@@ -1,0 +1,10 @@
+def fib(n) =
+  if n <= 1 then n
+  else
+    var (a, b) = (0, 1)
+    for _ in 1..n do
+      (a, b) := (b, a + b)
+    b
+
+for n in 0..=11 do
+  println("fib(${n}) = ${fib(n)}")
