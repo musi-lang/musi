@@ -1,55 +1,15 @@
-use crate::span::Span;
+use crate::utils::Span;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TokenKind {
-    // Keywords
-    And,
-    As,
-    Async,
-    Await,
-    Break,
-    Class,
-    Const,
-    Continue,
-    Def,
-    Do,
-    Else,
-    False,
-    For,
-    Foreign,
-    From,
-    If,
-    Implements,
-    Import,
-    In,
-    Inline,
-    Is,
-    Inherits,
-    Let,
-    Match,
-    New,
-    Not,
-    Or,
-    Override,
-    Protected,
-    Public,
-    Ref,
-    Repeat,
-    Return,
-    Self_,
-    Super,
-    Then,
-    Trait,
-    True,
-    Type,
-    Unsafe,
-    Until,
-    Var,
-    When,
-    Where,
-    While,
-    With,
-    Yield,
+    Eof,
+    Unknown,
+    Newline,
+    Indent,
+    Dedent,
+
+    Identifier,
+    Literal(LiteralKind),
 
     // Delimiters
     LeftParen,    // (
@@ -58,9 +18,9 @@ pub enum TokenKind {
     RightBrace,   // }
     LeftBracket,  // [
     RightBracket, // ]
-    Colon,        // :
     Comma,        // ,
     Dot,          // .
+    Colon,        // :
 
     // Operators
     Plus,                 // +
@@ -75,12 +35,14 @@ pub enum TokenKind {
     Pipe,                 // |
     Caret,                // ^
     Tilde,                // ~
-    Equals,               // =
     Less,                 // <
     LessLess,             // <<
+    LessGreater,          // <>
     Greater,              // >
     GreaterGreater,       // >>
-    DotDot,               // ..
+    MinusGreater,         // ->
+    EqualsGreater,        // =>
+    Equals,               // =
     PlusEquals,           // +=
     MinusEquals,          // -=
     StarEquals,           // *=
@@ -91,44 +53,75 @@ pub enum TokenKind {
     AmpersandEquals,      // &=
     PipeEquals,           // |=
     CaretEquals,          // ^=
-    EqualsEquals,         // ==
-    BangEquals,           // !=
-    LessEquals,           // <=
-    LessEqualsLess,       // <=>
     LessLessEquals,       // <<=
-    GreaterEquals,        // >=
     GreaterGreaterEquals, // >>=
     ColonEquals,          // :=
-    DotDotEquals,         // ..=
+    EqualsEquals,         // ==
+    LessEquals,           // <=
+    LessEqualsGreater,    // <=>
+    GreaterEquals,        // >=
 
-    Identifier,
-    NumberLiteral,
-    StringLiteral,
-    CharacterLiteral,
+    // Keywords
+    And,
+    As,
+    Async,
+    Await,
+    Break,
+    Const,
+    Continue,
+    Def,
+    Do,
+    Else,
+    False,
+    For,
+    Foreign,
+    From,
+    If,
+    Import,
+    In,
+    Inline,
+    Is,
+    Let,
+    Match,
+    Not,
+    Or,
+    Repeat,
+    Return,
+    Then,
+    True,
+    Type,
+    Unsafe,
+    Until,
+    Var,
+    When,
+    Where,
+    While,
+    With,
+    Yield,
+}
 
-    Dedent,
-    Indent,
-    Newline,
-    Eof,
-    Unknown,
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LiteralKind {
+    Number,
+    String,
+    Character,
 }
 
 #[derive(Clone, Debug)]
 pub struct Token {
     pub kind: TokenKind,
-    pub lexeme: String,
+    pub lexeme: Box<str>,
     pub span: Span,
 }
-impl Token {
-    pub const fn new(kind: TokenKind, lexeme: String, span: Span) -> Self {
-        Self { kind, lexeme, span }
-    }
 
-    pub fn synthetic(kind: TokenKind) -> Self {
+impl Token {
+    pub fn new(kind: TokenKind, lexeme: Vec<u8>, span: Span) -> Self {
         Self {
             kind,
-            lexeme: String::new(),
-            span: Span::default(),
+            lexeme: String::from_utf8(lexeme)
+                .expect("invalid utf-8")
+                .into_boxed_str(),
+            span,
         }
     }
 }
