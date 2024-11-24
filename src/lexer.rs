@@ -1,588 +1,604 @@
 use crate::{
     errors::{LexicalError, MusiError, MusiResult},
-    span::Span,
-    token::{Token, TokenKind},
+    token::{LiteralKind, Token, TokenKind},
+    utils::{Location, Span},
 };
 
 pub struct Lexer {
-    input: Vec<char>,
-    start: usize,
-    current: usize,
-
-    line: usize,
-    column: usize,
-
-    indent_stack: Vec<usize>,
-    line_start: bool,
+    source: Vec<u8>,
+    position: usize,
+    location: Location,
+    indent_stack: [u32; 32],
+    indent_level: usize,
 }
 
 impl Lexer {
-    pub fn new(source: &str) -> Self {
+    pub const fn new(source: Vec<u8>) -> Self {
         Self {
-            input: source.chars().collect(),
-            start: 0,
-            current: 0,
-
-            line: 1,
-            column: 1,
-
-            indent_stack: vec![0],
-            line_start: true,
+            source,
+            position: 0,
+            location: Location::new(),
+            indent_stack: [0; 32],
+            indent_level: 0,
         }
     }
 
-    pub fn tokenise(&mut self) -> MusiResult<Vec<Token>> {
+    pub fn lex(&mut self) -> MusiResult<Vec<Token>> {
         let mut tokens = vec![];
 
-        while !self.is_at_end() {
-            let token = self.next_token()?;
-            tokens.push(token);
+        loop {
+            let whitespace = self.skip_whitespace()?;
+            if whitespace.kind != TokenKind::Unknown {
+                tokens.push(whitespace);
+            }
+
+            let token = self.lex_token()?;
+
+            if token.kind == TokenKind::Eof {
+                while self.indent_level > 0 {
+                    tokens.push(Token::new(
+                        TokenKind::Dedent,
+                        vec![],
+                        Span {
+                            start: token.span.start,
+                            end: token.span.end,
+                        },
+                    ));
+                    self.indent_level -= 1;
+                }
+                tokens.push(token);
+                break;
+            } else if token.kind != TokenKind::Unknown {
+                tokens.push(token);
+            }
         }
 
-        while self.indent_stack.len() > 1 {
-            self.indent_stack.pop();
-            tokens.push(self.make_token(TokenKind::Dedent, Some(""))?);
-        }
-
-        tokens.push(self.make_token(TokenKind::Eof, Some(""))?);
         Ok(tokens)
     }
 
-    fn next_token(&mut self) -> MusiResult<Token> {
-        if self.is_at_end() {
-            self.make_token(TokenKind::Eof, None)?;
-        }
+    fn lex_token(&mut self) -> MusiResult<Token> {
+        let start_location = self.location;
 
-        let ws_token = self.skip_whitespace()?;
-        if ws_token.kind != TokenKind::Unknown {
-            return Ok(ws_token);
-        }
+        match self.peek() {
+            Some(current) => match current {
+                b'\r' => {
+                    self.advance();
+                    if self.peek() == Some(b'\n') {
+                        self.advance();
+                    }
+                    self.location.line += 1;
+                    self.location.column = 1;
 
-        self.start = self.current;
+                    Ok(Token::new(
+                        TokenKind::Newline,
+                        vec![b'\r', b'\n'],
+                        Span {
+                            start: start_location,
+                            end: self.location,
+                        },
+                    ))
+                }
+                b'\n' => {
+                    self.advance();
+                    self.location.line += 1;
+                    self.location.column = 1;
 
-        match self.advance() {
-            '(' => self.make_token(TokenKind::LeftParen, None),
-            ')' => self.make_token(TokenKind::RightParen, None),
-            '{' => self.make_token(TokenKind::LeftBrace, None),
-            '}' => self.make_token(TokenKind::RightBrace, None),
-            '[' => self.make_token(TokenKind::LeftBracket, None),
-            ']' => self.make_token(TokenKind::RightBracket, None),
-            ',' => self.make_token(TokenKind::Comma, None),
-            ':' => {
-                if self.match_char('=') {
-                    self.make_token(TokenKind::ColonEquals, None)
-                } else {
-                    self.make_token(TokenKind::Colon, None)
+                    Ok(Token::new(
+                        TokenKind::Newline,
+                        vec![b'\n'],
+                        Span {
+                            start: start_location,
+                            end: self.location,
+                        },
+                    ))
                 }
-            }
-            '.' => {
-                if self.match_char('.') {
-                    if self.match_char('=') {
-                        self.make_token(TokenKind::DotDotEquals, None)
-                    } else {
-                        self.make_token(TokenKind::DotDot, None)
-                    }
-                } else {
-                    self.make_token(TokenKind::Dot, None)
-                }
-            }
 
-            '+' => {
-                if self.match_char('=') {
-                    self.make_token(TokenKind::PlusEquals, None)
-                } else if self.match_char('+') {
-                    self.make_token(TokenKind::PlusPlus, None)
-                } else {
-                    self.make_token(TokenKind::Plus, None)
-                }
-            }
-            '-' => {
-                if self.match_char('=') {
-                    self.make_token(TokenKind::MinusEquals, None)
-                } else {
-                    self.make_token(TokenKind::Minus, None)
-                }
-            }
-            '*' => {
-                if self.match_char('*') {
-                    if self.match_char('=') {
-                        self.make_token(TokenKind::StarStarEquals, None)
-                    } else {
-                        self.make_token(TokenKind::StarStar, None)
-                    }
-                } else if self.match_char('=') {
-                    self.make_token(TokenKind::StarEquals, None)
-                } else {
-                    self.make_token(TokenKind::Star, None)
-                }
-            }
-            '/' => {
-                if self.match_char('/') {
-                    if self.match_char('=') {
-                        self.make_token(TokenKind::SlashSlashEquals, None)
-                    } else {
-                        self.make_token(TokenKind::SlashSlash, None)
-                    }
-                } else if self.match_char('=') {
-                    self.make_token(TokenKind::SlashEquals, None)
-                } else {
-                    self.make_token(TokenKind::Slash, None)
-                }
-            }
-            '%' => {
-                if self.match_char('=') {
-                    self.make_token(TokenKind::PercentEquals, None)
-                } else {
-                    self.make_token(TokenKind::Percent, None)
-                }
-            }
-            '&' => {
-                if self.match_char('=') {
-                    self.make_token(TokenKind::AmpersandEquals, None)
-                } else {
-                    self.make_token(TokenKind::Ampersand, None)
-                }
-            }
-            '|' => {
-                if self.match_char('=') {
-                    self.make_token(TokenKind::PipeEquals, None)
-                } else {
-                    self.make_token(TokenKind::Pipe, None)
-                }
-            }
-            '^' => {
-                if self.match_char('=') {
-                    self.make_token(TokenKind::CaretEquals, None)
-                } else {
-                    self.make_token(TokenKind::Caret, None)
-                }
-            }
-            '~' => self.make_token(TokenKind::Tilde, None),
-            '=' => {
-                if self.match_char('=') {
-                    self.make_token(TokenKind::EqualsEquals, None)
-                } else {
-                    self.make_token(TokenKind::Equals, None)
-                }
-            }
-            '!' => {
-                if self.match_char('=') {
-                    self.make_token(TokenKind::BangEquals, None)
-                } else {
-                    self.make_token(TokenKind::Unknown, None)
-                }
-            }
-            '<' => {
-                if self.match_char('<') {
-                    if self.match_char('=') {
-                        self.make_token(TokenKind::LessLessEquals, None)
-                    } else {
-                        self.make_token(TokenKind::LessLess, None)
-                    }
-                } else if self.match_char('=') {
-                    if self.match_char('>') {
-                        self.make_token(TokenKind::LessEqualsLess, None)
-                    } else {
-                        self.make_token(TokenKind::LessEquals, None)
-                    }
-                } else {
-                    self.make_token(TokenKind::Less, None)
-                }
-            }
-            '>' => {
-                if self.match_char('>') {
-                    if self.match_char('=') {
-                        self.make_token(TokenKind::GreaterGreaterEquals, None)
-                    } else {
-                        self.make_token(TokenKind::GreaterGreater, None)
-                    }
-                } else if self.match_char('=') {
-                    self.make_token(TokenKind::GreaterEquals, None)
-                } else {
-                    self.make_token(TokenKind::Greater, None)
-                }
-            }
+                b if is_identifier_start(b) => self.lex_identifier_or_keyword(),
+                b if b.is_ascii_digit() => self.lex_number_literal(),
+                b'"' => self.lex_string_literal(),
+                b'\'' => self.lex_character_literal(),
 
-            '"' => {
-                if self.peek() == 'r' {
-                    self.read_raw_string()
-                } else {
-                    self.read_string()
-                }
-            }
-            c => {
-                if c.is_ascii_digit() {
-                    self.read_number()
-                } else if is_identifier_start(c) {
-                    self.read_identifier()
-                } else {
-                    self.make_token(TokenKind::Unknown, None)
-                }
-            }
+                b'(' => self.make_token(TokenKind::LeftParen, 1),
+                b')' => self.make_token(TokenKind::RightParen, 1),
+                b'{' => self.make_token(TokenKind::LeftBrace, 1),
+                b'}' => self.make_token(TokenKind::RightBrace, 1),
+                b'[' => self.make_token(TokenKind::LeftBracket, 1),
+                b']' => self.make_token(TokenKind::RightBracket, 1),
+                b',' => self.make_token(TokenKind::Comma, 1),
+                b'.' => self.make_token(TokenKind::Dot, 1),
+                b':' => match self.peek_next() {
+                    Some(b'=') => self.make_token(TokenKind::ColonEquals, 2),
+                    _ => self.make_token(TokenKind::Colon, 1),
+                },
+                b'+' => match self.peek_next() {
+                    Some(b'+') => self.make_token(TokenKind::PlusPlus, 2),
+                    Some(b'=') => self.make_token(TokenKind::PlusEquals, 2),
+                    _ => self.make_token(TokenKind::Plus, 1),
+                },
+                b'-' => match self.peek_next() {
+                    Some(b'>') => self.make_token(TokenKind::MinusGreater, 2),
+                    Some(b'=') => self.make_token(TokenKind::MinusEquals, 2),
+                    _ => self.make_token(TokenKind::Minus, 1),
+                },
+                b'*' => match self.peek_next() {
+                    Some(b'*') => match self.source.get(self.position + 2) {
+                        Some(b'=') => self.make_token(TokenKind::StarStarEquals, 3),
+                        _ => self.make_token(TokenKind::StarStar, 2),
+                    },
+                    Some(b'=') => self.make_token(TokenKind::StarEquals, 2),
+                    _ => self.make_token(TokenKind::Star, 1),
+                },
+                b'/' => match self.peek_next() {
+                    Some(b'/') => match self.source.get(self.position + 2) {
+                        Some(b'=') => self.make_token(TokenKind::SlashSlashEquals, 3),
+                        _ => self.make_token(TokenKind::SlashSlash, 2),
+                    },
+                    Some(b'=') => self.make_token(TokenKind::SlashEquals, 2),
+                    _ => self.make_token(TokenKind::Slash, 1),
+                },
+                b'%' => match self.peek_next() {
+                    Some(b'=') => self.make_token(TokenKind::PercentEquals, 2),
+                    _ => self.make_token(TokenKind::Percent, 1),
+                },
+                b'&' => match self.peek_next() {
+                    Some(b'=') => self.make_token(TokenKind::AmpersandEquals, 2),
+                    _ => self.make_token(TokenKind::Ampersand, 1),
+                },
+                b'|' => match self.peek_next() {
+                    Some(b'=') => self.make_token(TokenKind::PipeEquals, 2),
+                    _ => self.make_token(TokenKind::Pipe, 1),
+                },
+                b'^' => match self.peek_next() {
+                    Some(b'=') => self.make_token(TokenKind::CaretEquals, 2),
+                    _ => self.make_token(TokenKind::Caret, 1),
+                },
+                b'~' => self.make_token(TokenKind::Tilde, 1),
+                b'<' => match self.peek_next() {
+                    Some(b'<') => match self.source.get(self.position + 2) {
+                        Some(b'=') => self.make_token(TokenKind::LessLessEquals, 3),
+                        _ => self.make_token(TokenKind::LessLess, 2),
+                    },
+                    Some(b'=') => match self.source.get(self.position + 2) {
+                        Some(b'>') => self.make_token(TokenKind::LessEqualsGreater, 3),
+                        _ => self.make_token(TokenKind::LessEquals, 2),
+                    },
+                    Some(b'>') => self.make_token(TokenKind::LessGreater, 2),
+                    _ => self.make_token(TokenKind::Less, 1),
+                },
+                b'>' => match self.peek_next() {
+                    Some(b'>') => match self.source.get(self.position + 2) {
+                        Some(b'=') => self.make_token(TokenKind::GreaterGreaterEquals, 3),
+                        _ => self.make_token(TokenKind::GreaterGreater, 2),
+                    },
+                    Some(b'=') => self.make_token(TokenKind::GreaterEquals, 2),
+                    _ => self.make_token(TokenKind::Greater, 1),
+                },
+                b'=' => match self.peek_next() {
+                    Some(b'=') => self.make_token(TokenKind::EqualsEquals, 2),
+                    Some(b'>') => self.make_token(TokenKind::EqualsGreater, 2),
+                    _ => self.make_token(TokenKind::Equals, 1),
+                },
+
+                _ => self.make_token(TokenKind::Unknown, 1),
+            },
+            None => Ok(Token::new(
+                TokenKind::Eof,
+                vec![],
+                Span {
+                    start: start_location,
+                    end: self.location,
+                },
+            )),
         }
     }
-}
 
-impl Lexer {
-    #[inline]
-    fn skip_whitespace(&mut self) -> MusiResult<Token> {
-        let mut spaces = 0;
+    fn lex_identifier_or_keyword(&mut self) -> MusiResult<Token> {
+        let start_location = self.location;
+        let start_position = self.position;
 
-        if self.line_start {
-            while !self.is_at_end() && self.peek().is_ascii_whitespace() && self.peek() != '\n' {
-                spaces += 1;
-                self.advance();
-            }
-
-            if !self.is_at_end() && self.peek() != '\n' {
-                let current_indent = *self.indent_stack.last().unwrap();
-
-                match spaces.cmp(&current_indent) {
-                    std::cmp::Ordering::Greater => {
-                        self.indent_stack.push(spaces);
-                        return self.make_token(TokenKind::Indent, Some(&format!("{spaces}")));
-                    }
-                    std::cmp::Ordering::Less => {
-                        if let Some(matching_level) =
-                            self.indent_stack.iter().rev().position(|&x| x == spaces)
-                        {
-                            let dedents = self.indent_stack.len() - matching_level - 1;
-                            self.indent_stack.truncate(matching_level + 1);
-                            if dedents > 0 {
-                                return self.make_token(TokenKind::Dedent, Some(""));
-                            }
-                        }
-                    }
-                    std::cmp::Ordering::Equal => {}
-                }
-            }
-        }
-
-        while !self.is_at_end() && self.peek().is_ascii_whitespace() {
-            if self.peek() == '\n' {
-                self.advance();
-                self.line += 1;
-                self.column = 1;
-                self.line_start = true;
-                return self.make_token(TokenKind::Newline, Some("\n"));
+        while let Some(current) = self.peek() {
+            if !is_identifier_continue(current) {
+                break;
             }
             self.advance();
         }
 
-        self.line_start = false;
-        self.make_token(TokenKind::Unknown, None)
+        let lexeme = &self.source[start_position..self.position];
+        let kind = match lexeme {
+            b"and" => TokenKind::And,
+            b"as" => TokenKind::As,
+            b"async" => TokenKind::Async,
+            b"await" => TokenKind::Await,
+            b"break" => TokenKind::Break,
+            b"const" => TokenKind::Const,
+            b"continue" => TokenKind::Continue,
+            b"def" => TokenKind::Def,
+            b"do" => TokenKind::Do,
+            b"else" => TokenKind::Else,
+            b"false" => TokenKind::False,
+            b"for" => TokenKind::For,
+            b"foreign" => TokenKind::Foreign,
+            b"from" => TokenKind::From,
+            b"if" => TokenKind::If,
+            b"import" => TokenKind::Import,
+            b"in" => TokenKind::In,
+            b"inline" => TokenKind::Inline,
+            b"is" => TokenKind::Is,
+            b"let" => TokenKind::Let,
+            b"match" => TokenKind::Match,
+            b"not" => TokenKind::Not,
+            b"or" => TokenKind::Or,
+            b"repeat" => TokenKind::Repeat,
+            b"return" => TokenKind::Return,
+            b"then" => TokenKind::Then,
+            b"to" => TokenKind::To,
+            b"true" => TokenKind::True,
+            b"type" => TokenKind::Type,
+            b"unsafe" => TokenKind::Unsafe,
+            b"until" => TokenKind::Until,
+            b"var" => TokenKind::Var,
+            b"when" => TokenKind::When,
+            b"where" => TokenKind::Where,
+            b"while" => TokenKind::While,
+            b"with" => TokenKind::With,
+            b"yield" => TokenKind::Yield,
+            _ => TokenKind::Identifier,
+        };
+
+        Ok(Token::new(
+            kind,
+            Vec::from(lexeme),
+            Span {
+                start: start_location,
+                end: self.location,
+            },
+        ))
     }
 
-    fn read_string(&mut self) -> MusiResult<Token> {
-        let mut string = String::new();
+    fn lex_number_literal(&mut self) -> MusiResult<Token> {
+        let start_location = self.location;
+        let start_position = self.position;
 
-        while !self.is_at_end() && self.peek() != '"' {
-            let c = if self.peek() == '\\' {
-                self.advance();
-                self.read_escape_sequence()?
-            } else {
-                self.advance()
-            };
-            string.push(c);
-        }
-
-        if self.is_at_end() {
-            return Err(MusiError::Lexical(LexicalError {
-                message: "unclosed string literal".to_string(),
-                span: self.make_span(),
-            }));
-        }
-
-        self.make_token(TokenKind::StringLiteral, Some(&string))
-    }
-
-    fn read_raw_string(&mut self) -> MusiResult<Token> {
-        self.advance_by(2); // r"
-        let mut string = String::new();
-
-        while !self.is_at_end() && self.peek() != '"' {
-            string.push(self.advance());
-        }
-
-        if self.is_at_end() {
-            return Err(MusiError::Lexical(LexicalError {
-                message: "unclosed raw string literal".to_string(),
-                span: self.make_span(),
-            }));
-        }
-
-        self.make_token(TokenKind::StringLiteral, Some(&string))
-    }
-
-    fn read_escape_sequence(&mut self) -> MusiResult<char> {
-        match self.advance() {
-            'n' => Ok('\n'),
-            'r' => Ok('\r'),
-            't' => Ok('\t'),
-            '0' => Ok('\0'),
-            '"' => Ok('"'),
-            '\'' => Ok('\''),
-            '\\' => Ok('\\'),
-            'x' => self.read_hex_escape(),
-            'u' => self.read_unicode_escape(),
-            found => Err(MusiError::Lexical(LexicalError {
-                message: format!("invalid escape sequence '\\{found}'"),
-                span: self.make_span(),
-            })),
-        }
-    }
-
-    fn read_hex_escape(&mut self) -> MusiResult<char> {
-        let hex1 = self.advance().to_digit(16);
-        let hex2 = self.advance().to_digit(16);
-
-        match (hex1, hex2) {
-            (Some(d1), Some(d2)) => char::from_u32(d1 * 16 + d2).ok_or_else(|| {
-                MusiError::Lexical(LexicalError {
-                    message: "invalid hex escape sequence".to_string(),
-                    span: self.make_span(),
-                })
-            }),
-            _ => Err(MusiError::Lexical(LexicalError {
-                message: "invalid hex escape sequence".to_string(),
-                span: self.make_span(),
-            })),
-        }
-    }
-
-    fn read_unicode_escape(&mut self) -> MusiResult<char> {
-        if self.peek() != '{' {
-            return Err(MusiError::Lexical(LexicalError {
-                message: "expected '{' in unicode escape".to_string(),
-                span: self.make_span(),
-            }));
-        }
-
-        self.advance(); // {
-        let mut value = 0u32;
-        let mut digits = 0;
-
-        while !self.is_at_end() && self.peek() != '}' && digits < 6 {
-            if let Some(digit) = self.peek().to_digit(16) {
-                value = value * 16 + digit;
-                self.advance();
-                digits += 1;
-            } else {
-                return Err(MusiError::Lexical(LexicalError {
-                    message: "invalid unicode escape sequence".to_string(),
-                    span: self.make_span(),
-                }));
+        while let Some(current) = self.peek() {
+            if !current.is_ascii_digit() && current != b'_' {
+                break;
             }
-        }
-
-        if self.peek() != '}' {
-            return Err(MusiError::Lexical(LexicalError {
-                message: "unclosed unicode escape sequence".to_string(),
-                span: self.make_span(),
-            }));
-        }
-
-        self.advance(); // }
-        char::from_u32(value).ok_or_else(|| {
-            MusiError::Lexical(LexicalError {
-                message: "invalid unicode code point".to_string(),
-                span: self.make_span(),
-            })
-        })
-    }
-
-    fn read_number(&mut self) -> MusiResult<Token> {
-        if self.peek() == '0' {
-            match self.peek_next() {
-                'x' | 'X' => return self.read_number_base(16),
-                'o' | 'O' => return self.read_number_base(8),
-                'b' | 'B' => return self.read_number_base(2),
-                _ => {}
+            if current == b'_' && !self.peek_next().map_or(false, |b| b.is_ascii_digit()) {
+                break;
             }
-        }
-
-        while self.peek().is_ascii_digit() || self.peek() == '_' {
             self.advance();
         }
 
-        if self.peek() == '.' {
-            if self.peek_next() == '.' {
-                return self.make_token(TokenKind::NumberLiteral, None);
-            }
-            if self.peek_next().is_ascii_digit() {
+        if self.peek() == Some(b'.') && self.peek_next().map_or(false, |b| b.is_ascii_digit()) {
+            self.advance();
+            while let Some(current) = self.peek() {
+                if is_identifier_continue(current) {
+                    break;
+                }
+                if current == b'_' && !self.peek_next().map_or(false, |b| b.is_ascii_digit()) {
+                    break;
+                }
                 self.advance();
+            }
+        }
 
-                while self.peek().is_ascii_digit() || self.peek() == '_' {
+        Ok(Token::new(
+            TokenKind::Literal(LiteralKind::Number),
+            Vec::from(&self.source[start_position..self.position]),
+            Span {
+                start: start_location,
+                end: self.location,
+            },
+        ))
+    }
+
+    fn lex_string_literal(&mut self) -> MusiResult<Token> {
+        let start_location = self.location;
+        let start_position = self.position;
+
+        if self.match_bytes(b"\"\"\"") {
+            while let Some(current) = self.peek() {
+                if current == b'"' && self.match_bytes(b"\"\"\"") {
+                    break;
+                }
+                if current == b'\n' {
+                    self.location.line += 1;
+                    self.location.column = 1;
+                }
+                self.advance();
+            }
+
+            return Ok(Token::new(
+                TokenKind::Literal(LiteralKind::String),
+                Vec::from(&self.source[start_position..self.position]),
+                Span {
+                    start: start_location,
+                    end: self.location,
+                },
+            ));
+        }
+
+        self.advance(); // opening '"'
+
+        while let Some(current) = self.peek() {
+            match current {
+                b'"' => {
+                    self.advance(); // closing '"'
+                    break;
+                }
+                b'\\' => self.lex_escape_sequence()?,
+                b'\n' => {
+                    return Err(MusiError::Lexical(LexicalError {
+                        message: "unclosed string literal",
+                    }));
+                }
+                _ => {
                     self.advance();
                 }
             }
         }
 
-        if self.peek() == 'e' || self.peek() == 'E' {
-            self.advance();
-            if self.peek() == '-' || self.peek() == '+' {
-                self.advance();
-            }
-            while self.peek().is_ascii_digit() || self.peek() == '_' {
-                self.advance();
-            }
-        }
-
-        self.make_token(TokenKind::NumberLiteral, None)
+        Ok(Token::new(
+            TokenKind::Literal(LiteralKind::String),
+            Vec::from(&self.source[start_position..self.position]),
+            Span {
+                start: start_location,
+                end: self.location,
+            },
+        ))
     }
 
-    fn read_number_base(&mut self, base: u32) -> MusiResult<Token> {
-        self.advance_by(2);
+    fn lex_character_literal(&mut self) -> MusiResult<Token> {
+        let start_position = self.position;
+        let start_location = self.location;
+        let mut chars = 0;
 
-        let is_valid_digit = |c: char| match base {
-            16 => c.is_ascii_hexdigit(),
-            8 => ('0'..='7').contains(&c),
-            2 => c == '0' || c == '1',
-            _ => c.is_ascii_digit(),
-        };
+        self.advance(); // opening '\''
 
-        let mut has_digits = false;
-        while is_valid_digit(self.peek()) || self.peek() == '_' {
-            if self.peek() != '_' {
-                has_digits = true;
+        while let Some(current) = self.peek() {
+            match current {
+                b'\'' => {
+                    if chars == 0 {
+                        return Err(MusiError::Lexical(LexicalError {
+                            message: "empty character literal",
+                        }));
+                    } else if chars > 1 {
+                        return Err(MusiError::Lexical(LexicalError {
+                            message: "too many codepoints in character literal",
+                        }));
+                    }
+                    self.advance(); // closing '\''
+                    break;
+                }
+                b'\\' => {
+                    self.lex_escape_sequence()?;
+                    chars += 1;
+                }
+                b'\n' => {
+                    return Err(MusiError::Lexical(LexicalError {
+                        message: "unclosed character literal",
+                    }));
+                }
+                _ => {
+                    self.advance();
+                    chars += 1;
+                }
             }
-            self.advance();
         }
 
-        if !has_digits {
-            return self.make_token(TokenKind::Unknown, None);
-        }
-
-        self.make_token(TokenKind::NumberLiteral, None)
+        Ok(Token::new(
+            TokenKind::Literal(LiteralKind::Character),
+            Vec::from(&self.source[start_position..self.position]),
+            Span {
+                start: start_location,
+                end: self.location,
+            },
+        ))
     }
 
-    fn read_identifier(&mut self) -> MusiResult<Token> {
-        while is_identifier_continue(self.peek()) {
-            self.advance();
+    fn lex_escape_sequence(&mut self) -> MusiResult<()> {
+        match self.peek_next() {
+            Some(b'n') | Some(b'r') | Some(b't') | Some(b'\\') | Some(b'"') | Some(b'\'') => {
+                self.advance_by(2);
+                Ok(())
+            }
+
+            Some(b'u') | Some(b'U') => {
+                self.advance_by(2);
+                self.lex_unicode_escape_sequence(4)
+            }
+
+            Some(b'x') => {
+                self.advance_by(2);
+                self.lex_unicode_escape_sequence(2)
+            }
+
+            Some(invalid) => Err(MusiError::Lexical(LexicalError {
+                message: Box::leak(
+                    format!("invalid escape sequence: \\{}", invalid as char).into_boxed_str(),
+                ),
+            })),
+            None => Err(MusiError::Lexical(LexicalError {
+                message: "unclosed escape sequence",
+            })),
+        }
+    }
+
+    fn lex_unicode_escape_sequence(&mut self, digits: usize) -> MusiResult<()> {
+        let start_position = self.position;
+        let mut value: u32 = 0;
+
+        for _ in 0..digits {
+            match self.peek() {
+                None => {
+                    return Err(MusiError::Lexical(LexicalError {
+                        message: "unclosed unicode escape sequence",
+                    }));
+                }
+                Some(current) if !current.is_ascii_hexdigit() => {
+                    return Err(MusiError::Lexical(LexicalError {
+                        message: Box::leak(
+                            format!("invalid hexadecimal digit: 0x{current:X}").into_boxed_str(),
+                        ),
+                    }));
+                }
+                Some(current) => {
+                    value = (value << 4)
+                        | (match current {
+                            b'0'..=b'9' => current - b'0',
+                            b'a'..=b'f' => current - b'a' + 10,
+                            b'A'..=b'F' => current - b'A' + 10,
+                            _ => {
+                                return Err(MusiError::Lexical(LexicalError {
+                                    message: Box::leak(
+                                        format!(
+                                            "invalid unicode escape: \\u{}",
+                                            self.source[start_position..self.position]
+                                                .escape_ascii()
+                                        )
+                                        .into_boxed_str(),
+                                    ),
+                                }))
+                            }
+                        } as u32);
+                    self.advance();
+                }
+            }
         }
 
-        let lexeme = self.input[self.start..self.current]
-            .iter()
-            .collect::<String>();
-        let lexeme_str = lexeme.as_str();
-        let kind = match lexeme_str {
-            "and" => TokenKind::And,
-            "as" => TokenKind::As,
-            "async" => TokenKind::Async,
-            "await" => TokenKind::Await,
-            "break" => TokenKind::Break,
-            "class" => TokenKind::Class,
-            "const" => TokenKind::Const,
-            "continue" => TokenKind::Continue,
-            "def" => TokenKind::Def,
-            "do" => TokenKind::Do,
-            "else" => TokenKind::Else,
-            "false" => TokenKind::False,
-            "for" => TokenKind::For,
-            "foreign" => TokenKind::Foreign,
-            "from" => TokenKind::From,
-            "if" => TokenKind::If,
-            "implements" => TokenKind::Implements,
-            "import" => TokenKind::Import,
-            "in" => TokenKind::In,
-            "inline" => TokenKind::Inline,
-            "is" => TokenKind::Is,
-            "inherits" => TokenKind::Inherits,
-            "let" => TokenKind::Let,
-            "match" => TokenKind::Match,
-            "new" => TokenKind::New,
-            "not" => TokenKind::Not,
-            "or" => TokenKind::Or,
-            "override" => TokenKind::Override,
-            "protected" => TokenKind::Protected,
-            "public" => TokenKind::Public,
-            "ref" => TokenKind::Ref,
-            "repeat" => TokenKind::Repeat,
-            "return" => TokenKind::Return,
-            "self" => TokenKind::Self_,
-            "super" => TokenKind::Super,
-            "then" => TokenKind::Then,
-            "trait" => TokenKind::Trait,
-            "true" => TokenKind::True,
-            "type" => TokenKind::Type,
-            "unsafe" => TokenKind::Unsafe,
-            "until" => TokenKind::Until,
-            "var" => TokenKind::Var,
-            "when" => TokenKind::When,
-            "where" => TokenKind::Where,
-            "while" => TokenKind::While,
-            "with" => TokenKind::With,
-            "yield" => TokenKind::Yield,
-            _ => TokenKind::Identifier,
-        };
+        if (0xD800..=0xDFFF).contains(&value) {
+            return Err(MusiError::Lexical(LexicalError {
+                message: "surrogate range not allowed in unicode escape",
+            }));
+        }
 
-        self.make_token(kind, Some(lexeme_str))
+        if value > 0x10FFFF {
+            return Err(MusiError::Lexical(LexicalError {
+                message: "unicode escape sequence out of range",
+            }));
+        }
+
+        Ok(())
     }
 }
 
 impl Lexer {
     #[inline]
-    fn is_at_end(&self) -> bool {
-        self.current >= self.input.len()
+    fn peek(&self) -> Option<u8> {
+        self.source.get(self.position).copied()
     }
 
     #[inline]
-    fn peek(&self) -> char {
-        self.input.get(self.current).copied().unwrap_or('\0')
+    fn peek_next(&self) -> Option<u8> {
+        self.source.get(self.position + 1).copied()
     }
 
     #[inline]
-    fn peek_next(&self) -> char {
-        self.input.get(self.current + 1).copied().unwrap_or('\0')
+    fn advance(&mut self) -> Option<u8> {
+        let current = self.peek()?;
+        self.position += 1;
+        self.location.column += 1;
+        self.location.offset += 1;
+        Some(current)
     }
 
     #[inline]
-    fn advance(&mut self) -> char {
-        let c = self.peek();
-        self.current += 1;
-        self.column += 1;
-        c
-    }
-
-    #[inline]
-    fn advance_by(&mut self, n: usize) {
-        self.current += n;
-        self.column += n;
-    }
-
-    #[inline]
-    fn match_char(&mut self, expected: char) -> bool {
-        if self.is_at_end() || self.peek() != expected {
-            false
-        } else {
-            self.advance();
-            true
+    fn advance_by(&mut self, offset: usize) -> Option<u8> {
+        let mut previous = None;
+        for _ in 0..offset {
+            previous = self.advance();
         }
+        previous
     }
 
-    fn make_span(&self) -> Span {
-        Span::new(self.start, self.current, self.line, self.column)
+    #[inline]
+    fn match_bytes(&mut self, bytes: &[u8]) -> bool {
+        let mut start_position = self.position;
+        for &expected in bytes {
+            match self.source.get(start_position) {
+                Some(&current) if current == expected => start_position += 1,
+                _ => return false,
+            }
+        }
+
+        start_position > self.position
     }
 
-    fn make_token(&self, kind: TokenKind, lexeme: Option<&str>) -> MusiResult<Token> {
-        let token = Token::new(
-            kind,
-            match lexeme {
-                Some(lexeme) => lexeme.to_string(),
-                None => self.input[self.start..self.current].iter().collect(),
+    fn skip_whitespace(&mut self) -> MusiResult<Token> {
+        if self.location.column == 1 {
+            let mut spaces = 0;
+            let start_location = self.location;
+
+            while let Some(current) = self.peek() {
+                match current {
+                    b' ' => {
+                        spaces += 1;
+                        self.advance();
+                    }
+                    _ => {
+                        if current != b'\r' && current != b'\n' {
+                            let current_indent = self.indent_stack[self.indent_level];
+                            if spaces.cmp(&{ current_indent }) == std::cmp::Ordering::Greater {
+                                self.indent_level += 1;
+                                self.indent_stack[self.indent_level] = spaces;
+
+                                return Ok(Token::new(
+                                    TokenKind::Indent,
+                                    vec![b' '; spaces as usize],
+                                    Span {
+                                        start: start_location,
+                                        end: self.location,
+                                    },
+                                ));
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+
+            log::debug!(
+                "{}:{}:{}: spaces={}, indent_level={}",
+                self.location.line,
+                self.location.column,
+                self.location.offset,
+                spaces,
+                self.indent_level
+            );
+        }
+
+        Ok(Token::new(
+            TokenKind::Unknown,
+            vec![],
+            Span {
+                start: self.location,
+                end: self.location,
             },
-            self.make_span(),
-        );
-        Ok(token)
+        ))
+    }
+
+    fn make_token(&mut self, kind: TokenKind, length: usize) -> MusiResult<Token> {
+        let start_location = self.location;
+        let start_position = self.position;
+        self.advance_by(length);
+
+        Ok(Token::new(
+            kind,
+            Vec::from(&self.source[start_position..self.position]),
+            Span {
+                start: start_location,
+                end: self.location,
+            },
+        ))
     }
 }
 
 #[inline]
-const fn is_identifier_start(c: char) -> bool {
-    c.is_ascii_alphabetic() || c == '_'
+const fn is_identifier_start(byte: u8) -> bool {
+    byte.is_ascii_alphabetic() || byte == b'_'
 }
 
 #[inline]
-const fn is_identifier_continue(c: char) -> bool {
-    c.is_ascii_alphanumeric() || c == '_'
+const fn is_identifier_continue(input: u8) -> bool {
+    input.is_ascii_alphanumeric() || input == b'_'
 }
