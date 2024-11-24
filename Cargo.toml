@@ -15,6 +15,8 @@ default-run = "musi"
 "path" = "src/main.rs"
 
 [dependencies]
+env_logger = "0.11.5"
+log = "0.4.22"
 
 [lints.rust]
 unsafe_code = "forbid"
