@@ -1,16 +1,15 @@
-use std::sync::Arc;
-
-#[derive(Clone, Debug)]
 pub enum Value {
     Integer(i64),
     Natural(u64),
     Real(f64),
     Boolean(bool),
-    String(Arc<String>),
-    Nothing,
+
+    String(Box<str>),
     Function {
-        name: Arc<String>,
+        name: Box<str>,
+        code: Vec<u8>,
         arity: usize,
-        code: Arc<[u8]>,
     },
+
+    Nothing,
 }
