@@ -443,24 +443,25 @@ impl Lexer {
                     }));
                 }
                 Some(current) => {
-                    value = (value << 4)
-                        | (match current {
+                    if current.is_ascii_hexdigit() {
+                        let digit = match current {
                             b'0'..=b'9' => current - b'0',
                             b'a'..=b'f' => current - b'a' + 10,
                             b'A'..=b'F' => current - b'A' + 10,
-                            _ => {
-                                return Err(MusiError::Lexical(LexicalError {
-                                    message: Box::leak(
-                                        format!(
-                                            "invalid unicode escape: \\u{}",
-                                            self.source[start_position..self.position]
-                                                .escape_ascii()
-                                        )
-                                        .into_boxed_str(),
-                                    ),
-                                }))
-                            }
-                        } as u32);
+                            _ => unreachable!(),
+                        };
+                        value = (value << 4) | (digit as u32);
+                    } else {
+                        return Err(MusiError::Lexical(LexicalError {
+                            message: Box::leak(
+                                format!(
+                                    "invalid unicode escape: \\u{}",
+                                    self.source[start_position..self.position].escape_ascii()
+                                )
+                                .into_boxed_str(),
+                            ),
+                        }));
+                    }
                     self.advance();
                 }
             }
@@ -531,7 +532,7 @@ impl Lexer {
 
             while let Some(current) = self.peek() {
                 match current {
-                    b' ' => {
+                    b if b.is_ascii_whitespace() => {
                         spaces += 1;
                         self.advance();
                     }
@@ -594,8 +595,8 @@ impl Lexer {
 }
 
 #[inline]
-const fn is_identifier_start(byte: u8) -> bool {
-    byte.is_ascii_alphabetic() || byte == b'_'
+const fn is_identifier_start(input: u8) -> bool {
+    input.is_ascii_alphabetic() || input == b'_'
 }
 
 #[inline]
