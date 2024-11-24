@@ -88,6 +88,7 @@ pub enum TokenKind {
     Repeat,
     Return,
     Then,
+    To,
     True,
     Type,
     Unsafe,
@@ -119,7 +120,7 @@ impl Token {
         Self {
             kind,
             lexeme: String::from_utf8(lexeme)
-                .expect("invalid utf-8")
+                .expect("expected utf-8")
                 .into_boxed_str(),
             span,
         }
