@@ -119,9 +119,7 @@ impl Token {
     pub fn new(kind: TokenKind, lexeme: Vec<u8>, span: Span) -> Self {
         Self {
             kind,
-            lexeme: String::from_utf8(lexeme)
-                .expect("expected utf-8")
-                .into_boxed_str(),
+            lexeme: std::str::from_utf8(&lexeme).expect("valid utf-8").into(),
             span,
         }
     }
