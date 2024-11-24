@@ -468,7 +468,7 @@ impl Lexer {
 
         if (0xD800..=0xDFFF).contains(&value) {
             return Err(MusiError::Lexical(LexicalError {
-                message: "surrogate range not allowed in unicode escape",
+                message: "surrogate range not allowed in unicode escape sequence",
             }));
         }
 
