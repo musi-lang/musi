@@ -242,7 +242,16 @@ impl Lexer {
                         if current != b'\r' && current != b'\n' {
                             let current_indent = self.indent_stack[self.indent_level];
 
-                            match spaces.cmp(&{ current_indent }) {
+                            log::debug!(
+                                "{}:{}:{}: spaces={}, indent_level={}",
+                                self.cursor.location.line,
+                                self.cursor.location.column,
+                                self.cursor.location.offset,
+                                spaces,
+                                self.indent_level
+                            );
+
+                            match spaces.cmp(&current_indent) {
                                 std::cmp::Ordering::Greater => {
                                     self.indent_level += 1;
                                     self.indent_stack[self.indent_level] = spaces;
@@ -257,7 +266,23 @@ impl Lexer {
                                     ));
                                 }
                                 std::cmp::Ordering::Less => {
-                                    lex_error("inconsistent indentation")?;
+                                    while self.indent_level > 0
+                                        && spaces < self.indent_stack[self.indent_level]
+                                    {
+                                        self.indent_level -= 1;
+                                    }
+                                    if spaces != self.indent_stack[self.indent_level] {
+                                        lex_error("inconsistent indentation")?;
+                                    }
+
+                                    return Ok(Token::new(
+                                        Kind::Dedent,
+                                        &[],
+                                        Span {
+                                            start: start_location,
+                                            end: self.cursor.location,
+                                        },
+                                    ));
                                 }
                                 std::cmp::Ordering::Equal => {}
                             }
@@ -266,15 +291,6 @@ impl Lexer {
                     }
                 }
             }
-
-            log::debug!(
-                "{}:{}:{}: spaces={}, indent_level={}",
-                self.cursor.location.line,
-                self.cursor.location.column,
-                self.cursor.location.offset,
-                spaces,
-                self.indent_level
-            );
         }
 
         Ok(Token::new(
