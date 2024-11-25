@@ -1,7 +1,8 @@
 use crate::{
     errors::{LexicalError, MusiError, MusiResult},
+    location::Location,
+    span::Span,
     token::{LiteralKind, Token, TokenKind},
-    utils::{Location, Span},
 };
 
 pub struct Lexer {
@@ -13,9 +14,9 @@ pub struct Lexer {
 }
 
 impl Lexer {
-    pub const fn new(source: Vec<u8>) -> Self {
+    pub fn new(input: &[u8]) -> Self {
         Self {
-            source,
+            source: input.to_vec(),
             position: 0,
             location: Location::new(),
             indent_stack: [0; 32],
@@ -32,7 +33,7 @@ impl Lexer {
                 tokens.push(whitespace);
             }
 
-            let token = self.lex_token()?;
+            let token = self.lex_next_token()?;
 
             if token.kind == TokenKind::Eof {
                 while self.indent_level > 0 {
@@ -56,7 +57,7 @@ impl Lexer {
         Ok(tokens)
     }
 
-    fn lex_token(&mut self) -> MusiResult<Token> {
+    fn lex_next_token(&mut self) -> MusiResult<Token> {
         let start_location = self.location;
 
         match self.peek() {
@@ -152,7 +153,10 @@ impl Lexer {
                     Some(b'=') => self.make_token(TokenKind::CaretEquals, 2),
                     _ => self.make_token(TokenKind::Caret, 1),
                 },
-                b'~' => self.make_token(TokenKind::Tilde, 1),
+                b'~' => match self.peek_next() {
+                    Some(b'=') => self.make_token(TokenKind::TildeEquals, 2),
+                    _ => self.make_token(TokenKind::Tilde, 1),
+                },
                 b'<' => match self.peek_next() {
                     Some(b'<') => match self.source.get(self.position + 2) {
                         Some(b'=') => self.make_token(TokenKind::LessLessEquals, 3),
@@ -192,6 +196,82 @@ impl Lexer {
         }
     }
 
+    #[inline(always)]
+    fn make_token(&mut self, kind: TokenKind, length: usize) -> MusiResult<Token> {
+        let start_location = self.location;
+        let start_position = self.position;
+        self.advance_by(length);
+
+        Ok(Token::new(
+            kind,
+            Vec::from(&self.source[start_position..self.position]),
+            Span {
+                start: start_location,
+                end: self.location,
+            },
+        ))
+    }
+
+    fn skip_whitespace(&mut self) -> MusiResult<Token> {
+        if self.location.column == 1 {
+            let mut spaces = 0;
+            let start_location = self.location;
+
+            while let Some(current) = self.peek() {
+                match current {
+                    b if b.is_ascii_whitespace() => {
+                        spaces += 1;
+                        self.advance();
+                    }
+                    _ => {
+                        if current != b'\r' && current != b'\n' {
+                            let current_indent = self.indent_stack[self.indent_level];
+
+                            match spaces.cmp(&{ current_indent }) {
+                                std::cmp::Ordering::Greater => {
+                                    self.indent_level += 1;
+                                    self.indent_stack[self.indent_level] = spaces;
+
+                                    return Ok(Token::new(
+                                        TokenKind::Indent,
+                                        vec![b' '; spaces as usize],
+                                        Span {
+                                            start: start_location,
+                                            end: self.location,
+                                        },
+                                    ));
+                                }
+                                std::cmp::Ordering::Less => {
+                                    return self.lex_error("inconsistent indentation");
+                                }
+                                std::cmp::Ordering::Equal => {}
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+
+            log::debug!(
+                "{}:{}:{}: spaces={}, indent_level={}",
+                self.location.line,
+                self.location.column,
+                self.location.offset,
+                spaces,
+                self.indent_level
+            );
+        }
+
+        Ok(Token::new(
+            TokenKind::Unknown,
+            vec![],
+            Span {
+                start: self.location,
+                end: self.location,
+            },
+        ))
+    }
+
     fn lex_identifier_or_keyword(&mut self) -> MusiResult<Token> {
         let start_location = self.location;
         let start_position = self.position;
@@ -206,6 +286,7 @@ impl Lexer {
         let lexeme = &self.source[start_position..self.position];
         let kind = match lexeme {
             b"and" => TokenKind::And,
+            b"at" => TokenKind::At,
             b"as" => TokenKind::As,
             b"async" => TokenKind::Async,
             b"await" => TokenKind::Await,
@@ -213,6 +294,7 @@ impl Lexer {
             b"const" => TokenKind::Const,
             b"continue" => TokenKind::Continue,
             b"def" => TokenKind::Def,
+            b"deref" => TokenKind::Deref,
             b"do" => TokenKind::Do,
             b"else" => TokenKind::Else,
             b"false" => TokenKind::False,
@@ -227,7 +309,9 @@ impl Lexer {
             b"let" => TokenKind::Let,
             b"match" => TokenKind::Match,
             b"not" => TokenKind::Not,
+            b"of" => TokenKind::Of,
             b"or" => TokenKind::Or,
+            b"ref" => TokenKind::Ref,
             b"repeat" => TokenKind::Repeat,
             b"return" => TokenKind::Return,
             b"then" => TokenKind::Then,
@@ -259,27 +343,32 @@ impl Lexer {
         let start_location = self.location;
         let start_position = self.position;
 
-        while let Some(current) = self.peek() {
-            if !current.is_ascii_digit() && current != b'_' {
-                break;
-            }
-            if current == b'_' && !self.peek_next().map_or(false, |b| b.is_ascii_digit()) {
-                break;
-            }
-            self.advance();
+        if self.peek() == Some(b'0')
+            && self.peek_next().map_or(false, |b| {
+                matches!(b, b'x' | b'X' | b'b' | b'B' | b'o' | b'O')
+            })
+        {
+            self.lex_number_base()?;
+
+            return Ok(Token::new(
+                TokenKind::Literal(LiteralKind::Number),
+                Vec::from(&self.source[start_position..self.position]),
+                Span {
+                    start: start_location,
+                    end: self.location,
+                },
+            ));
         }
+
+        self.lex_decimal_digits();
 
         if self.peek() == Some(b'.') && self.peek_next().map_or(false, |b| b.is_ascii_digit()) {
             self.advance();
-            while let Some(current) = self.peek() {
-                if is_identifier_continue(current) {
-                    break;
-                }
-                if current == b'_' && !self.peek_next().map_or(false, |b| b.is_ascii_digit()) {
-                    break;
-                }
-                self.advance();
-            }
+            self.lex_decimal_digits();
+        }
+
+        if let Some(b'e') | Some(b'E') = self.peek() {
+            self.lex_scientific_notation()?;
         }
 
         Ok(Token::new(
@@ -292,30 +381,86 @@ impl Lexer {
         ))
     }
 
+    fn lex_number_base(&mut self) -> MusiResult<()> {
+        match self.peek_next() {
+            Some(b'x') | Some(b'X') => {
+                self.advance_by(2);
+                while let Some(current) = self.peek() {
+                    if !current.is_ascii_hexdigit() && current != b'_' {
+                        break;
+                    }
+                    self.advance();
+                }
+            }
+            Some(b'b') | Some(b'B') => {
+                self.advance_by(2);
+                while let Some(current) = self.peek() {
+                    if current != b'0' && current != b'1' && current != b'_' {
+                        break;
+                    }
+                    self.advance();
+                }
+            }
+            Some(b'o') | Some(b'O') => {
+                self.advance_by(2);
+                while let Some(current) = self.peek() {
+                    if !matches!(current, b'0'..=b'7' | b'_') {
+                        break;
+                    }
+                    self.advance();
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn lex_decimal_digits(&mut self) {
+        while let Some(current) = self.peek() {
+            if !current.is_ascii_digit() && current != b'_' {
+                break;
+            }
+            if current == b'_' && !self.peek_next().map_or(false, |b| b.is_ascii_digit()) {
+                break;
+            }
+            self.advance();
+        }
+    }
+
+    fn lex_scientific_notation(&mut self) -> MusiResult<()> {
+        self.advance();
+
+        if let Some(b'+') | Some(b'-') = self.peek() {
+            self.advance();
+        }
+
+        while let Some(current) = self.peek() {
+            if !current.is_ascii_digit() && current != b'_' {
+                break;
+            }
+            if current == b'_' && !self.peek_next().map_or(false, |b| b.is_ascii_digit()) {
+                break;
+            }
+            self.advance();
+        }
+        Ok(())
+    }
+
     fn lex_string_literal(&mut self) -> MusiResult<Token> {
         let start_location = self.location;
         let start_position = self.position;
 
-        if self.match_bytes(b"\"\"\"") {
-            while let Some(current) = self.peek() {
-                if current == b'"' && self.match_bytes(b"\"\"\"") {
-                    break;
-                }
-                if current == b'\n' {
-                    self.location.line += 1;
-                    self.location.column = 1;
-                }
-                self.advance();
-            }
+        let byte_string = self.peek() == Some(b'b');
+        if byte_string {
+            self.advance();
+        }
 
-            return Ok(Token::new(
-                TokenKind::Literal(LiteralKind::String),
-                Vec::from(&self.source[start_position..self.position]),
-                Span {
-                    start: start_location,
-                    end: self.location,
-                },
-            ));
+        if self.peek() == Some(b'r') {
+            return self.lex_raw_string(start_location, start_position);
+        }
+
+        if self.match_sequence(b"\"\"\"") {
+            return self.lex_multiline_string(start_location, start_position);
         }
 
         self.advance(); // opening '"'
@@ -328,9 +473,10 @@ impl Lexer {
                 }
                 b'\\' => self.lex_escape_sequence()?,
                 b'\n' => {
-                    return Err(MusiError::Lexical(LexicalError {
-                        message: "unclosed string literal",
-                    }));
+                    return self.lex_error("unclosed string literal");
+                }
+                _ if byte_string && !current.is_ascii() => {
+                    return self.lex_error("non-ASCII character in byte string literal");
                 }
                 _ => {
                     self.advance();
@@ -339,7 +485,11 @@ impl Lexer {
         }
 
         Ok(Token::new(
-            TokenKind::Literal(LiteralKind::String),
+            TokenKind::Literal(if byte_string {
+                LiteralKind::ByteString
+            } else {
+                LiteralKind::String
+            }),
             Vec::from(&self.source[start_position..self.position]),
             Span {
                 start: start_location,
@@ -352,6 +502,11 @@ impl Lexer {
         let start_position = self.position;
         let start_location = self.location;
         let mut chars = 0;
+        let is_byte_char = self.peek() == Some(b'b');
+
+        if is_byte_char {
+            self.advance();
+        }
 
         self.advance(); // opening '\''
 
@@ -359,13 +514,9 @@ impl Lexer {
             match current {
                 b'\'' => {
                     if chars == 0 {
-                        return Err(MusiError::Lexical(LexicalError {
-                            message: "empty character literal",
-                        }));
+                        return self.lex_error("empty character literal");
                     } else if chars > 1 {
-                        return Err(MusiError::Lexical(LexicalError {
-                            message: "too many codepoints in character literal",
-                        }));
+                        return self.lex_error("too many codepoints in character literal");
                     }
                     self.advance(); // closing '\''
                     break;
@@ -375,9 +526,10 @@ impl Lexer {
                     chars += 1;
                 }
                 b'\n' => {
-                    return Err(MusiError::Lexical(LexicalError {
-                        message: "unclosed character literal",
-                    }));
+                    return self.lex_error("unclosed character literal");
+                }
+                _ if is_byte_char && !current.is_ascii() => {
+                    return self.lex_error("non-ASCII character in byte character literal");
                 }
                 _ => {
                     self.advance();
@@ -387,7 +539,69 @@ impl Lexer {
         }
 
         Ok(Token::new(
-            TokenKind::Literal(LiteralKind::Character),
+            TokenKind::Literal(if is_byte_char {
+                LiteralKind::ByteCharacter
+            } else {
+                LiteralKind::Character
+            }),
+            Vec::from(&self.source[start_position..self.position]),
+            Span {
+                start: start_location,
+                end: self.location,
+            },
+        ))
+    }
+
+    fn lex_raw_string(
+        &mut self,
+        start_location: Location,
+        start_position: usize,
+    ) -> MusiResult<Token> {
+        self.advance_by(2);
+        while let Some(current) = self.peek() {
+            if current == b'"' {
+                self.advance();
+                break;
+            }
+            self.advance();
+        }
+
+        Ok(Token::new(
+            TokenKind::Literal(LiteralKind::String),
+            Vec::from(&self.source[start_position..self.position]),
+            Span {
+                start: start_location,
+                end: self.location,
+            },
+        ))
+    }
+
+    fn lex_multiline_string(
+        &mut self,
+        start_location: Location,
+        start_position: usize,
+    ) -> MusiResult<Token> {
+        let is_byte_string = self.source[start_position] == b'b';
+        while let Some(current) = self.peek() {
+            if current == b'"' && self.match_sequence(b"\"\"\"") {
+                break;
+            }
+            if is_byte_string && !current.is_ascii() {
+                return self.lex_error("non-ASCII character in byte string literal");
+            }
+            if current == b'\n' {
+                self.location.line += 1;
+                self.location.column = 1;
+            }
+            self.advance();
+        }
+
+        Ok(Token::new(
+            TokenKind::Literal(if is_byte_string {
+                LiteralKind::ByteString
+            } else {
+                LiteralKind::String
+            }),
             Vec::from(&self.source[start_position..self.position]),
             Span {
                 start: start_location,
@@ -431,16 +645,10 @@ impl Lexer {
         for _ in 0..digits {
             match self.peek() {
                 None => {
-                    return Err(MusiError::Lexical(LexicalError {
-                        message: "unclosed unicode escape sequence",
-                    }));
+                    self.lex_error("unclosed unicode escape sequence")?;
                 }
                 Some(current) if !current.is_ascii_hexdigit() => {
-                    return Err(MusiError::Lexical(LexicalError {
-                        message: Box::leak(
-                            format!("invalid hexadecimal digit: 0x{current:X}").into_boxed_str(),
-                        ),
-                    }));
+                    self.lex_error(&format!("invalid hexadecimal digit: 0x{current:X}"))?;
                 }
                 Some(current) => {
                     if current.is_ascii_hexdigit() {
@@ -452,15 +660,10 @@ impl Lexer {
                         };
                         value = (value << 4) | (digit as u32);
                     } else {
-                        return Err(MusiError::Lexical(LexicalError {
-                            message: Box::leak(
-                                format!(
-                                    "invalid unicode escape: \\u{}",
-                                    self.source[start_position..self.position].escape_ascii()
-                                )
-                                .into_boxed_str(),
-                            ),
-                        }));
+                        self.lex_error(&format!(
+                            "invalid unicode escape: \\u{}",
+                            self.source[start_position..self.position].escape_ascii()
+                        ))?;
                     }
                     self.advance();
                 }
@@ -468,42 +671,52 @@ impl Lexer {
         }
 
         if (0xD800..=0xDFFF).contains(&value) {
-            return Err(MusiError::Lexical(LexicalError {
-                message: "surrogate range not allowed in unicode escape sequence",
-            }));
+            self.lex_error("surrogate range not allowed in unicode escape sequence")?;
         }
 
         if value > 0x10FFFF {
-            return Err(MusiError::Lexical(LexicalError {
-                message: "unicode escape sequence out of range",
-            }));
+            self.lex_error("unicode escape sequence out of range")?;
         }
 
         Ok(())
     }
+
+    fn lex_error(&self, message: &str) -> MusiResult<Token> {
+        Err(MusiError::Lexical(LexicalError {
+            message: Box::leak(message.into()),
+        }))
+    }
 }
 
 impl Lexer {
-    #[inline]
+    #[inline(always)]
     fn peek(&self) -> Option<u8> {
         self.source.get(self.position).copied()
     }
 
-    #[inline]
+    #[inline(always)]
     fn peek_next(&self) -> Option<u8> {
         self.source.get(self.position + 1).copied()
     }
 
-    #[inline]
+    #[inline(always)]
     fn advance(&mut self) -> Option<u8> {
-        let current = self.peek()?;
+        if self.position >= self.source.len() {
+            return None;
+        }
+
+        let current = self.source[self.position];
+
         self.position += 1;
-        self.location.column += 1;
+        if current != b'\n' {
+            self.location.column += 1;
+        }
         self.location.offset += 1;
+
         Some(current)
     }
 
-    #[inline]
+    #[inline(always)]
     fn advance_by(&mut self, offset: usize) -> Option<u8> {
         let mut previous = None;
         for _ in 0..offset {
@@ -512,8 +725,8 @@ impl Lexer {
         previous
     }
 
-    #[inline]
-    fn match_bytes(&mut self, bytes: &[u8]) -> bool {
+    #[inline(always)]
+    fn match_sequence(&mut self, bytes: &[u8]) -> bool {
         let mut start_position = self.position;
         for &expected in bytes {
             match self.source.get(start_position) {
@@ -524,82 +737,14 @@ impl Lexer {
 
         start_position > self.position
     }
-
-    fn skip_whitespace(&mut self) -> MusiResult<Token> {
-        if self.location.column == 1 {
-            let mut spaces = 0;
-            let start_location = self.location;
-
-            while let Some(current) = self.peek() {
-                match current {
-                    b if b.is_ascii_whitespace() => {
-                        spaces += 1;
-                        self.advance();
-                    }
-                    _ => {
-                        if current != b'\r' && current != b'\n' {
-                            let current_indent = self.indent_stack[self.indent_level];
-                            if spaces.cmp(&{ current_indent }) == std::cmp::Ordering::Greater {
-                                self.indent_level += 1;
-                                self.indent_stack[self.indent_level] = spaces;
-
-                                return Ok(Token::new(
-                                    TokenKind::Indent,
-                                    vec![b' '; spaces as usize],
-                                    Span {
-                                        start: start_location,
-                                        end: self.location,
-                                    },
-                                ));
-                            }
-                        }
-                        break;
-                    }
-                }
-            }
-
-            log::debug!(
-                "{}:{}:{}: spaces={}, indent_level={}",
-                self.location.line,
-                self.location.column,
-                self.location.offset,
-                spaces,
-                self.indent_level
-            );
-        }
-
-        Ok(Token::new(
-            TokenKind::Unknown,
-            vec![],
-            Span {
-                start: self.location,
-                end: self.location,
-            },
-        ))
-    }
-
-    fn make_token(&mut self, kind: TokenKind, length: usize) -> MusiResult<Token> {
-        let start_location = self.location;
-        let start_position = self.position;
-        self.advance_by(length);
-
-        Ok(Token::new(
-            kind,
-            Vec::from(&self.source[start_position..self.position]),
-            Span {
-                start: start_location,
-                end: self.location,
-            },
-        ))
-    }
 }
 
-#[inline]
+#[inline(always)]
 const fn is_identifier_start(input: u8) -> bool {
     input.is_ascii_alphabetic() || input == b'_'
 }
 
-#[inline]
+#[inline(always)]
 const fn is_identifier_continue(input: u8) -> bool {
     input.is_ascii_alphanumeric() || input == b'_'
 }
