@@ -154,10 +154,11 @@ impl Lexer {
                         (Kind::Ampersand, b"&"),
                         (Kind::AmpersandEquals, b"&="),
                     ])),
-                    b'|' => {
-                        Ok(self
-                            .make_multibyte_token(&[(Kind::Pipe, b"|"), (Kind::PipeEquals, b"|=")]))
-                    }
+                    b'|' => Ok(self.make_multibyte_token(&[
+                        (Kind::Pipe, b"|"),
+                        (Kind::PipeEquals, b"|="),
+                        (Kind::PipeGreater, b"|>"),
+                    ])),
                     b'^' => Ok(self
                         .make_multibyte_token(&[(Kind::Caret, b"^"), (Kind::CaretEquals, b"^=")])),
                     b'~' => Ok(self

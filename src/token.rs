@@ -42,6 +42,7 @@ pub enum Kind {
     GreaterGreater,       // >>
     MinusGreater,         // ->
     EqualsGreater,        // =>
+    PipeGreater,          // |>
     Equals,               // =
     PlusEquals,           // +=
     MinusEquals,          // -=
