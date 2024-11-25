@@ -21,6 +21,17 @@ log = "0.4.22"
 [lints.rust]
 unsafe_code = "forbid"
 
+[lints.clippy]
+all = "deny"
+correctness = "deny"
+suspicious = "deny"
+complexity = "warn"
+perf = "warn"
+style = "warn"
+pedantic = "warn"
+nursery = "warn"
+cargo = "deny"
+
 [profile.release]
 overflow-checks = true
 debug-assertions = true
