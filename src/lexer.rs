@@ -227,7 +227,10 @@ impl Lexer {
                     _ => self.make_token(TokenKind::Equals, 1),
                 },
 
-                _ => self.make_token(TokenKind::Unknown, 1),
+                _ => {
+                    log::warn!("unknown character: {:?}", self.cursor.peek());
+                    self.make_token(TokenKind::Unknown, 1)
+                }
             },
             None => Ok(Token::new(
                 TokenKind::Eof,
@@ -240,6 +243,7 @@ impl Lexer {
         }
     }
 
+    #[inline(always)]
     fn make_token(&mut self, kind: TokenKind, length: usize) -> MusiResult<Token> {
         let start_location = self.cursor.location;
         let start_position = self.cursor.position;
@@ -700,6 +704,7 @@ impl Lexer {
         ))
     }
 
+    #[inline(always)]
     fn lex_error(&self, message: &str) -> MusiResult<()> {
         Err(MusiError::Lexical(LexicalError {
             message: Box::leak(message.into()),
