@@ -243,12 +243,10 @@ impl Lexer {
                             let current_indent = self.indent_stack[self.indent_level];
 
                             log::debug!(
-                                "{}:{}:{}: spaces={}, indent_level={}",
+                                "line {}: spaces={}, current_indent={}",
                                 self.cursor.location.line,
-                                self.cursor.location.column,
-                                self.cursor.location.offset,
                                 spaces,
-                                self.indent_level
+                                current_indent
                             );
 
                             match spaces.cmp(&current_indent) {
@@ -256,9 +254,16 @@ impl Lexer {
                                     self.indent_level += 1;
                                     self.indent_stack[self.indent_level] = spaces;
 
+                                    log::debug!(
+                                        "INDENT: level {} -> {}, spaces={}",
+                                        self.indent_level - 1,
+                                        self.indent_level,
+                                        spaces
+                                    );
+
                                     return Ok(Token::new(
                                         Kind::Indent,
-                                        &vec![b' '; spaces as usize],
+                                        &[u8::try_from(spaces).expect("usize->u8")],
                                         Span {
                                             start: start_location,
                                             end: self.cursor.location,
@@ -269,8 +274,14 @@ impl Lexer {
                                     while self.indent_level > 0
                                         && spaces < self.indent_stack[self.indent_level]
                                     {
+                                        log::debug!(
+                                            "DEDENT: level {} -> {}",
+                                            self.indent_level,
+                                            self.indent_level - 1
+                                        );
                                         self.indent_level -= 1;
                                     }
+
                                     if spaces != self.indent_stack[self.indent_level] {
                                         lex_error("inconsistent indentation")?;
                                     }
@@ -285,7 +296,7 @@ impl Lexer {
                                     ));
                                 }
                                 std::cmp::Ordering::Equal => {}
-                            }
+                            };
                         }
                         break;
                     }
