@@ -124,10 +124,10 @@ pub struct Token {
 }
 
 impl Token {
-    pub fn new(kind: TokenKind, lexeme: Vec<u8>, span: Span) -> Self {
+    pub fn new(kind: TokenKind, lexeme: &[u8], span: Span) -> Self {
         Self {
             kind,
-            lexeme: std::str::from_utf8(&lexeme).expect("valid utf-8").into(),
+            lexeme: std::str::from_utf8(lexeme).expect("valid utf-8").into(),
             span,
         }
     }

@@ -15,17 +15,17 @@ impl Cursor {
         }
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn peek(&self) -> Option<u8> {
         self.source.get(self.position).copied()
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn peek_next(&self) -> Option<u8> {
         self.source.get(self.position + 1).copied()
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn advance(&mut self) -> Option<u8> {
         if self.position >= self.source.len() {
             return None;
@@ -42,7 +42,7 @@ impl Cursor {
         Some(current)
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn advance_by(&mut self, offset: usize) -> Option<u8> {
         let mut previous = None;
         for _ in 0..offset {
@@ -51,8 +51,8 @@ impl Cursor {
         previous
     }
 
-    #[inline(always)]
-    pub fn match_sequence(&mut self, bytes: &[u8]) -> bool {
+    #[inline]
+    pub fn match_sequence(&self, bytes: &[u8]) -> bool {
         let mut start_position = self.position;
         for &expected in bytes {
             match self.source.get(start_position) {
@@ -61,5 +61,18 @@ impl Cursor {
             }
         }
         start_position > self.position
+    }
+
+    #[inline]
+    pub fn match_2byte(&self, first: u8, second: u8) -> bool {
+        self.source.get(self.position) == Some(&first)
+            && self.source.get(self.position + 1) == Some(&second)
+    }
+
+    #[inline]
+    pub fn match_3byte(&self, first: u8, second: u8, third: u8) -> bool {
+        self.source.get(self.position) == Some(&first)
+            && self.source.get(self.position + 1) == Some(&second)
+            && self.source.get(self.position + 2) == Some(&third)
     }
 }

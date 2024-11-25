@@ -15,7 +15,7 @@ impl std::error::Error for MusiError {}
 impl std::fmt::Display for MusiError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            MusiError::Lexical(error) => write!(f, "Lexical Error: {}", error.message),
+            Self::Lexical(error) => write!(f, "Lexical Error: {}", error.message),
         }
     }
 }
