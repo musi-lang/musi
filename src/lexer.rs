@@ -83,7 +83,7 @@ impl Lexer {
                 while self.indent_level > 0 {
                     tokens.push(Token::new(
                         TokenKind::Dedent,
-                        vec![],
+                        &[],
                         Span {
                             start: token.span.start,
                             end: token.span.end,
@@ -106,135 +106,92 @@ impl Lexer {
 
         match self.cursor.peek() {
             Some(current) => match current {
-                b'\r' => {
-                    self.cursor.advance();
-                    if self.cursor.peek() == Some(b'\n') {
-                        self.cursor.advance();
-                    }
-                    self.cursor.location.line += 1;
-                    self.cursor.location.column = 1;
-
-                    Ok(Token::new(
-                        TokenKind::Newline,
-                        vec![b'\r', b'\n'],
-                        Span {
-                            start: start_location,
-                            end: self.cursor.location,
-                        },
-                    ))
-                }
-                b'\n' => {
-                    self.cursor.advance();
-                    self.cursor.location.line += 1;
-                    self.cursor.location.column = 1;
-
-                    Ok(Token::new(
-                        TokenKind::Newline,
-                        vec![b'\n'],
-                        Span {
-                            start: start_location,
-                            end: self.cursor.location,
-                        },
-                    ))
-                }
-
-                b if is_identifier_start(b) => self.lex_identifier_or_keyword(),
-                b if b.is_ascii_digit() => self.lex_number_literal(),
+                b'\r' | b'\n' => Ok(self.lex_newline(start_location)),
+                b if is_identifier_start(b) => Ok(self.lex_identifier_or_keyword()),
+                b if b.is_ascii_digit() => Ok(self.lex_number_literal()),
                 b'"' => self.lex_string_literal(),
                 b'\'' => self.lex_character_literal(),
 
-                b'(' => self.make_token(TokenKind::LeftParen, 1),
-                b')' => self.make_token(TokenKind::RightParen, 1),
-                b'{' => self.make_token(TokenKind::LeftBrace, 1),
-                b'}' => self.make_token(TokenKind::RightBrace, 1),
-                b'[' => self.make_token(TokenKind::LeftBracket, 1),
-                b']' => self.make_token(TokenKind::RightBracket, 1),
-                b',' => self.make_token(TokenKind::Comma, 1),
-                b'.' => self.make_token(TokenKind::Dot, 1),
-                b':' => match self.cursor.peek_next() {
-                    Some(b'=') => self.make_token(TokenKind::ColonEquals, 2),
-                    _ => self.make_token(TokenKind::Colon, 1),
-                },
-                b'+' => match self.cursor.peek_next() {
-                    Some(b'+') => self.make_token(TokenKind::PlusPlus, 2),
-                    Some(b'=') => self.make_token(TokenKind::PlusEquals, 2),
-                    _ => self.make_token(TokenKind::Plus, 1),
-                },
-                b'-' => match self.cursor.peek_next() {
-                    Some(b'>') => self.make_token(TokenKind::MinusGreater, 2),
-                    Some(b'=') => self.make_token(TokenKind::MinusEquals, 2),
-                    _ => self.make_token(TokenKind::Minus, 1),
-                },
-                b'*' => match self.cursor.peek_next() {
-                    Some(b'*') => match self.cursor.source.get(self.cursor.position + 2) {
-                        Some(b'=') => self.make_token(TokenKind::StarStarEquals, 3),
-                        _ => self.make_token(TokenKind::StarStar, 2),
-                    },
-                    Some(b'=') => self.make_token(TokenKind::StarEquals, 2),
-                    _ => self.make_token(TokenKind::Star, 1),
-                },
-                b'/' => match self.cursor.peek_next() {
-                    Some(b'/') => match self.cursor.source.get(self.cursor.position + 2) {
-                        Some(b'=') => self.make_token(TokenKind::SlashSlashEquals, 3),
-                        _ => self.make_token(TokenKind::SlashSlash, 2),
-                    },
-                    Some(b'=') => self.make_token(TokenKind::SlashEquals, 2),
-                    _ => self.make_token(TokenKind::Slash, 1),
-                },
-                b'%' => match self.cursor.peek_next() {
-                    Some(b'=') => self.make_token(TokenKind::PercentEquals, 2),
-                    _ => self.make_token(TokenKind::Percent, 1),
-                },
-                b'&' => match self.cursor.peek_next() {
-                    Some(b'=') => self.make_token(TokenKind::AmpersandEquals, 2),
-                    _ => self.make_token(TokenKind::Ampersand, 1),
-                },
-                b'|' => match self.cursor.peek_next() {
-                    Some(b'=') => self.make_token(TokenKind::PipeEquals, 2),
-                    _ => self.make_token(TokenKind::Pipe, 1),
-                },
-                b'^' => match self.cursor.peek_next() {
-                    Some(b'=') => self.make_token(TokenKind::CaretEquals, 2),
-                    _ => self.make_token(TokenKind::Caret, 1),
-                },
-                b'~' => match self.cursor.peek_next() {
-                    Some(b'=') => self.make_token(TokenKind::TildeEquals, 2),
-                    _ => self.make_token(TokenKind::Tilde, 1),
-                },
-                b'<' => match self.cursor.peek_next() {
-                    Some(b'<') => match self.cursor.source.get(self.cursor.position + 2) {
-                        Some(b'=') => self.make_token(TokenKind::LessLessEquals, 3),
-                        _ => self.make_token(TokenKind::LessLess, 2),
-                    },
-                    Some(b'=') => match self.cursor.source.get(self.cursor.position + 2) {
-                        Some(b'>') => self.make_token(TokenKind::LessEqualsGreater, 3),
-                        _ => self.make_token(TokenKind::LessEquals, 2),
-                    },
-                    Some(b'>') => self.make_token(TokenKind::LessGreater, 2),
-                    _ => self.make_token(TokenKind::Less, 1),
-                },
-                b'>' => match self.cursor.peek_next() {
-                    Some(b'>') => match self.cursor.source.get(self.cursor.position + 2) {
-                        Some(b'=') => self.make_token(TokenKind::GreaterGreaterEquals, 3),
-                        _ => self.make_token(TokenKind::GreaterGreater, 2),
-                    },
-                    Some(b'=') => self.make_token(TokenKind::GreaterEquals, 2),
-                    _ => self.make_token(TokenKind::Greater, 1),
-                },
-                b'=' => match self.cursor.peek_next() {
-                    Some(b'=') => self.make_token(TokenKind::EqualsEquals, 2),
-                    Some(b'>') => self.make_token(TokenKind::EqualsGreater, 2),
-                    _ => self.make_token(TokenKind::Equals, 1),
-                },
+                b'(' => Ok(self.make_token(TokenKind::LeftParen, 1)),
+                b')' => Ok(self.make_token(TokenKind::RightParen, 1)),
+                b'{' => Ok(self.make_token(TokenKind::LeftBrace, 1)),
+                b'}' => Ok(self.make_token(TokenKind::RightBrace, 1)),
+                b'[' => Ok(self.make_token(TokenKind::LeftBracket, 1)),
+                b']' => Ok(self.make_token(TokenKind::RightBracket, 1)),
+                b',' => Ok(self.make_token(TokenKind::Comma, 1)),
+                b'.' => Ok(self.make_token(TokenKind::Dot, 1)),
+                b':' => Ok(self.make_multibyte_token(&[
+                    (TokenKind::Colon, b":"),
+                    (TokenKind::ColonEquals, b":="),
+                ])),
 
-                _ => {
-                    log::warn!("unknown character: {:?}", self.cursor.peek());
-                    self.make_token(TokenKind::Unknown, 1)
-                }
+                b'+' => Ok(self.make_multibyte_token(&[
+                    (TokenKind::Plus, b"+"),
+                    (TokenKind::PlusPlus, b"++"),
+                    (TokenKind::PlusEquals, b"+="),
+                ])),
+                b'-' => Ok(self.make_multibyte_token(&[
+                    (TokenKind::Minus, b"-"),
+                    (TokenKind::MinusGreater, b"->"),
+                    (TokenKind::MinusEquals, b"-="),
+                ])),
+                b'*' => Ok(self.make_multibyte_token(&[
+                    (TokenKind::Star, b"*"),
+                    (TokenKind::StarStar, b"**"),
+                    (TokenKind::StarStarEquals, b"**="),
+                    (TokenKind::StarEquals, b"*="),
+                ])),
+                b'/' => Ok(self.make_multibyte_token(&[
+                    (TokenKind::Slash, b"/"),
+                    (TokenKind::SlashSlash, b"//"),
+                    (TokenKind::SlashSlashEquals, b"//="),
+                    (TokenKind::SlashEquals, b"/="),
+                ])),
+                b'%' => Ok(self.make_multibyte_token(&[
+                    (TokenKind::Percent, b"%"),
+                    (TokenKind::PercentEquals, b"%="),
+                ])),
+                b'&' => Ok(self.make_multibyte_token(&[
+                    (TokenKind::Ampersand, b"&"),
+                    (TokenKind::AmpersandEquals, b"&="),
+                ])),
+                b'|' => Ok(self.make_multibyte_token(&[
+                    (TokenKind::Pipe, b"|"),
+                    (TokenKind::PipeEquals, b"|="),
+                ])),
+                b'^' => Ok(self.make_multibyte_token(&[
+                    (TokenKind::Caret, b"^"),
+                    (TokenKind::CaretEquals, b"^="),
+                ])),
+                b'~' => Ok(self.make_multibyte_token(&[
+                    (TokenKind::Tilde, b"~"),
+                    (TokenKind::TildeEquals, b"~="),
+                ])),
+                b'<' => Ok(self.make_multibyte_token(&[
+                    (TokenKind::Less, b"<"),
+                    (TokenKind::LessLess, b"<<"),
+                    (TokenKind::LessLessEquals, b"<<="),
+                    (TokenKind::LessEquals, b"<="),
+                    (TokenKind::LessEqualsGreater, b"<=>"),
+                    (TokenKind::LessGreater, b"<>"),
+                ])),
+                b'>' => Ok(self.make_multibyte_token(&[
+                    (TokenKind::Greater, b">"),
+                    (TokenKind::GreaterEquals, b">="),
+                    (TokenKind::GreaterGreater, b">>"),
+                    (TokenKind::GreaterGreaterEquals, b">>="),
+                ])),
+                b'=' => Ok(self.make_multibyte_token(&[
+                    (TokenKind::Equals, b"="),
+                    (TokenKind::EqualsEquals, b"=="),
+                    (TokenKind::EqualsGreater, b"=>"),
+                ])),
+
+                _ => Ok(self.make_token(TokenKind::Unknown, 1)),
             },
             None => Ok(Token::new(
                 TokenKind::Eof,
-                vec![],
+                &[],
                 Span {
                     start: start_location,
                     end: self.cursor.location,
@@ -243,20 +200,34 @@ impl Lexer {
         }
     }
 
-    #[inline(always)]
-    fn make_token(&mut self, kind: TokenKind, length: usize) -> MusiResult<Token> {
+    #[inline]
+    fn make_token(&mut self, kind: TokenKind, length: usize) -> Token {
         let start_location = self.cursor.location;
         let start_position = self.cursor.position;
         self.cursor.advance_by(length);
 
-        Ok(Token::new(
+        Token::new(
             kind,
-            Vec::from(&self.cursor.source[start_position..self.cursor.position]),
+            &self.cursor.source[start_position..self.cursor.position],
             Span {
                 start: start_location,
                 end: self.cursor.location,
             },
-        ))
+        )
+    }
+
+    fn make_multibyte_token(&mut self, options: &[(TokenKind, &[u8])]) -> Token {
+        for (token_kind, pattern) in options {
+            if pattern.len() == 2 && self.cursor.match_2byte(pattern[0], pattern[1]) {
+                return self.make_token(*token_kind, 2);
+            } else if pattern.len() == 3
+                && self.cursor.match_3byte(pattern[0], pattern[1], pattern[2])
+            {
+                return self.make_token(*token_kind, 3);
+            }
+        }
+
+        self.make_token(options[0].0, 1)
     }
 
     fn skip_whitespace(&mut self) -> MusiResult<Token> {
@@ -281,7 +252,7 @@ impl Lexer {
 
                                     return Ok(Token::new(
                                         TokenKind::Indent,
-                                        vec![b' '; spaces as usize],
+                                        &vec![b' '; spaces as usize],
                                         Span {
                                             start: start_location,
                                             end: self.cursor.location,
@@ -289,7 +260,7 @@ impl Lexer {
                                     ));
                                 }
                                 std::cmp::Ordering::Less => {
-                                    self.lex_error("inconsistent indentation")?;
+                                    lex_error("inconsistent indentation")?;
                                 }
                                 std::cmp::Ordering::Equal => {}
                             }
@@ -311,7 +282,7 @@ impl Lexer {
 
         Ok(Token::new(
             TokenKind::Unknown,
-            vec![],
+            &[],
             Span {
                 start: self.cursor.location,
                 end: self.cursor.location,
@@ -319,7 +290,34 @@ impl Lexer {
         ))
     }
 
-    fn lex_identifier_or_keyword(&mut self) -> MusiResult<Token> {
+    fn lex_newline(&mut self, start_location: Location) -> Token {
+        let lexeme = if self.cursor.peek() == Some(b'\r') {
+            self.cursor.advance();
+            if self.cursor.peek() == Some(b'\n') {
+                self.cursor.advance();
+                vec![b'\r', b'\n']
+            } else {
+                vec![b'\r']
+            }
+        } else {
+            self.cursor.advance();
+            vec![b'\n']
+        };
+
+        self.cursor.location.line += 1;
+        self.cursor.location.column = 1;
+
+        Token::new(
+            TokenKind::Newline,
+            &lexeme,
+            Span {
+                start: start_location,
+                end: self.cursor.location,
+            },
+        )
+    }
+
+    fn lex_identifier_or_keyword(&mut self) -> Token {
         let start_location = self.cursor.location;
         let start_position = self.cursor.position;
 
@@ -334,20 +332,19 @@ impl Lexer {
         let kind = KEYWORDS
             .iter()
             .find(|(keyword, _)| *keyword == lexeme)
-            .map(|(_, kind)| *kind)
-            .unwrap_or(TokenKind::Identifier);
+            .map_or(TokenKind::Identifier, |(_, kind)| *kind);
 
-        Ok(Token::new(
+        Token::new(
             kind,
-            Vec::from(lexeme),
+            lexeme,
             Span {
                 start: start_location,
                 end: self.cursor.location,
             },
-        ))
+        )
     }
 
-    fn lex_number_literal(&mut self) -> MusiResult<Token> {
+    fn lex_number_literal(&mut self) -> Token {
         let start_location = self.cursor.location;
         let start_position = self.cursor.position;
 
@@ -356,16 +353,16 @@ impl Lexer {
                 matches!(b, b'x' | b'X' | b'b' | b'B' | b'o' | b'O')
             })
         {
-            self.lex_number_base()?;
+            self.lex_number_base();
 
-            return Ok(Token::new(
+            Token::new(
                 TokenKind::Literal(LiteralKind::Number),
-                Vec::from(&self.cursor.source[start_position..self.cursor.position]),
+                &self.cursor.source[start_position..self.cursor.position],
                 Span {
                     start: start_location,
                     end: self.cursor.location,
                 },
-            ));
+            );
         }
 
         self.lex_decimal_digits();
@@ -380,18 +377,18 @@ impl Lexer {
             self.lex_decimal_digits();
         }
 
-        if let Some(b'e') | Some(b'E') = self.cursor.peek() {
-            self.lex_scientific_notation()?;
+        if let Some(b'e' | b'E') = self.cursor.peek() {
+            self.lex_scientific_notation();
         }
 
-        Ok(Token::new(
+        Token::new(
             TokenKind::Literal(LiteralKind::Number),
-            Vec::from(&self.cursor.source[start_position..self.cursor.position]),
+            &self.cursor.source[start_position..self.cursor.position],
             Span {
                 start: start_location,
                 end: self.cursor.location,
             },
-        ))
+        )
     }
 
     fn lex_string_literal(&mut self) -> MusiResult<Token> {
@@ -404,7 +401,7 @@ impl Lexer {
         }
 
         if self.cursor.peek() == Some(b'r') {
-            return self.lex_raw_string(start_location, start_position);
+            return Ok(self.lex_raw_string(start_location, start_position));
         }
 
         if self.cursor.match_sequence(b"\"\"\"") {
@@ -421,10 +418,10 @@ impl Lexer {
                 }
                 b'\\' => self.lex_escape_sequence()?,
                 b'\n' => {
-                    self.lex_error("unclosed string literal")?;
+                    lex_error("unclosed string literal")?;
                 }
                 _ if byte_string && !current.is_ascii() => {
-                    self.lex_error("non-ASCII character in byte string literal")?;
+                    lex_error("non-ASCII character in byte string literal")?;
                 }
                 _ => {
                     self.cursor.advance();
@@ -438,7 +435,7 @@ impl Lexer {
             } else {
                 LiteralKind::String
             }),
-            Vec::from(&self.cursor.source[start_position..self.cursor.position]),
+            &self.cursor.source[start_position..self.cursor.position],
             Span {
                 start: start_location,
                 end: self.cursor.location,
@@ -462,9 +459,9 @@ impl Lexer {
             match current {
                 b'\'' => {
                     if chars == 0 {
-                        self.lex_error("empty character literal")?;
+                        lex_error("empty character literal")?;
                     } else if chars > 1 {
-                        self.lex_error("too many codepoints in character literal")?;
+                        lex_error("too many codepoints in character literal")?;
                     }
                     self.cursor.advance(); // closing '\''
                     break;
@@ -474,10 +471,10 @@ impl Lexer {
                     chars += 1;
                 }
                 b'\n' => {
-                    self.lex_error("unclosed character literal")?;
+                    lex_error("unclosed character literal")?;
                 }
                 _ if byte_char && !current.is_ascii() => {
-                    self.lex_error("non-ASCII character in byte character literal")?;
+                    lex_error("non-ASCII character in byte character literal")?;
                 }
                 _ => {
                     self.cursor.advance();
@@ -492,7 +489,7 @@ impl Lexer {
             } else {
                 LiteralKind::Character
             }),
-            Vec::from(&self.cursor.source[start_position..self.cursor.position]),
+            &self.cursor.source[start_position..self.cursor.position],
             Span {
                 start: start_location,
                 end: self.cursor.location,
@@ -500,9 +497,9 @@ impl Lexer {
         ))
     }
 
-    fn lex_number_base(&mut self) -> MusiResult<()> {
+    fn lex_number_base(&mut self) {
         match self.cursor.peek_next() {
-            Some(b'x') | Some(b'X') => {
+            Some(b'x' | b'X') => {
                 self.cursor.advance_by(2);
                 while let Some(current) = self.cursor.peek() {
                     if !current.is_ascii_hexdigit() && current != b'_' {
@@ -511,7 +508,7 @@ impl Lexer {
                     self.cursor.advance();
                 }
             }
-            Some(b'b') | Some(b'B') => {
+            Some(b'b' | b'B') => {
                 self.cursor.advance_by(2);
                 while let Some(current) = self.cursor.peek() {
                     if current != b'0' && current != b'1' && current != b'_' {
@@ -520,7 +517,7 @@ impl Lexer {
                     self.cursor.advance();
                 }
             }
-            Some(b'o') | Some(b'O') => {
+            Some(b'o' | b'O') => {
                 self.cursor.advance_by(2);
                 while let Some(current) = self.cursor.peek() {
                     if !matches!(current, b'0'..=b'7' | b'_') {
@@ -531,7 +528,6 @@ impl Lexer {
             }
             _ => {}
         }
-        Ok(())
     }
 
     fn lex_decimal_digits(&mut self) {
@@ -551,10 +547,10 @@ impl Lexer {
         }
     }
 
-    fn lex_scientific_notation(&mut self) -> MusiResult<()> {
+    fn lex_scientific_notation(&mut self) {
         self.cursor.advance();
 
-        if let Some(b'+') | Some(b'-') = self.cursor.peek() {
+        if let Some(b'+' | b'-') = self.cursor.peek() {
             self.cursor.advance();
         }
 
@@ -572,26 +568,18 @@ impl Lexer {
             }
             self.cursor.advance();
         }
-        Ok(())
     }
 
     fn lex_escape_sequence(&mut self) -> MusiResult<()> {
         match self.cursor.peek_next() {
-            Some(b'n') | Some(b'r') | Some(b't') | Some(b'\\') | Some(b'"') | Some(b'\'') => {
+            Some(b'n' | b'r' | b't' | b'\\' | b'"' | b'\'') => {
                 self.cursor.advance_by(2);
                 Ok(())
             }
-
-            Some(b'u') | Some(b'U') => {
+            Some(b'u' | b'U' | b'x') => {
                 self.cursor.advance_by(2);
                 self.lex_unicode_escape_sequence::<UNICODE_ESCAPE_HEX_DIGITS>()
             }
-
-            Some(b'x') => {
-                self.cursor.advance_by(2);
-                self.lex_unicode_escape_sequence::<UNICODE_ESCAPE_HEX_DIGITS>()
-            }
-
             Some(invalid) => Err(MusiError::Lexical(LexicalError {
                 message: Box::leak(
                     format!("invalid escape sequence: \\{}", invalid as char).into_boxed_str(),
@@ -610,10 +598,10 @@ impl Lexer {
         for _ in 0..N {
             match self.cursor.peek() {
                 None => {
-                    self.lex_error("unclosed unicode escape sequence")?;
+                    lex_error("unclosed unicode escape sequence")?;
                 }
                 Some(current) if !current.is_ascii_hexdigit() => {
-                    self.lex_error(&format!("invalid hexadecimal digit: 0x{current:X}"))?;
+                    lex_error(&format!("invalid hexadecimal digit: 0x{current:X}"))?;
                 }
                 Some(current) => {
                     if current.is_ascii_hexdigit() {
@@ -623,9 +611,9 @@ impl Lexer {
                             b'A'..=b'F' => current - b'A' + 10,
                             _ => unreachable!(),
                         };
-                        value = (value << 4) | (digit as u32);
+                        value = (value << 4) | u32::from(digit);
                     } else {
-                        self.lex_error(&format!(
+                        lex_error(&format!(
                             "invalid unicode escape: \\u{}",
                             self.cursor.source[start_position..self.cursor.position].escape_ascii()
                         ))?;
@@ -636,21 +624,17 @@ impl Lexer {
         }
 
         if (0xD800..=0xDFFF).contains(&value) {
-            self.lex_error("surrogate range not allowed in unicode escape sequence")?;
+            lex_error("surrogate range not allowed in unicode escape sequence")?;
         }
 
-        if value > 0x10FFFF {
-            self.lex_error("unicode escape sequence out of range")?;
+        if value > 0x0010_FFFF {
+            lex_error("unicode escape sequence out of range")?;
         }
 
         Ok(())
     }
 
-    fn lex_raw_string(
-        &mut self,
-        start_location: Location,
-        start_position: usize,
-    ) -> MusiResult<Token> {
+    fn lex_raw_string(&mut self, start_location: Location, start_position: usize) -> Token {
         self.cursor.advance_by(2);
         while let Some(current) = self.cursor.peek() {
             if current == b'"' {
@@ -660,14 +644,14 @@ impl Lexer {
             self.cursor.advance();
         }
 
-        Ok(Token::new(
+        Token::new(
             TokenKind::Literal(LiteralKind::String),
-            Vec::from(&self.cursor.source[start_position..self.cursor.position]),
+            &self.cursor.source[start_position..self.cursor.position],
             Span {
                 start: start_location,
                 end: self.cursor.location,
             },
-        ))
+        )
     }
 
     fn lex_multiline_string(
@@ -681,7 +665,7 @@ impl Lexer {
                 break;
             }
             if byte_string && !current.is_ascii() {
-                self.lex_error("non-ASCII character in byte string literal")?;
+                lex_error("non-ASCII character in byte string literal")?;
             }
             if current == b'\n' {
                 self.cursor.location.line += 1;
@@ -696,28 +680,28 @@ impl Lexer {
             } else {
                 LiteralKind::String
             }),
-            Vec::from(&self.cursor.source[start_position..self.cursor.position]),
+            &self.cursor.source[start_position..self.cursor.position],
             Span {
                 start: start_location,
                 end: self.cursor.location,
             },
         ))
     }
-
-    #[inline(always)]
-    fn lex_error(&self, message: &str) -> MusiResult<()> {
-        Err(MusiError::Lexical(LexicalError {
-            message: Box::leak(message.into()),
-        }))
-    }
 }
 
-#[inline(always)]
+#[inline]
 const fn is_identifier_start(input: u8) -> bool {
     input.is_ascii_alphabetic() || input == b'_'
 }
 
-#[inline(always)]
+#[inline]
 const fn is_identifier_continue(input: u8) -> bool {
     input.is_ascii_alphanumeric() || input == b'_'
+}
+
+#[inline]
+fn lex_error(message: &str) -> MusiResult<()> {
+    Err(MusiError::Lexical(LexicalError {
+        message: Box::leak(message.into()),
+    }))
 }
