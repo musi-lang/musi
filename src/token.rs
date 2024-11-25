@@ -65,8 +65,8 @@ pub enum Kind {
 
     // Keywords
     And,
-    At,
     As,
+    At,
     Async,
     Await,
     Break,
