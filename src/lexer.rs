@@ -502,9 +502,9 @@ impl Lexer {
         let start_position = self.position;
         let start_location = self.location;
         let mut chars = 0;
-        let is_byte_char = self.peek() == Some(b'b');
 
-        if is_byte_char {
+        let byte_char = self.peek() == Some(b'b');
+        if byte_char {
             self.advance();
         }
 
@@ -528,7 +528,7 @@ impl Lexer {
                 b'\n' => {
                     return self.lex_error("unclosed character literal");
                 }
-                _ if is_byte_char && !current.is_ascii() => {
+                _ if byte_char && !current.is_ascii() => {
                     return self.lex_error("non-ASCII character in byte character literal");
                 }
                 _ => {
@@ -539,7 +539,7 @@ impl Lexer {
         }
 
         Ok(Token::new(
-            TokenKind::Literal(if is_byte_char {
+            TokenKind::Literal(if byte_char {
                 LiteralKind::ByteCharacter
             } else {
                 LiteralKind::Character
@@ -581,12 +581,12 @@ impl Lexer {
         start_location: Location,
         start_position: usize,
     ) -> MusiResult<Token> {
-        let is_byte_string = self.source[start_position] == b'b';
+        let byte_string = self.source[start_position] == b'b';
         while let Some(current) = self.peek() {
             if current == b'"' && self.match_sequence(b"\"\"\"") {
                 break;
             }
-            if is_byte_string && !current.is_ascii() {
+            if byte_string && !current.is_ascii() {
                 return self.lex_error("non-ASCII character in byte string literal");
             }
             if current == b'\n' {
@@ -597,7 +597,7 @@ impl Lexer {
         }
 
         Ok(Token::new(
-            TokenKind::Literal(if is_byte_string {
+            TokenKind::Literal(if byte_string {
                 LiteralKind::ByteString
             } else {
                 LiteralKind::String
