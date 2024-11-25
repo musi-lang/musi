@@ -1,4 +1,4 @@
-use crate::utils::Span;
+use crate::span::Span;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TokenKind {
@@ -60,9 +60,11 @@ pub enum TokenKind {
     LessEquals,           // <=
     LessEqualsGreater,    // <=>
     GreaterEquals,        // >=
+    TildeEquals,          // ~=
 
     // Keywords
     And,
+    At,
     As,
     Async,
     Await,
@@ -70,6 +72,7 @@ pub enum TokenKind {
     Const,
     Continue,
     Def,
+    Deref,
     Do,
     Else,
     False,
@@ -84,7 +87,9 @@ pub enum TokenKind {
     Let,
     Match,
     Not,
+    Of,
     Or,
+    Ref,
     Repeat,
     Return,
     Then,
@@ -104,7 +109,10 @@ pub enum TokenKind {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LiteralKind {
     Number,
+
+    ByteString,
     String,
+    ByteCharacter,
     Character,
 }
 
