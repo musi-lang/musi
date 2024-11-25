@@ -1,7 +1,7 @@
 use crate::span::Span;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum TokenKind {
+pub enum Kind {
     Eof,
     Unknown,
     Newline,
@@ -118,13 +118,13 @@ pub enum LiteralKind {
 
 #[derive(Clone, Debug)]
 pub struct Token {
-    pub kind: TokenKind,
+    pub kind: Kind,
     pub lexeme: Box<str>,
     pub span: Span,
 }
 
 impl Token {
-    pub fn new(kind: TokenKind, lexeme: &[u8], span: Span) -> Self {
+    pub fn new(kind: Kind, lexeme: &[u8], span: Span) -> Self {
         Self {
             kind,
             lexeme: std::str::from_utf8(lexeme).expect("valid utf-8").into(),

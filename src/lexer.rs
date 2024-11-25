@@ -3,51 +3,51 @@ use crate::{
     errors::{LexicalError, MusiError, MusiResult},
     location::Location,
     span::Span,
-    token::{LiteralKind, Token, TokenKind},
+    token::{Kind, LiteralKind, Token},
 };
 
-const KEYWORDS: &[(&[u8], TokenKind)] = &[
-    (b"and", TokenKind::And),
-    (b"as", TokenKind::As),
-    (b"at", TokenKind::At),
-    (b"async", TokenKind::Async),
-    (b"await", TokenKind::Await),
-    (b"break", TokenKind::Break),
-    (b"const", TokenKind::Const),
-    (b"continue", TokenKind::Continue),
-    (b"def", TokenKind::Def),
-    (b"deref", TokenKind::Deref),
-    (b"do", TokenKind::Do),
-    (b"else", TokenKind::Else),
-    (b"false", TokenKind::False),
-    (b"for", TokenKind::For),
-    (b"foreign", TokenKind::Foreign),
-    (b"from", TokenKind::From),
-    (b"if", TokenKind::If),
-    (b"import", TokenKind::Import),
-    (b"in", TokenKind::In),
-    (b"inline", TokenKind::Inline),
-    (b"is", TokenKind::Is),
-    (b"let", TokenKind::Let),
-    (b"match", TokenKind::Match),
-    (b"not", TokenKind::Not),
-    (b"of", TokenKind::Of),
-    (b"or", TokenKind::Or),
-    (b"ref", TokenKind::Ref),
-    (b"repeat", TokenKind::Repeat),
-    (b"return", TokenKind::Return),
-    (b"then", TokenKind::Then),
-    (b"to", TokenKind::To),
-    (b"true", TokenKind::True),
-    (b"type", TokenKind::Type),
-    (b"unsafe", TokenKind::Unsafe),
-    (b"until", TokenKind::Until),
-    (b"var", TokenKind::Var),
-    (b"when", TokenKind::When),
-    (b"where", TokenKind::Where),
-    (b"while", TokenKind::While),
-    (b"with", TokenKind::With),
-    (b"yield", TokenKind::Yield),
+const KEYWORDS: &[(&[u8], Kind)] = &[
+    (b"and", Kind::And),
+    (b"as", Kind::As),
+    (b"at", Kind::At),
+    (b"async", Kind::Async),
+    (b"await", Kind::Await),
+    (b"break", Kind::Break),
+    (b"const", Kind::Const),
+    (b"continue", Kind::Continue),
+    (b"def", Kind::Def),
+    (b"deref", Kind::Deref),
+    (b"do", Kind::Do),
+    (b"else", Kind::Else),
+    (b"false", Kind::False),
+    (b"for", Kind::For),
+    (b"foreign", Kind::Foreign),
+    (b"from", Kind::From),
+    (b"if", Kind::If),
+    (b"import", Kind::Import),
+    (b"in", Kind::In),
+    (b"inline", Kind::Inline),
+    (b"is", Kind::Is),
+    (b"let", Kind::Let),
+    (b"match", Kind::Match),
+    (b"not", Kind::Not),
+    (b"of", Kind::Of),
+    (b"or", Kind::Or),
+    (b"ref", Kind::Ref),
+    (b"repeat", Kind::Repeat),
+    (b"return", Kind::Return),
+    (b"then", Kind::Then),
+    (b"to", Kind::To),
+    (b"true", Kind::True),
+    (b"type", Kind::Type),
+    (b"unsafe", Kind::Unsafe),
+    (b"until", Kind::Until),
+    (b"var", Kind::Var),
+    (b"when", Kind::When),
+    (b"where", Kind::Where),
+    (b"while", Kind::While),
+    (b"with", Kind::With),
+    (b"yield", Kind::Yield),
 ];
 
 const MAX_INDENT_LEVELS: usize = 32;
@@ -73,16 +73,16 @@ impl Lexer {
 
         loop {
             let whitespace = self.skip_whitespace()?;
-            if whitespace.kind != TokenKind::Unknown {
+            if whitespace.kind != Kind::Unknown {
                 tokens.push(whitespace);
             }
 
             let token = self.next_token()?;
 
-            if token.kind == TokenKind::Eof {
+            if token.kind == Kind::Eof {
                 while self.indent_level > 0 {
                     tokens.push(Token::new(
-                        TokenKind::Dedent,
+                        Kind::Dedent,
                         &[],
                         Span {
                             start: token.span.start,
@@ -93,7 +93,7 @@ impl Lexer {
                 }
                 tokens.push(token);
                 break;
-            } else if token.kind != TokenKind::Unknown {
+            } else if token.kind != Kind::Unknown {
                 tokens.push(token);
             }
         }
@@ -105,92 +105,88 @@ impl Lexer {
         let start_location = self.cursor.location;
 
         match self.cursor.peek() {
-            Some(current) => match current {
-                b'\r' | b'\n' => Ok(self.lex_newline(start_location)),
-                b if is_identifier_start(b) => Ok(self.lex_identifier_or_keyword()),
-                b if b.is_ascii_digit() => Ok(self.lex_number_literal()),
-                b'"' => self.lex_string_literal(),
-                b'\'' => self.lex_character_literal(),
+            Some(current) => {
+                match current {
+                    b'\r' | b'\n' => Ok(self.lex_newline(start_location)),
+                    b if is_identifier_start(b) => Ok(self.lex_identifier_or_keyword()),
+                    b if b.is_ascii_digit() => Ok(self.lex_number_literal()),
+                    b'"' => self.lex_string_literal(),
+                    b'\'' => self.lex_character_literal(),
 
-                b'(' => Ok(self.make_token(TokenKind::LeftParen, 1)),
-                b')' => Ok(self.make_token(TokenKind::RightParen, 1)),
-                b'{' => Ok(self.make_token(TokenKind::LeftBrace, 1)),
-                b'}' => Ok(self.make_token(TokenKind::RightBrace, 1)),
-                b'[' => Ok(self.make_token(TokenKind::LeftBracket, 1)),
-                b']' => Ok(self.make_token(TokenKind::RightBracket, 1)),
-                b',' => Ok(self.make_token(TokenKind::Comma, 1)),
-                b'.' => Ok(self.make_token(TokenKind::Dot, 1)),
-                b':' => Ok(self.make_multibyte_token(&[
-                    (TokenKind::Colon, b":"),
-                    (TokenKind::ColonEquals, b":="),
-                ])),
+                    b'(' => Ok(self.make_token(Kind::LeftParen, 1)),
+                    b')' => Ok(self.make_token(Kind::RightParen, 1)),
+                    b'{' => Ok(self.make_token(Kind::LeftBrace, 1)),
+                    b'}' => Ok(self.make_token(Kind::RightBrace, 1)),
+                    b'[' => Ok(self.make_token(Kind::LeftBracket, 1)),
+                    b']' => Ok(self.make_token(Kind::RightBracket, 1)),
+                    b',' => Ok(self.make_token(Kind::Comma, 1)),
+                    b'.' => Ok(self.make_token(Kind::Dot, 1)),
+                    b':' => Ok(self
+                        .make_multibyte_token(&[(Kind::Colon, b":"), (Kind::ColonEquals, b":=")])),
 
-                b'+' => Ok(self.make_multibyte_token(&[
-                    (TokenKind::Plus, b"+"),
-                    (TokenKind::PlusPlus, b"++"),
-                    (TokenKind::PlusEquals, b"+="),
-                ])),
-                b'-' => Ok(self.make_multibyte_token(&[
-                    (TokenKind::Minus, b"-"),
-                    (TokenKind::MinusGreater, b"->"),
-                    (TokenKind::MinusEquals, b"-="),
-                ])),
-                b'*' => Ok(self.make_multibyte_token(&[
-                    (TokenKind::Star, b"*"),
-                    (TokenKind::StarStar, b"**"),
-                    (TokenKind::StarStarEquals, b"**="),
-                    (TokenKind::StarEquals, b"*="),
-                ])),
-                b'/' => Ok(self.make_multibyte_token(&[
-                    (TokenKind::Slash, b"/"),
-                    (TokenKind::SlashSlash, b"//"),
-                    (TokenKind::SlashSlashEquals, b"//="),
-                    (TokenKind::SlashEquals, b"/="),
-                ])),
-                b'%' => Ok(self.make_multibyte_token(&[
-                    (TokenKind::Percent, b"%"),
-                    (TokenKind::PercentEquals, b"%="),
-                ])),
-                b'&' => Ok(self.make_multibyte_token(&[
-                    (TokenKind::Ampersand, b"&"),
-                    (TokenKind::AmpersandEquals, b"&="),
-                ])),
-                b'|' => Ok(self.make_multibyte_token(&[
-                    (TokenKind::Pipe, b"|"),
-                    (TokenKind::PipeEquals, b"|="),
-                ])),
-                b'^' => Ok(self.make_multibyte_token(&[
-                    (TokenKind::Caret, b"^"),
-                    (TokenKind::CaretEquals, b"^="),
-                ])),
-                b'~' => Ok(self.make_multibyte_token(&[
-                    (TokenKind::Tilde, b"~"),
-                    (TokenKind::TildeEquals, b"~="),
-                ])),
-                b'<' => Ok(self.make_multibyte_token(&[
-                    (TokenKind::Less, b"<"),
-                    (TokenKind::LessLess, b"<<"),
-                    (TokenKind::LessLessEquals, b"<<="),
-                    (TokenKind::LessEquals, b"<="),
-                    (TokenKind::LessEqualsGreater, b"<=>"),
-                    (TokenKind::LessGreater, b"<>"),
-                ])),
-                b'>' => Ok(self.make_multibyte_token(&[
-                    (TokenKind::Greater, b">"),
-                    (TokenKind::GreaterEquals, b">="),
-                    (TokenKind::GreaterGreater, b">>"),
-                    (TokenKind::GreaterGreaterEquals, b">>="),
-                ])),
-                b'=' => Ok(self.make_multibyte_token(&[
-                    (TokenKind::Equals, b"="),
-                    (TokenKind::EqualsEquals, b"=="),
-                    (TokenKind::EqualsGreater, b"=>"),
-                ])),
+                    b'+' => Ok(self.make_multibyte_token(&[
+                        (Kind::Plus, b"+"),
+                        (Kind::PlusPlus, b"++"),
+                        (Kind::PlusEquals, b"+="),
+                    ])),
+                    b'-' => Ok(self.make_multibyte_token(&[
+                        (Kind::Minus, b"-"),
+                        (Kind::MinusEquals, b"-="),
+                        (Kind::MinusGreater, b"->"),
+                    ])),
+                    b'*' => Ok(self.make_multibyte_token(&[
+                        (Kind::Star, b"*"),
+                        (Kind::StarStar, b"**"),
+                        (Kind::StarStarEquals, b"**="),
+                        (Kind::StarEquals, b"*="),
+                    ])),
+                    b'/' => Ok(self.make_multibyte_token(&[
+                        (Kind::Slash, b"/"),
+                        (Kind::SlashSlash, b"//"),
+                        (Kind::SlashSlashEquals, b"//="),
+                        (Kind::SlashEquals, b"/="),
+                    ])),
+                    b'%' => Ok(self.make_multibyte_token(&[
+                        (Kind::Percent, b"%"),
+                        (Kind::PercentEquals, b"%="),
+                    ])),
+                    b'&' => Ok(self.make_multibyte_token(&[
+                        (Kind::Ampersand, b"&"),
+                        (Kind::AmpersandEquals, b"&="),
+                    ])),
+                    b'|' => {
+                        Ok(self
+                            .make_multibyte_token(&[(Kind::Pipe, b"|"), (Kind::PipeEquals, b"|=")]))
+                    }
+                    b'^' => Ok(self
+                        .make_multibyte_token(&[(Kind::Caret, b"^"), (Kind::CaretEquals, b"^=")])),
+                    b'~' => Ok(self
+                        .make_multibyte_token(&[(Kind::Tilde, b"~"), (Kind::TildeEquals, b"~=")])),
+                    b'<' => Ok(self.make_multibyte_token(&[
+                        (Kind::Less, b"<"),
+                        (Kind::LessEquals, b"<="),
+                        (Kind::LessEqualsGreater, b"<=>"),
+                        (Kind::LessGreater, b"<>"),
+                        (Kind::LessLess, b"<<"),
+                        (Kind::LessLessEquals, b"<<="),
+                    ])),
+                    b'>' => Ok(self.make_multibyte_token(&[
+                        (Kind::Greater, b">"),
+                        (Kind::GreaterEquals, b">="),
+                        (Kind::GreaterGreater, b">>"),
+                        (Kind::GreaterGreaterEquals, b">>="),
+                    ])),
+                    b'=' => Ok(self.make_multibyte_token(&[
+                        (Kind::Equals, b"="),
+                        (Kind::EqualsEquals, b"=="),
+                        (Kind::EqualsGreater, b"=>"),
+                    ])),
 
-                _ => Ok(self.make_token(TokenKind::Unknown, 1)),
-            },
+                    _ => Ok(self.make_token(Kind::Unknown, 1)),
+                }
+            }
             None => Ok(Token::new(
-                TokenKind::Eof,
+                Kind::Eof,
                 &[],
                 Span {
                     start: start_location,
@@ -201,7 +197,7 @@ impl Lexer {
     }
 
     #[inline]
-    fn make_token(&mut self, kind: TokenKind, length: usize) -> Token {
+    fn make_token(&mut self, kind: Kind, length: usize) -> Token {
         let start_location = self.cursor.location;
         let start_position = self.cursor.position;
         self.cursor.advance_by(length);
@@ -216,7 +212,7 @@ impl Lexer {
         )
     }
 
-    fn make_multibyte_token(&mut self, options: &[(TokenKind, &[u8])]) -> Token {
+    fn make_multibyte_token(&mut self, options: &[(Kind, &[u8])]) -> Token {
         for (token_kind, pattern) in options {
             if pattern.len() == 2 && self.cursor.match_2byte(pattern[0], pattern[1]) {
                 return self.make_token(*token_kind, 2);
@@ -251,7 +247,7 @@ impl Lexer {
                                     self.indent_stack[self.indent_level] = spaces;
 
                                     return Ok(Token::new(
-                                        TokenKind::Indent,
+                                        Kind::Indent,
                                         &vec![b' '; spaces as usize],
                                         Span {
                                             start: start_location,
@@ -281,7 +277,7 @@ impl Lexer {
         }
 
         Ok(Token::new(
-            TokenKind::Unknown,
+            Kind::Unknown,
             &[],
             Span {
                 start: self.cursor.location,
@@ -308,7 +304,7 @@ impl Lexer {
         self.cursor.location.column = 1;
 
         Token::new(
-            TokenKind::Newline,
+            Kind::Newline,
             &lexeme,
             Span {
                 start: start_location,
@@ -332,7 +328,7 @@ impl Lexer {
         let kind = KEYWORDS
             .iter()
             .find(|(keyword, _)| *keyword == lexeme)
-            .map_or(TokenKind::Identifier, |(_, kind)| *kind);
+            .map_or(Kind::Identifier, |(_, kind)| *kind);
 
         Token::new(
             kind,
@@ -356,7 +352,7 @@ impl Lexer {
             self.lex_number_base();
 
             Token::new(
-                TokenKind::Literal(LiteralKind::Number),
+                Kind::Literal(LiteralKind::Number),
                 &self.cursor.source[start_position..self.cursor.position],
                 Span {
                     start: start_location,
@@ -382,7 +378,7 @@ impl Lexer {
         }
 
         Token::new(
-            TokenKind::Literal(LiteralKind::Number),
+            Kind::Literal(LiteralKind::Number),
             &self.cursor.source[start_position..self.cursor.position],
             Span {
                 start: start_location,
@@ -430,7 +426,7 @@ impl Lexer {
         }
 
         Ok(Token::new(
-            TokenKind::Literal(if byte_string {
+            Kind::Literal(if byte_string {
                 LiteralKind::ByteString
             } else {
                 LiteralKind::String
@@ -484,7 +480,7 @@ impl Lexer {
         }
 
         Ok(Token::new(
-            TokenKind::Literal(if byte_char {
+            Kind::Literal(if byte_char {
                 LiteralKind::ByteCharacter
             } else {
                 LiteralKind::Character
@@ -645,7 +641,7 @@ impl Lexer {
         }
 
         Token::new(
-            TokenKind::Literal(LiteralKind::String),
+            Kind::Literal(LiteralKind::String),
             &self.cursor.source[start_position..self.cursor.position],
             Span {
                 start: start_location,
@@ -675,7 +671,7 @@ impl Lexer {
         }
 
         Ok(Token::new(
-            TokenKind::Literal(if byte_string {
+            Kind::Literal(if byte_string {
                 LiteralKind::ByteString
             } else {
                 LiteralKind::String
