@@ -10,6 +10,7 @@ pub enum Value {
         code: Vec<u8>,
         arity: usize,
     },
+    Reference(Box<Value>),
 
     Nothing,
 }
