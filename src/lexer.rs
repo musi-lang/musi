@@ -243,8 +243,10 @@ impl Lexer {
                             let current_indent = self.indent_stack[self.indent_level];
 
                             log::debug!(
-                                "line {}: spaces={}, current_indent={}",
+                                "{}:{}:{}: spaces={}, current_indent={}",
                                 self.cursor.location.line,
+                                self.cursor.location.column,
+                                self.cursor.location.offset,
                                 spaces,
                                 current_indent
                             );
@@ -255,7 +257,7 @@ impl Lexer {
                                     self.indent_stack[self.indent_level] = spaces;
 
                                     log::debug!(
-                                        "INDENT: level {} -> {}, spaces={}",
+                                        "Indent => indent_level={}->{}, spaces={}",
                                         self.indent_level - 1,
                                         self.indent_level,
                                         spaces
@@ -275,13 +277,18 @@ impl Lexer {
                                         && spaces < self.indent_stack[self.indent_level]
                                     {
                                         log::debug!(
-                                            "DEDENT: level {} -> {}",
+                                            "Dedent => indent_level={}->{}",
                                             self.indent_level,
                                             self.indent_level - 1
                                         );
                                         self.indent_level -= 1;
                                     }
 
+                                    if spaces < self.indent_stack[0] {
+                                        lex_error(
+                                            "unindent does not match any outer indentation level",
+                                        )?;
+                                    }
                                     if spaces != self.indent_stack[self.indent_level] {
                                         lex_error("inconsistent indentation")?;
                                     }
