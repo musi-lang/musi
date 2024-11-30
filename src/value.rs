@@ -1,10 +1,13 @@
+#[derive(Debug)]
 pub enum Value {
     Integer(i64),
     Natural(u64),
     Real(f64),
     Boolean(bool),
 
-    String(Box<str>),
+    Array(Vec<Value>), // [v, v, v, ...]
+
+    String(Vec<char>),
     Function {
         name: Box<str>,
         code: Vec<u8>,
@@ -12,5 +15,5 @@ pub enum Value {
     },
     Reference(Box<Value>),
 
-    Nothing,
+    Unit,
 }
