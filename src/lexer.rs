@@ -9,23 +9,26 @@ use crate::{
 const KEYWORDS: &[(&[u8], Kind)] = &[
     (b"and", Kind::And),
     (b"as", Kind::As),
-    (b"at", Kind::At),
     (b"async", Kind::Async),
     (b"await", Kind::Await),
     (b"break", Kind::Break),
+    (b"cinclude", Kind::CInclude),
     (b"const", Kind::Const),
     (b"continue", Kind::Continue),
-    (b"def", Kind::Def),
     (b"deref", Kind::Deref),
     (b"do", Kind::Do),
+    (b"downto", Kind::Downto),
     (b"else", Kind::Else),
+    (b"exists", Kind::Exists),
     (b"false", Kind::False),
     (b"for", Kind::For),
+    (b"forall", Kind::Forall),
     (b"foreign", Kind::Foreign),
     (b"from", Kind::From),
     (b"if", Kind::If),
-    (b"import", Kind::Import),
     (b"in", Kind::In),
+    (b"include", Kind::Include),
+    (b"inherit", Kind::Inherit),
     (b"inline", Kind::Inline),
     (b"is", Kind::Is),
     (b"let", Kind::Let),
@@ -47,6 +50,7 @@ const KEYWORDS: &[(&[u8], Kind)] = &[
     (b"where", Kind::Where),
     (b"while", Kind::While),
     (b"with", Kind::With),
+    (b"xor", Kind::Xor),
     (b"yield", Kind::Yield),
 ];
 
@@ -123,33 +127,25 @@ impl Lexer {
                     b'.' => Ok(self.make_token(Kind::Dot, 1)),
                     b':' => Ok(self
                         .make_multibyte_token(&[(Kind::Colon, b":"), (Kind::ColonEquals, b":=")])),
+                    b';' => Ok(self.make_token(Kind::Semicolon, 1)),
+                    b'?' => Ok(self.make_token(Kind::Question, 1)),
+                    b'@' => Ok(self.make_token(Kind::At, 1)),
 
-                    b'+' => Ok(self.make_multibyte_token(&[
-                        (Kind::Plus, b"+"),
-                        (Kind::PlusPlus, b"++"),
-                        (Kind::PlusEquals, b"+="),
-                    ])),
+                    b'+' => {
+                        Ok(self
+                            .make_multibyte_token(&[(Kind::Plus, b"+"), (Kind::PlusEquals, b"+=")]))
+                    }
                     b'-' => Ok(self.make_multibyte_token(&[
                         (Kind::Minus, b"-"),
                         (Kind::MinusEquals, b"-="),
                         (Kind::MinusGreater, b"->"),
                     ])),
-                    b'*' => Ok(self.make_multibyte_token(&[
-                        (Kind::Star, b"*"),
-                        (Kind::StarStar, b"**"),
-                        (Kind::StarStarEquals, b"**="),
-                        (Kind::StarEquals, b"*="),
-                    ])),
-                    b'/' => Ok(self.make_multibyte_token(&[
-                        (Kind::Slash, b"/"),
-                        (Kind::SlashSlash, b"//"),
-                        (Kind::SlashSlashEquals, b"//="),
-                        (Kind::SlashEquals, b"/="),
-                    ])),
-                    b'%' => Ok(self.make_multibyte_token(&[
-                        (Kind::Percent, b"%"),
-                        (Kind::PercentEquals, b"%="),
-                    ])),
+                    b'*' => {
+                        Ok(self
+                            .make_multibyte_token(&[(Kind::Star, b"*"), (Kind::StarEquals, b"*=")]))
+                    }
+                    b'/' => Ok(self
+                        .make_multibyte_token(&[(Kind::Slash, b"/"), (Kind::SlashEquals, b"/=")])),
                     b'&' => Ok(self.make_multibyte_token(&[
                         (Kind::Ampersand, b"&"),
                         (Kind::AmpersandEquals, b"&="),
@@ -167,7 +163,6 @@ impl Lexer {
                         (Kind::Less, b"<"),
                         (Kind::LessEquals, b"<="),
                         (Kind::LessEqualsGreater, b"<=>"),
-                        (Kind::LessGreater, b"<>"),
                         (Kind::LessLess, b"<<"),
                         (Kind::LessLessEquals, b"<<="),
                     ])),
@@ -179,7 +174,6 @@ impl Lexer {
                     ])),
                     b'=' => Ok(self.make_multibyte_token(&[
                         (Kind::Equals, b"="),
-                        (Kind::EqualsEquals, b"=="),
                         (Kind::EqualsGreater, b"=>"),
                     ])),
 
@@ -435,10 +429,6 @@ impl Lexer {
             return Ok(self.lex_raw_string(start_location, start_position));
         }
 
-        if self.cursor.match_sequence(b"\"\"\"") {
-            return self.lex_multiline_string(start_location, start_position);
-        }
-
         self.cursor.advance(); // opening '"'
 
         while let Some(current) = self.cursor.peek() {
@@ -449,7 +439,8 @@ impl Lexer {
                 }
                 b'\\' => self.lex_escape_sequence()?,
                 b'\n' => {
-                    lex_error("unclosed string literal")?;
+                    // multi-line by default
+                    self.cursor.advance();
                 }
                 _ if byte_string && !current.is_ascii() => {
                     lex_error("non-ASCII character in byte string literal")?;
@@ -683,40 +674,6 @@ impl Lexer {
                 end: self.cursor.location,
             },
         )
-    }
-
-    fn lex_multiline_string(
-        &mut self,
-        start_location: Location,
-        start_position: usize,
-    ) -> MusiResult<Token> {
-        let byte_string = self.cursor.source[start_position] == b'b';
-        while let Some(current) = self.cursor.peek() {
-            if current == b'"' && self.cursor.match_sequence(b"\"\"\"") {
-                break;
-            }
-            if byte_string && !current.is_ascii() {
-                lex_error("non-ASCII character in byte string literal")?;
-            }
-            if current == b'\n' {
-                self.cursor.location.line += 1;
-                self.cursor.location.column = 1;
-            }
-            self.cursor.advance();
-        }
-
-        Ok(Token::new(
-            Kind::Literal(if byte_string {
-                LiteralKind::ByteString
-            } else {
-                LiteralKind::String
-            }),
-            &self.cursor.source[start_position..self.cursor.position],
-            Span {
-                start: start_location,
-                end: self.cursor.location,
-            },
-        ))
     }
 }
 
