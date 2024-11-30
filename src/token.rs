@@ -30,10 +30,8 @@ pub enum Kind {
     Minus,             // -
     Star,              // *
     Slash,             // /
-    Ampersand,         // &
     Pipe,              // |
     Caret,             // ^
-    Tilde,             // ~
     Less,              // <
     LessLess,          // <<
     Greater,           // >

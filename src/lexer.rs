@@ -135,15 +135,13 @@ impl Lexer {
                     b'*' => Ok(self.make_multibyte_token(&[(Kind::Star, b"*")])),
                     b'/' => Ok(self
                         .make_multibyte_token(&[(Kind::Slash, b"/"), (Kind::SlashEquals, b"/=")])),
-                    b'&' => Ok(self.make_multibyte_token(&[(Kind::Ampersand, b"&")])),
                     b'|' => Ok(self.make_multibyte_token(&[
                         (Kind::Pipe, b"|"),
                         (Kind::PipeGreater, b"|>"),
                         (Kind::PipeMinusGreater, b"|->"),
                     ])),
                     b'^' => Ok(self.make_token(Kind::Caret, 1)),
-                    b'~' => Ok(self
-                        .make_multibyte_token(&[(Kind::Tilde, b"~"), (Kind::TildeEquals, b"~=")])),
+                    b'~' => Ok(self.make_multibyte_token(&[(Kind::TildeEquals, b"~=")])),
                     b'<' => Ok(self.make_multibyte_token(&[
                         (Kind::Less, b"<"),
                         (Kind::LessEquals, b"<="),
