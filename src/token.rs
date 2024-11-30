@@ -43,13 +43,12 @@ pub enum Kind {
     PipeGreater,       // |>
     PipeMinusGreater,  // |->
     Equals,            // =
+    SlashEquals,       // /=
     ColonEquals,       // :=
     LessEquals,        // <=
     LessEqualsGreater, // <=>
     GreaterEquals,     // >=
     TildeEquals,       // ~=
-    PlusMinus,         // +-
-    MinusPlus,         // -+
 
     // Keywords
     And,
@@ -66,7 +65,6 @@ pub enum Kind {
     Exists,
     False,
     For,
-    Forall,
     Foreign,
     From,
     If,
