@@ -26,39 +26,30 @@ pub enum Kind {
     At,           // @
 
     // Operators
-    Plus,                 // +
-    Minus,                // -
-    Star,                 // *
-    Slash,                // /
-    Ampersand,            // &
-    Pipe,                 // |
-    Caret,                // ^
-    Tilde,                // ~
-    Less,                 // <
-    LessLess,             // <<
-    Greater,              // >
-    GreaterGreater,       // >>
-    MinusGreater,         // ->
-    EqualsGreater,        // =>
-    PipeGreater,          // |>
-    PipeMinusGreater,     // |->
-    Equals,               // =
-    PlusEquals,           // +=
-    MinusEquals,          // -=
-    StarEquals,           // *=
-    SlashEquals,          // /=
-    AmpersandEquals,      // &=
-    PipeEquals,           // |=
-    CaretEquals,          // ^=
-    LessLessEquals,       // <<=
-    GreaterGreaterEquals, // >>=
-    ColonEquals,          // :=
-    LessEquals,           // <=
-    LessEqualsGreater,    // <=>
-    GreaterEquals,        // >=
-    TildeEquals,          // ~=
-    PlusMinus,            // +-
-    MinusPlus,            // -+
+    Plus,              // +
+    Minus,             // -
+    Star,              // *
+    Slash,             // /
+    Ampersand,         // &
+    Pipe,              // |
+    Caret,             // ^
+    Tilde,             // ~
+    Less,              // <
+    LessLess,          // <<
+    Greater,           // >
+    GreaterGreater,    // >>
+    MinusGreater,      // ->
+    EqualsGreater,     // =>
+    PipeGreater,       // |>
+    PipeMinusGreater,  // |->
+    Equals,            // =
+    ColonEquals,       // :=
+    LessEquals,        // <=
+    LessEqualsGreater, // <=>
+    GreaterEquals,     // >=
+    TildeEquals,       // ~=
+    PlusMinus,         // +-
+    MinusPlus,         // -+
 
     // Keywords
     And,
@@ -66,7 +57,6 @@ pub enum Kind {
     Async,
     Await,
     Break,
-    CInclude,
     Const,
     Continue,
     Deref,

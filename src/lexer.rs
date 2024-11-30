@@ -12,7 +12,6 @@ const KEYWORDS: &[(&[u8], Kind)] = &[
     (b"async", Kind::Async),
     (b"await", Kind::Await),
     (b"break", Kind::Break),
-    (b"cinclude", Kind::CInclude),
     (b"const", Kind::Const),
     (b"continue", Kind::Continue),
     (b"deref", Kind::Deref),
@@ -109,80 +108,66 @@ impl Lexer {
         let start_location = self.cursor.location;
 
         match self.cursor.peek() {
-            Some(current) => {
-                match current {
-                    b'\r' | b'\n' => Ok(self.lex_newline(start_location)),
-                    b if is_identifier_start(b) => Ok(self.lex_identifier_or_keyword()),
-                    b if b.is_ascii_digit() => Ok(self.lex_number_literal()),
-                    b'"' => self.lex_string_literal(),
-                    b'\'' => self.lex_character_literal(),
+            Some(current) => match current {
+                b'\r' | b'\n' => Ok(self.lex_newline(start_location)),
+                b if is_identifier_start(b) => Ok(self.lex_identifier_or_keyword()),
+                b if b.is_ascii_digit() => Ok(self.lex_number_literal()),
+                b'"' => self.lex_string_literal(),
+                b'\'' => self.lex_character_literal(),
 
-                    b'(' => Ok(self.make_token(Kind::LeftParen, 1)),
-                    b')' => Ok(self.make_token(Kind::RightParen, 1)),
-                    b'{' => Ok(self.make_token(Kind::LeftBrace, 1)),
-                    b'}' => Ok(self.make_token(Kind::RightBrace, 1)),
-                    b'[' => Ok(self.make_token(Kind::LeftBracket, 1)),
-                    b']' => Ok(self.make_token(Kind::RightBracket, 1)),
-                    b',' => Ok(self.make_token(Kind::Comma, 1)),
-                    b'.' => Ok(self.make_token(Kind::Dot, 1)),
-                    b':' => Ok(self
-                        .make_multibyte_token(&[(Kind::Colon, b":"), (Kind::ColonEquals, b":=")])),
-                    b';' => Ok(self.make_token(Kind::Semicolon, 1)),
-                    b'?' => Ok(self.make_token(Kind::Question, 1)),
-                    b'@' => Ok(self.make_token(Kind::At, 1)),
-
-                    b'+' => Ok(self.make_multibyte_token(&[
-                        (Kind::Plus, b"+"),
-                        (Kind::PlusEquals, b"+="),
-                        (Kind::PlusMinus, b"+-"),
-                    ])),
-                    b'-' => Ok(self.make_multibyte_token(&[
-                        (Kind::Minus, b"-"),
-                        (Kind::MinusEquals, b"-="),
-                        (Kind::MinusGreater, b"->"),
-                        (Kind::MinusPlus, b"-+"),
-                    ])),
-                    b'*' => {
-                        Ok(self
-                            .make_multibyte_token(&[(Kind::Star, b"*"), (Kind::StarEquals, b"*=")]))
-                    }
-                    b'/' => Ok(self
-                        .make_multibyte_token(&[(Kind::Slash, b"/"), (Kind::SlashEquals, b"/=")])),
-                    b'&' => Ok(self.make_multibyte_token(&[
-                        (Kind::Ampersand, b"&"),
-                        (Kind::AmpersandEquals, b"&="),
-                    ])),
-                    b'|' => Ok(self.make_multibyte_token(&[
-                        (Kind::Pipe, b"|"),
-                        (Kind::PipeEquals, b"|="),
-                        (Kind::PipeGreater, b"|>"),
-                        (Kind::PipeMinusGreater, b"|->"),
-                    ])),
-                    b'^' => Ok(self
-                        .make_multibyte_token(&[(Kind::Caret, b"^"), (Kind::CaretEquals, b"^=")])),
-                    b'~' => Ok(self
-                        .make_multibyte_token(&[(Kind::Tilde, b"~"), (Kind::TildeEquals, b"~=")])),
-                    b'<' => Ok(self.make_multibyte_token(&[
-                        (Kind::Less, b"<"),
-                        (Kind::LessEquals, b"<="),
-                        (Kind::LessEqualsGreater, b"<=>"),
-                        (Kind::LessLess, b"<<"),
-                        (Kind::LessLessEquals, b"<<="),
-                    ])),
-                    b'>' => Ok(self.make_multibyte_token(&[
-                        (Kind::Greater, b">"),
-                        (Kind::GreaterEquals, b">="),
-                        (Kind::GreaterGreater, b">>"),
-                        (Kind::GreaterGreaterEquals, b">>="),
-                    ])),
-                    b'=' => Ok(self.make_multibyte_token(&[
-                        (Kind::Equals, b"="),
-                        (Kind::EqualsGreater, b"=>"),
-                    ])),
-
-                    _ => Ok(self.make_token(Kind::Unknown, 1)),
+                b'(' => Ok(self.make_token(Kind::LeftParen, 1)),
+                b')' => Ok(self.make_token(Kind::RightParen, 1)),
+                b'{' => Ok(self.make_token(Kind::LeftBrace, 1)),
+                b'}' => Ok(self.make_token(Kind::RightBrace, 1)),
+                b'[' => Ok(self.make_token(Kind::LeftBracket, 1)),
+                b']' => Ok(self.make_token(Kind::RightBracket, 1)),
+                b',' => Ok(self.make_token(Kind::Comma, 1)),
+                b'.' => Ok(self.make_token(Kind::Dot, 1)),
+                b':' => {
+                    Ok(self
+                        .make_multibyte_token(&[(Kind::Colon, b":"), (Kind::ColonEquals, b":=")]))
                 }
-            }
+                b';' => Ok(self.make_token(Kind::Semicolon, 1)),
+                b'?' => Ok(self.make_token(Kind::Question, 1)),
+                b'@' => Ok(self.make_token(Kind::At, 1)),
+
+                b'+' => {
+                    Ok(self.make_multibyte_token(&[(Kind::Plus, b"+"), (Kind::PlusMinus, b"+-")]))
+                }
+                b'-' => Ok(self.make_multibyte_token(&[
+                    (Kind::Minus, b"-"),
+                    (Kind::MinusGreater, b"->"),
+                    (Kind::MinusPlus, b"-+"),
+                ])),
+                b'*' => Ok(self.make_multibyte_token(&[(Kind::Star, b"*")])),
+                b'/' => Ok(self.make_token(Kind::Slash, 1)),
+                b'&' => Ok(self.make_multibyte_token(&[(Kind::Ampersand, b"&")])),
+                b'|' => Ok(self.make_multibyte_token(&[
+                    (Kind::Pipe, b"|"),
+                    (Kind::PipeGreater, b"|>"),
+                    (Kind::PipeMinusGreater, b"|->"),
+                ])),
+                b'^' => Ok(self.make_token(Kind::Caret, 1)),
+                b'~' => {
+                    Ok(self
+                        .make_multibyte_token(&[(Kind::Tilde, b"~"), (Kind::TildeEquals, b"~=")]))
+                }
+                b'<' => Ok(self.make_multibyte_token(&[
+                    (Kind::Less, b"<"),
+                    (Kind::LessEquals, b"<="),
+                    (Kind::LessEqualsGreater, b"<=>"),
+                    (Kind::LessLess, b"<<"),
+                ])),
+                b'>' => Ok(self.make_multibyte_token(&[
+                    (Kind::Greater, b">"),
+                    (Kind::GreaterEquals, b">="),
+                    (Kind::GreaterGreater, b">>"),
+                ])),
+                b'=' => Ok(self
+                    .make_multibyte_token(&[(Kind::Equals, b"="), (Kind::EqualsGreater, b"=>")])),
+
+                _ => Ok(self.make_token(Kind::Unknown, 1)),
+            },
             None => Ok(Token::new(
                 Kind::Eof,
                 &[],
