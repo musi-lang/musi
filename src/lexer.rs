@@ -131,14 +131,16 @@ impl Lexer {
                     b'?' => Ok(self.make_token(Kind::Question, 1)),
                     b'@' => Ok(self.make_token(Kind::At, 1)),
 
-                    b'+' => {
-                        Ok(self
-                            .make_multibyte_token(&[(Kind::Plus, b"+"), (Kind::PlusEquals, b"+=")]))
-                    }
+                    b'+' => Ok(self.make_multibyte_token(&[
+                        (Kind::Plus, b"+"),
+                        (Kind::PlusEquals, b"+="),
+                        (Kind::PlusMinus, b"+-"),
+                    ])),
                     b'-' => Ok(self.make_multibyte_token(&[
                         (Kind::Minus, b"-"),
                         (Kind::MinusEquals, b"-="),
                         (Kind::MinusGreater, b"->"),
+                        (Kind::MinusPlus, b"-+"),
                     ])),
                     b'*' => {
                         Ok(self
@@ -154,6 +156,7 @@ impl Lexer {
                         (Kind::Pipe, b"|"),
                         (Kind::PipeEquals, b"|="),
                         (Kind::PipeGreater, b"|>"),
+                        (Kind::PipeMinusGreater, b"|->"),
                     ])),
                     b'^' => Ok(self
                         .make_multibyte_token(&[(Kind::Caret, b"^"), (Kind::CaretEquals, b"^=")])),

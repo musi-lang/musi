@@ -41,6 +41,7 @@ pub enum Kind {
     MinusGreater,         // ->
     EqualsGreater,        // =>
     PipeGreater,          // |>
+    PipeMinusGreater,     // |->
     Equals,               // =
     PlusEquals,           // +=
     MinusEquals,          // -=
@@ -56,6 +57,8 @@ pub enum Kind {
     LessEqualsGreater,    // <=>
     GreaterEquals,        // >=
     TildeEquals,          // ~=
+    PlusMinus,            // +-
+    MinusPlus,            // -+
 
     // Keywords
     And,
