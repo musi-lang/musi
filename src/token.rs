@@ -21,23 +21,21 @@ pub enum Kind {
     Comma,        // ,
     Dot,          // .
     Colon,        // :
+    Semicolon,    // ;
+    Question,     // ?
+    At,           // @
 
     // Operators
     Plus,                 // +
-    PlusPlus,             // ++
     Minus,                // -
     Star,                 // *
-    StarStar,             // **
     Slash,                // /
-    SlashSlash,           // //
-    Percent,              // %
     Ampersand,            // &
     Pipe,                 // |
     Caret,                // ^
     Tilde,                // ~
     Less,                 // <
     LessLess,             // <<
-    LessGreater,          // <>
     Greater,              // >
     GreaterGreater,       // >>
     MinusGreater,         // ->
@@ -47,17 +45,13 @@ pub enum Kind {
     PlusEquals,           // +=
     MinusEquals,          // -=
     StarEquals,           // *=
-    StarStarEquals,       // **=
     SlashEquals,          // /=
-    SlashSlashEquals,     // //=
-    PercentEquals,        // %=
     AmpersandEquals,      // &=
     PipeEquals,           // |=
     CaretEquals,          // ^=
     LessLessEquals,       // <<=
     GreaterGreaterEquals, // >>=
     ColonEquals,          // :=
-    EqualsEquals,         // ==
     LessEquals,           // <=
     LessEqualsGreater,    // <=>
     GreaterEquals,        // >=
@@ -66,23 +60,26 @@ pub enum Kind {
     // Keywords
     And,
     As,
-    At,
     Async,
     Await,
     Break,
+    CInclude,
     Const,
     Continue,
-    Def,
     Deref,
     Do,
+    Downto,
     Else,
+    Exists,
     False,
     For,
+    Forall,
     Foreign,
     From,
     If,
-    Import,
     In,
+    Include,
+    Inherit,
     Inline,
     Is,
     Let,
@@ -104,6 +101,7 @@ pub enum Kind {
     Where,
     While,
     With,
+    Xor,
     Yield,
 }
 
