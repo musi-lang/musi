@@ -52,18 +52,6 @@ impl Cursor {
     }
 
     #[inline]
-    pub fn match_sequence(&self, bytes: &[u8]) -> bool {
-        let mut start_position = self.position;
-        for &expected in bytes {
-            match self.source.get(start_position) {
-                Some(&current) if current == expected => start_position += 1,
-                _ => return false,
-            }
-        }
-        start_position > self.position
-    }
-
-    #[inline]
     pub fn match_2byte(&self, first: u8, second: u8) -> bool {
         self.source.get(self.position) == Some(&first)
             && self.source.get(self.position + 1) == Some(&second)
