@@ -36,10 +36,7 @@ pub enum Kind {
     LessLess,          // <<
     Greater,           // >
     GreaterGreater,    // >>
-    MinusGreater,      // ->
-    EqualsGreater,     // =>
     PipeGreater,       // |>
-    PipeMinusGreater,  // |->
     Equals,            // =
     SlashEquals,       // /=
     ColonEquals,       // :=
@@ -47,6 +44,8 @@ pub enum Kind {
     LessEqualsGreater, // <=>
     GreaterEquals,     // >=
     TildeEquals,       // ~=
+    MinusGreater,      // ->
+    LessMinus,         // <-
 
     // Keywords
     And,
@@ -54,13 +53,13 @@ pub enum Kind {
     Async,
     Await,
     Break,
+    Case,
     Const,
     Continue,
     Deref,
     Do,
     Downto,
     Else,
-    Exists,
     False,
     For,
     Foreign,
@@ -72,10 +71,10 @@ pub enum Kind {
     Inline,
     Is,
     Let,
-    Match,
     Not,
     Of,
     Or,
+    Otherwise,
     Ref,
     Repeat,
     Return,
@@ -86,10 +85,8 @@ pub enum Kind {
     Unsafe,
     Until,
     Var,
-    When,
     Where,
     While,
-    With,
     Xor,
     Yield,
 }

@@ -12,13 +12,13 @@ const KEYWORDS: &[(&[u8], Kind)] = &[
     (b"async", Kind::Async),
     (b"await", Kind::Await),
     (b"break", Kind::Break),
+    (b"case", Kind::Case),
     (b"const", Kind::Const),
     (b"continue", Kind::Continue),
     (b"deref", Kind::Deref),
     (b"do", Kind::Do),
     (b"downto", Kind::Downto),
     (b"else", Kind::Else),
-    (b"exists", Kind::Exists),
     (b"false", Kind::False),
     (b"for", Kind::For),
     (b"foreign", Kind::Foreign),
@@ -30,10 +30,10 @@ const KEYWORDS: &[(&[u8], Kind)] = &[
     (b"inline", Kind::Inline),
     (b"is", Kind::Is),
     (b"let", Kind::Let),
-    (b"match", Kind::Match),
     (b"not", Kind::Not),
     (b"of", Kind::Of),
     (b"or", Kind::Or),
+    (b"otherwise", Kind::Otherwise),
     (b"ref", Kind::Ref),
     (b"repeat", Kind::Repeat),
     (b"return", Kind::Return),
@@ -44,10 +44,8 @@ const KEYWORDS: &[(&[u8], Kind)] = &[
     (b"unsafe", Kind::Unsafe),
     (b"until", Kind::Until),
     (b"var", Kind::Var),
-    (b"when", Kind::When),
     (b"where", Kind::Where),
     (b"while", Kind::While),
-    (b"with", Kind::With),
     (b"xor", Kind::Xor),
     (b"yield", Kind::Yield),
 ];
@@ -135,11 +133,8 @@ impl Lexer {
                     b'*' => Ok(self.make_multibyte_token(&[(Kind::Star, b"*")])),
                     b'/' => Ok(self
                         .make_multibyte_token(&[(Kind::Slash, b"/"), (Kind::SlashEquals, b"/=")])),
-                    b'|' => Ok(self.make_multibyte_token(&[
-                        (Kind::Pipe, b"|"),
-                        (Kind::PipeGreater, b"|>"),
-                        (Kind::PipeMinusGreater, b"|->"),
-                    ])),
+                    b'|' => Ok(self
+                        .make_multibyte_token(&[(Kind::Pipe, b"|"), (Kind::PipeGreater, b"|>")])),
                     b'^' => Ok(self.make_token(Kind::Caret, 1)),
                     b'~' => Ok(self.make_multibyte_token(&[(Kind::TildeEquals, b"~=")])),
                     b'<' => Ok(self.make_multibyte_token(&[
@@ -147,16 +142,14 @@ impl Lexer {
                         (Kind::LessEquals, b"<="),
                         (Kind::LessEqualsGreater, b"<=>"),
                         (Kind::LessLess, b"<<"),
+                        (Kind::LessMinus, b"<-"),
                     ])),
                     b'>' => Ok(self.make_multibyte_token(&[
                         (Kind::Greater, b">"),
                         (Kind::GreaterEquals, b">="),
                         (Kind::GreaterGreater, b">>"),
                     ])),
-                    b'=' => Ok(self.make_multibyte_token(&[
-                        (Kind::Equals, b"="),
-                        (Kind::EqualsGreater, b"=>"),
-                    ])),
+                    b'=' => Ok(self.make_token(Kind::Equals, 1)),
 
                     _ => Ok(self.make_token(Kind::Unknown, 1)),
                 }
