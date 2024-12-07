@@ -1,10 +1,29 @@
 use crate::{
-    ast::{DeclarationKind, ExpressionKind, Node, StatementKind},
+    ast::{
+        Expression, ExpressionKind, Node, Program, ProgramKind, Statement, StatementKind,
+        VariableDeclarator,
+    },
     errors::{MusiError, MusiResult, SyntaxError},
     span::Span,
     token::{Kind, LiteralKind, Token},
     value::Value,
 };
+
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+enum Precedence {
+    None,
+    Assignment,  // := <-
+    Conditional, // if ... then ... else if ... else ...
+    Or,
+    And,
+    Equality,   // = /=
+    Comparison, // < > <= <=> >=
+    Term,       // + -
+    Factor,     // * /
+    Unary,      // not -
+    Call,       // . ()
+    Primary,
+}
 
 pub struct Parser {
     tokens: Vec<Token>,
@@ -16,8 +35,9 @@ impl Parser {
         Self { tokens, current: 0 }
     }
 
-    pub fn parse(&mut self) -> MusiResult<Vec<Node>> {
-        let mut nodes = vec![];
+    pub fn parse(&mut self) -> MusiResult<Program> {
+        let start_span = self.peek().span;
+        let mut body = vec![];
 
         while !self.is_at_end() {
             match self.peek().kind {
@@ -26,137 +46,159 @@ impl Parser {
                     self.advance();
                     continue;
                 }
-                _ => nodes.push(self.parse_declaration()?),
+                _ => body.push(self.parse_declaration()?),
             }
         }
 
-        Ok(nodes)
+        Ok(Node {
+            kind: ProgramKind { body },
+            span: Span {
+                start: start_span.start,
+                end: self.previous().span.end,
+            },
+        })
     }
 
-    fn parse_declaration(&mut self) -> MusiResult<Node> {
-        match self.peek().kind {
-            Kind::Let | Kind::Var => self.parse_variable_declaration(),
-            _ => self.parse_statement(),
+    const fn precedence(token: &Token) -> Precedence {
+        match token.kind {
+            Kind::LessMinus => Precedence::Assignment,
+            Kind::Plus | Kind::Minus => Precedence::Term,
+            Kind::Star | Kind::Slash => Precedence::Factor,
+            _ => Precedence::None,
         }
     }
 
-    fn parse_statement(&mut self) -> MusiResult<Node> {
-        let expression = self.parse_expression()?;
-        let span = expression.span();
+    fn parse_declaration(&mut self) -> MusiResult<Statement> {
+        let start_span = self.peek().span;
+        let kind = match self.peek().kind {
+            Kind::Let => self.parse_variable_declaration(false)?,
+            Kind::Var => self.parse_variable_declaration(true)?,
+            _ => self.parse_statement()?,
+        };
 
-        Ok(Node::Statement(Box::new(
-            StatementKind::ExpressionStatement {
-                kind: expression,
-                span,
+        Ok(Node {
+            kind,
+            span: Span {
+                start: start_span.start,
+                end: self.previous().span.end,
             },
-        )))
+        })
     }
 
-    fn parse_expression(&mut self) -> MusiResult<ExpressionKind> {
-        let expression = self.parse_primary()?;
+    fn parse_expression(&mut self) -> MusiResult<Expression> {
+        self.parse_precedence(Precedence::Assignment)
+    }
 
-        if self.peek().kind == Kind::LessMinus {
-            let operator = self.advance().clone();
-            let value = self.parse_expression()?;
+    fn parse_precedence(&mut self, precedence: Precedence) -> MusiResult<Expression> {
+        let mut expression = self.parse_primary()?;
 
-            return Ok(ExpressionKind::Assignment {
-                target: Box::new(expression),
-                value: Box::new(value),
+        while precedence <= Self::precedence(self.peek()) {
+            let operator = self.advance().kind;
+            let right = self.parse_expression()?;
+
+            expression = Node {
                 span: Span {
-                    start: operator.span.start,
-                    end: self.previous().span.end,
+                    start: expression.span.start,
+                    end: right.span.end,
                 },
-            });
+                kind: ExpressionKind::Operation {
+                    left: Box::new(expression),
+                    operator,
+                    right: Box::new(right),
+                },
+            };
         }
 
         Ok(expression)
     }
 
-    fn parse_primary(&mut self) -> MusiResult<ExpressionKind> {
-        match self.peek().kind {
+    fn parse_primary(&mut self) -> MusiResult<Expression> {
+        let token = self.advance().clone();
+        let span = token.span;
+
+        let kind = match token.kind {
+            Kind::Identifier => ExpressionKind::Identifier(token.lexeme.to_string()),
             Kind::Literal(kind) => {
-                let token = self.advance();
-                Ok(ExpressionKind::Literal {
-                    value: match kind {
-                        LiteralKind::Number => {
-                            let lexeme = &token.lexeme;
-                            if lexeme.contains('.') {
-                                match lexeme.parse::<f64>() {
-                                    Ok(r) => Value::Real(r),
-                                    Err(_) => {
-                                        return Err(MusiError::Syntax(SyntaxError {
-                                            message: "invalid real number literal",
-                                        }))
-                                    }
-                                }
-                            } else if lexeme.starts_with('-') {
-                                match lexeme.parse::<i64>() {
-                                    Ok(i) => Value::Integer(i),
-                                    Err(_) => {
-                                        return Err(MusiError::Syntax(SyntaxError {
-                                            message: "invalid integer literal",
-                                        }))
-                                    }
-                                }
-                            } else {
-                                match lexeme.parse::<u64>() {
-                                    Ok(n) => Value::Natural(n),
-                                    Err(_) => {
-                                        return Err(MusiError::Syntax(SyntaxError {
-                                            message: "invalid natural number literal",
-                                        }))
-                                    }
-                                }
-                            }
-                        }
-                        _ => unimplemented!("other literal types"),
-                    },
-                    span: token.span,
-                })
+                ExpressionKind::Literal(Self::parse_literal_value(&token, kind)?)
             }
-            Kind::Identifier => {
-                let token = self.advance();
-                Ok(ExpressionKind::Identifier {
-                    name: token.clone(),
-                    span: token.span,
-                })
+            _ => {
+                return Err(MusiError::Syntax(SyntaxError {
+                    message: "expected expression",
+                }))
             }
-            _unexpected => Err(MusiError::Syntax(SyntaxError {
-                message: "expected expression",
+        };
+
+        Ok(Node { kind, span })
+    }
+
+    fn parse_statement(&mut self) -> MusiResult<StatementKind> {
+        Ok(StatementKind::Expression(self.parse_expression()?))
+    }
+
+    fn parse_literal_value(token: &Token, kind: LiteralKind) -> MusiResult<Value> {
+        match kind {
+            LiteralKind::Number => {
+                let lexeme = &token.lexeme;
+                if lexeme.contains('.') {
+                    lexeme.parse::<f64>().map(Value::Real).map_err(|_| {
+                        MusiError::Syntax(SyntaxError {
+                            message: "invalid number literal",
+                        })
+                    })
+                } else if lexeme.starts_with('-') {
+                    lexeme.parse::<i64>().map(Value::Integer).map_err(|_| {
+                        MusiError::Syntax(SyntaxError {
+                            message: "invalid number literal",
+                        })
+                    })
+                } else {
+                    lexeme.parse::<u64>().map(Value::Natural).map_err(|_| {
+                        MusiError::Syntax(SyntaxError {
+                            message: "invalid number literal",
+                        })
+                    })
+                }
+            }
+            _ => Err(MusiError::Syntax(SyntaxError {
+                message: "unsupported literal type",
             })),
         }
     }
 
-    fn parse_variable_declaration(&mut self) -> MusiResult<Node> {
-        let start_token = self.advance().clone();
-        let mutable = start_token.kind == Kind::Var;
+    fn parse_variable_declaration(&mut self, mutable: bool) -> MusiResult<StatementKind> {
+        self.advance(); // consume 'let' or 'var'
 
-        let name = self
-            .consume(Kind::Identifier, "expected IDENTIFIER")?
-            .clone();
-        self.consume(Kind::ColonEquals, "expected ':=' after IDENTIFIER")?;
-        let initialiser = self.parse_expression()?;
+        let mut declarations = Vec::new();
 
-        Ok(Node::Declaration(Box::new(DeclarationKind::Variable {
-            name,
+        loop {
+            let name = self
+                .consume(Kind::Identifier, "expected variable name")?
+                .lexeme
+                .to_string();
+
+            self.consume(Kind::ColonEquals, "expected ':=' after variable name")?;
+
+            let initialiser = self.parse_expression()?;
+
+            declarations.push(VariableDeclarator { name, initialiser });
+
+            if self.peek().kind != Kind::Comma {
+                break;
+            }
+            self.advance();
+        }
+
+        Ok(StatementKind::VariableDeclaration {
+            declarations,
             mutable,
-            initialiser: Some(initialiser),
-            span: Span {
-                start: start_token.span.start,
-                end: self.previous().span.end,
-            },
-        })))
+        })
     }
 }
 
 impl Parser {
     #[inline]
     fn peek(&self) -> &Token {
-        if self.current >= self.tokens.len() {
-            &self.tokens[self.tokens.len() - 1]
-        } else {
-            &self.tokens[self.current]
-        }
+        &self.tokens[self.current]
     }
 
     #[inline]
