@@ -31,7 +31,6 @@ pub enum Kind {
     Star,              // *
     Slash,             // /
     Pipe,              // |
-    Ampersand,         // &
     Caret,             // ^
     Tilde,             // ~
     Greater,           // >
