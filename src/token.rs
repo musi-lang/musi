@@ -31,19 +31,21 @@ pub enum Kind {
     Star,              // *
     Slash,             // /
     Pipe,              // |
+    Ampersand,         // &
     Caret,             // ^
+    Tilde,             // ~
+    Greater,           // >
     Less,              // <
     LessLess,          // <<
-    Greater,           // >
     GreaterGreater,    // >>
     PipeGreater,       // |>
+    TildeEquals,       // ~=
     Equals,            // =
     SlashEquals,       // /=
     ColonEquals,       // :=
     LessEquals,        // <=
-    LessEqualsGreater, // <=>
     GreaterEquals,     // >=
-    TildeEquals,       // ~=
+    LessEqualsGreater, // <=>
     MinusGreater,      // ->
     LessMinus,         // <-
 
@@ -95,10 +97,10 @@ pub enum Kind {
 pub enum LiteralKind {
     Number,
 
-    ByteString,
     String,
-    ByteCharacter,
+    ByteString,
     Character,
+    ByteCharacter,
 }
 
 #[derive(Clone, Debug)]
