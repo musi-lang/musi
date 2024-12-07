@@ -5,8 +5,6 @@ pub enum Value {
     Real(f64),
     Boolean(bool),
 
-    Array(Vec<Value>), // [v, v, v, ...]
-
     String(Vec<char>),
     Character(char),
     Function {
