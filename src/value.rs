@@ -8,6 +8,7 @@ pub enum Value {
     Array(Vec<Value>), // [v, v, v, ...]
 
     String(Vec<char>),
+    Character(char),
     Function {
         name: Box<str>,
         code: Vec<u8>,
