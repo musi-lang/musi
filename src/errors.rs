@@ -14,8 +14,6 @@ pub struct SyntaxError {
     pub message: &'static str,
 }
 
-pub type MusiResult<T> = Result<T, MusiError>;
-
 impl std::error::Error for MusiError {}
 
 impl std::fmt::Display for MusiError {
@@ -26,3 +24,5 @@ impl std::fmt::Display for MusiError {
         }
     }
 }
+
+pub type MusiResult<T> = Result<T, MusiError>;
