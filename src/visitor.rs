@@ -7,6 +7,12 @@ use crate::{
 
 pub trait Visitor<T> {
     // Expression
+    fn visit_assignment(
+        &mut self,
+        target: &ExpressionKind,
+        value: &ExpressionKind,
+        span: Span,
+    ) -> T;
     fn visit_literal(&mut self, value: &Value, span: Span) -> T;
     fn visit_identifier(&mut self, name: &Token, span: Span) -> T;
     fn visit_binary_operation(
