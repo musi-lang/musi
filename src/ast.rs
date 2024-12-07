@@ -1,5 +1,6 @@
 use crate::{span::Span, token::Token, value::Value, visitor::Visitor};
 
+#[derive(Debug)]
 pub enum Node {
     Expression(Box<ExpressionKind>),
     Statement(Box<StatementKind>),
@@ -24,7 +25,13 @@ impl Node {
     }
 }
 
+#[derive(Debug)]
 pub enum ExpressionKind {
+    Assignment {
+        target: Box<ExpressionKind>,
+        value: Box<ExpressionKind>,
+        span: Span,
+    },
     Literal {
         value: Value,
         span: Span,
@@ -54,6 +61,11 @@ pub enum ExpressionKind {
 impl ExpressionKind {
     pub fn accept<T>(&self, visitor: &mut dyn Visitor<T>) -> T {
         match self {
+            Self::Assignment {
+                target,
+                value,
+                span,
+            } => visitor.visit_assignment(target, value, *span),
             Self::Literal { value, span } => visitor.visit_literal(value, *span),
             Self::Identifier { name, span } => visitor.visit_identifier(name, *span),
             Self::BinaryOperation {
@@ -77,7 +89,8 @@ impl ExpressionKind {
 
     pub const fn span(&self) -> Span {
         match self {
-            Self::Literal { span, .. }
+            Self::Assignment { span, .. }
+            | Self::Literal { span, .. }
             | Self::Identifier { span, .. }
             | Self::BinaryOperation { span, .. }
             | Self::UnaryOperation { span, .. }
@@ -86,6 +99,7 @@ impl ExpressionKind {
     }
 }
 
+#[derive(Debug)]
 pub enum StatementKind {
     ExpressionStatement {
         kind: ExpressionKind,
@@ -128,6 +142,7 @@ impl StatementKind {
     }
 }
 
+#[derive(Debug)]
 pub enum DeclarationKind {
     Constant {
         name: Token,
