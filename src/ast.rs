@@ -37,6 +37,11 @@ pub enum StatementKind {
 
 #[derive(Debug)]
 pub enum ExpressionKind {
+    Assignment {
+        target: Box<Expression>,
+        value: Box<Expression>,
+        span: Span,
+    },
     Identifier {
         name: Box<str>,
         span: Span,

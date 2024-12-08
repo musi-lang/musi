@@ -22,6 +22,17 @@ enum Precedence {
     Primary,
 }
 
+impl From<Kind> for Precedence {
+    fn from(kind: Kind) -> Self {
+        match kind {
+            Kind::LessMinus => Self::Assignment,
+            Kind::Plus | Kind::Minus => Self::Term,
+            Kind::Star | Kind::Slash => Self::Factor,
+            _ => Self::None,
+        }
+    }
+}
+
 pub struct Parser {
     tokens: Vec<Token>,
     current: usize,
@@ -56,15 +67,6 @@ impl Parser {
         })
     }
 
-    const fn precedence(token: &Token) -> Precedence {
-        match token.kind {
-            Kind::LessMinus => Precedence::Assignment,
-            Kind::Plus | Kind::Minus => Precedence::Term,
-            Kind::Star | Kind::Slash => Precedence::Factor,
-            _ => Precedence::None,
-        }
-    }
-
     fn parse_declaration(&mut self) -> MusiResult<Statement> {
         let start_span = self.peek().span;
         let kind = match self.peek().kind {
@@ -89,7 +91,7 @@ impl Parser {
     fn parse_precedence(&mut self, precedence: Precedence) -> MusiResult<Expression> {
         let mut expression = self.parse_primary()?;
 
-        while precedence <= Self::precedence(self.peek()) {
+        while precedence <= Precedence::from(self.peek().kind) {
             let operator = self.advance().kind;
             let right = self.parse_expression()?;
             let span = Span {
@@ -98,11 +100,18 @@ impl Parser {
             };
 
             expression = Expression {
-                kind: ExpressionKind::Operation {
-                    left: Box::new(expression),
-                    operator,
-                    right: Box::new(right),
-                    span,
+                kind: match operator {
+                    Kind::LessMinus => ExpressionKind::Assignment {
+                        target: Box::new(expression),
+                        value: Box::new(right),
+                        span,
+                    },
+                    _ => ExpressionKind::Operation {
+                        left: Box::new(expression),
+                        operator,
+                        right: Box::new(right),
+                        span,
+                    },
                 },
                 span,
             };
@@ -258,7 +267,7 @@ impl Parser {
 
     fn parse_variable_declaration(&mut self, mutable: bool) -> MusiResult<StatementKind> {
         let start_span = self.peek().span;
-        self.advance(); // consume 'let' or 'var'
+        self.advance(); // consume 'const' or 'var'
 
         let mut declarations = vec![];
 
