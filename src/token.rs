@@ -97,9 +97,7 @@ pub enum LiteralKind {
     Number,
 
     String,
-    ByteString,
     Character,
-    ByteCharacter,
 }
 
 #[derive(Clone, Debug)]
