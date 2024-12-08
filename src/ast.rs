@@ -1,14 +1,22 @@
 use crate::{span::Span, token::Kind, value::Value};
 
 #[derive(Debug)]
-pub struct Node<T> {
-    pub kind: T,
+pub struct Program {
+    pub statements: Vec<Statement>,
     pub span: Span,
 }
 
-pub type Program = Node<Vec<Statement>>;
-pub type Statement = Node<StatementKind>;
-pub type Expression = Node<ExpressionKind>;
+#[derive(Debug)]
+pub struct Statement {
+    pub kind: StatementKind,
+    pub span: Span,
+}
+
+#[derive(Debug)]
+pub struct Expression {
+    pub kind: ExpressionKind,
+    pub span: Span,
+}
 
 #[derive(Debug)]
 pub enum StatementKind {

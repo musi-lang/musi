@@ -1,7 +1,5 @@
 use crate::{
-    ast::{
-        Expression, ExpressionKind, Node, Program, Statement, StatementKind, VariableDeclarator,
-    },
+    ast::{Expression, ExpressionKind, Program, Statement, StatementKind, VariableDeclarator},
     errors::{MusiError, MusiResult, SyntaxError},
     span::Span,
     token::{Kind, LiteralKind, Token},
@@ -36,7 +34,7 @@ impl Parser {
 
     pub fn parse(&mut self) -> MusiResult<Program> {
         let start_span = self.peek().span;
-        let mut body = vec![];
+        let mut statements = vec![];
 
         while !self.is_at_end() {
             match self.peek().kind {
@@ -45,12 +43,12 @@ impl Parser {
                     self.advance();
                     continue;
                 }
-                _ => body.push(self.parse_declaration()?),
+                _ => statements.push(self.parse_declaration()?),
             }
         }
 
-        Ok(Node {
-            kind: body,
+        Ok(Program {
+            statements,
             span: Span {
                 start: start_span.start,
                 end: self.previous().span.end,
@@ -75,7 +73,7 @@ impl Parser {
             _ => self.parse_statement()?,
         };
 
-        Ok(Node {
+        Ok(Statement {
             kind,
             span: Span {
                 start: start_span.start,
@@ -95,7 +93,7 @@ impl Parser {
             let operator = self.advance().kind;
             let right = self.parse_expression()?;
 
-            expression = Node {
+            expression = Expression {
                 span: Span {
                     start: expression.span.start,
                     end: right.span.end,
@@ -131,7 +129,7 @@ impl Parser {
             }
         };
 
-        Ok(Node { kind, span })
+        Ok(Expression { kind, span })
     }
 
     fn parse_statement(&mut self) -> MusiResult<StatementKind> {
