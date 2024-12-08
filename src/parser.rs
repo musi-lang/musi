@@ -1,7 +1,6 @@
 use crate::{
     ast::{
-        Expression, ExpressionKind, Node, Program, ProgramKind, Statement, StatementKind,
-        VariableDeclarator,
+        Expression, ExpressionKind, Node, Program, Statement, StatementKind, VariableDeclarator,
     },
     errors::{MusiError, MusiResult, SyntaxError},
     span::Span,
@@ -51,7 +50,7 @@ impl Parser {
         }
 
         Ok(Node {
-            kind: ProgramKind { body },
+            kind: body,
             span: Span {
                 start: start_span.start,
                 end: self.previous().span.end,
@@ -140,23 +139,48 @@ impl Parser {
             LiteralKind::Number => {
                 let lexeme = &token.lexeme;
                 if lexeme.contains('.') {
-                    lexeme.parse::<f64>().map(Value::Real).map_err(|_| {
-                        MusiError::Syntax(SyntaxError {
-                            message: "invalid number literal",
+                    lexeme
+                        .parse::<f64>()
+                        .map(|n| {
+                            if n.is_finite() && (f64::MIN..=f64::MAX).contains(&n) {
+                                Ok(Value::Real(n))
+                            } else {
+                                Err(MusiError::Syntax(SyntaxError {
+                                    message: "number literal out of range",
+                                }))
+                            }
                         })
-                    })
+                        .map_err(|_| {
+                            MusiError::Syntax(SyntaxError {
+                                message: "invalid number literal",
+                            })
+                        })?
                 } else if lexeme.starts_with('-') {
-                    lexeme.parse::<i64>().map(Value::Integer).map_err(|_| {
-                        MusiError::Syntax(SyntaxError {
-                            message: "invalid number literal",
+                    lexeme
+                        .parse::<i64>()
+                        .map(|n| {
+                            if (i64::MIN..=i64::MAX).contains(&n) {
+                                Ok(Value::Integer(n))
+                            } else {
+                                Err(MusiError::Syntax(SyntaxError {
+                                    message: "number literal out of range",
+                                }))
+                            }
                         })
-                    })
+                        .map_err(|_| {
+                            MusiError::Syntax(SyntaxError {
+                                message: "invalid number literal",
+                            })
+                        })?
                 } else {
-                    lexeme.parse::<u64>().map(Value::Natural).map_err(|_| {
-                        MusiError::Syntax(SyntaxError {
-                            message: "invalid number literal",
-                        })
-                    })
+                    lexeme
+                        .parse::<u64>()
+                        .map(|n| Ok(Value::Natural(n)))
+                        .map_err(|_| {
+                            MusiError::Syntax(SyntaxError {
+                                message: "invalid number literal",
+                            })
+                        })?
                 }
             }
             _ => Err(MusiError::Syntax(SyntaxError {
