@@ -92,17 +92,19 @@ impl Parser {
         while precedence <= Self::precedence(self.peek()) {
             let operator = self.advance().kind;
             let right = self.parse_expression()?;
+            let span = Span {
+                start: expression.span.start,
+                end: right.span.end,
+            };
 
             expression = Expression {
-                span: Span {
-                    start: expression.span.start,
-                    end: right.span.end,
-                },
                 kind: ExpressionKind::Operation {
                     left: Box::new(expression),
                     operator,
                     right: Box::new(right),
+                    span,
                 },
+                span,
             };
         }
 
@@ -114,12 +116,22 @@ impl Parser {
         let span = token.span;
 
         let kind = match token.kind {
-            Kind::Identifier => ExpressionKind::Identifier(token.lexeme.to_string()),
-            Kind::Literal(kind) => {
-                ExpressionKind::Literal(Self::parse_literal_value(&token, kind)?)
-            }
-            Kind::True => ExpressionKind::Literal(Value::Boolean(true)),
-            Kind::False => ExpressionKind::Literal(Value::Boolean(false)),
+            Kind::Identifier => ExpressionKind::Identifier {
+                name: token.lexeme,
+                span,
+            },
+            Kind::Literal(kind) => ExpressionKind::Literal {
+                value: Self::parse_literal_value(&token, kind)?,
+                span,
+            },
+            Kind::True => ExpressionKind::Literal {
+                value: Value::Boolean(true),
+                span,
+            },
+            Kind::False => ExpressionKind::Literal {
+                value: Value::Boolean(false),
+                span,
+            },
             unexpected => {
                 return Err(MusiError::Syntax(SyntaxError {
                     message: Box::leak(
@@ -245,21 +257,25 @@ impl Parser {
     }
 
     fn parse_variable_declaration(&mut self, mutable: bool) -> MusiResult<StatementKind> {
+        let start_span = self.peek().span;
         self.advance(); // consume 'let' or 'var'
 
         let mut declarations = vec![];
 
         loop {
-            let name = self
-                .consume(Kind::Identifier, "expected variable name")?
-                .lexeme
-                .to_string();
+            let name_token = self.consume(Kind::Identifier, "expected variable name")?;
+            let name = name_token.lexeme.clone();
+            let declaration_span = name_token.span;
 
             self.consume(Kind::ColonEquals, "expected ':=' after variable name")?;
 
             let initialiser = self.parse_expression()?;
 
-            declarations.push(VariableDeclarator { name, initialiser });
+            declarations.push(VariableDeclarator {
+                name,
+                initialiser,
+                span: declaration_span,
+            });
 
             if self.peek().kind != Kind::Comma {
                 break;
@@ -270,6 +286,10 @@ impl Parser {
         Ok(StatementKind::VariableDeclaration {
             declarations,
             mutable,
+            span: Span {
+                start: start_span.start,
+                end: self.previous().span.end,
+            },
         })
     }
 }

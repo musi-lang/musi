@@ -25,31 +25,42 @@ pub enum StatementKind {
     VariableDeclaration {
         declarations: Vec<VariableDeclarator>,
         mutable: bool,
+        span: Span,
     },
     FunctionDeclaration {
-        name: String,
-        parameters: Vec<String>,
+        name: Box<str>,
+        parameters: Vec<Box<str>>,
         body: Box<Statement>,
+        span: Span,
     },
 }
 
 #[derive(Debug)]
 pub enum ExpressionKind {
-    Identifier(String),
-    Literal(Value),
+    Identifier {
+        name: Box<str>,
+        span: Span,
+    },
+    Literal {
+        value: Value,
+        span: Span,
+    },
     Operation {
         left: Box<Expression>,
         operator: Kind,
         right: Box<Expression>,
+        span: Span,
     },
     Call {
         callee: Box<Expression>,
         arguments: Vec<Expression>,
+        span: Span,
     },
 }
 
 #[derive(Debug)]
 pub struct VariableDeclarator {
-    pub name: String,
+    pub name: Box<str>,
     pub initialiser: Expression,
+    pub span: Span,
 }
