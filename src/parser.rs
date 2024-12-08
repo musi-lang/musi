@@ -249,7 +249,7 @@ impl Parser {
     fn parse_variable_declaration(&mut self, mutable: bool) -> MusiResult<StatementKind> {
         self.advance(); // consume 'let' or 'var'
 
-        let mut declarations = Vec::new();
+        let mut declarations = vec![];
 
         loop {
             let name = self
