@@ -26,6 +26,11 @@ impl Cursor {
     }
 
     #[inline]
+    pub fn peek_previous(&self) -> Option<u8> {
+        self.source.get(self.position - 1).copied()
+    }
+
+    #[inline]
     pub fn advance(&mut self) -> Option<u8> {
         if self.position >= self.source.len() {
             return None;
