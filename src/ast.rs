@@ -6,14 +6,9 @@ pub struct Node<T> {
     pub span: Span,
 }
 
-pub type Program = Node<ProgramKind>;
+pub type Program = Node<Vec<Statement>>;
 pub type Statement = Node<StatementKind>;
 pub type Expression = Node<ExpressionKind>;
-
-#[derive(Debug)]
-pub struct ProgramKind {
-    pub body: Vec<Statement>,
-}
 
 #[derive(Debug)]
 pub enum StatementKind {
