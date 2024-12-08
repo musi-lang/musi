@@ -395,14 +395,10 @@ impl Lexer {
         let start_location = self.cursor.location;
         let start_position = self.cursor.position;
 
-        let byte_string = self.cursor.peek() == Some(b'b');
-        if byte_string {
-            self.cursor.advance();
-        }
-
-        if self.cursor.peek() == Some(b'r') {
-            return Ok(self.lex_raw_string(start_location, start_position));
-        }
+        // TODO: consider this later...
+        // if self.cursor.peek() == Some(b'r') {
+        //     return Ok(self.lex_raw_string(start_location, start_position));
+        // }
 
         self.cursor.advance(); // opening '"'
 
@@ -417,8 +413,15 @@ impl Lexer {
                     // multi-line by default
                     self.cursor.advance();
                 }
-                _ if byte_string && !current.is_ascii() => {
-                    lex_error("non-ASCII character in byte string literal")?;
+                b'\r' => {
+                    if self.cursor.peek_next() == Some(b'\n') {
+                        self.cursor.advance_by(2);
+                    } else {
+                        lex_error("invalid line ending in string literal")?;
+                    }
+                }
+                0x00..=0x1F => {
+                    lex_error("invalid control character in string literal")?;
                 }
                 _ => {
                     self.cursor.advance();
@@ -426,12 +429,12 @@ impl Lexer {
             }
         }
 
+        if self.cursor.peek_previous() != Some(b'"') {
+            lex_error("unclosed string literal")?;
+        }
+
         Ok(Token::new(
-            Kind::Literal(if byte_string {
-                LiteralKind::ByteString
-            } else {
-                LiteralKind::String
-            }),
+            Kind::Literal(LiteralKind::String),
             &self.cursor.source[start_position..self.cursor.position],
             Span {
                 start: start_location,
@@ -444,11 +447,6 @@ impl Lexer {
         let start_position = self.cursor.position;
         let start_location = self.cursor.location;
         let mut chars = 0;
-
-        let byte_char = self.cursor.peek() == Some(b'b');
-        if byte_char {
-            self.cursor.advance();
-        }
 
         self.cursor.advance(); // opening '\''
 
@@ -468,10 +466,7 @@ impl Lexer {
                     chars += 1;
                 }
                 b'\n' => {
-                    lex_error("unclosed character literal")?;
-                }
-                _ if byte_char && !current.is_ascii() => {
-                    lex_error("non-ASCII character in byte character literal")?;
+                    lex_error("invalid line ending in character literal")?;
                 }
                 _ => {
                     self.cursor.advance();
@@ -480,12 +475,12 @@ impl Lexer {
             }
         }
 
+        if self.cursor.peek_previous() != Some(b'\'') {
+            lex_error("unclosed character literal")?;
+        }
+
         Ok(Token::new(
-            Kind::Literal(if byte_char {
-                LiteralKind::ByteCharacter
-            } else {
-                LiteralKind::Character
-            }),
+            Kind::Literal(LiteralKind::Character),
             &self.cursor.source[start_position..self.cursor.position],
             Span {
                 start: start_location,
@@ -629,26 +624,6 @@ impl Lexer {
         }
 
         Ok(())
-    }
-
-    fn lex_raw_string(&mut self, start_location: Location, start_position: usize) -> Token {
-        self.cursor.advance_by(2);
-        while let Some(current) = self.cursor.peek() {
-            if current == b'"' {
-                self.cursor.advance();
-                break;
-            }
-            self.cursor.advance();
-        }
-
-        Token::new(
-            Kind::Literal(LiteralKind::String),
-            &self.cursor.source[start_position..self.cursor.position],
-            Span {
-                start: start_location,
-                end: self.cursor.location,
-            },
-        )
     }
 }
 
