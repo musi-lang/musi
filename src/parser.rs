@@ -68,7 +68,7 @@ impl Parser {
     fn parse_declaration(&mut self) -> MusiResult<Statement> {
         let start_span = self.peek().span;
         let kind = match self.peek().kind {
-            Kind::Let => self.parse_variable_declaration(false)?,
+            Kind::Const => self.parse_variable_declaration(false)?,
             Kind::Var => self.parse_variable_declaration(true)?,
             _ => self.parse_statement()?,
         };
