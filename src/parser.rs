@@ -120,9 +120,13 @@ impl Parser {
             Kind::Literal(kind) => {
                 ExpressionKind::Literal(Self::parse_literal_value(&token, kind)?)
             }
-            _ => {
+            Kind::True => ExpressionKind::Literal(Value::Boolean(true)),
+            Kind::False => ExpressionKind::Literal(Value::Boolean(false)),
+            unexpected => {
                 return Err(MusiError::Syntax(SyntaxError {
-                    message: "expected expression",
+                    message: Box::leak(
+                        format!("expected expression, found '{unexpected:?}'").into_boxed_str(),
+                    ),
                 }))
             }
         };
@@ -136,57 +140,110 @@ impl Parser {
 
     fn parse_literal_value(token: &Token, kind: LiteralKind) -> MusiResult<Value> {
         match kind {
-            LiteralKind::Number => {
-                let lexeme = &token.lexeme;
-                if lexeme.contains('.') {
-                    lexeme
-                        .parse::<f64>()
-                        .map(|n| {
-                            if n.is_finite() && (f64::MIN..=f64::MAX).contains(&n) {
-                                Ok(Value::Real(n))
-                            } else {
-                                Err(MusiError::Syntax(SyntaxError {
-                                    message: "number literal out of range",
-                                }))
-                            }
-                        })
-                        .map_err(|_| {
-                            MusiError::Syntax(SyntaxError {
-                                message: "invalid number literal",
-                            })
-                        })?
-                } else if lexeme.starts_with('-') {
-                    lexeme
-                        .parse::<i64>()
-                        .map(|n| {
-                            if (i64::MIN..=i64::MAX).contains(&n) {
-                                Ok(Value::Integer(n))
-                            } else {
-                                Err(MusiError::Syntax(SyntaxError {
-                                    message: "number literal out of range",
-                                }))
-                            }
-                        })
-                        .map_err(|_| {
-                            MusiError::Syntax(SyntaxError {
-                                message: "invalid number literal",
-                            })
-                        })?
-                } else {
-                    lexeme
-                        .parse::<u64>()
-                        .map(|n| Ok(Value::Natural(n)))
-                        .map_err(|_| {
-                            MusiError::Syntax(SyntaxError {
-                                message: "invalid number literal",
-                            })
-                        })?
-                }
-            }
-            _ => Err(MusiError::Syntax(SyntaxError {
-                message: "unsupported literal type",
-            })),
+            LiteralKind::Number => Self::parse_number_literal(token),
+            LiteralKind::String => Self::parse_string_literal(token),
+            LiteralKind::Character => Self::parse_character_literal(token),
         }
+    }
+
+    fn parse_number_literal(token: &Token) -> MusiResult<Value> {
+        let lexeme = &token.lexeme;
+
+        if lexeme.contains('.') {
+            lexeme
+                .parse::<f64>()
+                .map(|n| {
+                    if n.is_finite() && (f64::MIN..=f64::MAX).contains(&n) {
+                        Ok(Value::Real(n))
+                    } else {
+                        Err(MusiError::Syntax(SyntaxError {
+                            message: "number literal out of range",
+                        }))
+                    }
+                })
+                .map_err(|_| {
+                    MusiError::Syntax(SyntaxError {
+                        message: "invalid number literal",
+                    })
+                })?
+        } else if lexeme.starts_with('-') {
+            lexeme
+                .parse::<i64>()
+                .map(|n| {
+                    if (i64::MIN..=i64::MAX).contains(&n) {
+                        Ok(Value::Integer(n))
+                    } else {
+                        Err(MusiError::Syntax(SyntaxError {
+                            message: "number literal out of range",
+                        }))
+                    }
+                })
+                .map_err(|_| {
+                    MusiError::Syntax(SyntaxError {
+                        message: "invalid number literal",
+                    })
+                })?
+        } else {
+            lexeme
+                .parse::<u64>()
+                .map(|n| Ok(Value::Natural(n)))
+                .map_err(|_| {
+                    MusiError::Syntax(SyntaxError {
+                        message: "invalid number literal",
+                    })
+                })?
+        }
+    }
+
+    fn parse_string_literal(token: &Token) -> MusiResult<Value> {
+        let lexeme = token.lexeme.trim_matches('"');
+
+        if lexeme.len() > usize::MAX / 4 {
+            return Err(MusiError::Syntax(SyntaxError {
+                message: "string literal too long",
+            }));
+        }
+
+        let valid_utf8 = lexeme.chars().all(|c| {
+            let bytes = c.to_string().as_bytes().to_vec();
+            String::from_utf8(bytes).is_ok()
+        });
+        if !valid_utf8 {
+            return Err(MusiError::Syntax(SyntaxError {
+                message: "invalid UTF-8 sequence in string literal",
+            }));
+        }
+
+        let chars: Vec<char> = lexeme.chars().collect();
+        if chars.iter().any(|&c| c as u32 > 0x0010_FFFF) {
+            return Err(MusiError::Syntax(SyntaxError {
+                message: "invalid unicode character in string literal",
+            }));
+        }
+
+        Ok(Value::String(chars))
+    }
+
+    fn parse_character_literal(token: &Token) -> MusiResult<Value> {
+        let lexeme = token.lexeme.trim_matches('\'');
+
+        let ch = match lexeme.chars().next() {
+            Some(c) if c as u32 <= 0x0010_FFFF => c,
+            Some(_) => {
+                return Err(MusiError::Syntax(SyntaxError {
+                    message: "invalid unicode character in character literal",
+                }))
+            }
+            None => unreachable!("empty character literal should be caught by lexer"),
+        };
+
+        if lexeme.chars().count() > 1 {
+            return Err(MusiError::Syntax(SyntaxError {
+                message: "character literal contains multiple characters",
+            }));
+        }
+
+        Ok(Value::Character(ch))
     }
 
     fn parse_variable_declaration(&mut self, mutable: bool) -> MusiResult<StatementKind> {
