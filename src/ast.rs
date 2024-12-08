@@ -56,6 +56,12 @@ pub enum ExpressionKind {
         right: Box<Expression>,
         span: Span,
     },
+    Conditional {
+        condition: Box<Expression>,
+        consequence: Box<Expression>,
+        alternative: Option<Box<Expression>>,
+        span: Span,
+    },
     Call {
         callee: Box<Expression>,
         arguments: Vec<Expression>,
