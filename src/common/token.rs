@@ -1,4 +1,4 @@
-use super::span::Span;
+use super::source::Span;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
