@@ -5,8 +5,9 @@
 Musi is a programming language that takes inspiration from C, F#, Haskell,
 Python and Scala 3, making it easy to learn. We want to develop Musi into a
 fully-featured language that people can use for teaching or everyday
-programming. Languages such as C, Python and Java are not the most suitable
-choices for teaching beginners.
+programming.
+
+It's currently in very early development.
 
 # Licence
 
