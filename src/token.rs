@@ -68,6 +68,7 @@ pub enum Kind {
     If,
     In,
     Is,
+    Let,
     Not,
     Of,
     Or,

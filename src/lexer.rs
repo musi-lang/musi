@@ -25,6 +25,7 @@ const KEYWORDS: &[(&[u8], Kind)] = &[
     (b"if", Kind::If),
     (b"in", Kind::In),
     (b"is", Kind::Is),
+    (b"let", Kind::Let),
     (b"not", Kind::Not),
     (b"of", Kind::Of),
     (b"or", Kind::Or),
