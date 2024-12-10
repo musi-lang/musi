@@ -2,6 +2,7 @@ use cursor::Cursor;
 
 use crate::{
     errors::{ErrorDiagnostic, MusiResult},
+    location::Location,
     span::Span,
     token::{Kind, LiteralKind, Token},
 };
@@ -13,17 +14,13 @@ const MAX_INDENT_LEVELS: usize = 32;
 const KEYWORDS: &[(&[u8], Kind)] = &[
     (b"and", Kind::And),
     (b"as", Kind::As),
-    (b"break", Kind::Break),
-    (b"case", Kind::Case),
+    (b"cases", Kind::Cases),
     (b"const", Kind::Const),
-    (b"continue", Kind::Continue),
-    (b"deref", Kind::Deref),
     (b"do", Kind::Do),
-    (b"downto", Kind::Downto),
     (b"else", Kind::Else),
     (b"false", Kind::False),
     (b"for", Kind::For),
-    (b"foreign", Kind::Foreign),
+    (b"forall", Kind::Forall),
     (b"from", Kind::From),
     (b"if", Kind::If),
     (b"in", Kind::In),
@@ -32,20 +29,16 @@ const KEYWORDS: &[(&[u8], Kind)] = &[
     (b"not", Kind::Not),
     (b"of", Kind::Of),
     (b"or", Kind::Or),
-    (b"ref", Kind::Ref),
-    (b"repeat", Kind::Repeat),
-    (b"return", Kind::Return),
+    (b"otherwise", Kind::Otherwise),
     (b"then", Kind::Then),
     (b"to", Kind::To),
     (b"true", Kind::True),
     (b"type", Kind::Type),
-    (b"unsafe", Kind::Unsafe),
     (b"until", Kind::Until),
     (b"var", Kind::Var),
     (b"where", Kind::Where),
     (b"while", Kind::While),
     (b"xor", Kind::Xor),
-    (b"yield", Kind::Yield),
 ];
 
 const UNICODE_MAX_DIGITS: u32 = 0x0010_FFFF;
@@ -118,32 +111,7 @@ impl Lexer {
         match self.cursor.peek() {
             Some(current) => {
                 match current {
-                    CHAR_CR | CHAR_LF => {
-                        let lexeme = if self.cursor.peek() == Some(CHAR_CR) {
-                            self.cursor.advance();
-                            if self.cursor.peek() == Some(CHAR_LF) {
-                                self.cursor.advance();
-                                vec![CHAR_CR, CHAR_LF]
-                            } else {
-                                vec![CHAR_CR]
-                            }
-                        } else {
-                            self.cursor.advance();
-                            vec![CHAR_LF]
-                        };
-
-                        self.cursor.location.line += 1;
-                        self.cursor.location.column = 1;
-
-                        Ok(Token::new(
-                            Kind::Newline,
-                            &lexeme,
-                            Span {
-                                start: start_location,
-                                end: self.cursor.location,
-                            },
-                        ))
-                    }
+                    CHAR_CR | CHAR_LF => Ok(self.lex_newline(start_location)),
 
                     b if is_identifier_start(b) => Ok(self.lex_identifier_or_keyword()),
                     b if b.is_ascii_digit() => Ok(self.lex_number_literal()),
@@ -172,11 +140,17 @@ impl Lexer {
                     b'!' => Ok(self.make_token(Kind::Bang, 1)),
                     b'&' => Ok(self.make_token(Kind::Ampersand, 1)),
                     b'^' => Ok(self.make_token(Kind::Caret, 1)),
-                    b'|' => Ok(self
-                        .match_compound_token(&[(Kind::PipeGreater, b"|>"), (Kind::Pipe, b"|")])),
+                    b'|' => Ok(self.match_compound_token(&[
+                        (Kind::PipePipe, b"||"),
+                        (Kind::PipeGreater, b"|>"),
+                        (Kind::Pipe, b"|"),
+                    ])),
                     b'~' => Ok(self
                         .match_compound_token(&[(Kind::TildeEquals, b"~="), (Kind::Tilde, b"~")])),
-                    b'=' => Ok(self.make_token(Kind::Equals, 1)),
+                    b'=' => Ok(self.match_compound_token(&[
+                        (Kind::EqualsGreater, b"=>"),
+                        (Kind::Equals, b"="),
+                    ])),
                     b':' => Ok(self
                         .match_compound_token(&[(Kind::ColonEquals, b":="), (Kind::Colon, b":")])),
 
@@ -187,7 +161,9 @@ impl Lexer {
                     b'[' => Ok(self.make_token(Kind::LeftBracket, 1)),
                     b']' => Ok(self.make_token(Kind::RightBracket, 1)),
                     b',' => Ok(self.make_token(Kind::Comma, 1)),
-                    CHAR_DOT => Ok(self.make_token(Kind::Dot, 1)),
+                    CHAR_DOT => {
+                        Ok(self.match_compound_token(&[(Kind::DotDot, b".."), (Kind::Dot, b".")]))
+                    }
                     b';' => Ok(self.make_token(Kind::Semicolon, 1)),
                     b'?' => Ok(self.make_token(Kind::Question, 1)),
                     b'@' => Ok(self.make_token(Kind::At, 1)),
@@ -298,6 +274,33 @@ impl Lexer {
                 end: self.cursor.location,
             },
         ))
+    }
+
+    fn lex_newline(&mut self, start_location: Location) -> Token {
+        let lexeme = if self.cursor.peek() == Some(CHAR_CR) {
+            self.cursor.advance();
+            if self.cursor.peek() == Some(CHAR_LF) {
+                self.cursor.advance();
+                vec![CHAR_CR, CHAR_LF]
+            } else {
+                vec![CHAR_CR]
+            }
+        } else {
+            self.cursor.advance();
+            vec![CHAR_LF]
+        };
+
+        self.cursor.location.line += 1;
+        self.cursor.location.column = 1;
+
+        Token::new(
+            Kind::Newline,
+            &lexeme,
+            Span {
+                start: start_location,
+                end: self.cursor.location,
+            },
+        )
     }
 
     fn lex_identifier_or_keyword(&mut self) -> Token {
