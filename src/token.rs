@@ -26,27 +26,29 @@ pub enum Kind {
     At,           // @
 
     // Operators
-    Plus,              // +
-    Minus,             // -
     Star,              // *
     Slash,             // /
-    Pipe,              // |
-    Caret,             // ^
-    Tilde,             // ~
-    Greater,           // >
-    Less,              // <
+    Plus,              // +
+    Minus,             // -
     LessLess,          // <<
     GreaterGreater,    // >>
-    PipeGreater,       // |>
-    TildeEquals,       // ~=
-    Equals,            // =
-    SlashEquals,       // /=
-    ColonEquals,       // :=
+    Less,              // <
+    Greater,           // >
     LessEquals,        // <=
     GreaterEquals,     // >=
     LessEqualsGreater, // <=>
+    Bang,              // !
+    Ampersand,         // &
+    Caret,             // ^
+    Pipe,              // |
+    Tilde,             // ~
+    Equals,            // =
+    TildeEquals,       // ~=
+    SlashEquals,       // /=
+    ColonEquals,       // :=
     MinusGreater,      // ->
     LessMinus,         // <-
+    PipeGreater,       // |>
 
     // Keywords
     And,
@@ -96,7 +98,7 @@ pub enum LiteralKind {
 #[derive(Clone, Debug)]
 pub struct Token {
     pub kind: Kind,
-    pub lexeme: Box<str>,
+    pub lexeme: Vec<u8>,
     pub span: Span,
 }
 
@@ -104,7 +106,7 @@ impl Token {
     pub fn new(kind: Kind, lexeme: &[u8], span: Span) -> Self {
         Self {
             kind,
-            lexeme: std::str::from_utf8(lexeme).expect("valid utf-8").into(),
+            lexeme: lexeme.to_vec(),
             span,
         }
     }
