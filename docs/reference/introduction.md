@@ -22,6 +22,6 @@ As mentioned earlier, there is a main version of Musi written in Rust.
 
 Other versions may be added to this table below:
 
-| Name    | Description                                                                                    | Website                                            |
-| ------- | ---------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| musi-rs | The original version of Musi, written in Rust. New language features will usually appear here. | [kawarbon/musi](https://github.com/musi-lang/musi) |
+| Name    | Description                                                                                    | Website                                             |
+| ------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| musi-rs | The original version of Musi, written in Rust. New language features will usually appear here. | [musi-lang/musi](https://github.com/musi-lang/musi) |
