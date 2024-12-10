@@ -48,6 +48,24 @@ const KEYWORDS: &[(&[u8], Kind)] = &[
     (b"yield", Kind::Yield),
 ];
 
+const UNICODE_MAX_DIGITS: u32 = 0x0010_FFFF;
+const SURROGATE_START: u32 = 0xD800;
+const SURROGATE_END: u32 = 0xDFFF;
+
+const CHAR_QUOTE: u8 = b'"';
+const CHAR_APOSTROPHE: u8 = b'\'';
+const CHAR_BACKSLASH: u8 = b'\\';
+const CHAR_UNDERSCORE: u8 = b'_';
+const CHAR_DOT: u8 = b'.';
+const CHAR_CR: u8 = b'\r';
+const CHAR_LF: u8 = b'\n';
+const CHAR_ZERO: u8 = b'0';
+
+const HEX_LOWER_START: u8 = b'a';
+const HEX_LOWER_END: u8 = b'f';
+const HEX_UPPER_START: u8 = b'A';
+const HEX_UPPER_END: u8 = b'F';
+
 pub struct Lexer {
     cursor: Cursor,
     indent_stack: [u32; MAX_INDENT_LEVELS],
@@ -100,18 +118,18 @@ impl Lexer {
         match self.cursor.peek() {
             Some(current) => {
                 match current {
-                    b'\r' | b'\n' => {
-                        let lexeme = if self.cursor.peek() == Some(b'\r') {
+                    CHAR_CR | CHAR_LF => {
+                        let lexeme = if self.cursor.peek() == Some(CHAR_CR) {
                             self.cursor.advance();
-                            if self.cursor.peek() == Some(b'\n') {
+                            if self.cursor.peek() == Some(CHAR_LF) {
                                 self.cursor.advance();
-                                vec![b'\r', b'\n']
+                                vec![CHAR_CR, CHAR_LF]
                             } else {
-                                vec![b'\r']
+                                vec![CHAR_CR]
                             }
                         } else {
                             self.cursor.advance();
-                            vec![b'\n']
+                            vec![CHAR_LF]
                         };
 
                         self.cursor.location.line += 1;
@@ -130,8 +148,8 @@ impl Lexer {
                     b if is_identifier_start(b) => Ok(self.lex_identifier_or_keyword()),
                     b if b.is_ascii_digit() => Ok(self.lex_number_literal()),
 
-                    b'"' => self.lex_string_literal(),
-                    b'\'' => self.lex_character_literal(),
+                    CHAR_QUOTE => self.lex_string_literal(),
+                    CHAR_APOSTROPHE => self.lex_character_literal(),
 
                     b'*' => Ok(self.make_token(Kind::Star, 1)),
                     b'/' => Ok(self
@@ -169,7 +187,7 @@ impl Lexer {
                     b'[' => Ok(self.make_token(Kind::LeftBracket, 1)),
                     b']' => Ok(self.make_token(Kind::RightBracket, 1)),
                     b',' => Ok(self.make_token(Kind::Comma, 1)),
-                    b'.' => Ok(self.make_token(Kind::Dot, 1)),
+                    CHAR_DOT => Ok(self.make_token(Kind::Dot, 1)),
                     b';' => Ok(self.make_token(Kind::Semicolon, 1)),
                     b'?' => Ok(self.make_token(Kind::Question, 1)),
                     b'@' => Ok(self.make_token(Kind::At, 1)),
@@ -200,7 +218,7 @@ impl Lexer {
                         self.cursor.advance();
                     }
                     _ => {
-                        if current != b'\r' && current != b'\n' {
+                        if current != CHAR_CR && current != CHAR_LF {
                             let current_indent = self.indent_stack[self.indent_level];
 
                             log::debug!(
@@ -313,7 +331,7 @@ impl Lexer {
         let start_location = self.cursor.location;
         let start_position = self.cursor.position;
 
-        if self.cursor.peek() == Some(b'0')
+        if self.cursor.peek() == Some(CHAR_ZERO)
             && self.cursor.peek_next().map_or(false, |b| {
                 matches!(b, b'x' | b'X' | b'b' | b'B' | b'o' | b'O')
             })
@@ -332,7 +350,7 @@ impl Lexer {
 
         self.lex_decimal_digits();
 
-        if self.cursor.peek() == Some(b'.')
+        if self.cursor.peek() == Some(CHAR_DOT)
             && self
                 .cursor
                 .peek_next()
@@ -364,7 +382,7 @@ impl Lexer {
 
         while let Some(current) = self.cursor.peek() {
             match current {
-                b'"' => {
+                CHAR_QUOTE => {
                     self.cursor.advance(); // skip closing quote
 
                     return Ok(Token::new(
@@ -376,11 +394,11 @@ impl Lexer {
                         },
                     ));
                 }
-                b'\\' => {
+                CHAR_BACKSLASH => {
                     self.lex_escape_sequence()?;
                     continue;
                 }
-                b'\r' => {
+                CHAR_CR => {
                     return Err(self.error("invalid line ending in string literal"));
                 }
                 0..=0x1F => {
@@ -405,7 +423,7 @@ impl Lexer {
 
         while let Some(current) = self.cursor.peek() {
             match current {
-                b'\'' => {
+                CHAR_APOSTROPHE => {
                     if chars == 0 {
                         return Err(self.error("empty character literal"));
                     } else if chars > 1 {
@@ -423,12 +441,12 @@ impl Lexer {
                         },
                     ));
                 }
-                b'\\' => {
+                CHAR_BACKSLASH => {
                     self.lex_escape_sequence()?;
                     chars += 1;
                     continue;
                 }
-                b'\n' => {
+                CHAR_LF => {
                     return Err(self.error("invalid line ending in character literal"));
                 }
                 _ => {
@@ -448,7 +466,7 @@ impl Lexer {
             Some(b'x' | b'X') => {
                 self.cursor.advance_by(2);
                 while let Some(current) = self.cursor.peek() {
-                    if !current.is_ascii_hexdigit() && current != b'_' {
+                    if !current.is_ascii_hexdigit() && current != CHAR_UNDERSCORE {
                         break;
                     }
                     self.cursor.advance();
@@ -457,7 +475,7 @@ impl Lexer {
             Some(b'b' | b'B') => {
                 self.cursor.advance_by(2);
                 while let Some(current) = self.cursor.peek() {
-                    if ![b'0', b'1', b'_'].contains(&current) {
+                    if ![CHAR_ZERO, b'1', CHAR_UNDERSCORE].contains(&current) {
                         break;
                     }
                     self.cursor.advance();
@@ -466,7 +484,7 @@ impl Lexer {
             Some(b'o' | b'O') => {
                 self.cursor.advance_by(2);
                 while let Some(current) = self.cursor.peek() {
-                    if !matches!(current, b'0'..=b'7' | b'_') {
+                    if !matches!(current, CHAR_ZERO..=b'7' | CHAR_UNDERSCORE) {
                         break;
                     }
                     self.cursor.advance();
@@ -479,10 +497,10 @@ impl Lexer {
     #[inline]
     fn lex_decimal_digits(&mut self) {
         while let Some(current) = self.cursor.peek() {
-            if !current.is_ascii_digit() && current != b'_' {
+            if !current.is_ascii_digit() && current != CHAR_UNDERSCORE {
                 break;
             }
-            if current == b'_'
+            if current == CHAR_UNDERSCORE
                 && !self
                     .cursor
                     .peek_next()
@@ -502,10 +520,10 @@ impl Lexer {
         }
 
         while let Some(current) = self.cursor.peek() {
-            if !current.is_ascii_digit() && current != b'_' {
+            if !current.is_ascii_digit() && current != CHAR_UNDERSCORE {
                 break;
             }
-            if current == b'_'
+            if current == CHAR_UNDERSCORE
                 && !self
                     .cursor
                     .peek_next()
@@ -519,7 +537,7 @@ impl Lexer {
 
     fn lex_escape_sequence(&mut self) -> MusiResult<()> {
         match self.cursor.peek_next() {
-            Some(b'n' | b'r' | b't' | b'\\' | b'"' | b'\'') => {
+            Some(b'n' | b'r' | b't' | CHAR_BACKSLASH | CHAR_QUOTE | CHAR_APOSTROPHE) => {
                 self.cursor.advance_by(2);
                 Ok(())
             }
@@ -528,7 +546,7 @@ impl Lexer {
                 self.lex_unicode_escape_sequence::<4>()
             }
             Some(invalid) => {
-                Err(self.error(format!("invalid escape sequence: '\\{}'", invalid as char)))
+                Err(self.error(format!("invalid escape sequence '\\{}'", invalid as char)))
             }
             None => Err(self.error("unclosed escape sequence")),
         }
@@ -547,9 +565,9 @@ impl Lexer {
                 }
                 Some(current) => {
                     let digit = match current {
-                        b'0'..=b'9' => current - b'0',
-                        b'a'..=b'f' => current - b'a' + 10,
-                        b'A'..=b'F' => current - b'A' + 10,
+                        CHAR_ZERO..=b'9' => current - CHAR_ZERO,
+                        HEX_LOWER_START..=HEX_LOWER_END => current - HEX_LOWER_START + 10,
+                        HEX_UPPER_START..=HEX_UPPER_END => current - HEX_UPPER_START + 10,
                         _ => unreachable!(),
                     };
                     value = (value << 4) | u32::from(digit);
@@ -558,11 +576,11 @@ impl Lexer {
             }
         }
 
-        if (0xD800..=0xDFFF).contains(&value) {
+        if (SURROGATE_START..=SURROGATE_END).contains(&value) {
             return Err(self.error("surrogate pairs not allowed in unicode escape sequences"));
         }
 
-        if value > 0x0010_FFFF {
+        if value > UNICODE_MAX_DIGITS {
             return Err(self.error("unicode escape sequence out of range"));
         }
 
@@ -612,10 +630,10 @@ impl Lexer {
 
 #[inline]
 const fn is_identifier_start(input: u8) -> bool {
-    input.is_ascii_alphabetic() || input == b'_'
+    input.is_ascii_alphabetic() || input == CHAR_UNDERSCORE
 }
 
 #[inline]
 const fn is_identifier_continue(input: u8) -> bool {
-    input.is_ascii_alphanumeric() || input == b'_'
+    input.is_ascii_alphanumeric() || input == CHAR_UNDERSCORE
 }
