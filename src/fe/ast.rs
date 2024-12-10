@@ -1,4 +1,4 @@
-use crate::common::{source::Span, token::Kind, value::Value};
+use crate::{source::Span, token::Kind, value::Value};
 
 #[derive(Debug)]
 pub struct Program {

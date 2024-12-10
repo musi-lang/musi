@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
-use crate::common::{self, source::Source};
+use crate::source::Source;
 
 pub(super) struct Cursor {
     pub(super) source: Arc<Source>,
-    pub(super) position: usize,
+    pub position: usize,
     pub(super) current_line: usize,
 }
 
@@ -32,7 +32,7 @@ impl Cursor {
         let current = self.peek()?;
         self.position += 1;
 
-        if current == common::CHAR_LF {
+        if current == crate::CHAR_LF {
             self.current_line += 1;
         }
 
