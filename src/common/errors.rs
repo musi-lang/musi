@@ -1,80 +1,98 @@
-use super::span::Span;
+use super::source::{Source, Span};
 
 #[derive(Debug, Clone, Copy)]
-pub enum ErrorSeverity {
+pub enum Severity {
     Error,
     Warning,
 }
 
 #[derive(Debug)]
-pub struct ErrorDiagnostic {
-    pub severity: ErrorSeverity,
-    pub message: String,
-    pub span: Span,
-    pub source_file: Option<String>,
-    pub source_line: Option<String>,
+pub struct Diagnostic {
+    pub(crate) severity: Severity,
+    pub(crate) message: String,
+    pub(crate) span: Span,
+    pub(crate) source: Option<Box<Source>>,
 }
 
-impl ErrorDiagnostic {
-    pub fn error(message: impl Into<String>, span: Span) -> Self {
+impl Diagnostic {
+    pub(crate) fn error(message: impl Into<String>, span: Span) -> Self {
         Self {
-            severity: ErrorSeverity::Error,
+            severity: Severity::Error,
             message: message.into(),
             span,
-            source_file: None,
-            source_line: None,
+            source: None,
         }
     }
 
-    pub fn warning(message: impl Into<String>, span: Span) -> Self {
+    pub(crate) fn warning(message: impl Into<String>, span: Span) -> Self {
         Self {
-            severity: ErrorSeverity::Warning,
+            severity: Severity::Warning,
             message: message.into(),
             span,
-            source_file: None,
-            source_line: None,
+            source: None,
         }
     }
 
-    pub fn with_file(mut self, file: impl Into<String>) -> Self {
-        self.source_file = Some(file.into());
+    pub(crate) fn with_source(mut self, source: &Source) -> Self {
+        self.source = Some(Box::new(source.clone()));
         self
     }
 
-    pub fn with_source(mut self, line: impl Into<String>) -> Self {
-        self.source_line = Some(line.into());
-        self
-    }
-
-    fn report(&self) -> String {
+    fn format(&self) -> String {
         const RED: &str = "\x1b[31m";
         const YELLOW: &str = "\x1b[33m";
         const BOLD: &str = "\x1b[1m";
         const RESET: &str = "\x1b[0m";
 
         let severity_colour = match self.severity {
-            ErrorSeverity::Error => RED,
-            ErrorSeverity::Warning => YELLOW,
+            Severity::Error => RED,
+            Severity::Warning => YELLOW,
         };
 
-        let mut output = format!(
-            "{BOLD}{}:{}:{}:{RESET} {BOLD}{severity_colour}{}{RESET}: {}\n",
-            self.source_file.as_deref().unwrap_or("<source>"),
-            self.span.start.line,
-            self.span.start.column,
-            match self.severity {
-                ErrorSeverity::Error => "error",
-                ErrorSeverity::Warning => "warning",
-            },
-            self.message
-        );
+        let mut output = String::new();
 
-        if let Some(ref line) = self.source_line {
-            output.push_str(&format!("\n{line}\n"));
+        if let Some(source) = &self.source {
+            let start_position = source.position(self.span.start);
+            let end_position = source.position(self.span.end);
+
+            // filename:line:column
             output.push_str(&format!(
-                "{}{severity_colour}{}",
-                " ".repeat((self.span.start.column - 1) as usize),
-                "^".repeat((self.span.end.column - self.span.start.column + 1) as usize)
+                "{BOLD}{}:{}:{}:{RESET} ",
+                source.name, start_position.line, start_position.column
+            ));
+
+            output.push_str(&format!(
+                "{BOLD}{severity_colour}{}{RESET}: {}\n",
+                match self.severity {
+                    Severity::Error => "error",
+                    Severity::Warning => "warning",
+                },
+                self.message
+            ));
+
+            let line_start = source.line_starts[start_position.line as usize - 1];
+            let line_end = source
+                .line_starts
+                .get(start_position.line as usize)
+                .copied()
+                .unwrap_or(source.content.len());
+
+            let line = String::from_utf8_lossy(&source.content[line_start..line_end]);
+            output.push_str(&format!("\n{line}\n"));
+
+            let pointer_indent = start_position.column as usize - 1;
+            let pointer_width = if start_position.line == end_position.line {
+                end_position.column - start_position.column + 1
+            } else {
+                (line_end - line_start - pointer_indent + 1)
+                    .try_into()
+                    .expect("line length too long")
+            } as usize;
+
+            output.push_str(&format!(
+                "{}{severity_colour}{}{RESET}\n",
+                " ".repeat(pointer_indent),
+                "^".repeat(pointer_width)
             ));
         }
 
@@ -82,55 +100,52 @@ impl ErrorDiagnostic {
     }
 }
 
-impl std::error::Error for ErrorDiagnostic {}
+impl std::error::Error for Diagnostic {}
 
-impl std::fmt::Display for ErrorDiagnostic {
+impl std::fmt::Display for Diagnostic {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.report())
+        write!(f, "{}", self.format())
     }
 }
 
 pub struct ErrorReporter {
-    diagnostics: Vec<ErrorDiagnostic>,
-    error_count: usize,
+    pub(crate) diagnostics: Vec<Diagnostic>,
+    pub(crate) error_count: usize,
+    source: Option<&'static Source>,
 }
 
 impl ErrorReporter {
-    pub const fn new() -> Self {
+    pub const fn new(source: Option<&'static Source>) -> Self {
         Self {
             diagnostics: vec![],
             error_count: 0,
+            source,
         }
     }
 
     pub fn error(&mut self, message: impl Into<String>, span: Span) {
         self.error_count += 1;
-        self.diagnostics.push(ErrorDiagnostic {
-            severity: ErrorSeverity::Error,
-            message: message.into(),
-            span,
-            source_file: None,
-            source_line: None,
-        });
+
+        let mut diagnostic = Diagnostic::error(message, span);
+        if let Some(source) = self.source {
+            diagnostic = diagnostic.with_source(source);
+        }
+        self.diagnostics.push(diagnostic);
     }
 
     pub fn warning(&mut self, message: impl Into<String>, span: Span) {
-        self.diagnostics.push(ErrorDiagnostic {
-            severity: ErrorSeverity::Warning,
-            message: message.into(),
-            span,
-            source_file: None,
-            source_line: None,
-        });
+        self.error_count += 1;
+
+        let mut diagnostic = Diagnostic::warning(message, span);
+        if let Some(source) = self.source {
+            diagnostic = diagnostic.with_source(source);
+        }
+        self.diagnostics.push(diagnostic);
     }
 
     pub const fn has_errors(&self) -> bool {
         self.error_count > 0
     }
-
-    pub fn take_diagnostics(&mut self) -> Vec<ErrorDiagnostic> {
-        std::mem::take(&mut self.diagnostics)
-    }
 }
 
-pub type MusiResult<T> = Result<T, ErrorDiagnostic>;
+pub type MusiResult<T> = Result<T, Diagnostic>;
