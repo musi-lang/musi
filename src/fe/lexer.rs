@@ -1,13 +1,12 @@
 use std::sync::Arc;
 
-use crate::common::{
+use crate::{
     errors::{Diagnostic, MusiResult},
     source::{Source, Span},
     token::{Kind, LiteralKind, Token},
 };
 
 use super::cursor::Cursor;
-use crate::common;
 
 const MAX_INDENT_LEVELS: usize = 32;
 
@@ -57,6 +56,7 @@ pub struct Lexer {
 }
 
 impl Lexer {
+    #[must_use]
     pub const fn new(source: Arc<Source>) -> Self {
         Self {
             cursor: Cursor::new(source),
@@ -65,6 +65,15 @@ impl Lexer {
         }
     }
 
+    /// Lexically analyses source code and produces a bunch of tokens.
+    ///
+    /// # Errors
+    ///
+    /// Returns `MusiError` if:
+    /// - invalid characters encountered
+    /// - string or character literals not properly terminated
+    /// - invalid numeric literals found
+    /// - iaximum indentation level exceeded
     pub fn lex(&mut self) -> MusiResult<Vec<Token>> {
         let mut tokens = Vec::with_capacity(self.cursor.source.content.len() >> 3); // divide by 8
 
@@ -92,7 +101,6 @@ impl Lexer {
 
         Ok(tokens)
     }
-
     fn next_token(&mut self) -> MusiResult<Token> {
         let start_position = self.cursor.position;
 
@@ -104,13 +112,13 @@ impl Lexer {
         match self.cursor.peek() {
             Some(current) => {
                 match current {
-                    common::CHAR_CR | common::CHAR_LF => Ok(self.lex_newline(start_position)),
+                    crate::CHAR_CR | crate::CHAR_LF => Ok(self.lex_newline(start_position)),
 
                     b if is_identifier_start(b) => Ok(self.lex_identifier_or_keyword()),
                     b if b.is_ascii_digit() => Ok(self.lex_number_literal()),
 
-                    common::CHAR_QUOTE => self.lex_string_literal(),
-                    common::CHAR_APOSTROPHE => self.lex_character_literal(),
+                    crate::CHAR_QUOTE => self.lex_string_literal(),
+                    crate::CHAR_APOSTROPHE => self.lex_character_literal(),
 
                     b'*' => Ok(self.make_token(Kind::Star, 1)),
                     b'/' => Ok(self
@@ -154,7 +162,7 @@ impl Lexer {
                     b'[' => Ok(self.make_token(Kind::LeftBracket, 1)),
                     b']' => Ok(self.make_token(Kind::RightBracket, 1)),
                     b',' => Ok(self.make_token(Kind::Comma, 1)),
-                    common::CHAR_DOT => {
+                    crate::CHAR_DOT => {
                         Ok(self.match_compound_token(&[(Kind::DotDot, b".."), (Kind::Dot, b".")]))
                     }
                     b';' => Ok(self.make_token(Kind::Semicolon, 1)),
@@ -187,7 +195,7 @@ impl Lexer {
                         self.cursor.advance();
                     }
                     _ => {
-                        if current != common::CHAR_CR && current != common::CHAR_LF {
+                        if current != crate::CHAR_CR && current != crate::CHAR_LF {
                             let current_indent = self.indent_stack[self.indent_level];
 
                             match spaces.cmp(&current_indent) {
@@ -249,17 +257,17 @@ impl Lexer {
     }
 
     fn lex_newline(&mut self, start: usize) -> Token {
-        let lexeme = if self.cursor.peek() == Some(common::CHAR_CR) {
+        let lexeme = if self.cursor.peek() == Some(crate::CHAR_CR) {
             self.cursor.advance();
-            if self.cursor.peek() == Some(common::CHAR_LF) {
+            if self.cursor.peek() == Some(crate::CHAR_LF) {
                 self.cursor.advance();
-                vec![common::CHAR_CR, common::CHAR_LF]
+                vec![crate::CHAR_CR, crate::CHAR_LF]
             } else {
-                vec![common::CHAR_CR]
+                vec![crate::CHAR_CR]
             }
         } else {
             self.cursor.advance();
-            vec![common::CHAR_LF]
+            vec![crate::CHAR_LF]
         };
 
         Token::new(
@@ -301,7 +309,7 @@ impl Lexer {
     fn lex_number_literal(&mut self) -> Token {
         let start_position = self.cursor.position;
 
-        if self.cursor.peek() == Some(common::CHAR_ZERO)
+        if self.cursor.peek() == Some(crate::CHAR_ZERO)
             && self.cursor.peek_next().map_or(false, |b| {
                 matches!(b, b'x' | b'X' | b'b' | b'B' | b'o' | b'O')
             })
@@ -320,7 +328,7 @@ impl Lexer {
 
         self.lex_decimal_digits();
 
-        if self.cursor.peek() == Some(common::CHAR_DOT)
+        if self.cursor.peek() == Some(crate::CHAR_DOT)
             && self
                 .cursor
                 .peek_next()
@@ -351,7 +359,7 @@ impl Lexer {
 
         while let Some(current) = self.cursor.peek() {
             match current {
-                common::CHAR_QUOTE => {
+                crate::CHAR_QUOTE => {
                     self.cursor.advance(); // skip closing quote
 
                     return Ok(Token::new(
@@ -363,13 +371,13 @@ impl Lexer {
                         },
                     ));
                 }
-                common::CHAR_BACKSLASH => {
+                crate::CHAR_BACKSLASH => {
                     self.lex_escape_sequence()?;
                     continue;
                 }
                 0..=0x1F => {
                     return Err(self.error(
-                        if current == common::CHAR_CR || current == common::CHAR_LF {
+                        if current == crate::CHAR_CR || current == crate::CHAR_LF {
                             "unclosed string literal"
                         } else {
                             "control character not allowed in string literal"
@@ -394,7 +402,7 @@ impl Lexer {
 
         while let Some(current) = self.cursor.peek() {
             match current {
-                common::CHAR_APOSTROPHE => {
+                crate::CHAR_APOSTROPHE => {
                     if chars == 0 {
                         return Err(self.error("empty character literal"));
                     } else if chars > 1 {
@@ -412,12 +420,12 @@ impl Lexer {
                         },
                     ));
                 }
-                common::CHAR_BACKSLASH => {
+                crate::CHAR_BACKSLASH => {
                     self.lex_escape_sequence()?;
                     chars += 1;
                     continue;
                 }
-                common::CHAR_LF => {
+                crate::CHAR_LF => {
                     return Err(self.error("unclosed character literal"));
                 }
                 _ => {
@@ -437,7 +445,7 @@ impl Lexer {
             Some(b'x' | b'X') => {
                 self.cursor.advance_by(2);
                 while let Some(current) = self.cursor.peek() {
-                    if !current.is_ascii_hexdigit() && current != common::CHAR_UNDERSCORE {
+                    if !current.is_ascii_hexdigit() && current != crate::CHAR_UNDERSCORE {
                         break;
                     }
                     self.cursor.advance();
@@ -446,7 +454,7 @@ impl Lexer {
             Some(b'b' | b'B') => {
                 self.cursor.advance_by(2);
                 while let Some(current) = self.cursor.peek() {
-                    if ![common::CHAR_ZERO, b'1', common::CHAR_UNDERSCORE].contains(&current) {
+                    if ![crate::CHAR_ZERO, b'1', crate::CHAR_UNDERSCORE].contains(&current) {
                         break;
                     }
                     self.cursor.advance();
@@ -455,7 +463,7 @@ impl Lexer {
             Some(b'o' | b'O') => {
                 self.cursor.advance_by(2);
                 while let Some(current) = self.cursor.peek() {
-                    if !matches!(current, common::CHAR_ZERO..=b'7' | common::CHAR_UNDERSCORE) {
+                    if !matches!(current, crate::CHAR_ZERO..=b'7' | crate::CHAR_UNDERSCORE) {
                         break;
                     }
                     self.cursor.advance();
@@ -468,10 +476,10 @@ impl Lexer {
     #[inline]
     fn lex_decimal_digits(&mut self) {
         while let Some(current) = self.cursor.peek() {
-            if !current.is_ascii_digit() && current != common::CHAR_UNDERSCORE {
+            if !current.is_ascii_digit() && current != crate::CHAR_UNDERSCORE {
                 break;
             }
-            if current == common::CHAR_UNDERSCORE
+            if current == crate::CHAR_UNDERSCORE
                 && !self
                     .cursor
                     .peek_next()
@@ -491,10 +499,10 @@ impl Lexer {
         }
 
         while let Some(current) = self.cursor.peek() {
-            if !current.is_ascii_digit() && current != common::CHAR_UNDERSCORE {
+            if !current.is_ascii_digit() && current != crate::CHAR_UNDERSCORE {
                 break;
             }
-            if current == common::CHAR_UNDERSCORE
+            if current == crate::CHAR_UNDERSCORE
                 && !self
                     .cursor
                     .peek_next()
@@ -512,9 +520,9 @@ impl Lexer {
                 b'n'
                 | b'r'
                 | b't'
-                | common::CHAR_BACKSLASH
-                | common::CHAR_QUOTE
-                | common::CHAR_APOSTROPHE,
+                | crate::CHAR_BACKSLASH
+                | crate::CHAR_QUOTE
+                | crate::CHAR_APOSTROPHE,
             ) => {
                 self.cursor.advance_by(2);
                 Ok(())
@@ -543,7 +551,7 @@ impl Lexer {
                 }
                 Some(current) => {
                     let digit = match current {
-                        common::CHAR_ZERO..=b'9' => current - common::CHAR_ZERO,
+                        crate::CHAR_ZERO..=b'9' => current - crate::CHAR_ZERO,
                         HEX_LOWER_START..=HEX_LOWER_END => current - HEX_LOWER_START + 10,
                         HEX_UPPER_START..=HEX_UPPER_END => current - HEX_UPPER_START + 10,
                         _ => unreachable!(),
@@ -609,10 +617,10 @@ impl Lexer {
 
 #[inline]
 const fn is_identifier_start(input: u8) -> bool {
-    input.is_ascii_alphabetic() || input == common::CHAR_UNDERSCORE
+    input.is_ascii_alphabetic() || input == crate::CHAR_UNDERSCORE
 }
 
 #[inline]
 const fn is_identifier_continue(input: u8) -> bool {
-    input.is_ascii_alphanumeric() || input == common::CHAR_UNDERSCORE
+    input.is_ascii_alphanumeric() || input == crate::CHAR_UNDERSCORE
 }
