@@ -10,5 +10,7 @@ Java or Rust already, you may want to read
 
 1. [Introduction](introduction.md)
 2. [Lexical Analysis](lexical_analysis.md)
+   - [What is Cursor?](lexical_analysis.md#what-is-cursor)
+   - [How does the Cursor work?](lexical_analysis.md#how-does-the-cursor-work)
 3. [Synthatic Analysis](synthatic_analysis.md)
 4. [Semantic Analysis](semantic_analysis.md)
