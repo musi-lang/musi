@@ -96,7 +96,7 @@ pub struct ErrorReporter {
 }
 
 impl ErrorReporter {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             diagnostics: vec![],
             error_count: 0,
@@ -124,7 +124,7 @@ impl ErrorReporter {
         });
     }
 
-    pub fn has_errors(&self) -> bool {
+    pub const fn has_errors(&self) -> bool {
         self.error_count > 0
     }
 
