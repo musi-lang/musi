@@ -56,7 +56,6 @@ pub enum Kind {
     // Keywords
     And,
     As,
-    Cases,
     Const,
     Do,
     Else,
@@ -69,9 +68,7 @@ pub enum Kind {
     Is,
     Let,
     Not,
-    Of,
     Or,
-    Otherwise,
     Then,
     To,
     True,
