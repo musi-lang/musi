@@ -1,3 +1,0 @@
-const num := 10
-var num2 := 20
-num2 <- 30
