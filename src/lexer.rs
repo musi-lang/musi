@@ -45,18 +45,6 @@ const KEYWORDS: &[(&[u8], Kind)] = &[
     (b"yield", Kind::Yield),
 ];
 
-enum LexerErrorKind {
-    InvalidCharacter(u8),
-    InvalidDigit(u8),
-    InvalidEscapeSequence(u8),
-    InvalidIndentation(u32),
-    InvalidUnicodeEscape(u32),
-
-    UnclosedCharacterLiteral,
-    UnclosedString,
-    UnexpectedEOF,
-}
-
 pub struct Lexer {
     cursor: Cursor,
     indent_stack: [u32; MAX_INDENT_LEVELS],
