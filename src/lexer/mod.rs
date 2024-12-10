@@ -1,9 +1,12 @@
+use cursor::Cursor;
+
 use crate::{
-    cursor::Cursor,
     errors::{ErrorDiagnostic, MusiResult},
     span::Span,
     token::{Kind, LiteralKind, Token},
 };
+
+mod cursor;
 
 const MAX_INDENT_LEVELS: usize = 32;
 
