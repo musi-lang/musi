@@ -61,8 +61,8 @@ let hello := "world"
 The Cursor moves through each character, like following stepping stones across a
 river:
 
-1. Starts at l in let
+1. Starts at `l` in `let`
 2. Steps through each letter one at a time
-3. Groups let as one word, like putting puzzle pieces together
+3. Groups `let` as one word, like putting puzzle pieces together
 4. Spots the `:=` pattern, like finding a special mark on the map
 5. Finds `"world"` between quotes, like finding a message in a bottle
