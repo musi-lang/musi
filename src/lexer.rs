@@ -1,7 +1,6 @@
 use crate::{
     cursor::Cursor,
     errors::{ErrorDiagnostic, MusiResult},
-    location::Location,
     span::Span,
     token::{Kind, LiteralKind, Token},
 };
@@ -60,11 +59,10 @@ impl Lexer {
         }
     }
 
-    pub fn lex(&mut self) -> MusiResult<Vec<Token>> {
+    pub fn lex(&mut self) -> Vec<Token> {
         let mut tokens = Vec::with_capacity(self.cursor.source.len() >> 3); // divide by 8
 
-        loop {
-            let token = self.next_token()?;
+        while let Ok(token) = self.next_token() {
             if token.kind == Kind::Eof {
                 while self.indent_level > 0 {
                     tokens.push(Token::new(
@@ -84,7 +82,7 @@ impl Lexer {
             }
         }
 
-        Ok(tokens)
+        tokens
     }
 
     fn next_token(&mut self) -> MusiResult<Token> {
@@ -96,9 +94,34 @@ impl Lexer {
         }
 
         match self.cursor.peek() {
-            Some(c) => {
-                match c {
-                    b'\r' | b'\n' => Ok(self.lex_newline(start_location)),
+            Some(current) => {
+                match current {
+                    b'\r' | b'\n' => {
+                        let lexeme = if self.cursor.peek() == Some(b'\r') {
+                            self.cursor.advance();
+                            if self.cursor.peek() == Some(b'\n') {
+                                self.cursor.advance();
+                                vec![b'\r', b'\n']
+                            } else {
+                                vec![b'\r']
+                            }
+                        } else {
+                            self.cursor.advance();
+                            vec![b'\n']
+                        };
+
+                        self.cursor.location.line += 1;
+                        self.cursor.location.column = 1;
+
+                        Ok(Token::new(
+                            Kind::Newline,
+                            &lexeme,
+                            Span {
+                                start: start_location,
+                                end: self.cursor.location,
+                            },
+                        ))
+                    }
 
                     b if is_identifier_start(b) => Ok(self.lex_identifier_or_keyword()),
                     b if b.is_ascii_digit() => Ok(self.lex_number_literal()),
@@ -158,34 +181,6 @@ impl Lexer {
                     end: self.cursor.location,
                 },
             )),
-        }
-    }
-
-    #[inline]
-    fn make_token(&mut self, kind: Kind, length: usize) -> Token {
-        let start_location = self.cursor.location;
-        let start_position = self.cursor.position;
-        self.cursor.advance_by(length);
-
-        Token::new(
-            kind,
-            &self.cursor.source[start_position..self.cursor.position],
-            Span {
-                start: start_location,
-                end: self.cursor.location,
-            },
-        )
-    }
-
-    fn match_compound_token(&mut self, patterns: &[(Kind, &[u8])]) -> Token {
-        let matched = patterns.iter().find(|(_, pattern)| match pattern.len() {
-            2 => self.cursor.match_2byte(pattern[0], pattern[1]),
-            3 => self.cursor.match_3byte(pattern[0], pattern[1], pattern[2]),
-            _ => false,
-        });
-        match matched {
-            Some((kind, pattern)) => self.make_token(*kind, pattern.len()),
-            None => self.make_token(patterns[0].0, 1),
         }
     }
 
@@ -281,33 +276,6 @@ impl Lexer {
                 end: self.cursor.location,
             },
         ))
-    }
-
-    fn lex_newline(&mut self, start_location: Location) -> Token {
-        let lexeme = if self.cursor.peek() == Some(b'\r') {
-            self.cursor.advance();
-            if self.cursor.peek() == Some(b'\n') {
-                self.cursor.advance();
-                vec![b'\r', b'\n']
-            } else {
-                vec![b'\r']
-            }
-        } else {
-            self.cursor.advance();
-            vec![b'\n']
-        };
-
-        self.cursor.location.line += 1;
-        self.cursor.location.column = 1;
-
-        Token::new(
-            Kind::Newline,
-            &lexeme,
-            Span {
-                start: start_location,
-                end: self.cursor.location,
-            },
-        )
     }
 
     fn lex_identifier_or_keyword(&mut self) -> Token {
@@ -470,6 +438,7 @@ impl Lexer {
         Err(self.error("unclosed character literal"))
     }
 
+    #[inline]
     fn lex_number_base(&mut self) {
         match self.cursor.peek_next() {
             Some(b'x' | b'X') => {
@@ -503,6 +472,7 @@ impl Lexer {
         }
     }
 
+    #[inline]
     fn lex_decimal_digits(&mut self) {
         while let Some(current) = self.cursor.peek() {
             if !current.is_ascii_digit() && current != b'_' {
@@ -595,6 +565,36 @@ impl Lexer {
         Ok(())
     }
 
+    #[inline]
+    fn make_token(&mut self, kind: Kind, length: usize) -> Token {
+        let start_location = self.cursor.location;
+        let start_position = self.cursor.position;
+        self.cursor.advance_by(length);
+
+        Token::new(
+            kind,
+            &self.cursor.source[start_position..self.cursor.position],
+            Span {
+                start: start_location,
+                end: self.cursor.location,
+            },
+        )
+    }
+
+    #[inline]
+    fn match_compound_token(&mut self, patterns: &[(Kind, &[u8])]) -> Token {
+        let matched = patterns.iter().find(|(_, pattern)| match pattern.len() {
+            2 => self.cursor.match_2byte(pattern[0], pattern[1]),
+            3 => self.cursor.match_3byte(pattern[0], pattern[1], pattern[2]),
+            _ => false,
+        });
+        match matched {
+            Some((kind, pattern)) => self.make_token(*kind, pattern.len()),
+            None => self.make_token(patterns[0].0, 1),
+        }
+    }
+
+    #[inline]
     fn error(&self, message: impl Into<String>) -> ErrorDiagnostic {
         ErrorDiagnostic::error(
             message,
