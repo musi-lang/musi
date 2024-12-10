@@ -13,7 +13,6 @@ const MAX_INDENT_LEVELS: usize = 32;
 const KEYWORDS: &[(&[u8], Kind)] = &[
     (b"and", Kind::And),
     (b"as", Kind::As),
-    (b"cases", Kind::Cases),
     (b"const", Kind::Const),
     (b"do", Kind::Do),
     (b"else", Kind::Else),
@@ -26,9 +25,7 @@ const KEYWORDS: &[(&[u8], Kind)] = &[
     (b"is", Kind::Is),
     (b"let", Kind::Let),
     (b"not", Kind::Not),
-    (b"of", Kind::Of),
     (b"or", Kind::Or),
-    (b"otherwise", Kind::Otherwise),
     (b"then", Kind::Then),
     (b"to", Kind::To),
     (b"true", Kind::True),
