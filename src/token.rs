@@ -20,6 +20,7 @@ pub enum Kind {
     RightBracket, // ]
     Comma,        // ,
     Dot,          // .
+    DotDot,       // ..
     Colon,        // :
     Semicolon,    // ;
     Question,     // ?
@@ -41,11 +42,13 @@ pub enum Kind {
     Ampersand,         // &
     Caret,             // ^
     Pipe,              // |
+    PipePipe,          // ||
     Tilde,             // ~
     Equals,            // =
     TildeEquals,       // ~=
     SlashEquals,       // /=
     ColonEquals,       // :=
+    EqualsGreater,     // =>
     MinusGreater,      // ->
     LessMinus,         // <-
     PipeGreater,       // |>
@@ -53,17 +56,13 @@ pub enum Kind {
     // Keywords
     And,
     As,
-    Break,
-    Case,
+    Cases,
     Const,
-    Continue,
-    Deref,
     Do,
-    Downto,
     Else,
     False,
     For,
-    Foreign,
+    Forall,
     From,
     If,
     In,
@@ -72,20 +71,16 @@ pub enum Kind {
     Not,
     Of,
     Or,
-    Ref,
-    Repeat,
-    Return,
+    Otherwise,
     Then,
     To,
     True,
     Type,
-    Unsafe,
     Until,
     Var,
     Where,
     While,
     Xor,
-    Yield,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
