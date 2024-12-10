@@ -1,6 +1,0 @@
-const num := 100
-
-if num > 100 then "invalid"
-else if num >= 80 then "good"
-else if num >= 60 then "pass"
-else "fail"
