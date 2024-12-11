@@ -1,0 +1,39 @@
+[package]
+name = "musi"
+version = "0.1.0-alpha"
+description = "The Musi Programming Language"
+repository = "https://github.com/musi-lang/musi"
+edition = "2021"
+rust-version = "1.82.0"
+license = "AGPL-3.0"
+keywords = ["musi", "programming language"]
+categories = ["Programming Language"]
+default-run = "musi"
+
+[[bin]]
+"name" = "musi"
+"path" = "src/main.rs"
+
+[dependencies]
+env_logger = "0.11.5"
+log = "0.4.22"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = "deny"
+correctness = "deny"
+suspicious = "deny"
+complexity = "warn"
+perf = "warn"
+style = "warn"
+pedantic = "warn"
+nursery = "warn"
+cargo = "deny"
+
+[profile.release]
+overflow-checks = true
+debug-assertions = true
+codegen-units = 1
+panic = "abort"         # no unwinding

@@ -1,0 +1,8 @@
+{
+  "recommendations": [
+    "panicbit.cargo",
+    "rust-lang.rust-analyzer",
+    "tamasfe.even-better-toml",
+    "vadimcn.vscode-lldb",
+  ]
+}
