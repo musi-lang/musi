@@ -23,9 +23,6 @@ pub enum Kind {
     DotDot,       // ..
     DotDotLess,   // ..<
     Colon,        // :
-    Semicolon,    // ;
-    Question,     // ?
-    At,           // @
 
     // Operators
     Star,              // *

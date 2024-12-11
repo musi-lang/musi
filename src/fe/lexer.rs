@@ -154,9 +154,6 @@ impl Lexer {
                     crate::CHAR_DOT => {
                         Ok(self.match_compound_token(&[(Kind::DotDot, b".."), (Kind::Dot, b".")]))
                     }
-                    b';' => Ok(self.make_token(Kind::Semicolon, 1)),
-                    b'?' => Ok(self.make_token(Kind::Question, 1)),
-                    b'@' => Ok(self.make_token(Kind::At, 1)),
 
                     _ => Ok(self.make_token(Kind::Unknown, 1)),
                 }
