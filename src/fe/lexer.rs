@@ -151,9 +151,11 @@ impl Lexer {
                     b'[' => Ok(self.make_token(Kind::LeftBracket, 1)),
                     b']' => Ok(self.make_token(Kind::RightBracket, 1)),
                     b',' => Ok(self.make_token(Kind::Comma, 1)),
-                    crate::CHAR_DOT => {
-                        Ok(self.match_compound_token(&[(Kind::DotDot, b".."), (Kind::Dot, b".")]))
-                    }
+                    crate::CHAR_DOT => Ok(self.match_compound_token(&[
+                        (Kind::DotDotLess, b"..<"),
+                        (Kind::DotDot, b".."),
+                        (Kind::Dot, b"."),
+                    ])),
 
                     _ => Ok(self.make_token(Kind::Unknown, 1)),
                 }
