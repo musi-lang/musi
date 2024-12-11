@@ -2,6 +2,46 @@ use crate::core::span::Span;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
+    // Special
+    Eof,
+    Unknown,
+    Newline,
+    Indent,
+    Dedent,
+    Identifier,
+    Literal(LiteralKind),
+
+    // Operators
+    Plus,              // +
+    Minus,             // -
+    Star,              // *
+    Slash,             // /
+    Caret,             // ^
+    Pipe,              // |
+    Less,              // <
+    Greater,           // >
+    Equals,            // =
+    LessEquals,        // <=
+    GreaterEquals,     // >=
+    LessEqualsGreater, // <=>
+    SlashEquals,       // /=
+    ColonEquals,       // :=
+    MinusGreater,      // ->
+    PipeGreater,       // |>
+
+    // Delimiters
+    LeftParen,    // (
+    RightParen,   // )
+    LeftBrace,    // {
+    RightBrace,   // }
+    LeftBracket,  // [
+    RightBracket, // ]
+    Comma,        // ,
+    Colon,        // :
+    Dot,          // .
+    DotDot,       // ..
+    DotDotLess,   // ..<
+
     // Keywords
     And,
     As,
@@ -29,46 +69,6 @@ pub enum Kind {
     Type,
     Where,
     While,
-
-    // Delimiters
-    LeftParen,    // (
-    RightParen,   // )
-    LeftBrace,    // {
-    RightBrace,   // }
-    LeftBracket,  // [
-    RightBracket, // ]
-    Comma,        // ,
-    Colon,        // :
-    Dot,          // .
-    DotDot,       // ..
-    DotDotLess,   // ..<
-
-    // Operators
-    Plus,              // +
-    Minus,             // -
-    Star,              // *
-    Slash,             // /
-    Caret,             // ^
-    Pipe,              // |
-    Less,              // <
-    Greater,           // >
-    Equals,            // =
-    LessEquals,        // <=
-    GreaterEquals,     // >=
-    LessEqualsGreater, // <=>
-    SlashEquals,       // /=
-    ColonEquals,       // :=
-    MinusGreater,      // ->
-    PipeGreater,       // |>
-
-    // Special
-    Eof,
-    Unknown,
-    Newline,
-    Indent,
-    Dedent,
-    Identifier,
-    Literal(LiteralKind),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
