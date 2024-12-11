@@ -117,12 +117,30 @@ impl Lexer {
                     core::CHAR_QUOTE => self.lex_string_literal(),
                     core::CHAR_APOSTROPHE => self.lex_character_literal(),
 
-                    b'*' => Ok(self.make_token(Kind::Star, 1)),
-                    b'/' => Ok(self
-                        .match_compound_token(&[(Kind::SlashEquals, b"/="), (Kind::Slash, b"/")])),
+                    b'(' => Ok(self.make_token(Kind::LeftParen, 1)),
+                    b')' => Ok(self.make_token(Kind::RightParen, 1)),
+                    b'{' => Ok(self.make_token(Kind::LeftBrace, 1)),
+                    b'}' => Ok(self.make_token(Kind::RightBrace, 1)),
+                    b'[' => Ok(self.make_token(Kind::LeftBracket, 1)),
+                    b']' => Ok(self.make_token(Kind::RightBracket, 1)),
+                    b',' => Ok(self.make_token(Kind::Comma, 1)),
+                    b':' => Ok(self
+                        .match_compound_token(&[(Kind::ColonEquals, b":="), (Kind::Colon, b":")])),
+                    core::CHAR_DOT => Ok(self.match_compound_token(&[
+                        (Kind::DotDotLess, b"..<"),
+                        (Kind::DotDot, b".."),
+                        (Kind::Dot, b"."),
+                    ])),
+
                     b'+' => Ok(self.make_token(Kind::Plus, 1)),
                     b'-' => Ok(self
                         .match_compound_token(&[(Kind::MinusGreater, b"->"), (Kind::Minus, b"-")])),
+                    b'*' => Ok(self.make_token(Kind::Star, 1)),
+                    b'/' => Ok(self
+                        .match_compound_token(&[(Kind::SlashEquals, b"/="), (Kind::Slash, b"/")])),
+                    b'^' => Ok(self.make_token(Kind::Caret, 1)),
+                    b'|' => Ok(self
+                        .match_compound_token(&[(Kind::PipeGreater, b"|>"), (Kind::Pipe, b"|")])),
                     b'<' => Ok(self.match_compound_token(&[
                         (Kind::LessEqualsGreater, b"<=>"),
                         (Kind::LessEquals, b"<="),
@@ -132,27 +150,7 @@ impl Lexer {
                         (Kind::GreaterEquals, b">="),
                         (Kind::Greater, b">"),
                     ])),
-
-                    b'^' => Ok(self.make_token(Kind::Caret, 1)),
-                    b'|' => Ok(self
-                        .match_compound_token(&[(Kind::PipeGreater, b"|>"), (Kind::Pipe, b"|")])),
-
                     b'=' => Ok(self.make_token(Kind::Equals, 1)),
-                    b':' => Ok(self
-                        .match_compound_token(&[(Kind::ColonEquals, b":="), (Kind::Colon, b":")])),
-
-                    b'(' => Ok(self.make_token(Kind::LeftParen, 1)),
-                    b')' => Ok(self.make_token(Kind::RightParen, 1)),
-                    b'{' => Ok(self.make_token(Kind::LeftBrace, 1)),
-                    b'}' => Ok(self.make_token(Kind::RightBrace, 1)),
-                    b'[' => Ok(self.make_token(Kind::LeftBracket, 1)),
-                    b']' => Ok(self.make_token(Kind::RightBracket, 1)),
-                    b',' => Ok(self.make_token(Kind::Comma, 1)),
-                    core::CHAR_DOT => Ok(self.match_compound_token(&[
-                        (Kind::DotDotLess, b"..<"),
-                        (Kind::DotDot, b".."),
-                        (Kind::Dot, b"."),
-                    ])),
 
                     _ => Ok(self.make_token(Kind::Unknown, 1)),
                 }

@@ -2,46 +2,6 @@ use crate::core::span::Span;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
-    Eof,
-    Unknown,
-    Newline,
-    Indent,
-    Dedent,
-
-    Identifier,
-    Literal(LiteralKind),
-
-    // Delimiters
-    LeftParen,    // (
-    RightParen,   // )
-    LeftBrace,    // {
-    RightBrace,   // }
-    LeftBracket,  // [
-    RightBracket, // ]
-    Comma,        // ,
-    Dot,          // .
-    DotDot,       // ..
-    DotDotLess,   // ..<
-    Colon,        // :
-
-    // Operators
-    Star,              // *
-    Slash,             // /
-    Plus,              // +
-    Minus,             // -
-    Less,              // <
-    Greater,           // >
-    LessEquals,        // <=
-    GreaterEquals,     // >=
-    LessEqualsGreater, // <=>
-    Caret,             // ^
-    Pipe,              // |
-    Equals,            // =
-    SlashEquals,       // /=
-    ColonEquals,       // :=
-    MinusGreater,      // ->
-    PipeGreater,       // |>
-
     // Keywords
     And,
     As,
@@ -62,13 +22,53 @@ pub enum Kind {
     Not,
     Of,
     Or,
-    Return,
     Ref,
+    Return,
     Then,
     True,
     Type,
     Where,
     While,
+
+    // Delimiters
+    LeftParen,    // (
+    RightParen,   // )
+    LeftBrace,    // {
+    RightBrace,   // }
+    LeftBracket,  // [
+    RightBracket, // ]
+    Comma,        // ,
+    Colon,        // :
+    Dot,          // .
+    DotDot,       // ..
+    DotDotLess,   // ..<
+
+    // Operators
+    Plus,              // +
+    Minus,             // -
+    Star,              // *
+    Slash,             // /
+    Caret,             // ^
+    Pipe,              // |
+    Less,              // <
+    Greater,           // >
+    Equals,            // =
+    LessEquals,        // <=
+    GreaterEquals,     // >=
+    LessEqualsGreater, // <=>
+    SlashEquals,       // /=
+    ColonEquals,       // :=
+    MinusGreater,      // ->
+    PipeGreater,       // |>
+
+    // Special
+    Eof,
+    Unknown,
+    Newline,
+    Indent,
+    Dedent,
+    Identifier,
+    Literal(LiteralKind),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
