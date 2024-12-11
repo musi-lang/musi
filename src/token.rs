@@ -21,6 +21,7 @@ pub enum Kind {
     Comma,        // ,
     Dot,          // .
     DotDot,       // ..
+    DotDotLess,   // ..<
     Colon,        // :
     Semicolon,    // ;
     Question,     // ?
@@ -31,53 +32,48 @@ pub enum Kind {
     Slash,             // /
     Plus,              // +
     Minus,             // -
-    LessLess,          // <<
-    GreaterGreater,    // >>
     Less,              // <
     Greater,           // >
     LessEquals,        // <=
     GreaterEquals,     // >=
     LessEqualsGreater, // <=>
-    Bang,              // !
-    Ampersand,         // &
     Caret,             // ^
     Pipe,              // |
-    PipePipe,          // ||
-    Tilde,             // ~
     Equals,            // =
-    TildeEquals,       // ~=
     SlashEquals,       // /=
     ColonEquals,       // :=
-    EqualsGreater,     // =>
     MinusGreater,      // ->
-    LessMinus,         // <-
     PipeGreater,       // |>
 
     // Keywords
     And,
     As,
-    Const,
+    Break,
+    Case,
+    Continue,
+    Deref,
     Do,
     Else,
     False,
     For,
     Forall,
     From,
+    Func,
     If,
     In,
     Is,
     Let,
     Not,
+    Of,
     Or,
+    Proc,
+    Return,
+    Ref,
     Then,
-    To,
     True,
     Type,
-    Until,
-    Var,
     Where,
     While,
-    Xor,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

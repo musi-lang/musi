@@ -13,28 +13,31 @@ const MAX_INDENT_LEVELS: usize = 32;
 const KEYWORDS: &[(&[u8], Kind)] = &[
     (b"and", Kind::And),
     (b"as", Kind::As),
-    (b"const", Kind::Const),
+    (b"break", Kind::Break),
+    (b"case", Kind::Case),
+    (b"continue", Kind::Continue),
+    (b"deref", Kind::Deref),
     (b"do", Kind::Do),
     (b"else", Kind::Else),
     (b"false", Kind::False),
     (b"for", Kind::For),
     (b"forall", Kind::Forall),
     (b"from", Kind::From),
+    (b"func", Kind::Func),
     (b"if", Kind::If),
     (b"in", Kind::In),
     (b"is", Kind::Is),
     (b"let", Kind::Let),
     (b"not", Kind::Not),
+    (b"of", Kind::Of),
     (b"or", Kind::Or),
+    (b"proc", Kind::Proc),
+    (b"return", Kind::Return),
     (b"then", Kind::Then),
-    (b"to", Kind::To),
     (b"true", Kind::True),
     (b"type", Kind::Type),
-    (b"until", Kind::Until),
-    (b"var", Kind::Var),
     (b"where", Kind::Where),
     (b"while", Kind::While),
-    (b"xor", Kind::Xor),
 ];
 
 const UNICODE_MAX_DIGITS: u32 = 0x0010_FFFF;
@@ -125,30 +128,19 @@ impl Lexer {
                         .match_compound_token(&[(Kind::MinusGreater, b"->"), (Kind::Minus, b"-")])),
                     b'<' => Ok(self.match_compound_token(&[
                         (Kind::LessEqualsGreater, b"<=>"),
-                        (Kind::LessLess, b"<<"),
                         (Kind::LessEquals, b"<="),
-                        (Kind::LessMinus, b"<-"),
                         (Kind::Less, b"<"),
                     ])),
                     b'>' => Ok(self.match_compound_token(&[
-                        (Kind::GreaterGreater, b">>"),
                         (Kind::GreaterEquals, b">="),
                         (Kind::Greater, b">"),
                     ])),
-                    b'!' => Ok(self.make_token(Kind::Bang, 1)),
-                    b'&' => Ok(self.make_token(Kind::Ampersand, 1)),
+
                     b'^' => Ok(self.make_token(Kind::Caret, 1)),
-                    b'|' => Ok(self.match_compound_token(&[
-                        (Kind::PipePipe, b"||"),
-                        (Kind::PipeGreater, b"|>"),
-                        (Kind::Pipe, b"|"),
-                    ])),
-                    b'~' => Ok(self
-                        .match_compound_token(&[(Kind::TildeEquals, b"~="), (Kind::Tilde, b"~")])),
-                    b'=' => Ok(self.match_compound_token(&[
-                        (Kind::EqualsGreater, b"=>"),
-                        (Kind::Equals, b"="),
-                    ])),
+                    b'|' => Ok(self
+                        .match_compound_token(&[(Kind::PipeGreater, b"|>"), (Kind::Pipe, b"|")])),
+
+                    b'=' => Ok(self.make_token(Kind::Equals, 1)),
                     b':' => Ok(self
                         .match_compound_token(&[(Kind::ColonEquals, b":="), (Kind::Colon, b":")])),
 
