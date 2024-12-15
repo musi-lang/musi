@@ -1,12 +1,16 @@
+use std::fmt::{self, Write as _};
+
 use super::{source::Source, span::Span};
 
 #[derive(Debug, Clone, Copy)]
+#[non_exhaustive]
 pub enum Severity {
     Error,
     Warning,
 }
 
 #[derive(Clone, Debug)]
+#[non_exhaustive]
 pub struct Diagnostic {
     pub severity: Severity,
     pub message: String,
@@ -15,7 +19,8 @@ pub struct Diagnostic {
 }
 
 impl Diagnostic {
-    pub fn error(message: impl Into<String>, span: Span) -> Self {
+    #[inline]
+    pub fn error<T: Into<String>>(message: T, span: Span) -> Self {
         Self {
             severity: Severity::Error,
             message: message.into(),
@@ -24,7 +29,8 @@ impl Diagnostic {
         }
     }
 
-    pub fn warning(message: impl Into<String>, span: Span) -> Self {
+    #[inline]
+    pub fn warning<T: Into<String>>(message: T, span: Span) -> Self {
         Self {
             severity: Severity::Warning,
             message: message.into(),
@@ -34,6 +40,7 @@ impl Diagnostic {
     }
 
     #[must_use]
+    #[inline]
     pub fn with_source(mut self, source: &Source) -> Self {
         self.source = Some(Box::new(source.clone()));
         self
@@ -52,70 +59,91 @@ impl Diagnostic {
 
         let mut output = String::new();
 
-        if let Some(source) = &self.source {
+        if let Some(source) = self.source.as_ref() {
             let start_position = source.position(self.span.start);
             let end_position = source.position(self.span.end);
 
-            output.push_str(&format!(
+            write!(
+                output,
                 "{BOLD}{}:{}:{}:{RESET} ",
                 source.name, start_position.line, start_position.column
-            ));
-
-            output.push_str(&format!(
+            )
+            .unwrap();
+            writeln!(
+                output,
                 "{BOLD}{severity_colour}{}{RESET}: {}\n",
                 match self.severity {
                     Severity::Error => "error",
                     Severity::Warning => "warning",
                 },
                 self.message
-            ));
+            )
+            .unwrap();
 
-            let line_start = source.line_starts[start_position.line as usize - 1];
+            let line_start = source
+                .line_starts
+                .get(
+                    usize::try_from(start_position.line)
+                        .unwrap_or_default()
+                        .saturating_sub(1),
+                )
+                .copied()
+                .unwrap_or(0);
             let line_end = source
                 .line_starts
-                .get(start_position.line as usize)
+                .get(usize::try_from(start_position.line).unwrap_or_default())
                 .copied()
                 .unwrap_or(source.content.len());
 
-            let line = String::from_utf8_lossy(&source.content[line_start..line_end]);
-            output.push_str(&format!("\n{line}\n"));
-
-            let pointer_indent = start_position.column as usize - 1;
+            let line = String::from_utf8_lossy(
+                source.content.get(line_start..line_end).unwrap_or_default(),
+            );
+            writeln!(output, "\n{line}").unwrap();
+            let pointer_indent = usize::try_from(start_position.column)
+                .unwrap_or(1)
+                .saturating_sub(1);
             let pointer_width = if start_position.line == end_position.line {
-                end_position.column - start_position.column + 1
+                (end_position.column.saturating_sub(start_position.column)).saturating_add(1)
             } else {
-                (line_end - line_start - pointer_indent + 1)
+                line_end
+                    .saturating_sub(line_start)
+                    .saturating_sub(pointer_indent)
+                    .saturating_add(1)
                     .try_into()
-                    .expect("line length too long")
-            } as usize;
+                    .unwrap_or(1)
+            };
 
-            output.push_str(&format!(
-                "{}{severity_colour}{}{RESET}\n",
+            writeln!(
+                output,
+                "{}{severity_colour}{}{RESET}",
                 " ".repeat(pointer_indent),
-                "^".repeat(pointer_width)
-            ));
+                "^".repeat(usize::try_from(pointer_width).unwrap_or(1))
+            )
+            .unwrap();
         }
 
         output
     }
 }
 
-impl std::error::Error for Diagnostic {}
-
-impl std::fmt::Display for Diagnostic {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Diagnostic {
+    #[inline]
+    #[expect(clippy::min_ident_chars, reason = "forbids renaming")]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.format())
     }
 }
 
+#[non_exhaustive]
 pub struct ErrorReporter {
     pub diagnostics: Vec<Diagnostic>,
     pub error_count: usize,
-    source: Option<&'static Source>,
+    pub source: Option<&'static Source>,
 }
 
 impl ErrorReporter {
     #[must_use]
+    #[inline]
     pub const fn new(source: Option<&'static Source>) -> Self {
         Self {
             diagnostics: vec![],
@@ -124,8 +152,9 @@ impl ErrorReporter {
         }
     }
 
-    pub fn error(&mut self, message: impl Into<String>, span: Span) {
-        self.error_count += 1;
+    #[inline]
+    pub fn error<M: Into<String>>(&mut self, message: M, span: Span) {
+        self.error_count = self.error_count.saturating_add(1);
 
         let mut diagnostic = Diagnostic::error(message, span);
         if let Some(source) = self.source {
@@ -134,8 +163,9 @@ impl ErrorReporter {
         self.diagnostics.push(diagnostic);
     }
 
-    pub fn warning(&mut self, message: impl Into<String>, span: Span) {
-        self.error_count += 1;
+    #[inline]
+    pub fn warning<M: Into<String>>(&mut self, message: M, span: Span) {
+        self.error_count = self.error_count.saturating_add(1);
 
         let mut diagnostic = Diagnostic::warning(message, span);
         if let Some(source) = self.source {
@@ -145,6 +175,7 @@ impl ErrorReporter {
     }
 
     #[must_use]
+    #[inline]
     pub const fn has_errors(&self) -> bool {
         self.error_count > 0
     }

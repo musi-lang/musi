@@ -1,27 +1,31 @@
 use crate::{
-    analysis::lexical::token::Kind,
+    analysis::lexical::token::TokenKind,
     core::{span::Span, value::Value},
 };
 
 #[derive(Debug)]
+#[non_exhaustive]
 pub struct Program {
     pub statements: Vec<Statement>,
     pub span: Span,
 }
 
 #[derive(Debug)]
+#[non_exhaustive]
 pub struct Statement {
     pub kind: StatementKind,
     pub span: Span,
 }
 
 #[derive(Debug)]
+#[non_exhaustive]
 pub struct Expression {
     pub kind: ExpressionKind,
     pub span: Span,
 }
 
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum StatementKind {
     Expression(Expression),
     Block(Vec<Statement>),
@@ -40,6 +44,7 @@ pub enum StatementKind {
 }
 
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum ExpressionKind {
     Literal {
         value: Value,
@@ -51,12 +56,12 @@ pub enum ExpressionKind {
     },
     Binary {
         left: Box<Expression>,
-        operator: Kind,
+        operator: TokenKind,
         right: Box<Expression>,
         span: Span,
     },
     Unary {
-        operator: Kind,
+        operator: TokenKind,
         operand: Box<Expression>,
         span: Span,
     },
@@ -89,6 +94,7 @@ pub enum ExpressionKind {
 }
 
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum PatternKind {
     Literal(Value),
     Identifier(Box<str>),
@@ -101,6 +107,7 @@ pub enum PatternKind {
 }
 
 #[derive(Debug)]
+#[non_exhaustive]
 pub struct MatchArm {
     pub pattern: PatternKind,
     pub guard: Option<Box<Expression>>,
