@@ -6,7 +6,7 @@ pub enum Severity {
     Warning,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Diagnostic {
     pub severity: Severity,
     pub message: String,
