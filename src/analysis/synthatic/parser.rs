@@ -1,7 +1,7 @@
 use std::vec;
 
 use crate::{
-    analysis::lexical::token::{Kind, Token},
+    analysis::lexical::token::{Token, TokenKind},
     core::{diagnostics::Diagnostic, span::Span, value::Value, MusiResult},
 };
 
@@ -24,23 +24,23 @@ enum Precedence {
     Primary,    //
 }
 
-impl From<Kind> for Precedence {
-    fn from(kind: Kind) -> Self {
+impl From<TokenKind> for Precedence {
+    fn from(kind: TokenKind) -> Self {
         match kind {
-            Kind::ColonEquals | Kind::LessMinus => Self::Assignment,
-            Kind::PipeGreater => Self::Pipeline,
-            Kind::Or => Self::LogicalOr,
-            Kind::And => Self::LogicalAnd,
-            Kind::Equals | Kind::SlashEquals => Self::Equality,
-            Kind::Less
-            | Kind::Greater
-            | Kind::LessEquals
-            | Kind::GreaterEquals
-            | Kind::LessEqualsGreater => Self::Comparison,
-            Kind::Plus | Kind::Minus => Self::Term,
-            Kind::Star | Kind::Slash => Self::Factor,
-            Kind::Caret => Self::Power,
-            Kind::LeftParen | Kind::Dot => Self::Call,
+            TokenKind::ColonEquals | TokenKind::LessMinus => Self::Assignment,
+            TokenKind::PipeGreater => Self::Pipeline,
+            TokenKind::Or => Self::LogicalOr,
+            TokenKind::And => Self::LogicalAnd,
+            TokenKind::Equals | TokenKind::SlashEquals => Self::Equality,
+            TokenKind::Less
+            | TokenKind::Greater
+            | TokenKind::LessEquals
+            | TokenKind::GreaterEquals
+            | TokenKind::LessEqualsGreater => Self::Comparison,
+            TokenKind::Plus | TokenKind::Minus => Self::Term,
+            TokenKind::Star | TokenKind::Slash => Self::Factor,
+            TokenKind::Caret => Self::Power,
+            TokenKind::LeftParen | TokenKind::Dot => Self::Call,
             _ => Self::None,
         }
     }
@@ -54,6 +54,7 @@ pub struct Parser {
 
 impl Parser {
     #[must_use]
+    #[inline]
     pub const fn new(tokens: Vec<Token>) -> Self {
         Self {
             tokens,
@@ -62,25 +63,31 @@ impl Parser {
         }
     }
 
-    #[allow(clippy::missing_errors_doc)]
+    #[inline]
     pub fn parse(&mut self) -> MusiResult<Program> {
-        let start_span = self.peek().span;
+        let start_span = match self.peek() {
+            Some(token) => token.span,
+            None => return Err(self.error("unexpected end of file")),
+        };
         let mut statements = vec![];
 
         while !self.is_at_end() {
-            match self.peek().kind {
-                Kind::Eof => break,
-                Kind::Newline | Kind::Indent | Kind::Dedent => {
-                    self.advance();
-                    continue;
-                }
-                _ => match self.parse_statement() {
-                    Ok(statement) => statements.push(statement),
-                    Err(diagnostic) => {
-                        self.diagnostics.push(diagnostic);
-                        self.sync();
+            match self.peek() {
+                Some(token) => match token.kind {
+                    TokenKind::Eof => break,
+                    TokenKind::Newline | TokenKind::Indent | TokenKind::Dedent => {
+                        self.advance();
+                        continue;
                     }
+                    _ => match self.parse_statement() {
+                        Ok(statement) => statements.push(statement),
+                        Err(diagnostic) => {
+                            self.diagnostics.push(diagnostic);
+                            self.sync();
+                        }
+                    },
                 },
+                None => break,
             }
         }
 
@@ -88,47 +95,57 @@ impl Parser {
             statements,
             span: Span {
                 start: start_span.start,
-                end: self.previous().span.end,
+                end: self
+                    .previous()
+                    .map_or(start_span.end, |token| token.span.end),
             },
         })
     }
 
     fn parse_statement(&mut self) -> MusiResult<Statement> {
-        let start_span = self.peek().span;
+        let Some(current_token) = self.peek() else {
+            return Err(self.error("unexpected end of file"));
+        };
+        let start_span = current_token.span;
 
-        let kind = match self.peek().kind {
-            Kind::Let | Kind::Var => self.parse_variable_declaration(start_span)?,
-            _ => StatementKind::Expression(self.parse_expression()?),
+        let kind = match self.peek() {
+            Some(next_token) => match next_token.kind {
+                TokenKind::Let | TokenKind::Var => self.parse_variable_declaration(start_span)?,
+                _ => StatementKind::Expression(self.parse_expression()?),
+            },
+            None => return Err(self.error("unexpected end of file")),
         };
 
         Ok(Statement {
             kind,
             span: Span {
                 start: start_span.start,
-                end: self.previous().span.end,
+                end: match self.previous() {
+                    Some(previous_token) => previous_token.span.end,
+                    None => return Err(self.error("unexpected end of file")),
+                },
             },
         })
     }
 
     fn parse_variable_declaration(&mut self, span: Span) -> Result<StatementKind, Diagnostic> {
         let kind = self.advance().kind; // let | var
-        let mutable = matches!(kind, Kind::Var);
+        let mutable = matches!(kind, TokenKind::Var);
 
         let name = String::from_utf8(
-            self.consume(Kind::Identifer, "expected identifier")?
-                .lexeme
-                .clone(),
+            self.consume(TokenKind::Identifer, "expected identifier")?
+                .lexeme,
         )
-        .expect("identifier contains invalid UTF-8 character(s)")
+        .map_err(|_error| self.error("identifier contains invalid UTF-8 character(s)"))?
         .into();
 
-        self.consume(Kind::ColonEquals, "expected ':=' after identifier")?;
+        self.consume(TokenKind::ColonEquals, "expected ':=' after identifier")?;
         let initialiser = self.parse_expression()?;
 
         if matches!(
             initialiser.kind,
             ExpressionKind::Unary {
-                operator: Kind::Ref,
+                operator: TokenKind::Ref,
                 ..
             }
         ) && !mutable
@@ -151,64 +168,70 @@ impl Parser {
     fn parse_precedence(&mut self, precedence: Precedence) -> MusiResult<Expression> {
         let mut left = self.parse_unary()?;
 
-        while precedence <= Precedence::from(self.peek().kind) {
-            let operator = self.advance().kind;
-            let right = self.parse_precedence(Precedence::from(operator))?;
-            let span = Span {
-                start: left.span.start,
-                end: right.span.end,
-            };
+        while let Some(token) = self.peek() {
+            if precedence <= Precedence::from(token.kind) {
+                let operator = self.advance().kind;
+                let right = self.parse_precedence(Precedence::from(operator))?;
+                let span = Span {
+                    start: left.span.start,
+                    end: right.span.end,
+                };
 
-            left = match operator {
-                Kind::LessMinus => Expression {
-                    kind: ExpressionKind::Assignment {
-                        target: Box::new(left),
-                        value: Box::new(right),
+                left = match operator {
+                    TokenKind::LessMinus => Expression {
+                        kind: ExpressionKind::Assignment {
+                            target: Box::new(left),
+                            value: Box::new(right),
+                            span,
+                        },
                         span,
                     },
-                    span,
-                },
-                _ => Expression {
-                    kind: ExpressionKind::Binary {
-                        left: Box::new(left),
-                        operator,
-                        right: Box::new(right),
+                    _ => Expression {
+                        kind: ExpressionKind::Binary {
+                            left: Box::new(left),
+                            operator,
+                            right: Box::new(right),
+                            span,
+                        },
                         span,
                     },
-                    span,
-                },
-            };
+                };
+            } else {
+                break;
+            }
         }
 
         Ok(left)
     }
 
     fn parse_unary(&mut self) -> MusiResult<Expression> {
-        let token = self.peek();
+        let Some(token) = self.peek() else {
+            return self.parse_primary();
+        };
         match token.kind {
-            Kind::Minus | Kind::Not | Kind::Ref | Kind::Deref => {
+            TokenKind::Minus | TokenKind::Not | TokenKind::Ref | TokenKind::Deref => {
                 let start_span = token.span;
                 let operator = self.advance().kind;
 
                 let precedence = match operator {
-                    Kind::Ref | Kind::Deref => Precedence::Unary,
+                    TokenKind::Ref | TokenKind::Deref => Precedence::Unary,
                     _ => Precedence::Term,
                 };
 
                 let operand = self.parse_precedence(precedence)?;
 
                 match operator {
-                    Kind::Ref => {
+                    TokenKind::Ref => {
                         if !matches!(operand.kind, ExpressionKind::Identifier { .. }) {
                             return Err(self.error("'ref' can only be applied to variables"));
                         }
                     }
-                    Kind::Deref => {
+                    TokenKind::Deref => {
                         if !matches!(
                             operand.kind,
                             ExpressionKind::Identifier { .. }
                                 | ExpressionKind::Unary {
-                                    operator: Kind::Ref,
+                                    operator: TokenKind::Ref,
                                     ..
                                 }
                         ) {
@@ -237,37 +260,87 @@ impl Parser {
     }
 
     fn parse_primary(&mut self) -> MusiResult<Expression> {
-        let token = self.advance().clone();
+        let token = self.advance();
+        let lexeme = token.lexeme;
         let span = token.span;
 
         let kind = match token.kind {
-            Kind::Number => ExpressionKind::Literal {
-                value: Self::parse_number(&token.lexeme),
+            TokenKind::Number => ExpressionKind::Literal {
+                value: {
+                    use std::str::from_utf8;
+
+                    let number_str =
+                        from_utf8(&lexeme).map_err(|_error| "number must be valid UTF-8");
+                    match number_str {
+                        Ok(str) if str.starts_with("0x") || str.starts_with("0X") => {
+                            let hexadecimal_str = str
+                                .get(2..)
+                                .ok_or_else(|| self.error("expected '0x' or '0X'"))?;
+                            let value = i64::from_str_radix(hexadecimal_str, 16)
+                                .map_err(|_error| self.error("malformed hexadecimal integer"))?;
+                            Value::Integer(value)
+                        }
+                        Ok(str) if str.starts_with("0b") || str.starts_with("0B") => {
+                            let binary_str = str
+                                .get(2..)
+                                .ok_or_else(|| self.error("expected '0b' or '0B'"))?;
+                            let value = i64::from_str_radix(binary_str, 2)
+                                .map_err(|_error| self.error("malformed binary integer"))?;
+                            Value::Integer(value)
+                        }
+                        Ok(str) if str.starts_with("0o") || str.starts_with("0O") => {
+                            let octal_str = str
+                                .get(2..)
+                                .ok_or_else(|| self.error("expected '0o' or '0O'"))?;
+                            let value = i64::from_str_radix(octal_str, 8)
+                                .map_err(|_error| self.error("malformed octal integer"))?;
+                            Value::Integer(value)
+                        }
+                        Ok(str) if str.contains('.') => {
+                            let value = str
+                                .parse::<f64>()
+                                .map_err(|_error| self.error("malformed real number"))?;
+                            Value::Real(value)
+                        }
+                        Ok(str) => {
+                            let value = str
+                                .parse::<i64>()
+                                .map_err(|_error| self.error("malformed integer"))?;
+                            Value::Integer(value)
+                        }
+                        Err(error) => return Err(self.error(error)),
+                    }
+                },
                 span,
             },
-            Kind::String => ExpressionKind::Literal {
-                value: Self::parse_string(&token.lexeme),
+            TokenKind::String => ExpressionKind::Literal {
+                value: {
+                    let content = lexeme
+                        .get(1..lexeme.len().saturating_sub(1))
+                        .unwrap_or_default();
+                    Value::String(content.to_vec())
+                },
                 span,
             },
-            Kind::True => ExpressionKind::Literal {
+            TokenKind::True => ExpressionKind::Literal {
                 value: Value::Boolean(true),
                 span,
             },
-            Kind::False => ExpressionKind::Literal {
+            TokenKind::False => ExpressionKind::Literal {
                 value: Value::Boolean(false),
                 span,
             },
 
-            Kind::Identifer => ExpressionKind::Identifier {
-                name: String::from_utf8(token.lexeme)
-                    .expect("identifier contains invalid UTF-8 character(s)")
+            TokenKind::Identifer => ExpressionKind::Identifier {
+                name: String::from_utf8(lexeme)
+                    .map_err(|_error| self.error("identifier contains invalid UTF-8 character(s)"))?
                     .into(),
                 span,
             },
 
-            Kind::LeftParen => {
+            TokenKind::LeftParen => {
                 let expression = self.parse_expression()?;
-                self.consume(Kind::RightParen, "expected ')' after expression")?;
+                self.consume(TokenKind::RightParen, "expected ')' after expression")?;
                 return Ok(expression);
             }
 
@@ -282,80 +355,43 @@ impl Parser {
         Ok(Expression { kind, span })
     }
 
-    fn parse_number(lexeme: &[u8]) -> Value {
-        let number_str = std::str::from_utf8(lexeme).unwrap();
-        match number_str {
-            s if s.starts_with("0x") || s.starts_with("0X") => {
-                let hex_str = &s[2..];
-                let value = i64::from_str_radix(hex_str, 16).unwrap();
-                Value::Integer(value)
-            }
-            s if s.starts_with("0b") || s.starts_with("0B") => {
-                let bin_str = &s[2..];
-                let value = i64::from_str_radix(bin_str, 2).unwrap();
-                Value::Integer(value)
-            }
-            s if s.starts_with("0o") || s.starts_with("0O") => {
-                let oct_str = &s[2..];
-                let value = i64::from_str_radix(oct_str, 8).unwrap();
-                Value::Integer(value)
-            }
-            s if s.contains('.') => {
-                let value = s.parse::<f64>().unwrap();
-                Value::Real(value)
-            }
-            s => {
-                let value = s.parse::<i64>().unwrap();
-                Value::Integer(value)
-            }
-        }
-    }
-
-    fn parse_string(lexeme: &[u8]) -> Value {
-        let content = &lexeme[1..lexeme.len() - 1];
-        Value::String(content.to_vec())
-    }
-}
-
-impl Parser {
     #[inline]
-    fn peek(&self) -> &Token {
-        self.tokens
-            .get(self.current)
-            .expect("position out of bounds")
+    fn peek(&self) -> Option<&Token> {
+        self.tokens.get(self.current)
     }
 
     #[inline]
-    fn previous(&self) -> &Token {
-        self.tokens
-            .get(self.current.checked_sub(1).expect("position underflow"))
-            .expect("position out of bounds")
+    fn previous(&self) -> Option<&Token> {
+        self.tokens.get(self.current.saturating_sub(1))
     }
 
     #[inline]
-    fn advance(&mut self) -> &Token {
+    fn advance(&mut self) -> Token {
         if !self.is_at_end() {
-            self.current += 1;
+            self.current = self.current.saturating_add(1);
         }
+
         self.previous()
+            .cloned()
+            .unwrap_or_else(|| Token::new(TokenKind::Eof, &[], Span::default()))
     }
 
     #[inline]
     fn is_at_end(&self) -> bool {
-        self.peek().kind == Kind::Eof
+        matches!(self.peek(), Some(token) if token.kind == TokenKind::Eof)
     }
 
     #[inline]
-    fn check(&self, kind: Kind) -> bool {
+    fn check(&self, kind: TokenKind) -> bool {
         if self.is_at_end() {
             false
         } else {
-            self.peek().kind == kind
+            matches!(self.peek(), Some(token) if token.kind == kind)
         }
     }
 
     #[inline]
-    fn consume(&mut self, kind: Kind, message: &str) -> MusiResult<&Token> {
+    fn consume(&mut self, kind: TokenKind, message: &str) -> MusiResult<Token> {
         if self.check(kind) {
             Ok(self.advance())
         } else {
@@ -365,7 +401,10 @@ impl Parser {
 
     #[inline]
     fn error(&mut self, message: &str) -> Diagnostic {
-        let diagnostic = Diagnostic::error(message, self.peek().span);
+        let diagnostic = Diagnostic::error(
+            message,
+            self.peek().map_or_else(Span::default, |token| token.span),
+        );
         self.diagnostics.push(diagnostic.clone());
         diagnostic
     }
@@ -375,20 +414,24 @@ impl Parser {
         self.advance();
 
         while !self.is_at_end() {
-            if self.previous().kind == Kind::Newline {
-                return;
+            if let Some(token) = self.previous() {
+                if token.kind == TokenKind::Newline {
+                    return;
+                }
             }
 
-            match self.peek().kind {
-                Kind::If
-                | Kind::Let
-                | Kind::Match
-                | Kind::Return
-                | Kind::Type
-                | Kind::While
-                | Kind::Var => return,
-                _ => {
-                    self.advance();
+            if let Some(token) = self.peek() {
+                match token.kind {
+                    TokenKind::If
+                    | TokenKind::Let
+                    | TokenKind::Match
+                    | TokenKind::Return
+                    | TokenKind::Type
+                    | TokenKind::While
+                    | TokenKind::Var => return,
+                    _ => {
+                        self.advance();
+                    }
                 }
             }
         }
