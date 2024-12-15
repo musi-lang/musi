@@ -55,7 +55,6 @@ impl Cursor {
     }
 
     #[inline]
-
     pub(super) fn match_3byte(&self, first: u8, second: u8, third: u8) -> bool {
         matches!(self.source.content.get(self.position..=self.position + 2),
             Some([one, two, three]) if *one == first && *two == second && *three == third)
