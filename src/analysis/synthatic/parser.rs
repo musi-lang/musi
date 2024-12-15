@@ -73,7 +73,7 @@ impl Parser {
 
         while !self.is_at_end() {
             match self.peek() {
-                Some(token) => match token.kind {
+                Some(current_token) => match current_token.kind {
                     TokenKind::Eof => break,
                     TokenKind::Newline | TokenKind::Indent | TokenKind::Dedent => {
                         self.advance();
@@ -109,7 +109,7 @@ impl Parser {
         let start_span = current_token.span;
 
         let kind = match self.peek() {
-            Some(next_token) => match next_token.kind {
+            Some(token) => match token.kind {
                 TokenKind::Let | TokenKind::Var => self.parse_variable_declaration(start_span)?,
                 _ => StatementKind::Expression(self.parse_expression()?),
             },
@@ -168,8 +168,8 @@ impl Parser {
     fn parse_precedence(&mut self, precedence: Precedence) -> MusiResult<Expression> {
         let mut left = self.parse_unary()?;
 
-        while let Some(token) = self.peek() {
-            if precedence <= Precedence::from(token.kind) {
+        while let Some(current_token) = self.peek() {
+            if precedence <= Precedence::from(current_token.kind) {
                 let operator = self.advance().kind;
                 let right = self.parse_precedence(Precedence::from(operator))?;
                 let span = Span {
@@ -205,12 +205,13 @@ impl Parser {
     }
 
     fn parse_unary(&mut self) -> MusiResult<Expression> {
-        let Some(token) = self.peek() else {
+        let Some(current_token) = self.peek() else {
             return self.parse_primary();
         };
-        match token.kind {
+
+        match current_token.kind {
             TokenKind::Minus | TokenKind::Not | TokenKind::Ref | TokenKind::Deref => {
-                let start_span = token.span;
+                let start_span = current_token.span;
                 let operator = self.advance().kind;
 
                 let precedence = match operator {
@@ -378,7 +379,7 @@ impl Parser {
 
     #[inline]
     fn is_at_end(&self) -> bool {
-        matches!(self.peek(), Some(token) if token.kind == TokenKind::Eof)
+        matches!(self.peek(), Some(current_token) if current_token.kind == TokenKind::Eof)
     }
 
     #[inline]
@@ -386,7 +387,7 @@ impl Parser {
         if self.is_at_end() {
             false
         } else {
-            matches!(self.peek(), Some(token) if token.kind == kind)
+            matches!(self.peek(), Some(current_token) if current_token.kind == kind)
         }
     }
 
@@ -414,14 +415,14 @@ impl Parser {
         self.advance();
 
         while !self.is_at_end() {
-            if let Some(token) = self.previous() {
-                if token.kind == TokenKind::Newline {
+            if let Some(previous_token) = self.previous() {
+                if previous_token.kind == TokenKind::Newline {
                     return;
                 }
             }
 
-            if let Some(token) = self.peek() {
-                match token.kind {
+            if let Some(current_token) = self.peek() {
+                match current_token.kind {
                     TokenKind::If
                     | TokenKind::Let
                     | TokenKind::Match
