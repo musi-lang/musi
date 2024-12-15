@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::core::{self, diagnostics::Diagnostic, source::Source, span::Span, MusiResult};
+use crate::core::{diagnostics::Diagnostic, source::Source, span::Span, MusiResult};
 
 use super::{
     cursor::Cursor,
@@ -34,6 +34,8 @@ const KEYWORDS: &[(&[u8], Kind)] = &[
     (b"then", Kind::Then),
     (b"true", Kind::True),
     (b"type", Kind::Type),
+    (b"until", Kind::Until),
+    (b"var", Kind::Var),
     (b"when", Kind::When),
     (b"where", Kind::Where),
     (b"while", Kind::While),
@@ -41,19 +43,11 @@ const KEYWORDS: &[(&[u8], Kind)] = &[
     (b"yield", Kind::Yield),
 ];
 
-const UNICODE_MAX_DIGITS: u32 = 0x0010_FFFF;
-const SURROGATE_START: u32 = 0xD800;
-const SURROGATE_END: u32 = 0xDFFF;
-
-const HEX_LOWER_START: u8 = b'a';
-const HEX_LOWER_END: u8 = b'f';
-const HEX_UPPER_START: u8 = b'A';
-const HEX_UPPER_END: u8 = b'F';
-
 pub struct Lexer {
     cursor: Cursor,
     indent_stack: [u32; MAX_INDENT_LEVELS],
     indent_level: usize,
+    diagnostics: Vec<Diagnostic>,
 }
 
 impl Lexer {
@@ -63,23 +57,23 @@ impl Lexer {
             cursor: Cursor::new(source),
             indent_stack: [0; MAX_INDENT_LEVELS],
             indent_level: 0,
+            diagnostics: vec![],
         }
     }
 
-    /// Converts source code into a sequence of tokens.
-    ///
-    /// # Errors
-    ///
-    /// Returns `MusiError` if:
-    /// - invalid characters encountered
-    /// - string or character literals not properly terminated
-    /// - invalid numeric literals found
-    /// - maximum indentation level exceeded
+    #[allow(clippy::missing_errors_doc)]
     pub fn lex(&mut self) -> MusiResult<Vec<Token>> {
         let mut tokens = Vec::with_capacity(self.cursor.source.content.len() >> 3); // divide by 8
 
         loop {
-            let token = self.next_token()?;
+            let token = match self.next_token() {
+                Ok(token) => token,
+                Err(diagnostic) => {
+                    self.diagnostics.push(diagnostic);
+                    self.sync();
+                    continue;
+                }
+            };
             if token.kind == Kind::Eof {
                 while self.indent_level > 0 {
                     tokens.push(Token::new(
@@ -114,13 +108,13 @@ impl Lexer {
         match self.cursor.peek() {
             Some(current) => {
                 match current {
-                    core::CHAR_CR | core::CHAR_LF => Ok(self.lex_newline(start_position)),
+                    b'\r' | b'\n' => Ok(self.lex_newline(start_position)),
 
                     b if is_identifier_start(b) => Ok(self.lex_identifier_or_keyword()),
-                    b if b.is_ascii_digit() => Ok(self.lex_number_literal()),
+                    b if b.is_ascii_digit() => Ok(self.lex_number()?),
 
-                    core::CHAR_QUOTE => self.lex_string_literal(),
-                    core::CHAR_APOSTROPHE => self.lex_character_literal(),
+                    b'"' => self.lex_string(),
+                    b'\'' => self.lex_character(),
 
                     b'(' => Ok(self.make_token(Kind::LeftParen, 1)),
                     b')' => Ok(self.make_token(Kind::RightParen, 1)),
@@ -131,7 +125,7 @@ impl Lexer {
                     b',' => Ok(self.make_token(Kind::Comma, 1)),
                     b':' => Ok(self
                         .match_compound_token(&[(Kind::ColonEquals, b":="), (Kind::Colon, b":")])),
-                    core::CHAR_DOT => Ok(self.make_token(Kind::Dot, 1)),
+                    b'.' => Ok(self.make_token(Kind::Dot, 1)),
 
                     b'+' => Ok(self.make_token(Kind::Plus, 1)),
                     b'-' => Ok(self
@@ -152,7 +146,6 @@ impl Lexer {
                         (Kind::Greater, b">"),
                     ])),
                     b'=' => Ok(self.make_token(Kind::Equals, 1)),
-                    b'@' => Ok(self.make_token(Kind::At, 1)),
 
                     _ => Ok(self.make_token(Kind::Unknown, 1)),
                 }
@@ -180,7 +173,7 @@ impl Lexer {
                         self.cursor.advance();
                     }
                     _ => {
-                        if current != core::CHAR_CR && current != core::CHAR_LF {
+                        if current != b'\r' && current != b'\n' {
                             let current_indent = self.indent_stack[self.indent_level];
 
                             match spaces.cmp(&current_indent) {
@@ -242,17 +235,17 @@ impl Lexer {
     }
 
     fn lex_newline(&mut self, start: usize) -> Token {
-        let lexeme = if self.cursor.peek() == Some(core::CHAR_CR) {
+        let lexeme = if self.cursor.peek() == Some(b'\r') {
             self.cursor.advance();
-            if self.cursor.peek() == Some(core::CHAR_LF) {
+            if self.cursor.peek() == Some(b'\n') {
                 self.cursor.advance();
-                vec![core::CHAR_CR, core::CHAR_LF]
+                vec![b'\r', b'\n']
             } else {
-                vec![core::CHAR_CR]
+                vec![b'\r']
             }
         } else {
             self.cursor.advance();
-            vec![core::CHAR_LF]
+            vec![b'\n']
         };
 
         Token::new(
@@ -279,7 +272,7 @@ impl Lexer {
         let kind = KEYWORDS
             .iter()
             .find(|(keyword, _)| *keyword == lexeme)
-            .map_or(Kind::Name, |(_, kind)| *kind);
+            .map_or(Kind::Identifer, |(_, kind)| *kind);
 
         Token::new(
             kind,
@@ -291,29 +284,29 @@ impl Lexer {
         )
     }
 
-    fn lex_number_literal(&mut self) -> Token {
+    fn lex_number(&mut self) -> MusiResult<Token> {
         let start_position = self.cursor.position;
 
-        if self.cursor.peek() == Some(core::CHAR_ZERO)
+        if self.cursor.peek() == Some(b'0')
             && self.cursor.peek_next().map_or(false, |b| {
                 matches!(b, b'x' | b'X' | b'b' | b'B' | b'o' | b'O')
             })
         {
-            self.lex_number_base();
+            self.lex_number_base()?;
 
-            return Token::new(
+            return Ok(Token::new(
                 Kind::Number,
                 self.cursor.slice_from(start_position),
                 Span {
                     start: start_position,
                     end: self.cursor.position,
                 },
-            );
+            ));
         }
 
         self.lex_decimal_digits();
 
-        if self.cursor.peek() == Some(core::CHAR_DOT)
+        if self.cursor.peek() == Some(b'.')
             && self
                 .cursor
                 .peek_next()
@@ -327,24 +320,24 @@ impl Lexer {
             self.lex_scientific_notation();
         }
 
-        Token::new(
+        Ok(Token::new(
             Kind::Number,
             self.cursor.slice_from(start_position),
             Span {
                 start: start_position,
                 end: self.cursor.position,
             },
-        )
+        ))
     }
 
-    fn lex_string_literal(&mut self) -> MusiResult<Token> {
+    fn lex_string(&mut self) -> MusiResult<Token> {
         let start_position = self.cursor.position;
 
         self.cursor.advance(); // skip opening quote
 
         while let Some(current) = self.cursor.peek() {
             match current {
-                core::CHAR_QUOTE => {
+                b'"' => {
                     self.cursor.advance(); // skip closing quote
 
                     return Ok(Token::new(
@@ -356,18 +349,16 @@ impl Lexer {
                         },
                     ));
                 }
-                core::CHAR_BACKSLASH => {
+                b'\\' => {
                     self.lex_escape_sequence()?;
                     continue;
                 }
                 0..=0x1F => {
-                    return Err(self.error(
-                        if current == core::CHAR_CR || current == core::CHAR_LF {
-                            "unclosed string literal"
-                        } else {
-                            "control character not allowed in string literal"
-                        },
-                    ));
+                    return Err(self.error(if current == b'\r' || current == b'\n' {
+                        "unclosed string literal"
+                    } else {
+                        "control character not allowed in string literal"
+                    }));
                 }
                 _ => {
                     self.cursor.advance();
@@ -379,7 +370,7 @@ impl Lexer {
         Err(self.error("unclosed string literal"))
     }
 
-    fn lex_character_literal(&mut self) -> MusiResult<Token> {
+    fn lex_character(&mut self) -> MusiResult<Token> {
         let start_position = self.cursor.position;
         let mut chars = 0;
 
@@ -387,7 +378,7 @@ impl Lexer {
 
         while let Some(current) = self.cursor.peek() {
             match current {
-                core::CHAR_APOSTROPHE => {
+                b'\'' => {
                     if chars == 0 {
                         return Err(self.error("empty character literal"));
                     } else if chars > 1 {
@@ -405,12 +396,12 @@ impl Lexer {
                         },
                     ));
                 }
-                core::CHAR_BACKSLASH => {
+                b'\\' => {
                     self.lex_escape_sequence()?;
                     chars += 1;
                     continue;
                 }
-                core::CHAR_LF => {
+                b'\n' => {
                     return Err(self.error("unclosed character literal"));
                 }
                 _ => {
@@ -425,46 +416,87 @@ impl Lexer {
     }
 
     #[inline]
-    fn lex_number_base(&mut self) {
+    fn lex_number_base(&mut self) -> MusiResult<()> {
         match self.cursor.peek_next() {
             Some(b'x' | b'X') => {
                 self.cursor.advance_by(2);
+
+                let mut has_digits = false;
                 while let Some(current) = self.cursor.peek() {
-                    if !current.is_ascii_hexdigit() && current != core::CHAR_UNDERSCORE {
+                    if current == b'_'
+                        && !self
+                            .cursor
+                            .peek_next()
+                            .map_or(false, |b| b.is_ascii_hexdigit())
+                    {
+                        return Err(self.error("expected hexadecimal digit after '_'"));
+                    }
+                    if !current.is_ascii_hexdigit() && current != b'_' {
                         break;
                     }
+                    has_digits = has_digits || current != b'_';
                     self.cursor.advance();
+                }
+                if !has_digits {
+                    return Err(self.error("expected hexadecimal digit"));
                 }
             }
             Some(b'b' | b'B') => {
                 self.cursor.advance_by(2);
+                let mut has_digits = false;
                 while let Some(current) = self.cursor.peek() {
-                    if ![core::CHAR_ZERO, b'1', core::CHAR_UNDERSCORE].contains(&current) {
+                    if current == b'_'
+                        && !self
+                            .cursor
+                            .peek_next()
+                            .map_or(false, |next| [b'0', b'1'].contains(&next))
+                    {
+                        return Err(self.error("expected binary digit after '_'"));
+                    }
+                    if ![b'0', b'1', b'_'].contains(&current) {
                         break;
                     }
+                    has_digits = has_digits || current != b'_';
                     self.cursor.advance();
+                }
+                if !has_digits {
+                    return Err(self.error("expected binary digit after binary prefix"));
                 }
             }
             Some(b'o' | b'O') => {
                 self.cursor.advance_by(2);
+                let mut has_digits = false;
                 while let Some(current) = self.cursor.peek() {
-                    if !matches!(current, core::CHAR_ZERO..=b'7' | core::CHAR_UNDERSCORE) {
+                    if current == b'_'
+                        && !self
+                            .cursor
+                            .peek_next()
+                            .map_or(false, |b| matches!(b, b'0'..=b'7'))
+                    {
+                        return Err(self.error("expected octal digit after '_'"));
+                    }
+                    if !matches!(current, b'0'..=b'7' | b'_') {
                         break;
                     }
+                    has_digits = has_digits || current != b'_';
                     self.cursor.advance();
+                }
+                if !has_digits {
+                    return Err(self.error("expected octal digit after octal prefix"));
                 }
             }
             _ => {}
         }
+        Ok(())
     }
 
     #[inline]
     fn lex_decimal_digits(&mut self) {
         while let Some(current) = self.cursor.peek() {
-            if !current.is_ascii_digit() && current != core::CHAR_UNDERSCORE {
+            if !current.is_ascii_digit() && current != b'_' {
                 break;
             }
-            if current == core::CHAR_UNDERSCORE
+            if current == b'_'
                 && !self
                     .cursor
                     .peek_next()
@@ -484,10 +516,10 @@ impl Lexer {
         }
 
         while let Some(current) = self.cursor.peek() {
-            if !current.is_ascii_digit() && current != core::CHAR_UNDERSCORE {
+            if !current.is_ascii_digit() && current != b'_' {
                 break;
             }
-            if current == core::CHAR_UNDERSCORE
+            if current == b'_'
                 && !self
                     .cursor
                     .peek_next()
@@ -501,14 +533,7 @@ impl Lexer {
 
     fn lex_escape_sequence(&mut self) -> MusiResult<()> {
         match self.cursor.peek_next() {
-            Some(
-                b'n'
-                | b'r'
-                | b't'
-                | core::CHAR_BACKSLASH
-                | core::CHAR_QUOTE
-                | core::CHAR_APOSTROPHE,
-            ) => {
+            Some(b'n' | b'r' | b't' | b'\\' | b'"' | b'\'') => {
                 self.cursor.advance_by(2);
                 Ok(())
             }
@@ -516,9 +541,10 @@ impl Lexer {
                 self.cursor.advance_by(2);
                 self.lex_unicode_escape_sequence::<4>()
             }
-            Some(invalid) => {
-                Err(self.error(format!("invalid escape sequence '\\{}'", invalid as char)))
-            }
+            Some(invalid) => Err(self.error(format!(
+                "unexpected escape sequence '{:#?}'",
+                invalid as char
+            ))),
             None => Err(self.error("unclosed escape sequence")),
         }
     }
@@ -532,14 +558,16 @@ impl Lexer {
                     return Err(self.error("unclosed unicode escape sequence"));
                 }
                 Some(current) if !current.is_ascii_hexdigit() => {
-                    return Err(self.error(format!("invalid hexadecimal digit '0x{current:X}'")));
+                    return Err(self.error(format!("unexpected hexadecimal digit '{current:#X}'")));
                 }
                 Some(current) => {
                     let digit = match current {
-                        core::CHAR_ZERO..=b'9' => current - core::CHAR_ZERO,
-                        HEX_LOWER_START..=HEX_LOWER_END => current - HEX_LOWER_START + 10,
-                        HEX_UPPER_START..=HEX_UPPER_END => current - HEX_UPPER_START + 10,
-                        _ => unreachable!(),
+                        b'0'..=b'9' => current - b'0',
+                        b'a'..=b'f' | b'A'..=b'F' => (current & 0xDF) - b'A' + 10,
+                        unexpected => {
+                            return Err(self
+                                .error(format!("unexpected hexadecimal digit '{unexpected:#X}'")))
+                        }
                     };
                     value = (value << 4) | u32::from(digit);
                     self.cursor.advance();
@@ -547,11 +575,11 @@ impl Lexer {
             }
         }
 
-        if (SURROGATE_START..=SURROGATE_END).contains(&value) {
-            return Err(self.error("surrogate pairs not allowed in unicode escape sequences"));
+        if (0xD800..=0xDFFF).contains(&value) {
+            return Err(self.error("surrogate pairs not allowed in unicode escape sequence"));
         }
 
-        if value > UNICODE_MAX_DIGITS {
+        if value > 0x0010_FFFF {
             return Err(self.error("unicode escape sequence out of range"));
         }
 
@@ -598,14 +626,33 @@ impl Lexer {
         )
         .with_source(&self.cursor.source)
     }
+
+    fn sync(&mut self) {
+        while let Some(current) = self.cursor.peek() {
+            match current {
+                b'\n' => {
+                    self.cursor.advance();
+                    self.indent_level = 0;
+                    break;
+                }
+                b'}' | b')' => {
+                    self.cursor.advance();
+                    break;
+                }
+                _ => {
+                    self.cursor.advance();
+                }
+            }
+        }
+    }
 }
 
 #[inline]
 const fn is_identifier_start(input: u8) -> bool {
-    input.is_ascii_alphabetic() || input == core::CHAR_UNDERSCORE
+    input.is_ascii_alphabetic() || input == b'_'
 }
 
 #[inline]
 const fn is_identifier_continue(input: u8) -> bool {
-    input.is_ascii_alphanumeric() || input == core::CHAR_UNDERSCORE
+    input.is_ascii_alphanumeric() || input == b'_'
 }
