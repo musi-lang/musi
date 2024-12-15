@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::core::{self, source::Source};
+use crate::core::source::Source;
 
 pub(super) struct Cursor {
     pub(super) source: Arc<Source>,
@@ -32,7 +32,7 @@ impl Cursor {
         let current = self.peek()?;
         self.position += 1;
 
-        if current == core::CHAR_LF {
+        if current == b'\n' {
             self.current_line += 1;
         }
 
@@ -51,17 +51,21 @@ impl Cursor {
     #[inline]
     pub(super) fn match_2byte(&self, first: u8, second: u8) -> bool {
         matches!(self.source.content.get(self.position..=self.position + 1),
-            Some([one, two]) if *one == first && *two == second)
+            Some([current, next]) if *current == first && *next == second)
     }
 
     #[inline]
     pub(super) fn match_3byte(&self, first: u8, second: u8, third: u8) -> bool {
         matches!(self.source.content.get(self.position..=self.position + 2),
-            Some([one, two, three]) if *one == first && *two == second && *three == third)
+            Some([current, next, last]) if *current == first && *next == second && *last == third)
     }
 
     #[inline]
     pub(super) fn slice_from(&self, start: usize) -> &[u8] {
-        &self.source.content[start..self.position]
+        if (start <= self.position) && (self.position <= self.source.content.len()) {
+            &self.source.content[start..self.position]
+        } else {
+            &[]
+        }
     }
 }
