@@ -1,4 +1,7 @@
-use std::{cmp::Ordering, sync::Arc};
+use std::{
+    cmp::{self},
+    sync::Arc,
+};
 
 use crate::core::{diagnostics::Diagnostic, source::Source, span::Span, MusiResult};
 
@@ -200,7 +203,7 @@ impl Lexer {
                                 *self.indent_stack.get(self.indent_level).unwrap_or(&0);
 
                             match spaces.cmp(&current_indent) {
-                                Ordering::Greater => {
+                                cmp::Ordering::Greater => {
                                     self.indent_level = self.indent_level.saturating_add(1);
                                     *self
                                         .indent_stack
@@ -217,7 +220,7 @@ impl Lexer {
                                         },
                                     ));
                                 }
-                                Ordering::Less => {
+                                cmp::Ordering::Less => {
                                     while self.indent_level > 0
                                         && spaces
                                             < *self
@@ -248,7 +251,7 @@ impl Lexer {
                                         },
                                     ));
                                 }
-                                Ordering::Equal => {}
+                                cmp::Ordering::Equal => {}
                             };
                         }
                         break;
