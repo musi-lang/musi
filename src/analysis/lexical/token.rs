@@ -29,14 +29,14 @@ pub enum Kind {
     True,
     Type,
     Until,
+    Var,
     Where,
     When,
     While,
     With,
     Yield,
 
-    // Identifiers
-    Name,
+    Identifer,
 
     // Literals
     Number,
@@ -44,23 +44,23 @@ pub enum Kind {
     Character,
 
     // Operators
+    Caret,             // ^
     Star,              // *
     Slash,             // /
     Plus,              // +
     Minus,             // -
-    Caret,             // ^
-    Less,              // <
-    Greater,           // >
-    LessEquals,        // <=
-    GreaterEquals,     // >=
-    LessEqualsGreater, // <=>
-    Equals,            // =
-    SlashEquals,       // /=
-    ColonEquals,       // :=
-    Pipe,              // |
     PipeGreater,       // |>
     MinusGreater,      // ->
-    At,                // @
+    LessMinus,         // <-
+    LessEqualsGreater, // <=>
+    GreaterEquals,     // >=
+    LessEquals,        // <=
+    Less,              // <
+    Greater,           // >
+    Pipe,              // |
+    Equals,            // =
+    ColonEquals,       // :=
+    SlashEquals,       // /=
 
     // Delimiters
     LeftParen,    // (
