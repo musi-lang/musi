@@ -17,7 +17,7 @@ impl Source {
     pub fn new(name: &str, content: Vec<u8>) -> Self {
         let mut line_starts = vec![0];
         for (offset, &current) in content.iter().enumerate() {
-            if current == super::CHAR_LF {
+            if current == b'\n' {
                 line_starts.push(offset + 1);
             }
         }
@@ -35,7 +35,7 @@ impl Source {
         let mut last_line_start = 0;
 
         for (position, current) in self.content[..offset].iter().enumerate() {
-            if *current == super::CHAR_LF {
+            if *current == b'\n' {
                 line += 1;
                 last_line_start = position + 1;
             }
