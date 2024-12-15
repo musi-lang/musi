@@ -2,51 +2,10 @@ use crate::core::span::Span;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
-    // Special
-    Eof,
-    Unknown,
-    Newline,
-    Indent,
-    Dedent,
-    Identifier,
-    Literal(LiteralKind),
-
-    // Operators
-    Plus,              // +
-    Minus,             // -
-    Star,              // *
-    Slash,             // /
-    Caret,             // ^
-    Pipe,              // |
-    Less,              // <
-    Greater,           // >
-    Equals,            // =
-    LessEquals,        // <=
-    GreaterEquals,     // >=
-    LessEqualsGreater, // <=>
-    SlashEquals,       // /=
-    ColonEquals,       // :=
-    MinusGreater,      // ->
-    PipeGreater,       // |>
-
-    // Delimiters
-    LeftParen,    // (
-    RightParen,   // )
-    LeftBrace,    // {
-    RightBrace,   // }
-    LeftBracket,  // [
-    RightBracket, // ]
-    Comma,        // ,
-    Colon,        // :
-    Dot,          // .
-    DotDot,       // ..
-    DotDotLess,   // ..<
-
     // Keywords
     And,
     As,
     Break,
-    Case,
     Continue,
     Deref,
     Do,
@@ -59,24 +18,69 @@ pub enum Kind {
     In,
     Is,
     Let,
+    Match,
     Not,
     Of,
     Or,
     Ref,
     Return,
     Then,
+    To,
     True,
     Type,
+    Until,
     Where,
+    When,
     While,
-}
+    With,
+    Yield,
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum LiteralKind {
+    // Identifiers
+    Name,
+
+    // Literals
     Number,
-
     String,
     Character,
+
+    // Operators
+    Star,              // *
+    Slash,             // /
+    Plus,              // +
+    Minus,             // -
+    Caret,             // ^
+    Less,              // <
+    Greater,           // >
+    LessEquals,        // <=
+    GreaterEquals,     // >=
+    LessEqualsGreater, // <=>
+    Equals,            // =
+    SlashEquals,       // /=
+    ColonEquals,       // :=
+    Pipe,              // |
+    PipeGreater,       // |>
+    MinusGreater,      // ->
+    At,                // @
+
+    // Delimiters
+    LeftParen,    // (
+    RightParen,   // )
+    LeftBrace,    // {
+    RightBrace,   // }
+    LeftBracket,  // [
+    RightBracket, // ]
+    Comma,        // ,
+    Colon,        // :
+    Dot,          // .
+
+    // Layout
+    Newline,
+    Indent,
+    Dedent,
+
+    // Special
+    Eof,
+    Unknown,
 }
 
 #[derive(Clone, Debug)]
