@@ -2,6 +2,8 @@
   <img src="assets/musi.png" alt="Musi Logo">
 </p>
 
+# Musi
+
 Musi is a programming language that takes inspiration from C, F#, Haskell,
 Python and Scala 3, making it easy to learn. We want to develop Musi into a
 fully-featured language that people can use for teaching or everyday
