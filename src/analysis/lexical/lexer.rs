@@ -4,7 +4,7 @@ use crate::core::{self, diagnostics::Diagnostic, source::Source, span::Span, Mus
 
 use super::{
     cursor::Cursor,
-    token::{Kind, LiteralKind, Token},
+    token::{Kind, Token},
 };
 
 const MAX_INDENT_LEVELS: usize = 32;
@@ -13,7 +13,6 @@ const KEYWORDS: &[(&[u8], Kind)] = &[
     (b"and", Kind::And),
     (b"as", Kind::As),
     (b"break", Kind::Break),
-    (b"case", Kind::Case),
     (b"continue", Kind::Continue),
     (b"deref", Kind::Deref),
     (b"do", Kind::Do),
@@ -26,6 +25,7 @@ const KEYWORDS: &[(&[u8], Kind)] = &[
     (b"in", Kind::In),
     (b"is", Kind::Is),
     (b"let", Kind::Let),
+    (b"match", Kind::Match),
     (b"not", Kind::Not),
     (b"of", Kind::Of),
     (b"or", Kind::Or),
@@ -34,8 +34,11 @@ const KEYWORDS: &[(&[u8], Kind)] = &[
     (b"then", Kind::Then),
     (b"true", Kind::True),
     (b"type", Kind::Type),
+    (b"when", Kind::When),
     (b"where", Kind::Where),
     (b"while", Kind::While),
+    (b"with", Kind::With),
+    (b"yield", Kind::Yield),
 ];
 
 const UNICODE_MAX_DIGITS: u32 = 0x0010_FFFF;
@@ -63,7 +66,7 @@ impl Lexer {
         }
     }
 
-    /// Analyses source code and produces a bunch of tokens.
+    /// Converts source code into a sequence of tokens.
     ///
     /// # Errors
     ///
@@ -99,6 +102,7 @@ impl Lexer {
 
         Ok(tokens)
     }
+
     fn next_token(&mut self) -> MusiResult<Token> {
         let start_position = self.cursor.position;
 
@@ -127,11 +131,7 @@ impl Lexer {
                     b',' => Ok(self.make_token(Kind::Comma, 1)),
                     b':' => Ok(self
                         .match_compound_token(&[(Kind::ColonEquals, b":="), (Kind::Colon, b":")])),
-                    core::CHAR_DOT => Ok(self.match_compound_token(&[
-                        (Kind::DotDotLess, b"..<"),
-                        (Kind::DotDot, b".."),
-                        (Kind::Dot, b"."),
-                    ])),
+                    core::CHAR_DOT => Ok(self.make_token(Kind::Dot, 1)),
 
                     b'+' => Ok(self.make_token(Kind::Plus, 1)),
                     b'-' => Ok(self
@@ -152,6 +152,7 @@ impl Lexer {
                         (Kind::Greater, b">"),
                     ])),
                     b'=' => Ok(self.make_token(Kind::Equals, 1)),
+                    b'@' => Ok(self.make_token(Kind::At, 1)),
 
                     _ => Ok(self.make_token(Kind::Unknown, 1)),
                 }
@@ -278,7 +279,7 @@ impl Lexer {
         let kind = KEYWORDS
             .iter()
             .find(|(keyword, _)| *keyword == lexeme)
-            .map_or(Kind::Identifier, |(_, kind)| *kind);
+            .map_or(Kind::Name, |(_, kind)| *kind);
 
         Token::new(
             kind,
@@ -301,7 +302,7 @@ impl Lexer {
             self.lex_number_base();
 
             return Token::new(
-                Kind::Literal(LiteralKind::Number),
+                Kind::Number,
                 self.cursor.slice_from(start_position),
                 Span {
                     start: start_position,
@@ -327,7 +328,7 @@ impl Lexer {
         }
 
         Token::new(
-            Kind::Literal(LiteralKind::Number),
+            Kind::Number,
             self.cursor.slice_from(start_position),
             Span {
                 start: start_position,
@@ -347,7 +348,7 @@ impl Lexer {
                     self.cursor.advance(); // skip closing quote
 
                     return Ok(Token::new(
-                        Kind::Literal(LiteralKind::String),
+                        Kind::String,
                         self.cursor.slice_from(start_position),
                         Span {
                             start: start_position,
@@ -396,7 +397,7 @@ impl Lexer {
                     self.cursor.advance(); // skip closing apostrophe
 
                     return Ok(Token::new(
-                        Kind::Literal(LiteralKind::Character),
+                        Kind::Character,
                         self.cursor.slice_from(start_position),
                         Span {
                             start: start_position,
