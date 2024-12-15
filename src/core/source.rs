@@ -1,4 +1,5 @@
 #[derive(Clone, Debug)]
+#[non_exhaustive]
 pub struct Source {
     pub name: Box<str>,
     pub content: Vec<u8>,
@@ -6,6 +7,7 @@ pub struct Source {
 }
 
 #[derive(Clone, Copy, Debug)]
+#[non_exhaustive]
 pub struct Position {
     pub offset: usize,
     pub line: u32,
@@ -14,11 +16,12 @@ pub struct Position {
 
 impl Source {
     #[must_use]
+    #[inline]
     pub fn new(name: &str, content: Vec<u8>) -> Self {
         let mut line_starts = vec![0];
         for (offset, &current) in content.iter().enumerate() {
             if current == b'\n' {
-                line_starts.push(offset + 1);
+                line_starts.push(offset.saturating_add(1));
             }
         }
 
@@ -30,21 +33,22 @@ impl Source {
     }
 
     #[must_use]
+    #[inline]
     pub fn position(&self, offset: usize) -> Position {
-        let mut line = 1;
+        let mut line = 1_u32;
         let mut last_line_start = 0;
-
-        for (position, current) in self.content[..offset].iter().enumerate() {
+        for (position, current) in self.content.get(..offset).unwrap_or(&[]).iter().enumerate() {
             if *current == b'\n' {
-                line += 1;
-                last_line_start = position + 1;
+                line = line.saturating_add(1);
+                last_line_start = position.saturating_add(1);
             }
         }
 
         Position {
             offset,
             line,
-            column: u32::try_from(offset - last_line_start + 1).unwrap_or(u32::MAX),
+            column: u32::try_from(offset.saturating_sub(last_line_start).saturating_add(1))
+                .unwrap_or(u32::MAX),
         }
     }
 }

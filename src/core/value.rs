@@ -1,4 +1,5 @@
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum Value {
     Integer(i64),
     Natural(u64),
