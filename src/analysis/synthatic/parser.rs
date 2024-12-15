@@ -21,7 +21,6 @@ enum Precedence {
     Power,      // ^
     Unary,      // - not
     Call,       // . ()
-    Primary,    //
 }
 
 impl From<TokenKind> for Precedence {
