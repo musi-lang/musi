@@ -3,7 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use crate::core::{diagnostics::Diagnostic, source::SourceFile, span::Span, MusiResult};
+use crate::core::{diagnostics::Diagnostic, source::NamedSource, span::Span, MusiResult};
 
 use super::{
     cursor::Cursor,
@@ -54,9 +54,9 @@ pub struct Lexer {
 }
 
 impl Lexer {
-    #[must_use]
     #[inline]
-    pub const fn new(source: Arc<SourceFile>) -> Self {
+    #[must_use]
+    pub const fn new(source: Arc<NamedSource>) -> Self {
         Self {
             cursor: Cursor {
                 source,

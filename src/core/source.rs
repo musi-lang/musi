@@ -1,6 +1,6 @@
 #[derive(Clone, Debug)]
 #[non_exhaustive]
-pub struct SourceFile {
+pub struct NamedSource {
     pub file_path: Box<str>,
     pub bytes: Vec<u8>,
     pub line_offsets: Vec<usize>,
@@ -14,9 +14,9 @@ pub struct Position {
     pub column: u32,
 }
 
-impl SourceFile {
-    #[must_use]
+impl NamedSource {
     #[inline]
+    #[must_use]
     pub fn new(file_name: &str, bytes: Vec<u8>) -> Self {
         let mut line_offsets = vec![0];
         for (offset, &current_byte) in bytes.iter().enumerate() {
@@ -32,8 +32,8 @@ impl SourceFile {
         }
     }
 
-    #[must_use]
     #[inline]
+    #[must_use]
     pub fn position(&self, offset: usize) -> Position {
         let mut line = 1_u32;
         let mut last_line_start = 0;
