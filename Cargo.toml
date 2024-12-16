@@ -10,13 +10,14 @@ keywords = ["musi", "programming language"]
 categories = ["Programming Language"]
 default-run = "musi"
 
+
 [[bin]]
 "name" = "musi"
 "path" = "src/main.rs"
 
 [dependencies]
-env_logger = "0.11.5"
-log = "0.4.22"
+
+[dev-dependencies]
 
 [lints.rust]
 unsafe_code = "forbid"
@@ -33,6 +34,7 @@ suspicious = { level = "deny", priority = -1 }
 
 # pedantic
 missing-errors-doc = "allow"
+missing-panics-doc = "allow"
 module-name-repetitions = "allow"
 
 # restriction (clippy::blanket_clippy_restriction_lints)
@@ -163,7 +165,7 @@ verbose_file_reads = "deny"
 wildcard_enum_match_arm = "allow"
 
 [profile.release]
-overflow-checks = true
-debug-assertions = true
 codegen-units = 1
-panic = "abort"         # no unwinding
+panic = "abort"
+lto = "fat"
+incremental = false
