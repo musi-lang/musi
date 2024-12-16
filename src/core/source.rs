@@ -1,9 +1,9 @@
 #[derive(Clone, Debug)]
 #[non_exhaustive]
-pub struct Source {
-    pub name: Box<str>,
-    pub content: Vec<u8>,
-    pub line_starts: Vec<usize>,
+pub struct SourceFile {
+    pub file_path: Box<str>,
+    pub bytes: Vec<u8>,
+    pub line_offsets: Vec<usize>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -14,21 +14,21 @@ pub struct Position {
     pub column: u32,
 }
 
-impl Source {
+impl SourceFile {
     #[must_use]
     #[inline]
-    pub fn new(name: &str, content: Vec<u8>) -> Self {
-        let mut line_starts = vec![0];
-        for (offset, &current) in content.iter().enumerate() {
-            if current == b'\n' {
-                line_starts.push(offset.saturating_add(1));
+    pub fn new(file_name: &str, bytes: Vec<u8>) -> Self {
+        let mut line_offsets = vec![0];
+        for (offset, &current_byte) in bytes.iter().enumerate() {
+            if current_byte == b'\n' {
+                line_offsets.push(offset.saturating_add(1));
             }
         }
 
         Self {
-            name: format!("{name}.musi").into(),
-            content,
-            line_starts,
+            file_path: format!("{file_name}.musi").into(),
+            bytes,
+            line_offsets,
         }
     }
 
@@ -37,10 +37,10 @@ impl Source {
     pub fn position(&self, offset: usize) -> Position {
         let mut line = 1_u32;
         let mut last_line_start = 0;
-        for (position, current) in self.content.get(..offset).unwrap_or(&[]).iter().enumerate() {
-            if *current == b'\n' {
+        for (index, byte) in self.bytes.get(..offset).unwrap_or(&[]).iter().enumerate() {
+            if *byte == b'\n' {
                 line = line.saturating_add(1);
-                last_line_start = position.saturating_add(1);
+                last_line_start = index.saturating_add(1);
             }
         }
 

@@ -3,16 +3,16 @@ use std::{
     sync::Arc,
 };
 
-use crate::core::{diagnostics::Diagnostic, source::Source, span::Span, MusiResult};
+use crate::core::{diagnostics::Diagnostic, source::SourceFile, span::Span, MusiResult};
 
 use super::{
     cursor::Cursor,
     token::{Token, TokenKind},
 };
 
-const MAX_INDENT_LEVELS: usize = 32;
+const MAX_INDENT_DEPTH: usize = 32;
 
-const KEYWORDS: &[(&[u8], TokenKind)] = &[
+const RESERVED_KEYWORDS: &[(&[u8], TokenKind)] = &[
     (b"and", TokenKind::And),
     (b"as", TokenKind::As),
     (b"break", TokenKind::Break),
@@ -48,196 +48,194 @@ const KEYWORDS: &[(&[u8], TokenKind)] = &[
 
 pub struct Lexer {
     cursor: Cursor,
-    indent_stack: [u32; MAX_INDENT_LEVELS],
-    indent_level: usize,
+    indent_widths: [u32; MAX_INDENT_DEPTH],
+    indent_stack_depth: usize,
     diagnostics: Vec<Diagnostic>,
 }
 
 impl Lexer {
     #[must_use]
     #[inline]
-    pub const fn new(source: Arc<Source>) -> Self {
+    pub const fn new(source: Arc<SourceFile>) -> Self {
         Self {
             cursor: Cursor {
                 source,
-                position: 0,
-                current_line: 0,
+                offset: 0,
+                line: 0,
             },
-            indent_stack: [0; MAX_INDENT_LEVELS],
-            indent_level: 0,
+            indent_widths: [0; MAX_INDENT_DEPTH],
+            indent_stack_depth: 0,
             diagnostics: vec![],
         }
     }
 
     #[inline]
     pub fn lex(&mut self) -> MusiResult<Vec<Token>> {
-        let mut tokens = Vec::with_capacity(self.cursor.source.content.len() >> 3); // divide by 8
+        let mut tokens = Vec::with_capacity(self.cursor.remaining_bytes() >> 3); // divided by 8
 
-        loop {
-            let token = match self.next_token() {
-                Ok(token) => token,
-                Err(diagnostic) => {
-                    self.diagnostics.push(diagnostic);
-                    self.sync();
+        while let Ok(token) = self.next_token() {
+            match token.kind {
+                TokenKind::Eof => {
+                    while self.indent_stack_depth > 0 {
+                        tokens.push(Token::new(
+                            TokenKind::Dedent,
+                            &[],
+                            Span {
+                                start: self.cursor.offset,
+                                end: self.cursor.offset,
+                            },
+                        ));
+                        self.indent_stack_depth = self.indent_stack_depth.saturating_sub(1);
+                    }
+                    tokens.push(token);
+                    break;
+                }
+                TokenKind::Unknown => continue,
+                _ => {
+                    tokens.push(token);
                     continue;
                 }
-            };
-            if token.kind == TokenKind::Eof {
-                while self.indent_level > 0 {
-                    tokens.push(Token::new(
-                        TokenKind::Dedent,
-                        &[],
-                        Span {
-                            start: self.cursor.position,
-                            end: self.cursor.position,
-                        },
-                    ));
-                    self.indent_level = self.indent_level.saturating_sub(1);
-                }
-
-                tokens.push(token);
-                break;
-            } else if token.kind != TokenKind::Unknown {
-                tokens.push(token);
-            } else {
-                // skip unknown
             }
         }
-
+        if let Err(diagnostic) = self.next_token() {
+            self.diagnostics.push(diagnostic);
+            self.recover_from_error();
+        }
         Ok(tokens)
     }
 
     fn next_token(&mut self) -> MusiResult<Token> {
-        let start_position = self.cursor.position;
+        let start_offset = self.cursor.offset;
 
-        let whitespace = self.skip_whitespace()?;
-        if whitespace.kind != TokenKind::Unknown {
-            return Ok(whitespace);
+        let indent_token = self.lex_indentation()?;
+        if indent_token.kind != TokenKind::Unknown {
+            return Ok(indent_token);
         }
 
-        match self.cursor.peek() {
-            Some(current) => match current {
-                b'\r' | b'\n' => Ok(self.lex_newline(start_position)),
-
-                byte if byte.is_ascii_alphabetic() || byte == b'_' => {
-                    Ok(self.lex_identifier_or_keyword())
-                }
-                byte if byte.is_ascii_digit() => Ok(self.lex_number()?),
-
-                b'"' => self.lex_string(),
-                b'\'' => self.lex_character(),
-
-                b'(' => Ok(self.make_token(TokenKind::LeftParen, 1)),
-                b')' => Ok(self.make_token(TokenKind::RightParen, 1)),
-                b'{' => Ok(self.make_token(TokenKind::LeftBrace, 1)),
-                b'}' => Ok(self.make_token(TokenKind::RightBrace, 1)),
-                b'[' => Ok(self.make_token(TokenKind::LeftBracket, 1)),
-                b']' => Ok(self.make_token(TokenKind::RightBracket, 1)),
-                b',' => Ok(self.make_token(TokenKind::Comma, 1)),
-                b':' => self.match_compound_token(&[
-                    (TokenKind::ColonEquals, b":="),
-                    (TokenKind::Colon, b":"),
-                ]),
-                b'.' => Ok(self.make_token(TokenKind::Dot, 1)),
-
-                b'+' => Ok(self.make_token(TokenKind::Plus, 1)),
-                b'-' => self.match_compound_token(&[
-                    (TokenKind::MinusGreater, b"->"),
-                    (TokenKind::Minus, b"-"),
-                ]),
-                b'*' => Ok(self.make_token(TokenKind::Star, 1)),
-                b'/' => self.match_compound_token(&[
-                    (TokenKind::SlashEquals, b"/="),
-                    (TokenKind::Slash, b"/"),
-                ]),
-                b'^' => Ok(self.make_token(TokenKind::Caret, 1)),
-                b'|' => self.match_compound_token(&[
-                    (TokenKind::PipeGreater, b"|>"),
-                    (TokenKind::Pipe, b"|"),
-                ]),
-                b'<' => self.match_compound_token(&[
-                    (TokenKind::LessEqualsGreater, b"<=>"),
-                    (TokenKind::LessEquals, b"<="),
-                    (TokenKind::Less, b"<"),
-                ]),
-                b'>' => self.match_compound_token(&[
-                    (TokenKind::GreaterEquals, b">="),
-                    (TokenKind::Greater, b">"),
-                ]),
-                b'=' => Ok(self.make_token(TokenKind::Equals, 1)),
-
-                _ => Ok(self.make_token(TokenKind::Unknown, 1)),
-            },
-            None => Ok(Token::new(
+        if self.cursor.is_at_end() {
+            return Ok(Token::new(
                 TokenKind::Eof,
                 &[],
                 Span {
-                    start: start_position,
-                    end: self.cursor.position,
+                    start: start_offset,
+                    end: self.cursor.offset,
                 },
-            )),
+            ));
+        }
+
+        let current_byte = self
+            .cursor
+            .current_byte()
+            .ok_or_else(|| self.error("unexpected end of input"))?;
+        match current_byte {
+            b'\r' | b'\n' => Ok(self.lex_newline(start_offset)),
+
+            byte if byte.is_ascii_alphabetic() || byte == b'_' => Ok(self.lex_identifier()),
+            byte if byte.is_ascii_digit() => Ok(self.lex_number()?),
+
+            b'"' => self.lex_string(),
+            b'\'' => self.lex_character(),
+
+            b'(' => Ok(self.make_token(TokenKind::LeftParen, 1)),
+            b')' => Ok(self.make_token(TokenKind::RightParen, 1)),
+            b'{' => Ok(self.make_token(TokenKind::LeftBrace, 1)),
+            b'}' => Ok(self.make_token(TokenKind::RightBrace, 1)),
+            b'[' => Ok(self.make_token(TokenKind::LeftBracket, 1)),
+            b']' => Ok(self.make_token(TokenKind::RightBracket, 1)),
+            b',' => Ok(self.make_token(TokenKind::Comma, 1)),
+            b':' => self
+                .lex_compound_token(&[(TokenKind::ColonEquals, b":="), (TokenKind::Colon, b":")]),
+            b'.' => Ok(self.make_token(TokenKind::Dot, 1)),
+
+            b'+' => Ok(self.make_token(TokenKind::Plus, 1)),
+            b'-' => self
+                .lex_compound_token(&[(TokenKind::MinusGreater, b"->"), (TokenKind::Minus, b"-")]),
+            b'*' => Ok(self.make_token(TokenKind::Star, 1)),
+            b'/' => self
+                .lex_compound_token(&[(TokenKind::SlashEquals, b"/="), (TokenKind::Slash, b"/")]),
+            b'^' => Ok(self.make_token(TokenKind::Caret, 1)),
+            b'|' => {
+                self.lex_compound_token(&[(TokenKind::PipeGreater, b"|>"), (TokenKind::Pipe, b"|")])
+            }
+            b'<' => self.lex_compound_token(&[
+                (TokenKind::LessEqualsGreater, b"<=>"),
+                (TokenKind::LessEquals, b"<="),
+                (TokenKind::Less, b"<"),
+            ]),
+            b'>' => self.lex_compound_token(&[
+                (TokenKind::GreaterEquals, b">="),
+                (TokenKind::Greater, b">"),
+            ]),
+            b'=' => Ok(self.make_token(TokenKind::Equals, 1)),
+            _ => Ok(self.make_token(TokenKind::Unknown, 1)),
         }
     }
-
-    fn skip_whitespace(&mut self) -> MusiResult<Token> {
-        if self.cursor.position
+    fn lex_indentation(&mut self) -> MusiResult<Token> {
+        if self.cursor.offset
             == *self
                 .cursor
                 .source
-                .line_starts
-                .get(self.cursor.current_line)
+                .line_offsets
+                .get(self.cursor.line)
                 .ok_or_else(|| self.error("line start index out of bounds"))?
         {
-            let mut spaces = 0_u32;
-            let start_position = self.cursor.position;
+            let mut indent_width = 0_u32;
+            let start_offset = self.cursor.offset;
 
-            while let Some(current) = self.cursor.peek() {
-                match current {
+            while let Some(current_byte) = self.cursor.current_byte() {
+                match current_byte {
                     byte if byte.is_ascii_whitespace() => {
-                        spaces = spaces.saturating_add(1);
+                        indent_width = indent_width.saturating_add(1);
                         self.cursor.advance();
                     }
                     _ => {
-                        if current != b'\r' && current != b'\n' {
-                            let current_indent =
-                                *self.indent_stack.get(self.indent_level).unwrap_or(&0);
+                        if current_byte != b'\r' && current_byte != b'\n' {
+                            let parent_indent_width = *self
+                                .indent_widths
+                                .get(self.indent_stack_depth)
+                                .unwrap_or(&0);
 
-                            match spaces.cmp(&current_indent) {
+                            match indent_width.cmp(&parent_indent_width) {
                                 cmp::Ordering::Greater => {
-                                    self.indent_level = self.indent_level.saturating_add(1);
+                                    self.indent_stack_depth =
+                                        self.indent_stack_depth.saturating_add(1);
                                     *self
-                                        .indent_stack
-                                        .get_mut(self.indent_level)
-                                        .unwrap_or(&mut 0) = spaces;
+                                        .indent_widths
+                                        .get_mut(self.indent_stack_depth)
+                                        .unwrap_or(&mut 0) = indent_width;
 
                                     return Ok(Token::new(
                                         TokenKind::Indent,
-                                        &[u8::try_from(spaces)
+                                        &[u8::try_from(indent_width)
                                             .map_err(|_error| self.error("integer overflow"))?],
                                         Span {
-                                            start: start_position,
-                                            end: self.cursor.position,
+                                            start: start_offset,
+                                            end: self.cursor.offset,
                                         },
                                     ));
                                 }
                                 cmp::Ordering::Less => {
-                                    while self.indent_level > 0
-                                        && spaces
+                                    while self.indent_stack_depth > 0
+                                        && indent_width
                                             < *self
-                                                .indent_stack
-                                                .get(self.indent_level)
+                                                .indent_widths
+                                                .get(self.indent_stack_depth)
                                                 .unwrap_or(&0)
                                     {
-                                        self.indent_level = self.indent_level.saturating_sub(1);
+                                        self.indent_stack_depth =
+                                            self.indent_stack_depth.saturating_sub(1);
                                     }
 
-                                    if spaces < self.indent_stack[0] {
+                                    if indent_width < self.indent_widths[0] {
                                         return Err(self.error(
                                             "unindent does not match any outer indentation level",
                                         ));
                                     }
-                                    if spaces
-                                        != *self.indent_stack.get(self.indent_level).unwrap_or(&0)
+                                    if indent_width
+                                        != *self
+                                            .indent_widths
+                                            .get(self.indent_stack_depth)
+                                            .unwrap_or(&0)
                                     {
                                         return Err(self.error("inconsistent indentation"));
                                     }
@@ -246,8 +244,8 @@ impl Lexer {
                                         TokenKind::Dedent,
                                         &[],
                                         Span {
-                                            start: start_position,
-                                            end: self.cursor.position,
+                                            start: start_offset,
+                                            end: self.cursor.offset,
                                         },
                                     ));
                                 }
@@ -264,16 +262,17 @@ impl Lexer {
             TokenKind::Unknown,
             &[],
             Span {
-                start: self.cursor.position,
-                end: self.cursor.position,
+                start: self.cursor.offset,
+                end: self.cursor.offset,
             },
         ))
     }
 
     fn lex_newline(&mut self, start: usize) -> Token {
-        let lexeme = if self.cursor.peek() == Some(b'\r') {
+        let lexeme = if self.cursor.current_byte() == Some(b'\r') {
             self.cursor.advance();
-            if self.cursor.peek() == Some(b'\n') {
+
+            if self.cursor.current_byte() == Some(b'\n') {
                 self.cursor.advance();
                 vec![b'\r', b'\n']
             } else {
@@ -289,23 +288,23 @@ impl Lexer {
             &lexeme,
             Span {
                 start,
-                end: self.cursor.position,
+                end: self.cursor.offset,
             },
         )
     }
 
-    fn lex_identifier_or_keyword(&mut self) -> Token {
-        let start_position = self.cursor.position;
+    fn lex_identifier(&mut self) -> Token {
+        let start_offset = self.cursor.offset;
 
-        while let Some(current) = self.cursor.peek() {
-            if !current.is_ascii_alphanumeric() || current == b'_' {
+        while let Some(current_byte) = self.cursor.current_byte() {
+            if !current_byte.is_ascii_alphanumeric() && current_byte != b'_' {
                 break;
             }
             self.cursor.advance();
         }
 
-        let lexeme = self.cursor.slice_from(start_position);
-        let kind = KEYWORDS
+        let lexeme = self.cursor.byte_slice_from(start_offset);
+        let kind = RESERVED_KEYWORDS
             .iter()
             .find(|&&(keyword, _)| keyword == lexeme)
             .map_or(TokenKind::Identifer, |&(_, kind)| kind);
@@ -314,74 +313,74 @@ impl Lexer {
             kind,
             lexeme,
             Span {
-                start: start_position,
-                end: self.cursor.position,
+                start: start_offset,
+                end: self.cursor.offset,
             },
         )
     }
 
     fn lex_number(&mut self) -> MusiResult<Token> {
-        let start_position = self.cursor.position;
+        let start_offset = self.cursor.offset;
 
-        if self.cursor.peek() == Some(b'0')
-            && self.cursor.peek_next().map_or(false, |byte| {
+        if self.cursor.current_byte() == Some(b'0')
+            && self.cursor.next_byte().map_or(false, |byte| {
                 matches!(byte, b'x' | b'X' | b'b' | b'B' | b'o' | b'O')
             })
         {
-            self.lex_number_base()?;
+            self.lex_number_with_radix()?;
 
             return Ok(Token::new(
                 TokenKind::Number,
-                self.cursor.slice_from(start_position),
+                self.cursor.byte_slice_from(start_offset),
                 Span {
-                    start: start_position,
-                    end: self.cursor.position,
+                    start: start_offset,
+                    end: self.cursor.offset,
                 },
             ));
         }
 
-        self.lex_decimal_digits();
+        self.lex_number_digits();
 
-        if self.cursor.peek() == Some(b'.')
+        if self.cursor.current_byte() == Some(b'.')
             && self
                 .cursor
-                .peek_next()
+                .next_byte()
                 .map_or(false, |byte| byte.is_ascii_digit())
         {
             self.cursor.advance();
-            self.lex_decimal_digits();
+            self.lex_number_digits();
         }
 
-        if let Some(b'e' | b'E') = self.cursor.peek() {
+        if let Some(b'e' | b'E') = self.cursor.current_byte() {
             self.lex_scientific_notation();
         }
 
         Ok(Token::new(
             TokenKind::Number,
-            self.cursor.slice_from(start_position),
+            self.cursor.byte_slice_from(start_offset),
             Span {
-                start: start_position,
-                end: self.cursor.position,
+                start: start_offset,
+                end: self.cursor.offset,
             },
         ))
     }
 
     fn lex_string(&mut self) -> MusiResult<Token> {
-        let start_position = self.cursor.position;
+        let start_offset = self.cursor.offset;
 
         self.cursor.advance(); // skip opening quote
 
-        while let Some(current) = self.cursor.peek() {
-            match current {
+        while let Some(current_byte) = self.cursor.current_byte() {
+            match current_byte {
                 b'"' => {
                     self.cursor.advance(); // skip closing quote
 
                     return Ok(Token::new(
                         TokenKind::String,
-                        self.cursor.slice_from(start_position),
+                        self.cursor.byte_slice_from(start_offset),
                         Span {
-                            start: start_position,
-                            end: self.cursor.position,
+                            start: start_offset,
+                            end: self.cursor.offset,
                         },
                     ));
                 }
@@ -390,11 +389,13 @@ impl Lexer {
                     continue;
                 }
                 0..=0x1F => {
-                    return Err(self.error(if current == b'\r' || current == b'\n' {
-                        "unclosed string literal"
-                    } else {
-                        "control character not allowed in string literal"
-                    }));
+                    return Err(
+                        self.error(if current_byte == b'\r' || current_byte == b'\n' {
+                            "unclosed string literal"
+                        } else {
+                            "control character not allowed in string literal"
+                        }),
+                    );
                 }
                 _ => {
                     self.cursor.advance();
@@ -407,15 +408,15 @@ impl Lexer {
     }
 
     fn lex_character(&mut self) -> MusiResult<Token> {
-        let start_position = self.cursor.position;
-        let mut chars = 0_i32;
+        let start_offset = self.cursor.offset;
+        let mut char_count = 0_i32;
 
         self.cursor.advance(); // skip opening apostrophe
 
-        while let Some(current) = self.cursor.peek() {
-            match current {
+        while let Some(current_byte) = self.cursor.current_byte() {
+            match current_byte {
                 b'\'' => {
-                    match chars {
+                    match char_count {
                         0_i32 => return Err(self.error("empty character literal")),
                         char if char > 1_i32 => {
                             return Err(
@@ -429,16 +430,16 @@ impl Lexer {
 
                     return Ok(Token::new(
                         TokenKind::Character,
-                        self.cursor.slice_from(start_position),
+                        self.cursor.byte_slice_from(start_offset),
                         Span {
-                            start: start_position,
-                            end: self.cursor.position,
+                            start: start_offset,
+                            end: self.cursor.offset,
                         },
                     ));
                 }
                 b'\\' => {
                     self.lex_escape_sequence()?;
-                    chars = chars.saturating_add(1);
+                    char_count = char_count.saturating_add(1);
                     continue;
                 }
                 b'\n' => {
@@ -446,7 +447,7 @@ impl Lexer {
                 }
                 _ => {
                     self.cursor.advance();
-                    chars = chars.saturating_add(1);
+                    char_count = char_count.saturating_add(1);
                     continue;
                 }
             }
@@ -456,71 +457,82 @@ impl Lexer {
     }
 
     #[inline]
-    fn lex_number_base(&mut self) -> MusiResult<()> {
-        match self.cursor.peek_next() {
+    fn lex_number_with_radix(&mut self) -> MusiResult<()> {
+        match self.cursor.next_byte() {
             Some(b'x' | b'X') => {
                 self.cursor.advance_by(2);
 
-                let mut has_digits = false;
-                while let Some(current) = self.cursor.peek() {
-                    if current == b'_'
+                let mut has_valid_digits = false;
+
+                while let Some(current_byte) = self.cursor.current_byte() {
+                    if current_byte == b'_'
                         && !self
                             .cursor
-                            .peek_next()
+                            .next_byte()
                             .map_or(false, |byte| byte.is_ascii_hexdigit())
                     {
                         return Err(self.error("expected hexadecimal digit after '_'"));
                     }
-                    if !current.is_ascii_hexdigit() && current != b'_' {
+                    if !current_byte.is_ascii_hexdigit() && current_byte != b'_' {
                         break;
                     }
-                    has_digits = has_digits || current != b'_';
+
+                    has_valid_digits = has_valid_digits || current_byte != b'_';
                     self.cursor.advance();
                 }
-                if !has_digits {
+
+                if !has_valid_digits {
                     return Err(self.error("expected hexadecimal digit"));
                 }
             }
             Some(b'b' | b'B') => {
                 self.cursor.advance_by(2);
+
                 let mut has_digits = false;
-                while let Some(current) = self.cursor.peek() {
-                    if current == b'_'
+
+                while let Some(current_byte) = self.cursor.current_byte() {
+                    if current_byte == b'_'
                         && !self
                             .cursor
-                            .peek_next()
+                            .next_byte()
                             .map_or(false, |next| [b'0', b'1'].contains(&next))
                     {
                         return Err(self.error("expected binary digit after '_'"));
                     }
-                    if ![b'0', b'1', b'_'].contains(&current) {
+                    if ![b'0', b'1', b'_'].contains(&current_byte) {
                         break;
                     }
-                    has_digits = has_digits || current != b'_';
+
+                    has_digits = has_digits || current_byte != b'_';
                     self.cursor.advance();
                 }
+
                 if !has_digits {
                     return Err(self.error("expected binary digit after binary prefix"));
                 }
             }
             Some(b'o' | b'O') => {
                 self.cursor.advance_by(2);
+
                 let mut has_digits = false;
-                while let Some(current) = self.cursor.peek() {
-                    if current == b'_'
+
+                while let Some(current_byte) = self.cursor.current_byte() {
+                    if current_byte == b'_'
                         && !self
                             .cursor
-                            .peek_next()
+                            .next_byte()
                             .map_or(false, |byte| matches!(byte, b'0'..=b'7'))
                     {
                         return Err(self.error("expected octal digit after '_'"));
                     }
-                    if !matches!(current, b'0'..=b'7' | b'_') {
+                    if !matches!(current_byte, b'0'..=b'7' | b'_') {
                         break;
                     }
-                    has_digits = has_digits || current != b'_';
+
+                    has_digits = has_digits || current_byte != b'_';
                     self.cursor.advance();
                 }
+
                 if !has_digits {
                     return Err(self.error("expected octal digit after octal prefix"));
                 }
@@ -531,15 +543,15 @@ impl Lexer {
     }
 
     #[inline]
-    fn lex_decimal_digits(&mut self) {
-        while let Some(current) = self.cursor.peek() {
-            if !current.is_ascii_digit() && current != b'_' {
+    fn lex_number_digits(&mut self) {
+        while let Some(current_byte) = self.cursor.current_byte() {
+            if !current_byte.is_ascii_digit() && current_byte != b'_' {
                 break;
             }
-            if current == b'_'
+            if current_byte == b'_'
                 && !self
                     .cursor
-                    .peek_next()
+                    .next_byte()
                     .map_or(false, |byte| byte.is_ascii_digit())
             {
                 break;
@@ -551,18 +563,18 @@ impl Lexer {
     fn lex_scientific_notation(&mut self) {
         self.cursor.advance();
 
-        if let Some(b'+' | b'-') = self.cursor.peek() {
+        if let Some(b'+' | b'-') = self.cursor.current_byte() {
             self.cursor.advance();
         }
 
-        while let Some(current) = self.cursor.peek() {
-            if !current.is_ascii_digit() && current != b'_' {
+        while let Some(current_byte) = self.cursor.current_byte() {
+            if !current_byte.is_ascii_digit() && current_byte != b'_' {
                 break;
             }
-            if current == b'_'
+            if current_byte == b'_'
                 && !self
                     .cursor
-                    .peek_next()
+                    .next_byte()
                     .map_or(false, |byte| byte.is_ascii_digit())
             {
                 break;
@@ -572,14 +584,14 @@ impl Lexer {
     }
 
     fn lex_escape_sequence(&mut self) -> MusiResult<()> {
-        match self.cursor.peek_next() {
+        match self.cursor.next_byte() {
             Some(b'n' | b'r' | b't' | b'\\' | b'"' | b'\'') => {
                 self.cursor.advance_by(2);
                 Ok(())
             }
             Some(b'u' | b'U' | b'x') => {
                 self.cursor.advance_by(2);
-                self.lex_unicode_escape_sequence::<4>()
+                self.lex_unicode_escape::<4>()
             }
             Some(invalid) => Err(self.error(format!(
                 "unexpected escape sequence '{:#?}'",
@@ -589,38 +601,43 @@ impl Lexer {
         }
     }
 
-    fn lex_unicode_escape_sequence<const N: usize>(&mut self) -> MusiResult<()> {
-        let mut value = 0;
+    fn lex_unicode_escape<const N: usize>(&mut self) -> MusiResult<()> {
+        let mut unicode_value = 0;
 
         for _ in 0..N {
-            match self.cursor.peek() {
+            match self.cursor.current_byte() {
                 None => {
-                    return Err(self.error("unclosed unicode escape sequence"));
+                    return Err(self.error("unclosed unicode escape"));
                 }
-                Some(current) if !current.is_ascii_hexdigit() => {
-                    return Err(self.error(format!("unexpected hexadecimal digit '{current:#X}'")));
+                Some(current_byte) if !current_byte.is_ascii_hexdigit() => {
+                    return Err(
+                        self.error(format!("unexpected hexadecimal digit '{current_byte:#X}'"))
+                    );
                 }
-                Some(current) => {
-                    let digit = match current {
-                        b'0'..=b'9' => current.wrapping_sub(b'0'),
-                        b'a'..=b'f' | b'A'..=b'F' => current.wrapping_sub(b'A').wrapping_add(10),
+                Some(current_byte) => {
+                    let hexadecimal_digit = match current_byte {
+                        b'0'..=b'9' => current_byte.wrapping_sub(b'0'),
+                        b'a'..=b'f' | b'A'..=b'F' => {
+                            current_byte.wrapping_sub(b'A').wrapping_add(10)
+                        }
                         unexpected => {
                             return Err(self
                                 .error(format!("unexpected hexadecimal digit '{unexpected:#X}'")))
                         }
                     };
-                    value = (value << 4_i32) | u32::from(digit);
+
+                    unicode_value = (unicode_value << 4_i32) | u32::from(hexadecimal_digit);
                     self.cursor.advance();
                 }
             }
         }
 
-        if (0xD800..=0xDFFF).contains(&value) {
-            return Err(self.error("surrogate pairs not allowed in unicode escape sequence"));
+        if (0xD800..=0xDFFF).contains(&unicode_value) {
+            return Err(self.error("surrogate pairs not allowed in unicode escape"));
         }
 
-        if value > 0x0010_FFFF {
-            return Err(self.error("unicode escape sequence out of range"));
+        if unicode_value > 0x0010_FFFF {
+            return Err(self.error("unicode escape out of range"));
         }
 
         Ok(())
@@ -628,35 +645,35 @@ impl Lexer {
 
     #[inline]
     fn make_token(&mut self, kind: TokenKind, length: usize) -> Token {
-        let start_position = self.cursor.position;
+        let start_offset = self.cursor.offset;
         self.cursor.advance_by(length);
 
         Token::new(
             kind,
-            self.cursor.slice_from(start_position),
+            self.cursor.byte_slice_from(start_offset),
             Span {
-                start: start_position,
-                end: self.cursor.position,
+                start: start_offset,
+                end: self.cursor.offset,
             },
         )
     }
 
     #[inline]
-    fn match_compound_token(&mut self, patterns: &[(TokenKind, &[u8])]) -> MusiResult<Token> {
+    fn lex_compound_token(&mut self, patterns: &[(TokenKind, &[u8])]) -> MusiResult<Token> {
         let matched = patterns.iter().find(|&&(_, pattern)| match pattern.len() {
             2 => {
                 if pattern.len() < 2 {
                     return false;
                 }
 
-                matches!((pattern.first(), pattern.get(1)), (Some(&first), Some(&second)) if self.cursor.match_2byte(first, second))
+                matches!((pattern.first(), pattern.get(1)), (Some(&first), Some(&second)) if self.cursor.matches_byte_pair(first, second))
             }
             3 => {
                 if pattern.len() < 3 {
                     return false;
                 }
 
-                matches!((pattern.first(), pattern.get(1), pattern.get(2)), (Some(&first), Some(&second), Some(&third)) if self.cursor.match_3byte(first, second, third))
+                matches!((pattern.first(), pattern.get(1), pattern.get(2)), (Some(&first), Some(&second), Some(&third)) if self.cursor.matches_byte_triplet(first, second, third))
             }
             _ => false,
         });
@@ -672,24 +689,25 @@ impl Lexer {
             )),
         }
     }
+
     #[inline]
     fn error(&self, message: impl Into<String>) -> Diagnostic {
         Diagnostic::error(
             message,
             Span {
-                start: self.cursor.position,
-                end: self.cursor.position,
+                start: self.cursor.offset,
+                end: self.cursor.offset,
             },
         )
         .with_source(&self.cursor.source)
     }
 
-    fn sync(&mut self) {
-        while let Some(current) = self.cursor.peek() {
-            match current {
+    fn recover_from_error(&mut self) {
+        while let Some(current_byte) = self.cursor.current_byte() {
+            match current_byte {
                 b'\n' => {
                     self.cursor.advance();
-                    self.indent_level = 0;
+                    self.indent_stack_depth = 0;
                     break;
                 }
                 b'}' | b')' => {
