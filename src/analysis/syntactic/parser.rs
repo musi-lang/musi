@@ -7,7 +7,8 @@ use crate::{
 
 use super::ast::{Expression, ExpressionKind, Program, Statement, StatementKind};
 
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd)]
+#[non_exhaustive]
 enum Precedence {
     None,
     Assignment, // := <-
@@ -24,6 +25,7 @@ enum Precedence {
 }
 
 impl From<TokenKind> for Precedence {
+    #[inline]
     fn from(kind: TokenKind) -> Self {
         match kind {
             TokenKind::ColonEquals | TokenKind::LessMinus => Self::Assignment,
