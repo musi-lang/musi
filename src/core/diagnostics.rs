@@ -135,14 +135,15 @@ impl ErrorReporter {
         }
     }
 
-    #[expect(clippy::expect_used, reason = "How else do I unwrap Option?")]
     #[inline]
     pub fn error<M: Into<String>>(&mut self, message: M, span: Span) {
         self.error_count = self.error_count.saturating_add(1);
-        let diagnostic = Diagnostic::error(message, span).with_source(
-            self.source
-                .expect("source unavailable, did you forget to set it?"),
-        );
+
+        let mut diagnostic = Diagnostic::error(message, span);
+        if let Some(source) = self.source {
+            diagnostic = diagnostic.with_source(source);
+        };
+
         self.diagnostics.push(diagnostic);
     }
 
