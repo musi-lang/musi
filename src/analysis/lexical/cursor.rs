@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use crate::core::source::SourceFile;
+use crate::core::source::NamedSource;
 
 pub struct Cursor {
-    pub source: Arc<SourceFile>,
+    pub source: Arc<NamedSource>,
     pub offset: usize,
     pub line: usize,
 }
