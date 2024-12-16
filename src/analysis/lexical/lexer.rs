@@ -123,11 +123,11 @@ impl Lexer {
             ));
         }
 
-        let current_byte = self
+        let current = self
             .cursor
             .current_byte()
             .ok_or_else(|| self.error("unexpected end of input"))?;
-        match current_byte {
+        match current {
             b'\r' | b'\n' => Ok(self.lex_newline(start_offset)),
 
             byte if byte.is_ascii_alphabetic() || byte == b'_' => Ok(self.lex_identifier()),
@@ -182,14 +182,14 @@ impl Lexer {
             let mut indent_width = 0_u32;
             let start_offset = self.cursor.offset;
 
-            while let Some(current_byte) = self.cursor.current_byte() {
-                match current_byte {
+            while let Some(current) = self.cursor.current_byte() {
+                match current {
                     byte if byte.is_ascii_whitespace() => {
                         indent_width = indent_width.saturating_add(1);
                         self.cursor.advance();
                     }
                     _ => {
-                        if current_byte != b'\r' && current_byte != b'\n' {
+                        if current != b'\r' && current != b'\n' {
                             let parent_indent_width = *self
                                 .indent_widths
                                 .get(self.indent_stack_depth)
@@ -296,8 +296,8 @@ impl Lexer {
     fn lex_identifier(&mut self) -> Token {
         let start_offset = self.cursor.offset;
 
-        while let Some(current_byte) = self.cursor.current_byte() {
-            if !current_byte.is_ascii_alphanumeric() && current_byte != b'_' {
+        while let Some(current) = self.cursor.current_byte() {
+            if !current.is_ascii_alphanumeric() && current != b'_' {
                 break;
             }
             self.cursor.advance();
@@ -370,8 +370,8 @@ impl Lexer {
 
         self.cursor.advance(); // skip opening quote
 
-        while let Some(current_byte) = self.cursor.current_byte() {
-            match current_byte {
+        while let Some(current) = self.cursor.current_byte() {
+            match current {
                 b'"' => {
                     self.cursor.advance(); // skip closing quote
 
@@ -389,13 +389,11 @@ impl Lexer {
                     continue;
                 }
                 0..=0x1F => {
-                    return Err(
-                        self.error(if current_byte == b'\r' || current_byte == b'\n' {
-                            "unclosed string literal"
-                        } else {
-                            "control character not allowed in string literal"
-                        }),
-                    );
+                    return Err(self.error(if current == b'\r' || current == b'\n' {
+                        "unclosed string literal"
+                    } else {
+                        "control character not allowed in string literal"
+                    }));
                 }
                 _ => {
                     self.cursor.advance();
@@ -413,8 +411,8 @@ impl Lexer {
 
         self.cursor.advance(); // skip opening apostrophe
 
-        while let Some(current_byte) = self.cursor.current_byte() {
-            match current_byte {
+        while let Some(current) = self.cursor.current_byte() {
+            match current {
                 b'\'' => {
                     match char_count {
                         0_i32 => return Err(self.error("empty character literal")),
@@ -464,8 +462,8 @@ impl Lexer {
 
                 let mut has_valid_digits = false;
 
-                while let Some(current_byte) = self.cursor.current_byte() {
-                    if current_byte == b'_'
+                while let Some(current) = self.cursor.current_byte() {
+                    if current == b'_'
                         && !self
                             .cursor
                             .next_byte()
@@ -473,11 +471,11 @@ impl Lexer {
                     {
                         return Err(self.error("expected hexadecimal digit after '_'"));
                     }
-                    if !current_byte.is_ascii_hexdigit() && current_byte != b'_' {
+                    if !current.is_ascii_hexdigit() && current != b'_' {
                         break;
                     }
 
-                    has_valid_digits = has_valid_digits || current_byte != b'_';
+                    has_valid_digits = has_valid_digits || current != b'_';
                     self.cursor.advance();
                 }
 
@@ -490,8 +488,8 @@ impl Lexer {
 
                 let mut has_digits = false;
 
-                while let Some(current_byte) = self.cursor.current_byte() {
-                    if current_byte == b'_'
+                while let Some(current) = self.cursor.current_byte() {
+                    if current == b'_'
                         && !self
                             .cursor
                             .next_byte()
@@ -499,11 +497,11 @@ impl Lexer {
                     {
                         return Err(self.error("expected binary digit after '_'"));
                     }
-                    if ![b'0', b'1', b'_'].contains(&current_byte) {
+                    if ![b'0', b'1', b'_'].contains(&current) {
                         break;
                     }
 
-                    has_digits = has_digits || current_byte != b'_';
+                    has_digits = has_digits || current != b'_';
                     self.cursor.advance();
                 }
 
@@ -516,8 +514,8 @@ impl Lexer {
 
                 let mut has_digits = false;
 
-                while let Some(current_byte) = self.cursor.current_byte() {
-                    if current_byte == b'_'
+                while let Some(current) = self.cursor.current_byte() {
+                    if current == b'_'
                         && !self
                             .cursor
                             .next_byte()
@@ -525,11 +523,11 @@ impl Lexer {
                     {
                         return Err(self.error("expected octal digit after '_'"));
                     }
-                    if !matches!(current_byte, b'0'..=b'7' | b'_') {
+                    if !matches!(current, b'0'..=b'7' | b'_') {
                         break;
                     }
 
-                    has_digits = has_digits || current_byte != b'_';
+                    has_digits = has_digits || current != b'_';
                     self.cursor.advance();
                 }
 
@@ -544,11 +542,11 @@ impl Lexer {
 
     #[inline]
     fn lex_number_digits(&mut self) {
-        while let Some(current_byte) = self.cursor.current_byte() {
-            if !current_byte.is_ascii_digit() && current_byte != b'_' {
+        while let Some(current) = self.cursor.current_byte() {
+            if !current.is_ascii_digit() && current != b'_' {
                 break;
             }
-            if current_byte == b'_'
+            if current == b'_'
                 && !self
                     .cursor
                     .next_byte()
@@ -567,11 +565,11 @@ impl Lexer {
             self.cursor.advance();
         }
 
-        while let Some(current_byte) = self.cursor.current_byte() {
-            if !current_byte.is_ascii_digit() && current_byte != b'_' {
+        while let Some(current) = self.cursor.current_byte() {
+            if !current.is_ascii_digit() && current != b'_' {
                 break;
             }
-            if current_byte == b'_'
+            if current == b'_'
                 && !self
                     .cursor
                     .next_byte()
@@ -609,17 +607,13 @@ impl Lexer {
                 None => {
                     return Err(self.error("unclosed unicode escape"));
                 }
-                Some(current_byte) if !current_byte.is_ascii_hexdigit() => {
-                    return Err(
-                        self.error(format!("unexpected hexadecimal digit '{current_byte:#X}'"))
-                    );
+                Some(current) if !current.is_ascii_hexdigit() => {
+                    return Err(self.error(format!("unexpected hexadecimal digit '{current:#X}'")));
                 }
-                Some(current_byte) => {
-                    let hexadecimal_digit = match current_byte {
-                        b'0'..=b'9' => current_byte.wrapping_sub(b'0'),
-                        b'a'..=b'f' | b'A'..=b'F' => {
-                            current_byte.wrapping_sub(b'A').wrapping_add(10)
-                        }
+                Some(current) => {
+                    let hexadecimal_digit = match current {
+                        b'0'..=b'9' => current.wrapping_sub(b'0'),
+                        b'a'..=b'f' | b'A'..=b'F' => current.wrapping_sub(b'A').wrapping_add(10),
                         unexpected => {
                             return Err(self
                                 .error(format!("unexpected hexadecimal digit '{unexpected:#X}'")))
@@ -677,13 +671,12 @@ impl Lexer {
             }
             _ => false,
         });
-
         match matched {
             Some(&(kind, pattern)) => Ok(self.make_token(kind, pattern.len())),
             None => Ok(self.make_token(
                 patterns
                     .first()
-                    .ok_or_else(|| self.error("patterns must not be empty"))?
+                    .ok_or_else(|| self.error("patterns cannot be empty"))?
                     .0,
                 1,
             )),
@@ -703,8 +696,8 @@ impl Lexer {
     }
 
     fn recover_from_error(&mut self) {
-        while let Some(current_byte) = self.cursor.current_byte() {
-            match current_byte {
+        while let Some(current) = self.cursor.current_byte() {
+            match current {
                 b'\n' => {
                     self.cursor.advance();
                     self.indent_stack_depth = 0;
