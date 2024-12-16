@@ -93,8 +93,8 @@ pub struct Token {
 }
 
 impl Token {
-    #[must_use]
     #[inline]
+    #[must_use]
     pub fn new(kind: TokenKind, lexeme: &[u8], span: Span) -> Self {
         Self {
             kind,
