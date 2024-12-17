@@ -1,26 +1,26 @@
 use std::sync::Arc;
 
-use crate::core::source::NamedSource;
+use crate::core::source::SourceFile;
 
 pub struct Cursor {
-    pub source: Arc<NamedSource>,
-    pub offset: usize,
+    pub source: Arc<SourceFile>,
+    pub position: usize,
     pub line: usize,
 }
 
 impl Cursor {
     #[inline]
     pub fn advance(&mut self) -> Option<u8> {
-        let current_byte = self.current_byte()?;
+        let current = self.peek()?;
 
-        self.offset = self.offset.saturating_add(1);
+        self.position = self.position.saturating_add(1);
 
-        self.line = if current_byte == b'\n' {
+        self.line = if current == b'\n' {
             self.line.saturating_add(1)
         } else {
             self.line
         };
-        Some(current_byte)
+        Some(current)
     }
 
     #[inline]
@@ -32,49 +32,49 @@ impl Cursor {
 
     #[inline]
     pub fn is_at_end(&self) -> bool {
-        self.offset >= self.source.bytes.len()
+        self.position >= self.source.content.len()
     }
 
     #[inline]
-    pub fn matches_byte_pair(&self, expected: u8, next: u8) -> bool {
-        if self.offset >= self.source.bytes.len().saturating_sub(1) {
+    pub fn peek_matches_pair(&self, expected: u8, next: u8) -> bool {
+        if self.position >= self.source.content.len().saturating_sub(1) {
             return false;
         }
 
-        matches!(self.source.bytes.get(self.offset..=self.offset.saturating_add(1)),
+        matches!(self.source.content.get(self.position..=self.position.saturating_add(1)),
             Some(&[first, second]) if first == expected && second == next)
     }
 
     #[inline]
-    pub fn matches_byte_triplet(&self, expected: u8, next: u8, last: u8) -> bool {
-        matches!(self.source.bytes.get(self.offset..=self.offset.saturating_add(2)),
+    pub fn peek_matches_triplet(&self, expected: u8, next: u8, last: u8) -> bool {
+        matches!(self.source.content.get(self.position..=self.position.saturating_add(2)),
             Some(&[first, second, third]) if first == expected && second == next && third == last)
     }
 
     #[inline]
-    pub fn current_byte(&self) -> Option<u8> {
-        self.source.bytes.get(self.offset).copied()
+    pub fn peek(&self) -> Option<u8> {
+        self.source.content.get(self.position).copied()
     }
 
     #[inline]
-    pub fn next_byte(&self) -> Option<u8> {
+    pub fn peek_next(&self) -> Option<u8> {
         self.source
-            .bytes
-            .get(self.offset.saturating_add(1))
+            .content
+            .get(self.position.saturating_add(1))
             .copied()
     }
 
     #[inline]
-    pub fn remaining_bytes(&self) -> usize {
-        self.source.bytes.len().saturating_sub(self.offset)
+    pub fn remaining(&self) -> usize {
+        self.source.content.len().saturating_sub(self.position)
     }
 
     #[inline]
-    pub fn byte_slice_from(&self, start: usize) -> &[u8] {
-        if start > self.offset {
+    pub fn slice_from(&self, start: usize) -> &[u8] {
+        if start > self.position {
             return &[];
         }
 
-        self.source.bytes.get(start..self.offset).unwrap_or(&[])
+        self.source.content.get(start..self.position).unwrap_or(&[])
     }
 }
