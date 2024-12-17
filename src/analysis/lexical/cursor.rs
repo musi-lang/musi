@@ -24,9 +24,9 @@ impl Cursor {
     }
 
     #[inline]
-    pub fn advance_by(&mut self, mut remaining_steps: usize) {
-        while remaining_steps > 0 && self.advance().is_some() {
-            remaining_steps = remaining_steps.saturating_sub(1);
+    pub fn advance_by(&mut self, mut remaining: usize) {
+        while remaining > 0 && self.advance().is_some() {
+            remaining = remaining.saturating_sub(1);
         }
     }
 
@@ -36,7 +36,7 @@ impl Cursor {
     }
 
     #[inline]
-    pub fn peek_matches_pair(&self, expected: u8, next: u8) -> bool {
+    pub fn matches_pair(&self, expected: u8, next: u8) -> bool {
         if self.position >= self.source.content.len().saturating_sub(1) {
             return false;
         }
@@ -46,7 +46,7 @@ impl Cursor {
     }
 
     #[inline]
-    pub fn peek_matches_triplet(&self, expected: u8, next: u8, last: u8) -> bool {
+    pub fn matches_triplet(&self, expected: u8, next: u8, last: u8) -> bool {
         matches!(self.source.content.get(self.position..=self.position.saturating_add(2)),
             Some(&[first, second, third]) if first == expected && second == next && third == last)
     }
