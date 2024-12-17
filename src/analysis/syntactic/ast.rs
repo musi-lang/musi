@@ -35,23 +35,20 @@ pub enum StatementKind {
         mutable: bool,
         span: Span,
     },
-    FunctionDeclaration {
-        name: Box<str>,
-        parameters: Vec<Box<str>>,
-        body: Box<Statement>,
-        span: Span,
-    },
+    // FunctionDeclaration {
+    //     name: Box<str>,
+    //     parameters: Vec<Box<str>>,
+    //     body: Box<Statement>,
+    //     span: Span,
+    // },
 }
 
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum ExpressionKind {
-    Literal {
-        value: Value,
-        span: Span,
-    },
-    Identifier {
-        name: Box<str>,
+    Assignment {
+        target: Box<Expression>,
+        value: Box<Expression>,
         span: Span,
     },
     Binary {
@@ -60,24 +57,14 @@ pub enum ExpressionKind {
         right: Box<Expression>,
         span: Span,
     },
-    Unary {
-        operator: TokenKind,
-        operand: Box<Expression>,
-        span: Span,
-    },
-    Assignment {
-        target: Box<Expression>,
-        value: Box<Expression>,
+    Block {
+        statements: Vec<Statement>,
+        nesting_depth: u8,
         span: Span,
     },
     Call {
         callee: Box<Expression>,
         arguments: Vec<Expression>,
-        span: Span,
-    },
-    Block {
-        statements: Vec<Statement>,
-        nesting_depth: u8,
         span: Span,
     },
     Conditional {
@@ -86,9 +73,27 @@ pub enum ExpressionKind {
         alternative: Option<Box<Expression>>,
         span: Span,
     },
+    Identifier {
+        name: Box<str>,
+        span: Span,
+    },
+    Lambda {
+        parameters: Vec<Box<str>>,
+        body: Box<Expression>,
+        span: Span,
+    },
+    Literal {
+        value: Value,
+        span: Span,
+    },
     Match {
         scrutinee: Box<Expression>,
         arms: Vec<MatchArm>,
+        span: Span,
+    },
+    Unary {
+        operator: TokenKind,
+        operand: Box<Expression>,
         span: Span,
     },
 }
