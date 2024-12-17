@@ -28,6 +28,7 @@ complexity = { level = "deny", priority = -1 }
 correctness = { level = "deny", priority = -1 }
 nursery = { level = "deny", priority = -1 }
 pedantic = { level = "deny", priority = -1 }
+# restriction = { level = "deny", priority = -1 } # clippy::blanket_clippy_restriction_lints
 perf = { level = "deny", priority = -1 }
 style = { level = "deny", priority = -1 }
 suspicious = { level = "deny", priority = -1 }
@@ -37,7 +38,7 @@ missing-errors-doc = "allow"
 missing-panics-doc = "allow"
 module-name-repetitions = "allow"
 
-# restriction (clippy::blanket_clippy_restriction_lints)
+# restriction
 absolute_paths = "deny"
 alloc_instead_of_core = "deny"
 allow_attributes = "deny"
