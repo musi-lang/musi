@@ -40,9 +40,9 @@ pub enum TokenKind {
     Identifer,
 
     // Literals
-    Number,
-    String,
-    Character,
+    NumberLiteral,
+    StringLiteral,
+    CharacterLiteral,
 
     // Operators
     Caret,             // ^
@@ -75,9 +75,10 @@ pub enum TokenKind {
     Dot,          // .
 
     // Layout
-    Newline,
+    Whitespace,
     Indent,
     Dedent,
+    Newline,
 
     // Special
     Eof,
