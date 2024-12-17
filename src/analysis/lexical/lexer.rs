@@ -98,7 +98,7 @@ impl Lexer {
     }
 
     fn next_token(&mut self) -> MusiResult<Token> {
-        let token_start = self.cursor.position;
+        let start = self.cursor.position;
 
         if self.pending_dedents > 0 {
             self.pending_dedents = self.pending_dedents.saturating_sub(1);
@@ -107,7 +107,7 @@ impl Lexer {
                 TokenKind::Dedent,
                 &[],
                 Span {
-                    start: token_start,
+                    start,
                     end: self.cursor.position,
                 },
             ));
@@ -200,7 +200,7 @@ impl Lexer {
 
     fn lex_whitespace(&mut self) -> Option<Token> {
         if !self.at_line_start {
-            let token_start = self.cursor.position;
+            let cursor_start = self.cursor.position;
             let mut length = 0_i32;
 
             while let Some(current) = self.cursor.peek() {
@@ -218,7 +218,7 @@ impl Lexer {
                     TokenKind::Whitespace,
                     &[],
                     Span {
-                        start: token_start,
+                        start: cursor_start,
                         end: self.cursor.position,
                     },
                 ));
@@ -233,7 +233,7 @@ impl Lexer {
             return Ok(None);
         }
 
-        let token_start = self.cursor.position;
+        let start = self.cursor.position;
         let mut spaces = 0_u32;
 
         while let Some(current) = self.cursor.peek() {
@@ -276,7 +276,7 @@ impl Lexer {
                     TokenKind::Indent,
                     format!("{spaces}").as_bytes(),
                     Span {
-                        start: token_start,
+                        start,
                         end: self.cursor.position,
                     },
                 )))
@@ -303,7 +303,7 @@ impl Lexer {
                     TokenKind::Dedent,
                     &[],
                     Span {
-                        start: token_start,
+                        start,
                         end: self.cursor.position,
                     },
                 )))
@@ -335,7 +335,7 @@ impl Lexer {
     }
 
     fn lex_identifier_or_keyword(&mut self) -> Token {
-        let token_start = self.cursor.position;
+        let start = self.cursor.position;
 
         while let Some(current) = self.cursor.peek() {
             if !current.is_ascii_alphanumeric() && current != b'_' {
@@ -344,7 +344,7 @@ impl Lexer {
             self.cursor.advance();
         }
 
-        let lexeme = self.cursor.slice_from(token_start);
+        let lexeme = self.cursor.slice_from(start);
         let kind = RESERVED_KEYWORDS
             .iter()
             .find(|&&(keyword, _)| keyword == lexeme)
@@ -354,14 +354,14 @@ impl Lexer {
             kind,
             lexeme,
             Span {
-                start: token_start,
+                start,
                 end: self.cursor.position,
             },
         )
     }
 
     fn lex_numberic_literal(&mut self) -> MusiResult<Token> {
-        let token_start = self.cursor.position;
+        let start = self.cursor.position;
 
         if self.cursor.peek() == Some(b'0')
             && self.cursor.peek_next().map_or(false, |byte| {
@@ -372,9 +372,9 @@ impl Lexer {
 
             return Ok(Token::new(
                 TokenKind::NumbericLiteral,
-                self.cursor.slice_from(token_start),
+                self.cursor.slice_from(start),
                 Span {
-                    start: token_start,
+                    start,
                     end: self.cursor.position,
                 },
             ));
@@ -398,16 +398,16 @@ impl Lexer {
 
         Ok(Token::new(
             TokenKind::NumbericLiteral,
-            self.cursor.slice_from(token_start),
+            self.cursor.slice_from(start),
             Span {
-                start: token_start,
+                start,
                 end: self.cursor.position,
             },
         ))
     }
 
     fn lex_string_literal(&mut self) -> MusiResult<Token> {
-        let token_start = self.cursor.position;
+        let start = self.cursor.position;
 
         self.cursor.advance(); // skip opening quote
 
@@ -418,9 +418,9 @@ impl Lexer {
 
                     return Ok(Token::new(
                         TokenKind::StringLiteral,
-                        self.cursor.slice_from(token_start),
+                        self.cursor.slice_from(start),
                         Span {
-                            start: token_start,
+                            start,
                             end: self.cursor.position,
                         },
                     ));
@@ -634,14 +634,14 @@ impl Lexer {
 
     #[inline]
     fn make_token(&mut self, kind: TokenKind, length: usize) -> Token {
-        let token_start = self.cursor.position;
+        let start = self.cursor.position;
         self.cursor.advance_by(length);
 
         Token::new(
             kind,
-            self.cursor.slice_from(token_start),
+            self.cursor.slice_from(start),
             Span {
-                start: token_start,
+                start,
                 end: self.cursor.position,
             },
         )
