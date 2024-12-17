@@ -2,7 +2,7 @@
 #[non_exhaustive]
 pub enum Value {
     Integer(i64),
-    Natural(u64),
+    Cardinal(u64),
     Real(f64),
     Boolean(bool),
 
