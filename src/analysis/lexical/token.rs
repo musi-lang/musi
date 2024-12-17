@@ -40,7 +40,7 @@ pub enum TokenKind {
     Identifer,
 
     // Literals
-    NumberLiteral,
+    NumbericLiteral,
     StringLiteral,
     CharacterLiteral,
 
