@@ -60,7 +60,7 @@ impl Cursor {
     pub fn next_byte(&self) -> Option<u8> {
         self.source
             .bytes
-            .get(self.offset.checked_add(1).unwrap_or(self.offset))
+            .get(self.offset.saturating_add(1))
             .copied()
     }
 
