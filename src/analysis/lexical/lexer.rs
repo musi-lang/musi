@@ -655,14 +655,14 @@ impl Lexer {
                     return false;
                 }
 
-                matches!((pattern.first(), pattern.get(1)), (Some(&first), Some(&second)) if self.cursor.peek_matches_pair(first, second))
+                matches!((pattern.first(), pattern.get(1)), (Some(&first), Some(&second)) if self.cursor.matches_pair(first, second))
             }
             3 => {
                 if pattern.len() < 3 {
                     return false;
                 }
 
-                matches!((pattern.first(), pattern.get(1), pattern.get(2)), (Some(&first), Some(&second), Some(&third)) if self.cursor.peek_matches_triplet(first, second, third))
+                matches!((pattern.first(), pattern.get(1), pattern.get(2)), (Some(&first), Some(&second), Some(&third)) if self.cursor.matches_triplet(first, second, third))
             }
             _ => false,
         });
