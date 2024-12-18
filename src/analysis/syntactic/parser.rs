@@ -89,7 +89,7 @@ impl Parser {
         }
 
         Ok(Program {
-            statements,
+            body: statements,
             span: start_span,
         })
     }
@@ -103,7 +103,7 @@ impl Parser {
                     StatementKind::Declaration(self.parse_variable_declaration()?)
                 }
 
-                TokenKind::If => StatementKind::Expression(self.parse_if_expression()?),
+                TokenKind::If => StatementKind::Expression(self.parse_if_then_expression()?),
                 // TokenKind::While => self.parse_while_statement()?,
                 // TokenKind::Return => self.parse_return_statement()?,
                 _ => StatementKind::Expression(self.parse_expression()?),
@@ -137,21 +137,15 @@ impl Parser {
             };
 
         Ok(Declaration::Variable {
-            name,
             mutable,
-            type_annotation: None,
+            name,
             initialiser: Some(initialiser),
         })
     }
 
     fn parse_expression(&mut self) -> MusiResult<Expression> {
         let precedence = self.parse_precedence(Precedence::Assignment)?;
-
-        Ok(Expression {
-            kind: precedence.kind,
-            type_annotation: None,
-            span: precedence.span,
-        })
+        Ok(precedence)
     }
 
     fn parse_precedence(&mut self, precedence: Precedence) -> MusiResult<Expression> {
@@ -182,7 +176,6 @@ impl Parser {
                             right: Box::new(right),
                         },
                     },
-                    type_annotation: None,
                     span,
                 };
             } else {
@@ -215,7 +208,6 @@ impl Parser {
                         operator,
                         operand: Box::new(operand),
                     },
-                    type_annotation: None,
                     span,
                 })
             }
@@ -261,11 +253,7 @@ impl Parser {
             _ => return Err(self.error("unexpected token in expression")),
         };
 
-        Ok(Expression {
-            kind,
-            type_annotation: None,
-            span,
-        })
+        Ok(Expression { kind, span })
     }
 
     fn parse_numeric_literal(&self, lexeme: &[u8]) -> MusiResult<Value> {
@@ -313,7 +301,7 @@ impl Parser {
         Ok(Value::Integer(value))
     }
 
-    fn parse_if_expression(&mut self) -> MusiResult<Expression> {
+    fn parse_if_then_expression(&mut self) -> MusiResult<Expression> {
         self.consume();
 
         let start_span = self.peek().map_or_else(Span::default, |token| token.span);
@@ -322,15 +310,14 @@ impl Parser {
         self.expect(TokenKind::Then, "expected 'then' after condition")?;
 
         let then_branch = if self.check(TokenKind::Newline) {
-            Box::new(self.parse_indented_block_expression()?)
+            Box::new(self.parse_block_expression()?)
         } else {
             Box::new(self.parse_expression()?)
         };
-
         let else_branch = if self.check(TokenKind::Else) {
             self.consume();
             if self.check(TokenKind::If) {
-                Some(Box::new(self.parse_if_expression()?))
+                Some(Box::new(self.parse_if_then_expression()?))
             } else {
                 Some(Box::new(self.parse_expression()?))
             }
@@ -341,10 +328,6 @@ impl Parser {
         let end_span = self
             .previous()
             .map_or_else(Span::default, |token| token.span);
-        let span = Span {
-            start: start_span.start,
-            end: end_span.end,
-        };
 
         Ok(Expression {
             kind: ExpressionKind::If {
@@ -352,8 +335,10 @@ impl Parser {
                 then_branch,
                 else_branch,
             },
-            type_annotation: None,
-            span,
+            span: Span {
+                start: start_span.start,
+                end: end_span.end,
+            },
         })
     }
 
@@ -364,17 +349,14 @@ impl Parser {
 
         let mut parameters = vec![];
         while !self.check(TokenKind::RightParen) {
-            let parameter_name = String::from_utf8(
+            let name = String::from_utf8(
                 self.expect(TokenKind::Identifer, "expected parameter name")?
                     .lexeme,
             )
             .map_err(|_error| self.error("invalid UTF-8 sequence in parameter name"))?
             .into();
 
-            parameters.push(Parameter {
-                name: parameter_name,
-                type_annotation: None,
-            });
+            parameters.push(Parameter { name });
 
             if !self.check(TokenKind::RightParen) {
                 self.expect(TokenKind::Comma, "expected ',' between parameters")?;
@@ -385,18 +367,14 @@ impl Parser {
         self.expect(TokenKind::MinusGreater, "expected '->' after parameters")?;
 
         let body = if self.check(TokenKind::Newline) {
-            self.parse_indented_block_expression()?
+            Box::new(self.parse_block_expression()?)
         } else {
-            self.parse_expression()?
+            Box::new(self.parse_expression()?)
         };
         let end_span = body.span;
 
         Ok(Expression {
-            kind: ExpressionKind::Lambda {
-                parameters,
-                body: Box::new(body),
-            },
-            type_annotation: None,
+            kind: ExpressionKind::Lambda { parameters, body },
             span: Span {
                 start: start_span.start,
                 end: end_span.end,
@@ -404,7 +382,7 @@ impl Parser {
         })
     }
 
-    fn parse_indented_block_expression(&mut self) -> MusiResult<Expression> {
+    fn parse_block_expression(&mut self) -> MusiResult<Expression> {
         let start_span = self
             .previous()
             .map(|token| token.span.start)
@@ -433,8 +411,7 @@ impl Parser {
         let end_span = self.peek().map(|token| token.span.end).unwrap_or_default();
 
         Ok(Expression {
-            kind: ExpressionKind::Block { statements },
-            type_annotation: None,
+            kind: ExpressionKind::Block { body: statements },
             span: Span {
                 start: start_span,
                 end: end_span,
@@ -473,20 +450,26 @@ impl Parser {
     }
 
     fn check_lambda_parameters(&self) -> bool {
-        let mut position = self.current_position;
-
-        if !matches!(self.tokens.get(position), Some(token) if token.kind == TokenKind::LeftParen) {
+        if !self.check(TokenKind::LeftParen) {
             return false;
         }
 
-        while let Some(token) = self.tokens.get(position) {
-            if token.kind == TokenKind::RightParen {
-                position = position.saturating_add(1);
+        let mut position = self.current_position.saturating_add(1);
 
-                return matches!(self.tokens.get(position), Some(arrow_token) if arrow_token.kind ==TokenKind::MinusGreater);
+        while position < self.tokens.len() {
+            match self.tokens.get(position) {
+                Some(delimiter) => {
+                    if delimiter.kind == TokenKind::RightParen {
+                        return matches!(
+                            self.tokens.get(position.saturating_add(1)),
+                            Some(operator) if operator.kind == TokenKind::MinusGreater
+                        );
+                    }
+
+                    position = position.saturating_add(1);
+                }
+                None => return false,
             }
-
-            position = position.saturating_add(1);
         }
 
         false
