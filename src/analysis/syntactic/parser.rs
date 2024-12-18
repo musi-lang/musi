@@ -341,26 +341,15 @@ impl Parser {
         let start_span = self.peek().map(|token| token.span).unwrap_or_default();
 
         self.expect(TokenKind::LeftParen, "expected '(' after lambda")?;
-
-        let mut parameters = vec![];
-        while !self.check(TokenKind::RightParen) {
-            let name = self.expect_identifier()?;
-
-            parameters.push(Parameter { name });
-
-            if !self.check(TokenKind::RightParen) {
-                self.expect(TokenKind::Comma, "expected ',' between parameters")?;
-            }
-        }
-
+        let parameters = self.parse_parameters()?;
         self.expect(TokenKind::RightParen, "expected ')' after parameters")?;
         self.expect(TokenKind::MinusGreater, "expected '->' after parameters")?;
-
         let body = if self.check(TokenKind::Newline) {
             Box::new(self.parse_block_expression()?)
         } else {
             Box::new(self.parse_expression()?)
         };
+
         let end_span = body.span;
 
         Ok(Expression {
@@ -407,6 +396,21 @@ impl Parser {
                 end: end_span,
             },
         })
+    }
+
+    fn parse_parameters(&mut self) -> MusiResult<Vec<Parameter>> {
+        let mut parameters = vec![];
+
+        while !self.check(TokenKind::RightParen) {
+            let name = self.expect_identifier()?;
+            parameters.push(Parameter { name });
+
+            if !self.check(TokenKind::RightParen) {
+                self.expect(TokenKind::Comma, "expected ',' between parameters")?;
+            }
+        }
+
+        Ok(parameters)
     }
 
     fn peek(&self) -> Option<&Token> {
