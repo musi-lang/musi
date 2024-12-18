@@ -59,6 +59,11 @@ pub struct Expression {
 pub enum ExpressionKind {
     Literal(Value),
     Variable(Box<str>),
+    If {
+        condition: Box<Expression>,
+        then_branch: Box<Expression>,
+        else_branch: Option<Box<Expression>>,
+    },
     Binary {
         left: Box<Expression>,
         operator: TokenKind,
@@ -82,11 +87,6 @@ pub enum ExpressionKind {
     },
     Block {
         statements: Vec<Statement>,
-    },
-    If {
-        condition: Box<Expression>,
-        then_branch: Box<Expression>,
-        else_branch: Option<Box<Expression>>,
     },
 }
 
