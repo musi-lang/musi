@@ -449,7 +449,6 @@ impl Lexer {
         Err(self.error("unclosed string literal"))
     }
 
-    #[inline]
     fn lex_radix_number(&mut self) -> MusiResult<()> {
         match self.cursor.peek_next() {
             Some(b'x' | b'X') => {
@@ -535,7 +534,6 @@ impl Lexer {
         Ok(())
     }
 
-    #[inline]
     fn lex_decimal_digits(&mut self) {
         while let Some(current) = self.cursor.peek() {
             if !current.is_ascii_digit() && current != b'_' {
@@ -632,7 +630,6 @@ impl Lexer {
         Ok(())
     }
 
-    #[inline]
     fn make_token(&mut self, kind: TokenKind, length: usize) -> Token {
         let start = self.cursor.position;
         self.cursor.advance_by(length);
@@ -647,7 +644,6 @@ impl Lexer {
         )
     }
 
-    #[inline]
     fn lex_multi_byte_token(&mut self, patterns: &[(TokenKind, &[u8])]) -> MusiResult<Token> {
         let matched = patterns.iter().find(|&&(_, pattern)| match pattern.len() {
             2 => {
@@ -678,7 +674,6 @@ impl Lexer {
         }
     }
 
-    #[inline]
     fn error(&self, message: impl Into<String>) -> Diagnostic {
         Diagnostic::error(
             message,
