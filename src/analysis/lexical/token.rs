@@ -33,7 +33,7 @@ pub enum TokenKind {
     Var,
     Where,
     When,
-    While,
+    // While,
     With,
     Yield,
 

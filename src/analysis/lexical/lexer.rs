@@ -41,7 +41,7 @@ const RESERVED_KEYWORDS: &[(&[u8], TokenKind)] = &[
     (b"var", TokenKind::Var),
     (b"when", TokenKind::When),
     (b"where", TokenKind::Where),
-    (b"while", TokenKind::While),
+    // (b"while", TokenKind::While),
     (b"with", TokenKind::With),
     (b"yield", TokenKind::Yield),
 ];
