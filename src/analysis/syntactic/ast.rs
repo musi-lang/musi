@@ -6,7 +6,7 @@ use crate::{
 #[non_exhaustive]
 #[derive(Debug)]
 pub struct Program {
-    pub statements: Vec<Statement>,
+    pub body: Vec<Statement>,
     pub span: Span,
 }
 
@@ -33,24 +33,21 @@ pub enum StatementKind {
 #[derive(Debug)]
 pub enum Declaration {
     Variable {
-        name: Box<str>,
         mutable: bool,
-        type_annotation: Option<TypeAnnotation>,
+        name: Box<str>,
         initialiser: Option<Expression>,
     },
-    Function {
-        name: Box<str>,
-        parameters: Vec<Parameter>,
-        return_type: Option<TypeAnnotation>,
-        body: Box<Statement>,
-    },
+    // Function {
+    //     name: Box<str>,
+    //     parameters: Vec<Parameter>,
+    //     body: Box<Statement>,
+    // },
 }
 
 #[non_exhaustive]
 #[derive(Debug)]
 pub struct Expression {
     pub kind: ExpressionKind,
-    pub type_annotation: Option<TypeAnnotation>,
     pub span: Span,
 }
 
@@ -86,7 +83,7 @@ pub enum ExpressionKind {
         value: Box<Expression>,
     },
     Block {
-        statements: Vec<Statement>,
+        body: Vec<Statement>,
     },
 }
 
@@ -94,13 +91,4 @@ pub enum ExpressionKind {
 #[derive(Debug)]
 pub struct Parameter {
     pub name: Box<str>,
-    pub type_annotation: Option<TypeAnnotation>,
-}
-
-#[non_exhaustive]
-#[derive(Debug)]
-pub struct TypeAnnotation {
-    pub name: Box<str>,
-    pub parameters: Vec<TypeAnnotation>,
-    pub span: Span,
 }
