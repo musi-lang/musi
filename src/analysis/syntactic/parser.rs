@@ -120,12 +120,7 @@ impl Parser {
     fn parse_variable_declaration(&mut self) -> MusiResult<Declaration> {
         let mutable = matches!(self.consume().kind, TokenKind::Var);
 
-        let name = String::from_utf8(
-            self.expect(TokenKind::Identifer, "expected variable name")?
-                .lexeme,
-        )
-        .map_err(|_error| self.error("invalid UTF-8 sequence in variable name"))?
-        .into();
+        let name = self.expect_identifier()?;
 
         self.expect(TokenKind::ColonEquals, "expected ':=' after variable name")?;
 
@@ -349,12 +344,7 @@ impl Parser {
 
         let mut parameters = vec![];
         while !self.check(TokenKind::RightParen) {
-            let name = String::from_utf8(
-                self.expect(TokenKind::Identifer, "expected parameter name")?
-                    .lexeme,
-            )
-            .map_err(|_error| self.error("invalid UTF-8 sequence in parameter name"))?
-            .into();
+            let name = self.expect_identifier()?;
 
             parameters.push(Parameter { name });
 
@@ -481,6 +471,15 @@ impl Parser {
         } else {
             Err(self.error(message))
         }
+    }
+
+    fn expect_identifier(&mut self) -> MusiResult<Box<str>> {
+        let identifier = String::from_utf8(
+            self.expect(TokenKind::Identifer, "expected identifier")?
+                .lexeme,
+        )
+        .map_err(|_error| self.error("invalid UTF-8 sequence in indentifier"))?;
+        Ok(identifier.into())
     }
 
     fn error(&self, message: &str) -> Diagnostic {
