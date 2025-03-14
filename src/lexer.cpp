@@ -171,11 +171,11 @@ namespace musi {
         }
 
         if (peek() == '0' && !is_at_end()) {
-            auto next_char = static_cast<char>(std::tolower(peek_next()));
-            if (next_char == 'x' || next_char == 'b' || next_char == 'o') {
+            auto next = static_cast<char>(std::tolower(peek_next()));
+            if (next == 'x' || next == 'b' || next == 'o') {
                 number += advance();
                 number += advance();
-                return lex_integer_radix(number, next_char);
+                return lex_integer_radix(number, next);
             }
         }
         return lex_numeric_literal(number, start_location);
@@ -183,12 +183,12 @@ namespace musi {
     auto Lexer::handle_textual_literal() -> LexResult<Token> {
         auto start_location = m_current_location;
 
-        auto quote_char = advance();
-        if (quote_char == '"' && peek() == '"' && peek_next() == '"') {
+        auto quote = advance();
+        if (quote == '"' && peek() == '"' && peek_next() == '"') {
             advance_by(2);
             return lex_triple_quoted_string(start_location);
         }
-        return lex_textual_literal(quote_char, start_location);
+        return lex_textual_literal(quote, start_location);
     }
 
     auto Lexer::lex_identifier_or_keyword() -> LexResult<Token> {
@@ -209,7 +209,8 @@ namespace musi {
     auto Lexer::lex_delimiter_or_operator() -> LexResult<Token> {
         auto start_location = m_current_location;
 
-        switch (advance()) {
+        auto current = advance();
+        switch (current) {
             case '(':
                 return make_token(Token::Kind::LeftParen, "(");
             case ')':
@@ -282,7 +283,7 @@ namespace musi {
                 return make_token(Token::Kind::Underscore, "_");
             default:
                 return make_error(
-                    errors::invalid(std::format("character '{}'", peek())),
+                    errors::invalid(std::format("character '{}'", current)),
                     start_location
                 );
         }
@@ -295,7 +296,7 @@ namespace musi {
         while (!is_at_end()) {
             if (peek() == '.') {
                 if (has_decimal_point) {
-                    return make_error(errors::expected_of("named member", "numeric literal"));
+                    return make_error(errors::multiple_in("decimal points", "real literal"));
                 }
 
                 if (peek_next() == '.' || peek_next() == '<') {
@@ -317,10 +318,7 @@ namespace musi {
         }
 
         if (number == "-" || number == ".") {
-            return make_error(
-                errors::invalid(std::format("numeric literal '{}'", number)),
-                start_location
-            );
+            return make_error(errors::invalid("numeric literal"), start_location);
         }
 
         if (has_decimal_point) {
@@ -387,8 +385,7 @@ namespace musi {
 
         return make_token(Token::Kind::RealLiteral, number);
     }
-    auto Lexer::lex_textual_literal(char quote_char, SourceLocation start_location)
-        -> LexResult<Token> {
+    auto Lexer::lex_textual_literal(char quote, SourceLocation start_location) -> LexResult<Token> {
         std::string content;
 
         while (!is_at_end()) {
@@ -399,22 +396,22 @@ namespace musi {
 
                 return make_error(
                     errors::unterminated(
-                        std::string(quote_char == '"' ? "string" : "character") + " literal"
+                        std::string(quote == '"' ? "string" : "character") + " literal"
                     ),
                     start_location
                 );
             }
 
             if (peek() == '\\') {
-                if (auto result = append_escape_sequence(content, quote_char); !result) {
+                if (auto result = append_escape_sequence(content, quote); !result) {
                     return std::unexpected(std::move(result).error());
                 }
                 continue;
             }
-            if (peek() == quote_char) {
+            if (peek() == quote) {
                 advance();
                 return make_token(
-                    quote_char == '"' ? Token::Kind::StrLiteral : Token::Kind::CharLiteral,
+                    quote == '"' ? Token::Kind::StrLiteral : Token::Kind::CharLiteral,
                     content,
                     start_location
                 );
@@ -424,9 +421,7 @@ namespace musi {
         }
 
         return make_error(
-            errors::unterminated(
-                std::string(quote_char == '"' ? "string" : "character") + " literal"
-            ),
+            errors::unterminated(std::string(quote == '"' ? "string" : "character") + " literal"),
             start_location
         );
     }
@@ -589,9 +584,9 @@ namespace musi {
         return content.at(current_offset - offset);
     }
     auto Lexer::advance() -> char {
-        auto ch = peek();
+        auto current = peek();
         auto current_offset = m_current_location.offset();
-        if (ch == '\n') {
+        if (current == '\n') {
             m_current_location = { m_current_location.filename(),
                                    { .line = m_current_location.line() + 1, .column = 1 },
                                    current_offset + 1 };
@@ -600,7 +595,7 @@ namespace musi {
                                    m_source.get().line_column(current_offset + 1),
                                    current_offset + 1 };
         }
-        return ch;
+        return current;
     }
     auto Lexer::advance_until(const std::function<bool()>& predicate) -> void {
         while (!is_at_end() && !predicate()) {

@@ -54,7 +54,7 @@ namespace musi {
             -> LexResult<Token>;
         [[nodiscard]] auto lex_integer_radix(std::string& number, char radix) -> LexResult<Token>;
         [[nodiscard]] auto lex_real_exponent(std::string& number) -> LexResult<Token>;
-        [[nodiscard]] auto lex_textual_literal(char quote_char, SourceLocation start_location)
+        [[nodiscard]] auto lex_textual_literal(char quote, SourceLocation start_location)
             -> LexResult<Token>;
         [[nodiscard]] auto lex_triple_quoted_string(SourceLocation start_location)
             -> LexResult<Token>;
