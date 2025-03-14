@@ -313,7 +313,10 @@ namespace musi {
         return {};
     }
     auto Parser::validate_then_branch() -> ParseResult<void> {
-        auto then_token = match_and_advance_after(Token::Kind::Then, "'if' condition");
+        auto then_token = match_and_advance(
+            Token::Kind::Then,
+            errors::expected_after("'then'", "'if' condition")
+        );
         if (!then_token) {
             return std::unexpected(std::move(then_token).error());
         }
@@ -352,7 +355,7 @@ namespace musi {
                     return make_error(errors::unexpected_in("','", "argument list"));
                 }
                 if (matches(Token::Kind::RightParen)) {
-                    return make_error(errors::unexpected_in("')'", "argument list"));
+                    return make_error(errors::unexpected_after("')'", "argument list"));
                 }
             }
         }
@@ -384,7 +387,7 @@ namespace musi {
                 return make_error(errors::unexpected_in("','", "parameter list"));
             }
             if (matches(Token::Kind::RightParen)) {
-                return make_error(errors::unexpected_in("')'", "parameter list"));
+                return make_error(errors::unexpected_after("')'", "parameter list"));
             }
         }
         return {};
@@ -498,7 +501,7 @@ namespace musi {
         }
 
         skip_newlines();
-        auto right_paren = match_and_advance_or_error(Token::Kind::RightParen, "expression");
+        auto right_paren = match_and_advance(Token::Kind::RightParen, errors::expected("')'"));
         if (!right_paren) {
             return std::unexpected(std::move(right_paren).error());
         }
@@ -585,7 +588,8 @@ namespace musi {
         }
 
         skip_newlines();
-        auto do_token = match_and_advance_after(Token::Kind::Do, "'while' condition");
+        auto do_token =
+            match_and_advance(Token::Kind::Do, errors::expected_after("'do'", "'while' condition"));
         if (!do_token) {
             return std::unexpected(std::move(do_token).error());
         }
@@ -635,7 +639,10 @@ namespace musi {
         m_block_depth++;
 
         skip_newlines();
-        auto indent = match_and_advance_at(Token::Kind::Indent, "start of block expression");
+        auto indent = match_and_advance(
+            Token::Kind::Indent,
+            errors::expected_at("indentation", "start of block")
+        );
         if (!indent) {
             m_block_depth--;
             return std::unexpected(std::move(indent).error());
@@ -656,7 +663,10 @@ namespace musi {
             statements.push_back(std::move(*statement));
         }
 
-        auto dedent = match_and_advance_at(Token::Kind::Dedent, "end of block expression");
+        auto dedent = match_and_advance(
+            Token::Kind::Dedent,
+            errors::expected_at("dedentation", "end of block")
+        );
         if (!dedent) {
             m_block_depth--;
             return std::unexpected(std::move(dedent).error());
@@ -701,7 +711,10 @@ namespace musi {
         return std::make_unique<BinaryExpression>(op, std::move(left), std::move(*right));
     }
     auto Parser::parse_call_expression(ExpressionPtr left) -> ParseResult<ExpressionPtr> {
-        auto left_paren = match_and_advance_or_error(Token::Kind::LeftParen, "expression list");
+        auto left_paren = match_and_advance(
+            Token::Kind::LeftParen,
+            errors::expected_before("'('", "expression list")
+        );
         if (!left_paren) {
             return std::unexpected(std::move(left_paren).error());
         }
@@ -713,7 +726,10 @@ namespace musi {
             return std::unexpected(std::move(argument_result).error());
         }
 
-        auto right_paren = match_and_advance_or_error(Token::Kind::RightParen, "expression list");
+        auto right_paren = match_and_advance(
+            Token::Kind::RightParen,
+            errors::expected_after("')'", "expression list")
+        );
         if (!right_paren) {
             return std::unexpected(std::move(right_paren).error());
         }
@@ -803,7 +819,10 @@ namespace musi {
         }
         auto name = std::make_unique<IdentifierExpression>(*name_token);
 
-        auto colon_equals = match_and_advance_after(Token::Kind::ColonEquals, "variable name");
+        auto colon_equals = match_and_advance(
+            Token::Kind::ColonEquals,
+            errors::expected_after("':='", "variable declaration")
+        );
         if (!colon_equals) {
             return std::unexpected(std::move(colon_equals).error());
         }
@@ -835,9 +854,12 @@ namespace musi {
         }
         auto name = std::make_unique<IdentifierExpression>(*name_token);
 
-        auto left_paren = match_and_advance_after(
+        auto left_paren = match_and_advance(
             Token::Kind::LeftParen,
-            std::format("{} name", has_return_type ? "function" : "procedure")
+            errors::expected_after(
+                "'('",
+                std::format("{} name", has_return_type ? "function" : "procedure")
+            )
         );
         if (!left_paren) {
             return std::unexpected(std::move(left_paren).error());
@@ -856,12 +878,18 @@ namespace musi {
             parameters.push_back(std::make_unique<IdentifierExpression>(parameter_token));
         }
 
-        auto right_paren = match_and_advance_or_error(Token::Kind::RightParen, "parameter list");
+        auto right_paren = match_and_advance(
+            Token::Kind::RightParen,
+            errors::expected_after("')'", "parameter list")
+        );
         if (!right_paren) {
             return std::unexpected(std::move(right_paren).error());
         }
 
-        auto colon_equals = match_and_advance_after(Token::Kind::ColonEquals, "parameter list");
+        auto colon_equals = match_and_advance(
+            Token::Kind::ColonEquals,
+            errors::expected_after("':='", "parameter list")
+        );
         if (!colon_equals) {
             return std::unexpected(std::move(colon_equals).error());
         }

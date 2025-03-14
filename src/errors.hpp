@@ -23,6 +23,12 @@ namespace musi::errors {
     ) {
         return std::format("expected {} at {}", item, context);
     }
+    static constexpr auto expected_before(
+        std::convertible_to<std::string_view> auto item,
+        std::convertible_to<std::string_view> auto context
+    ) {
+        return std::format("expected {} before {}", item, context);
+    }
     static constexpr auto expected_in(
         std::convertible_to<std::string_view> auto item,
         std::convertible_to<std::string_view> auto context
@@ -52,9 +58,21 @@ namespace musi::errors {
     static constexpr auto mixed(std::convertible_to<std::string_view> auto item) {
         return std::format("mixed {}", item);
     }
+    static constexpr auto multiple_in(
+        std::convertible_to<std::string_view> auto item,
+        std::convertible_to<std::string_view> auto context
+    ) {
+        return std::format("multiple {} in {}", item, context);
+    }
 
     static constexpr auto unexpected(std::convertible_to<std::string_view> auto item) {
         return std::format("unexpected {}", item);
+    }
+    static constexpr auto unexpected_after(
+        std::convertible_to<std::string_view> auto item,
+        std::convertible_to<std::string_view> auto context
+    ) {
+        return std::format("unexpected {} after {}", item, context);
     }
     static constexpr auto unexpected_in(
         std::convertible_to<std::string_view> auto item,

@@ -3,7 +3,6 @@
 #include <expected>
 
 #include "diagnostics.hpp"
-#include "errors.hpp"
 #include "node.hpp"
 #include "token.hpp"
 
@@ -199,29 +198,6 @@ namespace musi {
                 return make_error(error_message);
             }
             return { advance() };
-        }
-        [[nodiscard]] auto match_and_advance_or_error(
-            Token::Kind kind,
-            std::string_view error_context
-        ) -> ParseResult<Token> {
-            return match_and_advance(
-                kind,
-                errors::expected_in(magic_enum::enum_name(kind), error_context)
-            );
-        }
-        [[nodiscard]] auto match_and_advance_after(Token::Kind kind, std::string_view after_what)
-            -> ParseResult<Token> {
-            return match_and_advance(
-                kind,
-                errors::expected_after(magic_enum::enum_name(kind), after_what)
-            );
-        }
-        [[nodiscard]] auto match_and_advance_at(Token::Kind kind, std::string_view at_what)
-            -> ParseResult<Token> {
-            return match_and_advance(
-                kind,
-                errors::expected_at(magic_enum::enum_name(kind), at_what)
-            );
         }
 
         auto parse_expression(Precedence precedence = Precedence::None)
