@@ -30,7 +30,6 @@ namespace musi {
         virtual auto visit_return_expression(class ReturnExpression& node) -> std::any = 0;
 
         virtual auto visit_expression_statement(class ExpressionStatement& node) -> std::any = 0;
-
         virtual auto visit_variable_declaration(class VariableDeclaration& node) -> std::any = 0;
         virtual auto visit_subprogram_declaration(class SubprogramDeclaration& node)
             -> std::any = 0;
@@ -333,7 +332,6 @@ namespace musi {
     private:
         ExpressionPtr m_expression;
     };
-
     class VariableDeclaration final : public Declaration {
     public:
         VariableDeclaration(IdentifierExpressionPtr name, Token kind, ExpressionPtr value)
