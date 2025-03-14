@@ -50,14 +50,14 @@ namespace musi {
         return std::isxdigit(ch) != 0;
     }
 
-    static constexpr auto to_upper(std::string_view str) -> std::string {
+    static constexpr auto to_upper_str(std::string_view str) -> std::string {
         std::string result(str);
         std::ranges::transform(result, result.begin(), [](unsigned char ch) {
             return std::toupper(ch);
         });
         return result;
     }
-    static constexpr auto to_lower(std::string_view str) -> std::string {
+    static constexpr auto to_lower_str(std::string_view str) -> std::string {
         std::string result(str);
         std::ranges::transform(result, result.begin(), [](unsigned char ch) {
             return std::tolower(ch);
