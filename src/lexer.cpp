@@ -79,71 +79,13 @@ namespace musi {
         if (peek() == '#') {
             return handle_comments();
         }
-
-        return handle_character(peek());
-    }
-    auto Lexer::handle_line_start() -> LexResult<Token> {
-        count_leading_whitespace();
-
-        if (peek() != '#' && peek() != '\n' && peek() != '\r') {
-            if (m_current_indent > m_indent_stack.back()) {
-                return lex_indent(m_current_indent);
-            }
-            if (m_current_indent < m_indent_stack.back()) {
-                return lex_dedent(m_current_indent);
-            }
-
-            m_at_line_start = false;
-        }
-
-        return std::unexpected(make_none().error());
-    }
-    auto Lexer::handle_comments() -> LexResult<Token> {
-        while (peek() == '#') {
-            skip_comments();
-            if (peek() == '\n' || peek() == '\r') {
-                return lex_newline();
-            }
-            count_leading_whitespace();
-        }
-
-        return next_token();
-    }
-    auto Lexer::handle_character(char ch) -> LexResult<Token> {
-        switch (ch) {
-            case '\n':
-            case '\r':
-                return lex_newline();
-            case ' ':
-            case '\t':
-                count_leading_whitespace();
-                return next_token();
-            case '"':
-            case '\'':
-            case '\\':
-                return lex_textual_literal();
-            case '-':
-                if (is_digit(peek_next())) {
-                    return lex_numeric();
-                }
-                return lex_delimiter_or_operator();
-            default:
-                if (is_at_end()) {
-                    return make_none();
-                }
-                if (is_digit(ch)) {
-                    return lex_numeric();
-                }
-                if (is_identifier_start(ch)) {
-                    return lex_identifier_or_keyword();
-                }
-                return lex_delimiter_or_operator();
-        }
+        return handle_characters(peek());
     }
     auto Lexer::match_operator_sequence(
         std::span<const std::pair<Token::Kind, std::string_view>> patterns
     ) -> LexResult<Token> {
         auto current_position = m_current_location.offset() - 1;
+
         auto content = m_source.get().content();
 
         for (const auto& [kind, pattern] : patterns) {
@@ -159,7 +101,94 @@ namespace musi {
             }
         }
 
-        return make_error(errors::unknown(std::format("pattern '{}'", patterns.front().second)));
+        return make_error(errors::invalid("operator sequence"));
+    }
+    auto Lexer::handle_line_start() -> LexResult<Token> {
+        count_leading_whitespace();
+
+        if (peek() != '#' && peek() != '\n' && peek() != '\r') {
+            if (m_current_indent > m_indent_stack.back()) {
+                return lex_indent(m_current_indent);
+            }
+            if (m_current_indent < m_indent_stack.back()) {
+                return lex_dedent(m_current_indent);
+            }
+            m_at_line_start = false;
+        }
+
+        return std::unexpected(make_none().error());
+    }
+    auto Lexer::handle_comments() -> LexResult<Token> {
+        while (peek() == '#') {
+            skip_comments();
+
+            if (peek() == '\n' || peek() == '\r') {
+                return lex_newline();
+            }
+
+            count_leading_whitespace();
+        }
+
+        return next_token();
+    }
+    auto Lexer::handle_characters(char ch) -> LexResult<Token> {
+        switch (ch) {
+            case '\n':
+            case '\r':
+                return lex_newline();
+            case ' ':
+            case '\t':
+                count_leading_whitespace();
+                return next_token();
+            case '"':
+            case '\'':
+            case '\\':
+                return handle_textual_literal();
+            case '-':
+                if (is_digit(peek_next())) {
+                    return handle_numeric_literal();
+                }
+                return lex_delimiter_or_operator();
+            default:
+                if (is_at_end()) {
+                    return make_none();
+                }
+                if (is_digit(ch)) {
+                    return handle_numeric_literal();
+                }
+                if (is_identifier_start(ch)) {
+                    return lex_identifier_or_keyword();
+                }
+                return lex_delimiter_or_operator();
+        }
+    }
+    auto Lexer::handle_numeric_literal() -> LexResult<Token> {
+        auto start_location = m_current_location;
+
+        std::string number;
+        if (peek() == '-') {
+            number += advance();
+        }
+
+        if (peek() == '0' && !is_at_end()) {
+            auto next_char = static_cast<char>(std::tolower(peek_next()));
+            if (next_char == 'x' || next_char == 'b' || next_char == 'o') {
+                number += advance();
+                number += advance();
+                return lex_integer_radix(number, next_char);
+            }
+        }
+        return lex_numeric_literal(number, start_location);
+    }
+    auto Lexer::handle_textual_literal() -> LexResult<Token> {
+        auto start_location = m_current_location;
+
+        auto quote_char = advance();
+        if (quote_char == '"' && peek() == '"' && peek_next() == '"') {
+            advance_by(2);
+            return lex_triple_quoted_string(start_location);
+        }
+        return lex_textual_literal(quote_char, start_location);
     }
 
     auto Lexer::lex_identifier_or_keyword() -> LexResult<Token> {
@@ -167,7 +196,6 @@ namespace musi {
         while (!is_at_end() && (is_identifier_start(peek()) || is_identifier_continue(peek()))) {
             identifier += advance();
         }
-
         if (identifier == "true" || identifier == "false") {
             return make_token(Token::Kind::BoolLiteral, identifier);
         }
@@ -179,8 +207,9 @@ namespace musi {
         return make_token(Token::Kind::Identifier, identifier);
     }
     auto Lexer::lex_delimiter_or_operator() -> LexResult<Token> {
-        auto current_char = advance();
-        switch (current_char) {
+        auto start_location = m_current_location;
+
+        switch (advance()) {
             case '(':
                 return make_token(Token::Kind::LeftParen, "(");
             case ')':
@@ -197,7 +226,7 @@ namespace musi {
                 return make_token(Token::Kind::Plus, "+");
             case '-':
                 if (is_digit(peek())) {
-                    return lex_numeric();
+                    return handle_numeric_literal();
                 }
                 return match_operator_sequence({ {
                     { Token::Kind::MinusGreater, "->" },
@@ -252,35 +281,20 @@ namespace musi {
             case '_':
                 return make_token(Token::Kind::Underscore, "_");
             default:
-                return make_error(errors::unknown(std::format("character '{}'", current_char)));
+                return make_error(
+                    errors::invalid(std::format("character '{}'", peek())),
+                    start_location
+                );
         }
     }
-    auto Lexer::lex_numeric() -> LexResult<Token> {
-        std::string number;
-        auto start_location = m_current_location;
-
-        if (peek() == '-') {
-            number += advance();
-        }
-
-        if (peek() == '0' && !is_at_end()) {
-            auto next = static_cast<char>(std::tolower(static_cast<unsigned char>(peek_next())));
-            if (next == 'x' || next == 'b' || next == 'o') {
-                number += advance();
-                return lex_radix_number(number);
-            }
-        }
-
-        return lex_decimal_number(number, start_location);
-    }
-    auto Lexer::lex_decimal_number(std::string& number, SourceLocation start_location)
+    auto Lexer::lex_numeric_literal(std::string& number, SourceLocation start_location)
         -> LexResult<Token> {
-        bool has_decimal = false;
+        bool has_decimal_point = false;
         bool has_suffix = false;
 
         while (!is_at_end()) {
             if (peek() == '.') {
-                if (has_decimal) {
+                if (has_decimal_point) {
                     return make_error(errors::expected_of("named member", "numeric literal"));
                 }
 
@@ -288,12 +302,12 @@ namespace musi {
                     break;
                 }
 
-                has_decimal = true;
+                has_decimal_point = true;
                 number += advance();
             } else if (is_digit(peek())) {
                 number += advance();
             } else if (peek() == 'e' || peek() == 'E') {
-                return lex_exponent(number);
+                return lex_real_exponent(number);
             } else if (!has_suffix && peek() == 'N') {
                 has_suffix = true;
                 number += advance();
@@ -309,66 +323,71 @@ namespace musi {
             );
         }
 
-        return make_token(Token::Kind::NumericLiteral, number, start_location);
-    }
-    auto Lexer::lex_radix_number(std::string& number) -> LexResult<Token> {
-        number += advance();
-        auto make_number = [&](auto predicate) {
-            while (!is_at_end() && predicate(peek())) {
-                number += advance();
-            }
-            return make_token(Token::Kind::NumericLiteral, number);
-        };
-
-        switch (peek()) {
-            case 'x':
-            case 'X':
-                number += advance();
-                return make_number(is_xdigit);
-            case 'b':
-            case 'B':
-                number += advance();
-                return make_number([](auto ch) { return ch == '0' || ch == '1'; });
-            case 'o':
-            case 'O':
-                number += advance();
-                return make_number([](auto ch) { return ch >= '0' && ch <= '7'; });
-            default:
-                return make_error(errors::unknown(std::format("numeric base '{}'", number)));
+        if (has_decimal_point) {
+            return make_token(Token::Kind::RealLiteral, number, start_location);
         }
+        if (number.starts_with('-')) {
+            return make_token(Token::Kind::IntLiteral, number, start_location);
+        }
+        if (has_suffix) {
+            return make_token(Token::Kind::NatLiteral, number, start_location);
+        }
+        return make_token(Token::Kind::IntLiteral, number, start_location);
     }
-    auto Lexer::lex_exponent(std::string& number) -> LexResult<Token> {
-        number += advance();
-        if (peek() == '+' || peek() == '-') {
+    auto Lexer::lex_integer_radix(std::string& number, char radix) -> LexResult<Token> {
+        while (!is_at_end() && (is_alnum(peek()) || peek() == '_')) {
+            auto error_location = m_current_location;
+
+            if (peek() == '_') {
+                number += advance();
+                continue;
+            }
+
+            if (radix == 'x' && !is_xdigit(peek())) {
+                return make_error(
+                    errors::invalid_in("hexadecimal digit", "integer literal"),
+                    error_location
+                );
+            }
+            if (radix == 'b' && peek() != '0' && peek() != '1') {
+                return make_error(
+                    errors::invalid_in("binary digit", "integer literal"),
+                    error_location
+                );
+            }
+            if (radix == 'o' && (peek() < '0' || peek() > '7')) {
+                return make_error(
+                    errors::invalid_in("octal digit", "integer literal"),
+                    error_location
+                );
+            }
+
             number += advance();
         }
 
-        if (!is_digit(peek())) {
-            return make_error(errors::expected_in("digit", "exponent notation"));
+        return make_token(Token::Kind::IntLiteral, number);
+    }
+    auto Lexer::lex_real_exponent(std::string& number) -> LexResult<Token> {
+        number += advance();
+
+        if (peek() == '+' || peek() == '-') {
+            number += advance();
         }
+        if (!is_digit(peek())) {
+            return make_error(errors::expected_in("digit", "real exponent"));
+        }
+
         while (!is_at_end() && is_digit(peek())) {
             number += advance();
         }
 
         if (peek() == 'e' || peek() == 'E') {
-            return make_error(
-                errors::invalid_in(std::format("digit '{}'", peek()), "exponent notation")
-            );
+            return make_error(errors::invalid_in("digit", "real exponent"));
         }
 
-        return make_token(Token::Kind::NumericLiteral, number);
+        return make_token(Token::Kind::RealLiteral, number);
     }
-    auto Lexer::lex_textual_literal() -> LexResult<Token> {
-        auto start_location = m_current_location;
-
-        auto quote_char = advance();
-        if (quote_char == '"' && peek() == '"' && peek_next() == '"') {
-            advance_by(2);
-            return lex_3quote_string(start_location);
-        }
-        return lex_1quote_string(quote_char, start_location);
-    }
-    auto Lexer::lex_1quote_string(char quote_char, SourceLocation start_location)
+    auto Lexer::lex_textual_literal(char quote_char, SourceLocation start_location)
         -> LexResult<Token> {
         std::string content;
 
@@ -411,7 +430,7 @@ namespace musi {
             start_location
         );
     }
-    auto Lexer::lex_3quote_string(SourceLocation start_location) -> LexResult<Token> {
+    auto Lexer::lex_triple_quoted_string(SourceLocation start_location) -> LexResult<Token> {
         std::string content;
 
         uint32_t char_count = 0;
@@ -497,8 +516,7 @@ namespace musi {
             return make_error(std::format("escape sequence '\\{}' at end of file", peek()));
         }
 
-        auto escape_char = advance();
-        switch (std::tolower(escape_char)) {
+        switch (std::tolower(advance())) {
             case 'n':
                 return "\n";
             case 'r':
@@ -524,10 +542,7 @@ namespace musi {
             case 'u':
                 return make_error("unicode not implemented");
             default:
-                return make_error(
-                    errors::unknown(std::format("escape sequence '{}'", escape_char)),
-                    start_location
-                );
+                return make_error(errors::invalid_in("escape sequence", "literal"), start_location);
         }
     }
     auto Lexer::process_escape_sequence(char quote) -> LexResult<std::string> {
@@ -574,9 +589,9 @@ namespace musi {
         return content.at(current_offset - offset);
     }
     auto Lexer::advance() -> char {
-        auto current_char = peek();
+        auto ch = peek();
         auto current_offset = m_current_location.offset();
-        if (current_char == '\n') {
+        if (ch == '\n') {
             m_current_location = { m_current_location.filename(),
                                    { .line = m_current_location.line() + 1, .column = 1 },
                                    current_offset + 1 };
@@ -585,7 +600,7 @@ namespace musi {
                                    m_source.get().line_column(current_offset + 1),
                                    current_offset + 1 };
         }
-        return current_char;
+        return ch;
     }
     auto Lexer::advance_until(const std::function<bool()>& predicate) -> void {
         while (!is_at_end() && !predicate()) {
@@ -658,21 +673,20 @@ namespace musi {
         }
     }
     auto Lexer::sync_at_statement_boundary() -> bool {
-        auto current_char = peek();
-        if (current_char == '\n' || current_char == '\r' || current_char == ';') {
+        if (peek() == '\n' || peek() == '\r' || peek() == ';') {
             advance();
 
-            if (current_char == '\n' || current_char == '\r') {
+            if (peek() == '\n' || peek() == '\r') {
                 m_at_line_start = true;
                 m_current_indent = 0;
             }
             return true;
         }
-        if (current_char == '}' || current_char == ')' || current_char == ']') {
+        if (peek() == '}' || peek() == ')' || peek() == ']') {
             advance();
             return true;
         }
-        if (current_char == ':' && peek_next() == '=') {
+        if (peek() == ':' && peek_next() == '=') {
             advance_by(2);
             return true;
         }

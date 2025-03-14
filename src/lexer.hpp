@@ -41,22 +41,23 @@ namespace musi {
         [[nodiscard]] auto next_token() -> LexResult<Token>;
         [[nodiscard]] auto handle_line_start() -> LexResult<Token>;
         [[nodiscard]] auto handle_comments() -> LexResult<Token>;
-        [[nodiscard]] auto handle_character(char ch) -> LexResult<Token>;
+        [[nodiscard]] auto handle_characters(char ch) -> LexResult<Token>;
+        [[nodiscard]] auto handle_textual_literal() -> LexResult<Token>;
+        [[nodiscard]] auto handle_numeric_literal() -> LexResult<Token>;
         [[nodiscard]] auto match_operator_sequence(
             std::span<const std::pair<Token::Kind, std::string_view>> patterns
         ) -> LexResult<Token>;
 
         [[nodiscard]] auto lex_identifier_or_keyword() -> LexResult<Token>;
         [[nodiscard]] auto lex_delimiter_or_operator() -> LexResult<Token>;
-        [[nodiscard]] auto lex_numeric() -> LexResult<Token>;
-        [[nodiscard]] auto lex_decimal_number(std::string& number, SourceLocation start_location)
+        [[nodiscard]] auto lex_numeric_literal(std::string& number, SourceLocation start_location)
             -> LexResult<Token>;
-        [[nodiscard]] auto lex_radix_number(std::string& number) -> LexResult<Token>;
-        [[nodiscard]] auto lex_exponent(std::string& number) -> LexResult<Token>;
-        [[nodiscard]] auto lex_textual_literal() -> LexResult<Token>;
-        [[nodiscard]] auto lex_1quote_string(char quote_char, SourceLocation start_location)
+        [[nodiscard]] auto lex_integer_radix(std::string& number, char radix) -> LexResult<Token>;
+        [[nodiscard]] auto lex_real_exponent(std::string& number) -> LexResult<Token>;
+        [[nodiscard]] auto lex_textual_literal(char quote_char, SourceLocation start_location)
             -> LexResult<Token>;
-        [[nodiscard]] auto lex_3quote_string(SourceLocation start_location) -> LexResult<Token>;
+        [[nodiscard]] auto lex_triple_quoted_string(SourceLocation start_location)
+            -> LexResult<Token>;
         [[nodiscard]] auto lex_newline() -> LexResult<Token>;
         [[nodiscard]] auto lex_indent(uint32_t spaces) -> LexResult<Token>;
         [[nodiscard]] auto lex_dedent(uint32_t spaces) -> LexResult<Token>;
