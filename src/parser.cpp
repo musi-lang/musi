@@ -7,7 +7,6 @@ namespace musi {
         Vec<Box<Node>> nodes;
 
         skip_newlines();
-
         while (!is_at_end()) {
             auto statement = parse_statement();
             if (!statement) {
@@ -174,10 +173,10 @@ namespace musi {
                 skip_newlines();
             }
         } else if (has_more_statements()) {
-            if (!matches(Token::Kind::Semicolon)) {
-                return make_error(errors::expected("';'"));
+            auto semicolon = match_and_advance(Token::Kind::Semicolon, errors::expected("';'"));
+            if (!semicolon) {
+                return std::unexpected(std::move(semicolon).error());
             }
-            advance();
             skip_newlines();
         }
         return {};
@@ -215,10 +214,10 @@ namespace musi {
         return {};
     }
     auto Parser::validate_then_branch() -> ParseResult<void> {
-        if (!matches(Token::Kind::Then)) {
-            return make_error(errors::expected_after("'then'", "'if' condition"));
+        auto then_token = match_and_advance_after(Token::Kind::Then, "'if' condition");
+        if (!then_token) {
+            return std::unexpected(std::move(then_token).error());
         }
-        advance();
         skip_newlines();
         return {};
     }
@@ -226,7 +225,6 @@ namespace musi {
         if (!matches(Token::Kind::RightParen)) {
             while (!is_at_end()) {
                 skip_newlines();
-
                 if (matches(Token::Kind::Comma)) {
                     return make_error(errors::unexpected_in("','", "argument list"));
                 }
@@ -251,7 +249,6 @@ namespace musi {
                 }
                 advance();
                 skip_newlines();
-
                 if (matches(Token::Kind::Comma)) {
                     return make_error(errors::unexpected_in("','", "argument list"));
                 }
@@ -265,7 +262,6 @@ namespace musi {
     auto Parser::validate_parameters(Vec<Token>& parameters) -> ParseResult<void> {
         while (!is_at_end()) {
             skip_newlines();
-
             if (matches(Token::Kind::Comma)) {
                 return make_error(errors::unexpected_in("','", "parameter list"));
             }
@@ -277,7 +273,6 @@ namespace musi {
             parameters.push_back(*parameter);
 
             skip_newlines();
-
             if (matches(Token::Kind::RightParen)) {
                 break;
             }
@@ -286,7 +281,6 @@ namespace musi {
             }
             advance();
             skip_newlines();
-
             if (matches(Token::Kind::Comma)) {
                 return make_error(errors::unexpected_in("','", "parameter list"));
             }
@@ -328,7 +322,6 @@ namespace musi {
         if (matches(Token::Kind::Dedent) || matches(Token::Kind::Eof)) {
             return make_error(errors::expected("expression"));
         }
-
         skip_newlines();
 
         auto statement = [&]() -> ParseResult<StatementPtr> {
@@ -343,11 +336,9 @@ namespace musi {
                     return parse_expression_statement();
             }
         }();
-
         if (!statement) {
             return std::unexpected(std::move(statement).error());
         }
-
         return statement;
     }
 
@@ -398,11 +389,10 @@ namespace musi {
         }
 
         skip_newlines();
-
-        if (!matches(Token::Kind::RightParen)) {
-            return make_error(errors::expected_in("')'", "expression"));
+        auto right_paren = match_and_advance_or_error(Token::Kind::RightParen, "expression");
+        if (!right_paren) {
+            return std::unexpected(std::move(right_paren).error());
         }
-        advance();
 
         return expression;
     }
@@ -441,7 +431,6 @@ namespace musi {
         }
 
         skip_newlines();
-
         auto then_result = validate_then_branch();
         if (!then_result) {
             return std::unexpected(std::move(then_result).error());
@@ -451,14 +440,12 @@ namespace musi {
         if (!then_branch) {
             return std::unexpected(std::move(then_branch).error());
         }
-
         skip_newlines();
 
         ExpressionPtr else_branch = nullptr;
         if (matches(Token::Kind::Else)) {
             advance();
             skip_newlines();
-
             if (matches(Token::Kind::If)) {
                 auto nested_if = parse_if_expression();
                 if (!nested_if) {
@@ -489,11 +476,10 @@ namespace musi {
         }
 
         skip_newlines();
-
-        if (!matches(Token::Kind::Do)) {
-            return make_error(errors::expected_after("'do'", "'while' condition"));
+        auto do_token = match_and_advance_after(Token::Kind::Do, "'while' condition");
+        if (!do_token) {
+            return std::unexpected(std::move(do_token).error());
         }
-        advance();
         skip_newlines();
 
         auto body = parse_expression_or_block_expression();
@@ -512,9 +498,11 @@ namespace musi {
         }
 
         skip_newlines();
-
         if (matches(Token::Kind::Then)) {
-            advance();
+            auto then_token = match_and_advance(Token::Kind::Then, "");
+            if (!then_token) {
+                return std::unexpected(std::move(then_token).error());
+            }
             skip_newlines();
 
             auto body = parse_expression_or_block_expression();
@@ -538,15 +526,11 @@ namespace musi {
         m_block_depth++;
 
         skip_newlines();
-
-        if (!matches(Token::Kind::Indent)) {
+        auto indent = match_and_advance_at(Token::Kind::Indent, "start of block expression");
+        if (!indent) {
             m_block_depth--;
-            return make_error(errors::expected_at(
-                magic_enum::enum_name(Token::Kind::Indent),
-                "start of block expression"
-            ));
+            return std::unexpected(std::move(indent).error());
         }
-        advance();
         skip_newlines();
 
         Vec<StatementPtr> statements;
@@ -563,14 +547,11 @@ namespace musi {
             statements.push_back(std::move(*statement));
         }
 
-        if (!matches(Token::Kind::Dedent)) {
+        auto dedent = match_and_advance_at(Token::Kind::Dedent, "end of block expression");
+        if (!dedent) {
             m_block_depth--;
-            return make_error(errors::expected_at(
-                magic_enum::enum_name(Token::Kind::Dedent),
-                "end of block expression"
-            ));
+            return std::unexpected(std::move(dedent).error());
         }
-        advance();
 
         m_block_depth--;
         return std::make_unique<BlockExpression>(std::move(statements));
@@ -611,10 +592,10 @@ namespace musi {
         return std::make_unique<BinaryExpression>(op, std::move(left), std::move(*right));
     }
     auto Parser::parse_call_expression(ExpressionPtr left) -> ParseResult<ExpressionPtr> {
-        if (!matches(Token::Kind::LeftParen)) {
-            return make_error(errors::expected_in("'('", "expression list"));
+        auto left_paren = match_and_advance_or_error(Token::Kind::LeftParen, "expression list");
+        if (!left_paren) {
+            return std::unexpected(std::move(left_paren).error());
         }
-        advance();
         skip_newlines();
 
         Vec<ExpressionPtr> arguments;
@@ -623,10 +604,10 @@ namespace musi {
             return std::unexpected(std::move(argument_result).error());
         }
 
-        if (!matches(Token::Kind::RightParen)) {
-            return make_error(errors::expected_in("')'", "expression list"));
+        auto right_paren = match_and_advance_or_error(Token::Kind::RightParen, "expression list");
+        if (!right_paren) {
+            return std::unexpected(std::move(right_paren).error());
         }
-        advance();
 
         return std::make_unique<CallExpression>(std::move(left), std::move(arguments));
     }
@@ -714,10 +695,10 @@ namespace musi {
         }
         auto name = std::make_unique<IdentifierExpression>(*name_token);
 
-        if (!matches(Token::Kind::ColonEquals)) {
-            return make_error(errors::expected_after("':='", "variable name"));
+        auto colon_equals = match_and_advance_after(Token::Kind::ColonEquals, "variable name");
+        if (!colon_equals) {
+            return std::unexpected(std::move(colon_equals).error());
         }
-        advance();
 
         auto value = parse_expression(Precedence::None);
         if (!value) {
@@ -745,12 +726,13 @@ namespace musi {
         }
         auto name = std::make_unique<IdentifierExpression>(*name_token);
 
-        if (!matches(Token::Kind::LeftParen)) {
-            return make_error(
-                errors::expected_after("'('", has_return_type ? "function name" : "procedure name")
-            );
+        auto left_paren = match_and_advance_after(
+            Token::Kind::LeftParen,
+            has_return_type ? "function name" : "procedure name"
+        );
+        if (!left_paren) {
+            return std::unexpected(std::move(left_paren).error());
         }
-        advance();
 
         Vec<Token> parameter_tokens;
         if (!matches(Token::Kind::RightParen)) {
@@ -765,14 +747,15 @@ namespace musi {
             parameters.push_back(std::make_unique<IdentifierExpression>(parameter_token));
         }
 
-        if (!matches(Token::Kind::RightParen)) {
-            return make_error(errors::expected_in("')'", "parameter list"));
+        auto right_paren = match_and_advance_or_error(Token::Kind::RightParen, "parameter list");
+        if (!right_paren) {
+            return std::unexpected(std::move(right_paren).error());
         }
-        advance();
-        if (!matches(Token::Kind::ColonEquals)) {
-            return make_error(errors::expected_after("':='", "parameter list"));
+
+        auto colon_equals = match_and_advance_after(Token::Kind::ColonEquals, "parameter list");
+        if (!colon_equals) {
+            return std::unexpected(std::move(colon_equals).error());
         }
-        advance();
         skip_newlines();
 
         auto body =
