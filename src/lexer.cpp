@@ -498,7 +498,7 @@ namespace musi {
         }
 
         auto escape_char = advance();
-        switch (escape_char) {
+        switch (std::tolower(escape_char)) {
             case 'n':
                 return "\n";
             case 'r':
@@ -522,8 +522,7 @@ namespace musi {
             case 'v':
                 return "\v";
             case 'u':
-            case 'U':
-                return make_error("unicode escape sequences are not supported");
+                return make_error("unicode not implemented");
             default:
                 return make_error(
                     errors::unknown(std::format("escape sequence '{}'", escape_char)),
