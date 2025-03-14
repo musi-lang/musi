@@ -4,14 +4,11 @@
 #include "token.hpp"
 
 namespace musi {
-    // save me from this absolute dogshit lexical analysis.
-    // I'm so sorry for whoever decides that it would be a good idea to actually read the fuck out
-    // of it.
-    // if you by chance can refactor this, PLEASE FUCKING DO AND OPEN A PR. PLEASE...I'll fuck-a
-    // pair of tits for this.
     auto Lexer::lex() -> LexResult<Vec<Token>> {
         Vec<Token> tokens;
         Vec<Diagnostic> errors;
+
+        uint32_t consecutive_errors = 0;
 
         while (!is_at_end()) {
             auto start_offset = m_current_location.offset();
@@ -21,13 +18,22 @@ namespace musi {
                 if (is_at_end()) {
                     break;
                 }
+
                 errors.push_back(std::move(token).error());
+
                 if (m_current_location.offset() == start_offset) {
                     advance();
+                    consecutive_errors++;
+                    if (consecutive_errors > errors::MAX_CONSECUTIVE_ERRORS) {
+                        return make_error("too many lexical errors, aborting...");
+                    }
+                } else {
+                    consecutive_errors = 0;
                 }
                 continue;
             }
 
+            consecutive_errors = 0;
             tokens.push_back(*token);
         }
 
@@ -43,6 +49,18 @@ namespace musi {
         return tokens;
     }
 
+    auto Lexer::validate_indentation(uint32_t spaces, [[maybe_unused]] SourceLocation location)
+        -> bool {
+        if (!m_indent_width && spaces > 0) {
+            m_indent_width = spaces;
+            return true;
+        }
+        if (m_indent_width && spaces > 0) {
+            return spaces % *m_indent_width == 0;
+        }
+        return true;
+    }
+
     auto Lexer::next_token() -> LexResult<Token> {
         if (!m_pending_tokens.empty()) {
             auto pending_token = m_pending_tokens.front();
@@ -51,30 +69,46 @@ namespace musi {
         }
 
         if (m_at_line_start) {
-            count_leading_whitespace();
-
-            if (peek() != '#' && peek() != '\n' && peek() != '\r') {
-                if (m_current_indent > m_indent_stack.back()) {
-                    return lex_indent(m_current_indent);
-                }
-                if (m_current_indent < m_indent_stack.back()) {
-                    return lex_dedent(m_current_indent);
-                }
-
-                m_at_line_start = false;
+            if (auto result = handle_line_start(); result) {
+                return result;
             }
         }
 
+        if (peek() == '#') {
+            return handle_comments();
+        }
+
+        return handle_character(peek());
+    }
+    auto Lexer::handle_line_start() -> LexResult<Token> {
+        count_leading_whitespace();
+
+        if (peek() != '#' && peek() != '\n' && peek() != '\r') {
+            if (m_current_indent > m_indent_stack.back()) {
+                return lex_indent(m_current_indent);
+            }
+            if (m_current_indent < m_indent_stack.back()) {
+                return lex_dedent(m_current_indent);
+            }
+
+            m_at_line_start = false;
+        }
+
+        return std::unexpected(make_none().error());
+    }
+    auto Lexer::handle_comments() -> LexResult<Token> {
         while (peek() == '#') {
-            skip_comment();
+            skip_comments();
             if (peek() == '\n' || peek() == '\r') {
                 return lex_newline();
             }
             count_leading_whitespace();
         }
 
-        auto current_char = peek();
-        switch (current_char) {
+        return next_token();
+    }
+    auto Lexer::handle_character(char ch) -> LexResult<Token> {
+        switch (ch) {
             case '\n':
             case '\r':
                 return lex_newline();
@@ -88,24 +122,45 @@ namespace musi {
                 return lex_textual_literal();
             case '-':
                 if (is_digit(peek_next())) {
-                    return lex_numeric_literal();
+                    return lex_numeric();
                 }
-                return lex_symbol();
+                return lex_delimiter_or_operator();
             default:
                 if (is_at_end()) {
                     return make_none();
                 }
-                if (is_digit(current_char)) {
-                    return lex_numeric_literal();
+                if (is_digit(ch)) {
+                    return lex_numeric();
                 }
-                if (is_identifier_start(current_char)) {
-                    return lex_identifier();
+                if (is_identifier_start(ch)) {
+                    return lex_identifier_or_keyword();
                 }
-                return lex_symbol();
+                return lex_delimiter_or_operator();
         }
     }
+    auto Lexer::match_operator_sequence(
+        std::span<const std::pair<Token::Kind, std::string_view>> patterns
+    ) -> LexResult<Token> {
+        auto current_position = m_current_location.offset() - 1;
+        auto content = m_source.get().content();
 
-    auto Lexer::lex_identifier() -> LexResult<Token> {
+        for (const auto& [kind, pattern] : patterns) {
+            auto pattern_length = pattern.length();
+            if (current_position + pattern_length > content.length()) {
+                continue;
+            }
+
+            auto current_slice = content.substr(current_position, pattern_length);
+            if (current_slice == pattern) {
+                advance_by(static_cast<uint32_t>(pattern_length - 1));
+                return make_token(kind, pattern);
+            }
+        }
+
+        return make_error(errors::unknown(std::format("pattern '{}'", patterns.front().second)));
+    }
+
+    auto Lexer::lex_identifier_or_keyword() -> LexResult<Token> {
         std::string identifier;
         while (!is_at_end() && (is_identifier_start(peek()) || is_identifier_continue(peek()))) {
             identifier += advance();
@@ -121,7 +176,7 @@ namespace musi {
         }
         return make_token(Token::Kind::Identifier, identifier);
     }
-    auto Lexer::lex_symbol() -> LexResult<Token> {
+    auto Lexer::lex_delimiter_or_operator() -> LexResult<Token> {
         auto current_char = advance();
         switch (current_char) {
             case '(':
@@ -140,7 +195,7 @@ namespace musi {
                 return make_token(Token::Kind::Plus, "+");
             case '-':
                 if (is_digit(peek())) {
-                    return lex_numeric_literal();
+                    return lex_numeric();
                 }
                 return match_operator_sequence({ {
                     { Token::Kind::MinusGreater, "->" },
@@ -198,43 +253,46 @@ namespace musi {
                 return make_error(errors::unknown(std::format("character '{}'", current_char)));
         }
     }
-    // this is so fucking vile. holy FUCKING shit
-    auto Lexer::lex_numeric_literal() -> LexResult<Token> {
+    auto Lexer::lex_numeric() -> LexResult<Token> {
         std::string number;
+        auto start_location = m_current_location;
 
-        auto has_decimal = false;
-        auto has_suffix = false;
-
-        if /* non-positive integer */ (peek() == '-') {
+        if (peek() == '-') {
             number += advance();
         }
-        if /* hex, octal, binary */ (peek() == '0' && !has_suffix) {
-            switch (peek_next()) {
-                case 'x':
-                case 'X':
-                case 'b':
-                case 'B':
-                case 'o':
-                case 'O':
-                    return lex_radix_number(number);
-                default:
-                    break;
+
+        if (peek() == '0' && !is_at_end()) {
+            auto next = static_cast<char>(std::tolower(static_cast<unsigned char>(peek_next())));
+            if (next == 'x' || next == 'b' || next == 'o') {
+                number += advance();
+                return lex_radix_number(number);
             }
         }
 
-        // *puking noises*
+        return lex_decimal_number(number, start_location);
+    }
+    auto Lexer::lex_decimal_number(std::string& number, SourceLocation start_location)
+        -> LexResult<Token> {
+        bool has_decimal = false;
+        bool has_suffix = false;
+
         while (!is_at_end()) {
-            if /* real number */ (peek() == '.') {
+            if (peek() == '.') {
                 if (has_decimal) {
                     return make_error(errors::expected_of("named member", "numeric literal"));
                 }
+
+                if (peek_next() == '.' || peek_next() == '<') {
+                    break;
+                }
+
                 has_decimal = true;
                 number += advance();
             } else if (is_digit(peek())) {
                 number += advance();
-            } else if /* scientific notation */ ((peek() == 'e' || peek() == 'E')) {
+            } else if (peek() == 'e' || peek() == 'E') {
                 return lex_exponent(number);
-            } else if /* 0-inclusive natural number */ (!has_suffix && (peek() == 'N')) {
+            } else if (!has_suffix && peek() == 'N') {
                 has_suffix = true;
                 number += advance();
             } else {
@@ -243,9 +301,13 @@ namespace musi {
         }
 
         if (number == "-" || number == ".") {
-            return make_error(errors::invalid(std::format("numeric literal '{}'", number)));
+            return make_error(
+                errors::invalid(std::format("numeric literal '{}'", number)),
+                start_location
+            );
         }
-        return make_token(Token::Kind::NumericLiteral, number);
+
+        return make_token(Token::Kind::NumericLiteral, number, start_location);
     }
     auto Lexer::lex_radix_number(std::string& number) -> LexResult<Token> {
         number += advance();
@@ -300,13 +362,20 @@ namespace musi {
         auto quote_char = advance();
         if (quote_char == '"' && peek() == '"' && peek_next() == '"') {
             advance_by(2);
-            return lex_triple_quoted_string(start_location);
+            return lex_3quote_string(start_location);
         }
-
+        return lex_1quote_string(quote_char, start_location);
+    }
+    auto Lexer::lex_1quote_string(char quote_char, SourceLocation start_location)
+        -> LexResult<Token> {
         std::string content;
+
         while (!is_at_end()) {
             if (peek() == '\n' || is_at_end()) {
-                advance_until([this]() { return peek() == '\n'; });
+                if (peek() == '\n') {
+                    advance();
+                }
+
                 return make_error(
                     errors::unterminated(
                         std::string(quote_char == '"' ? "string" : "character") + " literal"
@@ -315,7 +384,7 @@ namespace musi {
                 );
             }
 
-            if /* escape sequence */ (peek() == '\\') {
+            if (peek() == '\\') {
                 if (auto result = append_escape_sequence(content, quote_char); !result) {
                     return std::unexpected(std::move(result).error());
                 }
@@ -340,16 +409,22 @@ namespace musi {
             start_location
         );
     }
-    auto Lexer::lex_triple_quoted_string(SourceLocation start_location) -> LexResult<Token> {
+    auto Lexer::lex_3quote_string(SourceLocation start_location) -> LexResult<Token> {
         std::string content;
+
+        uint32_t char_count = 0;
+
         while (!is_at_end()) {
-            if /* escape sequence */ (peek() == '\\') {
+            if (++char_count > MAX_STRING_LENGTH) {
+                return make_error(errors::exceeded("maximum string literal length"));
+            }
+
+            if (peek() == '\\') {
                 if (auto result = append_escape_sequence(content, '"'); !result) {
                     return std::unexpected(std::move(result).error());
                 }
                 continue;
             }
-
             if (peek() == '"' && peek_next() == '"' && peek_at(2) == '"') {
                 advance_by(3);
                 return make_token(Token::Kind::StrLiteral, content, start_location);
@@ -363,6 +438,7 @@ namespace musi {
     auto Lexer::lex_newline() -> LexResult<Token> {
         auto start_location = m_current_location;
         advance();
+
         m_at_line_start = true;
         if (peek_back(2) == '\r' && peek() == '\n') {
             return make_token(Token::Kind::Newline, "\\r\\n", start_location);
@@ -376,10 +452,7 @@ namespace musi {
             m_current_location.offset() - spaces
         );
 
-        if (!m_indent_width && spaces > 0) {
-            m_indent_width = spaces;
-        }
-        if (m_indent_width && spaces > 0 && spaces % *m_indent_width != 0) {
+        if (!validate_indentation(spaces, start_location)) {
             return make_error(
                 std::format("indentation of {} must be multiple of {}", spaces, *m_indent_width),
                 start_location
@@ -393,33 +466,24 @@ namespace musi {
     auto Lexer::lex_dedent(uint32_t spaces) -> LexResult<Token> {
         auto start_location = m_current_location;
 
-        if (spaces < m_indent_stack.back()) {
-            bool found = false;
-            for (auto indent : m_indent_stack) {
-                if (indent == spaces) {
-                    found = true;
-                    break;
-                }
-            }
-
-            if (!found) {
-                return make_error(errors::mismatched("indentation"));
-            }
-
-            while (!m_indent_stack.empty() && m_indent_stack.back() > spaces) {
-                m_indent_stack.pop_back();
-                m_pending_tokens.push(make_token(Token::Kind::Dedent, "", start_location));
-            }
-
-            if (!m_pending_tokens.empty()) {
-                auto pending_token = m_pending_tokens.front();
-                m_pending_tokens.pop();
-                return pending_token;
-            }
+        if (spaces >= m_indent_stack.back()) {
+            m_at_line_start = false;
+            return next_token();
         }
 
-        m_at_line_start = false;
-        return next_token();
+        if (!is_valid_dedent(spaces)) {
+            return make_error(errors::mismatched("indentation"), start_location);
+        }
+        generate_dedent_tokens(spaces, start_location);
+
+        if (!m_pending_tokens.empty()) {
+            auto pending_token = m_pending_tokens.front();
+            m_pending_tokens.pop();
+            m_at_line_start = false;
+            return pending_token;
+        }
+
+        return make_error(errors::unknown("dedent processing error"), start_location);
     }
 
     auto Lexer::convert_escape_sequence() -> LexResult<std::string> {
@@ -487,28 +551,11 @@ namespace musi {
         return {};
     }
 
-    auto Lexer::match_operator_sequence(
-        std::span<const std::pair<Token::Kind, std::string_view>> patterns
-    ) -> LexResult<Token> {
-        auto current_position = m_current_location.offset() - 1;
-        auto content = m_source.get().content();
-
-        for (const auto& [kind, pattern] : patterns) {
-            auto pattern_length = pattern.length();
-            if (current_position + pattern_length > content.length()) {
-                continue;
-            }
-
-            auto current_slice = content.substr(current_position, pattern_length);
-            if (current_slice == pattern) {
-                advance_by(static_cast<uint32_t>(pattern_length - 1));
-                return make_token(kind, pattern);
-            }
-        }
-
-        return make_error(errors::unknown(std::format("pattern '{}'", patterns.front().second)));
+    auto Lexer::is_valid_dedent(uint32_t spaces) -> bool {
+        return std::ranges::any_of(m_indent_stack, [spaces](auto indent) {
+            return indent == spaces;
+        });
     }
-
     auto Lexer::peek_at(uint32_t offset) const -> char {
         auto current_offset = m_current_location.offset();
         auto content = m_source.get().content();
@@ -549,7 +596,7 @@ namespace musi {
             advance();
         }
     }
-    auto Lexer::skip_comment() -> void {
+    auto Lexer::skip_comments() -> void {
         while (!is_at_end() && peek() != '\n') {
             advance();
         }
@@ -562,6 +609,7 @@ namespace musi {
         uint32_t spaces = 0;
         auto has_tabs = false;
         auto has_spaces = false;
+        auto start_location = m_current_location;
 
         while (peek() == ' ' || peek() == '\t') {
             if (peek() == '\t') {
@@ -575,10 +623,21 @@ namespace musi {
         }
 
         if (has_tabs && has_spaces) {
-            [[maybe_unused]] auto err = make_error(errors::mixed("tabs and spaces"));
+            auto diagnostic = Diagnostic(
+                DiagnosticSeverity::Error,
+                errors::mixed("tabs and spaces"),
+                SourceSpan { start_location, m_current_location.offset() - start_location.offset() }
+            );
+            m_diagnostics.get().emit_error(diagnostic.span(), std::string(diagnostic.message()));
         }
 
         m_current_indent = spaces;
+    }
+    auto Lexer::generate_dedent_tokens(uint32_t spaces, SourceLocation location) -> void {
+        while (!m_indent_stack.empty() && m_indent_stack.back() > spaces) {
+            m_indent_stack.pop_back();
+            m_pending_tokens.push(make_token(Token::Kind::Dedent, "", location));
+        }
     }
 
     auto Lexer::make_none() -> std::unexpected<Diagnostic> {
@@ -617,5 +676,4 @@ namespace musi {
 
         return { kind, lexeme, start_location };
     }
-
 }  // namespace musi
