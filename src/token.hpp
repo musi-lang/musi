@@ -109,7 +109,7 @@ namespace musi {
         };
 
         static constexpr auto map_keywords() -> Map<std::string, Kind> {
-            std::unordered_map<std::string, Kind> keyword_map;
+            Map<std::string, Kind> keyword_map;
 
             for (auto kind : magic_enum::enum_values<Kind>()) {
                 if (kind >= Kind::And && kind <= Kind::Yield) {

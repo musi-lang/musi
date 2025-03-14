@@ -399,13 +399,13 @@ namespace musi {
 }  // namespace musi
 
 template<>
-struct std::formatter<std::vector<musi::Box<musi::Node>>> {
+struct std::formatter<musi::Vec<musi::Box<musi::Node>>> {
     static constexpr auto parse(std::format_parse_context& ctx)
         -> std::format_parse_context::iterator {
         return ctx.begin();
     }
 
-    static auto format(const std::vector<musi::Box<musi::Node>>& nodes, std::format_context& ctx)
+    static auto format(const musi::Vec<musi::Box<musi::Node>>& nodes, std::format_context& ctx)
         -> std::format_context::iterator {
         musi::Json array = musi::Json::array();
         for (const auto& node : nodes) {
