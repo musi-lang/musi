@@ -41,6 +41,26 @@ namespace musi {
         [[nodiscard]] auto parse() -> ParseResult<Vec<Box<Node>>>;
 
     private:
+        [[nodiscard]] static auto is_sync_token(Token::Kind kind) -> bool {
+            switch (kind) {
+                case Token::Kind::Let:
+                case Token::Kind::Var:
+                case Token::Kind::Func:
+                case Token::Kind::Proc:
+                case Token::Kind::If:
+                case Token::Kind::Unless:
+                case Token::Kind::While:
+                case Token::Kind::For:
+                case Token::Kind::Return:
+                case Token::Kind::Indent:
+                case Token::Kind::Dedent:
+                case Token::Kind::LeftBrace:
+                case Token::Kind::RightBrace:
+                    return true;
+                default:
+                    return false;
+            }
+        }
         [[nodiscard]] static auto has_locations_on_same_line(
             const SourceLocation& first,
             const SourceLocation& second
@@ -117,6 +137,17 @@ namespace musi {
             }
         }
 
+        static auto could_start_expression(Token::Kind kind) -> bool {
+            return kind == Token::Kind::If || kind == Token::Kind::Unless
+                   || kind == Token::Kind::While || kind == Token::Kind::For
+                   || kind == Token::Kind::Return;
+        }
+        static auto could_end_expression(Token::Kind kind) -> bool {
+            return kind == Token::Kind::RightParen || kind == Token::Kind::RightBracket
+                   || kind == Token::Kind::RightBrace || kind == Token::Kind::Comma
+                   || kind == Token::Kind::Colon || kind == Token::Kind::ColonEquals;
+        }
+
         [[nodiscard]] auto peek_at(size_t offset) const -> const Token&;
         [[nodiscard]] auto peek() const -> const Token& {
             return peek_at(0);
@@ -138,6 +169,12 @@ namespace musi {
         auto advance() -> const Token&;
         auto advance_by(uint32_t count) -> void;
         auto skip_newlines() -> void;
+
+        auto sync() -> void;
+        auto sync_to_statement_boundary() -> bool;
+        auto sync_to_declaration_boundary() -> bool;
+        auto sync_to_block_boundary() -> bool;
+        auto sync_to_expression_boundary() -> bool;
 
         auto make_error(std::string_view message, Option<SourceSpan> span = std::nullopt)
             -> std::unexpected<Diagnostic>;

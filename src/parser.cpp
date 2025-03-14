@@ -5,16 +5,35 @@
 namespace musi {
     auto Parser::parse() -> ParseResult<Vec<Box<Node>>> {
         Vec<Box<Node>> nodes;
+        Vec<Diagnostic> errors;
+        uint32_t consecutive_errors = 0;
 
         skip_newlines();
         while (!is_at_end()) {
+            auto start_position = m_current_position;
+
             auto statement = parse_statement();
             if (!statement) {
-                return std::unexpected(std::move(statement).error());
+                errors.push_back(std::move(statement).error());
+
+                if (m_current_position == start_position) {
+                    consecutive_errors++;
+                    if (consecutive_errors > errors::MAX_CONSECUTIVE_ERRORS) {
+                        return make_error("too many consecutive parsing errors, aborting...");
+                    }
+                } else {
+                    consecutive_errors = 0;
+                }
+                continue;
             }
 
+            consecutive_errors = 0;
             nodes.push_back(std::move(*statement));
             skip_newlines();
+        }
+
+        if (!errors.empty() && nodes.empty()) {
+            return std::unexpected(std::move(errors.front()));
         }
 
         return nodes;
@@ -115,6 +134,86 @@ namespace musi {
         while (matches(Token::Kind::Newline)) {
             advance();
         }
+    }
+
+    auto Parser::sync() -> void {
+        if (sync_to_statement_boundary() || sync_to_declaration_boundary()
+            || sync_to_block_boundary() || sync_to_expression_boundary()) {
+            return;
+        }
+
+        if (!is_at_end()) {
+            advance();
+        }
+    }
+    auto Parser::sync_to_statement_boundary() -> bool {
+        while (!is_at_end()) {
+            if (matches(Token::Kind::Semicolon) || matches(Token::Kind::Newline)) {
+                advance();
+                skip_newlines();
+                return true;
+            }
+
+            if (is_sync_token(peek().kind())) {
+                return true;
+            }
+            advance();
+        }
+        return false;
+    }
+    auto Parser::sync_to_declaration_boundary() -> bool {
+        while (!is_at_end()) {
+            auto current_kind = peek().kind();
+            if (current_kind == Token::Kind::Let || current_kind == Token::Kind::Var
+                || current_kind == Token::Kind::Func || current_kind == Token::Kind::Proc) {
+                return true;
+            }
+
+            if (matches(Token::Kind::Semicolon) || matches(Token::Kind::Newline)) {
+                advance();
+                skip_newlines();
+                return true;
+            }
+            advance();
+        }
+        return false;
+    }
+    auto Parser::sync_to_block_boundary() -> bool {
+        while (!is_at_end()) {
+            auto current_kind = peek().kind();
+            if (current_kind == Token::Kind::Indent || current_kind == Token::Kind::Dedent
+                || current_kind == Token::Kind::LeftBrace
+                || current_kind == Token::Kind::RightBrace) {
+                return true;
+            }
+
+            if (matches(Token::Kind::Semicolon) || matches(Token::Kind::Newline)) {
+                advance();
+                skip_newlines();
+                return true;
+            }
+            advance();
+        }
+        return false;
+    }
+    auto Parser::sync_to_expression_boundary() -> bool {
+        while (!is_at_end()) {
+            auto current_kind = peek().kind();
+            if (could_end_expression(current_kind)) {
+                return true;
+            }
+            if (could_start_expression(current_kind)) {
+                return true;
+            }
+
+            if (matches(Token::Kind::Semicolon) || matches(Token::Kind::Newline)) {
+                advance();
+                skip_newlines();
+                return true;
+            }
+            advance();
+        }
+        return false;
     }
 
     auto Parser::make_error(std::string_view message, Option<SourceSpan> span)
@@ -294,17 +393,20 @@ namespace musi {
     auto Parser::parse_expression(Precedence precedence) -> ParseResult<ExpressionPtr> {
         auto unary_result = validate_unary_whitespace();
         if (!unary_result) {
+            sync();
             return std::unexpected(std::move(unary_result).error());
         }
 
         auto left = parse_prefix();
         if (!left) {
+            sync();
             return std::unexpected(std::move(left).error());
         }
 
         while (precedence < fetch_precedence()) {
             auto result = parse_infix(std::move(*left));
             if (!result) {
+                sync();
                 return std::unexpected(std::move(result).error());
             }
             left = std::move(result);
@@ -337,6 +439,12 @@ namespace musi {
             }
         }();
         if (!statement) {
+            auto error_position = m_current_position;
+
+            sync();
+            if (m_current_position == error_position && !is_at_end()) {
+                advance();
+            }
             return std::unexpected(std::move(statement).error());
         }
         return statement;
@@ -346,12 +454,14 @@ namespace musi {
         auto prefix_rule = fetch_prefix_rule(peek().kind());
         if (prefix_rule == nullptr) {
             const auto& current_token = peek();
-            return make_error(
+            auto error = make_error(
                 errors::unexpected(std::format("{}", magic_enum::enum_name(current_token.kind()))),
                 current_token.span()
             );
-        }
 
+            sync();
+            return error;
+        }
         return (this->*prefix_rule)();
     }
     auto Parser::parse_infix(ExpressionPtr left) -> ParseResult<ExpressionPtr> {
@@ -359,16 +469,15 @@ namespace musi {
         if (infix_rule == nullptr) {
             return std::move(left);
         }
-
         return (this->*infix_rule)(std::move(left));
     }
     auto Parser::parse_postfix(ExpressionPtr left) -> ParseResult<ExpressionPtr> {
-        const auto expression_start = left->span().start();
+        const auto postfix_start = left->span().start();
 
         if (matches(Token::Kind::If) || matches(Token::Kind::Unless)
             || matches(Token::Kind::While)) {
             auto postfix_token = peek();
-            if (has_locations_on_same_line(expression_start, postfix_token.location())) {
+            if (has_locations_on_same_line(postfix_start, postfix_token.location())) {
                 auto result = validate_postfix_condition(left, postfix_token);
                 if (!result) {
                     return std::unexpected(std::move(result).error());
@@ -679,12 +788,11 @@ namespace musi {
 
         return std::make_unique<ExpressionStatement>(std::move(*postfix));
     }
-
     auto Parser::parse_variable_declaration() -> ParseResult<DeclarationPtr> {
-        bool able_to_mutate = matches(Token::Kind::Var);
+        bool reassignable = matches(Token::Kind::Var);
         Token kind_token(
-            able_to_mutate ? Token::Kind::Var : Token::Kind::Let,
-            able_to_mutate ? "var" : "let",
+            reassignable ? Token::Kind::Var : Token::Kind::Let,
+            reassignable ? "var" : "let",
             peek().location()
         );
         advance();
@@ -720,7 +828,8 @@ namespace musi {
         );
         advance();
 
-        auto name_token = expect_identifier(has_return_type ? "function name" : "procedure name");
+        auto name_token =
+            expect_identifier(std::format("{} name", has_return_type ? "function" : "procedure"));
         if (!name_token) {
             return std::unexpected(std::move(name_token).error());
         }
@@ -728,7 +837,7 @@ namespace musi {
 
         auto left_paren = match_and_advance_after(
             Token::Kind::LeftParen,
-            has_return_type ? "function name" : "procedure name"
+            std::format("{} name", has_return_type ? "function" : "procedure")
         );
         if (!left_paren) {
             return std::unexpected(std::move(left_paren).error());
