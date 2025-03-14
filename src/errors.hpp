@@ -3,6 +3,8 @@
 #include <format>
 
 namespace musi::errors {
+    static constexpr uint32_t MAX_CONSECUTIVE_ERRORS = 100;
+
     static constexpr auto exceeded(std::convertible_to<std::string_view> auto item) {
         return std::format("exceeded {}", item);
     }
