@@ -94,6 +94,11 @@ namespace musi {
         auto count_leading_whitespace() -> void;
         auto generate_dedent_tokens(uint32_t spaces, SourceLocation location) -> void;
 
+        auto sync() -> void;
+        auto sync_at_statement_boundary() -> bool;
+        auto sync_at_keyword() -> bool;
+        auto try_keyword_sync(std::string_view keyword) -> bool;
+
         [[nodiscard]] auto make_none() -> std::unexpected<Diagnostic>;
         [[nodiscard]] auto make_error(
             std::string_view message,

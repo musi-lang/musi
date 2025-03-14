@@ -1,5 +1,7 @@
 #include "lexer.hpp"
 
+#include <array>
+
 #include "errors.hpp"
 #include "token.hpp"
 
@@ -22,7 +24,7 @@ namespace musi {
                 errors.push_back(std::move(token).error());
 
                 if (m_current_location.offset() == start_offset) {
-                    advance();
+                    sync();
                     consecutive_errors++;
                     if (consecutive_errors > errors::MAX_CONSECUTIVE_ERRORS) {
                         return make_error("too many lexical errors, aborting...");
@@ -675,5 +677,70 @@ namespace musi {
         }());
 
         return { kind, lexeme, start_location };
+    }
+
+    auto Lexer::sync() -> void {
+        if (sync_at_statement_boundary() || sync_at_keyword()) {
+        } else {
+            advance_until([this]() { return is_at_end() || peek() == '\n' || peek() == '\r'; });
+
+            if (!is_at_end()) {
+                advance();
+                m_at_line_start = true;
+                m_current_indent = 0;
+            }
+        }
+
+        while (!m_pending_tokens.empty()) {
+            m_pending_tokens.pop();
+        }
+    }
+    auto Lexer::sync_at_statement_boundary() -> bool {
+        auto current_char = peek();
+        if (current_char == '\n' || current_char == '\r' || current_char == ';') {
+            advance();
+
+            if (current_char == '\n' || current_char == '\r') {
+                m_at_line_start = true;
+                m_current_indent = 0;
+            }
+            return true;
+        }
+        if (current_char == '}' || current_char == ')' || current_char == ']') {
+            advance();
+            return true;
+        }
+        if (current_char == ':' && peek_next() == '=') {
+            advance_by(2);
+            return true;
+        }
+        return false;
+    }
+    auto Lexer::sync_at_keyword() -> bool {
+        static const std::array<std::string_view, 13> keywords = {
+            "then",  "else",  "do",  "unless", "return", "if",  "for",
+            "while", "until", "let", "var",    "func",   "proc"
+        };
+
+        return std::ranges::any_of(keywords, [this](const auto& keyword) {
+            return try_keyword_sync(keyword);
+        });
+    }
+    auto Lexer::try_keyword_sync(std::string_view keyword) -> bool {
+        if (m_current_location.offset() + keyword.length() > m_source.get().content().length()) {
+            return false;
+        }
+
+        auto content_slice =
+            m_source.get().content().substr(m_current_location.offset(), keyword.length());
+        if (content_slice == keyword) {
+            if (m_current_location.offset() + keyword.length() >= m_source.get().content().length()
+                || !is_identifier_continue(m_source.get().content(
+                )[m_current_location.offset() + keyword.length()])) {
+                advance_by(static_cast<uint32_t>(keyword.length()));
+                return true;
+            }
+        }
+        return false;
     }
 }  // namespace musi

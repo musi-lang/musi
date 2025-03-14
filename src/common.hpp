@@ -49,6 +49,10 @@ namespace musi {
     static constexpr auto is_xdigit(char ch) -> bool {
         return std::isxdigit(ch) != 0;
     }
+    static constexpr auto is_sync_point(char ch) -> bool {
+        return ch == '\n' || ch == '\r' || ch == ';' || ch == '}' || ch == ')' || ch == ']'
+               || ch == ':' || ch == '=' || ch == '|';
+    }
 
     static constexpr auto to_upper_str(std::string_view str) -> std::string {
         std::string result(str);
