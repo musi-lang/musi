@@ -4,6 +4,11 @@
 #include "token.hpp"
 
 namespace musi {
+    // save me from this absolute dogshit lexical analysis.
+    // I'm so sorry for whoever decides that it would be a good idea to actually read the fuck out
+    // of it.
+    // if you by chance can refactor this, PLEASE FUCKING DO AND OPEN A PR. PLEASE...I'll fuck-a
+    // pair of tits for this.
     auto Lexer::lex() -> LexResult<Vec<Token>> {
         Vec<Token> tokens;
         Vec<Diagnostic> errors;
