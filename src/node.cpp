@@ -14,14 +14,16 @@ namespace musi {
     auto LiteralExpression::to_json() const -> Json {
         Json value_json;
         switch (value().kind()) {
+            case Token::Kind::IntLiteral:
+            case Token::Kind::RealLiteral:
+            case Token::Kind::NatLiteral:
+                value_json = std::stod(std::string(value().lexeme()));
+                break;
             case Token::Kind::StrLiteral:
                 value_json = std::format("\"{}\"", value().lexeme());
                 break;
             case Token::Kind::CharLiteral:
                 value_json = std::format("'{}'", value().lexeme());
-                break;
-            case Token::Kind::NumericLiteral:
-                value_json = std::stod(std::string(value().lexeme()));
                 break;
             default:
                 value_json = value().lexeme();

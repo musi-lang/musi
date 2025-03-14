@@ -69,10 +69,13 @@ namespace musi {
             Yield,
 
             /* literals */
-            NumericLiteral,  // 1.23e-4 (real), -123 (int), 0u (whole)
-            StrLiteral,      // "a"
-            CharLiteral,     // 'a'
-            BoolLiteral,     // true, false
+            IntLiteral,     // 123
+            RealLiteral,    // 1.23e-4
+            NatLiteral,     // 0N
+            StrLiteral,     // "a", """a"""
+            RawStrLiteral,  // r"a", r"""a"""
+            CharLiteral,    // 'a'
+            BoolLiteral,    // true, false
 
             /* symbols */
             LeftParen,          // (

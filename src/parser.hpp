@@ -88,7 +88,9 @@ namespace musi {
             switch (kind) {
                 case Token::Kind::LeftParen:
                     return &Parser::parse_grouping_expression;
-                case Token::Kind::NumericLiteral:
+                case Token::Kind::IntLiteral:
+                case Token::Kind::RealLiteral:
+                case Token::Kind::NatLiteral:
                 case Token::Kind::StrLiteral:
                 case Token::Kind::CharLiteral:
                 case Token::Kind::BoolLiteral:
