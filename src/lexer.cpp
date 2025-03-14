@@ -198,6 +198,7 @@ namespace musi {
                 return make_error(errors::unknown(std::format("character '{}'", current_char)));
         }
     }
+    // this is so fucking vile. holy FUCKING shit
     auto Lexer::lex_numeric_literal() -> LexResult<Token> {
         std::string number;
 
@@ -221,6 +222,7 @@ namespace musi {
             }
         }
 
+        // *puking noises*
         while (!is_at_end()) {
             if /* real number */ (peek() == '.') {
                 if (has_decimal) {
