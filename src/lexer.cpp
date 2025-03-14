@@ -642,43 +642,6 @@ namespace musi {
         }
     }
 
-    auto Lexer::make_none() -> std::unexpected<Diagnostic> {
-        return std::unexpected<Diagnostic>(
-            Diagnostic(DiagnosticSeverity::None, "", SourceSpan { m_current_location, 0 })
-        );
-    }
-    auto Lexer::make_error(std::string_view message, Option<SourceLocation> location)
-        -> std::unexpected<Diagnostic> {
-        auto diagnostic = Diagnostic(
-            DiagnosticSeverity::Error,
-            std::string(message),
-            SourceSpan { location.value_or(m_current_location), 0 }
-        );
-        m_diagnostics.get().emit_error(diagnostic.span(), std::string(diagnostic.message()));
-        return std::unexpected(std::move(diagnostic));
-    }
-    auto Lexer::make_token(
-        Token::Kind kind,
-        std::string_view lexeme,
-        Option<SourceLocation> location
-    ) -> Token {
-        if (kind == Token::Kind::Eof) {
-            return { kind, lexeme, m_current_location };
-        }
-
-        auto start_location = location.value_or([&] {
-            return SourceLocation(
-                m_current_location.filename(),
-                m_source.get().line_column(
-                    static_cast<uint32_t>(m_current_location.offset() - lexeme.length())
-                ),
-                static_cast<uint32_t>(lexeme.length())
-            );
-        }());
-
-        return { kind, lexeme, start_location };
-    }
-
     auto Lexer::sync() -> void {
         if (sync_at_statement_boundary() || sync_at_keyword()) {
         } else {
@@ -742,5 +705,42 @@ namespace musi {
             }
         }
         return false;
+    }
+
+    auto Lexer::make_none() -> std::unexpected<Diagnostic> {
+        return std::unexpected<Diagnostic>(
+            Diagnostic(DiagnosticSeverity::None, "", SourceSpan { m_current_location, 0 })
+        );
+    }
+    auto Lexer::make_error(std::string_view message, Option<SourceLocation> location)
+        -> std::unexpected<Diagnostic> {
+        auto diagnostic = Diagnostic(
+            DiagnosticSeverity::Error,
+            std::string(message),
+            SourceSpan { location.value_or(m_current_location), 0 }
+        );
+        m_diagnostics.get().emit_error(diagnostic.span(), std::string(diagnostic.message()));
+        return std::unexpected(std::move(diagnostic));
+    }
+    auto Lexer::make_token(
+        Token::Kind kind,
+        std::string_view lexeme,
+        Option<SourceLocation> location
+    ) -> Token {
+        if (kind == Token::Kind::Eof) {
+            return { kind, lexeme, m_current_location };
+        }
+
+        auto start_location = location.value_or([&] {
+            return SourceLocation(
+                m_current_location.filename(),
+                m_source.get().line_column(
+                    static_cast<uint32_t>(m_current_location.offset() - lexeme.length())
+                ),
+                static_cast<uint32_t>(lexeme.length())
+            );
+        }());
+
+        return { kind, lexeme, start_location };
     }
 }  // namespace musi
