@@ -281,6 +281,12 @@ namespace musi {
                 return make_token(Token::Kind::Question, "?");
             case '_':
                 return make_token(Token::Kind::Underscore, "_");
+            case '#':
+                return make_token(Token::Kind::Hash, "#");
+            case '@':
+                return make_token(Token::Kind::At, "@");
+            case '`':
+                return make_token(Token::Kind::Backtick, "`");
             default:
                 return make_error(
                     errors::invalid(std::format("character '{}'", current)),
@@ -312,6 +318,8 @@ namespace musi {
             } else if (!has_suffix && peek() == 'N') {
                 has_suffix = true;
                 number += advance();
+            } else if (is_alpha(peek())) {
+                return make_error(errors::invalid_in("digit", "natural literal"));
             } else {
                 break;
             }
