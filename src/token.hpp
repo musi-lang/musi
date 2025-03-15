@@ -30,7 +30,6 @@ namespace musi {
             Await,
             Break,
             Case,
-            Class,
             Continue,
             Do,
             Else,
@@ -48,7 +47,6 @@ namespace musi {
             Or,
             Override,
             Proc,
-            Public,
             Return,
             Sealed,
             Shared,
@@ -86,29 +84,32 @@ namespace musi {
             RightBrace,         // }
             Plus,               // +
             Minus,              // -
+            MinusGreater,       // ->
             Star,               // *
             Slash,              // /
-            Bang,               // !
-            Equals,             // =
-            Greater,            // >
-            Less,               // <
+            SlashEquals,        // /=
             Caret,              // ^
             Pipe,               // |
-            MinusGreater,       // ->
             PipeGreater,        // |>
-            GreaterEquals,      // >=
+            Equals,             // =
+            Less,               // <
             LessEquals,         // <=
             LessEqualsGreater,  // <=>
-            SlashEquals,        // /=
-            ColonEquals,        // :=
+            Greater,            // >
+            GreaterEquals,      // >=
+            Bang,               // !
+            Question,           // ?
             Colon,              // :
+            ColonEquals,        // :=
             Semicolon,          // ;
             Comma,              // ,
             Dot,                // .
             DotDot,             // .. (inclusive range)
             DotDotLess,         // ..< (exclusive range)
-            Question,           // ?
+            Hash,               // #
             Underscore,         // _
+            At,                 // @
+            Backtick,           // `
         };
 
         static constexpr auto map_keywords() -> Map<std::string, Kind> {
