@@ -21,9 +21,9 @@ namespace musi {
                 return Precedence::Equality;
             case Token::Kind::Less:
             case Token::Kind::LessEquals:
+            case Token::Kind::LessEqualsGreater:
             case Token::Kind::Greater:
             case Token::Kind::GreaterEquals:
-            case Token::Kind::LessEqualsGreater:
                 return Precedence::Comparison;
             case Token::Kind::Shl:
             case Token::Kind::Shr:
@@ -39,6 +39,7 @@ namespace musi {
             case Token::Kind::Star:
             case Token::Kind::Slash:
             case Token::Kind::Mod:
+            case Token::Kind::Rem:
                 return Precedence::Factor;
             case Token::Kind::Caret:
                 return Precedence::Power;
