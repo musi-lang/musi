@@ -1,0 +1,9 @@
+{
+    "recommendations": [
+        "ms-vscode.cpptools", // C/C++
+        "xaver.clang-format", // Clang-Format
+        "llvm-vs-code-extensions.vscode-clangd", // clangd
+        "vadimcn.vscode-lldb", // CodeLLDB
+        "tboox.xmake-vscode", // XMake
+    ]
+}
