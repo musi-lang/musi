@@ -48,7 +48,6 @@ namespace musi {
         auto lex_number(std::string& number, SourceLocation start_location) -> LexResult<Token>;
         auto lex_exponent(std::string& number) -> LexResult<Token>;
         auto lex_string(char quote, SourceLocation start_location) -> LexResult<Token>;
-        auto lex_multiline_string(SourceLocation start_location) -> LexResult<Token>;
         auto lex_newline() -> LexResult<Token>;
 
         auto process_line_start() -> LexResult<Token>;

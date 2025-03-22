@@ -154,12 +154,14 @@ namespace musi {
             case '>':
                 return match_operator_sequence({ {
                     { Token::Kind::GreaterEquals, ">=" },
+                    { Token::Kind::GreaterGreater, ">>" },
                     { Token::Kind::Greater, ">" },
                 } });
             case '<':
                 return match_operator_sequence({ {
                     { Token::Kind::LessEqualsGreater, "<=>" },
                     { Token::Kind::LessEquals, "<=" },
+                    { Token::Kind::LessLess, "<<" },
                     { Token::Kind::Less, "<" },
                 } });
             case '^':
@@ -194,6 +196,8 @@ namespace musi {
                 return make_token(Token::Kind::At, "@");
             case '`':
                 return make_token(Token::Kind::Backtick, "`");
+            case '$':
+                return make_token(Token::Kind::Dollar, "$");
             default:
                 return make_error(
                     errors::unknown(std::format("character '{}'", current_char)),
@@ -270,20 +274,13 @@ namespace musi {
     }
     auto Lexer::lex_string(char quote, SourceLocation start_location) -> LexResult<Token> {
         std::string content;
+        uint32_t char_count = 0;
 
         while (!m_reader.is_at_end()) {
-            if (m_reader.peek() == '\n' || m_reader.is_at_end()) {
-                if (m_reader.peek() == '\n') {
-                    m_reader.advance();
-                }
-
-                return make_error(
-                    errors::unterminated(
-                        std::string(quote == '"' ? "string" : "character") + " literal"
-                    ),
-                    start_location
-                );
+            if (++char_count > MAX_STRING_LENGTH) {
+                return make_error(errors::exceeded("maximum string literal length"));
             }
+
             if (m_reader.peek() == '\\') {
                 if (auto result = process_escape_append(content, quote); !result) {
                     return std::unexpected(std::move(result).error());
@@ -298,6 +295,7 @@ namespace musi {
                     start_location
                 );
             }
+
             content += m_reader.advance();
         }
 
@@ -305,33 +303,6 @@ namespace musi {
             errors::unterminated(std::string(quote == '"' ? "string" : "character") + " literal"),
             start_location
         );
-    }
-    auto Lexer::lex_multiline_string(SourceLocation start_location) -> LexResult<Token> {
-        std::string content;
-
-        uint32_t char_count = 0;
-
-        while (!m_reader.is_at_end()) {
-            if (++char_count > MAX_STRING_LENGTH) {
-                return make_error(errors::exceeded("maximum string literal length"));
-            }
-
-            if (m_reader.peek() == '\\') {
-                if (auto result = process_escape_append(content, '"'); !result) {
-                    return std::unexpected(std::move(result).error());
-                }
-                continue;
-            }
-            if (m_reader.peek() == '"' && m_reader.peek_next() == '"'
-                && m_reader.peek_at(2) == '"') {
-                m_reader.advance_by(3);
-                return make_token(Token::Kind::StrLiteral, content, start_location);
-            }
-
-            content += m_reader.advance();
-        }
-
-        return make_error(errors::unterminated("string literal"), start_location);
     }
     auto Lexer::lex_newline() -> LexResult<Token> {
         auto start_location = m_reader.location();
@@ -430,12 +401,7 @@ namespace musi {
     }
     auto Lexer::process_string() -> LexResult<Token> {
         auto start_location = m_reader.location();
-
         auto quote = m_reader.advance();
-        if (quote == '"' && m_reader.peek() == '"' && m_reader.peek_next() == '"') {
-            m_reader.advance_by(2);
-            return lex_multiline_string(start_location);
-        }
         return lex_string(quote, start_location);
     }
     auto Lexer::process_escape() -> LexResult<std::string> {

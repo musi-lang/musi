@@ -77,8 +77,8 @@ namespace musi {
             IntLiteral,     // 123
             RealLiteral,    // 1.23e-4
             NatLiteral,     // 0N
-            StrLiteral,     // "a", """a"""
-            RawStrLiteral,  // r"a", r"""a"""
+            StrLiteral,     // "a"
+            RawStrLiteral,  // r"a"
             CharLiteral,    // 'a'
             BoolLiteral,    // true, false
 
@@ -102,8 +102,10 @@ namespace musi {
             Less,               // <
             LessEquals,         // <=
             LessEqualsGreater,  // <=>
+            LessLess,           // <<
             Greater,            // >
             GreaterEquals,      // >=
+            GreaterGreater,     // >>
             Bang,               // !
             Question,           // ?
             Colon,              // :
@@ -117,6 +119,7 @@ namespace musi {
             Underscore,         // _
             At,                 // @
             Backtick,           // `
+            Dollar,             // $
         };
 
         static constexpr auto map_keywords() -> Map<std::string, Kind> {
