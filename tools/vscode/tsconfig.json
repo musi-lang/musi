@@ -1,0 +1,35 @@
+{
+    "compilerOptions": {
+        "allowArbitraryExtensions": true,
+        "allowUmdGlobalAccess": true,
+        "allowUnreachableCode": false,
+        "allowUnusedLabels": false,
+        "composite": true,
+        "exactOptionalPropertyTypes": true,
+        "lib": [
+            "ESNext"
+        ],
+        "module": "commonjs",
+        "moduleDetection": "force",
+        "moduleResolution": "node10",
+        "noFallthroughCasesInSwitch": true,
+        "noImplicitOverride": true,
+        "noImplicitReturns": true,
+        "noPropertyAccessFromIndexSignature": true,
+        "noUncheckedIndexedAccess": true,
+        "noUnusedLocals": true,
+        "noUnusedParameters": true,
+        "noUncheckedSideEffectImports": true,
+        "outDir": "out",
+        "rootDir": "src",
+        "sourceMap": true,
+        "strict": true,
+        "target": "ESNext",
+        "types": []
+    },
+    "exclude": [
+        "node_modules",
+        "out",
+        ".vscode-test"
+    ]
+}

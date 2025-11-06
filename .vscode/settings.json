@@ -1,0 +1,12 @@
+{
+    "remote.autoForwardPortsFallback": 0,
+    "C_Cpp.intelliSenseEngine": "disabled",
+    "clangd.path": "/usr/bin/clangd",
+    "clangd.arguments": [
+        "-log=verbose",
+        "-pretty",
+        "--background-index",
+        //"--query-driver=/bin/arm-buildroot-linux-gnueabihf-g++", //for cross compile usage
+        "--compile-commands-dir=/home/Kasutaja/musi/"
+    ]
+}

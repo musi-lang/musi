@@ -1,0 +1,17 @@
+(library
+ (name test_validate)
+ (modules validate)
+ (libraries basic))
+
+(executable
+ (name runner)
+ (modules runner)
+ (libraries alcotest unix lex parse sema codegen test_validate))
+
+(rule
+ (alias runtest)
+ (deps
+  (source_tree pass)
+  (source_tree fail))
+ (action
+  (run ./runner.exe)))

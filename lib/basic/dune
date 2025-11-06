@@ -1,0 +1,8 @@
+(library
+ (name basic)
+ (wrapped false)
+ (modules diagnostic span binary source interner)
+ (libraries fmt))
+
+(documentation
+ (package musi))

@@ -1,0 +1,39 @@
+(** Describes metadata stored inside bytecode output. *)
+
+(** Explains header block written near start for bytecode file. *)
+type header = {
+    magic : string
+  ; version : int32
+  ; bc_offset : int32
+  ; bc_size : int32
+  ; export_offset : int32
+  ; export_count : int32
+  ; link_offset : int32
+  ; link_count : int32
+}
+
+(** Describes single entry stored inside constant pool segment. *)
+type constant = ConstI32 of int32 | ConstI64 of int64 | ConstText of string
+
+(** Captures data needed to locate and run compiled procedure. *)
+type proc_desc = {
+    name : string option
+  ; param_count : int
+  ; local_count : int
+  ; max_stack : int
+  ; bytecode_offset : int
+  ; bytecode_length : int
+}
+
+(** Tracks module name along with exported entries and link keys. *)
+type module_desc = {
+    module_name : string option
+  ; exports : (string * int) list
+  ; link_keys : (int * string) list
+}
+
+(** Optional sections appended after bytecode payload. *)
+type optional_sections = {
+    export_table : (string * int) list
+  ; link_table : (int * string) list
+}

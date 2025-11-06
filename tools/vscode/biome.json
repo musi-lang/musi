@@ -1,0 +1,124 @@
+{
+	"$schema": "https://biomejs.dev/schemas/2.0.5/schema.json",
+	"vcs": {
+		"enabled": true,
+		"clientKind": "git",
+		"useIgnoreFile": true
+	},
+	"files": {
+		"includes": [
+			"**/*.js",
+			"**/*.jsx",
+			"**/*.mjs",
+			"**/*.mts",
+			"**/*.ts",
+			"**/*.tsx"
+		],
+		"ignoreUnknown": true
+	},
+	"formatter": {
+		"enabled": true,
+		"indentStyle": "tab"
+	},
+	"assist": {
+		"actions": {
+			"source": {
+				"organizeImports": "on"
+			}
+		}
+	},
+	"linter": {
+		"enabled": true,
+		"rules": {
+			"recommended": true,
+			"complexity": {
+				"noExcessiveCognitiveComplexity": "error",
+				"noUselessStringConcat": "warn",
+				"noUselessUndefinedInitialization": "error",
+				"noVoid": "warn",
+				"useDateNow": "warn",
+				"useSimplifiedLogicExpression": "warn"
+			},
+			"correctness": {
+				"noConstantMathMinMaxClamp": "error",
+				"noNodejsModules": "error",
+				"noUndeclaredDependencies": "error",
+				"noUndeclaredVariables": "error",
+				"noUnusedFunctionParameters": "warn",
+				"noUnusedImports": "error",
+				"noUnusedPrivateClassMembers": "error",
+				"noUnusedVariables": "error",
+				"useHookAtTopLevel": "error",
+				"useImportExtensions": "warn",
+				"noInvalidBuiltinInstantiation": "error",
+				"noSwitchDeclarations": "info"
+			},
+			"performance": {
+				"noBarrelFile": "warn",
+				"noReExportAll": "warn",
+				"useTopLevelRegex": "warn",
+				"noNamespaceImport": "warn"
+			},
+			"style": {
+				"noDefaultExport": "warn",
+				"noDoneCallback": "warn",
+				"noImplicitBoolean": "info",
+				"noNamespace": "error",
+				"noNegationElse": "info",
+				"noParameterProperties": "warn",
+				"noRestrictedGlobals": "error",
+				"noShoutyConstants": "info",
+				"noYodaExpression": "info",
+				"useBlockStatements": "warn",
+				"useCollapsedElseIf": "info",
+				"useConsistentArrayType": "warn",
+				"useConsistentBuiltinInstantiation": "warn",
+				"useDefaultSwitchClause": "info",
+				"useExplicitLengthCheck": "warn",
+				"useFilenamingConvention": "warn",
+				"useForOf": "info",
+				"useFragmentSyntax": "warn",
+				"useLiteralEnumMembers": "warn",
+				"useNamingConvention": "warn",
+				"useNodeAssertStrict": "error",
+				"useShorthandAssign": "info",
+				"useThrowNewError": "error",
+				"useThrowOnlyError": "error",
+				"noParameterAssign": "error",
+				"useAsConstAssertion": "error",
+				"useDefaultParameterLast": "error",
+				"useEnumInitializers": "error",
+				"useSelfClosingElements": "error",
+				"useSingleVarDeclarator": "error",
+				"noUnusedTemplateLiteral": "error",
+				"useNumberNamespace": "error",
+				"noInferrableTypes": "error",
+				"noUselessElse": "error",
+				"useArrayLiterals": "warn"
+			},
+			"suspicious": {
+				"noEmptyBlockStatements": "error",
+				"noEvolvingTypes": "error",
+				"noMisplacedAssertion": "error",
+				"noReactSpecificProps": "error",
+				"noSkippedTests": "error",
+				"useAwait": "error",
+				"useErrorMessage": "warn",
+				"useNumberToFixedDigitsArgument": "warn"
+			}
+		}
+	},
+	"javascript": {
+		"formatter": {
+			"quoteStyle": "double"
+		}
+	},
+	"css": {
+		"formatter": {
+			"enabled": true
+		},
+		"linter": {
+			"enabled": true
+		}
+	}
+}

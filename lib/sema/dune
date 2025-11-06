@@ -1,0 +1,9 @@
+(library
+ (name sema)
+ (wrapped false)
+ (libraries basic lex parse)
+ (flags
+  (:standard -w -32-39)))
+
+(documentation
+ (package musi))
