@@ -1,6 +1,6 @@
 # The Basics
 
-Bindings describe how names connect to values. Musi keeps this story direct with two keywords and two operators, echoing Swift's clarity but making mutation visible every time (see [Declarations](https://docs.swift.org/swift-book/documentation/the-swift-programming-language/declarations/)).
+Bindings describe how names connect to values. Musi keeps this story direct with two keywords and two operators so creation and mutation always stand out like a sore thumb.
 
 ## Declaring Values
 
@@ -9,7 +9,7 @@ const answer := 42;
 const name := "Nova";
 ```
 
-`const` introduces an immutable name. `:=` signals creation, so you never conflate it with comparison. Swift and TypeScript reuse `=` here (see [Declarations](https://docs.swift.org/swift-book/documentation/the-swift-programming-language/declarations/) and [Variable Declarations](https://www.typescriptlang.org/docs/handbook/variable-declarations.html)), but Musi pulls the operators apart to remove ambiguity.
+`const` introduces an immutable name. `:=` signals creation, so you never conflate it with comparison. By spelling the declaration operator out, we avoid the usual confusion between assignment and equality.
 
 ## Making Things Mutable
 
@@ -18,7 +18,7 @@ var counter := 0;
 counter <- counter + 1;
 ```
 
-`var` marks intent to mutate. `<-` performs reassignment and appears nowhere else. The extra symbol keeps updates loud, mirroring how Swift requires `var` and how TypeScript encourages `let` for mutable values while warning via linters (see [Declarations](https://docs.swift.org/swift-book/documentation/the-swift-programming-language/declarations/) and [prefer-const](https://eslint.org/docs/latest/rules/prefer-const)).
+`var` marks intent to mutate. `<-` performs reassignment and appears nowhere else. The extra symbol keeps updates loud and clear so refactors cannot miss state changes.
 
 ## Blocks Return Values
 
@@ -30,7 +30,7 @@ const total := {
 };
 ```
 
-Semicolons separate steps rather than terminate them. Leave the closing expression bare to return it; add a trailing semicolon to get `Unit`, Musi's empty value. Swift uses similar rules for closures, though statements tend to dominate; TypeScript treats blocks as statement-only unless you wrap them in IIFEs. Musi chooses expression blocks so you avoid temporary variables in many cases (see [Closures](https://docs.swift.org/swift-book/documentation/the-swift-programming-language/closures/) and [Functions](https://www.typescriptlang.org/docs/handbook/2/functions.html)).
+Semicolons separate steps rather than terminate them. Leave the closing expression bare to return it; add a trailing semicolon to get `Unit`, Musi's empty value. Expression blocks make it easy to pipe computations without temporary variables.
 
 ## Pattern-Aware Conditions
 
@@ -40,27 +40,17 @@ if case .Some(const value) := maybe_result {
 }
 ```
 
-Conditions can match patterns directly. This idea nods to Swift's `if let` and TypeScript's user-defined type guards, yet Musi unifies the syntax across `if`, `while`, and `for`. We will explore the full pattern system soon, but for now note that patterns always bind with `const`; make names mutable afterwards if needed (see [Control Flow](https://docs.swift.org/swift-book/documentation/the-swift-programming-language/controlflow/) and [Narrowing](https://www.typescriptlang.org/docs/handbook/2/narrowing.html)).
+Conditions can match patterns directly. Musi unifies the syntax across `if`, `while`, and `for`, so you only learn the rules once. We'll explore the full pattern system soon(TM), but for now keep in mind that patterns always bind with `const`; make names mutable afterwards if needed.
 
 ## Try It Out
 
-1. Rewrite a Swift snippet that flips a Boolean using `var flag = true; flag.toggle()` into Musi using `<-`.
-2. Translate a TypeScript `if (maybe !== undefined)` check into an `if case` expression.
+1. Create a Musi snippet that flips a `Bool` flag by rebinding with `<-`.
+2. Rewrite a manual optional check into an `if case` expression that binds the value.
 
 ## Recap
 
 - `const` + `:=` define immutable names; `var` + `<-` handle updates.
 - Blocks behave as expressions, returning final values unless you add a trailing semicolon.
-- Pattern matching appears in everyday control flow, echoing familiar constructs from Swift and TypeScript but with consistent syntax.
+- Pattern matching appears in everyday control flow, keeping optional access and destructuring concise.
 
 Read on to [Basic Operators](basic-operators.md) for Musi's symbol guide.
-
-### Further Reading
-
-- [Swift Programming Language – Declarations](https://docs.swift.org/swift-book/documentation/the-swift-programming-language/declarations/)
-- [TypeScript Handbook – Variable Declarations](https://www.typescriptlang.org/docs/handbook/variable-declarations.html)
-- [ESLint – prefer-const Rule](https://eslint.org/docs/latest/rules/prefer-const)
-- [Swift Programming Language – Closures](https://docs.swift.org/swift-book/documentation/the-swift-programming-language/closures/)
-- [TypeScript Handbook – Functions](https://www.typescriptlang.org/docs/handbook/2/functions.html)
-- [Swift Programming Language – Control Flow](https://docs.swift.org/swift-book/documentation/the-swift-programming-language/controlflow/)
-- [TypeScript Handbook – Narrowing](https://www.typescriptlang.org/docs/handbook/2/narrowing.html)
