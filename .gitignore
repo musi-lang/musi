@@ -6,6 +6,13 @@
 .sourcegraph/*
 .theia/*
 
+# I tried to block these universally w/ wirldcard `*.md`,
+# but somehow it ignored `!docs/*md`, causing new entries to be ignored, so...
+# temp solution (until people want this here by their choice) is to just manually ign them
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+
 .github/*
 !.github/workflows/*
 !docs/*.md
@@ -16,7 +23,6 @@ _priv/
 !LICENSE
 !LICENSE.md
 !README.md
-*.md
 
 # Musi Standard Library files
 !stdlib/**/*.ms
