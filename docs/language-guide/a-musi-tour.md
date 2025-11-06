@@ -34,7 +34,7 @@ const remainder := total mod divisor;
 
 `^` stays tight to its operands, and `mod` always returns a non-negative remainder. Logical keywords such as `and then` and `or else` keep intent clear. See [Basic Operators](basic-operators.md) for the full table.
 
-## Records, Choices, and Interfaces
+## Records and Choice Types
 
 ```musi
 const Point := record {
@@ -49,20 +49,20 @@ const distance := proc (a: Point, b: Point) -> Bin64 {
 };
 ```
 
-Records give you named fields, choices describe tagged unions, and interfaces specify shared behaviour. These topics will receive dedicated chapters as the book grows.
+Records give you named fields, choice types describe tagged unions. These topics will receive dedicated chapters as the book grows.
 
 ## Error Paths Without Exceptions
 
 Musi favours explicit results:
 
 ```musi
-const fetch_user := proc (id: Nat) -> User!Error {
-  const response := http.get(`/users/${id}`)?;
-  response.json()
+const fetch_user := proc (id: Nat) -> Expect<User, Error> {
+  const response := try http.get(`/users/${id}`);
+  try response.json()
 };
 ```
 
-Expect types (`T!E`) track success and failure without hidden control flow. A future chapter on error handling will cover patterns like `case .Fail` and early returns.
+`Expect<T, E>` tracks success and failure without hidden control flow. The `try` operator propagates errors upward, returning early on `.Fail`. Force unwrap with `!` when you know a value must succeed. See [Error Handling](error-handling.md) for patterns like `case .Fail` and recovery strategies.
 
 ## Where to Go Next
 
