@@ -1,6 +1,6 @@
 # Pattern Matching
 
-Musi uses one pattern language everywhere. The same binding you place in a `match` arm works inside `if`, `while`, and `for`. This shared approach keeps control flow tidy while staying close to Swift's pattern syntax and TypeScript's discriminated unions (see [Patterns](https://docs.swift.org/swift-book/documentation/the-swift-programming-language/patterns/) and [Narrowing](https://www.typescriptlang.org/docs/handbook/2/narrowing.html)).
+Musi uses one pattern language everywhere. The same binding you place in a `match` arm works inside `if`, `while`, and `for`. This shared approach keeps control flow neat and easy to follow.
 
 ## What Patterns Solve
 
@@ -16,7 +16,7 @@ case .Fail(const err) -> report(err),
 
 ## Binding Basics
 
-Every binding inside a pattern starts with `const`. This mirrors Swift's preference for immutable `let` and TypeScript's checked `const`. You can ignore values with `_` and still show intent.
+Every binding inside a pattern starts with `const`. You can ignore values with `_` (called a *wildcard*) and still show intent.
 
 ```musi
 if const value := reading {
@@ -46,7 +46,7 @@ Enum cases and tuple slots read naturally. Musi lets you choose between prefixin
 
 ## Adding Conditions
 
-Attach guards with `if` clauses or chain multiple pattern checks with commas. Guards mirror Swift where clauses, while chained checks feel close to TypeScript's successive narrowing.
+Attach guards with `if` clauses or chain multiple pattern checks with commas. Guards keep additional conditions close to the branch they protect.
 
 ```musi
 if case .Some(const size) := maybe_size, size > 0 {
@@ -86,14 +86,6 @@ if case .Some(const data) := download() {
 }
 ```
 
-## Swift and TypeScript Parallels
-
-| Feature | Musi | Swift | TypeScript |
-|---------|------|-------|------------|
-| Option unwrap | `if const value := maybe` | `if let value = maybe` | `if (maybe.kind === "some")` |
-| Choice match | `match choice { case .Left -> ... }` | `switch choice { case .left: ... }` | `switch (choice.tag) { case "Left": ... }` |
-| Guarded branch | `case const value if value > 0` | `case let value where value > 0` | `if (value !== undefined && value > 0)` |
-
 ## Recap
 
 - One pattern language works across `if`, `while`, `for`, and `match`.
@@ -101,8 +93,3 @@ if case .Some(const data) := download() {
 - Guards and chained conditions let you express complex flows without nested checks.
 
 Next up, later chapters will cover Musi's text types, collections, and control flow in depth.
-
-### Further Reading
-
-- [Swift Programming Language – Patterns](https://docs.swift.org/swift-book/documentation/the-swift-programming-language/patterns/)
-- [TypeScript Handbook – Narrowing](https://www.typescriptlang.org/docs/handbook/2/narrowing.html)
