@@ -1,4 +1,4 @@
-# Records
+# Record Types
 
 Records store structured data with value semantics. Fields stay visible, copying is explicit, and there is no hidden inheritance tree to worry about. Procedures provide behaviour while records focus on shape.
 
