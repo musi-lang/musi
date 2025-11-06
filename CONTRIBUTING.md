@@ -23,9 +23,9 @@ Thanks for helping Musi grow. This guide keeps expectations clear and simple so 
 
 ### Core Principles
 
-- **KISS** — prefer the simplest solution that works today.
-- **DRY** — extract shared behaviour quickly to keep one source of truth.
-- **YAGNI** — do not build future features until the roadmap calls for them.
+- **KISS** -- prefer the simplest solution that works today.
+- **DRY** -- extract shared behaviour quickly to keep one source of truth.
+- **YAGNI** -- do not build future features until the roadmap calls for them.
 
 ### Naming
 
