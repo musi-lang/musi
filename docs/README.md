@@ -15,13 +15,13 @@ Welcome to Musi's guide. Chapters stay short, use plain language, and build on e
   - [Text and Characters](language-guide/text-and-characters.md)
   - [Advanced Operators](language-guide/advanced-operators.md)
 - **Data and Structure**
-  - [Records](language-guide/records-and-interfaces.md)
+  - [Record Types](language-guide/record-types.md)
   - [Composition](language-guide/composition.md)
   - [Choice Types](language-guide/choice-types.md)
   - [Collection Types](language-guide/collection-types.md)
   - [Opaque Types](language-guide/opaque-types.md)
 - **Behaviour and Reuse**
-  - [Functions](language-guide/functions.md)
+  - [Procedures](language-guide/procedures.md)
   - [Closures](language-guide/closures.md)
   - [Methods](language-guide/methods.md)
   - [Properties](language-guide/properties.md)
