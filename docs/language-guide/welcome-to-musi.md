@@ -5,8 +5,10 @@ Musi is a systems language that aims for readable code, predictable memory, and 
 ## Your First Program
 
 ```musi
+import * as io from "stdlib/io";
+
 const greeting := "Hello, Musi!";
-writeln(greeting);
+io.writeln(greeting);
 ```
 
 This tiny script introduces Musi's two assignment forms: `const` for stable names and `:=` as declaration marker. Names stay explicit so you always see creation and mutation as separate steps.
