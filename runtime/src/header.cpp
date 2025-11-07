@@ -7,15 +7,46 @@
 namespace musi {
 
   namespace {
+    constexpr size_t OFFSET_VERSION = 4;
+    constexpr size_t OFFSET_BC_OFFSET = 8;
+    constexpr size_t OFFSET_BC_SIZE = 12;
+    constexpr size_t OFFSET_EXPORT_OFFSET = 16;
+    constexpr size_t OFFSET_EXPORT_COUNT = 20;
+    constexpr size_t OFFSET_LINK_OFFSET = 24;
+    constexpr size_t OFFSET_LINK_COUNT = 28;
+    constexpr uint8_t TAG_TEXT = 0x05;
+    constexpr size_t SIZE_U16 = 2;
+    constexpr size_t SIZE_U32 = 4;
+    constexpr size_t SIZE_PROC_DESC = 9;
+
     template<typename T>
     auto read_le(std::span<const uint8_t> data, const size_t offset) -> T {
       T value {};
       const auto bytes = data.subspan(offset, sizeof(T));
       for (auto i = 0U; i < sizeof(T); ++i) {
-        // what in casting f*ck?
         value |= static_cast<T>(static_cast<uint8_t>(bytes[i]) << (i * 8));
       }
       return value;
+    }
+
+    auto check_bounds(
+        std::span<const uint8_t> data,
+        size_t offset,
+        size_t size,
+        std::string_view msg) -> Expected<void> {
+      if (offset + size > data.size()) {
+        return std::unexpected(std::string(msg));
+      }
+      return {};
+    }
+
+    auto read_string(std::span<const uint8_t> data, size_t offset, size_t len)
+        -> std::string {
+      std::string str(len, '\0');
+      for (auto j = 0U; j < len; ++j) {
+        str[j] = static_cast<char>(data[offset + j]);
+      }
+      return str;
     }
   }  // namespace
 
@@ -42,90 +73,99 @@ namespace musi {
           hdr.magic[3]));
     }
 
-    hdr.version = read_le<uint32_t>(data, 4);
-    hdr.bc_offset = read_le<uint32_t>(data, 8);
-    hdr.bc_size = read_le<uint32_t>(data, 12);
-    hdr.export_offset = read_le<uint32_t>(data, 16);
-    hdr.export_count = read_le<uint32_t>(data, 20);
-    hdr.link_offset = read_le<uint32_t>(data, 24);
-    hdr.link_count = read_le<uint32_t>(data, 28);
+    hdr.version = read_le<uint32_t>(data, OFFSET_VERSION);
+    hdr.bc_offset = read_le<uint32_t>(data, OFFSET_BC_OFFSET);
+    hdr.bc_size = read_le<uint32_t>(data, OFFSET_BC_SIZE);
+    hdr.export_offset = read_le<uint32_t>(data, OFFSET_EXPORT_OFFSET);
+    hdr.export_count = read_le<uint32_t>(data, OFFSET_EXPORT_COUNT);
+    hdr.link_offset = read_le<uint32_t>(data, OFFSET_LINK_OFFSET);
+    hdr.link_count = read_le<uint32_t>(data, OFFSET_LINK_COUNT);
 
     return hdr;
   }
 
   auto parse_export_table(std::span<const uint8_t> data, size_t offset)
       -> Expected<ExportEntryList> {
-    if (offset + 4 > data.size()) {
-      return std::unexpected("export table offset out of bounds");
+    if (const auto res = check_bounds(
+            data,
+            offset,
+            SIZE_U32,
+            "export table offset out of bounds");
+        !res) {
+      return std::unexpected(res.error());
     }
-
     const auto count = read_le<uint32_t>(data, offset);
-    offset += 4;
+    offset += SIZE_U32;
 
     ExportEntryList exports;
     exports.reserve(count);
 
     for (auto i = 0U; i < count; ++i) {
-      if (offset + 4 > data.size()) {
-        return std::unexpected("export entry name length out of bounds");
+      if (const auto res = check_bounds(
+              data,
+              offset,
+              SIZE_U32,
+              "export entry name length out of bounds");
+          !res) {
+        return std::unexpected(res.error());
       }
-
       const auto name_len = read_le<uint32_t>(data, offset);
-      offset += 4;
+      offset += SIZE_U32;
 
-      if (offset + name_len + 4 > data.size()) {
-        return std::unexpected("export entry data out of bounds");
+      if (const auto res = check_bounds(
+              data,
+              offset,
+              name_len + SIZE_U32,
+              "export entry data out of bounds");
+          !res) {
+        return std::unexpected(res.error());
       }
-
-      std::string name(name_len, '\0');
-      for (auto j = 0U; j < name_len; ++j) {
-        name[j] = static_cast<char>(data[offset + j]);
-      }
+      const auto name = read_string(data, offset, name_len);
       offset += name_len;
 
       const auto proc_id = read_le<uint32_t>(data, offset);
-      offset += 4;
+      offset += SIZE_U32;
 
-      exports.push_back({std::move(name), proc_id});
+      exports.push_back({name, proc_id});
     }
 
     return exports;
   }
 
-  auto parse_link_table(std::span<const uint8_t> data, size_t offset)
-      -> Expected<LinkEntryList> {
-    if (offset + 4 > data.size()) {
-      return std::unexpected("link table offset out of bounds");
-    }
-
-    const auto count = read_le<uint32_t>(data, offset);
-    offset += 4;
-
+  auto parse_link_table(
+      std::span<const uint8_t> data,
+      size_t offset,
+      uint32_t count) -> Expected<LinkEntryList> {
     LinkEntryList links;
     links.reserve(count);
 
     for (auto i = 0U; i < count; ++i) {
-      if (offset + 8 > data.size()) {
-        return std::unexpected("link entry header out of bounds");
+      if (const auto res = check_bounds(
+              data,
+              offset,
+              SIZE_U16 * 2,
+              "link entry header out of bounds");
+          !res) {
+        return std::unexpected(res.error());
       }
+      const auto proc_id = read_le<uint16_t>(data, offset);
+      offset += SIZE_U16;
 
-      const auto proc_id = read_le<uint32_t>(data, offset);
-      offset += 4;
+      const auto key_len = read_le<uint16_t>(data, offset);
+      offset += SIZE_U16;
 
-      const auto key_len = read_le<uint32_t>(data, offset);
-      offset += 4;
-
-      if (offset + key_len > data.size()) {
-        return std::unexpected("link entry key out of bounds");
+      if (const auto res = check_bounds(
+              data,
+              offset,
+              key_len,
+              "link entry key out of bounds");
+          !res) {
+        return std::unexpected(res.error());
       }
-
-      std::string link_key(key_len, '\0');
-      for (auto j = 0U; j < key_len; ++j) {
-        link_key[j] = static_cast<char>(data[offset + j]);
-      }
+      const auto link_key = read_string(data, offset, key_len);
       offset += key_len;
 
-      links.push_back({proc_id, std::move(link_key)});
+      links.push_back({proc_id, link_key});
     }
 
     return links;
@@ -133,12 +173,16 @@ namespace musi {
 
   auto parse_const_pool(std::span<const uint8_t> data, size_t offset)
       -> Expected<ConstPool> {
-    if (offset + 4 > data.size()) {
-      return std::unexpected("constant pool offset out of bounds");
+    if (const auto res = check_bounds(
+            data,
+            offset,
+            SIZE_U32,
+            "constant pool offset out of bounds");
+        !res) {
+      return std::unexpected(res.error());
     }
-
     const auto count = read_le<uint32_t>(data, offset);
-    offset += 4;
+    offset += SIZE_U32;
 
     ConstPool pool;
     pool.reserve(count);
@@ -149,25 +193,30 @@ namespace musi {
       }
 
       const auto tag = data[offset++];
-      if (tag == 0x05) {
-        if (offset + 4 > data.size()) {
-          return std::unexpected("constant string length out of bounds");
+      if (tag == TAG_TEXT) {
+        if (auto res = check_bounds(
+                data,
+                offset,
+                SIZE_U32,
+                "constant string length out of bounds");
+            !res) {
+          return std::unexpected(res.error());
         }
-
         const auto len = read_le<uint32_t>(data, offset);
-        offset += 4;
+        offset += SIZE_U32;
 
-        if (offset + len > data.size()) {
-          return std::unexpected("constant string data out of bounds");
+        if (const auto res = check_bounds(
+                data,
+                offset,
+                len,
+                "constant string data out of bounds");
+            !res) {
+          return std::unexpected(res.error());
         }
-
-        std::string str(len, '\0');
-        for (auto j = 0U; j < len; ++j) {
-          str[j] = static_cast<char>(data[offset + j]);
-        }
+        const auto str = read_string(data, offset, len);
         offset += len;
 
-        pool.push_back(std::move(str));
+        pool.push_back(str);
       } else {
         return std::unexpected(
             std::format("unsupported constant tag '0x{:02X}'", tag));
@@ -179,26 +228,34 @@ namespace musi {
 
   auto parse_proc_table(std::span<const uint8_t> data, size_t offset)
       -> Expected<ProcTable> {
-    if (offset + 4 > data.size()) {
-      return std::unexpected("procedure table offset out of bounds");
+    if (auto res = check_bounds(
+            data,
+            offset,
+            SIZE_U32,
+            "procedure table offset out of bounds");
+        !res) {
+      return std::unexpected(res.error());
     }
-
     const auto count = read_le<uint32_t>(data, offset);
-    offset += 4;
+    offset += SIZE_U32;
 
     ProcTable procs;
     procs.reserve(count);
 
     for (auto i = 0U; i < count; ++i) {
-      if (offset + 9 > data.size()) {
-        return std::unexpected("procedure descriptor out of bounds");
+      if (const auto res = check_bounds(
+              data,
+              offset,
+              SIZE_PROC_DESC,
+              "procedure descriptor out of bounds");
+          !res) {
+        return std::unexpected(res.error());
       }
-
       ProcDesc desc {};
       desc.bytecode_offset = read_le<uint32_t>(data, offset);
-      offset += 4;
+      offset += SIZE_U32;
       desc.bytecode_length = read_le<uint32_t>(data, offset);
-      offset += 4;
+      offset += SIZE_U32;
       desc.is_extern = data[offset++] != 0;
 
       procs.push_back(desc);
