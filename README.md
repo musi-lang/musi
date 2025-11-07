@@ -16,7 +16,9 @@ Systems programming language designed for clarity, safety, and performance. Read
 ## Example
 
 ```musi
-const Counter := record { var value: Nat; };
+const Counter := record {
+  var value: Nat,
+};
 
 const Counter.inc := proc (var c: Counter) {
   const temp := c.value;
