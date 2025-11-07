@@ -9,10 +9,9 @@ namespace musi {
     uint32_t version;
     uint32_t bc_offset;
     uint32_t bc_size;
-    uint32_t export_offset;
-    uint32_t export_count;
-    uint32_t link_offset;
-    uint32_t link_count;
+    uint32_t metadata_offset;
+    uint32_t metadata_size;
+    uint64_t reserved;
 
     static constexpr size_t SIZE = 32;
     static constexpr std::string_view MAGIC = "MUSI";
@@ -31,6 +30,7 @@ namespace musi {
   struct ProcDesc {
     uint32_t bytecode_offset;
     uint32_t bytecode_length;
+    uint32_t param_count;
     bool is_extern;
   };
 

@@ -10,14 +10,13 @@ namespace musi {
     constexpr size_t OFFSET_VERSION = 4;
     constexpr size_t OFFSET_BC_OFFSET = 8;
     constexpr size_t OFFSET_BC_SIZE = 12;
-    constexpr size_t OFFSET_EXPORT_OFFSET = 16;
-    constexpr size_t OFFSET_EXPORT_COUNT = 20;
-    constexpr size_t OFFSET_LINK_OFFSET = 24;
-    constexpr size_t OFFSET_LINK_COUNT = 28;
+    constexpr size_t OFFSET_METADATA_OFFSET = 16;
+    constexpr size_t OFFSET_METADATA_SIZE = 20;
+    constexpr size_t OFFSET_RESERVED = 24;
     constexpr uint8_t TAG_TEXT = 0x05;
     constexpr size_t SIZE_U16 = 2;
     constexpr size_t SIZE_U32 = 4;
-    constexpr size_t SIZE_PROC_DESC = 9;
+    constexpr size_t SIZE_PROC_DESC = 13;
 
     template<typename T>
     auto read_le(std::span<const uint8_t> data, const size_t offset) -> T {
@@ -76,10 +75,9 @@ namespace musi {
     hdr.version = read_le<uint32_t>(data, OFFSET_VERSION);
     hdr.bc_offset = read_le<uint32_t>(data, OFFSET_BC_OFFSET);
     hdr.bc_size = read_le<uint32_t>(data, OFFSET_BC_SIZE);
-    hdr.export_offset = read_le<uint32_t>(data, OFFSET_EXPORT_OFFSET);
-    hdr.export_count = read_le<uint32_t>(data, OFFSET_EXPORT_COUNT);
-    hdr.link_offset = read_le<uint32_t>(data, OFFSET_LINK_OFFSET);
-    hdr.link_count = read_le<uint32_t>(data, OFFSET_LINK_COUNT);
+    hdr.metadata_offset = read_le<uint32_t>(data, OFFSET_METADATA_OFFSET);
+    hdr.metadata_size = read_le<uint32_t>(data, OFFSET_METADATA_SIZE);
+    hdr.reserved = read_le<uint64_t>(data, OFFSET_RESERVED);
 
     return hdr;
   }
@@ -255,6 +253,8 @@ namespace musi {
       desc.bytecode_offset = read_le<uint32_t>(data, offset);
       offset += SIZE_U32;
       desc.bytecode_length = read_le<uint32_t>(data, offset);
+      offset += SIZE_U32;
+      desc.param_count = read_le<uint32_t>(data, offset);
       offset += SIZE_U32;
       desc.is_extern = data[offset++] != 0;
 
