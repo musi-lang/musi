@@ -2,22 +2,22 @@ open Alcotest
 
 let test_empty () =
   let interner = Interner.create () in
-  let lexer = Lexer.make 0 "" interner in
+  let lexer = Lexer.make 0 "<test>" "" interner in
   let tokens, diags = Lexer.lex lexer in
   check int "eof only" 1 (List.length tokens);
   check bool "no errors" false (Diagnostic.has_errors diags)
 
 let test_underscore () =
   let interner = Interner.create () in
-  let lexer = Lexer.make 0 "_" interner in
+  let lexer = Lexer.make 0 "<test>" "_" interner in
   let tokens, _diags = Lexer.lex lexer in
   match List.hd tokens with
   | { Token.kind = Token.Underscore; _ } -> ()
-  | _ -> fail "expected underscore token"
+  | _ -> fail "expected 'Underscore' token"
 
 let test_keyword_vs_ident () =
   let interner = Interner.create () in
-  let lexer = Lexer.make 0 "proc procedure" interner in
+  let lexer = Lexer.make 0 "<test>" "proc procedure" interner in
   let tokens, _diags = Lexer.lex lexer in
   let kinds = List.map (fun t -> t.Token.kind) tokens in
   match kinds with
@@ -26,11 +26,11 @@ let test_keyword_vs_ident () =
 
 let test_operator_longest_match () =
   let interner = Interner.create () in
-  let lexer = Lexer.make 0 "<-" interner in
+  let lexer = Lexer.make 0 "<test>" "<-" interner in
   let tokens, _diags = Lexer.lex lexer in
   match List.hd tokens with
   | { Token.kind = Token.LtMinus; _ } -> ()
-  | _ -> fail "expected <- not < and -"
+  | _ -> fail "expected '<-', not '<' and '-'"
 
 let () =
   run

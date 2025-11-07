@@ -2,7 +2,7 @@ open Alcotest
 
 let make_parser source =
   let interner = Interner.create () in
-  let lexer = Lexer.make 0 source interner in
+  let lexer = Lexer.make 0 "<test>" source interner in
   let tokens, _ = Lexer.lex lexer in
   (Parser.make tokens interner, interner)
 
