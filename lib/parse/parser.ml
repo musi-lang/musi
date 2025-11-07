@@ -385,20 +385,21 @@ and parse_expr_if t start =
     if curr_token_kind t = Token.KwElse then (
       advance t;
       let tok = curr_token t in
-      if tok.Token.kind = Token.KwIf then Some (parse_expr_if t tok.Token.span)
-      else Some (parse_expr_block t tok.Token.span false))
+      Some
+        (if tok.Token.kind = Token.KwIf then parse_expr_if t tok.Token.span
+         else parse_expr_block t tok.Token.span false))
     else None
   in
-  let span = Span.merge start (curr_token t).Token.span in
-  Node.make (Node.ExprIf { pat; then_branch; else_branch }) span
+  Node.make
+    (Node.ExprIf { pat; then_branch; else_branch })
+    (Span.merge start (curr_token t).Token.span)
 
 and parse_expr_while t start =
   advance t;
   let pat = parse_expr t 0 in
   let _ = expect t Token.KwDo in
   let body = parse_expr_block t (curr_token t).Token.span false in
-  let span = Span.merge start body.Node.span in
-  Node.make (Node.ExprWhile { pat; body }) span
+  Node.make (Node.ExprWhile { pat; body }) (Span.merge start body.Node.span)
 
 and parse_expr_for t start =
   advance t;
@@ -407,24 +408,21 @@ and parse_expr_for t start =
   let iter = parse_expr t 0 in
   let _ = expect t Token.KwDo in
   let body = parse_expr_block t (curr_token t).Token.span false in
-  let span = Span.merge start body.Node.span in
-  Node.make (Node.ExprFor { pat; iter; body }) span
+  Node.make (Node.ExprFor { pat; iter; body }) (Span.merge start body.Node.span)
 
 and parse_expr_return t start =
   advance t;
-  let tok = curr_token t in
   let expr =
-    if tok.Token.kind = Token.Semi || tok.Token.kind = Token.RBrace then None
+    if curr_token_kind t = Token.Semi || curr_token_kind t = Token.RBrace then
+      None
     else Some (parse_expr t 0)
   in
-  let span =
-    match expr with Some e -> Span.merge start e.Node.span | None -> start
-  in
-  Node.make (Node.ExprReturn expr) span
+  Node.make
+    (Node.ExprReturn expr)
+    (match expr with Some e -> Span.merge start e.Node.span | None -> start)
 
 and parse_expr_postfix t node =
-  let tok = curr_token t in
-  match tok.Token.kind with
+  match curr_token_kind t with
   | Token.LParen ->
     let args =
       parse_separated
@@ -434,40 +432,35 @@ and parse_expr_postfix t node =
         ~trailing_ok:true
         ~parse_item:(fun t -> parse_expr t 0)
     in
-    let close_paren = expect t Token.RParen in
-    let node' =
-      Node.make
-        (Node.ExprCall { callee = node; args })
-        (Span.merge node.Node.span close_paren.Token.span)
-    in
-    parse_expr_postfix t node'
+    let close = expect t Token.RParen in
+    parse_expr_postfix
+      t
+      (Node.make
+         (Node.ExprCall { callee = node; args })
+         (Span.merge node.Node.span close.Token.span))
   | Token.Dot -> (
     advance t;
-    let field_tok = curr_token t in
-    match field_tok.Token.kind with
+    match curr_token_kind t with
     | Token.Ident name ->
+      let tok = curr_token t in
       advance t;
-      let span = Span.merge node.Node.span field_tok.Token.span in
-      let node' =
-        Node.make (Node.ExprField { target = node; field = name }) span
-      in
-      parse_expr_postfix t node'
-    | _ ->
-      error
+      parse_expr_postfix
         t
-        "expected field name after '.' in field access"
-        field_tok.Token.span;
+        (Node.make
+           (Node.ExprField { target = node; field = name })
+           (Span.merge node.Node.span tok.Token.span))
+    | _ ->
+      error t "expected field name after '.'" (curr_token t).Token.span;
       node)
   | Token.LBrack ->
     advance t;
     let index = parse_expr t 0 in
-    let close_brack = expect t Token.RBrack in
-    let node' =
-      Node.make
-        (Node.ExprIndex { target = node; index })
-        (Span.merge node.Node.span close_brack.Token.span)
-    in
-    parse_expr_postfix t node'
+    let close = expect t Token.RBrack in
+    parse_expr_postfix
+      t
+      (Node.make
+         (Node.ExprIndex { target = node; index })
+         (Span.merge node.Node.span close.Token.span))
   | _ -> node
 
 and parse_expr_primary t =
@@ -986,15 +979,14 @@ and parse_expr_match t start =
 
 and parse_expr_break t start =
   advance t;
-  let tok = curr_token t in
   let value =
-    if tok.Token.kind = Token.Semi || tok.Token.kind = Token.RBrace then None
+    if curr_token_kind t = Token.Semi || curr_token_kind t = Token.RBrace then
+      None
     else Some (parse_expr t 0)
   in
-  let span =
-    match value with Some v -> Span.merge start v.Node.span | None -> start
-  in
-  Node.make (Node.ExprBreak value) span
+  Node.make
+    (Node.ExprBreak value)
+    (match value with Some v -> Span.merge start v.Node.span | None -> start)
 
 and parse_expr_continue t start =
   advance t;
