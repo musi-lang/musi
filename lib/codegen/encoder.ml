@@ -57,11 +57,20 @@ let encode_header buf hdr =
   Binary.write_u32_le buf hdr.link_offset;
   Binary.write_u32_le buf hdr.link_count
 
-let encode_bytecode buf instrs = List.iter (encode_instr buf) (List.rev instrs)
+let encode_bytecode buf instrs = List.iter (encode_instr buf) instrs
 
 (* ========================================
    PROGRAM ENCODING
    ======================================== *)
+
+let encode_proc_table buf proc_descs =
+  Binary.write_u32_le buf (Int32.of_int (List.length proc_descs));
+  List.iter
+    (fun (desc : Metadata.proc_desc) ->
+      Binary.write_u32_le buf (Int32.of_int desc.bytecode_offset);
+      Binary.write_u32_le buf (Int32.of_int desc.bytecode_length);
+      Buffer.add_char buf (if desc.is_extern then '\x01' else '\x00'))
+    proc_descs
 
 let encode_program procs module_desc =
   let buf = Buffer.create 1024 in
@@ -69,10 +78,57 @@ let encode_program procs module_desc =
   encode_const_pool const_pool_buf module_desc.Metadata.const_pool;
   let const_pool_bytes = Buffer.to_bytes const_pool_buf in
   let bc_buf = Buffer.create 1024 in
-  Array.iter (encode_bytecode bc_buf) procs;
+  let proc_descs =
+    Array.to_list
+      (Array.mapi
+         (fun i instrs ->
+           let offset = Buffer.length bc_buf in
+           encode_bytecode bc_buf instrs;
+           let length = Buffer.length bc_buf - offset in
+           let is_extern =
+             List.exists (fun (proc_id, _) -> proc_id = i) module_desc.link_keys
+           in
+           {
+             Metadata.name = None
+           ; param_count = 0
+           ; local_count = 0
+           ; max_stack = 0
+           ; bytecode_offset = offset
+           ; bytecode_length = length
+           ; is_extern
+           })
+         procs)
+  in
+  let proc_table_buf = Buffer.create 256 in
+  encode_proc_table proc_table_buf proc_descs;
+  let proc_table_bytes = Buffer.to_bytes proc_table_buf in
   let bc_bytes = Buffer.to_bytes bc_buf in
+  let bc_offset_base =
+    Int32.add
+      (Int32.add 32l (Int32.of_int (Bytes.length const_pool_bytes)))
+      (Int32.of_int (Bytes.length proc_table_bytes))
+  in
+  let proc_descs_adjusted =
+    List.map
+      (fun (desc : Metadata.proc_desc) ->
+        {
+          Metadata.name = desc.name
+        ; param_count = desc.param_count
+        ; local_count = desc.local_count
+        ; max_stack = desc.max_stack
+        ; bytecode_offset = desc.bytecode_offset + Int32.to_int bc_offset_base
+        ; bytecode_length = desc.bytecode_length
+        ; is_extern = desc.is_extern
+        })
+      proc_descs
+  in
+  Buffer.clear proc_table_buf;
+  encode_proc_table proc_table_buf proc_descs_adjusted;
+  let proc_table_bytes = Buffer.to_bytes proc_table_buf in
   let bc_offset =
-    Int32.add 32l (Int32.of_int (Bytes.length const_pool_bytes))
+    Int32.add
+      (Int32.add 32l (Int32.of_int (Bytes.length const_pool_bytes)))
+      (Int32.of_int (Bytes.length proc_table_bytes))
   in
   let bc_size = Int32.of_int (Bytes.length bc_bytes) in
   let export_buf = Buffer.create 256 in
@@ -111,6 +167,7 @@ let encode_program procs module_desc =
   in
   encode_header buf hdr;
   Buffer.add_bytes buf const_pool_bytes;
+  Buffer.add_bytes buf proc_table_bytes;
   Buffer.add_bytes buf bc_bytes;
   Buffer.add_bytes buf export_bytes;
   Buffer.add_bytes buf link_bytes;
