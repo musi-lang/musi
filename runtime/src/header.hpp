@@ -28,10 +28,20 @@ namespace musi {
     std::string link_key;
   };
 
+  struct ProcDesc {
+    uint32_t bytecode_offset;
+    uint32_t bytecode_length;
+    bool is_extern;
+  };
+
   auto parse_header(std::span<const uint8_t> data) -> Expected<Header>;
   auto parse_export_table(std::span<const uint8_t> data, size_t offset)
       -> Expected<std::vector<ExportEntry>>;
   auto parse_link_table(std::span<const uint8_t> data, size_t offset)
       -> Expected<std::vector<LinkEntry>>;
+  auto parse_const_pool(std::span<const uint8_t> data, size_t offset)
+      -> Expected<ConstPool>;
+  auto parse_proc_table(std::span<const uint8_t> data, size_t offset)
+      -> Expected<ProcTable>;
 
 }  // namespace musi

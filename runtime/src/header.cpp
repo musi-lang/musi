@@ -54,7 +54,7 @@ namespace musi {
   }
 
   auto parse_export_table(std::span<const uint8_t> data, size_t offset)
-      -> Expected<std::vector<ExportEntry>> {
+      -> Expected<ExportEntryList> {
     if (offset + 4 > data.size()) {
       return std::unexpected("export table offset out of bounds");
     }
@@ -62,10 +62,10 @@ namespace musi {
     const auto count = read_le<uint32_t>(data, offset);
     offset += 4;
 
-    std::vector<ExportEntry> exports;
+    ExportEntryList exports;
     exports.reserve(count);
 
-    for (uint32_t i = 0; i < count; ++i) {
+    for (auto i = 0U; i < count; ++i) {
       if (offset + 4 > data.size()) {
         return std::unexpected("export entry name length out of bounds");
       }
@@ -78,7 +78,7 @@ namespace musi {
       }
 
       std::string name(name_len, '\0');
-      for (uint32_t j = 0; j < name_len; ++j) {
+      for (auto j = 0U; j < name_len; ++j) {
         name[j] = static_cast<char>(data[offset + j]);
       }
       offset += name_len;
@@ -93,7 +93,7 @@ namespace musi {
   }
 
   auto parse_link_table(std::span<const uint8_t> data, size_t offset)
-      -> Expected<std::vector<LinkEntry>> {
+      -> Expected<LinkEntryList> {
     if (offset + 4 > data.size()) {
       return std::unexpected("link table offset out of bounds");
     }
@@ -101,10 +101,10 @@ namespace musi {
     const auto count = read_le<uint32_t>(data, offset);
     offset += 4;
 
-    std::vector<LinkEntry> links;
+    LinkEntryList links;
     links.reserve(count);
 
-    for (uint32_t i = 0; i < count; ++i) {
+    for (auto i = 0U; i < count; ++i) {
       if (offset + 8 > data.size()) {
         return std::unexpected("link entry header out of bounds");
       }
@@ -120,7 +120,7 @@ namespace musi {
       }
 
       std::string link_key(key_len, '\0');
-      for (uint32_t j = 0; j < key_len; ++j) {
+      for (auto j = 0U; j < key_len; ++j) {
         link_key[j] = static_cast<char>(data[offset + j]);
       }
       offset += key_len;
@@ -129,6 +129,82 @@ namespace musi {
     }
 
     return links;
+  }
+
+  auto parse_const_pool(std::span<const uint8_t> data, size_t offset)
+      -> Expected<ConstPool> {
+    if (offset + 4 > data.size()) {
+      return std::unexpected("constant pool offset out of bounds");
+    }
+
+    const auto count = read_le<uint32_t>(data, offset);
+    offset += 4;
+
+    ConstPool pool;
+    pool.reserve(count);
+
+    for (auto i = 0U; i < count; ++i) {
+      if (offset >= data.size()) {
+        return std::unexpected("constant pool entry out of bounds");
+      }
+
+      const auto tag = data[offset++];
+      if (tag == 0x05) {
+        if (offset + 4 > data.size()) {
+          return std::unexpected("constant string length out of bounds");
+        }
+
+        const auto len = read_le<uint32_t>(data, offset);
+        offset += 4;
+
+        if (offset + len > data.size()) {
+          return std::unexpected("constant string data out of bounds");
+        }
+
+        std::string str(len, '\0');
+        for (auto j = 0U; j < len; ++j) {
+          str[j] = static_cast<char>(data[offset + j]);
+        }
+        offset += len;
+
+        pool.push_back(std::move(str));
+      } else {
+        return std::unexpected(
+            std::format("unsupported constant tag '0x{:02X}'", tag));
+      }
+    }
+
+    return pool;
+  }
+
+  auto parse_proc_table(std::span<const uint8_t> data, size_t offset)
+      -> Expected<ProcTable> {
+    if (offset + 4 > data.size()) {
+      return std::unexpected("procedure table offset out of bounds");
+    }
+
+    const auto count = read_le<uint32_t>(data, offset);
+    offset += 4;
+
+    ProcTable procs;
+    procs.reserve(count);
+
+    for (auto i = 0U; i < count; ++i) {
+      if (offset + 9 > data.size()) {
+        return std::unexpected("procedure descriptor out of bounds");
+      }
+
+      ProcDesc desc {};
+      desc.bytecode_offset = read_le<uint32_t>(data, offset);
+      offset += 4;
+      desc.bytecode_length = read_le<uint32_t>(data, offset);
+      offset += 4;
+      desc.is_extern = data[offset++] != 0;
+
+      procs.push_back(desc);
+    }
+
+    return procs;
   }
 
 }  // namespace musi
