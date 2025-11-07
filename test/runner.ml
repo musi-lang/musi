@@ -48,7 +48,12 @@ type stage = Lex | Parse | Full
 
 let empty_result interner diags =
   let empty_module_desc =
-    { Metadata.module_name = None; exports = []; link_keys = [] }
+    {
+      Metadata.module_name = None
+    ; exports = []
+    ; link_keys = []
+    ; const_pool = []
+    }
   in
   (interner, diags, ([||], empty_module_desc), Hashtbl.create 0)
 
