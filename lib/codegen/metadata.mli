@@ -6,10 +6,9 @@ type header = {
   ; version : int32
   ; bc_offset : int32
   ; bc_size : int32
-  ; export_offset : int32
-  ; export_count : int32
-  ; link_offset : int32
-  ; link_count : int32
+  ; metadata_offset : int32
+  ; metadata_size : int32
+  ; reserved : int64
 }
 
 (** Describes single entry stored inside constant pool segment. *)
@@ -26,12 +25,17 @@ type proc_desc = {
   ; is_extern : bool
 }
 
+(** Stores parameter count for procedure. *)
+type proc_info = { param_count : int }
+
 (** Tracks module name along with exported entries and link keys. *)
 type module_desc = {
     module_name : string option
   ; exports : (string * int) list
   ; link_keys : (int * string) list
   ; const_pool : constant list
+  ; proc_infos : proc_info list
+  ; imports : (string * string list) list
 }
 
 (** Optional sections appended after bytecode payload. *)
