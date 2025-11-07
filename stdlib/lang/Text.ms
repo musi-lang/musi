@@ -1,5 +1,6 @@
 import { Nat } from "stdlib/lang/Nat";
 
+@link("musi.lang.Text")
 const Text := record {
   var _data: Any;
 };
