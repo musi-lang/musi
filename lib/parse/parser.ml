@@ -199,24 +199,17 @@ let rec parse_expr_atom t =
   | Token.LBrace ->
     let next = Token.peek t.stream in
     if next.Token.kind = Token.Dot then parse_expr_record_literal t start None
-    else (
-      error t "expected 'do' before block expression" start;
-      parse_expr_block t start false)
+    else parse_expr_block t start false
   | Token.KwDo ->
     advance t;
-    if curr_token_kind t = Token.KwUnsafe then (
+    let body = parse_expr_block t (curr_token t).Token.span false in
+    if curr_token_kind t = Token.KwWhile then (
       advance t;
-      parse_expr_block t start true)
-    else
-      let body = parse_expr_block t start false in
-      if curr_token_kind t = Token.KwWhile then (
-        advance t;
-        let pat = parse_expr t 0 in
-        let span = Span.merge start pat.Node.span in
-        Node.make (Node.ExprWhile { pat; body }) span)
-      else body
+      let pat = parse_expr t 0 in
+      let span = Span.merge start pat.Node.span in
+      Node.make (Node.ExprWhile { pat; body }) span)
+    else Node.make (Node.ExprLoop body) (Span.merge start body.Node.span)
   | Token.KwUnsafe ->
-    error t "expected 'do' before 'unsafe' block" start;
     advance t;
     parse_expr_block t start true
   | Token.KwIf -> parse_expr_if t start
@@ -653,6 +646,7 @@ and parse_stmt_import t start =
       { Node.name; alias }
     | _ ->
       error t "expected identifier in import list" tok.Token.span;
+      advance t;
       { Node.name = Interner.intern t.interner "<error>"; alias = None }
   in
   let items =
@@ -690,6 +684,7 @@ and parse_stmt_export t start =
       name
     | _ ->
       error t "expected identifier in 'export' list" tok.Token.span;
+      advance t;
       Interner.intern t.interner "<error>"
   in
   let items =
@@ -890,6 +885,7 @@ and parse_expr_proc ?(modifiers = empty_modifiers) t start =
       { Node.is_mutable; name; ty }
     | _ ->
       error t "expected parameter name in 'proc' declaration" tok.Token.span;
+      advance t;
       {
         Node.is_mutable
       ; name = Interner.intern t.interner "<error>"
