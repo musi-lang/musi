@@ -53,6 +53,8 @@ let empty_result interner diags =
     ; exports = []
     ; link_keys = []
     ; const_pool = []
+    ; proc_infos = []
+    ; imports = []
     }
   in
   (interner, diags, ([||], empty_module_desc), Hashtbl.create 0)
