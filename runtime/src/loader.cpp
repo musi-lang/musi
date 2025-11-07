@@ -33,13 +33,7 @@ namespace musi {
             std::format("invalid .msc header: {}", hdr_res.error()));
       }
 
-      if (data.size() <= Header::SIZE) {
-        return std::unexpected("file too small to contain bytecode");
-      }
-
-      std::vector<uint8_t> bc(data.begin() + Header::SIZE, data.end());
-
-      return bc;
+      return data;
     } catch (const std::exception& ex) {
       return std::unexpected(
           std::format("exception loading '{}': {}", path, ex.what()));
