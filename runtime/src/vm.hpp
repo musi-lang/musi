@@ -62,6 +62,7 @@ private:
 
     auto exec_ldcstr() -> Expected<void>;
     auto exec_ldloc() -> Expected<void>;
+    auto exec_ldarg() -> Expected<void>;
     auto exec_stloc() -> Expected<void>;
     void exec_add();
     void exec_sub();
