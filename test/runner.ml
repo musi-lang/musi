@@ -52,9 +52,9 @@ let empty_result interner diags =
   in
   (interner, diags, ([||], empty_module_desc), Hashtbl.create 0)
 
-let run_pipeline source stage =
+let run_pipeline filepath source stage =
   let interner = Interner.create () in
-  let lexer = Lexer.make 0 source interner in
+  let lexer = Lexer.make 0 filepath source interner in
   let tokens, lex_diags = Lexer.lex lexer in
   match stage with
   | Lex -> empty_result interner lex_diags
@@ -87,7 +87,7 @@ let test_pass path () =
     else if String.starts_with ~prefix:"parse_" basename then Parse
     else Full
   in
-  let interner, diags, procs, proc_table = run_pipeline source stage in
+  let interner, diags, procs, proc_table = run_pipeline path source stage in
   Validate.check_no_errors ~diags;
   let expect_path = String.sub path 0 (String.length path - 3) ^ ".expect" in
   if Sys.file_exists expect_path then
@@ -104,7 +104,7 @@ let test_fail path () =
     else if String.starts_with ~prefix:"parse_" basename then Parse
     else Full
   in
-  let _interner, diags, _procs, _proc_table = run_pipeline source stage in
+  let _interner, diags, _procs, _proc_table = run_pipeline path source stage in
   Validate.check_has_errors ~diags
 
 let () =
