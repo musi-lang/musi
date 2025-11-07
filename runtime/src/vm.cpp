@@ -2,6 +2,7 @@
 
 #include <bit>
 #include <format>
+#include <print>
 
 #include "object.hpp"
 #include "opcode.hpp"
@@ -157,10 +158,18 @@ namespace musi {
 
   auto VM::exec_call() -> Expected<void> {
     const auto proc_id = static_cast<uint32_t>(read_i32());
+    std::println(
+        "[VM] call proc_id={} (table_size={})",
+        proc_id,
+        m_proc_table.size());
     if (proc_id >= m_proc_table.size()) {
       return std::unexpected(std::format("invalid procedure {}", proc_id));
     }
     const auto& proc = m_proc_table[proc_id];
+    std::println(
+        "[VM] proc.is_extern={{}} proc.bytecode_offset={{:#06x}}",
+        proc.is_extern,
+        proc.bytecode_offset);
     if (proc.is_extern) {
       const auto it = m_link_table.find(proc_id);
       if (it == m_link_table.end()) {
