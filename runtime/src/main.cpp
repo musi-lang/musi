@@ -2,6 +2,7 @@
 #include <print>
 #include <span>
 
+#include "intrinsics.hpp"
 #include "loader.hpp"
 #include "vm.hpp"
 
@@ -17,25 +18,27 @@ auto main(int argc, char** argv) -> int {
     const std::string_view filename(args[1]);
     const auto bc_result = musi::load_bytecode(filename);
     if (!bc_result) {
-      std::println(stderr, "error: {}", bc_result.error());
+      std::println(stderr, "{}", bc_result.error());
       return EXIT_FAILURE;
     }
 
     const auto& bc = bc_result.value();
     musi::VM vm(musi::Bytecode {bc.data(), bc.size()});
+    vm.register_intrinsic("musi.io.write", musi::intrinsics::io_write);
+    vm.register_intrinsic("musi.io.writeln", musi::intrinsics::io_writeln);
 
     const auto exec_result = vm.exec();
     if (!exec_result) {
-      std::println(stderr, "runtime error: {}", exec_result.error());
+      std::println(stderr, "{}", exec_result.error());
       return EXIT_FAILURE;
     }
 
     return EXIT_SUCCESS;
   } catch (const std::exception& ex) {
-    std::println(stderr, "fatal error: {}", ex.what());
+    std::println(stderr, "{}", ex.what());
     return EXIT_FAILURE;
   } catch (...) {
-    std::println(stderr, "fatal error: unknown exception");
+    std::println(stderr, "unknown exception caught");
     return EXIT_FAILURE;
   }
 }
