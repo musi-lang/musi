@@ -7,7 +7,7 @@ TEST_CASE("VM executes 'LdcI4_0' and 'Ret'") {
       0x16,  // LdcI4_0
       0x2A   // Ret
   };
-  musi::VM vm(bc);
+  musi::VM vm(bc, {}, {}, {});
   const auto result = vm.exec();
   CHECK(result.has_value());
 }
