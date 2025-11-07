@@ -6,13 +6,6 @@
  (flags
   (:standard -w -34-69)))
 
-(rule
- (targets ../../runtime/src/opcode.hpp)
- (deps instr.ml)
- (mode promote)
- (action
-  (run %{project_root}/tools/gen_opcodes.exe %{deps} %{targets})))
-
 (documentation
  (package musi))
 
