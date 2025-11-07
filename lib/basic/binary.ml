@@ -36,3 +36,34 @@ let write_u32_le buf value =
        (Int32.to_int (Int32.logand (Int32.shift_right_logical value 24) 0xFFl)))
 
 let write_i32_le = write_u32_le
+
+let write_i64_le buf value =
+  Buffer.add_char buf (Char.chr (Int64.to_int (Int64.logand value 0xFFL)));
+  Buffer.add_char
+    buf
+    (Char.chr
+       (Int64.to_int (Int64.logand (Int64.shift_right_logical value 8) 0xFFL)));
+  Buffer.add_char
+    buf
+    (Char.chr
+       (Int64.to_int (Int64.logand (Int64.shift_right_logical value 16) 0xFFL)));
+  Buffer.add_char
+    buf
+    (Char.chr
+       (Int64.to_int (Int64.logand (Int64.shift_right_logical value 24) 0xFFL)));
+  Buffer.add_char
+    buf
+    (Char.chr
+       (Int64.to_int (Int64.logand (Int64.shift_right_logical value 32) 0xFFL)));
+  Buffer.add_char
+    buf
+    (Char.chr
+       (Int64.to_int (Int64.logand (Int64.shift_right_logical value 40) 0xFFL)));
+  Buffer.add_char
+    buf
+    (Char.chr
+       (Int64.to_int (Int64.logand (Int64.shift_right_logical value 48) 0xFFL)));
+  Buffer.add_char
+    buf
+    (Char.chr
+       (Int64.to_int (Int64.logand (Int64.shift_right_logical value 56) 0xFFL)))

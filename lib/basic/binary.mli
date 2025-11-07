@@ -17,3 +17,6 @@ val write_u32_le : Buffer.t -> int32 -> unit
 
 (** Writes 32-bit signed integer into buffer using little-endian order. *)
 val write_i32_le : Buffer.t -> int32 -> unit
+
+(** Writes 64-bit signed integer into buffer using little-endian order. *)
+val write_i64_le : Buffer.t -> int64 -> unit
