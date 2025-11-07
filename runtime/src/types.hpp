@@ -14,6 +14,10 @@ namespace musi {
 
   using ValueList = std::vector<Value>;
 
+  using ExportEntryList = std::vector<struct ExportEntry>;
+  using LinkEntryList = std::vector<struct LinkEntry>;
+  using ProcTable = std::vector<struct ProcDesc>;
+
   template<typename T>
   using Expected = std::expected<T, std::string>;
 
