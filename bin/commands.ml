@@ -32,7 +32,10 @@ let compile input output_opt _search_paths =
   in
   Output.compiling input output;
   let start_time = Unix.gettimeofday () in
-  Pipeline.compile_file input output;
+  (try Pipeline.compile_module input output
+   with Failure msg ->
+     Output.error msg;
+     exit 1);
   let elapsed = Unix.gettimeofday () -. start_time in
   Output.finished
     "dev [fast-compile + debuginfo]"
@@ -45,9 +48,9 @@ let check input _search_paths =
   let ic = open_in input in
   let source = really_input_string ic (in_channel_length ic) in
   close_in ic;
-  let diags = Pipeline.check_source source in
+  let diags = Pipeline.check_source input source in
   if Diagnostic.has_errors diags then (
-    Pipeline.print_diagnostics diags source;
+    Pipeline.print_diagnostics diags input source;
     Output.error (format_error_summary diags);
     1)
   else (
@@ -89,12 +92,12 @@ let disasm input =
   close_in ic;
   let bytes_buf = Bytes.of_string buf in
   match Decoder.decode_program bytes_buf with
-  | Error e ->
-      Output.error (Printf.sprintf "failed to decode: %s" e);
-      1
+  | Error why ->
+    Output.error (Printf.sprintf "failed to decode: %s" why);
+    1
   | Ok decoded ->
-      print_string (Disasm.format_disassembly decoded);
-      0
+    print_string (Disasm.format_disassembly decoded);
+    0
 
 let version () =
   print_endline "musi 0.1.0";
