@@ -52,10 +52,8 @@ let error st msg span =
 let emit st instr =
   st.instrs <- instr :: st.instrs;
   match instr with
-  | Instr.LdcI4 _ | Instr.LdcI4M1 | Instr.LdcI4_0 | Instr.LdcI4_1
-  | Instr.LdcI4_2 | Instr.LdcI4_3 | Instr.LdcI4_4 | Instr.LdcI4_5
-  | Instr.LdcI4_6 | Instr.LdcI4_7 | Instr.LdcI4_8 | Instr.LdcUnit
-  | Instr.LdcStr _ | Instr.LdLoc _ | Instr.LdArg _ | Instr.Dup ->
+  | Instr.LdcI4 _ | Instr.LdcI4M1 | Instr.LdcUnit | Instr.LdcStr _
+  | Instr.LdLoc _ | Instr.LdArg _ | Instr.Dup ->
     st.stack_depth <- st.stack_depth + 1;
     if st.stack_depth > st.max_stack then st.max_stack <- st.stack_depth
   | Instr.Pop | Instr.StLoc _ | Instr.Ret ->
@@ -63,9 +61,8 @@ let emit st instr =
   | Instr.Add | Instr.Sub | Instr.Mul | Instr.Div | Instr.CmpEq | Instr.CmpNe
   | Instr.CmpLt | Instr.CmpGt | Instr.CmpLe | Instr.CmpGe ->
     st.stack_depth <- st.stack_depth - 1
-  | Instr.Neg -> ()
   | Instr.BrFalse _ | Instr.BrTrue _ -> st.stack_depth <- st.stack_depth - 1
-  | Instr.Br _ | Instr.Call _ | Instr.Nop -> ()
+  | _ -> ()
 
 let alloc_local st name =
   let idx = st.local_count in
@@ -147,7 +144,7 @@ let collect_procs interner ast =
 let rec emit_expr st node =
   match node.Node.kind with
   | Node.ExprLitNumeric (s, _) -> emit_expr_lit_numeric st s
-  | Node.ExprLitBool b -> emit st (if b then Instr.LdcI4_1 else Instr.LdcI4_0)
+  | Node.ExprLitBool b -> emit st (Instr.LdcI4 (if b then 1l else 0l))
   | Node.ExprLitText name ->
     let str = Interner.lookup st.interner name in
     let idx = add_const st str in
@@ -166,10 +163,7 @@ let rec emit_expr st node =
 
 and emit_expr_lit_numeric st s =
   let n = Int32.of_string s in
-  if n = 0l then emit st Instr.LdcI4_0
-  else if n = 1l then emit st Instr.LdcI4_1
-  else if n = -1l then emit st Instr.LdcI4M1
-  else emit st (Instr.LdcI4 n)
+  if n = -1l then emit st Instr.LdcI4M1 else emit st (Instr.LdcI4 n)
 
 and emit_expr_ident st name span =
   match lookup_local st name with
@@ -183,9 +177,6 @@ and emit_expr_ident st name span =
 and emit_expr_binary st op left right =
   emit_expr st left;
   emit_expr st right;
-  emit_binop st op
-
-and emit_binop st op =
   match op with
   | Token.Plus -> emit st Instr.Add
   | Token.Minus -> emit st Instr.Sub
@@ -201,9 +192,7 @@ and emit_binop st op =
 
 and emit_expr_unary st op operand =
   emit_expr st operand;
-  emit_unop st op
-
-and emit_unop st op = match op with Token.Minus -> emit st Instr.Neg | _ -> ()
+  if op = Token.Minus then emit st Instr.Neg
 
 and emit_expr_assign st target value =
   emit_expr st value;
