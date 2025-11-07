@@ -30,6 +30,7 @@ type module_desc = {
     module_name : string option
   ; exports : (string * int) list
   ; link_keys : (int * string) list
+  ; const_pool : constant list
 }
 
 (** Optional sections appended after bytecode payload. *)
