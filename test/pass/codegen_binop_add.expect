@@ -1,5 +1,5 @@
 proc 0 <main>:
-  ld.c.i4.1
+  ld.c.i4 1
   ld.c.i4 2
   add
   st.loc 0
