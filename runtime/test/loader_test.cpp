@@ -93,7 +93,7 @@ TEST_CASE("parse_export_table reads empty table") {
 
 TEST_CASE("parse_link_table reads empty table") {
   std::array<uint8_t, 4> data {0, 0, 0, 0};
-  const auto links = musi::parse_link_table(data, 0);
+  const auto links = musi::parse_link_table(data, 0, 1);
   REQUIRE(links.has_value());
   CHECK(links->empty());
 }
