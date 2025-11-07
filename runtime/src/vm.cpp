@@ -10,6 +10,19 @@ namespace musi {
 
   VM::VM(Bytecode bc) : m_bc(bc) {}
 
+  auto VM::register_intrinsic(std::string name, Intrinsic fn) -> void {
+    m_intrinsics[std::move(name)] = std::move(fn);
+  }
+
+  auto VM::call_intrinsic(const std::string& name) -> Expected<void> {
+    const auto it = m_intrinsics.find(name);
+    if (it == m_intrinsics.end()) {
+      return std::unexpected(std::format("intrinsic '{}' not found", name));
+    }
+    it->second(*this);
+    return {};
+  }
+
   VM::~VM() {
     const auto release_if_object = [](const Value& val) {
       if (const auto* obj_ptr = std::get_if<Object*>(&val)) {
