@@ -2,15 +2,6 @@ type t =
   | Nop
   | LdcI4 of int32
   | LdcI4M1
-  | LdcI4_0
-  | LdcI4_1
-  | LdcI4_2
-  | LdcI4_3
-  | LdcI4_4
-  | LdcI4_5
-  | LdcI4_6
-  | LdcI4_7
-  | LdcI4_8
   | LdcUnit
   | LdcStr of int
   | LdLoc of int
@@ -39,15 +30,6 @@ let to_opcode = function
   | Nop -> 0x00
   | LdcI4 _ -> 0x20
   | LdcI4M1 -> 0x15
-  | LdcI4_0 -> 0x16
-  | LdcI4_1 -> 0x17
-  | LdcI4_2 -> 0x18
-  | LdcI4_3 -> 0x19
-  | LdcI4_4 -> 0x1A
-  | LdcI4_5 -> 0x1B
-  | LdcI4_6 -> 0x1C
-  | LdcI4_7 -> 0x1D
-  | LdcI4_8 -> 0x1E
   | LdcUnit -> 0x21
   | LdcStr _ -> 0x22
   | LdLoc _ -> 0x0E
@@ -76,15 +58,6 @@ let show = function
   | Nop -> "nop"
   | LdcI4 n -> Printf.sprintf "ld.c.i4 %ld" n
   | LdcI4M1 -> "ld.c.i4.m1"
-  | LdcI4_0 -> "ld.c.i4.0"
-  | LdcI4_1 -> "ld.c.i4.1"
-  | LdcI4_2 -> "ld.c.i4.2"
-  | LdcI4_3 -> "ld.c.i4.3"
-  | LdcI4_4 -> "ld.c.i4.4"
-  | LdcI4_5 -> "ld.c.i4.5"
-  | LdcI4_6 -> "ld.c.i4.6"
-  | LdcI4_7 -> "ld.c.i4.7"
-  | LdcI4_8 -> "ld.c.i4.8"
   | LdcUnit -> "ld.c.unit"
   | LdcStr idx -> Printf.sprintf "ld.c.str %d" idx
   | LdLoc idx -> Printf.sprintf "ld.loc %d" idx

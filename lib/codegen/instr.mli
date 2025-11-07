@@ -5,15 +5,6 @@ type t =
   | Nop
   | LdcI4 of int32
   | LdcI4M1
-  | LdcI4_0
-  | LdcI4_1
-  | LdcI4_2
-  | LdcI4_3
-  | LdcI4_4
-  | LdcI4_5
-  | LdcI4_6
-  | LdcI4_7
-  | LdcI4_8
   | LdcUnit
   | LdcStr of int
   | LdLoc of int
