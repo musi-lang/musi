@@ -65,8 +65,7 @@ TEST_CASE("parse_header reads version") {
 
   const auto hdr = musi::parse_header(*bc);
   REQUIRE(hdr.has_value());
-  CHECK(hdr->major_version == 0);
-  CHECK(hdr->minor_version == 1);
+  CHECK(hdr->version == 1);
 }
 
 TEST_CASE("parse_header fails on invalid magic") {
