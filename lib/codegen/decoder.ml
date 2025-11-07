@@ -9,7 +9,7 @@ let decode_header buf =
   if Bytes.length buf < 32 then Error "file too small for header"
   else
     let magic = Bytes.sub_string buf 0 4 in
-    if magic <> "\x4D\x53\x43\x00" then Error "invalid magic number"
+    if magic <> "MUSI" then Error "invalid magic number"
     else
       let version = Binary.read_u32_le buf 4 in
       let bc_offset = Binary.read_u32_le buf 8 in
