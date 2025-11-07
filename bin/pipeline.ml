@@ -47,6 +47,48 @@ let print_diagnostics diags filename source =
   let _, files = Source.add_file files filename source in
   Diagnostic.emit_all Format.err_formatter diags files
 
+let bundle_modules interner sorted_modules =
+  let proc_table = Hashtbl.create 64 in
+  let all_procs = ref [] in
+  let global_const_pool = Hashtbl.create 64 in
+  let global_const_list = ref [] in
+  let all_exports = ref [] in
+  let all_links = ref [] in
+  List.iter
+    (fun (m : Linker.module_info) ->
+      let m_procs = Emitter.collect_procs interner m.ast in
+      Hashtbl.iter (fun k v -> Hashtbl.replace proc_table k v) m_procs)
+    sorted_modules;
+  List.iter
+    (fun (m : Linker.module_info) ->
+      let diags = ref Diagnostic.empty_bag in
+      let procs, module_desc =
+        Emitter.emit_program interner proc_table diags m.ast
+      in
+      all_procs := Array.to_list procs @ !all_procs;
+      List.iter
+        (fun const ->
+          match const with
+          | Metadata.ConstText s ->
+            if not (Hashtbl.mem global_const_pool s) then (
+              Hashtbl.add global_const_pool s (List.length !global_const_list);
+              global_const_list := !global_const_list @ [ const ])
+          | _ -> ())
+        module_desc.Metadata.const_pool;
+      all_exports := module_desc.Metadata.exports @ !all_exports;
+      all_links := module_desc.Metadata.link_keys @ !all_links)
+    sorted_modules;
+  let merged_desc =
+    {
+      Metadata.module_name = None
+    ; exports = !all_exports
+    ; link_keys = !all_links
+    ; const_pool = !global_const_list
+    }
+  in
+  let procs_array = Array.of_list (List.rev !all_procs) in
+  Encoder.encode_program procs_array merged_desc
+
 let compile_module input_path output_path =
   let interner = Interner.create () in
   let linker = Linker.create interner in
@@ -75,30 +117,7 @@ let compile_module input_path output_path =
         print_diagnostics resolve_diags m.path source;
         failwith "resolution failed"))
     sorted_modules;
-  let proc_table = Hashtbl.create 64 in
-  List.iter
-    (fun (m : Linker.module_info) ->
-      let m_procs = Emitter.collect_procs interner m.ast in
-      Hashtbl.iter (fun k v -> Hashtbl.replace proc_table k v) m_procs)
-    sorted_modules;
-  List.iter
-    (fun (m : Linker.module_info) ->
-      let diags = ref Diagnostic.empty_bag in
-      let procs, module_desc =
-        Emitter.emit_program interner proc_table diags m.ast
-      in
-      if Diagnostic.has_errors !diags then (
-        let ic = open_in m.path in
-        let source = really_input_string ic (in_channel_length ic) in
-        close_in ic;
-        print_diagnostics !diags m.path source;
-        failwith "codegen failed");
-      let bytecode = Encoder.encode_program procs module_desc in
-      let out_path =
-        if m.path = input_path then output_path
-        else String.sub m.path 0 (String.length m.path - 3) ^ ".msc"
-      in
-      let oc = open_out_bin out_path in
-      output_bytes oc bytecode;
-      close_out oc)
-    sorted_modules
+  let bytecode = bundle_modules interner sorted_modules in
+  let oc = open_out_bin output_path in
+  output_bytes oc bytecode;
+  close_out oc
