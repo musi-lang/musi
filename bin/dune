@@ -1,7 +1,0 @@
-(executable
- (name main)
- (modules main cli commands pipeline output disasm)
- (libraries basic lex parse sema codegen unix))
-
-(documentation
- (package musi))
