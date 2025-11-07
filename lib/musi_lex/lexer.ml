@@ -202,7 +202,7 @@ let lex_lit_rune t =
 let lex_line_comment t =
   let start = t.pos in
   advance_by t 2;
-  scan_while t (fun c -> c <> '\n');
+  scan_while t (fun c -> c <> '\n' && c <> '\000');
   Token.make
     (Token.LineComment (intern_slice t (start + 2) (t.pos - start - 2)))
     (span t start)
@@ -298,6 +298,9 @@ let lex t =
 let lex_all t =
   let rec loop acc =
     if at_end t then List.rev (Token.make Token.Eof (span t t.pos) :: acc)
-    else loop (lex t :: acc)
+    else
+      let tok = lex t in
+      if tok.Token.kind = Token.Eof then List.rev (tok :: acc)
+      else loop (tok :: acc)
   in
   (loop [], !(t.diags))
