@@ -3,9 +3,10 @@ open Musi_lex
 
 let lex src =
   let interner = Interner.create () in
-  let lexer = Lexer.make 0 src interner in
-  let tokens, diags = Lexer.lex_all lexer in
-  (tokens, diags, interner)
+  let file_id, _ = Source.add_file Source.empty "<test>" src in
+  let lexer = Lexer.make file_id src interner in
+  let toks, diags = Lexer.lex_all lexer in
+  (toks, diags, interner)
 
 let test_keyword_if () =
   let tokens, diags, _ = lex "if" in
@@ -23,7 +24,7 @@ let test_ident () =
   match tokens with
   | [ { Token.kind = Token.Ident n; _ }; { kind = Token.Eof; _ } ] ->
     Alcotest.(check string) "ident value" "foo" (Interner.lookup interner n)
-  | _ -> Alcotest.fail "expected ident token"
+  | _ -> Alcotest.fail "expected Ident token"
 
 let test_underscore () =
   let tokens, diags, _ = lex "_" in
@@ -36,7 +37,7 @@ let test_number_decimal () =
   match tokens with
   | [ { Token.kind = Token.LitNumeric s; _ }; { kind = Token.Eof; _ } ] ->
     Alcotest.(check string) "number value" "42" s
-  | _ -> Alcotest.fail "expected numeric token"
+  | _ -> Alcotest.fail "expected LitNumeric token"
 
 let test_number_hex () =
   let tokens, diags, _ = lex "0xFF" in
@@ -44,7 +45,7 @@ let test_number_hex () =
   match tokens with
   | [ { Token.kind = Token.LitNumeric s; _ }; { kind = Token.Eof; _ } ] ->
     Alcotest.(check string) "number value" "0xFF" s
-  | _ -> Alcotest.fail "expected numeric token"
+  | _ -> Alcotest.fail "expected LitNumeric token"
 
 let test_number_binary () =
   let tokens, diags, _ = lex "0b1010" in
@@ -52,7 +53,7 @@ let test_number_binary () =
   match tokens with
   | [ { Token.kind = Token.LitNumeric s; _ }; { kind = Token.Eof; _ } ] ->
     Alcotest.(check string) "number value" "0b1010" s
-  | _ -> Alcotest.fail "expected numeric token"
+  | _ -> Alcotest.fail "expected LitNumeric token"
 
 let test_number_float () =
   let tokens, diags, _ = lex "3.14" in
@@ -60,7 +61,7 @@ let test_number_float () =
   match tokens with
   | [ { Token.kind = Token.LitNumeric s; _ }; { kind = Token.Eof; _ } ] ->
     Alcotest.(check string) "number value" "3.14" s
-  | _ -> Alcotest.fail "expected numeric token"
+  | _ -> Alcotest.fail "expected LitNumeric token"
 
 let test_string_simple () =
   let tokens, diags, interner = lex {|"hello"|} in
@@ -68,7 +69,7 @@ let test_string_simple () =
   match tokens with
   | [ { Token.kind = Token.LitText n; _ }; { kind = Token.Eof; _ } ] ->
     Alcotest.(check string) "text value" "hello" (Interner.lookup interner n)
-  | _ -> Alcotest.fail "expected text token"
+  | _ -> Alcotest.fail "expected LitText token"
 
 let test_string_escape () =
   let tokens, diags, interner = lex {|"\n"|} in
@@ -76,7 +77,7 @@ let test_string_escape () =
   match tokens with
   | [ { Token.kind = Token.LitText n; _ }; { kind = Token.Eof; _ } ] ->
     Alcotest.(check string) "text value" "\n" (Interner.lookup interner n)
-  | _ -> Alcotest.fail "expected text token"
+  | _ -> Alcotest.fail "expected LitText token"
 
 let test_rune () =
   let tokens, diags, _ = lex "'a'" in
@@ -84,7 +85,7 @@ let test_rune () =
   match tokens with
   | [ { Token.kind = Token.LitRune c; _ }; { kind = Token.Eof; _ } ] ->
     Alcotest.(check int) "rune value" (Char.code 'a') c
-  | _ -> Alcotest.fail "expected rune token"
+  | _ -> Alcotest.fail "expected LitRune token"
 
 let test_operator_assign () =
   let tokens, diags, _ = lex ":=" in
