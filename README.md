@@ -11,7 +11,7 @@ Systems programming language designed for clarity, safety, and performance. Read
 - Strong static typing with inference plus gradual escape hatches
 - ARC by default with manual control when needed
 - Exhaustive pattern matching with guard support
-- Fallible types (`T!E`) and structured error propagation
+- Fallible types (`Expect<T, E>`) and structured error propagation
 
 ## Example
 
