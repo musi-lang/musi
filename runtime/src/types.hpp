@@ -10,6 +10,7 @@
 namespace musi {
 
   using Bytecode = std::span<const uint8_t>;
+  using ConstPool = std::vector<std::string>;
 
   using ValueList = std::vector<Value>;
 
