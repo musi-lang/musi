@@ -4,7 +4,7 @@
 type t
 
 (** Constructs lexer for given file contents and interner. *)
-val make : Span.file_id -> string -> Interner.t -> t
+val make : Span.file_id -> string -> string -> Interner.t -> t
 
 (** Tokenises entire source and returns tokens alongside diagnostics. *)
 val lex : t -> Token.t list * Diagnostic.bag

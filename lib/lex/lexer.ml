@@ -4,6 +4,8 @@
 
 type t = {
     file_id : Span.file_id
+  ; filename : string
+       [@warning "-69"] (* TODO(@xsyetopz): maybe read this IF needed? *)
   ; source : string
   ; len : int
   ; mutable pos : int
@@ -11,9 +13,10 @@ type t = {
   ; diags : Diagnostic.bag ref
 }
 
-let make file_id source interner =
+let make file_id filename source interner =
   {
     file_id
+  ; filename
   ; source
   ; len = String.length source
   ; pos = 0
