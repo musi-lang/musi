@@ -53,7 +53,8 @@ namespace {
 
     LinkEntryList link_entries;
     if (hdr.link_count > 0) {
-      const auto link_result = musi::parse_link_table(bc, hdr.link_offset);
+      const auto link_result =
+          musi::parse_link_table(bc, hdr.link_offset, hdr.link_count);
       if (!link_result) {
         std::println(stderr, "{}", link_result.error());
         std::exit(EXIT_FAILURE);  // NOLINT(concurrency-mt-unsafe)
