@@ -42,14 +42,13 @@ namespace musi {
           hdr.magic[3]));
     }
 
-    hdr.major_version = read_le<uint16_t>(data, 4);
-    hdr.minor_version = read_le<uint16_t>(data, 6);
-    hdr.flags = read_le<uint32_t>(data, 8);
-    hdr.const_pool_offset = read_le<uint32_t>(data, 12);
-    hdr.type_table_offset = read_le<uint32_t>(data, 16);
-    hdr.proc_table_offset = read_le<uint32_t>(data, 20);
-    hdr.debug_info_offset = read_le<uint32_t>(data, 24);
-    hdr.entry_proc_id = read_le<uint32_t>(data, 28);
+    hdr.version = read_le<uint32_t>(data, 4);
+    hdr.bc_offset = read_le<uint32_t>(data, 8);
+    hdr.bc_size = read_le<uint32_t>(data, 12);
+    hdr.export_offset = read_le<uint32_t>(data, 16);
+    hdr.export_count = read_le<uint32_t>(data, 20);
+    hdr.link_offset = read_le<uint32_t>(data, 24);
+    hdr.link_count = read_le<uint32_t>(data, 28);
 
     return hdr;
   }

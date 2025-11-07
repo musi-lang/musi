@@ -6,14 +6,13 @@ namespace musi {
 
   struct Header {
     std::array<char, 4> magic;
-    uint16_t major_version;
-    uint16_t minor_version;
-    uint32_t flags;
-    uint32_t const_pool_offset;
-    uint32_t type_table_offset;
-    uint32_t proc_table_offset;
-    uint32_t debug_info_offset;
-    uint32_t entry_proc_id;
+    uint32_t version;
+    uint32_t bc_offset;
+    uint32_t bc_size;
+    uint32_t export_offset;
+    uint32_t export_count;
+    uint32_t link_offset;
+    uint32_t link_count;
 
     static constexpr size_t SIZE = 32;
     static constexpr std::string_view MAGIC = "MUSI";
