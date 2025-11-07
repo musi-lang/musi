@@ -1,0 +1,4 @@
+(library
+ (name musi_lex)
+ (public_name musi.lex)
+ (libraries musi_basic))
