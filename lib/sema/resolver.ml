@@ -58,7 +58,24 @@ and add_sym_var t name mutable_ span =
 
 and resolve_stmt t stmt =
   match stmt.Node.kind with
-  | Node.StmtExpr expr -> resolve_expr t expr
+  | Node.StmtImport { items; _ } ->
+    List.iter
+      (fun item ->
+        let sym =
+          {
+            Symbol.name = item.Node.name
+          ; kind = Symbol.SymProc { param_count = 0 }
+          ; span = Span.dummy
+          ; ty = None
+          ; used = false
+          }
+        in
+        Symbol.add t.symbols sym)
+      items.Node.items
+  | Node.StmtExpr expr -> (
+    match expr.Node.kind with
+    | Node.ExprProc { modifiers; _ } when fst modifiers.Node.is_extern -> ()
+    | _ -> resolve_expr t expr)
   | _ -> ()
 
 and resolve_expr t expr =
@@ -72,15 +89,17 @@ and resolve_expr t expr =
         t
         (Printf.sprintf "cannot find '%s' in this scope" name_str)
         expr.Node.span)
-  | Node.ExprBinding { is_mutable; pat; init; _ } ->
-    resolve_expr t init;
+  | Node.ExprBinding { modifiers; is_mutable; pat; init; _ } ->
+    if not (fst modifiers.Node.is_extern) then resolve_expr t init;
     resolve_pat t pat is_mutable
-  | Node.ExprProc { params; body; _ } ->
-    Symbol.push_scope t.symbols;
-    List.iter (resolve_param t) params;
-    resolve_opt t body;
-    check_unused t;
-    Symbol.pop_scope t.symbols
+  | Node.ExprProc { modifiers; params; body; _ } ->
+    if fst modifiers.Node.is_extern then ()
+    else (
+      Symbol.push_scope t.symbols;
+      List.iter (resolve_param t) params;
+      resolve_opt t body;
+      check_unused t;
+      Symbol.pop_scope t.symbols)
   | Node.ExprCall { callee; args } ->
     resolve_expr t callee;
     resolve_exprs t args.Node.items
