@@ -1,11 +1,12 @@
 #include "vm.hpp"
 
+#include <algorithm>
 #include <bit>
 #include <format>
-#include <print>
 
 #include "object.hpp"
 #include "opcode.hpp"
+#include "spdlog/spdlog.h"
 
 namespace musi {
 
@@ -120,10 +121,10 @@ namespace musi {
 
   auto VM::exec_ldarg() -> Expected<void> {
     const auto idx = read_u16();
-    if (m_call_stack.empty()) {
-      return std::unexpected("no call frame for argument access");
+    if (idx >= m_locals.size()) {
+      return std::unexpected("argument index out of bounds");
     }
-    push(m_call_stack.back().saved_locals[idx]);
+    push(m_locals[idx]);
     return {};
   }
 
@@ -167,18 +168,20 @@ namespace musi {
 
   auto VM::exec_call() -> Expected<void> {
     const auto proc_id = static_cast<uint32_t>(read_i32());
-    std::println(
-        "[VM] call proc_id={} (table_size={})",
+    spdlog::trace(
+        "call proc_id={} (table_size={})",
         proc_id,
         m_proc_table.size());
     if (proc_id >= m_proc_table.size()) {
       return std::unexpected(std::format("invalid procedure {}", proc_id));
     }
     const auto& proc = m_proc_table[proc_id];
-    std::println(
-        "[VM] proc.is_extern={{}} proc.bytecode_offset={{:#06x}}",
+    spdlog::trace(
+        "proc.is_extern={{}} proc.bytecode_offset={{:#06x}} "
+        "param_count={}",
         proc.is_extern,
-        proc.bytecode_offset);
+        proc.bytecode_offset,
+        proc.param_count);
     if (proc.is_extern) {
       const auto it = m_link_table.find(proc_id);
       if (it == m_link_table.end()) {
@@ -188,7 +191,13 @@ namespace musi {
       return call_intrinsic(it->second);
     }
     m_call_stack.push_back({m_ip, m_locals});
-    m_locals.clear();
+    ValueList args;
+    args.reserve(proc.param_count);
+    for (size_t i = 0; i < proc.param_count; ++i) {
+      args.push_back(pop());
+    }
+    std::ranges::reverse(args);
+    m_locals = std::move(args);
     m_ip = proc.bytecode_offset;
     return {};
   }
@@ -260,7 +269,11 @@ namespace musi {
       return std::unexpected("empty bytecode");
     }
 
+    spdlog::trace("bytecode size={} bytes", m_bc.size());
+
     while (m_ip < m_bc.size()) {
+      const auto opcode_byte = m_bc[m_ip];
+      spdlog::trace("IP={} opcode_byte={:#04x}", m_ip, opcode_byte);
       const auto opcode = static_cast<Opcode>(m_bc[m_ip++]);
       switch (opcode) {
         case Opcode::Nop:
