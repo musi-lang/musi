@@ -9,6 +9,9 @@ val read_u32_le : bytes -> int -> int32
 (** Reads 32-bit signed integer from buffer using little-endian order. *)
 val read_i32_le : bytes -> int -> int32
 
+(** Reads 64-bit signed integer from buffer using little-endian order. *)
+val read_i64_le : bytes -> int -> int64
+
 (** Writes 16-bit unsigned integer into buffer using little-endian order. *)
 val write_u16_le : Buffer.t -> int -> unit
 
