@@ -37,9 +37,9 @@ counter.show();     // prints: `Counter is now: 2`
 
 ### Prerequisites
 
-- [OCaml 5.3+](https://ocaml.org/install) (5.3.0 or later)
-- [opam](https://opam.ocaml.org/doc/Install.html) (OCaml package manager)
-- [LLVM/Clang](https://clang.llvm.org/) (19.1.7 or greater)
+- [OCaml 5.3+](https://ocaml.org/install) (5.4.0 or greater)
+- [opam](https://opam.ocaml.org/doc/Install.html) (2.3.0 or greater)
+- [Clang](https://clang.llvm.org/) (19.1.7 or greater)
 
 ### Build
 
