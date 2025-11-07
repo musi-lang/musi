@@ -49,13 +49,13 @@ let matches_at t s =
 
 let is_whitespace = function ' ' | '\t' | '\r' -> true | _ -> false
 
-let is_ident_continue = function
+let is_ident_cont = function
   | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '_' -> true
   | _ -> false
 
 let is_digit = function '0' .. '9' -> true | _ -> false
 
-let is_hex = function
+let is_xdigit = function
   | '0' .. '9' | 'a' .. 'f' | 'A' .. 'F' -> true
   | _ -> false
 
@@ -111,7 +111,7 @@ let keywords =
 
 let lex_ident t =
   let start = t.pos in
-  scan_while t is_ident_continue;
+  scan_while t is_ident_cont;
   let text = String.sub t.source start (t.pos - start) in
   let kind =
     if text = "_" then Token.Underscore
@@ -126,7 +126,7 @@ let lex_number t =
   let start = t.pos in
   if curr t = '0' && (peek t 1 = 'x' || peek t 1 = 'X') then (
     advance_by t 2;
-    scan_while t (fun c -> is_hex c || c = '_'))
+    scan_while t (fun c -> is_xdigit c || c = '_'))
   else if curr t = '0' && (peek t 1 = 'b' || peek t 1 = 'B') then (
     advance_by t 2;
     scan_while t (fun c -> c = '0' || c = '1' || c = '_'))
@@ -152,23 +152,27 @@ let escapes =
   ; ('0', '\000')
   ]
 
-let lex_string t =
+let lex_lit_text t =
   let start = t.pos in
   advance t;
   let buf = Buffer.create 16 in
   let rec loop () =
-    if at_end t then error t "unterminated string" (span t start)
+    if at_end t then error t "unterminated text literal" (span t start)
     else
       match curr t with
       | '"' -> advance t
       | '\\' ->
         advance t;
-        (match List.assoc_opt (curr t) escapes with
+        let c = curr t in
+        (match List.assoc_opt c escapes with
         | Some ch ->
           Buffer.add_char buf ch;
           advance t
         | None ->
-          error t "invalid escape" (span t (t.pos - 1));
+          error
+            t
+            (Printf.sprintf "unknown escape sequence '\\%c'" c)
+            (span t (t.pos - 1));
           advance t);
         loop ()
       | c ->
@@ -181,16 +185,17 @@ let lex_string t =
     (Token.LitText (Interner.intern t.interner (Buffer.contents buf)))
     (span t start)
 
-let lex_rune t =
+let lex_lit_rune t =
   let start = t.pos in
   advance t;
   if at_end t then (
-    error t "unterminated rune" (span t start);
+    error t "unterminated rune literal" (span t start);
     Token.make Token.Error (span t start))
   else
     let code = Char.code (curr t) in
     advance t;
-    if curr t <> '\'' then error t "expected closing '" (span t start);
+    if curr t <> '\'' then
+      error t "missing closing '\'' in rune literal" (span t start);
     advance t;
     Token.make (Token.LitRune code) (span t start)
 
@@ -257,9 +262,10 @@ let lex_symbol t =
   let start = t.pos in
   let rec try_ops = function
     | [] ->
+      let c = curr t in
       error
         t
-        (Printf.sprintf "unexpected character '%c'" (curr t))
+        (Printf.sprintf "unexpected character '%c' (0x%02X)" c (Char.code c))
         (span t start);
       advance t;
       Token.make Token.Error (span t start)
@@ -283,8 +289,8 @@ let lex t =
     Token.make Token.Newline (span t start)
   | 'a' .. 'z' | 'A' .. 'Z' | '_' -> lex_ident t
   | '0' .. '9' -> lex_number t
-  | '"' -> lex_string t
-  | '\'' -> lex_rune t
+  | '"' -> lex_lit_text t
+  | '\'' -> lex_lit_rune t
   | '/' when peek t 1 = '/' -> lex_line_comment t
   | '/' when peek t 1 = '*' -> lex_block_comment t
   | _ -> lex_symbol t
