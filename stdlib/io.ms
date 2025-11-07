@@ -1,8 +1,8 @@
 @link("musi.io.write")
-const io_write := unsafe extern "C" proc (s: Text);
+const io_write := unsafe extern proc (s: Text);
 
 @link("musi.io.writeln")
-const io_writeln := unsafe extern "C" proc (s: Text);
+const io_writeln := unsafe extern proc (s: Text);
 
 /// Writes given text followed by newline to standard output.
 const write := proc (s: Text) {
