@@ -1,4 +1,10 @@
 (library
  (name musi_lex)
  (public_name musi.lex)
+ (modules token lexer)
  (libraries musi_basic))
+
+(test
+ (name test_lexer)
+ (modules test_lexer)
+ (libraries musi_lex alcotest))
