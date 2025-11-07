@@ -8,5 +8,6 @@
         "--background-index",
         //"--query-driver=/bin/arm-buildroot-linux-gnueabihf-g++", //for cross compile usage
         "--compile-commands-dir=/home/Kasutaja/musi/"
-    ]
+    ],
+    "makefile.configureOnOpen": false
 }
