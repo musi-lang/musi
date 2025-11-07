@@ -3,6 +3,8 @@
 #include <format>
 #include <fstream>
 
+#include "header.hpp"
+
 namespace musi {
 
   auto load_bytecode(std::string_view path) -> Expected<std::vector<uint8_t>> {
@@ -20,15 +22,27 @@ namespace musi {
 
       file.seekg(0, std::ios::beg);
 
-      std::vector<uint8_t> bc(static_cast<size_t>(size));
-      if (!file.read(std::bit_cast<char*>(bc.data()), size)) {
+      std::vector<uint8_t> data(static_cast<size_t>(size));
+      if (!file.read(std::bit_cast<char*>(data.data()), size)) {
         return std::unexpected(std::format("failed reading file '{}'", path));
       }
 
+      const auto hdr_res = parse_header(data);
+      if (!hdr_res) {
+        return std::unexpected(
+            std::format("invalid .msc header: {}", hdr_res.error()));
+      }
+
+      if (data.size() <= Header::SIZE) {
+        return std::unexpected("file too small to contain bytecode");
+      }
+
+      std::vector<uint8_t> bc(data.begin() + Header::SIZE, data.end());
+
       return bc;
-    } catch (const std::exception& e) {
+    } catch (const std::exception& ex) {
       return std::unexpected(
-          std::format("exception loading '{}': {}", path, e.what()));
+          std::format("exception loading '{}': {}", path, ex.what()));
     }
   }
 
