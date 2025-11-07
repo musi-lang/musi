@@ -1,1 +1,1 @@
-const x := do { 1; 2;
+const x := { 1; 2;

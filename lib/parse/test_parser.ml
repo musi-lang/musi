@@ -58,10 +58,10 @@ let test_parse_field () = check_expr_kind "ExprField" "obj.field;"
 let test_parse_if () = check_expr_kind "ExprIf" "if x then { 1 };"
 let test_parse_while () = check_expr_kind "ExprWhile" "while x do { 1 };"
 let test_parse_for () = check_expr_kind "ExprFor" "for x in xs do { 1 };"
-let test_parse_block () = check_expr_kind "ExprBlock" "do { 1; 2 };"
+let test_parse_block () = check_expr_kind "ExprBlock" "{ 1; 2 };"
 
 let test_parse_unsafe_block () =
-  check_expr_kind "ExprBlockUnsafe" "do unsafe { 1 };"
+  check_expr_kind "ExprBlockUnsafe" "unsafe { 1 };"
 
 let test_parse_binding () = check_expr_kind "ExprBinding" "const x := 1;"
 

@@ -309,7 +309,7 @@ const compute := proc (x: Int) -> Int { x^2 };
 // UNSAFE BLOCKS
 // ============================================================================
 
-const unsafe_op := do unsafe {
+const unsafe_op := unsafe {
   const p := addr(x);
   p.pointee
 };
