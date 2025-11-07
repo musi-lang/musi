@@ -6,7 +6,7 @@ add_rules("mode.debug", "mode.release")
 add_rules("plugin.compile_commands.autoupdate", {outputdir = "."})
 add_rules("mode.coverage")
 
-add_requires("doctest")
+add_requires("doctest", "spdlog")
 
 target("musi")
     set_kind("binary")
@@ -21,6 +21,7 @@ target("musi")
 
     add_files("runtime/src/*.cpp")
     add_includedirs("inc", "runtime/src")
+    add_packages("spdlog")
 
     if is_mode("debug") then
         set_warnings("everything")
@@ -68,10 +69,10 @@ target("musi_tests")
         "runtime/src/header.cpp",
         "runtime/src/vm.cpp",
         "runtime/src/object.cpp",
-        "runtime/src/intrinsics.cpp"
+        "runtime/src/_io.cpp"
     )
     add_includedirs("inc", "runtime/src")
-    add_packages("doctest")
+    add_packages("doctest", "spdlog")
 
     if is_mode("debug") then
         set_warnings("everything")
