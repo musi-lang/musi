@@ -1,6 +1,6 @@
 #include "_Text.hpp"
 
-namespace musi {
+namespace musi::intrinsics::lang {
 
   auto Text::from_literal(const std::string& str)
       -> std::unique_ptr<StringObject> {
@@ -11,4 +11,4 @@ namespace musi {
     return static_cast<int64_t>(text->data.size());
   }
 
-}  // namespace musi
+}  // namespace musi::intrinsics::lang

@@ -5,7 +5,7 @@
 
 #include "object.hpp"
 
-namespace musi {
+namespace musi::intrinsics::lang {
 
   class Text {
 public:
@@ -14,4 +14,4 @@ public:
     static auto length(StringObject* text) -> int64_t;
   };
 
-}  // namespace musi
+}  // namespace musi::intrinsics::lang
