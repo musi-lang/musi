@@ -67,7 +67,8 @@ target("musi_tests")
         "runtime/src/loader.cpp",
         "runtime/src/header.cpp",
         "runtime/src/vm.cpp",
-        "runtime/src/object.cpp"
+        "runtime/src/object.cpp",
+        "runtime/src/intrinsics.cpp"
     )
     add_includedirs("inc", "runtime/src")
     add_packages("doctest")
