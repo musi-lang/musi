@@ -13,7 +13,7 @@ val compile_source : string -> string -> bytes
 (** Read source file and check. *)
 val check_file : string -> Diagnostic.bag
 
-(** Compile source file to [<output>.msc] bytecode file. *)
+(** Compile source file to [<output>.msil] bytecode file. *)
 val compile_file : string -> string -> unit
 
 (** Compile module with dependency resolution and linking. *)
