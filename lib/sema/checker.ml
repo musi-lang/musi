@@ -115,8 +115,15 @@ let rec check_stmt t stmt =
   match stmt.Node.kind with
   | Node.StmtExpr expr ->
     (match expr.Node.kind with
-    | Node.ExprBinding { modifiers; _ } | Node.ExprProc { modifiers; _ } ->
-      check_decorators t modifiers
+    | Node.ExprBinding { modifiers; _ } ->
+      check_decorators t modifiers;
+      if modifiers.Node.is_unsafe then
+        error t "'unsafe' modifier not allowed on bindings" stmt.Node.span;
+      if fst modifiers.Node.is_extern then
+        error t "'extern' modifier not allowed on bindings" stmt.Node.span;
+      if modifiers.Node.is_async then
+        error t "'async' modifier not allowed on bindings" stmt.Node.span
+    | Node.ExprProc { modifiers; _ } -> check_decorators t modifiers
     | _ -> ());
     ignore (infer_expr t expr)
   | _ -> ()
