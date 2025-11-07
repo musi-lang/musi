@@ -76,7 +76,7 @@ let encode_program procs module_desc =
   let link_count = Int32.of_int (List.length module_desc.link_keys) in
   let hdr =
     {
-      Metadata.magic = "\x4D\x53\x43\x00"
+      Metadata.magic = "MUSI"
     ; version = 1l
     ; bc_offset
     ; bc_size
