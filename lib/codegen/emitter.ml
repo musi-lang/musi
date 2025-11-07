@@ -316,6 +316,22 @@ let collect_exports interner ast = List.filter_map (extract_export interner) ast
 let collect_link_keys interner proc_table ast =
   List.filter_map (extract_link_key interner proc_table) ast
 
+let collect_imports interner ast =
+  List.filter_map
+    (fun node ->
+      match node.Node.kind with
+      | Node.StmtImport { path; items } ->
+        let path_str = Interner.lookup interner path in
+        let names =
+          List.map
+            (fun (item : Node.import_item) ->
+              Interner.lookup interner item.name)
+            items.Node.items
+        in
+        Some (path_str, names)
+      | _ -> None)
+    ast
+
 let emit_program interner proc_table diags ast =
   let procs = Array.make (Hashtbl.length proc_table) [] in
   let global_const_pool = Hashtbl.create 16 in
@@ -358,12 +374,26 @@ let emit_program interner proc_table diags ast =
       exports
   in
   let link_keys = collect_link_keys interner proc_table ast in
+  let imports = collect_imports interner ast in
+  let proc_infos =
+    Array.to_list
+      (Array.init (Hashtbl.length proc_table) (fun i ->
+         let param_count =
+           Hashtbl.fold
+             (fun _ info acc -> if info.id = i then info.param_count else acc)
+             proc_table
+             0
+         in
+         { Metadata.param_count }))
+  in
   let module_desc =
     {
       Metadata.module_name = None
     ; exports = export_table
     ; link_keys
     ; const_pool = !global_const_list
+    ; proc_infos
+    ; imports
     }
   in
   (procs, module_desc)
