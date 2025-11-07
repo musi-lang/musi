@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <string>
 
 namespace musi {
 
@@ -17,6 +18,12 @@ namespace musi {
     Object(Object&&) = delete;
     auto operator=(const Object&) -> Object& = delete;
     auto operator=(Object&&) -> Object& = delete;
+  };
+
+  struct StringObject : Object {
+    std::string data;
+
+    explicit StringObject(std::string str) : data(std::move(str)) {}
   };
 
 }  // namespace musi
