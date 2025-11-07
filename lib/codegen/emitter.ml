@@ -298,9 +298,10 @@ let extract_export interner node =
 
 let extract_link_key interner proc_table node =
   match node.Node.kind with
-  | Node.StmtExpr { Node.kind = Node.ExprBinding { pat; init; _ }; _ } -> (
+  | Node.StmtExpr
+      { Node.kind = Node.ExprBinding { modifiers; pat; init; _ }; _ } -> (
     match (pat_name pat, init.Node.kind) with
-    | Some name, Node.ExprProc { modifiers; _ } -> (
+    | Some name, Node.ExprProc _ -> (
       match get_link_key interner modifiers with
       | Some link_key -> (
         match Hashtbl.find_opt proc_table name with
