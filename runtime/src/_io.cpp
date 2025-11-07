@@ -1,12 +1,11 @@
-#include "intrinsics.hpp"
+#include "_io.hpp"
 
 #include <print>
 
 #include "object.hpp"
 
-namespace musi::intrinsics {
-
-  void io_write(VM& vm) {
+namespace musi::intrinsics::io {
+  void write(VM& vm) {
     const auto val = vm.pop();
     if (const auto* obj_ptr = std::get_if<Object*>(&val)) {
       if (const auto* str = dynamic_cast<StringObject*>(*obj_ptr)) {
@@ -15,7 +14,7 @@ namespace musi::intrinsics {
     }
   }
 
-  void io_writeln(VM& vm) {
+  void writeln(VM& vm) {
     const auto val = vm.pop();
     if (const auto* obj_ptr = std::get_if<Object*>(&val)) {
       if (const auto* str = dynamic_cast<StringObject*>(*obj_ptr)) {
@@ -23,5 +22,4 @@ namespace musi::intrinsics {
       }
     }
   }
-
-}  // namespace musi::intrinsics
+}  // namespace musi::intrinsics::io
