@@ -1,0 +1,4 @@
+(library
+ (name musi_basic)
+ (public_name musi.basic)
+ (libraries unix fmt))
