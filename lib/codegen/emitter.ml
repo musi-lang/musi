@@ -10,6 +10,8 @@ type emitter_state = {
     interner : Interner.t
   ; proc_table : proc_table
   ; diags : Diagnostic.bag ref
+  ; mutable const_pool : (string, int) Hashtbl.t
+  ; mutable const_list : Metadata.constant list
   ; mutable locals : (Interner.name, int) Hashtbl.t
   ; mutable param_count : int
   ; mutable local_count : int
@@ -33,6 +35,8 @@ let make_state interner proc_table diags =
     interner
   ; proc_table
   ; diags
+  ; const_pool = Hashtbl.create 16
+  ; const_list = []
   ; locals = Hashtbl.create 16
   ; param_count = 0
   ; local_count = 0
@@ -51,7 +55,7 @@ let emit st instr =
   | Instr.LdcI4 _ | Instr.LdcI4M1 | Instr.LdcI4_0 | Instr.LdcI4_1
   | Instr.LdcI4_2 | Instr.LdcI4_3 | Instr.LdcI4_4 | Instr.LdcI4_5
   | Instr.LdcI4_6 | Instr.LdcI4_7 | Instr.LdcI4_8 | Instr.LdcUnit
-  | Instr.LdLoc _ | Instr.LdArg _ | Instr.Dup ->
+  | Instr.LdcStr _ | Instr.LdLoc _ | Instr.LdArg _ | Instr.Dup ->
     st.stack_depth <- st.stack_depth + 1;
     if st.stack_depth > st.max_stack then st.max_stack <- st.stack_depth
   | Instr.Pop | Instr.StLoc _ | Instr.Ret ->
@@ -77,6 +81,15 @@ let fresh_label st =
   lbl
 
 let emits st instrs = List.iter (emit st) instrs
+
+let add_const st str =
+  match Hashtbl.find_opt st.const_pool str with
+  | Some idx -> idx
+  | None ->
+    let idx = List.length st.const_list in
+    Hashtbl.add st.const_pool str idx;
+    st.const_list <- st.const_list @ [ Metadata.ConstText str ];
+    idx
 
 (* ========================================
    PASS 1: COLLECT PROCEDURES
@@ -135,6 +148,10 @@ let rec emit_expr st node =
   match node.Node.kind with
   | Node.ExprLitNumeric (s, _) -> emit_expr_lit_numeric st s
   | Node.ExprLitBool b -> emit st (if b then Instr.LdcI4_1 else Instr.LdcI4_0)
+  | Node.ExprLitText name ->
+    let str = Interner.lookup st.interner name in
+    let idx = add_const st str in
+    emit st (Instr.LdcStr idx)
   | Node.ExprIdent name -> emit_expr_ident st name node.span
   | Node.ExprBinary { op; left; right } -> emit_expr_binary st op left right
   | Node.ExprUnary { op; operand } -> emit_expr_unary st op operand
@@ -311,8 +328,17 @@ let collect_link_keys interner proc_table ast =
 
 let emit_program interner proc_table diags ast =
   let procs = Array.make (Hashtbl.length proc_table) [] in
-  let main_st = make_state interner proc_table diags in
+  let global_const_pool = Hashtbl.create 16 in
+  let global_const_list = ref [] in
+  let make_state_with_pool () =
+    let st = make_state interner proc_table diags in
+    st.const_pool <- global_const_pool;
+    st.const_list <- !global_const_list;
+    st
+  in
+  let main_st = make_state_with_pool () in
   procs.(0) <- emit_main_proc main_st ast;
+  global_const_list := main_st.const_list;
   List.iter
     (fun node ->
       match node.Node.kind with
@@ -323,8 +349,9 @@ let emit_program interner proc_table diags ast =
           | Some name, Node.ExprProc { params; body; _ } -> (
             match Hashtbl.find_opt proc_table name with
             | Some info ->
-              let proc_st = make_state interner proc_table diags in
-              procs.(info.id) <- emit_expr_proc proc_st params body
+              let proc_st = make_state_with_pool () in
+              procs.(info.id) <- emit_expr_proc proc_st params body;
+              global_const_list := proc_st.const_list
             | None -> ())
           | _ -> ())
         | _ -> ())
@@ -342,6 +369,11 @@ let emit_program interner proc_table diags ast =
   in
   let link_keys = collect_link_keys interner proc_table ast in
   let module_desc =
-    { Metadata.module_name = None; exports = export_table; link_keys }
+    {
+      Metadata.module_name = None
+    ; exports = export_table
+    ; link_keys
+    ; const_pool = !global_const_list
+    }
   in
   (procs, module_desc)
