@@ -26,7 +26,7 @@ _priv/
 
 # Musi Standard Library files
 !stdlib/**/*.ms
-stdlib/**/*.msc
+stdlib/**/*.msil
 
 .augment-guidelines
 .augmentignore

@@ -30,7 +30,7 @@ namespace musi {
       const auto hdr_res = parse_header(data);
       if (!hdr_res) {
         return std::unexpected(
-            std::format("invalid .msc header: {}", hdr_res.error()));
+            std::format("invalid .msil header: {}", hdr_res.error()));
       }
 
       return data;

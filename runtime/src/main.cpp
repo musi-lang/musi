@@ -18,7 +18,7 @@ namespace {
   auto parse_args(int argc, char** argv) -> std::string_view {
     const std::span args(argv, static_cast<size_t>(argc));
     if (args.size() != 2) {
-      std::println(stderr, "Usage: {} <filename.msc>", args[0]);
+      std::println(stderr, "Usage: {} <filename.msil>", args[0]);
       std::exit(EXIT_FAILURE);  // NOLINT(concurrency-mt-unsafe)
     }
     return {args[1]};

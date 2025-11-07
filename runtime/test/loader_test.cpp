@@ -24,19 +24,19 @@ namespace {
 
 TEST_CASE("load_bytecode reads file successfully") {
   const auto bc = musi::load_bytecode(
-      get_home_directory() + "/musi/runtime/test/basic_binding.msc");
+      get_home_directory() + "/musi/runtime/test/basic_binding.msil");
   REQUIRE(bc.has_value());
   CHECK(bc->size() > 0);
 }
 
 TEST_CASE("load_bytecode fails on nonexistent file") {
-  const auto bc = musi::load_bytecode("/nonexistent/file.msc");
+  const auto bc = musi::load_bytecode("/nonexistent/file.msil");
   CHECK_FALSE(bc.has_value());
 }
 
 TEST_CASE("load_bytecode validates MUSI magic header") {
   const auto bc = musi::load_bytecode(
-      get_home_directory() + "/musi/runtime/test/basic_binding.msc");
+      get_home_directory() + "/musi/runtime/test/basic_binding.msil");
   REQUIRE(bc.has_value());
   REQUIRE(bc->size() >= 4);
   CHECK((*bc)[0] == 'M');
@@ -47,7 +47,7 @@ TEST_CASE("load_bytecode validates MUSI magic header") {
 
 TEST_CASE("parse_header validates magic") {
   const auto bc = musi::load_bytecode(
-      get_home_directory() + "/musi/runtime/test/basic_binding.msc");
+      get_home_directory() + "/musi/runtime/test/basic_binding.msil");
   REQUIRE(bc.has_value());
 
   const auto hdr = musi::parse_header(*bc);
@@ -60,7 +60,7 @@ TEST_CASE("parse_header validates magic") {
 
 TEST_CASE("parse_header reads version") {
   const auto bc = musi::load_bytecode(
-      get_home_directory() + "/musi/runtime/test/basic_binding.msc");
+      get_home_directory() + "/musi/runtime/test/basic_binding.msil");
   REQUIRE(bc.has_value());
 
   const auto hdr = musi::parse_header(*bc);

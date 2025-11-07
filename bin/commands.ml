@@ -28,7 +28,7 @@ let compile input output_opt _search_paths =
   let output =
     match output_opt with
     | Some path -> path
-    | None -> Filename.remove_extension input ^ ".msc"
+    | None -> Filename.remove_extension input ^ ".msil"
   in
   Output.compiling input output;
   let start_time = Unix.gettimeofday () in
@@ -62,7 +62,7 @@ let check input _search_paths =
 
 let run _input _search_paths =
   Output.error "run command not yet implemented";
-  Output.error "use: msc <input.ms> && musi <output.msc>";
+  Output.error "use: msc <input.ms> && musi <output.msil>";
   1
 
 let help () =
