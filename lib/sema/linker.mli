@@ -21,6 +21,7 @@ val create : Interner.t -> t
 (** Builds import graph from entry file and returns modules with diagnostics. *)
 val build_import_graph : t -> string -> module_info list * Diagnostic.bag
 
-(** Performs topological sort with cycle detection and returns sorted modules with diagnostics. *)
+(** Performs topological sort with cycle detection
+    and returns sorted modules with diagnostics. *)
 val topological_sort :
   t -> module_info list -> module_info list * Diagnostic.bag
