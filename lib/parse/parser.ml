@@ -211,9 +211,20 @@ let rec parse_expr_atom t =
     in
     let span = Span.merge start body.Node.span in
     Node.make (Node.ExprWhile { pat; body }) span
-  | Token.KwUnsafe ->
-    advance t;
-    parse_expr_block t start true
+  | Token.KwUnsafe -> (
+    let next = Token.peek t.stream in
+    if next.Token.kind = Token.LBrace then (
+      advance t;
+      parse_expr_block t start true)
+    else
+      let modifiers = parse_modifiers t in
+      let expr = parse_expr_atom t in
+      match expr.Node.kind with
+      | Node.ExprProc { params; ret_ty; body; _ } ->
+        Node.make
+          (Node.ExprProc { modifiers; params; ret_ty; body })
+          (Span.merge start expr.Node.span)
+      | _ -> expr)
   | Token.KwIf -> parse_expr_if t start
   | Token.KwWhile -> parse_expr_while t start
   | Token.KwFor -> parse_expr_for t start
@@ -222,15 +233,15 @@ let rec parse_expr_atom t =
   | Token.KwBreak -> parse_expr_break t start
   | Token.KwContinue -> parse_expr_continue t start
   | Token.KwProc -> parse_expr_proc t start
-  | Token.KwAsync | Token.KwExtern ->
+  | Token.KwAsync | Token.KwExtern -> (
     let modifiers = parse_modifiers t in
-    if curr_token_kind t = Token.KwProc then parse_expr_proc ~modifiers t start
-    else (
-      error
-        t
-        "expected 'proc' after modifiers in expression"
-        (curr_token t).Token.span;
-      Node.make (Node.ExprIdent (Interner.intern t.interner "<error>")) start)
+    let expr = parse_expr_atom t in
+    match expr.Node.kind with
+    | Node.ExprProc { params; ret_ty; body; _ } ->
+      Node.make
+        (Node.ExprProc { modifiers; params; ret_ty; body })
+        (Span.merge start expr.Node.span)
+    | _ -> expr)
   | _ ->
     error
       t
