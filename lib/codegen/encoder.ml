@@ -52,10 +52,9 @@ let encode_header buf hdr =
   Binary.write_u32_le buf hdr.version;
   Binary.write_u32_le buf hdr.bc_offset;
   Binary.write_u32_le buf hdr.bc_size;
-  Binary.write_u32_le buf hdr.export_offset;
-  Binary.write_u32_le buf hdr.export_count;
-  Binary.write_u32_le buf hdr.link_offset;
-  Binary.write_u32_le buf hdr.link_count
+  Binary.write_u32_le buf hdr.metadata_offset;
+  Binary.write_u32_le buf hdr.metadata_size;
+  Binary.write_i64_le buf hdr.reserved
 
 let encode_bytecode buf instrs = List.iter (encode_instr buf) instrs
 
@@ -69,6 +68,7 @@ let encode_proc_table buf proc_descs =
     (fun (desc : Metadata.proc_desc) ->
       Binary.write_u32_le buf (Int32.of_int desc.bytecode_offset);
       Binary.write_u32_le buf (Int32.of_int desc.bytecode_length);
+      Binary.write_u32_le buf (Int32.of_int desc.param_count);
       Buffer.add_char buf (if desc.is_extern then '\x01' else '\x00'))
     proc_descs
 
@@ -88,9 +88,14 @@ let encode_program procs module_desc =
            let is_extern =
              List.exists (fun (proc_id, _) -> proc_id = i) module_desc.link_keys
            in
+           let param_count =
+             match List.nth_opt module_desc.proc_infos i with
+             | Some info -> info.param_count
+             | None -> 0
+           in
            {
              Metadata.name = None
-           ; param_count = 0
+           ; param_count
            ; local_count = 0
            ; max_stack = 0
            ; bytecode_offset = offset
@@ -103,72 +108,48 @@ let encode_program procs module_desc =
   encode_proc_table proc_table_buf proc_descs;
   let proc_table_bytes = Buffer.to_bytes proc_table_buf in
   let bc_bytes = Buffer.to_bytes bc_buf in
-  let bc_offset_base =
-    Int32.add
-      (Int32.add 32l (Int32.of_int (Bytes.length const_pool_bytes)))
-      (Int32.of_int (Bytes.length proc_table_bytes))
-  in
-  let proc_descs_adjusted =
-    List.map
-      (fun (desc : Metadata.proc_desc) ->
-        {
-          Metadata.name = desc.name
-        ; param_count = desc.param_count
-        ; local_count = desc.local_count
-        ; max_stack = desc.max_stack
-        ; bytecode_offset = desc.bytecode_offset + Int32.to_int bc_offset_base
-        ; bytecode_length = desc.bytecode_length
-        ; is_extern = desc.is_extern
-        })
-      proc_descs
-  in
-  Buffer.clear proc_table_buf;
-  encode_proc_table proc_table_buf proc_descs_adjusted;
-  let proc_table_bytes = Buffer.to_bytes proc_table_buf in
-  let bc_offset =
-    Int32.add
-      (Int32.add 32l (Int32.of_int (Bytes.length const_pool_bytes)))
-      (Int32.of_int (Bytes.length proc_table_bytes))
-  in
-  let bc_size = Int32.of_int (Bytes.length bc_bytes) in
+  let metadata_buf = Buffer.create 512 in
+  Buffer.add_bytes metadata_buf const_pool_bytes;
+  Buffer.add_bytes metadata_buf proc_table_bytes;
   let export_buf = Buffer.create 256 in
+  Binary.write_u32_le
+    export_buf
+    (Int32.of_int (List.length module_desc.exports));
   List.iter
     (fun (name, proc_id) ->
       Binary.write_u16_le export_buf (String.length name);
       Buffer.add_string export_buf name;
       Binary.write_u16_le export_buf proc_id)
     module_desc.Metadata.exports;
-  let export_bytes = Buffer.to_bytes export_buf in
-  let export_offset = Int32.add bc_offset bc_size in
-  let export_count = Int32.of_int (List.length module_desc.exports) in
+  Buffer.add_buffer metadata_buf export_buf;
   let link_buf = Buffer.create 256 in
+  Binary.write_u32_le
+    link_buf
+    (Int32.of_int (List.length module_desc.link_keys));
   List.iter
     (fun (proc_id, link_key) ->
       Binary.write_u16_le link_buf proc_id;
       Binary.write_u16_le link_buf (String.length link_key);
       Buffer.add_string link_buf link_key)
     module_desc.link_keys;
-  let link_bytes = Buffer.to_bytes link_buf in
-  let link_offset =
-    Int32.add export_offset (Int32.of_int (Bytes.length export_bytes))
-  in
-  let link_count = Int32.of_int (List.length module_desc.link_keys) in
+  Buffer.add_buffer metadata_buf link_buf;
+  let metadata_bytes = Buffer.to_bytes metadata_buf in
+  let metadata_offset = 32l in
+  let metadata_size = Int32.of_int (Bytes.length metadata_bytes) in
+  let bc_offset = Int32.add metadata_offset metadata_size in
+  let bc_size = Int32.of_int (Bytes.length bc_bytes) in
   let hdr =
     {
       Metadata.magic = "MUSI"
     ; version = 1l
     ; bc_offset
     ; bc_size
-    ; export_offset
-    ; export_count
-    ; link_offset
-    ; link_count
+    ; metadata_offset
+    ; metadata_size
+    ; reserved = 0L
     }
   in
   encode_header buf hdr;
-  Buffer.add_bytes buf const_pool_bytes;
-  Buffer.add_bytes buf proc_table_bytes;
+  Buffer.add_bytes buf metadata_bytes;
   Buffer.add_bytes buf bc_bytes;
-  Buffer.add_bytes buf export_bytes;
-  Buffer.add_bytes buf link_bytes;
   Buffer.to_bytes buf

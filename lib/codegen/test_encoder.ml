@@ -3,7 +3,14 @@ open Alcotest
 let header_size = 32
 
 let empty_module_desc =
-  { Metadata.module_name = None; exports = []; link_keys = []; const_pool = [] }
+  {
+    Metadata.module_name = None
+  ; exports = []
+  ; link_keys = []
+  ; const_pool = []
+  ; proc_infos = []
+  ; imports = []
+  }
 
 let test_encode_header () =
   let bytes = Encoder.encode_program [||] empty_module_desc in
