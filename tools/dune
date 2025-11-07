@@ -1,0 +1,3 @@
+(executable
+ (name gen_opcodes)
+ (modules gen_opcodes))
