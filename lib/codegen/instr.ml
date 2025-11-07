@@ -12,6 +12,7 @@ type t =
   | LdcI4_7
   | LdcI4_8
   | LdcUnit
+  | LdcStr of int
   | LdLoc of int
   | StLoc of int
   | LdArg of int
@@ -48,6 +49,7 @@ let to_opcode = function
   | LdcI4_7 -> 0x1D
   | LdcI4_8 -> 0x1E
   | LdcUnit -> 0x21
+  | LdcStr _ -> 0x22
   | LdLoc _ -> 0x0E
   | StLoc _ -> 0x13
   | LdArg _ -> 0x09
@@ -84,6 +86,7 @@ let show = function
   | LdcI4_7 -> "ld.c.i4.7"
   | LdcI4_8 -> "ld.c.i4.8"
   | LdcUnit -> "ld.c.unit"
+  | LdcStr idx -> Printf.sprintf "ld.c.str %d" idx
   | LdLoc idx -> Printf.sprintf "ld.loc %d" idx
   | StLoc idx -> Printf.sprintf "st.loc %d" idx
   | LdArg idx -> Printf.sprintf "ld.arg %d" idx

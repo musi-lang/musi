@@ -15,6 +15,7 @@ type t =
   | LdcI4_7
   | LdcI4_8
   | LdcUnit
+  | LdcStr of int
   | LdLoc of int
   | StLoc of int
   | LdArg of int
