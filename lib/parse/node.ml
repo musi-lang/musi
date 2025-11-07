@@ -17,7 +17,6 @@ type kind =
   | ExprIf of { pat : t; then_branch : t; else_branch : t option }
   | ExprWhile of { pat : t; body : t }
   | ExprFor of { pat : t; iter : t; body : t }
-  | ExprLoop of t
   | ExprBlock of { stmts : t list; expr : t option }
   | ExprBlockUnsafe of { stmts : t list; expr : t option }
   | ExprBinding of {
@@ -95,7 +94,6 @@ let show_kind = function
   | ExprIf _ -> "ExprIf"
   | ExprWhile _ -> "ExprWhile"
   | ExprFor _ -> "ExprFor"
-  | ExprLoop _ -> "ExprLoop"
   | ExprBlock _ -> "ExprBlock"
   | ExprBlockUnsafe _ -> "ExprBlockUnsafe"
   | ExprBinding _ -> "ExprBinding"

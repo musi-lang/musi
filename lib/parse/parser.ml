@@ -203,12 +203,14 @@ let rec parse_expr_atom t =
   | Token.KwDo ->
     advance t;
     let body = parse_expr_block t (curr_token t).Token.span false in
-    if curr_token_kind t = Token.KwWhile then (
-      advance t;
-      let pat = parse_expr t 0 in
-      let span = Span.merge start pat.Node.span in
-      Node.make (Node.ExprWhile { pat; body }) span)
-    else Node.make (Node.ExprLoop body) (Span.merge start body.Node.span)
+    let pat =
+      if curr_token_kind t = Token.KwWhile then (
+        advance t;
+        parse_expr t 0)
+      else Node.make (Node.ExprLitBool true) start
+    in
+    let span = Span.merge start body.Node.span in
+    Node.make (Node.ExprWhile { pat; body }) span
   | Token.KwUnsafe ->
     advance t;
     parse_expr_block t start true
