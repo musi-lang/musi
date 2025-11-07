@@ -61,7 +61,7 @@ xmake build
 
 ```bash
 opam exec -- dune exec bin/main.exe
-opam exec -- dune tests
+opam exec -- dune test
 
 # TODO: VM usage in C++ here
 ```
