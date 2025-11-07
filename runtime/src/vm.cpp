@@ -118,6 +118,15 @@ namespace musi {
     return {};
   }
 
+  auto VM::exec_ldarg() -> Expected<void> {
+    const auto idx = read_u16();
+    if (m_call_stack.empty()) {
+      return std::unexpected("no call frame for argument access");
+    }
+    push(m_call_stack.back().saved_locals[idx]);
+    return {};
+  }
+
   auto VM::exec_stloc() -> Expected<void> {
     const auto idx = read_u16();
     if (idx >= m_locals.size()) {
@@ -245,6 +254,7 @@ namespace musi {
     }
   }
 
+  // NOLINTBEGIN(readability-function-cognitive-complexity)
   auto VM::exec() -> Expected<void> {
     if (m_bc.empty()) {
       return std::unexpected("empty bytecode");
@@ -276,6 +286,12 @@ namespace musi {
             return result;
           }
           break;
+        case Opcode::LdArg: {
+          if (const auto result = exec_ldarg(); !result) {
+            return result;
+          }
+          break;
+        }
         case Opcode::StLoc:
           if (const auto result = exec_stloc(); !result) {
             return result;
@@ -334,5 +350,6 @@ namespace musi {
 
     return {};
   }
+  // NOLINTEND(readability-function-cognitive-complexity)
 
 }  // namespace musi
