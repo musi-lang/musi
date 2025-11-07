@@ -24,16 +24,19 @@ let error t msg span =
    ======================================== *)
 
 let resolve_module_path current_file import_path =
+  let add_extension path =
+    if String.ends_with ~suffix:".ms" path then path else path ^ ".ms"
+  in
   if String.starts_with ~prefix:"stdlib/" import_path then
     let subpath = String.sub import_path 7 (String.length import_path - 7) in
-    Filename.concat "stdlib" (subpath ^ ".ms")
+    Filename.concat "stdlib" (add_extension subpath)
   else if
     String.starts_with ~prefix:"./" import_path
     || String.starts_with ~prefix:"../" import_path
   then
     let dir = Filename.dirname current_file in
-    Filename.concat dir (import_path ^ ".ms")
-  else import_path ^ ".ms"
+    Filename.concat dir (add_extension import_path)
+  else add_extension import_path
 
 (* ========================================
    IMPORT EXTRACTION
@@ -85,7 +88,7 @@ let build_import_graph t entry_file =
       let ic = open_in current_file in
       let source = really_input_string ic (in_channel_length ic) in
       close_in ic;
-      let lexer = Lexer.make 0 source t.interner in
+      let lexer = Lexer.make 0 current_file source t.interner in
       let tokens, lex_diags = Lexer.lex lexer in
       t.diags := Diagnostic.merge [ !(t.diags); lex_diags ];
       let parser = Parser.make tokens t.interner in
