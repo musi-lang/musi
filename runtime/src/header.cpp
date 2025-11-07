@@ -82,93 +82,6 @@ namespace musi {
     return hdr;
   }
 
-  auto parse_export_table(std::span<const uint8_t> data, size_t offset)
-      -> Expected<ExportEntryList> {
-    if (const auto res = check_bounds(
-            data,
-            offset,
-            SIZE_U32,
-            "export table offset out of bounds");
-        !res) {
-      return std::unexpected(res.error());
-    }
-    const auto count = read_le<uint32_t>(data, offset);
-    offset += SIZE_U32;
-
-    ExportEntryList exports;
-    exports.reserve(count);
-
-    for (auto i = 0U; i < count; ++i) {
-      if (const auto res = check_bounds(
-              data,
-              offset,
-              SIZE_U32,
-              "export entry name length out of bounds");
-          !res) {
-        return std::unexpected(res.error());
-      }
-      const auto name_len = read_le<uint32_t>(data, offset);
-      offset += SIZE_U32;
-
-      if (const auto res = check_bounds(
-              data,
-              offset,
-              name_len + SIZE_U32,
-              "export entry data out of bounds");
-          !res) {
-        return std::unexpected(res.error());
-      }
-      const auto name = read_string(data, offset, name_len);
-      offset += name_len;
-
-      const auto proc_id = read_le<uint32_t>(data, offset);
-      offset += SIZE_U32;
-
-      exports.push_back({name, proc_id});
-    }
-
-    return exports;
-  }
-
-  auto parse_link_table(
-      std::span<const uint8_t> data,
-      size_t offset,
-      uint32_t count) -> Expected<LinkEntryList> {
-    LinkEntryList links;
-    links.reserve(count);
-
-    for (auto i = 0U; i < count; ++i) {
-      if (const auto res = check_bounds(
-              data,
-              offset,
-              SIZE_U16 * 2,
-              "link entry header out of bounds");
-          !res) {
-        return std::unexpected(res.error());
-      }
-      const auto proc_id = read_le<uint16_t>(data, offset);
-      offset += SIZE_U16;
-
-      const auto key_len = read_le<uint16_t>(data, offset);
-      offset += SIZE_U16;
-
-      if (const auto res = check_bounds(
-              data,
-              offset,
-              key_len,
-              "link entry key out of bounds");
-          !res) {
-        return std::unexpected(res.error());
-      }
-      const auto link_key = read_string(data, offset, key_len);
-      offset += key_len;
-
-      links.push_back({proc_id, link_key});
-    }
-
-    return links;
-  }
-
   auto parse_const_pool(std::span<const uint8_t> data, size_t offset)
       -> Expected<ConstPool> {
     if (const auto res = check_bounds(
@@ -224,6 +137,54 @@ namespace musi {
     return pool;
   }
 
+  auto parse_export_table(std::span<const uint8_t> data, size_t offset)
+      -> Expected<ExportEntryList> {
+    if (const auto res = check_bounds(
+            data,
+            offset,
+            SIZE_U32,
+            "export table offset out of bounds");
+        !res) {
+      return std::unexpected(res.error());
+    }
+    const auto count = read_le<uint32_t>(data, offset);
+    offset += SIZE_U32;
+
+    ExportEntryList exports;
+    exports.reserve(count);
+
+    for (auto i = 0U; i < count; ++i) {
+      if (const auto res = check_bounds(
+              data,
+              offset,
+              SIZE_U32,
+              "export entry name length out of bounds");
+          !res) {
+        return std::unexpected(res.error());
+      }
+      const auto name_len = read_le<uint32_t>(data, offset);
+      offset += SIZE_U32;
+
+      if (const auto res = check_bounds(
+              data,
+              offset,
+              name_len + SIZE_U32,
+              "export entry data out of bounds");
+          !res) {
+        return std::unexpected(res.error());
+      }
+      const auto name = read_string(data, offset, name_len);
+      offset += name_len;
+
+      const auto proc_id = read_le<uint32_t>(data, offset);
+      offset += SIZE_U32;
+
+      exports.push_back({name, proc_id});
+    }
+
+    return exports;
+  }
+
   auto parse_proc_table(std::span<const uint8_t> data, size_t offset)
       -> Expected<ProcTable> {
     if (auto res = check_bounds(
@@ -262,6 +223,110 @@ namespace musi {
     }
 
     return procs;
+  }
+
+  auto parse_link_table(
+      std::span<const uint8_t> data,
+      size_t offset,
+      uint32_t count) -> Expected<LinkEntryList> {
+    LinkEntryList links;
+    links.reserve(count);
+
+    for (auto i = 0U; i < count; ++i) {
+      if (const auto res = check_bounds(
+              data,
+              offset,
+              SIZE_U16 * 2,
+              "link entry header out of bounds");
+          !res) {
+        return std::unexpected(res.error());
+      }
+      const auto proc_id = read_le<uint16_t>(data, offset);
+      offset += SIZE_U16;
+
+      const auto key_len = read_le<uint16_t>(data, offset);
+      offset += SIZE_U16;
+
+      if (const auto res = check_bounds(
+              data,
+              offset,
+              key_len,
+              "link entry key out of bounds");
+          !res) {
+        return std::unexpected(res.error());
+      }
+      const auto link_key = read_string(data, offset, key_len);
+      offset += key_len;
+
+      links.push_back({proc_id, link_key});
+    }
+
+    return links;
+  }
+
+  auto parse_import_table(std::span<const uint8_t> data, size_t offset)
+      -> Expected<std::vector<std::string>> {
+    if (const auto res = check_bounds(
+            data,
+            offset,
+            SIZE_U32,
+            "import table offset out of bounds");
+        !res) {
+      return std::unexpected(res.error());
+    }
+    const auto count = read_le<uint32_t>(data, offset);
+    offset += SIZE_U32;
+
+    std::vector<std::string> imports;
+    imports.reserve(count);
+
+    for (auto i = 0U; i < count; ++i) {
+      if (const auto res = check_bounds(
+              data,
+              offset,
+              SIZE_U16,
+              "import entry length out of bounds");
+          !res) {
+        return std::unexpected(res.error());
+      }
+      const auto path_len = read_le<uint16_t>(data, offset);
+      offset += SIZE_U16;
+
+      if (const auto res =
+              check_bounds(data, offset, path_len, "import path out of bounds");
+          !res) {
+        return std::unexpected(res.error());
+      }
+      const auto path = read_string(data, offset, path_len);
+      offset += path_len;
+
+      imports.push_back(path);
+    }
+
+    return imports;
+  }
+
+  auto skip_const_pool(std::span<const uint8_t> data, size_t offset) -> size_t {
+    if (offset + SIZE_U32 > data.size()) {
+      return offset;
+    }
+    const auto count = read_le<uint32_t>(data, offset);
+    offset += SIZE_U32;
+
+    for (auto i = 0U; i < count; ++i) {
+      if (offset >= data.size()) {
+        break;
+      }
+      const auto tag = data[offset++];
+      if (tag == TAG_TEXT) {
+        if (offset + SIZE_U32 > data.size()) {
+          break;
+        }
+        const auto len = read_le<uint32_t>(data, offset);
+        offset += SIZE_U32 + len;
+      }
+    }
+    return offset;
   }
 
 }  // namespace musi
