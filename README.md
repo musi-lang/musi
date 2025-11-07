@@ -18,13 +18,13 @@ Systems programming language designed for clarity, safety, and performance. Read
 ```musi
 const Counter := record { var value: Nat; };
 
-const inc := proc (var self: Counter) {
-  const temp := self.value;
-  self.value <- temp + 1;
+const Counter.inc := proc (var c: Counter) {
+  const temp := c.value;
+  c.value <- temp + 1;
 };
 
-const show := proc (self: Counter) {
-  writeln(`Counter is now: ${self.value}`);
+const Counter.show := proc (c: Counter) {
+  writeln(`Counter is now: ${c.value}`);
 };
 
 var counter := Counter{ .value := 0 };
