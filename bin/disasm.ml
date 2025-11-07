@@ -17,24 +17,18 @@ let disass_bytecode buf =
           let idx = Binary.read_u16_le buf (offset + 1) in
           (Printf.sprintf "st.loc %d" idx, offset + 3)
         | 0x15 -> ("ld.c.i4.m1", offset + 1)
-        | 0x16 -> ("ld.c.i4.0", offset + 1)
-        | 0x17 -> ("ld.c.i4.1", offset + 1)
-        | 0x18 -> ("ld.c.i4.2", offset + 1)
-        | 0x19 -> ("ld.c.i4.3", offset + 1)
-        | 0x1A -> ("ld.c.i4.4", offset + 1)
-        | 0x1B -> ("ld.c.i4.5", offset + 1)
-        | 0x1C -> ("ld.c.i4.6", offset + 1)
-        | 0x1D -> ("ld.c.i4.7", offset + 1)
-        | 0x1E -> ("ld.c.i4.8", offset + 1)
         | 0x20 ->
           let val32 = Binary.read_i32_le buf (offset + 1) in
           (Printf.sprintf "ld.c.i4 %ld" val32, offset + 5)
         | 0x21 -> ("ld.c.unit", offset + 1)
+        | 0x22 ->
+          let idx = Binary.read_u16_le buf (offset + 1) in
+          (Printf.sprintf "ld.c.str %d" idx, offset + 3)
         | 0x25 -> ("dup", offset + 1)
         | 0x26 -> ("pop", offset + 1)
         | 0x28 ->
-          let proc_id = Binary.read_u16_le buf (offset + 1) in
-          (Printf.sprintf "call %d" proc_id, offset + 3)
+          let proc_id = Binary.read_i32_le buf (offset + 1) in
+          (Printf.sprintf "call %ld" proc_id, offset + 5)
         | 0x2A -> ("ret", offset + 1)
         | 0x38 ->
           let off = Binary.read_i32_le buf (offset + 1) in
