@@ -18,6 +18,7 @@ type proc_desc = {
   ; max_stack : int
   ; bytecode_offset : int
   ; bytecode_length : int
+  ; is_extern : bool
 }
 
 type module_desc = {
