@@ -58,6 +58,7 @@ type kind =
   | RBrack
   | LBrace
   | RBrace
+  | Pipe
   | Comma
   | Dot
   | Colon

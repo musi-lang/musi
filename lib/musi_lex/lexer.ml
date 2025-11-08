@@ -139,7 +139,7 @@ let lex_num t =
       if curr t = '+' || curr t = '-' then advance t;
       scan_while t (fun c -> is_digit c || c = '_')));
   let text = String.sub t.source start (t.pos - start) in
-  Token.make (Token.LitNumeric text) (span t start)
+  Token.make (Token.LitNum text) (span t start)
 
 let escapes =
   [
@@ -181,7 +181,7 @@ let lex_str_lit t =
   in
   loop ();
   Token.make
-    (Token.LitText (Interner.intern t.interner (Buffer.contents buf)))
+    (Token.LitStr (Interner.intern t.interner (Buffer.contents buf)))
     (span t start)
 
 let lex_chr_lit t =
@@ -196,7 +196,7 @@ let lex_chr_lit t =
     if curr t <> '\'' then
       error t "missing closing '\'' in rune literal" (span t start);
     advance t;
-    Token.make (Token.LitRune code) (span t start)
+    Token.make (Token.LitChr code) (span t start)
 
 let lex_line_comment t =
   let start = t.pos in
@@ -240,6 +240,7 @@ let symbols =
   ; ("]", Token.RBrack)
   ; ("{", Token.LBrace)
   ; ("}", Token.RBrace)
+  ; ("|", Token.Pipe)
   ; (",", Token.Comma)
   ; (".", Token.Dot)
   ; (":", Token.Colon)

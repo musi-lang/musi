@@ -57,6 +57,7 @@ type kind =
   | RBrack
   | LBrace
   | RBrace
+  | Pipe
   | Comma
   | Dot
   | Colon
@@ -168,6 +169,7 @@ let show_kind interner = function
   | RBrack -> "]"
   | LBrace -> "{"
   | RBrace -> "}"
+  | Pipe -> "|"
   | Comma -> ","
   | Dot -> "."
   | Colon -> ":"
