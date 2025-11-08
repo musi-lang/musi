@@ -227,35 +227,35 @@ let lex_block_comment t =
 
 let symbols =
   [
-    ("=/=", 3, Token.EqSlashEq)
-  ; ("..<", 3, Token.DotDotLt)
-  ; (":=", 2, Token.ColonEq)
-  ; ("<-", 2, Token.LtMinus)
-  ; ("->", 2, Token.MinusGt)
-  ; ("<=", 2, Token.LtEq)
-  ; (">=", 2, Token.GtEq)
-  ; ("..", 2, Token.DotDot)
-  ; ("(", 1, Token.LParen)
-  ; (")", 1, Token.RParen)
-  ; ("[", 1, Token.LBrack)
-  ; ("]", 1, Token.RBrack)
-  ; ("{", 1, Token.LBrace)
-  ; ("}", 1, Token.RBrace)
-  ; (",", 1, Token.Comma)
-  ; (".", 1, Token.Dot)
-  ; (":", 1, Token.Colon)
-  ; (";", 1, Token.Semi)
-  ; ("@", 1, Token.At)
-  ; ("?", 1, Token.Question)
-  ; ("!", 1, Token.Bang)
-  ; ("$", 1, Token.Dollar)
-  ; ("+", 1, Token.Plus)
-  ; ("-", 1, Token.Minus)
-  ; ("*", 1, Token.Star)
-  ; ("^", 1, Token.Caret)
-  ; ("=", 1, Token.Eq)
-  ; ("<", 1, Token.Lt)
-  ; (">", 1, Token.Gt)
+    ("=/=", Token.EqSlashEq)
+  ; ("..<", Token.DotDotLt)
+  ; (":=", Token.ColonEq)
+  ; ("<-", Token.LtMinus)
+  ; ("->", Token.MinusGt)
+  ; ("<=", Token.LtEq)
+  ; (">=", Token.GtEq)
+  ; ("..", Token.DotDot)
+  ; ("(", Token.LParen)
+  ; (")", Token.RParen)
+  ; ("[", Token.LBrack)
+  ; ("]", Token.RBrack)
+  ; ("{", Token.LBrace)
+  ; ("}", Token.RBrace)
+  ; (",", Token.Comma)
+  ; (".", Token.Dot)
+  ; (":", Token.Colon)
+  ; (";", Token.Semi)
+  ; ("@", Token.At)
+  ; ("?", Token.Question)
+  ; ("!", Token.Bang)
+  ; ("$", Token.Dollar)
+  ; ("+", Token.Plus)
+  ; ("-", Token.Minus)
+  ; ("*", Token.Star)
+  ; ("^", Token.Caret)
+  ; ("=", Token.Eq)
+  ; ("<", Token.Lt)
+  ; (">", Token.Gt)
   ]
 
 let lex_symbol t =
@@ -269,9 +269,9 @@ let lex_symbol t =
         (span t start);
       advance t;
       Token.make Token.Error (span t start)
-    | (op_str, len, kind) :: rest ->
+    | (op_str, kind) :: rest ->
       if matches_at t op_str then (
-        advance_by t len;
+        advance_by t (String.length op_str);
         Token.make kind (span t start))
       else try_ops rest
   in
@@ -303,4 +303,6 @@ let lex_all t =
       if tok.Token.kind = Token.Eof then List.rev (tok :: acc)
       else loop (tok :: acc)
   in
-  (loop [], !(t.diags))
+  let tokens = loop [] in
+  let diags = !(t.diags) in
+  (tokens, diags)
