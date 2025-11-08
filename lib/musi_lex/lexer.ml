@@ -47,7 +47,7 @@ let matches_at t s =
   in
   check 0
 
-let is_whitespace = function ' ' | '\t' | '\r' -> true | _ -> false
+let is_blank_char = function ' ' | '\t' | '\r' -> true | _ -> false
 
 let is_ident_cont = function
   | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '_' -> true
@@ -122,7 +122,7 @@ let lex_ident t =
   in
   Token.make kind (span t start)
 
-let lex_number t =
+let lex_num t =
   let start = t.pos in
   if curr t = '0' && (peek t 1 = 'x' || peek t 1 = 'X') then (
     advance_by t 2;
@@ -152,7 +152,7 @@ let escapes =
   ; ('0', '\000')
   ]
 
-let lex_lit_text t =
+let lex_str_lit t =
   let start = t.pos in
   advance t;
   let buf = Buffer.create 16 in
@@ -185,7 +185,7 @@ let lex_lit_text t =
     (Token.LitText (Interner.intern t.interner (Buffer.contents buf)))
     (span t start)
 
-let lex_lit_rune t =
+let lex_chr_lit t =
   let start = t.pos in
   advance t;
   if at_end t then (
@@ -258,7 +258,7 @@ let symbols =
   ; (">", Token.Gt)
   ]
 
-let lex_symbol t =
+let lex_sym t =
   let start = t.pos in
   let rec try_ops = function
     | [] ->
@@ -282,18 +282,18 @@ let lex t =
   match curr t with
   | '\000' -> Token.make Token.Eof (span t start)
   | ' ' | '\t' | '\r' ->
-    scan_while t is_whitespace;
+    scan_while t is_blank_char;
     Token.make Token.Whitespace (span t start)
   | '\n' ->
     advance t;
     Token.make Token.Newline (span t start)
   | 'a' .. 'z' | 'A' .. 'Z' | '_' -> lex_ident t
-  | '0' .. '9' -> lex_number t
-  | '"' -> lex_lit_text t
-  | '\'' -> lex_lit_rune t
+  | '0' .. '9' -> lex_num t
+  | '"' -> lex_str_lit t
+  | '\'' -> lex_chr_lit t
   | '/' when peek t 1 = '/' -> lex_line_comment t
   | '/' when peek t 1 = '*' -> lex_block_comment t
-  | _ -> lex_symbol t
+  | _ -> lex_sym t
 
 let lex_all t =
   let rec loop acc =
@@ -303,6 +303,6 @@ let lex_all t =
       if tok.Token.kind = Token.Eof then List.rev (tok :: acc)
       else loop (tok :: acc)
   in
-  let tokens = loop [] in
+  let toks = loop [] in
   let diags = !(t.diags) in
-  (tokens, diags)
+  (toks, diags)

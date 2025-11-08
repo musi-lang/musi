@@ -2,9 +2,9 @@ open Musi_basic
 
 type kind =
   | Ident of Interner.name
-  | LitNumeric of string
-  | LitText of Interner.name
-  | LitRune of int
+  | LitNum of string
+  | LitStr of Interner.name
+  | LitChr of int
   | LitTemplate of Interner.name
   | TemplateHead of Interner.name
   | TemplateMiddle of Interner.name
