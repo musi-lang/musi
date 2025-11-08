@@ -11,12 +11,12 @@ type expr = { ekind : expr_kind; span : Span.t }
 
 and expr_kind =
   | ExprIdent of name
-  | ExprLiteral of Token.kind
+  | ExprLiteral of literal_kind
   | ExprBinary of Token.kind * expr * expr
   | ExprUnary of Token.kind * expr
-  | ExprCall of expr * expr list
-  | ExprField of expr * name
-  | ExprIndex of expr * expr
+  | ExprCall of expr * expr list * bool
+  | ExprField of expr * name * bool
+  | ExprIndex of expr * expr * bool
   | ExprTuple of expr list
   | ExprArray of expr list
   | ExprRecord of (name * expr) list
@@ -34,6 +34,9 @@ and expr_kind =
   | ExprAwait of expr
   | ExprTry of expr
   | ExprDefer of expr
+  | ExprUnwrap of expr
+  | ExprCast of expr * ty
+  | ExprTest of expr * ty
   | ExprBinding of bool * pat * ty option * expr * modifiers
   | ExprProc of
       name list * capture list * param list * ty option * expr * modifiers
@@ -69,6 +72,13 @@ and pat_kind =
   | PatLiteral of Token.kind
   | PatRest of name
   | PatError
+
+and literal_kind =
+  | LitInt of string
+  | LitFloat of string
+  | LitStr of name
+  | LitChr of int
+  | LitBool of bool
 
 and param = { pname : name; pty : ty option; is_inout : bool }
 and field = { fname : name; fty : ty; is_var : bool; is_weak : bool }
