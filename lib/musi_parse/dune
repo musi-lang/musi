@@ -1,0 +1,4 @@
+(library
+ (name musi_parse)
+ (public_name musi.parse)
+ (libraries musi_basic musi_lex))
