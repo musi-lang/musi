@@ -9,7 +9,6 @@ type kind =
   | TemplateHead of Interner.name
   | TemplateMiddle of Interner.name
   | TemplateTail of Interner.name
-  | KwAlias
   | KwAnd
   | KwAs
   | KwAsync
@@ -121,7 +120,6 @@ let show_kind interner = function
   | TemplateHead n -> Printf.sprintf "`%s${" (Interner.lookup interner n)
   | TemplateMiddle n -> Printf.sprintf "}%s${" (Interner.lookup interner n)
   | TemplateTail n -> Printf.sprintf "}%s`" (Interner.lookup interner n)
-  | KwAlias -> "alias"
   | KwAnd -> "and"
   | KwAs -> "as"
   | KwAsync -> "async"

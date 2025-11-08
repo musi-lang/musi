@@ -64,8 +64,7 @@ let keywords =
   List.iter
     (fun (k, v) -> Hashtbl.add tbl k v)
     [
-      ("alias", Token.KwAlias)
-    ; ("and", Token.KwAnd)
+      ("and", Token.KwAnd)
     ; ("as", Token.KwAs)
     ; ("async", Token.KwAsync)
     ; ("await", Token.KwAwait)

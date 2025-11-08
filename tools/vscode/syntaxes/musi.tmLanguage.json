@@ -100,7 +100,7 @@
         },
         "declaration-named": {
             "name": "meta.declaration.musi",
-            "begin": "((?:(?:export|extern|unsafe|async)\\s+)*)\\b(alias|choice|proc|record)\\b",
+            "begin": "((?:(?:export|extern|unsafe|async)\\s+)*)\\b(choice|proc|record)\\b",
             "beginCaptures": {
                 "1": {
                     "patterns": [
@@ -115,7 +115,7 @@
         },
         "declaration-choice-case": {
             "name": "meta.choice.case.musi",
-            "match": "\\b(case)\\s+(\\.)?((?!(?:await|break|continue|defer|do|else|for|from|if|in|match|return|then|try|where|while|with|yield|alias|choice|const|proc|record|var|async|export|extern|unsafe|weak|as|is)\\b)[a-zA-Z_][a-zA-Z0-9_]*)(?=\\s*(?:\\(|\\{|\\}|\\)|,|=>|->|:|;|if|$))",
+            "match": "\\b(case)\\s+(\\.)?((?!(?:await|break|continue|defer|do|else|for|from|if|in|match|return|then|try|where|while|with|yield|choice|const|proc|record|var|async|export|extern|unsafe|weak|as|is)\\b)[a-zA-Z_][a-zA-Z0-9_]*)(?=\\s*(?:\\(|\\{|\\}|\\)|,|=>|->|:|;|if|$))",
             "captures": {
                 "1": { "name": "keyword.control.case.musi" },
                 "2": { "name": "punctuation.accessor.dot.musi" },
@@ -353,7 +353,7 @@
         },
         "keyword-storage": {
             "name": "storage.type.musi",
-            "match": "\\b(alias|choice|const|proc|record|var)\\b"
+            "match": "\\b(choice|const|proc|record|var)\\b"
         },
         "keyword-modifier": {
             "name": "storage.modifier.musi",
