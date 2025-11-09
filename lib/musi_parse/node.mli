@@ -47,8 +47,8 @@ and expr_kind =
   | ExprTest of expr * ty
   | ExprAsync of expr
   | ExprUnsafe of expr
-  | ExprChoice of variant list * modifiers
-  | ExprBinding of bool * pat * ty option * expr * modifiers
+  | ExprChoice of name list * variant list * modifiers
+  | ExprBinding of bool * name list * pat * ty option * expr * modifiers
   | ExprProc of
       name list * capture list * param list * ty option * expr * modifiers
   | ExprError
@@ -69,6 +69,7 @@ and ty_kind =
   | TyProc of ty list * ty option
   | TyTuple of ty list
   | TyArray of ty
+  | TyRecord of field list
   | TyError
 
 and pat = { pkind : pat_kind; span : Span.t }
