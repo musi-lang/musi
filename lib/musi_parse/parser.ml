@@ -507,9 +507,6 @@ let expr_tuple t (tok : Token.t) =
       let _ = get_tok Token.RParen t in
       first
 
-let variant_field t (tok : Token.t) =
-  parse_typed_field ~allow_modifiers:false t tok
-
 let variant_data t =
   skip_trivia t;
   match (curr t).kind with
@@ -520,7 +517,12 @@ let variant_data t =
     Node.VTuple types
   | Token.LBrace ->
     advance t;
-    let fields = sep_by_opt Token.Comma (fun t -> variant_field t (curr t)) t in
+    let fields =
+      sep_by_opt
+        Token.Comma
+        (fun t -> parse_typed_field ~allow_modifiers:false t (curr t))
+        t
+    in
     let _ = get_tok Token.RBrace t in
     Node.VRecord fields
   | _ -> Node.VUnit
@@ -589,11 +591,14 @@ let parse_param t =
   let pty = parse_optional_ty_annot t in
   { Node.pname; pty; is_inout }
 
-let parse_field t = parse_typed_field ~allow_modifiers:true t (curr t)
-
 let expr_record t (tok : Token.t) mods ty_params =
   let _ = get_tok Token.LBrace t in
-  let fields = sep_by_opt Token.Comma parse_field t in
+  let fields =
+    sep_by_opt
+      Token.Comma
+      (fun t -> parse_typed_field ~allow_modifiers:true t (curr t))
+      t
+  in
   let _ = get_tok Token.RBrace t in
   Node.make_expr (Node.ExprRecord (ty_params, fields, mods)) tok.span
 
@@ -642,9 +647,6 @@ let expr_block_or_lit_record t tok =
     | _ -> expr_block t tok)
   | _ -> expr_block t tok
 
-let expr_unary_wrap make_kind t (tok : Token.t) =
-  Node.make_expr (make_kind (parse_expr t PrecUnary)) tok.Token.span
-
 let expr_prefix t =
   skip_trivia t;
   let mods = parse_modifiers t in
@@ -674,11 +676,14 @@ let expr_prefix t =
     let value = parse_optional_expr t in
     Node.make_expr (Node.ExprBreak value) tok.span
   | Token.KwContinue -> Node.make_expr Node.ExprContinue tok.span
-  | Token.KwAwait -> expr_unary_wrap (fun e -> Node.ExprAwait e) t tok
+  | Token.KwAwait ->
+    Node.make_expr (Node.ExprAwait (parse_expr t PrecUnary)) tok.span
   | Token.KwYield ->
     Node.make_expr (Node.ExprYield (parse_optional_expr t)) tok.span
-  | Token.KwDefer -> expr_unary_wrap (fun e -> Node.ExprDefer e) t tok
-  | Token.KwTry -> expr_unary_wrap (fun e -> Node.ExprTry e) t tok
+  | Token.KwDefer ->
+    Node.make_expr (Node.ExprDefer (parse_expr t PrecUnary)) tok.span
+  | Token.KwTry ->
+    Node.make_expr (Node.ExprTry (parse_expr t PrecUnary)) tok.span
   | Token.KwAsync ->
     let brace_tok = get_tok Token.LBrace t in
     let block = expr_block t brace_tok in
@@ -776,10 +781,6 @@ let expr_impl t bp =
   let left = expr_prefix t in
   parse_expr_infix t left bp
 
-let pat_rest t (tok : Token.t) =
-  let name = expect_ident t "expected identifier after '..'" in
-  Node.make_pat (Node.PatRest name) tok.span
-
 let pat_choice t (tok : Token.t) =
   skip_trivia t;
   match (curr t).kind with
@@ -805,29 +806,17 @@ let pat_array t (tok : Token.t) =
     advance t;
     Node.make_pat (Node.PatArray ([], None)) tok.span)
   else
-    let rec parse_items acc =
-      skip_trivia t;
+    let items = sep_by_opt Token.Comma parse_pat t in
+    skip_trivia t;
+    let rest =
       if (curr t).kind = Token.DotDot then (
         advance t;
-        let rest_pat = pat_rest t tok in
-        let _ = get_tok Token.RBrack t in
-        Node.make_pat (Node.PatArray (List.rev acc, Some rest_pat)) tok.span)
-      else
-        let pat = parse_pat t in
-        skip_trivia t;
-        match (curr t).kind with
-        | Token.Comma ->
-          advance t;
-          parse_items (pat :: acc)
-        | Token.RBrack ->
-          advance t;
-          Node.make_pat (Node.PatArray (List.rev (pat :: acc), None)) tok.span
-        | _ ->
-          error t "expected ',' or ']' in array pattern";
-          let _ = get_tok Token.RBrack t in
-          Node.make_pat (Node.PatArray (List.rev (pat :: acc), None)) tok.span
+        let name = expect_ident t "expected identifier after '..'" in
+        Some (Node.make_pat (Node.PatRest name) tok.span))
+      else None
     in
-    parse_items []
+    let _ = get_tok Token.RBrack t in
+    Node.make_pat (Node.PatArray (items, rest)) tok.span
 
 let pat_record t (tok : Token.t) =
   let parse_field t =
@@ -869,16 +858,14 @@ let pat_tuple t (tok : Token.t) =
       let _ = get_tok Token.RParen t in
       Node.make_pat (Node.PatTuple [ first ]) tok.span
 
-let pat_binding t (tok : Token.t) =
-  let name = expect_ident t "expected identifier after 'const' in pattern" in
-  Node.make_pat (Node.PatBinding name) tok.span
-
 let pat_impl t =
   skip_trivia t;
   let tok = curr t in
   advance t;
   match tok.kind with
-  | Token.KwConst -> pat_binding t tok
+  | Token.KwConst ->
+    let name = expect_ident t "expected identifier after 'const' in pattern" in
+    Node.make_pat (Node.PatBinding name) tok.span
   | Token.Underscore -> Node.make_pat Node.PatWild tok.span
   | Token.Ident name -> Node.make_pat (Node.PatIdent name) tok.span
   | Token.Dot -> pat_choice t tok
@@ -926,43 +913,40 @@ let parse_ident_list t =
         Interner.empty_name t.interner)
     t
 
-let parse_import_spec t =
+let parse_named_or_namespace_spec ~kw ~named_ctor ~namespace_ctor t =
   skip_trivia t;
   match (curr t).kind with
   | Token.LBrace ->
     advance t;
     let names = parse_ident_list t in
     let _ = get_tok Token.RBrace t in
-    Node.ImportNamed names
-  | Token.Star -> (
-    advance t;
-    let _ = get_tok Token.KwAs t in
-    skip_trivia t;
-    match (curr t).kind with
-    | Token.Ident name ->
-      advance t;
-      Node.ImportNamespace name
-    | _ ->
-      error t "expected identifier after 'as'";
-      Node.ImportNamespace (Interner.empty_name t.interner))
-  | _ ->
-    error t "expected '{' or '*' after 'import'";
-    Node.ImportNamed []
-
-let parse_export_spec t =
-  skip_trivia t;
-  match (curr t).kind with
-  | Token.LBrace ->
-    advance t;
-    let names = parse_ident_list t in
-    let _ = get_tok Token.RBrace t in
-    Node.ExportNamed names
+    named_ctor names
   | Token.Star ->
     advance t;
-    Node.ExportNamespace (Interner.intern t.interner "*")
+    let name =
+      if kw = "import" then
+        let _ = get_tok Token.KwAs t in
+        expect_ident t "expected identifier after 'as'"
+      else Interner.intern t.interner "*"
+    in
+    namespace_ctor name
   | _ ->
-    error t "expected '{' or '*' after 'export'";
-    Node.ExportNamed []
+    error t (Printf.sprintf "expected '{' or '*' after '%s'" kw);
+    named_ctor []
+
+let parse_import_spec t =
+  parse_named_or_namespace_spec
+    ~kw:"import"
+    ~named_ctor:(fun names -> Node.ImportNamed names)
+    ~namespace_ctor:(fun name -> Node.ImportNamespace name)
+    t
+
+let parse_export_spec t =
+  parse_named_or_namespace_spec
+    ~kw:"export"
+    ~named_ctor:(fun names -> Node.ExportNamed names)
+    ~namespace_ctor:(fun name -> Node.ExportNamespace name)
+    t
 
 let stmt_import t (tok : Token.t) =
   let spec = parse_import_spec t in
