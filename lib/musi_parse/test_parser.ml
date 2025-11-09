@@ -4,11 +4,12 @@ open Musi_parse
 
 let parse src =
   let interner = Interner.create () in
-  let file_id, _ = Source.add_file Source.empty "<test>" src in
+  let file_id, source = Source.add_file Source.empty "<test>" src in
   let lexer = Lexer.make file_id src interner in
   let tokens, _ = Lexer.lex_all lexer in
   let parser = Parser.make tokens interner in
   let stmts, diags = Parser.parse parser in
+  Diagnostic.emit_all Format.std_formatter diags source;
   (stmts, diags, interner)
 
 let test_literal_int () =
@@ -57,12 +58,12 @@ let test_binding_var () =
   Alcotest.(check int) "stmt count" 1 (List.length stmts)
 
 let test_if_then () =
-  let stmts, diags, _ = parse "if true then { 1 }" in
+  let stmts, diags, _ = parse "if true then 1" in
   Alcotest.(check bool) "no errors" false (Diagnostic.has_errors diags);
   Alcotest.(check int) "stmt count" 1 (List.length stmts)
 
 let test_if_then_else () =
-  let stmts, diags, _ = parse "if false then { 1 } else { 2 }" in
+  let stmts, diags, _ = parse "if false then 1 else 2" in
   Alcotest.(check bool) "no errors" false (Diagnostic.has_errors diags);
   Alcotest.(check int) "stmt count" 1 (List.length stmts)
 
