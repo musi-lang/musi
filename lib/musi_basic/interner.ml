@@ -33,3 +33,4 @@ let intern t str =
 let lookup t n = t.strings.(n)
 let compare (a : name) (b : name) = Int.compare a b
 let equal (a : name) (b : name) = a = b
+let empty_name t = intern t ""
