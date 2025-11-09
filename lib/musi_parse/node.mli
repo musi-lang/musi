@@ -24,6 +24,7 @@ and expr_kind =
   | ExprIf of expr * expr * expr option
   | ExprMatch of expr * case list
   | ExprWhile of expr * expr
+  | ExprDo of expr * expr option
   | ExprFor of pat * expr * expr
   | ExprRange of expr * expr * bool
   | ExprAssign of expr * expr
@@ -37,6 +38,9 @@ and expr_kind =
   | ExprUnwrap of expr
   | ExprCast of expr * ty
   | ExprTest of expr * ty
+  | ExprAsync of expr
+  | ExprUnsafe of expr
+  | ExprChoice of variant list
   | ExprBinding of bool * pat * ty option * expr * modifiers
   | ExprProc of
       name list * capture list * param list * ty option * expr * modifiers
@@ -79,10 +83,13 @@ and literal_kind =
   | LitStr of name
   | LitChr of int
   | LitBool of bool
+  | LitRecord of (name * expr) list
 
 and param = { pname : name; pty : ty option; is_inout : bool }
 and field = { fname : name; fty : ty; is_var : bool; is_weak : bool }
 and case = { cpat : pat; guard : expr option; body : expr }
+and variant = { vname : name; vdata : variant_data }
+and variant_data = VUnit | VTuple of ty list | VRecord of field list
 
 val empty_modifiers : modifiers
 val make_expr : expr_kind -> Span.t -> expr
