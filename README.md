@@ -41,8 +41,7 @@ counter.show();     // prints: `Counter is now: 2`
 
 - [OCaml](https://ocaml.org/install) (5.4.0 or greater)
 - [opam](https://opam.ocaml.org/doc/Install.html) (2.3.0 or greater)
-- [Clang](https://clang.llvm.org/) (19.1.7 or greater)
-- [XMake](https://xmake.io/guide/quick-start.html) (3.0.4 or greater)
+- [Rust](https://rust-lang.org/tools/install/) (1.85.0 or greater)
 
 ### Build
 
@@ -65,7 +64,7 @@ xmake build
 opam exec -- dune exec bin/main.exe
 opam exec -- dune test
 
-# TODO: VM usage in C++ here
+# TODO: VM usage in Rust (Cargo) here
 ```
 
 ## Contributing
