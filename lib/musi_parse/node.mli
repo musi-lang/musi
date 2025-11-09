@@ -89,6 +89,7 @@ and pat_kind =
   | PatChoice of name * pat option
   | PatLiteral of Token.kind
   | PatRest of name
+  | PatBinding of name
   | PatError
 
 and literal_kind =
