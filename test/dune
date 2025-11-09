@@ -1,17 +1,28 @@
 (library
- (name test_validate)
- (modules validate)
- (libraries basic))
+ (name test_helpers)
+ (modules test_helpers)
+ (libraries alcotest unix))
 
 (executable
- (name runner)
- (modules runner)
- (libraries alcotest unix lex parse sema codegen test_validate))
+ (name run_lexer_tests)
+ (modules run_lexer_tests)
+ (libraries alcotest unix musi_basic musi_lex test_helpers))
+
+(executable
+ (name run_parser_tests)
+ (modules run_parser_tests)
+ (libraries alcotest unix musi_basic musi_lex musi_parse test_helpers))
 
 (rule
  (alias runtest)
  (deps
-  (source_tree pass)
-  (source_tree fail))
+  (source_tree lexer))
  (action
-  (run ./runner.exe)))
+  (run ./run_lexer_tests.exe)))
+
+(rule
+ (alias runtest)
+ (deps
+  (source_tree parser))
+ (action
+  (run ./run_parser_tests.exe)))
