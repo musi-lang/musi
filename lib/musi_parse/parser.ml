@@ -2,7 +2,7 @@ open Musi_basic
 open Musi_lex
 
 type t = {
-    mutable stream : Token.stream
+    stream : Token.stream
   ; interner : Interner.t
   ; diags : Diagnostic.bag ref
 }
@@ -51,7 +51,8 @@ let token_prec = function
   | Token.KwShl | Token.KwShr -> PrecBitShift
   | Token.Plus | Token.Minus -> PrecAdditive
   | Token.Star | Token.Slash | Token.KwMod -> PrecMultiply
-  | Token.Dot | Token.LBrack | Token.LParen | Token.Question | Token.Bang ->
+  | Token.Dot | Token.LBrack | Token.LBrace | Token.LParen | Token.Question
+  | Token.Bang ->
     PrecPostfix
   | _ -> PrecNone
 
@@ -94,18 +95,6 @@ let get_tok kind t =
     error t (Printf.sprintf "expected '%s', found '%s'" expected found);
     tok
 
-let sep_by sep p t =
-  let rec loop acc =
-    let item = p t in
-    let acc' = item :: acc in
-    skip_trivia t;
-    if (curr t).kind = sep then (
-      advance t;
-      loop acc')
-    else List.rev acc'
-  in
-  loop []
-
 let sep_by_opt sep p t =
   skip_trivia t;
   if
@@ -113,7 +102,23 @@ let sep_by_opt sep p t =
     || (curr t).kind = Token.RBrack
     || (curr t).kind = Token.RBrace
   then []
-  else sep_by sep p t
+  else
+    let rec loop acc =
+      let item = p t in
+      let acc' = item :: acc in
+      skip_trivia t;
+      if (curr t).kind = sep then (
+        advance t;
+        skip_trivia t;
+        if
+          (curr t).kind = Token.RParen
+          || (curr t).kind = Token.RBrack
+          || (curr t).kind = Token.RBrace
+        then List.rev acc'
+        else loop acc')
+      else List.rev acc'
+    in
+    loop []
 
 (* === PRATT PARSING === *)
 
@@ -328,6 +333,7 @@ let parse_ty_params t =
 
 let parse_modifiers t =
   let rec loop (mods : Node.modifiers) =
+    skip_trivia t;
     match (curr t).kind with
     | Token.KwExport ->
       advance t;
@@ -340,6 +346,7 @@ let parse_modifiers t =
       loop { mods with is_unsafe = true }
     | Token.KwExtern -> (
       advance t;
+      skip_trivia t;
       match (curr t).kind with
       | Token.LitStr abi_name ->
         advance t;
@@ -371,10 +378,14 @@ let expr_block t (tok : Token.t) =
     else
       let e = parse_expr t PrecNone in
       skip_trivia t;
-      if (curr t).kind = Token.Semi then (
+      match (curr t).kind with
+      | Token.Semi ->
         advance t;
-        loop (e :: acc))
-      else e :: List.rev acc
+        loop (e :: acc)
+      | Token.RBrace -> List.rev (e :: acc)
+      | _ ->
+        error t "expected ';' or '}' in block";
+        List.rev (e :: acc)
   in
   let exprs = loop [] in
   let _ = get_tok Token.RBrace t in
@@ -527,6 +538,7 @@ let parse_case t =
 
 let expr_match t (tok : Token.t) =
   let scrutinee = parse_expr t PrecNone in
+  let _ = get_tok Token.KwWith t in
   let _ = get_tok Token.LBrace t in
   let cases = sep_by_opt Token.Comma parse_case t in
   let _ = get_tok Token.RBrace t in
@@ -622,8 +634,14 @@ let expr_proc t (tok : Token.t) mods ty_params =
       Some (parse_ty t))
     else None
   in
-  let _ = get_tok Token.LBrace t in
-  let body = expr_block t (curr t) in
+  skip_trivia t;
+  let body =
+    if (curr t).kind = Token.LBrace then (
+      let brace_tok = curr t in
+      advance t;
+      Some (expr_block t brace_tok))
+    else None
+  in
   Node.make_expr
     (Node.ExprProc (ty_params, captures, params, ret_ty, body, mods))
     tok.span
@@ -636,16 +654,10 @@ let expr_block_or_lit_record t tok =
     advance t;
     Node.make_expr (Node.ExprBlock []) tok.span
   | Token.Ident _ -> (
-    let saved_pos = t.stream in
-    let _ = parse_expr t PrecNone in
-    skip_trivia t;
-    match (curr t).kind with
-    | Token.Comma ->
-      t.stream <- saved_pos;
-      expr_lit_record t tok
-    | _ ->
-      t.stream <- saved_pos;
-      expr_block t tok)
+    let next_tok = Token.peek t.stream in
+    match next_tok.kind with
+    | Token.ColonEq | Token.Comma -> expr_lit_record t tok
+    | _ -> expr_block t tok)
   | _ -> expr_block t tok
 
 let expr_unary_wrap make_kind t (tok : Token.t) =
@@ -685,8 +697,14 @@ let expr_prefix t =
     Node.make_expr (Node.ExprYield (parse_optional_expr t)) tok.span
   | Token.KwDefer -> expr_unary_wrap (fun e -> Node.ExprDefer e) t tok
   | Token.KwTry -> expr_unary_wrap (fun e -> Node.ExprTry e) t tok
-  | Token.KwAsync -> expr_unary_wrap (fun e -> Node.ExprAsync e) t tok
-  | Token.KwUnsafe -> expr_unary_wrap (fun e -> Node.ExprUnsafe e) t tok
+  | Token.KwAsync ->
+    let brace_tok = get_tok Token.LBrace t in
+    let block = expr_block t brace_tok in
+    Node.make_expr (Node.ExprAsync block) tok.span
+  | Token.KwUnsafe ->
+    let brace_tok = get_tok Token.LBrace t in
+    let block = expr_block t brace_tok in
+    Node.make_expr (Node.ExprUnsafe block) tok.span
   | Token.KwIf -> expr_if t tok
   | Token.KwMatch -> expr_match t tok
   | Token.KwWhile -> expr_while t tok
@@ -695,12 +713,29 @@ let expr_prefix t =
   | Token.KwVar -> expr_binding t tok false mods
   | Token.KwFor -> expr_for t tok
   | Token.KwChoice | Token.KwRecord | Token.KwProc | Token.Pipe -> (
+    skip_trivia t;
+    let name_opt =
+      match (curr t).kind with
+      | Token.Ident name ->
+        advance t;
+        Some name
+      | _ -> None
+    in
     let ty_params = parse_ty_params t in
-    match tok.kind with
-    | Token.KwChoice -> expr_choice t tok mods ty_params
-    | Token.KwRecord -> expr_record t tok mods ty_params
-    | Token.KwProc | Token.Pipe -> expr_proc t tok mods ty_params
-    | _ -> failwith "unreachable")
+    let construct =
+      match tok.kind with
+      | Token.KwChoice -> expr_choice t tok mods ty_params
+      | Token.KwRecord -> expr_record t tok mods ty_params
+      | Token.KwProc | Token.Pipe -> expr_proc t tok mods ty_params
+      | _ -> failwith "unreachable"
+    in
+    match name_opt with
+    | Some name ->
+      let pat = Node.make_pat (Node.PatIdent name) tok.span in
+      Node.make_expr
+        (Node.ExprBinding (true, [], pat, None, construct, Node.empty_modifiers))
+        tok.span
+    | None -> construct)
   | Token.LBrace -> expr_block_or_lit_record t tok
   | Token.LBrack -> expr_array t tok
   | Token.LParen -> expr_tuple t tok
@@ -723,6 +758,9 @@ let expr_infix_impl t left bp =
     | Token.Dot -> expr_field_opt t left bp false
     | Token.LBrack -> expr_index_opt t left bp false
     | Token.LParen -> expr_call_opt t left bp false
+    | Token.LBrace ->
+      let lit = expr_lit_record t op_token in
+      parse_expr_infix t lit bp
     | Token.Bang ->
       let unwrap = Node.make_expr (Node.ExprUnwrap left) op_token.span in
       parse_expr_infix t unwrap bp
@@ -855,11 +893,22 @@ let pat_tuple t (tok : Token.t) =
       let _ = get_tok Token.RParen t in
       Node.make_pat (Node.PatTuple [ first ]) tok.span
 
+let pat_binding t (tok : Token.t) =
+  skip_trivia t;
+  match (curr t).kind with
+  | Token.Ident name ->
+    advance t;
+    Node.make_pat (Node.PatBinding name) tok.span
+  | _ ->
+    error t "expected identifier after 'const' in pattern";
+    Node.make_pat Node.PatError tok.span
+
 let pat_impl t =
   skip_trivia t;
   let tok = curr t in
   advance t;
   match tok.kind with
+  | Token.KwConst -> pat_binding t tok
   | Token.Underscore -> Node.make_pat Node.PatWild tok.span
   | Token.Ident name -> Node.make_pat (Node.PatIdent name) tok.span
   | Token.Dot -> pat_choice t tok
@@ -890,7 +939,18 @@ let parse_ident_list t =
       match (curr t).kind with
       | Token.Ident name ->
         advance t;
-        name
+        skip_trivia t;
+        if (curr t).kind = Token.KwAs then (
+          advance t;
+          skip_trivia t;
+          match (curr t).kind with
+          | Token.Ident _ ->
+            advance t;
+            name
+          | _ ->
+            error t "expected identifier after 'as'";
+            name)
+        else name
       | _ ->
         error t "expected identifier";
         Interner.empty_name t.interner)
@@ -971,19 +1031,30 @@ let stmt t =
   | Token.KwImport ->
     advance t;
     stmt_import t tok
-  | Token.KwExport ->
-    advance t;
-    stmt_export t tok
+  | Token.KwExport -> (
+    let next_tok = Token.peek t.stream in
+    match next_tok.kind with
+    | Token.LBrace | Token.Star ->
+      advance t;
+      stmt_export t tok
+    | _ ->
+      let e = parse_expr t PrecNone in
+      Node.make_stmt (Node.StmtExpr (e, false)) Span.dummy)
   | _ ->
     let e = parse_expr t PrecNone in
     Node.make_stmt (Node.StmtExpr (e, false)) Span.dummy
 
 let parse t =
   let rec loop acc =
+    skip_trivia t;
     if at_end t then List.rev acc
     else
       let s = stmt t in
-      loop (s :: acc)
+      skip_trivia t;
+      if at_end t then List.rev (s :: acc)
+      else
+        let _ = get_tok Token.Semi t in
+        loop (s :: acc)
   in
   let stmts = loop [] in
   let diags = !(t.diags) in
