@@ -120,6 +120,10 @@ let sep_by_opt sep p t =
     in
     loop []
 
+let is_empty_delim t delim =
+  skip_trivia t;
+  (curr t).kind = delim
+
 (* === PRATT PARSING === *)
 
 let parse_expr_ref = ref (fun _ _ -> failwith "Parser.parse_expr not ready")
@@ -257,8 +261,7 @@ let ty_array t (tok : Token.t) =
   Node.make_ty (Node.TyArray elem_ty) tok.span
 
 let ty_tuple_or_proc t (tok : Token.t) =
-  skip_trivia t;
-  if (curr t).kind = Token.RParen then (
+  if is_empty_delim t Token.RParen then (
     advance t;
     skip_trivia t;
     if (curr t).kind = Token.MinusGt then (
@@ -486,8 +489,7 @@ let expr_array t (tok : Token.t) =
   Node.make_expr (Node.ExprArray exprs) tok.span
 
 let expr_tuple t (tok : Token.t) =
-  skip_trivia t;
-  if (curr t).kind = Token.RParen then (
+  if is_empty_delim t Token.RParen then (
     advance t;
     Node.make_expr (Node.ExprTuple []) tok.span)
   else
@@ -648,7 +650,6 @@ let expr_block_or_lit_record t tok =
   | _ -> expr_block t tok
 
 let expr_prefix t =
-  skip_trivia t;
   let mods = parse_modifiers t in
   let tok = curr t in
   advance t;
@@ -777,7 +778,6 @@ let expr_infix_impl t left bp =
       parse_expr_infix t node bp)
 
 let expr_impl t bp =
-  skip_trivia t;
   let left = expr_prefix t in
   parse_expr_infix t left bp
 
@@ -801,8 +801,7 @@ let pat_choice t (tok : Token.t) =
     Node.make_pat Node.PatError tok.span
 
 let pat_array t (tok : Token.t) =
-  skip_trivia t;
-  if (curr t).kind = Token.RBrack then (
+  if is_empty_delim t Token.RBrack then (
     advance t;
     Node.make_pat (Node.PatArray ([], None)) tok.span)
   else
@@ -837,8 +836,7 @@ let pat_record t (tok : Token.t) =
   Node.make_pat (Node.PatRecord fields) tok.span
 
 let pat_tuple t (tok : Token.t) =
-  skip_trivia t;
-  if (curr t).kind = Token.RParen then (
+  if is_empty_delim t Token.RParen then (
     advance t;
     Node.make_pat (Node.PatTuple []) tok.span)
   else
