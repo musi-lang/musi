@@ -148,7 +148,7 @@ let expect_ident t err_msg =
     error t err_msg;
     Interner.empty_name t.interner
 
-let parse_typed_field ~allow_modifiers t (tok : Token.t) =
+let parse_typed_field ~allow_modifiers t =
   skip_trivia t;
   let is_var, is_weak =
     if allow_modifiers then
@@ -167,20 +167,9 @@ let parse_typed_field ~allow_modifiers t (tok : Token.t) =
       | _ -> (false, false)
     else (false, false)
   in
-  skip_trivia t;
-  match (curr t).kind with
-  | Token.Ident fname ->
-    advance t;
-    let _ = get_tok Token.Colon t in
-    { Node.fname; fty = parse_ty t; is_var; is_weak }
-  | _ ->
-    error t "expected field name";
-    {
-      Node.fname = Interner.empty_name t.interner
-    ; fty = Node.make_ty Node.TyError tok.span
-    ; is_var
-    ; is_weak
-    }
+  let fname = expect_ident t "expected field name" in
+  let _ = get_tok Token.Colon t in
+  { Node.fname; fty = parse_ty t; is_var; is_weak }
 
 let field_name t =
   skip_trivia t;
@@ -294,7 +283,7 @@ let ty_record t (tok : Token.t) =
   let fields =
     sep_by_opt
       Token.Comma
-      (fun t -> parse_typed_field ~allow_modifiers:false t tok)
+      (fun t -> parse_typed_field ~allow_modifiers:false t)
       t
   in
   let _ = get_tok Token.RBrace t in
@@ -349,15 +338,7 @@ let parse_ty_params t =
     let params =
       sep_by_opt
         Token.Comma
-        (fun t ->
-          skip_trivia t;
-          match (curr t).kind with
-          | Token.Ident name ->
-            advance t;
-            name
-          | _ ->
-            error t "expected type parameter name";
-            Interner.empty_name t.interner)
+        (fun t -> expect_ident t "expected type parameter name")
         t
     in
     let _ = get_tok Token.Gt t in
@@ -519,7 +500,7 @@ let variant_data t =
     let fields =
       sep_by_opt
         Token.Comma
-        (fun t -> parse_typed_field ~allow_modifiers:false t (curr t))
+        (fun t -> parse_typed_field ~allow_modifiers:false t)
         t
     in
     let _ = get_tok Token.RBrace t in
@@ -528,16 +509,9 @@ let variant_data t =
 
 let parse_variant t =
   let _ = get_tok Token.KwCase t in
-  skip_trivia t;
-  match (curr t).kind with
-  | Token.Ident vname ->
-    advance t;
-    let vdata = variant_data t in
-    { Node.vname; vdata }
-  | _ ->
-    error t "expected variant name after 'case'";
-    let vname = Interner.empty_name t.interner in
-    { Node.vname; vdata = Node.VUnit }
+  let vname = expect_ident t "expected variant name after 'case'" in
+  let vdata = variant_data t in
+  { Node.vname; vdata }
 
 let expr_choice t (tok : Token.t) mods ty_params =
   let _ = get_tok Token.LBrace t in
@@ -595,7 +569,7 @@ let expr_record t (tok : Token.t) mods ty_params =
   let fields =
     sep_by_opt
       Token.Comma
-      (fun t -> parse_typed_field ~allow_modifiers:true t (curr t))
+      (fun t -> parse_typed_field ~allow_modifiers:true t)
       t
   in
   let _ = get_tok Token.RBrace t in
