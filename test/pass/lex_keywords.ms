@@ -1,4 +1,4 @@
-alias and as async await
+and as async await
 break
 case choice const continue
 defer do
