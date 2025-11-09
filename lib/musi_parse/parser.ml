@@ -649,6 +649,14 @@ let expr_block_or_lit_record t tok =
     | _ -> expr_block t tok)
   | _ -> expr_block t tok
 
+let expr_block_wrapper t (tok : Token.t) make_node =
+  let brace_tok = get_tok Token.LBrace t in
+  let block = expr_block t brace_tok in
+  Node.make_expr (make_node block) tok.span
+
+let expr_unary_prefix t (tok : Token.t) make_node =
+  Node.make_expr (make_node (parse_expr t PrecUnary)) tok.span
+
 let expr_prefix t =
   let mods = parse_modifiers t in
   let tok = curr t in
@@ -671,28 +679,17 @@ let expr_prefix t =
     Node.make_expr (Node.ExprLiteral (Node.LitBool false)) tok.span
   | Token.Ident name -> Node.make_expr (Node.ExprIdent name) tok.span
   | Token.KwReturn ->
-    let value = parse_optional_expr t in
-    Node.make_expr (Node.ExprReturn value) tok.span
+    Node.make_expr (Node.ExprReturn (parse_optional_expr t)) tok.span
   | Token.KwBreak ->
-    let value = parse_optional_expr t in
-    Node.make_expr (Node.ExprBreak value) tok.span
+    Node.make_expr (Node.ExprBreak (parse_optional_expr t)) tok.span
   | Token.KwContinue -> Node.make_expr Node.ExprContinue tok.span
-  | Token.KwAwait ->
-    Node.make_expr (Node.ExprAwait (parse_expr t PrecUnary)) tok.span
+  | Token.KwAwait -> expr_unary_prefix t tok (fun e -> Node.ExprAwait e)
   | Token.KwYield ->
     Node.make_expr (Node.ExprYield (parse_optional_expr t)) tok.span
-  | Token.KwDefer ->
-    Node.make_expr (Node.ExprDefer (parse_expr t PrecUnary)) tok.span
-  | Token.KwTry ->
-    Node.make_expr (Node.ExprTry (parse_expr t PrecUnary)) tok.span
-  | Token.KwAsync ->
-    let brace_tok = get_tok Token.LBrace t in
-    let block = expr_block t brace_tok in
-    Node.make_expr (Node.ExprAsync block) tok.span
-  | Token.KwUnsafe ->
-    let brace_tok = get_tok Token.LBrace t in
-    let block = expr_block t brace_tok in
-    Node.make_expr (Node.ExprUnsafe block) tok.span
+  | Token.KwDefer -> expr_unary_prefix t tok (fun e -> Node.ExprDefer e)
+  | Token.KwTry -> expr_unary_prefix t tok (fun e -> Node.ExprTry e)
+  | Token.KwAsync -> expr_block_wrapper t tok (fun b -> Node.ExprAsync b)
+  | Token.KwUnsafe -> expr_block_wrapper t tok (fun b -> Node.ExprUnsafe b)
   | Token.KwIf -> expr_if t tok
   | Token.KwMatch -> expr_match t tok
   | Token.KwWhile -> expr_while t tok
