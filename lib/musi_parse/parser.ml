@@ -83,7 +83,7 @@ let error t msg =
 
 (* === COMBINATORS === *)
 
-let get_tok kind t =
+let expect kind t =
   skip_trivia t;
   let tok = curr t in
   if tok.kind = kind then (
@@ -168,7 +168,7 @@ let parse_typed_field ~allow_modifiers t =
     else (false, false)
   in
   let fname = expect_ident t "expected field name" in
-  let _ = get_tok Token.Colon t in
+  let _ = expect Token.Colon t in
   { Node.fname; fty = parse_ty t; is_var; is_weak }
 
 let field_name t =
@@ -209,7 +209,7 @@ let expr_field_opt t left bp optional =
 
 let expr_index_opt t left bp optional =
   let index = parse_expr t PrecNone in
-  let _ = get_tok Token.RBrack t in
+  let _ = expect Token.RBrack t in
   let idx =
     Node.make_expr (Node.ExprIndex (left, index, optional)) left.Node.span
   in
@@ -217,7 +217,7 @@ let expr_index_opt t left bp optional =
 
 let expr_call_opt t left bp optional =
   let args = sep_by_opt Token.Comma (fun t -> parse_expr t PrecNone) t in
-  let _ = get_tok Token.RParen t in
+  let _ = expect Token.RParen t in
   let call =
     Node.make_expr (Node.ExprCall (left, args, optional)) left.Node.span
   in
@@ -246,7 +246,7 @@ let ty_infix t left op_tok make_node bp =
 
 let ty_array t (tok : Token.t) =
   let elem_ty = parse_ty t in
-  let _ = get_tok Token.RBrack t in
+  let _ = expect Token.RBrack t in
   Node.make_ty (Node.TyArray elem_ty) tok.span
 
 let ty_tuple_or_proc t (tok : Token.t) =
@@ -269,14 +269,14 @@ let ty_tuple_or_proc t (tok : Token.t) =
     | Token.Comma ->
       advance t;
       let rest = sep_by_opt Token.Comma parse_ty t in
-      let _ = get_tok Token.RParen t in
+      let _ = expect Token.RParen t in
       maybe_proc (first :: rest)
     | Token.RParen ->
       advance t;
       maybe_proc [ first ]
     | _ ->
       error t "expected ',' or ')' in tuple/proc type";
-      let _ = get_tok Token.RParen t in
+      let _ = expect Token.RParen t in
       first
 
 let ty_record t (tok : Token.t) =
@@ -286,7 +286,7 @@ let ty_record t (tok : Token.t) =
       (fun t -> parse_typed_field ~allow_modifiers:false t)
       t
   in
-  let _ = get_tok Token.RBrace t in
+  let _ = expect Token.RBrace t in
   Node.make_ty (Node.TyRecord fields) tok.span
 
 let ty_impl t =
@@ -301,7 +301,7 @@ let ty_impl t =
       if (curr t).kind = Token.Lt then (
         advance t;
         let args = sep_by_opt Token.Comma parse_ty t in
-        let _ = get_tok Token.Gt t in
+        let _ = expect Token.Gt t in
         Node.make_ty (Node.TyApp (ty, args)) tok.span)
       else ty
     | Token.LBrack -> ty_array t tok
@@ -341,7 +341,7 @@ let parse_ty_params t =
         (fun t -> expect_ident t "expected type parameter name")
         t
     in
-    let _ = get_tok Token.Gt t in
+    let _ = expect Token.Gt t in
     params)
   else []
 
@@ -374,7 +374,7 @@ let parse_modifiers t =
 
 let expr_if t (tok : Token.t) =
   let cond = parse_expr t PrecNone in
-  let _ = get_tok Token.KwThen t in
+  let _ = expect Token.KwThen t in
   let then_branch = parse_expr t PrecNone in
   skip_trivia t;
   let else_branch =
@@ -402,7 +402,7 @@ let expr_block t (tok : Token.t) =
         List.rev (e :: acc)
   in
   let exprs = loop [] in
-  let _ = get_tok Token.RBrace t in
+  let _ = expect Token.RBrace t in
   Node.make_expr (Node.ExprBlock exprs) tok.span
 
 let expr_lit_record t (tok : Token.t) =
@@ -411,7 +411,7 @@ let expr_lit_record t (tok : Token.t) =
     match (curr t).kind with
     | Token.Dot ->
       let name, _ = field_name_after_dot t "expected field name after '.'" in
-      let _ = get_tok Token.ColonEq t in
+      let _ = expect Token.ColonEq t in
       (name, parse_expr t PrecNone)
     | Token.Ident name ->
       advance t;
@@ -425,19 +425,19 @@ let expr_lit_record t (tok : Token.t) =
       (Interner.empty_name t.interner, Node.make_expr Node.ExprError tok.span)
   in
   let fields = sep_by_opt Token.Comma parse_field t in
-  let _ = get_tok Token.RBrace t in
+  let _ = expect Token.RBrace t in
   Node.make_expr (Node.ExprLiteral (Node.LitRecord fields)) tok.span
 
 let expr_while t (tok : Token.t) =
   let cond = parse_expr t PrecNone in
-  let _ = get_tok Token.KwDo t in
+  let _ = expect Token.KwDo t in
   Node.make_expr (Node.ExprWhile (cond, parse_expr t PrecNone)) tok.span
 
 let expr_binding t (tok : Token.t) is_const mods =
   let pat = parse_pat t in
   let ty_params = parse_ty_params t in
   let ty_opt = parse_optional_ty_annot t in
-  let _ = get_tok Token.ColonEq t in
+  let _ = expect Token.ColonEq t in
   Node.make_expr
     (Node.ExprBinding
        (is_const, ty_params, pat, ty_opt, parse_expr t PrecNone, mods))
@@ -445,9 +445,9 @@ let expr_binding t (tok : Token.t) is_const mods =
 
 let expr_for t (tok : Token.t) =
   let pat = parse_pat t in
-  let _ = get_tok Token.KwIn t in
+  let _ = expect Token.KwIn t in
   let iterable = parse_expr t PrecNone in
-  let _ = get_tok Token.KwDo t in
+  let _ = expect Token.KwDo t in
   Node.make_expr (Node.ExprFor (pat, iterable, parse_expr t PrecNone)) tok.span
 
 let expr_do t (tok : Token.t) =
@@ -463,7 +463,7 @@ let expr_do t (tok : Token.t) =
 
 let expr_array t (tok : Token.t) =
   let exprs = sep_by_opt Token.Comma (fun t -> parse_expr t PrecNone) t in
-  let _ = get_tok Token.RBrack t in
+  let _ = expect Token.RBrack t in
   Node.make_expr (Node.ExprArray exprs) tok.span
 
 let expr_tuple t (tok : Token.t) =
@@ -477,14 +477,14 @@ let expr_tuple t (tok : Token.t) =
     | Token.Comma ->
       advance t;
       let rest = sep_by_opt Token.Comma (fun t -> parse_expr t PrecNone) t in
-      let _ = get_tok Token.RParen t in
+      let _ = expect Token.RParen t in
       Node.make_expr (Node.ExprTuple (first :: rest)) tok.span
     | Token.RParen ->
       advance t;
       first
     | _ ->
       error t "expected ',' or ')' in tuple or grouped expression";
-      let _ = get_tok Token.RParen t in
+      let _ = expect Token.RParen t in
       first
 
 let variant_data t =
@@ -493,7 +493,7 @@ let variant_data t =
   | Token.LParen ->
     advance t;
     let types = sep_by_opt Token.Comma parse_ty t in
-    let _ = get_tok Token.RParen t in
+    let _ = expect Token.RParen t in
     Node.VTuple types
   | Token.LBrace ->
     advance t;
@@ -503,24 +503,24 @@ let variant_data t =
         (fun t -> parse_typed_field ~allow_modifiers:false t)
         t
     in
-    let _ = get_tok Token.RBrace t in
+    let _ = expect Token.RBrace t in
     Node.VRecord fields
   | _ -> Node.VUnit
 
 let parse_variant t =
-  let _ = get_tok Token.KwCase t in
+  let _ = expect Token.KwCase t in
   let vname = expect_ident t "expected variant name after 'case'" in
   let vdata = variant_data t in
   { Node.vname; vdata }
 
 let expr_choice t (tok : Token.t) mods ty_params =
-  let _ = get_tok Token.LBrace t in
+  let _ = expect Token.LBrace t in
   let variants = sep_by_opt Token.Comma parse_variant t in
-  let _ = get_tok Token.RBrace t in
+  let _ = expect Token.RBrace t in
   Node.make_expr (Node.ExprChoice (ty_params, variants, mods)) tok.span
 
 let parse_case t =
-  let _ = get_tok Token.KwCase t in
+  let _ = expect Token.KwCase t in
   let cpat = parse_pat t in
   skip_trivia t;
   let guard =
@@ -529,16 +529,16 @@ let parse_case t =
       Some (parse_expr t PrecNone))
     else None
   in
-  let _ = get_tok Token.MinusGt t in
+  let _ = expect Token.MinusGt t in
   let body = parse_expr t PrecNone in
   { Node.cpat; guard; body }
 
 let expr_match t (tok : Token.t) =
   let scrutinee = parse_expr t PrecNone in
-  let _ = get_tok Token.KwWith t in
-  let _ = get_tok Token.LBrace t in
+  let _ = expect Token.KwWith t in
+  let _ = expect Token.LBrace t in
   let cases = sep_by_opt Token.Comma parse_case t in
-  let _ = get_tok Token.RBrace t in
+  let _ = expect Token.RBrace t in
   Node.make_expr (Node.ExprMatch (scrutinee, cases)) tok.span
 
 let parse_capture t =
@@ -565,14 +565,14 @@ let parse_param t =
   { Node.pname; pty; is_inout }
 
 let expr_record t (tok : Token.t) mods ty_params =
-  let _ = get_tok Token.LBrace t in
+  let _ = expect Token.LBrace t in
   let fields =
     sep_by_opt
       Token.Comma
       (fun t -> parse_typed_field ~allow_modifiers:true t)
       t
   in
-  let _ = get_tok Token.RBrace t in
+  let _ = expect Token.RBrace t in
   Node.make_expr (Node.ExprRecord (ty_params, fields, mods)) tok.span
 
 let expr_proc t (tok : Token.t) mods ty_params =
@@ -580,13 +580,13 @@ let expr_proc t (tok : Token.t) mods ty_params =
     if (curr t).kind = Token.Pipe then (
       advance t;
       let caps = sep_by_opt Token.Comma parse_capture t in
-      let _ = get_tok Token.Pipe t in
+      let _ = expect Token.Pipe t in
       caps)
     else []
   in
-  let _ = get_tok Token.LParen t in
+  let _ = expect Token.LParen t in
   let params = sep_by_opt Token.Comma parse_param t in
-  let _ = get_tok Token.RParen t in
+  let _ = expect Token.RParen t in
   skip_trivia t;
   let ret_ty =
     if (curr t).kind = Token.MinusGt then (
@@ -621,7 +621,7 @@ let expr_block_or_lit_record t tok =
   | _ -> expr_block t tok
 
 let expr_block_wrapper t (tok : Token.t) make_node =
-  let brace_tok = get_tok Token.LBrace t in
+  let brace_tok = expect Token.LBrace t in
   let block = expr_block t brace_tok in
   Node.make_expr (make_node block) tok.span
 
@@ -759,7 +759,7 @@ let pat_choice t (tok : Token.t) =
       if (curr t).kind = Token.LParen then (
         advance t;
         let pat = parse_pat t in
-        let _ = get_tok Token.RParen t in
+        let _ = expect Token.RParen t in
         Some pat)
       else None
     in
@@ -782,7 +782,7 @@ let pat_array t (tok : Token.t) =
         Some (Node.make_pat (Node.PatRest name) tok.span))
       else None
     in
-    let _ = get_tok Token.RBrack t in
+    let _ = expect Token.RBrack t in
     Node.make_pat (Node.PatArray (items, rest)) tok.span
 
 let pat_record t (tok : Token.t) =
@@ -793,14 +793,14 @@ let pat_record t (tok : Token.t) =
       let name, _ =
         field_name_after_dot t "expected field name after '.' in record pattern"
       in
-      let _ = get_tok Token.ColonEq t in
+      let _ = expect Token.ColonEq t in
       (name, parse_pat t)
     | _ ->
       error t "expected '.' in record pattern";
       (Interner.empty_name t.interner, Node.make_pat Node.PatError tok.span)
   in
   let fields = sep_by_opt Token.Comma parse_field t in
-  let _ = get_tok Token.RBrace t in
+  let _ = expect Token.RBrace t in
   Node.make_pat (Node.PatRecord fields) tok.span
 
 let pat_tuple t (tok : Token.t) =
@@ -814,14 +814,14 @@ let pat_tuple t (tok : Token.t) =
     | Token.Comma ->
       advance t;
       let rest = sep_by_opt Token.Comma parse_pat t in
-      let _ = get_tok Token.RParen t in
+      let _ = expect Token.RParen t in
       Node.make_pat (Node.PatTuple (first :: rest)) tok.span
     | Token.RParen ->
       advance t;
       first
     | _ ->
       error t "expected ',' or ')' in tuple pattern";
-      let _ = get_tok Token.RParen t in
+      let _ = expect Token.RParen t in
       Node.make_pat (Node.PatTuple [ first ]) tok.span
 
 let pat_impl t =
@@ -873,13 +873,13 @@ let parse_named_or_namespace_spec ~kw ~named_ctor ~namespace_ctor t =
   | Token.LBrace ->
     advance t;
     let names = parse_ident_list t in
-    let _ = get_tok Token.RBrace t in
+    let _ = expect Token.RBrace t in
     named_ctor names
   | Token.Star ->
     advance t;
     let name =
       if kw = "import" then
-        let _ = get_tok Token.KwAs t in
+        let _ = expect Token.KwAs t in
         expect_ident t "expected identifier after 'as'"
       else Interner.intern t.interner "*"
     in
@@ -896,7 +896,7 @@ let stmt_import t (tok : Token.t) =
       ~namespace_ctor:(fun name -> Node.ImportNamespace name)
       t
   in
-  let _ = get_tok Token.KwFrom t in
+  let _ = expect Token.KwFrom t in
   skip_trivia t;
   match (curr t).kind with
   | Token.LitStr path ->
@@ -957,7 +957,7 @@ let parse t =
       skip_trivia t;
       if at_end t then List.rev (s :: acc)
       else
-        let _ = get_tok Token.Semi t in
+        let _ = expect Token.Semi t in
         loop (s :: acc)
   in
   let stmts = loop [] in
