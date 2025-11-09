@@ -2,7 +2,14 @@ open Musi_basic
 open Musi_lex
 
 type name = Interner.name
-type modifiers = { is_async : bool; is_unsafe : bool; abi : name option }
+
+type modifiers = {
+    is_exported : bool
+  ; is_async : bool
+  ; is_unsafe : bool
+  ; abi : name option
+}
+
 type capture = { cname : name; is_weak : bool }
 type import_spec = ImportNamed of name list | ImportNamespace of name
 type export_spec = ExportNamed of name list | ExportNamespace of name
@@ -40,7 +47,7 @@ and expr_kind =
   | ExprTest of expr * ty
   | ExprAsync of expr
   | ExprUnsafe of expr
-  | ExprChoice of variant list
+  | ExprChoice of variant list * modifiers
   | ExprBinding of bool * pat * ty option * expr * modifiers
   | ExprProc of
       name list * capture list * param list * ty option * expr * modifiers
