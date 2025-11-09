@@ -5,37 +5,10 @@ Welcome to Musi's guide. Chapters stay short, use plain language, and build on e
 ## Language Guide
 
 - **Foundation**
-  - [Welcome to Musi](language-guide/welcome-to-musi.md)
-  - [A Musi Tour](language-guide/a-musi-tour.md)
-  - [The Basics](language-guide/the-basics.md)
 - **Core Syntax**
-  - [Basic Operators](language-guide/basic-operators.md)
-  - [Control Flow](language-guide/control-flow.md)
-  - [Pattern Matching](language-guide/pattern-matching.md)
-  - [Text and Characters](language-guide/text-and-characters.md)
-  - [Advanced Operators](language-guide/advanced-operators.md)
 - **Data and Structure**
-  - [Record Types](language-guide/record-types.md)
-  - [Composition](language-guide/composition.md)
-  - [Choice Types](language-guide/choice-types.md)
-  - [Collection Types](language-guide/collection-types.md)
-  - [Opaque Types](language-guide/opaque-types.md)
 - **Behaviour and Reuse**
-  - [Procedures](language-guide/procedures.md)
-  - [Closures](language-guide/closures.md)
-  - [Methods](language-guide/methods.md)
-  - [Properties](language-guide/properties.md)
-  - [Subscripts](language-guide/subscripts.md)
-  - [Generics](language-guide/generics.md)
 - **Reliability and Runtime**
-  - [Optional Handling](language-guide/optional-chaining.md)
-  - [Error Handling](language-guide/error-handling.md)
-  - [Automatic Reference Counting](language-guide/automatic-reference-counting.md)
-  - [Memory Safety](language-guide/memory-safety.md)
-  - [Concurrency](language-guide/concurrency.md)
-  - [Access Control](language-guide/access-control.md)
-  - [Initialisation](language-guide/initialisation.md)
-  - [Deinitialisation](language-guide/deinitialisation.md)
 
 Several later chapters are still WIP. Content will go further as the Musi compiler and runtime mature.
 
