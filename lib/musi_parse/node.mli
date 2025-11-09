@@ -26,7 +26,7 @@ and expr_kind =
   | ExprIndex of expr * expr * bool
   | ExprTuple of expr list
   | ExprArray of expr list
-  | ExprRecord of (name * expr) list
+  | ExprRecord of name list * field list * modifiers
   | ExprBlock of expr list
   | ExprIf of expr * expr * expr option
   | ExprMatch of expr * case list
@@ -70,6 +70,7 @@ and ty_kind =
   | TyTuple of ty list
   | TyArray of ty
   | TyRecord of field list
+  | TyOptional of ty
   | TyError
 
 and pat = { pkind : pat_kind; span : Span.t }
