@@ -1,0 +1,4 @@
+(library
+ (name musi_ast)
+ (public_name musi.ast)
+ (libraries musi_basic))
