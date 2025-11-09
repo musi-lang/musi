@@ -88,9 +88,9 @@ and pat_kind =
 
 and literal_kind =
   | LitInt of string
-  | LitFloat of string
+  | LitBin of string
   | LitStr of name
-  | LitChr of int
+  | LitRune of int
   | LitBool of bool
   | LitRecord of (name * expr) list
 
