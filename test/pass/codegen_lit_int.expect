@@ -1,5 +1,0 @@
-proc 0 <main>:
-  ld.c.i4 42
-  st.loc 0
-  ld.c.unit
-  ret

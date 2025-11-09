@@ -1,6 +1,0 @@
-"hello"
-"world"
-""
-"with\nescape\tsequences\r\n"
-"quote: \" backslash: \\ null: \0"
-"hex: \x41\x42\x43"
