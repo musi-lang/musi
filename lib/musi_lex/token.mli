@@ -4,12 +4,11 @@ type kind =
   | Ident of Interner.name
   | LitNum of string
   | LitStr of Interner.name
-  | LitChr of int
-  | LitTemplate of Interner.name
-  | TemplateHead of Interner.name
-  | TemplateMiddle of Interner.name
-  | TemplateTail of Interner.name
-  | KwAlias
+  | LitRune of int
+  | LitTpl of Interner.name
+  | TplHead of Interner.name
+  | TplMid of Interner.name
+  | TplTail of Interner.name
   | KwAnd
   | KwAs
   | KwAsync

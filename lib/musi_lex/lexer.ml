@@ -196,7 +196,7 @@ let lex_chr_lit t =
     if curr t <> '\'' then
       error t "missing closing '\'' in rune literal" (span t start);
     advance t;
-    Token.make (Token.LitChr code) (span t start)
+    Token.make (Token.LitRune code) (span t start)
 
 let lex_line_comment t =
   let start = t.pos in

@@ -2,13 +2,13 @@ open Musi_basic
 
 type kind =
   | Ident of Interner.name
-  | LitNumeric of string
-  | LitText of Interner.name
+  | LitNum of string
+  | LitStr of Interner.name
   | LitRune of int
-  | LitTemplate of Interner.name
-  | TemplateHead of Interner.name
-  | TemplateMiddle of Interner.name
-  | TemplateTail of Interner.name
+  | LitTpl of Interner.name
+  | TplHead of Interner.name
+  | TplMid of Interner.name
+  | TplTail of Interner.name
   | KwAnd
   | KwAs
   | KwAsync
@@ -113,14 +113,14 @@ let expect s kind =
 
 let show_kind interner = function
   | Ident n -> Interner.lookup interner n
-  | LitNumeric s -> s
-  | LitText n -> Printf.sprintf "\"%s\"" (Interner.lookup interner n)
+  | LitNum s -> s
+  | LitStr n -> Printf.sprintf "\"%s\"" (Interner.lookup interner n)
   | LitRune c ->
     Printf.sprintf "'%s'" (Uchar.to_char (Uchar.of_int c) |> String.make 1)
-  | LitTemplate n -> Printf.sprintf "`%s`" (Interner.lookup interner n)
-  | TemplateHead n -> Printf.sprintf "`%s${" (Interner.lookup interner n)
-  | TemplateMiddle n -> Printf.sprintf "}%s${" (Interner.lookup interner n)
-  | TemplateTail n -> Printf.sprintf "}%s`" (Interner.lookup interner n)
+  | LitTpl n -> Printf.sprintf "`%s`" (Interner.lookup interner n)
+  | TplHead n -> Printf.sprintf "`%s${" (Interner.lookup interner n)
+  | TplMid n -> Printf.sprintf "}%s${" (Interner.lookup interner n)
+  | TplTail n -> Printf.sprintf "}%s`" (Interner.lookup interner n)
   | KwAnd -> "and"
   | KwAs -> "as"
   | KwAsync -> "async"

@@ -35,49 +35,49 @@ let test_number_decimal () =
   let tokens, diags, _ = lex "42" in
   Alcotest.(check bool) "no errors" false (Diagnostic.has_errors diags);
   match tokens with
-  | [ { Token.kind = Token.LitNumeric s; _ }; { kind = Token.Eof; _ } ] ->
+  | [ { Token.kind = Token.LitNum s; _ }; { kind = Token.Eof; _ } ] ->
     Alcotest.(check string) "number value" "42" s
-  | _ -> Alcotest.fail "expected LitNumeric token"
+  | _ -> Alcotest.fail "expected LitNum token"
 
 let test_number_hex () =
   let tokens, diags, _ = lex "0xFF" in
   Alcotest.(check bool) "no errors" false (Diagnostic.has_errors diags);
   match tokens with
-  | [ { Token.kind = Token.LitNumeric s; _ }; { kind = Token.Eof; _ } ] ->
+  | [ { Token.kind = Token.LitNum s; _ }; { kind = Token.Eof; _ } ] ->
     Alcotest.(check string) "number value" "0xFF" s
-  | _ -> Alcotest.fail "expected LitNumeric token"
+  | _ -> Alcotest.fail "expected LitNum token"
 
 let test_number_binary () =
   let tokens, diags, _ = lex "0b1010" in
   Alcotest.(check bool) "no errors" false (Diagnostic.has_errors diags);
   match tokens with
-  | [ { Token.kind = Token.LitNumeric s; _ }; { kind = Token.Eof; _ } ] ->
+  | [ { Token.kind = Token.LitNum s; _ }; { kind = Token.Eof; _ } ] ->
     Alcotest.(check string) "number value" "0b1010" s
-  | _ -> Alcotest.fail "expected LitNumeric token"
+  | _ -> Alcotest.fail "expected LitNum token"
 
 let test_number_float () =
   let tokens, diags, _ = lex "3.14" in
   Alcotest.(check bool) "no errors" false (Diagnostic.has_errors diags);
   match tokens with
-  | [ { Token.kind = Token.LitNumeric s; _ }; { kind = Token.Eof; _ } ] ->
+  | [ { Token.kind = Token.LitNum s; _ }; { kind = Token.Eof; _ } ] ->
     Alcotest.(check string) "number value" "3.14" s
-  | _ -> Alcotest.fail "expected LitNumeric token"
+  | _ -> Alcotest.fail "expected LitNum token"
 
 let test_string_simple () =
   let tokens, diags, interner = lex {|"hello"|} in
   Alcotest.(check bool) "no errors" false (Diagnostic.has_errors diags);
   match tokens with
-  | [ { Token.kind = Token.LitText n; _ }; { kind = Token.Eof; _ } ] ->
+  | [ { Token.kind = Token.LitStr n; _ }; { kind = Token.Eof; _ } ] ->
     Alcotest.(check string) "text value" "hello" (Interner.lookup interner n)
-  | _ -> Alcotest.fail "expected LitText token"
+  | _ -> Alcotest.fail "expected LitStr token"
 
 let test_string_escape () =
   let tokens, diags, interner = lex {|"\n"|} in
   Alcotest.(check bool) "no errors" false (Diagnostic.has_errors diags);
   match tokens with
-  | [ { Token.kind = Token.LitText n; _ }; { kind = Token.Eof; _ } ] ->
+  | [ { Token.kind = Token.LitStr n; _ }; { kind = Token.Eof; _ } ] ->
     Alcotest.(check string) "text value" "\n" (Interner.lookup interner n)
-  | _ -> Alcotest.fail "expected LitText token"
+  | _ -> Alcotest.fail "expected LitStr token"
 
 let test_rune () =
   let tokens, diags, _ = lex "'a'" in
