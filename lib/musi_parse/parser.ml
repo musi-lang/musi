@@ -261,13 +261,18 @@ let ty_array t (tok : Token.t) =
   Node.make_ty (Node.TyArray elem_ty) tok.span
 
 let ty_tuple_or_proc t (tok : Token.t) =
-  if is_empty_delim t Token.RParen then (
-    advance t;
+  let maybe_proc types =
     skip_trivia t;
     if (curr t).kind = Token.MinusGt then (
       advance t;
-      Node.make_ty (Node.TyProc ([], Some (parse_ty t))) tok.span)
-    else Node.make_ty (Node.TyTuple []) tok.span)
+      Node.make_ty (Node.TyProc (types, Some (parse_ty t))) tok.span)
+    else if types = [] then Node.make_ty (Node.TyTuple []) tok.span
+    else if List.length types = 1 then List.hd types
+    else Node.make_ty (Node.TyTuple types) tok.span
+  in
+  if is_empty_delim t Token.RParen then (
+    advance t;
+    maybe_proc [])
   else
     let first = parse_ty t in
     skip_trivia t;
@@ -276,18 +281,10 @@ let ty_tuple_or_proc t (tok : Token.t) =
       advance t;
       let rest = sep_by_opt Token.Comma parse_ty t in
       let _ = get_tok Token.RParen t in
-      skip_trivia t;
-      if (curr t).kind = Token.MinusGt then (
-        advance t;
-        Node.make_ty (Node.TyProc (first :: rest, Some (parse_ty t))) tok.span)
-      else Node.make_ty (Node.TyTuple (first :: rest)) tok.span
+      maybe_proc (first :: rest)
     | Token.RParen ->
       advance t;
-      skip_trivia t;
-      if (curr t).kind = Token.MinusGt then (
-        advance t;
-        Node.make_ty (Node.TyProc ([ first ], Some (parse_ty t))) tok.span)
-      else first
+      maybe_proc [ first ]
     | _ ->
       error t "expected ',' or ')' in tuple/proc type";
       let _ = get_tok Token.RParen t in
@@ -673,10 +670,10 @@ let expr_prefix t =
     Node.make_expr (Node.ExprLiteral (Node.LitStr name)) tok.span
   | Token.LitRune code ->
     Node.make_expr (Node.ExprLiteral (Node.LitRune code)) tok.span
-  | Token.KwTrue ->
-    Node.make_expr (Node.ExprLiteral (Node.LitBool true)) tok.span
-  | Token.KwFalse ->
-    Node.make_expr (Node.ExprLiteral (Node.LitBool false)) tok.span
+  | Token.KwTrue | Token.KwFalse ->
+    Node.make_expr
+      (Node.ExprLiteral (Node.LitBool (tok.kind = Token.KwTrue)))
+      tok.span
   | Token.Ident name -> Node.make_expr (Node.ExprIdent name) tok.span
   | Token.KwReturn ->
     Node.make_expr (Node.ExprReturn (parse_optional_expr t)) tok.span
@@ -929,22 +926,14 @@ let parse_named_or_namespace_spec ~kw ~named_ctor ~namespace_ctor t =
     error t (Printf.sprintf "expected '{' or '*' after '%s'" kw);
     named_ctor []
 
-let parse_import_spec t =
-  parse_named_or_namespace_spec
-    ~kw:"import"
-    ~named_ctor:(fun names -> Node.ImportNamed names)
-    ~namespace_ctor:(fun name -> Node.ImportNamespace name)
-    t
-
-let parse_export_spec t =
-  parse_named_or_namespace_spec
-    ~kw:"export"
-    ~named_ctor:(fun names -> Node.ExportNamed names)
-    ~namespace_ctor:(fun name -> Node.ExportNamespace name)
-    t
-
 let stmt_import t (tok : Token.t) =
-  let spec = parse_import_spec t in
+  let spec =
+    parse_named_or_namespace_spec
+      ~kw:"import"
+      ~named_ctor:(fun names -> Node.ImportNamed names)
+      ~namespace_ctor:(fun name -> Node.ImportNamespace name)
+      t
+  in
   let _ = get_tok Token.KwFrom t in
   skip_trivia t;
   match (curr t).kind with
@@ -956,7 +945,13 @@ let stmt_import t (tok : Token.t) =
     Node.make_stmt Node.StmtError tok.span
 
 let stmt_export t (tok : Token.t) =
-  let spec = parse_export_spec t in
+  let spec =
+    parse_named_or_namespace_spec
+      ~kw:"export"
+      ~named_ctor:(fun names -> Node.ExportNamed names)
+      ~namespace_ctor:(fun name -> Node.ExportNamespace name)
+      t
+  in
   skip_trivia t;
   let path =
     if (curr t).kind = Token.KwFrom then (
@@ -987,11 +982,9 @@ let stmt t =
       advance t;
       stmt_export t tok
     | _ ->
-      let e = parse_expr t PrecNone in
-      Node.make_stmt (Node.StmtExpr (e, false)) Span.dummy)
+      Node.make_stmt (Node.StmtExpr (parse_expr t PrecNone, false)) Span.dummy)
   | _ ->
-    let e = parse_expr t PrecNone in
-    Node.make_stmt (Node.StmtExpr (e, false)) Span.dummy
+    Node.make_stmt (Node.StmtExpr (parse_expr t PrecNone, false)) Span.dummy
 
 let parse t =
   let rec loop acc =
