@@ -50,7 +50,12 @@ and expr_kind =
   | ExprChoice of name list * variant list * modifiers
   | ExprBinding of bool * name list * pat * ty option * expr * modifiers
   | ExprProc of
-      name list * capture list * param list * ty option * expr * modifiers
+      name list
+      * capture list
+      * param list
+      * ty option
+      * expr option
+      * modifiers
   | ExprError
 
 and stmt = { skind : stmt_kind; span : Span.t }
