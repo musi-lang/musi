@@ -884,25 +884,13 @@ let parse_ident_list t =
   sep_by_opt
     Token.Comma
     (fun t ->
+      let name = expect_ident t "expected identifier" in
       skip_trivia t;
-      match (curr t).kind with
-      | Token.Ident name ->
+      if (curr t).kind = Token.KwAs then (
         advance t;
-        skip_trivia t;
-        if (curr t).kind = Token.KwAs then (
-          advance t;
-          skip_trivia t;
-          match (curr t).kind with
-          | Token.Ident _ ->
-            advance t;
-            name
-          | _ ->
-            error t "expected identifier after 'as'";
-            name)
-        else name
-      | _ ->
-        error t "expected identifier";
-        Interner.empty_name t.interner)
+        let _ = expect_ident t "expected identifier after 'as'" in
+        name)
+      else name)
     t
 
 let parse_named_or_namespace_spec ~kw ~named_ctor ~namespace_ctor t =
