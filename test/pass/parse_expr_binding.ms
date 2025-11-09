@@ -1,3 +1,4 @@
+const MyInt := Int32;
 const x := 5;
 var y := 10;
 const z: Int := 42;
