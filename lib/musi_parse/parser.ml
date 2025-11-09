@@ -134,6 +134,50 @@ let parse_expr_infix t left bp = !parse_expr_infix_ref t left bp
 let parse_ty t = !parse_ty_ref t
 let parse_pat t = !parse_pat_ref t
 
+let expect_ident t err_msg =
+  skip_trivia t;
+  match (curr t).kind with
+  | Token.Ident name ->
+    advance t;
+    name
+  | _ ->
+    error t err_msg;
+    Interner.empty_name t.interner
+
+let parse_typed_field ~allow_modifiers t (tok : Token.t) =
+  skip_trivia t;
+  let is_var, is_weak =
+    if allow_modifiers then
+      match (curr t).kind with
+      | Token.KwWeak ->
+        advance t;
+        skip_trivia t;
+        ( (curr t).kind = Token.KwVar
+          &&
+          (advance t;
+           true)
+        , true )
+      | Token.KwVar ->
+        advance t;
+        (true, false)
+      | _ -> (false, false)
+    else (false, false)
+  in
+  skip_trivia t;
+  match (curr t).kind with
+  | Token.Ident fname ->
+    advance t;
+    let _ = get_tok Token.Colon t in
+    { Node.fname; fty = parse_ty t; is_var; is_weak }
+  | _ ->
+    error t "expected field name";
+    {
+      Node.fname = Interner.empty_name t.interner
+    ; fty = Node.make_ty Node.TyError tok.span
+    ; is_var
+    ; is_weak
+    }
+
 let field_name t =
   skip_trivia t;
   let tok = curr t in
@@ -247,23 +291,12 @@ let ty_tuple_or_proc t (tok : Token.t) =
       first
 
 let ty_record t (tok : Token.t) =
-  let parse_field t =
-    skip_trivia t;
-    match (curr t).kind with
-    | Token.Ident fname ->
-      advance t;
-      let _ = get_tok Token.Colon t in
-      { Node.fname; fty = parse_ty t; is_var = false; is_weak = false }
-    | _ ->
-      error t "expected field name in record type";
-      {
-        Node.fname = Interner.empty_name t.interner
-      ; fty = Node.make_ty Node.TyError tok.span
-      ; is_var = false
-      ; is_weak = false
-      }
+  let fields =
+    sep_by_opt
+      Token.Comma
+      (fun t -> parse_typed_field ~allow_modifiers:false t tok)
+      t
   in
-  let fields = sep_by_opt Token.Comma parse_field t in
   let _ = get_tok Token.RBrace t in
   Node.make_ty (Node.TyRecord fields) tok.span
 
@@ -475,18 +508,7 @@ let expr_tuple t (tok : Token.t) =
       first
 
 let variant_field t (tok : Token.t) =
-  skip_trivia t;
-  match (curr t).kind with
-  | Token.Ident fname ->
-    advance t;
-    let _ = get_tok Token.Colon t in
-    let fty = parse_ty t in
-    { Node.fname; fty; is_var = false; is_weak = false }
-  | _ ->
-    error t "expected field name in variant record";
-    let fname = Interner.empty_name t.interner in
-    let fty = Node.make_ty Node.TyError tok.span in
-    { Node.fname; fty; is_var = false; is_weak = false }
+  parse_typed_field ~allow_modifiers:false t tok
 
 let variant_data t =
   skip_trivia t;
@@ -547,67 +569,27 @@ let expr_match t (tok : Token.t) =
 let parse_capture t =
   skip_trivia t;
   let is_weak =
-    if (curr t).kind = Token.KwWeak then (
-      advance t;
-      true)
-    else false
+    (curr t).kind = Token.KwWeak
+    &&
+    (advance t;
+     true)
   in
-  skip_trivia t;
-  match (curr t).kind with
-  | Token.Ident cname ->
-    advance t;
-    { Node.cname; is_weak }
-  | _ ->
-    error t "expected capture name";
-    let cname = Interner.empty_name t.interner in
-    { Node.cname; is_weak }
+  let cname = expect_ident t "expected capture name" in
+  { Node.cname; is_weak }
 
 let parse_param t =
   skip_trivia t;
   let is_inout =
-    if (curr t).kind = Token.KwVar then (
-      advance t;
-      true)
-    else false
+    (curr t).kind = Token.KwVar
+    &&
+    (advance t;
+     true)
   in
-  skip_trivia t;
-  match (curr t).kind with
-  | Token.Ident pname ->
-    advance t;
-    let pty = parse_optional_ty_annot t in
-    { Node.pname; pty; is_inout }
-  | _ ->
-    error t "expected parameter name";
-    let pname = Interner.empty_name t.interner in
-    { Node.pname; pty = None; is_inout }
+  let pname = expect_ident t "expected parameter name" in
+  let pty = parse_optional_ty_annot t in
+  { Node.pname; pty; is_inout }
 
-let parse_field t =
-  skip_trivia t;
-  let is_var, is_weak =
-    if (curr t).kind = Token.KwWeak then (
-      advance t;
-      skip_trivia t;
-      if (curr t).kind = Token.KwVar then (
-        advance t;
-        (true, true))
-      else (false, true))
-    else if (curr t).kind = Token.KwVar then (
-      advance t;
-      (true, false))
-    else (false, false)
-  in
-  skip_trivia t;
-  match (curr t).kind with
-  | Token.Ident fname ->
-    advance t;
-    let _ = get_tok Token.Colon t in
-    let fty = parse_ty t in
-    { Node.fname; fty; is_var; is_weak }
-  | _ ->
-    error t "expected field name";
-    let fname = Interner.empty_name t.interner in
-    let fty = Node.make_ty Node.TyError Span.dummy in
-    { Node.fname; fty; is_var; is_weak }
+let parse_field t = parse_typed_field ~allow_modifiers:true t (curr t)
 
 let expr_record t (tok : Token.t) mods ty_params =
   let _ = get_tok Token.LBrace t in
@@ -795,14 +777,8 @@ let expr_impl t bp =
   parse_expr_infix t left bp
 
 let pat_rest t (tok : Token.t) =
-  skip_trivia t;
-  match (curr t).kind with
-  | Token.Ident name ->
-    advance t;
-    Node.make_pat (Node.PatRest name) tok.span
-  | _ ->
-    error t "expected identifier after '..'";
-    Node.make_pat Node.PatError tok.span
+  let name = expect_ident t "expected identifier after '..'" in
+  Node.make_pat (Node.PatRest name) tok.span
 
 let pat_choice t (tok : Token.t) =
   skip_trivia t;
@@ -894,14 +870,8 @@ let pat_tuple t (tok : Token.t) =
       Node.make_pat (Node.PatTuple [ first ]) tok.span
 
 let pat_binding t (tok : Token.t) =
-  skip_trivia t;
-  match (curr t).kind with
-  | Token.Ident name ->
-    advance t;
-    Node.make_pat (Node.PatBinding name) tok.span
-  | _ ->
-    error t "expected identifier after 'const' in pattern";
-    Node.make_pat Node.PatError tok.span
+  let name = expect_ident t "expected identifier after 'const' in pattern" in
+  Node.make_pat (Node.PatBinding name) tok.span
 
 let pat_impl t =
   skip_trivia t;
