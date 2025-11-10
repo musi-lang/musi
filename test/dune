@@ -13,6 +13,18 @@
  (modules run_parser_tests)
  (libraries alcotest unix musi_basic musi_lex musi_parse test_helpers))
 
+(executable
+ (name run_resolver_tests)
+ (modules run_resolver_tests)
+ (libraries
+  alcotest
+  unix
+  musi_basic
+  musi_lex
+  musi_parse
+  musi_sema
+  test_helpers))
+
 (rule
  (alias runtest)
  (deps
@@ -26,3 +38,10 @@
   (source_tree parser))
  (action
   (run ./run_parser_tests.exe)))
+
+(rule
+ (alias runtest)
+ (deps
+  (source_tree resolver))
+ (action
+  (run ./run_resolver_tests.exe)))
