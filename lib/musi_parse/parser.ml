@@ -275,7 +275,7 @@ let ty_tuple_or_proc t (tok : Token.t) =
       advance t;
       maybe_proc [ first ]
     | _ ->
-      error t "expected ',' or ')' in tuple/proc type";
+      error t "expected ',' or ')' in tuple or procedure type";
       let _ = expect Token.RParen t in
       first
 
@@ -366,7 +366,7 @@ let parse_modifiers t =
         advance t;
         loop { mods with abi = Some abi_name }
       | _ ->
-        error t "expected ABI string after 'extern'";
+        error t "expected ABI string after 'extern' modifier";
         loop mods)
     | _ -> mods
   in
@@ -398,7 +398,7 @@ let expr_block t (tok : Token.t) =
         loop (e :: acc)
       | Token.RBrace -> List.rev (e :: acc)
       | _ ->
-        error t "expected ';' or '}' in block";
+        error t "expected ';' or '}' in block expression";
         List.rev (e :: acc)
   in
   let exprs = loop [] in
@@ -700,7 +700,7 @@ let expr_prefix t =
     Node.make_expr (Node.ExprUnary (tok.kind, operand)) tok.span
   | _ ->
     let found = Token.show_kind t.interner tok.kind in
-    error t (Printf.sprintf "unexpected '%s' in expression" found);
+    error t (Printf.sprintf "unexpected token '%s' in expression" found);
     Node.make_expr Node.ExprError tok.span
 
 let expr_infix_impl t left bp =
@@ -765,7 +765,7 @@ let pat_choice t (tok : Token.t) =
     in
     Node.make_pat (Node.PatChoice (name, inner)) tok.span
   | _ ->
-    error t "expected variant name after '.'";
+    error t "expected variant name after '.' in choice pattern";
     Node.make_pat Node.PatError tok.span
 
 let pat_array t (tok : Token.t) =
@@ -924,7 +924,7 @@ let stmt_export t (tok : Token.t) =
         advance t;
         Some p
       | _ ->
-        error t "expected text path after 'from'";
+        error t "expected text path after 'from' keyword";
         None)
     else None
   in
