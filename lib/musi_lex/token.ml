@@ -198,5 +198,5 @@ let show_kind interner = function
   | Newline -> "NEWLINE"
   | LineComment n -> Printf.sprintf "// %s" (Interner.lookup interner n)
   | BlockComment n -> Printf.sprintf "/* %s */" (Interner.lookup interner n)
-  | Error -> "<ERROR>"
-  | Eof -> "<EOF>"
+  | Error -> "<error>"
+  | Eof -> "<eof>"
