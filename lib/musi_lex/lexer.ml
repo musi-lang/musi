@@ -59,6 +59,10 @@ let is_xdigit = function
   | '0' .. '9' | 'a' .. 'f' | 'A' .. 'F' -> true
   | _ -> false
 
+let digit_or_underscore c = is_digit c || c = '_'
+let slice_from t start = String.sub t.source start (t.pos - start)
+let make_tok t kind start = Token.make kind (span t start)
+
 let keywords =
   let tbl = Hashtbl.create 64 in
   List.iter
@@ -111,7 +115,7 @@ let keywords =
 let lex_ident t =
   let start = t.pos in
   scan_while t is_ident_cont;
-  let text = String.sub t.source start (t.pos - start) in
+  let text = slice_from t start in
   let kind =
     if text = "_" then Token.Underscore
     else
@@ -119,27 +123,37 @@ let lex_ident t =
       | Some kw -> kw
       | None -> Token.Ident (Interner.intern t.interner text)
   in
-  Token.make kind (span t start)
+  make_tok t kind start
+
+let lex_radix t pred =
+  advance_by t 2;
+  scan_while t (fun c -> pred c || c = '_')
 
 let lex_lit_num t =
   let start = t.pos in
-  if curr t = '0' && (peek t 1 = 'x' || peek t 1 = 'X') then (
-    advance_by t 2;
-    scan_while t (fun c -> is_xdigit c || c = '_'))
-  else if curr t = '0' && (peek t 1 = 'b' || peek t 1 = 'B') then (
-    advance_by t 2;
-    scan_while t (fun c -> c = '0' || c = '1' || c = '_'))
+  let c1 = peek t 1 in
+  if curr t = '0' && (c1 = 'x' || c1 = 'X') then lex_radix t is_xdigit
+  else if curr t = '0' && (c1 = 'b' || c1 = 'B') then
+    lex_radix t (function '0' | '1' -> true | _ -> false)
+  else if curr t = '0' && (c1 = 'o' || c1 = 'O') then
+    lex_radix t (function '0' .. '7' -> true | _ -> false)
   else (
-    scan_while t (fun c -> is_digit c || c = '_');
+    if curr t = '0' && is_digit (peek t 1) then
+      error t "leading zero(s) not allowed" (span t start);
+    scan_while t digit_or_underscore;
     if curr t = '.' && is_digit (peek t 1) then (
       advance t;
-      scan_while t (fun c -> is_digit c || c = '_'));
+      scan_while t digit_or_underscore);
     if curr t = 'e' || curr t = 'E' then (
       advance t;
       if curr t = '+' || curr t = '-' then advance t;
-      scan_while t (fun c -> is_digit c || c = '_')));
-  let text = String.sub t.source start (t.pos - start) in
-  Token.make (Token.LitNum text) (span t start)
+      scan_while t digit_or_underscore));
+  if is_ident_cont (curr t) then (
+    let suffix_start = t.pos in
+    scan_while t is_ident_cont;
+    let suffix = slice_from t suffix_start in
+    error t (Printf.sprintf "invalid numeric suffix '%s'" suffix) (span t start));
+  make_tok t (Token.LitNum (slice_from t start)) start
 
 let escapes =
   [
@@ -153,19 +167,38 @@ let escapes =
   ; ('0', '\000')
   ]
 
-let lex_hex_escape t =
+let lex_xescape t =
   let h1 = curr t in
   advance t;
   let h2 = curr t in
   advance t;
   if is_xdigit h1 && is_xdigit h2 then
-    Some (Char.chr (int_of_string ("0x" ^ String.make 1 h1 ^ String.make 1 h2)))
+    Some (Char.chr (int_of_string (Printf.sprintf "0x%c%c" h1 h2)))
   else (
     error
       t
       (Printf.sprintf "invalid hexadecimal escape sequence '\\x%c%c'" h1 h2)
       (span t (t.pos - 4));
     None)
+
+let lex_escape t =
+  advance t;
+  match curr t with
+  | 'x' ->
+    advance t;
+    lex_xescape t
+  | c -> (
+    match List.assoc_opt c escapes with
+    | Some ch ->
+      advance t;
+      Some ch
+    | None ->
+      error
+        t
+        (Printf.sprintf "unknown escape sequence '\\%c'" c)
+        (span t (t.pos - 1));
+      advance t;
+      None)
 
 let lex_lit_str t =
   let start = t.pos in
@@ -177,22 +210,9 @@ let lex_lit_str t =
       match curr t with
       | '"' -> advance t
       | '\\' ->
-        advance t;
-        (match curr t with
-        | 'x' -> (
-          advance t;
-          match lex_hex_escape t with
-          | Some ch -> Buffer.add_char buf ch
-          | None -> ())
-        | c ->
-          (match List.assoc_opt c escapes with
-          | Some ch -> Buffer.add_char buf ch
-          | None ->
-            error
-              t
-              (Printf.sprintf "unknown escape sequence '\\%c'" c)
-              (span t (t.pos - 1)));
-          advance t);
+        (match lex_escape t with
+        | Some ch -> Buffer.add_char buf ch
+        | None -> ());
         loop ()
       | c ->
         Buffer.add_char buf c;
@@ -211,8 +231,13 @@ let lex_lit_rune t =
     error t "unterminated rune literal" (span t start);
     Token.make Token.Error (span t start))
   else
-    let code = Char.code (curr t) in
-    advance t;
+    let code =
+      match curr t with
+      | '\\' -> ( match lex_escape t with Some ch -> Char.code ch | None -> 0)
+      | c ->
+        advance t;
+        Char.code c
+    in
     if curr t <> '\'' then
       error t "missing closing '\'' in rune literal" (span t start);
     advance t;
@@ -282,7 +307,7 @@ let symbols =
   ; (">", Token.Gt)
   ]
 
-let lex_sym t =
+let lex_symbol t =
   let start = t.pos in
   let rec try_ops = function
     | [] ->
@@ -318,17 +343,14 @@ let lex t =
   | '/' ->
     if peek t 1 = '/' then lex_line_comment t
     else if peek t 1 = '*' then lex_block_comment t
-    else lex_sym t
-  | _ -> lex_sym t
+    else lex_symbol t
+  | _ -> lex_symbol t
 
 let lex_all t =
   let rec loop acc =
-    if at_end t then List.rev (Token.make Token.Eof (span t t.pos) :: acc)
-    else
-      let tok = lex t in
-      if tok.Token.kind = Token.Eof then List.rev (tok :: acc)
-      else loop (tok :: acc)
+    let tok = lex t in
+    if tok.Token.kind = Token.Eof then List.rev (tok :: acc)
+    else loop (tok :: acc)
   in
   let toks = loop [] in
-  let diags = !(t.diags) in
-  (toks, diags)
+  (toks, !(t.diags))
