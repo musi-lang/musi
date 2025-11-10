@@ -47,7 +47,7 @@ let matches_at t s =
   in
   check 0
 
-let is_blank_char = function ' ' | '\t' | '\r' -> true | _ -> false
+let is_whitespace = function ' ' | '\t' | '\r' -> true | _ -> false
 
 let is_ident_cont = function
   | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '_' -> true
@@ -121,7 +121,7 @@ let lex_ident t =
   in
   Token.make kind (span t start)
 
-let lex_num t =
+let lex_lit_num t =
   let start = t.pos in
   if curr t = '0' && (peek t 1 = 'x' || peek t 1 = 'X') then (
     advance_by t 2;
@@ -146,12 +146,28 @@ let escapes =
     ('n', '\n')
   ; ('t', '\t')
   ; ('r', '\r')
+  ; ('b', '\b')
   ; ('\\', '\\')
+  ; ('\'', '\'')
   ; ('"', '"')
   ; ('0', '\000')
   ]
 
-let lex_str_lit t =
+let lex_hex_escape t =
+  let h1 = curr t in
+  advance t;
+  let h2 = curr t in
+  advance t;
+  if is_xdigit h1 && is_xdigit h2 then
+    Some (Char.chr (int_of_string ("0x" ^ String.make 1 h1 ^ String.make 1 h2)))
+  else (
+    error
+      t
+      (Printf.sprintf "invalid hexadecimal escape sequence '\\x%c%c'" h1 h2)
+      (span t (t.pos - 4));
+    None)
+
+let lex_lit_str t =
   let start = t.pos in
   advance t;
   let buf = Buffer.create 16 in
@@ -162,16 +178,20 @@ let lex_str_lit t =
       | '"' -> advance t
       | '\\' ->
         advance t;
-        let c = curr t in
-        (match List.assoc_opt c escapes with
-        | Some ch ->
-          Buffer.add_char buf ch;
-          advance t
-        | None ->
-          error
-            t
-            (Printf.sprintf "unknown escape sequence '\\%c'" c)
-            (span t (t.pos - 1));
+        (match curr t with
+        | 'x' -> (
+          advance t;
+          match lex_hex_escape t with
+          | Some ch -> Buffer.add_char buf ch
+          | None -> ())
+        | c ->
+          (match List.assoc_opt c escapes with
+          | Some ch -> Buffer.add_char buf ch
+          | None ->
+            error
+              t
+              (Printf.sprintf "unknown escape sequence '\\%c'" c)
+              (span t (t.pos - 1)));
           advance t);
         loop ()
       | c ->
@@ -184,7 +204,7 @@ let lex_str_lit t =
     (Token.LitStr (Interner.intern t.interner (Buffer.contents buf)))
     (span t start)
 
-let lex_chr_lit t =
+let lex_lit_rune t =
   let start = t.pos in
   advance t;
   if at_end t then (
@@ -219,10 +239,13 @@ let lex_block_comment t =
       decr depth)
     else advance t
   done;
-  if !depth > 0 then error t "unterminated block comment" (span t start);
-  Token.make
-    (Token.BlockComment (intern_slice t (start + 2) (t.pos - start - 4)))
-    (span t start)
+  let content =
+    if !depth > 0 then (
+      error t "unterminated block comment" (span t start);
+      intern_slice t (start + 2) (t.pos - start - 2))
+    else intern_slice t (start + 2) (t.pos - start - 4)
+  in
+  Token.make (Token.BlockComment content) (span t start)
 
 let symbols =
   [
@@ -252,6 +275,7 @@ let symbols =
   ; ("+", Token.Plus)
   ; ("-", Token.Minus)
   ; ("*", Token.Star)
+  ; ("/", Token.Slash)
   ; ("^", Token.Caret)
   ; ("=", Token.Eq)
   ; ("<", Token.Lt)
@@ -282,17 +306,19 @@ let lex t =
   match curr t with
   | '\000' -> Token.make Token.Eof (span t start)
   | ' ' | '\t' | '\r' ->
-    scan_while t is_blank_char;
+    scan_while t is_whitespace;
     Token.make Token.Whitespace (span t start)
   | '\n' ->
     advance t;
     Token.make Token.Newline (span t start)
   | 'a' .. 'z' | 'A' .. 'Z' | '_' -> lex_ident t
-  | '0' .. '9' -> lex_num t
-  | '"' -> lex_str_lit t
-  | '\'' -> lex_chr_lit t
-  | '/' when peek t 1 = '/' -> lex_line_comment t
-  | '/' when peek t 1 = '*' -> lex_block_comment t
+  | '0' .. '9' -> lex_lit_num t
+  | '"' -> lex_lit_str t
+  | '\'' -> lex_lit_rune t
+  | '/' ->
+    if peek t 1 = '/' then lex_line_comment t
+    else if peek t 1 = '*' then lex_block_comment t
+    else lex_sym t
   | _ -> lex_sym t
 
 let lex_all t =
