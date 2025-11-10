@@ -223,7 +223,7 @@ let expr_call_opt t left bp optional =
   in
   parse_expr_infix t call bp
 
-let expr_optional t left bp =
+let expr_opt t left bp =
   skip_trivia t;
   match (curr t).kind with
   | Token.Dot ->
@@ -720,7 +720,7 @@ let expr_infix_impl t left bp =
     | Token.Bang ->
       let unwrap = Node.make_expr (Node.ExprUnwrap left) op_token.span in
       parse_expr_infix t unwrap bp
-    | Token.Question -> expr_optional t left bp
+    | Token.Question -> expr_opt t left bp
     | Token.KwAs ->
       ty_infix t left op_token (fun (e, ty) -> Node.ExprCast (e, ty)) bp
     | Token.KwIs ->
