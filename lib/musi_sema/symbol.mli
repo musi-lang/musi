@@ -15,4 +15,4 @@ val enter_scope : table -> table
 val exit_scope : table -> table
 val bind : table -> Interner.name -> t -> table
 val lookup : table -> Interner.name -> t option
-val lookup_current : table -> Interner.name -> t option
+val lookup_curr : table -> Interner.name -> t option
