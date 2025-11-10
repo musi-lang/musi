@@ -20,8 +20,8 @@ let test_fail path () =
   Alcotest.(check bool) "has errors" true (Diagnostic.has_errors diags)
 
 let () =
-  let pass_files = Test_helpers.collect_files "test/lexer/pass" in
-  let fail_files = Test_helpers.collect_files "test/lexer/fail" in
+  let pass_files = Test_helpers.collect_files "lexer/pass" in
+  let fail_files = Test_helpers.collect_files "lexer/fail" in
   let tests =
     Test_helpers.make_test_cases pass_files fail_files test_pass test_fail
   in
