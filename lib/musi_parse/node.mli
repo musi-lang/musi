@@ -12,8 +12,14 @@ type modifiers = {
 }
 
 type capture = { cname : name; is_weak : bool }
-type import_spec = ImportNamed of name list | ImportNamespace of name
-type export_spec = ExportNamed of name list | ExportNamespace of name
+
+type import_spec =
+  | ImportNamed of (name * Span.t) list
+  | ImportNamespace of name
+
+type export_spec =
+  | ExportNamed of (name * Span.t) list
+  | ExportNamespace of name
 
 type expr = { ekind : expr_kind; span : Span.t }
 
