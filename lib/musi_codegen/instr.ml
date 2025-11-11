@@ -8,10 +8,11 @@ type t =
   | CallTail of int
   | Ret
   (* Stack *)
-  | LdcI4 of int32
-  | LdcI4M1
-  | LdcUnit
-  | LdcStr of int
+  | LdC of int
+  | LdCI4 of int32
+  | LdCI4M1
+  | LdCUnit
+  | LdCStr of int
   | LdLoc of int
   | StLoc of int
   | LdArg of int
@@ -62,10 +63,11 @@ let to_opcode = function
   | CallTail _ -> 0x29
   | Ret -> 0x2A
   (* Stack *)
-  | LdcI4 _ -> 0x20
-  | LdcI4M1 -> 0x15
-  | LdcUnit -> 0x21
-  | LdcStr _ -> 0x22
+  | LdC _ -> 0x14
+  | LdCI4 _ -> 0x20
+  | LdCI4M1 -> 0x15
+  | LdCUnit -> 0x21
+  | LdCStr _ -> 0x22
   | LdLoc _ -> 0x0E
   | StLoc _ -> 0x13
   | LdArg _ -> 0x09
@@ -116,10 +118,11 @@ let show = function
   | CallTail proc_id -> Printf.sprintf "call.tail %d" proc_id
   | Ret -> "ret"
   (* Stack *)
-  | LdcI4 n -> Printf.sprintf "ld.c.i4 %ld" n
-  | LdcI4M1 -> "ld.c.i4.m1"
-  | LdcUnit -> "ld.c.unit"
-  | LdcStr idx -> Printf.sprintf "ld.c.str %d" idx
+  | LdC idx -> Printf.sprintf "ld.c %d" idx
+  | LdCI4 n -> Printf.sprintf "ld.c.i4 %ld" n
+  | LdCI4M1 -> "ld.c.i4.m1"
+  | LdCUnit -> "ld.c.unit"
+  | LdCStr idx -> Printf.sprintf "ld.c.str %d" idx
   | LdLoc idx -> Printf.sprintf "ld.loc %d" idx
   | StLoc idx -> Printf.sprintf "st.loc %d" idx
   | LdArg idx -> Printf.sprintf "ld.arg %d" idx

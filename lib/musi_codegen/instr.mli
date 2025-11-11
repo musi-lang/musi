@@ -8,10 +8,11 @@ type t =
   | CallTail of int
   | Ret
   (* Stack *)
-  | LdcI4 of int32
-  | LdcI4M1
-  | LdcUnit
-  | LdcStr of int
+  | LdC of int
+  | LdCI4 of int32
+  | LdCI4M1
+  | LdCUnit
+  | LdCStr of int
   | LdLoc of int
   | StLoc of int
   | LdArg of int
