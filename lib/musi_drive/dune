@@ -1,4 +1,4 @@
 (library
- (name musi_driver)
- (public_name musi.driver)
+ (name musi_drive)
+ (public_name musi.drive)
  (libraries musi_basic musi_lex musi_parse musi_sema musi_codegen))
