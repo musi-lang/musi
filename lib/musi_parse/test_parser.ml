@@ -449,6 +449,19 @@ let test_ty_optional () =
     ()
   | _ -> fail "expected ExprBinding.TyOptional"
 
+let test_ty_const () =
+  let stmts, diags, _ = parse "const x: const Int := 5" in
+  (check bool) "no errors" false (Diagnostic.has_errors diags);
+  match get_expr stmts with
+  | Some
+      {
+        Node.ekind =
+          Node.ExprBinding (_, _, _, Some { Node.is_const = true; _ }, _, _)
+      ; _
+      } ->
+    ()
+  | _ -> fail "expected const type"
+
 (* === STATEMENT TESTS === *)
 
 let test_stmt_import () =
@@ -530,6 +543,7 @@ let () =
         ; test_case "tuple" `Quick test_ty_tuple
         ; test_case "array" `Quick test_ty_array
         ; test_case "optional" `Quick test_ty_optional
+        ; test_case "const" `Quick test_ty_const
         ] )
     ; ( "statements"
       , [
