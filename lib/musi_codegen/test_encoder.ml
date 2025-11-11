@@ -79,7 +79,14 @@ let test_proc_table_with_proc () =
   let interner = Interner.create () in
   let proc_name = Interner.intern interner "test" in
   let proc =
-    { Emitter.proc_name; param_count = 2; local_count = 3; code_offset = 0 }
+    {
+      Emitter.proc_name
+    ; param_count = 2
+    ; local_count = 3
+    ; code_offset = 0
+    ; is_extern = false
+    ; abi = None
+    }
   in
   let encoder = Encoder.make interner in
   let bytecode = Encoder.encode encoder [ proc ] [] in
