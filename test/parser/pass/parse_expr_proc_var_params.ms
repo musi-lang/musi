@@ -1,14 +1,14 @@
-proc incr(var x: Int) {
+proc incr(var x: Nat) {
   x <- x + 1;
 };
 
-proc swap(var a: Int, var b: Int) {
+proc swap(var a: Nat, var b: Nat) {
   const temp := a;
   a <- b;
   b <- temp;
 };
 
-proc compute(x: Int, var result: Int, var error: Bool) {
+proc compute(x: Nat, var result: Nat, var error: Bool) {
   if x < 0 then {
     error <- true;
     result <- 0;
