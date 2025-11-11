@@ -39,12 +39,21 @@ let resolve_labels code =
       | IInstr instr -> Some instr)
     code
 
+type proc_info = {
+    proc_name : Interner.name
+  ; param_count : int
+  ; local_count : int
+  ; code_offset : int
+}
+
 type t = {
     mutable const_pool : const_kind list
   ; mutable locals : (Interner.name * int) list
   ; mutable next_local : int
   ; mutable loop_stack : loop_ctx list
   ; mutable next_label : int
+  ; mutable procs : proc_info list
+  ; mutable next_proc_id : int
 }
 
 let make () =
@@ -54,6 +63,8 @@ let make () =
   ; next_local = 0
   ; loop_stack = []
   ; next_label = 0
+  ; procs = []
+  ; next_proc_id = 0
   }
 
 let fresh_label t =
@@ -167,6 +178,7 @@ let rec emit_expr t expr =
   | Node.ExprAwait e ->
     emit_expr t e
   | Node.ExprYield (Some e) -> emit_expr t e
+  | Node.ExprProc (_, _, params, _, body, _) -> emit_expr_proc t params body
   | Node.ExprYield None | _ -> []
 
 and emit_expr_assign t target value =
@@ -290,14 +302,36 @@ and emit_expr_record _t fields =
 and emit_expr_field t obj _field =
   let obj_code = emit_expr t obj in
   let field_idx = 0 in
-  (* TODO: resolve field index from type info *)
   obj_code @ [ Instr.LdFld field_idx ]
+
+and emit_expr_proc t params body =
+  let proc_id = t.next_proc_id in
+  t.next_proc_id <- t.next_proc_id + 1;
+  let saved_locals = t.locals in
+  let saved_next_local = t.next_local in
+  t.locals <- [];
+  t.next_local <- 0;
+  List.iter (fun p -> ignore (add_local t p.Node.pname)) params;
+  let body_code = match body with Some e -> emit_expr t e | None -> [] in
+  let proc =
+    {
+      proc_name = Interner.intern (Interner.create ()) "<lambda>"
+    ; param_count = List.length params
+    ; local_count = t.next_local
+    ; code_offset = 0
+    }
+  in
+  t.procs <- t.procs @ [ proc ];
+  t.locals <- saved_locals;
+  t.next_local <- saved_next_local;
+  body_code @ [ Instr.LdCI4 (Int32.of_int proc_id) ]
 
 let emit_stmt t stmt =
   match stmt.Node.skind with
   | Node.StmtExpr (expr, _) -> emit_expr t expr
-  | Node.StmtImport _ | Node.StmtExport _ -> [] (* handled at link time *)
+  | Node.StmtImport _ | Node.StmtExport _ -> [] (* handled @ link time *)
   | _ -> []
 
 let emit t stmts = List.concat_map (emit_stmt t) stmts
 let const_pool t = t.const_pool
+let procs t = t.procs

@@ -8,8 +8,16 @@ type const_kind =
   | ConstBool of bool
   | ConstUnit
 
+type proc_info = {
+    proc_name : Interner.name
+  ; param_count : int
+  ; local_count : int
+  ; code_offset : int
+}
+
 type t
 
 val make : unit -> t
 val emit : t -> Node.stmt list -> Instr.t list
 val const_pool : t -> const_kind list
+val procs : t -> proc_info list
