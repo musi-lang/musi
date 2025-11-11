@@ -1,0 +1,1 @@
+async const foo := proc () {};

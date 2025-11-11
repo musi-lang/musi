@@ -1,0 +1,1 @@
+unsafe const foo := proc () {};
