@@ -1,4 +1,4 @@
 (library
  (name musi_codegen)
  (public_name musi.codegen)
- (libraries musi_basic musi_ast))
+ (libraries musi_basic musi_parse))

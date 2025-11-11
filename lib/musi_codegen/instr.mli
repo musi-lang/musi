@@ -1,6 +1,3 @@
-(** Lists constructors for every bytecode instruction emitted by compiler. *)
-
-(** Describes discriminated union representing each bytecode instruction. *)
 type t =
   | Nop
   | LdcI4 of int32
@@ -29,8 +26,5 @@ type t =
   | Call of int
   | Ret
 
-(** Returns opcode byte linked with provided instruction. *)
 val to_opcode : t -> int
-
-(** Renders instruction as readable string. *)
 val show : t -> string
