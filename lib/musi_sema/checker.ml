@@ -8,6 +8,9 @@ let empty_context = { in_proc = false; in_loop = false; in_async = false }
 let error diags msg span =
   diags := Diagnostic.add !diags (Diagnostic.error msg span)
 
+let warn diags msg span =
+  diags := Diagnostic.add !diags (Diagnostic.warning msg span)
+
 let safe_unify diags t1 t2 span =
   try Types.unify t1 t2 with Failure msg -> error diags msg span
 
@@ -46,6 +49,8 @@ let rec infer_expr ctx table interner diags expr =
     infer_expr_yield ctx table interner diags e_opt expr.span
   | Node.ExprBinding (_, _, pat, ty_opt, init, _) ->
     infer_expr_binding ctx table interner diags pat ty_opt init
+  | Node.ExprAssign (lhs, rhs) ->
+    infer_expr_assign ctx table interner diags lhs rhs expr.span
   | _ ->
     error
       diags
@@ -235,6 +240,32 @@ and infer_expr_binding ctx table interner diags pat ty_opt init =
   | Node.PatIdent name | Node.PatBinding name -> (
     match Symbol.lookup table name with
     | Some sym -> sym.ty := init_ty
+    | None -> ())
+  | _ -> ());
+  Types.TyUnit
+
+and infer_expr_assign ctx table interner diags lhs rhs span =
+  let lhs_ty = infer_expr ctx table interner diags lhs in
+  let rhs_ty = infer_expr ctx table interner diags rhs in
+  safe_unify diags lhs_ty rhs_ty rhs.span;
+  (match lhs.Node.ekind with
+  | Node.ExprIdent name -> (
+    match Symbol.lookup table name with
+    | Some sym -> (
+      (if not sym.is_mutable then
+         let name_str = Interner.lookup interner name in
+         error
+           diags
+           (Printf.sprintf "cannot assign to immutable binding '%s'" name_str)
+           span);
+      match rhs.Node.ekind with
+      | Node.ExprIdent rhs_name when rhs_name = name ->
+        let name_str = Interner.lookup interner name in
+        warn
+          diags
+          (Printf.sprintf "self-assignment of '%s' has no effect" name_str)
+          span
+      | _ -> ())
     | None -> ())
   | _ -> ());
   Types.TyUnit
