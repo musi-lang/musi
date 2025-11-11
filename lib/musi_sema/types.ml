@@ -109,19 +109,22 @@ and unify t1 t2 =
     failwith
       (Printf.sprintf "expected type '%s', found type '%s'" (show t1) (show t2))
 
-let rec from_node (node : Node.ty) =
+let rec from_node lookup (node : Node.ty) =
   match node.tkind with
-  | Node.TyNamed _ -> TyError (* TODO: resolve named types *)
+  | Node.TyNamed name -> (
+    match lookup name with Some ty -> ty | None -> TyError)
   | Node.TyTuple [] -> TyUnit
-  | Node.TyTuple tys -> TyTuple (List.map from_node tys)
-  | Node.TyArray ty -> TyArray (from_node ty)
+  | Node.TyTuple tys -> TyTuple (List.map (from_node lookup) tys)
+  | Node.TyArray ty -> TyArray (from_node lookup ty)
   | Node.TyRecord fields ->
     TyRecord
-      (List.map (fun (f : Node.field) -> (f.fname, from_node f.fty)) fields)
+      (List.map
+         (fun (f : Node.field) -> (f.fname, from_node lookup f.fty))
+         fields)
   | Node.TyProc (params, ret) ->
-    let param_tys = List.map from_node params in
-    let ret_ty = Option.fold ~none:TyUnit ~some:from_node ret in
+    let param_tys = List.map (from_node lookup) params in
+    let ret_ty = Option.fold ~none:TyUnit ~some:(from_node lookup) ret in
     TyProc (param_tys, ret_ty)
-  | Node.TyOptional ty -> TyOptional (from_node ty)
+  | Node.TyOptional ty -> TyOptional (from_node lookup ty)
   | Node.TyApp _ -> TyError (* TODO: generics *)
   | Node.TyError -> TyError

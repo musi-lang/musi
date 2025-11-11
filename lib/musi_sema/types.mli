@@ -22,5 +22,5 @@ val fresh_var : unit -> t
 val unify : t -> t -> unit
 val occurs_check : int -> t -> bool
 val repr : t -> t
-val from_node : Node.ty -> t
+val from_node : (Interner.name -> t option) -> Node.ty -> t
 val show : t -> string
