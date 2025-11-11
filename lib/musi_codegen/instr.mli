@@ -1,5 +1,13 @@
 type t =
+  (* Control *)
   | Nop
+  | Br of int
+  | BrTrue of int
+  | BrFalse of int
+  | Call of int
+  | CallTail of int
+  | Ret
+  (* Stack *)
   | LdcI4 of int32
   | LdcI4M1
   | LdcUnit
@@ -9,22 +17,40 @@ type t =
   | LdArg of int
   | Dup
   | Pop
+  (* Arithmetic *)
   | Add
   | Sub
   | Mul
   | Div
+  | Mod
   | Neg
+  (* Logical/Bitwise *)
+  | And
+  | Or
+  | Xor
+  | Not
+  | Shl
+  | Shr
+  (* Comparison *)
   | CmpEq
   | CmpNe
   | CmpLt
   | CmpGt
   | CmpLe
   | CmpGe
-  | Br of int
-  | BrTrue of int
-  | BrFalse of int
-  | Call of int
-  | Ret
+  (* Object *)
+  | NewObj of int
+  | LdFld of int
+  | StFld of int
+  | LdElem
+  | StElem
+  | LdLen
+  (* Type *)
+  | IsInst of int
+  | CastClass of int
+  (* Memory *)
+  | RefInc
+  | RefDec
 
 val to_opcode : t -> int
 val show : t -> string
