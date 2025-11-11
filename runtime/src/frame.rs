@@ -17,24 +17,28 @@ pub struct Frames {
 const BASE_FRAME_CAPACITY: usize = 256;
 
 impl Frames {
-    pub unsafe fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             data: Vec::with_capacity(BASE_FRAME_CAPACITY),
             locals: Vec::with_capacity(BASE_FRAME_CAPACITY),
         }
     }
 
-    pub unsafe fn push(&mut self, frame: Frame, local_count: usize) {
+    pub fn push(&mut self, frame: Frame, local_count: usize) {
         self.data.push(frame);
         self.locals.push(Vec::with_capacity(local_count));
     }
 
-    pub unsafe fn pop(&mut self) -> Frame {
+    pub fn pop(&mut self) -> Frame {
         self.locals.pop();
         self.data.pop().unwrap()
     }
 
-    pub unsafe fn current_locals(&mut self) -> &mut ValueList {
+    pub fn curr_locals(&mut self) -> &mut ValueList {
         self.locals.last_mut().unwrap()
+    }
+
+    pub const fn is_empty(&self) -> bool {
+        self.data.is_empty()
     }
 }

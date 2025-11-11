@@ -8,22 +8,22 @@ pub struct Stack {
 }
 
 impl Stack {
-    pub unsafe fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             data: Vec::with_capacity(BASE_STACK_SIZE),
         }
     }
 
-    pub unsafe fn push(&mut self, val: Value) {
+    pub fn push(&mut self, val: Value) {
         self.data.push(val);
     }
 
-    pub unsafe fn pop(&mut self) -> Value {
+    pub fn pop(&mut self) -> Value {
         self.data.pop().unwrap()
     }
 
-    pub unsafe fn dup(&mut self) {
-        let val = *self.data.last().unwrap();
+    pub fn dup(&mut self) {
+        let val = self.data.last().unwrap().clone();
         self.data.push(val);
     }
 }
