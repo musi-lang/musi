@@ -22,7 +22,7 @@ let safe_unify diags t1 t2 span =
 
 let rec infer_expr ctx table interner diags expr =
   match expr.Node.ekind with
-  | Node.ExprLiteral kind -> infer_expr_literal kind
+  | Node.ExprLiteral kind -> infer_expr_literal ctx table interner diags kind
   | Node.ExprIdent name -> infer_expr_ident table interner diags name expr.span
   | Node.ExprBinary (_, e1, e2) ->
     infer_expr_binary ctx table interner diags e1 e2
@@ -62,6 +62,15 @@ let rec infer_expr ctx table interner diags expr =
   | Node.ExprUnsafe body ->
     infer_expr_unsafe ctx table interner diags body expr.span
   | Node.ExprAwait e -> infer_expr_await ctx table interner diags e expr.span
+  | Node.ExprRecord (_, fields, _) ->
+    let lookup name =
+      Option.map (fun s -> !(s.Symbol.ty)) (Symbol.lookup table name)
+    in
+    Types.TyRecord
+      (List.map
+         (fun (f : Node.field) -> (f.fname, Types.from_node lookup f.fty))
+         fields)
+  | Node.ExprChoice _ -> Types.TyError
   | _ ->
     error
       diags
@@ -71,16 +80,22 @@ let rec infer_expr ctx table interner diags expr =
       expr.span;
     Types.TyError
 
-and infer_expr_literal kind =
+and infer_expr_literal ctx table interner diags kind =
   match kind with
   | Node.LitInt text ->
-    if String.length text > 0 && text.[0] = '-' then Types.TyInt
-    else Types.TyNat
-  | Node.LitBin _ -> Types.TyNat
-  | Node.LitStr _ -> Types.TyText
-  | Node.LitRune _ -> Types.TyRune
-  | Node.LitBool _ -> Types.TyBool
-  | Node.LitRecord _ -> Types.TyError (* TODO: infer record types *)
+    let name = if String.length text > 0 && text.[0] = '-' then "Int" else "Nat" in
+    Types.TyNamed (Interner.intern interner name)
+  | Node.LitBin _ -> Types.TyNamed (Interner.intern interner "Nat")
+  | Node.LitStr _ -> Types.TyNamed (Interner.intern interner "Text")
+  | Node.LitRune _ -> Types.TyNamed (Interner.intern interner "Rune")
+  | Node.LitBool _ -> Types.TyNamed (Interner.intern interner "Bool")
+  | Node.LitRecord fields ->
+    let field_tys =
+      List.map
+        (fun (name, expr) -> (name, infer_expr ctx table interner diags expr))
+        fields
+    in
+    Types.TyRecord field_tys
 
 and infer_expr_ident table interner diags name span =
   match Symbol.lookup table name with
@@ -157,7 +172,8 @@ and infer_expr_field ctx table interner diags base field span =
 and infer_expr_index ctx table interner diags base idx span =
   let base_ty = infer_expr ctx table interner diags base in
   let idx_ty = infer_expr ctx table interner diags idx in
-  safe_unify diags idx_ty Types.TyNat idx.span;
+  let nat_ty = Types.TyNamed (Interner.intern interner "Nat") in
+  safe_unify diags idx_ty nat_ty idx.span;
   match Types.repr base_ty with
   | Types.TyArray elem_ty -> elem_ty
   | Types.TyError -> Types.TyError
@@ -173,7 +189,8 @@ and infer_expr_range ctx table interner diags e1 e2 =
 
 and infer_expr_if ctx table interner diags cond then_br else_opt =
   let cond_ty = infer_expr ctx table interner diags cond in
-  safe_unify diags cond_ty Types.TyBool cond.span;
+  let bool_ty = Types.TyNamed (Interner.intern interner "Bool") in
+  safe_unify diags cond_ty bool_ty cond.span;
   let then_ty = infer_expr ctx table interner diags then_br in
   match else_opt with
   | Some else_br ->
@@ -187,7 +204,8 @@ and infer_expr_if ctx table interner diags cond then_br else_opt =
 and infer_expr_while ctx table interner diags cond body =
   let loop_ctx = { ctx with in_loop = true } in
   let cond_ty = infer_expr loop_ctx table interner diags cond in
-  safe_unify diags cond_ty Types.TyBool cond.span;
+  let bool_ty = Types.TyNamed (Interner.intern interner "Bool") in
+  safe_unify diags cond_ty bool_ty cond.span;
   ignore (infer_expr loop_ctx table interner diags body);
   Types.TyUnit
 
@@ -197,7 +215,8 @@ and infer_expr_do ctx table interner diags body cond_opt =
   Option.iter
     (fun cond ->
       let cond_ty = infer_expr loop_ctx table interner diags cond in
-      safe_unify diags cond_ty Types.TyBool cond.span)
+      let bool_ty = Types.TyNamed (Interner.intern interner "Bool") in
+      safe_unify diags cond_ty bool_ty cond.span)
     cond_opt;
   Types.TyUnit
 
@@ -244,7 +263,10 @@ and infer_expr_binding ctx table interner diags pat ty_opt init =
   let init_ty = infer_expr ctx table interner diags init in
   (match ty_opt with
   | Some ty_node ->
-    let expected_ty = Types.from_node ty_node in
+    let lookup name =
+      Option.map (fun s -> !(s.Symbol.ty)) (Symbol.lookup table name)
+    in
+    let expected_ty = Types.from_node lookup ty_node in
     safe_unify diags init_ty expected_ty init.span
   | None -> ());
   (match pat.Node.pkind with
@@ -321,5 +343,7 @@ let check nodes table interner diags =
   List.iter (check_stmt table interner diags) nodes
 
 let check_all nodes interner diags =
-  let table = Resolver.resolve nodes interner diags in
+  let table = Symbol.empty_table () in
+  let table = Symbol.prelude table interner in
+  let table = Resolver.resolve_with_table table nodes interner diags in
   check nodes table interner diags
