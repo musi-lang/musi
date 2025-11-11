@@ -58,3 +58,25 @@ let lookup_curr table name =
   match !(table.scopes) with
   | [] -> None
   | curr :: _ -> Hashtbl.find_opt curr.bindings name
+
+let prelude table interner =
+  let dummy_span = Span.dummy in
+  let predef name =
+    let n = Interner.intern interner name in
+    let sym =
+      {
+        name = n
+      ; ty = ref (Types.TyNamed n)
+      ; is_mutable = false
+      ; span = dummy_span
+      }
+    in
+    let _ = bind table n sym in
+    ()
+  in
+  predef "Nat";
+  predef "Int";
+  predef "Text";
+  predef "Rune";
+  predef "Bool";
+  table

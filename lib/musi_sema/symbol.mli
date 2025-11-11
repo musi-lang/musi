@@ -11,6 +11,7 @@ type scope
 type table
 
 val empty_table : unit -> table
+val prelude : table -> Interner.t -> table
 val enter_scope : table -> table
 val exit_scope : table -> table
 val bind : table -> Interner.name -> t -> table
