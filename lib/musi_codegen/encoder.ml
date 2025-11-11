@@ -1,9 +1,13 @@
 open Musi_basic
 
-type t = { const_pool : Emitter.const_kind list; interner : Interner.t }
+type t = {
+    const_pool : Emitter.const_kind list
+  ; procs : Emitter.proc_info list
+  ; interner : Interner.t
+}
 
 let hdr_size = 32
-let make interner = { const_pool = []; interner }
+let make interner = { const_pool = []; procs = []; interner }
 
 let write_op_u32 buf opcode operand =
   Buffer.add_char buf opcode;
@@ -76,14 +80,26 @@ let encode_const t buf = function
   | Emitter.ConstBool false -> Buffer.add_char buf '\x05'
   | Emitter.ConstUnit -> Buffer.add_char buf '\x00'
 
-let encode t instrs =
+let encode_proc t buf proc =
+  let name_str = Interner.lookup t.interner proc.Emitter.proc_name in
+  Buffer.add_string buf name_str;
+  Buffer.add_char buf '\x00';
+  Binary.write_u32_le buf (Int32.of_int proc.Emitter.param_count);
+  Binary.write_u32_le buf (Int32.of_int proc.Emitter.local_count);
+  Binary.write_u32_le buf (Int32.of_int proc.Emitter.code_offset)
+
+let encode t procs instrs =
+  let t = { t with procs } in
   let const_buf = Buffer.create 256 in
+  let proc_buf = Buffer.create 256 in
   let code_buf = Buffer.create 1024 in
 
   List.iter (encode_const t const_buf) t.const_pool;
+  List.iter (encode_proc t proc_buf) t.procs;
   List.iter (encode_opcode code_buf) instrs;
 
   let const_size = Buffer.length const_buf in
+  let proc_size = Buffer.length proc_buf in
   let code_size = Buffer.length code_buf in
 
   let hdr = Buffer.create hdr_size in
@@ -93,11 +109,13 @@ let encode t instrs =
   Binary.write_u32_le hdr (Int32.of_int hdr_size);
   Binary.write_u32_le hdr (Int32.of_int const_size);
   Binary.write_u32_le hdr (Int32.of_int (hdr_size + const_size));
+  Binary.write_u32_le hdr (Int32.of_int proc_size);
+  Binary.write_u32_le hdr (Int32.of_int (hdr_size + const_size + proc_size));
   Binary.write_u32_le hdr (Int32.of_int code_size);
-  Buffer.add_bytes hdr (Bytes.make 8 '\x00');
 
-  let res = Buffer.create (hdr_size + const_size + code_size) in
+  let res = Buffer.create (hdr_size + const_size + proc_size + code_size) in
   Buffer.add_buffer res hdr;
   Buffer.add_buffer res const_buf;
+  Buffer.add_buffer res proc_buf;
   Buffer.add_buffer res code_buf;
   Buffer.to_bytes res
