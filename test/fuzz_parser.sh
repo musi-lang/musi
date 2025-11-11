@@ -37,7 +37,7 @@ echo "checking for parser inf loop(s)..."
 failed=0
 
 for test in "${test_cases[@]}"; do
-    echo -n "Testing: '$test' ... "
+    echo -n "testing: '$test' ... "
     echo "$test" > /tmp/fuzz_test.ms
     timeout $TIMEOUT $COMPILER compile /tmp/fuzz_test.ms > /dev/null 2>&1
     exit_code=$?
