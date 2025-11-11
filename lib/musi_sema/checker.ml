@@ -61,6 +61,7 @@ let rec infer_expr ctx table interner diags expr =
     infer_expr_proc table interner diags params body_opt mods expr.span
   | Node.ExprUnsafe body ->
     infer_expr_unsafe ctx table interner diags body expr.span
+  | Node.ExprAwait e -> infer_expr_await ctx table interner diags e expr.span
   | _ ->
     error
       diags
@@ -270,10 +271,15 @@ and infer_expr_proc table interner diags _params body_opt mods _span =
 
 and infer_expr_unsafe ctx table interner diags body span =
   if ctx.in_unsafe then
-    warn diags "unnecessary 'unsafe' block inside 'unsafe' procedure" span;
+    warn diags "unnecessary 'unsafe' block inside unsafe procedure" span;
   let unsafe_ctx = { ctx with in_unsafe = true } in
   ignore (infer_expr unsafe_ctx table interner diags body);
   Types.TyUnit
+
+and infer_expr_await ctx table interner diags e span =
+  if not ctx.in_async then
+    error diags "'await' outside of asynchronous procedure" span;
+  infer_expr ctx table interner diags e
 
 and infer_expr_assign ctx table interner diags lhs rhs span =
   let lhs_ty = infer_expr ctx table interner diags lhs in
