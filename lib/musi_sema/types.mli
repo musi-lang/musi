@@ -3,11 +3,7 @@ open Musi_parse
 
 type t =
   | TyUnit
-  | TyBool
-  | TyInt
-  | TyNat
-  | TyText
-  | TyRune
+  | TyNamed of Interner.name
   | TyTuple of t list
   | TyArray of t
   | TyRecord of (Interner.name * t) list

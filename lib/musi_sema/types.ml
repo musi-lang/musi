@@ -3,11 +3,7 @@ open Musi_parse
 
 type t =
   | TyUnit
-  | TyBool
-  | TyInt
-  | TyNat
-  | TyText
-  | TyRune
+  | TyNamed of Interner.name
   | TyTuple of t list
   | TyArray of t
   | TyRecord of (Interner.name * t) list
@@ -36,25 +32,26 @@ let rec occurs_check id = function
   | TyProc (params, ret) ->
     List.exists (occurs_check id) params || occurs_check id ret
   | TyOptional t -> occurs_check id t
-  | _ -> false
+  | TyNamed _ | TyUnit | TyError -> false
 
-let rec show = function
+let rec show_with interner = function
   | TyUnit -> "Unit"
-  | TyBool -> "Bool"
-  | TyInt -> "Int"
-  | TyNat -> "Nat"
-  | TyText -> "Text"
-  | TyRune -> "Rune"
+  | TyNamed name -> Interner.lookup interner name
   | TyTuple [] -> "()"
-  | TyTuple ts -> "(" ^ String.concat ", " (List.map show ts) ^ ")"
-  | TyArray t -> "[" ^ show t ^ "]"
+  | TyTuple ts ->
+    "(" ^ String.concat ", " (List.map (show_with interner) ts) ^ ")"
+  | TyArray t -> "[" ^ show_with interner t ^ "]"
   | TyRecord _ -> "{...}"
   | TyProc (params, ret) ->
-    "(" ^ String.concat ", " (List.map show params) ^ ") -> " ^ show ret
-  | TyOptional t -> show t ^ "?"
+    "("
+    ^ String.concat ", " (List.map (show_with interner) params)
+    ^ ") -> " ^ show_with interner ret
+  | TyOptional t -> show_with interner t ^ "?"
   | TyVar { contents = Unbound id } -> "?" ^ string_of_int id
-  | TyVar { contents = Link t } -> show t
+  | TyVar { contents = Link t } -> show_with interner t
   | TyError -> "<error>"
+
+let show t = show_with (Interner.create ()) t
 
 let rec unify_record fs1 fs2 =
   if List.length fs1 <> List.length fs2 then
@@ -98,6 +95,7 @@ and unify t1 t2 =
     if occurs_check id t then
       failwith (Printf.sprintf "infinite type '%s'" (show t))
     else v := Link t
+  | TyNamed n1, TyNamed n2 when n1 = n2 -> ()
   | TyTuple ts1, TyTuple ts2 when List.length ts1 = List.length ts2 ->
     List.iter2 unify ts1 ts2
   | TyArray t1, TyArray t2 -> unify t1 t2
