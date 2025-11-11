@@ -18,8 +18,11 @@ let compile ~input_path ~output_path =
   let diag_bag = ref (Diagnostic.merge [ lex_diags; parse_diags ]) in
   let _symbols = Musi_sema.Resolver.resolve ast interner diag_bag in
 
+  let emitter = Emitter.make () in
+  let instrs = Emitter.emit emitter ast in
+
   let encoder = Encoder.make interner in
-  let bytecode = Encoder.encode encoder [] [] in
+  let bytecode = Encoder.encode encoder (Emitter.procs emitter) instrs in
 
   let oc = open_out_bin output_path in
   output_bytes oc bytecode;
