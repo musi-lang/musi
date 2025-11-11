@@ -123,6 +123,7 @@ let empty_modifiers =
   }
 
 let make_expr ekind span = { ekind; span }
+let make_expr_ident name span = { ekind = ExprIdent name; span }
 let make_stmt skind span = { skind; span }
 let make_ty tkind span = { tkind; span }
 let make_pat pkind span = { pkind; span }
