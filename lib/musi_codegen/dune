@@ -1,4 +1,10 @@
 (library
  (name musi_codegen)
  (public_name musi.codegen)
+ (modules instr emitter encoder)
  (libraries musi_basic musi_parse))
+
+(executable
+ (name test_emitter)
+ (modules test_emitter)
+ (libraries alcotest musi_basic musi_lex musi_parse musi_codegen))
