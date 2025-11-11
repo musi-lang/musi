@@ -1,0 +1,195 @@
+open Musi_basic
+open Musi_parse
+
+let error diags msg span =
+  diags := Diagnostic.add !diags (Diagnostic.error msg span)
+
+let safe_unify diags t1 t2 span =
+  try Types.unify t1 t2 with Failure msg -> error diags msg span
+
+let rec infer_expr table interner diags expr =
+  match expr.Node.ekind with
+  | Node.ExprLiteral kind -> infer_expr_literal kind
+  | Node.ExprIdent name -> infer_expr_ident table interner diags name expr.span
+  | Node.ExprBinary (_, e1, e2) -> infer_expr_binary table interner diags e1 e2
+  | Node.ExprUnary (_, e) -> infer_expr table interner diags e
+  | Node.ExprCall (callee, args, _) ->
+    infer_expr_call table interner diags callee args expr.span
+  | Node.ExprField (base, field, _) ->
+    infer_expr_field table interner diags base field expr.span
+  | Node.ExprIndex (base, idx, _) ->
+    infer_expr_index table interner diags base idx expr.span
+  | Node.ExprRange (e1, e2, _) -> infer_expr_range table interner diags e1 e2
+  | Node.ExprTuple exprs -> infer_expr_tuple table interner diags exprs
+  | Node.ExprArray exprs -> infer_expr_array table interner diags exprs
+  | Node.ExprBlock exprs -> infer_expr_block table interner diags exprs
+  | Node.ExprIf (cond, then_br, else_opt) ->
+    infer_expr_if table interner diags cond then_br else_opt
+  | Node.ExprWhile (_, body) | Node.ExprDo (body, _) | Node.ExprFor (_, _, body)
+    ->
+    ignore (infer_expr table interner diags body);
+    Types.TyUnit
+  | Node.ExprBinding (_, _, pat, ty_opt, init, _) ->
+    infer_expr_binding table interner diags pat ty_opt init
+  | _ ->
+    error
+      diags
+      (Printf.sprintf
+         "unimplemented '%s' in type inference"
+         (Node.string_of_expr expr))
+      expr.span;
+    Types.TyError
+
+and infer_expr_literal kind =
+  match kind with
+  | Node.LitInt text ->
+    if String.length text > 0 && text.[0] = '-' then Types.TyInt
+    else Types.TyNat
+  | Node.LitBin _ -> Types.TyNat
+  | Node.LitStr _ -> Types.TyText
+  | Node.LitRune _ -> Types.TyRune
+  | Node.LitBool _ -> Types.TyBool
+  | Node.LitRecord _ -> Types.TyError (* TODO: infer record types *)
+
+and infer_expr_ident table interner diags name span =
+  match Symbol.lookup table name with
+  | Some sym -> !(sym.ty)
+  | None ->
+    let name_str = Interner.lookup interner name in
+    error diags (Printf.sprintf "undefined identifier '%s'" name_str) span;
+    Types.TyError
+
+and infer_expr_binary table interner diags e1 e2 =
+  let t1 = infer_expr table interner diags e1 in
+  let t2 = infer_expr table interner diags e2 in
+  safe_unify diags t1 t2 e2.span;
+  t1
+
+and infer_expr_call table interner diags callee args span =
+  let callee_ty = infer_expr table interner diags callee in
+  match Types.repr callee_ty with
+  | Types.TyProc (param_tys, ret_ty) ->
+    if List.length args <> List.length param_tys then
+      error
+        diags
+        (Printf.sprintf
+           "expected %d argument(s), found %d"
+           (List.length param_tys)
+           (List.length args))
+        span;
+    List.iter2
+      (fun arg param_ty ->
+        let arg_ty = infer_expr table interner diags arg in
+        safe_unify diags arg_ty param_ty arg.span)
+      args
+      param_tys;
+    ret_ty
+  | Types.TyError -> Types.TyError
+  | _ ->
+    error diags "expected procedure type in call expression" span;
+    Types.TyError
+
+and infer_expr_tuple table interner diags exprs =
+  let tys = List.map (infer_expr table interner diags) exprs in
+  Types.TyTuple tys
+
+and infer_expr_array table interner diags exprs =
+  match exprs with
+  | [] -> Types.TyArray (Types.fresh_var ())
+  | e :: rest ->
+    let elem_ty = infer_expr table interner diags e in
+    List.iter
+      (fun e ->
+        let ty = infer_expr table interner diags e in
+        safe_unify diags elem_ty ty e.span)
+      rest;
+    Types.TyArray elem_ty
+
+and infer_expr_field table interner diags base field span =
+  let base_ty = infer_expr table interner diags base in
+  match Types.repr base_ty with
+  | Types.TyRecord fields -> (
+    match List.assoc_opt field fields with
+    | Some ty -> ty
+    | None ->
+      let field_str = Interner.lookup interner field in
+      error
+        diags
+        (Printf.sprintf "field '%s' not found in record" field_str)
+        span;
+      Types.TyError)
+  | Types.TyError -> Types.TyError
+  | _ ->
+    error diags "expected record type in field access" span;
+    Types.TyError
+
+and infer_expr_index table interner diags base idx span =
+  let base_ty = infer_expr table interner diags base in
+  let idx_ty = infer_expr table interner diags idx in
+  safe_unify diags idx_ty Types.TyNat idx.span;
+  match Types.repr base_ty with
+  | Types.TyArray elem_ty -> elem_ty
+  | Types.TyError -> Types.TyError
+  | _ ->
+    error diags "expected array type in index expression" span;
+    Types.TyError
+
+and infer_expr_range table interner diags e1 e2 =
+  let t1 = infer_expr table interner diags e1 in
+  let t2 = infer_expr table interner diags e2 in
+  safe_unify diags t1 t2 e2.span;
+  Types.TyUnit
+
+and infer_expr_if table interner diags cond then_br else_opt =
+  let cond_ty = infer_expr table interner diags cond in
+  safe_unify diags cond_ty Types.TyBool cond.span;
+  let then_ty = infer_expr table interner diags then_br in
+  match else_opt with
+  | Some else_br ->
+    let else_ty = infer_expr table interner diags else_br in
+    safe_unify diags then_ty else_ty else_br.span;
+    then_ty
+  | None ->
+    safe_unify diags then_ty Types.TyUnit then_br.span;
+    Types.TyUnit
+
+and infer_expr_block table interner diags exprs =
+  match List.rev exprs with
+  | [] -> Types.TyUnit
+  | last :: rest ->
+    List.iter
+      (fun e -> ignore (infer_expr table interner diags e))
+      (List.rev rest);
+    infer_expr table interner diags last
+
+and infer_expr_binding table interner diags pat ty_opt init =
+  let init_ty = infer_expr table interner diags init in
+  (match ty_opt with
+  | Some ty_node ->
+    let expected_ty = Types.from_node ty_node in
+    safe_unify diags init_ty expected_ty init.span
+  | None -> ());
+  (match pat.Node.pkind with
+  | Node.PatIdent name | Node.PatBinding name -> (
+    match Symbol.lookup table name with
+    | Some sym -> sym.ty := init_ty
+    | None -> ())
+  | _ -> ());
+  Types.TyUnit
+
+let _check_expr table interner diags expr expected_ty =
+  let actual_ty = infer_expr table interner diags expr in
+  safe_unify diags actual_ty expected_ty expr.span
+(* TODO: check exprs *)
+
+let check_stmt table interner diags stmt =
+  match stmt.Node.skind with
+  | Node.StmtExpr (expr, _) -> ignore (infer_expr table interner diags expr)
+  | Node.StmtImport _ | Node.StmtExport _ | Node.StmtError -> ()
+
+let check nodes table interner diags =
+  List.iter (check_stmt table interner diags) nodes
+
+let check_all nodes interner diags =
+  let table = Resolver.resolve nodes interner diags in
+  check nodes table interner diags
