@@ -147,7 +147,7 @@ pub struct Value {
 
 ```rust
 pub struct VM {
-    pub stack: Vec<Value>,      // drees stack slots when VM drops
+    pub stack: Vec<Value>,      // frees stack slots when VM drops
     pub frames: Vec<Frame>,     // releases frame storage automatically
     pub code: Box<[u8]>,        // owns code buffer lifetime
 }
