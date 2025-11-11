@@ -18,6 +18,19 @@ let collect_files dir =
   Unix.closedir handle;
   List.sort String.compare files
 
+let run_pipeline path =
+  let open Musi_basic in
+  let open Musi_lex in
+  let open Musi_parse in
+  let source = read_file path in
+  let interner = Interner.create () in
+  let file_id, src = Source.add_file Source.empty path source in
+  let lexer = Lexer.make file_id source interner in
+  let tokens, lex_diags = Lexer.lex_all lexer in
+  let parser = Parser.make tokens interner in
+  let stmts, parse_diags = Parser.parse parser in
+  (stmts, interner, src, Diagnostic.merge [ lex_diags; parse_diags ])
+
 let make_test_cases pass_files fail_files test_pass test_fail =
   let pass_tests =
     List.map

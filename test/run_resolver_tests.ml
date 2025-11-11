@@ -1,33 +1,19 @@
 open Musi_basic
-open Musi_lex
-open Musi_parse
 open Musi_sema
 
 let test_pass path () =
-  let source = Test_helpers.read_file path in
-  let interner = Interner.create () in
-  let file_id, src = Source.add_file Source.empty path source in
-  let lexer = Lexer.make file_id source interner in
-  let tokens, lex_diags = Lexer.lex_all lexer in
-  let parser = Parser.make tokens interner in
-  let stmts, parse_diags = Parser.parse parser in
+  let stmts, interner, src, parse_diags = Test_helpers.run_pipeline path in
   let resolve_diags = ref Diagnostic.empty_bag in
   let _ = Resolver.resolve stmts interner resolve_diags in
-  let diags = Diagnostic.merge [ lex_diags; parse_diags; !resolve_diags ] in
+  let diags = Diagnostic.merge [ parse_diags; !resolve_diags ] in
   Diagnostic.emit_all Format.std_formatter diags src;
   Alcotest.(check bool) "no errors" false (Diagnostic.has_errors diags)
 
 let test_fail path () =
-  let source = Test_helpers.read_file path in
-  let interner = Interner.create () in
-  let file_id, src = Source.add_file Source.empty path source in
-  let lexer = Lexer.make file_id source interner in
-  let tokens, lex_diags = Lexer.lex_all lexer in
-  let parser = Parser.make tokens interner in
-  let stmts, parse_diags = Parser.parse parser in
+  let stmts, interner, src, parse_diags = Test_helpers.run_pipeline path in
   let resolve_diags = ref Diagnostic.empty_bag in
   let _ = Resolver.resolve stmts interner resolve_diags in
-  let diags = Diagnostic.merge [ lex_diags; parse_diags; !resolve_diags ] in
+  let diags = Diagnostic.merge [ parse_diags; !resolve_diags ] in
   Diagnostic.emit_all Format.std_formatter diags src;
   Alcotest.(check bool) "has errors" true (Diagnostic.has_errors diags)
 
