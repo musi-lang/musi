@@ -103,9 +103,8 @@ let encode t procs instrs =
   let code_size = Buffer.length code_buf in
 
   let hdr = Buffer.create hdr_size in
-  Buffer.add_string hdr "MUSI";
-  Binary.write_u16_le hdr 1;
-  Binary.write_u16_le hdr 0;
+  Binary.write_u32_le hdr 0x4D555349l;
+  Binary.write_u32_le hdr 1l;
   Binary.write_u32_le hdr (Int32.of_int hdr_size);
   Binary.write_u32_le hdr (Int32.of_int const_size);
   Binary.write_u32_le hdr (Int32.of_int (hdr_size + const_size));
