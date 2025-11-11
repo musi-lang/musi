@@ -291,6 +291,13 @@ let parse_ty_record t (tok : Token.t) =
 
 let parse_ty_impl t =
   skip_trivia t;
+  let is_const =
+    if (curr t).kind = Token.KwConst then (
+      advance t;
+      skip_trivia t;
+      true)
+    else false
+  in
   let tok = curr t in
   advance t;
   let base_ty =
@@ -313,10 +320,14 @@ let parse_ty_impl t =
       Node.make_ty Node.TyError tok.span
   in
   skip_trivia t;
-  if (curr t).kind = Token.Question then (
-    advance t;
-    Node.make_ty (Node.TyOptional base_ty) tok.span)
-  else base_ty
+  let ty_with_optional =
+    if (curr t).kind = Token.Question then (
+      advance t;
+      Node.make_ty (Node.TyOptional base_ty) tok.span)
+    else base_ty
+  in
+  if is_const then { ty_with_optional with is_const = true }
+  else ty_with_optional
 
 let parse_optional_expr t =
   skip_trivia t;
@@ -633,79 +644,94 @@ let expr_unary_prefix t (tok : Token.t) make_node =
 
 let parse_expr_prefix t =
   let mods = parse_modifiers t in
-  let tok = curr t in
-  advance t;
-  match tok.kind with
-  | Token.LitNum s ->
-    let lit =
-      if String.contains s '.' || String.contains s 'e' || String.contains s 'E'
-      then Node.LitBin s
-      else Node.LitInt s
-    in
-    Node.make_expr (Node.ExprLiteral lit) tok.span
-  | Token.LitStr name ->
-    Node.make_expr (Node.ExprLiteral (Node.LitStr name)) tok.span
-  | Token.LitRune code ->
-    Node.make_expr (Node.ExprLiteral (Node.LitRune code)) tok.span
-  | Token.KwTrue | Token.KwFalse ->
-    Node.make_expr
-      (Node.ExprLiteral (Node.LitBool (tok.kind = Token.KwTrue)))
-      tok.span
-  | Token.Ident name -> Node.make_expr (Node.ExprIdent name) tok.span
-  | Token.KwReturn ->
-    Node.make_expr (Node.ExprReturn (parse_optional_expr t)) tok.span
-  | Token.KwBreak ->
-    Node.make_expr (Node.ExprBreak (parse_optional_expr t)) tok.span
-  | Token.KwContinue -> Node.make_expr Node.ExprContinue tok.span
-  | Token.KwAwait -> expr_unary_prefix t tok (fun e -> Node.ExprAwait e)
-  | Token.KwYield ->
-    Node.make_expr (Node.ExprYield (parse_optional_expr t)) tok.span
-  | Token.KwDefer -> expr_unary_prefix t tok (fun e -> Node.ExprDefer e)
-  | Token.KwTry -> expr_unary_prefix t tok (fun e -> Node.ExprTry e)
-  | Token.KwAsync -> parse_expr_block_wrapper t tok (fun b -> Node.ExprAsync b)
-  | Token.KwUnsafe ->
-    parse_expr_block_wrapper t tok (fun b -> Node.ExprUnsafe b)
-  | Token.KwIf -> parse_expr_if t tok
-  | Token.KwMatch -> parse_expr_match t tok
-  | Token.KwWhile -> parse_expr_while t tok
-  | Token.KwDo -> parse_expr_do t tok
-  | Token.KwConst -> parse_expr_binding t tok true mods
-  | Token.KwVar -> parse_expr_binding t tok false mods
-  | Token.KwFor -> parse_expr_for t tok
-  | Token.KwChoice | Token.KwRecord | Token.KwProc | Token.Pipe -> (
-    skip_trivia t;
-    let name_opt =
-      match (curr t).kind with
-      | Token.Ident name ->
-        advance t;
-        Some name
-      | _ -> None
-    in
-    let ty_params = parse_ty_params t in
-    let construct =
-      match tok.kind with
-      | Token.KwChoice -> parse_expr_choice t tok mods ty_params
-      | Token.KwRecord -> parse_expr_record t tok mods ty_params
-      | Token.KwProc | Token.Pipe -> parse_expr_proc t tok mods ty_params
-      | _ -> failwith "unreachable"
-    in
-    match name_opt with
-    | Some name ->
-      let pat = Node.make_pat (Node.PatIdent name) tok.span in
+  if mods.is_async && (curr t).kind = Token.LBrace then (
+    let tok = curr t in
+    advance t;
+    let block = parse_expr_block t tok in
+    Node.make_expr (Node.ExprAsync block) tok.span)
+  else if mods.is_unsafe && (curr t).kind = Token.LBrace then (
+    let tok = curr t in
+    advance t;
+    let block = parse_expr_block t tok in
+    Node.make_expr (Node.ExprUnsafe block) tok.span)
+  else
+    let tok = curr t in
+    advance t;
+    match tok.kind with
+    | Token.LitNum s ->
+      let lit =
+        if
+          String.contains s '.' || String.contains s 'e'
+          || String.contains s 'E'
+        then Node.LitBin s
+        else Node.LitInt s
+      in
+      Node.make_expr (Node.ExprLiteral lit) tok.span
+    | Token.LitStr name ->
+      Node.make_expr (Node.ExprLiteral (Node.LitStr name)) tok.span
+    | Token.LitRune code ->
+      Node.make_expr (Node.ExprLiteral (Node.LitRune code)) tok.span
+    | Token.KwTrue | Token.KwFalse ->
       Node.make_expr
-        (Node.ExprBinding (true, [], pat, None, construct, Node.empty_modifiers))
+        (Node.ExprLiteral (Node.LitBool (tok.kind = Token.KwTrue)))
         tok.span
-    | None -> construct)
-  | Token.LBrace -> parse_expr_block_or_lit_record t tok
-  | Token.LBrack -> parse_expr_array t tok
-  | Token.LParen -> parse_expr_tuple t tok
-  | Token.Minus | Token.KwNot ->
-    let operand = parse_expr t PrecUnary in
-    Node.make_expr (Node.ExprUnary (tok.kind, operand)) tok.span
-  | _ ->
-    let found = Token.show_kind t.interner tok.kind in
-    error t (Printf.sprintf "unexpected token '%s' in expression" found);
-    Node.make_expr Node.ExprError tok.span
+    | Token.Ident name -> Node.make_expr (Node.ExprIdent name) tok.span
+    | Token.KwReturn ->
+      Node.make_expr (Node.ExprReturn (parse_optional_expr t)) tok.span
+    | Token.KwBreak ->
+      Node.make_expr (Node.ExprBreak (parse_optional_expr t)) tok.span
+    | Token.KwContinue -> Node.make_expr Node.ExprContinue tok.span
+    | Token.KwAwait -> expr_unary_prefix t tok (fun e -> Node.ExprAwait e)
+    | Token.KwYield ->
+      Node.make_expr (Node.ExprYield (parse_optional_expr t)) tok.span
+    | Token.KwDefer -> expr_unary_prefix t tok (fun e -> Node.ExprDefer e)
+    | Token.KwTry -> expr_unary_prefix t tok (fun e -> Node.ExprTry e)
+    | Token.KwAsync ->
+      parse_expr_block_wrapper t tok (fun b -> Node.ExprAsync b)
+    | Token.KwUnsafe ->
+      parse_expr_block_wrapper t tok (fun b -> Node.ExprUnsafe b)
+    | Token.KwIf -> parse_expr_if t tok
+    | Token.KwMatch -> parse_expr_match t tok
+    | Token.KwWhile -> parse_expr_while t tok
+    | Token.KwDo -> parse_expr_do t tok
+    | Token.KwConst -> parse_expr_binding t tok true mods
+    | Token.KwVar -> parse_expr_binding t tok false mods
+    | Token.KwFor -> parse_expr_for t tok
+    | Token.KwChoice | Token.KwRecord | Token.KwProc | Token.Pipe -> (
+      skip_trivia t;
+      let name_opt =
+        match (curr t).kind with
+        | Token.Ident name ->
+          advance t;
+          Some name
+        | _ -> None
+      in
+      let ty_params = parse_ty_params t in
+      let construct =
+        match tok.kind with
+        | Token.KwChoice -> parse_expr_choice t tok mods ty_params
+        | Token.KwRecord -> parse_expr_record t tok mods ty_params
+        | Token.KwProc | Token.Pipe -> parse_expr_proc t tok mods ty_params
+        | _ -> failwith "unreachable"
+      in
+      match name_opt with
+      | Some name ->
+        let pat = Node.make_pat (Node.PatIdent name) tok.span in
+        Node.make_expr
+          (Node.ExprBinding
+             (true, [], pat, None, construct, Node.empty_modifiers))
+          tok.span
+      | None -> construct)
+    | Token.LBrace -> parse_expr_block_or_lit_record t tok
+    | Token.LBrack -> parse_expr_array t tok
+    | Token.LParen -> parse_expr_tuple t tok
+    | Token.Minus | Token.KwNot ->
+      let operand = parse_expr t PrecUnary in
+      Node.make_expr (Node.ExprUnary (tok.kind, operand)) tok.span
+    | _ ->
+      let found = Token.show_kind t.interner tok.kind in
+      error t (Printf.sprintf "unexpected token '%s' in expression" found);
+      Node.make_expr Node.ExprError tok.span
 
 let parse_expr_infix_impl t left bp =
   skip_trivia t;
