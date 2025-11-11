@@ -7,6 +7,7 @@ type modifiers = {
     is_exported : bool
   ; is_async : bool
   ; is_unsafe : bool
+  ; is_weak : bool
   ; abi : name option
 }
 

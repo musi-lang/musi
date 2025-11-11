@@ -7,6 +7,7 @@ type modifiers = {
     is_exported : bool
   ; is_async : bool
   ; is_unsafe : bool
+  ; is_weak : bool
   ; abi : name option
 }
 
@@ -107,7 +108,7 @@ and variant = { vname : name; vdata : variant_data }
 and variant_data = VUnit | VTuple of ty list | VRecord of field list
 
 let empty_modifiers =
-  { is_exported = false; is_async = false; is_unsafe = false; abi = None }
+  { is_exported = false; is_async = false; is_unsafe = false; is_weak = false; abi = None }
 
 let make_expr ekind span = { ekind; span }
 let make_stmt skind span = { skind; span }
