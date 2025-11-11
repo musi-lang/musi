@@ -50,7 +50,7 @@ for test in "${test_cases[@]}"; do
     fi
 done
 
-rm -f /tmp/fuzz_test.ms /tmp/fuzz_test.msil
+rm -f /tmp/fuzz_test.ms /tmp/fuzz_test.msc
 
 if [ $failed -gt 0 ]; then
     echo "found $failed potential inf loop(s)"
