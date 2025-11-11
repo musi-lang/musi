@@ -124,6 +124,11 @@ let empty_modifiers =
 
 let make_expr ekind span = { ekind; span }
 let make_expr_ident name span = { ekind = ExprIdent name; span }
+
+let make_expr_binary op left right span =
+  { ekind = ExprBinary (op, left, right); span }
+
+let make_expr_literal lit span = { ekind = ExprLiteral lit; span }
 let make_stmt skind span = { skind; span }
 let make_ty tkind span = { tkind; span }
 let make_pat pkind span = { pkind; span }

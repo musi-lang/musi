@@ -116,6 +116,8 @@ and variant_data = VUnit | VTuple of ty list | VRecord of field list
 val empty_modifiers : modifiers
 val make_expr : expr_kind -> Span.t -> expr
 val make_expr_ident : name -> Span.t -> expr
+val make_expr_binary : Token.kind -> expr -> expr -> Span.t -> expr
+val make_expr_literal : literal_kind -> Span.t -> expr
 val make_stmt : stmt_kind -> Span.t -> stmt
 val make_ty : ty_kind -> Span.t -> ty
 val make_pat : pat_kind -> Span.t -> pat
