@@ -50,13 +50,15 @@ and collect_expr_block table interner diags exprs =
 and collect_match_case table interner diags case_body =
   collect_scoped table (fun () -> collect_expr table interner diags case_body)
 
-and validate_binding_mods diags mods span =
+and validate_binding_mods diags is_const mods span =
   if mods.Node.is_unsafe then
     error diags "'unsafe' modifier not allowed on bindings" span;
   if mods.is_async then
     error diags "'async' modifier not allowed on bindings" span;
   if mods.is_exported then
-    error diags "'export' modifier not allowed on binding expressions" span
+    error diags "'export' modifier not allowed on binding expressions" span;
+  if mods.is_weak && is_const then
+    error diags "'weak' modifier only allowed on 'var' bindings" span
 
 and validate_expr_mods diags mods kind span =
   if mods.Node.is_exported then
@@ -68,7 +70,7 @@ and validate_expr_mods diags mods kind span =
 and collect_expr table interner diags expr =
   match expr.Node.ekind with
   | Node.ExprBinding (is_const, _, pat, ty_opt, init, mods) ->
-    validate_binding_mods diags mods expr.span;
+    validate_binding_mods diags is_const mods expr.span;
     collect_pat table interner diags (not is_const) pat ty_opt pat.span;
     collect_expr table interner diags init
   | Node.ExprProc (_, _, params, _, body_opt, mods) ->
