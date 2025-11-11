@@ -111,3 +111,4 @@ val make_expr : expr_kind -> Span.t -> expr
 val make_stmt : stmt_kind -> Span.t -> stmt
 val make_ty : ty_kind -> Span.t -> ty
 val make_pat : pat_kind -> Span.t -> pat
+val string_of_expr : expr -> string
