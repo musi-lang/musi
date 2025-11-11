@@ -358,6 +358,9 @@ let parse_modifiers t =
     | Token.KwUnsafe ->
       advance t;
       loop { mods with is_unsafe = true }
+    | Token.KwWeak ->
+      advance t;
+      loop { mods with is_weak = true }
     | Token.KwExtern -> (
       advance t;
       skip_trivia t;
