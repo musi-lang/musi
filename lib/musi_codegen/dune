@@ -8,3 +8,8 @@
  (name test_emitter)
  (modules test_emitter)
  (libraries alcotest musi_basic musi_lex musi_parse musi_codegen))
+
+(executable
+ (name test_encoder)
+ (modules test_encoder)
+ (libraries alcotest musi_basic musi_lex musi_parse musi_codegen))
