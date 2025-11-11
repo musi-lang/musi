@@ -150,10 +150,11 @@ let mark_export table interner diags (name, name_span) =
   match Symbol.lookup table name with
   | Some sym -> sym.is_exported <- true
   | None ->
-    let name_str = Interner.lookup interner name in
     error
       diags
-      (Printf.sprintf "cannot export undefined symbol '%s'" name_str)
+      (Printf.sprintf
+         "cannot export undefined symbol '%s'"
+         (Interner.lookup interner name))
       name_span
 
 let collect_stmt table interner diags stmt =
@@ -163,14 +164,18 @@ let collect_stmt table interner diags stmt =
 
 let parse_module file_id base_path module_path interner diags =
   let full_path = Filename.concat base_path (module_path ^ ".ms") in
-  let source = In_channel.with_open_text full_path In_channel.input_all in
-  let lexer = Lexer.make file_id source interner in
-  let tokens, lex_diags = Lexer.lex_all lexer in
-  diags := Diagnostic.merge [ !diags; lex_diags ];
-  let parser = Parser.make tokens interner in
-  let nodes, parse_diags = Parser.parse parser in
-  diags := Diagnostic.merge [ !diags; parse_diags ];
-  nodes
+  try
+    let source = In_channel.with_open_text full_path In_channel.input_all in
+    let lexer = Lexer.make file_id source interner in
+    let tokens, lex_diags = Lexer.lex_all lexer in
+    diags := Diagnostic.merge [ !diags; lex_diags ];
+    let parser = Parser.make tokens interner in
+    let nodes, parse_diags = Parser.parse parser in
+    diags := Diagnostic.merge [ !diags; parse_diags ];
+    nodes
+  with Sys_error _ ->
+    error diags (Printf.sprintf "module '%s' not found" module_path) Span.dummy;
+    []
 
 let collect_bindings table interner diags nodes =
   List.iter
@@ -194,12 +199,12 @@ let mark_exports table interner diags nodes =
 let rec build_module_graph cache visited file_id_counter base_path module_path
   interner diags =
   let full_path = Filename.concat base_path (module_path ^ ".ms") in
-  if Hashtbl.mem cache full_path then ()
-  else if List.mem full_path !visited then
+  if List.mem full_path !visited then
     error
       diags
       (Printf.sprintf "circular import '%s' detected" module_path)
       Span.dummy
+  else if Hashtbl.mem cache full_path then ()
   else (
     visited := full_path :: !visited;
     let nodes =
@@ -224,8 +229,7 @@ let rec build_module_graph cache visited file_id_counter base_path module_path
             interner
             diags
         | _ -> ())
-      nodes;
-    visited := List.filter (fun p -> p <> full_path) !visited)
+      nodes)
 
 let link_imports cache base_path table interner diags nodes =
   List.iter
