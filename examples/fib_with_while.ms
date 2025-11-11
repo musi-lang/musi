@@ -7,6 +7,5 @@ const fib := proc (n: Nat) -> Nat {
     (a, b) <- (b, a + b);
     i <- i + 1;
   }
-
   b
 };

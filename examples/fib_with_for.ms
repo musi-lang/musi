@@ -4,6 +4,5 @@ const fib := proc (n: Nat) -> Nat {
   var (a, b) := (0, 1);
 
   for i in 2..n do (a, b) <- (b, a + b);
-
   b
 };
