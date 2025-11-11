@@ -283,9 +283,3 @@ $RECYCLE.BIN/
 
 ## User settings
 xcuserdata/
-
-# Xmake
-.cache/
-.xmake/
-build/
-compile_commands.json
