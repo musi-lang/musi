@@ -7,14 +7,14 @@ let error diags msg span =
 let note diags msg span =
   diags := Diagnostic.add !diags (Diagnostic.note msg span)
 
-let collect_expr_binding table interner diags is_mutable name ty_opt span =
-  match Symbol.lookup_curr table name with
+let collect_expr_binding table interner diags is_mutable name ty_opt pat_span =
+  match Symbol.lookup table name with
   | Some existing ->
     let name_str = Interner.lookup interner name in
-    error diags (Printf.sprintf "redefinition of '%s'" name_str) span;
+    error diags (Printf.sprintf "redefinition of '%s'" name_str) pat_span;
     note
       diags
-      (Printf.sprintf "previous definition of '%s' was here" name_str)
+      (Printf.sprintf "previous definition of '%s' here" name_str)
       existing.span
   | None ->
     let ty =
@@ -22,7 +22,7 @@ let collect_expr_binding table interner diags is_mutable name ty_opt span =
       | Some t -> Types.from_node t
       | None -> Types.fresh_var ()
     in
-    let sym = { Symbol.name; ty = ref ty; is_mutable; span } in
+    let sym = { Symbol.name; ty = ref ty; is_mutable; span = pat_span } in
     ignore (Symbol.bind table name sym)
 
 let rec collect_2exprs table interner diags e1 e2 =
@@ -50,14 +50,34 @@ and collect_expr_block table interner diags exprs =
 and collect_match_case table interner diags case_body =
   collect_scoped table (fun () -> collect_expr table interner diags case_body)
 
+and validate_binding_mods diags mods span =
+  if mods.Node.is_unsafe then
+    error diags "'unsafe' modifier not allowed on bindings" span;
+  if mods.is_async then
+    error diags "'async' modifier not allowed on bindings" span;
+  if mods.is_exported then
+    error diags "'export' modifier not allowed on binding expressions" span
+
+and validate_expr_mods diags mods kind span =
+  if mods.Node.is_exported then
+    error
+      diags
+      (Printf.sprintf "'export' modifier not allowed on '%s' expressions" kind)
+      span
+
 and collect_expr table interner diags expr =
   match expr.Node.ekind with
-  | Node.ExprBinding (is_mutable, _ty_params, pat, ty_opt, init, _mods) ->
-    collect_pat table interner diags is_mutable pat ty_opt expr.span;
+  | Node.ExprBinding (is_mutable, _, pat, ty_opt, init, mods) ->
+    validate_binding_mods diags mods expr.span;
+    collect_pat table interner diags is_mutable pat ty_opt pat.span;
     collect_expr table interner diags init
-  | Node.ExprProc (_ty_params, _captures, params, _ret_ty, body_opt, _mods) ->
+  | Node.ExprProc (_, _, params, _, body_opt, mods) ->
+    validate_expr_mods diags mods "proc" expr.span;
     collect_expr_proc table interner diags params body_opt expr.span
-  | Node.ExprRecord _ | Node.ExprChoice _ -> ()
+  | Node.ExprRecord (_, _, mods) ->
+    validate_expr_mods diags mods "record" expr.span
+  | Node.ExprChoice (_, _, mods) ->
+    validate_expr_mods diags mods "choice" expr.span
   | Node.ExprBlock exprs -> collect_expr_block table interner diags exprs
   | Node.ExprIf (cond, then_br, else_opt) ->
     collect_2exprs table interner diags cond then_br;
