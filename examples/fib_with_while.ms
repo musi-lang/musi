@@ -3,9 +3,7 @@ const fib := proc (n: Nat) -> Nat {
     return n;
   }
 
-  var a: Nat := 0;
-  var b: Nat := 1;
-  var i: Nat := 2;
+  var (a, b, i) := (0, 1, 2);
 
   while i <= n do {
     (a, b) <- (b, a + b);
