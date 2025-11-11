@@ -94,8 +94,12 @@ let encode t procs instrs =
   let proc_buf = Buffer.create 256 in
   let code_buf = Buffer.create 1024 in
 
+  Binary.write_u32_le const_buf (Int32.of_int (List.length t.const_pool));
   List.iter (encode_const t const_buf) t.const_pool;
+
+  Binary.write_u32_le proc_buf (Int32.of_int (List.length t.procs));
   List.iter (encode_proc t proc_buf) t.procs;
+
   List.iter (encode_opcode code_buf) instrs;
 
   let const_size = Buffer.length const_buf in
