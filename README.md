@@ -49,13 +49,12 @@ counter.show();     // prints: `Counter is now: 2`
 git clone https://github.com/musi-lang/musi.git
 cd musi
 
-# build `msc` a.k.a. Musi Compiler
+# build Musi Compiler
 opam exec -- dune pkg lock
 opam exec -- dune build
 
-# build `musi` a.k.a. Musi Runtime Environment (MRE)
-xmake project -k compile_commands --lsp=clangd
-xmake build
+# build Musi Runtime Environment
+cargo build
 ```
 
 ### Run & Test
