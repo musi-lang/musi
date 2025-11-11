@@ -12,7 +12,7 @@ default-run = "musi"
 
 [[bin]]
 "name" = "musi"
-"path" = "runtime/main.rs"
+"path" = "src/main.rs"
 
 [dependencies]
 libc = { version = "0.2.177", default-features = false }
