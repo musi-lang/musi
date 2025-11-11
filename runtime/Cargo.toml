@@ -10,12 +10,12 @@ keywords = ["musi", "programming language"]
 categories = ["Programming Language"]
 default-run = "musi"
 
-
 [[bin]]
 "name" = "musi"
 "path" = "runtime/main.rs"
 
 [dependencies]
+libc = { version = "0.2.177", default-features = false }
 
 [dev-dependencies]
 
