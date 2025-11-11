@@ -21,6 +21,5 @@ proc compute(x: Nat, var result: Nat, var error: Bool) {
 var value := 10;
 incr(value);
 
-var x := 5;
-var y := 15;
+var (x, y) := (5, 15);
 swap(x, y);
