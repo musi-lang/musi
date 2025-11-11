@@ -1,0 +1,1 @@
+weak const x := {};
