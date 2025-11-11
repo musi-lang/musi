@@ -16,6 +16,7 @@ default-run = "musi"
 
 [dependencies]
 libc = { version = "0.2.177", default-features = false }
+libffi = "4.0.0"
 
 [dev-dependencies]
 
