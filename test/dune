@@ -4,18 +4,18 @@
  (libraries alcotest unix musi_basic musi_lex musi_parse))
 
 (executable
- (name run_lexer_tests)
- (modules run_lexer_tests)
+ (name run_lexer)
+ (modules run_lexer)
  (libraries alcotest unix musi_basic musi_lex test_helpers))
 
 (executable
- (name run_parser_tests)
- (modules run_parser_tests)
+ (name run_parser)
+ (modules run_parser)
  (libraries alcotest unix musi_basic musi_lex musi_parse test_helpers))
 
 (executable
- (name run_resolver_tests)
- (modules run_resolver_tests)
+ (name run_resolver)
+ (modules run_resolver)
  (libraries
   alcotest
   unix
@@ -26,8 +26,8 @@
   test_helpers))
 
 (executable
- (name run_checker_tests)
- (modules run_checker_tests)
+ (name run_checker)
+ (modules run_checker)
  (libraries
   alcotest
   unix
@@ -42,25 +42,25 @@
  (deps
   (source_tree lexer))
  (action
-  (run ./run_lexer_tests.exe)))
+  (run ./run_lexer.exe)))
 
 (rule
  (alias runtest)
  (deps
   (source_tree parser))
  (action
-  (run ./run_parser_tests.exe)))
+  (run ./run_parser.exe)))
 
 (rule
  (alias runtest)
  (deps
   (source_tree resolver))
  (action
-  (run ./run_resolver_tests.exe)))
+  (run ./run_resolver.exe)))
 
 (rule
  (alias runtest)
  (deps
   (source_tree checker))
  (action
-  (run ./run_checker_tests.exe)))
+  (run ./run_checker.exe)))
