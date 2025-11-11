@@ -73,7 +73,7 @@ and stmt_kind =
   | StmtExpr of expr * bool
   | StmtError
 
-and ty = { tkind : ty_kind; span : Span.t }
+and ty = { tkind : ty_kind; is_const : bool; span : Span.t }
 
 and ty_kind =
   | TyNamed of name
@@ -120,5 +120,6 @@ val make_expr_binary : Token.kind -> expr -> expr -> Span.t -> expr
 val make_expr_literal : literal_kind -> Span.t -> expr
 val make_stmt : stmt_kind -> Span.t -> stmt
 val make_ty : ty_kind -> Span.t -> ty
+val make_ty_const : ty_kind -> Span.t -> ty
 val make_pat : pat_kind -> Span.t -> pat
 val string_of_expr : expr -> string

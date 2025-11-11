@@ -73,7 +73,7 @@ and stmt_kind =
   | StmtExpr of expr * bool
   | StmtError
 
-and ty = { tkind : ty_kind; span : Span.t }
+and ty = { tkind : ty_kind; is_const : bool; span : Span.t }
 
 and ty_kind =
   | TyNamed of name
@@ -130,7 +130,8 @@ let make_expr_binary op left right span =
 
 let make_expr_literal lit span = { ekind = ExprLiteral lit; span }
 let make_stmt skind span = { skind; span }
-let make_ty tkind span = { tkind; span }
+let make_ty tkind span = { tkind; is_const = false; span }
+let make_ty_const tkind span = { tkind; is_const = true; span }
 let make_pat pkind span = { pkind; span }
 
 let string_of_expr expr =
