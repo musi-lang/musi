@@ -19,7 +19,11 @@ let collect_expr_binding table interner diags is_mutable name ty_opt pat_span =
   | None ->
     let ty =
       match ty_opt with
-      | Some t -> Types.from_node t
+      | Some t ->
+        let lookup name =
+          Option.map (fun s -> !(s.Symbol.ty)) (Symbol.lookup table name)
+        in
+        Types.from_node lookup t
       | None -> Types.fresh_var ()
     in
     let sym = { Symbol.name; ty = ref ty; is_mutable; span = pat_span } in
@@ -156,5 +160,10 @@ let collect_stmt table interner diags stmt =
 
 let resolve nodes interner diags =
   let table = Symbol.empty_table () in
+  let table = Symbol.prelude table interner in
+  List.iter (collect_stmt table interner diags) nodes;
+  table
+
+let resolve_with_table table nodes interner diags =
   List.iter (collect_stmt table interner diags) nodes;
   table
