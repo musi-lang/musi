@@ -1,0 +1,303 @@
+open Musi_basic
+open Musi_parse
+open Musi_lex
+
+type const_kind =
+  | ConstInt of int64
+  | ConstBin of float
+  | ConstStr of Interner.name
+  | ConstBool of bool
+  | ConstUnit
+
+type loop_ctx = { break_lbl : int; cont_lbl : int }
+type instr_or_label = IInstr of Instr.t | ILabel of int
+
+let instr_size = function
+  | Instr.Br _ | Instr.BrTrue _ | Instr.BrFalse _ | Instr.Call _
+  | Instr.CallTail _ | Instr.LdC _ | Instr.LdCI4 _ | Instr.LdCStr _
+  | Instr.LdLoc _ | Instr.StLoc _ | Instr.LdArg _ | Instr.NewObj _
+  | Instr.LdFld _ | Instr.StFld _ | Instr.IsInst _ | Instr.CastClass _ ->
+    5
+  | _ -> 1
+
+let resolve_labels code =
+  let rec build_map pos acc = function
+    | [] -> acc
+    | ILabel lbl :: rest -> build_map pos ((lbl, pos) :: acc) rest
+    | IInstr instr :: rest -> build_map (pos + instr_size instr) acc rest
+  in
+  let label_map = build_map 0 [] code in
+  let resolve_offset lbl =
+    match List.assoc_opt lbl label_map with Some offset -> offset | None -> 0
+  in
+  List.filter_map
+    (function
+      | ILabel _ -> None
+      | IInstr (Instr.Br lbl) -> Some (Instr.Br (resolve_offset lbl))
+      | IInstr (Instr.BrTrue lbl) -> Some (Instr.BrTrue (resolve_offset lbl))
+      | IInstr (Instr.BrFalse lbl) -> Some (Instr.BrFalse (resolve_offset lbl))
+      | IInstr instr -> Some instr)
+    code
+
+type t = {
+    mutable const_pool : const_kind list
+  ; mutable locals : (Interner.name * int) list
+  ; mutable next_local : int
+  ; mutable loop_stack : loop_ctx list
+  ; mutable next_label : int
+}
+
+let make () =
+  {
+    const_pool = []
+  ; locals = []
+  ; next_local = 0
+  ; loop_stack = []
+  ; next_label = 0
+  }
+
+let fresh_label t =
+  let lbl = t.next_label in
+  t.next_label <- t.next_label + 1;
+  lbl
+
+let push_loop t break_lbl cont_lbl =
+  t.loop_stack <- { break_lbl; cont_lbl } :: t.loop_stack
+
+let pop_loop t =
+  match t.loop_stack with _ :: rest -> t.loop_stack <- rest | [] -> ()
+
+let curr_loop t = match t.loop_stack with ctx :: _ -> Some ctx | [] -> None
+let find_local t name = List.assoc_opt name t.locals
+
+let add_local t name =
+  match find_local t name with
+  | Some slot -> slot
+  | None ->
+    let slot = t.next_local in
+    t.locals <- (name, slot) :: t.locals;
+    t.next_local <- t.next_local + 1;
+    slot
+
+let add_const t c =
+  match List.find_index (fun x -> x = c) t.const_pool with
+  | Some idx -> idx
+  | None ->
+    let idx = List.length t.const_pool in
+    t.const_pool <- t.const_pool @ [ c ];
+    idx
+
+let emit_expr_literal t = function
+  | Node.LitInt s ->
+    let n = Int64.of_string s in
+    let idx = add_const t (ConstInt n) in
+    [ Instr.LdC idx ]
+  | Node.LitBin s ->
+    let f = Float.of_string s in
+    let idx = add_const t (ConstBin f) in
+    [ Instr.LdC idx ]
+  | Node.LitStr name ->
+    let idx = add_const t (ConstStr name) in
+    [ Instr.LdC idx ]
+  | Node.LitRune code ->
+    let idx = add_const t (ConstInt (Int64.of_int code)) in
+    [ Instr.LdC idx ]
+  | Node.LitBool b ->
+    let idx = add_const t (ConstBool b) in
+    [ Instr.LdC idx ]
+  | Node.LitRecord _ -> []
+
+let emit_expr_binary = function
+  | Token.Plus -> [ Instr.Add ]
+  | Token.Minus -> [ Instr.Sub ]
+  | Token.Star -> [ Instr.Mul ]
+  | Token.Slash -> [ Instr.Div ]
+  | Token.KwMod -> [ Instr.Mod ]
+  | Token.KwAnd -> [ Instr.And ]
+  | Token.KwOr -> [ Instr.Or ]
+  | Token.KwXor -> [ Instr.Xor ]
+  | Token.KwShl -> [ Instr.Shl ]
+  | Token.KwShr -> [ Instr.Shr ]
+  | Token.Eq -> [ Instr.CmpEq ]
+  | Token.EqSlashEq -> [ Instr.CmpNe ]
+  | Token.Lt -> [ Instr.CmpLt ]
+  | Token.Gt -> [ Instr.CmpGt ]
+  | Token.LtEq -> [ Instr.CmpLe ]
+  | Token.GtEq -> [ Instr.CmpGe ]
+  | _ -> []
+
+let emit_expr_unary = function
+  | Token.Minus -> [ Instr.Neg ]
+  | Token.KwNot -> [ Instr.Not ]
+  | _ -> []
+
+let rec emit_expr t expr =
+  match expr.Node.ekind with
+  | Node.ExprLiteral lit -> emit_expr_literal t lit
+  | Node.ExprBinary (op, left, right) ->
+    emit_expr t left @ emit_expr t right @ emit_expr_binary op
+  | Node.ExprUnary (op, operand) -> emit_expr t operand @ emit_expr_unary op
+  | Node.ExprIdent name ->
+    let slot = find_local t name |> Option.value ~default:0 in
+    [ Instr.LdLoc slot ]
+  | Node.ExprBlock exprs -> List.concat_map (emit_expr t) exprs
+  | Node.ExprAssign (target, value) -> emit_expr_assign t target value
+  | Node.ExprReturn None -> [ Instr.Ret ]
+  | Node.ExprReturn (Some e) -> emit_expr t e @ [ Instr.Ret ]
+  | Node.ExprBreak _ -> (
+    match curr_loop t with Some ctx -> [ Instr.Br ctx.break_lbl ] | None -> [])
+  | Node.ExprContinue -> (
+    match curr_loop t with Some ctx -> [ Instr.Br ctx.cont_lbl ] | None -> [])
+  | Node.ExprIf (cond, then_br, else_br) -> emit_expr_if t cond then_br else_br
+  | Node.ExprWhile (cond, body) -> emit_expr_while t cond body
+  | Node.ExprDo (body, cond_opt) -> emit_expr_do t body cond_opt
+  | Node.ExprFor (pat, iter, body) -> emit_expr_for t pat iter body
+  | Node.ExprCall (callee, args, _) -> emit_expr_call t callee args
+  | Node.ExprBinding (_, _, pat, _, value, _) -> emit_expr_binding t pat value
+  | Node.ExprTuple exprs | Node.ExprArray exprs ->
+    List.concat_map (emit_expr t) exprs
+  | Node.ExprRecord (_, fields, _) -> emit_expr_record t fields
+  | Node.ExprField (obj, field, _) -> emit_expr_field t obj field
+  | Node.ExprCast (e, _) | Node.ExprTest (e, _) -> emit_expr t e
+  | Node.ExprUnwrap e
+  | Node.ExprTry e
+  | Node.ExprDefer e
+  | Node.ExprAsync e
+  | Node.ExprUnsafe e
+  | Node.ExprAwait e ->
+    emit_expr t e
+  | Node.ExprYield (Some e) -> emit_expr t e
+  | Node.ExprYield None | _ -> []
+
+and emit_expr_assign t target value =
+  let value_code = emit_expr t value in
+  match target.Node.ekind with
+  | Node.ExprIdent name ->
+    let slot = add_local t name in
+    value_code @ [ Instr.StLoc slot ]
+  | _ -> value_code
+
+and emit_expr_while t cond body =
+  let loop_lbl = fresh_label t in
+  let cond_lbl = fresh_label t in
+  let end_lbl = fresh_label t in
+  push_loop t end_lbl cond_lbl;
+  let code =
+    [ IInstr (Instr.Br cond_lbl) ]
+    @ [ ILabel loop_lbl ]
+    @ List.map (fun i -> IInstr i) (emit_expr t body)
+    @ [ ILabel cond_lbl ]
+    @ List.map (fun i -> IInstr i) (emit_expr t cond)
+    @ [ IInstr (Instr.BrTrue loop_lbl) ]
+    @ [ ILabel end_lbl ]
+  in
+  pop_loop t;
+  resolve_labels code
+
+and emit_expr_do t body cond_opt =
+  let span = body.Node.span in
+  match cond_opt with
+  | None ->
+    (* `do { body }` -> `while true { body }` *)
+    let true_expr = Node.make_expr_literal (Node.LitBool true) span in
+    emit_expr_while t true_expr body
+  | Some cond ->
+    (* `do { body } while cond` -> `body; while cond { body }` *)
+    emit_expr t body @ emit_expr_while t cond body
+
+and emit_expr_if t cond then_br else_br =
+  let else_lbl = fresh_label t in
+  let end_lbl = fresh_label t in
+  let cond_code = emit_expr t cond in
+  let then_code = emit_expr t then_br in
+  match else_br with
+  | None ->
+    let code =
+      List.map (fun i -> IInstr i) cond_code
+      @ [ IInstr (Instr.BrFalse else_lbl) ]
+      @ List.map (fun i -> IInstr i) then_code
+      @ [ ILabel else_lbl ]
+    in
+    resolve_labels code
+  | Some else_expr ->
+    let else_code = emit_expr t else_expr in
+    let code =
+      List.map (fun i -> IInstr i) cond_code
+      @ [ IInstr (Instr.BrFalse else_lbl) ]
+      @ List.map (fun i -> IInstr i) then_code
+      @ [ IInstr (Instr.Br end_lbl) ]
+      @ [ ILabel else_lbl ]
+      @ List.map (fun i -> IInstr i) else_code
+      @ [ ILabel end_lbl ]
+    in
+    resolve_labels code
+
+and emit_expr_call t callee args =
+  let args_code = List.concat_map (emit_expr t) args in
+  let callee_code = emit_expr t callee in
+  args_code @ callee_code @ [ Instr.Call 0 ]
+
+and emit_expr_binding t pat value =
+  let value_code = emit_expr t value in
+  match pat.Node.pkind with
+  | Node.PatIdent name ->
+    let slot = add_local t name in
+    value_code @ [ Instr.StLoc slot ]
+  | _ -> value_code
+
+and emit_expr_for t pat iter body =
+  let span = iter.Node.span in
+  match iter.Node.ekind with
+  | Node.ExprRange (start, end_, inclusive) ->
+    (*  `for i in start..end do body` ->
+        `i := start; while i < end do { body; i <- i + 1 }` *)
+    let iter_name =
+      match pat.Node.pkind with
+      | Node.PatIdent name -> name
+      | _ -> Interner.intern (Interner.create ()) "_i"
+    in
+    let iter_slot = add_local t iter_name in
+    let cmp_op = if inclusive then Token.LtEq else Token.Lt in
+    let init_code = emit_expr t start @ [ Instr.StLoc iter_slot ] in
+    let cond_expr =
+      Node.make_expr_binary
+        cmp_op
+        (Node.make_expr_ident iter_name span)
+        end_
+        span
+    in
+    let inc_expr =
+      Node.make_expr
+        (Node.ExprAssign
+           ( Node.make_expr_ident iter_name span
+           , Node.make_expr_binary
+               Token.Plus
+               (Node.make_expr_ident iter_name span)
+               (Node.make_expr_literal (Node.LitInt "1") span)
+               span ))
+        span
+    in
+    let body_with_inc =
+      Node.make_expr (Node.ExprBlock [ body; inc_expr ]) span
+    in
+    init_code @ emit_expr_while t cond_expr body_with_inc
+  | _ -> []
+
+and emit_expr_record _t fields =
+  let field_count = List.length fields in
+  [ Instr.NewObj field_count ]
+
+and emit_expr_field t obj _field =
+  let obj_code = emit_expr t obj in
+  let field_idx = 0 in
+  (* TODO: resolve field index from type info *)
+  obj_code @ [ Instr.LdFld field_idx ]
+
+let emit_stmt t stmt =
+  match stmt.Node.skind with
+  | Node.StmtExpr (expr, _) -> emit_expr t expr
+  | Node.StmtImport _ | Node.StmtExport _ -> [] (* handled at link time *)
+  | _ -> []
+
+let emit t stmts = List.concat_map (emit_stmt t) stmts
+let const_pool t = t.const_pool

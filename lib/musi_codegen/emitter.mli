@@ -12,3 +12,4 @@ type t
 
 val make : unit -> t
 val emit : t -> Node.stmt list -> Instr.t list
+val const_pool : t -> const_kind list
