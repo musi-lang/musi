@@ -8,7 +8,7 @@ const read_file := proc (path: Ptr<Unit>, buffer: Ptr<Unit>, size: Nat) -> Nat {
     const file := fopen(path, path);
     const bytes_read := fread(buffer, 1, size, file);
     fclose(file);
-    return bytes_read;
+    bytes_read
   }
 };
 
@@ -17,6 +17,6 @@ const write_file := proc (path: Ptr<Unit>, data: Ptr<Unit>, size: Nat) -> Nat {
     const file := fopen(path, path);
     const bytes_written := fwrite(data, 1, size, file);
     fclose(file);
-    return bytes_written;
+    bytes_written
   }
 };

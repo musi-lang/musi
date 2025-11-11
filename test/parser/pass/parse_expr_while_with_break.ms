@@ -6,5 +6,5 @@ const find := proc (target: Int) -> Int {
     };
     i <- i + 1;
   };
-  return -1;
+  -1
 };

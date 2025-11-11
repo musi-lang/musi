@@ -4,7 +4,7 @@ const find_first := proc (items: [Int], target: Int) -> Int {
       break x;
     };
   };
-  return -1;
+  -1
 };
 
 const skip_evens := proc (items: [Int]) {

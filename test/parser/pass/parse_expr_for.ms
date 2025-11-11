@@ -3,7 +3,7 @@ const sum := proc (items: [Int]) -> Int {
   for x in items do {
     total <- total + x;
   };
-  return total;
+  total
 };
 
 const find := proc (items: [Int], target: Int) -> Int {
@@ -12,7 +12,7 @@ const find := proc (items: [Int], target: Int) -> Int {
       break x;
     };
   };
-  return -1;
+  -1
 };
 
 const numbers := [1, 2, 3, 4, 5];
