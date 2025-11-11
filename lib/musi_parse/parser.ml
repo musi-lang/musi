@@ -862,13 +862,15 @@ let parse_ident_list t =
   sep_by_opt
     Token.Comma
     (fun t ->
+      skip_trivia t;
+      let tok = curr t in
       let name = expect_ident t "expected identifier" in
       skip_trivia t;
       if (curr t).kind = Token.KwAs then (
         advance t;
         let _ = expect_ident t "expected identifier after 'as'" in
-        name)
-      else name)
+        (name, tok.span))
+      else (name, tok.span))
     t
 
 let parse_named_or_namespace_spec ~kw ~named_ctor ~namespace_ctor t =
