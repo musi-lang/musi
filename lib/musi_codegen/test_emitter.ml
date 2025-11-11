@@ -164,6 +164,16 @@ let test_proc_with_body () =
     true
     (List.exists (function Instr.Ret -> true | _ -> false) instrs)
 
+let test_proc_extern () =
+  let instrs, diags, emitter = parse_and_emit "extern \"C\" proc test()" in
+  (check bool) "no errors" false (Diagnostic.has_errors diags);
+  (check int) "no instructions emitted" 0 (List.length instrs);
+  match Emitter.procs emitter with
+  | [ proc ] ->
+    (check bool) "'is_extern' is true" true proc.is_extern;
+    (check bool) "'abi' is Some" true (Option.is_some proc.abi)
+  | _ -> fail "expected 1 proc in table"
+
 let () =
   run
     "Emitter"
@@ -198,5 +208,6 @@ let () =
           test_case "proc definition" `Quick test_emit_expr_proc
         ; test_case "proc with params" `Quick test_proc_with_params
         ; test_case "proc with body" `Quick test_proc_with_body
+        ; test_case "extern proc" `Quick test_proc_extern
         ] )
     ]

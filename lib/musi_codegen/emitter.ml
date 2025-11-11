@@ -44,6 +44,8 @@ type proc_info = {
   ; param_count : int
   ; local_count : int
   ; code_offset : int
+  ; is_extern : bool
+  ; abi : Interner.name option
 }
 
 type t = {
@@ -178,7 +180,8 @@ let rec emit_expr t expr =
   | Node.ExprAwait e ->
     emit_expr t e
   | Node.ExprYield (Some e) -> emit_expr t e
-  | Node.ExprProc (_, _, params, _, body, _) -> emit_expr_proc t params body
+  | Node.ExprProc (_, _, params, _, body, mods) ->
+    emit_expr_proc t params body mods
   | Node.ExprYield None | _ -> []
 
 and emit_expr_assign t target value =
@@ -250,12 +253,16 @@ and emit_expr_call t callee args =
   args_code @ callee_code @ [ Instr.Call 0 ]
 
 and emit_expr_binding t pat value =
-  let value_code = emit_expr t value in
-  match pat.Node.pkind with
-  | Node.PatIdent name ->
-    let slot = add_local t name in
-    value_code @ [ Instr.StLoc slot ]
-  | _ -> value_code
+  match value.Node.ekind with
+  | Node.ExprProc (_, _, _, _, _, mods) when Option.is_some mods.Node.abi ->
+    emit_expr t value
+  | _ -> (
+    let value_code = emit_expr t value in
+    match pat.Node.pkind with
+    | Node.PatIdent name ->
+      let slot = add_local t name in
+      value_code @ [ Instr.StLoc slot ]
+    | _ -> value_code)
 
 and emit_expr_for t pat iter body =
   let span = iter.Node.span in
@@ -304,32 +311,38 @@ and emit_expr_field t obj _field =
   let field_idx = 0 in
   obj_code @ [ Instr.LdFld field_idx ]
 
-and emit_expr_proc t params body =
+and emit_expr_proc t params body mods =
   let proc_id = t.next_proc_id in
   t.next_proc_id <- t.next_proc_id + 1;
+  let is_extern = Option.is_some mods.Node.abi in
   let saved_locals = t.locals in
   let saved_next_local = t.next_local in
   t.locals <- [];
   t.next_local <- 0;
   List.iter (fun p -> ignore (add_local t p.Node.pname)) params;
-  let body_code = match body with Some e -> emit_expr t e | None -> [] in
+  let body_code =
+    if is_extern then []
+    else match body with Some e -> emit_expr t e | None -> []
+  in
   let proc =
     {
       proc_name = Interner.intern (Interner.create ()) "<lambda>"
     ; param_count = List.length params
     ; local_count = t.next_local
     ; code_offset = 0
+    ; is_extern
+    ; abi = mods.Node.abi
     }
   in
   t.procs <- t.procs @ [ proc ];
   t.locals <- saved_locals;
   t.next_local <- saved_next_local;
-  body_code @ [ Instr.LdCI4 (Int32.of_int proc_id) ]
+  if is_extern then [] else body_code @ [ Instr.LdCI4 (Int32.of_int proc_id) ]
 
 let emit_stmt t stmt =
   match stmt.Node.skind with
   | Node.StmtExpr (expr, _) -> emit_expr t expr
-  | Node.StmtImport _ | Node.StmtExport _ -> [] (* handled @ link time *)
+  | Node.StmtImport _ | Node.StmtExport _ -> []
   | _ -> []
 
 let emit t stmts = List.concat_map (emit_stmt t) stmts

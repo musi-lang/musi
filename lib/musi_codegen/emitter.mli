@@ -13,6 +13,8 @@ type proc_info = {
   ; param_count : int
   ; local_count : int
   ; code_offset : int
+  ; is_extern : bool
+  ; abi : Interner.name option
 }
 
 type t
