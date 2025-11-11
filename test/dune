@@ -1,7 +1,7 @@
 (library
  (name test_helpers)
  (modules test_helpers)
- (libraries alcotest unix))
+ (libraries alcotest unix musi_basic musi_lex musi_parse))
 
 (executable
  (name run_lexer_tests)
@@ -16,6 +16,18 @@
 (executable
  (name run_resolver_tests)
  (modules run_resolver_tests)
+ (libraries
+  alcotest
+  unix
+  musi_basic
+  musi_lex
+  musi_parse
+  musi_sema
+  test_helpers))
+
+(executable
+ (name run_checker_tests)
+ (modules run_checker_tests)
  (libraries
   alcotest
   unix
@@ -45,3 +57,10 @@
   (source_tree resolver))
  (action
   (run ./run_resolver_tests.exe)))
+
+(rule
+ (alias runtest)
+ (deps
+  (source_tree checker))
+ (action
+  (run ./run_checker_tests.exe)))
