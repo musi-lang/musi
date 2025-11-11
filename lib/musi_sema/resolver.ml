@@ -65,7 +65,9 @@ and validate_expr_mods diags mods kind span =
     error
       diags
       (Printf.sprintf "'export' modifier not allowed on '%s' expressions" kind)
-      span
+      span;
+  if Option.is_some mods.abi && not mods.is_unsafe then
+    error diags "'extern' procedures must be marked 'unsafe'" span
 
 and collect_expr table interner diags expr =
   match expr.Node.ekind with
