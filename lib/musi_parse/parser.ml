@@ -944,11 +944,11 @@ let parse_stmt t =
     advance t;
     parse_stmt_import t tok
   | Token.KwExport -> (
-    let next_tok = Token.peek t.stream in
+    advance t;
+    skip_trivia t;
+    let next_tok = curr t in
     match next_tok.kind with
-    | Token.LBrace | Token.Star ->
-      advance t;
-      parse_stmt_export t tok
+    | Token.LBrace | Token.Star -> parse_stmt_export t tok
     | _ ->
       Node.make_stmt (Node.StmtExpr (parse_expr t PrecNone, false)) Span.dummy)
   | _ ->
