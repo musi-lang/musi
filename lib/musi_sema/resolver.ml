@@ -67,9 +67,9 @@ and validate_expr_mods diags mods kind span =
 
 and collect_expr table interner diags expr =
   match expr.Node.ekind with
-  | Node.ExprBinding (is_mutable, _, pat, ty_opt, init, mods) ->
+  | Node.ExprBinding (is_const, _, pat, ty_opt, init, mods) ->
     validate_binding_mods diags mods expr.span;
-    collect_pat table interner diags is_mutable pat ty_opt pat.span;
+    collect_pat table interner diags (not is_const) pat ty_opt pat.span;
     collect_expr table interner diags init
   | Node.ExprProc (_, _, params, _, body_opt, mods) ->
     validate_expr_mods diags mods "proc" expr.span;
