@@ -4,6 +4,7 @@ type t = {
     name : Interner.name
   ; ty : Types.t ref
   ; is_mutable : bool
+  ; mutable is_exported : bool
   ; span : Span.t
 }
 

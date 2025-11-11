@@ -4,6 +4,7 @@ type t = {
     name : Interner.name
   ; ty : Types.t ref
   ; is_mutable : bool
+  ; mutable is_exported : bool
   ; span : Span.t
 }
 
@@ -68,6 +69,7 @@ let prelude table interner =
         name = n
       ; ty = ref (Types.TyNamed n)
       ; is_mutable = false
+      ; is_exported = true
       ; span = dummy_span
       }
     in
