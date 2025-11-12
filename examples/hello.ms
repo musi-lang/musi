@@ -1,3 +1,3 @@
-import { writeln } from "stdlib/io.ms";
+import { writeln } from "libstd/io.ms";
 
 writeln("Hello, World!");

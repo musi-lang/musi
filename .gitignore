@@ -26,8 +26,8 @@ _priv/
 !README.md
 
 # Musi Standard Library files
-!stdlib/**/*.ms
-stdlib/**/*.mso
+!libstd/**/*.ms
+libstd/**/*.mso
 
 .augment-guidelines
 .augmentignore

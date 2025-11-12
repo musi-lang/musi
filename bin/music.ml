@@ -1,7 +1,7 @@
 open Musi_drive
 
 let usage () =
-  Printf.eprintf "usage: music <input.ms> [-o <output.msc>]\n";
+  Printf.eprintf "usage: music <input.ms> [-o <output.mso>]\n";
   exit 1
 
 let () =
@@ -14,8 +14,8 @@ let () =
       | "-o" :: out :: _ -> out
       | _ ->
         if Filename.check_suffix input ".ms" then
-          Filename.chop_suffix input ".ms" ^ ".msc"
-        else input ^ ".msc"
+          Filename.chop_suffix input ".ms" ^ ".mso"
+        else input ^ ".mso"
     in
     Driver.compile ~input_path:input ~output_path:output
   | _ -> usage ()
