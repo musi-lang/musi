@@ -12,19 +12,22 @@ type const_kind =
 type loop_ctx = { break_lbl : int; cont_lbl : int }
 type instr_or_label = IInstr of Instr.t | ILabel of int
 
-let instr_size = function
-  | Instr.Br _ | Instr.BrTrue _ | Instr.BrFalse _ | Instr.Call _
-  | Instr.CallTail _ | Instr.LdC _ | Instr.LdCI4 _ | Instr.LdCStr _
-  | Instr.LdLoc _ | Instr.StLoc _ | Instr.LdArg _ | Instr.NewObj _
-  | Instr.LdFld _ | Instr.StFld _ | Instr.IsInst _ | Instr.AsInst _ ->
+let instr_size interner = function
+  | Instr.Call name | Instr.CallTail name ->
+    1 + String.length (Interner.lookup interner name) + 1
+  | Instr.Br _ | Instr.BrTrue _ | Instr.BrFalse _ | Instr.LdC _ | Instr.LdCI4 _
+  | Instr.LdCStr _ | Instr.LdLoc _ | Instr.StLoc _ | Instr.LdArg _
+  | Instr.NewObj _ | Instr.LdFld _ | Instr.StFld _ | Instr.IsInst _
+  | Instr.AsInst _ ->
     5
   | _ -> 1
 
-let resolve_labels code =
+let resolve_labels interner code =
   let rec build_map pos acc = function
     | [] -> acc
     | ILabel lbl :: rest -> build_map pos ((lbl, pos) :: acc) rest
-    | IInstr instr :: rest -> build_map (pos + instr_size instr) acc rest
+    | IInstr instr :: rest ->
+      build_map (pos + instr_size interner instr) acc rest
   in
   let label_map = build_map 0 [] code in
   let resolve_offset lbl =
@@ -56,9 +59,13 @@ type t = {
   ; mutable next_label : int
   ; mutable procs : proc_info list
   ; mutable next_proc_id : int
+  ; mutable proc_map : (Interner.name * int) list
+  ; mutable code : Instr.t list
+  ; interner : Interner.t
 }
 
 let make () =
+  let interner = Interner.create () in
   {
     const_pool = []
   ; locals = []
@@ -67,6 +74,9 @@ let make () =
   ; next_label = 0
   ; procs = []
   ; next_proc_id = 0
+  ; proc_map = []
+  ; code = []
+  ; interner
   }
 
 let fresh_label t =
@@ -207,7 +217,7 @@ and emit_expr_while t cond body =
     @ [ ILabel end_lbl ]
   in
   pop_loop t;
-  resolve_labels code
+  resolve_labels (Interner.create ()) code
 
 and emit_expr_do t body cond_opt =
   let span = body.Node.span in
@@ -233,7 +243,7 @@ and emit_expr_if t cond then_br else_br =
       @ List.map (fun i -> IInstr i) then_code
       @ [ ILabel else_lbl ]
     in
-    resolve_labels code
+    resolve_labels (Interner.create ()) code
   | Some else_expr ->
     let else_code = emit_expr t else_expr in
     let code =
@@ -245,17 +255,20 @@ and emit_expr_if t cond then_br else_br =
       @ List.map (fun i -> IInstr i) else_code
       @ [ ILabel end_lbl ]
     in
-    resolve_labels code
+    resolve_labels (Interner.create ()) code
 
 and emit_expr_call t callee args =
   let args_code = List.concat_map (emit_expr t) args in
-  let callee_code = emit_expr t callee in
-  args_code @ callee_code @ [ Instr.Call 0 ]
+  match callee.Node.ekind with
+  | Node.ExprIdent name -> args_code @ [ Instr.Call name ]
+  | _ ->
+    let callee_code = emit_expr t callee in
+    let dummy_name = Interner.intern (Interner.create ()) "" in
+    args_code @ callee_code @ [ Instr.Call dummy_name ]
 
 and emit_expr_binding t pat value =
   match value.Node.ekind with
-  | Node.ExprProc (_, _, params, _, body, mods)
-    when Option.is_some mods.Node.abi ->
+  | Node.ExprProc (_, _, params, _, body, mods) ->
     let proc_name =
       match pat.Node.pkind with
       | Node.PatIdent name -> name
@@ -336,22 +349,30 @@ and emit_expr_proc_named t proc_name params body mods =
   List.iter (fun p -> ignore (add_local t p.Node.pname)) params;
   let body_code =
     if is_extern then []
-    else match body with Some e -> emit_expr t e | None -> []
+    else
+      match body with
+      | Some e -> emit_expr t e @ [ Instr.Ret ]
+      | None -> [ Instr.Ret ]
+  in
+  let code_offset =
+    List.fold_left (fun acc i -> acc + instr_size t.interner i) 0 t.code
   in
   let proc =
     {
       proc_name
     ; param_count = List.length params
     ; local_count = t.next_local
-    ; code_offset = 0
+    ; code_offset
     ; is_extern
     ; abi = mods.Node.abi
     }
   in
   t.procs <- t.procs @ [ proc ];
+  t.proc_map <- (proc_name, proc_id) :: t.proc_map;
+  t.code <- t.code @ body_code;
   t.locals <- saved_locals;
   t.next_local <- saved_next_local;
-  if is_extern then [] else body_code @ [ Instr.LdCI4 (Int32.of_int proc_id) ]
+  []
 
 let emit_stmt t stmt =
   match stmt.Node.skind with
@@ -359,6 +380,9 @@ let emit_stmt t stmt =
   | Node.StmtImport _ | Node.StmtExport _ -> []
   | _ -> []
 
-let emit t stmts = List.concat_map (emit_stmt t) stmts
+let emit t stmts =
+  let top_level = List.concat_map (emit_stmt t) stmts in
+  t.code @ top_level
+
 let const_pool t = t.const_pool
 let procs t = t.procs
