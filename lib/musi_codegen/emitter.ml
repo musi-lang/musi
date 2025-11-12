@@ -16,7 +16,7 @@ let instr_size = function
   | Instr.Br _ | Instr.BrTrue _ | Instr.BrFalse _ | Instr.Call _
   | Instr.CallTail _ | Instr.LdC _ | Instr.LdCI4 _ | Instr.LdCStr _
   | Instr.LdLoc _ | Instr.StLoc _ | Instr.LdArg _ | Instr.NewObj _
-  | Instr.LdFld _ | Instr.StFld _ | Instr.IsInst _ | Instr.CastClass _ ->
+  | Instr.LdFld _ | Instr.StFld _ | Instr.IsInst _ | Instr.AsInst _ ->
     5
   | _ -> 1
 

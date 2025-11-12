@@ -66,7 +66,7 @@ let encode_opcode buf = function
   | Instr.LdCI4M1 -> Buffer.add_char buf '\x15'
   | Instr.LdCUnit -> Buffer.add_char buf '\x21'
   | Instr.IsInst idx -> write_op_u32 buf '\x90' idx
-  | Instr.CastClass idx -> write_op_u32 buf '\x91' idx
+  | Instr.AsInst idx -> write_op_u32 buf '\x91' idx
   | Instr.RefInc -> Buffer.add_char buf '\xA0'
   | Instr.RefDec -> Buffer.add_char buf '\xA1'
 
