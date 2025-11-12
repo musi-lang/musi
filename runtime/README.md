@@ -27,13 +27,13 @@ This runtime demonstrates that a complete VM can be built **without any `unsafe`
 
 ```bash
 # Execute Musi bytecode
-musi program.msc
+musi program.mso
 
 # Verbose execution
-musi -v program.msc
+musi -v program.mso
 
 # Disassemble bytecode
-musi disasm program.msc
+musi disasm program.mso
 ```
 
 ### Error Reporting
@@ -42,7 +42,7 @@ The runtime provides CLR/Java-style error reporting:
 
 ```
 Runtime Error: StackUnderflow at instruction 42
-  at Program.main (program.msc:15:5)
+  at Program.main (program.mso:15:5)
 ```
 
 ## Memory Model
@@ -103,9 +103,9 @@ let string = memory.allocate_string("Hello")?;  // Safe ARC
 ### Standard Commands
 
 ```bash
-musi run program.msc      # Execute bytecode
-musi disasm program.msc    # Disassemble bytecode
-musi info program.msc     # Show file information
+musi run program.mso      # Execute bytecode
+musi disasm program.mso    # Disassemble bytecode
+musi info program.mso     # Show file information
 musi version              # Show runtime version
 ```
 
@@ -124,10 +124,10 @@ musi version              # Show runtime version
 
 ```
 System.OverflowException: Stack overflow at instruction 123
-  at Example.recursive_call (example.msc:42:12)
+  at Example.recursive_call (example.mso:42:12)
 
 System.InvalidCastException: Cannot cast String to Int
-  at Example.type_mismatch (example.msc:15:8)
+  at Example.type_mismatch (example.mso:15:8)
 ```
 
 ### Structured Error Information
