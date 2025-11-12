@@ -78,7 +78,7 @@ let prelude table interner =
   in
   predef "Nat";
   predef "Int";
-  predef "Text";
+  predef "Str";
   predef "Rune";
   predef "Bool";
   table

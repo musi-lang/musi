@@ -92,7 +92,7 @@ and infer_expr_literal ctx table interner diags kind =
          interner
          (if String.length text > 0 && text.[0] = '-' then "Int" else "Nat"))
   | Node.LitBin _ -> Types.TyNamed (Interner.intern interner "Nat")
-  | Node.LitStr _ -> Types.TyNamed (Interner.intern interner "Text")
+  | Node.LitStr _ -> Types.TyNamed (Interner.intern interner "Str")
   | Node.LitRune _ -> Types.TyNamed (Interner.intern interner "Rune")
   | Node.LitBool _ -> Types.TyNamed (Interner.intern interner "Bool")
   | Node.LitRecord fields ->

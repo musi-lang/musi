@@ -203,7 +203,7 @@ setup.log
 # Local OPAM switch
 _opam/
 
-# Cache files for Sublime Text
+# Cache files for Sublime Str
 *.tmlanguage.cache
 *.tmPreferences.cache
 *.stTheme.cache
@@ -212,7 +212,7 @@ _opam/
 *.sublime-workspace
 
 # Project files should be checked into the repository, unless a significant
-# proportion of contributors will probably not be using Sublime Text
+# proportion of contributors will probably not be using Sublime Str
 # *.sublime-project
 
 # SFTP configuration file

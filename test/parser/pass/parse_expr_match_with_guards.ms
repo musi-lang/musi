@@ -1,4 +1,4 @@
-const classify := proc (x: Int) -> Text {
+const classify := proc (x: Int) -> Str {
   match x with {
   case 0 -> "zero",
   case const n if n > 0 -> "positive",

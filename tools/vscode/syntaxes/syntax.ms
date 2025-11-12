@@ -139,16 +139,16 @@ const bin_val: Bin := 3.14;
 const bin32_val: Bin32 := 3.14_b32;
 const bin64_val: Bin64 := 3.14_b64;
 const rune_val: Rune := 'A';
-const text_val: Text := "hello";
+const text_val: Str := "hello";
 
 const array_type: [Int] := [1, 2, 3];
-const tuple_type: (Int, Text) := (42, "answer");
+const tuple_type: (Int, Str) := (42, "answer");
 const ptr_type: Ptr<Int> := addr(x);
 const proc_type: proc (Int) -> Int := inc;
 
 const box_val: Box<Int> := Box{ 42 };
 const opt_val: Int? := .Some(42);
-const res_val: Int!Text := .Pass(42);
+const res_val: Int!Str := .Pass(42);
 
 const maybe: Int? := .Some(42);
 const result: Data! := try load();
@@ -176,7 +176,7 @@ const multi_generic := proc <T, U>(x: T, y: U) -> (T, U) {
   (x, y)
 };
 
-const async_proc := async proc (url: Text) -> Data! {
+const async_proc := async proc (url: Str) -> Data! {
   const res := await http.get(url);
   const body := await res.json();
   body
@@ -322,7 +322,7 @@ unsafe proc raw_copy(dest: Ptr<Unit>, src: Ptr<Unit>, size: Nat) {
 // ERROR HANDLING
 // ============================================================================
 
-const load := proc (path: Text) -> Data! {
+const load := proc (path: Str) -> Data! {
   const file := try open(path);
   const text := try file.read();
   try parse(text)
@@ -340,7 +340,7 @@ const handle_result := match operation() with {
 const MAX_SIZE := 1024;
 const DEFAULT_TIMEOUT := 30;
 
-const UserData := record { name: Text; age: Nat };
+const UserData := record { name: Str; age: Nat };
 const HttpError := choice HttpError { case NotFound, case ServerError };
 
 const user_count := 42;
@@ -377,7 +377,7 @@ const with_where := compute() where {
   const value := 42;
 };
 
-const nested_generics := Map<Text, List<Int?>>{};
+const nested_generics := Map<Str, List<Int?>>{};
 
 const chained := data
   .filter(proc (x) -> Bool { x > 0 })
@@ -396,7 +396,7 @@ case .Some(.Fail(const e)) -> handle(e),
 case .None -> fallback(),
 }
 
-const complex_type: proc (Int, Text) -> List<Data?>! := loader;
+const complex_type: proc (Int, Str) -> List<Data?>! := loader;
 
 const ptr := addr(value);
 const deref := ptr.pointee;
