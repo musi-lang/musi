@@ -18,6 +18,16 @@ let compile ~input_path ~output_path =
   let diag_bag = ref (Diagnostic.merge [ lex_diags; parse_diags ]) in
   let _symbols = Musi_sema.Resolver.resolve ast interner diag_bag in
 
+  let imports =
+    List.filter_map
+      (fun stmt ->
+        match stmt.Node.skind with
+        | Node.StmtImport (_, module_name) ->
+          Some (Interner.lookup interner module_name)
+        | _ -> None)
+      ast
+  in
+
   let emitter = Emitter.make () in
   let instrs = Emitter.emit emitter ast in
 
@@ -25,6 +35,7 @@ let compile ~input_path ~output_path =
   let bytecode =
     Encoder.encode
       encoder
+      imports
       (Emitter.const_pool emitter)
       (Emitter.procs emitter)
       instrs
