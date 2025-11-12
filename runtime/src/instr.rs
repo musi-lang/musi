@@ -1,4 +1,6 @@
-#[derive(Clone, Copy, Debug)]
+use alloc::string::String;
+
+#[derive(Clone, Debug)]
 pub enum Instr {
     Nop,
     Pop,
@@ -30,8 +32,8 @@ pub enum Instr {
     Br(i32),
     BrTrue(i32),
     BrFalse(i32),
-    Call(u32),
-    CallTail(u32),
+    Call(String),
+    CallTail(String),
     Ret,
     NewObj(u32),
     LdFld(u32),
@@ -82,8 +84,24 @@ pub fn decode(code: &[u8], ip: &mut usize) -> Instr {
         0x60 => Instr::Br(read_i32_le(code, ip)),
         0x61 => Instr::BrTrue(read_i32_le(code, ip)),
         0x62 => Instr::BrFalse(read_i32_le(code, ip)),
-        0x70 => Instr::Call(read_u32_le(code, ip)),
-        0x71 => Instr::CallTail(read_u32_le(code, ip)),
+        0x70 => {
+            let start = *ip;
+            while code[*ip] != 0 {
+                *ip += 1;
+            }
+            let name = String::from_utf8_lossy(&code[start..*ip]).into_owned();
+            *ip += 1;
+            Instr::Call(name)
+        }
+        0x71 => {
+            let start = *ip;
+            while code[*ip] != 0 {
+                *ip += 1;
+            }
+            let name = String::from_utf8_lossy(&code[start..*ip]).into_owned();
+            *ip += 1;
+            Instr::CallTail(name)
+        }
         0x72 => Instr::Ret,
         0x80 => Instr::NewObj(read_u32_le(code, ip)),
         0x81 => Instr::LdFld(read_u32_le(code, ip)),
