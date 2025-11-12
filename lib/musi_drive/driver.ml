@@ -22,7 +22,13 @@ let compile ~input_path ~output_path =
   let instrs = Emitter.emit emitter ast in
 
   let encoder = Encoder.make interner in
-  let bytecode = Encoder.encode encoder (Emitter.procs emitter) instrs in
+  let bytecode =
+    Encoder.encode
+      encoder
+      (Emitter.const_pool emitter)
+      (Emitter.procs emitter)
+      instrs
+  in
 
   let oc = open_out_bin output_path in
   output_bytes oc bytecode;
