@@ -7,7 +7,7 @@
    (run dune subst))
   (run dune build -p %{pkg-self:name} -j %{jobs})))
 
-(depends ocaml dune stdlib-shims)
+(depends ocaml dune libstd-shims)
 
 (source
  (fetch
