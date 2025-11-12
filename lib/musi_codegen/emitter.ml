@@ -254,8 +254,14 @@ and emit_expr_call t callee args =
 
 and emit_expr_binding t pat value =
   match value.Node.ekind with
-  | Node.ExprProc (_, _, _, _, _, mods) when Option.is_some mods.Node.abi ->
-    emit_expr t value
+  | Node.ExprProc (_, _, params, _, body, mods)
+    when Option.is_some mods.Node.abi ->
+    let proc_name =
+      match pat.Node.pkind with
+      | Node.PatIdent name -> name
+      | _ -> Interner.intern (Interner.create ()) "<lambda>"
+    in
+    emit_expr_proc_named t proc_name params body mods
   | _ -> (
     let value_code = emit_expr t value in
     match pat.Node.pkind with
@@ -268,7 +274,7 @@ and emit_expr_for t pat iter body =
   let span = iter.Node.span in
   match iter.Node.ekind with
   | Node.ExprRange (start, end_, inclusive) ->
-    (*  `for i in start..end do body` ->
+    (*  `for i in start..end do { body }` ->
         `i := start; while i < end do { body; i <- i + 1 }` *)
     let iter_name =
       match pat.Node.pkind with
@@ -312,6 +318,14 @@ and emit_expr_field t obj _field =
   obj_code @ [ Instr.LdFld field_idx ]
 
 and emit_expr_proc t params body mods =
+  emit_expr_proc_named
+    t
+    (Interner.intern (Interner.create ()) "<lambda>")
+    params
+    body
+    mods
+
+and emit_expr_proc_named t proc_name params body mods =
   let proc_id = t.next_proc_id in
   t.next_proc_id <- t.next_proc_id + 1;
   let is_extern = Option.is_some mods.Node.abi in
@@ -326,7 +340,7 @@ and emit_expr_proc t params body mods =
   in
   let proc =
     {
-      proc_name = Interner.intern (Interner.create ()) "<lambda>"
+      proc_name
     ; param_count = List.length params
     ; local_count = t.next_local
     ; code_offset = 0
