@@ -3,8 +3,8 @@ name = "musi"
 version = "0.1.0-alpha"
 description = "The Musi Programming Language"
 repository = "https://github.com/musi-lang/musi"
-edition = "2021"
-rust-version = "1.68.0"
+edition = "2024"
+rust-version = "1.85.0"
 license = "MIT OR Apache-2.0"
 keywords = ["musi", "programming language"]
 categories = ["Programming Language"]
@@ -15,22 +15,14 @@ name = "musi"
 path = "src/main.rs"
 
 [dependencies]
-libc = { version = "0.2.177", default-features = false }
-hashbrown = { version = "0.16.0", default-features = false }
-bytes = { version = "1.10.1", default-features = false }
-rend = { version = "0.5.3", default-features = false }
-either = { version = "1.15.0", default-features = false }
-spin = { version = "0.10.0", default-features = false }
+bytes = "1.10.1"
+clap = "4.5.51"
 
-[dependencies.clap]
-version = "4.5.5"
-default-features = false
-features = ["std"]       # clap needs std for CLI parsing
 
 [dev-dependencies]
 
 [lints.rust]
-unsafe_code = "allow"
+unsafe_code = "deny"
 
 [lints.clippy]
 cargo = { level = "forbid", priority = -1 }
@@ -116,7 +108,7 @@ mod_module_files = "allow"
 module_name_repetitions = "deny"
 modulo_arithmetic = "deny"
 multiple_inherent_impl = "deny"
-multiple_unsafe_ops_per_block = "allow"
+multiple_unsafe_ops_per_block = "deny"
 mutex_atomic = "deny"
 needless_raw_strings = "deny"
 non_ascii_literal = "deny"
@@ -158,7 +150,7 @@ suspicious_xor_used_as_pow = "deny"
 tests_outside_test_module = "deny"
 todo = "deny"
 try_err = "deny"
-undocumented_unsafe_blocks = "allow"
+undocumented_unsafe_blocks = "deny"
 unimplemented = "deny"
 unnecessary_safety_comment = "deny"
 unnecessary_safety_doc = "deny"
