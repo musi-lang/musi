@@ -15,6 +15,7 @@ default-run = "musi"
 "path" = "src/main.rs"
 
 [dependencies]
+clap = { version = "3.2.5", features = ["derive"] }
 libc = { version = "0.2.177", default-features = false }
 libffi = "4.0.0"
 
