@@ -40,7 +40,7 @@ pub enum Instr {
     StElem,
     LdLen,
     IsInst(u32),
-    CastClass(u32),
+    AsInst(u32),
     RefInc,
     RefDec,
 }
@@ -92,7 +92,7 @@ pub fn decode(code: &[u8], ip: &mut usize) -> Instr {
         0x84 => Instr::StElem,
         0x86 => Instr::LdLen,
         0x90 => Instr::IsInst(read_u32_le(code, ip)),
-        0x91 => Instr::CastClass(read_u32_le(code, ip)),
+        0x91 => Instr::AsInst(read_u32_le(code, ip)),
         0xA0 => Instr::RefInc,
         0xA1 => Instr::RefDec,
         _ => panic!("unknown opcode: {op:#x}"),

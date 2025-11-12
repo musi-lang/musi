@@ -48,7 +48,7 @@ type t =
   | LdLen
   (* Type *)
   | IsInst of int
-  | CastClass of int
+  | AsInst of int
   (* Memory *)
   | RefInc
   | RefDec
@@ -103,7 +103,7 @@ let to_opcode = function
   | LdLen -> 0x8E
   (* Type *)
   | IsInst _ -> 0x75
-  | CastClass _ -> 0x74
+  | AsInst _ -> 0x74
   (* Memory *)
   | RefInc -> 0x40
   | RefDec -> 0x41
@@ -150,7 +150,7 @@ let show = function
   | CmpLe -> "cmp.le"
   | CmpGe -> "cmp.ge"
   (* Object *)
-  | NewObj type_id -> Printf.sprintf "newobj %d" type_id
+  | NewObj type_id -> Printf.sprintf "new.obj %d" type_id
   | LdFld idx -> Printf.sprintf "ld.fld %d" idx
   | StFld idx -> Printf.sprintf "st.fld %d" idx
   | LdElem -> "ld.elem"
@@ -158,7 +158,7 @@ let show = function
   | LdLen -> "ld.len"
   (* Type *)
   | IsInst type_id -> Printf.sprintf "isinst %d" type_id
-  | CastClass type_id -> Printf.sprintf "castclass %d" type_id
+  | AsInst type_id -> Printf.sprintf "asinst %d" type_id
   (* Memory *)
   | RefInc -> "ref.inc"
   | RefDec -> "ref.dec"

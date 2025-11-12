@@ -48,7 +48,7 @@ type t =
   | LdLen
   (* Type *)
   | IsInst of int
-  | CastClass of int
+  | AsInst of int
   (* Memory *)
   | RefInc
   | RefDec
