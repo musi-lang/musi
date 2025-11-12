@@ -1,11 +1,13 @@
+open Musi_basic
+
 type t =
   (* Control *)
   | Nop
   | Br of int
   | BrTrue of int
   | BrFalse of int
-  | Call of int
-  | CallTail of int
+  | Call of Interner.name
+  | CallTail of Interner.name
   | Ret
   (* Stack *)
   | LdC of int
@@ -59,8 +61,8 @@ let to_opcode = function
   | Br _ -> 0x38
   | BrTrue _ -> 0x39
   | BrFalse _ -> 0x3A
-  | Call _ -> 0x28
-  | CallTail _ -> 0x29
+  | Call _ -> 0x70
+  | CallTail _ -> 0x71
   | Ret -> 0x2A
   (* Stack *)
   | LdC _ -> 0x14
@@ -114,8 +116,8 @@ let show = function
   | Br offset -> Printf.sprintf "br %d" offset
   | BrTrue offset -> Printf.sprintf "br.true %d" offset
   | BrFalse offset -> Printf.sprintf "br.false %d" offset
-  | Call proc_id -> Printf.sprintf "call %d" proc_id
-  | CallTail proc_id -> Printf.sprintf "call.tail %d" proc_id
+  | Call _ -> "call"
+  | CallTail _ -> "call.tail"
   | Ret -> "ret"
   (* Stack *)
   | LdC idx -> Printf.sprintf "ld.c %d" idx

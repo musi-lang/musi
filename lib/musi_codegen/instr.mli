@@ -1,11 +1,13 @@
+open Musi_basic
+
 type t =
   (* Control *)
   | Nop
   | Br of int
   | BrTrue of int
   | BrFalse of int
-  | Call of int
-  | CallTail of int
+  | Call of Interner.name
+  | CallTail of Interner.name
   | Ret
   (* Stack *)
   | LdC of int
