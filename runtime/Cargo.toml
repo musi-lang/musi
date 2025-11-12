@@ -11,13 +11,11 @@ categories = ["Programming Language"]
 default-run = "musi"
 
 [[bin]]
-"name" = "musi"
-"path" = "src/main.rs"
+name = "musi"
+path = "src/main.rs"
 
 [dependencies]
-clap = { version = "3.2.5", features = ["derive"] }
 libc = { version = "0.2.177", default-features = false }
-libffi = "4.0.0"
 
 [dev-dependencies]
 
@@ -146,7 +144,6 @@ str_to_string = "deny"
 string_add = "deny"
 string_lit_chars_any = "deny"
 string_slice = "deny"
-string_to_string = "deny"
 suspicious_xor_used_as_pow = "deny"
 tests_outside_test_module = "deny"
 todo = "deny"
