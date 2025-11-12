@@ -21,7 +21,7 @@ let write_op_i64 buf opcode operand =
   Buffer.add_char buf opcode;
   Binary.write_i64_le buf operand
 
-let encode_opcode buf = function
+let encode_opcode interner buf = function
   | Instr.Nop -> Buffer.add_char buf '\x00'
   | Instr.Pop -> Buffer.add_char buf '\x01'
   | Instr.Dup -> Buffer.add_char buf '\x02'
@@ -54,8 +54,14 @@ let encode_opcode buf = function
   | Instr.Br offset -> write_op_i32 buf '\x60' offset
   | Instr.BrTrue offset -> write_op_i32 buf '\x61' offset
   | Instr.BrFalse offset -> write_op_i32 buf '\x62' offset
-  | Instr.Call idx -> write_op_u32 buf '\x70' idx
-  | Instr.CallTail idx -> write_op_u32 buf '\x71' idx
+  | Instr.Call name ->
+    Buffer.add_char buf '\x70';
+    Buffer.add_string buf (Interner.lookup interner name);
+    Buffer.add_char buf '\x00'
+  | Instr.CallTail name ->
+    Buffer.add_char buf '\x71';
+    Buffer.add_string buf (Interner.lookup interner name);
+    Buffer.add_char buf '\x00'
   | Instr.Ret -> Buffer.add_char buf '\x72'
   | Instr.NewObj size -> write_op_u32 buf '\x80' size
   | Instr.LdFld idx -> write_op_u32 buf '\x81' idx
@@ -75,7 +81,8 @@ let encode_const t buf = function
   | Emitter.ConstBin f -> write_op_i64 buf '\x02' (Int64.bits_of_float f)
   | Emitter.ConstStr name ->
     Buffer.add_char buf '\x03';
-    Buffer.add_string buf (Interner.lookup t.interner name)
+    Buffer.add_string buf (Interner.lookup t.interner name);
+    Buffer.add_char buf '\x00'
   | Emitter.ConstBool true -> Buffer.add_char buf '\x04'
   | Emitter.ConstBool false -> Buffer.add_char buf '\x05'
   | Emitter.ConstUnit -> Buffer.add_char buf '\x00'
@@ -88,11 +95,19 @@ let encode_proc t buf proc =
   Binary.write_u32_le buf (Int32.of_int proc.Emitter.local_count);
   Binary.write_u32_le buf (Int32.of_int proc.Emitter.code_offset)
 
-let encode t const_pool procs instrs =
+let encode t imports const_pool procs instrs =
   let t = { t with const_pool; procs } in
+  let import_buf = Buffer.create 128 in
   let const_buf = Buffer.create 256 in
   let proc_buf = Buffer.create 256 in
   let code_buf = Buffer.create 1024 in
+
+  Binary.write_u32_le import_buf (Int32.of_int (List.length imports));
+  List.iter
+    (fun imp ->
+      Buffer.add_string import_buf imp;
+      Buffer.add_char import_buf '\x00')
+    imports;
 
   Binary.write_u32_le const_buf (Int32.of_int (List.length t.const_pool));
   List.iter (encode_const t const_buf) t.const_pool;
@@ -100,24 +115,28 @@ let encode t const_pool procs instrs =
   Binary.write_u32_le proc_buf (Int32.of_int (List.length t.procs));
   List.iter (encode_proc t proc_buf) t.procs;
 
-  List.iter (encode_opcode code_buf) instrs;
+  List.iter (encode_opcode t.interner code_buf) instrs;
 
+  let import_size = Buffer.length import_buf in
   let const_size = Buffer.length const_buf in
   let proc_size = Buffer.length proc_buf in
   let code_size = Buffer.length code_buf in
 
   let hdr = Buffer.create hdr_size in
-  Binary.write_u32_le hdr 0x4D555349l;
+  Buffer.add_string hdr "MUSI";
   Binary.write_u32_le hdr 1l;
   Binary.write_u32_le hdr (Int32.of_int hdr_size);
+  Binary.write_u32_le hdr (Int32.of_int import_size);
+  Binary.write_u32_le hdr (Int32.of_int (hdr_size + import_size));
   Binary.write_u32_le hdr (Int32.of_int const_size);
-  Binary.write_u32_le hdr (Int32.of_int (hdr_size + const_size));
+  Binary.write_u32_le hdr (Int32.of_int (hdr_size + import_size + const_size));
   Binary.write_u32_le hdr (Int32.of_int proc_size);
-  Binary.write_u32_le hdr (Int32.of_int (hdr_size + const_size + proc_size));
-  Binary.write_u32_le hdr (Int32.of_int code_size);
 
-  let res = Buffer.create (hdr_size + const_size + proc_size + code_size) in
+  let res =
+    Buffer.create (hdr_size + import_size + const_size + proc_size + code_size)
+  in
   Buffer.add_buffer res hdr;
+  Buffer.add_buffer res import_buf;
   Buffer.add_buffer res const_buf;
   Buffer.add_buffer res proc_buf;
   Buffer.add_buffer res code_buf;
