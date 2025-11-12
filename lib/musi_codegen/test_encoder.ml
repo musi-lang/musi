@@ -5,7 +5,7 @@ open Alcotest
 let encode_instrs instrs =
   let interner = Interner.create () in
   let encoder = Encoder.make interner in
-  Encoder.encode encoder [] instrs
+  Encoder.encode encoder [] [] instrs
 
 let test_header_magic () =
   let bytecode = encode_instrs [] in
@@ -89,7 +89,7 @@ let test_proc_table_with_proc () =
     }
   in
   let encoder = Encoder.make interner in
-  let bytecode = Encoder.encode encoder [ proc ] [] in
+  let bytecode = Encoder.encode encoder [] [ proc ] [] in
   let proc_size_offset = 20 in
   let proc_size = Bytes.get_int32_le bytecode proc_size_offset in
   (check bool) "proc table has data" true (Int32.to_int proc_size > 0)

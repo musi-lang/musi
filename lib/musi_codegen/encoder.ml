@@ -88,8 +88,8 @@ let encode_proc t buf proc =
   Binary.write_u32_le buf (Int32.of_int proc.Emitter.local_count);
   Binary.write_u32_le buf (Int32.of_int proc.Emitter.code_offset)
 
-let encode t procs instrs =
-  let t = { t with procs } in
+let encode t const_pool procs instrs =
+  let t = { t with const_pool; procs } in
   let const_buf = Buffer.create 256 in
   let proc_buf = Buffer.create 256 in
   let code_buf = Buffer.create 1024 in
