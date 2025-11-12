@@ -22,22 +22,22 @@ let test_emit_lit_int () =
   let instrs, diags, _ = parse_and_emit "42" in
   (check bool) "no errors" false (Diagnostic.has_errors diags);
   match instrs with
-  | [ Instr.LdC _ ] -> ()
-  | _ -> fail "expected 'LdC' instruction"
+  | [ Instr.LdCI4 _ ] -> ()
+  | _ -> fail "expected 'LdCI4' instruction"
 
 let test_emit_lit_bool () =
   let instrs, diags, _ = parse_and_emit "true" in
   (check bool) "no errors" false (Diagnostic.has_errors diags);
   match instrs with
-  | [ Instr.LdC _ ] -> ()
-  | _ -> fail "expected 'LdC' instruction"
+  | [ Instr.LdCI4 _ ] -> ()
+  | _ -> fail "expected 'LdCI4' instruction"
 
 let test_emit_lit_str () =
   let instrs, diags, _ = parse_and_emit "\"hello\"" in
   (check bool) "no errors" false (Diagnostic.has_errors diags);
   match instrs with
-  | [ Instr.LdC _ ] -> ()
-  | _ -> fail "expected 'LdC' instruction"
+  | [ Instr.LdCStr _ ] -> ()
+  | _ -> fail "expected 'LdCStr' instruction"
 
 (* === EXPRESSION TESTS === *)
 
@@ -45,15 +45,15 @@ let test_emit_expr_binary () =
   let instrs, diags, _ = parse_and_emit "1 + 2" in
   (check bool) "no errors" false (Diagnostic.has_errors diags);
   match instrs with
-  | [ Instr.LdC _; Instr.LdC _; Instr.Add ] -> ()
-  | _ -> fail "expected 'LdC', 'LdC', 'Add'"
+  | [ Instr.LdCI4 _; Instr.LdCI4 _; Instr.Add ] -> ()
+  | _ -> fail "expected 'LdCI4', 'LdCI4', 'Add'"
 
 let test_emit_expr_unary () =
   let instrs, diags, _ = parse_and_emit "-5" in
   (check bool) "no errors" false (Diagnostic.has_errors diags);
   match instrs with
-  | [ Instr.LdC _; Instr.Neg ] -> ()
-  | _ -> fail "expected 'LdC', 'Neg'"
+  | [ Instr.LdCI4 _; Instr.Neg ] -> ()
+  | _ -> fail "expected 'LdCI4', 'Neg'"
 
 let test_emit_expr_ident () =
   let instrs, diags, _ = parse_and_emit "x" in
@@ -66,15 +66,15 @@ let test_emit_expr_assign () =
   let instrs, diags, _ = parse_and_emit "x <- 5" in
   (check bool) "no errors" false (Diagnostic.has_errors diags);
   match instrs with
-  | [ Instr.LdC _; Instr.StLoc _ ] -> ()
-  | _ -> fail "expected 'LdC', 'StLoc'"
+  | [ Instr.LdCI4 _; Instr.StLoc _ ] -> ()
+  | _ -> fail "expected 'LdCI4', 'StLoc'"
 
 let test_emit_expr_call () =
   let instrs, diags, _ = parse_and_emit "foo(1, 2)" in
   (check bool) "no errors" false (Diagnostic.has_errors diags);
   match instrs with
-  | [ Instr.LdC _; Instr.LdC _; Instr.LdLoc _; Instr.Call _ ] -> ()
-  | _ -> fail "expected 'LdC' (arg1), 'LdC' (arg2), 'LdLoc' (callee), 'Call'"
+  | [ Instr.LdCI4 _; Instr.LdCI4 _; Instr.LdLoc _; Instr.Call _ ] -> ()
+  | _ -> fail "expected 'LdCI4' (arg1), 'LdCI4' (arg2), 'LdLoc' (callee), 'Call'"
 
 let test_emit_expr_field () =
   let instrs, diags, _ = parse_and_emit "obj.field" in
@@ -131,8 +131,8 @@ let test_emit_expr_binding () =
   let instrs, diags, _ = parse_and_emit "const x := 5" in
   (check bool) "no errors" false (Diagnostic.has_errors diags);
   match instrs with
-  | [ Instr.LdC _; Instr.StLoc _ ] -> ()
-  | _ -> fail "expected 'LdC', 'StLoc'"
+  | [ Instr.LdCI4 _; Instr.StLoc _ ] -> ()
+  | _ -> fail "expected 'LdCI4', 'StLoc'"
 
 (* === CONSTANT POOL TESTS === *)
 

@@ -22,59 +22,166 @@ let write_op_i64 buf opcode operand =
   Binary.write_i64_le buf operand
 
 let encode_opcode interner buf = function
+  (* Base Instructions *)
   | Instr.Nop -> Buffer.add_char buf '\x00'
-  | Instr.Pop -> Buffer.add_char buf '\x01'
-  | Instr.Dup -> Buffer.add_char buf '\x02'
-  | Instr.LdC idx -> write_op_u32 buf '\x10' idx
+  | Instr.Br offset -> write_op_i32 buf '\x38' offset
+  | Instr.BrTrue offset -> write_op_i32 buf '\x39' offset
+  | Instr.BrFalse offset -> write_op_i32 buf '\x3A' offset
+  | Instr.Beq offset -> write_op_i32 buf '\x3B' offset
+  | Instr.Bge offset -> write_op_i32 buf '\x3C' offset
+  | Instr.Bgt offset -> write_op_i32 buf '\x3D' offset
+  | Instr.Ble offset -> write_op_i32 buf '\x3E' offset
+  | Instr.Blt offset -> write_op_i32 buf '\x3F' offset
+  | Instr.Bne offset -> write_op_i32 buf '\x40' offset
+  | Instr.Leave offset -> write_op_i32 buf '\xC7' offset
+  | Instr.Ret -> Buffer.add_char buf '\x2A'
+  | Instr.Throw -> Buffer.add_char buf '\x7A'
+  | Instr.Rethrow -> Buffer.add_char buf '\x7B'
+  | Instr.Try -> Buffer.add_char buf '\xC8'
+  | Instr.Defer -> Buffer.add_char buf '\xC9'
+
+  (* Stack Operations *)
+  | Instr.Dup -> Buffer.add_char buf '\x25'
+  | Instr.Pop -> Buffer.add_char buf '\x26'
+
+  (* Load Constants *)
+  | Instr.LdNull -> Buffer.add_char buf '\x14'
   | Instr.LdCI4 n ->
-    Buffer.add_char buf '\x11';
+    Buffer.add_char buf '\x20';
     Binary.write_i32_le buf n
-  | Instr.LdCStr idx -> write_op_u32 buf '\x12' idx
-  | Instr.LdLoc slot -> write_op_u32 buf '\x20' slot
-  | Instr.StLoc slot -> write_op_u32 buf '\x21' slot
-  | Instr.LdArg idx -> write_op_u32 buf '\x22' idx
-  | Instr.Add -> Buffer.add_char buf '\x30'
-  | Instr.Sub -> Buffer.add_char buf '\x31'
-  | Instr.Mul -> Buffer.add_char buf '\x32'
-  | Instr.Div -> Buffer.add_char buf '\x33'
-  | Instr.Mod -> Buffer.add_char buf '\x34'
-  | Instr.Neg -> Buffer.add_char buf '\x35'
-  | Instr.And -> Buffer.add_char buf '\x40'
-  | Instr.Or -> Buffer.add_char buf '\x41'
-  | Instr.Xor -> Buffer.add_char buf '\x42'
-  | Instr.Not -> Buffer.add_char buf '\x43'
-  | Instr.Shl -> Buffer.add_char buf '\x44'
-  | Instr.Shr -> Buffer.add_char buf '\x45'
-  | Instr.CmpEq -> Buffer.add_char buf '\x50'
-  | Instr.CmpNe -> Buffer.add_char buf '\x51'
-  | Instr.CmpLt -> Buffer.add_char buf '\x52'
-  | Instr.CmpGt -> Buffer.add_char buf '\x53'
-  | Instr.CmpLe -> Buffer.add_char buf '\x54'
-  | Instr.CmpGe -> Buffer.add_char buf '\x55'
-  | Instr.Br offset -> write_op_i32 buf '\x60' offset
-  | Instr.BrTrue offset -> write_op_i32 buf '\x61' offset
-  | Instr.BrFalse offset -> write_op_i32 buf '\x62' offset
+  | Instr.LdCI8 n ->
+    Buffer.add_char buf '\x21';
+    Binary.write_i64_le buf n
+  | Instr.LdCN8 n -> write_op_u32 buf '\x22' n
+  | Instr.LdCN16 n -> write_op_u32 buf '\x23' n
+  | Instr.LdCN32 n -> write_op_u32 buf '\x24' n
+  | Instr.LdCN64 n -> write_op_u32 buf '\x2F' n
+  | Instr.LdCB32 f ->
+    Buffer.add_char buf '\x30';
+    Binary.write_f32_le buf f
+  | Instr.LdCB64 f ->
+    Buffer.add_char buf '\x31';
+    Binary.write_f64_le buf f
+  | Instr.LdCD32 f ->
+    Buffer.add_char buf '\x32';
+    Binary.write_f32_le buf f
+  | Instr.LdCD64 f ->
+    Buffer.add_char buf '\x33';
+    Binary.write_f64_le buf f
+  | Instr.LdCStr idx -> write_op_u32 buf '\x72' idx
+
+  (* Load/Store Variables *)
+  | Instr.LdLoc idx -> write_op_u32 buf '\x0E' idx
+  | Instr.StLoc idx -> write_op_u32 buf '\x0F' idx
+  | Instr.LdLocA idx -> write_op_u32 buf '\x10' idx
+  | Instr.LdArg idx -> write_op_u32 buf '\x02' idx
+  | Instr.StArg idx -> write_op_u32 buf '\x03' idx
+  | Instr.LdArgA idx -> write_op_u32 buf '\x04' idx
+
+  (* Object Operations *)
+  | Instr.NewObj ctor -> write_op_u32 buf '\x73' ctor
   | Instr.Call name ->
-    Buffer.add_char buf '\x70';
+    Buffer.add_char buf '\x28';
     Buffer.add_string buf (Interner.lookup interner name);
     Buffer.add_char buf '\x00'
-  | Instr.CallTail name ->
-    Buffer.add_char buf '\x71';
+  | Instr.CallVirt name ->
+    Buffer.add_char buf '\x6F';
     Buffer.add_string buf (Interner.lookup interner name);
     Buffer.add_char buf '\x00'
-  | Instr.Ret -> Buffer.add_char buf '\x72'
-  | Instr.NewObj size -> write_op_u32 buf '\x80' size
-  | Instr.LdFld idx -> write_op_u32 buf '\x81' idx
-  | Instr.StFld idx -> write_op_u32 buf '\x82' idx
-  | Instr.LdElem -> Buffer.add_char buf '\x83'
-  | Instr.StElem -> Buffer.add_char buf '\x84'
-  | Instr.LdLen -> Buffer.add_char buf '\x86'
-  | Instr.LdCI4M1 -> Buffer.add_char buf '\x15'
-  | Instr.LdCUnit -> Buffer.add_char buf '\x21'
-  | Instr.IsInst idx -> write_op_u32 buf '\x90' idx
-  | Instr.AsInst idx -> write_op_u32 buf '\x91' idx
-  | Instr.RefInc -> Buffer.add_char buf '\xA0'
-  | Instr.RefDec -> Buffer.add_char buf '\xA1'
+  | Instr.CallI -> Buffer.add_char buf '\x29'
+  | Instr.LdFld idx -> write_op_u32 buf '\x7B' idx
+  | Instr.StFld idx -> write_op_u32 buf '\x7D' idx
+  | Instr.LdFldA idx -> write_op_u32 buf '\x7C' idx
+  | Instr.LdSFld idx -> write_op_u32 buf '\x80' idx
+  | Instr.StSFld idx -> write_op_u32 buf '\x81' idx
+  | Instr.LdSFldA idx -> write_op_u32 buf '\x82' idx
+  | Instr.NewArr type_id -> write_op_u32 buf '\x8D' type_id
+  | Instr.LdElem -> Buffer.add_char buf '\xA3'
+  | Instr.StElem -> Buffer.add_char buf '\xA4'
+  | Instr.LdElemA -> Buffer.add_char buf '\x8F'
+  | Instr.LdLen -> Buffer.add_char buf '\x8E'
+
+  (* Type Operations *)
+  | Instr.LdType type_id -> write_op_u32 buf '\xD1' type_id
+  | Instr.IsInst type_id -> write_op_u32 buf '\x75' type_id
+  | Instr.CastClass type_id -> write_op_u32 buf '\x74' type_id
+  | Instr.Box type_id -> write_op_u32 buf '\x8C' type_id
+  | Instr.UnboxAny type_id -> write_op_u32 buf '\xA5' type_id
+  | Instr.ConvI8 -> Buffer.add_char buf '\x67'
+  | Instr.ConvI16 -> Buffer.add_char buf '\x68'
+  | Instr.ConvI32 -> Buffer.add_char buf '\x69'
+  | Instr.ConvI64 -> Buffer.add_char buf '\x6A'
+  | Instr.ConvI128 -> Buffer.add_char buf '\xD0'
+  | Instr.ConvN8 -> Buffer.add_char buf '\xD2'
+  | Instr.ConvN16 -> Buffer.add_char buf '\xD3'
+  | Instr.ConvN32 -> Buffer.add_char buf '\xD4'
+  | Instr.ConvN64 -> Buffer.add_char buf '\xD5'
+  | Instr.ConvN128 -> Buffer.add_char buf '\xD6'
+  | Instr.ConvB32 -> Buffer.add_char buf '\xB6'
+  | Instr.ConvB64 -> Buffer.add_char buf '\xB7'
+  | Instr.ConvB128 -> Buffer.add_char buf '\xD7'
+  | Instr.ConvD32 -> Buffer.add_char buf '\xD8'
+  | Instr.ConvD64 -> Buffer.add_char buf '\xD9'
+  | Instr.ConvD128 -> Buffer.add_char buf '\xDA'
+
+  (* Arithmetic Operations *)
+  | Instr.Add -> Buffer.add_char buf '\x58'
+  | Instr.AddOvf -> Buffer.add_char buf '\xD6'
+  | Instr.AddOvfUn -> Buffer.add_char buf '\xD7'
+  | Instr.Sub -> Buffer.add_char buf '\x59'
+  | Instr.SubOvf -> Buffer.add_char buf '\xD8'
+  | Instr.SubOvfUn -> Buffer.add_char buf '\xD9'
+  | Instr.Mul -> Buffer.add_char buf '\x5A'
+  | Instr.MulOvf -> Buffer.add_char buf '\xDA'
+  | Instr.MulOvfUn -> Buffer.add_char buf '\xDB'
+  | Instr.Div -> Buffer.add_char buf '\x5B'
+  | Instr.DivUn -> Buffer.add_char buf '\x5C'
+  | Instr.Rem -> Buffer.add_char buf '\x5D'
+  | Instr.RemUn -> Buffer.add_char buf '\x5E'
+  | Instr.Mod -> Buffer.add_char buf '\xDC'
+  | Instr.Neg -> Buffer.add_char buf '\x65'
+
+  (* Logical/Bitwise Operations *)
+  | Instr.And -> Buffer.add_char buf '\x5F'
+  | Instr.Or -> Buffer.add_char buf '\x60'
+  | Instr.Xor -> Buffer.add_char buf '\x61'
+  | Instr.Not -> Buffer.add_char buf '\x66'
+  | Instr.Shl -> Buffer.add_char buf '\x62'
+  | Instr.Shr -> Buffer.add_char buf '\x63'
+  | Instr.ShrUn -> Buffer.add_char buf '\x64'
+
+  (* Comparison Operations *)
+  | Instr.Ceq -> Buffer.add_char buf '\xFE'
+  | Instr.Cgt -> Buffer.add_char buf '\xC2'
+  | Instr.CgtUn -> Buffer.add_char buf '\xC3'
+  | Instr.Clt -> Buffer.add_char buf '\xC4'
+  | Instr.CltUn -> Buffer.add_char buf '\xC5'
+
+  (* Memory Management *)
+  | Instr.Pin -> Buffer.add_char buf '\xDF'
+  | Instr.Unpin -> Buffer.add_char buf '\xE0'
+
+  (* Dynamic Operations *)
+  | Instr.LdFldDyn name ->
+    Buffer.add_char buf '\xE1';
+    Buffer.add_string buf name;
+    Buffer.add_char buf '\x00'
+  | Instr.StFldDyn name ->
+    Buffer.add_char buf '\xE2';
+    Buffer.add_string buf name;
+    Buffer.add_char buf '\x00'
+  | Instr.LdFldADyn name ->
+    Buffer.add_char buf '\xE3';
+    Buffer.add_string buf name;
+    Buffer.add_char buf '\x00'
+  | Instr.CallDyn name ->
+    Buffer.add_char buf '\xE4';
+    Buffer.add_string buf name;
+    Buffer.add_char buf '\x00'
+  | Instr.CallVirtDyn name ->
+    Buffer.add_char buf '\xE5';
+    Buffer.add_string buf name;
+    Buffer.add_char buf '\x00'
 
 let encode_const t buf = function
   | Emitter.ConstInt n -> write_op_i64 buf '\x01' n

@@ -87,3 +87,11 @@ let write_i64_le buf value =
   write_byte
     buf
     (Int64.to_int (Int64.logand (Int64.shift_right_logical value 56) 0xFFL))
+
+let write_f32_le buf value =
+  let bits = Int64.bits_of_float (Float.of_string (Printf.sprintf "%.9g" value)) in
+  write_i32_le buf (Int64.to_int32 bits)
+
+let write_f64_le buf value =
+  let bits = Int64.bits_of_float value in
+  write_i64_le buf bits
