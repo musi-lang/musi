@@ -3,11 +3,11 @@
 // ============================================================================
 
 // single-line comment
-/// documentation comment
-/// @param {Int?} [value:=42] - parameter with default
-/// @returns {Data!} - operation result
-/// @throws {NetworkError} - when connection fails
-/// @deprecated - use new_function instead
+
+
+
+
+
 
 /* block comment */
 /** documentation block comment

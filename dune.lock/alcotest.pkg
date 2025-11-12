@@ -14,7 +14,7 @@
  astring
  cmdliner
  re
- libstd-shims
+ stdlib-shims
  uutf
  ocaml-syntax-shims)
 

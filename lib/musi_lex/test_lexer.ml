@@ -64,7 +64,7 @@ let test_number_float () =
     (check string) "number value" "3.14" s
   | _ -> fail "expected LitNum token"
 
-let test_string_simple () =
+let test_str_simple () =
   let tokens, diags, interner = lex {|"hello"|} in
   (check bool) "no errors" false (Diagnostic.has_errors diags);
   match tokens with
@@ -72,7 +72,7 @@ let test_string_simple () =
     (check string) "text value" "hello" (Interner.lookup interner n)
   | _ -> fail "expected LitStr token"
 
-let test_string_escape () =
+let test_str_escape () =
   let tokens, diags, interner = lex {|"\n"|} in
   (check bool) "no errors" false (Diagnostic.has_errors diags);
   match tokens with
@@ -143,8 +143,8 @@ let () =
         ] )
     ; ( "strings"
       , [
-          test_case "simple" `Quick test_string_simple
-        ; test_case "escape" `Quick test_string_escape
+          test_case "simple" `Quick test_str_simple
+        ; test_case "escape" `Quick test_str_escape
         ] )
     ; ("runes", [ test_case "simple" `Quick test_rune ])
     ; ( "operators"
