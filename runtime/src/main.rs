@@ -1,8 +1,9 @@
-use crate::vm::VM;
+use clap::{Parser, Subcommand};
 
 extern crate alloc;
 
 pub mod binary;
+pub mod cmds;
 pub mod frame;
 pub mod instr;
 pub mod loader;
@@ -11,14 +12,24 @@ pub mod types;
 pub mod value;
 pub mod vm;
 
-fn main() {
-    let args: Vec<String> = std::env::args().collect();
-    if args.len() < 2 {
-        eprintln!("usage: {} <file.ms>", args[0]);
-        std::process::exit(1);
-    }
+#[derive(Parser)]
+#[clap(name = "musi", version, about = "Musi runtime")]
+struct Cli {
+    #[clap(subcommand)]
+    command: Commands,
+}
 
-    let bc = unsafe { loader::load(&args[1]) };
-    let mut vm = VM::new(bc);
-    vm.exec();
+#[derive(Subcommand)]
+enum Commands {
+    Run { file: String },
+    Disasm { file: String },
+}
+
+fn main() {
+    let cli = Cli::parse();
+
+    match cli.command {
+        Commands::Run { file } => unsafe { cmds::run(&file) },
+        Commands::Disasm { file } => cmds::disasm(&file),
+    }
 }
