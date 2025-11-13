@@ -40,7 +40,7 @@ for const i in 0..<10 do { writeln(`${i}`) }
 do { step() } while continuing()
 
 match result with {
-case .Pass(const v) -> use(v),
+case .Succ(const v) -> use(v),
 case .Fail(const e) -> handle(e),
 }
 
@@ -148,7 +148,7 @@ const proc_type: proc (Int) -> Int := inc;
 
 const box_val: Box<Int> := Box{ 42 };
 const opt_val: Int? := .Some(42);
-const res_val: Int!Str := .Pass(42);
+const res_val: Int!Str := .Succ(42);
 
 const maybe: Int? := .Some(42);
 const result: Data! := try load();
@@ -252,7 +252,7 @@ const area := proc (s: Shape) -> Bin64 {
 
 if case .Some(const v) := opt then { use(v) }
 while case .Some(const v) := next() do { loop(v) }
-for case .Pass(const v) in results do { process(v) }
+for case .Succ(const v) in results do { process(v) }
 
 match value with {
 case const x -> handle(x),
@@ -329,7 +329,7 @@ const load := proc (path: Str) -> Data! {
 };
 
 const handle_result := match operation() with {
-  case .Pass(const v) -> v,
+  case .Succ(const v) -> v,
   case .Fail(const e) -> recover(e),
 };
 
@@ -352,7 +352,7 @@ const is_valid := proc (x: Int) -> Bool { x > 0 };
 const status := .Success;
 const color := .Red;
 const opt := .Some(42);
-const res := .Pass(data);
+const res := .Succ(data);
 
 const x_coord := point.x;
 const name := user.name;
@@ -391,7 +391,7 @@ const chained := data
 const multi := proc <T, U, V>(a: T, b: U, c: V) -> (T, U, V) { (a, b, c) };
 
 match nested with {
-case .Some(.Pass(const v)) -> use(v),
+case .Some(.Succ(const v)) -> use(v),
 case .Some(.Fail(const e)) -> handle(e),
 case .None -> fallback(),
 }
