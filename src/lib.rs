@@ -1,12 +1,12 @@
-pub mod builtins;
 pub mod bytecode;
 pub mod engine;
 pub mod errors;
 pub mod executor;
 pub mod frames;
-pub mod instr;
 pub mod memmgr;
+pub mod opcode;
 pub mod stack;
+pub mod stdlib;
 pub mod value;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
