@@ -95,7 +95,6 @@ pub const DIV: u8 = 0x5B;
 pub const DIV_UN: u8 = 0x5C;
 pub const REM: u8 = 0x5D;
 pub const REM_UN: u8 = 0x5E;
-pub const MOD: u8 = 0xDC;
 pub const NEG: u8 = 0x65;
 
 // Logical/bitwise operations
