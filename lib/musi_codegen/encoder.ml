@@ -39,11 +39,9 @@ let encode_opcode interner buf = function
   | Instr.Rethrow -> Buffer.add_char buf '\x7B'
   | Instr.Try -> Buffer.add_char buf '\xC8'
   | Instr.Defer -> Buffer.add_char buf '\xC9'
-
   (* Stack Operations *)
   | Instr.Dup -> Buffer.add_char buf '\x25'
   | Instr.Pop -> Buffer.add_char buf '\x26'
-
   (* Load Constants *)
   | Instr.LdNull -> Buffer.add_char buf '\x14'
   | Instr.LdCI4 n ->
@@ -69,7 +67,6 @@ let encode_opcode interner buf = function
     Buffer.add_char buf '\x33';
     Binary.write_f64_le buf f
   | Instr.LdCStr idx -> write_op_u32 buf '\x72' idx
-
   (* Load/Store Variables *)
   | Instr.LdLoc idx -> write_op_u32 buf '\x0E' idx
   | Instr.StLoc idx -> write_op_u32 buf '\x0F' idx
@@ -77,7 +74,6 @@ let encode_opcode interner buf = function
   | Instr.LdArg idx -> write_op_u32 buf '\x02' idx
   | Instr.StArg idx -> write_op_u32 buf '\x03' idx
   | Instr.LdArgA idx -> write_op_u32 buf '\x04' idx
-
   (* Object Operations *)
   | Instr.NewObj ctor -> write_op_u32 buf '\x73' ctor
   | Instr.Call name ->
@@ -100,7 +96,6 @@ let encode_opcode interner buf = function
   | Instr.StElem -> Buffer.add_char buf '\xA4'
   | Instr.LdElemA -> Buffer.add_char buf '\x8F'
   | Instr.LdLen -> Buffer.add_char buf '\x8E'
-
   (* Type Operations *)
   | Instr.LdType type_id -> write_op_u32 buf '\xD1' type_id
   | Instr.IsInst type_id -> write_op_u32 buf '\x75' type_id
@@ -123,7 +118,6 @@ let encode_opcode interner buf = function
   | Instr.ConvD32 -> Buffer.add_char buf '\xD8'
   | Instr.ConvD64 -> Buffer.add_char buf '\xD9'
   | Instr.ConvD128 -> Buffer.add_char buf '\xDA'
-
   (* Arithmetic Operations *)
   | Instr.Add -> Buffer.add_char buf '\x58'
   | Instr.AddOvf -> Buffer.add_char buf '\xD6'
@@ -140,7 +134,6 @@ let encode_opcode interner buf = function
   | Instr.RemUn -> Buffer.add_char buf '\x5E'
   | Instr.Mod -> Buffer.add_char buf '\xDC'
   | Instr.Neg -> Buffer.add_char buf '\x65'
-
   (* Logical/Bitwise Operations *)
   | Instr.And -> Buffer.add_char buf '\x5F'
   | Instr.Or -> Buffer.add_char buf '\x60'
@@ -149,18 +142,15 @@ let encode_opcode interner buf = function
   | Instr.Shl -> Buffer.add_char buf '\x62'
   | Instr.Shr -> Buffer.add_char buf '\x63'
   | Instr.ShrUn -> Buffer.add_char buf '\x64'
-
   (* Comparison Operations *)
   | Instr.Ceq -> Buffer.add_char buf '\xFE'
   | Instr.Cgt -> Buffer.add_char buf '\xC2'
   | Instr.CgtUn -> Buffer.add_char buf '\xC3'
   | Instr.Clt -> Buffer.add_char buf '\xC4'
   | Instr.CltUn -> Buffer.add_char buf '\xC5'
-
   (* Memory Management *)
   | Instr.Pin -> Buffer.add_char buf '\xDF'
   | Instr.Unpin -> Buffer.add_char buf '\xE0'
-
   (* Dynamic Operations *)
   | Instr.LdFldDyn name ->
     Buffer.add_char buf '\xE1';
