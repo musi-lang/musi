@@ -18,11 +18,9 @@ type t =
   | Rethrow
   | Try
   | Defer
-
   (* Stack Operations *)
   | Dup
   | Pop
-
   (* Load Constants *)
   | LdNull
   | LdCI4 of int32
@@ -36,7 +34,6 @@ type t =
   | LdCD32 of float
   | LdCD64 of float
   | LdCStr of int
-
   (* Load/Store Variables *)
   | LdLoc of int
   | StLoc of int
@@ -44,7 +41,6 @@ type t =
   | LdArg of int
   | StArg of int
   | LdArgA of int
-
   (* Object Operations *)
   | NewObj of int
   | Call of Interner.name
@@ -61,7 +57,6 @@ type t =
   | StElem
   | LdElemA
   | LdLen
-
   (* Type Operations *)
   | LdType of int
   | IsInst of int
@@ -84,7 +79,6 @@ type t =
   | ConvD32
   | ConvD64
   | ConvD128
-
   (* Arithmetic Operations *)
   | Add
   | AddOvf
@@ -99,9 +93,7 @@ type t =
   | DivUn
   | Rem
   | RemUn
-  | Mod
   | Neg
-
   (* Logical/Bitwise Operations *)
   | And
   | Or
@@ -110,18 +102,15 @@ type t =
   | Shl
   | Shr
   | ShrUn
-
   (* Comparison Operations *)
   | Ceq
   | Cgt
   | CgtUn
   | Clt
   | CltUn
-
   (* Memory Management *)
   | Pin
   | Unpin
-
   (* Dynamic Operations *)
   | LdFldDyn of string
   | StFldDyn of string
@@ -147,11 +136,9 @@ let to_opcode = function
   | Rethrow -> 0x7B
   | Try -> 0xC8
   | Defer -> 0xC9
-
   (* Stack Operations *)
   | Dup -> 0x25
   | Pop -> 0x26
-
   (* Load Constants *)
   | LdNull -> 0x14
   | LdCI4 _ -> 0x20
@@ -159,13 +146,12 @@ let to_opcode = function
   | LdCN8 _ -> 0x22
   | LdCN16 _ -> 0x23
   | LdCN32 _ -> 0x24
-  | LdCN64 _ -> 0x2F  (* Hypothetical value - need to check CIL spec *)
-  | LdCB32 _ -> 0x30  (* Hypothetical value - need to check CIL spec *)
-  | LdCB64 _ -> 0x31  (* Hypothetical value - need to check CIL spec *)
-  | LdCD32 _ -> 0x32  (* Hypothetical value - need to check CIL spec *)
-  | LdCD64 _ -> 0x33  (* Hypothetical value - need to check CIL spec *)
+  | LdCN64 _ -> 0x2F (* Hypothetical value - need to check CIL spec *)
+  | LdCB32 _ -> 0x30 (* Hypothetical value - need to check CIL spec *)
+  | LdCB64 _ -> 0x31 (* Hypothetical value - need to check CIL spec *)
+  | LdCD32 _ -> 0x32 (* Hypothetical value - need to check CIL spec *)
+  | LdCD64 _ -> 0x33 (* Hypothetical value - need to check CIL spec *)
   | LdCStr _ -> 0x72
-
   (* Load/Store Variables *)
   | LdLoc _ -> 0x0E
   | StLoc _ -> 0x0F
@@ -173,7 +159,6 @@ let to_opcode = function
   | LdArg _ -> 0x02
   | StArg _ -> 0x03
   | LdArgA _ -> 0x04
-
   (* Object Operations *)
   | NewObj _ -> 0x73
   | Call _ -> 0x28
@@ -190,7 +175,6 @@ let to_opcode = function
   | StElem -> 0xA4
   | LdElemA -> 0x8F
   | LdLen -> 0x8E
-
   (* Type Operations *)
   | LdType _ -> 0xD1
   | IsInst _ -> 0x75
@@ -213,7 +197,6 @@ let to_opcode = function
   | ConvD32 -> 0xD8
   | ConvD64 -> 0xD9
   | ConvD128 -> 0xDA
-
   (* Arithmetic Operations *)
   | Add -> 0x58
   | AddOvf -> 0xD6
@@ -228,9 +211,7 @@ let to_opcode = function
   | DivUn -> 0x5C
   | Rem -> 0x5D
   | RemUn -> 0x5E
-  | Mod -> 0xDC
   | Neg -> 0x65
-
   (* Logical/Bitwise Operations *)
   | And -> 0x5F
   | Or -> 0x60
@@ -239,18 +220,15 @@ let to_opcode = function
   | Shl -> 0x62
   | Shr -> 0x63
   | ShrUn -> 0x64
-
   (* Comparison Operations *)
   | Ceq -> 0xFE
   | Cgt -> 0xC2
   | CgtUn -> 0xC3
   | Clt -> 0xC4
   | CltUn -> 0xC5
-
   (* Memory Management *)
   | Pin -> 0xDF
   | Unpin -> 0xE0
-
   (* Dynamic Operations *)
   | LdFldDyn _ -> 0xE1
   | StFldDyn _ -> 0xE2
@@ -276,11 +254,9 @@ let show = function
   | Rethrow -> "rethrow"
   | Try -> "try"
   | Defer -> "defer"
-
   (* Stack Operations *)
   | Dup -> "dup"
   | Pop -> "pop"
-
   (* Load Constants *)
   | LdNull -> "ldnull"
   | LdCI4 n -> Printf.sprintf "ldc.i4 %ld" n
@@ -294,7 +270,6 @@ let show = function
   | LdCD32 f -> Printf.sprintf "ldc.d32 %g" f
   | LdCD64 f -> Printf.sprintf "ldc.d64 %g" f
   | LdCStr idx -> Printf.sprintf "ldstr %d" idx
-
   (* Load/Store Variables *)
   | LdLoc idx -> Printf.sprintf "ldloc %d" idx
   | StLoc idx -> Printf.sprintf "stloc %d" idx
@@ -302,7 +277,6 @@ let show = function
   | LdArg idx -> Printf.sprintf "ldarg %d" idx
   | StArg idx -> Printf.sprintf "starg %d" idx
   | LdArgA idx -> Printf.sprintf "ldarga %d" idx
-
   (* Object Operations *)
   | NewObj ctor -> Printf.sprintf "newobj %d" ctor
   | Call _method -> Printf.sprintf "call <method>"
@@ -319,7 +293,6 @@ let show = function
   | StElem -> "stelem"
   | LdElemA -> "ldelema"
   | LdLen -> "ldlen"
-
   (* Type Operations *)
   | LdType type_id -> Printf.sprintf "ldtype %d" type_id
   | IsInst type_id -> Printf.sprintf "isinst %d" type_id
@@ -342,7 +315,6 @@ let show = function
   | ConvD32 -> "conv.d32"
   | ConvD64 -> "conv.d64"
   | ConvD128 -> "conv.d128"
-
   (* Arithmetic Operations *)
   | Add -> "add"
   | AddOvf -> "add.ovf"
@@ -357,9 +329,7 @@ let show = function
   | DivUn -> "div.un"
   | Rem -> "rem"
   | RemUn -> "rem.un"
-  | Mod -> "mod"
   | Neg -> "neg"
-
   (* Logical/Bitwise Operations *)
   | And -> "and"
   | Or -> "or"
@@ -368,18 +338,15 @@ let show = function
   | Shl -> "shl"
   | Shr -> "shr"
   | ShrUn -> "shr.un"
-
   (* Comparison Operations *)
   | Ceq -> "ceq"
   | Cgt -> "cgt"
   | CgtUn -> "cgt.un"
   | Clt -> "clt"
   | CltUn -> "clt.un"
-
   (* Memory Management *)
   | Pin -> "pin"
   | Unpin -> "unpin"
-
   (* Dynamic Operations *)
   | LdFldDyn name -> Printf.sprintf "ldfld.dyn \"%s\"" name
   | StFldDyn name -> Printf.sprintf "stfld.dyn \"%s\"" name
@@ -405,11 +372,9 @@ let show_with_interner interner = function
   | Rethrow -> "rethrow"
   | Try -> "try"
   | Defer -> "defer"
-
   (* Stack Operations *)
   | Dup -> "dup"
   | Pop -> "pop"
-
   (* Load Constants *)
   | LdNull -> "ldnull"
   | LdCI4 n -> Printf.sprintf "ldc.i4 %ld" n
@@ -423,7 +388,6 @@ let show_with_interner interner = function
   | LdCD32 f -> Printf.sprintf "ldc.d32 %g" f
   | LdCD64 f -> Printf.sprintf "ldc.d64 %g" f
   | LdCStr idx -> Printf.sprintf "ldstr %d" idx
-
   (* Load/Store Variables *)
   | LdLoc idx -> Printf.sprintf "ldloc %d" idx
   | StLoc idx -> Printf.sprintf "stloc %d" idx
@@ -431,11 +395,11 @@ let show_with_interner interner = function
   | LdArg idx -> Printf.sprintf "ldarg %d" idx
   | StArg idx -> Printf.sprintf "starg %d" idx
   | LdArgA idx -> Printf.sprintf "ldarga %d" idx
-
   (* Object Operations *)
   | NewObj ctor -> Printf.sprintf "newobj %d" ctor
   | Call name -> Printf.sprintf "call %s" (Interner.lookup interner name)
-  | CallVirt name -> Printf.sprintf "callvirt %s" (Interner.lookup interner name)
+  | CallVirt name ->
+    Printf.sprintf "callvirt %s" (Interner.lookup interner name)
   | CallI -> "calli"
   | LdFld idx -> Printf.sprintf "ldfld %d" idx
   | StFld idx -> Printf.sprintf "stfld %d" idx
@@ -448,7 +412,6 @@ let show_with_interner interner = function
   | StElem -> "stelem"
   | LdElemA -> "ldelema"
   | LdLen -> "ldlen"
-
   (* Type Operations *)
   | LdType type_id -> Printf.sprintf "ldtype %d" type_id
   | IsInst type_id -> Printf.sprintf "isinst %d" type_id
@@ -471,7 +434,6 @@ let show_with_interner interner = function
   | ConvD32 -> "conv.d32"
   | ConvD64 -> "conv.d64"
   | ConvD128 -> "conv.d128"
-
   (* Arithmetic Operations *)
   | Add -> "add"
   | AddOvf -> "add.ovf"
@@ -486,9 +448,7 @@ let show_with_interner interner = function
   | DivUn -> "div.un"
   | Rem -> "rem"
   | RemUn -> "rem.un"
-  | Mod -> "mod"
   | Neg -> "neg"
-
   (* Logical/Bitwise Operations *)
   | And -> "and"
   | Or -> "or"
@@ -497,18 +457,15 @@ let show_with_interner interner = function
   | Shl -> "shl"
   | Shr -> "shr"
   | ShrUn -> "shr.un"
-
   (* Comparison Operations *)
   | Ceq -> "ceq"
   | Cgt -> "cgt"
   | CgtUn -> "cgt.un"
   | Clt -> "clt"
   | CltUn -> "clt.un"
-
   (* Memory Management *)
   | Pin -> "pin"
   | Unpin -> "unpin"
-
   (* Dynamic Operations *)
   | LdFldDyn name -> Printf.sprintf "ldfld.dyn \"%s\"" name
   | StFldDyn name -> Printf.sprintf "stfld.dyn \"%s\"" name

@@ -132,7 +132,6 @@ let encode_opcode interner buf = function
   | Instr.DivUn -> Buffer.add_char buf '\x5C'
   | Instr.Rem -> Buffer.add_char buf '\x5D'
   | Instr.RemUn -> Buffer.add_char buf '\x5E'
-  | Instr.Mod -> Buffer.add_char buf '\xDC'
   | Instr.Neg -> Buffer.add_char buf '\x65'
   (* Logical/Bitwise Operations *)
   | Instr.And -> Buffer.add_char buf '\x5F'
