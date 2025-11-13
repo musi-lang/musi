@@ -4,7 +4,7 @@ use std::hash::{Hash, Hasher};
 
 use serde::{Deserialize, Serialize};
 
-use crate::errors::{MusiError, MusiResult};
+use crate::errors::MusiResult;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Value {
@@ -51,8 +51,7 @@ pub struct Callable {
     pub name: String,
     pub params: Vec<String>,
     pub arity: usize,
-    pub closure: Option<HashMap<String, Value>>, // for closures
-    // TODO: reference bytecode or Rust function
+    pub closure: Option<HashMap<String, Value>>,
     pub bc_offset: Option<usize>,
 }
 
@@ -110,182 +109,32 @@ impl Value {
     pub fn is_truthy(&self) -> bool {
         match self {
             Self::Bool(b) => *b,
-            Self::Int(i) => *i != 0,
-            Self::Nat(n) => *n != 0,
-            Self::Int8(i) => *i != 0,
-            Self::Int16(i) => *i != 0,
-            Self::Int32(i) => *i != 0,
-            Self::Int64(i) => *i != 0,
-            Self::Int128(i) => *i != 0,
-            Self::Nat8(n) => *n != 0,
-            Self::Nat16(n) => *n != 0,
-            Self::Nat32(n) => *n != 0,
-            Self::Nat64(n) => *n != 0,
-            Self::Nat128(n) => *n != 0,
-            Self::Bin32(f) => *f != 0.0,
-            Self::Bin64(f) => *f != 0.0,
-            Self::Unit => false,
-            Self::Option(None) => false,
-            Self::Option(Some(_)) => true,
-            Self::Str(s) => !s.is_empty(),
-            Self::ArrayList(arr) => !arr.is_empty(),
-            Self::Array { elems, .. } => !elems.is_empty(),
-            Self::Tuple(tup) => !tup.is_empty(),
-            Self::Record(rec) => !rec.is_empty(),
-            Self::Callable(_) => true,
-            Self::Expect(exp) => matches!(exp.as_ref(), ExpectValue::Pass(_)),
             Self::Rune(c) => *c != '\0',
-        }
-    }
-
-    /// Generic helper for integer conversion to signed integers
-    fn as_int_variant<T>(&self) -> MusiResult<T>
-    where
-        T: TryFrom<isize> + TryFrom<usize>,
-    {
-        match self {
-            Self::Int(i) => {
-                T::try_from(*i).map_err(|_| MusiError::invalid_cast(self.show(), "Int"))
-            }
-            Self::Nat(n) => {
-                T::try_from(*n).map_err(|_| MusiError::invalid_cast(self.show(), "Int"))
-            }
-            Self::Int8(i) => {
-                T::try_from(*i as isize).map_err(|_| MusiError::invalid_cast(self.show(), "Int"))
-            }
-            Self::Int16(i) => {
-                T::try_from(*i as isize).map_err(|_| MusiError::invalid_cast(self.show(), "Int"))
-            }
-            Self::Int32(i) => {
-                T::try_from(*i as isize).map_err(|_| MusiError::invalid_cast(self.show(), "Int"))
-            }
-            Self::Int64(i) => {
-                T::try_from(*i as isize).map_err(|_| MusiError::invalid_cast(self.show(), "Int"))
-            }
-            Self::Int128(i) => {
-                T::try_from(*i as isize).map_err(|_| MusiError::invalid_cast(self.show(), "Int"))
-            }
-            Self::Nat8(n) => {
-                T::try_from(*n as usize).map_err(|_| MusiError::invalid_cast(self.show(), "Int"))
-            }
-            Self::Nat16(n) => {
-                T::try_from(*n as usize).map_err(|_| MusiError::invalid_cast(self.show(), "Int"))
-            }
-            Self::Nat32(n) => {
-                T::try_from(*n as usize).map_err(|_| MusiError::invalid_cast(self.show(), "Int"))
-            }
-            Self::Nat64(n) => {
-                T::try_from(*n as usize).map_err(|_| MusiError::invalid_cast(self.show(), "Int"))
-            }
-            Self::Nat128(n) => {
-                T::try_from(*n as usize).map_err(|_| MusiError::invalid_cast(self.show(), "Int"))
-            }
-            _ => Err(MusiError::invalid_cast(self.show(), "Int")),
-        }
-    }
-
-    /// Generic helper for integer conversion to unsigned integers
-    fn as_nat_variant<T>(&self) -> MusiResult<T>
-    where
-        T: TryFrom<usize> + TryFrom<isize>,
-    {
-        match self {
-            Self::Nat(n) => {
-                T::try_from(*n).map_err(|_| MusiError::invalid_cast(self.show(), "Nat"))
-            }
-            Self::Int(i) if *i >= 0 => {
-                T::try_from(*i as usize).map_err(|_| MusiError::invalid_cast(self.show(), "Nat"))
-            }
-            Self::Int8(i) if *i >= 0 => {
-                T::try_from(*i as usize).map_err(|_| MusiError::invalid_cast(self.show(), "Nat"))
-            }
-            Self::Int16(i) if *i >= 0 => {
-                T::try_from(*i as usize).map_err(|_| MusiError::invalid_cast(self.show(), "Nat"))
-            }
-            Self::Int32(i) if *i >= 0 => {
-                T::try_from(*i as usize).map_err(|_| MusiError::invalid_cast(self.show(), "Nat"))
-            }
-            Self::Int64(i) if *i >= 0 => {
-                T::try_from(*i as usize).map_err(|_| MusiError::invalid_cast(self.show(), "Nat"))
-            }
-            Self::Int128(i) if *i >= 0 => {
-                T::try_from(*i as usize).map_err(|_| MusiError::invalid_cast(self.show(), "Nat"))
-            }
-            Self::Nat8(n) => {
-                T::try_from(*n as usize).map_err(|_| MusiError::invalid_cast(self.show(), "Nat"))
-            }
-            Self::Nat16(n) => {
-                T::try_from(*n as usize).map_err(|_| MusiError::invalid_cast(self.show(), "Nat"))
-            }
-            Self::Nat32(n) => {
-                T::try_from(*n as usize).map_err(|_| MusiError::invalid_cast(self.show(), "Nat"))
-            }
-            Self::Nat64(n) => {
-                T::try_from(*n as usize).map_err(|_| MusiError::invalid_cast(self.show(), "Nat"))
-            }
-            Self::Nat128(n) => {
-                T::try_from(*n as usize).map_err(|_| MusiError::invalid_cast(self.show(), "Nat"))
-            }
-            _ => Err(MusiError::invalid_cast(self.show(), "Nat")),
-        }
-    }
-
-    pub fn as_int(&self) -> MusiResult<isize> {
-        self.as_int_variant()
-    }
-
-    pub fn as_nat(&self) -> MusiResult<usize> {
-        self.as_nat_variant()
-    }
-
-    pub fn as_str(&self) -> MusiResult<String> {
-        match self {
-            Self::Str(s) => Ok(s.clone()),
-            _ => Err(MusiError::invalid_cast(self.show(), "Str")),
-        }
-    }
-
-    pub fn as_bool(&self) -> MusiResult<bool> {
-        match self {
-            Self::Bool(b) => Ok(*b),
-            _ => Err(MusiError::invalid_cast(self.show(), "Bool")),
-        }
-    }
-
-    pub fn as_array(&self) -> MusiResult<&Vec<Value>> {
-        match self {
-            Self::ArrayList(arr) => Ok(arr),
-            Self::Array { elems, .. } => Ok(elems),
-            _ => Err(MusiError::invalid_cast(self.show(), "Array")),
-        }
-    }
-
-    pub fn as_array_mut(&mut self) -> MusiResult<&mut Vec<Value>> {
-        match self {
-            Self::ArrayList(arr) => Ok(arr),
-            Self::Array { elems, .. } => Ok(elems),
-            _ => Err(MusiError::invalid_cast(self.show(), "Array")),
-        }
-    }
-
-    pub fn as_tuple(&self) -> MusiResult<&Vec<Value>> {
-        match self {
-            Self::Tuple(tuple) => Ok(tuple),
-            _ => Err(MusiError::invalid_cast(self.show(), "Tuple")),
-        }
-    }
-
-    pub fn as_record(&self) -> MusiResult<&HashMap<String, Value>> {
-        match self {
-            Self::Record(record) => Ok(record),
-            _ => Err(MusiError::invalid_cast(self.show(), "Record")),
-        }
-    }
-
-    pub fn as_record_mut(&mut self) -> MusiResult<&mut HashMap<String, Value>> {
-        match self {
-            Self::Record(record) => Ok(record),
-            _ => Err(MusiError::invalid_cast(self.show(), "Record")),
+            Self::Str(s) => !s.is_empty(),
+            Self::Unit | Self::Option(None) => false,
+            Self::Option(Some(_)) | Self::Callable(_) => true,
+            Self::ArrayList(arr) | Self::Tuple(arr) => !arr.is_empty(),
+            Self::Array { elems, .. } => !elems.is_empty(),
+            Self::Record(rec) => !rec.is_empty(),
+            Self::Expect(exp) => matches!(exp.as_ref(), ExpectValue::Pass(_)),
+            _ if self.is_numeric() => match self {
+                Self::Int(i) => *i != 0,
+                Self::Nat(n) => *n != 0,
+                Self::Int8(i) => *i != 0,
+                Self::Int16(i) => *i != 0,
+                Self::Int32(i) => *i != 0,
+                Self::Int64(i) => *i != 0,
+                Self::Int128(i) => *i != 0,
+                Self::Nat8(n) => *n != 0,
+                Self::Nat16(n) => *n != 0,
+                Self::Nat32(n) => *n != 0,
+                Self::Nat64(n) => *n != 0,
+                Self::Nat128(n) => *n != 0,
+                Self::Bin32(f) => *f != 0.0,
+                Self::Bin64(f) => *f != 0.0,
+                _ => unreachable!(),
+            },
+            _ => false,
         }
     }
 
@@ -302,6 +151,18 @@ impl Value {
     }
     pub fn fail(value: Self) -> Self {
         Self::Expect(Box::new(ExpectValue::Fail(value)))
+    }
+
+    fn eq_seq(a: &[Self], b: &[Self]) -> MusiResult<bool> {
+        if a.len() != b.len() {
+            return Ok(false);
+        }
+        for (av, bv) in a.iter().zip(b.iter()) {
+            if !av.equals(bv)? {
+                return Ok(false);
+            }
+        }
+        Ok(true)
     }
 
     pub fn equals(&self, other: &Self) -> MusiResult<bool> {
@@ -330,59 +191,22 @@ impl Value {
                 (ExpectValue::Fail(av), ExpectValue::Fail(bv)) => av.equals(bv),
                 _ => Ok(false),
             },
-            (Self::ArrayList(a), Self::ArrayList(b)) => {
-                if a.len() != b.len() {
+            (Self::ArrayList(a), Self::ArrayList(b)) => Self::eq_seq(a, b),
+            (Self::Tuple(a), Self::Tuple(b)) => Self::eq_seq(a, b),
+            (Self::Array { elems: a, size: sa }, Self::Array { elems: b, size: sb }) => {
+                if sa != sb {
                     return Ok(false);
                 }
-                for (i, av) in a.iter().enumerate() {
-                    if !av.equals(&b[i])? {
-                        return Ok(false);
-                    }
-                }
-                Ok(true)
-            }
-            (
-                Self::Array {
-                    elems: a,
-                    size: size_a,
-                },
-                Self::Array {
-                    elems: b,
-                    size: size_b,
-                },
-            ) => {
-                if size_a != size_b || a.len() != b.len() {
-                    return Ok(false);
-                }
-                for (i, av) in a.iter().enumerate() {
-                    if !av.equals(&b[i])? {
-                        return Ok(false);
-                    }
-                }
-                Ok(true)
-            }
-            (Self::Tuple(a), Self::Tuple(b)) => {
-                if a.len() != b.len() {
-                    return Ok(false);
-                }
-                for (i, av) in a.iter().enumerate() {
-                    if !av.equals(&b[i])? {
-                        return Ok(false);
-                    }
-                }
-                Ok(true)
+                Self::eq_seq(a, b)
             }
             (Self::Record(a), Self::Record(b)) => {
                 if a.len() != b.len() {
                     return Ok(false);
                 }
                 for (key, av) in a {
-                    if let Some(bv) = b.get(key) {
-                        if !av.equals(bv)? {
-                            return Ok(false);
-                        }
-                    } else {
-                        return Ok(false);
+                    match b.get(key) {
+                        Some(bv) if av.equals(bv)? => continue,
+                        _ => return Ok(false),
                     }
                 }
                 Ok(true)
@@ -390,90 +214,17 @@ impl Value {
             _ => Ok(false),
         }
     }
+}
 
-    pub fn hash<H: Hasher>(&self, hasher: &mut H) -> MusiResult<()> {
-        match self {
-            Self::Unit => {
-                0u8.hash(hasher);
-            }
-            Self::Bool(b) => {
-                b.hash(hasher);
-            }
-            Self::Rune(c) => {
-                c.hash(hasher);
-            }
-            Self::Str(s) => {
-                s.hash(hasher);
-            }
-            Self::Int(i) => {
-                i.hash(hasher);
-            }
-            Self::Nat(n) => {
-                n.hash(hasher);
-            }
-            Self::Int8(i) => {
-                i.hash(hasher);
-            }
-            Self::Int16(i) => {
-                i.hash(hasher);
-            }
-            Self::Int32(i) => {
-                i.hash(hasher);
-            }
-            Self::Int64(i) => {
-                i.hash(hasher);
-            }
-            Self::Int128(i) => {
-                i.hash(hasher);
-            }
-            Self::Nat8(n) => {
-                n.hash(hasher);
-            }
-            Self::Nat16(n) => {
-                n.hash(hasher);
-            }
-            Self::Nat32(n) => {
-                n.hash(hasher);
-            }
-            Self::Nat64(n) => {
-                n.hash(hasher);
-            }
-            Self::Nat128(n) => {
-                n.hash(hasher);
-            }
-            Self::Bin32(f) => {
-                f.to_bits().hash(hasher);
-            }
-            Self::Bin64(f) => {
-                f.to_bits().hash(hasher);
-            }
-            // TODO: need recursive hashing
-            Self::Option(opt) => match opt {
-                None => {
-                    0u8.hash(hasher);
-                }
-                Some(v) => {
-                    1u8.hash(hasher);
-                    v.hash(hasher);
-                }
-            },
-            Self::Expect(result) => match result.as_ref() {
-                ExpectValue::Pass(v) => {
-                    0u8.hash(hasher);
-                    let _ = v.hash(hasher);
-                }
-                ExpectValue::Fail(e) => {
-                    1u8.hash(hasher);
-                    let _ = e.hash(hasher);
-                }
-            },
-            _ => {
-                // TODO: need more sophisticated hashing
-                self.show().hash(hasher);
-            }
+fn fmt_seq(f: &mut fmt::Formatter<'_>, items: &[Value], open: &str, close: &str) -> fmt::Result {
+    write!(f, "{open}")?;
+    for (i, val) in items.iter().enumerate() {
+        if i > 0 {
+            write!(f, ", ")?;
         }
-        Ok(())
+        write!(f, "{val}")?;
     }
+    write!(f, "{close}")
 }
 
 impl fmt::Display for Value {
@@ -497,36 +248,12 @@ impl fmt::Display for Value {
             Self::Nat128(n) => write!(f, "{n}n128"),
             Self::Bin32(fl) => write!(f, "{fl}b32"),
             Self::Bin64(fl) => write!(f, "{fl}b64"),
-            Self::ArrayList(arr) => {
-                write!(f, "[")?;
-                for (i, val) in arr.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{val}")?;
-                }
-                write!(f, "]")
-            }
+            Self::ArrayList(arr) => fmt_seq(f, arr, "[", "]"),
             Self::Array { elems, size } => {
-                write!(f, "[")?;
-                for (i, val) in elems.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{val}")?;
-                }
+                fmt_seq(f, elems, "[", "")?;
                 write!(f, "; {size}]")
             }
-            Self::Tuple(tup) => {
-                write!(f, "(")?;
-                for (i, val) in tup.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{val}")?;
-                }
-                write!(f, ")")
-            }
+            Self::Tuple(tup) => fmt_seq(f, tup, "(", ")"),
             Self::Record(record) => {
                 write!(f, "{{")?;
                 for (i, (key, val)) in record.iter().enumerate() {
@@ -554,13 +281,64 @@ impl PartialEq for Value {
     }
 }
 
-impl Hash for Value {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.hash(state).unwrap();
+fn hash_seq<H: Hasher>(items: &[Value], state: &mut H) {
+    items.len().hash(state);
+    for v in items {
+        v.hash(state);
     }
 }
 
-// From implementations for common types
+impl Hash for Value {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        std::mem::discriminant(self).hash(state);
+        match self {
+            Self::Unit => {}
+            Self::Bool(b) => b.hash(state),
+            Self::Rune(c) => c.hash(state),
+            Self::Str(s) => s.hash(state),
+            Self::Int(i) => i.hash(state),
+            Self::Nat(n) => n.hash(state),
+            Self::Int8(i) => i.hash(state),
+            Self::Int16(i) => i.hash(state),
+            Self::Int32(i) => i.hash(state),
+            Self::Int64(i) => i.hash(state),
+            Self::Int128(i) => i.hash(state),
+            Self::Nat8(n) => n.hash(state),
+            Self::Nat16(n) => n.hash(state),
+            Self::Nat32(n) => n.hash(state),
+            Self::Nat64(n) => n.hash(state),
+            Self::Nat128(n) => n.hash(state),
+            Self::Bin32(f) => f.to_bits().hash(state),
+            Self::Bin64(f) => f.to_bits().hash(state),
+            Self::ArrayList(arr) => hash_seq(arr, state),
+            Self::Tuple(tup) => hash_seq(tup, state),
+            Self::Array { elems, size } => {
+                size.hash(state);
+                hash_seq(elems, state);
+            }
+            Self::Record(rec) => {
+                rec.len().hash(state);
+                let mut pairs: Vec<_> = rec.iter().collect();
+                pairs.sort_by_key(|(k, _)| *k);
+                for (k, v) in pairs {
+                    k.hash(state);
+                    v.hash(state);
+                }
+            }
+            Self::Callable(c) => c.name.hash(state),
+            Self::Option(opt) => {
+                if let Some(v) = opt {
+                    v.hash(state);
+                }
+            }
+            Self::Expect(exp) => match exp.as_ref() {
+                ExpectValue::Pass(v) => v.hash(state),
+                ExpectValue::Fail(e) => e.hash(state),
+            },
+        }
+    }
+}
+
 impl From<bool> for Value {
     fn from(b: bool) -> Self {
         Self::Bool(b)
@@ -676,25 +454,6 @@ impl From<Vec<Value>> for Value {
 }
 
 impl Value {
-    pub const fn unit() -> Self {
-        Self::Unit
-    }
-    pub const fn bool(b: bool) -> Self {
-        Self::Bool(b)
-    }
-    pub const fn rune(c: char) -> Self {
-        Self::Rune(c)
-    }
-    pub fn str(s: impl Into<String>) -> Self {
-        Self::Str(s.into())
-    }
-    pub const fn int(i: isize) -> Self {
-        Self::Int(i)
-    }
-    pub const fn nat(n: usize) -> Self {
-        Self::Nat(n)
-    }
-
     pub fn array<T: Into<Value>>(items: Vec<T>) -> Self {
         Self::ArrayList(items.into_iter().map(|v| v.into()).collect())
     }
@@ -724,10 +483,10 @@ mod tests {
 
     #[test]
     fn test_value_creation() {
-        let unit = Value::unit();
-        let bool_val = Value::bool(true);
-        let int_val = Value::int(42);
-        let str_val = Value::str("hello");
+        let unit = Value::Unit;
+        let bool_val = Value::Bool(true);
+        let int_val = Value::Int(42);
+        let str_val = Value::Str("hello".to_string());
 
         assert_eq!(unit.show(), "Unit");
         assert_eq!(bool_val.show(), "Bool");
@@ -736,52 +495,22 @@ mod tests {
     }
 
     #[test]
-    fn test_array_creation() {
-        let arr = Value::array(vec![Value::int(1), Value::int(2), Value::int(3)]);
-        assert_eq!(arr.show(), "ArrayList");
-
-        let arr_ref = arr.as_array().unwrap();
-        assert_eq!(arr_ref.len(), 3);
-    }
-
-    #[test]
-    fn test_record_creation() {
-        let rec = Value::record(vec![("x", Value::int(42)), ("y", Value::int(24))]);
-
-        assert_eq!(rec.show(), "Record");
-        let rec_ref = rec.as_record().unwrap();
-        assert_eq!(rec_ref.get("x").unwrap(), &Value::int(42));
-        assert_eq!(rec_ref.get("y").unwrap(), &Value::int(24));
-    }
-
-    #[test]
     fn test_truthy_values() {
-        assert!(!Value::unit().is_truthy());
-        assert!(!Value::bool(false).is_truthy());
-        assert!(Value::bool(true).is_truthy());
-        assert!(!Value::int(0).is_truthy());
-        assert!(Value::int(42).is_truthy());
-        assert!(!Value::str("").is_truthy());
-        assert!(Value::str("hello").is_truthy());
-    }
-
-    #[test]
-    fn test_type_conversions() {
-        let int_val = Value::int(42);
-        assert_eq!(int_val.as_int().unwrap(), 42);
-        assert_eq!(int_val.as_nat().unwrap(), 42);
-
-        let str_val = Value::str("test");
-        assert!(str_val.as_str().is_ok());
-        assert!(str_val.as_int().is_err());
+        assert!(!Value::Unit.is_truthy());
+        assert!(!Value::Bool(false).is_truthy());
+        assert!(Value::Bool(true).is_truthy());
+        assert!(!Value::Int(0).is_truthy());
+        assert!(Value::Int(42).is_truthy());
+        assert!(!Value::Str("".to_string()).is_truthy());
+        assert!(Value::Str("hello".to_string()).is_truthy());
     }
 
     #[test]
     fn test_option_expect() {
-        let some_val = Value::some(Value::int(42));
+        let some_val = Value::some(Value::Int(42));
         let none_val = Value::none();
-        let pass_val = Value::pass(Value::str("success"));
-        let fail_val = Value::fail(Value::str("failure"));
+        let pass_val = Value::pass(Value::Str("success".to_string()));
+        let fail_val = Value::fail(Value::Str("failure".to_string()));
 
         assert_eq!(some_val.show(), "Option");
         assert_eq!(none_val.show(), "Option");
