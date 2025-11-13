@@ -7,7 +7,6 @@ pub mod frames;
 pub mod instr;
 pub mod memmgr;
 pub mod stack;
-pub mod std;
 pub mod value;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

@@ -1,3 +1,3 @@
 fn main() {
-    println!("Musi Runtime v{}", musi_runtime::VERSION);
+    println!("Musi Runtime v{}", musi::VERSION);
 }
