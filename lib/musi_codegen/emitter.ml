@@ -124,7 +124,7 @@ let emit_expr_literal t = function
   | Node.LitBin s ->
     let f = Float.of_string s in
     ignore (add_const t (ConstBin f));
-    (* Store in const pool for potential future use *)
+    (* store in const pool for possible future use *)
     [ Instr.LdCB64 f ]
   | Node.LitStr name ->
     let idx = add_const t (ConstStr name) in
@@ -150,11 +150,11 @@ let emit_expr_binary = function
   | Token.KwShl -> [ Instr.Shl ]
   | Token.KwShr -> [ Instr.Shr ]
   | Token.Eq -> [ Instr.Ceq ]
-  | Token.EqSlashEq -> [ Instr.Ceq; Instr.Not ] (* Not equal = equal then not *)
+  | Token.EqSlashEq -> [ Instr.Ceq; Instr.Not ] (* not equal : equal + not *)
   | Token.Lt -> [ Instr.Clt ]
   | Token.Gt -> [ Instr.Cgt ]
-  | Token.LtEq -> [ Instr.Cgt; Instr.Not ] (* <= = not greater *)
-  | Token.GtEq -> [ Instr.Clt; Instr.Not ] (* >= = not less *)
+  | Token.LtEq -> [ Instr.Cgt; Instr.Not ] (* <= : not + greater *)
+  | Token.GtEq -> [ Instr.Clt; Instr.Not ] (* >= : not + less *)
   | _ -> []
 
 let emit_expr_unary = function

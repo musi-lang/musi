@@ -146,11 +146,11 @@ let to_opcode = function
   | LdCN8 _ -> 0x22
   | LdCN16 _ -> 0x23
   | LdCN32 _ -> 0x24
-  | LdCN64 _ -> 0x2F (* Hypothetical value - need to check CIL spec *)
-  | LdCB32 _ -> 0x30 (* Hypothetical value - need to check CIL spec *)
-  | LdCB64 _ -> 0x31 (* Hypothetical value - need to check CIL spec *)
-  | LdCD32 _ -> 0x32 (* Hypothetical value - need to check CIL spec *)
-  | LdCD64 _ -> 0x33 (* Hypothetical value - need to check CIL spec *)
+  | LdCN64 _ -> 0x2F (* hypothetical value *)
+  | LdCB32 _ -> 0x30 (* hypothetical value *)
+  | LdCB64 _ -> 0x31 (* hypothetical value *)
+  | LdCD32 _ -> 0x32 (* hypothetical value *)
+  | LdCD64 _ -> 0x33 (* hypothetical value *)
   | LdCStr _ -> 0x72
   (* Load/Store Variables *)
   | LdLoc _ -> 0x0E
