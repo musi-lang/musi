@@ -20,32 +20,32 @@
 // KEYWORDS & CONTROL FLOW
 // ============================================================================
 
-const x := 42;
+val x := 42;
 var y := 0;
 y <- 10;
 
-if x > 0 then { writeln("positive") }
-if x > 0 then { writeln("pos") } else { writeln("neg") }
+if x > 0 then { writeln("positive") };
+if x > 0 then { writeln("pos") } else { writeln("neg") };
 if x > 0 then {
   writeln("positive")
 } else if x < 0 then {
   writeln("negative")
 } else {
   writeln("zero")
-}
+};
 
-while hasNext() do { process(next()) }
-for item in items do { handle(item) }
-for const i in 0..<10 do { writeln(`${i}`) }
-do { step() } while continuing()
+while hasNext() do { process(next()) };
+for item in items do { handle(item) };
+for i in 0..<10 do { writeln(`${i}`) };
+do { step() } while continuing();
 
 match result with {
-case .Succ(const v) -> use(v),
-case .Fail(const e) -> handle(e),
-}
+case .Succ(v) -> use(v),
+case .Fail(e) -> handle(e),
+};
 
-if x > 0 and then y < 10 then { inRange() }
-if valid or else canRecover() then { proceed() }
+if x > 0 and then y < 10 then { inRange() };
+if valid or else canRecover() then { proceed() };
 
 defer cleanup();
 break;
@@ -57,161 +57,162 @@ yield item;
 // LITERALS
 // ============================================================================
 
-const dec := 42;
-const hex := 0xFF;
-const bin := 0b1010;
-const oct := 0o755;
-const typed_int := 255_n8;
-const big_num := 1_000_000;
+val dec := 42;
+val hex := 0xFF;
+val bin := 0b1010;
+val oct := 0o755;
+val typed_int := 255_n8;
+val big_num := 1_000_000;
 
-const pi := 3.14159;
-const sci := 1.23e-4;
-const typed_float := 3.14_b32;
-const double := 2.718_b64;
+val pi := 3.14159;
+val sci := 1.23e-4;
+val typed_float := 3.14_b32;
+val double := 2.718_b64;
 
-const t := true;
-const f := false;
+val t := true;
+val f := false;
 
-const str := "hello world";
-const chr := 'A';
-const tmpl := `Hello ${name}, you have ${count} items`;
-const escape := "line1\nline2\ttab\u{1F600}";
+val str := "hello world";
+val chr := 'A';
+val tmpl := `Hello ${name}, you have ${count} items`;
+val escape := "line1\nline2\ttab\u{1F600}";
 
-const self_fld := self;
-const self_ref := Self;
+val self_fld := self;
+val self_ref := Self;
 
 // ============================================================================
 // OPERATORS
 // ============================================================================
 
 // Arithmetic
-const add := x + y;
-const sub := x - y;
-const mul := x * y;
-const div := x / y;
-const modulo := x mod y;
-const power := x^2;
+val add := x + y;
+val sub := x - y;
+val mul := x * y;
+val div := x / y;
+val euc := x mod y; // Euclidean division
+val pow := x^2;
 
 // Comparison
-const eq := x = y;
-const neq := x =/= y;
-const lt := x < y;
-const lte := x <= y;
-const gt := x > y;
-const gte := x >= y;
+val eq := x = y;
+val ne := x =/= y;
+val lt := x < y;
+val le := x <= y;
+val gt := x > y;
+val ge := x >= y;
 
 // Logical
-const and_op := a and b;
-const or_op := a or b;
-const not_op := not a;
-const xor_op := a xor b;
-const nand_op := a nand b;
-const nor_op := a nor b;
-const xnor_op := a xnor b;
+val and_op := a and b;
+val or_op := a or b;
+val not_op := not a;
+val xor_op := a xor b;
+val nand_op := a nand b;
+val nor_op := a nor b;
+val xnor_op := a xnor b;
 
 // Bitwise
-const shl_op := x shl 2;
-const shr_op := x shr 2;
+val shl_op := x shl 2;
+val shr_op := x shr 2;
 
 // Ranges
-const inclusive := 0..10;
-const exclusive := 0..<10;
+val inclusive := 0..10;
+val exclusive := 0..<10;
 
 // Type operators
-const optional := value?;
-const fallible := operation!;
-const fallible_typed := operation!Error;
-const cast := value as Int;
-const typecheck := value is Int;
+val optional := value?;
+val fallible := operation!;
+val type_cast := value as Int;
+val type_test := value is Int;
 
 // Arrow
-const arrow := proc (x: Int) -> Int { x + 1 };
+val arrow := proc(x: Int) -> Int { x + 1 };
 
 // ============================================================================
 // TYPES
 // ============================================================================
 
-const unit_val: Unit := ();
-const bool_val: Bool := true;
-const int_val: Int := 42;
-const nat_val: Nat := 42;
-const bin_val: Bin := 3.14;
-const bin32_val: Bin32 := 3.14_b32;
-const bin64_val: Bin64 := 3.14_b64;
-const rune_val: Rune := 'A';
-const text_val: Str := "hello";
+val unit_val: Unit := ();
+val bool_val: Bool := true;
+val int_val: Int := 42;
+val nat_val: Nat := 42;
+val bin_val: Bin := 3.14;
+val bin32_val: Bin32 := 3.14_b32;
+val bin64_val: Bin64 := 3.14_b64;
+val rune_val: Rune := 'A';
+val text_val: Str := "hello";
 
-const array_type: [Int] := [1, 2, 3];
-const tuple_type: (Int, Str) := (42, "answer");
-const ptr_type: Ptr<Int> := addr(x);
-const proc_type: proc (Int) -> Int := inc;
+val array_type: [Int] := [1, 2, 3];
+val tuple_type: (Int, Str) := (42, "answer");
+val ptr_type: Ptr<Int> := addr(x);
+val proc_type: proc(Int) -> Int := inc;
 
-const box_val: Box<Int> := Box{ 42 };
-const opt_val: Int? := .Some(42);
-const res_val: Int!Str := .Succ(42);
+val box_val: Box<Int> := Box{ 42 };
+val opt_val: Int? := .Some(42);
+val res_val: Int!Str := .Succ(42);
 
-const maybe: Int? := .Some(42);
-const result: Data! := try load();
-const result_typed: Data! := try load();
+val maybe: Int? := .Some(42);
+val result: Data! := try load();
+val result_typed: Data! := try load();
 
 // ============================================================================
 // PROCEDURES
 // ============================================================================
 
-const add := proc (x: Int, y: Int) -> Int { x + y };
+val add := proc(x: Int, y: Int) -> Int { x + y };
 
-const scale := proc (v: Bin, f: Bin) -> Bin {
+val scale := proc(v: Bin, f: Bin) -> Bin {
   v * f
 };
 
 proc fill(var buf: [Int], val: Int) {
-  for const i in 0..<len(buf) do {
+  for i in 0..<len(buf) do {
     buf[i] <- val
   }
-}
+};
 
-const generic := proc <T>(x: T) -> T { x };
+val generic := proc<T>(x: T) -> T { x };
 
-const multi_generic := proc <T, U>(x: T, y: U) -> (T, U) {
+val multi_generic := proc<T, U>(x: T, y: U) -> (T, U) {
   (x, y)
 };
 
-const async_proc := async proc (url: Str) -> Data! {
-  const res := await http.get(url);
-  const body := await res.json();
+val async_proc := async proc(url: Str) -> Data! {
+  val res := await http.get(url);
+  val body := await res.json();
   body
 };
 
 unsafe proc write_ptr(p: Ptr<Nat>, v: Nat) {
   p.pointee <- v;
-}
+};
 
 export unsafe proc raw_read(addr: Ptr<Unit>, size: Nat) -> [Nat8] {
-  const buf: [Nat8] := [Nat8; size]{};
+  val buf: [Nat8] := [Nat8; size]{};
   memcpy(addr(buf), addr, size);
   buf
-}
+};
 
-unsafe extern "C" proc malloc(size: Nat) -> Ptr<Unit>;
+@extern("C")
+unsafe proc malloc(size: Nat) -> Ptr<Unit>;
 
-export unsafe extern "C" proc free(ptr: Ptr<Unit>);
+@extern("C")
+export unsafe proc free(ptr: Ptr<Unit>);
 
 // ============================================================================
 // RECORDS (PRODUCT TYPES)
 // ============================================================================
 
-const Point := record {
+val Point := record {
   x: Bin64 := 0.0;
   y: Bin64 := 0.0;
 };
 
-const p1 := Point{ 3.0, 4.0 };
-const p2 := Point{};
-const p3 := Point{ .x := 1.0, .y := 2.0 };
+val p1 := Point{ 3.0, 4.0 };
+val p2 := Point{};
+val p3 := Point{ .x := 1.0, .y := 2.0 };
 
-const distance := proc (a: Point, b: Point) -> Bin64 {
-  const dx := a.x - b.x;
-  const dy := a.y - b.y;
+val distance := proc(a: Point, b: Point) -> Bin64 {
+  val dx := a.x - b.x;
+  val dy := a.y - b.y;
   sqrt(dx * dx + dy * dy)
 };
 
@@ -219,28 +220,28 @@ const distance := proc (a: Point, b: Point) -> Bin64 {
 // CHOICES (SUM TYPES)
 // ============================================================================
 
-const Option := choice Option<T> {
+val Option := choice Option<T> {
   case Some(T),
   case None,
 };
 
-const Expect := choice Expect<T, E> {
+val Expect := choice Expect<T, E> {
   case Pass(T),
   case Fail(E),
 };
 
-const Shape := choice Shape {
+val Shape := choice Shape {
   case Circle(r: Bin64),
   case Rect(w: Bin64, h: Bin64),
   case Triangle(a: Bin64, b: Bin64, c: Bin64),
 };
 
-const area := proc (s: Shape) -> Bin64 {
+val area := proc(s: Shape) -> Bin64 {
   match s with {
-  case .Circle(const r) -> 3.14159 * r^2,
-  case .Rect(const w, const h) -> w * h,
-  case .Triangle(const a, const b, const c) -> {
-    const s := (a + b + c) / 2.0;
+  case .Circle(r) -> 3.14159 * r^2,
+  case .Rect(w, h) -> w * h,
+  case .Triangle(a, b, c) -> {
+    val s := (a + b + c) / 2.0;
     sqrt(s * (s - a) * (s - b) * (s - c))
   },
   }
@@ -250,29 +251,29 @@ const area := proc (s: Shape) -> Bin64 {
 // PATTERN MATCHING
 // ============================================================================
 
-if case .Some(const v) := opt then { use(v) }
-while case .Some(const v) := next() do { loop(v) }
-for case .Succ(const v) in results do { process(v) }
+if case .Some(v) := opt then { use(v) };
+while case .Some(v) := next() do { loop(v) };
+for case .Succ(v) in results do { process(v) };
 
 match value with {
-case const x -> handle(x),
-case const _ -> ignore(),
-}
+case x -> handle(x),
+case _ -> ignore(),
+};
 
 match opt with {
-case .Some(const v) -> act(v),
+case .Some(v) -> act(v),
 case .None -> fallback(),
-}
+};
 
 match tuple with {
-case const (a, b) -> combine(a, b),
-}
+case (a, b) -> combine(a, b),
+};
 
 match num with {
-case const n if n > 10 -> large(n),
-case const n if n > 0 -> small(n),
-case const _ -> zero_or_neg(),
-}
+case n if n > 10 -> large(n),
+case n if n > 0 -> small(n),
+case _ -> zero_or_neg(),
+};
 
 // ============================================================================
 // MODULES & IMPORTS
@@ -291,128 +292,130 @@ export { myFunc, MyType };
 // ============================================================================
 
 @inline
-const fast := proc (x: Int) -> Int { x * 2 };
+val fast := proc(x: Int) -> Int { x * 2 };
 
 @deprecated("use 'new_sum' instead")
-const old_sum := proc (x: Int, y: Int) -> Int { x + y };
+val old_sum := proc(x: Int, y: Int) -> Int { x + y };
 
 @test
 proc test_addition() {
-  const result := add(2, 3);
+  val result := add(2, 3);
   assert(result = 5);
 }
 
 @inline
-const compute := proc (x: Int) -> Int { x^2 };
+val compute := proc(x: Int) -> Int { x^2 };
 
 // ============================================================================
 // UNSAFE BLOCKS
 // ============================================================================
 
-const unsafe_op := unsafe {
-  const p := addr(x);
+val unsafe_op := unsafe {
+  val p := addr(x);
   p.pointee
 };
 
 unsafe proc raw_copy(dest: Ptr<Unit>, src: Ptr<Unit>, size: Nat) {
   memcpy(dest, src, size);
-}
+};
 
 // ============================================================================
 // ERROR HANDLING
 // ============================================================================
 
-const load := proc (path: Str) -> Data! {
-  const file := try open(path);
-  const text := try file.read();
+val load := proc(path: Str) -> Data! {
+  val file := try open(path);
+  val text := try file.read();
   try parse(text)
 };
 
-const handle_result := match operation() with {
-  case .Succ(const v) -> v,
-  case .Fail(const e) -> recover(e),
+val handle_result := match operation() with {
+  case .Succ(v) -> v,
+  case .Fail(e) -> recover(e),
 };
 
 // ============================================================================
 // IDENTIFIERS
 // ============================================================================
 
-const MAX_SIZE := 1024;
-const DEFAULT_TIMEOUT := 30;
+val MAX_SIZE := 1024;
+val DEFAULT_TIMEOUT := 30;
 
-const UserData := record { name: Str; age: Nat };
-const HttpError := choice HttpError { case NotFound, case ServerError };
+val UserData := record { name: Str; age: Nat };
+val HttpError := choice HttpError { case NotFound, case ServerError };
 
-const user_count := 42;
+val user_count := 42;
 var active_sessions := 0;
 
-const get_user := proc (id: Nat) -> User? { /* ... */ };
-const is_valid := proc (x: Int) -> Bool { x > 0 };
+val get_user := proc(id: Nat) -> User? { /* ... */ };
+val is_valid := proc(x: Int) -> Bool { x > 0 };
 
-const status := .Success;
-const color := .Red;
-const opt := .Some(42);
-const res := .Succ(data);
+val status := .Success;
+val color := .Red;
+val opt := .Some(42);
+val res := .Succ(data);
 
-const x_coord := point.x;
-const name := user.name;
-const first := array.0;
+val x_coord := point.x;
+val name := user.name;
+val first := tuple.0;
+val second := array[1];
+val third := obj["key"];
 
-const result := compute(42);
-const value := transform<Int>(data);
-const output := process(input, config);
+val result := compute(42);
+val value := transform<Int>(data);
+val output := process(input, config);
 
 // ============================================================================
 // COMPLEX EXPRESSIONS
 // ============================================================================
 
-const complex := {
-  const helper := proc (x: Int) -> Int { x + 1 };
-  const value := 42;
+val complex := {
+  val helper := proc(x: Int) -> Int { x + 1 };
+  val value := 42;
   helper(value)
 };
 
-const with_where := compute() where {
-  const helper := proc (x: Int) -> Int { x + 1 };
-  const value := 42;
+val with_where := compute() where {
+  val helper := proc(x: Int) -> Int { x + 1 };
+  val value := 42;
 };
 
-const nested_generics := Map<Str, List<Int?>>{};
+val nested_generics := Map<Str, List<Int?>>{};
 
-const chained := data
-  .filter(proc (x) -> Bool { x > 0 })
-  .map(proc (x) -> Int { x * 2 })
-  .reduce(0, proc (acc, x) -> Int { acc + x });
+val chained := data
+  .filter(|x| -> Bool { x > 0 })
+  .map(|x| -> Int { x * 2 })
+  .reduce(0, |acc, x| -> Int { acc + x });
 
 // ============================================================================
 // EDGE CASES
 // ============================================================================
 
-const multi := proc <T, U, V>(a: T, b: U, c: V) -> (T, U, V) { (a, b, c) };
+val multi := proc<T, U, V>(a: T, b: U, c: V) -> (T, U, V) { (a, b, c) };
 
 match nested with {
-case .Some(.Succ(const v)) -> use(v),
-case .Some(.Fail(const e)) -> handle(e),
+case .Some(.Succ(v)) -> use(v),
+case .Some(.Fail(e)) -> handle(e),
 case .None -> fallback(),
-}
+};
 
-const complex_type: proc (Int, Str) -> List<Data?>! := loader;
+val complex_type: proc(Int, Str) -> List<Data?>! := loader;
 
-const ptr := addr(value);
-const deref := ptr.pointee;
+val ptr := addr(value);
+val deref := ptr.pointee;
 ptr.pointee <- 100;
 
-const msg := `User ${user.name} has ${user.items.len()} items (${user.items.len() * 2} total)`;
+val msg := `User ${user.name} has ${user.items.len()} items (${user.items.len() * 2} total)`;
 
-const a := 10;
-const b := 20;
-const result := {
-  const x := compute();
-  const y := transform(x);
+val a := 10;
+val b := 20;
+val result := {
+  val x := compute();
+  val y := transform(x);
   x + y
 };
 
-const unit := (
+val unit := (
   action();
   done();
 );
