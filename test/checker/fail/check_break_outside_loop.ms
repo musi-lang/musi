@@ -1,1 +1,1 @@
-const x := break;
+val x := break;

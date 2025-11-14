@@ -1,4 +1,4 @@
-const find := proc (target: Int) -> Int {
+val find := proc (target: Int) -> Int {
   var i := 0;
   while i < 100 do {
     if i = target then {

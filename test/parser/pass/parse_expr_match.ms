@@ -1,13 +1,13 @@
-const classify := proc (x: Int) -> Str {
+val classify := proc (x: Int) -> Str {
   match x with {
   case 0 -> "zero",
   case 1 -> "one",
-  case const n if n > 0 -> "positive",
-  case const n if n < 0 -> "negative",
+  case n if n > 0 -> "positive",
+  case n if n < 0 -> "negative",
   case _ -> "unknown",
   }
 };
 
-const result := classify(5);
-const status := classify(-3);
-const zero := classify(0);
+val result := classify(5);
+val status := classify(-3);
+val zero := classify(0);

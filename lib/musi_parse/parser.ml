@@ -390,9 +390,6 @@ let parse_modifiers t =
     | Token.KwAsync ->
       advance t;
       loop { mods with is_async = true }
-    | Token.KwUnsafe ->
-      advance t;
-      loop { mods with is_unsafe = true }
     | Token.KwWeak ->
       advance t;
       loop { mods with is_weak = true }
@@ -663,11 +660,6 @@ let parse_expr_prefix t =
     advance t;
     let block = parse_expr_block t tok in
     Node.make_expr (Node.ExprAsync block) tok.span)
-  else if mods.is_unsafe && (curr t).kind = Token.LBrace then (
-    let tok = curr t in
-    advance t;
-    let block = parse_expr_block t tok in
-    Node.make_expr (Node.ExprUnsafe block) tok.span)
   else
     let tok = curr t in
     advance t;

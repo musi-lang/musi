@@ -1,1 +1,1 @@
-const x := for i items do { };
+val x := for i items do { };

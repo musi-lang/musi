@@ -1,1 +1,1 @@
-const x := 1 + true;
+val x := 1 + true;

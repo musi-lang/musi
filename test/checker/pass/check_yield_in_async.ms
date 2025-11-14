@@ -1,1 +1,1 @@
-const foo := async proc () { yield 42 };
+val foo := async proc () { yield 42 };

@@ -1,2 +1,2 @@
-const arr := [1, 2, 3];
-const empty := [];
+val arr := [1, 2, 3];
+val empty := [];

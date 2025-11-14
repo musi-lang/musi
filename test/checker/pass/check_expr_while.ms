@@ -1,1 +1,1 @@
-const a := while true do { break; };
+val a := while true do { break; };

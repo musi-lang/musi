@@ -11,8 +11,6 @@ let note diags msg span =
 (* === VALIDATION === *)
 
 let validate_binding_mods diags is_const mods span =
-  if mods.Node.is_unsafe then
-    error diags "'unsafe' modifier not allowed on bindings" span;
   if mods.is_async then
     error diags "'async' modifier not allowed on bindings" span;
   if mods.is_exported then
@@ -25,9 +23,7 @@ let validate_expr_mods diags mods kind span =
     error
       diags
       (Printf.sprintf "'export' modifier not allowed on '%s' expressions" kind)
-      span;
-  if Option.is_some mods.abi && not mods.is_unsafe then
-    error diags "'extern' procedures must be marked 'unsafe'" span
+      span
 
 (* === SYMBOL COLLECTION === *)
 

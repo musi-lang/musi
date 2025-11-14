@@ -1,3 +1,3 @@
-const a := -5;
-const b := not true;    // false
-const c := not b;       // true
+val a := -5;
+val b := not true;    // false
+val c := not b;       // true

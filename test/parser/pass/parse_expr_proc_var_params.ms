@@ -3,7 +3,7 @@ proc incr(var x: Nat) {
 };
 
 proc swap(var a: Nat, var b: Nat) {
-  const temp := a;
+  val temp := a;
   a <- b;
   b <- temp;
 };

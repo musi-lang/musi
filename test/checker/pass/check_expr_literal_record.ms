@@ -1,2 +1,2 @@
-const Point := record { x: Nat, y: Nat };
-const p := Point{ .x := 1, .y := 2 };
+val Point := record { x: Nat, y: Nat };
+val p := Point{ .x := 1, .y := 2 };

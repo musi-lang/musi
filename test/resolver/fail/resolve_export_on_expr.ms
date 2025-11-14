@@ -1,1 +1,1 @@
-const foo := export proc () {};
+val foo := export proc () {};

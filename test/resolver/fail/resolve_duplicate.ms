@@ -1,2 +1,2 @@
-const x := 1;
-const x := 2;
+val x := 1;
+val x := 2;

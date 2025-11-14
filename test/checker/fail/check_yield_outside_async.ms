@@ -1,1 +1,1 @@
-const foo := proc () { yield 42 };
+val foo := proc () { yield 42 };

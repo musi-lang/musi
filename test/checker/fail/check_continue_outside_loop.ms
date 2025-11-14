@@ -1,1 +1,1 @@
-const x := continue;
+val x := continue;

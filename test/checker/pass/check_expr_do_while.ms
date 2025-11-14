@@ -1,1 +1,1 @@
-const x := do { break; } while false;
+val x := do { break; } while false;

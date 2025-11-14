@@ -1,3 +1,3 @@
-const x := 42;
-const y := true;
-const z := "hello";
+val x := 42;
+val y := true;
+val z := "hello";

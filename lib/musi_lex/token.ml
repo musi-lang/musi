@@ -153,7 +153,6 @@ let show_kind interner = function
   | KwThen -> "then"
   | KwTrue -> "true"
   | KwTry -> "try"
-  | KwUnsafe -> "unsafe"
   | KwVal -> "val"
   | KwVar -> "var"
   | KwWeak -> "weak"

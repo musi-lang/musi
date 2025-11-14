@@ -1,1 +1,1 @@
-const x := do { break; };
+val x := do { break; };

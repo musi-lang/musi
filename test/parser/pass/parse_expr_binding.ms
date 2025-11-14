@@ -1,7 +1,7 @@
-const MyInt := Int32;
-const x := 5;
+val MyInt := Int32;
+val x := 5;
 var y := 10;
-const z: Int := 42;
+val z: Int := 42;
 var w: Str := "hello";
-export const a := 1;
+export val a := 1;
 export var b := 2;

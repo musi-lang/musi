@@ -1,2 +1,2 @@
-const MyInt := Nat;
-const x: MyInt := 42;
+val MyInt := Nat;
+val x: MyInt := 42;

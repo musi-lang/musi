@@ -1,1 +1,1 @@
-const x :=
+val x :=

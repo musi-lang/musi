@@ -1,15 +1,9 @@
 open Musi_basic
 open Musi_parse
 
-type context = {
-    in_proc : bool
-  ; in_loop : bool
-  ; in_async : bool
-  ; in_unsafe : bool
-}
+type context = { in_proc : bool; in_loop : bool; in_async : bool }
 
-let empty_context =
-  { in_proc = false; in_loop = false; in_async = false; in_unsafe = false }
+let empty_context = { in_proc = false; in_loop = false; in_async = false }
 
 (* HELPERS *)
 
@@ -63,8 +57,6 @@ let rec infer_expr ctx table interner diags expr =
     infer_expr_assign ctx table interner diags lhs rhs expr.span
   | Node.ExprProc (_, _, params, _, body_opt, mods) ->
     infer_expr_proc table interner diags params body_opt mods expr.span
-  | Node.ExprUnsafe body ->
-    infer_expr_unsafe ctx table interner diags body expr.span
   | Node.ExprAwait e -> infer_expr_await ctx table interner diags e expr.span
   | Node.ExprRecord (_, fields, _) ->
     let lookup name =
@@ -294,24 +286,12 @@ and infer_expr_binding ctx table interner diags pat ty_opt init =
 
 and infer_expr_proc table interner diags _params body_opt mods _span =
   let proc_ctx =
-    {
-      in_proc = true
-    ; in_loop = false
-    ; in_async = mods.Node.is_async
-    ; in_unsafe = mods.is_unsafe
-    }
+    { in_proc = true; in_loop = false; in_async = mods.Node.is_async }
   in
   Option.iter
     (fun body -> ignore (infer_expr proc_ctx table interner diags body))
     body_opt;
   Types.TyError
-
-and infer_expr_unsafe ctx table interner diags body span =
-  if ctx.in_unsafe then
-    warn diags "unnecessary 'unsafe' block inside unsafe procedure" span;
-  let unsafe_ctx = { ctx with in_unsafe = true } in
-  ignore (infer_expr unsafe_ctx table interner diags body);
-  Types.TyUnit
 
 and infer_expr_await ctx table interner diags e span =
   if not ctx.in_async then

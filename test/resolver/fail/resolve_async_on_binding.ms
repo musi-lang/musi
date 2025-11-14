@@ -1,1 +1,1 @@
-async const foo := proc () {};
+async val foo := proc () {};

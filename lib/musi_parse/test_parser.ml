@@ -260,13 +260,6 @@ let test_expr_async () =
   | Some { Node.ekind = Node.ExprAsync _; _ } -> ()
   | _ -> fail "expected 'ExprAsync'"
 
-let test_expr_unsafe () =
-  let stmts, diags, _ = parse "unsafe { 1 }" in
-  (check bool) "no errors" false (Diagnostic.has_errors diags);
-  match get_expr stmts with
-  | Some { Node.ekind = Node.ExprUnsafe _; _ } -> ()
-  | _ -> fail "expected 'ExprUnsafe'"
-
 let test_expr_choice () =
   let stmts, diags, _ = parse "choice { case A, case B }" in
   (check bool) "no errors" false (Diagnostic.has_errors diags);
@@ -521,7 +514,6 @@ let () =
         ; test_case "cast" `Quick test_expr_cast
         ; test_case "test" `Quick test_expr_test
         ; test_case "async" `Quick test_expr_async
-        ; test_case "unsafe" `Quick test_expr_unsafe
         ; test_case "choice" `Quick test_expr_choice
         ; test_case "binding const" `Quick test_expr_binding_const
         ; test_case "binding var" `Quick test_expr_binding_var

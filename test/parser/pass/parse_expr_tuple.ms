@@ -1,3 +1,3 @@
-const empty := ();
-const single := (1,);
-const pair := (1, 2);
+val empty := ();
+val single := (1,);
+val pair := (1, 2);

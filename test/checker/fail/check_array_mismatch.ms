@@ -1,1 +1,1 @@
-const arr := [1, 2, true];
+val arr := [1, 2, true];

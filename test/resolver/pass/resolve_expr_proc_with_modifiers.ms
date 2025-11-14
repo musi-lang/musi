@@ -1,4 +1,2 @@
-const foo := unsafe proc () {};
-const bar := async proc () {};
-unsafe proc baz() {};
+val foo := async proc () {};
 async proc qux() {};

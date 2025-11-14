@@ -1,1 +1,1 @@
-const x := if cond then;
+val x := if cond then;

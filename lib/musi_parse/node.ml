@@ -8,7 +8,6 @@ type modifiers = {
     decorators : decorator list
   ; is_exported : bool
   ; is_async : bool
-  ; is_unsafe : bool
   ; is_weak : bool
 }
 
@@ -115,13 +114,7 @@ and variant = { vname : name; vdata : variant_data }
 and variant_data = VUnit | VTuple of ty list | VRecord of field list
 
 let empty_modifiers =
-  {
-    decorators = []
-  ; is_exported = false
-  ; is_async = false
-  ; is_unsafe = false
-  ; is_weak = false
-  }
+  { decorators = []; is_exported = false; is_async = false; is_weak = false }
 
 let make_expr ekind span = { ekind; span }
 let make_expr_ident name span = { ekind = ExprIdent name; span }

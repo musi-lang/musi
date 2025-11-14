@@ -15,7 +15,7 @@ test_cases=(
     "( _ )"
     "[ ]"
     "[ _ ]"
-    "const"
+    "val"
     "var"
     "proc"
     "if"

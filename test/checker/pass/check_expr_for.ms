@@ -1,1 +1,1 @@
-const z := for i in [1, 2, 3] do { continue; };
+val z := for i in [1, 2, 3] do { continue; };

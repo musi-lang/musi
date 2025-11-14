@@ -181,21 +181,19 @@ val async_proc := async proc(url: Str) -> Data! {
   body
 };
 
-unsafe proc write_ptr(p: Ptr<Nat>, v: Nat) {
+proc write_ptr(p: Ptr<Nat>, v: Nat) {
   p.pointee <- v;
 };
 
-export unsafe proc raw_read(addr: Ptr<Unit>, size: Nat) -> [Nat8] {
+export proc raw_read(addr: Ptr<Unit>, size: Nat) -> [Nat8] {
   val buf: [Nat8] := [Nat8; size]{};
   memcpy(addr(buf), addr, size);
   buf
 };
 
-@extern("C")
-unsafe proc malloc(size: Nat) -> Ptr<Unit>;
-
-@extern("C")
-export unsafe proc free(ptr: Ptr<Unit>);
+extern "C" {
+  proc malloc(size: Nat) -> Ptr<Unit>;
+};
 
 // ============================================================================
 // RECORDS (PRODUCT TYPES)
@@ -305,19 +303,6 @@ proc test_addition() {
 
 @inline
 val compute := proc(x: Int) -> Int { x^2 };
-
-// ============================================================================
-// UNSAFE BLOCKS
-// ============================================================================
-
-val unsafe_op := unsafe {
-  val p := addr(x);
-  p.pointee
-};
-
-unsafe proc raw_copy(dest: Ptr<Unit>, src: Ptr<Unit>, size: Nat) {
-  memcpy(dest, src, size);
-};
 
 // ============================================================================
 // ERROR HANDLING

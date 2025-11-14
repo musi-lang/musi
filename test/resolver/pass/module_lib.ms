@@ -1,3 +1,3 @@
-const foo := 42;
-const bar := 100;
+val foo := 42;
+val bar := 100;
 export { foo };

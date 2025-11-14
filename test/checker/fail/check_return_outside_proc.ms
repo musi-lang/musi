@@ -1,1 +1,1 @@
-const x := return;
+val x := return;

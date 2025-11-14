@@ -16,23 +16,23 @@ Systems programming language designed for clarity, safety, and performance. Read
 ## Example
 
 ```musi
-const Counter := record {
+val Counter := record {
   var value: Nat,
 };
 
-const Counter.inc := proc (var c: Counter) {
-  const temp := c.value;
+val inc := proc(var c: Counter) {
+  val temp := c.value;
   c.value <- temp + 1;
 };
 
-const Counter.show := proc (c: Counter) {
+val show := proc(c: Counter) {
   writeln(`Counter is now: ${c.value}`);
 };
 
 var counter := Counter{ .value := 0 };
-counter.inc();      // value is now 1
-counter.inc();      // value is now 2
-counter.show();     // prints: `Counter is now: 2`
+inc();      // value is now 1
+inc();      // value is now 2
+show();     // prints: `Counter is now: 2`
 ```
 
 ## Getting Started

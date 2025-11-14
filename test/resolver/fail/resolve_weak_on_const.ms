@@ -1,1 +1,1 @@
-weak const x := {};
+weak val x := {};

@@ -1,1 +1,1 @@
-const x := y + 1;
+val x := y + 1;

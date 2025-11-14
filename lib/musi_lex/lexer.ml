@@ -100,7 +100,6 @@ let keywords =
     ; ("then", Token.KwThen)
     ; ("true", Token.KwTrue)
     ; ("try", Token.KwTry)
-    ; ("unsafe", Token.KwUnsafe)
     ; ("val", Token.KwVal)
     ; ("var", Token.KwVar)
     ; ("weak", Token.KwWeak)

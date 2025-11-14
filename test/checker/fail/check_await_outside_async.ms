@@ -1,3 +1,3 @@
-const bar := async proc () { 42 };
+val bar := async proc () { 42 };
 
-const foo := proc () { await bar() };
+val foo := proc () { await bar() };

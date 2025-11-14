@@ -1,3 +1,3 @@
-const fib := proc (n: Nat) -> Nat {
+val fib := proc (n: Nat) -> Nat {
   if n <= 1 then n else fib(n - 1) + fib(n - 2)
 };

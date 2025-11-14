@@ -12,8 +12,7 @@ proc
 record return
 shl shr
 then true try
-unsafe
-var
+val var
 weak where while with
 xor
 yield
