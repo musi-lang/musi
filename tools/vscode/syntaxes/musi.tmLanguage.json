@@ -100,7 +100,7 @@
         },
         "declaration-named": {
             "name": "meta.declaration.musi",
-            "begin": "((?:(?:export|extern|unsafe|async)\\s+)*)\\b(choice|proc|record)\\b",
+            "begin": "((?:(?:export|unsafe|async)\\s+)*)\\b(choice|proc|record)\\b",
             "beginCaptures": {
                 "1": {
                     "patterns": [
@@ -115,7 +115,7 @@
         },
         "declaration-choice-case": {
             "name": "meta.choice.case.musi",
-            "match": "\\b(case)\\s+(\\.)?((?!(?:await|break|continue|defer|do|else|for|from|if|in|match|return|then|try|where|while|with|yield|choice|const|proc|record|var|async|export|extern|unsafe|weak|as|is)\\b)[a-zA-Z_][a-zA-Z0-9_]*)(?=\\s*(?:\\(|\\{|\\}|\\)|,|=>|->|:|;|if|$))",
+            "match": "\\b(case)\\s+(\\.)?((?!(?:await|break|continue|defer|do|else|for|from|if|in|match|return|then|try|where|while|with|yield|choice|proc|record|val|var|async|export|unsafe|weak|as|is)\\b)[a-zA-Z_][a-zA-Z0-9_]*)(?=\\s*(?:\\(|\\{|\\}|\\)|,|=>|->|:|;|if|$))",
             "captures": {
                 "1": { "name": "keyword.control.case.musi" },
                 "2": { "name": "punctuation.accessor.dot.musi" },
@@ -321,7 +321,7 @@
         },
         "identifier-constant": {
             "name": "variable.other.constant.musi",
-            "match": "\\b(?:const\\s+)?[A-Z][A-Z0-9_]*[A-Z][A-Z0-9_]*\\b"
+            "match": "\\b(?:val\\s+)?[A-Z][A-Z0-9_]*[A-Z][A-Z0-9_]*\\b"
         },
         "identifier-function-call": {
             "name": "entity.name.function.call.musi",
@@ -353,11 +353,11 @@
         },
         "keyword-storage": {
             "name": "storage.type.musi",
-            "match": "\\b(choice|const|proc|record|var)\\b"
+            "match": "\\b(choice|proc|record|val|var)\\b"
         },
         "keyword-modifier": {
             "name": "storage.modifier.musi",
-            "match": "\\b(async|extern|unsafe|weak)\\b"
+            "match": "\\b(async|const|unsafe|weak)\\b"
         },
         "keyword-cast": {
             "name": "keyword.operator.cast.musi",
