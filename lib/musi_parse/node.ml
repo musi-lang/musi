@@ -2,13 +2,14 @@ open Musi_basic
 open Musi_lex
 
 type name = Interner.name
+type decorator = { dname : name; dargs : name list }
 
 type modifiers = {
-    is_exported : bool
+    decorators : decorator list
+  ; is_exported : bool
   ; is_async : bool
   ; is_unsafe : bool
   ; is_weak : bool
-  ; abi : name option
 }
 
 type capture = { cname : name; is_weak : bool }
@@ -88,7 +89,7 @@ and ty_kind =
 and pat = { pkind : pat_kind; span : Span.t }
 
 and pat_kind =
-  | PatIdent of name
+  | PatIdent of name * bool
   | PatWild
   | PatTuple of pat list
   | PatArray of pat list * pat option
@@ -107,7 +108,7 @@ and literal_kind =
   | LitBool of bool
   | LitRecord of (name * expr) list
 
-and param = { pname : name; pty : ty option; is_inout : bool }
+and param = { pname : name; pty : ty option; is_var : bool }
 and field = { fname : name; fty : ty; is_var : bool; is_weak : bool }
 and case = { cpat : pat; guard : expr option; body : expr }
 and variant = { vname : name; vdata : variant_data }
@@ -115,11 +116,11 @@ and variant_data = VUnit | VTuple of ty list | VRecord of field list
 
 let empty_modifiers =
   {
-    is_exported = false
+    decorators = []
+  ; is_exported = false
   ; is_async = false
   ; is_unsafe = false
   ; is_weak = false
-  ; abi = None
   }
 
 let make_expr ekind span = { ekind; span }

@@ -295,18 +295,6 @@ let test_expr_proc () =
   | Some { Node.ekind = Node.ExprProc _; _ } -> ()
   | _ -> fail "expected 'ExprProc'"
 
-let test_expr_proc_extern () =
-  let stmts, diags, _ = parse "extern \"C\" proc test() -> Int" in
-  (check bool) "no errors" false (Diagnostic.has_errors diags);
-  match get_expr stmts with
-  | Some
-      {
-        Node.ekind = Node.ExprProc (_, _, _, _, _, { Node.abi = Some _; _ })
-      ; _
-      } ->
-    ()
-  | _ -> fail "expected 'ExprProc' with external ABI"
-
 (* === PATTERN TESTS === *)
 
 let test_pat_ident () =
@@ -538,7 +526,6 @@ let () =
         ; test_case "binding const" `Quick test_expr_binding_const
         ; test_case "binding var" `Quick test_expr_binding_var
         ; test_case "proc" `Quick test_expr_proc
-        ; test_case "proc extern" `Quick test_expr_proc_extern
         ] )
     ; ( "patterns"
       , [

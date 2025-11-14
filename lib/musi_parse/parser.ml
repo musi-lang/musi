@@ -356,10 +356,34 @@ let parse_ty_params t =
     params)
   else []
 
+let parse_decorator t =
+  let _ = expect Token.At t in
+  let dname = expect_ident t "expected decorator name" in
+  let _ = expect Token.LParen t in
+  let dargs =
+    sep_by_opt
+      Token.Comma
+      (fun t ->
+        skip_trivia t;
+        match (curr t).kind with
+        | Token.LitStr name ->
+          advance t;
+          name
+        | _ ->
+          error t "expected string in decorator";
+          Interner.empty_name t.interner)
+      t
+  in
+  let _ = expect Token.RParen t in
+  { Node.dname; dargs }
+
 let parse_modifiers t =
   let rec loop (mods : Node.modifiers) =
     skip_trivia t;
     match (curr t).kind with
+    | Token.At ->
+      let dec = parse_decorator t in
+      loop { mods with decorators = dec :: mods.decorators }
     | Token.KwExport ->
       advance t;
       loop { mods with is_exported = true }
@@ -372,17 +396,7 @@ let parse_modifiers t =
     | Token.KwWeak ->
       advance t;
       loop { mods with is_weak = true }
-    | Token.KwExtern -> (
-      advance t;
-      skip_trivia t;
-      match (curr t).kind with
-      | Token.LitStr abi_name ->
-        advance t;
-        loop { mods with abi = Some abi_name }
-      | _ ->
-        error t "expected ABI string after 'extern' modifier";
-        loop mods)
-    | _ -> mods
+    | _ -> { mods with decorators = List.rev mods.decorators }
   in
   loop Node.empty_modifiers
 
@@ -447,14 +461,14 @@ let parse_expr_while t (tok : Token.t) =
   let _ = expect Token.KwDo t in
   Node.make_expr (Node.ExprWhile (cond, parse_expr t PrecNone)) tok.span
 
-let parse_expr_binding t (tok : Token.t) is_const mods =
+let parse_expr_binding t (tok : Token.t) is_var mods =
   let pat = parse_pat t in
   let ty_params = parse_ty_params t in
   let ty_opt = parse_optional_ty_annot t in
   let _ = expect Token.ColonEq t in
   Node.make_expr
     (Node.ExprBinding
-       (is_const, ty_params, pat, ty_opt, parse_expr t PrecNone, mods))
+       (is_var, ty_params, pat, ty_opt, parse_expr t PrecNone, mods))
     tok.span
 
 let parse_expr_for t (tok : Token.t) =
@@ -568,7 +582,7 @@ let parse_capture t =
 
 let parse_param t =
   skip_trivia t;
-  let is_inout =
+  let is_var =
     (curr t).kind = Token.KwVar
     &&
     (advance t;
@@ -576,7 +590,7 @@ let parse_param t =
   in
   let pname = expect_ident t "expected parameter name" in
   let pty = parse_optional_ty_annot t in
-  { Node.pname; pty; is_inout }
+  { Node.pname; pty; is_var }
 
 let parse_expr_record t (tok : Token.t) mods ty_params =
   let _ = expect Token.LBrace t in
@@ -694,8 +708,8 @@ let parse_expr_prefix t =
     | Token.KwMatch -> parse_expr_match t tok
     | Token.KwWhile -> parse_expr_while t tok
     | Token.KwDo -> parse_expr_do t tok
-    | Token.KwConst -> parse_expr_binding t tok true mods
-    | Token.KwVar -> parse_expr_binding t tok false mods
+    | Token.KwVal -> parse_expr_binding t tok false mods
+    | Token.KwVar -> parse_expr_binding t tok true mods
     | Token.KwFor -> parse_expr_for t tok
     | Token.KwChoice | Token.KwRecord | Token.KwProc | Token.Pipe -> (
       skip_trivia t;
@@ -716,10 +730,10 @@ let parse_expr_prefix t =
       in
       match name_opt with
       | Some name ->
-        let pat = Node.make_pat (Node.PatIdent name) tok.span in
+        let pat = Node.make_pat (Node.PatIdent (name, false)) tok.span in
         Node.make_expr
           (Node.ExprBinding
-             (true, [], pat, None, construct, Node.empty_modifiers))
+             (false, [], pat, None, construct, Node.empty_modifiers))
           tok.span
       | None -> construct)
     | Token.LBrace -> parse_expr_block_or_lit_record t tok
@@ -856,6 +870,12 @@ let parse_pat_tuple t (tok : Token.t) =
 
 let parse_pat_impl t =
   skip_trivia t;
+  let is_var =
+    (curr t).kind = Token.KwVar
+    &&
+    (advance t;
+     true)
+  in
   let tok = curr t in
   advance t;
   match tok.kind with
@@ -863,7 +883,7 @@ let parse_pat_impl t =
     let name = expect_ident t "expected identifier after 'const' in pattern" in
     Node.make_pat (Node.PatBinding name) tok.span
   | Token.Underscore -> Node.make_pat Node.PatWild tok.span
-  | Token.Ident name -> Node.make_pat (Node.PatIdent name) tok.span
+  | Token.Ident name -> Node.make_pat (Node.PatIdent (name, is_var)) tok.span
   | Token.Dot -> parse_pat_choice t tok
   | Token.LParen -> parse_pat_tuple t tok
   | Token.LBrack -> parse_pat_array t tok

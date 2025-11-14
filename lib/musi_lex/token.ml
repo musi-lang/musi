@@ -22,7 +22,6 @@ type kind =
   | KwDo
   | KwElse
   | KwExport
-  | KwExtern
   | KwFalse
   | KwFor
   | KwFrom
@@ -43,6 +42,7 @@ type kind =
   | KwTrue
   | KwTry
   | KwUnsafe
+  | KwVal
   | KwVar
   | KwWeak
   | KwWhere
@@ -134,7 +134,6 @@ let show_kind interner = function
   | KwDo -> "do"
   | KwElse -> "else"
   | KwExport -> "export"
-  | KwExtern -> "extern"
   | KwFalse -> "false"
   | KwFor -> "for"
   | KwFrom -> "from"
@@ -155,6 +154,7 @@ let show_kind interner = function
   | KwTrue -> "true"
   | KwTry -> "try"
   | KwUnsafe -> "unsafe"
+  | KwVal -> "val"
   | KwVar -> "var"
   | KwWeak -> "weak"
   | KwWhere -> "where"

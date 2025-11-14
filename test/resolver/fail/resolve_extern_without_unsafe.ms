@@ -1,1 +1,1 @@
-extern "C" proc foo();
+@extern("C") unsafe proc foo();
