@@ -42,6 +42,29 @@ type t =
   | LdArg of int
   | StArg of int
   | LdArgA of int
+  (* Indirect Load/Store - for pointer dereferencing *)
+  | LdIndI1
+  | LdIndI2
+  | LdIndI4
+  | LdIndI8
+  | LdIndN1
+  | LdIndN2
+  | LdIndN4
+  | LdIndN8
+  | LdIndB4
+  | LdIndB8
+  | LdIndRef
+  | StIndI1
+  | StIndI2
+  | StIndI4
+  | StIndI8
+  | StIndN1
+  | StIndN2
+  | StIndN4
+  | StIndN8
+  | StIndB4
+  | StIndB8
+  | StIndRef
   (* Object Operations *)
   | NewObj of int
   | Call of Interner.name
@@ -159,6 +182,29 @@ let to_opcode = function
   | LdArg _ -> 0x02
   | StArg _ -> 0x03
   | LdArgA _ -> 0x04
+  (* Indirect Load/Store *)
+  | LdIndI1 -> 0x46
+  | LdIndI2 -> 0x48
+  | LdIndI4 -> 0x4A
+  | LdIndI8 -> 0x4C
+  | LdIndN1 -> 0x47
+  | LdIndN2 -> 0x49
+  | LdIndN4 -> 0x4B
+  | LdIndN8 -> 0x4D
+  | LdIndB4 -> 0x4E
+  | LdIndB8 -> 0x4F
+  | LdIndRef -> 0x50
+  | StIndI1 -> 0x52
+  | StIndI2 -> 0x53
+  | StIndI4 -> 0x54
+  | StIndI8 -> 0x55
+  | StIndN1 -> 0xDB
+  | StIndN2 -> 0xDC
+  | StIndN4 -> 0xDD
+  | StIndN8 -> 0xDE
+  | StIndB4 -> 0x56
+  | StIndB8 -> 0x57
+  | StIndRef -> 0x51
   (* Object Operations *)
   | NewObj _ -> 0x73
   | Call _ -> 0x28
@@ -278,6 +324,29 @@ let show = function
   | LdArg idx -> Printf.sprintf "ldarg %d" idx
   | StArg idx -> Printf.sprintf "starg %d" idx
   | LdArgA idx -> Printf.sprintf "ldarga %d" idx
+  (* Indirect Load/Store *)
+  | LdIndI1 -> "ldind.i1"
+  | LdIndI2 -> "ldind.i2"
+  | LdIndI4 -> "ldind.i4"
+  | LdIndI8 -> "ldind.i8"
+  | LdIndN1 -> "ldind.n1"
+  | LdIndN2 -> "ldind.n2"
+  | LdIndN4 -> "ldind.n4"
+  | LdIndN8 -> "ldind.n8"
+  | LdIndB4 -> "ldind.b4"
+  | LdIndB8 -> "ldind.b8"
+  | LdIndRef -> "ldind.ref"
+  | StIndI1 -> "stind.i1"
+  | StIndI2 -> "stind.i2"
+  | StIndI4 -> "stind.i4"
+  | StIndI8 -> "stind.i8"
+  | StIndN1 -> "stind.n1"
+  | StIndN2 -> "stind.n2"
+  | StIndN4 -> "stind.n4"
+  | StIndN8 -> "stind.n8"
+  | StIndB4 -> "stind.b4"
+  | StIndB8 -> "stind.b8"
+  | StIndRef -> "stind.ref"
   (* Object Operations *)
   | NewObj ctor -> Printf.sprintf "newobj %d" ctor
   | Call _method -> Printf.sprintf "call <method>"
@@ -397,6 +466,29 @@ let show_with_interner interner = function
   | LdArg idx -> Printf.sprintf "ldarg %d" idx
   | StArg idx -> Printf.sprintf "starg %d" idx
   | LdArgA idx -> Printf.sprintf "ldarga %d" idx
+  (* Indirect Load/Store *)
+  | LdIndI1 -> "ldind.i1"
+  | LdIndI2 -> "ldind.i2"
+  | LdIndI4 -> "ldind.i4"
+  | LdIndI8 -> "ldind.i8"
+  | LdIndN1 -> "ldind.n1"
+  | LdIndN2 -> "ldind.n2"
+  | LdIndN4 -> "ldind.n4"
+  | LdIndN8 -> "ldind.n8"
+  | LdIndB4 -> "ldind.b4"
+  | LdIndB8 -> "ldind.b8"
+  | LdIndRef -> "ldind.ref"
+  | StIndI1 -> "stind.i1"
+  | StIndI2 -> "stind.i2"
+  | StIndI4 -> "stind.i4"
+  | StIndI8 -> "stind.i8"
+  | StIndN1 -> "stind.n1"
+  | StIndN2 -> "stind.n2"
+  | StIndN4 -> "stind.n4"
+  | StIndN8 -> "stind.n8"
+  | StIndB4 -> "stind.b4"
+  | StIndB8 -> "stind.b8"
+  | StIndRef -> "stind.ref"
   (* Object Operations *)
   | NewObj ctor -> Printf.sprintf "newobj %d" ctor
   | Call name -> Printf.sprintf "call %s" (Interner.lookup interner name)
