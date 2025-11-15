@@ -2,16 +2,14 @@ open Musi_basic
 open Musi_lex
 
 type name = Interner.name
-type decorator = { dname : name; dargs : name list }
+type attrib = { aname : name; aargs : name list; aparams : (name * name) list }
 
 type modifiers = {
-    decorators : decorator list
+    attribs : attrib list
   ; is_exported : bool
-  ; is_async : bool
-  ; is_weak : bool
+  ; is_extern : bool
+  ; abi : name option
 }
-
-type capture = { cname : name; is_weak : bool }
 
 type import_spec =
   | ImportNamed of (name * Span.t) list
@@ -45,30 +43,20 @@ and expr_kind =
   | ExprReturn of expr option
   | ExprBreak of expr option
   | ExprContinue
-  | ExprYield of expr option
-  | ExprAwait of expr
   | ExprTry of expr
   | ExprDefer of expr
   | ExprUnwrap of expr
   | ExprCast of expr * ty
   | ExprTest of expr * ty
-  | ExprAsync of expr
-  | ExprUnsafe of expr
   | ExprChoice of name list * variant list * modifiers
   | ExprBinding of bool * name list * pat * ty option * expr * modifiers
-  | ExprProc of
-      name list
-      * capture list
-      * param list
-      * ty option
-      * expr option
-      * modifiers
+  | ExprFn of name list * param list * ty option * expr option * modifiers
   | ExprError
 
 and stmt = { skind : stmt_kind; span : Span.t }
 
 and stmt_kind =
-  | StmtImport of import_spec * name
+  | StmtImport of import_spec * name * modifiers
   | StmtExport of export_spec * name option
   | StmtExpr of expr * bool
   | StmtError
@@ -108,13 +96,13 @@ and literal_kind =
   | LitRecord of (name * expr) list
 
 and param = { pname : name; pty : ty option; is_var : bool }
-and field = { fname : name; fty : ty; is_var : bool; is_weak : bool }
+and field = { fname : name; fty : ty; is_var : bool }
 and case = { cpat : pat; guard : expr option; body : expr }
 and variant = { vname : name; vdata : variant_data }
 and variant_data = VUnit | VTuple of ty list | VRecord of field list
 
 let empty_modifiers =
-  { decorators = []; is_exported = false; is_async = false; is_weak = false }
+  { attribs = []; is_exported = false; is_extern = false; abi = None }
 
 let make_expr ekind span = { ekind; span }
 let make_expr_ident name span = { ekind = ExprIdent name; span }
@@ -151,16 +139,12 @@ let string_of_expr expr =
   | ExprReturn _ -> "ExprReturn"
   | ExprBreak _ -> "ExprBreak"
   | ExprContinue -> "ExprContinue"
-  | ExprYield _ -> "ExprYield"
-  | ExprAwait _ -> "ExprAwait"
   | ExprTry _ -> "ExprTry"
   | ExprDefer _ -> "ExprDefer"
   | ExprUnwrap _ -> "ExprUnwrap"
   | ExprCast _ -> "ExprCast"
   | ExprTest _ -> "ExprTest"
-  | ExprAsync _ -> "ExprAsync"
-  | ExprUnsafe _ -> "ExprUnsafe"
   | ExprChoice _ -> "ExprChoice"
   | ExprBinding _ -> "ExprBinding"
-  | ExprProc _ -> "ExprProc"
+  | ExprFn _ -> "ExprFn"
   | ExprError -> "ExprError"

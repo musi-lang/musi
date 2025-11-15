@@ -204,20 +204,6 @@ let test_expr_continue () =
   | Some { Node.ekind = Node.ExprContinue; _ } -> ()
   | _ -> fail "expected 'ExprContinue'"
 
-let test_expr_yield () =
-  let stmts, diags, _ = parse "yield 1" in
-  (check bool) "no errors" false (Diagnostic.has_errors diags);
-  match get_expr stmts with
-  | Some { Node.ekind = Node.ExprYield (Some _); _ } -> ()
-  | _ -> fail "expected 'ExprYield'"
-
-let test_expr_await () =
-  let stmts, diags, _ = parse "await foo()" in
-  (check bool) "no errors" false (Diagnostic.has_errors diags);
-  match get_expr stmts with
-  | Some { Node.ekind = Node.ExprAwait _; _ } -> ()
-  | _ -> fail "expected 'ExprAwait'"
-
 let test_expr_try () =
   let stmts, diags, _ = parse "try foo()" in
   (check bool) "no errors" false (Diagnostic.has_errors diags);
@@ -253,13 +239,6 @@ let test_expr_test () =
   | Some { Node.ekind = Node.ExprTest _; _ } -> ()
   | _ -> fail "expected 'ExprTest'"
 
-let test_expr_async () =
-  let stmts, diags, _ = parse "async { 1 }" in
-  (check bool) "no errors" false (Diagnostic.has_errors diags);
-  match get_expr stmts with
-  | Some { Node.ekind = Node.ExprAsync _; _ } -> ()
-  | _ -> fail "expected 'ExprAsync'"
-
 let test_expr_choice () =
   let stmts, diags, _ = parse "choice { case A, case B }" in
   (check bool) "no errors" false (Diagnostic.has_errors diags);
@@ -267,12 +246,12 @@ let test_expr_choice () =
   | Some { Node.ekind = Node.ExprChoice _; _ } -> ()
   | _ -> fail "expected 'ExprChoice'"
 
-let test_expr_binding_const () =
-  let stmts, diags, _ = parse "const x := 5" in
+let test_expr_binding_val () =
+  let stmts, diags, _ = parse "val x := 5" in
   (check bool) "no errors" false (Diagnostic.has_errors diags);
   match get_expr stmts with
   | Some { Node.ekind = Node.ExprBinding (true, _, _, _, _, _); _ } -> ()
-  | _ -> fail "expected 'ExprBinding' const"
+  | _ -> fail "expected 'ExprBinding' val"
 
 let test_expr_binding_var () =
   let stmts, diags, _ = parse "var x := 5" in
@@ -281,17 +260,27 @@ let test_expr_binding_var () =
   | Some { Node.ekind = Node.ExprBinding (false, _, _, _, _, _); _ } -> ()
   | _ -> fail "expected 'ExprBinding' var"
 
-let test_expr_proc () =
-  let stmts, diags, _ = parse "proc () { 1 }" in
+let test_expr_fn () =
+  let stmts, diags, _ = parse "fn () { 1 }" in
   (check bool) "no errors" false (Diagnostic.has_errors diags);
   match get_expr stmts with
-  | Some { Node.ekind = Node.ExprProc _; _ } -> ()
-  | _ -> fail "expected 'ExprProc'"
+  | Some { Node.ekind = Node.ExprFn _; _ } -> ()
+  | _ -> fail "expected 'ExprFn'"
+
+let test_expr_fn_extern () =
+  let stmts, diags, _ =
+    parse "extern \"C\" fn malloc(size: Nat64) -> Ptr<Unit>"
+  in
+  (check bool) "no errors" false (Diagnostic.has_errors diags);
+  match get_expr stmts with
+  | Some { Node.ekind = Node.ExprFn (_, _, _, _, mods); _ } ->
+    (check bool) "has extern" true mods.Node.is_extern
+  | _ -> fail "expected 'ExprFn' with extern"
 
 (* === PATTERN TESTS === *)
 
 let test_pat_ident () =
-  let stmts, diags, _ = parse "const x := 5" in
+  let stmts, diags, _ = parse "val x := 5" in
   (check bool) "no errors" false (Diagnostic.has_errors diags);
   match get_expr stmts with
   | Some
@@ -318,7 +307,7 @@ let test_pat_wild () =
   | _ -> fail "expected 'ExprMatch.PatWild'"
 
 let test_pat_tuple () =
-  let stmts, diags, _ = parse "const (x, y) := (1, 2)" in
+  let stmts, diags, _ = parse "val (x, y) := (1, 2)" in
   (check bool) "no errors" false (Diagnostic.has_errors diags);
   match get_expr stmts with
   | Some
@@ -331,7 +320,7 @@ let test_pat_tuple () =
   | _ -> fail "expected 'ExprBinding.PatTuple'"
 
 let test_pat_array () =
-  let stmts, diags, _ = parse "const [x, y] := [1, 2]" in
+  let stmts, diags, _ = parse "val [x, y] := [1, 2]" in
   (check bool) "no errors" false (Diagnostic.has_errors diags);
   match get_expr stmts with
   | Some
@@ -344,7 +333,7 @@ let test_pat_array () =
   | _ -> fail "expected 'ExprBinding.PatArray'"
 
 let test_pat_record () =
-  let stmts, diags, _ = parse "const { .x := a } := obj" in
+  let stmts, diags, _ = parse "val { .x := a } := obj" in
   (check bool) "no errors" false (Diagnostic.has_errors diags);
   match get_expr stmts with
   | Some
@@ -371,7 +360,7 @@ let test_pat_literal () =
   | _ -> fail "expected 'ExprMatch.PatLiteral'"
 
 let test_pat_binding () =
-  let stmts, diags, _ = parse "match x with { case const n -> n }" in
+  let stmts, diags, _ = parse "match x with { case var n -> n }" in
   (check bool) "no errors" false (Diagnostic.has_errors diags);
   match get_expr stmts with
   | Some
@@ -387,7 +376,7 @@ let test_pat_binding () =
 (* === TYPE TESTS === *)
 
 let test_ty_named () =
-  let stmts, diags, _ = parse "const x: Int := 5" in
+  let stmts, diags, _ = parse "val x: Int := 5" in
   (check bool) "no errors" false (Diagnostic.has_errors diags);
   match get_expr stmts with
   | Some
@@ -401,7 +390,7 @@ let test_ty_named () =
   | _ -> fail "expected 'ExprBinding.TyNamed'"
 
 let test_ty_tuple () =
-  let stmts, diags, _ = parse "const x: (Int, Nat) := (1, 2)" in
+  let stmts, diags, _ = parse "val x: (Int, Nat) := (1, 2)" in
   (check bool) "no errors" false (Diagnostic.has_errors diags);
   match get_expr stmts with
   | Some
@@ -415,7 +404,7 @@ let test_ty_tuple () =
   | _ -> fail "expected 'ExprBinding.TyTuple'"
 
 let test_ty_array () =
-  let stmts, diags, _ = parse "const x: [Int] := [1]" in
+  let stmts, diags, _ = parse "val x: [Int] := [1]" in
   (check bool) "no errors" false (Diagnostic.has_errors diags);
   match get_expr stmts with
   | Some
@@ -429,7 +418,7 @@ let test_ty_array () =
   | _ -> fail "expected 'ExprBinding.TyArray'"
 
 let test_ty_optional () =
-  let stmts, diags, _ = parse "const x: Int? := 5" in
+  let stmts, diags, _ = parse "val x: Int? := 5" in
   (check bool) "no errors" false (Diagnostic.has_errors diags);
   match get_expr stmts with
   | Some
@@ -441,19 +430,6 @@ let test_ty_optional () =
       } ->
     ()
   | _ -> fail "expected 'ExprBinding.TyOptional'"
-
-let test_ty_const () =
-  let stmts, diags, _ = parse "const x: const Int := 5" in
-  (check bool) "no errors" false (Diagnostic.has_errors diags);
-  match get_expr stmts with
-  | Some
-      {
-        Node.ekind =
-          Node.ExprBinding (_, _, _, Some { Node.is_const = true; _ }, _, _)
-      ; _
-      } ->
-    ()
-  | _ -> fail "expected 'const' type"
 
 (* === STATEMENT TESTS === *)
 
@@ -470,6 +446,16 @@ let test_stmt_export () =
   match stmts with
   | [ { Node.skind = Node.StmtExport _; _ } ] -> ()
   | _ -> fail "expected 'StmtExport'"
+
+let test_stmt_import_extern () =
+  let stmts, diags, _ =
+    parse "import extern \"C\" { malloc } from \"stdlib.h\""
+  in
+  (check bool) "no errors" false (Diagnostic.has_errors diags);
+  match stmts with
+  | [ { Node.skind = Node.StmtImport (_, _, mods); _ } ] ->
+    (check bool) "has extern" true mods.Node.is_extern
+  | _ -> fail "expected 'StmtImport' with extern"
 
 let () =
   run
@@ -506,18 +492,16 @@ let () =
         ; test_case "return" `Quick test_expr_return
         ; test_case "break" `Quick test_expr_break
         ; test_case "continue" `Quick test_expr_continue
-        ; test_case "yield" `Quick test_expr_yield
-        ; test_case "await" `Quick test_expr_await
         ; test_case "try" `Quick test_expr_try
         ; test_case "defer" `Quick test_expr_defer
         ; test_case "unwrap" `Quick test_expr_unwrap
         ; test_case "cast" `Quick test_expr_cast
         ; test_case "test" `Quick test_expr_test
-        ; test_case "async" `Quick test_expr_async
         ; test_case "choice" `Quick test_expr_choice
-        ; test_case "binding const" `Quick test_expr_binding_const
+        ; test_case "binding val" `Quick test_expr_binding_val
         ; test_case "binding var" `Quick test_expr_binding_var
-        ; test_case "proc" `Quick test_expr_proc
+        ; test_case "fn" `Quick test_expr_fn
+        ; test_case "fn extern" `Quick test_expr_fn_extern
         ] )
     ; ( "patterns"
       , [
@@ -535,11 +519,11 @@ let () =
         ; test_case "tuple" `Quick test_ty_tuple
         ; test_case "array" `Quick test_ty_array
         ; test_case "optional" `Quick test_ty_optional
-        ; test_case "const" `Quick test_ty_const
         ] )
     ; ( "statements"
       , [
           test_case "import" `Quick test_stmt_import
         ; test_case "export" `Quick test_stmt_export
+        ; test_case "import extern" `Quick test_stmt_import_extern
         ] )
     ]

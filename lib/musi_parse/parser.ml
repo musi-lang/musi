@@ -95,13 +95,13 @@ let expect kind t =
     error t (Printf.sprintf "expected '%s', found '%s'" expected found);
     tok
 
+let is_closing_delim t =
+  let k = (curr t).kind in
+  k = Token.RParen || k = Token.RBrack || k = Token.RBrace
+
 let sep_by_opt sep p t =
   skip_trivia t;
-  if
-    (curr t).kind = Token.RParen
-    || (curr t).kind = Token.RBrack
-    || (curr t).kind = Token.RBrace
-  then []
+  if is_closing_delim t then []
   else
     let rec loop acc =
       let item = p t in
@@ -110,12 +110,7 @@ let sep_by_opt sep p t =
       if (curr t).kind = sep then (
         advance t;
         skip_trivia t;
-        if
-          (curr t).kind = Token.RParen
-          || (curr t).kind = Token.RBrack
-          || (curr t).kind = Token.RBrace
-        then List.rev acc'
-        else loop acc')
+        if is_closing_delim t then List.rev acc' else loop acc')
       else List.rev acc'
     in
     loop []
@@ -150,26 +145,15 @@ let expect_ident t err_msg =
 
 let parse_typed_field ~allow_modifiers t =
   skip_trivia t;
-  let is_var, is_weak =
-    if allow_modifiers then
-      match (curr t).kind with
-      | Token.KwWeak ->
-        advance t;
-        skip_trivia t;
-        ( (curr t).kind = Token.KwVar
-          &&
-          (advance t;
-           true)
-        , true )
-      | Token.KwVar ->
-        advance t;
-        (true, false)
-      | _ -> (false, false)
-    else (false, false)
+  let is_var =
+    if allow_modifiers && (curr t).kind = Token.KwVar then (
+      advance t;
+      true)
+    else false
   in
   let fname = expect_ident t "expected field name" in
   let _ = expect Token.Colon t in
-  { Node.fname; fty = parse_ty t; is_var; is_weak }
+  { Node.fname; fty = parse_ty t; is_var }
 
 let field_name t =
   skip_trivia t;
@@ -178,10 +162,9 @@ let field_name t =
   | Token.Ident name ->
     advance t;
     Some (name, tok.span)
-  | Token.LitNum s ->
+  | Token.LitNumber s ->
     advance t;
-    let name = Interner.intern t.interner s in
-    Some (name, tok.span)
+    Some (Interner.intern t.interner s, tok.span)
   | _ -> None
 
 let field_name_after_dot t err_msg =
@@ -195,89 +178,71 @@ let field_name_after_dot t err_msg =
     error t err_msg;
     (Interner.empty_name t.interner, name_tok.span)
 
-let parse_expr_field_opt t left bp optional =
-  match field_name t with
-  | Some (name, span) ->
-    let field = Node.make_expr (Node.ExprField (left, name, optional)) span in
-    parse_expr_infix t field bp
-  | None ->
-    error
-      t
-      (if optional then "expected field name after '?.'"
-       else "expected field name or number after '.'");
-    parse_expr_infix t left bp
-
-let parse_expr_index_opt t left bp optional =
-  let index = parse_expr t PrecNone in
-  let _ = expect Token.RBrack t in
-  let idx =
-    Node.make_expr (Node.ExprIndex (left, index, optional)) left.Node.span
-  in
-  parse_expr_infix t idx bp
-
-let parse_expr_call_opt t left bp optional =
-  let args = sep_by_opt Token.Comma (fun t -> parse_expr t PrecNone) t in
-  let _ = expect Token.RParen t in
-  let call =
-    Node.make_expr (Node.ExprCall (left, args, optional)) left.Node.span
-  in
-  parse_expr_infix t call bp
-
-let parse_expr_opt t left bp =
-  skip_trivia t;
-  match (curr t).kind with
-  | Token.Dot ->
-    advance t;
-    parse_expr_field_opt t left bp true
+let parse_postfix t left bp optional op_kind =
+  match op_kind with
+  | Token.Dot -> (
+    match field_name t with
+    | Some (name, span) ->
+      let field = Node.make_expr (Node.ExprField (left, name, optional)) span in
+      parse_expr_infix t field bp
+    | None ->
+      error
+        t
+        (if optional then "expected field name after '?.'"
+         else "expected field name or number after '.'");
+      parse_expr_infix t left bp)
   | Token.LBrack ->
-    advance t;
-    parse_expr_index_opt t left bp true
+    let index = parse_expr t PrecNone in
+    let _ = expect Token.RBrack t in
+    let idx =
+      Node.make_expr (Node.ExprIndex (left, index, optional)) left.Node.span
+    in
+    parse_expr_infix t idx bp
   | Token.LParen ->
-    advance t;
-    parse_expr_call_opt t left bp true
-  | _ ->
-    error t "expected '.', '[', or '(' after '?'";
-    parse_expr_infix t left bp
-
-let parse_ty_infix t left op_tok make_node bp =
-  let ty = parse_ty t in
-  let node = Node.make_expr (make_node (left, ty)) op_tok.Token.span in
-  parse_expr_infix t node bp
+    let args = sep_by_opt Token.Comma (fun t -> parse_expr t PrecNone) t in
+    let _ = expect Token.RParen t in
+    let call =
+      Node.make_expr (Node.ExprCall (left, args, optional)) left.Node.span
+    in
+    parse_expr_infix t call bp
+  | _ -> parse_expr_infix t left bp
 
 let parse_ty_array t (tok : Token.t) =
   let elem_ty = parse_ty t in
   let _ = expect Token.RBrack t in
   Node.make_ty (Node.TyArray elem_ty) tok.span
 
-let parse_ty_tuple_or_proc t (tok : Token.t) =
-  let maybe_proc types =
-    skip_trivia t;
-    if (curr t).kind = Token.MinusGt then (
+let parse_ty_tuple_or_fn t (tok : Token.t) =
+  let types =
+    if is_empty_delim t Token.RParen then (
       advance t;
-      Node.make_ty (Node.TyProc (types, Some (parse_ty t))) tok.span)
-    else if types = [] then Node.make_ty (Node.TyTuple []) tok.span
-    else if List.length types = 1 then List.hd types
-    else Node.make_ty (Node.TyTuple types) tok.span
+      [])
+    else
+      let first = parse_ty t in
+      skip_trivia t;
+      match (curr t).kind with
+      | Token.Comma ->
+        advance t;
+        let rest = sep_by_opt Token.Comma parse_ty t in
+        let _ = expect Token.RParen t in
+        first :: rest
+      | Token.RParen ->
+        advance t;
+        [ first ]
+      | _ ->
+        error t "expected ',' or ')' in tuple or fn type";
+        let _ = expect Token.RParen t in
+        [ first ]
   in
-  if is_empty_delim t Token.RParen then (
+  skip_trivia t;
+  if (curr t).kind = Token.MinusGt then (
     advance t;
-    maybe_proc [])
+    Node.make_ty (Node.TyProc (types, Some (parse_ty t))) tok.span)
   else
-    let first = parse_ty t in
-    skip_trivia t;
-    match (curr t).kind with
-    | Token.Comma ->
-      advance t;
-      let rest = sep_by_opt Token.Comma parse_ty t in
-      let _ = expect Token.RParen t in
-      maybe_proc (first :: rest)
-    | Token.RParen ->
-      advance t;
-      maybe_proc [ first ]
-    | _ ->
-      error t "expected ',' or ')' in tuple or procedure type";
-      let _ = expect Token.RParen t in
-      first
+    match types with
+    | [] -> Node.make_ty (Node.TyTuple []) tok.span
+    | [ single ] -> single
+    | _ -> Node.make_ty (Node.TyTuple types) tok.span
 
 let parse_ty_record t (tok : Token.t) =
   let fields =
@@ -289,45 +254,35 @@ let parse_ty_record t (tok : Token.t) =
   let _ = expect Token.RBrace t in
   Node.make_ty (Node.TyRecord fields) tok.span
 
-let parse_ty_impl t =
+let parse_ty_base t =
   skip_trivia t;
-  let is_const =
-    if (curr t).kind = Token.KwConst then (
-      advance t;
-      skip_trivia t;
-      true)
-    else false
-  in
   let tok = curr t in
   advance t;
-  let base_ty =
-    match tok.kind with
-    | Token.Ident name ->
-      let ty = Node.make_ty (Node.TyNamed name) tok.span in
-      skip_trivia t;
-      if (curr t).kind = Token.Lt then (
-        advance t;
-        let args = sep_by_opt Token.Comma parse_ty t in
-        let _ = expect Token.Gt t in
-        Node.make_ty (Node.TyApp (ty, args)) tok.span)
-      else ty
-    | Token.LBrack -> parse_ty_array t tok
-    | Token.LParen -> parse_ty_tuple_or_proc t tok
-    | Token.LBrace -> parse_ty_record t tok
-    | _ ->
-      let found = Token.show_kind t.interner tok.kind in
-      error t (Printf.sprintf "expected type, found '%s'" found);
-      Node.make_ty Node.TyError tok.span
-  in
-  skip_trivia t;
-  let ty_with_optional =
-    if (curr t).kind = Token.Question then (
+  match tok.kind with
+  | Token.Ident name ->
+    let ty = Node.make_ty (Node.TyNamed name) tok.span in
+    skip_trivia t;
+    if (curr t).kind = Token.Lt then (
       advance t;
-      Node.make_ty (Node.TyOptional base_ty) tok.span)
-    else base_ty
-  in
-  if is_const then { ty_with_optional with is_const = true }
-  else ty_with_optional
+      let args = sep_by_opt Token.Comma parse_ty t in
+      let _ = expect Token.Gt t in
+      Node.make_ty (Node.TyApp (ty, args)) tok.span)
+    else ty
+  | Token.LBrack -> parse_ty_array t tok
+  | Token.LParen -> parse_ty_tuple_or_fn t tok
+  | Token.LBrace -> parse_ty_record t tok
+  | _ ->
+    let found = Token.show_kind t.interner tok.kind in
+    error t (Printf.sprintf "expected type, found '%s'" found);
+    Node.make_ty Node.TyError tok.span
+
+let parse_ty_impl t =
+  let base_ty = parse_ty_base t in
+  skip_trivia t;
+  if (curr t).kind = Token.Question then (
+    advance t;
+    Node.make_ty (Node.TyOptional base_ty) base_ty.Node.span)
+  else base_ty
 
 let parse_optional_expr t =
   skip_trivia t;
@@ -356,44 +311,63 @@ let parse_ty_params t =
     params)
   else []
 
-let parse_decorator t =
+let parse_attrib_arg t =
+  skip_trivia t;
+  match (curr t).kind with
+  | Token.LitString name ->
+    advance t;
+    name
+  | _ ->
+    error t "expected string argument";
+    Interner.empty_name t.interner
+
+let parse_attrib_param t =
+  let key = expect_ident t "expected parameter name" in
+  let _ = expect Token.ColonEq t in
+  let value = parse_attrib_arg t in
+  (key, value)
+
+let parse_attrib t =
   let _ = expect Token.At t in
-  let dname = expect_ident t "expected decorator name" in
-  let _ = expect Token.LParen t in
-  let dargs =
-    sep_by_opt
-      Token.Comma
-      (fun t ->
-        skip_trivia t;
-        match (curr t).kind with
-        | Token.LitStr name ->
-          advance t;
-          name
-        | _ ->
-          error t "expected string in decorator";
-          Interner.empty_name t.interner)
-      t
-  in
-  let _ = expect Token.RParen t in
-  { Node.dname; dargs }
+  let aname = expect_ident t "expected attribute name" in
+  skip_trivia t;
+  if (curr t).kind <> Token.LParen then { Node.aname; aargs = []; aparams = [] }
+  else (
+    advance t;
+    skip_trivia t;
+    let aargs, aparams =
+      if (curr t).kind = Token.RParen then ([], [])
+      else if
+        (match (curr t).kind with Token.Ident _ -> true | _ -> false)
+        && (Token.peek t.stream).kind = Token.ColonEq
+      then ([], sep_by_opt Token.Comma parse_attrib_param t)
+      else (sep_by_opt Token.Comma parse_attrib_arg t, [])
+    in
+    let _ = expect Token.RParen t in
+    { Node.aname; aargs; aparams })
 
 let parse_modifiers t =
   let rec loop (mods : Node.modifiers) =
     skip_trivia t;
     match (curr t).kind with
     | Token.At ->
-      let dec = parse_decorator t in
-      loop { mods with decorators = dec :: mods.decorators }
+      let attr = parse_attrib t in
+      loop { mods with attribs = attr :: mods.attribs }
     | Token.KwExport ->
       advance t;
       loop { mods with is_exported = true }
-    | Token.KwAsync ->
+    | Token.KwExtern ->
       advance t;
-      loop { mods with is_async = true }
-    | Token.KwWeak ->
-      advance t;
-      loop { mods with is_weak = true }
-    | _ -> { mods with decorators = List.rev mods.decorators }
+      skip_trivia t;
+      let abi =
+        match (curr t).kind with
+        | Token.LitString name ->
+          advance t;
+          Some name
+        | _ -> None
+      in
+      loop { mods with is_extern = true; abi }
+    | _ -> { mods with attribs = List.rev mods.attribs }
   in
   loop Node.empty_modifiers
 
@@ -417,18 +391,16 @@ let parse_expr_block t (tok : Token.t) =
     else
       let e = parse_expr t PrecNone in
       skip_trivia t;
-      match (curr t).kind with
-      | Token.Semi ->
+      if (curr t).kind = Token.Semi then (
         advance t;
-        loop (e :: acc)
-      | Token.RBrace -> List.rev (e :: acc)
-      | _ ->
+        loop (e :: acc))
+      else if (curr t).kind = Token.RBrace then List.rev (e :: acc)
+      else (
         error t "expected ';' or '}' in block expression";
-        List.rev (e :: acc)
+        List.rev (e :: acc))
   in
-  let exprs = loop [] in
   let _ = expect Token.RBrace t in
-  Node.make_expr (Node.ExprBlock exprs) tok.span
+  Node.make_expr (Node.ExprBlock (loop [])) tok.span
 
 let parse_expr_lit_record t (tok : Token.t) =
   let parse_field t =
@@ -486,31 +458,31 @@ let parse_expr_do t (tok : Token.t) =
   in
   Node.make_expr (Node.ExprDo (body, cond)) tok.span
 
-let parse_expr_array t (tok : Token.t) =
-  let exprs = sep_by_opt Token.Comma (fun t -> parse_expr t PrecNone) t in
-  let _ = expect Token.RBrack t in
-  Node.make_expr (Node.ExprArray exprs) tok.span
-
-let parse_expr_tuple t (tok : Token.t) =
-  if is_empty_delim t Token.RParen then (
+let parse_delimited_exprs t close_delim =
+  if is_empty_delim t close_delim then (
     advance t;
-    Node.make_expr (Node.ExprTuple []) tok.span)
+    [])
   else
     let first = parse_expr t PrecNone in
     skip_trivia t;
-    match (curr t).kind with
-    | Token.Comma ->
-      advance t;
-      let rest = sep_by_opt Token.Comma (fun t -> parse_expr t PrecNone) t in
-      let _ = expect Token.RParen t in
-      Node.make_expr (Node.ExprTuple (first :: rest)) tok.span
-    | Token.RParen ->
-      advance t;
-      first
-    | _ ->
-      error t "expected ',' or ')' in tuple or grouped expression";
-      let _ = expect Token.RParen t in
-      first
+    let rest =
+      if (curr t).kind = Token.Comma then (
+        advance t;
+        sep_by_opt Token.Comma (fun t -> parse_expr t PrecNone) t)
+      else []
+    in
+    let _ = expect close_delim t in
+    first :: rest
+
+let parse_expr_array t (tok : Token.t) =
+  let exprs = parse_delimited_exprs t Token.RBrack in
+  Node.make_expr (Node.ExprArray exprs) tok.span
+
+let parse_expr_tuple t (tok : Token.t) =
+  let exprs = parse_delimited_exprs t Token.RParen in
+  match exprs with
+  | [ single ] -> single
+  | _ -> Node.make_expr (Node.ExprTuple exprs) tok.span
 
 let variant_data t =
   skip_trivia t;
@@ -555,8 +527,7 @@ let parse_match_case t =
     else None
   in
   let _ = expect Token.MinusGt t in
-  let body = parse_expr t PrecNone in
-  { Node.cpat; guard; body }
+  { Node.cpat; guard; body = parse_expr t PrecNone }
 
 let parse_expr_match t (tok : Token.t) =
   let scrutinee = parse_expr t PrecNone in
@@ -566,28 +537,12 @@ let parse_expr_match t (tok : Token.t) =
   let _ = expect Token.RBrace t in
   Node.make_expr (Node.ExprMatch (scrutinee, cases)) tok.span
 
-let parse_capture t =
-  skip_trivia t;
-  let is_weak =
-    (curr t).kind = Token.KwWeak
-    &&
-    (advance t;
-     true)
-  in
-  let cname = expect_ident t "expected capture name" in
-  { Node.cname; is_weak }
-
 let parse_param t =
   skip_trivia t;
-  let is_var =
-    (curr t).kind = Token.KwVar
-    &&
-    (advance t;
-     true)
-  in
+  let is_var = (curr t).kind = Token.KwVar in
+  if is_var then advance t;
   let pname = expect_ident t "expected parameter name" in
-  let pty = parse_optional_ty_annot t in
-  { Node.pname; pty; is_var }
+  { Node.pname; pty = parse_optional_ty_annot t; is_var }
 
 let parse_expr_record t (tok : Token.t) mods ty_params =
   let _ = expect Token.LBrace t in
@@ -600,15 +555,7 @@ let parse_expr_record t (tok : Token.t) mods ty_params =
   let _ = expect Token.RBrace t in
   Node.make_expr (Node.ExprRecord (ty_params, fields, mods)) tok.span
 
-let parse_expr_proc t (tok : Token.t) mods ty_params =
-  let captures =
-    if (curr t).kind = Token.Pipe then (
-      advance t;
-      let caps = sep_by_opt Token.Comma parse_capture t in
-      let _ = expect Token.Pipe t in
-      caps)
-    else []
-  in
+let parse_expr_fn t (tok : Token.t) mods ty_params =
   let _ = expect Token.LParen t in
   let params = sep_by_opt Token.Comma parse_param t in
   let _ = expect Token.RParen t in
@@ -627,9 +574,7 @@ let parse_expr_proc t (tok : Token.t) mods ty_params =
       Some (parse_expr_block t brace_tok))
     else None
   in
-  Node.make_expr
-    (Node.ExprProc (ty_params, captures, params, ret_ty, body, mods))
-    tok.span
+  Node.make_expr (Node.ExprFn (ty_params, params, ret_ty, body, mods)) tok.span
 
 let parse_expr_block_or_lit_record t tok =
   skip_trivia t;
@@ -645,26 +590,44 @@ let parse_expr_block_or_lit_record t tok =
     | _ -> parse_expr_block t tok)
   | _ -> parse_expr_block t tok
 
-let parse_expr_block_wrapper t (tok : Token.t) make_node =
-  let brace_tok = expect Token.LBrace t in
-  let block = parse_expr_block t brace_tok in
-  Node.make_expr (make_node block) tok.span
-
-let expr_unary_prefix t (tok : Token.t) make_node =
-  Node.make_expr (make_node (parse_expr t PrecUnary)) tok.span
+let parse_expr_decl t (tok : Token.t) mods =
+  skip_trivia t;
+  let name_opt =
+    match (curr t).kind with
+    | Token.Ident name ->
+      advance t;
+      Some name
+    | _ -> None
+  in
+  let ty_params = parse_ty_params t in
+  let construct =
+    match tok.kind with
+    | Token.KwChoice -> parse_expr_choice t tok mods ty_params
+    | Token.KwRecord -> parse_expr_record t tok mods ty_params
+    | Token.KwFn -> parse_expr_fn t tok mods ty_params
+    | _ -> failwith "unreachable"
+  in
+  match name_opt with
+  | Some name ->
+    let pat = Node.make_pat (Node.PatIdent (name, false)) tok.span in
+    Node.make_expr
+      (Node.ExprBinding (false, [], pat, None, construct, Node.empty_modifiers))
+      tok.span
+  | None -> construct
 
 let parse_expr_prefix t =
   let mods = parse_modifiers t in
-  if mods.is_async && (curr t).kind = Token.LBrace then (
+  skip_trivia t;
+  if mods.is_extern && (curr t).kind = Token.LBrace then (
+    (* `extern "ABI" { ... }` - block w/ 'extern' applied to each decl *)
     let tok = curr t in
     advance t;
-    let block = parse_expr_block t tok in
-    Node.make_expr (Node.ExprAsync block) tok.span)
+    parse_expr_block t tok)
   else
     let tok = curr t in
     advance t;
     match tok.kind with
-    | Token.LitNum s ->
+    | Token.LitNumber s ->
       let lit =
         if
           String.contains s '.' || String.contains s 'e'
@@ -673,7 +636,7 @@ let parse_expr_prefix t =
         else Node.LitInt s
       in
       Node.make_expr (Node.ExprLiteral lit) tok.span
-    | Token.LitStr name ->
+    | Token.LitString name ->
       Node.make_expr (Node.ExprLiteral (Node.LitStr name)) tok.span
     | Token.LitRune code ->
       Node.make_expr (Node.ExprLiteral (Node.LitRune code)) tok.span
@@ -687,15 +650,10 @@ let parse_expr_prefix t =
     | Token.KwBreak ->
       Node.make_expr (Node.ExprBreak (parse_optional_expr t)) tok.span
     | Token.KwContinue -> Node.make_expr Node.ExprContinue tok.span
-    | Token.KwAwait -> expr_unary_prefix t tok (fun e -> Node.ExprAwait e)
-    | Token.KwYield ->
-      Node.make_expr (Node.ExprYield (parse_optional_expr t)) tok.span
-    | Token.KwDefer -> expr_unary_prefix t tok (fun e -> Node.ExprDefer e)
-    | Token.KwTry -> expr_unary_prefix t tok (fun e -> Node.ExprTry e)
-    | Token.KwAsync ->
-      parse_expr_block_wrapper t tok (fun b -> Node.ExprAsync b)
-    | Token.KwUnsafe ->
-      parse_expr_block_wrapper t tok (fun b -> Node.ExprUnsafe b)
+    | Token.KwDefer ->
+      Node.make_expr (Node.ExprDefer (parse_expr t PrecUnary)) tok.span
+    | Token.KwTry ->
+      Node.make_expr (Node.ExprTry (parse_expr t PrecUnary)) tok.span
     | Token.KwIf -> parse_expr_if t tok
     | Token.KwMatch -> parse_expr_match t tok
     | Token.KwWhile -> parse_expr_while t tok
@@ -703,31 +661,7 @@ let parse_expr_prefix t =
     | Token.KwVal -> parse_expr_binding t tok false mods
     | Token.KwVar -> parse_expr_binding t tok true mods
     | Token.KwFor -> parse_expr_for t tok
-    | Token.KwChoice | Token.KwRecord | Token.KwProc | Token.Pipe -> (
-      skip_trivia t;
-      let name_opt =
-        match (curr t).kind with
-        | Token.Ident name ->
-          advance t;
-          Some name
-        | _ -> None
-      in
-      let ty_params = parse_ty_params t in
-      let construct =
-        match tok.kind with
-        | Token.KwChoice -> parse_expr_choice t tok mods ty_params
-        | Token.KwRecord -> parse_expr_record t tok mods ty_params
-        | Token.KwProc | Token.Pipe -> parse_expr_proc t tok mods ty_params
-        | _ -> failwith "unreachable"
-      in
-      match name_opt with
-      | Some name ->
-        let pat = Node.make_pat (Node.PatIdent (name, false)) tok.span in
-        Node.make_expr
-          (Node.ExprBinding
-             (false, [], pat, None, construct, Node.empty_modifiers))
-          tok.span
-      | None -> construct)
+    | Token.KwChoice | Token.KwRecord | Token.KwFn -> parse_expr_decl t tok mods
     | Token.LBrace -> parse_expr_block_or_lit_record t tok
     | Token.LBrack -> parse_expr_array t tok
     | Token.LParen -> parse_expr_tuple t tok
@@ -741,45 +675,42 @@ let parse_expr_prefix t =
 
 let parse_expr_infix_impl t left bp =
   skip_trivia t;
-  let op_token = curr t in
-  let op_prec = token_prec op_token.kind in
+  let op_tok = curr t in
+  let op_prec = token_prec op_tok.kind in
   if prec_to_int op_prec <= prec_to_int bp then left
   else (
     advance t;
-    match op_token.kind with
-    | Token.Dot -> parse_expr_field_opt t left bp false
-    | Token.LBrack -> parse_expr_index_opt t left bp false
-    | Token.LParen -> parse_expr_call_opt t left bp false
+    let cont_with ekind =
+      parse_expr_infix t (Node.make_expr ekind op_tok.span) bp
+    in
+    match op_tok.kind with
+    | Token.Dot | Token.LBrack | Token.LParen ->
+      parse_postfix t left bp false op_tok.kind
     | Token.LBrace ->
-      let lit = parse_expr_lit_record t op_token in
+      let lit = parse_expr_lit_record t op_tok in
       parse_expr_infix t lit bp
-    | Token.Bang ->
-      let unwrap = Node.make_expr (Node.ExprUnwrap left) op_token.span in
-      parse_expr_infix t unwrap bp
-    | Token.Question -> parse_expr_opt t left bp
-    | Token.KwAs ->
-      parse_ty_infix t left op_token (fun (e, ty) -> Node.ExprCast (e, ty)) bp
-    | Token.KwIs ->
-      parse_ty_infix t left op_token (fun (e, ty) -> Node.ExprTest (e, ty)) bp
+    | Token.Bang -> cont_with (Node.ExprUnwrap left)
+    | Token.Question ->
+      skip_trivia t;
+      let next = (curr t).kind in
+      if next = Token.Dot || next = Token.LBrack || next = Token.LParen then (
+        advance t;
+        parse_postfix t left bp true next)
+      else (
+        error t "expected '.', '[', or '(' after '?'";
+        parse_expr_infix t left bp)
+    | Token.KwAs -> cont_with (Node.ExprCast (left, parse_ty t))
+    | Token.KwIs -> cont_with (Node.ExprTest (left, parse_ty t))
     | Token.DotDot | Token.DotDotLt ->
       let right = parse_expr t op_prec in
-      let inclusive = op_token.kind = Token.DotDot in
-      let range =
-        Node.make_expr (Node.ExprRange (left, right, inclusive)) op_token.span
-      in
-      parse_expr_infix t range bp
-    | Token.LtMinus ->
+      cont_with (Node.ExprRange (left, right, op_tok.kind = Token.DotDot))
+    | Token.LtMinus | _ ->
       let right = parse_expr t op_prec in
-      let node = Node.make_expr (Node.ExprAssign (left, right)) op_token.span in
-      parse_expr_infix t node bp
-    | _ ->
-      let right = parse_expr t op_prec in
-      let node =
-        Node.make_expr
-          (Node.ExprBinary (op_token.kind, left, right))
-          op_token.span
+      let ekind =
+        if op_tok.kind = Token.LtMinus then Node.ExprAssign (left, right)
+        else Node.ExprBinary (op_tok.kind, left, right)
       in
-      parse_expr_infix t node bp)
+      cont_with ekind)
 
 let parse_expr_impl t bp =
   let left = parse_expr_prefix t in
@@ -805,21 +736,24 @@ let parse_pat_choice t (tok : Token.t) =
     Node.make_pat Node.PatError tok.span
 
 let parse_pat_array t (tok : Token.t) =
-  if is_empty_delim t Token.RBrack then (
-    advance t;
-    Node.make_pat (Node.PatArray ([], None)) tok.span)
-  else
-    let items = sep_by_opt Token.Comma parse_pat t in
-    skip_trivia t;
-    let rest =
-      if (curr t).kind = Token.DotDot then (
-        advance t;
-        let name = expect_ident t "expected identifier after '..'" in
-        Some (Node.make_pat (Node.PatRest name) tok.span))
-      else None
-    in
-    let _ = expect Token.RBrack t in
-    Node.make_pat (Node.PatArray (items, rest)) tok.span
+  let items, rest =
+    if is_empty_delim t Token.RBrack then (
+      advance t;
+      ([], None))
+    else
+      let items = sep_by_opt Token.Comma parse_pat t in
+      skip_trivia t;
+      let rest =
+        if (curr t).kind = Token.DotDot then (
+          advance t;
+          let name = expect_ident t "expected identifier after '..'" in
+          Some (Node.make_pat (Node.PatRest name) tok.span))
+        else None
+      in
+      let _ = expect Token.RBrack t in
+      (items, rest)
+  in
+  Node.make_pat (Node.PatArray (items, rest)) tok.span
 
 let parse_pat_record t (tok : Token.t) =
   let parse_field t =
@@ -840,39 +774,41 @@ let parse_pat_record t (tok : Token.t) =
   Node.make_pat (Node.PatRecord fields) tok.span
 
 let parse_pat_tuple t (tok : Token.t) =
-  if is_empty_delim t Token.RParen then (
-    advance t;
-    Node.make_pat (Node.PatTuple []) tok.span)
-  else
-    let first = parse_pat t in
-    skip_trivia t;
-    match (curr t).kind with
-    | Token.Comma ->
+  let pats =
+    if is_empty_delim t Token.RParen then (
       advance t;
-      let rest = sep_by_opt Token.Comma parse_pat t in
-      let _ = expect Token.RParen t in
-      Node.make_pat (Node.PatTuple (first :: rest)) tok.span
-    | Token.RParen ->
-      advance t;
-      first
-    | _ ->
-      error t "expected ',' or ')' in tuple pattern";
-      let _ = expect Token.RParen t in
-      Node.make_pat (Node.PatTuple [ first ]) tok.span
+      [])
+    else
+      let first = parse_pat t in
+      skip_trivia t;
+      match (curr t).kind with
+      | Token.Comma ->
+        advance t;
+        let rest = sep_by_opt Token.Comma parse_pat t in
+        let _ = expect Token.RParen t in
+        first :: rest
+      | Token.RParen ->
+        advance t;
+        [ first ]
+      | _ ->
+        error t "expected ',' or ')' in tuple pattern";
+        let _ = expect Token.RParen t in
+        [ first ]
+  in
+  match pats with
+  | [ single ] -> single
+  | _ -> Node.make_pat (Node.PatTuple pats) tok.span
 
 let parse_pat_impl t =
   skip_trivia t;
-  let is_var =
-    (curr t).kind = Token.KwVar
-    &&
-    (advance t;
-     true)
-  in
   let tok = curr t in
+  let is_var = tok.kind = Token.KwVar in
+  if is_var then advance t;
+  let tok = if is_var then curr t else tok in
   advance t;
   match tok.kind with
-  | Token.KwConst ->
-    let name = expect_ident t "expected identifier after 'const' in pattern" in
+  | Token.KwVar ->
+    let name = expect_ident t "expected identifier after 'var' in pattern" in
     Node.make_pat (Node.PatBinding name) tok.span
   | Token.Underscore -> Node.make_pat Node.PatWild tok.span
   | Token.Ident name -> Node.make_pat (Node.PatIdent (name, is_var)) tok.span
@@ -880,7 +816,7 @@ let parse_pat_impl t =
   | Token.LParen -> parse_pat_tuple t tok
   | Token.LBrack -> parse_pat_array t tok
   | Token.LBrace -> parse_pat_record t tok
-  | Token.LitNum _ | Token.LitStr _ | Token.LitRune _ | Token.KwTrue
+  | Token.LitNumber _ | Token.LitString _ | Token.LitRune _ | Token.KwTrue
   | Token.KwFalse ->
     Node.make_pat (Node.PatLiteral tok.kind) tok.span
   | _ ->
@@ -906,9 +842,8 @@ let parse_ident_list t =
       skip_trivia t;
       if (curr t).kind = Token.KwAs then (
         advance t;
-        let _ = expect_ident t "expected identifier after 'as'" in
-        (name, tok.span))
-      else (name, tok.span))
+        ignore (expect_ident t "expected identifier after 'as'"));
+      (name, tok.span))
     t
 
 let parse_named_or_namespace_spec ~kw ~named_ctor ~namespace_ctor t =
@@ -933,6 +868,7 @@ let parse_named_or_namespace_spec ~kw ~named_ctor ~namespace_ctor t =
     named_ctor []
 
 let parse_stmt_import t (tok : Token.t) =
+  let mods = parse_modifiers t in
   let spec =
     parse_named_or_namespace_spec
       ~kw:"import"
@@ -943,11 +879,11 @@ let parse_stmt_import t (tok : Token.t) =
   let _ = expect Token.KwFrom t in
   skip_trivia t;
   match (curr t).kind with
-  | Token.LitStr path ->
+  | Token.LitString path ->
     advance t;
-    Node.make_stmt (Node.StmtImport (spec, path)) tok.span
+    Node.make_stmt (Node.StmtImport (spec, path, mods)) tok.span
   | _ ->
-    error t "expected text path after 'from'";
+    error t "expected string path after 'from'";
     Node.make_stmt Node.StmtError tok.span
 
 let parse_stmt_export t (tok : Token.t) =
@@ -964,11 +900,11 @@ let parse_stmt_export t (tok : Token.t) =
       advance t;
       skip_trivia t;
       match (curr t).kind with
-      | Token.LitStr p ->
+      | Token.LitString p ->
         advance t;
         Some p
       | _ ->
-        error t "expected text path after 'from' keyword";
+        error t "expected string path after 'from' keyword";
         None)
     else None
   in
@@ -1004,6 +940,4 @@ let parse t =
         let _ = expect Token.Semi t in
         loop (s :: acc)
   in
-  let stmts = loop [] in
-  let diags = !(t.diags) in
-  (stmts, diags)
+  (loop [], !(t.diags))
