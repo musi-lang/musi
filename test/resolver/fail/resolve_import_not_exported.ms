@@ -1,2 +1,2 @@
-import { bar } from "module_lib";
+import { bar } from "foo_lib";
 val x := bar;
