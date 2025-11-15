@@ -1,20 +1,10 @@
-# development files
-.vscode/
-.gitattributes
+.vscode/**
+.vscode-test/**
+test/**
 .gitignore
-tsconfig.json
-
-# source files
-!src/
+.yarnrc
+vsc-extension-quickstart.md
+**/jsconfig.json
 **/*.map
-
-# documentation
-docs/
-
-# dependencies
-node_modules/
-bun.lock
-tsconfig.tsbuildinfo
-
-# Musi files
-**/*.ms
+**/eslint.config.mjs
+**/.vscode-test.*
