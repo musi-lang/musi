@@ -3,36 +3,37 @@
 > [!WARNING]
 > Musi is under active development. Language design and implementation are subject to change.
 
-Systems programming language designed for clarity, safety, and performance. Readable syntax meets explicit ARC memory control.
+Systems programming language designed for clarity, safety, and performance. Readable syntax meets stack-only memory discipline.
 
 ## Highlights
 
 - Expression-oriented semantics; every construct yields a value
-- Strong static typing with inference plus gradual escape hatches
-- ARC by default with manual control when needed
+- Strong static typing with inference
+- Stack-only memory model with region-based arena allocators
+- Compile-time lifetime checking with Ada-level safety
 - Exhaustive pattern matching with guard support
 - Fallible types (`Expect<T, E>`) and structured error propagation
+- No garbage collection, no reference counting, no runtime overhead
 
 ## Example
 
 ```musi
 val Counter := record {
-  var value: Nat,
+  var value: Nat;
 };
 
-val inc := proc(var c: Counter) {
-  val temp := c.value;
-  c.value <- temp + 1;
+val inc := fn (ref var c: Counter) {
+  c.value <- c.value + 1;
 };
 
-val show := proc(c: Counter) {
+val show := fn (ref c: Counter) {
   writeln(`Counter is now: ${c.value}`);
 };
 
 var counter := Counter{ .value := 0 };
-inc();      // value is now 1
-inc();      // value is now 2
-show();     // prints: `Counter is now: 2`
+inc(ref var counter);  // value is now 1
+inc(ref var counter);  // value is now 2
+show(ref counter);     // prints: `Counter is now: 2`
 ```
 
 ## Getting Started
