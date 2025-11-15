@@ -1,154 +1,183 @@
-# Musi Language Knowledge Base
+# Musi Language Documentation
 
-LLM-focused documentation for implementing and understanding the Musi programming language.
+> Stack-only systems programming language
 
-## Purpose
+## Philosophy
 
-This knowledge base is designed for AI assistants (LLMs) to:
+Musi is designed for **clarity, safety, and performance** with a stack-only memory model. No heap allocation, no garbage collection, no runtime overhead.
 
-- Understand Musi's syntax and semantics
-- Implement compiler features
-- Implement runtime features
-- Understand design decisions
-- Reference similar languages
+### Core Principles
 
-## Structure
-
-### [syntax/](syntax/)
-
-Current language syntax (single source of truth)
-
-- [bindings.md](syntax/bindings.md) - val/var bindings
-- [types.md](syntax/types.md) - Type system
-- [patterns.md](syntax/patterns.md) - Pattern matching
-- [control-flow.md](syntax/control-flow.md) - Loops, conditionals
-- [ffi.md](syntax/ffi.md) - Foreign function interface
-
-### [semantics/](semantics/)
-
-Language behavior and rules
-
-- [memory-model.md](semantics/memory-model.md) - ARC memory management
-- [type-system.md](semantics/type-system.md) - Type inference, checking
-
-### [compiler/](compiler/)
-
-OCaml compiler implementation
-
-- [pipeline.md](compiler/pipeline.md) - Compilation phases
-- [lexer.md](compiler/lexer.md) - Tokenization
-- [parser.md](compiler/parser.md) - AST construction
-
-### [runtime/](runtime/)
-
-Zig VM implementation
-
-- [vm-arch.md](runtime/vm-arch.md) - VM architecture
-- [opcodes.md](runtime/opcodes.md) - Instruction set
-
-### [decisions/](decisions/)
-
-Design rationale (why, not what)
-
-- [val-var-const.md](decisions/val-var-const.md) - Binding keywords
-- [arc-choice.md](decisions/arc-choice.md) - Memory management
-- [no-inheritance.md](decisions/no-inheritance.md) - Composition over inheritance
-
-### [examples/](examples/)
-
-Reference implementations from other languages
-
-- [swift-arc.md](examples/swift-arc.md) - Swift's ARC implementation
-- [rust-ownership.md](examples/rust-ownership.md) - Rust's ownership model
-
-## Quick Reference
-
-### Current Implementation Status
-
-See [PROGRESS.md](PROGRESS.md) for detailed status.
-
-**Working:**
-
-- Lexer (basic)
-- Parser (basic)
-- Type system (basic)
-- Instruction set (defined)
-
-**In Progress:**
-
-- val/var migration
-- Semantic analysis
-- Code generation
-
-**TODO:**
-
-- Zig VM
-- ARC implementation
-- FFI bridge
-- Optimizations
-
-### Key Design Principles
-
-1. **Immutability by default** - val (immutable), var (explicit mutable)
-2. **ARC memory management** - Automatic, deterministic, predictable
-3. **Expression-oriented** - Everything is an expression
+1. **Stack-only memory** - All data on stack, compile-time lifetimes
+2. **Immutability by default** - `val` immutable, `var` explicit mutable
+3. **Expression-oriented** - Everything yields a value
 4. **Strong static typing** - With inference
-5. **No inheritance** - Composition over inheritance
+5. **Zero runtime overhead** - No allocator, no GC, no ARC
 6. **Explicit over implicit** - Clear, readable code
 
-### Syntax Quick Reference
+## Quick Start
+
+### Hello World
 
 ```musi
-// Bindings
-val x := 42;              // immutable
-var y := 42;              // mutable
-y <- 43;                  // reassignment
+writeln("Hello, Musi!");
+```
 
-// Types
-val n: Int := 42;
-val f: Bin32 := 3.14;
-val s: String := "hello";
+### Basic Example
 
-// Records
-val Point := record {
-  x: Bin32,
-  var y: Bin32,
+```musi
+val Counter := record {
+  var value: Nat;
 };
 
-// Choice Types
+val inc := fn(ref var c: Counter) {
+  c.value <- c.value + 1;
+};
+
+val show := fn(ref c: Counter) {
+  writeln(`Counter: ${c.value}`);
+};
+
+var counter := Counter{ .value := 0 };
+inc(ref var counter);
+inc(ref var counter);
+show(ref counter);
+```
+
+## Key Features
+
+### Stack-Only Memory
+
+All values stored on stack with compile-time known sizes:
+
+```musi
+val x: Nat := 42;                    // 8 bytes
+val arr: [Nat; 100] := [0; 100];     // 800 bytes
+val s: Str<32> := "hello";           // 32 runes + length
+```
+
+### Borrowing
+
+References to stack values:
+
+```musi
+val add := fn(ref x: Int, ref y: Int) -> Int {  // immutable borrow
+  x + y
+};
+
+val inc := fn(ref var x: Int) {                 // mutable borrow
+  x <- x + 1;
+};
+```
+
+### Pattern Matching
+
+```musi
 val Shape := choice Shape {
   case Circle(radius: Bin32),
   case Rectangle(width: Bin32, height: Bin32),
 };
 
-// Pattern Matching
-match shape with {
+val area := fn(ref shape: Shape) -> Bin32 {
+  match shape with {
   case .Circle(r) -> 3.14159 * r * r,
   case .Rectangle(w, h) -> w * h,
+  }
 };
-
-// Procedures
-proc add(x: Int, y: Int) -> Int {
-  x + y
-};
-
-// FFI
-@extern("C")
-proc malloc(size: N64) -> Ptr<Unit>;
 ```
 
-## For LLM Assistants
+### Optionals & Fallible Types
 
-When implementing features:
+```musi
+val maybe: Nat? := .Some(42);
+val nothing: Nat? := .None;
 
-1. Check [PROGRESS.md](PROGRESS.md) for current status
-2. Read relevant syntax/ docs for specification
-3. Read relevant compiler/ or runtime/ docs for implementation
-4. Check decisions/ for design rationale
-5. Reference examples/ for proven patterns
+val result: Expect<Nat, Error> := .Pass(42);
+val failure: Expect<Nat, Error> := .Fail(err);
+```
 
-When uncertain:
+### String Types
 
-- Create TODO in relevant file
-- Ask human for clarification
-- Document assumptions
+**Fixed-size (Str<N>):**
+
+```musi
+val Str<N: Nat> := record {
+  data: [Rune; N];
+  len: Nat;
+};
+
+val name: Str<32> := "Alice";
+```
+
+**Growable (StrBuf):**
+
+```musi
+val StrBuf := record {
+  ptr: Ptr<Rune>;
+  var len: Nat;
+  var cap: Nat;
+};
+
+Arena.with(fn(ref arena: Arena) {
+  var text := StrBuf.new(ref arena);
+  text.push_str("Hello");
+});
+```
+
+## Documentation Structure
+
+- **[SYNTAX.md](SYNTAX.md)** - Complete syntax reference
+- **[MEMORY.md](MEMORY.md)** - Stack-only model, borrowing, lifetimes
+- **[TYPES.md](TYPES.md)** - Type system, generics, inference
+- **[FFI.md](FFI.md)** - Foreign function interface
+- **[COMPILER.md](COMPILER.md)** - Compiler architecture
+- **[RUNTIME.md](RUNTIME.md)** - VM architecture
+- **[EXAMPLES.md](EXAMPLES.md)** - Code examples
+- **[PROGRESS.md](PROGRESS.md)** - Implementation status
+
+## Building
+
+```bash
+# Build compiler
+opam exec -- dune build
+
+# Build runtime
+cargo build
+
+# Run tests
+opam exec -- dune test
+```
+
+## Design Decisions
+
+### Why Stack-Only?
+
+- **Zero overhead** - No allocator, no GC, no ARC
+- **Predictable** - Constant-time allocation/deallocation
+- **Simple** - No cycles, no leaks, no fragmentation
+- **Fast** - Stack allocation is bump-pointer fast
+- **Embedded-friendly** - Works without OS
+
+### What's Removed?
+
+- Heap allocation (malloc/free)
+- Garbage collection
+- Reference counting (ARC)
+- `weak` references
+- `async`/`await`/`yield`, `const` keywords
+- `unsafe` keyword
+- Dynamic arrays/strings
+- Closures with heap captures
+
+### What's Added?
+
+- `ref` keyword for borrowing
+- `ref var` for mutable borrows
+- Compile-time lifetime checking
+- Fixed-size generics: `String<N>`, `[T; N]`
+- Copy-only closures (64 byte limit)
+- Region-based arena allocators for dynamic structures
+
+## License
+
+See [LICENSE](../LICENSE) for details.
