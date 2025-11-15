@@ -12,6 +12,7 @@ type t =
   | Ble of int
   | Blt of int
   | Bne of int
+  | Switch of int list
   | Leave of int
   | Ret
   | Throw
@@ -128,6 +129,7 @@ let to_opcode = function
   | Ble _ -> 0x3E
   | Blt _ -> 0x3F
   | Bne _ -> 0x40
+  | Switch _ -> 0x45
   | Leave _ -> 0xC7
   | Ret -> 0x2A
   | Throw -> 0x7A
@@ -244,6 +246,9 @@ let show = function
   | Ble offset -> Printf.sprintf "ble %d" offset
   | Blt offset -> Printf.sprintf "blt %d" offset
   | Bne offset -> Printf.sprintf "bne %d" offset
+  | Switch offsets ->
+    let offsets_str = String.concat ", " (List.map string_of_int offsets) in
+    Printf.sprintf "switch [%s]" offsets_str
   | Leave offset -> Printf.sprintf "leave %d" offset
   | Ret -> "ret"
   | Throw -> "throw"
@@ -360,6 +365,9 @@ let show_with_interner interner = function
   | Ble offset -> Printf.sprintf "ble %d" offset
   | Blt offset -> Printf.sprintf "blt %d" offset
   | Bne offset -> Printf.sprintf "bne %d" offset
+  | Switch offsets ->
+    let offsets_str = String.concat ", " (List.map string_of_int offsets) in
+    Printf.sprintf "switch [%s]" offsets_str
   | Leave offset -> Printf.sprintf "leave %d" offset
   | Ret -> "ret"
   | Throw -> "throw"
