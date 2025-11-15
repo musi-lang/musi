@@ -1,4 +1,4 @@
-val count := proc (limit: Int) {
+val count := fn (limit: Int) {
   var i := 0;
   do {
     i <- i + 1;

@@ -1,1 +1,0 @@
-async val foo := proc () {};

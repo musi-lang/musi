@@ -1,18 +1,16 @@
-and as async await
+and as
 break
-case choice const continue
+case choice continue
 defer do
 else export extern
-false for from
+false for from fn
 if import in is
 match mod
 not
 or
-proc
 record return
 shl shr
 then true try
 val var
-weak where while with
+where while with
 xor
-yield

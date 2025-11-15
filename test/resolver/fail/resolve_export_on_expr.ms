@@ -1,1 +1,1 @@
-val foo := export proc () {};
+val foo := export fn () {};

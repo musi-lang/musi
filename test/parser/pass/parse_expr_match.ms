@@ -1,4 +1,4 @@
-val classify := proc (x: Int) -> Str {
+val classify := fn (x: Int) -> Str {
   match x with {
   case 0 -> "zero",
   case 1 -> "one",

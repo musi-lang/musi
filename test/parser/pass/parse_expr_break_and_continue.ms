@@ -1,4 +1,4 @@
-val find_first := proc (items: [Int], target: Int) -> Int {
+val find_first := fn (items: [Int], target: Int) -> Int {
   for x in items do {
     if x = target then {
       break x;
@@ -7,7 +7,7 @@ val find_first := proc (items: [Int], target: Int) -> Int {
   -1
 };
 
-val skip_evens := proc (items: [Int]) {
+val skip_evens := fn (items: [Int]) {
   for x in items do {
     if x mod 2 = 0 then {
       continue;

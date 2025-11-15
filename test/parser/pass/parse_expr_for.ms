@@ -1,4 +1,4 @@
-val sum := proc (items: [Int]) -> Int {
+val sum := fn (items: [Int]) -> Int {
   var total := 0;
   for x in items do {
     total <- total + x;
@@ -6,7 +6,7 @@ val sum := proc (items: [Int]) -> Int {
   total
 };
 
-val find := proc (items: [Int], target: Int) -> Int {
+val find := fn (items: [Int], target: Int) -> Int {
   for x in items do {
     if x = target then {
       break x;

@@ -1,14 +1,14 @@
-proc incr(var x: Nat) {
+fn incr(var x: Nat) {
   x <- x + 1;
 };
 
-proc swap(var a: Nat, var b: Nat) {
+fn swap(var a: Nat, var b: Nat) {
   val temp := a;
   a <- b;
   b <- temp;
 };
 
-proc compute(x: Nat, var result: Nat, var error: Bool) {
+fn compute(x: Nat, var result: Nat, var error: Bool) {
   if x < 0 then {
     error <- true;
     result <- 0;
