@@ -10,7 +10,7 @@ let note diags msg span =
 
 (* === VALIDATION === *)
 
-let validate_binding_mods diags _is_const mods span =
+let validate_binding_mods diags mods span =
   if mods.Node.is_exported then
     error diags "'export' modifier not allowed on binding expressions" span;
   if mods.Node.is_extern then
@@ -61,9 +61,9 @@ let scoped table f =
 
 let rec collect_expr table interner diags expr =
   match expr.Node.ekind with
-  | Node.ExprBinding (is_const, _, pat, ty_opt, init, mods) ->
-    validate_binding_mods diags is_const mods expr.span;
-    collect_pat table interner diags (not is_const) pat ty_opt pat.span;
+  | Node.ExprBinding (is_mutable, _, pat, ty_opt, init, mods) ->
+    validate_binding_mods diags mods expr.span;
+    collect_pat table interner diags is_mutable pat ty_opt pat.span;
     collect_expr table interner diags init
   | Node.ExprFn (_, params, _, body_opt, mods) ->
     validate_expr_mods diags mods "fn" expr.span;

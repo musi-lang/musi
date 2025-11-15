@@ -145,7 +145,7 @@ let expect_ident t err_msg =
 
 let parse_typed_field ~allow_modifiers t =
   skip_trivia t;
-  let is_var =
+  let is_mutable =
     if allow_modifiers && (curr t).kind = Token.KwVar then (
       advance t;
       true)
@@ -153,7 +153,7 @@ let parse_typed_field ~allow_modifiers t =
   in
   let fname = expect_ident t "expected field name" in
   let _ = expect Token.Colon t in
-  { Node.fname; fty = parse_ty t; is_var }
+  { Node.fname; fty = parse_ty t; is_mutable }
 
 let field_name t =
   skip_trivia t;
@@ -399,8 +399,9 @@ let parse_expr_block t (tok : Token.t) =
         error t "expected ';' or '}' in block expression";
         List.rev (e :: acc))
   in
+  let exprs = loop [] in
   let _ = expect Token.RBrace t in
-  Node.make_expr (Node.ExprBlock (loop [])) tok.span
+  Node.make_expr (Node.ExprBlock exprs) tok.span
 
 let parse_expr_lit_record t (tok : Token.t) =
   let parse_field t =
@@ -430,14 +431,14 @@ let parse_expr_while t (tok : Token.t) =
   let _ = expect Token.KwDo t in
   Node.make_expr (Node.ExprWhile (cond, parse_expr t PrecNone)) tok.span
 
-let parse_expr_binding t (tok : Token.t) is_var mods =
+let parse_expr_binding t (tok : Token.t) is_mutable mods =
   let pat = parse_pat t in
   let ty_params = parse_ty_params t in
   let ty_opt = parse_optional_ty_annot t in
   let _ = expect Token.ColonEq t in
   Node.make_expr
     (Node.ExprBinding
-       (is_var, ty_params, pat, ty_opt, parse_expr t PrecNone, mods))
+       (is_mutable, ty_params, pat, ty_opt, parse_expr t PrecNone, mods))
     tok.span
 
 let parse_expr_for t (tok : Token.t) =
@@ -539,10 +540,10 @@ let parse_expr_match t (tok : Token.t) =
 
 let parse_param t =
   skip_trivia t;
-  let is_var = (curr t).kind = Token.KwVar in
-  if is_var then advance t;
+  let is_mutable = (curr t).kind = Token.KwVar in
+  if is_mutable then advance t;
   let pname = expect_ident t "expected parameter name" in
-  { Node.pname; pty = parse_optional_ty_annot t; is_var }
+  { Node.pname; pty = parse_optional_ty_annot t; is_mutable }
 
 let parse_expr_record t (tok : Token.t) mods ty_params =
   let _ = expect Token.LBrace t in
@@ -802,16 +803,17 @@ let parse_pat_tuple t (tok : Token.t) =
 let parse_pat_impl t =
   skip_trivia t;
   let tok = curr t in
-  let is_var = tok.kind = Token.KwVar in
-  if is_var then advance t;
-  let tok = if is_var then curr t else tok in
+  let is_mutable = tok.kind = Token.KwVar in
+  if is_mutable then advance t;
+  let tok = if is_mutable then curr t else tok in
   advance t;
   match tok.kind with
   | Token.KwVar ->
     let name = expect_ident t "expected identifier after 'var' in pattern" in
     Node.make_pat (Node.PatBinding name) tok.span
   | Token.Underscore -> Node.make_pat Node.PatWild tok.span
-  | Token.Ident name -> Node.make_pat (Node.PatIdent (name, is_var)) tok.span
+  | Token.Ident name ->
+    Node.make_pat (Node.PatIdent (name, is_mutable)) tok.span
   | Token.Dot -> parse_pat_choice t tok
   | Token.LParen -> parse_pat_tuple t tok
   | Token.LBrack -> parse_pat_array t tok
@@ -940,4 +942,5 @@ let parse t =
         let _ = expect Token.Semi t in
         loop (s :: acc)
   in
-  (loop [], !(t.diags))
+  let stmts = loop [] in
+  (stmts, !(t.diags))

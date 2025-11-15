@@ -95,8 +95,8 @@ and literal_kind =
   | LitBool of bool
   | LitRecord of (name * expr) list
 
-and param = { pname : name; pty : ty option; is_var : bool }
-and field = { fname : name; fty : ty; is_var : bool }
+and param = { pname : name; pty : ty option; is_mutable : bool }
+and field = { fname : name; fty : ty; is_mutable : bool }
 and case = { cpat : pat; guard : expr option; body : expr }
 and variant = { vname : name; vdata : variant_data }
 and variant_data = VUnit | VTuple of ty list | VRecord of field list
