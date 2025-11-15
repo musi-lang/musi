@@ -457,6 +457,30 @@ let test_stmt_import_extern () =
     (check bool) "has extern" true mods.Node.is_extern
   | _ -> fail "expected 'StmtImport' with extern"
 
+let test_attrib_args () =
+  let stmts, diags, _ = parse "@link(\"x\", \"c_\") val x := 5" in
+  (check bool) "no errors" false (Diagnostic.has_errors diags);
+  match get_expr stmts with
+  | Some { Node.ekind = Node.ExprBinding (_, _, _, _, _, mods); _ } ->
+    (check bool) "has attribs" true (List.length mods.Node.attribs > 0)
+  | _ -> fail "expected 'ExprBinding' with attributes"
+
+let test_attrib_params () =
+  let stmts, diags, _ = parse "@link(name := \"x\") val x := 5" in
+  (check bool) "no errors" false (Diagnostic.has_errors diags);
+  match get_expr stmts with
+  | Some { Node.ekind = Node.ExprBinding (_, _, _, _, _, mods); _ } ->
+    (check bool) "has attribs" true (List.length mods.Node.attribs > 0)
+  | _ -> fail "expected 'ExprBinding' with attributes"
+
+let test_attrib_mixed () =
+  let stmts, diags, _ = parse "@link(\"c\", prefix := \"c_\") val x := 5" in
+  (check bool) "no errors" false (Diagnostic.has_errors diags);
+  match get_expr stmts with
+  | Some { Node.ekind = Node.ExprBinding (_, _, _, _, _, mods); _ } ->
+    (check bool) "has attribs" true (List.length mods.Node.attribs > 0)
+  | _ -> fail "expected 'ExprBinding' with attributes"
+
 let () =
   run
     "Parser"
@@ -525,5 +549,11 @@ let () =
           test_case "import" `Quick test_stmt_import
         ; test_case "export" `Quick test_stmt_export
         ; test_case "import extern" `Quick test_stmt_import_extern
+        ] )
+    ; ( "attributes"
+      , [
+          test_case "args" `Quick test_attrib_args
+        ; test_case "params" `Quick test_attrib_params
+        ; test_case "mixed" `Quick test_attrib_mixed
         ] )
     ]
