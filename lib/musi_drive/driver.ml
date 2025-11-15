@@ -22,7 +22,7 @@ let compile ~input_path ~output_path =
     List.filter_map
       (fun stmt ->
         match stmt.Node.skind with
-        | Node.StmtImport (_, module_name) ->
+        | Node.StmtImport (_, module_name, _) ->
           Some (Interner.lookup interner module_name)
         | _ -> None)
       ast
@@ -37,7 +37,7 @@ let compile ~input_path ~output_path =
       encoder
       imports
       (Emitter.const_pool emitter)
-      (Emitter.procs emitter)
+      (Emitter.fns emitter)
       instrs
   in
 
