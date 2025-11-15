@@ -124,7 +124,7 @@ val type_cast := value as Int;
 val type_test := value is Int;
 
 // Arrow
-val arrow := proc(x: Int) -> Int { x + 1 };
+val arrow := fn (x: Int) -> Int { x + 1 };
 
 // ============================================================================
 // TYPES
@@ -138,16 +138,16 @@ val bin_val: Bin := 3.14;
 val bin32_val: Bin32 := 3.14_b32;
 val bin64_val: Bin64 := 3.14_b64;
 val rune_val: Rune := 'A';
-val text_val: Str := "hello";
+val text_val: String := "hello";
 
 val array_type: [Int] := [1, 2, 3];
-val tuple_type: (Int, Str) := (42, "answer");
+val tuple_type: (Int, String) := (42, "answer");
 val ptr_type: Ptr<Int> := addr(x);
-val proc_type: proc(Int) -> Int := inc;
+val proc_type: fn (Int) -> Int := inc;
 
 val box_val: Box<Int> := Box{ 42 };
 val opt_val: Int? := .Some(42);
-val res_val: Int!Str := .Succ(42);
+val res_val: Int!String := .Succ(42);
 
 val maybe: Int? := .Some(42);
 val result: Data! := try load();
@@ -157,42 +157,42 @@ val result_typed: Data! := try load();
 // PROCEDURES
 // ============================================================================
 
-val add := proc(x: Int, y: Int) -> Int { x + y };
+val add := fn (x: Int, y: Int) -> Int { x + y };
 
-val scale := proc(v: Bin, f: Bin) -> Bin {
+val scale := fn (v: Bin, f: Bin) -> Bin {
   v * f
 };
 
-proc fill(var buf: [Int], val: Int) {
+fn fill(var buf: [Int], val: Int) {
   for i in 0..<len(buf) do {
     buf[i] <- val
   }
 };
 
-val generic := proc<T>(x: T) -> T { x };
+val generic<T> := fn (x: T) -> T { x };
 
-val multi_generic := proc<T, U>(x: T, y: U) -> (T, U) {
+val multi_generic<T, U> := fn (x: T, y: U) -> (T, U) {
   (x, y)
 };
 
-val async_proc := async proc(url: Str) -> Data! {
+val async_proc := async fn (url: String) -> Data! {
   val res := await http.get(url);
   val body := await res.json();
   body
 };
 
-proc write_ptr(p: Ptr<Nat>, v: Nat) {
+fn write_ptr(p: Ptr<Nat>, v: Nat) {
   p.pointee <- v;
 };
 
-export proc raw_read(addr: Ptr<Unit>, size: Nat) -> [Nat8] {
+export fn raw_read(addr: Ptr<Unit>, size: Nat) -> [Nat8] {
   val buf: [Nat8] := [Nat8; size]{};
   memcpy(addr(buf), addr, size);
   buf
 };
 
 extern "C" {
-  proc malloc(size: Nat) -> Ptr<Unit>;
+  fn malloc(size: Nat) -> Ptr<Unit>;
 };
 
 // ============================================================================
@@ -208,7 +208,7 @@ val p1 := Point{ 3.0, 4.0 };
 val p2 := Point{};
 val p3 := Point{ .x := 1.0, .y := 2.0 };
 
-val distance := proc(a: Point, b: Point) -> Bin64 {
+val distance := fn (a: Point, b: Point) -> Bin64 {
   val dx := a.x - b.x;
   val dy := a.y - b.y;
   sqrt(dx * dx + dy * dy)
@@ -218,12 +218,12 @@ val distance := proc(a: Point, b: Point) -> Bin64 {
 // CHOICES (SUM TYPES)
 // ============================================================================
 
-val Option := choice Option<T> {
+val Option<T> := choice {
   case Some(T),
   case None,
 };
 
-val Expect := choice Expect<T, E> {
+val Expect<T, E> := choice {
   case Pass(T),
   case Fail(E),
 };
@@ -234,7 +234,7 @@ val Shape := choice Shape {
   case Triangle(a: Bin64, b: Bin64, c: Bin64),
 };
 
-val area := proc(s: Shape) -> Bin64 {
+val area := fn (s: Shape) -> Bin64 {
   match s with {
   case .Circle(r) -> 3.14159 * r^2,
   case .Rect(w, h) -> w * h,
@@ -290,25 +290,25 @@ export { myFunc, MyType };
 // ============================================================================
 
 @inline
-val fast := proc(x: Int) -> Int { x * 2 };
+val fast := fn (x: Int) -> Int { x * 2 };
 
 @deprecated("use 'new_sum' instead")
-val old_sum := proc(x: Int, y: Int) -> Int { x + y };
+val old_sum := fn (x: Int, y: Int) -> Int { x + y };
 
 @test
-proc test_addition() {
+fn test_addition() {
   val result := add(2, 3);
   assert(result = 5);
 }
 
 @inline
-val compute := proc(x: Int) -> Int { x^2 };
+val compute := fn (x: Int) -> Int { x^2 };
 
 // ============================================================================
 // ERROR HANDLING
 // ============================================================================
 
-val load := proc(path: Str) -> Data! {
+val load := fn (path: String) -> Data! {
   val file := try open(path);
   val text := try file.read();
   try parse(text)
@@ -326,14 +326,14 @@ val handle_result := match operation() with {
 val MAX_SIZE := 1024;
 val DEFAULT_TIMEOUT := 30;
 
-val UserData := record { name: Str; age: Nat };
+val UserData := record { name: String; age: Nat };
 val HttpError := choice HttpError { case NotFound, case ServerError };
 
 val user_count := 42;
 var active_sessions := 0;
 
-val get_user := proc(id: Nat) -> User? { /* ... */ };
-val is_valid := proc(x: Int) -> Bool { x > 0 };
+val get_user := fn (id: Nat) -> User? { /* ... */ };
+val is_valid := fn (x: Int) -> Bool { x > 0 };
 
 val status := .Success;
 val color := .Red;
@@ -355,17 +355,17 @@ val output := process(input, config);
 // ============================================================================
 
 val complex := {
-  val helper := proc(x: Int) -> Int { x + 1 };
+  val helper := fn (x: Int) -> Int { x + 1 };
   val value := 42;
   helper(value)
 };
 
 val with_where := compute() where {
-  val helper := proc(x: Int) -> Int { x + 1 };
+  val helper := fn (x: Int) -> Int { x + 1 };
   val value := 42;
 };
 
-val nested_generics := Map<Str, List<Int?>>{};
+val nested_generics := Map<String, List<Int?>>{};
 
 val chained := data
   .filter(|x| -> Bool { x > 0 })
@@ -376,7 +376,7 @@ val chained := data
 // EDGE CASES
 // ============================================================================
 
-val multi := proc<T, U, V>(a: T, b: U, c: V) -> (T, U, V) { (a, b, c) };
+val multi<T, U, V> := fn (a: T, b: U, c: V) -> (T, U, V) { (a, b, c) };
 
 match nested with {
 case .Some(.Succ(v)) -> use(v),
@@ -384,7 +384,7 @@ case .Some(.Fail(e)) -> handle(e),
 case .None -> fallback(),
 };
 
-val complex_type: proc(Int, Str) -> List<Data?>! := loader;
+val complex_type: fn (Int, String) -> List<Data?>! := loader;
 
 val ptr := addr(value);
 val deref := ptr.pointee;
