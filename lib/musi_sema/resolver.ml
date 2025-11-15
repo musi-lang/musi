@@ -10,19 +10,22 @@ let note diags msg span =
 
 (* === VALIDATION === *)
 
-let validate_binding_mods diags is_const mods span =
-  if mods.is_async then
-    error diags "'async' modifier not allowed on bindings" span;
-  if mods.is_exported then
+let validate_binding_mods diags _is_const mods span =
+  if mods.Node.is_exported then
     error diags "'export' modifier not allowed on binding expressions" span;
-  if mods.is_weak && is_const then
-    error diags "'weak' modifier only allowed on 'var' bindings" span
+  if mods.Node.is_extern then
+    error diags "'extern' modifier not allowed on binding expressions" span
 
 let validate_expr_mods diags mods kind span =
   if mods.Node.is_exported then
     error
       diags
       (Printf.sprintf "'export' modifier not allowed on '%s' expressions" kind)
+      span;
+  if mods.Node.is_extern && kind <> "fn" then
+    error
+      diags
+      (Printf.sprintf "'extern' modifier not allowed on '%s' expressions" kind)
       span
 
 (* === SYMBOL COLLECTION === *)
@@ -62,8 +65,8 @@ let rec collect_expr table interner diags expr =
     validate_binding_mods diags is_const mods expr.span;
     collect_pat table interner diags (not is_const) pat ty_opt pat.span;
     collect_expr table interner diags init
-  | Node.ExprProc (_, _, params, _, body_opt, mods) ->
-    validate_expr_mods diags mods "proc" expr.span;
+  | Node.ExprFn (_, params, _, body_opt, mods) ->
+    validate_expr_mods diags mods "fn" expr.span;
     scoped table (fun () ->
       List.iter
         (fun (p : Node.param) ->
@@ -99,14 +102,11 @@ let rec collect_expr table interner diags expr =
       collect_expr table interner diags body)
   | Node.ExprUnary (_, e)
   | Node.ExprField (e, _, _)
-  | Node.ExprAwait e
   | Node.ExprTry e
   | Node.ExprDefer e
   | Node.ExprUnwrap e
   | Node.ExprCast (e, _)
-  | Node.ExprTest (e, _)
-  | Node.ExprAsync e
-  | Node.ExprUnsafe e ->
+  | Node.ExprTest (e, _) ->
     collect_expr table interner diags e
   | Node.ExprCall (callee, args, _) ->
     collect_expr table interner diags callee;
@@ -118,7 +118,7 @@ let rec collect_expr table interner diags expr =
     collect_expr table interner diags idx
   | Node.ExprTuple exprs | Node.ExprArray exprs ->
     List.iter (collect_expr table interner diags) exprs
-  | Node.ExprReturn e_opt | Node.ExprBreak e_opt | Node.ExprYield e_opt ->
+  | Node.ExprReturn e_opt | Node.ExprBreak e_opt ->
     Option.iter (collect_expr table interner diags) e_opt
   | Node.ExprIdent _ | Node.ExprLiteral _ | Node.ExprContinue | Node.ExprError
     ->
@@ -126,7 +126,7 @@ let rec collect_expr table interner diags expr =
 
 and collect_pat table interner diags is_mutable pat ty_opt span =
   match pat.Node.pkind with
-  | Node.PatIdent name | Node.PatBinding name ->
+  | Node.PatIdent (name, _) | Node.PatBinding name ->
     bind_symbol table interner diags is_mutable name ty_opt span
   | Node.PatTuple pats | Node.PatArray (pats, _) ->
     List.iter
@@ -156,7 +156,7 @@ let mark_export table interner diags (name, name_span) =
 let collect_stmt table interner diags stmt =
   match stmt.Node.skind with
   | Node.StmtExpr (expr, _) -> collect_expr table interner diags expr
-  | Node.StmtImport _ | Node.StmtExport _ | Node.StmtError -> ()
+  | Node.StmtImport (_, _, _) | Node.StmtExport _ | Node.StmtError -> ()
 
 let parse_module file_id base_path module_path interner diags =
   let full_path = Filename.concat base_path (module_path ^ ".ms") in
@@ -214,7 +214,7 @@ let rec build_module_graph cache visited file_id_counter base_path module_path
     List.iter
       (fun stmt ->
         match stmt.Node.skind with
-        | Node.StmtImport (_, module_name) ->
+        | Node.StmtImport (_, module_name, _) ->
           let dep_path = Interner.lookup interner module_name in
           build_module_graph
             cache
@@ -231,7 +231,7 @@ let link_imports cache base_path table interner diags nodes =
   List.iter
     (fun stmt ->
       match stmt.Node.skind with
-      | Node.StmtImport (spec, module_name) -> (
+      | Node.StmtImport (spec, module_name, _) -> (
         let module_path = Interner.lookup interner module_name in
         let full_path = Filename.concat base_path (module_path ^ ".ms") in
         let module_table, _ = Hashtbl.find cache full_path in
@@ -246,7 +246,7 @@ let link_imports cache base_path table interner diags nodes =
                 error
                   diags
                   (Printf.sprintf
-                     "'%s' is not exported from module '%s'"
+                     "'%s' not exported from module '%s'"
                      (Interner.lookup interner name)
                      module_path)
                   name_span
@@ -275,7 +275,7 @@ let resolve ?(base_path = Sys.getcwd ()) nodes interner diags =
   List.iter
     (fun stmt ->
       match stmt.Node.skind with
-      | Node.StmtImport (_, module_name) ->
+      | Node.StmtImport (_, module_name, _) ->
         let module_path = Interner.lookup interner module_name in
         build_module_graph
           cache

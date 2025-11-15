@@ -1,9 +1,9 @@
 open Musi_basic
 open Musi_parse
 
-type context = { in_proc : bool; in_loop : bool; in_async : bool }
+type context = { in_fn : bool; in_loop : bool }
 
-let empty_context = { in_proc = false; in_loop = false; in_async = false }
+let empty_context = { in_fn = false; in_loop = false }
 
 (* HELPERS *)
 
@@ -49,15 +49,12 @@ let rec infer_expr ctx table interner diags expr =
   | Node.ExprBreak e_opt ->
     infer_expr_break ctx table interner diags e_opt expr.span
   | Node.ExprContinue -> infer_expr_continue ctx diags expr.span
-  | Node.ExprYield e_opt ->
-    infer_expr_yield ctx table interner diags e_opt expr.span
   | Node.ExprBinding (_, _, pat, ty_opt, init, _) ->
     infer_expr_binding ctx table interner diags pat ty_opt init
   | Node.ExprAssign (lhs, rhs) ->
     infer_expr_assign ctx table interner diags lhs rhs expr.span
-  | Node.ExprProc (_, _, params, _, body_opt, mods) ->
-    infer_expr_proc table interner diags params body_opt mods expr.span
-  | Node.ExprAwait e -> infer_expr_await ctx table interner diags e expr.span
+  | Node.ExprFn (_, params, _, body_opt, mods) ->
+    infer_expr_fn table interner diags params body_opt mods expr.span
   | Node.ExprRecord (_, fields, _) ->
     let lookup name =
       Option.map (fun s -> !(s.Symbol.ty)) (Symbol.lookup table name)
@@ -114,7 +111,7 @@ and infer_expr_binary ctx table interner diags e1 e2 =
 and infer_expr_call ctx table interner diags callee args span =
   let callee_ty = infer_expr ctx table interner diags callee in
   match Types.repr callee_ty with
-  | Types.TyProc (param_tys, ret_ty) ->
+  | Types.TyFn (param_tys, ret_ty) ->
     if List.length args <> List.length param_tys then
       error
         diags
@@ -132,7 +129,7 @@ and infer_expr_call ctx table interner diags callee args span =
     ret_ty
   | Types.TyError -> Types.TyError
   | _ ->
-    error diags "expected procedure type in call expression" span;
+    error diags "expected function type in call expression" span;
     Types.TyError
 
 and infer_expr_tuple ctx table interner diags exprs =
@@ -238,7 +235,7 @@ and infer_expr_for ctx table interner diags _pat iter body _span =
   Types.TyUnit
 
 and infer_expr_return ctx table interner diags e_opt span =
-  if not ctx.in_proc then error diags "'return' outside of procedure body" span;
+  if not ctx.in_fn then error diags "'return' outside of function body" span;
   Option.iter (fun e -> ignore (infer_expr ctx table interner diags e)) e_opt;
   Types.TyUnit
 
@@ -249,12 +246,6 @@ and infer_expr_break ctx table interner diags e_opt span =
 
 and infer_expr_continue ctx diags span =
   if not ctx.in_loop then error diags "'continue' outside of loop body" span;
-  Types.TyUnit
-
-and infer_expr_yield ctx table interner diags e_opt span =
-  if not ctx.in_async then
-    error diags "'yield' outside of asynchronous procedure" span;
-  Option.iter (fun e -> ignore (infer_expr ctx table interner diags e)) e_opt;
   Types.TyUnit
 
 and infer_expr_block ctx table interner diags exprs =
@@ -277,26 +268,19 @@ and infer_expr_binding ctx table interner diags pat ty_opt init =
     safe_unify diags init_ty expected_ty init.span
   | None -> ());
   (match pat.Node.pkind with
-  | Node.PatIdent name | Node.PatBinding name -> (
+  | Node.PatIdent (name, _) | Node.PatBinding name -> (
     match Symbol.lookup table name with
     | Some sym -> sym.ty := init_ty
     | None -> ())
   | _ -> ());
   Types.TyUnit
 
-and infer_expr_proc table interner diags _params body_opt mods _span =
-  let proc_ctx =
-    { in_proc = true; in_loop = false; in_async = mods.Node.is_async }
-  in
+and infer_expr_fn table interner diags _params body_opt _mods _span =
+  let fn_ctx = { in_fn = true; in_loop = false } in
   Option.iter
-    (fun body -> ignore (infer_expr proc_ctx table interner diags body))
+    (fun body -> ignore (infer_expr fn_ctx table interner diags body))
     body_opt;
   Types.TyError
-
-and infer_expr_await ctx table interner diags e span =
-  if not ctx.in_async then
-    error diags "'await' outside of asynchronous procedure" span;
-  infer_expr ctx table interner diags e
 
 and infer_expr_assign ctx table interner diags lhs rhs span =
   let lhs_ty = infer_expr ctx table interner diags lhs in
