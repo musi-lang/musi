@@ -69,18 +69,18 @@ let test_empty_bytecode () =
   let bytecode = encode_instrs [] in
   (check int) "bytecode is exactly header size" hdr_size (Bytes.length bytecode)
 
-let test_proc_table_empty () =
+let test_fn_table_empty () =
   let bytecode = encode_instrs [] in
-  let proc_size_offset = 20 in
-  let proc_size = Bytes.get_int32_le bytecode proc_size_offset in
-  (check int32) "proc table size is 0" 0l proc_size
+  let fn_size_offset = 20 in
+  let fn_size = Bytes.get_int32_le bytecode fn_size_offset in
+  (check int32) "fn table size is 0" 0l fn_size
 
-let test_proc_table_with_proc () =
+let test_fn_table_with_fn () =
   let interner = Interner.create () in
-  let proc_name = Interner.intern interner "test" in
-  let proc =
+  let fn_name = Interner.intern interner "test" in
+  let fn =
     {
-      Emitter.proc_name
+      Emitter.fn_name
     ; param_count = 2
     ; local_count = 3
     ; code_offset = 0
@@ -89,10 +89,10 @@ let test_proc_table_with_proc () =
     }
   in
   let encoder = Encoder.make interner in
-  let bytecode = Encoder.encode encoder [] [] [ proc ] [] in
-  let proc_size_offset = 20 in
-  let proc_size = Bytes.get_int32_le bytecode proc_size_offset in
-  (check bool) "proc table has data" true (Int32.to_int proc_size > 0)
+  let bytecode = Encoder.encode encoder [] [] [ fn ] [] in
+  let fn_size_offset = 20 in
+  let fn_size = Bytes.get_int32_le bytecode fn_size_offset in
+  (check bool) "fn table has data" true (Int32.to_int fn_size > 0)
 
 let () =
   run
@@ -104,10 +104,10 @@ let () =
         ; test_case "size" `Quick test_header_size
         ; test_case "empty bytecode" `Quick test_empty_bytecode
         ] )
-    ; ( "procedure table"
+    ; ( "function table"
       , [
-          test_case "empty proc table" `Quick test_proc_table_empty
-        ; test_case "proc table with proc" `Quick test_proc_table_with_proc
+          test_case "empty fn table" `Quick test_fn_table_empty
+        ; test_case "fn table with fn" `Quick test_fn_table_with_fn
         ] )
     ; ( "opcodes"
       , [

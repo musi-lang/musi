@@ -13,8 +13,7 @@ type loop_ctx = { break_lbl : int; cont_lbl : int }
 type instr_or_label = IInstr of Instr.t | ILabel of int
 
 let instr_size interner = function
-  | Instr.Call name | Instr.CallVirt name ->
-    1 + String.length (Interner.lookup interner name) + 1
+  | Instr.Call name -> 1 + String.length (Interner.lookup interner name) + 1
   | Instr.Br _ | Instr.BrTrue _ | Instr.BrFalse _ | Instr.LdCI4 _
   | Instr.LdCI8 _ | Instr.LdCN8 _ | Instr.LdCN16 _ | Instr.LdCN32 _
   | Instr.LdCN64 _ | Instr.LdCStr _ | Instr.LdLoc _ | Instr.StLoc _
@@ -45,8 +44,8 @@ let resolve_labels interner code =
       | IInstr instr -> Some instr)
     code
 
-type proc_info = {
-    proc_name : Interner.name
+type fn_info = {
+    fn_name : Interner.name
   ; param_count : int
   ; local_count : int
   ; code_offset : int
@@ -60,9 +59,9 @@ type t = {
   ; mutable next_local : int
   ; mutable loop_stack : loop_ctx list
   ; mutable next_label : int
-  ; mutable procs : proc_info list
-  ; mutable next_proc_id : int
-  ; mutable proc_map : (Interner.name * int) list
+  ; mutable fns : fn_info list
+  ; mutable next_fn_id : int
+  ; mutable fn_map : (Interner.name * int) list
   ; mutable code : Instr.t list
   ; interner : Interner.t
 }
@@ -75,9 +74,9 @@ let make () =
   ; next_local = 0
   ; loop_stack = []
   ; next_label = 0
-  ; procs = []
-  ; next_proc_id = 0
-  ; proc_map = []
+  ; fns = []
+  ; next_fn_id = 0
+  ; fn_map = []
   ; code = []
   ; interner
   }
@@ -190,17 +189,10 @@ let rec emit_expr t expr =
   | Node.ExprRecord (_, fields, _) -> emit_expr_record t fields
   | Node.ExprField (obj, field, _) -> emit_expr_field t obj field
   | Node.ExprCast (e, _) | Node.ExprTest (e, _) -> emit_expr t e
-  | Node.ExprUnwrap e
-  | Node.ExprTry e
-  | Node.ExprDefer e
-  | Node.ExprAsync e
-  | Node.ExprUnsafe e
-  | Node.ExprAwait e ->
-    emit_expr t e
-  | Node.ExprYield (Some e) -> emit_expr t e
-  | Node.ExprProc (_, _, params, _, body, mods) ->
-    emit_expr_proc t params body mods
-  | Node.ExprYield None | _ -> []
+  | Node.ExprUnwrap e | Node.ExprTry e | Node.ExprDefer e -> emit_expr t e
+  | Node.ExprFn (_, params, _, body_opt, mods) ->
+    emit_expr_fn t params body_opt mods
+  | _ -> []
 
 and emit_expr_assign t target value =
   let value_code = emit_expr t value in
@@ -276,17 +268,17 @@ and emit_expr_call t callee args =
 
 and emit_expr_binding t pat value =
   match value.Node.ekind with
-  | Node.ExprProc (_, _, params, _, body, mods) ->
-    let proc_name =
+  | Node.ExprFn (_, params, _, body_opt, mods) ->
+    let fn_name =
       match pat.Node.pkind with
-      | Node.PatIdent name -> name
+      | Node.PatIdent (name, _) | Node.PatBinding name -> name
       | _ -> Interner.intern (Interner.create ()) "<lambda>"
     in
-    emit_expr_proc_named t proc_name params body mods
+    emit_expr_fn_named t fn_name params body_opt mods
   | _ -> (
     let value_code = emit_expr t value in
     match pat.Node.pkind with
-    | Node.PatIdent name ->
+    | Node.PatIdent (name, _) | Node.PatBinding name ->
       let slot = add_local t name in
       value_code @ [ Instr.StLoc slot ]
     | _ -> value_code)
@@ -299,7 +291,7 @@ and emit_expr_for t pat iter body =
         `i := start; while i < end do { body; i <- i + 1 }` *)
     let iter_name =
       match pat.Node.pkind with
-      | Node.PatIdent name -> name
+      | Node.PatIdent (name, _) | Node.PatBinding name -> name
       | _ -> Interner.intern (Interner.create ()) "_i"
     in
     let iter_slot = add_local t iter_name in
@@ -338,17 +330,17 @@ and emit_expr_field t obj _field =
   let field_idx = 0 in
   obj_code @ [ Instr.LdFld field_idx ]
 
-and emit_expr_proc t params body mods =
-  emit_expr_proc_named
+and emit_expr_fn t params body mods =
+  emit_expr_fn_named
     t
     (Interner.intern (Interner.create ()) "<lambda>")
     params
     body
     mods
 
-and emit_expr_proc_named t proc_name params body mods =
-  let proc_id = t.next_proc_id in
-  t.next_proc_id <- t.next_proc_id + 1;
+and emit_expr_fn_named t fn_name params body mods =
+  let fn_id = t.next_fn_id in
+  t.next_fn_id <- t.next_fn_id + 1;
   let is_extern = Option.is_some mods.Node.abi in
   let saved_locals = t.locals in
   let saved_next_local = t.next_local in
@@ -365,9 +357,9 @@ and emit_expr_proc_named t proc_name params body mods =
   let code_offset =
     List.fold_left (fun acc i -> acc + instr_size t.interner i) 0 t.code
   in
-  let proc =
+  let fn =
     {
-      proc_name
+      fn_name
     ; param_count = List.length params
     ; local_count = t.next_local
     ; code_offset
@@ -375,8 +367,8 @@ and emit_expr_proc_named t proc_name params body mods =
     ; abi = mods.Node.abi
     }
   in
-  t.procs <- t.procs @ [ proc ];
-  t.proc_map <- (proc_name, proc_id) :: t.proc_map;
+  t.fns <- t.fns @ [ fn ];
+  t.fn_map <- (fn_name, fn_id) :: t.fn_map;
   t.code <- t.code @ body_code;
   t.locals <- saved_locals;
   t.next_local <- saved_next_local;
@@ -393,4 +385,4 @@ let emit t stmts =
   t.code @ top_level
 
 let const_pool t = t.const_pool
-let procs t = t.procs
+let fns t = t.fns

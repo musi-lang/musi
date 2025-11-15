@@ -2,12 +2,12 @@ open Musi_basic
 
 type t = {
     const_pool : Emitter.const_kind list
-  ; procs : Emitter.proc_info list
+  ; fns : Emitter.fn_info list
   ; interner : Interner.t
 }
 
 let hdr_size = 32
-let make interner = { const_pool = []; procs = []; interner }
+let make interner = { const_pool = []; fns = []; interner }
 
 let write_op_u32 buf opcode operand =
   Buffer.add_char buf opcode;
@@ -80,10 +80,6 @@ let encode_opcode interner buf = function
     Buffer.add_char buf '\x28';
     Buffer.add_string buf (Interner.lookup interner name);
     Buffer.add_char buf '\x00'
-  | Instr.CallVirt name ->
-    Buffer.add_char buf '\x6F';
-    Buffer.add_string buf (Interner.lookup interner name);
-    Buffer.add_char buf '\x00'
   | Instr.CallI -> Buffer.add_char buf '\x29'
   | Instr.LdFld idx -> write_op_u32 buf '\x7B' idx
   | Instr.StFld idx -> write_op_u32 buf '\x7D' idx
@@ -147,9 +143,6 @@ let encode_opcode interner buf = function
   | Instr.CgtUn -> Buffer.add_char buf '\xC3'
   | Instr.Clt -> Buffer.add_char buf '\xC4'
   | Instr.CltUn -> Buffer.add_char buf '\xC5'
-  (* Memory Management *)
-  | Instr.Pin -> Buffer.add_char buf '\xDF'
-  | Instr.Unpin -> Buffer.add_char buf '\xE0'
   (* Dynamic Operations *)
   | Instr.LdFldDyn name ->
     Buffer.add_char buf '\xE1';
@@ -167,10 +160,6 @@ let encode_opcode interner buf = function
     Buffer.add_char buf '\xE4';
     Buffer.add_string buf name;
     Buffer.add_char buf '\x00'
-  | Instr.CallVirtDyn name ->
-    Buffer.add_char buf '\xE5';
-    Buffer.add_string buf name;
-    Buffer.add_char buf '\x00'
 
 let encode_const t buf = function
   | Emitter.ConstInt n -> write_op_i64 buf '\x01' n
@@ -183,19 +172,19 @@ let encode_const t buf = function
   | Emitter.ConstBool false -> Buffer.add_char buf '\x05'
   | Emitter.ConstUnit -> Buffer.add_char buf '\x00'
 
-let encode_proc t buf proc =
-  let name_str = Interner.lookup t.interner proc.Emitter.proc_name in
+let encode_fn t buf fn =
+  let name_str = Interner.lookup t.interner fn.Emitter.fn_name in
   Buffer.add_string buf name_str;
   Buffer.add_char buf '\x00';
-  Binary.write_u32_le buf (Int32.of_int proc.Emitter.param_count);
-  Binary.write_u32_le buf (Int32.of_int proc.Emitter.local_count);
-  Binary.write_u32_le buf (Int32.of_int proc.Emitter.code_offset)
+  Binary.write_u32_le buf (Int32.of_int fn.Emitter.param_count);
+  Binary.write_u32_le buf (Int32.of_int fn.Emitter.local_count);
+  Binary.write_u32_le buf (Int32.of_int fn.Emitter.code_offset)
 
-let encode t imports const_pool procs instrs =
-  let t = { t with const_pool; procs } in
+let encode t imports const_pool fns instrs =
+  let t = { t with const_pool; fns } in
   let import_buf = Buffer.create 128 in
   let const_buf = Buffer.create 256 in
-  let proc_buf = Buffer.create 256 in
+  let fn_buf = Buffer.create 256 in
   let code_buf = Buffer.create 1024 in
 
   Binary.write_u32_le import_buf (Int32.of_int (List.length imports));
@@ -208,14 +197,14 @@ let encode t imports const_pool procs instrs =
   Binary.write_u32_le const_buf (Int32.of_int (List.length t.const_pool));
   List.iter (encode_const t const_buf) t.const_pool;
 
-  Binary.write_u32_le proc_buf (Int32.of_int (List.length t.procs));
-  List.iter (encode_proc t proc_buf) t.procs;
+  Binary.write_u32_le fn_buf (Int32.of_int (List.length t.fns));
+  List.iter (encode_fn t fn_buf) t.fns;
 
   List.iter (encode_opcode t.interner code_buf) instrs;
 
   let import_size = Buffer.length import_buf in
   let const_size = Buffer.length const_buf in
-  let proc_size = Buffer.length proc_buf in
+  let fn_size = Buffer.length fn_buf in
   let code_size = Buffer.length code_buf in
 
   let hdr = Buffer.create hdr_size in
@@ -226,14 +215,14 @@ let encode t imports const_pool procs instrs =
   Binary.write_u32_le hdr (Int32.of_int (hdr_size + import_size));
   Binary.write_u32_le hdr (Int32.of_int const_size);
   Binary.write_u32_le hdr (Int32.of_int (hdr_size + import_size + const_size));
-  Binary.write_u32_le hdr (Int32.of_int proc_size);
+  Binary.write_u32_le hdr (Int32.of_int fn_size);
 
   let res =
-    Buffer.create (hdr_size + import_size + const_size + proc_size + code_size)
+    Buffer.create (hdr_size + import_size + const_size + fn_size + code_size)
   in
   Buffer.add_buffer res hdr;
   Buffer.add_buffer res import_buf;
   Buffer.add_buffer res const_buf;
-  Buffer.add_buffer res proc_buf;
+  Buffer.add_buffer res fn_buf;
   Buffer.add_buffer res code_buf;
   Buffer.to_bytes res

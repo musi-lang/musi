@@ -74,7 +74,8 @@ let test_emit_expr_call () =
   (check bool) "no errors" false (Diagnostic.has_errors diags);
   match instrs with
   | [ Instr.LdCI4 _; Instr.LdCI4 _; Instr.LdLoc _; Instr.Call _ ] -> ()
-  | _ -> fail "expected 'LdCI4' (arg1), 'LdCI4' (arg2), 'LdLoc' (callee), 'Call'"
+  | _ ->
+    fail "expected 'LdCI4' (arg1), 'LdCI4' (arg2), 'LdLoc' (callee), 'Call'"
 
 let test_emit_expr_field () =
   let instrs, diags, _ = parse_and_emit "obj.field" in
@@ -141,38 +142,38 @@ let test_const_dedupl () =
   (check bool) "no errors" false (Diagnostic.has_errors diags);
   (check int) "const pool size" 1 (List.length (Emitter.const_pool emitter))
 
-(* === PROCEDURE TESTS === *)
+(* === FUNCTION TESTS === *)
 
-let test_emit_expr_proc () =
-  let instrs, diags, emitter = parse_and_emit "proc () { 1 }" in
+let test_emit_expr_fn () =
+  let instrs, diags, emitter = parse_and_emit "fn () { 1 }" in
   (check bool) "no errors" false (Diagnostic.has_errors diags);
   (check bool) "has instructions" true (List.length instrs > 0);
-  (check int) "proc table has 1 entry" 1 (List.length (Emitter.procs emitter))
+  (check int) "fn table has 1 entry" 1 (List.length (Emitter.fns emitter))
 
-let test_proc_with_params () =
-  let _, diags, emitter = parse_and_emit "proc (x: Nat, y: Nat) { x + y }" in
+let test_fn_with_params () =
+  let _, diags, emitter = parse_and_emit "fn (x: Nat, y: Nat) { x + y }" in
   (check bool) "no errors" false (Diagnostic.has_errors diags);
-  match Emitter.procs emitter with
-  | [ proc ] -> (check int) "param count is 2" 2 proc.param_count
-  | _ -> fail "expected 1 proc in table"
+  match Emitter.fns emitter with
+  | [ fn ] -> (check int) "param count is 2" 2 fn.param_count
+  | _ -> fail "expected 1 fn in table"
 
-let test_proc_with_body () =
-  let instrs, diags, _ = parse_and_emit "proc () { return 42 }" in
+let test_fn_with_body () =
+  let instrs, diags, _ = parse_and_emit "fn () { return 42 }" in
   (check bool) "no errors" false (Diagnostic.has_errors diags);
   (check bool)
     "has 'Ret' instruction"
     true
     (List.exists (function Instr.Ret -> true | _ -> false) instrs)
 
-let test_proc_extern () =
-  let instrs, diags, emitter = parse_and_emit "extern \"C\" proc test()" in
+let test_fn_extern () =
+  let instrs, diags, emitter = parse_and_emit "extern \"C\" fn test()" in
   (check bool) "no errors" false (Diagnostic.has_errors diags);
   (check int) "no instructions emitted" 0 (List.length instrs);
-  match Emitter.procs emitter with
-  | [ proc ] ->
-    (check bool) "'is_extern' is true" true proc.is_extern;
-    (check bool) "'abi' is Some" true (Option.is_some proc.abi)
-  | _ -> fail "expected 1 proc in table"
+  match Emitter.fns emitter with
+  | [ fn ] ->
+    (check bool) "'is_extern' is true" true fn.is_extern;
+    (check bool) "'abi' is Some" true (Option.is_some fn.abi)
+  | _ -> fail "expected 1 fn in table"
 
 let () =
   run
@@ -203,11 +204,11 @@ let () =
         ] )
     ; ("bindings", [ test_case "const" `Quick test_emit_expr_binding ])
     ; ("optimisations", [ test_case "const dedupl" `Quick test_const_dedupl ])
-    ; ( "procedures"
+    ; ( "functions"
       , [
-          test_case "proc definition" `Quick test_emit_expr_proc
-        ; test_case "proc with params" `Quick test_proc_with_params
-        ; test_case "proc with body" `Quick test_proc_with_body
-        ; test_case "extern proc" `Quick test_proc_extern
+          test_case "fn definition" `Quick test_emit_expr_fn
+        ; test_case "fn with params" `Quick test_fn_with_params
+        ; test_case "fn with body" `Quick test_fn_with_body
+        ; test_case "extern fn" `Quick test_fn_extern
         ] )
     ]
