@@ -44,7 +44,6 @@ type t =
   (* Object Operations *)
   | NewObj of int
   | Call of Interner.name
-  | CallVirt of Interner.name
   | CallI
   | LdFld of int
   | StFld of int
@@ -108,15 +107,11 @@ type t =
   | CgtUn
   | Clt
   | CltUn
-  (* Memory Management *)
-  | Pin
-  | Unpin
   (* Dynamic Operations *)
   | LdFldDyn of string
   | StFldDyn of string
   | LdFldADyn of string
   | CallDyn of string
-  | CallVirtDyn of string
 
 let to_opcode = function
   (* Base Instructions - CIL compatible *)
@@ -162,7 +157,6 @@ let to_opcode = function
   (* Object Operations *)
   | NewObj _ -> 0x73
   | Call _ -> 0x28
-  | CallVirt _ -> 0x6F
   | CallI -> 0x29
   | LdFld _ -> 0x7B
   | StFld _ -> 0x7D
@@ -226,15 +220,11 @@ let to_opcode = function
   | CgtUn -> 0xC3
   | Clt -> 0xC4
   | CltUn -> 0xC5
-  (* Memory Management *)
-  | Pin -> 0xDF
-  | Unpin -> 0xE0
   (* Dynamic Operations *)
   | LdFldDyn _ -> 0xE1
   | StFldDyn _ -> 0xE2
   | LdFldADyn _ -> 0xE3
   | CallDyn _ -> 0xE4
-  | CallVirtDyn _ -> 0xE5
 
 let show = function
   (* Base Instructions *)
@@ -280,7 +270,6 @@ let show = function
   (* Object Operations *)
   | NewObj ctor -> Printf.sprintf "newobj %d" ctor
   | Call _method -> Printf.sprintf "call <method>"
-  | CallVirt _method -> Printf.sprintf "callvirt <method>"
   | CallI -> "calli"
   | LdFld idx -> Printf.sprintf "ldfld %d" idx
   | StFld idx -> Printf.sprintf "stfld %d" idx
@@ -345,14 +334,11 @@ let show = function
   | Clt -> "clt"
   | CltUn -> "clt.un"
   (* Memory Management *)
-  | Pin -> "pin"
-  | Unpin -> "unpin"
   (* Dynamic Operations *)
   | LdFldDyn name -> Printf.sprintf "ldfld.dyn \"%s\"" name
   | StFldDyn name -> Printf.sprintf "stfld.dyn \"%s\"" name
   | LdFldADyn name -> Printf.sprintf "ldfld.addr.dyn \"%s\"" name
   | CallDyn name -> Printf.sprintf "call.dyn \"%s\"" name
-  | CallVirtDyn name -> Printf.sprintf "callvirt.dyn \"%s\"" name
 
 let show_with_interner interner = function
   (* Base Instructions *)
@@ -398,8 +384,6 @@ let show_with_interner interner = function
   (* Object Operations *)
   | NewObj ctor -> Printf.sprintf "newobj %d" ctor
   | Call name -> Printf.sprintf "call %s" (Interner.lookup interner name)
-  | CallVirt name ->
-    Printf.sprintf "callvirt %s" (Interner.lookup interner name)
   | CallI -> "calli"
   | LdFld idx -> Printf.sprintf "ldfld %d" idx
   | StFld idx -> Printf.sprintf "stfld %d" idx
@@ -464,11 +448,8 @@ let show_with_interner interner = function
   | Clt -> "clt"
   | CltUn -> "clt.un"
   (* Memory Management *)
-  | Pin -> "pin"
-  | Unpin -> "unpin"
   (* Dynamic Operations *)
   | LdFldDyn name -> Printf.sprintf "ldfld.dyn \"%s\"" name
   | StFldDyn name -> Printf.sprintf "stfld.dyn \"%s\"" name
   | LdFldADyn name -> Printf.sprintf "ldfld.addr.dyn \"%s\"" name
   | CallDyn name -> Printf.sprintf "call.dyn \"%s\"" name
-  | CallVirtDyn name -> Printf.sprintf "callvirt.dyn \"%s\"" name
