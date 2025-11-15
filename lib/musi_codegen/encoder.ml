@@ -50,23 +50,23 @@ let encode_opcode interner buf = function
   | Instr.LdCI8 n ->
     Buffer.add_char buf '\x21';
     Binary.write_i64_le buf n
-  | Instr.LdCN8 n -> write_op_u32 buf '\x22' n
-  | Instr.LdCN16 n -> write_op_u32 buf '\x23' n
-  | Instr.LdCN32 n -> write_op_u32 buf '\x24' n
-  | Instr.LdCN64 n -> write_op_u32 buf '\x2F' n
-  | Instr.LdCB32 f ->
+  | Instr.LdCN1 n -> write_op_u32 buf '\x22' n
+  | Instr.LdCN2 n -> write_op_u32 buf '\x23' n
+  | Instr.LdCN4 n -> write_op_u32 buf '\x24' n
+  | Instr.LdCN8 n -> write_op_u32 buf '\x2F' n
+  | Instr.LdCB4 f ->
     Buffer.add_char buf '\x30';
     Binary.write_f32_le buf f
-  | Instr.LdCB64 f ->
+  | Instr.LdCB8 f ->
     Buffer.add_char buf '\x31';
     Binary.write_f64_le buf f
-  | Instr.LdCD32 f ->
+  | Instr.LdCD4 f ->
     Buffer.add_char buf '\x32';
     Binary.write_f32_le buf f
-  | Instr.LdCD64 f ->
+  | Instr.LdCD8 f ->
     Buffer.add_char buf '\x33';
     Binary.write_f64_le buf f
-  | Instr.LdCStr idx -> write_op_u32 buf '\x72' idx
+  | Instr.LdStr idx -> write_op_u32 buf '\x72' idx
   (* Load/Store Variables *)
   | Instr.LdLoc idx -> write_op_u32 buf '\x0E' idx
   | Instr.StLoc idx -> write_op_u32 buf '\x0F' idx
@@ -80,24 +80,24 @@ let encode_opcode interner buf = function
     Buffer.add_char buf '\x28';
     Buffer.add_string buf (Interner.lookup interner name);
     Buffer.add_char buf '\x00'
-  | Instr.CallI -> Buffer.add_char buf '\x29'
+  | Instr.CallInd -> Buffer.add_char buf '\x29'
   | Instr.LdFld idx -> write_op_u32 buf '\x7B' idx
   | Instr.StFld idx -> write_op_u32 buf '\x7D' idx
   | Instr.LdFldA idx -> write_op_u32 buf '\x7C' idx
   | Instr.LdSFld idx -> write_op_u32 buf '\x80' idx
   | Instr.StSFld idx -> write_op_u32 buf '\x81' idx
   | Instr.LdSFldA idx -> write_op_u32 buf '\x82' idx
-  | Instr.NewArr type_id -> write_op_u32 buf '\x8D' type_id
+  | Instr.NewArr ty_id -> write_op_u32 buf '\x8D' ty_id
   | Instr.LdElem -> Buffer.add_char buf '\xA3'
   | Instr.StElem -> Buffer.add_char buf '\xA4'
   | Instr.LdElemA -> Buffer.add_char buf '\x8F'
   | Instr.LdLen -> Buffer.add_char buf '\x8E'
   (* Type Operations *)
-  | Instr.LdType type_id -> write_op_u32 buf '\xD1' type_id
-  | Instr.IsInst type_id -> write_op_u32 buf '\x75' type_id
-  | Instr.CastClass type_id -> write_op_u32 buf '\x74' type_id
-  | Instr.Box type_id -> write_op_u32 buf '\x8C' type_id
-  | Instr.UnboxAny type_id -> write_op_u32 buf '\xA5' type_id
+  | Instr.LdTok ty_id -> write_op_u32 buf '\xD1' ty_id
+  | Instr.IsInst ty_id -> write_op_u32 buf '\x75' ty_id
+  | Instr.AsInst ty_id -> write_op_u32 buf '\x74' ty_id
+  | Instr.Box ty_id -> write_op_u32 buf '\x8C' ty_id
+  | Instr.UnboxAny ty_id -> write_op_u32 buf '\xA5' ty_id
   | Instr.ConvI8 -> Buffer.add_char buf '\x67'
   | Instr.ConvI16 -> Buffer.add_char buf '\x68'
   | Instr.ConvI32 -> Buffer.add_char buf '\x69'

@@ -36,8 +36,8 @@ let test_emit_lit_str () =
   let instrs, diags, _ = parse_and_emit "\"hello\"" in
   (check bool) "no errors" false (Diagnostic.has_errors diags);
   match instrs with
-  | [ Instr.LdCStr _ ] -> ()
-  | _ -> fail "expected 'LdCStr' instruction"
+  | [ Instr.LdStr _ ] -> ()
+  | _ -> fail "expected 'LdStr' instruction"
 
 (* === EXPRESSION TESTS === *)
 

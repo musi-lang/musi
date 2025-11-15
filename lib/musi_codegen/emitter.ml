@@ -15,13 +15,13 @@ type instr_or_label = IInstr of Instr.t | ILabel of int
 let instr_size interner = function
   | Instr.Call name -> 1 + String.length (Interner.lookup interner name) + 1
   | Instr.Br _ | Instr.BrTrue _ | Instr.BrFalse _ | Instr.LdCI4 _
-  | Instr.LdCI8 _ | Instr.LdCN8 _ | Instr.LdCN16 _ | Instr.LdCN32 _
-  | Instr.LdCN64 _ | Instr.LdCStr _ | Instr.LdLoc _ | Instr.StLoc _
+  | Instr.LdCI8 _ | Instr.LdCN1 _ | Instr.LdCN2 _ | Instr.LdCN4 _
+  | Instr.LdCN8 _ | Instr.LdStr _ | Instr.LdLoc _ | Instr.StLoc _
   | Instr.LdArg _ | Instr.StArg _ | Instr.NewObj _ | Instr.LdFld _
-  | Instr.StFld _ | Instr.IsInst _ | Instr.CastClass _ | Instr.Box _
+  | Instr.StFld _ | Instr.IsInst _ | Instr.AsInst _ | Instr.Box _
   | Instr.UnboxAny _ ->
     5
-  | Instr.LdCB32 _ | Instr.LdCB64 _ | Instr.LdCD32 _ | Instr.LdCD64 _ -> 5
+  | Instr.LdCB4 _ | Instr.LdCB8 _ | Instr.LdCD4 _ | Instr.LdCD8 _ -> 5
   | _ -> 1
 
 let resolve_labels interner code =
@@ -119,21 +119,21 @@ let emit_expr_literal t = function
       [ Instr.LdCI4 (Int32.of_int (Int64.to_int n)) ]
     else
       let idx = add_const t (ConstInt n) in
-      [ Instr.LdCN64 idx ]
+      [ Instr.LdCN8 idx ]
   | Node.LitBin s ->
     let f = Float.of_string s in
     ignore (add_const t (ConstBin f));
     (* store in const pool for possible future use *)
-    [ Instr.LdCB64 f ]
+    [ Instr.LdCB8 f ]
   | Node.LitStr name ->
     let idx = add_const t (ConstStr name) in
-    [ Instr.LdCStr idx ]
+    [ Instr.LdStr idx ]
   | Node.LitRune code ->
     let n = Int64.of_int code in
     if n >= 0L && n <= 255L then [ Instr.LdCI4 (Int32.of_int (Int64.to_int n)) ]
     else
       let idx = add_const t (ConstInt n) in
-      [ Instr.LdCN64 idx ]
+      [ Instr.LdCN8 idx ]
   | Node.LitBool b -> [ Instr.LdCI4 (if b then 1l else 0l) ]
   | Node.LitRecord _ -> []
 

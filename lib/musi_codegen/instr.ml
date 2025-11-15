@@ -25,15 +25,15 @@ type t =
   | LdNull
   | LdCI4 of int32
   | LdCI8 of int64
+  | LdCN1 of int
+  | LdCN2 of int
+  | LdCN4 of int
   | LdCN8 of int
-  | LdCN16 of int
-  | LdCN32 of int
-  | LdCN64 of int
-  | LdCB32 of float
-  | LdCB64 of float
-  | LdCD32 of float
-  | LdCD64 of float
-  | LdCStr of int
+  | LdCB4 of float
+  | LdCB8 of float
+  | LdCD4 of float
+  | LdCD8 of float
+  | LdStr of int
   (* Load/Store Variables *)
   | LdLoc of int
   | StLoc of int
@@ -44,7 +44,7 @@ type t =
   (* Object Operations *)
   | NewObj of int
   | Call of Interner.name
-  | CallI
+  | CallInd
   | LdFld of int
   | StFld of int
   | LdFldA of int
@@ -57,9 +57,9 @@ type t =
   | LdElemA
   | LdLen
   (* Type Operations *)
-  | LdType of int
+  | LdTok of int
   | IsInst of int
-  | CastClass of int
+  | AsInst of int
   | Box of int
   | UnboxAny of int
   | ConvI8
@@ -141,15 +141,15 @@ let to_opcode = function
   | LdNull -> 0x14
   | LdCI4 _ -> 0x20
   | LdCI8 _ -> 0x21
-  | LdCN8 _ -> 0x22
-  | LdCN16 _ -> 0x23
-  | LdCN32 _ -> 0x24
-  | LdCN64 _ -> 0x2F (* hypothetical value *)
-  | LdCB32 _ -> 0x30 (* hypothetical value *)
-  | LdCB64 _ -> 0x31 (* hypothetical value *)
-  | LdCD32 _ -> 0x32 (* hypothetical value *)
-  | LdCD64 _ -> 0x33 (* hypothetical value *)
-  | LdCStr _ -> 0x72
+  | LdCN1 _ -> 0x22
+  | LdCN2 _ -> 0x23
+  | LdCN4 _ -> 0x24
+  | LdCN8 _ -> 0x2F (* hypothetical value *)
+  | LdCB4 _ -> 0x30 (* hypothetical value *)
+  | LdCB8 _ -> 0x31 (* hypothetical value *)
+  | LdCD4 _ -> 0x32 (* hypothetical value *)
+  | LdCD8 _ -> 0x33 (* hypothetical value *)
+  | LdStr _ -> 0x72
   (* Load/Store Variables *)
   | LdLoc _ -> 0x0E
   | StLoc _ -> 0x0F
@@ -160,7 +160,7 @@ let to_opcode = function
   (* Object Operations *)
   | NewObj _ -> 0x73
   | Call _ -> 0x28
-  | CallI -> 0x29
+  | CallInd -> 0x29
   | LdFld _ -> 0x7B
   | StFld _ -> 0x7D
   | LdFldA _ -> 0x7C
@@ -173,9 +173,9 @@ let to_opcode = function
   | LdElemA -> 0x8F
   | LdLen -> 0x8E
   (* Type Operations *)
-  | LdType _ -> 0xD1
+  | LdTok _ -> 0xD1
   | IsInst _ -> 0x75
-  | CastClass _ -> 0x74
+  | AsInst _ -> 0x74
   | Box _ -> 0x8C
   | UnboxAny _ -> 0xA5
   | ConvI8 -> 0x67
@@ -257,15 +257,15 @@ let show = function
   | LdNull -> "ldnull"
   | LdCI4 n -> Printf.sprintf "ldc.i4 %ld" n
   | LdCI8 n -> Printf.sprintf "ldc.i8 %Ld" n
+  | LdCN1 n -> Printf.sprintf "ldc.n1 %d" n
+  | LdCN2 n -> Printf.sprintf "ldc.n2 %d" n
+  | LdCN4 n -> Printf.sprintf "ldc.n4 %d" n
   | LdCN8 n -> Printf.sprintf "ldc.n8 %d" n
-  | LdCN16 n -> Printf.sprintf "ldc.n16 %d" n
-  | LdCN32 n -> Printf.sprintf "ldc.n32 %d" n
-  | LdCN64 n -> Printf.sprintf "ldc.n64 %d" n
-  | LdCB32 f -> Printf.sprintf "ldc.b32 %g" f
-  | LdCB64 f -> Printf.sprintf "ldc.b64 %g" f
-  | LdCD32 f -> Printf.sprintf "ldc.d32 %g" f
-  | LdCD64 f -> Printf.sprintf "ldc.d64 %g" f
-  | LdCStr idx -> Printf.sprintf "ldstr %d" idx
+  | LdCB4 f -> Printf.sprintf "ldc.b4 %g" f
+  | LdCB8 f -> Printf.sprintf "ldc.b8 %g" f
+  | LdCD4 f -> Printf.sprintf "ldc.d4 %g" f
+  | LdCD8 f -> Printf.sprintf "ldc.d8 %g" f
+  | LdStr idx -> Printf.sprintf "ldstr %d" idx
   (* Load/Store Variables *)
   | LdLoc idx -> Printf.sprintf "ldloc %d" idx
   | StLoc idx -> Printf.sprintf "stloc %d" idx
@@ -276,40 +276,40 @@ let show = function
   (* Object Operations *)
   | NewObj ctor -> Printf.sprintf "newobj %d" ctor
   | Call _method -> Printf.sprintf "call <method>"
-  | CallI -> "calli"
+  | CallInd -> "calli"
   | LdFld idx -> Printf.sprintf "ldfld %d" idx
   | StFld idx -> Printf.sprintf "stfld %d" idx
   | LdFldA idx -> Printf.sprintf "ldflda %d" idx
   | LdSFld idx -> Printf.sprintf "ldsfld %d" idx
   | StSFld idx -> Printf.sprintf "stsfld %d" idx
   | LdSFldA idx -> Printf.sprintf "ldsflda %d" idx
-  | NewArr type_id -> Printf.sprintf "newarr %d" type_id
+  | NewArr ty_id -> Printf.sprintf "newarr %d" ty_id
   | LdElem -> "ldelem"
   | StElem -> "stelem"
   | LdElemA -> "ldelema"
   | LdLen -> "ldlen"
   (* Type Operations *)
-  | LdType type_id -> Printf.sprintf "ldtype %d" type_id
-  | IsInst type_id -> Printf.sprintf "isinst %d" type_id
-  | CastClass type_id -> Printf.sprintf "castclass %d" type_id
-  | Box type_id -> Printf.sprintf "box %d" type_id
-  | UnboxAny type_id -> Printf.sprintf "unbox.any %d" type_id
+  | LdTok ty_id -> Printf.sprintf "ldtok %d" ty_id
+  | IsInst ty_id -> Printf.sprintf "isinst %d" ty_id
+  | AsInst ty_id -> Printf.sprintf "asinst %d" ty_id
+  | Box ty_id -> Printf.sprintf "box %d" ty_id
+  | UnboxAny ty_id -> Printf.sprintf "unbox.any %d" ty_id
   | ConvI8 -> "conv.i8"
   | ConvI16 -> "conv.i16"
   | ConvI32 -> "conv.i32"
   | ConvI64 -> "conv.i64"
   | ConvI128 -> "conv.i128"
-  | ConvN8 -> "conv.n8"
-  | ConvN16 -> "conv.n16"
-  | ConvN32 -> "conv.n32"
-  | ConvN64 -> "conv.n64"
-  | ConvN128 -> "conv.n128"
-  | ConvB32 -> "conv.b32"
-  | ConvB64 -> "conv.b64"
-  | ConvB128 -> "conv.b128"
-  | ConvD32 -> "conv.d32"
-  | ConvD64 -> "conv.d64"
-  | ConvD128 -> "conv.d128"
+  | ConvN8 -> "conv.n1"
+  | ConvN16 -> "conv.n2"
+  | ConvN32 -> "conv.n4"
+  | ConvN64 -> "conv.n8"
+  | ConvN128 -> "conv.n16"
+  | ConvB32 -> "conv.b4"
+  | ConvB64 -> "conv.b8"
+  | ConvB128 -> "conv.b16"
+  | ConvD32 -> "conv.d4"
+  | ConvD64 -> "conv.d8"
+  | ConvD128 -> "conv.d16"
   (* Arithmetic Operations *)
   | Add -> "add"
   | AddOvf -> "add.ovf"
@@ -345,7 +345,7 @@ let show = function
   (* Dynamic Operations *)
   | LdFldDyn name -> Printf.sprintf "ldfld.dyn \"%s\"" name
   | StFldDyn name -> Printf.sprintf "stfld.dyn \"%s\"" name
-  | LdFldADyn name -> Printf.sprintf "ldfld.addr.dyn \"%s\"" name
+  | LdFldADyn name -> Printf.sprintf "ldflda.dyn \"%s\"" name
   | CallDyn name -> Printf.sprintf "call.dyn \"%s\"" name
 
 let show_with_interner interner = function
@@ -373,15 +373,15 @@ let show_with_interner interner = function
   | LdNull -> "ldnull"
   | LdCI4 n -> Printf.sprintf "ldc.i4 %ld" n
   | LdCI8 n -> Printf.sprintf "ldc.i8 %Ld" n
+  | LdCN1 n -> Printf.sprintf "ldc.n1 %d" n
+  | LdCN2 n -> Printf.sprintf "ldc.n2 %d" n
+  | LdCN4 n -> Printf.sprintf "ldc.n4 %d" n
   | LdCN8 n -> Printf.sprintf "ldc.n8 %d" n
-  | LdCN16 n -> Printf.sprintf "ldc.n16 %d" n
-  | LdCN32 n -> Printf.sprintf "ldc.n32 %d" n
-  | LdCN64 n -> Printf.sprintf "ldc.n64 %d" n
-  | LdCB32 f -> Printf.sprintf "ldc.b32 %g" f
-  | LdCB64 f -> Printf.sprintf "ldc.b64 %g" f
-  | LdCD32 f -> Printf.sprintf "ldc.d32 %g" f
-  | LdCD64 f -> Printf.sprintf "ldc.d64 %g" f
-  | LdCStr idx -> Printf.sprintf "ldstr %d" idx
+  | LdCB4 f -> Printf.sprintf "ldc.b4 %g" f
+  | LdCB8 f -> Printf.sprintf "ldc.b8 %g" f
+  | LdCD4 f -> Printf.sprintf "ldc.d4 %g" f
+  | LdCD8 f -> Printf.sprintf "ldc.d8 %g" f
+  | LdStr idx -> Printf.sprintf "ldstr %d" idx
   (* Load/Store Variables *)
   | LdLoc idx -> Printf.sprintf "ldloc %d" idx
   | StLoc idx -> Printf.sprintf "stloc %d" idx
@@ -392,40 +392,40 @@ let show_with_interner interner = function
   (* Object Operations *)
   | NewObj ctor -> Printf.sprintf "newobj %d" ctor
   | Call name -> Printf.sprintf "call %s" (Interner.lookup interner name)
-  | CallI -> "calli"
+  | CallInd -> "callind"
   | LdFld idx -> Printf.sprintf "ldfld %d" idx
   | StFld idx -> Printf.sprintf "stfld %d" idx
   | LdFldA idx -> Printf.sprintf "ldflda %d" idx
   | LdSFld idx -> Printf.sprintf "ldsfld %d" idx
   | StSFld idx -> Printf.sprintf "stsfld %d" idx
   | LdSFldA idx -> Printf.sprintf "ldsflda %d" idx
-  | NewArr type_id -> Printf.sprintf "newarr %d" type_id
+  | NewArr ty_id -> Printf.sprintf "newarr %d" ty_id
   | LdElem -> "ldelem"
   | StElem -> "stelem"
   | LdElemA -> "ldelema"
   | LdLen -> "ldlen"
   (* Type Operations *)
-  | LdType type_id -> Printf.sprintf "ldtype %d" type_id
-  | IsInst type_id -> Printf.sprintf "isinst %d" type_id
-  | CastClass type_id -> Printf.sprintf "castclass %d" type_id
-  | Box type_id -> Printf.sprintf "box %d" type_id
-  | UnboxAny type_id -> Printf.sprintf "unbox.any %d" type_id
+  | LdTok ty_id -> Printf.sprintf "ldtok %d" ty_id
+  | IsInst ty_id -> Printf.sprintf "isinst %d" ty_id
+  | AsInst ty_id -> Printf.sprintf "asinst %d" ty_id
+  | Box ty_id -> Printf.sprintf "box %d" ty_id
+  | UnboxAny ty_id -> Printf.sprintf "unbox.any %d" ty_id
   | ConvI8 -> "conv.i8"
   | ConvI16 -> "conv.i16"
   | ConvI32 -> "conv.i32"
   | ConvI64 -> "conv.i64"
   | ConvI128 -> "conv.i128"
-  | ConvN8 -> "conv.n8"
-  | ConvN16 -> "conv.n16"
-  | ConvN32 -> "conv.n32"
-  | ConvN64 -> "conv.n64"
-  | ConvN128 -> "conv.n128"
-  | ConvB32 -> "conv.b32"
-  | ConvB64 -> "conv.b64"
-  | ConvB128 -> "conv.b128"
-  | ConvD32 -> "conv.d32"
-  | ConvD64 -> "conv.d64"
-  | ConvD128 -> "conv.d128"
+  | ConvN8 -> "conv.n1"
+  | ConvN16 -> "conv.n2"
+  | ConvN32 -> "conv.n4"
+  | ConvN64 -> "conv.n8"
+  | ConvN128 -> "conv.n16"
+  | ConvB32 -> "conv.b4"
+  | ConvB64 -> "conv.b8"
+  | ConvB128 -> "conv.b16"
+  | ConvD32 -> "conv.d4"
+  | ConvD64 -> "conv.d8"
+  | ConvD128 -> "conv.d16"
   (* Arithmetic Operations *)
   | Add -> "add"
   | AddOvf -> "add.ovf"
@@ -461,5 +461,5 @@ let show_with_interner interner = function
   (* Dynamic Operations *)
   | LdFldDyn name -> Printf.sprintf "ldfld.dyn \"%s\"" name
   | StFldDyn name -> Printf.sprintf "stfld.dyn \"%s\"" name
-  | LdFldADyn name -> Printf.sprintf "ldfld.addr.dyn \"%s\"" name
+  | LdFldADyn name -> Printf.sprintf "ldflda.dyn \"%s\"" name
   | CallDyn name -> Printf.sprintf "call.dyn \"%s\"" name
