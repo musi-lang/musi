@@ -9,10 +9,7 @@
 		"includes": [
 			"**/*.js",
 			"**/*.jsx",
-			"**/*.mjs",
-			"**/*.mts",
-			"**/*.ts",
-			"**/*.tsx"
+			"**/*.mjs"
 		],
 		"ignoreUnknown": true
 	},
