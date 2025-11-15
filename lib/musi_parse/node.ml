@@ -66,7 +66,7 @@ and ty = { tkind : ty_kind; is_const : bool; span : Span.t }
 and ty_kind =
   | TyNamed of name
   | TyApp of ty * ty list
-  | TyProc of ty list * ty option
+  | TyFn of ty list * ty option
   | TyTuple of ty list
   | TyArray of ty
   | TyRecord of field list

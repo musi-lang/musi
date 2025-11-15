@@ -36,49 +36,49 @@ let test_number_decimal () =
   let tokens, diags, _ = lex "42" in
   (check bool) "no errors" false (Diagnostic.has_errors diags);
   match tokens with
-  | [ { Token.kind = Token.LitNum s; _ }; { kind = Token.Eof; _ } ] ->
+  | [ { Token.kind = Token.LitNumber s; _ }; { kind = Token.Eof; _ } ] ->
     (check string) "number value" "42" s
-  | _ -> fail "expected LitNum token"
+  | _ -> fail "expected LitNumber token"
 
 let test_number_hex () =
   let tokens, diags, _ = lex "0xFF" in
   (check bool) "no errors" false (Diagnostic.has_errors diags);
   match tokens with
-  | [ { Token.kind = Token.LitNum s; _ }; { kind = Token.Eof; _ } ] ->
+  | [ { Token.kind = Token.LitNumber s; _ }; { kind = Token.Eof; _ } ] ->
     (check string) "number value" "0xFF" s
-  | _ -> fail "expected LitNum token"
+  | _ -> fail "expected LitNumber token"
 
 let test_number_binary () =
   let tokens, diags, _ = lex "0b1010" in
   (check bool) "no errors" false (Diagnostic.has_errors diags);
   match tokens with
-  | [ { Token.kind = Token.LitNum s; _ }; { kind = Token.Eof; _ } ] ->
+  | [ { Token.kind = Token.LitNumber s; _ }; { kind = Token.Eof; _ } ] ->
     (check string) "number value" "0b1010" s
-  | _ -> fail "expected LitNum token"
+  | _ -> fail "expected LitNumber token"
 
 let test_number_float () =
   let tokens, diags, _ = lex "3.14" in
   (check bool) "no errors" false (Diagnostic.has_errors diags);
   match tokens with
-  | [ { Token.kind = Token.LitNum s; _ }; { kind = Token.Eof; _ } ] ->
+  | [ { Token.kind = Token.LitNumber s; _ }; { kind = Token.Eof; _ } ] ->
     (check string) "number value" "3.14" s
-  | _ -> fail "expected LitNum token"
+  | _ -> fail "expected LitNumber token"
 
 let test_str_simple () =
   let tokens, diags, interner = lex {|"hello"|} in
   (check bool) "no errors" false (Diagnostic.has_errors diags);
   match tokens with
-  | [ { Token.kind = Token.LitStr n; _ }; { kind = Token.Eof; _ } ] ->
+  | [ { Token.kind = Token.LitString n; _ }; { kind = Token.Eof; _ } ] ->
     (check string) "text value" "hello" (Interner.lookup interner n)
-  | _ -> fail "expected LitStr token"
+  | _ -> fail "expected LitString token"
 
 let test_str_escape () =
   let tokens, diags, interner = lex {|"\n"|} in
   (check bool) "no errors" false (Diagnostic.has_errors diags);
   match tokens with
-  | [ { Token.kind = Token.LitStr n; _ }; { kind = Token.Eof; _ } ] ->
+  | [ { Token.kind = Token.LitString n; _ }; { kind = Token.Eof; _ } ] ->
     (check string) "text value" "\n" (Interner.lookup interner n)
-  | _ -> fail "expected LitStr token"
+  | _ -> fail "expected LitString token"
 
 let test_rune () =
   let tokens, diags, _ = lex "'a'" in

@@ -2,28 +2,27 @@ open Musi_basic
 
 type kind =
   | Ident of Interner.name
-  | LitNum of string
-  | LitStr of Interner.name
+  | LitNumber of string
+  | LitString of Interner.name
   | LitRune of int
-  | LitTpl of Interner.name
-  | TplHead of Interner.name
-  | TplMid of Interner.name
-  | TplTail of Interner.name
+  | LitNoSubstTemplate of Interner.name
+  | TemplateHead of Interner.name
+  | TemplateMiddle of Interner.name
+  | TemplateTail of Interner.name
   | KwAnd
   | KwAs
-  | KwAsync
-  | KwAwait
   | KwBreak
   | KwCase
   | KwChoice
-  | KwConst
   | KwContinue
   | KwDefer
   | KwDo
   | KwElse
   | KwExport
+  | KwExtern
   | KwFalse
   | KwFor
+  | KwFn
   | KwFrom
   | KwIf
   | KwImport
@@ -33,23 +32,20 @@ type kind =
   | KwMod
   | KwNot
   | KwOr
-  | KwProc
   | KwRecord
+  | KwRef
   | KwReturn
   | KwShl
   | KwShr
   | KwThen
   | KwTrue
   | KwTry
-  | KwUnsafe
   | KwVal
   | KwVar
-  | KwWeak
   | KwWhere
   | KwWhile
   | KwWith
   | KwXor
-  | KwYield
   | Underscore
   | LParen
   | RParen
@@ -57,7 +53,6 @@ type kind =
   | RBrack
   | LBrace
   | RBrace
-  | Pipe
   | Comma
   | Dot
   | Colon
@@ -113,30 +108,29 @@ let expect s kind =
 
 let show_kind interner = function
   | Ident n -> Interner.lookup interner n
-  | LitNum s -> s
-  | LitStr n -> Printf.sprintf "\"%s\"" (Interner.lookup interner n)
+  | LitNumber s -> s
+  | LitString n -> Printf.sprintf "\"%s\"" (Interner.lookup interner n)
   | LitRune c ->
     Printf.sprintf "'%s'" (Uchar.to_char (Uchar.of_int c) |> String.make 1)
-  | LitTpl n -> Printf.sprintf "`%s`" (Interner.lookup interner n)
-  | TplHead n -> Printf.sprintf "`%s${" (Interner.lookup interner n)
-  | TplMid n -> Printf.sprintf "}%s${" (Interner.lookup interner n)
-  | TplTail n -> Printf.sprintf "}%s`" (Interner.lookup interner n)
+  | LitNoSubstTemplate n -> Printf.sprintf "`%s`" (Interner.lookup interner n)
+  | TemplateHead n -> Printf.sprintf "`%s${" (Interner.lookup interner n)
+  | TemplateMiddle n -> Printf.sprintf "}%s${" (Interner.lookup interner n)
+  | TemplateTail n -> Printf.sprintf "}%s`" (Interner.lookup interner n)
   | KwAnd -> "and"
   | KwAs -> "as"
-  | KwAsync -> "async"
-  | KwAwait -> "await"
   | KwBreak -> "break"
   | KwCase -> "case"
   | KwChoice -> "choice"
-  | KwConst -> "const"
   | KwContinue -> "continue"
   | KwDefer -> "defer"
   | KwDo -> "do"
   | KwElse -> "else"
   | KwExport -> "export"
+  | KwExtern -> "extern"
   | KwFalse -> "false"
   | KwFor -> "for"
   | KwFrom -> "from"
+  | KwFn -> "fn"
   | KwIf -> "if"
   | KwImport -> "import"
   | KwIn -> "in"
@@ -145,8 +139,8 @@ let show_kind interner = function
   | KwMod -> "mod"
   | KwNot -> "not"
   | KwOr -> "or"
-  | KwProc -> "proc"
   | KwRecord -> "record"
+  | KwRef -> "ref"
   | KwReturn -> "return"
   | KwShl -> "shl"
   | KwShr -> "shr"
@@ -155,12 +149,10 @@ let show_kind interner = function
   | KwTry -> "try"
   | KwVal -> "val"
   | KwVar -> "var"
-  | KwWeak -> "weak"
   | KwWhere -> "where"
   | KwWhile -> "while"
   | KwWith -> "with"
   | KwXor -> "xor"
-  | KwYield -> "yield"
   | Underscore -> "_"
   | LParen -> "("
   | RParen -> ")"
@@ -168,7 +160,6 @@ let show_kind interner = function
   | RBrack -> "]"
   | LBrace -> "{"
   | RBrace -> "}"
-  | Pipe -> "|"
   | Comma -> ","
   | Dot -> "."
   | Colon -> ":"
@@ -193,8 +184,8 @@ let show_kind interner = function
   | ColonEq -> ":="
   | DotDotLt -> "..<"
   | DotDot -> ".."
-  | Whitespace -> "WHITESPACE"
-  | Newline -> "NEWLINE"
+  | Whitespace -> "\\s"
+  | Newline -> "\\n"
   | LineComment n -> Printf.sprintf "// %s" (Interner.lookup interner n)
   | BlockComment n -> Printf.sprintf "/* %s */" (Interner.lookup interner n)
   | Error -> "<error>"

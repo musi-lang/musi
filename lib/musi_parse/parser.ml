@@ -237,7 +237,7 @@ let parse_ty_tuple_or_fn t (tok : Token.t) =
   skip_trivia t;
   if (curr t).kind = Token.MinusGt then (
     advance t;
-    Node.make_ty (Node.TyProc (types, Some (parse_ty t))) tok.span)
+    Node.make_ty (Node.TyFn (types, Some (parse_ty t))) tok.span)
   else
     match types with
     | [] -> Node.make_ty (Node.TyTuple []) tok.span

@@ -7,7 +7,7 @@ type t =
   | TyTuple of t list
   | TyArray of t
   | TyRecord of (Interner.name * t) list
-  | TyProc of t list * t
+  | TyFn of t list * t
   | TyOptional of t
   | TyVar of var ref
   | TyError
@@ -29,7 +29,7 @@ let rec occurs_check id = function
   | TyTuple ts -> List.exists (occurs_check id) ts
   | TyArray t -> occurs_check id t
   | TyRecord fields -> List.exists (fun (_, t) -> occurs_check id t) fields
-  | TyProc (params, ret) ->
+  | TyFn (params, ret) ->
     List.exists (occurs_check id) params || occurs_check id ret
   | TyOptional t -> occurs_check id t
   | TyNamed _ | TyUnit | TyError -> false
@@ -42,7 +42,7 @@ let rec show_with interner = function
     "(" ^ String.concat ", " (List.map (show_with interner) ts) ^ ")"
   | TyArray t -> "[" ^ show_with interner t ^ "]"
   | TyRecord _ -> "{...}"
-  | TyProc (params, ret) ->
+  | TyFn (params, ret) ->
     "("
     ^ String.concat ", " (List.map (show_with interner) params)
     ^ ") -> " ^ show_with interner ret
@@ -72,7 +72,7 @@ let rec unify_record fs1 fs2 =
     fs1
     fs2
 
-and unify_proc args1 ret1 args2 ret2 =
+and unify_fn args1 ret1 args2 ret2 =
   if List.length args1 <> List.length args2 then
     failwith
       (Printf.sprintf
@@ -100,8 +100,7 @@ and unify t1 t2 =
     List.iter2 unify ts1 ts2
   | TyArray t1, TyArray t2 -> unify t1 t2
   | TyRecord fs1, TyRecord fs2 -> unify_record fs1 fs2
-  | TyProc (args1, ret1), TyProc (args2, ret2) ->
-    unify_proc args1 ret1 args2 ret2
+  | TyFn (args1, ret1), TyFn (args2, ret2) -> unify_fn args1 ret1 args2 ret2
   | TyOptional t1, TyOptional t2 -> unify t1 t2
   | _ ->
     failwith
@@ -119,10 +118,10 @@ let rec from_node lookup (node : Node.ty) =
       (List.map
          (fun (f : Node.field) -> (f.fname, from_node lookup f.fty))
          fields)
-  | Node.TyProc (params, ret) ->
+  | Node.TyFn (params, ret) ->
     let param_tys = List.map (from_node lookup) params in
     let ret_ty = Option.fold ~none:TyUnit ~some:(from_node lookup) ret in
-    TyProc (param_tys, ret_ty)
+    TyFn (param_tys, ret_ty)
   | Node.TyOptional ty -> TyOptional (from_node lookup ty)
   | Node.TyApp _ -> TyError (* TODO: generics *)
   | Node.TyError -> TyError

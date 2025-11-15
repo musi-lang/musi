@@ -70,20 +70,19 @@ let keywords =
     [
       ("and", Token.KwAnd)
     ; ("as", Token.KwAs)
-    ; ("async", Token.KwAsync)
-    ; ("await", Token.KwAwait)
     ; ("break", Token.KwBreak)
     ; ("case", Token.KwCase)
     ; ("choice", Token.KwChoice)
-    ; ("const", Token.KwConst)
     ; ("continue", Token.KwContinue)
     ; ("defer", Token.KwDefer)
     ; ("do", Token.KwDo)
     ; ("else", Token.KwElse)
     ; ("export", Token.KwExport)
+    ; ("extern", Token.KwExtern)
     ; ("false", Token.KwFalse)
     ; ("for", Token.KwFor)
     ; ("from", Token.KwFrom)
+    ; ("fn", Token.KwFn)
     ; ("if", Token.KwIf)
     ; ("import", Token.KwImport)
     ; ("in", Token.KwIn)
@@ -92,8 +91,8 @@ let keywords =
     ; ("mod", Token.KwMod)
     ; ("not", Token.KwNot)
     ; ("or", Token.KwOr)
-    ; ("proc", Token.KwProc)
     ; ("record", Token.KwRecord)
+    ; ("ref", Token.KwRef)
     ; ("return", Token.KwReturn)
     ; ("shl", Token.KwShl)
     ; ("shr", Token.KwShr)
@@ -102,12 +101,10 @@ let keywords =
     ; ("try", Token.KwTry)
     ; ("val", Token.KwVal)
     ; ("var", Token.KwVar)
-    ; ("weak", Token.KwWeak)
     ; ("where", Token.KwWhere)
     ; ("while", Token.KwWhile)
     ; ("with", Token.KwWith)
     ; ("xor", Token.KwXor)
-    ; ("yield", Token.KwYield)
     ];
   tbl
 
@@ -128,7 +125,7 @@ let lex_radix t pred =
   advance_by t 2;
   scan_while t (fun c -> pred c || c = '_')
 
-let lex_lit_num t =
+let lex_lit_number t =
   let start = t.pos in
   let c1 = peek t 1 in
   if curr t = '0' && (c1 = 'x' || c1 = 'X') then lex_radix t is_xdigit
@@ -152,7 +149,7 @@ let lex_lit_num t =
     scan_while t is_ident_cont;
     let suffix = slice_from t suffix_start in
     error t (Printf.sprintf "invalid numeric suffix '%s'" suffix) (span t start));
-  make_tok t (Token.LitNum (slice_from t start)) start
+  make_tok t (Token.LitNumber (slice_from t start)) start
 
 let escapes =
   [
@@ -199,12 +196,12 @@ let lex_escape t =
       advance t;
       None)
 
-let lex_lit_str t =
+let lex_lit_string t =
   let start = t.pos in
   advance t;
   let buf = Buffer.create 16 in
   let rec loop () =
-    if at_end t then error t "unterminated text literal" (span t start)
+    if at_end t then error t "unterminated string literal" (span t start)
     else
       match curr t with
       | '"' -> advance t
@@ -220,7 +217,7 @@ let lex_lit_str t =
   in
   loop ();
   Token.make
-    (Token.LitStr (Interner.intern t.interner (Buffer.contents buf)))
+    (Token.LitString (Interner.intern t.interner (Buffer.contents buf)))
     (span t start)
 
 let lex_lit_rune t =
@@ -287,7 +284,6 @@ let symbols =
   ; ("]", Token.RBrack)
   ; ("{", Token.LBrace)
   ; ("}", Token.RBrace)
-  ; ("|", Token.Pipe)
   ; (",", Token.Comma)
   ; (".", Token.Dot)
   ; (":", Token.Colon)
@@ -336,8 +332,8 @@ let lex t =
     advance t;
     Token.make Token.Newline (span t start)
   | 'a' .. 'z' | 'A' .. 'Z' | '_' -> lex_ident t
-  | '0' .. '9' -> lex_lit_num t
-  | '"' -> lex_lit_str t
+  | '0' .. '9' -> lex_lit_number t
+  | '"' -> lex_lit_string t
   | '\'' -> lex_lit_rune t
   | '/' ->
     if peek t 1 = '/' then lex_line_comment t
