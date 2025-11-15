@@ -17,7 +17,7 @@ test_cases=(
     "[ _ ]"
     "val"
     "var"
-    "proc"
+    "fn"
     "if"
     "while"
     "for"
@@ -30,7 +30,7 @@ test_cases=(
     ";;"
     'import { 123 } from "test";'
     'export { 123 };'
-    'proc (123) -> Int;'
+    'fn (123) -> Int;'
 )
 
 echo "checking for parser inf loop(s)..."
