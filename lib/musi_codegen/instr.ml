@@ -107,6 +107,9 @@ type t =
   | CgtUn
   | Clt
   | CltUn
+  (* Memory Management - for future opt-in GC *)
+  | Pin
+  | Unpin
   (* Dynamic Operations *)
   | LdFldDyn of string
   | StFldDyn of string
@@ -220,6 +223,9 @@ let to_opcode = function
   | CgtUn -> 0xC3
   | Clt -> 0xC4
   | CltUn -> 0xC5
+  (* Memory Management *)
+  | Pin -> 0xDF
+  | Unpin -> 0xE0
   (* Dynamic Operations *)
   | LdFldDyn _ -> 0xE1
   | StFldDyn _ -> 0xE2
@@ -334,6 +340,8 @@ let show = function
   | Clt -> "clt"
   | CltUn -> "clt.un"
   (* Memory Management *)
+  | Pin -> "pin"
+  | Unpin -> "unpin"
   (* Dynamic Operations *)
   | LdFldDyn name -> Printf.sprintf "ldfld.dyn \"%s\"" name
   | StFldDyn name -> Printf.sprintf "stfld.dyn \"%s\"" name
@@ -448,6 +456,8 @@ let show_with_interner interner = function
   | Clt -> "clt"
   | CltUn -> "clt.un"
   (* Memory Management *)
+  | Pin -> "pin"
+  | Unpin -> "unpin"
   (* Dynamic Operations *)
   | LdFldDyn name -> Printf.sprintf "ldfld.dyn \"%s\"" name
   | StFldDyn name -> Printf.sprintf "stfld.dyn \"%s\"" name
