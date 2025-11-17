@@ -42,7 +42,6 @@ show(ref counter);     // prints: `Counter is now: 2`
 
 - [OCaml](https://ocaml.org/install) (5.4.0 or greater)
 - [opam](https://opam.ocaml.org/doc/Install.html) (2.3.0 or greater)
-- [Rust](https://rust-lang.org/tools/install/) (1.85.0 or greater)
 
 ### Build
 
@@ -53,9 +52,6 @@ cd musi
 # build Musi Compiler
 opam exec -- dune pkg lock
 opam exec -- dune build
-
-# build Musi Runtime Environment
-cargo build
 ```
 
 ### Run & Test
@@ -64,7 +60,7 @@ cargo build
 opam exec -- dune exec bin/main.exe
 opam exec -- dune test
 
-# TODO: VM usage in Rust (Cargo) here
+# TODO: VM usage in Ada (Alire) here
 ```
 
 ## Contributing

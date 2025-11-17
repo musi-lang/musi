@@ -1,0 +1,14 @@
+name = "musi"
+description = "Musi Runtime Environment"
+version = "0.1.0-dev"
+
+authors = ["Krystian"]
+maintainers = ["Krystian <example@example.com>"]
+licenses = "MIT OR Apache-2.0 WITH LLVM-exception"
+website = "https://musi-lang.org/"
+tags = []
+
+executables = ["musi"]
+
+[[depends-on]]
+interfaces = "*"

@@ -281,8 +281,13 @@ $RECYCLE.BIN/
 # Windows shortcuts
 *.lnk
 
-## User settings
-xcuserdata/
-.zig-cache/
-zig-out/
+
+config/
+alire/
+obj/
+
+# Object file
 *.o
+
+# Ada Library Information
+*.ali
