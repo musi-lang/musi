@@ -95,18 +95,7 @@ Feature requests should describe the use case and why Musi needs it now.
 opam exec -- dune pkg lock   # lock dependencies
 opam exec -- dune build      # compile everything
 opam exec -- dune test       # run all tests
-opam exec -- dune exec lib/parse/test_lexer.exe   # run a specific test
 ```
-
-## Repository Layout
-
-- `lib/basic/` -- spans, diagnostics, interner, and helpers
-- `lib/parse/` -- lexer, parser, checker, resolver, metadata
-- `lib/codegen/` -- bytecode instructions and emitter (work in progress)
-- `lib/runtime/` -- VM, GC, and builtins
-- `bin/` -- CLI entry point
-- `docs/` -- language guide, reference, design notes
-- `test/` -- integration and regression suites
 
 ## Questions and Support
 
