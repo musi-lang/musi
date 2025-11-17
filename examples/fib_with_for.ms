@@ -1,4 +1,4 @@
-val fib := fn(n: Nat) -> Nat {
+val fib := fn (n: Nat) -> Nat {
   if n <= 1 then return n;
 
   var (a, b) := (0, 1);
