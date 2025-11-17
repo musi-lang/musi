@@ -2,4 +2,4 @@
  (name musi_sema)
  (public_name musi.sema)
  (libraries musi_basic musi_parse)
- (modules symbol types resolver checker))
+ (modules symbol types attrib resolver checker))
