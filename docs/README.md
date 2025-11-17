@@ -61,11 +61,11 @@ val s: Str<32> := "hello";           // 32 runes + length
 References to stack values:
 
 ```musi
-val add := fn(ref x: Int, ref y: Int) -> Int {  // immutable borrow
+val add := fn (ref x: Int, ref y: Int) -> Int {  // immutable borrow
   x + y
 };
 
-val inc := fn(ref var x: Int) {                 // mutable borrow
+val inc := fn (ref var x: Int) {                 // mutable borrow
   x <- x + 1;
 };
 ```
@@ -98,7 +98,7 @@ val failure: Expect<Nat, Error> := .Fail(err);
 
 ### String Types
 
-**Fixed-size (Str<N>):**
+**Fixed-size (`Str<N>`):**
 
 ```musi
 val Str<N: Nat> := record {
@@ -135,19 +135,6 @@ Arena.with(fn(ref arena: Arena) {
 - **[EXAMPLES.md](EXAMPLES.md)** - Code examples
 - **[PROGRESS.md](PROGRESS.md)** - Implementation status
 
-## Building
-
-```bash
-# Build compiler
-opam exec -- dune build
-
-# Build runtime
-cargo build
-
-# Run tests
-opam exec -- dune test
-```
-
 ## Design Decisions
 
 ### Why Stack-Only?
@@ -157,26 +144,6 @@ opam exec -- dune test
 - **Simple** - No cycles, no leaks, no fragmentation
 - **Fast** - Stack allocation is bump-pointer fast
 - **Embedded-friendly** - Works without OS
-
-### What's Removed?
-
-- Heap allocation (malloc/free)
-- Garbage collection
-- Reference counting (ARC)
-- `weak` references
-- `async`/`await`/`yield`, `const` keywords
-- `unsafe` keyword
-- Dynamic arrays/strings
-- Closures with heap captures
-
-### What's Added?
-
-- `ref` keyword for borrowing
-- `ref var` for mutable borrows
-- Compile-time lifetime checking
-- Fixed-size generics: `String<N>`, `[T; N]`
-- Copy-only closures (64 byte limit)
-- Region-based arena allocators for dynamic structures
 
 ## License
 
