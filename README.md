@@ -42,6 +42,7 @@ show(ref counter);     // prints: `Counter is now: 2`
 
 - [OCaml](https://ocaml.org/install) (5.4.0 or greater)
 - [opam](https://opam.ocaml.org/doc/Install.html) (2.3.0 or greater)
+- [Alire](https://alire.ada.dev/) (2.1.0 or greater)
 
 ### Build
 
@@ -52,12 +53,15 @@ cd musi
 # build Musi Compiler
 opam exec -- dune pkg lock
 opam exec -- dune build
+
+# build Musi Runtime
+alr build
 ```
 
 ### Run & Test
 
 ```bash
-opam exec -- dune exec bin/main.exe
+opam exec -- dune exec bin/msc/main.exe
 opam exec -- dune test
 
 # TODO: VM usage in Ada (Alire) here
