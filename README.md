@@ -19,7 +19,7 @@ Systems programming language designed for clarity, safety, and performance. Read
 
 ```musi
 val Counter := record {
-  var value: Nat;
+  var value: Nat
 };
 
 val inc := fn (ref var c: Counter) {
