@@ -341,7 +341,32 @@ and emit_expr_fn t params body mods =
 and emit_expr_fn_named t fn_name params body mods =
   let fn_id = t.next_fn_id in
   t.next_fn_id <- t.next_fn_id + 1;
-  let is_extern = Option.is_some mods.Node.abi in
+  let is_extern = mods.Node.is_extern in
+
+  let actual_fn_name =
+    if is_extern then
+      let link_attrib =
+        List.find_opt
+          (fun a -> Interner.lookup t.interner a.Node.aname = "link")
+          mods.Node.attribs
+      in
+      match link_attrib with
+      | Some attrib -> (
+        let prefix_param =
+          List.find_opt
+            (fun (k, _) -> Interner.lookup t.interner k = "prefix")
+            attrib.Node.aparams
+        in
+        match prefix_param with
+        | Some (_, prefix) ->
+          let prefix_str = Interner.lookup t.interner prefix in
+          let fn_str = Interner.lookup t.interner fn_name in
+          Interner.intern t.interner (prefix_str ^ fn_str)
+        | None -> fn_name)
+      | None -> fn_name
+    else fn_name
+  in
+
   let saved_locals = t.locals in
   let saved_next_local = t.next_local in
   t.locals <- [];
@@ -359,7 +384,7 @@ and emit_expr_fn_named t fn_name params body mods =
   in
   let fn =
     {
-      fn_name
+      fn_name = actual_fn_name
     ; param_count = List.length params
     ; local_count = t.next_local
     ; code_offset
@@ -368,7 +393,7 @@ and emit_expr_fn_named t fn_name params body mods =
     }
   in
   t.fns <- t.fns @ [ fn ];
-  t.fn_map <- (fn_name, fn_id) :: t.fn_map;
+  t.fn_map <- (actual_fn_name, fn_id) :: t.fn_map;
   t.code <- t.code @ body_code;
   t.locals <- saved_locals;
   t.next_local <- saved_next_local;
