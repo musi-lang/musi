@@ -13,9 +13,7 @@ export function activate(context) {
 		}
 	);
 
-	if (!context.subscriptions.includes(provider)) {
-		context.subscriptions.push(provider);
-	}
+	context.subscriptions.push(provider);
 }
 
 export function deactivate() {
