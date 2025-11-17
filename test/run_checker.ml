@@ -4,7 +4,7 @@ open Musi_sema
 let test_pass path () =
   let stmts, interner, src, parse_diags = Test_helpers.run_pipeline path in
   let check_diags = ref Diagnostic.empty_bag in
-  Checker.check_all stmts interner check_diags;
+  ignore (Coordinator.check_program stmts interner check_diags);
   let diags = Diagnostic.merge [ parse_diags; !check_diags ] in
   Diagnostic.emit_all Format.std_formatter diags src;
   Alcotest.(check bool) "no errors" false (Diagnostic.has_errors diags)
@@ -12,7 +12,7 @@ let test_pass path () =
 let test_fail path () =
   let stmts, interner, src, parse_diags = Test_helpers.run_pipeline path in
   let check_diags = ref Diagnostic.empty_bag in
-  Checker.check_all stmts interner check_diags;
+  ignore (Coordinator.check_program stmts interner check_diags);
   let diags = Diagnostic.merge [ parse_diags; !check_diags ] in
   Diagnostic.emit_all Format.std_formatter diags src;
   Alcotest.(check bool) "has errors" true (Diagnostic.has_errors diags)

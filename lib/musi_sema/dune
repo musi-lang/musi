@@ -2,4 +2,14 @@
  (name musi_sema)
  (public_name musi.sema)
  (libraries musi_basic musi_parse)
- (modules symbol types attrib mono resolver checker))
+ (modules
+  symbol
+  types
+  unifier
+  attrib
+  mono
+  resolver
+  inferrer
+  checker
+  collector
+  coordinator))

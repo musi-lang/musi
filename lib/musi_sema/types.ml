@@ -70,61 +70,6 @@ let rec show_with interner = function
 
 let show t = show_with (Interner.create ()) t
 
-let rec unify_record fs1 fs2 =
-  if List.length fs1 <> List.length fs2 then
-    failwith
-      (Printf.sprintf
-         "mismatched record fields '%s' and '%s'"
-         (show (TyRecord fs1))
-         (show (TyRecord fs2)));
-  List.iter2
-    (fun (n1, t1) (n2, t2) ->
-      if n1 <> n2 then
-        failwith
-          (Printf.sprintf
-             "mismatched record fields '%s' and '%s'"
-             (show (TyRecord fs1))
-             (show (TyRecord fs2)));
-      unify t1 t2)
-    fs1
-    fs2
-
-and unify_fn args1 ret1 args2 ret2 =
-  if List.length args1 <> List.length args2 then
-    failwith
-      (Printf.sprintf
-         "expected %d argument(s), found %d"
-         (List.length args1)
-         (List.length args2));
-  List.iter2 unify args1 args2;
-  unify ret1 ret2
-
-and unify t1 t2 =
-  let t1 = repr t1 in
-  let t2 = repr t2 in
-  match (t1, t2) with
-  | _ when t1 = t2 -> ()
-  | TyVar ({ contents = Unbound id1 } as v1), TyVar { contents = Unbound id2 }
-    ->
-    if id1 <> id2 then v1 := Link t2
-  | TyVar ({ contents = Unbound id } as v), t
-  | t, TyVar ({ contents = Unbound id } as v) ->
-    if occurs_check id t then
-      failwith (Printf.sprintf "infinite type '%s'" (show t))
-    else v := Link t
-  | TyNamed n1, TyNamed n2 when n1 = n2 -> ()
-  | TyTuple ts1, TyTuple ts2 when List.length ts1 = List.length ts2 ->
-    List.iter2 unify ts1 ts2
-  | TyArray t1, TyArray t2 -> unify t1 t2
-  | TyRecord fs1, TyRecord fs2 -> unify_record fs1 fs2
-  | TyFn (args1, ret1), TyFn (args2, ret2) -> unify_fn args1 ret1 args2 ret2
-  | TyOptional t1, TyOptional t2 -> unify t1 t2
-  | TyScheme (_, t1), t2 -> unify t1 t2
-  | t1, TyScheme (_, t2) -> unify t1 t2
-  | _ ->
-    failwith
-      (Printf.sprintf "expected type '%s', found type '%s'" (show t1) (show t2))
-
 let instiate scheme =
   match scheme with
   | TyScheme (vars, ty) ->
@@ -147,7 +92,32 @@ let instiate scheme =
     apply_subst ty
   | t -> t
 
-let rec from_node lookup (node : Node.ty) =
+let rec apply_subst vars arg_tys t =
+  match t with
+  | TyVar v -> (
+    match List.find_index (( == ) v) vars with
+    | Some i -> List.nth arg_tys i
+    | None -> t)
+  | TyTuple ts -> TyTuple (List.map (apply_subst vars arg_tys) ts)
+  | TyArray t -> TyArray (apply_subst vars arg_tys t)
+  | TyRecord fields ->
+    TyRecord (List.map (fun (n, t) -> (n, apply_subst vars arg_tys t)) fields)
+  | TyFn (params, ret) ->
+    TyFn
+      (List.map (apply_subst vars arg_tys) params, apply_subst vars arg_tys ret)
+  | TyOptional t -> TyOptional (apply_subst vars arg_tys t)
+  | TyNamed _ | TyUnit | TyError -> t
+  | TyScheme (_, t) -> apply_subst vars arg_tys t
+
+and handle_ty_app lookup base_ty args =
+  let base = from_node lookup base_ty in
+  let arg_tys = List.map (from_node lookup) args in
+  match base with
+  | TyScheme (vars, ty) when List.length vars = List.length arg_tys ->
+    apply_subst vars arg_tys ty
+  | _ -> TyError
+
+and from_node lookup (node : Node.ty) =
   match node.tkind with
   | Node.TyNamed name -> (
     match lookup name with Some ty -> ty | None -> TyNamed name)
@@ -164,4 +134,5 @@ let rec from_node lookup (node : Node.ty) =
     let ret_ty = Option.fold ~none:TyUnit ~some:(from_node lookup) ret in
     TyFn (param_tys, ret_ty)
   | Node.TyOptional ty -> TyOptional (from_node lookup ty)
-  | Node.TyApp (_, _) | Node.TyError -> TyError
+  | Node.TyApp (base_ty, args) -> handle_ty_app lookup base_ty args
+  | Node.TyError -> TyError
