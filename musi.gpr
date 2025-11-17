@@ -5,7 +5,7 @@ project Musi is
    for Main use ("musi.adb");
 
    package Compiler is
-      for Default_Switches ("Ada") use ("-gnat2022", "-gnaty", "-gnatwa", "-gnatwe", "-gnateE");
+      for Default_Switches ("Ada") use ("-gnat2022", "-gnatwa", "-gnatwe", "-gnateE");
    end Compiler;
 
    package Binder is
