@@ -61,10 +61,11 @@ alr build
 ### Run & Test
 
 ```bash
-opam exec -- dune exec bin/msc/main.exe
+opam exec -- dune exec bin/compiler/msc.exe
 opam exec -- dune test
 
-# TODO: VM usage in Ada (Alire) here
+# run 'hello.ms' file
+./bin/musi run examples/hello.ms
 ```
 
 ## Contributing
