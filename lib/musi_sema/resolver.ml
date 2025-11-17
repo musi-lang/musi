@@ -42,11 +42,14 @@ let bind_symbol table interner diags is_mutable name ty_opt span =
   | None ->
     let ty =
       match ty_opt with
-      | Some t ->
-        let lookup name =
-          Option.map (fun s -> !(s.Symbol.ty)) (Symbol.lookup table name)
-        in
-        Types.from_node lookup t
+      | Some t -> (
+        match t.Node.tkind with
+        | Node.TyApp (_, _) -> Types.fresh_var ()
+        | _ ->
+          let lookup name =
+            Option.map (fun s -> !(s.Symbol.ty)) (Symbol.lookup table name)
+          in
+          Types.from_node lookup t)
       | None -> Types.fresh_var ()
     in
     let sym =
@@ -61,13 +64,60 @@ let scoped table f =
 
 let rec collect_expr table interner diags expr =
   match expr.Node.ekind with
-  | Node.ExprBinding (is_mutable, _, pat, ty_opt, init, mods) ->
+  | Node.ExprBinding (is_mutable, ty_params, pat, ty_opt, init, mods) ->
     validate_binding_mods diags mods expr.span;
+    let ty_var_refs =
+      List.map (fun _ -> ref (Types.Unbound !Types.var_idx)) ty_params
+    in
+    List.iter (fun _ -> incr Types.var_idx) ty_params;
+    List.iter2
+      (fun tp var_ref ->
+        let tp_sym =
+          {
+            Symbol.name = tp
+          ; ty = ref (Types.TyVar var_ref)
+          ; is_mutable = false
+          ; is_exported = false
+          ; span = expr.span
+          }
+        in
+        ignore (Symbol.bind table tp tp_sym))
+      ty_params
+      ty_var_refs;
+    (match init.Node.ekind with
+    | Node.ExprFn (fn_ty_params, _, _, _, _) when fn_ty_params <> [] ->
+      List.iter
+        (fun tp ->
+          let tp_sym =
+            {
+              Symbol.name = tp
+            ; ty = ref (Types.fresh_var ())
+            ; is_mutable = false
+            ; is_exported = false
+            ; span = expr.span
+            }
+          in
+          ignore (Symbol.bind table tp tp_sym))
+        fn_ty_params
+    | _ -> ());
     collect_pat table interner diags is_mutable pat ty_opt pat.span;
     collect_expr table interner diags init
-  | Node.ExprFn (_, params, _, body_opt, mods) ->
+  | Node.ExprFn (ty_params, params, _, body_opt, mods) ->
     validate_expr_mods diags mods "fn" expr.span;
     scoped table (fun () ->
+      List.iter
+        (fun tp ->
+          let tp_sym =
+            {
+              Symbol.name = tp
+            ; ty = ref (Types.fresh_var ())
+            ; is_mutable = false
+            ; is_exported = false
+            ; span = expr.span
+            }
+          in
+          ignore (Symbol.bind table tp tp_sym))
+        ty_params;
       List.iter
         (fun (p : Node.param) ->
           bind_symbol table interner diags false p.pname p.pty expr.span)

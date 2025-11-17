@@ -10,6 +10,7 @@ type t =
   | TyFn of t list * t
   | TyOptional of t
   | TyVar of var ref
+  | TyScheme of var ref list * t
   | TyError
 
 and var = Unbound of int | Link of t
@@ -32,6 +33,12 @@ let rec occurs_check id = function
   | TyFn (params, ret) ->
     List.exists (occurs_check id) params || occurs_check id ret
   | TyOptional t -> occurs_check id t
+  | TyScheme (vars, t) ->
+    List.exists
+      (fun v ->
+        match !v with Unbound id' -> id = id' | Link t -> occurs_check id t)
+      vars
+    || occurs_check id t
   | TyNamed _ | TyUnit | TyError -> false
 
 let rec show_with interner = function
@@ -41,7 +48,15 @@ let rec show_with interner = function
   | TyTuple ts ->
     "(" ^ String.concat ", " (List.map (show_with interner) ts) ^ ")"
   | TyArray t -> "[" ^ show_with interner t ^ "]"
-  | TyRecord _ -> "{...}"
+  | TyRecord fields ->
+    "{ "
+    ^ String.concat
+        ", "
+        (List.map
+           (fun (name, ty) ->
+             Interner.lookup interner name ^ ": " ^ show_with interner ty)
+           fields)
+    ^ " }"
   | TyFn (params, ret) ->
     "("
     ^ String.concat ", " (List.map (show_with interner) params)
@@ -49,6 +64,8 @@ let rec show_with interner = function
   | TyOptional t -> show_with interner t ^ "?"
   | TyVar { contents = Unbound id } -> "?" ^ string_of_int id
   | TyVar { contents = Link t } -> show_with interner t
+  | TyScheme (vars, t) ->
+    "forall " ^ string_of_int (List.length vars) ^ "." ^ show_with interner t
   | TyError -> "<error>"
 
 let show t = show_with (Interner.create ()) t
@@ -102,14 +119,38 @@ and unify t1 t2 =
   | TyRecord fs1, TyRecord fs2 -> unify_record fs1 fs2
   | TyFn (args1, ret1), TyFn (args2, ret2) -> unify_fn args1 ret1 args2 ret2
   | TyOptional t1, TyOptional t2 -> unify t1 t2
+  | TyScheme (_, t1), t2 -> unify t1 t2
+  | t1, TyScheme (_, t2) -> unify t1 t2
   | _ ->
     failwith
       (Printf.sprintf "expected type '%s', found type '%s'" (show t1) (show t2))
 
+let instiate scheme =
+  match scheme with
+  | TyScheme (vars, ty) ->
+    let subst = List.map (fun _ -> fresh_var ()) vars in
+    let rec apply_subst t =
+      match t with
+      | TyVar v -> (
+        match List.find_index (( == ) v) vars with
+        | Some i -> List.nth subst i
+        | None -> t)
+      | TyTuple ts -> TyTuple (List.map apply_subst ts)
+      | TyArray t -> TyArray (apply_subst t)
+      | TyRecord fields ->
+        TyRecord (List.map (fun (n, t) -> (n, apply_subst t)) fields)
+      | TyFn (params, ret) -> TyFn (List.map apply_subst params, apply_subst ret)
+      | TyOptional t -> TyOptional (apply_subst t)
+      | TyNamed _ | TyUnit | TyError -> t
+      | TyScheme (_, t) -> apply_subst t
+    in
+    apply_subst ty
+  | t -> t
+
 let rec from_node lookup (node : Node.ty) =
   match node.tkind with
   | Node.TyNamed name -> (
-    match lookup name with Some ty -> ty | None -> TyError)
+    match lookup name with Some ty -> ty | None -> TyNamed name)
   | Node.TyTuple [] -> TyUnit
   | Node.TyTuple tys -> TyTuple (List.map (from_node lookup) tys)
   | Node.TyArray ty -> TyArray (from_node lookup ty)
@@ -123,5 +164,4 @@ let rec from_node lookup (node : Node.ty) =
     let ret_ty = Option.fold ~none:TyUnit ~some:(from_node lookup) ret in
     TyFn (param_tys, ret_ty)
   | Node.TyOptional ty -> TyOptional (from_node lookup ty)
-  | Node.TyApp _ -> TyError (* TODO: generics *)
-  | Node.TyError -> TyError
+  | Node.TyApp (_, _) | Node.TyError -> TyError
