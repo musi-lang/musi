@@ -11,4 +11,3 @@ tags = []
 executables = ["musi"]
 
 [[depends-on]]
-interfaces = "*"
