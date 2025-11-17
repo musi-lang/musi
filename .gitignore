@@ -283,3 +283,6 @@ $RECYCLE.BIN/
 
 ## User settings
 xcuserdata/
+.zig-cache/
+zig-out/
+*.o
