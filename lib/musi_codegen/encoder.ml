@@ -33,6 +33,10 @@ let encode_opcode interner buf = function
   | Instr.Ble offset -> write_op_i32 buf '\x3E' offset
   | Instr.Blt offset -> write_op_i32 buf '\x3F' offset
   | Instr.Bne offset -> write_op_i32 buf '\x40' offset
+  | Instr.Switch offsets ->
+    Buffer.add_char buf '\x41';
+    Binary.write_u32_le buf (Int32.of_int (List.length offsets));
+    List.iter (fun off -> Binary.write_i32_le buf (Int32.of_int off)) offsets
   | Instr.Leave offset -> write_op_i32 buf '\xC7' offset
   | Instr.Ret -> Buffer.add_char buf '\x2A'
   | Instr.Throw -> Buffer.add_char buf '\x7A'
@@ -74,6 +78,29 @@ let encode_opcode interner buf = function
   | Instr.LdArg idx -> write_op_u32 buf '\x02' idx
   | Instr.StArg idx -> write_op_u32 buf '\x03' idx
   | Instr.LdArgA idx -> write_op_u32 buf '\x04' idx
+  (* Indirect Load/Store *)
+  | Instr.LdIndI1 -> Buffer.add_char buf '\x46'
+  | Instr.LdIndI2 -> Buffer.add_char buf '\x48'
+  | Instr.LdIndI4 -> Buffer.add_char buf '\x4A'
+  | Instr.LdIndI8 -> Buffer.add_char buf '\x4C'
+  | Instr.LdIndN1 -> Buffer.add_char buf '\x47'
+  | Instr.LdIndN2 -> Buffer.add_char buf '\x49'
+  | Instr.LdIndN4 -> Buffer.add_char buf '\x4B'
+  | Instr.LdIndN8 -> Buffer.add_char buf '\x4D'
+  | Instr.LdIndB4 -> Buffer.add_char buf '\x4E'
+  | Instr.LdIndB8 -> Buffer.add_char buf '\x4F'
+  | Instr.LdIndRef -> Buffer.add_char buf '\x50'
+  | Instr.StIndI1 -> Buffer.add_char buf '\x52'
+  | Instr.StIndI2 -> Buffer.add_char buf '\x53'
+  | Instr.StIndI4 -> Buffer.add_char buf '\x54'
+  | Instr.StIndI8 -> Buffer.add_char buf '\x55'
+  | Instr.StIndN1 -> Buffer.add_char buf '\xDB'
+  | Instr.StIndN2 -> Buffer.add_char buf '\xDC'
+  | Instr.StIndN4 -> Buffer.add_char buf '\xDD'
+  | Instr.StIndN8 -> Buffer.add_char buf '\xDE'
+  | Instr.StIndB4 -> Buffer.add_char buf '\x56'
+  | Instr.StIndB8 -> Buffer.add_char buf '\x57'
+  | Instr.StIndRef -> Buffer.add_char buf '\x51'
   (* Object Operations *)
   | Instr.NewObj ctor -> write_op_u32 buf '\x73' ctor
   | Instr.Call name ->
@@ -143,6 +170,9 @@ let encode_opcode interner buf = function
   | Instr.CgtUn -> Buffer.add_char buf '\xC3'
   | Instr.Clt -> Buffer.add_char buf '\xC4'
   | Instr.CltUn -> Buffer.add_char buf '\xC5'
+  (* Memory Management *)
+  | Instr.Pin -> Buffer.add_char buf '\xDF'
+  | Instr.Unpin -> Buffer.add_char buf '\xE0'
   (* Dynamic Operations *)
   | Instr.LdFldDyn name ->
     Buffer.add_char buf '\xE1';
