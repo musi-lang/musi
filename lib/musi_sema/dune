@@ -9,6 +9,7 @@
   attrib
   mono
   resolver
+  pkg_resolver
   inferrer
   checker
   collector

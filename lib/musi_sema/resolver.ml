@@ -1,6 +1,7 @@
 open Musi_basic
 open Musi_lex
 open Musi_parse
+open Pkg_resolver
 
 let error diags msg span =
   diags := Diagnostic.add !diags (Diagnostic.error msg span)
@@ -208,8 +209,20 @@ let collect_stmt table interner diags stmt =
   | Node.StmtExpr (expr, _) -> collect_expr table interner diags expr
   | Node.StmtImport (_, _, _) | Node.StmtExport _ | Node.StmtError -> ()
 
+let resolve_pkg_path module_path base_path =
+  try
+    let resolved = resolve_pkg module_path "" in
+    if Filename.is_relative resolved then resolved
+    else Filename.concat base_path resolved
+  with _ -> module_path ^ ".ms"
+
 let parse_module file_id base_path module_path interner diags =
-  let full_path = Filename.concat base_path (module_path ^ ".ms") in
+  let resolved_path = resolve_pkg_path module_path base_path in
+  let full_path =
+    if Filename.is_relative resolved_path then
+      Filename.concat base_path resolved_path
+    else resolved_path
+  in
   try
     let source = In_channel.with_open_text full_path In_channel.input_all in
     let lexer = Lexer.make file_id source interner in
@@ -244,7 +257,12 @@ let mark_exports table interner diags nodes =
 
 let rec build_module_graph cache visited file_id_counter base_path module_path
   interner diags =
-  let full_path = Filename.concat base_path (module_path ^ ".ms") in
+  let resolved_path = resolve_pkg_path module_path base_path in
+  let full_path =
+    if Filename.is_relative resolved_path then
+      Filename.concat base_path resolved_path
+    else resolved_path
+  in
   if List.mem full_path !visited then
     error
       diags
@@ -283,7 +301,12 @@ let link_imports cache base_path table interner diags nodes =
       match stmt.Node.skind with
       | Node.StmtImport (spec, module_name, _) -> (
         let module_path = Interner.lookup interner module_name in
-        let full_path = Filename.concat base_path (module_path ^ ".ms") in
+        let resolved_path = resolve_pkg_path module_path base_path in
+        let full_path =
+          if Filename.is_relative resolved_path then
+            Filename.concat base_path resolved_path
+          else resolved_path
+        in
         let module_table, _ = Hashtbl.find cache full_path in
         match spec with
         | Node.ImportNamed names ->

@@ -35,9 +35,6 @@ package body Musi.CLI.Commands is
 
    procedure Handle_Run (Args : CLI_Arguments) is
       File_Name     : constant String := To_String (Args.Options.Input_File);
-      Compile_Args  : constant Argument_List :=
-        [new String'("_build/default/bin/compiler/msc.exe"),
-         new String'(File_Name)];
       Success       : Boolean;
       Dot_Pos       : Natural;
       Base_Name     : Unbounded_String;
@@ -49,28 +46,41 @@ package body Musi.CLI.Commands is
       end if;
 
       -- with package resolution
-      Spawn
-        (Program_Name => Compile_Args (Compile_Args'First).all,
-         Args         =>
-           Compile_Args (Compile_Args'First + 1 .. Compile_Args'Last),
-         Success      => Success);
+      declare
+         OCaml_Args : constant Argument_List :=
+           [new String'("opam"),
+            new String'("exec"),
+            new String'("--"),
+            new String'("dune"),
+            new String'("exec"),
+            new String'("bin/compiler/msc.exe"),
+            new String'(File_Name)];
+      begin
+         Spawn
+           (Program_Name => OCaml_Args (OCaml_Args'First).all,
+            Args         =>
+              OCaml_Args (OCaml_Args'First + 1 .. OCaml_Args'Last),
+            Success      => Success);
+      end;
 
       if not Success then
          Put_Line ("Error: Compilation failed");
          return;
       end if;
 
-      -- bytecode
-      Dot_Pos :=
-        Ada.Strings.Fixed.Index (File_Name, ".", Ada.Strings.Backward);
-      if Dot_Pos = 0 then
-         Base_Name := To_Unbounded_String (File_Name);
+      if Ada.Strings.Fixed.Index (File_Name, ".mso") > 0 then
+         Bytecode_File := To_Unbounded_String (File_Name);
       else
-         Base_Name :=
-           To_Unbounded_String (File_Name (File_Name'First .. Dot_Pos - 1));
+         Dot_Pos :=
+           Ada.Strings.Fixed.Index (File_Name, ".", Ada.Strings.Backward);
+         if Dot_Pos = 0 then
+            Base_Name := To_Unbounded_String (File_Name);
+         else
+            Base_Name :=
+              To_Unbounded_String (File_Name (File_Name'First .. Dot_Pos - 1));
+         end if;
+         Bytecode_File := Base_Name & ".mso";
       end if;
-
-      Bytecode_File := Base_Name & ".mso";
       Handle_Exec
         ((Options   =>
             (Command     => Exec,
@@ -97,26 +107,37 @@ package body Musi.CLI.Commands is
    procedure Handle_Compile (Args : CLI_Arguments) is
       File_Name    : constant String := To_String (Args.Options.Input_File);
       Compile_Args : constant Argument_List :=
-        [new String'("_build/default/bin/compiler/msc.exe"),
+        [new String'("opam"),
+         new String'("exec"),
+         new String'("--"),
+         new String'("dune"),
+         new String'("exec"),
+         new String'("bin/compiler/msc.exe"),
          new String'(File_Name)];
-      Success      : Boolean;
    begin
       if File_Name = "" then
          Put_Line ("Error: No input file specified");
          return;
       end if;
 
-      Spawn
-        (Program_Name => Compile_Args (Compile_Args'First).all,
-         Args         =>
-           Compile_Args (Compile_Args'First + 1 .. Compile_Args'Last),
-         Success      => Success);
+      declare
+         Exit_Code : Integer;
+      begin
+         Exit_Code :=
+           Spawn
+             (Program_Name => Compile_Args (Compile_Args'First).all,
+              Args         =>
+                Compile_Args (Compile_Args'First + 1 .. Compile_Args'Last));
 
-      if not Success then
-         Put_Line ("Error: Compilation failed");
-      else
-         Put_Line ("Compilation successful");
-      end if;
+         if Exit_Code /= 0 then
+            Put_Line
+              ("Error: Compilation failed (exit code:"
+               & Exit_Code'Image
+               & ")");
+         else
+            Put_Line ("Compilation successful");
+         end if;
+      end;
    end Handle_Compile;
 
    procedure Handle_Disasm (Args : CLI_Arguments) is
@@ -167,7 +188,7 @@ package body Musi.CLI.Commands is
    procedure Handle_Init (Args : CLI_Arguments) is
       pragma Unreferenced (Args);
    begin
-      Put_Line ("TODO: Initialize new Musi project with mspackage.json");
+      Put_Line ("TODO: Ready new Musi project with mspackage.json");
    end Handle_Init;
 
 end Musi.CLI.Commands;
