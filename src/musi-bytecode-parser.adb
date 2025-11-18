@@ -1,11 +1,11 @@
 with Ada.Unchecked_Conversion;
 
-package body Musi.Bytecode.Parse is
+package body Musi.Bytecode.Parser is
 
    subtype Four_Bytes is Ada.Streams.Stream_Element_Array (1 .. 4);
    function To_U32 is new Ada.Unchecked_Conversion (Four_Bytes, Unsigned_32);
 
-   function Parse_File (Data : Stream_Element_Array) return Bytecode_File is
+   function Parse_Bytecode_File (Data : Stream_Element_Array) return Bytecode_File is
       File : Bytecode_File;
    begin
       if Data'Length < 32 then
@@ -36,7 +36,7 @@ package body Musi.Bytecode.Parse is
         To_U32 (Four_Bytes (Data (Data'First + 28 .. Data'First + 31)));
 
       return File;
-   end Parse_File;
+   end Parse_Bytecode_File;
 
    function Extract_Code
      (File : Bytecode_File; Data : Stream_Element_Array)
@@ -113,16 +113,12 @@ package body Musi.Bytecode.Parse is
                case Const_Type is
                   when 16#01#          =>
                      Pos := Pos + 8;
-
                   when 16#02#          =>
                      Pos := Pos + 8;
-
                   when 16#04# | 16#05# =>
                      null;
-
                   when 16#00#          =>
                      null;
-
                   when others          =>
                      exit;
                end case;
@@ -133,4 +129,4 @@ package body Musi.Bytecode.Parse is
       return Strings;
    end Extract_Strings;
 
-end Musi.Bytecode.Parse;
+end Musi.Bytecode.Parser;

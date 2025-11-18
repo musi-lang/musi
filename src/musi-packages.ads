@@ -89,7 +89,7 @@ package Musi.Packages is
       License               : Unbounded_String;
       Homepage              : Unbounded_String;
       Repository            : Repository_Info;
-      Private_              : Boolean := False;
+      Private_Package       : Boolean := False;
       Workspaces            : String_Vectors.Vector;
       Publish_Registry      : Unbounded_String :=
         To_Unbounded_String ("https://msr.musi-lang.org");

@@ -153,18 +153,21 @@ package body Musi.CLI.Commands is
    end Handle_Disasm;
 
    procedure Handle_Test (Args : CLI_Arguments) is
+      pragma Unreferenced (Args);
    begin
       Put_Line ("TODO: Run tests with package resolution");
    end Handle_Test;
 
    procedure Handle_Repl (Args : CLI_Arguments) is
+      pragma Unreferenced (Args);
    begin
       Put_Line ("TODO: Start REPL with package-aware imports");
    end Handle_Repl;
 
    procedure Handle_Init (Args : CLI_Arguments) is
+      pragma Unreferenced (Args);
    begin
-      Put_Line ("TODO: Ready new Musi project with mspackage.json");
+      Put_Line ("TODO: Initialize new Musi project with mspackage.json");
    end Handle_Init;
 
 end Musi.CLI.Commands;

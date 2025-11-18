@@ -6,7 +6,7 @@ authors = ["Krystian"]
 maintainers = ["Krystian <example@example.com>"]
 licenses = "MIT OR Apache-2.0 WITH LLVM-exception"
 website = "https://musi-lang.org/"
-tags = []
+tags = ["compiler", "runtime", "vm"]
 
 executables = ["musi"]
 
