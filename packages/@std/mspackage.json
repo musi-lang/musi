@@ -1,0 +1,13 @@
+{
+  "name": "@std",
+  "version": "0.1.0",
+  "description": "Musi standard library",
+  "exports": {
+    "./io": "./io/index.ms",
+    "./math": "./math/index.ms",
+    "./collections": "./collections/index.ms",
+    "./text": "./text/index.ms",
+    "./mem": "./mem/index.ms",
+    "./assert": "./assert/index.ms"
+  }
+}
