@@ -1,0 +1,16 @@
+{
+  "name": "@std/io",
+  "version": "0.1.0",
+  "description": "Basic input/output operations for Musi",
+  "main": "index.ms",
+  "exports": {
+    ".": "./index.ms"
+  },
+  "dependencies": {},
+  "keywords": [
+    "io",
+    "console",
+    "output"
+  ],
+  "license": "MIT"
+}

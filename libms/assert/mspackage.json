@@ -1,0 +1,15 @@
+{
+  "name": "@std/assert",
+  "version": "0.1.0",
+  "description": "Test assertions for debugging purposes",
+  "main": "index.ms",
+  "exports": {
+    ".": "./index.ms"
+  },
+  "dependencies": {},
+  "keywords": [
+    "testing",
+    "assertions"
+  ],
+  "license": "MIT"
+}

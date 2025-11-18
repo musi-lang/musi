@@ -3,10 +3,12 @@ extern {
   fn write(fd: Int, s: Str) -> Int;
 };
 
-export val writeln := fn (s: Str) {
+val writeln := fn (s: Str) {
   __builtin_write(1, s);
 };
 
-export val write := fn (s: Str) {
+val write := fn (s: Str) {
   __builtin_write(1, s);
 };
+
+export { writeln, write };

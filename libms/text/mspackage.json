@@ -1,0 +1,16 @@
+{
+  "name": "@std/text",
+  "version": "0.1.0",
+  "description": "String processing and formatting",
+  "main": "index.ms",
+  "exports": {
+    ".": "./index.ms"
+  },
+  "dependencies": {},
+  "keywords": [
+    "string",
+    "text",
+    "formatting"
+  ],
+  "license": "MIT"
+}

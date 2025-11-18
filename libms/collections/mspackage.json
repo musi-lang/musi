@@ -1,0 +1,17 @@
+{
+  "name": "@std/collections",
+  "version": "0.1.0",
+  "description": "Core data structures",
+  "main": "index.ms",
+  "exports": {
+    ".": "./index.ms"
+  },
+  "dependencies": {},
+  "keywords": [
+    "collections",
+    "data-structures",
+    "HashMap",
+    "HashSet"
+  ],
+  "license": "MIT"
+}

@@ -1,0 +1,16 @@
+{
+  "name": "@std/mem",
+  "version": "0.1.0",
+  "description": "Memory management and buffer utilities",
+  "main": "index.ms",
+  "exports": {
+    ".": "./index.ms"
+  },
+  "dependencies": {},
+  "keywords": [
+    "memory",
+    "buffer",
+    "arena"
+  ],
+  "license": "MIT"
+}
