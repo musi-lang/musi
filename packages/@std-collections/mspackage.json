@@ -1,0 +1,6 @@
+{
+  "name": "@std/collections",
+  "version": "0.1.0",
+  "description": "Data structures and collections",
+  "main": "index.ms"
+}
