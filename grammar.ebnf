@@ -72,7 +72,7 @@ expr_logical_or = expr_logical_and, {"|", "|", expr_logical_and};
 
 expr_logical_and = expr_bitwise, {"&", "&", expr_bitwise};
 
-expr_bitwise = expr_comparison, {("&" | "|" | "^"), expr_comparison};
+expr_bitwise = expr_comparison, {("&" | "|" | "^" | "~&" | "~|" | "~^"), expr_comparison};
 
 expr_comparison = expr_range, [("=" | "!=" | ">" | "<" | ">=" | "<="), expr_range];
 
