@@ -35,7 +35,7 @@ stmt_export = "export", "{", aux_ident_list, "}", ["from", string], ";";
 aux_ident_list = ident, {",", ident};
 
 (* === STATEMENTS === *)
-stmt = [aux_attr], (stmt_bind | stmt_assign | stmt_expr | stmt_mutual | stmt_extern);
+stmt = [aux_attr], (stmt_bind | stmt_assign | stmt_expr | stmt_data | stmt_func | stmt_mutual | stmt_extern);
 
 stmt_bind = ("val" | "var"), ident, [":", typ], ":=", expr, ";";
 
@@ -45,11 +45,15 @@ compound_assign_op = ":+=" | ":-=" | ":*=" | ":/=" | ":**=" | ":&=" | ":|=" | ":
 
 stmt_expr = expr, ";";
 
-stmt_mutual = (expr_func | expr_data), {"and", (expr_func | expr_data)};
+stmt_data = "data", ident, [aux_gen_params], ":=", typ, ";";
+
+stmt_func = "def", ident, [aux_gen_params], aux_params, ["->", typ], stmt_block, ";";
+
+stmt_mutual = (stmt_func | stmt_data), {"and", (stmt_func | stmt_data)};
 
 stmt_extern = "extern", "{", {aux_extern_item}, "}";
 
-aux_extern_item = expr_func | stmt_bind;
+aux_extern_item = stmt_func | stmt_bind;
 
 stmt_block = "{", {stmt}, [expr], "}";
 
@@ -90,7 +94,7 @@ expr_postfix = expr_primary, {aux_postfix_op};
 
 aux_postfix_op = ".", (ident | number_whole) | "[", expr, "]" | [aux_gen_args], "(", [aux_arg_list], ")";
 
-expr_primary = expr_literal | expr_template | expr_ident | expr_tuple | expr_block | expr_if | expr_match | expr_for | expr_while | expr_try | expr_using | expr_record | expr_with | expr_func | expr_data;
+expr_primary = expr_literal | expr_template | expr_ident | expr_tuple | expr_block | expr_if | expr_match | expr_for | expr_while | expr_try | expr_using | expr_record | expr_with | expr_func;
 
 expr_literal = literal;
 
@@ -118,9 +122,7 @@ expr_record = ident, "{", aux_field_inits, "}";
 
 expr_with = expr, "with", "{", aux_field_inits, "}";
 
-expr_func = "def", ident, [aux_gen_params], aux_params, ["->", typ], stmt_block;
-
-expr_data = "data", ident, [aux_gen_params], ":=", typ;
+expr_func = "def", [aux_gen_params], aux_params, ["->", typ], stmt_block;
 
 aux_gen_params = "<", aux_typ_list, ">";
 
