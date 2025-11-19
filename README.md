@@ -18,22 +18,22 @@ Systems programming language designed for clarity, safety, and performance. Read
 ## Example
 
 ```musi
-val Counter := record {
+val Counter := data {
   var value: Nat
 };
 
-val inc := fn (ref var c: Counter) {
-  c.value <- c.value + 1;
+val inc := def (ref var c: Counter) {
+  c.value :+= 1;
 };
 
-val show := fn (ref c: Counter) {
-  writeln(`Counter is now: ${c.value}`);
+val show := def (ref c: Counter) {
+  writeln($"Counter is now: {c.value}");
 };
 
 var counter := Counter{ .value := 0 };
 inc(ref var counter);  // value is now 1
 inc(ref var counter);  // value is now 2
-show(ref counter);     // prints: `Counter is now: 2`
+show(ref counter);     // prints: "Counter is now: 2"
 ```
 
 ## Getting Started
@@ -42,7 +42,6 @@ show(ref counter);     // prints: `Counter is now: 2`
 
 - [OCaml](https://ocaml.org/install) (5.4.0 or greater)
 - [opam](https://opam.ocaml.org/doc/Install.html) (2.3.0 or greater)
-- [Alire](https://alire.ada.dev/) (2.1.0 or greater)
 
 ### Build
 
@@ -53,9 +52,6 @@ cd musi
 # build Musi Compiler
 opam exec -- dune pkg lock
 opam exec -- dune build
-
-# build Musi Runtime
-alr build
 ```
 
 ### Run & Test
@@ -64,8 +60,7 @@ alr build
 opam exec -- dune exec bin/compiler/msc.exe
 opam exec -- dune test
 
-# run 'hello.ms' file
-./bin/musi run examples/hello.ms
+# TODO: runtime cmd
 ```
 
 ## Contributing
