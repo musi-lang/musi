@@ -25,20 +25,27 @@
             ]
         },
         "attributes": {
+            "patterns": [ { "include": "#attribute-bracket" } ]
+        },
+        "attribute-bracket": {
+            "name": "meta.attribute.musi",
+            "begin": "@\\[",
+            "beginCaptures": { "0": { "name": "punctuation.definition.attribute.begin.musi" } },
+            "end": "\\]",
+            "endCaptures": { "0": { "name": "punctuation.definition.attribute.end.musi" } },
+            "patterns": [ { "include": "#attribute-content" } ]
+        },
+        "attribute-content": {
             "patterns": [
                 { "include": "#attribute-invocation" },
-                { "include": "#attribute-standalone" }
+                { "include": "#attribute-name" }
             ]
         },
         "attribute-invocation": {
-            "name": "meta.attribute.musi",
-            "begin": "(@\\[)([a-zA-Z_][a-zA-Z0-9_]*)(\\])",
-            "beginCaptures": {
-                "1": { "name": "punctuation.definition.attribute.begin.musi" },
-                "2": { "name": "entity.name.tag.attribute.musi" },
-                "3": { "name": "punctuation.definition.attribute.end.musi" }
-            },
-            "end": "(?=;|\\}|\\)|,)",
+            "name": "meta.attribute.invocation.musi",
+            "begin": "([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(",
+            "beginCaptures": { "1": { "name": "entity.name.tag.attribute.musi" } },
+            "end": "\\)",
             "patterns": [
                 { "include": "#strings" },
                 { "include": "#constants" },
@@ -57,13 +64,9 @@
             "end": "(?=,|\\))",
             "patterns": [ { "include": "#expressions" } ]
         },
-        "attribute-standalone": {
-            "name": "meta.attribute.musi",
-            "match": "@\\[([a-zA-Z_][a-zA-Z0-9_]*)\\]",
-            "captures": {
-                "0": { "name": "meta.attribute.musi" },
-                "1": { "name": "entity.name.tag.attribute.musi" }
-            }
+        "attribute-name": {
+            "name": "entity.name.tag.attribute.musi",
+            "match": "[a-zA-Z_][a-zA-Z0-9_]*"
         },
         "declarations": {
             "patterns": [
@@ -351,7 +354,7 @@
         },
         "keyword-control": {
             "name": "keyword.control.musi",
-            "match": "\\b(case|else|export|for|from|if|import|in|match|try|using|while|with)\\b"
+            "match": "\\b(break|continue|else|for|from|if|in|match|return|try|while|with)\\b"
         },
         "keyword-storage": {
             "name": "storage.type.musi",
@@ -367,6 +370,10 @@
         },
         "operators": {
             "patterns": [
+                {
+                    "name": "keyword.operator.wordlike.mutual.musi",
+                    "match": "\\b(and)\\b"
+                },
                 {
                     "name": "keyword.operator.assignment.compound.musi",
                     "match": ":::|:\\*\\*=|:>>=|:<<=|:\\^=|:\\|=|:&=|:\\/=|:\\*=|:-=|:\\+=|:\\|\\|=|:&&="
