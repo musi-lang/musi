@@ -11,9 +11,19 @@ number_decimal = number_whole, ".", digit, {digit};
 
 string = '"', {char_no_quote}, '"';
 
+template_string = "$", '"', {template_part}, '"';
+
+template_part = template_text | template_expr;
+
+template_text = {char_no_quote_or_brace};
+
+template_expr = "{", expr, "}";
+
 char_no_quote = letter | digit | "_" | " " | "!" | "#" | "$" | "%" | "&" | "(" | ")" | "*" | "+" | "," | "-" | "." | "/" | ":" | ";" | "<" | "=" | ">" | "?" | "@" | "[" | "\\" | "]" | "^" | "`" | "{" | "|" | "}" | "~";
 
-literal = number_whole | number_decimal | string;
+char_no_quote_or_brace = letter | digit | "_" | " " | "!" | "#" | "$" | "%" | "&" | "(" | ")" | "*" | "+" | "," | "-" | "." | "/" | ":" | ";" | "<" | "=" | ">" | "?" | "@" | "[" | "\\" | "]" | "^" | "`" | "|" | "~";
+
+literal = number_whole | number_decimal | string | template_string;
 
 (* === PROGRAM === *)
 program = {stmt_import | stmt_export | stmt};
@@ -25,9 +35,13 @@ stmt_export = "export", "{", aux_ident_list, "}", ["from", string], ";";
 aux_ident_list = ident, {",", ident};
 
 (* === STATEMENTS === *)
-stmt = [aux_attr], (stmt_bind | stmt_expr | stmt_mutual | stmt_extern);
+stmt = [aux_attr], (stmt_bind | stmt_assign | stmt_expr | stmt_mutual | stmt_extern);
 
 stmt_bind = ("val" | "var"), ident, [":", typ], ":=", expr, ";";
+
+stmt_assign = ident, compound_assign_op, expr, ";";
+
+compound_assign_op = ":+=" | ":-=" | ":*=" | ":/=" | ":**=" | ":&=" | ":|=" | ":^=" | ":<<=" | ":>>=" | ":&&=" | ":||=" | ":::=";
 
 stmt_expr = expr, ";";
 
@@ -50,11 +64,11 @@ expr = expr_pipe;
 
 expr_pipe = expr_logical_or, {"|", ">", expr_logical_or};
 
-expr_logical_or = expr_logical_and, {"or", expr_logical_and};
+expr_logical_or = expr_logical_and, {"|", "|", expr_logical_and};
 
-expr_logical_and = expr_bitwise, {"and", expr_bitwise};
+expr_logical_and = expr_bitwise, {"&", "&", expr_bitwise};
 
-expr_bitwise = expr_comparison, {("&" | "|" | "xor"), expr_comparison};
+expr_bitwise = expr_comparison, {("&" | "|" | "^"), expr_comparison};
 
 expr_comparison = expr_range, [("=" | "!=" | ">" | "<" | ">=" | "<="), expr_range];
 
@@ -64,17 +78,23 @@ expr_cons = expr_additive, {"::", expr_additive};
 
 expr_additive = expr_multiplicative, {("+" | "-"), expr_multiplicative};
 
-expr_multiplicative = expr_unary, {("*" | "/"), expr_unary};
+expr_multiplicative = expr_exponentiation, {("*" | "/"), expr_exponentiation};
 
-expr_unary = ["-" | "not" | "~"], expr_postfix;
+expr_exponentiation = expr_shift, {"*", "*", expr_shift};
+
+expr_shift = expr_unary, {("<", "<" | ">", ">"), expr_unary};
+
+expr_unary = ["-" | "!" | "~"], expr_postfix;
 
 expr_postfix = expr_primary, {aux_postfix_op};
 
 aux_postfix_op = ".", (ident | number_whole) | "[", expr, "]" | [aux_gen_args], "(", [aux_arg_list], ")";
 
-expr_primary = expr_literal | expr_ident | expr_tuple | expr_block | expr_if | expr_match | expr_for | expr_while | expr_try | expr_using | expr_record | expr_with | expr_func | expr_data;
+expr_primary = expr_literal | expr_template | expr_ident | expr_tuple | expr_block | expr_if | expr_match | expr_for | expr_while | expr_try | expr_using | expr_record | expr_with | expr_func | expr_data;
 
 expr_literal = literal;
+
+expr_template = template_string;
 
 expr_ident = ident;
 
@@ -90,7 +110,7 @@ expr_for = "for", pat, "in", expr, ["if", expr], stmt_block;
 
 expr_while = "while", aux_cond, stmt_block;
 
-expr_try = "try", expr, "else", expr;
+expr_try = "try", expr, "else", expr, stmt_block;
 
 expr_using = "using", pat, ":=", expr, stmt_block;
 
