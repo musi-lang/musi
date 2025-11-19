@@ -354,7 +354,7 @@
         },
         "keyword-control": {
             "name": "keyword.control.musi",
-            "match": "\\b(break|continue|else|for|from|if|in|match|return|try|while|with)\\b"
+            "match": "\\b(break|case|continue|else|for|from|if|in|match|return|try|while|with)\\b"
         },
         "keyword-storage": {
             "name": "storage.type.musi",
