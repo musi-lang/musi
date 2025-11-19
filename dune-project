@@ -6,4 +6,4 @@
  (synopsis "Musi")
  (description
   "Systems programming language for clarity, safety, and performance")
- (depends ocaml dune alcotest ctypes-foreign))
+ (depends ocaml dune alcotest ctypes-foreign fmt base-unix))

@@ -34,11 +34,11 @@ let line_col file offset =
   let col = offset - file.lines.(line) in
   (line + 1, col + 1)
 
-let trim_newline s =
+let trim_NL s =
   let len = String.length s in
   if len > 0 && s.[len - 1] = '\n' then String.sub s 0 (len - 1) else s
 
-let trim_carriage_return s =
+let trim_CR s =
   let len = String.length s in
   if len > 0 && s.[len - 1] = '\r' then String.sub s 0 (len - 1) else s
 
@@ -54,6 +54,6 @@ let line_text file line =
     else if end_ < start || end_ > String.length file.source then None
     else
       let text = String.sub file.source start (end_ - start) in
-      Some (trim_carriage_return (trim_newline text))
+      Some (trim_CR (trim_NL text))
 
 let path file = file.path
