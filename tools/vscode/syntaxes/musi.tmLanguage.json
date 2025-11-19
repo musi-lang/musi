@@ -125,7 +125,7 @@
         },
         "declaration-choice-case": {
             "name": "meta.choice.case.musi",
-            "match": "\\b(case)\\s+(\\.)?((?!(?:break|continue|else|for|from|if|in|match|return|try|while|with|val|var|export|extern|as|is)\\b)[a-zA-Z_][a-zA-Z0-9_]*)(?=\\s*(?:\\(|\\{|\\}|\\)|,|=>|->|:|;|if|$))",
+            "match": "\\b(case)\\s+(\\.)([a-zA-Z_][a-zA-Z0-9_]*)(?=\\s*(?:\\(|=>))",
             "captures": {
                 "1": { "name": "keyword.control.case.musi" },
                 "2": { "name": "punctuation.accessor.dot.musi" },
