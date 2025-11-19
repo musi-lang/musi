@@ -1,0 +1,165 @@
+(* Lexical *)
+letter = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "I" | "J" | "K" | "L" | "M" | "N" | "O" | "P" | "Q" | "R" | "S" | "T" | "U" | "V" | "W" | "X" | "Y" | "Z" | "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z";
+
+digit = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9";
+
+ident = letter, {letter | digit | "_"};
+
+integer = ["-"], digit, {digit};
+
+float = integer, ".", {digit};
+
+string = '"', {char_no_quote}, '"';
+
+char_no_quote = letter | digit | "_" | " " | "!" | "#" | "$" | "%" | "&" | "(" | ")" | "*" | "+" | "," | "-" | "." | "/" | ":" | ";" | "<" | "=" | ">" | "?" | "@" | "[" | "\\" | "]" | "^" | "`" | "{" | "|" | "}" | "~";
+
+literal = integer | float | string;
+
+(* Program Structure *)
+program = {stmt_import | stmt_export | stmt};
+
+stmt_import = "import", "{", ident_list, "}", "from", string, ";";
+
+stmt_export = "export", "{", ident_list, "}", ["from", string], ";";
+
+ident_list = ident, {",", ident};
+
+(* Statements *)
+stmt = [attribute], (stmt_bind | stmt_expr | stmt_mutual | stmt_extern);
+
+stmt_bind = ("val" | "var"), ident, [":", typ], ":=", expr, ";";
+
+stmt_expr = expr, ";";
+
+stmt_mutual = (expr_def | expr_data), {"and", (expr_def | expr_data)};
+
+stmt_extern = "extern", "{", {extern_item}, "}";
+
+extern_item = expr_def | stmt_bind;
+
+stmt_block = "{", {stmt}, [expr], "}";
+
+attribute = "@[", ident, ["(", attr_args, ")"], "]";
+
+attr_args = attr_arg, {",", attr_arg};
+
+attr_arg = ident | integer | string;
+
+(* Expressions - precedence from low to high *)
+expr = expr_or;
+
+expr_or = expr_and, {"or", expr_and};
+
+expr_and = expr_bit, {"and", expr_bit};
+
+expr_bit = expr_cmp, {("&" | "|" | "xor"), expr_cmp};
+
+expr_cmp = expr_range, {("=" | "!=" | ">" | "<" | ">=" | "<="), expr_range};
+
+expr_range = expr_cons, {(".." | "..<"), expr_cons};
+
+expr_cons = expr_add, {"::", expr_add};
+
+expr_add = expr_mul, {("+" | "-"), expr_mul};
+
+expr_mul = expr_unary, {("*" | "/"), expr_unary};
+
+expr_unary = ["-" | "not" | "~"], expr_atom;
+
+expr_atom = literal | ident | expr_tuple | stmt_block | expr_if | expr_match | expr_for | expr_while | expr_try | expr_using | expr_call | expr_access | expr_record | expr_def | expr_data | expr_with;
+
+expr_tuple = "(", [expr, ",", [expr, {",", expr}]], ")";
+
+expr_if = "if", condition, stmt_block, ["else", stmt_block];
+
+expr_match = "match", "(", expr, ")", "{", {match_arm}, "}";
+
+expr_for = "for", pat, "in", expr, ["if", expr], stmt_block;
+
+expr_while = "while", condition, stmt_block;
+
+expr_try = "try", expr, "else", expr;
+
+expr_using = "using", pat, ":=", expr, stmt_block;
+
+expr_call = ident, [gen_args], "(", [arg_list], ")";
+
+expr_access = expr_atom, {".", (ident | integer) | "[", expr, "]"};
+
+expr_record = ident, "{", field_inits, "}";
+
+expr_with = expr, "with", "{", field_inits, "}";
+
+expr_def = "def", ident, [gen_params], params, ["->", typ], stmt_block;
+
+expr_data = "data", ident, [gen_params], ":=", typ;
+
+gen_params = "<", typ_list, ">";
+
+gen_args = "<", typ_list, ">";
+
+params = "(", [param_list], ")";
+
+param_list = param, {",", param};
+
+param = ["ref"], ["var"], ident, ":", typ;
+
+arg_list = expr, {",", expr};
+
+field_inits = field_init, {",", field_init};
+
+field_init = ".", ident, ":=", expr;
+
+condition = pat_bind | "(", expr, ")";
+
+pat_bind = "case", pat, ":=", expr, {",", expr};
+
+match_arm = "case", pat_list, "=>", expr, ";";
+
+pat_list = pat, {",", pat};
+
+(* Patterns *)
+pat = pat_bind | pat_lit | pat_wild | pat_ident | pat_record | pat_choice | pat_tuple;
+
+pat_bind = ("val" | "var"), ident;
+
+pat_lit = literal;
+
+pat_wild = "_";
+
+pat_ident = ident;
+
+pat_record = ident, "{", pat_fields, "}";
+
+pat_choice = ident, ["(", pat_elems, ")"];
+
+pat_tuple = "(", [pat, ",", [pat_elems]], ")";
+
+pat_fields = pat_field, {",", pat_field};
+
+pat_field = ".", ident, [":=", pat];
+
+pat_elems = pat, {",", pat};
+
+(* Types *)
+typ = typ_sum;
+
+typ_sum = typ_atom, {"|", typ_case};
+
+typ_case = "case", ident, ["(", typ_list, ")"];
+
+typ_atom = ident | typ_tuple | typ_array | typ_fn | typ_record;
+
+typ_record = "{", typ_fields, "}";
+
+typ_tuple = "(", [typ, ",", [typ, {",", typ}]], ")";
+
+typ_array = "[", typ, "]";
+
+typ_fn = "(", [typ_list], ")", "->", typ;
+
+typ_list = typ, {",", typ};
+
+typ_fields = typ_field, {",", typ_field};
+
+typ_field = ident, ":", typ;
