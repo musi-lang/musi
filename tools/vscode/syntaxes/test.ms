@@ -133,7 +133,6 @@ val proc_type: (Int) -> Int := inc;
 
 val box_val: Box<Int> := Box{ 42 };
 val opt_val: Int? := .Some(42);
-val res_val: Int!String := .Succ(42);
 
 val maybe := .Some(42);
 val result := try load() else err { handle(err); };
@@ -148,9 +147,9 @@ val scale := def (v: Bin, f: Bin) -> Bin {
   v * f
 };
 
-val fill := def (var buf: [Int], val: Int) {
+val fill := def (var buf: [Int], value: Int) {
   for i in 0..<len(buf) {
-    buf[i] := val;
+    buf[i] := value;
   };
 };
 
@@ -178,7 +177,7 @@ extern "C" {
 // RECORDS (PRODUCT TYPES)
 // ============================================================================
 
-val Point := data {
+data Point := {
   x: Bin64,
   y: Bin64
 };
@@ -293,7 +292,11 @@ val handle_result := match operation() {
 val MAX_SIZE := 1024;
 val DEFAULT_TIMEOUT := 30;
 
-val UserData := data { name: String; age: Nat };
+data User := {
+  name: String,
+  age: Nat,
+  items: [String]
+};
 data HttpError := case NotFound | case ServerError;
 
 val user_count := 42;
@@ -305,7 +308,7 @@ val is_valid := def (x: Int) -> Bool { x > 0 };
 val status := .Success;
 val color := .Red;
 val opt := .Some(42);
-val res := .Succ(data);
+val res := .Succ(data_value);
 
 val x_coord := point.x;
 val name := user.name;
@@ -314,7 +317,7 @@ val second := array[1];
 val third := obj["key"];
 
 val result := compute(42);
-val value := transform<Int>(data);
+val value := transform<Int>(data_value);
 val output := process(input, config);
 
 // ============================================================================
@@ -329,13 +332,13 @@ val complex := {
 
 val nested_generics := Map<String, List<Option<Int>>>{};
 
-val chained := data |> filter((x) { x > 0 }) |> map((x) { x * 2 }) |> reduce(0, (acc, x) { acc + x });
+val chained := filter((x) { x > 0 }) |> map((x) { x * 2 }) |> reduce(0, (acc, x) { acc + x });
 
 // ============================================================================
 // EDGE CASES
 // ============================================================================
 
-val multi := def <T, U, V>(a: T, b: U, c: V) -> (T, U, V) { (a, b, c) };
+val multi<T, U, V> := def (a: T, b: U, c: V) -> (T, U, V) { (a, b, c) };
 
 match nested {
 case .Some(.Succ(v)) => use(v);
