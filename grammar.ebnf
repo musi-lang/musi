@@ -1,165 +1,175 @@
-(* Lexical *)
+(* === LEXICAL === *)
 letter = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "I" | "J" | "K" | "L" | "M" | "N" | "O" | "P" | "Q" | "R" | "S" | "T" | "U" | "V" | "W" | "X" | "Y" | "Z" | "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z";
 
 digit = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9";
 
 ident = letter, {letter | digit | "_"};
 
-integer = ["-"], digit, {digit};
+number_whole = ["-"], digit, {digit};
 
-float = integer, ".", {digit};
+number_decimal = number_whole, ".", digit, {digit};
 
 string = '"', {char_no_quote}, '"';
 
 char_no_quote = letter | digit | "_" | " " | "!" | "#" | "$" | "%" | "&" | "(" | ")" | "*" | "+" | "," | "-" | "." | "/" | ":" | ";" | "<" | "=" | ">" | "?" | "@" | "[" | "\\" | "]" | "^" | "`" | "{" | "|" | "}" | "~";
 
-literal = integer | float | string;
+literal = number_whole | number_decimal | string;
 
-(* Program Structure *)
+(* === PROGRAM === *)
 program = {stmt_import | stmt_export | stmt};
 
-stmt_import = "import", "{", ident_list, "}", "from", string, ";";
+stmt_import = "import", "{", aux_ident_list, "}", "from", string, ";";
 
-stmt_export = "export", "{", ident_list, "}", ["from", string], ";";
+stmt_export = "export", "{", aux_ident_list, "}", ["from", string], ";";
 
-ident_list = ident, {",", ident};
+aux_ident_list = ident, {",", ident};
 
-(* Statements *)
-stmt = [attribute], (stmt_bind | stmt_expr | stmt_mutual | stmt_extern);
+(* === STATEMENTS === *)
+stmt = [aux_attr], (stmt_bind | stmt_expr | stmt_mutual | stmt_extern);
 
 stmt_bind = ("val" | "var"), ident, [":", typ], ":=", expr, ";";
 
 stmt_expr = expr, ";";
 
-stmt_mutual = (expr_def | expr_data), {"and", (expr_def | expr_data)};
+stmt_mutual = (expr_func | expr_data), {"and", (expr_func | expr_data)};
 
-stmt_extern = "extern", "{", {extern_item}, "}";
+stmt_extern = "extern", "{", {aux_extern_item}, "}";
 
-extern_item = expr_def | stmt_bind;
+aux_extern_item = expr_func | stmt_bind;
 
 stmt_block = "{", {stmt}, [expr], "}";
 
-attribute = "@[", ident, ["(", attr_args, ")"], "]";
+aux_attr = "@[", ident, ["(", aux_attr_args, ")"], "]";
 
-attr_args = attr_arg, {",", attr_arg};
+aux_attr_args = aux_attr_arg, {",", aux_attr_arg};
 
-attr_arg = ident | integer | string;
+aux_attr_arg = ident | number_whole | string;
 
-(* Expressions - precedence from low to high *)
-expr = expr_or;
+(* === EXPRESSIONS - LO..HI === *)
+expr = expr_pipe;
 
-expr_or = expr_and, {"or", expr_and};
+expr_pipe = expr_logical_or, {"|", ">", expr_logical_or};
 
-expr_and = expr_bit, {"and", expr_bit};
+expr_logical_or = expr_logical_and, {"or", expr_logical_and};
 
-expr_bit = expr_cmp, {("&" | "|" | "xor"), expr_cmp};
+expr_logical_and = expr_bitwise, {"and", expr_bitwise};
 
-expr_cmp = expr_range, {("=" | "!=" | ">" | "<" | ">=" | "<="), expr_range};
+expr_bitwise = expr_comparison, {("&" | "|" | "xor"), expr_comparison};
+
+expr_comparison = expr_range, [("=" | "!=" | ">" | "<" | ">=" | "<="), expr_range];
 
 expr_range = expr_cons, {(".." | "..<"), expr_cons};
 
-expr_cons = expr_add, {"::", expr_add};
+expr_cons = expr_additive, {"::", expr_additive};
 
-expr_add = expr_mul, {("+" | "-"), expr_mul};
+expr_additive = expr_multiplicative, {("+" | "-"), expr_multiplicative};
 
-expr_mul = expr_unary, {("*" | "/"), expr_unary};
+expr_multiplicative = expr_unary, {("*" | "/"), expr_unary};
 
-expr_unary = ["-" | "not" | "~"], expr_atom;
+expr_unary = ["-" | "not" | "~"], expr_postfix;
 
-expr_atom = literal | ident | expr_tuple | stmt_block | expr_if | expr_match | expr_for | expr_while | expr_try | expr_using | expr_call | expr_access | expr_record | expr_def | expr_data | expr_with;
+expr_postfix = expr_primary, {aux_postfix_op};
 
-expr_tuple = "(", [expr, ",", [expr, {",", expr}]], ")";
+aux_postfix_op = ".", (ident | number_whole) | "[", expr, "]" | [aux_gen_args], "(", [aux_arg_list], ")";
 
-expr_if = "if", condition, stmt_block, ["else", stmt_block];
+expr_primary = expr_literal | expr_ident | expr_tuple | expr_block | expr_if | expr_match | expr_for | expr_while | expr_try | expr_using | expr_record | expr_with | expr_func | expr_data;
 
-expr_match = "match", "(", expr, ")", "{", {match_arm}, "}";
+expr_literal = literal;
+
+expr_ident = ident;
+
+expr_tuple = "(", [aux_expr_list], ")";
+
+expr_block = stmt_block;
+
+expr_if = "if", aux_cond, stmt_block, ["else", stmt_block];
+
+expr_match = "match", "(", expr, ")", "{", {aux_match_arm}, "}";
 
 expr_for = "for", pat, "in", expr, ["if", expr], stmt_block;
 
-expr_while = "while", condition, stmt_block;
+expr_while = "while", aux_cond, stmt_block;
 
 expr_try = "try", expr, "else", expr;
 
 expr_using = "using", pat, ":=", expr, stmt_block;
 
-expr_call = ident, [gen_args], "(", [arg_list], ")";
+expr_record = ident, "{", aux_field_inits, "}";
 
-expr_access = expr_atom, {".", (ident | integer) | "[", expr, "]"};
+expr_with = expr, "with", "{", aux_field_inits, "}";
 
-expr_record = ident, "{", field_inits, "}";
+expr_func = "def", ident, [aux_gen_params], aux_params, ["->", typ], stmt_block;
 
-expr_with = expr, "with", "{", field_inits, "}";
+expr_data = "data", ident, [aux_gen_params], ":=", typ;
 
-expr_def = "def", ident, [gen_params], params, ["->", typ], stmt_block;
+aux_gen_params = "<", aux_typ_list, ">";
 
-expr_data = "data", ident, [gen_params], ":=", typ;
+aux_gen_args = "<", aux_typ_list, ">";
 
-gen_params = "<", typ_list, ">";
+aux_params = "(", [aux_param_list], ")";
 
-gen_args = "<", typ_list, ">";
+aux_param_list = aux_param, {",", aux_param};
 
-params = "(", [param_list], ")";
+aux_param = ["ref"], ["var"], ident, ":", typ;
 
-param_list = param, {",", param};
+aux_arg_list = expr, {",", expr};
 
-param = ["ref"], ["var"], ident, ":", typ;
+aux_expr_list = expr, {",", expr};
 
-arg_list = expr, {",", expr};
+aux_field_inits = aux_field_init, {",", aux_field_init};
 
-field_inits = field_init, {",", field_init};
+aux_field_init = ".", ident, ":=", expr;
 
-field_init = ".", ident, ":=", expr;
+aux_cond = aux_case_cond | "(", expr, ")";
 
-condition = pat_bind | "(", expr, ")";
+aux_case_cond = "case", pat, ":=", expr, {",", expr};
 
-pat_bind = "case", pat, ":=", expr, {",", expr};
+aux_match_arm = "case", aux_pat_list, "=>", expr, ";";
 
-match_arm = "case", pat_list, "=>", expr, ";";
+aux_pat_list = pat, {",", pat};
 
-pat_list = pat, {",", pat};
-
-(* Patterns *)
-pat = pat_bind | pat_lit | pat_wild | pat_ident | pat_record | pat_choice | pat_tuple;
+(* === PATTERNS === *)
+pat = pat_bind | pat_literal | pat_wild | pat_ident | pat_record | pat_ctor | pat_tuple;
 
 pat_bind = ("val" | "var"), ident;
 
-pat_lit = literal;
+pat_literal = literal;
 
 pat_wild = "_";
 
 pat_ident = ident;
 
-pat_record = ident, "{", pat_fields, "}";
+pat_record = ident, "{", aux_pat_fields, "}";
 
-pat_choice = ident, ["(", pat_elems, ")"];
+pat_ctor = ident, ["(", aux_pat_list, ")"];
 
-pat_tuple = "(", [pat, ",", [pat_elems]], ")";
+pat_tuple = "(", [aux_pat_list], ")";
 
-pat_fields = pat_field, {",", pat_field};
+aux_pat_fields = aux_pat_field, {",", aux_pat_field};
 
-pat_field = ".", ident, [":=", pat];
+aux_pat_field = ".", ident, [":=", pat];
 
-pat_elems = pat, {",", pat};
-
-(* Types *)
+(* === TYPE REPRESENTATIONS (SYNTACTIC) === *)
 typ = typ_sum;
 
-typ_sum = typ_atom, {"|", typ_case};
+typ_sum = typ_primary, {"|", aux_typ_case};
 
-typ_case = "case", ident, ["(", typ_list, ")"];
+aux_typ_case = "case", ident, ["(", aux_typ_list, ")"];
 
-typ_atom = ident | typ_tuple | typ_array | typ_fn | typ_record;
+typ_primary = typ_ident | typ_tuple | typ_array | typ_func | typ_record;
 
-typ_record = "{", typ_fields, "}";
+typ_ident = ident;
 
-typ_tuple = "(", [typ, ",", [typ, {",", typ}]], ")";
+typ_record = "{", aux_typ_fields, "}";
+
+typ_tuple = "(", [aux_typ_list], ")";
 
 typ_array = "[", typ, "]";
 
-typ_fn = "(", [typ_list], ")", "->", typ;
+typ_func = "(", [aux_typ_list], ")", "->", typ;
 
-typ_list = typ, {",", typ};
+aux_typ_list = typ, {",", typ};
 
-typ_fields = typ_field, {",", typ_field};
+aux_typ_fields = aux_typ_field, {",", aux_typ_field};
 
-typ_field = ident, ":", typ;
+aux_typ_field = ident, ":", typ;
