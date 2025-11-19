@@ -1,6 +1,0 @@
-{
-  "name": "@std/mem",
-  "version": "0.1.0",
-  "description": "Memory management utilities",
-  "main": "index.ms"
-}

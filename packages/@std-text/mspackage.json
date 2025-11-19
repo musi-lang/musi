@@ -1,9 +1,0 @@
-{
-  "name": "@std/text",
-  "version": "0.1.0",
-  "description": "String processing utilities",
-  "main": "index.ms",
-  "dependencies": {
-    "@std/mem": "0.1.0"
-  }
-}

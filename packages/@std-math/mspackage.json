@@ -1,6 +1,0 @@
-{
-  "name": "@std/math",
-  "version": "0.1.0",
-  "description": "Mathematical operations",
-  "main": "index.ms"
-}

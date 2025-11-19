@@ -1,6 +1,0 @@
-{
-  "name": "@std/assert",
-  "version": "0.1.0",
-  "description": "Test assertion functions",
-  "main": "index.ms"
-}
