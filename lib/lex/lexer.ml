@@ -40,21 +40,37 @@ let scan_while state start_pos predicate =
   in
   loop start_pos
 
-let is_alpha = function 'a' .. 'z' | 'A' .. 'Z' -> true | _ -> false
-let is_digit = function '0' .. '9' -> true | _ -> false
-let is_whitespace = function ' ' | '\t' | '\r' -> true | _ -> false
+let create_char_error state pos msg_format arg =
+  let char_span = Span.make state.file_id pos (pos + 1) in
+  let msg = Printf.sprintf msg_format arg in
+  add_error state msg char_span
 
-let is_xdigit = function
-  | '0' .. '9' | 'a' .. 'f' | 'A' .. 'F' -> true
-  | _ -> false
+let create_incomplete_number_error state start_pos base_name =
+  let span = make_span state start_pos in
+  add_error state ("incomplete " ^ base_name ^ " number") span
 
-let is_bdigit = function '0' | '1' -> true | _ -> false
-let is_odigit = function '0' .. '7' -> true | _ -> false
+let create_invalid_digit_error state pos base_name digit =
+  let msg = Printf.sprintf "invalid %s digit '%c'" base_name digit in
+  create_char_error state pos "%s" msg
 
-let is_ident_start = function
-  | 'a' .. 'z' | 'A' .. 'Z' | '_' -> true
-  | _ -> false
+let check_char_in_set c char_set =
+  let rec loop i =
+    if i >= String.length char_set then false
+    else if c = char_set.[i] then true
+    else loop (i + 1)
+  in
+  loop 0
 
+let is_alpha c =
+  check_char_in_set c "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+let is_digit c = check_char_in_set c "0123456789"
+let is_whitespace c = check_char_in_set c " \t\r"
+let is_newline c = c = '\n'
+let is_xdigit c = is_digit c || check_char_in_set c "abcdefABCDEF"
+let is_bdigit c = check_char_in_set c "01"
+let is_odigit c = check_char_in_set c "01234567"
+let is_ident_start c = is_alpha c || c = '_'
 let is_ident_cont c = is_alpha c || is_digit c || c = '_'
 
 let escape_chars =
@@ -130,6 +146,28 @@ let validate_escapes_in_content state start_pos end_pos =
   in
   check_escapes start_pos state
 
+let scan_decimal_with_dot state start_pos =
+  let rec loop pos acc_state dot_count =
+    if pos >= state.len then (pos, acc_state, dot_count)
+    else
+      let c = state.source.[pos] in
+      if is_digit c then loop (pos + 1) acc_state dot_count
+      else if c = '.' then
+        if dot_count > 0 then
+          let error_state =
+            add_error
+              acc_state
+              "multiple decimal points in number"
+              (make_span acc_state pos)
+          in
+          (pos, error_state, dot_count + 1)
+        else loop (pos + 1) acc_state (dot_count + 1)
+      else (pos, acc_state, dot_count)
+  in
+  let end_pos, final_state, _ = loop state.pos state 0 in
+  let text = extract_content state start_pos end_pos in
+  ({ final_state with pos = end_pos }, text, make_span state start_pos)
+
 let scan_whitespace state =
   let end_pos = scan_while state state.pos is_whitespace in
   ({ state with pos = end_pos }, make_span state state.pos)
@@ -182,9 +220,14 @@ let scan_ident state =
       let c = state.source.[pos] in
       if is_ident_cont c then loop (pos + 1) acc_state
       else if Char.code c > 127 then
-        let char_span = Span.make state.file_id pos (pos + 1) in
-        let msg = Printf.sprintf "non-ASCII character '%c' in identifier" c in
-        loop (pos + 1) (add_error acc_state msg char_span)
+        let error_state =
+          create_char_error
+            acc_state
+            pos
+            "non-ASCII character '%c' in identifier"
+            c
+        in
+        loop (pos + 1) error_state
       else (pos, acc_state)
   in
   let end_pos, final_state = loop state.pos state in
@@ -194,11 +237,12 @@ let scan_ident state =
 let scan_number_with_base state start_pos prefix_len digit_predicate base_name =
   let pos = state.pos + prefix_len in
   if pos >= state.len then
-    let span = make_span state start_pos in
     let error_state =
-      add_error state ("incomplete " ^ base_name ^ " number") span
+      create_incomplete_number_error state start_pos base_name
     in
-    ({ error_state with pos }, extract_content state start_pos pos, span)
+    ( { error_state with pos }
+    , extract_content state start_pos pos
+    , make_span state start_pos )
   else
     let rec loop p acc_state =
       if p >= state.len then (p, acc_state)
@@ -206,43 +250,22 @@ let scan_number_with_base state start_pos prefix_len digit_predicate base_name =
         let c = state.source.[p] in
         if digit_predicate c then loop (p + 1) acc_state
         else if is_alpha c || is_digit c then
-          let char_span = Span.make state.file_id p (p + 1) in
-          let msg = Printf.sprintf "invalid %s digit '%c'" base_name c in
-          (p, add_error acc_state msg char_span)
+          (p, create_invalid_digit_error acc_state p base_name c)
         else (p, acc_state)
     in
     let end_pos, final_state = loop pos state in
     if end_pos = pos then
-      let span = make_span state start_pos in
       let error_state =
-        add_error final_state ("incomplete " ^ base_name ^ " number") span
+        create_incomplete_number_error final_state start_pos base_name
       in
       ( { error_state with pos = end_pos }
       , extract_content state start_pos end_pos
-      , span )
+      , make_span state start_pos )
     else
       let text = extract_content state start_pos end_pos in
       ({ final_state with pos = end_pos }, text, make_span state start_pos)
 
-let scan_decimal_number state start_pos =
-  let rec loop pos acc_state dot_count =
-    if pos >= state.len then (pos, acc_state, dot_count)
-    else
-      let c = state.source.[pos] in
-      if is_digit c then loop (pos + 1) acc_state dot_count
-      else if c = '.' then
-        if dot_count > 0 then
-          let char_span = Span.make state.file_id pos (pos + 1) in
-          let error_state =
-            add_error acc_state "multiple decimal points in number" char_span
-          in
-          (pos, error_state, dot_count + 1)
-        else loop (pos + 1) acc_state (dot_count + 1)
-      else (pos, acc_state, dot_count)
-  in
-  let end_pos, final_state, _ = loop state.pos state 0 in
-  let text = extract_content state start_pos end_pos in
-  ({ final_state with pos = end_pos }, text, make_span state start_pos)
+let scan_decimal_number state start_pos = scan_decimal_with_dot state start_pos
 
 let scan_number state =
   let start_pos = state.pos in
