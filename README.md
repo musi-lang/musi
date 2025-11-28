@@ -27,7 +27,10 @@ Systems programming language designed for clarity, safety, and performance. Read
 git clone https://github.com/musi-lang/musi.git
 cd musi
 
-opam install dune
+# install specific OCaml stuffs
+opam install ocamlformat ocaml-lsp-server dune
+
+# finally,... lock and load
 opam exec -- dune pkg lock
 opam exec -- dune build
 ```
