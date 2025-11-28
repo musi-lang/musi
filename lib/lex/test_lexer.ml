@@ -8,7 +8,7 @@ let make_test_state source =
 
 let lex_single source =
   let state = make_test_state source in
-  let tokens, diags = Lexer.tokenize source 0 state.interner in
+  let tokens, diags = Lexer.tokenize source state.file_id state.interner in
   (tokens, diags)
 
 let has_error_containing diags substring =
