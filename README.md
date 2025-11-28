@@ -13,28 +13,6 @@ Systems programming language designed for clarity, safety, and performance. Read
 - Compile-time lifetime checking with Ada-level safety
 - Exhaustive pattern matching with guard support
 - Fallible types (`Expect<T, E>`) and structured error propagation
-- No garbage collection, no reference counting, no runtime overhead
-
-## Example
-
-```musi
-val Counter := data {
-  var value: Nat
-};
-
-val inc := def (ref var c: Counter) {
-  c.value :+= 1;
-};
-
-val show := def (ref c: Counter) {
-  writeln($"Counter is now: {c.value}");
-};
-
-var counter := Counter{ .value := 0 };
-inc(ref var counter);  // value is now 1
-inc(ref var counter);  // value is now 2
-show(ref counter);     // prints: "Counter is now: 2"
-```
 
 ## Getting Started
 
