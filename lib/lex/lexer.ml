@@ -66,6 +66,29 @@ let escape_chars =
     ('/', '/') (* forward slash (JSON-style) *)
   ]
 
+let process_escape_sequences content =
+  let len = String.length content in
+  let result = Buffer.create len in
+  let rec process pos =
+    if pos >= len then ()
+    else
+      match content.[pos] with
+      | '\\' when pos + 1 < len -> (
+        match List.assoc_opt content.[pos + 1] escape_chars with
+        | Some escaped_char ->
+          Buffer.add_char result escaped_char;
+          process (pos + 2)
+        | None ->
+          Buffer.add_char result content.[pos];
+          Buffer.add_char result content.[pos + 1];
+          process (pos + 2))
+      | c ->
+        Buffer.add_char result c;
+        process (pos + 1)
+  in
+  process 0;
+  Buffer.contents result
+
 let create_char_error state pos msg_format arg =
   let char_span = Span.make state.file_id pos (pos + 1) in
   let msg = Printf.sprintf msg_format arg in
@@ -114,7 +137,9 @@ let scan_template_content state =
   scan_template start_pos 0
 
 let validate_escape_sequence state pos =
-  pos + 1 < state.len && List.mem_assoc state.source.[pos + 1] escape_chars
+  pos >= 0
+  && pos + 1 < state.len
+  && List.mem_assoc state.source.[pos + 1] escape_chars
 
 let check_unterminated_literal state quote_char end_pos span msg =
   if
@@ -262,7 +287,8 @@ let scan_ident state =
   in
   let end_pos, final_state = scan_ident_chars state.pos state in
   let text = extract_content state start_pos end_pos in
-  ({ final_state with pos = end_pos }, text, make_span state start_pos)
+  let name = Basic.Interner.intern state.interner text in
+  ({ final_state with pos = end_pos }, name, make_span state start_pos)
 
 let scan_number state =
   let start_pos = state.pos in
@@ -302,8 +328,13 @@ let scan_quoted_literal state quote_char literal_name =
 
 let scan_string state =
   match scan_quoted_literal state '"' "string" with
-  | state', None, span -> (state', "", span)
-  | state', Some content, span -> (state', content, span)
+  | state', None, span ->
+    let empty_name = Basic.Interner.empty_name state.interner in
+    (state', empty_name, span)
+  | state', Some content, span ->
+    let processed_content = process_escape_sequences content in
+    let name = Basic.Interner.intern state.interner processed_content in
+    (state', name, span)
 
 let scan_template state =
   let start_pos = state.pos in
@@ -311,10 +342,13 @@ let scan_template state =
   let span = make_span state start_pos in
   if is_unterminated then
     let error_state = add_error state "unterminated template literal" span in
-    (error_state, "", span)
+    let empty_name = Basic.Interner.empty_name error_state.interner in
+    (error_state, empty_name, span)
   else
-    let content = extract_content state (start_pos + 1) (end_pos - 1) in
-    ({ state with pos = end_pos }, content, span)
+    let content = extract_content state start_pos (end_pos - 1) in
+    let processed_content = process_escape_sequences content in
+    let name = Basic.Interner.intern state.interner processed_content in
+    ({ state with pos = end_pos }, name, span)
 
 let scan_rune state =
   match scan_quoted_literal state '\'' "rune" with
@@ -323,28 +357,16 @@ let scan_rune state =
     if String.length content = 0 then
       let error_state = add_error state' "empty rune literal" span in
       (error_state, '\000', span)
-    else if
-      String.length content > 2
-      || (String.length content = 2 && content.[0] <> '\\')
-    then
-      let error_state =
-        add_error state' "rune literal contains multiple characters" span
-      in
-      (error_state, content.[0], span)
-    else
-      let final_state, final_char =
-        if String.length content = 2 && content.[0] = '\\' then
-          let escape_pos = state.pos - String.length content - 1 in
-          if not (validate_escape_sequence state escape_pos) then
-            let msg =
-              Printf.sprintf "invalid escape sequence '\\%c'" content.[1]
-            in
-            (add_error state' msg span, '\000')
-          else (state', List.assoc content.[1] escape_chars)
-        else if String.length content = 1 then (state', content.[0])
-        else (add_error state' "unterminated escape sequence" span, '\000')
-      in
-      (final_state, final_char, span)
+    else if String.length content > 1 then
+      let processed_content = process_escape_sequences content in
+      if String.length processed_content = 1 then
+        (state', processed_content.[0], span)
+      else
+        let error_state =
+          add_error state' "rune literal contains multiple characters" span
+        in
+        (error_state, processed_content.[0], span)
+    else (state', content.[0], span)
 
 let scan_symbol state =
   let rec try_match_symbols symbols =
@@ -410,8 +432,9 @@ let dispatch_char c =
       (state', token, span)
   | _ when is_ident_start c ->
     fun state ->
-      let state', text, span = scan_ident state in
-      (state', Token.lookup_keyword text, span)
+      let state', name, span = scan_ident state in
+      let original_string = Basic.Interner.lookup state.interner name in
+      (state', Token.lookup_keyword state.interner original_string, span)
   | _ when is_digit c ->
     fun state ->
       let state', text, span = scan_number state in

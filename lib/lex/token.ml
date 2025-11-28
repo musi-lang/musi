@@ -1,11 +1,13 @@
+open Basic
+
 type t =
   (* Literals *)
   | LitNumber of string
-  | LitString of string
+  | LitString of Interner.name
   | LitRune of char
-  | LitTemplate of string
+  | LitTemplate of Interner.name
   (* Identifiers *)
-  | Ident of string
+  | Ident of Interner.name
   (* Keywords *)
   | KwVal
   | KwVar
@@ -52,6 +54,7 @@ type t =
   | Tilde (* ~ *)
   | At (* @ *)
   | Bang (* ! *)
+  | Dollar (* $ *)
   (* Punctuation *)
   | LParen (* ( *)
   | RParen (* ) *)
@@ -122,6 +125,7 @@ let symbol_strings =
   ; ("~", Tilde)
   ; ("@", At)
   ; ("!", Bang)
+  ; ("$", Dollar)
   ; ("(", LParen)
   ; (")", RParen)
   ; ("{", LBrace)
@@ -148,10 +152,10 @@ let symbol_to_string =
 
 let to_string = function
   | LitNumber s -> "NUMBER(" ^ s ^ ")"
-  | LitString s -> "STRING(" ^ s ^ ")"
+  | LitString name -> "STRING(id:" ^ string_of_int name ^ ")"
   | LitRune c -> "RUNE(" ^ String.make 1 c ^ ")"
-  | LitTemplate s -> "TEMPLATE(" ^ s ^ ")"
-  | Ident s -> "IDENT(" ^ s ^ ")"
+  | LitTemplate name -> "TEMPLATE(id:" ^ string_of_int name ^ ")"
+  | Ident name -> "IDENT(id:" ^ string_of_int name ^ ")"
   | ( KwVal | KwVar | KwDef | KwData | KwImport | KwExport | KwFrom | KwIf
     | KwElse | KwMatch | KwCase | KwFor | KwIn | KwStep | KwWhile | KwReturn
     | KwAnd | KwOr | KwNot | KwIs | KwAs | KwWhere | KwInstance | KwExtern ) as
@@ -159,8 +163,8 @@ let to_string = function
     Hashtbl.find keyword_to_string kw
   | ( LtMinus | ColonEq | Eq | BangEq | Lt | LtEq | Gt | GtEq | Plus | Minus
     | Star | Slash | StarStar | PipeGt | Amp | Pipe | Caret | Tilde | At | Bang
-    | LParen | RParen | LBrace | RBrace | LBrack | RBrack | Comma | Semi | Colon
-    | Dot | MinusGt ) as sym ->
+    | Dollar | LParen | RParen | LBrace | RBrace | LBrack | RBrack | Comma
+    | Semi | Colon | Dot | MinusGt ) as sym ->
     Hashtbl.find symbol_to_string sym
   | EOF -> "EOF"
   | Newline -> "NEWLINE"
@@ -173,8 +177,12 @@ let keywords =
   List.iter (fun (k, v) -> Hashtbl.add tbl k v) keyword_strings;
   tbl
 
-let lookup_keyword s =
-  match Hashtbl.find_opt keywords s with Some kw -> kw | None -> Ident s
+let lookup_keyword interner s =
+  match Hashtbl.find_opt keywords s with
+  | Some kw -> kw
+  | None ->
+    let name = Interner.intern interner s in
+    Ident name
 
 let symbols =
   let tbl = Hashtbl.create base_table_size in
