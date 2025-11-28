@@ -1,1 +1,2 @@
 (data_only_dirs lib_old)
+(data_only_dirs bin_old)
