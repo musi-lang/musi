@@ -40,38 +40,29 @@ let scan_while state start_pos predicate =
   in
   loop start_pos
 
-let create_char_error state pos msg_format arg =
+let rec create_char_error state pos msg_format arg =
   let char_span = Span.make state.file_id pos (pos + 1) in
   let msg = Printf.sprintf msg_format arg in
   add_error state msg char_span
 
-let create_incomplete_number_error state start_pos base_name =
+and create_incomplete_number_error state start_pos base_name =
   let span = make_span state start_pos in
   add_error state ("incomplete " ^ base_name ^ " number") span
 
-let create_invalid_digit_error state pos base_name digit =
+and create_invalid_digit_error state pos base_name digit =
   let msg = Printf.sprintf "invalid %s digit '%c'" base_name digit in
   create_char_error state pos "%s" msg
 
-let check_char_in_set c char_set =
-  let rec loop i =
-    if i >= String.length char_set then false
-    else if c = char_set.[i] then true
-    else loop (i + 1)
-  in
-  loop 0
-
-let is_alpha c =
-  check_char_in_set c "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-
-let is_digit c = check_char_in_set c "0123456789"
-let is_whitespace c = check_char_in_set c " \t\r"
+let is_alpha c = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+let is_digit c = c >= '0' && c <= '9'
+let is_whitespace c = c = ' ' || c = '\t' || c = '\r'
 let is_newline c = c = '\n'
-let is_xdigit c = is_digit c || check_char_in_set c "abcdefABCDEF"
-let is_bdigit c = check_char_in_set c "01"
-let is_odigit c = check_char_in_set c "01234567"
+let is_xdigit c = is_digit c || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+let is_bdigit c = c = '0' || c = '1'
+let is_odigit c = c >= '0' && c <= '7'
 let is_ident_start c = is_alpha c || c = '_'
 let is_ident_cont c = is_alpha c || is_digit c || c = '_'
+let is_template_delim c = c = '{' || c = '}'
 
 let escape_chars =
   [
@@ -103,21 +94,30 @@ let escape_chars =
   ]
 
 let scan_quoted_content state quote_char =
-  let rec loop pos =
+  let rec scan_content pos =
     if pos >= state.len then pos
     else
       match state.source.[pos] with
       | c when c = quote_char -> pos + 1
-      | '\\' -> if pos + 1 < state.len then loop (pos + 2) else loop (pos + 1)
-      | _ -> loop (pos + 1)
+      | '\\' when pos + 1 < state.len -> scan_content (pos + 2)
+      | _ -> scan_content (pos + 1)
   in
-  loop (state.pos + 1)
+  scan_content (state.pos + 1)
+
+and scan_until_pattern state pattern =
+  let rec scan_until pos =
+    if pos >= state.len then pos
+    else if String.sub state.source pos (String.length pattern) = pattern then
+      pos
+    else scan_until (pos + 1)
+  in
+  scan_until state.pos
 
 let validate_escape_sequence state pos =
-  if pos + 1 >= state.len then false
-  else
-    let escape_char = state.source.[pos + 1] in
-    List.exists (fun (c, _) -> c = escape_char) escape_chars
+  pos + 1 < state.len
+  &&
+  let escape_char = state.source.[pos + 1] in
+  List.mem_assoc escape_char escape_chars
 
 let check_unterminated_literal state quote_char end_pos span msg =
   if
@@ -147,11 +147,11 @@ let validate_escapes_in_content state start_pos end_pos =
   check_escapes start_pos state
 
 let scan_decimal_with_dot state start_pos =
-  let rec loop pos acc_state dot_count =
+  let rec scan_with_decimal pos acc_state dot_count =
     if pos >= state.len then (pos, acc_state, dot_count)
     else
       let c = state.source.[pos] in
-      if is_digit c then loop (pos + 1) acc_state dot_count
+      if is_digit c then scan_with_decimal (pos + 1) acc_state dot_count
       else if c = '.' then
         if dot_count > 0 then
           let error_state =
@@ -161,12 +161,43 @@ let scan_decimal_with_dot state start_pos =
               (make_span acc_state pos)
           in
           (pos, error_state, dot_count + 1)
-        else loop (pos + 1) acc_state (dot_count + 1)
+        else scan_with_decimal (pos + 1) acc_state (dot_count + 1)
       else (pos, acc_state, dot_count)
   in
-  let end_pos, final_state, _ = loop state.pos state 0 in
+  let end_pos, final_state, _ = scan_with_decimal state.pos state 0 in
   let text = extract_content state start_pos end_pos in
   ({ final_state with pos = end_pos }, text, make_span state start_pos)
+
+and scan_number_with_base state start_pos prefix_len digit_predicate base_name =
+  let pos = state.pos + prefix_len in
+  if pos >= state.len then
+    let error_state =
+      create_incomplete_number_error state start_pos base_name
+    in
+    ( { error_state with pos }
+    , extract_content state start_pos pos
+    , make_span state start_pos )
+  else
+    let rec scan_digits p acc_state =
+      if p >= state.len then (p, acc_state)
+      else
+        let c = state.source.[p] in
+        if digit_predicate c then scan_digits (p + 1) acc_state
+        else if is_alpha c || is_digit c then
+          (p, create_invalid_digit_error acc_state p base_name c)
+        else (p, acc_state)
+    in
+    let end_pos, final_state = scan_digits pos state in
+    if end_pos = pos then
+      let error_state =
+        create_incomplete_number_error final_state start_pos base_name
+      in
+      ( { error_state with pos = end_pos }
+      , extract_content state start_pos end_pos
+      , make_span state start_pos )
+    else
+      let text = extract_content state start_pos end_pos in
+      ({ final_state with pos = end_pos }, text, make_span state start_pos)
 
 let scan_whitespace state =
   let end_pos = scan_while state state.pos is_whitespace in
@@ -224,8 +255,8 @@ let scan_ident state =
           create_char_error
             acc_state
             pos
-            "non-ASCII character '%c' in identifier"
-            c
+            "non-ASCII character '%s' in identifier"
+            (String.make 1 c)
         in
         loop (pos + 1) error_state
       else (pos, acc_state)
@@ -233,37 +264,6 @@ let scan_ident state =
   let end_pos, final_state = loop state.pos state in
   let text = extract_content state start_pos end_pos in
   ({ final_state with pos = end_pos }, text, make_span state start_pos)
-
-let scan_number_with_base state start_pos prefix_len digit_predicate base_name =
-  let pos = state.pos + prefix_len in
-  if pos >= state.len then
-    let error_state =
-      create_incomplete_number_error state start_pos base_name
-    in
-    ( { error_state with pos }
-    , extract_content state start_pos pos
-    , make_span state start_pos )
-  else
-    let rec loop p acc_state =
-      if p >= state.len then (p, acc_state)
-      else
-        let c = state.source.[p] in
-        if digit_predicate c then loop (p + 1) acc_state
-        else if is_alpha c || is_digit c then
-          (p, create_invalid_digit_error acc_state p base_name c)
-        else (p, acc_state)
-    in
-    let end_pos, final_state = loop pos state in
-    if end_pos = pos then
-      let error_state =
-        create_incomplete_number_error final_state start_pos base_name
-      in
-      ( { error_state with pos = end_pos }
-      , extract_content state start_pos end_pos
-      , make_span state start_pos )
-    else
-      let text = extract_content state start_pos end_pos in
-      ({ final_state with pos = end_pos }, text, make_span state start_pos)
 
 let scan_decimal_number state start_pos = scan_decimal_with_dot state start_pos
 
@@ -283,7 +283,7 @@ let scan_number state =
     | _ -> scan_decimal_number state start_pos
   else scan_decimal_number state start_pos
 
-let scan_quoted_literal state quote_char literal_name =
+let rec scan_quoted_literal state quote_char literal_name =
   let start_pos = state.pos in
   let end_pos = scan_quoted_content state quote_char in
   let span = make_span state start_pos in
@@ -303,7 +303,7 @@ let scan_quoted_literal state quote_char literal_name =
     in
     ({ final_state with pos = end_pos }, Some content, span)
 
-let scan_string state =
+and scan_string state =
   match scan_quoted_literal state '"' "string" with
   | state', None, span -> (state', "", span)
   | state', Some content, span -> (state', content, span)
@@ -342,7 +342,7 @@ let scan_rune state =
       in
       (final_state, final_char, span)
 
-let scan_symbol state =
+let rec scan_symbol state =
   let rec try_symbols symbols =
     match symbols with
     | [] -> None
@@ -365,7 +365,7 @@ let scan_symbol state =
     let error_state = add_error (advance state) msg span in
     (error_state, Token.Error, span)
 
-let scan_comment_or_symbol state =
+and scan_comment_or_symbol state =
   if state.pos + 1 < state.len then
     match state.source.[state.pos + 1] with
     | '/' ->
@@ -381,8 +381,9 @@ let scan_comment_or_symbol state =
     let state', token, span = scan_symbol state in
     (state', token, span)
 
-let dispatch_char = function
-  | c when is_whitespace c ->
+and dispatch_char c =
+  match c with
+  | _ when is_whitespace c ->
     fun state ->
       let state', span = scan_whitespace state in
       (state', Token.Whitespace, span)
@@ -390,12 +391,15 @@ let dispatch_char = function
     fun state ->
       let state', span = scan_newline state in
       (state', Token.Newline, span)
-  | '/' -> scan_comment_or_symbol
-  | c when is_ident_start c ->
+  | '/' ->
+    fun state ->
+      let state', token, span = scan_comment_or_symbol state in
+      (state', token, span)
+  | _ when is_ident_start c ->
     fun state ->
       let state', text, span = scan_ident state in
       (state', Token.lookup_keyword text, span)
-  | c when is_digit c ->
+  | _ when is_digit c ->
     fun state ->
       let state', text, span = scan_number state in
       (state', Token.LitNumber text, span)
@@ -412,7 +416,7 @@ let dispatch_char = function
       let state', token, span = scan_symbol state in
       (state', token, span)
 
-let lex_token state =
+let rec lex_token state =
   match peek_char state with
   | None -> (state, Token.EOF, make_span state state.pos)
   | Some c ->
@@ -432,7 +436,7 @@ let lex_token state =
       let scanner = dispatch_char c in
       scanner state
 
-let tokenize source file_id interner =
+and tokenize source file_id interner =
   let rec loop state tokens =
     let old_pos = state.pos in
     let new_state, token, span = lex_token state in
