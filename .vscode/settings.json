@@ -1,6 +1,7 @@
 {
     "remote.autoForwardPortsFallback": 0,
     "ocaml.sandbox": {
-        "kind": "global"
+        "kind": "opam",
+        "switch": "default"
     },
 }
