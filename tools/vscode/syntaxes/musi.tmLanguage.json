@@ -72,7 +72,6 @@
             "patterns": [
                 { "include": "#declaration-import" },
                 { "include": "#declaration-named" },
-                { "include": "#declaration-choice-case" },
                 { "include": "#control-block" },
                 { "include": "#generic-parameters" }
             ]
@@ -122,15 +121,6 @@
             },
             "end": "(?<=\\})|(?=;)",
             "patterns": [ { "include": "#root" } ]
-        },
-        "declaration-choice-case": {
-            "name": "meta.choice.case.musi",
-            "match": "\\b(case)\\s+(\\.)?([a-zA-Z_][a-zA-Z0-9_]*)(?=\\s*(?:\\(|=>))",
-            "captures": {
-                "1": { "name": "keyword.control.case.musi" },
-                "2": { "name": "punctuation.accessor.dot.musi" },
-                "3": { "name": "variable.other.constant.musi" }
-            }
         },
         "control-block": {
             "name": "meta.control.block.musi",
@@ -354,7 +344,7 @@
         },
         "keyword-control": {
             "name": "keyword.control.musi",
-            "match": "\\b(case|defer|else|exit|export|for|from|if|in|match|return|skip|step|try|where|while)\\b"
+            "match": "\\b(case|defer|else|exit|export|for|from|if|in|instance|match|return|skip|step|try|where|while)\\b"
         },
         "keyword-storage": {
             "name": "storage.type.musi",
@@ -371,7 +361,7 @@
         "operators": {
             "patterns": [
                 {
-                    "name": "keyword.operator.wordlike.logical.musi",
+                    "name": "keyword.operator.logical.musi",
                     "match": "\\b(and|or|not)\\b"
                 },
                 {
@@ -409,8 +399,44 @@
             ]
         },
         "punctuation": {
-            "name": "punctuation.musi",
-            "match": "[\\[\\]{}():;,.]"
+            "patterns": [
+                {
+                    "name": "punctuation.definition.bracket.square.begin.musi",
+                    "match": "\\["
+                },
+                {
+                    "name": "punctuation.definition.bracket.square.end.musi",
+                    "match": "\\]"
+                },
+                {
+                    "name": "punctuation.definition.bracket.curly.begin.musi",
+                    "match": "\\{"
+                },
+                {
+                    "name": "punctuation.definition.bracket.curly.end.musi",
+                    "match": "\\}"
+                },
+                {
+                    "name": "punctuation.definition.parameters.begin.musi",
+                    "match": "\\("
+                },
+                {
+                    "name": "punctuation.definition.parameters.end.musi",
+                    "match": "\\)"
+                },
+                {
+                    "name": "punctuation.separator.semicolon.musi",
+                    "match": ";"
+                },
+                {
+                    "name": "punctuation.separator.comma.musi",
+                    "match": ","
+                },
+                {
+                    "name": "punctuation.accessor.dot.musi",
+                    "match": "\\."
+                }
+            ]
         },
         "strings": {
             "patterns": [
@@ -433,7 +459,8 @@
         },
         "string-template": {
             "name": "string.quoted.template.musi",
-            "begin": "\\$\"",
+            "begin": "(\\$)\"",
+            "beginCaptures": { "1": { "name": "keyword.operator.template.musi" } },
             "end": "\"",
             "patterns": [
                 { "include": "#template-expression" },
