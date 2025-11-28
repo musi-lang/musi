@@ -10,14 +10,8 @@ type state = {
 }
 
 let make_state source file_id interner =
-  {
-    source
-  ; pos = 0
-  ; len = String.length source
-  ; file_id
-  ; interner
-  ; diags = Diagnostic.empty_bag
-  }
+  let len = String.length source in
+  { source; pos = 0; len; file_id; interner; diags = Diagnostic.empty_bag }
 
 let peek_char state =
   if state.pos >= state.len then None else Some state.source.[state.pos]
@@ -31,27 +25,6 @@ let add_error state msg span =
 
 let extract_content state start_offset end_offset =
   String.sub state.source start_offset (end_offset - start_offset)
-
-let scan_while state start_pos predicate =
-  let rec loop pos =
-    if pos >= state.len then pos
-    else if predicate state.source.[pos] then loop (pos + 1)
-    else pos
-  in
-  loop start_pos
-
-let rec create_char_error state pos msg_format arg =
-  let char_span = Span.make state.file_id pos (pos + 1) in
-  let msg = Printf.sprintf msg_format arg in
-  add_error state msg char_span
-
-and create_incomplete_number_error state start_pos base_name =
-  let span = make_span state start_pos in
-  add_error state ("incomplete " ^ base_name ^ " number") span
-
-and create_invalid_digit_error state pos base_name digit =
-  let msg = Printf.sprintf "invalid %s digit '%c'" base_name digit in
-  create_char_error state pos "%s" msg
 
 let is_alpha c = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
 let is_digit c = c >= '0' && c <= '9'
@@ -93,7 +66,29 @@ let escape_chars =
     ('/', '/') (* forward slash (JSON-style) *)
   ]
 
+let create_char_error state pos msg_format arg =
+  let char_span = Span.make state.file_id pos (pos + 1) in
+  let msg = Printf.sprintf msg_format arg in
+  add_error state msg char_span
+
+let create_incomplete_number_error state start_pos base_name =
+  let span = make_span state start_pos in
+  add_error state ("incomplete " ^ base_name ^ " number") span
+
+let create_invalid_digit_error state pos base_name digit =
+  let msg = Printf.sprintf "invalid %s digit '%c'" base_name digit in
+  create_char_error state pos "%s" msg
+
+let scan_while state start_pos predicate =
+  let rec loop pos =
+    if pos >= state.len then pos
+    else if predicate state.source.[pos] then loop (pos + 1)
+    else pos
+  in
+  loop start_pos
+
 let scan_quoted_content state quote_char =
+  let start_pos = state.pos + 1 in
   let rec scan_content pos =
     if pos >= state.len then pos
     else
@@ -102,22 +97,24 @@ let scan_quoted_content state quote_char =
       | '\\' when pos + 1 < state.len -> scan_content (pos + 2)
       | _ -> scan_content (pos + 1)
   in
-  scan_content (state.pos + 1)
+  scan_content start_pos
 
-and scan_until_pattern state pattern =
-  let rec scan_until pos =
-    if pos >= state.len then pos
-    else if String.sub state.source pos (String.length pattern) = pattern then
-      pos
-    else scan_until (pos + 1)
+let scan_template_content state =
+  let start_pos = state.pos + 1 in
+  let rec scan_template pos depth =
+    if pos >= state.len then (pos, true)
+    else
+      match state.source.[pos] with
+      | '"' when depth = 0 -> (pos + 1, false)
+      | '\\' when pos + 1 < state.len -> scan_template (pos + 2) depth
+      | '{' when depth = 0 -> scan_template (pos + 1) (depth + 1)
+      | '}' when depth > 0 -> scan_template (pos + 1) (depth - 1)
+      | _ -> scan_template (pos + 1) depth
   in
-  scan_until state.pos
+  scan_template start_pos 0
 
 let validate_escape_sequence state pos =
-  pos + 1 < state.len
-  &&
-  let escape_char = state.source.[pos + 1] in
-  List.mem_assoc escape_char escape_chars
+  pos + 1 < state.len && List.mem_assoc state.source.[pos + 1] escape_chars
 
 let check_unterminated_literal state quote_char end_pos span msg =
   if
@@ -168,7 +165,7 @@ let scan_decimal_with_dot state start_pos =
   let text = extract_content state start_pos end_pos in
   ({ final_state with pos = end_pos }, text, make_span state start_pos)
 
-and scan_number_with_base state start_pos prefix_len digit_predicate base_name =
+let scan_number_with_base state start_pos prefix_len digit_predicate base_name =
   let pos = state.pos + prefix_len in
   if pos >= state.len then
     let error_state =
@@ -208,17 +205,18 @@ let scan_newline state =
   (new_state, make_span state state.pos)
 
 let scan_line_comment state =
-  let rec loop pos =
-    if pos >= state.len then pos
-    else match state.source.[pos] with '\n' -> pos | _ -> loop (pos + 1)
+  let rec scan_to_eol pos =
+    if pos >= state.len || state.source.[pos] = '\n' then pos
+    else scan_to_eol (pos + 1)
   in
-  let end_pos = loop (state.pos + 2) in
-  let content = extract_content state (state.pos + 2) end_pos in
+  let start_pos = state.pos + 2 in
+  let end_pos = scan_to_eol start_pos in
+  let content = extract_content state start_pos end_pos in
   ({ state with pos = end_pos }, content, make_span state state.pos)
 
 let scan_block_comment state =
   let start_pos = state.pos in
-  let rec loop pos acc_state =
+  let rec scan_block pos acc_state =
     if pos + 1 >= state.len then
       ( pos
       , add_error
@@ -232,24 +230,25 @@ let scan_block_comment state =
       let error_state =
         add_error acc_state "nested block comments not allowed" nested_span
       in
-      loop (pos + 2) error_state
-    else loop (pos + 1) acc_state
+      scan_block (pos + 2) error_state
+    else scan_block (pos + 1) acc_state
   in
-  let end_pos, final_state = loop (state.pos + 2) state in
+  let start_content = state.pos + 2 in
+  let end_pos, final_state = scan_block start_content state in
   let content =
-    if end_pos > state.pos + 2 then
-      extract_content state (state.pos + 2) (min (end_pos - 2) (state.len - 2))
+    if end_pos > start_content + 2 then
+      extract_content state start_content (end_pos - 2)
     else ""
   in
   ({ final_state with pos = end_pos }, content, make_span state start_pos)
 
 let scan_ident state =
   let start_pos = state.pos in
-  let rec loop pos acc_state =
+  let rec scan_ident_chars pos acc_state =
     if pos >= state.len then (pos, acc_state)
     else
       let c = state.source.[pos] in
-      if is_ident_cont c then loop (pos + 1) acc_state
+      if is_ident_cont c then scan_ident_chars (pos + 1) acc_state
       else if Char.code c > 127 then
         let error_state =
           create_char_error
@@ -258,14 +257,12 @@ let scan_ident state =
             "non-ASCII character '%s' in identifier"
             (String.make 1 c)
         in
-        loop (pos + 1) error_state
+        scan_ident_chars (pos + 1) error_state
       else (pos, acc_state)
   in
-  let end_pos, final_state = loop state.pos state in
+  let end_pos, final_state = scan_ident_chars state.pos state in
   let text = extract_content state start_pos end_pos in
   ({ final_state with pos = end_pos }, text, make_span state start_pos)
-
-let scan_decimal_number state start_pos = scan_decimal_with_dot state start_pos
 
 let scan_number state =
   let start_pos = state.pos in
@@ -279,11 +276,11 @@ let scan_number state =
       let error_state =
         add_error state "leading zeros in decimal numbers not allowed" span
       in
-      scan_decimal_number error_state start_pos
-    | _ -> scan_decimal_number state start_pos
-  else scan_decimal_number state start_pos
+      scan_decimal_with_dot error_state start_pos
+    | _ -> scan_decimal_with_dot state start_pos
+  else scan_decimal_with_dot state start_pos
 
-let rec scan_quoted_literal state quote_char literal_name =
+let scan_quoted_literal state quote_char literal_name =
   let start_pos = state.pos in
   let end_pos = scan_quoted_content state quote_char in
   let span = make_span state start_pos in
@@ -303,10 +300,21 @@ let rec scan_quoted_literal state quote_char literal_name =
     in
     ({ final_state with pos = end_pos }, Some content, span)
 
-and scan_string state =
+let scan_string state =
   match scan_quoted_literal state '"' "string" with
   | state', None, span -> (state', "", span)
   | state', Some content, span -> (state', content, span)
+
+let scan_template state =
+  let start_pos = state.pos in
+  let end_pos, is_unterminated = scan_template_content state in
+  let span = make_span state start_pos in
+  if is_unterminated then
+    let error_state = add_error state "unterminated template literal" span in
+    (error_state, "", span)
+  else
+    let content = extract_content state (start_pos + 1) (end_pos - 1) in
+    ({ state with pos = end_pos }, content, span)
 
 let scan_rune state =
   match scan_quoted_literal state '\'' "rune" with
@@ -317,7 +325,7 @@ let scan_rune state =
       (error_state, '\000', span)
     else if
       String.length content > 2
-      || (String.length content = 2 && content.[0] != '\\')
+      || (String.length content = 2 && content.[0] <> '\\')
     then
       let error_state =
         add_error state' "rune literal contains multiple characters" span
@@ -326,12 +334,8 @@ let scan_rune state =
     else
       let final_state, final_char =
         if String.length content = 2 && content.[0] = '\\' then
-          if
-            not
-              (validate_escape_sequence
-                 state
-                 (state.pos - String.length content - 1))
-          then
+          let escape_pos = state.pos - String.length content - 1 in
+          if not (validate_escape_sequence state escape_pos) then
             let msg =
               Printf.sprintf "invalid escape sequence '\\%c'" content.[1]
             in
@@ -342,8 +346,8 @@ let scan_rune state =
       in
       (final_state, final_char, span)
 
-let rec scan_symbol state =
-  let rec try_symbols symbols =
+let scan_symbol state =
+  let rec try_match_symbols symbols =
     match symbols with
     | [] -> None
     | (sym, token) :: rest ->
@@ -352,9 +356,9 @@ let rec scan_symbol state =
         state.pos + sym_len <= state.len
         && String.sub state.source state.pos sym_len = sym
       then Some (token, sym_len)
-      else try_symbols rest
+      else try_match_symbols rest
   in
-  match try_symbols Token.symbol_strings with
+  match try_match_symbols Token.symbol_strings with
   | Some (token, len) ->
     let new_state = { state with pos = state.pos + len } in
     (new_state, token, make_span state state.pos)
@@ -365,7 +369,7 @@ let rec scan_symbol state =
     let error_state = add_error (advance state) msg span in
     (error_state, Token.Error, span)
 
-and scan_comment_or_symbol state =
+let scan_comment_or_symbol state =
   if state.pos + 1 < state.len then
     match state.source.[state.pos + 1] with
     | '/' ->
@@ -381,7 +385,16 @@ and scan_comment_or_symbol state =
     let state', token, span = scan_symbol state in
     (state', token, span)
 
-and dispatch_char c =
+let scan_template_or_dollar state =
+  if state.pos + 1 < state.len && state.source.[state.pos + 1] = '"' then
+    let new_state = { state with pos = state.pos + 2 } in
+    let final_state', content, _ = scan_template new_state in
+    (final_state', Token.LitTemplate content, make_span state state.pos)
+  else
+    let state', token, span = scan_symbol state in
+    (state', token, span)
+
+let dispatch_char c =
   match c with
   | _ when is_whitespace c ->
     fun state ->
@@ -411,6 +424,10 @@ and dispatch_char c =
     fun state ->
       let state', char, span = scan_rune state in
       (state', Token.LitRune char, span)
+  | '$' ->
+    fun state ->
+      let state', token, span = scan_template_or_dollar state in
+      (state', token, span)
   | _ ->
     fun state ->
       let state', token, span = scan_symbol state in
@@ -421,7 +438,7 @@ let rec lex_token state =
   | None -> (state, Token.EOF, make_span state state.pos)
   | Some c ->
     let char_code = Char.code c in
-    if char_code < 32 && c != '\t' && c != '\n' && c != '\r' then
+    if char_code < 32 && c <> '\t' && c <> '\n' && c <> '\r' then
       let span = make_span state state.pos in
       let msg =
         Printf.sprintf "control character '\\x%02X' in source" char_code
@@ -437,7 +454,7 @@ let rec lex_token state =
       scanner state
 
 and tokenize source file_id interner =
-  let rec loop state tokens =
+  let rec process_tokens state tokens =
     let old_pos = state.pos in
     let new_state, token, span = lex_token state in
     match token with
@@ -446,8 +463,8 @@ and tokenize source file_id interner =
       if new_state.pos <= old_pos then
         let error_state = add_error new_state "lexer failed to advance" span in
         let final_state = advance error_state in
-        loop final_state ((Token.Error, span) :: tokens)
-      else loop new_state ((token, span) :: tokens)
+        process_tokens final_state ((Token.Error, span) :: tokens)
+      else process_tokens new_state ((token, span) :: tokens)
   in
   let initial_state = make_state source file_id interner in
-  loop initial_state []
+  process_tokens initial_state []
