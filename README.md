@@ -38,7 +38,7 @@ opam exec -- dune build
 ### Run & Test
 
 ```bash
-opam exec -- dune exec bin/compiler/msc.exe
+opam exec -- dune exec bin/msc.exe
 opam exec -- dune test
 
 # TODO: runtime cmd
