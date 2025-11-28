@@ -103,3 +103,17 @@ let emit ppf diag files =
       (List.rev diag.notes)
 
 let emit_all ppf bag files = List.iter (fun d -> emit ppf d files) (to_list bag)
+
+let has_message_containing bag substring =
+  let diag_list = to_list bag in
+  let contains_substring str sub =
+    let len_str = String.length str in
+    let len_sub = String.length sub in
+    let rec check i =
+      if i + len_sub > len_str then false
+      else if String.sub str i len_sub = sub then true
+      else check (i + 1)
+    in
+    if len_sub = 0 then true else check 0
+  in
+  List.exists (fun diag -> contains_substring diag.message substring) diag_list
