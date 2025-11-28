@@ -302,7 +302,7 @@ let test_comments_block () =
 
 let test_whitespace_space () =
   let state, _ = make_test_state "   " in
-  let new_state, _span = Lexer.scan_whitespace state in
+  let new_state, _, _span = Lexer.scan_whitespace state in
   Alcotest.(check int) "whitespace position" 3 new_state.pos
 
 let test_unicode_escape_valid_small () =
