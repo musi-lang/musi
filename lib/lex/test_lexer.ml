@@ -305,6 +305,139 @@ let test_whitespace_space () =
   let new_state, _span = Lexer.scan_whitespace state in
   Alcotest.(check int) "whitespace position" 3 new_state.pos
 
+let test_unicode_escape_valid_small () =
+  let state, interner = make_test_state "\"\\u{00A9}\"" in
+  let new_state, name, _span = Lexer.scan_string state in
+  check_no_errors new_state.diags;
+  check_string_value interner name "\169"
+
+let test_unicode_escape_valid_big () =
+  let state, interner = make_test_state "\"\\U{E001}\"" in
+  let new_state, name, _span = Lexer.scan_string state in
+  check_no_errors new_state.diags;
+  check_string_value interner name "\001"
+
+let test_unicode_escape_empty () =
+  let state, _ = make_test_state "\"\\u{}\"" in
+  let new_state, _name, _span = Lexer.scan_string state in
+  Alcotest.(check bool)
+    "unicode empty escape has errors"
+    true
+    (Diagnostic.has_errors new_state.diags)
+
+let test_unicode_escape_missing_brace () =
+  let state, _ = make_test_state "\"\\u00A9\"" in
+  let new_state, _name, _span = Lexer.scan_string state in
+  Alcotest.(check bool)
+    "unicode missing brace has errors"
+    true
+    (Diagnostic.has_errors new_state.diags)
+
+let test_unicode_escape_invalid_hex () =
+  let state, _ = make_test_state "\"\\u{GGGG}\"" in
+  let new_state, _name, _span = Lexer.scan_string state in
+  Alcotest.(check bool)
+    "unicode invalid hex has errors"
+    true
+    (Diagnostic.has_errors new_state.diags)
+
+let test_unicode_escape_exceed_small_limit () =
+  let state, _ = make_test_state "\"\\u{110000}\"" in
+  let new_state, _name, _span = Lexer.scan_string state in
+  Alcotest.(check bool)
+    "unicode exceeds small limit has errors"
+    true
+    (Diagnostic.has_errors new_state.diags)
+
+let test_unicode_escape_incomplete () =
+  let state, _ = make_test_state "\"\\u{" in
+  let new_state, _name, _span = Lexer.scan_string state in
+  Alcotest.(check bool)
+    "unicode incomplete has errors"
+    true
+    (Diagnostic.has_errors new_state.diags)
+
+let test_unicode_escape_in_rune () =
+  let state, _ = make_test_state "'\\u{41}'" in
+  let new_state, char_val, _span = Lexer.scan_rune state in
+  check_no_errors new_state.diags;
+  Alcotest.(check char) "unicode rune" 'A' char_val
+
+let test_template_extra_closing_brace () =
+  let state, _ = make_test_state "$\"hello}world\"" in
+  let new_state, _token, _span = Lexer.scan_template_or_dollar state in
+  Alcotest.(check bool)
+    "template extra closing brace has errors"
+    true
+    (Diagnostic.has_errors new_state.diags)
+
+let test_template_unclosed_opening_brace () =
+  let state, _ = make_test_state "$\"hello{world\"" in
+  let new_state, _token, _span = Lexer.scan_template_or_dollar state in
+  Alcotest.(check bool)
+    "template unclosed opening brace has errors"
+    true
+    (Diagnostic.has_errors new_state.diags)
+
+let test_template_nested_braces () =
+  let state, interner = make_test_state "$\"hello {user{name} } end\"" in
+  let new_state, token, _span = Lexer.scan_template_or_dollar state in
+  check_no_errors new_state.diags;
+  match token with
+  | Token.LitTemplate name ->
+    check_string_value interner name "hello {user{name} } end"
+  | _ -> Alcotest.fail "Expected template token"
+
+let test_template_empty_braces () =
+  let state, interner = make_test_state "$\"hello{}world\"" in
+  let new_state, token, _span = Lexer.scan_template_or_dollar state in
+  check_no_errors new_state.diags;
+  match token with
+  | Token.LitTemplate name -> check_string_value interner name "hello{}world"
+  | _ -> Alcotest.fail "Expected template token"
+
+let test_utf8_valid_2byte () =
+  let state, interner = make_test_state "\"\xc2\xa9\"" in
+  let new_state, name, _span = Lexer.scan_string state in
+  check_no_errors new_state.diags;
+  check_string_value interner name "\u{00A9}"
+
+let test_utf8_valid_3byte () =
+  let state, interner = make_test_state "\"\xe2\x98\x83\"" in
+  let new_state, name, _span = Lexer.scan_string state in
+  check_no_errors new_state.diags;
+  check_string_value interner name "\u{2603}"
+
+let test_utf8_valid_4byte () =
+  let state, interner = make_test_state "\"\xf0\x9f\x98\x80\"" in
+  let new_state, name, _span = Lexer.scan_string state in
+  check_no_errors new_state.diags;
+  check_string_value interner name "\u{1F600}"
+
+let test_utf8_invalid_continuation () =
+  let interner = Interner.create () in
+  let _tokens, diags = Lexer.tokenize "\xc2\x41" 42 interner in
+  Alcotest.(check bool)
+    "utf8 invalid continuation has errors"
+    true
+    (Diagnostic.has_errors diags)
+
+let test_utf8_incomplete_sequence () =
+  let interner = Interner.create () in
+  let _tokens, diags = Lexer.tokenize "\xc2" 42 interner in
+  Alcotest.(check bool)
+    "utf8 incomplete sequence has errors"
+    true
+    (Diagnostic.has_errors diags)
+
+let test_utf8_invalid_start_byte () =
+  let interner = Interner.create () in
+  let _tokens, diags = Lexer.tokenize "\xfc" 42 interner in
+  Alcotest.(check bool)
+    "utf8 invalid start byte has errors"
+    true
+    (Diagnostic.has_errors diags)
+
 let () =
   let open Alcotest in
   run
@@ -340,6 +473,42 @@ let () =
         ; test_case "empty" `Quick test_runes_empty
         ; test_case "multichar" `Quick test_runes_multichar
         ; test_case "invalid escape" `Quick test_runes_invalid_escape
+        ] )
+    ; ( "unicode_escapes"
+      , [
+          test_case "valid small unicode" `Quick test_unicode_escape_valid_small
+        ; test_case "valid big unicode" `Quick test_unicode_escape_valid_big
+        ; test_case "empty unicode escape" `Quick test_unicode_escape_empty
+        ; test_case "missing brace" `Quick test_unicode_escape_missing_brace
+        ; test_case "invalid hex digits" `Quick test_unicode_escape_invalid_hex
+        ; test_case
+            "exceed small limit"
+            `Quick
+            test_unicode_escape_exceed_small_limit
+        ; test_case "incomplete escape" `Quick test_unicode_escape_incomplete
+        ; test_case "unicode in rune" `Quick test_unicode_escape_in_rune
+        ] )
+    ; ( "template_validation"
+      , [
+          test_case
+            "extra closing brace"
+            `Quick
+            test_template_extra_closing_brace
+        ; test_case
+            "unclosed opening brace"
+            `Quick
+            test_template_unclosed_opening_brace
+        ; test_case "nested braces" `Quick test_template_nested_braces
+        ; test_case "empty braces" `Quick test_template_empty_braces
+        ] )
+    ; ( "utf8_validation"
+      , [
+          test_case "valid 2-byte" `Quick test_utf8_valid_2byte
+        ; test_case "valid 3-byte" `Quick test_utf8_valid_3byte
+        ; test_case "valid 4-byte" `Quick test_utf8_valid_4byte
+        ; test_case "invalid continuation" `Quick test_utf8_invalid_continuation
+        ; test_case "incomplete sequence" `Quick test_utf8_incomplete_sequence
+        ; test_case "invalid start byte" `Quick test_utf8_invalid_start_byte
         ] )
     ; ( "identifiers"
       , [
