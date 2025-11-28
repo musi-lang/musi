@@ -1,4 +1,16 @@
 (library
  (public_name musi.lex)
  (name lex)
+ (modules token lexer)
  (libraries basic))
+
+(executable
+ (public_name test_lexer)
+ (name test_lexer)
+ (modules test_lexer)
+ (libraries lex basic alcotest))
+
+(rule
+ (alias runtest)
+ (action
+  (run ./test_lexer.exe)))
