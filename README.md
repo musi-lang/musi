@@ -27,7 +27,7 @@ Systems programming language designed for clarity, safety, and performance. Read
 git clone https://github.com/musi-lang/musi.git
 cd musi
 
-# build Musi Compiler
+opam install dune
 opam exec -- dune pkg lock
 opam exec -- dune build
 ```
