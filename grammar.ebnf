@@ -23,39 +23,39 @@ char_no_quote = letter | digit | "_" | " " | "!" | "#" | "$" | "%" | "&" | "(" |
 
 char_no_quote_or_brace = letter | digit | "_" | " " | "!" | "#" | "$" | "%" | "&" | "(" | ")" | "*" | "+" | "," | "-" | "." | "/" | ":" | ";" | "<" | "=" | ">" | "?" | "@" | "[" | "\\" | "]" | "^" | "`" | "|" | "~";
 
-literal = number_whole | number_decimal | string | template_string;
+rune = "'", char_no_quote, "'";
+
+literal = number_whole | number_decimal | string | rune;
 
 (* === PROGRAM === *)
 program = {stmt_import | stmt_export | stmt};
 
-stmt_import = "import", "{", aux_ident_list, "}", "from", string, ";";
+stmt_import = "import", ident, "from", string, ";";
 
-stmt_export = "export", "{", aux_ident_list, "}", ["from", string], ";";
-
-aux_ident_list = ident, {",", ident};
+stmt_export = "export", ident, ["from", string], ";";
 
 (* === STATEMENTS === *)
-stmt = [aux_attr], (stmt_bind | stmt_assign | stmt_expr | stmt_data | stmt_func | stmt_mutual | stmt_extern);
+stmt = [aux_attr], (stmt_bind | stmt_assign | stmt_expr | stmt_data | stmt_func | stmt_extern);
 
-stmt_bind = ("val" | "var"), ident, [":", typ], ":=", expr, ";";
+stmt_bind = ("val" | "var"), ident, aux_opt_type, ":=", expr, ";";
 
-stmt_assign = ident, compound_assign_op, expr, ";";
-
-compound_assign_op = ":+=" | ":-=" | ":*=" | ":/=" | ":**=" | ":&=" | ":|=" | ":^=" | ":<<=" | ":>>=" | ":&&=" | ":||=" | ":::=";
+stmt_assign = ident, "<-", expr, ";";
 
 stmt_expr = expr, ";";
 
-stmt_data = "data", ident, [aux_gen_params], ":=", typ, ";";
+stmt_data = "data", ident, (typ_record | typ_sum), ";";
 
-stmt_func = "def", ident, [aux_gen_params], aux_params, ["->", typ], stmt_block, ";";
+stmt_func = "def", ident, aux_params, aux_opt_ret_type, stmt_block, ";";
 
-stmt_mutual = (stmt_func | stmt_data), {"and", (stmt_func | stmt_data)};
+stmt_extern = "extern", {aux_extern_item};
 
-stmt_extern = "extern", "{", {aux_extern_item}, "}";
+aux_extern_item = stmt_func;
 
-aux_extern_item = stmt_func | stmt_bind;
+stmt_block = "{", {stmt}, ["return", expr, ";"], "}";
 
-stmt_block = "{", {stmt}, [expr], "}";
+aux_opt_type = [":", typ];
+
+aux_opt_ret_type = ["->", typ];
 
 aux_attr = "@[", ident, ["(", aux_attr_args, ")"], "]";
 
@@ -66,35 +66,31 @@ aux_attr_arg = ident | number_whole | string;
 (* === EXPRESSIONS - LO..HI === *)
 expr = expr_pipe;
 
-expr_pipe = expr_logical_or, {"|", ">", expr_logical_or};
+expr_pipe = expr_logical_or, {"|>", expr_logical_or};
 
-expr_logical_or = expr_logical_and, {"|", "|", expr_logical_and};
+expr_logical_or = expr_logical_and, {"or", expr_logical_and};
 
-expr_logical_and = expr_bitwise, {"&", "&", expr_bitwise};
+expr_logical_and = expr_bitwise, {"and", expr_bitwise};
 
-expr_bitwise = expr_comparison, {("&" | "|" | "^" | "~&" | "~|" | "~^"), expr_comparison};
+expr_bitwise = expr_comparison, {("&" | "|" | "^"), expr_comparison};
 
-expr_comparison = expr_range, [("=" | "!=" | ">" | "<" | ">=" | "<="), expr_range];
-
-expr_range = expr_cons, {(".." | "..<"), expr_cons};
-
-expr_cons = expr_additive, {"::", expr_additive};
+expr_comparison = expr_additive, [("=" | "!=" | ">" | "<" | ">=" | "<="), expr_additive];
 
 expr_additive = expr_multiplicative, {("+" | "-"), expr_multiplicative};
 
 expr_multiplicative = expr_exponentiation, {("*" | "/"), expr_exponentiation};
 
-expr_exponentiation = expr_shift, {"*", "*", expr_shift};
+expr_exponentiation = expr_offset, {"**", expr_offset};
 
-expr_shift = expr_unary, {("<", "<" | ">", ">"), expr_unary};
+expr_offset = expr_unary, {"!", expr_unary};
 
-expr_unary = ["-" | "!" | "~"], expr_postfix;
+expr_unary = ["-" | "not" | "~" | "@"], expr_postfix;
 
 expr_postfix = expr_primary, {aux_postfix_op};
 
-aux_postfix_op = ".", (ident | number_whole) | "[", expr, "]" | [aux_gen_args], "(", [aux_arg_list], ")";
+aux_postfix_op = ".", ident | "[", expr, "]" | "(", [aux_arg_list], ")";
 
-expr_primary = expr_literal | expr_template | expr_ident | expr_tuple | expr_block | expr_if | expr_match | expr_for | expr_while | expr_try | expr_using | expr_record | expr_with | expr_func;
+expr_primary = expr_literal | expr_template | expr_ident | expr_tuple | expr_block | expr_if | expr_match | expr_for | expr_while | expr_record | expr_func;
 
 expr_literal = literal;
 
@@ -106,33 +102,23 @@ expr_tuple = "(", [aux_expr_list], ")";
 
 expr_block = stmt_block;
 
-expr_if = "if", aux_cond, stmt_block, ["else", stmt_block];
+expr_if = "if", "(", expr, ")", stmt_block, ["else", stmt_block];
 
-expr_match = "match", "(", expr, ")", "{", {aux_match_arm}, "}";
+expr_match = "match", expr, "{", {aux_match_arm}, "}";
 
-expr_for = "for", pat, "in", expr, ["if", expr], stmt_block;
+expr_for = "for", "(", ident, aux_opt_type, ":=", expr, "in", expr, ["step", expr], ")", stmt_block;
 
-expr_while = "while", aux_cond, stmt_block;
+expr_while = "while", "(", expr, ")", stmt_block;
 
-expr_try = "try", expr, "else", expr, stmt_block;
+expr_record = "{", aux_field_inits, "}";
 
-expr_using = "using", pat, ":=", expr, stmt_block;
-
-expr_record = ident, "{", aux_field_inits, "}";
-
-expr_with = expr, "with", "{", aux_field_inits, "}";
-
-expr_func = "def", [aux_gen_params], aux_params, ["->", typ], stmt_block;
-
-aux_gen_params = "<", aux_typ_list, ">";
-
-aux_gen_args = "<", aux_typ_list, ">";
+expr_func = "def", aux_params, aux_opt_ret_type, stmt_block;
 
 aux_params = "(", [aux_param_list], ")";
 
 aux_param_list = aux_param, {",", aux_param};
 
-aux_param = ["ref"], ["var"], ident, ":", typ;
+aux_param = ident, aux_opt_type;
 
 aux_arg_list = expr, {",", expr};
 
@@ -142,11 +128,7 @@ aux_field_inits = aux_field_init, {",", aux_field_init};
 
 aux_field_init = ".", ident, ":=", expr;
 
-aux_cond = aux_case_cond | "(", expr, ")";
-
-aux_case_cond = "case", pat, ":=", expr, {",", expr};
-
-aux_match_arm = "case", aux_pat_list, "=>", expr, ";";
+aux_match_arm = "case", pat, "=>", expr, [","];
 
 aux_pat_list = pat, {",", pat};
 
@@ -176,9 +158,11 @@ typ = typ_sum;
 
 typ_sum = typ_primary, {"|", aux_typ_case};
 
-aux_typ_case = "case", ident, ["(", aux_typ_list, ")"];
+aux_typ_case = "case", ident, ["(", aux_typ_fields, ")"];
 
-typ_primary = typ_ident | typ_tuple | typ_array | typ_func | typ_record;
+typ_primary = typ_ptr | typ_ident | typ_tuple | typ_func | typ_record;
+
+typ_ptr = "^", typ;
 
 typ_ident = ident;
 
@@ -186,9 +170,7 @@ typ_record = "{", aux_typ_fields, "}";
 
 typ_tuple = "(", [aux_typ_list], ")";
 
-typ_array = "[", typ, "]";
-
-typ_func = "(", [aux_typ_list], ")", "->", typ;
+typ_func = "def", "(", [aux_typ_list], ")", aux_opt_ret_type;
 
 aux_typ_list = typ, {",", typ};
 
