@@ -158,6 +158,23 @@ let test_unexpected_characters () =
     true
     (has_error_containing diags "unexpected character")
 
+let test_template_literals () =
+  let _, diags = lex_single "$\"hello world\"" in
+  Alcotest.(check bool)
+    "valid template has no errors"
+    false
+    (Diagnostic.has_errors diags);
+  let _, diags = lex_single "$\"hello {name} world\"" in
+  Alcotest.(check bool)
+    "template with expression has no errors"
+    false
+    (Diagnostic.has_errors diags);
+  let _, diags = lex_single "$\"hello" in
+  Alcotest.(check bool)
+    "unterminated template error"
+    true
+    (has_error_containing diags "unterminated template")
+
 let () =
   let open Alcotest in
   run
@@ -167,6 +184,8 @@ let () =
       , [ test_case "string literal errors" `Quick test_string_literals ] )
     ; ( "rune_literals"
       , [ test_case "rune literal errors" `Quick test_rune_literals ] )
+    ; ( "template_literals"
+      , [ test_case "template literal errors" `Quick test_template_literals ] )
     ; ( "number_literals"
       , [ test_case "number literal errors" `Quick test_number_literals ] )
     ; ("comments", [ test_case "comment errors" `Quick test_comments ])
