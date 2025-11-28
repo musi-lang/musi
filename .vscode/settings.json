@@ -1,4 +1,6 @@
 {
     "remote.autoForwardPortsFallback": 0,
-    "sarif-viewer.connectToGithubCodeScanning": "off",
+    "ocaml.sandbox": {
+        "kind": "global"
+    },
 }
