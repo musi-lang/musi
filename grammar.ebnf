@@ -45,11 +45,9 @@ stmt_expr = expr, ";";
 
 stmt_data = "data", ident, (typ_expr_record | typ_expr_sum), ";";
 
-stmt_func = "def", ident, aux_params, aux_opt_ret_type, stmt_block, ";";
+stmt_extern = "extern", "{", {aux_extern_func}, "}";
 
-stmt_extern = "extern", {aux_extern_item};
-
-aux_extern_item = stmt_func;
+aux_extern_func = "def", ident, aux_params, aux_opt_ret_type, ";";
 
 stmt_block = "{", {stmt}, ["return", expr, ";"], "}";
 
@@ -112,7 +110,7 @@ expr_while = "while", expr, stmt_block;
 
 expr_record = "{", aux_field_inits, "}";
 
-expr_func = "def", aux_params, aux_opt_ret_type, stmt_block;
+expr_func = "def", [ident], aux_params, aux_opt_ret_type, stmt_block;
 
 aux_params = "(", [aux_param_list], ")";
 
@@ -160,9 +158,11 @@ typ_expr_sum = typ_expr_primary, {"|", aux_typ_expr_case};
 
 aux_typ_expr_case = "case", ident, ["(", aux_typ_expr_fields, ")"];
 
-typ_expr_primary = typ_expr_ptr | typ_expr_ident | typ_expr_tuple | typ_expr_func | typ_expr_record;
+typ_expr_primary = typ_expr_ptr | typ_expr_array | typ_expr_ident | typ_expr_tuple | typ_expr_func | typ_expr_record;
 
 typ_expr_ptr = "^", typ_expr;
+
+typ_expr_array = "[", [expr], "]", typ_expr;
 
 typ_expr_ident = ident;
 
