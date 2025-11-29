@@ -110,7 +110,7 @@ expr_while = "while", expr, stmt_block;
 
 expr_record = "{", aux_field_inits, "}";
 
-expr_func = "def", [ident], aux_params, aux_opt_ret_type, stmt_block;
+expr_func = ["extern", [string]], "def", [ident], aux_params, aux_opt_ret_type, stmt_block;
 
 aux_params = "(", [aux_param_list], ")";
 
