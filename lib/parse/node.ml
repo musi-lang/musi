@@ -36,7 +36,7 @@ and stmt_kind =
   | StmtAssign of ident * expr
   | StmtExpr of expr
   | StmtData of ident * data_kind
-  | StmtExtern of func_sig list
+  | StmtExtern of string option * func_sig list
 
 and expr = { kind : expr_kind; span : Span.t }
 
