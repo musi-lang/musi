@@ -3,3 +3,14 @@
  (name parse)
  (modules node prec parser parse_error)
  (libraries basic lex))
+
+(executable
+ (public_name test_parser)
+ (name test_parser)
+ (modules test_parser)
+ (libraries parse basic lex alcotest))
+
+(rule
+ (alias runtest)
+ (action
+  (run ./test_parser.exe)))
