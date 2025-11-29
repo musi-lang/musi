@@ -109,7 +109,7 @@
         },
         "declaration-named": {
             "name": "meta.declaration.musi",
-            "begin": "((?:(?:export|extern)\\s+)*)\\b(data|def|val|var)\\b",
+            "begin": "((?:(?:export|extern|unsafe)\\s+)*)\\b(data|def|val|var)\\b",
             "beginCaptures": {
                 "1": {
                     "patterns": [
@@ -352,7 +352,7 @@
         },
         "keyword-modifier": {
             "name": "storage.modifier.musi",
-            "match": "\\b(extern)\\b"
+            "match": "\\b(extern|unsafe)\\b"
         },
         "keyword-cast": {
             "name": "keyword.operator.cast.musi",
