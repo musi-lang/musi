@@ -75,7 +75,7 @@ let test_parse_pattern_binding () =
     "parsed pat binding"
     true
     (match pattern.kind with
-    | PatBind { mutable_ = false; name = _ } -> true
+    | PatBinding { mutable_ = false; name = _ } -> true
     | _ -> false)
 
 let test_parse_pattern_constructor () =
