@@ -43,7 +43,7 @@ stmt_assign = ident, "<-", expr, ";";
 
 stmt_expr = expr, ";";
 
-stmt_data = "data", ident, (typ_record | typ_sum), ";";
+stmt_data = "data", ident, (typ_expr_record | typ_expr_sum), ";";
 
 stmt_func = "def", ident, aux_params, aux_opt_ret_type, stmt_block, ";";
 
@@ -53,9 +53,9 @@ aux_extern_item = stmt_func;
 
 stmt_block = "{", {stmt}, ["return", expr, ";"], "}";
 
-aux_opt_type = [":", typ];
+aux_opt_type = [":", typ_expr];
 
-aux_opt_ret_type = ["->", typ];
+aux_opt_ret_type = ["->", typ_expr];
 
 aux_attr = "@[", ident, ["(", aux_attr_args, ")"], "]";
 
@@ -102,13 +102,13 @@ expr_tuple = "(", [aux_expr_list], ")";
 
 expr_block = stmt_block;
 
-expr_if = "if", "(", expr, ")", stmt_block, ["else", stmt_block];
+expr_if = "if", expr, stmt_block, ["else", stmt_block];
 
 expr_match = "match", expr, "{", {aux_match_arm}, "}";
 
-expr_for = "for", "(", ident, aux_opt_type, ":=", expr, "in", expr, ["step", expr], ")", stmt_block;
+expr_for = "for", ident, aux_opt_type, ":=", expr, "in", expr, ["step", expr], stmt_block;
 
-expr_while = "while", "(", expr, ")", stmt_block;
+expr_while = "while", expr, stmt_block;
 
 expr_record = "{", aux_field_inits, "}";
 
@@ -153,27 +153,27 @@ aux_pat_fields = aux_pat_field, {",", aux_pat_field};
 
 aux_pat_field = ".", ident, [":=", pat];
 
-(* === TYPE REPRESENTATIONS (SYNTACTIC) === *)
-typ = typ_sum;
+(* === TYPE EXPRESSIONS === *)
+typ_expr = typ_expr_sum;
 
-typ_sum = typ_primary, {"|", aux_typ_case};
+typ_expr_sum = typ_expr_primary, {"|", aux_typ_expr_case};
 
-aux_typ_case = "case", ident, ["(", aux_typ_fields, ")"];
+aux_typ_expr_case = "case", ident, ["(", aux_typ_expr_fields, ")"];
 
-typ_primary = typ_ptr | typ_ident | typ_tuple | typ_func | typ_record;
+typ_expr_primary = typ_expr_ptr | typ_expr_ident | typ_expr_tuple | typ_expr_func | typ_expr_record;
 
-typ_ptr = "^", typ;
+typ_expr_ptr = "^", typ_expr;
 
-typ_ident = ident;
+typ_expr_ident = ident;
 
-typ_record = "{", aux_typ_fields, "}";
+typ_expr_record = "{", aux_typ_expr_fields, "}";
 
-typ_tuple = "(", [aux_typ_list], ")";
+typ_expr_tuple = "(", [aux_typ_expr_list], ")";
 
-typ_func = "def", "(", [aux_typ_list], ")", aux_opt_ret_type;
+typ_expr_func = "def", "(", [aux_typ_expr_list], ")", aux_opt_ret_type;
 
-aux_typ_list = typ, {",", typ};
+aux_typ_expr_list = typ_expr, {",", typ_expr};
 
-aux_typ_fields = aux_typ_field, {",", aux_typ_field};
+aux_typ_expr_fields = aux_typ_expr_field, {",", aux_typ_expr_field};
 
-aux_typ_field = ident, ":", typ;
+aux_typ_expr_field = ident, ":", typ_expr;
