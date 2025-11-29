@@ -45,7 +45,7 @@ stmt_expr = expr, ";";
 
 stmt_data = "data", ident, (typ_expr_record | typ_expr_sum), ";";
 
-stmt_extern = "extern", "{", {aux_extern_func}, "}";
+stmt_extern = "extern", [string], "{", {aux_extern_func}, "}";
 
 aux_extern_func = "def", ident, aux_params, aux_opt_ret_type, ";";
 
