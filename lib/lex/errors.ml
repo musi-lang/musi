@@ -66,7 +66,7 @@ let diag code span args =
     | E0103, [ base ] -> Printf.sprintf "incomplete %s number" base
     | E0201, [ lit_type ] -> Printf.sprintf "unterminated %s literal" lit_type
     | E0202, [ lit_type ] -> Printf.sprintf "unterminated %s literal" lit_type
-    | E0203, [] -> "rune literal cannot be empty"
+    | E0203, [] -> "empty rune literal"
     | E0204, [] -> "unexpected '}' in template literal"
     | E0205, [] -> "empty unicode escape sequence"
     | E0206, [] -> "incomplete unicode escape sequence"
@@ -81,8 +81,8 @@ let diag code span args =
     | E0301, [ char ] ->
       Printf.sprintf "unexpected character '%c'" (String.get char 0)
     | E0302, [ code ] ->
-      Printf.sprintf "control character '\\x%s' in source" code
-    | E0303, [] -> "null byte is not allowed in source"
+      Printf.sprintf "control character '\\x%s' not allowed in source" code
+    | E0303, [] -> "null byte not allowed in source"
     | E0304, [ char ] ->
       Printf.sprintf
         "non-ASCII character '%c' in identifier"
