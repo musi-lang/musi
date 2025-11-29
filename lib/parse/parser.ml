@@ -67,6 +67,25 @@ let consume_if st tok =
   let curr, _ = peek st in
   if curr = tok then (advance st, true) else (st, false)
 
+let peek_skip st =
+  let st = skip_trivia st in
+  let curr, span = peek st in
+  (st, curr, span)
+
+let parse_comma_sep parse_item st =
+  let rec loop st acc =
+    let st, curr, span = peek_skip st in
+    match parse_item st curr span with
+    | None -> (st, List.rev acc)
+    | Some (st, item) ->
+      let st, curr, _ = peek_skip st in
+      if curr = Token.Comma then
+        let st, _ = expect st Token.Comma in
+        loop st (item :: acc)
+      else (st, List.rev (item :: acc))
+  in
+  loop st []
+
 let parse_expr st =
   (st, Node.{ kind = ExprLiteral LitUnit; span = curr_span st })
 
@@ -82,14 +101,11 @@ let parse_typ_expr st =
 
 let parse_params parse_typ st =
   let st, _ = expect st Token.LParen in
-  let st = skip_trivia st in
   if match_token st Token.RParen then
     let st, _ = expect st Token.RParen in
     (st, [])
   else
-    let rec loop st acc =
-      let st = skip_trivia st in
-      let curr, span = peek st in
+    let parse_item st curr span =
       match curr with
       | Token.Ident name ->
         let st = advance st in
@@ -100,17 +116,12 @@ let parse_params parse_typ st =
             (st, Some t)
           else (st, None)
         in
-        let param = Node.{ name; typ = type_opt } in
-        let st = skip_trivia st in
-        if match_token st Token.Comma then
-          let st, _ = expect st Token.Comma in
-          loop st (param :: acc)
-        else (st, List.rev (param :: acc))
+        Some (st, Node.{ name; typ = type_opt })
       | _ ->
-        let st = add_error_code st Parse_error.E1105 span [] in
-        (st, List.rev acc)
+        let _ = add_error_code st Parse_error.E1105 span [] in
+        None
     in
-    let st, params = loop st [] in
+    let st, params = parse_comma_sep parse_item st in
     let st, _ = expect st Token.RParen in
     (st, params)
 
@@ -151,45 +162,32 @@ let parse_match_arm parse_pat parse_expr st =
   (st, Node.{ pattern; body })
 
 let parse_typ_fields parse_typ st =
-  let rec loop st acc =
-    let st = skip_trivia st in
-    let curr, span = peek st in
+  let parse_item st curr span =
     match curr with
     | Token.Ident name ->
       let st = advance st in
       let st, _ = expect st Token.Colon in
       let st, typ = parse_typ st in
-      let field = Node.{ name; typ } in
-      let st = skip_trivia st in
-      if match_token st Token.Comma then
-        let st, _ = expect st Token.Comma in
-        loop st (field :: acc)
-      else (st, List.rev (field :: acc))
+      Some (st, Node.{ name; typ })
     | _ ->
-      let st = add_error_code st Parse_error.E1105 span [] in
-      (st, List.rev acc)
+      let _ = add_error_code st Parse_error.E1105 span [] in
+      None
   in
-  loop st []
+  parse_comma_sep parse_item st
 
 let parse_typ_case parse_typ st =
   let st, _ = expect st Token.KwCase in
-  let st = skip_trivia st in
-  let curr, span = peek st in
+  let st, curr, span = peek_skip st in
   match curr with
   | Token.Ident name ->
     let st = advance st in
-    let st = skip_trivia st in
     if match_token st Token.LParen then
       let st, _ = expect st Token.LParen in
-      let rec loop st acc =
+      let parse_item st _curr _span =
         let st, typ = parse_typ st in
-        let st = skip_trivia st in
-        if match_token st Token.Comma then
-          let st, _ = expect st Token.Comma in
-          loop st (typ :: acc)
-        else (st, List.rev (typ :: acc))
+        Some (st, typ)
       in
-      let st, fields = loop st [] in
+      let st, fields = parse_comma_sep parse_item st in
       let st, _ = expect st Token.RParen in
       (st, Node.{ name; fields })
     else (st, Node.{ name; fields = [] })
