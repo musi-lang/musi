@@ -90,6 +90,6 @@ let diag code span args =
     | E0401, [] -> "unterminated block comment"
     | E0402, [] -> "block comments cannot be nested"
     | E0501, [] -> "lexer failed to advance"
-    | _, _ -> "unknown error"
+    | _, _ -> "unknown lex error"
   in
   Diagnostic.error_with_code (Diagnostic.Lex (code_string code)) msg span
