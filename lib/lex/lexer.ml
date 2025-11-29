@@ -31,7 +31,10 @@ let add_error st msg start end_ =
 
 let add_error_code st code start end_ args =
   let sp = Span.make st.file_id start end_ in
-  { st with diags = Diagnostic.add st.diags (Errors.diag code sp args) }
+  {
+    st with
+    diags = Diagnostic.add st.diags (Lex__Errors.Error.diag code sp args)
+  }
 
 let extract st s e = String.sub st.source s (e - s)
 
@@ -81,7 +84,8 @@ let check_utf8_char st pos =
   else
     let first = Char.code st.source.[pos] in
     if first < 0x80 then (pos + 1, None)
-    else if first < 0xC0 then (pos + 1, Some (Errors.E0001, pos, pos + 1))
+    else if first < 0xC0 then
+      (pos + 1, Some (Lex__Errors.Error.E0001, pos, pos + 1))
     else
       let exp =
         if first < 0xE0 then 2
@@ -89,8 +93,9 @@ let check_utf8_char st pos =
         else if first < 0xF8 then 4
         else 0
       in
-      if exp = 0 then (pos + 1, Some (Errors.E0002, pos, pos + 1))
-      else if pos + exp > st.len then (st.len, Some (Errors.E0003, pos, st.len))
+      if exp = 0 then (pos + 1, Some (Lex__Errors.Error.E0002, pos, pos + 1))
+      else if pos + exp > st.len then
+        (st.len, Some (Lex__Errors.Error.E0003, pos, st.len))
       else
         let rec chk idx =
           if idx >= pos + exp then None
@@ -99,7 +104,7 @@ let check_utf8_char st pos =
           else chk (idx + 1)
         in
         match chk (pos + 1) with
-        | Some inv -> (pos + exp, Some (Errors.E0001, inv, inv + 1))
+        | Some inv -> (pos + exp, Some (Lex__Errors.Error.E0001, inv, inv + 1))
         | None -> (pos + exp, None)
 
 let check_utf8_in_range st sp ep =
@@ -176,7 +181,13 @@ let scan_number_chars st start valid base =
       let c = st.source.[p] in
       if valid c then go (p + 1) s
       else if is_alpha c || is_digit c then
-        (p, add_error_code s Errors.E0101 p (p + 1) [ base; String.make 1 c ])
+        ( p
+        , add_error_code
+            s
+            Lex__Errors.Error.E0101
+            p
+            (p + 1)
+            [ base; String.make 1 c ] )
       else (p, s)
   in
   go start st
@@ -189,7 +200,7 @@ let scan_decimal st start =
       if is_digit c then go (pos + 1) s dots
       else if c = '.' then
         if dots > 0 then
-          (pos, add_error_code s Errors.E0102 pos pos [], dots + 1)
+          (pos, add_error_code s Lex__Errors.Error.E0102 pos pos [], dots + 1)
         else go (pos + 1) s (dots + 1)
       else (pos, s, dots)
   in
