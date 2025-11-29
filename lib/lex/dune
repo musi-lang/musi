@@ -1,7 +1,7 @@
 (library
  (public_name musi.lex)
  (name lex)
- (modules token lexer)
+ (modules token lexer errors)
  (libraries basic))
 
 (executable

@@ -29,6 +29,10 @@ let add_error st msg start end_ =
   let sp = Span.make st.file_id start end_ in
   { st with diags = Diagnostic.add st.diags (Diagnostic.error msg sp) }
 
+let add_error_code st code start end_ args =
+  let sp = Span.make st.file_id start end_ in
+  { st with diags = Diagnostic.add st.diags (Errors.diag code sp args) }
+
 let extract st s e = String.sub st.source s (e - s)
 
 let classify = function
@@ -77,8 +81,7 @@ let check_utf8_char st pos =
   else
     let first = Char.code st.source.[pos] in
     if first < 0x80 then (pos + 1, None)
-    else if first < 0xC0 then
-      (pos + 1, Some ("invalid UTF-8 continuation byte", pos, pos + 1))
+    else if first < 0xC0 then (pos + 1, Some (Errors.E0001, pos, pos + 1))
     else
       let exp =
         if first < 0xE0 then 2
@@ -86,9 +89,8 @@ let check_utf8_char st pos =
         else if first < 0xF8 then 4
         else 0
       in
-      if exp = 0 then (pos + 1, Some ("invalid UTF-8 start byte", pos, pos + 1))
-      else if pos + exp > st.len then
-        (st.len, Some ("incomplete UTF-8 sequence", pos, st.len))
+      if exp = 0 then (pos + 1, Some (Errors.E0002, pos, pos + 1))
+      else if pos + exp > st.len then (st.len, Some (Errors.E0003, pos, st.len))
       else
         let rec chk idx =
           if idx >= pos + exp then None
@@ -97,8 +99,7 @@ let check_utf8_char st pos =
           else chk (idx + 1)
         in
         match chk (pos + 1) with
-        | Some inv ->
-          (pos + exp, Some ("invalid UTF-8 continuation byte", inv, inv + 1))
+        | Some inv -> (pos + exp, Some (Errors.E0001, inv, inv + 1))
         | None -> (pos + exp, None)
 
 let check_utf8_in_range st sp ep =
@@ -106,7 +107,7 @@ let check_utf8_in_range st sp ep =
     if p >= ep then s
     else if Char.code st.source.[p] >= 0x80 then
       match check_utf8_char s p with
-      | _, Some (msg, a, b) -> go b (add_error s msg a b)
+      | _, Some (code, a, b) -> go b (add_error_code s code a b [])
       | nxt, None -> go nxt s
     else go (p + 1) s
   in
@@ -175,9 +176,7 @@ let scan_number_chars st start valid base =
       let c = st.source.[p] in
       if valid c then go (p + 1) s
       else if is_alpha c || is_digit c then
-        ( p
-        , add_error s (Printf.sprintf "invalid %s digit '%c'" base c) p (p + 1)
-        )
+        (p, add_error_code s Errors.E0101 p (p + 1) [ base; String.make 1 c ])
       else (p, s)
   in
   go start st
@@ -190,9 +189,7 @@ let scan_decimal st start =
       if is_digit c then go (pos + 1) s dots
       else if c = '.' then
         if dots > 0 then
-          ( pos
-          , add_error s "multiple decimal points in number" pos pos
-          , dots + 1 )
+          (pos, add_error_code s Errors.E0102 pos pos [], dots + 1)
         else go (pos + 1) s (dots + 1)
       else (pos, s, dots)
   in
@@ -201,9 +198,7 @@ let scan_decimal st start =
 
 let scan_based_number st start pfx valid base =
   let pos = st.pos + pfx in
-  let mkErr s =
-    { (add_error s ("incomplete " ^ base ^ " number") start pos) with pos }
-  in
+  let mkErr s = { (add_error_code s E0103 start pos [ base ]) with pos } in
   if pos >= st.len then (mkErr st, extract st start pos, mk_span st start)
   else
     let ep, fs = scan_number_chars st pos valid base in
@@ -258,70 +253,43 @@ let parse_unicode_escape st pos =
       | Some eb -> (
         let hex = String.sub st.source (pos + 3) (eb - pos - 3) in
         if String.length hex = 0 then
-          Some
-            (add_error st "empty unicode escape sequence" pos (eb + 1), eb + 1)
+          Some (add_error_code st E0205 pos (eb + 1) [], eb + 1)
         else
           try
             let v = int_of_string ("0x" ^ hex) in
             let max_v = if big then 0x10FFFF else 0xFFFF in
             if v > max_v then
               Some
-                ( add_error
+                ( add_error_code
                     st
-                    (Printf.sprintf
-                       "unicode code point exceeds maximum 0x%X"
-                       max_v)
+                    E0207
                     pos
                     (eb + 1)
+                    [ Printf.sprintf "%X" max_v ]
                 , eb + 1 )
             else None
-          with _ ->
-            Some
-              ( add_error
-                  st
-                  "invalid hex digits in unicode escape sequence"
-                  pos
-                  (eb + 1)
-              , eb + 1 ))
+          with _ -> Some (add_error_code st E0208 pos (eb + 1) [], eb + 1))
       | None ->
         if pos + 3 < st.len then
-          Some
-            ( add_error
-                st
-                "unclosed unicode escape sequence (missing '}')"
-                pos
-                (pos + 4)
-            , pos + 3 )
-        else
-          Some
-            ( add_error st "incomplete unicode escape sequence" pos st.len
-            , st.len )
-    else
-      Some
-        ( add_error
-            st
-            "expected '{' after unicode escape prefix"
-            pos
-            (min (pos + 3) st.len)
-        , pos + 2 )
+          Some (add_error_code st E0209 pos (pos + 4) [], pos + 3)
+        else Some (add_error_code st E0206 pos st.len [], st.len)
+    else Some (add_error_code st E0210 pos (min (pos + 3) st.len) [], pos + 2)
   else None
 
 let validate_escapes st start ep =
   let rec go pos s =
     if pos >= ep - 1 then s
     else if st.source.[pos] = '\\' then
-      if pos + 1 >= ep - 1 then
-        add_error s "unterminated escape sequence" pos (pos + 1)
+      if pos + 1 >= ep - 1 then add_error_code s E0211 pos (pos + 1) []
       else if not (is_valid_escape st pos) then
         go
           (pos + 2)
-          (add_error
+          (add_error_code
              s
-             (Printf.sprintf
-                "invalid escape sequence '\\%c'"
-                st.source.[pos + 1])
+             E0212
              pos
-             (pos + 2))
+             (pos + 2)
+             [ String.make 1 st.source.[pos + 1] ])
       else if st.source.[pos + 1] = 'u' || st.source.[pos + 1] = 'U' then
         match parse_unicode_escape st pos with
         | Some (es, nxt) -> go nxt es
@@ -347,11 +315,10 @@ let scan_line_comment st =
 let scan_block_comment st =
   let start = st.pos in
   let rec go p s =
-    if p + 1 >= st.len then
-      (p, add_error s "unterminated block comment" start st.pos)
+    if p + 1 >= st.len then (p, add_error_code s E0401 start st.pos [])
     else if st.source.[p] = '*' && st.source.[p + 1] = '/' then (p + 2, s)
     else if st.source.[p] = '/' && st.source.[p + 1] = '*' then
-      go (p + 2) (add_error s "nested block comments not allowed" p (p + 2))
+      go (p + 2) (add_error_code s E0402 p (p + 2) [])
     else go (p + 1) s
   in
   let sc = st.pos + 2 in
@@ -366,13 +333,7 @@ let scan_ident st =
       let c = st.source.[p] in
       if is_ident_cont c then go (p + 1) s
       else if Char.code c > 127 then
-        go
-          (p + 1)
-          (add_error
-             s
-             ("non-ASCII character '" ^ String.make 1 c ^ "' in identifier")
-             p
-             (p + 1))
+        go (p + 1) (add_error_code s E0304 p (p + 1) [ String.make 1 c ])
       else (p, s)
   in
   let ep, fs = go st.pos st in
@@ -386,17 +347,11 @@ let scan_literal st quote lit_name process =
   let sp = mk_span st start in
   let se =
     if lit_name = "template" then
-      List.fold_left
-        (fun s p ->
-          add_error s "extra closing brace in template literal" p (p + 1))
-        st
-        extra
+      List.fold_left (fun s p -> add_error_code s E0204 p (p + 1) []) st extra
     else st
   in
   if unterm || ep > st.len || (ep = st.len && st.source.[ep - 1] <> quote) then
-    ( add_error se ("unterminated " ^ lit_name ^ " literal") start st.pos
-    , None
-    , sp )
+    (add_error_code se E0201 start st.pos [ lit_name ], None, sp)
   else
     let content =
       extract st (if lit_name = "template" then start else st.pos + 1) (ep - 1)
@@ -422,7 +377,7 @@ let scan_rune st =
   | s, None, sp -> (s, '\000', sp)
   | s, Some proc, sp ->
     if String.length proc = 0 then
-      (add_error s "empty rune literal" st.pos (st.pos + 1), '\000', sp)
+      (add_error_code s E0203 st.pos (st.pos + 1) [], '\000', sp)
     else if String.length proc > 1 then
       ( add_error
           s
@@ -445,11 +400,12 @@ let scan_symbol st =
   match go Token.symbol_strings with
   | Some (tok, len) -> ({ st with pos = st.pos + len }, tok, mk_span st st.pos)
   | None ->
-    ( add_error
+    ( add_error_code
         (advance st)
-        (Printf.sprintf "unexpected character '%c'" st.source.[st.pos])
+        E0301
         st.pos
         (st.pos + 1)
+        [ String.make 1 st.source.[st.pos] ]
     , Token.Error
     , mk_span st st.pos )
 
@@ -500,21 +456,22 @@ let rec lex_token st =
   | Some c ->
     let code = Char.code c in
     if code < 32 && c <> '\t' && c <> '\n' && c <> '\r' then
-      ( add_error
+      ( add_error_code
           (advance st)
-          (Printf.sprintf "control character '\\x%02X' in source" code)
+          E0302
           st.pos
           (st.pos + 1)
+          [ Printf.sprintf "%02X" code ]
       , Token.Whitespace
       , mk_span st st.pos )
     else if c = '\000' then
-      ( add_error (advance st) "null byte in source" st.pos (st.pos + 1)
+      ( add_error_code (advance st) E0303 st.pos (st.pos + 1) []
       , Token.Whitespace
       , mk_span st st.pos )
     else if code >= 0x80 then
       match check_utf8_char st st.pos with
       | _, Some (msg, s, e) ->
-        ( { (add_error st msg s e) with pos = max (st.pos + 1) e }
+        ( { (add_error_code st msg s e []) with pos = max (st.pos + 1) e }
         , Token.Error
         , Span.make st.file_id s e )
       | nxt, None -> (dispatch_char c) { st with pos = nxt }
@@ -529,7 +486,7 @@ and tokenize source file_id interner =
     | _ ->
       if ns.pos <= old then
         go
-          (advance (add_error ns "lexer failed to advance" old ns.pos))
+          (advance (add_error_code ns E0501 old ns.pos []))
           ((Token.Error, sp) :: tokens)
       else go ns ((tok, sp) :: tokens)
   in
