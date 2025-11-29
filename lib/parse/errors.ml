@@ -88,7 +88,7 @@ let diag code span args =
     | E1001, [ found ] -> Printf.sprintf "unexpected token '%s'" found
     | E1002, [] -> "unexpected end of input"
     | E1003, [ expected; found ] ->
-      Printf.sprintf "expected '%s', but found '%s'" expected found
+      Printf.sprintf "expected '%s', found '%s'" expected found
     | E1004, [ token ] -> Printf.sprintf "unexpected '%s' in expression" token
     | E1005, [ token ] -> Printf.sprintf "unexpected '%s' in statement" token
     | E1101, [] -> "expected expression"
