@@ -5,7 +5,7 @@ open Alcotest
 let make_test_state source =
   let interner = Interner.create () in
   let file_id = 42 in
-  let state = Lexer.make_state source file_id interner in
+  let state = Lexer.mk_state source file_id interner in
   (state, interner)
 
 let check_no_errors diags =
@@ -47,13 +47,16 @@ let test_character_predicates () =
 
 let test_state_functions () =
   let state, _ = make_test_state "hello" in
-  (check (option char)) "peek_char first" (Some 'h') (Lexer.peek_char state);
+  (check (option char))
+    "peek_char_opt first"
+    (Some 'h')
+    (Lexer.peek_char_opt state);
   let state2 = Lexer.advance state in
   (check int) "advance position" 1 state2.pos;
   (check (option char))
-    "peek_char after advance"
+    "peek_char_opt after advance"
     (Some 'e')
-    (Lexer.peek_char state2)
+    (Lexer.peek_char_opt state2)
 
 let test_numbers_decimal () =
   let state, _ = make_test_state "42" in
