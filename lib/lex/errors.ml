@@ -59,22 +59,22 @@ let diag code span args =
     match (code, args) with
     | E0001, [] -> "invalid UTF-8 continuation byte"
     | E0002, [] -> "invalid UTF-8 start byte"
-    | E0003, [] -> "incomplete UTF-8 sequence"
+    | E0003, [] -> "incomplete UTF-8 byte sequence"
     | E0101, [ base; char ] ->
       Printf.sprintf "invalid %s digit '%c'" base (String.get char 0)
-    | E0102, [] -> "multiple decimal points in number"
+    | E0102, [] -> "multiple decimal points in numeric literal"
     | E0103, [ base ] -> Printf.sprintf "incomplete %s number" base
     | E0201, [ lit_type ] -> Printf.sprintf "unterminated %s literal" lit_type
     | E0202, [ lit_type ] -> Printf.sprintf "unterminated %s literal" lit_type
-    | E0203, [] -> "empty rune literal"
-    | E0204, [] -> "extra closing brace in template literal"
+    | E0203, [] -> "rune literal cannot be empty"
+    | E0204, [] -> "unexpected closing brace in template literal"
     | E0205, [] -> "empty unicode escape sequence"
     | E0206, [] -> "incomplete unicode escape sequence"
     | E0207, [ max_val ] ->
       Printf.sprintf "unicode code point exceeds maximum 0x%s" max_val
     | E0208, [] -> "invalid hex digits in unicode escape sequence"
     | E0209, [] -> "unclosed unicode escape sequence (missing '}')"
-    | E0210, [] -> "expected '{' after unicode escape prefix"
+    | E0210, [] -> "missing '{' after unicode escape prefix"
     | E0211, [] -> "unterminated escape sequence"
     | E0212, [ char ] ->
       Printf.sprintf "invalid escape sequence '\\%c'" (String.get char 0)
@@ -82,13 +82,13 @@ let diag code span args =
       Printf.sprintf "unexpected character '%c'" (String.get char 0)
     | E0302, [ code ] ->
       Printf.sprintf "control character '\\x%s' in source" code
-    | E0303, [] -> "null byte in source"
+    | E0303, [] -> "null byte is not allowed in source"
     | E0304, [ char ] ->
       Printf.sprintf
         "non-ASCII character '%c' in identifier"
         (String.get char 0)
     | E0401, [] -> "unterminated block comment"
-    | E0402, [] -> "nested block comments not allowed"
+    | E0402, [] -> "block comments cannot be nested"
     | E0501, [] -> "lexer failed to advance"
     | _, _ -> "unknown error"
   in
