@@ -13,6 +13,14 @@ type literal_kind =
 
 type attr_arg = AttrIdent of ident | AttrInt of string | AttrString of ident
 type attr = { name : ident; args : attr_arg list }
+
+type modifiers = {
+    attrs : attr list
+  ; export_ : bool
+  ; extern_ : bool
+  ; unsafe_ : bool
+}
+
 type 'a with_span = { kind : 'a; span : Span.t }
 
 type typ_expr = typ_expr_kind with_span
@@ -69,7 +77,7 @@ and block = { unsafeness : bool; stmts : stmt list; ret : expr option }
 and pat = pat_kind with_span
 
 and pat_kind =
-  | PatBind of { mutable_ : bool; name : ident }
+  | PatBinding of { mutable_ : bool; name : ident }
   | PatLiteral of literal_kind
   | PatWild
   | PatIdent of ident
@@ -78,7 +86,7 @@ and pat_kind =
   | PatTuple of pat * pat list
 
 and pat_field = { name : ident; pat : pat option }
-and stmt = { attrs : attr list; kind : stmt_kind; span : Span.t }
+and stmt = { modifiers : modifiers; kind : stmt_kind; span : Span.t }
 
 and stmt_kind =
   | StmtImport of ident * string
