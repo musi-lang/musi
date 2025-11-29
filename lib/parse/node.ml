@@ -58,7 +58,8 @@ and expr_kind =
     }
   | ExprWhile of expr * block
   | ExprFunc of {
-        name : ident option
+        abi : string option
+      ; name : ident option
       ; params : param list
       ; ret_type : typ_expr option
       ; body : block
