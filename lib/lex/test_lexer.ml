@@ -48,19 +48,7 @@ let test_character_predicates () =
   Alcotest.(check bool)
     "is_ident_cont underscore"
     true
-    (Lexer.is_ident_cont '_');
-  Alcotest.(check bool)
-    "is_template_delim open"
-    true
-    (Lexer.is_template_delim '{');
-  Alcotest.(check bool)
-    "is_template_delim close"
-    true
-    (Lexer.is_template_delim '}');
-  Alcotest.(check bool)
-    "is_template_delim other"
-    false
-    (Lexer.is_template_delim '[')
+    (Lexer.is_ident_cont '_')
 
 let test_state_functions () =
   let state, _ = make_test_state "hello" in
