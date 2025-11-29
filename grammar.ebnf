@@ -156,7 +156,7 @@ typ_expr = typ_expr_sum;
 
 typ_expr_sum = typ_expr_primary, {"|", aux_typ_expr_case};
 
-aux_typ_expr_case = "case", ident, ["(", aux_typ_expr_fields, ")"];
+aux_typ_expr_case = "case", ident, ["(", aux_typ_expr_list, ")"];
 
 typ_expr_primary = typ_expr_ptr | typ_expr_array | typ_expr_ident | typ_expr_tuple | typ_expr_func | typ_expr_record;
 
