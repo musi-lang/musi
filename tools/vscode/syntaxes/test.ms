@@ -161,7 +161,7 @@ def offset_ptr(ptr : ^Int32, bytes : Nat32) -> ^Int32 {
   return ptr ! bytes;
 };
 
-extern def malloc(size : Nat32) -> ^Unit { /* ... */};
+extern def malloc(size : Nat32) -> ^Unit { /* ... */ };
 
 // ============================================================================
 // STRUCTURAL DATA TYPES
@@ -231,7 +231,7 @@ case Err(e) => handle_error(e)
 // MODULES & IMPORTS
 // ============================================================================
 
-import { io } from "@std/io";
+import * as io from "@std/io";
 import { writeln } from "@std/io";
 import { Config } from "./config.ms";
 import { User } from "./types.ms";
