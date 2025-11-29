@@ -67,7 +67,7 @@ let diag code span args =
     | E0201, [ lit_type ] -> Printf.sprintf "unterminated %s literal" lit_type
     | E0202, [ lit_type ] -> Printf.sprintf "unterminated %s literal" lit_type
     | E0203, [] -> "rune literal cannot be empty"
-    | E0204, [] -> "unexpected closing brace in template literal"
+    | E0204, [] -> "unexpected '}' in template literal"
     | E0205, [] -> "empty unicode escape sequence"
     | E0206, [] -> "incomplete unicode escape sequence"
     | E0207, [ max_val ] ->
