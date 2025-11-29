@@ -10,8 +10,14 @@ type state = {
 }
 
 let make_state source file_id interner =
-  let len = String.length source in
-  { source; pos = 0; len; file_id; interner; diags = Diagnostic.empty_bag }
+  {
+    source
+  ; pos = 0
+  ; len = String.length source
+  ; file_id
+  ; interner
+  ; diags = Diagnostic.empty_bag
+  }
 
 let peek_char state =
   if state.pos >= state.len then None else Some state.source.[state.pos]
@@ -24,16 +30,13 @@ let error state msg start end_ =
   let span = Span.make state.file_id start end_ in
   { state with diags = Diagnostic.add state.diags (Diagnostic.error msg span) }
 
-let char_error state pos msg = error state msg pos (pos + 1)
-let range_error state start end_ msg = error state msg start end_
-
-let extract_content state start_offset end_offset =
-  String.sub state.source start_offset (end_offset - start_offset)
+let char_error st p msg = error st msg p (p + 1)
+let range_error st s e msg = error st msg s e
+let extract_content st s e = String.sub st.source s (e - s)
 
 type char_class = Alpha | Digit | Space | Newline | Underscore | Other
 
-let classify c =
-  match c with
+let classify = function
   | 'a' .. 'z' | 'A' .. 'Z' -> Alpha
   | '0' .. '9' -> Digit
   | ' ' | '\t' | '\r' -> Space
@@ -41,10 +44,9 @@ let classify c =
   | '_' -> Underscore
   | _ -> Other
 
-let is_alpha c = match classify c with Alpha -> true | _ -> false
-let is_digit c = match classify c with Digit -> true | _ -> false
-let is_whitespace c = match classify c with Space -> true | _ -> false
-let is_newline c = match classify c with Newline -> true | _ -> false
+let is_alpha c = classify c = Alpha
+let is_digit c = classify c = Digit
+let is_whitespace c = classify c = Space
 
 let is_ident_start c =
   match classify c with Alpha | Underscore -> true | _ -> false
@@ -73,62 +75,60 @@ let escape_chars =
   ; ('/', '/')
   ]
 
-let is_utf8_continuation byte = byte land 0xC0 = 0x80
+let is_utf8_continuation b = b land 0xC0 = 0x80
 
-let validate_utf8_char state pos =
-  if pos >= state.len then (pos, None)
+let validate_utf8_char st pos =
+  if pos >= st.len then (pos, None)
   else
-    let first = get_byte state pos in
+    let first = get_byte st pos in
     if first < 0x80 then (pos + 1, None)
     else if first < 0xC0 then
       (pos + 1, Some ("invalid UTF-8 continuation byte", pos, pos + 1))
     else
-      let expected =
+      let exp =
         if first < 0xE0 then 2
         else if first < 0xF0 then 3
         else if first < 0xF8 then 4
         else 0
       in
-      if expected = 0 then
-        (pos + 1, Some ("invalid UTF-8 start byte", pos, pos + 1))
-      else if pos + expected > state.len then
-        (state.len, Some ("incomplete UTF-8 sequence", pos, state.len))
+      if exp = 0 then (pos + 1, Some ("invalid UTF-8 start byte", pos, pos + 1))
+      else if pos + exp > st.len then
+        (st.len, Some ("incomplete UTF-8 sequence", pos, st.len))
       else
-        let rec check_continuation p =
-          if p >= pos + expected then None
-          else if not (is_utf8_continuation (get_byte state p)) then Some p
-          else check_continuation (p + 1)
+        let rec chk p =
+          if p >= pos + exp then None
+          else if not (is_utf8_continuation (get_byte st p)) then Some p
+          else chk (p + 1)
         in
-        match check_continuation (pos + 1) with
-        | Some invalid ->
-          ( pos + expected
-          , Some ("invalid UTF-8 continuation byte", invalid, invalid + 1) )
-        | None -> (pos + expected, None)
+        match chk (pos + 1) with
+        | Some inv ->
+          (pos + exp, Some ("invalid UTF-8 continuation byte", inv, inv + 1))
+        | None -> (pos + exp, None)
 
-let validate_utf8_in_range state start_pos end_pos =
-  let rec validate pos st =
-    if pos >= end_pos then st
-    else if get_byte state pos >= 0x80 then
-      match validate_utf8_char st pos with
-      | _, Some (msg, s, e) -> validate e (error st msg s e)
-      | next, None -> validate next st
-    else validate (pos + 1) st
+let validate_utf8_in_range st sp ep =
+  let rec go p s =
+    if p >= ep then s
+    else if get_byte st p >= 0x80 then
+      match validate_utf8_char s p with
+      | _, Some (msg, a, b) -> go b (error s msg a b)
+      | nxt, None -> go nxt s
+    else go (p + 1) s
   in
-  validate start_pos state
+  go sp st
 
 let find_end_brace content len start =
-  let rec find p =
+  let rec go p =
     if p >= len then None
     else if content.[p] = '}' then Some p
-    else if is_xdigit content.[p] then find (p + 1)
+    else if is_xdigit content.[p] then go (p + 1)
     else None
   in
-  find start
+  go start
 
 let process_escape_seqs content =
   let len = String.length content in
-  let result = Buffer.create len in
-  let rec process pos =
+  let buf = Buffer.create len in
+  let rec go pos =
     if pos >= len then ()
     else
       match content.[pos] with
@@ -136,418 +136,352 @@ let process_escape_seqs content =
         match content.[pos + 1] with
         | ('u' | 'U') when pos + 3 < len && content.[pos + 2] = '{' -> (
           match find_end_brace content len (pos + 3) with
-          | Some end_brace -> (
-            let hex = String.sub content (pos + 3) (end_brace - (pos + 3)) in
+          | Some eb -> (
             try
-              let value = int_of_string ("0x" ^ hex) in
-              Buffer.add_char result (Char.chr (value mod 256));
-              process (end_brace + 1)
+              let v =
+                int_of_string
+                  ("0x" ^ String.sub content (pos + 3) (eb - pos - 3))
+              in
+              Buffer.add_char buf (Char.chr (v mod 256));
+              go (eb + 1)
             with _ ->
-              Buffer.add_string result (String.sub content pos 2);
-              process (pos + 2))
+              Buffer.add_string buf (String.sub content pos 2);
+              go (pos + 2))
           | None ->
-            Buffer.add_string result (String.sub content pos 2);
-            process (pos + 2))
+            Buffer.add_string buf (String.sub content pos 2);
+            go (pos + 2))
         | c -> (
           match List.assoc_opt c escape_chars with
           | Some esc ->
-            Buffer.add_char result esc;
-            process (pos + 2)
+            Buffer.add_char buf esc;
+            go (pos + 2)
           | None ->
-            Buffer.add_string result (String.sub content pos 2);
-            process (pos + 2)))
+            Buffer.add_string buf (String.sub content pos 2);
+            go (pos + 2)))
       | c ->
-        Buffer.add_char result c;
-        process (pos + 1)
+        Buffer.add_char buf c;
+        go (pos + 1)
   in
-  process 0;
-  Buffer.contents result
+  go 0;
+  Buffer.contents buf
 
-let scan_while state start pred =
-  let rec loop p =
-    if p >= state.len then p
-    else if pred state.source.[p] then loop (p + 1)
-    else p
+let scan_while st start pred =
+  let rec go p =
+    if p >= st.len then p else if pred st.source.[p] then go (p + 1) else p
   in
-  loop start
+  go start
 
-let scan_number_chars state start is_valid base_name =
-  let rec scan p st =
-    if p >= state.len then (p, st)
+let scan_number_chars st start valid base =
+  let rec go p s =
+    if p >= st.len then (p, s)
     else
-      let c = state.source.[p] in
-      if is_valid c then scan (p + 1) st
+      let c = st.source.[p] in
+      if valid c then go (p + 1) s
       else if is_alpha c || is_digit c then
-        (p, char_error st p (Printf.sprintf "invalid %s digit '%c'" base_name c))
-      else (p, st)
+        (p, char_error s p (Printf.sprintf "invalid %s digit '%c'" base c))
+      else (p, s)
   in
-  scan start state
+  go start st
 
-let scan_decimal_with_dot state start =
-  let rec scan pos st dots =
-    if pos >= state.len then (pos, st, dots)
+let scan_decimal st start =
+  let rec go pos s dots =
+    if pos >= st.len then (pos, s, dots)
     else
-      let c = state.source.[pos] in
-      if is_digit c then scan (pos + 1) st dots
+      let c = st.source.[pos] in
+      if is_digit c then go (pos + 1) s dots
       else if c = '.' then
         if dots > 0 then
           ( pos
-          , range_error st pos pos "multiple decimal points in number"
+          , range_error s pos pos "multiple decimal points in number"
           , dots + 1 )
-        else scan (pos + 1) st (dots + 1)
-      else (pos, st, dots)
+        else go (pos + 1) s (dots + 1)
+      else (pos, s, dots)
   in
-  let end_pos, final_st, _ = scan state.pos state 0 in
-  let text = extract_content state start end_pos in
-  ({ final_st with pos = end_pos }, text, make_span state start)
+  let ep, fs, _ = go st.pos st 0 in
+  ({ fs with pos = ep }, extract_content st start ep, make_span st start)
 
-let scan_number state =
-  let start = state.pos in
-  if state.pos + 1 < state.len && state.source.[state.pos] = '0' then
-    match state.source.[state.pos + 1] with
-    | 'x' | 'X' ->
-      let pos = state.pos + 2 in
-      if pos >= state.len then
-        ( { (range_error state start pos "incomplete hex number") with pos }
-        , extract_content state start pos
-        , make_span state start )
-      else
-        let end_pos, st = scan_number_chars state pos is_xdigit "hex" in
-        if end_pos = pos then
-          ( {
-              (range_error st start end_pos "incomplete hex number") with
-              pos = end_pos
-            }
-          , extract_content state start end_pos
-          , make_span state start )
-        else
-          ( { st with pos = end_pos }
-          , extract_content state start end_pos
-          , make_span state start )
-    | 'b' | 'B' ->
-      let pos = state.pos + 2 in
-      if pos >= state.len then
-        ( { (range_error state start pos "incomplete binary number") with pos }
-        , extract_content state start pos
-        , make_span state start )
-      else
-        let end_pos, st = scan_number_chars state pos is_bdigit "binary" in
-        if end_pos = pos then
-          ( {
-              (range_error st start end_pos "incomplete binary number") with
-              pos = end_pos
-            }
-          , extract_content state start end_pos
-          , make_span state start )
-        else
-          ( { st with pos = end_pos }
-          , extract_content state start end_pos
-          , make_span state start )
-    | 'o' | 'O' ->
-      let pos = state.pos + 2 in
-      if pos >= state.len then
-        ( { (range_error state start pos "incomplete octal number") with pos }
-        , extract_content state start pos
-        , make_span state start )
-      else
-        let end_pos, st = scan_number_chars state pos is_odigit "octal" in
-        if end_pos = pos then
-          ( {
-              (range_error st start end_pos "incomplete octal number") with
-              pos = end_pos
-            }
-          , extract_content state start end_pos
-          , make_span state start )
-        else
-          ( { st with pos = end_pos }
-          , extract_content state start end_pos
-          , make_span state start )
+let scan_based_number st start prefix valid base_name =
+  let pos = st.pos + prefix in
+  let incomplete_err s =
+    {
+      (range_error s start pos ("incomplete " ^ base_name ^ " number")) with
+      pos
+    }
+  in
+  if pos >= st.len then
+    (incomplete_err st, extract_content st start pos, make_span st start)
+  else
+    let ep, fs = scan_number_chars st pos valid base_name in
+    if ep = pos then
+      (incomplete_err fs, extract_content st start ep, make_span st start)
+    else ({ fs with pos = ep }, extract_content st start ep, make_span st start)
+
+let scan_number st =
+  let start = st.pos in
+  if st.pos + 1 < st.len && st.source.[st.pos] = '0' then
+    match st.source.[st.pos + 1] with
+    | 'x' | 'X' -> scan_based_number st start 2 is_xdigit "hex"
+    | 'b' | 'B' -> scan_based_number st start 2 is_bdigit "binary"
+    | 'o' | 'O' -> scan_based_number st start 2 is_odigit "octal"
     | '0' .. '9' ->
-      scan_decimal_with_dot
+      scan_decimal
         (range_error
-           state
+           st
            start
-           state.pos
+           st.pos
            "leading zeros in decimal numbers not allowed")
         start
-    | _ -> scan_decimal_with_dot state start
-  else scan_decimal_with_dot state start
+    | _ -> scan_decimal st start
+  else scan_decimal st start
 
-let scan_quoted state quote is_template =
-  let start = state.pos + 1 in
-  let rec scan p depth extra =
-    if p >= state.len then (p, true, extra)
+let scan_quoted st quote tpl =
+  let start = st.pos + 1 in
+  let rec go p depth extra =
+    if p >= st.len then (p, true, extra)
     else
-      match state.source.[p] with
+      match st.source.[p] with
       | c when c = quote && depth = 0 -> (p + 1, false, extra)
-      | '\\' when p + 1 < state.len -> scan (p + 2) depth extra
-      | '{' when is_template -> scan (p + 1) (depth + 1) extra
-      | '}' when is_template && depth > 0 -> scan (p + 1) (depth - 1) extra
-      | '}' when is_template -> scan (p + 1) depth (p :: extra)
-      | _ -> scan (p + 1) depth extra
+      | '\\' when p + 1 < st.len -> go (p + 2) depth extra
+      | '{' when tpl -> go (p + 1) (depth + 1) extra
+      | '}' when tpl && depth > 0 -> go (p + 1) (depth - 1) extra
+      | '}' when tpl -> go (p + 1) depth (p :: extra)
+      | _ -> go (p + 1) depth extra
   in
-  scan start 0 []
+  go start 0 []
 
-let validate_escape state pos =
+let validate_escape st pos =
   pos >= 0
-  && pos + 1 < state.len
-  && (List.mem_assoc state.source.[pos + 1] escape_chars
-     || state.source.[pos + 1] = 'u'
-     || state.source.[pos + 1] = 'U')
+  && pos + 1 < st.len
+  && (List.mem_assoc st.source.[pos + 1] escape_chars
+     || st.source.[pos + 1] = 'u'
+     || st.source.[pos + 1] = 'U')
 
-let parse_unicode_escape state pos =
-  if
-    pos + 1 < state.len
-    && (state.source.[pos + 1] = 'u' || state.source.[pos + 1] = 'U')
+let parse_unicode_escape st pos =
+  if pos + 1 < st.len && (st.source.[pos + 1] = 'u' || st.source.[pos + 1] = 'U')
   then
-    let is_big = state.source.[pos + 1] = 'U' in
-    if pos + 3 < state.len && state.source.[pos + 2] = '{' then
-      match find_end_brace state.source state.len (pos + 3) with
-      | Some end_brace -> (
-        let hex = String.sub state.source (pos + 3) (end_brace - (pos + 3)) in
+    let big = st.source.[pos + 1] = 'U' in
+    if pos + 3 < st.len && st.source.[pos + 2] = '{' then
+      match find_end_brace st.source st.len (pos + 3) with
+      | Some eb -> (
+        let hex = String.sub st.source (pos + 3) (eb - pos - 3) in
         if String.length hex = 0 then
-          Some
-            ( error state "empty unicode escape sequence" pos (end_brace + 1)
-            , end_brace + 1 )
+          Some (error st "empty unicode escape sequence" pos (eb + 1), eb + 1)
         else
           try
-            let value = int_of_string ("0x" ^ hex) in
-            let max_val = if is_big then 0x10FFFF else 0xFFFF in
-            if value > max_val then
+            let v = int_of_string ("0x" ^ hex) in
+            let max_v = if big then 0x10FFFF else 0xFFFF in
+            if v > max_v then
               Some
                 ( error
-                    state
+                    st
                     (Printf.sprintf
                        "unicode code point exceeds maximum 0x%X"
-                       max_val)
+                       max_v)
                     pos
-                    (end_brace + 1)
-                , end_brace + 1 )
+                    (eb + 1)
+                , eb + 1 )
             else None
           with _ ->
             Some
               ( error
-                  state
+                  st
                   "invalid hex digits in unicode escape sequence"
                   pos
-                  (end_brace + 1)
-              , end_brace + 1 ))
+                  (eb + 1)
+              , eb + 1 ))
       | None ->
-        if pos + 3 < state.len then
+        if pos + 3 < st.len then
           Some
             ( error
-                state
+                st
                 "unclosed unicode escape sequence (missing '}')"
                 pos
                 (pos + 4)
             , pos + 3 )
         else
-          Some
-            ( error state "incomplete unicode escape sequence" pos state.len
-            , state.len )
+          Some (error st "incomplete unicode escape sequence" pos st.len, st.len)
     else
       Some
         ( error
-            state
+            st
             "expected '{' after unicode escape prefix"
             pos
-            (min (pos + 3) state.len)
+            (min (pos + 3) st.len)
         , pos + 2 )
   else None
 
-let validate_escapes_in_content state start end_pos =
-  let rec check pos st =
-    if pos >= end_pos - 1 then st
-    else if state.source.[pos] = '\\' then
-      if pos + 1 >= end_pos - 1 then
-        error st "unterminated escape sequence" pos (pos + 1)
-      else if not (validate_escape state pos) then
-        check
+let validate_escapes st start ep =
+  let rec go pos s =
+    if pos >= ep - 1 then s
+    else if st.source.[pos] = '\\' then
+      if pos + 1 >= ep - 1 then
+        error s "unterminated escape sequence" pos (pos + 1)
+      else if not (validate_escape st pos) then
+        go
           (pos + 2)
           (error
-             st
+             s
              (Printf.sprintf
                 "invalid escape sequence '\\%c'"
-                state.source.[pos + 1])
+                st.source.[pos + 1])
              pos
              (pos + 2))
-      else if state.source.[pos + 1] = 'u' || state.source.[pos + 1] = 'U' then
-        match parse_unicode_escape state pos with
-        | Some (err_st, next) -> check next err_st
-        | None -> check (pos + 2) st
-      else check (pos + 2) st
-    else check (pos + 1) st
+      else if st.source.[pos + 1] = 'u' || st.source.[pos + 1] = 'U' then
+        match parse_unicode_escape st pos with
+        | Some (es, nxt) -> go nxt es
+        | None -> go (pos + 2) s
+      else go (pos + 2) s
+    else go (pos + 1) s
   in
-  check start state
+  go start st
 
-let scan_whitespace state =
-  let end_pos = scan_while state state.pos is_whitespace in
-  ({ state with pos = end_pos }, (), make_span state state.pos)
+let scan_whitespace st =
+  let ep = scan_while st st.pos is_whitespace in
+  ({ st with pos = ep }, (), make_span st st.pos)
 
-let scan_newline state =
-  let new_state = advance state in
-  (new_state, (), make_span state state.pos)
+let scan_newline st = (advance st, (), make_span st st.pos)
 
-let scan_line_comment state =
-  let rec scan p =
-    if p >= state.len || state.source.[p] = '\n' then p else scan (p + 1)
+let scan_line_comment st =
+  let rec go p =
+    if p >= st.len || st.source.[p] = '\n' then p else go (p + 1)
   in
-  let start = state.pos + 2 in
-  let end_pos = scan start in
-  ( { state with pos = end_pos }
-  , extract_content state start end_pos
-  , make_span state state.pos )
+  let start = st.pos + 2 in
+  let ep = go start in
+  ({ st with pos = ep }, extract_content st start ep, make_span st st.pos)
 
-let scan_block_comment state =
-  let start = state.pos in
-  let rec scan p st =
-    if p + 1 >= state.len then
-      (p, range_error st start state.pos "unterminated block comment")
-    else if state.source.[p] = '*' && state.source.[p + 1] = '/' then (p + 2, st)
-    else if state.source.[p] = '/' && state.source.[p + 1] = '*' then
-      scan
-        (p + 2)
-        (range_error st p (p + 2) "nested block comments not allowed")
-    else scan (p + 1) st
+let scan_block_comment st =
+  let start = st.pos in
+  let rec go p s =
+    if p + 1 >= st.len then
+      (p, range_error s start st.pos "unterminated block comment")
+    else if st.source.[p] = '*' && st.source.[p + 1] = '/' then (p + 2, s)
+    else if st.source.[p] = '/' && st.source.[p + 1] = '*' then
+      go (p + 2) (range_error s p (p + 2) "nested block comments not allowed")
+    else go (p + 1) s
   in
-  let start_content = state.pos + 2 in
-  let end_pos, final_st = scan start_content state in
-  let content =
-    if end_pos > start_content + 2 then
-      extract_content state start_content (end_pos - 2)
-    else ""
-  in
-  ({ final_st with pos = end_pos }, content, make_span state start)
+  let sc = st.pos + 2 in
+  let ep, fs = go sc st in
+  let content = if ep > sc + 2 then extract_content st sc (ep - 2) else "" in
+  ({ fs with pos = ep }, content, make_span st start)
 
-let scan_ident state =
-  let start = state.pos in
-  let rec scan p st =
-    if p >= state.len then (p, st)
+let scan_ident st =
+  let start = st.pos in
+  let rec go p s =
+    if p >= st.len then (p, s)
     else
-      let c = state.source.[p] in
-      if is_ident_cont c then scan (p + 1) st
+      let c = st.source.[p] in
+      if is_ident_cont c then go (p + 1) s
       else if Char.code c > 127 then
-        scan
+        go
           (p + 1)
           (char_error
-             st
+             s
              p
              ("non-ASCII character '" ^ String.make 1 c ^ "' in identifier"))
-      else (p, st)
+      else (p, s)
   in
-  let end_pos, final_st = scan state.pos state in
-  let text = extract_content state start end_pos in
-  ( { final_st with pos = end_pos }
-  , Basic.Interner.intern state.interner text
-  , make_span state start )
+  let ep, fs = go st.pos st in
+  ( { fs with pos = ep }
+  , Basic.Interner.intern st.interner (extract_content st start ep)
+  , make_span st start )
 
-let scan_string state =
-  let start = state.pos in
-  let end_pos, unterm, _ = scan_quoted state '"' false in
-  let span = make_span state start in
-  if
-    unterm || end_pos > state.len
-    || (end_pos = state.len && state.source.[end_pos - 1] <> '"')
-  then
-    let empty = Basic.Interner.empty_name state.interner in
-    (error state "unterminated string literal" start state.pos, empty, span)
+let scan_string st =
+  let start = st.pos in
+  let ep, unterm, _ = scan_quoted st '"' false in
+  let span = make_span st start in
+  if unterm || ep > st.len || (ep = st.len && st.source.[ep - 1] <> '"') then
+    ( error st "unterminated string literal" start st.pos
+    , Basic.Interner.empty_name st.interner
+    , span )
   else
-    let content = extract_content state (state.pos + 1) (end_pos - 1) in
-    let final_st = validate_escapes_in_content state (state.pos + 1) end_pos in
-    let processed = process_escape_seqs content in
-    ( { final_st with pos = end_pos }
-    , Basic.Interner.intern state.interner processed
+    let content = extract_content st (st.pos + 1) (ep - 1) in
+    let fs = validate_escapes st (st.pos + 1) ep in
+    ( { fs with pos = ep }
+    , Basic.Interner.intern st.interner (process_escape_seqs content)
     , span )
 
-let scan_template state =
-  let start = state.pos in
-  let end_pos, unterm, extra = scan_quoted state '"' true in
-  let span = make_span state start in
-  let st_with_errs =
+let scan_template st =
+  let start = st.pos in
+  let ep, unterm, extra = scan_quoted st '"' true in
+  let span = make_span st start in
+  let se =
     List.fold_left
-      (fun st p -> error st "extra closing brace in template literal" p (p + 1))
-      state
+      (fun s p -> error s "extra closing brace in template literal" p (p + 1))
+      st
       extra
   in
   if unterm then
-    let empty = Basic.Interner.empty_name st_with_errs.interner in
-    ( error st_with_errs "unterminated template literal" start state.pos
-    , empty
+    ( error se "unterminated template literal" start st.pos
+    , Basic.Interner.empty_name se.interner
     , span )
   else
-    let content = extract_content state start (end_pos - 1) in
-    let processed = process_escape_seqs content in
-    ( { st_with_errs with pos = end_pos }
-    , Basic.Interner.intern st_with_errs.interner processed
+    let content = extract_content st start (ep - 1) in
+    ( { se with pos = ep }
+    , Basic.Interner.intern se.interner (process_escape_seqs content)
     , span )
 
-let scan_rune state =
-  let start = state.pos in
-  let end_pos, unterm, _ = scan_quoted state '\'' false in
-  let span = make_span state start in
-  if
-    unterm || end_pos > state.len
-    || (end_pos = state.len && state.source.[end_pos - 1] <> '\'')
-  then (error state "unterminated rune literal" start state.pos, '\000', span)
+let scan_rune st =
+  let start = st.pos in
+  let ep, unterm, _ = scan_quoted st '\'' false in
+  let span = make_span st start in
+  if unterm || ep > st.len || (ep = st.len && st.source.[ep - 1] <> '\'') then
+    (error st "unterminated rune literal" start st.pos, '\000', span)
   else
-    let content = extract_content state (state.pos + 1) (end_pos - 1) in
-    let final_st = validate_escapes_in_content state (state.pos + 1) end_pos in
-    let processed =
+    let content = extract_content st (st.pos + 1) (ep - 1) in
+    let fs = validate_escapes st (st.pos + 1) ep in
+    let proc =
       if String.length content > 1 then process_escape_seqs content else content
     in
-    if String.length processed = 0 then
-      (error final_st "empty rune literal" start end_pos, '\000', span)
-    else if String.length processed > 1 then
-      ( error final_st "rune literal contains multiple characters" start end_pos
-      , processed.[0]
+    if String.length proc = 0 then
+      (error fs "empty rune literal" start ep, '\000', span)
+    else if String.length proc > 1 then
+      ( error fs "rune literal contains multiple characters" start ep
+      , proc.[0]
       , span )
-    else ({ final_st with pos = end_pos }, processed.[0], span)
+    else ({ fs with pos = ep }, proc.[0], span)
 
-let scan_symbol state =
-  let rec try_match = function
+let scan_symbol st =
+  let rec go = function
     | [] -> None
     | (sym, tok) :: rest ->
       let len = String.length sym in
-      if
-        state.pos + len <= state.len
-        && String.sub state.source state.pos len = sym
-      then Some (tok, len)
-      else try_match rest
+      if st.pos + len <= st.len && String.sub st.source st.pos len = sym then
+        Some (tok, len)
+      else go rest
   in
-  match try_match Token.symbol_strings with
-  | Some (tok, len) ->
-    ({ state with pos = state.pos + len }, tok, make_span state state.pos)
+  match go Token.symbol_strings with
+  | Some (tok, len) -> ({ st with pos = st.pos + len }, tok, make_span st st.pos)
   | None ->
-    let span = make_span state state.pos in
+    let span = make_span st st.pos in
     ( char_error
-        (advance state)
-        state.pos
-        (Printf.sprintf "unexpected character '%c'" state.source.[state.pos])
+        (advance st)
+        st.pos
+        (Printf.sprintf "unexpected character '%c'" st.source.[st.pos])
     , Token.Error
     , span )
 
-let scan_comment_or_symbol state =
-  if state.pos + 1 < state.len then
-    match state.source.[state.pos + 1] with
+let scan_comment_or_symbol st =
+  if st.pos + 1 < st.len then
+    match st.source.[st.pos + 1] with
     | '/' ->
-      let st, c, sp = scan_line_comment state in
-      (st, Token.Comment c, sp)
+      let s, c, sp = scan_line_comment st in
+      (s, Token.Comment c, sp)
     | '*' ->
-      let st, c, sp = scan_block_comment state in
-      (st, Token.Comment c, sp)
-    | _ -> scan_symbol state
-  else scan_symbol state
+      let s, c, sp = scan_block_comment st in
+      (s, Token.Comment c, sp)
+    | _ -> scan_symbol st
+  else scan_symbol st
 
-let scan_template_or_dollar state =
-  if state.pos + 1 < state.len && state.source.[state.pos + 1] = '"' then
-    let new_st = { state with pos = state.pos + 2 } in
-    let final_st, content, _ = scan_template new_st in
-    (final_st, Token.LitTemplate content, make_span state state.pos)
-  else scan_symbol state
+let scan_template_or_dollar st =
+  if st.pos + 1 < st.len && st.source.[st.pos + 1] = '"' then
+    let ns = { st with pos = st.pos + 2 } in
+    let fs, content, _ = scan_template ns in
+    (fs, Token.LitTemplate content, make_span st st.pos)
+  else scan_symbol st
 
-let wrap_scanner scanner wrapper state =
-  let st, result, span = scanner state in
-  (st, wrapper result, span)
+let wrap_scanner scanner wrapper st =
+  let s, result, span = scanner st in
+  (s, wrapper result, span)
 
 let dispatch_char c =
   match c with
@@ -556,12 +490,12 @@ let dispatch_char c =
   | '\n' -> wrap_scanner scan_newline (fun () -> Token.Newline)
   | '/' -> scan_comment_or_symbol
   | _ when is_ident_start c ->
-    fun state ->
-      let st, name, span = scan_ident state in
-      ( st
+    fun st ->
+      let s, name, span = scan_ident st in
+      ( s
       , Token.lookup_keyword
-          state.interner
-          (Basic.Interner.lookup state.interner name)
+          st.interner
+          (Basic.Interner.lookup st.interner name)
       , span )
   | _ when is_digit c ->
     wrap_scanner scan_number (fun text -> Token.LitNumber text)
@@ -570,45 +504,42 @@ let dispatch_char c =
   | '$' -> scan_template_or_dollar
   | _ -> scan_symbol
 
-let rec lex_token state =
-  match peek_char state with
-  | None -> (state, Token.EOF, make_span state state.pos)
+let rec lex_token st =
+  match peek_char st with
+  | None -> (st, Token.EOF, make_span st st.pos)
   | Some c ->
     let code = Char.code c in
     if code < 32 && c <> '\t' && c <> '\n' && c <> '\r' then
-      let span = make_span state state.pos in
+      let span = make_span st st.pos in
       ( char_error
-          (advance state)
-          state.pos
+          (advance st)
+          st.pos
           (Printf.sprintf "control character '\\x%02X' in source" code)
       , Token.Whitespace
       , span )
     else if c = '\000' then
-      let span = make_span state state.pos in
-      ( char_error (advance state) state.pos "null byte in source"
+      let span = make_span st st.pos in
+      ( char_error (advance st) st.pos "null byte in source"
       , Token.Whitespace
       , span )
     else if code >= 0x80 then
-      match validate_utf8_char state state.pos with
+      match validate_utf8_char st st.pos with
       | _, Some (msg, s, e) ->
-        let span = Span.make state.file_id s e in
-        let next = max (state.pos + 1) e in
-        ({ (error state msg s e) with pos = next }, Token.Error, span)
-      | next, None -> (dispatch_char c) { state with pos = next }
-    else (dispatch_char c) state
+        let span = Span.make st.file_id s e in
+        ({ (error st msg s e) with pos = max (st.pos + 1) e }, Token.Error, span)
+      | nxt, None -> (dispatch_char c) { st with pos = nxt }
+    else (dispatch_char c) st
 
 and tokenize source file_id interner =
-  let rec process st tokens =
-    let old_pos = st.pos in
-    let new_st, tok, span = lex_token st in
+  let rec go st tokens =
+    let old = st.pos in
+    let ns, tok, span = lex_token st in
     match tok with
-    | Token.EOF -> (List.rev ((tok, span) :: tokens), new_st.diags)
+    | Token.EOF -> (List.rev ((tok, span) :: tokens), ns.diags)
     | _ ->
-      if new_st.pos <= old_pos then
-        let err_st =
-          error new_st "lexer failed to advance" old_pos new_st.pos
-        in
-        process (advance err_st) ((Token.Error, span) :: tokens)
-      else process new_st ((tok, span) :: tokens)
+      if ns.pos <= old then
+        let es = error ns "lexer failed to advance" old ns.pos in
+        go (advance es) ((Token.Error, span) :: tokens)
+      else go ns ((tok, span) :: tokens)
   in
-  process (make_state source file_id interner) []
+  go (make_state source file_id interner) []
