@@ -13,33 +13,25 @@ type literal_kind =
 
 type attr_arg = AttrIdent of ident | AttrInt of string | AttrString of ident
 type attr = { name : ident; args : attr_arg list }
+type 'a with_span = { kind : 'a; span : Span.t }
 
-type param = { name : ident; typ : typ_expr option }
+type typ_expr = typ_expr_kind with_span
+
+and typ_expr_kind =
+  | TypExprPtr of typ_expr
+  | TypExprIdent of ident
+  | TypExprTuple of typ_expr * typ_expr list
+  | TypExprArray of expr option * typ_expr
+  | TypExprFunc of typ_expr list * typ_expr option
+  | TypExprRecord of typ_field list
+  | TypExprSum of typ_case list
+
 and typ_field = { name : ident; typ : typ_expr }
 and typ_case = { name : ident; fields : typ_expr list }
+and param = { name : ident; typ : typ_expr option }
 and data_kind = DataRecord of typ_field list | DataSum of typ_case list
 and func_sig = { name : ident; params : param list; ret_type : typ_expr option }
-and field_init = { name : ident; value : expr }
-and pat_field = { name : ident; pat : pat option }
-and match_arm = { pattern : pat; body : expr }
-and block = { unsafeness : bool; stmts : stmt list; ret : expr option }
-and stmt = { attrs : attr list; kind : stmt_kind; span : Span.t }
-
-and stmt_kind =
-  | StmtImport of ident * string
-  | StmtExport of ident * string option
-  | StmtBinding of {
-        mutable_ : bool
-      ; name : ident
-      ; typ : typ_expr option
-      ; value : expr
-    }
-  | StmtAssign of ident * expr
-  | StmtExpr of expr
-  | StmtData of ident * data_kind
-  | StmtExtern of string option * func_sig list
-
-and expr = { kind : expr_kind; span : Span.t }
+and expr = expr_kind with_span
 
 and expr_kind =
   | ExprLiteral of literal_kind
@@ -71,7 +63,10 @@ and expr_kind =
   | ExprIndex of expr * expr
   | ExprField of expr * ident
 
-and pat = { kind : pat_kind; span : Span.t }
+and field_init = { name : ident; value : expr }
+and match_arm = { pattern : pat; body : expr }
+and block = { unsafeness : bool; stmts : stmt list; ret : expr option }
+and pat = pat_kind with_span
 
 and pat_kind =
   | PatBind of { mutable_ : bool; name : ident }
@@ -82,13 +77,19 @@ and pat_kind =
   | PatCtor of ident * pat list
   | PatTuple of pat * pat list
 
-and typ_expr = { kind : typ_expr_kind; span : Span.t }
+and pat_field = { name : ident; pat : pat option }
+and stmt = { attrs : attr list; kind : stmt_kind; span : Span.t }
 
-and typ_expr_kind =
-  | TypExprPtr of typ_expr
-  | TypExprIdent of ident
-  | TypExprTuple of typ_expr * typ_expr list
-  | TypExprArray of expr option * typ_expr
-  | TypExprFunc of typ_expr list * typ_expr option
-  | TypExprRecord of typ_field list
-  | TypExprSum of typ_case list
+and stmt_kind =
+  | StmtImport of ident * string
+  | StmtExport of ident * string option
+  | StmtBinding of {
+        mutable_ : bool
+      ; name : ident
+      ; typ : typ_expr option
+      ; value : expr
+    }
+  | StmtAssign of ident * expr
+  | StmtExpr of expr
+  | StmtData of ident * data_kind
+  | StmtExtern of string option * func_sig list
