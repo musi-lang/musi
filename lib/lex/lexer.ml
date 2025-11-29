@@ -9,7 +9,7 @@ type state = {
   ; diags : Diagnostic.bag
 }
 
-let make_state source file_id interner =
+let mk_state source file_id interner =
   {
     source
   ; pos = 0
@@ -19,9 +19,11 @@ let make_state source file_id interner =
   ; diags = Diagnostic.empty_bag
   }
 
-let peek_char st = if st.pos >= st.len then None else Some st.source.[st.pos]
+let peek_char_opt st =
+  if st.pos >= st.len then None else Some st.source.[st.pos]
+
 let advance st = { st with pos = st.pos + 1 }
-let make_span st start = Span.make st.file_id start st.pos
+let mk_span st start = Span.make st.file_id start st.pos
 
 let add_error st msg start end_ =
   let sp = Span.make st.file_id start end_ in
@@ -195,18 +197,18 @@ let scan_decimal st start =
       else (pos, s, dots)
   in
   let ep, fs, _ = go st.pos st 0 in
-  ({ fs with pos = ep }, extract st start ep, make_span st start)
+  ({ fs with pos = ep }, extract st start ep, mk_span st start)
 
 let scan_based_number st start pfx valid base =
   let pos = st.pos + pfx in
   let mkErr s =
     { (add_error s ("incomplete " ^ base ^ " number") start pos) with pos }
   in
-  if pos >= st.len then (mkErr st, extract st start pos, make_span st start)
+  if pos >= st.len then (mkErr st, extract st start pos, mk_span st start)
   else
     let ep, fs = scan_number_chars st pos valid base in
-    if ep = pos then (mkErr fs, extract st start ep, make_span st start)
-    else ({ fs with pos = ep }, extract st start ep, make_span st start)
+    if ep = pos then (mkErr fs, extract st start ep, mk_span st start)
+    else ({ fs with pos = ep }, extract st start ep, mk_span st start)
 
 let scan_number st =
   let start = st.pos in
@@ -330,9 +332,9 @@ let validate_escapes st start ep =
   go start st
 
 let scan_whitespace st =
-  ({ st with pos = scan_while st st.pos is_whitespace }, (), make_span st st.pos)
+  ({ st with pos = scan_while st st.pos is_whitespace }, (), mk_span st st.pos)
 
-let scan_newline st = (advance st, (), make_span st st.pos)
+let scan_newline st = (advance st, (), mk_span st st.pos)
 
 let scan_line_comment st =
   let rec go p =
@@ -340,7 +342,7 @@ let scan_line_comment st =
   in
   let start = st.pos + 2 in
   let ep = go start in
-  ({ st with pos = ep }, extract st start ep, make_span st st.pos)
+  ({ st with pos = ep }, extract st start ep, mk_span st st.pos)
 
 let scan_block_comment st =
   let start = st.pos in
@@ -376,12 +378,12 @@ let scan_ident st =
   let ep, fs = go st.pos st in
   ( { fs with pos = ep }
   , Basic.Interner.intern st.interner (extract st start ep)
-  , make_span st start )
+  , mk_span st start )
 
 let scan_literal st quote lit_name process =
   let start = st.pos in
   let ep, unterm, extra = scan_quoted st quote (lit_name = "template") in
-  let sp = make_span st start in
+  let sp = mk_span st start in
   let se =
     if lit_name = "template" then
       List.fold_left
@@ -441,7 +443,7 @@ let scan_symbol st =
       else go rest
   in
   match go Token.symbol_strings with
-  | Some (tok, len) -> ({ st with pos = st.pos + len }, tok, make_span st st.pos)
+  | Some (tok, len) -> ({ st with pos = st.pos + len }, tok, mk_span st st.pos)
   | None ->
     ( add_error
         (advance st)
@@ -449,7 +451,7 @@ let scan_symbol st =
         st.pos
         (st.pos + 1)
     , Token.Error
-    , make_span st st.pos )
+    , mk_span st st.pos )
 
 let scan_comment_or_symbol st =
   if st.pos + 1 < st.len then
@@ -459,14 +461,14 @@ let scan_comment_or_symbol st =
       (s, Token.Comment c, sp)
     | '*' ->
       let s, c = scan_block_comment st in
-      (s, Token.Comment c, make_span st st.pos)
+      (s, Token.Comment c, mk_span st st.pos)
     | _ -> scan_symbol st
   else scan_symbol st
 
 let scan_template_or_dollar st =
   if st.pos + 1 < st.len && st.source.[st.pos + 1] = '"' then
     let fs, content, _ = scan_template { st with pos = st.pos + 2 } in
-    (fs, Token.LitTemplate content, make_span st st.pos)
+    (fs, Token.LitTemplate content, mk_span st st.pos)
   else scan_symbol st
 
 let wrap scanner wrapper st =
@@ -493,8 +495,8 @@ let dispatch_char c =
   | _ -> scan_symbol
 
 let rec lex_token st =
-  match peek_char st with
-  | None -> (st, Token.EOF, make_span st st.pos)
+  match peek_char_opt st with
+  | None -> (st, Token.EOF, mk_span st st.pos)
   | Some c ->
     let code = Char.code c in
     if code < 32 && c <> '\t' && c <> '\n' && c <> '\r' then
@@ -504,11 +506,11 @@ let rec lex_token st =
           st.pos
           (st.pos + 1)
       , Token.Whitespace
-      , make_span st st.pos )
+      , mk_span st st.pos )
     else if c = '\000' then
       ( add_error (advance st) "null byte in source" st.pos (st.pos + 1)
       , Token.Whitespace
-      , make_span st st.pos )
+      , mk_span st st.pos )
     else if code >= 0x80 then
       match check_utf8_char st st.pos with
       | _, Some (msg, s, e) ->
@@ -531,4 +533,4 @@ and tokenize source file_id interner =
           ((Token.Error, sp) :: tokens)
       else go ns ((tok, sp) :: tokens)
   in
-  go (make_state source file_id interner) []
+  go (mk_state source file_id interner) []
