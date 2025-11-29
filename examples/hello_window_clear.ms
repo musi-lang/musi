@@ -1,6 +1,8 @@
 // https://learnopengl.com/code_viewer_gh.php?code=src/1.getting_started/1.2.hello_window_clear/hello_window_clear.cpp
 import * as io from "std/io.ms";
 
+data GLFWwindow; // opaque
+
 extern "C" {
 	unsafe def glfwInit() -> Int32;
 	unsafe def glfwWindowHint(hint : Int32, value : Int32);
@@ -19,8 +21,6 @@ extern "C" {
 	unsafe def glfwSetWindowShouldClose(window : ^GLFWwindow, value : Int32);
 	unsafe def glfwGetKey(window : ^GLFWwindow, key : Int32) -> Int32;
 };
-
-data GLFWwindow; // opaque
 
 val SCR_WIDTH : Int32 := 800;
 val SCR_HEIGHT : Int32 := 600;
