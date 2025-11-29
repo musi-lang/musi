@@ -15,7 +15,7 @@ type attr = { name : ident; args : attr_arg list }
 
 type param = { name : ident; typ : typ_expr option }
 and typ_field = { name : ident; typ : typ_expr }
-and typ_case = { name : ident; fields : typ_expr list option }
+and typ_case = { name : ident; fields : typ_expr list }
 and data_kind = DataRecord of typ_field list | DataSum of typ_case list
 and func_sig = { name : ident; params : param list; ret_type : typ_expr option }
 and field_init = { name : ident; value : expr }
