@@ -70,7 +70,7 @@ unsafe {
 	  io.writeln("Failed to create GLFW window");
 	  glfwTerminate();
 	  exit;
-  };
+  },
   case Some(window) => {
 	  glfwMakeContextCurrent(window);
 	  glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
