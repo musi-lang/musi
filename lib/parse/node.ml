@@ -21,7 +21,7 @@ and func_sig = { name : ident; params : param list; ret_type : typ_expr option }
 and field_init = { name : ident; value : expr }
 and pat_field = { name : ident; pat : pat option }
 and match_arm = { pattern : pat; body : expr }
-and block = { stmts : stmt list; ret : expr option }
+and block = { unsafeness : bool; stmts : stmt list; ret : expr option }
 and stmt = { attrs : attr list; kind : stmt_kind; span : Span.t }
 
 and stmt_kind =
