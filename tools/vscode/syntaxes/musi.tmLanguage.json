@@ -126,7 +126,7 @@
             "name": "meta.control.block.musi",
             "begin": "\\b(if|for|while)\\b",
             "beginCaptures": { "1": { "name": "keyword.control.musi" } },
-            "end": "(?<=\\))",
+            "end": "(?<=\\})",
             "patterns": [
                 {
                     "match": "\\b(in|step|else)\\b",
