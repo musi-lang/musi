@@ -8,31 +8,32 @@ type t =
   | LitTemplate of Interner.name
   (* Identifiers *)
   | Ident of Interner.name
-  (* Keywords *)
-  | KwVal
-  | KwVar
-  | KwDef
+  (* Keywords (alphabetically) *)
+  | KwAnd
+  | KwAs
+  | KwCase
   | KwData
-  | KwImport
+  | KwDef
+  | KwElse
   | KwExport
+  | KwExtern
+  | KwFor
   | KwFrom
   | KwIf
-  | KwElse
-  | KwMatch
-  | KwCase
-  | KwFor
+  | KwImport
   | KwIn
-  | KwStep
-  | KwWhile
-  | KwReturn
-  | KwAnd
-  | KwOr
-  | KwNot
-  | KwIs
-  | KwAs
-  | KwWhere
   | KwInstance
-  | KwExtern
+  | KwIs
+  | KwMatch
+  | KwNot
+  | KwOr
+  | KwReturn
+  | KwStep
+  | KwUnsafe
+  | KwVal
+  | KwVar
+  | KwWhere
+  | KwWhile
   (* Operators *)
   | LtMinus (* <- *)
   | ColonEq (* := *)
@@ -76,30 +77,31 @@ type t =
 
 let keyword_strings =
   [
-    ("val", KwVal)
-  ; ("var", KwVar)
-  ; ("def", KwDef)
+    ("and", KwAnd)
+  ; ("as", KwAs)
+  ; ("case", KwCase)
   ; ("data", KwData)
-  ; ("import", KwImport)
+  ; ("def", KwDef)
+  ; ("else", KwElse)
   ; ("export", KwExport)
+  ; ("extern", KwExtern)
+  ; ("for", KwFor)
   ; ("from", KwFrom)
   ; ("if", KwIf)
-  ; ("else", KwElse)
-  ; ("match", KwMatch)
-  ; ("case", KwCase)
-  ; ("for", KwFor)
+  ; ("import", KwImport)
   ; ("in", KwIn)
-  ; ("step", KwStep)
-  ; ("while", KwWhile)
-  ; ("return", KwReturn)
-  ; ("and", KwAnd)
-  ; ("or", KwOr)
-  ; ("not", KwNot)
-  ; ("is", KwIs)
-  ; ("as", KwAs)
-  ; ("where", KwWhere)
   ; ("instance", KwInstance)
-  ; ("extern", KwExtern)
+  ; ("is", KwIs)
+  ; ("match", KwMatch)
+  ; ("not", KwNot)
+  ; ("or", KwOr)
+  ; ("return", KwReturn)
+  ; ("step", KwStep)
+  ; ("unsafe", KwUnsafe)
+  ; ("val", KwVal)
+  ; ("var", KwVar)
+  ; ("where", KwWhere)
+  ; ("while", KwWhile)
   ]
 
 let symbol_strings =
@@ -156,10 +158,10 @@ let to_string = function
   | LitRune c -> "RUNE(" ^ String.make 1 c ^ ")"
   | LitTemplate name -> "TEMPLATE(id:" ^ string_of_int name ^ ")"
   | Ident name -> "IDENT(id:" ^ string_of_int name ^ ")"
-  | ( KwVal | KwVar | KwDef | KwData | KwImport | KwExport | KwFrom | KwIf
-    | KwElse | KwMatch | KwCase | KwFor | KwIn | KwStep | KwWhile | KwReturn
-    | KwAnd | KwOr | KwNot | KwIs | KwAs | KwWhere | KwInstance | KwExtern ) as
-    kw ->
+  | ( KwAnd | KwAs | KwCase | KwData | KwDef | KwElse | KwExport | KwExtern
+    | KwFor | KwFrom | KwIf | KwImport | KwIn | KwInstance | KwIs | KwMatch
+    | KwNot | KwOr | KwReturn | KwStep | KwUnsafe | KwVal | KwVar | KwWhere
+    | KwWhile ) as kw ->
     Hashtbl.find keyword_to_string kw
   | ( LtMinus | ColonEq | Eq | BangEq | Lt | LtEq | Gt | GtEq | Plus | Minus
     | Star | Slash | StarStar | PipeGt | Amp | Pipe | Caret | Tilde | At | Bang
