@@ -9,6 +9,7 @@ type literal_kind =
   | LitString of ident
   | LitRune of char
   | LitTemplate of ident
+  | LitUnit
 
 type attr_arg = AttrIdent of ident | AttrInt of string | AttrString of ident
 type attr = { name : ident; args : attr_arg list }
@@ -43,7 +44,7 @@ and expr = { kind : expr_kind; span : Span.t }
 and expr_kind =
   | ExprLiteral of literal_kind
   | ExprIdent of ident
-  | ExprTuple of expr list
+  | ExprTuple of expr * expr list
   | ExprRecord of field_init list
   | ExprBlock of block
   | ExprIf of expr * block * block option
@@ -78,15 +79,15 @@ and pat_kind =
   | PatWild
   | PatIdent of ident
   | PatRecord of ident * pat_field list
-  | PatCtor of ident * pat list option
-  | PatTuple of pat list
+  | PatCtor of ident * pat list
+  | PatTuple of pat * pat list
 
 and typ_expr = { kind : typ_expr_kind; span : Span.t }
 
 and typ_expr_kind =
   | TypExprPtr of typ_expr
   | TypExprIdent of ident
-  | TypExprTuple of typ_expr list
+  | TypExprTuple of typ_expr * typ_expr list
   | TypExprArray of expr option * typ_expr
   | TypExprFunc of typ_expr list * typ_expr option
   | TypExprRecord of typ_field list

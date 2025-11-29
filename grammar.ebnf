@@ -35,7 +35,7 @@ stmt_import = "import", ident, "from", string, ";";
 stmt_export = "export", ident, ["from", string], ";";
 
 (* === STATEMENTS === *)
-stmt = [aux_attr], (stmt_bind | stmt_assign | stmt_expr | stmt_data | stmt_func | stmt_extern);
+stmt = [aux_attr], (stmt_bind | stmt_assign | stmt_expr | stmt_data | stmt_extern);
 
 stmt_bind = ("val" | "var"), ident, aux_opt_type, ":=", expr, ";";
 
@@ -96,7 +96,7 @@ expr_template = template_string;
 
 expr_ident = ident;
 
-expr_tuple = "(", [aux_expr_list], ")";
+expr_tuple = "(", expr, ",", {expr, ","}, [expr], ")";
 
 expr_block = stmt_block;
 
@@ -145,7 +145,7 @@ pat_record = ident, "{", aux_pat_fields, "}";
 
 pat_ctor = ident, ["(", aux_pat_list, ")"];
 
-pat_tuple = "(", [aux_pat_list], ")";
+pat_tuple = "(", pat, ",", {pat, ","}, [pat], ")";
 
 aux_pat_fields = aux_pat_field, {",", aux_pat_field};
 
@@ -168,7 +168,7 @@ typ_expr_ident = ident;
 
 typ_expr_record = "{", aux_typ_expr_fields, "}";
 
-typ_expr_tuple = "(", [aux_typ_expr_list], ")";
+typ_expr_tuple = "(", typ_expr, ",", {typ_expr, ","}, [typ_expr], ")";
 
 typ_expr_func = "def", "(", [aux_typ_expr_list], ")", aux_opt_ret_type;
 
