@@ -1,7 +1,21 @@
 type severity = Error | Warning | Note
+type category = Lex | Parse | Sema | Codegen | Runtime
+
+type error_code =
+  (* E0000 .. E0999 *)
+  | Lex of string
+  (* E1000 .. E1999 *)
+  | Parse of string
+  (* E2000 .. E2999 *)
+  | Sema of string
+  (* E3000 .. E3999 *)
+  | Codegen of string
+  (* E4000 .. E4999 *)
+  | Runtime of string
 
 type t = {
     severity : severity
+  ; code : error_code option
   ; message : string
   ; span : Span.t
   ; notes : (string * Span.t) list
@@ -9,10 +23,21 @@ type t = {
 
 type bag = { diags : t list; errors : int; warnings : int }
 
-let make severity message span = { severity; message; span; notes = [] }
+let make severity message span =
+  { severity; code = None; message; span; notes = [] }
+
+let make_with_code severity code message span =
+  { severity; code = Some code; message; span; notes = [] }
+
 let error message span = make Error message span
 let warning message span = make Warning message span
 let note message span = make Note message span
+let error_with_code code message span = make_with_code Error code message span
+
+let warning_with_code code message span =
+  make_with_code Warning code message span
+
+let note_with_code code message span = make_with_code Note code message span
 let with_note t message span = { t with notes = (message, span) :: t.notes }
 let empty_bag = { diags = []; errors = 0; warnings = 0 }
 let is_empty bag = bag.diags = []
@@ -56,6 +81,14 @@ let severity_color = function
 let emit_location ppf file line col =
   Format.fprintf ppf "%a:%d:%d:" (styled `Bold) (Source.path file) line col
 
+let emit_error_code ppf = function
+  | None -> ()
+  | Some code ->
+    let code_str =
+      match code with Lex s | Parse s | Sema s | Codegen s | Runtime s -> s
+    in
+    Format.fprintf ppf " [%s]" code_str
+
 let emit_source_line ppf line_num text =
   Format.fprintf ppf " %a | %s@." (styled `Bold) (string_of_int line_num) text
 
@@ -81,12 +114,14 @@ let emit ppf diag files =
   match Source.get_file files (Span.file diag.span) with
   | None ->
     severity_header ppf diag.severity;
+    emit_error_code ppf diag.code;
     Format.fprintf ppf " %s@." diag.message
   | Some file ->
     let line, col = Source.line_col file (Span.start diag.span) in
     emit_location ppf file line col;
     Format.fprintf ppf " ";
     severity_header ppf diag.severity;
+    emit_error_code ppf diag.code;
     Format.fprintf ppf " %s@." diag.message;
     (match Source.line_text file line with
     | None -> ()
