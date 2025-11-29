@@ -35,7 +35,7 @@ let add_error st msg span =
   { st with diags = Diagnostic.add st.diags (Diagnostic.error msg span) }
 
 let add_error_code st code span args =
-  { st with diags = Diagnostic.add st.diags (Parse_errors.diag code span args) }
+  { st with diags = Diagnostic.add st.diags (Parse_error.diag code span args) }
 
 let rec skip_trivia st =
   match fst (peek st) with
@@ -51,7 +51,7 @@ let expect st tok =
     let st' =
       add_error_code
         st
-        Parse_errors.E1003
+        Parse_error.E1003
         span
         [ Token.to_string tok; Token.to_string curr ]
     in
@@ -107,7 +107,7 @@ let parse_params parse_typ st =
           loop st (param :: acc)
         else (st, List.rev (param :: acc))
       | _ ->
-        let st = add_error_code st Parse_errors.E1105 span [] in
+        let st = add_error_code st Parse_error.E1105 span [] in
         (st, List.rev acc)
     in
     let st, params = loop st [] in
@@ -135,7 +135,7 @@ let parse_field_inits parse_expr st =
           loop st (field :: acc)
         else (st, List.rev (field :: acc))
       | _ ->
-        let st = add_error_code st Parse_errors.E1105 span [] in
+        let st = add_error_code st Parse_error.E1105 span [] in
         (st, List.rev acc))
     | _ -> (st, List.rev acc)
   in
@@ -166,7 +166,7 @@ let parse_typ_fields parse_typ st =
         loop st (field :: acc)
       else (st, List.rev (field :: acc))
     | _ ->
-      let st = add_error_code st Parse_errors.E1105 span [] in
+      let st = add_error_code st Parse_error.E1105 span [] in
       (st, List.rev acc)
   in
   loop st []
@@ -194,7 +194,7 @@ let parse_typ_case parse_typ st =
       (st, Node.{ name; fields })
     else (st, Node.{ name; fields = [] })
   | _ ->
-    let st = add_error_code st Parse_errors.E1105 span [] in
+    let st = add_error_code st Parse_error.E1105 span [] in
     (st, Node.{ name = Interner.empty_name st.interner; fields = [] })
 
 let parse tokens interner =

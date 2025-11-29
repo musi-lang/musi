@@ -31,7 +31,7 @@ let add_error st msg start end_ =
 
 let add_error_code st code start end_ args =
   let sp = Span.make st.file_id start end_ in
-  { st with diags = Diagnostic.add st.diags (Lex_errors.diag code sp args) }
+  { st with diags = Diagnostic.add st.diags (Lex_error.diag code sp args) }
 
 let extract st s e = String.sub st.source s (e - s)
 
@@ -81,7 +81,7 @@ let check_utf8_char st pos =
   else
     let first = Char.code st.source.[pos] in
     if first < 0x80 then (pos + 1, None)
-    else if first < 0xC0 then (pos + 1, Some (Lex_errors.E0001, pos, pos + 1))
+    else if first < 0xC0 then (pos + 1, Some (Lex_error.E0001, pos, pos + 1))
     else
       let exp =
         if first < 0xE0 then 2
@@ -89,9 +89,9 @@ let check_utf8_char st pos =
         else if first < 0xF8 then 4
         else 0
       in
-      if exp = 0 then (pos + 1, Some (Lex_errors.E0002, pos, pos + 1))
+      if exp = 0 then (pos + 1, Some (Lex_error.E0002, pos, pos + 1))
       else if pos + exp > st.len then
-        (st.len, Some (Lex_errors.E0003, pos, st.len))
+        (st.len, Some (Lex_error.E0003, pos, st.len))
       else
         let rec chk idx =
           if idx >= pos + exp then None
@@ -100,7 +100,7 @@ let check_utf8_char st pos =
           else chk (idx + 1)
         in
         match chk (pos + 1) with
-        | Some inv -> (pos + exp, Some (Lex_errors.E0001, inv, inv + 1))
+        | Some inv -> (pos + exp, Some (Lex_error.E0001, inv, inv + 1))
         | None -> (pos + exp, None)
 
 let check_utf8_in_range st sp ep =
@@ -177,9 +177,7 @@ let scan_number_chars st start valid base =
       let c = st.source.[p] in
       if valid c then go (p + 1) s
       else if is_alpha c || is_digit c then
-        ( p
-        , add_error_code s Lex_errors.E0101 p (p + 1) [ base; String.make 1 c ]
-        )
+        (p, add_error_code s Lex_error.E0101 p (p + 1) [ base; String.make 1 c ])
       else (p, s)
   in
   go start st
@@ -192,7 +190,7 @@ let scan_decimal st start =
       if is_digit c then go (pos + 1) s dots
       else if c = '.' then
         if dots > 0 then
-          (pos, add_error_code s Lex_errors.E0102 pos pos [], dots + 1)
+          (pos, add_error_code s Lex_error.E0102 pos pos [], dots + 1)
         else go (pos + 1) s (dots + 1)
       else (pos, s, dots)
   in
@@ -202,7 +200,7 @@ let scan_decimal st start =
 let scan_based_number st start pfx valid base =
   let pos = st.pos + pfx in
   let mkErr s =
-    { (add_error_code s Lex_errors.E0103 start pos [ base ]) with pos }
+    { (add_error_code s Lex_error.E0103 start pos [ base ]) with pos }
   in
   if pos >= st.len then (mkErr st, extract st start pos, mk_span st start)
   else
@@ -258,7 +256,7 @@ let parse_unicode_escape st pos =
       | Some eb -> (
         let hex = String.sub st.source (pos + 3) (eb - pos - 3) in
         if String.length hex = 0 then
-          Some (add_error_code st Lex_errors.E0205 pos (eb + 1) [], eb + 1)
+          Some (add_error_code st Lex_error.E0205 pos (eb + 1) [], eb + 1)
         else
           try
             let v = int_of_string ("0x" ^ hex) in
@@ -267,21 +265,21 @@ let parse_unicode_escape st pos =
               Some
                 ( add_error_code
                     st
-                    Lex_errors.E0207
+                    Lex_error.E0207
                     pos
                     (eb + 1)
                     [ Printf.sprintf "%X" max_v ]
                 , eb + 1 )
             else None
           with _ ->
-            Some (add_error_code st Lex_errors.E0208 pos (eb + 1) [], eb + 1))
+            Some (add_error_code st Lex_error.E0208 pos (eb + 1) [], eb + 1))
       | None ->
         if pos + 3 < st.len then
-          Some (add_error_code st Lex_errors.E0209 pos (pos + 4) [], pos + 3)
-        else Some (add_error_code st Lex_errors.E0206 pos st.len [], st.len)
+          Some (add_error_code st Lex_error.E0209 pos (pos + 4) [], pos + 3)
+        else Some (add_error_code st Lex_error.E0206 pos st.len [], st.len)
     else
       Some
-        ( add_error_code st Lex_errors.E0210 pos (min (pos + 3) st.len) []
+        ( add_error_code st Lex_error.E0210 pos (min (pos + 3) st.len) []
         , pos + 2 )
   else None
 
@@ -290,13 +288,13 @@ let validate_escapes st start ep =
     if pos >= ep - 1 then s
     else if st.source.[pos] = '\\' then
       if pos + 1 >= ep - 1 then
-        add_error_code s Lex_errors.E0211 pos (pos + 1) []
+        add_error_code s Lex_error.E0211 pos (pos + 1) []
       else if not (is_valid_escape st pos) then
         go
           (pos + 2)
           (add_error_code
              s
-             Lex_errors.E0212
+             Lex_error.E0212
              pos
              (pos + 2)
              [ String.make 1 st.source.[pos + 1] ])
@@ -325,11 +323,10 @@ let scan_line_comment st =
 let scan_block_comment st =
   let start = st.pos in
   let rec go p s =
-    if p + 1 >= st.len then
-      (p, add_error_code s Lex_errors.E0401 start st.pos [])
+    if p + 1 >= st.len then (p, add_error_code s Lex_error.E0401 start st.pos [])
     else if st.source.[p] = '*' && st.source.[p + 1] = '/' then (p + 2, s)
     else if st.source.[p] = '/' && st.source.[p + 1] = '*' then
-      go (p + 2) (add_error_code s Lex_errors.E0402 p (p + 2) [])
+      go (p + 2) (add_error_code s Lex_error.E0402 p (p + 2) [])
     else go (p + 1) s
   in
   let sc = st.pos + 2 in
@@ -346,7 +343,7 @@ let scan_ident st =
       else if Char.code c > 127 then
         go
           (p + 1)
-          (add_error_code s Lex_errors.E0304 p (p + 1) [ String.make 1 c ])
+          (add_error_code s Lex_error.E0304 p (p + 1) [ String.make 1 c ])
       else (p, s)
   in
   let ep, fs = go st.pos st in
@@ -361,13 +358,13 @@ let scan_literal st quote lit_name process =
   let se =
     if lit_name = "template" then
       List.fold_left
-        (fun s p -> add_error_code s Lex_errors.E0204 p (p + 1) [])
+        (fun s p -> add_error_code s Lex_error.E0204 p (p + 1) [])
         st
         extra
     else st
   in
   if unterm || ep > st.len || (ep = st.len && st.source.[ep - 1] <> quote) then
-    (add_error_code se Lex_errors.E0201 start st.pos [ lit_name ], None, sp)
+    (add_error_code se Lex_error.E0201 start st.pos [ lit_name ], None, sp)
   else
     let content =
       extract st (if lit_name = "template" then start else st.pos + 1) (ep - 1)
@@ -393,7 +390,7 @@ let scan_rune st =
   | s, None, sp -> (s, '\000', sp)
   | s, Some proc, sp ->
     if String.length proc = 0 then
-      (add_error_code s Lex_errors.E0203 st.pos (st.pos + 1) [], '\000', sp)
+      (add_error_code s Lex_error.E0203 st.pos (st.pos + 1) [], '\000', sp)
     else if String.length proc > 1 then
       ( add_error
           s
@@ -418,7 +415,7 @@ let scan_symbol st =
   | None ->
     ( add_error_code
         (advance st)
-        Lex_errors.E0301
+        Lex_error.E0301
         st.pos
         (st.pos + 1)
         [ String.make 1 st.source.[st.pos] ]
@@ -474,14 +471,14 @@ let rec lex_token st =
     if code < 32 && c <> '\t' && c <> '\n' && c <> '\r' then
       ( add_error_code
           (advance st)
-          Lex_errors.E0302
+          Lex_error.E0302
           st.pos
           (st.pos + 1)
           [ Printf.sprintf "%02X" code ]
       , Token.Whitespace
       , mk_span st st.pos )
     else if c = '\000' then
-      ( add_error_code (advance st) Lex_errors.E0303 st.pos (st.pos + 1) []
+      ( add_error_code (advance st) Lex_error.E0303 st.pos (st.pos + 1) []
       , Token.Whitespace
       , mk_span st st.pos )
     else if code >= 0x80 then
@@ -502,7 +499,7 @@ and tokenize source file_id interner =
     | _ ->
       if ns.pos <= old then
         go
-          (advance (add_error_code ns Lex_errors.E0501 old ns.pos []))
+          (advance (add_error_code ns Lex_error.E0501 old ns.pos []))
           ((Token.Error, sp) :: tokens)
       else go ns ((tok, sp) :: tokens)
   in
