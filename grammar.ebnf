@@ -49,7 +49,7 @@ stmt_extern = "extern", [string], "{", {aux_extern_func}, "}";
 
 aux_extern_func = "def", ident, aux_params, aux_opt_ret_type, ";";
 
-stmt_block = "{", {stmt}, ["return", expr, ";"], "}";
+stmt_block = "(", {stmt}, ["return", expr, ";"], ")";
 
 aux_opt_type = [":", typ_expr];
 
