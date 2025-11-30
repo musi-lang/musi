@@ -17,17 +17,17 @@ let test_parser_state_create () =
   let state, _ = make_test_state tokens in
   (check int) "initial position" 0 state.pos;
   (check int) "tokens length" 1 (Array.length state.tokens);
-  let curr_token, _ = peek state in
+  let curr_token, _ = peek_opt state in
   (check bool) "current token is val" true (curr_token = Token.KwVal);
   check_no_errors state.diags
 
 let test_parser_advance () =
   let tokens = [ (Token.KwVal, Span.dummy); (Token.Ident 0, Span.dummy) ] in
   let state, _ = make_test_state tokens in
-  let initial_token, _ = peek state in
+  let initial_token, _ = peek_opt state in
   (check bool) "initial token" true (initial_token = Token.KwVal);
   let state_after = advance state in
-  let next_token, _ = peek state_after in
+  let next_token, _ = peek_opt state_after in
   (check bool)
     "advanced token"
     true
@@ -45,7 +45,7 @@ let test_parser_skip_trivia () =
   in
   let state, _ = make_test_state tokens in
   let state_after = skip_trivia state in
-  let curr_token, _ = peek state_after in
+  let curr_token, _ = peek_opt state_after in
   (check bool) "skipped to val" true (curr_token = Token.KwVal)
 
 let test_parser_expect () =
@@ -55,7 +55,7 @@ let test_parser_expect () =
   (check bool)
     "expect success"
     true
-    (match fst (peek state_after) with Token.Semi -> true | _ -> false)
+    (match fst (peek_opt state_after) with Token.Semi -> true | _ -> false)
 
 let test_parser_expect_error () =
   let tokens = [ (Token.KwVar, Span.dummy) ] in
