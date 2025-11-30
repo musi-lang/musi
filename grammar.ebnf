@@ -43,7 +43,7 @@ export_clause = ("*", "as", ident) | ("{", export_items, "}");
 export_items = ident, {",", ident};
 
 (* === STATEMENTS === *)
-stmt = [aux_attr], (stmt_bind | stmt_assign | stmt_expr | stmt_data | stmt_extern);
+stmt = [aux_attr], (stmt_bind | stmt_assign | stmt_expr | stmt_extern | stmt_instance);
 
 stmt_bind = ("val" | "var"), ident, aux_opt_type, ":=", expr, ";";
 
@@ -51,11 +51,11 @@ stmt_assign = ident, "<-", expr, ";";
 
 stmt_expr = expr, ";";
 
-stmt_data = "data", ident, ":=", (typ_expr_record | typ_expr_sum), ";";
+stmt_extern = "extern", [string], "{", {aux_extern_fn}, "}";
 
-stmt_extern = "extern", [string], "{", {aux_extern_func}, "}";
+aux_extern_fn = "fn", ident, aux_params, aux_opt_ret_type, ";";
 
-aux_extern_func = "def", ident, aux_params, aux_opt_ret_type, ";";
+stmt_instance = "instance", typ_expr, [":", typ_expr], ":=", expr_rec, ";";
 
 stmt_block = ["unsafe"], "{", {stmt}, ["return", expr, ";"], "}";
 
@@ -96,7 +96,7 @@ expr_postfix = expr_primary, {aux_postfix_op};
 
 aux_postfix_op = ".", ident | "[", expr, "]" | "(", [aux_arg_list], ")";
 
-expr_primary = expr_literal | expr_template | expr_ident | expr_tuple | expr_block | expr_if | expr_match | expr_for | expr_while | expr_defer | expr_exit | expr_next | expr_unsafe | expr_record | expr_func;
+expr_primary = expr_literal | expr_template | expr_ident | expr_tuple | expr_block | expr_if | expr_match | expr_for | expr_while | expr_defer | expr_exit | expr_next | expr_unsafe | expr_record | expr_fn | expr_rec | expr_sum;
 
 expr_literal = literal;
 
@@ -126,7 +126,15 @@ expr_unsafe = "unsafe", stmt_block;
 
 expr_record = [ident], "{", aux_field_inits, "}";
 
-expr_func = ["extern", [string]], "def", [ident], aux_params, aux_opt_ret_type, stmt_block;
+expr_fn = ["extern", [string]], "fn", [ident], aux_params, aux_opt_ret_type, stmt_block;
+
+expr_rec = "rec", [ident], "{", aux_typ_expr_fields, "}";
+
+expr_sum = "sum", [ident], "{", aux_sum_cases, "}";
+
+aux_sum_cases = aux_sum_case, {",", aux_sum_case};
+
+aux_sum_case = "case", ident, ["(", aux_typ_expr_list, ")"];
 
 aux_params = "(", [aux_param_list], ")";
 
@@ -140,7 +148,7 @@ aux_expr_list = expr, {",", expr};
 
 aux_field_inits = aux_field_init, {",", aux_field_init};
 
-aux_field_init = ".", ident, ":=", expr;
+aux_field_init = ["."], ident, ":=", expr;
 
 aux_cond = ("case", pat, ":=", expr) | expr;
 
@@ -151,7 +159,7 @@ aux_match_arm = "case", pat, ["if", expr], "=>", expr, [","];
 aux_pat_list = pat, {",", pat};
 
 (* === PATTERNS === *)
-pat = pat_bind | pat_literal | pat_wild | pat_ident | pat_record | pat_ctor | pat_tuple;
+pat = pat_bind | pat_literal | pat_wild | pat_ident | pat_rec | pat_ctor | pat_tuple;
 
 pat_bind = ("val" | "var"), ident;
 
@@ -161,7 +169,7 @@ pat_wild = "_";
 
 pat_ident = ident;
 
-pat_record = ident, "{", aux_pat_fields, "}";
+pat_rec = ident, "{", aux_pat_fields, "}";
 
 pat_ctor = ident, ["(", aux_pat_list, ")"];
 
@@ -178,7 +186,7 @@ typ_expr_sum = typ_expr_primary, {"|", aux_typ_expr_case};
 
 aux_typ_expr_case = "case", ident, ["(", aux_typ_expr_list, ")"];
 
-typ_expr_primary = typ_expr_ptr | typ_expr_array | typ_expr_ident | typ_expr_tuple | typ_expr_func | typ_expr_record;
+typ_expr_primary = typ_expr_ptr | typ_expr_array | typ_expr_ident | typ_expr_tuple | typ_expr_fn | typ_expr_rec;
 
 typ_expr_ptr = "^", typ_expr;
 
@@ -186,11 +194,11 @@ typ_expr_array = "[", [expr], "]", typ_expr;
 
 typ_expr_ident = ident;
 
-typ_expr_record = "{", aux_typ_expr_fields, "}";
+typ_expr_rec = "{", aux_typ_expr_fields, "}";
 
 typ_expr_tuple = "(", typ_expr, ",", {typ_expr, ","}, [typ_expr], ")";
 
-typ_expr_func = "def", "(", [aux_typ_expr_list], ")", aux_opt_ret_type;
+typ_expr_fn = "fn", "(", [aux_typ_expr_list], ")", aux_opt_ret_type;
 
 aux_typ_expr_list = typ_expr, {",", typ_expr};
 
