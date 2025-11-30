@@ -217,14 +217,14 @@ let test_keywords_var () =
   in
   assert (token = Token.KwVar)
 
-let test_keywords_def () =
-  let state, interner = make_test_state "def" in
+let test_keywords_fn () =
+  let state, interner = make_test_state "fn" in
   let new_state, name, _span = Lexer.scan_ident state in
   check_no_errors new_state.diags;
   let token =
     Token.lookup_keyword interner (get_interned_string interner name)
   in
-  assert (token = Token.KwDef)
+  assert (token = Token.KwFn)
 
 let test_symbols_assignment () =
   let state, _ = make_test_state "<-" in
@@ -501,7 +501,7 @@ let () =
       , [
           test_case "val" `Quick test_keywords_val
         ; test_case "var" `Quick test_keywords_var
-        ; test_case "def" `Quick test_keywords_def
+        ; test_case "fn" `Quick test_keywords_fn
         ] )
     ; ( "operators"
       , [
