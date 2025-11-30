@@ -23,15 +23,14 @@ type t =
   | KwIf
   | KwImport
   | KwIn
-  | KwInstance
   | KwIs
   | KwMatch
   | KwNext
   | KwNot
   | KwOr
-  | KwRec
+  | KwRecord
   | KwReturn
-  | KwSum
+  | KwTrait
   | KwUnsafe
   | KwVal
   | KwVar
@@ -94,15 +93,14 @@ let keyword_strings =
   ; ("if", KwIf)
   ; ("import", KwImport)
   ; ("in", KwIn)
-  ; ("instance", KwInstance)
   ; ("is", KwIs)
   ; ("match", KwMatch)
   ; ("next", KwNext)
   ; ("not", KwNot)
   ; ("or", KwOr)
-  ; ("rec", KwRec)
+  ; ("record", KwRecord)
   ; ("return", KwReturn)
-  ; ("sum", KwSum)
+  ; ("trait", KwTrait)
   ; ("unsafe", KwUnsafe)
   ; ("val", KwVal)
   ; ("var", KwVar)
@@ -165,9 +163,9 @@ let to_string = function
   | LitTemplate name -> "TEMPLATE(id:" ^ string_of_int name ^ ")"
   | Ident name -> "IDENT(id:" ^ string_of_int name ^ ")"
   | ( KwAnd | KwAs | KwCase | KwDefer | KwElse | KwExit | KwExport | KwExtern
-    | KwFn | KwFor | KwFrom | KwIf | KwImport | KwIn | KwInstance | KwIs
-    | KwMatch | KwNext | KwNot | KwOr | KwRec | KwReturn | KwSum | KwUnsafe
-    | KwVal | KwVar | KwWhile ) as kw ->
+    | KwFn | KwFor | KwFrom | KwIf | KwImport | KwIn | KwIs | KwMatch | KwNext
+    | KwNot | KwOr | KwRecord | KwReturn | KwTrait | KwUnsafe | KwVal | KwVar
+    | KwWhile ) as kw ->
     Hashtbl.find keyword_to_string kw
   | ( LtMinus | ColonEq | Eq | BangEq | Lt | LtEq | Gt | GtEq | Plus | Minus
     | Star | Slash | StarStar | PipeGt | Amp | Pipe | Caret | Tilde | At | Bang
