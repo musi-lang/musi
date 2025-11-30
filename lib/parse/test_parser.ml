@@ -390,6 +390,107 @@ let test_parse_expr_index () =
     true
     (match expr.kind with ExprIndex (_, _) -> true | _ -> false)
 
+let test_parse_expr_if () =
+  let tokens =
+    [
+      (Token.KwIf, Span.dummy)
+    ; (Token.Ident 0, Span.dummy)
+    ; (Token.LBrace, Span.dummy)
+    ; (Token.RBrace, Span.dummy)
+    ]
+  in
+  let state, _ = make_test_state tokens in
+  let state_after, expr = parse_expr state in
+  check_no_errors state_after.diags;
+  (check bool)
+    "parsed if"
+    true
+    (match expr.kind with ExprIf ([ _ ], _, None) -> true | _ -> false)
+
+let test_parse_expr_if_with_guard () =
+  let tokens =
+    [
+      (Token.KwIf, Span.dummy)
+    ; (Token.KwCase, Span.dummy)
+    ; (Token.Ident 0, Span.dummy)
+    ; (Token.ColonEq, Span.dummy)
+    ; (Token.Ident 1, Span.dummy)
+    ; (Token.LBrace, Span.dummy)
+    ; (Token.RBrace, Span.dummy)
+    ]
+  in
+  let state, _ = make_test_state tokens in
+  let state_after, expr = parse_expr state in
+  check_no_errors state_after.diags;
+  (check bool)
+    "parsed if with case"
+    true
+    (match expr.kind with
+    | ExprIf ([ CondCase _ ], _, None) -> true
+    | _ -> false)
+
+let test_parse_expr_match () =
+  let tokens =
+    [
+      (Token.KwMatch, Span.dummy)
+    ; (Token.Ident 0, Span.dummy)
+    ; (Token.LBrace, Span.dummy)
+    ; (Token.KwCase, Span.dummy)
+    ; (Token.Ident 1, Span.dummy)
+    ; (Token.MinusGt, Span.dummy)
+    ; (Token.LitNumber "1", Span.dummy)
+    ; (Token.RBrace, Span.dummy)
+    ]
+  in
+  let state, _ = make_test_state tokens in
+  let state_after, expr = parse_expr state in
+  check_no_errors state_after.diags;
+  (check bool)
+    "parsed match"
+    true
+    (match expr.kind with ExprMatch (_, [ _ ]) -> true | _ -> false)
+
+let test_parse_expr_while () =
+  let tokens =
+    [
+      (Token.KwWhile, Span.dummy)
+    ; (Token.Ident 0, Span.dummy)
+    ; (Token.LBrace, Span.dummy)
+    ; (Token.RBrace, Span.dummy)
+    ]
+  in
+  let state, _ = make_test_state tokens in
+  let state_after, expr = parse_expr state in
+  check_no_errors state_after.diags;
+  (check bool)
+    "parsed while"
+    true
+    (match expr.kind with ExprWhile (_, None, _) -> true | _ -> false)
+
+let test_parse_expr_for () =
+  let tokens =
+    [
+      (Token.KwFor, Span.dummy)
+    ; (Token.Ident 0, Span.dummy)
+    ; (Token.KwIn, Span.dummy)
+    ; (Token.Ident 1, Span.dummy)
+    ; (Token.LBrace, Span.dummy)
+    ; (Token.RBrace, Span.dummy)
+    ]
+  in
+  let state, _ = make_test_state tokens in
+  let state_after, expr = parse_expr state in
+  check_no_errors state_after.diags;
+  (check bool)
+    "parsed for"
+    true
+    (match expr.kind with
+    | ExprFor
+        { binding = ForIdent _; range = _; step = None; guard = None; body = _ }
+      ->
+      true
+    | _ -> false)
+
 let () =
   let open Alcotest in
   run
@@ -434,6 +535,11 @@ let () =
         ; test_case "call" `Quick test_parse_expr_call
         ; test_case "field access" `Quick test_parse_expr_field
         ; test_case "index" `Quick test_parse_expr_index
+        ; test_case "if" `Quick test_parse_expr_if
+        ; test_case "if with case" `Quick test_parse_expr_if_with_guard
+        ; test_case "match" `Quick test_parse_expr_match
+        ; test_case "while" `Quick test_parse_expr_while
+        ; test_case "for" `Quick test_parse_expr_for
         ] )
     ; ( "statement_parsing"
       , [
