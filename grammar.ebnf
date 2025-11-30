@@ -124,7 +124,7 @@ expr_skip = "skip";
 
 expr_unsafe = "unsafe", stmt_block;
 
-expr_record = ident, "{", aux_field_inits, "}";
+expr_record = [ident], "{", aux_field_inits, "}";
 
 expr_func = ["extern", [string]], "def", [ident], aux_params, aux_opt_ret_type, stmt_block;
 
