@@ -119,6 +119,29 @@ let parse_opt_type st tok parse_fn =
     (st, Some t)
   else (st, None)
 
+let parse_name st code =
+  let st, curr, span = peek_skip (advance st) in
+  match curr with
+  | Token.Ident n -> (advance st, n)
+  | _ -> error_name st code span
+
+let parse_tuple_or_single close_tok parse_fn mk_tuple st span =
+  let st, first = parse_fn (advance st) in
+  if match_token st Token.Comma then
+    let st, rest =
+      parse_list Token.Comma parse_fn (expect_tok st Token.Comma)
+    in
+    (expect_tok st close_tok, mk_tuple first rest span)
+  else (expect_tok st close_tok, first)
+
+let parse_sep_pipe parse_fn st =
+  let rec loop st acc =
+    let st, item = parse_fn st in
+    if match_token st Token.Pipe then loop st (item :: acc)
+    else (st, List.rev (item :: acc))
+  in
+  loop st []
+
 let mk_stmt kind span =
   Node.
     {
@@ -539,12 +562,7 @@ and parse_stmt_binding st start_span mutable_ =
     , mk_stmt (StmtExpr (mk_literal_expr LitUnit span)) start_span )
 
 and parse_stmt_data st start_span =
-  let st, curr, span = peek_skip (advance st) in
-  let st, name =
-    match curr with
-    | Token.Ident n -> (advance st, n)
-    | _ -> error_name st Parse_error.E1105 span
-  in
+  let st, name = parse_name st Parse_error.E1105 in
   let st, typ = parse_typ_expr (expect_tok st Token.ColonEq) in
   let data_kind =
     match typ.Node.kind with
@@ -566,12 +584,7 @@ and parse_stmt_extern st start_span =
     match curr with
     | Token.RBrace | Token.EOF -> (st, List.rev sigs)
     | Token.KwDef ->
-      let st, curr, span = peek_skip (advance st) in
-      let st, name =
-        match curr with
-        | Token.Ident n -> (advance st, n)
-        | _ -> (add_error_code st Parse_error.E1105 span [], empty_name st)
-      in
+      let st, name = parse_name st Parse_error.E1105 in
       let st, params = parse_params parse_typ_expr st in
       let st, ret_type = parse_opt_type st Token.MinusGt parse_typ_expr in
       loop (expect_tok st Token.Semi) (Node.{ name; params; ret_type } :: sigs)
@@ -666,16 +679,12 @@ and parse_pat st =
       (add_error_code st Parse_error.E1105 span [], mk_pat Node.PatWild span))
   | Token.Ident name -> parse_pat_ident st name span
   | Token.LParen ->
-    let st, first = parse_pat (advance st) in
-    if match_token st Token.Comma then
-      let st, rest =
-        parse_sep
-          Token.Comma
-          (fun st _ _ -> Some (parse_pat st))
-          (expect_tok st Token.Comma)
-      in
-      (expect_tok st Token.RParen, mk_pat (Node.PatTuple (first, rest)) span)
-    else (expect_tok st Token.RParen, first)
+    parse_tuple_or_single
+      Token.RParen
+      parse_pat
+      (fun f r s -> mk_pat (Node.PatTuple (f, r)) s)
+      st
+      span
   | Token.LitNumber _ | Token.LitString _ | Token.LitRune _ | Token.Minus ->
     parse_pat_literal st curr span
   | _ -> (advance st, mk_pat Node.PatWild span)
@@ -729,14 +738,12 @@ and parse_typ_expr_primary st =
     in
     (expect_tok st Token.RBrace, mk_node (Node.TypExprRecord fields) span)
   | Token.LParen ->
-    let st, first = parse_typ_expr (advance st) in
-    if match_token st Token.Comma then
-      let st, rest =
-        parse_list Token.Comma parse_typ_expr (expect_tok st Token.Comma)
-      in
-      ( expect_tok st Token.RParen
-      , mk_node (Node.TypExprTuple (first, rest)) span )
-    else (expect_tok st Token.RParen, first)
+    parse_tuple_or_single
+      Token.RParen
+      parse_typ_expr
+      (fun f r s -> mk_node (Node.TypExprTuple (f, r)) s)
+      st
+      span
   | Token.KwDef ->
     let st, params =
       parse_list
@@ -753,12 +760,7 @@ and parse_typ_expr_primary st =
 and parse_typ_expr st =
   let st, typ = parse_typ_expr_primary st in
   if match_token st Token.Pipe then
-    let rec loop st acc =
-      let st, case = parse_typ_case st in
-      if match_token st Token.Pipe then loop st (case :: acc)
-      else (st, List.rev (case :: acc))
-    in
-    let st, cases = loop st [] in
+    let st, cases = parse_sep_pipe parse_typ_case st in
     (st, Node.{ kind = TypExprSum cases; span = typ.Node.span })
   else (st, typ)
 
