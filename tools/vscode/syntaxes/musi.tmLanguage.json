@@ -109,7 +109,7 @@
         },
         "declaration-named": {
             "name": "meta.declaration.musi",
-            "begin": "((?:(?:export|extern|unsafe)\\s+)*)\\b(fn|record|val|var)\\b",
+            "begin": "((?:(?:export|extern|unsafe)\\s+)*)\\b(fn|record|trait|val|var)\\b",
             "beginCaptures": {
                 "1": {
                     "patterns": [
@@ -348,7 +348,7 @@
         },
         "keyword-storage": {
             "name": "storage.type.musi",
-            "match": "\\b(fn|record|val|var)\\b"
+            "match": "\\b(fn|record|trait|val|var)\\b"
         },
         "keyword-modifier": {
             "name": "storage.modifier.musi",
