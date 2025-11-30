@@ -159,9 +159,181 @@ and parse_expr_primary st =
   | Token.Ident name -> (advance st, Node.{ kind = ExprIdent name; span })
   | Token.LBrace -> parse_expr_block st false span
   | Token.KwUnsafe -> parse_expr_block (advance st) true span
+  | Token.KwIf -> parse_expr_if st span
+  | Token.KwMatch -> parse_expr_match st span
+  | Token.KwWhile -> parse_expr_while st span
+  | Token.KwFor -> parse_expr_for st span
   | _ ->
     ( add_error_code st Parse_error.E1102 span []
     , Node.{ kind = ExprLiteral LitUnit; span } )
+
+and parse_expr_if st start_span =
+  let parse_cond st =
+    let st, curr, _ = peek_skip st in
+    if curr = Token.KwCase then
+      let st, pat = parse_pat (fst (expect st Token.KwCase)) in
+      let st, expr = parse_expr (fst (expect st Token.ColonEq)) in
+      (st, Node.CondCase (pat, expr))
+    else
+      let st, expr = parse_expr st in
+      (st, Node.CondExpr expr)
+  in
+  let st, first = parse_cond (advance st) in
+  let st, rest =
+    parse_sep Token.Comma (fun st _ _ -> Some (parse_cond st)) st
+  in
+  let conds = first :: rest in
+  let st, curr, span = peek_skip st in
+  let st, then_block =
+    match curr with
+    | Token.LBrace -> parse_expr_block st false span
+    | Token.KwUnsafe -> parse_expr_block (advance st) true span
+    | _ ->
+      ( add_error_code st Parse_error.E1108 span []
+      , Node.
+          {
+            kind = ExprBlock { unsafeness = false; stmts = []; ret = None }
+          ; span
+          } )
+  in
+  let st, else_block =
+    if match_token st Token.KwElse then
+      let st, curr, span = peek_skip (advance st) in
+      match curr with
+      | Token.LBrace ->
+        let st, b = parse_expr_block st false span in
+        (st, Some b)
+      | Token.KwUnsafe ->
+        let st, b = parse_expr_block (advance st) true span in
+        (st, Some b)
+      | _ -> (st, None)
+    else (st, None)
+  in
+  let then_blk =
+    match then_block.Node.kind with
+    | ExprBlock b -> b
+    | _ -> { unsafeness = false; stmts = []; ret = None }
+  in
+  let else_blk =
+    match else_block with
+    | Some e -> ( match e.Node.kind with ExprBlock b -> Some b | _ -> None)
+    | None -> None
+  in
+  (st, Node.{ kind = ExprIf (conds, then_blk, else_blk); span = start_span })
+
+and parse_expr_match st start_span =
+  let parse_arm st =
+    let st, pattern = parse_pat (fst (expect st Token.KwCase)) in
+    let st, guard =
+      if match_token st Token.KwIf then
+        let st, g = parse_expr (fst (expect st Token.KwIf)) in
+        (st, Some g)
+      else (st, None)
+    in
+    let st, body = parse_expr (fst (expect st Token.MinusGt)) in
+    let st, _ = consume_if st Token.Comma in
+    (st, Node.{ pattern; guard; body })
+  in
+  let st, scrutinee = parse_expr (advance st) in
+  let st, _ = expect st Token.LBrace in
+  let st, arms =
+    parse_sep
+      Token.Comma
+      (fun st _ _ ->
+        if match_token st Token.KwCase then Some (parse_arm st) else None)
+      st
+  in
+  let st, _ = expect st Token.RBrace in
+  (st, Node.{ kind = ExprMatch (scrutinee, arms); span = start_span })
+
+and parse_expr_while st start_span =
+  let parse_cond st =
+    let st, curr, _ = peek_skip st in
+    if curr = Token.KwCase then
+      let st, pat = parse_pat (fst (expect st Token.KwCase)) in
+      let st, expr = parse_expr (fst (expect st Token.ColonEq)) in
+      (st, Node.CondCase (pat, expr))
+    else
+      let st, expr = parse_expr st in
+      (st, Node.CondExpr expr)
+  in
+  let st, cond = parse_cond (advance st) in
+  let st, guard =
+    if match_token st Token.KwIf then
+      let st, g = parse_expr (fst (expect st Token.KwIf)) in
+      (st, Some g)
+    else (st, None)
+  in
+  let st, curr, span = peek_skip st in
+  let st, body_expr =
+    match curr with
+    | Token.LBrace -> parse_expr_block st false span
+    | Token.KwUnsafe -> parse_expr_block (advance st) true span
+    | _ ->
+      ( add_error_code st Parse_error.E1108 span []
+      , Node.
+          {
+            kind = ExprBlock { unsafeness = false; stmts = []; ret = None }
+          ; span
+          } )
+  in
+  let body =
+    match body_expr.Node.kind with
+    | ExprBlock b -> b
+    | _ -> { unsafeness = false; stmts = []; ret = None }
+  in
+  (st, Node.{ kind = ExprWhile (cond, guard, body); span = start_span })
+
+and parse_expr_for st start_span =
+  let st, curr, span = peek_skip (advance st) in
+  let st, binding =
+    if curr = Token.KwCase then
+      let st, pat = parse_pat (fst (expect st Token.KwCase)) in
+      (st, Node.ForCase pat)
+    else
+      match curr with
+      | Token.Ident name -> (advance st, Node.ForIdent name)
+      | _ ->
+        ( add_error_code st Parse_error.E1105 span []
+        , Node.ForIdent (Interner.empty_name st.interner) )
+  in
+  let st, range = parse_expr (fst (expect st Token.KwIn)) in
+  let st, step =
+    if match_token st Token.KwStep then
+      let st, s = parse_expr (fst (expect st Token.KwStep)) in
+      (st, Some s)
+    else (st, None)
+  in
+  let st, guard =
+    if match_token st Token.KwIf then
+      let st, g = parse_expr (fst (expect st Token.KwIf)) in
+      (st, Some g)
+    else (st, None)
+  in
+  let st, curr, span = peek_skip st in
+  let st, body_expr =
+    match curr with
+    | Token.LBrace -> parse_expr_block st false span
+    | Token.KwUnsafe -> parse_expr_block (advance st) true span
+    | _ ->
+      ( add_error_code st Parse_error.E1108 span []
+      , Node.
+          {
+            kind = ExprBlock { unsafeness = false; stmts = []; ret = None }
+          ; span
+          } )
+  in
+  let body =
+    match body_expr.Node.kind with
+    | ExprBlock b -> b
+    | _ -> { unsafeness = false; stmts = []; ret = None }
+  in
+  ( st
+  , Node.
+      {
+        kind = ExprFor { binding; range; step; guard; body }
+      ; span = start_span
+      } )
 
 and parse_expr_prefix st op =
   let st, right = parse_expr_bp (advance st) (Prec.prec_value Prec.Unary) in
@@ -512,12 +684,6 @@ let parse_field_inits parse_expr st =
     | _ -> (st, List.rev acc)
   in
   loop st []
-
-let parse_match_arm parse_pat parse_expr st =
-  let st, pattern = parse_pat (fst (expect st Token.KwCase)) in
-  let st, body = parse_expr (fst (expect st Token.MinusGt)) in
-  let st, _ = consume_if st Token.Comma in
-  (st, Node.{ pattern; body })
 
 let parse_prog tokens interner =
   let st = mk_state tokens interner in
