@@ -51,7 +51,7 @@ stmt_assign = ident, "<-", expr, ";";
 
 stmt_expr = expr, ";";
 
-stmt_data = "data", ident, (typ_expr_record | typ_expr_sum), ";";
+stmt_data = "data", ident, ":=", (typ_expr_record | typ_expr_sum), ";";
 
 stmt_extern = "extern", [string], "{", {aux_extern_func}, "}";
 
@@ -96,7 +96,7 @@ expr_postfix = expr_primary, {aux_postfix_op};
 
 aux_postfix_op = ".", ident | "[", expr, "]" | "(", [aux_arg_list], ")";
 
-expr_primary = expr_literal | expr_template | expr_ident | expr_tuple | expr_block | expr_if | expr_match | expr_for | expr_while | expr_record | expr_func;
+expr_primary = expr_literal | expr_template | expr_ident | expr_tuple | expr_block | expr_if | expr_match | expr_for | expr_while | expr_defer | expr_exit | expr_skip | expr_unsafe | expr_record | expr_func;
 
 expr_literal = literal;
 
@@ -116,7 +116,15 @@ expr_for = "for", aux_for_binding, "in", expr, ["if", expr], stmt_block;
 
 expr_while = "while", aux_cond, ["if", expr], stmt_block;
 
-expr_record = "{", aux_field_inits, "}";
+expr_defer = "defer", expr;
+
+expr_exit = "exit", [expr];
+
+expr_skip = "skip";
+
+expr_unsafe = "unsafe", stmt_block;
+
+expr_record = ident, "{", aux_field_inits, "}";
 
 expr_func = ["extern", [string]], "def", [ident], aux_params, aux_opt_ret_type, stmt_block;
 
