@@ -88,10 +88,12 @@ and pat_kind =
 
 and pat_field = { name : ident; pat : pat option }
 and stmt = { modifiers : modifiers; kind : stmt_kind; span : Span.t }
+and import_clause = ImportAll of ident | ImportNamed of ident list
+and export_clause = ExportAll of ident | ExportNamed of ident list
 
 and stmt_kind =
-  | StmtImport of ident * string
-  | StmtExport of ident * string option
+  | StmtImport of import_clause * ident
+  | StmtExport of export_clause * ident option
   | StmtBinding of {
         mutable_ : bool
       ; name : ident

@@ -491,6 +491,90 @@ let test_parse_expr_for () =
       true
     | _ -> false)
 
+let test_parse_stmt_import_all () =
+  let tokens =
+    [
+      (Token.KwImport, Span.dummy)
+    ; (Token.Star, Span.dummy)
+    ; (Token.KwAs, Span.dummy)
+    ; (Token.Ident 0, Span.dummy)
+    ; (Token.KwFrom, Span.dummy)
+    ; (Token.LitString 1, Span.dummy)
+    ; (Token.Semi, Span.dummy)
+    ]
+  in
+  let state, _ = make_test_state tokens in
+  let state_after, stmt = parse_stmt state in
+  check_no_errors state_after.diags;
+  (check bool)
+    "parsed import * as"
+    true
+    (match stmt.kind with StmtImport (ImportAll _, _) -> true | _ -> false)
+
+let test_parse_stmt_import_named () =
+  let tokens =
+    [
+      (Token.KwImport, Span.dummy)
+    ; (Token.LBrace, Span.dummy)
+    ; (Token.Ident 0, Span.dummy)
+    ; (Token.Comma, Span.dummy)
+    ; (Token.Ident 1, Span.dummy)
+    ; (Token.RBrace, Span.dummy)
+    ; (Token.KwFrom, Span.dummy)
+    ; (Token.LitString 2, Span.dummy)
+    ; (Token.Semi, Span.dummy)
+    ]
+  in
+  let state, _ = make_test_state tokens in
+  let state_after, stmt = parse_stmt state in
+  check_no_errors state_after.diags;
+  (check bool)
+    "parsed import { items }"
+    true
+    (match stmt.kind with
+    | StmtImport (ImportNamed [ _; _ ], _) -> true
+    | _ -> false)
+
+let test_parse_stmt_export_all () =
+  let tokens =
+    [
+      (Token.KwExport, Span.dummy)
+    ; (Token.Star, Span.dummy)
+    ; (Token.KwAs, Span.dummy)
+    ; (Token.Ident 0, Span.dummy)
+    ; (Token.Semi, Span.dummy)
+    ]
+  in
+  let state, _ = make_test_state tokens in
+  let state_after, stmt = parse_stmt state in
+  check_no_errors state_after.diags;
+  (check bool)
+    "parsed export * as"
+    true
+    (match stmt.kind with StmtExport (ExportAll _, None) -> true | _ -> false)
+
+let test_parse_stmt_export_named () =
+  let tokens =
+    [
+      (Token.KwExport, Span.dummy)
+    ; (Token.LBrace, Span.dummy)
+    ; (Token.Ident 0, Span.dummy)
+    ; (Token.RBrace, Span.dummy)
+    ; (Token.KwFrom, Span.dummy)
+    ; (Token.LitString 1, Span.dummy)
+    ; (Token.Semi, Span.dummy)
+    ]
+  in
+  let state, _ = make_test_state tokens in
+  let state_after, stmt = parse_stmt state in
+  check_no_errors state_after.diags;
+  (check bool)
+    "parsed export { items } from"
+    true
+    (match stmt.kind with
+    | StmtExport (ExportNamed [ _ ], Some _) -> true
+    | _ -> false)
+
 let () =
   let open Alcotest in
   run
@@ -547,5 +631,9 @@ let () =
         ; test_case "var binding" `Quick test_parse_stmt_var_binding
         ; test_case "assignment" `Quick test_parse_stmt_assign
         ; test_case "missing semicolon" `Quick test_parse_stmt_missing_semi
+        ; test_case "import * as" `Quick test_parse_stmt_import_all
+        ; test_case "import { items }" `Quick test_parse_stmt_import_named
+        ; test_case "export * as" `Quick test_parse_stmt_export_all
+        ; test_case "export { items } from" `Quick test_parse_stmt_export_named
         ] )
     ]

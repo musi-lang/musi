@@ -30,9 +30,17 @@ literal = number_whole | number_decimal | string | rune;
 (* === PROGRAM === *)
 program = {stmt_import | stmt_export | stmt};
 
-stmt_import = "import", ident, "from", string, ";";
+stmt_import = "import", import_clause, "from", string, ";";
 
-stmt_export = "export", ident, ["from", string], ";";
+import_clause = ("*", "as", ident) | ("{", import_items, "}");
+
+import_items = ident, {",", ident};
+
+stmt_export = "export", export_clause, ["from", string], ";";
+
+export_clause = ("*", "as", ident) | ("{", export_items, "}");
+
+export_items = ident, {",", ident};
 
 (* === STATEMENTS === *)
 stmt = [aux_attr], (stmt_bind | stmt_assign | stmt_expr | stmt_data | stmt_extern);
