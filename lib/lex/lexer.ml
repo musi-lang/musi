@@ -104,29 +104,29 @@ let check_utf8_char st pos =
         | None -> (pos + exp, None)
 
 let check_utf8_in_range st sp ep =
-  let rec go p s =
+  let rec loop p s =
     if p >= ep then s
     else if Char.code st.source.[p] >= 0x80 then
       match check_utf8_char s p with
-      | _, Some (code, a, b) -> go b (add_error_code s code a b [])
-      | nxt, None -> go nxt s
-    else go (p + 1) s
+      | _, Some (code, a, b) -> loop b (add_error_code s code a b [])
+      | nxt, None -> loop nxt s
+    else loop (p + 1) s
   in
-  go sp st
+  loop sp st
 
 let find_rbrace content len start =
-  let rec go p =
+  let rec loop p =
     if p >= len then None
     else if content.[p] = '}' then Some p
-    else if is_xdigit content.[p] then go (p + 1)
+    else if is_xdigit content.[p] then loop (p + 1)
     else None
   in
-  go start
+  loop start
 
 let process_escape_chars content =
   let len = String.length content in
   let buf = Buffer.create len in
-  let rec go pos =
+  let rec loop pos =
     if pos >= len then ()
     else
       match content.[pos] with
@@ -142,59 +142,59 @@ let process_escape_chars content =
                    (int_of_string
                       ("0x" ^ String.sub content (pos + 3) (eb - pos - 3))
                    mod 256));
-              go (eb + 1)
+              loop (eb + 1)
             with _ ->
               Buffer.add_string buf (String.sub content pos 2);
-              go (pos + 2))
+              loop (pos + 2))
           | None ->
             Buffer.add_string buf (String.sub content pos 2);
-            go (pos + 2))
+            loop (pos + 2))
         | c -> (
           match List.assoc_opt c escape_chars with
           | Some esc ->
             Buffer.add_char buf esc;
-            go (pos + 2)
+            loop (pos + 2)
           | None ->
             Buffer.add_string buf (String.sub content pos 2);
-            go (pos + 2)))
+            loop (pos + 2)))
       | c ->
         Buffer.add_char buf c;
-        go (pos + 1)
+        loop (pos + 1)
   in
-  go 0;
+  loop 0;
   Buffer.contents buf
 
 let scan_while st start pred =
-  let rec go p =
-    if p >= st.len || not (pred st.source.[p]) then p else go (p + 1)
+  let rec loop p =
+    if p >= st.len || not (pred st.source.[p]) then p else loop (p + 1)
   in
-  go start
+  loop start
 
 let scan_number_chars st start valid base =
-  let rec go p s =
+  let rec loop p s =
     if p >= st.len then (p, s)
     else
       let c = st.source.[p] in
-      if valid c then go (p + 1) s
+      if valid c then loop (p + 1) s
       else if is_alpha c || is_digit c then
         (p, add_error_code s Lex_error.E0101 p (p + 1) [ base; String.make 1 c ])
       else (p, s)
   in
-  go start st
+  loop start st
 
 let scan_decimal st start =
-  let rec go pos s dots =
+  let rec loop pos s dots =
     if pos >= st.len then (pos, s, dots)
     else
       let c = st.source.[pos] in
-      if is_digit c then go (pos + 1) s dots
+      if is_digit c then loop (pos + 1) s dots
       else if c = '.' then
         if dots > 0 then
           (pos, add_error_code s Lex_error.E0102 pos pos [], dots + 1)
-        else go (pos + 1) s (dots + 1)
+        else loop (pos + 1) s (dots + 1)
       else (pos, s, dots)
   in
-  let ep, fs, _ = go st.pos st 0 in
+  let ep, fs, _ = loop st.pos st 0 in
   ({ fs with pos = ep }, extract st start ep, mk_span st start)
 
 let scan_based_number st start pfx valid base =
@@ -227,18 +227,18 @@ let scan_number st =
   else scan_decimal st start
 
 let scan_quoted st quote tpl =
-  let rec go p depth extra =
+  let rec loop p depth extra =
     if p >= st.len then (p, true, extra)
     else
       match st.source.[p] with
       | c when c = quote && depth = 0 -> (p + 1, false, extra)
-      | '\\' when p + 1 < st.len -> go (p + 2) depth extra
-      | '{' when tpl -> go (p + 1) (depth + 1) extra
-      | '}' when tpl && depth > 0 -> go (p + 1) (depth - 1) extra
-      | '}' when tpl -> go (p + 1) depth (p :: extra)
-      | _ -> go (p + 1) depth extra
+      | '\\' when p + 1 < st.len -> loop (p + 2) depth extra
+      | '{' when tpl -> loop (p + 1) (depth + 1) extra
+      | '}' when tpl && depth > 0 -> loop (p + 1) (depth - 1) extra
+      | '}' when tpl -> loop (p + 1) depth (p :: extra)
+      | _ -> loop (p + 1) depth extra
   in
-  go (st.pos + 1) 0 []
+  loop (st.pos + 1) 0 []
 
 let is_valid_escape st pos =
   pos >= 0
@@ -284,13 +284,13 @@ let parse_unicode_escape st pos =
   else None
 
 let validate_escapes st start ep =
-  let rec go pos s =
+  let rec loop pos s =
     if pos >= ep - 1 then s
     else if st.source.[pos] = '\\' then
       if pos + 1 >= ep - 1 then
         add_error_code s Lex_error.E0211 pos (pos + 1) []
       else if not (is_valid_escape st pos) then
-        go
+        loop
           (pos + 2)
           (add_error_code
              s
@@ -300,12 +300,12 @@ let validate_escapes st start ep =
              [ String.make 1 st.source.[pos + 1] ])
       else if st.source.[pos + 1] = 'u' || st.source.[pos + 1] = 'U' then
         match parse_unicode_escape st pos with
-        | Some (es, nxt) -> go nxt es
-        | None -> go (pos + 2) s
-      else go (pos + 2) s
-    else go (pos + 1) s
+        | Some (es, nxt) -> loop nxt es
+        | None -> loop (pos + 2) s
+      else loop (pos + 2) s
+    else loop (pos + 1) s
   in
-  go start st
+  loop start st
 
 let scan_whitespace st =
   ({ st with pos = scan_while st st.pos is_whitespace }, (), mk_span st st.pos)
@@ -313,40 +313,40 @@ let scan_whitespace st =
 let scan_newline st = (advance st, (), mk_span st st.pos)
 
 let scan_line_comment st =
-  let rec go p =
-    if p >= st.len || st.source.[p] = '\n' then p else go (p + 1)
+  let rec loop p =
+    if p >= st.len || st.source.[p] = '\n' then p else loop (p + 1)
   in
   let start = st.pos + 2 in
-  let ep = go start in
+  let ep = loop start in
   ({ st with pos = ep }, extract st start ep, mk_span st st.pos)
 
 let scan_block_comment st =
   let start = st.pos in
-  let rec go p s =
+  let rec loop p s =
     if p + 1 >= st.len then (p, add_error_code s Lex_error.E0401 start st.pos [])
     else if st.source.[p] = '*' && st.source.[p + 1] = '/' then (p + 2, s)
     else if st.source.[p] = '/' && st.source.[p + 1] = '*' then
-      go (p + 2) (add_error_code s Lex_error.E0402 p (p + 2) [])
-    else go (p + 1) s
+      loop (p + 2) (add_error_code s Lex_error.E0402 p (p + 2) [])
+    else loop (p + 1) s
   in
   let sc = st.pos + 2 in
-  let ep, fs = go sc st in
+  let ep, fs = loop sc st in
   ({ fs with pos = ep }, if ep > sc + 2 then extract st sc (ep - 2) else "")
 
 let scan_ident st =
   let start = st.pos in
-  let rec go p s =
+  let rec loop p s =
     if p >= st.len then (p, s)
     else
       let c = st.source.[p] in
-      if is_ident_cont c then go (p + 1) s
+      if is_ident_cont c then loop (p + 1) s
       else if Char.code c > 127 then
-        go
+        loop
           (p + 1)
           (add_error_code s Lex_error.E0304 p (p + 1) [ String.make 1 c ])
       else (p, s)
   in
-  let ep, fs = go st.pos st in
+  let ep, fs = loop st.pos st in
   ( { fs with pos = ep }
   , Basic.Interner.intern st.interner (extract st start ep)
   , mk_span st start )
@@ -402,15 +402,15 @@ let scan_rune st =
     else (s, proc.[0], sp)
 
 let scan_symbol st =
-  let rec go = function
+  let rec loop = function
     | [] -> None
     | (sym, tok) :: rest ->
       let len = String.length sym in
       if st.pos + len <= st.len && String.sub st.source st.pos len = sym then
         Some (tok, len)
-      else go rest
+      else loop rest
   in
-  match go Token.symbol_strings with
+  match loop Token.symbol_strings with
   | Some (tok, len) -> ({ st with pos = st.pos + len }, tok, mk_span st st.pos)
   | None ->
     ( add_error_code
@@ -492,16 +492,16 @@ let rec lex_token st =
     else (dispatch_char c) st
 
 and tokenize source file_id interner =
-  let rec go st tokens =
+  let rec loop st tokens =
     let old = st.pos in
     let ns, tok, sp = lex_token st in
     match tok with
     | Token.EOF -> (List.rev ((tok, sp) :: tokens), ns.diags)
     | _ ->
       if ns.pos <= old then
-        go
+        loop
           (advance (add_error_code ns Lex_error.E0501 old ns.pos []))
           ((Token.Error, sp) :: tokens)
-      else go ns ((tok, sp) :: tokens)
+      else loop ns ((tok, sp) :: tokens)
   in
-  go (mk_state source file_id interner) []
+  loop (mk_state source file_id interner) []
