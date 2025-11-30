@@ -112,7 +112,7 @@ expr_if = "if", aux_cond, {",", aux_cond}, stmt_block, ["else", stmt_block];
 
 expr_match = "match", expr, "{", {aux_match_arm}, "}";
 
-expr_for = "for", aux_for_binding, "in", expr, ["step", expr], ["if", expr], stmt_block;
+expr_for = "for", aux_for_binding, "in", expr, ["if", expr], stmt_block;
 
 expr_while = "while", aux_cond, ["if", expr], stmt_block;
 

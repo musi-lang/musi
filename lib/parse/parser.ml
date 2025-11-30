@@ -284,12 +284,6 @@ and parse_expr_for st start_span =
         , Node.ForIdent (Interner.empty_name st.interner) )
   in
   let st, range = parse_expr (fst (expect st Token.KwIn)) in
-  let st, step =
-    if match_token st Token.KwStep then
-      let st, s = parse_expr (fst (expect st Token.KwStep)) in
-      (st, Some s)
-    else (st, None)
-  in
   let st, guard =
     if match_token st Token.KwIf then
       let st, g = parse_expr (fst (expect st Token.KwIf)) in
@@ -303,11 +297,8 @@ and parse_expr_for st start_span =
     | _ -> { unsafeness = false; stmts = []; ret = None }
   in
   ( st
-  , Node.
-      {
-        kind = ExprFor { binding; range; step; guard; body }
-      ; span = start_span
-      } )
+  , Node.{ kind = ExprFor { binding; range; guard; body }; span = start_span }
+  )
 
 and parse_expr_prefix st op =
   let st, right = parse_expr_bp (advance st) (Prec.prec_value Prec.Unary) in

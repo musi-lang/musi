@@ -52,7 +52,6 @@ and expr_kind =
   | ExprFor of {
         binding : for_binding
       ; range : expr
-      ; step : expr option
       ; guard : expr option
       ; body : block
     }

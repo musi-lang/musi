@@ -485,9 +485,7 @@ let test_parse_expr_for () =
     "parsed for"
     true
     (match expr.kind with
-    | ExprFor
-        { binding = ForIdent _; range = _; step = None; guard = None; body = _ }
-      ->
+    | ExprFor { binding = ForIdent _; range = _; guard = None; body = _ } ->
       true
     | _ -> false)
 
