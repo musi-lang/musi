@@ -423,7 +423,7 @@ let test_parse_expr_if_with_guard () =
   let state_after, expr = parse_expr state in
   check_no_errors state_after.diags;
   (check bool)
-    "parsed if with case"
+    "parsed if w/ case"
     true
     (match expr.kind with
     | ExprIf ([ CondCase _ ], _, None) -> true
@@ -489,6 +489,66 @@ let test_parse_expr_for () =
       true
     | _ -> false)
 
+let test_parse_expr_defer () =
+  let tokens = [ (Token.KwDefer, Span.dummy); (Token.Ident 0, Span.dummy) ] in
+  let state, _ = make_test_state tokens in
+  let state_after, expr = parse_expr state in
+  check_no_errors state_after.diags;
+  (check bool)
+    "parsed defer"
+    true
+    (match expr.kind with ExprDefer _ -> true | _ -> false)
+
+let test_parse_expr_exit_no_value () =
+  let tokens = [ (Token.KwExit, Span.dummy) ] in
+  let state, _ = make_test_state tokens in
+  let state_after, expr = parse_expr state in
+  check_no_errors state_after.diags;
+  (check bool)
+    "parsed exit w/out value"
+    true
+    (match expr.kind with ExprExit None -> true | _ -> false)
+
+let test_parse_expr_exit_with_value () =
+  let tokens =
+    [ (Token.KwExit, Span.dummy); (Token.LitNumber "42", Span.dummy) ]
+  in
+  let state, _ = make_test_state tokens in
+  let state_after, expr = parse_expr state in
+  check_no_errors state_after.diags;
+  (check bool)
+    "parsed exit w/ value"
+    true
+    (match expr.kind with ExprExit (Some _) -> true | _ -> false)
+
+let test_parse_expr_skip () =
+  let tokens = [ (Token.KwSkip, Span.dummy) ] in
+  let state, _ = make_test_state tokens in
+  let state_after, expr = parse_expr state in
+  check_no_errors state_after.diags;
+  (check bool)
+    "parsed skip"
+    true
+    (match expr.kind with ExprSkip -> true | _ -> false)
+
+let test_parse_expr_unsafe () =
+  let tokens =
+    [
+      (Token.KwUnsafe, Span.dummy)
+    ; (Token.LBrace, Span.dummy)
+    ; (Token.LitNumber "1", Span.dummy)
+    ; (Token.Semi, Span.dummy)
+    ; (Token.RBrace, Span.dummy)
+    ]
+  in
+  let state, _ = make_test_state tokens in
+  let state_after, expr = parse_expr state in
+  check_no_errors state_after.diags;
+  (check bool)
+    "parsed unsafe"
+    true
+    (match expr.kind with ExprUnsafe _ -> true | _ -> false)
+
 let test_parse_stmt_import_all () =
   let tokens =
     [
@@ -505,7 +565,7 @@ let test_parse_stmt_import_all () =
   let state_after, stmt = parse_stmt state in
   check_no_errors state_after.diags;
   (check bool)
-    "parsed import * as"
+    "parsed 'import * as'"
     true
     (match stmt.kind with StmtImport (ImportAll _, _) -> true | _ -> false)
 
@@ -527,7 +587,7 @@ let test_parse_stmt_import_named () =
   let state_after, stmt = parse_stmt state in
   check_no_errors state_after.diags;
   (check bool)
-    "parsed import { items }"
+    "parsed 'import { items }'"
     true
     (match stmt.kind with
     | StmtImport (ImportNamed [ _; _ ], _) -> true
@@ -547,7 +607,7 @@ let test_parse_stmt_export_all () =
   let state_after, stmt = parse_stmt state in
   check_no_errors state_after.diags;
   (check bool)
-    "parsed export * as"
+    "parsed 'export * as'"
     true
     (match stmt.kind with StmtExport (ExportAll _, None) -> true | _ -> false)
 
@@ -567,7 +627,7 @@ let test_parse_stmt_export_named () =
   let state_after, stmt = parse_stmt state in
   check_no_errors state_after.diags;
   (check bool)
-    "parsed export { items } from"
+    "parsed 'export { items } from'"
     true
     (match stmt.kind with
     | StmtExport (ExportNamed [ _ ], Some _) -> true
@@ -618,10 +678,15 @@ let () =
         ; test_case "field access" `Quick test_parse_expr_field
         ; test_case "index" `Quick test_parse_expr_index
         ; test_case "if" `Quick test_parse_expr_if
-        ; test_case "if with case" `Quick test_parse_expr_if_with_guard
+        ; test_case "if w/ case" `Quick test_parse_expr_if_with_guard
         ; test_case "match" `Quick test_parse_expr_match
         ; test_case "while" `Quick test_parse_expr_while
         ; test_case "for" `Quick test_parse_expr_for
+        ; test_case "defer" `Quick test_parse_expr_defer
+        ; test_case "exit w/out value" `Quick test_parse_expr_exit_no_value
+        ; test_case "exit w/ value" `Quick test_parse_expr_exit_with_value
+        ; test_case "skip" `Quick test_parse_expr_skip
+        ; test_case "unsafe" `Quick test_parse_expr_unsafe
         ] )
     ; ( "statement_parsing"
       , [

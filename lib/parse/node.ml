@@ -68,12 +68,16 @@ and expr_kind =
   | ExprCall of expr * expr list
   | ExprIndex of expr * expr
   | ExprField of expr * ident
+  | ExprDefer of expr
+  | ExprExit of expr option
+  | ExprSkip
+  | ExprUnsafe of block
 
 and field_init = { name : ident; value : expr }
 and cond = CondExpr of expr | CondCase of pat * expr
 and for_binding = ForIdent of ident | ForCase of pat
 and match_arm = { pattern : pat; guard : expr option; body : expr }
-and block = { unsafeness : bool; stmts : stmt list; ret : expr option }
+and block = { stmts : stmt list; ret : expr option }
 and pat = pat_kind with_span
 
 and pat_kind =

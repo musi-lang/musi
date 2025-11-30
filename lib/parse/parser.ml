@@ -118,7 +118,7 @@ let rec parse_cond st =
     let st, expr = parse_expr st in
     (st, Node.CondExpr expr)
 
-and parse_block st unsafeness span =
+and parse_block st span =
   let st, _ = expect st Token.LBrace in
   let rec loop st stmts =
     let st, curr, _ = peek_skip st in
@@ -135,20 +135,23 @@ and parse_block st unsafeness span =
   in
   let st, stmts, ret = loop st [] in
   let st, _ = expect st Token.RBrace in
-  (st, Node.{ kind = ExprBlock { unsafeness; stmts; ret }; span })
+  (st, Node.{ kind = ExprBlock { stmts; ret }; span })
 
 and parse_body st =
   let st, curr, span = peek_skip st in
   match curr with
-  | Token.LBrace -> parse_block st false span
-  | Token.KwUnsafe -> parse_block (advance st) true span
+  | Token.LBrace -> parse_block st span
+  | Token.KwUnsafe ->
+    let st, block_expr = parse_block (advance st) span in
+    let block =
+      match block_expr.Node.kind with
+      | ExprBlock b -> b
+      | _ -> { stmts = []; ret = None }
+    in
+    (st, Node.{ kind = ExprUnsafe block; span })
   | _ ->
     ( add_error_code st Parse_error.E1108 span []
-    , Node.
-        {
-          kind = ExprBlock { unsafeness = false; stmts = []; ret = None }
-        ; span
-        } )
+    , Node.{ kind = ExprBlock { stmts = []; ret = None }; span } )
 
 and parse_expr_literal st curr span =
   let st = advance st in
@@ -189,8 +192,27 @@ and parse_expr_primary st =
         let st, _ = expect st Token.RParen in
         (st, first)
   | Token.Ident name -> (advance st, Node.{ kind = ExprIdent name; span })
-  | Token.LBrace -> parse_block st false span
-  | Token.KwUnsafe -> parse_block (advance st) true span
+  | Token.LBrace -> parse_block st span
+  | Token.KwUnsafe ->
+    let st, block_expr = parse_block (advance st) span in
+    let block =
+      match block_expr.Node.kind with
+      | ExprBlock b -> b
+      | _ -> { stmts = []; ret = None }
+    in
+    (st, Node.{ kind = ExprUnsafe block; span })
+  | Token.KwDefer ->
+    let st, expr = parse_expr (advance st) in
+    (st, Node.{ kind = ExprDefer expr; span })
+  | Token.KwExit ->
+    let st = advance st in
+    let st, curr, _ = peek_skip st in
+    if curr = Token.Semi || curr = Token.EOF || curr = Token.RBrace then
+      (st, Node.{ kind = ExprExit None; span })
+    else
+      let st, expr = parse_expr st in
+      (st, Node.{ kind = ExprExit (Some expr); span })
+  | Token.KwSkip -> (advance st, Node.{ kind = ExprSkip; span })
   | Token.KwIf -> parse_expr_if st span
   | Token.KwMatch -> parse_expr_match st span
   | Token.KwWhile -> parse_expr_while st span
@@ -220,11 +242,16 @@ and parse_expr_if st start_span =
   let then_blk =
     match then_block.Node.kind with
     | ExprBlock b -> b
-    | _ -> { unsafeness = false; stmts = []; ret = None }
+    | ExprUnsafe b -> b
+    | _ -> { stmts = []; ret = None }
   in
   let else_blk =
     match else_block with
-    | Some e -> ( match e.Node.kind with ExprBlock b -> Some b | _ -> None)
+    | Some e -> (
+      match e.Node.kind with
+      | ExprBlock b -> Some b
+      | ExprUnsafe b -> Some b
+      | _ -> None)
     | None -> None
   in
   (st, Node.{ kind = ExprIf (conds, then_blk, else_blk); span = start_span })
@@ -266,7 +293,8 @@ and parse_expr_while st start_span =
   let body =
     match body_expr.Node.kind with
     | ExprBlock b -> b
-    | _ -> { unsafeness = false; stmts = []; ret = None }
+    | ExprUnsafe b -> b
+    | _ -> { stmts = []; ret = None }
   in
   (st, Node.{ kind = ExprWhile (cond, guard, body); span = start_span })
 
@@ -294,7 +322,8 @@ and parse_expr_for st start_span =
   let body =
     match body_expr.Node.kind with
     | ExprBlock b -> b
-    | _ -> { unsafeness = false; stmts = []; ret = None }
+    | ExprUnsafe b -> b
+    | _ -> { stmts = []; ret = None }
   in
   ( st
   , Node.{ kind = ExprFor { binding; range; guard; body }; span = start_span }
