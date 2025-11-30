@@ -372,15 +372,15 @@ let scan_literal st quote lit_name process =
     let fs = validate_escapes se (st.pos + 1) ep in
     ({ fs with pos = ep }, Some (process content), sp)
 
-let scan_string st =
-  match scan_literal st '"' "string" process_escape_chars with
+let intern_result st = function
   | s, None, sp -> (s, Basic.Interner.empty_name st.interner, sp)
   | s, Some c, sp -> (s, Basic.Interner.intern st.interner c, sp)
 
+let scan_string st =
+  intern_result st (scan_literal st '"' "string" process_escape_chars)
+
 let scan_template st =
-  match scan_literal st '"' "template" process_escape_chars with
-  | s, None, sp -> (s, Basic.Interner.empty_name st.interner, sp)
-  | s, Some c, sp -> (s, Basic.Interner.intern st.interner c, sp)
+  intern_result st (scan_literal st '"' "template" process_escape_chars)
 
 let scan_rune st =
   match
