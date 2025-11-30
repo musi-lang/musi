@@ -178,10 +178,16 @@ and parse_expr_if st start_span =
       let st, expr = parse_expr st in
       (st, Node.CondExpr expr)
   in
-  let st, first = parse_cond (advance st) in
-  let st, rest =
-    parse_sep Token.Comma (fun st _ _ -> Some (parse_cond st)) st
+  let st = advance st in
+  let st, first = parse_cond st in
+  let rec parse_rest st acc =
+    if match_token st Token.Comma then
+      let st = fst (expect st Token.Comma) in
+      let st, c = parse_cond st in
+      parse_rest st (c :: acc)
+    else (st, List.rev acc)
   in
+  let st, rest = parse_rest st [] in
   let conds = first :: rest in
   let st, curr, span = peek_skip st in
   let st, then_block =
