@@ -535,7 +535,7 @@ and parse_stmt_binding st start_span mutable_ =
     ( expect_tok st Token.Semi
     , mk_stmt (StmtBinding { mutable_; name; typ; value }) start_span )
   | _ ->
-    ( add_error_code st Parse_error.E1401 span []
+    ( add_error_code st Parse_error.E1105 span []
     , mk_stmt (StmtExpr (mk_literal_expr LitUnit span)) start_span )
 
 and parse_stmt_data st start_span =
@@ -663,7 +663,7 @@ and parse_pat st =
     | Token.Ident name ->
       (advance st, mk_pat (Node.PatBinding { mutable_; name }) span)
     | _ ->
-      (add_error_code st Parse_error.E1501 span [], mk_pat Node.PatWild span))
+      (add_error_code st Parse_error.E1105 span [], mk_pat Node.PatWild span))
   | Token.Ident name -> parse_pat_ident st name span
   | Token.LParen ->
     let st, first = parse_pat (advance st) in
