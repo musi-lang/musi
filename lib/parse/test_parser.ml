@@ -521,15 +521,15 @@ let test_parse_expr_exit_with_value () =
     true
     (match expr.kind with ExprExit (Some _) -> true | _ -> false)
 
-let test_parse_expr_skip () =
-  let tokens = [ (Token.KwSkip, Span.dummy) ] in
+let test_parse_expr_next () =
+  let tokens = [ (Token.KwNext, Span.dummy) ] in
   let state, _ = make_test_state tokens in
   let state_after, expr = parse_expr state in
   check_no_errors state_after.diags;
   (check bool)
-    "parsed skip"
+    "parsed next"
     true
-    (match expr.kind with ExprSkip -> true | _ -> false)
+    (match expr.kind with ExprNext -> true | _ -> false)
 
 let test_parse_expr_unsafe () =
   let tokens =
@@ -772,7 +772,7 @@ let () =
         ; test_case "defer" `Quick test_parse_expr_defer
         ; test_case "exit w/out value" `Quick test_parse_expr_exit_no_value
         ; test_case "exit w/ value" `Quick test_parse_expr_exit_with_value
-        ; test_case "skip" `Quick test_parse_expr_skip
+        ; test_case "next" `Quick test_parse_expr_next
         ; test_case "unsafe" `Quick test_parse_expr_unsafe
         ; test_case "record" `Quick test_parse_expr_record
         ; test_case "func" `Quick test_parse_expr_func

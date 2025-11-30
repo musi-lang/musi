@@ -8,7 +8,7 @@ extern "C" {
 	unsafe def glfwWindowHint(hint : Int32, value : Int32);
 	unsafe def glfwCreateWindow(width : Int32, height : Int32, title : ^Nat8, monitor : ^Any, share : ^Any) -> Option<^GLFWwindow>;
 	unsafe def glfwMakeContextCurrent(window : ^GLFWwindow);
-	unsafe def glfwSetFramebufferSizeCallback(window : ^GLFWwindow, cb : ^def (^GLFWwindow, Int32, Int32) -> Unit);
+	unsafe def glfwSetFramebufferSizeCallback(window : ^GLFWwindow, cb : ^def(^GLFWwindow, Int32, Int32) -> Unit);
 	unsafe def glfwWindowShouldClose(window : ^GLFWwindow) -> Int32;
 	unsafe def glfwSwapBuffers(window : ^GLFWwindow);
 	unsafe def glfwPollEvents();
@@ -48,7 +48,7 @@ unsafe {
 
   // process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
   // ---------------------------------------------------------------------------------------------------------
-  val framebuffer_size_callback := def (window : ^GLFWwindow, width : Int32, height : Int32) {
+  val framebuffer_size_callback := def(window : ^GLFWwindow, width : Int32, height : Int32) {
     // make sure the viewport matches the new window dimensions; note that width and
     // height will be significantly larger than specified on retina displays.
     glViewport(0, 0, width, height);
@@ -56,7 +56,7 @@ unsafe {
 
   // glfw: whenever the window size changed (by OS or user resize) this callback function executes
   // ---------------------------------------------------------------------------------------------
-  val process_input := def (window : ^GLFWwindow) {
+  val process_input := def(window : ^GLFWwindow) {
     if glfwGetKey(window, GLFW_KEY_ESCAPE) = GLFW_PRESS {
       glfwSetWindowShouldClose(window, 1);
     };

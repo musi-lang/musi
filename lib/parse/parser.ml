@@ -142,6 +142,10 @@ let parse_sep_pipe parse_fn st =
   in
   loop st []
 
+let parse_between open_tok close_tok parse_fn st =
+  let st, result = parse_fn (expect_tok st open_tok) in
+  (expect_tok st close_tok, result)
+
 let mk_stmt kind span =
   Node.
     {
@@ -177,7 +181,7 @@ let parse_params parse_typ st =
 
 let parse_field_inits parse_expr st =
   let rec loop st acc =
-    let st, curr, _span = peek_skip st in
+    let st, curr, _ = peek_skip st in
     match curr with
     | Token.Dot -> (
       let st, curr, span = peek_skip (advance st) in
@@ -277,9 +281,13 @@ and parse_expr_primary st =
     if curr = Token.LBrace then
       let next_tok, _ = peek_nth_opt st 1 in
       if next_tok = Token.Dot then
-        let st, _ = expect st Token.LBrace in
-        let st, fields = parse_field_inits parse_expr st in
-        let st, _ = expect st Token.RBrace in
+        let st, fields =
+          parse_between
+            Token.LBrace
+            Token.RBrace
+            (parse_field_inits parse_expr)
+            st
+        in
         (st, Node.{ kind = ExprRecord (Some name, fields); span })
       else (st, Node.{ kind = ExprIdent name; span })
     else (st, Node.{ kind = ExprIdent name; span })
@@ -288,9 +296,13 @@ and parse_expr_primary st =
     let st, curr, _ = peek_skip st in
     if curr = Token.Dot then
       let st = { st with pos = st.pos - 1 } in
-      let st, _ = expect st Token.LBrace in
-      let st, fields = parse_field_inits parse_expr st in
-      let st, _ = expect st Token.RBrace in
+      let st, fields =
+        parse_between
+          Token.LBrace
+          Token.RBrace
+          (parse_field_inits parse_expr)
+          st
+      in
       (st, Node.{ kind = ExprRecord (None, fields); span })
     else
       let st = { st with pos = st.pos - 1 } in
@@ -309,7 +321,7 @@ and parse_expr_primary st =
     else
       let st, expr = parse_expr st in
       (st, mk_expr (Node.ExprExit (Some expr)) span)
-  | Token.KwSkip -> (advance st, mk_expr Node.ExprSkip span)
+  | Token.KwNext -> (advance st, mk_expr Node.ExprNext span)
   | Token.KwIf -> parse_expr_if st span
   | Token.KwMatch -> parse_expr_match st span
   | Token.KwWhile -> parse_expr_while st span

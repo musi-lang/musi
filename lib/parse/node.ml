@@ -70,7 +70,7 @@ and expr_kind =
   | ExprField of expr * ident
   | ExprDefer of expr
   | ExprExit of expr option
-  | ExprSkip
+  | ExprNext
   | ExprUnsafe of block
 
 and field_init = { name : ident; value : expr }

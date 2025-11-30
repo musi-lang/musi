@@ -27,10 +27,10 @@ type t =
   | KwInstance
   | KwIs
   | KwMatch
+  | KwNext
   | KwNot
   | KwOr
   | KwReturn
-  | KwSkip
   | KwUnsafe
   | KwVal
   | KwVar
@@ -98,10 +98,10 @@ let keyword_strings =
   ; ("instance", KwInstance)
   ; ("is", KwIs)
   ; ("match", KwMatch)
+  ; ("next", KwNext)
   ; ("not", KwNot)
   ; ("or", KwOr)
   ; ("return", KwReturn)
-  ; ("skip", KwSkip)
   ; ("unsafe", KwUnsafe)
   ; ("val", KwVal)
   ; ("var", KwVar)
@@ -166,7 +166,7 @@ let to_string = function
   | Ident name -> "IDENT(id:" ^ string_of_int name ^ ")"
   | ( KwAnd | KwAs | KwCase | KwData | KwDef | KwDefer | KwElse | KwExit
     | KwExport | KwExtern | KwFor | KwFrom | KwIf | KwImport | KwIn | KwInstance
-    | KwIs | KwMatch | KwNot | KwOr | KwReturn | KwSkip | KwUnsafe | KwVal
+    | KwIs | KwMatch | KwNext | KwNot | KwOr | KwReturn | KwUnsafe | KwVal
     | KwVar | KwWhere | KwWhile ) as kw ->
     Hashtbl.find keyword_to_string kw
   | ( LtMinus | ColonEq | Eq | BangEq | Lt | LtEq | Gt | GtEq | Plus | Minus

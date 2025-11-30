@@ -96,7 +96,7 @@ expr_postfix = expr_primary, {aux_postfix_op};
 
 aux_postfix_op = ".", ident | "[", expr, "]" | "(", [aux_arg_list], ")";
 
-expr_primary = expr_literal | expr_template | expr_ident | expr_tuple | expr_block | expr_if | expr_match | expr_for | expr_while | expr_defer | expr_exit | expr_skip | expr_unsafe | expr_record | expr_func;
+expr_primary = expr_literal | expr_template | expr_ident | expr_tuple | expr_block | expr_if | expr_match | expr_for | expr_while | expr_defer | expr_exit | expr_next | expr_unsafe | expr_record | expr_func;
 
 expr_literal = literal;
 
@@ -120,7 +120,7 @@ expr_defer = "defer", expr;
 
 expr_exit = "exit", [expr];
 
-expr_skip = "skip";
+expr_next = "next";
 
 expr_unsafe = "unsafe", stmt_block;
 
