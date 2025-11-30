@@ -43,7 +43,7 @@ export_clause = ("*", "as", ident) | ("{", export_items, "}");
 export_items = ident, {",", ident};
 
 (* === STATEMENTS === *)
-stmt = [aux_attr], (stmt_bind | stmt_assign | stmt_expr | stmt_extern | stmt_instance);
+stmt = [aux_attr], (stmt_bind | stmt_assign | stmt_expr | stmt_extern);
 
 stmt_bind = ("val" | "var"), ident, aux_opt_type, ":=", expr, ";";
 
@@ -54,8 +54,6 @@ stmt_expr = expr, ";";
 stmt_extern = "extern", [string], "{", {aux_extern_fn}, "}";
 
 aux_extern_fn = "fn", ident, aux_params, aux_opt_ret_type, ";";
-
-stmt_instance = "instance", typ_expr, [":", typ_expr], ":=", expr_rec, ";";
 
 stmt_block = ["unsafe"], "{", {stmt}, ["return", expr, ";"], "}";
 
@@ -96,7 +94,7 @@ expr_postfix = expr_primary, {aux_postfix_op};
 
 aux_postfix_op = ".", ident | "[", expr, "]" | "(", [aux_arg_list], ")";
 
-expr_primary = expr_literal | expr_template | expr_ident | expr_tuple | expr_block | expr_if | expr_match | expr_for | expr_while | expr_defer | expr_exit | expr_next | expr_unsafe | expr_rec | expr_fn | expr_rec | expr_sum;
+expr_primary = expr_literal | expr_template | expr_ident | expr_tuple | expr_block | expr_if | expr_match | expr_for | expr_while | expr_defer | expr_exit | expr_next | expr_unsafe | expr_record_lit | expr_fn | expr_record | expr_trait;
 
 expr_literal = literal;
 
@@ -124,15 +122,27 @@ expr_next = "next";
 
 expr_unsafe = "unsafe", stmt_block;
 
+expr_record_lit = [ident], "{", aux_field_inits, "}";
+
 expr_fn = ["extern", [string]], "fn", [ident], aux_params, aux_opt_ret_type, stmt_block;
 
-expr_rec = "rec", [ident], "{", aux_typ_expr_fields, "}";
+expr_record = "record", [":", typ_expr], "{", aux_record_items, "}";
 
-expr_sum = "sum", [ident], "{", aux_sum_cases, "}";
+expr_trait = "trait", [":", typ_expr], "{", aux_trait_items, "}";
 
-aux_sum_cases = aux_sum_case, {",", aux_sum_case};
+aux_record_items = aux_record_item, {",", aux_record_item};
 
-aux_sum_case = "case", ident, ["(", aux_typ_expr_list, ")"];
+aux_record_item = aux_field_decl | aux_case_decl | aux_method_decl;
+
+aux_field_decl = ident, ":", typ_expr;
+
+aux_case_decl = "case", ident, ["(", aux_typ_expr_list, ")"];
+
+aux_method_decl = ident, ":=", expr;
+
+aux_trait_items = aux_trait_item, {",", aux_trait_item};
+
+aux_trait_item = ident, ":", typ_expr;
 
 aux_params = "(", [aux_param_list], ")";
 
