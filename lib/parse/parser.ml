@@ -108,6 +108,43 @@ let parse_literal curr =
   | Token.LitTemplate n -> Some (Node.LitTemplate n)
   | _ -> None
 
+let parse_params parse_typ st =
+  let parse_item st curr span =
+    match curr with
+    | Token.Ident name ->
+      let st = advance st in
+      let st, typ =
+        if match_token st Token.Colon then
+          let st, t = parse_typ (fst (expect st Token.Colon)) in
+          (st, Some t)
+        else (st, None)
+      in
+      Some (st, Node.{ name; typ })
+    | _ ->
+      let _ = add_error_code st Parse_error.E1105 span [] in
+      None
+  in
+  let st, params =
+    parse_delimited Token.LParen Token.RParen Token.Comma parse_item st
+  in
+  (st, params)
+
+let parse_field_inits parse_expr st =
+  let rec loop st acc =
+    let st, curr, _span = peek_skip st in
+    match curr with
+    | Token.Dot -> (
+      let st, curr, span = peek_skip (advance st) in
+      match curr with
+      | Token.Ident name ->
+        let st, value = parse_expr (fst (expect (advance st) Token.ColonEq)) in
+        let st, _ = consume_if st Token.Comma in
+        loop st (Node.{ name; value } :: acc)
+      | _ -> (add_error_code st Parse_error.E1105 span [], List.rev acc))
+    | _ -> (st, List.rev acc)
+  in
+  loop st []
+
 let rec parse_cond st =
   let st, curr, _ = peek_skip st in
   if curr = Token.KwCase then
@@ -191,8 +228,23 @@ and parse_expr_primary st =
       else
         let st, _ = expect st Token.RParen in
         (st, first)
-  | Token.Ident name -> (advance st, Node.{ kind = ExprIdent name; span })
-  | Token.LBrace -> parse_block st span
+  | Token.Ident name ->
+    let st = advance st in
+    let st, curr, _ = peek_skip st in
+    if curr = Token.LBrace then
+      let next_tok, _ = peek_nth_opt st 1 in
+      if next_tok = Token.Dot then parse_expr_record st (Some name) span
+      else (st, Node.{ kind = ExprIdent name; span })
+    else (st, Node.{ kind = ExprIdent name; span })
+  | Token.LBrace ->
+    let st = advance st in
+    let st, curr, _ = peek_skip st in
+    if curr = Token.Dot then
+      let st = { st with pos = st.pos - 1 } in
+      parse_expr_record st None span
+    else
+      let st = { st with pos = st.pos - 1 } in
+      parse_block st span
   | Token.KwUnsafe ->
     let st, block_expr = parse_block (advance st) span in
     let block =
@@ -217,6 +269,15 @@ and parse_expr_primary st =
   | Token.KwMatch -> parse_expr_match st span
   | Token.KwWhile -> parse_expr_while st span
   | Token.KwFor -> parse_expr_for st span
+  | Token.KwDef -> parse_expr_func st span
+  | Token.KwExtern ->
+    let next_tok, _ = peek_nth_opt st 1 in
+    if
+      next_tok = Token.KwDef
+      || match next_tok with Token.LitString _ -> true | _ -> false
+    then parse_expr_func st span
+    else
+      (add_error_code st Parse_error.E1102 span [], mk_literal_expr LitUnit span)
   | _ ->
     (add_error_code st Parse_error.E1102 span [], mk_literal_expr LitUnit span)
 
@@ -328,6 +389,47 @@ and parse_expr_for st start_span =
   ( st
   , Node.{ kind = ExprFor { binding; range; guard; body }; span = start_span }
   )
+
+and parse_expr_record st name_opt start_span =
+  let st, _ = expect st Token.LBrace in
+  let st, fields = parse_field_inits parse_expr st in
+  let st, _ = expect st Token.RBrace in
+  (st, Node.{ kind = ExprRecord (name_opt, fields); span = start_span })
+
+and parse_expr_func st start_span =
+  let st, abi =
+    if match_token st Token.KwExtern then
+      let st, curr, _ = peek_skip (advance st) in
+      match curr with
+      | Token.LitString n -> (advance st, Some (Interner.lookup st.interner n))
+      | _ -> (st, None)
+    else (st, None)
+  in
+  let st, _ = expect st Token.KwDef in
+  let st, name =
+    let st, curr, _ = peek_skip st in
+    match curr with Token.Ident n -> (advance st, Some n) | _ -> (st, None)
+  in
+  let st, params = parse_params parse_typ_expr st in
+  let st, ret_type =
+    if match_token st Token.MinusGt then
+      let st, t = parse_typ_expr (fst (expect st Token.MinusGt)) in
+      (st, Some t)
+    else (st, None)
+  in
+  let st, body_expr = parse_body st in
+  let body =
+    match body_expr.Node.kind with
+    | ExprBlock b -> b
+    | ExprUnsafe b -> b
+    | _ -> { stmts = []; ret = None }
+  in
+  ( st
+  , Node.
+      {
+        kind = ExprFunc { abi; name; params; ret_type; body }
+      ; span = start_span
+      } )
 
 and parse_expr_prefix st op =
   let st, right = parse_expr_bp (advance st) (Prec.prec_value Prec.Unary) in
@@ -517,6 +619,64 @@ and parse_stmt_binding st start_span mutable_ =
     ( add_error_code st Parse_error.E1401 span []
     , mk_stmt (StmtExpr (mk_literal_expr LitUnit span)) start_span )
 
+and parse_stmt_data st start_span =
+  let st, curr, span = peek_skip (advance st) in
+  let st, name =
+    match curr with
+    | Token.Ident n -> (advance st, n)
+    | _ ->
+      ( add_error_code st Parse_error.E1105 span []
+      , Interner.empty_name st.interner )
+  in
+  let st, _ = expect st Token.ColonEq in
+  let st, typ = parse_typ_expr st in
+  let data_kind =
+    match typ.Node.kind with
+    | TypExprRecord fields -> Node.DataRecord fields
+    | TypExprSum cases -> Node.DataSum cases
+    | _ -> Node.DataRecord []
+  in
+  let st, _ = expect st Token.Semi in
+  (st, mk_stmt (StmtData (name, data_kind)) start_span)
+
+and parse_stmt_extern st start_span =
+  let st, abi =
+    let st, curr, _ = peek_skip (advance st) in
+    match curr with
+    | Token.LitString n -> (advance st, Some (Interner.lookup st.interner n))
+    | _ -> (st, None)
+  in
+  let st, _ = expect st Token.LBrace in
+  let rec loop st sigs =
+    let st, curr, _ = peek_skip st in
+    match curr with
+    | Token.RBrace | Token.EOF -> (st, List.rev sigs)
+    | Token.KwDef ->
+      let st, curr, span = peek_skip (advance st) in
+      let st, name =
+        match curr with
+        | Token.Ident n -> (advance st, n)
+        | _ ->
+          ( add_error_code st Parse_error.E1105 span []
+          , Interner.empty_name st.interner )
+      in
+      let st, params = parse_params parse_typ_expr st in
+      let st, ret_type =
+        if match_token st Token.MinusGt then
+          let st, t = parse_typ_expr (fst (expect st Token.MinusGt)) in
+          (st, Some t)
+        else (st, None)
+      in
+      let st, _ = expect st Token.Semi in
+      loop st (Node.{ name; params; ret_type } :: sigs)
+    | _ ->
+      let st = advance st in
+      loop st sigs
+  in
+  let st, sigs = loop st [] in
+  let st, _ = expect st Token.RBrace in
+  (st, mk_stmt (StmtExtern (abi, sigs)) start_span)
+
 and parse_stmt_ident st start_span name =
   let st = advance st in
   if match_token st Token.LtMinus then
@@ -536,6 +696,8 @@ and parse_stmt st =
   | Token.KwExport -> parse_stmt_export st start_span
   | Token.KwVal -> parse_stmt_binding st start_span false
   | Token.KwVar -> parse_stmt_binding st start_span true
+  | Token.KwData -> parse_stmt_data st start_span
+  | Token.KwExtern -> parse_stmt_extern st start_span
   | Token.Ident name -> parse_stmt_ident st start_span name
   | _ ->
     let st, expr = parse_expr st in
@@ -741,43 +903,6 @@ and parse_typ_expr st =
     let st, cases = loop st [] in
     (st, Node.{ kind = TypExprSum cases; span = typ.Node.span })
   else (st, typ)
-
-let parse_params parse_typ st =
-  let parse_item st curr span =
-    match curr with
-    | Token.Ident name ->
-      let st = advance st in
-      let st, typ =
-        if match_token st Token.Colon then
-          let st, t = parse_typ (fst (expect st Token.Colon)) in
-          (st, Some t)
-        else (st, None)
-      in
-      Some (st, Node.{ name; typ })
-    | _ ->
-      let _ = add_error_code st Parse_error.E1105 span [] in
-      None
-  in
-  let st, params =
-    parse_delimited Token.LParen Token.RParen Token.Comma parse_item st
-  in
-  (st, params)
-
-let parse_field_inits parse_expr st =
-  let rec loop st acc =
-    let st, curr, _span = peek_skip st in
-    match curr with
-    | Token.Dot -> (
-      let st, curr, span = peek_skip (advance st) in
-      match curr with
-      | Token.Ident name ->
-        let st, value = parse_expr (fst (expect (advance st) Token.ColonEq)) in
-        let st, _ = consume_if st Token.Comma in
-        loop st (Node.{ name; value } :: acc)
-      | _ -> (add_error_code st Parse_error.E1105 span [], List.rev acc))
-    | _ -> (st, List.rev acc)
-  in
-  loop st []
 
 let parse_prog tokens interner =
   let st = mk_state tokens interner in

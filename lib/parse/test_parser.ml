@@ -633,6 +633,93 @@ let test_parse_stmt_export_named () =
     | StmtExport (ExportNamed [ _ ], Some _) -> true
     | _ -> false)
 
+let test_parse_expr_record () =
+  let tokens =
+    [
+      (Token.Ident 0, Span.dummy)
+    ; (Token.LBrace, Span.dummy)
+    ; (Token.Dot, Span.dummy)
+    ; (Token.Ident 1, Span.dummy)
+    ; (Token.ColonEq, Span.dummy)
+    ; (Token.LitNumber "1", Span.dummy)
+    ; (Token.RBrace, Span.dummy)
+    ]
+  in
+  let state, _ = make_test_state tokens in
+  let state_after, expr = parse_expr state in
+  check_no_errors state_after.diags;
+  (check bool)
+    "parsed record"
+    true
+    (match expr.kind with ExprRecord (Some _, [ _ ]) -> true | _ -> false)
+
+let test_parse_expr_func () =
+  let tokens =
+    [
+      (Token.KwDef, Span.dummy)
+    ; (Token.LParen, Span.dummy)
+    ; (Token.Ident 0, Span.dummy)
+    ; (Token.RParen, Span.dummy)
+    ; (Token.LBrace, Span.dummy)
+    ; (Token.RBrace, Span.dummy)
+    ]
+  in
+  let state, _ = make_test_state tokens in
+  let state_after, expr = parse_expr state in
+  check_no_errors state_after.diags;
+  (check bool)
+    "parsed func"
+    true
+    (match expr.kind with
+    | ExprFunc
+        { abi = None; name = None; params = [ _ ]; ret_type = None; body = _ }
+      ->
+      true
+    | _ -> false)
+
+let test_parse_stmt_data () =
+  let tokens =
+    [
+      (Token.KwData, Span.dummy)
+    ; (Token.Ident 0, Span.dummy)
+    ; (Token.ColonEq, Span.dummy)
+    ; (Token.LBrace, Span.dummy)
+    ; (Token.Ident 1, Span.dummy)
+    ; (Token.Colon, Span.dummy)
+    ; (Token.Ident 2, Span.dummy)
+    ; (Token.RBrace, Span.dummy)
+    ; (Token.Semi, Span.dummy)
+    ]
+  in
+  let state, _ = make_test_state tokens in
+  let state_after, stmt = parse_stmt state in
+  check_no_errors state_after.diags;
+  (check bool)
+    "parsed data"
+    true
+    (match stmt.kind with StmtData (_, DataRecord [ _ ]) -> true | _ -> false)
+
+let test_parse_stmt_extern () =
+  let tokens =
+    [
+      (Token.KwExtern, Span.dummy)
+    ; (Token.LBrace, Span.dummy)
+    ; (Token.KwDef, Span.dummy)
+    ; (Token.Ident 0, Span.dummy)
+    ; (Token.LParen, Span.dummy)
+    ; (Token.RParen, Span.dummy)
+    ; (Token.Semi, Span.dummy)
+    ; (Token.RBrace, Span.dummy)
+    ]
+  in
+  let state, _ = make_test_state tokens in
+  let state_after, stmt = parse_stmt state in
+  check_no_errors state_after.diags;
+  (check bool)
+    "parsed extern"
+    true
+    (match stmt.kind with StmtExtern (None, [ _ ]) -> true | _ -> false)
+
 let () =
   let open Alcotest in
   run
@@ -687,6 +774,8 @@ let () =
         ; test_case "exit w/ value" `Quick test_parse_expr_exit_with_value
         ; test_case "skip" `Quick test_parse_expr_skip
         ; test_case "unsafe" `Quick test_parse_expr_unsafe
+        ; test_case "record" `Quick test_parse_expr_record
+        ; test_case "func" `Quick test_parse_expr_func
         ] )
     ; ( "statement_parsing"
       , [
@@ -698,5 +787,7 @@ let () =
         ; test_case "import { items }" `Quick test_parse_stmt_import_named
         ; test_case "export * as" `Quick test_parse_stmt_export_all
         ; test_case "export { items } from" `Quick test_parse_stmt_export_named
+        ; test_case "data" `Quick test_parse_stmt_data
+        ; test_case "extern" `Quick test_parse_stmt_extern
         ] )
     ]
