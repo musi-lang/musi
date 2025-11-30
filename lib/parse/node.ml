@@ -47,17 +47,16 @@ and expr_kind =
   | ExprTuple of expr * expr list
   | ExprRecord of field_init list
   | ExprBlock of block
-  | ExprIf of expr * block * block option
+  | ExprIf of cond list * block * block option
   | ExprMatch of expr * match_arm list
   | ExprFor of {
-        elem : ident
-      ; typ : typ_expr option
-      ; init : expr
+        binding : for_binding
       ; range : expr
       ; step : expr option
+      ; guard : expr option
       ; body : block
     }
-  | ExprWhile of expr * block
+  | ExprWhile of cond * expr option * block
   | ExprFunc of {
         abi : string option
       ; name : ident option
@@ -72,7 +71,9 @@ and expr_kind =
   | ExprField of expr * ident
 
 and field_init = { name : ident; value : expr }
-and match_arm = { pattern : pat; body : expr }
+and cond = CondExpr of expr | CondCase of pat * expr
+and for_binding = ForIdent of ident | ForCase of pat
+and match_arm = { pattern : pat; guard : expr option; body : expr }
 and block = { unsafeness : bool; stmts : stmt list; ret : expr option }
 and pat = pat_kind with_span
 
