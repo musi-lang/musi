@@ -545,18 +545,16 @@ and parse_stmt_export st start_span =
       | _ -> (add_error_code st Parse_error.E1115 span [], None)
     else (st, None)
   in
-  let st, _ = expect st Token.Semi in
-  (st, mk_stmt (StmtExport (clause, path_opt)) start_span)
+  (expect_tok st Token.Semi, mk_stmt (StmtExport (clause, path_opt)) start_span)
 
 and parse_stmt_binding st start_span mutable_ =
   let st, curr, span = peek_skip (advance st) in
   match curr with
   | Token.Ident name ->
-    let st = advance st in
-    let st, typ = parse_opt_type st Token.Colon parse_typ_expr in
+    let st, typ = parse_opt_type (advance st) Token.Colon parse_typ_expr in
     let st, value = parse_expr (expect_tok st Token.ColonEq) in
-    let st, _ = expect st Token.Semi in
-    (st, mk_stmt (StmtBinding { mutable_; name; typ; value }) start_span)
+    ( expect_tok st Token.Semi
+    , mk_stmt (StmtBinding { mutable_; name; typ; value }) start_span )
   | _ ->
     ( add_error_code st Parse_error.E1401 span []
     , mk_stmt (StmtExpr (mk_literal_expr LitUnit span)) start_span )
@@ -663,21 +661,6 @@ and parse_pat_ident st name span =
     (st, Node.{ kind = PatCtor (name, pats); span })
   | _ -> (st, Node.{ kind = PatIdent name; span })
 
-and parse_pat_tuple st span =
-  let st, first = parse_pat (advance st) in
-  if match_token st Token.Comma then
-    let st, rest =
-      parse_sep
-        Token.Comma
-        (fun st _ _ -> Some (parse_pat st))
-        (expect_tok st Token.Comma)
-    in
-    let st, _ = expect st Token.RParen in
-    (st, Node.{ kind = PatTuple (first, rest); span })
-  else
-    let st, _ = expect st Token.RParen in
-    (st, first)
-
 and parse_pat_literal st curr span =
   match curr with
   | Token.Minus -> (
@@ -705,7 +688,17 @@ and parse_pat st =
       ( add_error_code st Parse_error.E1501 span []
       , Node.{ kind = PatWild; span } ))
   | Token.Ident name -> parse_pat_ident st name span
-  | Token.LParen -> parse_pat_tuple st span
+  | Token.LParen ->
+    let st, first = parse_pat (advance st) in
+    if match_token st Token.Comma then
+      let st, rest =
+        parse_sep
+          Token.Comma
+          (fun st _ _ -> Some (parse_pat st))
+          (expect_tok st Token.Comma)
+      in
+      (expect_tok st Token.RParen, Node.{ kind = PatTuple (first, rest); span })
+    else (expect_tok st Token.RParen, first)
   | Token.LitNumber _ | Token.LitString _ | Token.LitRune _ | Token.Minus ->
     parse_pat_literal st curr span
   | _ -> (advance st, Node.{ kind = PatWild; span })
