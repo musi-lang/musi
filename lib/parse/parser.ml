@@ -71,6 +71,7 @@ let peek_skip st =
 let mk_literal_expr lit span = Node.{ kind = ExprLiteral lit; span }
 let mk_literal_pat lit span = Node.{ kind = PatLiteral lit; span }
 let mk_expr kind span = Node.{ kind; span }
+let mk_pat kind span = Node.{ kind; span }
 let expect_tok st tok = fst (expect st tok)
 let empty_name st = Interner.empty_name st.interner
 
@@ -78,7 +79,7 @@ let error_expr st code span =
   (add_error_code st code span [], mk_literal_expr LitUnit span)
 
 let error_pat st code span =
-  (add_error_code st code span [], Node.{ kind = PatWild; span })
+  (add_error_code st code span [], mk_pat Node.PatWild span)
 
 let error_typ st code span =
   ( add_error_code st code span []
@@ -626,7 +627,7 @@ and parse_pat_ident st name span =
           | _ -> None)
         st
     in
-    (st, Node.{ kind = PatRecord (name, fields); span })
+    (st, mk_pat (Node.PatRecord (name, fields)) span)
   | Token.LParen ->
     let st, pats =
       parse_delim
@@ -636,8 +637,8 @@ and parse_pat_ident st name span =
         (fun st _ _ -> Some (parse_pat st))
         st
     in
-    (st, Node.{ kind = PatCtor (name, pats); span })
-  | _ -> (st, Node.{ kind = PatIdent name; span })
+    (st, mk_pat (Node.PatCtor (name, pats)) span)
+  | _ -> (st, mk_pat (Node.PatIdent name) span)
 
 and parse_pat_literal st curr span =
   match curr with
@@ -646,12 +647,11 @@ and parse_pat_literal st curr span =
     match curr with
     | Token.LitNumber s -> (advance st, mk_literal_pat (LitInt ("-" ^ s)) span)
     | _ ->
-      ( add_error_code st Parse_error.E1103 span []
-      , Node.{ kind = PatWild; span } ))
+      (add_error_code st Parse_error.E1103 span [], mk_pat Node.PatWild span))
   | _ -> (
     match parse_literal curr with
     | Some lit -> (advance st, mk_literal_pat lit span)
-    | None -> (advance st, Node.{ kind = PatWild; span }))
+    | None -> (advance st, mk_pat Node.PatWild span))
 
 and parse_pat st =
   let st, curr, span = peek_skip st in
@@ -661,10 +661,9 @@ and parse_pat st =
     let st, curr, span = peek_skip (advance st) in
     match curr with
     | Token.Ident name ->
-      (advance st, Node.{ kind = PatBinding { mutable_; name }; span })
+      (advance st, mk_pat (Node.PatBinding { mutable_; name }) span)
     | _ ->
-      ( add_error_code st Parse_error.E1501 span []
-      , Node.{ kind = PatWild; span } ))
+      (add_error_code st Parse_error.E1501 span [], mk_pat Node.PatWild span))
   | Token.Ident name -> parse_pat_ident st name span
   | Token.LParen ->
     let st, first = parse_pat (advance st) in
@@ -675,11 +674,11 @@ and parse_pat st =
           (fun st _ _ -> Some (parse_pat st))
           (expect_tok st Token.Comma)
       in
-      (expect_tok st Token.RParen, Node.{ kind = PatTuple (first, rest); span })
+      (expect_tok st Token.RParen, mk_pat (Node.PatTuple (first, rest)) span)
     else (expect_tok st Token.RParen, first)
   | Token.LitNumber _ | Token.LitString _ | Token.LitRune _ | Token.Minus ->
     parse_pat_literal st curr span
-  | _ -> (advance st, Node.{ kind = PatWild; span })
+  | _ -> (advance st, mk_pat Node.PatWild span)
 
 and parse_typ_field st curr span =
   match curr with
