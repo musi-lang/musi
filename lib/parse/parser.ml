@@ -70,6 +70,7 @@ let peek_skip st =
 
 let mk_literal_expr lit span = Node.{ kind = ExprLiteral lit; span }
 let mk_literal_pat lit span = Node.{ kind = PatLiteral lit; span }
+let mk_expr kind span = Node.{ kind; span }
 let expect_tok st tok = fst (expect st tok)
 let empty_name st = Interner.empty_name st.interner
 
@@ -272,19 +273,19 @@ and parse_expr_primary st =
       parse_block st span
   | Token.KwUnsafe ->
     let st, block_expr = parse_block (advance st) span in
-    (st, Node.{ kind = ExprUnsafe (unwrap_block block_expr.Node.kind); span })
+    (st, mk_expr (Node.ExprUnsafe (unwrap_block block_expr.Node.kind)) span)
   | Token.KwDefer ->
     let st, expr = parse_expr (advance st) in
-    (st, Node.{ kind = ExprDefer expr; span })
+    (st, mk_expr (Node.ExprDefer expr) span)
   | Token.KwExit ->
     let st = advance st in
     let st, curr, _ = peek_skip st in
     if curr = Token.Semi || curr = Token.EOF || curr = Token.RBrace then
-      (st, Node.{ kind = ExprExit None; span })
+      (st, mk_expr (Node.ExprExit None) span)
     else
       let st, expr = parse_expr st in
-      (st, Node.{ kind = ExprExit (Some expr); span })
-  | Token.KwSkip -> (advance st, Node.{ kind = ExprSkip; span })
+      (st, mk_expr (Node.ExprExit (Some expr)) span)
+  | Token.KwSkip -> (advance st, mk_expr Node.ExprSkip span)
   | Token.KwIf -> parse_expr_if st span
   | Token.KwMatch -> parse_expr_match st span
   | Token.KwWhile -> parse_expr_while st span
@@ -323,10 +324,7 @@ and parse_expr_if st start_span =
     | Some e -> Some (unwrap_block e.Node.kind)
     | None -> None
   in
-  ( st
-  , Node.
-      { kind = ExprIf (first :: rest, then_blk, else_blk); span = start_span }
-  )
+  (st, mk_expr (Node.ExprIf (first :: rest, then_blk, else_blk)) start_span)
 
 and parse_expr_match st start_span =
   let st, scrutinee = parse_expr (advance st) in
@@ -345,18 +343,16 @@ and parse_expr_match st start_span =
       st
   in
   ( expect_tok st Token.RBrace
-  , Node.{ kind = ExprMatch (scrutinee, arms); span = start_span } )
+  , mk_expr (Node.ExprMatch (scrutinee, arms)) start_span )
 
 and parse_expr_while st start_span =
   let st, cond = parse_cond (advance st) in
   let st, guard = parse_opt_type st Token.KwIf parse_expr in
   let st, body_expr = parse_body st in
   ( st
-  , Node.
-      {
-        kind = ExprWhile (cond, guard, unwrap_block body_expr.Node.kind)
-      ; span = start_span
-      } )
+  , mk_expr
+      (Node.ExprWhile (cond, guard, unwrap_block body_expr.Node.kind))
+      start_span )
 
 and parse_expr_for st start_span =
   let st, curr, span = peek_skip (advance st) in
@@ -375,13 +371,10 @@ and parse_expr_for st start_span =
   let st, guard = parse_opt_type st Token.KwIf parse_expr in
   let st, body_expr = parse_body st in
   ( st
-  , Node.
-      {
-        kind =
-          ExprFor
-            { binding; range; guard; body = unwrap_block body_expr.Node.kind }
-      ; span = start_span
-      } )
+  , mk_expr
+      (Node.ExprFor
+         { binding; range; guard; body = unwrap_block body_expr.Node.kind })
+      start_span )
 
 and parse_expr_func st start_span =
   let st, abi =
@@ -401,12 +394,7 @@ and parse_expr_func st start_span =
   let st, ret_type = parse_opt_type st Token.MinusGt parse_typ_expr in
   let st, body_expr = parse_body st in
   let body = unwrap_block body_expr.Node.kind in
-  ( st
-  , Node.
-      {
-        kind = ExprFunc { abi; name; params; ret_type; body }
-      ; span = start_span
-      } )
+  (st, mk_expr (Node.ExprFunc { abi; name; params; ret_type; body }) start_span)
 
 and parse_expr_bp st min_bp =
   let st, curr, _ = peek_skip st in
@@ -414,11 +402,9 @@ and parse_expr_bp st min_bp =
     if Prec.is_prefix_op curr then
       let st, right = parse_expr_bp (advance st) (Prec.prec_value Prec.Unary) in
       ( st
-      , Node.
-          {
-            kind = ExprUnary (curr, right)
-          ; span = Span.merge (current_span st) right.Node.span
-          } )
+      , mk_expr
+          (Node.ExprUnary (curr, right))
+          (Span.merge (current_span st) right.Node.span) )
     else parse_expr_primary st
   in
   let rec loop st left =
@@ -431,20 +417,16 @@ and parse_expr_bp st min_bp =
           match curr with
           | Token.Ident name ->
             ( advance st
-            , Node.
-                {
-                  kind = ExprField (left, name)
-                ; span = Span.merge left.Node.span span
-                } )
+            , mk_expr
+                (Node.ExprField (left, name))
+                (Span.merge left.Node.span span) )
           | _ -> (add_error_code st Parse_error.E1105 span [], left))
         | Token.LBrack ->
           let st, index = parse_expr (advance st) in
           ( expect_tok st Token.RBrack
-          , Node.
-              {
-                kind = ExprIndex (left, index)
-              ; span = Span.merge left.Node.span (current_span st)
-              } )
+          , mk_expr
+              (Node.ExprIndex (left, index))
+              (Span.merge left.Node.span (current_span st)) )
         | Token.LParen ->
           let st, args =
             parse_sep
@@ -453,11 +435,9 @@ and parse_expr_bp st min_bp =
               (advance st)
           in
           ( expect_tok st Token.RParen
-          , Node.
-              {
-                kind = ExprCall (left, args)
-              ; span = Span.merge left.Node.span (current_span st)
-              } )
+          , mk_expr
+              (Node.ExprCall (left, args))
+              (Span.merge left.Node.span (current_span st)) )
         | _ -> (st, left)
       else (st, left)
     in
@@ -472,11 +452,9 @@ and parse_expr_bp st min_bp =
         let st, right = parse_expr_bp (advance st) next_bp in
         loop
           st
-          Node.
-            {
-              kind = ExprBinary (curr, left, right)
-            ; span = Span.merge left.Node.span right.Node.span
-            }
+          (mk_expr
+             (Node.ExprBinary (curr, left, right))
+             (Span.merge left.Node.span right.Node.span))
       | _ -> (st, left)
   in
   loop st left
