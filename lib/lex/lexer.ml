@@ -449,6 +449,7 @@ let dispatch_char c =
   | _ when is_whitespace c -> wrap scan_whitespace (fun () -> Token.Whitespace)
   | '\n' -> wrap scan_newline (fun () -> Token.Newline)
   | '/' -> scan_comment_or_symbol
+  | '_' -> scan_symbol
   | _ when is_ident_start c ->
     fun st ->
       let s, name, sp = scan_ident st in

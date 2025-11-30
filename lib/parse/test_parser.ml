@@ -216,7 +216,7 @@ let test_parse_statement_assignment () =
     (match stmt.kind with StmtAssign (_, _) -> true | _ -> false)
 
 let test_parse_pattern_wild () =
-  let tokens = [ (Token.Minus, Span.dummy) ] in
+  let tokens = [ (Token.Underscore, Span.dummy) ] in
   let state, _ = make_test_state tokens in
   let state_after, pattern = parse_pat state in
   check_no_errors state_after.diags;
@@ -257,6 +257,139 @@ let test_parse_type_missing_closing_brace () =
     true
     (Diagnostic.has_errors state_after.diags)
 
+let test_parse_expr_literal_int () =
+  let tokens = [ (Token.LitNumber "123", Span.dummy) ] in
+  let state, _ = make_test_state tokens in
+  let state_after, expr = parse_expr state in
+  check_no_errors state_after.diags;
+  (check bool)
+    "parsed int literal"
+    true
+    (match expr.kind with ExprLiteral (LitInt "123") -> true | _ -> false)
+
+let test_parse_expr_ident () =
+  let tokens = [ (Token.Ident 0, Span.dummy) ] in
+  let state, _ = make_test_state tokens in
+  let state_after, expr = parse_expr state in
+  check_no_errors state_after.diags;
+  (check bool)
+    "parsed identifier"
+    true
+    (match expr.kind with ExprIdent _ -> true | _ -> false)
+
+let test_parse_expr_tuple () =
+  let tokens =
+    [
+      (Token.LParen, Span.dummy)
+    ; (Token.LitNumber "1", Span.dummy)
+    ; (Token.Comma, Span.dummy)
+    ; (Token.LitNumber "2", Span.dummy)
+    ; (Token.RParen, Span.dummy)
+    ]
+  in
+  let state, _ = make_test_state tokens in
+  let state_after, expr = parse_expr state in
+  check_no_errors state_after.diags;
+  (check bool)
+    "parsed tuple"
+    true
+    (match expr.kind with ExprTuple (_, [ _ ]) -> true | _ -> false)
+
+let test_parse_expr_block () =
+  let tokens =
+    [
+      (Token.LBrace, Span.dummy)
+    ; (Token.LitNumber "42", Span.dummy)
+    ; (Token.Semi, Span.dummy)
+    ; (Token.RBrace, Span.dummy)
+    ]
+  in
+  let state, _ = make_test_state tokens in
+  let state_after, expr = parse_expr state in
+  check_no_errors state_after.diags;
+  (check bool)
+    "parsed block"
+    true
+    (match expr.kind with ExprBlock _ -> true | _ -> false)
+
+let test_parse_expr_unary () =
+  let tokens =
+    [ (Token.Minus, Span.dummy); (Token.LitNumber "5", Span.dummy) ]
+  in
+  let state, _ = make_test_state tokens in
+  let state_after, expr = parse_expr state in
+  check_no_errors state_after.diags;
+  (check bool)
+    "parsed unary"
+    true
+    (match expr.kind with ExprUnary (_, _) -> true | _ -> false)
+
+let test_parse_expr_binary () =
+  let tokens =
+    [
+      (Token.LitNumber "1", Span.dummy)
+    ; (Token.Plus, Span.dummy)
+    ; (Token.LitNumber "2", Span.dummy)
+    ]
+  in
+  let state, _ = make_test_state tokens in
+  let state_after, expr = parse_expr state in
+  check_no_errors state_after.diags;
+  (check bool)
+    "parsed binary"
+    true
+    (match expr.kind with ExprBinary (_, _, _) -> true | _ -> false)
+
+let test_parse_expr_call () =
+  let tokens =
+    [
+      (Token.Ident 0, Span.dummy)
+    ; (Token.LParen, Span.dummy)
+    ; (Token.LitNumber "1", Span.dummy)
+    ; (Token.RParen, Span.dummy)
+    ]
+  in
+  let state, _ = make_test_state tokens in
+  let state_after, expr = parse_expr state in
+  check_no_errors state_after.diags;
+  (check bool)
+    "parsed call"
+    true
+    (match expr.kind with ExprCall (_, [ _ ]) -> true | _ -> false)
+
+let test_parse_expr_field () =
+  let tokens =
+    [
+      (Token.Ident 0, Span.dummy)
+    ; (Token.Dot, Span.dummy)
+    ; (Token.Ident 1, Span.dummy)
+    ]
+  in
+  let state, _ = make_test_state tokens in
+  let state_after, expr = parse_expr state in
+  check_no_errors state_after.diags;
+  (check bool)
+    "parsed field access"
+    true
+    (match expr.kind with ExprField (_, _) -> true | _ -> false)
+
+let test_parse_expr_index () =
+  let tokens =
+    [
+      (Token.Ident 0, Span.dummy)
+    ; (Token.LBrack, Span.dummy)
+    ; (Token.LitNumber "0", Span.dummy)
+    ; (Token.RBrack, Span.dummy)
+    ]
+  in
+  let state, _ = make_test_state tokens in
+  let state_after, expr = parse_expr state in
+  check_no_errors state_after.diags;
+  (check bool)
+    "parsed index"
+    true
+    (match expr.kind with ExprIndex (_, _) -> true | _ -> false)
+
 let () =
   let open Alcotest in
   run
@@ -289,6 +422,18 @@ let () =
             "missing closing brace"
             `Quick
             test_parse_type_missing_closing_brace
+        ] )
+    ; ( "expression_parsing"
+      , [
+          test_case "literal int" `Quick test_parse_expr_literal_int
+        ; test_case "identifier" `Quick test_parse_expr_ident
+        ; test_case "tuple" `Quick test_parse_expr_tuple
+        ; test_case "block" `Quick test_parse_expr_block
+        ; test_case "unary" `Quick test_parse_expr_unary
+        ; test_case "binary" `Quick test_parse_expr_binary
+        ; test_case "call" `Quick test_parse_expr_call
+        ; test_case "field access" `Quick test_parse_expr_field
+        ; test_case "index" `Quick test_parse_expr_index
         ] )
     ; ( "statement_parsing"
       , [
