@@ -1,25 +1,25 @@
 // https://learnopengl.com/code_viewer_gh.php?code=src/1.getting_started/1.2.hello_window_clear/hello_window_clear.cpp
 import * as io from "std/io.ms";
 
-data GLFWwindow; // opaque
+rec GLFWwindow; // opaque
 
 extern "C" {
-	unsafe def glfwInit() -> Int32;
-	unsafe def glfwWindowHint(hint : Int32, value : Int32);
-	unsafe def glfwCreateWindow(width : Int32, height : Int32, title : ^Nat8, monitor : ^Any, share : ^Any) -> Option<^GLFWwindow>;
-	unsafe def glfwMakeContextCurrent(window : ^GLFWwindow);
-	unsafe def glfwSetFramebufferSizeCallback(window : ^GLFWwindow, cb : ^def(^GLFWwindow, Int32, Int32) -> Unit);
-	unsafe def glfwWindowShouldClose(window : ^GLFWwindow) -> Int32;
-	unsafe def glfwSwapBuffers(window : ^GLFWwindow);
-	unsafe def glfwPollEvents();
-	unsafe def glfwTerminate();
-	unsafe def gladLoadGLLoader(proc : ^Any) -> Int32;
-	unsafe def glClearColor(r : Bin32, g : Bin32, b : Bin32, a : Bin32);
-	unsafe def glClear(mask : Int32);
-	unsafe def glViewport(x : Int32, y : Int32, w : Int32, h : Int32);
-	unsafe def glfwGetProcAddress(name : ^Nat8) -> ^Any;
-	unsafe def glfwSetWindowShouldClose(window : ^GLFWwindow, value : Int32);
-	unsafe def glfwGetKey(window : ^GLFWwindow, key : Int32) -> Int32;
+	unsafe fn glfwInit() -> Int32;
+	unsafe fn glfwWindowHint(hint : Int32, value : Int32);
+	unsafe fn glfwCreateWindow(width : Int32, height : Int32, title : ^Nat8, monitor : ^Any, share : ^Any) -> Option<^GLFWwindow>;
+	unsafe fn glfwMakeContextCurrent(window : ^GLFWwindow);
+	unsafe fn glfwSetFramebufferSizeCallback(window : ^GLFWwindow, cb : ^fn(^GLFWwindow, Int32, Int32) -> Unit);
+	unsafe fn glfwWindowShouldClose(window : ^GLFWwindow) -> Int32;
+	unsafe fn glfwSwapBuffers(window : ^GLFWwindow);
+	unsafe fn glfwPollEvents();
+	unsafe fn glfwTerminate();
+	unsafe fn gladLoadGLLoader(proc : ^Any) -> Int32;
+	unsafe fn glClearColor(r : Bin32, g : Bin32, b : Bin32, a : Bin32);
+	unsafe fn glClear(mask : Int32);
+	unsafe fn glViewport(x : Int32, y : Int32, w : Int32, h : Int32);
+	unsafe fn glfwGetProcAddress(name : ^Nat8) -> ^Any;
+	unsafe fn glfwSetWindowShouldClose(window : ^GLFWwindow, value : Int32);
+	unsafe fn glfwGetKey(window : ^GLFWwindow, key : Int32) -> Int32;
 };
 
 val SCR_WIDTH : Int32 := 800;
@@ -48,7 +48,7 @@ unsafe {
 
   // process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
   // ---------------------------------------------------------------------------------------------------------
-  val framebuffer_size_callback := def(window : ^GLFWwindow, width : Int32, height : Int32) {
+  val framebuffer_size_callback := fn(window : ^GLFWwindow, width : Int32, height : Int32) {
     // make sure the viewport matches the new window dimensions; note that width and
     // height will be significantly larger than specified on retina displays.
     glViewport(0, 0, width, height);
@@ -56,7 +56,7 @@ unsafe {
 
   // glfw: whenever the window size changed (by OS or user resize) this callback function executes
   // ---------------------------------------------------------------------------------------------
-  val process_input := def(window : ^GLFWwindow) {
+  val process_input := fn(window : ^GLFWwindow) {
     if glfwGetKey(window, GLFW_KEY_ESCAPE) = GLFW_PRESS {
       glfwSetWindowShouldClose(window, 1);
     };
