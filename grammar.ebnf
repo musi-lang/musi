@@ -96,7 +96,7 @@ expr_postfix = expr_primary, {aux_postfix_op};
 
 aux_postfix_op = ".", ident | "[", expr, "]" | "(", [aux_arg_list], ")";
 
-expr_primary = expr_literal | expr_template | expr_ident | expr_tuple | expr_block | expr_if | expr_match | expr_for | expr_while | expr_defer | expr_exit | expr_next | expr_unsafe | expr_record | expr_fn | expr_rec | expr_sum;
+expr_primary = expr_literal | expr_template | expr_ident | expr_tuple | expr_block | expr_if | expr_match | expr_for | expr_while | expr_defer | expr_exit | expr_next | expr_unsafe | expr_rec | expr_fn | expr_rec | expr_sum;
 
 expr_literal = literal;
 
@@ -123,8 +123,6 @@ expr_exit = "exit", [expr];
 expr_next = "next";
 
 expr_unsafe = "unsafe", stmt_block;
-
-expr_record = [ident], "{", aux_field_inits, "}";
 
 expr_fn = ["extern", [string]], "fn", [ident], aux_params, aux_opt_ret_type, stmt_block;
 
