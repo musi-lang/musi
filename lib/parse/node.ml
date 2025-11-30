@@ -45,7 +45,7 @@ and expr_kind =
   | ExprLiteral of literal_kind
   | ExprIdent of ident
   | ExprTuple of expr * expr list
-  | ExprRecord of field_init list
+  | ExprRecord of ident option * field_init list
   | ExprBlock of block
   | ExprIf of cond list * block * block option
   | ExprMatch of expr * match_arm list
