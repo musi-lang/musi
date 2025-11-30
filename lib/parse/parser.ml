@@ -326,24 +326,23 @@ and parse_expr_if st start_span =
   )
 
 and parse_expr_match st start_span =
-  let parse_arm st =
-    let st, pattern = parse_pat (expect_tok st Token.KwCase) in
-    let st, guard = parse_opt_type st Token.KwIf parse_expr in
-    let st, body = parse_expr (expect_tok st Token.MinusGt) in
-    let st, _ = consume_if st Token.Comma in
-    (st, Node.{ pattern; guard; body })
-  in
   let st, scrutinee = parse_expr (advance st) in
-  let st, _ = expect st Token.LBrace in
+  let st = expect_tok st Token.LBrace in
   let st, arms =
     parse_sep
       Token.Comma
       (fun st _ _ ->
-        if match_token st Token.KwCase then Some (parse_arm st) else None)
+        if match_token st Token.KwCase then
+          let st, pattern = parse_pat (expect_tok st Token.KwCase) in
+          let st, guard = parse_opt_type st Token.KwIf parse_expr in
+          let st, body = parse_expr (expect_tok st Token.MinusGt) in
+          let st, _ = consume_if st Token.Comma in
+          Some (st, Node.{ pattern; guard; body })
+        else None)
       st
   in
-  let st, _ = expect st Token.RBrace in
-  (st, Node.{ kind = ExprMatch (scrutinee, arms); span = start_span })
+  ( expect_tok st Token.RBrace
+  , Node.{ kind = ExprMatch (scrutinee, arms); span = start_span } )
 
 and parse_expr_while st start_span =
   let st, cond = parse_cond (advance st) in
@@ -487,7 +486,7 @@ and parse_clause :
  fun st mk_all mk_named ->
   let st, curr, span = peek_skip st in
   if curr = Token.Star then
-    let st, _ = expect (advance st) Token.KwAs in
+    let st = expect_tok (advance st) Token.KwAs in
     let st, curr, span = peek_skip st in
     match curr with
     | Token.Ident name -> (advance st, mk_all name)
@@ -586,7 +585,6 @@ and parse_stmt_extern st start_span =
     | Token.LitString n -> (advance st, Some (Interner.lookup st.interner n))
     | _ -> (st, None)
   in
-  let st, _ = expect st Token.LBrace in
   let rec loop st sigs =
     let st, curr, _ = peek_skip st in
     match curr with
@@ -596,21 +594,15 @@ and parse_stmt_extern st start_span =
       let st, name =
         match curr with
         | Token.Ident n -> (advance st, n)
-        | _ ->
-          ( add_error_code st Parse_error.E1105 span []
-          , Interner.empty_name st.interner )
+        | _ -> (add_error_code st Parse_error.E1105 span [], empty_name st)
       in
       let st, params = parse_params parse_typ_expr st in
       let st, ret_type = parse_opt_type st Token.MinusGt parse_typ_expr in
-      let st, _ = expect st Token.Semi in
-      loop st (Node.{ name; params; ret_type } :: sigs)
-    | _ ->
-      let st = advance st in
-      loop st sigs
+      loop (expect_tok st Token.Semi) (Node.{ name; params; ret_type } :: sigs)
+    | _ -> loop (advance st) sigs
   in
-  let st, sigs = loop st [] in
-  let st, _ = expect st Token.RBrace in
-  (st, mk_stmt (StmtExtern (abi, sigs)) start_span)
+  let st, sigs = loop (expect_tok st Token.LBrace) [] in
+  (expect_tok st Token.RBrace, mk_stmt (StmtExtern (abi, sigs)) start_span)
 
 and parse_stmt_ident st start_span name =
   let st = advance st in
@@ -639,25 +631,6 @@ and parse_stmt st =
     let st, _ = expect st Token.Semi in
     (st, mk_stmt (StmtExpr expr) start_span)
 
-and parse_pat_record_field st curr _span =
-  match curr with
-  | Token.Dot -> (
-    let st, curr, span = peek_skip (advance st) in
-    match curr with
-    | Token.Ident field_name ->
-      let st = advance st in
-      let st, pat_opt =
-        if match_token st Token.ColonEq then
-          let st, p = parse_pat (expect_tok st Token.ColonEq) in
-          (st, Some p)
-        else (st, None)
-      in
-      Some (st, Node.{ name = field_name; pat = pat_opt })
-    | _ ->
-      let _ = add_error_code st Parse_error.E1105 span [] in
-      None)
-  | _ -> None
-
 and parse_pat_ident st name span =
   let st, curr, _ = peek_skip (advance st) in
   match curr with
@@ -667,7 +640,19 @@ and parse_pat_ident st name span =
         Token.LBrace
         Token.RBrace
         Token.Comma
-        parse_pat_record_field
+        (fun st curr _span ->
+          match curr with
+          | Token.Dot -> (
+            let st, curr, span = peek_skip (advance st) in
+            match curr with
+            | Token.Ident field_name ->
+              let st = advance st in
+              let st, pat_opt = parse_opt_type st Token.ColonEq parse_pat in
+              Some (st, Node.{ name = field_name; pat = pat_opt })
+            | _ ->
+              let _ = add_error_code st Parse_error.E1105 span [] in
+              None)
+          | _ -> None)
         st
     in
     (st, Node.{ kind = PatRecord (name, fields); span })
