@@ -12,7 +12,7 @@ let make_test_state tokens =
 let check_no_errors diags =
   (check bool) "no errors" false (Diagnostic.has_errors diags)
 
-let test_parser_state_creation () =
+let test_parser_state_create () =
   let tokens = [ (Token.KwVal, Span.dummy) ] in
   let state, _ = make_test_state tokens in
   (check int) "initial position" 0 state.pos;
@@ -66,7 +66,7 @@ let test_parser_expect_error () =
     true
     (Diagnostic.has_errors state_after.diags)
 
-let test_parse_pattern_binding () =
+let test_parse_pat_binding () =
   let tokens = [ (Token.KwVal, Span.dummy); (Token.Ident 0, Span.dummy) ] in
   let state, _ = make_test_state tokens in
   let state_after, pattern = parse_pat state in
@@ -78,7 +78,7 @@ let test_parse_pattern_binding () =
     | PatBinding { mutable_ = false; name = _ } -> true
     | _ -> false)
 
-let test_parse_pattern_constructor () =
+let test_parse_pat_ctor () =
   let tokens =
     [
       (Token.Ident 0, Span.dummy)
@@ -95,7 +95,7 @@ let test_parse_pattern_constructor () =
     true
     (match pattern.kind with PatCtor (_, [ _ ]) -> true | _ -> false)
 
-let test_parse_pattern_literal () =
+let test_parse_pat_literal () =
   let tokens = [ (Token.LitNumber "42", Span.dummy) ] in
   let state, _ = make_test_state tokens in
   let state_after, pattern = parse_pat state in
@@ -105,7 +105,7 @@ let test_parse_pattern_literal () =
     true
     (match pattern.kind with PatLiteral (LitInt "42") -> true | _ -> false)
 
-let test_parse_type_identifier () =
+let test_parse_typ_expr_ident () =
   let tokens = [ (Token.Ident 0, Span.dummy) ] in
   let state, _ = make_test_state tokens in
   let state_after, typ = parse_typ_expr state in
@@ -115,7 +115,7 @@ let test_parse_type_identifier () =
     true
     (match typ.kind with TypExprIdent _ -> true | _ -> false)
 
-let test_parse_type_function () =
+let test_parse_typ_expr_func () =
   let tokens =
     [
       (Token.KwDef, Span.dummy)
@@ -134,7 +134,7 @@ let test_parse_type_function () =
     true
     (match typ.kind with TypExprFunc ([ _ ], Some _) -> true | _ -> false)
 
-let test_parse_type_record () =
+let test_parse_typ_expr_record () =
   let tokens =
     [
       (Token.LBrace, Span.dummy)
@@ -156,7 +156,7 @@ let test_parse_type_record () =
     true
     (match typ.kind with TypExprRecord [ _; _ ] -> true | _ -> false)
 
-let test_parse_statement_val_binding () =
+let test_parse_stmt_val_binding () =
   let tokens =
     [
       (Token.KwVal, Span.dummy)
@@ -176,7 +176,7 @@ let test_parse_statement_val_binding () =
     | StmtBinding { mutable_ = false; name = _; typ = None; value = _ } -> true
     | _ -> false)
 
-let test_parse_statement_var_binding () =
+let test_parse_stmt_var_binding () =
   let tokens =
     [
       (Token.KwVar, Span.dummy)
@@ -198,7 +198,7 @@ let test_parse_statement_var_binding () =
     | StmtBinding { mutable_ = true; name = _; typ = Some _; value = _ } -> true
     | _ -> false)
 
-let test_parse_statement_assignment () =
+let test_parse_stmt_assign () =
   let tokens =
     [
       (Token.Ident 0, Span.dummy)
@@ -215,7 +215,7 @@ let test_parse_statement_assignment () =
     true
     (match stmt.kind with StmtAssign (_, _) -> true | _ -> false)
 
-let test_parse_pattern_wild () =
+let test_parse_pat_wild () =
   let tokens = [ (Token.Underscore, Span.dummy) ] in
   let state, _ = make_test_state tokens in
   let state_after, pattern = parse_pat state in
@@ -225,7 +225,7 @@ let test_parse_pattern_wild () =
     true
     (match pattern.kind with PatWild -> true | _ -> false)
 
-let test_parse_statement_missing_semicolon () =
+let test_parse_stmt_missing_semi () =
   let tokens =
     [
       (Token.KwVal, Span.dummy)
@@ -241,7 +241,7 @@ let test_parse_statement_missing_semicolon () =
     true
     (Diagnostic.has_errors state_after.diags)
 
-let test_parse_type_missing_closing_brace () =
+let test_parse_typ_expr_missing_closing_brace () =
   let tokens =
     [
       (Token.LBrace, Span.dummy)
@@ -397,31 +397,31 @@ let () =
     [
       ( "parser_state"
       , [
-          test_case "state creation" `Quick test_parser_state_creation
+          test_case "state creation" `Quick test_parser_state_create
         ; test_case "advance" `Quick test_parser_advance
         ; test_case "skip trivia" `Quick test_parser_skip_trivia
         ] )
     ; ( "parser_expect"
       , [
           test_case "expect success" `Quick test_parser_expect
-        ; test_case "expect error" `Quick test_parser_expect_error
+        ; test_case "expect failure" `Quick test_parser_expect_error
         ] )
     ; ( "pattern_parsing"
       , [
-          test_case "val binding" `Quick test_parse_pattern_binding
-        ; test_case "constructor" `Quick test_parse_pattern_constructor
-        ; test_case "literal" `Quick test_parse_pattern_literal
-        ; test_case "wildcard" `Quick test_parse_pattern_wild
+          test_case "val binding" `Quick test_parse_pat_binding
+        ; test_case "constructor" `Quick test_parse_pat_ctor
+        ; test_case "literal" `Quick test_parse_pat_literal
+        ; test_case "wildcard" `Quick test_parse_pat_wild
         ] )
-    ; ( "type_parsing"
+    ; ( "type_expression_parsing"
       , [
-          test_case "identifier" `Quick test_parse_type_identifier
-        ; test_case "function" `Quick test_parse_type_function
-        ; test_case "record" `Quick test_parse_type_record
+          test_case "identifier" `Quick test_parse_typ_expr_ident
+        ; test_case "function" `Quick test_parse_typ_expr_func
+        ; test_case "record" `Quick test_parse_typ_expr_record
         ; test_case
             "missing closing brace"
             `Quick
-            test_parse_type_missing_closing_brace
+            test_parse_typ_expr_missing_closing_brace
         ] )
     ; ( "expression_parsing"
       , [
@@ -437,12 +437,9 @@ let () =
         ] )
     ; ( "statement_parsing"
       , [
-          test_case "val binding" `Quick test_parse_statement_val_binding
-        ; test_case "var binding" `Quick test_parse_statement_var_binding
-        ; test_case "assignment" `Quick test_parse_statement_assignment
-        ; test_case
-            "missing semicolon"
-            `Quick
-            test_parse_statement_missing_semicolon
+          test_case "val binding" `Quick test_parse_stmt_val_binding
+        ; test_case "var binding" `Quick test_parse_stmt_var_binding
+        ; test_case "assignment" `Quick test_parse_stmt_assign
+        ; test_case "missing semicolon" `Quick test_parse_stmt_missing_semi
         ] )
     ]
