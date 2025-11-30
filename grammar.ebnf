@@ -94,7 +94,7 @@ expr_postfix = expr_primary, {aux_postfix_op};
 
 aux_postfix_op = ".", ident | "[", expr, "]" | "(", [aux_arg_list], ")";
 
-expr_primary = expr_literal | expr_template | expr_ident | expr_tuple | expr_block | expr_if | expr_match | expr_for | expr_while | expr_defer | expr_exit | expr_next | expr_unsafe | expr_record_lit | expr_fn | expr_record | expr_trait;
+expr_primary = expr_literal | expr_template | expr_ident | expr_tuple | expr_block | expr_if | expr_match | expr_for | expr_while | expr_defer | expr_exit | expr_next | expr_unsafe | expr_recordord_lit | expr_fn | expr_recordord | expr_trait;
 
 expr_literal = literal;
 
@@ -122,17 +122,17 @@ expr_next = "next";
 
 expr_unsafe = "unsafe", stmt_block;
 
-expr_record_lit = [ident], "{", aux_field_inits, "}";
+expr_recordord_lit = [ident], "{", aux_field_inits, "}";
 
 expr_fn = ["extern", [string]], "fn", [ident], aux_params, aux_opt_ret_type, stmt_block;
 
-expr_record = "record", [":", typ_expr], "{", aux_record_items, "}";
+expr_recordord = "record", [":", typ_expr], "{", aux_recordord_items, "}";
 
 expr_trait = "trait", [":", typ_expr], "{", aux_trait_items, "}";
 
-aux_record_items = aux_record_item, {",", aux_record_item};
+aux_recordord_items = aux_recordord_item, {",", aux_recordord_item};
 
-aux_record_item = aux_field_decl | aux_case_decl | aux_method_decl;
+aux_recordord_item = aux_field_decl | aux_case_decl | aux_method_decl;
 
 aux_field_decl = ident, ":", typ_expr;
 
@@ -167,7 +167,7 @@ aux_match_arm = "case", pat, ["if", expr], "=>", expr, [","];
 aux_pat_list = pat, {",", pat};
 
 (* === PATTERNS === *)
-pat = pat_bind | pat_literal | pat_wild | pat_ident | pat_rec | pat_ctor | pat_tuple;
+pat = pat_bind | pat_literal | pat_wild | pat_ident | pat_record | pat_ctor | pat_tuple;
 
 pat_bind = ("val" | "var"), ident;
 
@@ -177,7 +177,7 @@ pat_wild = "_";
 
 pat_ident = ident;
 
-pat_rec = ident, "{", aux_pat_fields, "}";
+pat_record = ident, "{", aux_pat_fields, "}";
 
 pat_ctor = ident, ["(", aux_pat_list, ")"];
 
@@ -194,7 +194,7 @@ typ_expr_sum = typ_expr_primary, {"|", aux_typ_expr_case};
 
 aux_typ_expr_case = "case", ident, ["(", aux_typ_expr_list, ")"];
 
-typ_expr_primary = typ_expr_ptr | typ_expr_array | typ_expr_ident | typ_expr_tuple | typ_expr_fn | typ_expr_rec;
+typ_expr_primary = typ_expr_ptr | typ_expr_array | typ_expr_ident | typ_expr_tuple | typ_expr_fn | typ_expr_record;
 
 typ_expr_ptr = "^", typ_expr;
 
@@ -202,7 +202,7 @@ typ_expr_array = "[", [expr], "]", typ_expr;
 
 typ_expr_ident = ident;
 
-typ_expr_rec = "{", aux_typ_expr_fields, "}";
+typ_expr_record = "{", aux_typ_expr_fields, "}";
 
 typ_expr_tuple = "(", typ_expr, ",", {typ_expr, ","}, [typ_expr], ")";
 
