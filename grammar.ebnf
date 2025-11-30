@@ -100,13 +100,13 @@ expr_tuple = "(", expr, ",", {expr, ","}, [expr], ")";
 
 expr_block = stmt_block;
 
-expr_if = "if", expr, stmt_block, ["else", stmt_block];
+expr_if = "if", aux_cond, {",", aux_cond}, stmt_block, ["else", stmt_block];
 
 expr_match = "match", expr, "{", {aux_match_arm}, "}";
 
-expr_for = "for", ident, aux_opt_type, ":=", expr, "in", expr, ["step", expr], stmt_block;
+expr_for = "for", aux_for_binding, "in", expr, ["step", expr], ["if", expr], stmt_block;
 
-expr_while = "while", expr, stmt_block;
+expr_while = "while", aux_cond, ["if", expr], stmt_block;
 
 expr_record = "{", aux_field_inits, "}";
 
@@ -126,7 +126,11 @@ aux_field_inits = aux_field_init, {",", aux_field_init};
 
 aux_field_init = ".", ident, ":=", expr;
 
-aux_match_arm = "case", pat, "=>", expr, [","];
+aux_cond = ("case", pat, ":=", expr) | expr;
+
+aux_for_binding = ident | ("case", pat);
+
+aux_match_arm = "case", pat, ["if", expr], "=>", expr, [","];
 
 aux_pat_list = pat, {",", pat};
 
