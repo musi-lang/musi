@@ -30,14 +30,13 @@ and typ_expr_kind =
   | TypExprIdent of ident
   | TypExprTuple of typ_expr * typ_expr list
   | TypExprArray of expr option * typ_expr
-  | TypExprFunc of typ_expr list * typ_expr option
-  | TypExprRecord of typ_field list
+  | TypExprFn of typ_expr list * typ_expr option
+  | TypExprRec of typ_field list
   | TypExprSum of typ_case list
 
 and typ_field = { name : ident; typ : typ_expr }
 and typ_case = { name : ident; fields : typ_expr list }
 and param = { name : ident; typ : typ_expr option }
-and data_kind = DataRecord of typ_field list | DataSum of typ_case list
 and func_sig = { name : ident; params : param list; ret_type : typ_expr option }
 and expr = expr_kind with_span
 
@@ -56,13 +55,15 @@ and expr_kind =
       ; body : block
     }
   | ExprWhile of cond * expr option * block
-  | ExprFunc of {
+  | ExprFn of {
         abi : string option
       ; name : ident option
       ; params : param list
       ; ret_type : typ_expr option
       ; body : block
     }
+  | ExprRec of typ_field list
+  | ExprSum of typ_case list
   | ExprBinary of Token.t * expr * expr
   | ExprUnary of Token.t * expr
   | ExprCall of expr * expr list
@@ -85,7 +86,7 @@ and pat_kind =
   | PatLiteral of literal_kind
   | PatWild
   | PatIdent of ident
-  | PatRecord of ident * pat_field list
+  | PatRec of ident * pat_field list
   | PatCtor of ident * pat list
   | PatTuple of pat * pat list
 
@@ -105,5 +106,9 @@ and stmt_kind =
     }
   | StmtAssign of ident * expr
   | StmtExpr of expr
-  | StmtData of ident * data_kind
+  | StmtInstance of {
+        typ : typ_expr
+      ; constraint_ : typ_expr option
+      ; impl : expr
+    }
   | StmtExtern of string option * func_sig list

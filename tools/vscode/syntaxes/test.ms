@@ -141,42 +141,42 @@ val size_info : Nat32 := sizeof(Int32);
 // FUNCTIONS
 // ============================================================================
 
-def add(x : Int32, y : Int32) -> Int32 {
+fn add(x : Int32, y : Int32) -> Int32 {
   return x + y;
 };
 
-def scale(v : Bin32, f : Bin32) -> Bin32 {
+fn scale(v : Bin32, f : Bin32) -> Bin32 {
   return v * f;
 };
 
-def write_ptr(p : ^Int32, v : Int32) {
+fn write_ptr(p : ^Int32, v : Int32) {
   [p] <- v;
 };
 
-def get_value(ptr : ^Int32) -> Int32 {
+fn get_value(ptr : ^Int32) -> Int32 {
   return [ptr];
 };
 
-def offset_ptr(ptr : ^Int32, bytes : Nat32) -> ^Int32 {
+fn offset_ptr(ptr : ^Int32, bytes : Nat32) -> ^Int32 {
   return ptr ! bytes;
 };
 
-extern def malloc(size : Nat32) -> ^Unit { /* ... */ };
+extern fn malloc(size : Nat32) -> ^Unit { /* ... */ };
 
 // ============================================================================
 // STRUCTURAL DATA TYPES
 // ============================================================================
 
-data Point {
-  x : Bin64;
-  y : Bin64;
+rec Point {
+  x : Bin64,
+  y : Bin64
 };
 
 val p1 : Point := { .x := 3.0, .y := 4.0 };
 val p2 : Point := { .x := 0.0, .y := 0.0 };
 val p3 : Point := { .x := 1.0, .y := 2.0 };
 
-def distance(a : Point, b : Point) -> Bin64 {
+fn distance(a : Point, b : Point) -> Bin64 {
   val dx : Bin64 := a.x - b.x;
   val dy : Bin64 := a.y - b.y;
   return sqrt(dx ** 2 + dy ** 2);
@@ -186,13 +186,13 @@ def distance(a : Point, b : Point) -> Bin64 {
 // ALGEBRAIC DATA TYPES
 // ============================================================================
 
-data Option := case Some(value : Int32) | case None;
+sum Option { case Some(value : Int32), case None };
 
-data Result := case Ok(value : Int32) | case Err(msg : String);
+sum Result { case Ok(value : Int32), case Err(msg : String) };
 
-data Shape := case Circle(radius : Bin64) | case Rect(width : Bin64, height : Bin64) | case Triangle(a : Bin64, b : Bin64, c : Bin64);
+sum Shape { case Circle(radius : Bin64), case Rect(width : Bin64, height : Bin64), case Triangle(a : Bin64, b : Bin64, c : Bin64) };
 
-def area(s : Shape) -> Bin64 {
+fn area(s : Shape) -> Bin64 {
   match s {
   case Circle(r) => 3.14159 * r ** 2,
   case Rect(w, h) => w * h,
@@ -237,33 +237,21 @@ import { Config } from "./config.ms";
 import { User } from "./types.ms";
 
 export { Config } from "./config.ms";
-export { myFunc };
+export { myFn };
 export { MyType };
 
 // ============================================================================
 // TYPE CLASSES
 // ============================================================================
 
-data Eq where {
-  def eq(a : Self, b : Self) -> Int32;
-  def neq(a : Self, b : Self) -> Int32;
-};
 
-instance Eq : Point where {
-  def eq(a : Point, b : Point) -> Int32 {
-    return (a.x = b.x) & (a.y = b.y);
-  };
 
-  def neq(a : Point, b : Point) -> Int32 {
-    return not eq(a, b);
-  };
-};
 
 // ============================================================================
 // ERROR HANDLING
 // ============================================================================
 
-def load(path : String) -> Result {
+fn load(path : String) -> Result {
   val file : Result := open(path);
   match file {
   case Ok(f) => {
@@ -289,22 +277,22 @@ case Err(e) => recover(e)
 val MAX_SIZE : Nat32 := 1024;
 val DEFAULT_TIMEOUT : Nat32 := 30;
 
-data User {
-  name : String;
-  age : Nat32;
-  active : Int32;
+rec User {
+  name : String,
+  age : Nat32,
+  active : Int32
 };
 
-data HttpError := case NotFound | case ServerError;
+sum HttpError { case NotFound, case ServerError };
 
 val user_count : Nat32 := 42;
 var active_sessions : Nat32 := 0;
 
-def get_user(id : Nat32) -> Option {
+fn get_user(id : Nat32) -> Option {
   return None;
 };
 
-def is_valid(x : Int32) -> Int32 {
+fn is_valid(x : Int32) -> Int32 {
   return x > 0;
 };
 
@@ -323,7 +311,7 @@ val output : Int32 := process(input, config);
 // ============================================================================
 
 val complex : Int32 := {
-  def helper(x : Int32) -> Int32 {
+  fn helper(x : Int32) -> Int32 {
     return x + 1;
   };
   val value : Int32 := 42;
