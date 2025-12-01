@@ -12,6 +12,7 @@ type t =
   | KwAnd
   | KwAs
   | KwCase
+  | KwChoice
   | KwDefer
   | KwElse
   | KwExit
@@ -50,6 +51,8 @@ type t =
   | Slash (* / *)
   | StarStar (* ** *)
   | PipeGt (* |> *)
+  | LtLt (* << *)
+  | GtGt (* >> *)
   | Amp (* & *)
   | Pipe (* | *)
   | Caret (* ^ *)
@@ -83,6 +86,7 @@ let keyword_strings =
     ("and", KwAnd)
   ; ("as", KwAs)
   ; ("case", KwCase)
+  ; ("choice", KwChoice)
   ; ("defer", KwDefer)
   ; ("else", KwElse)
   ; ("exit", KwExit)
@@ -115,6 +119,8 @@ let symbol_strings =
   ; ("!=", BangEq)
   ; ("<=", LtEq)
   ; (">=", GtEq)
+  ; ("<<", LtLt)
+  ; (">>", GtGt)
   ; ("**", StarStar)
   ; ("|>", PipeGt)
   ; ("->", MinusGt)
@@ -164,15 +170,16 @@ let to_string = function
   | LitRune c -> "RUNE(" ^ String.make 1 c ^ ")"
   | LitTemplate name -> "TEMPLATE(id:" ^ string_of_int name ^ ")"
   | Ident name -> "IDENT(id:" ^ string_of_int name ^ ")"
-  | ( KwAnd | KwAs | KwCase | KwDefer | KwElse | KwExit | KwExport | KwExtern
-    | KwFn | KwFor | KwFrom | KwIf | KwImport | KwIn | KwIs | KwMatch | KwNext
-    | KwNot | KwOr | KwRecord | KwReturn | KwTrait | KwUnsafe | KwVal | KwVar
-    | KwWhile ) as kw ->
+  | ( KwAnd | KwAs | KwCase | KwChoice | KwDefer | KwElse | KwExit | KwExport
+    | KwExtern | KwFn | KwFor | KwFrom | KwIf | KwImport | KwIn | KwIs | KwMatch
+    | KwNext | KwNot | KwOr | KwRecord | KwReturn | KwTrait | KwUnsafe | KwVal
+    | KwVar | KwWhile ) as kw ->
     Hashtbl.find keyword_to_string kw
-  | ( LtMinus | ColonEq | Eq | BangEq | Lt | LtEq | Gt | GtEq | Plus | Minus
-    | Star | Slash | StarStar | PipeGt | Amp | Pipe | Caret | Tilde | At | Bang
-    | Dollar | LParen | RParen | LBrace | RBrace | LBrack | RBrack | Comma
-    | Semi | Colon | Dot | MinusGt | Underscore | Question ) as sym ->
+  | ( LtMinus | ColonEq | Eq | BangEq | Lt | LtEq | Gt | GtEq | LtLt | GtGt
+    | Plus | Minus | Star | Slash | StarStar | PipeGt | Amp | Pipe | Caret
+    | Tilde | At | Bang | Dollar | LParen | RParen | LBrace | RBrace | LBrack
+    | RBrack | Comma | Semi | Colon | Dot | MinusGt | Underscore | Question ) as
+    sym ->
     Hashtbl.find symbol_to_string sym
   | EOF -> "EOF"
   | Newline -> "NEWLINE"

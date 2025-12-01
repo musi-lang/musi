@@ -373,8 +373,12 @@
                     "match": "\\|>"
                 },
                 {
+                    "name": "keyword.operator.shift.musi",
+                    "match": "<<|>>"
+                },
+                {
                     "name": "keyword.operator.bitwise.musi",
-                    "match": "~&|~\\||~\\^|&|\\||\\^|~|<<|>>"
+                    "match": "~&|~\\||~\\^|&|\\||\\^|~"
                 },
                 {
                     "name": "keyword.operator.comparison.musi",
