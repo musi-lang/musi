@@ -1,9 +1,0 @@
-(executable
- (name msc)
- (public_name msc)
- (libraries musi_drive))
-
-(executable
- (name music)
- (public_name music)
- (libraries musi_drive))
