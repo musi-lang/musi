@@ -374,7 +374,7 @@
                 },
                 {
                     "name": "keyword.operator.bitwise.musi",
-                    "match": "~&|~\\||~\\^|&|\\||\\^|~|shl|shr"
+                    "match": "~&|~\\||~\\^|&|\\||\\^|~|<<|>>"
                 },
                 {
                     "name": "keyword.operator.comparison.musi",
