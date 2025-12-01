@@ -70,6 +70,7 @@ type t =
   | Dot (* . *)
   | MinusGt (* -> *)
   | Underscore (* _ *)
+  | Question (* ? *)
   (* Special *)
   | EOF
   | Newline
@@ -142,6 +143,7 @@ let symbol_strings =
   ; (":", Colon)
   ; (".", Dot)
   ; ("_", Underscore)
+  ; ("?", Question)
   ]
 
 let base_table_size = 32
@@ -170,7 +172,7 @@ let to_string = function
   | ( LtMinus | ColonEq | Eq | BangEq | Lt | LtEq | Gt | GtEq | Plus | Minus
     | Star | Slash | StarStar | PipeGt | Amp | Pipe | Caret | Tilde | At | Bang
     | Dollar | LParen | RParen | LBrace | RBrace | LBrack | RBrack | Comma
-    | Semi | Colon | Dot | MinusGt | Underscore ) as sym ->
+    | Semi | Colon | Dot | MinusGt | Underscore | Question ) as sym ->
     Hashtbl.find symbol_to_string sym
   | EOF -> "EOF"
   | Newline -> "NEWLINE"
