@@ -27,14 +27,8 @@ and stmt_kind =
       ; typ : typ option
       ; value : expr
     }
-  | StmtExtern of { abi : string option; decls : extern_fn_decl list }
+  | StmtExtern of { abi : string option; decls : fn_sig list }
   | StmtExpr of expr
-
-and extern_fn_decl = {
-    name : ident
-  ; params : fn_param list
-  ; ret_typ : typ option
-}
 
 and block = { stmts : stmt list; ret : expr option }
 
@@ -61,8 +55,8 @@ and expr_kind =
     }
   | ExprWhile of { cond : cond; guard : expr option; body : block }
   | ExprDefer of expr
-  | ExprExit of expr option
-  | ExprNext
+  | ExprBreak of expr option
+  | ExprCycle
   | ExprUnsafe of block
   | ExprAssign of { target : ident; value : expr }
   | ExprBinary of { op : Token.t; left : expr; right : expr }
@@ -87,25 +81,27 @@ and expr_kind =
   | ExprRecord of {
         typ_params : ident list
       ; trait_bound : typ option
-      ; items : record_item list
+      ; fields : record_field list
+      ; body : stmt list
+    }
+  | ExprChoice of {
+        typ_params : ident list
+      ; cases : choice_case list
+      ; body : stmt list
     }
   | ExprTrait of {
         typ_params : ident list
       ; trait_bound : typ option
-      ; items : trait_item list
+      ; items : fn_sig list
     }
 
 and cond = CondExpr of expr | CondCase of { pat : pat; value : expr }
 and for_binding = ForIdent of ident | ForCase of pat
 and match_arm = { pat : pat; guard : expr option; body : expr }
 and record_field_init = { shorthand : bool; name : ident; value : expr }
-
-and record_item =
-  | RecordFieldDecl of { name : ident; typ : typ }
-  | RecordCaseDecl of { name : ident; fields : typ list }
-  | RecordMethodDecl of { name : ident; value : expr }
-
-and trait_item = { name : ident; typ : typ }
+and record_field = { name : ident; typ : typ }
+and choice_case = { name : ident; fields : typ list }
+and fn_sig = { name : ident; typ : typ }
 and fn_param = { name : ident; typ : typ option }
 
 (* Patterns *)
@@ -126,7 +122,6 @@ and pat_field = { name : ident; pat : pat option }
 and typ = typ_kind with_span
 
 and typ_kind =
-  | TypSum of { base : typ; cases : typ_sum_case list }
   | TypPtr of typ
   | TypArr of { size : expr option; elem : typ }
   | TypIdent of ident
@@ -136,7 +131,6 @@ and typ_kind =
   | TypRecord of typ_record_field list
   | TypOptional of typ
 
-and typ_sum_case = { name : ident; fields : typ list }
 and typ_record_field = { name : ident; typ : typ }
 
 type prog = stmt list
