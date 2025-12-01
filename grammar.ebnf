@@ -70,7 +70,7 @@ expr_una = ["-" | "not" | "~" | "@"], expr_postfix;
 
 expr_postfix = expr_atom, {aux_postfix_op};
 
-expr_atom = expr_lit | expr_tmpl | expr_ident | expr_tuple | expr_block | expr_if | expr_match | expr_for | expr_while | expr_defer | expr_exit | expr_next | expr_unsafe | expr_assign | expr_record_lit | expr_fn | expr_record | expr_choice | expr_trait;
+expr_atom = expr_lit | expr_tmpl | expr_ident | expr_tuple | expr_block | expr_if | expr_match | expr_for | expr_while | expr_defer | expr_break | expr_cycle | expr_unsafe | expr_assign | expr_record_lit | expr_fn | expr_record | expr_choice | expr_trait;
 
 expr_lit = lit;
 
@@ -92,9 +92,9 @@ expr_while = "while", aux_cond, aux_guard, aux_block;
 
 expr_defer = "defer", expr;
 
-expr_exit = "exit", [expr];
+expr_break = "break", [expr];
 
-expr_next = "next";
+expr_cycle = "cycle";
 
 expr_unsafe = "unsafe", aux_block;
 

@@ -344,7 +344,7 @@
         },
         "keyword-control": {
             "name": "keyword.control.musi",
-            "match": "\\b(case|defer|else|exit|export|for|from|if|in|instance|match|next|return|where|while)\\b"
+            "match": "\\b(break|case|cycle|defer|else|export|for|from|if|in|match|return|while)\\b"
         },
         "keyword-storage": {
             "name": "storage.type.musi",

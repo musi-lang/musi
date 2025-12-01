@@ -11,11 +11,12 @@ type t =
   (* Keywords (alphabetically) *)
   | KwAnd
   | KwAs
+  | KwBreak
   | KwCase
   | KwChoice
+  | KwCycle
   | KwDefer
   | KwElse
-  | KwExit
   | KwExport
   | KwExtern
   | KwFn
@@ -26,7 +27,6 @@ type t =
   | KwIn
   | KwIs
   | KwMatch
-  | KwNext
   | KwNot
   | KwOr
   | KwRecord
@@ -85,11 +85,12 @@ let keyword_strings =
   [
     ("and", KwAnd)
   ; ("as", KwAs)
+  ; ("break", KwBreak)
   ; ("case", KwCase)
   ; ("choice", KwChoice)
+  ; ("cycle", KwCycle)
   ; ("defer", KwDefer)
   ; ("else", KwElse)
-  ; ("exit", KwExit)
   ; ("export", KwExport)
   ; ("extern", KwExtern)
   ; ("fn", KwFn)
@@ -100,7 +101,6 @@ let keyword_strings =
   ; ("in", KwIn)
   ; ("is", KwIs)
   ; ("match", KwMatch)
-  ; ("next", KwNext)
   ; ("not", KwNot)
   ; ("or", KwOr)
   ; ("record", KwRecord)
@@ -170,10 +170,10 @@ let to_string = function
   | LitRune c -> "RUNE(" ^ String.make 1 c ^ ")"
   | LitTemplate name -> "TEMPLATE(id:" ^ string_of_int name ^ ")"
   | Ident name -> "IDENT(id:" ^ string_of_int name ^ ")"
-  | ( KwAnd | KwAs | KwCase | KwChoice | KwDefer | KwElse | KwExit | KwExport
-    | KwExtern | KwFn | KwFor | KwFrom | KwIf | KwImport | KwIn | KwIs | KwMatch
-    | KwNext | KwNot | KwOr | KwRecord | KwReturn | KwTrait | KwUnsafe | KwVal
-    | KwVar | KwWhile ) as kw ->
+  | ( KwAnd | KwAs | KwBreak | KwCase | KwChoice | KwCycle | KwDefer | KwElse
+    | KwExport | KwExtern | KwFn | KwFor | KwFrom | KwIf | KwImport | KwIn
+    | KwIs | KwMatch | KwNot | KwOr | KwRecord | KwReturn | KwTrait | KwUnsafe
+    | KwVal | KwVar | KwWhile ) as kw ->
     Hashtbl.find keyword_to_string kw
   | ( LtMinus | ColonEq | Eq | BangEq | Lt | LtEq | Gt | GtEq | LtLt | GtGt
     | Plus | Minus | Star | Slash | StarStar | PipeGt | Amp | Pipe | Caret
