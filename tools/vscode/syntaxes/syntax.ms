@@ -30,16 +30,16 @@ if (x > 0) {
   writeln("zero");
 };
 
-while (has_next()) { process(next()); };
-for (i : Nat32 := 0 in 10) { writeln($"{i}"); };
+while has_next() { process(next()); };
+for i in 0..10 { writeln($"{i}"); };
 
 match result {
 case Ok(v) => use(v),
 case Err(e) => handle(e)
 };
 
-if (x > 0 and y < 10) { in_range(); };
-if (valid or can_recover()) { proceed(); };
+if x > 0 and y < 10 { in_range(); };
+if valid or can_recover() { proceed(); };
 
 // ============================================================================
 // LITERALS
@@ -97,7 +97,6 @@ val bitwise_not : Int32 := ~a;
 // Memory operators
 var ptr : ^Int32 := @x;
 val deref : Int32 := [ptr];
-val offset : ^Int32 := ptr ! 4;
 
 // Assignment
 counter <- counter + 1;
@@ -135,7 +134,7 @@ val ptr_type : ^Int32 := @x;
 val ptr_ptr : ^^Int32 := @ptr_type;
 
 val any_val : Any := 42;
-val size_info : Nat32 := sizeof(Int32);
+val size_info : Nat32 := size_of(Int32);
 
 // ============================================================================
 // FUNCTIONS
@@ -157,19 +156,15 @@ fn get_value(ptr : ^Int32) -> Int32 {
   return [ptr];
 };
 
-fn offset_ptr(ptr : ^Int32, bytes : Nat32) -> ^Int32 {
-  return ptr ! bytes;
-};
-
-extern fn malloc(size : Nat32) -> ^Unit { /* ... */ };
+extern "C" fn malloc(size : Nat32) -> ^Unit { /* ... */ };
 
 // ============================================================================
 // STRUCTURAL DATA TYPES
 // ============================================================================
 
-rec Point {
-  x : Bin64,
-  y : Bin64
+record Point {
+  x : Bin64;
+  y : Bin64;
 };
 
 val p1 : Point := { .x := 3.0, .y := 4.0 };
@@ -186,11 +181,11 @@ fn distance(a : Point, b : Point) -> Bin64 {
 // ALGEBRAIC DATA TYPES
 // ============================================================================
 
-sum Option { case Some(value : Int32), case None };
+choice Option { case Some(value : Int32), case None };
 
-sum Result { case Ok(value : Int32), case Err(msg : String) };
+choice Result { case Ok(value : Int32), case Err(msg : String) };
 
-sum Shape { case Circle(radius : Bin64), case Rect(width : Bin64, height : Bin64), case Triangle(a : Bin64, b : Bin64, c : Bin64) };
+choice Shape { case Circle(radius : Bin64), case Rect(width : Bin64, height : Bin64), case Triangle(a : Bin64, b : Bin64, c : Bin64) };
 
 fn area(s : Shape) -> Bin64 {
   match s {
@@ -277,13 +272,13 @@ case Err(e) => recover(e)
 val MAX_SIZE : Nat32 := 1024;
 val DEFAULT_TIMEOUT : Nat32 := 30;
 
-rec User {
-  name : String,
-  age : Nat32,
-  active : Int32
+record User {
+  name : String;
+  age : Nat32;
+  active : Int32;
 };
 
-sum HttpError { case NotFound, case ServerError };
+choice HttpError { case NotFound, case ServerError };
 
 val user_count : Nat32 := 42;
 var active_sessions : Nat32 := 0;
