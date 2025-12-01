@@ -1,25 +1,25 @@
 // https://learnopengl.com/code_viewer_gh.php?code=src/1.getting_started/1.2.hello_window_clear/hello_window_clear.cpp
 import * as io from "std/io.ms";
 
-rec GLFWwindow {}; // opaque
+record GLFWwindow {}; // opaque
 
-extern "C" {
-	unsafe fn glfwInit() -> Int32;
-	unsafe fn glfwWindowHint(hint : Int32, value : Int32);
-	unsafe fn glfwCreateWindow(width : Int32, height : Int32, title : ^Nat8, monitor : ^Any, share : ^Any) -> Option<^GLFWwindow>;
-	unsafe fn glfwMakeContextCurrent(window : ^GLFWwindow);
-	unsafe fn glfwSetFramebufferSizeCallback(window : ^GLFWwindow, cb : ^fn(^GLFWwindow, Int32, Int32) -> Unit);
-	unsafe fn glfwWindowShouldClose(window : ^GLFWwindow) -> Int32;
-	unsafe fn glfwSwapBuffers(window : ^GLFWwindow);
-	unsafe fn glfwPollEvents();
-	unsafe fn glfwTerminate();
-	unsafe fn gladLoadGLLoader(proc : ^Any) -> Int32;
-	unsafe fn glClearColor(r : Bin32, g : Bin32, b : Bin32, a : Bin32);
-	unsafe fn glClear(mask : Int32);
-	unsafe fn glViewport(x : Int32, y : Int32, w : Int32, h : Int32);
-	unsafe fn glfwGetProcAddress(name : ^Nat8) -> ^Any;
-	unsafe fn glfwSetWindowShouldClose(window : ^GLFWwindow, value : Int32);
-	unsafe fn glfwGetKey(window : ^GLFWwindow, key : Int32) -> Int32;
+extern "C" unsafe {
+	fn glfwInit() -> Int32;
+	fn glfwWindowHint(hint : Int32, value : Int32);
+	fn glfwCreateWindow(width : Int32, height : Int32, title : ^Nat8, monitor : ^Any, share : ^Any) -> Option<^GLFWwindow>;
+	fn glfwMakeContextCurrent(window : ^GLFWwindow);
+	fn glfwSetFramebufferSizeCallback(window : ^GLFWwindow, cb : ^fn(^GLFWwindow, Int32, Int32) -> Unit);
+	fn glfwWindowShouldClose(window : ^GLFWwindow) -> Int32;
+	fn glfwSwapBuffers(window : ^GLFWwindow);
+	fn glfwPollEvents();
+	fn glfwTerminate();
+	fn gladLoadGLLoader(proc : ^Any) -> Int32;
+	fn glClearColor(r : Bin32, g : Bin32, b : Bin32, a : Bin32);
+	fn glClear(mask : Int32);
+	fn glViewport(x : Int32, y : Int32, w : Int32, h : Int32);
+	fn glfwGetProcAddress(name : ^Nat8) -> ^Any;
+	fn glfwSetWindowShouldClose(window : ^GLFWwindow, value : Int32);
+	fn glfwGetKey(window : ^GLFWwindow, key : Int32) -> Int32;
 };
 
 val SCR_WIDTH : Int32 := 800;
@@ -39,7 +39,7 @@ unsafe {
   // ------------------------------
   if glfwInit() = 0 {
 	  io.writeln("Failed to initialize GLFW");
-	  exit;
+	  break;
   };
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -64,12 +64,12 @@ unsafe {
 
   // glfw window creation
   // --------------------
-  val window_opt := glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "LearnOpenGL", None, None);
+  val window_opt := glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "LearnOpenGL", 0, 0);
   match window_opt {
   case None => {
 	  io.writeln("Failed to create GLFW window");
 	  glfwTerminate();
-	  exit;
+	  break;
   },
   case Some(window) => {
 	  glfwMakeContextCurrent(window);
@@ -79,7 +79,7 @@ unsafe {
     // ---------------------------------------
 	  if gladLoadGLLoader(glfwGetProcAddress) = 0 {
 		  io.writeln("Failed to initialize GLAD");
-		  exit;
+		  break;
 	  };
 
     // render loop
