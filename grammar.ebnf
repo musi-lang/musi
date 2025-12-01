@@ -100,11 +100,11 @@ expr_assign = ident, "<-", expr;
 
 expr_record_lit = [ident], "{", aux_record_field_init, {",", aux_record_field_init}, "}";
 
-expr_fn = ["extern", [string]], "fn", [ident], aux_fn_params, ["->", typ], aux_block;
+expr_fn = ["extern", [string]], "fn", [ident], [aux_typ_params], aux_fn_params, ["->", typ], aux_block;
 
-expr_record = "record", [":", typ], "{", aux_record_item, {",", aux_record_item}, "}";
+expr_record = "record", [aux_typ_params], [":", typ], "{", aux_record_item, {",", aux_record_item}, "}";
 
-expr_trait = "trait", [":", typ], "{", aux_trait_item, {",", aux_trait_item}, "}";
+expr_trait = "trait", [aux_typ_params], [":", typ], "{", aux_trait_item, {",", aux_trait_item}, "}";
 
 (* ========================================================================= *)
 (* PATTERNS                                                                  *)
@@ -138,7 +138,7 @@ typ_ptr = "^", typ;
 
 typ_arr = "[", [expr], "]", typ;
 
-typ_ident = ident;
+typ_ident = ident, [aux_typ_args];
 
 typ_tup = "(", typ, ",", {typ, ","}, [typ], ")";
 
@@ -173,7 +173,7 @@ aux_guard = ["if", expr];
 
 aux_match_arm = "case", pat, aux_guard, "=>", expr, [","];
 
-aux_postfix_op = (".", ident) | ("[", expr, "]") | ("(", [aux_expr_args], ")") | ("?.", ident) | ("?[", expr, "]") | ("?", "(", [aux_expr_args], ")");
+aux_postfix_op = (".", ident) | ("[", expr, "]") | ([aux_typ_args], "(", [aux_expr_args], ")") | ("?.", ident) | ("?[", expr, "]") | ("?", [aux_typ_args], "(", [aux_expr_args], ")");
 
 aux_expr_args = expr, {",", expr};
 
@@ -198,3 +198,7 @@ aux_pat_field = ".", ident, [":=", pat];
 aux_typ_sum_case = "case", ident, ["(", typ, {",", typ}, ")"];
 
 aux_typ_record_field = ident, ":", typ;
+
+aux_typ_params = "<", ident, {",", ident}, ">";
+
+aux_typ_args = "<", typ, {",", typ}, ">";
