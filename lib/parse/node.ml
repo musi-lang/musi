@@ -67,7 +67,14 @@ and expr_kind =
   | ExprAssign of { target : ident; value : expr }
   | ExprBinary of { op : Token.t; left : expr; right : expr }
   | ExprUnary of { op : Token.t; operand : expr }
-  | ExprPostfix of { base : expr; op : postfix_op }
+  | ExprCall of {
+        callee : expr
+      ; typ_args : typ list
+      ; args : expr list
+      ; optional : bool
+    }
+  | ExprField of { base : expr; field : ident; optional : bool }
+  | ExprIndex of { base : expr; index : expr; optional : bool }
   | ExprRecordLit of { name : ident option; fields : record_field_init list }
   | ExprFn of {
         abi : string option
@@ -91,12 +98,6 @@ and expr_kind =
 and cond = CondExpr of expr | CondCase of { pat : pat; value : expr }
 and for_binding = ForIdent of ident | ForCase of pat
 and match_arm = { pat : pat; guard : expr option; body : expr }
-
-and postfix_op =
-  | PostfixField of { field : ident; optional : bool }
-  | PostfixIndex of { index : expr; optional : bool }
-  | PostfixCall of { typ_args : typ list; args : expr list; optional : bool }
-
 and record_field_init = { shorthand : bool; name : ident; value : expr }
 
 and record_item =
