@@ -101,7 +101,7 @@ module Make () : S = struct
     try match parser st with st', first_item -> loop st' [ first_item ]
     with Failure _ -> (st, [])
 
-  let parse_zero_or_more st parser =
+  let parse_optional_many st parser =
     let rec loop st acc =
       try
         let st', item = parser st in
