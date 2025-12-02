@@ -12,7 +12,6 @@ module type S = sig
     | Additive
     | Multiplicative
     | Exponentiation
-    | Offset
     | Unary
     | Postfix
 
@@ -35,7 +34,6 @@ module Make () : S = struct
     | Additive
     | Multiplicative
     | Exponentiation
-    | Offset
     | Unary
     | Postfix
 
@@ -48,9 +46,8 @@ module Make () : S = struct
     | Additive -> 5
     | Multiplicative -> 6
     | Exponentiation -> 7
-    | Offset -> 8
-    | Unary -> 9
-    | Postfix -> 10
+    | Unary -> 8
+    | Postfix -> 9
 
   let token_prec = function
     | Token.PipeGt -> Some (Pipe, Left)
@@ -62,7 +59,6 @@ module Make () : S = struct
     | Token.Plus | Token.Minus -> Some (Additive, Left)
     | Token.Star | Token.Slash -> Some (Multiplicative, Left)
     | Token.StarStar -> Some (Exponentiation, Right)
-    | Token.Bang -> Some (Offset, Left)
     | Token.LtLt | Token.GtGt -> Some (Bitwise, Left)
     | _ -> None
 
