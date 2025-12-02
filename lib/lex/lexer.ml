@@ -59,7 +59,7 @@ module Make () : S = struct
 
   let add_error_code st code start end_ args =
     let sp = Span.make st.file_id start end_ in
-    { st with diags = Diagnostic.add st.diags (Lex.Error.diag code sp args) }
+    { st with diags = Diagnostic.add st.diags (Error.diag code sp args) }
 
   let extract st s e = String.sub st.source s (e - s)
 
@@ -111,7 +111,7 @@ module Make () : S = struct
     else
       let first = Char.code st.source.[pos] in
       if first < 0x80 then (pos + 1, None)
-      else if first < 0xC0 then (pos + 1, Some (Lex.Error.E0001, pos, pos + 1))
+      else if first < 0xC0 then (pos + 1, Some (Error.E0001, pos, pos + 1))
       else
         let exp =
           if first < 0xE0 then 2
@@ -119,9 +119,8 @@ module Make () : S = struct
           else if first < 0xF8 then 4
           else 0
         in
-        if exp = 0 then (pos + 1, Some (Lex.Error.E0002, pos, pos + 1))
-        else if pos + exp > st.len then
-          (st.len, Some (Lex.Error.E0003, pos, st.len))
+        if exp = 0 then (pos + 1, Some (Error.E0002, pos, pos + 1))
+        else if pos + exp > st.len then (st.len, Some (Error.E0003, pos, st.len))
         else
           let rec chk idx =
             if idx >= pos + exp then None
@@ -130,19 +129,8 @@ module Make () : S = struct
             else chk (idx + 1)
           in
           match chk (pos + 1) with
-          | Some inv -> (pos + exp, Some (Lex.Error.E0001, inv, inv + 1))
+          | Some inv -> (pos + exp, Some (Error.E0001, inv, inv + 1))
           | None -> (pos + exp, None)
-
-  let check_utf8_in_range st sp ep =
-    let rec loop p s =
-      if p >= ep then s
-      else if Char.code st.source.[p] >= 0x80 then
-        match check_utf8_char s p with
-        | _, Some (code, a, b) -> loop b (add_error_code s code a b [])
-        | nxt, None -> loop nxt s
-      else loop (p + 1) s
-    in
-    loop sp st
 
   let find_rbrace content len start =
     let rec loop p =
@@ -207,9 +195,7 @@ module Make () : S = struct
         let c = st.source.[p] in
         if valid c then loop (p + 1) s
         else if is_alpha c || is_digit c then
-          ( p
-          , add_error_code s Lex.Error.E0101 p (p + 1) [ base; String.make 1 c ]
-          )
+          (p, add_error_code s Error.E0101 p (p + 1) [ base; String.make 1 c ])
         else (p, s)
     in
     loop start st
@@ -222,7 +208,7 @@ module Make () : S = struct
         if is_digit c then loop (pos + 1) s dots
         else if c = '.' then
           if dots > 0 then
-            (pos, add_error_code s Lex.Error.E0102 pos pos [], dots + 1)
+            (pos, add_error_code s Error.E0102 pos pos [], dots + 1)
           else loop (pos + 1) s (dots + 1)
         else (pos, s, dots)
     in
@@ -232,7 +218,7 @@ module Make () : S = struct
   let scan_based_number st start pfx valid base =
     let pos = st.pos + pfx in
     let mkErr s =
-      { (add_error_code s Lex.Error.E0103 start pos [ base ]) with pos }
+      { (add_error_code s Error.E0103 start pos [ base ]) with pos }
     in
     if pos >= st.len then (mkErr st, extract st start pos, mk_span st start)
     else
@@ -290,7 +276,7 @@ module Make () : S = struct
         | Some eb -> (
           let hex = String.sub st.source (pos + 3) (eb - pos - 3) in
           if String.length hex = 0 then
-            Some (add_error_code st Lex.Error.E0205 pos (eb + 1) [], eb + 1)
+            Some (add_error_code st Error.E0205 pos (eb + 1) [], eb + 1)
           else
             try
               let v = int_of_string ("0x" ^ hex) in
@@ -299,36 +285,34 @@ module Make () : S = struct
                 Some
                   ( add_error_code
                       st
-                      Lex.Error.E0207
+                      Error.E0207
                       pos
                       (eb + 1)
                       [ Printf.sprintf "%X" max_v ]
                   , eb + 1 )
               else None
             with _ ->
-              Some (add_error_code st Lex.Error.E0208 pos (eb + 1) [], eb + 1))
+              Some (add_error_code st Error.E0208 pos (eb + 1) [], eb + 1))
         | None ->
           if pos + 3 < st.len then
-            Some (add_error_code st Lex.Error.E0209 pos (pos + 4) [], pos + 3)
-          else Some (add_error_code st Lex.Error.E0206 pos st.len [], st.len)
+            Some (add_error_code st Error.E0209 pos (pos + 4) [], pos + 3)
+          else Some (add_error_code st Error.E0206 pos st.len [], st.len)
       else
         Some
-          ( add_error_code st Lex.Error.E0210 pos (min (pos + 3) st.len) []
-          , pos + 2 )
+          (add_error_code st Error.E0210 pos (min (pos + 3) st.len) [], pos + 2)
     else None
 
   let validate_escapes st start ep =
     let rec loop pos s =
       if pos >= ep - 1 then s
       else if st.source.[pos] = '\\' then
-        if pos + 1 >= ep - 1 then
-          add_error_code s Lex.Error.E0211 pos (pos + 1) []
+        if pos + 1 >= ep - 1 then add_error_code s Error.E0211 pos (pos + 1) []
         else if not (is_valid_escape st pos) then
           loop
             (pos + 2)
             (add_error_code
                s
-               Lex.Error.E0212
+               Error.E0212
                pos
                (pos + 2)
                [ String.make 1 st.source.[pos + 1] ])
@@ -357,11 +341,10 @@ module Make () : S = struct
   let scan_block_comment st =
     let start = st.pos in
     let rec loop p s =
-      if p + 1 >= st.len then
-        (p, add_error_code s Lex.Error.E0401 start st.pos [])
+      if p + 1 >= st.len then (p, add_error_code s Error.E0401 start st.pos [])
       else if st.source.[p] = '*' && st.source.[p + 1] = '/' then (p + 2, s)
       else if st.source.[p] = '/' && st.source.[p + 1] = '*' then
-        loop (p + 2) (add_error_code s Lex.Error.E0402 p (p + 2) [])
+        loop (p + 2) (add_error_code s Error.E0402 p (p + 2) [])
       else loop (p + 1) s
     in
     let sc = st.pos + 2 in
@@ -378,7 +361,7 @@ module Make () : S = struct
         else if Char.code c > 127 then
           loop
             (p + 1)
-            (add_error_code s Lex.Error.E0304 p (p + 1) [ String.make 1 c ])
+            (add_error_code s Error.E0304 p (p + 1) [ String.make 1 c ])
         else (p, s)
     in
     let ep, fs = loop st.pos st in
@@ -393,13 +376,13 @@ module Make () : S = struct
     let se =
       if lit_name = "template" then
         List.fold_left
-          (fun s p -> add_error_code s Lex.Error.E0204 p (p + 1) [])
+          (fun s p -> add_error_code s Error.E0204 p (p + 1) [])
           st
           extra
       else st
     in
     if unterm || ep > st.len || (ep = st.len && st.source.[ep - 1] <> quote)
-    then (add_error_code se Lex.Error.E0201 start st.pos [ lit_name ], None, sp)
+    then (add_error_code se Error.E0201 start st.pos [ lit_name ], None, sp)
     else
       let content =
         extract st (if lit_name = "template" then start else st.pos + 1) (ep - 1)
@@ -425,7 +408,7 @@ module Make () : S = struct
     | s, None, sp -> (s, '\000', sp)
     | s, Some proc, sp ->
       if String.length proc = 0 then
-        (add_error_code s Lex.Error.E0203 st.pos (st.pos + 1) [], '\000', sp)
+        (add_error_code s Error.E0203 st.pos (st.pos + 1) [], '\000', sp)
       else if String.length proc > 1 then
         ( add_error
             s
@@ -450,7 +433,7 @@ module Make () : S = struct
     | None ->
       ( add_error_code
           (advance st)
-          Lex.Error.E0301
+          Error.E0301
           st.pos
           (st.pos + 1)
           [ String.make 1 st.source.[st.pos] ]
@@ -506,14 +489,14 @@ module Make () : S = struct
       if code < 32 && c <> '\t' && c <> '\n' && c <> '\r' then
         ( add_error_code
             (advance st)
-            Lex.Error.E0302
+            Error.E0302
             st.pos
             (st.pos + 1)
             [ Printf.sprintf "%02X" code ]
         , Token.Whitespace
         , mk_span st st.pos )
       else if c = '\000' then
-        ( add_error_code (advance st) Lex.Error.E0303 st.pos (st.pos + 1) []
+        ( add_error_code (advance st) Error.E0303 st.pos (st.pos + 1) []
         , Token.Whitespace
         , mk_span st st.pos )
       else if code >= 0x80 then
