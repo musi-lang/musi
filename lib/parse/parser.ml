@@ -165,13 +165,22 @@ module Make () : S = struct
   let btwn_braces parser = btwn (token Token.LBrace) (token Token.RBrace) parser
 
   let rec parse_expr st =
-    let span = curr_span st in
-    let error_expr = { Node.kind = Node.ExprLit (Node.LitNumber "0"); span } in
-    (st, error_expr)
+    match peek_opt st with
+    | Some (Token.Ident _, _) -> parse_expr_ident st
+    | _ ->
+      let span = curr_span st in
+      let error_expr =
+        { Node.kind = Node.ExprLit (Node.LitNumber "0"); span }
+      in
+      (st, error_expr)
 
   and parse_expr_lit st = failwith "unimpl parse_expr_lit"
   and parse_expr_template st = failwith "unimpl parse_expr_template"
-  and parse_expr_ident st = failwith "unimpl parse_expr_ident"
+
+  and parse_expr_ident st =
+    let st', name, span = expect_ident st in
+    (st', { Node.kind = Node.ExprIdent name; span })
+
   and parse_expr_tuple st = failwith "unimpl parse_expr_tuple"
   and parse_expr_block st = failwith "unimpl parse_expr_block"
   and parse_expr_if st = failwith "unimpl parse_expr_if"
@@ -194,28 +203,42 @@ module Make () : S = struct
   and parse_expr_atom st = failwith "unimpl parse_expr_atom"
 
   and parse_pat st =
-    let span = curr_span st in
-    let error_pat = { Node.kind = Node.PatWild; span } in
-    (st, error_pat)
+    match peek_opt st with
+    | Some (Token.Ident _, _) -> parse_pat_ident st
+    | _ ->
+      let span = curr_span st in
+      let error_pat = { Node.kind = Node.PatWild; span } in
+      (st, error_pat)
 
   and parse_pat_bind st = failwith "unimpl parse_pat_bind"
   and parse_pat_lit st = failwith "unimpl parse_pat_lit"
   and parse_pat_wild st = failwith "unimpl parse_pat_wild"
-  and parse_pat_ident st = failwith "unimpl parse_pat_ident"
+
+  and parse_pat_ident st =
+    let st', name, span = expect_ident st in
+    (st', { Node.kind = Node.PatIdent name; span })
+
   and parse_pat_record st = failwith "unimpl parse_pat_record"
   and parse_pat_ctor st = failwith "unimpl parse_pat_ctor"
   and parse_pat_tuple st = failwith "unimpl parse_pat_tuple"
 
   and parse_typ st =
-    let span = curr_span st in
-    let error_typ =
-      { Node.kind = Node.TypIdent (Interner.empty_name st.interner); span }
-    in
-    (st, error_typ)
+    match peek_opt st with
+    | Some (Token.Ident _, _) -> parse_typ_ident st
+    | _ ->
+      let span = curr_span st in
+      let error_typ =
+        { Node.kind = Node.TypIdent (Interner.empty_name st.interner); span }
+      in
+      (st, error_typ)
 
   and parse_typ_ptr st = failwith "unimpl parse_typ_ptr"
   and parse_typ_arr st = failwith "unimpl parse_typ_arr"
-  and parse_typ_ident st = failwith "unimpl parse_typ_ident"
+
+  and parse_typ_ident st =
+    let st', name, span = expect_ident st in
+    (st', { Node.kind = Node.TypIdent name; span })
+
   and parse_typ_app st = failwith "unimpl parse_typ_app"
   and parse_typ_tuple st = failwith "unimpl parse_typ_tuple"
   and parse_typ_fn st = failwith "unimpl parse_typ_fn"
