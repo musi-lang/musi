@@ -1,6 +1,8 @@
+open Basic
+
 module type S = sig
-  type ident = Basic.Interner.name
-  type 'a with_span = { kind : 'a; span : Basic.Span.t }
+  type ident = Interner.name
+  type 'a with_span = { kind : 'a; span : Span.t }
   type 'a delimited = 'a * 'a list
   type lit = LitNumber of string | LitString of ident | LitRune of char
 
@@ -14,7 +16,7 @@ module type S = sig
   type export_clause = ExportAll of ident | ExportNamed of ident list
 
   (* Statements *)
-  type stmt = { attr : attr option; kind : stmt_kind; span : Basic.Span.t }
+  type stmt = { attr : attr option; kind : stmt_kind; span : Span.t }
 
   and stmt_kind =
     | StmtImport of { clause : import_clause; source : ident }
@@ -135,7 +137,6 @@ module type S = sig
 end
 
 module Make () : S = struct
-  open Basic
   open Lex
 
   type ident = Interner.name
