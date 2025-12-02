@@ -1,5 +1,6 @@
 open Basic
 open Node
+module Token = Lex.Token
 
 module type S = sig
   type prog = Node.prog
@@ -7,16 +8,16 @@ module type S = sig
   type state = {
       source : string
     ; file_id : Span.file_id
-    ; tokens : (Lex.Token.t * Span.t) list
+    ; tokens : (Token.t * Span.t) list
     ; pos : int
     ; interner : Interner.t
     ; diags : Diagnostic.bag
   }
 
   val mk_state :
-    string -> Span.file_id -> (Lex.Token.t * Span.t) list -> Interner.t -> state
+    string -> Span.file_id -> (Token.t * Span.t) list -> Interner.t -> state
 
-  val peek_opt : state -> (Lex.Token.t * Span.t) option
+  val peek_opt : state -> (Token.t * Span.t) option
   val advance : state -> state
   val curr_span : state -> Span.t
   val add_error : state -> string -> Span.t -> state
@@ -26,7 +27,7 @@ module type S = sig
        string
     -> Span.file_id
     -> Interner.t
-    -> (Lex.Token.t * Span.t) list
+    -> (Token.t * Span.t) list
     -> prog * Diagnostic.bag
 
   val parse_prog : state -> state * prog
@@ -38,7 +39,7 @@ module Make () : S = struct
   type state = {
       source : string
     ; file_id : Span.file_id
-    ; tokens : (Lex.Token.t * Span.t) list
+    ; tokens : (Token.t * Span.t) list
     ; pos : int
     ; interner : Interner.t
     ; diags : Diagnostic.bag
@@ -67,7 +68,7 @@ module Make () : S = struct
     match peek_opt st with
     | Some (token, _) when token = token_type -> advance st
     | Some (token, span) ->
-      let found = Lex.Token.to_string token in
+      let found = Token.to_string token in
       add_error_code st Error.E1003 span [ expected_name; found ]
     | None ->
       let span = curr_span st in
@@ -75,11 +76,11 @@ module Make () : S = struct
 
   let expect_ident st =
     match peek_opt st with
-    | Some (Lex.Token.Ident name, span) ->
+    | Some (Token.Ident name, span) ->
       let st' = advance st in
       (st', name, span)
     | Some (token, span) ->
-      let found = Lex.Token.to_string token in
+      let found = Token.to_string token in
       let st' = add_error_code st Error.E1105 span [ found ] in
       (st', Interner.empty_name st.interner, span)
     | None ->
@@ -160,14 +161,68 @@ module Make () : S = struct
     let st''' = right st'' in
     (st''', result)
 
-  let btwn_parens parser =
-    btwn (token Lex.Token.LParen) (token Lex.Token.RParen) parser
+  let btwn_parens parser = btwn (token Token.LParen) (token Token.RParen) parser
+  let btwn_braces parser = btwn (token Token.LBrace) (token Token.RBrace) parser
 
-  let btwn_braces parser =
-    btwn (token Lex.Token.LBrace) (token Lex.Token.RBrace) parser
+  let rec parse_expr st =
+    let span = curr_span st in
+    let error_expr = { Node.kind = Node.ExprLit (Node.LitNumber "0"); span } in
+    (st, error_expr)
 
-  let rec parse_stmt st =
-    (* For now, create a simple error statement *)
+  and parse_expr_lit st = failwith "unimpl parse_expr_lit"
+  and parse_expr_template st = failwith "unimpl parse_expr_template"
+  and parse_expr_ident st = failwith "unimpl parse_expr_ident"
+  and parse_expr_tuple st = failwith "unimpl parse_expr_tuple"
+  and parse_expr_block st = failwith "unimpl parse_expr_block"
+  and parse_expr_if st = failwith "unimpl parse_expr_if"
+  and parse_expr_match st = failwith "unimpl parse_expr_match"
+  and parse_expr_for st = failwith "unimpl parse_expr_for"
+  and parse_expr_while st = failwith "unimpl parse_expr_while"
+  and parse_expr_defer st = failwith "unimpl parse_expr_defer"
+  and parse_expr_break st = failwith "unimpl parse_expr_break"
+  and parse_expr_cycle st = failwith "unimpl parse_expr_cycle"
+  and parse_expr_unsafe st = failwith "unimpl parse_expr_unsafe"
+  and parse_expr_assign st = failwith "unimpl parse_expr_assign"
+  and parse_expr_record_lit st = failwith "unimpl parse_expr_record_lit"
+  and parse_expr_fn st = failwith "unimpl parse_expr_fn"
+  and parse_expr_record st = failwith "unimpl parse_expr_record"
+  and parse_expr_choice st = failwith "unimpl parse_expr_choice"
+  and parse_expr_trait st = failwith "unimpl parse_expr_trait"
+  and parse_expr_prefix st = failwith "unimpl parse_expr_prefix"
+  and parse_expr_infix left st = failwith "unimpl parse_expr_infix"
+  and parse_expr_postfix left st = failwith "unimpl parse_expr_postfix"
+  and parse_expr_atom st = failwith "unimpl parse_expr_atom"
+
+  and parse_pat st =
+    let span = curr_span st in
+    let error_pat = { Node.kind = Node.PatWild; span } in
+    (st, error_pat)
+
+  and parse_pat_bind st = failwith "unimpl parse_pat_bind"
+  and parse_pat_lit st = failwith "unimpl parse_pat_lit"
+  and parse_pat_wild st = failwith "unimpl parse_pat_wild"
+  and parse_pat_ident st = failwith "unimpl parse_pat_ident"
+  and parse_pat_record st = failwith "unimpl parse_pat_record"
+  and parse_pat_ctor st = failwith "unimpl parse_pat_ctor"
+  and parse_pat_tuple st = failwith "unimpl parse_pat_tuple"
+
+  and parse_typ st =
+    let span = curr_span st in
+    let error_typ =
+      { Node.kind = Node.TypIdent (Interner.empty_name st.interner); span }
+    in
+    (st, error_typ)
+
+  and parse_typ_ptr st = failwith "unimpl parse_typ_ptr"
+  and parse_typ_arr st = failwith "unimpl parse_typ_arr"
+  and parse_typ_ident st = failwith "unimpl parse_typ_ident"
+  and parse_typ_app st = failwith "unimpl parse_typ_app"
+  and parse_typ_tuple st = failwith "unimpl parse_typ_tuple"
+  and parse_typ_fn st = failwith "unimpl parse_typ_fn"
+  and parse_typ_record st = failwith "unimpl parse_typ_record"
+  and parse_typ_optional st = failwith "unimpl parse_typ_optional"
+
+  and parse_stmt st =
     let span = curr_span st in
     let error_stmt =
       {
@@ -179,11 +234,17 @@ module Make () : S = struct
     in
     (st, error_stmt)
 
+  and parse_stmt_import st = failwith "unimpl parse_stmt_import"
+  and parse_stmt_export st = failwith "unimpl parse_stmt_export"
+  and parse_stmt_bind st = failwith "unimpl parse_stmt_bind"
+  and parse_stmt_extern st = failwith "unimpl parse_stmt_extern"
+  and parse_stmt_expr st = failwith "unimpl parse_stmt_expr"
+
   and parse_prog st =
     let rec loop st acc =
       match peek_opt st with
-      | Some (Lex.Token.EOF, _) -> (st, List.rev acc)
-      | Some (Lex.Token.Newline, _) ->
+      | Some (Token.EOF, _) -> (st, List.rev acc)
+      | Some (Token.Newline, _) ->
         let st' = advance st in
         loop st' acc
       | _ ->
@@ -194,8 +255,8 @@ module Make () : S = struct
 
   let parse source file_id interner tokens =
     let st = mk_state source file_id tokens interner in
-    let final_st, prog = parse_prog st in
-    (prog, final_st.diags)
+    let prog_st, prog = parse_prog st in
+    (prog, prog_st.diags)
 end
 
 include Make ()
