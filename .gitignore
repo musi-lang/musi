@@ -2,6 +2,7 @@
 # -- remove once people actually want it into codebase)
 .amazonq/*
 .claude/*
+.kilocode/*
 # this was for Cody, but I think they use it for Amp Code now? Not sure.
 .sourcegraph/*
 .theia/*
@@ -33,6 +34,8 @@ _priv/
 
 .cursorignore
 .cursorindexingignore
+
+.kilocodeignore
 
 # Covers JetBrains IDEs: IntelliJ, GoLand, RubyMine, PhpStorm, AppCode, PyCharm, CLion, Android Studio, WebStorm and Rider
 # Reference: https://intellij-support.jetbrains.com/hc/en-us/articles/206544839
