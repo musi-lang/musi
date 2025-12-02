@@ -19,6 +19,7 @@ module type S = sig
   val prec_value : t -> int
   val token_prec : Token.t -> (t * assoc) option
   val is_prefix_op : Token.t -> bool
+  val is_infix_op : Token.t -> bool
   val is_postfix_op : Token.t -> bool
 end
 
@@ -66,6 +67,14 @@ module Make () : S = struct
 
   let is_prefix_op = function
     | Token.Minus | Token.KwNot | Token.Tilde | Token.At -> true
+    | _ -> false
+
+  let is_infix_op = function
+    | Token.Plus | Token.Minus | Token.Star | Token.Slash | Token.StarStar
+    | Token.Lt | Token.Gt | Token.Eq | Token.BangEq | Token.LtEq | Token.GtEq
+    | Token.Amp | Token.Pipe | Token.Caret | Token.LtLt | Token.GtGt
+    | Token.MinusGt ->
+      true
     | _ -> false
 
   let is_postfix_op = function
