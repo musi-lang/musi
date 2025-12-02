@@ -64,8 +64,6 @@ expr_mul = expr_exp, {("*" | "/"), expr_exp};
 
 expr_exp = expr_off, {"**", expr_off};
 
-expr_off = expr_una, {"!", expr_una};
-
 expr_una = ["-" | "not" | "~" | "@"], expr_postfix;
 
 expr_postfix = expr_atom, {aux_postfix_op};
