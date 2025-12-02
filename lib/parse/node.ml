@@ -101,7 +101,7 @@ and match_arm = { pat : pat; guard : expr option; body : expr }
 and record_field_init = { shorthand : bool; name : ident; value : expr }
 and record_field = { name : ident; typ : typ }
 and choice_case = { name : ident; fields : typ list }
-and fn_sig = { name : ident; typ : typ }
+and fn_sig = { name : ident; typ : typ option }
 and fn_param = { name : ident; typ : typ option }
 
 (* Patterns *)
