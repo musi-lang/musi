@@ -136,6 +136,8 @@ module type S = sig
   type prog = stmt list
 end
 
+include Make ()
+
 module Make () : S = struct
   open Lex
 
@@ -266,3 +268,5 @@ module Make () : S = struct
 
   type prog = stmt list
 end
+
+include Make ()
