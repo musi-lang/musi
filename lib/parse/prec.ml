@@ -1,4 +1,4 @@
-open Lex
+module Token = Lex.Token
 
 module type S = sig
   type assoc = Left | Right | None
@@ -63,6 +63,7 @@ module Make () : S = struct
     | Token.Star | Token.Slash -> Some (Multiplicative, Left)
     | Token.StarStar -> Some (Exponentiation, Right)
     | Token.Bang -> Some (Offset, Left)
+    | Token.LtLt | Token.GtGt -> Some (Bitwise, Left)
     | _ -> None
 
   let is_prefix_op = function
