@@ -1,3 +1,5 @@
+open Basic
+
 module type S = sig
   type code =
     | E0001
@@ -27,12 +29,10 @@ module type S = sig
     | E0501
 
   val code_string : code -> string
-  val diag : code -> Basic.Span.t -> string list -> Basic.Diagnostic.t
+  val diag : code -> Span.t -> string list -> Diagnostic.t
 end
 
 module Make () : S = struct
-  open Basic
-
   type code =
     | E0001
     | E0002

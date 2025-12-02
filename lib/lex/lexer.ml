@@ -1,33 +1,33 @@
+open Basic
+
 module type S = sig
   type state = {
       source : string
     ; pos : int
     ; len : int
-    ; file_id : Basic.Span.file_id
-    ; interner : Basic.Interner.t
-    ; diags : Basic.Diagnostic.bag
+    ; file_id : Span.file_id
+    ; interner : Interner.t
+    ; diags : Diagnostic.bag
   }
 
-  val mk_state : string -> Basic.Span.file_id -> Basic.Interner.t -> state
+  val mk_state : string -> Span.file_id -> Interner.t -> state
   val peek_char_opt : state -> char option
   val advance : state -> state
-  val mk_span : state -> int -> Basic.Span.t
+  val mk_span : state -> int -> Span.t
   val add_error : state -> string -> int -> int -> state
   val add_error_code : state -> Error.code -> int -> int -> string list -> state
   val extract : state -> int -> int -> string
 
   val tokenize :
        string
-    -> Basic.Span.file_id
-    -> Basic.Interner.t
-    -> (Token.t * Basic.Span.t) list * Basic.Diagnostic.bag
+    -> Span.file_id
+    -> Interner.t
+    -> (Token.t * Span.t) list * Diagnostic.bag
 
-  val lex_token : state -> state * Token.t * Basic.Span.t
+  val lex_token : state -> state * Token.t * Span.t
 end
 
 module Make () : S = struct
-  open Basic
-
   type state = {
       source : string
     ; pos : int
@@ -383,7 +383,7 @@ module Make () : S = struct
     in
     let ep, fs = loop st.pos st in
     ( { fs with pos = ep }
-    , Basic.Interner.intern st.interner (extract st start ep)
+    , Interner.intern st.interner (extract st start ep)
     , mk_span st start )
 
   let scan_literal st quote lit_name process =
@@ -408,8 +408,8 @@ module Make () : S = struct
       ({ fs with pos = ep }, Some (process content), sp)
 
   let intern_result st = function
-    | s, None, sp -> (s, Basic.Interner.empty_name st.interner, sp)
-    | s, Some c, sp -> (s, Basic.Interner.intern st.interner c, sp)
+    | s, None, sp -> (s, Interner.empty_name st.interner, sp)
+    | s, Some c, sp -> (s, Interner.intern st.interner c, sp)
 
   let scan_string st =
     intern_result st (scan_literal st '"' "string" process_escape_chars)
@@ -490,9 +490,7 @@ module Make () : S = struct
       fun st ->
         let s, name, sp = scan_ident st in
         ( s
-        , Token.lookup_keyword
-            st.interner
-            (Basic.Interner.lookup st.interner name)
+        , Token.lookup_keyword st.interner (Interner.lookup st.interner name)
         , sp )
     | _ when is_digit c -> wrap scan_number (fun text -> Token.LitNumber text)
     | '"' -> wrap scan_string (fun content -> Token.LitString content)
