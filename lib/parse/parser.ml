@@ -16,7 +16,7 @@ module type S = sig
   val mk_state :
     string -> Span.file_id -> (Lex.Token.t * Span.t) list -> Interner.t -> state
 
-  val peek_token_opt : state -> (Lex.Token.t * Span.t) option
+  val peek_opt : state -> (Lex.Token.t * Span.t) option
   val advance : state -> state
   val curr_span : state -> Span.t
   val add_error : state -> string -> Span.t -> state
@@ -47,7 +47,7 @@ module Make () : S = struct
   let mk_state source file_id tokens interner =
     { source; file_id; tokens; pos = 0; interner; diags = Diagnostic.empty_bag }
 
-  let peek_token_opt st =
+  let peek_opt st =
     if st.pos >= List.length st.tokens then None
     else Some (List.nth st.tokens st.pos)
 
@@ -63,8 +63,8 @@ module Make () : S = struct
   let add_error_code st code span args =
     { st with diags = Diagnostic.add st.diags (Error.diag code span args) }
 
-  let expect_token st token_type expected_name =
-    match peek_token_opt st with
+  let expect st token_type expected_name =
+    match peek_opt st with
     | Some (token, _) when token = token_type -> advance st
     | Some (token, span) ->
       let found = Lex.Token.to_string token in
@@ -74,7 +74,7 @@ module Make () : S = struct
       add_error_code st Error.E1003 span [ expected_name; "EOF" ]
 
   let expect_ident st =
-    match peek_token_opt st with
+    match peek_opt st with
     | Some (Lex.Token.Ident name, span) ->
       let st' = advance st in
       (st', name, span)
@@ -89,7 +89,7 @@ module Make () : S = struct
 
   let parse_list_sep st sep parser =
     let rec loop st acc =
-      match peek_token_opt st with
+      match peek_opt st with
       | Some (sep_token, _) when sep_token = sep ->
         let st' = advance st in
         begin match parser st' with
@@ -101,7 +101,7 @@ module Make () : S = struct
     try match parser st with st', first_item -> loop st' [ first_item ]
     with Failure _ -> (st, [])
 
-  let parse_optional_many st parser =
+  let parse_opt_many st parser =
     let rec loop st acc =
       try
         let st', item = parser st in
@@ -110,20 +110,12 @@ module Make () : S = struct
     in
     loop st []
 
-  (* Parser combinators with proper terminology *)
   let satisfy pred st =
-    match peek_token_opt st with
-    | Some (token, span) when pred token -> advance st
+    match peek_opt st with
+    | Some (token, _) when pred token -> advance st
     | _ -> failwith "satisfy failed"
 
   let token t = satisfy (fun x -> x = t)
-
-  let choice parsers st =
-    let rec try_parser = function
-      | [] -> failwith "choice failed"
-      | p :: ps -> ( try p st with Failure _ -> try_parser ps)
-    in
-    try_parser parsers st
 
   let many parser st =
     let rec loop st acc =
@@ -141,7 +133,7 @@ module Make () : S = struct
 
   let sep_by parser sep st =
     let rec loop st acc =
-      match peek_token_opt st with
+      match peek_opt st with
       | Some (sep_token, _) when sep_token = sep ->
         let st' = advance st in
         begin try
@@ -156,7 +148,7 @@ module Make () : S = struct
       loop st' [ first ]
     with Failure _ -> (st, [])
 
-  let optional parser st =
+  let opt parser st =
     try
       let st', result = parser st in
       (st', Some result)
@@ -174,133 +166,31 @@ module Make () : S = struct
   let btwn_braces parser =
     btwn (token Lex.Token.LBrace) (token Lex.Token.RBrace) parser
 
-  let rec parse_expr st : state * Node.expr =
-    let rec parse_bp (bp : int) st : state * Node.expr =
-      (* parse at binding precedence *)
-      let st', left = nud st in
-      parse_led bp left st
-    and nud st : state * Node.expr =
-      (* null denotation - prefix parsing *)
-      match peek_token_opt st with
-      | Some (Lex.Token.Ident name, span) ->
-        let st' = advance st in
-        (st', { Node.kind = Node.ExprIdent name; span })
-      | Some (Lex.Token.LitNumber s, span) ->
-        let st' = advance st in
-        (st', { Node.kind = Node.ExprLit (Node.LitNumber s); span })
-      | Some (Lex.Token.LitString name, span) ->
-        let st' = advance st in
-        (st', { Node.kind = Node.ExprLit (Node.LitString name); span })
-      | Some (Lex.Token.LitRune c, span) ->
-        let st' = advance st in
-        (st', { Node.kind = Node.ExprLit (Node.LitRune c); span })
-      | Some (Lex.Token.LitTemplate name, span) ->
-        let st' = advance st in
-        (st', { Node.kind = Node.ExprTemplate name; span })
-      | Some (Lex.Token.LParen, span) ->
-        let st', expr = btwn_parens parse_expr st in
-        (st', expr)
-      | Some (token, span) when Prec.is_prefix_op token ->
-        let st' = advance st in
-        let st'', operand = parse_bp (Prec.prec_value Prec.Unary) st' in
-        let span' = Span.merge span operand.Node.span in
-        ( st''
-        , { Node.kind = Node.ExprUnary { op = token; operand }; span = span' }
-        )
-      | _ -> failwith "parse_expr not impl yet"
-    and parse_led bp left st =
-      (* left denotation - infix parsing *)
-      match peek_token_opt st with
-      | Some (op, _) when Prec.is_infix_op op -> (
-        match Prec.token_prec op with
-        | Some (prec, assoc) when Prec.prec_value prec > bp ->
-          let st' = advance st in
-          let right_bp =
-            if assoc = Prec.Right then Prec.prec_value prec
-            else Prec.prec_value prec + 1
-          in
-          let st'', right = parse_bp right_bp st' in
-          let span = Span.merge left.Node.span right.Node.span in
-          parse_led
-            bp
-            { Node.kind = Node.ExprBinary { op; left; right }; span }
-            st'
-        | _ -> (st, left))
-      | _ -> (st, left)
+  let rec parse_stmt st =
+    (* For now, create a simple error statement *)
+    let span = curr_span st in
+    let error_stmt =
+      {
+        Node.attr = None
+      ; kind =
+          Node.StmtExpr { Node.kind = Node.ExprLit (Node.LitNumber "0"); span }
+      ; span
+      }
     in
-    parse_bp 0 st
-
-  and parse_expr_block st =
-    (* parse_expr_block not impl yet *)
-    failwith "parse_expr_block not impl yet"
-
-  and parse_stmt st =
-    (* parse_stmt not impl yet *)
-    failwith "parse_stmt not impl yet"
-
-  and parse_stmt_import st =
-    (* parse_stmt_import not impl yet *)
-    failwith "parse_stmt_import not impl yet"
-
-  and parse_stmt_export st =
-    (* parse_stmt_export not impl yet *)
-    failwith "parse_stmt_export not impl yet"
-
-  and parse_stmt_bind st =
-    (* parse_stmt_bind not impl yet *)
-    failwith "parse_stmt_bind not impl yet"
-
-  and parse_stmt_extern st =
-    (* parse_stmt_extern not impl yet *)
-    failwith "parse_stmt_extern not impl yet"
-
-  and parse_pat st =
-    (* parse_pat not impl yet *)
-    failwith "parse_pat not impl yet"
-
-  and parse_pat_lit st =
-    (* parse_pat_lit not impl yet *)
-    failwith "parse_pat_lit not impl yet"
-
-  and parse_pat_ident st =
-    (* parse_pat_ident not impl yet *)
-    failwith "parse_pat_ident not impl yet"
-
-  and parse_pat_ctor st =
-    (* parse_pat_ctor not impl yet *)
-    failwith "parse_pat_ctor not impl yet"
-
-  and parse_typ st =
-    (* parse_typ not impl yet *)
-    failwith "parse_typ not impl yet"
-
-  and parse_typ_ident st =
-    (* parse_typ_ident not impl yet *)
-    failwith "parse_typ_ident not impl yet"
-
-  and parse_typ_ptr st =
-    (* parse_typ_ptr not impl yet *)
-    failwith "parse_typ_ptr not impl yet"
-
-  and parse_typ_arr st =
-    (* parse_typ_arr not impl yet *)
-    failwith "parse_typ_arr not impl yet"
-
-  and parse_typ_app st =
-    (* parse_typ_app not impl yet *)
-    failwith "parse_typ_app not impl yet"
-
-  and parse_typ_tuple st =
-    (* parse_typ_tuple not impl yet *)
-    failwith "parse_typ_tuple not impl yet"
-
-  and parse_typ_fn st =
-    (* parse_typ_fn not impl yet *)
-    failwith "parse_typ_fn not impl yet"
+    (st, error_stmt)
 
   and parse_prog st =
-    (* parse_program not impl yet *)
-    failwith "parse_prog not impl yet"
+    let rec loop st acc =
+      match peek_opt st with
+      | Some (Lex.Token.EOF, _) -> (st, List.rev acc)
+      | Some (Lex.Token.Newline, _) ->
+        let st' = advance st in
+        loop st' acc
+      | _ ->
+        let st', stmt = parse_stmt st in
+        loop st' (stmt :: acc)
+    in
+    loop st []
 
   let parse source file_id interner tokens =
     let st = mk_state source file_id tokens interner in
