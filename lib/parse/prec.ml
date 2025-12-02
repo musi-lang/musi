@@ -1,3 +1,5 @@
+open Lex
+
 module type S = sig
   type assoc = Left | Right | None
 
@@ -15,14 +17,12 @@ module type S = sig
     | Postfix
 
   val prec_value : t -> int
-  val token_prec : Lex.Token.t -> (t * assoc) option
-  val is_prefix_op : Lex.Token.t -> bool
-  val is_postfix_op : Lex.Token.t -> bool
+  val token_prec : Token.t -> (t * assoc) option
+  val is_prefix_op : Token.t -> bool
+  val is_postfix_op : Token.t -> bool
 end
 
 module Make () : S = struct
-  open Lex
-
   type assoc = Left | Right | None
 
   type t =
