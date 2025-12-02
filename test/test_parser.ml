@@ -28,7 +28,6 @@ let test_parser_state () =
   let state, _ = make_test_state "42" in
   (check int) "initial position" 0 state.pos;
   let token = Parser.peek state in
-  Printf.printf "DEBUG: token = %s\n" (Token.to_string token);
   (check string) "peek token" "NUMBER(42)" (Token.to_string token)
 
 let test_expr_lit_number () =
