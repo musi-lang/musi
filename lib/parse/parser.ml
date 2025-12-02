@@ -29,7 +29,7 @@ module type S = sig
     -> (Lex.Token.t * Span.t) list
     -> prog * Diagnostic.bag
 
-  val parse_program : state -> state * prog
+  val parse_prog : state -> state * prog
 end
 
 module Make () : S = struct
@@ -298,13 +298,13 @@ module Make () : S = struct
     (* parse_typ_fn not impl yet *)
     failwith "parse_typ_fn not impl yet"
 
-  and parse_program st =
+  and parse_prog st =
     (* parse_program not impl yet *)
-    failwith "parse_program not impl yet"
+    failwith "parse_prog not impl yet"
 
   let parse source file_id interner tokens =
     let st = mk_state source file_id tokens interner in
-    let final_st, prog = parse_program st in
+    let final_st, prog = parse_prog st in
     (prog, final_st.diags)
 end
 
