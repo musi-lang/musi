@@ -1,0 +1,4 @@
+(test
+ (name main)
+ (libraries alcotest musi.basic musi.lex musi.parse)
+ (modules test_lexer test_parser main))
