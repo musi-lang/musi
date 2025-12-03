@@ -42,27 +42,9 @@ stmt_bind = ("val" | "var"), ident, [":", typ], ":=", expr;
 stmt_extern = "extern", [string], "unsafe", "{", {aux_extern_fn_decl}, "}";
 
 (* ========================================================================= *)
-(* EXPRESSIONS - (lowest to highest)                                         *)
+(* EXPRESSIONS                                                               *)
 (* ========================================================================= *)
-expr = expr_pipe;
-
-expr_pipe = expr_lor, {"|>", expr_lor};
-
-expr_lor = expr_land, {"or", expr_land};
-
-expr_land = expr_bit, {"and", expr_bit};
-
-expr_bit = expr_shift, {("&" | "|" | "^"), expr_shift};
-
-expr_shift = expr_cmp, {("<<" | ">>"), expr_cmp};
-
-expr_cmp = expr_add, [("=" | "!=" | ">" | "<" | ">=" | "<="), expr_add];
-
-expr_add = expr_mul, {("+" | "-"), expr_mul};
-
-expr_mul = expr_exp, {("*" | "/"), expr_exp};
-
-expr_exp = expr_off, {"**", expr_off};
+expr = expr_una;
 
 expr_una = ["-" | "not" | "~" | "@"], expr_postfix;
 
@@ -132,9 +114,9 @@ pat_tup = "(", pat, ",", {pat, ","}, [pat], ")";
 (* ========================================================================= *)
 typ = typ_sum;
 
-typ_sum = typ_atom;
+typ_sum = typ_atom, ["?"];
 
-typ_atom = typ_ptr | typ_arr | typ_ident | typ_tup | typ_fn | typ_record | typ_optional;
+typ_atom = typ_ptr | typ_arr | typ_ident | typ_tup | typ_fn | typ_record;
 
 typ_ptr = "^", typ;
 
@@ -147,8 +129,6 @@ typ_tup = "(", typ, ",", {typ, ","}, [typ], ")";
 typ_fn = "fn", "(", [typ, {",", typ}], ")", ["->", typ];
 
 typ_record = "{", aux_typ_record_field, {",", aux_typ_record_field}, "}";
-
-typ_optional = typ_atom, "?";
 
 (* ========================================================================= *)
 (* AUXILIARIES                                                               *)
