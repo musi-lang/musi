@@ -4,7 +4,11 @@ module type S = sig
   type ident = Interner.name
   type 'a with_span = { kind : 'a; span : Span.t }
   type 'a delimited = 'a * 'a list
-  type lit = LitNumber of string | LitString of ident | LitRune of char
+
+  type lit =
+    | LitNumber of { value : string; negative : bool }
+    | LitString of ident
+    | LitRune of char
 
   type attr_arg =
     | AttrIdent of ident
@@ -15,8 +19,11 @@ module type S = sig
   type import_clause = ImportAll of ident | ImportNamed of ident list
   type export_clause = ExportAll of ident | ExportNamed of ident list
 
-  (* Statements *)
   type stmt = { attr : attr option; kind : stmt_kind; span : Span.t }
+  and expr = expr_kind with_span
+  and pat = pat_kind with_span
+  and typ = typ_kind with_span
+  and tmpl_string = TmplString of { parts : tmpl_part list }
 
   and stmt_kind =
     | StmtImport of { clause : import_clause; source : ident }
@@ -24,52 +31,61 @@ module type S = sig
     | StmtBind of {
           mutable_ : bool
         ; name : ident
-        ; typ : typ option
+        ; typ_ : typ option
         ; value : expr
       }
-    | StmtExtern of { abi : string option; decls : fn_sig list }
+    | StmtExtern of { abi : string option; decls : extern_fn_decl list }
     | StmtExpr of expr
-    | StmtError
+
+  and extern_fn_decl = {
+      name : ident
+    ; params : fn_param list
+    ; ret_typ : typ option
+  }
 
   and block = { stmts : stmt list; ret : expr option }
 
-  (* Expressions *)
-  and expr = expr_kind with_span
-
   and expr_kind =
     | ExprLit of lit
-    | ExprTemplate of ident
+    | ExprTmpl of tmpl_string
     | ExprIdent of ident
-    | ExprTuple of expr delimited
+    | ExprTuple of expr list
     | ExprBlock of block
     | ExprIf of {
-          conds : cond delimited
+          conds : (pat * expr) list
         ; then_block : block
         ; else_block : block option
       }
     | ExprMatch of { scrutinee : expr; arms : match_arm list }
     | ExprFor of {
-          binding : for_binding
+          binding : loop_binding
         ; range : expr
         ; guard : expr option
         ; body : block
       }
-    | ExprWhile of { cond : cond; guard : expr option; body : block }
+    | ExprWhile of {
+          cond : (pat * expr) option
+        ; guard : expr option
+        ; body : block
+      }
     | ExprDefer of expr
     | ExprBreak of expr option
     | ExprCycle
     | ExprUnsafe of block
     | ExprAssign of { target : ident; value : expr }
-    | ExprBinary of { op : Lex.Token.t; left : expr; right : expr }
-    | ExprUnary of { op : Lex.Token.t; operand : expr }
+    | ExprUnary of { op : string; arg : expr }
     | ExprCall of {
           callee : expr
         ; typ_args : typ list
         ; args : expr list
         ; optional : bool
       }
-    | ExprField of { base : expr; field : ident; optional : bool }
-    | ExprIndex of { base : expr; index : expr; optional : bool }
+    | ExprMember of {
+          obj_ : expr
+        ; prop : ident
+        ; computed : bool
+        ; optional : bool
+      }
     | ExprRecordLit of { name : ident option; fields : record_field_init list }
     | ExprFn of {
           abi : string option
@@ -83,31 +99,16 @@ module type S = sig
           typ_params : ident list
         ; trait_bound : typ option
         ; fields : record_field list
-        ; body : stmt list
       }
-    | ExprChoice of {
-          typ_params : ident list
-        ; cases : choice_case list
-        ; body : stmt list
-      }
-    | ExprTrait of {
-          typ_params : ident list
-        ; trait_bound : typ option
-        ; items : fn_sig list
-      }
-    | ExprError
+    | ExprChoice of { typ_params : ident list; cases : choice_case list }
 
-  and cond = CondExpr of expr | CondCase of { pat : pat; value : expr }
-  and for_binding = ForIdent of ident | ForCase of pat
+  and tmpl_part = TmplText of ident | TmplExpr of expr
+  and loop_binding = LoopIdent of ident | LoopPat of pat
   and match_arm = { pat : pat; guard : expr option; body : expr }
+  and fn_param = { name : ident; typ_ : typ option }
   and record_field_init = { shorthand : bool; name : ident; value : expr }
-  and record_field = { name : ident; typ : typ }
+  and record_field = { name : ident; typ_ : typ }
   and choice_case = { name : ident; fields : typ list }
-  and fn_sig = { name : ident; typ : typ option }
-  and fn_param = { name : ident; typ : typ option }
-
-  (* Patterns *)
-  and pat = pat_kind with_span
 
   and pat_kind =
     | PatBind of { mutable_ : bool; name : ident }
@@ -116,37 +117,34 @@ module type S = sig
     | PatIdent of ident
     | PatRecord of { name : ident; fields : pat_field list }
     | PatCtor of { name : ident; args : pat list }
-    | PatTuple of pat delimited
-    | PatError
+    | PatTuple of pat list
 
-  and pat_field = { name : ident; pat : pat option }
-
-  (* Types *)
-  and typ = typ_kind with_span
+  and pat_field = { name : ident; pat_ : pat option }
 
   and typ_kind =
     | TypPtr of typ
     | TypArr of { size : expr option; elem : typ }
     | TypIdent of ident
     | TypApp of { base : ident; args : typ list }
-    | TypTuple of typ delimited
+    | TypTuple of typ list
     | TypFn of { params : typ list; ret : typ option }
     | TypRecord of typ_record_field list
     | TypOptional of typ
-    | TypError
 
-  and typ_record_field = { name : ident; typ : typ }
+  and typ_record_field = { name : ident; typ_ : typ }
 
   type prog = stmt list
 end
 
 module Make () : S = struct
-  open Lex
-
   type ident = Interner.name
   type 'a with_span = { kind : 'a; span : Span.t }
   type 'a delimited = 'a * 'a list
-  type lit = LitNumber of string | LitString of ident | LitRune of char
+
+  type lit =
+    | LitNumber of { value : string; negative : bool }
+    | LitString of ident
+    | LitRune of char
 
   type attr_arg =
     | AttrIdent of ident
@@ -157,7 +155,12 @@ module Make () : S = struct
   type import_clause = ImportAll of ident | ImportNamed of ident list
   type export_clause = ExportAll of ident | ExportNamed of ident list
 
+  (* All types defined together for mutual recursion *)
   type stmt = { attr : attr option; kind : stmt_kind; span : Span.t }
+  and expr = expr_kind with_span
+  and pat = pat_kind with_span
+  and typ = typ_kind with_span
+  and tmpl_string = TmplString of { parts : tmpl_part list }
 
   and stmt_kind =
     | StmtImport of { clause : import_clause; source : ident }
@@ -165,50 +168,61 @@ module Make () : S = struct
     | StmtBind of {
           mutable_ : bool
         ; name : ident
-        ; typ : typ option
+        ; typ_ : typ option
         ; value : expr
       }
-    | StmtExtern of { abi : string option; decls : fn_sig list }
+    | StmtExtern of { abi : string option; decls : extern_fn_decl list }
     | StmtExpr of expr
-    | StmtError
+
+  and extern_fn_decl = {
+      name : ident
+    ; params : fn_param list
+    ; ret_typ : typ option
+  }
 
   and block = { stmts : stmt list; ret : expr option }
-  and expr = expr_kind with_span
 
   and expr_kind =
     | ExprLit of lit
-    | ExprTemplate of ident
+    | ExprTmpl of tmpl_string
     | ExprIdent of ident
-    | ExprTuple of expr delimited
+    | ExprTuple of expr list
     | ExprBlock of block
     | ExprIf of {
-          conds : cond delimited
+          conds : (pat * expr) list
         ; then_block : block
         ; else_block : block option
       }
     | ExprMatch of { scrutinee : expr; arms : match_arm list }
     | ExprFor of {
-          binding : for_binding
+          binding : loop_binding
         ; range : expr
         ; guard : expr option
         ; body : block
       }
-    | ExprWhile of { cond : cond; guard : expr option; body : block }
+    | ExprWhile of {
+          cond : (pat * expr) option
+        ; guard : expr option
+        ; body : block
+      }
     | ExprDefer of expr
     | ExprBreak of expr option
     | ExprCycle
     | ExprUnsafe of block
     | ExprAssign of { target : ident; value : expr }
-    | ExprBinary of { op : Token.t; left : expr; right : expr }
-    | ExprUnary of { op : Token.t; operand : expr }
+    | ExprUnary of { op : string; arg : expr }
     | ExprCall of {
           callee : expr
         ; typ_args : typ list
         ; args : expr list
         ; optional : bool
       }
-    | ExprField of { base : expr; field : ident; optional : bool }
-    | ExprIndex of { base : expr; index : expr; optional : bool }
+    | ExprMember of {
+          obj_ : expr
+        ; prop : ident
+        ; computed : bool
+        ; optional : bool
+      }
     | ExprRecordLit of { name : ident option; fields : record_field_init list }
     | ExprFn of {
           abi : string option
@@ -222,29 +236,16 @@ module Make () : S = struct
           typ_params : ident list
         ; trait_bound : typ option
         ; fields : record_field list
-        ; body : stmt list
       }
-    | ExprChoice of {
-          typ_params : ident list
-        ; cases : choice_case list
-        ; body : stmt list
-      }
-    | ExprTrait of {
-          typ_params : ident list
-        ; trait_bound : typ option
-        ; items : fn_sig list
-      }
-    | ExprError
+    | ExprChoice of { typ_params : ident list; cases : choice_case list }
 
-  and cond = CondExpr of expr | CondCase of { pat : pat; value : expr }
-  and for_binding = ForIdent of ident | ForCase of pat
+  and tmpl_part = TmplText of ident | TmplExpr of expr
+  and loop_binding = LoopIdent of ident | LoopPat of pat
   and match_arm = { pat : pat; guard : expr option; body : expr }
+  and fn_param = { name : ident; typ_ : typ option }
   and record_field_init = { shorthand : bool; name : ident; value : expr }
-  and record_field = { name : ident; typ : typ }
+  and record_field = { name : ident; typ_ : typ }
   and choice_case = { name : ident; fields : typ list }
-  and fn_sig = { name : ident; typ : typ option }
-  and fn_param = { name : ident; typ : typ option }
-  and pat = pat_kind with_span
 
   and pat_kind =
     | PatBind of { mutable_ : bool; name : ident }
@@ -253,24 +254,21 @@ module Make () : S = struct
     | PatIdent of ident
     | PatRecord of { name : ident; fields : pat_field list }
     | PatCtor of { name : ident; args : pat list }
-    | PatTuple of pat delimited
-    | PatError
+    | PatTuple of pat list
 
-  and pat_field = { name : ident; pat : pat option }
-  and typ = typ_kind with_span
+  and pat_field = { name : ident; pat_ : pat option }
 
   and typ_kind =
     | TypPtr of typ
     | TypArr of { size : expr option; elem : typ }
     | TypIdent of ident
     | TypApp of { base : ident; args : typ list }
-    | TypTuple of typ delimited
+    | TypTuple of typ list
     | TypFn of { params : typ list; ret : typ option }
     | TypRecord of typ_record_field list
     | TypOptional of typ
-    | TypError
 
-  and typ_record_field = { name : ident; typ : typ }
+  and typ_record_field = { name : ident; typ_ : typ }
 
   type prog = stmt list
 end
