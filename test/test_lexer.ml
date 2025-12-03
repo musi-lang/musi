@@ -100,7 +100,7 @@ let test_numbers_errors_incomplete_hex () =
 
 let test_strings_basic () =
   let state, interner = make_test_state "\"hello\"" in
-  let new_state, name_opt, _span = Lexer.scan_string_literal state in
+  let new_state, name_opt, _span = Lexer.scan_lit_string state in
   check_no_errors new_state.diags;
   (check (option string)) "string content" (Some "hello") name_opt;
   let name =
@@ -113,7 +113,7 @@ let test_strings_basic () =
 
 let test_strings_empty () =
   let state, interner = make_test_state "\"\"" in
-  let new_state, name_opt, _span = Lexer.scan_string_literal state in
+  let new_state, name_opt, _span = Lexer.scan_lit_string state in
   check_no_errors new_state.diags;
   (check (option string)) "string content" (Some "") name_opt;
   let name =
@@ -126,7 +126,7 @@ let test_strings_empty () =
 
 let test_strings_escape_newline () =
   let state, interner = make_test_state "\"hello\\nworld\"" in
-  let new_state, name_opt, _span = Lexer.scan_string_literal state in
+  let new_state, name_opt, _span = Lexer.scan_lit_string state in
   check_no_errors new_state.diags;
   let name =
     match name_opt with
@@ -137,7 +137,7 @@ let test_strings_escape_newline () =
 
 let test_strings_unterminated () =
   let state, _ = make_test_state "\"hello" in
-  let new_state, _content, _span = Lexer.scan_string_literal state in
+  let new_state, _content, _span = Lexer.scan_lit_string state in
   (check bool)
     "unterminated has errors"
     true
@@ -145,14 +145,14 @@ let test_strings_unterminated () =
 
 let test_runes_basic () =
   let state, _ = make_test_state "'a'" in
-  let new_state, char_val, _span = Lexer.scan_rune_literal state in
+  let new_state, char_val, _span = Lexer.scan_lit_rune state in
   check_no_errors new_state.diags;
   (check char) "rune basic" 'a' char_val;
   (check int) "rune basic position" 3 new_state.pos
 
 let test_runes_escape_newline () =
   let state, _ = make_test_state "'\\n'" in
-  let new_state, char_val, _span = Lexer.scan_rune_literal state in
+  let new_state, char_val, _span = Lexer.scan_lit_rune state in
   let has_errors = Diagnostic.has_errors new_state.diags in
   if has_errors then
     Printf.printf "Errors found in rune escape: %b\n" has_errors;
@@ -161,7 +161,7 @@ let test_runes_escape_newline () =
 
 let test_runes_empty () =
   let state, _ = make_test_state "''" in
-  let new_state, _char_val, _span = Lexer.scan_rune_literal state in
+  let new_state, _char_val, _span = Lexer.scan_lit_rune state in
   (check bool)
     "empty rune has errors"
     true
@@ -169,7 +169,7 @@ let test_runes_empty () =
 
 let test_runes_multichar () =
   let state, _ = make_test_state "'ab'" in
-  let new_state, _char_val, _span = Lexer.scan_rune_literal state in
+  let new_state, _char_val, _span = Lexer.scan_lit_rune state in
   (check bool)
     "multichar rune has errors"
     true
@@ -177,7 +177,7 @@ let test_runes_multichar () =
 
 let test_runes_invalid_escape () =
   let state, _ = make_test_state "'\\q'" in
-  let new_state, _char_val, _span = Lexer.scan_rune_literal state in
+  let new_state, _char_val, _span = Lexer.scan_lit_rune state in
   (check bool)
     "invalid escape has errors"
     true
@@ -303,7 +303,7 @@ let test_whitespace_space () =
 
 let test_unicode_escape_valid_small () =
   let state, interner = make_test_state "\"\\u{00A9}\"" in
-  let new_state, name_opt, _span = Lexer.scan_string_literal state in
+  let new_state, name_opt, _span = Lexer.scan_lit_string state in
   check_no_errors new_state.diags;
   let name =
     match name_opt with
@@ -314,7 +314,7 @@ let test_unicode_escape_valid_small () =
 
 let test_unicode_escape_valid_big () =
   let state, interner = make_test_state "\"\\U{E001}\"" in
-  let new_state, name_opt, _span = Lexer.scan_string_literal state in
+  let new_state, name_opt, _span = Lexer.scan_lit_string state in
   check_no_errors new_state.diags;
   let name =
     match name_opt with
@@ -325,7 +325,7 @@ let test_unicode_escape_valid_big () =
 
 let test_unicode_escape_empty () =
   let state, _ = make_test_state "\"\\u{}\"" in
-  let new_state, _name, _span = Lexer.scan_string_literal state in
+  let new_state, _name, _span = Lexer.scan_lit_string state in
   (check bool)
     "unicode empty escape has errors"
     true
@@ -333,7 +333,7 @@ let test_unicode_escape_empty () =
 
 let test_unicode_escape_missing_brace () =
   let state, _ = make_test_state "\"\\u00A9\"" in
-  let new_state, _name, _span = Lexer.scan_string_literal state in
+  let new_state, _name, _span = Lexer.scan_lit_string state in
   (check bool)
     "unicode missing brace has errors"
     true
@@ -341,7 +341,7 @@ let test_unicode_escape_missing_brace () =
 
 let test_unicode_escape_invalid_hex () =
   let state, _ = make_test_state "\"\\u{GGGG}\"" in
-  let new_state, _name, _span = Lexer.scan_string_literal state in
+  let new_state, _name, _span = Lexer.scan_lit_string state in
   (check bool)
     "unicode invalid hex has errors"
     true
@@ -349,7 +349,7 @@ let test_unicode_escape_invalid_hex () =
 
 let test_unicode_escape_exceed_small_limit () =
   let state, _ = make_test_state "\"\\u{110000}\"" in
-  let new_state, _name, _span = Lexer.scan_string_literal state in
+  let new_state, _name, _span = Lexer.scan_lit_string state in
   (check bool)
     "unicode exceeds small limit has errors"
     true
@@ -357,7 +357,7 @@ let test_unicode_escape_exceed_small_limit () =
 
 let test_unicode_escape_incomplete () =
   let state, _ = make_test_state "\"\\u{" in
-  let new_state, _name, _span = Lexer.scan_string_literal state in
+  let new_state, _name, _span = Lexer.scan_lit_string state in
   (check bool)
     "unicode incomplete has errors"
     true
@@ -365,7 +365,7 @@ let test_unicode_escape_incomplete () =
 
 let test_unicode_escape_in_rune () =
   let state, _ = make_test_state "'\\u{41}'" in
-  let new_state, char_val, _span = Lexer.scan_rune_literal state in
+  let new_state, char_val, _span = Lexer.scan_lit_rune state in
   check_no_errors new_state.diags;
   (check char) "unicode rune" 'A' char_val
 
@@ -404,7 +404,7 @@ let test_template_empty_braces () =
 
 let test_utf8_valid_2byte () =
   let state, interner = make_test_state "\"\xc2\xa9\"" in
-  let new_state, name_opt, _span = Lexer.scan_string_literal state in
+  let new_state, name_opt, _span = Lexer.scan_lit_string state in
   check_no_errors new_state.diags;
   let name =
     match name_opt with
@@ -415,7 +415,7 @@ let test_utf8_valid_2byte () =
 
 let test_utf8_valid_3byte () =
   let state, interner = make_test_state "\"\xe2\x98\x83\"" in
-  let new_state, name_opt, _span = Lexer.scan_string_literal state in
+  let new_state, name_opt, _span = Lexer.scan_lit_string state in
   check_no_errors new_state.diags;
   let name =
     match name_opt with
@@ -426,7 +426,7 @@ let test_utf8_valid_3byte () =
 
 let test_utf8_valid_4byte () =
   let state, interner = make_test_state "\"\xf0\x9f\x98\x80\"" in
-  let new_state, name_opt, _span = Lexer.scan_string_literal state in
+  let new_state, name_opt, _span = Lexer.scan_lit_string state in
   check_no_errors new_state.diags;
   let name =
     match name_opt with
