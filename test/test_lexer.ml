@@ -47,13 +47,10 @@ let test_char_preds () =
 
 let test_state_functions () =
   let state, _ = make_test_state "hello" in
-  (check (option char)) "peek_char first" (Some 'h') (Lexer.peek_char_opt state);
+  (check (option char)) "peek first" (Some 'h') (Lexer.peek state);
   let state2 = Lexer.adv state in
   (check int) "adv position" 1 state2.pos;
-  (check (option char))
-    "peek_char after advance"
-    (Some 'e')
-    (Lexer.peek_char_opt state2)
+  (check (option char)) "peek after advance" (Some 'e') (Lexer.peek state2)
 
 let test_numbers_decimal () =
   let state, _ = make_test_state "42" in
@@ -185,19 +182,17 @@ let test_runes_invalid_escape () =
 
 let test_templates_basic () =
   let state, interner = make_test_state "$\"hello world\"" in
-  let new_state, token, _span = Lexer.scan_template_or_dollar state in
+  let new_state, content, _span = Lexer.scan_template_string state in
   check_no_errors new_state.diags;
-  match token with
-  | Token.LitTemplate name -> check_string_value interner name "hello world"
-  | _ -> fail "Expected template token"
+  let name = Interner.intern interner content in
+  check_string_value interner name "hello world"
 
 let test_templates_escape () =
   let state, interner = make_test_state "$\"hello\\nworld\"" in
-  let new_state, token, _span = Lexer.scan_template_or_dollar state in
+  let new_state, content, _span = Lexer.scan_template_string state in
   check_no_errors new_state.diags;
-  match token with
-  | Token.LitTemplate name -> check_string_value interner name "hello\nworld"
-  | _ -> fail "Expected template token"
+  let name = Interner.intern interner content in
+  check_string_value interner name "hello\nworld"
 
 let test_idents_basic () =
   let state, interner = make_test_state "hello_world" in
@@ -267,7 +262,7 @@ let test_symbols_dollar () =
 
 let test_dollar_standalone () =
   let state, _ = make_test_state "$x" in
-  let new_state, token, _span = Lexer.scan_template_or_dollar state in
+  let new_state, token, _span = Lexer.scan_symbol state in
   check_no_errors new_state.diags;
   assert (token = Token.Dollar);
   (check int) "dollar standalone position" 1 new_state.pos
@@ -303,10 +298,10 @@ let test_whitespace_space () =
 
 let test_unicode_escape_valid_small () =
   let state, interner = make_test_state "\"\\u{00A9}\"" in
-  let new_state, name_opt, _span = Lexer.scan_lit_string state in
+  let new_state, content_opt, _span = Lexer.scan_lit_string state in
   check_no_errors new_state.diags;
   let name =
-    match name_opt with
+    match content_opt with
     | Some s -> Interner.intern interner s
     | None -> Interner.empty_name interner
   in
@@ -314,10 +309,10 @@ let test_unicode_escape_valid_small () =
 
 let test_unicode_escape_valid_big () =
   let state, interner = make_test_state "\"\\U{E001}\"" in
-  let new_state, name_opt, _span = Lexer.scan_lit_string state in
+  let new_state, content_opt, _span = Lexer.scan_lit_string state in
   check_no_errors new_state.diags;
   let name =
-    match name_opt with
+    match content_opt with
     | Some s -> Interner.intern interner s
     | None -> Interner.empty_name interner
   in
@@ -371,7 +366,7 @@ let test_unicode_escape_in_rune () =
 
 let test_template_extra_closing_brace () =
   let state, _ = make_test_state "$\"hello}world\"" in
-  let new_state, _token, _span = Lexer.scan_template_or_dollar state in
+  let new_state, _content, _span = Lexer.scan_template_string state in
   (check bool)
     "template extra closing brace has errors"
     true
@@ -379,7 +374,7 @@ let test_template_extra_closing_brace () =
 
 let test_template_unclosed_opening_brace () =
   let state, _ = make_test_state "$\"hello{world\"" in
-  let new_state, _token, _span = Lexer.scan_template_or_dollar state in
+  let new_state, _content, _span = Lexer.scan_template_string state in
   (check bool)
     "template unclosed opening brace has errors"
     true
@@ -387,27 +382,24 @@ let test_template_unclosed_opening_brace () =
 
 let test_template_nested_braces () =
   let state, interner = make_test_state "$\"hello {user{name} } end\"" in
-  let new_state, token, _span = Lexer.scan_template_or_dollar state in
+  let new_state, content, _span = Lexer.scan_template_string state in
   check_no_errors new_state.diags;
-  match token with
-  | Token.LitTemplate name ->
-    check_string_value interner name "hello {user{name} } end"
-  | _ -> fail "Expected template token"
+  let name = Interner.intern interner content in
+  check_string_value interner name "hello {user{name} } end"
 
 let test_template_empty_braces () =
   let state, interner = make_test_state "$\"hello{}world\"" in
-  let new_state, token, _span = Lexer.scan_template_or_dollar state in
+  let new_state, content, _span = Lexer.scan_template_string state in
   check_no_errors new_state.diags;
-  match token with
-  | Token.LitTemplate name -> check_string_value interner name "hello{}world"
-  | _ -> fail "Expected template token"
+  let name = Interner.intern interner content in
+  check_string_value interner name "hello{}world"
 
 let test_utf8_valid_2byte () =
   let state, interner = make_test_state "\"\xc2\xa9\"" in
-  let new_state, name_opt, _span = Lexer.scan_lit_string state in
+  let new_state, content_opt, _span = Lexer.scan_lit_string state in
   check_no_errors new_state.diags;
   let name =
-    match name_opt with
+    match content_opt with
     | Some s -> Interner.intern interner s
     | None -> Interner.empty_name interner
   in
@@ -415,10 +407,10 @@ let test_utf8_valid_2byte () =
 
 let test_utf8_valid_3byte () =
   let state, interner = make_test_state "\"\xe2\x98\x83\"" in
-  let new_state, name_opt, _span = Lexer.scan_lit_string state in
+  let new_state, content_opt, _span = Lexer.scan_lit_string state in
   check_no_errors new_state.diags;
   let name =
-    match name_opt with
+    match content_opt with
     | Some s -> Interner.intern interner s
     | None -> Interner.empty_name interner
   in
@@ -426,10 +418,10 @@ let test_utf8_valid_3byte () =
 
 let test_utf8_valid_4byte () =
   let state, interner = make_test_state "\"\xf0\x9f\x98\x80\"" in
-  let new_state, name_opt, _span = Lexer.scan_lit_string state in
+  let new_state, content_opt, _span = Lexer.scan_lit_string state in
   check_no_errors new_state.diags;
   let name =
-    match name_opt with
+    match content_opt with
     | Some s -> Interner.intern interner s
     | None -> Interner.empty_name interner
   in
