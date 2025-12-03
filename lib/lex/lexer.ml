@@ -56,10 +56,8 @@ let lookup_escape c =
   | '0' -> '\000'
   | _ -> c
 
-(* Single ordered symbol table - longest to shortest *)
 let symbols =
   [
-    (* 2-char symbols *)
     (">=", GtEq)
   ; ("<=", LtEq)
   ; ("!=", BangEq)
@@ -69,7 +67,7 @@ let symbols =
   ; ("|>", PipeGt)
   ; ("->", MinusGt)
   ; ("=>", EqGt)
-  ; (":=", ColonEq) (* 1-char symbols *)
+  ; (":=", ColonEq)
   ; ("!", Bang)
   ; ("$", Dollar)
   ; ("&", Amp)
@@ -129,7 +127,6 @@ let keyword_table =
   ; ("while", KwWhile)
   ]
 
-(* Fail-fast functional scanner type *)
 type 'a scanner = state -> ('a * state, state) Result.t
 
 let bind_error scanner fallback st =
@@ -380,7 +377,6 @@ let scan_error_chars st =
     else Result.Error st
   else Result.Error st
 
-(* Main fail-fast lexer *)
 let lex_next_token st =
   let start = st.pos in
   if st.pos >= st.len then Result.Ok (EOF, span st start)
