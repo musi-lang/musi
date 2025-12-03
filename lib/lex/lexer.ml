@@ -175,11 +175,9 @@ let rec scan_string_content st =
 
 let scan_string st start =
   advance st;
-  (* skip opening quote *)
   let content = scan_string_content st in
   if st.pos < st.len && st.source.[st.pos] = '"' then (
     advance st;
-    (* skip closing quote *)
     LitString (Interner.intern st.interner content))
   else (
     add_err st Error.E0201 start [ "string" ];
@@ -187,7 +185,6 @@ let scan_string st start =
 
 let scan_rune st start =
   advance st;
-  (* skip opening quote *)
   if st.pos >= st.len then (
     add_err st Error.E0201 start [ "rune" ];
     LitRune '\000')
