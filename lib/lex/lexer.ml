@@ -259,8 +259,8 @@ let tokenize source file_id interner =
     let token = next_token st in
     let token_span = Span.make st.file_id start st.pos in
     if token = EOF then
-      let final_tokens = (EOF, token_span) :: List.rev acc in
-      (final_tokens, st.diags)
+      let rev_tokens = (EOF, token_span) :: List.rev acc in
+      (rev_tokens, st.diags)
     else
       match token with
       | Newline -> collect acc
