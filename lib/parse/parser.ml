@@ -14,6 +14,22 @@ module type S = sig
     ; diags : Diagnostic.bag
   }
 
+  val mk_state :
+    string -> Span.file_id -> (Token.t * Span.t) list -> Interner.t -> state
+
+  val parse :
+       string
+    -> Span.file_id
+    -> Interner.t
+    -> (Token.t * Span.t) list
+    -> prog * Diagnostic.bag
+
+  val peek : state -> (Token.t * Span.t) option
+  val parse_expr : state -> state * Node.expr
+  val parse_pat : state -> state * Node.pat
+  val parse_typ : state -> state * Node.typ
+  val parse_stmt : state -> state * Node.stmt
+
   val parse :
        string
     -> Span.file_id
@@ -144,7 +160,7 @@ module Make () : S = struct
       ( err st Error.E1003 (span st) [ "attribute argument"; "" ]
       , AttrIdent (Interner.empty_name st.interner) )
 
-  let rec expr st = expr_prec st 0
+  let rec parse_expr st = expr_prec st 0
 
   and expr_prec st min =
     let s, l = expr_prefix st in
@@ -170,7 +186,7 @@ module Make () : S = struct
   and expr_infix_chain st l min =
     match peek st with
     | Some (Token.LtMinus, _) ->
-      let s, r = adv_then expr st in
+      let s, r = adv_then parse_expr st in
       let tgt =
         match l.Node.kind with
         | ExprIdent n -> n
@@ -208,7 +224,7 @@ module Make () : S = struct
         let s, b = adv_then block st in
         (s, mk_node (ExprBlock b) s))
     | Some (Token.LParen, _) -> (
-      let s, es = parens (sep_by expr Token.Comma) st in
+      let s, es = parens (sep_by parse_expr Token.Comma) st in
       match es with
       | [] -> (s, mk_node ExprError s)
       | [ x ] -> (s, x)
@@ -218,7 +234,7 @@ module Make () : S = struct
     | Some (Token.KwFor, _) -> expr_for st
     | Some (Token.KwWhile, _) -> expr_while st
     | Some (Token.KwDefer, _) ->
-      let s, e = adv_then expr st in
+      let s, e = adv_then parse_expr st in
       (s, mk_node (ExprDefer e) s)
     | Some (Token.KwBreak, _) -> (
       let s = adv st in
@@ -226,7 +242,7 @@ module Make () : S = struct
       | Some (Token.Semi, _) | Some (Token.RBrace, _) | None ->
         (s, mk_node (ExprBreak None) s)
       | _ ->
-        let s', e = expr s in
+        let s', e = parse_expr s in
         (s', mk_node (ExprBreak (Some e)) s'))
     | Some (Token.KwCycle, _) -> (adv st, mk_node ExprCycle st)
     | Some (Token.KwUnsafe, _) ->
@@ -248,11 +264,11 @@ module Make () : S = struct
         ; span = sp
         } )
     | Some (Token.LBrack, _) ->
-      let s, i = adv_then expr st in
+      let s, i = adv_then parse_expr st in
       let s' = expect s Token.RBrack "]" in
       (s', mk_node (ExprIndex { base = l; index = i; optional = false }) s')
     | Some (Token.LParen, _) ->
-      let s, a = adv_then (sep_by expr Token.Comma) st in
+      let s, a = adv_then (sep_by parse_expr Token.Comma) st in
       let s' = expect s Token.RParen ")" in
       ( s'
       , mk_node
@@ -263,10 +279,10 @@ module Make () : S = struct
   and block st =
     braces
       (fun s ->
-        let s', stmts = many stmt s in
+        let s', stmts = many parse_stmt s in
         match peek s' with
         | Some (Token.KwReturn, _) ->
-          let s'', r = adv_then expr s' in
+          let s'', r = adv_then parse_expr s' in
           let s''' = expect s'' Token.Semi ";" in
           (s''', { Node.stmts; ret = Some r })
         | _ -> (s', { Node.stmts; ret = None }))
@@ -286,26 +302,26 @@ module Make () : S = struct
   and cond st =
     match peek st with
     | Some (Token.KwCase, _) ->
-      let s, p = adv_then pat st in
+      let s, p = adv_then parse_pat st in
       let s' = expect s Token.ColonEq ":=" in
-      let s'', v = expr s' in
+      let s'', v = parse_expr s' in
       (s'', CondCase { pat = p; value = v })
     | _ ->
-      let s, e = expr st in
+      let s, e = parse_expr st in
       (s, CondExpr e)
 
   and expr_match st =
     let s = expect st Token.KwMatch "match" in
-    let s', sc = expr s in
+    let s', sc = parse_expr s in
     let s'', arms = braces (many match_arm) s' in
     (s'', mk_node (ExprMatch { scrutinee = sc; arms }) s'')
 
   and match_arm st =
     let s = expect st Token.KwCase "case" in
-    let s', p = pat s in
-    let s'', g = opt (adv_then expr) s' in
+    let s', p = parse_pat s in
+    let s'', g = opt (adv_then parse_expr) s' in
     let s''' = expect s'' Token.EqGt "=>" in
-    let s'''', b = expr s''' in
+    let s'''', b = parse_expr s''' in
     let s''''' =
       match peek s'''' with Some (Token.Comma, _) -> adv s'''' | _ -> s''''
     in
@@ -315,8 +331,8 @@ module Make () : S = struct
     let s = expect st Token.KwFor "for" in
     let s', b = for_bind s in
     let s'' = expect s' Token.KwIn "in" in
-    let s''', r = expr s'' in
-    let s'''', g = opt (adv_then expr) s''' in
+    let s''', r = parse_expr s'' in
+    let s'''', g = opt (adv_then parse_expr) s''' in
     let s''''', bd = block s'''' in
     ( s'''''
     , mk_node (ExprFor { binding = b; range = r; guard = g; body = bd }) s'''''
@@ -325,7 +341,7 @@ module Make () : S = struct
   and for_bind st =
     match peek st with
     | Some (Token.KwCase, _) ->
-      let s, p = adv_then pat st in
+      let s, p = adv_then parse_pat st in
       (s, ForCase p)
     | Some (Token.Ident _, _) ->
       let s, n, _ = ident st in
@@ -337,7 +353,7 @@ module Make () : S = struct
   and expr_while st =
     let s = expect st Token.KwWhile "while" in
     let s', c = cond s in
-    let s'', g = opt (adv_then expr) s' in
+    let s'', g = opt (adv_then parse_expr) s' in
     let s''', bd = block s'' in
     (s''', mk_node (ExprWhile { cond = c; guard = g; body = bd }) s''')
 
@@ -350,11 +366,11 @@ module Make () : S = struct
     | Some (Token.Dot, _) ->
       let s, n, _ = adv_then ident st in
       let s' = expect s Token.ColonEq ":=" in
-      let s'', v = expr s' in
+      let s'', v = parse_expr s' in
       (s'', { Node.shorthand = false; name = n; value = v })
     | Some (Token.Ident n, _) ->
       let s = expect (adv st) Token.ColonEq ":=" in
-      let s', v = expr s in
+      let s', v = parse_expr s in
       (s', { Node.shorthand = true; name = n; value = v })
     | _ ->
       let _ = span st in
@@ -380,7 +396,7 @@ module Make () : S = struct
     let s'', nm = opt ident_name s' in
     let s''', tp = opt (angles (sep_by ident_name Token.Comma)) s'' in
     let s'''', prm = fn_params s''' in
-    let s''''', rt = opt (adv_then typ) s'''' in
+    let s''''', rt = opt (adv_then parse_typ) s'''' in
     let s'''''', bd = block s''''' in
     ( s''''''
     , mk_node
@@ -398,7 +414,7 @@ module Make () : S = struct
   and expr_record st =
     let s = expect st Token.KwRecord "record" in
     let s', tp = opt (angles (sep_by ident_name Token.Comma)) s in
-    let s'', tb = opt (adv_then typ) s' in
+    let s'', tb = opt (adv_then parse_typ) s' in
     let s''', (fs, bd) =
       braces
         (fun st ->
@@ -427,10 +443,10 @@ module Make () : S = struct
     let s, n, _ = ident st in
     match peek s with
     | Some (Token.Colon, _) ->
-      let s', t = adv_then typ s in
+      let s', t = adv_then parse_typ s in
       (s', `F { Node.name = n; typ = t })
     | Some (Token.ColonEq, _) ->
-      let s', e = adv_then expr s in
+      let s', e = adv_then parse_expr s in
       ( s'
       , `M
           {
@@ -457,13 +473,13 @@ module Make () : S = struct
   and choice_case st =
     let s = expect st Token.KwCase "case" in
     let s', n, _ = ident s in
-    let s'', fs = opt (parens (sep_by typ Token.Comma)) s' in
+    let s'', fs = opt (parens (sep_by parse_typ Token.Comma)) s' in
     (s'', { Node.name = n; fields = Option.value fs ~default:[] })
 
   and expr_trait st =
     let s = expect st Token.KwTrait "trait" in
     let s', tp = opt (angles (sep_by ident_name Token.Comma)) s in
-    let s'', tb = opt (adv_then typ) s' in
+    let s'', tb = opt (adv_then parse_typ) s' in
     let s''', its = braces (sep_by trait_item Token.Comma) s'' in
     ( s'''
     , mk_node
@@ -478,10 +494,10 @@ module Make () : S = struct
   and trait_item st =
     let s, n, _ = ident st in
     let s' = expect s Token.Colon ":" in
-    let s'', t = typ s' in
+    let s'', t = parse_typ s' in
     (s'', { Node.name = n; typ = Some t })
 
-  and pat st =
+  and parse_pat st =
     match peek st with
     | Some (Token.KwVal, sp) ->
       let s, n, _ = adv_then ident st in
@@ -503,11 +519,11 @@ module Make () : S = struct
         let s', fs = braces (sep_by pat_field Token.Comma) s in
         (s', { Node.kind = PatRecord { name = n; fields = fs }; span = span s' })
       | Some (Token.LParen, _) ->
-        let s', args = parens (sep_by pat Token.Comma) s in
+        let s', args = parens (sep_by parse_pat Token.Comma) s in
         (s', { Node.kind = PatCtor { name = n; args }; span = span s' })
       | _ -> (s, { Node.kind = PatIdent n; span = sp }))
     | Some (Token.LParen, _) -> (
-      let s, ps = parens (sep_by pat Token.Comma) st in
+      let s, ps = parens (sep_by parse_pat Token.Comma) st in
       match ps with
       | [] -> (err s Error.E1103 (span s) [], mk_node PatError s)
       | [ x ] -> (s, x)
@@ -517,13 +533,13 @@ module Make () : S = struct
   and pat_field st =
     let s = expect st Token.Dot "." in
     let s', n, _ = ident s in
-    let s'', p = opt (adv_then pat) s' in
+    let s'', p = opt (adv_then parse_pat) s' in
     (s'', { Node.name = n; pat = p })
 
-  and typ st =
+  and parse_typ st =
     match peek st with
     | Some (Token.Caret, _) ->
-      let s, t = adv_then typ st in
+      let s, t = adv_then parse_typ st in
       (s, mk_node (TypPtr t) s)
     | Some (Token.LBrack, _) ->
       let s = adv st in
@@ -531,29 +547,29 @@ module Make () : S = struct
         match peek s with
         | Some (Token.RBrack, _) -> (s, None)
         | _ ->
-          let s', e = expr s in
+          let s', e = parse_expr s in
           (s', Some e)
       in
       let s'' = expect s' Token.RBrack "]" in
-      let s''', el = typ s'' in
+      let s''', el = parse_typ s'' in
       (s''', mk_node (TypArr { size = sz; elem = el }) s''')
     | Some (Token.Ident _, _) -> (
       let s, n, sp = ident st in
       match peek s with
       | Some (Token.Lt, _) ->
-        let s', args = angles (sep_by typ Token.Comma) s in
+        let s', args = angles (sep_by parse_typ Token.Comma) s in
         (s', mk_node (TypApp { base = n; args }) s')
       | _ -> (s, { Node.kind = TypIdent n; span = sp }))
     | Some (Token.LParen, _) -> (
-      let s, ts = parens (sep_by typ Token.Comma) st in
+      let s, ts = parens (sep_by parse_typ Token.Comma) st in
       match ts with
       | [] -> (err s Error.E1104 (span s) [], mk_node TypError s)
       | [ x ] -> (s, x)
       | f :: r -> (s, mk_node (TypTuple (f, r)) s))
     | Some (Token.KwFn, _) ->
       let s = adv st in
-      let s', ps = parens (sep_by typ Token.Comma) s in
-      let s'', rt = opt (adv_then typ) s' in
+      let s', ps = parens (sep_by parse_typ Token.Comma) s in
+      let s'', rt = opt (adv_then parse_typ) s' in
       (s'', mk_node (TypFn { params = ps; ret = rt }) s'')
     | Some (Token.LBrace, _) ->
       let s, fs = braces (sep_by typ_rec_field Token.Comma) st in
@@ -565,17 +581,17 @@ module Make () : S = struct
   and typ_rec_field st =
     let s, n, _ = ident st in
     let s' = expect s Token.Colon ":" in
-    let s'', t = typ s' in
+    let s'', t = parse_typ s' in
     (s'', { Node.name = n; typ = t })
 
   and fn_params st = parens (sep_by fn_param Token.Comma) st
 
   and fn_param st =
     let s, n, _ = ident st in
-    let s', t = opt (adv_then typ) s in
+    let s', t = opt (adv_then parse_typ) s in
     (s', { Node.name = n; typ = t })
 
-  and stmt st =
+  and parse_stmt st =
     let s, a = attr st in
     let s', kind =
       match peek s with
@@ -584,7 +600,7 @@ module Make () : S = struct
       | Some (Token.KwVal, _) | Some (Token.KwVar, _) -> stmt_bind s
       | Some (Token.KwExtern, _) -> stmt_extern s
       | _ ->
-        let s'', e = expr s in
+        let s'', e = parse_expr s in
         (s'', StmtExpr e)
     in
     (s', { Node.attr = a; kind; span = span s' })
@@ -649,9 +665,9 @@ module Make () : S = struct
         (err st Error.E1003 sp [ "val or var"; "" ], false, sp)
     in
     let s', n, _ = ident s in
-    let s'', t = opt (adv_then typ) s' in
+    let s'', t = opt (adv_then parse_typ) s' in
     let s''' = expect s'' Token.ColonEq ":=" in
-    let s'''', v = expr s''' in
+    let s'''', v = parse_expr s''' in
     let s''''' = expect s'''' Token.Semi ";" in
     (s''''', StmtBind { mutable_ = mut; name = n; typ = t; value = v })
 
@@ -671,7 +687,7 @@ module Make () : S = struct
     let s = expect st Token.KwFn "fn" in
     let s', n, _ = ident s in
     let s'', _ = fn_params s' in
-    let s''', t = opt (adv_then typ) s'' in
+    let s''', t = opt (adv_then parse_typ) s'' in
     (s''', { Node.name = n; typ = t })
 
   let prog st =
@@ -680,7 +696,7 @@ module Make () : S = struct
       | Some (Token.EOF, _) -> (s, List.rev acc)
       | Some (Token.Newline, _) -> loop (adv s) acc
       | _ ->
-        let s', st = stmt s in
+        let s', st = parse_stmt s in
         loop s' (st :: acc)
     in
     loop st []
