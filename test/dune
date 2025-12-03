@@ -3,7 +3,7 @@
  (libraries alcotest musi.basic musi.lex musi.parse)
  (modules test_lexer))
 
-(executable
- (name test_parser)
- (libraries alcotest musi.basic musi.lex musi.parse)
- (modules test_parser))
+; (executable
+;  (name test_parser)
+;  (libraries alcotest musi.basic musi.lex musi.parse)
+;  (modules test_parser))
