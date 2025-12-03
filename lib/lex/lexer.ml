@@ -11,7 +11,7 @@ module type S = sig
   }
 
   val mk_state : string -> Span.file_id -> Interner.t -> state
-  val peek_char_opt : state -> char option
+  val peek_opt : state -> char option
   val advance : state -> state
   val mk_span : state -> int -> Span.t
   val add_error : state -> string -> int -> int -> state
@@ -25,6 +25,25 @@ module type S = sig
     -> (Token.t * Span.t) list * Diagnostic.bag
 
   val lex_token : state -> state * Token.t * Span.t
+
+  (* Additional functions for testing *)
+  val is_alpha : char -> bool
+  val is_digit : char -> bool
+  val is_whitespace : char -> bool
+  val is_xdigit : char -> bool
+  val is_bdigit : char -> bool
+  val is_odigit : char -> bool
+  val is_ident_start : char -> bool
+  val is_ident_cont : char -> bool
+  val scan_number : state -> state * string * Span.t
+  val scan_string : state -> state * Interner.name * Span.t
+  val scan_rune : state -> state * char * Span.t
+  val scan_template_or_dollar : state -> state * Token.t * Span.t
+  val scan_ident : state -> state * Interner.name * Span.t
+  val scan_symbol : state -> state * Token.t * Span.t
+  val scan_line_comment : state -> state * string * Span.t
+  val scan_block_comment : state -> state * string
+  val scan_whitespace : state -> state * unit * Span.t
 end
 
 module Make () : S = struct
@@ -37,32 +56,6 @@ module Make () : S = struct
     ; diags : Diagnostic.bag
   }
 
-  let mk_state source file_id interner =
-    {
-      source
-    ; pos = 0
-    ; len = String.length source
-    ; file_id
-    ; interner
-    ; diags = Diagnostic.empty_bag
-    }
-
-  let peek_char_opt st =
-    if st.pos >= st.len then None else Some st.source.[st.pos]
-
-  let advance st = { st with pos = st.pos + 1 }
-  let mk_span st start = Span.make st.file_id start st.pos
-
-  let add_error st msg start end_ =
-    let sp = Span.make st.file_id start end_ in
-    { st with diags = Diagnostic.add st.diags (Diagnostic.error msg sp) }
-
-  let add_error_code st code start end_ args =
-    let sp = Span.make st.file_id start end_ in
-    { st with diags = Diagnostic.add st.diags (Error.diag code sp args) }
-
-  let extract st s e = String.sub st.source s (e - s)
-
   let classify = function
     | 'a' .. 'z' | 'A' .. 'Z' -> `Alpha
     | '0' .. '9' -> `Digit
@@ -73,19 +66,30 @@ module Make () : S = struct
 
   let is_alpha c = classify c = `Alpha
   let is_digit c = classify c = `Digit
+
   let is_whitespace c = classify c = `Space
 
-  let is_ident_start c =
+  and is_ident_start c =
     match classify c with `Alpha | `Underscore -> true | _ -> false
 
-  let is_ident_cont c =
+  and is_ident_cont c =
     match classify c with `Alpha | `Digit | `Underscore -> true | _ -> false
 
-  let is_xdigit c =
+  and is_xdigit c =
     is_digit c || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
 
-  let is_bdigit c = c = '0' || c = '1'
-  let is_odigit c = c >= '0' && c <= '7'
+  and is_bdigit c = c = '0' || c = '1'
+  and is_odigit c = c >= '0' && c <= '7'
+
+  let mk_state source file_id interner =
+    {
+      source
+    ; pos = 0
+    ; len = String.length source
+    ; file_id
+    ; interner
+    ; diags = Diagnostic.empty_bag
+    }
 
   let escape_chars =
     [
@@ -106,7 +110,23 @@ module Make () : S = struct
 
   let is_utf8_segment_cont b = b land 0xC0 = 0x80
 
-  let check_utf8_char st pos =
+  let rec peek_opt st =
+    if st.pos >= st.len then None else Some st.source.[st.pos]
+
+  and advance st = { st with pos = st.pos + 1 }
+  and mk_span st start = Span.make st.file_id start st.pos
+
+  and add_error st msg start end_ =
+    let sp = Span.make st.file_id start end_ in
+    { st with diags = Diagnostic.add st.diags (Diagnostic.error msg sp) }
+
+  and add_error_code st code start end_ args =
+    let sp = Span.make st.file_id start end_ in
+    { st with diags = Diagnostic.add st.diags (Error.diag code sp args) }
+
+  and extract st s e = String.sub st.source s (e - s)
+
+  and check_utf8_char st pos =
     if pos >= st.len then (pos, None)
     else
       let first = Char.code st.source.[pos] in
@@ -122,17 +142,16 @@ module Make () : S = struct
         if exp = 0 then (pos + 1, Some (Error.E0002, pos, pos + 1))
         else if pos + exp > st.len then (st.len, Some (Error.E0003, pos, st.len))
         else
-          let rec chk idx =
-            if idx >= pos + exp then None
-            else if not (is_utf8_segment_cont (Char.code st.source.[idx])) then
-              Some idx
-            else chk (idx + 1)
-          in
-          match chk (pos + 1) with
+          match chk_utf8_segment st (pos + 1) pos exp with
           | Some inv -> (pos + exp, Some (Error.E0001, inv, inv + 1))
           | None -> (pos + exp, None)
 
-  let find_rbrace content len start =
+  and chk_utf8_segment st idx pos exp =
+    if idx >= pos + exp then None
+    else if not (is_utf8_segment_cont (Char.code st.source.[idx])) then Some idx
+    else chk_utf8_segment st (idx + 1) pos exp
+
+  and find_rbrace content len start =
     let rec loop p =
       if p >= len then None
       else if content.[p] = '}' then Some p
@@ -182,13 +201,13 @@ module Make () : S = struct
     loop 0;
     Buffer.contents buf
 
-  let scan_while st start pred =
+  let rec scan_while st start pred =
     let rec loop p =
       if p >= st.len || not (pred st.source.[p]) then p else loop (p + 1)
     in
     loop start
 
-  let scan_number_chars st start valid base =
+  and scan_number_chars st start valid base =
     let rec loop p s =
       if p >= st.len then (p, s)
       else
@@ -200,7 +219,7 @@ module Make () : S = struct
     in
     loop start st
 
-  let scan_decimal st start =
+  and scan_decimal st start =
     let rec loop pos s dots =
       if pos >= st.len then (pos, s, dots)
       else
@@ -215,7 +234,7 @@ module Make () : S = struct
     let ep, fs, _ = loop st.pos st 0 in
     ({ fs with pos = ep }, extract st start ep, mk_span st start)
 
-  let scan_based_number st start pfx valid base =
+  and scan_based_number st start pfx valid base =
     let pos = st.pos + pfx in
     let mkErr s =
       { (add_error_code s Error.E0103 start pos [ base ]) with pos }
@@ -226,7 +245,7 @@ module Make () : S = struct
       if ep = pos then (mkErr fs, extract st start ep, mk_span st start)
       else ({ fs with pos = ep }, extract st start ep, mk_span st start)
 
-  let scan_number st =
+  and scan_number st =
     let start = st.pos in
     if st.pos + 1 < st.len && st.source.[st.pos] = '0' then
       match st.source.[st.pos + 1] with
@@ -244,7 +263,7 @@ module Make () : S = struct
       | _ -> scan_decimal st start
     else scan_decimal st start
 
-  let scan_quoted st quote tpl =
+  and scan_quoted st quote tpl =
     let rec loop p depth extra =
       if p >= st.len then (p, true, extra)
       else
@@ -258,14 +277,7 @@ module Make () : S = struct
     in
     loop (st.pos + 1) 0 []
 
-  let is_valid_escape st pos =
-    pos >= 0
-    && pos + 1 < st.len
-    && (List.mem_assoc st.source.[pos + 1] escape_chars
-       || st.source.[pos + 1] = 'u'
-       || st.source.[pos + 1] = 'U')
-
-  let parse_unicode_escape st pos =
+  and parse_unicode_escape st pos =
     if
       pos + 1 < st.len
       && (st.source.[pos + 1] = 'u' || st.source.[pos + 1] = 'U')
@@ -302,7 +314,7 @@ module Make () : S = struct
           (add_error_code st Error.E0210 pos (min (pos + 3) st.len) [], pos + 2)
     else None
 
-  let validate_escapes st start ep =
+  and validate_escapes st start ep =
     let rec loop pos s =
       if pos >= ep - 1 then s
       else if st.source.[pos] = '\\' then
@@ -325,12 +337,19 @@ module Make () : S = struct
     in
     loop start st
 
-  let scan_whitespace st =
+  and is_valid_escape st pos =
+    pos >= 0
+    && pos + 1 < st.len
+    && (List.mem_assoc st.source.[pos + 1] escape_chars
+       || st.source.[pos + 1] = 'u'
+       || st.source.[pos + 1] = 'U')
+
+  and scan_whitespace st =
     ({ st with pos = scan_while st st.pos is_whitespace }, (), mk_span st st.pos)
 
-  let scan_newline st = (advance st, (), mk_span st st.pos)
+  and scan_newline st = (advance st, (), mk_span st st.pos)
 
-  let scan_line_comment st =
+  and scan_line_comment st =
     let rec loop p =
       if p >= st.len || st.source.[p] = '\n' then p else loop (p + 1)
     in
@@ -338,7 +357,7 @@ module Make () : S = struct
     let ep = loop start in
     ({ st with pos = ep }, extract st start ep, mk_span st st.pos)
 
-  let scan_block_comment st =
+  and scan_block_comment st =
     let start = st.pos in
     let rec loop p s =
       if p + 1 >= st.len then (p, add_error_code s Error.E0401 start st.pos [])
@@ -351,7 +370,7 @@ module Make () : S = struct
     let ep, fs = loop sc st in
     ({ fs with pos = ep }, if ep > sc + 2 then extract st sc (ep - 2) else "")
 
-  let scan_ident st =
+  and scan_ident st =
     let start = st.pos in
     let rec loop p s =
       if p >= st.len then (p, s)
@@ -369,7 +388,7 @@ module Make () : S = struct
     , Interner.intern st.interner (extract st start ep)
     , mk_span st start )
 
-  let scan_literal st quote lit_name process =
+  and scan_literal st quote lit_name process =
     let start = st.pos in
     let ep, unterm, extra = scan_quoted st quote (lit_name = "template") in
     let sp = mk_span st start in
@@ -390,17 +409,17 @@ module Make () : S = struct
       let fs = validate_escapes se (st.pos + 1) ep in
       ({ fs with pos = ep }, Some (process content), sp)
 
-  let intern_result st = function
+  and intern_result st = function
     | s, None, sp -> (s, Interner.empty_name st.interner, sp)
     | s, Some c, sp -> (s, Interner.intern st.interner c, sp)
 
-  let scan_string st =
+  and scan_string st =
     intern_result st (scan_literal st '"' "string" process_escape_chars)
 
-  let scan_template st =
+  and scan_template st =
     intern_result st (scan_literal st '"' "template" process_escape_chars)
 
-  let scan_rune st =
+  and scan_rune st =
     match
       scan_literal st '\'' "rune" (fun c ->
         if String.length c > 1 then process_escape_chars c else c)
@@ -419,7 +438,7 @@ module Make () : S = struct
         , sp )
       else (s, proc.[0], sp)
 
-  let scan_symbol st =
+  and scan_symbol st =
     let rec loop = function
       | [] -> None
       | (sym, tok) :: rest ->
@@ -440,7 +459,7 @@ module Make () : S = struct
       , Token.Error
       , mk_span st st.pos )
 
-  let scan_comment_or_symbol st =
+  and scan_comment_or_symbol st =
     if st.pos + 1 < st.len then
       match st.source.[st.pos + 1] with
       | '/' ->
@@ -452,37 +471,42 @@ module Make () : S = struct
       | _ -> scan_symbol st
     else scan_symbol st
 
-  let scan_template_or_dollar st =
+  and scan_template_or_dollar st =
     if st.pos + 1 < st.len && st.source.[st.pos + 1] = '"' then
       let fs, content, _ = scan_template { st with pos = st.pos + 2 } in
       (fs, Token.LitTemplate content, mk_span st st.pos)
     else scan_symbol st
 
-  let wrap scanner wrapper st =
+  and wrap scanner wrapper st =
     let s, r, sp = scanner st in
     (s, wrapper r, sp)
 
-  let dispatch_char c =
+  and dispatch_char c st =
     match c with
     | _ when is_whitespace c ->
-      wrap scan_whitespace (fun () -> Token.Whitespace)
-    | '\n' -> wrap scan_newline (fun () -> Token.Newline)
-    | '/' -> scan_comment_or_symbol
-    | '_' -> scan_symbol
+      wrap scan_whitespace (fun () -> Token.Whitespace) st
+    | '\n' -> wrap scan_newline (fun () -> Token.Newline) st
+    | '/' -> scan_comment_or_symbol st
+    | '_' -> scan_symbol st
     | _ when is_ident_start c ->
-      fun st ->
-        let s, name, sp = scan_ident st in
-        ( s
-        , Token.lookup_keyword st.interner (Interner.lookup st.interner name)
-        , sp )
-    | _ when is_digit c -> wrap scan_number (fun text -> Token.LitNumber text)
-    | '"' -> wrap scan_string (fun content -> Token.LitString content)
-    | '\'' -> wrap scan_rune (fun char -> Token.LitRune char)
-    | '$' -> scan_template_or_dollar
-    | _ -> scan_symbol
+      let s, name, sp = scan_ident st in
+      ( s
+      , Token.lookup_keyword st.interner (Interner.lookup st.interner name)
+      , sp )
+    | _ when is_digit c ->
+      let s, text, sp = scan_number st in
+      (s, Token.LitNumber text, sp)
+    | '"' ->
+      let s, content, sp = scan_string st in
+      (s, Token.LitString content, sp)
+    | '\'' ->
+      let s, char_val, sp = scan_rune st in
+      (s, Token.LitRune char_val, sp)
+    | '$' -> scan_template_or_dollar st
+    | _ -> scan_symbol st
 
-  let rec lex_token st =
-    match peek_char_opt st with
+  and lex_token st =
+    match peek_opt st with
     | None -> (st, Token.EOF, mk_span st st.pos)
     | Some c ->
       let code = Char.code c in
@@ -505,8 +529,8 @@ module Make () : S = struct
           ( { (add_error_code st msg s e []) with pos = max (st.pos + 1) e }
           , Token.Error
           , Span.make st.file_id s e )
-        | nxt, None -> (dispatch_char c) { st with pos = nxt }
-      else (dispatch_char c) st
+        | nxt, None -> dispatch_char c { st with pos = nxt }
+      else dispatch_char c st
 
   and tokenize source file_id interner =
     let rec loop st tokens =

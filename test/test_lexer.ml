@@ -47,16 +47,13 @@ let test_character_predicates () =
 
 let test_state_functions () =
   let state, _ = make_test_state "hello" in
-  (check (option char))
-    "peek_char_opt first"
-    (Some 'h')
-    (Lexer.peek_char_opt state);
+  (check (option char)) "peek_opt first" (Some 'h') (Lexer.peek_opt state);
   let state2 = Lexer.advance state in
   (check int) "advance position" 1 state2.pos;
   (check (option char))
-    "peek_char_opt after advance"
+    "peek_opt after advance"
     (Some 'e')
-    (Lexer.peek_char_opt state2)
+    (Lexer.peek_opt state2)
 
 let test_numbers_decimal () =
   let state, _ = make_test_state "42" in
