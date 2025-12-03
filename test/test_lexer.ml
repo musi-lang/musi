@@ -288,6 +288,61 @@ let test_tokenize () =
           (check bool) "delimiter match" true (expected = actual))
         expected_tokens
         actual_tokens)
+  ; test_case "thousand separators in decimal" `Quick (fun () ->
+      let interner = Interner.create () in
+      let tokens, diags = Lexer.tokenize "1_000_000" 42 interner in
+      check_no_errors diags;
+      (check int) "token count" 2 (List.length tokens);
+      match tokens with
+      | [ (Token.EOF, _); (Token.LitNumber "1_000_000", _) ] -> ()
+      | _ -> Alcotest.fail "Expected thousand separator number and EOF")
+  ; test_case "hexadecimal numbers" `Quick (fun () ->
+      let interner = Interner.create () in
+      let tokens1, diags1 = Lexer.tokenize "0xFF" 42 interner in
+      let tokens2, diags2 = Lexer.tokenize "0x1A_2B" 42 interner in
+      check_no_errors diags1;
+      check_no_errors diags2;
+      (check int) "hex token count" 2 (List.length tokens1);
+      (check int) "hex with separator token count" 2 (List.length tokens2);
+      match (tokens1, tokens2) with
+      | ( [ (Token.EOF, _); (Token.LitNumber "0xFF", _) ]
+        , [ (Token.EOF, _); (Token.LitNumber "0x1A_2B", _) ] ) ->
+        ()
+      | _ -> Alcotest.fail "Expected hex numbers and EOF")
+  ; test_case "octal numbers" `Quick (fun () ->
+      let interner = Interner.create () in
+      let tokens1, diags1 = Lexer.tokenize "0o755" 42 interner in
+      let tokens2, diags2 = Lexer.tokenize "0O7_5_5" 42 interner in
+      check_no_errors diags1;
+      check_no_errors diags2;
+      (check int) "octal token count" 2 (List.length tokens1);
+      (check int) "octal with separator token count" 2 (List.length tokens2);
+      match (tokens1, tokens2) with
+      | ( [ (Token.EOF, _); (Token.LitNumber "0o755", _) ]
+        , [ (Token.EOF, _); (Token.LitNumber "0O7_5_5", _) ] ) ->
+        ()
+      | _ -> Alcotest.fail "Expected octal numbers and EOF")
+  ; test_case "binary numbers" `Quick (fun () ->
+      let interner = Interner.create () in
+      let tokens1, diags1 = Lexer.tokenize "0b1010" 42 interner in
+      let tokens2, diags2 = Lexer.tokenize "0B1_0_1_0" 42 interner in
+      check_no_errors diags1;
+      check_no_errors diags2;
+      (check int) "binary token count" 2 (List.length tokens1);
+      (check int) "binary with separator token count" 2 (List.length tokens2);
+      match (tokens1, tokens2) with
+      | ( [ (Token.EOF, _); (Token.LitNumber "0b1010", _) ]
+        , [ (Token.EOF, _); (Token.LitNumber "0B1_0_1_0", _) ] ) ->
+        ()
+      | _ -> Alcotest.fail "Expected binary numbers and EOF")
+  ; test_case "decimal with fraction and separators" `Quick (fun () ->
+      let interner = Interner.create () in
+      let tokens, diags = Lexer.tokenize "1_234.567_890" 42 interner in
+      check_no_errors diags;
+      (check int) "decimal fraction token count" 2 (List.length tokens);
+      match tokens with
+      | [ (Token.EOF, _); (Token.LitNumber "1_234.567_890", _) ] -> ()
+      | _ -> Alcotest.fail "Expected decimal fraction with separators and EOF")
   ; test_case "complex expression" `Quick (fun () ->
       let interner = Interner.create () in
       let tokens, diags =

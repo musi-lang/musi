@@ -28,6 +28,8 @@ let is_space c = c = ' ' || c = '\t' || c = '\r'
 let is_ident_start c = is_letter c || c = '_'
 let is_ident_cont c = is_letter c || is_digit c || c = '_'
 let is_xdigit c = is_digit c || ('a' <= c && c <= 'f') || ('A' <= c && c <= 'F')
+let is_odigit c = '0' <= c && c <= '7'
+let is_bdigit c = '0' <= c && c <= '1'
 let peek st = if st.pos >= st.len then '\000' else st.source.[st.pos]
 
 let peek_n st n =
@@ -143,21 +145,68 @@ let rec scan_ident st start =
     | Some kw -> kw
     | None -> Ident (Interner.intern st.interner text)
 
-let rec scan_number st start =
-  if st.pos < st.len && is_digit st.source.[st.pos] then (
-    advance st;
-    scan_number st start)
+type number_base = Decimal | Hexadecimal | Octal | Binary
+
+let scan_digit_with_sep st digit_checker =
+  let rec scan_digits acc =
+    if st.pos < st.len then
+      match st.source.[st.pos] with
+      | '_' when st.pos + 1 < st.len && digit_checker st.source.[st.pos + 1] ->
+        advance_n st 2;
+        scan_digits (acc + 1)
+      | c when digit_checker c ->
+        advance st;
+        scan_digits (acc + 1)
+      | _ -> acc
+    else acc
+  in
+  scan_digits 0
+
+let scan_number st start =
+  let number_base =
+    if st.pos + 1 < st.len && st.source.[st.pos] = '0' then
+      match st.source.[st.pos + 1] with
+      | 'x' | 'X' ->
+        advance_n st 2;
+        Hexadecimal
+      | 'o' | 'O' ->
+        advance_n st 2;
+        Octal
+      | 'b' | 'B' ->
+        advance_n st 2;
+        Binary
+      | _ -> Decimal
+    else Decimal
+  in
+
+  let digit_checker =
+    match number_base with
+    | Decimal -> is_digit
+    | Hexadecimal -> is_xdigit
+    | Octal -> is_odigit
+    | Binary -> is_bdigit
+  in
+
+  if st.pos >= st.len || not (digit_checker st.source.[st.pos]) then (
+    add_err
+      st
+      Error.E0103
+      start
+      [
+        (match number_base with
+        | Decimal -> "decimal"
+        | Hexadecimal -> "hexadecimal"
+        | Octal -> "octal"
+        | Binary -> "binary")
+      ];
+    LitNumber (substr st start (st.pos - start)))
   else
-    let has_decimal = st.pos < st.len && st.source.[st.pos] = '.' in
-    if has_decimal then (
+    let _ = scan_digit_with_sep st digit_checker in
+    if number_base = Decimal && st.pos < st.len && st.source.[st.pos] = '.' then (
       advance st;
-      let rec scan_fraction st =
-        if st.pos < st.len && is_digit st.source.[st.pos] then (
-          advance st;
-          scan_fraction st)
-        else ()
-      in
-      scan_fraction st);
+      let _ = scan_digit_with_sep st is_digit in
+      ());
+
     LitNumber (substr st start (st.pos - start))
 
 type escape_checker = char -> bool
@@ -332,7 +381,6 @@ let rec try_symbol st start symbols =
 let next_token st =
   skip_whitespace st;
   let start = st.pos in
-
   if st.pos >= st.len then EOF
   else
     match st.source.[st.pos] with
