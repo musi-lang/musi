@@ -17,13 +17,6 @@ module type S = sig
   val mk_state :
     string -> Span.file_id -> (Token.t * Span.t) list -> Interner.t -> state
 
-  val parse :
-       string
-    -> Span.file_id
-    -> Interner.t
-    -> (Token.t * Span.t) list
-    -> prog * Diagnostic.bag
-
   val peek : state -> (Token.t * Span.t) option
   val parse_expr : state -> state * Node.expr
   val parse_pat : state -> state * Node.pat
