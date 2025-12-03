@@ -19,10 +19,9 @@ let mk_state source file_id interner =
   ; diags = Diagnostic.empty_bag
   }
 
-let peek_char_opt st =
-  if st.pos >= st.len then None else Some st.source.[st.pos]
+let peek st = if st.pos >= st.len then None else Some st.source.[st.pos]
 
-let peek_n_opt st n =
+let peek_n st n =
   if st.pos + n >= st.len then None else Some st.source.[st.pos + n]
 
 let adv st = { st with pos = st.pos + 1 }
@@ -37,179 +36,323 @@ let extract st s e = String.sub st.source s (e - s)
 let is_alpha c = ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z')
 let is_digit c = '0' <= c && c <= '9'
 let is_space c = c = ' ' || c = '\t' || c = '\r'
-let is_newline c = c = '\n'
 let is_underscore c = c = '_'
 let is_ident_start c = is_alpha c || is_underscore c
 let is_ident_cont c = is_alpha c || is_digit c || is_underscore c
 let is_xdigit c = is_digit c || ('a' <= c && c <= 'f') || ('A' <= c && c <= 'F')
 let is_bdigit c = c = '0' || c = '1'
 let is_odigit c = '0' <= c && c <= '7'
+let is_utf8_continuation_byte c = Char.code c land 0xC0 = 0x80
 
-let scan_while p st =
+let utf8_seq_len first_byte =
+  let code = Char.code first_byte in
+  if code land 0x80 = 0 then 1 (* ASCII *)
+  else if code land 0xE0 = 0xC0 then 2
+  else if code land 0xF0 = 0xE0 then 3
+  else if code land 0xF8 = 0xF0 then 4
+  else 0
+
+let check_utf8_seq st =
+  match peek st with
+  | None -> (st, 0, false)
+  | Some first_byte ->
+    let expected_len = utf8_seq_len first_byte in
+    if expected_len = 0 then (st, 1, false)
+    else if expected_len = 1 then (st, 1, true)
+    else
+      let rec check_bytes pos count valid =
+        if count = 0 then (pos, valid)
+        else
+          match peek_n st pos with
+          | Some c when is_utf8_continuation_byte c ->
+            check_bytes (pos + 1) (count - 1) valid
+          | Some _ -> check_bytes pos 0 false
+          | None -> check_bytes pos 0 false
+      in
+      let final_pos, is_valid = check_bytes 1 (expected_len - 1) true in
+      (adv_n st (final_pos + 1), final_pos + 1, is_valid)
+
+let take_while p st =
   let rec loop st acc =
-    match peek_char_opt st with
+    match peek st with
     | Some c when p c -> loop (adv st) (c :: acc)
     | _ -> (st, List.rev acc)
   in
   loop st []
 
-let scan_char_opt p st =
-  match peek_char_opt st with
-  | Some c when p c -> (adv st, Some c)
-  | _ -> (st, None)
+let take_if p st =
+  match peek st with Some c when p c -> (adv st, Some c) | _ -> (st, None)
 
-let scan_string s st =
-  let len = String.length s in
-  if st.pos + len <= st.len && extract st st.pos (st.pos + len) = s then
-    (adv_n st len, true)
-  else (st, false)
-
-let scan_until stop_char st =
+let take_until p st =
   let rec loop st acc =
-    match peek_char_opt st with
-    | Some c when c = stop_char -> (st, List.rev acc)
-    | None -> (st, List.rev acc)
+    match peek st with
+    | Some c when p c -> (st, List.rev acc)
+    | None -> ({ st with pos = st.len }, List.rev acc)
     | Some c -> loop (adv st) (c :: acc)
   in
   loop st []
 
 let scan_ws st =
-  let final_st, _chars = scan_while is_space st in
-  (final_st, span st st.pos)
+  let start = st.pos in
+  let st, _chars = take_while is_space st in
+  (st, span st start)
 
-let scan_nl st = (adv st, span st st.pos)
+let scan_nl st =
+  let start = st.pos in
+  (adv st, span st start)
 
 let scan_line_comment st =
   let start = st.pos in
-  let final_st, _ = scan_until '\n' (adv_n st 2) in
-  let content = extract st (start + 2) final_st.pos in
-  (final_st, content, span st start)
-
-let rec scan_block_comment depth st =
-  match (peek_char_opt st, peek_n_opt st 1) with
-  | Some '*', Some '/' when depth = 0 -> (adv_n st 2, depth)
-  | Some '*', Some '/' -> scan_block_comment (depth - 1) (adv_n st 2)
-  | Some '/', Some '*' -> scan_block_comment (depth + 1) (adv_n st 2)
-  | None, _ when depth > 0 -> (st, depth)
-  | None, _ -> (st, 0)
-  | _ -> scan_block_comment depth (adv st)
+  let st, chars = take_until (fun c -> c = '\n') (adv_n st 2) in
+  let content = String.of_seq (List.to_seq chars) in
+  (st, content, span st start)
 
 let scan_block_comment st =
   let start = st.pos in
-  let final_st, _depth = scan_block_comment 0 (adv_n st 2) in
-  let content =
-    if final_st.pos > start + 4 then extract st (start + 2) (final_st.pos - 2)
-    else ""
+  let rec loop depth st =
+    match (peek st, peek_n st 1) with
+    | Some '*', Some '/' when depth = 0 -> adv_n st 2
+    | Some '*', Some '/' -> loop (depth - 1) (adv_n st 2)
+    | Some '/', Some '*' -> loop (depth + 1) (adv_n st 2)
+    | None, _ -> { st with pos = st.len }
+    | _ -> loop depth (adv st)
   in
-  (final_st, content, span st start)
+  let st = loop 0 (adv_n st 2) in
+  let content =
+    if st.pos > start + 4 then extract st (start + 2) (st.pos - 2) else ""
+  in
+  (st, content, span st start)
 
 let scan_ident st =
   let start = st.pos in
-  match scan_char_opt is_ident_start st with
-  | st', Some _ ->
-    let final_st, _chars = scan_while is_ident_cont st' in
-    let text = extract st start final_st.pos in
+  let st, first = take_if is_ident_start st in
+  match first with
+  | None -> (st, Interner.empty_name st.interner, span st start)
+  | Some _ ->
+    let st, _rest = take_while is_ident_cont st in
+    let text = extract st start st.pos in
     let name = Interner.intern st.interner text in
-    (final_st, name, span st start)
-  | _ -> (st, Interner.empty_name st.interner, span st st.pos)
+    (st, name, span st start)
 
-let rec scan_digits st valid_chars =
-  match peek_char_opt st with
-  | Some c when valid_chars c -> scan_digits (adv st) valid_chars
-  | Some c when is_alpha c || is_digit c ->
-    let err_st =
-      add_err st Error.E0101 st.pos (st.pos + 1) [ "digit"; String.make 1 c ]
-    in
-    (adv err_st, false)
-  | _ -> (st, true)
+let scan_digits valid_chars st =
+  let rec loop st =
+    match peek st with
+    | Some c when valid_chars c -> loop (adv st)
+    | Some c when is_alpha c || is_digit c ->
+      let st =
+        add_err st Error.E0101 st.pos (st.pos + 1) [ "digit"; String.make 1 c ]
+      in
+      (adv st, false)
+    | _ -> (st, true)
+  in
+  loop st
 
 let scan_decimal_part st =
-  let rec loop st dot_seen =
-    match peek_char_opt st with
-    | Some '.' when not dot_seen -> loop (adv st) true
-    | Some c when is_digit c -> loop (adv st) dot_seen
-    | Some '.' when dot_seen ->
-      let err_st = add_err st Error.E0102 st.pos (st.pos + 1) [] in
-      (adv err_st, true)
+  let rec loop dot_seen st =
+    match peek st with
+    | Some '.' when not dot_seen -> loop true (adv st)
+    | Some c when is_digit c -> loop dot_seen (adv st)
+    | Some '.' ->
+      let st = add_err st Error.E0102 st.pos (st.pos + 1) [] in
+      loop true (adv st)
     | _ -> (st, dot_seen)
   in
-  loop st false
-
-let scan_number_with_base st prefix valid_chars base_name =
-  let base_pos = st.pos + prefix in
-  if base_pos >= st.len then
-    let err_st = add_err st Error.E0103 st.pos base_pos [ base_name ] in
-    (err_st, extract st st.pos base_pos)
-  else
-    let digit_st, valid = scan_digits { st with pos = base_pos } valid_chars in
-    if (not valid) || digit_st.pos = base_pos then
-      let err_st = add_err digit_st Error.E0103 st.pos base_pos [ base_name ] in
-      (err_st, extract st st.pos base_pos)
-    else (digit_st, extract st st.pos digit_st.pos)
+  loop false st
 
 let scan_number st =
   let start = st.pos in
-  match (peek_char_opt st, peek_n_opt st 1) with
-  | Some '0', Some 'x' | Some '0', Some 'X' ->
-    scan_number_with_base st 2 is_xdigit "hex"
-  | Some '0', Some 'b' | Some '0', Some 'B' ->
-    scan_number_with_base st 2 is_bdigit "binary"
-  | Some '0', Some 'o' | Some '0', Some 'O' ->
-    scan_number_with_base st 2 is_odigit "octal"
+
+  let scan_with_base prefix valid_chars base_name st =
+    let base_pos = st.pos + prefix in
+    if base_pos >= st.len then
+      let st = add_err st Error.E0103 st.pos base_pos [ base_name ] in
+      (st, extract st st.pos base_pos)
+    else
+      let st = { st with pos = base_pos } in
+      let st, valid = scan_digits valid_chars st in
+      if (not valid) || st.pos = base_pos then
+        let st = add_err st Error.E0103 start base_pos [ base_name ] in
+        (st, extract st start base_pos)
+      else (st, extract st start st.pos)
+  in
+
+  match (peek st, peek_n st 1) with
+  | Some '0', Some ('x' | 'X') -> scan_with_base 2 is_xdigit "hex" st
+  | Some '0', Some ('b' | 'B') -> scan_with_base 2 is_bdigit "binary" st
+  | Some '0', Some ('o' | 'O') -> scan_with_base 2 is_odigit "octal" st
   | Some '0', Some d when is_digit d ->
-    let err_st = add_err st Error.E0103 start (start + 1) [ "decimal" ] in
-    let final_st, _ = scan_decimal_part err_st in
-    (final_st, extract st start final_st.pos)
+    let st = add_err st Error.E0103 start (start + 1) [ "decimal" ] in
+    let st, _ = scan_decimal_part st in
+    (st, extract st start st.pos)
   | _ ->
-    let final_st, _ = scan_decimal_part st in
-    (final_st, extract st start final_st.pos)
+    let st, _ = scan_decimal_part st in
+    (st, extract st start st.pos)
+
+let process_escape st =
+  let escape_start = st.pos in
+  if st.pos + 1 >= st.len then (st, Some '\000')
+  else
+    let next_char = st.source.[st.pos + 1] in
+    match next_char with
+    | 'n' -> (adv_n st 2, Some '\n')
+    | 't' -> (adv_n st 2, Some '\t')
+    | 'r' -> (adv_n st 2, Some '\r')
+    | '\\' -> (adv_n st 2, Some '\\')
+    | '"' -> (adv_n st 2, Some '"')
+    | '\'' -> (adv_n st 2, Some '\'')
+    | '0' -> (adv_n st 2, Some '\000')
+    | 'u' -> (
+      match peek_n st 2 with
+      | Some '{' ->
+        let brace_start = st.pos + 2 in
+        let rec scan_hex acc count st =
+          match peek st with
+          | Some c when is_xdigit c ->
+            let digit =
+              if '0' <= c && c <= '9' then Char.code c - Char.code '0'
+              else if 'a' <= c && c <= 'f' then Char.code c - Char.code 'a' + 10
+              else Char.code c - Char.code 'A' + 10
+            in
+            scan_hex ((acc * 16) + digit) (count + 1) (adv st)
+          | Some '}' ->
+            let st = adv st in
+            if count = 0 then
+              (add_err st Error.E0206 brace_start st.pos [], None)
+            else if acc > 0x10FFFF then
+              (add_err st Error.E0207 brace_start st.pos [], None)
+            else if acc > 255 then
+              (add_err st Error.E0208 brace_start st.pos [], None)
+            else (st, Some (Char.chr acc))
+          | Some c ->
+            let st =
+              add_err st Error.E0204 st.pos (st.pos + 1) [ String.make 1 c ]
+            in
+            let st, _ = take_until (fun c -> c = '}') st in
+            let st = match peek st with Some '}' -> adv st | _ -> st in
+            (st, None)
+          | None -> (add_err st Error.E0205 brace_start st.pos [], None)
+        in
+        scan_hex 0 0 (adv_n st 3)
+      | _ -> (add_err st Error.E0209 escape_start st.pos [], None))
+    | 'U' -> (
+      match peek_n st 2 with
+      | Some '{' ->
+        let brace_start = st.pos + 2 in
+        let rec scan_hex acc count st =
+          match peek st with
+          | Some c when is_xdigit c ->
+            let digit =
+              if '0' <= c && c <= '9' then Char.code c - Char.code '0'
+              else if 'a' <= c && c <= 'f' then Char.code c - Char.code 'a' + 10
+              else Char.code c - Char.code 'A' + 10
+            in
+            scan_hex ((acc * 16) + digit) (count + 1) (adv st)
+          | Some '}' ->
+            let st = adv st in
+            if count = 0 then
+              (add_err st Error.E0206 brace_start st.pos [], None)
+            else if acc > 0x10FFFF then
+              (add_err st Error.E0207 brace_start st.pos [], None)
+            else (st, Some (Char.chr (acc mod 256)))
+          | Some c ->
+            let st =
+              add_err st Error.E0204 st.pos (st.pos + 1) [ String.make 1 c ]
+            in
+            let st, _ = take_until (fun c -> c = '}') st in
+            let st = match peek st with Some '}' -> adv st | _ -> st in
+            (st, None)
+          | None -> (add_err st Error.E0205 brace_start st.pos [], None)
+        in
+        scan_hex 0 0 (adv_n st 3)
+      | _ -> (add_err st Error.E0209 escape_start st.pos [], None))
+    | _ ->
+      let st =
+        add_err
+          st
+          Error.E0210
+          escape_start
+          (st.pos + 2)
+          [ String.make 1 next_char ]
+      in
+      (adv_n st 2, None)
 
 let scan_lit_string st =
   let start = st.pos in
-  let rec loop st =
-    match peek_char_opt st with
-    | None -> (st, true)
-    | Some '"' -> (adv st, false)
-    | Some '\\' when st.pos + 1 < st.len -> loop (adv_n st 2)
-    | _ -> loop (adv st)
+  let rec loop acc st =
+    match peek st with
+    | None ->
+      let st = add_err st Error.E0201 start st.pos [ "string" ] in
+      (st, None, span st start)
+    | Some '"' ->
+      let content = String.of_seq (List.to_seq (List.rev acc)) in
+      (adv st, Some content, span st start)
+    | Some '\\' -> (
+      let st, escaped = process_escape st in
+      match escaped with
+      | Some escaped_char -> loop (escaped_char :: acc) st
+      | None -> loop acc (adv st))
+    | Some c -> loop (c :: acc) (adv st)
   in
-  let final_st, unterminated = loop (adv st) in
-  let content = extract st (st.pos + 1) (final_st.pos - 1) in
-  let sp = span st start in
-  if unterminated then
-    let err_st = add_err final_st Error.E0201 start final_st.pos [ "string" ] in
-    (err_st, None, sp)
-  else (final_st, Some content, sp)
+  loop [] (adv st)
 
 let scan_lit_rune st =
   let start = st.pos in
-  let rec loop st =
-    match peek_char_opt st with
-    | None -> (st, true)
-    | Some '\'' -> (adv st, false)
-    | Some '\\' when st.pos + 1 < st.len -> loop (adv_n st 2)
-    | _ -> loop (adv st)
+  let rec loop acc st =
+    match peek st with
+    | None ->
+      let st = add_err st Error.E0201 start st.pos [ "rune" ] in
+      (st, '\000', span st start)
+    | Some '\'' ->
+      let chars = List.rev acc in
+      let st = adv st in
+      let sp = span st start in
+      if List.length chars = 0 then
+        let st = add_err st Error.E0203 start (start + 1) [] in
+        (st, '\000', sp)
+      else if List.length chars > 1 then
+        let st =
+          add_err
+            st
+            Error.E0212
+            start
+            (start + 1)
+            [ String.make 1 (List.hd chars) ]
+        in
+        (st, List.hd chars, sp)
+      else (st, List.hd chars, sp)
+    | Some '\\' -> (
+      let st, escaped = process_escape st in
+      match escaped with
+      | Some escaped_char -> loop (escaped_char :: acc) st
+      | None -> loop acc (adv st))
+    | Some c -> loop (c :: acc) (adv st)
   in
-  let final_st, unterminated = loop (adv st) in
-  let content = extract st (st.pos + 1) (final_st.pos - 1) in
-  let sp = span st start in
-  if unterminated then
-    let err_st = add_err final_st Error.E0201 start final_st.pos [ "rune" ] in
-    (err_st, '\000', sp)
-  else if String.length content = 0 then
-    let err_st = add_err final_st Error.E0203 start (start + 1) [] in
-    (err_st, '\000', sp)
-  else if String.length content > 1 then
-    let err_st =
-      add_err
-        final_st
-        Error.E0212
-        start
-        (start + 1)
-        [ String.make 1 content.[0] ]
-    in
-    (err_st, content.[0], sp)
-  else (final_st, content.[0], sp)
+  loop [] (adv st)
+
+let scan_template_string st =
+  let start = st.pos in
+  let rec loop depth acc st =
+    match peek st with
+    | None ->
+      let st = add_err st Error.E0201 start st.pos [ "template" ] in
+      let content = String.of_seq (List.to_seq (List.rev acc)) in
+      (st, content, span st start)
+    | Some '"' when depth = 0 ->
+      let content = String.of_seq (List.to_seq (List.rev acc)) in
+      (adv st, content, span st start)
+    | Some '{' -> loop (depth + 1) ('{' :: acc) (adv st)
+    | Some '}' when depth > 0 -> loop (depth - 1) ('}' :: acc) (adv st)
+    | Some '}' ->
+      let st = add_err st Error.E0211 st.pos (st.pos + 1) [] in
+      (st, String.of_seq (List.to_seq (List.rev acc)), span st start)
+    | Some '\\' -> (
+      let st, escaped = process_escape st in
+      match escaped with
+      | Some escaped_char -> loop depth (escaped_char :: acc) st
+      | None -> loop depth acc (adv st))
+    | Some c -> loop depth (c :: acc) (adv st)
+  in
+  loop 0 [] (adv st)
 
 let scan_symbol st =
   let start = st.pos in
@@ -224,131 +367,101 @@ let scan_symbol st =
   match find_match Token.symbol_strings with
   | Some (tok, len) -> (adv_n st len, tok, span st start)
   | None ->
-    let err_st =
+    let st =
       add_err
-        (adv st)
+        st
         Error.E0301
         st.pos
         (st.pos + 1)
         [ String.make 1 st.source.[st.pos] ]
     in
-    (err_st, Token.Error, span st start)
-
-let scan_comment_or_symbol st =
-  match (peek_char_opt st, peek_n_opt st 1) with
-  | Some '/', Some '/' ->
-    let final_st, comment, sp = scan_line_comment st in
-    (final_st, Token.Comment comment, sp)
-  | Some '/', Some '*' ->
-    let final_st, comment, sp = scan_block_comment st in
-    (final_st, Token.Comment comment, sp)
-  | _ -> scan_symbol st
-
-let scan_template_or_dollar st =
-  match (peek_char_opt st, peek_n_opt st 1) with
-  | Some '$', Some '"' ->
-    let start = st.pos in
-    let final_st, content_opt, _ =
-      scan_lit_string { st with pos = st.pos + 1 }
-    in
-    let content =
-      match content_opt with
-      | Some c -> Interner.intern st.interner c
-      | None -> Interner.empty_name st.interner
-    in
-    (final_st, Token.LitTemplate content, span st start)
-  | _ -> scan_symbol st
+    (adv st, Token.Error, span st start)
 
 let dispatch_token st =
-  match peek_char_opt st with
-  | None -> (st, Token.EOF, span st st.pos)
-  | Some c when is_space c ->
-    let final_st, sp = scan_ws st in
-    (final_st, Token.Whitespace, sp)
-  | Some '\n' ->
-    let final_st, sp = scan_nl st in
-    (final_st, Token.Newline, sp)
-  | Some '/' -> scan_comment_or_symbol st
-  | Some '_' -> scan_symbol st
-  | Some c when is_ident_start c ->
-    let final_st, name, sp = scan_ident st in
+  let start = st.pos in
+
+  match (peek st, peek_n st 1) with
+  | None, _ -> (st, Token.EOF, span st start)
+  | Some c, _ when is_space c ->
+    let st, sp = scan_ws st in
+    (st, Token.Whitespace, sp)
+  | Some '\n', _ ->
+    let st, sp = scan_nl st in
+    (st, Token.Newline, sp)
+  | Some '/', Some '/' ->
+    let st, content, sp = scan_line_comment st in
+    (st, Token.Comment content, sp)
+  | Some '/', Some '*' ->
+    let st, content, sp = scan_block_comment st in
+    (st, Token.Comment content, sp)
+  | Some '$', Some '"' ->
+    let st, content, sp = scan_template_string (adv st) in
+    let name = Interner.intern st.interner content in
+    (st, Token.LitTemplate name, sp)
+  | Some c, _ when is_ident_start c ->
+    let st, name, sp = scan_ident st in
     let ident_str = Interner.lookup st.interner name in
     let token = Token.lookup_keyword st.interner ident_str in
-    (final_st, token, sp)
-  | Some c when is_digit c ->
-    let final_st, num_str = scan_number st in
-    (final_st, Token.LitNumber num_str, span st st.pos)
-  | Some '"' ->
-    let final_st, content_opt, sp = scan_lit_string st in
+    (st, token, sp)
+  | Some c, _ when is_digit c ->
+    let st, num_str = scan_number st in
+    (st, Token.LitNumber num_str, span st start)
+  | Some '"', _ ->
+    let st, content_opt, sp = scan_lit_string st in
     let content =
       match content_opt with
       | Some c -> Interner.intern st.interner c
       | None -> Interner.empty_name st.interner
     in
-    (final_st, Token.LitString content, sp)
-  | Some '\'' ->
-    let final_st, char_val, sp = scan_lit_rune st in
-    (final_st, Token.LitRune char_val, sp)
-  | Some '$' -> scan_template_or_dollar st
-  | Some c when Char.code c < 32 && c <> '\t' && c <> '\n' && c <> '\r' ->
-    let err_st =
+    (st, Token.LitString content, sp)
+  | Some '\'', _ ->
+    let st, char_val, sp = scan_lit_rune st in
+    (st, Token.LitRune char_val, sp)
+  | Some c, _ when Char.code c < 32 && c <> '\t' && c <> '\n' && c <> '\r' ->
+    let st =
       add_err
-        (adv st)
+        st
         Error.E0302
         st.pos
         (st.pos + 1)
         [ Printf.sprintf "%02X" (Char.code c) ]
     in
-    (err_st, Token.Whitespace, span st st.pos)
-  | Some '\000' ->
-    let err_st = add_err (adv st) Error.E0303 st.pos (st.pos + 1) [] in
-    (err_st, Token.Whitespace, span st st.pos)
-  | Some c when Char.code c >= 0x80 -> (adv st, Token.Error, span st st.pos)
+    (adv st, Token.Whitespace, span st start)
+  | Some '\000', _ ->
+    let st = add_err st Error.E0303 st.pos (st.pos + 1) [] in
+    (adv st, Token.Whitespace, span st start)
+  | Some c, _ when Char.code c >= 0x80 ->
+    let new_st, seq_len, is_valid = check_utf8_seq st in
+    if is_valid then (new_st, Token.Error, span st start)
+    else
+      let error_code =
+        let code = Char.code c in
+        if code land 0xE0 = 0xC0 then Error.E0002
+        else if seq_len = 0 then Error.E0002
+        else Error.E0001
+      in
+      let error_st = add_err st error_code st.pos new_st.pos [] in
+      (error_st, Token.Error, span st start)
   | _ -> scan_symbol st
-
-let recover st action =
-  let err_st = add_err st Error.E0501 st.pos (st.pos + 1) [] in
-  match action with
-  | `Skip_char -> adv err_st
-  | `Skip_to_nl ->
-    let rec loop s =
-      match peek_char_opt s with None | Some '\n' -> s | _ -> loop (adv s)
-    in
-    loop err_st
-  | `Skip_to_ws ->
-    let rec loop s =
-      match peek_char_opt s with
-      | None -> s
-      | Some c when is_space c -> s
-      | _ -> loop (adv s)
-    in
-    loop err_st
-  | `Skip_to_delim ->
-    let rec loop s =
-      match peek_char_opt s with
-      | None -> s
-      | Some c
-        when is_space c || c = ';' || c = ',' || c = ')' || c = '}' || c = ']'
-        ->
-        s
-      | _ -> loop (adv s)
-    in
-    loop err_st
 
 let lex_token st =
   let start = st.pos in
-  let result = dispatch_token st in
-  let new_st = match result with s, _, _ -> s in
-  if new_st.pos <= start then
-    let recovery_st = recover st `Skip_char in
-    (recovery_st, Token.Error, span st start)
-  else result
+  let st, token, sp = dispatch_token st in
+  if st.pos <= start then
+    let st = add_err st Error.E0501 st.pos (st.pos + 1) [] in
+    (adv st, Token.Error, span st start)
+  else (st, token, sp)
 
 let tokenize source file_id interner =
   let rec loop st acc =
-    let new_st, token, sp = lex_token st in
+    let start = st.pos in
+    let st, token, sp = lex_token st in
     match token with
-    | Token.EOF -> (List.rev ((token, sp) :: acc), new_st.diags)
-    | _ -> loop new_st ((token, sp) :: acc)
+    | Token.EOF -> (List.rev ((token, sp) :: acc), st.diags)
+    | _ ->
+      if st.pos <= start then
+        let st = add_err st Error.E0501 st.pos (st.pos + 1) [] in
+        loop (adv st) ((token, sp) :: acc)
+      else loop st ((token, sp) :: acc)
   in
   loop (mk_state source file_id interner) []
