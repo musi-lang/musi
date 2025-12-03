@@ -50,7 +50,7 @@ expr_una = ["-" | "not" | "~" | "@"], expr_postfix;
 
 expr_postfix = expr_atom, {aux_postfix_op};
 
-expr_atom = expr_lit | expr_tmpl | expr_ident | expr_tuple | expr_block | expr_if | expr_match | expr_for | expr_while | expr_defer | expr_break | expr_cycle | expr_unsafe | expr_assign | expr_record_lit | expr_fn | expr_record | expr_choice | expr_trait;
+expr_atom = expr_lit | expr_tmpl | expr_ident | expr_tuple | expr_block | expr_if | expr_match | expr_for | expr_while | expr_defer | expr_break | expr_cycle | expr_unsafe | expr_assign | expr_record_lit | expr_fn | expr_record | expr_choice;
 
 expr_lit = lit;
 
@@ -84,11 +84,9 @@ expr_record_lit = [ident], "{", aux_record_field_init, {",", aux_record_field_in
 
 expr_fn = ["extern", [string]], "fn", [ident], [aux_typ_params], aux_fn_params, ["->", typ], aux_block;
 
-expr_record = "record", [aux_typ_params], [":", typ], "{", aux_record_item, {",", aux_record_item}, "}";
+expr_record = "record", [aux_typ_params], [":", typ], "{", aux_record_field_decl, {",", aux_record_field_decl}, "}";
 
 expr_choice = "choice", [aux_typ_params], "{", aux_choice_case, {",", aux_choice_case}, "}";
-
-expr_trait = "trait", [aux_typ_params], [":", typ], "{", aux_trait_item, {",", aux_trait_item}, "}";
 
 (* ========================================================================= *)
 (* PATTERNS                                                                  *)
@@ -165,15 +163,9 @@ aux_fn_param = ident, [":", typ];
 
 aux_record_field_init = ["."], ident, ":=", expr;
 
-aux_record_item = aux_record_field_decl | aux_record_method_decl;
-
 aux_record_field_decl = ident, ":", typ;
 
-aux_record_method_decl = ident, ":=", expr;
-
 aux_choice_case = "case", ident, ["(", typ, {",", typ}, ")"];
-
-aux_trait_item = ident, ":", typ;
 
 aux_pat_field = ".", ident, [":=", pat];
 
