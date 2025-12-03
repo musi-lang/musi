@@ -45,7 +45,7 @@ let is_xdigit c = is_digit c || ('a' <= c && c <= 'f') || ('A' <= c && c <= 'F')
 let is_bdigit c = c = '0' || c = '1'
 let is_odigit c = '0' <= c && c <= '7'
 
-let rec scan_while p st =
+let scan_while p st =
   let rec loop st acc =
     match peek_char_opt st with
     | Some c when p c -> loop (adv st) (c :: acc)
@@ -64,7 +64,7 @@ let scan_string s st =
     (adv_n st len, true)
   else (st, false)
 
-let rec scan_until stop_char st =
+let scan_until stop_char st =
   let rec loop st acc =
     match peek_char_opt st with
     | Some c when c = stop_char -> (st, List.rev acc)
@@ -164,7 +164,7 @@ let scan_number st =
     let final_st, _ = scan_decimal_part st in
     (final_st, extract st start final_st.pos)
 
-let rec scan_string_literal st =
+let scan_string_literal st =
   let start = st.pos in
   let rec loop st =
     match peek_char_opt st with
@@ -181,7 +181,7 @@ let rec scan_string_literal st =
     (err_st, None, sp)
   else (final_st, Some content, sp)
 
-let rec scan_rune_literal st =
+let scan_rune_literal st =
   let start = st.pos in
   let rec loop st =
     match peek_char_opt st with
@@ -344,7 +344,7 @@ let lex_token st =
     (recovery_st, Token.Error, span st start)
   else result
 
-let rec tokenize source file_id interner =
+let tokenize source file_id interner =
   let rec loop st acc =
     let new_st, token, sp = lex_token st in
     match token with
