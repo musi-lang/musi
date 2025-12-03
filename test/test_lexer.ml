@@ -18,83 +18,83 @@ let check_interned_string interner name expected =
 
 let test_is_letter () =
   [
-    test_case "lowercase letter" `Quick (fun () ->
+    test_case "is_letter: lowercase a" `Quick (fun () ->
       (check bool) "is_letter 'a'" true (Lexer.is_letter 'a'))
-  ; test_case "uppercase letter" `Quick (fun () ->
+  ; test_case "is_letter: uppercase Z" `Quick (fun () ->
       (check bool) "is_letter 'Z'" true (Lexer.is_letter 'Z'))
-  ; test_case "non-letter" `Quick (fun () ->
+  ; test_case "is_letter: digit 5 invalid" `Quick (fun () ->
       (check bool) "is_letter '5'" false (Lexer.is_letter '5'))
   ]
 
 let test_is_digit () =
   [
-    test_case "digit" `Quick (fun () ->
+    test_case "is_digit: numeric digit 7" `Quick (fun () ->
       (check bool) "is_digit '7'" true (Lexer.is_digit '7'))
-  ; test_case "non-digit" `Quick (fun () ->
+  ; test_case "is_digit: letter a invalid" `Quick (fun () ->
       (check bool) "is_digit 'a'" false (Lexer.is_digit 'a'))
   ]
 
 let test_is_space () =
   [
-    test_case "space" `Quick (fun () ->
+    test_case "is_space: space character" `Quick (fun () ->
       (check bool) "is_space ' '" true (Lexer.is_space ' '))
-  ; test_case "tab" `Quick (fun () ->
+  ; test_case "is_space: tab character" `Quick (fun () ->
       (check bool) "is_space '\\t'" true (Lexer.is_space '\t'))
-  ; test_case "newline" `Quick (fun () ->
+  ; test_case "is_space: newline invalid" `Quick (fun () ->
       (check bool) "is_space '\\n'" false (Lexer.is_space '\n'))
   ]
 
 let test_is_xdigit () =
   [
-    test_case "digit" `Quick (fun () ->
+    test_case "is_xdigit: numeric digit 5" `Quick (fun () ->
       (check bool) "is_xdigit '5'" true (Lexer.is_xdigit '5'))
-  ; test_case "hex lowercase" `Quick (fun () ->
+  ; test_case "is_xdigit: hex lowercase a" `Quick (fun () ->
       (check bool) "is_xdigit 'a'" true (Lexer.is_xdigit 'a'))
-  ; test_case "hex uppercase" `Quick (fun () ->
+  ; test_case "is_xdigit: hex uppercase F" `Quick (fun () ->
       (check bool) "is_xdigit 'F'" true (Lexer.is_xdigit 'F'))
-  ; test_case "invalid hex" `Quick (fun () ->
+  ; test_case "is_xdigit: letter G invalid" `Quick (fun () ->
       (check bool) "is_xdigit 'G'" false (Lexer.is_xdigit 'G'))
   ]
 
 let test_is_ident_start () =
   [
-    test_case "letter" `Quick (fun () ->
+    test_case "is_ident_start: letter b valid" `Quick (fun () ->
       (check bool) "is_ident_start 'b'" true (Lexer.is_ident_start 'b'))
-  ; test_case "underscore" `Quick (fun () ->
+  ; test_case "is_ident_start: underscore valid" `Quick (fun () ->
       (check bool) "is_ident_start '_'" true (Lexer.is_ident_start '_'))
-  ; test_case "digit" `Quick (fun () ->
+  ; test_case "is_ident_start: digit 9 invalid" `Quick (fun () ->
       (check bool) "is_ident_start '9'" false (Lexer.is_ident_start '9'))
   ]
 
 let test_is_ident_cont () =
   [
-    test_case "letter" `Quick (fun () ->
+    test_case "is_ident_cont: letter c valid" `Quick (fun () ->
       (check bool) "is_ident_cont 'c'" true (Lexer.is_ident_cont 'c'))
-  ; test_case "digit" `Quick (fun () ->
+  ; test_case "is_ident_cont: digit 8 valid" `Quick (fun () ->
       (check bool) "is_ident_cont '8'" true (Lexer.is_ident_cont '8'))
-  ; test_case "underscore" `Quick (fun () ->
+  ; test_case "is_ident_cont: underscore valid" `Quick (fun () ->
       (check bool) "is_ident_cont '_'" true (Lexer.is_ident_cont '_'))
   ]
 
 let test_state_functions () =
   [
-    test_case "peek and advance" `Quick (fun () ->
+    test_case "state: peek then advance" `Quick (fun () ->
       let state = make_test_state "hello" in
       (check char) "peek first" 'h' (Lexer.peek state);
       Lexer.advance state;
       (check int) "advance position" 1 state.pos;
       (check char) "peek after advance" 'e' (Lexer.peek state))
-  ; test_case "peek_n" `Quick (fun () ->
+  ; test_case "state: peek_n multiple chars" `Quick (fun () ->
       let state = make_test_state "hello" in
       (check char) "peek_n 0" 'h' (Lexer.peek_n state 0);
       (check char) "peek_n 1" 'e' (Lexer.peek_n state 1);
       (check char) "peek_n 2" 'l' (Lexer.peek_n state 2))
-  ; test_case "peek beyond bounds" `Quick (fun () ->
+  ; test_case "state: peek beyond string bounds" `Quick (fun () ->
       let state = make_test_state "hi" in
       (check char) "peek_n 1" 'i' (Lexer.peek_n state 1);
       (check char) "peek_n 2" '\000' (Lexer.peek_n state 2);
       (check char) "peek_n 10" '\000' (Lexer.peek_n state 10))
-  ; test_case "advance_n" `Quick (fun () ->
+  ; test_case "state: advance_n multiple chars" `Quick (fun () ->
       let state = make_test_state "hello" in
       Lexer.advance_n state 3;
       (check int) "advance_n position" 3 state.pos;
@@ -103,27 +103,27 @@ let test_state_functions () =
 
 let test_lookup_escape () =
   [
-    test_case "newline" `Quick (fun () ->
+    test_case "escape: newline \\n" `Quick (fun () ->
       (check char) "lookup_escape 'n'" '\n' (Lexer.lookup_escape 'n'))
-  ; test_case "tab" `Quick (fun () ->
+  ; test_case "escape: tab \\t" `Quick (fun () ->
       (check char) "lookup_escape 't'" '\t' (Lexer.lookup_escape 't'))
-  ; test_case "return" `Quick (fun () ->
+  ; test_case "escape: carriage return \\r" `Quick (fun () ->
       (check char) "lookup_escape 'r'" '\r' (Lexer.lookup_escape 'r'))
-  ; test_case "backslash" `Quick (fun () ->
+  ; test_case "escape: backslash \\\\" `Quick (fun () ->
       (check char) "lookup_escape '\\\\'" '\\' (Lexer.lookup_escape '\\'))
-  ; test_case "double quote" `Quick (fun () ->
+  ; test_case "escape: double quote \\\"" `Quick (fun () ->
       (check char) "lookup_escape '\"'" '\"' (Lexer.lookup_escape '\"'))
-  ; test_case "single quote" `Quick (fun () ->
+  ; test_case "escape: single quote \\'" `Quick (fun () ->
       (check char) "lookup_escape '\\''" '\'' (Lexer.lookup_escape '\''))
-  ; test_case "null" `Quick (fun () ->
+  ; test_case "escape: null \\0" `Quick (fun () ->
       (check char) "lookup_escape '0'" '\000' (Lexer.lookup_escape '0'))
-  ; test_case "passthrough" `Quick (fun () ->
+  ; test_case "escape: passthrough unknown" `Quick (fun () ->
       (check char) "lookup_escape 'x'" 'x' (Lexer.lookup_escape 'x'))
   ]
 
 let test_tokenize () =
   [
-    test_case "empty input" `Quick (fun () ->
+    test_case "tokenize: empty input" `Quick (fun () ->
       let interner = Interner.create () in
       let tokens, diags = Lexer.tokenize "" 42 interner in
       check_no_errors diags;
@@ -131,7 +131,7 @@ let test_tokenize () =
       match tokens with
       | [ (Token.EOF, _) ] -> ()
       | _ -> Alcotest.fail "Expected EOF token")
-  ; test_case "single number" `Quick (fun () ->
+  ; test_case "tokenize: number literal 42" `Quick (fun () ->
       let interner = Interner.create () in
       let tokens, diags = Lexer.tokenize "42" 42 interner in
       check_no_errors diags;
@@ -139,7 +139,7 @@ let test_tokenize () =
       match tokens with
       | [ (Token.EOF, _); (Token.LitNumber "42", _) ] -> ()
       | _ -> Alcotest.fail "Expected number and EOF")
-  ; test_case "single identifier" `Quick (fun () ->
+  ; test_case "tokenize: identifier x" `Quick (fun () ->
       let interner = Interner.create () in
       let tokens, diags = Lexer.tokenize "x" 42 interner in
       check_no_errors diags;
@@ -148,7 +148,7 @@ let test_tokenize () =
       | [ (Token.EOF, _); (Token.Ident name, _) ] ->
         check_interned_string interner name "x"
       | _ -> Alcotest.fail "Expected identifier and EOF")
-  ; test_case "string literal" `Quick (fun () ->
+  ; test_case "tokenize: string \"hello\"" `Quick (fun () ->
       let interner = Interner.create () in
       let tokens, diags = Lexer.tokenize "\"hello\"" 42 interner in
       check_no_errors diags;
@@ -157,7 +157,7 @@ let test_tokenize () =
       | [ (Token.EOF, _); (Token.LitString name, _) ] ->
         check_interned_string interner name "hello"
       | _ -> Alcotest.fail "Expected string and EOF")
-  ; test_case "rune literal" `Quick (fun () ->
+  ; test_case "tokenize: rune 'a'" `Quick (fun () ->
       let interner = Interner.create () in
       let tokens, diags = Lexer.tokenize "'a'" 42 interner in
       check_no_errors diags;
@@ -165,7 +165,7 @@ let test_tokenize () =
       match tokens with
       | [ (Token.EOF, _); (Token.LitRune 'a', _) ] -> ()
       | _ -> Alcotest.fail "Expected rune and EOF")
-  ; test_case "template string" `Quick (fun () ->
+  ; test_case "tokenize: template $\"hello\"" `Quick (fun () ->
       let interner = Interner.create () in
       let tokens, diags = Lexer.tokenize "$\"hello\"" 42 interner in
       check_no_errors diags;
@@ -174,7 +174,7 @@ let test_tokenize () =
       | [ (Token.EOF, _); (Token.LitTemplate name, _) ] ->
         check_interned_string interner name "hello"
       | _ -> Alcotest.fail "Expected template and EOF")
-  ; test_case "unicode escape in string" `Quick (fun () ->
+  ; test_case "tokenize: unicode escape in string" `Quick (fun () ->
       let interner = Interner.create () in
       let tokens, diags = Lexer.tokenize "\"\\u{41}\"" 42 interner in
       check_no_errors diags;
@@ -183,7 +183,7 @@ let test_tokenize () =
       | [ (Token.EOF, _); (Token.LitString name, _) ] ->
         check_interned_string interner name "A"
       | _ -> Alcotest.fail "Expected unicode string and EOF")
-  ; test_case "unicode escape in rune" `Quick (fun () ->
+  ; test_case "tokenize: unicode escape in rune" `Quick (fun () ->
       let interner = Interner.create () in
       let tokens, diags = Lexer.tokenize "'\\u{42}'" 42 interner in
       check_no_errors diags;
@@ -191,7 +191,7 @@ let test_tokenize () =
       match tokens with
       | [ (Token.EOF, _); (Token.LitRune 'B', _) ] -> ()
       | _ -> Alcotest.fail "Expected unicode rune and EOF")
-  ; test_case "mixed escape sequences" `Quick (fun () ->
+  ; test_case "tokenize: mixed escape sequences" `Quick (fun () ->
       let interner = Interner.create () in
       let tokens, diags = Lexer.tokenize "\"\\n\\t\\u{43}\\0\"" 42 interner in
       check_no_errors diags;
@@ -200,7 +200,7 @@ let test_tokenize () =
       | [ (Token.EOF, _); (Token.LitString name, _) ] ->
         check_interned_string interner name "\n\tC\000"
       | _ -> Alcotest.fail "Expected mixed escapes string and EOF")
-  ; test_case "hex escape in string" `Quick (fun () ->
+  ; test_case "tokenize: hex escape in string" `Quick (fun () ->
       let interner = Interner.create () in
       let tokens, diags = Lexer.tokenize "\"\\x{41}\"" 42 interner in
       check_no_errors diags;
@@ -209,7 +209,7 @@ let test_tokenize () =
       | [ (Token.EOF, _); (Token.LitString name, _) ] ->
         check_interned_string interner name "A"
       | _ -> Alcotest.fail "Expected hex string and EOF")
-  ; test_case "hex escape in rune" `Quick (fun () ->
+  ; test_case "tokenize: hex escape in rune" `Quick (fun () ->
       let interner = Interner.create () in
       let tokens, diags = Lexer.tokenize "'\\x{42}'" 42 interner in
       check_no_errors diags;
@@ -217,7 +217,7 @@ let test_tokenize () =
       match tokens with
       | [ (Token.EOF, _); (Token.LitRune 'B', _) ] -> ()
       | _ -> Alcotest.fail "Expected hex rune and EOF")
-  ; test_case "all escape types combined" `Quick (fun () ->
+  ; test_case "tokenize: all escape types combined" `Quick (fun () ->
       let interner = Interner.create () in
       let tokens, diags =
         Lexer.tokenize "\"\\n\\u{41}\\x{42}\\t\"" 42 interner
@@ -228,7 +228,7 @@ let test_tokenize () =
       | [ (Token.EOF, _); (Token.LitString name, _) ] ->
         check_interned_string interner name "\nAB\t"
       | _ -> Alcotest.fail "Expected combined escapes string and EOF")
-  ; test_case "keyword recognition" `Quick (fun () ->
+  ; test_case "tokenize: keyword recognition" `Quick (fun () ->
       let interner = Interner.create () in
       let tokens, diags = Lexer.tokenize "val var fn if else" 42 interner in
       check_no_errors diags;
@@ -249,7 +249,7 @@ let test_tokenize () =
           (check bool) "keyword match" true (expected = actual))
         expected_tokens
         actual_tokens)
-  ; test_case "arithmetic operators" `Quick (fun () ->
+  ; test_case "tokenize: arithmetic operators" `Quick (fun () ->
       let interner = Interner.create () in
       let tokens, diags = Lexer.tokenize "+-*/" 42 interner in
       check_no_errors diags;
@@ -263,7 +263,7 @@ let test_tokenize () =
           (check bool) "operator match" true (expected = actual))
         expected_tokens
         actual_tokens)
-  ; test_case "delimiters" `Quick (fun () ->
+  ; test_case "tokenize: delimiters" `Quick (fun () ->
       let interner = Interner.create () in
       let tokens, diags = Lexer.tokenize "()[]{},:;" 42 interner in
       check_no_errors diags;
@@ -288,7 +288,7 @@ let test_tokenize () =
           (check bool) "delimiter match" true (expected = actual))
         expected_tokens
         actual_tokens)
-  ; test_case "thousand separators in decimal" `Quick (fun () ->
+  ; test_case "tokenize: thousand separators in decimal" `Quick (fun () ->
       let interner = Interner.create () in
       let tokens, diags = Lexer.tokenize "1_000_000" 42 interner in
       check_no_errors diags;
@@ -296,7 +296,7 @@ let test_tokenize () =
       match tokens with
       | [ (Token.EOF, _); (Token.LitNumber "1_000_000", _) ] -> ()
       | _ -> Alcotest.fail "Expected thousand separator number and EOF")
-  ; test_case "hexadecimal numbers" `Quick (fun () ->
+  ; test_case "tokenize: hexadecimal numbers" `Quick (fun () ->
       let interner = Interner.create () in
       let tokens1, diags1 = Lexer.tokenize "0xFF" 42 interner in
       let tokens2, diags2 = Lexer.tokenize "0x1A_2B" 42 interner in
@@ -309,7 +309,7 @@ let test_tokenize () =
         , [ (Token.EOF, _); (Token.LitNumber "0x1A_2B", _) ] ) ->
         ()
       | _ -> Alcotest.fail "Expected hex numbers and EOF")
-  ; test_case "octal numbers" `Quick (fun () ->
+  ; test_case "tokenize: octal numbers" `Quick (fun () ->
       let interner = Interner.create () in
       let tokens1, diags1 = Lexer.tokenize "0o755" 42 interner in
       let tokens2, diags2 = Lexer.tokenize "0O7_5_5" 42 interner in
@@ -322,7 +322,7 @@ let test_tokenize () =
         , [ (Token.EOF, _); (Token.LitNumber "0O7_5_5", _) ] ) ->
         ()
       | _ -> Alcotest.fail "Expected octal numbers and EOF")
-  ; test_case "binary numbers" `Quick (fun () ->
+  ; test_case "tokenize: binary numbers" `Quick (fun () ->
       let interner = Interner.create () in
       let tokens1, diags1 = Lexer.tokenize "0b1010" 42 interner in
       let tokens2, diags2 = Lexer.tokenize "0B1_0_1_0" 42 interner in
@@ -335,7 +335,7 @@ let test_tokenize () =
         , [ (Token.EOF, _); (Token.LitNumber "0B1_0_1_0", _) ] ) ->
         ()
       | _ -> Alcotest.fail "Expected binary numbers and EOF")
-  ; test_case "decimal with fraction and separators" `Quick (fun () ->
+  ; test_case "tokenize: decimal with fraction and separators" `Quick (fun () ->
       let interner = Interner.create () in
       let tokens, diags = Lexer.tokenize "1_234.567_890" 42 interner in
       check_no_errors diags;
@@ -343,7 +343,7 @@ let test_tokenize () =
       match tokens with
       | [ (Token.EOF, _); (Token.LitNumber "1_234.567_890", _) ] -> ()
       | _ -> Alcotest.fail "Expected decimal fraction with separators and EOF")
-  ; test_case "complex expression" `Quick (fun () ->
+  ; test_case "tokenize: complex expression" `Quick (fun () ->
       let interner = Interner.create () in
       let tokens, diags =
         Lexer.tokenize "result := func(x, y) + 42" 42 interner

@@ -31,12 +31,13 @@ type t =
   | KwOr
   | KwRecord
   | KwReturn
-  | KwTrait
   | KwUnsafe
   | KwVal
   | KwVar
   | KwWhile
   (* Operators *)
+  | DotDotLt
+  | DotDot
   | LtMinus
   | ColonEq
   | Eq
@@ -59,7 +60,6 @@ type t =
   | Tilde
   | At
   | Bang
-  | Dollar
   (* Punctuation *)
   | LParen
   | RParen
@@ -106,7 +106,6 @@ let keyword_strings =
   ; ("or", KwOr)
   ; ("record", KwRecord)
   ; ("return", KwReturn)
-  ; ("trait", KwTrait)
   ; ("unsafe", KwUnsafe)
   ; ("val", KwVal)
   ; ("var", KwVar)
@@ -115,7 +114,9 @@ let keyword_strings =
 
 let symbol_strings =
   [
-    ("<-", LtMinus)
+    ("..<", DotDotLt)
+  ; ("..", DotDot)
+  ; ("<-", LtMinus)
   ; (":=", ColonEq)
   ; ("!=", BangEq)
   ; ("<=", LtEq)
@@ -139,7 +140,6 @@ let symbol_strings =
   ; ("~", Tilde)
   ; ("@", At)
   ; ("!", Bang)
-  ; ("$", Dollar)
   ; ("(", LParen)
   ; (")", RParen)
   ; ("{", LBrace)
@@ -174,13 +174,13 @@ let to_string = function
   | Ident name -> "IDENT(id:" ^ string_of_int name ^ ")"
   | ( KwAnd | KwAs | KwBreak | KwCase | KwChoice | KwCycle | KwDefer | KwElse
     | KwExport | KwExtern | KwFn | KwFor | KwFrom | KwIf | KwImport | KwIn
-    | KwIs | KwMatch | KwNot | KwOr | KwRecord | KwReturn | KwTrait | KwUnsafe
-    | KwVal | KwVar | KwWhile ) as kw ->
+    | KwIs | KwMatch | KwNot | KwOr | KwRecord | KwReturn | KwUnsafe | KwVal
+    | KwVar | KwWhile ) as kw ->
     Hashtbl.find keyword_to_string kw
-  | ( LtMinus | ColonEq | Eq | BangEq | Lt | LtEq | Gt | GtEq | LtLt | GtGt
-    | Plus | Minus | Star | Slash | StarStar | PipeGt | Amp | Pipe | Caret
-    | Tilde | At | Bang | Dollar | LParen | RParen | LBrace | RBrace | LBrack
-    | RBrack | Comma | Semi | Colon | Dot | MinusGt | EqGt | Underscore
+  | ( DotDotLt | DotDot | LtMinus | ColonEq | Eq | BangEq | Lt | LtEq | Gt
+    | GtEq | LtLt | GtGt | Plus | Minus | Star | Slash | StarStar | PipeGt | Amp
+    | Pipe | Caret | Tilde | At | Bang | LParen | RParen | LBrace | RBrace
+    | LBrack | RBrack | Comma | Semi | Colon | Dot | MinusGt | EqGt | Underscore
     | Question ) as sym ->
     Hashtbl.find symbol_to_string sym
   | EOF -> "EOF"

@@ -78,7 +78,6 @@ let keyword_table =
   ; ("or", KwOr)
   ; ("record", KwRecord)
   ; ("return", KwReturn)
-  ; ("trait", KwTrait)
   ; ("unsafe", KwUnsafe)
   ; ("val", KwVal)
   ; ("var", KwVar)
