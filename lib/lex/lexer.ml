@@ -22,14 +22,24 @@ let mk_state source file_id interner =
   ; diags = Diagnostic.empty_bag
   }
 
-let is_letter c = ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z')
-let is_digit c = '0' <= c && c <= '9'
+let char_in_range c (lo, hi) = lo <= c && c <= hi
+let is_letter c = char_in_range c ('a', 'z') || char_in_range c ('A', 'Z')
+let is_digit c = char_in_range c ('0', '9')
 let is_space c = c = ' ' || c = '\t' || c = '\r'
 let is_ident_start c = is_letter c || c = '_'
 let is_ident_cont c = is_letter c || is_digit c || c = '_'
-let is_xdigit c = is_digit c || ('a' <= c && c <= 'f') || ('A' <= c && c <= 'F')
-let is_odigit c = '0' <= c && c <= '7'
-let is_bdigit c = '0' <= c && c <= '1'
+
+let digit_in_base c base =
+  if base <= 10 then char_in_range c ('0', Char.chr (Char.code '0' + base - 1))
+  else if base <= 16 then
+    is_digit c
+    || char_in_range c ('a', Char.chr (Char.code 'a' + base - 11))
+    || char_in_range c ('A', Char.chr (Char.code 'A' + base - 11))
+  else false
+
+let is_xdigit c = digit_in_base c 16
+let is_odigit c = digit_in_base c 8
+let is_bdigit c = digit_in_base c 2
 let peek st = if st.pos >= st.len then '\000' else st.source.[st.pos]
 
 let peek_n st n =
@@ -145,7 +155,19 @@ let rec scan_ident st start =
     | Some kw -> kw
     | None -> Ident (Interner.intern st.interner text)
 
-type number_base = Decimal | Hexadecimal | Octal | Binary
+type number_base = {
+    name : string
+  ; prefix : string option
+  ; digit_checker : char -> bool
+}
+
+let dec_base = { name = "decimal"; prefix = None; digit_checker = is_digit }
+
+let hex_base =
+  { name = "hexadecimal"; prefix = Some "x"; digit_checker = is_xdigit }
+
+let oct_base = { name = "octal"; prefix = Some "o"; digit_checker = is_odigit }
+let bin_base = { name = "binary"; prefix = Some "b"; digit_checker = is_bdigit }
 
 let scan_digit_with_sep st digit_checker =
   let rec scan_digits acc =
@@ -162,47 +184,25 @@ let scan_digit_with_sep st digit_checker =
   in
   scan_digits 0
 
+let classify_number_base st =
+  if st.pos + 1 < st.len && st.source.[st.pos] = '0' then
+    match st.source.[st.pos + 1] with
+    | 'x' | 'X' -> (hex_base, 2)
+    | 'o' | 'O' -> (oct_base, 2)
+    | 'b' | 'B' -> (bin_base, 2)
+    | _ -> (dec_base, 0)
+  else (dec_base, 0)
+
 let scan_number st start =
-  let number_base =
-    if st.pos + 1 < st.len && st.source.[st.pos] = '0' then
-      match st.source.[st.pos + 1] with
-      | 'x' | 'X' ->
-        advance_n st 2;
-        Hexadecimal
-      | 'o' | 'O' ->
-        advance_n st 2;
-        Octal
-      | 'b' | 'B' ->
-        advance_n st 2;
-        Binary
-      | _ -> Decimal
-    else Decimal
-  in
+  let number_base, prefix_len = classify_number_base st in
+  advance_n st prefix_len;
 
-  let digit_checker =
-    match number_base with
-    | Decimal -> is_digit
-    | Hexadecimal -> is_xdigit
-    | Octal -> is_odigit
-    | Binary -> is_bdigit
-  in
-
-  if st.pos >= st.len || not (digit_checker st.source.[st.pos]) then (
-    add_err
-      st
-      Error.E0103
-      start
-      [
-        (match number_base with
-        | Decimal -> "decimal"
-        | Hexadecimal -> "hexadecimal"
-        | Octal -> "octal"
-        | Binary -> "binary")
-      ];
+  if st.pos >= st.len || not (number_base.digit_checker st.source.[st.pos]) then (
+    add_err st Error.E0103 start [ number_base.name ];
     LitNumber (substr st start (st.pos - start)))
   else
-    let _ = scan_digit_with_sep st digit_checker in
-    if number_base = Decimal && st.pos < st.len && st.source.[st.pos] = '.' then (
+    let _ = scan_digit_with_sep st number_base.digit_checker in
+    if prefix_len = 0 && st.pos < st.len && st.source.[st.pos] = '.' then (
       advance st;
       let _ = scan_digit_with_sep st is_digit in
       ());
@@ -303,24 +303,27 @@ let scan_hex_escape st =
     ~parser:hex_parser
     ~post_processor:hex_post_processor
 
+let scan_escape st continuation_fn =
+  if st.pos + 1 < st.len then (
+    match st.source.[st.pos + 1] with
+    | 'u' when st.pos + 2 < st.len && st.source.[st.pos + 2] = '{' ->
+      let char_str, _code_point = scan_unicode_escape st in
+      continuation_fn char_str
+    | 'x' when st.pos + 2 < st.len && st.source.[st.pos + 2] = '{' ->
+      let char_str, _code_point = scan_hex_escape st in
+      continuation_fn char_str
+    | c ->
+      let esc = lookup_escape c in
+      advance_n st 2;
+      continuation_fn (String.make 1 esc))
+  else continuation_fn ""
+
 let rec scan_string_content st =
   if st.pos >= st.len then ""
   else
     match st.source.[st.pos] with
     | '"' -> ""
-    | '\\' when st.pos + 1 < st.len -> begin
-      match st.source.[st.pos + 1] with
-      | 'u' when st.pos + 2 < st.len && st.source.[st.pos + 2] = '{' ->
-        let char_str, _code_point = scan_unicode_escape st in
-        char_str ^ scan_string_content st
-      | 'x' when st.pos + 2 < st.len && st.source.[st.pos + 2] = '{' ->
-        let char_str, _code_point = scan_hex_escape st in
-        char_str ^ scan_string_content st
-      | c ->
-        let esc = lookup_escape c in
-        advance_n st 2;
-        String.make 1 esc ^ scan_string_content st
-    end
+    | '\\' -> scan_escape st (fun char_str -> char_str ^ scan_string_content st)
     | c ->
       advance st;
       String.make 1 c ^ scan_string_content st
@@ -345,38 +348,75 @@ let scan_rune st start =
     | '\'' ->
       advance st;
       LitRune '\000'
-    | '\\' when st.pos + 1 < st.len -> begin
-      match st.source.[st.pos + 1] with
-      | 'u' when st.pos + 2 < st.len && st.source.[st.pos + 2] = '{' ->
-        let char_str, _code_point = scan_unicode_escape st in
+    | '\\' ->
+      scan_escape st (fun char_str ->
         if st.pos < st.len && st.source.[st.pos] = '\'' then advance st;
-        if char_str = "" then LitRune '\000' else LitRune char_str.[0]
-      | 'x' when st.pos + 2 < st.len && st.source.[st.pos + 2] = '{' ->
-        let char_str, _code_point = scan_hex_escape st in
-        if st.pos < st.len && st.source.[st.pos] = '\'' then advance st;
-        if char_str = "" then LitRune '\000' else LitRune char_str.[0]
-      | c ->
-        let esc = lookup_escape c in
-        advance_n st 2;
-        if st.pos < st.len && st.source.[st.pos] = '\'' then advance st;
-        LitRune esc
-    end
+        if char_str = "" then LitRune '\000' else LitRune char_str.[0])
     | c ->
       advance st;
       if st.pos < st.len && st.source.[st.pos] = '\'' then advance st;
       LitRune c
 
-let rec try_symbol st start symbols =
-  match symbols with
-  | [] -> Token.Error
-  | (sym, token) :: rest ->
-    let len = String.length sym in
-    if st.pos + len <= st.len && substr st st.pos len = sym then (
-      for _i = 1 to len do
-        advance st
-      done;
-      token)
-    else try_symbol st start rest
+let symbol_table =
+  let entries =
+    [
+      (":=", ColonEq)
+    ; (">=", GtEq)
+    ; ("<=", LtEq)
+    ; ("!=", BangEq)
+    ; ("<<", LtLt)
+    ; (">>", GtGt)
+    ; ("**", StarStar)
+    ; ("|>", PipeGt)
+    ; ("->", MinusGt)
+    ; ("=>", EqGt)
+    ; ("!", Bang)
+    ; ("&", Amp)
+    ; ("(", LParen)
+    ; (")", RParen)
+    ; ("*", Star)
+    ; ("+", Plus)
+    ; (",", Comma)
+    ; ("-", Minus)
+    ; (".", Dot)
+    ; ("/", Slash)
+    ; (":", Colon)
+    ; (";", Semi)
+    ; ("<", Lt)
+    ; ("=", Eq)
+    ; (">", Gt)
+    ; ("?", Question)
+    ; ("@", At)
+    ; ("[", LBrack)
+    ; ("]", RBrack)
+    ; ("^", Caret)
+    ; ("_", Underscore)
+    ; ("{", LBrace)
+    ; ("|", Pipe)
+    ; ("}", RBrace)
+    ; ("~", Tilde)
+    ]
+  in
+  let table = Hashtbl.create (List.length entries) in
+  List.iter (fun (sym, token) -> Hashtbl.add table sym token) entries;
+  table
+
+let try_symbol st =
+  let max_len = 3 in
+  let rec find_longest_match len =
+    if len <= 0 then Token.Error
+    else
+      let sym_len = min len (st.len - st.pos) in
+      if sym_len > 0 then
+        let candidate = substr st st.pos sym_len in
+        match Hashtbl.find_opt symbol_table candidate with
+        | Some token ->
+          advance_n st sym_len;
+          token
+        | None -> find_longest_match (len - 1)
+      else find_longest_match (len - 1)
+  in
+  find_longest_match max_len
 
 let next_token st =
   skip_whitespace st;
@@ -409,7 +449,7 @@ let next_token st =
       else (
         add_err st Error.E0201 start [ "template" ];
         LitTemplate (Interner.intern st.interner content))
-    | _ -> try_symbol st start symbols
+    | _ -> try_symbol st
 
 let tokenize source file_id interner =
   let st = mk_state source file_id interner in
