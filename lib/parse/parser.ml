@@ -298,9 +298,8 @@ module Make () : S = struct
           let s', stmts = many parse_stmt s in
           match peek_opt s' with
           | Some (Token.KwReturn, _) ->
-            let s'' = advance s' in
-            let s''', ret = parse_expr s'' in
-            (s''', (stmts, Some ret))
+            let s'', ret = advance_then parse_expr s' in
+            (s'', (stmts, Some ret))
           | _ -> (s', (stmts, None)))
         st
     in
@@ -316,8 +315,7 @@ module Make () : S = struct
     let st''''', else_block =
       match peek_opt st'''' with
       | Some (Token.KwElse, _) ->
-        let s = advance st'''' in
-        let s', blk = parse_block s in
+        let s', blk = advance_then parse_block st in
         (s', Some blk)
       | _ -> (st'''', None)
     in
@@ -337,10 +335,9 @@ module Make () : S = struct
           let s', stmts = many parse_stmt s in
           match peek_opt s' with
           | Some (Token.KwReturn, _) ->
-            let s'' = advance s' in
-            let s''', ret = parse_expr s'' in
-            let s'''' = expect s''' Token.Semi ";" in
-            (s'''', (stmts, Some ret))
+            let s'', ret = advance_then parse_expr s in
+            let s''' = expect s'' Token.Semi ";" in
+            (s''', (stmts, Some ret))
           | _ -> (s', (stmts, None)))
         st
     in
@@ -350,11 +347,10 @@ module Make () : S = struct
   and parse_cond st =
     match peek_opt st with
     | Some (Token.KwCase, _) ->
-      let st' = advance st in
-      let st'', pat = parse_pat st' in
-      let st''' = expect st'' Token.ColonEq ":=" in
-      let st'''', value = parse_expr st''' in
-      (st'''', Node.CondCase { pat; value })
+      let st', pat = advance_then parse_pat st in
+      let st'' = expect st' Token.ColonEq ":=" in
+      let st''', value = parse_expr st'' in
+      (st''', Node.CondCase { pat; value })
     | _ ->
       let st', expr = parse_expr st in
       (st', Node.CondExpr expr)
@@ -374,8 +370,7 @@ module Make () : S = struct
     let st''', guard =
       match peek_opt st'' with
       | Some (Token.KwIf, _) ->
-        let s = advance st'' in
-        let s', g = parse_expr s in
+        let s', g = advance_then parse_expr st'' in
         (s', Some g)
       | _ -> (st'', None)
     in
@@ -396,8 +391,7 @@ module Make () : S = struct
     let st''''', guard =
       match peek_opt st'''' with
       | Some (Token.KwIf, _) ->
-        let s = advance st'''' in
-        let s', g = parse_expr s in
+        let s', g = parse_expr st'''' in
         (s', Some g)
       | _ -> (st'''', None)
     in
@@ -409,9 +403,8 @@ module Make () : S = struct
   and parse_for_binding st =
     match peek_opt st with
     | Some (Token.KwCase, _) ->
-      let st' = advance st in
-      let st'', pat = parse_pat st' in
-      (st'', Node.ForCase pat)
+      let st', pat = advance_then parse_pat st in
+      (st', Node.ForCase pat)
     | Some (Token.Ident _, _) ->
       let st', name, _ = expect_ident st in
       (st', Node.ForIdent name)
@@ -426,8 +419,7 @@ module Make () : S = struct
     let st''', guard =
       match peek_opt st'' with
       | Some (Token.KwIf, _) ->
-        let s = advance st'' in
-        let s', g = parse_expr s in
+        let s', g = advance_then parse_expr st'' in
         (s', Some g)
       | _ -> (st'', None)
     in
@@ -473,16 +465,14 @@ module Make () : S = struct
   and parse_record_field_init st =
     match peek_opt st with
     | Some (Token.Dot, _) ->
-      let st' = advance st in
-      let st'', name, _ = expect_ident st' in
-      let st''' = expect st'' Token.Colon ":=" in
-      let st'''', value = parse_expr st''' in
-      (st'''', { Node.shorthand = false; name; value })
-    | Some (Token.Ident name, _) ->
-      let st' = advance st in
+      let st', name, _ = advance_then expect_ident st in
       let st'' = expect st' Token.Colon ":=" in
       let st''', value = parse_expr st'' in
-      (st''', { Node.shorthand = true; name; value })
+      (st''', { Node.shorthand = false; name; value })
+    | Some (Token.Ident name, _) ->
+      let st' = advance_then expect st Token.Colon ":=" in
+      let st'', value = parse_expr st' in
+      (st'', { Node.shorthand = true; name; value })
     | _ ->
       let span = curr_span st in
       let error_field =
@@ -529,8 +519,7 @@ module Make () : S = struct
     let st'''''', ret_typ =
       match peek_opt st''''' with
       | Some (Token.MinusGt, _) ->
-        let s = advance st''''' in
-        let s', t = parse_typ s in
+        let s', t = advance_then parse_typ st''''' in
         (s', Some t)
       | _ -> (st''''', None)
     in
@@ -557,9 +546,8 @@ module Make () : S = struct
     let st''', trait_bound =
       match peek_opt st'' with
       | Some (Token.Colon, _) ->
-        let s = advance st'' in
-        let s', t = parse_typ s in
-        (s', Some t)
+        let s, t = advance_then parse_typ st'' in
+        (s, Some t)
       | _ -> (st'', None)
     in
     let st'''', (fields, body) =
@@ -591,14 +579,12 @@ module Make () : S = struct
     let st', name, _ = expect_ident st in
     match peek_opt st' with
     | Some (Token.Colon, _) ->
-      let st'' = advance st' in
-      let st''', typ = parse_typ st'' in
-      (st''', `Field ({ Node.name; typ } : Node.record_field))
+      let st'', typ = advance_then parse_typ st' in
+      (st'', `Field ({ Node.name; typ } : Node.record_field))
     | Some (Token.ColonEq, _) ->
-      let st'' = advance st' in
-      let st''', expr = parse_expr st'' in
-      let span = curr_span st''' in
-      ( st'''
+      let st'', expr = advance_then parse_expr st' in
+      let span = curr_span st'' in
+      ( st''
       , `Method
           ({
              Node.attr = None
@@ -659,9 +645,8 @@ module Make () : S = struct
     let st''', trait_bound =
       match peek_opt st'' with
       | Some (Token.Colon, _) ->
-        let s = advance st'' in
-        let s', t = parse_typ s in
-        (s', Some t)
+        let s, t = advance_then parse_typ st'' in
+        (s, Some t)
       | _ -> (st'', None)
     in
     let st'''', items =
@@ -732,13 +717,11 @@ module Make () : S = struct
   and parse_pat_bind st =
     match peek_opt st with
     | Some (Token.KwVal, span) ->
-      let st' = advance st in
-      let st'', name, _ = expect_ident st' in
-      (st'', { Node.kind = Node.PatBind { mutable_ = false; name }; span })
+      let st', name, _ = advance_then expect_ident st in
+      (st', { Node.kind = Node.PatBind { mutable_ = false; name }; span })
     | Some (Token.KwVar, span) ->
-      let st' = advance st in
-      let st'', name, _ = expect_ident st' in
-      (st'', { Node.kind = Node.PatBind { mutable_ = true; name }; span })
+      let st', name, _ = advance_then expect_ident st in
+      (st', { Node.kind = Node.PatBind { mutable_ = true; name }; span })
     | _ ->
       let span = curr_span st in
       let st' = add_error_code st Error.E1103 span [] in
@@ -785,9 +768,8 @@ module Make () : S = struct
     let st'', name, _ = expect_ident st' in
     match peek_opt st'' with
     | Some (Token.ColonEq, _) ->
-      let st''' = advance st'' in
-      let st'''', pat = parse_pat st''' in
-      (st'''', { Node.name; pat = Some pat })
+      let st''', pat = advance_then parse_pat st'' in
+      (st''', { Node.name; pat = Some pat })
     | _ -> (st'', { Node.name; pat = None })
 
   and parse_pat_ctor st =
@@ -877,9 +859,8 @@ module Make () : S = struct
     let st''', ret =
       match peek_opt st'' with
       | Some (Token.MinusGt, _) ->
-        let s = advance st'' in
-        let s', t = parse_typ s in
-        (s', Some t)
+        let s, t = advance_then parse_typ st'' in
+        (s, Some t)
       | _ -> (st'', None)
     in
     let span = curr_span st''' in
@@ -959,10 +940,9 @@ module Make () : S = struct
   and parse_import_clause st =
     match peek_opt st with
     | Some (Token.Star, _) ->
-      let st' = advance st in
-      let st'' = expect st' Token.KwAs "as" in
-      let st''', name, _ = expect_ident st'' in
-      (st''', Node.ImportAll name)
+      let st' = advance_then expect st Token.KwAs "as" in
+      let st'', name, _ = expect_ident st' in
+      (st'', Node.ImportAll name)
     | Some (Token.LBrace, _) ->
       let st', names = btwn_braces (sep_by expect_ident_name Token.Comma) st in
       (st', Node.ImportNamed names)
@@ -974,10 +954,9 @@ module Make () : S = struct
   and parse_export_clause st =
     match peek_opt st with
     | Some (Token.Star, _) ->
-      let st' = advance st in
-      let st'' = expect st' Token.KwAs "as" in
-      let st''', name, _ = expect_ident st'' in
-      (st''', Node.ExportAll name)
+      let st' = advance_then expect st Token.KwAs "as" in
+      let st'', name, _ = expect_ident st' in
+      (st'', Node.ExportAll name)
     | Some (Token.LBrace, _) ->
       let st', names = btwn_braces (sep_by expect_ident_name Token.Comma) st in
       (st', Node.ExportNamed names)
@@ -1008,9 +987,8 @@ module Make () : S = struct
     let st''', typ =
       match peek_opt st'' with
       | Some (Token.Colon, _) ->
-        let s = advance st'' in
-        let s', t = parse_typ s in
-        (s', Some t)
+        let s, t = advance_then parse_typ st'' in
+        (s, Some t)
       | _ -> (st'', None)
     in
     let st'''' = expect st''' Token.ColonEq ":=" in
@@ -1046,9 +1024,8 @@ module Make () : S = struct
     let st'''', typ =
       match peek_opt st''' with
       | Some (Token.MinusGt, _) ->
-        let s = advance st''' in
-        let s', t = parse_typ s in
-        (s', Some t)
+        let s, t = advance_then parse_typ st''' in
+        (s, Some t)
       | _ -> (st''', None)
     in
     (st'''', { Node.name; typ })
@@ -1059,9 +1036,8 @@ module Make () : S = struct
     let st', name, _ = expect_ident st in
     match peek_opt st' with
     | Some (Token.Colon, _) ->
-      let st'' = advance st' in
-      let st''', typ = parse_typ st'' in
-      (st''', { Node.name; typ = Some typ })
+      let st'', typ = advance_then parse_typ st' in
+      (st'', { Node.name; typ = Some typ })
     | _ -> (st', { Node.name; typ = None })
 
   and parse_stmt_expr st =
