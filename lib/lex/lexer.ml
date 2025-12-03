@@ -164,7 +164,7 @@ let scan_number st =
     let final_st, _ = scan_decimal_part st in
     (final_st, extract st start final_st.pos)
 
-let scan_string_literal st =
+let scan_lit_string st =
   let start = st.pos in
   let rec loop st =
     match peek_char_opt st with
@@ -181,7 +181,7 @@ let scan_string_literal st =
     (err_st, None, sp)
   else (final_st, Some content, sp)
 
-let scan_rune_literal st =
+let scan_lit_rune st =
   let start = st.pos in
   let rec loop st =
     match peek_char_opt st with
@@ -249,7 +249,7 @@ let scan_template_or_dollar st =
   | Some '$', Some '"' ->
     let start = st.pos in
     let final_st, content_opt, _ =
-      scan_string_literal { st with pos = st.pos + 1 }
+      scan_lit_string { st with pos = st.pos + 1 }
     in
     let content =
       match content_opt with
@@ -279,7 +279,7 @@ let dispatch_token st =
     let final_st, num_str = scan_number st in
     (final_st, Token.LitNumber num_str, span st st.pos)
   | Some '"' ->
-    let final_st, content_opt, sp = scan_string_literal st in
+    let final_st, content_opt, sp = scan_lit_string st in
     let content =
       match content_opt with
       | Some c -> Interner.intern st.interner c
@@ -287,7 +287,7 @@ let dispatch_token st =
     in
     (final_st, Token.LitString content, sp)
   | Some '\'' ->
-    let final_st, char_val, sp = scan_rune_literal st in
+    let final_st, char_val, sp = scan_lit_rune st in
     (final_st, Token.LitRune char_val, sp)
   | Some '$' -> scan_template_or_dollar st
   | Some c when Char.code c < 32 && c <> '\t' && c <> '\n' && c <> '\r' ->
