@@ -94,11 +94,11 @@ let test_state_functions () =
       (check char) "peek_n 1" 'i' (Lexer.peek_n state 1);
       (check char) "peek_n 2" '\000' (Lexer.peek_n state 2);
       (check char) "peek_n 10" '\000' (Lexer.peek_n state 10))
-  ; test_case "adv_n" `Quick (fun () ->
+  ; test_case "advance_n" `Quick (fun () ->
       let state = make_test_state "hello" in
       Lexer.advance_n state 3;
-      (check int) "adv_n position" 3 state.pos;
-      (check char) "peek after adv_n" 'l' (Lexer.peek state))
+      (check int) "advance_n position" 3 state.pos;
+      (check char) "peek after advance_n" 'l' (Lexer.peek state))
   ]
 
 let test_lookup_escape () =
