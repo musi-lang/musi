@@ -21,7 +21,7 @@ let check_identifier_value interner name expected =
   let actual = get_interned_string interner name in
   (check string) "identifier value" expected actual
 
-let test_character_predicates () =
+let test_char_preds () =
   (check bool) "is_alpha lowercase" true (Lexer.is_alpha 'a');
   (check bool) "is_alpha uppercase" true (Lexer.is_alpha 'Z');
   (check bool) "is_alpha non-alpha" false (Lexer.is_alpha '5');
@@ -182,14 +182,14 @@ let test_templates_escape () =
   | Token.LitTemplate name -> check_string_value interner name "hello\nworld"
   | _ -> fail "Expected template token"
 
-let test_identifiers_basic () =
+let test_idents_basic () =
   let state, interner = make_test_state "hello_world" in
   let new_state, name, _span = Lexer.scan_ident state in
   check_no_errors new_state.diags;
   check_identifier_value interner name "hello_world";
   (check int) "identifier basic position" 11 new_state.pos
 
-let test_identifiers_single_letter () =
+let test_idents_1letter () =
   let state, interner = make_test_state "x" in
   let new_state, name, _span = Lexer.scan_ident state in
   check_no_errors new_state.diags;
@@ -417,72 +417,81 @@ let test_utf8_invalid_start_byte () =
     true
     (Diagnostic.has_errors diags)
 
-let suite =
+let test_cases =
   [
-    ( "lexer"
-    , [
-        ("character_predicates", `Quick, test_character_predicates)
-      ; ("state_functions", `Quick, test_state_functions)
-      ; ("numbers_decimal", `Quick, test_numbers_decimal)
-      ; ("numbers_hex", `Quick, test_numbers_hex)
-      ; ("numbers_binary", `Quick, test_numbers_binary)
-      ; ("numbers_octal", `Quick, test_numbers_octal)
-      ; ("numbers_float", `Quick, test_numbers_float)
-      ; ( "numbers_errors_incomplete_hex"
-        , `Quick
-        , test_numbers_errors_incomplete_hex )
-      ; ("strings_basic", `Quick, test_strings_basic)
-      ; ("strings_empty", `Quick, test_strings_empty)
-      ; ("strings_escape_newline", `Quick, test_strings_escape_newline)
-      ; ("strings_unterminated", `Quick, test_strings_unterminated)
-      ; ("runes_basic", `Quick, test_runes_basic)
-      ; ("runes_escape_newline", `Quick, test_runes_escape_newline)
-      ; ("runes_empty", `Quick, test_runes_empty)
-      ; ("runes_multichar", `Quick, test_runes_multichar)
-      ; ("runes_invalid_escape", `Quick, test_runes_invalid_escape)
-      ; ("unicode_escape_valid_small", `Quick, test_unicode_escape_valid_small)
-      ; ("unicode_escape_valid_big", `Quick, test_unicode_escape_valid_big)
-      ; ("unicode_escape_empty", `Quick, test_unicode_escape_empty)
-      ; ( "unicode_escape_missing_brace"
-        , `Quick
-        , test_unicode_escape_missing_brace )
-      ; ("unicode_escape_invalid_hex", `Quick, test_unicode_escape_invalid_hex)
-      ; ( "unicode_escape_exceed_small_limit"
-        , `Quick
-        , test_unicode_escape_exceed_small_limit )
-      ; ("unicode_escape_incomplete", `Quick, test_unicode_escape_incomplete)
-      ; ("unicode_escape_in_rune", `Quick, test_unicode_escape_in_rune)
-      ; ( "template_extra_closing_brace"
-        , `Quick
-        , test_template_extra_closing_brace )
-      ; ( "template_unclosed_opening_brace"
-        , `Quick
-        , test_template_unclosed_opening_brace )
-      ; ("template_nested_braces", `Quick, test_template_nested_braces)
-      ; ("template_empty_braces", `Quick, test_template_empty_braces)
-      ; ("utf8_valid_2byte", `Quick, test_utf8_valid_2byte)
-      ; ("utf8_valid_3byte", `Quick, test_utf8_valid_3byte)
-      ; ("utf8_valid_4byte", `Quick, test_utf8_valid_4byte)
-      ; ("utf8_invalid_continuation", `Quick, test_utf8_invalid_continuation)
-      ; ("utf8_incomplete_sequence", `Quick, test_utf8_incomplete_sequence)
-      ; ("utf8_invalid_start_byte", `Quick, test_utf8_invalid_start_byte)
-      ; ("identifiers_basic", `Quick, test_identifiers_basic)
-      ; ("identifiers_single_letter", `Quick, test_identifiers_single_letter)
-      ; ("keywords_val", `Quick, test_keywords_val)
-      ; ("keywords_var", `Quick, test_keywords_var)
-      ; ("keywords_fn", `Quick, test_keywords_fn)
-      ; ("symbols_assignment", `Quick, test_symbols_assignment)
-      ; ("symbols_equals", `Quick, test_symbols_equals)
-      ; ("symbols_plus", `Quick, test_symbols_plus)
-      ; ("symbols_dollar", `Quick, test_symbols_dollar)
-      ; ("templates_basic", `Quick, test_templates_basic)
-      ; ("templates_escape", `Quick, test_templates_escape)
-      ; ("dollar_standalone", `Quick, test_dollar_standalone)
-      ; ("parentheses", `Quick, test_parentheses)
-      ; ("comments_line", `Quick, test_comments_line)
-      ; ("comments_block", `Quick, test_comments_block)
-      ; ("whitespace_space", `Quick, test_whitespace_space)
-      ] )
+    test_case "char_preds" `Quick test_char_preds
+  ; test_case "state_functions" `Quick test_state_functions
+  ; test_case "numbers_decimal" `Quick test_numbers_decimal
+  ; test_case "numbers_hex" `Quick test_numbers_hex
+  ; test_case "numbers_binary" `Quick test_numbers_binary
+  ; test_case "numbers_octal" `Quick test_numbers_octal
+  ; test_case "numbers_float" `Quick test_numbers_float
+  ; test_case
+      "numbers_errors_incomplete_hex"
+      `Quick
+      test_numbers_errors_incomplete_hex
+  ; test_case "strings_basic" `Quick test_strings_basic
+  ; test_case "strings_empty" `Quick test_strings_empty
+  ; test_case "strings_escape_newline" `Quick test_strings_escape_newline
+  ; test_case "strings_unterminated" `Quick test_strings_unterminated
+  ; test_case "runes_basic" `Quick test_runes_basic
+  ; test_case "runes_escape_newline" `Quick test_runes_escape_newline
+  ; test_case "runes_empty" `Quick test_runes_empty
+  ; test_case "runes_multichar" `Quick test_runes_multichar
+  ; test_case "runes_invalid_escape" `Quick test_runes_invalid_escape
+  ; test_case
+      "unicode_escape_valid_small"
+      `Quick
+      test_unicode_escape_valid_small
+  ; test_case "unicode_escape_valid_big" `Quick test_unicode_escape_valid_big
+  ; test_case "unicode_escape_empty" `Quick test_unicode_escape_empty
+  ; test_case
+      "unicode_escape_missing_brace"
+      `Quick
+      test_unicode_escape_missing_brace
+  ; test_case
+      "unicode_escape_invalid_hex"
+      `Quick
+      test_unicode_escape_invalid_hex
+  ; test_case
+      "unicode_escape_exceed_small_limit"
+      `Quick
+      test_unicode_escape_exceed_small_limit
+  ; test_case "unicode_escape_incomplete" `Quick test_unicode_escape_incomplete
+  ; test_case "unicode_escape_in_rune" `Quick test_unicode_escape_in_rune
+  ; test_case
+      "template_extra_closing_brace"
+      `Quick
+      test_template_extra_closing_brace
+  ; test_case
+      "template_unclosed_opening_brace"
+      `Quick
+      test_template_unclosed_opening_brace
+  ; test_case "template_nested_braces" `Quick test_template_nested_braces
+  ; test_case "template_empty_braces" `Quick test_template_empty_braces
+  ; test_case "utf8_valid_2byte" `Quick test_utf8_valid_2byte
+  ; test_case "utf8_valid_3byte" `Quick test_utf8_valid_3byte
+  ; test_case "utf8_valid_4byte" `Quick test_utf8_valid_4byte
+  ; test_case "utf8_invalid_continuation" `Quick test_utf8_invalid_continuation
+  ; test_case "utf8_incomplete_sequence" `Quick test_utf8_incomplete_sequence
+  ; test_case "utf8_invalid_start_byte" `Quick test_utf8_invalid_start_byte
+  ; test_case "idents_basic" `Quick test_idents_basic
+  ; test_case "idents_1letter" `Quick test_idents_1letter
+  ; test_case "keywords_val" `Quick test_keywords_val
+  ; test_case "keywords_var" `Quick test_keywords_var
+  ; test_case "keywords_fn" `Quick test_keywords_fn
+  ; test_case "symbols_assignment" `Quick test_symbols_assignment
+  ; test_case "symbols_equals" `Quick test_symbols_equals
+  ; test_case "symbols_plus" `Quick test_symbols_plus
+  ; test_case "symbols_dollar" `Quick test_symbols_dollar
+  ; test_case "templates_basic" `Quick test_templates_basic
+  ; test_case "templates_escape" `Quick test_templates_escape
+  ; test_case "dollar_standalone" `Quick test_dollar_standalone
+  ; test_case "parentheses" `Quick test_parentheses
+  ; test_case "comments_line" `Quick test_comments_line
+  ; test_case "comments_block" `Quick test_comments_block
+  ; test_case "whitespace_space" `Quick test_whitespace_space
   ]
 
-let () = Alcotest.run "Lexer Tests" suite
+let suite = [ ("lexer", test_cases) ]
+let () = run "lexer" suite

@@ -7,11 +7,6 @@ let make_test_state source =
   let interner = Interner.create () in
   let file_id = 42 in
   let tokens, _ = Lexer.tokenize source file_id interner in
-  Printf.printf "Token stream for '%s':\n" source;
-  List.iteri
-    (fun i (token, _) -> Printf.printf "  %d: %s\n" i (Token.to_string token))
-    tokens;
-  Printf.printf "Total tokens: %d\n\n" (List.length tokens);
   let state = Parser.mk_state source file_id tokens interner in
   (state, interner)
 
@@ -580,75 +575,73 @@ let test_program_multi_stmt () =
   check_no_errors diags;
   (check int) "multi stmt program length" 2 (List.length prog)
 
-let suite =
+let test_cases =
   [
-    ( "parser"
-    , [
-        ("parser_state", `Quick, test_parser_state)
-      ; ("expr_lit_number", `Quick, test_expr_lit_number)
-      ; ("expr_lit_string", `Quick, test_expr_lit_string)
-      ; ("expr_lit_rune", `Quick, test_expr_lit_rune)
-      ; ("expr_ident", `Quick, test_expr_ident)
-      ; ("expr_template", `Quick, test_expr_template)
-      ; ("expr_tuple", `Quick, test_expr_tuple)
-      ; ("expr_block", `Quick, test_expr_block)
-      ; ("expr_if", `Quick, test_expr_if)
-      ; ("expr_if_else", `Quick, test_expr_if_else)
-      ; ("expr_match", `Quick, test_expr_match)
-      ; ("expr_for", `Quick, test_expr_for)
-      ; ("expr_while", `Quick, test_expr_while)
-      ; ("expr_defer", `Quick, test_expr_defer)
-      ; ("expr_break", `Quick, test_expr_break)
-      ; ("expr_break_value", `Quick, test_expr_break_value)
-      ; ("expr_cycle", `Quick, test_expr_cycle)
-      ; ("expr_unsafe", `Quick, test_expr_unsafe)
-      ; ("expr_assign", `Quick, test_expr_assign)
-      ; ("expr_binary_add", `Quick, test_expr_binary_add)
-      ; ("expr_binary_mul", `Quick, test_expr_binary_mul)
-      ; ("expr_unary_neg", `Quick, test_expr_unary_neg)
-      ; ("expr_unary_not", `Quick, test_expr_unary_not)
-      ; ("expr_call", `Quick, test_expr_call)
-      ; ("expr_field", `Quick, test_expr_field)
-      ; ("expr_index", `Quick, test_expr_index)
-      ; ("expr_record_lit", `Quick, test_expr_record_lit)
-      ; ("expr_record_lit_named", `Quick, test_expr_record_lit_named)
-      ; ("expr_fn", `Quick, test_expr_fn)
-      ; ("expr_fn_named", `Quick, test_expr_fn_named)
-      ; ("expr_record", `Quick, test_expr_record)
-      ; ("expr_choice", `Quick, test_expr_choice)
-      ; ("expr_trait", `Quick, test_expr_trait)
-      ; ("pat_bind", `Quick, test_pat_bind)
-      ; ("pat_bind_var", `Quick, test_pat_bind_var)
-      ; ("pat_lit_number", `Quick, test_pat_lit_number)
-      ; ("pat_lit_string", `Quick, test_pat_lit_string)
-      ; ("pat_wild", `Quick, test_pat_wild)
-      ; ("pat_ident", `Quick, test_pat_ident)
-      ; ("pat_record", `Quick, test_pat_record)
-      ; ("pat_ctor", `Quick, test_pat_ctor)
-      ; ("pat_tuple", `Quick, test_pat_tuple)
-      ; ("typ_ptr", `Quick, test_typ_ptr)
-      ; ("typ_arr", `Quick, test_typ_arr)
-      ; ("typ_slice", `Quick, test_typ_slice)
-      ; ("typ_ident", `Quick, test_typ_ident)
-      ; ("typ_app", `Quick, test_typ_app)
-      ; ("typ_tuple", `Quick, test_typ_tuple)
-      ; ("typ_fn", `Quick, test_typ_fn)
-      ; ("typ_record", `Quick, test_typ_record)
-      ; ("typ_optional", `Quick, test_typ_optional)
-      ; ("stmt_import_named", `Quick, test_stmt_import_named)
-      ; ("stmt_import_all", `Quick, test_stmt_import_all)
-      ; ("stmt_export_named", `Quick, test_stmt_export_named)
-      ; ("stmt_export_all", `Quick, test_stmt_export_all)
-      ; ("stmt_bind_val", `Quick, test_stmt_bind_val)
-      ; ("stmt_bind_var", `Quick, test_stmt_bind_var)
-      ; ("stmt_bind_typed", `Quick, test_stmt_bind_typed)
-      ; ("stmt_extern", `Quick, test_stmt_extern)
-      ; ("stmt_extern_abi", `Quick, test_stmt_extern_abi)
-      ; ("stmt_expr", `Quick, test_stmt_expr)
-      ; ("program_empty", `Quick, test_program_empty)
-      ; ("program_single_stmt", `Quick, test_program_single_stmt)
-      ; ("program_multi_stmt", `Quick, test_program_multi_stmt)
-      ] )
+    test_case "parser_state" `Quick test_parser_state
+  ; test_case "expr_lit_number" `Quick test_expr_lit_number
+  ; test_case "expr_lit_string" `Quick test_expr_lit_string
+  ; test_case "expr_lit_rune" `Quick test_expr_lit_rune
+  ; test_case "expr_ident" `Quick test_expr_ident
+  ; test_case "expr_template" `Quick test_expr_template
+  ; test_case "expr_tuple" `Quick test_expr_tuple
+  ; test_case "expr_block" `Quick test_expr_block
+  ; test_case "expr_if" `Quick test_expr_if
+  ; test_case "expr_if_else" `Quick test_expr_if_else
+  ; test_case "expr_match" `Quick test_expr_match
+  ; test_case "expr_for" `Quick test_expr_for
+  ; test_case "expr_while" `Quick test_expr_while
+  ; test_case "expr_defer" `Quick test_expr_defer
+  ; test_case "expr_break" `Quick test_expr_break
+  ; test_case "expr_break_value" `Quick test_expr_break_value
+  ; test_case "expr_cycle" `Quick test_expr_cycle
+  ; test_case "expr_unsafe" `Quick test_expr_unsafe
+  ; test_case "expr_assign" `Quick test_expr_assign
+  ; test_case "expr_binary_add" `Quick test_expr_binary_add
+  ; test_case "expr_binary_mul" `Quick test_expr_binary_mul
+  ; test_case "expr_unary_neg" `Quick test_expr_unary_neg
+  ; test_case "expr_unary_not" `Quick test_expr_unary_not
+  ; test_case "expr_call" `Quick test_expr_call
+  ; test_case "expr_field" `Quick test_expr_field
+  ; test_case "expr_index" `Quick test_expr_index
+  ; test_case "expr_record_lit" `Quick test_expr_record_lit
+  ; test_case "expr_record_lit_named" `Quick test_expr_record_lit_named
+  ; test_case "expr_fn" `Quick test_expr_fn
+  ; test_case "expr_fn_named" `Quick test_expr_fn_named
+  ; test_case "expr_record" `Quick test_expr_record
+  ; test_case "expr_choice" `Quick test_expr_choice
+  ; test_case "expr_trait" `Quick test_expr_trait
+  ; test_case "pat_bind" `Quick test_pat_bind
+  ; test_case "pat_bind_var" `Quick test_pat_bind_var
+  ; test_case "pat_lit_number" `Quick test_pat_lit_number
+  ; test_case "pat_lit_string" `Quick test_pat_lit_string
+  ; test_case "pat_wild" `Quick test_pat_wild
+  ; test_case "pat_ident" `Quick test_pat_ident
+  ; test_case "pat_record" `Quick test_pat_record
+  ; test_case "pat_ctor" `Quick test_pat_ctor
+  ; test_case "pat_tuple" `Quick test_pat_tuple
+  ; test_case "typ_ptr" `Quick test_typ_ptr
+  ; test_case "typ_arr" `Quick test_typ_arr
+  ; test_case "typ_slice" `Quick test_typ_slice
+  ; test_case "typ_ident" `Quick test_typ_ident
+  ; test_case "typ_app" `Quick test_typ_app
+  ; test_case "typ_tuple" `Quick test_typ_tuple
+  ; test_case "typ_fn" `Quick test_typ_fn
+  ; test_case "typ_record" `Quick test_typ_record
+  ; test_case "typ_optional" `Quick test_typ_optional
+  ; test_case "stmt_import_named" `Quick test_stmt_import_named
+  ; test_case "stmt_import_all" `Quick test_stmt_import_all
+  ; test_case "stmt_export_named" `Quick test_stmt_export_named
+  ; test_case "stmt_export_all" `Quick test_stmt_export_all
+  ; test_case "stmt_bind_val" `Quick test_stmt_bind_val
+  ; test_case "stmt_bind_var" `Quick test_stmt_bind_var
+  ; test_case "stmt_bind_typed" `Quick test_stmt_bind_typed
+  ; test_case "stmt_extern" `Quick test_stmt_extern
+  ; test_case "stmt_extern_abi" `Quick test_stmt_extern_abi
+  ; test_case "stmt_expr" `Quick test_stmt_expr
+  ; test_case "program_empty" `Quick test_program_empty
+  ; test_case "program_single_stmt" `Quick test_program_single_stmt
+  ; test_case "program_multi_stmt" `Quick test_program_multi_stmt
   ]
 
-let () = Alcotest.run "Parser Tests" suite
+let suite = [ ("parser", test_cases) ]
+let () = run "parser" suite
