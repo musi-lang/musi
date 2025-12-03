@@ -6,9 +6,8 @@ open Alcotest
 let make_test_state source =
   let interner = Interner.create () in
   let file_id = 42 in
-  let tokens, _diags = Lexer.tokenize source file_id interner in
-  let tokens = Array.of_list tokens in
-  let state = Parser.mk_state tokens interner in
+  let tokens, _ = Lexer.tokenize source file_id interner in
+  let state = Parser.mk_state source file_id tokens interner in
   (state, interner)
 
 let check_no_errors diags =
@@ -28,7 +27,10 @@ let test_parser_state () =
   let state, _ = make_test_state "42" in
   (check int) "initial position" 0 state.pos;
   let token = Parser.peek state in
-  (check string) "peek token" "NUMBER(42)" (Token.to_string token)
+  (check string)
+    "peek token"
+    "NUMBER(42)"
+    (match token with Some (t, _) -> Token.to_string t | None -> "EOF")
 
 let test_expr_lit_number () =
   let state, _ = make_test_state "42" in
@@ -553,24 +555,23 @@ let test_stmt_expr () =
 let test_program_empty () =
   let _, interner = make_test_state "" in
   let tokens, _ = Lexer.tokenize "" 42 interner in
-  let tokens = Array.of_list tokens in
-  let prog, diags = Parser.parse tokens interner in
+  let prog, diags = Parser.parse "" 42 interner tokens in
   check_no_errors diags;
   (check int) "empty program length" 0 (List.length prog)
 
 let test_program_single_stmt () =
   let _, interner = make_test_state "val x := 42;" in
   let tokens, _ = Lexer.tokenize "val x := 42;" 42 interner in
-  let tokens = Array.of_list tokens in
-  let prog, diags = Parser.parse tokens interner in
+  let prog, diags = Parser.parse "val x := 42;" 42 interner tokens in
   check_no_errors diags;
   (check int) "single stmt program length" 1 (List.length prog)
 
 let test_program_multi_stmt () =
   let _, interner = make_test_state "val x := 42; val y := 24;" in
   let tokens, _ = Lexer.tokenize "val x := 42; val y := 24;" 42 interner in
-  let tokens = Array.of_list tokens in
-  let prog, diags = Parser.parse tokens interner in
+  let prog, diags =
+    Parser.parse "val x := 42; val y := 24;" 42 interner tokens
+  in
   check_no_errors diags;
   (check int) "multi stmt program length" 2 (List.length prog)
 
