@@ -14,23 +14,12 @@ module type S = sig
     ; diags : Diagnostic.bag
   }
 
-  val mk_state :
-    string -> Span.file_id -> (Token.t * Span.t) list -> Interner.t -> state
-
-  val peek_opt : state -> (Token.t * Span.t) option
-  val advance : state -> state
-  val curr_span : state -> Span.t
-  val add_error : state -> string -> Span.t -> state
-  val add_error_code : state -> Error.code -> Span.t -> string list -> state
-
   val parse :
        string
     -> Span.file_id
     -> Interner.t
     -> (Token.t * Span.t) list
     -> prog * Diagnostic.bag
-
-  val parse_prog : state -> state * prog
 end
 
 module Make () : S = struct
@@ -45,1023 +34,665 @@ module Make () : S = struct
     ; diags : Diagnostic.bag
   }
 
-  let mk_state source file_id tokens interner =
-    { source; file_id; tokens; pos = 0; interner; diags = Diagnostic.empty_bag }
+  let mk_state src fid toks int =
+    {
+      source = src
+    ; file_id = fid
+    ; tokens = toks
+    ; pos = 0
+    ; interner = int
+    ; diags = Diagnostic.empty_bag
+    }
 
-  let peek_opt st =
+  let peek st =
     if st.pos >= List.length st.tokens then None
     else Some (List.nth st.tokens st.pos)
 
-  let advance st = { st with pos = st.pos + 1 }
+  let adv st = { st with pos = st.pos + 1 }
 
-  let advance_then parser st =
-    let st' = advance st in
-    parser st'
-
-  let curr_span st =
+  let span st =
     if List.length st.tokens = 0 then Span.dummy
     else snd (List.nth st.tokens (min st.pos (List.length st.tokens - 1)))
 
-  let add_error st msg span =
-    { st with diags = Diagnostic.add st.diags (Diagnostic.error msg span) }
+  let err st c s a =
+    { st with diags = Diagnostic.add st.diags (Error.diag c s a) }
 
-  let add_error_code st code span args =
-    { st with diags = Diagnostic.add st.diags (Error.diag code span args) }
+  let expect st tok name =
+    match peek st with
+    | Some (t, _) when t = tok -> adv st
+    | Some (t, s) -> err st Error.E1003 s [ name; Token.to_string t ]
+    | None -> err st Error.E1003 (span st) [ name; "EOF" ]
 
-  let expect st token_type expected_name =
-    match peek_opt st with
-    | Some (token, _) when token = token_type -> advance st
-    | Some (token, span) ->
-      let found = Token.to_string token in
-      add_error_code st Error.E1003 span [ expected_name; found ]
+  let ident st =
+    match peek st with
+    | Some (Token.Ident n, s) -> (adv st, n, s)
+    | Some (t, s) ->
+      ( err st Error.E1105 s [ Token.to_string t ]
+      , Interner.empty_name st.interner
+      , s )
     | None ->
-      let span = curr_span st in
-      add_error_code st Error.E1003 span [ expected_name; "EOF" ]
+      let s = span st in
+      (err st Error.E1105 s [ "EOF" ], Interner.empty_name st.interner, s)
 
-  let expect_ident st =
-    match peek_opt st with
-    | Some (Token.Ident name, span) ->
-      let st' = advance st in
-      (st', name, span)
-    | Some (token, span) ->
-      let found = Token.to_string token in
-      let st' = add_error_code st Error.E1105 span [ found ] in
-      (st', Interner.empty_name st.interner, span)
-    | None ->
-      let span = curr_span st in
-      let st' = add_error_code st Error.E1105 span [ "EOF" ] in
-      (st', Interner.empty_name st.interner, span)
-
-  let expect_ident_name st =
-    let st', name, _ = expect_ident st in
-    (st', name)
-
-  let parse_sep_list st sep parser =
-    let rec loop st acc =
-      match peek_opt st with
-      | Some (sep_token, _) when sep_token = sep ->
-        let st' = advance st in
-        begin match parser st' with
-        | st'', item -> loop st'' (item :: acc)
-        | exception _ -> (st', List.rev acc)
-        end
-      | _ -> (st, List.rev acc)
-    in
-    try match parser st with st', first_item -> loop st' [ first_item ]
-    with Failure _ -> (st, [])
-
-  let parse_many_opts st parser =
-    let rec loop st acc =
-      try
-        let st', item = parser st in
-        loop st' (item :: acc)
-      with Failure _ -> (st, List.rev acc)
-    in
-    loop st []
+  let adv_then p st = p (adv st)
 
   let satisfy pred st =
-    match peek_opt st with
-    | Some (token, _) when pred token -> advance st
-    | _ -> failwith "satisfy failed"
+    match peek st with
+    | Some (t, _) when pred t -> adv st
+    | _ -> failwith "satisfy"
 
-  let token t = satisfy (fun x -> x = t)
+  let tok t = satisfy (fun x -> x = t)
 
-  let many parser st =
-    let rec loop st acc =
-      try
-        let st', item = parser st in
-        loop st' (item :: acc)
-      with Failure _ -> (st, List.rev acc)
-    in
-    loop st []
+  let rec many p st =
+    try
+      let s, x = p st in
+      let s', xs = many p s in
+      (s', x :: xs)
+    with _ -> (st, [])
 
-  let many1 parser st =
-    let st', first = parser st in
-    let st'', rest = many parser st' in
-    (st'', first :: rest)
-
-  let sep_by parser sep st =
-    let rec loop st acc =
-      match peek_opt st with
-      | Some (sep_token, _) when sep_token = sep ->
-        let st' = advance st in
-        begin try
-          let st'', item = parser st' in
-          loop st'' (item :: acc)
-        with Failure _ -> (st', List.rev acc)
-        end
-      | _ -> (st, List.rev acc)
+  let sep_by p sep st =
+    let rec loop s acc =
+      match peek s with
+      | Some (t, _) when t = sep -> (
+        try
+          let s', x = adv_then p s in
+          loop s' (x :: acc)
+        with _ -> (s, List.rev acc))
+      | _ -> (s, List.rev acc)
     in
     try
-      let st', first = parser st in
-      loop st' [ first ]
-    with Failure _ -> (st, [])
+      let s, x = p st in
+      loop s [ x ]
+    with _ -> (st, [])
 
-  let opt parser st =
+  let opt p st =
     try
-      let st', result = parser st in
-      (st', Some result)
-    with Failure _ -> (st, None)
+      let s, r = p st in
+      (s, Some r)
+    with _ -> (st, None)
 
-  let btwn left right parser st =
-    let st' = left st in
-    let st'', result = parser st' in
-    let st''' = right st'' in
-    (st''', result)
+  let btwn l r p st =
+    let s = l st in
+    let s', x = p s in
+    (r s', x)
 
-  let btwn_parens parser = btwn (token Token.LParen) (token Token.RParen) parser
-  let btwn_braces parser = btwn (token Token.LBrace) (token Token.RBrace) parser
+  let parens p = btwn (tok Token.LParen) (tok Token.RParen) p
+  let braces p = btwn (tok Token.LBrace) (tok Token.RBrace) p
+  let angles p = btwn (tok Token.Lt) (tok Token.Gt) p
+  let mk_node k st = { Node.kind = k; span = span st }
 
-  let rec parse_expr st = parse_expr_with_prec st 0
+  let ident_name st =
+    let s, n, _ = ident st in
+    (s, n)
 
-  and parse_expr_with_prec st min_prec =
-    let st', left = parse_expr_prefix st in
-    let st'', left_with_postfix = parse_expr_postfix_chain st' left in
-    parse_expr_infix_chain st'' left_with_postfix min_prec
+  let rec attr st =
+    match peek st with
+    | Some (Token.At, _) ->
+      let s = expect (adv st) Token.LBrack "[" in
+      let s', n, _ = ident s in
+      let s'', args = opt (parens (sep_by attr_arg Token.Comma)) s' in
+      let s''' = expect s'' Token.RBrack "]" in
+      (s''', Some { Node.name = n; args = Option.value args ~default:[] })
+    | _ -> (st, None)
 
-  and parse_expr_postfix_chain st left =
-    match peek_opt st with
-    | Some (token, _) when Prec.is_postfix_op token ->
-      let st', left' = parse_expr_postfix left st in
-      parse_expr_postfix_chain st' left'
-    | _ -> (st, left)
+  and attr_arg st =
+    match peek st with
+    | Some (Token.Ident n, _) -> (adv st, AttrIdent n)
+    | Some (Token.LitNumber n, _) -> (adv st, AttrNumber n)
+    | Some (Token.LitString s, _) -> (adv st, AttrString s)
+    | _ ->
+      ( err st Error.E1003 (span st) [ "attribute argument"; "" ]
+      , AttrIdent (Interner.empty_name st.interner) )
 
-  and parse_expr_prefix st =
-    match peek_opt st with
-    | Some (token, _) when Prec.is_prefix_op token ->
-      let st', operand =
-        advance_then
-          (fun s -> parse_expr_with_prec s (Prec.prec_value Prec.Unary))
-          st
+  (* Expressions *)
+  let rec expr st = expr_prec st 0
+
+  and expr_prec st min =
+    let s, l = expr_prefix st in
+    let s', l' = expr_postfix_chain s l in
+    expr_infix_chain s' l' min
+
+  and expr_postfix_chain st l =
+    match peek st with
+    | Some (t, _) when Prec.is_postfix_op t ->
+      let s, l' = expr_postfix l st in
+      expr_postfix_chain s l'
+    | _ -> (st, l)
+
+  and expr_prefix st =
+    match peek st with
+    | Some (t, _) when Prec.is_prefix_op t ->
+      let s, op =
+        adv_then (fun s -> expr_prec s (Prec.prec_value Prec.Unary)) st
       in
-      let span = curr_span st' in
-      (st', { Node.kind = Node.ExprUnary { op = token; operand }; span })
-    | _ -> parse_expr_atom st
+      (s, mk_node (Node.ExprUnary { op = t; operand = op }) s)
+    | _ -> expr_atom st
 
-  and parse_expr_infix_chain st left min_prec =
-    match peek_opt st with
-    | Some (Token.MinusGt, _) ->
-      let st', right = advance_then parse_expr st in
-      let span = curr_span st' in
-      ( st'
-      , {
-          Node.kind =
-            Node.ExprAssign
-              {
-                target =
-                  (match left.Node.kind with
-                  | Node.ExprIdent name -> name
-                  | _ -> Interner.empty_name st'.interner)
-              ; value = right
-              }
-        ; span
-        } )
-    | Some (token, _) when Prec.is_infix_op token -> (
-      match Prec.token_prec token with
-      | Some (prec_typ, _) when Prec.prec_value prec_typ >= min_prec ->
-        let st', right =
-          advance_then
-            (fun s -> parse_expr_with_prec s (Prec.prec_value prec_typ + 1))
-            st
-        in
-        let span = curr_span st' in
-        let binary_expr =
-          { Node.kind = Node.ExprBinary { op = token; left; right }; span }
-        in
-        parse_expr_infix_chain st' binary_expr min_prec
-      | _ -> (st, left))
-    | _ -> (st, left)
-
-  and parse_expr_lit st =
-    match peek_opt st with
-    | Some (Token.LitNumber n, span) ->
-      let st' = advance st in
-      (st', { Node.kind = Node.ExprLit (Node.LitNumber n); span })
-    | Some (Token.LitString s, span) ->
-      let st' = advance st in
-      (st', { Node.kind = Node.ExprLit (Node.LitString s); span })
-    | Some (Token.LitRune c, span) ->
-      let st' = advance st in
-      (st', { Node.kind = Node.ExprLit (Node.LitRune c); span })
-    | _ ->
-      let span = curr_span st in
-      let st' = add_error_code st Error.E1101 span [] in
-      (st', { Node.kind = Node.ExprError; span })
-
-  and parse_expr_template st =
-    match peek_opt st with
-    | Some (Token.LitTemplate t, span) ->
-      let st' = advance st in
-      (st', { Node.kind = Node.ExprTemplate t; span })
-    | _ ->
-      let span = curr_span st in
-      let st' = add_error_code st Error.E1101 span [] in
-      (st', { Node.kind = Node.ExprError; span })
-
-  and parse_expr_block_or_record_lit st =
-    match peek_opt st with
-    | Some (Token.LBrace, _) -> (
-      let st' = advance st in
-      match peek_opt st' with
-      | Some (Token.Dot, _) -> parse_expr_record_lit st'
-      | _ -> parse_expr_block st')
-    | _ ->
-      let span = curr_span st in
-      let st' = add_error_code st Error.E1108 span [] in
-      (st', { Node.kind = Node.ExprError; span })
-
-  and parse_expr_tuple_or_grouping st =
-    let st', expr = btwn_parens parse_expr st in
-    let span = curr_span st' in
-    (st', { Node.kind = Node.ExprTuple (expr, []); span })
-
-  and parse_expr_ident st =
-    let st', name, span = expect_ident st in
-    (st', { Node.kind = Node.ExprIdent name; span })
-
-  and parse_expr_tuple st =
-    let st', exprs = btwn_parens (sep_by parse_expr Token.Comma) st in
-    let span = curr_span st' in
-    match exprs with
-    | [] ->
-      let error_expr =
-        { Node.kind = Node.ExprLit (Node.LitNumber "0"); span }
+  and expr_infix_chain st l min =
+    match peek st with
+    | Some (Token.LtMinus, _) ->
+      let s, r = adv_then expr st in
+      let tgt =
+        match l.Node.kind with
+        | ExprIdent n -> n
+        | _ -> Interner.empty_name s.interner
       in
-      (st', error_expr)
-    | [ single ] -> (st', single)
-    | first :: rest -> (st', { Node.kind = Node.ExprTuple (first, rest); span })
+      (s, mk_node (Node.ExprAssign { target = tgt; value = r }) s)
+    | Some (t, _) when Prec.is_infix_op t -> (
+      match Prec.token_prec t with
+      | Some (p, _) when Prec.prec_value p >= min ->
+        let s, r = adv_then (fun s -> expr_prec s (Prec.prec_value p + 1)) st in
+        expr_infix_chain
+          s
+          (mk_node (Node.ExprBinary { op = t; left = l; right = r }) s)
+          min
+      | _ -> (st, l))
+    | _ -> (st, l)
 
-  and parse_expr_block st =
-    let st', stmts_and_ret =
-      btwn_braces
-        (fun s ->
-          let s', stmts = many parse_stmt s in
-          match peek_opt s' with
-          | Some (Token.KwReturn, _) ->
-            let s'', ret = advance_then parse_expr s' in
-            (s'', (stmts, Some ret))
-          | _ -> (s', (stmts, None)))
-        st
-    in
-    let span = curr_span st' in
-    let stmts, ret = stmts_and_ret in
-    (st', { Node.kind = Node.ExprBlock { stmts; ret }; span })
-
-  and parse_expr_if st =
-    let st' = expect st Token.KwIf "if" in
-    let st'', first_cond = parse_cond st' in
-    let st''', rest_conds = parse_sep_list st'' Token.Comma parse_cond in
-    let st'''', then_block = parse_block st''' in
-    let st''''', else_block =
-      match peek_opt st'''' with
-      | Some (Token.KwElse, _) ->
-        let s', blk = advance_then parse_block st in
-        (s', Some blk)
-      | _ -> (st'''', None)
-    in
-    let span = curr_span st''''' in
-    ( st'''''
-    , {
-        Node.kind =
-          Node.ExprIf
-            { conds = (first_cond, rest_conds); then_block; else_block }
-      ; span
-      } )
-
-  and parse_block st =
-    let st', stmts_and_ret =
-      btwn_braces
-        (fun s ->
-          let s', stmts = many parse_stmt s in
-          match peek_opt s' with
-          | Some (Token.KwReturn, _) ->
-            let s'', ret = advance_then parse_expr s in
-            let s''' = expect s'' Token.Semi ";" in
-            (s''', (stmts, Some ret))
-          | _ -> (s', (stmts, None)))
-        st
-    in
-    let stmts, ret = stmts_and_ret in
-    (st', { Node.stmts; ret })
-
-  and parse_cond st =
-    match peek_opt st with
-    | Some (Token.KwCase, _) ->
-      let st', pat = advance_then parse_pat st in
-      let st'' = expect st' Token.ColonEq ":=" in
-      let st''', value = parse_expr st'' in
-      (st''', Node.CondCase { pat; value })
-    | _ ->
-      let st', expr = parse_expr st in
-      (st', Node.CondExpr expr)
-
-  and parse_expr_match st =
-    let st' = expect st Token.KwMatch "match" in
-    let st'', scrutinee = parse_expr st' in
-    let st''' = expect st'' Token.LBrace "{" in
-    let st'''', arms = many parse_match_arm st''' in
-    let st''''' = expect st'''' Token.RBrace "}" in
-    let span = curr_span st''''' in
-    (st''''', { Node.kind = Node.ExprMatch { scrutinee; arms }; span })
-
-  and parse_match_arm st =
-    let st' = expect st Token.KwCase "case" in
-    let st'', pat = parse_pat st' in
-    let st''', guard =
-      match peek_opt st'' with
-      | Some (Token.KwIf, _) ->
-        let s', g = advance_then parse_expr st'' in
-        (s', Some g)
-      | _ -> (st'', None)
-    in
-    let st'''' = expect st''' Token.EqGt "=>" in
-    let st''''', body = parse_expr st'''' in
-    let st'''''' =
-      match peek_opt st''''' with
-      | Some (Token.Comma, _) -> advance st'''''
-      | _ -> st'''''
-    in
-    (st'''''', { Node.pat; guard; body })
-
-  and parse_expr_for st =
-    let st' = expect st Token.KwFor "for" in
-    let st'', binding = parse_for_binding st' in
-    let st''' = expect st'' Token.KwIn "in" in
-    let st'''', range = parse_expr st''' in
-    let st''''', guard =
-      match peek_opt st'''' with
-      | Some (Token.KwIf, _) ->
-        let s', g = parse_expr st'''' in
-        (s', Some g)
-      | _ -> (st'''', None)
-    in
-    let st'''''', body = parse_block st''''' in
-    let span = curr_span st'''''' in
-    ( st''''''
-    , { Node.kind = Node.ExprFor { binding; range; guard; body }; span } )
-
-  and parse_for_binding st =
-    match peek_opt st with
-    | Some (Token.KwCase, _) ->
-      let st', pat = advance_then parse_pat st in
-      (st', Node.ForCase pat)
+  and expr_atom st =
+    match peek st with
+    | Some (Token.LitNumber n, s) ->
+      (adv st, { Node.kind = ExprLit (LitNumber n); span = s })
+    | Some (Token.LitString n, s) ->
+      (adv st, { Node.kind = ExprLit (LitString n); span = s })
+    | Some (Token.LitRune c, s) ->
+      (adv st, { Node.kind = ExprLit (LitRune c); span = s })
+    | Some (Token.LitTemplate t, s) ->
+      (adv st, { Node.kind = ExprTemplate t; span = s })
     | Some (Token.Ident _, _) ->
-      let st', name, _ = expect_ident st in
-      (st', Node.ForIdent name)
-    | _ ->
-      let span = curr_span st in
-      let st' = add_error_code st Error.E1105 span [] in
-      (st', Node.ForIdent (Interner.empty_name st.interner))
+      let s, n, sp = ident st in
+      (s, { Node.kind = ExprIdent n; span = sp })
+    | Some (Token.LBrace, _) -> (
+      match peek (adv st) with
+      | Some (Token.Dot, _) -> expr_rec_lit st
+      | _ ->
+        let s, b = adv_then block st in
+        (s, mk_node (ExprBlock b) s))
+    | Some (Token.LParen, _) -> (
+      let s, es = parens (sep_by expr Token.Comma) st in
+      match es with
+      | [] -> (s, mk_node ExprError s)
+      | [ x ] -> (s, x)
+      | f :: r -> (s, mk_node (ExprTuple (f, r)) s))
+    | Some (Token.KwIf, _) -> expr_if st
+    | Some (Token.KwMatch, _) -> expr_match st
+    | Some (Token.KwFor, _) -> expr_for st
+    | Some (Token.KwWhile, _) -> expr_while st
+    | Some (Token.KwDefer, _) ->
+      let s, e = adv_then expr st in
+      (s, mk_node (ExprDefer e) s)
+    | Some (Token.KwBreak, _) -> (
+      let s = adv st in
+      match peek s with
+      | Some (Token.Semi, _) | Some (Token.RBrace, _) | None ->
+        (s, mk_node (ExprBreak None) s)
+      | _ ->
+        let s', e = expr s in
+        (s', mk_node (ExprBreak (Some e)) s'))
+    | Some (Token.KwCycle, _) -> (adv st, mk_node ExprCycle st)
+    | Some (Token.KwUnsafe, _) ->
+      let s, b = adv_then block st in
+      (s, mk_node (ExprUnsafe b) s)
+    | Some (Token.KwFn, _) -> expr_fn st
+    | Some (Token.KwRecord, _) -> expr_record st
+    | Some (Token.KwChoice, _) -> expr_choice st
+    | Some (Token.KwTrait, _) -> expr_trait st
+    | _ -> (err st Error.E1101 (span st) [], mk_node ExprError st)
 
-  and parse_expr_while st =
-    let st' = expect st Token.KwWhile "while" in
-    let st'', cond = parse_cond st' in
-    let st''', guard =
-      match peek_opt st'' with
-      | Some (Token.KwIf, _) ->
-        let s', g = advance_then parse_expr st'' in
-        (s', Some g)
-      | _ -> (st'', None)
-    in
-    let st'''', body = parse_block st''' in
-    let span = curr_span st'''' in
-    (st'''', { Node.kind = Node.ExprWhile { cond; guard; body }; span })
-
-  and parse_expr_defer st =
-    let st' = expect st Token.KwDefer "defer" in
-    let st'', expr = parse_expr st' in
-    let span = curr_span st'' in
-    (st'', { Node.kind = Node.ExprDefer expr; span })
-
-  and parse_expr_break st =
-    let st' = expect st Token.KwBreak "break" in
-    match peek_opt st' with
-    | Some (Token.Semi, _) | Some (Token.RBrace, _) | None ->
-      let span = curr_span st' in
-      (st', { Node.kind = Node.ExprBreak None; span })
-    | _ ->
-      let st'', expr = parse_expr st' in
-      let span = curr_span st'' in
-      (st'', { Node.kind = Node.ExprBreak (Some expr); span })
-
-  and parse_expr_cycle st =
-    let span = curr_span st in
-    let st' = expect st Token.KwCycle "cycle" in
-    (st', { Node.kind = Node.ExprCycle; span })
-
-  and parse_expr_unsafe st =
-    let st' = expect st Token.KwUnsafe "unsafe" in
-    let st'', block = parse_block st' in
-    let span = curr_span st'' in
-    (st'', { Node.kind = Node.ExprUnsafe block; span })
-
-  and parse_expr_record_lit st =
-    let st', fields =
-      btwn_braces (sep_by parse_record_field_init Token.Comma) st
-    in
-    let span = curr_span st' in
-    (st', { Node.kind = Node.ExprRecordLit { name = None; fields }; span })
-
-  and parse_record_field_init st =
-    match peek_opt st with
+  and expr_postfix l st =
+    match peek st with
     | Some (Token.Dot, _) ->
-      let st', name, _ = advance_then expect_ident st in
-      let st'' = expect st' Token.Colon ":=" in
-      let st''', value = parse_expr st'' in
-      (st''', { Node.shorthand = false; name; value })
-    | Some (Token.Ident name, _) ->
-      let st' = advance_then expect st Token.Colon ":=" in
-      let st'', value = parse_expr st' in
-      (st'', { Node.shorthand = true; name; value })
-    | _ ->
-      let span = curr_span st in
-      let error_field =
-        {
-          Node.shorthand = false
-        ; name = Interner.empty_name st.interner
-        ; value = { Node.kind = Node.ExprLit (Node.LitNumber "0"); span }
-        }
-      in
-      (st, error_field)
-
-  and parse_expr_fn st =
-    let st', abi =
-      match peek_opt st with
-      | Some (Token.KwExtern, _) -> (
-        let s = advance st in
-        match peek_opt s with
-        | Some (Token.LitString str, _) ->
-          let s' = advance s in
-          let abi_str = Interner.lookup s'.interner str in
-          (s', Some abi_str)
-        | _ -> (s, None))
-      | _ -> (st, None)
-    in
-    let st'' = expect st' Token.KwFn "fn" in
-    let st''', name =
-      match peek_opt st'' with
-      | Some (Token.Ident _, _) ->
-        let s, n, _ = expect_ident st'' in
-        (s, Some n)
-      | _ -> (st'', None)
-    in
-    let st'''', typ_params =
-      match peek_opt st''' with
-      | Some (Token.Lt, _) ->
-        btwn
-          (token Token.Lt)
-          (token Token.Gt)
-          (sep_by expect_ident_name Token.Comma)
-          st'''
-      | _ -> (st''', [])
-    in
-    let st''''', params = parse_fn_params st'''' in
-    let st'''''', ret_typ =
-      match peek_opt st''''' with
-      | Some (Token.MinusGt, _) ->
-        let s', t = advance_then parse_typ st''''' in
-        (s', Some t)
-      | _ -> (st''''', None)
-    in
-    let st''''''', body = parse_block st'''''' in
-    let span = curr_span st''''''' in
-    ( st'''''''
-    , {
-        Node.kind = Node.ExprFn { abi; name; typ_params; params; ret_typ; body }
-      ; span
-      } )
-
-  and parse_expr_record st =
-    let st' = expect st Token.KwRecord "record" in
-    let st'', typ_params =
-      match peek_opt st' with
-      | Some (Token.Lt, _) ->
-        btwn
-          (token Token.Lt)
-          (token Token.Gt)
-          (sep_by expect_ident_name Token.Comma)
-          st'
-      | _ -> (st', [])
-    in
-    let st''', trait_bound =
-      match peek_opt st'' with
-      | Some (Token.Colon, _) ->
-        let s, t = advance_then parse_typ st'' in
-        (s, Some t)
-      | _ -> (st'', None)
-    in
-    let st'''', (fields, body) =
-      btwn_braces
-        (fun s ->
-          let fields_and_methods = sep_by parse_record_item Token.Comma s in
-          let s', items = fields_and_methods in
-          let fields =
-            List.filter_map
-              (function `Field f -> Some f | `Method _ -> None)
-              items
-          in
-          let methods =
-            List.filter_map
-              (function `Field _ -> None | `Method m -> Some m)
-              items
-          in
-          (s', (fields, methods)))
-        st'''
-    in
-    let span = curr_span st'''' in
-    ( st''''
-    , {
-        Node.kind = Node.ExprRecord { typ_params; trait_bound; fields; body }
-      ; span
-      } )
-
-  and parse_record_item st =
-    let st', name, _ = expect_ident st in
-    match peek_opt st' with
-    | Some (Token.Colon, _) ->
-      let st'', typ = advance_then parse_typ st' in
-      (st'', `Field ({ Node.name; typ } : Node.record_field))
-    | Some (Token.ColonEq, _) ->
-      let st'', expr = advance_then parse_expr st' in
-      let span = curr_span st'' in
-      ( st''
-      , `Method
-          ({
-             Node.attr = None
-           ; kind =
-               Node.StmtBind
-                 { mutable_ = false; name; typ = None; value = expr }
-           ; span
-           }
-            : Node.stmt) )
-    | _ ->
-      let span = curr_span st' in
-      let st'' = add_error_code st' Error.E1003 span [ "':' or ':='"; "" ] in
-      let error_typ = { Node.kind = Node.TypError; span } in
-      (st'', `Field ({ Node.name; typ = error_typ } : Node.record_field))
-
-  and parse_expr_choice st =
-    let st' = expect st Token.KwChoice "choice" in
-    let st'', typ_params =
-      match peek_opt st' with
-      | Some (Token.Lt, _) ->
-        btwn
-          (token Token.Lt)
-          (token Token.Gt)
-          (sep_by expect_ident_name Token.Comma)
-          st'
-      | _ -> (st', [])
-    in
-    let st''', cases =
-      btwn_braces (sep_by parse_choice_case Token.Comma) st''
-    in
-    let span = curr_span st''' in
-    ( st'''
-    , { Node.kind = Node.ExprChoice { typ_params; cases; body = [] }; span } )
-
-  and parse_choice_case st =
-    let st' = expect st Token.KwCase "case" in
-    let st'', name, _ = expect_ident st' in
-    let st''', fields =
-      match peek_opt st'' with
-      | Some (Token.LParen, _) ->
-        btwn_parens (sep_by parse_typ Token.Comma) st''
-      | _ -> (st'', [])
-    in
-    (st''', { Node.name; fields })
-
-  and parse_expr_trait st =
-    let st' = expect st Token.KwTrait "trait" in
-    let st'', typ_params =
-      match peek_opt st' with
-      | Some (Token.Lt, _) ->
-        btwn
-          (token Token.Lt)
-          (token Token.Gt)
-          (sep_by expect_ident_name Token.Comma)
-          st'
-      | _ -> (st', [])
-    in
-    let st''', trait_bound =
-      match peek_opt st'' with
-      | Some (Token.Colon, _) ->
-        let s, t = advance_then parse_typ st'' in
-        (s, Some t)
-      | _ -> (st'', None)
-    in
-    let st'''', items =
-      btwn_braces (sep_by parse_trait_item Token.Comma) st'''
-    in
-    let span = curr_span st'''' in
-    ( st''''
-    , { Node.kind = Node.ExprTrait { typ_params; trait_bound; items }; span } )
-
-  and parse_trait_item st =
-    let st', name, _ = expect_ident st in
-    let st'' = expect st' Token.Colon ":" in
-    let st''', typ = parse_typ st'' in
-    (st''', { Node.name; typ = Some typ })
-
-  and parse_expr_atom st =
-    match peek_opt st with
-    | Some (Token.Ident _, _) -> parse_expr_ident st
-    | Some (Token.LBrace, _) -> parse_expr_block_or_record_lit st
-    | Some (Token.LParen, _) -> parse_expr_tuple_or_grouping st
-    | _ ->
-      let span = curr_span st in
-      let error_expr =
-        { Node.kind = Node.ExprLit (Node.LitNumber "0"); span }
-      in
-      (st, error_expr)
-
-  and parse_expr_postfix left st =
-    match peek_opt st with
-    | Some (Token.Dot, _) ->
-      let st', name, span = advance_then expect_ident st in
-      ( st'
+      let s, n, sp = adv_then ident st in
+      ( s
       , {
-          Node.kind =
-            Node.ExprField { base = left; field = name; optional = false }
-        ; span
+          Node.kind = ExprField { base = l; field = n; optional = false }
+        ; span = sp
         } )
     | Some (Token.LBrack, _) ->
-      let st', index = advance_then parse_expr st in
-      let st'' = expect st' Token.RBrack "]" in
-      let span = curr_span st'' in
-      ( st''
-      , {
-          Node.kind = Node.ExprIndex { base = left; index; optional = false }
-        ; span
-        } )
+      let s, i = adv_then expr st in
+      let s' = expect s Token.RBrack "]" in
+      (s', mk_node (ExprIndex { base = l; index = i; optional = false }) s')
     | Some (Token.LParen, _) ->
-      let st', args = advance_then (sep_by parse_expr Token.Comma) st in
-      let st'' = expect st' Token.RParen ")" in
-      let span = curr_span st'' in
-      ( st''
+      let s, a = adv_then (sep_by expr Token.Comma) st in
+      let s' = expect s Token.RParen ")" in
+      ( s'
+      , mk_node
+          (ExprCall { callee = l; typ_args = []; args = a; optional = false })
+          s' )
+    | _ -> (st, l)
+
+  and block st =
+    braces
+      (fun s ->
+        let s', stmts = many stmt s in
+        match peek s' with
+        | Some (Token.KwReturn, _) ->
+          let s'', r = adv_then expr s' in
+          let s''' = expect s'' Token.Semi ";" in
+          (s''', { Node.stmts; ret = Some r })
+        | _ -> (s', { Node.stmts; ret = None }))
+      st
+
+  and expr_if st =
+    let s = expect st Token.KwIf "if" in
+    let s', c = cond s in
+    let s'', cs = sep_by cond Token.Comma s' in
+    let s''', tb = block s'' in
+    let s'''', eb = opt (adv_then block) s''' in
+    ( s''''
+    , mk_node
+        (ExprIf { conds = (c, cs); then_block = tb; else_block = eb })
+        s'''' )
+
+  and cond st =
+    match peek st with
+    | Some (Token.KwCase, _) ->
+      let s, p = adv_then pat st in
+      let s' = expect s Token.ColonEq ":=" in
+      let s'', v = expr s' in
+      (s'', CondCase { pat = p; value = v })
+    | _ ->
+      let s, e = expr st in
+      (s, CondExpr e)
+
+  and expr_match st =
+    let s = expect st Token.KwMatch "match" in
+    let s', sc = expr s in
+    let s'', arms = braces (many match_arm) s' in
+    (s'', mk_node (ExprMatch { scrutinee = sc; arms }) s'')
+
+  and match_arm st =
+    let s = expect st Token.KwCase "case" in
+    let s', p = pat s in
+    let s'', g = opt (adv_then expr) s' in
+    let s''' = expect s'' Token.EqGt "=>" in
+    let s'''', b = expr s''' in
+    let s''''' =
+      match peek s'''' with Some (Token.Comma, _) -> adv s'''' | _ -> s''''
+    in
+    (s''''', { Node.pat = p; guard = g; body = b })
+
+  and expr_for st =
+    let s = expect st Token.KwFor "for" in
+    let s', b = for_bind s in
+    let s'' = expect s' Token.KwIn "in" in
+    let s''', r = expr s'' in
+    let s'''', g = opt (adv_then expr) s''' in
+    let s''''', bd = block s'''' in
+    ( s'''''
+    , mk_node (ExprFor { binding = b; range = r; guard = g; body = bd }) s'''''
+    )
+
+  and for_bind st =
+    match peek st with
+    | Some (Token.KwCase, _) ->
+      let s, p = adv_then pat st in
+      (s, ForCase p)
+    | Some (Token.Ident _, _) ->
+      let s, n, _ = ident st in
+      (s, ForIdent n)
+    | _ ->
+      ( err st Error.E1105 (span st) []
+      , ForIdent (Interner.empty_name st.interner) )
+
+  and expr_while st =
+    let s = expect st Token.KwWhile "while" in
+    let s', c = cond s in
+    let s'', g = opt (adv_then expr) s' in
+    let s''', bd = block s'' in
+    (s''', mk_node (ExprWhile { cond = c; guard = g; body = bd }) s''')
+
+  and expr_rec_lit st =
+    let s, fs = braces (sep_by rec_field_init Token.Comma) st in
+    (s, mk_node (ExprRecordLit { name = None; fields = fs }) s)
+
+  and rec_field_init st =
+    match peek st with
+    | Some (Token.Dot, _) ->
+      let s, n, _ = adv_then ident st in
+      let s' = expect s Token.ColonEq ":=" in
+      let s'', v = expr s' in
+      (s'', { Node.shorthand = false; name = n; value = v })
+    | Some (Token.Ident n, _) ->
+      let s = expect (adv st) Token.ColonEq ":=" in
+      let s', v = expr s in
+      (s', { Node.shorthand = true; name = n; value = v })
+    | _ ->
+      let _ = span st in
+      ( st
       , {
-          Node.kind =
-            Node.ExprCall
-              { callee = left; typ_args = []; args; optional = false }
-        ; span
+          Node.shorthand = false
+        ; name = Interner.empty_name st.interner
+        ; value = mk_node ExprError st
         } )
-    | _ -> (st, left)
 
-  and parse_pat st =
-    match peek_opt st with
-    | Some (Token.Ident _, _) -> parse_pat_ident st
-    | _ ->
-      let span = curr_span st in
-      let error_pat = { Node.kind = Node.PatWild; span } in
-      (st, error_pat)
-
-  and parse_pat_bind st =
-    match peek_opt st with
-    | Some (Token.KwVal, span) ->
-      let st', name, _ = advance_then expect_ident st in
-      (st', { Node.kind = Node.PatBind { mutable_ = false; name }; span })
-    | Some (Token.KwVar, span) ->
-      let st', name, _ = advance_then expect_ident st in
-      (st', { Node.kind = Node.PatBind { mutable_ = true; name }; span })
-    | _ ->
-      let span = curr_span st in
-      let st' = add_error_code st Error.E1103 span [] in
-      (st', { Node.kind = Node.PatError; span })
-
-  and parse_pat_lit st =
-    match peek_opt st with
-    | Some (Token.LitNumber n, span) ->
-      let st' = advance st in
-      (st', { Node.kind = Node.PatLit (Node.LitNumber n); span })
-    | Some (Token.LitString s, span) ->
-      let st' = advance st in
-      (st', { Node.kind = Node.PatLit (Node.LitString s); span })
-    | Some (Token.LitRune c, span) ->
-      let st' = advance st in
-      (st', { Node.kind = Node.PatLit (Node.LitRune c); span })
-    | _ ->
-      let span = curr_span st in
-      let st' = add_error_code st Error.E1103 span [] in
-      (st', { Node.kind = Node.PatError; span })
-
-  and parse_pat_wild st =
-    match peek_opt st with
-    | Some (Token.Underscore, span) ->
-      let st' = advance st in
-      (st', { Node.kind = Node.PatWild; span })
-    | _ ->
-      let span = curr_span st in
-      let st' = add_error_code st Error.E1103 span [] in
-      (st', { Node.kind = Node.PatError; span })
-
-  and parse_pat_ident st =
-    let st', name, span = expect_ident st in
-    (st', { Node.kind = Node.PatIdent name; span })
-
-  and parse_pat_record st =
-    let st', name, _ = expect_ident st in
-    let st'', fields = btwn_braces (sep_by parse_pat_field Token.Comma) st' in
-    let span' = curr_span st'' in
-    (st'', { Node.kind = Node.PatRecord { name; fields }; span = span' })
-
-  and parse_pat_field st =
-    let st' = expect st Token.Dot "." in
-    let st'', name, _ = expect_ident st' in
-    match peek_opt st'' with
-    | Some (Token.ColonEq, _) ->
-      let st''', pat = advance_then parse_pat st'' in
-      (st''', { Node.name; pat = Some pat })
-    | _ -> (st'', { Node.name; pat = None })
-
-  and parse_pat_ctor st =
-    let st', name, span = expect_ident st in
-    match peek_opt st' with
-    | Some (Token.LParen, _) ->
-      let st'', args = btwn_parens (sep_by parse_pat Token.Comma) st' in
-      let span' = curr_span st'' in
-      (st'', { Node.kind = Node.PatCtor { name; args }; span = span' })
-    | _ -> (st', { Node.kind = Node.PatCtor { name; args = [] }; span })
-
-  and parse_pat_tuple st =
-    let st', pats = btwn_parens (sep_by parse_pat Token.Comma) st in
-    let span = curr_span st' in
-    match pats with
-    | [] ->
-      let st'' = add_error_code st' Error.E1103 span [] in
-      (st'', { Node.kind = Node.PatError; span })
-    | [ single ] -> (st', single)
-    | first :: rest -> (st', { Node.kind = Node.PatTuple (first, rest); span })
-
-  and parse_typ st =
-    match peek_opt st with
-    | Some (Token.Ident _, _) -> parse_typ_ident st
-    | Some (Token.LBrack, _) -> parse_typ_array st
-    | Some (Token.LParen, _) -> parse_typ_tuple st
-    | Some (Token.LBrace, _) -> parse_typ_record st
-    | _ ->
-      let span = curr_span st in
-      let error_typ =
-        { Node.kind = Node.TypIdent (Interner.empty_name st.interner); span }
-      in
-      (st, error_typ)
-
-  and parse_typ_ptr st =
-    let st' = expect st Token.Caret "^" in
-    let st'', typ = parse_typ st' in
-    let span = curr_span st'' in
-    (st'', { Node.kind = Node.TypPtr typ; span })
-
-  and parse_typ_array st =
-    let st' = expect st Token.LBrack "[" in
-    let st'', size =
-      match peek_opt st' with
-      | Some (Token.RBrack, _) -> (st', None)
-      | _ ->
-        let s, e = parse_expr st' in
-        (s, Some e)
-    in
-    let st''' = expect st'' Token.RBrack "]" in
-    let st'''', elem = parse_typ st''' in
-    let span = curr_span st'''' in
-    (st'''', { Node.kind = Node.TypArr { size; elem }; span })
-
-  and parse_typ_ident st =
-    let st', name, span = expect_ident st in
-    (st', { Node.kind = Node.TypIdent name; span })
-
-  and parse_typ_app st =
-    let st', base, span = expect_ident st in
-    match peek_opt st' with
-    | Some (Token.Lt, _) ->
-      let st'', args =
-        btwn
-          (token Token.Lt)
-          (token Token.Gt)
-          (sep_by parse_typ Token.Comma)
-          st'
-      in
-      let span' = curr_span st'' in
-      (st'', { Node.kind = Node.TypApp { base; args }; span = span' })
-    | _ -> (st', { Node.kind = Node.TypIdent base; span })
-
-  and parse_typ_tuple st =
-    let st', typs = btwn_parens (sep_by parse_typ Token.Comma) st in
-    let span = curr_span st' in
-    match typs with
-    | [] ->
-      let st'' = add_error_code st' Error.E1104 span [] in
-      (st'', { Node.kind = Node.TypError; span })
-    | [ single ] -> (st', single)
-    | first :: rest -> (st', { Node.kind = Node.TypTuple (first, rest); span })
-
-  and parse_typ_fn st =
-    let st' = expect st Token.KwFn "fn" in
-    let st'', params = btwn_parens (sep_by parse_typ Token.Comma) st' in
-    let st''', ret =
-      match peek_opt st'' with
-      | Some (Token.MinusGt, _) ->
-        let s, t = advance_then parse_typ st'' in
-        (s, Some t)
-      | _ -> (st'', None)
-    in
-    let span = curr_span st''' in
-    (st''', { Node.kind = Node.TypFn { params; ret }; span })
-
-  and parse_typ_record st =
-    let st', fields =
-      btwn_braces (sep_by parse_typ_record_field Token.Comma) st
-    in
-    let span = curr_span st' in
-    (st', { Node.kind = Node.TypRecord fields; span })
-
-  and parse_typ_record_field st =
-    let st', name, _ = expect_ident st in
-    let st'' = expect st' Token.Colon ":" in
-    let st''', typ = parse_typ st'' in
-    (st''', { Node.name; typ })
-
-  and parse_typ_optional st =
-    let st', base = parse_typ st in
-    match peek_opt st' with
-    | Some (Token.Question, _) ->
-      let st'' = advance st' in
-      let span = curr_span st'' in
-      (st'', { Node.kind = Node.TypOptional base; span })
-    | _ -> (st', base)
-
-  and parse_stmt st =
-    match peek_opt st with
-    | Some (Token.Ident _, _) -> parse_stmt_bind st
-    | Some (Token.KwImport, _) -> parse_stmt_import st
-    | Some (Token.KwExport, _) -> parse_stmt_export st
-    | Some (Token.KwExtern, _) -> parse_stmt_extern st
-    | _ -> parse_stmt_expr st
-
-  and parse_stmt_import st =
-    let st' = expect st Token.KwImport "import" in
-    let st'', clause = parse_import_clause st' in
-    let st''' = expect st'' Token.KwFrom "from" in
-    let st'''', source =
-      match peek_opt st''' with
-      | Some (Token.LitString s, _) ->
-        let s' = advance st''' in
-        (s', s)
-      | _ ->
-        let span = curr_span st''' in
-        let s' = add_error_code st''' Error.E1003 span [ "string"; "" ] in
-        (s', Interner.empty_name st'''.interner)
-    in
-    let st''''' = expect st'''' Token.Semi ";" in
-    let span = curr_span st''''' in
-    ( st'''''
-    , { Node.attr = None; kind = Node.StmtImport { clause; source }; span } )
-
-  and parse_stmt_export st =
-    let st' = expect st Token.KwExport "export" in
-    let st'', clause = parse_export_clause st' in
-    let st''', source =
-      match peek_opt st'' with
-      | Some (Token.KwFrom, _) -> (
-        let s = advance st'' in
-        match peek_opt s with
+  and expr_fn st =
+    let s, abi =
+      match peek st with
+      | Some (Token.KwExtern, _) -> (
+        match peek (adv st) with
         | Some (Token.LitString str, _) ->
-          let s' = advance s in
-          (s', Some str)
-        | _ ->
-          let span = curr_span s in
-          let s' = add_error_code s Error.E1003 span [ "string"; "" ] in
-          (s', None))
-      | _ -> (st'', None)
+          let s = adv (adv st) in
+          (s, Some (Interner.lookup s.interner str))
+        | _ -> (adv st, None))
+      | _ -> (st, None)
     in
-    let st'''' = expect st''' Token.Semi ";" in
-    let span = curr_span st'''' in
-    ( st''''
-    , { Node.attr = None; kind = Node.StmtExport { clause; source }; span } )
+    let s' = expect s Token.KwFn "fn" in
+    let s'', nm = opt ident_name s' in
+    let s''', tp = opt (angles (sep_by ident_name Token.Comma)) s'' in
+    let s'''', prm = fn_params s''' in
+    let s''''', rt = opt (adv_then typ) s'''' in
+    let s'''''', bd = block s''''' in
+    ( s''''''
+    , mk_node
+        (ExprFn
+           {
+             abi
+           ; name = nm
+           ; typ_params = Option.value tp ~default:[]
+           ; params = prm
+           ; ret_typ = rt
+           ; body = bd
+           })
+        s'''''' )
 
-  and parse_import_clause st =
-    match peek_opt st with
-    | Some (Token.Star, _) ->
-      let st' = advance_then expect st Token.KwAs "as" in
-      let st'', name, _ = expect_ident st' in
-      (st'', Node.ImportAll name)
-    | Some (Token.LBrace, _) ->
-      let st', names = btwn_braces (sep_by expect_ident_name Token.Comma) st in
-      (st', Node.ImportNamed names)
-    | _ ->
-      let span = curr_span st in
-      let st' = add_error_code st Error.E1003 span [ "import clause"; "" ] in
-      (st', Node.ImportNamed [])
-
-  and parse_export_clause st =
-    match peek_opt st with
-    | Some (Token.Star, _) ->
-      let st' = advance_then expect st Token.KwAs "as" in
-      let st'', name, _ = expect_ident st' in
-      (st'', Node.ExportAll name)
-    | Some (Token.LBrace, _) ->
-      let st', names = btwn_braces (sep_by expect_ident_name Token.Comma) st in
-      (st', Node.ExportNamed names)
-    | _ ->
-      let span = curr_span st in
-      let st' = add_error_code st Error.E1003 span [ "export clause"; "" ] in
-      (st', Node.ExportNamed [])
-
-  and expect_ident_name st =
-    let st', name, _ = expect_ident st in
-    (st', name)
-
-  and parse_stmt_bind st =
-    let st', mutable_, _ =
-      match peek_opt st with
-      | Some (Token.KwVal, span) ->
-        let s = advance st in
-        (s, false, span)
-      | Some (Token.KwVar, span) ->
-        let s = advance st in
-        (s, true, span)
-      | _ ->
-        let span = curr_span st in
-        let s = add_error_code st Error.E1003 span [ "val or var"; "" ] in
-        (s, false, span)
+  and expr_record st =
+    let s = expect st Token.KwRecord "record" in
+    let s', tp = opt (angles (sep_by ident_name Token.Comma)) s in
+    let s'', tb = opt (adv_then typ) s' in
+    let s''', (fs, bd) =
+      braces
+        (fun st ->
+          let s, its = sep_by rec_item Token.Comma st in
+          let flds =
+            List.filter_map (function `F f -> Some f | _ -> None) its
+          in
+          let mths =
+            List.filter_map (function `M m -> Some m | _ -> None) its
+          in
+          (s, (flds, mths)))
+        s''
     in
-    let st'', name, _ = expect_ident st' in
-    let st''', typ =
-      match peek_opt st'' with
-      | Some (Token.Colon, _) ->
-        let s, t = advance_then parse_typ st'' in
-        (s, Some t)
-      | _ -> (st'', None)
-    in
-    let st'''' = expect st''' Token.ColonEq ":=" in
-    let st''''', value = parse_expr st'''' in
-    let st'''''' = expect st''''' Token.Semi ";" in
-    let span' = curr_span st'''''' in
-    ( st''''''
-    , {
-        Node.attr = None
-      ; kind = Node.StmtBind { mutable_; name; typ; value }
-      ; span = span'
-      } )
+    ( s'''
+    , mk_node
+        (ExprRecord
+           {
+             typ_params = Option.value tp ~default:[]
+           ; trait_bound = tb
+           ; fields = fs
+           ; body = bd
+           })
+        s''' )
 
-  and parse_stmt_extern st =
-    let st' = expect st Token.KwExtern "extern" in
-    let st'', abi =
-      match peek_opt st' with
-      | Some (Token.LitString s, _) ->
-        let s' = advance st' in
-        let abi_str = Interner.lookup st'.interner s in
-        (s', Some abi_str)
-      | _ -> (st', None)
-    in
-    let st''' = expect st'' Token.KwUnsafe "unsafe" in
-    let st'''', decls = btwn_braces (many parse_fn_sig) st''' in
-    let span = curr_span st'''' in
-    (st'''', { Node.attr = None; kind = Node.StmtExtern { abi; decls }; span })
-
-  and parse_fn_sig st =
-    let st' = expect st Token.KwFn "fn" in
-    let st'', name, _ = expect_ident st' in
-    let st''', _ = parse_fn_params st'' in
-    let st'''', typ =
-      match peek_opt st''' with
-      | Some (Token.MinusGt, _) ->
-        let s, t = advance_then parse_typ st''' in
-        (s, Some t)
-      | _ -> (st''', None)
-    in
-    (st'''', { Node.name; typ })
-
-  and parse_fn_params st = btwn_parens (sep_by parse_fn_param Token.Comma) st
-
-  and parse_fn_param st =
-    let st', name, _ = expect_ident st in
-    match peek_opt st' with
+  and rec_item st =
+    let s, n, _ = ident st in
+    match peek s with
     | Some (Token.Colon, _) ->
-      let st'', typ = advance_then parse_typ st' in
-      (st'', { Node.name; typ = Some typ })
-    | _ -> (st', { Node.name; typ = None })
+      let s', t = adv_then typ s in
+      (s', `F { Node.name = n; typ = t })
+    | Some (Token.ColonEq, _) ->
+      let s', e = adv_then expr s in
+      ( s'
+      , `M
+          {
+            Node.attr = None
+          ; kind =
+              StmtBind { mutable_ = false; name = n; typ = None; value = e }
+          ; span = span s'
+          } )
+    | _ ->
+      let sp = span s in
+      ( err s Error.E1003 sp [ "':' or ':='"; "" ]
+      , `F { Node.name = n; typ = mk_node TypError s } )
 
-  and parse_stmt_expr st =
-    let st', expr = parse_expr st in
-    let span = curr_span st in
-    (st', { Node.attr = None; kind = Node.StmtExpr expr; span })
+  and expr_choice st =
+    let s = expect st Token.KwChoice "choice" in
+    let s', tp = opt (angles (sep_by ident_name Token.Comma)) s in
+    let s'', cs = braces (sep_by choice_case Token.Comma) s' in
+    ( s''
+    , mk_node
+        (ExprChoice
+           { typ_params = Option.value tp ~default:[]; cases = cs; body = [] })
+        s'' )
 
-  and parse_prog st =
-    let rec loop st acc =
-      match peek_opt st with
-      | Some (Token.EOF, _) -> (st, List.rev acc)
-      | Some (Token.Newline, _) ->
-        let st' = advance st in
-        loop st' acc
+  and choice_case st =
+    let s = expect st Token.KwCase "case" in
+    let s', n, _ = ident s in
+    let s'', fs = opt (parens (sep_by typ Token.Comma)) s' in
+    (s'', { Node.name = n; fields = Option.value fs ~default:[] })
+
+  and expr_trait st =
+    let s = expect st Token.KwTrait "trait" in
+    let s', tp = opt (angles (sep_by ident_name Token.Comma)) s in
+    let s'', tb = opt (adv_then typ) s' in
+    let s''', its = braces (sep_by trait_item Token.Comma) s'' in
+    ( s'''
+    , mk_node
+        (ExprTrait
+           {
+             typ_params = Option.value tp ~default:[]
+           ; trait_bound = tb
+           ; items = its
+           })
+        s''' )
+
+  and trait_item st =
+    let s, n, _ = ident st in
+    let s' = expect s Token.Colon ":" in
+    let s'', t = typ s' in
+    (s'', { Node.name = n; typ = Some t })
+
+  (* Patterns *)
+  and pat st =
+    match peek st with
+    | Some (Token.KwVal, sp) ->
+      let s, n, _ = adv_then ident st in
+      (s, { Node.kind = PatBind { mutable_ = false; name = n }; span = sp })
+    | Some (Token.KwVar, sp) ->
+      let s, n, _ = adv_then ident st in
+      (s, { Node.kind = PatBind { mutable_ = true; name = n }; span = sp })
+    | Some (Token.LitNumber n, sp) ->
+      (adv st, { Node.kind = PatLit (LitNumber n); span = sp })
+    | Some (Token.LitString s, sp) ->
+      (adv st, { Node.kind = PatLit (LitString s); span = sp })
+    | Some (Token.LitRune c, sp) ->
+      (adv st, { Node.kind = PatLit (LitRune c); span = sp })
+    | Some (Token.Underscore, sp) -> (adv st, { Node.kind = PatWild; span = sp })
+    | Some (Token.Ident _, _) -> (
+      let s, n, sp = ident st in
+      match peek s with
+      | Some (Token.LBrace, _) ->
+        let s', fs = braces (sep_by pat_field Token.Comma) s in
+        (s', { Node.kind = PatRecord { name = n; fields = fs }; span = span s' })
+      | Some (Token.LParen, _) ->
+        let s', args = parens (sep_by pat Token.Comma) s in
+        (s', { Node.kind = PatCtor { name = n; args }; span = span s' })
+      | _ -> (s, { Node.kind = PatIdent n; span = sp }))
+    | Some (Token.LParen, _) -> (
+      let s, ps = parens (sep_by pat Token.Comma) st in
+      match ps with
+      | [] -> (err s Error.E1103 (span s) [], mk_node PatError s)
+      | [ x ] -> (s, x)
+      | f :: r -> (s, mk_node (PatTuple (f, r)) s))
+    | _ -> (err st Error.E1103 (span st) [], mk_node PatError st)
+
+  and pat_field st =
+    let s = expect st Token.Dot "." in
+    let s', n, _ = ident s in
+    let s'', p = opt (adv_then pat) s' in
+    (s'', { Node.name = n; pat = p })
+
+  (* Types *)
+  and typ st =
+    match peek st with
+    | Some (Token.Caret, _) ->
+      let s, t = adv_then typ st in
+      (s, mk_node (TypPtr t) s)
+    | Some (Token.LBrack, _) ->
+      let s = adv st in
+      let s', sz =
+        match peek s with
+        | Some (Token.RBrack, _) -> (s, None)
+        | _ ->
+          let s', e = expr s in
+          (s', Some e)
+      in
+      let s'' = expect s' Token.RBrack "]" in
+      let s''', el = typ s'' in
+      (s''', mk_node (TypArr { size = sz; elem = el }) s''')
+    | Some (Token.Ident _, _) -> (
+      let s, n, sp = ident st in
+      match peek s with
+      | Some (Token.Lt, _) ->
+        let s', args = angles (sep_by typ Token.Comma) s in
+        (s', mk_node (TypApp { base = n; args }) s')
+      | _ -> (s, { Node.kind = TypIdent n; span = sp }))
+    | Some (Token.LParen, _) -> (
+      let s, ts = parens (sep_by typ Token.Comma) st in
+      match ts with
+      | [] -> (err s Error.E1104 (span s) [], mk_node TypError s)
+      | [ x ] -> (s, x)
+      | f :: r -> (s, mk_node (TypTuple (f, r)) s))
+    | Some (Token.KwFn, _) ->
+      let s = adv st in
+      let s', ps = parens (sep_by typ Token.Comma) s in
+      let s'', rt = opt (adv_then typ) s' in
+      (s'', mk_node (TypFn { params = ps; ret = rt }) s'')
+    | Some (Token.LBrace, _) ->
+      let s, fs = braces (sep_by typ_rec_field Token.Comma) st in
+      (s, mk_node (TypRecord fs) s)
+    | _ ->
+      ( err st Error.E1104 (span st) []
+      , mk_node (TypIdent (Interner.empty_name st.interner)) st )
+
+  and typ_rec_field st =
+    let s, n, _ = ident st in
+    let s' = expect s Token.Colon ":" in
+    let s'', t = typ s' in
+    (s'', { Node.name = n; typ = t })
+
+  and fn_params st = parens (sep_by fn_param Token.Comma) st
+
+  and fn_param st =
+    let s, n, _ = ident st in
+    let s', t = opt (adv_then typ) s in
+    (s', { Node.name = n; typ = t })
+
+  (* Statements *)
+  and stmt st =
+    let s, a = attr st in
+    let s', kind =
+      match peek s with
+      | Some (Token.KwImport, _) -> stmt_import s
+      | Some (Token.KwExport, _) -> stmt_export s
+      | Some (Token.KwVal, _) | Some (Token.KwVar, _) -> stmt_bind s
+      | Some (Token.KwExtern, _) -> stmt_extern s
       | _ ->
-        let st', stmt = parse_stmt st in
-        loop st' (stmt :: acc)
+        let s'', e = expr s in
+        (s'', StmtExpr e)
+    in
+    (s', { Node.attr = a; kind; span = span s' })
+
+  and stmt_import st =
+    let s = expect st Token.KwImport "import" in
+    let s', cl = import_clause s in
+    let s'' = expect s' Token.KwFrom "from" in
+    let s''', src =
+      match peek s'' with
+      | Some (Token.LitString s, _) -> (adv s'', s)
+      | _ ->
+        ( err s'' Error.E1003 (span s'') [ "string"; "" ]
+        , Interner.empty_name s''.interner )
+    in
+    let s'''' = expect s''' Token.Semi ";" in
+    (s'''', StmtImport { clause = cl; source = src })
+
+  and import_clause st =
+    match peek st with
+    | Some (Token.Star, _) ->
+      let s = expect (adv st) Token.KwAs "as" in
+      let s', n, _ = ident s in
+      (s', ImportAll n)
+    | Some (Token.LBrace, _) ->
+      let s, ns = braces (sep_by ident_name Token.Comma) st in
+      (s, ImportNamed ns)
+    | _ -> (err st Error.E1003 (span st) [ "import clause"; "" ], ImportNamed [])
+
+  and stmt_export st =
+    let s = expect st Token.KwExport "export" in
+    let s', cl = export_clause s in
+    let s'', src =
+      match peek s' with
+      | Some (Token.KwFrom, _) -> (
+        match peek (adv s') with
+        | Some (Token.LitString str, _) -> (adv (adv s'), Some str)
+        | _ -> (err (adv s') Error.E1003 (span s') [ "string"; "" ], None))
+      | _ -> (s', None)
+    in
+    let s''' = expect s'' Token.Semi ";" in
+    (s''', StmtExport { clause = cl; source = src })
+
+  and export_clause st =
+    match peek st with
+    | Some (Token.Star, _) ->
+      let s = expect (adv st) Token.KwAs "as" in
+      let s', n, _ = ident s in
+      (s', ExportAll n)
+    | Some (Token.LBrace, _) ->
+      let s, ns = braces (sep_by ident_name Token.Comma) st in
+      (s, ExportNamed ns)
+    | _ -> (err st Error.E1003 (span st) [ "export clause"; "" ], ExportNamed [])
+
+  and stmt_bind st =
+    let s, mut, _ =
+      match peek st with
+      | Some (Token.KwVal, sp) -> (adv st, false, sp)
+      | Some (Token.KwVar, sp) -> (adv st, true, sp)
+      | _ ->
+        let sp = span st in
+        (err st Error.E1003 sp [ "val or var"; "" ], false, sp)
+    in
+    let s', n, _ = ident s in
+    let s'', t = opt (adv_then typ) s' in
+    let s''' = expect s'' Token.ColonEq ":=" in
+    let s'''', v = expr s''' in
+    let s''''' = expect s'''' Token.Semi ";" in
+    (s''''', StmtBind { mutable_ = mut; name = n; typ = t; value = v })
+
+  and stmt_extern st =
+    let s = expect st Token.KwExtern "extern" in
+    let s', abi =
+      match peek s with
+      | Some (Token.LitString str, _) ->
+        (adv s, Some (Interner.lookup s.interner str))
+      | _ -> (s, None)
+    in
+    let s'' = expect s' Token.KwUnsafe "unsafe" in
+    let s''', ds = braces (many fn_sig) s'' in
+    (s''', StmtExtern { abi; decls = ds })
+
+  and fn_sig st =
+    let s = expect st Token.KwFn "fn" in
+    let s', n, _ = ident s in
+    let s'', _ = fn_params s' in
+    let s''', t = opt (adv_then typ) s'' in
+    (s''', { Node.name = n; typ = t })
+
+  let prog st =
+    let rec loop s acc =
+      match peek s with
+      | Some (Token.EOF, _) -> (s, List.rev acc)
+      | Some (Token.Newline, _) -> loop (adv s) acc
+      | _ ->
+        let s', st = stmt s in
+        loop s' (st :: acc)
     in
     loop st []
 
-  let parse source file_id interner tokens =
-    let st = mk_state source file_id tokens interner in
-    let prog_st, prog = parse_prog st in
-    (prog, prog_st.diags)
+  let parse src fid int toks =
+    let st = mk_state src fid toks int in
+    let st', p = prog st in
+    (p, st'.diags)
 end
 
 include Make ()
