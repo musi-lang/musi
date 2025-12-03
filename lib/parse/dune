@@ -1,5 +1,5 @@
 (library
  (public_name musi.parse)
  (name parse)
- (modules node prec parser error)
- (libraries basic lex))
+ (modules node prec parser)
+ (libraries basic lex error))

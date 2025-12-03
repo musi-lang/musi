@@ -1,0 +1,4 @@
+(library
+ (public_name musi.error)
+ (name error)
+ (libraries basic))
