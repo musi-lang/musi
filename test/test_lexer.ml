@@ -81,8 +81,8 @@ let test_state_functions () =
     test_case "peek and advance" `Quick (fun () ->
       let state = make_test_state "hello" in
       (check char) "peek first" 'h' (Lexer.peek state);
-      Lexer.adv state;
-      (check int) "adv position" 1 state.pos;
+      Lexer.advance state;
+      (check int) "advance position" 1 state.pos;
       (check char) "peek after advance" 'e' (Lexer.peek state))
   ; test_case "peek_n" `Quick (fun () ->
       let state = make_test_state "hello" in
@@ -96,7 +96,7 @@ let test_state_functions () =
       (check char) "peek_n 10" '\000' (Lexer.peek_n state 10))
   ; test_case "adv_n" `Quick (fun () ->
       let state = make_test_state "hello" in
-      Lexer.adv_n state 3;
+      Lexer.advance_n state 3;
       (check int) "adv_n position" 3 state.pos;
       (check char) "peek after adv_n" 'l' (Lexer.peek state))
   ]
@@ -128,7 +128,7 @@ let test_tokenize () =
       let tokens, diags = Lexer.tokenize "" 42 interner in
       check_no_errors diags;
       (check int) "token count" 1 (List.length tokens);
-      match List.rev tokens with
+      match tokens with
       | [ (Token.EOF, _) ] -> ()
       | _ -> Alcotest.fail "Expected EOF token")
   ; test_case "single number" `Quick (fun () ->
@@ -136,7 +136,7 @@ let test_tokenize () =
       let tokens, diags = Lexer.tokenize "42" 42 interner in
       check_no_errors diags;
       (check int) "token count" 2 (List.length tokens);
-      match List.rev tokens with
+      match tokens with
       | [ (Token.EOF, _); (Token.LitNumber "42", _) ] -> ()
       | _ -> Alcotest.fail "Expected number and EOF")
   ; test_case "single identifier" `Quick (fun () ->
@@ -144,7 +144,7 @@ let test_tokenize () =
       let tokens, diags = Lexer.tokenize "x" 42 interner in
       check_no_errors diags;
       (check int) "token count" 2 (List.length tokens);
-      match List.rev tokens with
+      match tokens with
       | [ (Token.EOF, _); (Token.Ident name, _) ] ->
         check_interned_string interner name "x"
       | _ -> Alcotest.fail "Expected identifier and EOF")
@@ -153,7 +153,7 @@ let test_tokenize () =
       let tokens, diags = Lexer.tokenize "\"hello\"" 42 interner in
       check_no_errors diags;
       (check int) "token count" 2 (List.length tokens);
-      match List.rev tokens with
+      match tokens with
       | [ (Token.EOF, _); (Token.LitString name, _) ] ->
         check_interned_string interner name "hello"
       | _ -> Alcotest.fail "Expected string and EOF")
@@ -162,7 +162,7 @@ let test_tokenize () =
       let tokens, diags = Lexer.tokenize "'a'" 42 interner in
       check_no_errors diags;
       (check int) "token count" 2 (List.length tokens);
-      match List.rev tokens with
+      match tokens with
       | [ (Token.EOF, _); (Token.LitRune 'a', _) ] -> ()
       | _ -> Alcotest.fail "Expected rune and EOF")
   ; test_case "template string" `Quick (fun () ->
@@ -170,7 +170,7 @@ let test_tokenize () =
       let tokens, diags = Lexer.tokenize "$\"hello\"" 42 interner in
       check_no_errors diags;
       (check int) "token count" 2 (List.length tokens);
-      match List.rev tokens with
+      match tokens with
       | [ (Token.EOF, _); (Token.LitTemplate name, _) ] ->
         check_interned_string interner name "hello"
       | _ -> Alcotest.fail "Expected template and EOF")
@@ -181,15 +181,15 @@ let test_tokenize () =
       (check int) "token count" 6 (List.length tokens);
       let expected_tokens =
         [
-          Token.KwVal
+          Token.EOF
+        ; Token.KwVal
         ; Token.KwVar
         ; Token.KwFn
         ; Token.KwIf
         ; Token.KwElse
-        ; Token.EOF
         ]
       in
-      let actual_tokens = List.map fst (List.rev tokens) in
+      let actual_tokens = List.map fst tokens in
       List.iter2
         (fun expected actual ->
           (check bool) "keyword match" true (expected = actual))
@@ -201,9 +201,9 @@ let test_tokenize () =
       check_no_errors diags;
       (check int) "token count" 5 (List.length tokens);
       let expected_tokens =
-        [ Token.Plus; Token.Minus; Token.Star; Token.Slash; Token.EOF ]
+        [ Token.EOF; Token.Plus; Token.Minus; Token.Star; Token.Slash ]
       in
-      let actual_tokens = List.map fst (List.rev tokens) in
+      let actual_tokens = List.map fst tokens in
       List.iter2
         (fun expected actual ->
           (check bool) "operator match" true (expected = actual))
@@ -213,22 +213,22 @@ let test_tokenize () =
       let interner = Interner.create () in
       let tokens, diags = Lexer.tokenize "()[]{},:;" 42 interner in
       check_no_errors diags;
-      (check int) "token count" 8 (List.length tokens);
+      (check int) "token count" 10 (List.length tokens);
       let expected_tokens =
         [
-          Token.LParen
+          Token.EOF
+        ; Token.LParen
         ; Token.RParen
         ; Token.LBrack
         ; Token.RBrack
         ; Token.LBrace
         ; Token.RBrace
         ; Token.Comma
-        ; Token.Semi
         ; Token.Colon
-        ; Token.EOF
+        ; Token.Semi
         ]
       in
-      let actual_tokens = List.map fst (List.rev tokens) in
+      let actual_tokens = List.map fst tokens in
       List.iter2
         (fun expected actual ->
           (check bool) "delimiter match" true (expected = actual))
@@ -240,10 +240,11 @@ let test_tokenize () =
         Lexer.tokenize "result := func(x, y) + 42" 42 interner
       in
       check_no_errors diags;
-      (check int) "complex token count" 9 (List.length tokens);
+      (check int) "complex token count" 11 (List.length tokens);
       let expected_tokens =
         [
-          Token.Ident (Interner.empty_name interner)
+          Token.EOF
+        ; Token.Ident (Interner.empty_name interner)
         ; Token.ColonEq
         ; Token.Ident (Interner.empty_name interner)
         ; Token.LParen
@@ -253,10 +254,9 @@ let test_tokenize () =
         ; Token.RParen
         ; Token.Plus
         ; Token.LitNumber "42"
-        ; Token.EOF
         ]
       in
-      let actual_tokens = List.map fst (List.rev tokens) in
+      let actual_tokens = List.map fst tokens in
       List.iter2
         (fun expected actual ->
           match (expected, actual) with
