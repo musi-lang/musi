@@ -71,6 +71,7 @@ module type S = sig
     | Colon (* : *)
     | Dot (* . *)
     | MinusGt (* -> *)
+    | EqGt
     | Underscore (* _ *)
     | Question (* ? *)
     (* Special *)
@@ -160,6 +161,7 @@ module Make () : S = struct
     | Colon
     | Dot
     | MinusGt
+    | EqGt
     | Underscore
     | Question
     | EOF
@@ -211,6 +213,7 @@ module Make () : S = struct
     ; ("**", StarStar)
     ; ("|>", PipeGt)
     ; ("->", MinusGt)
+    ; ("=>", EqGt)
     ; ("=", Eq)
     ; ("<", Lt)
     ; (">", Gt)
@@ -265,8 +268,8 @@ module Make () : S = struct
     | ( LtMinus | ColonEq | Eq | BangEq | Lt | LtEq | Gt | GtEq | LtLt | GtGt
       | Plus | Minus | Star | Slash | StarStar | PipeGt | Amp | Pipe | Caret
       | Tilde | At | Bang | Dollar | LParen | RParen | LBrace | RBrace | LBrack
-      | RBrack | Comma | Semi | Colon | Dot | MinusGt | Underscore | Question )
-      as sym ->
+      | RBrack | Comma | Semi | Colon | Dot | MinusGt | EqGt | Underscore
+      | Question ) as sym ->
       Hashtbl.find symbol_to_string sym
     | EOF -> "EOF"
     | Newline -> "NEWLINE"

@@ -29,6 +29,7 @@ module type S = sig
       }
     | StmtExtern of { abi : string option; decls : fn_sig list }
     | StmtExpr of expr
+    | StmtError
 
   and block = { stmts : stmt list; ret : expr option }
 
@@ -94,6 +95,7 @@ module type S = sig
         ; trait_bound : typ option
         ; items : fn_sig list
       }
+    | ExprError
 
   and cond = CondExpr of expr | CondCase of { pat : pat; value : expr }
   and for_binding = ForIdent of ident | ForCase of pat
@@ -115,6 +117,7 @@ module type S = sig
     | PatRecord of { name : ident; fields : pat_field list }
     | PatCtor of { name : ident; args : pat list }
     | PatTuple of pat delimited
+    | PatError
 
   and pat_field = { name : ident; pat : pat option }
 
@@ -130,6 +133,7 @@ module type S = sig
     | TypFn of { params : typ list; ret : typ option }
     | TypRecord of typ_record_field list
     | TypOptional of typ
+    | TypError
 
   and typ_record_field = { name : ident; typ : typ }
 
@@ -166,6 +170,7 @@ module Make () : S = struct
       }
     | StmtExtern of { abi : string option; decls : fn_sig list }
     | StmtExpr of expr
+    | StmtError
 
   and block = { stmts : stmt list; ret : expr option }
   and expr = expr_kind with_span
@@ -229,6 +234,7 @@ module Make () : S = struct
         ; trait_bound : typ option
         ; items : fn_sig list
       }
+    | ExprError
 
   and cond = CondExpr of expr | CondCase of { pat : pat; value : expr }
   and for_binding = ForIdent of ident | ForCase of pat
@@ -248,6 +254,7 @@ module Make () : S = struct
     | PatRecord of { name : ident; fields : pat_field list }
     | PatCtor of { name : ident; args : pat list }
     | PatTuple of pat delimited
+    | PatError
 
   and pat_field = { name : ident; pat : pat option }
   and typ = typ_kind with_span
@@ -261,6 +268,7 @@ module Make () : S = struct
     | TypFn of { params : typ list; ret : typ option }
     | TypRecord of typ_record_field list
     | TypOptional of typ
+    | TypError
 
   and typ_record_field = { name : ident; typ : typ }
 
