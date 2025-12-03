@@ -174,6 +174,60 @@ let test_tokenize () =
       | [ (Token.EOF, _); (Token.LitTemplate name, _) ] ->
         check_interned_string interner name "hello"
       | _ -> Alcotest.fail "Expected template and EOF")
+  ; test_case "unicode escape in string" `Quick (fun () ->
+      let interner = Interner.create () in
+      let tokens, diags = Lexer.tokenize "\"\\u{41}\"" 42 interner in
+      check_no_errors diags;
+      (check int) "token count" 2 (List.length tokens);
+      match tokens with
+      | [ (Token.EOF, _); (Token.LitString name, _) ] ->
+        check_interned_string interner name "A"
+      | _ -> Alcotest.fail "Expected unicode string and EOF")
+  ; test_case "unicode escape in rune" `Quick (fun () ->
+      let interner = Interner.create () in
+      let tokens, diags = Lexer.tokenize "'\\u{42}'" 42 interner in
+      check_no_errors diags;
+      (check int) "token count" 2 (List.length tokens);
+      match tokens with
+      | [ (Token.EOF, _); (Token.LitRune 'B', _) ] -> ()
+      | _ -> Alcotest.fail "Expected unicode rune and EOF")
+  ; test_case "mixed escape sequences" `Quick (fun () ->
+      let interner = Interner.create () in
+      let tokens, diags = Lexer.tokenize "\"\\n\\t\\u{43}\\0\"" 42 interner in
+      check_no_errors diags;
+      (check int) "token count" 2 (List.length tokens);
+      match tokens with
+      | [ (Token.EOF, _); (Token.LitString name, _) ] ->
+        check_interned_string interner name "\n\tC\000"
+      | _ -> Alcotest.fail "Expected mixed escapes string and EOF")
+  ; test_case "hex escape in string" `Quick (fun () ->
+      let interner = Interner.create () in
+      let tokens, diags = Lexer.tokenize "\"\\x{41}\"" 42 interner in
+      check_no_errors diags;
+      (check int) "token count" 2 (List.length tokens);
+      match tokens with
+      | [ (Token.EOF, _); (Token.LitString name, _) ] ->
+        check_interned_string interner name "A"
+      | _ -> Alcotest.fail "Expected hex string and EOF")
+  ; test_case "hex escape in rune" `Quick (fun () ->
+      let interner = Interner.create () in
+      let tokens, diags = Lexer.tokenize "'\\x{42}'" 42 interner in
+      check_no_errors diags;
+      (check int) "token count" 2 (List.length tokens);
+      match tokens with
+      | [ (Token.EOF, _); (Token.LitRune 'B', _) ] -> ()
+      | _ -> Alcotest.fail "Expected hex rune and EOF")
+  ; test_case "all escape types combined" `Quick (fun () ->
+      let interner = Interner.create () in
+      let tokens, diags =
+        Lexer.tokenize "\"\\n\\u{41}\\x{42}\\t\"" 42 interner
+      in
+      check_no_errors diags;
+      (check int) "token count" 2 (List.length tokens);
+      match tokens with
+      | [ (Token.EOF, _); (Token.LitString name, _) ] ->
+        check_interned_string interner name "\nAB\t"
+      | _ -> Alcotest.fail "Expected combined escapes string and EOF")
   ; test_case "keyword recognition" `Quick (fun () ->
       let interner = Interner.create () in
       let tokens, diags = Lexer.tokenize "val var fn if else" 42 interner in

@@ -160,15 +160,118 @@ let rec scan_number st start =
       scan_fraction st);
     LitNumber (substr st start (st.pos - start))
 
+type escape_checker = char -> bool
+type escape_parser = string -> int -> int * bool
+type escape_post_processor = int -> string * bool
+
+let scan_braced_escape st ~validator ~parser ~post_processor =
+  let start_pos = st.pos in
+  advance_n st 2;
+  if st.pos >= st.len then (
+    add_err st Error.E0210 start_pos [];
+    ("", 0x0))
+  else if st.source.[st.pos] != '{' then (
+    add_err st Error.E0210 start_pos [];
+    ("", 0x0))
+  else (
+    advance st;
+    if st.pos >= st.len then (
+      add_err st Error.E0205 start_pos [];
+      ("", 0x0))
+    else if st.source.[st.pos] = '}' then (
+      add_err st Error.E0205 start_pos [];
+      ("", 0x0))
+    else
+      let digits = ref "" in
+      let valid = ref true in
+      while st.pos < st.len && st.source.[st.pos] != '}' && !valid do
+        let c = st.source.[st.pos] in
+        if validator c then (
+          digits := !digits ^ String.make 1 c;
+          advance st)
+        else valid := false
+      done;
+
+      if !valid then
+        if st.pos >= st.len || st.source.[st.pos] != '}' then (
+          add_err st Error.E0209 start_pos [];
+          ("", 0x0))
+        else if !digits = "" then (
+          add_err st Error.E0205 start_pos [];
+          ("", 0x0))
+        else (
+          advance st;
+          let code_point, valid_parse = parser !digits 0 in
+          if not valid_parse then (
+            add_err st Error.E0208 start_pos [];
+            ("", 0x0))
+          else
+            let result_char, valid_result = post_processor code_point in
+            if not valid_result then (
+              add_err st Error.E0207 start_pos [ "10FFFF" ];
+              ("", 0x0))
+            else (result_char, code_point))
+      else (
+        add_err st Error.E0208 start_pos [];
+        ("", 0x0)))
+
+let rec unicode_parser str acc =
+  if str = "" then (acc, true)
+  else
+    let digit =
+      match str.[0] with
+      | c when '0' <= c && c <= '9' -> Char.code c - Char.code '0'
+      | c when 'a' <= c && c <= 'f' -> Char.code c - Char.code 'a' + 10
+      | c when 'A' <= c && c <= 'F' -> Char.code c - Char.code 'A' + 10
+      | _ -> 0
+    in
+    unicode_parser
+      (String.sub str 1 (String.length str - 1))
+      ((acc * 16) + digit)
+
+let unicode_post_processor code_point =
+  if code_point > 0x10FFFF then ("", false)
+  else if code_point < 256 then (String.make 1 (Char.chr code_point), true)
+  else (String.make 1 '?', true)
+
+let scan_unicode_escape st =
+  scan_braced_escape
+    st
+    ~validator:is_xdigit
+    ~parser:unicode_parser
+    ~post_processor:unicode_post_processor
+
+let hex_parser str acc = unicode_parser str acc
+
+let hex_post_processor code_point =
+  if code_point > 0xFF then ("", false)
+  else (String.make 1 (Char.chr code_point), true)
+
+let scan_hex_escape st =
+  scan_braced_escape
+    st
+    ~validator:is_xdigit
+    ~parser:hex_parser
+    ~post_processor:hex_post_processor
+
 let rec scan_string_content st =
   if st.pos >= st.len then ""
   else
     match st.source.[st.pos] with
     | '"' -> ""
-    | '\\' when st.pos + 1 < st.len ->
-      let esc = lookup_escape st.source.[st.pos + 1] in
-      advance_n st 2;
-      String.make 1 esc ^ scan_string_content st
+    | '\\' when st.pos + 1 < st.len -> begin
+      match st.source.[st.pos + 1] with
+      | 'u' when st.pos + 2 < st.len && st.source.[st.pos + 2] = '{' ->
+        let char_str, _code_point = scan_unicode_escape st in
+        char_str ^ scan_string_content st
+      | 'x' when st.pos + 2 < st.len && st.source.[st.pos + 2] = '{' ->
+        let char_str, _code_point = scan_hex_escape st in
+        char_str ^ scan_string_content st
+      | c ->
+        let esc = lookup_escape c in
+        advance_n st 2;
+        String.make 1 esc ^ scan_string_content st
+    end
     | c ->
       advance st;
       String.make 1 c ^ scan_string_content st
@@ -193,11 +296,22 @@ let scan_rune st start =
     | '\'' ->
       advance st;
       LitRune '\000'
-    | '\\' when st.pos + 1 < st.len ->
-      let esc = lookup_escape st.source.[st.pos + 1] in
-      advance_n st 2;
-      if st.pos < st.len && st.source.[st.pos] = '\'' then advance st;
-      LitRune esc
+    | '\\' when st.pos + 1 < st.len -> begin
+      match st.source.[st.pos + 1] with
+      | 'u' when st.pos + 2 < st.len && st.source.[st.pos + 2] = '{' ->
+        let char_str, _code_point = scan_unicode_escape st in
+        if st.pos < st.len && st.source.[st.pos] = '\'' then advance st;
+        if char_str = "" then LitRune '\000' else LitRune char_str.[0]
+      | 'x' when st.pos + 2 < st.len && st.source.[st.pos + 2] = '{' ->
+        let char_str, _code_point = scan_hex_escape st in
+        if st.pos < st.len && st.source.[st.pos] = '\'' then advance st;
+        if char_str = "" then LitRune '\000' else LitRune char_str.[0]
+      | c ->
+        let esc = lookup_escape c in
+        advance_n st 2;
+        if st.pos < st.len && st.source.[st.pos] = '\'' then advance st;
+        LitRune esc
+    end
     | c ->
       advance st;
       if st.pos < st.len && st.source.[st.pos] = '\'' then advance st;
