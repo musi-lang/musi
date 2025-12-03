@@ -144,7 +144,6 @@ module Make () : S = struct
       ( err st Error.E1003 (span st) [ "attribute argument"; "" ]
       , AttrIdent (Interner.empty_name st.interner) )
 
-  (* Expressions *)
   let rec expr st = expr_prec st 0
 
   and expr_prec st min =
@@ -482,7 +481,6 @@ module Make () : S = struct
     let s'', t = typ s' in
     (s'', { Node.name = n; typ = Some t })
 
-  (* Patterns *)
   and pat st =
     match peek st with
     | Some (Token.KwVal, sp) ->
@@ -522,7 +520,6 @@ module Make () : S = struct
     let s'', p = opt (adv_then pat) s' in
     (s'', { Node.name = n; pat = p })
 
-  (* Types *)
   and typ st =
     match peek st with
     | Some (Token.Caret, _) ->
@@ -578,7 +575,6 @@ module Make () : S = struct
     let s', t = opt (adv_then typ) s in
     (s', { Node.name = n; typ = t })
 
-  (* Statements *)
   and stmt st =
     let s, a = attr st in
     let s', kind =
