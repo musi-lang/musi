@@ -12,6 +12,8 @@ type state = {
   ; mutable diags : Diagnostic.bag
 }
 
+type 'a scan_result = Ok of 'a * state | Error of state
+
 let mk_state source file_id interner =
   {
     source
@@ -127,17 +129,17 @@ let keyword_table =
   ; ("while", KwWhile)
   ]
 
-type 'a scanner = state -> ('a * state, state) Result.t
+type 'a scanner = state -> 'a scan_result
 
 let bind_error scanner fallback st =
   match scanner st with
-  | Result.Ok result -> Result.Ok result
-  | Result.Error st' -> fallback st'
+  | Ok (value, st') -> Ok (value, st')
+  | Error st' -> fallback st'
 
 let map_error f scanner st =
   match scanner st with
-  | Result.Ok result -> Result.Ok result
-  | Result.Error st' -> Result.Error (f st')
+  | Ok (value, st') -> Ok (value, st')
+  | Error st' -> Error (f st')
 
 let rec scan_whitespace_impl st start =
   if st.pos < st.len && is_space st.source.[st.pos] then (
@@ -147,15 +149,16 @@ let rec scan_whitespace_impl st start =
 
 let scan_whitespace st =
   if st.pos < st.len && is_space st.source.[st.pos] then
-    Result.Ok (scan_whitespace_impl st st.pos)
-  else Result.Error st
+    let token, span = scan_whitespace_impl st st.pos in
+    Ok ((token, span), st)
+  else Error st
 
 let scan_newline st =
   if st.pos < st.len && st.source.[st.pos] = '\n' then (
     let start = st.pos in
     adv st;
-    Result.Ok (Newline, span st start))
-  else Result.Error st
+    Ok ((Newline, span st start), st))
+  else Error st
 
 let rec scan_line_comment_impl st start =
   if st.pos < st.len && st.source.[st.pos] <> '\n' then (
@@ -172,8 +175,9 @@ let scan_line_comment st =
     && st.source.[st.pos + 1] = '/'
   then (
     adv_n st 2;
-    Result.Ok (scan_line_comment_impl st st.pos))
-  else Result.Error st
+    let token, span = scan_line_comment_impl st st.pos in
+    Ok ((token, span), st))
+  else Error st
 
 let rec scan_block_comment_impl st start depth =
   if st.pos + 1 < st.len then (
@@ -201,8 +205,9 @@ let scan_block_comment st =
     && st.source.[st.pos + 1] = '*'
   then (
     adv_n st 2;
-    Result.Ok (scan_block_comment_impl st st.pos 0))
-  else Result.Error st
+    let token, span = scan_block_comment_impl st st.pos 0 in
+    Ok ((token, span), st))
+  else Error st
 
 let scan_comment st =
   bind_error scan_line_comment (fun st -> scan_block_comment st) st
@@ -224,8 +229,9 @@ let rec scan_ident_impl st start =
 
 let scan_ident st =
   if st.pos < st.len && is_ident_start st.source.[st.pos] then
-    Result.Ok (scan_ident_impl st st.pos)
-  else Result.Error st
+    let token, span = scan_ident_impl st st.pos in
+    Ok ((token, span), st)
+  else Error st
 
 let rec scan_number_digits_impl st =
   if st.pos < st.len && is_digit st.source.[st.pos] then (
@@ -245,8 +251,8 @@ let scan_number st =
       adv st;
       scan_number_fraction_impl st);
     let text = substr st start st.pos in
-    Result.Ok (LitNumber text, span st start))
-  else Result.Error st
+    Ok ((LitNumber text, span st start), st))
+  else Error st
 
 let rec scan_string_content_impl st =
   if st.pos >= st.len then false
@@ -269,8 +275,8 @@ let scan_string st =
     else add_err st Error.E0201 start st.pos [ "string" ];
     let text = substr st (start + 1) (st.pos - 1) in
     let name = Interner.intern st.interner text in
-    Result.Ok (LitString name, span st start))
-  else Result.Error st
+    Ok ((LitString name, span st start), st))
+  else Error st
 
 let rec scan_template_content_impl st depth =
   if st.pos >= st.len then false
@@ -303,8 +309,8 @@ let scan_template st =
     else add_err st Error.E0201 start st.pos [ "template" ];
     let text = substr st (start + 2) (st.pos - 1) in
     let name = Interner.intern st.interner text in
-    Result.Ok (LitTemplate name, span st start))
-  else Result.Error st
+    Ok ((LitTemplate name, span st start), st))
+  else Error st
 
 let rec scan_rune_content_impl st char_count =
   if st.pos >= st.len then (false, '\000')
@@ -330,8 +336,8 @@ let scan_rune st =
     adv st;
     let finished, char_val = scan_rune_content_impl st 0 in
     if finished then adv st else add_err st Error.E0201 start st.pos [ "rune" ];
-    Result.Ok (LitRune char_val, span st start))
-  else Result.Error st
+    Ok ((LitRune char_val, span st start), st))
+  else Error st
 
 let scan_literal st =
   bind_error
@@ -341,12 +347,12 @@ let scan_literal st =
 
 let rec try_symbol_impl st start symbols =
   match symbols with
-  | [] -> Result.Error st
+  | [] -> Error st
   | (sym, token) :: rest ->
     let len = String.length sym in
     if st.pos + len <= st.len && substr st st.pos (st.pos + len) = sym then (
       adv_n st len;
-      Result.Ok (token, span st start))
+      Ok ((token, span st start), st))
     else try_symbol_impl st start rest
 
 let scan_symbol st = try_symbol_impl st st.pos symbols
@@ -360,13 +366,13 @@ let scan_invalid_char st c =
     (st.pos + 1)
     [ Printf.sprintf "%02X" (Char.code c) ];
   adv st;
-  Result.Ok (Whitespace, span st start)
+  Ok ((Whitespace, span st start), st)
 
 let scan_utf8_char st =
   let start = st.pos in
   add_err st Error.E0001 st.pos (st.pos + 1) [];
   adv st;
-  Result.Ok (Token.Error, span st start)
+  Ok ((Token.Error, span st start), st)
 
 let scan_error_chars st =
   if st.pos < st.len then
@@ -374,12 +380,12 @@ let scan_error_chars st =
     if Char.code c < 32 && c <> '\t' && c <> '\n' && c <> '\r' then
       scan_invalid_char st c
     else if Char.code c >= 0x80 then scan_utf8_char st
-    else Result.Error st
-  else Result.Error st
+    else Error st
+  else Error st
 
 let lex_next_token st =
   let start = st.pos in
-  if st.pos >= st.len then Result.Ok (EOF, span st start)
+  if st.pos >= st.len then Stdlib.Ok (EOF, span st start)
   else
     let scanner_result =
       scan_whitespace |> bind_error scan_newline |> bind_error scan_comment
@@ -388,18 +394,18 @@ let lex_next_token st =
       |> bind_error scan_error_chars
     in
     match scanner_result st with
-    | Result.Ok result -> Result.Ok result
-    | Result.Error st' ->
+    | Ok ((token, span), _) -> Stdlib.Ok (token, span)
+    | Error st' ->
       if st'.pos <= start then (
         add_err st' Error.E0501 st'.pos (st'.pos + 1) [];
         adv st';
-        Result.Ok (Token.Error, span st' start))
-      else Result.Ok (Token.Error, span st' start)
+        Stdlib.Ok (Token.Error, span st' start))
+      else Stdlib.Ok (Token.Error, span st' start)
 
 let lex_token st =
   match lex_next_token st with
-  | Result.Ok (token, sp) -> (token, sp)
-  | Result.Error _ -> assert false (* if happens, f*cked *)
+  | Stdlib.Ok (token, sp) -> (token, sp)
+  | Stdlib.Error _ -> assert false (* if happens, f*cked *)
 
 let tokenize source file_id interner =
   let st = mk_state source file_id interner in
