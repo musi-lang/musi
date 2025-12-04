@@ -80,7 +80,6 @@ type t =
   | Newline
   | Whitespace
   | Comment of string
-  | Error
 
 let keyword_strings =
   [
@@ -187,7 +186,6 @@ let show = function
   | Newline -> "NEWLINE"
   | Whitespace -> "WHITESPACE"
   | Comment s -> "COMMENT(" ^ s ^ ")"
-  | Error -> "ERROR"
 
 let keywords =
   let tbl = Hashtbl.create base_table_size in
