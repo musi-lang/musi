@@ -166,7 +166,7 @@ let symbol_to_string =
   List.iter (fun (k, v) -> Hashtbl.add tbl v k) symbol_strings;
   tbl
 
-let to_string = function
+let show = function
   | LitNumber s -> "NUMBER(" ^ s ^ ")"
   | LitString name -> "STRING(id:" ^ string_of_int name ^ ")"
   | LitRune c -> "RUNE(" ^ String.make 1 c ^ ")"
