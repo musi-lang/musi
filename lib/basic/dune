@@ -1,4 +1,5 @@
 (library
  (name basic)
  (public_name musi.basic)
+ (modules interner diagnostic span source basic)
  (libraries unix fmt))

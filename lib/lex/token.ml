@@ -1,13 +1,11 @@
-open Basic
-
 type t =
   (* Literals *)
   | LitNumber of string
-  | LitString of Interner.name
+  | LitString of int
   | LitRune of char
-  | LitTemplate of Interner.name
+  | LitTemplate of int
   (* Identifiers *)
-  | Ident of Interner.name
+  | Ident of int
   (* Keywords (alphabetically) *)
   | KwAnd
   | KwAs
@@ -76,6 +74,7 @@ type t =
   | Underscore
   | Question
   (* Special *)
+  | Error
   | EOF
   | Newline
   | Whitespace
@@ -182,6 +181,7 @@ let show = function
     | LBrack | RBrack | Comma | Semi | Colon | Dot | MinusGt | EqGt | Underscore
     | Question ) as sym ->
     Hashtbl.find symbol_to_string sym
+  | Error -> "ERROR"
   | EOF -> "EOF"
   | Newline -> "NEWLINE"
   | Whitespace -> "WHITESPACE"
@@ -196,10 +196,34 @@ let lookup_keyword interner s =
   match Hashtbl.find_opt keywords s with
   | Some kw -> kw
   | None ->
-    let name = Interner.intern interner s in
+    let name = Basic.Interner.intern interner s in
     Ident name
 
-let symbols =
-  let tbl = Hashtbl.create base_table_size in
-  List.iter (fun (k, v) -> Hashtbl.add tbl k v) symbol_strings;
-  tbl
+let is_keyword = function
+  | KwAnd | KwAs | KwBreak | KwCase | KwChoice | KwCycle | KwDefer | KwElse
+  | KwExport | KwExtern | KwFn | KwFor | KwFrom | KwIf | KwImport | KwIn | KwIs
+  | KwMatch | KwNot | KwOr | KwRecord | KwReturn | KwUnsafe | KwVal | KwVar
+  | KwWhile ->
+    true
+  | _ -> false
+
+let is_literal = function
+  | LitNumber _ | LitString _ | LitRune _ | LitTemplate _ -> true
+  | _ -> false
+
+let is_operator = function
+  | DotDotLt | DotDot | LtMinus | ColonEq | Eq | BangEq | Lt | LtEq | Gt | GtEq
+  | Plus | Minus | Star | Slash | StarStar | PipeGt | LtLt | GtGt | Amp | Pipe
+  | Caret | Tilde | At | Bang ->
+    true
+  | _ -> false
+
+let is_punctuation = function
+  | LParen | RParen | LBrace | RBrace | LBrack | RBrack | Comma | Semi | Colon
+  | Dot | MinusGt | EqGt | Underscore | Question ->
+    true
+  | _ -> false
+
+let is_special = function
+  | Error | EOF | Newline | Whitespace | Comment _ -> true
+  | _ -> false

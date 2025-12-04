@@ -1,13 +1,13 @@
-open Basic
+module Interner = Basic.Interner
+module Diagnostic = Basic.Diagnostic
+module Span = Basic.Span
 open Token
-
-type t = Token.t
 
 type state = {
     source : string
   ; mutable pos : int
   ; len : int
-  ; file_id : Span.file_id
+  ; file_id : Interner.file_id
   ; interner : Interner.t
   ; mutable diags : Diagnostic.bag
 }
@@ -21,6 +21,16 @@ let mk_state source file_id interner =
   ; interner
   ; diags = Diagnostic.empty_bag
   }
+
+let span st start = Span.make st.file_id start st.pos
+let substr st start len = String.sub st.source start len
+
+let add_err st _err_code start _args =
+  let sp = Span.make st.file_id start st.pos in
+  let diag =
+    Diagnostic.error_with_code (Diagnostic.Lex "UNKNOWN") "Unknown error" sp
+  in
+  st.diags <- Diagnostic.add st.diags diag
 
 let char_in_range c (lo, hi) = lo <= c && c <= hi
 let is_letter c = char_in_range c ('a', 'z') || char_in_range c ('A', 'Z')
@@ -47,12 +57,6 @@ let peek_n st n =
 
 let advance st = st.pos <- st.pos + 1
 let advance_n st n = st.pos <- st.pos + n
-let span st start = Span.make st.file_id start st.pos
-let substr st start len = String.sub st.source start len
-
-let add_err st err_code start args =
-  let sp = Span.make st.file_id start st.pos in
-  st.diags <- Diagnostic.add st.diags (Error.lex_diag err_code sp args)
 
 let keyword_table =
   [
@@ -196,9 +200,8 @@ let scan_number st start =
   let number_base, prefix_len = classify_number_base st in
   advance_n st prefix_len;
 
-  if st.pos >= st.len || not (number_base.digit_checker st.source.[st.pos]) then (
-    add_err st Error.E0103 start [ number_base.name ];
-    LitNumber (substr st start (st.pos - start)))
+  if st.pos >= st.len || not (number_base.digit_checker st.source.[st.pos]) then
+    LitNumber (substr st start (st.pos - start))
   else
     let _ = scan_digit_with_sep st number_base.digit_checker in
     if prefix_len = 0 && st.pos < st.len && st.source.[st.pos] = '.' then (
@@ -213,22 +216,13 @@ type escape_parser = string -> int -> int * bool
 type escape_post_processor = int -> string * bool
 
 let scan_braced_escape st ~validator ~parser ~post_processor =
-  let start_pos = st.pos in
   advance_n st 2;
-  if st.pos >= st.len then (
-    add_err st Error.E0210 start_pos [];
-    ("", 0x0))
-  else if st.source.[st.pos] != '{' then (
-    add_err st Error.E0210 start_pos [];
-    ("", 0x0))
+  if st.pos >= st.len then ("", 0x0)
+  else if st.source.[st.pos] != '{' then ("", 0x0)
   else (
     advance st;
-    if st.pos >= st.len then (
-      add_err st Error.E0205 start_pos [];
-      ("", 0x0))
-    else if st.source.[st.pos] = '}' then (
-      add_err st Error.E0205 start_pos [];
-      ("", 0x0))
+    if st.pos >= st.len then ("", 0x0)
+    else if st.source.[st.pos] = '}' then ("", 0x0)
     else
       let digits = ref "" in
       let valid = ref true in
@@ -241,27 +235,16 @@ let scan_braced_escape st ~validator ~parser ~post_processor =
       done;
 
       if !valid then
-        if st.pos >= st.len || st.source.[st.pos] != '}' then (
-          add_err st Error.E0209 start_pos [];
-          ("", 0x0))
-        else if !digits = "" then (
-          add_err st Error.E0205 start_pos [];
-          ("", 0x0))
+        if st.pos >= st.len || st.source.[st.pos] != '}' then ("", 0x0)
+        else if !digits = "" then ("", 0x0)
         else (
           advance st;
           let code_point, valid_parse = parser !digits 0 in
-          if not valid_parse then (
-            add_err st Error.E0208 start_pos [];
-            ("", 0x0))
+          if not valid_parse then ("", 0x0)
           else
             let result_char, valid_result = post_processor code_point in
-            if not valid_result then (
-              add_err st Error.E0207 start_pos [ "10FFFF" ];
-              ("", 0x0))
-            else (result_char, code_point))
-      else (
-        add_err st Error.E0208 start_pos [];
-        ("", 0x0)))
+            if not valid_result then ("", 0x0) else (result_char, code_point))
+      else ("", 0x0))
 
 let rec unicode_parser str acc =
   if str = "" then (acc, true)
@@ -327,21 +310,17 @@ let rec scan_string_content st =
       advance st;
       String.make 1 c ^ scan_string_content st
 
-let scan_string st start =
+let scan_string st _start =
   advance st;
   let content = scan_string_content st in
   if st.pos < st.len && st.source.[st.pos] = '"' then (
     advance st;
     LitString (Interner.intern st.interner content))
-  else (
-    add_err st Error.E0201 start [ "string" ];
-    LitString (Interner.intern st.interner content))
+  else LitString (Interner.intern st.interner content)
 
-let scan_rune st start =
+let scan_rune st _start =
   advance st;
-  if st.pos >= st.len then (
-    add_err st Error.E0201 start [ "rune" ];
-    LitRune '\000')
+  if st.pos >= st.len then LitRune '\000'
   else
     match st.source.[st.pos] with
     | '\'' ->
@@ -403,7 +382,7 @@ let symbol_table =
 let try_symbol st =
   let max_len = 3 in
   let rec find_longest_match len =
-    if len <= 0 then Token.Error
+    if len <= 0 then Error
     else
       let sym_len = min len (st.len - st.pos) in
       if sym_len > 0 then
@@ -445,9 +424,7 @@ let next_token st =
       if st.pos < st.len && st.source.[st.pos] = '"' then (
         advance st;
         LitTemplate (Interner.intern st.interner content))
-      else (
-        add_err st Error.E0201 start [ "template" ];
-        LitTemplate (Interner.intern st.interner content))
+      else LitTemplate (Interner.intern st.interner content)
     | _ -> try_symbol st
 
 let tokenize source file_id interner =

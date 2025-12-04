@@ -1,5 +1,4 @@
 open Basic
-open Lex
 module Token = Lex.Token
 
 type ident = Interner.name
