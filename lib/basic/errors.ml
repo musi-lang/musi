@@ -1,5 +1,3 @@
-open Basic
-
 type lex_error =
   | E0001 of char
   | E0101 of string
