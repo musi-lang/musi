@@ -2,5 +2,5 @@
  (public_name musi.ast)
  (name ast)
  (libraries basic lex)
- (modules node)
+ (modules node visitor)
  (inline_tests))
