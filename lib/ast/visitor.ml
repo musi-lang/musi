@@ -17,53 +17,42 @@ let ret_ok x = Ok x
 let ret_err bag = Error bag
 let bind_result = Result.bind
 
+let map_over_list f list =
+  List.fold_left
+    (fun acc item -> bind_result acc (fun _ -> f item))
+    (ret_ok ())
+    list
+
+let map_opt opt f =
+  match opt with
+  | Some x -> bind_result (ret_ok ()) (fun _ -> f x)
+  | None -> ret_ok ()
+
 let rec visit_expr ctx expr_node =
   let data = Node.Expr.data expr_node in
   match data with
   | Lit _ -> ret_ok ()
   | Ident _ -> ret_ok ()
   | Tmpl _ -> ret_ok ()
-  | Tuple exprs ->
-    List.fold_left
-      (fun acc expr -> bind_result acc (fun _ -> visit_expr ctx expr))
-      (ret_ok ())
-      exprs
-  | Block block ->
-    List.fold_left
-      (fun acc stmt -> bind_result acc (fun _ -> visit_stmt ctx stmt))
-      (ret_ok ())
-      block.stmts
-  | Range { start; end_; _ } -> (
+  | Tuple exprs -> map_over_list (visit_expr ctx) exprs
+  | Block block -> map_over_list (visit_stmt ctx) block.stmts
+  | Range { start; end_; _ } ->
+    bind_result
+      (map_opt start (visit_expr ctx))
+      (fun _ -> map_opt end_ (visit_expr ctx))
+  | If { conds; then_block; else_block } ->
     let acc =
-      match start with
-      | Some expr -> bind_result (ret_ok ()) (fun _ -> visit_expr ctx expr)
-      | None -> ret_ok ()
-    in
-    match end_ with
-    | Some expr -> bind_result acc (fun _ -> visit_expr ctx expr)
-    | None -> acc)
-  | If { conds; then_block; else_block } -> (
-    let acc =
-      List.fold_left
-        (fun acc (pat, expr) ->
-          bind_result acc (fun _ ->
-            bind_result (visit_expr ctx expr) (fun _ -> visit_pat ctx pat)))
-        (ret_ok ())
+      map_over_list
+        (fun (pat, expr) ->
+          bind_result (visit_expr ctx expr) (fun _ -> visit_pat ctx pat))
         conds
     in
     let acc =
-      List.fold_left
-        (fun acc stmt -> bind_result acc (fun _ -> visit_stmt ctx stmt))
-        acc
-        then_block.stmts
+      bind_result acc (fun _ -> map_over_list (visit_stmt ctx) then_block.stmts)
     in
-    match else_block with
-    | Some block ->
-      List.fold_left
-        (fun acc stmt -> bind_result acc (fun _ -> visit_stmt ctx stmt))
-        acc
-        block.stmts
-    | None -> acc)
+    bind_result acc (fun _ ->
+      map_opt else_block (fun block ->
+        map_over_list (visit_stmt ctx) block.stmts))
   | Match { scrutinee; _ } -> visit_expr ctx scrutinee
   | For { binding; range; guard; body } ->
     let acc = visit_expr ctx range in
@@ -73,17 +62,8 @@ let rec visit_expr ctx expr_node =
         | ForPat pat -> visit_pat ctx pat
         | ForIdent _ -> ret_ok ())
     in
-    let acc =
-      bind_result acc (fun _ ->
-        match guard with
-        | Some guard_expr -> visit_expr ctx guard_expr
-        | None -> ret_ok ())
-    in
-    bind_result acc (fun _ ->
-      List.fold_left
-        (fun acc stmt -> bind_result acc (fun _ -> visit_stmt ctx stmt))
-        (ret_ok ())
-        body.stmts)
+    let acc = bind_result acc (fun _ -> map_opt guard (visit_expr ctx)) in
+    bind_result acc (fun _ -> map_over_list (visit_stmt ctx) body.stmts)
   | While { cond; guard; body } ->
     let acc =
       match cond with
@@ -92,43 +72,20 @@ let rec visit_expr ctx expr_node =
       | Some (Expr expr) -> visit_expr ctx expr
       | None -> ret_ok ()
     in
-    let acc =
-      bind_result acc (fun _ ->
-        match guard with
-        | Some guard_expr -> visit_expr ctx guard_expr
-        | None -> ret_ok ())
-    in
-    bind_result acc (fun _ ->
-      List.fold_left
-        (fun acc stmt -> bind_result acc (fun _ -> visit_stmt ctx stmt))
-        (ret_ok ())
-        body.stmts)
+    let acc = bind_result acc (fun _ -> map_opt guard (visit_expr ctx)) in
+    bind_result acc (fun _ -> map_over_list (visit_stmt ctx) body.stmts)
   | Defer expr -> visit_expr ctx expr
   | Break mbe -> (
     match mbe with Some expr -> visit_expr ctx expr | None -> ret_ok ())
   | Cycle -> ret_ok ()
-  | Unsafe block ->
-    List.fold_left
-      (fun acc stmt -> bind_result acc (fun _ -> visit_stmt ctx stmt))
-      (ret_ok ())
-      block.stmts
+  | Unsafe block -> map_over_list (visit_stmt ctx) block.stmts
   | Assign { value; _ } -> visit_expr ctx value
   | Unary { arg; _ } -> visit_expr ctx arg
   | Call { callee; typ_args; args; _ } ->
-    let acc = visit_expr ctx callee in
-    let acc =
-      match typ_args with
-      | Some typs ->
-        List.fold_left
-          (fun acc typ -> bind_result acc (fun _ -> visit_typ ctx typ))
-          acc
-          typs
-      | None -> acc
-    in
-    List.fold_left
-      (fun acc expr -> bind_result acc (fun _ -> visit_expr ctx expr))
-      acc
-      args
+    bind_result (visit_expr ctx callee) (fun _ ->
+      bind_result
+        (map_opt typ_args (map_over_list (visit_typ ctx)))
+        (fun _ -> map_over_list (visit_expr ctx) args))
   | Member { obj; _ } -> visit_expr ctx obj
   | RecordLit _ -> ret_ok ()
   | Fn _ -> ret_ok ()
@@ -141,77 +98,40 @@ and visit_stmt ctx stmt_node =
   | Import _ -> ret_ok ()
   | Export _ -> ret_ok ()
   | Bind { binding; value; _ } ->
-    let acc =
-      match binding.typ_annot with
-      | Some typ -> bind_result (ret_ok ()) (fun _ -> visit_typ ctx typ)
-      | None -> ret_ok ()
-    in
-    bind_result acc (fun _ -> visit_expr ctx value)
+    bind_result
+      (map_opt binding.typ_annot (visit_typ ctx))
+      (fun _ -> visit_expr ctx value)
   | Extern _ -> ret_ok ()
   | Expr expr -> visit_expr ctx expr
 
 and visit_pat ctx pat_node =
   let data = Node.Pat.data pat_node in
   match data with
-  | Bind binding -> (
-    match binding.typ_annot with
-    | Some typ -> bind_result (ret_ok ()) (fun _ -> visit_typ ctx typ)
-    | None -> ret_ok ())
+  | Bind binding -> map_opt binding.typ_annot (visit_typ ctx)
   | Lit _ -> ret_ok ()
   | Wild -> ret_ok ()
   | Ident _ -> ret_ok ()
   | Record _ -> ret_ok ()
-  | Ctor { args; _ } ->
-    List.fold_left
-      (fun acc pat -> bind_result acc (fun _ -> visit_pat ctx pat))
-      (ret_ok ())
-      args
-  | Tuple pats ->
-    List.fold_left
-      (fun acc pat -> bind_result acc (fun _ -> visit_pat ctx pat))
-      (ret_ok ())
-      pats
+  | Ctor { args; _ } -> map_over_list (visit_pat ctx) args
+  | Tuple pats -> map_over_list (visit_pat ctx) pats
 
 and visit_typ ctx typ_node =
   let data = Node.Typ.data typ_node in
   match data with
   | Ptr typ -> bind_result (ret_ok ()) (fun _ -> visit_typ ctx typ)
   | Array { size; elem } ->
-    let acc =
-      match size with
-      | Some expr -> bind_result (ret_ok ()) (fun _ -> visit_expr ctx expr)
-      | None -> ret_ok ()
-    in
-    bind_result acc (fun _ -> visit_typ ctx elem)
+    bind_result (map_opt size (visit_expr ctx)) (fun _ -> visit_typ ctx elem)
   | Ident _ -> ret_ok ()
-  | App { args; _ } ->
-    List.fold_left
-      (fun acc typ -> bind_result acc (fun _ -> visit_typ ctx typ))
-      (ret_ok ())
-      args
-  | Tuple typs ->
-    List.fold_left
-      (fun acc typ -> bind_result acc (fun _ -> visit_typ ctx typ))
-      (ret_ok ())
-      typs
-  | Fn { params; ret } -> (
-    let acc =
-      List.fold_left
-        (fun acc typ -> bind_result acc (fun _ -> visit_typ ctx typ))
-        (ret_ok ())
-        params
-    in
-    match ret with
-    | Some typ -> bind_result acc (fun _ -> visit_typ ctx typ)
-    | None -> acc)
+  | App { args; _ } -> map_over_list (visit_typ ctx) args
+  | Tuple typs -> map_over_list (visit_typ ctx) typs
+  | Fn { params; ret } ->
+    bind_result
+      (map_over_list (visit_typ ctx) params)
+      (fun _ -> map_opt ret (visit_typ ctx))
   | Record _ -> ret_ok ()
-  | Optional typ -> bind_result (ret_ok ()) (fun _ -> visit_typ ctx typ)
+  | Optional typ -> visit_typ ctx typ
 
-let visit_prog ctx prog =
-  List.fold_left
-    (fun acc stmt -> bind_result acc (fun _ -> visit_stmt ctx stmt))
-    (ret_ok ())
-    prog
+let visit_prog ctx prog = map_over_list (visit_stmt ctx) prog
 
 let count_nodes prog =
   let ctx = mk_context () in
