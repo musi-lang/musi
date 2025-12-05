@@ -1,4 +1,5 @@
 type lex_error =
+  (* character & symbol *)
   | E0001 of char
   | E0101 of string
   | E0102 of char * string
@@ -6,6 +7,7 @@ type lex_error =
   | E0104 of string
   | E0105 of string
   | E0106
+  (* string & other literals  *)
   | E0201 of string
   | E0202
   | E0203 of char
@@ -19,7 +21,7 @@ type lex_error =
 type parse_error =
   | E1001 of string * string
   | E1002 of string
-  (* Basic expectations *)
+  (* basic expects *)
   | E1003
   | E1004
   | E1005
@@ -27,7 +29,7 @@ type parse_error =
   | E1007
   | E1008 of string
   | E1009
-  (* Import/Export *)
+  (* import/export *)
   | E1010
   | E1011
   | E1012
@@ -37,7 +39,7 @@ type parse_error =
   | E1016
   | E1017
   | E1018
-  (* Functions *)
+  (* functions *)
   | E1019
   | E1020
   | E1021
@@ -49,7 +51,7 @@ type parse_error =
   | E1027
   | E1028
   | E1029
-  (* Control flow *)
+  (* control flow *)
   | E1030
   | E1031
   | E1032
@@ -63,7 +65,7 @@ type parse_error =
   | E1040
   | E1041
   | E1042
-  (* Types and annotations *)
+  (* types & annots *)
   | E1043
   | E1044
   | E1045
@@ -71,13 +73,13 @@ type parse_error =
   | E1047
   | E1048
   | E1049
-  (* Patterns *)
+  (* patterns *)
   | E1050
   | E1051
   | E1052
   | E1053
   | E1054
-  (* Expressions *)
+  (* expressions *)
   | E1055
   | E1056
   | E1057
@@ -86,7 +88,7 @@ type parse_error =
   | E1060
   | E1061
   | E1062
-  (* General syntax *)
+  (* general syntax *)
   | E1063
   | E1064
   | E1065
@@ -98,25 +100,26 @@ type parse_error =
 let lex_diag err span _args =
   let msg =
     match err with
-    | E0001 c -> Printf.sprintf "wrong character '%c'" c
+    | E0001 c -> Printf.sprintf "invalid character '%c'" c
     | E0101 base -> Printf.sprintf "incomplete %s number" base
     | E0102 (digit, base) ->
-      Printf.sprintf "wrong digit '%c' for %s number" digit base
+      Printf.sprintf "invalid digit '%c' for %s number" digit base
     | E0103 num -> Printf.sprintf "malformed number separator in %s literal" num
-    | E0104 lit -> Printf.sprintf "wrong numeric literal '%s'" lit
-    | E0105 prefix -> Printf.sprintf "wrong number base prefix '%s'" prefix
+    | E0104 lit -> Printf.sprintf "invalid numeric literal '%s'" lit
+    | E0105 prefix -> Printf.sprintf "invalid number base prefix '%s'" prefix
     | E0106 -> "empty rune literal"
-    | E0201 lit_type -> Printf.sprintf "unterminated %s literal" lit_type
-    | E0202 -> "unterminated template string"
-    | E0203 c -> Printf.sprintf "wrong escape sequence '\\%c'" c
+    (* ---------------------------------------- *)
+    | E0201 lit_type -> Printf.sprintf "unclosed %s literal" lit_type
+    | E0202 -> "unclosed template string"
+    | E0203 c -> Printf.sprintf "invalid escape sequence '\\%c'" c
     | E0204 -> "empty unicode escape sequence"
     | E0205 max_val ->
       Printf.sprintf "unicode code point exceeds maximum 0x%s" max_val
-    | E0206 -> "wrong hexadecimal digits in unicode escape sequence"
+    | E0206 -> "invalid hexadecimal digits in unicode escape sequence"
     | E0207 -> "unclosed unicode escape sequence"
     | E0208 -> "unopened unicode escape sequence"
     | E0209 seq ->
-      Printf.sprintf "wrong hexadecimal escape sequence '\\x{%s}'" seq
+      Printf.sprintf "invalid hexadecimal escape sequence '\\x{%s}'" seq
   in
   Diagnostic.error_with_code (Diagnostic.Lex "") msg span
 
@@ -133,7 +136,7 @@ let parse_diag err span _args =
     | E1007 -> "expected identifier"
     | E1008 token -> Printf.sprintf "expected '%s'" token
     | E1009 -> "expected string literal"
-    (* import/export *)
+    (* ---------------------------------------- *)
     | E1010 -> "missing import source string"
     | E1011 -> "expected ';' after import statement"
     | E1012 -> "expected '{' in import clause"
@@ -143,7 +146,7 @@ let parse_diag err span _args =
     | E1016 -> "expected '{' in export clause"
     | E1017 -> "expected '}' in export clause"
     | E1018 -> "expected ',' in export clause"
-    (* functions *)
+    (* ---------------------------------------- *)
     | E1019 -> "missing '->' in function signature"
     | E1020 -> "expected function parameter list"
     | E1021 -> "expected ':' after parameter name"
@@ -155,7 +158,7 @@ let parse_diag err span _args =
     | E1027 -> "expected '(' to begin type arguments"
     | E1028 -> "expected '>' to close type arguments"
     | E1029 -> "expected ',' between type arguments"
-    (* control flow *)
+    (* ---------------------------------------- *)
     | E1030 -> "expected '(' after if"
     | E1031 -> "expected ')' after if condition"
     | E1032 -> "expected 'else' after if block"
@@ -169,7 +172,7 @@ let parse_diag err span _args =
     | E1040 -> "expected ')' after for binding"
     | E1041 -> "expected '(' after while"
     | E1042 -> "expected ')' after while condition"
-    (* types & annotations *)
+    (* ---------------------------------------- *)
     | E1043 -> "expected ':' before type annotation"
     | E1044 -> "expected '{' to begin record fields"
     | E1045 -> "expected '}' to close record fields"
@@ -177,13 +180,13 @@ let parse_diag err span _args =
     | E1047 -> "expected ',' between choice cases"
     | E1048 -> "expected '{' to begin choice cases"
     | E1049 -> "expected '}' to close choice cases"
-    (* patterns *)
+    (* ---------------------------------------- *)
     | E1050 -> "expected ',' between tuple elements"
     | E1051 -> "expected ')' to close tuple"
     | E1052 -> "expected ':' in pattern binding"
     | E1053 -> "expected '{' to begin pattern fields"
     | E1054 -> "expected '}' to close pattern fields"
-    (* expressions *)
+    (* ---------------------------------------- *)
     | E1055 -> "expected ',' between call arguments"
     | E1056 -> "expected ')' to close call arguments"
     | E1057 -> "expected '.' before member access"
@@ -192,7 +195,7 @@ let parse_diag err span _args =
     | E1060 -> "expected '<-' in assignment"
     | E1061 -> "expected '(' after unary operator"
     | E1062 -> "expected ')' after unary operator"
-    (* general syntax *)
+    (* ---------------------------------------- *)
     | E1063 -> "missing statement terminator ';'"
     | E1064 -> "expected '{' to begin block"
     | E1065 -> "expected '}' to close block"
