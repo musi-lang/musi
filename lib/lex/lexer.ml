@@ -1,7 +1,4 @@
-module Interner = Basic.Interner
-module Diagnostic = Basic.Diagnostic
-module Span = Basic.Span
-module Errors = Basic.Errors
+open Basic
 open Token
 
 type state = {
