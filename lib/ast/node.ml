@@ -153,7 +153,7 @@ module Node = struct
   let update_span span node = { node with span }
 
   let map f { span; data } =
-    (* This function is intentionally generic - actual mapping requires type-specific modules *)
+    (* intentionally generic - true mapping needs type-specific modules *)
     ignore f;
     { span; data }
 end
