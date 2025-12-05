@@ -2,9 +2,7 @@ type lex_error =
   (* character & symbol *)
   | E0001 of char
   | E0101 of string
-  | E0102 of char * string
   | E0103 of string
-  | E0104 of string
   | E0105 of string
   | E0106
   (* string & other literals  *)
@@ -16,7 +14,6 @@ type lex_error =
   | E0206
   | E0207
   | E0208
-  | E0209 of string
 
 type parse_error =
   | E1001 of string * string
@@ -102,10 +99,7 @@ let lex_diag err span _args =
     match err with
     | E0001 c -> Printf.sprintf "invalid character '%c'" c
     | E0101 base -> Printf.sprintf "incomplete %s number" base
-    | E0102 (digit, base) ->
-      Printf.sprintf "invalid digit '%c' for %s number" digit base
     | E0103 num -> Printf.sprintf "malformed number separator in %s literal" num
-    | E0104 lit -> Printf.sprintf "invalid numeric literal '%s'" lit
     | E0105 prefix -> Printf.sprintf "invalid number base prefix '%s'" prefix
     | E0106 -> "empty rune literal"
     (* ---------------------------------------- *)
@@ -118,9 +112,7 @@ let lex_diag err span _args =
     | E0206 -> "invalid hexadecimal digits in unicode escape sequence"
     | E0207 -> "unclosed unicode escape sequence"
     | E0208 -> "unopened unicode escape sequence"
-    | E0209 seq ->
-      Printf.sprintf "invalid hexadecimal escape sequence '\\x{%s}'" seq
-  in
+      in
   Diagnostic.error_with_code (Diagnostic.Lex "") msg span
 
 let parse_diag err span _args =
