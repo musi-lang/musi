@@ -3,7 +3,7 @@ module Token = Lex.Token
 module Combinator = Combinator
 module Node = Ast.Node
 
-type binding_power = { left : int; right : int }
+type bp = { left : int; right : int }
 
 let infix_bp = function
   | Token.Dot -> { left = 90; right = 91 }
