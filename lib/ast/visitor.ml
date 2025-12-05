@@ -47,23 +47,23 @@ let rec visit_expr ctx expr_node =
           bind_result (visit_expr ctx expr) (fun _ -> visit_pat ctx pat))
         conds
     in
-    let acc =
+    let acc' =
       bind_result acc (fun _ -> map_over_list (visit_stmt ctx) then_block.stmts)
     in
-    bind_result acc (fun _ ->
+    bind_result acc' (fun _ ->
       map_opt else_block (fun block ->
         map_over_list (visit_stmt ctx) block.stmts))
   | Match { scrutinee; _ } -> visit_expr ctx scrutinee
   | For { binding; range; guard; body } ->
     let acc = visit_expr ctx range in
-    let acc =
+    let acc' =
       bind_result acc (fun _ ->
         match binding with
         | ForPat pat -> visit_pat ctx pat
         | ForIdent _ -> ret_ok ())
     in
-    let acc = bind_result acc (fun _ -> map_opt guard (visit_expr ctx)) in
-    bind_result acc (fun _ -> map_over_list (visit_stmt ctx) body.stmts)
+    let acc'' = bind_result acc' (fun _ -> map_opt guard (visit_expr ctx)) in
+    bind_result acc'' (fun _ -> map_over_list (visit_stmt ctx) body.stmts)
   | While { cond; guard; body } ->
     let acc =
       match cond with
@@ -72,8 +72,8 @@ let rec visit_expr ctx expr_node =
       | Some (Expr expr) -> visit_expr ctx expr
       | None -> ret_ok ()
     in
-    let acc = bind_result acc (fun _ -> map_opt guard (visit_expr ctx)) in
-    bind_result acc (fun _ -> map_over_list (visit_stmt ctx) body.stmts)
+    let acc' = bind_result acc (fun _ -> map_opt guard (visit_expr ctx)) in
+    bind_result acc' (fun _ -> map_over_list (visit_stmt ctx) body.stmts)
   | Defer expr -> visit_expr ctx expr
   | Break mbe -> (
     match mbe with Some expr -> visit_expr ctx expr | None -> ret_ok ())
