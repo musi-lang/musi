@@ -169,19 +169,26 @@ let oct_base = { name = "octal"; prefix = Some "o"; digit_checker = is_odigit }
 let bin_base = { name = "binary"; prefix = Some "b"; digit_checker = is_bdigit }
 
 let scan_digit_with_sep st digit_checker =
-  let rec scan_digits acc =
+  let rec scan_digits acc prev_was_sep =
     if st.pos < st.len then
       match st.source.[st.pos] with
-      | '_' when st.pos + 1 < st.len && digit_checker st.source.[st.pos + 1] ->
+      | '_'
+        when (not prev_was_sep)
+             && st.pos + 1 < st.len
+             && digit_checker st.source.[st.pos + 1] ->
         advance_n st 2;
-        scan_digits (acc + 1)
+        scan_digits (acc + 1) false
+      | '_' ->
+        add_err st (Errors.E0103 "number") st.pos [];
+        advance st;
+        scan_digits acc true
       | c when digit_checker c ->
         advance st;
-        scan_digits (acc + 1)
+        scan_digits (acc + 1) false
       | _ -> acc
     else acc
   in
-  scan_digits 0
+  scan_digits 0 false
 
 let classify_number_base st =
   if st.pos + 1 < st.len && st.source.[st.pos] = '0' then
