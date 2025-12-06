@@ -46,7 +46,9 @@ module Exprs = struct
   let parse_defer = fun _stream -> failwith "TODO: implement defer parsing"
   let parse_break = fun _stream -> failwith "TODO: implement break parsing"
   let parse_cycle = fun _stream -> failwith "TODO: implement cycle parsing"
-  let parse_unsafe = fun _stream -> failwith "TODO: implement unsafe parsing"
+
+  let parse_unsafe =
+   fun _stream -> failwith "TODO: implement unsafe block parsing"
 
   let parse_assign =
    fun _stream -> failwith "TODO: implement assignment parsing"
