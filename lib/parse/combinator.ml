@@ -5,20 +5,20 @@ module Combinator = struct
   type 'a result = ('a, Diagnostic.bag) Result.t
 
   type stream = {
-      tokens : (Token.t * Span.t) list
+      toks : (Token.t * Span.t) list
     ; pos : int
     ; diags : Diagnostic.bag
   }
 
-  let mk_stream tokens = { tokens; pos = 0; diags = Diagnostic.empty_bag }
+  let mk_stream toks = { toks; pos = 0; diags = Diagnostic.empty_bag }
 
   type 'a parser = stream -> ('a * stream, Diagnostic.bag) Result.t
 
-  let ret_ok x stream = Ok (x, stream)
-  let ret_err bag _stream = Error bag
+  let ret_ok x st = Ok (x, st)
+  let ret_err bag _st = Error bag
 
-  let bind p f stream =
-    match p stream with Ok (x, stream') -> f x stream' | Error e -> Error e
+  let bind p f st =
+    match p st with Ok (x, stream') -> f x stream' | Error e -> Error e
 
   let ( >>= ) = bind
   let map f p = p >>= fun x -> ret_ok (f x)
@@ -28,64 +28,59 @@ module Combinator = struct
   let ( <*> ) pf p = pf >>= fun f -> map f p
   let ( <$>> ) p f = map f p
 
-  let report_error err span args stream =
+  let report_error err span args st =
     let diag = Errors.parse_diag err span args in
-    let bag = Diagnostic.add stream.diags diag in
+    let bag = Diagnostic.add st.diags diag in
     Error bag
 
-  let unexpected_eof span stream =
-    report_error (Errors.E1002 "EOF") span [] stream
+  let unexpected_eof span st = report_error (Errors.E1002 "EOF") span [] st
 
-  let token stream =
-    match stream.pos < List.length stream.tokens with
+  let token st =
+    match st.pos < List.length st.toks with
     | true ->
-      let token, span = List.nth stream.tokens stream.pos in
-      let stream' = { stream with pos = stream.pos + 1 } in
-      Ok ((token, span), stream')
-    | false -> unexpected_eof Span.dummy stream
+      let tok, span = List.nth st.toks st.pos in
+      let st' = { st with pos = st.pos + 1 } in
+      Ok ((tok, span), st')
+    | false -> unexpected_eof Span.dummy st
 
-  let peek stream =
-    match stream.pos < List.length stream.tokens with
+  let peek st =
+    match st.pos < List.length st.toks with
     | true ->
-      let token, span = List.nth stream.tokens stream.pos in
-      Ok ((token, span), stream)
-    | false -> unexpected_eof Span.dummy stream
+      let tok, span = List.nth st.toks st.pos in
+      Ok ((tok, span), st)
+    | false -> unexpected_eof Span.dummy st
 
-  let expect tok stream =
-    match stream.pos < List.length stream.tokens with
+  let expect tok st =
+    match st.pos < List.length st.toks with
     | true ->
-      let actual, span = List.nth stream.tokens stream.pos in
+      let actual, span = List.nth st.toks st.pos in
       if actual = tok then
-        let stream' = { stream with pos = stream.pos + 1 } in
-        Ok ((tok, span), stream')
+        let st' = { st with pos = st.pos + 1 } in
+        Ok ((tok, span), st')
       else
         report_error
           (Errors.E1001 (Token.show tok, Token.show actual))
           span
           []
-          stream
-    | false -> unexpected_eof Span.dummy stream
+          st
+    | false -> unexpected_eof Span.dummy st
 
-  let optional p stream =
-    match p stream with
-    | Ok (x, stream') -> Ok (Some x, stream')
-    | Error _ -> Ok (None, stream)
+  let optional p st =
+    match p st with Ok (x, st') -> Ok (Some x, st') | Error _ -> Ok (None, st)
 
-  let choice ps stream =
+  let choice ps st =
     let rec try_choices = function
-      | [] -> Error stream.diags
+      | [] -> Error st.diags
       | p :: rest -> (
-        match p stream with
-        | Ok _ as result -> result
-        | Error _ -> try_choices rest)
+        match p st with Ok _ as res -> res | Error _ -> try_choices rest)
     in
     try_choices ps
 
   let many p =
-    let rec collect acc stream =
-      match p stream with
-      | Ok (x, stream') -> collect (x :: acc) stream'
-      | Error _ -> Ok (List.rev acc, stream)
+    let rec collect acc st =
+      match p st with
+      | Ok (x, st') -> collect (x :: acc) st'
+      | Error _ -> Ok (List.rev acc, st)
     in
     collect []
 
@@ -94,13 +89,13 @@ module Combinator = struct
     many p >>| fun rest -> first :: rest
 
   let sep_by p sep =
-    let rec collect acc stream =
-      match p stream with
-      | Ok (x, stream') -> (
-        match sep stream' with
-        | Ok (_, stream'') -> collect (x :: acc) stream''
-        | Error _ -> Ok (List.rev (x :: acc), stream'))
-      | Error _ -> Ok (List.rev acc, stream)
+    let rec collect acc st =
+      match p st with
+      | Ok (x, st') -> (
+        match sep st' with
+        | Ok (_, st'') -> collect (x :: acc) st''
+        | Error _ -> Ok (List.rev (x :: acc), st'))
+      | Error _ -> Ok (List.rev acc, st)
     in
     collect []
 
@@ -118,24 +113,24 @@ module Combinator = struct
     p2 >>= fun x ->
     p3 >>| fun _ -> x
 
-  let with_span p stream =
+  let with_span p st =
     let start_span =
-      match stream.pos < List.length stream.tokens with
+      match st.pos < List.length st.toks with
       | true ->
-        let _, span = List.nth stream.tokens stream.pos in
+        let _, span = List.nth st.toks st.pos in
         span
       | false -> Span.dummy
     in
-    match p stream with
-    | Ok (x, stream') ->
+    match p st with
+    | Ok (x, st') ->
       let end_span =
-        match stream'.pos > 0 && stream'.pos <= List.length stream'.tokens with
+        match st'.pos > 0 && st'.pos <= List.length st'.toks with
         | true ->
-          let _, span = List.nth stream'.tokens (stream'.pos - 1) in
+          let _, span = List.nth st'.toks (st'.pos - 1) in
           span
         | false -> start_span
       in
-      let combined_span = Span.merge start_span end_span in
-      Ok ((x, combined_span), stream')
+      let merged_span = Span.merge start_span end_span in
+      Ok ((x, merged_span), st')
     | Error e -> Error e
 end
