@@ -2,10 +2,15 @@ type severity = Error | Warning | Note
 type category = Lex | Parse | Sema | Codegen | Runtime
 
 type error_code =
+  (* E0001..E0999 *)
   | Lex of string
+  (* E1001..E1999 *)
   | Parse of string
+  (* E2001..E2999 *)
   | Sema of string
+  (* E3001..E3999 *)
   | Codegen of string
+  (* E4001..E4999 *)
   | Runtime of string
 
 type t = {
