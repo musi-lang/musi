@@ -34,11 +34,6 @@ let can_bind_infix tok =
 module Exprs = struct
   let parse_lit = fun _stream -> failwith "TODO: implement literal parsing"
   let parse_ident = fun _stream -> failwith "TODO: implement identifier parsing"
-  let parse_string = fun _stream -> failwith "TODO: implement string parsing"
-
-  let parse_tmpl_string =
-   fun _stream -> failwith "TODO: implement template string parsing"
-
   let parse_tuple = fun _stream -> failwith "TODO: implement tuple parsing"
   let parse_block = fun _stream -> failwith "TODO: implement block parsing"
   let parse_if = fun _stream -> failwith "TODO: implement if expression parsing"
@@ -70,8 +65,6 @@ module Exprs = struct
     choice
       [
         parse_lit
-      ; parse_string
-      ; parse_tmpl_string
       ; parse_ident
       ; parse_grouped
       ; parse_tuple
