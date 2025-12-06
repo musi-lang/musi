@@ -32,8 +32,25 @@ let can_bind_infix tok =
   with Not_found -> false
 
 module Exprs = struct
-  let parse_lit = fun _stream -> failwith "TODO: implement literal parsing"
-  let parse_ident = fun _stream -> failwith "TODO: implement identifier parsing"
+  let parse_lit =
+    with_span
+      ( token >>= fun (tok, span) ->
+        match tok with
+        | Token.LitNumber s ->
+          ret_ok (Node.Expr.lit ~value:(Ast.Node.Whole s) span)
+        | Token.LitString name ->
+          ret_ok (Node.Expr.lit ~value:(Ast.Node.String name) span)
+        | Token.LitRune c ->
+          ret_ok (Node.Expr.lit ~value:(Ast.Node.Rune c) span)
+        | _ -> parse_error Errors.E1003 span [] )
+
+  let parse_ident =
+    with_span
+      ( token >>= fun (tok, span) ->
+        match tok with
+        | Token.Ident name -> ret_ok (Node.Expr.ident ~value:name span)
+        | _ -> parse_error Errors.E1007 span [] )
+
   let parse_tuple = fun _stream -> failwith "TODO: implement tuple parsing"
   let parse_block = fun _stream -> failwith "TODO: implement block parsing"
   let parse_if = fun _stream -> failwith "TODO: implement if expression parsing"
