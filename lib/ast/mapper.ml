@@ -89,6 +89,7 @@ let rec map_expr mapper ctx expr_node =
   | Defer expr -> map_expr mapper ctx expr
   | Break mbe -> map_opt mbe (map_expr mapper ctx)
   | Cycle -> Ok ()
+  | Return value -> map_opt value (map_expr mapper ctx)
   | Unsafe block -> map_over_list (map_stmt mapper ctx) block.stmts
   | Assign { value; _ } -> map_expr mapper ctx value
   | Unary { arg; _ } -> map_expr mapper ctx arg

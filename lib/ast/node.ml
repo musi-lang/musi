@@ -97,6 +97,7 @@ and expr_data =
   | Defer of expr node
   | Break of expr node option
   | Cycle
+  | Return of expr node option
   | Unsafe of block
   | Assign of { target : ident; value : expr node }
   | Unary of { op : Token.t; arg : expr node }
@@ -215,6 +216,7 @@ module Expr = struct
     | Defer of expr node
     | Break of expr node option
     | Cycle
+    | Return of expr node option
     | Unsafe of block
     | Assign of { target : ident; value : expr node }
     | Unary of { op : Token.t; arg : expr node }
@@ -269,6 +271,7 @@ module Expr = struct
   let defer ~value span = { span; data = Expr_data (Defer value) }
   let break ?value span = { span; data = Expr_data (Break value) }
   let cycle span = { span; data = Expr_data Cycle }
+  let return_ ?value span = { span; data = Expr_data (Return value) }
   let unsafe ~value span = { span; data = Expr_data (Unsafe value) }
 
   let assign ~target ~value span =
