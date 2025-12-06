@@ -24,7 +24,7 @@ module Lexer = struct
   let span st start = Span.make st.file_id start st.pos
   let substr st start len = String.sub st.source start len
 
-  let add_err st err_code start _args =
+  let add_err st err_code start =
     let sp = Span.make st.file_id start st.pos in
     let diag = Errors.lex_diag err_code sp [] in
     st.diags <- Diagnostic.add st.diags diag
@@ -183,7 +183,7 @@ module Lexer = struct
           advance_n st 2;
           scan_digits (acc + 1) false
         | '_' ->
-          add_err st (Errors.E0103 "number") st.pos [];
+          add_err st (Errors.E0103 "number") st.pos;
           advance st;
           scan_digits acc true
         | c when digit_checker c ->
@@ -210,8 +210,8 @@ module Lexer = struct
     if st.pos >= st.len || not (number_base.digit_checker st.source.[st.pos])
     then (
       if prefix_len > 0 then
-        add_err st (Errors.E0105 (substr st start prefix_len)) start []
-      else add_err st (Errors.E0101 number_base.name) start [];
+        add_err st (Errors.E0105 (substr st start prefix_len)) start
+      else add_err st (Errors.E0101 number_base.name) start;
       LitNumber (substr st start (st.pos - start)))
     else
       let _ = scan_digit_with_sep st number_base.digit_checker in
@@ -230,13 +230,13 @@ module Lexer = struct
     let escape_start = st.pos in
     advance_n st 2;
     if st.pos >= st.len || st.source.[st.pos] != '{' then (
-      add_err st Errors.E0208 escape_start [];
+      add_err st Errors.E0208 escape_start;
       ("", 0x0))
     else (
       advance st;
       if st.pos >= st.len then ("", 0x0)
       else if st.source.[st.pos] = '}' then (
-        add_err st Errors.E0204 escape_start [];
+        add_err st Errors.E0204 escape_start;
         ("", 0x0))
       else
         let digits = ref "" in
@@ -248,16 +248,16 @@ module Lexer = struct
             advance st)
           else (
             valid := false;
-            add_err st Errors.E0206 st.pos [];
+            add_err st Errors.E0206 st.pos;
             advance st)
         done;
 
         if not !valid then ("", 0x0)
         else if st.pos >= st.len || st.source.[st.pos] != '}' then (
-          add_err st Errors.E0207 escape_start [];
+          add_err st Errors.E0207 escape_start;
           ("", 0x0))
         else if !digits = "" then (
-          add_err st Errors.E0204 escape_start [];
+          add_err st Errors.E0204 escape_start;
           ("", 0x0))
         else (
           advance st;
@@ -269,8 +269,7 @@ module Lexer = struct
               add_err
                 st
                 (Errors.E0205 (Printf.sprintf "%x" 0x10FFFF))
-                escape_start
-                [];
+                escape_start;
               ("", 0x0))
             else (result_char, code_point)))
 
@@ -326,7 +325,7 @@ module Lexer = struct
         let esc = lookup_escape c in
         if esc = c && not (List.mem c [ 'n'; 't'; 'r'; '\\'; '"'; '\''; '0' ])
         then (
-          add_err st (Errors.E0203 c) st.pos [];
+          add_err st (Errors.E0203 c) st.pos;
           advance_n st 2;
           continuation_fn "")
         else (
@@ -352,18 +351,18 @@ module Lexer = struct
       advance st;
       LitString (Interner.intern st.interner content))
     else (
-      add_err st (Errors.E0201 "string") start [];
+      add_err st (Errors.E0201 "string") start;
       LitString (Interner.intern st.interner content))
 
   let scan_rune st start =
     advance st;
     if st.pos >= st.len then (
-      add_err st (Errors.E0201 "rune") start [];
+      add_err st (Errors.E0201 "rune") start;
       LitRune '\000')
     else
       match st.source.[st.pos] with
       | '\'' ->
-        add_err st Errors.E0106 start [];
+        add_err st Errors.E0106 start;
         advance st;
         LitRune '\000'
       | '\\' ->
@@ -373,7 +372,7 @@ module Lexer = struct
       | c ->
         advance st;
         if st.pos < st.len && st.source.[st.pos] = '\'' then advance st
-        else add_err st (Errors.E0201 "rune") start [];
+        else add_err st (Errors.E0201 "rune") start;
         LitRune c
 
   let symbol_table =
@@ -425,7 +424,7 @@ module Lexer = struct
     let start = st.pos in
     let rec find_longest_match len =
       if len <= 0 then (
-        add_err st (Errors.E0001 (peek st)) start [];
+        add_err st (Errors.E0001 (peek st)) start;
         Error)
       else
         let sym_len = min len (st.len - st.pos) in
@@ -454,7 +453,7 @@ module Lexer = struct
       | '"' -> scan_string st start
       | '\'' -> scan_rune st start
       | '$' when st.pos + 1 < st.len && st.source.[st.pos + 1] = '"' ->
-        let template_start = st.pos in
+        let tmpl_start = st.pos in
         advance_n st 2;
         let rec scan_template_content st acc =
           if st.pos >= st.len then acc
@@ -470,7 +469,7 @@ module Lexer = struct
           advance st;
           LitTemplate (Interner.intern st.interner content))
         else (
-          add_err st Errors.E0202 template_start [];
+          add_err st Errors.E0202 tmpl_start;
           LitTemplate (Interner.intern st.interner content))
       | _ -> try_symbol st
 
