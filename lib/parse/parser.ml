@@ -51,33 +51,84 @@ module Exprs = struct
         | Token.Ident name -> ret_ok (Node.Expr.ident ~value:name span)
         | _ -> parse_error Errors.E1007 span [] )
 
-  let parse_tuple = fun _stream -> failwith "TODO: implement tuple parsing"
-  let parse_block = fun _stream -> failwith "TODO: implement block parsing"
-  let parse_if = fun _stream -> failwith "TODO: implement if expression parsing"
+  let parse_tuple :
+    stream -> ((Node.expr Node.node * Span.t) * stream, Diagnostic.bag) Result.t
+      =
+   fun _stream -> failwith "TODO: implement tuple parsing"
 
-  let parse_match =
+  let parse_block :
+    stream -> ((Node.expr Node.node * Span.t) * stream, Diagnostic.bag) Result.t
+      =
+   fun _stream -> failwith "TODO: implement block parsing"
+
+  let parse_if :
+    stream -> ((Node.expr Node.node * Span.t) * stream, Diagnostic.bag) Result.t
+      =
+   fun _stream -> failwith "TODO: implement if expression parsing"
+
+  let parse_match :
+    stream -> ((Node.expr Node.node * Span.t) * stream, Diagnostic.bag) Result.t
+      =
    fun _stream -> failwith "TODO: implement match expression parsing"
 
-  let parse_for = fun _stream -> failwith "TODO: implement for loop parsing"
-  let parse_while = fun _stream -> failwith "TODO: implement while loop parsing"
-  let parse_defer = fun _stream -> failwith "TODO: implement defer parsing"
-  let parse_break = fun _stream -> failwith "TODO: implement break parsing"
-  let parse_cycle = fun _stream -> failwith "TODO: implement cycle parsing"
+  let parse_for :
+    stream -> ((Node.expr Node.node * Span.t) * stream, Diagnostic.bag) Result.t
+      =
+   fun _stream -> failwith "TODO: implement for loop parsing"
 
-  let parse_unsafe =
+  let parse_while :
+    stream -> ((Node.expr Node.node * Span.t) * stream, Diagnostic.bag) Result.t
+      =
+   fun _stream -> failwith "TODO: implement while loop parsing"
+
+  let parse_defer :
+    stream -> ((Node.expr Node.node * Span.t) * stream, Diagnostic.bag) Result.t
+      =
+   fun _stream -> failwith "TODO: implement defer parsing"
+
+  let parse_break :
+    stream -> ((Node.expr Node.node * Span.t) * stream, Diagnostic.bag) Result.t
+      =
+   fun _stream -> failwith "TODO: implement break parsing"
+
+  let parse_cycle :
+    stream -> ((Node.expr Node.node * Span.t) * stream, Diagnostic.bag) Result.t
+      =
+   fun _stream -> failwith "TODO: implement cycle parsing"
+
+  let parse_unsafe :
+    stream -> ((Node.expr Node.node * Span.t) * stream, Diagnostic.bag) Result.t
+      =
    fun _stream -> failwith "TODO: implement unsafe block parsing"
 
-  let parse_assign =
+  let parse_assign :
+    stream -> ((Node.expr Node.node * Span.t) * stream, Diagnostic.bag) Result.t
+      =
    fun _stream -> failwith "TODO: implement assignment parsing"
 
-  let parse_record_lit =
+  let parse_record_lit :
+    stream -> ((Node.expr Node.node * Span.t) * stream, Diagnostic.bag) Result.t
+      =
    fun _stream -> failwith "TODO: implement record literal parsing"
 
-  let parse_fn = fun _stream -> failwith "TODO: implement function parsing"
-  let parse_record = fun _stream -> failwith "TODO: implement record parsing"
-  let parse_choice = fun _stream -> failwith "TODO: implement choice parsing"
+  let parse_fn :
+    stream -> ((Node.expr Node.node * Span.t) * stream, Diagnostic.bag) Result.t
+      =
+   fun _stream -> failwith "TODO: implement function parsing"
 
-  let parse_grouped =
+  let parse_record :
+    stream -> ((Node.expr Node.node * Span.t) * stream, Diagnostic.bag) Result.t
+      =
+   fun _stream -> failwith "TODO: implement record parsing"
+
+  let parse_choice :
+    stream -> ((Node.expr Node.node * Span.t) * stream, Diagnostic.bag) Result.t
+      =
+   fun _stream -> failwith "TODO: implement choice parsing"
+
+  let parse_grouped :
+    stream -> ((Node.expr Node.node * Span.t) * stream, Diagnostic.bag) Result.t
+      =
    fun _stream -> failwith "TODO: implement grouped expression parsing"
 
   let parse_atom =
@@ -103,16 +154,30 @@ module Exprs = struct
       ; parse_choice
       ]
 
-  let parse_prefix =
+  let parse_prefix :
+       Token.t
+    -> stream
+    -> ((Node.expr Node.node * Span.t) * stream, Diagnostic.bag) Result.t =
    fun _tok _stream -> failwith "TODO: implement prefix parsing"
 
-  let parse_postfix =
+  let parse_postfix :
+       Node.expr Node.node
+    -> stream
+    -> ((Node.expr Node.node * Span.t) * stream, Diagnostic.bag) Result.t =
    fun _left _stream -> failwith "TODO: implement postfix parsing"
 
-  let parse_infix =
-   fun _left _tok _bp _stream -> failwith "TODO: implement infix parsing"
+  let parse_infix :
+       Node.expr Node.node
+    -> Token.t
+    -> bp
+    -> stream
+    -> ((Node.expr Node.node * Span.t) * stream, Diagnostic.bag) Result.t =
+   fun _left _tok _bpm _stream -> failwith "TODO: implement infix parsing"
 
-  let rec parse_expr_with_bp =
+  let parse_expr_with_bp :
+       int
+    -> stream
+    -> ((Node.expr Node.node * Span.t) * stream, Diagnostic.bag) Result.t =
    fun _min_bp _stream ->
     failwith "TODO: implement Pratt parsing with binding power"
 
@@ -120,25 +185,39 @@ module Exprs = struct
 end
 
 module Pats = struct
-  let parse_pat_bind =
+  let parse_pat_bind :
+    stream -> ((Node.pat Node.node * Span.t) * stream, Diagnostic.bag) Result.t
+      =
    fun _stream -> failwith "TODO: implement pattern binding parsing"
 
-  let parse_pat_lit =
+  let parse_pat_lit :
+    stream -> ((Node.pat Node.node * Span.t) * stream, Diagnostic.bag) Result.t
+      =
    fun _stream -> failwith "TODO: implement pattern literal parsing"
 
-  let parse_pat_wild =
+  let parse_pat_wild :
+    stream -> ((Node.pat Node.node * Span.t) * stream, Diagnostic.bag) Result.t
+      =
    fun _stream -> failwith "TODO: implement pattern wildcard parsing"
 
-  let parse_pat_ident =
+  let parse_pat_ident :
+    stream -> ((Node.pat Node.node * Span.t) * stream, Diagnostic.bag) Result.t
+      =
    fun _stream -> failwith "TODO: implement pattern identifier parsing"
 
-  let parse_pat_record =
+  let parse_pat_record :
+    stream -> ((Node.pat Node.node * Span.t) * stream, Diagnostic.bag) Result.t
+      =
    fun _stream -> failwith "TODO: implement pattern record parsing"
 
-  let parse_pat_ctor =
+  let parse_pat_ctor :
+    stream -> ((Node.pat Node.node * Span.t) * stream, Diagnostic.bag) Result.t
+      =
    fun _stream -> failwith "TODO: implement pattern constructor parsing"
 
-  let parse_pat_tup =
+  let parse_pat_tup :
+    stream -> ((Node.pat Node.node * Span.t) * stream, Diagnostic.bag) Result.t
+      =
    fun _stream -> failwith "TODO: implement pattern tuple parsing"
 
   let parse_pat =
@@ -155,60 +234,101 @@ module Pats = struct
 end
 
 module Typs = struct
-  let parse_typ_sum = fun _stream -> failwith "TODO: implement type sum parsing"
+  let parse_typ_sum :
+    stream -> ((Node.typ Node.node * Span.t) * stream, Diagnostic.bag) Result.t
+      =
+   fun _stream -> failwith "TODO: implement type sum parsing"
 
-  let parse_typ_atom =
+  let parse_typ_atom :
+    stream -> ((Node.typ Node.node * Span.t) * stream, Diagnostic.bag) Result.t
+      =
    fun _stream -> failwith "TODO: implement type atom parsing"
 
-  let parse_typ_ptr =
+  let parse_typ_ptr :
+    stream -> ((Node.typ Node.node * Span.t) * stream, Diagnostic.bag) Result.t
+      =
    fun _stream -> failwith "TODO: implement pointer type parsing"
 
-  let parse_typ_arr =
+  let parse_typ_arr :
+    stream -> ((Node.typ Node.node * Span.t) * stream, Diagnostic.bag) Result.t
+      =
    fun _stream -> failwith "TODO: implement array type parsing"
 
-  let parse_typ_ident =
+  let parse_typ_ident :
+    stream -> ((Node.typ Node.node * Span.t) * stream, Diagnostic.bag) Result.t
+      =
    fun _stream -> failwith "TODO: implement type identifier parsing"
 
-  let parse_typ_tup =
+  let parse_typ_tup :
+    stream -> ((Node.typ Node.node * Span.t) * stream, Diagnostic.bag) Result.t
+      =
    fun _stream -> failwith "TODO: implement tuple type parsing"
 
-  let parse_typ_fn =
+  let parse_typ_fn :
+    stream -> ((Node.typ Node.node * Span.t) * stream, Diagnostic.bag) Result.t
+      =
    fun _stream -> failwith "TODO: implement function type parsing"
 
-  let parse_typ_record =
+  let parse_typ_record :
+    stream -> ((Node.typ Node.node * Span.t) * stream, Diagnostic.bag) Result.t
+      =
    fun _stream -> failwith "TODO: implement record type parsing"
 
-  let parse_type_params =
+  let parse_type_params :
+    stream -> ((Interner.name list * Span.t) * stream, Diagnostic.bag) Result.t
+      =
    fun _stream -> failwith "TODO: implement type parameters parsing"
 
-  let parse_type_args =
+  let parse_type_args :
+       stream
+    -> ((Node.typ Node.node list * Span.t) * stream, Diagnostic.bag) Result.t =
    fun _stream -> failwith "TODO: implement type arguments parsing"
 
   let parse_typ = parse_typ_sum
 end
 
-let parse_attr = fun _stream -> failwith "TODO: implement attribute parsing"
+let parse_attr :
+  stream -> ((Node.attr * Span.t) * stream, Diagnostic.bag) Result.t =
+ fun _stream -> failwith "TODO: implement attribute parsing"
 
 module Stmts = struct
-  let parse_stmt_import =
+  let parse_stmt_import :
+    stream -> ((Node.stmt Node.node * Span.t) * stream, Diagnostic.bag) Result.t
+      =
    fun _stream -> failwith "TODO: implement import statement parsing"
 
-  let parse_stmt_export =
+  let parse_stmt_export :
+    stream -> ((Node.stmt Node.node * Span.t) * stream, Diagnostic.bag) Result.t
+      =
    fun _stream -> failwith "TODO: implement export statement parsing"
 
-  let parse_stmt_bind =
+  let parse_stmt_bind :
+    stream -> ((Node.stmt Node.node * Span.t) * stream, Diagnostic.bag) Result.t
+      =
    fun _stream -> failwith "TODO: implement bind statement parsing"
 
-  let parse_stmt_extern =
+  let parse_stmt_extern :
+    stream -> ((Node.stmt Node.node * Span.t) * stream, Diagnostic.bag) Result.t
+      =
    fun _stream -> failwith "TODO: implement extern statement parsing"
 
-  let parse_stmt_expr =
+  let parse_stmt_expr :
+    stream -> ((Node.stmt Node.node * Span.t) * stream, Diagnostic.bag) Result.t
+      =
    fun _stream -> failwith "TODO: implement expression statement parsing"
 
-  let parse_stmt_inner =
+  let parse_stmt_inner :
+    stream -> ((Node.stmt Node.node * Span.t) * stream, Diagnostic.bag) Result.t
+      =
    fun _stream -> failwith "TODO: implement inner statement parsing"
 
-  let parse_stmt = fun _stream -> failwith "TODO: implement statement parsing"
+  let parse_stmt :
+    stream -> ((Node.stmt Node.node * Span.t) * stream, Diagnostic.bag) Result.t
+      =
+   fun _stream -> failwith "TODO: implement statement parsing"
 end
 
-let parse_prog = fun _stream -> failwith "TODO: implement program parsing"
+let parse_prog :
+     stream
+  -> ((Node.stmt Node.node list * Span.t) * stream, Diagnostic.bag) Result.t =
+ fun _stream -> failwith "TODO: implement program parsing"
