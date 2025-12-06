@@ -22,7 +22,7 @@ let mk_state source file_id interner =
 
 let substr st start len = String.sub st.source start len
 
-let add_err st err_code start =
+let report_error st err_code start =
   let sp = Span.make st.file_id start st.pos in
   let diag = Errors.lex_diag err_code sp [] in
   st.diags <- Diagnostic.add st.diags diag
@@ -136,7 +136,7 @@ let scan_digit_with_sep st digit_checker =
         advance_n st 2;
         scan_digits (acc + 1) false
       | '_' ->
-        add_err st (Errors.E0103 "number") st.pos;
+        report_error st (Errors.E0103 "number") st.pos;
         advance st;
         scan_digits acc true
       | c when digit_checker c ->
@@ -162,8 +162,8 @@ let scan_number st start =
 
   if st.pos >= st.len || not (number_base.digit_checker st.source.[st.pos]) then (
     if prefix_len > 0 then
-      add_err st (Errors.E0105 (substr st start prefix_len)) start
-    else add_err st (Errors.E0101 number_base.name) start;
+      report_error st (Errors.E0105 (substr st start prefix_len)) start
+    else report_error st (Errors.E0101 number_base.name) start;
     LitNumber (substr st start (st.pos - start)))
   else
     let _ = scan_digit_with_sep st number_base.digit_checker in
@@ -178,13 +178,13 @@ let scan_braced_escape st ~validator ~parser ~post_processor =
   let escape_start = st.pos in
   advance_n st 2;
   if st.pos >= st.len || st.source.[st.pos] != '{' then (
-    add_err st Errors.E0208 escape_start;
+    report_error st Errors.E0208 escape_start;
     ("", 0x0))
   else (
     advance st;
     if st.pos >= st.len then ("", 0x0)
     else if st.source.[st.pos] = '}' then (
-      add_err st Errors.E0204 escape_start;
+      report_error st Errors.E0204 escape_start;
       ("", 0x0))
     else
       let digits = ref "" in
@@ -196,16 +196,16 @@ let scan_braced_escape st ~validator ~parser ~post_processor =
           advance st)
         else (
           valid := false;
-          add_err st Errors.E0206 st.pos;
+          report_error st Errors.E0206 st.pos;
           advance st)
       done;
 
       if not !valid then ("", 0x0)
       else if st.pos >= st.len || st.source.[st.pos] != '}' then (
-        add_err st Errors.E0207 escape_start;
+        report_error st Errors.E0207 escape_start;
         ("", 0x0))
       else if !digits = "" then (
-        add_err st Errors.E0204 escape_start;
+        report_error st Errors.E0204 escape_start;
         ("", 0x0))
       else (
         advance st;
@@ -214,7 +214,7 @@ let scan_braced_escape st ~validator ~parser ~post_processor =
         else
           let result_char, valid_result = post_processor code_point in
           if not valid_result then (
-            add_err
+            report_error
               st
               (Errors.E0205 (Printf.sprintf "%x" 0x10FFFF))
               escape_start;
@@ -273,7 +273,7 @@ let scan_escape st continuation_fn =
       let esc = lookup_escape c in
       if esc = c && not (List.mem c [ 'n'; 't'; 'r'; '\\'; '"'; '\''; '0' ])
       then (
-        add_err st (Errors.E0203 c) st.pos;
+        report_error st (Errors.E0203 c) st.pos;
         advance_n st 2;
         continuation_fn "")
       else (
@@ -298,18 +298,18 @@ let scan_string st start =
     advance st;
     LitString (Interner.intern st.interner content))
   else (
-    add_err st (Errors.E0201 "string") start;
+    report_error st (Errors.E0201 "string") start;
     LitString (Interner.intern st.interner content))
 
 let scan_rune st start =
   advance st;
   if st.pos >= st.len then (
-    add_err st (Errors.E0201 "rune") start;
+    report_error st (Errors.E0201 "rune") start;
     LitRune '\000')
   else
     match st.source.[st.pos] with
     | '\'' ->
-      add_err st Errors.E0106 start;
+      report_error st Errors.E0106 start;
       advance st;
       LitRune '\000'
     | '\\' ->
@@ -319,7 +319,7 @@ let scan_rune st start =
     | c ->
       advance st;
       if st.pos < st.len && st.source.[st.pos] = '\'' then advance st
-      else add_err st (Errors.E0201 "rune") start;
+      else report_error st (Errors.E0201 "rune") start;
       LitRune c
 
 let symbol_table =
@@ -371,7 +371,7 @@ let try_symbol st =
   let start = st.pos in
   let rec find_longest_match len =
     if len <= 0 then (
-      add_err st (Errors.E0001 (peek st)) start;
+      report_error st (Errors.E0001 (peek st)) start;
       Unknown)
     else
       let sym_len = min len (st.len - st.pos) in
@@ -416,7 +416,7 @@ let next_token st =
         advance st;
         LitTemplate (Interner.intern st.interner content))
       else (
-        add_err st Errors.E0202 tmpl_start;
+        report_error st Errors.E0202 tmpl_start;
         LitTemplate (Interner.intern st.interner content))
     | _ -> try_symbol st
 
