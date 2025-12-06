@@ -32,7 +32,7 @@ let can_bind_infix tok =
   with Not_found -> false
 
 module Exprs = struct
-  let parse_literal = fun _stream -> failwith "TODO: implement literal parsing"
+  let parse_lit = fun _stream -> failwith "TODO: implement literal parsing"
   let parse_ident = fun _stream -> failwith "TODO: implement identifier parsing"
   let parse_string = fun _stream -> failwith "TODO: implement string parsing"
 
@@ -69,7 +69,7 @@ module Exprs = struct
   let parse_atom =
     choice
       [
-        parse_literal
+        parse_lit
       ; parse_string
       ; parse_tmpl_string
       ; parse_ident
@@ -172,11 +172,10 @@ module Typs = struct
   let parse_type_args =
    fun _stream -> failwith "TODO: implement type arguments parsing"
 
-  let parse_field_decl =
-   fun _stream -> failwith "TODO: implement field declaration parsing"
-
   let parse_typ = parse_typ_sum
 end
+
+let parse_attr = fun _stream -> failwith "TODO: implement attribute parsing"
 
 module Stmts = struct
   let parse_stmt_import =
@@ -197,7 +196,6 @@ module Stmts = struct
   let parse_stmt_inner =
    fun _stream -> failwith "TODO: implement inner statement parsing"
 
-  let parse_attr = fun _stream -> failwith "TODO: implement attribute parsing"
   let parse_stmt = fun _stream -> failwith "TODO: implement statement parsing"
 end
 
