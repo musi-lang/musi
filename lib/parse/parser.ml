@@ -29,16 +29,11 @@ let bind m f =
  fun st -> match m st with Error diag -> Error diag | Ok (x, st') -> f x st'
 
 let ( >>= ) = bind
-let ( >>| ) m f = m >>= fun x -> return (f x)
 
 let parse_error err_code span =
  fun _ ->
   let diag = Errors.parse_diag err_code span [] in
   Error diag
-
-let catch_error m handler =
- fun st ->
-  match m st with Ok result -> Ok result | Error diag -> handler diag st
 
 let or_else m1 m2 =
  fun st -> match m1 st with Ok result -> Ok result | Error _ -> m2 st
@@ -64,15 +59,6 @@ let token =
     match advance st with
     | Ok ((), st') -> Ok (tok_span, st')
     | Error diag -> Error diag
-
-let peek st =
-  if st.pos >= st.len then Token.EOF else fst (List.nth st.toks st.pos)
-
-let peek_span st =
-  if st.pos >= st.len then Span.dummy else snd (List.nth st.toks st.pos)
-
-let curr_opt st =
-  if st.pos >= st.len then None else Some (List.nth st.toks st.pos)
 
 let optional parser =
  fun st ->
@@ -153,8 +139,9 @@ let prefix_bp = function
   | _ -> raise Not_found
 
 let postfix_bp = function
-  | Token.LParen | Token.Dot -> 1000
-  | Token.Bang | Token.Question -> 1001
+  | Token.LParen | Token.Dot | Token.LBrack -> 1000
+  | Token.Question -> 1001
+  | Token.Bang -> 1002
   | _ -> raise Not_found
 
 let can_bind_infix tok =
@@ -181,7 +168,7 @@ let curr st =
 let curr_span st =
   if st.pos >= st.len then Span.dummy else snd (List.nth st.toks st.pos)
 
-let make_node span data = { Node.span; data }
+let mk_node span data = { Node.span; data }
 
 let rec parse_expr_bp min_bp st =
   let tok = curr st in
@@ -202,7 +189,7 @@ let rec parse_expr_bp min_bp st =
           | Ok (rhs_expr, st'''') ->
             let span' = Span.merge (Node.span lhs) (Node.span rhs_expr) in
             let lhs' =
-              make_node
+              mk_node
                 span'
                 (Node.ExprCall
                    {
@@ -212,8 +199,8 @@ let rec parse_expr_bp min_bp st =
                    ; optional = false
                    })
             in
-            loop lhs' st''''
-          | _ -> Ok (lhs, st''))
+            loop lhs' st'''')
+      | _ -> Ok (lhs, st'')
     in
     loop mut_lhs st'
 
@@ -226,23 +213,23 @@ and parse_prefix tok span st =
     | Error _ as e -> e
     | Ok (op, st'') ->
       let span' = Span.merge span (Node.span op) in
-      Ok (make_node span' (Node.ExprUnary { op = tok; arg = op }), st'')
-    | _ -> parse_expr_atom tok span st)
+      Ok (mk_node span' (Node.ExprUnary { op = tok; arg = op }), st''))
+  | _ -> parse_expr_atom tok span st
 
 and parse_expr_atom tok span st =
   match tok with
   | Token.Ident name ->
     let st' = { st with pos = st.pos + 1 } in
-    Ok (make_node span (Node.ExprIdent name), st')
+    Ok (mk_node span (Node.ExprIdent name), st')
   | Token.LitNumber s ->
     let st' = { st with pos = st.pos + 1 } in
-    Ok (make_node span (Node.ExprLit (Node.LitWhole s)), st')
+    Ok (mk_node span (Node.ExprLit (Node.LitWhole s)), st')
   | Token.LitString name ->
     let st' = { st with pos = st.pos + 1 } in
-    Ok (make_node span (Node.ExprLit (Node.LitString name)), st')
+    Ok (mk_node span (Node.ExprLit (Node.LitString name)), st')
   | Token.LitRune c ->
     let st' = { st with pos = st.pos + 1 } in
-    Ok (make_node span (Node.ExprLit (Node.LitRune c)), st')
+    Ok (mk_node span (Node.ExprLit (Node.LitRune c)), st')
   | _ ->
     let diag = Errors.parse_diag Errors.E1003 span [] in
     Error diag
@@ -288,7 +275,7 @@ and parse_expr_bp min_bp st =
           match lhs.data with
           | Node.ExprIdent target ->
             let assign_expr =
-              make_node span' (Node.ExprAssign { target; value = rhs_expr })
+              mk_node span' (Node.ExprAssign { target; value = rhs_expr })
             in
             Ok (assign_expr, st'''')
           | _ ->
@@ -302,10 +289,10 @@ and parse_expr_bp min_bp st =
           let st''' = { st'' with pos = st''.pos + 1 } in
           match parse_expr_bp rhs st''' with
           | Error _ as e -> e
-          | Ok (rhs_expr, st'''') ->
+          | Ok (rhs_expr, _st'''' (* TODO: what is `st''''` for? *)) ->
             let span' = Span.merge (Node.span lhs) (Node.span rhs_expr) in
             let lhs' =
-              make_node
+              mk_node
                 span'
                 (Node.ExprCall
                    {
@@ -323,8 +310,8 @@ and parse_expr_bp min_bp st =
           match curr st'' with
           | Token.LParen -> parse_expr_call lhs st''
           | Token.Dot -> parse_expr_member lhs st''
-          | _ -> Ok (lhs, st'')
           | _ -> Ok (lhs, st''))
+      | _ -> Ok (lhs, st'')
     in
     loop mut_lhs st'
 
@@ -337,24 +324,24 @@ and parse_expr_unary tok span st =
     | Error _ as e -> e
     | Ok (operand, st'') ->
       let span' = Span.merge span (Node.span operand) in
-      Ok (make_node span' (Node.ExprUnary { op = tok; arg = operand }), st'')
-    | _ -> parse_expr_atom tok span st)
+      Ok (mk_node span' (Node.ExprUnary { op = tok; arg = operand }), st''))
+  | _ -> parse_expr_atom tok span st
 
 and parse_expr_atom tok span st =
   match tok with
   | Token.Ident name ->
     let st' = { st with pos = st.pos + 1 } in
-    let ident_expr = make_node span (Node.ExprIdent name) in
+    let ident_expr = mk_node span (Node.ExprIdent name) in
     parse_expr_postfix ident_expr st'
   | Token.LitNumber s ->
     let st' = { st with pos = st.pos + 1 } in
-    Ok (make_node span (Node.ExprLit (Node.LitWhole s)), st')
+    Ok (mk_node span (Node.ExprLit (Node.LitWhole s)), st')
   | Token.LitString name ->
     let st' = { st with pos = st.pos + 1 } in
-    Ok (make_node span (Node.ExprLit (Node.LitString name)), st')
+    Ok (mk_node span (Node.ExprLit (Node.LitString name)), st')
   | Token.LitRune c ->
     let st' = { st with pos = st.pos + 1 } in
-    Ok (make_node span (Node.ExprLit (Node.LitRune c)), st')
+    Ok (mk_node span (Node.ExprLit (Node.LitRune c)), st')
   | Token.LParen -> parse_grouped_or_expr_tuple span st
   | _ ->
     let diag = Errors.parse_diag Errors.E1003 span [] in
@@ -370,11 +357,69 @@ and parse_expr_postfix expr st =
 and parse_expr_postfix_bp min_bp expr st =
   match curr st with
   | Token.LParen when min_bp <= 1000 -> parse_expr_call expr st
-  | Token.Dot when min_bp <= 1000 -> parse_expr_member expr st
-  | _ -> Ok (expr, st)
+  | Token.Dot when min_bp <= 1000 -> parse_expr_field expr false st
+  | Token.LBrack when min_bp <= 1000 -> parse_expr_index expr false st
+  | Token.Question when min_bp <= 1001 ->
+    (* expr?[thing] *)
+    ( advance >>= fun () ->
+      token >>= fun (tok, tok_span) ->
+      match tok with
+      | Token.LBrack -> parse_expr_index expr true
+      | Token.Dot -> parse_expr_field expr true
+      | _ -> parse_error Errors.E1005 tok_span )
+      st
+  | _ -> return expr st
 
-and parse_expr_call callee st = failwith "TODO: parse_expr_call"
-and parse_expr_member obj st = failwith "TODO: parse_expr_member"
+and parse_expr_call callee =
+  token_expect Token.LParen >>= fun () ->
+  sep_by parse_expr (token_expect Token.Comma) >>= fun args ->
+  token_expect Token.RParen >>= fun () ->
+  let span = Node.span callee in
+  let call_expr =
+    mk_node
+      span
+      (Node.ExprCall { callee; typ_args = None; args; optional = false })
+  in
+  return call_expr
+
+and parse_expr_field obj optional =
+  advance >>= fun () ->
+  token >>= fun (tok, tok_span) ->
+  match tok with
+  | Token.Ident field_name ->
+    let full_span = Span.merge (Node.span obj) tok_span in
+    let field_expr =
+      mk_node full_span (Node.ExprField { obj; prop = field_name; optional })
+    in
+    return field_expr
+  | _ -> parse_error Errors.E1005 tok_span
+
+and parse_expr_index obj optional =
+  advance >>= fun () ->
+  parse_expr >>= fun index_expr ->
+  token >>= fun (tok, tok_span) ->
+  match tok with
+  | Token.RBrack ->
+    let full_span = Span.merge (Node.span obj) tok_span in
+    let index_expr =
+      mk_node full_span (Node.ExprIndex { obj; index = index_expr; optional })
+    in
+    return index_expr
+  | _ -> parse_error Errors.E1006 tok_span
+
+and parse_expr_member obj = parse_expr_field obj false
+
+and parse_expr_deref obj =
+  advance >>= fun () ->
+  parse_expr >>= fun inner_expr ->
+  token >>= fun (tok, tok_span) ->
+  match tok with
+  | Token.RBrack ->
+    let full_span = Span.merge (Node.span obj) tok_span in
+    let deref_expr = mk_node full_span (Node.ExprDeref inner_expr) in
+    return deref_expr
+  | _ -> parse_error Errors.E1006 tok_span
+
 and parse_expr_args st = failwith "TODO: parse_expr_args"
 
 and parse_grouped_or_expr_tuple start_span st =

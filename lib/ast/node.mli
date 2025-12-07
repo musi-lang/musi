@@ -90,6 +90,7 @@ and expr_kind =
   | ExprReturn of expr option
   | ExprUnsafe of block
   | ExprAssign of { target : ident; value : expr }
+  | ExprDeref of expr
   | ExprUnary of { op : Token.t; arg : expr }
   | ExprCall of {
         callee : expr
@@ -97,7 +98,8 @@ and expr_kind =
       ; args : expr list
       ; optional : bool
     }
-  | ExprMember of { obj : expr; prop : ident; computed : bool; optional : bool }
+  | ExprField of { obj : expr; prop : ident; optional : bool }
+  | ExprIndex of { obj : expr; index : expr; optional : bool }
   | ExprRecordLit of { name : ident option; fields : field_init list }
   | ExprFn of {
         abi : string option
