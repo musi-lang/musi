@@ -30,4 +30,17 @@ val token_expect : Lex.Token.t -> unit t
 val ident_parser : Ast.Node.ident t
 val keyword_parser : Lex.Token.t -> unit t
 val report_error : state -> Errors.parse_error -> Span.t -> unit
+val current_token : state -> Lex.Token.t
+val current_span : state -> Span.t
+val make_node : Span.t -> 'a -> 'a Ast.Node.node
+
+type bp = { lhs : int; rhs : int }
+
+val infix_bp : Lex.Token.t -> bp
+val prefix_bp : Lex.Token.t -> int
+val postfix_bp : Lex.Token.t -> int
+val can_bind_infix : Lex.Token.t -> bool
+val can_bind_prefix : Lex.Token.t -> bool
+val can_bind_postfix : Lex.Token.t -> bool
+val parse_expr_bp : int -> Ast.Node.expr t
 val parse_expr : Ast.Node.expr t

@@ -135,21 +135,43 @@ let report_error st err_code span =
 
 let enclosed_list lhs rhs sep parser =
   token_expect lhs >>= fun () ->
-  parser >>= fun first ->
-  many (token_expect sep >>= fun _ -> parser) >>= fun rest ->
+  parser >>= fun fst ->
+  many (token_expect sep >>= fun _ -> parser) >>= fun rst ->
   token_expect rhs >>= fun () ->
-  return (first :: rest)
+  return (fst :: rst)
   <|> ( token_expect lhs >>= fun () ->
         token_expect rhs >>= fun () -> return [] )
 
 type bp = { lhs : int; rhs : int }
 
 let infix_bp = function
-  | Token.LtMinus -> { lhs = 5; rhs = 6 }
+  | Token.Eq -> { lhs = 2; rhs = 3 }
+  | Token.BangEq -> { lhs = 2; rhs = 3 }
+  | Token.Lt -> { lhs = 2; rhs = 3 }
+  | Token.LtEq -> { lhs = 2; rhs = 3 }
+  | Token.Gt -> { lhs = 2; rhs = 3 }
+  | Token.GtEq -> { lhs = 2; rhs = 3 }
+  | Token.LtMinus -> { lhs = 4; rhs = 5 }
+  | Token.Plus -> { lhs = 6; rhs = 7 }
+  | Token.Minus -> { lhs = 6; rhs = 7 }
+  | Token.Star -> { lhs = 8; rhs = 9 }
+  | Token.Slash -> { lhs = 8; rhs = 9 }
+  | Token.StarStar -> { lhs = 10; rhs = 11 }
+  | Token.Amp -> { lhs = 12; rhs = 13 }
+  | Token.Pipe -> { lhs = 12; rhs = 13 }
+  | Token.Caret -> { lhs = 12; rhs = 13 }
+  | Token.LtLt -> { lhs = 14; rhs = 15 }
+  | Token.GtGt -> { lhs = 14; rhs = 15 }
+  | Token.KwAnd -> { lhs = 16; rhs = 17 }
+  | Token.KwOr -> { lhs = 18; rhs = 19 }
   | _ -> raise Not_found
 
 let prefix_bp = function
-  | Token.Minus | Token.Tilde | Token.KwNot | Token.Bang | Token.At -> 100
+  | Token.Minus | Token.Tilde | Token.KwNot | Token.At -> 100
+  | _ -> raise Not_found
+
+let postfix_bp = function
+  | Token.Bang | Token.Question -> 101
   | _ -> raise Not_found
 
 let can_bind_infix tok =
@@ -164,20 +186,87 @@ let can_bind_prefix tok =
     true
   with Not_found -> false
 
+let can_bind_postfix tok =
+  try
+    ignore (postfix_bp tok);
+    true
+  with Not_found -> false
+
+let curr_token st =
+  if st.pos >= st.len then Token.EOF else fst (List.nth st.toks st.pos)
+
+let curr_span st =
+  if st.pos >= st.len then Span.dummy else snd (List.nth st.toks st.pos)
+
+let make_node span data = { Node.span; data }
+
+let rec parse_expr_bp min_bp st =
+  let tok = curr_token st in
+  let span = curr_span st in
+  match parse_prefix tok span st with
+  | Error _ as e -> e
+  | Ok (mut_lhs, st') ->
+    let rec loop lhs st'' =
+      match curr_token st'' with
+      | Token.EOF -> Ok (lhs, st'')
+      | infix_tok when can_bind_infix infix_tok -> (
+        let { lhs = infix_lhs; rhs } = infix_bp infix_tok in
+        if infix_lhs < min_bp then Ok (lhs, st'')
+        else
+          let st''' = { st'' with pos = st''.pos + 1 } in
+          match parse_expr_bp rhs st''' with
+          | Error _ as e -> e
+          | Ok (rhs_expr, st'''') ->
+            let span' = Span.merge (Node.span lhs) (Node.span rhs_expr) in
+            let lhs' =
+              make_node
+                span'
+                (Node.ExprCall
+                   {
+                     callee = lhs
+                   ; typ_args = None
+                   ; args = [ rhs_expr ]
+                   ; optional = false
+                   })
+            in
+            loop lhs' st''''
+          | _ -> Ok (lhs, st''))
+    in
+    loop mut_lhs st'
+
+and parse_prefix tok span st =
+  match tok with
+  | _ when can_bind_prefix tok -> (
+    let r_bp = prefix_bp tok in
+    let st' = { st with pos = st.pos + 1 } in
+    match parse_expr_bp r_bp st' with
+    | Error _ as e -> e
+    | Ok (op, st'') ->
+      let span' = Span.merge span (Node.span op) in
+      Ok (make_node span' (Node.ExprUnary { op = tok; arg = op }), st'')
+    | _ -> parse_expr_atom tok span st)
+
+and parse_expr_atom tok span st =
+  match tok with
+  | Token.Ident name ->
+    let st' = { st with pos = st.pos + 1 } in
+    Ok (make_node span (Node.ExprIdent name), st')
+  | Token.LitNumber s ->
+    let st' = { st with pos = st.pos + 1 } in
+    Ok (make_node span (Node.ExprLit (Node.LitWhole s)), st')
+  | Token.LitString name ->
+    let st' = { st with pos = st.pos + 1 } in
+    Ok (make_node span (Node.ExprLit (Node.LitString name)), st')
+  | Token.LitRune c ->
+    let st' = { st with pos = st.pos + 1 } in
+    Ok (make_node span (Node.ExprLit (Node.LitRune c)), st')
+  | _ ->
+    let diag = Errors.parse_diag Errors.E1003 span [] in
+    Error diag
+
 let parse_typ : Node.typ t = failwith "TODO: implement parse_typ"
 let parse_pat : Node.pat t = failwith "TODO: implement parse_pat"
-
-let parse_expr =
-  token >>= fun (tok, span') ->
-  match tok with
-  | Token.Ident name -> return Node.{ span = span'; data = ExprIdent name }
-  | Token.LitNumber s ->
-    return Node.{ span = span'; data = ExprLit (Node.LitWhole s) }
-  | Token.LitString name ->
-    return Node.{ span = span'; data = ExprLit (Node.LitString name) }
-  | Token.LitRune c ->
-    return Node.{ span = span'; data = ExprLit (Node.LitRune c) }
-  | _ -> parse_error Errors.E1003 span'
+let parse_expr = parse_expr_bp 0
 
 let parse_stmt =
   parse_expr >>= fun expr ->
