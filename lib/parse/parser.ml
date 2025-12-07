@@ -258,7 +258,6 @@ and parse_typ_fn st = failwith "TODO: parse_typ_fn"
 and parse_typ_record st = failwith "TODO: parse_typ_record"
 and parse_typ_optional st = failwith "TODO: parse_typ_optional"
 
-(* Pattern parsers *)
 let rec parse_pat st = parse_pat_atom st
 and parse_pat_atom st = failwith "TODO: parse_pat_atom"
 and parse_pat_bind st = failwith "TODO: parse_pat_bind"
@@ -330,7 +329,6 @@ and parse_expr_bp min_bp st =
     loop mut_lhs st'
 
 and parse_expr_unary tok span st =
-  (* prefix operators *)
   match tok with
   | _ when can_bind_prefix tok -> (
     let r_bp = prefix_bp tok in
@@ -384,11 +382,8 @@ and parse_grouped_or_expr_tuple start_span st =
 
 and parse_expr_tuple st = failwith "TODO: parse_expr_tuple"
 
-(* Expression literals *)
 let parse_expr_lit st = failwith "TODO: parse_expr_lit"
 let parse_expr_ident st = failwith "TODO: parse_expr_ident"
-
-(* Complex expressions *)
 let parse_expr_if st = failwith "TODO: parse_expr_if"
 let parse_expr_match st = failwith "TODO: parse_expr_match"
 let parse_expr_for st = failwith "TODO: parse_expr_for"
