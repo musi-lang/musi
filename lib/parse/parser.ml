@@ -50,6 +50,11 @@ let advance =
   st.pos <- st.pos + 1;
   Ok ((), st)
 
+let advance_n n =
+ fun st ->
+  st.pos <- st.pos + n;
+  Ok ((), st)
+
 let token =
  fun st ->
   if st.pos >= st.len then
