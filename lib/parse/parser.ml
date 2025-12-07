@@ -179,5 +179,9 @@ let parse_expr =
     return Node.{ span = span'; data = ExprLit (Node.LitRune c) }
   | _ -> parse_error Errors.E1003 span'
 
-let parse_stmt : Node.stmt t = failwith "TODO: implement parse_stmt"
-let parse_prog : Node.prog t = failwith "TODO: implement parse_prog"
+let parse_stmt =
+  parse_expr >>= fun expr ->
+  let span' = Node.span expr in
+  return Node.{ span = span'; data = StmtExpr expr }
+
+let parse_prog : Node.prog t = many parse_stmt
