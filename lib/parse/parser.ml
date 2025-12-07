@@ -72,12 +72,6 @@ let peek_span st =
 let curr_opt st =
   if st.pos >= st.len then None else Some (List.nth st.toks st.pos)
 
-let choice parsers =
-  List.fold_right
-    or_else
-    parsers
-    (parse_error (Errors.E1002 "no matching parser") Span.dummy)
-
 let optional parser =
  fun st ->
   match parser st with
@@ -114,20 +108,6 @@ let token_match matcher =
 
 let token_expect expected =
   token_match (fun tok -> tok = expected) >>= fun _ -> return ()
-
-let ident_parser =
-  token_match (function Token.Ident _ -> true | _ -> false) >>= fun tok ->
-  match tok with Token.Ident name -> return name | _ -> assert false
-
-let lit_parser =
-  token >>= fun (tok, span) ->
-  match tok with
-  | Token.LitNumber s -> return (Node.LitWhole s)
-  | Token.LitString name -> return (Node.LitString name)
-  | Token.LitRune c -> return (Node.LitRune c)
-  | _ -> parse_error Errors.E1003 span
-
-let keyword_parser kw = token_match (fun tok -> tok = kw) >>= fun _ -> return ()
 
 let report_error st err_code span =
   let diag = Errors.parse_diag err_code span [] in
@@ -192,7 +172,7 @@ let can_bind_postfix tok =
     true
   with Not_found -> false
 
-let curr_token st =
+let curr st =
   if st.pos >= st.len then Token.EOF else fst (List.nth st.toks st.pos)
 
 let curr_span st =
@@ -201,13 +181,13 @@ let curr_span st =
 let make_node span data = { Node.span; data }
 
 let rec parse_expr_bp min_bp st =
-  let tok = curr_token st in
+  let tok = curr st in
   let span = curr_span st in
   match parse_prefix tok span st with
   | Error _ as e -> e
   | Ok (mut_lhs, st') ->
     let rec loop lhs st'' =
-      match curr_token st'' with
+      match curr st'' with
       | Token.EOF -> Ok (lhs, st'')
       | infix_tok when can_bind_infix infix_tok -> (
         let { lhs = infix_lhs; rhs } = infix_bp infix_tok in
