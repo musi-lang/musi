@@ -58,10 +58,7 @@ let advance_n n =
 let token =
  fun st ->
   if st.pos >= st.len then
-    parse_error
-      (Errors.E1001 ("unexpected EOF", "expected token"))
-      (Span.make st.file_id st.pos st.pos)
-      st
+    parse_error Errors.E1070 (Span.make st.file_id st.pos st.pos) st
   else
     let tok_span = List.nth st.toks st.pos in
     match advance st with
@@ -130,13 +127,13 @@ let enclosed_list lhs rhs sep parser =
 type bp = { lhs : int; rhs : int }
 
 let infix_bp = function
-  | Token.Eq -> { lhs = 2; rhs = 3 }
+  | Token.LtMinus -> { lhs = 1; rhs = 0 }
+  | Token.Eq -> { lhs = 1; rhs = 0 }
   | Token.BangEq -> { lhs = 2; rhs = 3 }
   | Token.Lt -> { lhs = 2; rhs = 3 }
   | Token.LtEq -> { lhs = 2; rhs = 3 }
   | Token.Gt -> { lhs = 2; rhs = 3 }
   | Token.GtEq -> { lhs = 2; rhs = 3 }
-  | Token.LtMinus -> { lhs = 4; rhs = 5 }
   | Token.Plus -> { lhs = 6; rhs = 7 }
   | Token.Minus -> { lhs = 6; rhs = 7 }
   | Token.Star -> { lhs = 8; rhs = 9 }
@@ -156,7 +153,8 @@ let prefix_bp = function
   | _ -> raise Not_found
 
 let postfix_bp = function
-  | Token.Bang | Token.Question -> 101
+  | Token.LParen | Token.Dot -> 1000
+  | Token.Bang | Token.Question -> 1001
   | _ -> raise Not_found
 
 let can_bind_infix tok =
@@ -249,13 +247,167 @@ and parse_expr_atom tok span st =
     let diag = Errors.parse_diag Errors.E1003 span [] in
     Error diag
 
-let parse_typ : Node.typ t = failwith "TODO: implement parse_typ"
-let parse_pat : Node.pat t = failwith "TODO: implement parse_pat"
-let parse_expr = parse_expr_bp 0
+let rec parse_typ st = parse_typ_atom st
+and parse_typ_atom st = failwith "TODO: parse_typ_atom"
+and parse_typ_ptr st = failwith "TODO: parse_typ_ptr"
+and parse_typ_array st = failwith "TODO: parse_typ_array"
+and parse_typ_ident st = failwith "TODO: parse_typ_ident"
+and parse_typ_app st = failwith "TODO: parse_typ_app"
+and parse_typ_tuple st = failwith "TODO: parse_typ_tuple"
+and parse_typ_fn st = failwith "TODO: parse_typ_fn"
+and parse_typ_record st = failwith "TODO: parse_typ_record"
+and parse_typ_optional st = failwith "TODO: parse_typ_optional"
 
-let parse_stmt =
-  parse_expr >>= fun expr ->
-  let span' = Node.span expr in
-  return Node.{ span = span'; data = StmtExpr expr }
+(* Pattern parsers *)
+let rec parse_pat st = parse_pat_atom st
+and parse_pat_atom st = failwith "TODO: parse_pat_atom"
+and parse_pat_bind st = failwith "TODO: parse_pat_bind"
+and parse_pat_lit st = failwith "TODO: parse_pat_lit"
+and parse_pat_wild st = failwith "TODO: parse_pat_wild"
+and parse_pat_ident st = failwith "TODO: parse_pat_ident"
+and parse_pat_record st = failwith "TODO: parse_pat_record"
+and parse_pat_ctor st = failwith "TODO: parse_pat_ctor"
+and parse_pat_tuple st = failwith "TODO: parse_pat_tuple"
 
-let parse_prog : Node.prog t = many parse_stmt
+let rec parse_expr st = parse_expr_bp 0 st
+
+and parse_expr_bp min_bp st =
+  let tok = curr st in
+  let span = curr_span st in
+  match parse_expr_unary tok span st with
+  | Error _ as e -> e
+  | Ok (mut_lhs, st') ->
+    let rec loop lhs st'' =
+      match curr st'' with
+      | Token.EOF -> Ok (lhs, st'')
+      | Token.LtMinus when min_bp <= 1 -> (
+        let st''' = { st'' with pos = st''.pos + 1 } in
+        match parse_expr_bp 0 st''' with
+        | Error _ as e -> e
+        | Ok (rhs_expr, st'''') -> (
+          let span' = Span.merge (Node.span lhs) (Node.span rhs_expr) in
+          match lhs.data with
+          | Node.ExprIdent target ->
+            let assign_expr =
+              make_node span' (Node.ExprAssign { target; value = rhs_expr })
+            in
+            Ok (assign_expr, st'''')
+          | _ ->
+            let span = curr_span st''' in
+            let diag = Errors.parse_diag Errors.E1007 span [] in
+            Error diag))
+      | infix_tok when can_bind_infix infix_tok -> (
+        let { lhs = infix_lhs; rhs } = infix_bp infix_tok in
+        if infix_lhs < min_bp then Ok (lhs, st'')
+        else
+          let st''' = { st'' with pos = st''.pos + 1 } in
+          match parse_expr_bp rhs st''' with
+          | Error _ as e -> e
+          | Ok (rhs_expr, st'''') ->
+            let span' = Span.merge (Node.span lhs) (Node.span rhs_expr) in
+            let lhs' =
+              make_node
+                span'
+                (Node.ExprCall
+                   {
+                     callee = lhs
+                   ; typ_args = None
+                   ; args = [ rhs_expr ]
+                   ; optional = false
+                   })
+            in
+            loop lhs' st''')
+      | _ when can_bind_postfix (curr st'') -> (
+        let bp = postfix_bp (curr st'') in
+        if bp < min_bp then Ok (lhs, st'')
+        else
+          match curr st'' with
+          | Token.LParen -> parse_expr_call lhs st''
+          | Token.Dot -> parse_expr_member lhs st''
+          | _ -> Ok (lhs, st'')
+          | _ -> Ok (lhs, st''))
+    in
+    loop mut_lhs st'
+
+and parse_expr_unary tok span st =
+  (* prefix operators *)
+  match tok with
+  | _ when can_bind_prefix tok -> (
+    let r_bp = prefix_bp tok in
+    let st' = { st with pos = st.pos + 1 } in
+    match parse_expr_bp r_bp st' with
+    | Error _ as e -> e
+    | Ok (operand, st'') ->
+      let span' = Span.merge span (Node.span operand) in
+      Ok (make_node span' (Node.ExprUnary { op = tok; arg = operand }), st'')
+    | _ -> parse_expr_atom tok span st)
+
+and parse_expr_atom tok span st =
+  match tok with
+  | Token.Ident name ->
+    let st' = { st with pos = st.pos + 1 } in
+    let ident_expr = make_node span (Node.ExprIdent name) in
+    parse_expr_postfix ident_expr st'
+  | Token.LitNumber s ->
+    let st' = { st with pos = st.pos + 1 } in
+    Ok (make_node span (Node.ExprLit (Node.LitWhole s)), st')
+  | Token.LitString name ->
+    let st' = { st with pos = st.pos + 1 } in
+    Ok (make_node span (Node.ExprLit (Node.LitString name)), st')
+  | Token.LitRune c ->
+    let st' = { st with pos = st.pos + 1 } in
+    Ok (make_node span (Node.ExprLit (Node.LitRune c)), st')
+  | Token.LParen -> parse_grouped_or_expr_tuple span st
+  | _ ->
+    let diag = Errors.parse_diag Errors.E1003 span [] in
+    Error diag
+
+and parse_expr_postfix expr st =
+  match curr st with
+  | tok when can_bind_postfix tok ->
+    let bp = postfix_bp tok in
+    parse_expr_postfix_bp bp expr st
+  | _ -> Ok (expr, st)
+
+and parse_expr_postfix_bp min_bp expr st =
+  match curr st with
+  | Token.LParen when min_bp <= 1000 -> parse_expr_call expr st
+  | Token.Dot when min_bp <= 1000 -> parse_expr_member expr st
+  | _ -> Ok (expr, st)
+
+and parse_expr_call callee st = failwith "TODO: parse_expr_call"
+and parse_expr_member obj st = failwith "TODO: parse_expr_member"
+and parse_expr_args st = failwith "TODO: parse_expr_args"
+
+and parse_grouped_or_expr_tuple start_span st =
+  failwith "TODO: parse_grouped_or_expr_tuple"
+
+and parse_expr_tuple st = failwith "TODO: parse_expr_tuple"
+
+(* Expression literals *)
+let parse_expr_lit st = failwith "TODO: parse_expr_lit"
+let parse_expr_ident st = failwith "TODO: parse_expr_ident"
+
+(* Complex expressions *)
+let parse_expr_if st = failwith "TODO: parse_expr_if"
+let parse_expr_match st = failwith "TODO: parse_expr_match"
+let parse_expr_for st = failwith "TODO: parse_expr_for"
+let parse_expr_while st = failwith "TODO: parse_expr_while"
+let parse_expr_block st = failwith "TODO: parse_expr_block"
+let parse_expr_fn st = failwith "TODO: parse_expr_fn"
+let parse_expr_record st = failwith "TODO: parse_expr_record"
+let parse_expr_record_lit st = failwith "TODO: parse_expr_record_lit"
+let parse_expr_choice st = failwith "TODO: parse_expr_choice"
+let parse_expr_unsafe st = failwith "TODO: parse_expr_unsafe"
+let parse_expr_break st = failwith "TODO: parse_expr_break"
+let parse_expr_cycle st = failwith "TODO: parse_expr_cycle"
+let parse_expr_return st = failwith "TODO: parse_expr_return"
+let parse_expr_defer st = failwith "TODO: parse_expr_defer"
+
+let rec parse_stmt st = failwith "TODO: parse_stmt"
+and parse_stmt_bind st = failwith "TODO: parse_stmt_bind"
+and parse_stmt_import st = failwith "TODO: parse_stmt_import"
+and parse_stmt_export st = failwith "TODO: parse_stmt_export"
+and parse_stmt_extern st = failwith "TODO: parse_stmt_extern"
+
+let parse_prog st = failwith "TODO: parse_prog"
