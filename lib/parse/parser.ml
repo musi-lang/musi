@@ -235,25 +235,110 @@ and parse_expr_atom tok span st =
     Error diag
 
 let rec parse_typ st = parse_typ_atom st
-and parse_typ_atom st = failwith "TODO: parse_typ_atom"
-and parse_typ_ptr st = failwith "TODO: parse_typ_ptr"
-and parse_typ_array st = failwith "TODO: parse_typ_array"
-and parse_typ_ident st = failwith "TODO: parse_typ_ident"
-and parse_typ_app st = failwith "TODO: parse_typ_app"
-and parse_typ_tuple st = failwith "TODO: parse_typ_tuple"
-and parse_typ_fn st = failwith "TODO: parse_typ_fn"
-and parse_typ_record st = failwith "TODO: parse_typ_record"
-and parse_typ_optional st = failwith "TODO: parse_typ_optional"
+
+and parse_typ_atom st =
+  (* Entry point for type parsing
+   * Syntax: ^T, [N]T, []T, T<U>, (T, U), fn(T) -> R, { f: T }, T?
+   * Dispatches to specific type parsers based on first token *)
+  failwith "TODO: parse_typ_atom"
+
+and parse_typ_ptr st =
+  (* Parse pointer types
+   * Syntax: ^T, ^^T
+   * Example: ^Int32, ^^String *)
+  failwith "TODO: parse_typ_ptr"
+
+and parse_typ_array st =
+  (* Parse array types
+   * Syntax: [N]T, []T
+   * Example: [10]Int32, []String *)
+  failwith "TODO: parse_typ_array"
+
+and parse_typ_ident st =
+  (* Parse type identifiers
+   * Syntax: Int32, String, Bool, Point, Option
+   * Example: val x : Int32 := 42 *)
+  failwith "TODO: parse_typ_ident"
+
+and parse_typ_app st =
+  (* Parse type applications
+   * Syntax: T<U, V>, Vec<T>, Map<K, V>
+   * Example: Option<Int32>, Result<String, Error> *)
+  failwith "TODO: parse_typ_app"
+
+and parse_typ_tuple st =
+  (* Parse tuple types
+   * Syntax: (T, U, V)
+   * Example: (Int32, String, Bool) *)
+  failwith "TODO: parse_typ_tuple"
+
+and parse_typ_fn st =
+  (* Parse function types
+   * Syntax: fn(T, U) -> R, fn() -> Unit
+   * Example: fn(Int32, String) -> Bool *)
+  failwith "TODO: parse_typ_fn"
+
+and parse_typ_record st =
+  (* Parse record types
+   * Syntax: { f: T, g: U }, { x: Int32; y: Bin64 }
+   * Example: { x: Int32, y: Bin64 } *)
+  failwith "TODO: parse_typ_record"
+
+and parse_typ_optional st =
+  (* Parse optional types
+   * Syntax: T?
+   * Example: Int32?, String?, Point? *)
+  failwith "TODO: parse_typ_optional"
 
 let rec parse_pat st = parse_pat_atom st
-and parse_pat_atom st = failwith "TODO: parse_pat_atom"
-and parse_pat_bind st = failwith "TODO: parse_pat_bind"
-and parse_pat_lit st = failwith "TODO: parse_pat_lit"
-and parse_pat_wild st = failwith "TODO: parse_pat_wild"
-and parse_pat_ident st = failwith "TODO: parse_pat_ident"
-and parse_pat_record st = failwith "TODO: parse_pat_record"
-and parse_pat_ctor st = failwith "TODO: parse_pat_ctor"
-and parse_pat_tuple st = failwith "TODO: parse_pat_tuple"
+
+and parse_pat_atom st =
+  (* Entry point for pattern parsing
+   * Syntax: _, 42, "hello", x, val/var x: T, Point { .x := a }, Some(x), (a, b)
+   * Dispatches to specific pattern parsers based on first token *)
+  failwith "TODO: parse_pat_atom"
+
+and parse_pat_bind st =
+  (* Parse binding patterns
+   * Syntax: val x: T, var y: U
+   * Example: val name: String := "Bob" *)
+  failwith "TODO: parse_pat_bind"
+
+and parse_pat_lit st =
+  (* Parse literal patterns
+   * Syntax: 42, 3.14, "hello", 'c', true
+   * Example: case 42 => "answer" *)
+  failwith "TODO: parse_pat_lit"
+
+and parse_pat_wild st =
+  (* Parse wildcard pattern
+   * Syntax: _
+   * Example: case _ => "default" *)
+  failwith "TODO: parse_pat_wild"
+
+and parse_pat_ident st =
+  (* Parse identifier patterns
+   * Syntax: x, name, value
+   * Example: case x => use(x) *)
+  failwith "TODO: parse_pat_ident"
+
+and parse_pat_record st =
+  (* Parse record patterns (name is optional)
+   * Syntax: Point { .x := a, .y := b }, User { .name }
+   * Example: case Point { .x := x, .y := y } => x + y *)
+  failwith "TODO: parse_pat_record"
+
+and parse_pat_ctor st =
+  (* Parse constructor patterns
+   * Syntax: Some(x), Ok(value), Err(msg), Cons(head, tail)
+   * Example: case Some(x) => x, case None => 0 *)
+  failwith "TODO: parse_pat_ctor"
+
+and parse_pat_tuple st =
+  (* Parse tuple patterns
+   * Syntax: (a, b, c), (x, y)
+   * Example: case (x, y) => x + y *)
+  failwith "TODO: parse_pat_tuple"
 
 let rec parse_expr st = parse_expr_bp 0 st
 
@@ -420,33 +505,160 @@ and parse_expr_deref obj =
     return deref_expr
   | _ -> parse_error Errors.E1006 tok_span
 
-and parse_expr_args st = failwith "TODO: parse_expr_args"
+and parse_expr_args st =
+  (* Parse comma-separated function arguments with type args
+   * Syntax: <T, U>(x: T, y: U), (a, b), ()
+   * Example: map<Int32, String>(func, list) *)
+  failwith "TODO: parse_expr_args"
 
 and parse_grouped_or_expr_tuple start_span st =
+  (* Distinguish between grouped expressions and tuples
+   * Syntax: (expr) vs (expr1, expr2, ...)
+   * Example: (x + 1) vs (a, b, c) *)
   failwith "TODO: parse_grouped_or_expr_tuple"
 
-and parse_expr_tuple st = failwith "TODO: parse_expr_tuple"
-and parse_expr_lit st = failwith "TODO: parse_expr_lit"
-and parse_expr_ident st = failwith "TODO: parse_expr_ident"
-and parse_expr_if st = failwith "TODO: parse_expr_if"
-and parse_expr_match st = failwith "TODO: parse_expr_match"
-and parse_expr_for st = failwith "TODO: parse_expr_for"
-and parse_expr_while st = failwith "TODO: parse_expr_while"
-and parse_expr_block st = failwith "TODO: parse_expr_block"
-and parse_expr_fn st = failwith "TODO: parse_expr_fn"
-and parse_expr_record st = failwith "TODO: parse_expr_record"
-and parse_expr_record_lit st = failwith "TODO: parse_expr_record_lit"
-and parse_expr_choice st = failwith "TODO: parse_expr_choice"
-and parse_expr_unsafe st = failwith "TODO: parse_expr_unsafe"
-and parse_expr_break st = failwith "TODO: parse_expr_break"
-and parse_expr_cycle st = failwith "TODO: parse_expr_cycle"
-and parse_expr_return st = failwith "TODO: parse_expr_return"
-and parse_expr_defer st = failwith "TODO: parse_expr_defer"
+and parse_expr_tuple st =
+  (* Parse tuple expressions
+   * Syntax: (expr1, expr2, expr3)
+   * Example: (1, "hello", true) *)
+  failwith "TODO: parse_expr_tuple"
 
-let rec parse_stmt st = failwith "TODO: parse_stmt"
-and parse_stmt_bind st = failwith "TODO: parse_stmt_bind"
-and parse_stmt_import st = failwith "TODO: parse_stmt_import"
-and parse_stmt_export st = failwith "TODO: parse_stmt_export"
-and parse_stmt_extern st = failwith "TODO: parse_stmt_extern"
+and parse_expr_lit st =
+  (* Parse literal expressions (mostly handled in parse_expr_atom)
+   * Syntax: 42, 3.14, "string", 'c', true
+   * Example: return 42 *)
+  failwith "TODO: parse_expr_lit"
 
-let parse_prog st = failwith "TODO: parse_prog"
+and parse_expr_ident st =
+  (* Parse identifier expressions (mostly handled in parse_expr_atom)
+   * Syntax: x, name, function_name
+   * Example: x + 1 *)
+  failwith "TODO: parse_expr_ident"
+
+and parse_expr_if st =
+  (* Parse if expressions
+   * Syntax: if cond { then_expr } else { else_expr }
+   * Example: if x > 0 { x } else { -x } *)
+  failwith "TODO: parse_expr_if"
+
+and parse_expr_match st =
+  (* Parse match expressions
+   * Syntax: match expr { case pat => expr, case pat2 => expr2 }
+   * Example: match opt { case Some(x) => x, case None => 0 } *)
+  failwith "TODO: parse_expr_match"
+
+and parse_expr_for st =
+  (* Parse for loop expressions
+   * Syntax: for x in range { body_expr }
+   * Example: for i in 0..10 { process(i) } *)
+  failwith "TODO: parse_expr_for"
+
+and parse_expr_while st =
+  (* Parse while loop expressions
+   * Syntax: while cond { body_expr }
+   * Example: while running { tick() } *)
+  failwith "TODO: parse_expr_while"
+
+and parse_expr_block st =
+  (* Parse block expressions
+   * Syntax: { stmt1; stmt2; expr }
+   * Example: { val x := 1; x * 2 } *)
+  failwith "TODO: parse_expr_block"
+
+and parse_expr_fn st =
+  (* Parse function literal expressions
+   * Syntax: fn(x: T, y: U) -> R { body }, fn name(params) -> R { body }
+   * Example: fn(x: Int32) -> Int32 { return x * 2; } *)
+  failwith "TODO: parse_expr_fn"
+
+and parse_expr_record st =
+  (* Parse record definition expressions (name is optional)
+   * Syntax: record Name { x: T, y: U }, record Name<T> { f: T }
+   * Example: record { x: Int32, y: Bin64 } *)
+  failwith "TODO: parse_expr_record"
+
+and parse_expr_record_lit st =
+  (* Parse record literal expressions (name is optional)
+   * Syntax: Point { .x := 1, .y := 2 }, { .name := "Bob" }
+   * Example: Point { .x := 3.0, .y := 4.0 } *)
+  failwith "TODO: parse_expr_record_lit"
+
+and parse_expr_choice st =
+  (* Parse choice/sum type definition expressions (name is optional)
+   * Syntax: choice<T> { case A(T), case B(U), case C }
+   * Example: choice Option<T> { case Some(T), case None }
+   * NOTE: choice cases have parameters--named and unnamed. using `var t: T` makes the case parameter mutable (same as in record fields/fn params) <-- they use the same system, including defaulting
+   * NOTE: this means, choice case parameters, record fields, and function parameters use the exact same system:
+   * named parameters (implicit 'val'): `case A(x: T), case B(var y: U)`
+   * unnamed parameters (implicit 'val'): `case A(T), case B(var U)`
+   *)
+  failwith "TODO: parse_expr_choice"
+
+and parse_expr_unsafe st =
+  (* Parse unsafe block expressions
+   * Syntax: unsafe { expr }
+   * Example: unsafe { [ptr] <- 42 } *)
+  failwith "TODO: parse_expr_unsafe"
+
+and parse_expr_break st =
+  (* Parse break expressions
+   * Syntax: break, break expr
+   * Example: break, break result_value *)
+  failwith "TODO: parse_expr_break"
+
+and parse_expr_cycle st =
+  (* Parse cycle expressions (continue to next iteration)
+   * Syntax: cycle
+   * Example: if done { break } else { cycle } *)
+  failwith "TODO: parse_expr_cycle"
+
+and parse_expr_return st =
+  (* Parse return expressions
+   * Syntax: return, return expr
+   * Example: return, return x + 1 *)
+  failwith "TODO: parse_expr_return"
+
+and parse_expr_defer st =
+  (* Parse defer expressions
+   * Syntax: defer expr
+   * Example: defer close_file(handle) *)
+  failwith "TODO: parse_expr_defer"
+
+let rec parse_stmt st =
+  (* Main statement dispatcher
+   * Syntax: expr_stmt, bind_stmt, import_stmt, export_stmt, extern_stmt
+   * Dispatches to specific statement parsers based on first token
+   * expr_stmt requires mandatory semicolon at the end, this means 'expr' doesn't have semi, and expr_stmt (internally StmtExpr sum type variant)
+   * adds a semicolon to the end of the expression
+   *)
+  failwith "TODO: parse_stmt"
+
+and parse_stmt_bind st =
+  (* Parse binding statements
+   * Syntax: val name: T := expr, var name: T := expr
+   * Example: val x: Int32 := 42, var y: String := "hello" *)
+  failwith "TODO: parse_stmt_bind"
+
+and parse_stmt_import st =
+  (* Parse import statements
+   * Syntax: import { names } from "module", import * as alias from "module"
+   * Example: import { writeln } from "@std/io.ms" *)
+  failwith "TODO: parse_stmt_import"
+
+and parse_stmt_export st =
+  (* Parse export statements
+   * Syntax: export { names }, export * as alias, export name from "module"
+   * Example: export { MyType, my_func } *)
+  failwith "TODO: parse_stmt_export"
+
+and parse_stmt_extern st =
+  (* Parse extern block statements
+   * Syntax: extern "ABI" { fn_sig1; fn_sig2; }
+   * Example: extern "C" { fn malloc(size: Nat64) -> ^Unit; } *)
+  failwith "TODO: parse_stmt_extern"
+
+let parse_prog st =
+  (* Parse complete program (list of statements)
+   * Syntax: stmt1; stmt2; stmt3; ...
+   * Example: val x := 1; val y := 2; x + y *)
+  failwith "TODO: parse_prog"
