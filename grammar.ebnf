@@ -51,20 +51,27 @@ aux_lit_template_text = "$", '"', {aux_text_part | aux_template_expr}, '"';
 
 aux_lit = aux_lit_number | aux_lit_text | aux_lit_template_text | aux_lit_rune | "true" | "false";
 
-aux_bin_op = "+" | "-" | "*" | "/" | "**" | "=" | "/=" | "<" | ">" | "<=" | ">=" | "::" | "??" | "and" | "or" | "&" | "|" | "^";
+aux_bin_op = "+" | "-" | "*" | "/" | "**" | "=" | "/=" | "<" | ">" | "<=" | ">=" | "::" | "??" | "and" | "or" | "&" | "|" | "^" | ".." | "..<";
 
 aux_una_op = "-" | "not" | "~" | "@";
 
 aux_modifiers = {("export" | "extern", aux_lit_text) | "unsafe"};
 
 (* ========================================================================= *)
+(* ATTRIBUTES                                                                *)
+(* ========================================================================= *)
+aux_attr = "[<", ident, [aux_attr_args], {",", ident, [aux_attr_args]}, ">]";
+
+aux_attr_args = "(", {(ident | aux_lit), [":=", (ident | aux_lit)], [",", (ident | aux_lit, [":=", (ident | aux_lit)])], ")"};
+
+(* ========================================================================= *)
 (* TYPES                                                                     *)
 (* ========================================================================= *)
-ty_params = "'", ident, {",", "'", ident};
+ty_params = "<", ident, {",", ident}, ">";
 
 ty_args = ty, {",", ty};
 
-ty_app = ident, "'", ty_args;
+ty_app = ident, ty_args;
 
 ty_optional = ty, "?";
 
@@ -147,7 +154,7 @@ expr_block = "{", {stmt}, [expr], "}";
 
 expr_bind = [aux_modifiers], ("val" | "var"), ident, [":", ty], ":=", expr;
 
-expr_fn = [aux_modifiers], "fn", [ident], [ty_params], [aux_params], ":", ty, expr_block | [aux_modifiers], "fn", [ty_params], [aux_params], ":", ty, expr_block;
+expr_fn = [aux_attr], [aux_modifiers], "fn", [ident], [ty_params], [aux_params], ":", ty, expr_block | [aux_attr], [aux_modifiers], "fn", [ty_params], [aux_params], ":", ty, expr_block;
 
 expr_if = "if", expr, expr_block, "else", expr_block;
 
@@ -171,9 +178,9 @@ expr_import = "import", aux_lit_text;
 
 expr_extern = "extern", aux_lit_text;
 
-expr_record = [aux_modifiers], "record", ident, [ty_params], "{", aux_record_fields, "}";
+expr_record = [aux_attr], [aux_modifiers], "record", ident, [ty_params], "{", aux_record_fields, "}";
 
-expr_sum = [aux_modifiers], "sum", ident, [ty_params], "{", aux_sum_cases, "}";
+expr_sum = [aux_attr], [aux_modifiers], "sum", ident, [ty_params], "{", aux_sum_cases, "}";
 
 expr = expr_lit | expr_ident | expr_field | expr_index | expr_call | expr_unary | expr_binary | expr_tuple | expr_block | expr_bind | expr_fn | expr_if | expr_while | expr_for | expr_match | expr_return | expr_defer | expr_break | expr_cycle | expr_unsafe | expr_import | expr_extern | expr_record | expr_sum;
 
