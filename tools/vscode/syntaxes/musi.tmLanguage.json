@@ -324,7 +324,7 @@
         },
         "identifier-property": {
             "name": "variable.other.property.musi",
-            "match": "(?<=\\.)([a-zA-Z_][a-zA-Z0-9_]*|\\d+)"
+            "match": "(?<=\\.|#)([a-zA-Z_][a-zA-Z0-9_]*|\\d+)"
         },
         "identifier-variable": {
             "name": "variable.other.musi",
