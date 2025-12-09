@@ -251,6 +251,10 @@
                 {
                     "match": "\\?",
                     "name": "keyword.operator.optional.musi"
+                },
+                {
+                    "match": "\\.\\^",
+                    "name": "keyword.operator.deref.musi"
                 }
             ]
         },
