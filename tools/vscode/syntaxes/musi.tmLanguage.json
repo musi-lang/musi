@@ -251,10 +251,6 @@
                 {
                     "match": "\\?",
                     "name": "keyword.operator.optional.musi"
-                },
-                {
-                    "match": "\\.\\^",
-                    "name": "keyword.operator.deref.musi"
                 }
             ]
         },
@@ -406,7 +402,7 @@
                     "match": "~&|~\\||~\\^|&|\\||\\^|~"
                 },
                 {
-                    "name": "keyword.operator.nil-coalescing.musi",
+                    "name": "keyword.operator.null-coalescing.musi",
                     "match": "\\?\\?"
                 },
                 {
@@ -414,8 +410,8 @@
                     "match": "\\?\\."
                 },
                 {
-                    "name": "keyword.operator.optional.musi",
-                    "match": "\\?"
+                    "match": "\\.\\^",
+                    "name": "keyword.operator.deref.musi"
                 }
             ]
         },
