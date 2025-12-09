@@ -295,6 +295,7 @@
         },
         "identifiers": {
             "patterns": [
+                { "include": "#identifier-escaped" },
                 { "include": "#identifier-enum-member" },
                 { "include": "#identifier-constant" },
                 { "include": "#identifier-function-call" },
@@ -302,6 +303,10 @@
                 { "include": "#identifier-property" },
                 { "include": "#identifier-variable" }
             ]
+        },
+        "identifier-escaped": {
+            "name": "variable.other.identifier.escaped.musi",
+            "match": "`([^`]+)`"
         },
         "identifier-enum-member": {
             "match": "(\\.)([a-zA-Z_][a-zA-Z0-9_]*)\\b",
