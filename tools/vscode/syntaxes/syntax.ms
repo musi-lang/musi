@@ -96,7 +96,7 @@ val bitwise_not: Int32 := ~a;
 
 // Memory operators
 var ptr: ^Int32 := @x;
-val deref: Int32 := ptr[];
+val deref: Int32 := ptr.^;
 
 // Assignment
 counter <- counter + 1;
@@ -149,11 +149,11 @@ fn scale(v: Bin32, f: Bin32) -> Bin32 {
 };
 
 fn write_ptr(p: ^Int32, v: Int32) {
-  [p] <- v;
+  p.^ <- v;
 };
 
 fn get_value(ptr: ^Int32) -> Int32 {
-  return [ptr];
+  return ptr.^;
 };
 
 extern "C" fn malloc(size: Nat32) -> ^Unit { /* ... */ };
@@ -312,8 +312,8 @@ case None => fallback()
 };
 
 val ptr: ^Int32 := @value;
-val deref: Int32 := ptr[];
-ptr[] <- 100;
+val deref: Int32 := ptr.^;
+ptr.^ <- 100;
 
 val msg: Text := $"User {user.name} has {count} items";
 
