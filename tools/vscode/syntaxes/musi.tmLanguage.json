@@ -316,7 +316,7 @@
         },
         "identifier-function-call": {
             "name": "entity.name.function.call.musi",
-            "match": "\\b([A-Z][a-zA-Z0-9_]*|[a-z_][a-zA-Z0-9_]*)(?=\\s*(?:<(?:[^<>]|<[^<>]*>)*>)?\\()"
+            "match": "\\b([A-Z][a-zA-Z0-9_]*|[a-z_][a-zA-Z0-9_]*)(?=\\s*(?:\\?\\s*)?(?:<(?:[^<>]|<[^<>]*>)*>)?\\()"
         },
         "identifier-type": {
             "name": "entity.name.type.musi",
@@ -369,28 +369,44 @@
                     "match": "\\|>"
                 },
                 {
+                    "name": "keyword.operator.arrow.musi",
+                    "match": "->"
+                },
+                {
                     "name": "keyword.operator.shift.musi",
                     "match": "<<|>>"
-                },
-                {
-                    "name": "keyword.operator.bitwise.musi",
-                    "match": "~&|~\\||~\\^|&|\\||\\^|~"
-                },
-                {
-                    "name": "keyword.operator.comparison.musi",
-                    "match": "/=|<=|>=|=|<|>"
                 },
                 {
                     "name": "keyword.operator.range.musi",
                     "match": "\\.\\.<|\\.\\."
                 },
                 {
+                    "name": "keyword.operator.comparison.musi",
+                    "match": "/=|<=|>=|=|<|>"
+                },
+                {
+                    "name": "keyword.operator.cons.musi",
+                    "match": "::"
+                },
+                {
                     "name": "keyword.operator.arithmetic.musi",
                     "match": "\\*\\*|[+\\-*/]"
                 },
                 {
-                    "name": "keyword.operator.arrow.musi",
-                    "match": "->"
+                    "name": "keyword.operator.bitwise.musi",
+                    "match": "~&|~\\||~\\^|&|\\||\\^|~"
+                },
+                {
+                    "name": "keyword.operator.nil-coalescing.musi",
+                    "match": "\\?\\?"
+                },
+                {
+                    "name": "keyword.operator.optional-chaining.musi",
+                    "match": "\\?\\."
+                },
+                {
+                    "name": "keyword.operator.optional.musi",
+                    "match": "\\?"
                 }
             ]
         },
