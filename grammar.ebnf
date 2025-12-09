@@ -75,7 +75,7 @@ ty_app = ident, ty_args;
 
 ty_optional = ty, "?";
 
-ty_array = ty, "[]";
+ty_array = "[", [aux_lit_number], "]", ty;
 
 ty_ptr = "^", ty;
 
@@ -144,6 +144,8 @@ expr_index = expr, "[", expr, "]" | expr, "?", "[", expr, "]";
 
 expr_call = expr, "(", [aux_args], ")" | expr, "?", "(", [aux_args], ")";
 
+expr_deref = expr, ".^";
+
 expr_unary = aux_una_op, expr;
 
 expr_binary = expr, aux_bin_op, expr;
@@ -176,13 +178,13 @@ expr_unsafe = expr_block;
 
 expr_import = "import", aux_lit_text;
 
-expr_extern = "extern", aux_lit_text;
+expr_extern = "extern", [aux_lit_text];
 
 expr_record = [aux_attr], [aux_modifiers], "record", ident, [ty_params], "{", aux_record_fields, "}";
 
 expr_sum = [aux_attr], [aux_modifiers], "sum", ident, [ty_params], "{", aux_sum_cases, "}";
 
-expr = expr_lit | expr_ident | expr_field | expr_index | expr_call | expr_unary | expr_binary | expr_tuple | expr_block | expr_bind | expr_fn | expr_if | expr_while | expr_for | expr_match | expr_return | expr_defer | expr_break | expr_cycle | expr_unsafe | expr_import | expr_extern | expr_record | expr_sum;
+expr = expr_lit | expr_ident | expr_field | expr_index | expr_call | expr_deref | expr_unary | expr_binary | expr_tuple | expr_block | expr_bind | expr_fn | expr_if | expr_while | expr_for | expr_match | expr_return | expr_defer | expr_break | expr_cycle | expr_unsafe | expr_import | expr_extern | expr_record | expr_sum;
 
 (* ========================================================================= *)
 (* STATEMENTS                                                                *)
