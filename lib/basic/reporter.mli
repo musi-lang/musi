@@ -1,7 +1,7 @@
-type severity = Error | Warning | Note
+type level = Error | Warning | Note
 
 type t = {
-    severity : severity
+    level : level
   ; message : string
   ; span : Span.t
   ; notes : (string * Span.t) list
@@ -9,8 +9,7 @@ type t = {
 
 type bag = { diags : t list; errors : int; warnings : int }
 
-val make : severity -> string -> Span.t -> t
-val make_with_code : severity -> string -> Span.t -> t
+val make : level -> string -> Span.t -> t
 val error : string -> Span.t -> t
 val warning : string -> Span.t -> t
 val note : string -> Span.t -> t

@@ -1,8 +1,7 @@
-type severity = Error | Warning | Note
-type category = Lex | Parse | Sema | Codegen | Runtime
+type level = Error | Warning | Note
 
 type t = {
-    severity : severity
+    level : level
   ; message : string
   ; span : Span.t
   ; notes : (string * Span.t) list
@@ -10,7 +9,7 @@ type t = {
 
 type bag = { diags : t list; errors : int; warnings : int }
 
-let make severity message span = { severity; message; span; notes = [] }
+let make level message span = { level; message; span; notes = [] }
 let error message span = make Error message span
 let warning message span = make Warning message span
 let note message span = make Note message span
@@ -22,10 +21,10 @@ let empty_bag = { diags = []; errors = 0; warnings = 0 }
 
 let add bag diag =
   let errors =
-    match diag.severity with Error -> bag.errors + 1 | _ -> bag.errors
+    match diag.level with Error -> bag.errors + 1 | _ -> bag.errors
   in
   let warnings =
-    match diag.severity with Warning -> bag.warnings + 1 | _ -> bag.warnings
+    match diag.level with Warning -> bag.warnings + 1 | _ -> bag.warnings
   in
   { diags = diag :: bag.diags; errors; warnings }
 
@@ -38,8 +37,8 @@ let merge bag1 bag2 =
   ; warnings = bag1.warnings + bag2.warnings
   }
 
-let get_errors bag = List.filter (fun d -> d.severity = Error) bag.diags
-let get_warnings bag = List.filter (fun d -> d.severity = Warning) bag.diags
+let get_errors bag = List.filter (fun d -> d.level = Error) bag.diags
+let get_warnings bag = List.filter (fun d -> d.level = Warning) bag.diags
 let get_all bag = List.rev bag.diags
 let count_errors bag = bag.errors
 let count_warnings bag = bag.warnings
