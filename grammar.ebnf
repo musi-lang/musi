@@ -133,11 +133,13 @@ pat_cons = pat, "::", pat;
 
 pat_tuple = "(", pat, {",", pat}, ")";
 
+pat_array = "[", pat, {",", pat}, "]";
+
 pat_record = ident, "{", aux_pat_fields, "}";
 
 pat_ctor = ident, [ty_args], ["(", [pat], ")"];
 
-pat = pat_ident | pat_lit | pat_wild | pat_cons | pat_tuple | pat_record | pat_ctor;
+pat = pat_ident | pat_lit | pat_wild | pat_cons | pat_tuple | pat_array | pat_record | pat_ctor;
 
 (* ========================================================================= *)
 (* EXPRESSIONS                                                               *)
@@ -158,7 +160,11 @@ expr_unary = aux_una_op, expr;
 
 expr_binary = expr, aux_bin_op, expr;
 
-expr_tuple = "(", expr, {",", expr}, ")";
+expr_lit_tuple = "(", expr, {",", expr}, ")";
+
+expr_lit_array = "[", expr, {",", expr}, "]";
+
+expr_lit_record = [ident], ".{", {aux_record_field, ","}, "}";
 
 expr_block = "{", {stmt}, [expr], "}";
 
@@ -192,7 +198,7 @@ expr_record = [aux_attr], [aux_modifiers], "record", ident, [ty_params], "{", au
 
 expr_sum = [aux_attr], [aux_modifiers], "sum", ident, [ty_params], "{", aux_sum_cases, "}";
 
-expr = expr_lit | expr_ident | expr_field | expr_index | expr_call | expr_deref | expr_unary | expr_binary | expr_tuple | expr_block | expr_bind | expr_fn | expr_if | expr_while | expr_for | expr_match | expr_return | expr_defer | expr_break | expr_cycle | expr_unsafe | expr_import | expr_extern | expr_record | expr_sum;
+expr = expr_lit | expr_ident | expr_field | expr_index | expr_call | expr_deref | expr_unary | expr_binary | expr_lit_tuple | expr_lit_array | expr_lit_record | expr_block | expr_bind | expr_fn | expr_if | expr_while | expr_for | expr_match | expr_return | expr_defer | expr_break | expr_cycle | expr_unsafe | expr_import | expr_extern | expr_record | expr_sum;
 
 (* ========================================================================= *)
 (* STATEMENTS                                                                *)
