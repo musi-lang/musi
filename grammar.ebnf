@@ -92,6 +92,8 @@ aux_ty_annot = ":", ty;
 
 aux_init = ":=", expr;
 
+aux_optional_chain = expr, "?";
+
 aux_param = ["var"], ident, [aux_ty_annot], [aux_init];
 
 aux_param_list = aux_param, {",", aux_param};
@@ -144,11 +146,11 @@ expr_lit = aux_lit;
 
 expr_ident = ident;
 
-expr_field = expr, ".", ident | expr, "#", ident | expr, "?", ".", ident;
+expr_field = expr, ".", ident | expr, "#", ident | aux_optional_chain, ".", ident;
 
-expr_index = expr, "[", expr, "]" | expr, "?", "[", expr, "]";
+expr_index = expr, "[", expr, "]" | aux_optional_chain, "[", expr, "]";
 
-expr_call = expr, "(", [aux_args], ")" | expr, "?", "(", [aux_args], ")";
+expr_call = expr, "(", [aux_args], ")" | aux_optional_chain, "(", [aux_args], ")";
 
 expr_deref = expr, ".^";
 
