@@ -45,24 +45,24 @@ aux_lit_text = '"', {aux_text_content}, '"';
 
 aux_lit_rune = "'", char, "'";
 
-aux_template_expr = "${", expr, "}";
-
-aux_lit_template_text = "$", '"', {aux_text_part | aux_template_expr}, '"';
-
-aux_lit = aux_lit_number | aux_lit_text | aux_lit_template_text | aux_lit_rune | "true" | "false";
-
 aux_bin_op = "+" | "-" | "*" | "/" | "**" | "=" | "/=" | "<" | ">" | "<=" | ">=" | "::" | "??" | "and" | "or" | "&" | "|" | "^" | ".." | "..<";
 
 aux_una_op = "-" | "not" | "~" | "@";
 
 aux_modifiers = {("export" | "extern", [aux_lit_text]) | "unsafe"};
 
+aux_lit_template_part = "{", expr, "}";
+
+aux_lit_template_text = "$", '"', {aux_text_part | aux_lit_template_part}, '"';
+
+aux_lit = aux_lit_number | aux_lit_text | aux_lit_template_text | aux_lit_rune | "true" | "false";
+
 (* ========================================================================= *)
 (* ATTRIBUTES                                                                *)
 (* ========================================================================= *)
 aux_attr = "[<", ident, [aux_attr_args], {",", ident, [aux_attr_args]}, ">]";
 
-aux_attr_args = "(", {(ident | aux_lit), [":=", (ident | aux_lit)], [",", (ident | aux_lit, [":=", (ident | aux_lit)])], ")"};
+aux_attr_args = "(", {(ident | aux_lit), [":=", (ident | aux_lit)], {",", (ident | aux_lit, [":=", (ident | aux_lit)])}, ")"};
 
 (* ========================================================================= *)
 (* TYPES                                                                     *)
@@ -91,8 +91,6 @@ ty = ident | ty_app | ty_optional | ty_array | ty_ptr | ty_fn | ty_tuple;
 aux_ty_annot = ":", ty;
 
 aux_init = ":=", expr;
-
-aux_optional_chain = expr, "?";
 
 aux_param = ["var"], ident, [aux_ty_annot], [aux_init];
 
@@ -148,11 +146,11 @@ expr_lit = aux_lit;
 
 expr_ident = ident;
 
-expr_field = expr, ".", ident | expr, "#", ident | aux_optional_chain, ".", ident;
+expr_field = expr, ".", ident | expr, "#", ident | expr_optional_chain, ".", ident;
 
-expr_index = expr, "[", expr, "]" | aux_optional_chain, "[", expr, "]";
+expr_index = expr, "[", expr, "]" | expr_optional_chain, "[", expr, "]";
 
-expr_call = expr, "(", [aux_args], ")" | aux_optional_chain, "(", [aux_args], ")";
+expr_call = expr, "(", [aux_args], ")" | expr_optional_chain, "(", [aux_args], ")";
 
 expr_deref = expr, ".^";
 
@@ -162,9 +160,11 @@ expr_binary = expr, aux_bin_op, expr;
 
 expr_lit_tuple = "(", expr, {",", expr}, ")";
 
-expr_lit_array = "[", expr, {",", expr}, "]";
+expr_lit_array = "[", expr, {",", expr}, ")";
 
 expr_lit_record = [ident], ".{", {aux_record_field, ","}, "}";
+
+expr_optional_chain = expr, "?";
 
 expr_block = "{", {stmt}, [expr], "}";
 
