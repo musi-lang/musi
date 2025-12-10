@@ -55,7 +55,7 @@ aux_bin_op = "+" | "-" | "*" | "/" | "**" | "=" | "/=" | "<" | ">" | "<=" | ">="
 
 aux_una_op = "-" | "not" | "~" | "@";
 
-aux_modifiers = {("export" | "extern", aux_lit_text) | "unsafe"};
+aux_modifiers = {("export" | "extern", [aux_lit_text]) | "unsafe"};
 
 (* ========================================================================= *)
 (* ATTRIBUTES                                                                *)
@@ -88,17 +88,21 @@ ty = ident | ty_app | ty_optional | ty_array | ty_ptr | ty_fn | ty_tuple;
 (* ========================================================================= *)
 (* AUXILIARY HELPERS                                                         *)
 (* ========================================================================= *)
-aux_param = ["var"], ident, ":", ty, [":=", expr];
+aux_ty_annot = ":", ty;
+
+aux_init = ":=", expr;
+
+aux_param = ["var"], ident, [aux_ty_annot], [aux_init];
 
 aux_param_list = aux_param, {",", aux_param};
 
 aux_params = "(", [aux_param_list], ")";
 
-aux_fn_sig = [ident], [ty_params], [aux_params], ":", ty;
+aux_fn_sig = [ident], [ty_params], [aux_params], [aux_ty_annot];
 
 aux_args = expr, {",", expr};
 
-aux_record_field = ["var"], ident, ":", ty, [":=", expr];
+aux_record_field = ["var"], ident, [aux_ty_annot], [aux_init];
 
 aux_record_fields = aux_record_field, {",", aux_record_field};
 
@@ -156,7 +160,7 @@ expr_tuple = "(", expr, {",", expr}, ")";
 
 expr_block = "{", {stmt}, [expr], "}";
 
-expr_bind = [aux_modifiers], ("val" | "var"), ident, [":", ty], ":=", expr;
+expr_bind = [aux_modifiers], ("val" | "var"), ident, [aux_ty_annot], aux_init, expr;
 
 expr_fn = [aux_attr], [aux_modifiers], "fn", aux_fn_sig, expr_block;
 
