@@ -73,7 +73,7 @@ ty_args = ty, {",", ty};
 
 ty_app = ident, ty_args;
 
-ty_optional = ty, "?";
+ty_optional = "?", ty;
 
 ty_array = "[", [aux_lit_number], "]", ty;
 
