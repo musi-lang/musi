@@ -1,5 +1,5 @@
 (library
  (name basic)
  (public_name musi.basic)
- (modules reporter span)
+ (modules reporter source span)
  (libraries unix fmt))
