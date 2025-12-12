@@ -212,7 +212,7 @@ let try_scan_number_with_base prefix digit_chars base_name lexer pos =
     let lit = prefix ^ String.sub lexer.text pos (end_pos - pos) in
     Reporter.try_ok (LitInt (intern lexer lit), span lexer pos end_pos)
 
-let try_scan_decimal_or_float lexer pos =
+let try_scan_int_or_real lexer pos =
   let int_end = scan_while is_digit lexer.text pos in
   if int_end < lexer.text_len && lexer.text.[int_end] = '.' then
     let frac_end = scan_while is_digit lexer.text (int_end + 1) in
@@ -236,8 +236,8 @@ let try_scan_number lexer =
       try_scan_number_with_base "0x" is_xdigit "hexadecimal" lexer pos
     | '0', 'o' -> try_scan_number_with_base "0o" is_odigit "octal" lexer pos
     | '0', 'b' -> try_scan_number_with_base "0b" is_bdigit "binary" lexer pos
-    | _ -> try_scan_decimal_or_float lexer pos
-  else try_scan_decimal_or_float lexer pos
+    | _ -> try_scan_int_or_real lexer pos
+  else try_scan_int_or_real lexer pos
 
 let try_scan_identifier_or_keyword lexer =
   let end_pos = scan_while is_ident_char lexer.text lexer.curr_pos in
@@ -253,9 +253,7 @@ let try_scan_identifier_or_keyword lexer =
     Reporter.try_ok (token, span lexer lexer.curr_pos end_pos)
   else
     Reporter.try_error_info
-      (Printf.sprintf
-         "invalid identifier '%s'"
-         (String.sub lexer.text lexer.curr_pos 1))
+      "invalid identifier"
       (span lexer lexer.curr_pos (lexer.curr_pos + 1))
 
 let try_scan_symbol lexer =
@@ -368,12 +366,12 @@ let try_tokenize lexer =
     Error (Reporter.merge error_bags)
 
 let token_stream_opt lexer =
-  let next_state () =
+  let next_state_opt () =
     match try_next_token lexer with
     | Ok (token, span) -> Some ((token, span), ())
     | Error _ -> None
   in
-  Some (Seq.unfold next_state ())
+  Some (Seq.unfold next_state_opt ())
 
 let emit_errors fmt lexer =
   Reporter.emit_all fmt lexer.error_bag [ (lexer.file_id, lexer.source) ]
