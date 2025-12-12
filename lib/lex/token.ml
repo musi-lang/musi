@@ -1,9 +1,15 @@
+open Basic
+
 type t =
-  | Ident of string
-  | LitInt of string
-  | LitReal of string
-  | LitString of string
+  | Ident of Interner.ident
+  | LitInt of Interner.ident
+  | LitReal of Interner.ident
+  | LitString of Interner.ident
   | LitRune of char
+  | LitTemplateNoSubst of Interner.ident
+  | TemplateHead of Interner.ident
+  | TemplateMiddle of Interner.ident
+  | TemplateTail of Interner.ident
   | KwAnd
   | KwAs
   | KwBreak
@@ -66,14 +72,23 @@ type t =
   | EqGt
   | Question
   | Underscore
+  | Dollar
   | EOF
+  | Unknown of Interner.ident
 
-let show = function
-  | Ident s -> s
-  | LitInt s -> s
-  | LitReal s -> s
-  | LitString s -> "\"" ^ s ^ "\""
+let ident_to_string interner id =
+  match Interner.lookup_opt interner id with Some s -> s | None -> "<ident>"
+
+let show interner = function
+  | Ident s -> ident_to_string interner s
+  | LitInt s -> ident_to_string interner s
+  | LitReal s -> ident_to_string interner s
+  | LitString s -> "\"" ^ ident_to_string interner s ^ "\""
   | LitRune c -> "'" ^ String.make 1 c ^ "'"
+  | LitTemplateNoSubst s -> "$\"" ^ ident_to_string interner s ^ "\""
+  | TemplateHead s -> "$\"" ^ ident_to_string interner s
+  | TemplateMiddle s -> ident_to_string interner s
+  | TemplateTail s -> ident_to_string interner s ^ "\""
   | KwAnd -> "and"
   | KwAs -> "as"
   | KwBreak -> "break"
@@ -136,4 +151,6 @@ let show = function
   | EqGt -> "=>"
   | Question -> "?"
   | Underscore -> "_"
+  | Dollar -> "$"
   | EOF -> "EOF"
+  | Unknown s -> ident_to_string interner s

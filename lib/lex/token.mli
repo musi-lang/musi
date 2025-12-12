@@ -1,9 +1,15 @@
+open Basic
+
 type t =
-  | Ident of string
-  | LitInt of string
-  | LitReal of string
-  | LitString of string
+  | Ident of Interner.ident
+  | LitInt of Interner.ident
+  | LitReal of Interner.ident
+  | LitString of Interner.ident
   | LitRune of char
+  | LitTemplateNoSubst of Interner.ident
+  | TemplateHead of Interner.ident
+  | TemplateMiddle of Interner.ident
+  | TemplateTail of Interner.ident
   | KwAnd
   | KwAs
   | KwBreak
@@ -66,6 +72,8 @@ type t =
   | EqGt
   | Question
   | Underscore
+  | Dollar
   | EOF
+  | Unknown of Interner.ident
 
-val show : t -> string
+val show : Interner.t -> t -> string

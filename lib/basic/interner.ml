@@ -20,7 +20,7 @@ let intern t s =
     incr t.next_id;
     id
 
-let lookup t id =
+let lookup_opt t id =
   if id >= 0 && id < !(t.next_id) then Some t.strings.(id) else None
 
 let clear t =

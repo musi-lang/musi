@@ -1,5 +1,5 @@
 (library
  (public_name musi.lex)
- (modules token)
+ (modules token lexer)
  (name lex)
  (libraries basic))
