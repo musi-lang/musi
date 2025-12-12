@@ -1,5 +1,9 @@
 type t = string * string array
 
+let create filename content =
+  let lines = String.split_on_char '\n' content in
+  (filename, Array.of_list lines)
+
 let path (filename, _) = filename
 
 let line_col (_, lines) pos =
@@ -19,3 +23,5 @@ let line_text_opt (_, lines) line_idx =
 
 let get_file_opt files file_id =
   try Some (List.assoc file_id files) with Not_found -> None
+
+let text (_, lines) = String.concat "\n" (Array.to_list lines)
