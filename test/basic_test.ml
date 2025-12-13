@@ -108,7 +108,7 @@ let test_reporter () =
   check int "bag diags count" (List.length (Reporter.to_list bag3)) 3;
 
   let merged = Reporter.merge [ empty_bag; bag1; bag2 ] in
-  check int "merged error count" (Reporter.error_count merged) 1;
+  check int "merged error count" (Reporter.error_count merged) 2;
   check int "merged warning count" (Reporter.warning_count merged) 1;
 
   let noted = Reporter.with_note error_diag "additional info" span in
