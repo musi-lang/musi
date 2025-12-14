@@ -12,10 +12,10 @@ type t = {
   ; mutable in_template : bool
 }
 
-let create ?interner source file_id =
+let create source file_id =
   let text = Source.text source in
   {
-    interner = Option.value interner ~default:(Interner.create ())
+    interner = Interner.create ()
   ; error_bag = Reporter.empty_bag
   ; source
   ; file_id
@@ -25,7 +25,19 @@ let create ?interner source file_id =
   ; in_template = false
   }
 
-let with_interner interner source file_id = create ~interner source file_id
+let with_interner interner source file_id =
+  let text = Source.text source in
+  {
+    interner
+  ; error_bag = Reporter.empty_bag
+  ; source
+  ; file_id
+  ; curr_pos = 0
+  ; text
+  ; text_len = String.length text
+  ; in_template = false
+  }
+
 let curr_pos lexer = lexer.curr_pos
 let source lexer = lexer.source
 let file_id lexer = lexer.file_id
@@ -50,14 +62,14 @@ let scan_exact_opt expected text pos =
     Some len
   else None
 
-let rec scan_string_content_opt text pos =
+let rec scan_content_opt text pos stop_chars =
   if pos >= String.length text then None
   else
     match text.[pos] with
-    | '"' -> Some pos
+    | c when List.mem c stop_chars -> Some pos
     | '\\' when pos + 1 < String.length text ->
-      scan_string_content_opt text (pos + 2)
-    | _ -> scan_string_content_opt text (pos + 1)
+      scan_content_opt text (pos + 2) stop_chars
+    | _ -> scan_content_opt text (pos + 1) stop_chars
 
 let is_digit c = c >= '0' && c <= '9'
 let is_digit_pred base_chars c = is_digit c || List.mem c base_chars
@@ -98,8 +110,7 @@ let find_sync_point text pos =
 let keyword_table = Hashtbl.create 64
 
 let () =
-  List.iter
-    (fun (k, v) -> Hashtbl.add keyword_table k v)
+  let keywords =
     [
       ("and", KwAnd)
     ; ("as", KwAs)
@@ -129,6 +140,8 @@ let () =
     ; ("while", KwWhile)
     ; ("with", KwWith)
     ]
+  in
+  List.iter (fun (k, v) -> Hashtbl.add keyword_table k v) keywords
 
 let symbols =
   [
@@ -179,7 +192,7 @@ let symbols_sorted =
     symbols
 
 let try_scan_string lexer pos =
-  match scan_string_content_opt lexer.text (pos + 1) with
+  match scan_content_opt lexer.text (pos + 1) [ '"' ] with
   | Some end_pos ->
     let content = String.sub lexer.text (pos + 1) (end_pos - pos - 1) in
     Reporter.try_ok
@@ -203,18 +216,8 @@ let try_scan_rune lexer pos =
       "unterminated rune literal"
       (span lexer pos (pos + 1))
 
-let rec scan_template_content_opt lexer pos =
-  if pos >= lexer.text_len then None
-  else
-    match lexer.text.[pos] with
-    | '"' -> Some pos
-    | '{' -> Some pos
-    | '\\' when pos + 1 < lexer.text_len ->
-      scan_template_content_opt lexer (pos + 2)
-    | _ -> scan_template_content_opt lexer (pos + 1)
-
 let try_scan_template lexer pos =
-  match scan_template_content_opt lexer (pos + 2) with
+  match scan_content_opt lexer.text (pos + 2) [ '"'; '{' ] with
   | Some end_pos when lexer.text.[end_pos] = '{' ->
     let content = String.sub lexer.text (pos + 2) (end_pos - pos - 2) in
     lexer.in_template <- true;
@@ -230,7 +233,7 @@ let try_scan_template lexer pos =
       (span lexer pos (pos + 1))
 
 let try_scan_template_cont lexer pos =
-  match scan_template_content_opt lexer pos with
+  match scan_content_opt lexer.text pos [ '"'; '{' ] with
   | Some end_pos when lexer.text.[end_pos] = '{' ->
     let content = String.sub lexer.text pos (end_pos - pos) in
     Reporter.try_ok
@@ -287,7 +290,7 @@ let try_scan_int_or_real lexer pos =
             Reporter.try_ok
               (LitInt (intern lexer clean_int), span lexer pos int_end)
           else
-            let parse_exponent real_end =
+            let extract_exponent real_end =
               if
                 real_end >= lexer.text_len
                 || not
@@ -313,10 +316,10 @@ let try_scan_int_or_real lexer pos =
                   if exp_valid then exp_end else real_end
                 else real_end
             in
-            let final_end = parse_exponent frac_end in
-            let clean_real, _ = handle_underscores lexer.text pos final_end in
+            let fract_end = extract_exponent frac_end in
+            let decml_value, _ = handle_underscores lexer.text pos fract_end in
             Reporter.try_ok
-              (LitReal (intern lexer clean_real), span lexer pos final_end)
+              (LitReal (intern lexer decml_value), span lexer pos fract_end)
       in
       try_parse_real int_end clean_int
 
@@ -349,15 +352,7 @@ let try_scan_ident_or_keyword lexer =
     Reporter.try_ok (token, span lexer lexer.curr_pos end_pos)
 
 let try_scan_ident_escape lexer =
-  let rec scan_content_opt pos =
-    if pos >= lexer.text_len then None
-    else
-      match lexer.text.[pos] with
-      | '`' -> Some pos
-      | '\\' when pos + 1 < lexer.text_len -> scan_content_opt (pos + 2)
-      | _ -> scan_content_opt (pos + 1)
-  in
-  match scan_content_opt (lexer.curr_pos + 1) with
+  match scan_content_opt lexer.text (lexer.curr_pos + 1) [ '`' ] with
   | Some end_pos ->
     let content =
       String.sub lexer.text (lexer.curr_pos + 1) (end_pos - lexer.curr_pos - 1)
