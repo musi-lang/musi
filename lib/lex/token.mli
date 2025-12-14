@@ -41,6 +41,8 @@ type t =
   | RBrace
   | LBrack
   | RBrack
+  | LBrackLt
+  | GtRBrack
   | LParen
   | RParen
   | Comma
@@ -69,6 +71,7 @@ type t =
   | DotDot
   | DotDotLt
   | MinusGt
+  | LtMinus
   | EqGt
   | Question
   | Underscore

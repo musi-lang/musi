@@ -41,6 +41,8 @@ type t =
   | RBrace
   | LBrack
   | RBrack
+  | LBrackLt
+  | GtRBrack
   | LParen
   | RParen
   | Comma
@@ -69,6 +71,7 @@ type t =
   | DotDot
   | DotDotLt
   | MinusGt
+  | LtMinus
   | EqGt
   | Question
   | Underscore
@@ -120,6 +123,8 @@ let show interner = function
   | RBrace -> "}"
   | LBrack -> "["
   | RBrack -> "]"
+  | LBrackLt -> "[<"
+  | GtRBrack -> ">]"
   | LParen -> "("
   | RParen -> ")"
   | Comma -> ","
@@ -148,6 +153,7 @@ let show interner = function
   | DotDot -> ".."
   | DotDotLt -> "..<"
   | MinusGt -> "->"
+  | LtMinus -> "<-"
   | EqGt -> "=>"
   | Question -> "?"
   | Underscore -> "_"
