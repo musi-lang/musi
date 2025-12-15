@@ -74,20 +74,15 @@ let rec scan_quoted_content_opt text pos stop_chars =
       scan_quoted_content_opt text (pos + 2) stop_chars
     | _ -> scan_quoted_content_opt text (pos + 1) stop_chars
 
-let make_char_checker base_chars c = List.mem c base_chars
-
-let make_digit_checker base_chars c =
-  (c >= '0' && c <= '9') || make_char_checker base_chars c
-
+let is_alpha c = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
 let is_digit c = c >= '0' && c <= '9'
-
-let is_xdigit =
-  make_digit_checker
-    [ 'a'; 'b'; 'c'; 'd'; 'e'; 'f'; 'A'; 'B'; 'C'; 'D'; 'E'; 'F' ]
-
-let is_odigit = make_digit_checker [ '0'; '1'; '2'; '3'; '4'; '5'; '6'; '7' ]
-let is_bdigit = make_digit_checker [ '0'; '1' ]
+let is_xdigit c = is_digit c || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+let is_odigit c = c >= '0' && c <= '7'
+let is_bdigit c = c = '0' || c = '1'
+let is_ident_start c = c = '_' || is_alpha c
+let is_ident_char c = is_ident_start c || is_digit c
 let is_digit_or_underscore c = is_digit c || c = '_'
+let is_sync_char c = c = ';' || c = '\n' || c = '}' || c = ')' || c = ']'
 
 let handle_underscores text pos end_pos =
   let rec loop i acc prev_underscore =
@@ -100,12 +95,6 @@ let handle_underscores text pos end_pos =
       else loop (i + 1) (String.make 1 c :: acc) false
   in
   loop pos [] false
-
-let is_ident_start c =
-  (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c = '_'
-
-let is_ident_char c = is_ident_start c || is_digit c
-let is_sync_char c = c = ';' || c = '\n' || c = '}' || c = ')' || c = ']'
 
 let find_sync_point text pos =
   let rec loop i =
