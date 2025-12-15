@@ -1,3 +1,9 @@
 (test
  (name basic_test)
- (libraries alcotest basic))
+ (libraries alcotest basic)
+ (modules basic_test))
+
+(test
+ (name lex_test)
+ (libraries alcotest basic lex)
+ (modules lex_test))
