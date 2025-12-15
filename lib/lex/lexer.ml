@@ -12,10 +12,13 @@ type t = {
   ; mutable in_template : bool
 }
 
-let create source file_id =
+let create_aux ?(interner = None) source file_id =
   let text = Source.text source in
+  let interner_val =
+    match interner with Some i -> i | None -> Interner.create ()
+  in
   {
-    interner = Interner.create ()
+    interner = interner_val
   ; error_bag = Reporter.empty_bag
   ; source
   ; file_id
@@ -25,18 +28,10 @@ let create source file_id =
   ; in_template = false
   }
 
+let create source file_id = create_aux ~interner:None source file_id
+
 let with_interner interner source file_id =
-  let text = Source.text source in
-  {
-    interner
-  ; error_bag = Reporter.empty_bag
-  ; source
-  ; file_id
-  ; curr_pos = 0
-  ; text
-  ; text_len = String.length text
-  ; in_template = false
-  }
+  create_aux ~interner:(Some interner) source file_id
 
 let curr_pos lexer = lexer.curr_pos
 let source lexer = lexer.source
