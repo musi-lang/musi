@@ -265,80 +265,72 @@ let try_scan_template_cont lexer pos =
 
 let try_scan_number lexer =
   let pos = lexer.curr_pos in
-  let scan_digits digit_pred start_pos =
-    let end_pos = scan_while digit_pred lexer.text start_pos in
-    let clean_digits, valid = handle_underscores lexer.text start_pos end_pos in
-    if valid then (clean_digits, end_pos) else ("", start_pos)
+  let text = lexer.text in
+  let fail msg end_pos = Reporter.try_error_info msg (span lexer pos end_pos) in
+
+  let prefix =
+    if pos + 1 < lexer.text_len && text.[pos] = '0' then
+      match text.[pos + 1] with
+      | 'x' -> Some ("0x", is_xdigit, "hexadecimal")
+      | 'o' -> Some ("0o", is_odigit, "octal")
+      | 'b' -> Some ("0b", is_bdigit, "binary")
+      | _ -> None
+    else None
   in
-  let try_scan_base_number prefix digit_pred base_name =
-    match scan_digits digit_pred (pos + 2) with
-    | "", _ ->
-      Reporter.try_error_info
-        (Printf.sprintf "invalid %s literal" base_name)
-        (span lexer pos (pos + 1))
-    | digits, end_pos ->
-      let lit = prefix ^ digits in
-      Reporter.try_ok (LitInt (intern lexer lit), span lexer pos end_pos)
-  in
-  if pos + 1 < lexer.text_len then
-    match (lexer.text.[pos], lexer.text.[pos + 1]) with
-    | '0', 'x' -> try_scan_base_number "0x" is_xdigit "hexadecimal"
-    | '0', 'o' -> try_scan_base_number "0o" is_odigit "octal"
-    | '0', 'b' -> try_scan_base_number "0b" is_bdigit "binary"
-    | _ -> (
-      match scan_digits is_digit_or_underscore pos with
-      | "", _ ->
-        Reporter.try_error_info
-          "invalid numeric literal"
-          (span lexer pos (pos + 1))
-      | clean_int, int_end ->
-        if int_end >= lexer.text_len || lexer.text.[int_end] <> '.' then
+
+  match prefix with
+  | Some (pfx, pred, name) ->
+    let end_pos = scan_while pred text (pos + String.length pfx) in
+    if end_pos = pos + String.length pfx then
+      fail (Printf.sprintf "invalid %s literal" name) (pos + 1)
+    else
+      let clean, valid =
+        handle_underscores text (pos + String.length pfx) end_pos
+      in
+      if not valid then
+        fail (Printf.sprintf "malformed '_' in %s literal" name) end_pos
+      else
+        Reporter.try_ok
+          (LitInt (intern lexer (pfx ^ clean)), span lexer pos end_pos)
+  | None ->
+    let int_end = scan_while is_digit_or_underscore text pos in
+    if int_end <= pos then fail "invalid numeric literal" (pos + 1)
+    else
+      let clean_int, valid = handle_underscores text pos int_end in
+      if not valid then fail "malformed '_' in decimal literal" int_end
+      else if int_end >= lexer.text_len || text.[int_end] <> '.' then
+        Reporter.try_ok (LitInt (intern lexer clean_int), span lexer pos int_end)
+      else
+        let frac_end = scan_while is_digit_or_underscore text (int_end + 1) in
+        if frac_end = int_end + 1 then
           Reporter.try_ok
             (LitInt (intern lexer clean_int), span lexer pos int_end)
         else
-          let frac_end =
-            scan_while is_digit_or_underscore lexer.text (int_end + 1)
+          let has_exp =
+            frac_end < lexer.text_len
+            && (text.[frac_end] = 'e' || text.[frac_end] = 'E')
           in
-          if frac_end = int_end + 1 then
-            Reporter.try_ok
-              (LitInt (intern lexer clean_int), span lexer pos int_end)
-          else
-            let exp_end =
-              if
-                frac_end >= lexer.text_len
-                || not
-                     (lexer.text.[frac_end] = 'e' || lexer.text.[frac_end] = 'E')
-              then frac_end
-              else
-                let exp_start = frac_end + 1 in
-                let exp_digits_start =
-                  if
-                    exp_start < lexer.text_len
-                    && (lexer.text.[exp_start] = '+'
-                       || lexer.text.[exp_start] = '-')
-                  then exp_start + 1
-                  else exp_start
-                in
-                let exp_end2 =
-                  scan_while is_digit_or_underscore lexer.text exp_digits_start
-                in
-                if exp_end2 > exp_digits_start then
-                  let _, exp_valid =
-                    handle_underscores lexer.text exp_digits_start exp_end2
-                  in
-                  if exp_valid then exp_end2 else frac_end
-                else frac_end
-            in
-            if exp_end = frac_end then
-              let clean_frac, _ = handle_underscores lexer.text pos frac_end in
-              Reporter.try_ok
-                (LitReal (intern lexer clean_frac), span lexer pos frac_end)
+          let exp_end =
+            if not has_exp then frac_end
             else
-              let clean_dec, _ = handle_underscores lexer.text pos exp_end in
-              Reporter.try_ok
-                (LitReal (intern lexer clean_dec), span lexer pos exp_end))
-  else
-    Reporter.try_error_info "invalid numeric literal" (span lexer pos (pos + 1))
+              let exp_start = frac_end + 1 in
+              let exp_digits =
+                if
+                  exp_start < lexer.text_len
+                  && (text.[exp_start] = '+' || text.[exp_start] = '-')
+                then exp_start + 1
+                else exp_start
+              in
+              let exp_end2 =
+                scan_while is_digit_or_underscore text exp_digits
+              in
+              if exp_end2 > exp_digits then
+                let _, valid = handle_underscores text exp_digits exp_end2 in
+                if valid then exp_end2 else frac_end
+              else frac_end
+          in
+          let clean, _ = handle_underscores text pos exp_end in
+          Reporter.try_ok (LitReal (intern lexer clean), span lexer pos exp_end)
 
 let try_scan_ident_or_keyword lexer =
   let end_pos = scan_while is_ident_char lexer.text lexer.curr_pos in
