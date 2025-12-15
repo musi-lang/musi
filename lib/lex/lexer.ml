@@ -424,20 +424,23 @@ let skip_line_comment lexer =
   in
   advance lexer (end_pos - lexer.curr_pos)
 
-let rec try_skip_block_comment_opt lexer pos depth =
-  if pos + 1 >= lexer.text_len then
-    Some
-      (Reporter.try_error_info
-         "unterminated block comment"
-         (span lexer pos (pos + 1)))
-  else
-    match (lexer.text.[pos], lexer.text.[pos + 1]) with
-    | '/', '*' -> try_skip_block_comment_opt lexer (pos + 2) (depth + 1)
-    | '*', '/' when depth = 1 ->
-      advance lexer (pos + 2 - lexer.curr_pos);
-      None
-    | '*', '/' -> try_skip_block_comment_opt lexer (pos + 2) (depth - 1)
-    | _ -> try_skip_block_comment_opt lexer (pos + 1) depth
+let try_skip_block_comment_opt lexer =
+  let pos = lexer.curr_pos in
+  let rec scan pos depth =
+    if pos + 1 >= lexer.text_len then
+      Reporter.try_error_info
+        "unterminated block comment"
+        (span lexer pos (pos + 1))
+    else
+      match (lexer.text.[pos], lexer.text.[pos + 1]) with
+      | '/', '*' -> scan (pos + 2) (depth + 1)
+      | '*', '/' when depth = 1 ->
+        advance lexer (pos + 2 - lexer.curr_pos);
+        Reporter.try_ok ()
+      | '*', '/' -> scan (pos + 2) (depth - 1)
+      | _ -> scan (pos + 1) depth
+  in
+  match scan (pos + 2) 1 with Ok () -> None | Error bag -> Some (Error bag)
 
 let rec try_scan_token_opt lexer =
   if lexer.curr_pos >= lexer.text_len then
@@ -458,7 +461,10 @@ let rec try_scan_token_opt lexer =
       | '/' ->
         skip_line_comment lexer;
         None
-      | '*' -> try_skip_block_comment_opt lexer lexer.curr_pos 1
+      | '*' -> (
+        match try_skip_block_comment_opt lexer with
+        | None -> None
+        | Some error -> Some error)
       | _ -> Some (try_scan_symbol lexer))
     | '$'
       when lexer.curr_pos + 1 < lexer.text_len
@@ -483,7 +489,10 @@ and try_next_token lexer =
   | Some (Error bag) ->
     advance lexer 1;
     Error bag
-  | None -> try_next_token lexer
+  | None ->
+    if lexer.curr_pos >= lexer.text_len then
+      Ok (EOF, span lexer lexer.curr_pos lexer.text_len)
+    else try_next_token lexer
 
 let try_tokenize lexer =
   let tokens = ref [] in
