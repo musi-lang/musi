@@ -56,29 +56,37 @@ let rec scan_while pred text pos =
   if pos >= String.length text || not (pred text.[pos]) then pos
   else scan_while pred text (pos + 1)
 
-let scan_exact_opt expected text pos =
+let extract_content text start_pos end_pos =
+  String.sub text start_pos (end_pos - start_pos)
+
+let scan_exact_match_opt expected text pos =
   let len = String.length expected in
   if pos + len <= String.length text && String.sub text pos len = expected then
     Some len
   else None
 
-let rec scan_content_opt text pos stop_chars =
+let rec scan_quoted_content_opt text pos stop_chars =
   if pos >= String.length text then None
   else
     match text.[pos] with
     | c when List.mem c stop_chars -> Some pos
     | '\\' when pos + 1 < String.length text ->
-      scan_content_opt text (pos + 2) stop_chars
-    | _ -> scan_content_opt text (pos + 1) stop_chars
+      scan_quoted_content_opt text (pos + 2) stop_chars
+    | _ -> scan_quoted_content_opt text (pos + 1) stop_chars
+
+let make_char_checker base_chars c = List.mem c base_chars
+
+let make_digit_checker base_chars c =
+  (c >= '0' && c <= '9') || make_char_checker base_chars c
 
 let is_digit c = c >= '0' && c <= '9'
-let is_digit_pred base_chars c = is_digit c || List.mem c base_chars
 
-let is_xdigit c =
-  is_digit_pred [ 'a'; 'b'; 'c'; 'd'; 'e'; 'f'; 'A'; 'B'; 'C'; 'D'; 'E'; 'F' ] c
+let is_xdigit =
+  make_digit_checker
+    [ 'a'; 'b'; 'c'; 'd'; 'e'; 'f'; 'A'; 'B'; 'C'; 'D'; 'E'; 'F' ]
 
-let is_odigit c = is_digit_pred [ '0'; '1'; '2'; '3'; '4'; '5'; '6'; '7' ] c
-let is_bdigit c = is_digit_pred [ '0'; '1' ] c
+let is_odigit = make_digit_checker [ '0'; '1'; '2'; '3'; '4'; '5'; '6'; '7' ]
+let is_bdigit = make_digit_checker [ '0'; '1' ]
 let is_digit_or_underscore c = is_digit c || c = '_'
 
 let handle_underscores text pos end_pos =
@@ -192,9 +200,9 @@ let symbols_sorted =
     symbols
 
 let try_scan_string lexer pos =
-  match scan_content_opt lexer.text (pos + 1) [ '"' ] with
+  match scan_quoted_content_opt lexer.text (pos + 1) [ '"' ] with
   | Some end_pos ->
-    let content = String.sub lexer.text (pos + 1) (end_pos - pos - 1) in
+    let content = extract_content lexer.text (pos + 1) end_pos in
     Reporter.try_ok
       (LitString (intern lexer content), span lexer pos (end_pos + 1))
   | None ->
@@ -225,9 +233,9 @@ let try_scan_rune lexer pos =
       (span lexer pos (pos + 1))
 
 let try_scan_template lexer pos =
-  match scan_content_opt lexer.text (pos + 2) [ '"'; '{' ] with
+  match scan_quoted_content_opt lexer.text (pos + 2) [ '"'; '{' ] with
   | Some end_pos when lexer.text.[end_pos] = '{' ->
-    let content = String.sub lexer.text (pos + 2) (end_pos - pos - 2) in
+    let content = extract_content lexer.text (pos + 2) end_pos in
     lexer.in_template <- true;
     if String.length content = 0 then
       Reporter.try_error_info
@@ -237,7 +245,7 @@ let try_scan_template lexer pos =
       Reporter.try_ok
         (TemplateHead (intern lexer content), span lexer pos (end_pos + 1))
   | Some end_pos ->
-    let content = String.sub lexer.text (pos + 2) (end_pos - pos - 2) in
+    let content = extract_content lexer.text (pos + 2) end_pos in
     Reporter.try_ok
       (LitTemplateNoSubst (intern lexer content), span lexer pos (end_pos + 1))
   | None ->
@@ -246,13 +254,13 @@ let try_scan_template lexer pos =
       (span lexer pos (pos + 1))
 
 let try_scan_template_cont lexer pos =
-  match scan_content_opt lexer.text pos [ '"'; '{' ] with
+  match scan_quoted_content_opt lexer.text pos [ '"'; '{' ] with
   | Some end_pos when lexer.text.[end_pos] = '{' ->
-    let content = String.sub lexer.text pos (end_pos - pos) in
+    let content = extract_content lexer.text pos end_pos in
     Reporter.try_ok
       (TemplateMiddle (intern lexer content), span lexer pos (end_pos + 1))
   | Some end_pos ->
-    let content = String.sub lexer.text pos (end_pos - pos) in
+    let content = extract_content lexer.text pos end_pos in
     lexer.in_template <- false;
     Reporter.try_ok
       (TemplateTail (intern lexer content), span lexer pos (end_pos + 1))
@@ -277,82 +285,62 @@ let try_scan_number_with_base prefix digit_chars base_name lexer pos =
         (Printf.sprintf "malformed '_' placement in %s literal" base_name)
         (span lexer pos end_pos)
     else
-      let rec check_digits i =
-        if
-          i >= String.length lexer.text
-          || lexer.text.[i] = '_'
-          || digit_chars lexer.text.[i]
-        then check_digits (i + 1)
-        else
-          Reporter.try_error_info
-            (Printf.sprintf
-               "invalid digit '%c' in %s literal"
-               lexer.text.[i]
-               base_name)
-            (span lexer pos (i + 1))
-      in
-      let validation_result = check_digits digit_start in
-      match validation_result with
-      | Ok () ->
-        let lit = prefix ^ clean_digits in
-        Reporter.try_ok (LitInt (intern lexer lit), span lexer pos end_pos)
-      | Error bag -> Error bag
+      let lit = prefix ^ clean_digits in
+      Reporter.try_ok (LitInt (intern lexer lit), span lexer pos end_pos)
 
-let try_scan_int_or_real lexer pos =
+let scan_integer_part lexer pos =
   let int_end = scan_while is_digit_or_underscore lexer.text pos in
-  if int_end <= pos then
-    Reporter.try_error_info "invalid numeric literal" (span lexer pos (pos + 1))
+  if int_end <= pos then None
   else
     let clean_int, valid = handle_underscores lexer.text pos int_end in
-    if not valid then
-      Reporter.try_error_info
-        "malformed '_' placement in numeric literal"
-        (span lexer pos int_end)
+    if valid then Some (clean_int, int_end) else None
+
+let try_scan_exponent_part lexer pos =
+  if
+    pos >= lexer.text_len
+    || not (lexer.text.[pos] = 'e' || lexer.text.[pos] = 'E')
+  then Reporter.try_ok pos
+  else
+    let exp_start = pos + 1 in
+    let exp_digits_start =
+      if
+        exp_start < lexer.text_len
+        && (lexer.text.[exp_start] = '+' || lexer.text.[exp_start] = '-')
+      then exp_start + 1
+      else exp_start
+    in
+    let exp_end =
+      scan_while is_digit_or_underscore lexer.text exp_digits_start
+    in
+    if exp_end > exp_digits_start then
+      let _, exp_valid =
+        handle_underscores lexer.text exp_digits_start exp_end
+      in
+      if exp_valid then Reporter.try_ok exp_end else Reporter.try_ok pos
+    else Reporter.try_ok pos
+
+let try_scan_int_or_real lexer pos =
+  match scan_integer_part lexer pos with
+  | None ->
+    Reporter.try_error_info "invalid numeric literal" (span lexer pos (pos + 1))
+  | Some (clean_int, int_end) -> (
+    if int_end >= lexer.text_len || lexer.text.[int_end] <> '.' then
+      Reporter.try_ok (LitInt (intern lexer clean_int), span lexer pos int_end)
     else
-      let try_parse_real int_end clean_int =
-        if int_end >= lexer.text_len || lexer.text.[int_end] <> '.' then
+      let frac_end =
+        scan_while is_digit_or_underscore lexer.text (int_end + 1)
+      in
+      if frac_end = int_end + 1 then
+        Reporter.try_ok (LitInt (intern lexer clean_int), span lexer pos int_end)
+      else
+        match try_scan_exponent_part lexer frac_end with
+        | Error _ ->
           Reporter.try_ok
             (LitInt (intern lexer clean_int), span lexer pos int_end)
-        else
-          let frac_end =
-            scan_while is_digit_or_underscore lexer.text (int_end + 1)
-          in
-          if frac_end = int_end + 1 then
-            Reporter.try_ok
-              (LitInt (intern lexer clean_int), span lexer pos int_end)
-          else
-            let extract_exponent real_end =
-              if
-                real_end >= lexer.text_len
-                || not
-                     (lexer.text.[real_end] = 'e' || lexer.text.[real_end] = 'E')
-              then real_end
-              else
-                let exp_start = real_end + 1 in
-                let exp_digits_start =
-                  if
-                    exp_start < lexer.text_len
-                    && (lexer.text.[exp_start] = '+'
-                       || lexer.text.[exp_start] = '-')
-                  then exp_start + 1
-                  else exp_start
-                in
-                let exp_end =
-                  scan_while is_digit_or_underscore lexer.text exp_digits_start
-                in
-                if exp_end > exp_digits_start then
-                  let _, exp_valid =
-                    handle_underscores lexer.text exp_digits_start exp_end
-                  in
-                  if exp_valid then exp_end else real_end
-                else real_end
-            in
-            let fract_end = extract_exponent frac_end in
-            let decml_value, _ = handle_underscores lexer.text pos fract_end in
-            Reporter.try_ok
-              (LitReal (intern lexer decml_value), span lexer pos fract_end)
-      in
-      try_parse_real int_end clean_int
+        | Ok real_end ->
+          let decml_value, _ = handle_underscores lexer.text pos real_end in
+          Reporter.try_ok
+            (LitReal (intern lexer decml_value), span lexer pos real_end))
 
 let try_scan_number lexer =
   let pos = lexer.curr_pos in
@@ -372,9 +360,7 @@ let try_scan_ident_or_keyword lexer =
       "invalid identifier"
       (span lexer lexer.curr_pos (lexer.curr_pos + 1))
   else
-    let ident =
-      String.sub lexer.text lexer.curr_pos (end_pos - lexer.curr_pos)
-    in
+    let ident = extract_content lexer.text lexer.curr_pos end_pos in
     let token =
       match Hashtbl.find_opt keyword_table ident with
       | Some kw -> kw
@@ -383,11 +369,9 @@ let try_scan_ident_or_keyword lexer =
     Reporter.try_ok (token, span lexer lexer.curr_pos end_pos)
 
 let try_scan_ident_escape lexer =
-  match scan_content_opt lexer.text (lexer.curr_pos + 1) [ '`' ] with
+  match scan_quoted_content_opt lexer.text (lexer.curr_pos + 1) [ '`' ] with
   | Some end_pos ->
-    let content =
-      String.sub lexer.text (lexer.curr_pos + 1) (end_pos - lexer.curr_pos - 1)
-    in
+    let content = extract_content lexer.text (lexer.curr_pos + 1) end_pos in
     Reporter.try_ok
       (Ident (intern lexer content), span lexer lexer.curr_pos (end_pos + 1))
   | None ->
@@ -403,7 +387,7 @@ let try_scan_symbol lexer =
         (Printf.sprintf "unknown character '%c'" c)
         (span lexer lexer.curr_pos (lexer.curr_pos + 1))
     | (sym, token) :: rest -> (
-      match scan_exact_opt sym lexer.text lexer.curr_pos with
+      match scan_exact_match_opt sym lexer.text lexer.curr_pos with
       | Some len ->
         Reporter.try_ok (token, span lexer lexer.curr_pos (lexer.curr_pos + len))
       | None -> try_match rest)
@@ -420,11 +404,9 @@ let skip_whitespace lexer =
   advance lexer (end_pos - lexer.curr_pos)
 
 let skip_line_comment lexer =
-  let rec loop pos =
-    if pos >= lexer.text_len || lexer.text.[pos] = '\n' then pos
-    else loop (pos + 1)
+  let end_pos =
+    scan_while (fun c -> c <> '\n') lexer.text (lexer.curr_pos + 2)
   in
-  let end_pos = loop (lexer.curr_pos + 2) in
   advance lexer (end_pos - lexer.curr_pos)
 
 let rec try_skip_block_comment_opt lexer pos depth =
