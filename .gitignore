@@ -1,3 +1,5 @@
+.env
+
 # AI stuff (Amazon Q, Claude Code, etc
 # -- remove once people actually want it into codebase)
 .amazonq/*
