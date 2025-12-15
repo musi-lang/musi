@@ -190,69 +190,55 @@ let try_scan_string lexer pos =
     lexer
     pos
     [ '"' ]
-    (fun content -> LitString content)
+    (fun c -> LitString c)
     "unterminated string literal"
 
-let try_check_rune_content lexer pos =
-  if pos + 1 >= lexer.text_len || lexer.text.[pos + 1] = '\'' then
-    Reporter.try_error_info
-      "empty character literal"
-      (span lexer pos (pos + if pos + 1 >= lexer.text_len then 1 else 2))
-  else if pos + 2 < lexer.text_len then
-    match (lexer.text.[pos + 1], lexer.text.[pos + 2]) with
-    | '\\', c when pos + 3 < lexer.text_len && lexer.text.[pos + 3] = '\'' ->
-      Reporter.try_ok (c, pos + 4)
-    | c, '\'' when c <> '\'' -> Reporter.try_ok (c, pos + 3)
-    | _, d when d <> '\'' ->
-      Reporter.try_error_info
-        "multiple characters not allowed in rune literal"
-        (span lexer pos (pos + 3))
-    | _ ->
-      Reporter.try_error_info "invalid rune literal" (span lexer pos (pos + 1))
-  else
-    Reporter.try_error_info
-      "unterminated rune literal"
-      (span lexer pos (pos + 1))
-
 let try_scan_rune lexer pos =
-  match try_check_rune_content lexer pos with
-  | Ok (char, end_pos) -> Reporter.try_ok (LitRune char, span lexer pos end_pos)
-  | Error bag -> Error bag
+  let text = lexer.text in
+  let fail msg end_offset =
+    Reporter.try_error_info msg (span lexer pos (pos + end_offset))
+  in
 
-let try_scan_template_content lexer pos offset stop_chars =
-  match scan_quoted_content_opt lexer.text (pos + offset) stop_chars with
-  | Some end_pos when lexer.text.[end_pos] = '{' ->
-    let content = extract_content lexer.text (pos + offset) end_pos in
-    Reporter.try_ok (content, end_pos, true)
-  | Some end_pos ->
-    let content = extract_content lexer.text (pos + offset) end_pos in
-    Reporter.try_ok (content, end_pos, false)
+  if pos + 1 >= lexer.text_len || text.[pos + 1] = '\'' then
+    fail "empty character literal" (if pos + 1 >= lexer.text_len then 1 else 2)
+  else if pos + 2 >= lexer.text_len then fail "unterminated rune literal" 1
+  else
+    match (text.[pos + 1], text.[pos + 2]) with
+    | '\\', c when pos + 3 < lexer.text_len && text.[pos + 3] = '\'' ->
+      Reporter.try_ok (LitRune c, span lexer pos (pos + 4))
+    | c, '\'' when c <> '\'' ->
+      Reporter.try_ok (LitRune c, span lexer pos (pos + 3))
+    | _, '\'' -> fail "invalid rune literal" 1
+    | _ -> fail "multiple characters not allowed in rune literal" 3
+
+let try_scan_template lexer pos offset =
+  match scan_quoted_content_opt lexer.text (pos + offset) [ '"'; '{' ] with
   | None ->
     Reporter.try_error_info
       "unterminated template literal"
       (span lexer pos (pos + 1))
+  | Some end_pos ->
+    let content = extract_content lexer.text (pos + offset) end_pos in
+    let is_expr = lexer.text.[end_pos] = '{' in
 
-let try_scan_template lexer pos offset =
-  match try_scan_template_content lexer pos offset [ '"'; '{' ] with
-  | Ok (content, end_pos, is_expr) ->
-    if is_expr then
-      if offset = 2 then (
-        lexer.in_template <- true;
-        if String.length content = 0 then
-          Reporter.try_error_info
-            "empty template expression"
-            (span lexer pos (end_pos + 1))
-        else
-          Reporter.try_ok
-            (TemplateHead (intern lexer content), span lexer pos (end_pos + 1)))
+    if is_expr then begin
+      if offset = 2 then lexer.in_template <- true;
+      if String.length content = 0 then
+        Reporter.try_error_info
+          "empty template expression"
+          (span lexer pos (end_pos + 1))
       else
-        Reporter.try_ok
-          (TemplateMiddle (intern lexer content), span lexer pos (end_pos + 1))
-    else (
+        let tok =
+          if offset = 2 then TemplateHead (intern lexer content)
+          else TemplateMiddle (intern lexer content)
+        in
+        Reporter.try_ok (tok, span lexer pos (end_pos + 1))
+    end
+    else begin
       if offset = 0 then lexer.in_template <- false;
       Reporter.try_ok
-        (LitTemplateNoSubst (intern lexer content), span lexer pos (end_pos + 1)))
-  | Error bag -> Error bag
+        (LitTemplateNoSubst (intern lexer content), span lexer pos (end_pos + 1))
+    end
 
 let try_scan_number lexer =
   let pos = lexer.curr_pos in
