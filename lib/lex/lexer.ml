@@ -203,12 +203,20 @@ let try_scan_string lexer pos =
       (span lexer pos (pos + 1))
 
 let try_scan_rune lexer pos =
-  if pos + 2 < lexer.text_len then
+  if pos + 1 >= lexer.text_len || lexer.text.[pos + 1] = '\'' then
+    Reporter.try_error_info
+      "empty character literal"
+      (span lexer pos (pos + if pos + 1 >= lexer.text_len then 1 else 2))
+  else if pos + 2 < lexer.text_len then
     match (lexer.text.[pos + 1], lexer.text.[pos + 2]) with
     | '\\', c when pos + 3 < lexer.text_len && lexer.text.[pos + 3] = '\'' ->
       Reporter.try_ok (LitRune c, span lexer pos (pos + 4))
     | c, '\'' when c <> '\'' ->
       Reporter.try_ok (LitRune c, span lexer pos (pos + 3))
+    | _, d when d <> '\'' ->
+      Reporter.try_error_info
+        "multiple characters not allowed in rune literal"
+        (span lexer pos (pos + 3))
     | _ ->
       Reporter.try_error_info "invalid rune literal" (span lexer pos (pos + 1))
   else
@@ -221,8 +229,13 @@ let try_scan_template lexer pos =
   | Some end_pos when lexer.text.[end_pos] = '{' ->
     let content = String.sub lexer.text (pos + 2) (end_pos - pos - 2) in
     lexer.in_template <- true;
-    Reporter.try_ok
-      (TemplateHead (intern lexer content), span lexer pos (end_pos + 1))
+    if String.length content = 0 then
+      Reporter.try_error_info
+        "empty template expression"
+        (span lexer pos (end_pos + 1))
+    else
+      Reporter.try_ok
+        (TemplateHead (intern lexer content), span lexer pos (end_pos + 1))
   | Some end_pos ->
     let content = String.sub lexer.text (pos + 2) (end_pos - pos - 2) in
     Reporter.try_ok
@@ -261,11 +274,29 @@ let try_scan_number_with_base prefix digit_chars base_name lexer pos =
     in
     if not valid then
       Reporter.try_error_info
-        (Printf.sprintf "invalid '_' placement in %s literal" base_name)
+        (Printf.sprintf "malformed '_' placement in %s literal" base_name)
         (span lexer pos end_pos)
     else
-      let lit = prefix ^ clean_digits in
-      Reporter.try_ok (LitInt (intern lexer lit), span lexer pos end_pos)
+      let rec check_digits i =
+        if
+          i >= String.length lexer.text
+          || lexer.text.[i] = '_'
+          || digit_chars lexer.text.[i]
+        then check_digits (i + 1)
+        else
+          Reporter.try_error_info
+            (Printf.sprintf
+               "invalid digit '%c' in %s literal"
+               lexer.text.[i]
+               base_name)
+            (span lexer pos (i + 1))
+      in
+      let validation_result = check_digits digit_start in
+      match validation_result with
+      | Ok () ->
+        let lit = prefix ^ clean_digits in
+        Reporter.try_ok (LitInt (intern lexer lit), span lexer pos end_pos)
+      | Error bag -> Error bag
 
 let try_scan_int_or_real lexer pos =
   let int_end = scan_while is_digit_or_underscore lexer.text pos in
@@ -275,7 +306,7 @@ let try_scan_int_or_real lexer pos =
     let clean_int, valid = handle_underscores lexer.text pos int_end in
     if not valid then
       Reporter.try_error_info
-        "invalid '_' placement in numeric literal"
+        "malformed '_' placement in numeric literal"
         (span lexer pos int_end)
     else
       let try_parse_real int_end clean_int =
