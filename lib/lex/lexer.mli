@@ -2,8 +2,7 @@ open Basic
 
 type t
 
-val create : Source.t -> int -> t
-val with_interner : Interner.t -> Source.t -> int -> t
+val create : ?interner:Interner.t option -> Source.t -> int -> t
 val try_tokenize : t -> (Token.t * Span.t) list Reporter.result
 val try_next_token : t -> (Token.t * Span.t) Reporter.result
 val curr_pos : t -> int

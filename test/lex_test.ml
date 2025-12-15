@@ -4,7 +4,7 @@ open Alcotest
 
 let make_lexer input =
   let source = Source.create "test.ms" input in
-  Lexer.create source 0
+  Lexer.create None source 0
 
 let token_to_string token =
   match token with
@@ -289,8 +289,7 @@ let test_delimiters () =
 
 let test_comments () =
   let test_line_comment () =
-    let source = Source.create "test.ms" "// this is a comment\nfn" in
-    let lexer = Lexer.create source 0 in
+    let lexer = make_lexer "// this is a comment\nfn" in
     match Lexer.try_next_token lexer with
     | Ok (Token.KwFn, _) -> ()
     | Ok (token, _) ->
@@ -302,8 +301,7 @@ let test_comments () =
   in
 
   let test_block_comment () =
-    let source = Source.create "test.ms" "/* block comment */ fn" in
-    let lexer = Lexer.create source 0 in
+    let lexer = make_lexer "/* block comment */ fn" in
     match Lexer.try_next_token lexer with
     | Ok (Token.KwFn, _) -> ()
     | Ok (token, _) ->
@@ -315,8 +313,7 @@ let test_comments () =
   in
 
   let test_nested_block_comment () =
-    let source = Source.create "test.ms" "/* outer /* inner */ comment */ fn" in
-    let lexer = Lexer.create source 0 in
+    let lexer = make_lexer "/* outer /* inner */ comment */ fn" in
     match Lexer.try_next_token lexer with
     | Ok (Token.KwFn, _) -> ()
     | Ok (token, _) ->
@@ -352,8 +349,7 @@ let test_whitespace () =
 
 let test_template_literals () =
   let test_template_no_subst () =
-    let source = Source.create "test.ms" "$\"hello world\"" in
-    let lexer = Lexer.create source 0 in
+    let lexer = make_lexer "$\"hello world\"" in
     match Lexer.try_next_token lexer with
     | Ok (Token.LitTemplateNoSubst _, _) -> ()
     | Ok (token, _) ->
@@ -365,8 +361,7 @@ let test_template_literals () =
   in
 
   let test_template_with_expr () =
-    let source = Source.create "test.ms" "$\"hello {name}\"" in
-    let lexer = Lexer.create source 0 in
+    let lexer = make_lexer "$\"hello {name}\"" in
     match Lexer.try_next_token lexer with
     | Ok (Token.TemplateHead _, _) -> ()
     | Ok (token, _) ->
@@ -380,8 +375,7 @@ let test_template_literals () =
 
 let test_error_handling () =
   let test_unterminated_string () =
-    let source = Source.create "test.ms" "\"unterminated" in
-    let lexer = Lexer.create source 0 in
+    let lexer = make_lexer "\"unterminated" in
     match Lexer.try_next_token lexer with
     | Error _ -> ()
     | Ok (token, _) ->
@@ -392,8 +386,7 @@ let test_error_handling () =
   in
 
   let test_unterminated_rune () =
-    let source = Source.create "test.ms" "'a" in
-    let lexer = Lexer.create source 0 in
+    let lexer = make_lexer "'a" in
     match Lexer.try_next_token lexer with
     | Error _ -> ()
     | Ok (token, _) ->
@@ -404,8 +397,7 @@ let test_error_handling () =
   in
 
   let test_invalid_number () =
-    let source = Source.create "test.ms" "0x" in
-    let lexer = Lexer.create source 0 in
+    let lexer = make_lexer "0x" in
     match Lexer.try_next_token lexer with
     | Error _ -> ()
     | Ok (token, _) ->
