@@ -426,21 +426,23 @@ let skip_line_comment lexer =
 
 let try_skip_block_comment_opt lexer =
   let pos = lexer.curr_pos in
-  let rec scan pos depth =
+  let rec try_scan pos depth =
     if pos + 1 >= lexer.text_len then
       Reporter.try_error_info
         "unterminated block comment"
         (span lexer pos (pos + 1))
     else
       match (lexer.text.[pos], lexer.text.[pos + 1]) with
-      | '/', '*' -> scan (pos + 2) (depth + 1)
+      | '/', '*' -> try_scan (pos + 2) (depth + 1)
       | '*', '/' when depth = 1 ->
         advance lexer (pos + 2 - lexer.curr_pos);
         Reporter.try_ok ()
-      | '*', '/' -> scan (pos + 2) (depth - 1)
-      | _ -> scan (pos + 1) depth
+      | '*', '/' -> try_scan (pos + 2) (depth - 1)
+      | _ -> try_scan (pos + 1) depth
   in
-  match scan (pos + 2) 1 with Ok () -> None | Error bag -> Some (Error bag)
+  match try_scan (pos + 2) 1 with
+  | Ok () -> None
+  | Error bag -> Some (Error bag)
 
 let rec try_scan_token_opt lexer =
   if lexer.curr_pos >= lexer.text_len then
