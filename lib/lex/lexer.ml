@@ -524,11 +524,16 @@ let try_tokenize lexer =
     Error (Reporter.merge error_bags)
 
 let token_stream_opt lexer =
+  let done_flag = ref false in
   let next_state_opt () =
-    match try_next_token lexer with
-    | Ok (Token.EOF, _) -> None
-    | Ok (token, span) -> Some ((token, span), ())
-    | Error _ -> None
+    if !done_flag then None
+    else
+      match try_next_token lexer with
+      | Ok (Token.EOF, span) ->
+        done_flag := true;
+        Some ((Token.EOF, span), ())
+      | Ok (token, span) -> Some ((token, span), ())
+      | Error _ -> None
   in
   Some (Seq.unfold next_state_opt ())
 
