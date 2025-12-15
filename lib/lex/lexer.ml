@@ -12,7 +12,7 @@ type t = {
   ; mutable in_template : bool
 }
 
-let create_aux ?(interner = None) source file_id =
+let create ?(interner = None) source file_id =
   let text = Source.text source in
   let interner_val =
     match interner with Some i -> i | None -> Interner.create ()
@@ -27,11 +27,6 @@ let create_aux ?(interner = None) source file_id =
   ; text_len = String.length text
   ; in_template = false
   }
-
-let create source file_id = create_aux ~interner:None source file_id
-
-let with_interner interner source file_id =
-  create_aux ~interner:(Some interner) source file_id
 
 let curr_pos lexer = lexer.curr_pos
 let source lexer = lexer.source
