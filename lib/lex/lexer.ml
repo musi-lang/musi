@@ -234,33 +234,26 @@ let try_scan_template_content lexer pos offset stop_chars =
       "unterminated template literal"
       (span lexer pos (pos + 1))
 
-let try_scan_template lexer pos =
-  match try_scan_template_content lexer pos 2 [ '"'; '{' ] with
-  | Ok (content, end_pos, is_expr) ->
-    if is_expr then (
-      lexer.in_template <- true;
-      if String.length content = 0 then
-        Reporter.try_error_info
-          "empty template expression"
-          (span lexer pos (end_pos + 1))
-      else
-        Reporter.try_ok
-          (TemplateHead (intern lexer content), span lexer pos (end_pos + 1)))
-    else
-      Reporter.try_ok
-        (LitTemplateNoSubst (intern lexer content), span lexer pos (end_pos + 1))
-  | Error bag -> Error bag
-
-let try_scan_template_cont lexer pos =
-  match try_scan_template_content lexer pos 0 [ '"'; '{' ] with
+let try_scan_template lexer pos offset =
+  match try_scan_template_content lexer pos offset [ '"'; '{' ] with
   | Ok (content, end_pos, is_expr) ->
     if is_expr then
-      Reporter.try_ok
-        (TemplateMiddle (intern lexer content), span lexer pos (end_pos + 1))
+      if offset = 2 then (
+        lexer.in_template <- true;
+        if String.length content = 0 then
+          Reporter.try_error_info
+            "empty template expression"
+            (span lexer pos (end_pos + 1))
+        else
+          Reporter.try_ok
+            (TemplateHead (intern lexer content), span lexer pos (end_pos + 1)))
+      else
+        Reporter.try_ok
+          (TemplateMiddle (intern lexer content), span lexer pos (end_pos + 1))
     else (
-      lexer.in_template <- false;
+      if offset = 0 then lexer.in_template <- false;
       Reporter.try_ok
-        (TemplateTail (intern lexer content), span lexer pos (end_pos + 1)))
+        (LitTemplateNoSubst (intern lexer content), span lexer pos (end_pos + 1)))
   | Error bag -> Error bag
 
 let try_scan_number lexer =
@@ -415,7 +408,7 @@ let rec try_scan_token_opt lexer =
     match lexer.text.[lexer.curr_pos] with
     | '}' ->
       advance lexer 1;
-      Some (try_scan_template_cont lexer lexer.curr_pos)
+      Some (try_scan_template lexer lexer.curr_pos 0)
     | _ -> Some (try_scan_symbol lexer)
   else
     match lexer.text.[lexer.curr_pos] with
@@ -435,7 +428,7 @@ let rec try_scan_token_opt lexer =
     | '$'
       when lexer.curr_pos + 1 < lexer.text_len
            && lexer.text.[lexer.curr_pos + 1] = '"' ->
-      Some (try_scan_template lexer lexer.curr_pos)
+      Some (try_scan_template lexer lexer.curr_pos 2)
     | '"' -> Some (try_scan_string lexer lexer.curr_pos)
     | '\'' -> Some (try_scan_rune lexer lexer.curr_pos)
     | '`' -> Some (try_scan_ident_escape lexer)
