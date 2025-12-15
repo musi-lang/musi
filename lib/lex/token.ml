@@ -72,6 +72,7 @@ type t =
   | DotDotLt
   | MinusGt
   | LtMinus
+  | ColonEq
   | EqGt
   | Question
   | Underscore
@@ -154,6 +155,7 @@ let show interner = function
   | DotDotLt -> "..<"
   | MinusGt -> "->"
   | LtMinus -> "<-"
+  | ColonEq -> ":="
   | EqGt -> "=>"
   | Question -> "?"
   | Underscore -> "_"

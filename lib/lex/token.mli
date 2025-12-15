@@ -72,6 +72,7 @@ type t =
   | DotDotLt
   | MinusGt
   | LtMinus
+  | ColonEq
   | EqGt
   | Question
   | Underscore

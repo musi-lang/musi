@@ -166,6 +166,7 @@ let symbols =
   ; ("..", DotDot)
   ; ("->", MinusGt)
   ; ("<-", LtMinus)
+  ; (":=", ColonEq)
   ; ("=>", EqGt)
   ; ("{", LBrace)
   ; ("}", RBrace)
@@ -505,6 +506,7 @@ let try_tokenize lexer =
 let token_stream_opt lexer =
   let next_state_opt () =
     match try_next_token lexer with
+    | Ok (Token.EOF, _) -> None
     | Ok (token, span) -> Some ((token, span), ())
     | Error _ -> None
   in
