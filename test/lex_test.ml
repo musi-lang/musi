@@ -4,7 +4,7 @@ open Alcotest
 
 let make_lexer input =
   let source = Source.create "test.ms" input in
-  Lexer.create None source 0
+  Lexer.create ~interner:None source 0
 
 let token_to_string token =
   match token with
