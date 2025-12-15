@@ -35,8 +35,6 @@ let has_errors lexer = not (Reporter.is_empty lexer.error_bag)
 let error_bag lexer = lexer.error_bag
 
 let span lexer start_pos end_pos =
-  let _ = Source.line_col lexer.source start_pos in
-  let _ = Source.line_col lexer.source end_pos in
   { Span.file = lexer.file_id; Span.start = start_pos; Span.end_ = end_pos }
 
 let intern lexer s = Interner.intern lexer.interner s
