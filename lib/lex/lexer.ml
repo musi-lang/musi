@@ -467,13 +467,22 @@ let rec try_scan_token_opt lexer =
     | '"' -> Some (try_scan_string lexer lexer.curr_pos)
     | '\'' -> Some (try_scan_rune lexer lexer.curr_pos)
     | '`' -> Some (try_scan_ident_escape lexer)
+    | '_'
+      when lexer.curr_pos + 1 = lexer.text_len
+           || not (is_ident_char lexer.text.[lexer.curr_pos + 1]) ->
+      Some (try_scan_symbol lexer)
     | c when is_ident_start c -> Some (try_scan_ident_or_keyword lexer)
     | c when is_digit c -> Some (try_scan_number lexer)
     | _ -> Some (try_scan_symbol lexer)
 
 and try_next_token lexer =
   match try_scan_token_opt lexer with
-  | Some result -> result
+  | Some (Ok (token, span)) ->
+    advance lexer (span.end_ - span.start);
+    Ok (token, span)
+  | Some (Error bag) ->
+    advance lexer 1;
+    Error bag
   | None -> try_next_token lexer
 
 let try_tokenize lexer =
