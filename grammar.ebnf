@@ -135,9 +135,9 @@ pat_lit_array = "[", pat, {",", pat}, "]";
 
 pat_lit_record = ident, ".{", aux_pat_fields, "}";
 
-pat_call = ident, [ty_args], ["(", [pat], ")"];
+pat_ctor = ident, [ty_args], ["(", [pat], ")"];
 
-pat = pat_ident | pat_lit | pat_wild | pat_cons | pat_lit_tuple | pat_lit_array | pat_lit_record | pat_call;
+pat = pat_ident | pat_lit | pat_wild | pat_cons | pat_lit_tuple | pat_lit_array | pat_lit_record | pat_ctor;
 
 (* ========================================================================= *)
 (* EXPRESSIONS                                                               *)
