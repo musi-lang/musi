@@ -367,6 +367,15 @@ extern "C" unsafe {
   fn write(fd: Int32, buf: ^Nat8, count: Nat64): Int64;
 };
 
+// NOTE:
+// Musi has a 'write' function as part of STL's io library.
+// This example shows use of external write.
+// if we used `import "std/io.ms";` instead of the extern block, we would get a compile error.
+// but if we used `val io := import "std/io.ms";` instead of the extern block, we could use io#write,
+// separating the concern between two functions using the exact same name.
+// alternatively, `import "std/io.ms" as io;` would work as well.
+// `val io := import "std/io.ms";` and `import "std/io.ms" as io;` are equivalent.
+
 unsafe {
   val msg := "Hello\n";
   write(1, @msg, 6);
