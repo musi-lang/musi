@@ -146,7 +146,9 @@ expr_lit = aux_lit;
 
 expr_ident = ident;
 
-expr_field = expr, ".", ident | expr, "#", ident | expr_optional_chain, ".", ident;
+expr_field = expr, ".", ident | expr_optional_chain, ".", ident;
+
+expr_path = expr, "#", ident;
 
 expr_index = expr, "[", expr, "]" | expr_optional_chain, "[", expr, "]";
 
@@ -168,7 +170,7 @@ expr_optional_chain = expr, "?";
 
 expr_block = "{", {stmt}, [expr], "}";
 
-expr_bind = [aux_modifiers], ("val" | "var"), ident, [aux_ty_annot], aux_init, expr;
+expr_bound = [aux_modifiers], ("val" | "var"), ident, [aux_ty_annot], aux_init, expr;
 
 expr_fn = [aux_attr], [aux_modifiers], "fn", aux_fn_sig, expr_block;
 
@@ -198,7 +200,7 @@ expr_record = [aux_attr], [aux_modifiers], "record", ident, [ty_params], "{", au
 
 expr_sum = [aux_attr], [aux_modifiers], "sum", ident, [ty_params], "{", aux_sum_cases, "}";
 
-expr = expr_lit | expr_ident | expr_field | expr_index | expr_call | expr_deref | expr_unary | expr_binary | expr_lit_tuple | expr_lit_array | expr_lit_record | expr_block | expr_bind | expr_fn | expr_if | expr_while | expr_for | expr_match | expr_return | expr_defer | expr_break | expr_cycle | expr_unsafe | expr_import | expr_extern | expr_record | expr_sum;
+expr = expr_lit | expr_ident | expr_field | expr_path | expr_index | expr_call | expr_deref | expr_unary | expr_binary | expr_lit_tuple | expr_lit_array | expr_lit_record | expr_block | expr_bound | expr_fn | expr_if | expr_while | expr_for | expr_match | expr_return | expr_defer | expr_break | expr_cycle | expr_unsafe | expr_import | expr_extern | expr_record | expr_sum;
 
 (* ========================================================================= *)
 (* STATEMENTS                                                                *)
