@@ -133,7 +133,7 @@ pat_tuple = "(", pat, {",", pat}, ")";
 
 pat_array = "[", pat, {",", pat}, "]";
 
-pat_record = ident, "{", aux_pat_fields, "}";
+pat_record = ident, ".{", aux_pat_fields, "}";
 
 pat_ctor = ident, [ty_args], ["(", [pat], ")"];
 
@@ -192,7 +192,7 @@ expr_unsafe = expr_block;
 
 expr_import = "import", aux_lit_text;
 
-expr_extern = "extern", [aux_lit_text], "{", {aux_fn_sig, ";"}, "}";
+expr_extern = "extern", [aux_lit_text], "unsafe", "{", {aux_fn_sig, ";"}, "}";
 
 expr_record = [aux_attr], [aux_modifiers], "record", ident, [ty_params], "{", aux_record_fields, "}";
 
