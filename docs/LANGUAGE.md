@@ -38,9 +38,75 @@ List<String>             // generic application
 []String                 // dynamic array
 [10]Int32                // fixed-size array
 ^Int32                   // pointer
-(Int32, String) -> Bool  // function type
+(Int32, String) -> Bool  // tupled function type
+Int32 -> String -> Bool  // curried function type (right-associative)
 (Int32, String)          // tuple type
 ```
+
+### Function Types and Currying
+
+Musi supports two styles of function types:
+
+1. **Curried function types** (right-associative): `A -> B -> C` means `A -> (B -> C)`
+2. **Tupled function types**: `(A, B) -> C` takes a tuple of two arguments
+
+The `->` operator is right-associative, enabling **partial application** where a multi-parameter function can be applied to fewer arguments than it expects, yielding a new function.
+
+**Curried Examples:**
+
+```musi
+// 1 param
+val negate: Int32 -> Int32 := fn(x: Int32): Int32 { -x };
+
+// 2 params (chained arrows)
+val add: Int32 -> Int32 -> Int32 := fn(x: Int32, y: Int32): Int32 { x + y };
+
+// 3 params
+val clamp: Int32 -> Int32 -> Int32 -> Int32 :=
+  fn(value: Int32, min: Int32, max: Int32): Int32 {
+    if value < min { min } else if value > max { max } else { value }
+  };
+
+// no params (Unit type)
+val get_random: () -> Int32 := fn(): Int32 { /* ... */ };
+
+// higher-order
+val map: (A -> B) -> List<A> -> List<B> :=
+  fn(f: A -> B, xs: List<A>): List<B> {
+    match xs {
+    case [] => [],
+    case head :: tail => f(head) :: map(f, tail)
+    }
+  };
+```
+
+**Partial Application:**
+
+```musi
+val add5 := add(5);       // type: Int32 -> Int32
+val result := add5(3);    // evaluates to 8
+
+val clamp_to_0_100 := fn(x: Int32): Int32 { clamp(x, 0, 100) };
+```
+
+**Tupled vs Curried:**
+
+```musi
+// tupled Fn type (1 arrow with tuple)
+val add_tupled: (Int32, Int32) -> Int32 :=
+  fn(pair: (Int32, Int32)): Int32 { pair.0 + pair.1 };
+
+// curried Fn type (chained arrows)
+val add_curried: Int32 -> Int32 -> Int32 :=
+  fn(x: Int32, y: Int32): Int32 { x + y };
+
+// usage diffs:
+val sum1 := add_tupled((3, 4));    // must pass tuple
+val sum2 := add_curried(3)(4);     // can apply args one at a time
+val sum3 := add_curried(3, 4);     // also can: multiple args at once
+```
+
+**Type Inference:** Function parameters without explicit types default to `Any`. The return type can often be inferred from the function body.
 
 ### Inference Rules
 
@@ -49,9 +115,9 @@ List<String>             // generic application
 - **Variable bindings**: infer from initializer or default to `Any`
 
 ```musi
-val x := 42;              // infers Int32
-val y := "hello";         // infers String
-val f := fn(a) { a + 1 }; // 'a' infers to Any
+val x := 42;                // infers Int32
+val y := "hello";           // infers String
+val f := fn(a) { a + 1 };   // 'a' infers to Any
 ```
 
 ## Lexical Structure
