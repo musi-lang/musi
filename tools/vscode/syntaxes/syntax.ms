@@ -20,9 +20,9 @@ val x: Int32 := 42;
 var y: Int32 := 0;
 y <- 10;
 
-if (x > 0) { writeln("positive"); };
-if (x > 0) { writeln("pos"); } else { writeln("neg"); };
-if (x > 0) {
+if x > 0 { writeln("positive"); };
+if x > 0 { writeln("pos"); } else { writeln("neg"); };
+if x > 0 {
   writeln("positive");
 } else if (x < 0) {
   writeln("negative");
@@ -34,8 +34,8 @@ while has_next() { process(next()); };
 for i in 0..10 { writeln($"{i}"); };
 
 match result {
-case Ok(v) => use(v),
-case Err(e) => handle(e)
+case Succ(v) => use(v),
+case Fail(e) => handle(e)
 };
 
 if x > 0 and y < 10 { in_range(); };
@@ -59,10 +59,11 @@ val double: Bin64 := 2.718;
 val t: Int32 := 1;
 val f: Int32 := 0;
 
-val str: Text := "hello world";
+val str: String := "hello world";
 val chr: Rune := 'A';
-val tmpl: Text := $"Hello {name}, you have {count} items";
-val escape: Text := "line1\nline2\ttab\u{1F600}";
+val tmpl: String := $"Hello {name}, you have {count} items";
+val escape: String := "line1\nline2\ttab\u{1F600}";
+val `and`: String := "keyword as escaped identifier";
 
 // ============================================================================
 // OPERATORS
@@ -83,30 +84,24 @@ val le: Int32 := x <= y;
 val gt: Int32 := x > y;
 val ge: Int32 := x >= y;
 
-// Logical (short-circuiting)
 val and_op: Int32 := a and b;
 val or_op: Int32 := a or b;
 val not_op: Int32 := not a;
 
-// Bitwise (non-short-circuiting)
-val bitwise_and: Int32 := a & b;
-val bitwise_or: Int32 := a | b;
+val bit_and: Int32 := a & b;
+val bit_or: Int32 := a | b;
 val xor_op: Int32 := a ^ b;
-val bitwise_not: Int32 := ~a;
+val bit_not: Int32 := ~a;
 
-// Memory operators
 var ptr: ^Int32 := @x;
 val deref: Int32 := ptr.^;
 
-// Assignment
 counter <- counter + 1;
 flags <- flags & MASK;
 
-// Type operators
 val type_cast: Int32 := value as Int32;
 val type_test: Int32 := value is Int32;
 
-// Pipe operator
 val piped: Int32 := 10 |> add(5) |> multiply(2);
 
 // ============================================================================
@@ -128,7 +123,7 @@ val bin64_val: Bin64 := 3.14;
 val dec32_val: Dec32 := 3.14;
 val dec64_val: Dec64 := 3.14;
 val rune_val: Rune := 'A';
-val text_val: Text := "hello";
+val text_val: String := "hello";
 
 val ptr_type: ^Int32 := @x;
 val ptr_ptr: ^^Int32 := @ptr_type;
@@ -140,11 +135,11 @@ val size_info: Nat32 := size_of(Int32);
 // FUNCTIONS
 // ============================================================================
 
-fn add(x: Int32, y: Int32) -> Int32 {
+fn add(x: Int32, y: Int32): Int32 {
   return x + y;
 };
 
-fn scale(v: Bin32, f: Bin32) -> Bin32 {
+fn scale(v: Bin32, f: Bin32): Bin32 {
   return v * f;
 };
 
@@ -152,11 +147,11 @@ fn write_ptr(p: ^Int32, v: Int32) {
   p.^ <- v;
 };
 
-fn get_value(ptr: ^Int32) -> Int32 {
+fn get_value(ptr: ^Int32): Int32 {
   return ptr.^;
 };
 
-extern "C" fn malloc(size: Nat32) -> ^Unit { /* ... */ };
+extern "C" fn malloc(size: Nat32): ^Unit { /* ... */ };
 
 // ============================================================================
 // STRUCTURAL DATA TYPES
@@ -168,7 +163,7 @@ val p1: Point := { .x := 3.0, .y := 4.0 };
 val p2: Point := { .x := 0.0, .y := 0.0 };
 val p3: Point := { .x := 1.0, .y := 2.0 };
 
-fn distance(a: Point, b: Point) -> Bin64 {
+fn distance(a: Point, b: Point): Bin64 {
   val dx: Bin64 := a.x - b.x;
   val dy: Bin64 := a.y - b.y;
   return sqrt(dx ** 2 + dy ** 2);
@@ -180,11 +175,11 @@ fn distance(a: Point, b: Point) -> Bin64 {
 
 sum Option { case Some(value: Int32), case None };
 
-sum Result { case Ok(value: Int32), case Err(msg: Text) };
+sum Result { case Ok(value: Int32), case Err(msg: String) };
 
 sum Shape { case Circle(radius: Bin64), case Rect(width: Bin64, height: Bin64), case Triangle(a: Bin64, b: Bin64, c: Bin64) };
 
-fn area(s: Shape) -> Bin64 {
+fn area(s: Shape): Bin64 {
   match s {
   case Circle(r) => 3.14159 * r ** 2,
   case Rect(w, h) => w * h,
@@ -232,7 +227,7 @@ import "./types.ms";
 // ERROR HANDLING
 // ============================================================================
 
-fn load(path: Text) -> Result {
+fn load(path: String): Result {
   val file: Result := open(path);
   match file {
   case Ok(f) => {
@@ -259,7 +254,7 @@ val MAX_SIZE: Nat32 := 1024;
 val DEFAULT_TIMEOUT: Nat32 := 30;
 
 record User {
-  name: Text;
+  name: String;
   age: Nat32;
   active: Int32
 };
@@ -269,11 +264,11 @@ sum HttpError { case NotFound, case ServerError };
 val user_count: Nat32 := 42;
 var active_sessions: Nat32 := 0;
 
-fn get_user(id: Nat32) -> Option {
+fn get_user(id: Nat32): Option {
   return None;
 };
 
-fn is_valid(x: Int32) -> Int32 {
+fn is_valid(x: Int32): Int32 {
   return x > 0;
 };
 
@@ -282,7 +277,7 @@ val opt: Option := Some(42);
 val res: Result := Ok(42);
 
 val x_coord: Bin64 := point.x;
-val name: Text := user.name;
+val name: String := user.name;
 
 val result: Int32 := compute(42);
 val output: Int32 := process(input, config);
@@ -292,7 +287,7 @@ val output: Int32 := process(input, config);
 // ============================================================================
 
 val complex: Int32 := {
-  fn helper(x: Int32) -> Int32 {
+  fn helper(x: Int32): Int32 {
     return x + 1;
   };
   val value: Int32 := 42;
@@ -315,7 +310,7 @@ val ptr: ^Int32 := @value;
 val deref: Int32 := ptr.^;
 ptr.^ <- 100;
 
-val msg: Text := $"User {user.name} has {count} items";
+val msg: String := $"User {user.name} has {count} items";
 
 val a: Int32 := 10;
 val b: Int32 := 20;
