@@ -69,14 +69,12 @@ val `and`: String := "keyword as escaped identifier";
 // OPERATORS
 // ============================================================================
 
-// Arithmetic
 val add: Int32 := x + y;
 val sub: Int32 := x - y;
 val mul: Int32 := x * y;
 val div: Int32 := x / y;
 val pow: Int32 := x ** 2;
 
-// Comparison
 val eq: Int32 := x = y;
 val ne: Int32 := x /= y;
 val lt: Int32 := x < y;
