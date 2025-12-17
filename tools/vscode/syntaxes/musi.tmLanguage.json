@@ -339,8 +339,7 @@
             "patterns": [
                 { "include": "#keyword-control" },
                 { "include": "#keyword-storage" },
-                { "include": "#keyword-modifier" },
-                { "include": "#keyword-cast" }
+                { "include": "#keyword-modifier" }
             ]
         },
         "keyword-control": {
@@ -354,10 +353,6 @@
         "keyword-modifier": {
             "name": "storage.modifier.musi",
             "match": "\\b(extern|unsafe)\\b"
-        },
-        "keyword-cast": {
-            "name": "keyword.operator.cast.musi",
-            "match": "\\b(as|is)\\b"
         },
         "operators": {
             "patterns": [
@@ -409,8 +404,8 @@
                     "match": "<=|>=|<(?!<)|>(?!>)"
                 },
                 {
-                    "name": "keyword.operator.type.musi",
-                    "match": "\\b(is|as)\\b"
+                    "name": "keyword.operator.cast.musi",
+                    "match": "\\b(is(?:\\s+not)?|as)\\b"
                 },
                 {
                     "comment": "Lv11",
