@@ -26,6 +26,7 @@ type t =
   | KwIn
   | KwIs
   | KwMatch
+  | KwMod
   | KwNot
   | KwOr
   | KwRecord
@@ -60,6 +61,9 @@ type t =
   | Minus
   | Star
   | Slash
+  | Percent
+  | LtLt
+  | GtGt
   | StarStar
   | Amp
   | Bar
@@ -111,6 +115,7 @@ let show interner = function
   | KwIn -> "in"
   | KwIs -> "is"
   | KwMatch -> "match"
+  | KwMod -> "mod"
   | KwNot -> "not"
   | KwOr -> "or"
   | KwRecord -> "record"
@@ -145,6 +150,9 @@ let show interner = function
   | Minus -> "-"
   | Star -> "*"
   | Slash -> "/"
+  | Percent -> "%"
+  | LtLt -> "<<"
+  | GtGt -> ">>"
   | StarStar -> "**"
   | Amp -> "&"
   | Bar -> "|"

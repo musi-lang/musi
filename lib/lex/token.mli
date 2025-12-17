@@ -26,6 +26,7 @@ type t =
   | KwIn
   | KwIs
   | KwMatch
+  | KwMod
   | KwNot
   | KwOr
   | KwRecord
@@ -60,6 +61,9 @@ type t =
   | Minus
   | Star
   | Slash
+  | Percent
+  | LtLt
+  | GtGt
   | StarStar
   | Amp
   | Bar
