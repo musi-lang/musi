@@ -204,7 +204,7 @@ expr_cons = expr_add, {"::", expr_add};
 
 expr_range = expr_cons, [(".." | "..<"), expr_cons];
 
-expr_rel = expr_range, [("<" | ">" | "<=" | ">="), expr_range];
+expr_rel = expr_range, [("<" | ">" | "<=" | ">=", "is", "as"), expr_range];
 
 expr_eq = expr_rel, [("=" | "/="), expr_rel];
 
