@@ -362,56 +362,121 @@
         "operators": {
             "patterns": [
                 {
-                    "name": "keyword.operator.logical.musi",
-                    "match": "\\b(and|or|not)\\b"
-                },
-                {
+                    "comment": "Lv1",
                     "name": "keyword.operator.assignment.musi",
                     "match": "<-|:="
+                },
+                {
+                    "comment": "Lv2",
+                    "name": "keyword.operator.arrow.musi",
+                    "match": "->"
                 },
                 {
                     "name": "keyword.operator.pipe.musi",
                     "match": "\\|>"
                 },
                 {
-                    "name": "keyword.operator.arrow.musi",
-                    "match": "->"
-                },
-                {
-                    "name": "keyword.operator.shift.musi",
-                    "match": "<<|>>"
-                },
-                {
-                    "name": "keyword.operator.range.musi",
-                    "match": "\\.\\.<|\\.\\."
-                },
-                {
-                    "name": "keyword.operator.comparison.musi",
-                    "match": "/=|<=|>=|=|<|>"
-                },
-                {
-                    "name": "keyword.operator.cons.musi",
-                    "match": "::"
-                },
-                {
-                    "name": "keyword.operator.arithmetic.musi",
-                    "match": "\\*\\*|[+\\-*/]"
-                },
-                {
-                    "name": "keyword.operator.bitwise.musi",
-                    "match": "~&|~\\||~\\^|&|\\||\\^|~"
-                },
-                {
+                    "comment": "Lv3",
                     "name": "keyword.operator.null-coalescing.musi",
                     "match": "\\?\\?"
                 },
                 {
-                    "name": "keyword.operator.optional-chaining.musi",
-                    "match": "\\?\\."
+                    "comment": "Lv4-5",
+                    "name": "keyword.operator.logical.musi",
+                    "match": "\\b(or|and)\\b"
                 },
                 {
-                    "match": "\\.\\^",
-                    "name": "keyword.operator.deref.musi"
+                    "comment": "Lv6-8",
+                    "name": "keyword.operator.bitwise.or.musi",
+                    "match": "\\|(?!>)"
+                },
+                {
+                    "name": "keyword.operator.bitwise.xor.musi",
+                    "match": "\\^(?!\\.)"
+                },
+                {
+                    "name": "keyword.operator.bitwise.and.musi",
+                    "match": "&"
+                },
+                {
+                    "comment": "Lv9",
+                    "name": "keyword.operator.comparison.equality.musi",
+                    "match": "(?<!=)=(?!=)|/="
+                },
+                {
+                    "comment": "Lv10",
+                    "name": "keyword.operator.comparison.relational.musi",
+                    "match": "<=|>=|<(?!<)|>(?!>)"
+                },
+                {
+                    "name": "keyword.operator.type.musi",
+                    "match": "\\b(is|as)\\b"
+                },
+                {
+                    "comment": "Lv11",
+                    "name": "keyword.operator.range.exclusive.musi",
+                    "match": "\\.\\.<"
+                },
+                {
+                    "name": "keyword.operator.range.inclusive.musi",
+                    "match": "\\.\\.(?!<)"
+                },
+                {
+                    "comment": "Lv12",
+                    "name": "keyword.operator.list.cons.musi",
+                    "match": "::"
+                },
+                {
+                    "comment": "Lv13",
+                    "name": "keyword.operator.arithmetic.additive.musi",
+                    "match": "(?<![*\\-])\\+|(?<!\\*)\\-(?!>)"
+                },
+                {
+                    "comment": "Lv14",
+                    "name": "keyword.operator.arithmetic.power.musi",
+                    "match": "\\*\\*"
+                },
+                {
+                    "name": "keyword.operator.arithmetic.multiplicative.musi",
+                    "match": "(?<!\\*)\\*(?!\\*)|/"
+                },
+                {
+                    "name": "keyword.operator.arithmetic.modulo.musi",
+                    "match": "%|\\bmod\\b"
+                },
+                {
+                    "name": "keyword.operator.bitwise.shift.musi",
+                    "match": "<<|>>"
+                },
+                {
+                    "comment": "Lv16",
+                    "name": "keyword.operator.logical.not.musi",
+                    "match": "\\bnot\\b"
+                },
+                {
+                    "name": "keyword.operator.bitwise.not.musi",
+                    "match": "~"
+                },
+                {
+                    "name": "keyword.operator.addressof.musi",
+                    "match": "@"
+                },
+                {
+                    "comment": "Lv17",
+                    "name": "keyword.operator.accessor.member.musi",
+                    "match": "\\.(?![.^])"
+                },
+                {
+                    "name": "keyword.operator.accessor.optional.musi",
+                    "match": "\\?\\.(?!\\^)"
+                },
+                {
+                    "name": "keyword.operator.pointer.dereference.musi",
+                    "match": "\\.\\^"
+                },
+                {
+                    "name": "keyword.operator.optional.optional-unwrap.musi",
+                    "match": "\\?(?![.?])"
                 }
             ]
         },
