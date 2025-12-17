@@ -66,6 +66,7 @@ type t =
   | Caret
   | Tilde
   | At
+  | DotCaret
   | ColonColon
   | QuestionQuestion
   | DotDot
@@ -149,6 +150,7 @@ let show interner = function
   | Caret -> "^"
   | Tilde -> "~"
   | At -> "@"
+  | DotCaret -> ".^"
   | ColonColon -> "::"
   | QuestionQuestion -> "??"
   | DotDot -> ".."

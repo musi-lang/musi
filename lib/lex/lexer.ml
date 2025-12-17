@@ -138,6 +138,7 @@ let symbols =
   ; (">=", GtEq)
   ; ("**", StarStar)
   ; ("|>", BarGt)
+  ; (".^", DotCaret)
   ; ("::", ColonColon)
   ; ("??", QuestionQuestion)
   ; ("..", DotDot)

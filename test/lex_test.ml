@@ -73,6 +73,7 @@ let token_to_string token =
   | Token.Caret -> "Caret"
   | Token.Tilde -> "Tilde"
   | Token.At -> "At"
+  | Token.DotCaret -> "DotCaret"
   | Token.ColonColon -> "ColonColon"
   | Token.QuestionQuestion -> "QuestionQuestion"
   | Token.DotDot -> "DotDot"

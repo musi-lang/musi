@@ -66,6 +66,7 @@ type t =
   | Caret
   | Tilde
   | At
+  | DotCaret
   | ColonColon
   | QuestionQuestion
   | DotDot
