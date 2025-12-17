@@ -5,7 +5,7 @@ letter = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "I" | "J" | "K" | "L" |
 
 digit = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9";
 
-symbol = " " | "!" | "$" | "&" | "(" | ")" | "*" | "+" | "," | "-" | "." | ".^" | "/" | ":" | ";" | "<" | "=" | ">" | "?" | "@" | "[" | "]" | "^" | "`" | "{" | "|" | "}" | "~" | "'" | '"' | '"';
+symbol = " " | "!" | "$" | "%" | "&" | "(" | ")" | "*" | "+" | "," | "-" | "." | "/" | ":" | ";" | "<" | "=" | ">" | "?" | "@" | "[" | "]" | "^" | "`" | "{" | "|" | "}" | "~" | "'" | '"' | '"';
 
 char = letter | digit | symbol;
 
@@ -51,6 +51,8 @@ aux_lit_template_text = "$", '"', {aux_text_part | aux_lit_template_part}, '"';
 
 aux_lit = aux_lit_number | aux_lit_text | aux_lit_template_text | aux_lit_rune | "true" | "false";
 
+aux_modifier_extern = "extern", [aux_lit_text], "unsafe";
+
 (* ========================================================================= *)
 (* ATTRIBUTES                                                                *)
 (* ========================================================================= *)
@@ -84,8 +86,6 @@ ty = ty_fn | ty_ptr | ty_array | ty_optional | ty_app | ty_primary;
 (* ========================================================================= *)
 (* AUXILIARY HELPERS                                                         *)
 (* ========================================================================= *)
-aux_modifier_extern = "extern", [aux_lit_text], "unsafe";
-
 aux_ty_annot = ":", ty;
 
 aux_init = ":=", expr;
@@ -103,6 +103,8 @@ aux_args = expr, {",", expr};
 aux_record_field = ["var"], ident, [aux_ty_annot], [aux_init];
 
 aux_record_fields = aux_record_field, {",", aux_record_field};
+
+aux_record_content = aux_record_fields | expr, "with", aux_record_fields;
 
 aux_sum_case = "case", ident, [ty_args], ["(", [ty_args], ")"];
 
@@ -150,7 +152,7 @@ expr_lit_tuple = "(", expr, {",", expr}, ")";
 
 expr_lit_array = "[", expr, {",", expr}, "]";
 
-expr_lit_record = [ident], ".{", [aux_record_fields], "}";
+expr_lit_record = [ident], ".{", [aux_record_content], "}";
 
 expr_block = "{", {stmt}, [expr], "}";
 
@@ -162,9 +164,7 @@ expr_for = "for", ident, "in", expr, expr_block;
 
 expr_match = "match", expr, "{", aux_match_cases, "}";
 
-expr_try = "try", expr, ["else", [ident], expr_block];
-
-expr_return = "return", expr;
+expr_return = "return", [expr];
 
 expr_defer = "defer", expr;
 
@@ -186,7 +186,7 @@ expr_fn = [aux_attr], [aux_modifiers], "fn", aux_fn_sig, expr_block;
 
 expr_bind = [aux_modifiers], ("val" | "var"), ident, [aux_ty_annot], aux_init, expr;
 
-expr_primary = expr_lit | expr_ident | expr_lit_tuple | expr_lit_array | expr_lit_record | expr_block | expr_if | expr_while | expr_for | expr_match | expr_try | expr_return | expr_defer | expr_break | expr_cycle | expr_unsafe | expr_import | expr_extern | expr_record | expr_sum | expr_fn | expr_bind | "(", expr, ")";
+expr_primary = expr_lit | expr_ident | expr_lit_tuple | expr_lit_array | expr_lit_record | expr_block | expr_if | expr_while | expr_for | expr_match | expr_return | expr_defer | expr_break | expr_cycle | expr_unsafe | expr_import | expr_extern | expr_record | expr_sum | expr_fn | expr_bind | "(", expr, ")";
 
 expr_postfix = expr_primary, {postfix_op};
 
@@ -196,7 +196,7 @@ expr_unary = ("-" | "not" | "~" | "@"), expr_unary | expr_postfix;
 
 expr_exp = expr_unary, ["**", expr_exp];
 
-expr_mult = expr_exp, {("*" | "/"), expr_exp};
+expr_mult = expr_exp, {("*" | "/" | "%", "mod", "<<" | ">>"), expr_exp};
 
 expr_add = expr_mult, {("+" | "-"), expr_mult};
 
@@ -218,7 +218,11 @@ expr_conj = expr_bitor, {"and", expr_bitor};
 
 expr_disj = expr_conj, {"or", expr_conj};
 
-expr_assign = expr_disj, [(":=" | "<-"), expr_assign];
+expr_coalesce = expr_or, {"??", expr_or};
+
+expr_pipe = expr_coalesce, {"|>", expr_coalesce};
+
+expr_assign = expr_pipe, [(":=" | "<-"), expr_assign];
 
 expr = expr_assign;
 
