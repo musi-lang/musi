@@ -70,7 +70,7 @@ val sub := x - y;
 val mul := x * y;
 val div := x / y;
 val rem := x % y;
-val mod := x mod y;
+val `mod` := x mod y;
 val pow := x ** 2;
 
 val eq := x = y;
@@ -220,7 +220,7 @@ val load := fn (path) {
     match content {
     case Succ(data) => return Succ(data),
     case Fail(e) => return Fail(e)
-    };
+    }
   },
   case Fail(e) => return Fail(e)
   }
