@@ -164,6 +164,8 @@ expr_for = "for", ident, "in", expr, expr_block;
 
 expr_match = "match", expr, "{", aux_match_cases, "}";
 
+expr_try = "try", expr, ["else", [expr], expr_block];
+
 expr_return = "return", [expr];
 
 expr_defer = "defer", expr;
@@ -218,9 +220,9 @@ expr_conj = expr_bitor, {"and", expr_bitor};
 
 expr_disj = expr_conj, {"or", expr_conj};
 
-expr_coalesce = expr_or, {"??", expr_or};
+expr_coal = expr_disj, {"??", expr_disj};
 
-expr_pipe = expr_coalesce, {"|>", expr_coalesce};
+expr_pipe = expr_coal, {"|>", expr_coal};
 
 expr_assign = expr_pipe, [(":=" | "<-"), expr_assign];
 
