@@ -32,6 +32,7 @@ type t =
   | KwReturn
   | KwSum
   | KwTrue
+  | KwTry
   | KwUnsafe
   | KwVal
   | KwVar

@@ -32,6 +32,7 @@ type t =
   | KwReturn
   | KwSum
   | KwTrue
+  | KwTry
   | KwUnsafe
   | KwVal
   | KwVar
@@ -116,6 +117,7 @@ let show interner = function
   | KwReturn -> "return"
   | KwSum -> "sum"
   | KwTrue -> "true"
+  | KwTry -> "try"
   | KwUnsafe -> "unsafe"
   | KwVal -> "val"
   | KwVar -> "var"

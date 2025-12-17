@@ -119,6 +119,7 @@ let () =
     ; ("return", KwReturn)
     ; ("sum", KwSum)
     ; ("true", KwTrue)
+    ; ("try", KwTry)
     ; ("unsafe", KwUnsafe)
     ; ("val", KwVal)
     ; ("var", KwVar)

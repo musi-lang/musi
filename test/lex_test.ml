@@ -39,6 +39,7 @@ let token_to_string token =
   | Token.KwReturn -> "KwReturn"
   | Token.KwSum -> "KwSum"
   | Token.KwTrue -> "KwTrue"
+  | Token.KwTry -> "KwTry"
   | Token.KwUnsafe -> "KwUnsafe"
   | Token.KwVal -> "KwVal"
   | Token.KwVar -> "KwVar"
