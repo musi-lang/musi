@@ -5,7 +5,7 @@ letter = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "I" | "J" | "K" | "L" |
 
 digit = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9";
 
-symbol = " " | "!" | "#" | "$" | "%" | "&" | "(" | ")" | "*" | "+" | "," | "-" | "." | "/" | ":" | ";" | "<" | "=" | ">" | "?" | "@" | "[" | "]" | "^" | "`" | "{" | "|" | "}" | "~" | "'" | '"' | '"';
+symbol = " " | "!" | "$" | "&" | "(" | ")" | "*" | "+" | "," | "-" | "." | ".^" | "/" | ":" | ";" | "<" | "=" | ">" | "?" | "@" | "[" | "]" | "^" | "`" | "{" | "|" | "}" | "~" | "'" | '"' | '"';
 
 char = letter | digit | symbol;
 
@@ -45,12 +45,6 @@ aux_lit_text = '"', {aux_text_content}, '"';
 
 aux_lit_rune = "'", char, "'";
 
-aux_bin_op = "+" | "-" | "*" | "/" | "**" | "=" | "/=" | "<" | ">" | "<=" | ">=" | "::" | "??" | "and" | "or" | "&" | "|" | "^" | ".." | "..<";
-
-aux_una_op = "-" | "not" | "~" | "@";
-
-aux_modifiers = {("export" | "extern", [aux_lit_text]) | "unsafe"};
-
 aux_lit_template_part = "{", expr, "}";
 
 aux_lit_template_text = "$", '"', {aux_text_part | aux_lit_template_part}, '"';
@@ -62,7 +56,7 @@ aux_lit = aux_lit_number | aux_lit_text | aux_lit_template_text | aux_lit_rune |
 (* ========================================================================= *)
 aux_attr = "[<", ident, [aux_attr_args], {",", ident, [aux_attr_args]}, ">]";
 
-aux_attr_args = "(", {(ident | aux_lit), [":=", (ident | aux_lit)], {",", (ident | aux_lit, [":=", (ident | aux_lit)])}, ")"};
+aux_attr_args = "(", [(ident | aux_lit), [":=", (ident | aux_lit)], {",", (ident | aux_lit), [":=", (ident | aux_lit)]}], ")";
 
 (* ========================================================================= *)
 (* TYPES                                                                     *)
@@ -71,7 +65,7 @@ ty_params = "<", ident, {",", ident}, ">";
 
 ty_args = ty, {",", ty};
 
-ty_app = ident, ty_args;
+ty_app = ident, "<", ty_args, ">";
 
 ty_optional = "?", ty;
 
@@ -83,11 +77,15 @@ ty_fn = ty, "->", ty;
 
 ty_tuple = "(", ty, {",", ty}, ")";
 
-ty = ident | ty_app | ty_optional | ty_array | ty_ptr | ty_fn | ty_tuple;
+ty_primary = ident | ty_tuple | "(", ty, ")";
+
+ty = ty_fn | ty_ptr | ty_array | ty_optional | ty_app | ty_primary;
 
 (* ========================================================================= *)
 (* AUXILIARY HELPERS                                                         *)
 (* ========================================================================= *)
+aux_modifier_extern = "extern", [aux_lit_text], "unsafe";
+
 aux_ty_annot = ":", ty;
 
 aux_init = ":=", expr;
@@ -127,17 +125,19 @@ pat_lit = aux_lit;
 
 pat_wild = "_";
 
-pat_cons = pat, "::", pat;
-
 pat_lit_tuple = "(", pat, {",", pat}, ")";
 
 pat_lit_array = "[", pat, {",", pat}, "]";
 
 pat_lit_record = ident, ".{", aux_pat_fields, "}";
 
-pat_ctor = ident, [ty_args], ["(", [pat], ")"];
+pat_variant = ident, [ty_args], ["(", [pat], ")"];
 
-pat = pat_ident | pat_lit | pat_wild | pat_cons | pat_lit_tuple | pat_lit_array | pat_lit_record | pat_ctor;
+pat_primary = pat_ident | pat_lit | pat_wild | pat_lit_tuple | pat_lit_array | pat_lit_record | pat_variant | "(", pat, ")";
+
+pat_cons = pat_primary, {"::", pat_primary};
+
+pat = pat_cons;
 
 (* ========================================================================= *)
 (* EXPRESSIONS                                                               *)
@@ -146,33 +146,13 @@ expr_lit = aux_lit;
 
 expr_ident = ident;
 
-expr_path = expr, "#", ident;
-
-expr_field = expr, ".", ident | expr_optional_chain, ".", ident;
-
-expr_index = expr, "[", expr, "]" | expr_optional_chain, "[", expr, "]";
-
-expr_call = expr, "(", [aux_args], ")" | expr_optional_chain, "(", [aux_args], ")";
-
-expr_deref = expr, ".^";
-
-expr_unary = aux_una_op, expr;
-
-expr_binary = expr, aux_bin_op, expr;
-
 expr_lit_tuple = "(", expr, {",", expr}, ")";
 
-expr_lit_array = "[", expr, {",", expr}, ")";
+expr_lit_array = "[", expr, {",", expr}, "]";
 
-expr_lit_record = [ident], ".{", {aux_record_field, ","}, "}";
-
-expr_optional_chain = expr, "?";
+expr_lit_record = [ident], ".{", [aux_record_fields], "}";
 
 expr_block = "{", {stmt}, [expr], "}";
-
-expr_bind = [aux_modifiers], ("val" | "var"), ident, [aux_ty_annot], aux_init, expr;
-
-expr_fn = [aux_attr], [aux_modifiers], "fn", aux_fn_sig, expr_block;
 
 expr_if = "if", expr, expr_block, "else", expr_block;
 
@@ -182,32 +162,72 @@ expr_for = "for", ident, "in", expr, expr_block;
 
 expr_match = "match", expr, "{", aux_match_cases, "}";
 
+expr_try = "try", expr, ["else", [ident], expr_block];
+
 expr_return = "return", expr;
 
-expr_defer = "defer", expr_block;
+expr_defer = "defer", expr;
 
 expr_break = "break", [expr];
 
 expr_cycle = "cycle";
 
-expr_unsafe = expr_block;
+expr_unsafe = "unsafe", expr_block;
 
 expr_import = "import", aux_lit_text;
 
-expr_extern = "extern", [aux_lit_text], "unsafe", "{", {aux_fn_sig, ";"}, "}";
+expr_extern = aux_modifier_extern, "{", {aux_fn_sig, ";"}, "}";
 
 expr_record = [aux_attr], [aux_modifiers], "record", ident, [ty_params], "{", aux_record_fields, "}";
 
 expr_sum = [aux_attr], [aux_modifiers], "sum", ident, [ty_params], "{", aux_sum_cases, "}";
 
-expr = expr_lit | expr_ident | expr_path | expr_field | expr_index | expr_call | expr_deref | expr_unary | expr_binary | expr_lit_tuple | expr_lit_array | expr_lit_record | expr_block | expr_bind | expr_fn | expr_if | expr_while | expr_for | expr_match | expr_return | expr_defer | expr_break | expr_cycle | expr_unsafe | expr_import | expr_extern | expr_record | expr_sum;
+expr_fn = [aux_attr], [aux_modifiers], "fn", aux_fn_sig, expr_block;
+
+expr_bind = [aux_modifiers], ("val" | "var"), ident, [aux_ty_annot], aux_init, expr;
+
+expr_primary = expr_lit | expr_ident | expr_lit_tuple | expr_lit_array | expr_lit_record | expr_block | expr_if | expr_while | expr_for | expr_match | expr_try | expr_return | expr_defer | expr_break | expr_cycle | expr_unsafe | expr_import | expr_extern | expr_record | expr_sum | expr_fn | expr_bind | "(", expr, ")";
+
+expr_postfix = expr_primary, {postfix_op};
+
+postfix_op = "(", [aux_args], ")" (* call *) | "[", expr, "]" (* index *) | ".", ident (* member access *) | ".^" (* deref *) | "?" (* optional chain *);
+
+expr_unary = ("-" | "not" | "~" | "@"), expr_unary | expr_postfix;
+
+expr_exp = expr_unary, ["**", expr_exp];
+
+expr_mult = expr_exp, {("*" | "/"), expr_exp};
+
+expr_add = expr_mult, {("+" | "-"), expr_mult};
+
+expr_cons = expr_add, {"::", expr_add};
+
+expr_range = expr_cons, [(".." | "..<"), expr_cons];
+
+expr_rel = expr_range, [("<" | ">" | "<=" | ">="), expr_range];
+
+expr_eq = expr_rel, [("=" | "/="), expr_rel];
+
+expr_bitand = expr_eq, {"&", expr_eq};
+
+expr_bitxor = expr_bitand, {"^", expr_bitand};
+
+expr_bitor = expr_bitxor, {"|", expr_bitxor};
+
+expr_conj = expr_bitor, {"and", expr_bitor};
+
+expr_disj = expr_conj, {"or", expr_conj};
+
+expr_assign = expr_disj, [(":=" | "<-"), expr_assign];
+
+expr = expr_assign;
+
+aux_modifiers = {("export" | aux_modifier_extern | "unsafe")};
 
 (* ========================================================================= *)
 (* STATEMENTS                                                                *)
 (* ========================================================================= *)
-stmt_expr = expr;
-
-stmt = stmt_expr, ";";
+stmt = expr, ";";
 
 (* ========================================================================= *)
 (* PROGRAM                                                                   *)
