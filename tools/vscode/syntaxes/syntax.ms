@@ -16,19 +16,15 @@
 // KEYWORDS & CONTROL FLOW
 // ============================================================================
 
-val x: Int32 := 42;
-var y: Int32 := 0;
+val x := 42;
+var y := 0;
 y <- 10;
 
 if x > 0 { writeln("positive"); };
 if x > 0 { writeln("pos"); } else { writeln("neg"); };
-if x > 0 {
-  writeln("positive");
-} else if (x < 0) {
-  writeln("negative");
-} else {
-  writeln("zero");
-};
+if x > 0 { writeln("positive");
+} else if (x < 0) { writeln("negative");
+} else { writeln("zero"); };
 
 while has_next() { process(next()); };
 for i in 0..10 { writeln($"{i}"); };
@@ -45,62 +41,64 @@ if valid or can_recover() { proceed(); };
 // LITERALS
 // ============================================================================
 
-val dec: Int32 := 42;
-val hex: Int32 := 0xFF;
-val bin: Int32 := 0b1010;
+val dec := 42;
+val hex := 0xFF;
+val bin := 0b1010;
 val typed_int: Nat8 := 255;
-val big_num: Int32 := 1000000;
+val big_num := 1000000;
 
-val pi: Bin32 := 3.14159;
-val sci: Bin32 := 1.23e-4;
+val PI := 3.14159;
+val sci := 1.23e-4;
 val typed_float: Bin32 := 3.14;
-val double: Bin64 := 2.718;
+val double := 2.718;
 
-val t: Int32 := 1;
-val f: Int32 := 0;
+val t := 1;
+val f := 0;
 
-val str: String := "hello world";
+val str := "hello world";
 val chr: Rune := 'A';
-val tmpl: String := $"Hello {name}, you have {count} items";
-val escape: String := "line1\nline2\ttab\u{1F600}";
-val `and`: String := "keyword as escaped identifier";
+val tmpl := $"Hello {name}, you have {count} items";
+val escape := "line1\nline2\ttab\u{1F600}";
+val `and` := "keyword as escaped identifier";
 
 // ============================================================================
 // OPERATORS
 // ============================================================================
 
-val add: Int32 := x + y;
-val sub: Int32 := x - y;
-val mul: Int32 := x * y;
-val div: Int32 := x / y;
-val pow: Int32 := x ** 2;
+val add := x + y;
+val sub := x - y;
+val mul := x * y;
+val div := x / y;
+val rem := x % y;
+val mod := x mod y;
+val pow := x ** 2;
 
-val eq: Int32 := x = y;
-val ne: Int32 := x /= y;
-val lt: Int32 := x < y;
-val le: Int32 := x <= y;
-val gt: Int32 := x > y;
-val ge: Int32 := x >= y;
+val eq := x = y;
+val ne := x /= y;
+val lt := x < y;
+val le := x <= y;
+val gt := x > y;
+val ge := x >= y;
 
-val and_op: Int32 := a and b;
-val or_op: Int32 := a or b;
-val not_op: Int32 := not a;
+val and_op := a and b;
+val or_op := a or b;
+val not_op := not a;
 
-val bit_and: Int32 := a & b;
-val bit_or: Int32 := a | b;
-val xor_op: Int32 := a ^ b;
-val bit_not: Int32 := ~a;
+val bit_and := a & b;
+val bit_or := a | b;
+val xor_op := a ^ b;
+val bit_not := ~a;
 
-var ptr: ^Int32 := @x;
-val deref: Int32 := ptr.^;
+var ptr := @x;
+val deref := ptr.^;
 
 counter <- counter + 1;
 flags <- flags & MASK;
 
-val type_cast: Int32 := value as Int32;
-val type_test: Int32 := value is Int32;
+val type_cast := value as Int32;
+val type_test := value is Int32;
 
-val piped: Int32 := 10 |> add(5) |> multiply(2);
+val piped := 10 |> add(5) |> multiply(2);
 
 // ============================================================================
 // TYPES
@@ -121,71 +119,62 @@ val bin64_val: Bin64 := 3.14;
 val dec32_val: Dec32 := 3.14;
 val dec64_val: Dec64 := 3.14;
 val rune_val: Rune := 'A';
-val text_val: String := "hello";
+val text_val: Text := "hello";
 
 val ptr_type: ^Int32 := @x;
 val ptr_ptr: ^^Int32 := @ptr_type;
 
 val any_val: Any := 42;
-val size_info: Nat32 := size_of(Int32);
+val size_info := size_of(Int32);
 
 // ============================================================================
 // FUNCTIONS
 // ============================================================================
 
-fn add(x: Int32, y: Int32): Int32 {
-  return x + y;
-};
+val add := fn (x, y) { x + y };
 
-fn scale(v: Bin32, f: Bin32): Bin32 {
-  return v * f;
-};
+val scale := fn (v, f) { v * f };
 
-fn write_ptr(p: ^Int32, v: Int32) {
-  p.^ <- v;
-};
+val write_ptr := fn (p, v) { p.^ <- v };
 
-fn get_value(ptr: ^Int32): Int32 {
-  return ptr.^;
-};
+val get_value := fn (ptr) { ptr.^ };
 
-extern "C" fn malloc(size: Nat32): ^Unit { /* ... */ };
+val malloc := extern "C" unsafe fn (size) { /* ... */ };
 
 // ============================================================================
 // STRUCTURAL DATA TYPES
 // ============================================================================
 
-record Point { x: Bin64; y: Bin64 };
+val Point := record { x: Bin32; y: Bin32 };
 
 val p1: Point := { .x := 3.0, .y := 4.0 };
 val p2: Point := { .x := 0.0, .y := 0.0 };
 val p3: Point := { .x := 1.0, .y := 2.0 };
 
-fn distance(a: Point, b: Point): Bin64 {
-  val dx: Bin64 := a.x - b.x;
-  val dy: Bin64 := a.y - b.y;
-  return sqrt(dx ** 2 + dy ** 2);
+val dist := fn (a: Point, b: Point) {
+  val (dx, dy) := (a.x - b.x, a.y - b.y);
+  sqrt(dx ** 2 + dy ** 2)
 };
 
 // ============================================================================
 // ALGEBRAIC DATA TYPES
 // ============================================================================
 
-sum Option { case Some(value: Int32), case None };
+val Option := sum { case Some(value), case None };
 
-sum Result { case Ok(value: Int32), case Err(msg: String) };
+val Expect := sum { case Succ(value), case Fail(msg) };
 
-sum Shape { case Circle(radius: Bin64), case Rect(width: Bin64, height: Bin64), case Triangle(a: Bin64, b: Bin64, c: Bin64) };
+val Shape := sum { case Circle(radius), case Rect(width, height), case Triangle(a, b, c) };
 
-fn area(s: Shape): Bin64 {
+val area := fn (s: Shape) {
   match s {
   case Circle(r) => 3.14159 * r ** 2,
   case Rect(w, h) => w * h,
   case Triangle(a, b, c) => {
-    val s: Bin64 := (a + b + c) / 2.0;
+    val s := (a + b + c) / 2.0;
     return sqrt(s * (s - a) * (s - b) * (s - c));
   }
-  };
+  }
 };
 
 // ============================================================================
@@ -197,19 +186,17 @@ case Some(v) => use(v),
 case None => {}
 };
 
-// Match in conditional
 if case Some(value) := opt {
   use(value);
 };
 
-// Match in loop
 while case Some(item) := get_next() {
   process(item);
 };
 
 match result {
-case Ok(v) => process(v),
-case Err(e) => handle_error(e)
+case Succ(v) => process(v),
+case Fail(e) => handle_error(e)
 };
 
 // ============================================================================
@@ -225,101 +212,84 @@ import "./types.ms";
 // ERROR HANDLING
 // ============================================================================
 
-fn load(path: String): Result {
-  val file: Result := open(path);
+val load := fn (path) {
+  val file := open(path);
   match file {
-  case Ok(f) => {
-    val content: Result := read_file(f);
+  case Succ(f) => {
+    val content := read_file(f);
     match content {
-    case Ok(data_) => return Ok(data_),
-    case Err(e) => return Err(e)
+    case Succ(data) => return Succ(data),
+    case Fail(e) => return Fail(e)
     };
   },
-  case Err(e) => return Err(e)
-  };
+  case Fail(e) => return Fail(e)
+  }
 };
 
-val handle_result: Int32 := match operation() {
-case Ok(v) => v,
-case Err(e) => recover(e)
+val handle_result := match operation() {
+case Succ(v) => v,
+case Fail(e) => recover(e)
 };
 
 // ============================================================================
 // IDENTIFIERS
 // ============================================================================
 
-val MAX_SIZE: Nat32 := 1024;
-val DEFAULT_TIMEOUT: Nat32 := 30;
+val MAX_SIZE := 1024;
+val DEFAULT_TIMEOUT := 30;
 
-record User {
-  name: String;
-  age: Nat32;
-  active: Int32
-};
+val User := record { name: String; age: Nat32; active: Bool };
 
-sum HttpError { case NotFound, case ServerError };
+val HttpError := sum { case NotFound, case ServerError };
 
-val user_count: Nat32 := 42;
-var active_sessions: Nat32 := 0;
+val user_count := 42;
+var active_sessions := 0;
 
-fn get_user(id: Nat32): Option {
-  return None;
-};
+val get_user := fn (id) { None };
 
-fn is_valid(x: Int32): Int32 {
-  return x > 0;
-};
+val is_valid := fn (x) { x > 0 };
 
-val status: Int32 := 1;
-val opt: Option := Some(42);
-val res: Result := Ok(42);
+val status := 1;
+val (opt, res) := (Some(42), Succ(42));
 
-val x_coord: Bin64 := point.x;
-val name: String := user.name;
+val x_coord := point.x;
+val name := user.name;
 
-val result: Int32 := compute(42);
-val output: Int32 := process(input, config);
+val result := compute(42);
+val output := process(input, config);
 
 // ============================================================================
 // COMPLEX EXPRESSIONS
 // ============================================================================
 
-val complex: Int32 := {
-  fn helper(x: Int32): Int32 {
-    return x + 1;
-  };
-  val value: Int32 := 42;
-  return helper(value);
+val complex := {
+  val helper := fn (x) { x + 1 };
+  val value := 42;
+  helper(value)
 };
 
-val chained: Int32 := 10 |> add(5) |> multiply(2);
+val chained := 10 |> add(5) |> multiply(2);
 
 // ============================================================================
 // EDGE CASES
 // ============================================================================
 
 match nested {
-case Some(Ok(v)) => use(v),
-case Some(Err(e)) => handle(e),
-case None => fallback()
+case Some(Succ(v)) => use(v),
+case Some(Fail(e)) => handle(e),
+case _ => fallback()
 };
 
-val ptr: ^Int32 := @value;
-val deref: Int32 := ptr.^;
+val ptr := @value;
+val deref := ptr.^;
 ptr.^ <- 100;
 
-val msg: String := $"User {user.name} has {count} items";
+val msg := $"User {user.name} has {count} items";
 
-val a: Int32 := 10;
-val b: Int32 := 20;
-val result: Int32 := {
-  val x: Int32 := compute();
-  val y: Int32 := transform(x);
-  return x + y;
+val (a, b) := (10, 20);
+val result := {
+  val (x, y) := (compute(), transform(x));
+  x + y
 };
 
-val unit: Unit := {
-  action();
-  done();
-  return ();
-};
+val unit := { action(); done(); () };
