@@ -20,10 +20,10 @@ val x := 42;
 var y := 0;
 y <- 10;
 
-if x > 0 { writeln("positive"); };
+if x > 0 { writeln("pos"); };
 if x > 0 { writeln("pos"); } else { writeln("neg"); };
-if x > 0 { writeln("positive");
-} else if (x < 0) { writeln("negative");
+if x > 0 { writeln("pos");
+} else if (x < 0) { writeln("neg");
 } else { writeln("zero"); };
 
 while has_next() { process(next()); };
