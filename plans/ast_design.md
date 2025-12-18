@@ -4,12 +4,25 @@
 
 This document specifies the Abstract Syntax Tree (AST) structure for the Musi programming language, following ESTree-style conventions with OCaml-specific adaptations.
 
+## Grammar Naming Conventions
+
+Based on grammar.ebnf, the naming conventions are:
+
+- **No prefix**: Lexical tokens (no AST nodes)
+- **aux_**: Syntactic helpers/support (no AST nodes)
+- **prec_**: Precedence levels (parser-only, no AST nodes)
+- **expr_**: Expression nodes (create AST nodes)
+- **pat_**: Pattern nodes (create AST nodes)
+- **ty_**: Type nodes (create AST nodes)
+- **stmt_**: Statement nodes (create AST nodes)
+
 ## Core Design Principles
 
 1. **Record-based nodes**: All AST nodes are records with `kind` and `span` fields
 2. **Grammar prefix matching**: Node kind names match grammar rule prefixes exactly (`expr_ident` → `ExprIdent`)
-3. **Parser concerns separated**: Precedence levels are handled by parser, not reflected in AST structure
+3. **Parser concerns separated**: `aux_` helpers and `prec_` precedence levels are parser-only, NOT AST nodes
 4. **Boolean flags**: Optional behaviors represented as boolean flags rather than separate node types
+5. **Token-based operators**: Unary and binary operators use `Token.t` directly, not separate node types
 
 ## Core Node Types
 
@@ -22,16 +35,11 @@ type expr = {
 }
 
 and expr_kind =
-  (* Literals and identifiers *)
-  | ExprLit of lit_kind
+  | ExprLit of lit
   | ExprIdent of ident
-
-  (* Collection literals *)
   | ExprLitTuple of expr list
   | ExprLitArray of expr list
   | ExprLitRecord of ident option * record_content
-
-  (* Control flow *)
   | ExprBlock of stmt list * expr option
   | ExprIf of expr * expr * expr
   | ExprWhile of expr * expr
@@ -43,22 +51,17 @@ and expr_kind =
   | ExprBreak of expr option
   | ExprCycle
   | ExprUnsafe of expr
-
-  (* Declarations *)
   | ExprImport of string
   | ExprExtern of string option * bool * fn_sig list
   | ExprRecord of attr list * modifier * ident option * ty_params * record_field list
   | ExprSum of attr list * modifier * ident option * ty_params * sum_case list
   | ExprFn of attr list * modifier * fn_sig * expr
   | ExprBind of modifier * bool * ident * ty option * expr * expr
-
-  (* Operations *)
-  | ExprCall of expr * expr list
-  | ExprIndex of expr * expr * bool    (* bool: true for optional chain *)
-  | ExprMember of expr * ident * bool  (* bool: true for optional chain *)
-  | ExprDeref of expr
-  | ExprUnary of Token.t * expr
-  | ExprBinary of expr * Token.t * expr
+  | ExprUnaryPostfix of expr * Token.t  (* (), [], ., .^, ? *)
+  | ExprUnaryPrefix of Token.t * expr   (* -, not, ~, @ *)
+  | ExprBinary of expr * Token.t * expr (* all binary ops *)
+  | ExprRange of expr * Token.t * expr option  (* .., ..< *)
+  | ExprAssign of expr * expr           (* <- *)
 ```
 
 ### Pattern Nodes
@@ -71,7 +74,7 @@ type pat = {
 
 and pat_kind =
   | PatIdent of ident
-  | PatLit of literal
+  | PatLit of lit
   | PatWild
   | PatLitTuple of pat list
   | PatLitArray of pat list
@@ -115,7 +118,7 @@ and stmt_kind =
 ### Literals
 
 ```ocaml
-type literal =
+type lit =
   | LitInt of string
   | LitFloat of string
   | LitString of string
@@ -137,17 +140,17 @@ type attr = {
 }
 
 and attr_arg =
-  | AttrArgPos of ident * literal
-  | AttrArgNamed of ident * ident * literal
+  | AttrArgPos of ident * lit
+  | AttrArgNamed of ident * ident * lit
 ```
 
 ### Modifiers
 
 ```ocaml
 type modifier = {
-  is_export: bool;
-  is_extern: (string option * bool) option;  (* Some(path, unsafe) or None *)
-  is_unsafe: bool;
+  mod_export: bool;
+  mod_extern: (string option * bool) option;  (* Some(path, unsafe) or None *)
+  mod_unsafe: bool;
 }
 ```
 
@@ -162,7 +165,7 @@ type fn_sig = {
 }
 
 and param = {
-  param_var: bool;
+  param_mutable: bool;
   param_name: ident;
   param_ty: ty option;
   param_default: expr option;
@@ -177,7 +180,7 @@ type record_content =
   | RecordWith of expr * record_field list
 
 and record_field = {
-  field_var: bool;
+  field_mutable: bool;
   field_name: ident;
   field_ty: ty option;
   field_default: expr option;
@@ -189,7 +192,7 @@ and record_field = {
 ```ocaml
 type sum_case = {
   case_name: ident;
-  case_types: ty list;
+  case_tys: ty list;
   case_params: ty list;
 }
 ```
@@ -206,7 +209,7 @@ type pat_field = {
 
 ```ocaml
 type match_case = {
-  case_pattern: pat;
+  case_pat: pat;
   case_expr: expr;
 }
 ```
@@ -215,10 +218,9 @@ type match_case = {
 
 ### Expression Grammar to AST
 
-```md
 | Grammar Rule | AST Node Kind | Fields |
-|--------------|---------------|--------|
-| `expr_lit` | `ExprLit` | `literal` |
+|--------------|---------------|--------\|
+| `expr_lit` | `ExprLit` | `lit` |
 | `expr_ident` | `ExprIdent` | `ident` |
 | `expr_lit_tuple` | `ExprLitTuple` | `expr list` |
 | `expr_lit_array` | `ExprLitArray` | `expr list` |
@@ -236,32 +238,33 @@ type match_case = {
 | `expr_unsafe` | `ExprUnsafe` | `expr` |
 | `expr_import` | `ExprImport` | `string` |
 | `expr_extern` | `ExprExtern` | `string option * bool * fn_sig list` |
-| `expr_record` | `ExprRecord` | `attr list * modifier * ident * ty_params * record_field list` |
-| `expr_sum` | `ExprSum` | `attr list * modifier * ident * ty_params * sum_case list` |
+| `expr_record` | `ExprRecord` | `attr list * modifier * ident option * ty_params * record_field list` |
+| `expr_sum` | `ExprSum` | `attr list * modifier * ident option * ty_params * sum_case list` |
 | `expr_fn` | `ExprFn` | `attr list * modifier * fn_sig * expr` |
 | `expr_bind` | `ExprBind` | `modifier * bool * ident * ty option * expr * expr` |
-```
+| `expr_unary_postfix` | `ExprUnaryPostfix` | `expr * Token.t` |
+| `expr_unary_prefix` | `ExprUnaryPrefix` | `Token.t * expr` |
+| `expr_binary` | `ExprBinary` | `expr * Token.t * expr` |
+| `expr_range` | `ExprRange` | `expr * Token.t * expr option` |
+| `expr_assign` | `ExprAssign` | `expr * expr` |
 
 ### Pattern Grammar to AST
 
-```md
 | Grammar Rule | AST Node Kind | Fields |
-|--------------|---------------|--------|
+|--------------|---------------|--------\|
 | `pat_ident` | `PatIdent` | `ident` |
-| `pat_lit` | `PatLit` | `literal` |
+| `pat_lit` | `PatLit` | `lit` |
 | `pat_wild` | `PatWild` | unit |
 | `pat_lit_tuple` | `PatLitTuple` | `pat list` |
 | `pat_lit_array` | `PatLitArray` | `pat list` |
-| `pat_lit_record` | `PatLitRecord` | `ident option * pat_field list` |
+| `pat_lit_record` | `PatLitRecord` | `ident * pat_field list` |
 | `pat_variant` | `PatVariant` | `ident * ty list * pat option` |
 | `pat_cons` | `PatCons` | `pat * pat` |
-```
 
 ### Type Grammar to AST
 
-```md
 | Grammar Rule | AST Node Kind | Fields |
-|--------------|---------------|--------|
+|--------------|---------------|--------\|
 | `ty_ident` | `TyIdent` | `ident` |
 | `ty_app` | `TyApp` | `ident * ty list` |
 | `ty_optional` | `TyOptional` | `ty` |
@@ -269,7 +272,6 @@ type match_case = {
 | `ty_ptr` | `TyPtr` | `ty` |
 | `ty_fn` | `TyFn` | `ty * ty` |
 | `ty_tuple` | `TyTuple` | `ty list` |
-```
 
 ## Examples
 
@@ -282,7 +284,7 @@ val x := 10 + 20;
 ```ocaml
 {
   kind = ExprBind(
-    {is_export = false; is_extern = None; is_unsafe = false},
+    {mod_export = false; mod_extern = None; mod_unsafe = false},
     false,
     "x",
     None,
@@ -304,9 +306,9 @@ val x := 10 + 20;
 
 ```musi
 match result {
-case Succ(value) => value,
-case Fail(_) => 0
-};
+  case Ok(value) => value,
+  case Err(_) => 0
+}
 ```
 
 ```ocaml
@@ -315,15 +317,15 @@ case Fail(_) => 0
     {kind = ExprIdent "result"; span = span1},
     [
       {
-        case_pat = {
-          kind = PatVariant("Succ", [], Some {kind = PatIdent "value"; span = span2});
+        case_pattern = {
+          kind = PatVariant("Ok", [], Some {kind = PatIdent "value"; span = span2});
           span = span3
         };
         case_expr = {kind = ExprIdent "value"; span = span4}
       };
       {
-        case_pat = {
-          kind = PatVariant("Fail", [], Some {kind = PatWild; span = span5});
+        case_pattern = {
+          kind = PatVariant("Err", [], Some {kind = PatWild; span = span5});
           span = span6
         };
         case_expr = {kind = ExprLit(LitInt "0"); span = span7}
@@ -333,6 +335,63 @@ case Fail(_) => 0
   span = span8
 }
 ```
+
+### Unary Operations Example
+
+```musi
+-x
+arr[0]
+obj.field
+ptr.^
+opt.?
+```
+
+```ocaml
+(* -x *)
+ExprUnaryPrefix(Token.Minus, expr_x)
+
+(* arr[0] *)
+ExprUnaryPostfix(expr_arr, Token.LBrack)  (* with index expr as separate param *)
+
+(* obj.field *)
+ExprUnaryPostfix(expr_obj, Token.Dot)  (* with field ident as separate param *)
+
+(* ptr.^ *)
+ExprUnaryPostfix(expr_ptr, Token.DotCaret)
+
+(* opt.? *)
+ExprUnaryPostfix(expr_opt, Token.Question)
+```
+
+## Important Notes
+
+### What is NOT in the AST (Parser-Only)
+
+- **`aux_` elements**: All `aux_` prefixed rules are syntactic helpers for the parser only
+- **`prec_` elements**: All `prec_` prefixed rules are precedence levels handled by parser
+- **Operator precedence**: Parser handles precedence, AST uses uniform `ExprBinary` and `ExprUnary*` nodes
+- **Template string parsing**: Template parts are parsed but represented as `LitTemplate` in AST
+
+### Grammar to AST Node Mapping
+
+Only rules with these prefixes create AST nodes:
+
+- `expr_` → Expression AST nodes (Expr*)
+- `pat_` → Pattern AST nodes (Pat*)
+- `ty_` → Type AST nodes (Ty*)
+- `stmt_` → Statement AST nodes (Stmt*)
+
+All other prefixes (`aux_`, `prec_`, no prefix) are for lexical tokens or parser organization only.
+
+### Operator Representation
+
+All operators use `Token.t` directly:
+
+- Unary postfix: `(), [], ., .^, ?` → `ExprUnaryPostfix(expr, Token.t)`
+- Unary prefix: `-, not, ~, @` → `ExprUnaryPrefix(Token.t, expr)`
+- Binary: `**, *, /, %, mod, <<, >>, +, -, ::, <, >, <=, >=, is, as, =, /=, &, ^, |, and, or, ??, |>` → `ExprBinary(expr, Token.t, expr)`
+- Range: `.., ..<` → `ExprRange(expr, Token.t, expr option)`
+- Assignment: `<-` → `ExprAssign(expr, expr)`
 
 ## AST Node Relationships
 
@@ -348,7 +407,7 @@ graph TD
     ty --> ty_kind
     stmt --> stmt_kind
 
-    expr_kind --> ExprLit[lit_kind]
+    expr_kind --> ExprLit[lit]
     expr_kind --> ExprIdent[ident]
     expr_kind --> ExprLitTuple[expr list]
     expr_kind --> ExprLitArray[expr list]
@@ -370,19 +429,18 @@ graph TD
     expr_kind --> ExprSum[attr list * modifier * ident option * ty_params * sum_case list]
     expr_kind --> ExprFn[attr list * modifier * fn_sig * expr]
     expr_kind --> ExprBind[modifier * bool * ident * ty option * expr * expr]
-    expr_kind --> ExprCall[expr * expr list]
-    expr_kind --> ExprIndex[expr * expr * bool]
-    expr_kind --> ExprMember[expr * ident * bool]
-    expr_kind --> ExprDeref[expr]
-    expr_kind --> ExprUnary[Token.t * expr]
+    expr_kind --> ExprUnaryPostfix[expr * Token.t]
+    expr_kind --> ExprUnaryPrefix[Token.t * expr]
     expr_kind --> ExprBinary[expr * Token.t * expr]
+    expr_kind --> ExprRange[expr * Token.t * expr option]
+    expr_kind --> ExprAssign[expr * expr]
 
     pat_kind --> PatIdent[ident]
-    pat_kind --> PatLit[lit_kind]
+    pat_kind --> PatLit[lit]
     pat_kind --> PatWild[unit]
     pat_kind --> PatLitTuple[pat list]
     pat_kind --> PatLitArray[pat list]
-    pat_kind --> PatLitRecord[ident option * pat_field list]
+    pat_kind --> PatLitRecord[ident * pat_field list]
     pat_kind --> PatVariant[ident * ty list * pat option]
     pat_kind --> PatCons[pat * pat]
 
@@ -400,7 +458,9 @@ graph TD
 ## Implementation Notes
 
 - All nodes contain source location information via the `span` field
-- The parser handles operator precedence; AST uses uniform `ExprBinary` and `ExprUnary` nodes
-- Optional chaining represented as boolean flag on `ExprMember`
+- The parser handles operator precedence; AST uses uniform `ExprBinary` and `ExprUnary*` nodes
+- Optional chaining represented as boolean flag where applicable
 - Modifiers use record with boolean flags rather than sum types
 - Grammar auxiliary elements (`aux_`) that are purely syntactic are not represented in AST
+- Template strings parsed into `LitTemplate` with parts array
+- Record and sum declarations allow optional names (e.g., anonymous records)
