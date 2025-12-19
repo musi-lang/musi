@@ -2,63 +2,65 @@
 
 Thanks for helping Musi grow. This guide keeps expectations clear and simple so you can move fast without guessing.
 
-## Before You Start
+## Before Starting
 
-- Read the Language Guide in `docs/` to understand current syntax and roadmap.
-- Set up the toolchain listed in [Development Setup](#development-setup).
-- Skim open issues to avoid duplicating work.
+- Read language guide in `docs/` to understand current syntax and roadmap.
+- Set up toolchain listed in [Development Setup](#development-setup).
+- Check open issues to avoid duplicating work.
 - Keep British spelling in docs and commit messages.
 
 ## Standard Workflow
 
-1. Fork the repository.
-2. Clone your fork: `git clone https://github.com/<your-user>/musi.git`.
-3. Create a topic branch: `git checkout -b feat/<short-description>`.
+1. Fork repository.
+2. Clone fork: `git clone https://github.com/<your-user>/musi.git`.
+3. Create topic branch: `git checkout -b feat/<short-description>`.
 4. Make focused changes.
-5. Run `opam exec -- dune test` (and any extra commands relevant to your change).
-6. Commit with a clear message that explains *why* the change exists.
-7. Push and open a pull request describing behaviour changes and tests.
+5. Run `opam exec -- dune test` (and any extra commands relevant to change).
+6. Commit with clear message explaining *why* change exists.
+7. Push and open pull request describing behaviour changes and tests.
 
 ## Coding Guidelines
 
 ### Core Principles
 
-- **KISS** -- prefer the simplest solution that works today.
+- **KISS** -- prefer simplest solution that works today.
 - **DRY** -- extract shared behaviour quickly to keep one source of truth.
-- **YAGNI** -- do not build future features until the roadmap calls for them.
+- **YAGNI** -- do not build future features until roadmap calls for them.
 
 ### Naming
 
-- Modules and variant constructors use `PascalCase` (`Ast`, `Token`, `Some`).
+- Modules and variant constructors use `PascalCase` (`Expr`, `Token`, `Some`).
 - Functions and values use `snake_case`.
 - Use `t` for primary types inside modules.
+- Use `_opt` suffix for functions that return `option`.
+- Use `try_` prefix for functions that return `result`.
 - Prefix intentionally unused bindings with `_`.
 
 ### OCaml Style
 
 - Add type annotations when inference is unclear, especially in `.mli` files.
 - Pattern match exhaustively instead of relying on `_` fallbacks.
-- Keep data immutable unless a mutable field is required; mark it with `mutable`.
+- Keep data immutable unless mutable field is required; mark with `mutable`.
 - Prefer small functions (under 50 lines) and shallow nesting (no more than four levels).
 - Remove dead or commented-out code before submitting.
 
 ### Comments and Docs
 
-- Comment to explain *why* a choice was made, not what the code already states.
+- Comment to explain *why* choice was made, not what code already states.
 - Update documentation and examples whenever behaviour changes.
-- Follow the Language Guide structure when adding new docs; place new book chapters under `docs/language-guide/`.
+- Follow language guide structure when adding new docs; place new book chapters under `docs/language-guide/`.
 
 ## Testing Expectations
 
 - Run `opam exec -- dune test` before every push.
 - Add or update targeted tests for every bug fix or new feature.
-- Mention any skipped or flaky tests in the pull request so reviewers know the risk.
+- Mention any skipped or flaky tests in pull request so reviewers know risk.
 
 ## Using AI Assistants
 
-No AI configuration files live in this repository yet, but you may use your own tools. You remain responsible for code quality:
+No AI configuration files live in repository yet, but you may use own tools. You remain responsible for code quality:
 
-- Understand the surrounding code before pasting AI suggestions.
+- Understand surrounding code before pasting AI suggestions.
 - Review and test generated code carefully.
 - Never merge output you do not fully understand.
 
@@ -66,25 +68,25 @@ No AI configuration files live in this repository yet, but you may use your own 
 
 - [ ] Tests pass locally with `opam exec -- dune test`.
 - [ ] Docs and comments updated if behaviour changed.
-- [ ] Commit messages explain the intent.
+- [ ] Commit messages explain intent.
 - [ ] PR description covers motivation, approach, and testing.
 
 ## Reporting Issues
 
-When filing a bug, include:
+When filing bug, include:
 
 - Steps to reproduce.
 - Expected versus actual behaviour.
 - Output snippets or logs when helpful.
 - Musi commit hash, OCaml version, and platform.
 
-Feature requests should describe the use case and why Musi needs it now.
+Feature requests should describe use case and why Musi needs it now.
 
 ## Development Setup
 
 ### Prerequisites
 
-- OCaml 5.3.0 or newer
+- OCaml 5.4.0 or newer
 - opam
 - Dune 3.20.2 or newer
 - Git
@@ -92,15 +94,20 @@ Feature requests should describe the use case and why Musi needs it now.
 ### Typical Commands
 
 ```bash
-opam exec -- dune pkg lock   # lock dependencies
-opam exec -- dune build      # compile everything
-opam exec -- dune test       # run all tests
+# lock dependencies
+opam exec -- dune pkg lock
+
+# compile everything
+opam exec -- dune build
+
+# run all tests
+opam exec -- dune test
 ```
 
 ## Questions and Support
 
-Open an issue if you need clarification on direction, architecture, or roadmap priorities. Discussions stay public so future contributors benefit from the context.
+Open issue if you need clarification on direction, architecture, or roadmap priorities. Discussions stay public so future contributors benefit from context.
 
 ## Code of Conduct
 
-All contributors must follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+All contributors must follow [Code of Conduct](CODE_OF_CONDUCT.md).
