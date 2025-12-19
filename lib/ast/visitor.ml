@@ -121,9 +121,7 @@ and traverse_ty (v : 'ctx visitor) (ctx : 'ctx) (ty : ty) =
   | TyApp (name, args) ->
     v.visit_ident v ctx name;
     visit_list v.visit_ty v ctx args
-  | TyArray (_, inner) ->
-    (* size is int option, not expr *)
-    v.visit_ty v ctx inner
+  | TyArray (_, inner) -> v.visit_ty v ctx inner
   | TyOptional inner | TyPtr inner -> v.visit_ty v ctx inner
   | TyFn (arg, ret) -> visit_seq2 v.visit_ty v ctx arg ret
   | TyTuple tys -> visit_list v.visit_ty v ctx tys
