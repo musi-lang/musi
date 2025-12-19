@@ -1,57 +1,76 @@
 # Musi
 
 > [!WARNING]
-> Musi is under active development. Language design and implementation are subject to change.
+> Musi is currently under active development. Language design and implementation are subject to change.
 
-Systems programming language designed for clarity, safety, and performance. Readable syntax meets stack-only memory discipline.
+Musi is systems programming language designed for clarity, safety, and performance. It combines readable syntax with strict, stack-only memory model.
 
-## Highlights
+## Key Features
 
-- Expression-oriented semantics; every construct yields a value
-- Strong static typing with inference
-- Stack-only memory model with region-based arena allocators
-- Compile-time lifetime checking with Ada-level safety
-- Exhaustive pattern matching with guard support
-- Fallible types (`Expect<T, E>`) and structured error propagation
+- **Expression-oriented**: Every construct in language produces value.
+- **Strong static typing**: Includes automatic type inference to keep code clean and concise.
+- **Stack-only memory**: Uses region-based arena allocators for predictable performance and memory safety.
+- **Safety checks**: Provides compile-time checking of lifetimes, ensuring high level of safety.
+- **Pattern matching**: Supports exhaustive pattern matching with guards for robust logic.
+- **Error handling**: Uses fallible types (`Expect<T, E>`) for structured and reliable error management.
 
-## Getting Started
+## Installation
 
-### Prerequisites
-
-- [OCaml](https://ocaml.org/install) (5.4.0 or greater)
-- [opam](https://opam.ocaml.org/doc/Install.html) (2.3.0 or greater)
-
-### Build
+### macOS and Linux
 
 ```bash
+# install pkg-config (macOS only)
+brew install pkg-config
+
+# clone repository
 git clone https://github.com/musi-lang/musi.git
 cd musi
 
-# install specific OCaml stuffs
+# install OCaml tools and build project
 opam install ocamlformat ocaml-lsp-server dune
-
-# finally,... lock and load
 opam exec -- dune pkg lock
 opam exec -- dune build
 ```
 
-### Run & Test
+### Windows
+
+```powershell
+# install opam (choose one method)
+winget install OCaml.opam
+# OR: choco install opam
+# OR: scoop install opam
+
+# initiate opam (restart terminal first)
+opam init
+
+# clone repository
+git clone https://github.com/musi-lang/musi.git
+cd musi
+
+# build project
+opam install ocamlformat ocaml-lsp-server dune
+opam exec -- dune pkg lock
+opam exec -- dune build
+```
+
+## Running and Testing
 
 ```bash
+# run compiler
 opam exec -- dune exec bin/msc.exe
-opam exec -- dune test
 
-# TODO: runtime cmd
+# run tests
+opam exec -- dune test
 ```
 
 ## Contributing
 
-Contributions welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on submitting pull requests, code standards, and development setup.
+We welcome contributions from community. Please see [CONTRIBUTING.md](CONTRIBUTING.md) for coding standards and details on how to submit pull requests.
 
 ## Code of Conduct
 
-All contributors must follow [Code of Conduct](CODE_OF_CONDUCT.md).
+All contributors are expected to follow [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
 
-See [LICENSE](LICENSE) for details.
+Project licensed under terms of [LICENSE](LICENSE) file.
