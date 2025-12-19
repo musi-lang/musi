@@ -196,7 +196,7 @@ expr_unsafe = "unsafe", expr_block;
 
 expr_import = "import", aux_lit_text;
 
-expr_extern = aux_modifier_extern, "{", {aux_fn_sig, ";"}, "}";
+expr_extern = aux_modifier_extern, "{", {"fn", aux_fn_sig, ";"}, "}";
 
 expr_record = [aux_attr], [aux_modifiers], "record", [ident], [ty_params], "{", aux_record_fields, "}";
 
