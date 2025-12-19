@@ -2,177 +2,152 @@ open Nodes
 
 type 'ctx visitor = {
     visit_expr : 'ctx visitor -> 'ctx -> expr -> unit
-  ; visit_stmt : 'ctx visitor -> 'ctx -> stmt -> unit
   ; visit_pat : 'ctx visitor -> 'ctx -> pat -> unit
   ; visit_ty : 'ctx visitor -> 'ctx -> ty -> unit
+  ; visit_stmt : 'ctx visitor -> 'ctx -> stmt -> unit
   ; visit_ident : 'ctx visitor -> 'ctx -> ident -> unit
   ; visit_lit : 'ctx visitor -> 'ctx -> lit -> unit
-  ; visit_fn_sig : 'ctx visitor -> 'ctx -> fn_sig -> unit
-  ; visit_param : 'ctx visitor -> 'ctx -> param -> unit
-  ; visit_match_case : 'ctx visitor -> 'ctx -> match_case -> unit
-  ; visit_sum_case : 'ctx visitor -> 'ctx -> sum_case -> unit
-  ; visit_record_field : 'ctx visitor -> 'ctx -> record_field -> unit
-  ; visit_record_content : 'ctx visitor -> 'ctx -> record_content -> unit
-  ; visit_prog : 'ctx visitor -> 'ctx -> prog -> unit
 }
 
-let visit_all f v ctx items = List.iter (f v ctx) items
-let visit_opt f v ctx opt = Option.iter (f v ctx) opt
+let visit_opt visit v ctx opt = Option.iter (visit v ctx) opt
+let visit_list visit v ctx list = List.iter (visit v ctx) list
 
-let visit_seq2 f v ctx a b =
-  f v ctx a;
-  f v ctx b
+let visit_seq2 visit v ctx a b =
+  visit v ctx a;
+  visit v ctx b
 
-let visit_seq3 f v ctx a b c =
-  f v ctx a;
-  f v ctx b;
-  f v ctx c
-
-let traverse_expr (v : 'ctx visitor) (ctx : 'ctx) (expr : expr) =
+let rec traverse_expr (v : 'ctx visitor) (ctx : 'ctx) (expr : expr) =
   match expr.kind with
   | ExprError -> ()
   | ExprLit lit -> v.visit_lit v ctx lit
   | ExprIdent ident -> v.visit_ident v ctx ident
   | ExprLitTuple exprs | ExprLitArray exprs ->
-    visit_all v.visit_expr v ctx exprs
-  | ExprLitRecord (name_opt, content) ->
+    visit_list v.visit_expr v ctx exprs
+  | ExprLitRecord (name_opt, fields, base_opt) ->
     visit_opt v.visit_ident v ctx name_opt;
-    v.visit_record_content v ctx content
+    List.iter
+      (fun f ->
+        v.visit_ident v ctx f.field_name;
+        visit_opt v.visit_ty v ctx f.field_ty;
+        visit_opt v.visit_expr v ctx f.field_default)
+      fields;
+    visit_opt v.visit_expr v ctx base_opt
   | ExprBlock (stmts, expr_opt) ->
-    visit_all v.visit_stmt v ctx stmts;
+    visit_list v.visit_stmt v ctx stmts;
     visit_opt v.visit_expr v ctx expr_opt
   | ExprIf (cond, then_, else_) ->
-    visit_seq3 v.visit_expr v ctx cond then_ else_
-  | ExprWhile (cond, body) -> visit_seq2 v.visit_expr v ctx cond body
-  | ExprFor (ident, iter, body) ->
-    v.visit_ident v ctx ident;
-    visit_seq2 v.visit_expr v ctx iter body
+    v.visit_expr v ctx cond;
+    v.visit_expr v ctx then_;
+    v.visit_expr v ctx else_
+  | ExprWhile (cond, body) ->
+    v.visit_expr v ctx cond;
+    v.visit_expr v ctx body
+  | ExprFor (name, iter, body) ->
+    v.visit_ident v ctx name;
+    v.visit_expr v ctx iter;
+    v.visit_expr v ctx body
   | ExprMatch (target, cases) ->
     v.visit_expr v ctx target;
-    visit_all v.visit_match_case v ctx cases
-  | ExprTry (body, catch_opt) ->
-    v.visit_expr v ctx body;
-    visit_opt
-      (fun v ctx (ident_opt, catch_body) ->
-        visit_opt v.visit_ident v ctx ident_opt;
-        v.visit_expr v ctx catch_body)
-      v
-      ctx
-      catch_opt
+    List.iter
+      (fun c ->
+        v.visit_pat v ctx c.case_pat;
+        v.visit_expr v ctx c.case_expr)
+      cases
   | ExprReturn expr_opt | ExprBreak expr_opt ->
     visit_opt v.visit_expr v ctx expr_opt
   | ExprDefer expr | ExprUnsafe expr -> v.visit_expr v ctx expr
-  | ExprCycle -> ()
-  | ExprImport _ -> ()
-  | ExprExtern (_, _, sigs) -> visit_all v.visit_fn_sig v ctx sigs
+  | ExprImport _ -> () (* string literal *)
+  | ExprExtern (_, _, sigs) -> List.iter (fun s -> traverse_fn_sig v ctx s) sigs
+  | ExprBind (_, _, name, ty_opt, init, _) ->
+    v.visit_ident v ctx name;
+    visit_opt v.visit_ty v ctx ty_opt;
+    v.visit_expr v ctx init
+  | ExprFn (_, _, sig_, body) ->
+    traverse_fn_sig v ctx sig_;
+    v.visit_expr v ctx body
   | ExprRecord (_, _, name_opt, _, fields) ->
     visit_opt v.visit_ident v ctx name_opt;
-    visit_all v.visit_record_field v ctx fields
+    List.iter
+      (fun f ->
+        v.visit_ident v ctx f.field_name;
+        visit_opt v.visit_ty v ctx f.field_ty;
+        visit_opt v.visit_expr v ctx f.field_default)
+      fields
   | ExprSum (_, _, name_opt, _, cases) ->
     visit_opt v.visit_ident v ctx name_opt;
-    visit_all v.visit_sum_case v ctx cases
-  | ExprFn (_, _, sig_, body) ->
-    v.visit_fn_sig v ctx sig_;
-    v.visit_expr v ctx body
-  | ExprBind (_, _, ident, ty_opt, init, next) ->
-    v.visit_ident v ctx ident;
-    visit_opt v.visit_ty v ctx ty_opt;
-    visit_seq2 v.visit_expr v ctx init next
+    List.iter
+      (fun c ->
+        v.visit_ident v ctx c.case_name;
+        visit_list v.visit_ty v ctx c.case_tys;
+        List.iter (fun p -> traverse_param v ctx p) c.case_params)
+      cases
   | ExprCall (callee, args) ->
     v.visit_expr v ctx callee;
-    visit_all v.visit_expr v ctx args
-  | ExprIndex (target, index) -> visit_seq2 v.visit_expr v ctx target index
-  | ExprField (target, _) -> v.visit_expr v ctx target
-  | ExprUnaryPostfix (expr, _) -> v.visit_expr v ctx expr
-  | ExprUnaryPrefix (_, expr) -> v.visit_expr v ctx expr
-  | ExprBinary (left, _, right) -> visit_seq2 v.visit_expr v ctx left right
+    visit_list v.visit_expr v ctx args
+  | ExprIndex (callee, index) ->
+    v.visit_expr v ctx callee;
+    v.visit_expr v ctx index
+  | ExprField (callee, field) ->
+    v.visit_expr v ctx callee;
+    v.visit_ident v ctx field
+  | ExprUnaryPrefix (_, operand) -> v.visit_expr v ctx operand
+  | ExprUnaryPostfix (operand, _) -> v.visit_expr v ctx operand
+  | ExprBinary (left, _, right) | ExprAssign (left, right) ->
+    v.visit_expr v ctx left;
+    v.visit_expr v ctx right
   | ExprRange (start, _, end_opt) ->
     v.visit_expr v ctx start;
     visit_opt v.visit_expr v ctx end_opt
-  | ExprAssign (target, value) -> visit_seq2 v.visit_expr v ctx target value
 
-let traverse_stmt v ctx stmt =
-  match stmt.kind with StmtExpr expr -> v.visit_expr v ctx expr
-
-let traverse_pat v ctx pat =
+and traverse_pat (v : 'ctx visitor) (ctx : 'ctx) (pat : pat) =
   match pat.kind with
   | PatIdent ident -> v.visit_ident v ctx ident
-  | PatLit lit -> v.visit_lit v ctx lit
   | PatWild -> ()
-  | PatLitTuple pats | PatLitArray pats -> visit_all v.visit_pat v ctx pats
-  | PatLitRecord (ident, fields) ->
-    v.visit_ident v ctx ident;
-    visit_all
-      (fun v ctx (field : pat_field) -> v.visit_ident v ctx field.field_name)
-      v
-      ctx
-      fields
-  | PatVariant (ident, tys, pat_opt) ->
-    v.visit_ident v ctx ident;
-    visit_all v.visit_ty v ctx tys;
+  | PatLit lit -> v.visit_lit v ctx lit
+  | PatLitTuple pats | PatLitArray pats -> visit_list v.visit_pat v ctx pats
+  | PatLitRecord (name, fields) ->
+    v.visit_ident v ctx name;
+    List.iter (fun (f : pat_field) -> v.visit_ident v ctx f.field_name) fields
+  | PatVariant (name, tys, pat_opt) ->
+    v.visit_ident v ctx name;
+    visit_list v.visit_ty v ctx tys;
     visit_opt v.visit_pat v ctx pat_opt
   | PatCons (head, tail) -> visit_seq2 v.visit_pat v ctx head tail
   | PatError -> ()
 
-let traverse_ty v ctx ty =
+and traverse_ty (v : 'ctx visitor) (ctx : 'ctx) (ty : ty) =
   match ty.kind with
   | TyIdent ident -> v.visit_ident v ctx ident
-  | TyApp (ident, args) ->
-    v.visit_ident v ctx ident;
-    visit_all v.visit_ty v ctx args
-  | TyOptional inner -> v.visit_ty v ctx inner
-  | TyArray (_, inner) -> v.visit_ty v ctx inner
-  | TyPtr inner -> v.visit_ty v ctx inner
+  | TyApp (name, args) ->
+    v.visit_ident v ctx name;
+    visit_list v.visit_ty v ctx args
+  | TyArray (_, inner) ->
+    (* size is int option, not expr *)
+    v.visit_ty v ctx inner
+  | TyOptional inner | TyPtr inner -> v.visit_ty v ctx inner
   | TyFn (arg, ret) -> visit_seq2 v.visit_ty v ctx arg ret
-  | TyTuple tys -> visit_all v.visit_ty v ctx tys
+  | TyTuple tys -> visit_list v.visit_ty v ctx tys
   | TyError -> ()
 
-let traverse_fn_sig v ctx sig_ =
+and traverse_fn_sig v ctx sig_ =
   visit_opt v.visit_ident v ctx sig_.fn_name;
-  visit_all v.visit_param v ctx sig_.fn_params;
+  List.iter (fun p -> traverse_param v ctx p) sig_.fn_params;
   visit_opt v.visit_ty v ctx sig_.fn_ret_ty
 
-let traverse_param v ctx param =
+and traverse_param v ctx param =
   v.visit_ident v ctx param.param_name;
   visit_opt v.visit_ty v ctx param.param_ty;
   visit_opt v.visit_expr v ctx param.param_default
 
-let traverse_match_case v ctx case =
-  v.visit_pat v ctx case.case_pat;
-  v.visit_expr v ctx case.case_expr
+and traverse_stmt v ctx stmt =
+  match stmt.kind with StmtExpr expr -> v.visit_expr v ctx expr
 
-let traverse_sum_case v ctx case =
-  v.visit_ident v ctx case.case_name;
-  visit_all v.visit_ty v ctx case.case_tys;
-  visit_all v.visit_ty v ctx case.case_params
-
-let traverse_record_field v ctx field =
-  v.visit_ident v ctx field.field_name;
-  visit_opt v.visit_ty v ctx field.field_ty;
-  visit_opt v.visit_expr v ctx field.field_default
-
-let traverse_record_content v ctx content =
-  match content with
-  | RecordFields fields -> visit_all v.visit_record_field v ctx fields
-  | RecordWith (base, fields) ->
-    v.visit_expr v ctx base;
-    visit_all v.visit_record_field v ctx fields
-
-let traverse_prog v ctx prog = visit_all v.visit_stmt v ctx prog
-
-let default_visitor : 'ctx visitor =
+let default_visitor =
   {
     visit_expr = traverse_expr
-  ; visit_stmt = traverse_stmt
   ; visit_pat = traverse_pat
   ; visit_ty = traverse_ty
+  ; visit_stmt = traverse_stmt
   ; visit_ident = (fun _ _ _ -> ())
   ; visit_lit = (fun _ _ _ -> ())
-  ; visit_fn_sig = traverse_fn_sig
-  ; visit_param = traverse_param
-  ; visit_match_case = traverse_match_case
-  ; visit_sum_case = traverse_sum_case
-  ; visit_record_field = traverse_record_field
-  ; visit_record_content = traverse_record_content
-  ; visit_prog = traverse_prog
   }

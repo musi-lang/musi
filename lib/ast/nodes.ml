@@ -56,7 +56,7 @@ and expr_kind =
   | ExprLit of lit
   | ExprLitTuple of expr list
   | ExprLitArray of expr list
-  | ExprLitRecord of ident list
+  | ExprLitRecord of ident option * record_field list * expr option
   | ExprIdent of ident
   | ExprBlock of stmt list * expr option
   | ExprIf of expr * expr * expr
