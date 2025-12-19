@@ -1,5 +1,6 @@
 open Basic
 
+(** Lexical token kind *)
 type t =
   | Ident of Interner.ident
   | LitInt of Interner.ident
@@ -86,4 +87,5 @@ type t =
   | EOF
   | Unknown of Interner.ident
 
+(** Convert token to string representation *)
 val show : Interner.t -> t -> string
