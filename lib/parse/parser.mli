@@ -3,8 +3,10 @@ open Lex
 open Ast
 open Nodes
 
+(** Parser state *)
 type t
 
+(** Operator precedence levels *)
 type prec =
   | PrecNone
   | PrecAssign
@@ -25,8 +27,10 @@ type prec =
   | PrecUnary
   | PrecPostfix
 
+(** Create new parser instance from token sequence *)
 val create : (Token.t * Span.t) Seq.t -> Source.t -> int -> Interner.t -> t
 
+(** Parse all statements in source *)
 val parse :
      (Token.t * Span.t) Seq.t
   -> Source.t
@@ -34,7 +38,16 @@ val parse :
   -> Interner.t
   -> (stmt list, Reporter.bag) result
 
+(* Exposed for testing purposes *)
+
+(** Parse single expression with given precedence *)
 val parse_expr : t -> prec -> expr
+
+(** Parse single type definition *)
 val parse_ty : t -> ty
+
+(** Parse single pattern *)
 val parse_pat : t -> pat
+
+(** Parse single statement *)
 val parse_stmt : t -> stmt

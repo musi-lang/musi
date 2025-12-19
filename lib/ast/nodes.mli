@@ -1,20 +1,25 @@
 open Basic
 open Lex
 
+(** AST node with source span *)
 type 'a with_span = { kind : 'a; span : Span.t }
 
+(** Access modifiers for function or variable *)
 type modifier = {
     is_export : bool
   ; is_extern : (string option * bool) option
   ; is_unsafe : bool
 }
 
+(** Attribute argument value *)
 type attr_arg =
   | AttrArgNamed of ident * ident * lit
   | AttrArgPos of ident * lit
 
+(** Attribute attached to declaration *)
 and attr = { attr_name : ident; attr_args : attr_arg list }
 
+(** Literal value *)
 and lit =
   | LitInt of ident
   | LitFloat of ident
@@ -22,10 +27,13 @@ and lit =
   | LitRune of char
   | LitBool of bool
 
+(** Identifier string *)
 and ident = string
 
+(** Type definition node *)
 type ty = ty_kind with_span
 
+(** Type definition variant *)
 and ty_kind =
   | TyIdent of ident
   | TyApp of ident * ty list
@@ -36,8 +44,10 @@ and ty_kind =
   | TyTuple of ty list
   | TyError
 
+(** Pattern matching node *)
 and pat = pat_kind with_span
 
+(** Pattern matching variant *)
 and pat_kind =
   | PatIdent of ident
   | PatWild
@@ -49,9 +59,13 @@ and pat_kind =
   | PatCons of pat * pat
   | PatError
 
+(** Record pattern field *)
 and pat_field = { field_name : ident }
+
+(** Expression node *)
 and expr = expr_kind with_span
 
+(** Expression variant *)
 and expr_kind =
   | ExprLit of lit
   | ExprLitTuple of expr list
@@ -84,10 +98,16 @@ and expr_kind =
   | ExprAssign of expr * expr
   | ExprError
 
+(** Statement node *)
 and stmt = stmt_kind with_span
+
+(** Statement variant *)
 and stmt_kind = StmtExpr of expr
+
+(** Match case branch *)
 and match_case = { case_pat : pat; case_expr : expr }
 
+(** Function signature *)
 and fn_sig = {
     fn_name : ident option
   ; fn_ty_params : ident list
@@ -95,6 +115,7 @@ and fn_sig = {
   ; fn_ret_ty : ty option
 }
 
+(** Function parameter *)
 and param = {
     param_mutable : bool
   ; param_name : ident
@@ -102,6 +123,7 @@ and param = {
   ; param_default : expr option
 }
 
+(** Record field definition *)
 and record_field = {
     field_mutable : bool
   ; field_name : ident
@@ -109,13 +131,21 @@ and record_field = {
   ; field_default : expr option
 }
 
+(** Sum type case definition *)
 and sum_case = {
     case_name : ident
   ; case_tys : ty list
   ; case_params : param list
 }
 
+(** Create type node with span *)
 val make_ty : ty_kind -> Span.t -> ty
+
+(** Create pattern node with span *)
 val make_pat : pat_kind -> Span.t -> pat
+
+(** Create expression node with span *)
 val make_expr : expr_kind -> Span.t -> expr
+
+(** Create statement node with span *)
 val make_stmt : stmt_kind -> Span.t -> stmt
