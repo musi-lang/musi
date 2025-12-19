@@ -56,7 +56,7 @@ let rec traverse_expr (v : 'ctx visitor) (ctx : 'ctx) (expr : expr) =
   | ExprReturn expr_opt | ExprBreak expr_opt ->
     visit_opt v.visit_expr v ctx expr_opt
   | ExprDefer expr | ExprUnsafe expr -> v.visit_expr v ctx expr
-  | ExprImport _ -> () (* string literal *)
+  | ExprImport _ -> ()
   | ExprExtern (_, _, sigs) -> List.iter (fun s -> traverse_fn_sig v ctx s) sigs
   | ExprBind (_, _, name, ty_opt, init, _) ->
     v.visit_ident v ctx name;
