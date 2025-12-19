@@ -30,6 +30,7 @@ let visit_seq3 f v ctx a b c =
 
 let traverse_expr (v : 'ctx visitor) (ctx : 'ctx) (expr : expr) =
   match expr.kind with
+  | ExprError -> ()
   | ExprLit lit -> v.visit_lit v ctx lit
   | ExprIdent ident -> v.visit_ident v ctx ident
   | ExprLitTuple exprs | ExprLitArray exprs ->
@@ -111,6 +112,7 @@ let traverse_pat v ctx pat =
     visit_all v.visit_ty v ctx tys;
     visit_opt v.visit_pat v ctx pat_opt
   | PatCons (head, tail) -> visit_seq2 v.visit_pat v ctx head tail
+  | PatError -> ()
 
 let traverse_ty v ctx ty =
   match ty.kind with
@@ -123,6 +125,7 @@ let traverse_ty v ctx ty =
   | TyPtr inner -> v.visit_ty v ctx inner
   | TyFn (arg, ret) -> visit_seq2 v.visit_ty v ctx arg ret
   | TyTuple tys -> visit_all v.visit_ty v ctx tys
+  | TyError -> ()
 
 let traverse_fn_sig v ctx sig_ =
   visit_opt v.visit_ident v ctx sig_.fn_name;

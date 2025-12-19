@@ -30,6 +30,7 @@ and ty_kind =
   | TyPtr of ty
   | TyFn of ty * ty
   | TyTuple of ty list
+  | TyError
 
 and pat = pat_kind with_span
 
@@ -42,6 +43,7 @@ and pat_kind =
   | PatLitRecord of ident * pat_field list
   | PatVariant of ident * ty list * pat option
   | PatCons of pat * pat
+  | PatError
 
 and pat_field = { field_name : ident }
 and expr = expr_kind with_span
@@ -78,6 +80,7 @@ and expr_kind =
   | ExprBinary of expr * Token.t * expr
   | ExprRange of expr * Token.t * expr option
   | ExprAssign of expr * expr
+  | ExprError
 
 and stmt = stmt_kind with_span
 and stmt_kind = StmtExpr of expr
