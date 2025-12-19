@@ -11,4 +11,4 @@
 (test
  (name parse_test)
  (libraries alcotest basic lex ast parse)
- (modules parse_test))
+ (modules))
