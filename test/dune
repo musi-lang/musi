@@ -7,8 +7,3 @@
  (name lex_test)
  (libraries alcotest basic lex)
  (modules lex_test))
-
-(test
- (name parse_test)
- (libraries alcotest basic lex ast parse)
- (modules))
