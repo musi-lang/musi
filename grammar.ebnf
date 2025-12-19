@@ -174,15 +174,15 @@ expr_lit_record = [ident], ".{", [aux_record_content], "}";
 
 expr_block = "{", {stmt}, [expr], "}";
 
-expr_if = "if", expr, expr_block, "else", expr_block;
+expr_if = "if", expr, expr, "else", expr;
 
-expr_while = "while", expr, expr_block;
+expr_while = "while", expr, expr;
 
-expr_for = "for", ident, "in", expr, expr_block;
+expr_for = "for", ident, "in", expr, expr;
 
 expr_match = "match", expr, "{", aux_match_cases, "}";
 
-expr_try = "try", expr, ["else", [ident], expr_block];
+expr_try = "try", expr, ["else", [ident], expr];
 
 expr_return = "return", [expr];
 
