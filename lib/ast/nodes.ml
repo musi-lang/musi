@@ -6,9 +6,9 @@ type span = Span.t
 type 'a with_span = { kind : 'a; span : span }
 
 type modifier = {
-    mod_export : bool
-  ; mod_extern : (string option * bool) option (* Some(path, unsafe) or None *)
-  ; mod_unsafe : bool
+    is_export : bool
+  ; is_extern : (string option * bool) option (* Some(path, unsafe) or None *)
+  ; is_unsafe : bool
 }
 
 type lit =
@@ -70,6 +70,9 @@ and expr_kind =
   | ExprSum of attr list * modifier * ident option * ty_params * sum_case list
   | ExprFn of attr list * modifier * fn_sig * expr
   | ExprBind of modifier * bool * ident * ty option * expr * expr
+  | ExprCall of expr * expr list
+  | ExprIndex of expr * expr
+  | ExprField of expr * ident
   | ExprUnaryPostfix of expr * Token.t
   | ExprUnaryPrefix of Token.t * expr
   | ExprBinary of expr * Token.t * expr

@@ -77,6 +77,11 @@ let traverse_expr (v : 'ctx visitor) (ctx : 'ctx) (expr : expr) =
     v.visit_ident v ctx ident;
     visit_opt v.visit_ty v ctx ty_opt;
     visit_seq2 v.visit_expr v ctx init next
+  | ExprCall (callee, args) ->
+    v.visit_expr v ctx callee;
+    visit_all v.visit_expr v ctx args
+  | ExprIndex (target, index) -> visit_seq2 v.visit_expr v ctx target index
+  | ExprField (target, _) -> v.visit_expr v ctx target
   | ExprUnaryPostfix (expr, _) -> v.visit_expr v ctx expr
   | ExprUnaryPrefix (_, expr) -> v.visit_expr v ctx expr
   | ExprBinary (left, _, right) -> visit_seq2 v.visit_expr v ctx left right
