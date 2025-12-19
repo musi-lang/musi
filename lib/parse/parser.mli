@@ -25,10 +25,10 @@ type prec =
   | PrecUnary
   | PrecPostfix
 
-val create : Token.t Seq.t -> Source.t -> int -> Interner.t -> t
+val create : (Token.t * Span.t) Seq.t -> Source.t -> int -> Interner.t -> t
 
 val parse :
-     Token.t Seq.t
+     (Token.t * Span.t) Seq.t
   -> Source.t
   -> int
   -> Interner.t
