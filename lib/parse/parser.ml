@@ -7,20 +7,14 @@ type t = {
     tokens : (Token.t * Span.t) array
   ; mutable token_idx : int
   ; mutable diag : Reporter.bag
-  ; source : Source.t
-  ; file_id : int
   ; interner : Interner.t
 }
 
-type 'a result = ('a, Reporter.bag) Stdlib.result
-
-let create tokens source file_id interner =
+let create tokens _ _ interner =
   {
     tokens = Array.of_seq (Seq.memoize tokens)
   ; token_idx = 0
   ; diag = Reporter.empty_bag
-  ; source
-  ; file_id
   ; interner
   }
 
@@ -758,7 +752,7 @@ and parse_expr_record p start attrs mods =
   ignore (consume p Token.LBrace "expected '{' after 'record' name");
   let fields = parse_comma_list p parse_record_field Token.RBrace in
   let _, end_span =
-    consume p Token.RBrace "expected '}' closing 'record' definition"
+    consume p Token.RBrace "expected '}' closing 'record' expression"
   in
   make_expr
     (ExprRecord (attrs, mods, name, [], fields))
@@ -771,7 +765,7 @@ and parse_expr_sum p start attrs mods =
   ignore (consume p Token.LBrace "expected '{' after 'sum' type name");
   let cases = parse_comma_list p parse_sum_case Token.RBrace in
   let _, end_span =
-    consume p Token.RBrace "expected '}' closing 'sum' type definition"
+    consume p Token.RBrace "expected '}' closing 'sum' type expression"
   in
   make_expr (ExprSum (attrs, mods, name, [], cases)) (Span.merge start end_span)
 
@@ -786,7 +780,7 @@ and parse_sum_case p =
   let types =
     if match_token p [ Token.LParen ] then (
       let t = parse_comma_list p parse_ty Token.RParen in
-      ignore (consume p Token.RParen "expected ')' closing 'sum' case payload");
+      ignore (consume p Token.RParen "expected ')' closing sum case payload");
       t)
     else []
   in
