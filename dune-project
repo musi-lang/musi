@@ -15,5 +15,5 @@
   base-unix
   cmdliner
   yojson
-  lsp
-  jsonrpc))
+  linol
+  linol-lwt))

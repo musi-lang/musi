@@ -1,0 +1,17 @@
+(version 0.10)
+
+(build
+ (progn
+  (when
+   %{pkg-self:dev}
+   (run dune subst))
+  (run dune build -p %{pkg-self:name} -j %{jobs} @install)))
+
+(depends dune yojson logs trace ocaml uutf ppx_yojson_conv_lib)
+
+(source
+ (fetch
+  (url
+   https://github.com/c-cube/linol/releases/download/v0.10/linol-0.10.tbz)
+  (checksum
+   sha256=174bb8cad5b8b0c260d62b0a85da13c4f5caba4fcee042ee58284b09de7896ea)))
