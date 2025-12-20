@@ -77,14 +77,11 @@ let parse_ident_opt p =
   | _ -> None
 
 let parse_list p f seps end_tok =
-  let res = ref [] in
-  (if not (check p end_tok) then
-     let rec loop () =
-       res := f p :: !res;
-       if match_token p seps then loop ()
-     in
-     loop ());
-  List.rev !res
+  let rec loop acc =
+    let x = f p in
+    if match_token p seps then loop (x :: acc) else x :: acc
+  in
+  if check p end_tok then [] else List.rev (loop [])
 
 let sync p =
   let rec loop () =
@@ -230,12 +227,9 @@ let parse_mods p =
     | Token.KwExtern ->
       let off = ref 1 in
       let has =
-        match fst (peek_at p !off) with
-        | Token.LitString _ ->
-          off := !off + 1;
-          true
-        | _ -> false
+        match fst (peek_at p !off) with Token.LitString _ -> true | _ -> false
       in
+      if has then off := !off + 1;
       if fst (peek_at p !off) = Token.KwUnsafe then off := !off + 1;
       if fst (peek_at p !off) = Token.LBrace then ()
       else (
@@ -410,42 +404,11 @@ and parse_infix p l op =
     let r = parse_expr p (token_prec op) in
     make_expr (ExprBinary (l, op, r)) (Span.merge l.span r.span)
 
-and parse_expr_lit_record p n s =
-  expect p Token.LBrace "expected '{' after '.' for record literal";
-  let fs, b = (ref [], ref None) in
-  (if not (check p Token.RBrace) then
-     let e = parse_expr p PrecNone in
-     if match_token p [ Token.KwWith ] then (
-       b := Some e;
-       fs :=
-         parse_list
-           p
-           parse_record_field
-           [ Token.Comma; Token.Semicolon ]
-           Token.RBrace)
-     else
-       fs :=
-         match e.kind with
-         | ExprIdent id ->
-           {
-             field_mutable = false
-           ; field_name = id
-           ; field_ty = None
-           ; field_default = None
-           }
-           :: parse_list
-                p
-                parse_record_field
-                [ Token.Comma; Token.Semicolon ]
-                Token.RBrace
-         | _ ->
-           parse_list
-             p
-             parse_record_field
-             [ Token.Comma; Token.Semicolon ]
-             Token.RBrace);
-  let _, es = consume p Token.RBrace "expected '}' closing record literal" in
-  make_expr (ExprLitRecord (n, !fs, !b)) (Span.merge s es)
+and parse_decl_head p k =
+  let n = parse_ident_opt p in
+  let tp = parse_ty_params p in
+  expect p Token.LBrace (Printf.sprintf "expected '{' after '%s' name" k);
+  (n, tp)
 
 and parse_record_field p =
   let m = match_token p [ Token.KwVar ] in
@@ -456,6 +419,34 @@ and parse_record_field p =
     else None
   in
   { field_mutable = m; field_name = n; field_ty = ty; field_default = def }
+
+and parse_expr_lit_record p n s =
+  expect p Token.LBrace "expected '{' after '.' for record literal";
+  let seps, fs, b = ([ Token.Comma; Token.Semicolon ], ref [], ref None) in
+  (if not (check p Token.RBrace) then
+     let e = parse_expr p PrecNone in
+     if match_token p [ Token.KwWith ] then (
+       b := Some e;
+       fs := parse_list p parse_record_field seps Token.RBrace)
+     else
+       let rest =
+         if match_token p seps then
+           parse_list p parse_record_field seps Token.RBrace
+         else []
+       in
+       fs :=
+         match e.kind with
+         | ExprIdent id ->
+           {
+             field_mutable = false
+           ; field_name = id
+           ; field_ty = None
+           ; field_default = None
+           }
+           :: rest
+         | _ -> rest);
+  let _, es = consume p Token.RBrace "expected '}' closing record literal" in
+  make_expr (ExprLitRecord (n, !fs, !b)) (Span.merge s es)
 
 and parse_expr_block p s =
   expect p Token.LBrace "expected '{' starting block";
@@ -627,9 +618,7 @@ and parse_expr_bind p s t m =
     (Span.merge s i.span)
 
 and parse_expr_record p s a m =
-  let n = parse_ident_opt p in
-  let tp = parse_ty_params p in
-  expect p Token.LBrace "expected '{' after 'record' name";
+  let n, tp = parse_decl_head p "record" in
   let fs = parse_list p parse_record_field [ Token.Semicolon ] Token.RBrace in
   let _, es =
     consume p Token.RBrace "expected '}' closing 'record' expression"
@@ -637,9 +626,7 @@ and parse_expr_record p s a m =
   make_expr (ExprRecord (a, m, n, tp, fs)) (Span.merge s es)
 
 and parse_expr_sum p s a m =
-  let n = parse_ident_opt p in
-  let tp = parse_ty_params p in
-  expect p Token.LBrace "expected '{' after 'sum' name";
+  let n, tp = parse_decl_head p "sum" in
   let cs = parse_list p parse_sum_case [ Token.Comma ] Token.RBrace in
   let _, es =
     consume p Token.RBrace "expected '}' closing 'sum' type expression"
@@ -661,9 +648,9 @@ and parse_sum_case p =
 and parse_expr_extern p s =
   let a =
     match fst (peek p) with
-    | Token.LitString _ -> (
-      let t, _ = advance p in
-      match t with Token.LitString id -> Some (resolve p id) | _ -> None)
+    | Token.LitString id ->
+      ignore (advance p);
+      Some (resolve p id)
     | _ -> None
   in
   let u = match_token p [ Token.KwUnsafe ] in
