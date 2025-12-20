@@ -37,7 +37,7 @@ val has_errors : t -> bool
 val diag : t -> Reporter.bag
 
 (** Parse all statements in source *)
-val parse :
+val try_parse :
      (Token.t * Span.t) Seq.t
   -> Source.t
   -> int
