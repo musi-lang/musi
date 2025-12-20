@@ -83,7 +83,38 @@
 				"language": "musi",
 				"path": "snippets/musi_snippets.json"
 			}
-		]
+		],
+		"commands": [
+			{
+				"command": "musi.restartServer",
+				"title": "Restart Language Server",
+				"category": "Musi",
+				"icon": "$(refresh)"
+			}
+		],
+		"keybindings": [
+			{
+				"command": "musi.restartServer",
+				"key": "ctrl+shift+R",
+				"mac": "cmd+shift+R",
+				"when": "editorLangId == musi"
+			}
+		],
+		"menus": {
+			"commandPalette": [
+				{
+					"command": "musi.restartServer",
+					"when": "true"
+				}
+			],
+			"view/item/context": [
+				{
+					"command": "musi.restartServer",
+					"when": "view == workbench.explorer.fileView",
+					"group": "musi@1"
+				}
+			]
+		}
 	},
 	"scripts": {
 		"build": "bun build ./client/src/extension.ts --outfile=./dist/extension.js --external vscode --target=node",

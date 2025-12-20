@@ -102,7 +102,7 @@ async function startClientWithTimeout(serverPath: string): Promise<void> {
 	]);
 }
 
-export async function activate(_context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
 	updateStatus("Starting...", "loading");
 
 	try {
@@ -159,9 +159,75 @@ export async function activate(_context: vscode.ExtensionContext) {
 			vscode.commands.executeCommand("extension.activate", "musi.vscode");
 		}
 	}
+
+	// Register commands
+	registerCommands(context);
 }
 
 export function deactivate() {
 	statusBarItem?.dispose();
 	return client ? client.stop() : undefined;
+}
+
+async function restartClient(): Promise<void> {
+	if (client) {
+		updateStatus("Restarting...", "loading");
+
+		try {
+			await client.stop();
+			client = undefined;
+		} catch (error) {
+			console.warn("Error stopping client during restart:", error);
+		}
+	}
+
+	try {
+		const serverPath = await findServerPath();
+
+		if (!serverPath) {
+			updateStatus("Build required", "error");
+			vscode.window.showErrorMessage(
+				"Musi LSP server not found. Please run 'dune build' to build the server.",
+			);
+			return;
+		}
+
+		await startClientWithTimeout(serverPath);
+		updateStatus("Ready", "ready");
+
+		vscode.window.showInformationMessage(
+			"Musi Language Server restarted successfully",
+			"Dismiss",
+		);
+
+	} catch (e) {
+		const error = e instanceof Error ? e.message : String(e);
+		updateStatus("Failed", "error");
+
+		vscode.window.showErrorMessage(
+			`Failed to restart Musi LSP server: ${error}`,
+			"Retry",
+			"Show Logs",
+		);
+
+		if (error.includes("timeout")) {
+			vscode.window.showWarningMessage(
+				"Server restart timed out. The server may be hanging. Try checking the build.",
+			);
+		}
+	}
+}
+
+function registerCommands(context: vscode.ExtensionContext) {
+	context.subscriptions.push(
+		vscode.commands.registerCommand("musi.restartServer", async () => {
+			await restartClient();
+		}),
+	);
+
+	context.subscriptions.push(
+		vscode.commands.registerCommand("musi.showLogs", () => {
+			vscode.commands.executeCommand("workbench.action.toggleDevTools");
+		}),
+	);
 }
