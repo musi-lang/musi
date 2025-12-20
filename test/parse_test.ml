@@ -49,15 +49,26 @@ and eq_pat p1 p2 =
            f1.field_name = f2.field_name)
          fs1
          fs2
-  | PatVariant (i1, ts1, p1), PatVariant (i2, ts2, p2) ->
-    i1 = i2 && List.for_all2 eq_ty ts1 ts2 && Option.equal eq_pat p1 p2
+  | PatVariant (i1, ts1, ps1), PatVariant (i2, ts2, ps2) ->
+    i1 = i2 && List.for_all2 eq_ty ts1 ts2 && List.for_all2 eq_pat ps1 ps2
   | PatCons (l1, r1), PatCons (l2, r2) -> eq_pat l1 l2 && eq_pat r1 r2
   | PatError, PatError -> true
   | _ -> false
 
+and eq_cond c1 c2 =
+  match (c1, c2) with
+  | CondExpr e1, CondExpr e2 -> eq_expr e1 e2
+  | CondPat (p1, e1), CondPat (p2, e2) -> eq_pat p1 p2 && eq_expr e1 e2
+  | _ -> false
+
+and eq_cond_list cs1 cs2 = List.for_all2 eq_cond cs1 cs2
+
 and eq_expr e1 e2 =
   match (e1.kind, e2.kind) with
   | ExprLit l1, ExprLit l2 -> eq_lit l1 l2
+  | ExprTemplate (ps1, t1), ExprTemplate (ps2, t2) ->
+    t1 = t2
+    && List.for_all2 (fun (s1, e1) (s2, e2) -> s1 = s2 && eq_expr e1 e2) ps1 ps2
   | ExprLitTuple es1, ExprLitTuple es2 -> List.for_all2 eq_expr es1 es2
   | ExprLitArray es1, ExprLitArray es2 -> List.for_all2 eq_expr es1 es2
   | ExprLitRecord (i1, fs1, b1), ExprLitRecord (i2, fs2, b2) ->
@@ -67,11 +78,13 @@ and eq_expr e1 e2 =
   | ExprIdent i1, ExprIdent i2 -> i1 = i2
   | ExprBlock (ss1, e1), ExprBlock (ss2, e2) ->
     List.for_all2 eq_stmt ss1 ss2 && Option.equal eq_expr e1 e2
-  | ExprIf (c1, t1, f1), ExprIf (c2, t2, f2) ->
-    eq_expr c1 c2 && eq_expr t1 t2 && Option.equal eq_expr f1 f2
-  | ExprWhile (c1, b1), ExprWhile (c2, b2) -> eq_expr c1 c2 && eq_expr b1 b2
-  | ExprFor (id1, it1, b1), ExprFor (id2, it2, b2) ->
-    id1 = id2 && eq_expr it1 it2 && eq_expr b1 b2
+  | ExprIf (c1, t1, e1), ExprIf (c2, t2, e2) ->
+    eq_cond_list c1 c2 && eq_expr t1 t2 && Option.equal eq_expr e1 e2
+  | ExprWhile (c1, g1, b1), ExprWhile (c2, g2, b2) ->
+    eq_cond c1 c2 && Option.equal eq_expr g1 g2 && eq_expr b1 b2
+  | ExprFor (ic1, p1, it1, g1, b1), ExprFor (ic2, p2, it2, g2, b2) ->
+    ic1 = ic2 && eq_pat p1 p2 && eq_expr it1 it2 && Option.equal eq_expr g1 g2
+    && eq_expr b1 b2
   | ExprMatch (e1, cs1), ExprMatch (e2, cs2) ->
     eq_expr e1 e2 && List.for_all2 eq_match_case cs1 cs2
   | ExprReturn e1, ExprReturn e2 -> Option.equal eq_expr e1 e2
@@ -81,10 +94,9 @@ and eq_expr e1 e2 =
   | ExprImport s1, ExprImport s2 -> s1 = s2
   | ExprExtern (a1, u1, s1), ExprExtern (a2, u2, s2) ->
     a1 = a2 && u1 = u2 && List.for_all2 eq_fn_sig s1 s2
-  | ( ExprBind (m1, mut1, i1, t1, init1, n1)
-    , ExprBind (m2, mut2, i2, t2, init2, n2) ) ->
-    eq_mod m1 m2 && mut1 = mut2 && i1 = i2 && Option.equal eq_ty t1 t2
-    && eq_expr init1 init2 && eq_expr n1 n2
+  | ExprBind (m1, mr1, p1, ty1, i1, n1), ExprBind (m2, mr2, p2, ty2, i2, n2) ->
+    eq_mod m1 m2 && mr1 = mr2 && eq_pat p1 p2 && Option.equal eq_ty ty1 ty2
+    && eq_expr i1 i2 && eq_expr n1 n2
   | ExprFn (as1, m1, s1, b1), ExprFn (as2, m2, s2, b2) ->
     List.for_all2 eq_attr as1 as2
     && eq_mod m1 m2 && eq_fn_sig s1 s2 && eq_expr b1 b2
@@ -186,7 +198,7 @@ let verify_ty input expected =
          (ExprBind
             ( mk_mod
             , true
-            , "x"
+            , make_pat (PatIdent "x") Span.dummy
             , Some expected
             , mk_lit (LitInt "0")
             , mk_expr (ExprLit (LitInt "0")) )))
@@ -232,7 +244,13 @@ let verify_pat input expected =
       (mk_expr
          (ExprMatch
             ( mk_ident "x"
-            , [ { case_pat = expected; case_expr = mk_lit (LitInt "0") } ] )))
+            , [
+                {
+                  case_pat = expected
+                ; case_guard = None
+                ; case_expr = mk_lit (LitInt "0")
+                }
+              ] )))
   in
   assert_stmt wrapped expected_stmt
 
@@ -270,7 +288,7 @@ let test_pat_variant () =
   verify_pat
     "Some(x)"
     (make_pat
-       (PatVariant ("Some", [], Some (make_pat (PatIdent "x") Span.dummy)))
+       (PatVariant ("Some", [], [ make_pat (PatIdent "x") Span.dummy ]))
        Span.dummy);
   verify_pat "None" (make_pat (PatIdent "None") Span.dummy)
 
@@ -350,7 +368,12 @@ let test_expr_stmt_bind () =
     mk_stmt_expr
       (mk_expr
          (ExprBind
-            (mk_mod, false, "x", None, mk_lit (LitInt "1"), mk_lit (LitInt "0"))))
+            ( mk_mod
+            , false
+            , make_pat (PatIdent "x") Span.dummy
+            , None
+            , mk_lit (LitInt "1")
+            , mk_lit (LitInt "0") )))
   in
   assert_stmt "val x := 1;" expected_bind
 
