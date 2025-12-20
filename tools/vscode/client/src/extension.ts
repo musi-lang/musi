@@ -144,10 +144,10 @@ export async function activate(_context: vscode.ExtensionContext) {
 		}, 1000);
 	} catch (e) {
 		const error = e instanceof Error ? e.message : String(e);
-		updateStatus("Failed", "error");
+		updateStatus("Unable", "error");
 
 		const action = await vscode.window.showErrorMessage(
-			`Failed to start Musi LSP server: ${error}`,
+			`Unable to start Musi LSP server: ${error}`,
 			"Retry",
 			"Show Logs",
 		);
