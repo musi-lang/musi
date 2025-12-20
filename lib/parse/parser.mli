@@ -38,8 +38,6 @@ val parse :
   -> Interner.t
   -> (stmt list, Reporter.bag) result
 
-(* Exposed for testing purposes *)
-
 (** Parse single expression with given precedence *)
 val parse_expr : t -> prec -> expr
 
