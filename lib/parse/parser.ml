@@ -286,13 +286,18 @@ and parse_prefix p =
       let rec loop acc =
         let e = parse_expr p Prec.None in
         match advance p with
-        | Token.TemplateMiddle id, _ -> loop ((resolve p id, e) :: acc)
-        | Token.TemplateTail id, s ->
+        | Token.TemplateMiddle mid, _ -> loop ((resolve p mid, e) :: acc)
+        | Token.TemplateTail tid, s ->
           make_expr
-            (ExprTemplate (List.rev ((head, e) :: acc), resolve p id))
+            (ExprTemplate (List.rev ((head, e) :: acc), resolve p tid))
             (Span.merge span s)
-        | _, s ->
-          error p "unterminated template literal" s;
+        | tok, s ->
+          error
+            p
+            (Printf.sprintf
+               "expected template middle or tail, found %s"
+               (Token.show p.interner tok))
+            s;
           make_expr ExprError span
       in
       loop []
@@ -485,29 +490,44 @@ and parse_param p =
 
 and parse_expr_lit_record p n s =
   expect p Token.LBrace "expected '{' to start record literal";
-  let seps, fs, b = ([ Token.Comma; Token.Semicolon ], ref [], ref None) in
-  (if not (check p Token.RBrace) then
-     let e = parse_expr p Prec.None in
-     if match_token p [ Token.KwWith ] then (
-       b := Some e;
-       fs := parse_list p parse_record_field seps Token.RBrace)
-     else
-       let rest =
-         if match_token p seps then
-           parse_list p parse_record_field seps Token.RBrace
-         else []
-       in
-       fs :=
-         match e.kind with
-         | ExprIdent id ->
-           {
-             field_mutable = false
-           ; field_name = id
-           ; field_ty = None
-           ; field_default = None
-           }
-           :: rest
-         | _ -> rest);
+  let seps = [ Token.Comma; Token.Semicolon ] in
+  let fs = ref [] in
+  let b = ref None in
+  if not (check p Token.RBrace) then
+    if match_token p [ Token.KwVar ] then
+      fs := parse_list p parse_record_field seps Token.RBrace
+    else
+      let e = parse_expr p Prec.None in
+      if match_token p [ Token.KwWith ] then (
+        b := Some e;
+        fs := parse_list p parse_record_field seps Token.RBrace)
+      else
+        match e.kind with
+        | ExprIdent id ->
+          let ty =
+            if match_token p [ Token.Colon ] then Some (parse_ty p) else None
+          in
+          let def =
+            if match_token p [ Token.ColonEq ] then
+              Some (parse_expr p Prec.None)
+            else None
+          in
+          let first =
+            {
+              field_mutable = false
+            ; field_name = id
+            ; field_ty = ty
+            ; field_default = def
+            }
+          in
+          let rest =
+            if match_token p seps then
+              parse_list p parse_record_field seps Token.RBrace
+            else []
+          in
+          fs := first :: rest
+        | _ -> error p "expected field name or 'with' base" e.span
+  else ();
   let _, es = consume p Token.RBrace "expected '}' to close record literal" in
   make_expr (ExprLitRecord (n, !fs, !b)) (Span.merge s es)
 
