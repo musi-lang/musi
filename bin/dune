@@ -1,0 +1,4 @@
+(executable
+ (public_name music)
+ (name main)
+ (libraries musi.basic musi.lex musi.parse cmdliner yojson))
