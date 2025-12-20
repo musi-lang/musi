@@ -73,7 +73,7 @@ and expr_kind =
   | ExprLitRecord of ident option * record_field list * expr option
   | ExprIdent of ident
   | ExprBlock of stmt list * expr option
-  | ExprIf of expr * expr * expr
+  | ExprIf of expr * expr * expr option
   | ExprWhile of expr * expr
   | ExprFor of ident * expr * expr
   | ExprMatch of expr * match_case list

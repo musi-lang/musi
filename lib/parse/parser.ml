@@ -57,8 +57,17 @@ let consume p kind message =
       span;
     (kind, span)
 
+let expect p k m = ignore (consume p k m)
+
 let resolve p id =
   match Interner.lookup_opt p.interner id with Some s -> s | None -> "?"
+
+let expect_id p msg =
+  match advance p with
+  | Token.Ident id, _ -> resolve p id
+  | _, s ->
+    error p msg s;
+    "?"
 
 let parse_ident_opt p =
   match peek p with
@@ -137,293 +146,280 @@ let token_prec = function
     PrecPostfix
   | _ -> PrecNone
 
+let parse_lit_opt p =
+  let tok, span = peek p in
+  match tok with
+  | Token.LitInt id | Token.LitReal id | Token.LitString id ->
+    ignore (advance p);
+    Some
+      ( span
+      , match tok with
+        | Token.LitInt _ -> LitInt (resolve p id)
+        | Token.LitReal _ -> LitFloat (resolve p id)
+        | _ -> LitString (resolve p id) )
+  | Token.LitRune c ->
+    ignore (advance p);
+    Some (span, LitRune c)
+  | Token.KwTrue | Token.KwFalse ->
+    ignore (advance p);
+    Some (span, LitBool (tok = Token.KwTrue))
+  | _ -> None
+
 let rec parse_ty p =
   match fst (peek p) with
   | Token.Ident _ -> parse_ty_app_or_ident p
   | Token.Question ->
-    let _, start = advance p in
-    let inner = parse_ty p in
-    make_ty (TyOptional inner) (Span.merge start inner.span)
+    let _, s = advance p in
+    let i = parse_ty p in
+    make_ty (TyOptional i) (Span.merge s i.span)
   | Token.Caret ->
-    let _, start = advance p in
-    let inner = parse_ty p in
-    make_ty (TyPtr inner) (Span.merge start inner.span)
-  | Token.LBrack -> parse_ty_array p (snd (peek p))
-  | Token.LParen -> parse_ty_tuple_or_group p (snd (peek p))
+    let _, s = advance p in
+    let i = parse_ty p in
+    make_ty (TyPtr i) (Span.merge s i.span)
+  | Token.LBrack ->
+    ignore (advance p);
+    let sz =
+      match advance p with
+      | Token.LitInt id, _ -> Some (int_of_string (resolve p id))
+      | _ -> None
+    in
+    expect p Token.RBrack "expected ']' closing array type size";
+    let i = parse_ty p in
+    make_ty (TyArray (sz, i)) (Span.merge (snd (prev p)) i.span)
+  | Token.LParen ->
+    let _, s = advance p in
+    let ts = parse_list p parse_ty [ Token.Comma ] Token.RParen in
+    let _, es = consume p Token.RParen "expected ')' closing tuple type" in
+    make_ty (TyTuple ts) (Span.merge s es)
   | _ ->
-    let _, span = advance p in
-    error p "expected type" span;
-    make_ty TyError span
+    let _, s = advance p in
+    error p "expected type" s;
+    make_ty TyError s
 
 and parse_ty_app_or_ident p =
-  let tok, span = advance p in
-  let name = match tok with Token.Ident id -> resolve p id | _ -> "?" in
+  let t, s = advance p in
+  let n = match t with Token.Ident id -> resolve p id | _ -> "?" in
   if match_token p [ Token.Lt ] then
-    let args = parse_list p parse_ty [ Token.Comma ] Token.Gt in
-    let _, end_span =
-      consume p Token.Gt "expected '>' closing type arguments"
-    in
-    make_ty (TyApp (name, args)) (Span.merge span end_span)
-  else make_ty (TyIdent name) span
-
-and parse_ty_array p start =
-  ignore (advance p);
-  let sz =
-    match advance p with
-    | Token.LitInt id, _ -> Some (int_of_string (resolve p id))
-    | _ -> None
-  in
-  ignore (consume p Token.RBrack "expected ']' closing array type size");
-  let inner = parse_ty p in
-  make_ty (TyArray (sz, inner)) (Span.merge start inner.span)
-
-and parse_ty_tuple_or_group p start =
-  ignore (advance p);
-  let types = parse_list p parse_ty [ Token.Comma ] Token.RParen in
-  let _, end_span = consume p Token.RParen "expected ')' closing tuple type" in
-  make_ty (TyTuple types) (Span.merge start end_span)
+    let as_ = parse_list p parse_ty [ Token.Comma ] Token.Gt in
+    let _, es = consume p Token.Gt "expected '>' closing type arguments" in
+    make_ty (TyApp (n, as_)) (Span.merge s es)
+  else make_ty (TyIdent n) s
 
 let parse_attrs p =
   if match_token p [ Token.LBrackLt ] then (
-    let attrs =
+    let as_ =
       parse_list
         p
         (fun p ->
-          let t, _ = advance p in
-          {
-            attr_name =
-              (match t with Token.Ident id -> resolve p id | _ -> "?")
-          ; attr_args = []
-          })
+          { attr_name = expect_id p "expected attribute name"; attr_args = [] })
         [ Token.Comma ]
         Token.GtRBrack
     in
-    ignore (consume p Token.GtRBrack "expected '>]' closing attributes");
-    attrs)
+    expect p Token.GtRBrack "expected '>]' closing attributes";
+    as_)
   else []
 
 let parse_modifiers p =
-  let export, extern, unsafe = (ref false, ref (None, false), ref false) in
+  let ex, ext, u = (ref false, ref (None, false), ref false) in
   let rec loop () =
     match fst (peek p) with
     | Token.Ident id when resolve p id = "export" ->
       ignore (advance p);
-      export := true;
+      ex := true;
       loop ()
     | Token.KwExtern ->
-      let offset = ref 1 in
-      let has_str =
-        match fst (peek_at p !offset) with
+      let off = ref 1 in
+      let has =
+        match fst (peek_at p !off) with
         | Token.LitString _ ->
-          offset := !offset + 1;
+          off := !off + 1;
           true
         | _ -> false
       in
-      if fst (peek_at p !offset) = Token.KwUnsafe then offset := !offset + 1;
-      if fst (peek_at p !offset) = Token.LBrace then ()
+      if fst (peek_at p !off) = Token.KwUnsafe then off := !off + 1;
+      if fst (peek_at p !off) = Token.LBrace then ()
       else (
         ignore (advance p);
         let abi =
-          if has_str then
+          if has then
             match advance p with
             | Token.LitString id, _ -> Some (resolve p id)
             | _ -> None
           else None
         in
-        extern := (abi, true);
+        ext := (abi, true);
         loop ())
     | Token.KwUnsafe ->
       if fst (peek_at p 1) = Token.LBrace then ()
       else (
         ignore (advance p);
-        unsafe := true;
+        u := true;
         loop ())
     | _ -> ()
   in
   loop ();
-  { is_export = !export; is_extern = !extern; is_unsafe = !unsafe }
+  { is_export = !ex; is_extern = !ext; is_unsafe = !u }
 
 let rec parse_expr p prec =
-  let left = parse_prefix p in
-  let rec loop left =
-    let tok, _ = peek p in
-    if token_prec tok > prec then loop (parse_infix p left tok) else left
+  let l = parse_prefix p in
+  let rec loop l =
+    let t, _ = peek p in
+    if token_prec t > prec then loop (parse_infix p l t) else l
   in
-  loop left
+  loop l
 
 and parse_prefix p =
-  let attrs = parse_attrs p in
-  let mods = parse_modifiers p in
-  let tok, span = peek p in
-  match tok with
-  | Token.LitInt id | Token.LitReal id | Token.LitString id ->
-    ignore (advance p);
-    let lit =
-      match tok with
-      | Token.LitInt _ -> LitInt (resolve p id)
-      | Token.LitReal _ -> LitFloat (resolve p id)
-      | _ -> LitString (resolve p id)
-    in
-    make_expr (ExprLit lit) span
-  | Token.LitRune c ->
-    ignore (advance p);
-    make_expr (ExprLit (LitRune c)) span
-  | Token.Minus | Token.KwNot | Token.Tilde | Token.At ->
-    ignore (advance p);
-    let right = parse_expr p PrecUnary in
-    make_expr (ExprUnaryPrefix (tok, right)) (Span.merge span right.span)
-  | Token.KwTrue | Token.KwFalse ->
-    ignore (advance p);
-    make_expr (ExprLit (LitBool (tok = Token.KwTrue))) span
-  | Token.Ident id ->
-    ignore (advance p);
-    let name = resolve p id in
-    if check p Token.Dot && fst (peek_at p 1) = Token.LBrace then (
+  let attrs, mods, (tok, span) = (parse_attrs p, parse_modifiers p, peek p) in
+  match parse_lit_opt p with
+  | Some (s, l) -> make_expr (ExprLit l) s
+  | None -> (
+    match tok with
+    | Token.Minus | Token.KwNot | Token.Tilde | Token.At ->
       ignore (advance p);
-      parse_expr_lit_record p (Some name) span)
-    else make_expr (ExprIdent name) span
-  | Token.Dot ->
-    if fst (peek_at p 1) = Token.LBrace then (
+      let r = parse_expr p PrecUnary in
+      make_expr (ExprUnaryPrefix (tok, r)) (Span.merge span r.span)
+    | Token.Ident id ->
       ignore (advance p);
-      parse_expr_lit_record p None span)
-    else (
-      error p "expected '{' after '.' for record literal" span;
+      let n = resolve p id in
+      if check p Token.Dot && fst (peek_at p 1) = Token.LBrace then (
+        ignore (advance p);
+        parse_expr_lit_record p (Some n) span)
+      else make_expr (ExprIdent n) span
+    | Token.Dot ->
+      if fst (peek_at p 1) = Token.LBrace then (
+        ignore (advance p);
+        parse_expr_lit_record p None span)
+      else (
+        error p "expected '{' after '.' for record literal" span;
+        ignore (advance p);
+        make_expr ExprError span)
+    | Token.LParen ->
+      ignore (advance p);
+      parse_expr_group_or_tuple p span
+    | Token.LBrack ->
+      ignore (advance p);
+      let es =
+        parse_list
+          p
+          (fun p -> parse_expr p PrecNone)
+          [ Token.Comma ]
+          Token.RBrack
+      in
+      let _, es_s = consume p Token.RBrack "expected ']'" in
+      make_expr (ExprLitArray es) (Span.merge span es_s)
+    | Token.LBrace -> parse_expr_block p span
+    | Token.KwIf ->
+      ignore (advance p);
+      let c, t = (parse_expr p PrecNone, parse_expr p PrecNone) in
+      let e =
+        if match_token p [ Token.KwElse ] then Some (parse_expr p PrecNone)
+        else None
+      in
+      make_expr (ExprIf (c, t, e)) (Span.merge span (prev p |> snd))
+    | Token.KwWhile ->
+      ignore (advance p);
+      let c, b = (parse_expr p PrecNone, parse_expr p PrecNone) in
+      make_expr (ExprWhile (c, b)) (Span.merge span b.span)
+    | Token.KwFor ->
+      ignore (advance p);
+      let n = expect_id p "expected identifier for iterator" in
+      expect p Token.KwIn "expected 'in'";
+      let it, b = (parse_expr p PrecNone, parse_expr p PrecNone) in
+      make_expr (ExprFor (n, it, b)) (Span.merge span b.span)
+    | Token.KwMatch ->
+      ignore (advance p);
+      parse_expr_match p span
+    | Token.KwReturn | Token.KwBreak ->
+      ignore (advance p);
+      let e =
+        if not (check p Token.Semicolon || check p Token.RBrace) then
+          Some (parse_expr p PrecNone)
+        else None
+      in
+      make_expr
+        (if tok = Token.KwReturn then ExprReturn e else ExprBreak e)
+        span
+    | Token.KwDefer | Token.KwUnsafe ->
+      ignore (advance p);
+      let b = parse_expr p PrecNone in
+      make_expr
+        (if tok = Token.KwDefer then ExprDefer b else ExprUnsafe b)
+        (Span.merge span b.span)
+    | Token.KwImport ->
+      ignore (advance p);
+      let pth =
+        match advance p with
+        | Token.LitString id, _ -> resolve p id
+        | _, s ->
+          error p "expected string after 'import'" s;
+          "?"
+      in
+      make_expr (ExprImport pth) span
+    | Token.KwExtern ->
+      ignore (advance p);
+      parse_expr_extern p span
+    | Token.KwFn ->
+      ignore (advance p);
+      parse_expr_fn p span attrs mods
+    | Token.KwVal | Token.KwVar ->
+      ignore (advance p);
+      parse_expr_bind p span tok mods
+    | Token.KwRecord ->
+      ignore (advance p);
+      parse_expr_record p span attrs mods
+    | Token.KwSum ->
+      ignore (advance p);
+      parse_expr_sum p span attrs mods
+    | _ ->
+      error
+        p
+        (Printf.sprintf "unexpected token '%s'" (Token.show p.interner tok))
+        span;
       ignore (advance p);
       make_expr ExprError span)
-  | Token.LParen ->
-    ignore (advance p);
-    parse_expr_group_or_tuple p span
-  | Token.LBrack ->
-    ignore (advance p);
-    let es =
-      parse_list p (fun p -> parse_expr p PrecNone) [ Token.Comma ] Token.RBrack
-    in
-    let _, end_s = consume p Token.RBrack "expected ']'" in
-    make_expr (ExprLitArray es) (Span.merge span end_s)
-  | Token.LBrace -> parse_expr_block p span
-  | Token.KwIf ->
-    ignore (advance p);
-    let c = parse_expr p PrecNone in
-    let t = parse_expr p PrecNone in
-    let e =
-      if match_token p [ Token.KwElse ] then parse_expr p PrecNone
-      else make_expr ExprError span
-    in
-    make_expr (ExprIf (c, t, e)) (Span.merge span (prev p |> snd))
-  | Token.KwWhile ->
-    ignore (advance p);
-    let c, b = (parse_expr p PrecNone, parse_expr p PrecNone) in
-    make_expr (ExprWhile (c, b)) (Span.merge span b.span)
-  | Token.KwFor ->
-    ignore (advance p);
-    let n =
-      match advance p with
-      | Token.Ident id, _ -> resolve p id
-      | _, s ->
-        error p "expected identifier for iterator" s;
-        "?"
-    in
-    ignore (consume p Token.KwIn "expected 'in'");
-    let it, b = (parse_expr p PrecNone, parse_expr p PrecNone) in
-    make_expr (ExprFor (n, it, b)) (Span.merge span b.span)
-  | Token.KwMatch ->
-    ignore (advance p);
-    parse_expr_match p span
-  | Token.KwReturn | Token.KwBreak ->
-    ignore (advance p);
-    let e =
-      if not (check p Token.Semicolon || check p Token.RBrace) then
-        Some (parse_expr p PrecNone)
-      else None
-    in
-    make_expr (if tok = Token.KwReturn then ExprReturn e else ExprBreak e) span
-  | Token.KwDefer | Token.KwUnsafe ->
-    ignore (advance p);
-    let b = parse_expr p PrecNone in
-    make_expr
-      (if tok = Token.KwDefer then ExprDefer b else ExprUnsafe b)
-      (Span.merge span b.span)
-  | Token.KwImport ->
-    ignore (advance p);
-    let pth =
-      match advance p with
-      | Token.LitString id, _ -> resolve p id
-      | _, s ->
-        error p "expected string after 'import'" s;
-        "?"
-    in
-    make_expr (ExprImport pth) span
-  | Token.KwExtern ->
-    ignore (advance p);
-    parse_expr_extern p span
-  | Token.KwFn ->
-    ignore (advance p);
-    parse_expr_fn p span attrs mods
-  | Token.KwVal | Token.KwVar ->
-    ignore (advance p);
-    parse_expr_bind p span tok mods
-  | Token.KwRecord ->
-    ignore (advance p);
-    parse_expr_record p span attrs mods
-  | Token.KwSum ->
-    ignore (advance p);
-    parse_expr_sum p span attrs mods
-  | _ ->
-    error
-      p
-      (Printf.sprintf "unexpected token '%s'" (Token.show p.interner tok))
-      span;
-    ignore (advance p);
-    make_expr ExprError span
 
-and parse_infix p left op =
-  let _, span = advance p in
+and parse_infix p l op =
+  let _, s = advance p in
   match op with
   | Token.LParen ->
-    let args =
+    let as_ =
       parse_list p (fun p -> parse_expr p PrecNone) [ Token.Comma ] Token.RParen
     in
-    let _, end_s =
+    let _, es =
       consume p Token.RParen "expected ')' closing function arguments"
     in
-    make_expr (ExprCall (left, args)) (Span.merge left.span end_s)
+    make_expr (ExprCall (l, as_)) (Span.merge l.span es)
   | Token.LBrack ->
-    let idx = parse_expr p PrecNone in
-    let _, end_s = consume p Token.RBrack "expected ']'" in
-    make_expr (ExprIndex (left, idx)) (Span.merge left.span end_s)
+    let i = parse_expr p PrecNone in
+    let _, es = consume p Token.RBrack "expected ']'" in
+    make_expr (ExprIndex (l, i)) (Span.merge l.span es)
   | Token.Dot ->
-    let fld =
-      match advance p with
-      | Token.Ident id, _ -> resolve p id
-      | _, s ->
-        error p "expected field name after '.'" s;
-        "?"
-    in
-    make_expr (ExprField (left, fld)) (Span.merge left.span span)
+    let f = expect_id p "expected field name after '.'" in
+    make_expr (ExprField (l, f)) (Span.merge l.span s)
   | Token.DotCaret | Token.Question ->
-    make_expr (ExprUnaryPostfix (left, op)) (Span.merge left.span span)
+    make_expr (ExprUnaryPostfix (l, op)) (Span.merge l.span s)
   | Token.LtMinus ->
-    let right = parse_expr p PrecAssign in
-    make_expr (ExprAssign (left, right)) (Span.merge left.span right.span)
+    let r = parse_expr p PrecAssign in
+    make_expr (ExprAssign (l, r)) (Span.merge l.span r.span)
   | _ ->
-    let right = parse_expr p (token_prec op) in
-    make_expr (ExprBinary (left, op, right)) (Span.merge left.span right.span)
+    let r = parse_expr p (token_prec op) in
+    make_expr (ExprBinary (l, op, r)) (Span.merge l.span r.span)
 
-and parse_expr_lit_record p name start =
-  ignore (consume p Token.LBrace "expected '{' after '.' for record literal");
-  let base, fields = (ref None, ref []) in
+and parse_expr_lit_record p n s =
+  expect p Token.LBrace "expected '{' after '.' for record literal";
+  let fs, b = (ref [], ref None) in
   (if not (check p Token.RBrace) then
      let e = parse_expr p PrecNone in
      if match_token p [ Token.KwWith ] then (
-       base := Some e;
-       fields :=
+       b := Some e;
+       fs :=
          parse_list
            p
            parse_record_field
            [ Token.Comma; Token.Semicolon ]
            Token.RBrace)
      else
-       fields :=
+       fs :=
          match e.kind with
          | ExprIdent id ->
            {
@@ -443,17 +439,12 @@ and parse_expr_lit_record p name start =
              parse_record_field
              [ Token.Comma; Token.Semicolon ]
              Token.RBrace);
-  let _, end_s = consume p Token.RBrace "expected '}' closing record literal" in
-  make_expr (ExprLitRecord (name, !fields, !base)) (Span.merge start end_s)
+  let _, es = consume p Token.RBrace "expected '}' closing record literal" in
+  make_expr (ExprLitRecord (n, !fs, !b)) (Span.merge s es)
 
 and parse_record_field p =
   let m, n =
-    ( match_token p [ Token.KwVar ]
-    , match advance p with
-      | Token.Ident id, _ -> resolve p id
-      | _, s ->
-        error p "expected field name" s;
-        "?" )
+    (match_token p [ Token.KwVar ], expect_id p "expected field name")
   in
   let ty = if match_token p [ Token.Colon ] then Some (parse_ty p) else None in
   let def =
@@ -462,310 +453,244 @@ and parse_record_field p =
   in
   { field_mutable = m; field_name = n; field_ty = ty; field_default = def }
 
-and parse_expr_block p start =
-  ignore (consume p Token.LBrace "expected '{' starting block");
-  let stmts, expr = (ref [], ref None) in
+and parse_expr_block p s =
+  expect p Token.LBrace "expected '{' starting block";
+  let st, e = (ref [], ref None) in
   while not (check p Token.RBrace || is_at_end p) do
-    let e = parse_expr p PrecNone in
+    let ex = parse_expr p PrecNone in
     if match_token p [ Token.Semicolon ] then
-      stmts := make_stmt (StmtExpr e) e.span :: !stmts
-    else if check p Token.RBrace then expr := Some e
+      st := make_stmt (StmtExpr ex) ex.span :: !st
+    else if check p Token.RBrace then e := Some ex
     else (
       error p "expected ';' after statement" (snd (peek p));
       sync p)
   done;
-  let _, end_s = consume p Token.RBrace "expected '}' closing block" in
-  make_expr (ExprBlock (List.rev !stmts, !expr)) (Span.merge start end_s)
+  let _, es = consume p Token.RBrace "expected '}' closing block" in
+  make_expr (ExprBlock (List.rev !st, !e)) (Span.merge s es)
 
-and parse_expr_group_or_tuple p start =
+and parse_expr_group_or_tuple p s =
   if match_token p [ Token.RParen ] then
-    make_expr (ExprLitTuple []) (Span.merge start (prev p |> snd))
+    make_expr (ExprLitTuple []) (Span.merge s (snd (prev p)))
   else
-    let first = parse_expr p PrecNone in
+    let f = parse_expr p PrecNone in
     if match_token p [ Token.Comma ] then
-      let rest =
+      let rs =
         parse_list
           p
           (fun p -> parse_expr p PrecNone)
           [ Token.Comma ]
           Token.RParen
       in
-      let _, end_s =
-        consume p Token.RParen "expected ')' closing tuple literal"
-      in
-      make_expr (ExprLitTuple (first :: rest)) (Span.merge start end_s)
+      let _, es = consume p Token.RParen "expected ')' closing tuple literal" in
+      make_expr (ExprLitTuple (f :: rs)) (Span.merge s es)
     else (
-      ignore (consume p Token.RParen "expected ')' closing expression grouping");
-      first)
+      expect p Token.RParen "expected ')' closing expression grouping";
+      f)
 
-and parse_expr_match p start =
-  let target = parse_expr p PrecNone in
-  ignore (consume p Token.LBrace "expected '{' opening 'match' body");
-  let cases = ref [] in
+and parse_expr_match p s =
+  let t = parse_expr p PrecNone in
+  expect p Token.LBrace "expected '{' opening 'match' body";
+  let cs = ref [] in
   while match_token p [ Token.KwCase ] do
     let pat = parse_pat p in
-    ignore (consume p Token.EqGt "expected '=>' after 'match' pattern");
+    expect p Token.EqGt "expected '=>' after 'match' pattern";
     let e = parse_expr p PrecNone in
     ignore (match_token p [ Token.Comma; Token.Semicolon ]);
-    cases := { case_pat = pat; case_expr = e } :: !cases
+    cs := { case_pat = pat; case_expr = e } :: !cs
   done;
-  let _, end_s = consume p Token.RBrace "expected '}' closing 'match' body" in
-  make_expr (ExprMatch (target, List.rev !cases)) (Span.merge start end_s)
+  let _, es = consume p Token.RBrace "expected '}' closing 'match' body" in
+  make_expr (ExprMatch (t, List.rev !cs)) (Span.merge s es)
 
-and parse_pat p = parse_pat_cons p
-
-and parse_pat_cons p =
-  let left = parse_pat_primary p in
+and parse_pat p =
+  let l = parse_pat_primary p in
   if match_token p [ Token.ColonColon ] then
-    let right = parse_pat_cons p in
-    make_pat (PatCons (left, right)) (Span.merge left.span right.span)
-  else left
+    let r = parse_pat p in
+    make_pat (PatCons (l, r)) (Span.merge l.span r.span)
+  else l
 
 and parse_pat_primary p =
   let tok, span = peek p in
-  match tok with
-  | Token.Ident id -> (
-    ignore (advance p);
-    let n = resolve p id in
-    match fst (peek p) with
-    | Token.Dot ->
+  match parse_lit_opt p with
+  | Some (s, l) -> make_pat (PatLit l) s
+  | None -> (
+    match tok with
+    | Token.Ident id -> (
       ignore (advance p);
-      parse_pat_lit_record p n span
-    | Token.Lt | Token.LParen -> parse_pat_variant p n span
-    | _ -> make_pat (PatIdent n) span)
-  | Token.Underscore ->
-    ignore (advance p);
-    make_pat PatWild span
-  | Token.LitInt id | Token.LitReal id | Token.LitString id ->
-    ignore (advance p);
-    let lit =
-      match tok with
-      | Token.LitInt _ -> LitInt (resolve p id)
-      | Token.LitReal _ -> LitFloat (resolve p id)
-      | _ -> LitString (resolve p id)
-    in
-    make_pat (PatLit lit) span
-  | Token.LitRune c ->
-    ignore (advance p);
-    make_pat (PatLit (LitRune c)) span
-  | Token.KwTrue | Token.KwFalse ->
-    ignore (advance p);
-    make_pat (PatLit (LitBool (tok = Token.KwTrue))) span
-  | Token.LParen ->
-    ignore (advance p);
-    let ps = parse_list p parse_pat [ Token.Comma ] Token.RParen in
-    let _, end_s =
-      consume p Token.RParen "expected ')' closing tuple pattern"
-    in
-    make_pat (PatLitTuple ps) (Span.merge span end_s)
-  | Token.LBrack ->
-    ignore (advance p);
-    let ps = parse_list p parse_pat [ Token.Comma ] Token.RBrack in
-    let _, end_s =
-      consume p Token.RBrack "expected ']' closing array pattern"
-    in
-    make_pat (PatLitArray ps) (Span.merge span end_s)
-  | _ ->
-    error p "expected pattern" span;
-    ignore (advance p);
-    make_pat PatError span
+      let n = resolve p id in
+      match fst (peek p) with
+      | Token.Dot ->
+        ignore (advance p);
+        parse_pat_lit_record p n span
+      | Token.Lt | Token.LParen -> parse_pat_variant p n span
+      | _ -> make_pat (PatIdent n) span)
+    | Token.Underscore ->
+      ignore (advance p);
+      make_pat PatWild span
+    | Token.LParen ->
+      ignore (advance p);
+      let ps = parse_list p parse_pat [ Token.Comma ] Token.RParen in
+      let _, es = consume p Token.RParen "expected ')' closing tuple pattern" in
+      make_pat (PatLitTuple ps) (Span.merge span es)
+    | Token.LBrack ->
+      ignore (advance p);
+      let ps = parse_list p parse_pat [ Token.Comma ] Token.RBrack in
+      let _, es = consume p Token.RBrack "expected ']' closing array pattern" in
+      make_pat (PatLitArray ps) (Span.merge span es)
+    | _ ->
+      error p "expected pattern" span;
+      ignore (advance p);
+      make_pat PatError span)
 
-and parse_pat_lit_record p name start =
-  ignore (consume p Token.LBrace "expected '{' after '.' for record pattern");
-  let fields =
+and parse_pat_lit_record p n s =
+  expect p Token.LBrace "expected '{' after '.' for record pattern";
+  let fs =
     parse_list
       p
-      (fun p ->
-        let t, _ = advance p in
-        {
-          field_name =
-            (match t with Token.Ident id -> resolve p id | _ -> "?")
-        })
+      (fun p -> { field_name = expect_id p "expected field name" })
       [ Token.Comma ]
       Token.RBrace
   in
-  let _, end_s = consume p Token.RBrace "expected '}' closing record pattern" in
-  make_pat (PatLitRecord (name, fields)) (Span.merge start end_s)
+  let _, es = consume p Token.RBrace "expected '}' closing record pattern" in
+  make_pat (PatLitRecord (n, fs)) (Span.merge s es)
 
-and parse_pat_variant p name start =
-  let args =
+and parse_pat_variant p n s =
+  let as_ =
     if match_token p [ Token.Lt ] then (
       let as_ = parse_list p parse_ty [ Token.Comma ] Token.Gt in
-      ignore (consume p Token.Gt "expected '>'");
+      expect p Token.Gt "expected '>'";
       as_)
     else []
   in
-  let pat =
+  let pt =
     if match_token p [ Token.LParen ] then (
       let p' = parse_pat p in
-      ignore (consume p Token.RParen "expected ')'");
+      expect p Token.RParen "expected ')'";
       Some p')
     else None
   in
-  make_pat (PatVariant (name, args, pat)) (Span.merge start (prev p |> snd))
+  make_pat (PatVariant (n, as_, pt)) (Span.merge s (snd (prev p)))
 
 and parse_ty_params p =
   if match_token p [ Token.Lt ] then (
     let ps =
       parse_list
         p
-        (fun p ->
-          match advance p with
-          | Token.Ident id, _ -> resolve p id
-          | _, s ->
-            error p "expected identifier" s;
-            "?")
+        (fun p -> expect_id p "expected identifier")
         [ Token.Comma ]
         Token.Gt
     in
-    ignore (consume p Token.Gt "expected '>' closing type parameters");
+    expect p Token.Gt "expected '>' closing type parameters";
     ps)
   else []
 
-and parse_fn_sig p name =
-  let ty_params = parse_ty_params p in
-  ignore (consume p Token.LParen "expected '(' starting function parameters");
-  let params = parse_list p parse_param [ Token.Comma ] Token.RParen in
-  ignore (consume p Token.RParen "expected ')' closing function parameters");
-  let ret_ty =
-    if match_token p [ Token.Colon ] then Some (parse_ty p) else None
-  in
-  {
-    fn_name = name
-  ; fn_ty_params = ty_params
-  ; fn_params = params
-  ; fn_ret_ty = ret_ty
-  }
+and parse_fn_sig p n =
+  let tp = parse_ty_params p in
+  expect p Token.LParen "expected '(' starting function parameters";
+  let ps = parse_list p parse_param [ Token.Comma ] Token.RParen in
+  expect p Token.RParen "expected ')' closing function parameters";
+  let rt = if match_token p [ Token.Colon ] then Some (parse_ty p) else None in
+  { fn_name = n; fn_ty_params = tp; fn_params = ps; fn_ret_ty = rt }
 
 and parse_param p =
   let mut = match_token p [ Token.KwVar ] in
-  let name =
-    match advance p with
-    | Token.Ident id, _ -> resolve p id
-    | _, s ->
-      error p "expected parameter name" s;
-      "?"
-  in
+  let n = expect_id p "expected parameter name" in
   let ty = if match_token p [ Token.Colon ] then Some (parse_ty p) else None in
-  let def =
+  let d =
     if match_token p [ Token.ColonEq ] then Some (parse_expr p PrecNone)
     else None
   in
-  { param_mutable = mut; param_name = name; param_ty = ty; param_default = def }
+  { param_mutable = mut; param_name = n; param_ty = ty; param_default = d }
 
-and parse_expr_fn p start attrs mods =
-  let name = parse_ident_opt p in
-  let sig_ = parse_fn_sig p name in
-  let body = parse_expr_block p (snd (peek p)) in
-  make_expr (ExprFn (attrs, mods, sig_, body)) (Span.merge start body.span)
+and parse_expr_fn p s a m =
+  let n = parse_ident_opt p in
+  let sig_ = parse_fn_sig p n in
+  let b = parse_expr_block p (snd (peek p)) in
+  make_expr (ExprFn (a, m, sig_, b)) (Span.merge s b.span)
 
-and parse_expr_bind p start tok mods =
-  let name =
-    match advance p with
-    | Token.Ident id, _ -> resolve p id
-    | _, s ->
-      error p "expected identifier" s;
-      "?"
-  in
+and parse_expr_bind p s t m =
+  let n = expect_id p "expected identifier" in
   let ty = if match_token p [ Token.Colon ] then Some (parse_ty p) else None in
-  ignore (consume p Token.ColonEq "expected ':=' after binding name and type");
-  let init = parse_expr p PrecNone in
+  expect p Token.ColonEq "expected ':=' after binding name and type";
+  let i = parse_expr p PrecNone in
   make_expr
     (ExprBind
-       ( mods
-       , tok = Token.KwVar
-       , name
+       ( m
+       , t = Token.KwVar
+       , n
        , ty
-       , init
+       , i
        , make_expr (ExprLit (LitInt "0")) Span.dummy ))
-    (Span.merge start init.span)
+    (Span.merge s i.span)
 
-and parse_expr_record p start attrs mods =
-  let name = parse_ident_opt p in
-  let ty_params = parse_ty_params p in
-  ignore (consume p Token.LBrace "expected '{' after 'record' name");
-  let fields =
+and parse_expr_record p s a m =
+  let n, tp = (parse_ident_opt p, parse_ty_params p) in
+  expect p Token.LBrace "expected '{' after 'record' name";
+  let fs =
     parse_list
       p
       parse_record_field
       [ Token.Comma; Token.Semicolon ]
       Token.RBrace
   in
-  let _, end_span =
+  let _, es =
     consume p Token.RBrace "expected '}' closing 'record' expression"
   in
-  make_expr
-    (ExprRecord (attrs, mods, name, ty_params, fields))
-    (Span.merge start end_span)
+  make_expr (ExprRecord (a, m, n, tp, fs)) (Span.merge s es)
 
-and parse_expr_sum p start attrs mods =
-  let name = parse_ident_opt p in
-  let ty_params = parse_ty_params p in
-  ignore (consume p Token.LBrace "expected '{' after 'sum' type name");
-  let cases =
+and parse_expr_sum p s a m =
+  let n, tp = (parse_ident_opt p, parse_ty_params p) in
+  expect p Token.LBrace "expected '{' after 'sum' name";
+  let cs =
     parse_list p parse_sum_case [ Token.Comma; Token.Semicolon ] Token.RBrace
   in
-  let _, end_span =
+  let _, es =
     consume p Token.RBrace "expected '}' closing 'sum' type expression"
   in
-  make_expr
-    (ExprSum (attrs, mods, name, ty_params, cases))
-    (Span.merge start end_span)
+  make_expr (ExprSum (a, m, n, tp, cs)) (Span.merge s es)
 
 and parse_sum_case p =
-  ignore (consume p Token.KwCase "expected 'case' starting sum case");
-  let name =
-    match advance p with
-    | Token.Ident id, _ -> resolve p id
-    | _, s ->
-      error p "expected sum case name" s;
-      "?"
-  in
-  let tys =
+  expect p Token.KwCase "expected 'case' starting sum case";
+  let n = expect_id p "expected sum case name" in
+  let ts =
     if match_token p [ Token.LParen ] then (
       let ts = parse_list p parse_ty [ Token.Comma ] Token.RParen in
-      ignore (consume p Token.RParen "expected ')' closing sum case payload");
+      expect p Token.RParen "expected ')' closing sum case payload";
       ts)
     else []
   in
-  { case_name = name; case_tys = tys; case_params = [] }
+  { case_name = n; case_tys = ts; case_params = [] }
 
-and parse_expr_extern p start =
-  let abi =
+and parse_expr_extern p s =
+  let a =
     match fst (peek p) with
     | Token.LitString _ -> (
-      let tok, _ = advance p in
-      match tok with Token.LitString id -> Some (resolve p id) | _ -> None)
+      let t, _ = advance p in
+      match t with Token.LitString id -> Some (resolve p id) | _ -> None)
     | _ -> None
   in
-  let is_unsafe = match_token p [ Token.KwUnsafe ] in
-  ignore (consume p Token.LBrace "expected '{' starting 'extern' block");
+  let u = match_token p [ Token.KwUnsafe ] in
+  expect p Token.LBrace "expected '{' starting 'extern' block";
   let sigs = ref [] in
   while (not (check p Token.RBrace)) && not (is_at_end p) do
     if not (match_token p [ Token.KwFn ]) then (
       error p "expected 'fn' inside 'extern' block" (snd (peek p));
       sync p)
-    else
-      let name = parse_ident_opt p in
-      sigs := parse_fn_sig p name :: !sigs;
-      ignore (match_token p [ Token.Semicolon ])
+    else (
+      sigs := parse_fn_sig p (parse_ident_opt p) :: !sigs;
+      ignore (match_token p [ Token.Semicolon ]))
   done;
-  let _, end_span =
-    consume p Token.RBrace "expected '}' closing 'extern' block"
-  in
-  make_expr
-    (ExprExtern (abi, is_unsafe, List.rev !sigs))
-    (Span.merge start end_span)
+  let _, es = consume p Token.RBrace "expected '}' closing 'extern' block" in
+  make_expr (ExprExtern (a, u, List.rev !sigs)) (Span.merge s es)
 
 and parse_stmt p =
-  let expr = parse_expr p PrecNone in
-  ignore (consume p Token.Semicolon "expected ';' after statement-expression");
-  make_stmt (StmtExpr expr) expr.span
+  let e = parse_expr p PrecNone in
+  expect p Token.Semicolon "expected ';' after statement-expression";
+  make_stmt (StmtExpr e) e.span
 
-let parse tokens source file_id interner =
+let try_parse tokens source file_id interner =
   let p = create tokens source file_id interner in
-  let stmts = ref [] in
+  let ss = ref [] in
   while not (is_at_end p) do
-    stmts := parse_stmt p :: !stmts
+    ss := parse_stmt p :: !ss
   done;
-  if has_errors p then Error p.diag else Ok (List.rev !stmts)
+  if has_errors p then Error p.diag else Ok (List.rev !ss)

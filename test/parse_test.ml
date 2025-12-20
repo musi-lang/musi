@@ -75,7 +75,7 @@ and eq_expr e1 e2 =
   | ExprBlock (ss1, e1), ExprBlock (ss2, e2) ->
     List.for_all2 eq_stmt ss1 ss2 && Option.equal eq_expr e1 e2
   | ExprIf (c1, t1, f1), ExprIf (c2, t2, f2) ->
-    eq_expr c1 c2 && eq_expr t1 t2 && eq_expr f1 f2
+    eq_expr c1 c2 && eq_expr t1 t2 && Option.equal eq_expr f1 f2
   | ExprWhile (c1, b1), ExprWhile (c2, b2) -> eq_expr c1 c2 && eq_expr b1 b2
   | ExprFor (id1, it1, b1), ExprFor (id2, it2, b2) ->
     id1 = id2 && eq_expr it1 it2 && eq_expr b1 b2
@@ -208,7 +208,10 @@ let test_expr_if () =
   let f_expr = mk_expr (ExprBlock ([], Some (mk_ident "wait"))) in
   assert_stmt
     "if is_ready {start} else {wait};"
-    (mk_stmt_expr (mk_expr (ExprIf (cond, t_expr, f_expr))))
+    (mk_stmt_expr (mk_expr (ExprIf (cond, t_expr, Some f_expr))));
+  assert_stmt
+    "if is_ready {start};"
+    (mk_stmt_expr (mk_expr (ExprIf (cond, t_expr, None))))
 
 let test_expr_bind () =
   let expected =

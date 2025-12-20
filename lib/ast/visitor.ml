@@ -38,7 +38,7 @@ let rec traverse_expr (v : 'ctx visitor) (ctx : 'ctx) (expr : expr) =
   | ExprIf (cond, then_, else_) ->
     v.visit_expr v ctx cond;
     v.visit_expr v ctx then_;
-    v.visit_expr v ctx else_
+    visit_opt v.visit_expr v ctx else_
   | ExprWhile (cond, body) ->
     v.visit_expr v ctx cond;
     v.visit_expr v ctx body
