@@ -75,7 +75,7 @@ aux_attr_arg = (ident | aux_lit), [":=", (ident | aux_lit)];
 
 aux_attr_arg_list = aux_attr_arg, {",", aux_attr_arg};
 
-aux_modifier_extern = "extern", [aux_lit_text], "unsafe";
+aux_modifier_extern = "extern", [aux_lit_text];
 
 aux_modifiers = {("export" | aux_modifier_extern | "unsafe")};
 
