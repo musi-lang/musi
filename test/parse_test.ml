@@ -109,6 +109,9 @@ and eq_expr e1 e2 =
     List.for_all2 eq_attr as1 as2
     && eq_mod m1 m2 && id1 = id2 && tps1 = tps2
     && List.for_all2 eq_sum_case cs1 cs2
+  | ExprAlias (as1, m1, id1, tps1, ty1), ExprAlias (as2, m2, id2, tps2, ty2) ->
+    List.for_all2 eq_attr as1 as2
+    && eq_mod m1 m2 && id1 = id2 && tps1 = tps2 && eq_ty ty1 ty2
   | ExprCall (f1, as1), ExprCall (f2, as2) ->
     eq_expr f1 f2 && List.for_all2 eq_expr as1 as2
   | ExprIndex (e1, i1), ExprIndex (e2, i2) -> eq_expr e1 e2 && eq_expr i1 i2
@@ -401,6 +404,22 @@ let test_expr_control () =
     (mk_stmt_expr
        (mk_expr (ExprDefer (mk_expr (ExprCall (mk_ident "cleanup", []))))))
 
+let test_expr_alias () =
+  assert_stmt
+    "alias MyInt := Int;"
+    (mk_stmt_expr
+       (mk_expr (ExprAlias ([], mk_mod, "MyInt", [], mk_ty_ident "Int"))));
+  assert_stmt
+    "alias List<T> := []T;"
+    (mk_stmt_expr
+       (mk_expr
+          (ExprAlias
+             ( []
+             , mk_mod
+             , "List"
+             , [ "T" ]
+             , make_ty (TyArray (None, mk_ty_ident "T")) Span.dummy ))))
+
 let test_suite =
   [
     ("lit_basic", [ test_case "lit_basic" `Quick test_lit_basic ])
@@ -420,6 +439,7 @@ let test_suite =
   ; ("expr_bind", [ test_case "expr_bind" `Quick test_expr_stmt_bind ])
   ; ("expr_record", [ test_case "expr_record" `Quick test_expr_record_update ])
   ; ("expr_control", [ test_case "expr_control" `Quick test_expr_control ])
+  ; ("expr_alias", [ test_case "expr_alias" `Quick test_expr_alias ])
   ]
 
 let () = run "parser_tests" test_suite
