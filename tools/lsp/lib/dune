@@ -1,0 +1,3 @@
+(library
+ (name musi_lsp)
+ (libraries musi.basic musi.lex musi.parse musi.ast linol linol-lwt yojson))
