@@ -422,7 +422,32 @@ let test_expr_sum () =
              , "Option"
              , None
              , sum_option
-             , mk_expr (ExprLit (LitInt "0")) ))))
+             , mk_expr (ExprLit (LitInt "0")) ))));
+  let p_x =
+    {
+      param_mutable = false
+    ; param_name = "x"
+    ; param_ty = Some (mk_ty_ident "Int")
+    ; param_default = None
+    }
+  in
+  let p_y =
+    {
+      param_mutable = false
+    ; param_name = "y"
+    ; param_ty = Some (mk_ty_ident "Int")
+    ; param_default = None
+    }
+  in
+  let case_point =
+    { case_name = "Point"; case_tys = []; case_params = [ p_x; p_y ] }
+  in
+  let sum_point =
+    mk_expr (ExprSum ([], mk_mod, Some "Scale", [], [ case_point ]))
+  in
+  assert_stmt
+    "sum Scale { case Point(x: Int, y: Int) };"
+    (mk_stmt_expr sum_point)
 
 let test_expr_match () =
   let target = mk_ident "result" in

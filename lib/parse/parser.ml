@@ -642,14 +642,29 @@ and parse_expr_sum p s a m =
 and parse_sum_case p =
   expect p Token.KwCase "expected 'case' keyword";
   let n = expect_id p "expected case name" in
-  let ts =
+  let tys, params =
     if match_token p [ Token.LParen ] then (
-      let ts = parse_list p parse_ty [ Token.Comma ] Token.RParen in
+      let ts, ps = (ref [], ref []) in
+      let rec loop () =
+        let is_p =
+          check p Token.KwVar
+          ||
+          match peek p with
+          | Token.Ident _, _ -> (
+            match fst (peek_at p 1) with
+            | Token.Colon | Token.ColonEq -> true
+            | _ -> false)
+          | _ -> false
+        in
+        if is_p then ps := parse_param p :: !ps else ts := parse_ty p :: !ts;
+        if match_token p [ Token.Comma ] then loop ()
+      in
+      if not (check p Token.RParen) then loop ();
       expect p Token.RParen "expected ')' to close case payload";
-      ts)
-    else []
+      (List.rev !ts, List.rev !ps))
+    else ([], [])
   in
-  { case_name = n; case_tys = ts; case_params = [] }
+  { case_name = n; case_tys = tys; case_params = params }
 
 and parse_expr_extern p s =
   let a =
