@@ -1,1 +1,1 @@
-let () = Musi_lsp.Server.start ()
+let () = Musi_lsp.Lsp_server.start ()

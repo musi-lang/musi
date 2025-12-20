@@ -9,4 +9,4 @@ let range_of_span source span =
       (Types.Position.create ~line:(start_line - 1) ~character:(start_col - 1))
     ~end_:(Types.Position.create ~line:(end_line - 1) ~character:(end_col - 1))
 
-let path_of_uri uri = Uri.to_path uri
+let path_of_uri uri = Types.DocumentUri.to_path uri

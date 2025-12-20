@@ -4,20 +4,29 @@ open Basic
 
 let log msg = Printf.eprintf "[Server] %s\n%!" msg
 
-let parse_and_diagnose uri text =
-  let path = Utils.path_of_uri uri in
-  let source = Source.create path text in
-  let interner = Interner.create () in
-  let lexer = Lex.Lexer.create ~interner:(Some interner) source 0 in
-  match Lex.Lexer.token_stream_opt lexer with
+let parse_and_diagnose uri =
+  match Lsp_store.get_document uri with
   | None -> None
-  | Some seq ->
-    let bag =
-      match Parse.Parser.try_parse seq source 0 interner with
-      | Ok _ -> Reporter.empty_bag
-      | Error diag -> diag
+  | Some doc ->
+    let interner = Interner.create () in
+    let lexer =
+      Lex.Lexer.create ~interner:(Some interner) doc.source doc.file_id
     in
-    Some (Diagnostics.publish uri source bag)
+    let bag =
+      match Lex.Lexer.try_tokenize lexer with
+      | Error bag -> bag
+      | Ok tokens -> (
+        match
+          Parse.Parser.try_parse
+            (List.to_seq tokens)
+            doc.source
+            doc.file_id
+            interner
+        with
+        | Ok _ -> Reporter.empty_bag
+        | Error diag -> diag)
+    in
+    Some (Lsp_diagnostics.publish uri doc.source bag)
 
 let on_initialize _params =
   let caps =
@@ -31,7 +40,7 @@ let on_initialize _params =
       ~semanticTokensProvider:
         (`SemanticTokensOptions
            (Types.SemanticTokensOptions.create
-              ~legend:Tokens.TokenBuilder.legend
+              ~legend:Lsp_tokens.TokenBuilder.legend
               ~range:false
               ~full:(`Bool true)
               ()))
@@ -43,17 +52,17 @@ let on_initialize _params =
 let on_did_open (params : Types.DidOpenTextDocumentParams.t) =
   let uri = params.textDocument.uri in
   let text = params.textDocument.text in
-  State.set_text uri text;
-  log ("Opened " ^ Uri.to_string uri);
-  parse_and_diagnose uri text
+  let _ = Lsp_store.set_document uri text in
+  log ("Opened " ^ Types.DocumentUri.to_string uri);
+  parse_and_diagnose uri
 
 let on_did_change (params : Types.DidChangeTextDocumentParams.t) =
   let uri = params.textDocument.uri in
   match params.contentChanges with
   | [ change ] ->
-    State.set_text uri change.text;
-    log ("Changed " ^ Uri.to_string uri);
-    parse_and_diagnose uri change.text
+    let _ = Lsp_store.set_document uri change.text in
+    log ("Changed " ^ Types.DocumentUri.to_string uri);
+    parse_and_diagnose uri
   | _ ->
     log "Unexpected change event structure";
     None
@@ -86,7 +95,7 @@ let write_message oc json =
   Printf.fprintf oc "Content-Length: %d\r\n\r\n%s%!" len content
 
 let start () =
-  log "Starting...";
+  log "Starting Musi LSP...";
   let ic = In_channel.stdin in
   let oc = Out_channel.stdout in
   set_binary_mode_out oc true;
@@ -113,17 +122,21 @@ let start () =
                  Types.SemanticTokensParams.t_of_yojson
                    (Option.get r.params :> Yojson.Safe.t)
                in
-               Tokens.handle params
+               Lsp_tokens.handle params.textDocument.uri
              else if r.method_ = "textDocument/documentSymbol" then
                let params =
                  Types.DocumentSymbolParams.t_of_yojson
                    (Option.get r.params :> Yojson.Safe.t)
                in
-               Symbols.handle params
+               Lsp_symbols.handle params.textDocument.uri
              else if r.method_ = "shutdown" then `Null
              else (
                log ("Unknown request: " ^ r.method_);
-               `Null)
+               Jsonrpc.Response.Error.yojson_of_t
+                 (Jsonrpc.Response.Error.make
+                    ~code:MethodNotFound
+                    ~message:"Method not found"
+                    ()))
            in
            let response = Response.ok r.id res_json in
            write_message oc (Packet.yojson_of_t (Response response))

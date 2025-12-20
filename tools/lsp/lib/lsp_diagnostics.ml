@@ -11,9 +11,9 @@ let publish uri source bag =
     List.map
       (fun (d : Reporter.t) ->
         Types.Diagnostic.create
-          ~range:(Utils.range_of_span source d.span)
+          ~range:(Lsp_utils.range_of_span source d.span)
           ~severity:(diagnostic_severity d.level)
-          ~message:(`String (Printf.sprintf "Syntax Error: %s" d.message))
+          ~message:(`String d.message)
           ~source:"musi"
           ())
       (Reporter.to_list bag)
