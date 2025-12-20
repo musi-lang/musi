@@ -299,7 +299,7 @@ let test_exprs () =
              , mk_ident "c" ))));
 
   assert_stmt
-    "0 .. 10;"
+    "0..10;"
     (mk_stmt_expr
        (mk_expr
           (ExprRange
