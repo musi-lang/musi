@@ -1,0 +1,271 @@
+{
+	"Function Declaration": {
+		"prefix": "fn",
+		"body": [
+			"fn ${1:functionName}(${2:params}): ${3:returnType} {",
+			"\t${4:// function body}",
+			"}"
+		],
+		"description": "Declare function with parameters and return type"
+	},
+
+	"Function with Type Inference": {
+		"prefix": "fni",
+		"body": [
+			"fn ${1:functionName}(${2:params}) {",
+			"\t${3:// function body}",
+			"}"
+		],
+		"description": "Declare function with type inference"
+	},
+
+	"Function with Single Expression": {
+		"prefix": "fnx",
+		"body": [
+			"fn ${1:functionName}(${2:params}): ${3:returnType} := ${4:expression}"
+		],
+		"description": "Declare function with single expression body"
+	},
+
+	"Variable Binding (val)": {
+		"prefix": "val",
+		"body": "val ${1:name} := ${2:value};"
+	},
+
+	"Variable Binding (var)": {
+		"prefix": "var",
+		"body": "var ${1:name} := ${2:value};"
+	},
+
+	"Variable with Type Annotation": {
+		"prefix": "valt",
+		"body": "val ${1:name}: ${2:Type} := ${3:value};"
+	},
+
+	"Record Definition": {
+		"prefix": "record",
+		"body": [
+			"record ${1:RecordName} {",
+			"\t${2:field1}: ${3:Type1};",
+			"\t${4:field2}: ${5:Type2}",
+			"}"
+		],
+		"description": "Define record type"
+	},
+
+	"Record Instance": {
+		"prefix": "ri",
+		"body": "${1:RecordName}.{ ${2:field1 := value1, field2 := value2} }"
+	},
+
+	"Sum Type Definition": {
+		"prefix": "sum",
+		"body": [
+			"sum ${1:SumName} {",
+			"\tcase ${2:Case1}(${3:Type1}),",
+			"\tcase ${4:Case2}(${5:Type2})",
+			"}"
+		],
+		"description": "Define sum type"
+	},
+
+	"Pattern Match": {
+		"prefix": "match",
+		"body": [
+			"match ${1:expression} {",
+			"\tcase ${2:pattern1} => ${3:result1},",
+			"\tcase ${4:pattern2} => ${5:result2}",
+			"}"
+		],
+		"description": "Pattern matching expression"
+	},
+
+	"If Expression": {
+		"prefix": "if",
+		"body": [
+			"if ${1:condition} {",
+			"\t${2:// then branch}",
+			"}"
+		],
+		"description": "Simple if expression"
+	},
+
+	"If-Else Expression": {
+		"prefix": "ife",
+		"body": [
+			"if ${1:condition} {",
+			"\t${2:// then branch}",
+			"} else {",
+			"\t${3:// else branch}",
+			"}"
+		],
+		"description": "If-else expression"
+	},
+
+	"While Loop": {
+		"prefix": "while",
+		"body": [
+			"while ${1:condition} {",
+			"\t${2:// loop body}",
+			"}"
+		],
+		"description": "While loop"
+	},
+
+	"For Loop": {
+		"prefix": "for",
+		"body": [
+			"for ${1:item} in ${2:collection} {",
+			"\t${3:// loop body}",
+			"}"
+		],
+		"description": "For loop over collection"
+	},
+
+	"Template String": {
+		"prefix": "ts",
+		"body": "\"${1:Hello ${2:name}!}\""
+	},
+
+	"Import Statement": {
+		"prefix": "import",
+		"body": "import \"${1:@std/io}\";"
+	},
+
+	"Import with Alias": {
+		"prefix": "im",
+		"body": "val ${1:alias} := import \"${2:@std/io}\";"
+	},
+
+	"Extern Function": {
+		"prefix": "extern",
+		"body": [
+			"extern \"${1:C}\" unsafe {",
+			"\tfn ${2:functionName}(${3:params}): ${4:returnType};",
+			"}"
+		],
+		"description": "External function declaration"
+	},
+
+	"Unsafe Block": {
+		"prefix": "unsafe",
+		"body": [
+			"unsafe {",
+			"\t${1:// unsafe code}",
+			"}"
+		],
+		"description": "Unsafe code block"
+	},
+
+	"Return Statement": {
+		"prefix": "ret",
+		"body": "return ${1:expression};"
+	},
+
+	"Defer Statement": {
+		"prefix": "defer",
+		"body": "defer ${1:expression};"
+	},
+
+	"Break Statement": {
+		"prefix": "break",
+		"body": "break;"
+	},
+
+	"Type Alias": {
+		"prefix": "alias",
+		"body": "alias ${1:AliasName} := ${2:TargetType};"
+	},
+
+	"Generic Type Alias": {
+		"prefix": "aliasg",
+		"body": "alias ${1:AliasName}<${2:T}> := ${3:TargetType};"
+	},
+
+	"Optional Type": {
+		"prefix": "?",
+		"body": "?${1:Type}"
+	},
+
+	"Pointer Type": {
+		"prefix": "^",
+		"body": "^${1:Type}"
+	},
+
+	"Array Type": {
+		"prefix": "[]",
+		"body": "[${1:size}]${2:Type}"
+	},
+
+	"Function Type": {
+		"prefix": "->",
+		"body": "${1:ParamType} -> ${2:ReturnType}"
+	},
+
+	"Tuple Type": {
+		"prefix": "tuple",
+		"body": "(${1:Type1}, ${2:Type2})"
+	},
+
+	"Comment Line": {
+		"prefix": "//",
+		"body": "// ${1:comment}"
+	},
+
+	"Comment Block": {
+		"prefix": "/*",
+		"body": "/* ${1:comment} */"
+	},
+
+	"Documentation Comment": {
+		"prefix": "///",
+		"body": "/// ${1:documentation comment}"
+	},
+
+	"WriteLine Statement": {
+		"prefix": "print",
+		"body": "writeln(\"${1:message}\");"
+	},
+
+	"Hello World": {
+		"prefix": "hello",
+		"body": [
+			"val io := import \"@std/io\";",
+			"io.writeln(\"${1:Hello, World!}\");"
+		],
+		"description": "Hello World program"
+	},
+
+	"Error Handling Pattern": {
+		"prefix": "result",
+		"body": [
+			"match ${1:operation}() {",
+			"\tcase Succ(${2:value}) => ${3:use(value)},",
+			"\tcase Fail(${4:error}) => ${5:handle(error)}",
+			"}"
+		],
+		"description": "Fallible pattern matching"
+	},
+
+	"Option Pattern": {
+		"prefix": "option",
+		"body": [
+			"match ${1:option} {",
+			"\tcase Some(${2:value}) => ${3:use(value)},",
+			"\tcase None => ${4:default()}",
+			"}"
+		],
+		"description": "Optional pattern matching"
+	},
+
+	"List Cons Pattern": {
+		"prefix": "cons",
+		"body": [
+			"match ${1:list} {",
+			"\tcase head :: tail => ${2:process(head, tail)},",
+			"\tcase [] => ${3:empty()}",
+			"}"
+		],
+		"description": "List cons pattern matching"
+	}
+}
