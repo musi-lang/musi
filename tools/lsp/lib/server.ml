@@ -103,49 +103,105 @@ end
 let collect_tokens source ast =
   let builder = TokenBuilder.create () in
 
-  let add_span span kind =
+  let text_of_span span =
+    let full_text = Source.text source in
+    let start_pos = span.Span.start in
+    let end_pos = span.Span.end_ in
+    if end_pos <= String.length full_text && start_pos >= 0 then
+      String.sub full_text start_pos (end_pos - start_pos)
+    else ""
+  in
+
+  let add_token_at_span span kind ?(modifiers = 0) () =
     let start_line, start_col = Source.line_col source span.Span.start in
     let line = start_line - 1 in
-
     let start_char = start_col - 1 in
     let length = span.Span.end_ - span.Span.start in
     if length > 0 then
-      TokenBuilder.add_token builder ~line ~start_char ~length ~kind ()
+      TokenBuilder.add_token
+        builder
+        ~line
+        ~start_char
+        ~length
+        ~kind
+        ~modifiers
+        ()
   in
 
-  let rec traverse_expr expr =
+  let find_word_in_span span word =
+    let text = text_of_span span in
+    try
+      let raw_index = Str.search_forward (Str.regexp_string word) text 0 in
+      let start_pos = span.Span.start + raw_index in
+      let end_pos = start_pos + String.length word in
+      Some (Span.make span.file start_pos end_pos)
+    with Not_found -> None
+  in
+
+  let visit_ident _ _ _ = () in
+
+  let visit_expr (v : bool Ast.Visitor.visitor) is_callee (expr : expr) =
     match expr.kind with
-    | ExprBind (_, _, _, _, _, _) -> add_span expr.span "variable"
-    | ExprFn (_, _, sig_, body) ->
-      Option.iter (fun _ -> add_span expr.span "function") sig_.fn_name;
-      traverse_expr body
-    | ExprSum (_, _, name, _, cases) ->
-      Option.iter (fun _ -> add_span expr.span "enum") name;
+    | ExprBind (_, _, name, _, init, _) ->
+      let kind =
+        match init.kind with ExprFn _ -> "function" | _ -> "variable"
+      in
+      (match find_word_in_span expr.span name with
+      | Some span -> add_token_at_span span kind ()
+      | None -> ());
+      v.visit_expr v false init
+    | ExprCall (callee, args) ->
+      v.visit_expr v true callee;
+      List.iter (v.visit_expr v false) args
+    | ExprIdent name ->
+      let kind =
+        if
+          String.get name 0 |> Char.uppercase_ascii
+          |> Char.equal (String.get name 0)
+        then "enumMember"
+        else if is_callee then "function"
+        else "variable"
+      in
+      add_token_at_span expr.span kind ()
+    | ExprSum (_, _, Some name, _, cases) ->
+      (match find_word_in_span expr.span name with
+      | Some span -> add_token_at_span span "enum" ()
+      | None -> ());
       List.iter
         (fun _ ->
-          (* case *)
+          (* For sum cases, we don't have explicit spans for names easily accessible without
+              more complex parsing or assuming the name is locally unique in the case definition.
+              We'll skip case definition naming for now or try to match. *)
           ())
         cases
-    | ExprRecord (_, _, name, _, fields) ->
-      Option.iter (fun _ -> add_span expr.span "struct") name;
-      List.iter
-        (fun _ ->
-          (* field *)
-          ())
-        fields
-    | ExprBlock (stmts, expr_opt) ->
-      List.iter traverse_stmt stmts;
-      Option.iter traverse_expr expr_opt
-    | ExprCall (func, args) ->
-      traverse_expr func;
-      List.iter traverse_expr args
-    | ExprIdent _ -> add_span expr.span "variable"
-    | _ -> () (* catch all *)
-  and traverse_stmt stmt =
-    match stmt.kind with StmtExpr e -> traverse_expr e
+    | ExprRecord (_, _, Some name, _, _) ->
+      (match find_word_in_span expr.span name with
+      | Some span -> add_token_at_span span "struct" ()
+      | None -> ());
+      Ast.Visitor.traverse_expr v false expr
+    | _ -> Ast.Visitor.traverse_expr v false expr
   in
 
-  List.iter traverse_stmt ast;
+  let visit_pat (v : bool Ast.Visitor.visitor) _ (pat : pat) =
+    match pat.kind with
+    | PatVariant (name, _, _) ->
+      (* Heuristic: Variant name is usually at the start of the pattern span *)
+      let span =
+        Span.make
+          pat.span.file
+          pat.span.start
+          (pat.span.start + String.length name)
+      in
+      add_token_at_span span "enumMember" ();
+      Ast.Visitor.traverse_pat v false pat
+    | _ -> Ast.Visitor.traverse_pat v false pat
+  in
+
+  let visitor =
+    { Ast.Visitor.default_visitor with visit_expr; visit_pat; visit_ident }
+  in
+
+  List.iter (visitor.visit_stmt visitor false) ast;
 
   TokenBuilder.build builder
 

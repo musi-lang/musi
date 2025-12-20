@@ -44,6 +44,7 @@ export function activate(_context) {
 	);
 
 	client.start();
+	window.showInformationMessage("Musi LSP server started!");
 }
 
 export function deactivate() {
