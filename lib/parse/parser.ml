@@ -726,16 +726,40 @@ and parse_expr_fn p start attrs mods =
   let body = parse_expr_block p (snd (peek p)) in
   make_expr (ExprFn (attrs, mods, sig_, body)) (Span.merge start body.span)
 
+and parse_ty_params p =
+  if match_token p [ Token.Lt ] then (
+    let params =
+      parse_comma_list
+        p
+        (fun p ->
+          match advance p with
+          | Token.Ident id, _ -> resolve p id
+          | _, s ->
+            error p "expected type parameter name" s;
+            "?")
+        Token.Gt
+    in
+    ignore (consume p Token.Gt "expected '>' closing type parameters");
+    params)
+  else []
+
 and parse_fn_sig p name =
+  let ty_params = parse_ty_params p in
   ignore (consume p Token.LParen "expected '(' starting function parameters");
   let params = parse_comma_list p parse_param Token.RParen in
   ignore (consume p Token.RParen "expected ')' closing function parameters");
   let ret_ty =
     if match_token p [ Token.Colon ] then Some (parse_ty p) else None
   in
-  { fn_name = name; fn_ty_params = []; fn_params = params; fn_ret_ty = ret_ty }
+  {
+    fn_name = name
+  ; fn_ty_params = ty_params
+  ; fn_params = params
+  ; fn_ret_ty = ret_ty
+  }
 
 and parse_param p =
+  let mut = match_token p [ Token.KwVar ] in
   let p_name =
     match advance p with
     | Token.Ident id, _ -> resolve p id
@@ -743,40 +767,58 @@ and parse_param p =
       error p "expected parameter name" s;
       "?"
   in
-  ignore (consume p Token.Colon "expected ':' after parameter name");
-  let p_ty = parse_ty p in
+  let p_ty =
+    if match_token p [ Token.Colon ] then Some (parse_ty p) else None
+  in
+  let p_init =
+    if match_token p [ Token.ColonEq ] then Some (parse_expr p PrecNone)
+    else None
+  in
   {
-    param_mutable = false
+    param_mutable = mut
   ; param_name = p_name
-  ; param_ty = Some p_ty
-  ; param_default = None
+  ; param_ty = p_ty
+  ; param_default = p_init
   }
 
 and parse_expr_record p start attrs mods =
   let name =
-    match advance p with Token.Ident id, _ -> Some (resolve p id) | _ -> None
+    match peek p with
+    | Token.Ident id, _ ->
+      ignore (advance p);
+      Some (resolve p id)
+    | _ -> None
   in
+  let ty_params = parse_ty_params p in
   ignore (consume p Token.LBrace "expected '{' after 'record' name");
   let fields = parse_comma_list p parse_record_field Token.RBrace in
   let _, end_span =
     consume p Token.RBrace "expected '}' closing 'record' expression"
   in
   make_expr
-    (ExprRecord (attrs, mods, name, [], fields))
+    (ExprRecord (attrs, mods, name, ty_params, fields))
     (Span.merge start end_span)
 
 and parse_expr_sum p start attrs mods =
   let name =
-    match advance p with Token.Ident id, _ -> Some (resolve p id) | _ -> None
+    match peek p with
+    | Token.Ident id, _ ->
+      ignore (advance p);
+      Some (resolve p id)
+    | _ -> None
   in
+  let ty_params = parse_ty_params p in
   ignore (consume p Token.LBrace "expected '{' after 'sum' type name");
   let cases = parse_comma_list p parse_sum_case Token.RBrace in
   let _, end_span =
     consume p Token.RBrace "expected '}' closing 'sum' type expression"
   in
-  make_expr (ExprSum (attrs, mods, name, [], cases)) (Span.merge start end_span)
+  make_expr
+    (ExprSum (attrs, mods, name, ty_params, cases))
+    (Span.merge start end_span)
 
 and parse_sum_case p =
+  ignore (consume p Token.KwCase "expected 'case' starting sum case");
   let cname =
     match advance p with
     | Token.Ident id, _ -> resolve p id
