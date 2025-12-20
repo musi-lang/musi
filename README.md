@@ -16,8 +16,9 @@ Musi is systems programming language designed for clarity, safety, and performan
 
 ## Installation
 
-- **macOS/Linux**: Install `pkg-config` using your package manager.
-- **Windows**: Install `opam` using the method of your choice.
+- **macOS**: Install `pkg-config` and `opam` using [Homebrew](https://brew.sh/).
+- **Linux**: Install `opam` using your package manager.
+- **Windows**: Install `opam` using [Chocolatey](https://chocolatey.org/install), [Scoop](https://scoop.sh/), or [WinGet](https://docs.microsoft.com/en-us/windows/package-manager/winget/).
 
 ```bash
 opam init
