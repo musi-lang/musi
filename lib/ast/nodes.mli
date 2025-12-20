@@ -55,7 +55,7 @@ and pat_kind =
   | PatLitTuple of pat list
   | PatLitArray of pat list
   | PatLitRecord of ident * pat_field list
-  | PatVariant of ident * ty list * pat option
+  | PatVariant of ident * ty list * pat list
   | PatCons of pat * pat
   | PatError
 
@@ -68,14 +68,15 @@ and expr = expr_kind with_span
 (** Expression variant *)
 and expr_kind =
   | ExprLit of lit
+  | ExprTemplate of (string * expr) list * string
   | ExprLitTuple of expr list
   | ExprLitArray of expr list
   | ExprLitRecord of ident option * record_field list * expr option
   | ExprIdent of ident
   | ExprBlock of stmt list * expr option
-  | ExprIf of expr * expr * expr option
-  | ExprWhile of expr * expr
-  | ExprFor of ident * expr * expr
+  | ExprIf of cond list * expr * expr option
+  | ExprWhile of cond * expr option * expr
+  | ExprFor of bool * pat * expr * expr option * expr
   | ExprMatch of expr * match_case list
   | ExprReturn of expr option
   | ExprBreak of expr option
@@ -83,7 +84,7 @@ and expr_kind =
   | ExprUnsafe of expr
   | ExprImport of string
   | ExprExtern of string option * bool * fn_sig list
-  | ExprBind of modifier * bool * ident * ty option * expr * expr
+  | ExprBind of modifier * bool * pat * ty option * expr * expr
   | ExprFn of attr list * modifier * fn_sig * expr
   | ExprRecord of
       attr list * modifier * ident option * ident list * record_field list
@@ -105,7 +106,10 @@ and stmt = stmt_kind with_span
 and stmt_kind = StmtExpr of expr
 
 (** Match case branch *)
-and match_case = { case_pat : pat; case_expr : expr }
+and cond = CondExpr of expr | CondPat of pat * expr
+
+(** Match case branch *)
+and match_case = { case_pat : pat; case_guard : expr option; case_expr : expr }
 
 (** Function signature *)
 and fn_sig = {

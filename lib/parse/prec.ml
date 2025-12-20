@@ -30,7 +30,8 @@ let of_token = function
   | Token.Caret -> BitXor
   | Token.Amp -> BitAnd
   | Token.Eq | Token.SlashEq -> Equality
-  | Token.Lt | Token.Gt | Token.LtEq | Token.GtEq | Token.KwIs | Token.KwAs ->
+  | Token.Lt | Token.Gt | Token.LtEq | Token.GtEq | Token.KwIs | Token.KwAs
+  | Token.KwIn ->
     Comparison
   | Token.DotDot | Token.DotDotLt -> Range
   | Token.ColonColon -> Cons
