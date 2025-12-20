@@ -32,7 +32,7 @@
 		"theme": "dark"
 	},
 	"readme": "README.md",
-	"main": "./src/extension.js",
+	"main": "./dist/extension.js",
 	"engines": {
 		"vscode": "^1.75.0"
 	},
@@ -86,7 +86,9 @@
 		]
 	},
 	"scripts": {
-		"package": "vsce package"
+		"build": "bun build ./src/extension.ts --outfile=./dist/extension.js --external vscode --target=node",
+		"package": "bun run build && vsce package",
+		"vscode:prepublish": "bun run build"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.3.8",
@@ -102,6 +104,7 @@
 	],
 	"dependencies": {
 		"npm": "^11.7.0",
+		"typescript": "^5.9.3",
 		"vscode-languageclient": "^9.0.1"
 	}
 }

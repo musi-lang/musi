@@ -1,20 +1,14 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import * as vscode from "vscode";
 import { window, workspace } from "vscode";
 import { LanguageClient, TransportKind } from "vscode-languageclient/node.js";
 
-/**
- * @type {{ start: () => void; stop: () => any; }}
- */
-let client;
+let client: LanguageClient;
 
-/**
- * @param {{ subscriptions: import("vscode").Disposable[]; extensionPath: string }} _context
- */
-export async function activate(_context) {
-
+export async function activate(_context: vscode.ExtensionContext) {
 	console.log("Activating Musi extension...");
-	window.showInformationMessage("Musi extension activating...");
+	vscode.window.showInformationMessage("Musi extension activating...");
 
 	try {
 		const serverSource = path.join(
@@ -22,7 +16,7 @@ export async function activate(_context) {
 			"../../_build/default/tools/lsp/bin/main.exe",
 		);
 		console.log("Server source:", serverSource);
-		window.showInformationMessage(`Looking for server at: ${serverSource}`);
+		vscode.window.showInformationMessage(`Looking for server at: ${serverSource}`);
 
 		if (!fs.existsSync(serverSource)) {
 			window.showErrorMessage(`Musi LSP server not found at ${serverSource}. Please run 'dune build' first.`);
@@ -57,8 +51,6 @@ export async function activate(_context) {
 }
 
 export function deactivate() {
-	if (!client) {
-		return undefined;
-	}
+	if (!client) return undefined;
 	return client.stop();
 }
