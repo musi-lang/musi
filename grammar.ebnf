@@ -202,6 +202,8 @@ expr_record = [aux_attr], [aux_modifiers], "record", [ident], [ty_params], "{", 
 
 expr_sum = [aux_attr], [aux_modifiers], "sum", [ident], [ty_params], "{", aux_sum_cases, "}";
 
+expr_alias = [aux_attr], [aux_modifiers], "alias", ident, [ty_params], ":=", ty;
+
 expr_fn = [aux_attr], [aux_modifiers], "fn", aux_fn_sig, expr_block;
 
 expr_bind = [aux_modifiers], ("val" | "var"), ident, [aux_ty_annot], aux_init, expr;
@@ -219,7 +221,7 @@ expr_assign = expr, "<-", expr;
 (* ========================================================================= *)
 (* PRECEDENCE LEVELS                                                         *)
 (* ========================================================================= *)
-prec_expr_primary = expr_lit | expr_ident | expr_lit_tuple | expr_lit_array | expr_lit_record | expr_block | expr_if | expr_while | expr_for | expr_match | expr_try | expr_return | expr_defer | expr_break | expr_cycle | expr_unsafe | expr_import | expr_extern | expr_record | expr_sum | expr_fn | expr_bind | "(", expr, ")";
+prec_expr_primary = expr_lit | expr_ident | expr_lit_tuple | expr_lit_array | expr_lit_record | expr_block | expr_if | expr_while | expr_for | expr_match | expr_try | expr_return | expr_defer | expr_break | expr_cycle | expr_unsafe | expr_import | expr_extern | expr_record | expr_sum | expr_alias | expr_fn | expr_bind | "(", expr, ")";
 
 postfix_op = "(", [aux_args], ")" | "[", expr, "]" | ".", ident | ".^" | "?";
 

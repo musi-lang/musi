@@ -79,7 +79,7 @@
                 },
                 {
                     "name": "meta.declaration.musi",
-                    "begin": "((?:(?:export|extern|unsafe)\\s+)*)\\b(fn|record|sum|val|var)\\b",
+                    "begin": "((?:(?:export|extern|unsafe)\\s+)*)\\b(allas|fn|record|sum|val|var)\\b",
                     "beginCaptures": {
                         "1": {
                             "patterns": [
@@ -303,7 +303,7 @@
                 },
                 {
                     "name": "storage.type.musi",
-                    "match": "\\b(fn|record|sum|val|var)\\b"
+                    "match": "\\b(alias|fn|record|sum|val|var)\\b"
                 },
                 {
                     "name": "storage.modifier.musi",

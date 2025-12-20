@@ -104,6 +104,8 @@ val piped := 10 |> add(5) |> multiply(2);
 // TYPES
 // ============================================================================
 
+alias MyInt := Int;
+
 val unit_val: Unit := ();
 val int8_val: Int8 := 42;
 val int16_val: Int16 := 42;
@@ -160,9 +162,9 @@ val dist := fn (a: Point, b: Point) {
 // ALGEBRAIC DATA TYPES
 // ============================================================================
 
-val Option := sum { case Some(value), case None };
+val Option := sum Option<T>{ case Some(T), case None };
 
-val Expect := sum { case Succ(value), case Fail(msg) };
+val Expect := sum Option<T>{ case Succ(T), case Fail(E) };
 
 val Shape := sum { case Circle(radius), case Rect(width, height), case Triangle(a, b, c) };
 
