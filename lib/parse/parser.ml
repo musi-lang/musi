@@ -448,9 +448,8 @@ and parse_expr_lit_record p n s =
   make_expr (ExprLitRecord (n, !fs, !b)) (Span.merge s es)
 
 and parse_record_field p =
-  let m, n =
-    (match_token p [ Token.KwVar ], expect_id p "expected field name")
-  in
+  let m = match_token p [ Token.KwVar ] in
+  let n = expect_id p "expected field name" in
   let ty = if match_token p [ Token.Colon ] then Some (parse_ty p) else None in
   let def =
     if match_token p [ Token.ColonEq ] then Some (parse_expr p PrecNone)
@@ -628,7 +627,8 @@ and parse_expr_bind p s t m =
     (Span.merge s i.span)
 
 and parse_expr_record p s a m =
-  let n, tp = (parse_ident_opt p, parse_ty_params p) in
+  let n = parse_ident_opt p in
+  let tp = parse_ty_params p in
   expect p Token.LBrace "expected '{' after 'record' name";
   let fs =
     parse_list
@@ -643,7 +643,8 @@ and parse_expr_record p s a m =
   make_expr (ExprRecord (a, m, n, tp, fs)) (Span.merge s es)
 
 and parse_expr_sum p s a m =
-  let n, tp = (parse_ident_opt p, parse_ty_params p) in
+  let n = parse_ident_opt p in
+  let tp = parse_ty_params p in
   expect p Token.LBrace "expected '{' after 'sum' name";
   let cs =
     parse_list p parse_sum_case [ Token.Comma; Token.Semicolon ] Token.RBrace
