@@ -138,9 +138,13 @@ and parse_ty_primary p =
   | Token.LBrack ->
     ignore (advance p);
     let sz =
-      match advance p with
-      | Token.LitInt id, _ -> Some (int_of_string (resolve p id))
-      | _ -> None
+      if check p Token.RBrack then None
+      else
+        match advance p with
+        | Token.LitInt id, _ -> Some (int_of_string (resolve p id))
+        | _, s ->
+          error p "expected integer literal for array size" s;
+          None
     in
     expect p Token.RBrack "expected ']' to close array type";
     let i = parse_ty_primary p in
@@ -227,7 +231,12 @@ let rec parse_expr p prec =
   let l = parse_prefix p in
   let rec loop l =
     let t, _ = peek p in
-    if Prec.of_token t > prec then loop (parse_infix p l t) else l
+    let t_prec = Prec.of_token t in
+    if
+      t_prec > prec
+      || (t_prec <> Prec.None && t_prec = prec && Prec.is_right_assoc t)
+    then loop (parse_infix p l t)
+    else l
   in
   loop l
 
