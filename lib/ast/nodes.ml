@@ -5,7 +5,7 @@ type 'a with_span = { kind : 'a; span : Span.t }
 
 type modifier = {
     is_export : bool
-  ; is_extern : (string option * bool) option
+  ; is_extern : string option * bool
   ; is_unsafe : bool
 }
 
