@@ -30,6 +30,9 @@ type prec =
 (** Create new parser instance from token sequence *)
 val create : (Token.t * Span.t) Seq.t -> Source.t -> int -> Interner.t -> t
 
+(** Check if parser has errors *)
+val has_errors : t -> bool
+
 (** Parse all statements in source *)
 val parse :
      (Token.t * Span.t) Seq.t

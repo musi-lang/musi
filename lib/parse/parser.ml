@@ -18,6 +18,7 @@ let create tokens _ _ interner =
   ; interner
   }
 
+let has_errors p = Reporter.has_errors p.diag
 let is_at_end p = p.token_idx >= Array.length p.tokens
 
 let peek_at p offset =
@@ -65,16 +66,21 @@ let resolve p id =
   match Interner.lookup_opt p.interner id with Some s -> s | None -> "?"
 
 let sync p =
-  ignore (advance p);
-  while not (is_at_end p) do
-    if fst (prev p) = Token.Semicolon then ()
+  let rec loop () =
+    if is_at_end p then ()
+    else if fst (prev p) = Token.Semicolon then ()
     else
       match fst (peek p) with
       | Token.KwFn | Token.KwVal | Token.KwVar | Token.KwFor | Token.KwIf
       | Token.KwWhile | Token.KwReturn | Token.KwRecord | Token.KwSum ->
         ()
-      | _ -> ignore (advance p)
-  done
+      | _ ->
+        ignore (advance p);
+        loop ()
+  in
+  if not (is_at_end p) then (
+    ignore (advance p);
+    loop ())
 
 type prec =
   | PrecNone
@@ -827,16 +833,20 @@ and parse_expr_extern p start =
   ignore (consume p Token.LBrace "expected '{' starting 'extern' block");
   let sigs = ref [] in
   while (not (check p Token.RBrace)) && not (is_at_end p) do
-    ignore (consume p Token.KwFn "expected 'fn' inside 'extern' block");
-    let name =
-      match peek p with
-      | Token.Ident id, _ ->
-        ignore (advance p);
-        Some (resolve p id)
-      | _ -> None
-    in
-    sigs := parse_fn_sig p name :: !sigs;
-    ignore (match_token p [ Token.Semicolon ])
+    if not (check p Token.KwFn) then (
+      error p "expected 'fn' inside 'extern' block" (snd (peek p));
+      sync p)
+    else (
+      ignore (advance p);
+      let name =
+        match peek p with
+        | Token.Ident id, _ ->
+          ignore (advance p);
+          Some (resolve p id)
+        | _ -> None
+      in
+      sigs := parse_fn_sig p name :: !sigs;
+      ignore (match_token p [ Token.Semicolon ]))
   done;
   let _, end_span =
     consume p Token.RBrace "expected '}' closing 'extern' block"

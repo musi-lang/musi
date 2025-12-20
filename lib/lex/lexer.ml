@@ -450,7 +450,9 @@ let try_tokenize lexer =
 
   while lexer.curr_pos < lexer.text_len do
     match try_scan_token_opt lexer with
-    | Some (Ok (token, span)) -> tokens := (token, span) :: !tokens
+    | Some (Ok (token, span)) ->
+      tokens := (token, span) :: !tokens;
+      advance lexer (span.end_ - span.start)
     | Some (Error bag) ->
       errors := !errors @ Reporter.to_list bag;
       let sync_pos = find_sync_point lexer.text lexer.curr_pos in
