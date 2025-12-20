@@ -42,3 +42,7 @@ let of_token = function
   | Token.LParen | Token.LBrack | Token.Dot | Token.DotCaret | Token.Question ->
     Postfix
   | _ -> None
+
+let is_right_assoc = function
+  | Token.StarStar | Token.LtMinus -> true
+  | _ -> false

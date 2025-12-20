@@ -21,3 +21,4 @@ type t =
   | Postfix
 
 val of_token : Token.t -> t
+val is_right_assoc : Token.t -> bool
