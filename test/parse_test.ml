@@ -19,16 +19,9 @@ and eq_mod m1 m2 =
   && m1.is_extern = m2.is_extern
   && m1.is_unsafe = m2.is_unsafe
 
-and eq_attr_arg a1 a2 =
-  match (a1, a2) with
-  | AttrArgNamed (id1, id2, l1), AttrArgNamed (id3, id4, l2) ->
-    id1 = id3 && id2 = id4 && eq_lit l1 l2
-  | AttrArgPos (id1, l1), AttrArgPos (id2, l2) -> id1 = id2 && eq_lit l1 l2
-  | _ -> false
-
 and eq_attr a1 a2 =
   a1.attr_name = a2.attr_name
-  && List.for_all2 eq_attr_arg a1.attr_args a2.attr_args
+  && List.length a1.attr_args = List.length a2.attr_args
 
 and eq_ty t1 t2 =
   match (t1.kind, t2.kind) with
@@ -170,308 +163,214 @@ let mk_ident i = mk_expr (ExprIdent i)
 let mk_ty_ident i = make_ty (TyIdent i) Span.dummy
 let mk_mod = { is_export = false; is_extern = (None, false); is_unsafe = false }
 
-let test_expr_lit () =
+let test_lits () =
   assert_stmt "1024;" (mk_stmt_expr (mk_lit (LitInt "1024")));
-  assert_stmt "2.71828;" (mk_stmt_expr (mk_lit (LitFloat "2.71828")));
+  assert_stmt "0xDEADBEEF;" (mk_stmt_expr (mk_lit (LitInt "0xDEADBEEF")));
+  assert_stmt "0o755;" (mk_stmt_expr (mk_lit (LitInt "0o755")));
+  assert_stmt "0b1010;" (mk_stmt_expr (mk_lit (LitInt "0b1010")));
+  assert_stmt "3.14159;" (mk_stmt_expr (mk_lit (LitFloat "3.14159")));
+  assert_stmt "true;" (mk_stmt_expr (mk_lit (LitBool true)));
   assert_stmt "false;" (mk_stmt_expr (mk_lit (LitBool false)));
-  assert_stmt "\"musi-lang\";" (mk_stmt_expr (mk_lit (LitString "musi-lang")))
-
-let test_expr_binary () =
   assert_stmt
-    "base + offset;"
-    (mk_stmt_expr
-       (mk_expr (ExprBinary (mk_ident "base", Token.Plus, mk_ident "offset"))));
-  let expected_prec =
-    mk_stmt_expr
-      (mk_expr
-         (ExprBinary
-            ( mk_lit (LitInt "1")
-            , Token.Plus
-            , mk_expr
-                (ExprBinary
-                   (mk_lit (LitInt "2"), Token.Star, mk_lit (LitInt "3"))) )))
+    "\"hello world\";"
+    (mk_stmt_expr (mk_lit (LitString "hello world")));
+  assert_stmt "'a';" (mk_stmt_expr (mk_lit (LitRune 'a')))
+
+let test_types () =
+  let assert_ty input expected =
+    let wrapped = Printf.sprintf "var x: %s := 0;" input in
+    let expected_stmt =
+      mk_stmt_expr
+        (mk_expr
+           (ExprBind
+              ( mk_mod
+              , true
+              , "x"
+              , Some expected
+              , mk_lit (LitInt "0")
+              , mk_expr (ExprLit (LitInt "0")) )))
+    in
+    assert_stmt wrapped expected_stmt
   in
-  assert_stmt "1 + 2 * 3;" expected_prec
+  assert_ty "Int" (mk_ty_ident "Int");
+  assert_ty
+    "List<Int>"
+    (make_ty (TyApp ("List", [ mk_ty_ident "Int" ])) Span.dummy);
+  assert_ty "?Int" (make_ty (TyOptional (mk_ty_ident "Int")) Span.dummy);
+  assert_ty "^Int" (make_ty (TyPtr (mk_ty_ident "Int")) Span.dummy);
+  assert_ty "[]Int" (make_ty (TyArray (None, mk_ty_ident "Int")) Span.dummy);
+  assert_ty
+    "[10]Int"
+    (make_ty (TyArray (Some 10, mk_ty_ident "Int")) Span.dummy);
+  assert_ty
+    "Int -> String"
+    (make_ty (TyFn (mk_ty_ident "Int", mk_ty_ident "String")) Span.dummy);
+  assert_ty
+    "Int -> String -> Bool"
+    (make_ty
+       (TyFn
+          ( mk_ty_ident "Int"
+          , make_ty (TyFn (mk_ty_ident "String", mk_ty_ident "Bool")) Span.dummy
+          ))
+       Span.dummy);
+  assert_ty
+    "(Int, String)"
+    (make_ty (TyTuple [ mk_ty_ident "Int"; mk_ty_ident "String" ]) Span.dummy)
 
-let test_expr_unary () =
+let test_pats () =
+  let assert_pat input expected =
+    let wrapped = Printf.sprintf "match x { case %s => 0 };" input in
+    let expected_stmt =
+      mk_stmt_expr
+        (mk_expr
+           (ExprMatch
+              ( mk_ident "x"
+              , [ { case_pat = expected; case_expr = mk_lit (LitInt "0") } ] )))
+    in
+    assert_stmt wrapped expected_stmt
+  in
+  assert_pat "_" (make_pat PatWild Span.dummy);
+  assert_pat "x" (make_pat (PatIdent "x") Span.dummy);
+  assert_pat "42" (make_pat (PatLit (LitInt "42")) Span.dummy);
+  assert_pat
+    "(x, y)"
+    (make_pat
+       (PatLitTuple
+          [
+            make_pat (PatIdent "x") Span.dummy
+          ; make_pat (PatIdent "y") Span.dummy
+          ])
+       Span.dummy);
+  assert_pat
+    "[x, y]"
+    (make_pat
+       (PatLitArray
+          [
+            make_pat (PatIdent "x") Span.dummy
+          ; make_pat (PatIdent "y") Span.dummy
+          ])
+       Span.dummy);
+  assert_pat
+    "Some(x)"
+    (make_pat
+       (PatVariant ("Some", [], Some (make_pat (PatIdent "x") Span.dummy)))
+       Span.dummy);
+  assert_pat "None" (make_pat (PatIdent "None") Span.dummy);
+  assert_pat
+    "head :: tail"
+    (make_pat
+       (PatCons
+          ( make_pat (PatIdent "head") Span.dummy
+          , make_pat (PatIdent "tail") Span.dummy ))
+       Span.dummy);
+  assert_pat
+    "Point.{x, y}"
+    (make_pat
+       (PatLitRecord ("Point", [ { field_name = "x" }; { field_name = "y" } ]))
+       Span.dummy)
+
+let test_exprs () =
   assert_stmt
-    "-delta;"
-    (mk_stmt_expr (mk_expr (ExprUnaryPrefix (Token.Minus, mk_ident "delta"))));
-  assert_stmt
-    "not is_valid;"
+    "1 + 2 * 3;"
     (mk_stmt_expr
-       (mk_expr (ExprUnaryPrefix (Token.KwNot, mk_ident "is_valid"))))
-
-let test_expr_if () =
-  let cond = mk_ident "is_ready" in
-  let t_expr = mk_expr (ExprBlock ([], Some (mk_ident "start"))) in
-  let f_expr = mk_expr (ExprBlock ([], Some (mk_ident "wait"))) in
+       (mk_expr
+          (ExprBinary
+             ( mk_lit (LitInt "1")
+             , Token.Plus
+             , mk_expr
+                 (ExprBinary
+                    (mk_lit (LitInt "2"), Token.Star, mk_lit (LitInt "3"))) ))));
   assert_stmt
-    "if is_ready {start} else {wait};"
-    (mk_stmt_expr (mk_expr (ExprIf (cond, t_expr, Some f_expr))));
+    "a |> b |> c;"
+    (mk_stmt_expr
+       (mk_expr
+          (ExprBinary
+             ( mk_expr (ExprBinary (mk_ident "a", Token.BarGt, mk_ident "b"))
+             , Token.BarGt
+             , mk_ident "c" ))));
   assert_stmt
-    "if is_ready {start};"
-    (mk_stmt_expr (mk_expr (ExprIf (cond, t_expr, None))))
+    "a ?? b ?? c;"
+    (mk_stmt_expr
+       (mk_expr
+          (ExprBinary
+             ( mk_expr
+                 (ExprBinary (mk_ident "a", Token.QuestionQuestion, mk_ident "b"))
+             , Token.QuestionQuestion
+             , mk_ident "c" ))));
 
-let test_expr_bind () =
-  let expected =
+  assert_stmt
+    "0 .. 10;"
+    (mk_stmt_expr
+       (mk_expr
+          (ExprRange
+             (mk_lit (LitInt "0"), Token.DotDot, Some (mk_lit (LitInt "10"))))));
+  assert_stmt
+    "0..;"
+    (mk_stmt_expr
+       (mk_expr (ExprRange (mk_lit (LitInt "0"), Token.DotDot, None))));
+
+  assert_stmt
+    "a.^;"
+    (mk_stmt_expr (mk_expr (ExprUnaryPostfix (mk_ident "a", Token.DotCaret))));
+  assert_stmt
+    "a?;"
+    (mk_stmt_expr (mk_expr (ExprUnaryPostfix (mk_ident "a", Token.Question))));
+  assert_stmt
+    "f(x, y);"
+    (mk_stmt_expr
+       (mk_expr (ExprCall (mk_ident "f", [ mk_ident "x"; mk_ident "y" ]))));
+  assert_stmt
+    "a[i];"
+    (mk_stmt_expr (mk_expr (ExprIndex (mk_ident "a", mk_ident "i"))));
+  assert_stmt "a.b;" (mk_stmt_expr (mk_expr (ExprField (mk_ident "a", "b"))));
+
+  assert_stmt
+    "x <- 1;"
+    (mk_stmt_expr (mk_expr (ExprAssign (mk_ident "x", mk_lit (LitInt "1")))));
+
+  let expected_bind =
     mk_stmt_expr
       (mk_expr
          (ExprBind
-            ( mk_mod
-            , false
-            , "timeout"
-            , None
-            , mk_lit (LitInt "5000")
-            , mk_expr (ExprLit (LitInt "0")) )))
+            (mk_mod, false, "x", None, mk_lit (LitInt "1"), mk_lit (LitInt "0"))))
   in
-  assert_stmt "val timeout := 5000;" expected;
-  let expected_mut =
-    mk_stmt_expr
-      (mk_expr
-         (ExprBind
-            ( mk_mod
-            , true
-            , "count"
-            , Some (mk_ty_ident "Int")
-            , mk_lit (LitInt "0")
-            , mk_expr (ExprLit (LitInt "0")) )))
-  in
-  assert_stmt "var count: Int := 0;" expected_mut
+  assert_stmt "val x := 1;" expected_bind;
 
-let test_expr_fn () =
-  let body = mk_expr (ExprBlock ([], None)) in
-  let p1 =
-    {
-      param_mutable = false
-    ; param_name = "name"
-    ; param_ty = Some (mk_ty_ident "String")
-    ; param_default = None
-    }
-  in
-  let p2 =
-    {
-      param_mutable = true
-    ; param_name = "age"
-    ; param_ty = Some (mk_ty_ident "Int")
-    ; param_default = None
-    }
-  in
-  let sig_greet =
-    {
-      fn_name = Some "greet"
-    ; fn_ty_params = []
-    ; fn_params = [ p1; p2 ]
-    ; fn_ret_ty = Some (mk_ty_ident "Unit")
-    }
-  in
-  assert_stmt
-    "fn greet(name: String, var age: Int): Unit {};"
-    (mk_stmt_expr (mk_expr (ExprFn ([], mk_mod, sig_greet, body))));
-  let sig_anon = { sig_greet with fn_name = None } in
-  let fn_anon = mk_expr (ExprFn ([], mk_mod, sig_anon, body)) in
-  assert_stmt
-    "val greet_fn := fn (name: String, var age: Int): Unit {};"
-    (mk_stmt_expr
-       (mk_expr
-          (ExprBind
-             ( mk_mod
-             , false
-             , "greet_fn"
-             , None
-             , fn_anon
-             , mk_expr (ExprLit (LitInt "0")) ))));
-  assert_stmt
-    "val greet_named := fn greet(name: String, var age: Int): Unit {};"
-    (mk_stmt_expr
-       (mk_expr
-          (ExprBind
-             ( mk_mod
-             , false
-             , "greet_named"
-             , None
-             , mk_expr (ExprFn ([], mk_mod, sig_greet, body))
-             , mk_expr (ExprLit (LitInt "0")) ))));
-  let m_ext = { mk_mod with is_extern = (None, true) } in
-  let m_ext_unsafe = { m_ext with is_unsafe = true } in
-  assert_stmt
-    "extern fn print_line() {};"
-    (mk_stmt_expr
-       (mk_expr
-          (ExprFn
-             ( []
-             , m_ext
-             , {
-                 fn_name = Some "print_line"
-               ; fn_ty_params = []
-               ; fn_params = []
-               ; fn_ret_ty = None
-               }
-             , body ))));
-  assert_stmt
-    "extern unsafe fn raw_access() {};"
-    (mk_stmt_expr
-       (mk_expr
-          (ExprFn
-             ( []
-             , m_ext_unsafe
-             , {
-                 fn_name = Some "raw_access"
-               ; fn_ty_params = []
-               ; fn_params = []
-               ; fn_ret_ty = None
-               }
-             , body ))));
-  let sig_ms =
-    { fn_name = None; fn_ty_params = []; fn_params = []; fn_ret_ty = None }
-  in
-  let fn_ext = mk_expr (ExprFn ([], m_ext, sig_ms, body)) in
-  assert_stmt
-    "val log := extern fn () {};"
-    (mk_stmt_expr
-       (mk_expr
-          (ExprBind
-             (mk_mod, false, "log", None, fn_ext, mk_expr (ExprLit (LitInt "0"))))));
-  let fn_ext_unsafe = mk_expr (ExprFn ([], m_ext_unsafe, sig_ms, body)) in
-  assert_stmt
-    "val write_raw := extern unsafe fn () {};"
-    (mk_stmt_expr
-       (mk_expr
-          (ExprBind
-             ( mk_mod
-             , false
-             , "write_raw"
-             , None
-             , fn_ext_unsafe
-             , mk_expr (ExprLit (LitInt "0")) ))))
-
-let test_expr_record () =
-  let rf_email =
+  let rf =
     {
       field_mutable = false
-    ; field_name = "email"
-    ; field_ty = Some (mk_ty_ident "String")
-    ; field_default = None
+    ; field_name = "x"
+    ; field_ty = None
+    ; field_default = Some (mk_lit (LitInt "1"))
     }
   in
-  let rf_id =
-    {
-      field_mutable = false
-    ; field_name = "id"
-    ; field_ty = Some (mk_ty_ident "Int")
-    ; field_default = None
-    }
-  in
-  let rec_user =
-    mk_expr (ExprRecord ([], mk_mod, Some "User", [], [ rf_email; rf_id ]))
-  in
-  assert_stmt "record User { email: String; id: Int };" (mk_stmt_expr rec_user);
-  let rec_anon =
-    mk_expr (ExprRecord ([], mk_mod, None, [], [ rf_email; rf_id ]))
-  in
-  let bind_anon =
-    mk_expr
-      (ExprBind
-         (mk_mod, false, "User", None, rec_anon, mk_expr (ExprLit (LitInt "0"))))
-  in
   assert_stmt
-    "val User := record { email: String; id: Int };"
-    (mk_stmt_expr bind_anon);
-  let bind_named =
-    mk_expr
-      (ExprBind
-         (mk_mod, false, "User", None, rec_user, mk_expr (ExprLit (LitInt "0"))))
-  in
-  assert_stmt
-    "val User := record User { email: String; id: Int };"
-    (mk_stmt_expr bind_named)
+    ".{ orig with x := 1 };"
+    (mk_stmt_expr
+       (mk_expr (ExprLitRecord (None, [ rf ], Some (mk_ident "orig")))));
 
-let test_expr_sum () =
-  let case_none = { case_name = "None"; case_tys = []; case_params = [] } in
-  let case_some =
-    { case_name = "Some"; case_tys = [ mk_ty_ident "T" ]; case_params = [] }
-  in
-  let sum_option =
-    mk_expr
-      (ExprSum ([], mk_mod, Some "Option", [ "T" ], [ case_none; case_some ]))
-  in
   assert_stmt
-    "sum Option<T> { case None, case Some(T) };"
-    (mk_stmt_expr sum_option);
-  let sum_anon =
-    mk_expr (ExprSum ([], mk_mod, None, [ "T" ], [ case_none; case_some ]))
-  in
+    "return 1;"
+    (mk_stmt_expr (mk_expr (ExprReturn (Some (mk_lit (LitInt "1"))))));
+  assert_stmt "break;" (mk_stmt_expr (mk_expr (ExprBreak None)));
   assert_stmt
-    "val Option := sum<T> { case None, case Some(T) };"
+    "defer { cleanup(); };"
     (mk_stmt_expr
        (mk_expr
-          (ExprBind
-             ( mk_mod
-             , false
-             , "Option"
-             , None
-             , sum_anon
-             , mk_expr (ExprLit (LitInt "0")) ))));
-  assert_stmt
-    "val Option := sum Option<T> { case None, case Some(T) };"
-    (mk_stmt_expr
-       (mk_expr
-          (ExprBind
-             ( mk_mod
-             , false
-             , "Option"
-             , None
-             , sum_option
-             , mk_expr (ExprLit (LitInt "0")) ))));
-  let p_x =
-    {
-      param_mutable = false
-    ; param_name = "x"
-    ; param_ty = Some (mk_ty_ident "Int")
-    ; param_default = None
-    }
-  in
-  let p_y =
-    {
-      param_mutable = false
-    ; param_name = "y"
-    ; param_ty = Some (mk_ty_ident "Int")
-    ; param_default = None
-    }
-  in
-  let case_point =
-    { case_name = "Point"; case_tys = []; case_params = [ p_x; p_y ] }
-  in
-  let sum_point =
-    mk_expr (ExprSum ([], mk_mod, Some "Scale", [], [ case_point ]))
-  in
-  assert_stmt
-    "sum Scale { case Point(x: Int, y: Int) };"
-    (mk_stmt_expr sum_point)
-
-let test_expr_match () =
-  let target = mk_ident "result" in
-  let pat_ok =
-    make_pat
-      (PatVariant ("Ok", [], Some (make_pat (PatIdent "val") Span.dummy)))
-      Span.dummy
-  in
-  let case_ok = { case_pat = pat_ok; case_expr = mk_ident "val" } in
-  assert_stmt
-    "match result { case Ok(`val`) => `val` };"
-    (mk_stmt_expr (mk_expr (ExprMatch (target, [ case_ok ]))))
+          (ExprDefer
+             (mk_expr
+                (ExprBlock
+                   ( [
+                       mk_stmt_expr (mk_expr (ExprCall (mk_ident "cleanup", [])))
+                     ]
+                   , None ))))))
 
 let test_suite =
   [
-    ("lit", [ test_case "lit" `Quick test_expr_lit ])
-  ; ("binary", [ test_case "binary" `Quick test_expr_binary ])
-  ; ("unary", [ test_case "unary" `Quick test_expr_unary ])
-  ; ("if", [ test_case "if" `Quick test_expr_if ])
-  ; ("bind", [ test_case "bind" `Quick test_expr_bind ])
-  ; ("fn", [ test_case "fn" `Quick test_expr_fn ])
-  ; ("record", [ test_case "record" `Quick test_expr_record ])
-  ; ("sum", [ test_case "sum" `Quick test_expr_sum ])
-  ; ("match", [ test_case "match" `Quick test_expr_match ])
+    ("lits", [ test_case "lits" `Quick test_lits ])
+  ; ("types", [ test_case "types" `Quick test_types ])
+  ; ("pats", [ test_case "pats" `Quick test_pats ])
+  ; ("exprs", [ test_case "exprs" `Quick test_exprs ])
   ]
 
 let () = run "parser_tests" test_suite

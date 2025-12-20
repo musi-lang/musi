@@ -227,6 +227,17 @@ let parse_mods p =
   loop ();
   { is_export = !ex; is_extern = !ext; is_unsafe = !u }
 
+let can_start_expr = function
+  | Token.Ident _ | Token.LitInt _ | Token.LitReal _ | Token.LitString _
+  | Token.LitRune _ | Token.KwTrue | Token.KwFalse | Token.LParen | Token.LBrack
+  | Token.LBrace | Token.Minus | Token.KwNot | Token.Tilde | Token.At
+  | Token.KwIf | Token.KwWhile | Token.KwFor | Token.KwMatch | Token.KwReturn
+  | Token.KwBreak | Token.KwDefer | Token.KwUnsafe | Token.KwImport
+  | Token.KwExtern | Token.KwFn | Token.KwVal | Token.KwVar | Token.KwRecord
+  | Token.KwSum | Token.Dot ->
+    true
+  | _ -> false
+
 let rec parse_expr p prec =
   let l = parse_prefix p in
   let rec loop l =
@@ -396,8 +407,7 @@ and parse_infix p l op =
   | Token.DotDot | Token.DotDotLt ->
     let prec = Prec.of_token op in
     let r =
-      if Prec.of_token (fst (peek p)) > prec then Some (parse_expr p prec)
-      else None
+      if can_start_expr (fst (peek p)) then Some (parse_expr p prec) else None
     in
     let end_s = match r with Some e -> e.span | None -> s in
     make_expr (ExprRange (l, op, r)) (Span.merge l.span end_s)
