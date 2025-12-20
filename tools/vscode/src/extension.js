@@ -12,14 +12,10 @@ let client;
  * @param {{ subscriptions: import("vscode").Disposable[]; extensionPath: string }} _context
  */
 export function activate(_context) {
-	const workspaceRoot = workspace.workspaceFolders?.[0]?.uri.fsPath;
-	if (!workspaceRoot) {
-		return;
-	}
 
 	const serverSource = path.join(
-		workspaceRoot,
-		"_build/default/tools/lsp/bin/main.exe",
+		_context.extensionPath,
+		"../../_build/default/tools/lsp/bin/main.exe",
 	);
 
 
