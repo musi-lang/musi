@@ -4,14 +4,15 @@
         "allowUmdGlobalAccess": true,
         "allowUnreachableCode": false,
         "allowUnusedLabels": false,
+        "checkJs": true,
         "composite": true,
         "exactOptionalPropertyTypes": true,
         "lib": [
             "ES2022"
         ],
-        "module": "Node16",
+        "module": "commonjs",
         "moduleDetection": "force",
-        "moduleResolution": "node16",
+        "moduleResolution": "node",
         "noFallthroughCasesInSwitch": true,
         "noImplicitOverride": true,
         "noImplicitReturns": true,
@@ -21,17 +22,19 @@
         "noUnusedParameters": true,
         "noUncheckedSideEffectImports": true,
         "outDir": "dist",
-        "rootDir": "src",
+        "rootDir": "client/src",
         "sourceMap": true,
         "strict": true,
         "target": "ES2022",
         "types": [
             "node",
-            "vscode"
+            "vscode",
+            "vscode-languageclient"
         ]
     },
     "exclude": [
         "node_modules",
-        ".vscode-test"
+        ".vscode-test",
+        "dist"
     ]
 }

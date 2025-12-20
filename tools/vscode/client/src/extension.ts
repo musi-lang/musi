@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { window, workspace } from "vscode";
-import { LanguageClient, TransportKind } from "vscode-languageclient/node.js";
+import { LanguageClient, TransportKind } from "vscode-languageclient/node";
 
 let client: LanguageClient;
 

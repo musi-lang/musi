@@ -86,7 +86,7 @@
 		]
 	},
 	"scripts": {
-		"build": "bun build ./src/extension.ts --outfile=./dist/extension.js --external vscode --target=node",
+		"build": "bun build ./client/src/extension.ts --outfile=./dist/extension.js --external vscode --target=node",
 		"package": "bun run build && vsce package",
 		"vscode:prepublish": "bun run build"
 	},
