@@ -16,38 +16,15 @@ Musi is systems programming language designed for clarity, safety, and performan
 
 ## Installation
 
-### macOS and Linux
+- **macOS/Linux**: Install `pkg-config` using your package manager.
+- **Windows**: Install `opam` using the method of your choice.
 
 ```bash
-# install pkg-config (macOS only)
-brew install pkg-config
-
-# clone repository
-git clone https://github.com/musi-lang/musi.git
-cd musi
-
-# install OCaml tools and build project
-opam install ocamlformat ocaml-lsp-server dune
-opam exec -- dune pkg lock
-opam exec -- dune build
-```
-
-### Windows
-
-```powershell
-# install opam (choose one method)
-winget install OCaml.opam
-# OR: choco install opam
-# OR: scoop install opam
-
-# initiate opam (restart terminal first)
 opam init
 
-# clone repository
 git clone https://github.com/musi-lang/musi.git
 cd musi
 
-# build project
 opam install ocamlformat ocaml-lsp-server dune
 opam exec -- dune pkg lock
 opam exec -- dune build
@@ -56,10 +33,7 @@ opam exec -- dune build
 ## Running and Testing
 
 ```bash
-# run compiler
-opam exec -- dune exec bin/msc.exe
-
-# run tests
+opam exec -- dune exec bin/main.exe
 opam exec -- dune test
 ```
 
