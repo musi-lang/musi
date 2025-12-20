@@ -165,14 +165,12 @@ let parse_lit_opt p =
 let rec parse_ty p =
   match fst (peek p) with
   | Token.Ident _ -> parse_ty_app_or_ident p
-  | Token.Question ->
+  | (Token.Question | Token.Caret) as t ->
     let _, s = advance p in
     let i = parse_ty p in
-    make_ty (TyOptional i) (Span.merge s i.span)
-  | Token.Caret ->
-    let _, s = advance p in
-    let i = parse_ty p in
-    make_ty (TyPtr i) (Span.merge s i.span)
+    make_ty
+      (if t = Token.Question then TyOptional i else TyPtr i)
+      (Span.merge s i.span)
   | Token.LBrack ->
     ignore (advance p);
     let sz =
@@ -194,13 +192,20 @@ let rec parse_ty p =
     make_ty TyError s
 
 and parse_ty_app_or_ident p =
-  let t, s = advance p in
-  let n = match t with Token.Ident id -> resolve p id | _ -> "?" in
-  if match_token p [ Token.Lt ] then
-    let as_ = parse_list p parse_ty [ Token.Comma ] Token.Gt in
-    let _, es = consume p Token.Gt "expected '>' to close type argument list" in
-    make_ty (TyApp (n, as_)) (Span.merge s es)
-  else make_ty (TyIdent n) s
+  match advance p with
+  | Token.Ident id, s ->
+    let n = resolve p id in
+    if match_token p [ Token.Lt ] then
+      let as_ = parse_list p parse_ty [ Token.Comma ] Token.Gt in
+      let _, es =
+        consume p Token.Gt "expected '>' to close type argument list"
+      in
+      make_ty (TyApp (n, as_)) (Span.merge s es)
+    else make_ty (TyIdent n) s
+  | _ ->
+    let _, s = peek p in
+    error p "expected identifier" s;
+    make_ty TyError s
 
 let parse_attrs p =
   if match_token p [ Token.LBrackLt ] then (
@@ -402,6 +407,16 @@ and parse_infix p l op =
     let r = parse_expr p (token_prec op) in
     make_expr (ExprBinary (l, op, r)) (Span.merge l.span r.span)
 
+and parse_field_like p msg =
+  let m = match_token p [ Token.KwVar ] in
+  let n = expect_id p msg in
+  let ty = if match_token p [ Token.Colon ] then Some (parse_ty p) else None in
+  let d =
+    if match_token p [ Token.ColonEq ] then Some (parse_expr p PrecNone)
+    else None
+  in
+  (m, n, ty, d)
+
 and parse_decl_head p k =
   let n = parse_ident_opt p in
   let tp = parse_ty_params p in
@@ -409,14 +424,12 @@ and parse_decl_head p k =
   (n, tp)
 
 and parse_record_field p =
-  let m = match_token p [ Token.KwVar ] in
-  let n = expect_id p "expected field name" in
-  let ty = if match_token p [ Token.Colon ] then Some (parse_ty p) else None in
-  let def =
-    if match_token p [ Token.ColonEq ] then Some (parse_expr p PrecNone)
-    else None
-  in
-  { field_mutable = m; field_name = n; field_ty = ty; field_default = def }
+  let m, n, ty, d = parse_field_like p "expected field name" in
+  { field_mutable = m; field_name = n; field_ty = ty; field_default = d }
+
+and parse_param p =
+  let m, n, ty, d = parse_field_like p "expected parameter name" in
+  { param_mutable = m; param_name = n; param_ty = ty; param_default = d }
 
 and parse_expr_lit_record p n s =
   expect p Token.LBrace "expected '{' to start record literal";
@@ -511,15 +524,16 @@ and parse_pat_primary p =
   | Some (s, l) -> make_pat (PatLit l) s
   | None -> (
     match tok with
-    | Token.Ident id -> (
+    | Token.Ident id ->
       ignore (advance p);
       let n = resolve p id in
-      match fst (peek p) with
-      | Token.Dot ->
+      if fst (peek p) = Token.Dot then (
         ignore (advance p);
-        parse_pat_lit_record p n span
-      | Token.Lt | Token.LParen -> parse_pat_variant p n span
-      | _ -> make_pat (PatIdent n) span)
+        parse_pat_lit_record p n span)
+      else if match_token p [ Token.Lt; Token.LParen ] then (
+        p.token_idx <- p.token_idx - 1;
+        parse_pat_variant p n span)
+      else make_pat (PatIdent n) span
     | Token.Underscore ->
       ignore (advance p);
       make_pat PatWild span
@@ -592,16 +606,6 @@ and parse_fn_sig p n =
   let rt = if match_token p [ Token.Colon ] then Some (parse_ty p) else None in
   { fn_name = n; fn_ty_params = tp; fn_params = ps; fn_ret_ty = rt }
 
-and parse_param p =
-  let mut = match_token p [ Token.KwVar ] in
-  let n = expect_id p "expected parameter name" in
-  let ty = if match_token p [ Token.Colon ] then Some (parse_ty p) else None in
-  let d =
-    if match_token p [ Token.ColonEq ] then Some (parse_expr p PrecNone)
-    else None
-  in
-  { param_mutable = mut; param_name = n; param_ty = ty; param_default = d }
-
 and parse_expr_fn p s a m =
   let n = parse_ident_opt p in
   let sig_ = parse_fn_sig p n in
@@ -642,29 +646,31 @@ and parse_expr_sum p s a m =
 and parse_sum_case p =
   expect p Token.KwCase "expected 'case' keyword";
   let n = expect_id p "expected case name" in
-  let tys, params =
+  let ts, ps =
     if match_token p [ Token.LParen ] then (
-      let ts, ps = (ref [], ref []) in
-      let rec loop () =
-        let is_p =
-          check p Token.KwVar
-          ||
-          match peek p with
-          | Token.Ident _, _ -> (
-            match fst (peek_at p 1) with
-            | Token.Colon | Token.ColonEq -> true
-            | _ -> false)
-          | _ -> false
-        in
-        if is_p then ps := parse_param p :: !ps else ts := parse_ty p :: !ts;
-        if match_token p [ Token.Comma ] then loop ()
+      let items =
+        parse_list
+          p
+          (fun p ->
+            if
+              check p Token.KwVar
+              ||
+              match peek p with
+              | Token.Ident _, _ -> (
+                match fst (peek_at p 1) with
+                | Token.Colon | Token.ColonEq -> true
+                | _ -> false)
+              | _ -> false
+            then (None, Some (parse_param p))
+            else (Some (parse_ty p), None))
+          [ Token.Comma ]
+          Token.RParen
       in
-      if not (check p Token.RParen) then loop ();
       expect p Token.RParen "expected ')' to close case payload";
-      (List.rev !ts, List.rev !ps))
+      (List.filter_map fst items, List.filter_map snd items))
     else ([], [])
   in
-  { case_name = n; case_tys = tys; case_params = params }
+  { case_name = n; case_tys = ts; case_params = ps }
 
 and parse_expr_extern p s =
   let a =
