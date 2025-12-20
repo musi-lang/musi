@@ -1,6 +1,8 @@
 open Token
 open Basic
 
+type brace_kind = Normal | Template
+
 type t = {
     interner : Interner.t
   ; error_bag : Reporter.bag
@@ -9,7 +11,7 @@ type t = {
   ; mutable curr_pos : int
   ; text : string
   ; text_len : int
-  ; mutable in_template : bool
+  ; mutable brace_stack : brace_kind list
 }
 
 let create ?(interner = None) source file_id =
@@ -25,7 +27,7 @@ let create ?(interner = None) source file_id =
   ; curr_pos = 0
   ; text
   ; text_len = String.length text
-  ; in_template = false
+  ; brace_stack = []
   }
 
 let curr_pos lexer = lexer.curr_pos
@@ -228,22 +230,19 @@ let try_scan_template lexer pos offset =
     let is_expr = lexer.text.[end_pos] = '{' in
 
     if is_expr then begin
-      if offset = 2 then lexer.in_template <- true;
-      if String.length content = 0 then
-        Reporter.try_error_info
-          "empty template expression"
-          (span lexer pos (end_pos + 1))
-      else
-        let tok =
-          if offset = 2 then TemplateHead (intern lexer content)
-          else TemplateMiddle (intern lexer content)
-        in
-        Reporter.try_ok (tok, span lexer pos (end_pos + 1))
+      lexer.brace_stack <- Template :: lexer.brace_stack;
+      let tok =
+        if offset = 2 then TemplateHead (intern lexer content)
+        else TemplateMiddle (intern lexer content)
+      in
+      Reporter.try_ok (tok, span lexer pos (end_pos + 1))
     end
     else begin
-      if offset = 0 then lexer.in_template <- false;
-      Reporter.try_ok
-        (LitTemplateNoSubst (intern lexer content), span lexer pos (end_pos + 1))
+      let tok =
+        if offset = 2 then LitTemplateNoSubst (intern lexer content)
+        else TemplateTail (intern lexer content)
+      in
+      Reporter.try_ok (tok, span lexer pos (end_pos + 1))
     end
 
 let try_scan_number lexer =
@@ -351,6 +350,11 @@ let try_scan_symbol lexer =
     | (sym, token) :: rest -> (
       match scan_exact_match_opt sym lexer.text lexer.curr_pos with
       | Some len ->
+        (if token = LBrace then lexer.brace_stack <- Normal :: lexer.brace_stack
+         else if token = RBrace then
+           match lexer.brace_stack with
+           | _ :: bs -> lexer.brace_stack <- bs
+           | [] -> ());
         Reporter.try_ok (token, span lexer lexer.curr_pos (lexer.curr_pos + len))
       | None -> try_match rest)
   in
@@ -394,17 +398,23 @@ let try_skip_block_comment_opt lexer =
 let rec try_scan_token_opt lexer =
   if lexer.curr_pos >= lexer.text_len then
     Some (Reporter.try_ok (EOF, span lexer lexer.curr_pos lexer.text_len))
-  else if lexer.in_template then
-    match lexer.text.[lexer.curr_pos] with
-    | '}' ->
-      advance lexer 1;
-      Some (try_scan_template lexer lexer.curr_pos 0)
-    | _ -> Some (try_scan_symbol lexer)
   else
     match lexer.text.[lexer.curr_pos] with
     | ' ' | '\t' | '\r' | '\n' ->
       skip_whitespace lexer;
       None
+    | '#'
+      when lexer.curr_pos + 1 < lexer.text_len
+           && lexer.text.[lexer.curr_pos + 1] = '!' ->
+      skip_line_comment lexer;
+      None
+    | '}' -> (
+      match lexer.brace_stack with
+      | Template :: bs ->
+        lexer.brace_stack <- bs;
+        advance lexer 1;
+        Some (try_scan_template lexer lexer.curr_pos 0)
+      | _ -> Some (try_scan_symbol lexer))
     | '/' when lexer.curr_pos + 1 < lexer.text_len -> (
       match lexer.text.[lexer.curr_pos + 1] with
       | '/' ->
