@@ -10,6 +10,7 @@ type t =
   | TemplateHead of Interner.ident
   | TemplateMiddle of Interner.ident
   | TemplateTail of Interner.ident
+  | KwAlias
   | KwAnd
   | KwAs
   | KwBreak
@@ -99,6 +100,7 @@ let show interner = function
   | TemplateHead s -> "$\"" ^ ident_to_string interner s
   | TemplateMiddle s -> ident_to_string interner s
   | TemplateTail s -> ident_to_string interner s ^ "\""
+  | KwAlias -> "alias"
   | KwAnd -> "and"
   | KwAs -> "as"
   | KwBreak -> "break"

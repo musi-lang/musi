@@ -11,6 +11,7 @@ type t =
   | TemplateHead of Interner.ident
   | TemplateMiddle of Interner.ident
   | TemplateTail of Interner.ident
+  | KwAlias
   | KwAnd
   | KwAs
   | KwBreak

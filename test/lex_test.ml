@@ -17,6 +17,7 @@ let token_to_string token =
   | Token.TemplateHead _ -> "TemplateHead"
   | Token.TemplateMiddle _ -> "TemplateMiddle"
   | Token.TemplateTail _ -> "TemplateTail"
+  | Token.KwAlias -> "KwAlias"
   | Token.KwAnd -> "KwAnd"
   | Token.KwAs -> "KwAs"
   | Token.KwBreak -> "KwBreak"

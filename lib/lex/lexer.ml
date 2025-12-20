@@ -99,7 +99,8 @@ let keyword_table = Hashtbl.create 64
 let () =
   let keywords =
     [
-      ("and", KwAnd)
+      ("alias", KwAlias)
+    ; ("and", KwAnd)
     ; ("as", KwAs)
     ; ("break", KwBreak)
     ; ("case", KwCase)
