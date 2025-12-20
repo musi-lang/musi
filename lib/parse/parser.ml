@@ -368,12 +368,26 @@ and parse_prefix p =
     | Token.KwVal | Token.KwVar ->
       ignore (advance p);
       parse_expr_bind p span tok mods
-    | Token.KwRecord ->
+    | Token.KwRecord | Token.KwSum ->
+      let k = if tok = Token.KwRecord then "record" else "sum" in
       ignore (advance p);
-      parse_expr_record p span attrs mods
-    | Token.KwSum ->
-      ignore (advance p);
-      parse_expr_sum p span attrs mods
+      let n = parse_ident_opt p in
+      let tp = parse_ty_params p in
+      expect p Token.LBrace (Printf.sprintf "expected '{' after '%s' name" k);
+      if k = "record" then
+        let fs =
+          parse_list p parse_record_field [ Token.Semicolon ] Token.RBrace
+        in
+        let _, es =
+          consume p Token.RBrace "expected '}' to close 'record' definition"
+        in
+        make_expr (ExprRecord (attrs, mods, n, tp, fs)) (Span.merge span es)
+      else
+        let cs = parse_list p parse_sum_case [ Token.Comma ] Token.RBrace in
+        let _, es =
+          consume p Token.RBrace "expected '}' to close 'sum' type definition"
+        in
+        make_expr (ExprSum (attrs, mods, n, tp, cs)) (Span.merge span es)
     | _ ->
       error
         p
@@ -416,12 +430,6 @@ and parse_field_like p msg =
     else None
   in
   (m, n, ty, d)
-
-and parse_decl_head p k =
-  let n = parse_ident_opt p in
-  let tp = parse_ty_params p in
-  expect p Token.LBrace (Printf.sprintf "expected '{' after '%s' name" k);
-  (n, tp)
 
 and parse_record_field p =
   let m, n, ty, d = parse_field_like p "expected field name" in
@@ -626,22 +634,6 @@ and parse_expr_bind p s t m =
        , i
        , make_expr (ExprLit (LitInt "0")) Span.dummy ))
     (Span.merge s i.span)
-
-and parse_expr_record p s a m =
-  let n, tp = parse_decl_head p "record" in
-  let fs = parse_list p parse_record_field [ Token.Semicolon ] Token.RBrace in
-  let _, es =
-    consume p Token.RBrace "expected '}' to close 'record' definition"
-  in
-  make_expr (ExprRecord (a, m, n, tp, fs)) (Span.merge s es)
-
-and parse_expr_sum p s a m =
-  let n, tp = parse_decl_head p "sum" in
-  let cs = parse_list p parse_sum_case [ Token.Comma ] Token.RBrace in
-  let _, es =
-    consume p Token.RBrace "expected '}' to close 'sum' type definition"
-  in
-  make_expr (ExprSum (a, m, n, tp, cs)) (Span.merge s es)
 
 and parse_sum_case p =
   expect p Token.KwCase "expected 'case' keyword";
