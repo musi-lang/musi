@@ -42,7 +42,6 @@ let collect_symbols source ast =
           add_symbol ~detail name Types.SymbolKind.Function expr.span)
         sig_.fn_name;
 
-      (* Collect function parameters as child symbols *)
       List.iter
         (fun param ->
           let detail = Some "param" in
@@ -59,7 +58,6 @@ let collect_symbols source ast =
         (fun name -> add_symbol name Types.SymbolKind.Struct expr.span)
         name_opt;
 
-      (* Collect record fields as child symbols *)
       List.iter
         (fun field ->
           let detail = Some "field" in
@@ -72,7 +70,6 @@ let collect_symbols source ast =
         (fun name -> add_symbol name Types.SymbolKind.Enum expr.span)
         name_opt;
 
-      (* Collect sum type cases as child symbols *)
       List.iter
         (fun sum_case ->
           let detail = Some "case" in
