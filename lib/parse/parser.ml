@@ -269,7 +269,9 @@ let rec parse_expr p prec =
   loop l
 
 and parse_prefix p =
-  let attrs, mods, (tok, span) = (parse_attrs p, parse_modifiers p, peek p) in
+  let attrs = parse_attrs p in
+  let mods = parse_modifiers p in
+  let tok, span = peek p in
   match parse_lit_opt p with
   | Some (s, l) -> make_expr (ExprLit l) s
   | None -> (
@@ -310,7 +312,8 @@ and parse_prefix p =
     | Token.LBrace -> parse_expr_block p span
     | Token.KwIf ->
       ignore (advance p);
-      let c, t = (parse_expr p PrecNone, parse_expr p PrecNone) in
+      let c = parse_expr p PrecNone in
+      let t = parse_expr p PrecNone in
       let e =
         if match_token p [ Token.KwElse ] then Some (parse_expr p PrecNone)
         else None
@@ -318,13 +321,15 @@ and parse_prefix p =
       make_expr (ExprIf (c, t, e)) (Span.merge span (prev p |> snd))
     | Token.KwWhile ->
       ignore (advance p);
-      let c, b = (parse_expr p PrecNone, parse_expr p PrecNone) in
+      let c = parse_expr p PrecNone in
+      let b = parse_expr p PrecNone in
       make_expr (ExprWhile (c, b)) (Span.merge span b.span)
     | Token.KwFor ->
       ignore (advance p);
       let n = expect_id p "expected identifier for iterator" in
       expect p Token.KwIn "expected 'in'";
-      let it, b = (parse_expr p PrecNone, parse_expr p PrecNone) in
+      let it = parse_expr p PrecNone in
+      let b = parse_expr p PrecNone in
       make_expr (ExprFor (n, it, b)) (Span.merge span b.span)
     | Token.KwMatch ->
       ignore (advance p);
