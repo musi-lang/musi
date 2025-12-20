@@ -48,7 +48,7 @@ let match_token p kinds =
 let error p msg span = p.diag <- Reporter.add p.diag (Reporter.error msg span)
 
 let consume p kind message =
-  if check p kind then advance p
+  if fst (peek p) = kind then advance p
   else
     let tok, span = peek p in
     error
@@ -219,7 +219,7 @@ let parse_attrs p =
     as_)
   else []
 
-let parse_modifiers p =
+let parse_mods p =
   let ex, ext, u = (ref false, ref (None, false), ref false) in
   let rec loop () =
     match fst (peek p) with
@@ -270,7 +270,7 @@ let rec parse_expr p prec =
 
 and parse_prefix p =
   let attrs = parse_attrs p in
-  let mods = parse_modifiers p in
+  let mods = parse_mods p in
   let tok, span = peek p in
   match parse_lit_opt p with
   | Some (s, l) -> make_expr (ExprLit l) s
@@ -630,13 +630,7 @@ and parse_expr_record p s a m =
   let n = parse_ident_opt p in
   let tp = parse_ty_params p in
   expect p Token.LBrace "expected '{' after 'record' name";
-  let fs =
-    parse_list
-      p
-      parse_record_field
-      [ Token.Comma; Token.Semicolon ]
-      Token.RBrace
-  in
+  let fs = parse_list p parse_record_field [ Token.Semicolon ] Token.RBrace in
   let _, es =
     consume p Token.RBrace "expected '}' closing 'record' expression"
   in
@@ -646,9 +640,7 @@ and parse_expr_sum p s a m =
   let n = parse_ident_opt p in
   let tp = parse_ty_params p in
   expect p Token.LBrace "expected '{' after 'sum' name";
-  let cs =
-    parse_list p parse_sum_case [ Token.Comma; Token.Semicolon ] Token.RBrace
-  in
+  let cs = parse_list p parse_sum_case [ Token.Comma ] Token.RBrace in
   let _, es =
     consume p Token.RBrace "expected '}' closing 'sum' type expression"
   in
