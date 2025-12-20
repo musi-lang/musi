@@ -13,7 +13,8 @@ export async function activate(_context: vscode.ExtensionContext) {
 	try {
 		const serverSource = path.join(
 			_context.extensionPath,
-			"../../_build/default/tools/lsp/bin/main.exe",
+			// hard-coded bullf*ck
+			"/Users/krystian/CodeProjects/musi/_build/default/tools/lsp/bin/main.exe",
 		);
 		console.log("Server source:", serverSource);
 		vscode.window.showInformationMessage(`Looking for server at: ${serverSource}`);
