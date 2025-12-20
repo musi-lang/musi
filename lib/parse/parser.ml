@@ -350,6 +350,7 @@ let parse_modifiers p =
           true
         | _ -> false
       in
+      if fst (peek_at p !offset) = Token.KwUnsafe then offset := !offset + 1;
       if fst (peek_at p !offset) = Token.LBrace then ()
       else (
         ignore (advance p);
