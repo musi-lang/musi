@@ -316,7 +316,7 @@ let parse_attr p =
   in
   { attr_name = name; attr_args = args }
 
-let parse_attributes p =
+let parse_attrs p =
   let attrs = ref [] in
   if match_token p [ Token.LBrackLt ] then (
     attrs := parse_comma_list p parse_attr Token.GtRBrack;
@@ -325,7 +325,7 @@ let parse_attributes p =
 
 let parse_modifiers p =
   let is_export = ref false in
-  let is_extern = ref None in
+  let is_extern = ref (None, false) in
   let is_unsafe = ref false in
   let rec loop () =
     let tok, _ = peek p in
@@ -353,8 +353,8 @@ let parse_modifiers p =
             | _ -> None
           else None
         in
-        let unsafe = match_token p [ Token.KwUnsafe ] in
-        is_extern := Some (abi, unsafe);
+
+        is_extern := (abi, true);
         loop ())
     | Token.KwUnsafe ->
       if fst (peek_at p 1) = Token.LBrace then ()
@@ -380,7 +380,7 @@ let rec parse_expr p prec =
   loop left
 
 and parse_prefix p =
-  let attrs = parse_attributes p in
+  let attrs = parse_attrs p in
   let mods = parse_modifiers p in
   let tok, span = peek p in
   match tok with
