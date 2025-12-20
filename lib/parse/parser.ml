@@ -268,8 +268,7 @@ let rec parse_expr p prec =
   loop l
 
 and parse_prefix p =
-  let attrs = parse_attrs p in
-  let mods = parse_mods p in
+  let attrs, mods = (parse_attrs p, parse_mods p) in
   let tok, span = peek p in
   match parse_lit_opt p with
   | Some (s, l) -> make_expr (ExprLit l) s
