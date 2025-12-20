@@ -1,10 +1,5 @@
 open Lsp
 open Jsonrpc
-open Utils
-open State
-open Tokens
-open Diagnostics
-open Symbols
 open Basic
 
 let log msg = Printf.eprintf "[Server] %s\n%!" msg
