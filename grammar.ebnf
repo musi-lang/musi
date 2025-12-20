@@ -3,13 +3,13 @@
 (* ========================================================================= *)
 (*
  * Naming Conventions:
- * - No prefix: Lexical tokens (no AST nodes)
- * - aux_: Syntactic helpers/support (no AST nodes)
- * - prec_: Precedence levels (parser-only, no AST nodes)
- * - expr_: Expression nodes (create AST nodes)
- * - pat_: Pattern nodes (create AST nodes)
- * - ty_: Type nodes (create AST nodes)
- * - stmt_: Statement nodes (create AST nodes)
+ * - no prefix: lexical tokens (no AST nodes)
+ * - aux_: syntactic helpers/support (no AST nodes)
+ * - prec_: precedence levels (parser-only, no AST nodes)
+ * - expr_: expression nodes (create AST nodes)
+ * - pat_: pattern nodes (create AST nodes)
+ * - ty_: type nodes (create AST nodes)
+ * - stmt_: statement nodes (create AST nodes)
  *)
 (* ========================================================================= *)
 (* LEXICAL TOKENS                                                            *)
@@ -114,7 +114,7 @@ aux_match_cases = aux_match_case, {",", aux_match_case};
 aux_comma_list = expr, {",", expr};
 
 (* ========================================================================= *)
-(* TYPES q                                                                   *)
+(* TYPES                                                                     *)
 (* ========================================================================= *)
 ty_params = "<", ident, {",", ident}, ">";
 
