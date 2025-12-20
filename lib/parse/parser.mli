@@ -7,25 +7,6 @@ open Nodes
 type t
 
 (** Operator precedence levels *)
-type prec =
-  | PrecNone
-  | PrecAssign
-  | PrecPipe
-  | PrecCoal
-  | PrecOr
-  | PrecAnd
-  | PrecBitOr
-  | PrecBitXor
-  | PrecBitAnd
-  | PrecEquality
-  | PrecComparison
-  | PrecRange
-  | PrecCons
-  | PrecTerm
-  | PecFactor
-  | PrecExponent
-  | PrecUnary
-  | PrecPostfix
 
 (** Create new parser instance from token sequence *)
 val create : (Token.t * Span.t) Seq.t -> Source.t -> int -> Interner.t -> t
@@ -45,7 +26,7 @@ val try_parse :
   -> (stmt list, Reporter.bag) result
 
 (** Parse single expression with given precedence *)
-val parse_expr : t -> prec -> expr
+val parse_expr : t -> Prec.t -> expr
 
 (** Parse single type definition *)
 val parse_ty : t -> ty

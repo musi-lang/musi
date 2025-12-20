@@ -100,49 +100,6 @@ let sync p =
     ignore (advance p);
     loop ())
 
-type prec =
-  | PrecNone
-  | PrecAssign
-  | PrecPipe
-  | PrecCoal
-  | PrecOr
-  | PrecAnd
-  | PrecBitOr
-  | PrecBitXor
-  | PrecBitAnd
-  | PrecEquality
-  | PrecComparison
-  | PrecRange
-  | PrecCons
-  | PrecTerm
-  | PecFactor
-  | PrecExponent
-  | PrecUnary
-  | PrecPostfix
-
-let token_prec = function
-  | Token.LtMinus -> PrecAssign
-  | Token.BarGt -> PrecPipe
-  | Token.QuestionQuestion -> PrecCoal
-  | Token.KwOr -> PrecOr
-  | Token.KwAnd -> PrecAnd
-  | Token.Bar -> PrecBitOr
-  | Token.Caret -> PrecBitXor
-  | Token.Amp -> PrecBitAnd
-  | Token.Eq | Token.SlashEq -> PrecEquality
-  | Token.Lt | Token.Gt | Token.LtEq | Token.GtEq | Token.KwIs | Token.KwAs ->
-    PrecComparison
-  | Token.DotDot | Token.DotDotLt -> PrecRange
-  | Token.ColonColon -> PrecCons
-  | Token.Plus | Token.Minus -> PrecTerm
-  | Token.Star | Token.Slash | Token.Percent | Token.KwMod | Token.LtLt
-  | Token.GtGt ->
-    PecFactor
-  | Token.StarStar -> PrecExponent
-  | Token.LParen | Token.LBrack | Token.Dot | Token.DotCaret | Token.Question ->
-    PrecPostfix
-  | _ -> PrecNone
-
 let parse_lit_opt p =
   let tok, span = peek p in
   match tok with
@@ -263,7 +220,7 @@ let rec parse_expr p prec =
   let l = parse_prefix p in
   let rec loop l =
     let t, _ = peek p in
-    if token_prec t > prec then loop (parse_infix p l t) else l
+    if Prec.of_token t > prec then loop (parse_infix p l t) else l
   in
   loop l
 
@@ -276,7 +233,7 @@ and parse_prefix p =
     match tok with
     | Token.Minus | Token.KwNot | Token.Tilde | Token.At ->
       ignore (advance p);
-      let r = parse_expr p PrecUnary in
+      let r = parse_expr p Prec.Unary in
       make_expr (ExprUnaryPrefix (tok, r)) (Span.merge span r.span)
     | Token.Ident id ->
       ignore (advance p);
@@ -301,7 +258,7 @@ and parse_prefix p =
       let es =
         parse_list
           p
-          (fun p -> parse_expr p PrecNone)
+          (fun p -> parse_expr p Prec.None)
           [ Token.Comma ]
           Token.RBrack
       in
@@ -310,24 +267,24 @@ and parse_prefix p =
     | Token.LBrace -> parse_expr_block p span
     | Token.KwIf ->
       ignore (advance p);
-      let c = parse_expr p PrecNone in
-      let t = parse_expr p PrecNone in
+      let c = parse_expr p Prec.None in
+      let t = parse_expr p Prec.None in
       let e =
-        if match_token p [ Token.KwElse ] then Some (parse_expr p PrecNone)
+        if match_token p [ Token.KwElse ] then Some (parse_expr p Prec.None)
         else None
       in
       make_expr (ExprIf (c, t, e)) (Span.merge span (prev p |> snd))
     | Token.KwWhile ->
       ignore (advance p);
-      let c = parse_expr p PrecNone in
-      let b = parse_expr p PrecNone in
+      let c = parse_expr p Prec.None in
+      let b = parse_expr p Prec.None in
       make_expr (ExprWhile (c, b)) (Span.merge span b.span)
     | Token.KwFor ->
       ignore (advance p);
       let n = expect_id p "expected identifier for iterator" in
       expect p Token.KwIn "expected 'in'";
-      let it = parse_expr p PrecNone in
-      let b = parse_expr p PrecNone in
+      let it = parse_expr p Prec.None in
+      let b = parse_expr p Prec.None in
       make_expr (ExprFor (n, it, b)) (Span.merge span b.span)
     | Token.KwMatch ->
       ignore (advance p);
@@ -336,7 +293,7 @@ and parse_prefix p =
       ignore (advance p);
       let e =
         if not (check p Token.Semicolon || check p Token.RBrace) then
-          Some (parse_expr p PrecNone)
+          Some (parse_expr p Prec.None)
         else None
       in
       make_expr
@@ -344,7 +301,7 @@ and parse_prefix p =
         span
     | Token.KwDefer | Token.KwUnsafe ->
       ignore (advance p);
-      let b = parse_expr p PrecNone in
+      let b = parse_expr p Prec.None in
       make_expr
         (if tok = Token.KwDefer then ExprDefer b else ExprUnsafe b)
         (Span.merge span b.span)
@@ -400,12 +357,16 @@ and parse_infix p l op =
   match op with
   | Token.LParen ->
     let as_ =
-      parse_list p (fun p -> parse_expr p PrecNone) [ Token.Comma ] Token.RParen
+      parse_list
+        p
+        (fun p -> parse_expr p Prec.None)
+        [ Token.Comma ]
+        Token.RParen
     in
     let _, es = consume p Token.RParen "expected ')' to close argument list" in
     make_expr (ExprCall (l, as_)) (Span.merge l.span es)
   | Token.LBrack ->
-    let i = parse_expr p PrecNone in
+    let i = parse_expr p Prec.None in
     let _, es = consume p Token.RBrack "expected ']'" in
     make_expr (ExprIndex (l, i)) (Span.merge l.span es)
   | Token.Dot ->
@@ -414,10 +375,10 @@ and parse_infix p l op =
   | Token.DotCaret | Token.Question ->
     make_expr (ExprUnaryPostfix (l, op)) (Span.merge l.span s)
   | Token.LtMinus ->
-    let r = parse_expr p PrecAssign in
+    let r = parse_expr p Prec.Assign in
     make_expr (ExprAssign (l, r)) (Span.merge l.span r.span)
   | _ ->
-    let r = parse_expr p (token_prec op) in
+    let r = parse_expr p (Prec.of_token op) in
     make_expr (ExprBinary (l, op, r)) (Span.merge l.span r.span)
 
 and parse_field_like p msg =
@@ -425,7 +386,7 @@ and parse_field_like p msg =
   let n = expect_id p msg in
   let ty = if match_token p [ Token.Colon ] then Some (parse_ty p) else None in
   let d =
-    if match_token p [ Token.ColonEq ] then Some (parse_expr p PrecNone)
+    if match_token p [ Token.ColonEq ] then Some (parse_expr p Prec.None)
     else None
   in
   (m, n, ty, d)
@@ -442,7 +403,7 @@ and parse_expr_lit_record p n s =
   expect p Token.LBrace "expected '{' to start record literal";
   let seps, fs, b = ([ Token.Comma; Token.Semicolon ], ref [], ref None) in
   (if not (check p Token.RBrace) then
-     let e = parse_expr p PrecNone in
+     let e = parse_expr p Prec.None in
      if match_token p [ Token.KwWith ] then (
        b := Some e;
        fs := parse_list p parse_record_field seps Token.RBrace)
@@ -470,7 +431,7 @@ and parse_expr_block p s =
   expect p Token.LBrace "expected '{' to start block";
   let st, e = (ref [], ref None) in
   while not (check p Token.RBrace || is_at_end p) do
-    let ex = parse_expr p PrecNone in
+    let ex = parse_expr p Prec.None in
     if match_token p [ Token.Semicolon ] then
       st := make_stmt (StmtExpr ex) ex.span :: !st
     else if check p Token.RBrace then e := Some ex
@@ -485,12 +446,12 @@ and parse_expr_group_or_tuple p s =
   if match_token p [ Token.RParen ] then
     make_expr (ExprLitTuple []) (Span.merge s (snd (prev p)))
   else
-    let f = parse_expr p PrecNone in
+    let f = parse_expr p Prec.None in
     if match_token p [ Token.Comma ] then
       let rs =
         parse_list
           p
-          (fun p -> parse_expr p PrecNone)
+          (fun p -> parse_expr p Prec.None)
           [ Token.Comma ]
           Token.RParen
       in
@@ -503,13 +464,13 @@ and parse_expr_group_or_tuple p s =
       f)
 
 and parse_expr_match p s =
-  let t = parse_expr p PrecNone in
+  let t = parse_expr p Prec.None in
   expect p Token.LBrace "expected '{' to start 'match' expression";
   let cs = ref [] in
   while match_token p [ Token.KwCase ] do
     let pat = parse_pat p in
     expect p Token.EqGt "expected '=>' after 'match' pattern";
-    let e = parse_expr p PrecNone in
+    let e = parse_expr p Prec.None in
     ignore (match_token p [ Token.Comma; Token.Semicolon ]);
     cs := { case_pat = pat; case_expr = e } :: !cs
   done;
@@ -623,7 +584,7 @@ and parse_expr_bind p s t m =
   let n = expect_id p "expected identifier" in
   let ty = if match_token p [ Token.Colon ] then Some (parse_ty p) else None in
   expect p Token.ColonEq "expected ':=' after binding name and type";
-  let i = parse_expr p PrecNone in
+  let i = parse_expr p Prec.None in
   make_expr
     (ExprBind
        ( m
@@ -686,7 +647,7 @@ and parse_expr_extern p s =
   make_expr (ExprExtern (a, u, List.rev !sigs)) (Span.merge s es)
 
 and parse_stmt p =
-  let e = parse_expr p PrecNone in
+  let e = parse_expr p Prec.None in
   expect p Token.Semicolon "expected ';' after statement";
   make_stmt (StmtExpr e) e.span
 
