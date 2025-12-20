@@ -33,6 +33,9 @@ val create : (Token.t * Span.t) Seq.t -> Source.t -> int -> Interner.t -> t
 (** Check if parser has errors *)
 val has_errors : t -> bool
 
+(** Get diagnostics bag *)
+val diag : t -> Reporter.bag
+
 (** Parse all statements in source *)
 val parse :
      (Token.t * Span.t) Seq.t

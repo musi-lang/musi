@@ -19,6 +19,7 @@ let create tokens _ _ interner =
   }
 
 let has_errors p = Reporter.has_errors p.diag
+let diag p = p.diag
 let is_at_end p = p.token_idx >= Array.length p.tokens
 
 let peek_at p offset =
@@ -434,9 +435,7 @@ and parse_prefix p =
   | Token.LBrack ->
     ignore (advance p);
     parse_expr_lit_array p span
-  | Token.LBrace ->
-    ignore (advance p);
-    parse_expr_block p span
+  | Token.LBrace -> parse_expr_block p span
   | Token.KwIf ->
     ignore (advance p);
     parse_expr_if p span
@@ -606,6 +605,7 @@ and parse_expr_lit_array p start =
   make_expr (ExprLitArray elems) (Span.merge start end_span)
 
 and parse_expr_block p start =
+  ignore (consume p Token.LBrace "expected '{' starting block");
   let stmts = ref [] in
   let expr_opt = ref None in
   while (not (check p Token.RBrace)) && not (is_at_end p) do
