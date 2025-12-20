@@ -174,7 +174,7 @@ expr_lit_record = [ident], ".{", [aux_record_content], "}";
 
 expr_block = "{", {stmt}, [expr], "}";
 
-expr_if = "if", expr, expr, "else", expr;
+expr_if = "if", expr, expr, ["else", expr];
 
 expr_while = "while", expr, expr;
 
