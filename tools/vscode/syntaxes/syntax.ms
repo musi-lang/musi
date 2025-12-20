@@ -147,9 +147,9 @@ val malloc := extern "C" unsafe fn (size) { /* ... */ };
 
 val Point := record { x: Bin32; y: Bin32 };
 
-val p1: Point := { .x := 3.0, .y := 4.0 };
-val p2: Point := { .x := 0.0, .y := 0.0 };
-val p3: Point := { .x := 1.0, .y := 2.0 };
+val p1: Point := .{ x := 3.0, y := 4.0 };
+val p2: Point := .{ x := 0.0, y := 0.0 };
+val p3: Point := .{ x := 1.0, y := 2.0 };
 
 val dist := fn (a: Point, b: Point) {
   val (dx, dy) := (a.x - b.x, a.y - b.y);
