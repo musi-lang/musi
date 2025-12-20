@@ -1,5 +1,4 @@
 import * as fs from "node:fs";
-import * as path from "node:path";
 import * as vscode from "vscode";
 import { window, workspace } from "vscode";
 import { LanguageClient, TransportKind } from "vscode-languageclient/node";
@@ -11,11 +10,7 @@ export async function activate(_context: vscode.ExtensionContext) {
 	vscode.window.showInformationMessage("Musi extension activating...");
 
 	try {
-		const serverSource = path.join(
-			_context.extensionPath,
-			// hard-coded bullf*ck
-			"/Users/krystian/CodeProjects/musi/_build/default/tools/lsp/bin/main.exe",
-		);
+		const serverSource = "/Users/krystian/CodeProjects/musi/_build/default/tools/lsp/bin/main.exe";
 		console.log("Server source:", serverSource);
 		vscode.window.showInformationMessage(`Looking for server at: ${serverSource}`);
 
