@@ -1,21 +1,58 @@
-import { languages } from "vscode";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { window, workspace } from "vscode";
+import { LanguageClient, TransportKind } from "vscode-languageclient/node.js";
 
 /**
- * @param {{ subscriptions: import("vscode").Disposable[]; }} context
+ * @type {{ start: () => void; stop: () => any; }}
  */
-export function activate(context) {
-	const provider = languages.registerCompletionItemProvider(
-		{ language: "musi", scheme: "file" },
-		{
-			provideCompletionItems(_document, _position, _token, _context) {
-				return undefined;
-			},
-		}
+let client;
+
+/**
+ * @param {{ subscriptions: import("vscode").Disposable[]; extensionPath: string }} _context
+ */
+export function activate(_context) {
+	const workspaceRoot = workspace.workspaceFolders?.[0]?.uri.fsPath;
+	if (!workspaceRoot) {
+		return;
+	}
+
+	const serverSource = path.join(
+		workspaceRoot,
+		"_build/default/tools/lsp/bin/main.exe",
 	);
 
-	context.subscriptions.push(provider);
+
+	if (!fs.existsSync(serverSource)) {
+		window.showErrorMessage(`Musi LSP server not found at ${serverSource}. Please run 'dune build' first.`);
+		return;
+	}
+
+	const serverOptions = {
+		run: { command: serverSource, transport: TransportKind.stdio },
+		debug: { command: serverSource, transport: TransportKind.stdio },
+	};
+
+	const clientOptions = {
+		documentSelector: [{ scheme: "file", language: "musi" }],
+		synchronize: {
+			fileEvents: workspace.createFileSystemWatcher("**/.clientrc"),
+		},
+	};
+
+	client = new LanguageClient(
+		"musiLsp",
+		"Musi Language Server",
+		serverOptions,
+		clientOptions,
+	);
+
+	client.start();
 }
 
 export function deactivate() {
-	return undefined;
+	if (!client) {
+		return undefined;
+	}
+	return client.stop();
 }

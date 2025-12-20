@@ -26,7 +26,10 @@
         "sourceMap": true,
         "strict": true,
         "target": "ES2022",
-        "types": []
+        "types": [
+            "node",
+            "vscode"
+        ]
     },
     "exclude": [
         "node_modules"
