@@ -37,13 +37,13 @@ let on_initialize _params =
               ~openClose:true
               ~change:Full
               ()))
-      ~semanticTokensProvider:
+        (* ~semanticTokensProvider:
         (`SemanticTokensOptions
            (Types.SemanticTokensOptions.create
               ~legend:Lsp_tokens.TokenBuilder.legend
               ~range:false
               ~full:(`Bool true)
-              ()))
+              ())) *)
       ~documentSymbolProvider:(`Bool true)
       ()
   in
@@ -117,12 +117,6 @@ let start () =
                    (Option.get r.params :> Yojson.Safe.t)
                in
                Types.InitializeResult.yojson_of_t (on_initialize params)
-             else if r.method_ = "textDocument/semanticTokens/full" then
-               let params =
-                 Types.SemanticTokensParams.t_of_yojson
-                   (Option.get r.params :> Yojson.Safe.t)
-               in
-               Lsp_tokens.handle params.textDocument.uri
              else if r.method_ = "textDocument/documentSymbol" then
                let params =
                  Types.DocumentSymbolParams.t_of_yojson
