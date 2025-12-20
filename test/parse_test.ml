@@ -430,7 +430,7 @@ let test_expr_match () =
   in
   let case_ok = { case_pat = pat_ok; case_expr = mk_ident "val" } in
   assert_stmt
-    "match result { case Ok(val) => val };"
+    "match result { case Ok(`val`) => `val` };"
     (mk_stmt_expr (mk_expr (ExprMatch (target, [ case_ok ]))))
 
 let test_suite =
