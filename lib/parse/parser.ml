@@ -274,9 +274,28 @@ and parse_prefix p =
         ignore (advance p);
         parse_expr_lit_record p None span)
       else (
-        error p "expected '{' to start record literal" span;
+        error p "expected '{' after '.' to start record literal" span;
         ignore (advance p);
         make_expr ExprError span)
+    | Token.LitTemplateNoSubst id ->
+      ignore (advance p);
+      make_expr (ExprLit (LitString (resolve p id))) span
+    | Token.TemplateHead id ->
+      ignore (advance p);
+      let head = resolve p id in
+      let rec loop acc =
+        let e = parse_expr p Prec.None in
+        match advance p with
+        | Token.TemplateMiddle id, _ -> loop ((resolve p id, e) :: acc)
+        | Token.TemplateTail id, s ->
+          make_expr
+            (ExprTemplate (List.rev ((head, e) :: acc), resolve p id))
+            (Span.merge span s)
+        | _, s ->
+          error p "unterminated template literal" s;
+          make_expr ExprError span
+      in
+      loop []
     | Token.LParen ->
       ignore (advance p);
       parse_expr_group_or_tuple p span
@@ -294,25 +313,34 @@ and parse_prefix p =
     | Token.LBrace -> parse_expr_block p span
     | Token.KwIf ->
       ignore (advance p);
-      let c = parse_expr p Prec.None in
+      let cs = parse_cond_list p in
       let t = parse_expr p Prec.None in
       let e =
         if match_token p [ Token.KwElse ] then Some (parse_expr p Prec.None)
         else None
       in
-      make_expr (ExprIf (c, t, e)) (Span.merge span (prev p |> snd))
+      make_expr (ExprIf (cs, t, e)) (Span.merge span (prev p |> snd))
     | Token.KwWhile ->
       ignore (advance p);
-      let c = parse_expr p Prec.None in
+      let c = parse_cond p in
+      let g =
+        if match_token p [ Token.KwIf ] then Some (parse_expr p Prec.None)
+        else None
+      in
       let b = parse_expr p Prec.None in
-      make_expr (ExprWhile (c, b)) (Span.merge span b.span)
+      make_expr (ExprWhile (c, g, b)) (Span.merge span b.span)
     | Token.KwFor ->
       ignore (advance p);
-      let n = expect_id p "expected identifier for iterator" in
+      let is_case = match_token p [ Token.KwCase ] in
+      let pat = parse_pat p in
       expect p Token.KwIn "expected 'in'";
       let it = parse_expr p Prec.None in
+      let guard =
+        if match_token p [ Token.KwIf ] then Some (parse_expr p Prec.None)
+        else None
+      in
       let b = parse_expr p Prec.None in
-      make_expr (ExprFor (n, it, b)) (Span.merge span b.span)
+      make_expr (ExprFor (is_case, pat, it, guard, b)) (Span.merge span b.span)
     | Token.KwMatch ->
       ignore (advance p);
       parse_expr_match p span
@@ -411,9 +439,31 @@ and parse_infix p l op =
     in
     let end_s = match r with Some e -> e.span | None -> s in
     make_expr (ExprRange (l, op, r)) (Span.merge l.span end_s)
+  | Token.KwNot when check p Token.KwIn ->
+    ignore (advance p);
+    (* consume 'in' *)
+    let r = parse_expr p (Prec.of_token Token.KwIn) in
+    (* We use a special representation for 'not in' or just compose it in AST? *)
+    (* Let's use ExprUnaryPrefix(KwNot, ExprBinary(l, KwIn, r)) *)
+    let bin =
+      make_expr (ExprBinary (l, Token.KwIn, r)) (Span.merge l.span r.span)
+    in
+    make_expr (ExprUnaryPrefix (Token.KwNot, bin)) (Span.merge l.span r.span)
   | _ ->
     let r = parse_expr p (Prec.of_token op) in
     make_expr (ExprBinary (l, op, r)) (Span.merge l.span r.span)
+
+and parse_cond p =
+  if match_token p [ Token.KwCase ] then (
+    let pat = parse_pat p in
+    expect p Token.ColonEq "expected ':=' in condition";
+    let expr = parse_expr p Prec.None in
+    CondPat (pat, expr))
+  else CondExpr (parse_expr p Prec.None)
+
+and parse_cond_list p =
+  let c = parse_cond p in
+  if match_token p [ Token.Comma ] then c :: parse_cond_list p else [ c ]
 
 and parse_field_like p msg =
   let m = match_token p [ Token.KwVar ] in
@@ -503,10 +553,14 @@ and parse_expr_match p s =
   let cs = ref [] in
   while match_token p [ Token.KwCase ] do
     let pat = parse_pat p in
+    let guard =
+      if match_token p [ Token.KwIf ] then Some (parse_expr p Prec.None)
+      else None
+    in
     expect p Token.EqGt "expected '=>' after 'match' pattern";
     let e = parse_expr p Prec.None in
     ignore (match_token p [ Token.Comma; Token.Semicolon ]);
-    cs := { case_pat = pat; case_expr = e } :: !cs
+    cs := { case_pat = pat; case_guard = guard; case_expr = e } :: !cs
   done;
   let _, es =
     consume p Token.RBrace "expected '}' to close 'match' expression"
@@ -580,10 +634,10 @@ and parse_pat_variant p n s =
   in
   let pt =
     if match_token p [ Token.LParen ] then (
-      let p' = parse_pat p in
+      let ps = parse_list p parse_pat [ Token.Comma ] Token.RParen in
       expect p Token.RParen "expected ')'";
-      Some p')
-    else None
+      ps)
+    else []
   in
   make_pat (PatVariant (n, as_, pt)) (Span.merge s (snd (prev p)))
 
@@ -615,15 +669,15 @@ and parse_expr_fn p s a m =
   make_expr (ExprFn (a, m, sig_, b)) (Span.merge s b.span)
 
 and parse_expr_bind p s t m =
-  let n = expect_id p "expected identifier" in
+  let pat = parse_pat p in
   let ty = if match_token p [ Token.Colon ] then Some (parse_ty p) else None in
-  expect p Token.ColonEq "expected ':=' after binding name and type";
+  expect p Token.ColonEq "expected ':=' after binding";
   let i = parse_expr p Prec.None in
   make_expr
     (ExprBind
        ( m
        , t = Token.KwVar
-       , n
+       , pat
        , ty
        , i
        , make_expr (ExprLit (LitInt "0")) Span.dummy ))

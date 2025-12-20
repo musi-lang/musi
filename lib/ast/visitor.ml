@@ -16,10 +16,18 @@ let visit_seq2 visit v ctx a b =
   visit v ctx a;
   visit v ctx b
 
+let traverse_cond v ctx = function
+  | CondExpr e -> v.visit_expr v ctx e
+  | CondPat (p, e) ->
+    v.visit_pat v ctx p;
+    v.visit_expr v ctx e
+
 let rec traverse_expr (v : 'ctx visitor) (ctx : 'ctx) (expr : expr) =
   match expr.kind with
   | ExprError -> ()
   | ExprLit lit -> v.visit_lit v ctx lit
+  | ExprTemplate (parts, _tail) ->
+    List.iter (fun (_s, e) -> v.visit_expr v ctx e) parts
   | ExprIdent ident -> v.visit_ident v ctx ident
   | ExprLitTuple exprs | ExprLitArray exprs ->
     visit_list v.visit_expr v ctx exprs
@@ -35,22 +43,25 @@ let rec traverse_expr (v : 'ctx visitor) (ctx : 'ctx) (expr : expr) =
   | ExprBlock (stmts, expr_opt) ->
     visit_list v.visit_stmt v ctx stmts;
     visit_opt v.visit_expr v ctx expr_opt
-  | ExprIf (cond, then_, else_) ->
-    v.visit_expr v ctx cond;
+  | ExprIf (conds, then_, else_) ->
+    List.iter (traverse_cond v ctx) conds;
     v.visit_expr v ctx then_;
     visit_opt v.visit_expr v ctx else_
-  | ExprWhile (cond, body) ->
-    v.visit_expr v ctx cond;
+  | ExprWhile (cond, guard, body) ->
+    traverse_cond v ctx cond;
+    visit_opt v.visit_expr v ctx guard;
     v.visit_expr v ctx body
-  | ExprFor (name, iter, body) ->
-    v.visit_ident v ctx name;
+  | ExprFor (_is_case, pat, iter, guard, body) ->
+    v.visit_pat v ctx pat;
     v.visit_expr v ctx iter;
+    visit_opt v.visit_expr v ctx guard;
     v.visit_expr v ctx body
   | ExprMatch (target, cases) ->
     v.visit_expr v ctx target;
     List.iter
       (fun c ->
         v.visit_pat v ctx c.case_pat;
+        visit_opt v.visit_expr v ctx c.case_guard;
         v.visit_expr v ctx c.case_expr)
       cases
   | ExprReturn expr_opt | ExprBreak expr_opt ->
@@ -58,8 +69,8 @@ let rec traverse_expr (v : 'ctx visitor) (ctx : 'ctx) (expr : expr) =
   | ExprDefer expr | ExprUnsafe expr -> v.visit_expr v ctx expr
   | ExprImport _ -> ()
   | ExprExtern (_, _, sigs) -> List.iter (fun s -> traverse_fn_sig v ctx s) sigs
-  | ExprBind (_, _, name, ty_opt, init, _) ->
-    v.visit_ident v ctx name;
+  | ExprBind (_, _, pat, ty_opt, init, _) ->
+    v.visit_pat v ctx pat;
     visit_opt v.visit_ty v ctx ty_opt;
     v.visit_expr v ctx init
   | ExprFn (_, _, sig_, body) ->
@@ -108,10 +119,10 @@ and traverse_pat (v : 'ctx visitor) (ctx : 'ctx) (pat : pat) =
   | PatLitRecord (name, fields) ->
     v.visit_ident v ctx name;
     List.iter (fun (f : pat_field) -> v.visit_ident v ctx f.field_name) fields
-  | PatVariant (name, tys, pat_opt) ->
+  | PatVariant (name, tys, pats) ->
     v.visit_ident v ctx name;
     visit_list v.visit_ty v ctx tys;
-    visit_opt v.visit_pat v ctx pat_opt
+    visit_list v.visit_pat v ctx pats
   | PatCons (head, tail) -> visit_seq2 v.visit_pat v ctx head tail
   | PatError -> ()
 
