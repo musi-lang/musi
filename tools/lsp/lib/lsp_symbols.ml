@@ -28,13 +28,15 @@ let collect_symbols source ast =
         (fun name -> add_symbol name Types.SymbolKind.Enum expr.span)
         name_opt;
       Ast.Visitor.traverse_expr v ctx expr
-    | ExprBind (_, _, name, _, init, _) ->
+    | ExprBind (_, _, pat, _, init, _) ->
       let kind =
         match init.kind with
         | ExprFn _ -> Types.SymbolKind.Function
         | _ -> Types.SymbolKind.Variable
       in
-      add_symbol name kind expr.span;
+      (match pat.kind with
+      | PatIdent name -> add_symbol name kind expr.span
+      | _ -> ());
       v.visit_expr v ctx init
     | _ -> Ast.Visitor.traverse_expr v ctx expr
   in
