@@ -120,11 +120,18 @@ let parse_lit_opt p =
   | _ -> None
 
 let rec parse_ty p =
+  let l = parse_ty_primary p in
+  if match_token p [ Token.MinusGt ] then
+    let r = parse_ty p in
+    make_ty (TyFn (l, r)) (Span.merge l.span r.span)
+  else l
+
+and parse_ty_primary p =
   match fst (peek p) with
   | Token.Ident _ -> parse_ty_app_or_ident p
   | (Token.Question | Token.Caret) as t ->
     let _, s = advance p in
-    let i = parse_ty p in
+    let i = parse_ty_primary p in
     make_ty
       (if t = Token.Question then TyOptional i else TyPtr i)
       (Span.merge s i.span)
@@ -136,7 +143,7 @@ let rec parse_ty p =
       | _ -> None
     in
     expect p Token.RBrack "expected ']' to close array type";
-    let i = parse_ty p in
+    let i = parse_ty_primary p in
     make_ty (TyArray (sz, i)) (Span.merge (snd (prev p)) i.span)
   | Token.LParen ->
     let _, s = advance p in
@@ -377,6 +384,14 @@ and parse_infix p l op =
   | Token.LtMinus ->
     let r = parse_expr p Prec.Assign in
     make_expr (ExprAssign (l, r)) (Span.merge l.span r.span)
+  | Token.DotDot | Token.DotDotLt ->
+    let prec = Prec.of_token op in
+    let r =
+      if Prec.of_token (fst (peek p)) > prec then Some (parse_expr p prec)
+      else None
+    in
+    let end_s = match r with Some e -> e.span | None -> s in
+    make_expr (ExprRange (l, op, r)) (Span.merge l.span end_s)
   | _ ->
     let r = parse_expr p (Prec.of_token op) in
     make_expr (ExprBinary (l, op, r)) (Span.merge l.span r.span)
