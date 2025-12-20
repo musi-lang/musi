@@ -6,12 +6,11 @@ import { LanguageClient, TransportKind } from "vscode-languageclient/node";
 let client: LanguageClient;
 
 export async function activate(_context: vscode.ExtensionContext) {
-	console.log("Activating Musi extension...");
 	vscode.window.showInformationMessage("Musi extension activating...");
+
 
 	try {
 		const serverSource = "/Users/krystian/CodeProjects/musi/_build/default/tools/lsp/bin/main.exe";
-		console.log("Server source:", serverSource);
 		vscode.window.showInformationMessage(`Looking for server at: ${serverSource}`);
 
 		if (!fs.existsSync(serverSource)) {
@@ -42,7 +41,6 @@ export async function activate(_context: vscode.ExtensionContext) {
 		window.showInformationMessage("Musi LSP server started!");
 	} catch (e) {
 		window.showErrorMessage(`Musi extension failed to activate: ${e}`);
-		console.error(e);
 	}
 }
 
