@@ -90,7 +90,8 @@ let sync p =
     else
       match fst (peek p) with
       | Token.KwFn | Token.KwVal | Token.KwVar | Token.KwFor | Token.KwIf
-      | Token.KwWhile | Token.KwReturn | Token.KwRecord | Token.KwSum ->
+      | Token.KwWhile | Token.KwReturn | Token.KwRecord | Token.KwSum
+      | Token.KwAlias ->
         ()
       | _ ->
         ignore (advance p);
@@ -234,7 +235,7 @@ let can_start_expr = function
   | Token.KwIf | Token.KwWhile | Token.KwFor | Token.KwMatch | Token.KwReturn
   | Token.KwBreak | Token.KwDefer | Token.KwUnsafe | Token.KwImport
   | Token.KwExtern | Token.KwFn | Token.KwVal | Token.KwVar | Token.KwRecord
-  | Token.KwSum | Token.Dot ->
+  | Token.KwSum | Token.KwAlias | Token.Dot ->
     true
   | _ -> false
 
@@ -404,6 +405,13 @@ and parse_prefix p =
           consume p Token.RBrace "expected '}' to close 'sum' type definition"
         in
         make_expr (ExprSum (attrs, mods, n, tp, cs)) (Span.merge span es)
+    | Token.KwAlias ->
+      ignore (advance p);
+      let n = expect_id p "expected type alias name" in
+      let tp = parse_ty_params p in
+      expect p Token.ColonEq "expected ':=' after type alias name";
+      let t = parse_ty p in
+      make_expr (ExprAlias (attrs, mods, n, tp, t)) (Span.merge span t.span)
     | _ ->
       error
         p

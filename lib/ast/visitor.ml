@@ -92,6 +92,10 @@ let rec traverse_expr (v : 'ctx visitor) (ctx : 'ctx) (expr : expr) =
         visit_list v.visit_ty v ctx c.case_tys;
         List.iter (fun p -> traverse_param v ctx p) c.case_params)
       cases
+  | ExprAlias (_, _, name, ty_params, target_ty) ->
+    v.visit_ident v ctx name;
+    List.iter (v.visit_ident v ctx) ty_params;
+    v.visit_ty v ctx target_ty
   | ExprCall (callee, args) ->
     v.visit_expr v ctx callee;
     visit_list v.visit_expr v ctx args

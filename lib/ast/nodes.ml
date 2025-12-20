@@ -75,6 +75,7 @@ and expr_kind =
   | ExprRecord of
       attr list * modifier * ident option * ident list * record_field list
   | ExprSum of attr list * modifier * ident option * ident list * sum_case list
+  | ExprAlias of attr list * modifier * ident * ident list * ty
   | ExprCall of expr * expr list
   | ExprIndex of expr * expr
   | ExprField of expr * ident
