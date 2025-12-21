@@ -537,7 +537,7 @@ and parse_param p =
 
 and parse_expr_lit_record p n s =
   expect p Token.LBrace "expected opening '{' in record literal";
-  let seps = [ Token.Comma; Token.Semicolon ] in
+  let seps = [ Token.Comma ] in
   let fs = ref [] in
   let b = ref None in
   if not (check p Token.RBrace) then
