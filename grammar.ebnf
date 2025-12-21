@@ -122,11 +122,11 @@ aux_pat_list = pat, {",", pat}, [","];
 (* ========================================================================= *)
 (* TYPES                                                                     *)
 (* ========================================================================= *)
-ty_params = "<", [aux_ident_list], ">";
+ty_params = "[", [aux_ident_list], "]";
 
 ty_args = aux_ty_list;
 
-ty_app = ident, "<", ty_args, ">";
+ty_app = ident, "[", ty_args, "]";
 
 ty_optional = "?", ty;
 
