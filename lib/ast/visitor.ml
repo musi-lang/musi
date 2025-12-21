@@ -11,7 +11,6 @@ type 'ctx visitor = {
 
 let visit_opt visit v ctx opt = Option.iter (visit v ctx) opt
 let visit_list visit v ctx list = List.iter (visit v ctx) list
-let visit_delimited visit v ctx (d : _ delimited) = visit v ctx d.value
 
 let visit_list_delimited visit v ctx (d : _ delimited) =
   List.iter (visit v ctx) d.value.elems
