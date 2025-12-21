@@ -186,13 +186,13 @@ let symbols_sorted =
     (fun (a, _) (b, _) -> compare (String.length b) (String.length a))
     symbols
 
-let try_scan_quoted_literal lexer pos stop_chars tok_ctor err_msg =
+let try_scan_quoted_literal lexer pos stop_chars tok_ctor err_id =
   match scan_quoted_content_opt lexer.text (pos + 1) stop_chars with
   | Some end_pos ->
     let content = extract_content lexer.text (pos + 1) end_pos in
     Reporter.try_ok
       (tok_ctor (intern lexer content), span lexer pos (end_pos + 1))
-  | None -> Reporter.try_error_info err_msg (span lexer pos (pos + 1))
+  | None -> Reporter.report (Errors.Lexical err_id) (span lexer pos (pos + 1))
 
 let try_scan_string lexer pos =
   try_scan_quoted_literal
@@ -200,31 +200,31 @@ let try_scan_string lexer pos =
     pos
     [ '"' ]
     (fun c -> LitString c)
-    "unterminated string literal"
+    Errors.UnclosedString
 
 let try_scan_rune lexer pos =
   let text = lexer.text in
-  let fail msg end_offset =
-    Reporter.try_error_info msg (span lexer pos (pos + end_offset))
+  let fail err end_offset =
+    Reporter.report (Errors.Lexical err) (span lexer pos (pos + end_offset))
   in
 
   if pos + 1 >= lexer.text_len || text.[pos + 1] = '\'' then
-    fail "empty character literal" (if pos + 1 >= lexer.text_len then 1 else 2)
-  else if pos + 2 >= lexer.text_len then fail "unterminated rune literal" 1
+    fail Errors.EmptyRune (if pos + 1 >= lexer.text_len then 1 else 2)
+  else if pos + 2 >= lexer.text_len then fail Errors.UnclosedRune 1
   else
     match (text.[pos + 1], text.[pos + 2]) with
     | '\\', c when pos + 3 < lexer.text_len && text.[pos + 3] = '\'' ->
       Reporter.try_ok (LitRune c, span lexer pos (pos + 4))
     | c, '\'' when c <> '\'' ->
       Reporter.try_ok (LitRune c, span lexer pos (pos + 3))
-    | _, '\'' -> fail "invalid rune literal" 1
-    | _ -> fail "multiple characters not allowed in rune literal" 3
+    | _, '\'' -> fail Errors.MultiCharRune 1
+    | _ -> fail Errors.MultiCharRune 3
 
 let try_scan_template lexer pos offset =
   match scan_quoted_content_opt lexer.text (pos + offset) [ '"'; '{' ] with
   | None ->
-    Reporter.try_error_info
-      "unterminated template literal"
+    Reporter.report
+      (Errors.Lexical Errors.UnclosedTemplate)
       (span lexer pos (pos + 1))
   | Some end_pos ->
     let content = extract_content lexer.text (pos + offset) end_pos in
@@ -249,7 +249,11 @@ let try_scan_template lexer pos offset =
 let try_scan_number lexer =
   let pos = lexer.curr_pos in
   let text = lexer.text in
-  let fail msg end_pos = Reporter.try_error_info msg (span lexer pos end_pos) in
+  let fail err end_pos =
+    Reporter.report
+      (Errors.Lexical (Errors.InvalidNumeric err))
+      (span lexer pos end_pos)
+  in
 
   let prefix =
     if pos + 1 < lexer.text_len && text.[pos] = '0' then
@@ -265,22 +269,21 @@ let try_scan_number lexer =
   | Some (pfx, pred, name) ->
     let end_pos = scan_while pred text (pos + String.length pfx) in
     if end_pos = pos + String.length pfx then
-      fail (Printf.sprintf "invalid %s literal" name) (pos + 1)
+      fail (Errors.NoDigits name) (pos + 1)
     else
       let clean, valid =
         handle_underscores text (pos + String.length pfx) end_pos
       in
-      if not valid then
-        fail (Printf.sprintf "malformed '_' in %s literal" name) end_pos
+      if not valid then fail (Errors.InvalidUnderscore name) end_pos
       else
         Reporter.try_ok
           (LitInt (intern lexer (pfx ^ clean)), span lexer pos end_pos)
   | None ->
     let int_end = scan_while is_digit_or_underscore text pos in
-    if int_end <= pos then fail "invalid numeric literal" (pos + 1)
+    if int_end <= pos then fail (Errors.NoDigits "numeric") (pos + 1)
     else
       let clean_int, valid = handle_underscores text pos int_end in
-      if not valid then fail "malformed '_' in decimal literal" int_end
+      if not valid then fail (Errors.InvalidUnderscore "decimal") int_end
       else if int_end >= lexer.text_len || text.[int_end] <> '.' then
         Reporter.try_ok (LitInt (intern lexer clean_int), span lexer pos int_end)
       else
@@ -318,8 +321,8 @@ let try_scan_number lexer =
 let try_scan_ident_or_keyword lexer =
   let end_pos = scan_while is_ident_char lexer.text lexer.curr_pos in
   if end_pos <= lexer.curr_pos then
-    Reporter.try_error_info
-      "invalid identifier"
+    Reporter.report
+      (Errors.Lexical Errors.InvalidIdent)
       (span lexer lexer.curr_pos (lexer.curr_pos + 1))
   else
     let ident = extract_content lexer.text lexer.curr_pos end_pos in
@@ -337,16 +340,16 @@ let try_scan_ident_escape lexer =
     let content = extract_content lexer.text (pos + 1) end_pos in
     Reporter.try_ok (Ident (intern lexer content), span lexer pos (end_pos + 1))
   | None ->
-    Reporter.try_error_info
-      "unterminated escaped identifier"
+    Reporter.report
+      (Errors.Lexical Errors.UnclosedEscapedIdent)
       (span lexer pos (pos + 1))
 
 let try_scan_symbol lexer =
   let rec try_match = function
     | [] ->
       let c = lexer.text.[lexer.curr_pos] in
-      Reporter.try_error_info
-        (Printf.sprintf "unknown character '%c'" c)
+      Reporter.report
+        (Errors.Lexical (Errors.UnknownChar c))
         (span lexer lexer.curr_pos (lexer.curr_pos + 1))
     | (sym, token) :: rest -> (
       match scan_exact_match_opt sym lexer.text lexer.curr_pos with
@@ -380,8 +383,8 @@ let try_skip_block_comment_opt lexer =
   let pos = lexer.curr_pos in
   let rec try_scan pos depth =
     if pos + 1 >= lexer.text_len then
-      Reporter.try_error_info
-        "unterminated block comment"
+      Reporter.report
+        (Errors.Lexical Errors.UnclosedComment)
         (span lexer pos (pos + 1))
     else
       match (lexer.text.[pos], lexer.text.[pos + 1]) with

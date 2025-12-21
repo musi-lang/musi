@@ -86,3 +86,6 @@ val try_map : ('a -> 'b) -> 'a result -> 'b result
 
 (** Map result error bag *)
 val try_map_error : (bag -> bag) -> 'a result -> 'a result
+
+(** Create diagnostic result from error type *)
+val report : Errors.t -> Span.t -> 'a result

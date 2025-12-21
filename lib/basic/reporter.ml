@@ -122,3 +122,20 @@ let try_map f = function
 let try_map_error f = function
   | Stdlib.Ok x -> Stdlib.Ok x
   | Stdlib.Error bag -> Stdlib.Error (f bag)
+
+let report err span =
+  let info = Errors.info err in
+  let level =
+    match info.level with
+    | Errors.Error -> Error
+    | Errors.Warning -> Warning
+    | Errors.Note -> Note
+  in
+  let diag = make level info.msg span in
+  let diag' =
+    match info.hint with Some h -> with_note diag h span | None -> diag
+  in
+  match level with
+  | Error -> try_error_diag diag'
+  | Warning -> try_warning_diag diag'
+  | Note -> try_warning_diag diag'
