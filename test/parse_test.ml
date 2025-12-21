@@ -125,23 +125,27 @@ and eq_expr e1 e2 =
   | ExprUnsafe (_, ex1), ExprUnsafe (_, ex2) -> eq_expr ex1 ex2
   | ExprImport (_, s1), ExprImport (_, s2) -> s1 = s2
   | ExprExtern e1, ExprExtern e2 ->
-    Option.equal
-      (fun (p1 : _ preceded) (p2 : _ preceded) -> p1.value = p2.value)
-      e1.abi
-      e2.abi
+    eq_mod e1.modifier e2.modifier
+    && Option.equal
+         (fun (p1 : _ preceded) (p2 : _ preceded) -> p1.value = p2.value)
+         e1.abi
+         e2.abi
     && List.for_all2 eq_fn_sig_extern e1.sigs.value.elems e2.sigs.value.elems
   | ExprBind b1, ExprBind b2 ->
-    eq_pat b1.pat b2.pat
+    eq_mod b1.modifier b2.modifier
+    && eq_pat b1.pat b2.pat
     && Option.equal
          (fun (p1 : _ preceded) (p2 : _ preceded) -> eq_ty p1.value p2.value)
          b1.ty_annot
          b2.ty_annot
     && eq_expr b1.init.value b2.init.value
   | ExprFn f1, ExprFn f2 ->
-    List.for_all2 eq_attr f1.attrs f2.attrs
+    eq_mod f1.modifier f2.modifier
+    && List.for_all2 eq_attr f1.attrs f2.attrs
     && eq_fn_sig f1.sig_ f2.sig_ && eq_expr f1.body f2.body
   | ExprRecord r1, ExprRecord r2 ->
-    List.for_all2 eq_attr r1.attrs r2.attrs
+    eq_mod r1.modifier r2.modifier
+    && List.for_all2 eq_attr r1.attrs r2.attrs
     && r1.name = r2.name
     && Option.equal
          (fun (d1 : _ delimited) (d2 : _ delimited) ->
@@ -153,7 +157,8 @@ and eq_expr e1 e2 =
          r1.fields.value.elems
          r2.fields.value.elems
   | ExprSum s1, ExprSum s2 ->
-    List.for_all2 eq_attr s1.attrs s2.attrs
+    eq_mod s1.modifier s2.modifier
+    && List.for_all2 eq_attr s1.attrs s2.attrs
     && s1.name = s2.name
     && Option.equal
          (fun (d1 : _ delimited) (d2 : _ delimited) ->
