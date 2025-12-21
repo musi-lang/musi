@@ -1,156 +1,256 @@
 open Basic
 open Lex
 
-(** AST node with source span *)
-type 'a with_span = { kind : 'a; span : Span.t }
+type 'a spanned = { kind : 'a; span : Span.t }
 
-(** Access modifiers for function or variable *)
-type modifier = {
-    is_export : bool
-  ; is_extern : string option * bool
-  ; is_unsafe : bool
+type 'a delimited = {
+    ldelim : Token.t spanned
+  ; value : 'a
+  ; rdelim : Token.t spanned
 }
 
-(** Attribute argument value *)
+(** Captures elements and separators between them. *)
+type ('a, 's) separated = { elems : 'a list; seps : 's spanned list }
+
+(** Helper for elements preceded by token (e.g., ': ty', ':= expr'). *)
+type 'a preceded = { leader : Token.t spanned; value : 'a }
+
+(** Helper for elements followed by token (e.g., 'expr ;'). *)
+type 'a followed = { value : 'a; trailer : Token.t spanned }
+
+type modifier = {
+    is_export : Token.t spanned option
+  ; is_extern : (Token.t spanned * string spanned preceded option * bool) option
+  ; is_unsafe : Token.t spanned option
+}
+
 type attr_arg =
-  | AttrArgNamed of ident * ident * lit
-  | AttrArgPos of ident * lit
+  | AttrArgNamed of string spanned * Token.t spanned (* := *) * lit spanned
+  | AttrArgPos of lit spanned
 
-(** Attribute attached to declaration *)
-and attr = { attr_name : ident; attr_args : attr_arg list }
+and attr = {
+    ldelim : Token.t spanned (* [< *)
+  ; name : string spanned
+  ; args : (attr_arg, Token.t) separated delimited option
+  ; rdelim : Token.t spanned (* >] *)
+}
 
-(** Literal value *)
 and lit =
-  | LitInt of ident
-  | LitFloat of ident
-  | LitString of ident
+  | LitInt of string
+  | LitFloat of string
+  | LitString of string
   | LitRune of char
   | LitBool of bool
 
-(** Identifier string *)
-and ident = string
+type ty = ty_kind spanned
 
-(** Type definition node *)
-type ty = ty_kind with_span
-
-(** Type definition variant *)
 and ty_kind =
-  | TyIdent of ident
-  | TyApp of ident * ty list
-  | TyArray of int option * ty
-  | TyOptional of ty
-  | TyPtr of ty
-  | TyFn of ty * ty
-  | TyTuple of ty list
+  | TyIdent of string spanned
+  | TyApp of { name : string spanned; args : (ty, Token.t) separated delimited }
+  | TyArray of {
+        ldelim : Token.t spanned
+      ; len : int option
+      ; rdelim : Token.t spanned
+      ; ty : ty
+    }
+  | TyOptional of Token.t spanned (* ? *) * ty
+  | TyPtr of Token.t spanned (* ^ *) * ty
+  | TyFn of ty * Token.t spanned (* -> *) * ty
+  | TyTuple of (ty, Token.t) separated delimited
   | TyError
 
-(** Pattern matching node *)
-and pat = pat_kind with_span
+type pat = pat_kind spanned
 
-(** Pattern matching variant *)
 and pat_kind =
-  | PatIdent of ident
-  | PatWild
-  | PatLit of lit
-  | PatLitTuple of pat list
-  | PatLitArray of pat list
-  | PatLitRecord of ident * pat_field list
-  | PatVariant of ident * ty list * pat list
-  | PatCons of pat * pat
+  | PatOr of (pat, Token.t) separated spanned
+  | PatIdent of string spanned
+  | PatWild of Token.t spanned (* _ *)
+  | PatLit of lit spanned
+  | PatLitTuple of (pat, Token.t) separated delimited
+  | PatLitArray of (pat, Token.t) separated delimited
+  | PatLitRecord of {
+        name : string spanned option
+      ; dot : Token.t spanned (* . *)
+      ; fields : (pat_field, Token.t) separated delimited
+    }
+  | PatVariant of {
+        name : string spanned
+      ; ty_args : (ty, Token.t) separated delimited option
+      ; args : (pat, Token.t) separated delimited option
+    }
+  | PatCons of pat * Token.t spanned (* :: *) * pat
   | PatError
 
-(** Record pattern field *)
-and pat_field = { field_name : ident }
+and pat_field = { name : string spanned }
 
-(** Expression node *)
-and expr = expr_kind with_span
+type expr = expr_kind spanned
 
-(** Expression variant *)
 and expr_kind =
-  | ExprLit of lit
+  | ExprLit of lit spanned
   | ExprTemplate of (string * expr) list * string
-  | ExprLitTuple of expr list
-  | ExprLitArray of expr list
-  | ExprLitRecord of ident option * record_field list * expr option
-  | ExprIdent of ident
-  | ExprBlock of stmt list * expr option
-  | ExprIf of cond list * expr * expr option
-  | ExprWhile of cond * expr option * expr
-  | ExprFor of bool * pat * expr * expr option * expr
-  | ExprMatch of expr * match_case list
-  | ExprReturn of expr option
-  | ExprBreak of expr option
-  | ExprDefer of expr
-  | ExprUnsafe of expr
-  | ExprImport of string
-  | ExprExtern of string option * bool * fn_sig list
-  | ExprBind of modifier * bool * pat * ty option * expr * expr
-  | ExprFn of attr list * modifier * fn_sig * expr
-  | ExprRecord of
-      attr list * modifier * ident option * ident list * record_field list
-  | ExprSum of attr list * modifier * ident option * ident list * sum_case list
-  | ExprAlias of attr list * modifier * ident * ident list * ty
-  | ExprCall of expr * expr list
-  | ExprIndex of expr * expr
-  | ExprField of expr * ident
-  | ExprUnaryPrefix of Token.t * expr
-  | ExprUnaryPostfix of expr * Token.t
-  | ExprBinary of expr * Token.t * expr
-  | ExprRange of expr * Token.t * expr option
-  | ExprAssign of expr * expr
+  | ExprLitTuple of (expr, Token.t) separated delimited
+  | ExprLitArray of (expr, Token.t) separated delimited
+  | ExprLitRecord of {
+        name : string spanned option
+      ; dot : Token.t spanned (* . *)
+      ; fields : record_lit_content delimited
+    }
+  | ExprIdent of string spanned
+  | ExprBlock of block delimited
+  | ExprIf of {
+        if_kw : Token.t spanned
+      ; cond : expr
+      ; then_branch : expr
+      ; else_if_branches : else_if_branch list
+      ; else_branch : (Token.t spanned (* else *) * expr) option
+    }
+  | ExprWhile of { while_kw : Token.t spanned; cond : expr; body : expr }
+  | ExprFor of {
+        for_kw : Token.t spanned
+      ; pat : pat
+      ; in_kw : Token.t spanned
+      ; target : expr
+      ; body : expr
+    }
+  | ExprMatch of {
+        match_kw : Token.t spanned
+      ; target : expr
+      ; cases : (match_case, Token.t) separated delimited
+    }
+  | ExprReturn of Token.t spanned * expr option
+  | ExprBreak of Token.t spanned * expr option
+  | ExprDefer of Token.t spanned * expr
+  | ExprUnsafe of Token.t spanned * expr
+  | ExprImport of Token.t spanned * string spanned
+  | ExprExtern of {
+        modifier : modifier
+      ; extern_kw : Token.t spanned
+      ; abi : string spanned preceded option
+      ; sigs : (fn_sig_extern, Token.t) separated delimited
+    }
+  | ExprBind of {
+        modifier : modifier
+      ; kind_kw : Token.t spanned (* val or var *)
+      ; pat : pat
+      ; ty_annot : ty preceded option
+      ; init : expr preceded
+    }
+  | ExprFn of {
+        attrs : attr list
+      ; modifier : modifier
+      ; fn_kw : Token.t spanned
+      ; sig_ : fn_sig
+      ; body : expr
+    }
+  | ExprRecord of {
+        attrs : attr list
+      ; modifier : modifier
+      ; record_kw : Token.t spanned
+      ; name : string spanned option
+      ; ty_params : (string spanned, Token.t) separated delimited option
+      ; fields : (record_field_def, Token.t) separated delimited
+    }
+  | ExprSum of {
+        attrs : attr list
+      ; modifier : modifier
+      ; sum_kw : Token.t spanned
+      ; name : string spanned option
+      ; ty_params : (string spanned, Token.t) separated delimited option
+      ; cases : (sum_case, Token.t) separated delimited
+    }
+  | ExprAlias of {
+        attrs : attr list
+      ; modifier : modifier
+      ; alias_kw : Token.t spanned
+      ; name : string spanned
+      ; ty_params : (string spanned, Token.t) separated delimited option
+      ; init : ty preceded
+    }
+  | ExprCall of { callee : expr; args : (expr, Token.t) separated delimited }
+  | ExprIndex of { target : expr; index : expr delimited }
+  | ExprField of {
+        target : expr
+      ; dot : Token.t spanned
+      ; field : string spanned
+    }
+  | ExprUnaryPrefix of Token.t spanned * expr
+  | ExprUnaryPostfix of expr * Token.t spanned
+  | ExprBinary of { left : expr; op : Token.t spanned; right : expr }
+  | ExprRange of { left : expr; op : Token.t spanned; right : expr option }
+  | ExprAssign of { left : expr; op : Token.t spanned; right : expr }
   | ExprError
 
-(** Statement node *)
-and stmt = stmt_kind with_span
+and record_lit_content = {
+    with_expr : expr preceded option (* with *)
+  ; fields : (record_field, Token.t) separated
+}
 
-(** Statement variant *)
-and stmt_kind = StmtExpr of expr
+and block = { stmts : stmt list; result_expr : expr option }
+and stmt = stmt_kind spanned
 
-(** Match case branch *)
-and cond = CondExpr of expr | CondPat of pat * expr
+and stmt_kind =
+  | StmtExpr of expr followed
+  (* ; *)
+  | StmtError
 
-(** Match case branch *)
-and match_case = { case_pat : pat; case_guard : expr option; case_expr : expr }
+and else_if_branch = {
+    else_kw : Token.t spanned
+  ; if_kw : Token.t spanned
+  ; cond : expr
+  ; branch : expr
+}
 
-(** Function signature *)
+and match_case = {
+    case_kw : Token.t spanned
+  ; pat : pat
+  ; guard : expr preceded option (* if *)
+  ; arrow : Token.t spanned
+  ; expr : expr
+}
+
 and fn_sig = {
-    fn_name : ident option
-  ; fn_ty_params : ident list
-  ; fn_params : param list
-  ; fn_ret_ty : ty option
+    name : string spanned option
+  ; ty_params : (string spanned, Token.t) separated delimited option
+  ; params : (param, Token.t) separated delimited
+  ; ret_ty : ty preceded option
 }
 
-(** Function parameter *)
+and fn_sig_extern = {
+    fn_kw : Token.t spanned
+  ; sig_ : fn_sig
+  ; semi : Token.t spanned
+}
+
 and param = {
-    param_mutable : bool
-  ; param_name : ident
-  ; param_ty : ty option
-  ; param_default : expr option
+    is_var : Token.t spanned option
+  ; name : string spanned
+  ; ty_annot : ty preceded option
+  ; init : expr preceded option
 }
 
-(** Record field definition *)
 and record_field = {
-    field_mutable : bool
-  ; field_name : ident
-  ; field_ty : ty option
-  ; field_default : expr option
+    name : string spanned
+  ; ty_annot : ty preceded option
+  ; init : expr preceded option
 }
 
-(** Sum type case definition *)
+and record_field_def = {
+    is_var : Token.t spanned option
+  ; name : string spanned
+  ; ty_annot : ty preceded option
+  ; init : expr preceded option
+}
+
 and sum_case = {
-    case_name : ident
-  ; case_tys : ty list
-  ; case_params : param list
+    case_kw : Token.t spanned
+  ; name : string spanned
+  ; ty_args : (ty, Token.t) separated delimited option
+  ; args : (sum_case_arg, Token.t) separated delimited option
 }
 
-(** Create type node with span *)
+and sum_case_arg = SumCaseArgTy of ty | SumCaseArgParam of param
+
 val make_ty : ty_kind -> Span.t -> ty
-
-(** Create pattern node with span *)
 val make_pat : pat_kind -> Span.t -> pat
-
-(** Create expression node with span *)
 val make_expr : expr_kind -> Span.t -> expr
-
-(** Create statement node with span *)
 val make_stmt : stmt_kind -> Span.t -> stmt
