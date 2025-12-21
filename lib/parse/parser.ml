@@ -19,6 +19,7 @@ let create tokens _ _ interner =
   }
 
 let has_errors p = Reporter.has_errors p.diag
+let diag p = p.diag
 let is_at_end p = p.token_idx >= Array.length p.tokens
 
 let peek p =
@@ -342,7 +343,7 @@ let parse_mods p =
         let abi =
           Some
             (let l =
-               expect_spanned p (fst (peek p)) "expected abi string literal"
+               expect_spanned p (fst (peek p)) "expected ABI string literal"
              in
              let v =
                match l.kind with
@@ -543,7 +544,7 @@ and parse_prefix p =
         (ExprFn { attrs; modifier = m; fn_kw = kw; sig_; body })
         (Span.merge kw.span body.span)
     | Token.KwRecord | Token.KwSum | Token.KwAlias ->
-      let kw = expect_spanned p tok "expected type decl keyword" in
+      let kw = expect_spanned p tok "expected type declaration keyword" in
       parse_type_decl p attrs m kw
     | Token.KwExtern ->
       let e = parse_expr_extern p m in
@@ -559,7 +560,7 @@ and parse_expr_extern p modifier =
     if check_fn p (function Token.LitString _ -> true | _ -> false) then
       Some
         (let l =
-           expect_spanned p (fst (peek p)) "expected abi string literal"
+           expect_spanned p (fst (peek p)) "expected ABI string literal"
          in
          let v =
            match l.kind with
