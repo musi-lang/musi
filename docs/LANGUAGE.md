@@ -1,449 +1,201 @@
 # Musi Language Specification
 
+Musi is a statically typed, compiled systems programming language with a focus on simplicity, safety, and expressiveness. It features gradual typing, Hindley-Milner type inference, and a syntax inspired by modern OCaml, Rust, and TypeScript.
+
 ## Type System
 
-**Gradual typing** with local Hindley-Milner inference. Unannotated bindings default to `Any`.
+Musi uses a **Gradual Typing** system with local type inference.
 
-### Primitives
+### primitives
 
-- **Integers**: `Int8`, `Int16`, `Int32`, `Int64` (signed)
-- **Naturals**: `Nat8`, `Nat16`, `Nat32`, `Nat64` (unsigned)
-- **Floats**: `Bin16`, `Bin32`, `Bin64` (IEEE-754 binary floats, hardware primitives)
-- **Decimals**: `Dec32`, `Dec64`, `Dec128` (software implementation in STL, uses `Bin*` internally)
-- **Character**: `Rune` (Unicode scalar value, UTF-32)
-- **Text**: `String` (alias for `[]Rune`)
+- **Integers**: `Int8`, `Int16`, `Int32`, `Int64` (Signed)
+- **Naturals**: `Nat8`, `Nat16`, `Nat32`, `Nat64` (Unsigned)
+- **Floats**: `Bin16`, `Bin32`, `Bin64` (IEEE-754)
+- **Decimals**: `Dec32`, `Dec64`, `Dec128` (Software decimal floating point)
+- **Text**: `Rune` (UTF-32 scalar), `String` (UTF-8 seq encoding)
 - **Logic**: `Bool` (true/false)
-- **Special**: `Unit` (empty tuple), `Any` (top type), `Never` (bottom type)
+- **Special**: `Unit` (empty tuple `()`), `Any` (dynamic top type), `Never` (bottom type)
 
 ### Type Constructors
 
-```ebnf
-ty_params = "<", ident, {",", ident}, ">";
-ty_args = ty, {",", ty};
-ty_app = ident, "<", ty_args, ">";
-ty_optional = "?", ty;
-ty_array = "[", [aux_lit_number], "]", ty;
-ty_ptr = "^", ty;
-ty_fn = ty, "->", ty;
-ty_tuple = "(", ty, {",", ty}, ")";
-ty = ident | ty_app | ty_optional | ty_array | ty_ptr | ty_fn | ty_tuple;
-```
+Musi provides standard constructors for composing types.
+
+- **Generics**: `List[T]`
+- **Optional**: `?T` (Isomorphic to `Option[T]`)
+- **Pointer**: `^T` (Unsafe raw pointer)
+- **Array**: `[]T` (Dynamic slice) or `[N]T` (Fixed size array)
+- **Tuple**: `(A, B, C)`
+- **Function**: `A -> B`
 
 **Examples:**
 
 ```musi
-Int32                    // primitive
-List<String>             // generic application
-?Int32                   // optional (nullable)
-[]String                 // dynamic array
-[10]Int32                // fixed-size array
-^Int32                   // pointer
-(Int32, String) -> Bool  // tupled function type
-Int32 -> String -> Bool  // curried function type (right-associative)
-(Int32, String)          // tuple type
+val i: Int32 := 0;
+val s: String := "hello";
+val opt: ?Int32 := 10;
+val ptr: ^Int32 := @i;      // Address-of operator
+val list: List[String] := List.{ head := "a", tail := None };
+val func: Int32 -> Bool := fn(x) { x > 0 };
 ```
 
-### Function Types and Currying
+### Function Types
 
-Musi supports two styles of function types:
+Musi functions are first-class citizens. The `->` operator is right-associative, supporting Currying.
 
-1. **Curried function types** (right-associative): `A -> B -> C` means `A -> (B -> C)`
-2. **Tupled function types**: `(A, B) -> C` takes a tuple of two arguments
-
-The `->` operator is right-associative, enabling **partial application** where a multi-parameter function can be applied to fewer arguments than it expects, yielding a new function.
-
-**Curried Examples:**
+1. **Curried**: `A -> B -> C` (Idiomatic).
+2. **Tupled**: `(A, B) -> C` (Used for interop or specific grouping).
 
 ```musi
-// 1 param
-val negate: Int32 -> Int32 := fn(x: Int32): Int32 { -x };
+// Curried (Default)
+val add: Int32 -> Int32 -> Int32 := fn(x, y) { x + y };
+val add5 := add(5); // Partial application
 
-// 2 params (chained arrows)
-val add: Int32 -> Int32 -> Int32 := fn(x: Int32, y: Int32): Int32 { x + y };
-
-// 3 params
-val clamp: Int32 -> Int32 -> Int32 -> Int32 :=
-  fn(value: Int32, min: Int32, max: Int32): Int32 {
-    if value < min { min } else if value > max { max } else { value }
-  };
-
-// no params (Unit type)
-val get_random: () -> Int32 := fn(): Int32 { /* ... */ };
-
-// higher-order
-val map: (A -> B) -> List<A> -> List<B> :=
-  fn(f: A -> B, xs: List<A>): List<B> {
-    match xs {
-    case [] => [],
-    case head :: tail => f(head) :: map(f, tail)
-    }
-  };
+// Tupled
+val add_pair: (Int32, Int32) -> Int32 := fn(pair) { pair.0 + pair.1 };
 ```
 
-**Partial Application:**
-
-```musi
-val add5 := add(5);       // type: Int32 -> Int32
-val result := add5(3);    // evaluates to 8
-
-val clamp_to_0_100 := fn(x: Int32): Int32 { clamp(x, 0, 100) };
-```
-
-**Tupled vs Curried:**
-
-```musi
-// tupled Fn type (1 arrow with tuple)
-val add_tupled: (Int32, Int32) -> Int32 :=
-  fn(pair: (Int32, Int32)): Int32 { pair.0 + pair.1 };
-
-// curried Fn type (chained arrows)
-val add_curried: Int32 -> Int32 -> Int32 :=
-  fn(x: Int32, y: Int32): Int32 { x + y };
-
-// usage diffs:
-val sum1 := add_tupled((3, 4));    // must pass tuple
-val sum2 := add_curried(3)(4);     // can apply args one at a time
-val sum3 := add_curried(3, 4);     // also can: multiple args at once
-```
-
-**Type Inference:** Function parameters without explicit types default to `Any`. The return type can often be inferred from the function body.
-
-### Inference Rules
-
-- **Local scope only**: inference within function bodies, not across boundaries
-- **Function parameters**: unannotated params default to `Any`
-- **Variable bindings**: infer from initializer or default to `Any`
-
-```musi
-val x := 42;                // infers Int32
-val y := "hello";           // infers String
-val f := fn(a) { a + 1 };   // 'a' infers to Any
-```
+---
 
 ## Lexical Structure
 
-### Identifiers
-
-```ebnf
-aux_ident = letter, {letter | digit | "_"};
-aux_escaped_ident = "`", {char}, "`";
-ident = aux_ident | aux_escaped_ident;
-```
-
-**Examples:** `x`, `myVar`, `_internal`, `` `escaped identifier` ``
-
 ### Literals
 
-```ebnf
-aux_dec = digit, {digit}, [".", digit, {digit}];
-aux_hex = "0x", xdigit, {xdigit};
-aux_oct = "0o", odigit, {odigit};
-aux_bin = "0b", bdigit, {bdigit};
-aux_lit_number = aux_dec | aux_hex | aux_oct | aux_bin;
-aux_lit_text = '"', {aux_text_content}, '"';
-aux_lit_rune = "'", char, "'";
-aux_lit_template_text = "$", '"', {aux_text_content | aux_lit_template_part}, '"';
-aux_lit = aux_lit_number | aux_lit_text | aux_lit_template_text | aux_lit_rune | "true" | "false";
-```
-
-**Examples:**
+Musi supports a rich set of literals for numeric and textual data.
 
 ```musi
-42                // decimal integer
-3.14              // decimal float (works for Bin64 or Dec64 depending on context)
-0x2A              // hexadecimal
-0o52              // octal
-0b101010          // binary
-"hello"           // string
-'c'               // rune
-$"Hello {name}"   // template string
-true              // boolean
-false             // boolean
+// Numbers
+42          // Decimal
+0xFF        // Hex
+0o77        // Octal
+0b1011      // Binary
+3.14        // Float
+
+// Text
+"Hello"             // String
+'⌘'                 // Rune
+$"Value: {x + 1}"   // String Interpolation
+
+// Logic
+true, false
 ```
 
 ### Operators
 
-```ebnf
-aux_bin_op = "+" | "-" | "*" | "/" | "**" | "=" | "/=" | "<" | ">" | "<=" | ">=" | "::" | "??" | "and" | "or" | "&" | "|" | "^" | ".." | "..<";
-aux_una_op = "-" | "not" | "~" | "@";
-```
+Standard arithmetic and logical operators are available.
 
-### Modifiers
+- **Arithmetic**: `+`, `-`, `*`, `/`, `%` (remainder), `mod` (modulus), `**` (Power)
+- **Bitwise**: `&`, `|`, `^`, `<<`, `>>`, `~` (Not)
+- **Logical**: `and`, `or`, `not`
+- **Comparison**: `<`, `>`, `<=`, `>=`, `=`, `/=` (Not Equal)
+- **Pipe**: `|>` (Function application pipeline)
+- **Coalesce**: `??` (Null/Optional coalesce)
 
-```ebnf
-aux_modifiers = {("export" | "extern", [aux_lit_text]) | "unsafe"};
-```
+---
 
-- `export`: external visibility
-- `extern "lib"`: foreign function declaration
-- `unsafe`: manual memory management, no GC
+## Data Structures
 
-## Attributes
+### Records
 
-```ebnf
-aux_attr = "[<", ident, [aux_attr_args], {",", ident, [aux_attr_args]}, ">]";
-aux_attr_args = "(", {(ident | aux_lit), [":=", (ident | aux_lit)], {",", (ident | aux_lit, [":=", (ident | aux_lit)])}}, ")";
-```
-
-**Examples:**
+Structs with named fields.
 
 ```musi
-[<inline>]
-[<deprecated("use new version")>]
-[<link(name := "c", version := "1.0")>]
-[<inline, no_mangle>]
-```
-
-## Patterns
-
-```ebnf
-pat_ident = ident;
-pat_lit = aux_lit;
-pat_wild = "_";
-pat_cons = pat, "::", pat;
-pat_tuple = "(", pat, {",", pat}, ")";
-pat_array = "[", pat, {",", pat}, "]";
-pat_record = ident, ".", "{", aux_pat_fields, "}";
-pat_ctor = ident, [ty_args], ["(", [pat], ")"];
-pat = pat_ident | pat_lit | pat_wild | pat_cons | pat_tuple | pat_array | pat_record | pat_ctor;
-aux_pat_fields = aux_pat_field, {",", aux_pat_field};
-aux_pat_field = ident;
-```
-
-**Examples:**
-
-```musi
-x                // bind to variable
-42               // literal match
-_                // wildcard
-head :: tail     // cons pattern
-(x, y)           // tuple destructure
-[x, y]           // array destructure
-Person.{name}    // record field extract
-Some(value)      // sum type constructor match
-```
-
-## Expressions
-
-### Auxiliary Definitions
-
-```ebnf
-aux_ty_annot = ":", ty;
-aux_init = ":=", expr;
-aux_param = ["var"], ident, [aux_ty_annot], [aux_init];
-aux_param_list = aux_param, {",", aux_param};
-aux_params = "(", [aux_param_list], ")";
-aux_fn_sig = [ident], [ty_params], [aux_params], [aux_ty_annot];
-aux_args = expr, {",", expr};
-aux_record_field = ["var"], ident, [aux_ty_annot], [aux_init];
-aux_record_fields = aux_record_field, {",", aux_record_field};
-aux_sum_case = "case", ident, [ty_args], ["(", [ty_args], ")"];
-aux_sum_cases = aux_sum_case, {",", aux_sum_case};
-aux_match_case = "case", pat, "=>", expr;
-aux_match_cases = aux_match_case, {",", aux_match_case};
-```
-
-### Core Expressions
-
-```ebnf
-expr_lit = aux_lit;
-expr_ident = ident;
-expr_field = expr, ".", ident;
-expr_index = expr, "[", expr, "]";
-expr_call = expr, "(", [aux_args], ")";
-expr_deref = expr, ".^";
-expr_unary = aux_una_op, expr;
-expr_binary = expr, aux_bin_op, expr;
-expr_lit_tuple = "(", expr, {",", expr}, ")";
-expr_lit_array = "[", expr, {",", expr}, "]";
-expr_lit_record = [ident], ".{", {aux_record_field, ","}, "}";
-expr_optional_chain = expr, "?", (".", ident | "[", expr, "]" | "(", [aux_args], ")");
-expr_block = "{", {stmt}, [expr], "}";
-```
-
-### Binding & Functions
-
-```ebnf
-expr_bind = [aux_modifiers], ("val" | "var"), ident, [aux_ty_annot], aux_init;
-expr_fn = [aux_attr], [aux_modifiers], "fn", aux_fn_sig, expr_block;
-```
-
-**Examples:**
-
-```musi
-val x: Int32 := 42;
-var y := "hello";
-
-fn add(x: Int32, y: Int32): Int32 {
-  return x + y;
-};
-
-fn identity<T>(x: T): T { x };
-```
-
-### Control Flow
-
-```ebnf
-expr_if = "if", expr, expr_block, ["else", expr_block];
-expr_while = "while", expr, expr_block;
-expr_for = "for", ident, "in", expr, expr_block;
-expr_match = "match", expr, "{", aux_match_cases, "}";
-expr_return = "return", expr;
-expr_defer = "defer", expr_block;
-expr_break = "break", [expr];
-expr_cycle = "cycle";
-```
-
-**Examples:**
-
-```musi
-if x > 0 { positive() } else { negative() };
-
-while running { process() };
-
-for i in 0..10 { handle(i) };
-
-match opt {
-case Some(value) => process(value),
-case None => default()
-};
-
-return x + 1;
-defer cleanup();
-break;
-cycle;
-```
-
-### Type Definitions
-
-```ebnf
-expr_record = [aux_attr], [aux_modifiers], "record", ident, [ty_params], "{", aux_record_fields, "}";
-expr_sum = [aux_attr], [aux_modifiers], "sum", ident, [ty_params], "{", aux_sum_cases, "}";
-```
-
-**Examples:**
-
-```musi
-record Point<T> {
+record Point[T] {
   x: T;
   y: T
 };
 
-sum Option<T> {
+val p := Point.{ x := 10, y := 20 };
+val x := p.x;
+```
+
+### Sum Types (Variants)
+
+Tagged unions for expressing distinct cases.
+
+```musi
+sum Option[T] {
   case Some(T),
   case None
 };
-```
 
-### Interop
-
-```ebnf
-expr_unsafe = "unsafe", expr_block;
-expr_import = "import", aux_lit_text;
-expr_extern = "extern", [aux_lit_text], "unsafe", "{", {aux_fn_sig, ";"}, "}";
-```
-
-**Examples:**
-
-```musi
-unsafe {
-  val ptr: ^Int32 := malloc(4);
-  ptr.^ <- 42;
-  free(ptr);
-};
-
-import "std/io.ms";
-
-extern "C" unsafe {
-  fn malloc(size: Nat64): ^Unit;
-  fn free(ptr: ^Unit): Unit;
-};
-```
-
-### Complete Expression Grammar
-
-```ebnf
-expr = expr_lit | expr_ident | expr_field | expr_index | expr_call | expr_deref
-     | expr_unary | expr_binary | expr_lit_tuple | expr_lit_array | expr_lit_record
-     | expr_optional_chain | expr_block | expr_bind | expr_fn | expr_if | expr_while
-     | expr_for | expr_match | expr_return | expr_defer | expr_break | expr_cycle
-     | expr_unsafe | expr_import | expr_extern | expr_record | expr_sum;
-```
-
-## Statements & Programs
-
-```ebnf
-stmt = expr, ";";
-prog = {stmt};
-```
-
-**Note**: Semicolons are required after statements. Blocks implicitly return their last expression.
-
-## Examples
-
-### Minimal Program
-
-```musi
-val io := import "std/io.ms";
-io.writeln("Hello, Musi!");
-```
-
-### Function Definition
-
-```musi
-fn fact(n: Int32): Int32 {
-  if n <= 1 { return 1; };
-  return n * fact(n - 1);
-};
-```
-
-### Generic Data Structure
-
-```musi
-record List<T> {
-  head: T;
-  tail: ?^List<T>
-};
-
-fn cons<T>(x: T, xs: ?^List<T>): ^List<T> {
-  return List.{head := x, tail := xs};
-};
+val `val` := Option.Some(42);
 ```
 
 ### Pattern Matching
 
-```musi
-sum Expect<T, E> {
-  case Ok(T),
-  case Err(E)
-};
+Robust matching on literals, structure, and variants.
 
-fn unwrap_or<T, E>(result: Expect<T, E>, default: T): T {
-  match result {
-  case Ok(value) => value,
-  case Err(_) => default
-  }
+```musi
+match val {
+case Some(x) => x,
+case None => 0
 };
 ```
 
-### Unsafe FFI
+---
+
+## Control Flow
+
+Musi is an expression-oriented language. `if`, `match`, and blocks return values.
+
+```musi
+val result := if x > 0 { "Positive" } else { "Negative" };
+
+while running {
+  process();
+};
+
+for item in list {
+  writeln(item);
+};
+```
+
+**Defer** statements run at the end of the enclosing block (LIFO order).
+
+```musi
+val f := open("file.txt");
+defer close(f);
+```
+
+---
+
+## System Programming
+
+### Unsafe & FFI
+
+Access to raw pointers and C ABI is governed by `unsafe` blocks.
 
 ```musi
 extern "C" unsafe {
-  fn write(fd: Int32, buf: ^Nat8, count: Nat64): Int64;
+  fn malloc(size: Nat64): ^Any;
+  fn free(ptr: ^Any): Any;
 };
-
-// NOTE:
-// Musi has a 'write' function as part of STL's io library.
-// This example shows use of external write.
-// if we used `import "std/io.ms";` instead of the extern block, we would get a compile error.
-// but if we used `val io := import "std/io.ms";` instead of the extern block, we could use io.write,
-// separating the concern between two functions using the exact same name.
-// alternatively, `import "std/io.ms" as io;` would work as well.
-// `val io := import "std/io.ms";` and `import "std/io.ms" as io;` are equivalent.
 
 unsafe {
-  val msg := "Hello\n";
-  write(1, @msg, 6);
+  val ptr := malloc(16);
+  defer free(ptr);
 };
 ```
+
+### Attributes
+
+Compiler directives using `[< ... >]` syntax (borrowed from F#).
+
+```musi
+[<inline>]
+fn fast_add(x: Int32, y: Int32) { x + y };
+```
+
+---
+
+## Design Rationale
+
+### Generic Syntax: Square Brackets `[]`
+
+Musi uses square brackets for generics (e.g., `List[Int]`, `fn identity[T]`) instead of the C++-style angle brackets (`List<Int>`).
+
+**Reasoning:**
+
+1. **Strict Context-Free Grammar (CFG)**: Angle brackets introduce an ambiguity with "Less Than" and "Greater Than" operators (`a < b`). Resolving this often requires infinite lookahead or semantic information (checking if `a` is a type) during parsing, which violates strict CFG rules.
+2. **No "Turbofish"**: By using distinct delimiters `[]`, we avoid the need for special disambiguation syntax like Rust's `::<>`.
+3. **Unified "indexing" Semantics**: Generics can be conceptually viewed as "indexing into a family of types". Syntactically, `List[Int]` (Type Indexing) parallels `array[0]` (Value Indexing).
