@@ -76,7 +76,7 @@ test.ms:1:17: error: cannot convert type 'String' to expected type 'Int32'
 **Rules:**
 
 - Lowercase (except proper nouns: Musi, OCaml, etc.)
-- No articles (the, a, an) unless necessary
+- No articles (the, a, an)
 - No contractions (cannot, not can't)
 - Semicolon separates problem from hint
 
@@ -85,6 +85,32 @@ test.ms:1:17: error: cannot convert type 'String' to expected type 'Int32'
 ```text
 error: missing ';' after value binding; add ';'
 ```
+
+## Error Archetypes
+
+Strict taxonomy for error messages to ensure consistency and specificity. Vagueness (e.g., "invalid syntax") is forbidden.
+
+| Context | Template | Example |
+| :--- | :--- | :--- |
+| **Unknown** | `unknown %0` | "unknown character", "unknown escape sequence" |
+| **Unclosed** | `unclosed %0` | "unclosed string literal", "unclosed block comment" |
+| **Expected** | `expected %0` | "expected identifier", "expected ';'" |
+| **Unexpected** | `unexpected %0` | "unexpected token 'val'" |
+| **Missing** | `missing %0` | "missing return type", "missing field 'x'" |
+| **Invalid** | `invalid %0` | "invalid rune literal", "invalid identifier" |
+| **Malformed** | `malformed %0` | "malformed hex literal" |
+| **Illegal** | `illegal %0` | "illegal character in identifier" |
+
+### Detailed Guidelines
+
+1. **Specificity**: Never say "invalid syntax". Always describe *what* is invalid.
+    - *Bad*: `error: invalid syntax`
+    - *Good*: `error: expected identifier after 'val'`
+2. **Context**: Provide context for "unclosed" or "missing" items.
+    - *Bad*: `error: unclosed comment`
+    - *Good*: `error: unclosed block comment` (implies `/*` was used)
+3. **Hints**: Use the semicolon separator to offer immediate fixes.
+    - `error: unclosed string literal; missing '"'`
 
 ## Categories
 
@@ -303,13 +329,9 @@ note: previous definition here
 
 ### Invalid Modifier Combination
 
-```text
-error: cannot combine 'export' and 'unsafe' modifiers
-```
-
 ### FFI Type Mismatch
 
 ```text
-error: FFI function 'malloc' expects type '^Unit' but got 'Int32'
-note: unsafe blocks required for FFI calls
+error: FFI function 'malloc' expects type '^Any', got 'Int32'
+note: 'unsafe' blocks required for FFI calls
 ```
