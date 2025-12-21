@@ -95,8 +95,11 @@ module TokenBuilder = struct
     delta 0 0 [] tokens
 end
 
-let collect_tokens source ast =
+let collect_tokens source ast interner =
   let builder = TokenBuilder.create () in
+  let resolve id =
+    match Interner.lookup_opt interner id with Some s -> s | None -> "?"
+  in
 
   let add_token_at_span span kind ?(modifiers = 0) () =
     let start_line, start_col = Source.line_col source span.Span.start in
@@ -116,19 +119,53 @@ let collect_tokens source ast =
 
   let visit_expr (v : 'ctx Ast.Visitor.visitor) is_callee (expr : expr) =
     match expr.kind with
-    | ExprBind (_, _, _, _, init, _) ->
+    | ExprBind { pat; ty_annot; kind_kw; init; _ } ->
+      add_token_at_span kind_kw.span "keyword" ();
       let kind =
-        match init.kind with ExprFn _ -> "function" | _ -> "variable"
+        match init.value.kind with ExprFn _ -> "function" | _ -> "variable"
       in
-      add_token_at_span expr.span kind ();
-      v.visit_expr v false init
-    | ExprCall (callee, args) ->
+      let modifiers =
+        match ty_annot with
+        | Some _ -> TokenBuilder.token_type_to_int "declaration"
+        | None -> 0
+      in
+      add_token_at_span pat.span kind ~modifiers ();
+      v.visit_expr v false init.value
+    | ExprCall { callee; args } ->
       v.visit_expr v true callee;
-      List.iter (v.visit_expr v false) args
-    | ExprIdent name ->
+      List.iter (fun e -> v.visit_expr v false e) args.value.elems
+    | ExprIf { if_kw; _ } ->
+      add_token_at_span if_kw.span "keyword" ();
+      Ast.Visitor.traverse_expr v is_callee expr
+    | ExprWhile { while_kw; _ } ->
+      add_token_at_span while_kw.span "keyword" ();
+      Ast.Visitor.traverse_expr v is_callee expr
+    | ExprFor { for_kw; in_kw; _ } ->
+      add_token_at_span for_kw.span "keyword" ();
+      add_token_at_span in_kw.span "keyword" ();
+      Ast.Visitor.traverse_expr v is_callee expr
+    | ExprMatch { match_kw; _ } ->
+      add_token_at_span match_kw.span "keyword" ();
+      Ast.Visitor.traverse_expr v is_callee expr
+    | ExprBinary { op; _ } ->
+      add_token_at_span op.span "operator" ();
+      Ast.Visitor.traverse_expr v is_callee expr
+    | ExprLit lit ->
       let kind =
-        if String.length name > 0 && Char.uppercase_ascii name.[0] = name.[0]
-        then "enumMember"
+        match lit.kind with
+        | LitInt _ | LitFloat _ -> "number"
+        | LitString _ | LitRune _ -> "string"
+        | LitBool _ -> "keyword"
+      in
+      add_token_at_span lit.span kind ();
+      Ast.Visitor.traverse_expr v is_callee expr
+    | ExprIdent name ->
+      let name_str = resolve name.kind in
+      let kind =
+        if
+          String.length name_str > 0
+          && Char.uppercase_ascii name_str.[0] = name_str.[0]
+        then "class"
         else if is_callee then "function"
         else "variable"
       in
@@ -159,7 +196,7 @@ let handle uri =
           interner
       with
       | Ok ast ->
-        let data = collect_tokens doc.source ast in
+        let data = collect_tokens doc.source ast interner in
         let tokens =
           Types.SemanticTokens.create ~data:(Array.of_list data) ()
         in
