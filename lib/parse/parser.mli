@@ -25,8 +25,11 @@ val try_parse :
   -> Interner.t
   -> (stmt list, Reporter.bag) result
 
+(** Parse single expression with default precedence (Prec.None) *)
+val parse_expr : t -> expr
+
 (** Parse single expression with given precedence *)
-val parse_expr : t -> Prec.t -> expr
+val parse_expr_with_prec : t -> Prec.t -> expr
 
 (** Parse single type definition *)
 val parse_ty : t -> ty
