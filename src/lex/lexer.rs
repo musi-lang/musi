@@ -72,7 +72,7 @@ impl<'a> Lexer<'a> {
             '$' if self.peek_by(1) == Some('"') => {
                 (self.scan_template_lit(2), self.span(start, self.cursor))
             }
-            c if c == '_' || c.is_alphabetic() => {
+            c if c == '_' || c.is_ascii_alphabetic() => {
                 (self.scan_ident(), self.span(start, self.cursor))
             }
             '0'..='9' => (self.scan_number(), self.span(start, self.cursor)),
@@ -123,7 +123,7 @@ impl<'a> Lexer<'a> {
 
     fn scan_ident(&mut self) -> Token {
         let start = self.cursor;
-        self.cursor = self.consume_while(start, |c| c == '_' || c.is_alphanumeric());
+        self.cursor = self.consume_while(start, |c| c == '_' || c.is_ascii_alphanumeric());
         let s = &self.source.input[start..self.cursor];
         if s == "_" {
             return Token::Underscore;
@@ -139,13 +139,14 @@ impl<'a> Lexer<'a> {
         let mut end = self.consume_while(start + prefix, |c| c.is_digit(base) || c == '_');
         if end == start + prefix {
             self.report(LexErrorKind::MalformedNumber, start, end);
+            self.cursor = end;
             return Token::LitInt(0);
         }
         let mut is_real = false;
         if base == 10 {
-            let next_end = self.scan_real_part(end);
-            is_real = next_end != end;
-            end = next_end;
+            end = self.scan_real_part(start, end);
+            is_real = end > start + prefix
+                && self.source.input[start + prefix..end].contains(['.', 'e', 'E']);
         }
         self.cursor = end;
         let (val, valid) = self.unitize_numeric(start, end);
@@ -270,7 +271,7 @@ impl<'a> Lexer<'a> {
                 if *tok == Token::LBrace {
                     self.braces.push(BraceKind::Normal);
                 } else if *tok == Token::RBrace && self.braces.last() == Some(&BraceKind::Normal) {
-                    self.braces.pop();
+                    let _ = self.braces.pop();
                 }
                 return Some(tok.clone());
             }
@@ -409,17 +410,26 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn scan_real_part(&self, mut end: usize) -> usize {
+    fn scan_real_part(&mut self, start: usize, mut end: usize) -> usize {
         if self.source.input[end..].starts_with('.') && !self.source.input[end..].starts_with("..")
         {
-            end = self.consume_while(end + 1, |c| self.is_num_body(c));
+            let next = end + 1;
+            let after_dot = self.consume_while(next, |c| self.is_num_body(c));
+            if after_dot == next {
+                self.report(LexErrorKind::MalformedNumber, start, next);
+            }
+            end = after_dot;
         }
         if self.source.input[end..].starts_with(['e', 'E']) {
             let mut exp = end + 1;
             if self.source.input[exp..].starts_with(['+', '-']) {
                 exp += 1;
             }
-            end = self.consume_while(exp, |c| self.is_num_body(c));
+            let after_exp = self.consume_while(exp, |c| self.is_num_body(c));
+            if after_exp == exp {
+                self.report(LexErrorKind::MalformedNumber, start, after_exp);
+            }
+            end = after_exp;
         }
         end
     }
