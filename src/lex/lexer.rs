@@ -521,6 +521,7 @@ impl<'a> Lexer<'a> {
     }
 }
 
+#[inline]
 pub fn unescape(s: &str, start_pos: usize, errors: &mut DiagnosticBag) -> String {
     let mut out = String::with_capacity(s.len());
     let mut chars = s.chars();
@@ -534,8 +535,8 @@ pub fn unescape(s: &str, start_pos: usize, errors: &mut DiagnosticBag) -> String
                 }
                 Err((esc_err, len)) => {
                     let err_span = Span::new(
-                        (start_pos + offset) as u32,
-                        (start_pos + offset + 1 + len) as u32,
+                        u32::try_from(start_pos + offset).unwrap(),
+                        u32::try_from(start_pos + offset + 1 + len).unwrap(),
                     );
                     errors.add(report(Error::new(
                         LexErrorKind::UnknownEscape(esc_err).into(),
@@ -552,10 +553,10 @@ pub fn unescape(s: &str, start_pos: usize, errors: &mut DiagnosticBag) -> String
     out
 }
 
+#[inline]
 pub fn scan_escape(chars: &mut std::str::Chars<'_>) -> Result<(char, usize), (String, usize)> {
-    let ch = match chars.next() {
-        Some(c) => c,
-        None => return Ok(('\0', 0)),
+    let Some(ch) = chars.next() else {
+        return Ok(('\0', 0));
     };
 
     if let Ok(i) = ESCAPES.binary_search_by_key(&ch, |e| e.0) {
@@ -589,8 +590,8 @@ pub fn scan_escape(chars: &mut std::str::Chars<'_>) -> Result<(char, usize), (St
                 let (mut val, mut len) = (0, 3);
                 let mut valid = false;
 
-                while let Some(c) = chars.next() {
-                    if c == '}' {
+                while let Some(ch) = chars.next() {
+                    if ch == '}' {
                         if !valid {
                             return Err(("u{}".into(), len));
                         }
@@ -599,7 +600,7 @@ pub fn scan_escape(chars: &mut std::str::Chars<'_>) -> Result<(char, usize), (St
                             None => break, // bad unicode scalar
                         };
                     }
-                    if let Some(d) = c.to_digit(16) {
+                    if let Some(d) = ch.to_digit(16) {
                         val = (val << 4) | d;
                         len += 1;
                         valid = true;
