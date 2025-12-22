@@ -43,6 +43,7 @@ enum BraceKind {
     Template,
 }
 
+#[derive(Debug)]
 pub struct Lexer<'a> {
     interner: &'a mut Interner,
     errors: DiagnosticBag,

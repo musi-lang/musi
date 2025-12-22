@@ -24,11 +24,11 @@ impl SourceFile {
         }
     }
 
-    pub fn end_pos(&self) -> u32 {
+    pub const fn end_pos(&self) -> u32 {
         self.start + self.input.len() as u32
     }
 
-    pub fn contains(&self, offset: u32) -> bool {
+    pub const fn contains(&self, offset: u32) -> bool {
         offset >= self.start && offset < self.end_pos()
     }
 
@@ -59,7 +59,6 @@ impl SourceFile {
         } else {
             self.input.len()
         };
-
         if end <= start {
             return Some("");
         }
@@ -69,14 +68,9 @@ impl SourceFile {
     }
 }
 
+#[derive(Debug, Default)]
 pub struct SourceMap {
     files: Vec<Arc<SourceFile>>,
-}
-
-impl Default for SourceMap {
-    fn default() -> Self {
-        Self { files: Vec::new() }
-    }
 }
 
 impl SourceMap {

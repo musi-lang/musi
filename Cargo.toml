@@ -15,6 +15,7 @@ name = "musi"
 path = "src/main.rs"
 
 [dependencies]
+clap = { version = "4.5.53", features = ["derive"] }
 thiserror = "2.0.17"
 
 [lints.rust]

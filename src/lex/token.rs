@@ -148,6 +148,7 @@ pub const KEYWORDS: &[(&str, TokenKind)] = &[
     ("with", TokenKind::KwWith),
 ];
 
+#[derive(Debug)]
 pub struct TokenDisplay<'a> {
     kind: &'a TokenKind,
     interner: &'a Interner,
