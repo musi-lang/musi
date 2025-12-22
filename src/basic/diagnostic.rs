@@ -17,69 +17,69 @@ pub struct Diagnostic {
 }
 
 #[derive(Default, Debug, Clone)]
-pub struct Bag {
-    pub diags: Vec<Diagnostic>,
+pub struct DiagnosticBag {
+    pub diagnostics: Vec<Diagnostic>,
     pub errors: usize,
     pub warnings: usize,
 }
 
-impl Bag {
+impl DiagnosticBag {
     pub fn add(&mut self, diag: Diagnostic) {
         match diag.level {
             Level::Error => self.errors += 1,
             Level::Warning => self.warnings += 1,
             _ => {}
         }
-        self.diags.push(diag);
+        self.diagnostics.push(diag);
     }
 
-    pub fn merge(&mut self, other: Bag) {
+    pub fn merge(&mut self, other: DiagnosticBag) {
         self.errors += other.errors;
         self.warnings += other.warnings;
-        self.diags.extend(other.diags);
+        self.diagnostics.extend(other.diagnostics);
     }
 
     pub const fn is_empty(&self) -> bool {
-        self.diags.is_empty()
+        self.diagnostics.is_empty()
     }
 }
 
-pub fn emit_all(bag: &Bag, files: &HashMap<u32, Source>) {
-    for diag in &bag.diags {
+pub fn emit_all(bag: &DiagnosticBag, files: &HashMap<u32, Source>) {
+    for diag in &bag.diagnostics {
         emit(diag, files);
     }
 }
 
 pub fn report(err: errors::Error, span: Span) -> Diagnostic {
-    let msg = err.to_string();
-    let hint = err.hint();
+    let message = err.to_string();
+    let hint = err.hint_opt();
     let level = err.level();
 
     let mut diag = Diagnostic {
         level,
-        message: msg,
+        message,
         span,
-        notes: Vec::new(),
+        notes: vec![],
     };
-    if let Some(h) = hint {
-        diag.notes.push((h.to_string(), span));
+    if let Some(hint_text) = hint {
+        diag.notes.push((hint_text.to_string(), span));
     }
     diag
 }
 
 pub fn emit(diag: &Diagnostic, files: &HashMap<u32, Source>) {
-    let mut w = io::stderr();
-    let color = w.is_terminal();
-    let _ = emit_inner(&mut w, diag, files, color);
+    let mut writer = io::stderr();
+    let use_color = writer.is_terminal();
+    let _ = render(&mut writer, diag, files, use_color);
 }
 
-fn emit_inner(
-    w: &mut impl Write,
+fn render(
+    writer: &mut impl Write,
     diag: &Diagnostic,
     files: &HashMap<u32, Source>,
-    color: bool,
+    colour: bool,
 ) -> io::Result<()> {
-    let (lc, hdr) = match diag.level {
+    let (style, header) = match diag.level {
         Level::Error => ("\x1b[31m", "error"),
         Level::Warning => ("\x1b[33m", "warning"),
         Level::Note => ("\x1b[36m", "note"),
@@ -87,68 +87,68 @@ fn emit_inner(
 
     let src = files.get(&diag.span.file_id);
     if let Some(src) = src {
-        let (l, c) = src.line_col(diag.span.start);
-        if color {
-            write!(w, "\x1b[1m")?;
+        let (ln, col) = src.location_at(diag.span.start);
+        if colour {
+            write!(writer, "\x1b[1m")?;
         }
-        write!(w, "{}:{l}:{c}: ", src.filename)?;
-        if color {
-            write!(w, "\x1b[0m")?;
+        write!(writer, "{}:{ln}:{col}: ", src.filename)?;
+        if colour {
+            write!(writer, "\x1b[0m")?;
         }
     }
 
-    if color {
-        write!(w, "\x1b[1m{lc}{}:\x1b[0m {}\n", hdr, diag.message)?;
+    if colour {
+        write!(writer, "\x1b[1m{style}{header}:\x1b[0m {}\n", diag.message)?;
     } else {
-        writeln!(w, "{hdr}: {}", diag.message)?;
+        writeln!(writer, "{header}: {}", diag.message)?;
     }
 
     if let Some(src) = src {
-        let (l, c) = src.line_col(diag.span.start);
-        if let Some(ln_) = src.line_text(l) {
-            let ln = l.to_string();
-            if color {
-                write!(w, " \x1b[1m{ln} |\x1b[0m {ln_}\n")?;
+        let (line_index, col) = src.location_at(diag.span.start);
+        if let Some(line) = src.line_at_opt(line_index) {
+            let line_index_str = line_index.to_string();
+            if colour {
+                write!(writer, " \x1b[1m{line_index_str} |\x1b[0m {line}\n")?;
             } else {
-                writeln!(w, " {ln} | {ln_}")?;
+                writeln!(writer, " {line_index_str} | {line}")?;
             }
 
-            let (el, ec) = src.line_col(diag.span.end);
-            let len = if l == el {
-                ec.saturating_sub(c).max(1)
+            let (end_line_index, end_col) = src.location_at(diag.span.end);
+            let highlight_len = if line_index == end_line_index {
+                end_col.saturating_sub(col).max(1)
             } else {
-                ln_.len().saturating_sub(c) + 1
+                line.len().saturating_sub(col).saturating_add(1)
             };
 
-            let pad = " ".repeat(ln.len());
-            let sp = " ".repeat(c.saturating_sub(1));
-            let car = "^".repeat(len);
+            let padding = " ".repeat(line_index_str.len());
+            let indent = " ".repeat(col.saturating_sub(1));
+            let carets = "^".repeat(highlight_len);
 
-            if color {
-                writeln!(w, " {pad} | {sp}{lc}{car}\x1b[0m")?;
+            if colour {
+                writeln!(writer, " {padding} | {indent}{style}{carets}\x1b[0m")?;
             } else {
-                writeln!(w, " {pad} | {sp}{car}")?;
+                writeln!(writer, " {padding} | {indent}{carets}")?;
             }
         }
     }
 
     for (msg, span) in &diag.notes {
-        let (lc, hdr) = ("\x1b[36m", "note");
+        let (note_style, note_header) = ("\x1b[36m", "note");
         let src = files.get(&span.file_id);
         if let Some(src) = src {
-            let (l, c) = src.line_col(span.start);
-            if color {
-                write!(w, "\x1b[1m")?;
+            let (ln_idx, col_idx) = src.location_at(span.start);
+            if colour {
+                write!(writer, "\x1b[1m")?;
             }
-            write!(w, "{}:{l}:{c}: ", src.filename)?;
-            if color {
-                write!(w, "\x1b[0m")?;
+            write!(writer, "{}:{ln_idx}:{col_idx}: ", src.filename)?;
+            if colour {
+                write!(writer, "\x1b[0m")?;
             }
         }
-        if color {
-            write!(w, "\x1b[1m{lc}{hdr}:\x1b[0m {msg}\n")?;
+        if colour {
+            write!(writer, "\x1b[1m{note_style}{note_header}:\x1b[0m {msg}\n")?;
         } else {
-            writeln!(w, "{hdr}: {msg}")?;
+            writeln!(writer, "{note_header}: {msg}")?;
         }
     }
     Ok(())

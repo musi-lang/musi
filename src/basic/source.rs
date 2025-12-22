@@ -18,26 +18,30 @@ impl Source {
         Path::new(&self.filename)
     }
 
-    pub fn line_col(&self, pos: u32) -> (usize, usize) {
-        let pos = pos as usize;
-        let mut start = 0;
+    pub fn location_at(&self, target: u32) -> (usize, usize) {
+        let mut offset = 0;
+        let target = target as usize;
 
-        for (i, line) in self.lines.iter().enumerate() {
-            let len = line.len() + 1; // +1 for stripped '\n'
-            if start + len > pos {
-                return (i + 1, pos - start + 1);
+        for (idx, line) in self.lines.iter().enumerate() {
+            let len = line.len() + 1; // for stripped '\n'
+            if offset + len > target {
+                return (idx + 1, target - offset + 1);
             }
-            start += len;
+            offset += len;
         }
 
         (self.lines.len(), 1)
     }
 
-    pub fn line_text(&self, line: usize) -> Option<&str> {
-        if line > 0 && line <= self.lines.len() {
-            Some(&self.lines[line - 1])
+    pub fn line_at_opt(&self, idx: usize) -> Option<&str> {
+        if idx > 0 && idx <= self.lines.len() {
+            Some(&self.lines[idx - 1])
         } else {
             None
         }
+    }
+
+    pub fn text(&self) -> String {
+        self.lines.join("\n")
     }
 }

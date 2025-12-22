@@ -11,18 +11,18 @@ impl Interner {
         Self::default()
     }
 
-    pub fn intern(&mut self, s: &str) -> u32 {
-        if let Some(&id) = self.table.get(s) {
+    pub fn intern(&mut self, text: &str) -> u32 {
+        if let Some(&id) = self.table.get(text) {
             return id;
         }
         let id = self.strings.len() as u32;
-        let s_owned = s.to_string();
-        self.strings.push(s_owned.clone());
-        let _ = self.table.insert(s_owned, id);
+        let owned = text.to_string();
+        self.strings.push(owned.clone());
+        let _ = self.table.insert(owned, id);
         id
     }
 
-    pub fn lookup(&self, id: u32) -> Option<&str> {
+    pub fn lookup_opt(&self, id: u32) -> Option<&str> {
         self.strings.get(id as usize).map(String::as_str)
     }
 
@@ -31,7 +31,7 @@ impl Interner {
         self.strings.clear();
     }
 
-    pub const fn size(&self) -> usize {
+    pub const fn len(&self) -> usize {
         self.strings.len()
     }
 }

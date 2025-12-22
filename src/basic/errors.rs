@@ -48,7 +48,7 @@ pub enum Error {
 }
 
 impl NumericError {
-    pub fn hint(&self) -> Option<&'static str> {
+    pub fn hint_opt(&self) -> Option<&'static str> {
         match self {
             Self::InvalidUnderscore(_) => Some("underscores must separate digits"),
             Self::NoDigits(_) => None,
@@ -61,7 +61,7 @@ impl NumericError {
 }
 
 impl LexicalError {
-    pub fn hint(&self) -> Option<&'static str> {
+    pub fn hint_opt(&self) -> Option<&'static str> {
         match self {
             Self::UnclosedString | Self::UnclosedTemplate => Some("missing '\"'"),
             Self::UnclosedEscapedIdent => Some("missing '`'"),
@@ -70,7 +70,7 @@ impl LexicalError {
             Self::UnknownChar(_) => Some("remove this character"),
             Self::MalformedUnderscore(_) => Some("underscores must separate digits"),
             Self::InvalidIdent | Self::EmptyRune | Self::MultiCharRune => None,
-            Self::InvalidNumeric(e) => e.hint(),
+            Self::InvalidNumeric(e) => e.hint_opt(),
         }
     }
 
@@ -83,9 +83,9 @@ impl LexicalError {
 }
 
 impl Error {
-    pub fn hint(&self) -> Option<&'static str> {
+    pub fn hint_opt(&self) -> Option<&'static str> {
         match self {
-            Self::Lexical(e) => e.hint(),
+            Self::Lexical(e) => e.hint_opt(),
         }
     }
 
