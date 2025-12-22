@@ -1,6 +1,5 @@
 use crate::basic::interner::Interner;
 use crate::basic::source::SourceFile;
-use crate::lex::lexer::Lexer;
 use crate::lex::token::TokenKind;
 
 struct TestContext {
@@ -15,24 +14,17 @@ impl TestContext {
             source: SourceFile::new("test.ms".into(), input.into(), 0),
         }
     }
-
-    fn lexer(&mut self) -> Lexer<'_> {
-        Lexer::new(&self.source, &mut self.interner)
-    }
 }
 
 fn check(input: &str, expected: impl FnOnce(&mut Interner) -> Vec<TokenKind>) {
     let mut ctx = TestContext::new(input);
     let mut actual = vec![];
-    {
-        let mut lexer = ctx.lexer();
-        loop {
-            let tok = lexer.next_token();
-            if tok.kind == TokenKind::EOF {
-                break;
-            }
-            actual.push(tok.kind);
+    let (tokens, _) = crate::lex::lexer::tokenize(&ctx.source, &mut ctx.interner);
+    for tok in tokens {
+        if tok.kind == TokenKind::EOF {
+            break;
         }
+        actual.push(tok.kind);
     }
 
     let expected_tokens = expected(&mut ctx.interner);
@@ -216,10 +208,9 @@ fn test_error_reporting() {
     ];
     for input in cases {
         let mut ctx = TestContext::new(input);
-        let mut lexer = ctx.lexer();
-        while lexer.next_token().kind != TokenKind::EOF {}
+        let (_, diagnostics) = crate::lex::lexer::tokenize(&ctx.source, &mut ctx.interner);
         assert!(
-            !lexer.errors().diagnostics.is_empty(),
+            !diagnostics.diagnostics.is_empty(),
             "expected error for input: {:?}",
             input
         );
@@ -229,9 +220,8 @@ fn test_error_reporting() {
 #[test]
 fn test_rejection_of_unicode() {
     let mut ctx = TestContext::new("你好 世界 π_value 🦀_emojis");
-    let mut lexer = ctx.lexer();
-    while lexer.next_token().kind != TokenKind::EOF {}
-    assert!(!lexer.errors().diagnostics.is_empty());
+    let (_, diagnostics) = crate::lex::lexer::tokenize(&ctx.source, &mut ctx.interner);
+    assert!(!diagnostics.diagnostics.is_empty());
 }
 
 #[test]
@@ -272,11 +262,11 @@ fn test_spans() {
         (TokenKind::Semicolon, 12, 13),
     ];
 
-    let mut lexer = ctx.lexer();
-    for (expected_tok, expected_lo, expected_hi) in tokens_with_spans {
-        let tok = lexer.next_token();
-        assert_eq!(tok.kind, expected_tok);
-        assert_eq!(tok.span.lo, expected_lo);
-        assert_eq!(tok.span.hi, expected_hi);
+    let (tokens, _) = crate::lex::lexer::tokenize(&ctx.source, &mut ctx.interner);
+    for (i, (expected_tok, expected_lo, expected_hi)) in tokens_with_spans.iter().enumerate() {
+        let tok = &tokens[i];
+        assert_eq!(tok.kind, *expected_tok);
+        assert_eq!(tok.span.lo, *expected_lo);
+        assert_eq!(tok.span.hi, *expected_hi);
     }
 }
