@@ -117,7 +117,7 @@ import "@std/<completion shows: io, math, etc>"
 **Files to Modify:**
 
 - `tools/lsp/lib/lsp_server.ml`: Add formatting handler
-- `tools/lsp/lib/lsp_formatting.ml`: New file for formatting logic
+- `tools/lsp/lib/lsp_format.ml`: New file for formatting logic
 
 **Expected Features:**
 
@@ -317,7 +317,7 @@ val complete_imports : base_path:string -> string list
 ### Formatting Architecture (To Implement)
 
 ```ocaml
-(* tools/lsp/lib/lsp_formatting.ml - To Implement *)
+(* tools/lsp/lib/lsp_format.ml - To Implement *)
 type format_options = {
     indent_size: int;
     max_line_length: int;
