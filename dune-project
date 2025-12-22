@@ -6,13 +6,4 @@
  (synopsis "Musi")
  (description
   "Systems programming language for clarity, safety, and performance")
- (depends
-  dune
-  alcotest
-  ctypes-foreign
-  fmt
-  base-unix
-  cmdliner
-  yojson
-  lsp
-  jsonrpc))
+ (depends dune alcotest fmt base-unix cmdliner yojson lsp jsonrpc))
