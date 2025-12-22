@@ -21,6 +21,10 @@ keywords = ["musi", "programming language"]
 categories = ["Programming Language"]
 default-run = "musi"
 
+[[workspace.bin]]
+"name" = "musi"
+"path" = "src/main.rs"
+
 [workspace.dependencies]
 
 [workspace.lints.rust]
