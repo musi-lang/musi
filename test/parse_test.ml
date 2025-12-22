@@ -355,7 +355,7 @@ let verify_ty input expected_ty_fn =
 
 let test_ty_basic () =
   verify_ty "Int" (fun i -> mk_ty_ident i "Int");
-  verify_ty "List<Int>" (fun i ->
+  verify_ty "List[Int]" (fun i ->
     make_ty
       (TyApp
          {
@@ -727,7 +727,7 @@ let test_expr_alias () =
             ; ty_params = None
             ; init = mk_preceded i Token.ColonEq (mk_ty_ident i "Int")
             })));
-  assert_stmt "alias List<T> := []T;" (fun i ->
+  assert_stmt "alias List[T] := []T;" (fun i ->
     mk_stmt_expr
       (mk_expr
          (ExprAlias

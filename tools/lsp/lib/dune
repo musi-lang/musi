@@ -1,3 +1,0 @@
-(library
- (name musi_lsp)
- (libraries musi.basic musi.lex musi.parse musi.ast lsp jsonrpc yojson str))

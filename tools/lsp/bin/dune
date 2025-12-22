@@ -1,4 +1,0 @@
-(executable
- (public_name musi-lsp)
- (name main)
- (libraries musi_lsp cmdliner))
