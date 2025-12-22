@@ -1,7 +1,7 @@
 use crate::basic::interner::Interner;
 use crate::basic::source::SourceFile;
 use crate::lex::lexer::Lexer;
-use crate::lex::token::Token;
+use crate::lex::token::TokenKind;
 
 struct TestContext {
     interner: Interner,
@@ -21,17 +21,17 @@ impl TestContext {
     }
 }
 
-fn check(input: &str, expected: impl FnOnce(&mut Interner) -> Vec<Token>) {
+fn check(input: &str, expected: impl FnOnce(&mut Interner) -> Vec<TokenKind>) {
     let mut ctx = TestContext::new(input);
     let mut actual = vec![];
     {
         let mut lexer = ctx.lexer();
         loop {
-            let (tok, _) = lexer.next_token();
-            if tok == Token::EOF {
+            let tok = lexer.next_token();
+            if tok.kind == TokenKind::EOF {
                 break;
             }
-            actual.push(tok);
+            actual.push(tok.kind);
         }
     }
 
@@ -47,19 +47,19 @@ fn check(input: &str, expected: impl FnOnce(&mut Interner) -> Vec<Token>) {
 fn test_numbers() {
     check("123 456_789 0xFF 0o77 0b1011", |i| {
         vec![
-            Token::LitInt(i.intern("123")),
-            Token::LitInt(i.intern("456789")),
-            Token::LitInt(i.intern("0xFF")),
-            Token::LitInt(i.intern("0o77")),
-            Token::LitInt(i.intern("0b1011")),
+            TokenKind::LitInt(i.intern("123")),
+            TokenKind::LitInt(i.intern("456789")),
+            TokenKind::LitInt(i.intern("0xFF")),
+            TokenKind::LitInt(i.intern("0o77")),
+            TokenKind::LitInt(i.intern("0b1011")),
         ]
     });
 
     check("3.14 1e10 1.2e-5", |i| {
         vec![
-            Token::LitReal(i.intern("3.14")),
-            Token::LitReal(i.intern("1e10")),
-            Token::LitReal(i.intern("1.2e-5")),
+            TokenKind::LitReal(i.intern("3.14")),
+            TokenKind::LitReal(i.intern("1e10")),
+            TokenKind::LitReal(i.intern("1.2e-5")),
         ]
     });
 }
@@ -68,23 +68,23 @@ fn test_numbers() {
 fn test_idents_keywords() {
     check("val var if else match record sum fn", |_| {
         vec![
-            Token::KwVal,
-            Token::KwVar,
-            Token::KwIf,
-            Token::KwElse,
-            Token::KwMatch,
-            Token::KwRecord,
-            Token::KwSum,
-            Token::KwFn,
+            TokenKind::KwVal,
+            TokenKind::KwVar,
+            TokenKind::KwIf,
+            TokenKind::KwElse,
+            TokenKind::KwMatch,
+            TokenKind::KwRecord,
+            TokenKind::KwSum,
+            TokenKind::KwFn,
         ]
     });
 
     check("my_var _unused `escaped ident` `if`", |i| {
         vec![
-            Token::Ident(i.intern("my_var")),
-            Token::Ident(i.intern("_unused")),
-            Token::Ident(i.intern("escaped ident")),
-            Token::Ident(i.intern("if")),
+            TokenKind::Ident(i.intern("my_var")),
+            TokenKind::Ident(i.intern("_unused")),
+            TokenKind::Ident(i.intern("escaped ident")),
+            TokenKind::Ident(i.intern("if")),
         ]
     });
 }
@@ -93,10 +93,10 @@ fn test_idents_keywords() {
 fn test_strings_runes() {
     check(r#""hello" "with \"quotes\"" 'a' "\n""#, |i| {
         vec![
-            Token::LitString(i.intern("hello")),
-            Token::LitString(i.intern("with \"quotes\"")),
-            Token::LitRune('a'),
-            Token::LitString(i.intern("\n")),
+            TokenKind::LitString(i.intern("hello")),
+            TokenKind::LitString(i.intern("with \"quotes\"")),
+            TokenKind::LitRune('a'),
+            TokenKind::LitString(i.intern("\n")),
         ]
     });
 }
@@ -105,12 +105,12 @@ fn test_strings_runes() {
 fn test_templates() {
     check(r#"$"hello {x} middle {y} tail" $"no subst""#, |i| {
         vec![
-            Token::TemplateHead(i.intern("hello ")),
-            Token::Ident(i.intern("x")),
-            Token::TemplateMiddle(i.intern(" middle ")),
-            Token::Ident(i.intern("y")),
-            Token::TemplateTail(i.intern(" tail")),
-            Token::LitTemplateNoSubst(i.intern("no subst")),
+            TokenKind::TemplateHead(i.intern("hello ")),
+            TokenKind::Ident(i.intern("x")),
+            TokenKind::TemplateMiddle(i.intern(" middle ")),
+            TokenKind::Ident(i.intern("y")),
+            TokenKind::TemplateTail(i.intern(" tail")),
+            TokenKind::LitTemplateNoSubst(i.intern("no subst")),
         ]
     });
 }
@@ -119,43 +119,43 @@ fn test_templates() {
 fn test_symbols() {
     check("+ - * / % mod **", |_| {
         vec![
-            Token::Plus,
-            Token::Minus,
-            Token::Star,
-            Token::Slash,
-            Token::Percent,
-            Token::KwMod,
-            Token::StarStar,
+            TokenKind::Plus,
+            TokenKind::Minus,
+            TokenKind::Star,
+            TokenKind::Slash,
+            TokenKind::Percent,
+            TokenKind::KwMod,
+            TokenKind::StarStar,
         ]
     });
 
     check("= /= < <= > >= and or not", |_| {
         vec![
-            Token::Eq,
-            Token::SlashEq,
-            Token::Lt,
-            Token::LtEq,
-            Token::Gt,
-            Token::GtEq,
-            Token::KwAnd,
-            Token::KwOr,
-            Token::KwNot,
+            TokenKind::Eq,
+            TokenKind::SlashEq,
+            TokenKind::Lt,
+            TokenKind::LtEq,
+            TokenKind::Gt,
+            TokenKind::GtEq,
+            TokenKind::KwAnd,
+            TokenKind::KwOr,
+            TokenKind::KwNot,
         ]
     });
 
     check(".. ..< |> ?? := => -> <- :: .^ ?", |_| {
         vec![
-            Token::DotDot,
-            Token::DotDotLt,
-            Token::BarGt,
-            Token::QuestionQuestion,
-            Token::ColonEq,
-            Token::EqGt,
-            Token::MinusGt,
-            Token::LtMinus,
-            Token::ColonColon,
-            Token::DotCaret,
-            Token::Question,
+            TokenKind::DotDot,
+            TokenKind::DotDotLt,
+            TokenKind::BarGt,
+            TokenKind::QuestionQuestion,
+            TokenKind::ColonEq,
+            TokenKind::EqGt,
+            TokenKind::MinusGt,
+            TokenKind::LtMinus,
+            TokenKind::ColonColon,
+            TokenKind::DotCaret,
+            TokenKind::Question,
         ]
     });
 }
@@ -166,32 +166,32 @@ fn test_comments() {
         "val x := 1; // line comment\nval y := 2; /* block\ncomment */ val z := 3;",
         |i| {
             vec![
-                Token::KwVal,
-                Token::Ident(i.intern("x")),
-                Token::ColonEq,
-                Token::LitInt(i.intern("1")),
-                Token::Semicolon,
-                Token::KwVal,
-                Token::Ident(i.intern("y")),
-                Token::ColonEq,
-                Token::LitInt(i.intern("2")),
-                Token::Semicolon,
-                Token::KwVal,
-                Token::Ident(i.intern("z")),
-                Token::ColonEq,
-                Token::LitInt(i.intern("3")),
-                Token::Semicolon,
+                TokenKind::KwVal,
+                TokenKind::Ident(i.intern("x")),
+                TokenKind::ColonEq,
+                TokenKind::LitInt(i.intern("1")),
+                TokenKind::Semicolon,
+                TokenKind::KwVal,
+                TokenKind::Ident(i.intern("y")),
+                TokenKind::ColonEq,
+                TokenKind::LitInt(i.intern("2")),
+                TokenKind::Semicolon,
+                TokenKind::KwVal,
+                TokenKind::Ident(i.intern("z")),
+                TokenKind::ColonEq,
+                TokenKind::LitInt(i.intern("3")),
+                TokenKind::Semicolon,
             ]
         },
     );
 
     check("/* nested /* block */ comment */ val x := 1;", |i| {
         vec![
-            Token::KwVal,
-            Token::Ident(i.intern("x")),
-            Token::ColonEq,
-            Token::LitInt(i.intern("1")),
-            Token::Semicolon,
+            TokenKind::KwVal,
+            TokenKind::Ident(i.intern("x")),
+            TokenKind::ColonEq,
+            TokenKind::LitInt(i.intern("1")),
+            TokenKind::Semicolon,
         ]
     });
 }
@@ -217,7 +217,7 @@ fn test_error_reporting() {
     for input in cases {
         let mut ctx = TestContext::new(input);
         let mut lexer = ctx.lexer();
-        while lexer.next_token().0 != Token::EOF {}
+        while lexer.next_token().kind != TokenKind::EOF {}
         assert!(
             !lexer.errors().diagnostics.is_empty(),
             "expected error for input: {:?}",
@@ -230,7 +230,7 @@ fn test_error_reporting() {
 fn test_rejection_of_unicode() {
     let mut ctx = TestContext::new("你好 世界 π_value 🦀_emojis");
     let mut lexer = ctx.lexer();
-    while lexer.next_token().0 != Token::EOF {}
+    while lexer.next_token().kind != TokenKind::EOF {}
     assert!(!lexer.errors().diagnostics.is_empty());
 }
 
@@ -238,11 +238,11 @@ fn test_rejection_of_unicode() {
 fn test_nested_templates() {
     check(r#"$"outer { $"inner {x} tail" } end""#, |i| {
         vec![
-            Token::TemplateHead(i.intern("outer ")),
-            Token::TemplateHead(i.intern("inner ")),
-            Token::Ident(i.intern("x")),
-            Token::TemplateTail(i.intern(" tail")),
-            Token::TemplateTail(i.intern(" end")),
+            TokenKind::TemplateHead(i.intern("outer ")),
+            TokenKind::TemplateHead(i.intern("inner ")),
+            TokenKind::Ident(i.intern("x")),
+            TokenKind::TemplateTail(i.intern(" tail")),
+            TokenKind::TemplateTail(i.intern(" end")),
         ]
     });
 }
@@ -251,9 +251,9 @@ fn test_nested_templates() {
 fn test_underscores() {
     check("_ _unused __test", |i| {
         vec![
-            Token::Underscore,
-            Token::Ident(i.intern("_unused")),
-            Token::Ident(i.intern("__test")),
+            TokenKind::Underscore,
+            TokenKind::Ident(i.intern("_unused")),
+            TokenKind::Ident(i.intern("__test")),
         ]
     });
 }
@@ -265,18 +265,18 @@ fn test_spans() {
     let num_id = ctx.interner.intern("123");
 
     let tokens_with_spans = vec![
-        (Token::KwVal, 0, 3),
-        (Token::Ident(x_id), 4, 5),
-        (Token::ColonEq, 6, 8),
-        (Token::LitInt(num_id), 9, 12),
-        (Token::Semicolon, 12, 13),
+        (TokenKind::KwVal, 0, 3),
+        (TokenKind::Ident(x_id), 4, 5),
+        (TokenKind::ColonEq, 6, 8),
+        (TokenKind::LitInt(num_id), 9, 12),
+        (TokenKind::Semicolon, 12, 13),
     ];
 
     let mut lexer = ctx.lexer();
     for (expected_tok, expected_lo, expected_hi) in tokens_with_spans {
-        let (tok, span) = lexer.next_token();
-        assert_eq!(tok, expected_tok);
-        assert_eq!(span.lo, expected_lo);
-        assert_eq!(span.hi, expected_hi);
+        let tok = lexer.next_token();
+        assert_eq!(tok.kind, expected_tok);
+        assert_eq!(tok.span.lo, expected_lo);
+        assert_eq!(tok.span.hi, expected_hi);
     }
 }

@@ -5,8 +5,6 @@ pub struct Span {
 }
 
 impl Span {
-    pub const DUMMY: Self = Self { lo: 0, hi: 0 };
-
     pub const fn new(lo: u32, hi: u32) -> Self {
         Self { lo, hi }
     }
