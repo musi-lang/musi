@@ -198,11 +198,64 @@ fn test_comments() {
 
 #[test]
 fn test_error_reporting() {
-    let mut ctx = TestContext::new("\"unclosed string");
+    let cases = [
+        "\"unclosed string literal",
+        "$'unclosed template {x}",
+        "'unclosed rune",
+        "`unclosed escaped ident",
+        "/* unclosed block comment",
+        r#""bad escape \z""#,
+        r#"'bad hex \xGG'"#,
+        r#""bad uni \u{!!!!}""#,
+        "''",
+        "'abc'",
+        "0x",
+        "1.0_",
+        "1__2",
+        "1e",
+    ];
+    for input in cases {
+        let mut ctx = TestContext::new(input);
+        let mut lexer = ctx.lexer();
+        while lexer.next_token().0 != Token::EOF {}
+        assert!(
+            !lexer.errors().diagnostics.is_empty(),
+            "expected error for input: {:?}",
+            input
+        );
+    }
+}
+
+#[test]
+fn test_rejection_of_unicode() {
+    let mut ctx = TestContext::new("你好 世界 π_value 🦀_emojis");
     let mut lexer = ctx.lexer();
-    let (tok, _) = lexer.next_token();
-    assert!(matches!(tok, Token::Invalid(_)));
-    assert!(!lexer.errors().is_empty());
+    while lexer.next_token().0 != Token::EOF {}
+    assert!(!lexer.errors().diagnostics.is_empty());
+}
+
+#[test]
+fn test_nested_templates() {
+    check(r#"$"outer { $"inner {x} tail" } end""#, |i| {
+        vec![
+            Token::TemplateHead(i.intern("outer ")),
+            Token::TemplateHead(i.intern("inner ")),
+            Token::Ident(i.intern("x")),
+            Token::TemplateTail(i.intern(" tail")),
+            Token::TemplateTail(i.intern(" end")),
+        ]
+    });
+}
+
+#[test]
+fn test_underscores() {
+    check("_ _unused __test", |i| {
+        vec![
+            Token::Underscore,
+            Token::Ident(i.intern("_unused")),
+            Token::Ident(i.intern("__test")),
+        ]
+    });
 }
 
 #[test]
