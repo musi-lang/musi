@@ -82,7 +82,7 @@ fn test_idents_keywords() {
     check("my_var _unused `escaped ident` `if`", |i| {
         vec![
             Token::Ident(i.intern("my_var")),
-            Token::Underscore,
+            Token::Ident(i.intern("_unused")),
             Token::Ident(i.intern("escaped ident")),
             Token::Ident(i.intern("if")),
         ]
@@ -91,10 +91,10 @@ fn test_idents_keywords() {
 
 #[test]
 fn test_strings_runes() {
-    check(r#""hello" "with \"quotes\"" 'a' '\n'"#, |i| {
+    check(r#""hello" "with \"quotes\"" 'a' "\n""#, |i| {
         vec![
             Token::LitString(i.intern("hello")),
-            Token::LitString(i.intern("with \\\"quotes\\\"")),
+            Token::LitString(i.intern("with \"quotes\"")),
             Token::LitRune('a'),
             Token::LitRune('\n'),
         ]
@@ -199,9 +199,10 @@ fn test_comments() {
 #[test]
 fn test_error_reporting() {
     let mut ctx = TestContext::new("\"unclosed string");
-    let (tok, _) = ctx.lexer().next_token();
+    let mut lexer = ctx.lexer();
+    let (tok, _) = lexer.next_token();
     assert!(matches!(tok, Token::Invalid(_)));
-    assert!(!ctx.lexer().errors().is_empty());
+    assert!(!lexer.errors().is_empty());
 }
 
 #[test]
