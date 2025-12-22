@@ -5,93 +5,13 @@ use crate::basic::{
     source::SourceFile,
     span::Span,
 };
-use crate::lex::token::Token;
+use crate::lex::token::{KEYWORDS, SYMBOLS, Token};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum BraceKind {
     Normal,
     Template,
 }
-
-const KEYWORDS: &[(&str, Token)] = &[
-    ("alias", Token::KwAlias),
-    ("and", Token::KwAnd),
-    ("as", Token::KwAs),
-    ("break", Token::KwBreak),
-    ("case", Token::KwCase),
-    ("cycle", Token::KwCycle),
-    ("defer", Token::KwDefer),
-    ("else", Token::KwElse),
-    ("extern", Token::KwExtern),
-    ("false", Token::KwFalse),
-    ("fn", Token::KwFn),
-    ("for", Token::KwFor),
-    ("if", Token::KwIf),
-    ("import", Token::KwImport),
-    ("in", Token::KwIn),
-    ("is", Token::KwIs),
-    ("match", Token::KwMatch),
-    ("mod", Token::KwMod),
-    ("not", Token::KwNot),
-    ("or", Token::KwOr),
-    ("record", Token::KwRecord),
-    ("return", Token::KwReturn),
-    ("sum", Token::KwSum),
-    ("true", Token::KwTrue),
-    ("try", Token::KwTry),
-    ("unsafe", Token::KwUnsafe),
-    ("val", Token::KwVal),
-    ("var", Token::KwVar),
-    ("while", Token::KwWhile),
-    ("with", Token::KwWith),
-];
-
-const SYMBOLS: &[(&str, Token)] = &[
-    ("..<", Token::DotDotLt),
-    ("<<", Token::LtLt),
-    ("<=", Token::LtEq),
-    ("<-", Token::LtMinus),
-    ("::", Token::ColonColon),
-    (":=", Token::ColonEq),
-    ("=>", Token::EqGt),
-    (">=", Token::GtEq),
-    (">>", Token::GtGt),
-    (">]", Token::GtRBrack),
-    ("??", Token::QuestionQuestion),
-    (".^", Token::DotCaret),
-    ("..", Token::DotDot),
-    ("/=", Token::SlashEq),
-    ("->", Token::MinusGt),
-    ("**", Token::StarStar),
-    ("[<", Token::LBrackLt),
-    ("|>", Token::BarGt),
-    ("%", Token::Percent),
-    ("&", Token::Amp),
-    ("(", Token::LParen),
-    (")", Token::RParen),
-    ("*", Token::Star),
-    ("+", Token::Plus),
-    (",", Token::Comma),
-    ("-", Token::Minus),
-    (".", Token::Dot),
-    ("/", Token::Slash),
-    (":", Token::Colon),
-    (";", Token::Semicolon),
-    ("<", Token::Lt),
-    ("=", Token::Eq),
-    (">", Token::Gt),
-    ("?", Token::Question),
-    ("@", Token::At),
-    ("[", Token::LBrack),
-    ("]", Token::RBrack),
-    ("^", Token::Caret),
-    ("_", Token::Underscore),
-    ("{", Token::LBrace),
-    ("|", Token::Bar),
-    ("}", Token::RBrace),
-    ("~", Token::Tilde),
-    ("$", Token::Dollar),
-];
 
 const ESCAPES: &[(char, char)] = &[
     ('0', '\0'),
@@ -138,7 +58,6 @@ impl<'a> Lexer<'a> {
             Some(c) => c,
             None => return (Token::EOF, self.span(start, start)),
         };
-
         match c {
             '#' if self.peek_by(1) == Some('!') => self.scan_line_comment(),
             '/' if matches!(self.peek_by(1), Some('/' | '*')) => self.scan_slash_seq(start),
@@ -176,16 +95,16 @@ impl<'a> Lexer<'a> {
 
     fn scan_block_comment(&mut self, start: usize) -> (Token, Span) {
         let mut depth = 1;
-        self.advance_by(2);
+        self.cursor += 2;
         while depth > 0 && self.cursor < self.source.input.len() {
             if self.source.input[self.cursor..].starts_with("/*") {
                 depth += 1;
-                self.advance_by(2);
+                self.cursor += 2;
             } else if self.source.input[self.cursor..].starts_with("*/") {
                 depth -= 1;
-                self.advance_by(2);
+                self.cursor += 2;
             } else {
-                self.advance_by(self.peek_by(0).map_or(1, char::len_utf8));
+                self.cursor += self.peek_by(0).map_or(1, char::len_utf8);
             }
         }
         if depth > 0 {
@@ -216,34 +135,17 @@ impl<'a> Lexer<'a> {
     }
 
     fn scan_number(&mut self) -> Token {
-        let start = self.cursor;
-        let (base, prefix, name) = match (self.peek_by(0), self.peek_by(1)) {
-            (Some('0'), Some('x')) => (16, 2, "hexadecimal"),
-            (Some('0'), Some('o')) => (8, 2, "octal"),
-            (Some('0'), Some('b')) => (2, 2, "binary"),
-            _ => (10, 0, "decimal"),
-        };
+        let (start, (base, prefix, name)) = (self.cursor, self.scan_numeric_base());
         let mut end = self.consume_while(start + prefix, |c| c.is_digit(base) || c == '_');
         if end == start + prefix {
-            self.report(LexErrorKind::InvalidLiteral(name.into()), start, start + 1);
+            self.report(LexErrorKind::MalformedNumber, start, end);
             return Token::LitInt(0);
         }
         let mut is_real = false;
         if base == 10 {
-            if self.source.input[end..].starts_with('.')
-                && !self.source.input[end..].starts_with("..")
-            {
-                is_real = true;
-                end = self.consume_while(end + 1, |c| c.is_ascii_digit() || c == '_');
-            }
-            if self.source.input[end..].starts_with(['e', 'E']) {
-                is_real = true;
-                let mut exp = end + 1;
-                if self.source.input[exp..].starts_with(['+', '-']) {
-                    exp += 1;
-                }
-                end = self.consume_while(exp, |c| c.is_ascii_digit() || c == '_');
-            }
+            let next_end = self.scan_real_part(end);
+            is_real = next_end != end;
+            end = next_end;
         }
         self.cursor = end;
         let (val, valid) = self.unitize_numeric(start, end);
@@ -264,10 +166,10 @@ impl<'a> Lexer<'a> {
     fn scan_text_lit(&mut self) -> Token {
         let start = self.cursor;
         match self.consume_quoted(start, 1, &['"'], LexErrorKind::UnclosedString) {
-            Some(end) => Token::LitString(
-                self.interner
-                    .intern(&self.unescape(&self.source.input[start + 1..end])),
-            ),
+            Some(end) => {
+                let content = self.unescape(&self.source.input[start + 1..end], start + 1);
+                Token::LitString(self.interner.intern(&content))
+            }
             None => self.invalid_token(start),
         }
     }
@@ -276,20 +178,21 @@ impl<'a> Lexer<'a> {
         let start = self.cursor;
         match self.consume_quoted(start, offset, &['"', '{'], LexErrorKind::UnclosedTemplate) {
             Some(end) => {
-                let s = self
-                    .interner
-                    .intern(&self.unescape(&self.source.input[start + offset..end]));
-                if self.source.input[end..].starts_with('{') {
-                    self.braces.push(BraceKind::Template);
-                    if offset == 2 {
+                let content =
+                    self.unescape(&self.source.input[start + offset..end], start + offset);
+                let s = self.interner.intern(&content);
+                let is_head = offset == 2;
+                match (is_head, self.source.input[end..].starts_with('{')) {
+                    (true, true) => {
+                        self.braces.push(BraceKind::Template);
                         Token::TemplateHead(s)
-                    } else {
+                    }
+                    (false, true) => {
+                        self.braces.push(BraceKind::Template);
                         Token::TemplateMiddle(s)
                     }
-                } else if offset == 2 {
-                    Token::LitTemplateNoSubst(s)
-                } else {
-                    Token::TemplateTail(s)
+                    (true, false) => Token::LitTemplateNoSubst(s),
+                    (false, false) => Token::TemplateTail(s),
                 }
             }
             None => self.invalid_token(start),
@@ -301,11 +204,21 @@ impl<'a> Lexer<'a> {
         let mut chars = self.source.input[start + 1..].chars();
         let (c, len) = match chars.next() {
             Some('\'') => {
-                self.report(LexErrorKind::EmptyRune, start, start + 2);
+                self.report(LexErrorKind::InvalidRune, start, start + 2);
                 self.cursor += 2;
                 return Token::LitRune('\0');
             }
-            Some('\\') => self.scan_escape(&mut chars),
+            Some('\\') => match self.scan_escape(&mut chars) {
+                Ok((c, len)) => (c, len),
+                Err((esc, len)) => {
+                    self.report(
+                        LexErrorKind::UnknownEscape(esc),
+                        self.cursor + 1,
+                        self.cursor + 1 + len,
+                    );
+                    ('\0', len)
+                }
+            },
             Some(c) => (c, c.len_utf8()),
             None => {
                 self.report(LexErrorKind::UnclosedRune, start, start + 1);
@@ -324,7 +237,7 @@ impl<'a> Lexer<'a> {
                 if unclosed {
                     LexErrorKind::UnclosedRune
                 } else {
-                    LexErrorKind::MultiCharRune
+                    LexErrorKind::InvalidRune
                 },
                 start,
                 self.cursor,
@@ -354,12 +267,10 @@ impl<'a> Lexer<'a> {
         for (sym, tok) in SYMBOLS {
             if input.starts_with(sym) {
                 self.cursor += sym.len();
-                match tok {
-                    Token::LBrace => self.braces.push(BraceKind::Normal),
-                    Token::RBrace if self.braces.last() == Some(&BraceKind::Normal) => {
-                        self.braces.pop();
-                    }
-                    _ => {}
+                if *tok == Token::LBrace {
+                    self.braces.push(BraceKind::Normal);
+                } else if *tok == Token::RBrace && self.braces.last() == Some(&BraceKind::Normal) {
+                    self.braces.pop();
                 }
                 return Some(tok.clone());
             }
@@ -421,60 +332,96 @@ impl<'a> Lexer<'a> {
         (out, valid)
     }
 
-    fn unescape(&self, s: &str) -> String {
+    fn unescape(&mut self, s: &str, start_pos: usize) -> String {
         let mut out = String::with_capacity(s.len());
         let mut chars = s.chars();
+        let mut offset = 0;
         while let Some(c) = chars.next() {
             if c == '\\' {
-                out.push(self.scan_escape(&mut chars).0);
+                match self.scan_escape(&mut chars) {
+                    Ok((esc, len)) => {
+                        out.push(esc);
+                        offset += 1 + len;
+                    }
+                    Err((esc, len)) => {
+                        self.report(
+                            LexErrorKind::UnknownEscape(esc),
+                            start_pos + offset,
+                            start_pos + offset + 1 + len,
+                        );
+                        offset += 1 + len;
+                    }
+                }
             } else {
                 out.push(c);
+                offset += c.len_utf8();
             }
         }
         out
     }
 
-    fn scan_escape(&self, chars: &mut std::str::Chars<'_>) -> (char, usize) {
+    fn scan_escape(
+        &self,
+        chars: &mut std::str::Chars<'_>,
+    ) -> Result<(char, usize), (String, usize)> {
         let c = match chars.next() {
             Some(c) => c,
-            None => return ('\0', 0),
+            None => return Ok(('\0', 0)),
         };
         if let Ok(i) = ESCAPES.binary_search_by_key(&c, |e| e.0) {
-            return (ESCAPES[i].1, 1);
+            return Ok((ESCAPES[i].1, 1));
         }
         match c {
             'x' => {
                 let s: String = chars.by_ref().take(2).collect();
-                (
-                    u32::from_str_radix(&s, 16)
-                        .ok()
-                        .and_then(char::from_u32)
-                        .unwrap_or('\0'),
-                    3,
-                )
+                match u32::from_str_radix(&s, 16).ok().and_then(char::from_u32) {
+                    Some(c) => Ok((c, 3)),
+                    None => Err((format!("x{}", s), 1 + s.len())),
+                }
             }
             'u' if chars.next() == Some('{') => {
                 let s: String = chars.by_ref().take_while(|&c| c != '}').collect();
-                (
-                    u32::from_str_radix(&s, 16)
-                        .ok()
-                        .and_then(char::from_u32)
-                        .unwrap_or('\0'),
-                    s.len() + 3,
-                )
+                match u32::from_str_radix(&s, 16).ok().and_then(char::from_u32) {
+                    Some(c) => Ok((c, s.len() + 3)),
+                    None => Err((format!("u{{{}}}", s), s.len() + 3)),
+                }
             }
-            _ => (c, 1),
+            _ => Err((c.to_string(), 1)),
         }
     }
 
     fn report_invalid_char(&mut self, start: usize, c: char) -> (Token, Span) {
-        self.advance_by(c.len_utf8());
-        self.report(LexErrorKind::InvalidChar(c), start, self.cursor);
+        self.cursor += c.len_utf8();
+        self.report(LexErrorKind::UnknownChar(c), start, self.cursor);
         (self.invalid_token(start), self.span(start, self.cursor))
     }
 
     fn invalid_token(&mut self, start: usize) -> Token {
         Token::Invalid(self.interner.intern(&self.source.input[start..self.cursor]))
+    }
+
+    fn scan_numeric_base(&self) -> (u32, usize, &'static str) {
+        match (self.peek_by(0), self.peek_by(1)) {
+            (Some('0'), Some('x')) => (16, 2, "hexadecimal"),
+            (Some('0'), Some('o')) => (8, 2, "octal"),
+            (Some('0'), Some('b')) => (2, 2, "binary"),
+            _ => (10, 0, "decimal"),
+        }
+    }
+
+    fn scan_real_part(&self, mut end: usize) -> usize {
+        if self.source.input[end..].starts_with('.') && !self.source.input[end..].starts_with("..")
+        {
+            end = self.consume_while(end + 1, |c| self.is_num_body(c));
+        }
+        if self.source.input[end..].starts_with(['e', 'E']) {
+            let mut exp = end + 1;
+            if self.source.input[exp..].starts_with(['+', '-']) {
+                exp += 1;
+            }
+            end = self.consume_while(exp, |c| self.is_num_body(c));
+        }
+        end
     }
 
     fn report(&mut self, err: LexErrorKind, start: usize, end: usize) {
@@ -492,5 +439,9 @@ impl<'a> Lexer<'a> {
 
     const fn span(&self, lo: usize, hi: usize) -> Span {
         Span::new(self.source.start + lo as u32, self.source.start + hi as u32)
+    }
+
+    const fn is_num_body(&self, c: char) -> bool {
+        c.is_ascii_digit() || c == '_'
     }
 }
