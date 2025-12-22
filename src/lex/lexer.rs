@@ -7,7 +7,7 @@ use crate::basic::{
 };
 use crate::lex::{
     cursor::Cursor,
-    token::{KEYWORDS, SYMBOLS, Token, TokenKind},
+    token::{KEYWORDS, Token, TokenKind},
 };
 
 pub type TokenStream = (Vec<Token>, DiagnosticBag);
@@ -130,7 +130,6 @@ impl<'a> Lexer<'a> {
         let start = self.cursor.pos();
         self.cursor.eat_while(is_id_continue);
         let text = &self.source.input[start..self.cursor.pos()];
-
         if text == "_" {
             return TokenKind::Underscore;
         }
@@ -143,12 +142,34 @@ impl<'a> Lexer<'a> {
 
     fn scan_number(&mut self) -> TokenKind {
         let start = self.cursor.pos();
-        let (base, prefix, name) = self.scan_numeric_base();
+
+        let (mut base, mut prefix, mut name) = (10, 0, "decimal");
+
+        if self.cursor.peek() == Some('0') {
+            match self.cursor.peek_nth(1) {
+                Some('x') => {
+                    base = 16;
+                    prefix = 2;
+                    name = "hexadecimal";
+                }
+                Some('o') => {
+                    base = 8;
+                    prefix = 2;
+                    name = "octal";
+                }
+                Some('b') => {
+                    base = 2;
+                    prefix = 2;
+                    name = "binary";
+                }
+                _ => {}
+            }
+        }
+
         self.cursor.bump_n(prefix);
-
         self.cursor.eat_while(|c| c.is_digit(base) || c == '_');
-        let mut end = self.cursor.pos();
 
+        let mut end = self.cursor.pos();
         if end == start + prefix {
             self.report(LexErrorKind::MalformedNumber, start, end);
             return TokenKind::LitInt(0);
@@ -159,7 +180,7 @@ impl<'a> Lexer<'a> {
             if self.cursor.is_next('.') && self.cursor.peek_nth(1) != Some('.') {
                 let _ = self.cursor.bump();
                 let before = self.cursor.pos();
-                self.cursor.eat_while(is_num_body);
+                self.cursor.eat_while(|c| c.is_ascii_digit() || c == '_');
                 if self.cursor.pos() == before {
                     self.report(LexErrorKind::MalformedNumber, start, self.cursor.pos());
                 }
@@ -170,7 +191,7 @@ impl<'a> Lexer<'a> {
                     let _ = self.cursor.bump();
                 }
                 let before = self.cursor.pos();
-                self.cursor.eat_while(is_num_body);
+                self.cursor.eat_while(|c| c.is_ascii_digit() || c == '_');
                 if self.cursor.pos() == before {
                     self.report(LexErrorKind::MalformedNumber, start, self.cursor.pos());
                 }
@@ -196,15 +217,6 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn scan_numeric_base(&self) -> (u32, usize, &'static str) {
-        match (self.cursor.peek(), self.cursor.peek_nth(1)) {
-            (Some('0'), Some('x')) => (16, 2, "hexadecimal"),
-            (Some('0'), Some('o')) => (8, 2, "octal"),
-            (Some('0'), Some('b')) => (2, 2, "binary"),
-            _ => (10, 0, "decimal"),
-        }
-    }
-
     fn unitize_numeric(&self, start: usize, end: usize) -> (String, bool) {
         let s = &self.source.input[start..end];
         let mut out = String::with_capacity(s.len());
@@ -224,28 +236,104 @@ impl<'a> Lexer<'a> {
     }
 
     fn scan_symbol(&mut self) -> TokenKind {
-        let rest = self.cursor.rest();
-        for (sym, kind) in SYMBOLS {
-            if rest.starts_with(sym) {
-                self.cursor.bump_n(sym.len());
-                if *kind == TokenKind::LBrace {
-                    self.braces.push(BraceKind::Normal);
-                } else if *kind == TokenKind::RBrace
-                    && self.braces.last() == Some(&BraceKind::Normal)
-                {
+        match self.cursor.peek() {
+            Some('.') => match self.cursor.peek_nth(1) {
+                Some('.') => match self.cursor.peek_nth(2) {
+                    Some('<') => self.singe_char_compound(3, TokenKind::DotDotLt),
+                    _ => self.singe_char_compound(2, TokenKind::DotDot),
+                },
+                Some('^') => self.singe_char_compound(2, TokenKind::DotCaret),
+                _ => self.single_char(TokenKind::Dot),
+            },
+            Some('<') => match self.cursor.peek_nth(1) {
+                Some('<') => self.singe_char_compound(2, TokenKind::LtLt),
+                Some('=') => self.singe_char_compound(2, TokenKind::LtEq),
+                Some('-') => self.singe_char_compound(2, TokenKind::LtMinus),
+                _ => self.single_char(TokenKind::Lt),
+            },
+            Some(':') => match self.cursor.peek_nth(1) {
+                Some(':') => self.singe_char_compound(2, TokenKind::ColonColon),
+                Some('=') => self.singe_char_compound(2, TokenKind::ColonEq),
+                _ => self.single_char(TokenKind::Colon),
+            },
+            Some('=') => match self.cursor.peek_nth(1) {
+                Some('>') => self.singe_char_compound(2, TokenKind::EqGt),
+                _ => self.single_char(TokenKind::Eq),
+            },
+            Some('>') => match self.cursor.peek_nth(1) {
+                Some('=') => self.singe_char_compound(2, TokenKind::GtEq),
+                Some('>') => self.singe_char_compound(2, TokenKind::GtGt),
+                Some(']') => self.singe_char_compound(2, TokenKind::GtRBrack),
+                _ => self.single_char(TokenKind::Gt),
+            },
+            Some('?') => match self.cursor.peek_nth(1) {
+                Some('?') => self.singe_char_compound(2, TokenKind::QuestionQuestion),
+                _ => self.single_char(TokenKind::Question),
+            },
+            Some('/') => match self.cursor.peek_nth(1) {
+                Some('=') => self.singe_char_compound(2, TokenKind::SlashEq),
+                _ => self.single_char(TokenKind::Slash),
+            },
+            Some('-') => match self.cursor.peek_nth(1) {
+                Some('>') => self.singe_char_compound(2, TokenKind::MinusGt),
+                _ => self.single_char(TokenKind::Minus),
+            },
+            Some('*') => match self.cursor.peek_nth(1) {
+                Some('*') => self.singe_char_compound(2, TokenKind::StarStar),
+                _ => self.single_char(TokenKind::Star),
+            },
+            Some('[') => match self.cursor.peek_nth(1) {
+                Some('<') => self.singe_char_compound(2, TokenKind::LBrackLt),
+                _ => self.single_char(TokenKind::LBrack),
+            },
+            Some('|') => match self.cursor.peek_nth(1) {
+                Some('>') => self.singe_char_compound(2, TokenKind::BarGt),
+                _ => self.single_char(TokenKind::Bar),
+            },
+            Some('%') => self.single_char(TokenKind::Percent),
+            Some('&') => self.single_char(TokenKind::Amp),
+            Some('(') => self.single_char(TokenKind::LParen),
+            Some(')') => self.single_char(TokenKind::RParen),
+            Some('+') => self.single_char(TokenKind::Plus),
+            Some(',') => self.single_char(TokenKind::Comma),
+            Some(';') => self.single_char(TokenKind::Semicolon),
+            Some('@') => self.single_char(TokenKind::At),
+            Some(']') => self.single_char(TokenKind::RBrack),
+            Some('^') => self.single_char(TokenKind::Caret),
+            Some('_') => self.single_char(TokenKind::Underscore),
+            Some('{') => {
+                self.braces.push(BraceKind::Normal);
+                self.single_char(TokenKind::LBrace)
+            }
+            Some('}') => {
+                if self.braces.last() == Some(&BraceKind::Normal) {
                     let _ = self.braces.pop();
                 }
-                return *kind;
+                self.single_char(TokenKind::RBrace)
             }
+            Some('~') => self.single_char(TokenKind::Tilde),
+            Some('$') => self.single_char(TokenKind::Dollar),
+            Some(c) => {
+                let _ = self.cursor.bump();
+                self.report(
+                    LexErrorKind::UnknownChar(c),
+                    self.cursor.pos() - c.len_utf8(),
+                    self.cursor.pos(),
+                );
+                TokenKind::Invalid(self.interner.intern(c.to_string().as_str()))
+            }
+            None => TokenKind::EOF,
         }
+    }
 
-        let c = self.cursor.bump().unwrap_or('\0');
-        self.report(
-            LexErrorKind::UnknownChar(c),
-            self.cursor.pos() - c.len_utf8(),
-            self.cursor.pos(),
-        );
-        TokenKind::Invalid(self.interner.intern(c.to_string().as_str()))
+    fn single_char(&mut self, kind: TokenKind) -> TokenKind {
+        let _ = self.cursor.bump();
+        kind
+    }
+
+    fn singe_char_compound(&mut self, len: usize, kind: TokenKind) -> TokenKind {
+        self.cursor.bump_n(len);
+        kind
     }
 
     fn scan_text_lit(&mut self) -> TokenKind {
@@ -407,33 +495,6 @@ impl<'a> Lexer<'a> {
     }
 }
 
-const fn is_id_start(c: char) -> bool {
-    c.is_ascii_alphabetic() || c == '_'
-}
-
-const fn is_id_continue(c: char) -> bool {
-    c.is_ascii_alphanumeric() || c == '_'
-}
-
-const fn is_num_body(c: char) -> bool {
-    c.is_ascii_digit() || c == '_'
-}
-
-const ESCAPES: &[(char, char)] = &[
-    ('0', '\0'),
-    ('"', '\"'),
-    ('\'', '\''),
-    ('\\', '\\'),
-    ('a', '\x07'),
-    ('b', '\x08'),
-    ('e', '\x1b'),
-    ('f', '\x0c'),
-    ('n', '\n'),
-    ('r', '\r'),
-    ('t', '\t'),
-    ('v', '\x0b'),
-];
-
 pub fn unescape(s: &str, start_pos: usize, errors: &mut DiagnosticBag) -> String {
     let mut out = String::with_capacity(s.len());
     let mut chars = s.chars();
@@ -478,39 +539,53 @@ pub fn scan_escape(chars: &mut std::str::Chars<'_>) -> Result<(char, usize), (St
 
     match ch {
         'x' => {
-            let s: String = chars.clone().take(2).collect();
-            if s.len() < 2 {
-                return Err((format!("x{s}"), 1 + s.len()));
-            }
+            let d1 = chars.next();
+            let d2 = chars.next();
 
-            let _ = chars.next();
-            let _ = chars.next();
-
-            match u32::from_str_radix(&s, 16).ok().and_then(char::from_u32) {
-                Some(c) => Ok((c, 3)),
-                None => Err((format!("x{s}"), 3)),
+            match (d1, d2) {
+                (Some(c1), Some(c2)) => {
+                    if let (Some(d1), Some(d2)) = (c1.to_digit(16), c2.to_digit(16)) {
+                        if let Some(c) = char::from_u32((d1 << 4) | d2) {
+                            return Ok((c, 3));
+                        }
+                    }
+                    Err((format!("x{}{}", c1, c2), 3))
+                }
+                (Some(c1), None) => Err((format!("x{c1}"), 2)),
+                _ => Err(("x".to_string(), 1)),
             }
         }
         'u' => {
-            if chars.clone().next() == Some('{') {
-                let _ = chars.next();
-                let mut s = String::new();
-                let mut len = 0;
+            if chars.next() == Some('{') {
+                let mut val = 0;
+                let mut len = 3;
+                let mut empty = true;
+
                 while let Some(c) = chars.next() {
                     if c == '}' {
-                        match u32::from_str_radix(&s, 16).ok().and_then(char::from_u32) {
-                            Some(c) => return Ok((c, s.len() + 3)),
-                            None => return Err((format!("u{{{s}}}"), s.len() + 3)),
+                        if empty {
+                            return Err(("u{}".to_string(), len));
                         }
+                        return match char::from_u32(val) {
+                            Some(c) => Ok((c, len)),
+                            None => Err((format!("u{{{val:x}}}"), len)),
+                        };
                     }
-                    s.push(c);
-                    len += c.len_utf8();
-                    if s.len() > 6 {
+                    if let Some(digit) = c.to_digit(16) {
+                        val = (val << 4) | digit;
+                        len += 1;
+                        empty = false;
+                        if len > 8 {
+                            // too long
+                            break;
+                        }
+                    } else {
+                        // bad char
                         break;
                     }
                 }
-                // len used here for error span calcing
-                Err((format!("u{{{s}}}"), len + 2))
+                // Fallback error, simpler than original but robust enough
+                Err(("u{...}".to_string(), len))
             } else {
                 Err(("u".to_string(), 1))
             }
@@ -518,3 +593,26 @@ pub fn scan_escape(chars: &mut std::str::Chars<'_>) -> Result<(char, usize), (St
         _ => Err((ch.to_string(), 1)),
     }
 }
+
+const fn is_id_start(c: char) -> bool {
+    c.is_ascii_alphabetic() || c == '_'
+}
+
+const fn is_id_continue(c: char) -> bool {
+    c.is_ascii_alphanumeric() || c == '_'
+}
+
+const ESCAPES: &[(char, char)] = &[
+    ('0', '\0'),
+    ('"', '\"'),
+    ('\'', '\''),
+    ('\\', '\\'),
+    ('a', '\x07'),
+    ('b', '\x08'),
+    ('e', '\x1b'),
+    ('f', '\x0c'),
+    ('n', '\n'),
+    ('r', '\r'),
+    ('t', '\t'),
+    ('v', '\x0b'),
+];
