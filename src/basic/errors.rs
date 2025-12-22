@@ -46,6 +46,11 @@ impl ErrorKind {
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum LexErrorKind {
+    #[error("unknown character '{0}'")]
+    UnknownChar(char),
+    #[error("unknown escape sequence '{0}'")]
+    UnknownEscape(String),
+
     #[error("unclosed string literal")]
     UnclosedString,
     #[error("unclosed template literal")]
@@ -56,18 +61,16 @@ pub enum LexErrorKind {
     UnclosedRune,
     #[error("unclosed block comment")]
     UnclosedComment,
+
     #[error("invalid identifier")]
     InvalidIdent,
-    #[error("invalid character '{0}'")]
-    InvalidChar(char),
+    #[error("invalid rune literal")]
+    InvalidRune,
+
+    #[error("malformed numeric literal")]
+    MalformedNumber,
     #[error("malformed '_' in {0} literal")]
     MalformedUnderscore(String),
-    #[error("invalid {0} literal")]
-    InvalidLiteral(String),
-    #[error("rune literal cannot be empty")]
-    EmptyRune,
-    #[error("rune literal must contain exactly one character")]
-    MultiCharRune,
 }
 
 impl LexErrorKind {
@@ -77,12 +80,13 @@ impl LexErrorKind {
             Self::UnclosedEscapedIdent => Some("missing '`'"),
             Self::UnclosedRune => Some("missing '\''"),
             Self::UnclosedComment => Some("missing '*/'"),
-            Self::InvalidChar(_) => Some("remove this character"),
+            Self::UnknownChar(_) => Some("remove this character"),
+            Self::UnknownEscape(_) => {
+                Some("use '\\n', '\\r', '\\t', '\\\\', '\\'', '\\\"', '\\xHH', or '\\u{...}'")
+            }
             Self::MalformedUnderscore(_) => Some("underscores must separate digits"),
-            Self::InvalidIdent
-            | Self::InvalidLiteral(_)
-            | Self::EmptyRune
-            | Self::MultiCharRune => None,
+            Self::MalformedNumber => Some("add missing digits"),
+            Self::InvalidIdent | Self::InvalidRune => None,
         }
     }
 
