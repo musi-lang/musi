@@ -15,6 +15,7 @@ name = "musi"
 path = "src/main.rs"
 
 [dependencies]
+thiserror = "2.0.17"
 
 [lints.rust]
 ambiguous_negative_literals = "warn"
