@@ -95,6 +95,15 @@ pub enum Token {
     Invalid(u32),
 }
 
+impl Token {
+    pub fn display<'a>(&'a self, interner: &'a Interner) -> TokenDisplay<'a> {
+        TokenDisplay {
+            token: self,
+            interner,
+        }
+    }
+}
+
 pub struct TokenDisplay<'a> {
     token: &'a Token,
     interner: &'a Interner,
@@ -190,15 +199,6 @@ impl<'a> std::fmt::Display for TokenDisplay<'a> {
             Token::Dollar => write!(f, "$"),
             Token::EOF => write!(f, "EOF"),
             Token::Invalid(id) => write!(f, "{}", self.interner.lookup(*id).unwrap_or("<invalid>")),
-        }
-    }
-}
-
-impl Token {
-    pub fn display<'a>(&'a self, interner: &'a Interner) -> TokenDisplay<'a> {
-        TokenDisplay {
-            token: self,
-            interner,
         }
     }
 }
