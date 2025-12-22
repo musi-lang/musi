@@ -1,0 +1,14 @@
+[package]
+name = "music-lex"
+version.workspace = true
+description = ""
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

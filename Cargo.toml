@@ -1,4 +1,15 @@
-[package]
+[workspace]
+members = [
+    "crates/music-ast",
+    "crates/music-basic",
+    "crates/music-codegen",
+    "crates/music-lex",
+    "crates/music-parse",
+    "crates/music-sema",
+]
+resolver = "2"
+
+[workspace.package]
 name = "musi"
 version = "0.1.0"
 description = "The Musi Programming Language"
@@ -10,13 +21,9 @@ keywords = ["musi", "programming language"]
 categories = ["Programming Language"]
 default-run = "musi"
 
-[[bin]]
-"name" = "musi"
-"path" = "src/main.rs"
+[workspace.dependencies]
 
-[dependencies]
-
-[lints.rust]
+[workspace.lints.rust]
 ambiguous_negative_literals = "warn"
 elided_lifetimes_in_paths = "warn"
 keyword_idents_2024 = "warn"

@@ -3,5 +3,25 @@
 version = 4
 
 [[package]]
-name = "musi"
+name = "music-ast"
+version = "0.1.0"
+
+[[package]]
+name = "music-basic"
+version = "0.1.0"
+
+[[package]]
+name = "music-codegen"
+version = "0.1.0"
+
+[[package]]
+name = "music-lex"
+version = "0.1.0"
+
+[[package]]
+name = "music-parse"
+version = "0.1.0"
+
+[[package]]
+name = "music-sema"
 version = "0.1.0"
