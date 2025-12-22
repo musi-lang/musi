@@ -96,7 +96,7 @@ fn test_strings_runes() {
             Token::LitString(i.intern("hello")),
             Token::LitString(i.intern("with \"quotes\"")),
             Token::LitRune('a'),
-            Token::LitRune('\n'),
+            Token::LitString(i.intern("\n")),
         ]
     });
 }
