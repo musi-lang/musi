@@ -173,7 +173,7 @@ impl<'a> std::fmt::Display for TokenDisplay<'a> {
             TokenKind::LitString(id) => {
                 write!(f, "\"{}\"", self.interner.lookup(*id).unwrap_or(""))
             }
-            TokenKind::LitRune(c) => write!(f, "'{}'", c),
+            TokenKind::LitRune(c) => write!(f, "'{c}'"),
             TokenKind::LitTemplateNoSubst(id) => {
                 write!(f, "$\"{}\"", self.interner.lookup(*id).unwrap_or(""))
             }

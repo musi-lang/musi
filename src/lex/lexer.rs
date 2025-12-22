@@ -84,7 +84,7 @@ impl<'a> Lexer<'a> {
                 '\'' => self.scan_rune_lit(),
                 '`' => self.scan_escaped_ident(),
                 '$' if self.cursor.peek_nth(1) == Some('"') => self.scan_template_lit(2, start),
-                c if is_id_start(c) => self.scan_ident(),
+                c if c.is_ascii_alphabetic() || c == '_' => self.scan_ident(),
                 '0'..='9' => self.scan_number(),
                 _ => self.scan_symbol(),
             },
@@ -138,7 +138,8 @@ impl<'a> Lexer<'a> {
 
     fn scan_ident(&mut self) -> TokenKind {
         let start = self.cursor.pos();
-        self.cursor.eat_while(is_id_continue);
+        self.cursor
+            .eat_while(|c| c.is_ascii_alphanumeric() || c == '_');
         let text = &self.source.input[start..self.cursor.pos()];
         if text == "_" {
             return TokenKind::Underscore;
@@ -625,12 +626,6 @@ pub fn scan_escape(chars: &mut std::str::Chars<'_>) -> Result<(char, usize), (St
     }
 }
 
-const fn is_id_start(c: char) -> bool {
-    c.is_ascii_alphabetic() || c == '_'
-}
-const fn is_id_continue(c: char) -> bool {
-    c.is_ascii_alphanumeric() || c == '_'
-}
 const ESCAPES: &[(char, char)] = &[
     ('0', '\0'),
     ('"', '\"'),
