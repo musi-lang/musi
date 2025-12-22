@@ -1,6 +1,6 @@
 use crate::basic::{
     diagnostic::{DiagnosticBag, report},
-    errors::{ErrorKind, LexErrorKind},
+    errors::{Error, ErrorKind, LexErrorKind},
     interner::Interner,
     source::SourceFile,
     span::Span,
@@ -439,7 +439,8 @@ impl<'a> Lexer<'a> {
     }
 
     fn report(&mut self, err: ErrorKind, start: usize, end: usize) {
-        self.errors.add(report(err, self.span(start, end)));
+        self.errors
+            .add(report(Error::new(err, self.span(start, end))));
     }
 
     const fn span(&self, start: usize, end: usize) -> Span {
