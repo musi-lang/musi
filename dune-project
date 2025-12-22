@@ -7,7 +7,6 @@
  (description
   "Systems programming language for clarity, safety, and performance")
  (depends
-  ocaml
   dune
   alcotest
   ctypes-foreign
