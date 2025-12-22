@@ -114,6 +114,10 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    pub const fn errors(&self) -> &DiagnosticBag {
+        &self.errors
+    }
+
     pub fn next_token(&mut self) -> (Token, Span) {
         self.skip_whitespace();
         if self.cursor >= self.source.input.len() {
