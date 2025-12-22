@@ -1,12 +1,9 @@
 use crate::basic::{
     errors::{self, Level},
-    source::Source,
+    source::SourceMap,
     span::Span,
 };
-use std::{
-    collections::HashMap,
-    io::{self, IsTerminal, Write},
-};
+use std::io::{self, IsTerminal, Write};
 
 #[derive(Debug, Clone)]
 pub struct Diagnostic {
@@ -44,9 +41,9 @@ impl DiagnosticBag {
     }
 }
 
-pub fn emit_all(bag: &DiagnosticBag, files: &HashMap<u32, Source>) {
+pub fn emit_all(bag: &DiagnosticBag, source_map: &SourceMap) {
     for diag in &bag.diagnostics {
-        emit(diag, files);
+        emit(diag, source_map);
     }
 }
 
@@ -67,16 +64,16 @@ pub fn report(err: errors::Error, span: Span) -> Diagnostic {
     diag
 }
 
-pub fn emit(diag: &Diagnostic, files: &HashMap<u32, Source>) {
+pub fn emit(diag: &Diagnostic, source_map: &SourceMap) {
     let mut writer = io::stderr();
     let use_color = writer.is_terminal();
-    let _ = render(&mut writer, diag, files, use_color);
+    let _ = render(&mut writer, diag, source_map, use_color);
 }
 
 fn render(
     writer: &mut impl Write,
     diag: &Diagnostic,
-    files: &HashMap<u32, Source>,
+    source_map: &SourceMap,
     colour: bool,
 ) -> io::Result<()> {
     let (style, header) = match diag.level {
@@ -85,13 +82,13 @@ fn render(
         Level::Note => ("\x1b[36m", "note"),
     };
 
-    let src = files.get(&diag.span.file_id);
-    if let Some(src) = src {
-        let (ln, col) = src.location_at(diag.span.start);
+    let src_file = source_map.lookup_source(diag.span.lo);
+    if let Some(src) = src_file {
+        let (ln, col) = src.location_at(diag.span.lo);
         if colour {
             write!(writer, "\x1b[1m")?;
         }
-        write!(writer, "{}:{ln}:{col}: ", src.filename)?;
+        write!(writer, "{}:{ln}:{col}: ", src.name)?;
         if colour {
             write!(writer, "\x1b[0m")?;
         }
@@ -103,9 +100,9 @@ fn render(
         writeln!(writer, "{header}: {}", diag.message)?;
     }
 
-    if let Some(src) = src {
-        let (line_index, col) = src.location_at(diag.span.start);
-        if let Some(line) = src.line_at_opt(line_index) {
+    if let Some(src) = src_file {
+        let (line_index, col) = src.location_at(diag.span.lo);
+        if let Some(line) = src.line_at(line_index - 1) {
             let line_index_str = line_index.to_string();
             if colour {
                 write!(writer, " \x1b[1m{line_index_str} |\x1b[0m {line}\n")?;
@@ -113,8 +110,8 @@ fn render(
                 writeln!(writer, " {line_index_str} | {line}")?;
             }
 
-            let (end_line_index, end_col) = src.location_at(diag.span.end);
-            let highlight_len = if line_index == end_line_index {
+            let (_end_line_index, end_col) = src.location_at(diag.span.hi);
+            let highlight_len = if src.line_index(diag.span.lo) == src.line_index(diag.span.hi) {
                 end_col.saturating_sub(col).max(1)
             } else {
                 line.len().saturating_sub(col).saturating_add(1)
@@ -134,13 +131,13 @@ fn render(
 
     for (msg, span) in &diag.notes {
         let (note_style, note_header) = ("\x1b[36m", "note");
-        let src = files.get(&span.file_id);
-        if let Some(src) = src {
-            let (ln_idx, col_idx) = src.location_at(span.start);
+        let src_file = source_map.lookup_source(span.lo);
+        if let Some(src) = src_file {
+            let (ln_idx, col_idx) = src.location_at(span.lo);
             if colour {
                 write!(writer, "\x1b[1m")?;
             }
-            write!(writer, "{}:{ln_idx}:{col_idx}: ", src.filename)?;
+            write!(writer, "{}:{ln_idx}:{col_idx}: ", src.name)?;
             if colour {
                 write!(writer, "\x1b[0m")?;
             }

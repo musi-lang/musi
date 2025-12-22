@@ -22,7 +22,7 @@ impl Interner {
         id
     }
 
-    pub fn lookup_opt(&self, id: u32) -> Option<&str> {
+    pub fn lookup(&self, id: u32) -> Option<&str> {
         self.strings.get(id as usize).map(String::as_str)
     }
 
