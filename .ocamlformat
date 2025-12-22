@@ -1,9 +1,0 @@
-profile=default
-version=0.28.1
-break-separators=before
-doc-comments=before
-margin=80
-max-indent=2
-parse-docstrings=false
-space-around-arrays=true
-wrap-fun-args=false
