@@ -4,14 +4,24 @@ trigger: always_on
 
 # PROJECT STACK CONTEXT
 
-## 1. OCaml Environment
+## 1. Rust Environment
 
-- **Language Version**: OCaml 5.4.0
-- **Build System**: Dune 2.30.2
-  - **MANDATORY**: Use `dune` commands for all build/test/run tasks (e.g., `dune build`, `dune runtest`, `dune exec`).
-  - **FORBIDDEN**: Do not generate `Makefiles` or call `ocamlc`/`ocamlopt` directly.
-- **Package Manager**: Opam
-  - Dependencies are managed via `dune` files and `dune-project`.
+- **Build System**: Cargo
+  - **MANDATORY**: Use `cargo` commands for all build/test/run tasks (e.g., `cargo build`, `cargo test`, `cargo run`).
+- **Function Ordering (Public-First)**:
+  - In `impl` blocks, maintain a "Public First" reading order.
+  - **Order**:
+    1. Constructors (`new`, `Default`, `From`).
+    2. Main Public Entry Points (the core API of the struct).
+    3. High-level orchestrators/dispatchers.
+    4. Specialized implementation methods (e.g., specific scanners).
+    5. Internal private helpers and state-modification logic.
+    6. Low-level navigation (`peek`, `advance`).
+    7. Character predicates or small unit-helpers at the very bottom.
+
+- **Borrow Checker & Closures**:
+  - **Closure Pitfall**: Avoid using functional methods like `map_or_else` or `and_then` when the closures need to capture `&mut self` if `self` is already partially borrowed.
+  - **Preference**: Use `match` or `if let` blocks. They provide clearer lifetime boundaries and are more robust against "cannot borrow as mutable" errors in complex structs like Lexers or Parsers.
 
 ## 2. JavaScript/TypeScript Environment
 
@@ -23,17 +33,16 @@ trigger: always_on
 
 ## 3. Testing Protocols
 
-- **OCaml**: Use `Alcotest` (via `dune runtest`) unless existing files show otherwise.
 - **JS/TS**: Use `bun:test`.
 
 ## 4. Paradigm Conflicts
 
-- **OCaml Files (`.ml`, `.mli`)**: Functional programming first. Immutable by default.
-- **Scripting**: If writing quick scripts, verify if I want a `dune exec` script or a `bun` script before generating code.
+- **Scripting**: If writing quick scripts, verify if I want a `cargo run --bin script` or a `bun` script before generating code.
 
 ## 5. Musi Language Development
 
-- **Project Type**: Language Compiler (OCaml/Dune).
+- **Project Type**: Language Compiler (Rust/Cargo).
+- **No Parser Generators**: The lexer and parser are hand-written for maximum control and performance. Do NOT suggest using `pest`, `lalrpop`, or similar unless explicitly asked.
 - **Core Definitions (`grammar.ebnf`)**:
   - This file is **HUMAN-AUTHORED** and is the absolute Source of Truth.
   - **Ambiguity Protocol**: If you encounter a design decision in the grammar that looks "questionable," "inefficient," or ambiguous (e.g., "should this be X or Y?"):

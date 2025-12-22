@@ -92,7 +92,7 @@ pub enum Token {
 
     // Special
     EOF,
-    Unknown(u32),
+    Invalid(u32),
 }
 
 pub struct TokenDisplay<'a> {
@@ -189,7 +189,7 @@ impl<'a> std::fmt::Display for TokenDisplay<'a> {
             Token::Underscore => write!(f, "_"),
             Token::Dollar => write!(f, "$"),
             Token::EOF => write!(f, "EOF"),
-            Token::Unknown(id) => write!(f, "{}", self.interner.lookup(*id).unwrap_or("<unknown>")),
+            Token::Invalid(id) => write!(f, "{}", self.interner.lookup(*id).unwrap_or("<invalid>")),
         }
     }
 }

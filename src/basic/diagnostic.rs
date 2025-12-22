@@ -47,7 +47,7 @@ pub fn emit_all(bag: &DiagnosticBag, source_map: &SourceMap) {
     }
 }
 
-pub fn report(err: errors::Error, span: Span) -> Diagnostic {
+pub fn report(err: errors::ErrorKind, span: Span) -> Diagnostic {
     let message = err.to_string();
     let hint = err.hint();
     let level = err.level();

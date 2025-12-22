@@ -8,7 +8,7 @@ pub enum Level {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
-pub enum LexicalError {
+pub enum LexErrorKind {
     #[error("unclosed string literal")]
     UnclosedString,
     #[error("unclosed template literal")]
@@ -21,8 +21,8 @@ pub enum LexicalError {
     UnclosedComment,
     #[error("invalid identifier")]
     InvalidIdent,
-    #[error("unknown character '{0}'")]
-    UnknownChar(char),
+    #[error("invalid character '{0}'")]
+    InvalidChar(char),
     #[error("malformed underscore in {0} literal")]
     MalformedUnderscore(String),
     #[error("invalid {0} literal")]
@@ -34,19 +34,19 @@ pub enum LexicalError {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
-pub enum Error {
+pub enum ErrorKind {
     #[error(transparent)]
-    Lexical(#[from] LexicalError),
+    Lexical(#[from] LexErrorKind),
 }
 
-impl LexicalError {
+impl LexErrorKind {
     pub fn hint(&self) -> Option<&'static str> {
         match self {
             Self::UnclosedString | Self::UnclosedTemplate => Some("missing '\"'"),
             Self::UnclosedEscapedIdent => Some("missing '`'"),
             Self::UnclosedRune => Some("missing '\''"),
             Self::UnclosedComment => Some("missing '*/'"),
-            Self::UnknownChar(_) => Some("remove this character"),
+            Self::InvalidChar(_) => Some("remove this character"),
             Self::MalformedUnderscore(_) => Some("underscores must separate digits"),
             Self::InvalidIdent
             | Self::InvalidLiteral(_)
@@ -60,7 +60,7 @@ impl LexicalError {
     }
 }
 
-impl Error {
+impl ErrorKind {
     pub fn hint(&self) -> Option<&'static str> {
         match self {
             Self::Lexical(err) => err.hint(),

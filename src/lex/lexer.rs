@@ -1,6 +1,6 @@
 use crate::basic::{
     diagnostic::{DiagnosticBag, report},
-    errors::{Error, LexicalError},
+    errors::{ErrorKind, LexErrorKind},
     interner::Interner,
     source::SourceFile,
     span::Span,
@@ -99,8 +99,8 @@ pub struct Lexer<'a> {
     interner: &'a mut Interner,
     errors: DiagnosticBag,
     source: &'a SourceFile,
-    offset: usize,
-    brace_stack: Vec<BraceKind>,
+    cursor: usize,
+    braces: Vec<BraceKind>,
 }
 
 impl<'a> Lexer<'a> {
@@ -109,59 +109,59 @@ impl<'a> Lexer<'a> {
             interner,
             errors: DiagnosticBag::default(),
             source,
-            offset: 0,
-            brace_stack: vec![],
+            cursor: 0,
+            braces: vec![],
         }
     }
 
     pub fn next_token(&mut self) -> (Token, Span) {
         self.skip_whitespace();
-        if self.offset >= self.source.input.len() {
-            return (Token::EOF, self.span(self.offset, self.offset));
+        if self.cursor >= self.source.input.len() {
+            return (Token::EOF, self.span(self.cursor, self.cursor));
         }
-        let start = self.offset;
-        let c = self.peek(0).unwrap();
+        let start = self.cursor;
+        let char = self.peek(0).unwrap();
 
-        match c {
+        match char {
             '#' if self.peek(1) == Some('!') => self.scan_line_comment(),
-            '/' => self.scan_slash_or_comment(start),
-            '}' if matches!(self.brace_stack.last(), Some(BraceKind::Template)) => {
-                let _ = self.brace_stack.pop();
+            '/' => self.scan_slash_sequence(start),
+            '}' if matches!(self.braces.last(), Some(BraceKind::Template)) => {
+                let _ = self.braces.pop();
                 self.advance(1);
-                (self.scan_template(0), self.span(start, self.offset))
+                (self.scan_template(0), self.span(start, self.cursor))
             }
-            '"' => (self.scan_string(), self.span(start, self.offset)),
-            '\'' => (self.scan_rune(), self.span(start, self.offset)),
-            '`' => (self.scan_ident_escape(), self.span(start, self.offset)),
+            '"' => (self.scan_text_literal(), self.span(start, self.cursor)),
+            '\'' => (self.scan_rune_literal(), self.span(start, self.cursor)),
+            '`' => (self.scan_escaped_ident(), self.span(start, self.cursor)),
             '$' if self.peek(1) == Some('"') => {
-                (self.scan_template(2), self.span(start, self.offset))
+                (self.scan_template(2), self.span(start, self.cursor))
             }
-            c if Self::is_ident_start(c) => (self.scan_ident(), self.span(start, self.offset)),
-            c if c.is_ascii_digit() => (self.scan_number(), self.span(start, self.offset)),
+            c if Self::is_ident_start(c) => (self.scan_ident(), self.span(start, self.cursor)),
+            c if c.is_ascii_digit() => (self.scan_number(), self.span(start, self.cursor)),
             _ => match self.scan_symbol() {
-                Some(t) => (t, self.span(start, self.offset)),
-                None => self.report_unknown_char(start, c),
+                Some(t) => (t, self.span(start, self.cursor)),
+                None => self.report_invalid_char(start, char),
             },
         }
     }
 
     fn skip_whitespace(&mut self) {
-        self.offset = self.scan_while(self.offset, |c| WHITESPACE.contains(&c));
+        self.cursor = self.consume_while(self.cursor, |c| WHITESPACE.contains(&c));
     }
 
     fn scan_line_comment(&mut self) -> (Token, Span) {
-        self.offset = self.scan_while(self.offset, |c| c != '\n');
+        self.cursor = self.consume_while(self.cursor, |c| c != '\n');
         self.next_token()
     }
 
     fn scan_block_comment(&mut self, start: usize) -> (Token, Span) {
         let mut depth = 1;
         self.advance(2);
-        while depth > 0 && self.offset < self.source.input.len() {
-            if self.source.input[self.offset..].starts_with("/*") {
+        while depth > 0 && self.cursor < self.source.input.len() {
+            if self.source.input[self.cursor..].starts_with("/*") {
                 depth += 1;
                 self.advance(2);
-            } else if self.source.input[self.offset..].starts_with("*/") {
+            } else if self.source.input[self.cursor..].starts_with("*/") {
                 depth -= 1;
                 self.advance(2);
             } else {
@@ -169,27 +169,27 @@ impl<'a> Lexer<'a> {
             }
         }
         if depth > 0 {
-            self.report(LexicalError::UnclosedComment.into(), start, self.offset);
+            self.report(LexErrorKind::UnclosedComment.into(), start, self.cursor);
             (
-                self.unknown_token(&self.source.input[start..self.offset]),
-                self.span(start, self.offset),
+                self.invalid_token(&self.source.input[start..self.cursor]),
+                self.span(start, self.cursor),
             )
         } else {
             self.next_token()
         }
     }
 
-    fn scan_slash_or_comment(&mut self, start: usize) -> (Token, Span) {
+    fn scan_slash_sequence(&mut self, start: usize) -> (Token, Span) {
         match self.peek(1) {
             Some('/') => self.scan_line_comment(),
             Some('*') => self.scan_block_comment(start),
             _ => match self.scan_symbol() {
-                Some(t) => (t, self.span(start, self.offset)),
+                Some(t) => (t, self.span(start, self.cursor)),
                 None => {
                     self.advance(1);
                     (
-                        self.unknown_token(&self.source.input[start..self.offset]),
-                        self.span(start, self.offset),
+                        self.invalid_token(&self.source.input[start..self.cursor]),
+                        self.span(start, self.cursor),
                     )
                 }
             },
@@ -197,9 +197,9 @@ impl<'a> Lexer<'a> {
     }
 
     fn scan_ident(&mut self) -> Token {
-        let start = self.offset;
-        let end = self.scan_while(start, Self::is_ident_char);
-        self.offset = end;
+        let start = self.cursor;
+        let end = self.consume_while(start, Self::is_ident_char);
+        self.cursor = end;
         let content = &self.source.input[start..end];
         KEYWORDS
             .binary_search_by_key(&content, |&(k, _)| k)
@@ -210,18 +210,18 @@ impl<'a> Lexer<'a> {
     }
 
     fn scan_number(&mut self) -> Token {
-        let start = self.offset;
-        let (radix, off, name) = match (self.peek(0), self.peek(1)) {
+        let start = self.cursor;
+        let (base, prefix_len, name) = match (self.peek(0), self.peek(1)) {
             (Some('0'), Some('x')) => (16, 2, "hexadecimal"),
             (Some('0'), Some('o')) => (8, 2, "octal"),
             (Some('0'), Some('b')) => (2, 2, "binary"),
             _ => (10, 0, "decimal"),
         };
 
-        let mut end = self.scan_while(start + off, |c| c.is_digit(radix) || c == '_');
-        if end == start + off {
+        let mut end = self.consume_while(start + prefix_len, |c| c.is_digit(base) || c == '_');
+        if end == start + prefix_len {
             self.report(
-                LexicalError::InvalidLiteral(name.into()).into(),
+                LexErrorKind::InvalidLiteral(name.into()).into(),
                 start,
                 start + 1,
             );
@@ -229,12 +229,12 @@ impl<'a> Lexer<'a> {
         }
 
         let mut is_real = false;
-        if radix == 10 {
+        if base == 10 {
             if self.source.input[end..].starts_with('.')
                 && !self.source.input[end..].starts_with("..")
             {
                 is_real = true;
-                end = self.scan_while(end + 1, Self::is_num_char);
+                end = self.consume_while(end + 1, Self::is_num_char);
             }
             if self.source.input[end..].starts_with(['e', 'E']) {
                 is_real = true;
@@ -242,44 +242,44 @@ impl<'a> Lexer<'a> {
                 if self.source.input[exp..].starts_with(['+', '-']) {
                     exp += 1;
                 }
-                end = self.scan_while(exp, Self::is_num_char);
+                end = self.consume_while(exp, Self::is_num_char);
             }
         }
 
-        self.offset = end;
-        let (clean, valid) = self.handle_underscores(start, end);
+        self.cursor = end;
+        let (normalized, valid) = self.normalize_numeric(start, end);
         if !valid {
             self.report(
-                LexicalError::MalformedUnderscore((if is_real { "real" } else { name }).into())
+                LexErrorKind::MalformedUnderscore((if is_real { "real" } else { name }).into())
                     .into(),
                 start,
                 end,
             );
         }
         if is_real {
-            Token::LitReal(self.interner.intern(&clean))
+            Token::LitReal(self.interner.intern(&normalized))
         } else {
-            Token::LitInt(self.interner.intern(&clean))
+            Token::LitInt(self.interner.intern(&normalized))
         }
     }
 
-    fn scan_string(&mut self) -> Token {
-        let start = self.offset;
-        match self.scan_quoted(start, 1, &['"'], LexicalError::UnclosedString) {
+    fn scan_text_literal(&mut self) -> Token {
+        let start = self.cursor;
+        match self.consume_quoted(start, 1, &['"'], LexErrorKind::UnclosedString) {
             Some(end) => Token::LitString(self.interner.intern(&self.source.input[start + 1..end])),
-            None => self.unknown_token(&self.source.input[start..]),
+            None => self.invalid_token(&self.source.input[start..]),
         }
     }
 
     fn scan_template(&mut self, offset: usize) -> Token {
-        let start = self.offset;
-        match self.scan_quoted(start, offset, &['"', '{'], LexicalError::UnclosedTemplate) {
+        let start = self.cursor;
+        match self.consume_quoted(start, offset, &['"', '{'], LexErrorKind::UnclosedTemplate) {
             Some(end) => {
                 let content = &self.source.input[start + offset..end];
                 let is_expr = self.source.input[end..].starts_with('{');
                 let interned = self.interner.intern(content);
                 if is_expr {
-                    self.brace_stack.push(BraceKind::Template);
+                    self.braces.push(BraceKind::Template);
                     if offset == 2 {
                         Token::TemplateHead(interned)
                     } else {
@@ -291,18 +291,18 @@ impl<'a> Lexer<'a> {
                     Token::TemplateTail(interned)
                 }
             }
-            None => self.unknown_token(&self.source.input[start..]),
+            None => self.invalid_token(&self.source.input[start..]),
         }
     }
 
-    fn scan_rune(&mut self) -> Token {
-        let start = self.offset;
+    fn scan_rune_literal(&mut self) -> Token {
+        let start = self.cursor;
         let mut chars = self.source.input[start + 1..].chars();
         let (c, len) = match chars.next() {
             Some('\'') => {
                 return {
-                    self.report(LexicalError::EmptyRune.into(), start, start + 2);
-                    self.offset += 2;
+                    self.report(LexErrorKind::EmptyRune.into(), start, start + 2);
+                    self.cursor += 2;
                     Token::LitRune('\0')
                 };
             }
@@ -310,59 +310,59 @@ impl<'a> Lexer<'a> {
             Some(c) => (c, c.len_utf8()),
             None => {
                 return {
-                    self.report(LexicalError::UnclosedRune.into(), start, start + 1);
-                    self.offset = self.source.input.len();
+                    self.report(LexErrorKind::UnclosedRune.into(), start, start + 1);
+                    self.cursor = self.source.input.len();
                     Token::LitRune('\0')
                 };
             }
         };
         if self.source.input[start + 1 + len..].starts_with('\'') {
-            self.offset = start + 1 + len + 1;
+            self.cursor = start + 1 + len + 1;
             Token::LitRune(c)
         } else {
-            let end = self.scan_while(start + 1 + len, |c| c != '\'');
+            let end = self.consume_while(start + 1 + len, |c| c != '\'');
             let is_unclosed = !self.source.input[end..].starts_with('\'');
-            self.offset = if is_unclosed { end } else { end + 1 };
+            self.cursor = if is_unclosed { end } else { end + 1 };
             self.report(
                 if is_unclosed {
-                    LexicalError::UnclosedRune
+                    LexErrorKind::UnclosedRune
                 } else {
-                    LexicalError::MultiCharRune
+                    LexErrorKind::MultiCharRune
                 }
                 .into(),
                 start,
-                self.offset,
+                self.cursor,
             );
             Token::LitRune('\0')
         }
     }
 
-    fn scan_ident_escape(&mut self) -> Token {
-        let start = self.offset;
-        match self.scan_quoted(start, 1, &['`'], LexicalError::UnclosedEscapedIdent) {
+    fn scan_escaped_ident(&mut self) -> Token {
+        let start = self.cursor;
+        match self.consume_quoted(start, 1, &['`'], LexErrorKind::UnclosedEscapedIdent) {
             Some(end) => {
                 let content = &self.source.input[start + 1..end];
                 if content.is_empty() {
-                    self.report(LexicalError::InvalidIdent.into(), start, self.offset);
-                    self.unknown_token("`")
+                    self.report(LexErrorKind::InvalidIdent.into(), start, self.cursor);
+                    self.invalid_token("`")
                 } else {
                     Token::Ident(self.interner.intern(content))
                 }
             }
-            None => self.unknown_token(&self.source.input[start..]),
+            None => self.invalid_token(&self.source.input[start..]),
         }
     }
 
     fn scan_symbol(&mut self) -> Option<Token> {
-        let input = &self.source.input[self.offset..];
+        let input = &self.source.input[self.cursor..];
         for &(sym, ref tok) in SYMBOLS {
             if input.starts_with(sym) {
-                self.offset += sym.len();
+                self.cursor += sym.len();
                 if let Token::LBrace = tok {
-                    self.brace_stack.push(BraceKind::Normal);
+                    self.braces.push(BraceKind::Normal);
                 } else if let Token::RBrace = tok {
-                    if let Some(BraceKind::Normal) = self.brace_stack.last() {
-                        self.brace_stack.pop();
+                    if let Some(BraceKind::Normal) = self.braces.last() {
+                        let _ = self.braces.pop();
                     }
                 }
                 return Some(tok.clone());
@@ -371,18 +371,18 @@ impl<'a> Lexer<'a> {
         None
     }
 
-    fn scan_quoted(
+    fn consume_quoted(
         &mut self,
-        start: usize,
-        off: usize,
-        stop: &[char],
-        err: LexicalError,
+        literal_start: usize,
+        prefix_len: usize,
+        terminators: &[char],
+        error_if_unclosed: LexErrorKind,
     ) -> Option<usize> {
-        let mut pos = start + off;
+        let mut pos = literal_start + prefix_len;
         let mut chars = self.source.input[pos..].chars();
         while let Some(c) = chars.next() {
-            if stop.contains(&c) {
-                self.offset = pos + 1;
+            if terminators.contains(&c) {
+                self.cursor = pos + 1;
                 return Some(pos);
             }
             pos += c.len_utf8();
@@ -392,22 +392,22 @@ impl<'a> Lexer<'a> {
                 }
             }
         }
-        self.offset = self.source.input.len();
-        self.report(err.into(), start, start + 1);
+        self.cursor = self.source.input.len();
+        self.report(error_if_unclosed.into(), literal_start, literal_start + 1);
         None
     }
 
-    fn scan_while<F>(&self, start: usize, pred: F) -> usize
+    fn consume_while<F>(&self, start: usize, predicate: F) -> usize
     where
         F: Fn(char) -> bool,
     {
         self.source.input[start..]
             .char_indices()
-            .find(|&(_, c)| !pred(c))
+            .find(|&(_, c)| !predicate(c))
             .map_or(self.source.input.len(), |(i, _)| start + i)
     }
 
-    fn handle_underscores(&self, start: usize, end: usize) -> (String, bool) {
+    fn normalize_numeric(&self, start: usize, end: usize) -> (String, bool) {
         let s = &self.source.input[start..end];
         let mut out = String::with_capacity(s.len());
         let (mut prev, mut valid) = (false, true);
@@ -425,20 +425,20 @@ impl<'a> Lexer<'a> {
         (out, valid)
     }
 
-    fn unknown_token(&mut self, content: &str) -> Token {
-        Token::Unknown(self.interner.intern(content))
+    fn invalid_token(&mut self, content: &str) -> Token {
+        Token::Invalid(self.interner.intern(content))
     }
 
-    fn report_unknown_char(&mut self, start: usize, c: char) -> (Token, Span) {
-        self.advance(c.len_utf8());
-        self.report(LexicalError::UnknownChar(c).into(), start, self.offset);
+    fn report_invalid_char(&mut self, start: usize, char: char) -> (Token, Span) {
+        self.advance(char.len_utf8());
+        self.report(LexErrorKind::InvalidChar(char).into(), start, self.cursor);
         (
-            self.unknown_token(&c.to_string()),
-            self.span(start, self.offset),
+            self.invalid_token(&char.to_string()),
+            self.span(start, self.cursor),
         )
     }
 
-    fn report(&mut self, err: Error, start: usize, end: usize) {
+    fn report(&mut self, err: ErrorKind, start: usize, end: usize) {
         self.errors.add(report(err, self.span(start, end)));
     }
 
@@ -449,12 +449,12 @@ impl<'a> Lexer<'a> {
         )
     }
 
-    fn peek(&self, n: usize) -> Option<char> {
-        self.source.input[self.offset..].chars().nth(n)
+    fn peek(&self, index: usize) -> Option<char> {
+        self.source.input[self.cursor..].chars().nth(index)
     }
 
-    fn advance(&mut self, n: usize) {
-        self.offset += n;
+    fn advance(&mut self, count: usize) {
+        self.cursor += count;
     }
 
     const fn is_ident_start(c: char) -> bool {
