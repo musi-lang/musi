@@ -180,15 +180,16 @@ impl<'a> Lexer<'a> {
         }
 
         let is_real = if base == DEC_RADIX {
-            let mut real = false;
-            if self.cursor.is_next('.') && self.cursor.peek_nth(1) != Some('.') {
+            let has_frac = if self.cursor.is_next('.') && self.cursor.peek_nth(1) != Some('.') {
                 let _: Option<char> = self.cursor.bump();
                 if !self.consume_digits() {
                     self.report(LexErrorKind::MalformedNumber, start, self.cursor.pos());
                 }
-                real = true;
-            }
-            if matches!(self.cursor.peek(), Some('e' | 'E')) {
+                true
+            } else {
+                false
+            };
+            let has_exp = if matches!(self.cursor.peek(), Some('e' | 'E')) {
                 let _: Option<char> = self.cursor.bump();
                 if matches!(self.cursor.peek(), Some('+' | '-')) {
                     let _: Option<char> = self.cursor.bump();
@@ -196,11 +197,12 @@ impl<'a> Lexer<'a> {
                 if !self.consume_digits() {
                     self.report(LexErrorKind::MalformedNumber, start, self.cursor.pos());
                 }
-                real = true;
-            }
+                true
+            } else {
+                false
+            };
             end = self.cursor.pos();
-            let slice = self.source.input.get(start + prefix_len..end).unwrap();
-            real || slice.contains('.') || slice.contains('e') || slice.contains('E')
+            has_frac || has_exp
         } else {
             false
         };
@@ -452,7 +454,7 @@ impl<'a> Lexer<'a> {
                 .source
                 .input
                 .get(content_end..)
-                .map_or(false, |s| s.starts_with('{'));
+                .is_some_and(|s| s.starts_with('{'));
             if follows_brace {
                 self.braces.push(BraceKind::Template);
                 if is_head {
@@ -460,12 +462,10 @@ impl<'a> Lexer<'a> {
                 } else {
                     TokenKind::TemplateMiddle(s)
                 }
+            } else if is_head {
+                TokenKind::LitTemplateNoSubst(s)
             } else {
-                if is_head {
-                    TokenKind::LitTemplateNoSubst(s)
-                } else {
-                    TokenKind::TemplateTail(s)
-                }
+                TokenKind::TemplateTail(s)
             }
         } else {
             TokenKind::Invalid(
@@ -607,13 +607,13 @@ pub fn scan_escape(chars: &mut Chars<'_>) -> Result<(char, usize), (String, usiz
         'u' => {
             if chars.clone().next() == Some('{') {
                 let mut err_iter = chars.clone();
-                let _ = chars.next();
-                let _ = err_iter.next();
+                let _: Option<char> = chars.next();
+                let _: Option<char> = err_iter.next();
 
                 let (mut val, mut len) = (0, 3);
                 let mut valid = false;
 
-                while let Some(ch) = chars.next() {
+                for ch in chars.by_ref() {
                     if ch == '}' {
                         if !valid {
                             return Err(("u{}".into(), len));

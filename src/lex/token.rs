@@ -1,7 +1,9 @@
 use crate::basic::interner::Interner;
 use crate::basic::span::Span;
+use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum TokenKind {
     Ident(u32),
     LitInt(u32),
@@ -97,16 +99,19 @@ pub enum TokenKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Token {
     pub kind: TokenKind,
     pub span: Span,
 }
 
 impl Token {
+    #[must_use]
     pub const fn new(kind: TokenKind, span: Span) -> Self {
         Self { kind, span }
     }
 
+    #[must_use]
     pub fn dummy() -> Self {
         Self {
             kind: TokenKind::EOF,
@@ -155,7 +160,8 @@ pub struct TokenDisplay<'a> {
 }
 
 impl TokenKind {
-    pub fn display<'a>(&'a self, interner: &'a Interner) -> TokenDisplay<'a> {
+    #[must_use]
+    pub const fn display<'a>(&'a self, interner: &'a Interner) -> TokenDisplay<'a> {
         TokenDisplay {
             kind: self,
             interner,
@@ -163,8 +169,56 @@ impl TokenKind {
     }
 }
 
-impl<'a> std::fmt::Display for TokenDisplay<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+const SYMBOLS: &[(TokenKind, &str)] = &[
+    (TokenKind::LBrace, "{"),
+    (TokenKind::RBrace, "}"),
+    (TokenKind::LBrack, "["),
+    (TokenKind::RBrack, "]"),
+    (TokenKind::LBrackLt, "[<"),
+    (TokenKind::GtRBrack, ">]"),
+    (TokenKind::LParen, "("),
+    (TokenKind::RParen, ")"),
+    (TokenKind::Comma, ","),
+    (TokenKind::Dot, "."),
+    (TokenKind::Colon, ":"),
+    (TokenKind::Semicolon, ";"),
+    (TokenKind::Eq, "="),
+    (TokenKind::SlashEq, "/="),
+    (TokenKind::Lt, "<"),
+    (TokenKind::LtEq, "<="),
+    (TokenKind::Gt, ">"),
+    (TokenKind::GtEq, ">="),
+    (TokenKind::Plus, "+"),
+    (TokenKind::Minus, "-"),
+    (TokenKind::Star, "*"),
+    (TokenKind::Slash, "/"),
+    (TokenKind::Percent, "%"),
+    (TokenKind::LtLt, "<<"),
+    (TokenKind::GtGt, ">>"),
+    (TokenKind::StarStar, "**"),
+    (TokenKind::Amp, "&"),
+    (TokenKind::Bar, "|"),
+    (TokenKind::BarGt, "|>"),
+    (TokenKind::Caret, "^"),
+    (TokenKind::Tilde, "~"),
+    (TokenKind::At, "@"),
+    (TokenKind::DotCaret, ".^"),
+    (TokenKind::ColonColon, "::"),
+    (TokenKind::QuestionQuestion, "??"),
+    (TokenKind::DotDot, ".."),
+    (TokenKind::DotDotLt, "..<"),
+    (TokenKind::MinusGt, "->"),
+    (TokenKind::LtMinus, "<-"),
+    (TokenKind::ColonEq, ":="),
+    (TokenKind::EqGt, "=>"),
+    (TokenKind::Question, "?"),
+    (TokenKind::Underscore, "_"),
+    (TokenKind::Dollar, "$"),
+    (TokenKind::EOF, "EOF"),
+];
+
+impl fmt::Display for TokenDisplay<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.kind {
             TokenKind::Ident(id) => write!(f, "{}", self.interner.lookup(*id).unwrap_or("<ident>")),
             TokenKind::LitInt(id) => write!(f, "{}", self.interner.lookup(*id).unwrap_or("<int>")),
@@ -187,83 +241,17 @@ impl<'a> std::fmt::Display for TokenDisplay<'a> {
             TokenKind::TemplateTail(id) => {
                 write!(f, "{}\"", self.interner.lookup(*id).unwrap_or(""))
             }
-            TokenKind::KwAlias => write!(f, "alias"),
-            TokenKind::KwAnd => write!(f, "and"),
-            TokenKind::KwAs => write!(f, "as"),
-            TokenKind::KwBreak => write!(f, "break"),
-            TokenKind::KwCase => write!(f, "case"),
-            TokenKind::KwCycle => write!(f, "cycle"),
-            TokenKind::KwDefer => write!(f, "defer"),
-            TokenKind::KwElse => write!(f, "else"),
-            TokenKind::KwExtern => write!(f, "extern"),
-            TokenKind::KwFalse => write!(f, "false"),
-            TokenKind::KwFn => write!(f, "fn"),
-            TokenKind::KwFor => write!(f, "for"),
-            TokenKind::KwIf => write!(f, "if"),
-            TokenKind::KwImport => write!(f, "import"),
-            TokenKind::KwIn => write!(f, "in"),
-            TokenKind::KwIs => write!(f, "is"),
-            TokenKind::KwMatch => write!(f, "match"),
-            TokenKind::KwMod => write!(f, "mod"),
-            TokenKind::KwNot => write!(f, "not"),
-            TokenKind::KwOr => write!(f, "or"),
-            TokenKind::KwRecord => write!(f, "record"),
-            TokenKind::KwReturn => write!(f, "return"),
-            TokenKind::KwSum => write!(f, "sum"),
-            TokenKind::KwTrue => write!(f, "true"),
-            TokenKind::KwTry => write!(f, "try"),
-            TokenKind::KwUnsafe => write!(f, "unsafe"),
-            TokenKind::KwVal => write!(f, "val"),
-            TokenKind::KwVar => write!(f, "var"),
-            TokenKind::KwWhile => write!(f, "while"),
-            TokenKind::KwWith => write!(f, "with"),
-            TokenKind::LBrace => write!(f, "{{"),
-            TokenKind::RBrace => write!(f, "}}"),
-            TokenKind::LBrack => write!(f, "["),
-            TokenKind::RBrack => write!(f, "]"),
-            TokenKind::LBrackLt => write!(f, "[<"),
-            TokenKind::GtRBrack => write!(f, ">]"),
-            TokenKind::LParen => write!(f, "("),
-            TokenKind::RParen => write!(f, ")"),
-            TokenKind::Comma => write!(f, ","),
-            TokenKind::Dot => write!(f, "."),
-            TokenKind::Colon => write!(f, ":"),
-            TokenKind::Semicolon => write!(f, ";"),
-            TokenKind::Eq => write!(f, "="),
-            TokenKind::SlashEq => write!(f, "/="),
-            TokenKind::Lt => write!(f, "<"),
-            TokenKind::LtEq => write!(f, "<="),
-            TokenKind::Gt => write!(f, ">"),
-            TokenKind::GtEq => write!(f, ">="),
-            TokenKind::Plus => write!(f, "+"),
-            TokenKind::Minus => write!(f, "-"),
-            TokenKind::Star => write!(f, "*"),
-            TokenKind::Slash => write!(f, "/"),
-            TokenKind::Percent => write!(f, "%"),
-            TokenKind::LtLt => write!(f, "<<"),
-            TokenKind::GtGt => write!(f, ">>"),
-            TokenKind::StarStar => write!(f, "**"),
-            TokenKind::Amp => write!(f, "&"),
-            TokenKind::Bar => write!(f, "|"),
-            TokenKind::BarGt => write!(f, "|>"),
-            TokenKind::Caret => write!(f, "^"),
-            TokenKind::Tilde => write!(f, "~"),
-            TokenKind::At => write!(f, "@"),
-            TokenKind::DotCaret => write!(f, ".^"),
-            TokenKind::ColonColon => write!(f, "::"),
-            TokenKind::QuestionQuestion => write!(f, "??"),
-            TokenKind::DotDot => write!(f, ".."),
-            TokenKind::DotDotLt => write!(f, "..<"),
-            TokenKind::MinusGt => write!(f, "->"),
-            TokenKind::LtMinus => write!(f, "<-"),
-            TokenKind::ColonEq => write!(f, ":="),
-            TokenKind::EqGt => write!(f, "=>"),
-            TokenKind::Question => write!(f, "?"),
-            TokenKind::Underscore => write!(f, "_"),
-            TokenKind::Dollar => write!(f, "$"),
-            TokenKind::EOF => write!(f, "EOF"),
             TokenKind::Invalid(id) => {
                 write!(f, "{}", self.interner.lookup(*id).unwrap_or("<invalid>"))
+            }
+            kind => {
+                if let Some((kw, _)) = KEYWORDS.iter().find(|(_, tk)| *tk == *kind) {
+                    return write!(f, "{kw}");
+                }
+                if let Some((_, sym)) = SYMBOLS.iter().find(|(tk, _)| *tk == *kind) {
+                    return write!(f, "{sym}");
+                }
+                write!(f, "<unknown>")
             }
         }
     }

@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]
@@ -89,11 +90,11 @@ impl SourceMap {
     pub fn lookup_source(&self, offset: u32) -> Option<&Arc<SourceFile>> {
         let idx = self.files.binary_search_by(|f| {
             if offset < f.start {
-                std::cmp::Ordering::Greater
+                Ordering::Greater
             } else if offset >= f.end_pos() {
-                std::cmp::Ordering::Less
+                Ordering::Less
             } else {
-                std::cmp::Ordering::Equal
+                Ordering::Equal
             }
         });
         match idx {

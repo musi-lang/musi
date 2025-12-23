@@ -2,6 +2,7 @@ use crate::basic::errors::Level;
 use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
+#[non_exhaustive]
 pub enum LexErrorKind {
     #[error("unknown character '{0}'")]
     UnknownChar(char),
@@ -31,7 +32,8 @@ pub enum LexErrorKind {
 }
 
 impl LexErrorKind {
-    pub fn hint(&self) -> Option<&'static str> {
+    #[must_use]
+    pub const fn hint(&self) -> Option<&'static str> {
         match self {
             Self::UnclosedString | Self::UnclosedTemplate => Some("missing '\"'"),
             Self::UnclosedEscapedIdent => Some("missing '`'"),
@@ -47,6 +49,7 @@ impl LexErrorKind {
         }
     }
 
+    #[must_use]
     pub const fn level(&self) -> Level {
         Level::Error
     }
