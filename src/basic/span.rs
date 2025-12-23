@@ -10,7 +10,7 @@ impl Span {
     }
 
     pub const fn len(&self) -> u32 {
-        self.hi.saturating_sub(self.lo)
+        self.hi - self.lo
     }
 
     pub const fn is_empty(&self) -> bool {

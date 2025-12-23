@@ -160,13 +160,13 @@ fn render_snippet(
 
         let (_end_line_idx, end_col) = src_file.location_at(span.hi);
         let highlight_len = if src_file.line_index(span.lo) == src_file.line_index(span.hi) {
-            end_col.saturating_sub(col).max(1)
+            (end_col - col).max(1)
         } else {
-            line.len().saturating_sub(col).saturating_add(1)
+            line.len() - col + 1
         };
 
         let padding = " ".repeat(ln_idx_str.len());
-        let indent = " ".repeat(col.saturating_sub(1));
+        let indent = " ".repeat(col - 1);
         let carets = "^".repeat(highlight_len);
 
         if colour {

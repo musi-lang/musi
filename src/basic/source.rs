@@ -33,7 +33,7 @@ impl SourceFile {
     }
 
     pub fn line_index(&self, offset: u32) -> usize {
-        let rel = offset.saturating_sub(self.start);
+        let rel = offset - self.start;
         match self.line_starts.binary_search(&rel) {
             Ok(idx) => idx,
             Err(idx) => idx - 1,
@@ -41,7 +41,7 @@ impl SourceFile {
     }
 
     pub fn location_at(&self, offset: u32) -> (usize, usize) {
-        let rel = offset.saturating_sub(self.start);
+        let rel = offset - self.start;
         let line_idx = self.line_index(offset);
         let line_start = self.line_starts[line_idx];
         let col = rel - line_start;
@@ -63,7 +63,7 @@ impl SourceFile {
             return Some("");
         }
 
-        let end_excl_newline = end.saturating_sub(1);
+        let end_excl_newline = end - 1;
         self.input.get(start..end_excl_newline)
     }
 }
