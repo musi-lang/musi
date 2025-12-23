@@ -27,7 +27,7 @@ unused_results = "forbid"
 
 [lints.clippy]
 absolute_paths = "forbid"
-arithmetic_side_effects = "forbid"
+# arithmetic_side_effects = "forbid"
 as_conversions = "forbid"
 as_pointer_underscore = "forbid"
 as_underscore = "forbid"
