@@ -1,16 +1,16 @@
 use crate::basic::span::Span;
 use thiserror::Error;
 
-pub type MusiResult<T> = Result<T, Error>;
+pub type MusiResult<T> = Result<T, MusiError>;
 
 #[derive(Debug, Clone, Error)]
 #[error("{kind}")]
-pub struct Error {
+pub struct MusiError {
     pub kind: ErrorKind,
     pub span: Span,
 }
 
-impl Error {
+impl MusiError {
     pub const fn new(kind: ErrorKind, span: Span) -> Self {
         Self { kind, span }
     }

@@ -1,6 +1,6 @@
 use crate::basic::{
     diagnostic::{DiagnosticBag, report},
-    errors::Error,
+    errors::MusiError,
     interner::Interner,
     source::SourceFile,
     span::Span,
@@ -528,7 +528,7 @@ impl<'a> Lexer<'a> {
 
     fn report(&mut self, err: LexErrorKind, start: usize, end: usize) {
         self.errors
-            .add(report(Error::new(err.into(), self.span(start, end))));
+            .add(report(MusiError::new(err.into(), self.span(start, end))));
     }
 
     fn span(&self, lo: usize, hi: usize) -> Span {
@@ -561,7 +561,7 @@ pub fn unescape(s: &str, start_pos: usize, errors: &mut DiagnosticBag) -> String
                         u32::try_from(start_pos + offset).expect("offset out of range"),
                         u32::try_from(start_pos + offset + 1 + len).expect("offset out of range"),
                     );
-                    errors.add(report(Error::new(
+                    errors.add(report(MusiError::new(
                         LexErrorKind::UnknownEscape(esc_err).into(),
                         err_span,
                     )));

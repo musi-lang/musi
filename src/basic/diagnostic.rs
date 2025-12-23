@@ -44,8 +44,8 @@ impl DiagnosticBag {
     }
 }
 
-impl From<errors::Error> for Diagnostic {
-    fn from(err: errors::Error) -> Self {
+impl From<errors::MusiError> for Diagnostic {
+    fn from(err: errors::MusiError) -> Self {
         let message = err.to_string();
         let hint = err.hint();
         let level = err.level();
@@ -65,7 +65,7 @@ impl From<errors::Error> for Diagnostic {
 }
 
 #[must_use]
-pub fn report(err: errors::Error) -> Diagnostic {
+pub fn report(err: errors::MusiError) -> Diagnostic {
     Diagnostic::from(err)
 }
 
