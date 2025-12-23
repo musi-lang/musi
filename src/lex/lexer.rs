@@ -15,7 +15,7 @@ const PREFIX_LEN: usize = "0x".len();
 const TEMPLATE_PREFIX: usize = "$\"".len();
 const DEC_RADIX: u32 = 10;
 
-/// (prefix_char, radix, name)
+/// `(prefix_char, radix, name)`
 const NUM_PREFIXES: &[(char, u32, &str)] = &[
     ('x', 16, "hexadecimal"),
     ('o', 8, "octal"),
@@ -56,13 +56,14 @@ impl<'a> Lexer<'a> {
     pub fn new(source: &'a SourceFile, interner: &'a mut Interner) -> Self {
         Self {
             interner,
-            errors: Default::default(),
+            errors: DiagnosticBag::default(),
             source,
             cursor: Cursor::new(&source.input),
             braces: vec![],
         }
     }
 
+    #[must_use]
     pub const fn errors(&self) -> &DiagnosticBag {
         &self.errors
     }
@@ -141,26 +142,29 @@ impl<'a> Lexer<'a> {
         let start = self.cursor.pos();
         self.cursor
             .eat_while(|c| c.is_ascii_alphanumeric() || c == '_');
-        let text = &self.source.input[start..self.cursor.pos()];
+        let text = self.source.input.get(start..self.cursor.pos()).unwrap();
         if text == "_" {
             return TokenKind::Underscore;
         }
 
-        KEYWORDS
-            .binary_search_by_key(&text, |k| k.0)
-            .map(|i| KEYWORDS[i].1)
-            .unwrap_or_else(|_| TokenKind::Ident(self.interner.intern(text)))
+        match KEYWORDS.binary_search_by_key(&text, |k| k.0) {
+            Ok(i) => KEYWORDS[i].1,
+            Err(_) => TokenKind::Ident(self.interner.intern(text)),
+        }
     }
 
     fn scan_number(&mut self) -> TokenKind {
         let start = self.cursor.pos();
 
         let (base, prefix_len, name) = if self.cursor.peek() == Some('0') {
-            NUM_PREFIXES
+            if let Some((_, b, n)) = NUM_PREFIXES
                 .iter()
                 .find(|(c, ..)| self.cursor.peek_nth(1) == Some(*c))
-                .map(|(_, b, n)| (*b, PREFIX_LEN, *n))
-                .unwrap_or((DEC_RADIX, 0, "decimal"))
+            {
+                (*b, PREFIX_LEN, *n)
+            } else {
+                (DEC_RADIX, 0, "decimal")
+            }
         } else {
             (DEC_RADIX, 0, "decimal")
         };
@@ -174,13 +178,14 @@ impl<'a> Lexer<'a> {
             return TokenKind::LitInt(0);
         }
 
-        let mut is_real = false;
-        if base == DEC_RADIX {
+        let has_decimal_point = if base == DEC_RADIX {
+            let mut is_real = false;
             if self.cursor.is_next('.') && self.cursor.peek_nth(1) != Some('.') {
                 let _ = self.cursor.bump();
                 if !self.consume_digits() {
                     self.report(LexErrorKind::MalformedNumber, start, self.cursor.pos());
                 }
+                is_real = true;
             }
             if matches!(self.cursor.peek(), Some('e' | 'E')) {
                 let _ = self.cursor.bump();
@@ -190,22 +195,27 @@ impl<'a> Lexer<'a> {
                 if !self.consume_digits() {
                     self.report(LexErrorKind::MalformedNumber, start, self.cursor.pos());
                 }
+                is_real = true;
             }
             end = self.cursor.pos();
-            let slice = &self.source.input[start + prefix_len..end];
-            is_real = slice.contains('.') || slice.contains('e') || slice.contains('E');
-        }
+            let slice = self.source.input.get(start + prefix_len..end).unwrap();
+            is_real || slice.contains('.') || slice.contains('e') || slice.contains('E')
+        } else {
+            false
+        };
 
         let (val, valid) = self.unitize_numeric(start, end);
         if !valid {
             self.report(
-                LexErrorKind::MalformedUnderscore((if is_real { "real" } else { name }).into()),
+                LexErrorKind::MalformedUnderscore(
+                    (if has_decimal_point { "real" } else { name }).into(),
+                ),
                 start,
                 end,
             );
         }
 
-        if is_real {
+        if has_decimal_point {
             TokenKind::LitReal(self.interner.intern(&val))
         } else {
             TokenKind::LitInt(self.interner.intern(&val))
@@ -222,7 +232,7 @@ impl<'a> Lexer<'a> {
         let mut out = String::with_capacity(end - start);
         let mut prev_under = false;
         let mut valid = true;
-        let s = &self.source.input[start..end];
+        let s = self.source.input.get(start..end).unwrap();
         for (i, c) in s.char_indices() {
             if c == '_' {
                 if i == 0 || i == s.len() - 1 || prev_under {
