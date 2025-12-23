@@ -38,8 +38,8 @@ impl DiagnosticBag {
     }
 
     pub fn merge(&mut self, other: Self) {
-        self.errors = self.errors + other.errors;
-        self.warnings = self.warnings + other.warnings;
+        self.errors += other.errors;
+        self.warnings += other.warnings;
         self.diagnostics.extend(other.diagnostics);
     }
 }
