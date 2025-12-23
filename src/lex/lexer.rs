@@ -178,14 +178,14 @@ impl<'a> Lexer<'a> {
             return TokenKind::LitInt(0);
         }
 
-        let has_decimal_point = if base == DEC_RADIX {
-            let mut is_real = false;
+        let is_real = if base == DEC_RADIX {
+            let mut real = false;
             if self.cursor.is_next('.') && self.cursor.peek_nth(1) != Some('.') {
                 let _ = self.cursor.bump();
                 if !self.consume_digits() {
                     self.report(LexErrorKind::MalformedNumber, start, self.cursor.pos());
                 }
-                is_real = true;
+                real = true;
             }
             if matches!(self.cursor.peek(), Some('e' | 'E')) {
                 let _ = self.cursor.bump();
@@ -195,11 +195,11 @@ impl<'a> Lexer<'a> {
                 if !self.consume_digits() {
                     self.report(LexErrorKind::MalformedNumber, start, self.cursor.pos());
                 }
-                is_real = true;
+                real = true;
             }
             end = self.cursor.pos();
             let slice = self.source.input.get(start + prefix_len..end).unwrap();
-            is_real || slice.contains('.') || slice.contains('e') || slice.contains('E')
+            real || slice.contains('.') || slice.contains('e') || slice.contains('E')
         } else {
             false
         };
@@ -207,15 +207,13 @@ impl<'a> Lexer<'a> {
         let (val, valid) = self.unitize_numeric(start, end);
         if !valid {
             self.report(
-                LexErrorKind::MalformedUnderscore(
-                    (if has_decimal_point { "real" } else { name }).into(),
-                ),
+                LexErrorKind::MalformedUnderscore((if is_real { "real" } else { name }).into()),
                 start,
                 end,
             );
         }
 
-        if has_decimal_point {
+        if is_real {
             TokenKind::LitReal(self.interner.intern(&val))
         } else {
             TokenKind::LitInt(self.interner.intern(&val))
@@ -377,13 +375,13 @@ impl<'a> Lexer<'a> {
         if let Some(content_end) =
             self.consume_quoted(start, 1, &['"'], LexErrorKind::UnclosedString)
         {
-            let raw = &self.source.input[start + 1..content_end];
+            let raw = self.source.input.get(start + 1..content_end).unwrap();
             let val = unescape(raw, start + 1, &mut self.errors);
             TokenKind::LitString(self.interner.intern(&val))
         } else {
             TokenKind::Invalid(
                 self.interner
-                    .intern(&self.source.input[start..self.cursor.pos()]),
+                    .intern(self.source.input.get(start..self.cursor.pos()).unwrap()),
             )
         }
     }
@@ -444,28 +442,34 @@ impl<'a> Lexer<'a> {
         if let Some(content_end) =
             self.consume_quoted(start, offset, &['"', '{'], LexErrorKind::UnclosedTemplate)
         {
-            let raw = &self.source.input[start + offset..content_end];
+            let raw = self.source.input.get(start + offset..content_end).unwrap();
             let val = unescape(raw, start + offset, &mut self.errors);
             let s = self.interner.intern(&val);
 
             let is_head = offset == TEMPLATE_PREFIX;
-            let follows_brace = self.source.input[content_end..].starts_with('{');
+            let follows_brace = self
+                .source
+                .input
+                .get(content_end..)
+                .map_or(false, |s| s.starts_with('{'));
             if follows_brace {
                 self.braces.push(BraceKind::Template);
-                match is_head {
-                    true => TokenKind::TemplateHead(s),
-                    false => TokenKind::TemplateMiddle(s),
+                if is_head {
+                    TokenKind::TemplateHead(s)
+                } else {
+                    TokenKind::TemplateMiddle(s)
                 }
             } else {
-                match is_head {
-                    true => TokenKind::LitTemplateNoSubst(s),
-                    false => TokenKind::TemplateTail(s),
+                if is_head {
+                    TokenKind::LitTemplateNoSubst(s)
+                } else {
+                    TokenKind::TemplateTail(s)
                 }
             }
         } else {
             TokenKind::Invalid(
                 self.interner
-                    .intern(&self.source.input[start..self.cursor.pos()]),
+                    .intern(self.source.input.get(start..self.cursor.pos()).unwrap()),
             )
         }
     }
@@ -475,7 +479,7 @@ impl<'a> Lexer<'a> {
         if let Some(content_end) =
             self.consume_quoted(start, 1, &['`'], LexErrorKind::UnclosedEscapedIdent)
         {
-            let s = &self.source.input[start + 1..content_end];
+            let s = self.source.input.get(start + 1..content_end).unwrap();
             if s.is_empty() {
                 self.report(LexErrorKind::InvalidIdent, start, self.cursor.pos());
                 TokenKind::Invalid(self.interner.intern(""))
@@ -485,7 +489,7 @@ impl<'a> Lexer<'a> {
         } else {
             TokenKind::Invalid(
                 self.interner
-                    .intern(&self.source.input[start..self.cursor.pos()]),
+                    .intern(self.source.input.get(start..self.cursor.pos()).unwrap()),
             )
         }
     }
@@ -526,8 +530,11 @@ impl<'a> Lexer<'a> {
             .add(report(Error::new(err.into(), self.span(start, end))));
     }
 
-    const fn span(&self, lo: usize, hi: usize) -> Span {
-        Span::new(self.source.start + lo as u32, self.source.start + hi as u32)
+    fn span(&self, lo: usize, hi: usize) -> Span {
+        Span::new(
+            self.source.start + u32::try_from(lo).unwrap(),
+            self.source.start + u32::try_from(hi).unwrap(),
+        )
     }
 }
 
