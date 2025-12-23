@@ -128,7 +128,7 @@ impl<'a> Lexer<'a> {
                     self.cursor.bump_n(2);
                 }
                 (Some(_), _) => {
-                    let _ = self.cursor.bump();
+                    let _: Option<char> = self.cursor.bump();
                 }
                 (None, _) => break,
             }
@@ -182,16 +182,16 @@ impl<'a> Lexer<'a> {
         let is_real = if base == DEC_RADIX {
             let mut real = false;
             if self.cursor.is_next('.') && self.cursor.peek_nth(1) != Some('.') {
-                let _ = self.cursor.bump();
+                let _: Option<char> = self.cursor.bump();
                 if !self.consume_digits() {
                     self.report(LexErrorKind::MalformedNumber, start, self.cursor.pos());
                 }
                 real = true;
             }
             if matches!(self.cursor.peek(), Some('e' | 'E')) {
-                let _ = self.cursor.bump();
+                let _: Option<char> = self.cursor.bump();
                 if matches!(self.cursor.peek(), Some('+' | '-')) {
-                    let _ = self.cursor.bump();
+                    let _: Option<char> = self.cursor.bump();
                 }
                 if !self.consume_digits() {
                     self.report(LexErrorKind::MalformedNumber, start, self.cursor.pos());
@@ -297,14 +297,14 @@ impl<'a> Lexer<'a> {
             }
             Some('}') => {
                 if self.braces.last() == Some(&BraceKind::Normal) {
-                    let _ = self.braces.pop();
+                    let _: Option<BraceKind> = self.braces.pop();
                 }
                 self.one(TokenKind::RBrace)
             }
             Some('~') => self.one(TokenKind::Tilde),
             Some('$') => self.one(TokenKind::Dollar),
             Some(c) => {
-                let _ = self.cursor.bump();
+                let _: Option<char> = self.cursor.bump();
                 self.report(
                     LexErrorKind::UnknownChar(c),
                     self.cursor.pos() - c.len_utf8(),
@@ -317,7 +317,7 @@ impl<'a> Lexer<'a> {
     }
 
     fn one(&mut self, kind: TokenKind) -> TokenKind {
-        let _ = self.cursor.bump();
+        let _: Option<char> = self.cursor.bump();
         kind
     }
 
@@ -331,7 +331,7 @@ impl<'a> Lexer<'a> {
             self.cursor.bump_n(offset + 1);
             yes
         } else {
-            let _ = self.cursor.bump();
+            let _: Option<char> = self.cursor.bump();
             no
         }
     }
@@ -365,7 +365,7 @@ impl<'a> Lexer<'a> {
                 k2
             }
             _ => {
-                let _ = self.cursor.bump();
+                let _: Option<char> = self.cursor.bump();
                 def
             }
         }
@@ -389,17 +389,17 @@ impl<'a> Lexer<'a> {
 
     fn scan_rune_lit(&mut self) -> TokenKind {
         let start = self.cursor.pos();
-        let _ = self.cursor.bump();
+        let _: Option<char> = self.cursor.bump();
 
         let mut val = '\0';
 
         match self.cursor.peek() {
             Some('\'') => {
                 self.report(LexErrorKind::InvalidRune, start, start + 2);
-                let _ = self.cursor.bump();
+                let _: Option<char> = self.cursor.bump();
             }
             Some('\\') => {
-                let _ = self.cursor.bump();
+                let _: Option<char> = self.cursor.bump();
                 let c_start = self.cursor.pos();
                 let mut rest_chars = self.cursor.rest().chars();
                 match scan_escape(&mut rest_chars) {
@@ -419,17 +419,17 @@ impl<'a> Lexer<'a> {
             }
             Some(c) => {
                 val = c;
-                let _ = self.cursor.bump();
+                let _: Option<char> = self.cursor.bump();
             }
             None => {}
         }
 
         if self.cursor.is_next('\'') {
-            let _ = self.cursor.bump();
+            let _: Option<char> = self.cursor.bump();
         } else {
             self.cursor.eat_while(|c| c != '\'');
             if self.cursor.is_next('\'') {
-                let _ = self.cursor.bump();
+                let _: Option<char> = self.cursor.bump();
                 self.report(LexErrorKind::InvalidRune, start, self.cursor.pos());
             } else {
                 self.report(LexErrorKind::UnclosedRune, start, start + 1);
@@ -508,15 +508,15 @@ impl<'a> Lexer<'a> {
             match self.cursor.peek() {
                 Some(c) if terms.contains(&c) => {
                     let pos = self.cursor.pos();
-                    let _ = self.cursor.bump();
+                    let _: Option<char> = self.cursor.bump();
                     return Some(pos);
                 }
                 Some('\\') => {
-                    let _ = self.cursor.bump();
-                    let _ = self.cursor.bump();
+                    let _: Option<char> = self.cursor.bump();
+                    let _: Option<char> = self.cursor.bump();
                 }
                 Some(_) => {
-                    let _ = self.cursor.bump();
+                    let _: Option<char> = self.cursor.bump();
                 }
                 None => {
                     self.report(err, start, start + 1);
