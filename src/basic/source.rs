@@ -96,7 +96,6 @@ impl SourceMap {
                 std::cmp::Ordering::Equal
             }
         });
-
         match idx {
             Ok(i) => Some(&self.files[i]),
             Err(_) => None,
