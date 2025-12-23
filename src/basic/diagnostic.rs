@@ -1,23 +1,47 @@
 use crate::basic::{
     errors::{self, Level},
-    source::SourceMap,
+    source::{SourceFile, SourceMap},
     span::Span,
 };
-use std::io::{self, IsTerminal, Write};
+use std::io::{self, IsTerminal as _, Write};
 
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct Diagnostic {
     pub level: Level,
     pub message: String,
-    pub span: Span,
     pub notes: Vec<(String, Span)>,
+    pub span: Span,
 }
 
 #[derive(Default, Debug, Clone)]
+#[non_exhaustive]
 pub struct DiagnosticBag {
     pub diagnostics: Vec<Diagnostic>,
     pub errors: usize,
     pub warnings: usize,
+}
+
+impl DiagnosticBag {
+    pub fn add(&mut self, diag: Diagnostic) {
+        match diag.level {
+            Level::Error => self.errors += 1,
+            Level::Warning => self.warnings += 1,
+            Level::Note => {}
+        }
+        self.diagnostics.push(diag);
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.diagnostics.is_empty()
+    }
+
+    pub fn merge(&mut self, other: Self) {
+        self.errors = self.errors + other.errors;
+        self.warnings = self.warnings + other.warnings;
+        self.diagnostics.extend(other.diagnostics);
+    }
 }
 
 impl From<errors::Error> for Diagnostic {
@@ -30,57 +54,37 @@ impl From<errors::Error> for Diagnostic {
         let mut diag = Self {
             level,
             message,
-            span,
             notes: vec![],
+            span,
         };
         if let Some(hint_text) = hint {
-            diag.notes.push((hint_text.to_string(), span));
+            diag.notes.push((hint_text.to_owned(), span));
         }
         diag
     }
 }
 
+#[must_use]
 pub fn report(err: errors::Error) -> Diagnostic {
     Diagnostic::from(err)
 }
 
-impl DiagnosticBag {
-    pub fn add(&mut self, diag: Diagnostic) {
-        match diag.level {
-            Level::Error => self.errors += 1,
-            Level::Warning => self.warnings += 1,
-            _ => {}
-        }
-        self.diagnostics.push(diag);
-    }
-
-    pub fn merge(&mut self, other: DiagnosticBag) {
-        self.errors += other.errors;
-        self.warnings += other.warnings;
-        self.diagnostics.extend(other.diagnostics);
-    }
-
-    pub const fn is_empty(&self) -> bool {
-        self.diagnostics.is_empty()
-    }
-}
-
-pub fn emit_all(bag: &DiagnosticBag, source_map: &SourceMap) {
+pub fn emit_all(bag: &DiagnosticBag, src_map: &SourceMap) {
     for diag in &bag.diagnostics {
-        emit(diag, source_map);
+        emit(diag, src_map);
     }
 }
 
-pub fn emit(diag: &Diagnostic, source_map: &SourceMap) {
+pub fn emit(diag: &Diagnostic, src_map: &SourceMap) {
     let mut writer = io::stderr();
     let use_color = writer.is_terminal();
-    let _ = render(&mut writer, diag, source_map, use_color);
+    _ = render(&mut writer, diag, src_map, use_color);
 }
 
 fn render(
     writer: &mut impl Write,
     diag: &Diagnostic,
-    source_map: &SourceMap,
+    src_map: &SourceMap,
     colour: bool,
 ) -> io::Result<()> {
     let (style, header) = match diag.level {
@@ -89,7 +93,7 @@ fn render(
         Level::Note => ("\x1b[36m", "note"),
     };
 
-    let src_file = source_map.lookup_source(diag.span.lo);
+    let src_file = src_map.lookup_source(diag.span.lo);
     if let Some(src) = src_file {
         render_location(writer, src, diag.span.lo, colour)?;
     }
@@ -101,7 +105,7 @@ fn render(
     }
 
     for (msg, span) in &diag.notes {
-        render_note(writer, msg, *span, source_map, colour)?;
+        render_note(writer, msg, *span, src_map, colour)?;
     }
 
     Ok(())
@@ -109,15 +113,15 @@ fn render(
 
 fn render_location(
     writer: &mut impl Write,
-    src: &crate::basic::source::SourceFile,
+    src_file: &SourceFile,
     offset: u32,
     colour: bool,
 ) -> io::Result<()> {
-    let (ln, col) = src.location_at(offset);
+    let (ln, col) = src_file.location_at(offset);
     if colour {
         write!(writer, "\x1b[1m")?;
     }
-    write!(writer, "{}:{ln}:{col}: ", src.name)?;
+    write!(writer, "{}:{ln}:{col}: ", src_file.name)?;
     if colour {
         write!(writer, "\x1b[0m")?;
     }
@@ -132,7 +136,7 @@ fn render_message(
     colour: bool,
 ) -> io::Result<()> {
     if colour {
-        write!(writer, "\x1b[1m{style}{header}:\x1b[0m {message}\n")
+        writeln!(writer, "\x1b[1m{style}{header}:\x1b[0m {message}")
     } else {
         writeln!(writer, "{header}: {message}")
     }
@@ -140,28 +144,28 @@ fn render_message(
 
 fn render_snippet(
     writer: &mut impl Write,
-    src: &crate::basic::source::SourceFile,
+    src_file: &SourceFile,
     span: Span,
     style: &str,
     colour: bool,
 ) -> io::Result<()> {
-    let (line_index, col) = src.location_at(span.lo);
-    if let Some(line) = src.line_at(line_index - 1) {
-        let line_index_str = line_index.to_string();
+    let (ln_idx, col) = src_file.location_at(span.lo);
+    if let Some(line) = src_file.line_at(ln_idx - 1) {
+        let ln_idx_str = ln_idx.to_string();
         if colour {
-            write!(writer, " \x1b[1m{line_index_str} |\x1b[0m {line}\n")?;
+            writeln!(writer, " \x1b[1m{ln_idx_str} |\x1b[0m {line}")?;
         } else {
-            writeln!(writer, " {line_index_str} | {line}")?;
+            writeln!(writer, " {ln_idx_str} | {line}")?;
         }
 
-        let (_end_line_index, end_col) = src.location_at(span.hi);
-        let highlight_len = if src.line_index(span.lo) == src.line_index(span.hi) {
+        let (_end_line_idx, end_col) = src_file.location_at(span.hi);
+        let highlight_len = if src_file.line_index(span.lo) == src_file.line_index(span.hi) {
             end_col.saturating_sub(col).max(1)
         } else {
             line.len().saturating_sub(col).saturating_add(1)
         };
 
-        let padding = " ".repeat(line_index_str.len());
+        let padding = " ".repeat(ln_idx_str.len());
         let indent = " ".repeat(col.saturating_sub(1));
         let carets = "^".repeat(highlight_len);
 
@@ -178,16 +182,16 @@ fn render_note(
     writer: &mut impl Write,
     msg: &str,
     span: Span,
-    source_map: &SourceMap,
+    src_map: &SourceMap,
     colour: bool,
 ) -> io::Result<()> {
     let (note_style, note_header) = ("\x1b[36m", "note");
-    let src_file = source_map.lookup_source(span.lo);
+    let src_file = src_map.lookup_source(span.lo);
     if let Some(src) = src_file {
         render_location(writer, src, span.lo, colour)?;
     }
     if colour {
-        write!(writer, "\x1b[1m{note_style}{note_header}:\x1b[0m {msg}\n")
+        writeln!(writer, "\x1b[1m{note_style}{note_header}:\x1b[0m {msg}")
     } else {
         writeln!(writer, "{note_header}: {msg}")
     }
