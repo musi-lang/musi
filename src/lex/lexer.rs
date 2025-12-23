@@ -540,6 +540,11 @@ impl<'a> Lexer<'a> {
 }
 
 #[inline]
+/// Unescape string literal, reporting any errors into diagnostic bag.
+///
+/// # Panics
+///
+/// Panics if `start_pos + offset` or `start_pos + offset + 1 + len` exceeds `u32::MAX`.
 pub fn unescape(s: &str, start_pos: usize, errors: &mut DiagnosticBag) -> String {
     let mut out = String::with_capacity(s.len());
     let mut chars = s.chars();
@@ -553,8 +558,8 @@ pub fn unescape(s: &str, start_pos: usize, errors: &mut DiagnosticBag) -> String
                 }
                 Err((esc_err, len)) => {
                     let err_span = Span::new(
-                        u32::try_from(start_pos + offset).unwrap(),
-                        u32::try_from(start_pos + offset + 1 + len).unwrap(),
+                        u32::try_from(start_pos + offset).expect("offset out of range"),
+                        u32::try_from(start_pos + offset + 1 + len).expect("offset out of range"),
                     );
                     errors.add(report(Error::new(
                         LexErrorKind::UnknownEscape(esc_err).into(),
