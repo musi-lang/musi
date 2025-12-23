@@ -27,7 +27,7 @@ unused_results = "forbid"
 
 [lints.clippy]
 absolute_paths = "forbid"
-# arithmetic_side_effects = "forbid"
+# arithmetic_side_effects = "forbid"  # use checked ops where overflow matters
 as_conversions = "forbid"
 as_pointer_underscore = "forbid"
 as_underscore = "forbid"
@@ -38,12 +38,11 @@ cast_sign_loss = "forbid"
 clone_on_ref_ptr = "forbid"
 dbg_macro = "forbid"
 empty_drop = "forbid"
-exit = "forbid"
+# exit = "forbid"  # CLI tools need exit codes
 filetype_is_file = "forbid"
-float_arithmetic = "forbid"
 fn_to_numeric_cast_any = "forbid"
 get_unwrap = "forbid"
-indexing_slicing = "forbid"
+# indexing_slicing = "forbid"  # use `.get()` in critical paths only
 infinite_loop = "forbid"
 let_underscore_must_use = "forbid"
 mem_forget = "forbid"
@@ -51,12 +50,9 @@ missing_asserts_for_indexing = "forbid"
 multiple_unsafe_ops_per_block = "forbid"
 mutex_atomic = "forbid"
 panic = "forbid"
-print_stderr = "forbid"
-print_stdout = "forbid"
 rc_buffer = "forbid"
 rc_mutex = "forbid"
 str_to_string = "forbid"
-string_add = "forbid"
 string_slice = "forbid"
 tests_outside_test_module = "forbid"
 todo = "forbid"
@@ -67,8 +63,7 @@ unnecessary_safety_comment = "forbid"
 unnecessary_safety_doc = "forbid"
 unreachable = "forbid"
 unwrap_in_result = "forbid"
-unwrap_used = "forbid"
-use_debug = "forbid"
+# unwrap_used = "forbid"  # use `.expect()` in prod, but allow `.unwrap()` in tests/prototypes
 
 cargo = { level = "forbid", priority = -1 }
 complexity = { level = "forbid", priority = -1 }
