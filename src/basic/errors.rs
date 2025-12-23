@@ -1,7 +1,7 @@
 use crate::basic::span::Span;
 use thiserror::Error;
 
-pub type Result<T> = std::result::Result<T, Error>;
+pub type MusiResult<T> = Result<T, Error>;
 
 #[derive(Debug, Clone, Error)]
 #[error("{kind}")]
