@@ -19,7 +19,7 @@ impl MusiError {
     }
 
     #[must_use]
-    pub fn hint(&self) -> Option<&'static str> {
+    pub const fn hint(&self) -> Option<&'static str> {
         self.kind.hint()
     }
 

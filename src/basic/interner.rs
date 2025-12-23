@@ -7,6 +7,7 @@ pub struct Interner {
 }
 
 impl Interner {
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -15,15 +16,18 @@ impl Interner {
         if let Some(&id) = self.table.get(text) {
             return id;
         }
-        let id = self.strings.len() as u32;
-        let owned = text.to_string();
+        let id = u32::try_from(self.strings.len()).expect("interner overflow");
+        let owned = text.to_owned();
         self.strings.push(owned.clone());
-        let _ = self.table.insert(owned, id);
+        let _: Option<u32> = self.table.insert(owned, id);
         id
     }
 
+    #[must_use]
     pub fn lookup(&self, id: u32) -> Option<&str> {
-        self.strings.get(id as usize).map(String::as_str)
+        self.strings
+            .get(usize::try_from(id).ok()?)
+            .map(String::as_str)
     }
 
     pub fn clear(&mut self) {
@@ -31,7 +35,13 @@ impl Interner {
         self.strings.clear();
     }
 
+    #[must_use]
     pub const fn len(&self) -> usize {
         self.strings.len()
+    }
+
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.strings.is_empty()
     }
 }
