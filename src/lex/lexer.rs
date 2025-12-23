@@ -10,6 +10,7 @@ use crate::lex::{
     errors::LexErrorKind,
     token::{KEYWORDS, Token, TokenKind},
 };
+use std::str::Chars;
 
 const PREFIX_LEN: usize = "0x".len();
 const TEMPLATE_PREFIX: usize = "$\"".len();
@@ -571,7 +572,7 @@ pub fn unescape(s: &str, start_pos: usize, errors: &mut DiagnosticBag) -> String
 }
 
 #[inline]
-pub fn scan_escape(chars: &mut std::str::Chars<'_>) -> Result<(char, usize), (String, usize)> {
+pub fn scan_escape(chars: &mut Chars<'_>) -> Result<(char, usize), (String, usize)> {
     let Some(ch) = chars.next() else {
         return Ok(('\0', 0));
     };
