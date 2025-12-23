@@ -74,8 +74,16 @@ perf = { level = "forbid", priority = -1 }
 style = { level = "forbid", priority = -1 }
 suspicious = { level = "forbid", priority = -1 }
 
+# https://doc.rust-lang.org/cargo/reference/profiles.html#profile-settings
 [profile.release]
+opt-level = "s"
+debug = "full"
+strip = "symbols"
+lto = true
 panic = "abort"
-lto = "fat"
-incremental = false
+incremental = true
 codegen-units = 1
+
+[profile.bench]
+codegen-units = 16
+lto = "thin"
