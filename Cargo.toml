@@ -7,6 +7,8 @@ version = "0.1.0"
 edition = "2024"
 repository = "https://github.com/musi-lang/musi"
 license = "MIT OR Apache-2.0"
+keywords = ["compiler", "interpreter", "language", "musi"]
+categories = ["compilers", "interpreters", "development-tools"]
 
 [workspace.dependencies]
 clap = { version = "4.5.53", features = ["derive"] }
