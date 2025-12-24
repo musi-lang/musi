@@ -75,7 +75,7 @@ pub fn emit_all(bag: &DiagnosticBag, src_map: &SourceMap) {
 pub fn emit(diag: &Diagnostic, src_map: &SourceMap) {
     let mut writer = io::stderr();
     let use_color = writer.is_terminal();
-    let _: io::Result<()> = render(&mut writer, diag, src_map, use_color);
+    _ = render(&mut writer, diag, src_map, use_color);
 }
 
 fn render(
