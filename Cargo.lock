@@ -115,7 +115,71 @@ name = "musi"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "musi-driver",
+]
+
+[[package]]
+name = "musi-ast"
+version = "0.1.0"
+dependencies = [
+ "musi-basic",
+]
+
+[[package]]
+name = "musi-basic"
+version = "0.1.0"
+dependencies = [
  "thiserror",
+]
+
+[[package]]
+name = "musi-codegen"
+version = "0.1.0"
+dependencies = [
+ "musi-ast",
+ "musi-basic",
+]
+
+[[package]]
+name = "musi-driver"
+version = "0.1.0"
+dependencies = [
+ "musi-basic",
+ "musi-lex",
+]
+
+[[package]]
+name = "musi-lex"
+version = "0.1.0"
+dependencies = [
+ "musi-basic",
+ "thiserror",
+]
+
+[[package]]
+name = "musi-parse"
+version = "0.1.0"
+dependencies = [
+ "musi-basic",
+ "musi-lex",
+]
+
+[[package]]
+name = "musi-sema"
+version = "0.1.0"
+dependencies = [
+ "musi-ast",
+ "musi-basic",
+]
+
+[[package]]
+name = "music"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "musi-basic",
+ "musi-driver",
+ "musi-lex",
 ]
 
 [[package]]

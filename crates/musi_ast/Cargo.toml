@@ -1,0 +1,13 @@
+[package]
+name = "musi-ast"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "AST definitions for Musi compiler"
+
+[dependencies]
+musi-basic = { path = "../musi_basic" }
+
+[lints]
+workspace = true

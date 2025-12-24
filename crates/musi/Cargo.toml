@@ -1,0 +1,18 @@
+[package]
+name = "musi"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Musi runtime and REPL"
+
+[[bin]]
+name = "musi"
+path = "src/main.rs"
+
+[dependencies]
+musi-driver = { path = "../musi_driver" }
+clap.workspace = true
+
+[lints]
+workspace = true

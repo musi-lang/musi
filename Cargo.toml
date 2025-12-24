@@ -1,31 +1,26 @@
-[package]
-name = "musi"
+[workspace]
+members = ["crates/*"]
+resolver = "2"
+
+[workspace.package]
 version = "0.1.0"
-description = "The Musi Programming Language"
-repository = "https://github.com/musi-lang/musi"
 edition = "2024"
 rust-version = "1.92.0"
 license = "MIT OR Apache-2.0"
-keywords = ["musi", "programming language"]
-categories = ["Programming Language"]
-default-run = "musi"
+repository = "https://github.com/musi-lang/musi"
 
-[[bin]]
-name = "musi"
-path = "src/main.rs"
-
-[dependencies]
+[workspace.dependencies]
 clap = { version = "4.5.53", features = ["derive"] }
 thiserror = "2.0.17"
 
-[lints.rust]
+[workspace.lints.rust]
 keyword_idents_2024 = "forbid"
 missing_unsafe_on_extern = "forbid"
 unsafe_code = "forbid"
 unsafe_op_in_unsafe_fn = "forbid"
 unused_results = "forbid"
 
-[lints.clippy]
+[workspace.lints.clippy]
 absolute_paths = "deny"
 # arithmetic_side_effects = "deny"  # use checked ops where overflow matters
 as_conversions = "deny"

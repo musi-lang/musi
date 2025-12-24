@@ -1,0 +1,20 @@
+[package]
+name = "music"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Musi compiler"
+
+[[bin]]
+name = "music"
+path = "src/main.rs"
+
+[dependencies]
+musi-driver = { path = "../musi_driver" }
+musi-basic = { path = "../musi_basic" }
+musi-lex = { path = "../musi_lex" }
+clap.workspace = true
+
+[lints]
+workspace = true

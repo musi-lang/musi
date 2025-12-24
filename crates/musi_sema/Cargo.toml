@@ -1,0 +1,14 @@
+[package]
+name = "musi-sema"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Semantic analysis for Musi compiler"
+
+[dependencies]
+musi-basic = { path = "../musi_basic" }
+musi-ast = { path = "../musi_ast" }
+
+[lints]
+workspace = true
