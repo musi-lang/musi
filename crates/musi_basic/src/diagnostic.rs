@@ -1,5 +1,5 @@
 use crate::{
-    errors::{Level, MusiError},
+    error::{Level, MusiError},
     source::{SourceFile, SourceMap},
     span::Span,
 };

@@ -1,6 +1,6 @@
 use crate::{
     cursor::Cursor,
-    errors::LexErrorKind,
+    error::LexErrorKind,
     token::{KEYWORDS, Token, TokenKind},
 };
 use musi_basic::{

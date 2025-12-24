@@ -1,5 +1,5 @@
 pub mod cursor;
-pub mod errors;
+pub mod error;
 pub mod lexer;
 pub mod token;
 

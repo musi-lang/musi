@@ -1,7 +1,7 @@
-pub mod nodes;
+pub mod node;
 pub mod visitor;
 
-pub use nodes::*;
+pub use node::*;
 pub use visitor::*;
 
 pub type Ident = u32;
