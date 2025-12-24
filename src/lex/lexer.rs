@@ -576,6 +576,11 @@ pub fn unescape(s: &str, start_pos: usize, errors: &mut DiagnosticBag) -> String
     out
 }
 
+/// Parses escape sequence from character iterator.
+///
+/// # Errors
+///
+/// Returns `Err((invalid_sequence, len))` if escape is malformed.
 #[inline]
 pub fn scan_escape(chars: &mut Chars<'_>) -> Result<(char, usize), (String, usize)> {
     let Some(ch) = chars.next() else {
@@ -593,10 +598,10 @@ pub fn scan_escape(chars: &mut Chars<'_>) -> Result<(char, usize), (String, usiz
 
             match (d1, d2) {
                 (Some(c1), Some(c2)) => {
-                    if let (Some(d1), Some(d2)) = (c1.to_digit(16), c2.to_digit(16)) {
-                        if let Some(c) = char::from_u32((d1 << 4) | d2) {
-                            return Ok((c, 3));
-                        }
+                    if let (Some(d1), Some(d2)) = (c1.to_digit(16), c2.to_digit(16))
+                        && let Some(c) = char::from_u32((d1 << 4) | d2)
+                    {
+                        return Ok((c, 3));
                     }
                     Err((format!("x{c1}{c2}"), 3))
                 }
