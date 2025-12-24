@@ -40,16 +40,16 @@ enum Commands {
         files: Vec<PathBuf>,
 
         /// Output directory
-        #[arg(short, long, default_value = "./dist")]
+        #[arg(short, long, default_value = "./target")]
         out_dir: PathBuf,
     },
-    /// Build project from mspackage.json
+    /// Build project from 'mspackage.json'
     Build {
         /// Project directory
         #[arg(short, long, default_value = ".")]
         project: PathBuf,
     },
-    /// Initialize new mspackage.json
+    /// Create new 'mspackage.json'
     Init {
         /// Project directory
         #[arg(default_value = ".")]
