@@ -1,4 +1,8 @@
-use musi_ast::*;
+use musi_ast::{
+    Attr, AttrArg, AttrArgList, AttrList, Expr, ExprKind, ExprList, Field, FieldList, FnSig,
+    LitKind, MatchCase, Modifiers, Stmt, StmtKind, SumCase, SumCaseItem, SumCaseItemList,
+    TemplatePart,
+};
 use musi_basic::{
     error::{IntoMusiError, MusiResult},
     span::Span,
@@ -8,10 +12,17 @@ use musi_lex::token::TokenKind;
 use crate::{Parser, error::ParseErrorKind, parser::Prec};
 
 impl Parser<'_> {
+    /// # Errors
+    /// Returns `ParseErrorKind` on syntax error.
     pub fn parse_expr(&mut self) -> MusiResult<Expr> {
         self.parse_expr_bp(0)
     }
 
+    /// # Errors
+    /// Returns `ParseErrorKind` on syntax error.
+    ///
+    /// # Panics
+    /// Never panics - `.expect()` is guarded by prior `Prec::prefix`/`Prec::infix` check.
     pub fn parse_expr_bp(&mut self, min_bp: u8) -> MusiResult<Expr> {
         let start = self.curr_span();
 
@@ -186,7 +197,7 @@ impl Parser<'_> {
                     span: start,
                 })
             }
-            Some(TokenKind::LitString(id)) => {
+            Some(TokenKind::LitString(id) | TokenKind::LitTemplateNoSubst(id)) => {
                 let _ = self.advance();
                 Ok(Expr {
                     kind: ExprKind::Lit(LitKind::String(id)),
@@ -214,19 +225,12 @@ impl Parser<'_> {
                     span: start,
                 })
             }
-            Some(TokenKind::LitTemplateNoSubst(id)) => {
-                let _ = self.advance();
-                Ok(Expr {
-                    kind: ExprKind::Lit(LitKind::String(id)),
-                    span: start,
-                })
-            }
             Some(TokenKind::TemplateHead(_)) => self.parse_expr_template(),
 
             Some(TokenKind::Ident(id)) => {
                 let _ = self.advance();
                 if self.at(TokenKind::Dot) && self.peek_nth(1) == Some(TokenKind::LBrace) {
-                    let _ = self.advance_by(2);
+                    self.advance_by(2);
                     let fields = self.parse_expr_field_list()?;
                     let _ = self.expect(TokenKind::RBrace)?;
                     return Ok(Expr {
@@ -243,7 +247,7 @@ impl Parser<'_> {
                 })
             }
             Some(TokenKind::Dot) if self.peek_nth(1) == Some(TokenKind::LBrace) => {
-                let _ = self.advance_by(2);
+                self.advance_by(2);
                 let fields = self.parse_expr_field_list()?;
                 let _ = self.expect(TokenKind::RBrace)?;
                 Ok(Expr {
@@ -337,6 +341,8 @@ impl Parser<'_> {
         })
     }
 
+    /// # Errors
+    /// Returns `ParseErrorKind` on syntax error.
     pub fn parse_expr_block(&mut self) -> MusiResult<Expr> {
         let start = self.curr_span();
         let _ = self.expect(TokenKind::LBrace)?;
@@ -450,11 +456,11 @@ impl Parser<'_> {
         let (else_binding, else_body) = if self.at(TokenKind::KwElse) {
             let _ = self.advance();
             let bind = if let Some(TokenKind::Ident(id)) = self.peek_kind() {
-                if !self.at(TokenKind::LBrace) {
+                if self.at(TokenKind::LBrace) {
+                    None
+                } else {
                     let _ = self.advance();
                     Some(id)
-                } else {
-                    None
                 }
             } else {
                 None
@@ -572,7 +578,7 @@ impl Parser<'_> {
     }
 
     fn parse_expr_with_modifiers(&mut self, attrs: AttrList, start: Span) -> MusiResult<Expr> {
-        let mods = self.parse_modifiers()?;
+        let mods = self.parse_modifiers();
         match self.peek_kind() {
             Some(TokenKind::KwRecord) => self.parse_expr_record(attrs, mods),
             Some(TokenKind::KwSum) => self.parse_expr_sum(attrs, mods),
@@ -613,7 +619,7 @@ impl Parser<'_> {
         while !self.at(TokenKind::RParen) && !self.is_eof() {
             if let Some(TokenKind::Ident(id)) = self.peek_kind() {
                 if self.peek_nth(1) == Some(TokenKind::ColonEq) {
-                    let _ = self.advance_by(2);
+                    self.advance_by(2);
                     args.push(AttrArg {
                         name: Some(id),
                         value: Some(self.parse_expr()?),
@@ -642,7 +648,7 @@ impl Parser<'_> {
         Ok(args)
     }
 
-    fn parse_modifiers(&mut self) -> MusiResult<Modifiers> {
+    fn parse_modifiers(&mut self) -> Modifiers {
         let mut mods = Modifiers::default();
         loop {
             match self.peek_kind() {
@@ -669,7 +675,7 @@ impl Parser<'_> {
                 _ => break,
             }
         }
-        Ok(mods)
+        mods
     }
 
     fn parse_expr_record(&mut self, attrs: AttrList, mods: Modifiers) -> MusiResult<Expr> {
@@ -997,6 +1003,8 @@ impl Parser<'_> {
         )
     }
 
+    /// # Errors
+    /// Returns `ParseErrorKind::Expected` if current token is not an identifier.
     pub fn expect_ident(&mut self) -> MusiResult<u32> {
         match self.peek_kind() {
             Some(TokenKind::Ident(id)) => {
