@@ -31,7 +31,8 @@ pub enum Prec {
 }
 
 impl Prec {
-    pub fn infix(op: TokenKind) -> Option<(u8, u8)> {
+    #[must_use]
+    pub const fn infix(op: TokenKind) -> Option<(u8, u8)> {
         Some(match op {
             TokenKind::LtMinus => (1, 1),
             TokenKind::BarGt => (2, 3),
@@ -63,14 +64,16 @@ impl Prec {
         })
     }
 
-    pub fn prefix(op: TokenKind) -> Option<u8> {
+    #[must_use]
+    pub const fn prefix(op: TokenKind) -> Option<u8> {
         match op {
             TokenKind::Minus | TokenKind::KwNot | TokenKind::Tilde | TokenKind::At => Some(16),
             _ => None,
         }
     }
 
-    pub fn postfix(op: TokenKind) -> Option<u8> {
+    #[must_use]
+    pub const fn postfix(op: TokenKind) -> Option<u8> {
         match op {
             TokenKind::LParen
             | TokenKind::LBrack
