@@ -18,5 +18,7 @@ pub type ExprList = Vec<Expr>;
 pub type TypList = Vec<Typ>;
 pub type PatList = Vec<Pat>;
 pub type StmtList = Vec<Stmt>;
+pub type SumCaseItemList = Vec<SumCaseItem>;
 pub type AttrList = Vec<Attr>;
+pub type AttrArgList = Vec<AttrArg>;
 pub type FieldList = Vec<Field>;
