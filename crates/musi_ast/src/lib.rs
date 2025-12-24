@@ -1,6 +1,8 @@
 pub mod nodes;
+pub mod visitor;
 
 pub use nodes::*;
+pub use visitor::*;
 
 pub type Ident = u32;
 pub type Idents = Vec<Ident>;
