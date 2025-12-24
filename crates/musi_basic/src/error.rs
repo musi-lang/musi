@@ -1,4 +1,5 @@
 use crate::span::Span;
+use std::error;
 use std::fmt;
 
 pub type MusiResult<T> = Result<T, MusiError>;
@@ -24,13 +25,13 @@ impl MusiError {
     }
 
     #[must_use]
-    pub fn with_hint(mut self, hint: &'static str) -> Self {
+    pub const fn with_hint(mut self, hint: &'static str) -> Self {
         self.hint = Some(hint);
         self
     }
 
     #[must_use]
-    pub fn with_level(mut self, level: Level) -> Self {
+    pub const fn with_level(mut self, level: Level) -> Self {
         self.level = level;
         self
     }
@@ -42,7 +43,7 @@ impl fmt::Display for MusiError {
     }
 }
 
-impl std::error::Error for MusiError {}
+impl error::Error for MusiError {}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
