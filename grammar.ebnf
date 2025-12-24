@@ -75,6 +75,8 @@ aux_expr_list = expr, {",", expr}, [","];
 
 aux_attr_arg_list = aux_attr_arg, {",", aux_attr_arg}, [","];
 
+aux_param = ["var"], ident, [aux_ty_annot];
+
 aux_param_list = aux_param, {",", aux_param}, [","];
 
 aux_params = "(", [aux_param_list], ")";
