@@ -1,10 +1,13 @@
 [package]
 name = "musi"
+description = "Musi runtime and REPL"
 version.workspace = true
 edition.workspace = true
-rust-version.workspace = true
+repository.workspace = true
+readme = "README.md"
 license.workspace = true
-description = "Musi runtime and REPL"
+keywords = [""]
+categories = [""]
 
 [[bin]]
 name = "musi"

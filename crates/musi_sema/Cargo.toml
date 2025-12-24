@@ -1,10 +1,13 @@
 [package]
 name = "musi-sema"
+description = "Semantic analysis for Musi compiler"
 version.workspace = true
 edition.workspace = true
-rust-version.workspace = true
+repository.workspace = true
+readme = "README.md"
 license.workspace = true
-description = "Semantic analysis for Musi compiler"
+keywords = [""]
+categories = [""]
 
 [dependencies]
 musi-basic = { path = "../musi_basic" }
