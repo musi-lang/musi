@@ -5,6 +5,8 @@ use musi_lex::token::TokenKind;
 use crate::{Parser, error::ParseErrorKind};
 
 impl Parser<'_> {
+    /// # Errors
+    /// Returns `ParseErrorKind` on syntax error.
     pub fn parse_typ(&mut self) -> MusiResult<Typ> {
         let start = self.curr_span();
         match self.peek_kind() {
@@ -125,6 +127,8 @@ impl Parser<'_> {
         Ok(types)
     }
 
+    /// # Errors
+    /// Returns `ParseErrorKind` on syntax error.
     pub fn parse_typ_params(&mut self) -> MusiResult<Idents> {
         if !self.at(TokenKind::LBrack) {
             return Ok(vec![]);
@@ -142,6 +146,8 @@ impl Parser<'_> {
         Ok(params)
     }
 
+    /// # Errors
+    /// Returns `ParseErrorKind` on syntax error.
     pub fn parse_typ_args(&mut self) -> MusiResult<TypList> {
         if !self.at(TokenKind::LBrack) {
             return Ok(vec![]);

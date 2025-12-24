@@ -5,6 +5,8 @@ use musi_lex::token::TokenKind;
 use crate::{Parser, error::ParseErrorKind};
 
 impl Parser<'_> {
+    /// # Errors
+    /// Returns `ParseErrorKind` on syntax error.
     pub fn parse_pat(&mut self) -> MusiResult<Pat> {
         self.parse_pat_or()
     }

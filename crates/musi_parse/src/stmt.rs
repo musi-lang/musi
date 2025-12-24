@@ -5,6 +5,8 @@ use musi_lex::token::TokenKind;
 use crate::Parser;
 
 impl Parser<'_> {
+    /// # Errors
+    /// Returns `ParseErrorKind` on syntax error.
     pub fn parse_stmt(&mut self) -> MusiResult<Stmt> {
         let expr = self.parse_expr()?;
         let _ = self.expect(TokenKind::Semicolon)?;
