@@ -6,8 +6,8 @@ edition.workspace = true
 repository.workspace = true
 readme = "README.md"
 license.workspace = true
-keywords = [""]
-categories = [""]
+keywords.workspace = true
+categories.workspace = true
 
 [dependencies]
 musi-basic = { path = "../musi_basic" }

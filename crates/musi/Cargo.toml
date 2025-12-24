@@ -6,15 +6,14 @@ edition.workspace = true
 repository.workspace = true
 readme = "README.md"
 license.workspace = true
-keywords = [""]
-categories = [""]
+keywords.workspace = true
+categories.workspace = true
 
 [[bin]]
 name = "musi"
 path = "src/main.rs"
 
 [dependencies]
-musi-drive = { path = "../musi_drive" }
 clap.workspace = true
 
 [lints]
