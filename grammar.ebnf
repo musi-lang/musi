@@ -75,23 +75,21 @@ aux_expr_list = expr, {",", expr}, [","];
 
 aux_attr_arg_list = aux_attr_arg, {",", aux_attr_arg}, [","];
 
-aux_param = ["var"], ident, [aux_ty_annot];
+aux_attr_arg = ident, [":=", expr] | aux_lit;
 
-aux_param_list = aux_param, {",", aux_param}, [","];
+aux_field = ["var"], ident, [aux_ty_annot], [aux_init];
 
-aux_params = "(", [aux_param_list], ")";
+aux_field_list = aux_field, {",", aux_field}, [","];
+
+aux_field_list_semi = aux_field, {";", aux_field}, [";"];
+
+aux_params = "(", [aux_field_list], ")";
 
 aux_fn_sig = [ident], [ty_params], [aux_params], [aux_ty_annot];
 
 aux_args = [aux_expr_list];
 
-aux_record_field = ["var"], ident, [aux_ty_annot], [aux_init];
-
-aux_record_fields = aux_record_field, {";", aux_record_field}, [";"];
-
-aux_record_fields_lit = aux_record_field, {",", aux_record_field}, [","];
-
-aux_sum_case_item = ty | aux_param;
+aux_sum_case_item = ty | aux_field;
 
 aux_sum_case_list = aux_sum_case_item, {",", aux_sum_case_item}, [","];
 
@@ -180,7 +178,7 @@ expr_lit_tuple = "(", [expr, ",", [aux_expr_list]], ")";
 
 expr_lit_array = "[", [aux_expr_list], "]";
 
-expr_lit_record = [ident], ".{", [aux_record_content], "}";
+expr_lit_record = [ident], ".{", [aux_field_list], "}";
 
 expr_block = "{", {stmt}, [expr], "}";
 
@@ -208,7 +206,7 @@ expr_import = "import", aux_lit_text;
 
 expr_extern = aux_modifier_extern, "{", {"fn", aux_fn_sig, ";"}, "}";
 
-expr_record = [aux_attr], [aux_modifiers], "record", [ident], [ty_params], "{", aux_record_fields, "}";
+expr_record = [aux_attr], [aux_modifiers], "record", [ident], [ty_params], "{", aux_field_list_semi, "}";
 
 expr_sum = [aux_attr], [aux_modifiers], "sum", [ident], [ty_params], "{", aux_sum_cases, "}";
 
