@@ -7,6 +7,81 @@ use musi_lex::token::{Token, TokenKind};
 
 use crate::error::ParseErrorKind;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(u8)]
+pub enum Prec {
+    None = 0,
+    Assign = 1,      // <-
+    Pipe = 2,        // |>
+    Coalesce = 3,    // ??
+    Disjunction = 4, // or
+    Conjunction = 5, // and
+    BitOr = 6,       // |
+    BitXor = 7,      // ^
+    BitAnd = 8,      // &
+    Equality = 9,    // = /=
+    Comparison = 10, // < > <= >= is as in
+    Range = 11,      // .. ..<
+    Cons = 12,       // ::
+    Term = 13,       // + -
+    Factor = 14,     // * / % mod << >>
+    Power = 15,      // **
+    Unary = 16,      // - not ~ @
+    Postfix = 17,    // () [] . .^ ?
+}
+
+impl Prec {
+    pub fn infix(op: TokenKind) -> Option<(u8, u8)> {
+        Some(match op {
+            TokenKind::LtMinus => (1, 1),
+            TokenKind::BarGt => (2, 3),
+            TokenKind::QuestionQuestion => (3, 4),
+            TokenKind::KwOr => (4, 5),
+            TokenKind::KwAnd => (5, 6),
+            TokenKind::Bar => (6, 7),
+            TokenKind::Caret => (7, 8),
+            TokenKind::Amp => (8, 9),
+            TokenKind::Eq | TokenKind::SlashEq => (9, 10),
+            TokenKind::Lt
+            | TokenKind::Gt
+            | TokenKind::LtEq
+            | TokenKind::GtEq
+            | TokenKind::KwIs
+            | TokenKind::KwAs
+            | TokenKind::KwIn => (10, 11),
+            TokenKind::DotDot | TokenKind::DotDotLt => (11, 12),
+            TokenKind::ColonColon => (12, 12),
+            TokenKind::Plus | TokenKind::Minus => (13, 14),
+            TokenKind::Star
+            | TokenKind::Slash
+            | TokenKind::Percent
+            | TokenKind::KwMod
+            | TokenKind::LtLt
+            | TokenKind::GtGt => (14, 15),
+            TokenKind::StarStar => (15, 15),
+            _ => return None,
+        })
+    }
+
+    pub fn prefix(op: TokenKind) -> Option<u8> {
+        match op {
+            TokenKind::Minus | TokenKind::KwNot | TokenKind::Tilde | TokenKind::At => Some(16),
+            _ => None,
+        }
+    }
+
+    pub fn postfix(op: TokenKind) -> Option<u8> {
+        match op {
+            TokenKind::LParen
+            | TokenKind::LBrack
+            | TokenKind::Dot
+            | TokenKind::DotCaret
+            | TokenKind::Question => Some(17),
+            _ => None,
+        }
+    }
+}
+
 pub struct Parser<'a> {
     tokens: &'a [Token],
     pos: usize,

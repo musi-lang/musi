@@ -2,8 +2,8 @@ use musi_basic::span::Span;
 use musi_lex::token::TokenKind;
 
 use crate::{
-    AttrList, ExprList, ExprPtr, FieldList, Ident, Idents, OptExpr, OptExprPtr, OptIdent, OptTyp,
-    PatList, StmtList, TypList, TypPtr,
+    AttrArgList, AttrList, ExprList, ExprPtr, FieldList, Ident, Idents, OptExpr, OptExprPtr,
+    OptIdent, OptTyp, PatList, StmtList, SumCaseItemList, TypList, TypPtr,
 };
 
 // ============================================================================
@@ -269,7 +269,7 @@ pub struct MatchCase {
 pub struct SumCase {
     pub name: Ident,
     pub ty_args: TypList,
-    pub fields: Vec<SumCaseItem>,
+    pub fields: SumCaseItemList,
 }
 
 #[derive(Debug, Clone)]
@@ -282,7 +282,7 @@ pub enum SumCaseItem {
 #[derive(Debug, Clone)]
 pub struct Attr {
     pub name: Ident,
-    pub args: Vec<AttrArg>,
+    pub args: AttrArgList,
 }
 
 /// `name := value` or literal
