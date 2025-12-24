@@ -123,6 +123,14 @@ fn run_build(project: &PathBuf, _emit: Option<EmitKind>) {
 }
 
 fn run_init(path: &PathBuf) {
+    if let Err(e) = fs::create_dir_all(path) {
+        error(&format!(
+            "unable to create directory '{}': {e}",
+            path.display()
+        ));
+        return;
+    }
+
     let config_path = path.join("mspackage.json");
     if config_path.exists() {
         error("'mspackage.json' already exists");
