@@ -2,7 +2,7 @@
   "$id": "https://musi-lang.org/schemas/mspackage-schema.v1.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Musi package configuration file",
-  "description": "Configuration for Musi packages (mspackage.json). Combines package metadata, compiler options, and tooling config.",
+  "description": "Configuration for Musi packages. Combines package metadata, compiler options, and tooling config.",
   "type": "object",
   "properties": {
     "name": {
