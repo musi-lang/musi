@@ -247,7 +247,7 @@ prec_expr_cons = prec_expr_add, {"::", prec_expr_add};
 
 prec_expr_range = prec_expr_cons, [(".." | "..<"), prec_expr_cons];
 
-prec_expr_rel = prec_expr_range, [("<" | ">" | "<=" | ">=" | "is" | "as"), prec_expr_range];
+prec_expr_rel = prec_expr_range, [("<" | ">" | "<=" | ">=" | "is" | "as" | "in"), prec_expr_range];
 
 prec_expr_eq = prec_expr_rel, [("=" | "/="), prec_expr_rel];
 
