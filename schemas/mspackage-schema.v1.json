@@ -328,7 +328,7 @@
       "description": "Glob patterns to include in compilation.",
       "items": { "type": "string" }
     },
-    "files": {
+    "compileFiles": {
       "type": "array",
       "description": "Explicit list of files to compile.",
       "items": { "type": "string" }
@@ -397,7 +397,6 @@
         "useTabs": { "type": "boolean", "default": false },
         "lineWidth": { "type": "number", "default": 80 },
         "indentWidth": { "type": "number", "default": 2 },
-        "semiColons": { "type": "boolean", "default": true },
         "proseWrap": { "type": "string", "enum": ["always", "never", "preserve"], "default": "preserve" }
       }
     },
