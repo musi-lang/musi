@@ -12,6 +12,11 @@ impl Interner {
         Self::default()
     }
 
+    /// Interns string and returns its unique ID.
+    ///
+    /// # Panics
+    ///
+    /// Panics if interner contains more than `u32::MAX` strings.
     pub fn intern(&mut self, text: &str) -> u32 {
         if let Some(&id) = self.table.get(text) {
             return id;
