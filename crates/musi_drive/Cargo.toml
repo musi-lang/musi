@@ -1,10 +1,10 @@
 [package]
 name = "musi-drive"
+description = "Shared driver logic for Musi binaries"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "Shared driver logic for Musi binaries"
 
 [dependencies]
 musi-basic = { path = "../musi_basic" }

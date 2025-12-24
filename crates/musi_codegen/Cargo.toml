@@ -1,10 +1,10 @@
 [package]
 name = "musi-codegen"
+description = "Bytecode generation for Musi compiler"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "Code generation for Musi compiler"
 
 [dependencies]
 musi-basic = { path = "../musi_basic" }

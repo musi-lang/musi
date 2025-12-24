@@ -14,10 +14,12 @@ pub struct Diagnostic {
     pub span: Span,
 }
 
+pub type DiagnosticList = Vec<Diagnostic>;
+
 #[derive(Default, Debug, Clone)]
 #[non_exhaustive]
 pub struct DiagnosticBag {
-    pub diagnostics: Vec<Diagnostic>,
+    pub diagnostics: DiagnosticList,
     pub errors: usize,
     pub warnings: usize,
 }

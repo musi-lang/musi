@@ -11,7 +11,7 @@ name = "musi"
 path = "src/main.rs"
 
 [dependencies]
-musi-driver = { path = "../musi_driver" }
+musi-drive = { path = "../musi_drive" }
 clap.workspace = true
 
 [lints]

@@ -5,7 +5,7 @@ use crate::{
 };
 use musi_basic::{
     diagnostic::{DiagnosticBag, report},
-    errors::IntoMusiError,
+    error::IntoMusiError,
     interner::Interner,
     source::SourceFile,
     span::Span,

@@ -11,7 +11,7 @@ name = "music"
 path = "src/main.rs"
 
 [dependencies]
-musi-driver = { path = "../musi_driver" }
+musi-drive = { path = "../musi_drive" }
 musi-basic = { path = "../musi_basic" }
 musi-lex = { path = "../musi_lex" }
 clap.workspace = true

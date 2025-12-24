@@ -1,10 +1,11 @@
 [package]
 name = "musi-lex"
+description = "Lexer for Musi compiler"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "Lexer for Musi compiler"
+
 
 [dependencies]
 musi-basic = { path = "../musi_basic" }

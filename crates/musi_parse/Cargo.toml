@@ -1,14 +1,17 @@
 [package]
 name = "musi-parse"
+description = "Parser for Musi compiler"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "Parser for Musi compiler"
+
 
 [dependencies]
 musi-basic = { path = "../musi_basic" }
 musi-lex = { path = "../musi_lex" }
+musi-ast = { path = "../musi_ast" }
+thiserror.workspace = true
 
 [lints]
 workspace = true

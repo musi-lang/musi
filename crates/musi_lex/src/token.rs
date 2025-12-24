@@ -153,23 +153,7 @@ pub const KEYWORDS: &[(&str, TokenKind)] = &[
     ("with", TokenKind::KwWith),
 ];
 
-#[derive(Debug)]
-pub struct TokenDisplay<'a> {
-    kind: &'a TokenKind,
-    interner: &'a Interner,
-}
-
-impl TokenKind {
-    #[must_use]
-    pub const fn display<'a>(&'a self, interner: &'a Interner) -> TokenDisplay<'a> {
-        TokenDisplay {
-            kind: self,
-            interner,
-        }
-    }
-}
-
-const SYMBOLS: &[(TokenKind, &str)] = &[
+pub const SYMBOLS: &[(TokenKind, &str)] = &[
     (TokenKind::LBrace, "{"),
     (TokenKind::RBrace, "}"),
     (TokenKind::LBrack, "["),
@@ -217,6 +201,37 @@ const SYMBOLS: &[(TokenKind, &str)] = &[
     (TokenKind::EOF, "EOF"),
 ];
 
+#[derive(Debug)]
+pub struct TokenDisplay<'a> {
+    kind: &'a TokenKind,
+    interner: &'a Interner,
+}
+
+impl TokenKind {
+    #[must_use]
+    pub const fn display<'a>(&'a self, interner: &'a Interner) -> TokenDisplay<'a> {
+        TokenDisplay {
+            kind: self,
+            interner,
+        }
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &'static str {
+        for (kw, tk) in KEYWORDS {
+            if *tk == *self {
+                return kw;
+            }
+        }
+        for (tk, sym) in SYMBOLS {
+            if *tk == *self {
+                return sym;
+            }
+        }
+        "token"
+    }
+}
+
 impl fmt::Display for TokenDisplay<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.kind {
@@ -228,7 +243,7 @@ impl fmt::Display for TokenDisplay<'_> {
             TokenKind::LitString(id) => {
                 write!(f, "\"{}\"", self.interner.lookup(*id).unwrap_or(""))
             }
-            TokenKind::LitRune(c) => write!(f, "'{c}'"),
+            TokenKind::LitRune(c) => write!(f, "'{c}''"),
             TokenKind::LitTemplateNoSubst(id) => {
                 write!(f, "$\"{}\"", self.interner.lookup(*id).unwrap_or(""))
             }

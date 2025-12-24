@@ -115,7 +115,7 @@ name = "musi"
 version = "0.1.0"
 dependencies = [
  "clap",
- "musi-driver",
+ "musi-drive",
 ]
 
 [[package]]
@@ -142,7 +142,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "musi-driver"
+name = "musi-drive"
 version = "0.1.0"
 dependencies = [
  "musi-basic",
@@ -161,8 +161,10 @@ dependencies = [
 name = "musi-parse"
 version = "0.1.0"
 dependencies = [
+ "musi-ast",
  "musi-basic",
  "musi-lex",
+ "thiserror",
 ]
 
 [[package]]
@@ -179,7 +181,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "musi-basic",
- "musi-driver",
+ "musi-drive",
  "musi-lex",
 ]
 

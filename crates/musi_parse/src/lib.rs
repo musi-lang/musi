@@ -1,1 +1,5 @@
-//! Placeholder for Musi parser.
+pub mod error;
+pub mod parser;
+
+pub use error::ParseErrorKind;
+pub use parser::Parser;

@@ -1,4 +1,4 @@
-use musi_basic::errors::{IntoMusiError, Level};
+use musi_basic::error::{IntoMusiError, Level};
 use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
