@@ -429,5 +429,4 @@ val format_sum : expr -> string
 - Grammar: `grammar.ebnf`
 - Example Syntax: `tools/vscode/syntaxes/syntax.ms`
 - Contributing Guidelines: `CONTRIBUTING.md`
-- Current Implementation: `tools/lsp/lib/`
 - VSCode Extension: `tools/vscode/`
