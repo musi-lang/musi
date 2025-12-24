@@ -3,7 +3,7 @@ use musi_lex::lexer;
 
 use std::fs;
 use std::io::{self, Read, Write as _};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::EmitKind;
 
@@ -15,7 +15,7 @@ pub fn check(files: &[PathBuf], emit: Option<EmitKind>) {
     }
 }
 
-pub fn compile(files: &[PathBuf], _out_dir: &PathBuf, emit: Option<EmitKind>) {
+pub fn compile(files: &[PathBuf], _out_dir: &Path, emit: Option<EmitKind>) {
     for path in files {
         if let Err(e) = check_file(path, emit) {
             error(&e);
@@ -26,7 +26,7 @@ pub fn compile(files: &[PathBuf], _out_dir: &PathBuf, emit: Option<EmitKind>) {
     }
 }
 
-pub fn build(project: &PathBuf, _emit: Option<EmitKind>) {
+pub fn build(project: &Path, _emit: Option<EmitKind>) {
     let config_path = project.join("mspackage.json");
     if !config_path.exists() {
         error(&format!(
@@ -38,7 +38,7 @@ pub fn build(project: &PathBuf, _emit: Option<EmitKind>) {
     eprintln!("note: project build not yet implemented");
 }
 
-pub fn init(path: &PathBuf) {
+pub fn init(path: &Path) {
     if let Err(e) = fs::create_dir_all(path) {
         error(&format!(
             "unable to create directory '{}': {e}",
@@ -108,7 +108,7 @@ pub fn stdin(emit: Option<EmitKind>) {
     }
 }
 
-fn check_file(path: &PathBuf, emit: Option<EmitKind>) -> Result<(), String> {
+fn check_file(path: &Path, emit: Option<EmitKind>) -> Result<(), String> {
     let contents =
         fs::read_to_string(path).map_err(|e| format!("cannot read '{}': {e}", path.display()))?;
 

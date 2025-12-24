@@ -107,10 +107,11 @@ pub fn walk_stmt<V: Visitor>(v: &mut V, stmt: &Stmt) {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 pub fn walk_expr<V: Visitor>(v: &mut V, expr: &Expr) {
     match &expr.kind {
         ExprKind::Lit(lit) => v.visit_lit(lit),
-        ExprKind::Ident(_) => {}
+        ExprKind::Ident(_) | ExprKind::Cycle | ExprKind::Import(_) => {}
         ExprKind::Tuple(exprs) | ExprKind::Array(exprs) => v.visit_exprs(exprs),
         ExprKind::Record { fields, .. } => v.visit_fields(fields),
         ExprKind::Block { stmts, expr } => {
@@ -156,7 +157,6 @@ pub fn walk_expr<V: Visitor>(v: &mut V, expr: &Expr) {
         ExprKind::Defer(e) | ExprKind::Unsafe(e) | ExprKind::Deref(e) => {
             v.visit_expr(e);
         }
-        ExprKind::Cycle | ExprKind::Import(_) => {}
         ExprKind::Extern { fns, .. } => {
             for sig in fns {
                 v.visit_fn_sig(sig);
@@ -225,12 +225,11 @@ pub fn walk_typ<V: Visitor>(v: &mut V, typ: &Typ) {
 
 pub fn walk_pat<V: Visitor>(v: &mut V, pat: &Pat) {
     match &pat.kind {
-        PatKind::Ident(_) | PatKind::Wild => {}
+        PatKind::Ident(_) | PatKind::Wild | PatKind::Record { .. } => {}
         PatKind::Lit(lit) => v.visit_lit(lit),
         PatKind::Tuple(ps) | PatKind::Array(ps) | PatKind::Cons(ps) | PatKind::Or(ps) => {
             v.visit_pats(ps);
         }
-        PatKind::Record { .. } => {}
         PatKind::Variant { ty_args, args, .. } => {
             v.visit_typs(ty_args);
             v.visit_pats(args);
