@@ -19,22 +19,21 @@ struct Cli {
 fn main() {
     let cli = Cli::parse();
 
-    let input = match cli.file {
-        Some(path) => match fs::read_to_string(&path) {
+    let input = if let Some(path) = cli.file {
+        match fs::read_to_string(&path) {
             Ok(contents) => (path.display().to_string(), contents),
             Err(err) => {
                 error(&format!("cannot read '{}': {err}", path.display()));
                 return;
             }
-        },
-        None => {
-            let mut buf = String::new();
-            if io::stdin().read_to_string(&mut buf).is_ok() {
-                ("<stdin>".into(), buf)
-            } else {
-                error("unable to read stdin");
-                return;
-            }
+        }
+    } else {
+        let mut buf = String::new();
+        if io::stdin().read_to_string(&mut buf).is_ok() {
+            ("<stdin>".into(), buf)
+        } else {
+            error("unable to read stdin");
+            return;
         }
     };
 
@@ -42,8 +41,7 @@ fn main() {
     let mut interner = Interner::new();
 
     let file_id = source_map.add_file(input.0, input.1);
-    let file = source_map.get(file_id).cloned();
-    let Some(file) = file else {
+    let Some(file) = source_map.get(file_id).cloned() else {
         error("internal: unable to add source file");
         return;
     };
@@ -54,12 +52,12 @@ fn main() {
 
     if cli.dump_tokens {
         for token in &tokens {
-            let _ = eprintln!("{}", token.kind.display(&interner));
+            eprintln!("{}", token.kind.display(&interner));
         }
     }
 }
 
 fn error(msg: &str) {
     let mut stderr = io::stderr();
-    let _ = write!(stderr, "\x1b[1;31merror:\x1b[0m {msg}\n");
+    writeln!(stderr, "\x1b[1;31merror:\x1b[0m {msg}").unwrap_or(());
 }
