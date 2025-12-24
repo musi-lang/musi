@@ -216,6 +216,7 @@ impl TokenKind {
         }
     }
 
+    #[must_use]
     pub fn as_str(&self) -> &'static str {
         for (kw, tk) in KEYWORDS {
             if *tk == *self {
