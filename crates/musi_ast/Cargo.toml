@@ -8,6 +8,7 @@ description = "AST definitions for Musi compiler"
 
 [dependencies]
 musi-basic = { path = "../musi_basic" }
+musi-lex = { path = "../musi_lex" }
 
 [lints]
 workspace = true

@@ -123,6 +123,7 @@ name = "musi-ast"
 version = "0.1.0"
 dependencies = [
  "musi-basic",
+ "musi-lex",
 ]
 
 [[package]]
