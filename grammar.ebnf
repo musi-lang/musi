@@ -101,7 +101,7 @@ aux_pat_field = ident;
 
 aux_pat_fields = aux_pat_field, {",", aux_pat_field}, [","];
 
-aux_match_case = "case", pat, ["if", expr], "=>", expr;
+aux_match_case = "case", pat, aux_if_guard, "=>", expr;
 
 aux_match_cases = aux_match_case, {",", aux_match_case}, [","];
 
@@ -182,11 +182,15 @@ expr_lit_record = [ident], ".{", [aux_field_list], "}";
 
 expr_block = "{", {stmt}, [expr], "}";
 
-expr_if = "if", expr, expr_block, {"else", "if", expr, expr_block}, ["else", expr_block];
+aux_if_cond = expr | ("case", pat, ":=", expr, {",", expr});
 
-expr_while = "while", expr, expr_block;
+aux_if_guard = "if", expr;
 
-expr_for = "for", pat, "in", expr, expr_block;
+expr_if = "if", aux_if_cond, expr_block, {"else", "if", aux_if_cond, expr_block}, ["else", expr_block];
+
+expr_while = "while", expr, [aux_if_guard], expr_block;
+
+expr_for = "for", pat, "in", expr, [aux_if_guard], expr_block;
 
 expr_match = "match", expr, "{", aux_match_cases, "}";
 
