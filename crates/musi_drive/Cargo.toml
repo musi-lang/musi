@@ -1,6 +1,6 @@
 [package]
-name = "music"
-description = "Musi compiler"
+name = "musi-drive"
+description = "Shared driver logic for Musi"
 version.workspace = true
 edition.workspace = true
 repository.workspace = true
@@ -16,7 +16,7 @@ path = "src/main.rs"
 [dependencies]
 musi-basic = { path = "../musi_basic" }
 musi-lex = { path = "../musi_lex" }
-clap.workspace = true
+clap = { workspace = true }
 
 [lints]
 workspace = true

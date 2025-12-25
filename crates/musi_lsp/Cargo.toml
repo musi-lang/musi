@@ -1,0 +1,30 @@
+[package]
+name = "musi-lsp"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "Language Server Protocol implementation for Musi"
+
+[[bin]]
+name = "musi_lsp"
+path = "src/main.rs"
+
+[dependencies]
+musi-basic = { path = "../musi_basic" }
+musi-lex = { path = "../musi_lex" }
+musi-parse = { path = "../musi_parse" }
+musi-ast = { path = "../musi_ast" }
+async-lsp = "0.2.2"
+lsp-types = "0.97.0"
+tokio = { version = "1.48.0", features = ["full"] }
+tower = "0.5.2"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.147"
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[lints]
+workspace = true
