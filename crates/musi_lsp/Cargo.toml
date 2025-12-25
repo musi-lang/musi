@@ -10,7 +10,7 @@ keywords.workspace = true
 categories.workspace = true
 
 [[bin]]
-name = "musi-lsp"
+name = "musi_lsp"
 path = "src/main.rs"
 
 [dependencies]
