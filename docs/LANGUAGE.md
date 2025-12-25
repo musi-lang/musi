@@ -1,31 +1,52 @@
 # Musi Language Specification
 
-Musi is a statically typed, compiled systems programming language with a focus on simplicity, safety, and expressiveness. It features gradual typing, Hindley-Milner type inference, and a syntax inspired by modern OCaml, Rust, and TypeScript.
+Musi is statically typed systems programming language that also lets you use dynamic types when you want. It compiles to bytecode and focuses on being simple, safe, and expressive.
 
 ## Type System
 
-Musi uses a **Gradual Typing** system with local type inference.
+Musi uses **gradual typing** with local `Hindley-Milner` inference. You can write types explicitly or let compiler figure them out.
 
-### primitives
+### Basic Types
 
-- **Integers**: `Int8`, `Int16`, `Int32`, `Int64` (Signed)
-- **Naturals**: `Nat8`, `Nat16`, `Nat32`, `Nat64` (Unsigned)
-- **Floats**: `Bin16`, `Bin32`, `Bin64` (IEEE-754)
-- **Decimals**: `Dec32`, `Dec64`, `Dec128` (Software decimal floating point)
-- **Text**: `Rune` (UTF-32 scalar), `String` (UTF-8 seq encoding)
-- **Logic**: `Bool` (true/false)
-- **Special**: `Unit` (empty tuple `()`), `Any` (dynamic top type), `Never` (bottom type)
+**Integers (signed):**
 
-### Type Constructors
+- `Int8`, `Int16`, `Int32`, `Int64`, `Int128`
 
-Musi provides standard constructors for composing types.
+**Naturals (unsigned):**
 
-- **Generics**: `List[T]`
-- **Optional**: `?T` (Isomorphic to `Option[T]`)
-- **Pointer**: `^T` (Unsafe raw pointer)
-- **Array**: `[]T` (Dynamic slice) or `[N]T` (Fixed size array)
-- **Tuple**: `(A, B, C)`
-- **Function**: `A -> B`
+- `Nat8`, `Nat16`, `Nat32`, `Nat64`, `Nat128`
+
+**Floats (IEEE-754 binary):**
+
+- `Bin16`, `Bin32`, `Bin64`
+
+**Decimals (IEEE-754 decimal, software... for now):**
+
+- `Dec32`, `Dec64`, `Dec128`
+
+**Text:**
+
+- `Rune` (single UTF-32 character)
+- `String` (UTF-8 encoded text)
+
+**Logic:**
+
+- `Bool` (true/false)
+
+**Special:**
+
+- `Unit` (empty tuple `()`, like void but better, but also not quite like void)
+- `Any` (dynamic type)
+- `Never` (bottom type, for things that never return)
+
+### Building Complex Types
+
+- **Generics:** `List[T]`
+- **Optional:** `?T` (same as `Option[T]`)
+- **Pointer:** `^T` (raw pointer, reading is safe, writing is not)
+- **Array:** `[]T` (dynamic slice) or `[N]T` (fixed size)
+- **Tuple:** `(A, B, C)`
+- **Function:** `A -> B`
 
 **Examples:**
 
@@ -33,70 +54,79 @@ Musi provides standard constructors for composing types.
 val i: Int32 := 0;
 val s: String := "hello";
 val opt: ?Int32 := 10;
-val ptr: ^Int32 := @i;      // Address-of operator
+val ptr: ^Int32 := @i;      // @ is addr-of, borrowed from Pascal
 val list: List[String] := List.{ head := "a", tail := None };
-val func: Int32 -> Bool := fn(x) { x > 0 };
+val func: Int32 -> Bool := fn (x) { x > 0 };
 ```
 
-### Function Types
+### Functions as Types
 
-Musi functions are first-class citizens. The `->` operator is right-associative, supporting Currying.
+Functions are first-class values. The `->` operator is right-associative, so you can curry.
 
-1. **Curried**: `A -> B -> C` (Idiomatic).
-2. **Tupled**: `(A, B) -> C` (Used for interop or specific grouping).
+**Curried (default way):**
 
 ```musi
-// Curried (Default)
 val add: Int32 -> Int32 -> Int32 := fn(x, y) { x + y };
-val add5 := add(5); // Partial application
+val add5 := add(5);  // partial application works
+```
 
-// Tupled
+**Tupled (for interop or when you need it):**
+
+```musi
 val add_pair: (Int32, Int32) -> Int32 := fn(pair) { pair.0 + pair.1 };
 ```
 
----
-
-## Lexical Structure
+## Writing Code
 
 ### Literals
 
-Musi supports a rich set of literals for numeric and textual data.
-
 ```musi
 // Numbers
-42          // Decimal
-0xFF        // Hex
-0o77        // Octal
-0b1011      // Binary
+42          // Int
+0xFF        // Int (hex)
+0o77        // Int (octal)
+0b1011      // Int (binary)
 3.14        // Float
 
 // Text
-"Hello"             // String
-'⌘'                 // Rune
-$"Value: {x + 1}"   // String Interpolation
+"Hello"             // String (just slice of Runes)
+'⌘'                 // Rune (Unicode scalar, actually Nat32)
+$"Value: {x + 1}"   // String interpolation
 
-// Logic
+// Booleans
 true, false
 ```
 
 ### Operators
 
-Standard arithmetic and logical operators are available.
+**Arithmetic:**
 
-- **Arithmetic**: `+`, `-`, `*`, `/`, `%` (remainder), `mod` (modulus), `**` (Power)
-- **Bitwise**: `&`, `|`, `^`, `<<`, `>>`, `~` (Not)
-- **Logical**: `and`, `or`, `not`
-- **Comparison**: `<`, `>`, `<=`, `>=`, `=`, `/=` (Not Equal)
-- **Pipe**: `|>` (Function application pipeline)
-- **Coalesce**: `??` (Null/Optional coalesce)
+- `+`, `-`, `*`, `/`, `%` (remainder), `mod` (true modulus), `**` (power)
 
----
+**Bitwise:**
+
+Also, these are non-shorting in logical context.
+
+- `&`, `|`, `^`, `<<`, `>>`, `~` (not)
+
+**Logical:**
+
+- `and`, `or`, `not`
+
+**Comparison:**
+
+- `<`, `>`, `<=`, `>=`, `=`, `/=` (not equal)
+
+**Special:**
+
+- `|>` (pipe, for chaining functions)
+- `??` (optional coalesce, like `??` in Swift)
 
 ## Data Structures
 
 ### Records
 
-Structs with named fields.
+Product types with named fields:
 
 ```musi
 record Point[T] {
@@ -108,9 +138,9 @@ val p := Point.{ x := 10, y := 20 };
 val x := p.x;
 ```
 
-### Sum Types (Variants)
+### Sum Types
 
-Tagged unions for expressing distinct cases.
+Tagged unions for when something can be one thing or another:
 
 ```musi
 sum Option[T] {
@@ -118,25 +148,24 @@ sum Option[T] {
   case None
 };
 
+// use backticks to escape reserved keywords or operators
 val `val` := Option.Some(42);
 ```
 
 ### Pattern Matching
 
-Robust matching on literals, structure, and variants.
+Match on values, structure, variants, whatever:
 
 ```musi
-match val {
+match `val` {
 case Some(x) => x,
 case None => 0
 };
 ```
 
----
-
 ## Control Flow
 
-Musi is an expression-oriented language. `if`, `match`, and blocks return values.
+Everything is expression. Blocks return values.
 
 ```musi
 val result := if x > 0 { "Positive" } else { "Negative" };
@@ -150,24 +179,22 @@ for item in list {
 };
 ```
 
-**Defer** statements run at the end of the enclosing block (LIFO order).
+**Defer** runs code at end of block (LIFO order, like Go):
 
 ```musi
 val f := open("file.txt");
-defer close(f);
+defer close(f);  // runs when block exits
 ```
 
----
+## Systems Programming
 
-## System Programming
+### Unsafe Code & FFI
 
-### Unsafe & FFI
-
-Access to raw pointers and C ABI is governed by `unsafe` blocks.
+Raw pointers and C functions need `unsafe` blocks (stolen from Rust):
 
 ```musi
 extern "C" unsafe {
-  fn malloc(size: Nat64): ^Any;
+  fn malloc(size: Nat64): ^Any; // because Unit =/= void, Any makes more sense... somehow
   fn free(ptr: ^Any): Any;
 };
 
@@ -179,23 +206,27 @@ unsafe {
 
 ### Attributes
 
-Compiler directives using `[< ... >]` syntax (borrowed from F#).
+Compiler hints using `[< ... >]` syntax (stolen from F#):
 
 ```musi
 [<inline>]
 fn fast_add(x: Int32, y: Int32) { x + y };
 ```
 
----
+## Why Square Brackets for Generics?
 
-## Design Rationale
+You may/may not wonder why `List[Int]` instead of `List<Int>` like C++ or Rust.
 
-### Generic Syntax: Square Brackets `[]`
+**Three reasons:**
 
-Musi uses square brackets for generics (e.g., `List[Int]`, `fn identity[T]`) instead of the C++-style angle brackets (`List<Int>`).
+### 1. Parsing is simpler
 
-**Reasoning:**
+Angle brackets clash with less-than and greater-than operators. The parser cannot tell if `a<b>` is generic type or comparison without looking ahead or knowing what `a` is. This breaks grammar rules that keep parsing simple.
 
-1. **Strict Context-Free Grammar (CFG)**: Angle brackets introduce an ambiguity with "Less Than" and "Greater Than" operators (`a < b`). Resolving this often requires infinite lookahead or semantic information (checking if `a` is a type) during parsing, which violates strict CFG rules.
-2. **No "Turbofish"**: By using distinct delimiters `[]`, we avoid the need for special disambiguation syntax like Rust's `::<>`.
-3. **Unified "indexing" Semantics**: Generics can be conceptually viewed as "indexing into a family of types". Syntactically, `List[Int]` (Type Indexing) parallels `array[0]` (Value Indexing).
+### 12. No "turbofish" needed
+
+Rust needs `::<>` syntax to disambiguate generics in some contexts. Square brackets avoid this entirely.
+
+### 13. Conceptual consistency
+
+Generics are like "indexing into family of types". So `List[Int]` (type indexing) looks like `array[0]` (value indexing). Same bracket syntax, similar mental model.
