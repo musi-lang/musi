@@ -16,25 +16,8 @@ impl Parser<'_> {
     /// Returns `ParseErrorKind` on syntax error.
     pub fn parse_typ(&mut self) -> MusiResult<Typ> {
         let start = self.curr_span();
-        match self.peek_kind() {
-            Some(TokenKind::Question) => self.parse_typ_optional(),
-            Some(TokenKind::Caret) => self.parse_typ_ptr(),
-            Some(TokenKind::LBrack) => self.parse_typ_array(),
-            _ => {
-                let mut ty = self.parse_typ_primary()?;
-                if self.bump_if(TokenKind::MinusGt) {
-                    let ret = Box::new(self.parse_typ()?);
-                    ty = Typ::new(
-                        TypKind::Fn {
-                            param: Box::new(ty),
-                            ret,
-                        },
-                        start.merge(self.prev_span()),
-                    );
-                }
-                Ok(ty)
-            }
-        }
+        let ty = self.parse_typ_prefix()?;
+        self.parse_typ_fn(ty, start)
     }
 
     /// # Errors
@@ -53,10 +36,34 @@ impl Parser<'_> {
         })
     }
 
+    fn parse_typ_fn(&mut self, param: Typ, start: Span) -> MusiResult<Typ> {
+        if self.bump_if(TokenKind::MinusGt) {
+            let ret = Box::new(self.parse_typ()?);
+            Ok(Typ::new(
+                TypKind::Fn {
+                    param: Box::new(param),
+                    ret,
+                },
+                start.merge(self.prev_span()),
+            ))
+        } else {
+            Ok(param)
+        }
+    }
+
+    fn parse_typ_prefix(&mut self) -> MusiResult<Typ> {
+        match self.peek_kind() {
+            Some(TokenKind::Question) => self.parse_typ_optional(),
+            Some(TokenKind::Caret) => self.parse_typ_ptr(),
+            Some(TokenKind::LBrack) => self.parse_typ_array(),
+            _ => self.parse_typ_primary(),
+        }
+    }
+
     fn parse_typ_optional(&mut self) -> MusiResult<Typ> {
         let start = self.curr_span();
         let _ = self.advance();
-        let inner = Box::new(self.parse_typ()?);
+        let inner = Box::new(self.parse_typ_prefix()?);
         Ok(Typ::new(
             TypKind::Optional(inner),
             start.merge(self.prev_span()),
@@ -66,7 +73,7 @@ impl Parser<'_> {
     fn parse_typ_ptr(&mut self) -> MusiResult<Typ> {
         let start = self.curr_span();
         let _ = self.advance();
-        let inner = Box::new(self.parse_typ()?);
+        let inner = Box::new(self.parse_typ_prefix()?);
         Ok(Typ::new(TypKind::Ptr(inner), start.merge(self.prev_span())))
     }
 
@@ -80,7 +87,7 @@ impl Parser<'_> {
             None
         };
         let _ = self.expect(TokenKind::RBrack)?;
-        let elem = Box::new(self.parse_typ()?);
+        let elem = Box::new(self.parse_typ_prefix()?);
         Ok(Typ::new(
             TypKind::Array { size, elem },
             start.merge(self.prev_span()),

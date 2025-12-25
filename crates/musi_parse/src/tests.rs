@@ -816,15 +816,11 @@ fn test_typ_app() {
 }
 
 #[test]
+/// Should parse as: `Fn(param: ?[10]^Int, ret: (Int, String))`
 fn test_typ_complex() {
     let mut ctx = TestContext::new();
-    // ?[10]^Int -> (Int, String) parses as: ?([10](^(Int))) -> (Int, String)
-    // The outermost is Optional because ? is a prefix operator
     let typ = ctx.parse_typ("?[10]^Int -> (Int, String)");
-    // Due to -> being the lowest precedence, this is: Optional(...) -> Tuple
-    // But actually ? binds tighter, so it should be: (?(Array...)) -> Tuple - no wait
-    // Let's just check it parses correctly as Optional at top level
-    assert!(matches!(typ.kind, TypKind::Optional(_)));
+    assert!(matches!(typ.kind, TypKind::Fn { .. }));
 }
 
 #[test]
