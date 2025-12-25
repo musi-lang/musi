@@ -24,10 +24,7 @@ impl Parser<'_> {
         while self.bump_if(TokenKind::Bar) {
             alts.push(self.parse_pat_cons()?);
         }
-        Ok(Pat {
-            kind: PatKind::Or(alts),
-            span: start.merge(self.prev_span()),
-        })
+        Ok(Pat::new(PatKind::Or(alts), start.merge(self.prev_span())))
     }
 
     fn parse_pat_cons(&mut self) -> MusiResult<Pat> {
@@ -40,10 +37,10 @@ impl Parser<'_> {
         while self.bump_if(TokenKind::ColonColon) {
             parts.push(self.parse_pat_primary()?);
         }
-        Ok(Pat {
-            kind: PatKind::Cons(parts),
-            span: start.merge(self.prev_span()),
-        })
+        Ok(Pat::new(
+            PatKind::Cons(parts),
+            start.merge(self.prev_span()),
+        ))
     }
 
     fn parse_pat_primary(&mut self) -> MusiResult<Pat> {
@@ -51,10 +48,7 @@ impl Parser<'_> {
         match self.peek_kind() {
             Some(TokenKind::Underscore) => {
                 let _ = self.advance();
-                Ok(Pat {
-                    kind: PatKind::Wild,
-                    span: start,
-                })
+                Ok(Pat::new(PatKind::Wild, start))
             }
             Some(
                 TokenKind::LitInt(_)
@@ -109,7 +103,7 @@ impl Parser<'_> {
             }
             _ => return Err(ParseErrorKind::Expected("literal pattern").into_musi_error(start)),
         };
-        Ok(Pat { kind, span: start })
+        Ok(Pat::new(kind, start))
     }
 
     fn parse_pat_after_ident(&mut self, id: u32, start: Span) -> MusiResult<Pat> {
@@ -126,20 +120,17 @@ impl Parser<'_> {
         if !ty_args.is_empty() {
             return Ok(self.make_pat_variant(id, ty_args, vec![], start));
         }
-        Ok(Pat {
-            kind: PatKind::Ident(id),
-            span: start,
-        })
+        Ok(Pat::new(PatKind::Ident(id), start))
     }
 
     fn parse_pat_record(&mut self, ty: Option<u32>, start: Span) -> MusiResult<Pat> {
         self.advance_by(2);
         let fields = self.separated(TokenKind::Comma, Self::expect_ident)?;
         let _ = self.expect(TokenKind::RBrace)?;
-        Ok(Pat {
-            kind: PatKind::Record { ty, fields },
-            span: start.merge(self.prev_span()),
-        })
+        Ok(Pat::new(
+            PatKind::Record { ty, fields },
+            start.merge(self.prev_span()),
+        ))
     }
 
     fn parse_pat_record_anon(&mut self) -> MusiResult<Pat> {
@@ -150,52 +141,58 @@ impl Parser<'_> {
         let start = self.curr_span();
         let _ = self.advance();
         if self.bump_if(TokenKind::RParen) {
-            return Ok(Pat {
-                kind: PatKind::Tuple(vec![]),
-                span: start.merge(self.prev_span()),
-            });
+            return Ok(self.make_empty_tuple_pat(start));
         }
         let first = self.parse_pat()?;
         if self.bump_if(TokenKind::Comma) {
-            let mut elems = vec![first];
-            if !self.at(TokenKind::RParen) {
-                elems.extend(self.separated(TokenKind::Comma, Self::parse_pat)?);
-            }
-            let _ = self.expect(TokenKind::RParen)?;
-            Ok(Pat {
-                kind: PatKind::Tuple(elems),
-                span: start.merge(self.prev_span()),
-            })
+            self.parse_pat_tuple(first, start)
         } else {
-            let _ = self.expect(TokenKind::RParen)?;
-            Ok(Pat {
-                kind: first.kind,
-                span: start.merge(self.prev_span()),
-            })
+            self.parse_pat_grouped(first, start)
         }
+    }
+
+    fn parse_pat_tuple(&mut self, first: Pat, start: Span) -> MusiResult<Pat> {
+        let mut elems = vec![first];
+        if !self.at(TokenKind::RParen) {
+            elems.extend(self.separated(TokenKind::Comma, Self::parse_pat)?);
+        }
+        let _ = self.expect(TokenKind::RParen)?;
+        Ok(Pat::new(
+            PatKind::Tuple(elems),
+            start.merge(self.prev_span()),
+        ))
+    }
+
+    fn parse_pat_grouped(&mut self, inner: Pat, start: Span) -> MusiResult<Pat> {
+        let _ = self.expect(TokenKind::RParen)?;
+        Ok(Pat::new(inner.kind, start.merge(self.prev_span())))
     }
 
     fn parse_pat_array(&mut self) -> MusiResult<Pat> {
         let start = self.curr_span();
-        let _ = self.advance();
-        let pats = self.separated(TokenKind::Comma, Self::parse_pat)?;
-        let _ = self.expect(TokenKind::RBrack)?;
-        Ok(Pat {
-            kind: PatKind::Array(pats),
-            span: start.merge(self.prev_span()),
-        })
+        let pats = self.delimited(TokenKind::LBrack, TokenKind::RBrack, |p| {
+            p.separated(TokenKind::Comma, Self::parse_pat)
+        })?;
+        Ok(Pat::new(
+            PatKind::Array(pats),
+            start.merge(self.prev_span()),
+        ))
     }
 }
 
 impl Parser<'_> {
     fn make_pat_variant(&self, name: u32, ty_args: TypList, args: PatList, start: Span) -> Pat {
-        Pat {
-            kind: PatKind::Variant {
+        Pat::new(
+            PatKind::Variant {
                 name,
                 ty_args,
                 args,
             },
-            span: start.merge(self.prev_span()),
-        }
+            start.merge(self.prev_span()),
+        )
+    }
+
+    fn make_empty_tuple_pat(&self, start: Span) -> Pat {
+        Pat::new(PatKind::Tuple(vec![]), start.merge(self.prev_span()))
     }
 }

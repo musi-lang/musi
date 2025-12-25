@@ -1,8 +1,15 @@
 use musi_ast::{Idents, Typ, TypKind, TypList};
-use musi_basic::error::{IntoMusiError, MusiResult};
+use musi_basic::{
+    error::{IntoMusiError, MusiResult},
+    span::Span,
+};
 use musi_lex::token::TokenKind;
 
 use crate::{Parser, error::ParseErrorKind};
+
+// =============================================================================
+// TYPE PARSING
+// =============================================================================
 
 impl Parser<'_> {
     /// # Errors
@@ -112,25 +119,36 @@ impl Parser<'_> {
         let start = self.curr_span();
         let _ = self.advance();
         if self.bump_if(TokenKind::RParen) {
-            return Ok(Typ::new(
-                TypKind::Tuple(vec![]),
-                start.merge(self.prev_span()),
-            ));
+            return Ok(self.make_empty_tuple_typ(start));
         }
         let first = self.parse_typ()?;
         if self.bump_if(TokenKind::Comma) {
-            let mut elems = vec![first];
-            if !self.at(TokenKind::RParen) {
-                elems.extend(self.separated(TokenKind::Comma, Self::parse_typ)?);
-            }
-            let _ = self.expect(TokenKind::RParen)?;
-            Ok(Typ::new(
-                TypKind::Tuple(elems),
-                start.merge(self.prev_span()),
-            ))
+            self.parse_typ_tuple(first, start)
         } else {
-            let _ = self.expect(TokenKind::RParen)?;
-            Ok(Typ::new(first.kind, start.merge(self.prev_span())))
+            self.parse_typ_grouped(first, start)
         }
+    }
+
+    fn parse_typ_tuple(&mut self, first: Typ, start: Span) -> MusiResult<Typ> {
+        let mut elems = vec![first];
+        if !self.at(TokenKind::RParen) {
+            elems.extend(self.separated(TokenKind::Comma, Self::parse_typ)?);
+        }
+        let _ = self.expect(TokenKind::RParen)?;
+        Ok(Typ::new(
+            TypKind::Tuple(elems),
+            start.merge(self.prev_span()),
+        ))
+    }
+
+    fn parse_typ_grouped(&mut self, inner: Typ, start: Span) -> MusiResult<Typ> {
+        let _ = self.expect(TokenKind::RParen)?;
+        Ok(Typ::new(inner.kind, start.merge(self.prev_span())))
+    }
+}
+
+impl Parser<'_> {
+    fn make_empty_tuple_typ(&self, start: Span) -> Typ {
+        Typ::new(TypKind::Tuple(vec![]), start.merge(self.prev_span()))
     }
 }
