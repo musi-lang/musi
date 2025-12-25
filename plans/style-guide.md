@@ -248,7 +248,7 @@ record Point {
 ### Syntax
 
 ```musi
-import std.io;
+import "std/io";
 import "path/to/module";
 ```
 
@@ -260,9 +260,15 @@ Group imports logically, separated by blank lines:
 2. External dependencies
 3. Internal modules
 
-### Sorting
+```musi
+import "std/io";
+import "std/collections/list";
 
-Alphabetical within each group.
+import "external/json";
+
+import "./utils";
+import "./models";
+```
 
 ---
 
