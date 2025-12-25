@@ -282,27 +282,29 @@ impl<'a> Parser<'a> {
     }
 
     pub fn sync_to_stmt(&mut self) {
+        let mut advanced = false;
         loop {
             match self.peek_kind() {
-                None
-                | Some(
-                    TokenKind::RBrace
-                    | TokenKind::KwVal
+                None => break,
+                Some(TokenKind::RBrace) => break,
+                Some(
+                    TokenKind::KwVal
                     | TokenKind::KwVar
                     | TokenKind::KwFn
                     | TokenKind::KwRecord
                     | TokenKind::KwSum
                     | TokenKind::KwIf
                     | TokenKind::KwWhile
-                    | TokenKind::KwFor
-                    | TokenKind::Ident(_),
+                    | TokenKind::KwFor,
                 ) => break,
+                Some(TokenKind::Ident(_)) if advanced => break,
                 Some(TokenKind::Semicolon) => {
                     _ = self.advance();
                     break;
                 }
                 _ => {
                     _ = self.advance();
+                    advanced = true;
                 }
             }
         }
