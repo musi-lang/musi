@@ -22,9 +22,8 @@ impl Parser<'_> {
     /// Returns `ParseErrorKind` on syntax error.
     pub fn parse_expr_block(&mut self) -> MusiResult<Expr> {
         let start = self.curr_span();
-        let _ = self.expect(TokenKind::LBrace)?;
-        let (stmts, expr) = self.parse_block_body()?;
-        let _ = self.expect(TokenKind::RBrace)?;
+        let (stmts, expr) =
+            self.delimited(TokenKind::LBrace, TokenKind::RBrace, Self::parse_block_body)?;
         Ok(Expr::new(
             ExprKind::Block { stmts, expr },
             start.merge(self.prev_span()),
@@ -184,51 +183,56 @@ impl Parser<'_> {
 
     fn parse_expr_postfix(&mut self, lhs: Expr) -> MusiResult<Expr> {
         let start = lhs.span;
-        let (kind, span) = match self.peek_kind() {
-            Some(TokenKind::LParen) => {
-                let _ = self.advance();
-                let args = self.separated(TokenKind::Comma, Self::parse_expr)?;
-                let _ = self.expect(TokenKind::RParen)?;
-                (
-                    ExprKind::Call {
-                        callee: Box::new(lhs),
-                        args,
-                    },
-                    start.merge(self.prev_span()),
-                )
-            }
-            Some(TokenKind::LBrack) => {
-                let _ = self.advance();
-                let index = Box::new(self.parse_expr()?);
-                let _ = self.expect(TokenKind::RBrack)?;
-                (
-                    ExprKind::Index {
-                        base: Box::new(lhs),
-                        index,
-                    },
-                    start.merge(self.prev_span()),
-                )
-            }
-            Some(TokenKind::Dot) => {
-                let _ = self.advance();
-                (
-                    ExprKind::Field {
-                        base: Box::new(lhs),
-                        field: self.expect_ident()?,
-                    },
-                    start.merge(self.prev_span()),
-                )
-            }
-            Some(TokenKind::DotCaret) => {
-                let _ = self.advance();
-                (
-                    ExprKind::Deref(Box::new(lhs)),
-                    start.merge(self.prev_span()),
-                )
-            }
-            _ => return Ok(lhs),
-        };
-        Ok(Expr::new(kind, span))
+        match self.peek_kind() {
+            Some(TokenKind::LParen) => self.parse_postfix_call(lhs, start),
+            Some(TokenKind::LBrack) => self.parse_postfix_index(lhs, start),
+            Some(TokenKind::Dot) => self.parse_postfix_field(lhs, start),
+            Some(TokenKind::DotCaret) => self.parse_postfix_deref(lhs, start),
+            _ => Ok(lhs),
+        }
+    }
+
+    fn parse_postfix_call(&mut self, lhs: Expr, start: Span) -> MusiResult<Expr> {
+        let args = self.delimited(TokenKind::LParen, TokenKind::RParen, |p| {
+            p.separated(TokenKind::Comma, Self::parse_expr)
+        })?;
+        Ok(Expr::new(
+            ExprKind::Call {
+                callee: Box::new(lhs),
+                args,
+            },
+            start.merge(self.prev_span()),
+        ))
+    }
+
+    fn parse_postfix_index(&mut self, lhs: Expr, start: Span) -> MusiResult<Expr> {
+        let index = self.delimited(TokenKind::LBrack, TokenKind::RBrack, Self::parse_expr)?;
+        Ok(Expr::new(
+            ExprKind::Index {
+                base: Box::new(lhs),
+                index: Box::new(index),
+            },
+            start.merge(self.prev_span()),
+        ))
+    }
+
+    fn parse_postfix_field(&mut self, lhs: Expr, start: Span) -> MusiResult<Expr> {
+        let _ = self.advance();
+        Ok(Expr::new(
+            ExprKind::Field {
+                base: Box::new(lhs),
+                field: self.expect_ident()?,
+            },
+            start.merge(self.prev_span()),
+        ))
+    }
+
+    fn parse_postfix_deref(&mut self, lhs: Expr, start: Span) -> MusiResult<Expr> {
+        let _ = self.advance();
+        Ok(Expr::new(
+            ExprKind::Deref(Box::new(lhs)),
+            start.merge(self.prev_span()),
+        ))
     }
 
     fn parse_expr_primary(&mut self) -> MusiResult<Expr> {
