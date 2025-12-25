@@ -2,44 +2,75 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { getConfig } from "./config";
+import { getCargoBinDir, getServerBinaryName, isWindows } from "./utils";
+
+function _exists(filePath: string): boolean {
+	return fs.existsSync(filePath);
+}
+
+function _getWorkspaceCandidates(workspacePath: string): string[] {
+	const binary = getServerBinaryName();
+	return [
+		path.join(workspacePath, "target", "debug", binary),
+		path.join(workspacePath, "target", "release", binary),
+	];
+}
+
+function _getGlobalCandidates(): string[] {
+	const binary = getServerBinaryName();
+	const candidates = [path.join(getCargoBinDir(), binary)];
+
+	if (!isWindows()) {
+		candidates.push(`/usr/local/bin/${binary}`, `/usr/bin/${binary}`);
+	}
+
+	return candidates;
+}
+
+function _showConfiguredPathWarning(configuredPath: string) {
+	vscode.window.showWarningMessage(
+		`Musi: Configured server path does not exist: ${configuredPath}`,
+	);
+}
 
 /**
- * Find `musi_lsp` server binary.
+ * Locate `musi_lsp` server binary.
+ *
  * Search order:
- * 1. User-configured path (`musi.server.path`)
- * 2. Workspace `target/debug/musi_lsp`
- * 3. Workspace `target/release/musi_lsp`
- * 4. Global installation paths
+ * 1. User-configured `musi.server.path` setting
+ * 2. Workspace `target/debug/musi_lsp` or `target/release/musi_lsp`
+ * 3. Global paths: `~/.cargo/bin`, `/usr/local/bin`, `/usr/bin`
+ *
+ * @returns Absolute path to server binary, or `undefined` if not found.
  */
-export async function findServerPath(): Promise<string | undefined> {
+function _getUserConfiguredPath(): string | undefined {
 	const config = getConfig();
 	if (config.serverPath) {
-		if (fs.existsSync(config.serverPath)) {
+		if (_exists(config.serverPath)) {
 			return config.serverPath;
 		}
-		vscode.window.showWarningMessage(
-			`Configured server path not found: ${config.serverPath}`,
-		);
+		_showConfiguredPathWarning(config.serverPath);
 	}
+
+	return undefined;
+}
+
+function _getWorkspacePath(): string | undefined {
 	const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 	if (workspacePath) {
-		const candidates = [
-			path.join(workspacePath, "target", "debug", "musi_lsp"),
-			path.join(workspacePath, "target", "release", "musi_lsp"),
-		];
-		for (const candidate of candidates) {
-			if (fs.existsSync(candidate)) {
+		for (const candidate of _getWorkspaceCandidates(workspacePath)) {
+			if (_exists(candidate)) {
 				return candidate;
 			}
 		}
 	}
-	const globalCandidates = [
-		"/usr/local/bin/musi_lsp",
-		"/usr/bin/musi_lsp",
-		path.join(process.env["HOME"] || "", ".cargo", "bin", "musi_lsp"),
-	];
-	for (const candidate of globalCandidates) {
-		if (fs.existsSync(candidate)) {
+
+	return undefined;
+}
+
+function _getGlobalPath(): string | undefined {
+	for (const candidate of _getGlobalCandidates()) {
+		if (_exists(candidate)) {
 			return candidate;
 		}
 	}
@@ -47,18 +78,32 @@ export async function findServerPath(): Promise<string | undefined> {
 	return undefined;
 }
 
-export async function validateServer(serverPath: string): Promise<boolean> {
-	try {
-		fs.accessSync(serverPath, fs.constants.X_OK);
-		return true;
-	} catch {
-		return false;
+export async function findServerPath(): Promise<string | undefined> {
+	const userPath = _getUserConfiguredPath();
+	if (userPath) {
+		return userPath;
 	}
+
+	const workspacePath = _getWorkspacePath();
+	if (workspacePath) {
+		return workspacePath;
+	}
+
+	const globalPath = _getGlobalPath();
+	if (globalPath) {
+		return globalPath;
+	}
+
+	return undefined;
 }
 
+/**
+ * Display error dialog when server binary cannot be found.
+ * Offers options to open terminal for building or view documentation.
+ */
 export async function showServerNotFoundUI() {
 	const action = await vscode.window.showErrorMessage(
-		"Musi LSP server not found. Please run 'cargo build -p musi_lsp' to build server.",
+		"Musi LSP server binary not found. Build with 'cargo build -p musi_lsp'.",
 		"Open Terminal",
 		"Show Build Instructions",
 	);

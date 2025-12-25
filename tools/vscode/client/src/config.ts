@@ -1,5 +1,8 @@
 import * as vscode from "vscode";
 
+/**
+ * Extension configuration values from VS Code settings.
+ */
 export interface Config {
 	readonly serverPath: string | null;
 	readonly runtimePath: string | null;
@@ -11,23 +14,45 @@ export interface Config {
 	readonly formattingIndentSize: number;
 }
 
+const _DEFAULTS: Config = {
+	serverPath: null,
+	runtimePath: null,
+	traceServer: "off",
+	diagnosticsEnabled: true,
+	inlayHintsEnabled: true,
+	completionEnabled: true,
+	formattingEnabled: true,
+	formattingIndentSize: 2,
+};
+
+function _get<T>(cfg: vscode.WorkspaceConfiguration, key: string, fallback: T): T {
+	return cfg.get<T>(key, fallback);
+}
+
+/**
+ * Retrieve current Musi extension configuration from VS Code settings.
+ * Falls back to defaults for any unset values.
+ */
 export function getConfig(): Config {
-	const config = vscode.workspace.getConfiguration("musi");
+	const cfg = vscode.workspace.getConfiguration("musi");
+
 	return {
-		serverPath: config.get<string | null>("server.path", null),
-		runtimePath: config.get<string | null>("runtime.path", null),
-		traceServer: config.get<"off" | "messages" | "verbose">(
-			"trace.server",
-			"off",
-		),
-		diagnosticsEnabled: config.get<boolean>("diagnostics.enable", true),
-		inlayHintsEnabled: config.get<boolean>("inlayHints.enable", true),
-		completionEnabled: config.get<boolean>("completion.enable", true),
-		formattingEnabled: config.get<boolean>("formatting.enable", true),
-		formattingIndentSize: config.get<number>("formatting.indentSize", 2),
+		serverPath: _get(cfg, "server.path", _DEFAULTS.serverPath),
+		runtimePath: _get(cfg, "runtime.path", _DEFAULTS.runtimePath),
+		traceServer: _get(cfg, "trace.server", _DEFAULTS.traceServer),
+		diagnosticsEnabled: _get(cfg, "diagnostics.enable", _DEFAULTS.diagnosticsEnabled),
+		inlayHintsEnabled: _get(cfg, "inlayHints.enable", _DEFAULTS.inlayHintsEnabled),
+		completionEnabled: _get(cfg, "completion.enable", _DEFAULTS.completionEnabled),
+		formattingEnabled: _get(cfg, "formatting.enable", _DEFAULTS.formattingEnabled),
+		formattingIndentSize: _get(cfg, "formatting.indentSize", _DEFAULTS.formattingIndentSize),
 	};
 }
 
+/**
+ * Subscribe to configuration changes for Musi settings.
+ * @param callback Function to invoke when any `musi.*` setting changes.
+ * @returns Disposable to unsubscribe from changes.
+ */
 export function onConfigChange(callback: () => void): vscode.Disposable {
 	return vscode.workspace.onDidChangeConfiguration((event) => {
 		if (event.affectsConfiguration("musi")) {

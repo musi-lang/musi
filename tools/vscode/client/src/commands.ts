@@ -1,11 +1,19 @@
 import * as vscode from "vscode";
 import { findServerPath, showServerNotFoundUI } from "./bootstrap";
-import { restartClient } from "./client";
+import { restartClient, stopClient } from "./client";
 import type { StatusBar } from "./status";
 
-export function createCommands(statusBar: StatusBar) {
+type CommandHandler = () => Promise<void> | void;
+
+interface Commands {
+	restartServer: CommandHandler;
+	stopServer: CommandHandler;
+	showLogs: CommandHandler;
+}
+
+function _createCommands(statusBar: StatusBar): Commands {
 	return {
-		restartServer: async () => {
+		async restartServer() {
 			statusBar.update("Restarting...", "loading");
 
 			try {
@@ -18,46 +26,36 @@ export function createCommands(statusBar: StatusBar) {
 
 				await restartClient(serverPath);
 				statusBar.update("Ready", "ready");
-
-				vscode.window.showInformationMessage(
-					"Musi Language Server restarted successfully",
-				);
+				vscode.window.showInformationMessage("Musi Language Server restarted successfully.");
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
-				statusBar.update("Failed", "error");
-				vscode.window.showErrorMessage(
-					`Failed to restart Musi LSP server: ${message}`,
-				);
+				statusBar.update("Restart failed", "error");
+				vscode.window.showErrorMessage(`Failed to restart Musi LSP: ${message}`);
 			}
 		},
 
-		showLogs: () => {
-			vscode.commands.executeCommand("workbench.action.toggleDevTools");
-		},
-
-		stopServer: async () => {
-			const { stopClient } = await import("./client");
+		async stopServer() {
 			await stopClient();
 			statusBar.update("Stopped", "stopped");
+		},
+
+		showLogs() {
+			vscode.commands.executeCommand("workbench.action.toggleDevTools");
 		},
 	};
 }
 
-export function registerCommands(
-	context: vscode.ExtensionContext,
-	statusBar: StatusBar,
-) {
-	const commands = createCommands(statusBar);
+/**
+ * Register all Musi extension commands with VS Code.
+ * @param context Extension context for managing subscriptions.
+ * @param statusBar Status bar instance for visual feedback.
+ */
+export function registerCommands(context: vscode.ExtensionContext, statusBar: StatusBar) {
+	const commands = _createCommands(statusBar);
 
 	context.subscriptions.push(
 		vscode.commands.registerCommand("musi.restartServer", commands.restartServer),
-	);
-
-	context.subscriptions.push(
-		vscode.commands.registerCommand("musi.showLogs", commands.showLogs),
-	);
-
-	context.subscriptions.push(
 		vscode.commands.registerCommand("musi.stopServer", commands.stopServer),
+		vscode.commands.registerCommand("musi.showLogs", commands.showLogs),
 	);
 }

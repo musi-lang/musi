@@ -1,52 +1,55 @@
 import * as vscode from "vscode";
 
+/** Visual state of status bar indicator. */
 export type StatusState = "loading" | "ready" | "error" | "stopped";
 
-export class StatusBar {
-	#statusBarItem: vscode.StatusBarItem;
+const _STATE_COLORS: Record<StatusState, { bg?: string; fg: string }> = {
+	loading: { fg: "statusBarItem.warningForeground" },
+	ready: { fg: "statusBarItem.prominentForeground" },
+	error: { bg: "statusBarItem.errorBackground", fg: "errorForeground" },
+	stopped: { fg: "disabledForeground" },
+};
 
-	constructor() {
-		this.#statusBarItem = vscode.window.createStatusBarItem(
+/**
+ * Manages Musi status bar item in VS Code.
+ * Displays connection state and provides click-to-action functionality.
+ */
+export class StatusBar {
+	#item: vscode.StatusBarItem;
+
+	/**
+	 * Create new status bar manager.
+	 * @param command Command to execute when status bar item is clicked.
+	 */
+	constructor(command = "musi.showLogs") {
+		this.#item = vscode.window.createStatusBarItem(
 			vscode.StatusBarAlignment.Right,
 			100,
 		);
-		this.#statusBarItem.command = "musi.showLogs";
+		this.#item.command = command;
 	}
 
+	/**
+	 * Update status bar with message and visual state.
+	 * @param message Text to display (prefixed with `"Musi: "`).
+	 * @param state Visual state determining colors.
+	 */
 	update(message: string, state: StatusState) {
-		this.#statusBarItem.text = `$(play) Musi: ${message}`;
+		this.#item.text = `$(play) Musi: ${message}`;
 
-		switch (state) {
-			case "loading":
-				this.#statusBarItem.backgroundColor = undefined;
-				this.#statusBarItem.color = new vscode.ThemeColor(
-					"statusBarItem.warningForeground",
-				);
-				break;
-			case "ready":
-				this.#statusBarItem.backgroundColor = undefined;
-				this.#statusBarItem.color = new vscode.ThemeColor(
-					"statusBarItem.prominentForeground",
-				);
-				break;
-			case "error":
-				this.#statusBarItem.backgroundColor = new vscode.ThemeColor(
-					"statusBarItem.errorBackground",
-				);
-				this.#statusBarItem.color = new vscode.ThemeColor("errorForeground");
-				break;
-			case "stopped":
-				this.#statusBarItem.backgroundColor = undefined;
-				this.#statusBarItem.color = new vscode.ThemeColor(
-					"disabledForeground",
-				);
-				break;
-		}
+		const colors = _STATE_COLORS[state];
+		this.#item.backgroundColor = colors.bg
+			? new vscode.ThemeColor(colors.bg)
+			: undefined;
+		this.#item.color = new vscode.ThemeColor(colors.fg);
 
-		this.#statusBarItem.show();
+		this.#item.show();
 	}
 
+	/**
+	 * Dispose of status bar item and release resources.
+	 */
 	dispose() {
-		this.#statusBarItem.dispose();
+		this.#item.dispose();
 	}
 }

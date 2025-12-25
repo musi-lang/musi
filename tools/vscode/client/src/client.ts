@@ -7,29 +7,21 @@ import {
 } from "vscode-languageclient/node";
 import { getConfig } from "./config";
 
-const _SERVER_START_TIMEOUT_MS = 30000;
+const _TIMEOUT_MS = 30_000;
 
 let _client: LanguageClient | undefined;
 
-export function getClient(): LanguageClient | undefined {
-	return _client;
-}
-
-export function isClientRunning(): boolean {
-	return _client?.isRunning() ?? false;
-}
-
-export async function createAndStartClient(
-	serverPath: string,
-): Promise<LanguageClient> {
-	const config = getConfig();
-
-	const serverOptions: ServerOptions = {
+function _buildServerOptions(serverPath: string): ServerOptions {
+	return {
 		run: { command: serverPath, transport: TransportKind.stdio },
 		debug: { command: serverPath, transport: TransportKind.stdio },
 	};
+}
 
-	const clientOptions: LanguageClientOptions = {
+function _buildClientOptions(): LanguageClientOptions {
+	const config = getConfig();
+
+	const options: LanguageClientOptions = {
 		documentSelector: [{ scheme: "file", language: "musi" }],
 		synchronize: {
 			fileEvents: vscode.workspace.createFileSystemWatcher("**/*.ms"),
@@ -47,42 +39,80 @@ export async function createAndStartClient(
 	};
 
 	if (config.traceServer !== "off") {
-		clientOptions.traceOutputChannel = vscode.window.createOutputChannel(
+		options.traceOutputChannel = vscode.window.createOutputChannel(
 			"Musi Language Server Trace",
 		);
 	}
 
-	_client = new LanguageClient(
-		"musiLsp",
-		"Musi Language Server",
-		serverOptions,
-		clientOptions,
-	);
+	return options;
+}
 
-	await Promise.race([
-		_client.start(),
+function _startWithTimeout(client: LanguageClient): Promise<void> {
+	return Promise.race([
+		client.start(),
 		new Promise<never>((_, reject) =>
 			setTimeout(
-				() => reject(new Error(`Server start timeout (${_SERVER_START_TIMEOUT_MS / 1000}s)`)),
-				_SERVER_START_TIMEOUT_MS,
+				() => reject(new Error(`Language server failed to start within ${_TIMEOUT_MS / 1000} seconds`)),
+				_TIMEOUT_MS,
 			),
 		),
 	]);
+}
 
+/**
+ * Get current language client instance.
+ * @returns active LanguageClient, or `undefined` if not started.
+ */
+export function getClient(): LanguageClient | undefined {
 	return _client;
 }
 
-export async function stopClient() {
-	if (_client) {
-		try {
-			await _client.stop();
-		} catch (error) {
-			console.warn("Error stopping client:", error);
-		}
-		_client = undefined;
-	}
+/**
+ * Check if language client is currently running.
+ */
+export function isClientRunning(): boolean {
+	return _client?.isRunning() ?? false;
 }
 
+/**
+ * Create and start new language client connected to given server.
+ * @param serverPath Absolute path to musi_lsp binary.
+ * @returns started LanguageClient instance.
+ * @throws Error if server fails to start within timeout period.
+ */
+export async function createAndStartClient(serverPath: string): Promise<LanguageClient> {
+	_client = new LanguageClient(
+		"musiLsp",
+		"Musi Language Server",
+		_buildServerOptions(serverPath),
+		_buildClientOptions(),
+	);
+
+	await _startWithTimeout(_client);
+	return _client;
+}
+
+/**
+ * Stop current language client and release resources.
+ * Safe to call if no client is running.
+ */
+export async function stopClient() {
+	if (!_client) {
+		return;
+	}
+
+	try {
+		await _client.stop();
+	} catch (error) {
+		console.warn("Failed to stop language client gracefully:", error);
+	}
+	_client = undefined;
+}
+
+/**
+ * Restart language client with new server instance.
+ * @param serverPath Absolute path to `musi_lsp` binary.
+ */
 export async function restartClient(serverPath: string) {
 	await stopClient();
 	await createAndStartClient(serverPath);
