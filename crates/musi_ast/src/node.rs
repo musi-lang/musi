@@ -36,6 +36,13 @@ pub struct Typ {
     pub span: Span,
 }
 
+impl Typ {
+    #[must_use]
+    pub const fn new(kind: TypKind, span: Span) -> Self {
+        Self { kind, span }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum TypKind {
     /// `Int`, `String`
@@ -62,6 +69,13 @@ pub enum TypKind {
 pub struct Pat {
     pub kind: PatKind,
     pub span: Span,
+}
+
+impl Pat {
+    #[must_use]
+    pub const fn new(kind: PatKind, span: Span) -> Self {
+        Self { kind, span }
+    }
 }
 
 #[derive(Debug, Clone)]
