@@ -1,5 +1,8 @@
 use musi_ast::{Idents, LitKind, Pat, PatKind, PatList};
-use musi_basic::error::{IntoMusiError, MusiResult};
+use musi_basic::{
+    error::{IntoMusiError, MusiResult},
+    span::Span,
+};
 use musi_lex::token::TokenKind;
 
 use crate::{Parser, error::ParseErrorKind};
@@ -114,7 +117,7 @@ impl Parser<'_> {
         Ok(Pat { kind, span: start })
     }
 
-    fn parse_pat_ident(&mut self, id: u32, start: musi_basic::span::Span) -> MusiResult<Pat> {
+    fn parse_pat_ident(&mut self, id: u32, start: Span) -> MusiResult<Pat> {
         let _ = self.advance();
         if self.at(TokenKind::Dot) && self.peek_nth(1) == Some(TokenKind::LBrace) {
             self.advance_by(2);
