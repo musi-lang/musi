@@ -175,6 +175,78 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Consume current token if it matches `kind`, returning true if consumed.
+    pub fn bump_if(&mut self, kind: TokenKind) -> bool {
+        if self.at(kind) {
+            let _ = self.advance();
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Check if at any closing delimiter (RParen, RBrack, RBrace) or EOF.
+    #[must_use]
+    pub fn at_closing(&self) -> bool {
+        matches!(
+            self.peek_kind(),
+            Some(TokenKind::RParen | TokenKind::RBrack | TokenKind::RBrace) | None
+        )
+    }
+
+    /// Parse items separated by `sep`, stopping at closing delimiters.
+    /// Trailing separator is allowed.
+    ///
+    /// # Errors
+    /// Returns error from `parse` if any item fails to parse.
+    pub fn separated<T>(
+        &mut self,
+        sep: TokenKind,
+        mut parse: impl FnMut(&mut Self) -> Result<T, MusiError>,
+    ) -> Result<Vec<T>, MusiError> {
+        let mut items = vec![];
+        while !self.at_closing() && !self.is_eof() {
+            items.push(parse(self)?);
+            if !self.bump_if(sep) {
+                break;
+            }
+        }
+        Ok(items)
+    }
+
+    /// Parse content between `open` and `close` delimiters.
+    ///
+    /// # Errors
+    /// Returns error if delimiters are missing or content fails to parse.
+    pub fn delimited<T>(
+        &mut self,
+        open: TokenKind,
+        close: TokenKind,
+        parse: impl FnOnce(&mut Self) -> Result<T, MusiError>,
+    ) -> Result<T, MusiError> {
+        let _ = self.expect(open)?;
+        let result = parse(self)?;
+        let _ = self.expect(close)?;
+        Ok(result)
+    }
+
+    /// Parse optional content between delimiters, returning empty vec if not present.
+    ///
+    /// # Errors
+    /// Returns error if delimiters are present but content fails.
+    pub fn opt_delimited<T>(
+        &mut self,
+        open: TokenKind,
+        close: TokenKind,
+        parse: impl FnOnce(&mut Self) -> Result<Vec<T>, MusiError>,
+    ) -> Result<Vec<T>, MusiError> {
+        if self.at(open) {
+            self.delimited(open, close, parse)
+        } else {
+            Ok(vec![])
+        }
+    }
+
     pub fn report(&mut self, err: MusiError) {
         self.diagnostics.add(Diagnostic::from(err));
     }
