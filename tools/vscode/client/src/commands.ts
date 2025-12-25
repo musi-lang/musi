@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import { findServerPath, showServerNotFoundUI } from "./bootstrap";
-import { restartClient, stopClient } from "./client";
+import { getClient, restartClient, stopClient } from "./client";
 import type { StatusBar } from "./status";
 
 type CommandHandler = () => Promise<void> | void;
@@ -30,7 +30,7 @@ function _createCommands(statusBar: StatusBar): Commands {
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
 				statusBar.update("Restart failed", "error");
-				vscode.window.showErrorMessage(`Failed to restart Musi LSP: ${message}`);
+				vscode.window.showErrorMessage(`Unable to restart Musi LSP: ${message}`);
 			}
 		},
 
@@ -40,7 +40,12 @@ function _createCommands(statusBar: StatusBar): Commands {
 		},
 
 		showLogs() {
-			vscode.commands.executeCommand("workbench.action.toggleDevTools");
+			const client = getClient();
+			if (client) {
+				client.outputChannel.show();
+			} else {
+				vscode.window.showWarningMessage("Musi Language Server is not running.");
+			}
 		},
 	};
 }

@@ -16,7 +16,7 @@ async fn main() {
     let (loop_node, _) = MainLoop::new_server(|client| {
         let state = ServerState::new(client);
         let server = MusiLanguageServer::new(state);
-        Lifecycle::new(Router::new(server))
+        Lifecycle::new(Router::from_language_server(server))
     });
 
     if let Err(e) = loop_node.run_buffered(stdin2, stdout2).await {
