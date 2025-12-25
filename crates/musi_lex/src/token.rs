@@ -229,7 +229,7 @@ impl TokenKind {
                 return Cow::Owned(format!("'{sym}'"));
             }
         }
-        Cow::Borrowed("token")
+        Cow::Owned(format!("token '{self:?}'"))
     }
 }
 
