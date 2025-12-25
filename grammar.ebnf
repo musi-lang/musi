@@ -174,11 +174,11 @@ expr_lit = aux_lit;
 
 expr_ident = ident;
 
-expr_lit_tuple = "(", [expr, ",", [aux_expr_list]], ")";
+expr_tuple = "(", [expr, ",", [aux_expr_list]], ")";
 
-expr_lit_array = "[", [aux_expr_list], "]";
+expr_array = "[", [aux_expr_list], "]";
 
-expr_lit_record = ".{", [aux_field_list], "}";
+expr_record = ".{", [aux_field_list], "}";
 
 expr_block = "{", {stmt}, [expr], "}";
 
@@ -210,9 +210,9 @@ expr_import = "import", aux_lit_text;
 
 expr_extern = aux_modifier_extern, "{", {"fn", aux_fn_sig, ";"}, "}";
 
-expr_record = [aux_attr], [aux_modifiers], "record", [ident], [ty_params], "{", aux_field_list_semi, "}";
+expr_record_def = [aux_attr], [aux_modifiers], "record", [ident], [ty_params], "{", aux_field_list_semi, "}";
 
-expr_sum = [aux_attr], [aux_modifiers], "sum", [ident], [ty_params], "{", aux_sum_cases, "}";
+expr_sum_def = [aux_attr], [aux_modifiers], "sum", [ident], [ty_params], "{", aux_sum_cases, "}";
 
 expr_alias = [aux_attr], [aux_modifiers], "alias", ident, [ty_params], ":=", ty;
 
@@ -233,7 +233,7 @@ expr_assign = expr, "<-", expr;
 (* ========================================================================= *)
 (* PRECEDENCE LEVELS                                                         *)
 (* ========================================================================= *)
-prec_expr_primary = expr_lit | expr_ident | expr_lit_tuple | expr_lit_array | expr_lit_record | expr_block | expr_if | expr_while | expr_for | expr_match | expr_try | expr_return | expr_defer | expr_break | expr_cycle | expr_unsafe | expr_import | expr_extern | expr_record | expr_sum | expr_alias | expr_fn | expr_bind | "(", expr, ")";
+prec_expr_primary = expr_lit | expr_ident | expr_tuple | expr_array | expr_record | expr_block | expr_if | expr_while | expr_for | expr_match | expr_try | expr_return | expr_defer | expr_break | expr_cycle | expr_unsafe | expr_import | expr_extern | expr_record_def | expr_sum_def | expr_alias | expr_fn | expr_bind | "(", expr, ")";
 
 postfix_op = "(", [aux_args], ")" | ".[", aux_expr_list, "]" | ".{", [aux_field_list], "}" | ".", ident | ".^" | "?";
 
