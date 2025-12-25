@@ -61,7 +61,7 @@ unnecessary_safety_comment = "deny"
 unnecessary_safety_doc = "deny"
 unreachable = "deny"
 unwrap_in_result = "deny"
-# unwrap_used = "deny"  # use `.expect()` in prod, but allow `.unwrap()` in tests/prototypes
+# unwrap_used = "deny"  # use `.expect()` in prod, but allow `.unwrap()` in tests
 
 cargo = { level = "deny", priority = -1 }
 complexity = { level = "deny", priority = -1 }
