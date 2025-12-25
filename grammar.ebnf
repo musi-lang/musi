@@ -151,15 +151,15 @@ pat_lit = aux_lit;
 
 pat_wild = "_";
 
-pat_lit_tuple = "(", [pat, ",", [aux_pat_list]], ")";
+pat_tuple = "(", [pat, ",", [aux_pat_list]], ")";
 
-pat_lit_array = "[", [aux_pat_list], "]";
+pat_array = "[", [aux_pat_list], "]";
 
-pat_lit_record = [ident], ".{", [aux_pat_fields], "}";
+pat_record = [ident], ".{", [aux_pat_fields], "}";
 
 pat_variant = ident, [ty_args], ["(", [aux_pat_list], ")"];
 
-pat_primary = pat_ident | pat_lit | pat_wild | pat_lit_tuple | pat_lit_array | pat_lit_record | pat_variant | "(", pat, ")";
+pat_primary = pat_ident | pat_lit | pat_wild | pat_tuple | pat_array | pat_record | pat_variant | "(", pat, ")";
 
 pat_cons = pat_primary, {"::", pat_primary};
 
