@@ -6,7 +6,7 @@ use thiserror::Error;
 pub enum LexErrorKind {
     #[error("unknown character '{0}'")]
     UnknownChar(char),
-    #[error("unknown escape sequence '{0}'")]
+    #[error("unknown escape sequence '\\{0}'")]
     UnknownEscape(String),
 
     #[error("unclosed string literal")]
