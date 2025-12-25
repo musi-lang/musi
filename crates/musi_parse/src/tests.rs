@@ -313,7 +313,7 @@ fn test_expr_call() {
 fn test_expr_index() {
     let mut ctx = TestContext::new();
     let arr = ctx.intern("arr");
-    let expr = ctx.parse_expr("arr[0]");
+    let expr = ctx.parse_expr("arr.[0]");
     if let ExprKind::Index { base, .. } = expr.kind {
         assert!(matches!(base.kind, ExprKind::Ident(i) if i == arr));
     } else {
