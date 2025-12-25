@@ -1,4 +1,4 @@
-use musi_ast::{LitKind, Pat, PatKind, PatList, TypList};
+use musi_ast::{Expr, ExprKind, LitKind, OptExprPtr, Pat, PatKind, PatList, TypList};
 use musi_basic::{
     error::{IntoMusiError, MusiResult},
     span::Span,
@@ -108,7 +108,8 @@ impl Parser<'_> {
 
     fn parse_pat_after_ident(&mut self, id: u32, start: Span) -> MusiResult<Pat> {
         if self.at(TokenKind::Dot) && self.peek_nth(1) == Some(TokenKind::LBrace) {
-            return self.parse_pat_record(Some(id), start);
+            let ty_expr = Expr::new(ExprKind::Ident(id), start);
+            return self.parse_pat_record(Some(Box::new(ty_expr)), start);
         }
         let ty_args = self.parse_typ_args()?;
         if self.at(TokenKind::LParen) {
@@ -123,7 +124,7 @@ impl Parser<'_> {
         Ok(Pat::new(PatKind::Ident(id), start))
     }
 
-    fn parse_pat_record(&mut self, ty: Option<u32>, start: Span) -> MusiResult<Pat> {
+    fn parse_pat_record(&mut self, ty: OptExprPtr, start: Span) -> MusiResult<Pat> {
         self.advance_by(2); // consume `.` and `{`
         let fields = self.separated(TokenKind::Comma, Self::expect_ident)?;
         let _ = self.expect(TokenKind::RBrace)?;

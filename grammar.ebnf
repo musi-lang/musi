@@ -178,7 +178,7 @@ expr_lit_tuple = "(", [expr, ",", [aux_expr_list]], ")";
 
 expr_lit_array = "[", [aux_expr_list], "]";
 
-expr_lit_record = [ident], ".{", [aux_field_list], "}";
+expr_lit_record = ".{", [aux_field_list], "}";
 
 expr_block = "{", {stmt}, [expr], "}";
 
@@ -235,7 +235,7 @@ expr_assign = expr, "<-", expr;
 (* ========================================================================= *)
 prec_expr_primary = expr_lit | expr_ident | expr_lit_tuple | expr_lit_array | expr_lit_record | expr_block | expr_if | expr_while | expr_for | expr_match | expr_try | expr_return | expr_defer | expr_break | expr_cycle | expr_unsafe | expr_import | expr_extern | expr_record | expr_sum | expr_alias | expr_fn | expr_bind | "(", expr, ")";
 
-postfix_op = "(", [aux_args], ")" | ".[", aux_expr_list, "]" | ".", ident | ".^" | "?";
+postfix_op = "(", [aux_args], ")" | ".[", aux_expr_list, "]" | ".{", [aux_field_list], "}" | ".", ident | ".^" | "?";
 
 prec_expr_postfix = prec_expr_primary, {postfix_op};
 

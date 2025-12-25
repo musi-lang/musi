@@ -188,6 +188,7 @@ impl Parser<'_> {
             Some(TokenKind::DotCaret) => Ok(self.parse_postfix_deref(lhs, start)),
             Some(TokenKind::Dot) => match self.peek_nth(1) {
                 Some(TokenKind::LBrack) => self.parse_postfix_index(lhs, start),
+                Some(TokenKind::LBrace) => self.parse_postfix_record(lhs, start),
                 _ => self.parse_postfix_field(lhs, start),
             },
             _ => Ok(lhs),
@@ -404,19 +405,20 @@ impl Parser<'_> {
     fn parse_expr_ident(&mut self, id: u32) -> MusiResult<Expr> {
         let start = self.curr_span();
         let _ = self.advance();
-        if self.at(TokenKind::Dot) && self.peek_nth(1) == Some(TokenKind::LBrace) {
-            self.advance_by(2); // consume `.` and `{`
-            let fields = self.separated(TokenKind::Comma, Self::parse_field)?;
-            let _ = self.expect(TokenKind::RBrace)?;
-            return Ok(Expr::new(
-                ExprKind::Record {
-                    ty: Some(id),
-                    fields,
-                },
-                start.merge(self.prev_span()),
-            ));
-        }
         Ok(Expr::new(ExprKind::Ident(id), start))
+    }
+
+    fn parse_postfix_record(&mut self, lhs: Expr, start: Span) -> MusiResult<Expr> {
+        self.advance_by(2); // consume `.` and `{`
+        let fields = self.separated(TokenKind::Comma, Self::parse_field)?;
+        let _ = self.expect(TokenKind::RBrace)?;
+        Ok(Expr::new(
+            ExprKind::Record {
+                ty: Some(Box::new(lhs)),
+                fields,
+            },
+            start.merge(self.prev_span()),
+        ))
     }
 
     fn parse_expr_record_anon(&mut self) -> MusiResult<Expr> {

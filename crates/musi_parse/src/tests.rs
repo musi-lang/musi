@@ -168,8 +168,12 @@ fn test_expr_record_typed() {
     let point = ctx.intern("Point");
     let x = ctx.intern("x");
     let expr = ctx.parse_expr("Point.{x := 1}");
-    if let ExprKind::Record { ty, fields } = expr.kind {
-        assert_eq!(ty, Some(point));
+    if let ExprKind::Record {
+        ty: Some(ty_expr),
+        fields,
+    } = expr.kind
+    {
+        assert!(matches!(ty_expr.kind, ExprKind::Ident(i) if i == point));
         assert_eq!(fields.len(), 1);
         assert_eq!(fields[0].name, x);
     } else {
@@ -710,8 +714,12 @@ fn test_pat_record() {
     let mut ctx = TestContext::new();
     let point = ctx.intern("Point");
     let pat = ctx.parse_pat("Point.{x, y}");
-    if let PatKind::Record { ty, fields } = pat.kind {
-        assert_eq!(ty, Some(point));
+    if let PatKind::Record {
+        ty: Some(ty_expr),
+        fields,
+    } = pat.kind
+    {
+        assert!(matches!(ty_expr.kind, ExprKind::Ident(i) if i == point));
         assert_eq!(fields.len(), 2);
     } else {
         panic!("expected record pattern");
