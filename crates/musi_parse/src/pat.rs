@@ -62,7 +62,9 @@ impl Parser<'_> {
                 let _ = self.advance();
                 self.parse_pat_after_ident(id, start)
             }
-            Some(TokenKind::DotLBrace) => self.parse_pat_record_anon(),
+            Some(TokenKind::Dot) if self.peek_nth(1) == Some(TokenKind::LBrace) => {
+                self.parse_pat_record_anon()
+            }
             Some(TokenKind::LParen) => self.parse_pat_paren(),
             Some(TokenKind::LBrack) => self.parse_pat_array(),
             Some(kind) => {
@@ -105,7 +107,7 @@ impl Parser<'_> {
     }
 
     fn parse_pat_after_ident(&mut self, id: u32, start: Span) -> MusiResult<Pat> {
-        if self.at(TokenKind::DotLBrace) {
+        if self.at(TokenKind::Dot) && self.peek_nth(1) == Some(TokenKind::LBrace) {
             return self.parse_pat_record(Some(id), start);
         }
         let ty_args = self.parse_typ_args()?;
@@ -122,7 +124,7 @@ impl Parser<'_> {
     }
 
     fn parse_pat_record(&mut self, ty: Option<u32>, start: Span) -> MusiResult<Pat> {
-        let _ = self.advance(); // consume `.{`
+        self.advance_by(2); // consume `.` and `{`
         let fields = self.separated(TokenKind::Comma, Self::expect_ident)?;
         let _ = self.expect(TokenKind::RBrace)?;
         Ok(Pat::new(

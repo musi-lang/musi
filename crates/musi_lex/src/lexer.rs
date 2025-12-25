@@ -253,8 +253,6 @@ impl<'a> Lexer<'a> {
             Some('.') => match self.cursor.peek_nth(1) {
                 Some('.') => self.match_tri(2, '<', TokenKind::DotDotLt, TokenKind::DotDot),
                 Some('^') => self.compound(2, TokenKind::DotCaret),
-                Some('[') => self.compound(2, TokenKind::DotLBrack),
-                Some('{') => self.compound(2, TokenKind::DotLBrace),
                 _ => self.one(TokenKind::Dot),
             },
             Some('<') => match self.cursor.peek_nth(1) {

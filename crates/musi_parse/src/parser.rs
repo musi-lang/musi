@@ -75,11 +75,9 @@ impl Prec {
     #[must_use]
     pub const fn postfix(op: TokenKind) -> Option<u8> {
         match op {
-            TokenKind::LParen
-            | TokenKind::DotLBrack
-            | TokenKind::Dot
-            | TokenKind::DotCaret
-            | TokenKind::Question => Some(17),
+            TokenKind::LParen | TokenKind::Dot | TokenKind::DotCaret | TokenKind::Question => {
+                Some(17)
+            }
             _ => None,
         }
     }
