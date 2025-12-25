@@ -50,8 +50,15 @@ crates/
 │       └── format.rs      # Code formatting
 │
 tools/vscode/
-├── client/src/extension.ts  # Update paths to Rust binary
-└── ...
+├── client/src/
+│   ├── main.ts            # Entry point (activate/deactivate)
+│   ├── client.ts          # LanguageClient management
+│   ├── config.ts          # Configuration wrapper
+│   ├── commands.ts        # Command implementations
+│   ├── status.ts          # Status bar management
+│   └── bootstrap.ts       # Server discovery
+│   └── utils.ts           # Utility functions
+└── package.json           # Extension manifest with settings
 ```
 
 ---
@@ -160,15 +167,36 @@ musi_ast = { path = "../musi_ast" }
 
 ## VSCode Extension Updates
 
-Update `findServerPath()` in `extension.ts`:
+✅ **DONE**: Extension restructured (rust-analyzer style)
 
-```typescript
-const candidates = [
-  path.join(workspacePath, "target", "debug", "musi_lsp"),
-  path.join(workspacePath, "target", "release", "musi_lsp"),
-  "/usr/local/bin/musi_lsp",
-];
-```
+### New Modular Structure
+
+| File | Purpose |
+|------|--------|
+| `main.ts` | Entry point |
+| `client.ts` | LanguageClient management |
+| `config.ts` | Configuration wrapper |
+| `commands.ts` | Command implementations |
+| `status.ts` | Status bar |
+| `bootstrap.ts` | Server discovery |
+| `utils.ts` | Utility functions |
+
+### Configuration Settings
+
+| Setting | Purpose |
+|---------|--------|
+| `musi.server.path` | Override LSP binary location |
+| `musi.runtime.path` | Musi runtime/SDK path |
+| `musi.trace.server` | Debug LSP communication |
+| `musi.diagnostics.enable` | Toggle diagnostics |
+| `musi.formatting.*` | Formatting options |
+
+### Server Discovery Order
+
+1. User-configured `musi.server.path`
+2. `${workspace}/target/debug/musi_lsp`
+3. `${workspace}/target/release/musi_lsp`
+4. Global paths (`/usr/local/bin`, `~/.cargo/bin`)
 
 ---
 
