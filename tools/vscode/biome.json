@@ -37,6 +37,7 @@
 				"noUselessUndefinedInitialization": "error",
 				"noVoid": "warn",
 				"useDateNow": "warn",
+				"useLiteralKeys": "off",
 				"useSimplifiedLogicExpression": "warn"
 			},
 			"correctness": {

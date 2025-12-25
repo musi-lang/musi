@@ -114,10 +114,56 @@
 					"group": "musi@1"
 				}
 			]
+		},
+		"configuration": {
+			"title": "Musi",
+			"properties": {
+				"musi.server.path": {
+					"type": ["string", "null"],
+					"default": null,
+					"markdownDescription": "Path to `musi_lsp` binary. If not set, searches in `target/debug`, `target/release`, and `PATH`."
+				},
+				"musi.runtime.path": {
+					"type": ["string", "null"],
+					"default": null,
+					"markdownDescription": "Path to Musi runtime environment. Required for code execution and some diagnostics."
+				},
+				"musi.trace.server": {
+					"type": "string",
+					"enum": ["off", "messages", "verbose"],
+					"default": "off",
+					"description": "Traces communication between VS Code and language server."
+				},
+				"musi.diagnostics.enable": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable/disable diagnostics from language server."
+				},
+				"musi.inlayHints.enable": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable/disable inlay hints."
+				},
+				"musi.completion.enable": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable/disable code completion."
+				},
+				"musi.formatting.enable": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable/disable code formatting."
+				},
+				"musi.formatting.indentSize": {
+					"type": "number",
+					"default": 2,
+					"description": "Number of spaces for indentation."
+				}
+			}
 		}
 	},
 	"scripts": {
-		"build": "bun build ./client/src/extension.ts --outfile=./dist/extension.js --external vscode --target=node",
+		"build": "bun build ./client/src/main.ts --outfile=./dist/extension.js --external vscode --target=node",
 		"package": "bun run build && vsce package",
 		"vscode:prepublish": "bun run build"
 	},
