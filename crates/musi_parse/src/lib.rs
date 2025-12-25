@@ -5,6 +5,9 @@ pub mod pat;
 pub mod stmt;
 pub mod typ;
 
+#[cfg(test)]
+mod tests;
+
 pub use error::ParseErrorKind;
 pub use parser::Parser;
 
