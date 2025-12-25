@@ -4,7 +4,8 @@ use async_lsp::{
     lsp_types::{
         DidChangeTextDocumentParams, DidChangeWatchedFilesParams, DidCloseTextDocumentParams,
         DidOpenTextDocumentParams, DidSaveTextDocumentParams, InitializeParams, InitializeResult,
-        PublishDiagnosticsParams, ServerCapabilities, ServerInfo, TextDocumentSyncKind, Url,
+        LogMessageParams, MessageType, PublishDiagnosticsParams, ServerCapabilities, ServerInfo,
+        TextDocumentSyncKind, Url,
     },
 };
 use musi_basic::source::SourceFile;
@@ -35,15 +36,30 @@ impl MusiLanguageServer {
         };
 
         let interner = Arc::clone(&state.interner);
-        let diags = task::spawn_blocking(move || compute_diagnostics(&source_file, &interner))
-            .await
-            .unwrap_or_else(|e| {
-                eprintln!("analysis task failed: {e}");
-                vec![]
-            });
+        let analysis_future =
+            task::spawn_blocking(move || compute_diagnostics(&source_file, &interner));
 
-        // no cleanup needed
+        let (diags, error_msg) =
+            match tokio::time::timeout(std::time::Duration::from_secs(5), analysis_future).await {
+                Ok(Ok(result)) => result,
+                Ok(Err(e)) => (vec![], Some(format!("Analysis task failed: {e}"))),
+                Err(_) => (
+                    vec![],
+                    Some(format!(
+                        "Analysis timed out (possible infinite loop) for {uri}"
+                    )),
+                ),
+            };
+
         let mut client = state.client.clone();
+
+        if let Some(msg) = error_msg {
+            _ = client.log_message(LogMessageParams {
+                typ: MessageType::ERROR,
+                message: msg,
+            });
+        }
+
         _ = client.publish_diagnostics(PublishDiagnosticsParams {
             uri,
             diagnostics: diags,

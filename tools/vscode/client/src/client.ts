@@ -81,6 +81,8 @@ export function isClientRunning(): boolean {
  * @throws Error if server fails to start within timeout period.
  */
 export async function createAndStartClient(serverPath: string): Promise<LanguageClient> {
+	await stopClient();
+
 	_client = new LanguageClient(
 		"musiLsp",
 		"Musi Language Server",
@@ -114,6 +116,5 @@ export async function stopClient() {
  * @param serverPath Absolute path to `musi_lsp` binary.
  */
 export async function restartClient(serverPath: string) {
-	await stopClient();
 	await createAndStartClient(serverPath);
 }
