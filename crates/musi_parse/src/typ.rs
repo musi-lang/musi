@@ -17,13 +17,13 @@ impl Parser<'_> {
                 let mut ty = self.parse_typ_primary()?;
                 if self.bump_if(TokenKind::MinusGt) {
                     let ret = Box::new(self.parse_typ()?);
-                    ty = Typ {
-                        kind: TypKind::Fn {
+                    ty = Typ::new(
+                        TypKind::Fn {
                             param: Box::new(ty),
                             ret,
                         },
-                        span: start.merge(self.prev_span()),
-                    };
+                        start.merge(self.prev_span()),
+                    );
                 }
                 Ok(ty)
             }
@@ -50,20 +50,17 @@ impl Parser<'_> {
         let start = self.curr_span();
         let _ = self.advance();
         let inner = Box::new(self.parse_typ()?);
-        Ok(Typ {
-            kind: TypKind::Optional(inner),
-            span: start.merge(self.prev_span()),
-        })
+        Ok(Typ::new(
+            TypKind::Optional(inner),
+            start.merge(self.prev_span()),
+        ))
     }
 
     fn parse_typ_ptr(&mut self) -> MusiResult<Typ> {
         let start = self.curr_span();
         let _ = self.advance();
         let inner = Box::new(self.parse_typ()?);
-        Ok(Typ {
-            kind: TypKind::Ptr(inner),
-            span: start.merge(self.prev_span()),
-        })
+        Ok(Typ::new(TypKind::Ptr(inner), start.merge(self.prev_span())))
     }
 
     fn parse_typ_array(&mut self) -> MusiResult<Typ> {
@@ -77,10 +74,10 @@ impl Parser<'_> {
         };
         let _ = self.expect(TokenKind::RBrack)?;
         let elem = Box::new(self.parse_typ()?);
-        Ok(Typ {
-            kind: TypKind::Array { size, elem },
-            span: start.merge(self.prev_span()),
-        })
+        Ok(Typ::new(
+            TypKind::Array { size, elem },
+            start.merge(self.prev_span()),
+        ))
     }
 
     fn parse_typ_primary(&mut self) -> MusiResult<Typ> {
@@ -102,15 +99,12 @@ impl Parser<'_> {
             let args = self.delimited(TokenKind::LBrack, TokenKind::RBrack, |p| {
                 p.separated(TokenKind::Comma, Self::parse_typ)
             })?;
-            Ok(Typ {
-                kind: TypKind::App { base: id, args },
-                span: start.merge(self.prev_span()),
-            })
+            Ok(Typ::new(
+                TypKind::App { base: id, args },
+                start.merge(self.prev_span()),
+            ))
         } else {
-            Ok(Typ {
-                kind: TypKind::Ident(id),
-                span: start,
-            })
+            Ok(Typ::new(TypKind::Ident(id), start))
         }
     }
 
@@ -118,10 +112,10 @@ impl Parser<'_> {
         let start = self.curr_span();
         let _ = self.advance();
         if self.bump_if(TokenKind::RParen) {
-            return Ok(Typ {
-                kind: TypKind::Tuple(vec![]),
-                span: start.merge(self.prev_span()),
-            });
+            return Ok(Typ::new(
+                TypKind::Tuple(vec![]),
+                start.merge(self.prev_span()),
+            ));
         }
         let first = self.parse_typ()?;
         if self.bump_if(TokenKind::Comma) {
@@ -130,16 +124,13 @@ impl Parser<'_> {
                 elems.extend(self.separated(TokenKind::Comma, Self::parse_typ)?);
             }
             let _ = self.expect(TokenKind::RParen)?;
-            Ok(Typ {
-                kind: TypKind::Tuple(elems),
-                span: start.merge(self.prev_span()),
-            })
+            Ok(Typ::new(
+                TypKind::Tuple(elems),
+                start.merge(self.prev_span()),
+            ))
         } else {
             let _ = self.expect(TokenKind::RParen)?;
-            Ok(Typ {
-                kind: first.kind,
-                span: start.merge(self.prev_span()),
-            })
+            Ok(Typ::new(first.kind, start.merge(self.prev_span())))
         }
     }
 }
