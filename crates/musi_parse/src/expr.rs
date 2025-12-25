@@ -256,7 +256,7 @@ impl Parser<'_> {
                 | TokenKind::KwFalse,
             ) => self.parse_expr_lit(),
             Some(TokenKind::TemplateHead(_)) => self.parse_expr_template(),
-            Some(TokenKind::Ident(id)) => self.parse_expr_ident(id),
+            Some(TokenKind::Ident(id)) => Ok(self.parse_expr_ident(id)),
             Some(TokenKind::Dot) if self.peek_nth(1) == Some(TokenKind::LBrace) => {
                 self.parse_expr_record_anon()
             }
@@ -408,10 +408,10 @@ impl Parser<'_> {
         ))
     }
 
-    fn parse_expr_ident(&mut self, id: u32) -> MusiResult<Expr> {
+    fn parse_expr_ident(&mut self, id: u32) -> Expr {
         let start = self.curr_span();
         let _ = self.advance();
-        Ok(Expr::new(ExprKind::Ident(id), start))
+        Expr::new(ExprKind::Ident(id), start)
     }
 
     fn parse_postfix_record(&mut self, lhs: Expr, start: Span) -> MusiResult<Expr> {

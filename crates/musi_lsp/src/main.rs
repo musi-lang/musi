@@ -1,4 +1,5 @@
 use async_lsp::{MainLoop, router::Router, server::Lifecycle};
+use tokio::io;
 use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 
 mod diagnostics;
@@ -10,7 +11,7 @@ use server_state::ServerState;
 
 #[tokio::main]
 async fn main() {
-    let (stdin, stdout) = (tokio::io::stdin(), tokio::io::stdout());
+    let (stdin, stdout) = (io::stdin(), io::stdout());
     let (stdin2, stdout2) = (stdin.compat(), stdout.compat_write());
 
     let (loop_node, _) = MainLoop::new_server(|client| {

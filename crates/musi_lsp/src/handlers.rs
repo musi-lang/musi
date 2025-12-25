@@ -14,6 +14,7 @@ use std::future::Future;
 use std::ops::ControlFlow;
 use std::pin::Pin;
 use std::sync::Arc;
+use tokio::task;
 
 pub struct MusiLanguageServer {
     pub state: ServerState,
@@ -31,11 +32,11 @@ impl MusiLanguageServer {
         let source_file = {
             let mut docs = state.documents.lock().expect("unable to lock documents");
             let src = Arc::new(SourceFile::new(uri_string.clone(), text, 0));
-            let _ = docs.insert(uri.clone(), src.clone());
+            let _ = docs.insert(uri.clone(), Arc::clone(&src));
             src
         };
 
-        let diags = tokio::task::spawn_blocking(move || {
+        let diags = task::spawn_blocking(move || {
             let mut interner = state.interner.lock().unwrap();
 
             let (tokens, mut lex_errors) = tokenize(&source_file, &mut interner);
@@ -53,7 +54,7 @@ impl MusiLanguageServer {
 
         // no cleanup needed
         let mut client = state.client.clone();
-        let _: Result<_, _> = client.publish_diagnostics(PublishDiagnosticsParams {
+        _ = client.publish_diagnostics(PublishDiagnosticsParams {
             uri,
             diagnostics: diags,
             version: None,
@@ -75,22 +76,25 @@ impl LanguageServer for MusiLanguageServer {
                 ..Default::default()
             },
             server_info: Some(ServerInfo {
-                name: "musi-lsp".to_string(),
-                version: Some("0.1.0".to_string()),
+                name: "musi-lsp".to_owned(),
+                version: Some("0.1.0".to_owned()),
             }),
         };
         Box::pin(async move { Ok(result) })
     }
 
-    fn shutdown(&mut self, _: ()) -> Pin<Box<dyn Future<Output = Result<(), Self::Error>> + Send>> {
+    fn shutdown(
+        &mut self,
+        (): (),
+    ) -> Pin<Box<dyn Future<Output = Result<(), Self::Error>> + Send>> {
         Box::pin(async move { Ok(()) })
     }
 
     fn did_open(&mut self, params: DidOpenTextDocumentParams) -> Self::NotifyResult {
-        let this = MusiLanguageServer {
+        let this = Self {
             state: self.state.clone(),
         };
-        let _ = tokio::spawn(async move {
+        _ = tokio::spawn(async move {
             this.analyze(params.text_document.uri, params.text_document.text)
                 .await;
         });
@@ -98,10 +102,10 @@ impl LanguageServer for MusiLanguageServer {
     }
 
     fn did_change(&mut self, params: DidChangeTextDocumentParams) -> Self::NotifyResult {
-        let this = MusiLanguageServer {
+        let this = Self {
             state: self.state.clone(),
         };
-        let _ = tokio::spawn(async move {
+        _ = tokio::spawn(async move {
             if let Some(change) = params.content_changes.into_iter().next() {
                 this.analyze(params.text_document.uri, change.text).await;
             }
