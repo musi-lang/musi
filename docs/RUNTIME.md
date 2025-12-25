@@ -112,7 +112,7 @@ Compiled to efficient dispatch:
 ### C Interop
 
 ```musi
-[<link(name := "c")>]
+@[link(name := "c")]
 extern "C" unsafe {
   fn malloc(size: Nat64): ^Unit;
   fn free(ptr: ^Unit): Unit;
@@ -131,7 +131,7 @@ extern "C" unsafe {
 ### Exporting Functions
 
 ```musi
-[<no_mangle>]
+@[no_mangle]
 export fn add_numbers(a: Int32, b: Int32): Int32 {
   return a + b;
 };

@@ -185,7 +185,7 @@ impl Parser<'_> {
         let start = lhs.span;
         match self.peek_kind() {
             Some(TokenKind::LParen) => self.parse_postfix_call(lhs, start),
-            Some(TokenKind::LBrack) => self.parse_postfix_index(lhs, start),
+            Some(TokenKind::DotLBrack) => self.parse_postfix_index(lhs, start),
             Some(TokenKind::Dot) => self.parse_postfix_field(lhs, start),
             Some(TokenKind::DotCaret) => Ok(self.parse_postfix_deref(lhs, start)),
             _ => Ok(lhs),
@@ -206,7 +206,9 @@ impl Parser<'_> {
     }
 
     fn parse_postfix_index(&mut self, lhs: Expr, start: Span) -> MusiResult<Expr> {
-        let index = self.delimited(TokenKind::LBrack, TokenKind::RBrack, Self::parse_expr)?;
+        let _ = self.advance(); // consume `.[`
+        let index = self.parse_expr()?;
+        let _ = self.expect(TokenKind::RBrack)?;
         Ok(Expr::new(
             ExprKind::Index {
                 base: Box::new(lhs),
@@ -269,7 +271,7 @@ impl Parser<'_> {
             }
             Some(TokenKind::KwUnsafe) => self.parse_expr_unsafe(),
             Some(TokenKind::KwImport) => self.parse_expr_import(),
-            Some(TokenKind::LBrackLt) => self.parse_expr_with_attrs(),
+            Some(TokenKind::AtLBrack) => self.parse_expr_with_attrs(),
             Some(TokenKind::KwExport | TokenKind::KwExtern) => {
                 self.parse_expr_with_modifiers(vec![], start)
             }
@@ -757,7 +759,7 @@ impl Parser<'_> {
 impl Parser<'_> {
     fn parse_attrs(&mut self) -> MusiResult<AttrList> {
         let mut attrs = vec![];
-        while self.bump_if(TokenKind::LBrackLt) {
+        while self.bump_if(TokenKind::AtLBrack) {
             loop {
                 let name = self.expect_ident()?;
                 let args = self.opt_delimited(TokenKind::LParen, TokenKind::RParen, |p| {
@@ -768,7 +770,7 @@ impl Parser<'_> {
                     break;
                 }
             }
-            let _ = self.expect(TokenKind::GtRBrack)?;
+            let _ = self.expect(TokenKind::RBrack)?;
         }
         Ok(attrs)
     }
@@ -874,7 +876,7 @@ impl Parser<'_> {
                     | TokenKind::KwCycle
                     | TokenKind::KwUnsafe
                     | TokenKind::KwImport
-                    | TokenKind::LBrackLt
+                    | TokenKind::AtLBrack
                     | TokenKind::KwExport
                     | TokenKind::KwExtern
                     | TokenKind::KwRecord

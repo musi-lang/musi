@@ -206,10 +206,10 @@ unsafe {
 
 ### Attributes
 
-Compiler hints using `[< ... >]` syntax (stolen from F#):
+Compiler hints using `@[...]` syntax:
 
 ```musi
-[<inline>]
+@[inline]
 fn fast_add(x: Int32, y: Int32) { x + y };
 ```
 

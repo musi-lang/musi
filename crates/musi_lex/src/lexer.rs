@@ -253,6 +253,7 @@ impl<'a> Lexer<'a> {
             Some('.') => match self.cursor.peek_nth(1) {
                 Some('.') => self.match_tri(2, '<', TokenKind::DotDotLt, TokenKind::DotDot),
                 Some('^') => self.compound(2, TokenKind::DotCaret),
+                Some('[') => self.compound(2, TokenKind::DotLBrack),
                 _ => self.one(TokenKind::Dot),
             },
             Some('<') => match self.cursor.peek_nth(1) {
@@ -273,14 +274,13 @@ impl<'a> Lexer<'a> {
             Some('>') => match self.cursor.peek_nth(1) {
                 Some('=') => self.compound(2, TokenKind::GtEq),
                 Some('>') => self.compound(2, TokenKind::GtGt),
-                Some(']') => self.compound(2, TokenKind::GtRBrack),
                 _ => self.one(TokenKind::Gt),
             },
             Some('?') => self.match_maybe(1, '?', TokenKind::QuestionQuestion, TokenKind::Question),
             Some('/') => self.match_maybe(1, '=', TokenKind::SlashEq, TokenKind::Slash),
             Some('-') => self.match_maybe(1, '>', TokenKind::MinusGt, TokenKind::Minus),
             Some('*') => self.match_maybe(1, '*', TokenKind::StarStar, TokenKind::Star),
-            Some('[') => self.match_maybe(1, '<', TokenKind::LBrackLt, TokenKind::LBrack),
+            Some('[') => self.one(TokenKind::LBrack),
             Some('|') => self.match_maybe(1, '>', TokenKind::BarGt, TokenKind::Bar),
             Some('%') => self.one(TokenKind::Percent),
             Some('&') => self.one(TokenKind::Amp),
@@ -289,7 +289,7 @@ impl<'a> Lexer<'a> {
             Some('+') => self.one(TokenKind::Plus),
             Some(',') => self.one(TokenKind::Comma),
             Some(';') => self.one(TokenKind::Semicolon),
-            Some('@') => self.one(TokenKind::At),
+            Some('@') => self.match_maybe(1, '[', TokenKind::AtLBrack, TokenKind::At),
             Some(']') => self.one(TokenKind::RBrack),
             Some('^') => self.one(TokenKind::Caret),
             Some('_') => self.one(TokenKind::Underscore),

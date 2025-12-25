@@ -21,16 +21,13 @@
         },
         "attributes": {
             "name": "meta.attribute.musi",
-            "begin": "(\\[)(<)",
+            "begin": "(@)(\\[)",
             "beginCaptures": {
                 "1": { "name": "punctuation.definition.attribute.begin.musi" },
                 "2": { "name": "punctuation.definition.attribute.begin.musi" }
             },
-            "end": "(>)(\\])",
-            "endCaptures": {
-                "1": { "name": "punctuation.definition.attribute.end.musi" },
-                "2": { "name": "punctuation.definition.attribute.end.musi" }
-            },
+            "end": "(\\])",
+            "endCaptures": { "1": { "name": "punctuation.definition.attribute.end.musi" } },
             "patterns": [
                 {
                     "name": "meta.attribute.invocation.musi",

@@ -322,7 +322,7 @@ pub enum SumCaseItem {
     Field(Field),
 }
 
-/// `[<Name(args)>]`
+/// `@[Name(args)]`
 #[derive(Debug, Clone)]
 pub struct Attr {
     pub name: Ident,
