@@ -251,9 +251,7 @@ impl Parser<'_> {
             ) => self.parse_expr_lit(),
             Some(TokenKind::TemplateHead(_)) => self.parse_expr_template(),
             Some(TokenKind::Ident(id)) => self.parse_expr_ident(id),
-            Some(TokenKind::Dot) if self.peek_nth(1) == Some(TokenKind::LBrace) => {
-                self.parse_expr_record_anon()
-            }
+            Some(TokenKind::DotLBrace) => self.parse_expr_record_anon(),
             Some(TokenKind::LParen) => self.parse_expr_paren(),
             Some(TokenKind::LBrack) => self.parse_expr_array(),
             Some(TokenKind::LBrace) => self.parse_expr_block(),
@@ -402,8 +400,8 @@ impl Parser<'_> {
     fn parse_expr_ident(&mut self, id: u32) -> MusiResult<Expr> {
         let start = self.curr_span();
         let _ = self.advance();
-        if self.at(TokenKind::Dot) && self.peek_nth(1) == Some(TokenKind::LBrace) {
-            self.advance_by(2);
+        if self.at(TokenKind::DotLBrace) {
+            let _ = self.advance();
             let fields = self.separated(TokenKind::Comma, Self::parse_field)?;
             let _ = self.expect(TokenKind::RBrace)?;
             return Ok(Expr::new(
@@ -419,7 +417,7 @@ impl Parser<'_> {
 
     fn parse_expr_record_anon(&mut self) -> MusiResult<Expr> {
         let start = self.curr_span();
-        self.advance_by(2);
+        let _ = self.advance(); // consume `.{`
         let fields = self.separated(TokenKind::Comma, Self::parse_field)?;
         let _ = self.expect(TokenKind::RBrace)?;
         Ok(Expr::new(
