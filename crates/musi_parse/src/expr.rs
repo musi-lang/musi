@@ -45,27 +45,15 @@ impl Parser<'_> {
                 continue;
             }
             if self.at(TokenKind::KwNot) && self.peek_nth(1) == Some(TokenKind::KwIn) {
-                let prec = Prec::Comparison as u8;
-                if prec < min_bp {
+                let (l_bp, r_bp) = Prec::infix(TokenKind::KwIn).expect("`in` is infix");
+                if l_bp < min_bp {
                     break;
                 }
                 self.advance_by(2);
-                let rhs = Box::new(self.parse_expr_bp(prec + 1)?);
-                let inner = Box::new(Expr {
-                    kind: ExprKind::Binary {
-                        op: TokenKind::KwIn,
-                        lhs: Box::new(lhs),
-                        rhs,
-                    },
-                    span: start.merge(self.prev_span()),
-                });
-                lhs = Expr {
-                    kind: ExprKind::Unary {
-                        op: TokenKind::KwNot,
-                        operand: inner,
-                    },
-                    span: start.merge(self.prev_span()),
-                };
+                let rhs = self.parse_expr_bp(r_bp)?;
+                let span = start.merge(self.prev_span());
+                let inner = Expr::binary(TokenKind::KwIn, lhs, rhs, span);
+                lhs = Expr::unary(TokenKind::KwNot, inner, span);
                 continue;
             }
 

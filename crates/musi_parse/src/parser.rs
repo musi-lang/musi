@@ -185,7 +185,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Check if at any closing delimiter (RParen, RBrack, RBrace) or EOF.
+    /// Check if at any closing delimiter (`RParen`, `RBrack`, `RBrace`) or EOF.
     #[must_use]
     pub fn at_closing(&self) -> bool {
         matches!(
