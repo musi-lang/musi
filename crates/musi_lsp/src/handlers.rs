@@ -2,7 +2,8 @@ use crate::{diagnostics::convert_diagnostics, server_state::ServerState};
 use async_lsp::{
     LanguageClient, LanguageServer, ResponseError,
     lsp_types::{
-        DidChangeTextDocumentParams, DidOpenTextDocumentParams, InitializeParams, InitializeResult,
+        DidChangeTextDocumentParams, DidChangeWatchedFilesParams, DidCloseTextDocumentParams,
+        DidOpenTextDocumentParams, DidSaveTextDocumentParams, InitializeParams, InitializeResult,
         PublishDiagnosticsParams, ServerCapabilities, ServerInfo, TextDocumentSyncKind, Url,
     },
 };
@@ -105,6 +106,18 @@ impl LanguageServer for MusiLanguageServer {
                 this.analyze(params.text_document.uri, change.text).await;
             }
         });
+        ControlFlow::Continue(())
+    }
+
+    fn did_save(&mut self, _: DidSaveTextDocumentParams) -> Self::NotifyResult {
+        ControlFlow::Continue(())
+    }
+
+    fn did_close(&mut self, _: DidCloseTextDocumentParams) -> Self::NotifyResult {
+        ControlFlow::Continue(())
+    }
+
+    fn did_change_watched_files(&mut self, _: DidChangeWatchedFilesParams) -> Self::NotifyResult {
         ControlFlow::Continue(())
     }
 }
