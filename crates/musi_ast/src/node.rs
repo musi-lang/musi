@@ -100,6 +100,36 @@ pub struct Expr {
     pub span: Span,
 }
 
+impl Expr {
+    #[must_use]
+    pub const fn new(kind: ExprKind, span: Span) -> Self {
+        Self { kind, span }
+    }
+
+    #[must_use]
+    pub fn binary(op: TokenKind, lhs: Self, rhs: Self, span: Span) -> Self {
+        Self::new(
+            ExprKind::Binary {
+                op,
+                lhs: Box::new(lhs),
+                rhs: Box::new(rhs),
+            },
+            span,
+        )
+    }
+
+    #[must_use]
+    pub fn unary(op: TokenKind, operand: Self, span: Span) -> Self {
+        Self::new(
+            ExprKind::Unary {
+                op,
+                operand: Box::new(operand),
+            },
+            span,
+        )
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum ExprKind {
     /// `42`, `"hello"`, `true`
