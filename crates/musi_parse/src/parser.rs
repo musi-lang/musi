@@ -87,7 +87,7 @@ impl Prec {
 
 pub struct Parser<'a> {
     tokens: &'a [Token],
-    pos: usize,
+    index: usize,
     pub diagnostics: DiagnosticBag,
 }
 
@@ -96,14 +96,14 @@ impl<'a> Parser<'a> {
     pub fn new(tokens: &'a [Token]) -> Self {
         Self {
             tokens,
-            pos: 0,
+            index: 0,
             diagnostics: DiagnosticBag::default(),
         }
     }
 
     #[must_use]
     pub fn peek(&self) -> Option<&Token> {
-        self.tokens.get(self.pos)
+        self.tokens.get(self.index)
     }
 
     #[must_use]
@@ -113,19 +113,19 @@ impl<'a> Parser<'a> {
 
     #[must_use]
     pub fn peek_nth(&self, n: usize) -> Option<TokenKind> {
-        self.tokens.get(self.pos + n).map(|t| t.kind)
+        self.tokens.get(self.index + n).map(|t| t.kind)
     }
 
     pub fn advance(&mut self) -> Option<&Token> {
-        let tok = self.tokens.get(self.pos);
+        let tok = self.tokens.get(self.index);
         if tok.is_some() {
-            self.pos += 1;
+            self.index += 1;
         }
         tok
     }
 
     pub fn advance_by(&mut self, n: usize) {
-        self.pos = (self.pos + n).min(self.tokens.len());
+        self.index = (self.index + n).min(self.tokens.len());
     }
 
     #[must_use]
@@ -144,13 +144,13 @@ impl<'a> Parser<'a> {
 
     #[must_use]
     pub const fn is_eof(&self) -> bool {
-        self.pos >= self.tokens.len()
+        self.index >= self.tokens.len()
     }
 
     #[must_use]
     pub const fn prev_span(&self) -> Span {
-        if self.pos > 0 {
-            self.tokens[self.pos - 1].span
+        if self.index > 0 {
+            self.tokens[self.index - 1].span
         } else {
             Span::new(0, 0)
         }
