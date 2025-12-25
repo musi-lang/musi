@@ -825,10 +825,6 @@ fn test_typ_complex() {
     assert!(matches!(typ.kind, TypKind::Fn { .. }));
 }
 
-// =============================================================================
-// EDGE CASES
-// =============================================================================
-
 #[test]
 fn test_nested_calls() {
     let mut ctx = TestContext::new();
