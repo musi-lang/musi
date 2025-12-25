@@ -1,7 +1,10 @@
+#![allow(clippy::multiple_crate_versions)]
+
 use async_lsp::{MainLoop, router::Router, server::Lifecycle};
 use tokio::io;
 use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 
+mod analysis;
 mod diagnostics;
 mod handlers;
 mod server_state;

@@ -1,4 +1,4 @@
-use crate::{diagnostics::convert_diagnostics, server_state::ServerState};
+use crate::{analysis::compute_diagnostics, server_state::ServerState};
 use async_lsp::{
     LanguageClient, LanguageServer, ResponseError,
     lsp_types::{
@@ -8,8 +8,6 @@ use async_lsp::{
     },
 };
 use musi_basic::source::SourceFile;
-use musi_lex::lexer::tokenize;
-use musi_parse::parse;
 use std::future::Future;
 use std::ops::ControlFlow;
 use std::pin::Pin;
@@ -36,21 +34,13 @@ impl MusiLanguageServer {
             src
         };
 
-        let diags = task::spawn_blocking(move || {
-            let mut interner = state.interner.lock().unwrap();
-
-            let (tokens, mut lex_errors) = tokenize(&source_file, &mut interner);
-            let (_program, parse_errors) = parse(&tokens);
-
-            lex_errors.merge(parse_errors);
-
-            convert_diagnostics(&source_file, &lex_errors.diagnostics)
-        })
-        .await
-        .unwrap_or_else(|e| {
-            eprintln!("analysis task failed: {e}");
-            vec![]
-        });
+        let interner = Arc::clone(&state.interner);
+        let diags = task::spawn_blocking(move || compute_diagnostics(&source_file, &interner))
+            .await
+            .unwrap_or_else(|e| {
+                eprintln!("analysis task failed: {e}");
+                vec![]
+            });
 
         // no cleanup needed
         let mut client = state.client.clone();

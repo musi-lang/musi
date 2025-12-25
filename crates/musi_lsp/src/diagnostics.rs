@@ -16,7 +16,7 @@ fn convert_diagnostic(source_file: &SourceFile, diag: &Diagnostic) -> lsp_types:
         range: convert_span(source_file, diag.span),
         severity: Some(convert_level(diag.level)),
         code: None,
-        source: Some("musi".to_string()),
+        source: Some("musi".to_owned()),
         message: diag.message.clone(),
         related_information: None,
         tags: None,
@@ -32,21 +32,20 @@ fn convert_span(source_file: &SourceFile, span: Span) -> lsp_types::Range {
     // LSP is 0-indexed, Musi is 1-indexed
     lsp_types::Range {
         start: lsp_types::Position {
-            line: (start_line - 1) as u32,
-            character: (start_col - 1) as u32,
+            line: u32::try_from(start_line - 1).unwrap_or(0),
+            character: u32::try_from(start_col - 1).unwrap_or(0),
         },
         end: lsp_types::Position {
-            line: (end_line - 1) as u32,
-            character: (end_col - 1) as u32,
+            line: u32::try_from(end_line - 1).unwrap_or(0),
+            character: u32::try_from(end_col - 1).unwrap_or(0),
         },
     }
 }
 
-fn convert_level(level: Level) -> DiagnosticSeverity {
+const fn convert_level(level: Level) -> DiagnosticSeverity {
     match level {
-        Level::Error => DiagnosticSeverity::ERROR,
         Level::Warning => DiagnosticSeverity::WARNING,
         Level::Note => DiagnosticSeverity::INFORMATION,
-        _ => unreachable!(),
+        _ => DiagnosticSeverity::ERROR,
     }
 }
