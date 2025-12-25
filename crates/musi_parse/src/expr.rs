@@ -998,7 +998,7 @@ impl Parser<'_> {
     }
 
     /// # Errors
-    /// Returns `ParseErrorKind::Expected` if current token is not an identifier.
+    /// Returns `ParseErrorKind::Expected` if current token is not identifier.
     pub fn expect_ident(&mut self) -> MusiResult<u32> {
         match self.peek_kind() {
             Some(TokenKind::Ident(id)) => {
