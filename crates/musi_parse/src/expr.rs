@@ -1,7 +1,6 @@
 use musi_ast::{
-    Attr, AttrArg, AttrArgList, AttrList, Expr, ExprKind, ExprList, Field, FieldList, FnSig,
-    LitKind, MatchCase, Modifiers, Stmt, StmtKind, SumCase, SumCaseItem, SumCaseItemList,
-    TemplatePart,
+    Attr, AttrArg, AttrArgList, AttrList, Expr, ExprKind, Field, FnSig, LitKind, MatchCase,
+    Modifiers, Stmt, StmtKind, SumCase, SumCaseItem, SumCaseItemList, TemplatePart,
 };
 use musi_basic::{
     error::{IntoMusiError, MusiResult},
@@ -25,16 +24,16 @@ impl Parser<'_> {
     /// Never panics - `.expect()` is guarded by prior `Prec::prefix`/`Prec::infix` check.
     pub fn parse_expr_bp(&mut self, min_bp: u8) -> MusiResult<Expr> {
         let start = self.curr_span();
-
-        let mut lhs = if let Some(bp) = self.peek_kind().and_then(Prec::prefix) {
-            let op = self.advance().expect("checked by `Prec::prefix`").kind;
-            let operand = Box::new(self.parse_expr_bp(bp)?);
-            Expr {
-                kind: ExprKind::Unary { op, operand },
-                span: start.merge(self.prev_span()),
+        let mut lhs = match self.peek_kind().and_then(Prec::prefix) {
+            Some(bp) => {
+                let op = self.advance().expect("Prec::prefix").kind;
+                let operand = Box::new(self.parse_expr_bp(bp)?);
+                Expr {
+                    kind: ExprKind::Unary { op, operand },
+                    span: start.merge(self.prev_span()),
+                }
             }
-        } else {
-            self.parse_expr_primary()?
+            None => self.parse_expr_primary()?,
         };
 
         loop {
@@ -45,13 +44,13 @@ impl Parser<'_> {
                 lhs = self.parse_expr_postfix(lhs)?;
                 continue;
             }
-
             if self.at(TokenKind::KwNot) && self.peek_nth(1) == Some(TokenKind::KwIn) {
-                if 10 < min_bp {
+                let prec = Prec::Comparison as u8;
+                if prec < min_bp {
                     break;
                 }
                 self.advance_by(2);
-                let rhs = Box::new(self.parse_expr_bp(11)?);
+                let rhs = Box::new(self.parse_expr_bp(prec + 1)?);
                 let inner = Box::new(Expr {
                     kind: ExprKind::Binary {
                         op: TokenKind::KwIn,
@@ -77,8 +76,7 @@ impl Parser<'_> {
                 break;
             }
 
-            let op = self.advance().expect("checked by Prec::infix").kind;
-
+            let op = self.advance().expect("Prec::infix").kind;
             if matches!(op, TokenKind::DotDot | TokenKind::DotDotLt) {
                 let end = if self.can_start_expr() {
                     Some(Box::new(self.parse_expr_bp(r_bp)?))
@@ -122,62 +120,62 @@ impl Parser<'_> {
 
     fn parse_expr_postfix(&mut self, lhs: Expr) -> MusiResult<Expr> {
         let start = lhs.span;
-        match self.peek_kind() {
+        let (kind, span) = match self.peek_kind() {
             Some(TokenKind::LParen) => {
                 let _ = self.advance();
-                let args = self.parse_expr_args()?;
+                let args = self.separated(TokenKind::Comma, Self::parse_expr)?;
                 let _ = self.expect(TokenKind::RParen)?;
-                Ok(Expr {
-                    kind: ExprKind::Call {
+                (
+                    ExprKind::Call {
                         callee: Box::new(lhs),
                         args,
                     },
-                    span: start.merge(self.prev_span()),
-                })
+                    start.merge(self.prev_span()),
+                )
             }
             Some(TokenKind::LBrack) => {
                 let _ = self.advance();
                 let index = Box::new(self.parse_expr()?);
                 let _ = self.expect(TokenKind::RBrack)?;
-                Ok(Expr {
-                    kind: ExprKind::Index {
+                (
+                    ExprKind::Index {
                         base: Box::new(lhs),
                         index,
                     },
-                    span: start.merge(self.prev_span()),
-                })
+                    start.merge(self.prev_span()),
+                )
             }
             Some(TokenKind::Dot) => {
                 let _ = self.advance();
-                let field = self.expect_ident()?;
-                Ok(Expr {
-                    kind: ExprKind::Field {
+                (
+                    ExprKind::Field {
                         base: Box::new(lhs),
-                        field,
+                        field: self.expect_ident()?,
                     },
-                    span: start.merge(self.prev_span()),
-                })
+                    start.merge(self.prev_span()),
+                )
             }
             Some(TokenKind::DotCaret) => {
                 let _ = self.advance();
-                Ok(Expr {
-                    kind: ExprKind::Deref(Box::new(lhs)),
-                    span: start.merge(self.prev_span()),
-                })
+                (
+                    ExprKind::Deref(Box::new(lhs)),
+                    start.merge(self.prev_span()),
+                )
             }
             Some(TokenKind::Question) => {
                 let _ = self.advance();
-                Ok(Expr {
-                    kind: ExprKind::Try {
+                (
+                    ExprKind::Try {
                         expr: Box::new(lhs),
                         else_binding: None,
                         else_body: None,
                     },
-                    span: start.merge(self.prev_span()),
-                })
+                    start.merge(self.prev_span()),
+                )
             }
-            _ => Ok(lhs),
-        }
+            _ => return Ok(lhs),
+        };
+        Ok(Expr { kind, span })
     }
 
     fn parse_expr_primary(&mut self) -> MusiResult<Expr> {
@@ -197,7 +195,7 @@ impl Parser<'_> {
                 let _ = self.advance();
                 if self.at(TokenKind::Dot) && self.peek_nth(1) == Some(TokenKind::LBrace) {
                     self.advance_by(2);
-                    let fields = self.parse_expr_field_list()?;
+                    let fields = self.separated(TokenKind::Comma, Self::parse_field)?;
                     let _ = self.expect(TokenKind::RBrace)?;
                     return Ok(Expr {
                         kind: ExprKind::Record {
@@ -214,7 +212,7 @@ impl Parser<'_> {
             }
             Some(TokenKind::Dot) if self.peek_nth(1) == Some(TokenKind::LBrace) => {
                 self.advance_by(2);
-                let fields = self.parse_expr_field_list()?;
+                let fields = self.separated(TokenKind::Comma, Self::parse_field)?;
                 let _ = self.expect(TokenKind::RBrace)?;
                 Ok(Expr {
                     kind: ExprKind::Record { ty: None, fields },
@@ -292,19 +290,17 @@ impl Parser<'_> {
     fn parse_expr_tuple_or_grouped(&mut self) -> MusiResult<Expr> {
         let start = self.curr_span();
         let _ = self.advance();
-        if self.at(TokenKind::RParen) {
-            let _ = self.advance();
+        if self.bump_if(TokenKind::RParen) {
             return Ok(Expr {
                 kind: ExprKind::Tuple(vec![]),
                 span: start.merge(self.prev_span()),
             });
         }
         let first = self.parse_expr()?;
-        if self.at(TokenKind::Comma) {
-            let _ = self.advance();
+        if self.bump_if(TokenKind::Comma) {
             let mut elems = vec![first];
             if !self.at(TokenKind::RParen) {
-                elems.extend(self.parse_expr_list()?);
+                elems.extend(self.separated(TokenKind::Comma, Self::parse_expr)?);
             }
             let _ = self.expect(TokenKind::RParen)?;
             Ok(Expr {
@@ -323,11 +319,7 @@ impl Parser<'_> {
     fn parse_expr_array(&mut self) -> MusiResult<Expr> {
         let start = self.curr_span();
         let _ = self.advance();
-        let elems = if self.at(TokenKind::RBrack) {
-            vec![]
-        } else {
-            self.parse_expr_list()?
-        };
+        let elems = self.separated(TokenKind::Comma, Self::parse_expr)?;
         let _ = self.expect(TokenKind::RBrack)?;
         Ok(Expr {
             kind: ExprKind::Array(elems),
@@ -344,8 +336,7 @@ impl Parser<'_> {
         let mut final_expr = None;
         while !self.at(TokenKind::RBrace) && !self.is_eof() {
             let expr = self.parse_expr()?;
-            if self.at(TokenKind::Semicolon) {
-                let _ = self.advance();
+            if self.bump_if(TokenKind::Semicolon) {
                 stmts.push(Stmt {
                     kind: StmtKind::Expr(expr),
                     span: self.prev_span(),
@@ -370,8 +361,7 @@ impl Parser<'_> {
         let _ = self.expect(TokenKind::KwIf)?;
         let cond = Box::new(self.parse_expr()?);
         let then_br = Box::new(self.parse_expr_block()?);
-        let else_br = if self.at(TokenKind::KwElse) {
-            let _ = self.advance();
+        let else_br = if self.bump_if(TokenKind::KwElse) {
             Some(Box::new(if self.at(TokenKind::KwIf) {
                 self.parse_expr_if()?
             } else {
@@ -420,11 +410,9 @@ impl Parser<'_> {
         let scrutinee = Box::new(self.parse_expr()?);
         let _ = self.expect(TokenKind::LBrace)?;
         let mut cases = vec![];
-        while !self.at(TokenKind::RBrace) && !self.is_eof() {
-            let _ = self.expect(TokenKind::KwCase)?;
+        while self.bump_if(TokenKind::KwCase) {
             let pat = self.parse_pat()?;
-            let guard = if self.at(TokenKind::KwIf) {
-                let _ = self.advance();
+            let guard = if self.bump_if(TokenKind::KwIf) {
                 Some(self.parse_expr()?)
             } else {
                 None
@@ -432,9 +420,7 @@ impl Parser<'_> {
             let _ = self.expect(TokenKind::EqGt)?;
             let body = self.parse_expr()?;
             cases.push(MatchCase { pat, guard, body });
-            if self.at(TokenKind::Comma) {
-                let _ = self.advance();
-            }
+            let _ = self.bump_if(TokenKind::Comma);
         }
         let _ = self.expect(TokenKind::RBrace)?;
         Ok(Expr {
@@ -447,17 +433,13 @@ impl Parser<'_> {
         let start = self.curr_span();
         let _ = self.expect(TokenKind::KwTry)?;
         let expr = Box::new(self.parse_expr()?);
-        let (else_binding, else_body) = if self.at(TokenKind::KwElse) {
-            let _ = self.advance();
-            let bind = if let Some(TokenKind::Ident(id)) = self.peek_kind() {
-                if self.at(TokenKind::LBrace) {
-                    None
-                } else {
+        let (else_binding, else_body) = if self.bump_if(TokenKind::KwElse) {
+            let bind = match self.peek_kind() {
+                Some(TokenKind::Ident(id)) if !self.at(TokenKind::LBrace) => {
                     let _ = self.advance();
                     Some(id)
                 }
-            } else {
-                None
+                _ => None,
             };
             (bind, Some(Box::new(self.parse_expr()?)))
         } else {
@@ -585,23 +567,16 @@ impl Parser<'_> {
 
     fn parse_attrs(&mut self) -> MusiResult<AttrList> {
         let mut attrs = vec![];
-        while self.at(TokenKind::LBrackLt) {
-            let _ = self.advance();
+        while self.bump_if(TokenKind::LBrackLt) {
             loop {
                 let name = self.expect_ident()?;
-                let args = if self.at(TokenKind::LParen) {
-                    let _ = self.advance();
-                    let a = self.parse_attr_args()?;
-                    let _ = self.advance();
-                    a
-                } else {
-                    vec![]
-                };
+                let args = self.opt_delimited(TokenKind::LParen, TokenKind::RParen, |p| {
+                    p.parse_attr_args()
+                })?;
                 attrs.push(Attr { name, args });
-                if !self.at(TokenKind::Comma) {
+                if !self.bump_if(TokenKind::Comma) {
                     break;
                 }
-                let _ = self.advance();
             }
             let _ = self.expect(TokenKind::GtRBrack)?;
         }
@@ -609,37 +584,29 @@ impl Parser<'_> {
     }
 
     fn parse_attr_args(&mut self) -> MusiResult<AttrArgList> {
-        let mut args = vec![];
-        while !self.at(TokenKind::RParen) && !self.is_eof() {
-            if let Some(TokenKind::Ident(id)) = self.peek_kind() {
-                if self.peek_nth(1) == Some(TokenKind::ColonEq) {
-                    self.advance_by(2);
-                    args.push(AttrArg {
+        self.separated(TokenKind::Comma, |p| {
+            if let Some(TokenKind::Ident(id)) = p.peek_kind() {
+                if p.peek_nth(1) == Some(TokenKind::ColonEq) {
+                    p.advance_by(2);
+                    return Ok(AttrArg {
                         name: Some(id),
-                        value: Some(self.parse_expr()?),
-                        lit: None,
-                    });
-                } else {
-                    let _ = self.advance();
-                    args.push(AttrArg {
-                        name: Some(id),
-                        value: None,
+                        value: Some(p.parse_expr()?),
                         lit: None,
                     });
                 }
-            } else {
-                args.push(AttrArg {
-                    name: None,
+                let _ = p.advance();
+                return Ok(AttrArg {
+                    name: Some(id),
                     value: None,
-                    lit: Some(self.parse_lit()?),
+                    lit: None,
                 });
             }
-            if !self.at(TokenKind::Comma) {
-                break;
-            }
-            let _ = self.advance();
-        }
-        Ok(args)
+            Ok(AttrArg {
+                name: None,
+                value: None,
+                lit: Some(p.parse_lit()?),
+            })
+        })
     }
 
     fn parse_modifiers(&mut self) -> Modifiers {
@@ -678,7 +645,7 @@ impl Parser<'_> {
         let name = self.try_ident();
         let ty_params = self.parse_typ_params()?;
         let _ = self.expect(TokenKind::LBrace)?;
-        let fields = self.parse_field_list_semi()?;
+        let fields = self.separated(TokenKind::Semicolon, Self::parse_field)?;
         let _ = self.expect(TokenKind::RBrace)?;
         Ok(Expr {
             kind: ExprKind::RecordDef {
@@ -699,26 +666,18 @@ impl Parser<'_> {
         let ty_params = self.parse_typ_params()?;
         let _ = self.expect(TokenKind::LBrace)?;
         let mut cases = vec![];
-        while self.at(TokenKind::KwCase) {
-            let _ = self.advance();
+        while self.bump_if(TokenKind::KwCase) {
             let case_name = self.expect_ident()?;
             let ty_args = self.parse_typ_args()?;
-            let fields = if self.at(TokenKind::LParen) {
-                let _ = self.advance();
-                let items = self.parse_sum_case_items()?;
-                let _ = self.expect(TokenKind::RParen)?;
-                items
-            } else {
-                vec![]
-            };
+            let fields = self.opt_delimited(TokenKind::LParen, TokenKind::RParen, |p| {
+                p.parse_sum_case_items()
+            })?;
             cases.push(SumCase {
                 name: case_name,
                 ty_args,
                 fields,
             });
-            if self.at(TokenKind::Comma) {
-                let _ = self.advance();
-            }
+            let _ = self.bump_if(TokenKind::Comma);
         }
         let _ = self.expect(TokenKind::RBrace)?;
         Ok(Expr {
@@ -734,25 +693,16 @@ impl Parser<'_> {
     }
 
     fn parse_sum_case_items(&mut self) -> MusiResult<SumCaseItemList> {
-        let mut items = vec![];
-        while !self.at(TokenKind::RParen) && !self.is_eof() {
-            if self.at(TokenKind::KwVar)
-                || (matches!(self.peek_kind(), Some(TokenKind::Ident(_)))
-                    && matches!(
-                        self.peek_nth(1),
-                        Some(TokenKind::Colon | TokenKind::ColonEq)
-                    ))
+        self.separated(TokenKind::Comma, |p| {
+            if p.at(TokenKind::KwVar)
+                || (matches!(p.peek_kind(), Some(TokenKind::Ident(_)))
+                    && matches!(p.peek_nth(1), Some(TokenKind::Colon | TokenKind::ColonEq)))
             {
-                items.push(SumCaseItem::Field(self.parse_field()?));
+                Ok(SumCaseItem::Field(p.parse_field()?))
             } else {
-                items.push(SumCaseItem::Type(self.parse_typ()?));
+                Ok(SumCaseItem::Type(p.parse_typ()?))
             }
-            if !self.at(TokenKind::Comma) {
-                break;
-            }
-            let _ = self.advance();
-        }
-        Ok(items)
+        })
     }
 
     fn parse_expr_alias(&mut self, attrs: AttrList, mods: Modifiers) -> MusiResult<Expr> {
@@ -779,16 +729,10 @@ impl Parser<'_> {
         let _ = self.expect(TokenKind::KwFn)?;
         let name = self.try_ident();
         let ty_params = self.parse_typ_params()?;
-        let params = if self.at(TokenKind::LParen) {
-            let _ = self.advance();
-            let p = self.parse_field_list()?;
-            let _ = self.expect(TokenKind::RParen)?;
-            p
-        } else {
-            vec![]
-        };
-        let ret = if self.at(TokenKind::Colon) {
-            let _ = self.advance();
+        let params = self.opt_delimited(TokenKind::LParen, TokenKind::RParen, |p| {
+            p.separated(TokenKind::Comma, Self::parse_field)
+        })?;
+        let ret = if self.bump_if(TokenKind::Colon) {
             Some(self.parse_typ()?)
         } else {
             None
@@ -815,8 +759,7 @@ impl Parser<'_> {
         let mutable = self.at(TokenKind::KwVar);
         let _ = self.advance();
         let pat = self.parse_pat()?;
-        let ty = if self.at(TokenKind::Colon) {
-            let _ = self.advance();
+        let ty = if self.bump_if(TokenKind::Colon) {
             Some(self.parse_typ()?)
         } else {
             None
@@ -835,81 +778,15 @@ impl Parser<'_> {
         })
     }
 
-    fn parse_expr_list(&mut self) -> MusiResult<ExprList> {
-        let mut exprs = vec![self.parse_expr()?];
-        while self.at(TokenKind::Comma) {
-            let _ = self.advance();
-            if self.at(TokenKind::RParen)
-                || self.at(TokenKind::RBrack)
-                || self.at(TokenKind::RBrace)
-            {
-                break;
-            }
-            exprs.push(self.parse_expr()?);
-        }
-        Ok(exprs)
-    }
-
-    fn parse_expr_args(&mut self) -> MusiResult<ExprList> {
-        if self.at(TokenKind::RParen) {
-            Ok(vec![])
-        } else {
-            self.parse_expr_list()
-        }
-    }
-
-    fn parse_field_list(&mut self) -> MusiResult<FieldList> {
-        let mut fields = vec![];
-        while !self.at(TokenKind::RParen) && !self.at(TokenKind::RBrace) && !self.is_eof() {
-            fields.push(self.parse_field()?);
-            if !self.at(TokenKind::Comma) {
-                break;
-            }
-            let _ = self.advance();
-        }
-        Ok(fields)
-    }
-
-    fn parse_field_list_semi(&mut self) -> MusiResult<FieldList> {
-        let mut fields = vec![];
-        while !self.at(TokenKind::RBrace) && !self.is_eof() {
-            fields.push(self.parse_field()?);
-            if !self.at(TokenKind::Semicolon) {
-                break;
-            }
-            let _ = self.advance();
-        }
-        Ok(fields)
-    }
-
-    fn parse_expr_field_list(&mut self) -> MusiResult<FieldList> {
-        let mut fields = vec![];
-        while !self.at(TokenKind::RBrace) && !self.is_eof() {
-            fields.push(self.parse_field()?);
-            if !self.at(TokenKind::Comma) {
-                break;
-            }
-            let _ = self.advance();
-        }
-        Ok(fields)
-    }
-
     fn parse_field(&mut self) -> MusiResult<Field> {
-        let mutable = if self.at(TokenKind::KwVar) {
-            let _ = self.advance();
-            true
-        } else {
-            false
-        };
+        let mutable = self.bump_if(TokenKind::KwVar);
         let name = self.expect_ident()?;
-        let ty = if self.at(TokenKind::Colon) {
-            let _ = self.advance();
+        let ty = if self.bump_if(TokenKind::Colon) {
             Some(self.parse_typ()?)
         } else {
             None
         };
-        let init = if self.at(TokenKind::ColonEq) {
-            let _ = self.advance();
+        let init = if self.bump_if(TokenKind::ColonEq) {
             Some(self.parse_expr()?)
         } else {
             None
