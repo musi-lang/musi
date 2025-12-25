@@ -282,29 +282,56 @@ impl<'a> Parser<'a> {
     }
 
     pub fn sync_to_stmt(&mut self) {
-        let mut advanced = false;
+        _ = self.advance();
+
         loop {
             match self.peek_kind() {
-                None => break,
-                Some(TokenKind::RBrace) => break,
-                Some(
-                    TokenKind::KwVal
-                    | TokenKind::KwVar
-                    | TokenKind::KwFn
-                    | TokenKind::KwRecord
-                    | TokenKind::KwSum
-                    | TokenKind::KwIf
-                    | TokenKind::KwWhile
-                    | TokenKind::KwFor,
-                ) => break,
-                Some(TokenKind::Ident(_)) if advanced => break,
                 Some(TokenKind::Semicolon) => {
                     _ = self.advance();
                     break;
                 }
+                Some(TokenKind::Dot) if self.peek_nth(1) == Some(TokenKind::LBrace) => break,
+                None
+                | Some(
+                    TokenKind::LitInt(_)
+                    | TokenKind::LitReal(_)
+                    | TokenKind::LitString(_)
+                    | TokenKind::LitRune(_)
+                    | TokenKind::LitTemplateNoSubst(_)
+                    | TokenKind::TemplateHead(_)
+                    | TokenKind::KwTrue
+                    | TokenKind::KwFalse
+                    | TokenKind::Ident(_)
+                    | TokenKind::LParen
+                    | TokenKind::LBrack
+                    | TokenKind::LBrace
+                    | TokenKind::Minus
+                    | TokenKind::KwNot
+                    | TokenKind::Tilde
+                    | TokenKind::At
+                    | TokenKind::KwIf
+                    | TokenKind::KwWhile
+                    | TokenKind::KwFor
+                    | TokenKind::KwMatch
+                    | TokenKind::KwTry
+                    | TokenKind::KwReturn
+                    | TokenKind::KwDefer
+                    | TokenKind::KwBreak
+                    | TokenKind::KwCycle
+                    | TokenKind::KwUnsafe
+                    | TokenKind::KwImport
+                    | TokenKind::KwRecord
+                    | TokenKind::KwSum
+                    | TokenKind::KwAlias
+                    | TokenKind::KwFn
+                    | TokenKind::KwVal
+                    | TokenKind::KwVar
+                    | TokenKind::KwExport
+                    | TokenKind::KwExtern
+                    | TokenKind::AtLBrack,
+                ) => break,
                 _ => {
                     _ = self.advance();
-                    advanced = true;
                 }
             }
         }
