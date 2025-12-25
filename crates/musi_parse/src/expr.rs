@@ -187,7 +187,7 @@ impl Parser<'_> {
             Some(TokenKind::LParen) => self.parse_postfix_call(lhs, start),
             Some(TokenKind::LBrack) => self.parse_postfix_index(lhs, start),
             Some(TokenKind::Dot) => self.parse_postfix_field(lhs, start),
-            Some(TokenKind::DotCaret) => self.parse_postfix_deref(lhs, start),
+            Some(TokenKind::DotCaret) => Ok(self.parse_postfix_deref(lhs, start)),
             _ => Ok(lhs),
         }
     }
@@ -227,12 +227,12 @@ impl Parser<'_> {
         ))
     }
 
-    fn parse_postfix_deref(&mut self, lhs: Expr, start: Span) -> MusiResult<Expr> {
+    fn parse_postfix_deref(&mut self, lhs: Expr, start: Span) -> Expr {
         let _ = self.advance();
-        Ok(Expr::new(
+        Expr::new(
             ExprKind::Deref(Box::new(lhs)),
             start.merge(self.prev_span()),
-        ))
+        )
     }
 
     fn parse_expr_primary(&mut self) -> MusiResult<Expr> {
