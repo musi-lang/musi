@@ -5,17 +5,17 @@ import { registerCommands } from "./commands";
 import { onConfigChange } from "./config";
 import { StatusBar } from "./status";
 
-let statusBar: StatusBar;
+let _statusBar: StatusBar;
 
 export async function activate(
 	context: vscode.ExtensionContext,
 ) {
-	statusBar = new StatusBar();
-	context.subscriptions.push({ dispose: () => statusBar.dispose() });
+	_statusBar = new StatusBar();
+	context.subscriptions.push({ dispose: () => _statusBar.dispose() });
 
-	statusBar.update("Starting...", "loading");
+	_statusBar.update("Starting...", "loading");
 
-	registerCommands(context, statusBar);
+	registerCommands(context, _statusBar);
 
 	context.subscriptions.push(
 		onConfigChange(async () => {
@@ -31,13 +31,13 @@ export async function activate(
 	try {
 		const serverPath = await findServerPath();
 		if (!serverPath) {
-			statusBar.update("Server not found", "error");
+			_statusBar.update("Server not found", "error");
 			await showServerNotFoundUI();
 			return;
 		}
 
 		await createAndStartClient(serverPath);
-		statusBar.update("Ready", "ready");
+		_statusBar.update("Ready", "ready");
 
 		setTimeout(() => {
 			vscode.window
@@ -48,7 +48,7 @@ export async function activate(
 		}, 500);
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
-		statusBar.update("Failed", "error");
+		_statusBar.update("Failed", "error");
 
 		const action = await vscode.window.showErrorMessage(
 			`Unable to start Musi LSP server: ${message}`,
@@ -65,6 +65,6 @@ export async function activate(
 }
 
 export async function deactivate() {
-	statusBar?.dispose();
+	_statusBar?.dispose();
 	await stopClient();
 }
