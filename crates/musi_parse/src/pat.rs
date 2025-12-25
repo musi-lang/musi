@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use musi_ast::{Expr, ExprKind, LitKind, OptExprPtr, Pat, PatKind, PatList, TypList};
 use musi_basic::{
     error::{IntoMusiError, MusiResult},
@@ -101,7 +103,10 @@ impl Parser<'_> {
                 let _ = self.advance();
                 PatKind::Lit(LitKind::Bool(false))
             }
-            _ => return Err(ParseErrorKind::Expected("literal pattern").into_musi_error(start)),
+            _ => {
+                return Err(ParseErrorKind::Expected(Cow::Borrowed("literal pattern"))
+                    .into_musi_error(start));
+            }
         };
         Ok(Pat::new(kind, start))
     }

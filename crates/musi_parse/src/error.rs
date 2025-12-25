@@ -1,14 +1,15 @@
 use musi_basic::error::{IntoMusiError, Level};
+use std::borrow::Cow;
 use thiserror::Error;
 
 #[derive(Debug, Clone, Error)]
 #[non_exhaustive]
 pub enum ParseErrorKind {
     #[error("expected {0}")]
-    Expected(&'static str),
+    Expected(Cow<'static, str>),
 
     #[error("expected {0} after {1}")]
-    ExpectedAfter(&'static str, &'static str),
+    ExpectedAfter(Cow<'static, str>, Cow<'static, str>),
 
     #[error("unexpected {0}")]
     Unexpected(String),
@@ -17,20 +18,20 @@ pub enum ParseErrorKind {
     UnexpectedEof,
 
     #[error("unclosed {0}")]
-    Unclosed(&'static str),
+    Unclosed(Cow<'static, str>),
 
     #[error("invalid {0}")]
-    Invalid(&'static str),
+    Invalid(Cow<'static, str>),
 }
 
 impl IntoMusiError for ParseErrorKind {
     fn hint(&self) -> Option<&'static str> {
         match self {
-            Self::Unclosed("block") => Some("add '}'"),
-            Self::Unclosed("parenthese(s)") => Some("add ')'"),
-            Self::Unclosed("bracket(s)") => Some("add ']'"),
-            Self::Unclosed("attribute") => Some("add '>]'"),
-            Self::ExpectedAfter("';'", _) => Some("add ';'"),
+            Self::Unclosed(s) if s == "block" => Some("add '}'"),
+            Self::Unclosed(s) if s == "parenthese(s)" => Some("add ')'"),
+            Self::Unclosed(s) if s == "bracket(s)" => Some("add ']'"),
+            Self::Unclosed(s) if s == "attribute" => Some("add '>]'"),
+            Self::ExpectedAfter(s, _) if s == "';'" => Some("add ';'"),
             _ => None,
         }
     }

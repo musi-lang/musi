@@ -1,5 +1,6 @@
 use musi_basic::interner::Interner;
 use musi_basic::span::Span;
+use std::borrow::Cow;
 use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -217,18 +218,18 @@ impl TokenKind {
     }
 
     #[must_use]
-    pub fn as_str(&self) -> &'static str {
+    pub fn as_str(&self) -> Cow<'static, str> {
         for (kw, tk) in KEYWORDS {
             if *tk == *self {
-                return kw;
+                return Cow::Owned(format!("'{kw}'"));
             }
         }
         for (tk, sym) in SYMBOLS {
             if *tk == *self {
-                return sym;
+                return Cow::Owned(format!("'{sym}'"));
             }
         }
-        "token"
+        Cow::Borrowed("token")
     }
 }
 

@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use musi_ast::{
     Attr, AttrArg, AttrArgList, AttrList, Expr, ExprKind, Field, FnSig, LitKind, MatchCase,
     Modifiers, OptExpr, OptExprPtr, Stmt, StmtKind, StmtList, SumCase, SumCaseItem,
@@ -38,7 +40,8 @@ impl Parser<'_> {
                 let _ = self.advance();
                 Ok(id)
             }
-            _ => Err(ParseErrorKind::Expected("identifier").into_musi_error(self.curr_span())),
+            _ => Err(ParseErrorKind::Expected(Cow::Borrowed("identifier"))
+                .into_musi_error(self.curr_span())),
         }
     }
 
@@ -322,14 +325,17 @@ impl Parser<'_> {
                 let _ = self.advance();
                 Ok(LitKind::Bool(false))
             }
-            _ => Err(ParseErrorKind::Expected("literal").into_musi_error(self.curr_span())),
+            _ => Err(ParseErrorKind::Expected(Cow::Borrowed("literal"))
+                .into_musi_error(self.curr_span())),
         }
     }
 
     fn parse_expr_template(&mut self) -> MusiResult<Expr> {
         let start = self.curr_span();
         let Some(TokenKind::TemplateHead(id)) = self.peek_kind() else {
-            return Err(ParseErrorKind::Expected("template string").into_musi_error(start));
+            return Err(
+                ParseErrorKind::Expected(Cow::Borrowed("template string")).into_musi_error(start)
+            );
         };
         let _ = self.advance();
         let mut parts = vec![TemplatePart::Text(id)];
@@ -346,7 +352,7 @@ impl Parser<'_> {
                     break;
                 }
                 _ => {
-                    return Err(ParseErrorKind::Unclosed("template string")
+                    return Err(ParseErrorKind::Unclosed(Cow::Borrowed("template string"))
                         .into_musi_error(self.curr_span()));
                 }
             }
@@ -599,9 +605,8 @@ impl Parser<'_> {
         let start = self.curr_span();
         let _ = self.expect(TokenKind::KwImport)?;
         let Some(TokenKind::LitString(path)) = self.peek_kind() else {
-            return Err(
-                ParseErrorKind::Expected("string literal").into_musi_error(self.curr_span())
-            );
+            return Err(ParseErrorKind::Expected(Cow::Borrowed("string literal"))
+                .into_musi_error(self.curr_span()));
         };
         let _ = self.advance();
         Ok(Expr::new(
@@ -624,7 +629,7 @@ impl Parser<'_> {
             Some(TokenKind::KwAlias) => self.parse_expr_alias_def(attrs, mods),
             Some(TokenKind::KwFn) => self.parse_expr_fn_def(attrs, mods),
             Some(TokenKind::KwVal | TokenKind::KwVar) => self.parse_expr_bind(mods),
-            _ => Err(ParseErrorKind::Expected("definition").into_musi_error(start)),
+            _ => Err(ParseErrorKind::Expected(Cow::Borrowed("definition")).into_musi_error(start)),
         }
     }
 

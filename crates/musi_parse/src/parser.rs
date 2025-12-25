@@ -294,7 +294,8 @@ impl<'a> Parser<'a> {
                     | TokenKind::KwSum
                     | TokenKind::KwIf
                     | TokenKind::KwWhile
-                    | TokenKind::KwFor,
+                    | TokenKind::KwFor
+                    | TokenKind::Ident(_),
                 ) => break,
                 Some(TokenKind::Semicolon) => {
                     _ = self.advance();
