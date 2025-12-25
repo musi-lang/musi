@@ -16,7 +16,7 @@ impl Parser<'_> {
         })
     }
 
-    pub fn parse_program(&mut self) -> Program {
+    pub fn parse_prog(&mut self) -> Program {
         let mut stmts = vec![];
         while !self.is_eof() {
             match self.parse_stmt() {

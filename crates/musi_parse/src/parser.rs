@@ -247,6 +247,23 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// If at `trigger` token, consume it and run parser, returning `Some(result)`.
+    /// Otherwise return `None`.
+    ///
+    /// # Errors
+    /// Returns error if parser fails after trigger is consumed.
+    pub fn maybe<T>(
+        &mut self,
+        trigger: TokenKind,
+        parse: impl FnOnce(&mut Self) -> Result<T, MusiError>,
+    ) -> Result<Option<T>, MusiError> {
+        if self.bump_if(trigger) {
+            Ok(Some(parse(self)?))
+        } else {
+            Ok(None)
+        }
+    }
+
     pub fn report(&mut self, err: MusiError) {
         self.diagnostics.add(Diagnostic::from(err));
     }

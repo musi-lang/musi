@@ -15,6 +15,6 @@ use musi_lex::token::Token;
 #[must_use]
 pub fn parse(tokens: &[Token]) -> (Program, DiagnosticBag) {
     let mut parser = Parser::new(tokens);
-    let program = parser.parse_program();
+    let program = parser.parse_prog();
     (program, parser.diagnostics)
 }
