@@ -52,6 +52,10 @@ pub struct Lexer<'a> {
     braces: Vec<BraceKind>,
 }
 
+// ============================================================================
+// SCANNING
+// ============================================================================
+
 impl<'a> Lexer<'a> {
     pub fn new(source: &'a SourceFile, interner: &'a mut Interner) -> Self {
         Self {
@@ -94,10 +98,6 @@ impl<'a> Lexer<'a> {
         };
 
         Token::new(kind, self.span(start, self.cursor.pos()))
-    }
-
-    fn skip_whitespace(&mut self) {
-        self.cursor.eat_while(|c| " \t\r\n".contains(c));
     }
 
     fn scan_line_comment(&mut self) -> TokenKind {
@@ -230,42 +230,6 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn parse_int(s: &str) -> Result<i64, num::ParseIntError> {
-        const RADIX_PREFIXES: &[(&str, &str, u32)] =
-            &[("0x", "0X", 16), ("0o", "0O", 8), ("0b", "0B", 2)];
-        for &(lower, upper, radix) in RADIX_PREFIXES {
-            if let Some(suffix) = s.strip_prefix(lower).or_else(|| s.strip_prefix(upper)) {
-                return i64::from_str_radix(suffix, radix);
-            }
-        }
-        s.parse()
-    }
-
-    fn consume_digits(&mut self) -> bool {
-        let before = self.cursor.pos();
-        self.cursor.eat_while(|c| c.is_ascii_digit() || c == '_');
-        self.cursor.pos() > before
-    }
-
-    fn unitize_numeric(&self, start: usize, end: usize) -> (String, bool) {
-        let mut out = String::with_capacity(end - start);
-        let mut prev_under = false;
-        let mut valid = true;
-        let s = self.source.input.get(start..end).unwrap();
-        for (i, c) in s.char_indices() {
-            if c == '_' {
-                if i == 0 || i == s.len() - 1 || prev_under {
-                    valid = false;
-                }
-                prev_under = true;
-            } else {
-                prev_under = false;
-                out.push(c);
-            }
-        }
-        (out, valid)
-    }
-
     fn scan_symbol(&mut self) -> TokenKind {
         match self.cursor.peek() {
             Some('.') => match self.cursor.peek_nth(1) {
@@ -332,61 +296,6 @@ impl<'a> Lexer<'a> {
                 TokenKind::Invalid(self.interner.intern(c.to_string().as_str()))
             }
             None => TokenKind::EOF,
-        }
-    }
-
-    fn one(&mut self, kind: TokenKind) -> TokenKind {
-        let _: Option<char> = self.cursor.bump();
-        kind
-    }
-
-    fn compound(&mut self, len: usize, kind: TokenKind) -> TokenKind {
-        self.cursor.bump_n(len);
-        kind
-    }
-
-    fn match_maybe(&mut self, offset: usize, c: char, yes: TokenKind, no: TokenKind) -> TokenKind {
-        if self.cursor.peek_nth(offset) == Some(c) {
-            self.cursor.bump_n(offset + 1);
-            yes
-        } else {
-            let _: Option<char> = self.cursor.bump();
-            no
-        }
-    }
-
-    fn match_tri(&mut self, offset: usize, c: char, yes: TokenKind, no: TokenKind) -> TokenKind {
-        if self.cursor.peek_nth(offset) == Some(c) {
-            self.cursor.bump_n(offset + 1);
-            yes
-        } else {
-            self.cursor.bump_n(offset);
-            no
-        }
-    }
-
-    fn match_bi(
-        &mut self,
-        offset: usize,
-        c1: char,
-        k1: TokenKind,
-        c2: char,
-        k2: TokenKind,
-        def: TokenKind,
-    ) -> TokenKind {
-        match self.cursor.peek_nth(offset) {
-            Some(c) if c == c1 => {
-                self.cursor.bump_n(offset + 1);
-                k1
-            }
-            Some(c) if c == c2 => {
-                self.cursor.bump_n(offset + 1);
-                k2
-            }
-            _ => {
-                let _: Option<char> = self.cursor.bump();
-                def
-            }
         }
     }
 
@@ -514,6 +423,107 @@ impl<'a> Lexer<'a> {
             )
         }
     }
+}
+
+// ============================================================================
+// HELPERS
+// ============================================================================
+
+impl Lexer<'_> {
+    fn skip_whitespace(&mut self) {
+        self.cursor.eat_while(|c| " \t\r\n".contains(c));
+    }
+
+    fn consume_digits(&mut self) -> bool {
+        let before = self.cursor.pos();
+        self.cursor.eat_while(|c| c.is_ascii_digit() || c == '_');
+        self.cursor.pos() > before
+    }
+
+    fn unitize_numeric(&self, start: usize, end: usize) -> (String, bool) {
+        let mut out = String::with_capacity(end - start);
+        let mut prev_under = false;
+        let mut valid = true;
+        let s = self.source.input.get(start..end).unwrap();
+        for (i, c) in s.char_indices() {
+            if c == '_' {
+                if i == 0 || i == s.len() - 1 || prev_under {
+                    valid = false;
+                }
+                prev_under = true;
+            } else {
+                prev_under = false;
+                out.push(c);
+            }
+        }
+        (out, valid)
+    }
+
+    fn parse_int(s: &str) -> Result<i64, num::ParseIntError> {
+        const RADIX_PREFIXES: &[(&str, &str, u32)] =
+            &[("0x", "0X", 16), ("0o", "0O", 8), ("0b", "0B", 2)];
+        for &(lower, upper, radix) in RADIX_PREFIXES {
+            if let Some(suffix) = s.strip_prefix(lower).or_else(|| s.strip_prefix(upper)) {
+                return i64::from_str_radix(suffix, radix);
+            }
+        }
+        s.parse()
+    }
+
+    fn one(&mut self, kind: TokenKind) -> TokenKind {
+        let _: Option<char> = self.cursor.bump();
+        kind
+    }
+
+    fn compound(&mut self, len: usize, kind: TokenKind) -> TokenKind {
+        self.cursor.bump_n(len);
+        kind
+    }
+
+    fn match_maybe(&mut self, offset: usize, c: char, yes: TokenKind, no: TokenKind) -> TokenKind {
+        if self.cursor.peek_nth(offset) == Some(c) {
+            self.cursor.bump_n(offset + 1);
+            yes
+        } else {
+            let _: Option<char> = self.cursor.bump();
+            no
+        }
+    }
+
+    fn match_tri(&mut self, offset: usize, c: char, yes: TokenKind, no: TokenKind) -> TokenKind {
+        if self.cursor.peek_nth(offset) == Some(c) {
+            self.cursor.bump_n(offset + 1);
+            yes
+        } else {
+            self.cursor.bump_n(offset);
+            no
+        }
+    }
+
+    fn match_bi(
+        &mut self,
+        offset: usize,
+        c1: char,
+        k1: TokenKind,
+        c2: char,
+        k2: TokenKind,
+        def: TokenKind,
+    ) -> TokenKind {
+        match self.cursor.peek_nth(offset) {
+            Some(c) if c == c1 => {
+                self.cursor.bump_n(offset + 1);
+                k1
+            }
+            Some(c) if c == c2 => {
+                self.cursor.bump_n(offset + 1);
+                k2
+            }
+            _ => {
+                let _: Option<char> = self.cursor.bump();
+                def
+            }
+        }
+    }
 
     fn consume_quoted(
         &mut self,
@@ -558,6 +568,10 @@ impl<'a> Lexer<'a> {
         )
     }
 }
+
+// ============================================================================
+// ESCAPE HANDLING
+// ============================================================================
 
 #[inline]
 /// Unescape string literal, reporting any errors into diagnostic bag.
@@ -612,9 +626,7 @@ pub fn scan_escape(chars: &mut Chars<'_>) -> Result<(char, usize), (String, usiz
 
     match ch {
         'x' => {
-            let d1 = chars.next();
-            let d2 = chars.next();
-
+            let (d1, d2) = (chars.next(), chars.next());
             match (d1, d2) {
                 (Some(c1), Some(c2)) => {
                     if let (Some(d1), Some(d2)) = (c1.to_digit(16), c2.to_digit(16))
