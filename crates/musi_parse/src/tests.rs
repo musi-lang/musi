@@ -1,4 +1,4 @@
-use musi_ast::{Expr, ExprKind, LitKind, Pat, PatKind, Typ, TypKind};
+use musi_ast::{Cond, Expr, ExprKind, LitKind, Pat, PatKind, Typ, TypKind};
 use musi_basic::{interner::Interner, source::SourceFile};
 use musi_lex::{lexer::tokenize, token::TokenKind};
 
@@ -126,7 +126,6 @@ fn test_expr_tuple_multiple() {
 fn test_expr_grouped() {
     let mut ctx = TestContext::new();
     let expr = ctx.parse_expr("(42)");
-    // Grouped expression should unwrap to inner expression
     assert!(matches!(expr.kind, ExprKind::Lit(LitKind::Int(_))));
 }
 
@@ -296,10 +295,6 @@ fn test_expr_not_in() {
     }
 }
 
-// =============================================================================
-// EXPRESSION TESTS - POSTFIX OPERATORS
-// =============================================================================
-
 #[test]
 fn test_expr_call() {
     let mut ctx = TestContext::new();
@@ -394,6 +389,43 @@ fn test_expr_while() {
 }
 
 #[test]
+fn test_expr_if_case() {
+    let mut ctx = TestContext::new();
+    let expr = ctx.parse_expr("if case Some(x) := opt { x }");
+    if let ExprKind::If { cond, .. } = expr.kind {
+        assert!(matches!(*cond, Cond::Case { .. }));
+    } else {
+        panic!("expected `if case` expression");
+    }
+}
+
+#[test]
+fn test_expr_while_case() {
+    let mut ctx = TestContext::new();
+    let expr = ctx.parse_expr("while case Some(item) := get_next() { item }");
+    if let ExprKind::While { cond, .. } = expr.kind {
+        assert!(matches!(*cond, Cond::Case { .. }));
+    } else {
+        panic!("expected `while case` expression");
+    }
+}
+
+#[test]
+fn test_expr_if_case_multi() {
+    let mut ctx = TestContext::new();
+    let expr = ctx.parse_expr("if case Some(x) := opt, x > 0 { x }");
+    if let ExprKind::If { cond, .. } = expr.kind {
+        if let Cond::Case { extra, .. } = *cond {
+            assert_eq!(extra.len(), 1);
+        } else {
+            panic!("expected `case` condition");
+        }
+    } else {
+        panic!("expected `if case` expression with extra condition");
+    }
+}
+
+#[test]
 fn test_expr_for() {
     let mut ctx = TestContext::new();
     let expr = ctx.parse_expr("for x in items { x }");
@@ -421,10 +453,6 @@ fn test_expr_match_guard() {
         panic!("expected `match` expression with 'if' guard");
     }
 }
-
-// =============================================================================
-// EXPRESSION TESTS - RANGE
-// =============================================================================
 
 #[test]
 fn test_expr_range_inclusive() {
@@ -460,10 +488,6 @@ fn test_expr_range_unbounded() {
     }
 }
 
-// =============================================================================
-// EXPRESSION TESTS - ASSIGNMENT
-// =============================================================================
-
 #[test]
 fn test_expr_assign() {
     let mut ctx = TestContext::new();
@@ -475,10 +499,6 @@ fn test_expr_assign() {
         panic!("expected assign expression");
     }
 }
-
-// =============================================================================
-// EXPRESSION TESTS - STATEMENTS-LIKE
-// =============================================================================
 
 #[test]
 fn test_expr_return() {
@@ -520,10 +540,6 @@ fn test_expr_defer() {
     let expr = ctx.parse_expr("defer cleanup()");
     assert!(matches!(expr.kind, ExprKind::Defer(_)));
 }
-
-// =============================================================================
-// EXPRESSION TESTS - BLOCKS
-// =============================================================================
 
 #[test]
 fn test_expr_block_empty() {
@@ -647,10 +663,6 @@ fn test_expr_alias_def() {
         panic!("expected `alias` expression");
     }
 }
-
-// =============================================================================
-// PATTERN TESTS
-// =============================================================================
 
 #[test]
 fn test_pat_wild() {
