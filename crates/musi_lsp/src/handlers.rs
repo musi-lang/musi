@@ -41,11 +41,17 @@ fn analyze_and_publish(state: &mut GlobalState, uri: Uri, text: String) {
         tokenize(&source_file, &mut interner)
     };
 
-    let mut errors = lex_errors;
     let (_program, parse_errors) = parse(&tokens);
-    errors.merge(parse_errors);
 
-    let diagnostics = convert_diagnostics(&source_file, &errors.diagnostics);
+    let mut diagnostics = convert_diagnostics(&source_file, &lex_errors.diagnostics);
+    diagnostics.extend(
+        convert_diagnostics(&source_file, &parse_errors.diagnostics)
+            .into_iter()
+            .map(|mut d| {
+                d.message = format!("Syntax Error: {}", d.message);
+                d
+            }),
+    );
 
     if let Err(e) = state.send_notification::<PublishDiagnostics>(PublishDiagnosticsParams {
         uri,
