@@ -18,7 +18,7 @@ pub enum LexErrorKind {
     #[error("unclosed rune literal")]
     UnclosedRune,
     #[error("unclosed block comment")]
-    UnclosedComment,
+    UnclosedBlockComment,
 
     #[error("invalid identifier")]
     InvalidIdent,
@@ -37,7 +37,7 @@ impl IntoMusiError for LexErrorKind {
             Self::UnclosedString | Self::UnclosedTemplate => Some("missing '\"'"),
             Self::UnclosedEscapedIdent => Some("missing '`'"),
             Self::UnclosedRune => Some("missing '\\''"),
-            Self::UnclosedComment => Some("missing '*/'"),
+            Self::UnclosedBlockComment => Some("missing '*/'"),
             Self::UnknownChar(_) => Some("remove this character"),
             Self::UnknownEscape(_) => {
                 Some("use '\\n', '\\r', '\\t', '\\\\', '\\'', '\\\"', '\\xHH', or '\\u{...}'")

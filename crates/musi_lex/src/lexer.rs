@@ -134,7 +134,7 @@ impl<'a> Lexer<'a> {
             }
         }
         if depth > 0 {
-            self.report(LexErrorKind::UnclosedComment, start, self.cursor.pos());
+            self.report(LexErrorKind::UnclosedBlockComment, start, self.cursor.pos());
         }
         self.next_token().kind
     }
