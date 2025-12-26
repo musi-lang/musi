@@ -30,8 +30,17 @@ pub fn did_change(state: &mut GlobalState, params: DidChangeTextDocumentParams) 
 }
 
 pub fn did_close(state: &mut GlobalState, params: &DidCloseTextDocumentParams) {
-    drop(state.documents.remove(&params.text_document.uri));
-    drop(state.programs.remove(&params.text_document.uri));
+    let uri = params.text_document.uri.clone();
+    drop(state.documents.remove(&uri));
+    drop(state.programs.remove(&uri));
+
+    if let Err(e) = state.send_notification::<PublishDiagnostics>(PublishDiagnosticsParams {
+        uri,
+        diagnostics: vec![],
+        version: None,
+    }) {
+        tracing::error!("failed to clear diagnostics: {e}");
+    }
 }
 
 fn get_document<'a>(
