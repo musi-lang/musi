@@ -11,7 +11,7 @@ use musi_basic::{
     source::SourceFile,
     span::Span,
 };
-use std::str::Chars;
+use std::{num, str::Chars};
 
 const PREFIX_LEN: usize = "0x".len();
 const TEMPLATE_PREFIX: usize = "$\"".len();
@@ -216,31 +216,29 @@ impl<'a> Lexer<'a> {
         }
 
         if is_real {
-            match val.parse::<f64>() {
-                Ok(v) => TokenKind::LitReal(v),
-                Err(_) => {
-                    self.report(LexErrorKind::MalformedNumericLit, start, end);
-                    TokenKind::LitReal(0.0)
-                }
-            }
+            let v = val.parse::<f64>().unwrap_or_else(|_| {
+                self.report(LexErrorKind::MalformedNumericLit, start, end);
+                0.0
+            });
+            TokenKind::LitReal(v)
         } else {
-            let parsed = if val.starts_with("0x") || val.starts_with("0X") {
-                i64::from_str_radix(&val[2..], 16)
-            } else if val.starts_with("0o") || val.starts_with("0O") {
-                i64::from_str_radix(&val[2..], 8)
-            } else if val.starts_with("0b") || val.starts_with("0B") {
-                i64::from_str_radix(&val[2..], 2)
-            } else {
-                val.parse()
-            };
-            match parsed {
-                Ok(v) => TokenKind::LitInt(v),
-                Err(_) => {
-                    self.report(LexErrorKind::MalformedNumericLit, start, end);
-                    TokenKind::LitInt(0)
-                }
+            let v = Self::parse_int(&val).unwrap_or_else(|_| {
+                self.report(LexErrorKind::MalformedNumericLit, start, end);
+                0
+            });
+            TokenKind::LitInt(v)
+        }
+    }
+
+    fn parse_int(s: &str) -> Result<i64, num::ParseIntError> {
+        const RADIX_PREFIXES: &[(&str, &str, u32)] =
+            &[("0x", "0X", 16), ("0o", "0O", 8), ("0b", "0B", 2)];
+        for &(lower, upper, radix) in RADIX_PREFIXES {
+            if let Some(suffix) = s.strip_prefix(lower).or_else(|| s.strip_prefix(upper)) {
+                return i64::from_str_radix(suffix, radix);
             }
         }
+        s.parse()
     }
 
     fn consume_digits(&mut self) -> bool {
