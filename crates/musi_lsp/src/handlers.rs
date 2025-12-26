@@ -5,7 +5,7 @@ use lsp_types::{
     DocumentSymbolParams, DocumentSymbolResponse, FoldingRangeParams, PublishDiagnosticsParams,
     Uri, notification::PublishDiagnostics,
 };
-use musi_ast::Prog;
+use musi_ast::{AstArena, Prog};
 use musi_basic::source::SourceFile;
 use musi_lex::lexer::tokenize;
 use musi_parse::parse;
@@ -15,6 +15,11 @@ use crate::folding::collect_folding_ranges;
 use crate::state::GlobalState;
 use crate::symbols::collect_symbols;
 use crate::types::FoldingRangeList;
+
+pub struct ParsedDocument {
+    pub prog: Prog,
+    pub arena: AstArena,
+}
 
 pub fn did_open(state: &mut GlobalState, params: DidOpenTextDocumentParams) {
     let uri = params.text_document.uri;
@@ -32,7 +37,7 @@ pub fn did_change(state: &mut GlobalState, params: DidChangeTextDocumentParams) 
 pub fn did_close(state: &mut GlobalState, params: &DidCloseTextDocumentParams) {
     let uri = params.text_document.uri.clone();
     drop(state.documents.remove(&uri));
-    drop(state.progs.remove(&uri));
+    drop(state.parsed.remove(&uri));
 
     if let Err(e) = state.send_notification::<PublishDiagnostics>(PublishDiagnosticsParams {
         uri,
@@ -43,19 +48,22 @@ pub fn did_close(state: &mut GlobalState, params: &DidCloseTextDocumentParams) {
     }
 }
 
-fn get_document<'a>(state: &'a GlobalState, uri: &Uri) -> Option<(&'a Arc<SourceFile>, &'a Prog)> {
+fn get_document<'a>(
+    state: &'a GlobalState,
+    uri: &Uri,
+) -> Option<(&'a Arc<SourceFile>, &'a ParsedDocument)> {
     let source = state.documents.get(uri)?;
-    let prog = state.progs.get(uri)?;
-    Some((source, prog))
+    let parsed = state.parsed.get(uri)?;
+    Some((source, parsed))
 }
 
 pub fn document_symbols(
     state: &GlobalState,
     params: &DocumentSymbolParams,
 ) -> Option<DocumentSymbolResponse> {
-    let (source, prog) = get_document(state, &params.text_document.uri)?;
+    let (source, parsed) = get_document(state, &params.text_document.uri)?;
     let interner = state.interner.lock().ok()?;
-    let symbols = collect_symbols(source, prog, &interner);
+    let symbols = collect_symbols(source, &parsed.prog, &parsed.arena, &interner);
     drop(interner);
     Some(DocumentSymbolResponse::Nested(symbols))
 }
@@ -64,8 +72,8 @@ pub fn folding_ranges(
     state: &GlobalState,
     params: &FoldingRangeParams,
 ) -> Option<FoldingRangeList> {
-    let (source, prog) = get_document(state, &params.text_document.uri)?;
-    Some(collect_folding_ranges(source, prog))
+    let (source, parsed) = get_document(state, &params.text_document.uri)?;
+    Some(collect_folding_ranges(source, &parsed.prog, &parsed.arena))
 }
 
 fn analyze_and_publish(state: &mut GlobalState, uri: Uri, text: String) {
@@ -81,12 +89,16 @@ fn analyze_and_publish(state: &mut GlobalState, uri: Uri, text: String) {
         tokenize(&source_file, &mut interner)
     };
 
-    let (prog, parse_errors) = parse(&tokens);
-    drop(state.progs.insert(uri.clone(), prog));
+    let result = parse(&tokens);
+    let parsed = ParsedDocument {
+        prog: result.prog,
+        arena: result.arena,
+    };
+    drop(state.parsed.insert(uri.clone(), parsed));
 
     let mut diagnostics = convert_diagnostics(&source_file, &lex_errors.diagnostics);
     diagnostics.extend(
-        convert_diagnostics(&source_file, &parse_errors.diagnostics)
+        convert_diagnostics(&source_file, &result.diagnostics.diagnostics)
             .into_iter()
             .map(|mut d| {
                 d.message = format!("Syntax Error: {}", d.message);
