@@ -111,19 +111,16 @@ impl<T> Arena<T> {
         &mut self.nodes[id.as_usize()]
     }
 
-    /// Returns number of nodes in arena.
     #[must_use]
     pub const fn len(&self) -> usize {
         self.nodes.len()
     }
 
-    /// Returns true if arena is empty.
     #[must_use]
     pub const fn is_empty(&self) -> bool {
         self.nodes.is_empty()
     }
 
-    /// Returns iterator over all nodes.
     pub fn iter(&self) -> impl Iterator<Item = (NodeId<T>, &T)> {
         self.nodes
             .iter()
