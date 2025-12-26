@@ -1,3 +1,4 @@
+pub mod arena;
 pub mod diagnostic;
 pub mod error;
 pub mod interner;
