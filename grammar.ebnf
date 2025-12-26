@@ -186,7 +186,7 @@ aux_cond = expr | ("case", pat, ":=", expr, {",", expr});
 
 aux_if_guard = "if", expr;
 
-aux_if_then = "if", aux_cond, expr_block;
+aux_if = "if", aux_cond, expr_block;
 
 expr_if = aux_if, {"else", aux_if}, ["else", expr_block];
 
