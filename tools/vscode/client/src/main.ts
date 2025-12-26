@@ -39,10 +39,10 @@ async function _startServer() {
 
 async function _handleActivationError(error: unknown) {
 	const message = error instanceof Error ? error.message : String(error);
-	_statusBar.update("Unable to start", "error");
+	_statusBar.update("Failedto start", "error");
 
 	const action = await vscode.window.showErrorMessage(
-		`Unable to start Musi LSP server: ${message}`,
+		`Failedto start Musi LSP server: ${message}`,
 		"Retry",
 		"Show Logs",
 	);

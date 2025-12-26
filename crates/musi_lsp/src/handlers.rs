@@ -58,6 +58,6 @@ fn analyze_and_publish(state: &mut GlobalState, uri: Uri, text: String) {
         diagnostics,
         version: None,
     }) {
-        tracing::error!("unable to publish diagnostics: {e}");
+        tracing::error!("failed to publish diagnostics: {e}");
     }
 }

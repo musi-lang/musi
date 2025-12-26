@@ -52,7 +52,12 @@ function _startWithTimeout(client: LanguageClient): Promise<void> {
 		client.start(),
 		new Promise<never>((_, reject) =>
 			setTimeout(
-				() => reject(new Error(`Language server unable to start within ${_TIMEOUT_MS / 1000} seconds`)),
+				() =>
+					reject(
+						new Error(
+							`Language server failed to start within ${_TIMEOUT_MS / 1000} seconds`,
+						),
+					),
 				_TIMEOUT_MS,
 			),
 		),
@@ -80,7 +85,9 @@ export function isClientRunning(): boolean {
  * @returns started LanguageClient instance.
  * @throws Error if server fails to start within timeout period.
  */
-export async function createAndStartClient(serverPath: string): Promise<LanguageClient> {
+export async function createAndStartClient(
+	serverPath: string,
+): Promise<LanguageClient> {
 	await stopClient();
 
 	_client = new LanguageClient(
@@ -106,7 +113,7 @@ export async function stopClient() {
 	try {
 		await _client.stop();
 	} catch (error) {
-		console.warn("Unable to stop language client gracefully:", error);
+		console.warn("Failedto stop language client gracefully:", error);
 	}
 	_client = undefined;
 }

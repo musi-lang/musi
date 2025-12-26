@@ -41,7 +41,7 @@ pub fn build(project: &Path, _emit: Option<EmitKind>) {
 pub fn init(path: &Path) {
     if let Err(e) = fs::create_dir_all(path) {
         error(&format!(
-            "unable to create directory '{}': {e}",
+            "failed to create directory '{}': {e}",
             path.display()
         ));
         return;
@@ -67,7 +67,7 @@ pub fn init(path: &Path) {
 
     match fs::write(&config_path, template) {
         Ok(()) => eprintln!("created {}", config_path.display()),
-        Err(e) => error(&format!("unable to create 'mspackage.json': {e}")),
+        Err(e) => error(&format!("failed to create 'mspackage.json': {e}")),
     }
 }
 
@@ -82,7 +82,7 @@ pub fn watch(files: &[PathBuf], _emit: Option<EmitKind>) {
 pub fn stdin(emit: Option<EmitKind>) {
     let mut buf = String::new();
     if io::stdin().read_to_string(&mut buf).is_err() {
-        error("unable to read stdin");
+        error("failed to read stdin");
         return;
     }
 
@@ -91,7 +91,7 @@ pub fn stdin(emit: Option<EmitKind>) {
 
     let file_id = source_map.add_file("<stdin>".into(), buf);
     let Some(file) = source_map.get(file_id).cloned() else {
-        error("internal: unable to add source file");
+        error("internal: failed to add source file");
         return;
     };
 
@@ -119,7 +119,7 @@ fn check_file(path: &Path, emit: Option<EmitKind>) -> Result<(), String> {
     let file = source_map
         .get(file_id)
         .cloned()
-        .ok_or_else(|| "internal: unable to add source file".to_owned())?;
+        .ok_or_else(|| "internal: failed to add source file".to_owned())?;
 
     let (tokens, bag) = lexer::tokenize(&file, &mut interner);
 

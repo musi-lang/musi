@@ -30,7 +30,7 @@ function _createCommands(statusBar: StatusBar): Commands {
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
 				statusBar.update("Restart failed", "error");
-				vscode.window.showErrorMessage(`Unable to restart Musi LSP: ${message}`);
+				vscode.window.showErrorMessage(`Failedto restart Musi LSP: ${message}`);
 			}
 		},
 
