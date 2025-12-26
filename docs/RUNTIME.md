@@ -177,8 +177,8 @@ fn process_file(path: String): Expect[Unit, String] {
 - `Never`: bottom type (uninhabited)
 - `Unit`: empty tuple
 - `Any`: top type (all types are subtypes)
-- `Bool`, `Int*`, `Nat*`, `Bin*`, `Rune`, `String`
-- `Dec*`: decimal floating-point (STL implementation using `Bin*`)
+- `Bool`, `Int*`, `Nat*`, `Float*`, `Rune`, `String`
+- `BigFloat*`: decimal floating-point (STL implementation using `Float*`)
 
 ### Standard Modules
 
