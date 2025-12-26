@@ -162,9 +162,9 @@ val dist := fn (a: Point, b: Point) {
 // ALGEBRAIC DATA TYPES
 // ============================================================================
 
-val Option := sum Option<T>{ case Some(T), case None };
+val Option := sum Option[T] { case Some(T), case None };
 
-val Expect := sum Option<T>{ case Succ(T), case Fail(E) };
+val Expect := sum Option[T] { case Succ(T), case Fail(E) };
 
 val Shape := sum { case Circle(radius), case Rect(width, height), case Triangle(a, b, c) };
 
