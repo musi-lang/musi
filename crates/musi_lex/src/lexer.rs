@@ -2,6 +2,7 @@ use crate::{
     cursor::Cursor,
     error::LexErrorKind,
     token::{KEYWORDS, Token, TokenKind},
+    types::TokenStream,
 };
 use musi_basic::{
     diagnostic::{DiagnosticBag, report},
@@ -22,8 +23,6 @@ const NUM_PREFIXES: &[(char, u32, &str)] = &[
     ('o', 8, "octal"),
     ('b', 2, "binary"),
 ];
-
-pub type TokenStream = (Vec<Token>, DiagnosticBag);
 
 pub fn tokenize(source: &SourceFile, interner: &mut Interner) -> TokenStream {
     let mut lexer = Lexer::new(source, interner);
