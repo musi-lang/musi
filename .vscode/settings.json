@@ -1,7 +1,6 @@
 {
     "remote.autoForwardPortsFallback": 0,
-    "ocaml.sandbox": {
-        "kind": "opam",
-        "switch": "default"
+    "files.watcherExclude": {
+        "**/target": true
     },
 }
