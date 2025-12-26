@@ -8,6 +8,8 @@ pub mod ty_expr;
 #[cfg(test)]
 mod tests;
 
+use std::mem;
+
 pub use error::ParseErrorKind;
 pub use parser::Parser;
 
@@ -26,7 +28,7 @@ pub fn parse(tokens: &[Token]) -> ParseResult {
     let mut arena = AstArena::new();
     let mut parser = Parser::new(tokens, &mut arena);
     let prog = parser.parse_prog();
-    let diagnostics = std::mem::take(&mut parser.diagnostics);
+    let diagnostics = mem::take(&mut parser.diagnostics);
     ParseResult {
         prog,
         arena,
