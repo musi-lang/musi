@@ -11,13 +11,25 @@ mod tests;
 pub use error::ParseErrorKind;
 pub use parser::Parser;
 
-use musi_ast::Prog;
+use musi_ast::{AstArena, Prog};
 use musi_basic::diagnostic::DiagnosticBag;
 use musi_lex::token::Token;
 
+pub struct ParseResult {
+    pub prog: Prog,
+    pub arena: AstArena,
+    pub diagnostics: DiagnosticBag,
+}
+
 #[must_use]
-pub fn parse(tokens: &[Token]) -> (Prog, DiagnosticBag) {
-    let mut parser = Parser::new(tokens);
+pub fn parse(tokens: &[Token]) -> ParseResult {
+    let mut arena = AstArena::new();
+    let mut parser = Parser::new(tokens, &mut arena);
     let prog = parser.parse_prog();
-    (prog, parser.diagnostics)
+    let diagnostics = std::mem::take(&mut parser.diagnostics);
+    ParseResult {
+        prog,
+        arena,
+        diagnostics,
+    }
 }
