@@ -1,7 +1,7 @@
 use lsp_types::{FoldingRange, FoldingRangeKind};
 use musi_ast::{
     Expr, ExprKind, Prog, Stmt, StmtKind,
-    visitor::{Visitor, walk_expr},
+    visitor::{AstVisitor, walk_expr},
 };
 use musi_basic::{source::SourceFile, span::Span};
 
@@ -38,7 +38,7 @@ impl FoldingCollector<'_> {
     }
 }
 
-impl Visitor for FoldingCollector<'_> {
+impl AstVisitor for FoldingCollector<'_> {
     fn visit_stmt(&mut self, stmt: &Stmt) {
         let StmtKind::Expr(expr) = &stmt.kind;
         self.visit_expr(expr);

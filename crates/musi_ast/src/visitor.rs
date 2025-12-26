@@ -6,7 +6,7 @@ use crate::{
     SumCase, SumCaseItem, TemplatePart, TyExpr, TyExprId, TyExprIds, TyExprKind,
 };
 
-pub trait Visitor: Sized {
+pub trait AstVisitor: Sized {
     fn visit_prog(&mut self, arena: &AstArena, prog: &Prog) {
         walk_prog(self, arena, prog);
     }
@@ -97,18 +97,18 @@ pub trait Visitor: Sized {
     }
 }
 
-pub fn walk_prog<V: Visitor>(v: &mut V, arena: &AstArena, prog: &Prog) {
+pub fn walk_prog<V: AstVisitor>(v: &mut V, arena: &AstArena, prog: &Prog) {
     v.visit_stmt_ids(arena, &prog.stmts);
 }
 
-pub fn walk_stmt<V: Visitor>(v: &mut V, arena: &AstArena, stmt: &Stmt) {
+pub fn walk_stmt<V: AstVisitor>(v: &mut V, arena: &AstArena, stmt: &Stmt) {
     match &stmt.kind {
         StmtKind::Expr(id) => v.visit_expr_id(arena, *id),
     }
 }
 
 #[allow(clippy::too_many_lines)]
-pub fn walk_expr<V: Visitor>(v: &mut V, arena: &AstArena, expr: &Expr) {
+pub fn walk_expr<V: AstVisitor>(v: &mut V, arena: &AstArena, expr: &Expr) {
     match &expr.kind {
         ExprKind::Lit(lit) => v.visit_lit(arena, lit),
         ExprKind::Ident(_) | ExprKind::Cycle | ExprKind::Import(_) => {}
@@ -218,7 +218,7 @@ pub fn walk_expr<V: Visitor>(v: &mut V, arena: &AstArena, expr: &Expr) {
     }
 }
 
-pub fn walk_ty_expr<V: Visitor>(v: &mut V, arena: &AstArena, ty_expr: &TyExpr) {
+pub fn walk_ty_expr<V: AstVisitor>(v: &mut V, arena: &AstArena, ty_expr: &TyExpr) {
     match &ty_expr.kind {
         TyExprKind::Ident(_) => {}
         TyExprKind::App { args, .. } => v.visit_ty_expr_ids(arena, args),
@@ -232,7 +232,7 @@ pub fn walk_ty_expr<V: Visitor>(v: &mut V, arena: &AstArena, ty_expr: &TyExpr) {
     }
 }
 
-pub fn walk_pat<V: Visitor>(v: &mut V, arena: &AstArena, pat: &Pat) {
+pub fn walk_pat<V: AstVisitor>(v: &mut V, arena: &AstArena, pat: &Pat) {
     match &pat.kind {
         PatKind::Ident(_) | PatKind::Wild | PatKind::Record { .. } => {}
         PatKind::Lit(lit) => v.visit_lit(arena, lit),
@@ -246,7 +246,7 @@ pub fn walk_pat<V: Visitor>(v: &mut V, arena: &AstArena, pat: &Pat) {
     }
 }
 
-pub fn walk_cond<V: Visitor>(v: &mut V, arena: &AstArena, cond: &Cond) {
+pub fn walk_cond<V: AstVisitor>(v: &mut V, arena: &AstArena, cond: &Cond) {
     match &cond.kind {
         CondKind::Expr(id) => v.visit_expr_id(arena, *id),
         CondKind::Case { pat, init, extra } => {
@@ -257,7 +257,7 @@ pub fn walk_cond<V: Visitor>(v: &mut V, arena: &AstArena, cond: &Cond) {
     }
 }
 
-pub fn walk_lit<V: Visitor>(v: &mut V, arena: &AstArena, lit: &LitKind) {
+pub fn walk_lit<V: AstVisitor>(v: &mut V, arena: &AstArena, lit: &LitKind) {
     if let LitKind::Template(parts) = lit {
         for part in parts {
             if let TemplatePart::Expr(id) = part {
@@ -267,7 +267,7 @@ pub fn walk_lit<V: Visitor>(v: &mut V, arena: &AstArena, lit: &LitKind) {
     }
 }
 
-pub fn walk_field<V: Visitor>(v: &mut V, arena: &AstArena, field: &Field) {
+pub fn walk_field<V: AstVisitor>(v: &mut V, arena: &AstArena, field: &Field) {
     if let Some(id) = field.ty {
         v.visit_ty_expr_id(arena, id);
     }
@@ -276,7 +276,7 @@ pub fn walk_field<V: Visitor>(v: &mut V, arena: &AstArena, field: &Field) {
     }
 }
 
-pub fn walk_fn_sig<V: Visitor>(v: &mut V, arena: &AstArena, sig: &FnSig) {
+pub fn walk_fn_sig<V: AstVisitor>(v: &mut V, arena: &AstArena, sig: &FnSig) {
     for p in &sig.params {
         v.visit_field(arena, p);
     }
@@ -285,7 +285,7 @@ pub fn walk_fn_sig<V: Visitor>(v: &mut V, arena: &AstArena, sig: &FnSig) {
     }
 }
 
-pub fn walk_match_case<V: Visitor>(v: &mut V, arena: &AstArena, case: &MatchCase) {
+pub fn walk_match_case<V: AstVisitor>(v: &mut V, arena: &AstArena, case: &MatchCase) {
     v.visit_pat_id(arena, case.pat);
     if let Some(id) = case.guard {
         v.visit_expr_id(arena, id);
@@ -293,7 +293,7 @@ pub fn walk_match_case<V: Visitor>(v: &mut V, arena: &AstArena, case: &MatchCase
     v.visit_expr_id(arena, case.body);
 }
 
-pub fn walk_sum_case<V: Visitor>(v: &mut V, arena: &AstArena, case: &SumCase) {
+pub fn walk_sum_case<V: AstVisitor>(v: &mut V, arena: &AstArena, case: &SumCase) {
     v.visit_ty_expr_ids(arena, &case.ty_args);
     for item in &case.fields {
         match item {
@@ -303,13 +303,13 @@ pub fn walk_sum_case<V: Visitor>(v: &mut V, arena: &AstArena, case: &SumCase) {
     }
 }
 
-pub fn walk_attr<V: Visitor>(v: &mut V, arena: &AstArena, attr: &Attr) {
+pub fn walk_attr<V: AstVisitor>(v: &mut V, arena: &AstArena, attr: &Attr) {
     for arg in &attr.args {
         walk_attr_arg(v, arena, arg);
     }
 }
 
-pub fn walk_attr_arg<V: Visitor>(v: &mut V, arena: &AstArena, arg: &AttrArg) {
+pub fn walk_attr_arg<V: AstVisitor>(v: &mut V, arena: &AstArena, arg: &AttrArg) {
     if let Some(id) = arg.value {
         v.visit_expr_id(arena, id);
     }

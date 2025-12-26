@@ -1,7 +1,7 @@
 use lsp_types::{DocumentSymbol, SymbolKind};
 use musi_ast::{
     Expr, ExprKind, FnSig, PatKind, Prog, Stmt, StmtKind, SumCase,
-    visitor::{Visitor, walk_expr},
+    visitor::{AstVisitor, walk_expr},
 };
 use musi_basic::{interner::Interner, source::SourceFile, span::Span};
 
@@ -87,7 +87,7 @@ impl SymbolCollector<'_> {
     }
 }
 
-impl Visitor for SymbolCollector<'_> {
+impl AstVisitor for SymbolCollector<'_> {
     fn visit_stmt(&mut self, stmt: &Stmt) {
         let StmtKind::Expr(expr) = &stmt.kind;
         self.visit_expr(expr);
