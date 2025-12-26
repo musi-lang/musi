@@ -44,7 +44,7 @@ impl SymbolCollector<'_> {
     }
 
     fn resolve_name(&self, id: u32) -> String {
-        self.interner.resolve(id).unwrap_or("<unknown>").to_owned()
+        self.interner.lookup(id).unwrap_or("<unknown>").to_owned()
     }
 
     fn make_symbol(

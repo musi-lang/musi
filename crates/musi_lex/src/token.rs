@@ -243,30 +243,30 @@ impl fmt::Display for TokenDisplay<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.kind {
             TokenKind::Ident(id) => {
-                write!(f, "{}", self.interner.resolve(*id).unwrap_or("<ident>"))
+                write!(f, "{}", self.interner.lookup(*id).unwrap_or("<ident>"))
             }
-            TokenKind::LitInt(id) => write!(f, "{}", self.interner.resolve(*id).unwrap_or("<int>")),
+            TokenKind::LitInt(id) => write!(f, "{}", self.interner.lookup(*id).unwrap_or("<int>")),
             TokenKind::LitReal(id) => {
-                write!(f, "{}", self.interner.resolve(*id).unwrap_or("<real>"))
+                write!(f, "{}", self.interner.lookup(*id).unwrap_or("<real>"))
             }
             TokenKind::LitString(id) => {
-                write!(f, "\"{}\"", self.interner.resolve(*id).unwrap_or(""))
+                write!(f, "\"{}\"", self.interner.lookup(*id).unwrap_or(""))
             }
             TokenKind::LitRune(c) => write!(f, "'{c}''"),
             TokenKind::LitTemplateNoSubst(id) => {
-                write!(f, "$\"{}\"", self.interner.resolve(*id).unwrap_or(""))
+                write!(f, "$\"{}\"", self.interner.lookup(*id).unwrap_or(""))
             }
             TokenKind::TemplateHead(id) => {
-                write!(f, "$\"{}", self.interner.resolve(*id).unwrap_or(""))
+                write!(f, "$\"{}", self.interner.lookup(*id).unwrap_or(""))
             }
             TokenKind::TemplateMiddle(id) => {
-                write!(f, "{}", self.interner.resolve(*id).unwrap_or(""))
+                write!(f, "{}", self.interner.lookup(*id).unwrap_or(""))
             }
             TokenKind::TemplateTail(id) => {
-                write!(f, "{}\"", self.interner.resolve(*id).unwrap_or(""))
+                write!(f, "{}\"", self.interner.lookup(*id).unwrap_or(""))
             }
             TokenKind::Invalid(id) => {
-                write!(f, "{}", self.interner.resolve(*id).unwrap_or("<invalid>"))
+                write!(f, "{}", self.interner.lookup(*id).unwrap_or("<invalid>"))
             }
             kind => {
                 if let Some((kw, _)) = KEYWORDS.iter().find(|(_, tk)| *tk == *kind) {

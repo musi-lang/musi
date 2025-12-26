@@ -29,7 +29,7 @@ impl Interner {
     }
 
     #[must_use]
-    pub fn resolve(&self, id: u32) -> Option<&str> {
+    pub fn lookup(&self, id: u32) -> Option<&str> {
         self.strings
             .get(usize::try_from(id).ok()?)
             .map(String::as_str)
