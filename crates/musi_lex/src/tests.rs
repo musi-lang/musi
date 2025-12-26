@@ -108,14 +108,13 @@ fn test_templates() {
 
 #[test]
 fn test_symbols() {
-    check("+ - * / % mod **", |_| {
+    check("+ - * / % **", |_| {
         vec![
             TokenKind::Plus,
             TokenKind::Minus,
             TokenKind::Star,
             TokenKind::Slash,
             TokenKind::Percent,
-            TokenKind::KwMod,
             TokenKind::StarStar,
         ]
     });

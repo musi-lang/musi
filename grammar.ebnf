@@ -224,7 +224,7 @@ expr_unary_postfix = expr, "(", [aux_args], ")" | expr, ".[", aux_expr_list, "]"
 
 expr_unary_prefix = ("-" | "not" | "~" | "@"), expr;
 
-expr_binary = expr, ("**" | "*" | "/" | "%" | "mod" | "<<" | ">>" | "+" | "-" | "::" | "<" | ">" | "<=" | ">=" | "is" | "as" | "=" | "/=" | "&" | "^" | "|" | "and" | "or" | "??" | "|>"), expr;
+expr_binary = expr, ("**" | "*" | "/" | "%" | "<<" | ">>" | "+" | "-" | "::" | "<" | ">" | "<=" | ">=" | "is" | "as" | "=" | "/=" | "&" | "^" | "|" | "and" | "or" | "??" | "|>"), expr;
 
 expr_range = expr, (".." | "..<"), [expr];
 
@@ -243,7 +243,7 @@ prec_expr_unary = ("-" | "not" | "~" | "@"), prec_expr_unary | prec_expr_postfix
 
 prec_expr_exp = prec_expr_unary, ["**", prec_expr_exp];
 
-prec_expr_mult = prec_expr_exp, {("*" | "/" | "%" | "mod" | "<<" | ">>"), prec_expr_exp};
+prec_expr_mult = prec_expr_exp, {("*" | "/" | "%" | "<<" | ">>"), prec_expr_exp};
 
 prec_expr_add = prec_expr_mult, {("+" | "-"), prec_expr_mult};
 

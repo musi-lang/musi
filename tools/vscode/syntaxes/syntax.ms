@@ -70,7 +70,7 @@ val sub := x - y;
 val mul := x * y;
 val div := x / y;
 val rem := x % y;
-val `mod` := x mod y;
+val mod := mod(x, y);
 val pow := x ** 2;
 
 val eq := x = y;

@@ -24,7 +24,7 @@ pub enum Prec {
     Range = 11,      // .. ..<
     Cons = 12,       // ::
     Term = 13,       // + -
-    Factor = 14,     // * / % mod << >>
+    Factor = 14,     // * / % << >>
     Power = 15,      // **
     Unary = 16,      // - not ~ @
     Postfix = 17,    // () [] . .^ ?
@@ -56,7 +56,6 @@ impl Prec {
             TokenKind::Star
             | TokenKind::Slash
             | TokenKind::Percent
-            | TokenKind::KwMod
             | TokenKind::LtLt
             | TokenKind::GtGt => (14, 15),
             TokenKind::StarStar => (15, 15),

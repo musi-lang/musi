@@ -101,7 +101,7 @@ true, false
 
 **Arithmetic:**
 
-- `+`, `-`, `*`, `/`, `%` (remainder), `mod` (true modulus), `**` (power)
+- `+`, `-`, `*`, `/`, `%` (remainder), `**` (power)
 
 **Bitwise:**
 
