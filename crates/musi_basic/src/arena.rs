@@ -1,5 +1,3 @@
-//! Arena allocation with typed node identifiers.
-
 use std::{hash, marker::PhantomData};
 
 #[derive(Debug)]

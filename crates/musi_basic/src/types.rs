@@ -1,5 +1,3 @@
-//! Type aliases for `musi_basic`.
-
 use crate::diagnostic::Diagnostic;
 
 // ============================================================================

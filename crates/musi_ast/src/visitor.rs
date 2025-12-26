@@ -1,5 +1,3 @@
-//! AST visitor pattern with arena support.
-
 use crate::{
     AstArena, Attr, AttrArg, Cond, CondId, CondKind, Expr, ExprId, ExprIds, ExprKind, Field, FnSig,
     LitKind, MatchCase, Pat, PatId, PatIds, PatKind, Prog, Stmt, StmtId, StmtIds, StmtKind,

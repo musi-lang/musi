@@ -1,5 +1,3 @@
-//! Type aliases for AST nodes.
-
 use musi_basic::arena::NodeId;
 
 use crate::node::{Attr, AttrArg, Cond, Expr, Field, Pat, Stmt, SumCaseItem, TyExpr};

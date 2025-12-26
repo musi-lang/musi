@@ -1,7 +1,3 @@
-//! AST node definitions.
-//!
-//! All child references use `NodeId` for arena-based allocation.
-
 use musi_basic::span::Span;
 use musi_lex::token::TokenKind;
 
