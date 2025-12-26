@@ -1,127 +1,123 @@
+//! AST visitor pattern with arena support.
+
 use crate::{
-    Attr, AttrArg, Cond, Expr, ExprKind, Field, FnSig, LitKind, MatchCase, Pat, PatKind, Prog,
-    Stmt, StmtKind, SumCase, SumCaseItem, TemplatePart, TyExpr, TyExprKind,
+    AstArena, Attr, AttrArg, Cond, CondId, CondKind, Expr, ExprId, ExprIds, ExprKind, Field, FnSig,
+    LitKind, MatchCase, Pat, PatId, PatIds, PatKind, Prog, Stmt, StmtId, StmtIds, StmtKind,
+    SumCase, SumCaseItem, TemplatePart, TyExpr, TyExprId, TyExprIds, TyExprKind,
 };
 
 pub trait Visitor: Sized {
-    fn visit_prog(&mut self, prog: &Prog) {
-        walk_prog(self, prog);
+    fn visit_prog(&mut self, arena: &AstArena, prog: &Prog) {
+        walk_prog(self, arena, prog);
     }
 
-    fn visit_stmt(&mut self, stmt: &Stmt) {
-        walk_stmt(self, stmt);
+    fn visit_stmt_id(&mut self, arena: &AstArena, id: StmtId) {
+        let stmt = arena.stmts.get(id);
+        walk_stmt(self, arena, stmt);
     }
 
-    fn visit_stmts(&mut self, stmts: &[Stmt]) {
-        for s in stmts {
-            self.visit_stmt(s);
+    fn visit_stmt_ids(&mut self, arena: &AstArena, ids: &StmtIds) {
+        for &id in ids {
+            self.visit_stmt_id(arena, id);
         }
     }
 
-    fn visit_expr(&mut self, expr: &Expr) {
-        walk_expr(self, expr);
+    fn visit_expr_id(&mut self, arena: &AstArena, id: ExprId) {
+        let expr = arena.exprs.get(id);
+        walk_expr(self, arena, expr);
     }
 
-    fn visit_expr_refs(&mut self, exprs: &[&Expr]) {
-        for e in exprs {
-            self.visit_expr(e);
+    fn visit_expr_ids(&mut self, arena: &AstArena, ids: &ExprIds) {
+        for &id in ids {
+            self.visit_expr_id(arena, id);
         }
     }
 
-    fn visit_exprs(&mut self, exprs: &[Expr]) {
-        for e in exprs {
-            self.visit_expr(e);
+    fn visit_ty_expr_id(&mut self, arena: &AstArena, id: TyExprId) {
+        let ty_expr = arena.ty_exprs.get(id);
+        walk_ty_expr(self, arena, ty_expr);
+    }
+
+    fn visit_ty_expr_ids(&mut self, arena: &AstArena, ids: &TyExprIds) {
+        for &id in ids {
+            self.visit_ty_expr_id(arena, id);
         }
     }
 
-    fn visit_typ(&mut self, typ: &TyExpr) {
-        walk_typ(self, typ);
+    fn visit_pat_id(&mut self, arena: &AstArena, id: PatId) {
+        let pat = arena.pats.get(id);
+        walk_pat(self, arena, pat);
     }
 
-    fn visit_typs(&mut self, typs: &[TyExpr]) {
-        for t in typs {
-            self.visit_typ(t);
+    fn visit_pat_ids(&mut self, arena: &AstArena, ids: &PatIds) {
+        for &id in ids {
+            self.visit_pat_id(arena, id);
         }
     }
 
-    fn visit_pat(&mut self, pat: &Pat) {
-        walk_pat(self, pat);
+    fn visit_cond_id(&mut self, arena: &AstArena, id: CondId) {
+        let cond = arena.conds.get(id);
+        walk_cond(self, arena, cond);
     }
 
-    fn visit_typ_refs(&mut self, typs: &[&TyExpr]) {
-        for t in typs {
-            self.visit_typ(t);
-        }
+    fn visit_lit(&mut self, arena: &AstArena, lit: &LitKind) {
+        walk_lit(self, arena, lit);
     }
 
-    fn visit_pats(&mut self, pats: &[Pat]) {
-        for p in pats {
-            self.visit_pat(p);
-        }
+    fn visit_field(&mut self, arena: &AstArena, field: &Field) {
+        walk_field(self, arena, field);
     }
 
-    fn visit_lit(&mut self, lit: &LitKind) {
-        walk_lit(self, lit);
-    }
-
-    fn visit_cond(&mut self, cond: &Cond) {
-        walk_cond(self, cond);
-    }
-
-    fn visit_field(&mut self, field: &Field) {
-        walk_field(self, field);
-    }
-
-    fn visit_fn_sig(&mut self, sig: &FnSig) {
-        walk_fn_sig(self, sig);
-    }
-
-    fn visit_match_case(&mut self, case: &MatchCase) {
-        walk_match_case(self, case);
-    }
-
-    fn visit_sum_case(&mut self, case: &SumCase) {
-        walk_sum_case(self, case);
-    }
-
-    fn visit_attr(&mut self, attr: &Attr) {
-        walk_attr(self, attr);
-    }
-
-    fn visit_attrs(&mut self, attrs: &[Attr]) {
-        for a in attrs {
-            self.visit_attr(a);
-        }
-    }
-
-    fn visit_fields(&mut self, fields: &[Field]) {
+    fn visit_fields(&mut self, arena: &AstArena, fields: &[Field]) {
         for f in fields {
-            self.visit_field(f);
+            self.visit_field(arena, f);
+        }
+    }
+
+    fn visit_fn_sig(&mut self, arena: &AstArena, sig: &FnSig) {
+        walk_fn_sig(self, arena, sig);
+    }
+
+    fn visit_match_case(&mut self, arena: &AstArena, case: &MatchCase) {
+        walk_match_case(self, arena, case);
+    }
+
+    fn visit_sum_case(&mut self, arena: &AstArena, case: &SumCase) {
+        walk_sum_case(self, arena, case);
+    }
+
+    fn visit_attr(&mut self, arena: &AstArena, attr: &Attr) {
+        walk_attr(self, arena, attr);
+    }
+
+    fn visit_attrs(&mut self, arena: &AstArena, attrs: &[Attr]) {
+        for a in attrs {
+            self.visit_attr(arena, a);
         }
     }
 }
 
-pub fn walk_prog<V: Visitor>(v: &mut V, prog: &Prog) {
-    v.visit_stmts(&prog.stmts);
+pub fn walk_prog<V: Visitor>(v: &mut V, arena: &AstArena, prog: &Prog) {
+    v.visit_stmt_ids(arena, &prog.stmts);
 }
 
-pub fn walk_stmt<V: Visitor>(v: &mut V, stmt: &Stmt) {
+pub fn walk_stmt<V: Visitor>(v: &mut V, arena: &AstArena, stmt: &Stmt) {
     match &stmt.kind {
-        StmtKind::Expr(expr) => v.visit_expr(expr),
+        StmtKind::Expr(id) => v.visit_expr_id(arena, *id),
     }
 }
 
 #[allow(clippy::too_many_lines)]
-pub fn walk_expr<V: Visitor>(v: &mut V, expr: &Expr) {
+pub fn walk_expr<V: Visitor>(v: &mut V, arena: &AstArena, expr: &Expr) {
     match &expr.kind {
-        ExprKind::Lit(lit) => v.visit_lit(lit),
+        ExprKind::Lit(lit) => v.visit_lit(arena, lit),
         ExprKind::Ident(_) | ExprKind::Cycle | ExprKind::Import(_) => {}
-        ExprKind::Tuple(exprs) | ExprKind::Array(exprs) => v.visit_exprs(exprs),
-        ExprKind::Record { fields, .. } => v.visit_fields(fields),
+        ExprKind::Tuple(ids) | ExprKind::Array(ids) => v.visit_expr_ids(arena, ids),
+        ExprKind::Record { fields, .. } => v.visit_fields(arena, fields),
         ExprKind::Block { stmts, expr } => {
-            v.visit_stmts(stmts);
-            if let Some(e) = expr {
-                v.visit_expr(e);
+            v.visit_stmt_ids(arena, stmts);
+            if let Some(id) = expr {
+                v.visit_expr_id(arena, *id);
             }
         }
         ExprKind::If {
@@ -129,184 +125,195 @@ pub fn walk_expr<V: Visitor>(v: &mut V, expr: &Expr) {
             then_br,
             else_br,
         } => {
-            v.visit_cond(cond);
-            v.visit_expr(then_br);
-            if let Some(e) = else_br {
-                v.visit_expr(e);
+            v.visit_cond_id(arena, *cond);
+            v.visit_expr_id(arena, *then_br);
+            if let Some(id) = else_br {
+                v.visit_expr_id(arena, *id);
             }
         }
         ExprKind::While { cond, body } => {
-            v.visit_cond(cond);
-            v.visit_expr(body);
+            v.visit_cond_id(arena, *cond);
+            v.visit_expr_id(arena, *body);
         }
         ExprKind::For { pat, iter, body } => {
-            v.visit_pat(pat);
-            v.visit_expr_refs(&[iter, body]);
+            v.visit_pat_id(arena, *pat);
+            v.visit_expr_id(arena, *iter);
+            v.visit_expr_id(arena, *body);
         }
         ExprKind::Match { scrutinee, cases } => {
-            v.visit_expr(scrutinee);
+            v.visit_expr_id(arena, *scrutinee);
             for c in cases {
-                v.visit_match_case(c);
+                v.visit_match_case(arena, c);
             }
         }
         ExprKind::Return(e) | ExprKind::Break(e) => {
-            if let Some(e) = e {
-                v.visit_expr(e);
+            if let Some(id) = e {
+                v.visit_expr_id(arena, *id);
             }
         }
-        ExprKind::Defer(e) | ExprKind::Unsafe(e) | ExprKind::Deref(e) => {
-            v.visit_expr(e);
+        ExprKind::Defer(id) | ExprKind::Unsafe(id) | ExprKind::Deref(id) => {
+            v.visit_expr_id(arena, *id);
         }
         ExprKind::Extern { fns, .. } => {
             for sig in fns {
-                v.visit_fn_sig(sig);
+                v.visit_fn_sig(arena, sig);
             }
         }
         ExprKind::RecordDef { attrs, fields, .. } => {
-            v.visit_attrs(attrs);
-            v.visit_fields(fields);
+            v.visit_attrs(arena, attrs);
+            v.visit_fields(arena, fields);
         }
         ExprKind::SumDef { attrs, cases, .. } => {
-            v.visit_attrs(attrs);
+            v.visit_attrs(arena, attrs);
             for c in cases {
-                v.visit_sum_case(c);
+                v.visit_sum_case(arena, c);
             }
         }
         ExprKind::Alias { attrs, ty, .. } => {
-            v.visit_attrs(attrs);
-            v.visit_typ(ty);
+            v.visit_attrs(arena, attrs);
+            v.visit_ty_expr_id(arena, *ty);
         }
         ExprKind::Fn {
             attrs, sig, body, ..
         } => {
-            v.visit_attrs(attrs);
-            v.visit_fn_sig(sig);
-            v.visit_expr(body);
+            v.visit_attrs(arena, attrs);
+            v.visit_fn_sig(arena, sig);
+            v.visit_expr_id(arena, *body);
         }
         ExprKind::Bind { pat, ty, init, .. } => {
-            v.visit_pat(pat);
-            if let Some(t) = ty {
-                v.visit_typ(t);
+            v.visit_pat_id(arena, *pat);
+            if let Some(id) = ty {
+                v.visit_ty_expr_id(arena, *id);
             }
-            v.visit_expr(init);
+            v.visit_expr_id(arena, *init);
         }
         ExprKind::Call { callee, args } => {
-            v.visit_expr(callee);
-            v.visit_exprs(args);
+            v.visit_expr_id(arena, *callee);
+            v.visit_expr_ids(arena, args);
         }
-        ExprKind::Index { base, index } => v.visit_expr_refs(&[base, index]),
+        ExprKind::Index { base, index } => {
+            v.visit_expr_id(arena, *base);
+            v.visit_expr_id(arena, *index);
+        }
         ExprKind::Field { base, .. } => {
-            v.visit_expr(base);
+            v.visit_expr_id(arena, *base);
         }
         ExprKind::Unary { operand, .. } => {
-            v.visit_expr(operand);
+            v.visit_expr_id(arena, *operand);
         }
-        ExprKind::Binary { lhs, rhs, .. } => v.visit_expr_refs(&[lhs, rhs]),
+        ExprKind::Binary { lhs, rhs, .. } => {
+            v.visit_expr_id(arena, *lhs);
+            v.visit_expr_id(arena, *rhs);
+        }
         ExprKind::Range { start, end, .. } => {
-            v.visit_expr(start);
-            if let Some(e) = end {
-                v.visit_expr(e);
+            v.visit_expr_id(arena, *start);
+            if let Some(id) = end {
+                v.visit_expr_id(arena, *id);
             }
         }
-        ExprKind::Assign { target, value } => v.visit_expr_refs(&[target, value]),
+        ExprKind::Assign { target, value } => {
+            v.visit_expr_id(arena, *target);
+            v.visit_expr_id(arena, *value);
+        }
     }
 }
 
-pub fn walk_typ<V: Visitor>(v: &mut V, typ: &TyExpr) {
-    match &typ.kind {
+pub fn walk_ty_expr<V: Visitor>(v: &mut V, arena: &AstArena, ty_expr: &TyExpr) {
+    match &ty_expr.kind {
         TyExprKind::Ident(_) => {}
-        TyExprKind::App { args, .. } => v.visit_typs(args),
-        TyExprKind::Optional(t) | TyExprKind::Ptr(t) => v.visit_typ(t),
-        TyExprKind::Array { elem, .. } => v.visit_typ(elem),
-        TyExprKind::Fn { param, ret } => v.visit_typ_refs(&[param, ret]),
-        TyExprKind::Tuple(ts) => v.visit_typs(ts),
+        TyExprKind::App { args, .. } => v.visit_ty_expr_ids(arena, args),
+        TyExprKind::Optional(id) | TyExprKind::Ptr(id) => v.visit_ty_expr_id(arena, *id),
+        TyExprKind::Array { elem, .. } => v.visit_ty_expr_id(arena, *elem),
+        TyExprKind::Fn { param, ret } => {
+            v.visit_ty_expr_id(arena, *param);
+            v.visit_ty_expr_id(arena, *ret);
+        }
+        TyExprKind::Tuple(ids) => v.visit_ty_expr_ids(arena, ids),
     }
 }
 
-pub fn walk_pat<V: Visitor>(v: &mut V, pat: &Pat) {
+pub fn walk_pat<V: Visitor>(v: &mut V, arena: &AstArena, pat: &Pat) {
     match &pat.kind {
         PatKind::Ident(_) | PatKind::Wild | PatKind::Record { .. } => {}
-        PatKind::Lit(lit) => v.visit_lit(lit),
-        PatKind::Tuple(ps) | PatKind::Array(ps) | PatKind::Cons(ps) | PatKind::Or(ps) => {
-            v.visit_pats(ps);
+        PatKind::Lit(lit) => v.visit_lit(arena, lit),
+        PatKind::Tuple(ids) | PatKind::Array(ids) | PatKind::Cons(ids) | PatKind::Or(ids) => {
+            v.visit_pat_ids(arena, ids);
         }
         PatKind::Variant { ty_args, args, .. } => {
-            v.visit_typs(ty_args);
-            v.visit_pats(args);
+            v.visit_ty_expr_ids(arena, ty_args);
+            v.visit_pat_ids(arena, args);
         }
     }
 }
 
-pub fn walk_lit<V: Visitor>(v: &mut V, lit: &LitKind) {
+pub fn walk_cond<V: Visitor>(v: &mut V, arena: &AstArena, cond: &Cond) {
+    match &cond.kind {
+        CondKind::Expr(id) => v.visit_expr_id(arena, *id),
+        CondKind::Case { pat, init, extra } => {
+            v.visit_pat_id(arena, *pat);
+            v.visit_expr_id(arena, *init);
+            v.visit_expr_ids(arena, extra);
+        }
+    }
+}
+
+pub fn walk_lit<V: Visitor>(v: &mut V, arena: &AstArena, lit: &LitKind) {
     if let LitKind::Template(parts) = lit {
         for part in parts {
-            if let TemplatePart::Expr(e) = part {
-                v.visit_expr(e);
+            if let TemplatePart::Expr(id) = part {
+                v.visit_expr_id(arena, *id);
             }
         }
     }
 }
 
-pub fn walk_cond<V: Visitor>(v: &mut V, cond: &Cond) {
-    match cond {
-        Cond::Expr(e) => v.visit_expr(e),
-        Cond::Case { pat, init, extra } => {
-            v.visit_pat(pat);
-            v.visit_expr(init);
-            v.visit_exprs(extra);
-        }
+pub fn walk_field<V: Visitor>(v: &mut V, arena: &AstArena, field: &Field) {
+    if let Some(id) = field.ty {
+        v.visit_ty_expr_id(arena, id);
+    }
+    if let Some(id) = field.init {
+        v.visit_expr_id(arena, id);
     }
 }
 
-pub fn walk_field<V: Visitor>(v: &mut V, field: &Field) {
-    if let Some(t) = &field.ty {
-        v.visit_typ(t);
-    }
-    if let Some(e) = &field.init {
-        v.visit_expr(e);
-    }
-}
-
-pub fn walk_fn_sig<V: Visitor>(v: &mut V, sig: &FnSig) {
+pub fn walk_fn_sig<V: Visitor>(v: &mut V, arena: &AstArena, sig: &FnSig) {
     for p in &sig.params {
-        v.visit_field(p);
+        v.visit_field(arena, p);
     }
-    if let Some(t) = &sig.ret {
-        v.visit_typ(t);
+    if let Some(id) = sig.ret {
+        v.visit_ty_expr_id(arena, id);
     }
 }
 
-pub fn walk_match_case<V: Visitor>(v: &mut V, case: &MatchCase) {
-    v.visit_pat(&case.pat);
-    if let Some(g) = &case.guard {
-        v.visit_expr(g);
+pub fn walk_match_case<V: Visitor>(v: &mut V, arena: &AstArena, case: &MatchCase) {
+    v.visit_pat_id(arena, case.pat);
+    if let Some(id) = case.guard {
+        v.visit_expr_id(arena, id);
     }
-    v.visit_expr(&case.body);
+    v.visit_expr_id(arena, case.body);
 }
 
-pub fn walk_sum_case<V: Visitor>(v: &mut V, case: &SumCase) {
-    for t in &case.ty_args {
-        v.visit_typ(t);
-    }
+pub fn walk_sum_case<V: Visitor>(v: &mut V, arena: &AstArena, case: &SumCase) {
+    v.visit_ty_expr_ids(arena, &case.ty_args);
     for item in &case.fields {
         match item {
-            SumCaseItem::Type(t) => v.visit_typ(t),
-            SumCaseItem::Field(f) => v.visit_field(f),
+            SumCaseItem::Type(id) => v.visit_ty_expr_id(arena, *id),
+            SumCaseItem::Field(f) => v.visit_field(arena, f),
         }
     }
 }
 
-pub fn walk_attr<V: Visitor>(v: &mut V, attr: &Attr) {
+pub fn walk_attr<V: Visitor>(v: &mut V, arena: &AstArena, attr: &Attr) {
     for arg in &attr.args {
-        walk_attr_arg(v, arg);
+        walk_attr_arg(v, arena, arg);
     }
 }
 
-pub fn walk_attr_arg<V: Visitor>(v: &mut V, arg: &AttrArg) {
-    if let Some(e) = &arg.value {
-        v.visit_expr(e);
+pub fn walk_attr_arg<V: Visitor>(v: &mut V, arena: &AstArena, arg: &AttrArg) {
+    if let Some(id) = arg.value {
+        v.visit_expr_id(arena, id);
     }
     if let Some(lit) = &arg.lit {
-        v.visit_lit(lit);
+        v.visit_lit(arena, lit);
     }
 }
