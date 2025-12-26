@@ -75,8 +75,37 @@
                     ]
                 },
                 {
+                    "name": "meta.sum.musi",
+                    "begin": "((?:(?:export|extern|unsafe)\\s+)*)\\b(sum)\\b",
+                    "beginCaptures": {
+                        "1": {
+                            "patterns": [
+                                {
+                                    "match": "\\b(export|extern|unsafe)\\b",
+                                    "name": "storage.modifier.musi"
+                                }
+                            ]
+                        },
+                        "2": { "name": "storage.type.musi" }
+                    },
+                    "end": "(?<=\\})",
+                    "patterns": [
+                        {
+                            "match": "\\b(case)\\s+([A-Z][a-zA-Z0-9_]*)",
+                            "captures": {
+                                "1": { "name": "keyword.control.musi" },
+                                "2": { "name": "variable.other.enummember.musi" }
+                            }
+                        },
+                        { "include": "#comments" },
+                        { "include": "#attributes" },
+                        { "include": "#declarations" },
+                        { "include": "#expressions" }
+                    ]
+                },
+                {
                     "name": "meta.declaration.musi",
-                    "begin": "((?:(?:export|extern|unsafe)\\s+)*)\\b(allas|fn|record|sum|val|var)\\b",
+                    "begin": "((?:(?:export|extern|unsafe)\\s+)*)\\b(alias|fn|record|val|var)\\b",
                     "beginCaptures": {
                         "1": {
                             "patterns": [
