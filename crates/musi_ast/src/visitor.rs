@@ -1,11 +1,11 @@
 use crate::{
-    Attr, AttrArg, Expr, ExprKind, Field, FnSig, LitKind, MatchCase, Pat, PatKind, Program, Stmt,
-    StmtKind, SumCase, SumCaseItem, TemplatePart, Typ, TypKind,
+    Attr, AttrArg, Cond, Expr, ExprKind, Field, FnSig, LitKind, MatchCase, Pat, PatKind, Prog,
+    Stmt, StmtKind, SumCase, SumCaseItem, TemplatePart, Typ, TypKind,
 };
 
 pub trait Visitor: Sized {
-    fn visit_program(&mut self, program: &Program) {
-        walk_program(self, program);
+    fn visit_prog(&mut self, prog: &Prog) {
+        walk_prog(self, prog);
     }
 
     fn visit_stmt(&mut self, stmt: &Stmt) {
@@ -64,6 +64,10 @@ pub trait Visitor: Sized {
         walk_lit(self, lit);
     }
 
+    fn visit_cond(&mut self, cond: &Cond) {
+        walk_cond(self, cond);
+    }
+
     fn visit_field(&mut self, field: &Field) {
         walk_field(self, field);
     }
@@ -97,8 +101,8 @@ pub trait Visitor: Sized {
     }
 }
 
-pub fn walk_program<V: Visitor>(v: &mut V, program: &Program) {
-    v.visit_stmts(&program.stmts);
+pub fn walk_prog<V: Visitor>(v: &mut V, prog: &Prog) {
+    v.visit_stmts(&prog.stmts);
 }
 
 pub fn walk_stmt<V: Visitor>(v: &mut V, stmt: &Stmt) {
@@ -125,12 +129,16 @@ pub fn walk_expr<V: Visitor>(v: &mut V, expr: &Expr) {
             then_br,
             else_br,
         } => {
-            v.visit_expr_refs(&[cond, then_br]);
+            v.visit_cond(cond);
+            v.visit_expr(then_br);
             if let Some(e) = else_br {
                 v.visit_expr(e);
             }
         }
-        ExprKind::While { cond, body } => v.visit_expr_refs(&[cond, body]),
+        ExprKind::While { cond, body } => {
+            v.visit_cond(cond);
+            v.visit_expr(body);
+        }
         ExprKind::For { pat, iter, body } => {
             v.visit_pat(pat);
             v.visit_expr_refs(&[iter, body]);
@@ -243,6 +251,17 @@ pub fn walk_lit<V: Visitor>(v: &mut V, lit: &LitKind) {
             if let TemplatePart::Expr(e) = part {
                 v.visit_expr(e);
             }
+        }
+    }
+}
+
+pub fn walk_cond<V: Visitor>(v: &mut V, cond: &Cond) {
+    match cond {
+        Cond::Expr(e) => v.visit_expr(e),
+        Cond::Case { pat, init, extra } => {
+            v.visit_pat(pat);
+            v.visit_expr(init);
+            v.visit_exprs(extra);
         }
     }
 }

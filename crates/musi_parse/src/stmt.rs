@@ -1,4 +1,4 @@
-use musi_ast::{Program, Stmt, StmtKind};
+use musi_ast::{Prog, Stmt, StmtKind};
 use musi_basic::error::MusiResult;
 use musi_lex::token::TokenKind;
 
@@ -16,7 +16,7 @@ impl Parser<'_> {
         })
     }
 
-    pub fn parse_prog(&mut self) -> Program {
+    pub fn parse_prog(&mut self) -> Prog {
         let mut stmts = vec![];
         while !self.is_eof() {
             match self.parse_stmt() {
@@ -27,6 +27,6 @@ impl Parser<'_> {
                 }
             }
         }
-        Program { stmts }
+        Prog { stmts }
     }
 }

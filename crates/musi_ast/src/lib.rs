@@ -9,6 +9,7 @@ pub type Idents = Vec<Ident>;
 pub type OptIdent = Option<Ident>;
 
 pub type ExprPtr = Box<Expr>;
+pub type CondPtr = Box<Cond>;
 pub type TypPtr = Box<Typ>;
 pub type OptExprPtr = Option<ExprPtr>;
 pub type OptExpr = Option<Expr>;

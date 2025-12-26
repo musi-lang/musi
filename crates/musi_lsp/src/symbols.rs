@@ -1,6 +1,6 @@
 use lsp_types::{DocumentSymbol, SymbolKind};
 use musi_ast::{
-    Expr, ExprKind, FnSig, PatKind, Program, Stmt, StmtKind, SumCase,
+    Expr, ExprKind, FnSig, PatKind, Prog, Stmt, StmtKind, SumCase,
     visitor::{Visitor, walk_expr},
 };
 use musi_basic::{interner::Interner, source::SourceFile, span::Span};
@@ -9,7 +9,7 @@ use crate::types::DocumentSymbolList;
 
 pub fn collect_symbols(
     source: &SourceFile,
-    program: &Program,
+    prog: &Prog,
     interner: &Interner,
 ) -> DocumentSymbolList {
     let mut collector = SymbolCollector {
@@ -17,7 +17,7 @@ pub fn collect_symbols(
         interner,
         symbols: Vec::new(),
     };
-    collector.visit_program(program);
+    collector.visit_prog(prog);
     collector.symbols
 }
 

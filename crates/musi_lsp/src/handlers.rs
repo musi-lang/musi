@@ -5,7 +5,7 @@ use lsp_types::{
     DocumentSymbolParams, DocumentSymbolResponse, FoldingRangeParams, PublishDiagnosticsParams,
     Uri, notification::PublishDiagnostics,
 };
-use musi_ast::Program;
+use musi_ast::Prog;
 use musi_basic::source::SourceFile;
 use musi_lex::lexer::tokenize;
 use musi_parse::parse;
@@ -32,7 +32,7 @@ pub fn did_change(state: &mut GlobalState, params: DidChangeTextDocumentParams) 
 pub fn did_close(state: &mut GlobalState, params: &DidCloseTextDocumentParams) {
     let uri = params.text_document.uri.clone();
     drop(state.documents.remove(&uri));
-    drop(state.programs.remove(&uri));
+    drop(state.progs.remove(&uri));
 
     if let Err(e) = state.send_notification::<PublishDiagnostics>(PublishDiagnosticsParams {
         uri,
@@ -43,22 +43,19 @@ pub fn did_close(state: &mut GlobalState, params: &DidCloseTextDocumentParams) {
     }
 }
 
-fn get_document<'a>(
-    state: &'a GlobalState,
-    uri: &Uri,
-) -> Option<(&'a Arc<SourceFile>, &'a Program)> {
+fn get_document<'a>(state: &'a GlobalState, uri: &Uri) -> Option<(&'a Arc<SourceFile>, &'a Prog)> {
     let source = state.documents.get(uri)?;
-    let program = state.programs.get(uri)?;
-    Some((source, program))
+    let prog = state.progs.get(uri)?;
+    Some((source, prog))
 }
 
 pub fn document_symbols(
     state: &GlobalState,
     params: &DocumentSymbolParams,
 ) -> Option<DocumentSymbolResponse> {
-    let (source, program) = get_document(state, &params.text_document.uri)?;
+    let (source, prog) = get_document(state, &params.text_document.uri)?;
     let interner = state.interner.lock().ok()?;
-    let symbols = collect_symbols(source, program, &interner);
+    let symbols = collect_symbols(source, prog, &interner);
     drop(interner);
     Some(DocumentSymbolResponse::Nested(symbols))
 }
@@ -67,8 +64,8 @@ pub fn folding_ranges(
     state: &GlobalState,
     params: &FoldingRangeParams,
 ) -> Option<FoldingRangeList> {
-    let (source, program) = get_document(state, &params.text_document.uri)?;
-    Some(collect_folding_ranges(source, program))
+    let (source, prog) = get_document(state, &params.text_document.uri)?;
+    Some(collect_folding_ranges(source, prog))
 }
 
 fn analyze_and_publish(state: &mut GlobalState, uri: Uri, text: String) {
@@ -84,8 +81,8 @@ fn analyze_and_publish(state: &mut GlobalState, uri: Uri, text: String) {
         tokenize(&source_file, &mut interner)
     };
 
-    let (program, parse_errors) = parse(&tokens);
-    drop(state.programs.insert(uri.clone(), program));
+    let (prog, parse_errors) = parse(&tokens);
+    drop(state.progs.insert(uri.clone(), prog));
 
     let mut diagnostics = convert_diagnostics(&source_file, &lex_errors.diagnostics);
     diagnostics.extend(

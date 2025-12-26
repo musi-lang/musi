@@ -1,18 +1,18 @@
 use lsp_types::{FoldingRange, FoldingRangeKind};
 use musi_ast::{
-    Expr, ExprKind, Program, Stmt, StmtKind,
+    Expr, ExprKind, Prog, Stmt, StmtKind,
     visitor::{Visitor, walk_expr},
 };
 use musi_basic::{source::SourceFile, span::Span};
 
 use crate::types::FoldingRangeList;
 
-pub fn collect_folding_ranges(source: &SourceFile, program: &Program) -> FoldingRangeList {
+pub fn collect_folding_ranges(source: &SourceFile, prog: &Prog) -> FoldingRangeList {
     let mut collector = FoldingCollector {
         source,
         ranges: vec![],
     };
-    collector.visit_program(program);
+    collector.visit_prog(prog);
     collector.ranges
 }
 

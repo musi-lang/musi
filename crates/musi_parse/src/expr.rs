@@ -1,6 +1,6 @@
 use musi_ast::{
-    Attr, AttrArg, AttrArgList, AttrList, Expr, ExprKind, Field, FnSig, LitKind, MatchCase,
-    Modifiers, OptExpr, OptExprPtr, Stmt, StmtKind, StmtList, SumCase, SumCaseItem,
+    Attr, AttrArg, AttrArgList, AttrList, Cond, CondPtr, Expr, ExprKind, Field, FnSig, LitKind,
+    MatchCase, Modifiers, OptExpr, OptExprPtr, Stmt, StmtKind, StmtList, SumCase, SumCaseItem,
     SumCaseItemList, TemplatePart,
 };
 use musi_basic::{
@@ -449,10 +449,25 @@ impl Parser<'_> {
         Ok((stmts, final_expr))
     }
 
+    fn parse_cond(&mut self) -> MusiResult<CondPtr> {
+        if self.bump_if(TokenKind::KwCase) {
+            let pat = self.parse_pat()?;
+            let _ = self.expect(TokenKind::ColonEq)?;
+            let init = self.parse_expr()?;
+            let mut extra = vec![];
+            while self.bump_if(TokenKind::Comma) {
+                extra.push(self.parse_expr()?);
+            }
+            Ok(CondPtr::new(Cond::Case { pat, init, extra }))
+        } else {
+            Ok(CondPtr::new(Cond::Expr(self.parse_expr()?)))
+        }
+    }
+
     fn parse_expr_if(&mut self) -> MusiResult<Expr> {
         let start = self.curr_span();
         let _ = self.expect(TokenKind::KwIf)?;
-        let cond = Box::new(self.parse_expr()?);
+        let cond = self.parse_cond()?;
         let then_br = Box::new(self.parse_expr_block()?);
         let else_br = if self.bump_if(TokenKind::KwElse) {
             Some(Box::new(if self.at(TokenKind::KwIf) {
@@ -476,7 +491,7 @@ impl Parser<'_> {
     fn parse_expr_while(&mut self) -> MusiResult<Expr> {
         let start = self.curr_span();
         let _ = self.expect(TokenKind::KwWhile)?;
-        let cond = Box::new(self.parse_expr()?);
+        let cond = self.parse_cond()?;
         let body = Box::new(self.parse_expr_block()?);
         Ok(Expr::new(
             ExprKind::While { cond, body },

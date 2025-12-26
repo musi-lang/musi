@@ -2,8 +2,8 @@ use musi_basic::span::Span;
 use musi_lex::token::TokenKind;
 
 use crate::{
-    AttrArgList, AttrList, ExprList, ExprPtr, FieldList, Ident, Idents, OptExpr, OptExprPtr,
-    OptIdent, OptTyp, PatList, StmtList, SumCaseItemList, TypList, TypPtr,
+    AttrArgList, AttrList, CondPtr, ExprList, ExprPtr, FieldList, Ident, Idents, OptExpr,
+    OptExprPtr, OptIdent, OptTyp, PatList, StmtList, SumCaseItemList, TypList, TypPtr,
 };
 
 // ============================================================================
@@ -145,6 +145,18 @@ impl Expr {
 }
 
 #[derive(Debug, Clone)]
+pub enum Cond {
+    /// `cond`
+    Expr(Expr),
+    /// `case pat := expr, expr, expr, ...`
+    Case {
+        pat: Pat,
+        init: Expr,
+        extra: ExprList,
+    },
+}
+
+#[derive(Debug, Clone)]
 pub enum ExprKind {
     /// `42`, `"hello"`, `true`
     Lit(LitKind),
@@ -155,17 +167,25 @@ pub enum ExprKind {
     /// `[a, b, c]`
     Array(ExprList),
     /// `Point.{x := 1, y := 2}`
-    Record { ty: OptExprPtr, fields: FieldList },
+    Record {
+        ty: OptExprPtr,
+        fields: FieldList,
+    },
     /// Block: `{ stmt; stmt; expr }`
-    Block { stmts: StmtList, expr: OptExprPtr },
+    Block {
+        stmts: StmtList,
+        expr: OptExprPtr,
+    },
     /// `if cond { } else if { } else { }`
     If {
-        cond: ExprPtr,
+        cond: CondPtr,
         then_br: ExprPtr,
         else_br: OptExprPtr,
     },
-    /// `while cond { }`
-    While { cond: ExprPtr, body: ExprPtr },
+    While {
+        cond: CondPtr,
+        body: ExprPtr,
+    },
     /// `for pat in iter { }`
     For {
         pat: Pat,
@@ -196,7 +216,10 @@ pub enum ExprKind {
     /// `import "path"`
     Import(Ident),
     /// `extern "C" { fn foo(); }`
-    Extern { abi: OptIdent, fns: Vec<FnSig> },
+    Extern {
+        abi: OptIdent,
+        fns: Vec<FnSig>,
+    },
     /// `record Point { x: Int; y: Int }`
     RecordDef {
         attrs: AttrList,
@@ -237,15 +260,27 @@ pub enum ExprKind {
         init: ExprPtr,
     },
     /// `f(args)`
-    Call { callee: ExprPtr, args: ExprList },
+    Call {
+        callee: ExprPtr,
+        args: ExprList,
+    },
     /// `arr[i]`
-    Index { base: ExprPtr, index: ExprPtr },
+    Index {
+        base: ExprPtr,
+        index: ExprPtr,
+    },
     /// `obj.field`
-    Field { base: ExprPtr, field: Ident },
+    Field {
+        base: ExprPtr,
+        field: Ident,
+    },
     /// `expr.^`
     Deref(ExprPtr),
     /// `-x`, `not x`, `~x`, `@x`
-    Unary { op: TokenKind, operand: ExprPtr },
+    Unary {
+        op: TokenKind,
+        operand: ExprPtr,
+    },
     /// `a + b`, `a and b`
     Binary {
         op: TokenKind,
@@ -259,7 +294,10 @@ pub enum ExprKind {
         inclusive: bool,
     },
     /// `x <- y`
-    Assign { target: ExprPtr, value: ExprPtr },
+    Assign {
+        target: ExprPtr,
+        value: ExprPtr,
+    },
 }
 
 // ============================================================================
@@ -349,6 +387,6 @@ pub struct Modifiers {
 // ============================================================================
 
 #[derive(Debug, Clone)]
-pub struct Program {
+pub struct Prog {
     pub stmts: StmtList,
 }
