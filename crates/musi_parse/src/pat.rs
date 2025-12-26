@@ -1,4 +1,4 @@
-use musi_ast::{Expr, ExprKind, LitKind, OptExprPtr, Pat, PatKind, Pats, TyExprs};
+use musi_ast::{ExprKind, LitKind, OptExprId, PatId, PatIds, PatKind, TyExprIds};
 use musi_basic::{
     error::{IntoMusiError, MusiResult},
     span::Span,
@@ -14,45 +14,44 @@ use crate::{Parser, error::ParseErrorKind};
 impl Parser<'_> {
     /// # Errors
     /// Returns `ParseErrorKind` on syntax error.
-    pub fn parse_pat(&mut self) -> MusiResult<Pat> {
+    pub fn parse_pat(&mut self) -> MusiResult<PatId> {
         self.parse_pat_or()
     }
 
-    fn parse_pat_or(&mut self) -> MusiResult<Pat> {
+    fn parse_pat_or(&mut self) -> MusiResult<PatId> {
         let start = self.curr_span();
-        let first = self.parse_pat_cons()?;
+        let first_id = self.parse_pat_cons()?;
         if !self.at(TokenKind::Bar) {
-            return Ok(first);
+            return Ok(first_id);
         }
-        let mut alts = vec![first];
+        let mut alts = vec![first_id];
         while self.bump_if(TokenKind::Bar) {
             alts.push(self.parse_pat_cons()?);
         }
-        Ok(Pat::new(PatKind::Or(alts), start.merge(self.prev_span())))
+        let span = start.merge(self.prev_span());
+        Ok(self.arena.alloc_pat(PatKind::Or(alts), span))
     }
 
-    fn parse_pat_cons(&mut self) -> MusiResult<Pat> {
+    fn parse_pat_cons(&mut self) -> MusiResult<PatId> {
         let start = self.curr_span();
-        let first = self.parse_pat_primary()?;
+        let first_id = self.parse_pat_primary()?;
         if !self.at(TokenKind::ColonColon) {
-            return Ok(first);
+            return Ok(first_id);
         }
-        let mut parts = vec![first];
+        let mut parts = vec![first_id];
         while self.bump_if(TokenKind::ColonColon) {
             parts.push(self.parse_pat_primary()?);
         }
-        Ok(Pat::new(
-            PatKind::Cons(parts),
-            start.merge(self.prev_span()),
-        ))
+        let span = start.merge(self.prev_span());
+        Ok(self.arena.alloc_pat(PatKind::Cons(parts), span))
     }
 
-    fn parse_pat_primary(&mut self) -> MusiResult<Pat> {
+    fn parse_pat_primary(&mut self) -> MusiResult<PatId> {
         let start = self.curr_span();
         match self.peek_kind() {
             Some(TokenKind::Underscore) => {
                 let _ = self.advance();
-                Ok(Pat::new(PatKind::Wild, start))
+                Ok(self.arena.alloc_pat(PatKind::Wild, start))
             }
             Some(
                 TokenKind::LitInt(_)
@@ -76,7 +75,7 @@ impl Parser<'_> {
         }
     }
 
-    fn parse_pat_lit(&mut self) -> MusiResult<Pat> {
+    fn parse_pat_lit(&mut self) -> MusiResult<PatId> {
         let start = self.curr_span();
         let kind = match self.peek_kind() {
             Some(TokenKind::LitInt(id)) => {
@@ -107,13 +106,13 @@ impl Parser<'_> {
                 return Err(ParseErrorKind::ExpectedLit.into_musi_error(start));
             }
         };
-        Ok(Pat::new(kind, start))
+        Ok(self.arena.alloc_pat(kind, start))
     }
 
-    fn parse_pat_after_ident(&mut self, id: u32, start: Span) -> MusiResult<Pat> {
+    fn parse_pat_after_ident(&mut self, id: u32, start: Span) -> MusiResult<PatId> {
         if self.at(TokenKind::Dot) && self.peek_nth(1) == Some(TokenKind::LBrace) {
-            let ty_expr = Expr::new(ExprKind::Ident(id), start);
-            return self.parse_pat_record(Some(Box::new(ty_expr)), start);
+            let ty_expr_id = self.arena.alloc_expr(ExprKind::Ident(id), start);
+            return self.parse_pat_record(Some(ty_expr_id), start);
         }
         let ty_args = self.parse_ty_expr_args()?;
         if self.at(TokenKind::LParen) {
@@ -125,63 +124,60 @@ impl Parser<'_> {
         if !ty_args.is_empty() {
             return Ok(self.make_pat_variant(id, ty_args, vec![], start));
         }
-        Ok(Pat::new(PatKind::Ident(id), start))
+        Ok(self.arena.alloc_pat(PatKind::Ident(id), start))
     }
 
-    fn parse_pat_record(&mut self, ty: OptExprPtr, start: Span) -> MusiResult<Pat> {
+    fn parse_pat_record(&mut self, ty: OptExprId, start: Span) -> MusiResult<PatId> {
         self.advance_by(2); // consume `.` and `{`
         let fields = self.separated(TokenKind::Comma, Self::expect_ident)?;
         let _ = self.expect(TokenKind::RBrace)?;
-        Ok(Pat::new(
-            PatKind::Record { ty, fields },
-            start.merge(self.prev_span()),
-        ))
+        let span = start.merge(self.prev_span());
+        Ok(self.arena.alloc_pat(PatKind::Record { ty, fields }, span))
     }
 
-    fn parse_pat_record_anon(&mut self) -> MusiResult<Pat> {
+    fn parse_pat_record_anon(&mut self) -> MusiResult<PatId> {
         self.parse_pat_record(None, self.curr_span())
     }
 
-    fn parse_pat_paren(&mut self) -> MusiResult<Pat> {
+    fn parse_pat_paren(&mut self) -> MusiResult<PatId> {
         let start = self.curr_span();
         let _ = self.advance();
         if self.bump_if(TokenKind::RParen) {
             return Ok(self.make_empty_tuple_pat(start));
         }
-        let first = self.parse_pat()?;
+        let first_id = self.parse_pat()?;
         if self.bump_if(TokenKind::Comma) {
-            self.parse_pat_tuple(first, start)
+            self.parse_pat_tuple(first_id, start)
         } else {
-            self.parse_pat_grouped(first, start)
+            self.parse_pat_grouped(first_id, start)
         }
     }
 
-    fn parse_pat_tuple(&mut self, first: Pat, start: Span) -> MusiResult<Pat> {
-        let mut elems = vec![first];
+    fn parse_pat_tuple(&mut self, first_id: PatId, start: Span) -> MusiResult<PatId> {
+        let mut elems = vec![first_id];
         if !self.at(TokenKind::RParen) {
             elems.extend(self.separated(TokenKind::Comma, Self::parse_pat)?);
         }
         let _ = self.expect(TokenKind::RParen)?;
-        Ok(Pat::new(
-            PatKind::Tuple(elems),
-            start.merge(self.prev_span()),
-        ))
+        let span = start.merge(self.prev_span());
+        Ok(self.arena.alloc_pat(PatKind::Tuple(elems), span))
     }
 
-    fn parse_pat_grouped(&mut self, inner: Pat, start: Span) -> MusiResult<Pat> {
+    fn parse_pat_grouped(&mut self, inner_id: PatId, start: Span) -> MusiResult<PatId> {
         let _ = self.expect(TokenKind::RParen)?;
-        Ok(Pat::new(inner.kind, start.merge(self.prev_span())))
+        let inner = self.arena.pats.get(inner_id);
+        let kind = inner.kind.clone();
+        let span = start.merge(self.prev_span());
+        Ok(self.arena.alloc_pat(kind, span))
     }
 
-    fn parse_pat_array(&mut self) -> MusiResult<Pat> {
+    fn parse_pat_array(&mut self) -> MusiResult<PatId> {
         let start = self.curr_span();
         let pats = self.delimited(TokenKind::LBrack, TokenKind::RBrack, |p| {
             p.separated(TokenKind::Comma, Self::parse_pat)
         })?;
-        Ok(Pat::new(
-            PatKind::Array(pats),
-            start.merge(self.prev_span()),
-        ))
+        let span = start.merge(self.prev_span());
+        Ok(self.arena.alloc_pat(PatKind::Array(pats), span))
     }
 }
 
@@ -190,18 +186,26 @@ impl Parser<'_> {
 // ============================================================================
 
 impl Parser<'_> {
-    fn make_pat_variant(&self, name: u32, ty_args: TyExprs, args: Pats, start: Span) -> Pat {
-        Pat::new(
+    fn make_pat_variant(
+        &mut self,
+        name: u32,
+        ty_args: TyExprIds,
+        args: PatIds,
+        start: Span,
+    ) -> PatId {
+        let span = start.merge(self.prev_span());
+        self.arena.alloc_pat(
             PatKind::Variant {
                 name,
                 ty_args,
                 args,
             },
-            start.merge(self.prev_span()),
+            span,
         )
     }
 
-    fn make_empty_tuple_pat(&self, start: Span) -> Pat {
-        Pat::new(PatKind::Tuple(vec![]), start.merge(self.prev_span()))
+    fn make_empty_tuple_pat(&mut self, start: Span) -> PatId {
+        let span = start.merge(self.prev_span());
+        self.arena.alloc_pat(PatKind::Tuple(vec![]), span)
     }
 }
