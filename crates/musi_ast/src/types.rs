@@ -1,5 +1,7 @@
 //! Type aliases for AST nodes.
 
+use musi_basic::arena::NodeId;
+
 use crate::node::{Attr, AttrArg, Cond, Expr, Field, Pat, Stmt, SumCaseItem, TyExpr};
 
 // ============================================================================
@@ -14,31 +16,32 @@ pub type OptIdent = Option<Ident>;
 // TYPE EXPRESSIONS
 // ============================================================================
 
-pub type TyExprPtr = Box<TyExpr>;
-pub type TyExprs = Vec<TyExpr>;
-pub type OptTyExpr = Option<TyExpr>;
+pub type TyExprId = NodeId<TyExpr>;
+pub type TyExprIds = Vec<TyExprId>;
+pub type OptTyExprId = Option<TyExprId>;
 
 // ============================================================================
 // PATTERNS
 // ============================================================================
 
-pub type Pats = Vec<Pat>;
+pub type PatId = NodeId<Pat>;
+pub type PatIds = Vec<PatId>;
 
 // ============================================================================
 // EXPRESSIONS
 // ============================================================================
 
-pub type ExprPtr = Box<Expr>;
-pub type Exprs = Vec<Expr>;
-pub type OptExprPtr = Option<ExprPtr>;
-pub type OptExpr = Option<Expr>;
-pub type CondPtr = Box<Cond>;
+pub type ExprId = NodeId<Expr>;
+pub type ExprIds = Vec<ExprId>;
+pub type OptExprId = Option<ExprId>;
+pub type CondId = NodeId<Cond>;
 
 // ============================================================================
 // STATEMENTS
 // ============================================================================
 
-pub type Stmts = Vec<Stmt>;
+pub type StmtId = NodeId<Stmt>;
+pub type StmtIds = Vec<StmtId>;
 
 // ============================================================================
 // SUPPORT TYPES
