@@ -1,5 +1,5 @@
 [package]
-name = "musi-lsp"
+name = "musi_lsp"
 description = "Language server for Musi compiler"
 version.workspace = true
 edition.workspace = true
@@ -23,10 +23,10 @@ anyhow = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
-musi-basic = { path = "../musi_basic" }
-musi-lex = { path = "../musi_lex" }
-musi-parse = { path = "../musi_parse" }
-musi-ast = { path = "../musi_ast" }
+musi_basic = { path = "../musi_basic" }
+musi_lex = { path = "../musi_lex" }
+musi_parse = { path = "../musi_parse" }
+musi_ast = { path = "../musi_ast" }
 
 [lints]
 workspace = true

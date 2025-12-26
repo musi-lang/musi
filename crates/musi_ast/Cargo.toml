@@ -1,5 +1,5 @@
 [package]
-name = "musi-ast"
+name = "musi_ast"
 description = "AST definitions for Musi compiler"
 version.workspace = true
 edition.workspace = true
@@ -10,8 +10,8 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
-musi-basic = { path = "../musi_basic" }
-musi-lex = { path = "../musi_lex" }
+musi_basic = { path = "../musi_basic" }
+musi_lex = { path = "../musi_lex" }
 
 [lints]
 workspace = true

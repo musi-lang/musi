@@ -103,14 +103,14 @@ export async function findServerPath(): Promise<string | undefined> {
  */
 export async function showServerNotFoundUI() {
 	const action = await vscode.window.showErrorMessage(
-		"Musi LSP server binary not found. Build with 'cargo build -p musi-lsp'.",
+		"Musi LSP server binary not found. Build with 'cargo build -p musi_lsp'.",
 		"Open Terminal",
 		"Show Build Instructions",
 	);
 
 	if (action === "Open Terminal") {
 		const terminal = vscode.window.createTerminal("Musi Build");
-		terminal.sendText("cargo build -p musi-lsp");
+		terminal.sendText("cargo build -p musi_lsp");
 		terminal.show();
 	} else if (action === "Show Build Instructions") {
 		vscode.env.openExternal(

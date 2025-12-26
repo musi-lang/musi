@@ -228,57 +228,57 @@ dependencies = [
 ]
 
 [[package]]
-name = "musi-ast"
+name = "musi_ast"
 version = "0.1.0"
 dependencies = [
- "musi-basic",
- "musi-lex",
+ "musi_basic",
+ "musi_lex",
 ]
 
 [[package]]
-name = "musi-basic"
+name = "musi_basic"
 version = "0.1.0"
 dependencies = [
  "thiserror",
 ]
 
 [[package]]
-name = "musi-codegen"
+name = "musi_codegen"
 version = "0.1.0"
 dependencies = [
- "musi-ast",
- "musi-basic",
+ "musi_ast",
+ "musi_basic",
 ]
 
 [[package]]
-name = "musi-drive"
+name = "musi_drive"
 version = "0.1.0"
 dependencies = [
  "clap",
- "musi-basic",
- "musi-lex",
+ "musi_basic",
+ "musi_lex",
 ]
 
 [[package]]
-name = "musi-lex"
+name = "musi_lex"
 version = "0.1.0"
 dependencies = [
- "musi-basic",
+ "musi_basic",
  "thiserror",
 ]
 
 [[package]]
-name = "musi-lsp"
+name = "musi_lsp"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "crossbeam-channel",
  "lsp-server",
  "lsp-types",
- "musi-ast",
- "musi-basic",
- "musi-lex",
- "musi-parse",
+ "musi_ast",
+ "musi_basic",
+ "musi_lex",
+ "musi_parse",
  "serde",
  "serde_json",
  "tracing",
@@ -286,21 +286,21 @@ dependencies = [
 ]
 
 [[package]]
-name = "musi-parse"
+name = "musi_parse"
 version = "0.1.0"
 dependencies = [
- "musi-ast",
- "musi-basic",
- "musi-lex",
+ "musi_ast",
+ "musi_basic",
+ "musi_lex",
  "thiserror",
 ]
 
 [[package]]
-name = "musi-sema"
+name = "musi_sema"
 version = "0.1.0"
 dependencies = [
- "musi-ast",
- "musi-basic",
+ "musi_ast",
+ "musi_basic",
 ]
 
 [[package]]

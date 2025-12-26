@@ -1,5 +1,5 @@
 [package]
-name = "musi-lex"
+name = "musi_lex"
 description = "Lexer for Musi compiler"
 version.workspace = true
 edition.workspace = true
@@ -10,7 +10,7 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
-musi-basic = { path = "../musi_basic" }
+musi_basic = { path = "../musi_basic" }
 thiserror = { workspace = true }
 
 [lints]

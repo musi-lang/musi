@@ -1,5 +1,5 @@
 [package]
-name = "musi-sema"
+name = "musi_sema"
 description = "Semantic analysis for Musi compiler"
 version.workspace = true
 edition.workspace = true
@@ -10,8 +10,8 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
-musi-basic = { path = "../musi_basic" }
-musi-ast = { path = "../musi_ast" }
+musi_basic = { path = "../musi_basic" }
+musi_ast = { path = "../musi_ast" }
 
 [lints]
 workspace = true

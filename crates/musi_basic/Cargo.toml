@@ -1,5 +1,5 @@
 [package]
-name = "musi-basic"
+name = "musi_basic"
 description = "Basic utilities for Musi compiler"
 version.workspace = true
 edition.workspace = true

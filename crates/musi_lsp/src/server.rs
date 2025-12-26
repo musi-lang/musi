@@ -44,7 +44,7 @@ impl LspServer {
         let init_result = InitializeResult {
             capabilities: caps,
             server_info: Some(ServerInfo {
-                name: "musi-lsp".into(),
+                name: "musi_lsp".into(),
                 version: Some(env!("CARGO_PKG_VERSION").into()),
             }),
         };
