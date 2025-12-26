@@ -91,7 +91,7 @@ impl<T> Arena<T> {
         NodeId::new(index)
     }
 
-    /// Returnsreference to node with given ID.
+    /// Returns reference to node with given ID.
     ///
     /// # Panics
     ///
