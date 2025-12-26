@@ -99,9 +99,7 @@ impl Parser<'_> {
         match self.peek_kind() {
             Some(TokenKind::Ident(id)) => self.parse_typ_ident(id),
             Some(TokenKind::LParen) => self.parse_typ_paren(),
-            Some(kind) => {
-                Err(ParseErrorKind::Unexpected(kind.as_str().into()).into_musi_error(start))
-            }
+            Some(kind) => Err(ParseErrorKind::UnexpectedToken(kind).into_musi_error(start)),
             None => Err(ParseErrorKind::UnexpectedEof.into_musi_error(start)),
         }
     }

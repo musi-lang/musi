@@ -43,8 +43,7 @@ impl IntoMusiError for LexErrorKind {
                 Some("use '\\n', '\\r', '\\t', '\\\\', '\\'', '\\\"', '\\xHH', or '\\u{...}'")
             }
             Self::MalformedUnderscore(_) => Some("underscores must separate digits"),
-            Self::MalformedNumber => Some("add missing digits"),
-            Self::InvalidIdent | Self::InvalidRune => None,
+            _ => None,
         }
     }
 

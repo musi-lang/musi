@@ -1,5 +1,3 @@
-use std::borrow::Cow;
-
 use musi_ast::{Expr, ExprKind, LitKind, OptExprPtr, Pat, PatKind, PatList, TypList};
 use musi_basic::{
     error::{IntoMusiError, MusiResult},
@@ -69,9 +67,7 @@ impl Parser<'_> {
             }
             Some(TokenKind::LParen) => self.parse_pat_paren(),
             Some(TokenKind::LBrack) => self.parse_pat_array(),
-            Some(kind) => {
-                Err(ParseErrorKind::Unexpected(kind.as_str().into()).into_musi_error(start))
-            }
+            Some(kind) => Err(ParseErrorKind::UnexpectedToken(kind).into_musi_error(start)),
             None => Err(ParseErrorKind::UnexpectedEof.into_musi_error(start)),
         }
     }
@@ -104,8 +100,7 @@ impl Parser<'_> {
                 PatKind::Lit(LitKind::Bool(false))
             }
             _ => {
-                return Err(ParseErrorKind::Expected(Cow::Borrowed("literal pattern"))
-                    .into_musi_error(start));
+                return Err(ParseErrorKind::ExpectedLit.into_musi_error(start));
             }
         };
         Ok(Pat::new(kind, start))

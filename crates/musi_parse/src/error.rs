@@ -1,37 +1,45 @@
 use musi_basic::error::{IntoMusiError, Level};
-use std::borrow::Cow;
+use musi_lex::token::TokenKind;
 use thiserror::Error;
 
 #[derive(Debug, Clone, Error)]
 #[non_exhaustive]
 pub enum ParseErrorKind {
-    #[error("expected {0}")]
-    Expected(Cow<'static, str>),
+    #[error("expected identifier")]
+    ExpectedIdent,
+    #[error("expected expression")]
+    ExpectedExpr,
+    #[error("expected type")]
+    ExpectedTyp,
+    #[error("expected pattern")]
+    ExpectedPat,
+    #[error("expected literal")]
+    ExpectedLit,
+    #[error("expected string literal")]
+    ExpectedStringLit,
+    #[error("expected '{0}'")]
+    ExpectedToken(TokenKind),
+    #[error("expected '{0}' separator")]
+    ExpectedSeparator(TokenKind),
 
-    #[error("expected {0} after {1}")]
-    ExpectedAfter(Cow<'static, str>, Cow<'static, str>),
-
-    #[error("unexpected {0}")]
-    Unexpected(String),
-
+    #[error("unexpected '{0}'")]
+    UnexpectedToken(TokenKind),
     #[error("unexpected end of file")]
     UnexpectedEof,
 
-    #[error("unclosed {0}")]
-    Unclosed(Cow<'static, str>),
-
-    #[error("invalid {0}")]
-    Invalid(Cow<'static, str>),
+    #[error("unclosed '{0}' delimiter")]
+    UnclosedDelimiter(TokenKind),
+    #[error("unclosed attribute")]
+    UnclosedAttr,
+    #[error("unclosed template expression")]
+    UnclosedTemplateExpr,
 }
 
 impl IntoMusiError for ParseErrorKind {
     fn hint(&self) -> Option<&'static str> {
         match self {
-            Self::Unclosed(s) if s == "block" => Some("add '}'"),
-            Self::Unclosed(s) if s == "parenthese(s)" => Some("add ')'"),
-            Self::Unclosed(s) if s == "bracket(s)" => Some("add ']'"),
-            Self::Unclosed(s) if s == "attribute" => Some("add '>]'"),
-            Self::ExpectedAfter(s, _) if s == "';'" => Some("add ';'"),
+            Self::UnclosedAttr => Some("add ']'"),
+            Self::UnclosedTemplateExpr => Some("add '}'"),
             _ => None,
         }
     }

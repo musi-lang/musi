@@ -221,15 +221,21 @@ impl TokenKind {
     pub fn as_str(&self) -> Cow<'static, str> {
         for (kw, tk) in KEYWORDS {
             if *tk == *self {
-                return Cow::Owned(format!("'{kw}'"));
+                return Cow::Borrowed(kw);
             }
         }
         for (tk, sym) in SYMBOLS {
             if *tk == *self {
-                return Cow::Owned(format!("'{sym}'"));
+                return Cow::Borrowed(sym);
             }
         }
-        Cow::Owned(format!("token '{self:?}'"))
+        Cow::Owned(format!("{self:?}"))
+    }
+}
+
+impl fmt::Display for TokenKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
     }
 }
 

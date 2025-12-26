@@ -160,7 +160,7 @@ impl<'a> Parser<'a> {
     }
 
     /// # Errors
-    /// Returns `ParseErrorKind::Expected` if current token does not match.
+    /// Returns `ParseErrorKind::ExpectedToken` if current token does not match.
     ///
     /// # Panics
     /// Never panics if `at(kind)` is true.
@@ -168,7 +168,7 @@ impl<'a> Parser<'a> {
         if self.at(kind) {
             Ok(self.advance().expect("checked by `at()`"))
         } else {
-            let err = ParseErrorKind::Expected(kind.as_str());
+            let err = ParseErrorKind::ExpectedToken(kind);
             Err(err.into_musi_error(self.curr_span()))
         }
     }
@@ -283,7 +283,6 @@ impl<'a> Parser<'a> {
 
     pub fn sync_to_stmt(&mut self) {
         _ = self.advance();
-
         loop {
             match self.peek_kind() {
                 Some(TokenKind::Semicolon) => {
