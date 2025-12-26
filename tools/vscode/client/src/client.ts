@@ -114,7 +114,7 @@ export async function stopClient() {
 	try {
 		await _client.stop();
 	} catch (error) {
-		console.warn("Failedto stop language client gracefully:", error);
+		console.warn("Failed to stop language client gracefully:", error);
 	}
 	_client = undefined;
 }
