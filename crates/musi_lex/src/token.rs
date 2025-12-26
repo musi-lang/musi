@@ -3,12 +3,12 @@ use musi_basic::span::Span;
 use std::borrow::Cow;
 use std::fmt;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 #[non_exhaustive]
 pub enum TokenKind {
     Ident(u32),
-    LitInt(u32),
-    LitReal(u32),
+    LitInt(i64),
+    LitReal(f64),
     LitString(u32),
     LitRune(char),
     LitTemplateNoSubst(u32),
@@ -98,7 +98,7 @@ pub enum TokenKind {
     Invalid(u32),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct Token {
     pub kind: TokenKind,
@@ -242,10 +242,8 @@ impl fmt::Display for TokenDisplay<'_> {
             TokenKind::Ident(id) => {
                 write!(f, "{}", self.interner.lookup(*id).unwrap_or("<ident>"))
             }
-            TokenKind::LitInt(id) => write!(f, "{}", self.interner.lookup(*id).unwrap_or("<int>")),
-            TokenKind::LitReal(id) => {
-                write!(f, "{}", self.interner.lookup(*id).unwrap_or("<real>"))
-            }
+            TokenKind::LitInt(v) => write!(f, "{v}"),
+            TokenKind::LitReal(v) => write!(f, "{v}"),
             TokenKind::LitString(id) => {
                 write!(f, "\"{}\"", self.interner.lookup(*id).unwrap_or(""))
             }

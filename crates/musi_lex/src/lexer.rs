@@ -216,9 +216,30 @@ impl<'a> Lexer<'a> {
         }
 
         if is_real {
-            TokenKind::LitReal(self.interner.intern(&val))
+            match val.parse::<f64>() {
+                Ok(v) => TokenKind::LitReal(v),
+                Err(_) => {
+                    self.report(LexErrorKind::MalformedNumericLit, start, end);
+                    TokenKind::LitReal(0.0)
+                }
+            }
         } else {
-            TokenKind::LitInt(self.interner.intern(&val))
+            let parsed = if val.starts_with("0x") || val.starts_with("0X") {
+                i64::from_str_radix(&val[2..], 16)
+            } else if val.starts_with("0o") || val.starts_with("0O") {
+                i64::from_str_radix(&val[2..], 8)
+            } else if val.starts_with("0b") || val.starts_with("0B") {
+                i64::from_str_radix(&val[2..], 2)
+            } else {
+                val.parse()
+            };
+            match parsed {
+                Ok(v) => TokenKind::LitInt(v),
+                Err(_) => {
+                    self.report(LexErrorKind::MalformedNumericLit, start, end);
+                    TokenKind::LitInt(0)
+                }
+            }
         }
     }
 

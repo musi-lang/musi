@@ -82,9 +82,9 @@ impl Parser<'_> {
     fn parse_ty_expr_array(&mut self) -> MusiResult<TyExprId> {
         let start = self.curr_span();
         let _ = self.advance();
-        let size = if let Some(TokenKind::LitInt(id)) = self.peek_kind() {
+        let size = if let Some(TokenKind::LitInt(v)) = self.peek_kind() {
             let _ = self.advance();
-            Some(i64::from(id))
+            Some(v)
         } else {
             None
         };

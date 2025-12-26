@@ -304,13 +304,13 @@ impl Parser<'_> {
 
     fn parse_lit(&mut self) -> MusiResult<LitKind> {
         match self.peek_kind() {
-            Some(TokenKind::LitInt(id)) => {
+            Some(TokenKind::LitInt(v)) => {
                 let _ = self.advance();
-                Ok(LitKind::Int(i64::from(id)))
+                Ok(LitKind::Int(v))
             }
-            Some(TokenKind::LitReal(id)) => {
+            Some(TokenKind::LitReal(v)) => {
                 let _ = self.advance();
-                Ok(LitKind::Real(f64::from(id)))
+                Ok(LitKind::Real(v))
             }
             Some(TokenKind::LitString(id) | TokenKind::LitTemplateNoSubst(id)) => {
                 let _ = self.advance();

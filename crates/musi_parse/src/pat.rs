@@ -78,13 +78,13 @@ impl Parser<'_> {
     fn parse_pat_lit(&mut self) -> MusiResult<PatId> {
         let start = self.curr_span();
         let kind = match self.peek_kind() {
-            Some(TokenKind::LitInt(id)) => {
+            Some(TokenKind::LitInt(v)) => {
                 let _ = self.advance();
-                PatKind::Lit(LitKind::Int(i64::from(id)))
+                PatKind::Lit(LitKind::Int(v))
             }
-            Some(TokenKind::LitReal(id)) => {
+            Some(TokenKind::LitReal(v)) => {
                 let _ = self.advance();
-                PatKind::Lit(LitKind::Real(f64::from(id)))
+                PatKind::Lit(LitKind::Real(v))
             }
             Some(TokenKind::LitString(id)) => {
                 let _ = self.advance();

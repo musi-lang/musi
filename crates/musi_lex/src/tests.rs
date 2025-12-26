@@ -36,21 +36,21 @@ fn check(input: &str, expected: impl FnOnce(&mut Interner) -> Vec<TokenKind>) {
 
 #[test]
 fn test_numbers() {
-    check("123 456_789 0xFF 0o77 0b1011", |i| {
+    check("123 456_789 0xFF 0o77 0b1011", |_| {
         vec![
-            TokenKind::LitInt(i.intern("123")),
-            TokenKind::LitInt(i.intern("456789")),
-            TokenKind::LitInt(i.intern("0xFF")),
-            TokenKind::LitInt(i.intern("0o77")),
-            TokenKind::LitInt(i.intern("0b1011")),
+            TokenKind::LitInt(123),
+            TokenKind::LitInt(456789),
+            TokenKind::LitInt(255),
+            TokenKind::LitInt(63),
+            TokenKind::LitInt(11),
         ]
     });
 
-    check("3.14 1e10 1.2e-5", |i| {
+    check("3.14 1e10 1.2e-5", |_| {
         vec![
-            TokenKind::LitReal(i.intern("3.14")),
-            TokenKind::LitReal(i.intern("1e10")),
-            TokenKind::LitReal(i.intern("1.2e-5")),
+            TokenKind::LitReal(3.14),
+            TokenKind::LitReal(1e10),
+            TokenKind::LitReal(1.2e-5),
         ]
     });
 }
@@ -159,17 +159,17 @@ fn test_comments() {
                 TokenKind::KwVal,
                 TokenKind::Ident(i.intern("x")),
                 TokenKind::ColonEq,
-                TokenKind::LitInt(i.intern("1")),
+                TokenKind::LitInt(1),
                 TokenKind::Semicolon,
                 TokenKind::KwVal,
                 TokenKind::Ident(i.intern("y")),
                 TokenKind::ColonEq,
-                TokenKind::LitInt(i.intern("2")),
+                TokenKind::LitInt(2),
                 TokenKind::Semicolon,
                 TokenKind::KwVal,
                 TokenKind::Ident(i.intern("z")),
                 TokenKind::ColonEq,
-                TokenKind::LitInt(i.intern("3")),
+                TokenKind::LitInt(3),
                 TokenKind::Semicolon,
             ]
         },
@@ -180,7 +180,7 @@ fn test_comments() {
             TokenKind::KwVal,
             TokenKind::Ident(i.intern("x")),
             TokenKind::ColonEq,
-            TokenKind::LitInt(i.intern("1")),
+            TokenKind::LitInt(1),
             TokenKind::Semicolon,
         ]
     });
@@ -249,13 +249,12 @@ fn test_underscores() {
 fn test_spans() {
     let mut ctx = TestContext::new("val x := 123;");
     let x_id = ctx.interner.intern("x");
-    let num_id = ctx.interner.intern("123");
 
     let tokens_with_spans = vec![
         (TokenKind::KwVal, 0, 3),
         (TokenKind::Ident(x_id), 4, 5),
         (TokenKind::ColonEq, 6, 8),
-        (TokenKind::LitInt(num_id), 9, 12),
+        (TokenKind::LitInt(123), 9, 12),
         (TokenKind::Semicolon, 12, 13),
     ];
 
