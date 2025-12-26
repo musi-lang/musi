@@ -29,7 +29,13 @@ impl LspServer {
         let _init_params: InitializeParams = serde_json::from_value(init_params)?;
 
         let caps = ServerCapabilities {
-            text_document_sync: Some(TextDocumentSyncCapability::Kind(TextDocumentSyncKind::FULL)),
+            text_document_sync: Some(TextDocumentSyncCapability::Options(
+                lsp_types::TextDocumentSyncOptions {
+                    open_close: Some(true),
+                    change: Some(TextDocumentSyncKind::FULL),
+                    ..Default::default()
+                },
+            )),
             document_symbol_provider: Some(lsp_types::OneOf::Left(true)),
             folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
             ..Default::default()
