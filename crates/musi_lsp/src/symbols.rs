@@ -1,8 +1,5 @@
 use lsp_types::{DocumentSymbol, SymbolKind};
-use musi_ast::{
-    Expr, ExprKind, FnSig, PatKind, Prog, Stmt, StmtKind, SumCase,
-    visitor::{AstVisitor, walk_expr},
-};
+use musi_ast::{AstArena, ExprKind, FnSig, PatKind, Prog, StmtKind, SumCase};
 use musi_basic::{interner::Interner, source::SourceFile, span::Span};
 
 use crate::types::DocumentSymbolList;
@@ -10,10 +7,12 @@ use crate::types::DocumentSymbolList;
 pub fn collect_symbols(
     source: &SourceFile,
     prog: &Prog,
+    arena: &AstArena,
     interner: &Interner,
 ) -> DocumentSymbolList {
     let mut collector = SymbolCollector {
         source,
+        arena,
         interner,
         symbols: Vec::new(),
     };
@@ -23,6 +22,7 @@ pub fn collect_symbols(
 
 struct SymbolCollector<'a> {
     source: &'a SourceFile,
+    arena: &'a AstArena,
     interner: &'a Interner,
     symbols: DocumentSymbolList,
 }
@@ -85,23 +85,26 @@ impl SymbolCollector<'_> {
             })
             .collect()
     }
-}
 
-impl AstVisitor for SymbolCollector<'_> {
-    fn visit_stmt(&mut self, stmt: &Stmt) {
-        let StmtKind::Expr(expr) = &stmt.kind;
-        self.visit_expr(expr);
+    fn visit_prog(&mut self, prog: &Prog) {
+        for &stmt_id in &prog.stmts {
+            let stmt = self.arena.stmts.get(stmt_id);
+            let StmtKind::Expr(expr_id) = stmt.kind;
+            self.visit_expr_id(expr_id);
+        }
     }
 
-    fn visit_expr(&mut self, expr: &Expr) {
+    fn visit_expr_id(&mut self, expr_id: musi_ast::ExprId) {
+        let expr = self.arena.exprs.get(expr_id);
         match &expr.kind {
             ExprKind::Fn { sig, .. } => {
                 self.collect_fn(sig, expr.span);
             }
             ExprKind::Bind { pat, .. } => {
-                if let PatKind::Ident(ident_id) = &pat.kind {
+                let pat_node = self.arena.pats.get(*pat);
+                if let PatKind::Ident(ident_id) = &pat_node.kind {
                     let name = self.resolve_name(*ident_id);
-                    let sym = self.make_symbol(name, SymbolKind::VARIABLE, pat.span, None);
+                    let sym = self.make_symbol(name, SymbolKind::VARIABLE, pat_node.span, None);
                     self.symbols.push(sym);
                 }
             }
@@ -125,8 +128,20 @@ impl AstVisitor for SymbolCollector<'_> {
                 let sym = self.make_symbol(name_str, SymbolKind::TYPE_PARAMETER, expr.span, None);
                 self.symbols.push(sym);
             }
+            ExprKind::Block {
+                stmts,
+                expr: opt_expr,
+            } => {
+                for &stmt_id in stmts {
+                    let stmt = self.arena.stmts.get(stmt_id);
+                    let StmtKind::Expr(inner_expr_id) = stmt.kind;
+                    self.visit_expr_id(inner_expr_id);
+                }
+                if let Some(inner) = opt_expr {
+                    self.visit_expr_id(*inner);
+                }
+            }
             _ => {}
         }
-        walk_expr(self, expr);
     }
 }
