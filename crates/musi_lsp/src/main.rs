@@ -1,8 +1,11 @@
 mod diagnostics;
 mod dispatch;
+mod folding;
 mod handlers;
 mod server;
 mod state;
+mod symbols;
+mod types;
 
 use anyhow::Result;
 use lsp_server::Connection;

@@ -1,8 +1,8 @@
 use anyhow::Result;
 use lsp_server::{Connection, Message};
 use lsp_types::{
-    InitializeParams, InitializeResult, ServerCapabilities, ServerInfo, TextDocumentSyncCapability,
-    TextDocumentSyncKind,
+    FoldingRangeProviderCapability, InitializeParams, InitializeResult, ServerCapabilities,
+    ServerInfo, TextDocumentSyncCapability, TextDocumentSyncKind,
 };
 
 use crate::dispatch::{dispatch_notification, dispatch_request};
@@ -30,6 +30,8 @@ impl LspServer {
 
         let caps = ServerCapabilities {
             text_document_sync: Some(TextDocumentSyncCapability::Kind(TextDocumentSyncKind::FULL)),
+            document_symbol_provider: Some(lsp_types::OneOf::Left(true)),
+            folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
             ..Default::default()
         };
 
@@ -52,13 +54,12 @@ impl LspServer {
             let Ok(msg) = self.conn.receiver.recv() else {
                 return Ok(());
             };
-
             match msg {
                 Message::Request(req) => {
                     if self.conn.handle_shutdown(&req)? {
                         return Ok(());
                     }
-                    if let Some(resp) = dispatch_request(&mut self.state, &req) {
+                    if let Some(resp) = dispatch_request(&self.state, &req) {
                         self.conn.sender.send(Message::Response(resp))?;
                     }
                 }
