@@ -22,6 +22,11 @@ impl<T> NodeId<T> {
         self.index
     }
 
+    /// Converts index to `usize`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if index does not fit in `usize` (only on 16-bit platforms).
     #[must_use]
     pub fn as_usize(self) -> usize {
         usize::try_from(self.index).expect("index too large")
@@ -121,6 +126,11 @@ impl<T> Arena<T> {
         self.nodes.is_empty()
     }
 
+    /// Iterates over all nodes with their IDs.
+    ///
+    /// # Panics
+    ///
+    /// Panics if arena contains more than `u32::MAX` nodes.
     pub fn iter(&self) -> impl Iterator<Item = (NodeId<T>, &T)> {
         self.nodes
             .iter()
