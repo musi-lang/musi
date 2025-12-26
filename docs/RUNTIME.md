@@ -68,9 +68,9 @@ unsafe {
 Generics are specialized at compile time. Each instantiation produces a separate concrete implementation.
 
 ```musi
-fn identity<T>(x: T): T { x };
-identity<Int32>(42);      // generates Int32 version
-identity<String>("hi");   // generates String version
+fn identity[T](x: T): T { x };
+identity[Int32](42);      // generates Int32 version
+identity[String]("hi");   // generates String version
 ```
 
 ### Sum Type Layout
@@ -78,7 +78,7 @@ identity<String>("hi");   // generates String version
 Tagged union: `[discriminant:u8][padding][payload]`
 
 ```musi
-sum Option<T> {
+sum Option[T] {
   case Some(T),
   case None
 };
@@ -114,8 +114,8 @@ Compiled to efficient dispatch:
 ```musi
 @[link(name := "c")]
 extern "C" unsafe {
-  fn malloc(size: Nat64): ^Unit;
-  fn free(ptr: ^Unit): Unit;
+  fn malloc(size: Nat64): ^Any;
+  fn free(ptr: ^Any): Any;
   fn write(fd: Int32, buf: ^Nat8, count: Nat64): Int64;
 };
 ```
@@ -141,15 +141,15 @@ export fn add_numbers(a: Int32, b: Int32): Int32 {
 
 ## Error Handling
 
-**Musi uses**: `defer` + `Expect<T, E>` (Result type)
+**Musi uses**: `defer` + `Expect[T, E]` (Result type)
 
 ```musi
-sum Expect<T, E> {
+sum Expect[T, E] {
   case Ok(T),
   case Err(E)
 };
 
-fn divide(a: Int32, b: Int32): Expect<Int32, String> {
+fn divide(a: Int32, b: Int32): Expect[Int32, String] {
   if b = 0 { return Err("division by zero"); };
   return Ok(a / b);
 };
@@ -158,7 +158,7 @@ fn divide(a: Int32, b: Int32): Expect<Int32, String> {
 **Defer**: cleanup on scope exit (normal or error)
 
 ```musi
-fn process_file(path: String): Expect<Unit, String> {
+fn process_file(path: String): Expect[Unit, String] {
   val file := open(path).unwrap();
   defer close(file);
   return read(file);
@@ -195,7 +195,7 @@ import "std/collections.ms";  // vectors, maps, sets
 
 ```musi
 val io := import "std/io.ms";
-io#writeln("Hello, world!");
+io.writeln("Hello, world!");
 ```
 
 ## Performance Model
@@ -248,12 +248,12 @@ See [BYTECODE.md](./BYTECODE.md) for complete specification.
 ### Generic Function with Monomorphization
 
 ```musi
-fn swap<T>(x: T, y: T): (T, T) {
+fn swap[T](x: T, y: T): (T, T) {
   return (y, x);
 };
 
-val a := swap<Int32>(1, 2);        // generates Int32 version
-val b := swap<String>("x", "y");   // generates String version
+val a := swap[Int32](1, 2);        // generates Int32 version
+val b := swap[String]("x", "y");   // generates String version
 ```
 
 ### Result Type Error Handling
@@ -261,14 +261,14 @@ val b := swap<String>("x", "y");   // generates String version
 ```musi
 val io := import "std/io.ms";
 
-fn safe_divide(a: Int32, b: Int32): Expect<Int32, String> {
+fn safe_divide(a: Int32, b: Int32): Expect[Int32, String] {
   if b = 0 { return Err("division by zero"); };
   return Ok(a / b);
 };
 
 match safe_divide(10, 0) {
-  case Ok(result) => io#writeln($"Result: {result}"),
-  case Err(msg) => io#writeln($"Error: {msg}")
+case Ok(result) => io.writeln($"Result: {result}"),
+case Err(msg) => io.writeln($"Error: {msg}")
 };
 ```
 
@@ -276,9 +276,9 @@ match safe_divide(10, 0) {
 
 ```musi
 extern "C" unsafe {
-  fn fopen(path: ^Nat8, mode: ^Nat8): ^Unit;
-  fn fclose(file: ^Unit): Int32;
-  fn fread(buf: ^Unit, size: Nat64, count: Nat64, file: ^Unit): Nat64;
+  fn fopen(path: ^Nat8, mode: ^Nat8): ^Any;
+  fn fclose(file: ^Any): Int32;
+  fn fread(buf: ^Any, size: Nat64, count: Nat64, file: ^Any): Nat64;
 };
 
 unsafe {
@@ -293,12 +293,12 @@ unsafe {
 ### Sum Type Dispatch
 
 ```musi
-sum Tree<T> {
+sum Tree[T] {
   case Leaf(T),
-  case Node(^Tree<T>, ^Tree<T>)
+  case Node(^Tree[T], ^Tree[T])
 };
 
-fn height<T>(tree: Tree<T>): Int32 {
+fn height[T](tree: Tree[T]): Int32 {
   match tree {
   case Leaf(_) => 1,
   case Node(left, right) => 1 + max(height(left.^), height(right.^))
