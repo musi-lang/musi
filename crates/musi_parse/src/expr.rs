@@ -1,7 +1,7 @@
 use musi_ast::{
-    Attr, AttrArg, AttrArgList, AttrList, Cond, CondPtr, Expr, ExprKind, Field, FnSig, LitKind,
-    MatchCase, Modifiers, OptExpr, OptExprPtr, Stmt, StmtKind, StmtList, SumCase, SumCaseItem,
-    SumCaseItemList, TemplatePart,
+    Attr, AttrArg, AttrArgs, Attrs, Cond, CondPtr, Expr, ExprKind, Field, FnSig, LitKind,
+    MatchCase, Modifiers, OptExpr, OptExprPtr, Stmt, StmtKind, Stmts, SumCase, SumCaseItem,
+    SumCaseItems, TemplatePart,
 };
 use musi_basic::{
     error::{IntoMusiError, MusiResult},
@@ -434,7 +434,7 @@ impl Parser<'_> {
         ))
     }
 
-    fn parse_block_body(&mut self) -> MusiResult<(StmtList, OptExprPtr)> {
+    fn parse_block_body(&mut self) -> MusiResult<(Stmts, OptExprPtr)> {
         let mut stmts = vec![];
         let mut final_expr = None;
         while !self.at(TokenKind::RBrace) && !self.is_eof() {
@@ -605,7 +605,7 @@ impl Parser<'_> {
         self.parse_expr_with_modifiers(attrs, start)
     }
 
-    fn parse_expr_with_modifiers(&mut self, attrs: AttrList, start: Span) -> MusiResult<Expr> {
+    fn parse_expr_with_modifiers(&mut self, attrs: Attrs, start: Span) -> MusiResult<Expr> {
         let mods = self.parse_modifiers();
         match self.peek_kind() {
             Some(TokenKind::KwRecord) => self.parse_expr_record_def(attrs, mods),
@@ -618,7 +618,7 @@ impl Parser<'_> {
         }
     }
 
-    fn parse_expr_record_def(&mut self, attrs: AttrList, mods: Modifiers) -> MusiResult<Expr> {
+    fn parse_expr_record_def(&mut self, attrs: Attrs, mods: Modifiers) -> MusiResult<Expr> {
         let start = self.curr_span();
         let _ = self.expect(TokenKind::KwRecord)?;
         let name = self.try_ident();
@@ -638,7 +638,7 @@ impl Parser<'_> {
         ))
     }
 
-    fn parse_expr_sum_def(&mut self, attrs: AttrList, mods: Modifiers) -> MusiResult<Expr> {
+    fn parse_expr_sum_def(&mut self, attrs: Attrs, mods: Modifiers) -> MusiResult<Expr> {
         let start = self.curr_span();
         let _ = self.expect(TokenKind::KwSum)?;
         let name = self.try_ident();
@@ -671,7 +671,7 @@ impl Parser<'_> {
         ))
     }
 
-    fn parse_sum_case_items(&mut self) -> MusiResult<SumCaseItemList> {
+    fn parse_sum_case_items(&mut self) -> MusiResult<SumCaseItems> {
         self.separated(TokenKind::Comma, |p| {
             if p.at(TokenKind::KwVar)
                 || (matches!(p.peek_kind(), Some(TokenKind::Ident(_)))
@@ -684,7 +684,7 @@ impl Parser<'_> {
         })
     }
 
-    fn parse_expr_alias_def(&mut self, attrs: AttrList, mods: Modifiers) -> MusiResult<Expr> {
+    fn parse_expr_alias_def(&mut self, attrs: Attrs, mods: Modifiers) -> MusiResult<Expr> {
         let start = self.curr_span();
         let _ = self.expect(TokenKind::KwAlias)?;
         let name = self.expect_ident()?;
@@ -703,7 +703,7 @@ impl Parser<'_> {
         ))
     }
 
-    fn parse_expr_fn_def(&mut self, attrs: AttrList, mods: Modifiers) -> MusiResult<Expr> {
+    fn parse_expr_fn_def(&mut self, attrs: Attrs, mods: Modifiers) -> MusiResult<Expr> {
         let start = self.curr_span();
         let _ = self.expect(TokenKind::KwFn)?;
         let name = self.try_ident();
@@ -755,7 +755,7 @@ impl Parser<'_> {
 // ============================================================================
 
 impl Parser<'_> {
-    fn parse_attrs(&mut self) -> MusiResult<AttrList> {
+    fn parse_attrs(&mut self) -> MusiResult<Attrs> {
         let mut attrs = vec![];
         while self.bump_if(TokenKind::AtLBrack) {
             loop {
@@ -773,7 +773,7 @@ impl Parser<'_> {
         Ok(attrs)
     }
 
-    fn parse_attr_args(&mut self) -> MusiResult<AttrArgList> {
+    fn parse_attr_args(&mut self) -> MusiResult<AttrArgs> {
         self.separated(TokenKind::Comma, |p| {
             if let Some(TokenKind::Ident(id)) = p.peek_kind() {
                 if p.peek_nth(1) == Some(TokenKind::ColonEq) {

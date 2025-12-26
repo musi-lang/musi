@@ -1,4 +1,4 @@
-use musi_ast::{Expr, ExprKind, LitKind, OptExprPtr, Pat, PatKind, PatList, TyExprList};
+use musi_ast::{Expr, ExprKind, LitKind, OptExprPtr, Pat, PatKind, Pats, TyExprs};
 use musi_basic::{
     error::{IntoMusiError, MusiResult},
     span::Span,
@@ -190,7 +190,7 @@ impl Parser<'_> {
 // ============================================================================
 
 impl Parser<'_> {
-    fn make_pat_variant(&self, name: u32, ty_args: TyExprList, args: PatList, start: Span) -> Pat {
+    fn make_pat_variant(&self, name: u32, ty_args: TyExprs, args: Pats, start: Span) -> Pat {
         Pat::new(
             PatKind::Variant {
                 name,

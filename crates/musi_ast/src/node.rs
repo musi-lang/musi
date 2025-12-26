@@ -2,8 +2,8 @@ use musi_basic::span::Span;
 use musi_lex::token::TokenKind;
 
 use crate::{
-    AttrArgList, AttrList, CondPtr, ExprList, ExprPtr, FieldList, Ident, Idents, OptExpr,
-    OptExprPtr, OptIdent, OptTyExpr, PatList, StmtList, SumCaseItemList, TyExprList, TyExprPtr,
+    AttrArgs, Attrs, CondPtr, ExprPtr, Exprs, Fields, Ident, Idents, OptExpr, OptExprPtr, OptIdent,
+    OptTyExpr, Pats, Stmts, SumCaseItems, TyExprPtr, TyExprs,
 };
 
 // ============================================================================
@@ -48,7 +48,7 @@ pub enum TyExprKind {
     /// `Int`, `String`
     Ident(Ident),
     /// `List[Int]`, `Map[String, Int]`
-    App { base: Ident, args: TyExprList },
+    App { base: Ident, args: TyExprs },
     /// `?Int`
     Optional(TyExprPtr),
     /// `[10]Int`, `[]Int`
@@ -58,7 +58,7 @@ pub enum TyExprKind {
     /// `Int -> String`
     Fn { param: TyExprPtr, ret: TyExprPtr },
     /// `(Int, String)`
-    Tuple(TyExprList),
+    Tuple(TyExprs),
 }
 
 // ============================================================================
@@ -87,21 +87,21 @@ pub enum PatKind {
     ///`_`
     Wild,
     /// `(a, b, c)`
-    Tuple(PatList),
+    Tuple(Pats),
     /// `[a, b, c]`
-    Array(PatList),
+    Array(Pats),
     /// `Point.{x, y}`
     Record { ty: OptExprPtr, fields: Idents },
     /// `Some(x)`, `None`
     Variant {
         name: Ident,
-        ty_args: TyExprList,
-        args: PatList,
+        ty_args: TyExprs,
+        args: Pats,
     },
     /// `head :: tail`
-    Cons(PatList),
+    Cons(Pats),
     /// `a | b`
-    Or(PatList),
+    Or(Pats),
 }
 
 // ============================================================================
@@ -149,11 +149,7 @@ pub enum Cond {
     /// `cond`
     Expr(Expr),
     /// `case pat := expr, expr, expr, ...`
-    Case {
-        pat: Pat,
-        init: Expr,
-        extra: ExprList,
-    },
+    Case { pat: Pat, init: Expr, extra: Exprs },
 }
 
 #[derive(Debug, Clone)]
@@ -163,17 +159,17 @@ pub enum ExprKind {
     /// `x`, `foo`
     Ident(Ident),
     /// `(a, b, c)`
-    Tuple(ExprList),
+    Tuple(Exprs),
     /// `[a, b, c]`
-    Array(ExprList),
+    Array(Exprs),
     /// `Point.{x := 1, y := 2}`
     Record {
         ty: OptExprPtr,
-        fields: FieldList,
+        fields: Fields,
     },
     /// Block: `{ stmt; stmt; expr }`
     Block {
-        stmts: StmtList,
+        stmts: Stmts,
         expr: OptExprPtr,
     },
     /// `if cond { } else if { } else { }`
@@ -216,15 +212,15 @@ pub enum ExprKind {
     },
     /// `record Point { x: Int; y: Int }`
     RecordDef {
-        attrs: AttrList,
+        attrs: Attrs,
         mods: Modifiers,
         name: OptIdent,
         ty_params: Idents,
-        fields: FieldList,
+        fields: Fields,
     },
     /// `sum Option[T] { case Some(T), case None }`
     SumDef {
-        attrs: AttrList,
+        attrs: Attrs,
         mods: Modifiers,
         name: OptIdent,
         ty_params: Idents,
@@ -232,7 +228,7 @@ pub enum ExprKind {
     },
     /// `alias Name := Type`
     Alias {
-        attrs: AttrList,
+        attrs: Attrs,
         mods: Modifiers,
         name: Ident,
         ty_params: Idents,
@@ -240,7 +236,7 @@ pub enum ExprKind {
     },
     /// `fn name(params) { body }`
     Fn {
-        attrs: AttrList,
+        attrs: Attrs,
         mods: Modifiers,
         sig: FnSig,
         body: ExprPtr,
@@ -256,7 +252,7 @@ pub enum ExprKind {
     /// `f(args)`
     Call {
         callee: ExprPtr,
-        args: ExprList,
+        args: Exprs,
     },
     /// `arr[i]`
     Index {
@@ -328,7 +324,7 @@ pub struct Field {
 pub struct FnSig {
     pub name: OptIdent,
     pub ty_params: Idents,
-    pub params: FieldList,
+    pub params: Fields,
     pub ret: OptTyExpr,
 }
 
@@ -344,8 +340,8 @@ pub struct MatchCase {
 #[derive(Debug, Clone)]
 pub struct SumCase {
     pub name: Ident,
-    pub ty_args: TyExprList,
-    pub fields: SumCaseItemList,
+    pub ty_args: TyExprs,
+    pub fields: SumCaseItems,
 }
 
 #[derive(Debug, Clone)]
@@ -358,7 +354,7 @@ pub enum SumCaseItem {
 #[derive(Debug, Clone)]
 pub struct Attr {
     pub name: Ident,
-    pub args: AttrArgList,
+    pub args: AttrArgs,
 }
 
 /// `name := value` or literal
@@ -382,5 +378,5 @@ pub struct Modifiers {
 
 #[derive(Debug, Clone)]
 pub struct Prog {
-    pub stmts: StmtList,
+    pub stmts: Stmts,
 }
