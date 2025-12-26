@@ -3,7 +3,7 @@ use musi_lex::token::TokenKind;
 
 use crate::{
     AttrArgList, AttrList, CondPtr, ExprList, ExprPtr, FieldList, Ident, Idents, OptExpr,
-    OptExprPtr, OptIdent, OptTyp, PatList, StmtList, SumCaseItemList, TypList, TypPtr,
+    OptExprPtr, OptIdent, OptTyExpr, PatList, StmtList, SumCaseItemList, TyExprList, TyExprPtr,
 };
 
 // ============================================================================
@@ -31,34 +31,34 @@ pub enum TemplatePart {
 // ============================================================================
 
 #[derive(Debug, Clone)]
-pub struct Typ {
-    pub kind: TypKind,
+pub struct TyExpr {
+    pub kind: TyExprKind,
     pub span: Span,
 }
 
-impl Typ {
+impl TyExpr {
     #[must_use]
-    pub const fn new(kind: TypKind, span: Span) -> Self {
+    pub const fn new(kind: TyExprKind, span: Span) -> Self {
         Self { kind, span }
     }
 }
 
 #[derive(Debug, Clone)]
-pub enum TypKind {
+pub enum TyExprKind {
     /// `Int`, `String`
     Ident(Ident),
     /// `List[Int]`, `Map[String, Int]`
-    App { base: Ident, args: TypList },
+    App { base: Ident, args: TyExprList },
     /// `?Int`
-    Optional(TypPtr),
+    Optional(TyExprPtr),
     /// `[10]Int`, `[]Int`
-    Array { size: Option<i64>, elem: TypPtr },
+    Array { size: Option<i64>, elem: TyExprPtr },
     /// `^Int`
-    Ptr(TypPtr),
+    Ptr(TyExprPtr),
     /// `Int -> String`
-    Fn { param: TypPtr, ret: TypPtr },
+    Fn { param: TyExprPtr, ret: TyExprPtr },
     /// `(Int, String)`
-    Tuple(TypList),
+    Tuple(TyExprList),
 }
 
 // ============================================================================
@@ -95,7 +95,7 @@ pub enum PatKind {
     /// `Some(x)`, `None`
     Variant {
         name: Ident,
-        ty_args: TypList,
+        ty_args: TyExprList,
         args: PatList,
     },
     /// `head :: tail`
@@ -236,7 +236,7 @@ pub enum ExprKind {
         mods: Modifiers,
         name: Ident,
         ty_params: Idents,
-        ty: Typ,
+        ty: TyExpr,
     },
     /// `fn name(params) { body }`
     Fn {
@@ -250,7 +250,7 @@ pub enum ExprKind {
         mods: Modifiers,
         mutable: bool,
         pat: Pat,
-        ty: OptTyp,
+        ty: OptTyExpr,
         init: ExprPtr,
     },
     /// `f(args)`
@@ -319,7 +319,7 @@ pub enum StmtKind {
 pub struct Field {
     pub mutable: bool,
     pub name: Ident,
-    pub ty: OptTyp,
+    pub ty: OptTyExpr,
     pub init: OptExpr,
 }
 
@@ -329,7 +329,7 @@ pub struct FnSig {
     pub name: OptIdent,
     pub ty_params: Idents,
     pub params: FieldList,
-    pub ret: OptTyp,
+    pub ret: OptTyExpr,
 }
 
 /// `case pat if guard => body`
@@ -344,13 +344,13 @@ pub struct MatchCase {
 #[derive(Debug, Clone)]
 pub struct SumCase {
     pub name: Ident,
-    pub ty_args: TypList,
+    pub ty_args: TyExprList,
     pub fields: SumCaseItemList,
 }
 
 #[derive(Debug, Clone)]
 pub enum SumCaseItem {
-    Type(Typ),
+    Type(TyExpr),
     Field(Field),
 }
 

@@ -3,7 +3,7 @@ pub mod expr;
 pub mod parser;
 pub mod pat;
 pub mod stmt;
-pub mod typ;
+pub mod ty_expr;
 
 #[cfg(test)]
 mod tests;

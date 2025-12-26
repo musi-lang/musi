@@ -11,6 +11,10 @@ use musi_lex::token::TokenKind;
 
 use crate::{Parser, error::ParseErrorKind, parser::Prec};
 
+// ============================================================================
+// EXPRESSION PARSING
+// ============================================================================
+
 impl Parser<'_> {
     /// # Errors
     /// Returns `ParseErrorKind` on syntax error.
@@ -618,7 +622,7 @@ impl Parser<'_> {
         let start = self.curr_span();
         let _ = self.expect(TokenKind::KwRecord)?;
         let name = self.try_ident();
-        let ty_params = self.parse_typ_params()?;
+        let ty_params = self.parse_ty_expr_params()?;
         let fields = self.delimited(TokenKind::LBrace, TokenKind::RBrace, |p| {
             p.separated(TokenKind::Semicolon, Self::parse_field)
         })?;
@@ -638,12 +642,12 @@ impl Parser<'_> {
         let start = self.curr_span();
         let _ = self.expect(TokenKind::KwSum)?;
         let name = self.try_ident();
-        let ty_params = self.parse_typ_params()?;
+        let ty_params = self.parse_ty_expr_params()?;
         let _ = self.expect(TokenKind::LBrace)?;
         let mut cases = vec![];
         while self.bump_if(TokenKind::KwCase) {
             let case_name = self.expect_ident()?;
-            let ty_args = self.parse_typ_args()?;
+            let ty_args = self.parse_ty_expr_args()?;
             let fields = self.opt_delimited(TokenKind::LParen, TokenKind::RParen, |p| {
                 p.parse_sum_case_items()
             })?;
@@ -675,7 +679,7 @@ impl Parser<'_> {
             {
                 Ok(SumCaseItem::Field(p.parse_field()?))
             } else {
-                Ok(SumCaseItem::Type(p.parse_typ()?))
+                Ok(SumCaseItem::Type(p.parse_ty_expr()?))
             }
         })
     }
@@ -684,9 +688,9 @@ impl Parser<'_> {
         let start = self.curr_span();
         let _ = self.expect(TokenKind::KwAlias)?;
         let name = self.expect_ident()?;
-        let ty_params = self.parse_typ_params()?;
+        let ty_params = self.parse_ty_expr_params()?;
         let _ = self.expect(TokenKind::ColonEq)?;
-        let ty = self.parse_typ()?;
+        let ty = self.parse_ty_expr()?;
         Ok(Expr::new(
             ExprKind::Alias {
                 attrs,
@@ -703,11 +707,11 @@ impl Parser<'_> {
         let start = self.curr_span();
         let _ = self.expect(TokenKind::KwFn)?;
         let name = self.try_ident();
-        let ty_params = self.parse_typ_params()?;
+        let ty_params = self.parse_ty_expr_params()?;
         let params = self.opt_delimited(TokenKind::LParen, TokenKind::RParen, |p| {
             p.separated(TokenKind::Comma, Self::parse_field)
         })?;
-        let ret = self.maybe(TokenKind::Colon, Self::parse_typ)?;
+        let ret = self.maybe(TokenKind::Colon, Self::parse_ty_expr)?;
         let body = Box::new(self.parse_expr_block()?);
         Ok(Expr::new(
             ExprKind::Fn {
@@ -730,7 +734,7 @@ impl Parser<'_> {
         let mutable = self.at(TokenKind::KwVar);
         let _ = self.advance();
         let pat = self.parse_pat()?;
-        let ty = self.maybe(TokenKind::Colon, Self::parse_typ)?;
+        let ty = self.maybe(TokenKind::Colon, Self::parse_ty_expr)?;
         let _ = self.expect(TokenKind::ColonEq)?;
         let init = Box::new(self.parse_expr()?);
         Ok(Expr::new(
@@ -745,6 +749,10 @@ impl Parser<'_> {
         ))
     }
 }
+
+// ============================================================================
+// EXPRESSION HELPERS
+// ============================================================================
 
 impl Parser<'_> {
     fn parse_attrs(&mut self) -> MusiResult<AttrList> {
@@ -824,7 +832,7 @@ impl Parser<'_> {
     fn parse_field(&mut self) -> MusiResult<Field> {
         let mutable = self.bump_if(TokenKind::KwVar);
         let name = self.expect_ident()?;
-        let ty = self.maybe(TokenKind::Colon, Self::parse_typ)?;
+        let ty = self.maybe(TokenKind::Colon, Self::parse_ty_expr)?;
         let init = self.maybe(TokenKind::ColonEq, Self::parse_expr)?;
         Ok(Field {
             mutable,

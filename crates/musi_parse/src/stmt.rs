@@ -4,6 +4,10 @@ use musi_lex::token::TokenKind;
 
 use crate::Parser;
 
+// ============================================================================
+// STATEMENT PARSING
+// ============================================================================
+
 impl Parser<'_> {
     /// # Errors
     /// Returns `ParseErrorKind` on syntax error.

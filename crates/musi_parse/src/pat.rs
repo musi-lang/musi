@@ -1,4 +1,4 @@
-use musi_ast::{Expr, ExprKind, LitKind, OptExprPtr, Pat, PatKind, PatList, TypList};
+use musi_ast::{Expr, ExprKind, LitKind, OptExprPtr, Pat, PatKind, PatList, TyExprList};
 use musi_basic::{
     error::{IntoMusiError, MusiResult},
     span::Span,
@@ -6,6 +6,10 @@ use musi_basic::{
 use musi_lex::token::TokenKind;
 
 use crate::{Parser, error::ParseErrorKind};
+
+// ============================================================================
+// PATTERN PARSING
+// ============================================================================
 
 impl Parser<'_> {
     /// # Errors
@@ -111,7 +115,7 @@ impl Parser<'_> {
             let ty_expr = Expr::new(ExprKind::Ident(id), start);
             return self.parse_pat_record(Some(Box::new(ty_expr)), start);
         }
-        let ty_args = self.parse_typ_args()?;
+        let ty_args = self.parse_ty_expr_args()?;
         if self.at(TokenKind::LParen) {
             let args = self.delimited(TokenKind::LParen, TokenKind::RParen, |p| {
                 p.separated(TokenKind::Comma, Self::parse_pat)
@@ -181,8 +185,12 @@ impl Parser<'_> {
     }
 }
 
+// ============================================================================
+// PATTERN HELPERS
+// ============================================================================
+
 impl Parser<'_> {
-    fn make_pat_variant(&self, name: u32, ty_args: TypList, args: PatList, start: Span) -> Pat {
+    fn make_pat_variant(&self, name: u32, ty_args: TyExprList, args: PatList, start: Span) -> Pat {
         Pat::new(
             PatKind::Variant {
                 name,

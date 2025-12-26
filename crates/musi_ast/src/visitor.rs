@@ -1,6 +1,6 @@
 use crate::{
     Attr, AttrArg, Cond, Expr, ExprKind, Field, FnSig, LitKind, MatchCase, Pat, PatKind, Prog,
-    Stmt, StmtKind, SumCase, SumCaseItem, TemplatePart, Typ, TypKind,
+    Stmt, StmtKind, SumCase, SumCaseItem, TemplatePart, TyExpr, TyExprKind,
 };
 
 pub trait Visitor: Sized {
@@ -34,11 +34,11 @@ pub trait Visitor: Sized {
         }
     }
 
-    fn visit_typ(&mut self, typ: &Typ) {
+    fn visit_typ(&mut self, typ: &TyExpr) {
         walk_typ(self, typ);
     }
 
-    fn visit_typs(&mut self, typs: &[Typ]) {
+    fn visit_typs(&mut self, typs: &[TyExpr]) {
         for t in typs {
             self.visit_typ(t);
         }
@@ -48,7 +48,7 @@ pub trait Visitor: Sized {
         walk_pat(self, pat);
     }
 
-    fn visit_typ_refs(&mut self, typs: &[&Typ]) {
+    fn visit_typ_refs(&mut self, typs: &[&TyExpr]) {
         for t in typs {
             self.visit_typ(t);
         }
@@ -212,14 +212,14 @@ pub fn walk_expr<V: Visitor>(v: &mut V, expr: &Expr) {
     }
 }
 
-pub fn walk_typ<V: Visitor>(v: &mut V, typ: &Typ) {
+pub fn walk_typ<V: Visitor>(v: &mut V, typ: &TyExpr) {
     match &typ.kind {
-        TypKind::Ident(_) => {}
-        TypKind::App { args, .. } => v.visit_typs(args),
-        TypKind::Optional(t) | TypKind::Ptr(t) => v.visit_typ(t),
-        TypKind::Array { elem, .. } => v.visit_typ(elem),
-        TypKind::Fn { param, ret } => v.visit_typ_refs(&[param, ret]),
-        TypKind::Tuple(ts) => v.visit_typs(ts),
+        TyExprKind::Ident(_) => {}
+        TyExprKind::App { args, .. } => v.visit_typs(args),
+        TyExprKind::Optional(t) | TyExprKind::Ptr(t) => v.visit_typ(t),
+        TyExprKind::Array { elem, .. } => v.visit_typ(elem),
+        TyExprKind::Fn { param, ret } => v.visit_typ_refs(&[param, ret]),
+        TyExprKind::Tuple(ts) => v.visit_typs(ts),
     }
 }
 

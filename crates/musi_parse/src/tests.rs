@@ -1,4 +1,4 @@
-use musi_ast::{Cond, Expr, ExprKind, LitKind, Pat, PatKind, Typ, TypKind};
+use musi_ast::{Cond, Expr, ExprKind, LitKind, Pat, PatKind, TyExpr, TyExprKind};
 use musi_basic::{interner::Interner, source::SourceFile};
 use musi_lex::{lexer::tokenize, token::TokenKind};
 
@@ -33,10 +33,10 @@ impl TestContext {
         parser.parse_pat().expect("parse failed")
     }
 
-    fn parse_typ(&mut self, input: &str) -> Typ {
+    fn parse_typ(&mut self, input: &str) -> TyExpr {
         let tokens = self.tokenize(input);
         let mut parser = Parser::new(&tokens);
-        parser.parse_typ().expect("parse failed")
+        parser.parse_ty_expr().expect("parse failed")
     }
 
     fn intern(&mut self, s: &str) -> u32 {
@@ -765,28 +765,28 @@ fn test_typ_ident() {
     let mut ctx = TestContext::new();
     let int = ctx.intern("Int");
     let typ = ctx.parse_typ("Int");
-    assert!(matches!(typ.kind, TypKind::Ident(i) if i == int));
+    assert!(matches!(typ.kind, TyExprKind::Ident(i) if i == int));
 }
 
 #[test]
 fn test_typ_optional() {
     let mut ctx = TestContext::new();
     let typ = ctx.parse_typ("?Int");
-    assert!(matches!(typ.kind, TypKind::Optional(_)));
+    assert!(matches!(typ.kind, TyExprKind::Optional(_)));
 }
 
 #[test]
 fn test_typ_ptr() {
     let mut ctx = TestContext::new();
     let typ = ctx.parse_typ("^Int");
-    assert!(matches!(typ.kind, TypKind::Ptr(_)));
+    assert!(matches!(typ.kind, TyExprKind::Ptr(_)));
 }
 
 #[test]
 fn test_typ_array_unsized() {
     let mut ctx = TestContext::new();
     let typ = ctx.parse_typ("[]Int");
-    if let TypKind::Array { size, .. } = typ.kind {
+    if let TyExprKind::Array { size, .. } = typ.kind {
         assert!(size.is_none());
     } else {
         panic!("expected array type");
@@ -797,7 +797,7 @@ fn test_typ_array_unsized() {
 fn test_typ_array_sized() {
     let mut ctx = TestContext::new();
     let typ = ctx.parse_typ("[10]Int");
-    if let TypKind::Array { size, .. } = typ.kind {
+    if let TyExprKind::Array { size, .. } = typ.kind {
         assert!(size.is_some());
     } else {
         panic!("expected array type");
@@ -808,14 +808,14 @@ fn test_typ_array_sized() {
 fn test_typ_fn() {
     let mut ctx = TestContext::new();
     let typ = ctx.parse_typ("Int -> String");
-    assert!(matches!(typ.kind, TypKind::Fn { .. }));
+    assert!(matches!(typ.kind, TyExprKind::Fn { .. }));
 }
 
 #[test]
 fn test_typ_tuple() {
     let mut ctx = TestContext::new();
     let typ = ctx.parse_typ("(Int, String)");
-    if let TypKind::Tuple(elems) = typ.kind {
+    if let TyExprKind::Tuple(elems) = typ.kind {
         assert_eq!(elems.len(), 2);
     } else {
         panic!("expected tuple type");
@@ -827,7 +827,7 @@ fn test_typ_app() {
     let mut ctx = TestContext::new();
     let list = ctx.intern("List");
     let typ = ctx.parse_typ("List[Int]");
-    if let TypKind::App { base, args } = typ.kind {
+    if let TyExprKind::App { base, args } = typ.kind {
         assert_eq!(base, list);
         assert_eq!(args.len(), 1);
     } else {
@@ -840,7 +840,7 @@ fn test_typ_app() {
 fn test_typ_complex() {
     let mut ctx = TestContext::new();
     let typ = ctx.parse_typ("?[10]^Int -> (Int, String)");
-    assert!(matches!(typ.kind, TypKind::Fn { .. }));
+    assert!(matches!(typ.kind, TyExprKind::Fn { .. }));
 }
 
 #[test]
