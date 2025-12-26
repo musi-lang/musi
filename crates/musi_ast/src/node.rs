@@ -1,9 +1,13 @@
+//! AST node definitions.
+//!
+//! All child references use `NodeId` for arena-based allocation.
+
 use musi_basic::span::Span;
 use musi_lex::token::TokenKind;
 
 use crate::{
-    AttrArgs, Attrs, CondPtr, ExprPtr, Exprs, Fields, Ident, Idents, OptExpr, OptExprPtr, OptIdent,
-    OptTyExpr, Pats, Stmts, SumCaseItems, TyExprPtr, TyExprs,
+    AttrArgs, Attrs, CondId, ExprId, ExprIds, Fields, Ident, Idents, OptExprId, OptIdent,
+    OptTyExprId, PatId, PatIds, StmtId, StmtIds, SumCaseItems, TyExprId, TyExprIds,
 };
 
 // ============================================================================
@@ -23,23 +27,24 @@ pub enum LitKind {
 #[derive(Debug, Clone)]
 pub enum TemplatePart {
     Text(Ident),
-    Expr(ExprPtr),
+    Expr(ExprId),
 }
 
 // ============================================================================
-// TYPES
+// TYPE EXPRESSIONS
 // ============================================================================
 
 #[derive(Debug, Clone)]
 pub struct TyExpr {
+    pub id: TyExprId,
     pub kind: TyExprKind,
     pub span: Span,
 }
 
 impl TyExpr {
     #[must_use]
-    pub const fn new(kind: TyExprKind, span: Span) -> Self {
-        Self { kind, span }
+    pub const fn new(id: TyExprId, kind: TyExprKind, span: Span) -> Self {
+        Self { id, kind, span }
     }
 }
 
@@ -48,17 +53,17 @@ pub enum TyExprKind {
     /// `Int`, `String`
     Ident(Ident),
     /// `List[Int]`, `Map[String, Int]`
-    App { base: Ident, args: TyExprs },
+    App { base: Ident, args: TyExprIds },
     /// `?Int`
-    Optional(TyExprPtr),
+    Optional(TyExprId),
     /// `[10]Int`, `[]Int`
-    Array { size: Option<i64>, elem: TyExprPtr },
+    Array { size: Option<i64>, elem: TyExprId },
     /// `^Int`
-    Ptr(TyExprPtr),
+    Ptr(TyExprId),
     /// `Int -> String`
-    Fn { param: TyExprPtr, ret: TyExprPtr },
+    Fn { param: TyExprId, ret: TyExprId },
     /// `(Int, String)`
-    Tuple(TyExprs),
+    Tuple(TyExprIds),
 }
 
 // ============================================================================
@@ -67,14 +72,15 @@ pub enum TyExprKind {
 
 #[derive(Debug, Clone)]
 pub struct Pat {
+    pub id: PatId,
     pub kind: PatKind,
     pub span: Span,
 }
 
 impl Pat {
     #[must_use]
-    pub const fn new(kind: PatKind, span: Span) -> Self {
-        Self { kind, span }
+    pub const fn new(id: PatId, kind: PatKind, span: Span) -> Self {
+        Self { id, kind, span }
     }
 }
 
@@ -87,21 +93,21 @@ pub enum PatKind {
     ///`_`
     Wild,
     /// `(a, b, c)`
-    Tuple(Pats),
+    Tuple(PatIds),
     /// `[a, b, c]`
-    Array(Pats),
+    Array(PatIds),
     /// `Point.{x, y}`
-    Record { ty: OptExprPtr, fields: Idents },
+    Record { ty: OptExprId, fields: Idents },
     /// `Some(x)`, `None`
     Variant {
         name: Ident,
-        ty_args: TyExprs,
-        args: Pats,
+        ty_args: TyExprIds,
+        args: PatIds,
     },
     /// `head :: tail`
-    Cons(Pats),
+    Cons(PatIds),
     /// `a | b`
-    Or(Pats),
+    Or(PatIds),
 }
 
 // ============================================================================
@@ -110,46 +116,41 @@ pub enum PatKind {
 
 #[derive(Debug, Clone)]
 pub struct Expr {
+    pub id: ExprId,
     pub kind: ExprKind,
     pub span: Span,
 }
 
 impl Expr {
     #[must_use]
-    pub const fn new(kind: ExprKind, span: Span) -> Self {
-        Self { kind, span }
-    }
-
-    #[must_use]
-    pub fn binary(op: TokenKind, lhs: Self, rhs: Self, span: Span) -> Self {
-        Self::new(
-            ExprKind::Binary {
-                op,
-                lhs: Box::new(lhs),
-                rhs: Box::new(rhs),
-            },
-            span,
-        )
-    }
-
-    #[must_use]
-    pub fn unary(op: TokenKind, operand: Self, span: Span) -> Self {
-        Self::new(
-            ExprKind::Unary {
-                op,
-                operand: Box::new(operand),
-            },
-            span,
-        )
+    pub const fn new(id: ExprId, kind: ExprKind, span: Span) -> Self {
+        Self { id, kind, span }
     }
 }
 
 #[derive(Debug, Clone)]
-pub enum Cond {
+pub struct Cond {
+    pub id: CondId,
+    pub kind: CondKind,
+}
+
+impl Cond {
+    #[must_use]
+    pub const fn new(id: CondId, kind: CondKind) -> Self {
+        Self { id, kind }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum CondKind {
     /// `cond`
-    Expr(Expr),
+    Expr(ExprId),
     /// `case pat := expr, expr, expr, ...`
-    Case { pat: Pat, init: Expr, extra: Exprs },
+    Case {
+        pat: PatId,
+        init: ExprId,
+        extra: ExprIds,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -159,50 +160,50 @@ pub enum ExprKind {
     /// `x`, `foo`
     Ident(Ident),
     /// `(a, b, c)`
-    Tuple(Exprs),
+    Tuple(ExprIds),
     /// `[a, b, c]`
-    Array(Exprs),
+    Array(ExprIds),
     /// `Point.{x := 1, y := 2}`
     Record {
-        ty: OptExprPtr,
+        ty: OptExprId,
         fields: Fields,
     },
     /// Block: `{ stmt; stmt; expr }`
     Block {
-        stmts: Stmts,
-        expr: OptExprPtr,
+        stmts: StmtIds,
+        expr: OptExprId,
     },
     /// `if cond { } else if { } else { }`
     If {
-        cond: CondPtr,
-        then_br: ExprPtr,
-        else_br: OptExprPtr,
+        cond: CondId,
+        then_br: ExprId,
+        else_br: OptExprId,
     },
     While {
-        cond: CondPtr,
-        body: ExprPtr,
+        cond: CondId,
+        body: ExprId,
     },
     /// `for pat in iter { }`
     For {
-        pat: Pat,
-        iter: ExprPtr,
-        body: ExprPtr,
+        pat: PatId,
+        iter: ExprId,
+        body: ExprId,
     },
     /// `match expr { cases }`
     Match {
-        scrutinee: ExprPtr,
+        scrutinee: ExprId,
         cases: Vec<MatchCase>,
     },
     /// `return expr`
-    Return(OptExprPtr),
+    Return(OptExprId),
     /// `defer expr`
-    Defer(ExprPtr),
+    Defer(ExprId),
     /// `break expr`
-    Break(OptExprPtr),
+    Break(OptExprId),
     /// `cycle`
     Cycle,
     /// `unsafe { }`
-    Unsafe(ExprPtr),
+    Unsafe(ExprId),
     /// `import "path"`
     Import(Ident),
     /// `extern "C" { fn foo(); }`
@@ -232,61 +233,61 @@ pub enum ExprKind {
         mods: Modifiers,
         name: Ident,
         ty_params: Idents,
-        ty: TyExpr,
+        ty: TyExprId,
     },
     /// `fn name(params) { body }`
     Fn {
         attrs: Attrs,
         mods: Modifiers,
         sig: FnSig,
-        body: ExprPtr,
+        body: ExprId,
     },
     /// `val x := 1` or `var x := 1`
     Bind {
         mods: Modifiers,
         mutable: bool,
-        pat: Pat,
-        ty: OptTyExpr,
-        init: ExprPtr,
+        pat: PatId,
+        ty: OptTyExprId,
+        init: ExprId,
     },
     /// `f(args)`
     Call {
-        callee: ExprPtr,
-        args: Exprs,
+        callee: ExprId,
+        args: ExprIds,
     },
     /// `arr[i]`
     Index {
-        base: ExprPtr,
-        index: ExprPtr,
+        base: ExprId,
+        index: ExprId,
     },
     /// `obj.field`
     Field {
-        base: ExprPtr,
+        base: ExprId,
         field: Ident,
     },
     /// `expr.^`
-    Deref(ExprPtr),
+    Deref(ExprId),
     /// `-x`, `not x`, `~x`, `@x`
     Unary {
         op: TokenKind,
-        operand: ExprPtr,
+        operand: ExprId,
     },
     /// `a + b`, `a and b`
     Binary {
         op: TokenKind,
-        lhs: ExprPtr,
-        rhs: ExprPtr,
+        lhs: ExprId,
+        rhs: ExprId,
     },
     /// `a..b`, `a..<b`
     Range {
-        start: ExprPtr,
-        end: OptExprPtr,
+        start: ExprId,
+        end: OptExprId,
         inclusive: bool,
     },
     /// `x <- y`
     Assign {
-        target: ExprPtr,
-        value: ExprPtr,
+        target: ExprId,
+        value: ExprId,
     },
 }
 
@@ -296,14 +297,22 @@ pub enum ExprKind {
 
 #[derive(Debug, Clone)]
 pub struct Stmt {
+    pub id: StmtId,
     pub kind: StmtKind,
     pub span: Span,
+}
+
+impl Stmt {
+    #[must_use]
+    pub const fn new(id: StmtId, kind: StmtKind, span: Span) -> Self {
+        Self { id, kind, span }
+    }
 }
 
 #[derive(Debug, Clone)]
 pub enum StmtKind {
     /// `expr;`
-    Expr(Expr),
+    Expr(ExprId),
 }
 
 // ============================================================================
@@ -315,8 +324,8 @@ pub enum StmtKind {
 pub struct Field {
     pub mutable: bool,
     pub name: Ident,
-    pub ty: OptTyExpr,
-    pub init: OptExpr,
+    pub ty: OptTyExprId,
+    pub init: OptExprId,
 }
 
 /// `name[T](params): RetType`
@@ -325,28 +334,28 @@ pub struct FnSig {
     pub name: OptIdent,
     pub ty_params: Idents,
     pub params: Fields,
-    pub ret: OptTyExpr,
+    pub ret: OptTyExprId,
 }
 
 /// `case pat if guard => body`
 #[derive(Debug, Clone)]
 pub struct MatchCase {
-    pub pat: Pat,
-    pub guard: OptExpr,
-    pub body: Expr,
+    pub pat: PatId,
+    pub guard: OptExprId,
+    pub body: ExprId,
 }
 
 /// `case Name[T](fields)`
 #[derive(Debug, Clone)]
 pub struct SumCase {
     pub name: Ident,
-    pub ty_args: TyExprs,
+    pub ty_args: TyExprIds,
     pub fields: SumCaseItems,
 }
 
 #[derive(Debug, Clone)]
 pub enum SumCaseItem {
-    Type(TyExpr),
+    Type(TyExprId),
     Field(Field),
 }
 
@@ -361,7 +370,7 @@ pub struct Attr {
 #[derive(Debug, Clone)]
 pub struct AttrArg {
     pub name: OptIdent,
-    pub value: OptExpr,
+    pub value: OptExprId,
     pub lit: Option<LitKind>,
 }
 
@@ -376,7 +385,7 @@ pub struct Modifiers {
 // PROGRAM
 // ============================================================================
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Prog {
-    pub stmts: Stmts,
+    pub stmts: StmtIds,
 }
