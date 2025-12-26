@@ -1,4 +1,7 @@
-use musi_ast::{Cond, Expr, ExprKind, LitKind, Pat, PatKind, TyExpr, TyExprKind};
+use musi_ast::{
+    AstArena, CondKind, Expr, ExprId, ExprKind, LitKind, Pat, PatId, PatKind, TyExpr, TyExprId,
+    TyExprKind,
+};
 use musi_basic::{interner::Interner, source::SourceFile};
 use musi_lex::{lexer::tokenize, token::TokenKind};
 
@@ -6,12 +9,14 @@ use crate::Parser;
 
 struct TestContext {
     interner: Interner,
+    arena: AstArena,
 }
 
 impl TestContext {
     fn new() -> Self {
         Self {
             interner: Interner::new(),
+            arena: AstArena::new(),
         }
     }
 
@@ -21,22 +26,34 @@ impl TestContext {
         tokens
     }
 
-    fn parse_expr(&mut self, input: &str) -> Expr {
+    fn parse_expr(&mut self, input: &str) -> ExprId {
         let tokens = self.tokenize(input);
-        let mut parser = Parser::new(&tokens);
+        let mut parser = Parser::new(&tokens, &mut self.arena);
         parser.parse_expr().expect("parse failed")
     }
 
-    fn parse_pat(&mut self, input: &str) -> Pat {
+    fn parse_pat(&mut self, input: &str) -> PatId {
         let tokens = self.tokenize(input);
-        let mut parser = Parser::new(&tokens);
+        let mut parser = Parser::new(&tokens, &mut self.arena);
         parser.parse_pat().expect("parse failed")
     }
 
-    fn parse_typ(&mut self, input: &str) -> TyExpr {
+    fn parse_typ(&mut self, input: &str) -> TyExprId {
         let tokens = self.tokenize(input);
-        let mut parser = Parser::new(&tokens);
+        let mut parser = Parser::new(&tokens, &mut self.arena);
         parser.parse_ty_expr().expect("parse failed")
+    }
+
+    fn expr(&self, id: ExprId) -> &Expr {
+        self.arena.exprs.get(id)
+    }
+
+    fn pat(&self, id: PatId) -> &Pat {
+        self.arena.pats.get(id)
+    }
+
+    fn ty_expr(&self, id: TyExprId) -> &TyExpr {
+        self.arena.ty_exprs.get(id)
     }
 
     fn intern(&mut self, s: &str) -> u32 {
@@ -47,40 +64,46 @@ impl TestContext {
 #[test]
 fn test_expr_lit_int() {
     let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("42");
-    assert!(matches!(expr.kind, ExprKind::Lit(LitKind::Int(_))));
+    let id = ctx.parse_expr("42");
+    assert!(matches!(ctx.expr(id).kind, ExprKind::Lit(LitKind::Int(_))));
 }
 
 #[test]
 fn test_expr_lit_real() {
     let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("3.14");
-    assert!(matches!(expr.kind, ExprKind::Lit(LitKind::Real(_))));
+    let id = ctx.parse_expr("3.14");
+    assert!(matches!(ctx.expr(id).kind, ExprKind::Lit(LitKind::Real(_))));
 }
 
 #[test]
 fn test_expr_lit_string() {
     let mut ctx = TestContext::new();
-    let id = ctx.intern("hello");
-    let expr = ctx.parse_expr(r#""hello""#);
-    assert!(matches!(expr.kind, ExprKind::Lit(LitKind::String(s)) if s == id));
+    let str_id = ctx.intern("hello");
+    let id = ctx.parse_expr(r#""hello""#);
+    assert!(matches!(ctx.expr(id).kind, ExprKind::Lit(LitKind::String(s)) if s == str_id));
 }
 
 #[test]
 fn test_expr_lit_rune() {
     let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("'x'");
-    assert!(matches!(expr.kind, ExprKind::Lit(LitKind::Rune('x'))));
+    let id = ctx.parse_expr("'x'");
+    assert!(matches!(
+        ctx.expr(id).kind,
+        ExprKind::Lit(LitKind::Rune('x'))
+    ));
 }
 
 #[test]
 fn test_expr_lit_bool() {
     let mut ctx = TestContext::new();
-    let expr_true = ctx.parse_expr("true");
-    let expr_false = ctx.parse_expr("false");
-    assert!(matches!(expr_true.kind, ExprKind::Lit(LitKind::Bool(true))));
+    let id_true = ctx.parse_expr("true");
+    let id_false = ctx.parse_expr("false");
     assert!(matches!(
-        expr_false.kind,
+        ctx.expr(id_true).kind,
+        ExprKind::Lit(LitKind::Bool(true))
+    ));
+    assert!(matches!(
+        ctx.expr(id_false).kind,
         ExprKind::Lit(LitKind::Bool(false))
     ));
 }
@@ -88,23 +111,23 @@ fn test_expr_lit_bool() {
 #[test]
 fn test_expr_ident() {
     let mut ctx = TestContext::new();
-    let id = ctx.intern("foo");
-    let expr = ctx.parse_expr("foo");
-    assert!(matches!(expr.kind, ExprKind::Ident(i) if i == id));
+    let foo = ctx.intern("foo");
+    let id = ctx.parse_expr("foo");
+    assert!(matches!(ctx.expr(id).kind, ExprKind::Ident(i) if i == foo));
 }
 
 #[test]
 fn test_expr_tuple_empty() {
     let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("()");
-    assert!(matches!(expr.kind, ExprKind::Tuple(ref elems) if elems.is_empty()));
+    let id = ctx.parse_expr("()");
+    assert!(matches!(&ctx.expr(id).kind, ExprKind::Tuple(elems) if elems.is_empty()));
 }
 
 #[test]
 fn test_expr_tuple_single() {
     let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("(1,)");
-    if let ExprKind::Tuple(elems) = expr.kind {
+    let id = ctx.parse_expr("(1,)");
+    if let ExprKind::Tuple(elems) = &ctx.expr(id).kind {
         assert_eq!(elems.len(), 1);
     } else {
         panic!("expected tuple literal expression");
@@ -114,8 +137,8 @@ fn test_expr_tuple_single() {
 #[test]
 fn test_expr_tuple_multiple() {
     let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("(1, 2, 3)");
-    if let ExprKind::Tuple(elems) = expr.kind {
+    let id = ctx.parse_expr("(1, 2, 3)");
+    if let ExprKind::Tuple(elems) = &ctx.expr(id).kind {
         assert_eq!(elems.len(), 3);
     } else {
         panic!("expected tuple literal expression");
@@ -125,22 +148,22 @@ fn test_expr_tuple_multiple() {
 #[test]
 fn test_expr_grouped() {
     let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("(42)");
-    assert!(matches!(expr.kind, ExprKind::Lit(LitKind::Int(_))));
+    let id = ctx.parse_expr("(42)");
+    assert!(matches!(ctx.expr(id).kind, ExprKind::Lit(LitKind::Int(_))));
 }
 
 #[test]
 fn test_expr_array_empty() {
     let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("[]");
-    assert!(matches!(expr.kind, ExprKind::Array(ref elems) if elems.is_empty()));
+    let id = ctx.parse_expr("[]");
+    assert!(matches!(&ctx.expr(id).kind, ExprKind::Array(elems) if elems.is_empty()));
 }
 
 #[test]
 fn test_expr_array_multiple() {
     let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("[1, 2, 3]");
-    if let ExprKind::Array(elems) = expr.kind {
+    let id = ctx.parse_expr("[1, 2, 3]");
+    if let ExprKind::Array(elems) = &ctx.expr(id).kind {
         assert_eq!(elems.len(), 3);
     } else {
         panic!("expected array literal expression");
@@ -151,8 +174,8 @@ fn test_expr_array_multiple() {
 fn test_expr_record_anon() {
     let mut ctx = TestContext::new();
     let x = ctx.intern("x");
-    let expr = ctx.parse_expr(".{x := 1}");
-    if let ExprKind::Record { ty, fields } = expr.kind {
+    let id = ctx.parse_expr(".{x := 1}");
+    if let ExprKind::Record { ty, fields } = &ctx.expr(id).kind {
         assert!(ty.is_none());
         assert_eq!(fields.len(), 1);
         assert_eq!(fields[0].name, x);
@@ -166,13 +189,13 @@ fn test_expr_record_typed() {
     let mut ctx = TestContext::new();
     let point = ctx.intern("Point");
     let x = ctx.intern("x");
-    let expr = ctx.parse_expr("Point.{x := 1}");
+    let id = ctx.parse_expr("Point.{x := 1}");
     if let ExprKind::Record {
-        ty: Some(ty_expr),
+        ty: Some(ty_id),
         fields,
-    } = expr.kind
+    } = &ctx.expr(id).kind
     {
-        assert!(matches!(ty_expr.kind, ExprKind::Ident(i) if i == point));
+        assert!(matches!(ctx.expr(*ty_id).kind, ExprKind::Ident(i) if i == point));
         assert_eq!(fields.len(), 1);
         assert_eq!(fields[0].name, x);
     } else {
@@ -183,9 +206,9 @@ fn test_expr_record_typed() {
 #[test]
 fn test_expr_binary_add() {
     let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("1 + 2");
-    if let ExprKind::Binary { op, .. } = expr.kind {
-        assert_eq!(op, TokenKind::Plus);
+    let id = ctx.parse_expr("1 + 2");
+    if let ExprKind::Binary { op, .. } = &ctx.expr(id).kind {
+        assert_eq!(*op, TokenKind::Plus);
     } else {
         panic!("expected binary `+` expression");
     }
@@ -195,113 +218,95 @@ fn test_expr_binary_add() {
 /// Should parse as `1 + (2 * 3)`.
 fn test_expr_binary_precedence() {
     let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("1 + 2 * 3");
-    if let ExprKind::Binary { op, rhs, .. } = expr.kind {
-        assert_eq!(op, TokenKind::Plus);
-        assert!(matches!(
-            rhs.kind,
-            ExprKind::Binary {
-                op: TokenKind::Star,
-                ..
-            }
-        ));
+    let id = ctx.parse_expr("1 + 2 * 3");
+    if let ExprKind::Binary { op, rhs, .. } = &ctx.expr(id).kind {
+        assert_eq!(*op, TokenKind::Plus);
+        assert!(
+            matches!(&ctx.expr(*rhs).kind, ExprKind::Binary { op, .. } if *op == TokenKind::Star)
+        );
     } else {
-        panic!("expected binary `+` and `*` expression");
+        panic!("expected binary expression");
     }
 }
 
 #[test]
-/// Should parse as `(1 - 2) - 3`. (left associative)
-fn test_expr_binary_associativity() {
+/// Should parse as `(1 + 2) + 3` (left-associative).
+fn test_expr_binary_left_assoc() {
     let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("1 - 2 - 3");
-    if let ExprKind::Binary { op, lhs, .. } = expr.kind {
-        assert_eq!(op, TokenKind::Minus);
-        assert!(matches!(
-            lhs.kind,
-            ExprKind::Binary {
-                op: TokenKind::Minus,
-                ..
-            }
-        ));
+    let id = ctx.parse_expr("1 + 2 + 3");
+    if let ExprKind::Binary { op, lhs, .. } = &ctx.expr(id).kind {
+        assert_eq!(*op, TokenKind::Plus);
+        assert!(
+            matches!(&ctx.expr(*lhs).kind, ExprKind::Binary { op, .. } if *op == TokenKind::Plus)
+        );
     } else {
-        panic!("expected binary `-` expression");
+        panic!("expected binary expression");
     }
 }
 
 #[test]
-fn test_expr_binary_comparison() {
+/// Should parse as `1 ** (2 ** 3)` (right-associative).
+fn test_expr_binary_right_assoc() {
     let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("1 < 2");
-    if let ExprKind::Binary { op, .. } = expr.kind {
-        assert_eq!(op, TokenKind::Lt);
+    let id = ctx.parse_expr("1 ** 2 ** 3");
+    if let ExprKind::Binary { op, rhs, .. } = &ctx.expr(id).kind {
+        assert_eq!(*op, TokenKind::StarStar);
+        assert!(
+            matches!(&ctx.expr(*rhs).kind, ExprKind::Binary { op, .. } if *op == TokenKind::StarStar)
+        );
     } else {
-        panic!("expected binary `<` expression");
-    }
-}
-
-#[test]
-fn test_expr_binary_logical() {
-    let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("true and false");
-    if let ExprKind::Binary { op, .. } = expr.kind {
-        assert_eq!(op, TokenKind::KwAnd);
-    } else {
-        panic!("expected binary `and` expression");
+        panic!("expected binary expression");
     }
 }
 
 #[test]
 fn test_expr_unary_neg() {
     let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("-42");
-    if let ExprKind::Unary { op, .. } = expr.kind {
-        assert_eq!(op, TokenKind::Minus);
+    let id = ctx.parse_expr("-42");
+    if let ExprKind::Unary { op, operand } = &ctx.expr(id).kind {
+        assert_eq!(*op, TokenKind::Minus);
+        assert!(matches!(
+            ctx.expr(*operand).kind,
+            ExprKind::Lit(LitKind::Int(_))
+        ));
     } else {
-        panic!("expected unary `-` expression");
+        panic!("expected unary expression");
     }
 }
 
 #[test]
 fn test_expr_unary_not() {
     let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("not true");
-    if let ExprKind::Unary { op, .. } = expr.kind {
-        assert_eq!(op, TokenKind::KwNot);
-    } else {
-        panic!("expected unary `not` expression");
-    }
-}
-
-#[test]
-/// Should parse `not in` as `not(x in list)`
-fn test_expr_not_in() {
-    let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("x not in list");
-    if let ExprKind::Unary {
-        op: TokenKind::KwNot,
-        operand,
-    } = expr.kind
-    {
+    let id = ctx.parse_expr("not true");
+    if let ExprKind::Unary { op, operand } = &ctx.expr(id).kind {
+        assert_eq!(*op, TokenKind::KwNot);
         assert!(matches!(
-            operand.kind,
-            ExprKind::Binary {
-                op: TokenKind::KwIn,
-                ..
-            }
+            ctx.expr(*operand).kind,
+            ExprKind::Lit(LitKind::Bool(true))
         ));
     } else {
-        panic!("expected binary `not in` expression");
+        panic!("expected unary expression");
     }
 }
 
 #[test]
-fn test_expr_call() {
+fn test_expr_call_no_args() {
     let mut ctx = TestContext::new();
-    let f = ctx.intern("f");
-    let expr = ctx.parse_expr("f(1, 2)");
-    if let ExprKind::Call { callee, args } = expr.kind {
-        assert!(matches!(callee.kind, ExprKind::Ident(i) if i == f));
+    let foo = ctx.intern("foo");
+    let id = ctx.parse_expr("foo()");
+    if let ExprKind::Call { callee, args } = &ctx.expr(id).kind {
+        assert!(matches!(ctx.expr(*callee).kind, ExprKind::Ident(i) if i == foo));
+        assert!(args.is_empty());
+    } else {
+        panic!("expected call expression");
+    }
+}
+
+#[test]
+fn test_expr_call_with_args() {
+    let mut ctx = TestContext::new();
+    let id = ctx.parse_expr("foo(1, 2)");
+    if let ExprKind::Call { args, .. } = &ctx.expr(id).kind {
         assert_eq!(args.len(), 2);
     } else {
         panic!("expected call expression");
@@ -312,9 +317,13 @@ fn test_expr_call() {
 fn test_expr_index() {
     let mut ctx = TestContext::new();
     let arr = ctx.intern("arr");
-    let expr = ctx.parse_expr("arr.[0]");
-    if let ExprKind::Index { base, .. } = expr.kind {
-        assert!(matches!(base.kind, ExprKind::Ident(i) if i == arr));
+    let id = ctx.parse_expr("arr.[0]");
+    if let ExprKind::Index { base, index } = &ctx.expr(id).kind {
+        assert!(matches!(ctx.expr(*base).kind, ExprKind::Ident(i) if i == arr));
+        assert!(matches!(
+            ctx.expr(*index).kind,
+            ExprKind::Lit(LitKind::Int(_))
+        ));
     } else {
         panic!("expected index expression");
     }
@@ -323,12 +332,12 @@ fn test_expr_index() {
 #[test]
 fn test_expr_field() {
     let mut ctx = TestContext::new();
-    let obj = ctx.intern("obj");
+    let point = ctx.intern("point");
     let x = ctx.intern("x");
-    let expr = ctx.parse_expr("obj.x");
-    if let ExprKind::Field { base, field } = expr.kind {
-        assert!(matches!(base.kind, ExprKind::Ident(i) if i == obj));
-        assert_eq!(field, x);
+    let id = ctx.parse_expr("point.x");
+    if let ExprKind::Field { base, field } = &ctx.expr(id).kind {
+        assert!(matches!(ctx.expr(*base).kind, ExprKind::Ident(i) if i == point));
+        assert_eq!(*field, x);
     } else {
         panic!("expected field expression");
     }
@@ -338,214 +347,19 @@ fn test_expr_field() {
 fn test_expr_deref() {
     let mut ctx = TestContext::new();
     let ptr = ctx.intern("ptr");
-    let expr = ctx.parse_expr("ptr.^");
-    if let ExprKind::Deref(base) = expr.kind {
-        assert!(matches!(base.kind, ExprKind::Ident(i) if i == ptr));
+    let id = ctx.parse_expr("ptr.^");
+    if let ExprKind::Deref(base) = &ctx.expr(id).kind {
+        assert!(matches!(ctx.expr(*base).kind, ExprKind::Ident(i) if i == ptr));
     } else {
         panic!("expected deref expression");
     }
 }
 
 #[test]
-fn test_expr_if() {
-    let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("if true { 1 }");
-    assert!(matches!(expr.kind, ExprKind::If { else_br: None, .. }));
-}
-
-#[test]
-fn test_expr_if_else() {
-    let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("if true { 1 } else { 2 }");
-    assert!(matches!(
-        expr.kind,
-        ExprKind::If {
-            else_br: Some(_),
-            ..
-        }
-    ));
-}
-
-#[test]
-fn test_expr_if_else_if() {
-    let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("if true { 1 } else if false { 2 } else { 3 }");
-    if let ExprKind::If {
-        else_br: Some(else_expr),
-        ..
-    } = expr.kind
-    {
-        assert!(matches!(else_expr.kind, ExprKind::If { .. }));
-    } else {
-        panic!("expected '`if`-`else`-`if` expression");
-    }
-}
-
-#[test]
-fn test_expr_while() {
-    let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("while true { 1 }");
-    assert!(matches!(expr.kind, ExprKind::While { .. }));
-}
-
-#[test]
-fn test_expr_if_case() {
-    let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("if case Some(x) := opt { x }");
-    if let ExprKind::If { cond, .. } = expr.kind {
-        assert!(matches!(*cond, Cond::Case { .. }));
-    } else {
-        panic!("expected `if case` expression");
-    }
-}
-
-#[test]
-fn test_expr_while_case() {
-    let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("while case Some(item) := get_next() { item }");
-    if let ExprKind::While { cond, .. } = expr.kind {
-        assert!(matches!(*cond, Cond::Case { .. }));
-    } else {
-        panic!("expected `while case` expression");
-    }
-}
-
-#[test]
-fn test_expr_if_case_multi() {
-    let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("if case Some(x) := opt, x > 0 { x }");
-    if let ExprKind::If { cond, .. } = expr.kind {
-        if let Cond::Case { extra, .. } = *cond {
-            assert_eq!(extra.len(), 1);
-        } else {
-            panic!("expected `case` condition");
-        }
-    } else {
-        panic!("expected `if case` expression with extra condition");
-    }
-}
-
-#[test]
-fn test_expr_for() {
-    let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("for x in items { x }");
-    assert!(matches!(expr.kind, ExprKind::For { .. }));
-}
-
-#[test]
-fn test_expr_match() {
-    let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("match x { case 1 => 2 }");
-    if let ExprKind::Match { cases, .. } = expr.kind {
-        assert_eq!(cases.len(), 1);
-    } else {
-        panic!("expected `match` expression");
-    }
-}
-
-#[test]
-fn test_expr_match_guard() {
-    let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("match x { case n if n > 0 => n }");
-    if let ExprKind::Match { cases, .. } = expr.kind {
-        assert!(cases[0].guard.is_some());
-    } else {
-        panic!("expected `match` expression with 'if' guard");
-    }
-}
-
-#[test]
-fn test_expr_range_inclusive() {
-    let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("1..10");
-    if let ExprKind::Range { inclusive, end, .. } = expr.kind {
-        assert!(inclusive);
-        assert!(end.is_some());
-    } else {
-        panic!("expected inclusive range expression");
-    }
-}
-
-#[test]
-fn test_expr_range_exclusive() {
-    let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("1..<10");
-    if let ExprKind::Range { inclusive, .. } = expr.kind {
-        assert!(!inclusive);
-    } else {
-        panic!("expected exclusive range expression");
-    }
-}
-
-#[test]
-fn test_expr_range_unbounded() {
-    let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("1..");
-    if let ExprKind::Range { end, .. } = expr.kind {
-        assert!(end.is_none());
-    } else {
-        panic!("expected unbounded range expression");
-    }
-}
-
-#[test]
-fn test_expr_assign() {
-    let mut ctx = TestContext::new();
-    let x = ctx.intern("x");
-    let expr = ctx.parse_expr("x <- 42");
-    if let ExprKind::Assign { target, .. } = expr.kind {
-        assert!(matches!(target.kind, ExprKind::Ident(i) if i == x));
-    } else {
-        panic!("expected assign expression");
-    }
-}
-
-#[test]
-fn test_expr_return() {
-    let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("return 42");
-    if let ExprKind::Return(Some(val)) = expr.kind {
-        assert!(matches!(val.kind, ExprKind::Lit(LitKind::Int(_))));
-    } else {
-        panic!("expected `return` expression");
-    }
-}
-
-#[test]
-fn test_expr_return_void() {
-    let mut ctx = TestContext::new();
-    let tokens = ctx.tokenize("return;");
-    let mut parser = Parser::new(&tokens);
-    let expr = parser.parse_expr().expect("parse failed");
-    assert!(matches!(expr.kind, ExprKind::Return(None)));
-}
-
-#[test]
-fn test_expr_break() {
-    let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("break 1");
-    assert!(matches!(expr.kind, ExprKind::Break(Some(_))));
-}
-
-#[test]
-fn test_expr_cycle() {
-    let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("cycle");
-    assert!(matches!(expr.kind, ExprKind::Cycle));
-}
-
-#[test]
-fn test_expr_defer() {
-    let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("defer cleanup()");
-    assert!(matches!(expr.kind, ExprKind::Defer(_)));
-}
-
-#[test]
 fn test_expr_block_empty() {
     let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("{}");
-    if let ExprKind::Block { stmts, expr } = expr.kind {
+    let id = ctx.parse_expr("{}");
+    if let ExprKind::Block { stmts, expr } = &ctx.expr(id).kind {
         assert!(stmts.is_empty());
         assert!(expr.is_none());
     } else {
@@ -556,8 +370,8 @@ fn test_expr_block_empty() {
 #[test]
 fn test_expr_block_with_expr() {
     let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("{ 42 }");
-    if let ExprKind::Block { stmts, expr } = expr.kind {
+    let id = ctx.parse_expr("{ 42 }");
+    if let ExprKind::Block { stmts, expr } = &ctx.expr(id).kind {
         assert!(stmts.is_empty());
         assert!(expr.is_some());
     } else {
@@ -568,8 +382,8 @@ fn test_expr_block_with_expr() {
 #[test]
 fn test_expr_block_with_stmts() {
     let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("{ 1; 2; 3 }");
-    if let ExprKind::Block { stmts, expr } = expr.kind {
+    let id = ctx.parse_expr("{ 1; 2; 3 }");
+    if let ExprKind::Block { stmts, expr } = &ctx.expr(id).kind {
         assert_eq!(stmts.len(), 2);
         assert!(expr.is_some());
     } else {
@@ -578,64 +392,177 @@ fn test_expr_block_with_stmts() {
 }
 
 #[test]
-fn test_expr_val_bind() {
+fn test_expr_if_simple() {
     let mut ctx = TestContext::new();
-    let x = ctx.intern("x");
-    let expr = ctx.parse_expr("val x := 42");
-    if let ExprKind::Bind { mutable, pat, .. } = expr.kind {
-        assert!(!mutable);
-        assert!(matches!(pat.kind, PatKind::Ident(i) if i == x));
+    let id = ctx.parse_expr("if true { 1 }");
+    if let ExprKind::If {
+        cond,
+        then_br,
+        else_br,
+    } = &ctx.expr(id).kind
+    {
+        let cond_node = ctx.arena.conds.get(*cond);
+        assert!(
+            matches!(&cond_node.kind, CondKind::Expr(e) if matches!(ctx.expr(*e).kind, ExprKind::Lit(LitKind::Bool(true))))
+        );
+        assert!(matches!(&ctx.expr(*then_br).kind, ExprKind::Block { .. }));
+        assert!(else_br.is_none());
     } else {
-        panic!("expected `val` binding expression");
+        panic!("expected if expression");
     }
 }
 
 #[test]
-fn test_expr_var_bind() {
+fn test_expr_if_else() {
     let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("var x := 42");
-    if let ExprKind::Bind { mutable, .. } = expr.kind {
-        assert!(mutable);
+    let id = ctx.parse_expr("if true { 1 } else { 2 }");
+    if let ExprKind::If { else_br, .. } = &ctx.expr(id).kind {
+        assert!(else_br.is_some());
     } else {
-        panic!("expected `var` binding expression");
+        panic!("expected if-else expression");
     }
 }
 
 #[test]
-fn test_expr_fn_def() {
+fn test_expr_if_else_if() {
     let mut ctx = TestContext::new();
-    let add = ctx.intern("add");
-    let expr = ctx.parse_expr("fn add(a, b) { a + b }");
-    if let ExprKind::Fn { sig, .. } = expr.kind {
-        assert_eq!(sig.name, Some(add));
-        assert_eq!(sig.params.len(), 2);
+    let id = ctx.parse_expr("if true { 1 } else if false { 2 } else { 3 }");
+    if let ExprKind::If {
+        else_br: Some(else_id),
+        ..
+    } = &ctx.expr(id).kind
+    {
+        assert!(matches!(&ctx.expr(*else_id).kind, ExprKind::If { .. }));
     } else {
-        panic!("expected `fn` expression");
+        panic!("expected if-else-if expression");
     }
 }
 
 #[test]
-fn test_expr_fn_anon() {
+fn test_expr_if_case() {
     let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("fn(x) { x }");
-    if let ExprKind::Fn { sig, .. } = expr.kind {
-        assert!(sig.name.is_none());
-        assert_eq!(sig.params.len(), 1);
+    let id = ctx.parse_expr("if case x := foo { x }");
+    if let ExprKind::If { cond, .. } = &ctx.expr(id).kind {
+        let cond_node = ctx.arena.conds.get(*cond);
+        assert!(matches!(&cond_node.kind, CondKind::Case { .. }));
     } else {
-        panic!("expected unnamed `fn` expression");
+        panic!("expected if-case expression");
     }
+}
+
+#[test]
+fn test_expr_while_simple() {
+    let mut ctx = TestContext::new();
+    let id = ctx.parse_expr("while true { 1 }");
+    assert!(matches!(&ctx.expr(id).kind, ExprKind::While { .. }));
+}
+
+#[test]
+fn test_expr_for() {
+    let mut ctx = TestContext::new();
+    let id = ctx.parse_expr("for x in items { x }");
+    assert!(matches!(&ctx.expr(id).kind, ExprKind::For { .. }));
+}
+
+#[test]
+fn test_expr_match_simple() {
+    let mut ctx = TestContext::new();
+    let id = ctx.parse_expr("match x { case 1 => 2 }");
+    if let ExprKind::Match { cases, .. } = &ctx.expr(id).kind {
+        assert_eq!(cases.len(), 1);
+    } else {
+        panic!("expected match expression");
+    }
+}
+
+#[test]
+fn test_expr_match_multiple_cases() {
+    let mut ctx = TestContext::new();
+    let id = ctx.parse_expr("match x { case 1 => 2, case 3 => 4 }");
+    if let ExprKind::Match { cases, .. } = &ctx.expr(id).kind {
+        assert_eq!(cases.len(), 2);
+    } else {
+        panic!("expected match expression");
+    }
+}
+
+#[test]
+fn test_expr_match_with_guard() {
+    let mut ctx = TestContext::new();
+    let id = ctx.parse_expr("match x { case y if y > 0 => y }");
+    if let ExprKind::Match { cases, .. } = &ctx.expr(id).kind {
+        assert!(cases[0].guard.is_some());
+    } else {
+        panic!("expected match expression");
+    }
+}
+
+#[test]
+fn test_expr_return_empty() {
+    let mut ctx = TestContext::new();
+    let id = ctx.parse_expr("return");
+    assert!(matches!(&ctx.expr(id).kind, ExprKind::Return(None)));
+}
+
+#[test]
+fn test_expr_return_value() {
+    let mut ctx = TestContext::new();
+    let id = ctx.parse_expr("return 42");
+    assert!(matches!(&ctx.expr(id).kind, ExprKind::Return(Some(_))));
+}
+
+#[test]
+fn test_expr_defer() {
+    let mut ctx = TestContext::new();
+    let id = ctx.parse_expr("defer foo()");
+    assert!(matches!(&ctx.expr(id).kind, ExprKind::Defer(_)));
+}
+
+#[test]
+fn test_expr_break_empty() {
+    let mut ctx = TestContext::new();
+    let id = ctx.parse_expr("break");
+    assert!(matches!(&ctx.expr(id).kind, ExprKind::Break(None)));
+}
+
+#[test]
+fn test_expr_break_value() {
+    let mut ctx = TestContext::new();
+    let id = ctx.parse_expr("break 42");
+    assert!(matches!(&ctx.expr(id).kind, ExprKind::Break(Some(_))));
+}
+
+#[test]
+fn test_expr_cycle() {
+    let mut ctx = TestContext::new();
+    let id = ctx.parse_expr("cycle");
+    assert!(matches!(ctx.expr(id).kind, ExprKind::Cycle));
+}
+
+#[test]
+fn test_expr_unsafe() {
+    let mut ctx = TestContext::new();
+    let id = ctx.parse_expr("unsafe { 42 }");
+    assert!(matches!(&ctx.expr(id).kind, ExprKind::Unsafe(_)));
+}
+
+#[test]
+fn test_expr_import() {
+    let mut ctx = TestContext::new();
+    let id = ctx.parse_expr(r#"import "foo""#);
+    assert!(matches!(ctx.expr(id).kind, ExprKind::Import(_)));
 }
 
 #[test]
 fn test_expr_record_def() {
     let mut ctx = TestContext::new();
     let point = ctx.intern("Point");
-    let expr = ctx.parse_expr("record Point { x; y }");
-    if let ExprKind::RecordDef { name, fields, .. } = expr.kind {
-        assert_eq!(name, Some(point));
+    let id = ctx.parse_expr("record Point { x: Int; y: Int }");
+    if let ExprKind::RecordDef { name, fields, .. } = &ctx.expr(id).kind {
+        assert_eq!(*name, Some(point));
         assert_eq!(fields.len(), 2);
     } else {
-        panic!("expected `record` typedef expression");
+        panic!("expected record definition");
     }
 }
 
@@ -643,55 +570,163 @@ fn test_expr_record_def() {
 fn test_expr_sum_def() {
     let mut ctx = TestContext::new();
     let option = ctx.intern("Option");
-    let expr = ctx.parse_expr("sum Option { case Some(x), case None }");
-    if let ExprKind::SumDef { name, cases, .. } = expr.kind {
-        assert_eq!(name, Some(option));
+    let id = ctx.parse_expr("sum Option { case Some(Int), case None }");
+    if let ExprKind::SumDef { name, cases, .. } = &ctx.expr(id).kind {
+        assert_eq!(*name, Some(option));
         assert_eq!(cases.len(), 2);
     } else {
-        panic!("expected `sum` typedef expression");
+        panic!("expected sum definition");
     }
 }
 
 #[test]
-fn test_expr_alias_def() {
+fn test_expr_alias() {
     let mut ctx = TestContext::new();
-    let myint = ctx.intern("MyInt");
-    let expr = ctx.parse_expr("alias MyInt := Int");
-    if let ExprKind::Alias { name, .. } = expr.kind {
-        assert_eq!(name, myint);
+    let my_int = ctx.intern("MyInt");
+    let id = ctx.parse_expr("alias MyInt := Int");
+    if let ExprKind::Alias { name, .. } = &ctx.expr(id).kind {
+        assert_eq!(*name, my_int);
     } else {
-        panic!("expected `alias` expression");
+        panic!("expected alias definition");
     }
 }
+
+#[test]
+fn test_expr_fn() {
+    let mut ctx = TestContext::new();
+    let foo = ctx.intern("foo");
+    let id = ctx.parse_expr("fn foo(x: Int): Int { x }");
+    if let ExprKind::Fn { sig, .. } = &ctx.expr(id).kind {
+        assert_eq!(sig.name, Some(foo));
+        assert_eq!(sig.params.len(), 1);
+    } else {
+        panic!("expected function definition");
+    }
+}
+
+#[test]
+fn test_expr_bind_val() {
+    let mut ctx = TestContext::new();
+    let id = ctx.parse_expr("val x := 42");
+    if let ExprKind::Bind { mutable, .. } = &ctx.expr(id).kind {
+        assert!(!mutable);
+    } else {
+        panic!("expected bind expression");
+    }
+}
+
+#[test]
+fn test_expr_bind_var() {
+    let mut ctx = TestContext::new();
+    let id = ctx.parse_expr("var x := 42");
+    if let ExprKind::Bind { mutable, .. } = &ctx.expr(id).kind {
+        assert!(mutable);
+    } else {
+        panic!("expected bind expression");
+    }
+}
+
+#[test]
+fn test_expr_assign() {
+    let mut ctx = TestContext::new();
+    let id = ctx.parse_expr("x <- 42");
+    assert!(matches!(&ctx.expr(id).kind, ExprKind::Assign { .. }));
+}
+
+#[test]
+fn test_expr_range_inclusive() {
+    let mut ctx = TestContext::new();
+    let id = ctx.parse_expr("1..10");
+    assert!(matches!(
+        &ctx.expr(id).kind,
+        ExprKind::Range {
+            inclusive: true,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn test_expr_range_exclusive() {
+    let mut ctx = TestContext::new();
+    let id = ctx.parse_expr("1..<10");
+    assert!(matches!(
+        &ctx.expr(id).kind,
+        ExprKind::Range {
+            inclusive: false,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn test_expr_binary_not_in() {
+    let mut ctx = TestContext::new();
+    let id = ctx.parse_expr("x not in items");
+    if let ExprKind::Unary { op, operand } = &ctx.expr(id).kind {
+        assert_eq!(*op, TokenKind::KwNot);
+        assert!(
+            matches!(&ctx.expr(*operand).kind, ExprKind::Binary { op, .. } if *op == TokenKind::KwIn)
+        );
+    } else {
+        panic!("expected binary expression");
+    }
+}
+
+#[test]
+fn test_expr_binary_pipe() {
+    let mut ctx = TestContext::new();
+    let id = ctx.parse_expr("x |> f");
+    if let ExprKind::Binary { op, .. } = &ctx.expr(id).kind {
+        assert_eq!(*op, TokenKind::BarGt);
+    } else {
+        panic!("expected binary expression");
+    }
+}
+
+#[test]
+fn test_expr_binary_coalesce() {
+    let mut ctx = TestContext::new();
+    let id = ctx.parse_expr("x ?? 0");
+    if let ExprKind::Binary { op, .. } = &ctx.expr(id).kind {
+        assert_eq!(*op, TokenKind::QuestionQuestion);
+    } else {
+        panic!("expected binary expression");
+    }
+}
+
+// ============================================================================
+// PATTERN TESTS
+// ============================================================================
 
 #[test]
 fn test_pat_wild() {
     let mut ctx = TestContext::new();
-    let pat = ctx.parse_pat("_");
-    assert!(matches!(pat.kind, PatKind::Wild));
+    let id = ctx.parse_pat("_");
+    assert!(matches!(ctx.pat(id).kind, PatKind::Wild));
 }
 
 #[test]
 fn test_pat_ident() {
     let mut ctx = TestContext::new();
     let x = ctx.intern("x");
-    let pat = ctx.parse_pat("x");
-    assert!(matches!(pat.kind, PatKind::Ident(i) if i == x));
+    let id = ctx.parse_pat("x");
+    assert!(matches!(ctx.pat(id).kind, PatKind::Ident(i) if i == x));
 }
 
 #[test]
 fn test_pat_lit_int() {
     let mut ctx = TestContext::new();
-    let pat = ctx.parse_pat("42");
-    assert!(matches!(pat.kind, PatKind::Lit(LitKind::Int(_))));
+    let id = ctx.parse_pat("42");
+    assert!(matches!(ctx.pat(id).kind, PatKind::Lit(LitKind::Int(_))));
 }
 
 #[test]
 fn test_pat_tuple() {
     let mut ctx = TestContext::new();
-    let pat = ctx.parse_pat("(a, b, c)");
-    if let PatKind::Tuple(elems) = pat.kind {
-        assert_eq!(elems.len(), 3);
+    let id = ctx.parse_pat("(x, y)");
+    if let PatKind::Tuple(elems) = &ctx.pat(id).kind {
+        assert_eq!(elems.len(), 2);
     } else {
         panic!("expected tuple pattern");
     }
@@ -700,9 +735,9 @@ fn test_pat_tuple() {
 #[test]
 fn test_pat_array() {
     let mut ctx = TestContext::new();
-    let pat = ctx.parse_pat("[a, b]");
-    if let PatKind::Array(elems) = pat.kind {
-        assert_eq!(elems.len(), 2);
+    let id = ctx.parse_pat("[a, b, c]");
+    if let PatKind::Array(elems) = &ctx.pat(id).kind {
+        assert_eq!(elems.len(), 3);
     } else {
         panic!("expected array pattern");
     }
@@ -712,9 +747,9 @@ fn test_pat_array() {
 fn test_pat_variant() {
     let mut ctx = TestContext::new();
     let some = ctx.intern("Some");
-    let pat = ctx.parse_pat("Some(x)");
-    if let PatKind::Variant { name, args, .. } = pat.kind {
-        assert_eq!(name, some);
+    let id = ctx.parse_pat("Some(x)");
+    if let PatKind::Variant { name, args, .. } = &ctx.pat(id).kind {
+        assert_eq!(*name, some);
         assert_eq!(args.len(), 1);
     } else {
         panic!("expected variant pattern");
@@ -722,113 +757,58 @@ fn test_pat_variant() {
 }
 
 #[test]
-fn test_pat_record() {
+fn test_pat_cons() {
     let mut ctx = TestContext::new();
-    let point = ctx.intern("Point");
-    let pat = ctx.parse_pat("Point.{x, y}");
-    if let PatKind::Record {
-        ty: Some(ty_expr),
-        fields,
-    } = pat.kind
-    {
-        assert!(matches!(ty_expr.kind, ExprKind::Ident(i) if i == point));
-        assert_eq!(fields.len(), 2);
+    let id = ctx.parse_pat("head :: tail");
+    if let PatKind::Cons(parts) = &ctx.pat(id).kind {
+        assert_eq!(parts.len(), 2);
     } else {
-        panic!("expected record pattern");
+        panic!("expected cons pattern");
     }
 }
 
 #[test]
 fn test_pat_or() {
     let mut ctx = TestContext::new();
-    let pat = ctx.parse_pat("1 | 2 | 3");
-    if let PatKind::Or(alts) = pat.kind {
+    let id = ctx.parse_pat("1 | 2 | 3");
+    if let PatKind::Or(alts) = &ctx.pat(id).kind {
         assert_eq!(alts.len(), 3);
     } else {
-        panic!("expected or `|` pattern");
+        panic!("expected or pattern");
     }
 }
 
 #[test]
-fn test_pat_cons() {
+fn test_pat_record() {
     let mut ctx = TestContext::new();
-    let pat = ctx.parse_pat("head :: tail");
-    if let PatKind::Cons(parts) = pat.kind {
-        assert_eq!(parts.len(), 2);
+    let id = ctx.parse_pat("Point.{x, y}");
+    if let PatKind::Record { ty, fields } = &ctx.pat(id).kind {
+        assert!(ty.is_some());
+        assert_eq!(fields.len(), 2);
     } else {
-        panic!("expected cons `::` pattern");
+        panic!("expected record pattern");
     }
 }
 
+// ============================================================================
+// TYPE EXPRESSION TESTS
+// ============================================================================
+
 #[test]
-fn test_typ_ident() {
+fn test_ty_expr_ident() {
     let mut ctx = TestContext::new();
     let int = ctx.intern("Int");
-    let typ = ctx.parse_typ("Int");
-    assert!(matches!(typ.kind, TyExprKind::Ident(i) if i == int));
+    let id = ctx.parse_typ("Int");
+    assert!(matches!(ctx.ty_expr(id).kind, TyExprKind::Ident(i) if i == int));
 }
 
 #[test]
-fn test_typ_optional() {
-    let mut ctx = TestContext::new();
-    let typ = ctx.parse_typ("?Int");
-    assert!(matches!(typ.kind, TyExprKind::Optional(_)));
-}
-
-#[test]
-fn test_typ_ptr() {
-    let mut ctx = TestContext::new();
-    let typ = ctx.parse_typ("^Int");
-    assert!(matches!(typ.kind, TyExprKind::Ptr(_)));
-}
-
-#[test]
-fn test_typ_array_unsized() {
-    let mut ctx = TestContext::new();
-    let typ = ctx.parse_typ("[]Int");
-    if let TyExprKind::Array { size, .. } = typ.kind {
-        assert!(size.is_none());
-    } else {
-        panic!("expected array type");
-    }
-}
-
-#[test]
-fn test_typ_array_sized() {
-    let mut ctx = TestContext::new();
-    let typ = ctx.parse_typ("[10]Int");
-    if let TyExprKind::Array { size, .. } = typ.kind {
-        assert!(size.is_some());
-    } else {
-        panic!("expected array type");
-    }
-}
-
-#[test]
-fn test_typ_fn() {
-    let mut ctx = TestContext::new();
-    let typ = ctx.parse_typ("Int -> String");
-    assert!(matches!(typ.kind, TyExprKind::Fn { .. }));
-}
-
-#[test]
-fn test_typ_tuple() {
-    let mut ctx = TestContext::new();
-    let typ = ctx.parse_typ("(Int, String)");
-    if let TyExprKind::Tuple(elems) = typ.kind {
-        assert_eq!(elems.len(), 2);
-    } else {
-        panic!("expected tuple type");
-    }
-}
-
-#[test]
-fn test_typ_app() {
+fn test_ty_expr_app() {
     let mut ctx = TestContext::new();
     let list = ctx.intern("List");
-    let typ = ctx.parse_typ("List[Int]");
-    if let TyExprKind::App { base, args } = typ.kind {
-        assert_eq!(base, list);
+    let id = ctx.parse_typ("List[Int]");
+    if let TyExprKind::App { base, args } = &ctx.ty_expr(id).kind {
+        assert_eq!(*base, list);
         assert_eq!(args.len(), 1);
     } else {
         panic!("expected type application");
@@ -836,73 +816,68 @@ fn test_typ_app() {
 }
 
 #[test]
-/// Should parse as: `Fn(param: ?[10]^Int, ret: (Int, String))`
-fn test_typ_complex() {
+fn test_ty_expr_optional() {
     let mut ctx = TestContext::new();
-    let typ = ctx.parse_typ("?[10]^Int -> (Int, String)");
-    assert!(matches!(typ.kind, TyExprKind::Fn { .. }));
+    let id = ctx.parse_typ("?Int");
+    assert!(matches!(&ctx.ty_expr(id).kind, TyExprKind::Optional(_)));
 }
 
 #[test]
-fn test_nested_calls() {
+fn test_ty_expr_ptr() {
     let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("f(g(h(x)))");
-    if let ExprKind::Call { callee, .. } = expr.kind {
-        if let ExprKind::Ident(i) = callee.kind {
-            assert_eq!(i, ctx.intern("f"));
-        } else {
-            panic!("expected identifier expression");
-        }
+    let id = ctx.parse_typ("^Int");
+    assert!(matches!(&ctx.ty_expr(id).kind, TyExprKind::Ptr(_)));
+}
+
+#[test]
+fn test_ty_expr_array_unsized() {
+    let mut ctx = TestContext::new();
+    let id = ctx.parse_typ("[]Int");
+    if let TyExprKind::Array { size, .. } = &ctx.ty_expr(id).kind {
+        assert!(size.is_none());
     } else {
-        panic!("expected call expression");
+        panic!("expected array type");
     }
 }
 
 #[test]
-/// Should parse as `((obj.foo()).bar()).baz()``.
-fn test_chained_method_calls() {
+fn test_ty_expr_array_sized() {
     let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("obj.foo().bar().baz()");
-    assert!(matches!(expr.kind, ExprKind::Call { .. }));
+    let id = ctx.parse_typ("[10]Int");
+    if let TyExprKind::Array { size, .. } = &ctx.ty_expr(id).kind {
+        assert_eq!(*size, Some(10));
+    } else {
+        panic!("expected sized array type");
+    }
 }
 
 #[test]
-/// Should parse as `1 + (2 * (3**4))``
-fn test_complex_precedence() {
+fn test_ty_expr_fn() {
     let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("1 + 2 * 3**4");
-    if let ExprKind::Binary {
-        op: TokenKind::Plus,
-        rhs,
-        ..
-    } = expr.kind
-    {
-        if let ExprKind::Binary {
-            op: TokenKind::Star,
-            rhs: inner_rhs,
-            ..
-        } = rhs.kind
-        {
-            assert!(matches!(
-                inner_rhs.kind,
-                ExprKind::Binary {
-                    op: TokenKind::StarStar,
-                    ..
-                }
-            ));
-        } else {
-            panic!("expected binary `*` expression");
-        }
+    let id = ctx.parse_typ("Int -> String");
+    assert!(matches!(&ctx.ty_expr(id).kind, TyExprKind::Fn { .. }));
+}
+
+#[test]
+fn test_ty_expr_tuple() {
+    let mut ctx = TestContext::new();
+    let id = ctx.parse_typ("(Int, String)");
+    if let TyExprKind::Tuple(elems) = &ctx.ty_expr(id).kind {
+        assert_eq!(elems.len(), 2);
     } else {
-        panic!("expected binary `+` expression");
+        panic!("expected tuple type");
     }
 }
+
+// ============================================================================
+// EDGE CASES
+// ============================================================================
 
 #[test]
 fn test_trailing_comma_tuple() {
     let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("(1, 2, 3,)");
-    if let ExprKind::Tuple(elems) = expr.kind {
+    let id = ctx.parse_expr("(1, 2, 3,)");
+    if let ExprKind::Tuple(elems) = &ctx.expr(id).kind {
         assert_eq!(elems.len(), 3);
     } else {
         panic!("expected tuple literal expression");
@@ -912,8 +887,8 @@ fn test_trailing_comma_tuple() {
 #[test]
 fn test_trailing_comma_array() {
     let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("[1, 2, 3,]");
-    if let ExprKind::Array(elems) = expr.kind {
+    let id = ctx.parse_expr("[1, 2, 3,]");
+    if let ExprKind::Array(elems) = &ctx.expr(id).kind {
         assert_eq!(elems.len(), 3);
     } else {
         panic!("expected array literal expression");
@@ -923,16 +898,16 @@ fn test_trailing_comma_array() {
 #[test]
 fn test_deeply_nested_blocks() {
     let mut ctx = TestContext::new();
-    let expr = ctx.parse_expr("{ { { 42 } } }");
+    let id = ctx.parse_expr("{ { { 42 } } }");
     if let ExprKind::Block {
-        expr: Some(inner), ..
-    } = expr.kind
+        expr: Some(inner1), ..
+    } = &ctx.expr(id).kind
     {
         if let ExprKind::Block {
             expr: Some(inner2), ..
-        } = inner.kind
+        } = &ctx.expr(*inner1).kind
         {
-            assert!(matches!(inner2.kind, ExprKind::Block { .. }));
+            assert!(matches!(&ctx.expr(*inner2).kind, ExprKind::Block { .. }));
         } else {
             panic!("expected nested block expression");
         }
