@@ -1,6 +1,6 @@
 //! Arena allocation with typed node identifiers.
 
-use std::marker::PhantomData;
+use std::{hash, marker::PhantomData};
 
 #[derive(Debug)]
 pub struct NodeId<T> {
@@ -23,8 +23,8 @@ impl<T> NodeId<T> {
     }
 
     #[must_use]
-    pub const fn as_usize(self) -> usize {
-        self.index as usize
+    pub fn as_usize(self) -> usize {
+        usize::try_from(self.index).expect("index too large")
     }
 }
 
@@ -44,8 +44,8 @@ impl<T> PartialEq for NodeId<T> {
 
 impl<T> Eq for NodeId<T> {}
 
-impl<T> std::hash::Hash for NodeId<T> {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+impl<T> hash::Hash for NodeId<T> {
+    fn hash<H: hash::Hasher>(&self, state: &mut H) {
         self.index.hash(state);
     }
 }
