@@ -8,7 +8,7 @@
  * - prec_: precedence levels (parser-only, no AST nodes)
  * - expr_: expression nodes (create AST nodes)
  * - pat_: pattern nodes (create AST nodes)
- * - ty_: type nodes (create AST nodes)
+ * - ty_expr: type expression nodes (create AST nodes)
  * - stmt_: statement nodes (create AST nodes)
  *)
 (* ========================================================================= *)
