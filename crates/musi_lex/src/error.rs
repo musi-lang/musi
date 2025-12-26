@@ -10,23 +10,23 @@ pub enum LexErrorKind {
     UnknownEscape(String),
 
     #[error("unclosed string literal")]
-    UnclosedString,
+    UnclosedStringLit,
     #[error("unclosed template literal")]
-    UnclosedTemplate,
+    UnclosedTemplateLit,
     #[error("unclosed escaped identifier")]
     UnclosedEscapedIdent,
     #[error("unclosed rune literal")]
-    UnclosedRune,
+    UnclosedRuneLit,
     #[error("unclosed block comment")]
     UnclosedBlockComment,
 
     #[error("invalid identifier")]
     InvalidIdent,
     #[error("invalid rune literal")]
-    InvalidRune,
+    InvalidRuneLit,
 
     #[error("malformed numeric literal")]
-    MalformedNumber,
+    MalformedNumericLit,
     #[error("malformed '_' in {0} literal")]
     MalformedUnderscore(String),
 }
@@ -34,14 +34,10 @@ pub enum LexErrorKind {
 impl IntoMusiError for LexErrorKind {
     fn hint(&self) -> Option<&'static str> {
         match self {
-            Self::UnclosedString | Self::UnclosedTemplate => Some("missing '\"'"),
-            Self::UnclosedEscapedIdent => Some("missing '`'"),
-            Self::UnclosedRune => Some("missing '\\''"),
-            Self::UnclosedBlockComment => Some("missing '*/'"),
-            Self::UnknownChar(_) => Some("remove this character"),
-            Self::UnknownEscape(_) => {
-                Some("use '\\n', '\\r', '\\t', '\\\\', '\\'', '\\\"', '\\xHH', or '\\u{...}'")
-            }
+            Self::UnclosedStringLit | Self::UnclosedTemplateLit => Some("add '\"'"),
+            Self::UnclosedEscapedIdent => Some("add '`'"),
+            Self::UnclosedRuneLit => Some("add '\\''"),
+            Self::UnclosedBlockComment => Some("add '*/'"),
             Self::MalformedUnderscore(_) => Some("underscores must separate digits"),
             _ => None,
         }

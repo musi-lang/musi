@@ -175,7 +175,7 @@ impl<'a> Lexer<'a> {
 
         let mut end = self.cursor.pos();
         if end == start + prefix_len {
-            self.report(LexErrorKind::MalformedNumber, start, end);
+            self.report(LexErrorKind::MalformedNumericLit, start, end);
             return TokenKind::LitInt(0);
         }
 
@@ -183,7 +183,7 @@ impl<'a> Lexer<'a> {
             let has_frac = if self.cursor.is_next('.') && self.cursor.peek_nth(1) != Some('.') {
                 let _: Option<char> = self.cursor.bump();
                 if !self.consume_digits() {
-                    self.report(LexErrorKind::MalformedNumber, start, self.cursor.pos());
+                    self.report(LexErrorKind::MalformedNumericLit, start, self.cursor.pos());
                 }
                 true
             } else {
@@ -195,7 +195,7 @@ impl<'a> Lexer<'a> {
                     let _: Option<char> = self.cursor.bump();
                 }
                 if !self.consume_digits() {
-                    self.report(LexErrorKind::MalformedNumber, start, self.cursor.pos());
+                    self.report(LexErrorKind::MalformedNumericLit, start, self.cursor.pos());
                 }
                 true
             } else {
@@ -375,7 +375,7 @@ impl<'a> Lexer<'a> {
     fn scan_text_lit(&mut self) -> TokenKind {
         let start = self.cursor.pos();
         if let Some(content_end) =
-            self.consume_quoted(start, 1, &['"'], LexErrorKind::UnclosedString)
+            self.consume_quoted(start, 1, &['"'], LexErrorKind::UnclosedStringLit)
         {
             let raw = self.source.input.get(start + 1..content_end).unwrap();
             let val = unescape(raw, start + 1, &mut self.errors);
@@ -396,7 +396,7 @@ impl<'a> Lexer<'a> {
 
         match self.cursor.peek() {
             Some('\'') => {
-                self.report(LexErrorKind::InvalidRune, start, start + 2);
+                self.report(LexErrorKind::InvalidRuneLit, start, start + 2);
                 let _: Option<char> = self.cursor.bump();
             }
             Some('\\') => {
@@ -431,9 +431,9 @@ impl<'a> Lexer<'a> {
             self.cursor.eat_while(|c| c != '\'');
             if self.cursor.is_next('\'') {
                 let _: Option<char> = self.cursor.bump();
-                self.report(LexErrorKind::InvalidRune, start, self.cursor.pos());
+                self.report(LexErrorKind::InvalidRuneLit, start, self.cursor.pos());
             } else {
-                self.report(LexErrorKind::UnclosedRune, start, start + 1);
+                self.report(LexErrorKind::UnclosedRuneLit, start, start + 1);
             }
         }
 
@@ -441,9 +441,12 @@ impl<'a> Lexer<'a> {
     }
 
     fn scan_template_lit(&mut self, offset: usize, start: usize) -> TokenKind {
-        if let Some(content_end) =
-            self.consume_quoted(start, offset, &['"', '{'], LexErrorKind::UnclosedTemplate)
-        {
+        if let Some(content_end) = self.consume_quoted(
+            start,
+            offset,
+            &['"', '{'],
+            LexErrorKind::UnclosedTemplateLit,
+        ) {
             let raw = self.source.input.get(start + offset..content_end).unwrap();
             let val = unescape(raw, start + offset, &mut self.errors);
             let s = self.interner.intern(&val);
