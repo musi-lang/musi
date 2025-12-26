@@ -1,29 +1,21 @@
-#![allow(clippy::multiple_crate_versions)]
-
-use async_lsp::{MainLoop, router::Router, server::Lifecycle};
-use tokio::io;
-use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
-
-mod analysis;
 mod diagnostics;
+mod dispatch;
 mod handlers;
-mod server_state;
+mod server;
+mod state;
 
-use handlers::MusiLanguageServer;
-use server_state::ServerState;
+use anyhow::Result;
+use lsp_server::Connection;
+use server::LspServer;
 
-#[tokio::main]
-async fn main() {
-    let (stdin, stdout) = (io::stdin(), io::stdout());
-    let (stdin2, stdout2) = (stdin.compat(), stdout.compat_write());
+fn main() -> Result<()> {
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
 
-    let (loop_node, _) = MainLoop::new_server(|client| {
-        let state = ServerState::new(client);
-        let server = MusiLanguageServer::new(state);
-        Lifecycle::new(Router::from_language_server(server))
-    });
-
-    if let Err(e) = loop_node.run_buffered(stdin2, stdout2).await {
-        eprintln!("LSP server error: {e}");
-    }
+    let (conn, io_threads) = Connection::stdio();
+    let mut server = LspServer::new(conn);
+    server.run()?;
+    io_threads.join()?;
+    Ok(())
 }

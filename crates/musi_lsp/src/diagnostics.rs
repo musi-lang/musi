@@ -1,4 +1,4 @@
-use async_lsp::lsp_types::{self, DiagnosticSeverity};
+use lsp_types::{self, DiagnosticSeverity};
 use musi_basic::{diagnostic::Diagnostic, error::Level, source::SourceFile, span::Span};
 
 pub fn convert_diagnostics(
