@@ -85,15 +85,15 @@ aux_field_list_semi = aux_field, {";", aux_field}, [";"];
 
 aux_params = "(", [aux_field_list], ")";
 
-aux_fn_sig = [ident], [ty_params], [aux_params], [aux_ty_annot];
+aux_fn_sig = [ident], [ty_expr_params], [aux_params], [aux_ty_annot];
 
 aux_args = [aux_expr_list];
 
-aux_sum_case_item = ty | aux_field;
+aux_sum_case_item = ty_expr | aux_field;
 
 aux_sum_case_list = aux_sum_case_item, {",", aux_sum_case_item}, [","];
 
-aux_sum_case = "case", ident, [ty_args], ["(", [aux_sum_case_list], ")"];
+aux_sum_case = "case", ident, [ty_expr_args], ["(", [aux_sum_case_list], ")"];
 
 aux_sum_cases = aux_sum_case, {",", aux_sum_case}, [","];
 
@@ -105,7 +105,7 @@ aux_match_case = "case", pat, aux_if_guard, "=>", expr;
 
 aux_match_cases = aux_match_case, {",", aux_match_case}, [","];
 
-aux_ty_list = ty, {",", ty}, [","];
+aux_ty_list = ty_expr, {",", ty_expr}, [","];
 
 aux_ident_list = ident, {",", ident}, [","];
 
@@ -113,34 +113,34 @@ aux_modifier_extern = "extern", [aux_lit_text];
 
 aux_modifiers = {("export" | aux_modifier_extern | "unsafe")};
 
-aux_ty_annot = ":", ty;
+aux_ty_annot = ":", ty_expr;
 
 aux_init = ":=", expr;
 
 aux_pat_list = pat, {",", pat}, [","];
 
 (* ========================================================================= *)
-(* TYPES                                                                     *)
+(* TYPE EXPRESSIONS                                                          *)
 (* ========================================================================= *)
-ty_params = "[", [aux_ident_list], "]";
+ty_expr_params = "[", [aux_ident_list], "]";
 
-ty_args = aux_ty_list;
+ty_expr_args = aux_ty_list;
 
-ty_app = ident, "[", ty_args, "]";
+ty_expr_app = ident, "[", ty_expr_args, "]";
 
-ty_optional = "?", ty;
+ty_expr_optional = "?", ty_expr;
 
-ty_array = "[", [aux_lit_number], "]", ty;
+ty_expr_array = "[", [aux_lit_number], "]", ty_expr;
 
-ty_ptr = "^", ty;
+ty_expr_ptr = "^", ty_expr;
 
-ty_fn = ty, "->", ty;
+ty_expr_fn = ty_expr, "->", ty_expr;
 
-ty_tuple = "(", [ty, ",", [aux_ty_list]], ")";
+ty_expr_tuple = "(", [ty_expr, ",", [aux_ty_list]], ")";
 
-ty_primary = ident | ty_tuple | "(", ty, ")";
+ty_expr_primary = ident | ty_expr_tuple | "(", ty_expr, ")";
 
-ty = ty_fn | ty_ptr | ty_array | ty_optional | ty_app | ty_primary;
+ty_expr = ty_expr_fn | ty_expr_ptr | ty_expr_array | ty_expr_optional | ty_expr_app | ty_expr_primary;
 
 (* ========================================================================= *)
 (* PATTERNS                                                                  *)
@@ -157,7 +157,7 @@ pat_array = "[", [aux_pat_list], "]";
 
 pat_record = [ident], ".{", [aux_pat_fields], "}";
 
-pat_variant = ident, [ty_args], ["(", [aux_pat_list], ")"];
+pat_variant = ident, [ty_expr_args], ["(", [aux_pat_list], ")"];
 
 pat_primary = pat_ident | pat_lit | pat_wild | pat_tuple | pat_array | pat_record | pat_variant | "(", pat, ")";
 
@@ -210,11 +210,11 @@ expr_import = "import", aux_lit_text;
 
 expr_extern = aux_modifier_extern, "{", {"fn", aux_fn_sig, ";"}, "}";
 
-expr_record_def = [aux_attr], [aux_modifiers], "record", [ident], [ty_params], "{", aux_field_list_semi, "}";
+expr_record_def = [aux_attr], [aux_modifiers], "record", [ident], [ty_expr_params], "{", aux_field_list_semi, "}";
 
-expr_sum_def = [aux_attr], [aux_modifiers], "sum", [ident], [ty_params], "{", aux_sum_cases, "}";
+expr_sum_def = [aux_attr], [aux_modifiers], "sum", [ident], [ty_expr_params], "{", aux_sum_cases, "}";
 
-expr_alias = [aux_attr], [aux_modifiers], "alias", ident, [ty_params], ":=", ty;
+expr_alias = [aux_attr], [aux_modifiers], "alias", ident, [ty_expr_params], ":=", ty_expr;
 
 expr_fn = [aux_attr], [aux_modifiers], "fn", aux_fn_sig, expr_block;
 
