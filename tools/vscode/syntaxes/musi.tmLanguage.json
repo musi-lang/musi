@@ -380,7 +380,7 @@
                     "name": "keyword.operator.list.musi"
                 },
                 {
-                    "match": "\\+|\\-(?!>)|\\*\\*|\\*(?!\\*)|/(?!=)|%|\\bmod\\b",
+                    "match": "\\+|\\-(?!>)|\\*\\*|\\*(?!\\*)|/(?!=)|%",
                     "name": "keyword.operator.arithmetic.musi"
                 },
                 {
