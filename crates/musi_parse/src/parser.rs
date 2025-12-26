@@ -1,3 +1,4 @@
+use musi_ast::AstArena;
 use musi_basic::{
     diagnostic::{Diagnostic, DiagnosticBag},
     error::{IntoMusiError, MusiError},
@@ -85,15 +86,17 @@ impl Prec {
 pub struct Parser<'a> {
     tokens: &'a [Token],
     index: usize,
+    pub arena: &'a mut AstArena,
     pub diagnostics: DiagnosticBag,
 }
 
 impl<'a> Parser<'a> {
     #[must_use]
-    pub fn new(tokens: &'a [Token]) -> Self {
+    pub fn new(tokens: &'a [Token], arena: &'a mut AstArena) -> Self {
         Self {
             tokens,
             index: 0,
+            arena,
             diagnostics: DiagnosticBag::default(),
         }
     }
