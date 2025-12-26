@@ -26,6 +26,7 @@ function _buildClientOptions(): LanguageClientOptions {
 		synchronize: {
 			fileEvents: vscode.workspace.createFileSystemWatcher("**/*.ms"),
 		},
+		outputChannel: vscode.window.createOutputChannel("Musi Language Server"),
 		initializationOptions: {
 			diagnostics: { enable: config.diagnosticsEnabled },
 			completion: { enable: config.completionEnabled },

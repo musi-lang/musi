@@ -90,6 +90,18 @@
 				"title": "Restart Language Server",
 				"category": "Musi",
 				"icon": "$(refresh)"
+			},
+			{
+				"command": "musi.stopServer",
+				"title": "Stop Language Server",
+				"category": "Musi",
+				"icon": "$(stop)"
+			},
+			{
+				"command": "musi.showLogs",
+				"title": "Show Language Server Output",
+				"category": "Musi",
+				"icon": "$(output)"
 			}
 		],
 		"keybindings": [
@@ -119,18 +131,28 @@
 			"title": "Musi",
 			"properties": {
 				"musi.server.path": {
-					"type": ["string", "null"],
+					"type": [
+						"string",
+						"null"
+					],
 					"default": null,
 					"markdownDescription": "Path to `musi_lsp` binary. If not set, searches in `target/debug`, `target/release`, and `PATH`."
 				},
 				"musi.runtime.path": {
-					"type": ["string", "null"],
+					"type": [
+						"string",
+						"null"
+					],
 					"default": null,
 					"markdownDescription": "Path to Musi runtime environment. Required for code execution and some diagnostics."
 				},
 				"musi.trace.server": {
 					"type": "string",
-					"enum": ["off", "messages", "verbose"],
+					"enum": [
+						"off",
+						"messages",
+						"verbose"
+					],
 					"default": "off",
 					"description": "Traces communication between VS Code and language server."
 				},
