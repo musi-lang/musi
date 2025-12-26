@@ -74,9 +74,8 @@ aux_mso_header = aux_magic, aux_version, aux_flags, aux_const_pool_len, aux_symb
 | 0x21 | `ldc.i8` | value:i64 | 64-bit signed integer |
 | 0x24 | `ldc.n4` | value:u32 | 32-bit unsigned integer |
 | 0x2F | `ldc.n8` | value:u64 | 64-bit unsigned integer |
-| 0x2E | `ldc.r2` | value:f16 | 16-bit binary float |
-| 0x30 | `ldc.r4` | value:f32 | 32-bit binary float |
-| 0x31 | `ldc.r8` | value:f64 | 64-bit binary float |
+| 0x2E | `ldc.r4` | value:f32 | 32-bit binary float |
+| 0x30 | `ldc.r8` | value:f64 | 64-bit binary float |
 | 0x72 | `ldstr` | index:u32 | string from constant pool |
 
 ### Memory Operations
@@ -106,13 +105,11 @@ aux_mso_header = aux_magic, aux_version, aux_flags, aux_const_pool_len, aux_symb
 | 0x49 | `ldind.n2` | unsigned 16-bit | load |
 | 0x4B | `ldind.n4` | unsigned 32-bit | load |
 | 0x4D | `ldind.n8` | unsigned 64-bit | load |
-| 0xE5 | `ldind.r2` | 16-bit float | load |
 | 0x4E | `ldind.r4` | 32-bit float | load |
 | 0x4F | `ldind.r8` | 64-bit float | load |
 | 0x50 | `ldind.ref` | reference | load |
 | 0x54 | `stind.i4` | 32-bit integer | store |
 | 0x55 | `stind.i8` | 64-bit integer | store |
-| 0xE6 | `stind.r2` | 16-bit float | store |
 | 0x56 | `stind.r4` | 32-bit float | store |
 | 0x57 | `stind.r8` | 64-bit float | store |
 | 0x51 | `stind.ref` | reference | store |
@@ -121,7 +118,7 @@ aux_mso_header = aux_magic, aux_version, aux_flags, aux_const_pool_len, aux_symb
 
 | Opcode | Mnemonic | Operands | Description |
 |--------|----------|----------|-------------|
-| 0x73 | `newobj` | ctor:u32 | allocate object, call constructor |
+| 0x73 | `newobj` | init:u32 | allocate object, call designated initializer |
 | 0x8D | `newarr` | type:u32 | allocate array |
 | 0x8E | `ldlen` | — | load array length |
 | 0xA3 | `ldelem` | — | load array element (index on stack) |
@@ -155,7 +152,6 @@ aux_mso_header = aux_magic, aux_version, aux_flags, aux_const_pool_len, aux_symb
 | 0x6A | `conv.i8` | 64-bit signed integer |
 | 0xD4 | `conv.n4` | 32-bit unsigned integer |
 | 0xD5 | `conv.n8` | 64-bit unsigned integer |
-| 0xE7 | `conv.r2` | 16-bit binary float |
 | 0xB6 | `conv.r4` | 32-bit binary float |
 | 0xB7 | `conv.r8` | 64-bit binary float |
 

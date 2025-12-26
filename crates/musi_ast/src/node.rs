@@ -197,12 +197,6 @@ pub enum ExprKind {
         scrutinee: ExprPtr,
         cases: Vec<MatchCase>,
     },
-    /// `try expr else x { }`
-    Try {
-        expr: ExprPtr,
-        else_binding: OptIdent,
-        else_body: OptExprPtr,
-    },
     /// `return expr`
     Return(OptExprPtr),
     /// `defer expr`

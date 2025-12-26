@@ -196,8 +196,6 @@ expr_for = "for", pat, "in", expr, [aux_if_guard], expr_block;
 
 expr_match = "match", expr, "{", aux_match_cases, "}";
 
-expr_try = "try", expr, ["else", [ident], expr];
-
 expr_return = "return", [expr];
 
 expr_defer = "defer", expr;
@@ -235,7 +233,7 @@ expr_assign = expr, "<-", expr;
 (* ========================================================================= *)
 (* PRECEDENCE LEVELS                                                         *)
 (* ========================================================================= *)
-prec_expr_primary = expr_lit | expr_ident | expr_tuple | expr_array | expr_record | expr_block | expr_if | expr_while | expr_for | expr_match | expr_try | expr_return | expr_defer | expr_break | expr_cycle | expr_unsafe | expr_import | expr_extern | expr_record_def | expr_sum_def | expr_alias | expr_fn | expr_bind | "(", expr, ")";
+prec_expr_primary = expr_lit | expr_ident | expr_tuple | expr_array | expr_record | expr_block | expr_if | expr_while | expr_for | expr_match | expr_return | expr_defer | expr_break | expr_cycle | expr_unsafe | expr_import | expr_extern | expr_record_def | expr_sum_def | expr_alias | expr_fn | expr_bind | "(", expr, ")";
 
 postfix_op = "(", [aux_args], ")" | ".[", aux_expr_list, "]" | ".{", [aux_field_list], "}" | ".", ident | ".^" | "?";
 

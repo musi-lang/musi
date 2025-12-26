@@ -147,7 +147,6 @@ pub const KEYWORDS: &[(&str, TokenKind)] = &[
     ("return", TokenKind::KwReturn),
     ("sum", TokenKind::KwSum),
     ("true", TokenKind::KwTrue),
-    ("try", TokenKind::KwTry),
     ("unsafe", TokenKind::KwUnsafe),
     ("val", TokenKind::KwVal),
     ("var", TokenKind::KwVar),

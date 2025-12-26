@@ -149,14 +149,6 @@ pub fn walk_expr<V: Visitor>(v: &mut V, expr: &Expr) {
                 v.visit_match_case(c);
             }
         }
-        ExprKind::Try {
-            expr, else_body, ..
-        } => {
-            v.visit_expr(expr);
-            if let Some(e) = else_body {
-                v.visit_expr(e);
-            }
-        }
         ExprKind::Return(e) | ExprKind::Break(e) => {
             if let Some(e) = e {
                 v.visit_expr(e);

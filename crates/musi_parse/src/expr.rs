@@ -264,7 +264,6 @@ impl Parser<'_> {
             Some(TokenKind::KwWhile) => self.parse_expr_while(),
             Some(TokenKind::KwFor) => self.parse_expr_for(),
             Some(TokenKind::KwMatch) => self.parse_expr_match(),
-            Some(TokenKind::KwTry) => self.parse_expr_try(),
             Some(TokenKind::KwReturn) => self.parse_expr_return(),
             Some(TokenKind::KwDefer) => self.parse_expr_defer(),
             Some(TokenKind::KwBreak) => self.parse_expr_break(),
@@ -533,32 +532,6 @@ impl Parser<'_> {
         let _ = self.expect(TokenKind::RBrace)?;
         Ok(Expr::new(
             ExprKind::Match { scrutinee, cases },
-            start.merge(self.prev_span()),
-        ))
-    }
-
-    fn parse_expr_try(&mut self) -> MusiResult<Expr> {
-        let start = self.curr_span();
-        let _ = self.expect(TokenKind::KwTry)?;
-        let expr = Box::new(self.parse_expr()?);
-        let (else_binding, else_body) = if self.bump_if(TokenKind::KwElse) {
-            let bind = match self.peek_kind() {
-                Some(TokenKind::Ident(id)) if !self.at(TokenKind::LBrace) => {
-                    let _ = self.advance();
-                    Some(id)
-                }
-                _ => None,
-            };
-            (bind, Some(Box::new(self.parse_expr()?)))
-        } else {
-            (None, None)
-        };
-        Ok(Expr::new(
-            ExprKind::Try {
-                expr,
-                else_binding,
-                else_body,
-            },
             start.merge(self.prev_span()),
         ))
     }
