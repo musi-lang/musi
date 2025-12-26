@@ -182,13 +182,13 @@ expr_record = ".{", [aux_field_list], "}";
 
 expr_block = "{", {stmt}, [expr], "}";
 
-aux_if_cond = expr | ("case", pat, ":=", expr, {",", expr});
+aux_cond = expr | ("case", pat, ":=", expr, {",", expr});
 
 aux_if_guard = "if", expr;
 
-expr_if = "if", aux_if_cond, expr_block, {"else", "if", aux_if_cond, expr_block}, ["else", expr_block];
+expr_if = "if", aux_cond, expr_block, {"else", "if", aux_cond, expr_block}, ["else", expr_block];
 
-expr_while = "while", expr, [aux_if_guard], expr_block;
+expr_while = "while", aux_cond, [aux_if_guard], expr_block;
 
 expr_for = "for", pat, "in", expr, [aux_if_guard], expr_block;
 
