@@ -63,7 +63,7 @@ pub fn document_symbols(
 ) -> Option<DocumentSymbolResponse> {
     let (source, parsed) = get_document(state, &params.text_document.uri)?;
     let interner = state.interner.lock().ok()?;
-    let symbols = collect_symbols(&source, &parsed.prog, &parsed.arena, &interner);
+    let symbols = collect_symbols(source, &parsed.prog, &parsed.arena, &interner);
     drop(interner);
     Some(DocumentSymbolResponse::Nested(symbols))
 }
@@ -73,7 +73,7 @@ pub fn folding_ranges(
     params: &FoldingRangeParams,
 ) -> Option<FoldingRangeList> {
     let (source, parsed) = get_document(state, &params.text_document.uri)?;
-    Some(collect_folding_ranges(&source, &parsed.prog, &parsed.arena))
+    Some(collect_folding_ranges(source, &parsed.prog, &parsed.arena))
 }
 
 fn analyze_and_publish(state: &mut GlobalState, uri: Uri, text: String) {
