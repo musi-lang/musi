@@ -65,7 +65,7 @@ pub trait IntoMusiError: fmt::Display {
         Level::Error
     }
 
-    /// Convert into a `MusiError` at given span.
+    /// Convert into `MusiError` at given span.
     fn into_musi_error(self, span: Span) -> MusiError
     where
         Self: Sized,

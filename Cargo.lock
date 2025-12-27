@@ -301,6 +301,8 @@ version = "0.1.0"
 dependencies = [
  "musi_ast",
  "musi_basic",
+ "musi_lex",
+ "thiserror",
 ]
 
 [[package]]

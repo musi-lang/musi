@@ -14,7 +14,7 @@ pub fn collect_symbols(
         source,
         arena,
         interner,
-        symbols: Vec::new(),
+        symbols: vec![],
     };
     collector.visit_prog(prog);
     collector.symbols
