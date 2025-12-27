@@ -605,6 +605,19 @@ fn test_expr_fn() {
 }
 
 #[test]
+fn test_expr_fn_arrow() {
+    let mut ctx = TestContext::new();
+    let id = ctx.parse_expr("fn(x: Int): Int => x + 1");
+    if let ExprKind::Fn { sig, body, .. } = &ctx.expr(id).kind {
+        assert_eq!(sig.name, None);
+        assert_eq!(sig.params.len(), 1);
+        assert!(matches!(ctx.expr(*body).kind, ExprKind::Binary { .. }));
+    } else {
+        panic!("expected function expression with arrow body");
+    }
+}
+
+#[test]
 fn test_expr_bind_val() {
     let mut ctx = TestContext::new();
     let id = ctx.parse_expr("val x := 42");
