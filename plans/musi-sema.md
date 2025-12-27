@@ -123,8 +123,8 @@ val Eq := class Eq[T] {
 
 // Instance (semicolon-separated)
 instance Eq[Int32] {
-  eq := fn(a, b) { a = b };
-  neq := fn(a, b) { a /= b }
+  eq := fn(a, b) => a = b;
+  neq := fn(a, b) => a /= b
 };
 
 // Constrained type parameters
