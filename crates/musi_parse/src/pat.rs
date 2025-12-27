@@ -195,7 +195,7 @@ impl Parser<'_> {
     ) -> PatId {
         let span = start.merge(self.prev_span());
         self.arena.alloc_pat(
-            PatKind::Variant {
+            PatKind::Choice {
                 name,
                 ty_args,
                 args,

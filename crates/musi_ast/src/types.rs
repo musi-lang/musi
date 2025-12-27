@@ -1,6 +1,6 @@
 use musi_basic::arena::NodeId;
 
-use crate::node::{Attr, AttrArg, Cond, Expr, Field, Pat, Stmt, SumCaseItem, TyExpr};
+use crate::node::{Attr, AttrArg, ChoiceCaseItem, Cond, Expr, Field, Pat, Stmt, TyExpr};
 
 // ============================================================================
 // IDENTIFIERS
@@ -46,6 +46,6 @@ pub type StmtIds = Vec<StmtId>;
 // ============================================================================
 
 pub type Fields = Vec<Field>;
-pub type SumCaseItems = Vec<SumCaseItem>;
+pub type ChoiceCaseItems = Vec<ChoiceCaseItem>;
 pub type Attrs = Vec<Attr>;
 pub type AttrArgs = Vec<AttrArg>;

@@ -18,11 +18,11 @@ Musi uses **gradual typing** with local `Hindley-Milner` inference. You can writ
 
 **Floats (IEEE-754 binary):**
 
-- `Bin16`, `Bin32`, `Bin64`
+- `Float16`, `Float32`, `Float64`
 
 **Decimals (IEEE-754 decimal, software... for now):**
 
-- `Dec32`, `Dec64`, `Dec128`
+- `BigFloat32`, `BigFloat64`, `BigFloat128`
 
 **Text:**
 
@@ -61,19 +61,46 @@ val func: Int32 -> Bool := fn (x) { x > 0 };
 
 ### Functions as Types
 
-Functions are first-class values. The `->` operator is right-associative, so you can curry.
+Functions are first-class values. The `->` operator constructs **function types** (also called the "function space" or "arrow type").
+
+**Important:** `->` is for *type expressions*, not function definitions. Function definitions use `fn` with a block body.
+
+```musi
+// : introduces type, -> builds function type
+val add: Int -> Int -> Int := fn(x, y) { x + y };
+
+// fully explicit version (same semantics):
+val add: Int -> Int -> Int := fn(x: Int, y: Int): Int { return x + y; };
+
+// Compare to OCaml:
+// let add : int -> int -> int = fun x y -> x + y
+```
+
+**Right-associative:** `A -> B -> C` means `A -> (B -> C)` (returns a function).
+
+**From type theory:** The `->` notation comes from type theory and mathematical logic, where it represents the function space (the set of all functions from A to B). This is why Musi uses `=>` for match case arrows instead of `->` — to avoid ambiguity between function types and pattern matching. Lean4 makes the same distinction.
 
 **Curried (default way):**
 
 ```musi
 val add: Int32 -> Int32 -> Int32 := fn(x, y) { x + y };
-val add5 := add(5);  // partial application works
+val add5 := add(5);  // partial application returns Int32 -> Int32
 ```
 
 **Tupled (for interop or when you need it):**
 
 ```musi
 val add_pair: (Int32, Int32) -> Int32 := fn(pair) { pair.0 + pair.1 };
+```
+
+**Higher-order functions:**
+
+```musi
+// map takes a function and returns a function
+val map: (A -> B) -> []A -> []B := fn(f, xs) { ... };
+
+// compose takes two functions and returns their composition
+val compose: (B -> C) -> (A -> B) -> A -> C := fn(g, f, x) { g(f(x)) };
 ```
 
 ## Writing Code
@@ -138,12 +165,12 @@ val p := Point.{ x := 10, y := 20 };
 val x := p.x;
 ```
 
-### Sum Types
+### Choice Types
 
 Tagged unions for when something can be one thing or another:
 
 ```musi
-sum Option[T] {
+choice Option[T] {
   case Some(T),
   case None
 };

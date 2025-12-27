@@ -57,7 +57,7 @@ fn test_numbers() {
 
 #[test]
 fn test_idents_keywords() {
-    check("val var if else match record sum fn", |_| {
+    check("val var if else match record choice fn", |_| {
         vec![
             TokenKind::KwVal,
             TokenKind::KwVar,
@@ -65,7 +65,7 @@ fn test_idents_keywords() {
             TokenKind::KwElse,
             TokenKind::KwMatch,
             TokenKind::KwRecord,
-            TokenKind::KwSum,
+            TokenKind::KwChoice,
             TokenKind::KwFn,
         ]
     });

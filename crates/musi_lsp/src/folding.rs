@@ -70,7 +70,7 @@ impl FoldingCollector<'_> {
                 self.add_range(expr.span, Some(FoldingRangeKind::Region));
                 self.visit_expr_id(*body);
             }
-            ExprKind::RecordDef { .. } | ExprKind::SumDef { .. } => {
+            ExprKind::RecordDef { .. } | ExprKind::ChoiceDef { .. } => {
                 self.add_range(expr.span, Some(FoldingRangeKind::Region));
             }
             ExprKind::Match { scrutinee, cases } => {

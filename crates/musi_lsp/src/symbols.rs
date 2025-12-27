@@ -1,5 +1,5 @@
 use lsp_types::{DocumentSymbol, SymbolKind};
-use musi_ast::{AstArena, ExprKind, FnSig, PatKind, Prog, StmtKind, SumCase};
+use musi_ast::{AstArena, ChoiceCase, ExprKind, FnSig, PatKind, Prog, StmtKind};
 use musi_basic::{interner::Interner, source::SourceFile, span::Span};
 
 use crate::types::DocumentSymbolList;
@@ -76,7 +76,7 @@ impl SymbolCollector<'_> {
         }
     }
 
-    fn collect_sum_cases(&self, cases: &[SumCase], parent_span: Span) -> DocumentSymbolList {
+    fn collect_choice_cases(&self, cases: &[ChoiceCase], parent_span: Span) -> DocumentSymbolList {
         cases
             .iter()
             .map(|c| {
@@ -113,13 +113,13 @@ impl SymbolCollector<'_> {
                 let sym = self.make_symbol(name_str, SymbolKind::STRUCT, expr.span, None);
                 self.symbols.push(sym);
             }
-            ExprKind::SumDef {
+            ExprKind::ChoiceDef {
                 name: Some(n),
                 cases,
                 ..
             } => {
                 let name_str = self.resolve_name(*n);
-                let children = self.collect_sum_cases(cases, expr.span);
+                let children = self.collect_choice_cases(cases, expr.span);
                 let sym = self.make_symbol(name_str, SymbolKind::ENUM, expr.span, Some(children));
                 self.symbols.push(sym);
             }

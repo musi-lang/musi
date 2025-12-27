@@ -1,7 +1,7 @@
 use crate::{
     AstArena, Attr, AttrArg, Cond, CondId, CondKind, Expr, ExprId, ExprIds, ExprKind, Field, FnSig,
     LitKind, MatchCase, Pat, PatId, PatIds, PatKind, Prog, Stmt, StmtId, StmtIds, StmtKind,
-    SumCase, SumCaseItem, TemplatePart, TyExpr, TyExprId, TyExprIds, TyExprKind,
+    ChoiceCase, ChoiceCaseItem, TemplatePart, TyExpr, TyExprId, TyExprIds, TyExprKind,
 };
 
 pub trait AstVisitor: Sized {
@@ -80,8 +80,8 @@ pub trait AstVisitor: Sized {
         walk_match_case(self, arena, case);
     }
 
-    fn visit_sum_case(&mut self, arena: &AstArena, case: &SumCase) {
-        walk_sum_case(self, arena, case);
+    fn visit_choice_case(&mut self, arena: &AstArena, case: &ChoiceCase) {
+        walk_choice_case(self, arena, case);
     }
 
     fn visit_attr(&mut self, arena: &AstArena, attr: &Attr) {
@@ -161,10 +161,10 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, arena: &AstArena, expr: &Expr) {
             v.visit_attrs(arena, attrs);
             v.visit_fields(arena, fields);
         }
-        ExprKind::SumDef { attrs, cases, .. } => {
+        ExprKind::ChoiceDef { attrs, cases, .. } => {
             v.visit_attrs(arena, attrs);
             for c in cases {
-                v.visit_sum_case(arena, c);
+                v.visit_choice_case(arena, c);
             }
         }
         ExprKind::Alias { attrs, ty, .. } => {
@@ -237,7 +237,7 @@ pub fn walk_pat<V: AstVisitor>(v: &mut V, arena: &AstArena, pat: &Pat) {
         PatKind::Tuple(ids) | PatKind::Array(ids) | PatKind::Cons(ids) | PatKind::Or(ids) => {
             v.visit_pat_ids(arena, ids);
         }
-        PatKind::Variant { ty_args, args, .. } => {
+        PatKind::Choice { ty_args, args, .. } => {
             v.visit_ty_expr_ids(arena, ty_args);
             v.visit_pat_ids(arena, args);
         }
@@ -291,12 +291,12 @@ pub fn walk_match_case<V: AstVisitor>(v: &mut V, arena: &AstArena, case: &MatchC
     v.visit_expr_id(arena, case.body);
 }
 
-pub fn walk_sum_case<V: AstVisitor>(v: &mut V, arena: &AstArena, case: &SumCase) {
+pub fn walk_choice_case<V: AstVisitor>(v: &mut V, arena: &AstArena, case: &ChoiceCase) {
     v.visit_ty_expr_ids(arena, &case.ty_args);
     for item in &case.fields {
         match item {
-            SumCaseItem::Type(id) => v.visit_ty_expr_id(arena, *id),
-            SumCaseItem::Field(f) => v.visit_field(arena, f),
+            ChoiceCaseItem::Type(id) => v.visit_ty_expr_id(arena, *id),
+            ChoiceCaseItem::Field(f) => v.visit_field(arena, f),
         }
     }
 }

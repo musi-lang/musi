@@ -89,13 +89,13 @@ aux_fn_sig = [ident], [ty_expr_params], [aux_params], [aux_ty_annot];
 
 aux_args = [aux_expr_list];
 
-aux_sum_case_item = ty_expr | aux_field;
+aux_choice_case_item = ty_expr | aux_field;
 
-aux_sum_case_list = aux_sum_case_item, {",", aux_sum_case_item}, [","];
+aux_choice_case_list = aux_choice_case_item, {",", aux_choice_case_item}, [","];
 
-aux_sum_case = "case", ident, [ty_expr_args], ["(", [aux_sum_case_list], ")"];
+aux_choice_case = "case", ident, [ty_expr_args], ["(", [aux_choice_case_list], ")"];
 
-aux_sum_cases = aux_sum_case, {",", aux_sum_case}, [","];
+aux_choice_cases = aux_choice_case, {",", aux_choice_case}, [","];
 
 aux_pat_field = ident;
 
@@ -212,7 +212,7 @@ expr_extern = aux_modifier_extern, "{", {"fn", aux_fn_sig, ";"}, "}";
 
 expr_record_def = [aux_attr], [aux_modifiers], "record", [ident], [ty_expr_params], "{", aux_field_list_semi, "}";
 
-expr_sum_def = [aux_attr], [aux_modifiers], "sum", [ident], [ty_expr_params], "{", aux_sum_cases, "}";
+expr_choice_def = [aux_attr], [aux_modifiers], "choice", [ident], [ty_expr_params], "{", aux_choice_cases, "}";
 
 expr_alias = [aux_attr], [aux_modifiers], "alias", ident, [ty_expr_params], ":=", ty_expr;
 
@@ -233,7 +233,7 @@ expr_assign = expr, "<-", expr;
 (* ========================================================================= *)
 (* PRECEDENCE LEVELS                                                         *)
 (* ========================================================================= *)
-prec_expr_primary = expr_lit | expr_ident | expr_tuple | expr_array | expr_record | expr_block | expr_if | expr_while | expr_for | expr_match | expr_return | expr_defer | expr_break | expr_cycle | expr_unsafe | expr_import | expr_extern | expr_record_def | expr_sum_def | expr_alias | expr_fn | expr_bind | "(", expr, ")";
+prec_expr_primary = expr_lit | expr_ident | expr_tuple | expr_array | expr_record | expr_block | expr_if | expr_while | expr_for | expr_match | expr_return | expr_defer | expr_break | expr_cycle | expr_unsafe | expr_import | expr_extern | expr_record_def | expr_choice_def | expr_alias | expr_fn | expr_bind | "(", expr, ")";
 
 postfix_op = "(", [aux_args], ")" | ".[", aux_expr_list, "]" | ".{", [aux_field_list], "}" | ".", ident | ".^" | "?";
 

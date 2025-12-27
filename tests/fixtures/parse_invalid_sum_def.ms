@@ -1,1 +1,1 @@
-sum Option[T] { case Some(T) }
+choice Option[T] { case Some(T) }

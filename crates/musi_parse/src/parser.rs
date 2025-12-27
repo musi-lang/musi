@@ -322,7 +322,7 @@ impl<'a> Parser<'a> {
                     | TokenKind::KwUnsafe
                     | TokenKind::KwImport
                     | TokenKind::KwRecord
-                    | TokenKind::KwSum
+                    | TokenKind::KwChoice
                     | TokenKind::KwAlias
                     | TokenKind::KwFn
                     | TokenKind::KwVal

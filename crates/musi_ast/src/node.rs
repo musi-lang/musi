@@ -2,8 +2,8 @@ use musi_basic::span::Span;
 use musi_lex::token::TokenKind;
 
 use crate::{
-    AttrArgs, Attrs, CondId, ExprId, ExprIds, Fields, Ident, Idents, OptExprId, OptIdent,
-    OptTyExprId, PatId, PatIds, StmtId, StmtIds, SumCaseItems, TyExprId, TyExprIds,
+    AttrArgs, Attrs, ChoiceCaseItems, CondId, ExprId, ExprIds, Fields, Ident, Idents, OptExprId,
+    OptIdent, OptTyExprId, PatId, PatIds, StmtId, StmtIds, TyExprId, TyExprIds,
 };
 
 // ============================================================================
@@ -95,7 +95,7 @@ pub enum PatKind {
     /// `Point.{x, y}`
     Record { ty: OptExprId, fields: Idents },
     /// `Some(x)`, `None`
-    Variant {
+    Choice {
         name: Ident,
         ty_args: TyExprIds,
         args: PatIds,
@@ -215,13 +215,13 @@ pub enum ExprKind {
         ty_params: Idents,
         fields: Fields,
     },
-    /// `sum Option[T] { case Some(T), case None }`
-    SumDef {
+    /// `choice Option[T] { case Some(T), case None }`
+    ChoiceDef {
         attrs: Attrs,
         mods: Modifiers,
         name: OptIdent,
         ty_params: Idents,
-        cases: Vec<SumCase>,
+        cases: Vec<ChoiceCase>,
     },
     /// `alias Name := Type`
     Alias {
@@ -343,14 +343,14 @@ pub struct MatchCase {
 
 /// `case Name[T](fields)`
 #[derive(Debug, Clone)]
-pub struct SumCase {
+pub struct ChoiceCase {
     pub name: Ident,
     pub ty_args: TyExprIds,
-    pub fields: SumCaseItems,
+    pub fields: ChoiceCaseItems,
 }
 
 #[derive(Debug, Clone)]
-pub enum SumCaseItem {
+pub enum ChoiceCaseItem {
     Type(TyExprId),
     Field(Field),
 }

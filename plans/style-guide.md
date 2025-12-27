@@ -48,7 +48,7 @@ record Point {
   y: Int;
 };
 
-sum Option[T] {
+choice Option[T] {
   case Some(value: T),
   case None,
 };
@@ -73,7 +73,7 @@ fn double(x: Int): Int { x * 2 };
 | Context | Rule |
 |---------|------|
 | **All statements** | **Required** (mandatory) |
-| **Record/sum fields** | Required |
+| **Record/choice fields** | Required |
 | **Top-level declarations** | Required after `}` |
 
 ```musi
@@ -184,7 +184,7 @@ val point := Point.{
   y := 2,     // trailing comma
 };
 
-sum Color {
+choice Color {
   case Red,
   case Green,
   case Blue,  // trailing comma
@@ -227,7 +227,7 @@ fn add(a: Int, b: Int): Int { a + b };
 |---------|-------------|
 | Between top-level declarations | 1 |
 | Between logical sections in a function | 1 |
-| Inside record/sum bodies | 0 |
+| Inside record/choice bodies | 0 |
 | Before `else`/`else if` | 0 |
 
 ```musi

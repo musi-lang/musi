@@ -1,7 +1,7 @@
 use musi_ast::{
-    Attr, AttrArg, AttrArgs, Attrs, CondId, CondKind, ExprId, ExprIds, ExprKind, Field, FnSig,
-    LitKind, MatchCase, Modifiers, OptExprId, StmtIds, StmtKind, SumCase, SumCaseItem,
-    SumCaseItems, TemplatePart,
+    Attr, AttrArg, AttrArgs, Attrs, ChoiceCase, ChoiceCaseItem, ChoiceCaseItems, CondId, CondKind,
+    ExprId, ExprIds, ExprKind, Field, FnSig, LitKind, MatchCase, Modifiers, OptExprId, StmtIds,
+    StmtKind, TemplatePart,
 };
 use musi_basic::{
     error::{IntoMusiError, MusiResult},
@@ -287,7 +287,7 @@ impl Parser<'_> {
                 self.parse_expr_with_modifiers(vec![], start)
             }
             Some(TokenKind::KwRecord) => self.parse_expr_record_def(vec![], Modifiers::default()),
-            Some(TokenKind::KwSum) => self.parse_expr_sum_def(vec![], Modifiers::default()),
+            Some(TokenKind::KwChoice) => self.parse_expr_choice_def(vec![], Modifiers::default()),
             Some(TokenKind::KwAlias) => self.parse_expr_alias_def(vec![], Modifiers::default()),
             Some(TokenKind::KwFn) => self.parse_expr_fn_def(vec![], Modifiers::default()),
             Some(TokenKind::KwVal | TokenKind::KwVar) => self.parse_expr_bind(Modifiers::default()),
@@ -604,7 +604,7 @@ impl Parser<'_> {
         let mods = self.parse_modifiers();
         match self.peek_kind() {
             Some(TokenKind::KwRecord) => self.parse_expr_record_def(attrs, mods),
-            Some(TokenKind::KwSum) => self.parse_expr_sum_def(attrs, mods),
+            Some(TokenKind::KwChoice) => self.parse_expr_choice_def(attrs, mods),
             Some(TokenKind::KwAlias) => self.parse_expr_alias_def(attrs, mods),
             Some(TokenKind::KwFn) => self.parse_expr_fn_def(attrs, mods),
             Some(TokenKind::KwVal | TokenKind::KwVar) => self.parse_expr_bind(mods),
@@ -634,9 +634,9 @@ impl Parser<'_> {
         ))
     }
 
-    fn parse_expr_sum_def(&mut self, attrs: Attrs, mods: Modifiers) -> MusiResult<ExprId> {
+    fn parse_expr_choice_def(&mut self, attrs: Attrs, mods: Modifiers) -> MusiResult<ExprId> {
         let start = self.curr_span();
-        let _ = self.expect(TokenKind::KwSum)?;
+        let _ = self.expect(TokenKind::KwChoice)?;
         let name = self.try_ident();
         let ty_params = self.parse_ty_expr_params()?;
         let _ = self.expect(TokenKind::LBrace)?;
@@ -645,9 +645,9 @@ impl Parser<'_> {
             let case_name = self.expect_ident()?;
             let ty_args = self.parse_ty_expr_args()?;
             let fields = self.opt_delimited(TokenKind::LParen, TokenKind::RParen, |p| {
-                p.parse_sum_case_items()
+                p.parse_choice_case_items()
             })?;
-            cases.push(SumCase {
+            cases.push(ChoiceCase {
                 name: case_name,
                 ty_args,
                 fields,
@@ -657,7 +657,7 @@ impl Parser<'_> {
         let _ = self.expect(TokenKind::RBrace)?;
         let span = start.merge(self.prev_span());
         Ok(self.arena.alloc_expr(
-            ExprKind::SumDef {
+            ExprKind::ChoiceDef {
                 attrs,
                 mods,
                 name,
@@ -668,15 +668,15 @@ impl Parser<'_> {
         ))
     }
 
-    fn parse_sum_case_items(&mut self) -> MusiResult<SumCaseItems> {
+    fn parse_choice_case_items(&mut self) -> MusiResult<ChoiceCaseItems> {
         self.separated(TokenKind::Comma, |p| {
             if p.at(TokenKind::KwVar)
                 || (matches!(p.peek_kind(), Some(TokenKind::Ident(_)))
                     && matches!(p.peek_nth(1), Some(TokenKind::Colon | TokenKind::ColonEq)))
             {
-                Ok(SumCaseItem::Field(p.parse_field()?))
+                Ok(ChoiceCaseItem::Field(p.parse_field()?))
             } else {
-                Ok(SumCaseItem::Type(p.parse_ty_expr()?))
+                Ok(ChoiceCaseItem::Type(p.parse_ty_expr()?))
             }
         })
     }
@@ -879,7 +879,7 @@ impl Parser<'_> {
                     | TokenKind::KwExport
                     | TokenKind::KwExtern
                     | TokenKind::KwRecord
-                    | TokenKind::KwSum
+                    | TokenKind::KwChoice
                     | TokenKind::KwAlias
                     | TokenKind::KwFn
                     | TokenKind::KwVal

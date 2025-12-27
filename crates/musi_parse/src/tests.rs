@@ -567,15 +567,15 @@ fn test_expr_record_def() {
 }
 
 #[test]
-fn test_expr_sum_def() {
+fn test_expr_choice_def() {
     let mut ctx = TestContext::new();
     let option = ctx.intern("Option");
-    let id = ctx.parse_expr("sum Option { case Some(Int), case None }");
-    if let ExprKind::SumDef { name, cases, .. } = &ctx.expr(id).kind {
+    let id = ctx.parse_expr("choice Option { case Some(Int), case None }");
+    if let ExprKind::ChoiceDef { name, cases, .. } = &ctx.expr(id).kind {
         assert_eq!(*name, Some(option));
         assert_eq!(cases.len(), 2);
     } else {
-        panic!("expected sum definition");
+        panic!("expected choice definition");
     }
 }
 
@@ -748,7 +748,7 @@ fn test_pat_variant() {
     let mut ctx = TestContext::new();
     let some = ctx.intern("Some");
     let id = ctx.parse_pat("Some(x)");
-    if let PatKind::Variant { name, args, .. } = &ctx.pat(id).kind {
+    if let PatKind::Choice { name, args, .. } = &ctx.pat(id).kind {
         assert_eq!(*name, some);
         assert_eq!(args.len(), 1);
     } else {

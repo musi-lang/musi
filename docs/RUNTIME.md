@@ -78,7 +78,7 @@ identity[String]("hi");   // generates String version
 Tagged union: `[discriminant:u8][padding][payload]`
 
 ```musi
-sum Option[T] {
+choice Option[T] {
   case Some(T),
   case None
 };
@@ -144,7 +144,7 @@ export fn add_numbers(a: Int32, b: Int32): Int32 {
 **Musi uses**: `defer` + `Expect[T, E]` (Result type)
 
 ```musi
-sum Expect[T, E] {
+choice Expect[T, E] {
   case Ok(T),
   case Err(E)
 };
@@ -293,7 +293,7 @@ unsafe {
 ### Sum Type Dispatch
 
 ```musi
-sum Tree[T] {
+choice Tree[T] {
   case Leaf(T),
   case Node(^Tree[T], ^Tree[T])
 };

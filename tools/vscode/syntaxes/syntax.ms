@@ -162,11 +162,11 @@ val dist := fn (a: Point, b: Point) {
 // ALGEBRAIC DATA TYPES
 // ============================================================================
 
-val Option := sum Option[T] { case Some(T), case None };
+val Option := choice Option[T] { case Some(T), case None };
 
-val Expect := sum Option[T] { case Succ(T), case Fail(E) };
+val Expect := choice Option[T] { case Succ(T), case Fail(E) };
 
-val Shape := sum { case Circle(radius), case Rect(width, height), case Triangle(a, b, c) };
+val Shape := choice { case Circle(radius), case Rect(width, height), case Triangle(a, b, c) };
 
 val area := fn (s: Shape) {
   match s {
@@ -242,7 +242,7 @@ val DEFAULT_TIMEOUT := 30;
 
 val User := record { name: String; age: Nat32; active: Bool };
 
-val HttpError := sum { case NotFound, case ServerError };
+val HttpError := choice { case NotFound, case ServerError };
 
 val user_count := 42;
 var active_sessions := 0;

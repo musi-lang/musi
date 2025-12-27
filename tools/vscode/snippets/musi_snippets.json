@@ -22,7 +22,7 @@
 	"Function with Single Expression": {
 		"prefix": "fnx",
 		"body": [
-			"fn ${1:functionName}(${2:params}): ${3:returnType} := ${4:expression}"
+			"fn ${1:functionName}(${2:params}): ${3:returnType} := ${4:expr}"
 		],
 		"description": "Declare function with single expression body"
 	},
@@ -58,21 +58,21 @@
 		"body": "${1:RecordName}.{ ${2:field1 := value1, field2 := value2} }"
 	},
 
-	"Sum Type Definition": {
-		"prefix": "sum",
+	"Choice Type Definition": {
+		"prefix": "choice",
 		"body": [
-			"sum ${1:SumName} {",
+			"choice ${1:ChoiceName} {",
 			"\tcase ${2:Case1}(${3:Type1}),",
 			"\tcase ${4:Case2}(${5:Type2})",
 			"}"
 		],
-		"description": "Define sum type"
+		"description": "Define choice type"
 	},
 
 	"Pattern Match": {
 		"prefix": "match",
 		"body": [
-			"match ${1:expression} {",
+			"match ${1:expr} {",
 			"\tcase ${2:pattern1} => ${3:result1},",
 			"\tcase ${4:pattern2} => ${5:result2}",
 			"}"
@@ -159,12 +159,12 @@
 
 	"Return Statement": {
 		"prefix": "ret",
-		"body": "return ${1:expression};"
+		"body": "return ${1:expr};"
 	},
 
 	"Defer Statement": {
 		"prefix": "defer",
-		"body": "defer ${1:expression};"
+		"body": "defer ${1:expr};"
 	},
 
 	"Break Statement": {
@@ -179,7 +179,7 @@
 
 	"Generic Type Alias": {
 		"prefix": "aliasg",
-		"body": "alias ${1:AliasName}<${2:T}> := ${3:TargetType};"
+		"body": "alias ${1:AliasName}[${2:T}] := ${3:TargetType};"
 	},
 
 	"Optional Type": {
