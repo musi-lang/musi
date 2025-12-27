@@ -1,7 +1,8 @@
 use std::fmt;
 
+use crate::TyReprPtr;
 use crate::symbol::SymbolId;
-use crate::types::{TyReprPtr, TyReprs};
+use crate::types::TyReprs;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TyVarId(pub u32);

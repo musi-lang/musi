@@ -2,15 +2,14 @@ use musi_ast::{ExprId, PatId, TyExprId};
 
 use crate::symbol::SymbolId;
 use crate::ty_repr::TyRepr;
-use crate::types::{OptSymbolId, OptSymbolIds, OptTyReprs};
 
 #[derive(Debug)]
 pub struct SemanticModel {
-    expr_types: OptTyReprs,
-    expr_symbols: OptSymbolIds,
-    pat_types: OptTyReprs,
-    pat_symbols: OptSymbolIds,
-    ty_expr_types: OptTyReprs,
+    expr_types: Vec<Option<TyRepr>>,
+    expr_symbols: Vec<Option<SymbolId>>,
+    pat_types: Vec<Option<TyRepr>>,
+    pat_symbols: Vec<Option<SymbolId>>,
+    ty_expr_types: Vec<Option<TyRepr>>,
 }
 
 impl SemanticModel {
@@ -31,7 +30,7 @@ impl SemanticModel {
     }
 
     #[must_use]
-    pub fn symbol_of_expr(&self, id: ExprId) -> OptSymbolId {
+    pub fn symbol_of_expr(&self, id: ExprId) -> Option<SymbolId> {
         self.expr_symbols.get(id.as_usize()).copied().flatten()
     }
 
@@ -55,7 +54,7 @@ impl SemanticModel {
     }
 
     #[must_use]
-    pub fn symbol_of_pat(&self, id: PatId) -> OptSymbolId {
+    pub fn symbol_of_pat(&self, id: PatId) -> Option<SymbolId> {
         self.pat_symbols.get(id.as_usize()).copied().flatten()
     }
 
