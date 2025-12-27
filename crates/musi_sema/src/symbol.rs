@@ -137,8 +137,19 @@ impl SymbolTable {
     }
 
     #[must_use]
-    pub const fn curr_scope_id(&self) -> ScopeId {
+    pub const fn scope_id(&self) -> ScopeId {
         self.scope_id
+    }
+
+    #[must_use]
+    pub fn scope_depth(&self) -> usize {
+        let mut depth = 1;
+        let mut curr = &self.scopes[self.scope_id.as_usize()];
+        while let Some(parent) = curr.parent {
+            depth += 1;
+            curr = &self.scopes[parent.as_usize()];
+        }
+        depth
     }
 
     /// Pushes new scope.
@@ -232,3 +243,6 @@ impl SymbolTable {
         SymbolId::new(len)
     }
 }
+
+#[cfg(test)]
+mod tests;
