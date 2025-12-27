@@ -209,3 +209,6 @@ impl Parser<'_> {
         self.arena.alloc_pat(PatKind::Tuple(vec![]), span)
     }
 }
+
+#[cfg(test)]
+mod tests;

@@ -5,4 +5,5 @@ use musi_basic::diagnostic::DiagnosticBag;
 // LEXER
 // ============================================================================
 
-pub type TokenStream = (Vec<Token>, DiagnosticBag);
+pub type Tokens = Vec<Token>;
+pub type TokenStream = (Tokens, DiagnosticBag);

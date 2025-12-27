@@ -169,3 +169,6 @@ impl Parser<'_> {
         self.arena.alloc_ty_expr(TyExprKind::Tuple(vec![]), span)
     }
 }
+
+#[cfg(test)]
+mod tests;

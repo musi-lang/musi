@@ -6,7 +6,7 @@ pub mod stmt;
 pub mod ty_expr;
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod test_utils;
 
 use std::mem;
 
@@ -29,6 +29,7 @@ pub fn parse(tokens: &[Token]) -> ParseResult {
     let mut parser = Parser::new(tokens, &mut arena);
     let prog = parser.parse_prog();
     let diagnostics = mem::take(&mut parser.diagnostics);
+
     ParseResult {
         prog,
         arena,
