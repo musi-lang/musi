@@ -16,6 +16,7 @@ pub const TOKEN_MODIFIERS: &[lsp_types::SemanticTokenModifier] = &[
     lsp_types::SemanticTokenModifier::DECLARATION,
     lsp_types::SemanticTokenModifier::READONLY,
     lsp_types::SemanticTokenModifier::DEFAULT_LIBRARY,
+    lsp_types::SemanticTokenModifier::new("mutable"),
 ];
 
 pub fn get_semantic_tokens(doc: &AnalyzedDocument, source: &SourceFile) -> SemanticTokens {

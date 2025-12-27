@@ -1,7 +1,7 @@
 use crate::{
     AstArena, Attr, AttrArg, ChoiceCase, ChoiceCaseItem, Cond, CondId, CondKind, Expr, ExprId,
-    ExprIds, ExprKind, Field, FnSig, LitKind, MatchCase, Pat, PatId, PatIds, PatKind, Prog, Stmt,
-    StmtId, StmtIds, StmtKind, TemplatePart, TyExpr, TyExprId, TyExprIds, TyExprKind,
+    ExprIds, ExprKind, Field, FnSig, Ident, LitKind, MatchCase, Pat, PatId, PatIds, PatKind, Prog,
+    Stmt, StmtId, StmtIds, StmtKind, TemplatePart, TyExpr, TyExprId, TyExprIds, TyExprKind,
 };
 
 pub trait AstVisitor: Sized {
@@ -93,6 +93,8 @@ pub trait AstVisitor: Sized {
             self.visit_attr(arena, a);
         }
     }
+
+    fn visit_ident(&mut self, _arena: &AstArena, _ident: Ident) {}
 }
 
 pub fn walk_prog<V: AstVisitor>(v: &mut V, arena: &AstArena, prog: &Prog) {
@@ -109,7 +111,8 @@ pub fn walk_stmt<V: AstVisitor>(v: &mut V, arena: &AstArena, stmt: &Stmt) {
 pub fn walk_expr<V: AstVisitor>(v: &mut V, arena: &AstArena, expr: &Expr) {
     match &expr.kind {
         ExprKind::Lit(lit) => v.visit_lit(arena, lit),
-        ExprKind::Ident(_) | ExprKind::Cycle | ExprKind::Import(_) => {}
+        ExprKind::Ident(ident) => v.visit_ident(arena, *ident),
+        ExprKind::Cycle | ExprKind::Import(_) => {}
         ExprKind::Tuple(ids) | ExprKind::Array(ids) => v.visit_expr_ids(arena, ids),
         ExprKind::Record { base, fields } => {
             if let Some(id) = base {
@@ -162,24 +165,43 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, arena: &AstArena, expr: &Expr) {
                 v.visit_fn_sig(arena, sig);
             }
         }
-        ExprKind::RecordDef { attrs, fields, .. } => {
+        ExprKind::RecordDef {
+            attrs,
+            fields,
+            name,
+            ..
+        } => {
             v.visit_attrs(arena, attrs);
+            if let Some(id) = name {
+                v.visit_ident(arena, *id);
+            }
             v.visit_fields(arena, fields);
         }
-        ExprKind::ChoiceDef { attrs, cases, .. } => {
+        ExprKind::ChoiceDef {
+            attrs, cases, name, ..
+        } => {
             v.visit_attrs(arena, attrs);
+            if let Some(id) = name {
+                v.visit_ident(arena, *id);
+            }
             for c in cases {
                 v.visit_choice_case(arena, c);
             }
         }
-        ExprKind::Alias { attrs, ty, .. } => {
+        ExprKind::Alias {
+            attrs, ty, name, ..
+        } => {
             v.visit_attrs(arena, attrs);
+            v.visit_ident(arena, *name);
             v.visit_ty_expr_id(arena, *ty);
         }
         ExprKind::Fn {
             attrs, sig, body, ..
         } => {
             v.visit_attrs(arena, attrs);
+            if let Some(name) = sig.name {
+                v.visit_ident(arena, name);
+            }
             v.visit_fn_sig(arena, sig);
             v.visit_expr_id(arena, *body);
         }
@@ -237,7 +259,8 @@ pub fn walk_ty_expr<V: AstVisitor>(v: &mut V, arena: &AstArena, ty_expr: &TyExpr
 
 pub fn walk_pat<V: AstVisitor>(v: &mut V, arena: &AstArena, pat: &Pat) {
     match &pat.kind {
-        PatKind::Ident(_) | PatKind::Wild => {}
+        PatKind::Ident(ident) => v.visit_ident(arena, *ident),
+        PatKind::Wild => {}
         PatKind::Record { base, .. } => {
             if let Some(id) = base {
                 v.visit_expr_id(arena, *id);
@@ -247,7 +270,13 @@ pub fn walk_pat<V: AstVisitor>(v: &mut V, arena: &AstArena, pat: &Pat) {
         PatKind::Tuple(ids) | PatKind::Array(ids) | PatKind::Cons(ids) | PatKind::Or(ids) => {
             v.visit_pat_ids(arena, ids);
         }
-        PatKind::Choice { ty_args, args, .. } => {
+        PatKind::Choice {
+            name,
+            ty_args,
+            args,
+            ..
+        } => {
+            v.visit_ident(arena, *name);
             v.visit_ty_expr_ids(arena, ty_args);
             v.visit_pat_ids(arena, args);
         }
@@ -302,6 +331,7 @@ pub fn walk_match_case<V: AstVisitor>(v: &mut V, arena: &AstArena, case: &MatchC
 }
 
 pub fn walk_choice_case<V: AstVisitor>(v: &mut V, arena: &AstArena, case: &ChoiceCase) {
+    v.visit_ident(arena, case.name);
     v.visit_ty_expr_ids(arena, &case.ty_args);
     for item in &case.fields {
         match item {

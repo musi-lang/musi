@@ -1,6 +1,4 @@
-use musi_ast::{
-    AstArena, AstVisitor, ExprId, ExprKind, PatId, PatKind, Prog, TyExprId, TyExprKind,
-};
+use musi_ast::{AstArena, AstVisitor, ExprId, Ident, PatId, Prog, TyExprId, TyExprKind};
 use musi_basic::span::Span;
 
 use crate::symbol::SymbolId;
@@ -119,6 +117,7 @@ pub enum SemanticTokenModifier {
     Declaration,
     ReadOnly,
     DefaultLibrary,
+    Mutable,
 }
 
 #[derive(Debug, Clone)]
@@ -132,6 +131,7 @@ impl SemanticToken {
     pub const MOD_DECLARATION: u32 = 1 << 0;
     pub const MOD_READONLY: u32 = 1 << 1;
     pub const MOD_DEFAULT_LIBRARY: u32 = 1 << 2;
+    pub const MOD_MUTABLE: u32 = 1 << 3;
 }
 
 #[must_use]
@@ -179,6 +179,8 @@ impl TokenCollector<'_> {
         let mut modifiers = extra_mods;
         if !symbol.mutable {
             modifiers |= SemanticToken::MOD_READONLY;
+        } else {
+            modifiers |= SemanticToken::MOD_MUTABLE;
         }
         if symbol.def_span == Span::default() {
             modifiers |= SemanticToken::MOD_DEFAULT_LIBRARY;
@@ -192,36 +194,29 @@ impl TokenCollector<'_> {
 }
 
 impl AstVisitor for TokenCollector<'_> {
-    fn visit_expr_id(&mut self, arena: &AstArena, id: ExprId) {
-        let expr = arena.exprs.get(id);
-        if let Some(sym_id) = self.model.symbol_of_expr(id)
+    fn visit_ident(&mut self, _arena: &AstArena, ident: Ident) {
+        if let Some(sym_id) = self.symbols.lookup(ident)
             && let Some(sym) = self.symbols.get(sym_id)
         {
-            let kind = Self::classify_kind(sym.kind);
-            if let ExprKind::Ident(ident) = &expr.kind {
-                let mut mods = 0;
-                if sym.def_span == ident.span {
-                    mods |= SemanticToken::MOD_DECLARATION;
-                }
-                self.add_token_with_mods(ident.span, kind, sym, mods);
+            let mut kind = Self::classify_kind(sym.kind);
+            let mut mods = 0;
+            if sym.def_span == ident.span {
+                mods |= SemanticToken::MOD_DECLARATION;
             }
+            if sym.kind == SymbolKind::Variant {
+                kind = SemanticTokenKind::EnumMember;
+            }
+            self.add_token_with_mods(ident.span, kind, sym, mods);
         }
+    }
+
+    fn visit_expr_id(&mut self, arena: &AstArena, id: ExprId) {
+        let expr = arena.exprs.get(id);
         musi_ast::walk_expr(self, arena, expr);
     }
 
     fn visit_pat_id(&mut self, arena: &AstArena, id: PatId) {
         let pat = arena.pats.get(id);
-        if let Some(sym_id) = self.model.symbol_of_pat(id)
-            && let Some(sym) = self.symbols.get(sym_id)
-        {
-            let kind = Self::classify_kind(sym.kind);
-            let mods = SemanticToken::MOD_DECLARATION;
-            if let PatKind::Ident(ident) = &pat.kind {
-                self.add_token_with_mods(ident.span, kind, sym, mods);
-            } else if let PatKind::Choice { name, .. } = &pat.kind {
-                self.add_token_with_mods(name.span, SemanticTokenKind::EnumMember, sym, mods);
-            }
-        }
         musi_ast::walk_pat(self, arena, pat);
     }
 
@@ -232,7 +227,11 @@ impl AstVisitor for TokenCollector<'_> {
         {
             let kind = Self::classify_kind(sym.kind);
             if let TyExprKind::Ident(ident) = &ty_expr.kind {
-                self.add_token_with_mods(ident.span, kind, sym, 0);
+                let mut mods = 0;
+                if sym.def_span == ident.span {
+                    mods |= SemanticToken::MOD_DECLARATION;
+                }
+                self.add_token_with_mods(ident.span, kind, sym, mods);
             } else {
                 self.add_token_with_mods(ty_expr.span, kind, sym, 0);
             }
