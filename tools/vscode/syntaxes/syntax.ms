@@ -299,7 +299,7 @@ val filter := fn (pred, list) {
 // EXTERNAL BLOCKS & FUNCTIONS
 // ============================================================================
 
-// extern "C" {
-//   fn malloc(size: Nat64): ^Any;
-//   fn free(ptr: ^Any): Any;
-// };
+extern "C" {
+  fn malloc(size: Nat64): ^Any;
+  fn free(ptr: ^Any): Any;
+};
