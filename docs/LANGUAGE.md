@@ -63,14 +63,17 @@ val func: Int32 -> Bool := fn (x) { x > 0 };
 
 Functions are first-class values. The `->` operator constructs **function types** (also called the "function space" or "arrow type").
 
-**Important:** `->` is for *type expressions*, not function definitions. Function definitions use `fn` with a block body.
+**Important:** `->` is for *type expressions*, not function definitions. Function definitions use `fn` with either a block `{ }` or expression body `=>`.
 
 ```musi
-// : introduces type, -> builds function type
+// Block body (multiple statements, implicit return of last expression)
 val add: Int -> Int -> Int := fn(x, y) { x + y };
 
-// fully explicit version (same semantics):
-val add: Int -> Int -> Int := fn(x: Int, y: Int): Int { return x + y; };
+// Expression body (single expression, like C#)
+val add: Int -> Int -> Int := fn(x, y) => x + y;
+
+// Fully explicit
+val add: Int -> Int -> Int := fn(x: Int, y: Int): Int => x + y;
 
 // Compare to OCaml:
 // let add : int -> int -> int = fun x y -> x + y
