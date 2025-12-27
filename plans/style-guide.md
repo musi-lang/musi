@@ -137,8 +137,8 @@ The `|>` operator chains operations (like F#/Elixir):
 
 ```musi
 val result := items
-  |> filter(fn(x) { x > 0 })
-  |> map(fn(x) { x * 2 })
+  |> filter(fn(x) => x > 0)
+  |> map(fn(x) => x * 2)
   |> collect();
 ```
 
@@ -290,8 +290,7 @@ Use `///` for documentation:
 ```musi
 /// Calculate the factorial of n.
 /// Returns 1 for n <= 1.
-fn factorial(n: Int): Int {
-  if n <= 1 { 1 } else { n * factorial(n - 1) }
+fn factorial(n: Int): Int => if n <= 1 { 1 } else { n * factorial(n - 1) };
 };
 ```
 
@@ -303,8 +302,8 @@ fn factorial(n: Int): Int {
 
 ```musi
 match value {
-  case Some(x) => x * 2,
-  case None => 0,
+case Some(x) => x * 2,
+case None => 0,
 };
 ```
 
@@ -312,9 +311,9 @@ match value {
 
 ```musi
 match value {
-  case x if x > 0 => "positive",
-  case x if x < 0 => "negative",
-  case _ => "zero",
+case x if x > 0 => "positive",
+case x if x < 0 => "negative",
+case _ => "zero",
 };
 ```
 
@@ -337,8 +336,8 @@ val result := some_long_function_name(
 );
 
 val processed := items
-  |> filter(fn(x) { x > 0 })
-  |> map(fn(x) { x * 2 })
+  |> filter(fn(x) => x > 0)
+  |> map(fn(x) => x * 2)
   |> collect();
 ```
 
