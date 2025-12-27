@@ -733,3 +733,6 @@ const ESCAPES: &[(char, char)] = &[
     ('t', '\t'),
     ('v', '\x0b'),
 ];
+
+#[cfg(test)]
+mod tests;

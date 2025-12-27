@@ -1,4 +1,4 @@
-use crate::token::TokenKind;
+use super::TokenKind;
 use musi_basic::interner::Interner;
 use musi_basic::source::SourceFile;
 
@@ -19,7 +19,7 @@ impl TestContext {
 fn check(input: &str, expected: impl FnOnce(&mut Interner) -> Vec<TokenKind>) {
     let mut ctx = TestContext::new(input);
     let mut actual = vec![];
-    let (tokens, _) = crate::lexer::tokenize(&ctx.source, &mut ctx.interner);
+    let (tokens, _) = super::tokenize(&ctx.source, &mut ctx.interner);
     for tok in tokens {
         if tok.kind == TokenKind::EOF {
             break;
@@ -206,7 +206,7 @@ fn test_error_reporting() {
     ];
     for input in cases {
         let mut ctx = TestContext::new(input);
-        let (_, diagnostics) = crate::lexer::tokenize(&ctx.source, &mut ctx.interner);
+        let (_, diagnostics) = super::tokenize(&ctx.source, &mut ctx.interner);
         assert!(
             !diagnostics.diagnostics.is_empty(),
             "expected error for input: {input:?}"
@@ -217,7 +217,7 @@ fn test_error_reporting() {
 #[test]
 fn test_rejection_of_unicode() {
     let mut ctx = TestContext::new("你好 世界 π_value 🦀_emojis");
-    let (_, diagnostics) = crate::lexer::tokenize(&ctx.source, &mut ctx.interner);
+    let (_, diagnostics) = super::tokenize(&ctx.source, &mut ctx.interner);
     assert!(!diagnostics.diagnostics.is_empty());
 }
 
@@ -258,7 +258,7 @@ fn test_spans() {
         (TokenKind::Semicolon, 12, 13),
     ];
 
-    let (tokens, _) = crate::lexer::tokenize(&ctx.source, &mut ctx.interner);
+    let (tokens, _) = super::tokenize(&ctx.source, &mut ctx.interner);
     for (i, (expected_tok, expected_lo, expected_hi)) in tokens_with_spans.iter().enumerate() {
         let tok = &tokens[i];
         assert_eq!(tok.kind, *expected_tok);
