@@ -2,8 +2,8 @@ use musi_basic::span::Span;
 use musi_lex::token::TokenKind;
 
 use crate::{
-    AttrArgs, Attrs, ChoiceCaseItems, CondId, ExprId, ExprIds, Fields, Ident, Idents, OptExprId,
-    OptIdent, OptTyExprId, PatId, PatIds, StmtId, StmtIds, TyExprId, TyExprIds,
+    AttrArgs, Attrs, ChoiceCaseItems, CondId, ExprId, ExprIds, Fields, Ident, Idents, PatId,
+    PatIds, StmtId, StmtIds, TyExprId, TyExprIds,
 };
 
 #[derive(Debug, Clone)]
@@ -81,7 +81,10 @@ pub enum PatKind {
     /// `[a, b, c]`
     Array(PatIds),
     /// `Point.{x, y}`
-    Record { base: OptExprId, fields: Idents },
+    Record {
+        base: Option<ExprId>,
+        fields: Idents,
+    },
     /// `Some(x)`, `None`
     Choice {
         name: Ident,
@@ -145,19 +148,19 @@ pub enum ExprKind {
     Array(ExprIds),
     /// `Point.{x := 1, y := 2}`
     Record {
-        base: OptExprId,
+        base: Option<ExprId>,
         fields: Fields,
     },
     /// Block: `{ stmt; stmt; expr }`
     Block {
         stmts: StmtIds,
-        expr: OptExprId,
+        expr: Option<ExprId>,
     },
     /// `if cond { } else if { } else { }`
     If {
         cond: CondId,
         then_br: ExprId,
-        else_br: OptExprId,
+        else_br: Option<ExprId>,
     },
     While {
         cond: CondId,
@@ -175,11 +178,11 @@ pub enum ExprKind {
         cases: Vec<MatchCase>,
     },
     /// `return expr`
-    Return(OptExprId),
+    Return(Option<ExprId>),
     /// `defer expr`
     Defer(ExprId),
     /// `break expr`
-    Break(OptExprId),
+    Break(Option<ExprId>),
     /// `cycle`
     Cycle,
     /// `unsafe { }`
@@ -188,14 +191,14 @@ pub enum ExprKind {
     Import(Ident),
     /// `extern "C" { fn foo(); }`
     Extern {
-        abi: OptIdent,
+        abi: Option<Ident>,
         fns: Vec<FnSig>,
     },
     /// `record Point { x: Int; y: Int }`
     RecordDef {
         attrs: Attrs,
         mods: Modifiers,
-        name: OptIdent,
+        name: Option<Ident>,
         ty_params: Idents,
         fields: Fields,
     },
@@ -203,7 +206,7 @@ pub enum ExprKind {
     ChoiceDef {
         attrs: Attrs,
         mods: Modifiers,
-        name: OptIdent,
+        name: Option<Ident>,
         ty_params: Idents,
         cases: Vec<ChoiceCase>,
     },
@@ -227,7 +230,7 @@ pub enum ExprKind {
         mods: Modifiers,
         mutable: bool,
         pat: PatId,
-        ty: OptTyExprId,
+        ty: Option<TyExprId>,
         init: ExprId,
     },
     /// `f(args)`
@@ -261,7 +264,7 @@ pub enum ExprKind {
     /// `a..b`, `a..<b`
     Range {
         start: ExprId,
-        end: OptExprId,
+        end: Option<ExprId>,
         inclusive: bool,
     },
     /// `x <- y`
@@ -296,24 +299,24 @@ pub enum StmtKind {
 pub struct Field {
     pub mutable: bool,
     pub name: Ident,
-    pub ty: OptTyExprId,
-    pub init: OptExprId,
+    pub ty: Option<TyExprId>,
+    pub init: Option<ExprId>,
 }
 
 /// `name[T](params): RetType`
 #[derive(Debug, Clone)]
 pub struct FnSig {
-    pub name: OptIdent,
+    pub name: Option<Ident>,
     pub ty_params: Idents,
     pub params: Fields,
-    pub ret: OptTyExprId,
+    pub ret: Option<TyExprId>,
 }
 
 /// `case pat if guard => body`
 #[derive(Debug, Clone)]
 pub struct MatchCase {
     pub pat: PatId,
-    pub guard: OptExprId,
+    pub guard: Option<ExprId>,
     pub body: ExprId,
 }
 
@@ -341,15 +344,15 @@ pub struct Attr {
 /// `name := value` or literal
 #[derive(Debug, Clone)]
 pub struct AttrArg {
-    pub name: OptIdent,
-    pub value: OptExprId,
+    pub name: Option<Ident>,
+    pub value: Option<ExprId>,
     pub lit: Option<LitKind>,
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct Modifiers {
     pub exportness: bool,
-    pub externness: (OptIdent, bool),
+    pub externness: (Option<Ident>, bool),
     pub unsafeness: bool,
 }
 
