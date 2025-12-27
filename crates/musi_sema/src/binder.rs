@@ -1,7 +1,7 @@
 use musi_ast::{
-    AstArena, ChoiceCase, CondId, CondKind, Expr, ExprId, ExprKind, Field, Fields, FnSig, Ident,
-    Idents, LitKind, MatchCase, PatId, PatKind, Prog, StmtId, StmtKind, TemplatePart, TyExpr,
-    TyExprId, TyExprKind,
+    AstArena, ChoiceCase, ChoiceCaseItem, CondId, CondKind, Expr, ExprId, ExprKind, Field, Fields,
+    FnSig, Ident, Idents, LitKind, MatchCase, PatId, PatKind, Prog, StmtId, StmtKind, TemplatePart,
+    TyExpr, TyExprId, TyExprKind,
 };
 use musi_basic::diagnostic::{Diagnostic, DiagnosticBag};
 use musi_basic::error::IntoMusiError;
@@ -622,7 +622,7 @@ impl<'a> Binder<'a> {
         let ty = name.map_or_else(TyRepr::unit, |ident| {
             let sym_id = self
                 .define_and_record(ident, SymbolKind::Type, TyRepr::unit(), ident.span, false)
-                .expect("duplicate type def");
+                .expect("duplicate type definition");
             TyRepr::named(sym_id, vec![])
         });
 
@@ -634,6 +634,21 @@ impl<'a> Binder<'a> {
                 case.name.span,
                 false,
             );
+            for field_item in &case.fields {
+                if let ChoiceCaseItem::Field(field) = field_item {
+                    let field_ty = field
+                        .ty
+                        .map_or_else(TyRepr::any, |ty_id| self.resolve_ty_expr(ty_id));
+
+                    _ = self.define_and_record(
+                        field.name,
+                        SymbolKind::Field,
+                        field_ty,
+                        field.name.span,
+                        field.mutable,
+                    );
+                }
+            }
         }
 
         ty
