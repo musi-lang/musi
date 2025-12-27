@@ -238,6 +238,11 @@ pub enum ExprKind {
         sig: FnSig,
         body: ExprId,
     },
+    /// `(params) => expr`
+    Lambda {
+        params: Fields,
+        body: ExprId,
+    },
     /// `val x := 1` or `var x := 1`
     Bind {
         mods: Modifiers,

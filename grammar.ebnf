@@ -218,6 +218,8 @@ expr_alias = [aux_attr], [aux_modifiers], "alias", ident, [ty_expr_params], ":="
 
 expr_fn = [aux_attr], [aux_modifiers], "fn", aux_fn_sig, expr_block;
 
+expr_lambda = "(", [aux_field_list], ")", "=>", expr;
+
 expr_bind = [aux_modifiers], ("val" | "var"), pat, [aux_ty_annot], aux_init, expr;
 
 expr_unary_postfix = expr, "(", [aux_args], ")" | expr, ".[", aux_expr_list, "]" | expr, ".", ident | expr, ".^" | expr, "?";
@@ -233,7 +235,7 @@ expr_assign = expr, "<-", expr;
 (* ========================================================================= *)
 (* PRECEDENCE LEVELS                                                         *)
 (* ========================================================================= *)
-prec_expr_primary = expr_lit | expr_ident | expr_tuple | expr_array | expr_record | expr_block | expr_if | expr_while | expr_for | expr_match | expr_return | expr_defer | expr_break | expr_cycle | expr_unsafe | expr_import | expr_extern | expr_record_def | expr_choice_def | expr_alias | expr_fn | expr_bind | "(", expr, ")";
+prec_expr_primary = expr_lit | expr_ident | expr_tuple | expr_array | expr_record | expr_block | expr_if | expr_while | expr_for | expr_match | expr_return | expr_defer | expr_break | expr_cycle | expr_unsafe | expr_import | expr_extern | expr_record_def | expr_choice_def | expr_alias | expr_fn | expr_lambda | expr_bind | "(", expr, ")";
 
 postfix_op = "(", [aux_args], ")" | ".[", aux_expr_list, "]" | ".{", [aux_field_list], "}" | ".", ident | ".^" | "?";
 

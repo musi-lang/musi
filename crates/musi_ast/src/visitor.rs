@@ -1,7 +1,7 @@
 use crate::{
-    AstArena, Attr, AttrArg, Cond, CondId, CondKind, Expr, ExprId, ExprIds, ExprKind, Field, FnSig,
-    LitKind, MatchCase, Pat, PatId, PatIds, PatKind, Prog, Stmt, StmtId, StmtIds, StmtKind,
-    ChoiceCase, ChoiceCaseItem, TemplatePart, TyExpr, TyExprId, TyExprIds, TyExprKind,
+    AstArena, Attr, AttrArg, ChoiceCase, ChoiceCaseItem, Cond, CondId, CondKind, Expr, ExprId,
+    ExprIds, ExprKind, Field, FnSig, LitKind, MatchCase, Pat, PatId, PatIds, PatKind, Prog, Stmt,
+    StmtId, StmtIds, StmtKind, TemplatePart, TyExpr, TyExprId, TyExprIds, TyExprKind,
 };
 
 pub trait AstVisitor: Sized {
@@ -176,6 +176,10 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, arena: &AstArena, expr: &Expr) {
         } => {
             v.visit_attrs(arena, attrs);
             v.visit_fn_sig(arena, sig);
+            v.visit_expr_id(arena, *body);
+        }
+        ExprKind::Lambda { params, body } => {
+            v.visit_fields(arena, params);
             v.visit_expr_id(arena, *body);
         }
         ExprKind::Bind { pat, ty, init, .. } => {
