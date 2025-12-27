@@ -51,31 +51,37 @@ impl Builtins {
 
         let widths = [IntWidth::I8, IntWidth::I16, IntWidth::I32, IntWidth::I64];
         for (idx, &width) in widths.iter().enumerate() {
-            let _ = symbols.define(
-                self.ints[idx],
-                SymbolKind::Type,
-                TyRepr::int(width),
-                span,
-                false,
-            );
-            let _ = symbols.define(
-                self.nats[idx],
-                SymbolKind::Type,
-                TyRepr::nat(width),
-                span,
-                false,
-            );
+            let _ = symbols
+                .define(
+                    self.ints[idx],
+                    SymbolKind::Type,
+                    TyRepr::int(width),
+                    span,
+                    false,
+                )
+                .expect("Int builtin already defined");
+            let _ = symbols
+                .define(
+                    self.nats[idx],
+                    SymbolKind::Type,
+                    TyRepr::nat(width),
+                    span,
+                    false,
+                )
+                .expect("Nat builtin already defined");
         }
 
         let float_widths = [FloatWidth::F32, FloatWidth::F64];
         for (idx, &width) in float_widths.iter().enumerate() {
-            let _ = symbols.define(
-                self.floats[idx],
-                SymbolKind::Type,
-                TyRepr::float(width),
-                span,
-                false,
-            );
+            let _ = symbols
+                .define(
+                    self.floats[idx],
+                    SymbolKind::Type,
+                    TyRepr::float(width),
+                    span,
+                    false,
+                )
+                .expect("Float builtin already defined");
         }
 
         let aliases = [

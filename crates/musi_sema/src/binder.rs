@@ -252,22 +252,20 @@ impl<'a> Binder<'a> {
                 if let PatKind::Ident(pat_ident) = &self.arena.pats.get(pat_id).kind
                     && let Some(name_ident) = name
                     && pat_ident.id == name_ident.id
+                    && let Some(sym_id) = self.symbols.lookup(*pat_ident)
                 {
-                    if let Some(sym_id) = self.symbols.lookup(*pat_ident) {
-                        self.model.set_pat_symbol(pat_id, sym_id);
-                        return TyRepr::unit();
-                    }
+                    self.model.set_pat_symbol(pat_id, sym_id);
+                    return TyRepr::unit();
                 }
                 SymbolKind::Type
             }
             ExprKind::Alias { name, .. } => {
                 if let PatKind::Ident(pat_ident) = &self.arena.pats.get(pat_id).kind
                     && pat_ident.id == name.id
+                    && let Some(sym_id) = self.symbols.lookup(*pat_ident)
                 {
-                    if let Some(sym_id) = self.symbols.lookup(*pat_ident) {
-                        self.model.set_pat_symbol(pat_id, sym_id);
-                        return TyRepr::unit();
-                    }
+                    self.model.set_pat_symbol(pat_id, sym_id);
+                    return TyRepr::unit();
                 }
                 SymbolKind::Type
             }
@@ -534,14 +532,16 @@ impl<'a> Binder<'a> {
         let _ = self.symbols.push_scope();
 
         for (param, ty) in sig.params.iter().zip(param_tys.iter()) {
-            if let Ok(_) = self.define_and_record(
-                param.name,
-                SymbolKind::Param,
-                ty.clone(),
-                param.name.span,
-                param.mutable,
-            ) {
-            } else {
+            if self
+                .define_and_record(
+                    param.name,
+                    SymbolKind::Param,
+                    ty.clone(),
+                    param.name.span,
+                    param.mutable,
+                )
+                .is_err()
+            {
                 let name = self.interner.resolve(param.name.id);
                 self.error(
                     SemaErrorKind::DuplicateDef(name.to_owned()),
@@ -570,18 +570,16 @@ impl<'a> Binder<'a> {
         fields: &Fields,
         _ty_params: &Idents,
     ) -> TyRepr {
-        let ty = if let Some(ident) = name {
+        let ty = name.map_or_else(TyRepr::unit, |ident| {
             let sym_id = self
                 .define_and_record(ident, SymbolKind::Type, TyRepr::unit(), ident.span, false)
                 .expect("duplicate type def");
             TyRepr::named(sym_id, vec![])
-        } else {
-            TyRepr::unit()
-        };
+        });
 
         for field in fields {
             if let Some(ty_expr) = field.ty {
-                let _ = self.resolve_ty_expr(ty_expr);
+                drop(self.resolve_ty_expr(ty_expr));
             }
         }
 
@@ -594,23 +592,22 @@ impl<'a> Binder<'a> {
         cases: &[ChoiceCase],
         _ty_params: &Idents,
     ) -> TyRepr {
-        let ty = if let Some(ident) = name {
+        let ty = name.map_or_else(TyRepr::unit, |ident| {
             let sym_id = self
                 .define_and_record(ident, SymbolKind::Type, TyRepr::unit(), ident.span, false)
                 .expect("duplicate type def");
             TyRepr::named(sym_id, vec![])
-        } else {
-            TyRepr::unit()
-        };
+        });
 
         for case in cases {
-            if let Ok(_) = self.define_and_record(
+            #[allow(clippy::let_underscore_must_use)] // `drop()` on `Copy` trait is no-op
+            let _ = self.define_and_record(
                 case.name,
                 SymbolKind::Variant,
                 TyRepr::unit(),
                 case.name.span,
                 false,
-            ) {}
+            );
         }
 
         ty
@@ -618,6 +615,7 @@ impl<'a> Binder<'a> {
 
     fn bind_expr_alias(&mut self, name: Ident, ty_expr: TyExprId) -> TyRepr {
         let ty = self.resolve_ty_expr(ty_expr);
+        #[allow(clippy::let_underscore_must_use)] // `drop()` on `Copy` trait is no-op
         let _ = self.define_and_record(name, SymbolKind::Type, ty.clone(), name.span, false);
         ty
     }

@@ -305,6 +305,7 @@ pub fn walk_lit<V: AstVisitor>(v: &mut V, arena: &AstArena, lit: &LitKind) {
 }
 
 pub fn walk_field<V: AstVisitor>(v: &mut V, arena: &AstArena, field: &Field) {
+    v.visit_ident(arena, field.name);
     if let Some(id) = field.ty {
         v.visit_ty_expr_id(arena, id);
     }

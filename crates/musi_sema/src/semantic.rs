@@ -4,7 +4,7 @@ use musi_basic::span::Span;
 use std::collections::HashMap;
 
 use crate::symbol::SymbolId;
-use crate::ty_repr::TyRepr;
+use crate::ty_repr::{TyRepr, TyReprKind};
 use crate::{SemanticTokens, Symbol, SymbolKind, SymbolTable};
 
 #[derive(Debug)]
@@ -171,10 +171,17 @@ struct TokenCollector<'a> {
 }
 
 impl TokenCollector<'_> {
-    const fn classify_kind(kind: SymbolKind) -> SemanticTokenKind {
+    fn classify_with_type(kind: SymbolKind, ty: &TyRepr) -> SemanticTokenKind {
         match kind {
-            SymbolKind::Local => SemanticTokenKind::Variable,
-            SymbolKind::Param => SemanticTokenKind::Parameter,
+            SymbolKind::Param | SymbolKind::Local => {
+                if matches!(ty.kind, TyReprKind::Fn(..)) {
+                    SemanticTokenKind::Function
+                } else if kind == SymbolKind::Param {
+                    SemanticTokenKind::Parameter
+                } else {
+                    SemanticTokenKind::Variable
+                }
+            }
             SymbolKind::Fn | SymbolKind::Builtin => SemanticTokenKind::Function,
             SymbolKind::Type => SemanticTokenKind::Type,
             SymbolKind::Field => SemanticTokenKind::Property,
@@ -190,10 +197,10 @@ impl TokenCollector<'_> {
         extra_mods: u32,
     ) {
         let mut modifiers = extra_mods;
-        if !symbol.mutable {
-            modifiers |= SemanticToken::MOD_READONLY;
-        } else {
+        if symbol.mutable {
             modifiers |= SemanticToken::MOD_MUTABLE;
+        } else {
+            modifiers |= SemanticToken::MOD_READONLY;
         }
         if symbol.def_span == Span::default() {
             modifiers |= SemanticToken::MOD_DEFAULT_LIBRARY;
@@ -215,7 +222,7 @@ impl AstVisitor for TokenCollector<'_> {
         if let Some(sym_id) = sym_id
             && let Some(sym) = self.symbols.get(sym_id)
         {
-            let mut kind = Self::classify_kind(sym.kind);
+            let mut kind = Self::classify_with_type(sym.kind, &sym.ty);
             let mut mods = 0;
             if sym.def_span == ident.span {
                 mods |= SemanticToken::MOD_DECLARATION;
@@ -242,7 +249,7 @@ impl AstVisitor for TokenCollector<'_> {
         if let Some(sym_id) = self.model.symbol_of_ty_expr(id)
             && let Some(sym) = self.symbols.get(sym_id)
         {
-            let kind = Self::classify_kind(sym.kind);
+            let kind = Self::classify_with_type(sym.kind, &sym.ty);
             if let TyExprKind::Ident(ident) = &ty_expr.kind {
                 let mut mods = 0;
                 if sym.def_span == ident.span {
