@@ -1,6 +1,6 @@
 use musi_ast::{
-    AstArena, CondId, CondKind, Expr, ExprId, ExprKind, FnSig, Ident, LitKind, OptExprId,
-    OptTyExprId, PatId, PatKind, Prog, StmtId, StmtKind, TyExpr, TyExprId, TyExprKind,
+    AstArena, CondId, CondKind, Expr, ExprId, ExprKind, FnSig, Ident, LitKind, PatId, PatKind,
+    Prog, StmtId, StmtKind, TyExpr, TyExprId, TyExprKind,
 };
 use musi_basic::diagnostic::{Diagnostic, DiagnosticBag};
 use musi_basic::error::IntoMusiError;
@@ -181,7 +181,7 @@ impl<'a> Binder<'a> {
         TyRepr::array(first_ty, Some(elems.len()))
     }
 
-    fn bind_expr_block(&mut self, stmts: &[StmtId], tail: OptExprId) -> TyRepr {
+    fn bind_expr_block(&mut self, stmts: &[StmtId], tail: Option<ExprId>) -> TyRepr {
         let _ = self.symbols.push_scope();
         for stmt_id in stmts {
             self.bind_stmt(*stmt_id);
@@ -194,7 +194,7 @@ impl<'a> Binder<'a> {
     fn bind_expr_bind(
         &mut self,
         pat_id: PatId,
-        ty_ann: OptTyExprId,
+        ty_ann: Option<TyExprId>,
         init_id: ExprId,
         mutable: bool,
     ) -> TyRepr {
@@ -213,7 +213,12 @@ impl<'a> Binder<'a> {
         TyRepr::unit()
     }
 
-    fn bind_expr_if(&mut self, cond_id: CondId, then_id: ExprId, else_id: OptExprId) -> TyRepr {
+    fn bind_expr_if(
+        &mut self,
+        cond_id: CondId,
+        then_id: ExprId,
+        else_id: Option<ExprId>,
+    ) -> TyRepr {
         let cond = self.arena.conds.get(cond_id);
         match &cond.kind {
             CondKind::Expr(expr_id) => {
@@ -276,7 +281,7 @@ impl<'a> Binder<'a> {
         TyRepr::unit()
     }
 
-    fn bind_expr_return(&mut self, opt: OptExprId, span: Span) -> TyRepr {
+    fn bind_expr_return(&mut self, opt: Option<ExprId>, span: Span) -> TyRepr {
         if !self.in_fn {
             self.error(SemaErrorKind::ReturnOutsideFn, span);
         }
@@ -286,7 +291,7 @@ impl<'a> Binder<'a> {
         TyRepr::never()
     }
 
-    fn bind_expr_break(&mut self, opt: OptExprId, span: Span) -> TyRepr {
+    fn bind_expr_break(&mut self, opt: Option<ExprId>, span: Span) -> TyRepr {
         if !self.in_loop {
             self.error(SemaErrorKind::BreakOutsideLoop, span);
         }

@@ -5,14 +5,14 @@ use crossbeam_channel::Sender;
 use lsp_server::{Message, Notification};
 use lsp_types::Uri;
 use lsp_types::notification::Notification as LspNotification;
-use musi_basic::ArcSource;
 use musi_basic::interner::Interner;
+use musi_basic::source::SourceFile;
 
 use crate::handlers::ParsedDocument;
 
 pub struct GlobalState {
     pub interner: Arc<Mutex<Interner>>,
-    pub documents: HashMap<Uri, ArcSource>,
+    pub documents: HashMap<Uri, Arc<SourceFile>>,
     pub parsed: HashMap<Uri, ParsedDocument>,
     pub sender: Sender<Message>,
 }
