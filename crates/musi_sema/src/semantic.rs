@@ -5,7 +5,7 @@ use musi_basic::span::Span;
 
 use crate::symbol::SymbolId;
 use crate::ty_repr::TyRepr;
-use crate::{SymbolKind, SymbolTable};
+use crate::{SemanticTokens, SymbolKind, SymbolTable};
 
 #[derive(Debug)]
 pub struct SemanticModel {
@@ -114,7 +114,7 @@ pub fn collect_tokens(
     prog: &Prog,
     model: &SemanticModel,
     symbols: &SymbolTable,
-) -> Vec<SemanticToken> {
+) -> SemanticTokens {
     let mut collector = TokenCollector {
         model,
         symbols,
@@ -128,7 +128,7 @@ pub fn collect_tokens(
 struct TokenCollector<'a> {
     model: &'a SemanticModel,
     symbols: &'a SymbolTable,
-    tokens: Vec<SemanticToken>,
+    tokens: SemanticTokens,
 }
 
 impl TokenCollector<'_> {
@@ -173,6 +173,8 @@ impl AstVisitor for TokenCollector<'_> {
         {
             let kind = Self::classify_kind(sym.kind);
             if matches!(pat.kind, PatKind::Ident(_)) {
+                self.add_token(pat.span, kind, sym.mutable);
+            } else if matches!(pat.kind, PatKind::Choice { .. }) {
                 self.add_token(pat.span, kind, sym.mutable);
             }
         }
