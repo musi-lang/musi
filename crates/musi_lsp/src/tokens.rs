@@ -47,11 +47,7 @@ pub fn get_semantic_tokens(doc: &AnalyzedDocument, source: &SourceFile) -> Seman
             SemanticTokenKind::EnumMember => 5,
         };
 
-        let mut modifiers = 0;
-        if !raw.is_mutable {
-            modifiers |= 1 << 1; // READONLY
-        }
-        // NOTE: other mods could be added here if `musi_sema::SemanticToken` gave more info
+        let modifiers = raw.modifiers;
 
         data.push(SemanticToken {
             delta_line: delta_line.try_into().expect("delta_line too large"),

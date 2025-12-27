@@ -17,7 +17,7 @@ impl TestContext {
     }
 
     pub fn check_bind(&mut self, code: &str) -> (SemanticModel, SymbolTable, DiagnosticBag) {
-        let source = SourceFile::new("test.ms".to_string(), code.to_string(), 0);
+        let source = SourceFile::new("test.ms".to_owned(), code.to_owned(), 0);
         let (tokens, lex_errs) = musi_lex::tokenize(&source, &mut self.interner);
         assert!(lex_errs.is_empty(), "lex errors: {lex_errs:?}");
 
@@ -30,7 +30,7 @@ impl TestContext {
 
         super::bind(
             &parse_result.arena,
-            &mut self.interner,
+            &self.interner,
             &parse_result.prog,
             &self.builtins,
         )

@@ -27,23 +27,25 @@ pub struct Builtins {
 impl Builtins {
     #[must_use]
     pub fn from_interner(interner: &mut Interner) -> Self {
+        let span = Span::default();
+        let mut i = |s| Ident::new(interner.intern(s), span);
         Self {
-            int8: interner.intern("Int8"),
-            int16: interner.intern("Int16"),
-            int32: interner.intern("Int"),
-            int64: interner.intern("Int64"),
-            nat8: interner.intern("Nat8"),
-            nat16: interner.intern("Nat16"),
-            nat32: interner.intern("Nat32"),
-            nat64: interner.intern("Nat64"),
-            float32: interner.intern("Float32"),
-            float64: interner.intern("Float64"),
-            bool: interner.intern("Bool"),
-            rune: interner.intern("Rune"),
-            string: interner.intern("String"),
-            unit: interner.intern("Unit"),
-            never: interner.intern("Never"),
-            any: interner.intern("Any"),
+            int8: i("Int8"),
+            int16: i("Int16"),
+            int32: i("Int"),
+            int64: i("Int64"),
+            nat8: i("Nat8"),
+            nat16: i("Nat16"),
+            nat32: i("Nat32"),
+            nat64: i("Nat64"),
+            float32: i("Float32"),
+            float64: i("Float64"),
+            bool: i("Bool"),
+            rune: i("Rune"),
+            string: i("String"),
+            unit: i("Unit"),
+            never: i("Never"),
+            any: i("Any"),
         }
     }
 
@@ -76,7 +78,7 @@ impl Builtins {
 
         for (name, ty) in builtins {
             let _ = symbols
-                .define(name, SymbolKind::Builtin, ty, span, false)
+                .define(name, SymbolKind::Type, ty, span, false)
                 .expect("builtin already defined");
         }
     }

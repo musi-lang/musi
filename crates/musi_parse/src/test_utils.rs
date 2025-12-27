@@ -1,6 +1,6 @@
 use crate::Parser;
-use musi_ast::{AstArena, Expr, ExprId, Pat, PatId, TyExpr, TyExprId};
-use musi_basic::{interner::Interner, source::SourceFile};
+use musi_ast::{AstArena, Expr, ExprId, Ident, Pat, PatId, TyExpr, TyExprId};
+use musi_basic::{interner::Interner, source::SourceFile, span::Span};
 use musi_lex::{Tokens, lexer::tokenize};
 
 pub struct TestContext {
@@ -52,7 +52,7 @@ impl TestContext {
         self.arena.ty_exprs.get(id)
     }
 
-    pub fn intern(&mut self, s: &str) -> u32 {
-        self.interner.intern(s)
+    pub fn intern(&mut self, s: &str) -> Ident {
+        Ident::new(self.interner.intern(s), Span::default())
     }
 }

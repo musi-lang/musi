@@ -1,7 +1,5 @@
 use std::collections::HashMap;
 
-use crate::types::Ident;
-
 #[derive(Debug, Default)]
 pub struct Interner {
     table: HashMap<String, u32>,
@@ -18,27 +16,27 @@ impl Interner {
     ///
     /// # Panics
     ///
-    /// Panics if interner contains more than `u32::MAX` strings.
-    pub fn intern(&mut self, text: &str) -> Ident {
+    /// Panics if number of strings exceeds `u32::MAX`.
+    pub fn intern(&mut self, text: &str) -> u32 {
         if let Some(&id) = self.table.get(text) {
             return id;
         }
         let id = u32::try_from(self.strings.len()).expect("interner overflow");
         let owned = text.to_owned();
         self.strings.push(owned.clone());
-        let _: Option<Ident> = self.table.insert(owned, id);
+        let _ = self.table.insert(owned, id);
         id
     }
 
     #[must_use]
-    pub fn lookup(&self, id: Ident) -> Option<&str> {
+    pub fn lookup(&self, id: u32) -> Option<&str> {
         self.strings
             .get(usize::try_from(id).ok()?)
             .map(String::as_str)
     }
 
     #[must_use]
-    pub fn resolve(&self, id: Ident) -> &str {
+    pub fn resolve(&self, id: u32) -> &str {
         self.lookup(id).unwrap_or("<unknown>")
     }
 

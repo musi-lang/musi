@@ -5,6 +5,7 @@ use crate::{
     types::TokenStream,
 };
 use musi_basic::{
+    Ident,
     diagnostic::{DiagnosticBag, report},
     error::IntoMusiError,
     interner::Interner,
@@ -147,9 +148,11 @@ impl<'a> Lexer<'a> {
             return TokenKind::Underscore;
         }
 
-        match KEYWORDS.binary_search_by_key(&text, |k| k.0) {
-            Ok(i) => KEYWORDS[i].1,
-            Err(_) => TokenKind::Ident(self.interner.intern(text)),
+        if let Ok(i) = KEYWORDS.binary_search_by_key(&text, |k| k.0) {
+            KEYWORDS[i].1
+        } else {
+            let id = self.interner.intern(text);
+            TokenKind::Ident(Ident::new(id, self.span(start, self.cursor.pos())))
         }
     }
 
@@ -293,7 +296,11 @@ impl<'a> Lexer<'a> {
                     self.cursor.pos() - c.len_utf8(),
                     self.cursor.pos(),
                 );
-                TokenKind::Error(self.interner.intern(c.to_string().as_str()))
+                let id = self.interner.intern(c.to_string().as_str());
+                TokenKind::Error(Ident::new(
+                    id,
+                    self.span(self.cursor.pos() - c.len_utf8(), self.cursor.pos()),
+                ))
             }
             None => TokenKind::EOF,
         }
@@ -310,16 +317,16 @@ impl<'a> Lexer<'a> {
                 .get(start + 1..content_end)
                 .expect("`start+1..content_end` within source bounds");
             let val = unescape(raw, start + 1, &mut self.errors);
-            TokenKind::LitString(self.interner.intern(&val))
+            let id = self.interner.intern(&val);
+            TokenKind::LitString(Ident::new(id, self.span(start, self.cursor.pos())))
         } else {
-            TokenKind::Error(
-                self.interner.intern(
-                    self.source
-                        .input
-                        .get(start..self.cursor.pos())
-                        .expect("`start..cursor` within source bounds"),
-                ),
-            )
+            let id = self.interner.intern(
+                self.source
+                    .input
+                    .get(start..self.cursor.pos())
+                    .expect("`start..cursor` within source bounds"),
+            );
+            TokenKind::Error(Ident::new(id, self.span(start, self.cursor.pos())))
         }
     }
 
@@ -388,7 +395,8 @@ impl<'a> Lexer<'a> {
                 .get(start + offset..content_end)
                 .expect("`start+offset..content_end` within source bounds");
             let val = unescape(raw, start + offset, &mut self.errors);
-            let s = self.interner.intern(&val);
+            let id = self.interner.intern(&val);
+            let span = self.span(start, self.cursor.pos());
 
             let is_head = offset == TEMPLATE_PREFIX;
             let follows_brace = self
@@ -399,24 +407,23 @@ impl<'a> Lexer<'a> {
             if follows_brace {
                 self.braces.push(BraceKind::Template);
                 if is_head {
-                    TokenKind::TemplateHead(s)
+                    TokenKind::TemplateHead(Ident::new(id, span))
                 } else {
-                    TokenKind::TemplateMiddle(s)
+                    TokenKind::TemplateMiddle(Ident::new(id, span))
                 }
             } else if is_head {
-                TokenKind::LitTemplateNoSubst(s)
+                TokenKind::LitTemplateNoSubst(Ident::new(id, span))
             } else {
-                TokenKind::TemplateTail(s)
+                TokenKind::TemplateTail(Ident::new(id, span))
             }
         } else {
-            TokenKind::Error(
-                self.interner.intern(
-                    self.source
-                        .input
-                        .get(start..self.cursor.pos())
-                        .expect("`start..cursor` within source bounds"),
-                ),
-            )
+            let id = self.interner.intern(
+                self.source
+                    .input
+                    .get(start..self.cursor.pos())
+                    .expect("`start..cursor` within source bounds"),
+            );
+            TokenKind::Error(Ident::new(id, self.span(start, self.cursor.pos())))
         }
     }
 
@@ -431,20 +438,20 @@ impl<'a> Lexer<'a> {
                 .get(start + 1..content_end)
                 .expect("valid format string prefix slice");
             if s.is_empty() {
-                self.report(LexErrorKind::InvalidIdent, start, self.cursor.pos());
-                TokenKind::Error(self.interner.intern(""))
+                let id = self.interner.intern("");
+                TokenKind::Error(Ident::new(id, self.span(start, self.cursor.pos())))
             } else {
-                TokenKind::Ident(self.interner.intern(s))
+                let id = self.interner.intern(s);
+                TokenKind::Ident(Ident::new(id, self.span(start, self.cursor.pos())))
             }
         } else {
-            TokenKind::Error(
-                self.interner.intern(
-                    self.source
-                        .input
-                        .get(start..self.cursor.pos())
-                        .expect("`start..cursor` within source bounds"),
-                ),
-            )
+            let id = self.interner.intern(
+                self.source
+                    .input
+                    .get(start..self.cursor.pos())
+                    .expect("`start..cursor` within source bounds"),
+            );
+            TokenKind::Error(Ident::new(id, self.span(start, self.cursor.pos())))
         }
     }
 }

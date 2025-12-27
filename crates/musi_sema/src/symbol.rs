@@ -18,10 +18,14 @@ impl SymbolId {
         self.0
     }
 
+    /// Returns symbol ID as `usize`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if symbol ID cannot fit into `usize`.
     #[must_use]
-    #[allow(clippy::as_conversions)]
-    pub const fn as_usize(self) -> usize {
-        self.0 as usize
+    pub fn as_usize(self) -> usize {
+        usize::try_from(self.0).expect("symbol ID overflow")
     }
 }
 
@@ -34,10 +38,14 @@ impl ScopeId {
         Self(id)
     }
 
+    /// Returns scope ID as `usize`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the scope ID cannot fit into `usize`.
     #[must_use]
-    #[allow(clippy::as_conversions)]
-    pub const fn as_usize(self) -> usize {
-        self.0 as usize
+    pub fn as_usize(self) -> usize {
+        usize::try_from(self.0).expect("scope ID overflow")
     }
 }
 

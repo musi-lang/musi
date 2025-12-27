@@ -57,9 +57,9 @@ impl Parser<'_> {
                 | TokenKind::KwTrue
                 | TokenKind::KwFalse,
             ) => self.parse_pat_lit(),
-            Some(TokenKind::Ident(id)) => {
+            Some(TokenKind::Ident(ident)) => {
                 let _ = self.advance();
-                self.parse_pat_after_ident(id, start)
+                self.parse_pat_after_ident(ident, ident.span)
             }
             Some(TokenKind::Dot) if self.peek_nth(1) == Some(TokenKind::LBrace) => {
                 self.parse_pat_record_anon()
@@ -82,9 +82,9 @@ impl Parser<'_> {
                 let _ = self.advance();
                 PatKind::Lit(LitKind::Real(v))
             }
-            Some(TokenKind::LitString(id)) => {
+            Some(TokenKind::LitString(ident)) => {
                 let _ = self.advance();
-                PatKind::Lit(LitKind::String(id))
+                PatKind::Lit(LitKind::String(ident))
             }
             Some(TokenKind::LitRune(c)) => {
                 let _ = self.advance();
@@ -105,9 +105,9 @@ impl Parser<'_> {
         Ok(self.arena.alloc_pat(kind, start))
     }
 
-    fn parse_pat_after_ident(&mut self, id: u32, start: Span) -> MusiResult<PatId> {
+    fn parse_pat_after_ident(&mut self, ident: musi_ast::Ident, start: Span) -> MusiResult<PatId> {
         if self.at(TokenKind::Dot) && self.peek_nth(1) == Some(TokenKind::LBrace) {
-            let ty_expr_id = self.arena.alloc_expr(ExprKind::Ident(id), start);
+            let ty_expr_id = self.arena.alloc_expr(ExprKind::Ident(ident), start);
             return self.parse_pat_record(Some(ty_expr_id), start);
         }
         let ty_args = self.parse_ty_expr_args()?;
@@ -115,12 +115,12 @@ impl Parser<'_> {
             let args = self.delimited(TokenKind::LParen, TokenKind::RParen, |p| {
                 p.separated(TokenKind::Comma, Self::parse_pat)
             })?;
-            return Ok(self.make_pat_variant(id, ty_args, args, start));
+            return Ok(self.make_pat_variant(ident, ty_args, args, start));
         }
         if !ty_args.is_empty() {
-            return Ok(self.make_pat_variant(id, ty_args, vec![], start));
+            return Ok(self.make_pat_variant(ident, ty_args, vec![], start));
         }
-        Ok(self.arena.alloc_pat(PatKind::Ident(id), start))
+        Ok(self.arena.alloc_pat(PatKind::Ident(ident), start))
     }
 
     fn parse_pat_record(&mut self, base: Option<ExprId>, start: Span) -> MusiResult<PatId> {
@@ -180,7 +180,7 @@ impl Parser<'_> {
 impl Parser<'_> {
     fn make_pat_variant(
         &mut self,
-        name: u32,
+        name: musi_ast::Ident,
         ty_args: TyExprIds,
         args: PatIds,
         start: Span,

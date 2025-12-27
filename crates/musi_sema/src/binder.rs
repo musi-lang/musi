@@ -124,9 +124,19 @@ impl<'a> Binder<'a> {
             ExprKind::Field { base, field } => self.bind_expr_field(*base, *field, expr.span),
             ExprKind::Index { base, index } => self.bind_expr_index(*base, *index, expr.span),
             ExprKind::Fn { sig, body, .. } => self.bind_expr_fn(sig, *body),
-            ExprKind::RecordDef { .. } | ExprKind::ChoiceDef { .. } | ExprKind::Alias { .. } => {
-                TyRepr::unit()
-            }
+            ExprKind::RecordDef {
+                name,
+                fields,
+                ty_params,
+                ..
+            } => self.bind_expr_record_def(*name, fields, ty_params),
+            ExprKind::ChoiceDef {
+                name,
+                cases,
+                ty_params,
+                ..
+            } => self.bind_expr_choice_def(*name, cases, ty_params),
+            ExprKind::Alias { name, ty, .. } => self.bind_expr_alias(*name, *ty),
             ExprKind::Defer(inner) => {
                 let _ = self.bind_expr(*inner);
                 TyRepr::unit()
@@ -158,7 +168,7 @@ impl<'a> Binder<'a> {
                 return sym.ty.clone();
             }
         }
-        let name = self.interner.resolve(ident);
+        let name = self.interner.resolve(ident.id);
         self.error(SemaErrorKind::UndefinedIdent(name.to_owned()), span);
         TyRepr::error()
     }
@@ -209,7 +219,22 @@ impl<'a> Binder<'a> {
             init_ty
         };
 
-        self.bind_pat(pat_id, &binding_ty, mutable);
+        // If init is a type definition or function, use appropriate symbol kind
+        let kind = match self.arena.exprs.get(init_id).kind {
+            ExprKind::RecordDef { .. } | ExprKind::ChoiceDef { .. } | ExprKind::Alias { .. } => {
+                SymbolKind::Type
+            }
+            ExprKind::Fn { .. } => SymbolKind::Fn,
+            _ => {
+                if matches!(binding_ty.kind, TyReprKind::Fn(..)) {
+                    SymbolKind::Fn
+                } else {
+                    SymbolKind::Local
+                }
+            }
+        };
+
+        self.bind_pat_with_kind(pat_id, &binding_ty, mutable, kind);
         TyRepr::unit()
     }
 
@@ -403,7 +428,7 @@ impl<'a> Binder<'a> {
             && let Some(sym) = self.symbols.get(sym_id)
             && !sym.mutable
         {
-            let name = self.interner.resolve(ident);
+            let name = self.interner.resolve(ident.id);
             let span = self.arena.exprs.get(target_id).span;
             self.error(SemaErrorKind::AssignmentToImmutable(name.to_owned()), span);
         }
@@ -419,7 +444,7 @@ impl<'a> Binder<'a> {
         match &base_ty.kind {
             TyReprKind::Any | TyReprKind::Unknown => base_ty,
             _ => {
-                let field_name = self.interner.resolve(field);
+                let field_name = self.interner.resolve(field.id);
                 self.error(
                     SemaErrorKind::NoSuchField {
                         ty: format!("{base_ty}"),
@@ -465,16 +490,16 @@ impl<'a> Binder<'a> {
                     param.name,
                     SymbolKind::Local,
                     ty.clone(),
-                    self.arena.exprs.get(body_id).span,
+                    param.name.span,
                     param.mutable,
                 )
                 .is_ok()
             {
             } else {
-                let name = self.interner.resolve(param.name);
+                let name = self.interner.resolve(param.name.id);
                 self.error(
                     SemaErrorKind::DuplicateDef(name.to_owned()),
-                    self.arena.exprs.get(body_id).span,
+                    param.name.span,
                 );
             }
         }
@@ -493,31 +518,124 @@ impl<'a> Binder<'a> {
         TyRepr::func(param_tys, body_ty)
     }
 
+    fn bind_expr_record_def(
+        &mut self,
+        name: Option<Ident>,
+        fields: &musi_ast::Fields,
+        _ty_params: &musi_ast::Idents,
+    ) -> TyRepr {
+        let ty = if let Some(ident) = name {
+            let sym_id = self
+                .symbols
+                .define(
+                    ident,
+                    SymbolKind::Type,
+                    TyRepr::unit(),
+                    Span::default(),
+                    false,
+                )
+                .expect("duplicate type def");
+            TyRepr::named(sym_id, vec![])
+        } else {
+            TyRepr::unit()
+        };
+
+        for field in fields {
+            if let Some(ty_expr) = field.ty {
+                let _ = self.resolve_ty_expr(ty_expr);
+            }
+        }
+
+        ty
+    }
+
+    fn bind_expr_choice_def(
+        &mut self,
+        name: Option<Ident>,
+        cases: &[musi_ast::ChoiceCase],
+        _ty_params: &musi_ast::Idents,
+    ) -> TyRepr {
+        let ty = if let Some(ident) = name {
+            let sym_id = self
+                .symbols
+                .define(
+                    ident,
+                    SymbolKind::Type,
+                    TyRepr::unit(),
+                    Span::default(),
+                    false,
+                )
+                .expect("duplicate type def");
+            TyRepr::named(sym_id, vec![])
+        } else {
+            TyRepr::unit()
+        };
+
+        for case in cases {
+            let _ = self
+                .symbols
+                .define(
+                    case.name,
+                    SymbolKind::Variant,
+                    TyRepr::unit(),
+                    Span::default(),
+                    false,
+                )
+                .ok();
+        }
+
+        ty
+    }
+
+    fn bind_expr_alias(&mut self, name: Ident, ty_expr: TyExprId) -> TyRepr {
+        let ty = self.resolve_ty_expr(ty_expr);
+        let _ = self
+            .symbols
+            .define(name, SymbolKind::Type, ty.clone(), Span::default(), false)
+            .ok();
+        ty
+    }
+
     fn bind_pat(&mut self, pat_id: PatId, expected: &TyRepr, mutable: bool) {
+        self.bind_pat_with_kind(pat_id, expected, mutable, SymbolKind::Local);
+    }
+
+    fn bind_pat_with_kind(
+        &mut self,
+        pat_id: PatId,
+        expected: &TyRepr,
+        mutable: bool,
+        kind: SymbolKind,
+    ) {
         let pat = self.arena.pats.get(pat_id);
         self.model.set_pat_type(pat_id, expected.clone());
 
         match &pat.kind {
             PatKind::Ident(ident) => {
-                match self.symbols.define(
-                    *ident,
-                    SymbolKind::Local,
-                    expected.clone(),
-                    pat.span,
-                    mutable,
-                ) {
+                match self
+                    .symbols
+                    .define(*ident, kind, expected.clone(), ident.span, mutable)
+                {
                     Ok(sym_id) => self.model.set_pat_symbol(pat_id, sym_id),
                     Err(_prev) => {
-                        let name = self.interner.resolve(*ident);
-                        self.error(SemaErrorKind::DuplicateDef(name.to_owned()), pat.span);
+                        let name = self.interner.resolve(ident.id);
+                        self.error(SemaErrorKind::DuplicateDef(name.to_owned()), ident.span);
                     }
                 }
             }
             PatKind::Tuple(pats) => {
                 if let TyReprKind::Tuple(elem_tys) = &expected.kind {
                     for (sub_pat, elem_ty) in pats.iter().zip(elem_tys.iter()) {
-                        self.bind_pat(*sub_pat, elem_ty, mutable);
+                        self.bind_pat_with_kind(*sub_pat, elem_ty, mutable, kind);
                     }
+                }
+            }
+            PatKind::Choice { name, args, .. } => {
+                if let Some(sym_id) = self.symbols.lookup(*name) {
+                    self.model.set_pat_symbol(pat_id, sym_id);
+                }
+                for arg in args {
+                    self.bind_pat(*arg, &TyRepr::any(), false);
                 }
             }
             _ => {}
@@ -538,10 +656,11 @@ impl<'a> Binder<'a> {
                     && let Some(sym) = self.symbols.get(sym_id)
                     && matches!(sym.kind, SymbolKind::Builtin | SymbolKind::Type)
                 {
+                    self.model.set_ty_expr_symbol(ty_expr.id, sym_id);
                     return sym.ty.clone();
                 }
-                let name = self.interner.resolve(*ident);
-                self.error(SemaErrorKind::UndefinedType(name.to_owned()), ty_expr.span);
+                let name = self.interner.resolve(ident.id);
+                self.error(SemaErrorKind::UndefinedType(name.to_owned()), ident.span);
                 TyRepr::error()
             }
             TyExprKind::Optional(inner) => TyRepr::optional(self.resolve_ty_expr(*inner)),
@@ -565,8 +684,8 @@ impl<'a> Binder<'a> {
                     let arg_tys: Vec<_> = args.iter().map(|a| self.resolve_ty_expr(*a)).collect();
                     return TyRepr::named(sym_id, arg_tys);
                 }
-                let name = self.interner.resolve(*base);
-                self.error(SemaErrorKind::UndefinedType(name.to_owned()), ty_expr.span);
+                let name = self.interner.resolve(base.id);
+                self.error(SemaErrorKind::UndefinedType(name.to_owned()), base.span);
                 TyRepr::error()
             }
         }

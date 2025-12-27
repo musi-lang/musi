@@ -14,12 +14,8 @@ fn test_ty_expr_app() {
     let mut ctx = TestContext::new();
     let list = ctx.intern("List");
     let id = ctx.parse_typ("List[Int]");
-    if let TyExprKind::App { base, args } = &ctx.ty_expr(id).kind {
-        assert_eq!(*base, list);
-        assert_eq!(args.len(), 1);
-    } else {
-        panic!("expected type application");
-    }
+    let kind = &ctx.ty_expr(id).kind;
+    assert!(matches!(kind, TyExprKind::App { base, args } if *base == list && args.len() == 1));
 }
 
 #[test]
@@ -40,22 +36,16 @@ fn test_ty_expr_ptr() {
 fn test_ty_expr_array_unsized() {
     let mut ctx = TestContext::new();
     let id = ctx.parse_typ("[]Int");
-    if let TyExprKind::Array { size, .. } = &ctx.ty_expr(id).kind {
-        assert!(size.is_none());
-    } else {
-        panic!("expected array type");
-    }
+    let kind = &ctx.ty_expr(id).kind;
+    assert!(matches!(kind, TyExprKind::Array { size: None, .. }));
 }
 
 #[test]
 fn test_ty_expr_array_sized() {
     let mut ctx = TestContext::new();
     let id = ctx.parse_typ("[10]Int");
-    if let TyExprKind::Array { size, .. } = &ctx.ty_expr(id).kind {
-        assert_eq!(*size, Some(10));
-    } else {
-        panic!("expected sized array type");
-    }
+    let kind = &ctx.ty_expr(id).kind;
+    assert!(matches!(kind, TyExprKind::Array { size: Some(10), .. }));
 }
 
 #[test]
@@ -69,9 +59,6 @@ fn test_ty_expr_fn() {
 fn test_ty_expr_tuple() {
     let mut ctx = TestContext::new();
     let id = ctx.parse_typ("(Int, String)");
-    if let TyExprKind::Tuple(elems) = &ctx.ty_expr(id).kind {
-        assert_eq!(elems.len(), 2);
-    } else {
-        panic!("expected tuple type");
-    }
+    let kind = &ctx.ty_expr(id).kind;
+    assert!(matches!(kind, TyExprKind::Tuple(elems) if elems.len() == 2));
 }

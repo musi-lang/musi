@@ -1,4 +1,4 @@
-use musi_ast::{Idents, TyExprId, TyExprIds, TyExprKind};
+use musi_ast::{Ident, Idents, TyExprId, TyExprIds, TyExprKind};
 use musi_basic::{
     error::{IntoMusiError, MusiResult},
     span::Span,
@@ -99,15 +99,15 @@ impl Parser<'_> {
     fn parse_ty_expr_primary(&mut self) -> MusiResult<TyExprId> {
         let start = self.curr_span();
         match self.peek_kind() {
-            Some(TokenKind::Ident(id)) => self.parse_ty_expr_ident(id),
+            Some(TokenKind::Ident(ident)) => self.parse_ty_expr_ident(ident),
             Some(TokenKind::LParen) => self.parse_ty_expr_paren(),
             Some(kind) => Err(ParseErrorKind::UnexpectedToken(kind).into_musi_error(start)),
             None => Err(ParseErrorKind::UnexpectedEof.into_musi_error(start)),
         }
     }
 
-    fn parse_ty_expr_ident(&mut self, id: u32) -> MusiResult<TyExprId> {
-        let start = self.curr_span();
+    fn parse_ty_expr_ident(&mut self, ident: Ident) -> MusiResult<TyExprId> {
+        let start = ident.span;
         let _ = self.advance();
         if self.at(TokenKind::LBrack) {
             let args = self.delimited(TokenKind::LBrack, TokenKind::RBrack, |p| {
@@ -116,9 +116,9 @@ impl Parser<'_> {
             let span = start.merge(self.prev_span());
             Ok(self
                 .arena
-                .alloc_ty_expr(TyExprKind::App { base: id, args }, span))
+                .alloc_ty_expr(TyExprKind::App { base: ident, args }, span))
         } else {
-            Ok(self.arena.alloc_ty_expr(TyExprKind::Ident(id), start))
+            Ok(self.arena.alloc_ty_expr(TyExprKind::Ident(ident), start))
         }
     }
 

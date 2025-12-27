@@ -18,12 +18,12 @@ fn scope_push_pop() {
 #[test]
 fn define_lookup() {
     let mut symbols = SymbolTable::new();
-    let name: Ident = 0;
+    let name = Ident::new(0, Span::default());
     let ty = TyRepr::unit();
     let span = Span::new(0, 0);
 
     let id = symbols
-        .define(name, SymbolKind::Local, ty.clone(), span, false)
+        .define(name, SymbolKind::Local, ty, span, false)
         .expect("define failed");
     let lookup = symbols.lookup(name).expect("lookup failed");
 
@@ -35,7 +35,7 @@ fn define_lookup() {
 #[test]
 fn shadowing_same_scope_error() {
     let mut symbols = SymbolTable::new();
-    let name: Ident = 0;
+    let name = Ident::new(0, Span::default());
     let ty = TyRepr::unit();
     let span = Span::new(0, 0);
 
@@ -52,7 +52,7 @@ fn shadowing_same_scope_error() {
 #[test]
 fn shadowing_nested_scope_ok() {
     let mut symbols = SymbolTable::new();
-    let name: Ident = 0;
+    let name = Ident::new(0, Span::default());
     let ty = TyRepr::unit();
     let span = Span::new(0, 0);
 
@@ -61,7 +61,7 @@ fn shadowing_nested_scope_ok() {
         .unwrap();
     let _ = symbols.push_scope();
     let id2 = symbols
-        .define(name, SymbolKind::Local, ty.clone(), span, false)
+        .define(name, SymbolKind::Local, ty, span, false)
         .unwrap();
 
     assert_ne!(id1, id2);
@@ -74,7 +74,7 @@ fn shadowing_nested_scope_ok() {
 #[test]
 fn lookup_in_parent_scope() {
     let mut symbols = SymbolTable::new();
-    let name: Ident = 0;
+    let name = Ident::new(0, Span::default());
     let ty = TyRepr::unit();
     let span = Span::new(0, 0);
 

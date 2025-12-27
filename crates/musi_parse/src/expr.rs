@@ -1,7 +1,7 @@
 use musi_ast::{
     Attr, AttrArg, AttrArgs, Attrs, ChoiceCase, ChoiceCaseItem, ChoiceCaseItems, CondId, CondKind,
-    ExprId, ExprIds, ExprKind, Field, FnSig, LitKind, MatchCase, Modifiers, StmtIds, StmtKind,
-    TemplatePart,
+    ExprId, ExprIds, ExprKind, Field, FnSig, Ident, LitKind, MatchCase, Modifiers, StmtIds,
+    StmtKind, TemplatePart,
 };
 use musi_basic::{
     error::{IntoMusiError, MusiResult},
@@ -30,7 +30,7 @@ impl Parser<'_> {
 
     /// # Errors
     /// Returns `ParseErrorKind::ExpectedIdent` if current token is not identifier.
-    pub fn expect_ident(&mut self) -> MusiResult<u32> {
+    pub fn expect_ident(&mut self) -> MusiResult<Ident> {
         match self.peek_kind() {
             Some(TokenKind::Ident(id)) => {
                 let _ = self.advance();
@@ -40,7 +40,7 @@ impl Parser<'_> {
         }
     }
 
-    pub fn try_ident(&mut self) -> Option<u32> {
+    pub fn try_ident(&mut self) -> Option<Ident> {
         if let Some(TokenKind::Ident(id)) = self.peek_kind() {
             let _ = self.advance();
             Some(id)
@@ -413,10 +413,9 @@ impl Parser<'_> {
         Ok(self.arena.alloc_expr(ExprKind::Array(elems), span))
     }
 
-    fn parse_expr_ident(&mut self, id: u32) -> ExprId {
-        let start = self.curr_span();
+    fn parse_expr_ident(&mut self, ident: musi_ast::Ident) -> ExprId {
         let _ = self.advance();
-        self.arena.alloc_expr(ExprKind::Ident(id), start)
+        self.arena.alloc_expr(ExprKind::Ident(ident), ident.span)
     }
 
     fn parse_postfix_record(&mut self, lhs: ExprId, start: Span) -> MusiResult<ExprId> {

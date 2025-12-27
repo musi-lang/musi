@@ -1,5 +1,5 @@
 use lsp_types::{DocumentSymbol, SymbolKind};
-use musi_ast::{AstArena, ChoiceCase, ExprKind, FnSig, PatKind, Prog, StmtKind};
+use musi_ast::{AstArena, ChoiceCase, ExprKind, FnSig, Ident, PatKind, Prog, StmtKind};
 use musi_basic::{interner::Interner, source::SourceFile, span::Span};
 
 use crate::types::DocumentSymbolList;
@@ -43,8 +43,8 @@ impl SymbolCollector<'_> {
         }
     }
 
-    fn resolve_name(&self, id: u32) -> String {
-        self.interner.lookup(id).unwrap_or("<unknown>").to_owned()
+    fn resolve_name(&self, ident: Ident) -> String {
+        self.interner.resolve(ident.id).to_owned()
     }
 
     fn make_symbol(
@@ -102,8 +102,8 @@ impl SymbolCollector<'_> {
             }
             ExprKind::Bind { pat, .. } => {
                 let pat_node = self.arena.pats.get(*pat);
-                if let PatKind::Ident(ident_id) = &pat_node.kind {
-                    let name = self.resolve_name(*ident_id);
+                if let PatKind::Ident(ident) = &pat_node.kind {
+                    let name = self.resolve_name(*ident);
                     let sym = self.make_symbol(name, SymbolKind::VARIABLE, pat_node.span, None);
                     self.symbols.push(sym);
                 }

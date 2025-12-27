@@ -242,24 +242,24 @@ impl fmt::Display for TokenDisplay<'_> {
         match self.kind {
             TokenKind::LitInt(v) => write!(f, "{v}"),
             TokenKind::LitReal(v) => write!(f, "{v}"),
-            TokenKind::LitString(id) => {
-                write!(f, "\"{}\"", self.interner.lookup(*id).unwrap_or(""))
+            TokenKind::LitString(ident) => {
+                write!(f, "\"{}\"", self.interner.lookup(ident.id).unwrap_or(""))
             }
             TokenKind::LitRune(c) => write!(f, "'{c}''"),
-            TokenKind::LitTemplateNoSubst(id) => {
-                write!(f, "$\"{}\"", self.interner.lookup(*id).unwrap_or(""))
+            TokenKind::LitTemplateNoSubst(ident) => {
+                write!(f, "$\"{}\"", self.interner.lookup(ident.id).unwrap_or(""))
             }
-            TokenKind::TemplateHead(id) => {
-                write!(f, "$\"{}", self.interner.lookup(*id).unwrap_or(""))
+            TokenKind::TemplateHead(ident) => {
+                write!(f, "$\"{}", self.interner.lookup(ident.id).unwrap_or(""))
             }
-            TokenKind::TemplateMiddle(id) => {
-                write!(f, "{}", self.interner.lookup(*id).unwrap_or(""))
+            TokenKind::TemplateMiddle(ident) => {
+                write!(f, "{}", self.interner.lookup(ident.id).unwrap_or(""))
             }
-            TokenKind::TemplateTail(id) => {
-                write!(f, "{}\"", self.interner.lookup(*id).unwrap_or(""))
+            TokenKind::TemplateTail(ident) => {
+                write!(f, "{}\"", self.interner.lookup(ident.id).unwrap_or(""))
             }
-            TokenKind::Ident(id) | TokenKind::Error(id) => {
-                write!(f, "{}", self.interner.resolve(*id))
+            TokenKind::Ident(ident) | TokenKind::Error(ident) => {
+                write!(f, "{}", self.interner.resolve(ident.id))
             }
             kind => {
                 if let Some((kw, _)) = KEYWORDS.iter().find(|(_, tk)| *tk == *kind) {
