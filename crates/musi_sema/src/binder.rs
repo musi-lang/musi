@@ -1,6 +1,6 @@
 use musi_ast::{
-    AstArena, CondId, CondKind, Expr, ExprId, ExprKind, FnSig, Ident, LitKind, PatId, PatKind,
-    Prog, StmtId, StmtKind, TyExpr, TyExprId, TyExprKind,
+    AstArena, ChoiceCase, CondId, CondKind, Expr, ExprId, ExprKind, Fields, FnSig, Ident, Idents,
+    LitKind, PatId, PatKind, Prog, StmtId, StmtKind, TemplatePart, TyExpr, TyExprId, TyExprKind,
 };
 use musi_basic::diagnostic::{Diagnostic, DiagnosticBag};
 use musi_basic::error::IntoMusiError;
@@ -95,7 +95,7 @@ impl<'a> Binder<'a> {
 
     fn bind_expr_inner(&mut self, expr: &Expr) -> TyRepr {
         match &expr.kind {
-            ExprKind::Lit(lit) => Self::bind_expr_lit(lit),
+            ExprKind::Lit(lit) => self.bind_expr_lit(lit),
             ExprKind::Ident(ident) => self.bind_expr_ident(*ident, expr.id, expr.span),
             ExprKind::Tuple(elems) => self.bind_expr_tuple(elems),
             ExprKind::Array(elems) => self.bind_expr_array(elems),
@@ -145,7 +145,15 @@ impl<'a> Binder<'a> {
         }
     }
 
-    const fn bind_expr_lit(lit: &LitKind) -> TyRepr {
+    fn bind_expr_lit(&mut self, lit: &LitKind) -> TyRepr {
+        if let LitKind::Template(parts) = lit {
+            for part in parts {
+                if let TemplatePart::Expr(id) = part {
+                    let _ = self.bind_expr(*id);
+                }
+            }
+        }
+
         match lit {
             LitKind::Int(n) => {
                 if *n < 0 {
@@ -221,7 +229,27 @@ impl<'a> Binder<'a> {
 
         // If init is a type definition or function, use appropriate symbol kind
         let kind = match self.arena.exprs.get(init_id).kind {
-            ExprKind::RecordDef { .. } | ExprKind::ChoiceDef { .. } | ExprKind::Alias { .. } => {
+            ExprKind::RecordDef { name, .. } | ExprKind::ChoiceDef { name, .. } => {
+                if let PatKind::Ident(pat_ident) = &self.arena.pats.get(pat_id).kind
+                    && let Some(name_ident) = name
+                    && pat_ident.id == name_ident.id
+                {
+                    if let Some(sym_id) = self.symbols.lookup(*pat_ident) {
+                        self.model.set_pat_symbol(pat_id, sym_id);
+                        return TyRepr::unit();
+                    }
+                }
+                SymbolKind::Type
+            }
+            ExprKind::Alias { name, .. } => {
+                if let PatKind::Ident(pat_ident) = &self.arena.pats.get(pat_id).kind
+                    && pat_ident.id == name.id
+                {
+                    if let Some(sym_id) = self.symbols.lookup(*pat_ident) {
+                        self.model.set_pat_symbol(pat_id, sym_id);
+                        return TyRepr::unit();
+                    }
+                }
                 SymbolKind::Type
             }
             ExprKind::Fn { .. } => SymbolKind::Fn,
@@ -488,7 +516,7 @@ impl<'a> Binder<'a> {
                 .symbols
                 .define(
                     param.name,
-                    SymbolKind::Local,
+                    SymbolKind::Param,
                     ty.clone(),
                     param.name.span,
                     param.mutable,
@@ -521,8 +549,8 @@ impl<'a> Binder<'a> {
     fn bind_expr_record_def(
         &mut self,
         name: Option<Ident>,
-        fields: &musi_ast::Fields,
-        _ty_params: &musi_ast::Idents,
+        fields: &Fields,
+        _ty_params: &Idents,
     ) -> TyRepr {
         let ty = if let Some(ident) = name {
             let sym_id = self
@@ -552,8 +580,8 @@ impl<'a> Binder<'a> {
     fn bind_expr_choice_def(
         &mut self,
         name: Option<Ident>,
-        cases: &[musi_ast::ChoiceCase],
-        _ty_params: &musi_ast::Idents,
+        cases: &[ChoiceCase],
+        _ty_params: &Idents,
     ) -> TyRepr {
         let ty = if let Some(ident) = name {
             let sym_id = self

@@ -205,3 +205,23 @@ fn bind_pat_tuple() {
     let (_, _, diags) = ctx.check_bind("val (x, y) := (1, 2);");
     assert!(diags.is_empty(), "bind errors: {diags:?}");
 }
+#[test]
+fn bind_redundant_type_def() {
+    let mut ctx = TestContext::new();
+    let (_, _, diags) =
+        ctx.check_bind("val Option := choice Option { case Some(Int), case None };");
+    assert!(
+        diags.is_empty(),
+        "expected no duplicate definition error, got: {diags:?}"
+    );
+}
+
+#[test]
+fn bind_template_expr() {
+    let mut ctx = TestContext::new();
+    let (_, _, diags) = ctx.check_bind(r#"val name := "World"; val msg := $"Hello {name}";"#);
+    assert!(
+        diags.is_empty(),
+        "expected no errors in template, got: {diags:?}"
+    );
+}
