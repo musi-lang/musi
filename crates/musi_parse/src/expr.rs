@@ -1,7 +1,7 @@
 use musi_ast::{
     Attr, AttrArg, AttrArgs, Attrs, ChoiceCase, ChoiceCaseItem, ChoiceCaseItems, CondId, CondKind,
-    ExprId, ExprIds, ExprKind, Field, FnSig, LitKind, MatchCase, Modifiers, OptExprId, StmtIds,
-    StmtKind, TemplatePart,
+    ExprId, ExprIds, ExprKind, Field, FnSig, LitKind, MatchCase, Modifiers, StmtIds, StmtKind,
+    TemplatePart,
 };
 use musi_basic::{
     error::{IntoMusiError, MusiResult},
@@ -87,7 +87,7 @@ impl Parser<'_> {
         }
     }
 
-    fn try_parse_postfix(&mut self, lhs: ExprId, min_bp: u8) -> MusiResult<OptExprId> {
+    fn try_parse_postfix(&mut self, lhs: ExprId, min_bp: u8) -> MusiResult<Option<ExprId>> {
         if let Some(l_bp) = self.peek_kind().and_then(Prec::postfix)
             && l_bp >= min_bp
         {
@@ -96,7 +96,12 @@ impl Parser<'_> {
         Ok(None)
     }
 
-    fn try_parse_not_in(&mut self, lhs: ExprId, start: Span, min_bp: u8) -> MusiResult<OptExprId> {
+    fn try_parse_not_in(
+        &mut self,
+        lhs: ExprId,
+        start: Span,
+        min_bp: u8,
+    ) -> MusiResult<Option<ExprId>> {
         if self.at(TokenKind::KwNot) && self.peek_nth(1) == Some(TokenKind::KwIn) {
             let (l_bp, r_bp) = Prec::infix(TokenKind::KwIn).expect("`in` is infix");
             if l_bp >= min_bp {
@@ -123,7 +128,12 @@ impl Parser<'_> {
         Ok(None)
     }
 
-    fn try_parse_infix(&mut self, lhs: ExprId, start: Span, min_bp: u8) -> MusiResult<OptExprId> {
+    fn try_parse_infix(
+        &mut self,
+        lhs: ExprId,
+        start: Span,
+        min_bp: u8,
+    ) -> MusiResult<Option<ExprId>> {
         let Some((l_bp, r_bp)) = self.peek_kind().and_then(Prec::infix) else {
             return Ok(None);
         };
@@ -462,7 +472,7 @@ impl Parser<'_> {
         false
     }
 
-    fn parse_block_body(&mut self) -> MusiResult<(StmtIds, OptExprId)> {
+    fn parse_block_body(&mut self) -> MusiResult<(StmtIds, Option<ExprId>)> {
         let mut stmts = vec![];
         let mut final_expr = None;
         while !self.at(TokenKind::RBrace) && !self.is_eof() {

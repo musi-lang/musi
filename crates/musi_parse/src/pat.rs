@@ -1,4 +1,4 @@
-use musi_ast::{ExprKind, LitKind, OptExprId, PatId, PatIds, PatKind, TyExprIds};
+use musi_ast::{ExprId, ExprKind, LitKind, PatId, PatIds, PatKind, TyExprIds};
 use musi_basic::{
     error::{IntoMusiError, MusiResult},
     span::Span,
@@ -123,7 +123,7 @@ impl Parser<'_> {
         Ok(self.arena.alloc_pat(PatKind::Ident(id), start))
     }
 
-    fn parse_pat_record(&mut self, base: OptExprId, start: Span) -> MusiResult<PatId> {
+    fn parse_pat_record(&mut self, base: Option<ExprId>, start: Span) -> MusiResult<PatId> {
         self.advance_by(2); // consume `.` and `{`
         let fields = self.separated(TokenKind::Comma, Self::expect_ident)?;
         let _ = self.expect(TokenKind::RBrace)?;
