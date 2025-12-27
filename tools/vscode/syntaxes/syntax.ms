@@ -301,5 +301,5 @@ val filter := fn (pred, list) {
 
 // extern "C" {
 //   fn malloc(size: Nat64): ^Any;
-//   fn free(ptr: ^Any): Unit;
+//   fn free(ptr: ^Any): Any;
 // };
