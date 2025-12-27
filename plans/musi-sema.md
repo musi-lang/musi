@@ -13,7 +13,7 @@ musi_sema/
 ├── ty_repr.rs          # TyRepr, TyReprKind
 ├── bound.rs            # BoundExpr, BoundStmt (semantic nodes)
 ├── symbol.rs           # SymbolTable, Symbol, SymbolId
-├── infer.rs            # Type inference (unification)
+├── unifier.rs            # Type inference (unification)
 ├── binder.rs           # AST → Semantic tree
 ├── builtins.rs         # Builtin types
 └── tests.rs
@@ -75,7 +75,7 @@ pub enum TyReprKind {
 1. `ty_repr.rs` - Type representation
 2. `symbol.rs` - Symbol table
 3. `builtins.rs` - Builtin types
-4. `infer.rs` - Unification engine
+4. `unifier.rs` - Unification engine
 5. `bound.rs` - Semantic nodes
 6. `binder.rs` - Main binder
 7. `lib.rs` - Wire up
