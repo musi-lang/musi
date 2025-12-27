@@ -710,7 +710,11 @@ impl Parser<'_> {
             p.separated(TokenKind::Comma, Self::parse_field)
         })?;
         let ret = self.maybe(TokenKind::Colon, Self::parse_ty_expr)?;
-        let body = self.parse_expr_block()?;
+        let body = if self.bump_if(TokenKind::EqGt) {
+            self.parse_expr()?
+        } else {
+            self.parse_expr_block()?
+        };
         let span = start.merge(self.prev_span());
         Ok(self.arena.alloc_expr(
             ExprKind::Fn {

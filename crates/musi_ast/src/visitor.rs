@@ -178,10 +178,6 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, arena: &AstArena, expr: &Expr) {
             v.visit_fn_sig(arena, sig);
             v.visit_expr_id(arena, *body);
         }
-        ExprKind::Lambda { params, body } => {
-            v.visit_fields(arena, params);
-            v.visit_expr_id(arena, *body);
-        }
         ExprKind::Bind { pat, ty, init, .. } => {
             v.visit_pat_id(arena, *pat);
             if let Some(id) = ty {

@@ -231,16 +231,11 @@ pub enum ExprKind {
         ty_params: Idents,
         ty: TyExprId,
     },
-    /// `fn name(params) { body }`
+    /// `fn name(params) { body }` or `fn(params) => expr`
     Fn {
         attrs: Attrs,
         mods: Modifiers,
         sig: FnSig,
-        body: ExprId,
-    },
-    /// `(params) => expr`
-    Lambda {
-        params: Fields,
         body: ExprId,
     },
     /// `val x := 1` or `var x := 1`
