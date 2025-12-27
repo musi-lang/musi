@@ -1,3 +1,4 @@
+use crate::TyVarId;
 use crate::ty_repr::{IntWidth, TyRepr};
 use crate::unifier::Unifier;
 
@@ -35,4 +36,112 @@ fn unify_any_with_anything() {
     let int32 = TyRepr::int(IntWidth::I32);
 
     assert!(unifier.unify(&any, &int32).is_ok());
+}
+
+#[test]
+fn unify_tuple_tys() {
+    let mut unifier = Unifier::new();
+    let v1 = unifier.fresh_var();
+    let v2 = unifier.fresh_var();
+    let tuple1 = TyRepr::tuple(vec![v1.clone(), v2.clone()]);
+    let tuple2 = TyRepr::tuple(vec![TyRepr::int(IntWidth::I32), TyRepr::bool()]);
+
+    assert!(unifier.unify(&tuple1, &tuple2).is_ok());
+    assert_eq!(unifier.apply(&v1), TyRepr::int(IntWidth::I32));
+    assert_eq!(unifier.apply(&v2), TyRepr::bool());
+}
+
+#[test]
+fn unify_tuple_mismatch() {
+    let mut unifier = Unifier::new();
+    let tuple1 = TyRepr::tuple(vec![TyRepr::int(IntWidth::I32)]);
+    let tuple2 = TyRepr::tuple(vec![TyRepr::int(IntWidth::I32), TyRepr::bool()]);
+
+    assert!(unifier.unify(&tuple1, &tuple2).is_err());
+}
+
+#[test]
+fn unify_array_tys() {
+    let mut unifier = Unifier::new();
+    let v1 = unifier.fresh_var();
+    let arr1 = TyRepr::array(v1.clone(), Some(10));
+    let arr2 = TyRepr::array(TyRepr::int(IntWidth::I32), Some(10));
+
+    assert!(unifier.unify(&arr1, &arr2).is_ok());
+    assert_eq!(unifier.apply(&v1), TyRepr::int(IntWidth::I32));
+}
+
+#[test]
+fn unify_array_size_mismatch() {
+    let mut unifier = Unifier::new();
+    let arr1 = TyRepr::array(TyRepr::int(IntWidth::I32), Some(10));
+    let arr2 = TyRepr::array(TyRepr::int(IntWidth::I32), Some(20));
+
+    assert!(unifier.unify(&arr1, &arr2).is_err());
+}
+
+#[test]
+fn unify_fn_tys() {
+    let mut unifier = Unifier::new();
+    let v_param = unifier.fresh_var();
+    let v_ret = unifier.fresh_var();
+    let fn1 = TyRepr::func(vec![v_param.clone()], v_ret.clone());
+    let fn2 = TyRepr::func(vec![TyRepr::int(IntWidth::I32)], TyRepr::bool());
+
+    assert!(unifier.unify(&fn1, &fn2).is_ok());
+    assert_eq!(unifier.apply(&v_param), TyRepr::int(IntWidth::I32));
+    assert_eq!(unifier.apply(&v_ret), TyRepr::bool());
+}
+
+#[test]
+fn unify_fn_arity_mismatch() {
+    let mut unifier = Unifier::new();
+    let fn1 = TyRepr::func(vec![TyRepr::int(IntWidth::I32)], TyRepr::bool());
+    let fn2 = TyRepr::func(
+        vec![TyRepr::int(IntWidth::I32), TyRepr::bool()],
+        TyRepr::bool(),
+    );
+
+    assert!(unifier.unify(&fn1, &fn2).is_err());
+}
+
+#[test]
+fn unify_optional_ty() {
+    let mut unifier = Unifier::new();
+    let v = unifier.fresh_var();
+    let opt1 = TyRepr::optional(v.clone());
+    let opt2 = TyRepr::optional(TyRepr::int(IntWidth::I32));
+
+    assert!(unifier.unify(&opt1, &opt2).is_ok());
+    assert_eq!(unifier.apply(&v), TyRepr::int(IntWidth::I32));
+}
+
+#[test]
+fn unify_ptr_ty() {
+    let mut unifier = Unifier::new();
+    let v = unifier.fresh_var();
+    let ptr1 = TyRepr::ptr(v.clone());
+    let ptr2 = TyRepr::ptr(TyRepr::int(IntWidth::I32));
+
+    assert!(unifier.unify(&ptr1, &ptr2).is_ok());
+    assert_eq!(unifier.apply(&v), TyRepr::int(IntWidth::I32));
+}
+
+#[test]
+fn unify_transitive_vars() {
+    let mut unifier = Unifier::new();
+    let v1 = unifier.fresh_var();
+    let v2 = unifier.fresh_var();
+
+    assert!(unifier.unify(&v1, &v2).is_ok());
+    assert!(unifier.unify(&v2, &TyRepr::int(IntWidth::I32)).is_ok());
+    assert_eq!(unifier.apply(&v1), TyRepr::int(IntWidth::I32));
+}
+
+#[test]
+fn finalize_unbound_var() {
+    let unifier = Unifier::new();
+    let v = TyRepr::var(TyVarId::new(0));
+
+    assert_eq!(unifier.finalize(&v), TyRepr::error());
 }
