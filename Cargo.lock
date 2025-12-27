@@ -302,6 +302,7 @@ dependencies = [
  "musi_ast",
  "musi_basic",
  "musi_lex",
+ "musi_parse",
  "thiserror",
 ]
 

@@ -1,6 +1,6 @@
 [package]
 name = "musi_sema"
-description = "Semantic analysis for Musi compiler"
+description = "Semantic analysis and symbol resolution for Musi compiler"
 version.workspace = true
 edition.workspace = true
 repository.workspace = true
@@ -14,6 +14,9 @@ musi_basic = { path = "../musi_basic" }
 musi_ast = { path = "../musi_ast" }
 musi_lex = { path = "../musi_lex" }
 thiserror = { workspace = true }
+
+[dev-dependencies]
+musi_parse = { path = "../musi_parse" }
 
 [lints]
 workspace = true
