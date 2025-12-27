@@ -8,7 +8,7 @@ pub mod types;
 pub mod unifier;
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod test_utils;
 
 pub use builtins::Builtins;
 pub use error::SemaErrorKind;

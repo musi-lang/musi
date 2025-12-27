@@ -540,3 +540,6 @@ impl<'a> Binder<'a> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

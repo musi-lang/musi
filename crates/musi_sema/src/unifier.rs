@@ -153,3 +153,6 @@ impl Unifier {
         let _ = self.substitutions.insert(id, ty);
     }
 }
+
+#[cfg(test)]
+mod tests;
