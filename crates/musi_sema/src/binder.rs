@@ -454,21 +454,23 @@ impl<'a> Binder<'a> {
         let _ = self.symbols.push_scope();
 
         for (param, ty) in sig.params.iter().zip(param_tys.iter()) {
-            match self.symbols.define(
-                param.name,
-                SymbolKind::Local,
-                ty.clone(),
-                self.arena.exprs.get(body_id).span,
-                param.mutable,
-            ) {
-                Ok(_) => {}
-                Err(_) => {
-                    let name = self.interner.resolve(param.name);
-                    self.error(
-                        SemaErrorKind::DuplicateDef(name.to_owned()),
-                        self.arena.exprs.get(body_id).span,
-                    );
-                }
+            if self
+                .symbols
+                .define(
+                    param.name,
+                    SymbolKind::Local,
+                    ty.clone(),
+                    self.arena.exprs.get(body_id).span,
+                    param.mutable,
+                )
+                .is_ok()
+            {
+            } else {
+                let name = self.interner.resolve(param.name);
+                self.error(
+                    SemaErrorKind::DuplicateDef(name.to_owned()),
+                    self.arena.exprs.get(body_id).span,
+                );
             }
         }
 
