@@ -7,18 +7,17 @@ use lsp_types::{
 };
 use musi_ast::{AstArena, Prog};
 use musi_basic::source::SourceFile;
-use musi_lex::lexer::tokenize;
-use musi_parse::parse;
+use musi_sema::{Builtins, SemanticModel, SymbolTable};
 
-use crate::diagnostics::convert_diagnostics;
-use crate::folding::collect_folding_ranges;
 use crate::state::GlobalState;
-use crate::symbols::collect_symbols;
+use crate::tokens;
 use crate::types::FoldingRangeList;
 
-pub struct ParsedDocument {
+pub struct AnalyzedDocument {
     pub prog: Prog,
     pub arena: AstArena,
+    pub sema_model: SemanticModel,
+    pub symbols: SymbolTable,
 }
 
 pub fn did_open(state: &mut GlobalState, params: DidOpenTextDocumentParams) {
@@ -51,7 +50,7 @@ pub fn did_close(state: &mut GlobalState, params: &DidCloseTextDocumentParams) {
 fn get_document<'a>(
     state: &'a GlobalState,
     uri: &Uri,
-) -> Option<(&'a Arc<SourceFile>, &'a ParsedDocument)> {
+) -> Option<(&'a Arc<SourceFile>, &'a AnalyzedDocument)> {
     let source = state.documents.get(uri)?;
     let parsed = state.parsed.get(uri)?;
     Some((source, parsed))
@@ -63,7 +62,7 @@ pub fn document_symbols(
 ) -> Option<DocumentSymbolResponse> {
     let (source, parsed) = get_document(state, &params.text_document.uri)?;
     let interner = state.interner.lock().ok()?;
-    let symbols = collect_symbols(source, &parsed.prog, &parsed.arena, &interner);
+    let symbols = super::symbols::collect_symbols(source, &parsed.prog, &parsed.arena, &interner);
     drop(interner);
     Some(DocumentSymbolResponse::Nested(symbols))
 }
@@ -73,7 +72,21 @@ pub fn folding_ranges(
     params: &FoldingRangeParams,
 ) -> Option<FoldingRangeList> {
     let (source, parsed) = get_document(state, &params.text_document.uri)?;
-    Some(collect_folding_ranges(source, &parsed.prog, &parsed.arena))
+    Some(super::folding::collect_folding_ranges(
+        source,
+        &parsed.prog,
+        &parsed.arena,
+    ))
+}
+
+pub fn semantic_tokens_full(
+    state: &GlobalState,
+    params: &lsp_types::SemanticTokensParams,
+) -> Option<lsp_types::SemanticTokensResult> {
+    let (source, parsed) = get_document(state, &params.text_document.uri)?;
+    Some(lsp_types::SemanticTokensResult::Tokens(
+        tokens::get_semantic_tokens(parsed, source),
+    ))
 }
 
 fn analyze_and_publish(state: &mut GlobalState, uri: Uri, text: String) {
@@ -86,25 +99,46 @@ fn analyze_and_publish(state: &mut GlobalState, uri: Uri, text: String) {
 
     let (tokens, lex_errors) = {
         let mut interner = state.interner.lock().expect("interner mutex not poisoned");
-        tokenize(&source_file, &mut interner)
+        musi_lex::tokenize(&source_file, &mut interner)
     };
 
-    let result = parse(&tokens);
-    let parsed = ParsedDocument {
-        prog: result.prog,
-        arena: result.arena,
-    };
-    drop(state.parsed.insert(uri.clone(), parsed));
+    let result = musi_parse::parse(&tokens);
 
-    let mut diagnostics = convert_diagnostics(&source_file, &lex_errors.diagnostics);
+    let mut diagnostics =
+        super::diagnostics::convert_diagnostics(&source_file, &lex_errors.diagnostics);
     diagnostics.extend(
-        convert_diagnostics(&source_file, &result.diagnostics.diagnostics)
+        super::diagnostics::convert_diagnostics(&source_file, &result.diagnostics.diagnostics)
             .into_iter()
             .map(|mut d| {
                 d.message = format!("Syntax Error: {}", d.message);
                 d
             }),
     );
+
+    let (sema_model, symbols) = if result.diagnostics.errors == 0 && lex_errors.errors == 0 {
+        let mut interner = state.interner.lock().expect("interner mutex not poisoned");
+        let builtins = Builtins::from_interner(&mut interner);
+        let (model, symbols, sema_diags) =
+            musi_sema::bind(&result.arena, &interner, &result.prog, &builtins);
+        drop(interner);
+        diagnostics.extend(super::diagnostics::convert_diagnostics(
+            &source_file,
+            &sema_diags.diagnostics,
+        ));
+        (Some(model), Some(symbols))
+    } else {
+        (None, None)
+    };
+
+    if let (Some(sema_model), Some(symbols)) = (sema_model, symbols) {
+        let analyzed = AnalyzedDocument {
+            prog: result.prog,
+            arena: result.arena,
+            sema_model,
+            symbols,
+        };
+        drop(state.parsed.insert(uri.clone(), analyzed));
+    }
 
     if let Err(e) = state.send_notification::<PublishDiagnostics>(PublishDiagnosticsParams {
         uri,

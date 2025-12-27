@@ -10,7 +10,7 @@ use musi_lex::token::TokenKind;
 
 use crate::builtins::Builtins;
 use crate::error::SemaErrorKind;
-use crate::model::SemanticModel;
+use crate::semantic::SemanticModel;
 use crate::symbol::{SymbolKind, SymbolTable};
 use crate::ty_repr::{FloatWidth, IntWidth, TyRepr, TyReprKind};
 use crate::unifier::Unifier;
@@ -21,7 +21,7 @@ pub fn bind(
     interner: &Interner,
     prog: &Prog,
     builtins: &Builtins,
-) -> (SemanticModel, DiagnosticBag) {
+) -> (SemanticModel, SymbolTable, DiagnosticBag) {
     let mut binder = Binder::new(arena, interner, builtins);
     binder.bind_prog(prog);
     binder.finish()
@@ -56,9 +56,9 @@ impl<'a> Binder<'a> {
         }
     }
 
-    fn finish(mut self) -> (SemanticModel, DiagnosticBag) {
+    fn finish(mut self) -> (SemanticModel, SymbolTable, DiagnosticBag) {
         self.finalize_types();
-        (self.model, self.diags)
+        (self.model, self.symbols, self.diags)
     }
 
     fn bind_prog(&mut self, prog: &Prog) {

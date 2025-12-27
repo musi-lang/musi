@@ -6,7 +6,10 @@ use lsp_types::{
     notification::{
         DidChangeTextDocument, DidCloseTextDocument, DidOpenTextDocument, Notification as _,
     },
-    request::{DocumentSymbolRequest, FoldingRangeRequest, Request as _, Shutdown},
+    request::{
+        DocumentSymbolRequest, FoldingRangeRequest, Request as _, SemanticTokensFullRequest,
+        Shutdown,
+    },
 };
 
 use crate::handlers;
@@ -24,6 +27,13 @@ pub fn dispatch_request(state: &GlobalState, req: &Request) -> Option<Response> 
         FoldingRangeRequest::METHOD => {
             let params: FoldingRangeParams = serde_json::from_value(req.params.clone()).ok()?;
             let result = handlers::folding_ranges(state, &params);
+            let response = Response::new_ok(req.id.clone(), serde_json::to_value(result).ok()?);
+            Some(response)
+        }
+        SemanticTokensFullRequest::METHOD => {
+            let params: lsp_types::SemanticTokensParams =
+                serde_json::from_value(req.params.clone()).ok()?;
+            let result = handlers::semantic_tokens_full(state, &params);
             let response = Response::new_ok(req.id.clone(), serde_json::to_value(result).ok()?);
             Some(response)
         }

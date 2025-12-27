@@ -1,7 +1,7 @@
 pub mod binder;
 pub mod builtins;
 pub mod error;
-pub mod model;
+pub mod semantic;
 pub mod symbol;
 pub mod ty_repr;
 pub mod types;
@@ -10,9 +10,10 @@ pub mod unifier;
 #[cfg(test)]
 pub(crate) mod test_utils;
 
+pub use binder::*;
 pub use builtins::Builtins;
 pub use error::SemaErrorKind;
-pub use model::SemanticModel;
+pub use semantic::*;
 pub use symbol::*;
 pub use ty_repr::*;
 pub use types::*;

@@ -5,6 +5,7 @@ mod handlers;
 mod server;
 mod state;
 mod symbols;
+mod tokens;
 mod types;
 
 use anyhow::Result;

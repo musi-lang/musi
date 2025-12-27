@@ -8,12 +8,12 @@ use lsp_types::notification::Notification as LspNotification;
 use musi_basic::interner::Interner;
 use musi_basic::source::SourceFile;
 
-use crate::handlers::ParsedDocument;
+use crate::handlers::AnalyzedDocument;
 
 pub struct GlobalState {
     pub interner: Arc<Mutex<Interner>>,
     pub documents: HashMap<Uri, Arc<SourceFile>>,
-    pub parsed: HashMap<Uri, ParsedDocument>,
+    pub parsed: HashMap<Uri, AnalyzedDocument>,
     pub sender: Sender<Message>,
 }
 

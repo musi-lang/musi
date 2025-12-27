@@ -7,6 +7,7 @@ use lsp_types::{
 
 use crate::dispatch::{dispatch_notification, dispatch_request};
 use crate::state::GlobalState;
+use crate::tokens;
 
 pub struct LspServer {
     conn: Connection,
@@ -38,6 +39,19 @@ impl LspServer {
             )),
             document_symbol_provider: Some(lsp_types::OneOf::Left(true)),
             folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
+            semantic_tokens_provider: Some(
+                lsp_types::SemanticTokensServerCapabilities::SemanticTokensOptions(
+                    lsp_types::SemanticTokensOptions {
+                        legend: lsp_types::SemanticTokensLegend {
+                            token_types: tokens::TOKEN_TYPES.to_vec(),
+                            token_modifiers: tokens::TOKEN_MODIFIERS.to_vec(),
+                        },
+                        full: Some(lsp_types::SemanticTokensFullOptions::Bool(true)),
+                        range: Some(false),
+                        ..Default::default()
+                    },
+                ),
+            ),
             ..Default::default()
         };
 

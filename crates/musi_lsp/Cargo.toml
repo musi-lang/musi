@@ -27,6 +27,7 @@ musi_basic = { path = "../musi_basic" }
 musi_lex = { path = "../musi_lex" }
 musi_parse = { path = "../musi_parse" }
 musi_ast = { path = "../musi_ast" }
+musi_sema = { path = "../musi_sema" }
 
 [lints]
 workspace = true

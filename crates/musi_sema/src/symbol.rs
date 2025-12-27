@@ -2,11 +2,7 @@ use musi_ast::Ident;
 use musi_basic::span::Span;
 use std::collections::HashMap;
 
-use crate::ty_repr::TyRepr;
-
-pub type Symbols = Vec<Symbol>;
-pub type Scopes = Vec<Scope>;
-pub type OptScopeId = Option<ScopeId>;
+use crate::{Scopes, Symbols, ty_repr::TyRepr};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SymbolId(pub u32);
@@ -89,21 +85,21 @@ impl Symbol {
 
 #[derive(Debug, Clone)]
 pub struct Scope {
-    pub parent: OptScopeId,
+    pub parent: Option<ScopeId>,
     names: HashMap<Ident, SymbolId>,
 }
 
 impl Scope {
     #[must_use]
-    pub fn new(parent: OptScopeId) -> Self {
+    pub fn new(parent: Option<ScopeId>) -> Self {
         Self {
             parent,
             names: HashMap::new(),
         }
     }
 
-    pub fn insert(&mut self, name: Ident, symbol: SymbolId) -> OptScopeId {
-        self.names.insert(name, symbol).map(|_| ScopeId::new(0))
+    pub fn insert(&mut self, name: Ident, symbol: SymbolId) -> Option<SymbolId> {
+        self.names.insert(name, symbol)
     }
 
     #[must_use]

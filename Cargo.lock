@@ -282,6 +282,7 @@ dependencies = [
  "musi_basic",
  "musi_lex",
  "musi_parse",
+ "musi_sema",
  "serde",
  "serde_json",
  "tracing",
