@@ -1,7 +1,7 @@
 use std::fmt;
 
 use crate::symbol::SymbolId;
-use crate::types::{BoxTyRepr, TyReprs};
+use crate::types::{TyReprPtr, TyReprs};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TyVarId(pub u32);
@@ -36,6 +36,18 @@ impl IntWidth {
             Self::I64 => 64,
         }
     }
+
+    #[must_use]
+    pub const fn native() -> Self {
+        #[cfg(target_pointer_width = "64")]
+        {
+            Self::I64
+        }
+        #[cfg(target_pointer_width = "32")]
+        {
+            Self::I32
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -50,6 +62,18 @@ impl FloatWidth {
         match self {
             Self::F32 => 32,
             Self::F64 => 64,
+        }
+    }
+
+    #[must_use]
+    pub const fn native() -> Self {
+        #[cfg(target_pointer_width = "64")]
+        {
+            Self::F64
+        }
+        #[cfg(target_pointer_width = "32")]
+        {
+            Self::F32
         }
     }
 }
@@ -107,17 +131,17 @@ impl TyRepr {
 
     #[must_use]
     pub const fn int(width: IntWidth) -> Self {
-        Self::new(TyReprKind::Int(width))
+        Self::new(TyReprKind::int(width))
     }
 
     #[must_use]
     pub const fn nat(width: IntWidth) -> Self {
-        Self::new(TyReprKind::Nat(width))
+        Self::new(TyReprKind::nat(width))
     }
 
     #[must_use]
     pub const fn float(width: FloatWidth) -> Self {
-        Self::new(TyReprKind::Float(width))
+        Self::new(TyReprKind::float(width))
     }
 
     #[must_use]
@@ -127,20 +151,17 @@ impl TyRepr {
 
     #[must_use]
     pub fn optional(inner: Self) -> Self {
-        Self::new(TyReprKind::Optional(Box::new(inner)))
+        Self::new(TyReprKind::optional(inner))
     }
 
     #[must_use]
     pub fn ptr(inner: Self) -> Self {
-        Self::new(TyReprKind::Ptr(Box::new(inner)))
+        Self::new(TyReprKind::ptr(inner))
     }
 
     #[must_use]
     pub fn array(elem: Self, size: Option<usize>) -> Self {
-        Self::new(TyReprKind::Array {
-            elem: Box::new(elem),
-            size,
-        })
+        Self::new(TyReprKind::array(elem, size))
     }
 
     #[must_use]
@@ -150,10 +171,12 @@ impl TyRepr {
 
     #[must_use]
     pub fn func(params: Vec<Self>, ret: Self) -> Self {
-        Self::new(TyReprKind::Fn {
-            params,
-            ret: Box::new(ret),
-        })
+        Self::new(TyReprKind::func(params, ret))
+    }
+
+    #[must_use]
+    pub fn named(symbol: SymbolId, args: Vec<Self>) -> Self {
+        Self::new(TyReprKind::named(symbol, args))
     }
 
     #[must_use]
@@ -185,22 +208,60 @@ pub enum TyReprKind {
     Any,
     Unknown,
     Tuple(TyReprs),
-    Array {
-        elem: BoxTyRepr,
-        size: Option<usize>,
-    },
-    Ptr(BoxTyRepr),
-    Optional(BoxTyRepr),
-    Fn {
-        params: TyReprs,
-        ret: BoxTyRepr,
-    },
-    Named {
-        symbol: SymbolId,
-        args: TyReprs,
-    },
+    Array(TyReprPtr, Option<usize>),
+    Ptr(TyReprPtr),
+    Optional(TyReprPtr),
+    Fn(TyReprs, TyReprPtr),
+    Named(SymbolId, TyReprs),
     Var(TyVarId),
     Error,
+}
+
+impl TyReprKind {
+    #[must_use]
+    pub const fn int(width: IntWidth) -> Self {
+        Self::Int(width)
+    }
+
+    #[must_use]
+    pub const fn nat(width: IntWidth) -> Self {
+        Self::Nat(width)
+    }
+
+    #[must_use]
+    pub const fn float(width: FloatWidth) -> Self {
+        Self::Float(width)
+    }
+
+    #[must_use]
+    pub const fn tuple(elems: TyReprs) -> Self {
+        Self::Tuple(elems)
+    }
+
+    #[must_use]
+    pub fn array(elem: TyRepr, size: Option<usize>) -> Self {
+        Self::Array(Box::new(elem), size)
+    }
+
+    #[must_use]
+    pub fn ptr(inner: TyRepr) -> Self {
+        Self::Ptr(Box::new(inner))
+    }
+
+    #[must_use]
+    pub fn optional(inner: TyRepr) -> Self {
+        Self::Optional(Box::new(inner))
+    }
+
+    #[must_use]
+    pub fn func(params: TyReprs, ret: TyRepr) -> Self {
+        Self::Fn(params, Box::new(ret))
+    }
+
+    #[must_use]
+    pub const fn named(symbol: SymbolId, args: TyReprs) -> Self {
+        Self::Named(symbol, args)
+    }
 }
 
 impl fmt::Display for TyRepr {
@@ -218,15 +279,10 @@ impl fmt::Display for TyRepr {
             TyReprKind::Unknown => write!(f, "Unknown"),
             TyReprKind::Tuple(elems) => {
                 write!(f, "(")?;
-                for (i, elem) in elems.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{elem}")?;
-                }
+                write_comma_separated(f, elems)?;
                 write!(f, ")")
             }
-            TyReprKind::Array { elem, size } => {
+            TyReprKind::Array(elem, size) => {
                 if let Some(n) = size {
                     write!(f, "[{n}]{elem}")
                 } else {
@@ -235,26 +291,16 @@ impl fmt::Display for TyRepr {
             }
             TyReprKind::Ptr(inner) => write!(f, "^{inner}"),
             TyReprKind::Optional(inner) => write!(f, "?{inner}"),
-            TyReprKind::Fn { params, ret } => {
+            TyReprKind::Fn(params, ret) => {
                 write!(f, "(")?;
-                for (i, param) in params.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{param}")?;
-                }
+                write_comma_separated(f, params)?;
                 write!(f, ") -> {ret}")
             }
-            TyReprKind::Named { symbol, args } => {
+            TyReprKind::Named(symbol, args) => {
                 write!(f, "Named#{}", symbol.0)?;
                 if !args.is_empty() {
                     write!(f, "[")?;
-                    for (i, arg) in args.iter().enumerate() {
-                        if i > 0 {
-                            write!(f, ", ")?;
-                        }
-                        write!(f, "{arg}")?;
-                    }
+                    write_comma_separated(f, args)?;
                     write!(f, "]")?;
                 }
                 Ok(())
@@ -263,4 +309,14 @@ impl fmt::Display for TyRepr {
             TyReprKind::Error => write!(f, "<error>"),
         }
     }
+}
+
+fn write_comma_separated(f: &mut fmt::Formatter<'_>, elems: &[TyRepr]) -> fmt::Result {
+    for (i, elem) in elems.iter().enumerate() {
+        if i > 0 {
+            write!(f, ", ")?;
+        }
+        write!(f, "{elem}")?;
+    }
+    Ok(())
 }

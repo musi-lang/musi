@@ -17,24 +17,7 @@ struct TestContext {
 impl TestContext {
     fn new() -> Self {
         let mut interner = Interner::new();
-        let builtins = Builtins::new(
-            interner.intern("Int8"),
-            interner.intern("Int16"),
-            interner.intern("Int"),
-            interner.intern("Int64"),
-            interner.intern("Nat8"),
-            interner.intern("Nat16"),
-            interner.intern("Nat32"),
-            interner.intern("Nat64"),
-            interner.intern("Float32"),
-            interner.intern("Float64"),
-            interner.intern("Bool"),
-            interner.intern("Rune"),
-            interner.intern("String"),
-            interner.intern("Unit"),
-            interner.intern("Never"),
-            interner.intern("Any"),
-        );
+        let builtins = Builtins::from_interner(&mut interner);
         Self { interner, builtins }
     }
 

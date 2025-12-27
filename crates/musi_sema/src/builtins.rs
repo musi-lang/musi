@@ -1,4 +1,5 @@
 use musi_ast::Ident;
+use musi_basic::interner::Interner;
 use musi_basic::span::Span;
 
 use crate::symbol::{SymbolKind, SymbolTable};
@@ -25,42 +26,24 @@ pub struct Builtins {
 
 impl Builtins {
     #[must_use]
-    #[allow(clippy::too_many_arguments)]
-    pub const fn new(
-        int8: Ident,
-        int16: Ident,
-        int32: Ident,
-        int64: Ident,
-        nat8: Ident,
-        nat16: Ident,
-        nat32: Ident,
-        nat64: Ident,
-        float32: Ident,
-        float64: Ident,
-        bool_id: Ident,
-        rune: Ident,
-        string: Ident,
-        unit: Ident,
-        never: Ident,
-        any: Ident,
-    ) -> Self {
+    pub fn from_interner(interner: &mut Interner) -> Self {
         Self {
-            int8,
-            int16,
-            int32,
-            int64,
-            nat8,
-            nat16,
-            nat32,
-            nat64,
-            float32,
-            float64,
-            bool: bool_id,
-            rune,
-            string,
-            unit,
-            never,
-            any,
+            int8: interner.intern("Int8"),
+            int16: interner.intern("Int16"),
+            int32: interner.intern("Int"),
+            int64: interner.intern("Int64"),
+            nat8: interner.intern("Nat8"),
+            nat16: interner.intern("Nat16"),
+            nat32: interner.intern("Nat32"),
+            nat64: interner.intern("Nat64"),
+            float32: interner.intern("Float32"),
+            float64: interner.intern("Float64"),
+            bool: interner.intern("Bool"),
+            rune: interner.intern("Rune"),
+            string: interner.intern("String"),
+            unit: interner.intern("Unit"),
+            never: interner.intern("Never"),
+            any: interner.intern("Any"),
         }
     }
 
@@ -69,129 +52,32 @@ impl Builtins {
     /// # Panics
     ///
     /// Panics if builtin is already defined (indicates bug).
-    /// Panics if builtin is already defined (indicates bug).
-    #[allow(clippy::too_many_lines)]
     pub fn register(&self, symbols: &mut SymbolTable) {
         let span = Span::default();
-        let _ = symbols
-            .define(
-                self.int8,
-                SymbolKind::Builtin,
-                TyRepr::int(IntWidth::I8),
-                span,
-                false,
-            )
-            .expect("builtin already defined");
-        let _ = symbols
-            .define(
-                self.int16,
-                SymbolKind::Builtin,
-                TyRepr::int(IntWidth::I16),
-                span,
-                false,
-            )
-            .expect("builtin already defined");
-        let _ = symbols
-            .define(
-                self.int32,
-                SymbolKind::Builtin,
-                TyRepr::int(IntWidth::I32),
-                span,
-                false,
-            )
-            .expect("builtin already defined");
-        let _ = symbols
-            .define(
-                self.int64,
-                SymbolKind::Builtin,
-                TyRepr::int(IntWidth::I64),
-                span,
-                false,
-            )
-            .expect("builtin already defined");
-        let _ = symbols
-            .define(
-                self.nat8,
-                SymbolKind::Builtin,
-                TyRepr::nat(IntWidth::I8),
-                span,
-                false,
-            )
-            .expect("builtin already defined");
-        let _ = symbols
-            .define(
-                self.nat16,
-                SymbolKind::Builtin,
-                TyRepr::nat(IntWidth::I16),
-                span,
-                false,
-            )
-            .expect("builtin already defined");
-        let _ = symbols
-            .define(
-                self.nat32,
-                SymbolKind::Builtin,
-                TyRepr::nat(IntWidth::I32),
-                span,
-                false,
-            )
-            .expect("builtin already defined");
-        let _ = symbols
-            .define(
-                self.nat64,
-                SymbolKind::Builtin,
-                TyRepr::nat(IntWidth::I64),
-                span,
-                false,
-            )
-            .expect("builtin already defined");
-        let _ = symbols
-            .define(
-                self.float32,
-                SymbolKind::Builtin,
-                TyRepr::float(FloatWidth::F32),
-                span,
-                false,
-            )
-            .expect("builtin already defined");
-        let _ = symbols
-            .define(
-                self.float64,
-                SymbolKind::Builtin,
-                TyRepr::float(FloatWidth::F64),
-                span,
-                false,
-            )
-            .expect("builtin already defined");
-        let _ = symbols
-            .define(self.bool, SymbolKind::Builtin, TyRepr::bool(), span, false)
-            .expect("builtin already defined");
-        let _ = symbols
-            .define(self.rune, SymbolKind::Builtin, TyRepr::rune(), span, false)
-            .expect("builtin already defined");
-        let _ = symbols
-            .define(
-                self.string,
-                SymbolKind::Builtin,
-                TyRepr::string(),
-                span,
-                false,
-            )
-            .expect("builtin already defined");
-        let _ = symbols
-            .define(self.unit, SymbolKind::Builtin, TyRepr::unit(), span, false)
-            .expect("builtin already defined");
-        let _ = symbols
-            .define(
-                self.never,
-                SymbolKind::Builtin,
-                TyRepr::never(),
-                span,
-                false,
-            )
-            .expect("builtin already defined");
-        let _ = symbols
-            .define(self.any, SymbolKind::Builtin, TyRepr::any(), span, false)
-            .expect("builtin already defined");
+
+        let builtins = [
+            (self.int8, TyRepr::int(IntWidth::I8)),
+            (self.int16, TyRepr::int(IntWidth::I16)),
+            (self.int32, TyRepr::int(IntWidth::native())),
+            (self.int64, TyRepr::int(IntWidth::I64)),
+            (self.nat8, TyRepr::nat(IntWidth::I8)),
+            (self.nat16, TyRepr::nat(IntWidth::I16)),
+            (self.nat32, TyRepr::nat(IntWidth::native())),
+            (self.nat64, TyRepr::nat(IntWidth::I64)),
+            (self.float32, TyRepr::float(FloatWidth::F32)),
+            (self.float64, TyRepr::float(FloatWidth::F64)),
+            (self.bool, TyRepr::bool()),
+            (self.rune, TyRepr::rune()),
+            (self.string, TyRepr::string()),
+            (self.unit, TyRepr::unit()),
+            (self.never, TyRepr::never()),
+            (self.any, TyRepr::any()),
+        ];
+
+        for (name, ty) in builtins {
+            let _ = symbols
+                .define(name, SymbolKind::Builtin, ty, span, false)
+                .expect("builtin already defined");
+        }
     }
 }

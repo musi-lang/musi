@@ -1,11 +1,10 @@
-use std::sync::Arc;
-
 use lsp_types::{
     DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
     DocumentSymbolParams, DocumentSymbolResponse, FoldingRangeParams, PublishDiagnosticsParams,
     Uri, notification::PublishDiagnostics,
 };
 use musi_ast::{AstArena, Prog};
+use musi_basic::ArcSource;
 use musi_basic::source::SourceFile;
 use musi_lex::lexer::tokenize;
 use musi_parse::parse;
@@ -51,7 +50,7 @@ pub fn did_close(state: &mut GlobalState, params: &DidCloseTextDocumentParams) {
 fn get_document<'a>(
     state: &'a GlobalState,
     uri: &Uri,
-) -> Option<(&'a Arc<SourceFile>, &'a ParsedDocument)> {
+) -> Option<(&'a ArcSource, &'a ParsedDocument)> {
     let source = state.documents.get(uri)?;
     let parsed = state.parsed.get(uri)?;
     Some((source, parsed))
@@ -77,11 +76,11 @@ pub fn folding_ranges(
 }
 
 fn analyze_and_publish(state: &mut GlobalState, uri: Uri, text: String) {
-    let source_file = Arc::new(SourceFile::new(uri.to_string(), text, 0));
+    let source_file = ArcSource::new(SourceFile::new(uri.to_string(), text, 0));
     drop(
         state
             .documents
-            .insert(uri.clone(), Arc::clone(&source_file)),
+            .insert(uri.clone(), ArcSource::clone(&source_file)),
     );
 
     let (tokens, lex_errors) = {

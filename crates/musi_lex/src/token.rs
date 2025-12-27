@@ -1,20 +1,21 @@
 use musi_basic::interner::Interner;
 use musi_basic::span::Span;
+use musi_basic::types::Ident;
 use std::borrow::Cow;
 use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[non_exhaustive]
 pub enum TokenKind {
-    Ident(u32),
+    Ident(Ident),
     LitInt(i64),
     LitReal(f64),
-    LitString(u32),
+    LitString(Ident),
     LitRune(char),
-    LitTemplateNoSubst(u32),
-    TemplateHead(u32),
-    TemplateMiddle(u32),
-    TemplateTail(u32),
+    LitTemplateNoSubst(Ident),
+    TemplateHead(Ident),
+    TemplateMiddle(Ident),
+    TemplateTail(Ident),
 
     // Keywords (alphabetically)
     KwAlias,
@@ -94,8 +95,8 @@ pub enum TokenKind {
     Dollar,
 
     // Special
+    Invalid(Ident),
     EOF,
-    Invalid(u32),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -240,7 +241,7 @@ impl fmt::Display for TokenDisplay<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.kind {
             TokenKind::Ident(id) => {
-                write!(f, "{}", self.interner.lookup(*id).unwrap_or("<ident>"))
+                write!(f, "{}", self.interner.resolve(*id))
             }
             TokenKind::LitInt(v) => write!(f, "{v}"),
             TokenKind::LitReal(v) => write!(f, "{v}"),
@@ -261,7 +262,7 @@ impl fmt::Display for TokenDisplay<'_> {
                 write!(f, "{}\"", self.interner.lookup(*id).unwrap_or(""))
             }
             TokenKind::Invalid(id) => {
-                write!(f, "{}", self.interner.lookup(*id).unwrap_or("<invalid>"))
+                write!(f, "{}", self.interner.resolve(*id))
             }
             kind => {
                 if let Some((kw, _)) = KEYWORDS.iter().find(|(_, tk)| *tk == *kind) {

@@ -67,6 +67,16 @@ impl<'a> Binder<'a> {
         }
     }
 
+    fn finalize_types(&mut self) {
+        for idx in 0..self.arena.exprs.len() {
+            let expr_id = ExprId::new(u32::try_from(idx).expect("index overflow"));
+            if let Some(ty) = self.model.type_of_expr(expr_id).cloned() {
+                let finalized = self.unifier.finalize(&ty);
+                self.model.set_expr_type(expr_id, finalized);
+            }
+        }
+    }
+
     fn bind_stmt(&mut self, stmt_id: StmtId) {
         let stmt = self.arena.stmts.get(stmt_id);
         match &stmt.kind {
@@ -148,8 +158,8 @@ impl<'a> Binder<'a> {
                 return sym.ty.clone();
             }
         }
-        let name = self.lookup_name(ident);
-        self.error(SemaErrorKind::UndefinedIdent(name), span);
+        let name = self.interner.resolve(ident);
+        self.error(SemaErrorKind::UndefinedIdent(name.to_owned()), span);
         TyRepr::error()
     }
 
@@ -165,10 +175,8 @@ impl<'a> Binder<'a> {
         let first_ty = self.bind_expr(elems[0]);
         for elem_id in &elems[1..] {
             let elem_ty = self.bind_expr(*elem_id);
-            if let Err(err) = self.unifier.unify(&first_ty, &elem_ty) {
-                let span = self.arena.exprs.get(*elem_id).span;
-                self.error(err, span);
-            }
+            let span = self.arena.exprs.get(*elem_id).span;
+            self.unify_or_err(&first_ty, &elem_ty, span);
         }
         TyRepr::array(first_ty, Some(elems.len()))
     }
@@ -194,10 +202,8 @@ impl<'a> Binder<'a> {
         let decl_ty = ty_ann.map(|id| self.resolve_ty_expr(id));
 
         let binding_ty = if let Some(decl) = decl_ty {
-            if let Err(err) = self.unifier.unify(&decl, &init_ty) {
-                let span = self.arena.exprs.get(init_id).span;
-                self.error(err, span);
-            }
+            let span = self.arena.exprs.get(init_id).span;
+            self.unify_or_err(&decl, &init_ty, span);
             decl
         } else {
             init_ty
@@ -212,20 +218,16 @@ impl<'a> Binder<'a> {
         match &cond.kind {
             CondKind::Expr(expr_id) => {
                 let cond_ty = self.bind_expr(*expr_id);
-                if let Err(err) = self.unifier.unify(&cond_ty, &TyRepr::bool()) {
-                    let span = self.arena.exprs.get(*expr_id).span;
-                    self.error(err, span);
-                }
+                let span = self.arena.exprs.get(*expr_id).span;
+                self.unify_or_err(&cond_ty, &TyRepr::bool(), span);
             }
             CondKind::Case { pat, init, extra } => {
                 let init_ty = self.bind_expr(*init);
                 self.bind_pat(*pat, &init_ty, false);
                 for extra_id in extra {
                     let ty = self.bind_expr(*extra_id);
-                    if let Err(err) = self.unifier.unify(&ty, &TyRepr::bool()) {
-                        let span = self.arena.exprs.get(*extra_id).span;
-                        self.error(err, span);
-                    }
+                    let span = self.arena.exprs.get(*extra_id).span;
+                    self.unify_or_err(&ty, &TyRepr::bool(), span);
                 }
             }
         }
@@ -233,10 +235,8 @@ impl<'a> Binder<'a> {
         let then_ty = self.bind_expr(then_id);
         if let Some(else_id) = else_id {
             let else_ty = self.bind_expr(else_id);
-            if let Err(err) = self.unifier.unify(&then_ty, &else_ty) {
-                let span = self.arena.exprs.get(else_id).span;
-                self.error(err, span);
-            }
+            let span = self.arena.exprs.get(else_id).span;
+            self.unify_or_err(&then_ty, &else_ty, span);
             then_ty
         } else {
             TyRepr::unit()
@@ -247,10 +247,8 @@ impl<'a> Binder<'a> {
         let cond = self.arena.conds.get(cond_id);
         if let CondKind::Expr(expr_id) = &cond.kind {
             let cond_ty = self.bind_expr(*expr_id);
-            if let Err(err) = self.unifier.unify(&cond_ty, &TyRepr::bool()) {
-                let span = self.arena.exprs.get(*expr_id).span;
-                self.error(err, span);
-            }
+            let span = self.arena.exprs.get(*expr_id).span;
+            self.unify_or_err(&cond_ty, &TyRepr::bool(), span);
         }
         let prev = self.in_loop;
         self.in_loop = true;
@@ -262,7 +260,7 @@ impl<'a> Binder<'a> {
     fn bind_expr_for(&mut self, pat_id: PatId, iter_id: ExprId, body_id: ExprId) -> TyRepr {
         let iter_ty = self.bind_expr(iter_id);
         let elem_ty = match &iter_ty.kind {
-            TyReprKind::Array { elem, .. } => (**elem).clone(),
+            TyReprKind::Array(elem, ..) => (**elem).clone(),
             _ => self.unifier.fresh_var(),
         };
 
@@ -310,7 +308,7 @@ impl<'a> Binder<'a> {
         let arg_tys: Vec<_> = args.iter().map(|a| self.bind_expr(*a)).collect();
 
         match &callee_ty.kind {
-            TyReprKind::Fn { params, ret } => {
+            TyReprKind::Fn(params, ret) => {
                 if params.len() != arg_tys.len() {
                     let span = self.arena.exprs.get(callee_id).span;
                     self.error(
@@ -323,14 +321,12 @@ impl<'a> Binder<'a> {
                     return (**ret).clone();
                 }
                 for (param, arg) in params.iter().zip(arg_tys.iter()) {
-                    if let Err(err) = self.unifier.unify(param, arg) {
-                        let span = self.arena.exprs.get(callee_id).span;
-                        self.error(err, span);
-                    }
+                    let span = self.arena.exprs.get(callee_id).span;
+                    self.unify_or_err(param, arg, span);
                 }
                 (**ret).clone()
             }
-            TyReprKind::Any | TyReprKind::Error => callee_ty,
+            TyReprKind::Any | TyReprKind::Unknown => callee_ty,
             _ => {
                 let span = self.arena.exprs.get(callee_id).span;
                 self.error(
@@ -358,14 +354,12 @@ impl<'a> Binder<'a> {
             | TokenKind::GtEq => TyRepr::bool(),
 
             TokenKind::KwAnd | TokenKind::KwOr => {
-                if let Err(err) = self.unifier.unify(&lhs_ty, &TyRepr::bool()) {
-                    let span = self.arena.exprs.get(lhs_id).span;
-                    self.error(err, span);
-                }
-                if let Err(err) = self.unifier.unify(&rhs_ty, &TyRepr::bool()) {
-                    let span = self.arena.exprs.get(rhs_id).span;
-                    self.error(err, span);
-                }
+                let lhs_span = self.arena.exprs.get(lhs_id).span;
+                self.unify_or_err(&lhs_ty, &TyRepr::bool(), lhs_span);
+
+                let rhs_span = self.arena.exprs.get(rhs_id).span;
+                self.unify_or_err(&rhs_ty, &TyRepr::bool(), rhs_span);
+
                 TyRepr::bool()
             }
 
@@ -374,10 +368,8 @@ impl<'a> Binder<'a> {
             | TokenKind::Star
             | TokenKind::Slash
             | TokenKind::Percent => {
-                if let Err(err) = self.unifier.unify(&lhs_ty, &rhs_ty) {
-                    let span = self.arena.exprs.get(rhs_id).span;
-                    self.error(err, span);
-                }
+                let span = self.arena.exprs.get(rhs_id).span;
+                self.unify_or_err(&lhs_ty, &rhs_ty, span);
                 lhs_ty
             }
 
@@ -389,9 +381,7 @@ impl<'a> Binder<'a> {
         let operand_ty = self.bind_expr(operand_id);
         match op {
             TokenKind::KwNot => {
-                if let Err(err) = self.unifier.unify(&operand_ty, &TyRepr::bool()) {
-                    self.error(err, span);
-                }
+                self.unify_or_err(&operand_ty, &TyRepr::bool(), span);
                 TyRepr::bool()
             }
             TokenKind::Minus => operand_ty,
@@ -408,29 +398,27 @@ impl<'a> Binder<'a> {
             && let Some(sym) = self.symbols.get(sym_id)
             && !sym.mutable
         {
-            let name = self.lookup_name(ident);
+            let name = self.interner.resolve(ident);
             let span = self.arena.exprs.get(target_id).span;
-            self.error(SemaErrorKind::AssignmentToImmutable(name), span);
+            self.error(SemaErrorKind::AssignmentToImmutable(name.to_owned()), span);
         }
 
         let value_ty = self.bind_expr(value_id);
-        if let Err(err) = self.unifier.unify(&target_ty, &value_ty) {
-            let span = self.arena.exprs.get(value_id).span;
-            self.error(err, span);
-        }
+        let span = self.arena.exprs.get(value_id).span;
+        self.unify_or_err(&target_ty, &value_ty, span);
         TyRepr::unit()
     }
 
     fn bind_expr_field(&mut self, base_id: ExprId, field: Ident, span: Span) -> TyRepr {
         let base_ty = self.bind_expr(base_id);
         match &base_ty.kind {
-            TyReprKind::Any | TyReprKind::Error => base_ty,
+            TyReprKind::Any | TyReprKind::Unknown => base_ty,
             _ => {
-                let field_name = self.lookup_name(field);
+                let field_name = self.interner.resolve(field);
                 self.error(
                     SemaErrorKind::NoSuchField {
                         ty: format!("{base_ty}"),
-                        field: field_name,
+                        field: field_name.to_owned(),
                     },
                     span,
                 );
@@ -443,8 +431,8 @@ impl<'a> Binder<'a> {
         let base_ty = self.bind_expr(base_id);
         let _ = self.bind_expr(index_id);
         match &base_ty.kind {
-            TyReprKind::Array { elem, .. } => (**elem).clone(),
-            TyReprKind::Any | TyReprKind::Error => base_ty,
+            TyReprKind::Array(elem, ..) => (**elem).clone(),
+            TyReprKind::Any | TyReprKind::Unknown => base_ty,
             _ => {
                 self.error(SemaErrorKind::NotIndexable(format!("{base_ty}")), span);
                 TyRepr::error()
@@ -477,8 +465,8 @@ impl<'a> Binder<'a> {
                 ) {
                     Ok(sym_id) => self.model.set_pat_symbol(pat_id, sym_id),
                     Err(_prev) => {
-                        let name = self.lookup_name(*ident);
-                        self.error(SemaErrorKind::DuplicateDef(name), pat.span);
+                        let name = self.interner.resolve(*ident);
+                        self.error(SemaErrorKind::DuplicateDef(name.to_owned()), pat.span);
                     }
                 }
             }
@@ -509,8 +497,8 @@ impl<'a> Binder<'a> {
                 {
                     return sym.ty.clone();
                 }
-                let name = self.lookup_name(*ident);
-                self.error(SemaErrorKind::UndefinedType(name), ty_expr.span);
+                let name = self.interner.resolve(*ident);
+                self.error(SemaErrorKind::UndefinedType(name.to_owned()), ty_expr.span);
                 TyRepr::error()
             }
             TyExprKind::Optional(inner) => TyRepr::optional(self.resolve_ty_expr(*inner)),
@@ -532,24 +520,11 @@ impl<'a> Binder<'a> {
             TyExprKind::App { base, args } => {
                 if let Some(sym_id) = self.symbols.lookup(*base) {
                     let arg_tys: Vec<_> = args.iter().map(|a| self.resolve_ty_expr(*a)).collect();
-                    return TyRepr::new(TyReprKind::Named {
-                        symbol: sym_id,
-                        args: arg_tys,
-                    });
+                    return TyRepr::named(sym_id, arg_tys);
                 }
-                let name = self.lookup_name(*base);
-                self.error(SemaErrorKind::UndefinedType(name), ty_expr.span);
+                let name = self.interner.resolve(*base);
+                self.error(SemaErrorKind::UndefinedType(name.to_owned()), ty_expr.span);
                 TyRepr::error()
-            }
-        }
-    }
-
-    fn finalize_types(&mut self) {
-        for idx in 0..self.arena.exprs.len() {
-            let expr_id = ExprId::new(u32::try_from(idx).expect("index overflow"));
-            if let Some(ty) = self.model.type_of_expr(expr_id).cloned() {
-                let finalized = self.unifier.finalize(&ty);
-                self.model.set_expr_type(expr_id, finalized);
             }
         }
     }
@@ -559,10 +534,9 @@ impl<'a> Binder<'a> {
         self.diags.add(diag);
     }
 
-    fn lookup_name(&self, ident: Ident) -> String {
-        self.interner
-            .lookup(ident)
-            .unwrap_or("<unknown>")
-            .to_owned()
+    fn unify_or_err(&mut self, a: &TyRepr, b: &TyRepr, span: Span) {
+        if let Err(err) = self.unifier.unify(a, b) {
+            self.error(err, span);
+        }
     }
 }

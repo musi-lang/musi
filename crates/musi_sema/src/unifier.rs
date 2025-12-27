@@ -56,16 +56,7 @@ impl Unifier {
                 self.unify(inner_a, inner_b)
             }
             (TyReprKind::Ptr(inner_a), TyReprKind::Ptr(inner_b)) => self.unify(inner_a, inner_b),
-            (
-                TyReprKind::Array {
-                    elem: elem_a,
-                    size: size_a,
-                },
-                TyReprKind::Array {
-                    elem: elem_b,
-                    size: size_b,
-                },
-            ) => {
+            (TyReprKind::Array(elem_a, size_a), TyReprKind::Array(elem_b, size_b)) => {
                 if size_a != size_b {
                     return Err(SemaErrorKind::TypeMismatch {
                         from: format!("{a}"),
@@ -86,16 +77,7 @@ impl Unifier {
                 }
                 Ok(())
             }
-            (
-                TyReprKind::Fn {
-                    params: params_a,
-                    ret: ret_a,
-                },
-                TyReprKind::Fn {
-                    params: params_b,
-                    ret: ret_b,
-                },
-            ) => {
+            (TyReprKind::Fn(params_a, ret_a), TyReprKind::Fn(params_b, ret_b)) => {
                 if params_a.len() != params_b.len() {
                     return Err(SemaErrorKind::ArityMismatch {
                         expected: params_a.len(),
@@ -107,16 +89,7 @@ impl Unifier {
                 }
                 self.unify(ret_a, ret_b)
             }
-            (
-                TyReprKind::Named {
-                    symbol: sym_a,
-                    args: args_a,
-                },
-                TyReprKind::Named {
-                    symbol: sym_b,
-                    args: args_b,
-                },
-            ) => {
+            (TyReprKind::Named(sym_a, args_a), TyReprKind::Named(sym_b, args_b)) => {
                 if sym_a != sym_b || args_a.len() != args_b.len() {
                     return Err(SemaErrorKind::TypeMismatch {
                         from: format!("{a}"),
@@ -137,55 +110,46 @@ impl Unifier {
 
     #[must_use]
     pub fn apply(&self, ty: &TyRepr) -> TyRepr {
-        match &ty.kind {
-            TyReprKind::Var(id) => self
-                .substitutions
-                .get(id)
-                .map_or_else(|| ty.clone(), |resolved| self.apply(resolved)),
-            TyReprKind::Optional(inner) => TyRepr::optional(self.apply(inner)),
-            TyReprKind::Ptr(inner) => TyRepr::ptr(self.apply(inner)),
-            TyReprKind::Array { elem, size } => TyRepr::array(self.apply(elem), *size),
-            TyReprKind::Tuple(elems) => {
-                TyRepr::tuple(elems.iter().map(|e| self.apply(e)).collect())
-            }
-            TyReprKind::Fn { params, ret } => TyRepr::func(
-                params.iter().map(|p| self.apply(p)).collect(),
-                self.apply(ret),
-            ),
-            TyReprKind::Named { symbol, args } => TyRepr::new(TyReprKind::Named {
-                symbol: *symbol,
-                args: args.iter().map(|a| self.apply(a)).collect(),
-            }),
-            _ => ty.clone(),
-        }
+        self.transform(ty, &|s, id| {
+            s.substitutions
+                .get(&id)
+                .map_or_else(|| TyRepr::var(id), |resolved| s.apply(resolved))
+        })
     }
 
     #[must_use]
     pub fn finalize(&self, ty: &TyRepr) -> TyRepr {
-        let applied = self.apply(ty);
-        finalize_inner(&applied)
+        self.transform(ty, &|s, id| {
+            s.substitutions
+                .get(&id)
+                .map_or(TyRepr::error(), |resolved| s.finalize(resolved))
+        })
+    }
+
+    fn transform<F>(&self, ty: &TyRepr, f: &F) -> TyRepr
+    where
+        F: Fn(&Self, TyVarId) -> TyRepr,
+    {
+        match &ty.kind {
+            TyReprKind::Var(id) => f(self, *id),
+            TyReprKind::Optional(inner) => TyRepr::optional(self.transform(inner, f)),
+            TyReprKind::Ptr(inner) => TyRepr::ptr(self.transform(inner, f)),
+            TyReprKind::Array(elem, size) => TyRepr::array(self.transform(elem, f), *size),
+            TyReprKind::Tuple(elems) => {
+                TyRepr::tuple(elems.iter().map(|e| self.transform(e, f)).collect())
+            }
+            TyReprKind::Fn(params, ret) => TyRepr::func(
+                params.iter().map(|p| self.transform(p, f)).collect(),
+                self.transform(ret, f),
+            ),
+            TyReprKind::Named(symbol, args) => {
+                TyRepr::named(*symbol, args.iter().map(|a| self.transform(a, f)).collect())
+            }
+            _ => ty.clone(),
+        }
     }
 
     fn bind(&mut self, id: TyVarId, ty: TyRepr) {
         let _ = self.substitutions.insert(id, ty);
-    }
-}
-
-fn finalize_inner(ty: &TyRepr) -> TyRepr {
-    match &ty.kind {
-        TyReprKind::Var(_) => TyRepr::error(),
-        TyReprKind::Optional(inner) => TyRepr::optional(finalize_inner(inner)),
-        TyReprKind::Ptr(inner) => TyRepr::ptr(finalize_inner(inner)),
-        TyReprKind::Array { elem, size } => TyRepr::array(finalize_inner(elem), *size),
-        TyReprKind::Tuple(elems) => TyRepr::tuple(elems.iter().map(finalize_inner).collect()),
-        TyReprKind::Fn { params, ret } => TyRepr::func(
-            params.iter().map(finalize_inner).collect(),
-            finalize_inner(ret),
-        ),
-        TyReprKind::Named { symbol, args } => TyRepr::new(TyReprKind::Named {
-            symbol: *symbol,
-            args: args.iter().map(finalize_inner).collect(),
-        }),
-        _ => ty.clone(),
     }
 }

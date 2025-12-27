@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
-use std::sync::Arc;
+
+use crate::{OptArcSource, types::ArcSource};
 
 #[derive(Debug, Clone)]
 #[non_exhaustive]
@@ -25,6 +26,7 @@ impl SourceFile {
                 line_starts.push(pos);
             }
         }
+
         Self {
             name,
             input,
@@ -89,7 +91,7 @@ impl SourceFile {
 
 #[derive(Debug, Default)]
 pub struct SourceMap {
-    files: Vec<Arc<SourceFile>>,
+    files: Vec<ArcSource>,
 }
 
 impl SourceMap {
@@ -105,14 +107,14 @@ impl SourceMap {
     /// Panics if more than `u32::MAX` files are added.
     pub fn add_file(&mut self, name: String, src: String) -> u32 {
         let start_pos = self.files.last().map_or(0, |f| f.end_pos());
-        let file = Arc::new(SourceFile::new(name, src, start_pos));
+        let file = ArcSource::new(SourceFile::new(name, src, start_pos));
         let id = u32::try_from(self.files.len()).expect("too many source files");
         self.files.push(file);
         id
     }
 
     #[must_use]
-    pub fn lookup_source(&self, offset: u32) -> Option<&Arc<SourceFile>> {
+    pub fn lookup_source(&self, offset: u32) -> OptArcSource<'_> {
         let idx = self.files.binary_search_by(|f| {
             if offset < f.start {
                 Ordering::Greater
@@ -126,7 +128,7 @@ impl SourceMap {
     }
 
     #[must_use]
-    pub fn get(&self, id: u32) -> Option<&Arc<SourceFile>> {
+    pub fn get(&self, id: u32) -> OptArcSource<'_> {
         self.files.get(usize::try_from(id).ok()?)
     }
 }
