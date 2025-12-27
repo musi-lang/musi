@@ -1,6 +1,7 @@
 use musi_ast::{
-    AstArena, ChoiceCase, CondId, CondKind, Expr, ExprId, ExprKind, Fields, FnSig, Ident, Idents,
-    LitKind, PatId, PatKind, Prog, StmtId, StmtKind, TemplatePart, TyExpr, TyExprId, TyExprKind,
+    AstArena, ChoiceCase, CondId, CondKind, Expr, ExprId, ExprKind, Field, Fields, FnSig, Ident,
+    Idents, LitKind, PatId, PatKind, Prog, StmtId, StmtKind, TemplatePart, TyExpr, TyExprId,
+    TyExprKind,
 };
 use musi_basic::diagnostic::{Diagnostic, DiagnosticBag};
 use musi_basic::error::IntoMusiError;
@@ -8,6 +9,7 @@ use musi_basic::interner::Interner;
 use musi_basic::span::Span;
 use musi_lex::token::TokenKind;
 
+use crate::SymbolId;
 use crate::builtins::Builtins;
 use crate::error::SemaErrorKind;
 use crate::semantic::SemanticModel;
@@ -59,6 +61,21 @@ impl<'a> Binder<'a> {
     fn finish(mut self) -> (SemanticModel, SymbolTable, DiagnosticBag) {
         self.finalize_types();
         (self.model, self.symbols, self.diags)
+    }
+
+    fn define_and_record(
+        &mut self,
+        name: Ident,
+        kind: SymbolKind,
+        ty: TyRepr,
+        def_span: Span,
+        mutable: bool,
+    ) -> Result<SymbolId, SymbolId> {
+        let res = self.symbols.define(name, kind, ty, def_span, mutable);
+        if let Ok(sym_id) = res {
+            self.model.set_ident_symbol(name, sym_id);
+        }
+        res
     }
 
     fn bind_prog(&mut self, prog: &Prog) {
@@ -123,6 +140,7 @@ impl<'a> Binder<'a> {
             ExprKind::Assign { target, value } => self.bind_expr_assign(*target, *value),
             ExprKind::Field { base, field } => self.bind_expr_field(*base, *field, expr.span),
             ExprKind::Index { base, index } => self.bind_expr_index(*base, *index, expr.span),
+            ExprKind::Record { base, fields } => self.bind_expr_record(*base, fields),
             ExprKind::Fn { sig, body, .. } => self.bind_expr_fn(sig, *body),
             ExprKind::RecordDef {
                 name,
@@ -172,6 +190,7 @@ impl<'a> Binder<'a> {
     fn bind_expr_ident(&mut self, ident: Ident, expr_id: ExprId, span: Span) -> TyRepr {
         if let Some(sym_id) = self.symbols.lookup(ident) {
             self.model.set_expr_symbol(expr_id, sym_id);
+            self.model.set_ident_symbol(ident, sym_id);
             if let Some(sym) = self.symbols.get(sym_id) {
                 return sym.ty.clone();
             }
@@ -469,6 +488,9 @@ impl<'a> Binder<'a> {
 
     fn bind_expr_field(&mut self, base_id: ExprId, field: Ident, span: Span) -> TyRepr {
         let base_ty = self.bind_expr(base_id);
+        if let Some(sym_id) = self.symbols.lookup(field) {
+            self.model.set_ident_symbol(field, sym_id);
+        }
         match &base_ty.kind {
             TyReprKind::Any | TyReprKind::Unknown => base_ty,
             _ => {
@@ -512,17 +534,13 @@ impl<'a> Binder<'a> {
         let _ = self.symbols.push_scope();
 
         for (param, ty) in sig.params.iter().zip(param_tys.iter()) {
-            if self
-                .symbols
-                .define(
-                    param.name,
-                    SymbolKind::Param,
-                    ty.clone(),
-                    param.name.span,
-                    param.mutable,
-                )
-                .is_ok()
-            {
+            if let Ok(_) = self.define_and_record(
+                param.name,
+                SymbolKind::Param,
+                ty.clone(),
+                param.name.span,
+                param.mutable,
+            ) {
             } else {
                 let name = self.interner.resolve(param.name.id);
                 self.error(
@@ -554,14 +572,7 @@ impl<'a> Binder<'a> {
     ) -> TyRepr {
         let ty = if let Some(ident) = name {
             let sym_id = self
-                .symbols
-                .define(
-                    ident,
-                    SymbolKind::Type,
-                    TyRepr::unit(),
-                    Span::default(),
-                    false,
-                )
+                .define_and_record(ident, SymbolKind::Type, TyRepr::unit(), ident.span, false)
                 .expect("duplicate type def");
             TyRepr::named(sym_id, vec![])
         } else {
@@ -585,14 +596,7 @@ impl<'a> Binder<'a> {
     ) -> TyRepr {
         let ty = if let Some(ident) = name {
             let sym_id = self
-                .symbols
-                .define(
-                    ident,
-                    SymbolKind::Type,
-                    TyRepr::unit(),
-                    Span::default(),
-                    false,
-                )
+                .define_and_record(ident, SymbolKind::Type, TyRepr::unit(), ident.span, false)
                 .expect("duplicate type def");
             TyRepr::named(sym_id, vec![])
         } else {
@@ -600,16 +604,13 @@ impl<'a> Binder<'a> {
         };
 
         for case in cases {
-            let _ = self
-                .symbols
-                .define(
-                    case.name,
-                    SymbolKind::Variant,
-                    TyRepr::unit(),
-                    Span::default(),
-                    false,
-                )
-                .ok();
+            if let Ok(_) = self.define_and_record(
+                case.name,
+                SymbolKind::Variant,
+                TyRepr::unit(),
+                case.name.span,
+                false,
+            ) {}
         }
 
         ty
@@ -617,11 +618,23 @@ impl<'a> Binder<'a> {
 
     fn bind_expr_alias(&mut self, name: Ident, ty_expr: TyExprId) -> TyRepr {
         let ty = self.resolve_ty_expr(ty_expr);
-        let _ = self
-            .symbols
-            .define(name, SymbolKind::Type, ty.clone(), Span::default(), false)
-            .ok();
+        let _ = self.define_and_record(name, SymbolKind::Type, ty.clone(), name.span, false);
         ty
+    }
+
+    fn bind_expr_record(&mut self, base: Option<ExprId>, fields: &[Field]) -> TyRepr {
+        if let Some(base_id) = base {
+            let _ = self.bind_expr(base_id);
+        }
+        for field in fields {
+            if let Some(init_id) = field.init {
+                let _ = self.bind_expr(init_id);
+            }
+            if let Some(ty_id) = field.ty {
+                let _ = self.resolve_ty_expr(ty_id);
+            }
+        }
+        TyRepr::any()
     }
 
     fn bind_pat(&mut self, pat_id: PatId, expected: &TyRepr, mutable: bool) {
@@ -644,7 +657,10 @@ impl<'a> Binder<'a> {
                     .symbols
                     .define(*ident, kind, expected.clone(), ident.span, mutable)
                 {
-                    Ok(sym_id) => self.model.set_pat_symbol(pat_id, sym_id),
+                    Ok(sym_id) => {
+                        self.model.set_pat_symbol(pat_id, sym_id);
+                        self.model.set_ident_symbol(*ident, sym_id);
+                    }
                     Err(_prev) => {
                         let name = self.interner.resolve(ident.id);
                         self.error(SemaErrorKind::DuplicateDef(name.to_owned()), ident.span);
@@ -661,6 +677,7 @@ impl<'a> Binder<'a> {
             PatKind::Choice { name, args, .. } => {
                 if let Some(sym_id) = self.symbols.lookup(*name) {
                     self.model.set_pat_symbol(pat_id, sym_id);
+                    self.model.set_ident_symbol(*name, sym_id);
                 }
                 for arg in args {
                     self.bind_pat(*arg, &TyRepr::any(), false);
@@ -685,6 +702,7 @@ impl<'a> Binder<'a> {
                     && matches!(sym.kind, SymbolKind::Builtin | SymbolKind::Type)
                 {
                     self.model.set_ty_expr_symbol(ty_expr.id, sym_id);
+                    self.model.set_ident_symbol(*ident, sym_id);
                     return sym.ty.clone();
                 }
                 let name = self.interner.resolve(ident.id);
@@ -709,6 +727,7 @@ impl<'a> Binder<'a> {
             ),
             TyExprKind::App { base, args } => {
                 if let Some(sym_id) = self.symbols.lookup(*base) {
+                    self.model.set_ident_symbol(*base, sym_id);
                     let arg_tys: Vec<_> = args.iter().map(|a| self.resolve_ty_expr(*a)).collect();
                     return TyRepr::named(sym_id, arg_tys);
                 }

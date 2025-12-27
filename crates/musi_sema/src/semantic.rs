@@ -1,6 +1,8 @@
 use musi_ast::{AstArena, AstVisitor, ExprId, Ident, PatId, Prog, TyExprId, TyExprKind};
 use musi_basic::span::Span;
 
+use std::collections::HashMap;
+
 use crate::symbol::SymbolId;
 use crate::ty_repr::TyRepr;
 use crate::{SemanticTokens, Symbol, SymbolKind, SymbolTable};
@@ -13,6 +15,7 @@ pub struct SemanticModel {
     pat_symbols: Vec<Option<SymbolId>>,
     ty_expr_types: Vec<Option<TyRepr>>,
     ty_expr_symbols: Vec<Option<SymbolId>>,
+    ident_symbols: HashMap<Span, SymbolId>,
 }
 
 impl SemanticModel {
@@ -25,6 +28,7 @@ impl SemanticModel {
             pat_symbols: vec![None; pat_count],
             ty_expr_types: vec![None; ty_expr_count],
             ty_expr_symbols: vec![None; ty_expr_count],
+            ident_symbols: HashMap::new(),
         }
     }
 
@@ -100,6 +104,15 @@ impl SemanticModel {
         if idx < self.ty_expr_symbols.len() {
             self.ty_expr_symbols[idx] = Some(symbol);
         }
+    }
+
+    #[must_use]
+    pub fn symbol_of_ident(&self, ident: Ident) -> Option<SymbolId> {
+        self.ident_symbols.get(&ident.span).copied()
+    }
+
+    pub fn set_ident_symbol(&mut self, ident: Ident, symbol: SymbolId) {
+        let _ = self.ident_symbols.insert(ident.span, symbol);
     }
 }
 
@@ -195,7 +208,11 @@ impl TokenCollector<'_> {
 
 impl AstVisitor for TokenCollector<'_> {
     fn visit_ident(&mut self, _arena: &AstArena, ident: Ident) {
-        if let Some(sym_id) = self.symbols.lookup(ident)
+        let sym_id = self
+            .model
+            .symbol_of_ident(ident)
+            .or_else(|| self.symbols.lookup(ident));
+        if let Some(sym_id) = sym_id
             && let Some(sym) = self.symbols.get(sym_id)
         {
             let mut kind = Self::classify_kind(sym.kind);
