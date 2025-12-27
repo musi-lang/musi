@@ -175,7 +175,7 @@ impl TyRepr {
     }
 
     #[must_use]
-    pub fn named(symbol: SymbolId, args: Vec<Self>) -> Self {
+    pub const fn named(symbol: SymbolId, args: Vec<Self>) -> Self {
         Self::new(TyReprKind::named(symbol, args))
     }
 
