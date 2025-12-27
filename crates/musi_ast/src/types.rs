@@ -2,13 +2,7 @@ use musi_basic::arena::NodeId;
 
 use crate::node::{Attr, AttrArg, ChoiceCaseItem, Cond, Expr, Field, Pat, Stmt, TyExpr};
 
-// ============================================================================
-// IDENTIFIERS
-// ============================================================================
-
-pub type Ident = u32;
-pub type Idents = Vec<Ident>;
-pub type OptIdent = Option<Ident>;
+pub use musi_basic::types::{Ident, Idents, OptIdent};
 
 // ============================================================================
 // TYPE EXPRESSIONS
