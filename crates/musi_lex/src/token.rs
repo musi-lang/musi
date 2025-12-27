@@ -95,7 +95,7 @@ pub enum TokenKind {
     Dollar,
 
     // Special
-    Invalid(Ident),
+    Error(Ident),
     EOF,
 }
 
@@ -240,9 +240,6 @@ impl fmt::Display for TokenKind {
 impl fmt::Display for TokenDisplay<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.kind {
-            TokenKind::Ident(id) => {
-                write!(f, "{}", self.interner.resolve(*id))
-            }
             TokenKind::LitInt(v) => write!(f, "{v}"),
             TokenKind::LitReal(v) => write!(f, "{v}"),
             TokenKind::LitString(id) => {
@@ -261,7 +258,7 @@ impl fmt::Display for TokenDisplay<'_> {
             TokenKind::TemplateTail(id) => {
                 write!(f, "{}\"", self.interner.lookup(*id).unwrap_or(""))
             }
-            TokenKind::Invalid(id) => {
+            TokenKind::Ident(id) | TokenKind::Error(id) => {
                 write!(f, "{}", self.interner.resolve(*id))
             }
             kind => {

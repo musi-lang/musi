@@ -297,7 +297,7 @@ impl<'a> Lexer<'a> {
                     self.cursor.pos() - c.len_utf8(),
                     self.cursor.pos(),
                 );
-                TokenKind::Invalid(self.interner.intern(c.to_string().as_str()))
+                TokenKind::Error(self.interner.intern(c.to_string().as_str()))
             }
             None => TokenKind::EOF,
         }
@@ -316,7 +316,7 @@ impl<'a> Lexer<'a> {
             let val = unescape(raw, start + 1, &mut self.errors);
             TokenKind::LitString(self.interner.intern(&val))
         } else {
-            TokenKind::Invalid(
+            TokenKind::Error(
                 self.interner.intern(
                     self.source
                         .input
@@ -413,7 +413,7 @@ impl<'a> Lexer<'a> {
                 TokenKind::TemplateTail(s)
             }
         } else {
-            TokenKind::Invalid(
+            TokenKind::Error(
                 self.interner.intern(
                     self.source
                         .input
@@ -436,12 +436,12 @@ impl<'a> Lexer<'a> {
                 .expect("valid format string prefix slice");
             if s.is_empty() {
                 self.report(LexErrorKind::InvalidIdent, start, self.cursor.pos());
-                TokenKind::Invalid(self.interner.intern(""))
+                TokenKind::Error(self.interner.intern(""))
             } else {
                 TokenKind::Ident(self.interner.intern(s))
             }
         } else {
-            TokenKind::Invalid(
+            TokenKind::Error(
                 self.interner.intern(
                     self.source
                         .input
