@@ -56,7 +56,7 @@ async function _handleActivationError(error: unknown) {
 
 /**
  * Activate Musi extension.
- * Initiates language client, status bar, and registers commands.
+ * Readies language client, status bar, and registers commands.
  * @param context VS Code extension context.
  */
 export async function activate(context: vscode.ExtensionContext) {
