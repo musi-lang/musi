@@ -216,9 +216,7 @@ expr_choice_def = [aux_attr], [aux_modifiers], "choice", [ident], [ty_expr_param
 
 expr_alias = [aux_attr], [aux_modifiers], "alias", ident, [ty_expr_params], ":=", ty_expr;
 
-expr_fn = [aux_attr], [aux_modifiers], "fn", aux_fn_sig, expr_block;
-
-expr_lambda = "(", [aux_field_list], ")", "=>", expr;
+expr_fn = [aux_attr], [aux_modifiers], "fn", aux_fn_sig, (expr_block | "=>", expr);
 
 expr_bind = [aux_modifiers], ("val" | "var"), pat, [aux_ty_annot], aux_init, expr;
 
