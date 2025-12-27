@@ -13,6 +13,42 @@
 #! /usr/bin/env musi
 
 // ============================================================================
+// IMPORTS
+// ============================================================================
+
+import "@std/io";
+import "@std/math";
+
+// ============================================================================
+// HELPER FUNCTIONS & VALUES
+// ============================================================================
+
+val sqrt := fn (x) { x ** 0.5 };
+val open := fn (path) { Succ(path) };
+val read_file := fn (f) { Succ("file content") };
+val has_next := fn () { 0 };
+val next := fn () { 42 };
+val process := fn (x) { x };
+val use := fn (v) { v };
+val handle := fn (e) { e };
+val in_range := fn () { () };
+val valid := 1;
+val can_recover := fn () { 1 };
+val proceed := fn () { () };
+val add := fn (x) { fn (y) { x + y } };
+val multiply := fn (x) { fn (y) { x * y } };
+val compute := fn () { 42 };
+val transform := fn (x) { x * 2 };
+val action := fn () { () };
+val done := fn () { () };
+val recover := fn (e) { 0 };
+val operation := fn () { Succ(42) };
+val handle_error := fn (e) { () };
+val get_next := fn () { None };
+val fallback := fn () { () };
+val size_of := fn (t) { 4 };
+
+// ============================================================================
 // KEYWORDS & CONTROL FLOW
 // ============================================================================
 
@@ -29,6 +65,7 @@ if x > 0 { writeln("pos");
 while has_next() { process(next()); };
 for i in 0..10 { writeln($"{i}"); };
 
+val result := Succ(42);
 match result {
 case Succ(v) => use(v),
 case Fail(e) => handle(e)
@@ -49,12 +86,14 @@ val big_num := 1000000;
 
 val PI := 3.14159;
 val sci := 1.23e-4;
-val typed_float: Bin32 := 3.14;
+val typed_float: Float32 := 3.14;
 val double := 2.718;
 
 val t := 1;
 val f := 0;
 
+val name := "Alice";
+val count := 5;
 val str := "hello world";
 val chr: Rune := 'A';
 val tmpl := $"Hello {name}, you have {count} items";
@@ -65,12 +104,15 @@ val `and` := "keyword as escaped identifier";
 // OPERATORS
 // ============================================================================
 
-val add := x + y;
+val a := 10;
+val b := 20;
+
+val add_op := x + y;
 val sub := x - y;
 val mul := x * y;
 val div := x / y;
 val rem := x % y;
-val mod := mod(x, y);
+val mod_op := mod(x, y);
 val pow := x ** 2;
 
 val eq := x = y;
@@ -84,15 +126,19 @@ val and_op := a and b;
 val or_op := a or b;
 val not_op := not a;
 
+val MASK := 0xFF;
 val bit_and := a & b;
 val bit_or := a | b;
 val xor_op := a ^ b;
 val bit_not := ~a;
 
+var value := 42;
 var ptr := @x;
 val deref := ptr.^;
 
+var counter := 0;
 counter <- counter + 1;
+var flags := 0xFF;
 flags <- flags & MASK;
 
 val type_cast := value as Int32;
@@ -105,6 +151,7 @@ val piped := 10 |> add(5) |> multiply(2);
 // ============================================================================
 
 alias MyInt := Int;
+alias Bool := Nat8;
 
 val unit_val: Unit := ();
 val int8_val: Int8 := 42;
@@ -115,13 +162,10 @@ val nat8_val: Nat8 := 42;
 val nat16_val: Nat16 := 42;
 val nat32_val: Nat32 := 42;
 val nat64_val: Nat64 := 42;
-val bin16_val: Bin16 := 3.14;
-val bin32_val: Bin32 := 3.14;
-val bin64_val: Bin64 := 3.14;
-val dec32_val: Dec32 := 3.14;
-val dec64_val: Dec64 := 3.14;
+val float32_val: Float32 := 3.14;
+val float64_val: Float64 := 3.14;
 val rune_val: Rune := 'A';
-val text_val: Text := "hello";
+val string_val: String := "hello";
 
 val ptr_type: ^Int32 := @x;
 val ptr_ptr: ^^Int32 := @ptr_type;
@@ -133,7 +177,7 @@ val size_info := size_of(Int32);
 // FUNCTIONS
 // ============================================================================
 
-val add := fn (x, y) { x + y };
+val add_fn := fn (x, y) { x + y };
 
 val scale := fn (v, f) { v * f };
 
@@ -147,7 +191,7 @@ val malloc := extern "C" unsafe fn (size) { /* ... */ };
 // STRUCTURAL DATA TYPES
 // ============================================================================
 
-val Point := record { x: Bin32; y: Bin32 };
+val Point := record { x: Float32; y: Float32 };
 
 val p1: Point := .{ x := 3.0, y := 4.0 };
 val p2: Point := .{ x := 0.0, y := 0.0 };
@@ -158,13 +202,16 @@ val dist := fn (a: Point, b: Point) {
   sqrt(dx ** 2 + dy ** 2)
 };
 
+val point := p1;
+val x_coord := point.x;
+
 // ============================================================================
 // ALGEBRAIC DATA TYPES
 // ============================================================================
 
 val Option := choice Option[T] { case Some(T), case None };
 
-val Expect := choice Option[T] { case Succ(T), case Fail(E) };
+val Expect := choice Expect[T, E] { case Succ(T), case Fail(E) };
 
 val Shape := choice { case Circle(radius), case Rect(width, height), case Triangle(a, b, c) };
 
@@ -179,10 +226,16 @@ val area := fn (s: Shape) {
   }
 };
 
+val Some := fn (v) { v };
+val None := 0;
+val Succ := fn (v) { v };
+val Fail := fn (e) { e };
+
 // ============================================================================
 // PATTERN MATCHING
 // ============================================================================
 
+val opt := Some(42);
 match opt {
 case Some(v) => use(v),
 case None => {}
@@ -196,19 +249,11 @@ while case Some(item) := get_next() {
   process(item);
 };
 
-match result {
+val result2 := Succ(100);
+match result2 {
 case Succ(v) => process(v),
 case Fail(e) => handle_error(e)
 };
-
-// ============================================================================
-// MODULES & IMPORTS
-// ============================================================================
-
-import "@std/io";
-import "@std/io";
-import "./config.ms";
-import "./types.ms";
 
 // ============================================================================
 // ERROR HANDLING
@@ -252,13 +297,15 @@ val get_user := fn (id) { None };
 val is_valid := fn (x) { x > 0 };
 
 val status := 1;
-val (opt, res) := (Some(42), Succ(42));
+val (opt2, res) := (Some(42), Succ(42));
 
-val x_coord := point.x;
-val name := user.name;
+val user := .{ name := "Bob", age := 25, active := 1 };
+val user_name := user.name;
 
-val result := compute(42);
-val output := process(input, config);
+val input := 10;
+val config := 5;
+val result3 := compute();
+val output := process(input);
 
 // ============================================================================
 // COMPLEX EXPRESSIONS
@@ -276,22 +323,25 @@ val chained := 10 |> add(5) |> multiply(2);
 // EDGE CASES
 // ============================================================================
 
+val nested := Some(Succ(42));
 match nested {
 case Some(Succ(v)) => use(v),
 case Some(Fail(e)) => handle(e),
 case _ => fallback()
 };
 
-val ptr := @value;
-val deref := ptr.^;
-ptr.^ <- 100;
+val value2 := 50;
+val ptr2 := @value2;
+val deref2 := ptr2.^;
+ptr2.^ <- 100;
 
 val msg := $"User {user.name} has {count} items";
 
-val (a, b) := (10, 20);
-val result := {
-  val (x, y) := (compute(), transform(x));
-  x + y
+val (pair_a, pair_b) := (10, 20);
+val result4 := {
+  val x_val := compute();
+  val (x_res, y_res) := (compute(), transform(x_val));
+  x_res + y_res
 };
 
 val unit := { action(); done(); () };
