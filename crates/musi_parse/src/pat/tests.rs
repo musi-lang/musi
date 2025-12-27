@@ -84,8 +84,8 @@ fn test_pat_or() {
 fn test_pat_record() {
     let mut ctx = TestContext::new();
     let id = ctx.parse_pat("Point.{x, y}");
-    if let PatKind::Record { ty, fields } = &ctx.pat(id).kind {
-        assert!(ty.is_some());
+    if let PatKind::Record { base, fields } = &ctx.pat(id).kind {
+        assert!(base.is_some());
         assert_eq!(fields.len(), 2);
     } else {
         panic!("expected record pattern");

@@ -81,7 +81,7 @@ pub enum PatKind {
     /// `[a, b, c]`
     Array(PatIds),
     /// `Point.{x, y}`
-    Record { ty: OptExprId, fields: Idents },
+    Record { base: OptExprId, fields: Idents },
     /// `Some(x)`, `None`
     Choice {
         name: Ident,
@@ -145,7 +145,7 @@ pub enum ExprKind {
     Array(ExprIds),
     /// `Point.{x := 1, y := 2}`
     Record {
-        ty: OptExprId,
+        base: OptExprId,
         fields: Fields,
     },
     /// Block: `{ stmt; stmt; expr }`

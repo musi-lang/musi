@@ -84,8 +84,8 @@ impl Prec {
 }
 
 pub struct Parser<'a> {
-    tokens: &'a [Token],
-    index: usize,
+    pub tokens: &'a [Token],
+    pub index: usize,
     pub arena: &'a mut AstArena,
     pub diagnostics: DiagnosticBag,
 }

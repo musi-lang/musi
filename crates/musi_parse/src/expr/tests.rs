@@ -116,8 +116,8 @@ fn test_expr_record_anon() {
     let mut ctx = TestContext::new();
     let x = ctx.intern("x");
     let id = ctx.parse_expr(".{x := 1}");
-    if let ExprKind::Record { ty, fields } = &ctx.expr(id).kind {
-        assert!(ty.is_none());
+    if let ExprKind::Record { base, fields } = &ctx.expr(id).kind {
+        assert!(base.is_none());
         assert_eq!(fields.len(), 1);
         assert_eq!(fields[0].name, x);
     } else {
@@ -132,15 +132,34 @@ fn test_expr_record_typed() {
     let x = ctx.intern("x");
     let id = ctx.parse_expr("Point.{x := 1}");
     if let ExprKind::Record {
-        ty: Some(ty_id),
+        base: Some(base_id),
         fields,
     } = &ctx.expr(id).kind
     {
-        assert!(matches!(ctx.expr(*ty_id).kind, ExprKind::Ident(i) if i == point));
+        assert!(matches!(ctx.expr(*base_id).kind, ExprKind::Ident(i) if i == point));
         assert_eq!(fields.len(), 1);
         assert_eq!(fields[0].name, x);
     } else {
         panic!("expected `record` expression");
+    }
+}
+
+#[test]
+fn test_expr_record_update() {
+    let mut ctx = TestContext::new();
+    let p = ctx.intern("p");
+    let x = ctx.intern("x");
+    let id = ctx.parse_expr(".{p with, x := 1}");
+    if let ExprKind::Record {
+        base: Some(base_id),
+        fields,
+    } = &ctx.expr(id).kind
+    {
+        assert!(matches!(ctx.expr(*base_id).kind, ExprKind::Ident(i) if i == p));
+        assert_eq!(fields.len(), 1);
+        assert_eq!(fields[0].name, x);
+    } else {
+        panic!("expected record update expression");
     }
 }
 

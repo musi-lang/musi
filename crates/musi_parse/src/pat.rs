@@ -123,12 +123,12 @@ impl Parser<'_> {
         Ok(self.arena.alloc_pat(PatKind::Ident(id), start))
     }
 
-    fn parse_pat_record(&mut self, ty: OptExprId, start: Span) -> MusiResult<PatId> {
+    fn parse_pat_record(&mut self, base: OptExprId, start: Span) -> MusiResult<PatId> {
         self.advance_by(2); // consume `.` and `{`
         let fields = self.separated(TokenKind::Comma, Self::expect_ident)?;
         let _ = self.expect(TokenKind::RBrace)?;
         let span = start.merge(self.prev_span());
-        Ok(self.arena.alloc_pat(PatKind::Record { ty, fields }, span))
+        Ok(self.arena.alloc_pat(PatKind::Record { base, fields }, span))
     }
 
     fn parse_pat_record_anon(&mut self) -> MusiResult<PatId> {

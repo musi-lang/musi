@@ -111,7 +111,12 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, arena: &AstArena, expr: &Expr) {
         ExprKind::Lit(lit) => v.visit_lit(arena, lit),
         ExprKind::Ident(_) | ExprKind::Cycle | ExprKind::Import(_) => {}
         ExprKind::Tuple(ids) | ExprKind::Array(ids) => v.visit_expr_ids(arena, ids),
-        ExprKind::Record { fields, .. } => v.visit_fields(arena, fields),
+        ExprKind::Record { base, fields } => {
+            if let Some(id) = base {
+                v.visit_expr_id(arena, *id);
+            }
+            v.visit_fields(arena, fields);
+        }
         ExprKind::Block { stmts, expr } => {
             v.visit_stmt_ids(arena, stmts);
             if let Some(id) = expr {
@@ -232,7 +237,12 @@ pub fn walk_ty_expr<V: AstVisitor>(v: &mut V, arena: &AstArena, ty_expr: &TyExpr
 
 pub fn walk_pat<V: AstVisitor>(v: &mut V, arena: &AstArena, pat: &Pat) {
     match &pat.kind {
-        PatKind::Ident(_) | PatKind::Wild | PatKind::Record { .. } => {}
+        PatKind::Ident(_) | PatKind::Wild => {}
+        PatKind::Record { base, .. } => {
+            if let Some(id) = base {
+                v.visit_expr_id(arena, *id);
+            }
+        }
         PatKind::Lit(lit) => v.visit_lit(arena, lit),
         PatKind::Tuple(ids) | PatKind::Array(ids) | PatKind::Cons(ids) | PatKind::Or(ids) => {
             v.visit_pat_ids(arena, ids);

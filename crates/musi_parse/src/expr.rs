@@ -416,7 +416,7 @@ impl Parser<'_> {
         let span = start.merge(self.prev_span());
         Ok(self.arena.alloc_expr(
             ExprKind::Record {
-                ty: Some(lhs),
+                base: Some(lhs),
                 fields,
             },
             span,
@@ -426,12 +426,41 @@ impl Parser<'_> {
     fn parse_expr_record_anon(&mut self) -> MusiResult<ExprId> {
         let start = self.curr_span();
         self.advance_by(2); // consume `.` and `{`
+
+        let mut base = None;
+        if self.is_record_update() {
+            base = Some(self.parse_expr()?);
+            let _ = self.expect(TokenKind::KwWith)?;
+            let _ = self.bump_if(TokenKind::Comma);
+        }
+
         let fields = self.separated(TokenKind::Comma, Self::parse_field)?;
         let _ = self.expect(TokenKind::RBrace)?;
         let span = start.merge(self.prev_span());
         Ok(self
             .arena
-            .alloc_expr(ExprKind::Record { ty: None, fields }, span))
+            .alloc_expr(ExprKind::Record { base, fields }, span))
+    }
+
+    fn is_record_update(&self) -> bool {
+        let mut depth = 0;
+        let mut i = 0;
+        while let Some(tok) = self.tokens.get(self.index + i) {
+            match tok.kind {
+                TokenKind::LBrace => depth += 1,
+                TokenKind::RBrace => {
+                    if depth == 0 {
+                        break;
+                    }
+                    depth -= 1;
+                }
+                TokenKind::KwWith if depth == 0 => return true,
+                TokenKind::Comma | TokenKind::ColonEq if depth == 0 => return false,
+                _ => {}
+            }
+            i += 1;
+        }
+        false
     }
 
     fn parse_block_body(&mut self) -> MusiResult<(StmtIds, OptExprId)> {
