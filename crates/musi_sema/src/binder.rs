@@ -1,6 +1,6 @@
 use musi_ast::{
-    AstArena, CondId, CondKind, Expr, ExprId, ExprKind, Ident, LitKind, OptExprId, OptTyExprId,
-    PatId, PatKind, Prog, StmtId, StmtKind, TyExpr, TyExprId, TyExprKind,
+    AstArena, CondId, CondKind, Expr, ExprId, ExprKind, FnSig, Ident, LitKind, OptExprId,
+    OptTyExprId, PatId, PatKind, Prog, StmtId, StmtKind, TyExpr, TyExprId, TyExprKind,
 };
 use musi_basic::diagnostic::{Diagnostic, DiagnosticBag};
 use musi_basic::error::IntoMusiError;
@@ -123,7 +123,7 @@ impl<'a> Binder<'a> {
             ExprKind::Assign { target, value } => self.bind_expr_assign(*target, *value),
             ExprKind::Field { base, field } => self.bind_expr_field(*base, *field, expr.span),
             ExprKind::Index { base, index } => self.bind_expr_index(*base, *index, expr.span),
-            ExprKind::Fn { body, .. } => self.bind_expr_fn(*body),
+            ExprKind::Fn { sig, body, .. } => self.bind_expr_fn(sig, *body),
             ExprKind::RecordDef { .. } | ExprKind::ChoiceDef { .. } | ExprKind::Alias { .. } => {
                 TyRepr::unit()
             }
@@ -440,14 +440,50 @@ impl<'a> Binder<'a> {
         }
     }
 
-    fn bind_expr_fn(&mut self, body_id: ExprId) -> TyRepr {
+    fn bind_expr_fn(&mut self, sig: &FnSig, body_id: ExprId) -> TyRepr {
+        let mut param_tys = vec![];
+        for param in &sig.params {
+            let ty = if let Some(id) = param.ty {
+                self.resolve_ty_expr(id)
+            } else {
+                self.unifier.fresh_var()
+            };
+            param_tys.push(ty);
+        }
+
         let _ = self.symbols.push_scope();
+
+        for (param, ty) in sig.params.iter().zip(param_tys.iter()) {
+            match self.symbols.define(
+                param.name,
+                SymbolKind::Local,
+                ty.clone(),
+                self.arena.exprs.get(body_id).span,
+                param.mutable,
+            ) {
+                Ok(_) => {}
+                Err(_) => {
+                    let name = self.interner.resolve(param.name);
+                    self.error(
+                        SemaErrorKind::DuplicateDef(name.to_owned()),
+                        self.arena.exprs.get(body_id).span,
+                    );
+                }
+            }
+        }
+
         let prev = self.in_fn;
         self.in_fn = true;
-        let ret_ty = self.bind_expr(body_id);
+        let body_ty = self.bind_expr(body_id);
         self.in_fn = prev;
+
+        if let Some(ret_ty_expr) = sig.ret {
+            let ret_ty = self.resolve_ty_expr(ret_ty_expr);
+            self.unify_or_err(&ret_ty, &body_ty, self.arena.exprs.get(body_id).span);
+        }
+
         self.symbols.pop_scope();
-        TyRepr::func(vec![], ret_ty)
+        TyRepr::func(param_tys, body_ty)
     }
 
     fn bind_pat(&mut self, pat_id: PatId, expected: &TyRepr, mutable: bool) {

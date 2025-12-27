@@ -117,7 +117,7 @@ fn bind_for_scope() {
 #[test]
 fn bind_fn_basic() {
     let mut ctx = TestContext::new();
-    let (_, diags) = ctx.check_bind("fn add(x: Int, y: Int): Int { x + y; };");
+    let (_, diags) = ctx.check_bind("fn add(x: Int, y: Int): Int { x + y };");
     assert!(diags.is_empty(), "bind errors: {diags:?}");
 }
 
