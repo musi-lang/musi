@@ -160,6 +160,13 @@ impl<'a> Binder<'a> {
                 TyRepr::unit()
             }
             ExprKind::Match { scrutinee, cases } => self.bind_expr_match(*scrutinee, cases),
+            ExprKind::Range { start, end, .. } => {
+                let _ = self.bind_expr(*start);
+                if let Some(end_id) = end {
+                    let _ = self.bind_expr(*end_id);
+                }
+                TyRepr::any()
+            }
             _ => TyRepr::any(),
         }
     }
@@ -320,15 +327,28 @@ impl<'a> Binder<'a> {
 
     fn bind_expr_while(&mut self, cond_id: CondId, body_id: ExprId) -> TyRepr {
         let cond = self.arena.conds.get(cond_id);
-        if let CondKind::Expr(expr_id) = &cond.kind {
-            let cond_ty = self.bind_expr(*expr_id);
-            let span = self.arena.exprs.get(*expr_id).span;
-            self.unify_or_err(&cond_ty, &TyRepr::bool(), span);
+        let _ = self.symbols.push_scope();
+        match &cond.kind {
+            CondKind::Expr(expr_id) => {
+                let cond_ty = self.bind_expr(*expr_id);
+                let span = self.arena.exprs.get(*expr_id).span;
+                self.unify_or_err(&cond_ty, &TyRepr::bool(), span);
+            }
+            CondKind::Case { pat, init, extra } => {
+                let init_ty = self.bind_expr(*init);
+                self.bind_pat(*pat, &init_ty, false);
+                for extra_id in extra {
+                    let ty = self.bind_expr(*extra_id);
+                    let span = self.arena.exprs.get(*extra_id).span;
+                    self.unify_or_err(&ty, &TyRepr::bool(), span);
+                }
+            }
         }
         let prev = self.in_loop;
         self.in_loop = true;
         let _ = self.bind_expr(body_id);
         self.in_loop = prev;
+        self.symbols.pop_scope();
         TyRepr::unit()
     }
 
