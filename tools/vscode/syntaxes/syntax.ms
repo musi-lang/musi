@@ -76,8 +76,8 @@ var ptr := @value;
 val deref := ptr.^;
 ptr.^ <- 200;
 
-val ptr_type: ^Int32 := @value;
-val ptr_ptr: ^^Int32 := @ptr_type;
+val ptr_type: ^Nat32 := @value;
+val ptr_ptr: ^^Nat32 := @ptr_type;
 
 // ============================================================================
 // TYPE OPERATIONS
