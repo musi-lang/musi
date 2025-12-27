@@ -1,7 +1,7 @@
 use musi_ast::{
     AstArena, ChoiceCase, CondId, CondKind, Expr, ExprId, ExprKind, Field, Fields, FnSig, Ident,
-    Idents, LitKind, PatId, PatKind, Prog, StmtId, StmtKind, TemplatePart, TyExpr, TyExprId,
-    TyExprKind,
+    Idents, LitKind, MatchCase, PatId, PatKind, Prog, StmtId, StmtKind, TemplatePart, TyExpr,
+    TyExprId, TyExprKind,
 };
 use musi_basic::diagnostic::{Diagnostic, DiagnosticBag};
 use musi_basic::error::IntoMusiError;
@@ -159,6 +159,7 @@ impl<'a> Binder<'a> {
                 let _ = self.bind_expr(*inner);
                 TyRepr::unit()
             }
+            ExprKind::Match { scrutinee, cases } => self.bind_expr_match(*scrutinee, cases),
             _ => TyRepr::any(),
         }
     }
@@ -246,7 +247,6 @@ impl<'a> Binder<'a> {
             init_ty
         };
 
-        // If init is a type definition or function, use appropriate symbol kind
         let kind = match self.arena.exprs.get(init_id).kind {
             ExprKind::RecordDef { name, .. } | ExprKind::ChoiceDef { name, .. } => {
                 if let PatKind::Ident(pat_ident) = &self.arena.pats.get(pat_id).kind
@@ -349,6 +349,26 @@ impl<'a> Binder<'a> {
 
         self.symbols.pop_scope();
         TyRepr::unit()
+    }
+
+    fn bind_expr_match(&mut self, scrutinee_id: ExprId, cases: &[MatchCase]) -> TyRepr {
+        let scrutinee_ty = self.bind_expr(scrutinee_id);
+        let mut result_ty = self.unifier.fresh_var();
+
+        for case in cases {
+            let _ = self.symbols.push_scope();
+            self.bind_pat(case.pat, &scrutinee_ty, false);
+            if let Some(guard_id) = case.guard {
+                let _ = self.bind_expr(guard_id);
+            }
+            let body_ty = self.bind_expr(case.body);
+            let span = self.arena.exprs.get(case.body).span;
+            self.unify_or_err(&result_ty, &body_ty, span);
+            result_ty = body_ty;
+            self.symbols.pop_scope();
+        }
+
+        result_ty
     }
 
     fn bind_expr_return(&mut self, opt: Option<ExprId>, span: Span) -> TyRepr {
@@ -578,9 +598,16 @@ impl<'a> Binder<'a> {
         });
 
         for field in fields {
-            if let Some(ty_expr) = field.ty {
-                drop(self.resolve_ty_expr(ty_expr));
-            }
+            let field_ty = field
+                .ty
+                .map_or_else(TyRepr::any, |ty_id| self.resolve_ty_expr(ty_id));
+            _ = self.define_and_record(
+                field.name,
+                SymbolKind::Field,
+                field_ty,
+                field.name.span,
+                field.mutable,
+            );
         }
 
         ty
@@ -600,8 +627,7 @@ impl<'a> Binder<'a> {
         });
 
         for case in cases {
-            #[allow(clippy::let_underscore_must_use)] // `drop()` on `Copy` trait is no-op
-            let _ = self.define_and_record(
+            _ = self.define_and_record(
                 case.name,
                 SymbolKind::Variant,
                 TyRepr::unit(),
@@ -615,8 +641,7 @@ impl<'a> Binder<'a> {
 
     fn bind_expr_alias(&mut self, name: Ident, ty_expr: TyExprId) -> TyRepr {
         let ty = self.resolve_ty_expr(ty_expr);
-        #[allow(clippy::let_underscore_must_use)] // `drop()` on `Copy` trait is no-op
-        let _ = self.define_and_record(name, SymbolKind::Type, ty.clone(), name.span, false);
+        _ = self.define_and_record(name, SymbolKind::Type, ty.clone(), name.span, false);
         ty
     }
 
@@ -678,7 +703,7 @@ impl<'a> Binder<'a> {
                     self.model.set_ident_symbol(*name, sym_id);
                 }
                 for arg in args {
-                    self.bind_pat(*arg, &TyRepr::any(), false);
+                    self.bind_pat(*arg, &TyRepr::any(), mutable);
                 }
             }
             _ => {}

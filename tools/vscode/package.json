@@ -90,19 +90,24 @@
 				"scopes": {
 					"variable.readonly": ["variable.other.constant.musi"],
 					"variable.declaration.readonly": ["variable.other.constant.musi"],
+					"variable.mutable": ["variable.other.musi"],
+					"variable.declaration.mutable": ["variable.other.musi"],
 					"parameter.readonly": ["variable.other.constant.musi"],
 					"parameter.declaration.readonly": ["variable.other.constant.musi"],
-					"variable.mutable": ["variable.other.readwrite.musi"],
-					"variable.declaration.mutable": ["variable.other.readwrite.musi"],
 					"parameter.mutable": ["variable.parameter.musi"],
 					"parameter.declaration.mutable": ["variable.parameter.musi"],
+					"property.readonly": ["variable.other.constant.property.musi"],
+					"property.declaration.readonly": ["variable.other.constant.property.musi"],
+					"property.mutable": ["variable.other.property.musi"],
+					"property.declaration.mutable": ["variable.other.property.musi"],
+					"property": ["variable.other.property.musi"],
+					"property.declaration": ["variable.other.property.musi"],
 					"function": ["entity.name.function.musi"],
 					"function.declaration": ["entity.name.function.musi"],
 					"type": ["entity.name.type.musi"],
 					"type.declaration": ["entity.name.type.musi"],
-					"property": ["variable.other.property.musi"],
-					"property.readonly": ["variable.other.constant.property.musi"],
-					"enumMember": ["variable.other.enummember.musi"]
+					"enumMember": ["variable.other.enummember.musi"],
+					"enumMember.declaration": ["variable.other.enummember.musi"]
 				}
 			}
 		],
