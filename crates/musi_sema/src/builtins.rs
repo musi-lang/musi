@@ -69,6 +69,8 @@ impl Builtins {
     /// # Panics
     ///
     /// Panics if builtin is already defined (indicates bug).
+    /// Panics if builtin is already defined (indicates bug).
+    #[allow(clippy::too_many_lines)]
     pub fn register(&self, symbols: &mut SymbolTable) {
         let span = Span::default();
         let _ = symbols
@@ -77,6 +79,7 @@ impl Builtins {
                 SymbolKind::Builtin,
                 TyRepr::int(IntWidth::I8),
                 span,
+                false,
             )
             .expect("builtin already defined");
         let _ = symbols
@@ -85,6 +88,7 @@ impl Builtins {
                 SymbolKind::Builtin,
                 TyRepr::int(IntWidth::I16),
                 span,
+                false,
             )
             .expect("builtin already defined");
         let _ = symbols
@@ -93,6 +97,7 @@ impl Builtins {
                 SymbolKind::Builtin,
                 TyRepr::int(IntWidth::I32),
                 span,
+                false,
             )
             .expect("builtin already defined");
         let _ = symbols
@@ -101,6 +106,7 @@ impl Builtins {
                 SymbolKind::Builtin,
                 TyRepr::int(IntWidth::I64),
                 span,
+                false,
             )
             .expect("builtin already defined");
         let _ = symbols
@@ -109,6 +115,7 @@ impl Builtins {
                 SymbolKind::Builtin,
                 TyRepr::nat(IntWidth::I8),
                 span,
+                false,
             )
             .expect("builtin already defined");
         let _ = symbols
@@ -117,6 +124,7 @@ impl Builtins {
                 SymbolKind::Builtin,
                 TyRepr::nat(IntWidth::I16),
                 span,
+                false,
             )
             .expect("builtin already defined");
         let _ = symbols
@@ -125,6 +133,7 @@ impl Builtins {
                 SymbolKind::Builtin,
                 TyRepr::nat(IntWidth::I32),
                 span,
+                false,
             )
             .expect("builtin already defined");
         let _ = symbols
@@ -133,6 +142,7 @@ impl Builtins {
                 SymbolKind::Builtin,
                 TyRepr::nat(IntWidth::I64),
                 span,
+                false,
             )
             .expect("builtin already defined");
         let _ = symbols
@@ -141,6 +151,7 @@ impl Builtins {
                 SymbolKind::Builtin,
                 TyRepr::float(FloatWidth::F32),
                 span,
+                false,
             )
             .expect("builtin already defined");
         let _ = symbols
@@ -149,25 +160,38 @@ impl Builtins {
                 SymbolKind::Builtin,
                 TyRepr::float(FloatWidth::F64),
                 span,
+                false,
             )
             .expect("builtin already defined");
         let _ = symbols
-            .define(self.bool, SymbolKind::Builtin, TyRepr::bool(), span)
+            .define(self.bool, SymbolKind::Builtin, TyRepr::bool(), span, false)
             .expect("builtin already defined");
         let _ = symbols
-            .define(self.rune, SymbolKind::Builtin, TyRepr::rune(), span)
+            .define(self.rune, SymbolKind::Builtin, TyRepr::rune(), span, false)
             .expect("builtin already defined");
         let _ = symbols
-            .define(self.string, SymbolKind::Builtin, TyRepr::string(), span)
+            .define(
+                self.string,
+                SymbolKind::Builtin,
+                TyRepr::string(),
+                span,
+                false,
+            )
             .expect("builtin already defined");
         let _ = symbols
-            .define(self.unit, SymbolKind::Builtin, TyRepr::unit(), span)
+            .define(self.unit, SymbolKind::Builtin, TyRepr::unit(), span, false)
             .expect("builtin already defined");
         let _ = symbols
-            .define(self.never, SymbolKind::Builtin, TyRepr::never(), span)
+            .define(
+                self.never,
+                SymbolKind::Builtin,
+                TyRepr::never(),
+                span,
+                false,
+            )
             .expect("builtin already defined");
         let _ = symbols
-            .define(self.any, SymbolKind::Builtin, TyRepr::any(), span)
+            .define(self.any, SymbolKind::Builtin, TyRepr::any(), span, false)
             .expect("builtin already defined");
     }
 }
