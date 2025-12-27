@@ -20,328 +20,288 @@ import "@std/io";
 import "@std/math";
 
 // ============================================================================
-// HELPER FUNCTIONS & VALUES
+// BASIC LITERALS & TYPES
 // ============================================================================
 
-val sqrt := fn (x) { x ** 0.5 };
-val open := fn (path) { Succ(path) };
-val read_file := fn (f) { Succ("file content") };
-val has_next := fn () { 0 };
-val next := fn () { 42 };
-val process := fn (x) { x };
-val use := fn (v) { v };
-val handle := fn (e) { e };
-val in_range := fn () { () };
-val valid := 1;
-val can_recover := fn () { 1 };
-val proceed := fn () { () };
-val add := fn (x) { fn (y) { x + y } };
-val multiply := fn (x) { fn (y) { x * y } };
-val compute := fn () { 42 };
-val transform := fn (x) { x * 2 };
-val action := fn () { () };
-val done := fn () { () };
-val recover := fn (e) { 0 };
-val operation := fn () { Succ(42) };
-val handle_error := fn (e) { () };
-val get_next := fn () { None };
-val fallback := fn () { () };
-val size_of := fn (t) { 4 };
+val unit_val: Unit := ();
+val int_val := 42;
+val hex_val := 0xFF;
+val bin_val := 0b1010;
+val float_val := 3.14159;
+val sci_val := 1.23e-4;
+val bool_true := 1;
+val bool_false := 0;
 
-// ============================================================================
-// KEYWORDS & CONTROL FLOW
-// ============================================================================
-
-val x := 42;
-var y := 0;
-y <- 10;
-
-if x > 0 { writeln("pos"); };
-if x > 0 { writeln("pos"); } else { writeln("neg"); };
-if x > 0 { writeln("pos");
-} else if (x < 0) { writeln("neg");
-} else { writeln("zero"); };
-
-while has_next() { process(next()); };
-for i in 0..10 { writeln($"{i}"); };
-
-val result := Succ(42);
-match result {
-case Succ(v) => use(v),
-case Fail(e) => handle(e)
-};
-
-if x > 0 and y < 10 { in_range(); };
-if valid or can_recover() { proceed(); };
-
-// ============================================================================
-// LITERALS
-// ============================================================================
-
-val dec := 42;
-val hex := 0xFF;
-val bin := 0b1010;
-val typed_int: Nat8 := 255;
-val big_num := 1000000;
-
-val PI := 3.14159;
-val sci := 1.23e-4;
-val typed_float: Float32 := 3.14;
-val double := 2.718;
-
-val t := 1;
-val f := 0;
-
-val name := "Alice";
-val count := 5;
 val str := "hello world";
 val chr: Rune := 'A';
-val tmpl := $"Hello {name}, you have {count} items";
-val escape := "line1\nline2\ttab\u{1F600}";
-val `and` := "keyword as escaped identifier";
+val escape := "line\n\ttab\u{1F600}";
+val `and` := "escaped keyword identifier";
+
+val typed_int: Int32 := 42;
+val typed_float: Float32 := 3.14;
+val typed_nat: Nat8 := 255;
 
 // ============================================================================
 // OPERATORS
 // ============================================================================
 
-val a := 10;
-val b := 20;
+val ari := (10 + 5) * 2 - 3 / 2;
+val pow := 2 ** 8;
+val rem := 17 % 5;
 
-val add_op := x + y;
-val sub := x - y;
-val mul := x * y;
-val div := x / y;
-val rem := x % y;
-val mod_op := mod(x, y);
-val pow := x ** 2;
+val cmp := (10 > 5) and (3 <= 7);
+val log_op := bool_true or bool_false;
+val neg := not bool_false;
 
-val eq := x = y;
-val ne := x /= y;
-val lt := x < y;
-val le := x <= y;
-val gt := x > y;
-val ge := x >= y;
+val bitwise := (0xFF & 0x0F) | (0xF0 ^ 0x55);
+val bit_not := ~0xFF;
 
-val and_op := a and b;
-val or_op := a or b;
-val not_op := not a;
-
-val MASK := 0xFF;
-val bit_and := a & b;
-val bit_or := a | b;
-val xor_op := a ^ b;
-val bit_not := ~a;
-
-var value := 42;
-var ptr := @x;
-val deref := ptr.^;
+// ============================================================================
+// VARIABLES & ASSIGNMENT
+// ============================================================================
 
 var counter := 0;
 counter <- counter + 1;
-var flags := 0xFF;
-flags <- flags & MASK;
+counter <- counter * 2;
 
-val type_cast := value as Int32;
-val type_test := value is Int32;
-
-val piped := 10 |> add(5) |> multiply(2);
+var flags := 0b1010;
+flags <- flags & 0b1100;
 
 // ============================================================================
-// TYPES
+// POINTERS
 // ============================================================================
 
-alias MyInt := Int;
-alias Bool := Nat8;
+var value := 100;
+var ptr := @value;
+val deref := ptr.^;
+ptr.^ <- 200;
 
-val unit_val: Unit := ();
-val int8_val: Int8 := 42;
-val int16_val: Int16 := 42;
-val int32_val: Int32 := 42;
-val int64_val: Int64 := 42;
-val nat8_val: Nat8 := 42;
-val nat16_val: Nat16 := 42;
-val nat32_val: Nat32 := 42;
-val nat64_val: Nat64 := 42;
-val float32_val: Float32 := 3.14;
-val float64_val: Float64 := 3.14;
-val rune_val: Rune := 'A';
-val string_val: String := "hello";
-
-val ptr_type: ^Int32 := @x;
+val ptr_type: ^Int32 := @value;
 val ptr_ptr: ^^Int32 := @ptr_type;
 
-val any_val: Any := 42;
+// ============================================================================
+// TYPE OPERATIONS
+// ============================================================================
+
+alias MyInt := Int32;
+val casted := value as Float32;
+val type_check := value is Int32;
 val size_info := size_of(Int32);
-
-// ============================================================================
-// FUNCTIONS
-// ============================================================================
-
-val add_fn := fn (x, y) { x + y };
-
-val scale := fn (v, f) { v * f };
-
-val write_ptr := fn (p, v) { p.^ <- v };
-
-val get_value := fn (ptr) { ptr.^ };
-
-val malloc := extern "C" unsafe fn (size) { /* ... */ };
 
 // ============================================================================
 // STRUCTURAL DATA TYPES
 // ============================================================================
 
 val Point := record { x: Float32; y: Float32 };
+val Color := record { r: Nat8; g: Nat8; b: Nat8 };
 
-val p1: Point := .{ x := 3.0, y := 4.0 };
-val p2: Point := .{ x := 0.0, y := 0.0 };
-val p3: Point := .{ x := 1.0, y := 2.0 };
+val origin: Point := .{ x := 0.0, y := 0.0 };
+val red: Color := .{ r := 255, g := 0, b := 0 };
 
-val dist := fn (a: Point, b: Point) {
-  val (dx, dy) := (a.x - b.x, a.y - b.y);
-  sqrt(dx ** 2 + dy ** 2)
+val distance := fn (p1: Point, p2: Point) {
+  val dx := p1.x - p2.x;
+  val dy := p1.y - p2.y;
+  sqrt(dx * dx + dy * dy)
 };
-
-val point := p1;
-val x_coord := point.x;
 
 // ============================================================================
 // ALGEBRAIC DATA TYPES
 // ============================================================================
 
 val Option := choice Option[T] { case Some(T), case None };
+val Result := choice Result[T, E] { case Ok(T), case Err(E) };
 
-val Expect := choice Expect[T, E] { case Succ(T), case Fail(E) };
-
-val Shape := choice { case Circle(radius), case Rect(width, height), case Triangle(a, b, c) };
+val Shape := choice Shape {
+  case Circle(radius: Float32),
+  case Rectangle(width: Float32, height: Float32),
+  case Triangle(a: Float32, b: Float32, c: Float32)
+};
 
 val area := fn (s: Shape) {
   match s {
-  case Circle(r) => 3.14159 * r ** 2,
-  case Rect(w, h) => w * h,
-  case Triangle(a, b, c) => {
-    val s := (a + b + c) / 2.0;
-    return sqrt(s * (s - a) * (s - b) * (s - c));
-  }
+    case Circle(r) => 3.14159 * r * r,
+    case Rectangle(w, h) => w * h,
+    case Triangle(a, b, c) => {
+      val s := (a + b + c) / 2.0;
+      sqrt(s * (s - a) * (s - b) * (s - c))
+    }
   }
 };
 
-val Some := fn (v) { v };
-val None := 0;
-val Succ := fn (v) { v };
-val Fail := fn (e) { e };
+// ============================================================================
+// FUNCTIONS
+// ============================================================================
+
+val add := fn (x, y) { x + y };
+val multiply := fn (x, y) { x * y };
+
+val curry_add := fn (x) { fn (y) { x + y } };
+
+val write_thru_ptr := fn (p: ^Int32, v: Int32) {
+  p.^ <- v;
+};
+
+val factorial := fn (n) {
+  if n <= 1 { return 1; };
+  n * factorial(n - 1)
+};
+
+// ============================================================================
+// CONTROL FLOW
+// ============================================================================
+
+val abs := fn (n) {
+  if n < 0 { -n } else { n }
+};
+
+val sign := fn (n) {
+  if n > 0 { 1 }
+  else if n < 0 { -1 }
+  else { 0 }
+};
+
+val sum_to := fn (n) {
+  var total := 0;
+  var i := 1;
+  while i <= n {
+    total <- total + i;
+    i <- i + 1;
+  };
+  total
+};
+
+val print_range := fn (start, end) {
+  for i in start..end {
+    writeln($"value: {i}");
+  };
+};
 
 // ============================================================================
 // PATTERN MATCHING
 // ============================================================================
 
-val opt := Some(42);
-match opt {
-case Some(v) => use(v),
-case None => {}
-};
+val maybe_value := Some(42);
 
-if case Some(value) := opt {
-  use(value);
-};
-
-while case Some(item) := get_next() {
-  process(item);
-};
-
-val result2 := Succ(100);
-match result2 {
-case Succ(v) => process(v),
-case Fail(e) => handle_error(e)
-};
-
-// ============================================================================
-// ERROR HANDLING
-// ============================================================================
-
-val load := fn (path) {
-  val file := open(path);
-  match file {
-  case Succ(f) => {
-    val content := read_file(f);
-    match content {
-    case Succ(data) => return Succ(data),
-    case Fail(e) => return Fail(e)
-    }
-  },
-  case Fail(e) => return Fail(e)
+val unwrap := fn (opt) {
+  match opt {
+    case Some(v) => v,
+    case None => 0
   }
 };
 
-val handle_result := match operation() {
-case Succ(v) => v,
-case Fail(e) => recover(e)
+val handle_result := fn (res) {
+  match res {
+    case Ok(v) => writeln($"Success: {v}"),
+    case Err(e) => writeln($"Failure: {e}")
+  }
+};
+
+// Pattern matching in conditionals
+val process_option := fn (opt) {
+  if case Some(v) := opt {
+    writeln($"got value '{v}'");
+  };
+};
+
+// Pattern matching in loops
+val process_stream := fn (next_fn) {
+  while case Some(item) := next_fn() {
+    writeln($"processing '{item}'...");
+  };
 };
 
 // ============================================================================
-// IDENTIFIERS
+// STRING TEMPLATES
 // ============================================================================
 
-val MAX_SIZE := 1024;
-val DEFAULT_TIMEOUT := 30;
-
-val User := record { name: String; age: Nat32; active: Bool };
-
-val HttpError := choice { case NotFound, case ServerError };
-
-val user_count := 42;
-var active_sessions := 0;
-
-val get_user := fn (id) { None };
-
-val is_valid := fn (x) { x > 0 };
-
-val status := 1;
-val (opt2, res) := (Some(42), Succ(42));
-
-val user := .{ name := "Bob", age := 25, active := 1 };
-val user_name := user.name;
-
-val input := 10;
-val config := 5;
-val result3 := compute();
-val output := process(input);
+val name := "Alice";
+val age := 30;
+val greeting := $"Hello {name}, you are {age} years old";
+val calculation := $"2 + 2 = {2 + 2}";
 
 // ============================================================================
 // COMPLEX EXPRESSIONS
 // ============================================================================
 
-val complex := {
-  val helper := fn (x) { x + 1 };
-  val value := 42;
-  helper(value)
+val pipe_example := 10 |> add(5) |> multiply(2);
+
+val block_result := {
+  val x := 10;
+  val y := 20;
+  x + y
 };
 
-val chained := 10 |> add(5) |> multiply(2);
+val nested_match := fn (opt) {
+  match opt {
+    case Some(Ok(v)) => v,
+    case Some(Err(e)) => -1,
+    case None => 0
+  }
+};
 
 // ============================================================================
-// EDGE CASES
+// TUPLES & DESTRUCTURING
 // ============================================================================
 
-val nested := Some(Succ(42));
-match nested {
-case Some(Succ(v)) => use(v),
-case Some(Fail(e)) => handle(e),
-case _ => fallback()
+val pair := (10, 20);
+val (first, second) := pair;
+
+val swap := fn (tuple) {
+  val (a, b) := tuple;
+  (b, a)
 };
 
-val value2 := 50;
-val ptr2 := @value2;
-val deref2 := ptr2.^;
-ptr2.^ <- 100;
-
-val msg := $"User {user.name} has {count} items";
-
-val (pair_a, pair_b) := (10, 20);
-val result4 := {
-  val x_val := compute();
-  val (x_res, y_res) := (compute(), transform(x_val));
-  x_res + y_res
+val complex_destructure := {
+  val point := .{ x := 5.0, y := 10.0 };
+  val (px, py) := (point.x, point.y);
+  px + py
 };
 
-val unit := { action(); done(); () };
+// ============================================================================
+// PRACTICAL EXAMPLES
+// ============================================================================
+
+val safe_divide := fn (a, b) {
+  if b = 0 {
+    Err("division by zero")
+  } else {
+    Ok(a / b)
+  }
+};
+
+val find_max := fn (nums) {
+  var max := nums.[0];
+  for n in nums {
+    if n > max {
+      max <- n;
+    };
+  };
+  max
+};
+
+val map := fn (f, list) {
+  var result := [];
+  for item in list {
+    result <- result + [f(item)];
+  };
+  result
+};
+
+val filter := fn (pred, list) {
+  var result := [];
+  for item in list {
+    if pred(item) {
+      result <- result + [item];
+    };
+  };
+  result
+};
+
+// ============================================================================
+// EXTERNAL FUNCTIONS
+// ============================================================================
+
+// extern "C" {
+//   fn malloc(size: Nat64): ^Any;
+//   fn free(ptr: ^Any): Unit;
+// };
