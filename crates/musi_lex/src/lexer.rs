@@ -142,7 +142,11 @@ impl<'a> Lexer<'a> {
         let start = self.cursor.pos();
         self.cursor
             .eat_while(|c| c.is_ascii_alphanumeric() || c == '_');
-        let text = self.source.input.get(start..self.cursor.pos()).unwrap();
+        let text = self
+            .source
+            .input
+            .get(start..self.cursor.pos())
+            .expect("`start..cursor` within source bounds");
         if text == "_" {
             return TokenKind::Underscore;
         }
@@ -304,13 +308,21 @@ impl<'a> Lexer<'a> {
         if let Some(content_end) =
             self.consume_quoted(start, 1, &['"'], LexErrorKind::UnclosedStringLit)
         {
-            let raw = self.source.input.get(start + 1..content_end).unwrap();
+            let raw = self
+                .source
+                .input
+                .get(start + 1..content_end)
+                .expect("`start+1..content_end` within source bounds");
             let val = unescape(raw, start + 1, &mut self.errors);
             TokenKind::LitString(self.interner.intern(&val))
         } else {
             TokenKind::Invalid(
-                self.interner
-                    .intern(self.source.input.get(start..self.cursor.pos()).unwrap()),
+                self.interner.intern(
+                    self.source
+                        .input
+                        .get(start..self.cursor.pos())
+                        .expect("`start..cursor` within source bounds"),
+                ),
             )
         }
     }
@@ -374,7 +386,11 @@ impl<'a> Lexer<'a> {
             &['"', '{'],
             LexErrorKind::UnclosedTemplateLit,
         ) {
-            let raw = self.source.input.get(start + offset..content_end).unwrap();
+            let raw = self
+                .source
+                .input
+                .get(start + offset..content_end)
+                .expect("`start+offset..content_end` within source bounds");
             let val = unescape(raw, start + offset, &mut self.errors);
             let s = self.interner.intern(&val);
 
@@ -398,8 +414,12 @@ impl<'a> Lexer<'a> {
             }
         } else {
             TokenKind::Invalid(
-                self.interner
-                    .intern(self.source.input.get(start..self.cursor.pos()).unwrap()),
+                self.interner.intern(
+                    self.source
+                        .input
+                        .get(start..self.cursor.pos())
+                        .expect("`start..cursor` within source bounds"),
+                ),
             )
         }
     }
@@ -409,7 +429,11 @@ impl<'a> Lexer<'a> {
         if let Some(content_end) =
             self.consume_quoted(start, 1, &['`'], LexErrorKind::UnclosedEscapedIdent)
         {
-            let s = self.source.input.get(start + 1..content_end).unwrap();
+            let s = self
+                .source
+                .input
+                .get(start + 1..content_end)
+                .expect("valid format string prefix slice");
             if s.is_empty() {
                 self.report(LexErrorKind::InvalidIdent, start, self.cursor.pos());
                 TokenKind::Invalid(self.interner.intern(""))
@@ -418,8 +442,12 @@ impl<'a> Lexer<'a> {
             }
         } else {
             TokenKind::Invalid(
-                self.interner
-                    .intern(self.source.input.get(start..self.cursor.pos()).unwrap()),
+                self.interner.intern(
+                    self.source
+                        .input
+                        .get(start..self.cursor.pos())
+                        .expect("`start..cursor` within source bounds"),
+                ),
             )
         }
     }
@@ -444,7 +472,11 @@ impl Lexer<'_> {
         let mut out = String::with_capacity(end - start);
         let mut prev_under = false;
         let mut valid = true;
-        let s = self.source.input.get(start..end).unwrap();
+        let s = self
+            .source
+            .input
+            .get(start..end)
+            .expect("`start..end` within source bounds");
         for (i, c) in s.char_indices() {
             if c == '_' {
                 if i == 0 || i == s.len() - 1 || prev_under {
@@ -563,8 +595,8 @@ impl Lexer<'_> {
 
     fn span(&self, lo: usize, hi: usize) -> Span {
         Span::new(
-            self.source.start + u32::try_from(lo).unwrap(),
-            self.source.start + u32::try_from(hi).unwrap(),
+            self.source.start + u32::try_from(lo).expect("span `lo` fits in u32"),
+            self.source.start + u32::try_from(hi).expect("span `hi` fits in u32"),
         )
     }
 }

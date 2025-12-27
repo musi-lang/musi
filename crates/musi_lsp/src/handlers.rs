@@ -84,7 +84,7 @@ fn analyze_and_publish(state: &mut GlobalState, uri: Uri, text: String) {
     );
 
     let (tokens, lex_errors) = {
-        let mut interner = state.interner.lock().unwrap();
+        let mut interner = state.interner.lock().expect("interner mutex not poisoned");
         tokenize(&source_file, &mut interner)
     };
 
