@@ -63,6 +63,7 @@ pub struct Symbol {
     pub ty: TyRepr,
     pub def_span: Span,
     pub scope_id: ScopeId,
+    pub mutable: bool,
 }
 
 impl Symbol {
@@ -73,6 +74,7 @@ impl Symbol {
         ty: TyRepr,
         def_span: Span,
         scope_id: ScopeId,
+        mutable: bool,
     ) -> Self {
         Self {
             name,
@@ -80,6 +82,7 @@ impl Symbol {
             ty,
             def_span,
             scope_id,
+            mutable,
         }
     }
 }
@@ -176,9 +179,10 @@ impl SymbolTable {
         kind: SymbolKind,
         ty: TyRepr,
         span: Span,
+        mutable: bool,
     ) -> Result<SymbolId, SymbolId> {
         let id = self.next_symbol_id();
-        let symbol = Symbol::new(name, kind, ty, span, self.scope_id);
+        let symbol = Symbol::new(name, kind, ty, span, self.scope_id, mutable);
         self.symbols.push(symbol);
 
         let scope = &mut self.scopes[self.scope_id.as_usize()];
