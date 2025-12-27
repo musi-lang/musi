@@ -13,7 +13,7 @@ Musi is a hand-written compiler for the Musi programming language (`.ms` files).
 musi_basic → musi_lex → musi_ast → musi_parse → musi_sema → musi_codegen
                                   ↓
                                musi_lsp
-                               musi_drive (CLI)
+                               musi_cli (CLI)
                                musi (REPL)
 ```
 

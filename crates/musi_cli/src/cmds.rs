@@ -1,5 +1,7 @@
+use musi_basic::source::SourceFile;
 use musi_basic::{diagnostic, interner::Interner, source::SourceMap};
 use musi_lex::lexer;
+use musi_sema::{binder, builtins::Builtins};
 
 use std::fs;
 use std::io::{self, Read, Write as _};
@@ -95,17 +97,7 @@ pub fn stdin(emit: Option<EmitKind>) {
         return;
     };
 
-    let (tokens, bag) = lexer::tokenize(&file, &mut interner);
-
-    if bag.errors > 0 {
-        diagnostic::emit_all(&bag, &source_map);
-    }
-
-    if emit == Some(EmitKind::Tokens) {
-        for token in &tokens {
-            eprintln!("{}", token.kind.display(&interner));
-        }
-    }
+    let _ = run_phases(&file, &mut interner, &source_map, emit);
 }
 
 fn check_file(path: &Path, emit: Option<EmitKind>) -> Result<(), String> {
@@ -121,25 +113,45 @@ fn check_file(path: &Path, emit: Option<EmitKind>) -> Result<(), String> {
         .cloned()
         .ok_or_else(|| "internal: failed to add source file".to_owned())?;
 
-    let (tokens, bag) = lexer::tokenize(&file, &mut interner);
+    let errs = run_phases(&file, &mut interner, &source_map, emit);
 
-    if bag.errors > 0 {
-        diagnostic::emit_all(&bag, &source_map);
-    }
-
-    if emit == Some(EmitKind::Tokens) {
-        for token in &tokens {
-            eprintln!("{}", token.kind.display(&interner));
-        }
-    }
-
-    // TODO: parse, semantic analysis
-
-    if bag.errors > 0 {
-        Err(format!("{} error(s) in {}", bag.errors, path.display()))
+    if errs > 0 {
+        Err(format!("{errs} error(s) in {}", path.display()))
     } else {
         Ok(())
     }
+}
+
+fn run_phases(
+    file: &SourceFile,
+    interner: &mut Interner,
+    source_map: &SourceMap,
+    emit: Option<EmitKind>,
+) -> usize {
+    let (tokens, mut bag) = lexer::tokenize(file, interner);
+
+    if emit == Some(EmitKind::Tokens) {
+        for token in &tokens {
+            eprintln!("{}", token.kind.display(interner));
+        }
+    }
+
+    let parse_result = musi_parse::parse(&tokens);
+    bag.merge(parse_result.diagnostics);
+
+    if emit == Some(EmitKind::Ast) {
+        eprintln!("{:#?}", parse_result.prog);
+    }
+
+    if bag.errors == 0 {
+        let builtins = Builtins::from_interner(interner);
+        let (_, sema_bag) =
+            binder::bind(&parse_result.arena, interner, &parse_result.prog, &builtins);
+        bag.merge(sema_bag);
+    }
+
+    diagnostic::emit_all(&bag, source_map);
+    bag.errors
 }
 
 fn error(msg: &str) {

@@ -243,20 +243,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "musi_cli"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "musi_ast",
+ "musi_basic",
+ "musi_lex",
+ "musi_parse",
+ "musi_sema",
+]
+
+[[package]]
 name = "musi_codegen"
 version = "0.1.0"
 dependencies = [
  "musi_ast",
  "musi_basic",
-]
-
-[[package]]
-name = "musi_drive"
-version = "0.1.0"
-dependencies = [
- "clap",
- "musi_basic",
- "musi_lex",
 ]
 
 [[package]]
