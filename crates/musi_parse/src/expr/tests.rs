@@ -149,7 +149,7 @@ fn test_expr_record_update() {
     let mut ctx = TestContext::new();
     let p = ctx.intern("p");
     let x = ctx.intern("x");
-    let id = ctx.parse_expr(".{p with, x := 1}");
+    let id = ctx.parse_expr(".{p with x := 1}");
     if let ExprKind::Record {
         base: Some(base_id),
         fields,

@@ -431,7 +431,6 @@ impl Parser<'_> {
         if self.is_record_update() {
             base = Some(self.parse_expr()?);
             let _ = self.expect(TokenKind::KwWith)?;
-            let _ = self.bump_if(TokenKind::Comma);
         }
 
         let fields = self.separated(TokenKind::Comma, Self::parse_field)?;
