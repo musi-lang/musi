@@ -1,5 +1,8 @@
 # Musi Compiler - AI Coding Guide
 
+> [!NOTE]
+> This guide focuses on architecture and key patterns. See `.agent/rules/` for strict coding standards, behavior protocols, and lint management.
+
 ## Project Overview
 
 Musi is a hand-written compiler for the Musi programming language (`.ms` files).
@@ -43,24 +46,13 @@ Crates use internal `types.rs` module + `pub use types::*` in `lib.rs` for clean
 
 ## Lint Compliance
 
-Workspace enforces strict lints via `Cargo.toml`. **Do NOT suppress with `#[allow(...)]` unless unavoidable** (e.g., function genuinely cannot be split into smaller functions).
+Workspace enforces strict lints via `Cargo.toml`. See [`rust-coding-standards.md`](file:///.agent/rules/rust-coding-standards.md) for enforcement rules and documentation guidelines.
 
-**Attribute Guidelines**: Only add `#[must_use]` or `#[inline]` when `cargo clippy` suggests them.
+**Error Handling Rules**:
 
-### Error Handling Rules
-
-| Context | Use | Example |
-|---------|-----|---------|
-| Inevitable failure | `.expect("message")` | Arena overflow |
-| Recoverable error | `Result<T, E>` | Parse errors |
-| Tests only | `.unwrap()` | `tests.rs`, `@/tests/` |
-| Critical path access | `.get()` + handle | Bounds checking |
-
-### Key Lint Rationale
-
-- `indexing_slicing = "deny"` (commented): Use `.get()` in critical paths, direct indexing when bounds are provable.
-- `unwrap_used = "deny"` (commented): `.expect()` in prod with descriptive message, `.unwrap()` only in test files.
-- `panic = "deny"`: No panics except via `.expect()` for invariant violations.
+- Inevitable failure: `.expect("message")`
+- Recoverable: `Result<T, E>`
+- Tests only: `.unwrap()`
 
 ## Build & Test
 
@@ -69,13 +61,3 @@ cargo build        # Build all crates
 cargo test         # Run unit + integration tests
 cargo clippy       # Lint check (must pass clean)
 ```
-
-## File Structure Conventions
-
-- **Unit tests**: `foo.rs` + `foo/tests.rs` sibling.
-- **Integration tests**: `/tests/` directory.
-- **Function ordering in `impl`**: Constructors → Public API → Internal helpers → Navigation (`peek`/`advance`).
-
-## Borrow Checker Guidance
-
-Avoid `map_or_else`/`and_then` with closures capturing `&mut self`. Prefer `match`/`if let` for clearer lifetime boundaries.
