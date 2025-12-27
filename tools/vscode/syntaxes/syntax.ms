@@ -196,14 +196,12 @@ val handle_result := fn (res) {
   }
 };
 
-// Pattern matching in conditionals
 val process_option := fn (opt) {
   if case Some(v) := opt {
     writeln($"got value '{v}'");
   };
 };
 
-// Pattern matching in loops
 val process_stream := fn (next_fn) {
   while case Some(item) := next_fn() {
     writeln($"processing '{item}'...");
