@@ -52,6 +52,9 @@ pub enum SemaErrorKind {
 
     #[error("pattern match not exhaustive")]
     NonExhaustiveMatch,
+
+    #[error("cannot assign to immutable binding '{0}'")]
+    AssignmentToImmutable(String),
 }
 
 impl IntoMusiError for SemaErrorKind {
