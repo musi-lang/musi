@@ -11,12 +11,12 @@ musi_sema/
 ├── lib.rs              # bind() API
 ├── types.rs            # Type aliases
 ├── ty_repr.rs          # TyRepr, TyReprKind
-├── bound.rs            # BoundExpr, BoundStmt (semantic nodes)
+├── model.rs            # SemanticModel (side tables + query API)
 ├── symbol.rs           # SymbolTable, Symbol, SymbolId
-├── unifier.rs            # Type inference (unification)
-├── binder.rs           # AST → Semantic tree
+├── unifier.rs          # Type inference (unification)
+├── binder.rs           # AST walker → populates model
 ├── builtins.rs         # Builtin types
-└── tests.rs
+└── tests.rs            # Unit tests
 ```
 
 ---
@@ -29,20 +29,25 @@ musi_sema/
 - `Any ~ T` for all `T` (consistency relation)
 - `DynCast` nodes inserted at type boundaries
 
-### Semantic Model (NodeId-indexed)
+### Semantic Model (NodeId-indexed, Roslyn-style)
 
 ```rust
 pub struct SemanticModel {
     types: Vec<Option<TyRepr>>,     // indexed by Expr.id
     symbols: Vec<Option<SymbolId>>,  // indexed by ident's Expr.id
 }
+
+impl SemanticModel {
+    pub fn type_of(&self, id: NodeId) -> Option<&TyRepr>;
+    pub fn symbol_of(&self, id: NodeId) -> Option<SymbolId>;
+}
 ```
 
 ### No Tree Duplication
 
-- BoundExpr references original AST via `NodeId`
-- Semantic info stored in side tables
-- LSP queries: `model.type_of(node.id)`
+- Syntax tree IS the tree — no parallel "bound" tree
+- Semantic info stored in side tables, queried by `NodeId`
+- LSP/IDE queries: `model.type_of(node.id)`
 
 ---
 
@@ -76,8 +81,8 @@ pub enum TyReprKind {
 2. `symbol.rs` - Symbol table
 3. `builtins.rs` - Builtin types
 4. `unifier.rs` - Unification engine
-5. `bound.rs` - Semantic nodes
-6. `binder.rs` - Main binder
+5. `model.rs` - SemanticModel query API
+6. `binder.rs` - AST walker → populates model
 7. `lib.rs` - Wire up
 8. `tests.rs`
 
