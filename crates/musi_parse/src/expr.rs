@@ -635,6 +635,9 @@ impl Parser<'_> {
 
     fn parse_expr_with_modifiers(&mut self, attrs: Attrs, start: Span) -> MusiResult<ExprId> {
         let mods = self.parse_modifiers();
+        if mods.externness.1 && self.at(TokenKind::LBrace) {
+            return self.parse_expr_extern_block(mods.externness.0, start);
+        }
         match self.peek_kind() {
             Some(TokenKind::KwRecord) => self.parse_expr_record_def(attrs, mods),
             Some(TokenKind::KwChoice) => self.parse_expr_choice_def(attrs, mods),
@@ -644,6 +647,30 @@ impl Parser<'_> {
             Some(kind) => Err(ParseErrorKind::UnexpectedToken(kind).into_musi_error(start)),
             None => Err(ParseErrorKind::UnexpectedEof.into_musi_error(start)),
         }
+    }
+
+    fn parse_expr_extern_block(&mut self, abi: Option<Ident>, start: Span) -> MusiResult<ExprId> {
+        let _ = self.expect(TokenKind::LBrace)?;
+        let mut fns = vec![];
+        while !self.at(TokenKind::RBrace) && !self.is_eof() {
+            let _ = self.expect(TokenKind::KwFn)?;
+            let name = self.try_ident();
+            let ty_params = self.parse_ty_expr_params()?;
+            let params = self.opt_delimited(TokenKind::LParen, TokenKind::RParen, |p| {
+                p.separated(TokenKind::Comma, Self::parse_field)
+            })?;
+            let ret = self.maybe(TokenKind::Colon, Self::parse_ty_expr)?;
+            let _ = self.expect(TokenKind::Semicolon)?;
+            fns.push(FnSig {
+                name,
+                ty_params,
+                params,
+                ret,
+            });
+        }
+        let _ = self.expect(TokenKind::RBrace)?;
+        let span = start.merge(self.prev_span());
+        Ok(self.arena.alloc_expr(ExprKind::Extern { abi, fns }, span))
     }
 
     fn parse_expr_record_def(&mut self, attrs: Attrs, mods: Modifiers) -> MusiResult<ExprId> {
