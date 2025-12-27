@@ -85,29 +85,35 @@ impl<'a> Binder<'a> {
 
     fn bind_expr_inner(&mut self, expr: &Expr) -> TyRepr {
         match &expr.kind {
-            ExprKind::Lit(lit) => Self::bind_lit(lit),
-            ExprKind::Ident(ident) => self.bind_ident_expr(*ident, expr.id, expr.span),
-            ExprKind::Tuple(elems) => self.bind_tuple(elems),
-            ExprKind::Array(elems) => self.bind_array(elems),
-            ExprKind::Block { stmts, expr: tail } => self.bind_block(stmts, *tail),
-            ExprKind::Bind { pat, ty, init, .. } => self.bind_val(*pat, *ty, *init),
+            ExprKind::Lit(lit) => Self::bind_expr_lit(lit),
+            ExprKind::Ident(ident) => self.bind_expr_ident(*ident, expr.id, expr.span),
+            ExprKind::Tuple(elems) => self.bind_expr_tuple(elems),
+            ExprKind::Array(elems) => self.bind_expr_array(elems),
+            ExprKind::Block { stmts, expr: tail } => self.bind_expr_block(stmts, *tail),
+            ExprKind::Bind {
+                pat,
+                ty,
+                init,
+                mutable,
+                ..
+            } => self.bind_expr_bind(*pat, *ty, *init, *mutable),
             ExprKind::If {
                 cond,
                 then_br,
                 else_br,
-            } => self.bind_if(*cond, *then_br, *else_br),
-            ExprKind::While { cond, body } => self.bind_while(*cond, *body),
-            ExprKind::For { pat, iter, body } => self.bind_for(*pat, *iter, *body),
-            ExprKind::Return(opt) => self.bind_return(*opt, expr.span),
-            ExprKind::Break(opt) => self.bind_break(*opt, expr.span),
-            ExprKind::Cycle => self.bind_cycle(expr.span),
-            ExprKind::Call { callee, args } => self.bind_call(*callee, args),
-            ExprKind::Binary { op, lhs, rhs } => self.bind_binary(*op, *lhs, *rhs),
-            ExprKind::Unary { op, operand } => self.bind_unary(*op, *operand, expr.span),
-            ExprKind::Assign { target, value } => self.bind_assign(*target, *value),
-            ExprKind::Field { base, field } => self.bind_field(*base, *field, expr.span),
-            ExprKind::Index { base, index } => self.bind_index(*base, *index, expr.span),
-            ExprKind::Fn { body, .. } => self.bind_fn_expr(*body),
+            } => self.bind_expr_if(*cond, *then_br, *else_br),
+            ExprKind::While { cond, body } => self.bind_expr_while(*cond, *body),
+            ExprKind::For { pat, iter, body } => self.bind_expr_for(*pat, *iter, *body),
+            ExprKind::Return(opt) => self.bind_expr_return(*opt, expr.span),
+            ExprKind::Break(opt) => self.bind_expr_break(*opt, expr.span),
+            ExprKind::Cycle => self.bind_expr_cycle(expr.span),
+            ExprKind::Call { callee, args } => self.bind_expr_call(*callee, args),
+            ExprKind::Binary { op, lhs, rhs } => self.bind_expr_binary(*op, *lhs, *rhs),
+            ExprKind::Unary { op, operand } => self.bind_expr_unary(*op, *operand, expr.span),
+            ExprKind::Assign { target, value } => self.bind_expr_assign(*target, *value),
+            ExprKind::Field { base, field } => self.bind_expr_field(*base, *field, expr.span),
+            ExprKind::Index { base, index } => self.bind_expr_index(*base, *index, expr.span),
+            ExprKind::Fn { body, .. } => self.bind_expr_fn(*body),
             ExprKind::RecordDef { .. } | ExprKind::ChoiceDef { .. } | ExprKind::Alias { .. } => {
                 TyRepr::unit()
             }
@@ -119,7 +125,7 @@ impl<'a> Binder<'a> {
         }
     }
 
-    const fn bind_lit(lit: &LitKind) -> TyRepr {
+    const fn bind_expr_lit(lit: &LitKind) -> TyRepr {
         match lit {
             LitKind::Int(n) => {
                 if *n < 0 {
@@ -135,7 +141,7 @@ impl<'a> Binder<'a> {
         }
     }
 
-    fn bind_ident_expr(&mut self, ident: Ident, expr_id: ExprId, span: Span) -> TyRepr {
+    fn bind_expr_ident(&mut self, ident: Ident, expr_id: ExprId, span: Span) -> TyRepr {
         if let Some(sym_id) = self.symbols.lookup(ident) {
             self.model.set_expr_symbol(expr_id, sym_id);
             if let Some(sym) = self.symbols.get(sym_id) {
@@ -147,12 +153,12 @@ impl<'a> Binder<'a> {
         TyRepr::error()
     }
 
-    fn bind_tuple(&mut self, elems: &[ExprId]) -> TyRepr {
+    fn bind_expr_tuple(&mut self, elems: &[ExprId]) -> TyRepr {
         let types: Vec<_> = elems.iter().map(|e| self.bind_expr(*e)).collect();
         TyRepr::tuple(types)
     }
 
-    fn bind_array(&mut self, elems: &[ExprId]) -> TyRepr {
+    fn bind_expr_array(&mut self, elems: &[ExprId]) -> TyRepr {
         if elems.is_empty() {
             return TyRepr::array(self.unifier.fresh_var(), Some(0));
         }
@@ -167,7 +173,7 @@ impl<'a> Binder<'a> {
         TyRepr::array(first_ty, Some(elems.len()))
     }
 
-    fn bind_block(&mut self, stmts: &[StmtId], tail: OptExprId) -> TyRepr {
+    fn bind_expr_block(&mut self, stmts: &[StmtId], tail: OptExprId) -> TyRepr {
         let _ = self.symbols.push_scope();
         for stmt_id in stmts {
             self.bind_stmt(*stmt_id);
@@ -177,7 +183,13 @@ impl<'a> Binder<'a> {
         result
     }
 
-    fn bind_val(&mut self, pat_id: PatId, ty_ann: OptTyExprId, init_id: ExprId) -> TyRepr {
+    fn bind_expr_bind(
+        &mut self,
+        pat_id: PatId,
+        ty_ann: OptTyExprId,
+        init_id: ExprId,
+        mutable: bool,
+    ) -> TyRepr {
         let init_ty = self.bind_expr(init_id);
         let decl_ty = ty_ann.map(|id| self.resolve_ty_expr(id));
 
@@ -191,11 +203,11 @@ impl<'a> Binder<'a> {
             init_ty
         };
 
-        self.bind_pat(pat_id, &binding_ty);
+        self.bind_pat(pat_id, &binding_ty, mutable);
         TyRepr::unit()
     }
 
-    fn bind_if(&mut self, cond_id: CondId, then_id: ExprId, else_id: OptExprId) -> TyRepr {
+    fn bind_expr_if(&mut self, cond_id: CondId, then_id: ExprId, else_id: OptExprId) -> TyRepr {
         let cond = self.arena.conds.get(cond_id);
         match &cond.kind {
             CondKind::Expr(expr_id) => {
@@ -207,7 +219,7 @@ impl<'a> Binder<'a> {
             }
             CondKind::Case { pat, init, extra } => {
                 let init_ty = self.bind_expr(*init);
-                self.bind_pat(*pat, &init_ty);
+                self.bind_pat(*pat, &init_ty, false);
                 for extra_id in extra {
                     let ty = self.bind_expr(*extra_id);
                     if let Err(err) = self.unifier.unify(&ty, &TyRepr::bool()) {
@@ -231,7 +243,7 @@ impl<'a> Binder<'a> {
         }
     }
 
-    fn bind_while(&mut self, cond_id: CondId, body_id: ExprId) -> TyRepr {
+    fn bind_expr_while(&mut self, cond_id: CondId, body_id: ExprId) -> TyRepr {
         let cond = self.arena.conds.get(cond_id);
         if let CondKind::Expr(expr_id) = &cond.kind {
             let cond_ty = self.bind_expr(*expr_id);
@@ -247,7 +259,7 @@ impl<'a> Binder<'a> {
         TyRepr::unit()
     }
 
-    fn bind_for(&mut self, pat_id: PatId, iter_id: ExprId, body_id: ExprId) -> TyRepr {
+    fn bind_expr_for(&mut self, pat_id: PatId, iter_id: ExprId, body_id: ExprId) -> TyRepr {
         let iter_ty = self.bind_expr(iter_id);
         let elem_ty = match &iter_ty.kind {
             TyReprKind::Array { elem, .. } => (**elem).clone(),
@@ -255,7 +267,7 @@ impl<'a> Binder<'a> {
         };
 
         let _ = self.symbols.push_scope();
-        self.bind_pat(pat_id, &elem_ty);
+        self.bind_pat(pat_id, &elem_ty, false);
 
         let prev = self.in_loop;
         self.in_loop = true;
@@ -266,7 +278,7 @@ impl<'a> Binder<'a> {
         TyRepr::unit()
     }
 
-    fn bind_return(&mut self, opt: OptExprId, span: Span) -> TyRepr {
+    fn bind_expr_return(&mut self, opt: OptExprId, span: Span) -> TyRepr {
         if !self.in_fn {
             self.error(SemaErrorKind::ReturnOutsideFn, span);
         }
@@ -276,7 +288,7 @@ impl<'a> Binder<'a> {
         TyRepr::never()
     }
 
-    fn bind_break(&mut self, opt: OptExprId, span: Span) -> TyRepr {
+    fn bind_expr_break(&mut self, opt: OptExprId, span: Span) -> TyRepr {
         if !self.in_loop {
             self.error(SemaErrorKind::BreakOutsideLoop, span);
         }
@@ -286,14 +298,14 @@ impl<'a> Binder<'a> {
         TyRepr::never()
     }
 
-    fn bind_cycle(&mut self, span: Span) -> TyRepr {
+    fn bind_expr_cycle(&mut self, span: Span) -> TyRepr {
         if !self.in_loop {
             self.error(SemaErrorKind::CycleOutsideLoop, span);
         }
         TyRepr::never()
     }
 
-    fn bind_call(&mut self, callee_id: ExprId, args: &[ExprId]) -> TyRepr {
+    fn bind_expr_call(&mut self, callee_id: ExprId, args: &[ExprId]) -> TyRepr {
         let callee_ty = self.bind_expr(callee_id);
         let arg_tys: Vec<_> = args.iter().map(|a| self.bind_expr(*a)).collect();
 
@@ -333,7 +345,7 @@ impl<'a> Binder<'a> {
         }
     }
 
-    fn bind_binary(&mut self, op: TokenKind, lhs_id: ExprId, rhs_id: ExprId) -> TyRepr {
+    fn bind_expr_binary(&mut self, op: TokenKind, lhs_id: ExprId, rhs_id: ExprId) -> TyRepr {
         let lhs_ty = self.bind_expr(lhs_id);
         let rhs_ty = self.bind_expr(rhs_id);
 
@@ -373,7 +385,7 @@ impl<'a> Binder<'a> {
         }
     }
 
-    fn bind_unary(&mut self, op: TokenKind, operand_id: ExprId, span: Span) -> TyRepr {
+    fn bind_expr_unary(&mut self, op: TokenKind, operand_id: ExprId, span: Span) -> TyRepr {
         let operand_ty = self.bind_expr(operand_id);
         match op {
             TokenKind::KwNot => {
@@ -388,8 +400,19 @@ impl<'a> Binder<'a> {
         }
     }
 
-    fn bind_assign(&mut self, target_id: ExprId, value_id: ExprId) -> TyRepr {
+    fn bind_expr_assign(&mut self, target_id: ExprId, value_id: ExprId) -> TyRepr {
         let target_ty = self.bind_expr(target_id);
+
+        if let ExprKind::Ident(ident) = self.arena.exprs.get(target_id).kind
+            && let Some(sym_id) = self.symbols.lookup(ident)
+            && let Some(sym) = self.symbols.get(sym_id)
+            && !sym.mutable
+        {
+            let name = self.lookup_name(ident);
+            let span = self.arena.exprs.get(target_id).span;
+            self.error(SemaErrorKind::AssignmentToImmutable(name), span);
+        }
+
         let value_ty = self.bind_expr(value_id);
         if let Err(err) = self.unifier.unify(&target_ty, &value_ty) {
             let span = self.arena.exprs.get(value_id).span;
@@ -398,7 +421,7 @@ impl<'a> Binder<'a> {
         TyRepr::unit()
     }
 
-    fn bind_field(&mut self, base_id: ExprId, field: Ident, span: Span) -> TyRepr {
+    fn bind_expr_field(&mut self, base_id: ExprId, field: Ident, span: Span) -> TyRepr {
         let base_ty = self.bind_expr(base_id);
         match &base_ty.kind {
             TyReprKind::Any | TyReprKind::Error => base_ty,
@@ -416,7 +439,7 @@ impl<'a> Binder<'a> {
         }
     }
 
-    fn bind_index(&mut self, base_id: ExprId, index_id: ExprId, span: Span) -> TyRepr {
+    fn bind_expr_index(&mut self, base_id: ExprId, index_id: ExprId, span: Span) -> TyRepr {
         let base_ty = self.bind_expr(base_id);
         let _ = self.bind_expr(index_id);
         match &base_ty.kind {
@@ -429,7 +452,7 @@ impl<'a> Binder<'a> {
         }
     }
 
-    fn bind_fn_expr(&mut self, body_id: ExprId) -> TyRepr {
+    fn bind_expr_fn(&mut self, body_id: ExprId) -> TyRepr {
         let _ = self.symbols.push_scope();
         let prev = self.in_fn;
         self.in_fn = true;
@@ -439,16 +462,19 @@ impl<'a> Binder<'a> {
         TyRepr::func(vec![], ret_ty)
     }
 
-    fn bind_pat(&mut self, pat_id: PatId, expected: &TyRepr) {
+    fn bind_pat(&mut self, pat_id: PatId, expected: &TyRepr, mutable: bool) {
         let pat = self.arena.pats.get(pat_id);
         self.model.set_pat_type(pat_id, expected.clone());
 
         match &pat.kind {
             PatKind::Ident(ident) => {
-                match self
-                    .symbols
-                    .define(*ident, SymbolKind::Local, expected.clone(), pat.span)
-                {
+                match self.symbols.define(
+                    *ident,
+                    SymbolKind::Local,
+                    expected.clone(),
+                    pat.span,
+                    mutable,
+                ) {
                     Ok(sym_id) => self.model.set_pat_symbol(pat_id, sym_id),
                     Err(_prev) => {
                         let name = self.lookup_name(*ident);
@@ -459,7 +485,7 @@ impl<'a> Binder<'a> {
             PatKind::Tuple(pats) => {
                 if let TyReprKind::Tuple(elem_tys) = &expected.kind {
                     for (sub_pat, elem_ty) in pats.iter().zip(elem_tys.iter()) {
-                        self.bind_pat(*sub_pat, elem_ty);
+                        self.bind_pat(*sub_pat, elem_ty, mutable);
                     }
                 }
             }
