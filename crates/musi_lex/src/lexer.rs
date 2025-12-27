@@ -52,10 +52,6 @@ pub struct Lexer<'a> {
     braces: Vec<BraceKind>,
 }
 
-// ============================================================================
-// SCANNING
-// ============================================================================
-
 impl<'a> Lexer<'a> {
     pub fn new(source: &'a SourceFile, interner: &'a mut Interner) -> Self {
         Self {
@@ -453,10 +449,6 @@ impl<'a> Lexer<'a> {
     }
 }
 
-// ============================================================================
-// HELPERS
-// ============================================================================
-
 impl Lexer<'_> {
     fn skip_whitespace(&mut self) {
         self.cursor.eat_while(|c| " \t\r\n".contains(c));
@@ -600,10 +592,6 @@ impl Lexer<'_> {
         )
     }
 }
-
-// ============================================================================
-// ESCAPE HANDLING
-// ============================================================================
 
 #[inline]
 /// Unescape string literal, reporting any errors into diagnostic bag.

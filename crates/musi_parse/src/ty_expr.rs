@@ -7,10 +7,6 @@ use musi_lex::token::TokenKind;
 
 use crate::{Parser, error::ParseErrorKind};
 
-// ============================================================================
-// TYPE EXPRESSION PARSING
-// ============================================================================
-
 impl Parser<'_> {
     /// # Errors
     /// Returns `ParseErrorKind` on syntax error.
@@ -158,10 +154,6 @@ impl Parser<'_> {
         Ok(self.arena.alloc_ty_expr(kind, span))
     }
 }
-
-// ============================================================================
-// TYPE EXPRESSION HELPERS
-// ============================================================================
 
 impl Parser<'_> {
     fn make_empty_ty_expr_tuple(&mut self, start: Span) -> TyExprId {

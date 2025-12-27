@@ -7,10 +7,6 @@ use musi_lex::token::TokenKind;
 
 use crate::{Parser, error::ParseErrorKind};
 
-// ============================================================================
-// PATTERN PARSING
-// ============================================================================
-
 impl Parser<'_> {
     /// # Errors
     /// Returns `ParseErrorKind` on syntax error.
@@ -180,10 +176,6 @@ impl Parser<'_> {
         Ok(self.arena.alloc_pat(PatKind::Array(pats), span))
     }
 }
-
-// ============================================================================
-// PATTERN HELPERS
-// ============================================================================
 
 impl Parser<'_> {
     fn make_pat_variant(

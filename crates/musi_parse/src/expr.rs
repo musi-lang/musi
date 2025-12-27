@@ -11,10 +11,6 @@ use musi_lex::token::TokenKind;
 
 use crate::{Parser, error::ParseErrorKind, parser::Prec};
 
-// ============================================================================
-// EXPRESSION PARSING
-// ============================================================================
-
 impl Parser<'_> {
     /// # Errors
     /// Returns `ParseErrorKind` on syntax error.
@@ -753,10 +749,6 @@ impl Parser<'_> {
         ))
     }
 }
-
-// ============================================================================
-// EXPRESSION HELPERS
-// ============================================================================
 
 impl Parser<'_> {
     fn parse_attrs(&mut self) -> MusiResult<Attrs> {
