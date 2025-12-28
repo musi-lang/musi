@@ -185,7 +185,7 @@ val maybe_value := Some(42);
 val unwrap := fn (opt) {
   match opt {
   case Some(v) => v,
-  case None => 0
+  case _ => 0
   }
 };
 
