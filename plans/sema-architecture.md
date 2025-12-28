@@ -16,30 +16,33 @@
 
 ---
 
-## Proposed Module Structure
+## Module Structure ✅ IMPLEMENTED
 
 ```text
 musi_sema/
 ├── lib.rs                    # Public API: bind()
 ├── types.rs                  # Re-exports
+├── binder.rs                 # 88-line orchestrator (was 825 lines)
 │
 ├── phase1/                   # Phase 1: Global declarations
 │   ├── mod.rs
-│   ├── collector.rs          # Collect type/fn/alias declarations
+│   ├── collector.rs          # Collect type/variant names (hoisted)
 │   └── resolver.rs           # Resolve type references
 │
-├── phase2/                   # Phase 2: Local inference (HM)
+├── phase2/                   # Phase 2: Local inference
 │   ├── mod.rs
-│   ├── expr.rs               # Expression binding
+│   ├── ctx.rs                # Shared binding context (BindCtx)
+│   ├── expr.rs               # Expression binding + inference
 │   ├── pat.rs                # Pattern binding
-│   └── inferer.rs            # Local HM type inference
+│   ├── stmt.rs               # Statement binding
+│   └── ty.rs                 # Type expression resolution
 │
-├── symbol/                   # Symbol table (exists)
-├── unifier/                  # Type unification (exists)
-├── ty_repr.rs                # Type representation (exists)
-├── semantic.rs               # Semantic model/token for LSP (exists)
-├── builtins.rs               # Builtin types (exists)
-└── error.rs                  # Errors (exists)
+├── symbol.rs                 # Symbol table
+├── unifier.rs                # Type unification (union-find)
+├── ty_repr.rs                # Type representation
+├── semantic.rs               # Semantic model for LSP
+├── builtins.rs               # Builtin types
+└── error.rs                  # Errors
 ```
 
 ---
@@ -82,13 +85,13 @@ Key: Each function is independent - can parallelize later.
 
 ---
 
-## Migration Path
+## Migration Path ✅ COMPLETED
 
-1. **Extract pattern binding** → `phase2/pat.rs`
-2. **Extract expression binding** → `phase2/expr.rs`
-3. **Add global collector** → `phase1/collector.rs`
-4. **Split entry point** into two phases
-5. **Move tests** to new structure
+1. ✅ **Extract pattern binding** → `phase2/pat.rs`
+2. ✅ **Extract expression binding** → `phase2/expr.rs`
+3. ✅ **Add global collector** → `phase1/collector.rs`
+4. ✅ **Split entry point** into two phases
+5. ✅ **Move tests** to `binder/tests.rs`
 
 ---
 
@@ -148,14 +151,11 @@ fn finalize(&mut self, ty: &TyRepr) -> TyRepr {
 
 ### Configuration
 
-Could add a compiler flag:
+- `--strict` - Disallow Any fallback, require all types (confirmed `compilerOptions` flag)
+- `--warn-any` - Warn when Any is inferred (conceptual)
+- `--allow-any` - Default mode, allow Any (conceptual)
 
-- `--strict` - Disallow Any fallback, require all types
-- `--warn-any` - Warn when Any is inferred
-- `--allow-any` - Default mode, allow Any
-
-> NOTE: these compiler flags are conceptual and not reflective of the current/future implementation
-> NOTE: `--strict` is a confirmed `compilerOptions` flag, but options will come later in the future into CLI.
+> NOTE: `--strict` is a confirmed TS-like flag. Other options are conceptual and likely won't make it into CLI, or will be renamed. Unknown at the moment.
 
 ---
 
@@ -259,9 +259,7 @@ Each function body is **independent** for type inference:
 | Error location | First conflict | Can show both sites |
 | Implementation | Simpler | More complex |
 | Error recovery | Stop at first | Can continue |
-| Gradual typing | Harder | Easier to insert boundaries |
-
-**Recommendation**: Keep immediate for now, migrate to constraint-based if error messages need improvement.
+**Decision**: Immediate unification. Constraint-based may be considered if error messages need improvement.
 
 ### 5. Generics: Full Parametric Polymorphism ✓
 
@@ -297,11 +295,3 @@ TyReprKind::Poly {
     body: Box<TyRepr>,         // T → U
 }
 ```
-
----
-
-## Next Steps
-
-1. Start extracting pattern binding to `phase2/pat.rs`
-2. Extract expr binding to `phase2/expr.rs`
-3. Design Phase 1 collector structure
