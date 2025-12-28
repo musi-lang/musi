@@ -24,8 +24,8 @@ pub struct BindCtx<'a> {
     pub in_fn: bool,
 }
 
-impl<'a> BindCtx<'a> {
-    pub fn define_and_record(
+impl BindCtx<'_> {
+    pub(crate) fn define_and_record(
         &mut self,
         name: Ident,
         kind: SymbolKind,
