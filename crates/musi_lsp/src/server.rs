@@ -39,6 +39,9 @@ impl LspServer {
             )),
             document_symbol_provider: Some(lsp_types::OneOf::Left(true)),
             folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
+            document_highlight_provider: Some(lsp_types::OneOf::Left(true)),
+            definition_provider: Some(lsp_types::OneOf::Left(true)),
+            references_provider: Some(lsp_types::OneOf::Left(true)),
             semantic_tokens_provider: Some(
                 lsp_types::SemanticTokensServerCapabilities::SemanticTokensOptions(
                     lsp_types::SemanticTokensOptions {
