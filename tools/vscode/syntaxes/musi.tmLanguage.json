@@ -65,10 +65,6 @@
                             "match": "\\b(as)\\b",
                             "name": "keyword.control.import.musi"
                         },
-                        {
-                            "match": "\\*",
-                            "name": "constant.language.import-export-all.musi"
-                        },
                         { "include": "#strings" },
                         { "include": "#identifiers" },
                         { "include": "#punctuation" }
@@ -81,7 +77,11 @@
                         "1": {
                             "patterns": [
                                 {
-                                    "match": "\\b(export|extern|unsafe)\\b",
+                                    "match": "\\b(export)\\b",
+                                    "name": "keyword.control.export.musi"
+                                },
+                                {
+                                    "match": "\\b(extern|unsafe)\\b",
                                     "name": "storage.modifier.musi"
                                 }
                             ]
@@ -105,12 +105,16 @@
                 },
                 {
                     "name": "meta.declaration.musi",
-                    "begin": "((?:(?:export|extern|unsafe)\\s+)*)\\b(alias|fn|record|val|var)\\b",
+                    "begin": "((?:(?:export|extern|unsafe)\\s+)*)\\b(fn|record|type|val|var)\\b",
                     "beginCaptures": {
                         "1": {
                             "patterns": [
                                 {
-                                    "match": "\\b(export|extern|unsafe)\\b",
+                                    "match": "\\b(export)\\b",
+                                    "name": "keyword.control.export.musi"
+                                },
+                                {
+                                    "match": "\\b(extern|unsafe)\\b",
                                     "name": "storage.modifier.musi"
                                 }
                             ]
@@ -329,7 +333,7 @@
                 },
                 {
                     "name": "storage.type.musi",
-                    "match": "\\b(alias|choice|fn|record|val|var)\\b"
+                    "match": "\\b(choice|fn|record|type|val|var)\\b"
                 },
                 {
                     "name": "storage.modifier.musi",
@@ -341,11 +345,11 @@
             "patterns": [
                 {
                     "match": "<-|:=",
-                    "name": "keyword.operator.assignment.musi"
+                    "name": "keyword.operator.assign.musi"
                 },
                 {
                     "match": "->",
-                    "name": "keyword.operator.arrow.musi"
+                    "name": "keyword.operator.maps-to.musi"
                 },
                 {
                     "match": "\\|>",
@@ -353,7 +357,7 @@
                 },
                 {
                     "match": "\\?\\?",
-                    "name": "keyword.operator.null-coalescing.musi"
+                    "name": "keyword.operator.coalesce.musi"
                 },
                 {
                     "match": "\\b(or|and|not)\\b",

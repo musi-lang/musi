@@ -4,7 +4,7 @@
 		"body": [
 			"fn ${1:functionName}(${2:params}): ${3:returnType} {",
 			"\t${4:// function body}",
-			"}"
+			"};"
 		],
 		"description": "Declare function with parameters and return type"
 	},
@@ -14,7 +14,7 @@
 		"body": [
 			"fn ${1:functionName}(${2:params}) {",
 			"\t${3:// function body}",
-			"}"
+			"};"
 		],
 		"description": "Declare function with type inference"
 	},
@@ -22,7 +22,7 @@
 	"Function with Single Expression": {
 		"prefix": "fnx",
 		"body": [
-			"fn ${1:functionName}(${2:params}): ${3:returnType} := ${4:expr}"
+			"fn ${1:functionName}(${2:params}): ${3:returnType} => ${4:expr};"
 		],
 		"description": "Declare function with single expression body"
 	},
@@ -48,7 +48,7 @@
 			"record ${1:RecordName} {",
 			"\t${2:field1}: ${3:Type1};",
 			"\t${4:field2}: ${5:Type2}",
-			"}"
+			"};"
 		],
 		"description": "Define record type"
 	},
@@ -63,8 +63,8 @@
 		"body": [
 			"choice ${1:ChoiceName} {",
 			"\tcase ${2:Case1}(${3:Type1}),",
-			"\tcase ${4:Case2}(${5:Type2})",
-			"}"
+			"\tcase ${4:Case2}(${5:Type2}),",
+			"};"
 		],
 		"description": "Define choice type"
 	},
@@ -74,8 +74,8 @@
 		"body": [
 			"match ${1:expr} {",
 			"\tcase ${2:pattern1} => ${3:result1},",
-			"\tcase ${4:pattern2} => ${5:result2}",
-			"}"
+			"\tcase ${4:pattern2} => ${5:result2},",
+			"};"
 		],
 		"description": "Pattern matching expression"
 	},
@@ -85,7 +85,7 @@
 		"body": [
 			"if ${1:condition} {",
 			"\t${2:// then branch}",
-			"}"
+			"};"
 		],
 		"description": "Simple if expression"
 	},
@@ -97,7 +97,7 @@
 			"\t${2:// then branch}",
 			"} else {",
 			"\t${3:// else branch}",
-			"}"
+			"};"
 		],
 		"description": "If-else expression"
 	},
@@ -107,7 +107,7 @@
 		"body": [
 			"while ${1:condition} {",
 			"\t${2:// loop body}",
-			"}"
+			"};"
 		],
 		"description": "While loop"
 	},
@@ -117,7 +117,7 @@
 		"body": [
 			"for ${1:item} in ${2:collection} {",
 			"\t${3:// loop body}",
-			"}"
+			"};"
 		],
 		"description": "For loop over collection"
 	},
@@ -137,14 +137,14 @@
 		"body": "val ${1:alias} := import \"${2:@std/io}\";"
 	},
 
-	"Extern Function": {
+	"Extern Block": {
 		"prefix": "extern",
 		"body": [
-			"extern \"${1:C}\" unsafe {",
+			"extern \"${1:C}\" {",
 			"\tfn ${2:functionName}(${3:params}): ${4:returnType};",
-			"}"
+			"};"
 		],
-		"description": "External function declaration"
+		"description": "External function declaration block"
 	},
 
 	"Unsafe Block": {
@@ -152,7 +152,7 @@
 		"body": [
 			"unsafe {",
 			"\t${1:// unsafe code}",
-			"}"
+			"};"
 		],
 		"description": "Unsafe code block"
 	},
@@ -172,14 +172,14 @@
 		"body": "break;"
 	},
 
-	"Type Alias": {
-		"prefix": "alias",
-		"body": "alias ${1:AliasName} := ${2:TargetType};"
+	"Type Definition": {
+		"prefix": "type",
+		"body": "type ${1:TypeName} := ${2:TargetType};"
 	},
 
-	"Generic Type Alias": {
-		"prefix": "aliasg",
-		"body": "alias ${1:AliasName}[${2:T}] := ${3:TargetType};"
+	"Generic Type Definition": {
+		"prefix": "typeg",
+		"body": "type ${1:TypeName}[${2:T}] := ${3:TargetType};"
 	},
 
 	"Optional Type": {
@@ -230,8 +230,8 @@
 	"Hello World": {
 		"prefix": "hello",
 		"body": [
-			"val io := import \"@std/io\";",
-			"io.writeln(\"${1:Hello, World!}\");"
+			"import \"@std/io\";",
+			"writeln(\"${1:Hello, World!}\");"
 		],
 		"description": "Hello World program"
 	},
@@ -241,8 +241,8 @@
 		"body": [
 			"match ${1:operation}() {",
 			"\tcase Succ(${2:value}) => ${3:use(value)},",
-			"\tcase Fail(${4:error}) => ${5:handle(error)}",
-			"}"
+			"\tcase Fail(${4:error}) => ${5:handle(error)},",
+			"};"
 		],
 		"description": "Fallible pattern matching"
 	},
@@ -252,8 +252,8 @@
 		"body": [
 			"match ${1:option} {",
 			"\tcase Some(${2:value}) => ${3:use(value)},",
-			"\tcase None => ${4:default()}",
-			"}"
+			"\tcase None => ${4:default()},",
+			"};"
 		],
 		"description": "Optional pattern matching"
 	},
@@ -263,8 +263,8 @@
 		"body": [
 			"match ${1:list} {",
 			"\tcase head :: tail => ${2:process(head, tail)},",
-			"\tcase [] => ${3:empty()}",
-			"}"
+			"\tcase [] => ${3:empty()},",
+			"};"
 		],
 		"description": "List cons pattern matching"
 	}
