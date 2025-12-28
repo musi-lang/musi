@@ -1,6 +1,7 @@
 pub mod binder;
 pub mod builtins;
 pub mod error;
+pub mod phase1;
 pub mod phase2;
 pub mod semantic;
 pub mod symbol;
