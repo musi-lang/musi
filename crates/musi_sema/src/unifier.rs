@@ -71,6 +71,45 @@ impl Unifier {
         }
     }
 
+    #[must_use]
+    pub fn apply(&self, ty: &TyRepr) -> TyRepr {
+        self.transform(ty, &|s, id| {
+            s.substs
+                .get(&id)
+                .map_or_else(|| TyRepr::var(id), |resolved| s.apply(resolved))
+        })
+    }
+
+    #[must_use]
+    pub fn finalize(&self, ty: &TyRepr) -> TyRepr {
+        self.transform(ty, &|s, id| {
+            s.substs
+                .get(&id)
+                .map_or(TyRepr::any(), |resolved| s.finalize(resolved))
+        })
+    }
+
+    #[must_use]
+    /// Generalize type by replacing free type variables with type parameters.
+    ///
+    /// # Panics
+    ///
+    /// Panics if there are too many type parameters.
+    pub fn generalize(&self, ty: &TyRepr) -> TyRepr {
+        let applied = self.apply(ty);
+        let free_vars = collect_free_vars(&applied);
+        if free_vars.is_empty() {
+            return applied;
+        }
+        let param_ids: Vec<_> = free_vars
+            .iter()
+            .enumerate()
+            .map(|(i, _)| TyParamId::new(u32::try_from(i).expect("too many type parameters")))
+            .collect();
+        let substituted = substitute_vars_to_params(&applied, &free_vars, &param_ids);
+        TyRepr::poly(param_ids, substituted)
+    }
+
     fn unify_ty_array(
         &mut self,
         a: &TyRepr,
@@ -137,45 +176,6 @@ impl Unifier {
             self.unify(aa, ab)?;
         }
         Ok(())
-    }
-
-    #[must_use]
-    pub fn apply(&self, ty: &TyRepr) -> TyRepr {
-        self.transform(ty, &|s, id| {
-            s.substs
-                .get(&id)
-                .map_or_else(|| TyRepr::var(id), |resolved| s.apply(resolved))
-        })
-    }
-
-    #[must_use]
-    pub fn finalize(&self, ty: &TyRepr) -> TyRepr {
-        self.transform(ty, &|s, id| {
-            s.substs
-                .get(&id)
-                .map_or(TyRepr::any(), |resolved| s.finalize(resolved))
-        })
-    }
-
-    #[must_use]
-    /// Generalize type by replacing free type variables with type parameters.
-    ///
-    /// # Panics
-    ///
-    /// Panics if there are too many type parameters.
-    pub fn generalize(&self, ty: &TyRepr) -> TyRepr {
-        let applied = self.apply(ty);
-        let free_vars = collect_free_vars(&applied);
-        if free_vars.is_empty() {
-            return applied;
-        }
-        let param_ids: Vec<_> = free_vars
-            .iter()
-            .enumerate()
-            .map(|(i, _)| TyParamId::new(u32::try_from(i).expect("too many type parameters")))
-            .collect();
-        let substituted = substitute_vars_to_params(&applied, &free_vars, &param_ids);
-        TyRepr::poly(param_ids, substituted)
     }
 
     fn transform<F>(&self, ty: &TyRepr, f: &F) -> TyRepr
