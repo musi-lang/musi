@@ -1,8 +1,10 @@
 use musi_ast::Ident;
 use musi_basic::span::Span;
-use std::collections::HashMap;
 
 use crate::ty_repr::TyRepr;
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SymbolId(pub u32);
@@ -116,11 +118,16 @@ impl Scope {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SymbolTable {
     symbols: Vec<Symbol>,
     scopes: Vec<Scope>,
     scope_id: ScopeId,
+    next_symbol: Arc<AtomicU32>,
+    next_scope: Arc<AtomicU32>,
+    local_symbols: HashMap<SymbolId, Symbol>,
+    local_scopes: HashMap<ScopeId, Scope>,
+    modified_scopes: HashMap<ScopeId, Scope>,
 }
 
 impl Default for SymbolTable {
@@ -137,7 +144,57 @@ impl SymbolTable {
             symbols: vec![],
             scopes: vec![global],
             scope_id: ScopeId::new(0),
+            next_symbol: Arc::new(AtomicU32::new(0)),
+            next_scope: Arc::new(AtomicU32::new(1)),
+            local_symbols: HashMap::new(),
+            local_scopes: HashMap::new(),
+            modified_scopes: HashMap::new(),
         }
+    }
+
+    #[must_use]
+    pub fn fork(&self) -> Self {
+        Self {
+            symbols: self.all_symbols(),
+            scopes: self.all_scopes(),
+            scope_id: self.scope_id,
+            next_symbol: Arc::clone(&self.next_symbol),
+            next_scope: Arc::clone(&self.next_scope),
+            local_symbols: HashMap::new(),
+            local_scopes: HashMap::new(),
+            modified_scopes: HashMap::new(),
+        }
+    }
+
+    fn all_symbols(&self) -> Vec<Symbol> {
+        let mut all = self.symbols.clone();
+        for (id, sym) in &self.local_symbols {
+            let idx = id.as_usize();
+            if idx >= all.len() {
+                all.resize(idx + 1, sym.clone());
+            }
+            all[idx] = sym.clone();
+        }
+        all
+    }
+
+    fn all_scopes(&self) -> Vec<Scope> {
+        let mut all = self.scopes.clone();
+        for (id, scope) in &self.local_scopes {
+            let idx = id.as_usize();
+            if idx >= all.len() {
+                all.resize(idx + 1, scope.clone());
+            }
+            all[idx] = scope.clone();
+        }
+        for (id, scope) in &self.modified_scopes {
+            let idx = id.as_usize();
+            if idx >= all.len() {
+                all.resize(idx + 1, scope.clone());
+            }
+            all[idx] = scope.clone();
+        }
+        all
     }
 
     #[must_use]
@@ -146,12 +203,17 @@ impl SymbolTable {
     }
 
     #[must_use]
+    /// Returns depth of current scope.
+    ///
+    /// # Panics
+    ///
+    /// Panics ifcurrent scope is global scope.
     pub fn scope_depth(&self) -> usize {
         let mut depth = 1;
-        let mut curr = &self.scopes[self.scope_id.as_usize()];
+        let mut curr = self.get_scope(self.scope_id).expect("missing scope");
         while let Some(parent) = curr.parent {
             depth += 1;
-            curr = &self.scopes[parent.as_usize()];
+            curr = self.get_scope(parent).expect("missing scope");
         }
         depth
     }
@@ -162,9 +224,9 @@ impl SymbolTable {
     ///
     /// Panics if there are more than `u32::MAX` scopes.
     pub fn push_scope(&mut self) -> ScopeId {
-        let id = ScopeId::new(u32::try_from(self.scopes.len()).expect("scope overflow"));
+        let id = ScopeId::new(self.next_scope.fetch_add(1, Ordering::Relaxed));
         let scope = Scope::new(Some(self.scope_id));
-        self.scopes.push(scope);
+        let _ = self.local_scopes.insert(id, scope);
         self.scope_id = id;
         id
     }
@@ -175,8 +237,29 @@ impl SymbolTable {
     ///
     /// Panics if attempting to pop global scope.
     pub fn pop_scope(&mut self) {
-        let scope = &self.scopes[self.scope_id.as_usize()];
+        let scope = self.get_scope(self.scope_id).expect("missing scope");
         self.scope_id = scope.parent.expect("cannot pop global scope");
+    }
+
+    fn get_scope(&self, id: ScopeId) -> Option<&Scope> {
+        self.local_scopes
+            .get(&id)
+            .or_else(|| self.modified_scopes.get(&id))
+            .or_else(|| self.scopes.get(id.as_usize()))
+    }
+
+    fn get_scope_mut(&mut self, id: ScopeId) -> Option<&mut Scope> {
+        if self.local_scopes.contains_key(&id) {
+            return self.local_scopes.get_mut(&id);
+        }
+        if self.modified_scopes.contains_key(&id) {
+            return self.modified_scopes.get_mut(&id);
+        }
+        if let Some(scope) = self.scopes.get(id.as_usize()) {
+            let cloned = scope.clone();
+            return Some(self.modified_scopes.entry(id).or_insert(cloned));
+        }
+        None
     }
 
     /// Defines new symbol in current scope.
@@ -196,19 +279,39 @@ impl SymbolTable {
         span: Span,
         mutable: bool,
     ) -> Result<SymbolId, SymbolId> {
-        let id = self.next_symbol_id();
+        let id = SymbolId::new(self.next_symbol.fetch_add(1, Ordering::Relaxed));
         let symbol = Symbol::new(name, kind, ty, span, self.scope_id, mutable);
-        self.symbols.push(symbol);
+        let _ = self.local_symbols.insert(id, symbol);
 
-        let scope = &mut self.scopes[self.scope_id.as_usize()];
+        let scope = self.get_scope_mut(self.scope_id).expect("missing scope");
         scope.names.insert(name, id).map_or(Ok(id), Err)
+    }
+
+    pub fn merge(&mut self, other: Self) {
+        for (id, sym) in other.local_symbols {
+            let idx = id.as_usize();
+            if idx >= self.symbols.len() {
+                self.symbols.resize(idx + 1, sym.clone());
+            }
+            self.symbols[idx] = sym;
+        }
+        for (id, scope) in other.local_scopes {
+            let idx = id.as_usize();
+            if idx >= self.scopes.len() {
+                self.scopes.resize(idx + 1, scope.clone());
+            }
+            self.scopes[idx] = scope;
+        }
+        for (id, scope) in other.modified_scopes {
+            self.scopes[id.as_usize()] = scope;
+        }
     }
 
     #[must_use]
     pub fn lookup(&self, name: Ident) -> Option<SymbolId> {
         let mut scope_id = Some(self.scope_id);
         while let Some(sid) = scope_id {
-            let scope = &self.scopes[sid.as_usize()];
+            let scope = self.get_scope(sid)?;
             if let Some(symbol) = scope.get(name) {
                 return Some(symbol);
             }
@@ -224,11 +327,16 @@ impl SymbolTable {
 
     #[must_use]
     pub fn get(&self, id: SymbolId) -> Option<&Symbol> {
-        self.symbols.get(id.as_usize())
+        self.local_symbols
+            .get(&id)
+            .or_else(|| self.symbols.get(id.as_usize()))
     }
 
     #[must_use]
     pub fn get_mut(&mut self, id: SymbolId) -> Option<&mut Symbol> {
+        if let Some(symbol) = self.local_symbols.get_mut(&id) {
+            return Some(symbol);
+        }
         self.symbols.get_mut(id.as_usize())
     }
 
@@ -240,11 +348,6 @@ impl SymbolTable {
     #[must_use]
     pub const fn is_empty(&self) -> bool {
         self.symbols.is_empty()
-    }
-
-    fn next_symbol_id(&self) -> SymbolId {
-        let len = u32::try_from(self.symbols.len()).expect("symbol overflow");
-        SymbolId::new(len)
     }
 }
 

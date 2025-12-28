@@ -347,7 +347,7 @@ fn bind_expr_call(ctx: &mut BindCtx<'_>, callee_id: ExprId, args: &[ExprId]) -> 
     }
 }
 
-fn instantiate_poly(ctx: &mut BindCtx<'_>, ty: &TyRepr) -> TyRepr {
+fn instantiate_poly(ctx: &BindCtx<'_>, ty: &TyRepr) -> TyRepr {
     let TyReprKind::Poly { params, body } = &ty.kind else {
         return ty.clone();
     };

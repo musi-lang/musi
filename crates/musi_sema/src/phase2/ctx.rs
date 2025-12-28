@@ -25,6 +25,51 @@ pub struct BindCtx<'a> {
 }
 
 impl BindCtx<'_> {
+    pub fn fork(&mut self) -> (SemanticModel, Unifier, SymbolTable, DiagnosticBag) {
+        (
+            self.model.fork(),
+            self.unifier.fork(),
+            self.symbols.fork(),
+            DiagnosticBag::default(),
+        )
+    }
+
+    pub fn with_forked<T>(
+        &mut self,
+        model: &mut SemanticModel,
+        unifier: &mut Unifier,
+        symbols: &mut SymbolTable,
+        diags: &mut DiagnosticBag,
+        f: impl FnOnce(&mut BindCtx) -> T,
+    ) -> T {
+        let mut ctx = BindCtx {
+            arena: self.arena,
+            interner: self.interner,
+            model,
+            symbols,
+            unifier,
+            diags,
+            in_loop: self.in_loop,
+            in_fn: self.in_fn,
+        };
+        f(&mut ctx)
+    }
+
+    pub fn merge_forked(
+        &mut self,
+        model: SemanticModel,
+        unifier: Unifier,
+        symbols: SymbolTable,
+        diags: DiagnosticBag,
+    ) {
+        self.model.merge(model);
+        self.unifier.merge(unifier);
+        self.symbols.merge(symbols);
+        self.diags.merge(diags);
+    }
+}
+
+impl BindCtx<'_> {
     pub(crate) fn define_and_record(
         &mut self,
         name: Ident,

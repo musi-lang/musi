@@ -148,7 +148,7 @@ pub enum ExprKind {
         base: Option<ExprId>,
         fields: Vec<Field>,
     },
-    /// Block: `{ stmt; stmt; expr }`
+    /// `{ stmt; stmt; expr }`
     Block {
         stmts: Vec<StmtId>,
         expr: Option<ExprId>,

@@ -53,19 +53,15 @@ pub enum Level {
     Note,
 }
 
-/// Trait for converting phase-specific errors into `MusiError`.
 pub trait IntoMusiError: fmt::Display {
-    /// Optional hint for error recovery.
     fn hint(&self) -> Option<&'static str> {
         None
     }
 
-    /// Severity level of this error.
     fn level(&self) -> Level {
         Level::Error
     }
 
-    /// Convert into `MusiError` at given span.
     fn into_musi_error(self, span: Span) -> MusiError
     where
         Self: Sized,

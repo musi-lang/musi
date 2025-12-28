@@ -8,6 +8,7 @@ use crate::phase2::{BindCtx, bind_expr};
 use crate::semantic::SemanticModel;
 use crate::symbol::SymbolTable;
 use crate::unifier::Unifier;
+use rayon::prelude::*;
 
 #[must_use]
 pub fn bind(
@@ -68,10 +69,48 @@ fn bind_prog(
         in_fn: false,
     };
 
-    for stmt_id in &prog.stmts {
-        let stmt = arena.stmts.get(*stmt_id);
-        let StmtKind::Expr(expr_id) = &stmt.kind;
-        let _ = bind_expr(&mut ctx, *expr_id);
+    let tasks: Vec<_> = prog
+        .stmts
+        .iter()
+        .map(|stmt_id| {
+            let stmt = arena.stmts.get(*stmt_id);
+            let StmtKind::Expr(expr_id) = &stmt.kind;
+            *expr_id
+        })
+        .collect();
+
+    let ctx_arena = ctx.arena;
+    let ctx_interner = ctx.interner;
+    let in_loop = ctx.in_loop;
+    let in_fn = ctx.in_fn;
+
+    let results: Vec<_> = tasks
+        .into_par_iter()
+        .map(|expr_id| {
+            let mut model = ctx.model.fork();
+            let mut symbols = ctx.symbols.fork();
+            let mut unifier = ctx.unifier.fork();
+            let mut diags = DiagnosticBag::default();
+
+            let mut forked = BindCtx {
+                arena: ctx_arena,
+                interner: ctx_interner,
+                model: &mut model,
+                symbols: &mut symbols,
+                unifier: &mut unifier,
+                diags: &mut diags,
+                in_loop,
+                in_fn,
+            };
+
+            let _ = bind_expr(&mut forked, expr_id);
+
+            (model, unifier, symbols, diags)
+        })
+        .collect();
+
+    for (m, u, s, d) in results {
+        ctx.merge_forked(m, u, s, d);
     }
 }
 

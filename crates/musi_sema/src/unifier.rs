@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use crate::SymbolId;
 use crate::error::SemaErrorKind;
@@ -7,7 +9,7 @@ use crate::ty_repr::{TyParamId, TyRepr, TyReprKind, TyVarId};
 #[derive(Debug)]
 pub struct Unifier {
     substs: HashMap<TyVarId, TyRepr>,
-    next_var: u32,
+    next_var: Arc<AtomicU32>,
 }
 
 impl Default for Unifier {
@@ -21,13 +23,21 @@ impl Unifier {
     pub fn new() -> Self {
         Self {
             substs: HashMap::new(),
-            next_var: 0,
+            next_var: Arc::new(AtomicU32::new(0)),
         }
     }
 
-    pub const fn fresh_var(&mut self) -> TyRepr {
-        let id = TyVarId::new(self.next_var);
-        self.next_var += 1;
+    #[must_use]
+    pub fn fork(&self) -> Self {
+        Self {
+            substs: HashMap::new(),
+            next_var: Arc::clone(&self.next_var),
+        }
+    }
+
+    #[must_use]
+    pub fn fresh_var(&self) -> TyRepr {
+        let id = TyVarId::new(self.next_var.fetch_add(1, Ordering::Relaxed));
         TyRepr::var(id)
     }
 
@@ -90,7 +100,7 @@ impl Unifier {
     }
 
     #[must_use]
-    /// Replace free type variables with type parameters.
+    /// Replaces free type variables with type parameters.
     ///
     /// # Panics
     ///
@@ -206,6 +216,23 @@ impl Unifier {
 
     fn bind(&mut self, id: TyVarId, ty: TyRepr) {
         let _ = self.substs.insert(id, ty);
+    }
+
+    pub fn merge(&mut self, other: Self) {
+        self.substs.extend(other.substs);
+        let other_val = other.next_var.load(Ordering::Relaxed);
+        let mut current = self.next_var.load(Ordering::Relaxed);
+        while other_val > current {
+            match self.next_var.compare_exchange_weak(
+                current,
+                other_val,
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            ) {
+                Ok(_) => break,
+                Err(val) => current = val,
+            }
+        }
     }
 }
 

@@ -7,7 +7,7 @@ use crate::symbol::SymbolId;
 use crate::ty_repr::{TyRepr, TyReprKind};
 use crate::{Symbol, SymbolKind, SymbolTable};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SemanticModel {
     expr_types: Vec<Option<TyRepr>>,
     expr_symbols: Vec<Option<SymbolId>>,
@@ -16,6 +16,13 @@ pub struct SemanticModel {
     ty_expr_types: Vec<Option<TyRepr>>,
     ty_expr_symbols: Vec<Option<SymbolId>>,
     ident_symbols: HashMap<Span, SymbolId>,
+    local_expr_types: HashMap<ExprId, TyRepr>,
+    local_expr_symbols: HashMap<ExprId, SymbolId>,
+    local_pat_types: HashMap<PatId, TyRepr>,
+    local_pat_symbols: HashMap<PatId, SymbolId>,
+    local_ty_expr_types: HashMap<TyExprId, TyRepr>,
+    local_ty_expr_symbols: HashMap<TyExprId, SymbolId>,
+    local_ident_symbols: HashMap<Span, SymbolId>,
 }
 
 impl SemanticModel {
@@ -29,90 +36,171 @@ impl SemanticModel {
             ty_expr_types: vec![None; ty_expr_count],
             ty_expr_symbols: vec![None; ty_expr_count],
             ident_symbols: HashMap::new(),
+            local_expr_types: HashMap::new(),
+            local_expr_symbols: HashMap::new(),
+            local_pat_types: HashMap::new(),
+            local_pat_symbols: HashMap::new(),
+            local_ty_expr_types: HashMap::new(),
+            local_ty_expr_symbols: HashMap::new(),
+            local_ident_symbols: HashMap::new(),
         }
+    }
+
+    #[must_use]
+    pub fn fork(&self) -> Self {
+        Self {
+            expr_types: vec![],
+            expr_symbols: vec![],
+            pat_types: vec![],
+            pat_symbols: vec![],
+            ty_expr_types: vec![],
+            ty_expr_symbols: vec![],
+            ident_symbols: HashMap::new(),
+            local_expr_types: HashMap::new(),
+            local_expr_symbols: HashMap::new(),
+            local_pat_types: HashMap::new(),
+            local_pat_symbols: HashMap::new(),
+            local_ty_expr_types: HashMap::new(),
+            local_ty_expr_symbols: HashMap::new(),
+            local_ident_symbols: HashMap::new(),
+        }
+    }
+
+    #[must_use]
+    pub fn new_empty(expr_count: usize, pat_count: usize, ty_expr_count: usize) -> Self {
+        Self::new(expr_count, pat_count, ty_expr_count)
     }
 
     #[must_use]
     pub fn type_of_expr(&self, id: ExprId) -> Option<&TyRepr> {
-        self.expr_types.get(id.as_usize()).and_then(|t| t.as_ref())
+        self.local_expr_types
+            .get(&id)
+            .or_else(|| self.expr_types.get(id.as_usize()).and_then(|t| t.as_ref()))
     }
 
     #[must_use]
     pub fn symbol_of_expr(&self, id: ExprId) -> Option<SymbolId> {
-        self.expr_symbols.get(id.as_usize()).copied().flatten()
+        self.local_expr_symbols.get(&id).copied().or_else(|| {
+            self.expr_symbols
+                .get(id.as_usize())
+                .and_then(|t| t.as_ref().copied())
+        })
     }
 
     pub fn set_expr_type(&mut self, id: ExprId, ty: TyRepr) {
-        let idx = id.as_usize();
-        if idx < self.expr_types.len() {
-            self.expr_types[idx] = Some(ty);
-        }
+        let _ = self.local_expr_types.insert(id, ty);
     }
 
     pub fn set_expr_symbol(&mut self, id: ExprId, symbol: SymbolId) {
-        let idx = id.as_usize();
-        if idx < self.expr_symbols.len() {
-            self.expr_symbols[idx] = Some(symbol);
-        }
+        let _ = self.local_expr_symbols.insert(id, symbol);
     }
 
     #[must_use]
     pub fn type_of_pat(&self, id: PatId) -> Option<&TyRepr> {
-        self.pat_types.get(id.as_usize()).and_then(|t| t.as_ref())
+        self.local_pat_types
+            .get(&id)
+            .or_else(|| self.pat_types.get(id.as_usize()).and_then(|t| t.as_ref()))
     }
 
     #[must_use]
     pub fn symbol_of_pat(&self, id: PatId) -> Option<SymbolId> {
-        self.pat_symbols.get(id.as_usize()).copied().flatten()
+        self.local_pat_symbols.get(&id).copied().or_else(|| {
+            self.pat_symbols
+                .get(id.as_usize())
+                .and_then(|t| t.as_ref().copied())
+        })
     }
 
     pub fn set_pat_type(&mut self, id: PatId, ty: TyRepr) {
-        let idx = id.as_usize();
-        if idx < self.pat_types.len() {
-            self.pat_types[idx] = Some(ty);
-        }
+        let _ = self.local_pat_types.insert(id, ty);
     }
 
     pub fn set_pat_symbol(&mut self, id: PatId, symbol: SymbolId) {
-        let idx = id.as_usize();
-        if idx < self.pat_symbols.len() {
-            self.pat_symbols[idx] = Some(symbol);
-        }
+        let _ = self.local_pat_symbols.insert(id, symbol);
     }
 
     #[must_use]
     pub fn type_of_ty_expr(&self, id: TyExprId) -> Option<&TyRepr> {
-        self.ty_expr_types
-            .get(id.as_usize())
-            .and_then(|t| t.as_ref())
+        self.local_ty_expr_types.get(&id).or_else(|| {
+            self.ty_expr_types
+                .get(id.as_usize())
+                .and_then(|t| t.as_ref())
+        })
     }
 
     pub fn set_ty_expr_type(&mut self, id: TyExprId, ty: TyRepr) {
-        let idx = id.as_usize();
-        if idx < self.ty_expr_types.len() {
-            self.ty_expr_types[idx] = Some(ty);
-        }
+        let _ = self.local_ty_expr_types.insert(id, ty);
     }
 
     #[must_use]
     pub fn symbol_of_ty_expr(&self, id: TyExprId) -> Option<SymbolId> {
-        self.ty_expr_symbols.get(id.as_usize()).copied().flatten()
+        self.local_ty_expr_symbols.get(&id).copied().or_else(|| {
+            self.ty_expr_symbols
+                .get(id.as_usize())
+                .and_then(|t| t.as_ref().copied())
+        })
     }
 
     pub fn set_ty_expr_symbol(&mut self, id: TyExprId, symbol: SymbolId) {
-        let idx = id.as_usize();
-        if idx < self.ty_expr_symbols.len() {
-            self.ty_expr_symbols[idx] = Some(symbol);
-        }
+        let _ = self.local_ty_expr_symbols.insert(id, symbol);
     }
 
     #[must_use]
     pub fn symbol_of_ident(&self, ident: Ident) -> Option<SymbolId> {
-        self.ident_symbols.get(&ident.span).copied()
+        self.local_ident_symbols
+            .get(&ident.span)
+            .copied()
+            .or_else(|| self.ident_symbols.get(&ident.span).copied())
     }
 
     pub fn set_ident_symbol(&mut self, ident: Ident, symbol: SymbolId) {
-        let _ = self.ident_symbols.insert(ident.span, symbol);
+        let _ = self.local_ident_symbols.insert(ident.span, symbol);
+    }
+
+    pub fn merge(&mut self, other: Self) {
+        for (id, ty) in other.local_expr_types {
+            let idx = id.as_usize();
+            if idx >= self.expr_types.len() {
+                self.expr_types.resize(idx + 1, None);
+            }
+            self.expr_types[idx] = Some(ty);
+        }
+        for (id, sym) in other.local_expr_symbols {
+            let idx = id.as_usize();
+            if idx >= self.expr_symbols.len() {
+                self.expr_symbols.resize(idx + 1, None);
+            }
+            self.expr_symbols[idx] = Some(sym);
+        }
+        for (id, ty) in other.local_pat_types {
+            let idx = id.as_usize();
+            if idx >= self.pat_types.len() {
+                self.pat_types.resize(idx + 1, None);
+            }
+            self.pat_types[idx] = Some(ty);
+        }
+        for (id, sym) in other.local_pat_symbols {
+            let idx = id.as_usize();
+            if idx >= self.pat_symbols.len() {
+                self.pat_symbols.resize(idx + 1, None);
+            }
+            self.pat_symbols[idx] = Some(sym);
+        }
+        for (id, ty) in other.local_ty_expr_types {
+            let idx = id.as_usize();
+            if idx >= self.ty_expr_types.len() {
+                self.ty_expr_types.resize(idx + 1, None);
+            }
+            self.ty_expr_types[idx] = Some(ty);
+        }
+        for (id, sym) in other.local_ty_expr_symbols {
+            let idx = id.as_usize();
+            if idx >= self.ty_expr_symbols.len() {
+                self.ty_expr_symbols.resize(idx + 1, None);
+            }
+            self.ty_expr_symbols[idx] = Some(sym);
+        }
+        self.ident_symbols.extend(other.local_ident_symbols);
     }
 }
 

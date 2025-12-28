@@ -194,7 +194,7 @@ fn generalize_no_free_vars() {
 
 #[test]
 fn generalize_single_free_var() {
-    let mut unifier = Unifier::new();
+    let unifier = Unifier::new();
     let var = unifier.fresh_var();
     let fn_ty = TyRepr::func(vec![var.clone()], var);
 
@@ -204,7 +204,7 @@ fn generalize_single_free_var() {
 
 #[test]
 fn generalize_multiple_free_vars() {
-    let mut unifier = Unifier::new();
+    let unifier = Unifier::new();
     let var_a = unifier.fresh_var();
     let var_b = unifier.fresh_var();
     let fn_ty = TyRepr::func(vec![var_a], var_b);
