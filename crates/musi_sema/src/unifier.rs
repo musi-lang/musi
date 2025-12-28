@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::SymbolId;
 use crate::error::SemaErrorKind;
-use crate::ty_repr::{TyRepr, TyReprKind, TyVarId};
+use crate::ty_repr::{TyParamId, TyRepr, TyReprKind, TyVarId};
 
 #[derive(Debug)]
 pub struct Unifier {
@@ -157,6 +157,27 @@ impl Unifier {
         })
     }
 
+    #[must_use]
+    /// Generalize type by replacing free type variables with type parameters.
+    ///
+    /// # Panics
+    ///
+    /// Panics if there are too many type parameters.
+    pub fn generalize(&self, ty: &TyRepr) -> TyRepr {
+        let applied = self.apply(ty);
+        let free_vars = collect_free_vars(&applied);
+        if free_vars.is_empty() {
+            return applied;
+        }
+        let param_ids: Vec<_> = free_vars
+            .iter()
+            .enumerate()
+            .map(|(i, _)| TyParamId::new(u32::try_from(i).expect("too many type parameters")))
+            .collect();
+        let substituted = substitute_vars_to_params(&applied, &free_vars, &param_ids);
+        TyRepr::poly(param_ids, substituted)
+    }
+
     fn transform<F>(&self, ty: &TyRepr, f: &F) -> TyRepr
     where
         F: Fn(&Self, TyVarId) -> TyRepr,
@@ -192,6 +213,66 @@ fn type_mismatch(a: &TyRepr, b: &TyRepr) -> SemaErrorKind {
     SemaErrorKind::TypeMismatch {
         from: format!("{a}"),
         to: format!("{b}"),
+    }
+}
+
+fn collect_free_vars(ty: &TyRepr) -> Vec<TyVarId> {
+    let mut vars = Vec::new();
+    collect_free_vars_rec(ty, &mut vars);
+    vars
+}
+
+fn collect_free_vars_rec(ty: &TyRepr, vars: &mut Vec<TyVarId>) {
+    match &ty.kind {
+        TyReprKind::Var(id) if !vars.contains(id) => vars.push(*id),
+        TyReprKind::Optional(inner) | TyReprKind::Ptr(inner) | TyReprKind::Array(inner, _) => {
+            collect_free_vars_rec(inner, vars);
+        }
+        TyReprKind::Tuple(elems) | TyReprKind::Fn(elems, _) => {
+            for e in elems {
+                collect_free_vars_rec(e, vars);
+            }
+            if let TyReprKind::Fn(_, ret) = &ty.kind {
+                collect_free_vars_rec(ret, vars);
+            }
+        }
+        TyReprKind::Named(_, args) => {
+            for a in args {
+                collect_free_vars_rec(a, vars);
+            }
+        }
+        TyReprKind::Poly { body, .. } => collect_free_vars_rec(body, vars),
+        _ => {}
+    }
+}
+
+fn substitute_vars_to_params(ty: &TyRepr, vars: &[TyVarId], params: &[TyParamId]) -> TyRepr {
+    match &ty.kind {
+        TyReprKind::Var(id) => vars
+            .iter()
+            .position(|v| v == id)
+            .map_or_else(|| ty.clone(), |pos| TyRepr::type_param(params[pos])),
+        TyReprKind::Optional(inner) => {
+            TyRepr::optional(substitute_vars_to_params(inner, vars, params))
+        }
+        TyReprKind::Ptr(inner) => TyRepr::ptr(substitute_vars_to_params(inner, vars, params)),
+        TyReprKind::Array(elem, size) => {
+            TyRepr::array(substitute_vars_to_params(elem, vars, params), *size)
+        }
+        TyReprKind::Tuple(elems) => TyRepr::tuple(
+            elems
+                .iter()
+                .map(|e| substitute_vars_to_params(e, vars, params))
+                .collect(),
+        ),
+        TyReprKind::Fn(fn_params, ret) => TyRepr::func(
+            fn_params
+                .iter()
+                .map(|p| substitute_vars_to_params(p, vars, params))
+                .collect(),
+            substitute_vars_to_params(ret, vars, params),
+        ),
+        _ => ty.clone(),
     }
 }
 
