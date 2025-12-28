@@ -50,6 +50,7 @@ pub enum ErrorCode {
     MS3015,
     MS3016,
     MS3017,
+    MS3018,
 
     MS4001,
     MS4002,
@@ -103,6 +104,7 @@ impl ErrorCode {
             Self::MS3015 => 3015,
             Self::MS3016 => 3016,
             Self::MS3017 => 3017,
+            Self::MS3018 => 3018,
             Self::MS4001 => 4001,
             Self::MS4002 => 4002,
             Self::MS5001 => 5001,
