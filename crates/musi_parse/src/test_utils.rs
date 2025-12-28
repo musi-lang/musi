@@ -3,12 +3,12 @@ use musi_ast::{AstArena, Expr, ExprId, Ident, Pat, PatId, TyExpr, TyExprId};
 use musi_basic::{interner::Interner, source::SourceFile, span::Span};
 use musi_lex::{Tokens, lexer::tokenize};
 
-pub struct TestContext {
+pub struct TestCtx {
     pub interner: Interner,
     pub arena: AstArena,
 }
 
-impl TestContext {
+impl TestCtx {
     pub fn new() -> Self {
         Self {
             interner: Interner::new(),

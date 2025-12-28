@@ -4,12 +4,12 @@ use musi_basic::diagnostic::DiagnosticBag;
 use musi_basic::interner::Interner;
 use musi_basic::source::SourceFile;
 
-pub struct TestContext {
+pub struct TestCtx {
     pub interner: Interner,
     pub builtins: Builtins,
 }
 
-impl TestContext {
+impl TestCtx {
     pub fn new() -> Self {
         let mut interner = Interner::new();
         let builtins = Builtins::from_interner(&mut interner);

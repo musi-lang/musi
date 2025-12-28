@@ -3,12 +3,12 @@ use crate::token::TokenKind;
 use musi_basic::interner::Interner;
 use musi_basic::source::SourceFile;
 
-pub struct TestContext {
+pub struct TestCtx {
     pub interner: Interner,
     pub source: SourceFile,
 }
 
-impl TestContext {
+impl TestCtx {
     pub fn new(input: &str) -> Self {
         Self {
             interner: Interner::new(),
@@ -18,7 +18,7 @@ impl TestContext {
 }
 
 pub fn check(input: &str, expected: impl FnOnce(&mut Interner) -> Vec<TokenKind>) {
-    let mut ctx = TestContext::new(input);
+    let mut ctx = TestCtx::new(input);
     let mut actual = vec![];
     let (tokens, _) = tokenize(&ctx.source, &mut ctx.interner);
     for tok in tokens {

@@ -1,5 +1,5 @@
 use crate::lexer::tokenize;
-use crate::test_utils::{TestContext, check};
+use crate::test_utils::{TestCtx, check};
 use crate::token::TokenKind;
 use musi_basic::span::Span;
 use musi_basic::types::Ident;
@@ -181,7 +181,7 @@ fn test_error_reporting() {
         "1e",
     ];
     for input in cases {
-        let mut ctx = TestContext::new(input);
+        let mut ctx = TestCtx::new(input);
         let (_, diagnostics) = tokenize(&ctx.source, &mut ctx.interner);
         assert!(
             !diagnostics.diagnostics.is_empty(),
@@ -192,7 +192,7 @@ fn test_error_reporting() {
 
 #[test]
 fn test_rejection_of_unicode() {
-    let mut ctx = TestContext::new("你好 世界 π_value 🦀_emojis");
+    let mut ctx = TestCtx::new("你好 世界 π_value 🦀_emojis");
     let (_, diagnostics) = tokenize(&ctx.source, &mut ctx.interner);
     assert!(!diagnostics.diagnostics.is_empty());
 }
@@ -227,7 +227,7 @@ fn test_underscores() {
 
 #[test]
 fn test_spans() {
-    let mut ctx = TestContext::new("val x := 123;");
+    let mut ctx = TestCtx::new("val x := 123;");
     let x_id = Ident::new(ctx.interner.intern("x"), Span::new(4, 5));
 
     let tokens_with_spans = [
