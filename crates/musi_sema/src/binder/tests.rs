@@ -33,7 +33,7 @@ fn bind_mutability_error() {
     let mut ctx = TestCtx::new();
     let (_, _, diags) = ctx.check_bind("val x := 10; x <- 20;");
     assert!(
-        !diags.errors == 0,
+        diags.errors > 0,
         "expected error for assigning to immutable binding"
     );
     let msg = diags.diagnostics[0].message.clone();
@@ -55,7 +55,7 @@ fn bind_scope_access_error() {
     let mut ctx = TestCtx::new();
     let (_, _, diags) = ctx.check_bind("{ val x := 10; }; x;");
     assert!(
-        !diags.errors == 0,
+        diags.errors > 0,
         "expected error for accessing variable out of scope"
     );
     let msg = diags.diagnostics[0].message.clone();
@@ -76,7 +76,7 @@ fn bind_if_expr_types() {
 fn bind_if_expr_mismatch() {
     let mut ctx = TestCtx::new();
     let (_, _, diags) = ctx.check_bind("val x := if true { 10 } else { true };");
-    assert!(!diags.errors == 0, "Expected error for type mismatch");
+    assert!(diags.errors > 0, "Expected error for type mismatch");
     let msg = diags.diagnostics[0].message.clone();
     assert!(
         msg.contains("cannot convert type"),
@@ -89,7 +89,7 @@ fn bind_while_scope() {
     let mut ctx = TestCtx::new();
     let (_, _, diags) = ctx.check_bind("while true { val x := 10; }; x;");
     assert!(
-        !diags.errors == 0,
+        diags.errors > 0,
         "expected error for accessing while-loop variable out of scope"
     );
     let msg = diags.diagnostics[0].message.clone();
@@ -104,7 +104,7 @@ fn bind_for_scope() {
     let mut ctx = TestCtx::new();
     let (_, _, diags) = ctx.check_bind("for i in [1, 2, 3] { i; }; i;");
     assert!(
-        !diags.errors == 0,
+        diags.errors > 0,
         "expected error for accessing for-loop variable out of scope"
     );
     let msg = diags.diagnostics[0].message.clone();
@@ -125,7 +125,7 @@ fn bind_fn_basic() {
 fn bind_fn_ret_ty() {
     let mut ctx = TestCtx::new();
     let (_, _, diags) = ctx.check_bind("fn foo(): Int { true; };");
-    assert!(!diags.errors == 0, "expected return type mismatch error");
+    assert!(diags.errors > 0, "expected return type mismatch error");
     let msg = diags.diagnostics[0].message.clone();
     assert!(
         msg.contains("cannot convert type"),
@@ -138,7 +138,7 @@ fn bind_fn_params() {
     let mut ctx = TestCtx::new();
     let (_, _, diags) = ctx.check_bind("fn foo(x: Int) { x + true; };");
     assert!(
-        !diags.errors == 0,
+        diags.errors > 0,
         "expected error for binary op type mismatch"
     );
 }
