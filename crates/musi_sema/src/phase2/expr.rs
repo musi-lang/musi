@@ -468,6 +468,11 @@ fn bind_expr_binary(
     rhs_id: ExprId,
 ) -> TyRepr {
     let lhs_ty = bind_expr(ctx, lhs_id);
+
+    if op == TokenKind::BarGt {
+        return bind_expr_pipe(ctx, &lhs_ty, rhs_id);
+    }
+
     let rhs_ty = bind_expr(ctx, rhs_id);
 
     match op {
@@ -479,21 +484,116 @@ fn bind_expr_binary(
         | TokenKind::GtEq => TyRepr::bool(),
 
         TokenKind::KwAnd | TokenKind::KwOr => {
-            ctx.unify_or_err(&lhs_ty, &TyRepr::bool(), ctx.arena.exprs.get(lhs_id).span);
-            ctx.unify_or_err(&rhs_ty, &TyRepr::bool(), ctx.arena.exprs.get(rhs_id).span);
+            let span_lhs = ctx.arena.exprs.get(lhs_id).span;
+            let span_rhs = ctx.arena.exprs.get(rhs_id).span;
+            ctx.unify_or_err(&lhs_ty, &TyRepr::bool(), span_lhs);
+            ctx.unify_or_err(&rhs_ty, &TyRepr::bool(), span_rhs);
             TyRepr::bool()
         }
 
-        TokenKind::Plus
-        | TokenKind::Minus
-        | TokenKind::Star
-        | TokenKind::Slash
-        | TokenKind::Percent => {
+        TokenKind::Plus => {
+            let lhs_resolved = ctx.unifier.apply(&lhs_ty);
+            let rhs_resolved = ctx.unifier.apply(&rhs_ty);
+
+            let span = ctx.arena.exprs.get(rhs_id).span;
+            if let TyReprKind::Array(lhs_elem, _) = &lhs_resolved.kind
+                && let TyReprKind::Array(rhs_elem, _) = &rhs_resolved.kind
+            {
+                ctx.unify_or_err(lhs_elem.as_ref(), rhs_elem.as_ref(), span);
+                TyRepr::array(lhs_elem.as_ref().clone(), None)
+            } else {
+                ctx.unify_or_err(&lhs_ty, &rhs_ty, span);
+                lhs_ty
+            }
+        }
+
+        TokenKind::Minus | TokenKind::Star | TokenKind::Slash | TokenKind::Percent => {
             let span = ctx.arena.exprs.get(rhs_id).span;
             ctx.unify_or_err(&lhs_ty, &rhs_ty, span);
             lhs_ty
         }
         _ => TyRepr::any(),
+    }
+}
+
+fn bind_expr_pipe(ctx: &mut BindCtx<'_>, lhs_ty: &TyRepr, rhs_id: ExprId) -> TyRepr {
+    let rhs_expr = ctx.arena.exprs.get(rhs_id);
+    match &rhs_expr.kind {
+        ExprKind::Call { callee, args } => {
+            bind_pipe_call(ctx, *callee, args, lhs_ty, rhs_expr.span)
+        }
+        _ => bind_pipe(ctx, rhs_id, lhs_ty, rhs_expr.span),
+    }
+}
+
+fn bind_pipe_call(
+    ctx: &mut BindCtx<'_>,
+    callee: ExprId,
+    args: &[ExprId],
+    lhs_ty: &TyRepr,
+    span: Span,
+) -> TyRepr {
+    let callee_ty = bind_expr(ctx, callee);
+    let instantiated_ty = instantiate_poly(ctx, &callee_ty);
+
+    if let TyReprKind::Fn(params, ret) = &instantiated_ty.kind {
+        if params.len() != args.len() + 1 {
+            ctx.error(
+                SemaErrorKind::ArityMismatch {
+                    expected: params.len(),
+                    got: args.len() + 1,
+                },
+                span,
+            );
+            return (**ret).clone();
+        }
+
+        ctx.unify_or_err(&params[0], lhs_ty, span);
+
+        let arg_tys: Vec<_> = args.iter().map(|a| bind_expr(ctx, *a)).collect();
+
+        for (param, arg) in params[1..].iter().zip(arg_tys.iter()) {
+            ctx.unify_or_err(param, arg, span);
+        }
+
+        (**ret).clone()
+    } else {
+        ctx.error(
+            SemaErrorKind::NotCallable {
+                callee: format!("{callee_ty}"),
+                ty: format!("{callee_ty}"),
+            },
+            span,
+        );
+        TyRepr::error()
+    }
+}
+
+fn bind_pipe(ctx: &mut BindCtx<'_>, rhs_id: ExprId, lhs_ty: &TyRepr, span: Span) -> TyRepr {
+    let rhs_ty = bind_expr(ctx, rhs_id);
+
+    if let TyReprKind::Fn(params, ret) = &rhs_ty.kind {
+        if params.len() == 1 {
+            ctx.unify_or_err(&params[0], lhs_ty, span);
+        } else {
+            ctx.error(
+                SemaErrorKind::ArityMismatch {
+                    expected: 1,
+                    got: 1,
+                },
+                span,
+            );
+        }
+        (**ret).clone()
+    } else {
+        ctx.error(
+            SemaErrorKind::NotCallable {
+                callee: format!("{rhs_ty}"),
+                ty: format!("{rhs_ty}"),
+            },
+            span,
+        );
+        TyRepr::error()
     }
 }
 
@@ -682,7 +782,7 @@ fn bind_expr_choice_def(
     ctx: &mut BindCtx<'_>,
     name: Option<Ident>,
     cases: &[ChoiceCase],
-    ty_params: &Vec<Ident>,
+    ty_params: &[Ident],
 ) -> TyRepr {
     let ty = define_named_ty(ctx, name);
     let _ = ctx.symbols.push_scope();
