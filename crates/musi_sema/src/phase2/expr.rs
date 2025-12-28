@@ -83,6 +83,7 @@ fn try_coerce_lit(lit: &LitKind, target: &TyRepr) -> Option<TyRepr> {
     match (lit, &target.kind) {
         (LitKind::Int(_), TyReprKind::Nat(_) | TyReprKind::Int(_))
         | (LitKind::Real(_), TyReprKind::Float(_)) => Some(target.clone()),
+        (LitKind::Int(v), TyReprKind::Bool) if *v == 0 || *v == 1 => Some(target.clone()),
         _ => None,
     }
 }
@@ -343,9 +344,34 @@ fn bind_expr_cycle(ctx: &mut BindCtx<'_>, span: Span) -> TyRepr {
 
 fn bind_expr_call(ctx: &mut BindCtx<'_>, callee_id: ExprId, args: &[ExprId]) -> TyRepr {
     let callee_ty = bind_expr(ctx, callee_id);
-    let arg_tys: Vec<_> = args.iter().map(|a| bind_expr(ctx, *a)).collect();
-
     let instantiated_ty = instantiate_poly(ctx, &callee_ty);
+
+    let param_tys = if let TyReprKind::Fn(params, _) = &instantiated_ty.kind {
+        Some(params)
+    } else {
+        None
+    };
+
+    let arg_tys: Vec<_> = args
+        .iter()
+        .enumerate()
+        .map(|(i, arg_id)| {
+            let arg_ty = bind_expr(ctx, *arg_id);
+            if let Some(params) = param_tys
+                && let Some(expected) = params.get(i)
+            {
+                let expr = ctx.arena.exprs.get(*arg_id);
+                if let ExprKind::Lit(lit) = &expr.kind
+                    && let Some(coerced) = try_coerce_lit(lit, expected)
+                {
+                    ctx.model.set_expr_type(*arg_id, coerced.clone());
+                    return coerced;
+                }
+            }
+            arg_ty
+        })
+        .collect();
+
     match &instantiated_ty.kind {
         TyReprKind::Fn(params, ret) => {
             check_call_args(ctx, callee_id, params, &arg_tys);
@@ -637,10 +663,24 @@ fn bind_expr_choice_def(
 ) -> TyRepr {
     let ty = define_named_ty(ctx, name);
     for case in cases {
+        let variant_ty = if case.fields.is_empty() {
+            ty.clone()
+        } else {
+            let field_tys: Vec<_> = case
+                .fields
+                .iter()
+                .map(|item| match item {
+                    ChoiceCaseItem::Field(f) => resolve_field_ty(ctx, f.ty),
+                    ChoiceCaseItem::Type(node_id) => resolve_ty_expr(ctx, *node_id),
+                })
+                .collect();
+            TyRepr::func(field_tys, ty.clone())
+        };
+
         _ = ctx.define_and_record(
             case.name,
             SymbolKind::Variant,
-            TyRepr::unit(),
+            variant_ty,
             case.name.span,
             false,
         );

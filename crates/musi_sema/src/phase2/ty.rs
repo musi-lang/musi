@@ -25,7 +25,11 @@ pub fn define_named_ty(ctx: &mut BindCtx<'_>, name: Option<Ident>) -> TyRepr {
     match ctx.define_and_record(ident, SymbolKind::Type, TyRepr::unit(), ident.span, false) {
         Ok(sym_id) | Err(sym_id) => {
             ctx.model.set_ident_symbol(ident, sym_id);
-            TyRepr::named(sym_id, vec![])
+            let named_ty = TyRepr::named(sym_id, vec![]);
+            if let Some(sym) = ctx.symbols.get_mut(sym_id) {
+                sym.ty = named_ty.clone();
+            }
+            named_ty
         }
     }
 }
