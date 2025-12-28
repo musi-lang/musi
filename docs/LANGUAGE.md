@@ -10,17 +10,17 @@ Musi uses **gradual typing** with local `Hindley-Milner` inference. You can writ
 
 **Integers (signed):**
 
-- `Int8`, `Int16`, `Int32`, `Int64`, `Int128`
+- `Int8`, `Int16`, `Int32`, `Int64`
 
 **Naturals (unsigned):**
 
-- `Nat8`, `Nat16`, `Nat32`, `Nat64`, `Nat128`
+- `Nat8`, `Nat16`, `Nat32`, `Nat64`
 
 **Floats (IEEE-754 binary):**
 
 - `Float16`, `Float32`, `Float64`
 
-**Decimals (IEEE-754 decimal, software... for now):**
+**Decimals (IEEE-754 decimal, software):**
 
 - `BigFloat32`, `BigFloat64`, `BigFloat128`
 
@@ -159,10 +159,7 @@ Also, these are non-shorting in logical context.
 Product types with named fields:
 
 ```musi
-record Point[T] {
-  x: T;
-  y: T
-};
+record Point[T] { x: T, y: T };
 
 val p := Point.{ x := 10, y := 20 };
 val x := p.x;
@@ -218,20 +215,32 @@ defer close(f);  // runs when block exits
 
 ## Systems Programming
 
-### Unsafe Code & FFI
+### Foreign Function Interface (FFI)
 
-Raw pointers and C functions need `unsafe` blocks (stolen from Rust):
+Import C functions using `extern` modifier on `fn` (no body):
 
 ```musi
-extern "C" unsafe {
-  fn malloc(size: Nat64): ^Any; // because Unit =/= void, Any makes more sense... somehow
-  fn free(ptr: ^Any): Any;
-};
+@[link("libc")]
+extern "C" fn malloc(size: Nat64): ^Any;
 
+@[link("libc")]
+extern "C" fn free(ptr: ^Any): Unit;
+```
+
+**Calling** C functions requires `unsafe` block:
+
+```musi
 unsafe {
   val ptr := malloc(16);
   defer free(ptr);
 };
+```
+
+Export Musi functions to C using `Callback.register`:
+
+```musi
+val my_add := fn(x: Int32, y: Int32): Int32 => x + y;
+Callback.register("my_add", my_add);
 ```
 
 ### Attributes

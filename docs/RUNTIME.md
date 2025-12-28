@@ -91,10 +91,7 @@ choice Option[T] {
 C-compatible struct layout. Fields sequential with alignment.
 
 ```musi
-record Point {
-  x: Bin64;
-  y: Bin64
-};
+record Point { x: Bin64, y: Bin64 };
 ```
 
 **Memory**: `[x:8][y:8]` = 16 bytes total.
@@ -109,18 +106,44 @@ Compiled to efficient dispatch:
 
 ## Foreign Function Interface
 
-### C Interop
+### Importing C Functions
+
+Use `extern` modifier on `fn` declarations without a body:
 
 ```musi
-@[link(name := "c")]
-extern "C" unsafe {
-  fn malloc(size: Nat64): ^Any;
-  fn free(ptr: ^Any): Any;
-  fn write(fd: Int32, buf: ^Nat8, count: Nat64): Int64;
-};
+@[link("libc")]
+extern "C" fn malloc(size: Nat64): ^Any;
+
+@[link("libc")]
+extern "C" fn free(ptr: ^Any): Unit;
+
+@[link("libc")]
+extern "C" fn write(fd: Int32, buf: ^Nat8, count: Nat64): Int64;
+
+// Symbol override when C name differs from Musi name
+@[link("libc"), symbol("__strdup")]
+extern "C" fn strdup(s: ^Nat8): ^Nat8;
 ```
 
-**Calling convention**: C standard (cdecl/System V on Unix, stdcall on Windows)
+**Attributes**:
+
+- `@[link("lib")]` — library to link against
+- `@[symbol("name")]` — C symbol name (defaults to function name)
+
+**ABI string** (optional, defaults to `"C"`):
+
+- `"C"` — cdecl (System V on Unix, cdecl on Windows)
+- `"stdcall"` — Windows stdcall
+- `"fastcall"` — fastcall convention
+
+**Calling** requires `unsafe` block:
+
+```musi
+unsafe {
+  val ptr := malloc(64);
+  defer free(ptr);
+};
+```
 
 **Layout compatibility**:
 
@@ -128,16 +151,28 @@ extern "C" unsafe {
 - Musi pointers ≡ C pointers
 - Primitive types match C types
 
-### Exporting Functions
+### Exporting Musi Functions
+
+Use `Callback.register` to expose Musi functions to C at runtime:
 
 ```musi
-@[no_mangle]
-export fn add_numbers(a: Int32, b: Int32): Int32 {
-  return a + b;
-};
+// Define normal Musi function
+val add_numbers := fn(a: Int32, b: Int32): Int32 => a + b;
+
+// Register for C access
+Callback.register("add_numbers", add_numbers);
 ```
 
-**Effect**: Function exposed with C calling convention, no name mangling.
+**C side**:
+
+```c
+#include <musi/callback.h>
+
+musi_value fn = musi_named_value("add_numbers");
+int result = musi_call_int(fn, 1, 2);
+```
+
+**Effect**: Function registered in runtime table, accessible by name from C.
 
 ## Error Handling
 
@@ -259,7 +294,7 @@ val b := swap[String]("x", "y");   // generates String version
 ### Result Type Error Handling
 
 ```musi
-val io := import "std/io.ms";
+import "std/io";
 
 fn safe_divide(a: Int32, b: Int32): Expect[Int32, String] {
   if b = 0 { return Err("division by zero"); };
@@ -267,19 +302,17 @@ fn safe_divide(a: Int32, b: Int32): Expect[Int32, String] {
 };
 
 match safe_divide(10, 0) {
-case Ok(result) => io.writeln($"Result: {result}"),
-case Err(msg) => io.writeln($"Error: {msg}")
+case Ok(result) => writeln($"Result: {result}"),
+case Err(msg) => writeln($"Error: {msg}")
 };
 ```
 
 ### FFI with Defer
 
 ```musi
-extern "C" unsafe {
-  fn fopen(path: ^Nat8, mode: ^Nat8): ^Any;
-  fn fclose(file: ^Any): Int32;
-  fn fread(buf: ^Any, size: Nat64, count: Nat64, file: ^Any): Nat64;
-};
+extern fn fopen(path: ^Nat8, mode: ^Nat8): ^Any;
+extern fn fclose(file: ^Any): Int32;
+extern fn fread(buf: ^Any, size: Nat64, count: Nat64, file: ^Any): Nat64;
 
 unsafe {
   val file := fopen(@"data.bin", @"rb");
