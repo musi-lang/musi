@@ -30,8 +30,6 @@ any_char_except_double_quote = char - '"';
 
 aux_text_content = escape_char | any_char_except_double_quote;
 
-aux_text_part = any_char_except_double_quote | escape_char;
-
 aux_ident = letter, {letter | digit | "_"};
 
 aux_escaped_ident = "`", {char}, "`";
@@ -60,7 +58,7 @@ aux_lit_rune = "'", char, "'";
 
 aux_lit_template_part = "{", expr, "}";
 
-aux_lit_template_text = "$", '"', {aux_text_part | aux_lit_template_part}, '"';
+aux_lit_template_text = "$", '"', {aux_text_content | aux_lit_template_part}, '"';
 
 aux_lit = aux_lit_number | aux_lit_text | aux_lit_template_text | aux_lit_rune | "true" | "false";
 
@@ -80,8 +78,6 @@ aux_attr_arg = ident, [":=", expr] | aux_lit;
 aux_field = ["var"], ident, [aux_ty_annot], [aux_init];
 
 aux_field_list = aux_field, {",", aux_field}, [","];
-
-aux_field_list_semi = aux_field, {";", aux_field}, [";"];
 
 aux_params = "(", [aux_field_list], ")";
 
@@ -165,7 +161,9 @@ pat_cons = pat_primary, {"::", pat_primary};
 
 pat_or = pat_cons, {"|", pat_cons};
 
-pat = pat_or;
+pat_as = pat_or, ["as", ident];
+
+pat = pat_as;
 
 (* ========================================================================= *)
 (* EXPRESSIONS                                                               *)
@@ -210,21 +208,21 @@ expr_import = "import", aux_lit_text;
 
 expr_extern = aux_modifier_extern, "{", {"fn", aux_fn_sig, ";"}, "}";
 
-expr_record_def = [aux_attr], [aux_modifiers], "record", [ident], [ty_expr_params], "{", aux_field_list_semi, "}";
+expr_def_record = [aux_attr], [aux_modifiers], "record", [ident], [ty_expr_params], "{", [aux_field_list], "}";
 
-expr_choice_def = [aux_attr], [aux_modifiers], "choice", [ident], [ty_expr_params], "{", aux_choice_cases, "}";
+expr_def_choice = [aux_attr], [aux_modifiers], "choice", [ident], [ty_expr_params], "{", aux_choice_cases, "}";
 
-expr_alias = [aux_attr], [aux_modifiers], "alias", ident, [ty_expr_params], ":=", ty_expr;
+expr_def_type = [aux_attr], [aux_modifiers], "type", ident, [ty_expr_params], ":=", ty_expr;
 
-expr_fn = [aux_attr], [aux_modifiers], "fn", aux_fn_sig, (expr_block | "=>", expr);
+expr_def_fn = [aux_attr], [aux_modifiers], "fn", aux_fn_sig, (expr_block | "=>", expr);
 
-expr_bind = [aux_modifiers], ("val" | "var"), pat, [aux_ty_annot], aux_init, expr;
+expr_binding = [aux_modifiers], ("val" | "var"), pat, [aux_ty_annot], aux_init, expr;
 
-expr_unary_postfix = expr, "(", [aux_args], ")" | expr, ".[", aux_expr_list, "]" | expr, ".", ident | expr, ".^" | expr, "?";
+expr_unary_postfix = expr, "(", [aux_args], ")" | expr, ".[", aux_expr_list, "]" | expr, ".", ident | expr, ".^" | expr, "?" | expr, "!";
 
 expr_unary_prefix = ("-" | "not" | "~" | "@"), expr;
 
-expr_binary = expr, ("**" | "*" | "/" | "%" | "<<" | ">>" | "+" | "-" | "::" | "<" | ">" | "<=" | ">=" | "is" | "as" | "=" | "/=" | "&" | "^" | "|" | "and" | "or" | "??" | "|>"), expr;
+expr_binary = expr, ("**" | "*" | "/" | "%" | "<<" | ">>" | "+" | "-" | "::" | "<" | ">" | "<=" | ">=" | "is" | "as" | "in" | "=" | "/=" | "&" | "^" | "|" | "and" | "or" | "??" | "|>"), expr;
 
 expr_range = expr, (".." | "..<"), [expr];
 
@@ -233,9 +231,9 @@ expr_assign = expr, "<-", expr;
 (* ========================================================================= *)
 (* PRECEDENCE LEVELS                                                         *)
 (* ========================================================================= *)
-prec_expr_primary = expr_lit | expr_ident | expr_tuple | expr_array | expr_record | expr_block | expr_if | expr_while | expr_for | expr_match | expr_return | expr_defer | expr_break | expr_cycle | expr_unsafe | expr_import | expr_extern | expr_record_def | expr_choice_def | expr_alias | expr_fn | expr_bind | "(", expr, ")";
+prec_expr_primary = expr_lit | expr_ident | expr_tuple | expr_array | expr_record | expr_block | expr_if | expr_while | expr_for | expr_match | expr_return | expr_defer | expr_break | expr_cycle | expr_unsafe | expr_import | expr_extern | expr_def_record | expr_def_choice | expr_def_type | expr_def_fn | expr_binding | "(", expr, ")";
 
-postfix_op = "(", [aux_args], ")" | ".[", aux_expr_list, "]" | ".{", [aux_field_list], "}" | ".", ident | ".^" | "?";
+postfix_op = "(", [aux_args], ")" | ".[", aux_expr_list, "]" | ".{", [aux_field_list], "}" | ".", ident | ".^" | "?" | "!";
 
 prec_expr_postfix = prec_expr_primary, {postfix_op};
 
