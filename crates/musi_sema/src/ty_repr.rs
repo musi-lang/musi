@@ -180,7 +180,10 @@ impl TyRepr {
     }
 
     #[must_use]
-    pub const fn tuple(elems: Vec<Self>) -> Self {
+    pub fn tuple(elems: Vec<Self>) -> Self {
+        if elems.is_empty() {
+            return Self::unit();
+        }
         Self::new(TyReprKind::Tuple(elems))
     }
 

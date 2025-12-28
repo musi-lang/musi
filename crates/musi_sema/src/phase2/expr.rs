@@ -60,6 +60,8 @@ fn bind_expr_inner(ctx: &mut BindCtx<'_>, expr_id: ExprId, kind: &ExprKind, span
             ty_params,
             ..
         } => bind_expr_record_def(ctx, *name, fields, ty_params),
+        ExprKind::Unsafe(block) => bind_expr(ctx, *block),
+        ExprKind::Extern { .. } => TyRepr::unit(),
         ExprKind::ChoiceDef {
             name,
             cases,
@@ -74,6 +76,14 @@ fn bind_expr_inner(ctx: &mut BindCtx<'_>, expr_id: ExprId, kind: &ExprKind, span
         ExprKind::Match { scrutinee, cases } => bind_expr_match(ctx, *scrutinee, cases),
         ExprKind::Range { start, end, .. } => bind_expr_range(ctx, *start, *end),
         _ => TyRepr::any(),
+    }
+}
+
+fn try_coerce_lit(lit: &LitKind, target: &TyRepr) -> Option<TyRepr> {
+    match (lit, &target.kind) {
+        (LitKind::Int(_), TyReprKind::Nat(_) | TyReprKind::Int(_))
+        | (LitKind::Real(_), TyReprKind::Float(_)) => Some(target.clone()),
+        _ => None,
     }
 }
 
@@ -154,8 +164,15 @@ fn bind_expr_bind(
 
     let binding_ty = match decl_ty {
         Some(decl) => {
-            let span = ctx.arena.exprs.get(init_id).span;
-            ctx.unify_or_err(&decl, &init_ty, span);
+            let expr = ctx.arena.exprs.get(init_id);
+            if let ExprKind::Lit(lit) = &expr.kind
+                && let Some(coerced) = try_coerce_lit(lit, &decl)
+            {
+                ctx.model.set_expr_type(init_id, coerced);
+            } else {
+                let span = expr.span;
+                ctx.unify_or_err(&decl, &init_ty, span);
+            }
             decl
         }
         None => init_ty,
@@ -490,7 +507,7 @@ fn bind_expr_field(ctx: &mut BindCtx<'_>, base_id: ExprId, field: Ident, span: S
         ctx.model.set_ident_symbol(field, sym_id);
     }
     match &base_ty.kind {
-        TyReprKind::Any | TyReprKind::Unknown => base_ty,
+        TyReprKind::Named(..) | TyReprKind::Any | TyReprKind::Unknown => base_ty,
         _ => {
             let field_name = ctx.interner.resolve(field.id);
             ctx.error(
@@ -521,9 +538,11 @@ fn bind_expr_index(ctx: &mut BindCtx<'_>, base_id: ExprId, index_id: ExprId, spa
 fn bind_expr_fn(ctx: &mut BindCtx<'_>, sig: &FnSig, body_id: ExprId) -> TyRepr {
     let type_params = register_ty_params(ctx, &sig.ty_params);
     let param_tys = collect_param_types(ctx, sig);
-    let ret_ty = sig
-        .ret
-        .map_or_else(TyRepr::unit, |ty_id| resolve_ty_expr(ctx, ty_id));
+    let ret_ty = if let Some(ty_id) = sig.ret {
+        resolve_ty_expr(ctx, ty_id)
+    } else {
+        ctx.unifier.fresh_var()
+    };
 
     let scope_id = ctx.symbols.push_scope();
     register_params(ctx, sig, &param_tys);

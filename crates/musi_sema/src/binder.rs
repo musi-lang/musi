@@ -87,7 +87,6 @@ fn bind_prog(
         let ctx_arena = ctx.arena;
         let ctx_interner = ctx.interner;
         let in_loop = ctx.in_loop;
-        let in_fn = ctx.in_fn;
 
         let results: Vec<_> = tasks
             .into_par_iter()
@@ -107,7 +106,7 @@ fn bind_prog(
                     diags: &mut diags,
                     deferred: &mut next_deferred,
                     in_loop,
-                    in_fn,
+                    in_fn: true,
                 };
 
                 forked.reenter_scope(task.scope);

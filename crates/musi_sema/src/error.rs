@@ -58,12 +58,16 @@ pub enum SemaErrorKind {
 
     #[error("unused name '{0}'")]
     UnusedName(String),
+
+    #[error("invalid pipe target")]
+    InvalidPipeTarget,
 }
 
 impl IntoMusiError for SemaErrorKind {
     fn hint(&self) -> Option<&'static str> {
         match self {
             Self::NonExhaustiveMatch => Some("add missing case(s) or use '_' wildcard"),
+            Self::InvalidPipeTarget => Some("use function that returns value"),
             _ => None,
         }
     }
