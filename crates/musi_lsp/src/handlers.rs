@@ -171,17 +171,7 @@ pub fn hover(state: &GlobalState, params: &lsp_types::HoverParams) -> Option<lsp
     let kind = sym.kind;
     drop(interner_guard);
 
-    let kind_str = match kind {
-        SymbolKind::Fn => "fn",
-        SymbolKind::Local => "val",
-        SymbolKind::Param => "param",
-        SymbolKind::Type => "type",
-        SymbolKind::Field => "field",
-        SymbolKind::Variant => "variant",
-        SymbolKind::Builtin => "builtin",
-    };
-
-    let contents = format!("```musi\n{kind_str} {name_str}: {type_str}\n```");
+    let contents = format_hover_contents(kind, &name_str, &type_str);
     Some(lsp_types::Hover {
         contents: lsp_types::HoverContents::Markup(lsp_types::MarkupContent {
             kind: lsp_types::MarkupKind::Markdown,
@@ -189,6 +179,19 @@ pub fn hover(state: &GlobalState, params: &lsp_types::HoverParams) -> Option<lsp
         }),
         range: Some(span_to_range(source, span)),
     })
+}
+
+fn format_hover_contents(kind: SymbolKind, name: &str, type_str: &str) -> String {
+    let signature = match kind {
+        SymbolKind::Fn => format!("fn {name}{type_str}"),
+        SymbolKind::Local => format!("val {name}: {type_str}"),
+        SymbolKind::Param => format!("{name}: {type_str}"),
+        SymbolKind::Type => format!("val {name} := {type_str}"),
+        SymbolKind::Field => format!("{name}: {type_str}"),
+        SymbolKind::Variant => name.to_owned(),
+        SymbolKind::Builtin => format!("{name}: {type_str}"),
+    };
+    format!("```musi\n{signature}\n```")
 }
 
 #[allow(clippy::mutable_key_type)]
