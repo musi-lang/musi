@@ -27,10 +27,6 @@ fn bind_opt_expr(ctx: &mut BindCtx<'_>, opt: Option<ExprId>) {
     }
 }
 
-fn emit_arity_error(ctx: &mut BindCtx<'_>, expected: usize, got: usize, span: Span) {
-    ctx.error(SemaErrorKind::ArityMismatch { expected, got }, span);
-}
-
 fn bind_expr_inner(ctx: &mut BindCtx<'_>, expr_id: ExprId, kind: &ExprKind, span: Span) -> TyRepr {
     match kind {
         ExprKind::Lit(lit) => bind_expr_lit(ctx, lit),
@@ -393,7 +389,7 @@ fn bind_pipe_call(
 
     if let TyReprKind::Fn(params, ret) = &instantiated_ty.kind {
         if params.len() != args.len() + 1 {
-            emit_arity_error(ctx, params.len(), args.len() + 1, span);
+            arity_mismatch(ctx, params.len(), args.len() + 1, span);
             return (**ret).clone();
         }
 
@@ -418,7 +414,7 @@ fn bind_pipe(ctx: &mut BindCtx<'_>, rhs_id: ExprId, lhs_ty: &TyRepr, span: Span)
         if params.len() == 1 {
             ctx.unify_or_err(&params[0], lhs_ty, span);
         } else {
-            emit_arity_error(ctx, 1, params.len(), span);
+            arity_mismatch(ctx, 1, params.len(), span);
         }
         (**ret).clone()
     } else {
@@ -882,6 +878,10 @@ fn bind_choice_case_fields(ctx: &mut BindCtx<'_>, fields: &[ChoiceCaseItem]) {
             );
         }
     }
+}
+
+fn arity_mismatch(ctx: &mut BindCtx<'_>, expected: usize, got: usize, span: Span) {
+    ctx.error(SemaErrorKind::ArityMismatch { expected, got }, span);
 }
 
 fn not_callable(ctx: &mut BindCtx<'_>, ty: &TyRepr, span: Span) -> TyRepr {
