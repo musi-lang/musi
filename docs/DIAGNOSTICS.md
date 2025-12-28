@@ -2,48 +2,6 @@
 
 ## Structure
 
-### Core Types
-
-```ocaml
-type level = Error | Warning | Note
-
-type t = {
-  level : level;
-  message : string;
-  span : Span.t;
-  notes : (string * Span.t) list;
-}
-
-type diags = {
-  items : t list;
-  error_count : int;
-  warning_count : int;
-}
-```
-
-### Constructors
-
-```ocaml
-make : level -> string -> Span.t -> t
-error : string -> Span.t -> t
-warning : string -> Span.t -> t
-note : string -> Span.t -> t
-with_note : t -> string -> Span.t -> t
-```
-
-### Bag Operations
-
-```ocaml
-empty_bag : diags
-is_empty : diags -> bool
-has_errors : diags -> bool
-add : diags -> t -> diags
-to_list : diags -> t list
-merge : diags list -> diags
-error_count : diags -> int
-warning_count : diags -> int
-```
-
 ## Format
 
 ### Location
@@ -88,29 +46,73 @@ error: missing ';' after value binding; add ';'
 
 ## Error Archetypes
 
-Strict taxonomy for error messages to ensure consistency and specificity. Vagueness (e.g., "invalid syntax") is forbidden.
+Strict taxonomy for error messages inspired by Clang. Messages are composed from **prefix**, **infix**, and **suffix** parts. Vagueness (e.g., "invalid syntax") is forbidden.
 
-| Context | Template | Example |
+### Prefix Archetypes
+
+The **prefix** indicates what went wrong. Always use these exact words:
+
+| Prefix | When to Use | Example |
 | :--- | :--- | :--- |
-| **Unknown** | `unknown %0` | "unknown character", "unknown escape sequence" |
-| **Unclosed** | `unclosed %0` | "unclosed string literal", "unclosed block comment" |
-| **Expected** | `expected %0` | "expected identifier", "expected ';'" |
-| **Unexpected** | `unexpected %0` | "unexpected token 'val'" |
-| **Missing** | `missing %0` | "missing return type", "missing field 'x'" |
-| **Invalid** | `invalid %0` | "invalid rune literal", "invalid identifier" |
-| **Malformed** | `malformed %0` | "malformed hex literal" |
-| **Illegal** | `illegal %0` | "illegal character in identifier" |
+| `unknown` | Entity exists but not recognized | "unknown escape sequence '\\q'" |
+| `unclosed` | Opening delimiter without closing | "unclosed block comment" |
+| `expected` | Parser needed something specific | "expected identifier after 'val'" |
+| `unexpected` | Parser encountered wrong token | "unexpected token 'else'" |
+| `missing` | Required element absent | "missing return type annotation" |
+| `invalid` | Syntactically present but wrong | "invalid rune literal" |
+| `malformed` | Structure is wrong/incomplete | "malformed hex literal '0x'" |
+| `illegal` | Forbidden in this context | "illegal character in identifier" |
+| `cannot` | Semantic impossibility | "cannot convert type 'String' to type 'Int32'" |
+| `undefined` | Name not in scope | "undefined identifier 'foo'" |
+| `duplicate` | Already defined | "duplicate definition of 'x'" |
+| `unused` | Declared but never used | "unused variable 'temp'" |
+| `unreachable` | Code will never execute | "unreachable code after 'return'" |
 
-### Detailed Guidelines
+### Infix Archetypes
 
-1. **Specificity**: Never say "invalid syntax". Always describe *what* is invalid.
-    - *Bad*: `error: invalid syntax`
-    - *Good*: `error: expected identifier after 'val'`
-2. **Context**: Provide context for "unclosed" or "missing" items.
-    - *Bad*: `error: unclosed comment`
-    - *Good*: `error: unclosed block comment` (implies `/*` was used)
-3. **Hints**: Use the semicolon separator to offer immediate fixes.
-    - `error: unclosed string literal; missing '"'`
+The **infix** connects subject to object. Used for type errors and conversions:
+
+| Infix | Pattern | Example |
+| :--- | :--- | :--- |
+| `to` | `cannot convert %0 to %1` | "cannot convert type 'String' to type 'Int32'" |
+| `as` | `cannot use %0 as %1` | "cannot use type 'Int32' as function" |
+| `for` | `%0 for %1` | "missing argument for parameter 'x'" |
+| `in` | `%0 in %1` | "duplicate field 'x' in record" |
+| `of` | `%0 of %1` | "invalid member of 'Point'" |
+
+### Suffix Archetypes
+
+The **suffix** provides context or hints after semicolon:
+
+| Suffix | When to Use | Example |
+| :--- | :--- | :--- |
+| `; add %0` | Suggest addition | "missing type; add annotation" |
+| `; remove %0` | Suggest removal | "duplicate modifier; remove 'export'" |
+| `; did you mean '%0'?` | Suggest correction | "undefined 'prnt'; did you mean 'print'?" |
+
+### Composing Messages
+
+Combine prefix + subject + infix + object + suffix:
+
+```text
+<prefix> <subject> [<infix> <object>] [; <suffix>]
+```
+
+**Examples:**
+
+```text
+expected identifier after 'val'
+cannot convert type 'String' to type 'Int32'
+undefined identifier 'foo'; did you mean 'bar'?
+unclosed block comment; missing '*/'
+```
+
+### Guidelines
+
+1. **Specificity**: Never say "invalid syntax". Describe *what* is invalid.
+2. **Quoting**: Always quote type names and identifiers with single quotes.
+3. **Hints**: Use semicolon separator to offer fixes.
+4. **Context**: Specify what kind of thing is unclosed/missing.
 
 ## Categories
 
@@ -132,21 +134,6 @@ Strict taxonomy for error messages to ensure consistency and specificity. Vaguen
 - Undefined identifier
 - Duplicate definition
 - Invalid scope
-
-## Result Type Integration
-
-```ocaml
-type 'a result = ('a * diags) Stdlib.result
-
-try_ok : 'a -> 'a result
-try_error_bag : diags -> 'a result
-try_error_diag : t -> 'a result
-try_error_info : string -> Span.t -> 'a result
-
-try_bind : ('a -> 'b result) -> 'a result -> 'b result
-try_map : ('a -> 'b) -> 'a result -> 'b result
-try_map_error : (diags -> diags) -> 'a result -> 'a result
-```
 
 **Purpose**: Accumulate errors without early exit. Success carries both value and diagnostic bag.
 
@@ -301,12 +288,6 @@ List of diagnostic entries with severity, message, span, hints, optional fix-its
 
 ## Common Patterns
 
-### Type Inference Failure
-
-```text
-error: cannot infer type for 'x'; add type annotation
-```
-
 ### Scope Error
 
 ```text
@@ -325,13 +306,4 @@ warning: pattern match not exhaustive; missing case 'None'
 ```text
 error: duplicate definition of 'x'
 note: previous definition here
-```
-
-### Invalid Modifier Combination
-
-### FFI Type Mismatch
-
-```text
-error: FFI function 'malloc' expects type '^Any', got 'Int32'
-note: 'unsafe' blocks required for FFI calls
 ```
