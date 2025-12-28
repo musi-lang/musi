@@ -1,7 +1,6 @@
 use musi_ast::{
-    Attr, AttrArg, AttrArgs, Attrs, ChoiceCase, ChoiceCaseItem, ChoiceCaseItems, CondId, CondKind,
-    ExprId, ExprIds, ExprKind, Field, FnSig, Ident, LitKind, MatchCase, Modifiers, StmtIds,
-    StmtKind, TemplatePart,
+    Attr, AttrArg, ChoiceCase, ChoiceCaseItem, CondId, CondKind, ExprId, ExprKind, Field, FnSig,
+    Ident, LitKind, MatchCase, Modifiers, StmtId, StmtKind, TemplatePart,
 };
 use musi_basic::{
     error::{IntoMusiError, MusiResult},
@@ -371,7 +370,7 @@ impl Parser<'_> {
             .alloc_expr(ExprKind::Lit(LitKind::Template(parts)), span))
     }
 
-    fn parse_expr_tuple(&mut self, elems: ExprIds, start: Span) -> MusiResult<ExprId> {
+    fn parse_expr_tuple(&mut self, elems: Vec<ExprId>, start: Span) -> MusiResult<ExprId> {
         let _ = self.expect(TokenKind::RParen)?;
         let span = start.merge(self.prev_span());
         Ok(self.arena.alloc_expr(ExprKind::Tuple(elems), span))
@@ -471,7 +470,7 @@ impl Parser<'_> {
         false
     }
 
-    fn parse_block_body(&mut self) -> MusiResult<(StmtIds, Option<ExprId>)> {
+    fn parse_block_body(&mut self) -> MusiResult<(Vec<StmtId>, Option<ExprId>)> {
         let mut stmts = vec![];
         let mut final_expr = None;
         while !self.at(TokenKind::RBrace) && !self.is_eof() {
@@ -633,7 +632,7 @@ impl Parser<'_> {
         self.parse_expr_with_modifiers(attrs, start)
     }
 
-    fn parse_expr_with_modifiers(&mut self, attrs: Attrs, start: Span) -> MusiResult<ExprId> {
+    fn parse_expr_with_modifiers(&mut self, attrs: Vec<Attr>, start: Span) -> MusiResult<ExprId> {
         let mods = self.parse_modifiers();
         if mods.externness.1 && self.at(TokenKind::LBrace) {
             return self.parse_expr_extern_block(mods.externness.0, start);
@@ -673,7 +672,7 @@ impl Parser<'_> {
         Ok(self.arena.alloc_expr(ExprKind::Extern { abi, fns }, span))
     }
 
-    fn parse_expr_record_def(&mut self, attrs: Attrs, mods: Modifiers) -> MusiResult<ExprId> {
+    fn parse_expr_record_def(&mut self, attrs: Vec<Attr>, mods: Modifiers) -> MusiResult<ExprId> {
         let start = self.curr_span();
         let _ = self.expect(TokenKind::KwRecord)?;
         let name = self.try_ident();
@@ -694,7 +693,7 @@ impl Parser<'_> {
         ))
     }
 
-    fn parse_expr_choice_def(&mut self, attrs: Attrs, mods: Modifiers) -> MusiResult<ExprId> {
+    fn parse_expr_choice_def(&mut self, attrs: Vec<Attr>, mods: Modifiers) -> MusiResult<ExprId> {
         let start = self.curr_span();
         let _ = self.expect(TokenKind::KwChoice)?;
         let name = self.try_ident();
@@ -728,7 +727,7 @@ impl Parser<'_> {
         ))
     }
 
-    fn parse_choice_case_items(&mut self) -> MusiResult<ChoiceCaseItems> {
+    fn parse_choice_case_items(&mut self) -> MusiResult<Vec<ChoiceCaseItem>> {
         self.separated(TokenKind::Comma, |p| {
             if p.at(TokenKind::KwVar)
                 || (matches!(p.peek_kind(), Some(TokenKind::Ident(_)))
@@ -741,7 +740,7 @@ impl Parser<'_> {
         })
     }
 
-    fn parse_expr_alias_def(&mut self, attrs: Attrs, mods: Modifiers) -> MusiResult<ExprId> {
+    fn parse_expr_alias_def(&mut self, attrs: Vec<Attr>, mods: Modifiers) -> MusiResult<ExprId> {
         let start = self.curr_span();
         let _ = self.expect(TokenKind::KwAlias)?;
         let name = self.expect_ident()?;
@@ -761,7 +760,7 @@ impl Parser<'_> {
         ))
     }
 
-    fn parse_expr_fn_def(&mut self, attrs: Attrs, mods: Modifiers) -> MusiResult<ExprId> {
+    fn parse_expr_fn_def(&mut self, attrs: Vec<Attr>, mods: Modifiers) -> MusiResult<ExprId> {
         let start = self.curr_span();
         let _ = self.expect(TokenKind::KwFn)?;
         let name = self.try_ident();
@@ -815,7 +814,7 @@ impl Parser<'_> {
 }
 
 impl Parser<'_> {
-    fn parse_attrs(&mut self) -> MusiResult<Attrs> {
+    fn parse_attrs(&mut self) -> MusiResult<Vec<Attr>> {
         let mut attrs = vec![];
         while self.bump_if(TokenKind::AtLBrack) {
             loop {
@@ -833,7 +832,7 @@ impl Parser<'_> {
         Ok(attrs)
     }
 
-    fn parse_attr_args(&mut self) -> MusiResult<AttrArgs> {
+    fn parse_attr_args(&mut self) -> MusiResult<Vec<AttrArg>> {
         self.separated(TokenKind::Comma, |p| {
             if let Some(TokenKind::Ident(id)) = p.peek_kind() {
                 if p.peek_nth(1) == Some(TokenKind::ColonEq) {

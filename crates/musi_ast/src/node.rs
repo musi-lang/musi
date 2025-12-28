@@ -1,10 +1,7 @@
 use musi_basic::span::Span;
 use musi_lex::token::TokenKind;
 
-use crate::{
-    AttrArgs, Attrs, ChoiceCaseItems, CondId, ExprId, ExprIds, Fields, Ident, Idents, PatId,
-    PatIds, StmtId, StmtIds, TyExprId, TyExprIds,
-};
+use crate::{CondId, ExprId, Ident, PatId, StmtId, TyExprId};
 
 #[derive(Debug, Clone)]
 pub enum LitKind {
@@ -41,7 +38,7 @@ pub enum TyExprKind {
     /// `Int`, `String`
     Ident(Ident),
     /// `List[Int]`, `Map[String, Int]`
-    App { base: Ident, args: TyExprIds },
+    App { base: Ident, args: Vec<TyExprId> },
     /// `?Int`
     Optional(TyExprId),
     /// `[10]Int`, `[]Int`
@@ -51,7 +48,7 @@ pub enum TyExprKind {
     /// `Int -> String`
     Fn { param: TyExprId, ret: TyExprId },
     /// `(Int, String)`
-    Tuple(TyExprIds),
+    Tuple(Vec<TyExprId>),
 }
 
 #[derive(Debug, Clone)]
@@ -77,24 +74,24 @@ pub enum PatKind {
     ///`_`
     Wild,
     /// `(a, b, c)`
-    Tuple(PatIds),
+    Tuple(Vec<PatId>),
     /// `[a, b, c]`
-    Array(PatIds),
+    Array(Vec<PatId>),
     /// `Point.{x, y}`
     Record {
         base: Option<ExprId>,
-        fields: Idents,
+        fields: Vec<Ident>,
     },
     /// `Some(x)`, `None`
     Choice {
         name: Ident,
-        ty_args: TyExprIds,
-        args: PatIds,
+        ty_args: Vec<TyExprId>,
+        args: Vec<PatId>,
     },
     /// `head :: tail`
-    Cons(PatIds),
+    Cons(Vec<PatId>),
     /// `a | b`
-    Or(PatIds),
+    Or(Vec<PatId>),
 }
 
 #[derive(Debug, Clone)]
@@ -132,7 +129,7 @@ pub enum CondKind {
     Case {
         pat: PatId,
         init: ExprId,
-        extra: ExprIds,
+        extra: Vec<ExprId>,
     },
 }
 
@@ -143,17 +140,17 @@ pub enum ExprKind {
     /// `x`, `foo`
     Ident(Ident),
     /// `(a, b, c)`
-    Tuple(ExprIds),
+    Tuple(Vec<ExprId>),
     /// `[a, b, c]`
-    Array(ExprIds),
+    Array(Vec<ExprId>),
     /// `Point.{x := 1, y := 2}`
     Record {
         base: Option<ExprId>,
-        fields: Fields,
+        fields: Vec<Field>,
     },
     /// Block: `{ stmt; stmt; expr }`
     Block {
-        stmts: StmtIds,
+        stmts: Vec<StmtId>,
         expr: Option<ExprId>,
     },
     /// `if cond { } else if { } else { }`
@@ -196,31 +193,31 @@ pub enum ExprKind {
     },
     /// `record Point { x: Int; y: Int }`
     RecordDef {
-        attrs: Attrs,
+        attrs: Vec<Attr>,
         mods: Modifiers,
         name: Option<Ident>,
-        ty_params: Idents,
-        fields: Fields,
+        ty_params: Vec<Ident>,
+        fields: Vec<Field>,
     },
     /// `choice Option[T] { case Some(T), case None }`
     ChoiceDef {
-        attrs: Attrs,
+        attrs: Vec<Attr>,
         mods: Modifiers,
         name: Option<Ident>,
-        ty_params: Idents,
+        ty_params: Vec<Ident>,
         cases: Vec<ChoiceCase>,
     },
     /// `alias Name := Type`
     Alias {
-        attrs: Attrs,
+        attrs: Vec<Attr>,
         mods: Modifiers,
         name: Ident,
-        ty_params: Idents,
+        ty_params: Vec<Ident>,
         ty: TyExprId,
     },
     /// `fn name(params) { body }` or `fn(params) => expr`
     Fn {
-        attrs: Attrs,
+        attrs: Vec<Attr>,
         mods: Modifiers,
         sig: FnSig,
         body: ExprId,
@@ -236,7 +233,7 @@ pub enum ExprKind {
     /// `f(args)`
     Call {
         callee: ExprId,
-        args: ExprIds,
+        args: Vec<ExprId>,
     },
     /// `arr[i]`
     Index {
@@ -307,8 +304,8 @@ pub struct Field {
 #[derive(Debug, Clone)]
 pub struct FnSig {
     pub name: Option<Ident>,
-    pub ty_params: Idents,
-    pub params: Fields,
+    pub ty_params: Vec<Ident>,
+    pub params: Vec<Field>,
     pub ret: Option<TyExprId>,
 }
 
@@ -324,8 +321,8 @@ pub struct MatchCase {
 #[derive(Debug, Clone)]
 pub struct ChoiceCase {
     pub name: Ident,
-    pub ty_args: TyExprIds,
-    pub fields: ChoiceCaseItems,
+    pub ty_args: Vec<TyExprId>,
+    pub fields: Vec<ChoiceCaseItem>,
 }
 
 #[derive(Debug, Clone)]
@@ -338,7 +335,7 @@ pub enum ChoiceCaseItem {
 #[derive(Debug, Clone)]
 pub struct Attr {
     pub name: Ident,
-    pub args: AttrArgs,
+    pub args: Vec<AttrArg>,
 }
 
 /// `name := value` or literal
@@ -358,5 +355,5 @@ pub struct Modifiers {
 
 #[derive(Debug)]
 pub struct Prog {
-    pub stmts: StmtIds,
+    pub stmts: Vec<StmtId>,
 }

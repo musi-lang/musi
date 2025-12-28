@@ -2,14 +2,12 @@ use lsp_types::{DocumentSymbol, SymbolKind};
 use musi_ast::{AstArena, ChoiceCase, ExprKind, FnSig, Ident, PatKind, Prog, StmtKind};
 use musi_basic::{interner::Interner, source::SourceFile, span::Span};
 
-use crate::types::DocumentSymbolList;
-
 pub fn collect_symbols(
     source: &SourceFile,
     prog: &Prog,
     arena: &AstArena,
     interner: &Interner,
-) -> DocumentSymbolList {
+) -> Vec<DocumentSymbol> {
     let mut collector = SymbolCollector {
         source,
         arena,
@@ -24,7 +22,7 @@ struct SymbolCollector<'a> {
     source: &'a SourceFile,
     arena: &'a AstArena,
     interner: &'a Interner,
-    symbols: DocumentSymbolList,
+    symbols: Vec<DocumentSymbol>,
 }
 
 impl SymbolCollector<'_> {
@@ -52,7 +50,7 @@ impl SymbolCollector<'_> {
         name: String,
         kind: SymbolKind,
         span: Span,
-        children: Option<DocumentSymbolList>,
+        children: Option<Vec<DocumentSymbol>>,
     ) -> DocumentSymbol {
         let range = self.span_to_range(span);
         DocumentSymbol {
@@ -76,7 +74,7 @@ impl SymbolCollector<'_> {
         }
     }
 
-    fn collect_choice_cases(&self, cases: &[ChoiceCase], parent_span: Span) -> DocumentSymbolList {
+    fn collect_choice_cases(&self, cases: &[ChoiceCase], parent_span: Span) -> Vec<DocumentSymbol> {
         cases
             .iter()
             .map(|c| {

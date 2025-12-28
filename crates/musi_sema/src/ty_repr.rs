@@ -2,7 +2,6 @@ use std::fmt;
 
 use crate::TyReprPtr;
 use crate::symbol::SymbolId;
-use crate::types::TyReprs;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TyVarId(pub u32);
@@ -236,12 +235,12 @@ pub enum TyReprKind {
     Never,
     Any,
     Unknown,
-    Tuple(TyReprs),
+    Tuple(Vec<TyRepr>),
     Array(TyReprPtr, Option<usize>),
     Ptr(TyReprPtr),
     Optional(TyReprPtr),
-    Fn(TyReprs, TyReprPtr),
-    Named(SymbolId, TyReprs),
+    Fn(Vec<TyRepr>, TyReprPtr),
+    Named(SymbolId, Vec<TyRepr>),
     Var(TyVarId),
     Poly {
         params: Vec<TyParamId>,
@@ -268,7 +267,7 @@ impl TyReprKind {
     }
 
     #[must_use]
-    pub const fn tuple(elems: TyReprs) -> Self {
+    pub const fn tuple(elems: Vec<TyRepr>) -> Self {
         Self::Tuple(elems)
     }
 
@@ -288,12 +287,12 @@ impl TyReprKind {
     }
 
     #[must_use]
-    pub fn func(params: TyReprs, ret: TyRepr) -> Self {
+    pub fn func(params: Vec<TyRepr>, ret: TyRepr) -> Self {
         Self::Fn(params, Box::new(ret))
     }
 
     #[must_use]
-    pub const fn named(symbol: SymbolId, args: TyReprs) -> Self {
+    pub const fn named(symbol: SymbolId, args: Vec<TyRepr>) -> Self {
         Self::Named(symbol, args)
     }
 }

@@ -1,4 +1,4 @@
-use musi_ast::{ExprId, ExprKind, LitKind, PatId, PatIds, PatKind, TyExprIds};
+use musi_ast::{ExprId, ExprKind, Ident, LitKind, PatId, PatKind, TyExprId};
 use musi_basic::{
     error::{IntoMusiError, MusiResult},
     span::Span,
@@ -180,9 +180,9 @@ impl Parser<'_> {
 impl Parser<'_> {
     fn make_pat_variant(
         &mut self,
-        name: musi_ast::Ident,
-        ty_args: TyExprIds,
-        args: PatIds,
+        name: Ident,
+        ty_args: Vec<TyExprId>,
+        args: Vec<PatId>,
         start: Span,
     ) -> PatId {
         let span = start.merge(self.prev_span());

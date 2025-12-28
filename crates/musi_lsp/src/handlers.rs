@@ -11,7 +11,6 @@ use musi_sema::{Builtins, SemanticModel, SymbolTable};
 
 use crate::state::GlobalState;
 use crate::tokens;
-use crate::types::FoldingRangeList;
 
 pub struct AnalyzedDocument {
     pub prog: Prog,
@@ -70,7 +69,7 @@ pub fn document_symbols(
 pub fn folding_ranges(
     state: &GlobalState,
     params: &FoldingRangeParams,
-) -> Option<FoldingRangeList> {
+) -> Option<Vec<lsp_types::FoldingRange>> {
     let (source, parsed) = get_document(state, &params.text_document.uri)?;
     Some(super::folding::collect_folding_ranges(
         source,

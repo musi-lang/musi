@@ -2,7 +2,7 @@ use musi_ast::Ident;
 use musi_basic::span::Span;
 use std::collections::HashMap;
 
-use crate::{Scopes, Symbols, ty_repr::TyRepr};
+use crate::ty_repr::TyRepr;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SymbolId(pub u32);
@@ -118,8 +118,8 @@ impl Scope {
 
 #[derive(Debug)]
 pub struct SymbolTable {
-    symbols: Symbols,
-    scopes: Scopes,
+    symbols: Vec<Symbol>,
+    scopes: Vec<Scope>,
     scope_id: ScopeId,
 }
 

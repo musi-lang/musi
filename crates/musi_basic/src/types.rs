@@ -29,5 +29,3 @@ impl hash::Hash for Ident {
         self.id.hash(state);
     }
 }
-
-pub type Idents = Vec<Ident>;

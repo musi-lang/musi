@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use crate::symbol::SymbolId;
 use crate::ty_repr::{TyRepr, TyReprKind};
-use crate::{SemanticTokens, Symbol, SymbolKind, SymbolTable};
+use crate::{Symbol, SymbolKind, SymbolTable};
 
 #[derive(Debug)]
 pub struct SemanticModel {
@@ -153,7 +153,7 @@ pub fn collect_tokens(
     prog: &Prog,
     model: &SemanticModel,
     symbols: &SymbolTable,
-) -> SemanticTokens {
+) -> Vec<SemanticToken> {
     let mut collector = TokenCollector {
         model,
         symbols,
@@ -167,7 +167,7 @@ pub fn collect_tokens(
 struct TokenCollector<'a> {
     model: &'a SemanticModel,
     symbols: &'a SymbolTable,
-    tokens: SemanticTokens,
+    tokens: Vec<SemanticToken>,
 }
 
 impl TokenCollector<'_> {

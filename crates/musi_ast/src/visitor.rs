@@ -1,7 +1,7 @@
 use crate::{
     AstArena, Attr, AttrArg, ChoiceCase, ChoiceCaseItem, Cond, CondId, CondKind, Expr, ExprId,
-    ExprIds, ExprKind, Field, FnSig, Ident, LitKind, MatchCase, Pat, PatId, PatIds, PatKind, Prog,
-    Stmt, StmtId, StmtIds, StmtKind, TemplatePart, TyExpr, TyExprId, TyExprIds, TyExprKind,
+    ExprKind, Field, FnSig, Ident, LitKind, MatchCase, Pat, PatId, PatKind, Prog, Stmt, StmtId,
+    StmtKind, TemplatePart, TyExpr, TyExprId, TyExprKind,
 };
 
 pub trait AstVisitor: Sized {
@@ -14,7 +14,7 @@ pub trait AstVisitor: Sized {
         walk_stmt(self, arena, stmt);
     }
 
-    fn visit_stmt_ids(&mut self, arena: &AstArena, ids: &StmtIds) {
+    fn visit_stmt_ids(&mut self, arena: &AstArena, ids: &Vec<StmtId>) {
         for &id in ids {
             self.visit_stmt_id(arena, id);
         }
@@ -25,7 +25,7 @@ pub trait AstVisitor: Sized {
         walk_expr(self, arena, expr);
     }
 
-    fn visit_expr_ids(&mut self, arena: &AstArena, ids: &ExprIds) {
+    fn visit_expr_ids(&mut self, arena: &AstArena, ids: &Vec<ExprId>) {
         for &id in ids {
             self.visit_expr_id(arena, id);
         }
@@ -36,7 +36,7 @@ pub trait AstVisitor: Sized {
         walk_ty_expr(self, arena, ty_expr);
     }
 
-    fn visit_ty_expr_ids(&mut self, arena: &AstArena, ids: &TyExprIds) {
+    fn visit_ty_expr_ids(&mut self, arena: &AstArena, ids: &Vec<TyExprId>) {
         for &id in ids {
             self.visit_ty_expr_id(arena, id);
         }
@@ -47,7 +47,7 @@ pub trait AstVisitor: Sized {
         walk_pat(self, arena, pat);
     }
 
-    fn visit_pat_ids(&mut self, arena: &AstArena, ids: &PatIds) {
+    fn visit_pat_ids(&mut self, arena: &AstArena, ids: &Vec<PatId>) {
         for &id in ids {
             self.visit_pat_id(arena, id);
         }

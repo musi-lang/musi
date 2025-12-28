@@ -1,6 +1,6 @@
 use musi_ast::{
-    ChoiceCase, ChoiceCaseItem, CondId, CondKind, ExprId, ExprKind, Field, Fields, FnSig, Ident,
-    Idents, LitKind, MatchCase, PatId, PatKind, StmtId, TemplatePart, TyExprId,
+    ChoiceCase, ChoiceCaseItem, CondId, CondKind, ExprId, ExprKind, Field, FnSig, Ident, LitKind,
+    MatchCase, PatId, PatKind, StmtId, TemplatePart, TyExprId,
 };
 use musi_basic::span::Span;
 use musi_lex::token::TokenKind;
@@ -542,7 +542,7 @@ fn bind_expr_fn(ctx: &mut BindCtx<'_>, sig: &FnSig, body_id: ExprId) -> TyRepr {
     }
 }
 
-fn register_ty_params(ctx: &mut BindCtx<'_>, ty_params: &Idents) -> Vec<TyParamId> {
+fn register_ty_params(ctx: &mut BindCtx<'_>, ty_params: &[Ident]) -> Vec<TyParamId> {
     ty_params
         .iter()
         .enumerate()
@@ -592,8 +592,8 @@ fn register_params(ctx: &mut BindCtx<'_>, sig: &FnSig, param_tys: &[TyRepr]) {
 fn bind_expr_record_def(
     ctx: &mut BindCtx<'_>,
     name: Option<Ident>,
-    fields: &Fields,
-    _ty_params: &Idents,
+    fields: &Vec<Field>,
+    _ty_params: &Vec<Ident>,
 ) -> TyRepr {
     let ty = define_named_ty(ctx, name);
     for field in fields {
@@ -613,7 +613,7 @@ fn bind_expr_choice_def(
     ctx: &mut BindCtx<'_>,
     name: Option<Ident>,
     cases: &[ChoiceCase],
-    _ty_params: &Idents,
+    _ty_params: &Vec<Ident>,
 ) -> TyRepr {
     let ty = define_named_ty(ctx, name);
     for case in cases {

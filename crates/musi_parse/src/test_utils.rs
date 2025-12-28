@@ -1,7 +1,7 @@
 use crate::Parser;
 use musi_ast::{AstArena, Expr, ExprId, Ident, Pat, PatId, TyExpr, TyExprId};
 use musi_basic::{interner::Interner, source::SourceFile, span::Span};
-use musi_lex::{Tokens, lexer::tokenize};
+use musi_lex::{lexer::tokenize, token::Token};
 
 pub struct TestCtx {
     pub interner: Interner,
@@ -16,7 +16,7 @@ impl TestCtx {
         }
     }
 
-    pub fn tokenize(&mut self, input: &str) -> Tokens {
+    pub fn tokenize(&mut self, input: &str) -> Vec<Token> {
         let source = SourceFile::new("test.ms".into(), input.into(), 0);
         let (tokens, _) = tokenize(&source, &mut self.interner);
         tokens

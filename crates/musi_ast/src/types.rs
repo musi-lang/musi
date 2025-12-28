@@ -1,23 +1,14 @@
 use musi_basic::arena::NodeId;
 
-use crate::node::{Attr, AttrArg, ChoiceCaseItem, Cond, Expr, Field, Pat, Stmt, TyExpr};
+use crate::node::{Cond, Expr, Pat, Stmt, TyExpr};
 
-pub use musi_basic::types::{Ident, Idents};
+pub use musi_basic::types::Ident;
 
 pub type TyExprId = NodeId<TyExpr>;
-pub type TyExprIds = Vec<TyExprId>;
 
 pub type PatId = NodeId<Pat>;
-pub type PatIds = Vec<PatId>;
 
 pub type ExprId = NodeId<Expr>;
-pub type ExprIds = Vec<ExprId>;
 pub type CondId = NodeId<Cond>;
 
 pub type StmtId = NodeId<Stmt>;
-pub type StmtIds = Vec<StmtId>;
-
-pub type Fields = Vec<Field>;
-pub type ChoiceCaseItems = Vec<ChoiceCaseItem>;
-pub type Attrs = Vec<Attr>;
-pub type AttrArgs = Vec<AttrArg>;

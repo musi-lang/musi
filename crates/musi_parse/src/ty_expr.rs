@@ -1,4 +1,4 @@
-use musi_ast::{Ident, Idents, TyExprId, TyExprIds, TyExprKind};
+use musi_ast::{Ident, TyExprId, TyExprKind};
 use musi_basic::{
     error::{IntoMusiError, MusiResult},
     span::Span,
@@ -18,7 +18,7 @@ impl Parser<'_> {
 
     /// # Errors
     /// Returns `ParseErrorKind` on syntax error.
-    pub fn parse_ty_expr_params(&mut self) -> MusiResult<Idents> {
+    pub fn parse_ty_expr_params(&mut self) -> MusiResult<Vec<Ident>> {
         self.opt_delimited(TokenKind::LBrack, TokenKind::RBrack, |p| {
             p.separated(TokenKind::Comma, Self::expect_ident)
         })
@@ -26,7 +26,7 @@ impl Parser<'_> {
 
     /// # Errors
     /// Returns `ParseErrorKind` on syntax error.
-    pub fn parse_ty_expr_args(&mut self) -> MusiResult<TyExprIds> {
+    pub fn parse_ty_expr_args(&mut self) -> MusiResult<Vec<TyExprId>> {
         self.opt_delimited(TokenKind::LBrack, TokenKind::RBrack, |p| {
             p.separated(TokenKind::Comma, Self::parse_ty_expr)
         })
