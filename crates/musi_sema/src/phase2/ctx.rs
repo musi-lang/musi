@@ -38,29 +38,6 @@ impl BindCtx<'_> {
         )
     }
 
-    pub fn with_forked<T>(
-        &mut self,
-        model: &mut SemanticModel,
-        unifier: &mut Unifier,
-        symbols: &mut SymbolTable,
-        diags: &mut DiagnosticBag,
-        deferred: &mut Vec<DeferredTask>,
-        f: impl FnOnce(&mut BindCtx) -> T,
-    ) -> T {
-        let mut ctx = BindCtx {
-            arena: self.arena,
-            interner: self.interner,
-            model,
-            symbols,
-            unifier,
-            diags,
-            deferred,
-            in_loop: self.in_loop,
-            in_fn: self.in_fn,
-        };
-        f(&mut ctx)
-    }
-
     pub fn merge_forked(
         &mut self,
         model: SemanticModel,
