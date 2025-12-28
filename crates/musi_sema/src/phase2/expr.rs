@@ -21,6 +21,16 @@ pub fn bind_expr(ctx: &mut BindCtx<'_>, expr_id: ExprId) -> TyRepr {
     ty
 }
 
+fn bind_opt_expr(ctx: &mut BindCtx<'_>, opt: Option<ExprId>) {
+    if let Some(id) = opt {
+        let _ = bind_expr(ctx, id);
+    }
+}
+
+fn emit_arity_error(ctx: &mut BindCtx<'_>, expected: usize, got: usize, span: Span) {
+    ctx.error(SemaErrorKind::ArityMismatch { expected, got }, span);
+}
+
 fn bind_expr_inner(ctx: &mut BindCtx<'_>, expr_id: ExprId, kind: &ExprKind, span: Span) -> TyRepr {
     match kind {
         ExprKind::Lit(lit) => bind_expr_lit(ctx, lit),
@@ -138,13 +148,12 @@ fn bind_expr_array(ctx: &mut BindCtx<'_>, elems: &[ExprId]) -> TyRepr {
 }
 
 fn bind_expr_block(ctx: &mut BindCtx<'_>, stmts: &[StmtId], tail: Option<ExprId>) -> TyRepr {
-    let _ = ctx.symbols.push_scope();
-    for stmt_id in stmts {
-        bind_stmt(ctx, *stmt_id);
-    }
-    let result_ty = tail.map_or(TyRepr::unit(), |e| bind_expr(ctx, e));
-    ctx.symbols.pop_scope();
-    result_ty
+    ctx.with_scope(|ctx| {
+        for stmt_id in stmts {
+            bind_stmt(ctx, *stmt_id);
+        }
+        tail.map_or(TyRepr::unit(), |e| bind_expr(ctx, e))
+    })
 }
 
 fn bind_expr_bind(
@@ -322,9 +331,7 @@ fn bind_expr_return(ctx: &mut BindCtx<'_>, opt: Option<ExprId>, span: Span) -> T
     if !ctx.in_fn {
         ctx.error(SemaErrorKind::ReturnOutsideFn, span);
     }
-    if let Some(id) = opt {
-        let _ = bind_expr(ctx, id);
-    }
+    bind_opt_expr(ctx, opt);
     TyRepr::never()
 }
 
@@ -332,9 +339,7 @@ fn bind_expr_break(ctx: &mut BindCtx<'_>, opt: Option<ExprId>, span: Span) -> Ty
     if !ctx.in_loop {
         ctx.error(SemaErrorKind::BreakOutsideLoop, span);
     }
-    if let Some(id) = opt {
-        let _ = bind_expr(ctx, id);
-    }
+    bind_opt_expr(ctx, opt);
     TyRepr::never()
 }
 
@@ -388,13 +393,7 @@ fn bind_pipe_call(
 
     if let TyReprKind::Fn(params, ret) = &instantiated_ty.kind {
         if params.len() != args.len() + 1 {
-            ctx.error(
-                SemaErrorKind::ArityMismatch {
-                    expected: params.len(),
-                    got: args.len() + 1,
-                },
-                span,
-            );
+            emit_arity_error(ctx, params.len(), args.len() + 1, span);
             return (**ret).clone();
         }
 
@@ -419,13 +418,7 @@ fn bind_pipe(ctx: &mut BindCtx<'_>, rhs_id: ExprId, lhs_ty: &TyRepr, span: Span)
         if params.len() == 1 {
             ctx.unify_or_err(&params[0], lhs_ty, span);
         } else {
-            ctx.error(
-                SemaErrorKind::ArityMismatch {
-                    expected: 1,
-                    got: 1,
-                },
-                span,
-            );
+            emit_arity_error(ctx, 1, params.len(), span);
         }
         (**ret).clone()
     } else {
@@ -607,7 +600,7 @@ fn bind_expr_unary(ctx: &mut BindCtx<'_>, op: TokenKind, operand_id: ExprId, spa
         TokenKind::At => TyRepr::ptr(operand_ty),
         TokenKind::DotCaret => match &operand_ty.kind {
             TyReprKind::Ptr(inner) => (**inner).clone(),
-            TyReprKind::Any | TyReprKind::Unknown => TyRepr::any(),
+            _ if operand_ty.is_dynamic() => TyRepr::any(),
             _ => {
                 let inner = ctx.unifier.fresh_var();
                 let ptr_ty = TyRepr::ptr(inner.clone());
@@ -655,7 +648,7 @@ fn bind_op_coalesce(ctx: &mut BindCtx<'_>, lhs_ty: &TyRepr, rhs_ty: &TyRepr, spa
             ctx.unify_or_err(inner, rhs_ty, span);
             rhs_ty.clone()
         }
-        TyReprKind::Any | TyReprKind::Unknown => TyRepr::any(),
+        _ if lhs_resolved.is_dynamic() => TyRepr::any(),
         _ => {
             ctx.unify_or_err(lhs_ty, rhs_ty, span);
             lhs_ty.clone()
@@ -676,7 +669,7 @@ fn bind_expr_field(ctx: &mut BindCtx<'_>, base_id: ExprId, field: Ident, span: S
             }
             no_such_field(ctx, &base_ty, field, span)
         }
-        TyReprKind::Any | TyReprKind::Unknown => TyRepr::any(),
+        _ if base_ty.is_dynamic() => TyRepr::any(),
         _ => no_such_field(ctx, &base_ty, field, span),
     }
 }
@@ -692,7 +685,7 @@ fn bind_expr_index(ctx: &mut BindCtx<'_>, base_id: ExprId, index_id: ExprId, spa
             ctx.unify_or_err(&base_ty, &array_ty, span);
             elem_ty
         }
-        TyReprKind::Any | TyReprKind::Unknown => base_ty,
+        _ if base_ty.is_dynamic() => base_ty,
         _ => {
             ctx.error(SemaErrorKind::NotIndexable(format!("{base_ty}")), span);
             TyRepr::error()

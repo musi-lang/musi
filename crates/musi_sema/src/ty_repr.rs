@@ -213,6 +213,11 @@ impl TyRepr {
     }
 
     #[must_use]
+    pub const fn is_dynamic(&self) -> bool {
+        matches!(self.kind, TyReprKind::Any | TyReprKind::Unknown)
+    }
+
+    #[must_use]
     pub fn poly(params: Vec<TyParamId>, body: Self) -> Self {
         Self::new(TyReprKind::Poly {
             params,
