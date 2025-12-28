@@ -11,7 +11,7 @@ use crate::symbol::SymbolKind;
 use crate::ty_repr::{FloatWidth, IntWidth, TyParamId, TyRepr, TyReprKind};
 
 use super::BindCtx;
-use super::ops::try_coerce_lit;
+use super::ops::{ensure_bool, fresh_var_or, try_coerce_lit};
 use super::pat::{bind_pat, bind_pat_with_kind};
 use super::stmt::bind_stmt;
 use super::ty::{define_named_ty, resolve_field_ty, resolve_ty_expr};
@@ -256,7 +256,7 @@ fn bind_cond(ctx: &mut BindCtx<'_>, cond_id: CondId) {
         CondKind::Expr(expr_id) => {
             let cond_ty = bind_expr(ctx, *expr_id);
             let span = ctx.arena.exprs.get(*expr_id).span;
-            ctx.unify_or_err(&cond_ty, &TyRepr::bool(), span);
+            ensure_bool(ctx, &cond_ty, span);
         }
         CondKind::Case { pat, init, extra } => {
             let init_ty = bind_expr(ctx, *init);
@@ -264,7 +264,7 @@ fn bind_cond(ctx: &mut BindCtx<'_>, cond_id: CondId) {
             for extra_id in extra {
                 let ty = bind_expr(ctx, *extra_id);
                 let span = ctx.arena.exprs.get(*extra_id).span;
-                ctx.unify_or_err(&ty, &TyRepr::bool(), span);
+                ensure_bool(ctx, &ty, span);
             }
         }
     }
@@ -273,12 +273,16 @@ fn bind_cond(ctx: &mut BindCtx<'_>, cond_id: CondId) {
 fn bind_expr_while(ctx: &mut BindCtx<'_>, cond_id: CondId, body_id: ExprId) -> TyRepr {
     let _ = ctx.symbols.push_scope();
     bind_cond(ctx, cond_id);
+    bind_loop_body(ctx, body_id);
+    ctx.symbols.pop_scope();
+    TyRepr::unit()
+}
+
+fn bind_loop_body(ctx: &mut BindCtx<'_>, body_id: ExprId) {
     let prev = ctx.in_loop;
     ctx.in_loop = true;
     let _ = bind_expr(ctx, body_id);
     ctx.in_loop = prev;
-    ctx.symbols.pop_scope();
-    TyRepr::unit()
 }
 
 fn bind_expr_for(ctx: &mut BindCtx<'_>, pat_id: PatId, iter_id: ExprId, body_id: ExprId) -> TyRepr {
@@ -290,12 +294,7 @@ fn bind_expr_for(ctx: &mut BindCtx<'_>, pat_id: PatId, iter_id: ExprId, body_id:
 
     let _ = ctx.symbols.push_scope();
     bind_pat(ctx, pat_id, &elem_ty, false);
-
-    let prev = ctx.in_loop;
-    ctx.in_loop = true;
-    let _ = bind_expr(ctx, body_id);
-    ctx.in_loop = prev;
-
+    bind_loop_body(ctx, body_id);
     ctx.symbols.pop_scope();
     TyRepr::unit()
 }
@@ -347,8 +346,7 @@ fn bind_expr_cycle(ctx: &mut BindCtx<'_>, span: Span) -> TyRepr {
 }
 
 fn bind_expr_call(ctx: &mut BindCtx<'_>, callee_id: ExprId, args: &[ExprId]) -> TyRepr {
-    let callee_ty = bind_expr(ctx, callee_id);
-    let instantiated_ty = instantiate_poly(ctx, &callee_ty);
+    let (callee_ty, instantiated_ty) = bind_callee(ctx, callee_id);
 
     let param_tys = if let TyReprKind::Fn(params, _) = &instantiated_ty.kind {
         Some(params)
@@ -401,6 +399,12 @@ fn bind_expr_call(ctx: &mut BindCtx<'_>, callee_id: ExprId, args: &[ExprId]) -> 
             TyRepr::error()
         }
     }
+}
+
+fn bind_callee(ctx: &mut BindCtx<'_>, callee_id: ExprId) -> (TyRepr, TyRepr) {
+    let callee_ty = bind_expr(ctx, callee_id);
+    let instantiated = instantiate_poly(ctx, &callee_ty);
+    (callee_ty, instantiated)
 }
 
 fn instantiate_poly(ctx: &BindCtx<'_>, ty: &TyRepr) -> TyRepr {
@@ -490,8 +494,8 @@ fn bind_expr_binary(
         TokenKind::KwAnd | TokenKind::KwOr => {
             let span_lhs = ctx.arena.exprs.get(lhs_id).span;
             let span_rhs = ctx.arena.exprs.get(rhs_id).span;
-            ctx.unify_or_err(&lhs_ty, &TyRepr::bool(), span_lhs);
-            ctx.unify_or_err(&rhs_ty, &TyRepr::bool(), span_rhs);
+            ensure_bool(ctx, &lhs_ty, span_lhs);
+            ensure_bool(ctx, &rhs_ty, span_rhs);
             TyRepr::bool()
         }
 
@@ -537,8 +541,7 @@ fn bind_pipe_call(
     lhs_ty: &TyRepr,
     span: Span,
 ) -> TyRepr {
-    let callee_ty = bind_expr(ctx, callee);
-    let instantiated_ty = instantiate_poly(ctx, &callee_ty);
+    let (callee_ty, instantiated_ty) = bind_callee(ctx, callee);
 
     if let TyReprKind::Fn(params, ret) = &instantiated_ty.kind {
         if params.len() != args.len() + 1 {
@@ -605,7 +608,7 @@ fn bind_expr_unary(ctx: &mut BindCtx<'_>, op: TokenKind, operand_id: ExprId, spa
     let operand_ty = bind_expr(ctx, operand_id);
     match op {
         TokenKind::KwNot => {
-            ctx.unify_or_err(&operand_ty, &TyRepr::bool(), span);
+            ensure_bool(ctx, &operand_ty, span);
             TyRepr::bool()
         }
         TokenKind::Minus => operand_ty,
@@ -654,34 +657,28 @@ fn bind_expr_field(ctx: &mut BindCtx<'_>, base_id: ExprId, field: Ident, span: S
         TyReprKind::Named(sym_id, _) => {
             if let Some(member_id) = ctx.symbols.lookup_member(*sym_id, field) {
                 ctx.model.set_ident_symbol(field, member_id);
-                ctx.symbols
+                return ctx
+                    .symbols
                     .get(member_id)
-                    .map_or_else(TyRepr::error, |sym| sym.ty.clone())
-            } else {
-                let field_name = ctx.interner.resolve(field.id);
-                ctx.error(
-                    SemaErrorKind::NoSuchField {
-                        ty: format!("{base_ty}"),
-                        field: field_name.to_owned(),
-                    },
-                    span,
-                );
-                TyRepr::error()
+                    .map_or_else(TyRepr::error, |sym| sym.ty.clone());
             }
+            no_such_field(ctx, &base_ty, field, span)
         }
         TyReprKind::Any | TyReprKind::Unknown => TyRepr::any(),
-        _ => {
-            let field_name = ctx.interner.resolve(field.id);
-            ctx.error(
-                SemaErrorKind::NoSuchField {
-                    ty: format!("{base_ty}"),
-                    field: field_name.to_owned(),
-                },
-                span,
-            );
-            TyRepr::error()
-        }
+        _ => no_such_field(ctx, &base_ty, field, span),
     }
+}
+
+fn no_such_field(ctx: &mut BindCtx<'_>, base_ty: &TyRepr, field: Ident, span: Span) -> TyRepr {
+    let field_name = ctx.interner.resolve(field.id);
+    ctx.error(
+        SemaErrorKind::NoSuchField {
+            ty: format!("{base_ty}"),
+            field: field_name.to_owned(),
+        },
+        span,
+    );
+    TyRepr::error()
 }
 
 fn bind_expr_index(ctx: &mut BindCtx<'_>, base_id: ExprId, index_id: ExprId, span: Span) -> TyRepr {
@@ -706,11 +703,7 @@ fn bind_expr_index(ctx: &mut BindCtx<'_>, base_id: ExprId, index_id: ExprId, spa
 fn bind_expr_fn(ctx: &mut BindCtx<'_>, sig: &FnSig, body_id: ExprId) -> TyRepr {
     let type_params = register_ty_params(ctx, &sig.ty_params);
     let param_tys = collect_param_types(ctx, sig);
-    let ret_ty = if let Some(ty_id) = sig.ret {
-        resolve_ty_expr(ctx, ty_id)
-    } else {
-        ctx.unifier.fresh_var()
-    };
+    let ret_ty = fresh_var_or(ctx, sig.ret);
 
     let scope_id = ctx.symbols.push_scope();
     register_params(ctx, sig, &param_tys);
@@ -746,13 +739,7 @@ fn register_ty_params(ctx: &mut BindCtx<'_>, ty_params: &[Ident]) -> Vec<TyParam
 fn collect_param_types(ctx: &mut BindCtx<'_>, sig: &FnSig) -> Vec<TyRepr> {
     sig.params
         .iter()
-        .map(|param| {
-            if let Some(id) = param.ty {
-                resolve_ty_expr(ctx, id)
-            } else {
-                ctx.unifier.fresh_var()
-            }
-        })
+        .map(|param| fresh_var_or(ctx, param.ty))
         .collect()
 }
 
