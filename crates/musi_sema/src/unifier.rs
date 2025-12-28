@@ -153,7 +153,7 @@ impl Unifier {
         self.transform(ty, &|s, id| {
             s.substs
                 .get(&id)
-                .map_or(TyRepr::error(), |resolved| s.finalize(resolved))
+                .map_or(TyRepr::any(), |resolved| s.finalize(resolved))
         })
     }
 
@@ -175,6 +175,9 @@ impl Unifier {
             ),
             TyReprKind::Named(symbol, args) => {
                 TyRepr::named(*symbol, args.iter().map(|a| self.transform(a, f)).collect())
+            }
+            TyReprKind::Poly { params, body } => {
+                TyRepr::poly(params.clone(), self.transform(body, f))
             }
             _ => ty.clone(),
         }
