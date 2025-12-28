@@ -57,6 +57,11 @@ impl Unifier {
             (TyReprKind::Never, _) | (_, TyReprKind::Never) => Ok(()),
             (TyReprKind::Optional(inner_a), TyReprKind::Optional(inner_b))
             | (TyReprKind::Ptr(inner_a), TyReprKind::Ptr(inner_b)) => self.unify(inner_a, inner_b),
+            (TyReprKind::Range(elem_a, incl_a), TyReprKind::Range(elem_b, incl_b))
+                if incl_a == incl_b =>
+            {
+                self.unify(elem_a, elem_b)
+            }
             (TyReprKind::Array(elem_a, size_a), TyReprKind::Array(elem_b, size_b)) => {
                 self.unify_ty_array(&a, &b, elem_a, elem_b, *size_a, *size_b)
             }

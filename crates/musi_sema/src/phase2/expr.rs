@@ -73,7 +73,11 @@ fn bind_expr_inner(ctx: &mut BindCtx<'_>, expr_id: ExprId, kind: &ExprKind, span
             TyRepr::unit()
         }
         ExprKind::Match { scrutinee, cases } => bind_expr_match(ctx, *scrutinee, cases),
-        ExprKind::Range { start, end, .. } => bind_expr_range(ctx, *start, *end),
+        ExprKind::Range {
+            start,
+            end,
+            inclusive,
+        } => bind_expr_range(ctx, *start, *end, *inclusive),
         _ => TyRepr::any(),
     }
 }
@@ -557,7 +561,8 @@ fn bind_expr_binary(
         | TokenKind::LtEq
         | TokenKind::Gt
         | TokenKind::GtEq
-        | TokenKind::KwIs => TyRepr::bool(),
+        | TokenKind::KwIs
+        | TokenKind::KwIn => TyRepr::bool(),
 
         TokenKind::KwAnd | TokenKind::KwOr => {
             let lhs_span = ctx.arena.exprs.get(lhs_id).span;
@@ -790,12 +795,19 @@ fn bind_expr_record(ctx: &mut BindCtx<'_>, base: Option<ExprId>, fields: &[Field
     TyRepr::any()
 }
 
-fn bind_expr_range(ctx: &mut BindCtx<'_>, start: ExprId, end: Option<ExprId>) -> TyRepr {
-    let _ = bind_expr(ctx, start);
+fn bind_expr_range(
+    ctx: &mut BindCtx<'_>,
+    start: ExprId,
+    end: Option<ExprId>,
+    inclusive: bool,
+) -> TyRepr {
+    let start_ty = bind_expr(ctx, start);
     if let Some(end_id) = end {
-        let _ = bind_expr(ctx, end_id);
+        let end_ty = bind_expr(ctx, end_id);
+        let span = ctx.arena.exprs.get(end_id).span;
+        ctx.unify_or_err(&start_ty, &end_ty, span);
     }
-    TyRepr::any()
+    TyRepr::range(start_ty, inclusive)
 }
 
 fn register_ty_params(ctx: &mut BindCtx<'_>, ty_params: &[Ident]) -> Vec<TyParamId> {
