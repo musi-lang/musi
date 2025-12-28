@@ -182,3 +182,45 @@ fn poly_finalize_preserves_type_params() {
     let finalized = unifier.finalize(&poly);
     assert_eq!(format!("{finalized}"), "forall[T0]. (T0) -> T0");
 }
+
+#[test]
+fn generalize_no_free_vars() {
+    let unifier = Unifier::new();
+    let concrete = TyRepr::func(vec![TyRepr::int(IntWidth::I32)], TyRepr::bool());
+
+    let generalized = unifier.generalize(&concrete);
+    assert_eq!(format!("{generalized}"), "(Int32) -> Bool");
+}
+
+#[test]
+fn generalize_single_free_var() {
+    let mut unifier = Unifier::new();
+    let var = unifier.fresh_var();
+    let fn_ty = TyRepr::func(vec![var.clone()], var);
+
+    let generalized = unifier.generalize(&fn_ty);
+    assert_eq!(format!("{generalized}"), "forall[T0]. (T0) -> T0");
+}
+
+#[test]
+fn generalize_multiple_free_vars() {
+    let mut unifier = Unifier::new();
+    let var_a = unifier.fresh_var();
+    let var_b = unifier.fresh_var();
+    let fn_ty = TyRepr::func(vec![var_a], var_b);
+
+    let generalized = unifier.generalize(&fn_ty);
+    assert_eq!(format!("{generalized}"), "forall[T0, T1]. (T0) -> T1");
+}
+
+#[test]
+fn generalize_bound_var_not_generalized() {
+    let mut unifier = Unifier::new();
+    let var = unifier.fresh_var();
+    let fn_ty = TyRepr::func(vec![var.clone()], var.clone());
+
+    unifier.unify(&var, &TyRepr::int(IntWidth::I32)).unwrap();
+
+    let generalized = unifier.generalize(&fn_ty);
+    assert_eq!(format!("{generalized}"), "(Int32) -> Int32");
+}
