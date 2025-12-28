@@ -59,7 +59,7 @@ fn bind_expr_inner(ctx: &mut BindCtx<'_>, expr_id: ExprId, kind: &ExprKind, span
             fields,
             ty_params,
             ..
-        } => bind_expr_record_def(ctx, *name, fields, ty_params),
+        } => bind_expr_record_def(ctx, *name, fields, ty_params, span),
         ExprKind::Unsafe(block) => bind_expr(ctx, *block),
         ExprKind::Extern { .. } => TyRepr::unit(),
         ExprKind::ChoiceDef {
@@ -67,7 +67,7 @@ fn bind_expr_inner(ctx: &mut BindCtx<'_>, expr_id: ExprId, kind: &ExprKind, span
             cases,
             ty_params,
             ..
-        } => bind_expr_choice_def(ctx, *name, cases, ty_params),
+        } => bind_expr_choice_def(ctx, *name, cases, ty_params, span),
         ExprKind::Alias { name, ty, .. } => bind_expr_alias(ctx, *name, *ty),
         ExprKind::Defer(inner) => {
             let _ = bind_expr(ctx, *inner);
@@ -204,6 +204,18 @@ fn infer_binding_kind(
                 ctx.model.set_pat_symbol(pat_id, sym_id);
                 return None;
             }
+
+            if name.is_none()
+                && let PatKind::Ident(pat_ident) = &ctx.arena.pats.get(pat_id).kind
+                && let TyReprKind::Named(sym_id, _) = &binding_ty.kind
+                && let Some(sym) = ctx.symbols.get_mut(*sym_id)
+                && ctx.interner.resolve(sym.name.id) == "<anon>"
+            {
+                sym.name = *pat_ident;
+                ctx.model.set_pat_symbol(pat_id, *sym_id);
+                return None;
+            }
+
             Some(SymbolKind::Type)
         }
         ExprKind::Alias { name, .. } => {
@@ -646,11 +658,28 @@ fn check_mutability(ctx: &mut BindCtx<'_>, target_id: ExprId) {
 
 fn bind_expr_field(ctx: &mut BindCtx<'_>, base_id: ExprId, field: Ident, span: Span) -> TyRepr {
     let base_ty = bind_expr(ctx, base_id);
-    if let Some(sym_id) = ctx.symbols.lookup(field) {
-        ctx.model.set_ident_symbol(field, sym_id);
-    }
     match &base_ty.kind {
-        TyReprKind::Named(..) | TyReprKind::Any | TyReprKind::Unknown => base_ty,
+        TyReprKind::Named(sym_id, _) => {
+            if let Some(member_id) = ctx.symbols.lookup_member(*sym_id, field) {
+                ctx.model.set_ident_symbol(field, member_id);
+                if let Some(sym) = ctx.symbols.get(member_id) {
+                    sym.ty.clone()
+                } else {
+                    TyRepr::error()
+                }
+            } else {
+                let field_name = ctx.interner.resolve(field.id);
+                ctx.error(
+                    SemaErrorKind::NoSuchField {
+                        ty: format!("{base_ty}"),
+                        field: field_name.to_owned(),
+                    },
+                    span,
+                );
+                TyRepr::error()
+            }
+        }
+        TyReprKind::Any | TyReprKind::Unknown => TyRepr::any(),
         _ => {
             let field_name = ctx.interner.resolve(field.id);
             ctx.error(
@@ -763,8 +792,9 @@ fn bind_expr_record_def(
     name: Option<Ident>,
     fields: &Vec<Field>,
     _ty_params: &Vec<Ident>,
+    span: Span,
 ) -> TyRepr {
-    let ty = define_named_ty(ctx, name);
+    let ty = define_named_ty(ctx, name, span);
     for field in fields {
         let field_ty = resolve_field_ty(ctx, field.ty);
         _ = ctx.define_and_record(
@@ -783,8 +813,9 @@ fn bind_expr_choice_def(
     name: Option<Ident>,
     cases: &[ChoiceCase],
     ty_params: &[Ident],
+    span: Span,
 ) -> TyRepr {
-    let ty = define_named_ty(ctx, name);
+    let ty = define_named_ty(ctx, name, span);
     let _ = ctx.symbols.push_scope();
     let _ = register_ty_params(ctx, ty_params);
 

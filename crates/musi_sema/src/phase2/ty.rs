@@ -1,4 +1,5 @@
 use musi_ast::{Ident, TyExpr, TyExprId, TyExprKind};
+use musi_basic::span::Span;
 
 use crate::error::SemaErrorKind;
 use crate::symbol::SymbolKind;
@@ -17,14 +18,20 @@ pub fn resolve_field_ty(ctx: &mut BindCtx<'_>, ty: Option<TyExprId>) -> TyRepr {
     ty.map_or_else(TyRepr::any, |ty_id| resolve_ty_expr(ctx, ty_id))
 }
 
-pub fn define_named_ty(ctx: &mut BindCtx<'_>, name: Option<Ident>) -> TyRepr {
-    let Some(ident) = name else {
-        return TyRepr::unit();
+pub fn define_named_ty(ctx: &mut BindCtx<'_>, name: Option<Ident>, span: Span) -> TyRepr {
+    let (ident, is_anon) = match name {
+        Some(id) => (id, false),
+        None => {
+            let id = ctx.interner.intern("<anon>");
+            (Ident { id, span }, true)
+        }
     };
 
     match ctx.define_and_record(ident, SymbolKind::Type, TyRepr::unit(), ident.span, false) {
         Ok(sym_id) | Err(sym_id) => {
-            ctx.model.set_ident_symbol(ident, sym_id);
+            if !is_anon {
+                ctx.model.set_ident_symbol(ident, sym_id);
+            }
             let named_ty = TyRepr::named(sym_id, vec![]);
             if let Some(sym) = ctx.symbols.get_mut(sym_id) {
                 sym.ty = named_ty.clone();

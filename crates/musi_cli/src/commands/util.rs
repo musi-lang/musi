@@ -56,7 +56,7 @@ pub fn run_phases(
     if bag.errors == 0 {
         let builtins = Builtins::from_interner(interner);
         let (_, _, sema_bag) =
-            binder::bind(&parse_result.arena, interner, &parse_result.prog, &builtins);
+            binder::bind(&parse_result.arena, &mut interner, &parse_result.prog, &builtins);
         bag.merge(sema_bag);
     }
 

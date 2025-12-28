@@ -30,7 +30,7 @@ impl TestCtx {
 
         super::bind(
             &parse_result.arena,
-            &self.interner,
+            &mut self.interner,
             &parse_result.prog,
             &self.builtins,
         )

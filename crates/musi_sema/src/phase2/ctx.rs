@@ -18,7 +18,7 @@ pub struct DeferredTask {
 
 pub struct BindCtx<'a> {
     pub arena: &'a AstArena,
-    pub interner: &'a Interner,
+    pub interner: &'a mut Interner,
     pub model: &'a mut SemanticModel,
     pub symbols: &'a mut SymbolTable,
     pub unifier: &'a mut Unifier,

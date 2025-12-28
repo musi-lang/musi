@@ -118,7 +118,7 @@ fn analyze_and_publish(state: &mut GlobalState, uri: Uri, text: String) {
         let mut interner = state.interner.lock().expect("interner mutex not poisoned");
         let builtins = Builtins::from_interner(&mut interner);
         let (model, symbols, sema_diags) =
-            musi_sema::bind(&result.arena, &interner, &result.prog, &builtins);
+            musi_sema::bind(&result.arena, &mut interner, &result.prog, &builtins);
         drop(interner);
         diagnostics.extend(super::diagnostics::convert_diagnostics(
             &source_file,

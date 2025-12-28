@@ -12,7 +12,7 @@ use musi_basic::interner::Interner;
 
 pub fn resolve(
     arena: &AstArena,
-    interner: &Interner,
+    interner: &mut Interner,
     prog: &Prog,
     symbols: &mut SymbolTable,
     model: &mut SemanticModel,

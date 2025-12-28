@@ -16,7 +16,7 @@ use rayon::prelude::*;
 #[must_use]
 pub fn bind(
     arena: &AstArena,
-    interner: &Interner,
+    interner: &mut Interner,
     prog: &Prog,
     builtins: &Builtins,
 ) -> (SemanticModel, SymbolTable, DiagnosticBag) {
@@ -55,7 +55,7 @@ pub fn bind(
 
 fn bind_prog(
     arena: &AstArena,
-    interner: &Interner,
+    interner: &mut Interner,
     prog: &Prog,
     symbols: &mut SymbolTable,
     model: &mut SemanticModel,
@@ -85,7 +85,7 @@ fn bind_prog(
         let tasks = mem::take(ctx.deferred);
 
         let ctx_arena = ctx.arena;
-        let ctx_interner = ctx.interner;
+        let ctx_interner = &mut *ctx.interner;
         let in_loop = ctx.in_loop;
 
         let results: Vec<_> = tasks

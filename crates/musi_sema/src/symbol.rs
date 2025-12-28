@@ -70,6 +70,7 @@ pub struct Symbol {
     pub def_span: Span,
     pub scope_id: ScopeId,
     pub mutable: bool,
+    pub members: Option<ScopeId>,
 }
 
 impl Symbol {
@@ -81,6 +82,7 @@ impl Symbol {
         def_span: Span,
         scope_id: ScopeId,
         mutable: bool,
+        members: Option<ScopeId>,
     ) -> Self {
         Self {
             name,
@@ -89,6 +91,7 @@ impl Symbol {
             def_span,
             scope_id,
             mutable,
+            members,
         }
     }
 }
@@ -287,7 +290,7 @@ impl SymbolTable {
         mutable: bool,
     ) -> Result<SymbolId, SymbolId> {
         let id = SymbolId::new(self.next_symbol.fetch_add(1, Ordering::Relaxed));
-        let symbol = Symbol::new(name, kind, ty, span, self.scope_id, mutable);
+        let symbol = Symbol::new(name, kind, ty, span, self.scope_id, mutable, None);
         let _ = self.local_symbols.insert(id, symbol);
 
         let scope = self.get_scope_mut(self.scope_id).expect("missing scope");
@@ -326,6 +329,20 @@ impl SymbolTable {
             scope_id = scope.parent;
         }
         None
+    }
+
+    #[must_use]
+    pub fn lookup_member(&self, sym_id: SymbolId, name: Ident) -> Option<SymbolId> {
+        let sym = self.get(sym_id)?;
+        let member_scope_id = sym.members?;
+        let scope = self.get_scope(member_scope_id)?;
+        scope.get(name)
+    }
+
+    pub fn set_members(&mut self, sym_id: SymbolId, members: ScopeId) {
+        if let Some(sym) = self.get_mut(sym_id) {
+            sym.members = Some(members);
+        }
     }
 
     #[must_use]
