@@ -296,10 +296,15 @@ val filter := fn (pred, list) {
 };
 
 // ============================================================================
-// EXTERNAL BLOCKS & FUNCTIONS
+// EXTERNAL & UNSAFETY
 // ============================================================================
 
 extern "C" {
   fn malloc(size: Nat64): ^Any;
   fn free(ptr: ^Any): Any;
+};
+
+unsafe {
+  val ptr := malloc(100);
+  free(ptr);
 };
