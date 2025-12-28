@@ -85,6 +85,16 @@ impl SourceFile {
         let end_excl_newline = end - 1;
         self.input.get(start..end_excl_newline)
     }
+
+    #[must_use]
+    pub fn offset_at(&self, line: usize, col: usize) -> Option<u32> {
+        if line == 0 || line > self.line_starts.len() {
+            return None;
+        }
+        let line_start = self.line_starts[line - 1];
+        let col_offset = u32::try_from(col.saturating_sub(1)).ok()?;
+        Some(self.start + line_start + col_offset)
+    }
 }
 
 #[derive(Debug, Default)]

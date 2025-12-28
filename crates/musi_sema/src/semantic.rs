@@ -19,6 +19,7 @@ pub struct SemanticModel {
     pats: Vec<NodeInfo>,
     ty_exprs: Vec<NodeInfo>,
     ident_symbols: HashMap<Span, SymbolId>,
+    symbol_refs: HashMap<SymbolId, Vec<Span>>,
 }
 
 impl SemanticModel {
@@ -29,6 +30,7 @@ impl SemanticModel {
             pats: vec![NodeInfo::default(); pat_count],
             ty_exprs: vec![NodeInfo::default(); ty_expr_count],
             ident_symbols: HashMap::new(),
+            symbol_refs: HashMap::new(),
         }
     }
 
@@ -105,6 +107,25 @@ impl SemanticModel {
 
     pub fn set_ident_symbol(&mut self, ident: Ident, symbol: SymbolId) {
         let _ = self.ident_symbols.insert(ident.span, symbol);
+        self.symbol_refs.entry(symbol).or_default().push(ident.span);
+    }
+
+    #[must_use]
+    pub fn references_of(&self, symbol: SymbolId) -> &[Span] {
+        self.symbol_refs.get(&symbol).map_or(&[], |v| v.as_slice())
+    }
+
+    #[must_use]
+    pub fn symbol_at(&self, span: Span) -> Option<SymbolId> {
+        self.ident_symbols.get(&span).copied()
+    }
+
+    #[must_use]
+    pub fn symbol_at_offset(&self, offset: u32) -> Option<(SymbolId, Span)> {
+        self.ident_symbols
+            .iter()
+            .find(|(span, _)| span.lo <= offset && offset < span.hi)
+            .map(|(span, id)| (*id, *span))
     }
 }
 
