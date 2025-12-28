@@ -7,7 +7,7 @@ use musi_lex::token::TokenKind;
 
 use crate::error::SemaErrorKind;
 use crate::symbol::SymbolKind;
-use crate::ty_repr::{FloatWidth, IntWidth, TyRepr, TyReprKind};
+use crate::ty_repr::{FloatWidth, IntWidth, TyRepr, TyReprKind, TypeParamId};
 
 use super::BindCtx;
 use super::pat::{bind_pat, bind_pat_with_kind};
@@ -326,12 +326,13 @@ fn bind_expr_call(ctx: &mut BindCtx<'_>, callee_id: ExprId, args: &[ExprId]) -> 
     let callee_ty = bind_expr(ctx, callee_id);
     let arg_tys: Vec<_> = args.iter().map(|a| bind_expr(ctx, *a)).collect();
 
-    match &callee_ty.kind {
+    let instantiated_ty = instantiate_poly(ctx, &callee_ty);
+    match &instantiated_ty.kind {
         TyReprKind::Fn(params, ret) => {
             check_call_args(ctx, callee_id, params, &arg_tys);
             (**ret).clone()
         }
-        TyReprKind::Any | TyReprKind::Unknown => callee_ty,
+        TyReprKind::Any | TyReprKind::Unknown => instantiated_ty,
         _ => {
             let span = ctx.arena.exprs.get(callee_id).span;
             ctx.error(
@@ -343,6 +344,46 @@ fn bind_expr_call(ctx: &mut BindCtx<'_>, callee_id: ExprId, args: &[ExprId]) -> 
             );
             TyRepr::error()
         }
+    }
+}
+
+fn instantiate_poly(ctx: &mut BindCtx<'_>, ty: &TyRepr) -> TyRepr {
+    let TyReprKind::Poly { params, body } = &ty.kind else {
+        return ty.clone();
+    };
+
+    let mut substituted = (**body).clone();
+    for param in params {
+        let fresh_var = ctx.unifier.fresh_var();
+        substituted = substitute_type_param(&substituted, *param, &fresh_var);
+    }
+    substituted
+}
+
+fn substitute_type_param(ty: &TyRepr, param_id: TypeParamId, replacement: &TyRepr) -> TyRepr {
+    match &ty.kind {
+        TyReprKind::TypeParam(id) if *id == param_id => replacement.clone(),
+        TyReprKind::Optional(inner) => {
+            TyRepr::optional(substitute_type_param(inner, param_id, replacement))
+        }
+        TyReprKind::Ptr(inner) => TyRepr::ptr(substitute_type_param(inner, param_id, replacement)),
+        TyReprKind::Array(elem, size) => {
+            TyRepr::array(substitute_type_param(elem, param_id, replacement), *size)
+        }
+        TyReprKind::Tuple(elems) => TyRepr::tuple(
+            elems
+                .iter()
+                .map(|e| substitute_type_param(e, param_id, replacement))
+                .collect(),
+        ),
+        TyReprKind::Fn(params, ret) => TyRepr::func(
+            params
+                .iter()
+                .map(|p| substitute_type_param(p, param_id, replacement))
+                .collect(),
+            substitute_type_param(ret, param_id, replacement),
+        ),
+        _ => ty.clone(),
     }
 }
 
@@ -476,6 +517,7 @@ fn bind_expr_index(ctx: &mut BindCtx<'_>, base_id: ExprId, index_id: ExprId, spa
 }
 
 fn bind_expr_fn(ctx: &mut BindCtx<'_>, sig: &FnSig, body_id: ExprId) -> TyRepr {
+    let type_params = register_type_params(ctx, &sig.ty_params);
     let param_tys = collect_param_types(ctx, sig);
     let _ = ctx.symbols.push_scope();
     register_params(ctx, sig, &param_tys);
@@ -491,7 +533,26 @@ fn bind_expr_fn(ctx: &mut BindCtx<'_>, sig: &FnSig, body_id: ExprId) -> TyRepr {
     }
 
     ctx.symbols.pop_scope();
-    TyRepr::func(param_tys, body_ty)
+    let fn_ty = TyRepr::func(param_tys, body_ty);
+
+    if type_params.is_empty() {
+        fn_ty
+    } else {
+        TyRepr::poly(type_params, fn_ty)
+    }
+}
+
+fn register_type_params(ctx: &mut BindCtx<'_>, ty_params: &Idents) -> Vec<TypeParamId> {
+    ty_params
+        .iter()
+        .enumerate()
+        .map(|(i, ident)| {
+            let param_id = TypeParamId::new(u32::try_from(i).expect("too many type params"));
+            let ty = TyRepr::type_param(param_id);
+            _ = ctx.define_and_record(*ident, SymbolKind::Type, ty, ident.span, false);
+            param_id
+        })
+        .collect()
 }
 
 fn collect_param_types(ctx: &mut BindCtx<'_>, sig: &FnSig) -> Vec<TyRepr> {
