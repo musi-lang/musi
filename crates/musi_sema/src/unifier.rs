@@ -90,7 +90,7 @@ impl Unifier {
     }
 
     #[must_use]
-    /// Generalize type by replacing free type variables with type parameters.
+    /// Replace free type variables with type parameters.
     ///
     /// # Panics
     ///
