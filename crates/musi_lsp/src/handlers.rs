@@ -9,6 +9,7 @@ use lsp_types::{
 use musi_ast::{AstArena, Prog};
 use musi_basic::{source::SourceFile, span::Span};
 use musi_sema::{Builtins, SemanticModel, SymbolTable};
+use serde::{Serialize, de::DeserializeOwned};
 
 use crate::state::GlobalState;
 use crate::tokens;
@@ -26,8 +27,8 @@ pub fn handle<P, R>(
     handler: fn(&GlobalState, &P) -> Option<R>,
 ) -> Option<Response>
 where
-    P: serde::de::DeserializeOwned,
-    R: serde::Serialize,
+    P: DeserializeOwned,
+    R: Serialize,
 {
     let params: P = serde_json::from_value(req.params.clone()).ok()?;
     let result = handler(state, &params);
