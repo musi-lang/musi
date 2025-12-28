@@ -18,12 +18,16 @@ pub fn resolve_field_ty(ctx: &mut BindCtx<'_>, ty: Option<TyExprId>) -> TyRepr {
 }
 
 pub fn define_named_ty(ctx: &mut BindCtx<'_>, name: Option<Ident>) -> TyRepr {
-    name.map_or_else(TyRepr::unit, |ident| {
-        let sym_id = ctx
-            .define_and_record(ident, SymbolKind::Type, TyRepr::unit(), ident.span, false)
-            .expect("duplicate type definition");
-        TyRepr::named(sym_id, vec![])
-    })
+    let Some(ident) = name else {
+        return TyRepr::unit();
+    };
+
+    match ctx.define_and_record(ident, SymbolKind::Type, TyRepr::unit(), ident.span, false) {
+        Ok(sym_id) | Err(sym_id) => {
+            ctx.model.set_ident_symbol(ident, sym_id);
+            TyRepr::named(sym_id, vec![])
+        }
+    }
 }
 
 fn resolve_ty_expr_kind(ctx: &mut BindCtx<'_>, ty_expr: &TyExpr) -> TyRepr {
