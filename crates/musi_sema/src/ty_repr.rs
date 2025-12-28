@@ -20,6 +20,21 @@ impl TyVarId {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TypeParamId(pub u32);
+
+impl TypeParamId {
+    #[must_use]
+    pub const fn new(id: u32) -> Self {
+        Self(id)
+    }
+
+    #[must_use]
+    pub const fn as_u32(self) -> u32 {
+        self.0
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum IntWidth {
     I8,
     I16,
@@ -194,6 +209,19 @@ impl TyRepr {
     pub const fn is_var(&self) -> bool {
         matches!(self.kind, TyReprKind::Var(_))
     }
+
+    #[must_use]
+    pub fn poly(params: Vec<TypeParamId>, body: Self) -> Self {
+        Self::new(TyReprKind::Poly {
+            params,
+            body: Box::new(body),
+        })
+    }
+
+    #[must_use]
+    pub const fn type_param(id: TypeParamId) -> Self {
+        Self::new(TyReprKind::TypeParam(id))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -215,6 +243,11 @@ pub enum TyReprKind {
     Fn(TyReprs, TyReprPtr),
     Named(SymbolId, TyReprs),
     Var(TyVarId),
+    Poly {
+        params: Vec<TypeParamId>,
+        body: TyReprPtr,
+    },
+    TypeParam(TypeParamId),
     Error,
 }
 
@@ -307,6 +340,17 @@ impl fmt::Display for TyRepr {
                 Ok(())
             }
             TyReprKind::Var(id) => write!(f, "?T{}", id.0),
+            TyReprKind::Poly { params, body } => {
+                write!(f, "∀[")?;
+                for (i, p) in params.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "T{}", p.0)?;
+                }
+                write!(f, "]. {body}")
+            }
+            TyReprKind::TypeParam(id) => write!(f, "T{}", id.0),
             TyReprKind::Error => write!(f, "<error>"),
         }
     }
