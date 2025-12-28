@@ -224,6 +224,14 @@ impl TyRepr {
     pub const fn type_param(id: TyParamId) -> Self {
         Self::new(TyReprKind::TypeParam(id))
     }
+
+    #[must_use]
+    pub fn as_fn(&self) -> Option<(&[Self], &Self)> {
+        match &self.kind {
+            TyReprKind::Fn(params, ret) => Some((params.as_slice(), ret.as_ref())),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

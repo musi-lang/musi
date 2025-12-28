@@ -58,6 +58,13 @@ impl<'a> BindCtx<'a> {
     pub fn mark_used(&mut self, id: SymbolId) {
         self.symbols.mark_used(id);
     }
+
+    pub fn with_scope<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
+        let _ = self.symbols.push_scope();
+        let result = f(self);
+        self.symbols.pop_scope();
+        result
+    }
 }
 
 impl BindCtx<'_> {

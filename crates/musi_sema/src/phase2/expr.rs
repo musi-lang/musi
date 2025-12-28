@@ -273,10 +273,10 @@ fn bind_cond(ctx: &mut BindCtx<'_>, cond_id: CondId) {
 }
 
 fn bind_expr_while(ctx: &mut BindCtx<'_>, cond_id: CondId, body_id: ExprId) -> TyRepr {
-    let _ = ctx.symbols.push_scope();
-    bind_cond(ctx, cond_id);
-    bind_loop_body(ctx, body_id);
-    ctx.symbols.pop_scope();
+    ctx.with_scope(|ctx| {
+        bind_cond(ctx, cond_id);
+        bind_loop_body(ctx, body_id);
+    });
     TyRepr::unit()
 }
 
@@ -286,11 +286,10 @@ fn bind_expr_for(ctx: &mut BindCtx<'_>, pat_id: PatId, iter_id: ExprId, body_id:
         TyReprKind::Array(elem, ..) => (**elem).clone(),
         _ => ctx.unifier.fresh_var(),
     };
-
-    let _ = ctx.symbols.push_scope();
-    bind_pat(ctx, pat_id, &elem_ty, false);
-    bind_loop_body(ctx, body_id);
-    ctx.symbols.pop_scope();
+    ctx.with_scope(|ctx| {
+        bind_pat(ctx, pat_id, &elem_ty, false);
+        bind_loop_body(ctx, body_id);
+    });
     TyRepr::unit()
 }
 
@@ -304,18 +303,17 @@ fn bind_loop_body(ctx: &mut BindCtx<'_>, body_id: ExprId) {
 fn bind_expr_match(ctx: &mut BindCtx<'_>, scrutinee_id: ExprId, cases: &[MatchCase]) -> TyRepr {
     let scrutinee_ty = bind_expr(ctx, scrutinee_id);
     let mut result_ty = ctx.unifier.fresh_var();
-
     for case in cases {
-        let _ = ctx.symbols.push_scope();
-        bind_pat(ctx, case.pat, &scrutinee_ty, false);
-        if let Some(guard_id) = case.guard {
-            let _ = bind_expr(ctx, guard_id);
-        }
-        let body_ty = bind_expr(ctx, case.body);
+        let body_ty = ctx.with_scope(|ctx| {
+            bind_pat(ctx, case.pat, &scrutinee_ty, false);
+            if let Some(guard_id) = case.guard {
+                let _ = bind_expr(ctx, guard_id);
+            }
+            bind_expr(ctx, case.body)
+        });
         let span = ctx.arena.exprs.get(case.body).span;
         ctx.unify_or_err(&result_ty, &body_ty, span);
         result_ty = body_ty;
-        ctx.symbols.pop_scope();
     }
     result_ty
 }
@@ -349,12 +347,7 @@ fn bind_expr_cycle(ctx: &mut BindCtx<'_>, span: Span) -> TyRepr {
 
 fn bind_expr_call(ctx: &mut BindCtx<'_>, callee_id: ExprId, args: &[ExprId]) -> TyRepr {
     let (callee_ty, instantiated_ty) = bind_callee(ctx, callee_id);
-
-    let param_tys = match &instantiated_ty.kind {
-        TyReprKind::Fn(params, _) => Some(params.as_slice()),
-        _ => None,
-    };
-
+    let param_tys = instantiated_ty.as_fn().map(|(params, _)| params);
     let arg_tys = coerce_call_args(ctx, args, param_tys);
 
     match &instantiated_ty.kind {
