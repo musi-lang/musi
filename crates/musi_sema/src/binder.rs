@@ -1,3 +1,5 @@
+use std::mem;
+
 use musi_ast::{AstArena, ExprId, Prog, StmtKind};
 use musi_basic::diagnostic::DiagnosticBag;
 use musi_basic::interner::Interner;
@@ -58,6 +60,7 @@ fn bind_prog(
     unifier: &mut Unifier,
     diags: &mut DiagnosticBag,
 ) {
+    let mut deferred = vec![];
     let mut ctx = BindCtx {
         arena,
         interner,
@@ -65,52 +68,61 @@ fn bind_prog(
         symbols,
         unifier,
         diags,
+        deferred: &mut deferred,
         in_loop: false,
         in_fn: false,
     };
 
-    let tasks: Vec<_> = prog
-        .stmts
-        .iter()
-        .map(|stmt_id| {
-            let stmt = arena.stmts.get(*stmt_id);
-            let StmtKind::Expr(expr_id) = &stmt.kind;
-            *expr_id
-        })
-        .collect();
+    for stmt_id in &prog.stmts {
+        let stmt = arena.stmts.get(*stmt_id);
+        let StmtKind::Expr(expr_id) = &stmt.kind;
+        let _ = bind_expr(&mut ctx, *expr_id);
+    }
 
-    let ctx_arena = ctx.arena;
-    let ctx_interner = ctx.interner;
-    let in_loop = ctx.in_loop;
-    let in_fn = ctx.in_fn;
+    while !ctx.deferred.is_empty() {
+        let tasks = mem::take(ctx.deferred);
 
-    let results: Vec<_> = tasks
-        .into_par_iter()
-        .map(|expr_id| {
-            let mut model = ctx.model.fork();
-            let mut symbols = ctx.symbols.fork();
-            let mut unifier = ctx.unifier.fork();
-            let mut diags = DiagnosticBag::default();
+        let ctx_arena = ctx.arena;
+        let ctx_interner = ctx.interner;
+        let in_loop = ctx.in_loop;
+        let in_fn = ctx.in_fn;
 
-            let mut forked = BindCtx {
-                arena: ctx_arena,
-                interner: ctx_interner,
-                model: &mut model,
-                symbols: &mut symbols,
-                unifier: &mut unifier,
-                diags: &mut diags,
-                in_loop,
-                in_fn,
-            };
+        let results: Vec<_> = tasks
+            .into_par_iter()
+            .map(|task| {
+                let mut model = ctx.model.fork();
+                let mut symbols = ctx.symbols.fork();
+                let mut unifier = ctx.unifier.fork();
+                let mut diags = DiagnosticBag::default();
+                let mut next_deferred = vec![];
 
-            let _ = bind_expr(&mut forked, expr_id);
+                let mut forked = BindCtx {
+                    arena: ctx_arena,
+                    interner: ctx_interner,
+                    model: &mut model,
+                    symbols: &mut symbols,
+                    unifier: &mut unifier,
+                    diags: &mut diags,
+                    deferred: &mut next_deferred,
+                    in_loop,
+                    in_fn,
+                };
 
-            (model, unifier, symbols, diags)
-        })
-        .collect();
+                forked.reenter_scope(task.scope);
+                let body_ty = bind_expr(&mut forked, task.body);
+                forked.unify_or_err(
+                    &task.expected_ret,
+                    &body_ty,
+                    ctx_arena.exprs.get(task.body).span,
+                );
 
-    for (m, u, s, d) in results {
-        ctx.merge_forked(m, u, s, d);
+                (model, unifier, symbols, diags, next_deferred)
+            })
+            .collect();
+
+        for (m, u, s, d, nd) in results {
+            ctx.merge_forked(m, u, s, d, nd);
+        }
     }
 }
 

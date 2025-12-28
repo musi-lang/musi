@@ -231,6 +231,10 @@ impl SymbolTable {
         id
     }
 
+    pub const fn reenter(&mut self, id: ScopeId) {
+        self.scope_id = id;
+    }
+
     /// Pops current scope.
     ///
     /// # Panics

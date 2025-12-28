@@ -1,17 +1,20 @@
-use musi_ast::AstArena;
+use musi_ast::{AstArena, ExprId, Ident};
 use musi_basic::diagnostic::{Diagnostic, DiagnosticBag};
 use musi_basic::error::IntoMusiError;
 use musi_basic::interner::Interner;
 use musi_basic::span::Span;
 
-use crate::SymbolId;
 use crate::error::SemaErrorKind;
 use crate::semantic::SemanticModel;
-use crate::symbol::SymbolKind;
-use crate::symbol::SymbolTable;
+use crate::symbol::{ScopeId, SymbolId, SymbolKind, SymbolTable};
 use crate::ty_repr::TyRepr;
 use crate::unifier::Unifier;
-use musi_ast::Ident;
+
+pub struct DeferredTask {
+    pub body: ExprId,
+    pub scope: ScopeId,
+    pub expected_ret: TyRepr,
+}
 
 pub struct BindCtx<'a> {
     pub arena: &'a AstArena,
@@ -20,6 +23,7 @@ pub struct BindCtx<'a> {
     pub symbols: &'a mut SymbolTable,
     pub unifier: &'a mut Unifier,
     pub diags: &'a mut DiagnosticBag,
+    pub deferred: &'a mut Vec<DeferredTask>,
     pub in_loop: bool,
     pub in_fn: bool,
 }
@@ -40,6 +44,7 @@ impl BindCtx<'_> {
         unifier: &mut Unifier,
         symbols: &mut SymbolTable,
         diags: &mut DiagnosticBag,
+        deferred: &mut Vec<DeferredTask>,
         f: impl FnOnce(&mut BindCtx) -> T,
     ) -> T {
         let mut ctx = BindCtx {
@@ -49,6 +54,7 @@ impl BindCtx<'_> {
             symbols,
             unifier,
             diags,
+            deferred,
             in_loop: self.in_loop,
             in_fn: self.in_fn,
         };
@@ -61,11 +67,17 @@ impl BindCtx<'_> {
         unifier: Unifier,
         symbols: SymbolTable,
         diags: DiagnosticBag,
+        deferred: Vec<DeferredTask>,
     ) {
         self.model.merge(model);
         self.unifier.merge(unifier);
         self.symbols.merge(symbols);
         self.diags.merge(diags);
+        self.deferred.extend(deferred);
+    }
+
+    pub const fn reenter_scope(&mut self, id: ScopeId) {
+        self.symbols.reenter(id);
     }
 }
 

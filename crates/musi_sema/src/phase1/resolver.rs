@@ -19,6 +19,7 @@ pub fn resolve(
     unifier: &mut Unifier,
     diags: &mut DiagnosticBag,
 ) {
+    let mut deferred = vec![];
     let mut ctx = BindCtx {
         arena,
         interner,
@@ -26,6 +27,7 @@ pub fn resolve(
         symbols,
         unifier,
         diags,
+        deferred: &mut deferred,
         in_loop: false,
         in_fn: false,
     };

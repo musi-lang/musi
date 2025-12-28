@@ -6,6 +6,7 @@ use musi_basic::span::Span;
 use musi_lex::token::TokenKind;
 
 use crate::error::SemaErrorKind;
+use crate::phase2::ctx::DeferredTask;
 use crate::symbol::SymbolKind;
 use crate::ty_repr::{FloatWidth, IntWidth, TyParamId, TyRepr, TyReprKind};
 
@@ -519,22 +520,21 @@ fn bind_expr_index(ctx: &mut BindCtx<'_>, base_id: ExprId, index_id: ExprId, spa
 fn bind_expr_fn(ctx: &mut BindCtx<'_>, sig: &FnSig, body_id: ExprId) -> TyRepr {
     let type_params = register_ty_params(ctx, &sig.ty_params);
     let param_tys = collect_param_types(ctx, sig);
-    let _ = ctx.symbols.push_scope();
+    let ret_ty = sig
+        .ret
+        .map_or_else(TyRepr::unit, |ty_id| resolve_ty_expr(ctx, ty_id));
+
+    let scope_id = ctx.symbols.push_scope();
     register_params(ctx, sig, &param_tys);
-
-    let prev = ctx.in_fn;
-    ctx.in_fn = true;
-    let body_ty = bind_expr(ctx, body_id);
-    ctx.in_fn = prev;
-
-    if let Some(ret_ty_expr) = sig.ret {
-        let ret_ty = resolve_ty_expr(ctx, ret_ty_expr);
-        ctx.unify_or_err(&ret_ty, &body_ty, ctx.arena.exprs.get(body_id).span);
-    }
-
     ctx.symbols.pop_scope();
-    let fn_ty = TyRepr::func(param_tys, body_ty);
 
+    ctx.deferred.push(DeferredTask {
+        body: body_id,
+        scope: scope_id,
+        expected_ret: ret_ty.clone(),
+    });
+
+    let fn_ty = TyRepr::func(param_tys, ret_ty);
     if type_params.is_empty() {
         fn_ty
     } else {
