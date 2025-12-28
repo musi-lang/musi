@@ -328,7 +328,7 @@ fn bind_expr_call(ctx: &mut BindCtx<'_>, callee_id: ExprId, args: &[ExprId]) -> 
 
     match &callee_ty.kind {
         TyReprKind::Fn(params, ret) => {
-            validate_call_args(ctx, callee_id, params, &arg_tys);
+            check_call_args(ctx, callee_id, params, &arg_tys);
             (**ret).clone()
         }
         TyReprKind::Any | TyReprKind::Unknown => callee_ty,
@@ -346,7 +346,7 @@ fn bind_expr_call(ctx: &mut BindCtx<'_>, callee_id: ExprId, args: &[ExprId]) -> 
     }
 }
 
-fn validate_call_args(
+fn check_call_args(
     ctx: &mut BindCtx<'_>,
     callee_id: ExprId,
     params: &[TyRepr],
