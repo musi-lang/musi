@@ -6,7 +6,7 @@ use musi_basic::error::IntoMusiError;
 use musi_basic::interner::Interner;
 
 use crate::builtins::Builtins;
-use crate::phase3::{BindCtx, bind_expr};
+use crate::phase2::{BindCtx, bind_expr};
 use crate::semantic::SemanticModel;
 use crate::symbol::SymbolTable;
 use crate::unifier::Unifier;

@@ -1,5 +1,5 @@
 use crate::TyParamId;
-use crate::phase3::{BindCtx, resolve_ty_expr};
+use crate::phase2::{BindCtx, resolve_ty_expr};
 
 use crate::symbol::SymbolKind;
 use crate::ty_repr::TyRepr;

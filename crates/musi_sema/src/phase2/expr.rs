@@ -6,7 +6,7 @@ use musi_basic::span::Span;
 use musi_lex::token::TokenKind;
 
 use crate::error::SemaErrorKind;
-use crate::phase3::ctx::DeferredTask;
+use crate::phase2::ctx::DeferredTask;
 use crate::symbol::SymbolKind;
 use crate::ty_repr::{FloatWidth, IntWidth, TyParamId, TyRepr, TyReprKind};
 
