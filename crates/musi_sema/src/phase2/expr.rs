@@ -547,7 +547,7 @@ fn register_type_params(ctx: &mut BindCtx<'_>, ty_params: &Idents) -> Vec<TypePa
         .iter()
         .enumerate()
         .map(|(i, ident)| {
-            let param_id = TypeParamId::new(u32::try_from(i).expect("too many type params"));
+            let param_id = TypeParamId::new(u32::try_from(i).expect("too many type parameters"));
             let ty = TyRepr::type_param(param_id);
             _ = ctx.define_and_record(*ident, SymbolKind::Type, ty, ident.span, false);
             param_id
