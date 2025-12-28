@@ -50,8 +50,8 @@ val pow := 2 ** 8;
 val rem := 17 % 5;
 
 val cmp := (10 > 5) and (3 <= 7);
-val log_op := bool_true or bool_false;
-val neg := not bool_false;
+val log_op := (bool_true as Bool) or (bool_false as Bool);
+val neg := not (bool_false as Bool);
 
 val bitwise := (0xFF & 0x0F) | (0xF0 ^ 0x55);
 val bit_not := ~0xFF;
