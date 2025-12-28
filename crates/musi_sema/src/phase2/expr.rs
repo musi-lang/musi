@@ -132,7 +132,7 @@ fn bind_expr_tuple(ctx: &mut BindCtx<'_>, elems: &[ExprId]) -> TyRepr {
 
 fn bind_expr_array(ctx: &mut BindCtx<'_>, elems: &[ExprId]) -> TyRepr {
     if elems.is_empty() {
-        return TyRepr::array(ctx.unifier.fresh_var(), Some(0));
+        return TyRepr::array(ctx.unifier.fresh_var(), None);
     }
     let first_ty = bind_expr(ctx, elems[0]);
     for elem_id in &elems[1..] {
@@ -377,6 +377,13 @@ fn bind_expr_call(ctx: &mut BindCtx<'_>, callee_id: ExprId, args: &[ExprId]) -> 
             check_call_args(ctx, callee_id, params, &arg_tys);
             (**ret).clone()
         }
+        TyReprKind::Var(_) => {
+            let ret_ty = ctx.unifier.fresh_var();
+            let fn_ty = TyRepr::func(arg_tys.clone(), ret_ty.clone());
+            let span = ctx.arena.exprs.get(callee_id).span;
+            ctx.unify_or_err(&instantiated_ty, &fn_ty, span);
+            ret_ty
+        }
         TyReprKind::Any | TyReprKind::Unknown => instantiated_ty,
         _ => {
             let span = ctx.arena.exprs.get(callee_id).span;
@@ -499,6 +506,16 @@ fn bind_expr_unary(ctx: &mut BindCtx<'_>, op: TokenKind, operand_id: ExprId, spa
         }
         TokenKind::Minus => operand_ty,
         TokenKind::At => TyRepr::ptr(operand_ty),
+        TokenKind::DotCaret => match &operand_ty.kind {
+            TyReprKind::Ptr(inner) => (**inner).clone(),
+            TyReprKind::Any | TyReprKind::Unknown => TyRepr::any(),
+            _ => {
+                let inner = ctx.unifier.fresh_var();
+                let ptr_ty = TyRepr::ptr(inner.clone());
+                ctx.unify_or_err(&operand_ty, &ptr_ty, span);
+                inner
+            }
+        },
         _ => TyRepr::any(),
     }
 }
@@ -553,6 +570,12 @@ fn bind_expr_index(ctx: &mut BindCtx<'_>, base_id: ExprId, index_id: ExprId, spa
     let _ = bind_expr(ctx, index_id);
     match &base_ty.kind {
         TyReprKind::Array(elem, ..) => (**elem).clone(),
+        TyReprKind::Var(_) => {
+            let elem_ty = ctx.unifier.fresh_var();
+            let array_ty = TyRepr::array(elem_ty.clone(), None);
+            ctx.unify_or_err(&base_ty, &array_ty, span);
+            elem_ty
+        }
         TyReprKind::Any | TyReprKind::Unknown => base_ty,
         _ => {
             ctx.error(SemaErrorKind::NotIndexable(format!("{base_ty}")), span);
@@ -659,9 +682,12 @@ fn bind_expr_choice_def(
     ctx: &mut BindCtx<'_>,
     name: Option<Ident>,
     cases: &[ChoiceCase],
-    _ty_params: &Vec<Ident>,
+    ty_params: &Vec<Ident>,
 ) -> TyRepr {
     let ty = define_named_ty(ctx, name);
+    let _ = ctx.symbols.push_scope();
+    let _ = register_ty_params(ctx, ty_params);
+
     for case in cases {
         let variant_ty = if case.fields.is_empty() {
             ty.clone()
@@ -686,6 +712,8 @@ fn bind_expr_choice_def(
         );
         bind_choice_case_fields(ctx, &case.fields);
     }
+
+    ctx.symbols.pop_scope();
     ty
 }
 
