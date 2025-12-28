@@ -119,12 +119,12 @@ val Shape := choice Shape {
 
 val area := fn (s: Shape) {
   match s {
-    case Circle(r) => 3.14159 * r * r,
-    case Rectangle(w, h) => w * h,
-    case Triangle(a, b, c) => {
-      val s := (a + b + c) / 2.0;
-      sqrt(s * (s - a) * (s - b) * (s - c))
-    }
+  case Circle(r) => 3.14159 * r * r,
+  case Rectangle(w, h) => w * h,
+  case Triangle(a, b, c) => {
+    val s := (a + b + c) / 2.0;
+    sqrt(s * (s - a) * (s - b) * (s - c))
+  }
   }
 };
 
@@ -184,15 +184,15 @@ val maybe_value := Some(42);
 
 val unwrap := fn (opt) {
   match opt {
-    case Some(v) => v,
-    case None => 0
+  case Some(v) => v,
+  case None => 0
   }
 };
 
 val handle_result := fn (res) {
   match res {
-    case Ok(v) => writeln($"Success: {v}"),
-    case Err(e) => writeln($"Failure: {e}")
+  case Ok(v) => writeln($"Success: {v}"),
+  case Err(e) => writeln($"Failure: {e}")
   }
 };
 
@@ -231,9 +231,9 @@ val block_result := {
 
 val nested_match := fn (opt) {
   match opt {
-    case Some(Ok(v)) => v,
-    case Some(Err(e)) => -1,
-    case None => 0
+  case Some(Ok(v)) => v,
+  case Some(Err(e)) => -1,
+  case None => 0
   }
 };
 
