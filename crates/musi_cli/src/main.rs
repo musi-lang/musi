@@ -1,6 +1,7 @@
 mod cli;
 mod commands;
 mod dispatcher;
+pub mod options;
 mod types;
 
 use clap::Parser;

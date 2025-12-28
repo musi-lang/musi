@@ -175,11 +175,6 @@ impl TyRepr {
     }
 
     #[must_use]
-    pub fn range(elem: Self, inclusive: bool) -> Self {
-        Self::new(TyReprKind::range(elem, inclusive))
-    }
-
-    #[must_use]
     pub fn array(elem: Self, size: Option<usize>) -> Self {
         Self::new(TyReprKind::array(elem, size))
     }
@@ -247,7 +242,6 @@ pub enum TyReprKind {
     Array(TyReprPtr, Option<usize>),
     Ptr(TyReprPtr),
     Optional(TyReprPtr),
-    Range(TyReprPtr, bool),
     Fn(Vec<TyRepr>, TyReprPtr),
     Named(SymbolId, Vec<TyRepr>),
     Var(TyVarId),
@@ -296,11 +290,6 @@ impl TyReprKind {
     }
 
     #[must_use]
-    pub fn range(elem: TyRepr, inclusive: bool) -> Self {
-        Self::Range(Box::new(elem), inclusive)
-    }
-
-    #[must_use]
     pub fn func(params: Vec<TyRepr>, ret: TyRepr) -> Self {
         Self::Fn(params, Box::new(ret))
     }
@@ -338,13 +327,6 @@ impl fmt::Display for TyRepr {
             }
             TyReprKind::Ptr(inner) => write!(f, "^{inner}"),
             TyReprKind::Optional(inner) => write!(f, "?{inner}"),
-            TyReprKind::Range(elem, inclusive) => {
-                if *inclusive {
-                    write!(f, "Range[{elem}]")
-                } else {
-                    write!(f, "RangeExcl[{elem}]")
-                }
-            }
             TyReprKind::Fn(params, ret) => {
                 write!(f, "(")?;
                 write_comma_separated(f, params)?;

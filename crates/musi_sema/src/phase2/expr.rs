@@ -799,7 +799,7 @@ fn bind_expr_range(
     ctx: &mut BindCtx<'_>,
     start: ExprId,
     end: Option<ExprId>,
-    inclusive: bool,
+    _inclusive: bool,
 ) -> TyRepr {
     let start_ty = bind_expr(ctx, start);
     if let Some(end_id) = end {
@@ -807,7 +807,7 @@ fn bind_expr_range(
         let span = ctx.arena.exprs.get(end_id).span;
         ctx.unify_or_err(&start_ty, &end_ty, span);
     }
-    TyRepr::range(start_ty, inclusive)
+    TyRepr::array(start_ty, None)
 }
 
 fn register_ty_params(ctx: &mut BindCtx<'_>, ty_params: &[Ident]) -> Vec<TyParamId> {

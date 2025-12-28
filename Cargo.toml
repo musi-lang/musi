@@ -16,6 +16,8 @@ clap = { version = "4.5.53", features = ["derive"] }
 thiserror = "2.0.17"
 tracing = "0.1.44"
 tracing-subscriber = "0.3.22"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.148"
 
 [workspace.lints.rust]
 keyword_idents_2024 = "forbid"
