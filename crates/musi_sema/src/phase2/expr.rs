@@ -6,15 +6,13 @@ use musi_basic::span::Span;
 use musi_lex::token::TokenKind;
 
 use crate::error::SemaErrorKind;
-use crate::phase2::ctx::DeferredTask;
+use crate::phase1::{BindCtx, DeferredTask, define_named_ty, resolve_field_ty, resolve_ty_expr};
 use crate::symbol::SymbolKind;
 use crate::ty_repr::{FloatWidth, IntWidth, TyParamId, TyRepr, TyReprKind};
 
-use super::BindCtx;
 use super::ops::{ensure_bool, fresh_var_or, try_coerce_lit};
 use super::pat::{bind_pat, bind_pat_with_kind};
 use super::stmt::bind_stmt;
-use super::ty::{define_named_ty, resolve_field_ty, resolve_ty_expr};
 
 pub fn bind_expr(ctx: &mut BindCtx<'_>, expr_id: ExprId) -> TyRepr {
     let expr = ctx.arena.exprs.get(expr_id);
@@ -541,12 +539,15 @@ fn bind_expr_binary(
     rhs_id: ExprId,
 ) -> TyRepr {
     let lhs_ty = bind_expr(ctx, lhs_id);
-
     if op == TokenKind::BarGt {
         return bind_expr_pipe(ctx, &lhs_ty, rhs_id);
     }
-
     let rhs_ty = bind_expr(ctx, rhs_id);
+
+    if lhs_ty.is_any() || rhs_ty.is_any() {
+        return TyRepr::any();
+    }
+
     let rhs_span = ctx.arena.exprs.get(rhs_id).span;
 
     match op {
@@ -579,6 +580,9 @@ fn bind_expr_binary(
 
 fn bind_expr_unary(ctx: &mut BindCtx<'_>, op: TokenKind, operand_id: ExprId, span: Span) -> TyRepr {
     let operand_ty = bind_expr(ctx, operand_id);
+    if operand_ty.is_any() {
+        return TyRepr::any();
+    }
     match op {
         TokenKind::KwNot => {
             ensure_bool(ctx, &operand_ty, span);

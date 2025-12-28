@@ -1,10 +1,10 @@
 use musi_ast::{LitKind, TyExprId};
 use musi_basic::span::Span;
 
-use crate::ty_repr::{TyRepr, TyReprKind};
-
-use super::BindCtx;
-use super::ty::resolve_ty_expr;
+use crate::{
+    phase2::{BindCtx, resolve_ty_expr},
+    ty_repr::{TyRepr, TyReprKind},
+};
 
 pub fn try_coerce_lit(lit: &LitKind, target: &TyRepr) -> Option<TyRepr> {
     match (lit, &target.kind) {
