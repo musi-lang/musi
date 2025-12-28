@@ -268,6 +268,7 @@ name = "musi_lex"
 version = "0.1.0"
 dependencies = [
  "musi_basic",
+ "musi_macros",
  "thiserror",
 ]
 
@@ -306,6 +307,7 @@ dependencies = [
  "musi_ast",
  "musi_basic",
  "musi_lex",
+ "musi_macros",
  "thiserror",
 ]
 
@@ -316,6 +318,7 @@ dependencies = [
  "musi_ast",
  "musi_basic",
  "musi_lex",
+ "musi_macros",
  "musi_parse",
  "thiserror",
 ]

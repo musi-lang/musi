@@ -14,6 +14,7 @@ musi_basic = { path = "../musi_basic" }
 musi_lex = { path = "../musi_lex" }
 musi_ast = { path = "../musi_ast" }
 thiserror = { workspace = true }
+musi_macros = { path = "../musi_macros" }
 
 [lints]
 workspace = true

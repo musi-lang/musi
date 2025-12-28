@@ -14,6 +14,7 @@ musi_basic = { path = "../musi_basic" }
 musi_ast = { path = "../musi_ast" }
 musi_lex = { path = "../musi_lex" }
 thiserror = { workspace = true }
+musi_macros = { path = "../musi_macros" }
 
 [dev-dependencies]
 musi_parse = { path = "../musi_parse" }
