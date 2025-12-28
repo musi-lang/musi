@@ -6,6 +6,7 @@ mod server;
 mod state;
 mod symbols;
 mod tokens;
+mod type_fmt;
 mod types;
 
 use anyhow::Result;

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use lsp_server::{Request, Response};
@@ -8,11 +9,11 @@ use lsp_types::{
 };
 use musi_ast::{AstArena, Prog};
 use musi_basic::{source::SourceFile, span::Span};
-use musi_sema::{Builtins, SemanticModel, SymbolTable};
+use musi_sema::{Builtins, SemanticModel, SymbolKind, SymbolTable};
 use serde::{Serialize, de::DeserializeOwned};
 
 use crate::state::GlobalState;
-use crate::tokens;
+use crate::{tokens, type_fmt};
 
 pub struct AnalyzedDocument {
     pub prog: Prog,
@@ -155,6 +156,67 @@ pub fn find_references(
         })
         .collect();
     Some(locations)
+}
+
+pub fn hover(state: &GlobalState, params: &lsp_types::HoverParams) -> Option<lsp_types::Hover> {
+    let uri = &params.text_document_position_params.text_document.uri;
+    let (source, parsed) = get_document(state, uri)?;
+    let offset = position_to_offset(source, params.text_document_position_params.position)?;
+    let (sym_id, span) = parsed.sema_model.symbol_at_offset(offset)?;
+    let sym = parsed.symbols.get(sym_id)?;
+
+    let interner_guard = state.interner.lock().ok()?;
+    let type_str = type_fmt::format_type(&sym.ty, &parsed.symbols, &interner_guard);
+    let name_str = interner_guard.resolve(sym.name.id).to_owned();
+    let kind = sym.kind;
+    drop(interner_guard);
+
+    let kind_str = match kind {
+        SymbolKind::Fn => "fn",
+        SymbolKind::Local => "val",
+        SymbolKind::Param => "param",
+        SymbolKind::Type => "type",
+        SymbolKind::Field => "field",
+        SymbolKind::Variant => "variant",
+        SymbolKind::Builtin => "builtin",
+    };
+
+    let contents = format!("```musi\n{kind_str} {name_str}: {type_str}\n```");
+    Some(lsp_types::Hover {
+        contents: lsp_types::HoverContents::Markup(lsp_types::MarkupContent {
+            kind: lsp_types::MarkupKind::Markdown,
+            value: contents,
+        }),
+        range: Some(span_to_range(source, span)),
+    })
+}
+
+#[allow(clippy::mutable_key_type)]
+pub fn rename(
+    state: &GlobalState,
+    params: &lsp_types::RenameParams,
+) -> Option<lsp_types::WorkspaceEdit> {
+    let uri = &params.text_document_position.text_document.uri;
+    let (source, parsed) = get_document(state, uri)?;
+    let offset = position_to_offset(source, params.text_document_position.position)?;
+    let (sym_id, _) = parsed.sema_model.symbol_at_offset(offset)?;
+
+    let refs = parsed.sema_model.references_of(sym_id);
+    let edits: Vec<_> = refs
+        .iter()
+        .map(|span| lsp_types::TextEdit {
+            range: span_to_range(source, *span),
+            new_text: params.new_name.clone(),
+        })
+        .collect();
+
+    let mut changes = HashMap::new();
+    let _ = changes.insert(uri.clone(), edits);
+    Some(lsp_types::WorkspaceEdit {
+        changes: Some(changes),
+        document_changes: None,
+        change_annotations: None,
+    })
 }
 
 fn get_document<'a>(

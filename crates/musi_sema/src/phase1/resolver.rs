@@ -108,11 +108,19 @@ fn resolve_fn_sig(ctx: &mut BindCtx<'_>, sig: &FnSig) -> TyRepr {
 
     let mut param_tys = vec![];
     for param in &sig.params {
-        if let Some(ty_id) = param.ty {
-            param_tys.push(resolve_ty_expr(ctx, ty_id));
+        let param_ty = if let Some(ty_id) = param.ty {
+            resolve_ty_expr(ctx, ty_id)
         } else {
-            param_tys.push(ctx.unifier.fresh_var());
-        }
+            ctx.unifier.fresh_var()
+        };
+        param_tys.push(param_ty.clone());
+        _ = ctx.define_and_record(
+            param.name,
+            SymbolKind::Param,
+            param_ty,
+            param.name.span,
+            param.mutable,
+        );
     }
 
     let ret_ty = sig

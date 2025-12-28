@@ -7,7 +7,7 @@ use lsp_types::{
     },
     request::{
         DocumentHighlightRequest, DocumentSymbolRequest, FoldingRangeRequest, GotoDefinition,
-        References, Request as _, SemanticTokensFullRequest, Shutdown,
+        HoverRequest, References, Rename, Request as _, SemanticTokensFullRequest, Shutdown,
     },
 };
 
@@ -27,6 +27,8 @@ pub fn dispatch_request(state: &GlobalState, req: &Request) -> Option<Response> 
         }
         GotoDefinition::METHOD => handlers::handle(req, state, handlers::goto_definition),
         References::METHOD => handlers::handle(req, state, handlers::find_references),
+        HoverRequest::METHOD => handlers::handle(req, state, handlers::hover),
+        Rename::METHOD => handlers::handle(req, state, handlers::rename),
         _ => {
             tracing::warn!("unhandled request: {}", req.method);
             None
