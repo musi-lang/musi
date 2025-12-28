@@ -2,7 +2,7 @@ use musi_ast::Ident;
 use musi_basic::span::Span;
 
 use crate::ty_repr::TyRepr;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -128,6 +128,7 @@ pub struct SymbolTable {
     local_symbols: HashMap<SymbolId, Symbol>,
     local_scopes: HashMap<ScopeId, Scope>,
     modified_scopes: HashMap<ScopeId, Scope>,
+    used_symbols: HashSet<SymbolId>,
 }
 
 impl Default for SymbolTable {
@@ -149,6 +150,7 @@ impl SymbolTable {
             local_symbols: HashMap::new(),
             local_scopes: HashMap::new(),
             modified_scopes: HashMap::new(),
+            used_symbols: HashSet::new(),
         }
     }
 
@@ -163,6 +165,7 @@ impl SymbolTable {
             local_symbols: HashMap::new(),
             local_scopes: HashMap::new(),
             modified_scopes: HashMap::new(),
+            used_symbols: self.used_symbols.clone(),
         }
     }
 
@@ -309,6 +312,7 @@ impl SymbolTable {
         for (id, scope) in other.modified_scopes {
             self.scopes[id.as_usize()] = scope;
         }
+        self.used_symbols.extend(other.used_symbols);
     }
 
     #[must_use]
@@ -352,6 +356,15 @@ impl SymbolTable {
     #[must_use]
     pub const fn is_empty(&self) -> bool {
         self.symbols.is_empty()
+    }
+
+    pub fn mark_used(&mut self, id: SymbolId) {
+        let _ = self.used_symbols.insert(id);
+    }
+
+    #[must_use]
+    pub fn is_used(&self, id: SymbolId) -> bool {
+        self.used_symbols.contains(&id)
     }
 }
 

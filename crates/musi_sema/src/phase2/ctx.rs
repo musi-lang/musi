@@ -56,6 +56,10 @@ impl BindCtx<'_> {
     pub const fn reenter_scope(&mut self, id: ScopeId) {
         self.symbols.reenter(id);
     }
+
+    pub fn mark_used(&mut self, id: SymbolId) {
+        self.symbols.mark_used(id);
+    }
 }
 
 impl BindCtx<'_> {

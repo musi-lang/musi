@@ -104,6 +104,7 @@ fn bind_expr_ident(ctx: &mut BindCtx<'_>, ident: Ident, expr_id: ExprId, span: S
     if let Some(sym_id) = ctx.symbols.lookup(ident) {
         ctx.model.set_expr_symbol(expr_id, sym_id);
         ctx.model.set_ident_symbol(ident, sym_id);
+        ctx.mark_used(sym_id);
         if let Some(sym) = ctx.symbols.get(sym_id) {
             return sym.ty.clone();
         }

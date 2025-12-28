@@ -1,15 +1,16 @@
 use std::mem;
 
 use musi_ast::{AstArena, ExprId, Prog, StmtKind};
-use musi_basic::diagnostic::DiagnosticBag;
+use musi_basic::diagnostic::{Diagnostic, DiagnosticBag};
+use musi_basic::error::IntoMusiError;
 use musi_basic::interner::Interner;
 
 use crate::builtins::Builtins;
-use crate::phase1;
 use crate::phase2::{BindCtx, bind_expr};
 use crate::semantic::SemanticModel;
 use crate::symbol::SymbolTable;
 use crate::unifier::Unifier;
+use crate::{SemaErrorKind, SymbolId, SymbolKind, phase1};
 use rayon::prelude::*;
 
 #[must_use]
@@ -47,6 +48,7 @@ pub fn bind(
         &mut diags,
     );
     finalize_types(arena, &mut model, &unifier);
+    report_unused(interner, &symbols, &mut diags);
 
     (model, symbols, diags)
 }
@@ -133,6 +135,33 @@ fn finalize_types(arena: &AstArena, model: &mut SemanticModel, unifier: &Unifier
             let finalized = unifier.finalize(&ty);
             model.set_expr_type(expr_id, finalized);
         }
+    }
+}
+
+fn report_unused(interner: &Interner, symbols: &SymbolTable, diags: &mut DiagnosticBag) {
+    for i in 0..symbols.len() {
+        let id = SymbolId::new(u32::try_from(i).expect("symbol ID overflow"));
+        let Some(sym) = symbols.get(id) else {
+            continue;
+        };
+
+        match sym.kind {
+            SymbolKind::Local | SymbolKind::Param | SymbolKind::Fn => {}
+            _ => continue,
+        }
+
+        if symbols.is_used(id) {
+            continue;
+        }
+
+        let name = interner.resolve(sym.name.id);
+        if name.starts_with('_') {
+            continue;
+        }
+
+        let diag =
+            Diagnostic::from(SemaErrorKind::Unused(name.to_owned()).into_musi_error(sym.def_span));
+        diags.add(diag);
     }
 }
 
