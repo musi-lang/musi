@@ -337,6 +337,21 @@ impl SymbolTable {
     pub fn is_used(&self, id: SymbolId) -> bool {
         self.used_symbols.contains(&id)
     }
+
+    /// Iterates over all symbols (both base and local).
+    ///
+    /// # Panics
+    ///
+    /// Panics if number of symbols exceeds `u32::MAX`.
+    pub fn iter_all(&self) -> impl Iterator<Item = (SymbolId, &Symbol)> {
+        let base_iter = self
+            .symbols
+            .iter()
+            .enumerate()
+            .map(|(i, s)| (SymbolId::new(u32::try_from(i).expect("index overflow")), s));
+        let local_iter = self.local_symbols.iter().map(|(id, s)| (*id, s));
+        base_iter.chain(local_iter)
+    }
 }
 
 #[cfg(test)]

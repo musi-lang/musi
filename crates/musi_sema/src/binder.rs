@@ -10,7 +10,7 @@ use crate::phase2::{BindCtx, bind_expr};
 use crate::semantic::SemanticModel;
 use crate::symbol::SymbolTable;
 use crate::unifier::Unifier;
-use crate::{SemaErrorKind, SymbolId, SymbolKind, phase1};
+use crate::{SemaErrorKind, SymbolKind, phase1};
 
 #[must_use]
 pub fn bind(
@@ -78,12 +78,7 @@ fn finalize_types(arena: &AstArena, model: &mut SemanticModel, unifier: &Unifier
 }
 
 fn report_unused(interner: &Interner, symbols: &SymbolTable, diags: &mut DiagnosticBag) {
-    for i in 0..symbols.len() {
-        let id = SymbolId::new(u32::try_from(i).expect("symbol ID overflow"));
-        let Some(sym) = symbols.get(id) else {
-            continue;
-        };
-
+    for (id, sym) in symbols.iter_all() {
         match sym.kind {
             SymbolKind::Local | SymbolKind::Param | SymbolKind::Fn => {}
             _ => continue,

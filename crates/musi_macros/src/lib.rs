@@ -40,6 +40,14 @@ pub fn derive_musi_error(input: TokenStream) -> TokenStream {
                     _ => None,
                 }
             }
+
+            fn hint(&self) -> Option<&'static str> {
+                #enum_name::hint(self)
+            }
+
+            fn level(&self) -> musi_basic::error::Level {
+                #enum_name::level(self)
+            }
         }
     };
 

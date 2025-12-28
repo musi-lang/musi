@@ -1,4 +1,4 @@
-use lsp_types::{self, DiagnosticSeverity};
+use lsp_types::{self, DiagnosticSeverity, NumberOrString};
 use musi_basic::{diagnostic::Diagnostic, error::Level, source::SourceFile, span::Span};
 
 pub fn convert_diagnostics(
@@ -15,7 +15,9 @@ fn convert_diagnostic(source_file: &SourceFile, diag: &Diagnostic) -> lsp_types:
     lsp_types::Diagnostic {
         range: convert_span(source_file, diag.span),
         severity: Some(convert_level(diag.level)),
-        code: None,
+        code: diag
+            .code
+            .map(|c| NumberOrString::Number(i32::from(c.as_u16()))),
         source: Some("musi".to_owned()),
         message: diag.message.clone(),
         related_information: None,

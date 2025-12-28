@@ -1,6 +1,6 @@
 use crate::{
     Diagnostics,
-    error::{Level, MusiError},
+    error::{ErrorCode, Level, MusiError},
     source::{SourceFile, SourceMap},
     span::Span,
 };
@@ -9,6 +9,7 @@ use std::io::{self, IsTerminal as _, Write};
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct Diagnostic {
+    pub code: Option<ErrorCode>,
     pub level: Level,
     pub message: String,
     pub notes: Vec<(String, Span)>,
@@ -48,6 +49,7 @@ impl DiagnosticBag {
 impl From<MusiError> for Diagnostic {
     fn from(err: MusiError) -> Self {
         let mut diag = Self {
+            code: err.code,
             level: err.level,
             message: err.message,
             notes: vec![],
