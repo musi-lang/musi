@@ -1,7 +1,6 @@
 use musi_ast::{
     ChoiceCase, ChoiceCaseItem, CondId, CondKind, ExprId, ExprKind, Field, Fields, FnSig, Ident,
-    Idents, LitKind, MatchCase, PatId, PatKind, StmtId, StmtKind, TemplatePart, TyExpr, TyExprId,
-    TyExprKind,
+    Idents, LitKind, MatchCase, PatId, PatKind, StmtId, TemplatePart, TyExprId,
 };
 use musi_basic::span::Span;
 use musi_lex::token::TokenKind;
@@ -12,6 +11,8 @@ use crate::ty_repr::{FloatWidth, IntWidth, TyRepr, TyReprKind};
 
 use super::BindCtx;
 use super::pat::{bind_pat, bind_pat_with_kind};
+use super::stmt::bind_stmt;
+use super::ty::{define_named_ty, resolve_field_ty, resolve_ty_expr};
 
 pub fn bind_expr(ctx: &mut BindCtx<'_>, expr_id: ExprId) -> TyRepr {
     let expr = ctx.arena.exprs.get(expr_id);
@@ -137,15 +138,6 @@ fn bind_expr_block(ctx: &mut BindCtx<'_>, stmts: &[StmtId], tail: Option<ExprId>
     let result_ty = tail.map_or(TyRepr::unit(), |e| bind_expr(ctx, e));
     ctx.symbols.pop_scope();
     result_ty
-}
-
-fn bind_stmt(ctx: &mut BindCtx<'_>, stmt_id: StmtId) {
-    let stmt = ctx.arena.stmts.get(stmt_id);
-    match &stmt.kind {
-        StmtKind::Expr(expr_id) => {
-            let _ = bind_expr(ctx, *expr_id);
-        }
-    }
 }
 
 fn bind_expr_bind(
@@ -542,21 +534,10 @@ fn bind_expr_record_def(
     fields: &Fields,
     _ty_params: &Idents,
 ) -> TyRepr {
-    let ty = match name {
-        Some(ident) => {
-            let sym_id = ctx
-                .define_and_record(ident, SymbolKind::Type, TyRepr::unit(), ident.span, false)
-                .expect("duplicate type def");
-            TyRepr::named(sym_id, vec![])
-        }
-        None => TyRepr::unit(),
-    };
+    let ty = define_named_ty(ctx, name);
     for field in fields {
-        let field_ty = match field.ty {
-            Some(ty_id) => resolve_ty_expr(ctx, ty_id),
-            None => TyRepr::any(),
-        };
-        let _ = ctx.define_and_record(
+        let field_ty = resolve_field_ty(ctx, field.ty);
+        _ = ctx.define_and_record(
             field.name,
             SymbolKind::Field,
             field_ty,
@@ -573,17 +554,9 @@ fn bind_expr_choice_def(
     cases: &[ChoiceCase],
     _ty_params: &Idents,
 ) -> TyRepr {
-    let ty = match name {
-        Some(ident) => {
-            let sym_id = ctx
-                .define_and_record(ident, SymbolKind::Type, TyRepr::unit(), ident.span, false)
-                .expect("duplicate type definition");
-            TyRepr::named(sym_id, vec![])
-        }
-        None => TyRepr::unit(),
-    };
+    let ty = define_named_ty(ctx, name);
     for case in cases {
-        let _ = ctx.define_and_record(
+        _ = ctx.define_and_record(
             case.name,
             SymbolKind::Variant,
             TyRepr::unit(),
@@ -598,11 +571,8 @@ fn bind_expr_choice_def(
 fn bind_choice_case_fields(ctx: &mut BindCtx<'_>, fields: &[ChoiceCaseItem]) {
     for field_item in fields {
         if let ChoiceCaseItem::Field(field) = field_item {
-            let field_ty = match field.ty {
-                Some(ty_id) => resolve_ty_expr(ctx, ty_id),
-                None => TyRepr::any(),
-            };
-            let _ = ctx.define_and_record(
+            let field_ty = resolve_field_ty(ctx, field.ty);
+            _ = ctx.define_and_record(
                 field.name,
                 SymbolKind::Field,
                 field_ty,
@@ -615,7 +585,7 @@ fn bind_choice_case_fields(ctx: &mut BindCtx<'_>, fields: &[ChoiceCaseItem]) {
 
 fn bind_expr_alias(ctx: &mut BindCtx<'_>, name: Ident, ty_expr: TyExprId) -> TyRepr {
     let ty = resolve_ty_expr(ctx, ty_expr);
-    let _ = ctx.define_and_record(name, SymbolKind::Type, ty.clone(), name.span, false);
+    _ = ctx.define_and_record(name, SymbolKind::Type, ty.clone(), name.span, false);
     ty
 }
 
@@ -640,59 +610,4 @@ fn bind_expr_range(ctx: &mut BindCtx<'_>, start: ExprId, end: Option<ExprId>) ->
         let _ = bind_expr(ctx, end_id);
     }
     TyRepr::any()
-}
-
-pub fn resolve_ty_expr(ctx: &mut BindCtx<'_>, ty_id: TyExprId) -> TyRepr {
-    let ty_expr = ctx.arena.ty_exprs.get(ty_id);
-    let resolved = resolve_ty_expr_inner(ctx, ty_expr);
-    ctx.model.set_ty_expr_type(ty_id, resolved.clone());
-    resolved
-}
-
-fn resolve_ty_expr_inner(ctx: &mut BindCtx<'_>, ty_expr: &TyExpr) -> TyRepr {
-    match &ty_expr.kind {
-        TyExprKind::Ident(ident) => resolve_ty_expr_ident(ctx, ty_expr, *ident),
-        TyExprKind::Optional(inner) => TyRepr::optional(resolve_ty_expr(ctx, *inner)),
-        TyExprKind::Ptr(inner) => TyRepr::ptr(resolve_ty_expr(ctx, *inner)),
-        TyExprKind::Array { size, elem } => {
-            let elem_ty = resolve_ty_expr(ctx, *elem);
-            TyRepr::array(
-                elem_ty,
-                size.map(|s| usize::try_from(s).expect("size overflow")),
-            )
-        }
-        TyExprKind::Tuple(elems) => {
-            TyRepr::tuple(elems.iter().map(|e| resolve_ty_expr(ctx, *e)).collect())
-        }
-        TyExprKind::Fn { param, ret } => TyRepr::func(
-            vec![resolve_ty_expr(ctx, *param)],
-            resolve_ty_expr(ctx, *ret),
-        ),
-        TyExprKind::App { base, args } => resolve_ty_expr_app(ctx, *base, args),
-    }
-}
-
-fn resolve_ty_expr_ident(ctx: &mut BindCtx<'_>, ty_expr: &TyExpr, ident: Ident) -> TyRepr {
-    if let Some(sym_id) = ctx.symbols.lookup(ident)
-        && let Some(sym) = ctx.symbols.get(sym_id)
-        && matches!(sym.kind, SymbolKind::Builtin | SymbolKind::Type)
-    {
-        ctx.model.set_ty_expr_symbol(ty_expr.id, sym_id);
-        ctx.model.set_ident_symbol(ident, sym_id);
-        return sym.ty.clone();
-    }
-    let name = ctx.interner.resolve(ident.id);
-    ctx.error(SemaErrorKind::UndefinedType(name.to_owned()), ident.span);
-    TyRepr::error()
-}
-
-fn resolve_ty_expr_app(ctx: &mut BindCtx<'_>, base: Ident, args: &[TyExprId]) -> TyRepr {
-    if let Some(sym_id) = ctx.symbols.lookup(base) {
-        ctx.model.set_ident_symbol(base, sym_id);
-        let arg_tys: Vec<_> = args.iter().map(|a| resolve_ty_expr(ctx, *a)).collect();
-        return TyRepr::named(sym_id, arg_tys);
-    }
-    let name = ctx.interner.resolve(base.id);
-    ctx.error(SemaErrorKind::UndefinedType(name.to_owned()), base.span);
-    TyRepr::error()
 }
