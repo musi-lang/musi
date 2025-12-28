@@ -117,8 +117,7 @@ fn resolve_fn_sig(ctx: &mut BindCtx<'_>, sig: &FnSig) -> TyRepr {
 
     let ret_ty = sig
         .ret
-        .map(|ty_id| resolve_ty_expr(ctx, ty_id))
-        .unwrap_or_else(TyRepr::unit);
+        .map_or_else(TyRepr::unit, |ty_id| resolve_ty_expr(ctx, ty_id));
 
     ctx.symbols.pop_scope();
 
