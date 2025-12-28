@@ -23,38 +23,38 @@ import "@std/math";
 // BASIC LITERALS & TYPES
 // ============================================================================
 
-val unit_val: Unit := ();
-val int_val := 42;
-val hex_val := 0xFF;
-val bin_val := 0b1010;
-val float_val := 3.14159;
-val sci_val := 1.23e-4;
+val _unit_val: Unit := ();
+val _int_val := 42;
+val _hex_val := 0xFF;
+val _bin_val := 0b1010;
+val _float_val := 3.14159;
+val _sci_val := 1.23e-4;
 val bool_true := 1;
 val bool_false := 0;
 
-val str := "hello world";
-val chr: Rune := 'A';
-val escape := "line\n\ttab\u{1F600}";
-val `and` := "escaped keyword identifier";
+val _str := "hello world";
+val _chr: Rune := 'A';
+val _escape := "line\n\ttab\u{1F600}";
+val _and := "escaped keyword identifier";
 
-val typed_int: Int32 := 42;
-val typed_float: Float32 := 3.14;
-val typed_nat: Nat8 := 255;
+val _typed_int: Int32 := 42;
+val _typed_float: Float32 := 3.14;
+val _typed_nat: Nat8 := 255;
 
 // ============================================================================
 // OPERATORS
 // ============================================================================
 
-val ari := (10 + 5) * 2 - 3 / 2;
-val pow := 2 ** 8;
-val rem := 17 % 5;
+val _ari := (10 + 5) * 2 - 3 / 2;
+val _pow := 2 ** 8;
+val _rem := 17 % 5;
 
-val cmp := (10 > 5) and (3 <= 7);
-val log_op := (bool_true as Bool) or (bool_false as Bool);
-val neg := not (bool_false as Bool);
+val _cmp := (10 > 5) and (3 <= 7);
+val _logical := (bool_true as Bool) or (bool_false as Bool);
+val _neg := not (bool_false as Bool);
 
-val bitwise := (0xFF & 0x0F) | (0xF0 ^ 0x55);
-val bit_not := ~0xFF;
+val _bitwise := (0xFF & 0x0F) | (0xF0 ^ 0x55);
+val _bit_not := ~0xFF;
 
 // ============================================================================
 // VARIABLES & ASSIGNMENT
@@ -72,33 +72,33 @@ flags <- flags & 0b1100;
 // ============================================================================
 
 var value := 100;
-var ptr := @value;
-val deref := ptr.^;
+var ptr := @value; // FIXME: p.^ is deref op, so why is 'p' in param seen as 'unused name'?
+val _deref := ptr.^;
 ptr.^ <- 200;
 
 val ptr_type: ^Nat32 := @value;
-val ptr_ptr: ^^Nat32 := @ptr_type;
+val _ptr_ptr: ^^Nat32 := @ptr_type;
 
 // ============================================================================
 // TYPE OPERATIONS
 // ============================================================================
 
 alias MyInt := Int32;
-val casted := value as Float32;
-val type_check := value is Int32;
-val size_info := size_of(Int32);
+val _type_cast := value as Float32;
+val _type_test := value is Int32;
+val _size_info := size_of(Int32);
 
 // ============================================================================
 // STRUCTURAL DATA TYPES
 // ============================================================================
 
 val Point := record { x: Float32; y: Float32 };
-val Color := record { r: Nat8; g: Nat8; b: Nat8 };
+val Color := record { r: Nat8; g: Nat8; b: Nat8 }; // FIXME: duplicate definition of 'Color'
 
-val origin: Point := .{ x := 0.0, y := 0.0 };
-val red: Color := .{ r := 255, g := 0, b := 0 };
+val _origin: Point := .{ x := 0.0, y := 0.0 };
+val _red: Color := .{ r := 255, g := 0, b := 0 }; // Color used here, defined first above, so what the hell?
 
-val distance := fn (p1: Point, p2: Point) {
+val _dist := fn (p1: Point, p2: Point) {
   val dx := p1.x - p2.x;
   val dy := p1.y - p2.y;
   sqrt(dx * dx + dy * dy)
@@ -117,7 +117,8 @@ val Shape := choice Shape {
   case Triangle(a: Float32, b: Float32, c: Float32)
 };
 
-val area := fn (s: Shape) {
+// TODO: `Shape.area` should be supported syntax in identifiers for namespace access (or does this violate Context-Free Grammar?)
+val _area := fn (s: Shape) {
   match s {
   case Circle(r) => 3.14159 * r * r,
   case Rectangle(w, h) => w * h,
@@ -135,9 +136,10 @@ val area := fn (s: Shape) {
 val add := fn (x, y) { x + y };
 val multiply := fn (x, y) { x * y };
 
-val curry_add := fn (x) { fn (y) { x + y } };
+val _curry_add := fn (x) { fn (y) { x + y } };
 
-val write_thru_ptr := fn (p: ^Int32, v: Int32) {
+// FIXME: p.^ is deref op, so why is 'p' in param seen as 'unused name'?
+val _write_thru_ptr := fn (p: ^Int32, v: Int32) {
   p.^ <- v;
 };
 
@@ -150,17 +152,17 @@ val factorial := fn (n) {
 // CONTROL FLOW
 // ============================================================================
 
-val abs := fn (n) {
+val _abs := fn (n) {
   if n < 0 { -n } else { n }
 };
 
-val sign := fn (n) {
+val _sign := fn (n) {
   if n > 0 { 1 }
   else if n < 0 { -1 }
   else { 0 }
 };
 
-val sum_to := fn (n) {
+val _sum_to := fn (n) {
   var total := 0;
   var i := 1;
   while i <= n {
@@ -170,7 +172,7 @@ val sum_to := fn (n) {
   total
 };
 
-val print_range := fn (start, end) {
+val _print_range := fn (start, end) {
   for i in start..end {
     writeln($"value: {i}");
   };
@@ -180,29 +182,29 @@ val print_range := fn (start, end) {
 // PATTERN MATCHING
 // ============================================================================
 
-val maybe_value := Some(42);
+val _maybe_value := Some(42); // FIXME: cannot apply '()' to non-function type '()' @ Some
 
-val unwrap := fn (opt) {
+val _unwrap := fn (opt) {
   match opt {
   case Some(v) => v,
   case _ => 0
   }
 };
 
-val handle_result := fn (res) {
+val _handle_result := fn (res) {
   match res {
   case Ok(v) => writeln($"Success: {v}"),
   case Err(e) => writeln($"Failure: {e}")
   }
 };
 
-val process_option := fn (opt) {
+val _process_option := fn (opt) {
   if case Some(v) := opt {
     writeln($"got value '{v}'");
   };
 };
 
-val process_stream := fn (next_fn) {
+val _process_stream := fn (next_fn) {
   while case Some(item) := next_fn() {
     writeln($"processing '{item}'...");
   };
@@ -214,25 +216,26 @@ val process_stream := fn (next_fn) {
 
 val name := "Alice";
 val age := 30;
-val greeting := $"Hello {name}, you are {age} years old";
-val calculation := $"2 + 2 = {2 + 2}";
+val _greet := $"Hello {name}, you are {age} years old";
+val _calc := $"2 + 2 = {2 + 2}";
 
 // ============================================================================
 // COMPLEX EXPRESSIONS
 // ============================================================================
 
-val pipe_example := 10 |> add(5) |> multiply(2);
+val _pipe_example := 10 |> add(5) |> multiply(2);
 
-val block_result := {
+val _block_result := {
   val x := 10;
   val y := 20;
   x + y
 };
 
-val nested_match := fn (opt) {
+val _nested_match := fn (opt) {
   match opt {
   case Some(Ok(v)) => v,
   case Some(Err(e)) => -1,
+  // FIXME: unused name 'None'
   case None => 0
   }
 };
@@ -242,14 +245,14 @@ val nested_match := fn (opt) {
 // ============================================================================
 
 val pair := (10, 20);
-val (first, second) := pair;
+val (_first, _second) := pair;
 
-val swap := fn (tuple) {
+val _swap := fn (tuple) {
   val (a, b) := tuple;
   (b, a)
 };
 
-val complex_destructure := {
+val _complex_destruct := {
   val point := .{ x := 5.0, y := 10.0 };
   val (px, py) := (point.x, point.y);
   px + py
@@ -259,15 +262,16 @@ val complex_destructure := {
 // PRACTICAL EXAMPLES
 // ============================================================================
 
-val safe_divide := fn (a, b) {
+val _safe_div := fn (a, b) {
   if b = 0 {
+    // FIXME: cannot apply '()' to non-function type '()' @ Err
     Err("division by zero")
   } else {
     Ok(a / b)
   }
 };
 
-val find_max := fn (nums) {
+val _find_max := fn (nums) {
   var max := nums.[0];
   for n in nums {
     if n > max {
@@ -277,7 +281,7 @@ val find_max := fn (nums) {
   max
 };
 
-val map := fn (f, list) {
+val _map := fn (f, list) {
   var result := [];
   for item in list {
     result <- result + [f(item)];
@@ -285,7 +289,7 @@ val map := fn (f, list) {
   result
 };
 
-val filter := fn (pred, list) {
+val _filter := fn (pred, list) {
   var result := [];
   for item in list {
     if pred(item) {
@@ -300,6 +304,7 @@ val filter := fn (pred, list) {
 // ============================================================================
 
 extern "C" {
+  // FIXME: params in extern fn sigs are seen as 'unused name'
   fn malloc(size: Nat64): ^Any;
   fn free(ptr: ^Any): Any;
 };
