@@ -119,9 +119,9 @@ aux_mso_header = aux_magic, aux_version, aux_flags, aux_const_pool_len, aux_symb
 
 | Opcode | Mnemonic | Operands | Description |
 |--------|----------|----------|-------------|
-| 0xE4 | `new.closure` | fn:n32, captures:n16 | create closure |
-| 0xE5 | `ld.capture` | index:n16 | load captured variable |
-| 0xE6 | `st.capture` | index:n16 | store to captured variable |
+| 0xE4 | `new.cls` | fn:n32, captures:n16 | create closure |
+| 0xE5 | `ld.capt` | index:n16 | load captured variable |
+| 0xE6 | `st.capt` | index:n16 | store to captured variable |
 
 ### Control Flow
 
