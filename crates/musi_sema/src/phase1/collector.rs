@@ -1,4 +1,4 @@
-use musi_ast::{AstArena, ExprId, ExprKind, Ident, Prog, StmtKind};
+use musi_ast::{AstArena, ExprId, ExprKind, Ident, PatKind, Prog, StmtKind};
 
 use crate::semantic::SemanticModel;
 use crate::symbol::{SymbolKind, SymbolTable};
@@ -25,7 +25,19 @@ fn collect_expr(
 ) {
     let expr = arena.exprs.get(expr_id);
     match &expr.kind {
-        ExprKind::Bind { init, .. } => collect_expr(arena, *init, symbols, model),
+        ExprKind::Bind { pat, init, .. } => {
+            let init_expr = arena.exprs.get(*init);
+            match &init_expr.kind {
+                ExprKind::RecordDef { name: None, .. } | ExprKind::ChoiceDef { name: None, .. } => {
+                    if let PatKind::Ident(ident) = &arena.pats.get(*pat).kind {
+                        collect_symbol_type(ident, symbols, model);
+                        return;
+                    }
+                }
+                _ => {}
+            }
+            collect_expr(arena, *init, symbols, model);
+        }
         ExprKind::RecordDef {
             name: Some(ident), ..
         } => {
