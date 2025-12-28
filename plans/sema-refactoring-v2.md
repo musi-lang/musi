@@ -131,7 +131,7 @@ Current: 894 lines with 42 functions.
 Split by concern:
 
 - `expr.rs`: Main dispatcher, literals, identifiers, blocks, Function calls, pipe operator, if/while/for/match/return/break
-- `ops.rs`: Binary/unary operators, type coercions
+- `ops.rs`: type coercions
 
 Try using parameterised helpers where possible.
 

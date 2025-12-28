@@ -3,6 +3,7 @@ pub mod builtins;
 pub mod error;
 pub mod phase1;
 pub mod phase2;
+pub mod phase3;
 pub mod semantic;
 pub mod symbol;
 pub mod ty_repr;

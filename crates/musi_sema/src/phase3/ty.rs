@@ -19,12 +19,11 @@ pub fn resolve_field_ty(ctx: &mut BindCtx<'_>, ty: Option<TyExprId>) -> TyRepr {
 }
 
 pub fn define_named_ty(ctx: &mut BindCtx<'_>, name: Option<Ident>, span: Span) -> TyRepr {
-    let (ident, is_anon) = match name {
-        Some(id) => (id, false),
-        None => {
-            let id = ctx.interner.intern("<anon>");
-            (Ident { id, span }, true)
-        }
+    let (ident, is_anon) = if let Some(id) = name {
+        (id, false)
+    } else {
+        let id = ctx.interner.intern("<anon>");
+        (Ident { id, span }, true)
     };
 
     match ctx.define_and_record(ident, SymbolKind::Type, TyRepr::unit(), ident.span, false) {

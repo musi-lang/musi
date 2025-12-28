@@ -6,11 +6,12 @@ use musi_basic::span::Span;
 use musi_lex::token::TokenKind;
 
 use crate::error::SemaErrorKind;
-use crate::phase2::ctx::DeferredTask;
+use crate::phase3::ctx::DeferredTask;
 use crate::symbol::SymbolKind;
 use crate::ty_repr::{FloatWidth, IntWidth, TyParamId, TyRepr, TyReprKind};
 
 use super::BindCtx;
+use super::ops::try_coerce_lit;
 use super::pat::{bind_pat, bind_pat_with_kind};
 use super::stmt::bind_stmt;
 use super::ty::{define_named_ty, resolve_field_ty, resolve_ty_expr};
@@ -76,15 +77,6 @@ fn bind_expr_inner(ctx: &mut BindCtx<'_>, expr_id: ExprId, kind: &ExprKind, span
         ExprKind::Match { scrutinee, cases } => bind_expr_match(ctx, *scrutinee, cases),
         ExprKind::Range { start, end, .. } => bind_expr_range(ctx, *start, *end),
         _ => TyRepr::any(),
-    }
-}
-
-fn try_coerce_lit(lit: &LitKind, target: &TyRepr) -> Option<TyRepr> {
-    match (lit, &target.kind) {
-        (LitKind::Int(_), TyReprKind::Nat(_) | TyReprKind::Int(_))
-        | (LitKind::Real(_), TyReprKind::Float(_)) => Some(target.clone()),
-        (LitKind::Int(v), TyReprKind::Bool) if *v == 0 || *v == 1 => Some(target.clone()),
-        _ => None,
     }
 }
 
@@ -662,11 +654,9 @@ fn bind_expr_field(ctx: &mut BindCtx<'_>, base_id: ExprId, field: Ident, span: S
         TyReprKind::Named(sym_id, _) => {
             if let Some(member_id) = ctx.symbols.lookup_member(*sym_id, field) {
                 ctx.model.set_ident_symbol(field, member_id);
-                if let Some(sym) = ctx.symbols.get(member_id) {
-                    sym.ty.clone()
-                } else {
-                    TyRepr::error()
-                }
+                ctx.symbols
+                    .get(member_id)
+                    .map_or_else(TyRepr::error, |sym| sym.ty.clone())
             } else {
                 let field_name = ctx.interner.resolve(field.id);
                 ctx.error(
