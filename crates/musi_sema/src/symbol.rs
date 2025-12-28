@@ -326,7 +326,7 @@ impl SymbolTable {
 
     #[must_use]
     pub fn lookup_local(&self, name: Ident) -> Option<SymbolId> {
-        self.scopes[self.scope_id.as_usize()].get(name)
+        self.get_scope(self.scope_id).and_then(|s| s.get(name))
     }
 
     #[must_use]
