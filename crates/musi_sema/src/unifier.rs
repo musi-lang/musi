@@ -217,7 +217,7 @@ fn type_mismatch(a: &TyRepr, b: &TyRepr) -> SemaErrorKind {
 }
 
 fn collect_free_vars(ty: &TyRepr) -> Vec<TyVarId> {
-    let mut vars = Vec::new();
+    let mut vars = vec![];
     collect_free_vars_rec(ty, &mut vars);
     vars
 }
