@@ -143,5 +143,5 @@ fn finalize_unbound_var() {
     let unifier = Unifier::new();
     let v = TyRepr::var(TyVarId::new(0));
 
-    assert_eq!(unifier.finalize(&v), TyRepr::error());
+    assert_eq!(unifier.finalize(&v), TyRepr::any());
 }
