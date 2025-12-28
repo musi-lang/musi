@@ -105,9 +105,7 @@ aux_ty_list = ty_expr, {",", ty_expr}, [","];
 
 aux_ident_list = ident, {",", ident}, [","];
 
-aux_modifier_extern = "extern", [aux_lit_text];
-
-aux_modifiers = {("export" | aux_modifier_extern | "unsafe")};
+aux_modifiers = {("export" | "extern", [aux_lit_text] | "unsafe")};
 
 aux_ty_annot = ":", ty_expr;
 
@@ -206,8 +204,6 @@ expr_unsafe = "unsafe", expr_block;
 
 expr_import = "import", aux_lit_text;
 
-expr_extern = aux_modifier_extern, "{", {"fn", aux_fn_sig, ";"}, "}";
-
 expr_def_record = [aux_attr], [aux_modifiers], "record", [ident], [ty_expr_params], "{", [aux_field_list], "}";
 
 expr_def_choice = [aux_attr], [aux_modifiers], "choice", [ident], [ty_expr_params], "{", aux_choice_cases, "}";
@@ -231,7 +227,7 @@ expr_assign = expr, "<-", expr;
 (* ========================================================================= *)
 (* PRECEDENCE LEVELS                                                         *)
 (* ========================================================================= *)
-prec_expr_primary = expr_lit | expr_ident | expr_tuple | expr_array | expr_record | expr_block | expr_if | expr_while | expr_for | expr_match | expr_return | expr_defer | expr_break | expr_cycle | expr_unsafe | expr_import | expr_extern | expr_def_record | expr_def_choice | expr_def_type | expr_def_fn | expr_binding | "(", expr, ")";
+prec_expr_primary = expr_lit | expr_ident | expr_tuple | expr_array | expr_record | expr_block | expr_if | expr_while | expr_for | expr_match | expr_return | expr_defer | expr_break | expr_cycle | expr_unsafe | expr_import | expr_def_record | expr_def_choice | expr_def_type | expr_def_fn | expr_binding | "(", expr, ")";
 
 postfix_op = "(", [aux_args], ")" | ".[", aux_expr_list, "]" | ".{", [aux_field_list], "}" | ".", ident | ".^" | "?" | "!";
 
