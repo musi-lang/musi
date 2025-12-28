@@ -137,7 +137,7 @@ Musi is a hand-written compiler with a layered crate architecture inspired by Ro
 
 ## Compilation Phases
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           COMPILATION PHASES                                │
 └─────────────────────────────────────────────────────────────────────────────┘
