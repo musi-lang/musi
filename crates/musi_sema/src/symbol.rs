@@ -158,52 +158,6 @@ impl SymbolTable {
     }
 
     #[must_use]
-    pub fn fork(&self) -> Self {
-        Self {
-            symbols: self.all_symbols(),
-            scopes: self.all_scopes(),
-            scope_id: self.scope_id,
-            next_symbol: Arc::clone(&self.next_symbol),
-            next_scope: Arc::clone(&self.next_scope),
-            local_symbols: HashMap::new(),
-            local_scopes: HashMap::new(),
-            modified_scopes: HashMap::new(),
-            used_symbols: self.used_symbols.clone(),
-        }
-    }
-
-    fn all_symbols(&self) -> Vec<Symbol> {
-        let mut all = self.symbols.clone();
-        for (id, sym) in &self.local_symbols {
-            let idx = id.as_usize();
-            if idx >= all.len() {
-                all.resize(idx + 1, sym.clone());
-            }
-            all[idx] = sym.clone();
-        }
-        all
-    }
-
-    fn all_scopes(&self) -> Vec<Scope> {
-        let mut all = self.scopes.clone();
-        for (id, scope) in &self.local_scopes {
-            let idx = id.as_usize();
-            if idx >= all.len() {
-                all.resize(idx + 1, scope.clone());
-            }
-            all[idx] = scope.clone();
-        }
-        for (id, scope) in &self.modified_scopes {
-            let idx = id.as_usize();
-            if idx >= all.len() {
-                all.resize(idx + 1, scope.clone());
-            }
-            all[idx] = scope.clone();
-        }
-        all
-    }
-
-    #[must_use]
     pub const fn scope_id(&self) -> ScopeId {
         self.scope_id
     }

@@ -28,14 +28,6 @@ impl Unifier {
     }
 
     #[must_use]
-    pub fn fork(&self) -> Self {
-        Self {
-            substs: HashMap::new(),
-            next_var: Arc::clone(&self.next_var),
-        }
-    }
-
-    #[must_use]
     pub fn fresh_var(&self) -> TyRepr {
         let id = TyVarId::new(self.next_var.fetch_add(1, Ordering::Relaxed));
         TyRepr::var(id)
@@ -216,23 +208,6 @@ impl Unifier {
 
     fn bind(&mut self, id: TyVarId, ty: TyRepr) {
         let _ = self.substs.insert(id, ty);
-    }
-
-    pub fn merge(&mut self, other: Self) {
-        self.substs.extend(other.substs);
-        let other_val = other.next_var.load(Ordering::Relaxed);
-        let mut current = self.next_var.load(Ordering::Relaxed);
-        while other_val > current {
-            match self.next_var.compare_exchange_weak(
-                current,
-                other_val,
-                Ordering::Relaxed,
-                Ordering::Relaxed,
-            ) {
-                Ok(_) => break,
-                Err(val) => current = val,
-            }
-        }
     }
 }
 
