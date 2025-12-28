@@ -11,7 +11,6 @@ use crate::semantic::SemanticModel;
 use crate::symbol::SymbolTable;
 use crate::unifier::Unifier;
 use crate::{SemaErrorKind, SymbolId, SymbolKind, phase1};
-use rayon::prelude::*;
 
 #[must_use]
 pub fn bind(
@@ -89,7 +88,7 @@ fn bind_prog(
         let in_loop = ctx.in_loop;
 
         let results: Vec<_> = tasks
-            .into_par_iter()
+            .into_iter()
             .map(|task| {
                 let mut model = ctx.model.fork();
                 let mut symbols = ctx.symbols.fork();
