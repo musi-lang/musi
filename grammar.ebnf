@@ -210,7 +210,7 @@ expr_def_choice = [aux_attr], [aux_modifiers], "choice", [ident], [ty_expr_param
 
 expr_def_type = [aux_attr], [aux_modifiers], "type", ident, [ty_expr_params], ":=", ty_expr;
 
-expr_def_fn = [aux_attr], [aux_modifiers], "fn", aux_fn_sig, (expr_block | "=>", expr);
+expr_def_fn = [aux_attr], [aux_modifiers], "fn", aux_fn_sig, [(expr_block | "=>", expr)];
 
 expr_binding = [aux_modifiers], ("val" | "var"), pat, [aux_ty_annot], aux_init, expr;
 
