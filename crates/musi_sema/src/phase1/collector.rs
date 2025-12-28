@@ -29,40 +29,52 @@ fn collect_expr(
         ExprKind::RecordDef {
             name: Some(ident), ..
         } => {
-            collect_named_type(ident, symbols, model);
+            collect_symbol_type(ident, symbols, model);
         }
         ExprKind::ChoiceDef {
             name: Some(ident),
             cases,
             ..
         } => {
-            collect_named_type(ident, symbols, model);
+            collect_symbol_type(ident, symbols, model);
             for case in cases {
-                collect_variant(&case.name, symbols, model);
+                collect_symbol_variant(&case.name, symbols, model);
             }
         }
         ExprKind::ChoiceDef {
             name: None, cases, ..
         } => {
             for case in cases {
-                collect_variant(&case.name, symbols, model);
+                collect_symbol_variant(&case.name, symbols, model);
             }
         }
         ExprKind::Alias { name, .. } => {
-            collect_named_type(name, symbols, model);
+            collect_symbol_type(name, symbols, model);
+        }
+        ExprKind::Fn { sig, .. } => {
+            if let Some(name) = &sig.name {
+                collect_symbol_fn(name, symbols, model);
+            }
+        }
+        ExprKind::Extern { fns, .. } => {
+            for sig in fns {
+                if let Some(name) = &sig.name {
+                    collect_symbol_fn(name, symbols, model);
+                }
+            }
         }
         _ => {}
     }
 }
 
-fn collect_named_type(ident: &Ident, symbols: &mut SymbolTable, model: &mut SemanticModel) {
+fn collect_symbol_type(ident: &Ident, symbols: &mut SymbolTable, model: &mut SemanticModel) {
     if let Ok(sym_id) = symbols.define(*ident, SymbolKind::Type, TyRepr::unit(), ident.span, false)
     {
         model.set_ident_symbol(*ident, sym_id);
     }
 }
 
-fn collect_variant(ident: &Ident, symbols: &mut SymbolTable, model: &mut SemanticModel) {
+fn collect_symbol_variant(ident: &Ident, symbols: &mut SymbolTable, model: &mut SemanticModel) {
     if let Ok(sym_id) = symbols.define(
         *ident,
         SymbolKind::Variant,
@@ -70,6 +82,12 @@ fn collect_variant(ident: &Ident, symbols: &mut SymbolTable, model: &mut Semanti
         ident.span,
         false,
     ) {
+        model.set_ident_symbol(*ident, sym_id);
+    }
+}
+
+fn collect_symbol_fn(ident: &Ident, symbols: &mut SymbolTable, model: &mut SemanticModel) {
+    if let Ok(sym_id) = symbols.define(*ident, SymbolKind::Fn, TyRepr::unit(), ident.span, false) {
         model.set_ident_symbol(*ident, sym_id);
     }
 }
