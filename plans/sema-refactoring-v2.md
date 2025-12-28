@@ -148,7 +148,7 @@ Common patterns to extract:
 
 1. **Fix immediate error**: Remove parallel iteration, use sequential loop
 2. **Split phases**: Rename current phase2 → phase3, create new phase2
-3. **Split expr.rs**: Extract `ops.rs`, `call.rs`, `control.rs`
+3. **Split expr.rs**: Extract `ops.rs`
 4. **Simplify BindCtx**: Split into `ResolveCtx` + `InferCtx`
 5. **Add tests**: Unit tests for each phase
 
