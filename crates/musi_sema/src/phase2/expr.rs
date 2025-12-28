@@ -571,11 +571,28 @@ fn bind_expr_binary(
             TyRepr::bool()
         }
 
+        TokenKind::Amp | TokenKind::Caret | TokenKind::Bar => {
+            ctx.unify_or_err(&lhs_ty, &rhs_ty, rhs_span);
+            lhs_ty
+        }
+
         TokenKind::Plus => bind_op_plus(ctx, &lhs_ty, &rhs_ty, rhs_span),
 
-        TokenKind::Minus | TokenKind::Star | TokenKind::Slash | TokenKind::Percent => {
-            bind_op_arith(ctx, lhs_ty, &rhs_ty, rhs_span)
+        TokenKind::Minus
+        | TokenKind::Star
+        | TokenKind::Slash
+        | TokenKind::Percent
+        | TokenKind::StarStar
+        | TokenKind::LtLt
+        | TokenKind::GtGt => bind_op_arith(ctx, lhs_ty, &rhs_ty, rhs_span),
+
+        TokenKind::ColonColon => {
+            let array_ty = TyRepr::array(lhs_ty, None);
+            ctx.unify_or_err(&array_ty, &rhs_ty, rhs_span);
+            rhs_ty
         }
+
+        TokenKind::QuestionQuestion => bind_op_coalesce(ctx, &lhs_ty, &rhs_ty, rhs_span),
 
         TokenKind::KwAs => rhs_ty,
 
@@ -636,6 +653,21 @@ fn bind_op_plus(ctx: &mut BindCtx<'_>, lhs_ty: &TyRepr, rhs_ty: &TyRepr, span: S
 fn bind_op_arith(ctx: &mut BindCtx<'_>, lhs_ty: TyRepr, rhs_ty: &TyRepr, span: Span) -> TyRepr {
     ctx.unify_or_err(&lhs_ty, rhs_ty, span);
     lhs_ty
+}
+
+fn bind_op_coalesce(ctx: &mut BindCtx<'_>, lhs_ty: &TyRepr, rhs_ty: &TyRepr, span: Span) -> TyRepr {
+    let lhs_resolved = ctx.unifier.apply(lhs_ty);
+    match &lhs_resolved.kind {
+        TyReprKind::Optional(inner) => {
+            ctx.unify_or_err(inner, rhs_ty, span);
+            rhs_ty.clone()
+        }
+        TyReprKind::Any | TyReprKind::Unknown => TyRepr::any(),
+        _ => {
+            ctx.unify_or_err(lhs_ty, rhs_ty, span);
+            lhs_ty.clone()
+        }
+    }
 }
 
 fn bind_expr_field(ctx: &mut BindCtx<'_>, base_id: ExprId, field: Ident, span: Span) -> TyRepr {
