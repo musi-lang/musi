@@ -56,8 +56,8 @@ pub enum SemaErrorKind {
     #[error("cannot assign to immutable binding '{0}'")]
     AssignmentToImmutable(String),
 
-    #[error("unused symbol '{0}'")]
-    Unused(String),
+    #[error("unused name '{0}'")]
+    UnusedName(String),
 }
 
 impl IntoMusiError for SemaErrorKind {
@@ -70,7 +70,7 @@ impl IntoMusiError for SemaErrorKind {
 
     fn level(&self) -> Level {
         match self {
-            Self::NonExhaustiveMatch | Self::Unused(_) => Level::Warning,
+            Self::NonExhaustiveMatch | Self::UnusedName(_) => Level::Warning,
             _ => Level::Error,
         }
     }
