@@ -20,9 +20,9 @@ impl TyVarId {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct TypeParamId(pub u32);
+pub struct TyParamId(pub u32);
 
-impl TypeParamId {
+impl TyParamId {
     #[must_use]
     pub const fn new(id: u32) -> Self {
         Self(id)
@@ -211,7 +211,7 @@ impl TyRepr {
     }
 
     #[must_use]
-    pub fn poly(params: Vec<TypeParamId>, body: Self) -> Self {
+    pub fn poly(params: Vec<TyParamId>, body: Self) -> Self {
         Self::new(TyReprKind::Poly {
             params,
             body: Box::new(body),
@@ -219,7 +219,7 @@ impl TyRepr {
     }
 
     #[must_use]
-    pub const fn type_param(id: TypeParamId) -> Self {
+    pub const fn type_param(id: TyParamId) -> Self {
         Self::new(TyReprKind::TypeParam(id))
     }
 }
@@ -244,10 +244,10 @@ pub enum TyReprKind {
     Named(SymbolId, TyReprs),
     Var(TyVarId),
     Poly {
-        params: Vec<TypeParamId>,
+        params: Vec<TyParamId>,
         body: TyReprPtr,
     },
-    TypeParam(TypeParamId),
+    TypeParam(TyParamId),
     Error,
 }
 
@@ -341,13 +341,8 @@ impl fmt::Display for TyRepr {
             }
             TyReprKind::Var(id) => write!(f, "?T{}", id.0),
             TyReprKind::Poly { params, body } => {
-                write!(f, "∀[")?;
-                for (i, p) in params.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "T{}", p.0)?;
-                }
+                write!(f, "forall[")?;
+                write_comma_separated_ty_params(f, params)?;
                 write!(f, "]. {body}")
             }
             TyReprKind::TypeParam(id) => write!(f, "T{}", id.0),
@@ -362,6 +357,19 @@ fn write_comma_separated(f: &mut fmt::Formatter<'_>, elems: &[TyRepr]) -> fmt::R
             write!(f, ", ")?;
         }
         write!(f, "{elem}")?;
+    }
+    Ok(())
+}
+
+fn write_comma_separated_ty_params(
+    f: &mut fmt::Formatter<'_>,
+    params: &[TyParamId],
+) -> fmt::Result {
+    for (i, p) in params.iter().enumerate() {
+        if i > 0 {
+            write!(f, ", ")?;
+        }
+        write!(f, "T{}", p.0)?;
     }
     Ok(())
 }
