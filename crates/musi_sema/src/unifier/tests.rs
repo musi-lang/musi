@@ -1,6 +1,6 @@
-use crate::TyVarId;
 use crate::ty_repr::{IntWidth, TyRepr};
 use crate::unifier::Unifier;
+use crate::{TyVarId, TypeParamId};
 
 #[test]
 fn unify_same_types() {
@@ -144,4 +144,41 @@ fn finalize_unbound_var() {
     let v = TyRepr::var(TyVarId::new(0));
 
     assert_eq!(unifier.finalize(&v), TyRepr::any());
+}
+
+#[test]
+fn poly_display_formatting() {
+    let param = TypeParamId::new(0);
+    let body = TyRepr::func(vec![TyRepr::type_param(param)], TyRepr::type_param(param));
+    let poly = TyRepr::poly(vec![param], body);
+
+    assert_eq!(format!("{poly}"), "forall[T0]. (T0) -> T0");
+}
+
+#[test]
+fn type_param_display() {
+    let param = TyRepr::type_param(TypeParamId::new(2));
+    assert_eq!(format!("{param}"), "T2");
+}
+
+#[test]
+fn poly_apply_preserves_structure() {
+    let unifier = Unifier::new();
+    let param = TypeParamId::new(0);
+    let body = TyRepr::func(vec![TyRepr::type_param(param)], TyRepr::type_param(param));
+    let poly = TyRepr::poly(vec![param], body.clone());
+
+    let applied = unifier.apply(&poly);
+    assert_eq!(applied, poly);
+}
+
+#[test]
+fn poly_finalize_preserves_type_params() {
+    let unifier = Unifier::new();
+    let param = TypeParamId::new(0);
+    let body = TyRepr::func(vec![TyRepr::type_param(param)], TyRepr::type_param(param));
+    let poly = TyRepr::poly(vec![param], body);
+
+    let finalized = unifier.finalize(&poly);
+    assert_eq!(format!("{finalized}"), "forall[T0]. (T0) -> T0");
 }
