@@ -1,8 +1,7 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use syn::{
-    Attribute, Data, DeriveInput, Error, Expr, ExprLit, Ident, Lit, MetaNameValue, Result, Variant,
-    parse2,
+    Attribute, Data, DeriveInput, Expr, ExprLit, Ident, Lit, MetaNameValue, Result, Variant, parse2,
 };
 
 pub fn derive_lexer_impl(input: TokenStream) -> Result<TokenStream> {
@@ -12,7 +11,7 @@ pub fn derive_lexer_impl(input: TokenStream) -> Result<TokenStream> {
     let variants = match &input.data {
         Data::Enum(data_enum) => &data_enum.variants,
         _ => {
-            return Err(Error::new_spanned(
+            return Err(syn::Error::new_spanned(
                 input,
                 "Lexer can only be derived for enums",
             ));
@@ -21,45 +20,16 @@ pub fn derive_lexer_impl(input: TokenStream) -> Result<TokenStream> {
 
     let skip_patterns = extract_skip_patterns(&input.attrs)?;
     let mut token_defs = vec![];
-    let mut has_eof = false;
-    let mut has_error = false;
-    let mut has_underscore = false;
 
     for variant in variants {
-        let variant_name = &variant.ident;
-        if variant_name == "EOF" {
-            has_eof = true;
-            continue;
-        }
-        if variant_name == "Error" {
-            has_error = true;
-            continue;
-        }
-        if variant_name == "Underscore" {
-            has_underscore = true;
-            continue;
-        }
         if let Some(def) = parse_token_variant(variant)? {
             token_defs.push(def);
         }
     }
 
-    if !has_eof {
-        return Err(Error::new_spanned(
-            enum_name,
-            "Lexer enum must have EOF variant",
-        ));
-    }
-    if !has_error {
-        return Err(Error::new_spanned(
-            enum_name,
-            "Lexer enum must have Error variant",
-        ));
-    }
-
     token_defs.sort_by(|a, b| b.pattern.len().cmp(&a.pattern.len()));
 
-    let generated = generate_lexer_impl(enum_name, &skip_patterns, &token_defs, has_underscore);
+    let generated = generate_lexer_impl(enum_name, &skip_patterns, &token_defs);
     Ok(generated)
 }
 
@@ -108,12 +78,10 @@ fn generate_lexer_impl(
     enum_name: &Ident,
     skip_patterns: &[String],
     token_defs: &[TokenDef],
-    has_underscore: bool,
 ) -> TokenStream {
     let symbol_arms = generate_symbol_dispatch(enum_name, token_defs);
     let keyword_arms = generate_keyword_lookup(enum_name, token_defs);
     let skip_check = generate_skip_check(skip_patterns);
-    let underscore_check = generate_underscore_check(enum_name, has_underscore);
 
     let lexer_struct_name = format_ident!("{enum_name}Lexer");
 
@@ -158,6 +126,11 @@ fn generate_lexer_impl(
                 self.pos
             }
 
+            #[must_use]
+            pub fn slice(&self, start: usize, end: usize) -> &'a str {
+                self.input.get(start..end).unwrap_or("")
+            }
+
             fn skip_trivia(&mut self) {
                 #skip_check
             }
@@ -181,14 +154,10 @@ fn generate_lexer_impl(
                     let _ = self.bump();
                 }
             }
-
-            fn rest(&self) -> &'a str {
-                self.input.get(self.pos..).unwrap_or("")
-            }
         }
 
         impl Iterator for #lexer_struct_name<'_> {
-            type Item = (#enum_name, usize, usize);
+            type Item = (Option<#enum_name>, usize, usize);
 
             fn next(&mut self) -> Option<Self::Item> {
                 self.skip_trivia();
@@ -201,7 +170,7 @@ fn generate_lexer_impl(
                     |n| self.peek_nth(n + 1),
                 ) {
                     self.bump_n(len);
-                    return Some((token, start, self.pos));
+                    return Some((Some(token), start, self.pos));
                 }
 
                 if first_char.is_ascii_alphabetic() || first_char == '_' {
@@ -209,15 +178,12 @@ fn generate_lexer_impl(
                         let _ = self.bump();
                     }
                     let ident = &self.input[start..self.pos];
-                    #underscore_check
-                    if let Some(kw) = #enum_name::keyword_lookup(ident) {
-                        return Some((kw, start, self.pos));
-                    }
-                    return Some((#enum_name::Error, start, self.pos));
+                    let token = #enum_name::keyword_lookup(ident);
+                    return Some((token, start, self.pos));
                 }
 
                 let _ = self.bump();
-                Some((#enum_name::Error, start, self.pos))
+                Some((None, start, self.pos))
             }
         }
     }
@@ -283,18 +249,6 @@ fn generate_skip_check(skip_patterns: &[String]) -> TokenStream {
             if self.pos == before {
                 break;
             }
-        }
-    }
-}
-
-fn generate_underscore_check(enum_name: &Ident, has_underscore: bool) -> TokenStream {
-    if !has_underscore {
-        return quote! {};
-    }
-
-    quote! {
-        if ident == "_" {
-            return Some((#enum_name::Underscore, start, self.pos));
         }
     }
 }
