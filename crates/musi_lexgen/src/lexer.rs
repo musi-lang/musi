@@ -4,6 +4,7 @@ use syn::{
     Attribute, Data, DeriveInput, Expr, ExprLit, Ident, Lit, MetaNameValue, Result, Variant, parse2,
 };
 
+/// Building logic for Lexer macro.
 pub fn derive_lexer_impl(input: TokenStream) -> Result<TokenStream> {
     let input: DeriveInput = parse2(input)?;
     let enum_name = &input.ident;
@@ -87,11 +88,13 @@ fn generate_lexer_impl(
 
     quote! {
         impl #enum_name {
+            /// Starts lexer for input text.
             #[must_use]
             pub fn lexer(input: &str) -> #lexer_struct_name<'_> {
                 #lexer_struct_name::new(input)
             }
 
+            /// Checks if word is keyword.
             #[must_use]
             pub fn keyword_lookup(ident: &str) -> Option<Self> {
                 match ident {
@@ -100,6 +103,7 @@ fn generate_lexer_impl(
                 }
             }
 
+            /// Matches symbols. Prefers longest matches.
             #[must_use]
             pub fn symbol_dispatch(
                 first: char,
@@ -110,22 +114,26 @@ fn generate_lexer_impl(
             }
         }
 
+        /// Tracking state for lexer.
         pub struct #lexer_struct_name<'a> {
             input: &'a str,
             pos: usize,
         }
 
         impl<'a> #lexer_struct_name<'a> {
+            /// Starts fresh lexer.
             #[must_use]
             pub const fn new(input: &'a str) -> Self {
                 Self { input, pos: 0 }
             }
 
+            /// Gives current byte position.
             #[must_use]
             pub const fn pos(&self) -> usize {
                 self.pos
             }
 
+            /// Gives text between two positions.
             #[must_use]
             pub fn slice(&self, start: usize, end: usize) -> &'a str {
                 self.input.get(start..end).unwrap_or("")
