@@ -268,8 +268,16 @@ name = "musi_lex"
 version = "0.1.0"
 dependencies = [
  "musi_basic",
- "musi_macros",
  "thiserror",
+]
+
+[[package]]
+name = "musi_lexgen"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -292,22 +300,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "musi_macros"
-version = "0.1.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "musi_parse"
 version = "0.1.0"
 dependencies = [
  "musi_ast",
  "musi_basic",
  "musi_lex",
- "musi_macros",
  "thiserror",
 ]
 
@@ -318,7 +316,6 @@ dependencies = [
  "musi_ast",
  "musi_basic",
  "musi_lex",
- "musi_macros",
  "musi_parse",
  "thiserror",
 ]

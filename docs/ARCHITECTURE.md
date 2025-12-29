@@ -78,7 +78,6 @@ Musi is a hand-written compiler with a layered crate architecture inspired by Ro
 |-------|---------|
 | `musi_basic` | Core primitives: `Span`, `FileId`, `NodeId`, `InternedString`, arena types |
 | `musi_errors` | Unified diagnostics: `Diagnostic`, `ErrorCode`, `Severity`, rendering |
-| `musi_macros` | Procedural macros for derive and code generation |
 
 ### Type System Layer
 

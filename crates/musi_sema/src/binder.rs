@@ -93,10 +93,10 @@ fn report_unused(interner: &Interner, symbols: &SymbolTable, diags: &mut Diagnos
             continue;
         }
 
-        let diag = Diagnostic::from(
-            SemaErrorKind::UnusedName(name.to_owned()).into_musi_error(sym.def_span),
-        );
-        diags.add(diag);
+        // let diag = Diagnostic::from(
+        //     SemaErrorKind::UnusedName(name.to_owned()).into_musi_error(sym.def_span),
+        // );
+        // diags.add(diag);
     }
 }
 
