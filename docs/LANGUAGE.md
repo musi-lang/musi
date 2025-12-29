@@ -36,7 +36,7 @@ Musi uses **gradual typing** with local `Hindley-Milner` inference. You can writ
 **Special:**
 
 - `Unit` (empty tuple `()`, like void but better, but also not quite like void)
-- `Any` (dynamic type)
+- `Any` (top type)
 - `Never` (bottom type, for things that never return)
 
 ### Building Complex Types
@@ -268,4 +268,4 @@ Rust needs `::<>` syntax to disambiguate generics in some contexts. Square brack
 
 ### 13. Conceptual consistency
 
-Generics are like "indexing into family of types". So `List[Int]` (type indexing) looks like `array[0]` (value indexing). Same bracket syntax, similar mental model.
+Generics are like "indexing into family of types". So `List[Int]` (type indexing) looks like `array.[0]` (value indexing). Same bracket syntax, similar mental model.
