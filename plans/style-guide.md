@@ -44,8 +44,8 @@ fn calculate(x: Int): Int {
 };
 
 record Point {
-  x: Int;
-  y: Int;
+  x: Int,
+  y: Int,
 };
 
 choice Option[T] {
@@ -236,8 +236,8 @@ fn first() { ... };
 fn second() { ... };
 
 record Point {
-  x: Int;
-  y: Int;
+  x: Int,
+  y: Int,
 };
 ```
 
@@ -291,7 +291,6 @@ Use `///` for documentation:
 /// Calculate the factorial of n.
 /// Returns 1 for n <= 1.
 fn factorial(n: Int): Int => if n <= 1 { 1 } else { n * factorial(n - 1) };
-};
 ```
 
 ---
