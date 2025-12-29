@@ -291,14 +291,14 @@ List of diagnostic entries with severity, message, span, hints, optional fix-its
 ### Scope Error
 
 ```text
-error: identifier 'x' not in scope
-note: similar identifier 'y' found in parent scope
+error: cannot find name 'x' in scope
+note: similar name 'y' found in parent scope
 ```
 
 ### Pattern Match Exhaustiveness
 
 ```text
-warning: pattern match not exhaustive; missing case 'None'
+warning: non-exhaustive pattern match; missing case 'None'
 ```
 
 ### Duplicate Definition
