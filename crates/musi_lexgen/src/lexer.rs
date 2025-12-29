@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use syn::{
@@ -25,6 +23,7 @@ pub fn derive_lexer_impl(input: TokenStream) -> Result<TokenStream> {
     let mut token_defs = vec![];
     let mut has_eof = false;
     let mut has_error = false;
+    let mut has_underscore = false;
 
     for variant in variants {
         let variant_name = &variant.ident;
@@ -34,6 +33,10 @@ pub fn derive_lexer_impl(input: TokenStream) -> Result<TokenStream> {
         }
         if variant_name == "Error" {
             has_error = true;
+            continue;
+        }
+        if variant_name == "Underscore" {
+            has_underscore = true;
             continue;
         }
         if let Some(def) = parse_token_variant(variant)? {
@@ -56,7 +59,7 @@ pub fn derive_lexer_impl(input: TokenStream) -> Result<TokenStream> {
 
     token_defs.sort_by(|a, b| b.pattern.len().cmp(&a.pattern.len()));
 
-    let generated = generate_lexer_impl(enum_name, &skip_patterns, &token_defs);
+    let generated = generate_lexer_impl(enum_name, &skip_patterns, &token_defs, has_underscore);
     Ok(generated)
 }
 
@@ -105,10 +108,12 @@ fn generate_lexer_impl(
     enum_name: &Ident,
     skip_patterns: &[String],
     token_defs: &[TokenDef],
+    has_underscore: bool,
 ) -> TokenStream {
     let symbol_arms = generate_symbol_dispatch(enum_name, token_defs);
     let keyword_arms = generate_keyword_lookup(enum_name, token_defs);
     let skip_check = generate_skip_check(skip_patterns);
+    let underscore_check = generate_underscore_check(enum_name, has_underscore);
 
     let lexer_struct_name = format_ident!("{enum_name}Lexer");
 
@@ -204,9 +209,7 @@ fn generate_lexer_impl(
                         let _ = self.bump();
                     }
                     let ident = &self.input[start..self.pos];
-                    if ident == "_" {
-                        return Some((#enum_name::Underscore, start, self.pos));
-                    }
+                    #underscore_check
                     if let Some(kw) = #enum_name::keyword_lookup(ident) {
                         return Some((kw, start, self.pos));
                     }
@@ -221,32 +224,15 @@ fn generate_lexer_impl(
 }
 
 fn generate_symbol_dispatch(enum_name: &Ident, token_defs: &[TokenDef]) -> Vec<TokenStream> {
-    let mut arms = vec![];
-    let mut seen_first_chars: HashSet<char> = HashSet::new();
+    token_defs
+        .iter()
+        .filter(|def| !def.is_keyword)
+        .filter_map(|def| {
+            let variant = &def.variant_name;
+            let chars: Vec<char> = def.pattern.chars().collect();
+            let first_char = *chars.first()?;
+            let pattern_len = chars.len();
 
-    for def in token_defs {
-        if def.is_keyword {
-            continue;
-        }
-
-        let pattern = &def.pattern;
-        let variant = &def.variant_name;
-        let chars: Vec<char> = pattern.chars().collect();
-        let first_char = match chars.first() {
-            Some(c) => *c,
-            None => continue,
-        };
-        let pattern_len = chars.len();
-
-        if pattern_len == 1 {
-            if !seen_first_chars.contains(&first_char) {
-                arms.push(quote! {
-                    if first == #first_char {
-                        return Some((#enum_name::#variant, 1));
-                    }
-                });
-            }
-        } else {
             let rest_checks: Vec<TokenStream> = chars
                 .iter()
                 .skip(1)
@@ -254,17 +240,21 @@ fn generate_symbol_dispatch(enum_name: &Ident, token_defs: &[TokenDef]) -> Vec<T
                 .map(|(i, c)| quote! { peek_nth(#i) == Some(#c) })
                 .collect();
 
-            arms.push(quote! {
-                if first == #first_char #(&& #rest_checks)* {
-                    return Some((#enum_name::#variant, #pattern_len));
+            Some(if rest_checks.is_empty() {
+                quote! {
+                    if first == #first_char {
+                        return Some((#enum_name::#variant, 1));
+                    }
                 }
-            });
-        }
-
-        let _: bool = seen_first_chars.insert(first_char);
-    }
-
-    arms
+            } else {
+                quote! {
+                    if first == #first_char #(&& #rest_checks)* {
+                        return Some((#enum_name::#variant, #pattern_len));
+                    }
+                }
+            })
+        })
+        .collect()
 }
 
 fn generate_keyword_lookup(enum_name: &Ident, token_defs: &[TokenDef]) -> Vec<TokenStream> {
@@ -293,6 +283,18 @@ fn generate_skip_check(skip_patterns: &[String]) -> TokenStream {
             if self.pos == before {
                 break;
             }
+        }
+    }
+}
+
+fn generate_underscore_check(enum_name: &Ident, has_underscore: bool) -> TokenStream {
+    if !has_underscore {
+        return quote! {};
+    }
+
+    quote! {
+        if ident == "_" {
+            return Some((#enum_name::Underscore, start, self.pos));
         }
     }
 }
