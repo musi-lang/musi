@@ -136,7 +136,7 @@ aux_mso_header = aux_magic, aux_version, aux_flags, aux_const_pool_len, aux_symb
 | 0x3E | `br.le` | offset:i32 | branch if less or equal |
 | 0x3D | `br.gt` | offset:i32 | branch if greater than |
 | 0x3C | `br.ge` | offset:i32 | branch if greater or equal |
-| 0x45 | `sw` | count:n32, offsets:i32[] | jump table dispatch |
+| 0x45 | `jmp` | count:n32, offsets:i32[] | jump table dispatch |
 | 0x2A | `ret` | — | return from function |
 
 ### Function Calls

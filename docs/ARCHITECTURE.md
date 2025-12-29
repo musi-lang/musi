@@ -188,13 +188,13 @@ Rust-style attribute-driven linting:
 **In code:**
 
 ```musi
-@[allow("unused_vars")]
+@[lint(allow("unused_vars"))]
 fn foo(x: Int32) { ... };
 
-@[deny("implicit_any")]
+@[lint(deny("implicit_any"))]
 record Bar { ... };
 
-@[warn("missing_docs")]
+@[lint(warn("missing_docs"))]
 export fn public_api() { ... };
 ```
 
