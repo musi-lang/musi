@@ -173,7 +173,7 @@ fn generate_lexer_impl(
                     return Some((Some(token), start, self.pos));
                 }
 
-                if first_char.is_ascii_alphabetic() || first_char == '_' {
+                if first_char.is_ascii_alphanumeric() || first_char == '_' {
                     while self.peek().is_some_and(|c| c.is_ascii_alphanumeric() || c == '_') {
                         let _ = self.bump();
                     }
