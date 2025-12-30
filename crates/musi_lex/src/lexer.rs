@@ -28,6 +28,7 @@ pub struct Lexer<'a> {
 }
 
 impl<'a> Lexer<'a> {
+    /// Creates new lexer for source file.
     pub fn new(source: &'a SourceFile, interner: &'a mut Interner) -> Self {
         Self {
             interner,
@@ -40,15 +41,18 @@ impl<'a> Lexer<'a> {
     }
 
     #[must_use]
+    /// Returns reference to accumulated errors.
     pub const fn errors_ref(&self) -> &DiagnosticBag {
         &self.errors
     }
 
     #[must_use]
+    /// Consumes lexer and returns accumulated errors.
     pub fn errors(self) -> DiagnosticBag {
         self.errors
     }
 
+    /// Scans next token from input.
     pub fn next_token(&mut self) -> Token {
         let start = self.cursor.pos();
 
@@ -387,7 +391,7 @@ impl<'a> Lexer<'a> {
         let id = self.interner.intern(raw_str);
 
         if is_float {
-            TokenKind::LitReal {
+            TokenKind::LitFloat {
                 raw: Ident::new(id, self.make_span(start, suffix_start)),
                 suffix,
             }

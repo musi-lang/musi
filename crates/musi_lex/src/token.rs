@@ -6,15 +6,21 @@ use std::fmt;
 use std::str::FromStr;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Numeric base for integer literals.
 pub enum NumericBase {
+    /// Base 10.
     Decimal,
+    /// Base 16.
     Hex,
+    /// Base 8.
     Octal,
+    /// Base 2.
     Binary,
 }
 
 impl NumericBase {
     #[must_use]
+    /// Returns radix value.
     pub const fn radix(&self) -> u32 {
         match self {
             Self::Decimal => 10,
@@ -26,17 +32,29 @@ impl NumericBase {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Suffix for numeric literals.
 pub enum NumericSuffix {
+    /// Signed 8-bit integer.
     I8,
+    /// Signed 16-bit integer.
     I16,
+    /// Signed 32-bit integer.
     I32,
+    /// Signed 64-bit integer.
     I64,
+    /// Unsigned 8-bit integer.
     N8,
+    /// Unsigned 16-bit integer.
     N16,
+    /// Unsigned 32-bit integer.
     N32,
+    /// Unsigned 64-bit integer.
     N64,
+    /// Binary 32-bit floating-point.
     F16,
+    /// Binary 32-bit floating-point.
     F32,
+    /// Binary 64-bit floating-point.
     F64,
 }
 
@@ -63,33 +81,54 @@ impl FromStr for NumericSuffix {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[non_exhaustive]
+/// Kind of lexical token.
 pub enum TokenKind {
+    /// `variable_name`, `foo`
     Ident(Ident),
 
     // Literals
+    /// `42`, `0xFF`, `0b1010`
     LitInt {
+        /// Raw string representation of literal. (e.g., `42`, `FF`)
         raw: Ident,
+        /// Numeric base of literal. (e.g., `0x`)
         base: NumericBase,
+        /// Suffix of literal. (e.g., `_i32`, `_n32`)
         suffix: Option<NumericSuffix>,
     },
-    LitReal {
+    /// `3.14`, `1.5e-10`
+    LitFloat {
+        /// Raw string representation of literal. (e.g., `3.14`)
         raw: Ident,
+        /// Suffix of literal. (e.g., `_f64`)
         suffix: Option<NumericSuffix>,
     },
+    /// `"hello world"`
     LitString(Ident),
+    /// `'a'`, `'\n'`
     LitRune(char),
+    /// `$\"text\"`
     LitTemplateNoSubst(Ident),
+    /// `$\"Head {`
     TemplateHead(Ident),
+    /// `} Middle {`
     TemplateMiddle(Ident),
+    /// `} Tail\"`
     TemplateTail(Ident),
 
     // Trivia
+    ///  ` `, `\t`
     Whitespace,
+    /// `\n` or `\r\n`
     Newline,
+    /// `// comment`
     LineComment {
+        /// `/// comment`
         docstyle: bool,
     },
+    /// `/* comment */`
     BlockComment {
+        /// `/** comment */`
         docstyle: bool,
     },
 
@@ -125,48 +164,91 @@ pub enum TokenKind {
     KwWith,
 
     // Symbols
+    /// `{`
     LBrace,
+    /// `}`
     RBrace,
+    /// `[`
     LBrack,
+    /// `]`
     RBrack,
+    /// `(`
     LParen,
+    /// `)`
     RParen,
+    /// `@[`
     AtLBrack,
+    /// `,`
     Comma,
+    /// `.`
     Dot,
+    /// `:`
     Colon,
+    /// `;`
     Semicolon,
+    /// `=`
     Eq,
+    /// `/=`
     SlashEq,
+    /// `<`
     Lt,
+    /// `<=`
     LtEq,
+    /// `>`
     Gt,
+    /// `>=`
     GtEq,
+    /// `+`
     Plus,
+    /// `-`
     Minus,
+    /// `*`
     Star,
+    /// `/`
     Slash,
+    /// `%`
     Percent,
+    /// `<<`
     LtLt,
+    /// `>>`
     GtGt,
+    /// `**`
     StarStar,
+    /// `&`
     Amp,
+    /// `|`
     Bar,
+    /// `|>`
     BarGt,
+    /// `^`
     Caret,
+    /// `~`
     Tilde,
+    /// `@`
     At,
+    /// `.^`
     DotCaret,
+    /// `::`
     ColonColon,
+    /// `??`
     QuestionQuestion,
+    /// `..`
     DotDot,
+    /// `..<`
     DotDotLt,
+    /// `->`
     MinusGt,
+    /// `<-`
     LtMinus,
+    /// `:=`
     ColonEq,
+    /// `=>`
     EqGt,
+    /// `?`
     Question,
+    /// `_`
     Underscore,
+    /// `$`
     Dollar,
 
     // Special
@@ -176,23 +258,29 @@ pub enum TokenKind {
 
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
+/// Lexical token with span.
 pub struct Token {
+    /// Token kind.
     pub kind: TokenKind,
+    /// Source span.
     pub span: Span,
 }
 
 impl Token {
+    /// Dummy token for testing/placeholders.
     pub const DUMMY: Self = Self {
         kind: TokenKind::EOF,
         span: Span::DUMMY,
     };
 
     #[must_use]
+    /// Creates new token.
     pub const fn new(kind: TokenKind, span: Span) -> Self {
         Self { kind, span }
     }
 }
 
+/// List of language keywords.
 pub const KEYWORDS: &[(&str, TokenKind)] = &[
     ("and", TokenKind::KwAnd),
     ("as", TokenKind::KwAs),
@@ -225,6 +313,7 @@ pub const KEYWORDS: &[(&str, TokenKind)] = &[
     ("with", TokenKind::KwWith),
 ];
 
+/// List of language symbols.
 pub const SYMBOLS: &[(TokenKind, &str)] = &[
     (TokenKind::LBrace, "{"),
     (TokenKind::RBrace, "}"),
@@ -272,6 +361,7 @@ pub const SYMBOLS: &[(TokenKind, &str)] = &[
 ];
 
 #[derive(Debug)]
+/// Helper for displaying token kind with interned string.
 pub struct TokenDisplay<'a> {
     kind: &'a TokenKind,
     interner: &'a Interner,
@@ -279,6 +369,7 @@ pub struct TokenDisplay<'a> {
 
 impl TokenKind {
     #[must_use]
+    /// Creates display helper for token kind.
     pub const fn display<'a>(&'a self, interner: &'a Interner) -> TokenDisplay<'a> {
         TokenDisplay {
             kind: self,
@@ -287,6 +378,7 @@ impl TokenKind {
     }
 
     #[must_use]
+    /// Returns string representation of token kind if static.
     pub fn as_str(&self) -> Cow<'static, str> {
         for (kw, tk) in KEYWORDS {
             if *tk == *self {
@@ -311,7 +403,7 @@ impl fmt::Display for TokenKind {
 impl fmt::Display for TokenDisplay<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.kind {
-            TokenKind::LitInt { raw, suffix, .. } | TokenKind::LitReal { raw, suffix } => {
+            TokenKind::LitInt { raw, suffix, .. } | TokenKind::LitFloat { raw, suffix } => {
                 let s = self.interner.lookup(raw.id).unwrap_or("");
                 write!(f, "{s}")?;
                 if let Some(suf) = suffix {

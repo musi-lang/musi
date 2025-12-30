@@ -62,13 +62,18 @@ impl Diagnostic {
 
 #[derive(Default, Debug, Clone)]
 #[non_exhaustive]
+/// Collection of compiler diagnostics.
 pub struct DiagnosticBag {
+    /// List of accumulated diagnostics.
     pub diagnostics: Vec<Diagnostic>,
+    /// Count of error-level diagnostics.
     pub errors: usize,
+    /// Count of warning-level diagnostics.
     pub warnings: usize,
 }
 
 impl DiagnosticBag {
+    /// Adds diagnostic to bag.
     pub fn add(&mut self, diag: Diagnostic) {
         match diag.level {
             Level::Error => self.errors += 1,
@@ -79,16 +84,19 @@ impl DiagnosticBag {
     }
 
     #[must_use]
+    /// Checks if bag contains no diagnostics.
     pub const fn is_empty(&self) -> bool {
         self.diagnostics.is_empty()
     }
 
+    /// Merges other diagnostic bag into this one.
     pub fn merge(&mut self, other: Self) {
         self.errors += other.errors;
         self.warnings += other.warnings;
         self.diagnostics.extend(other.diagnostics);
     }
 
+    /// Emits all diagnostics to `stderr`.
     pub fn emit_all(&self, source_map: &SourceMap) {
         for diag in &self.diagnostics {
             emit(diag, source_map);
@@ -96,6 +104,7 @@ impl DiagnosticBag {
     }
 }
 
+/// Emits diagnostic to `stderr`.
 pub fn emit(diag: &Diagnostic, source_map: &SourceMap) {
     let mut writer = io::stderr();
     let use_color = writer.is_terminal();

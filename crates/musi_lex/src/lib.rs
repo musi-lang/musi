@@ -9,6 +9,7 @@ pub use types::*;
 
 use crate::token::TokenKind;
 
+/// Turns source file input into stream of tokens and diagnostics.
 pub fn tokenize(source: &SourceFile, interner: &mut Interner) -> TokenStream {
     let mut lexer = Lexer::new(source, interner);
     let mut tokens = vec![];
