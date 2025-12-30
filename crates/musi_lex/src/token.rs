@@ -3,13 +3,79 @@ use musi_basic::span::Span;
 use musi_basic::types::Ident;
 use std::borrow::Cow;
 use std::fmt;
+use std::str::FromStr;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NumericBase {
+    Decimal,
+    Hex,
+    Octal,
+    Binary,
+}
+
+impl NumericBase {
+    #[must_use]
+    pub const fn radix(&self) -> u32 {
+        match self {
+            Self::Decimal => 10,
+            Self::Hex => 16,
+            Self::Octal => 8,
+            Self::Binary => 2,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NumericSuffix {
+    I8,
+    I16,
+    I32,
+    I64,
+    N8,
+    N16,
+    N32,
+    N64,
+    F16,
+    F32,
+    F64,
+}
+
+impl FromStr for NumericSuffix {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim_start_matches('_') {
+            "i8" => Ok(Self::I8),
+            "i16" => Ok(Self::I16),
+            "i32" => Ok(Self::I32),
+            "i64" => Ok(Self::I64),
+            "n8" => Ok(Self::N8),
+            "n16" => Ok(Self::N16),
+            "n32" => Ok(Self::N32),
+            "n64" => Ok(Self::N64),
+            "f16" => Ok(Self::F16),
+            "f32" => Ok(Self::F32),
+            "f64" => Ok(Self::F64),
+            _ => Err(()),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[non_exhaustive]
 pub enum TokenKind {
     Ident(Ident),
-    LitInt(i64),
-    LitReal(f64),
+
+    // Literals
+    LitInt {
+        raw: Ident,
+        base: NumericBase,
+        suffix: Option<NumericSuffix>,
+    },
+    LitReal {
+        raw: Ident,
+        suffix: Option<NumericSuffix>,
+    },
     LitString(Ident),
     LitRune(char),
     LitTemplateNoSubst(Ident),
@@ -17,8 +83,17 @@ pub enum TokenKind {
     TemplateMiddle(Ident),
     TemplateTail(Ident),
 
+    // Trivia
+    Whitespace,
+    Newline,
+    LineComment {
+        docstyle: bool,
+    },
+    BlockComment {
+        docstyle: bool,
+    },
+
     // Keywords (alphabetically)
-    KwAlias,
     KwAnd,
     KwAs,
     KwBreak,
@@ -42,7 +117,7 @@ pub enum TokenKind {
     KwRecord,
     KwReturn,
     KwTrue,
-    KwTry,
+    KwType,
     KwUnsafe,
     KwVal,
     KwVar,
@@ -107,22 +182,18 @@ pub struct Token {
 }
 
 impl Token {
+    pub const DUMMY: Self = Self {
+        kind: TokenKind::EOF,
+        span: Span::DUMMY,
+    };
+
     #[must_use]
     pub const fn new(kind: TokenKind, span: Span) -> Self {
         Self { kind, span }
     }
-
-    #[must_use]
-    pub fn dummy() -> Self {
-        Self {
-            kind: TokenKind::EOF,
-            span: Span::default(),
-        }
-    }
 }
 
 pub const KEYWORDS: &[(&str, TokenKind)] = &[
-    ("alias", TokenKind::KwAlias),
     ("and", TokenKind::KwAnd),
     ("as", TokenKind::KwAs),
     ("break", TokenKind::KwBreak),
@@ -146,6 +217,7 @@ pub const KEYWORDS: &[(&str, TokenKind)] = &[
     ("record", TokenKind::KwRecord),
     ("return", TokenKind::KwReturn),
     ("true", TokenKind::KwTrue),
+    ("type", TokenKind::KwType),
     ("unsafe", TokenKind::KwUnsafe),
     ("val", TokenKind::KwVal),
     ("var", TokenKind::KwVar),
@@ -197,7 +269,6 @@ pub const SYMBOLS: &[(TokenKind, &str)] = &[
     (TokenKind::Question, "?"),
     (TokenKind::Underscore, "_"),
     (TokenKind::Dollar, "$"),
-    (TokenKind::EOF, "EOF"),
 ];
 
 #[derive(Debug)]
@@ -240,12 +311,18 @@ impl fmt::Display for TokenKind {
 impl fmt::Display for TokenDisplay<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.kind {
-            TokenKind::LitInt(v) => write!(f, "{v}"),
-            TokenKind::LitReal(v) => write!(f, "{v}"),
+            TokenKind::LitInt { raw, suffix, .. } | TokenKind::LitReal { raw, suffix } => {
+                let s = self.interner.lookup(raw.id).unwrap_or("");
+                write!(f, "{s}")?;
+                if let Some(suf) = suffix {
+                    write!(f, "{suf:?}")?;
+                }
+                Ok(())
+            }
             TokenKind::LitString(ident) => {
                 write!(f, "\"{}\"", self.interner.lookup(ident.id).unwrap_or(""))
             }
-            TokenKind::LitRune(c) => write!(f, "'{c}''"),
+            TokenKind::LitRune(c) => write!(f, "'{c}'"),
             TokenKind::LitTemplateNoSubst(ident) => {
                 write!(f, "$\"{}\"", self.interner.lookup(ident.id).unwrap_or(""))
             }
@@ -261,6 +338,10 @@ impl fmt::Display for TokenDisplay<'_> {
             TokenKind::Ident(ident) | TokenKind::Error(ident) => {
                 write!(f, "{}", self.interner.resolve(ident.id))
             }
+            TokenKind::Whitespace => write!(f, " "),
+            TokenKind::Newline => write!(f, "\\n"),
+            TokenKind::LineComment { .. } => write!(f, "//..."),
+            TokenKind::BlockComment { .. } => write!(f, "/*...*/"),
             kind => {
                 if let Some((kw, _)) = KEYWORDS.iter().find(|(_, tk)| *tk == *kind) {
                     return write!(f, "{kw}");

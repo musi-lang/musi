@@ -1,41 +1,14 @@
 use crate::{
     cursor::Cursor,
-    error::LexErrorKind,
-    token::{KEYWORDS, Token, TokenKind},
-    types::TokenStream,
+    token::{KEYWORDS, NumericBase, NumericSuffix, SYMBOLS, Token, TokenKind},
 };
-use musi_basic::{
-    Ident,
-    diagnostic::{DiagnosticBag, report},
-    error::IntoMusiError,
-    interner::Interner,
-    source::SourceFile,
-    span::Span,
-};
-use std::{num, str::Chars};
+use musi_basic::{interner::Interner, source::SourceFile, span::Span, types::Ident};
+use musi_errors::{DiagnosticBag, helpers};
 
-const PREFIX_LEN: usize = "0x".len();
-const TEMPLATE_PREFIX: usize = "$\"".len();
-const DEC_RADIX: u32 = 10;
-
-/// `(prefix_char, radix, name)`
-const NUM_PREFIXES: &[(char, u32, &str)] = &[
-    ('x', 16, "hexadecimal"),
-    ('o', 8, "octal"),
-    ('b', 2, "binary"),
-];
-
-pub fn tokenize(source: &SourceFile, interner: &mut Interner) -> TokenStream {
-    let mut lexer = Lexer::new(source, interner);
-    let mut tokens = vec![];
-    loop {
-        let token = lexer.next_token();
-        if token.kind == TokenKind::EOF {
-            break;
-        }
-        tokens.push(token);
-    }
-    (tokens, lexer.errors)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LexerState {
+    Normal,
+    InTemplate,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -50,6 +23,7 @@ pub struct Lexer<'a> {
     errors: DiagnosticBag,
     source: &'a SourceFile,
     cursor: Cursor<'a>,
+    state: LexerState,
     braces: Vec<BraceKind>,
 }
 
@@ -60,59 +34,99 @@ impl<'a> Lexer<'a> {
             errors: DiagnosticBag::default(),
             source,
             cursor: Cursor::new(&source.input),
+            state: LexerState::Normal,
             braces: vec![],
         }
     }
 
     #[must_use]
-    pub const fn errors(&self) -> &DiagnosticBag {
+    pub const fn errors_ref(&self) -> &DiagnosticBag {
         &self.errors
     }
 
+    #[must_use]
+    pub fn errors(self) -> DiagnosticBag {
+        self.errors
+    }
+
     pub fn next_token(&mut self) -> Token {
-        self.skip_whitespace();
         let start = self.cursor.pos();
 
-        let kind = match self.cursor.peek() {
-            Some(c) => match c {
-                '#' if self.cursor.peek_nth(1) == Some('!') => self.scan_line_comment(),
-                '/' if matches!(self.cursor.peek_nth(1), Some('/' | '*')) => {
-                    self.scan_slash_seq(start)
-                }
-                '}' if self.braces.last() == Some(&BraceKind::Template) => {
-                    let _ = self.braces.pop();
-                    self.scan_template_lit(1, start)
-                }
-                '"' => self.scan_text_lit(),
-                '\'' => self.scan_rune_lit(),
-                '`' => self.scan_escaped_ident(),
-                '$' if self.cursor.peek_nth(1) == Some('"') => self.scan_template_lit(2, start),
-                c if c.is_ascii_alphabetic() || c == '_' => self.scan_ident(),
-                '0'..='9' => self.scan_number(),
-                _ => self.scan_symbol(),
-            },
-            None => TokenKind::EOF,
+        let kind = match self.state {
+            LexerState::Normal => self.scan_root(start),
+            LexerState::InTemplate => self.scan_template_content(start, false),
         };
 
-        Token::new(kind, self.span(start, self.cursor.pos()))
+        if kind == TokenKind::EOF {
+            return Token::new(
+                kind,
+                self.make_span(self.source.input.len(), self.source.input.len()),
+            );
+        }
+
+        let end = self.cursor.pos();
+        Token::new(kind, self.make_span(start, end))
     }
 
-    fn scan_line_comment(&mut self) -> TokenKind {
-        self.cursor.eat_while(|c| c != '\n');
-        self.next_token().kind
-    }
-
-    fn scan_slash_seq(&mut self, start: usize) -> TokenKind {
-        match self.cursor.peek_nth(1) {
-            Some('/') => self.scan_line_comment(),
-            Some('*') => self.scan_block_comment(start),
-            _ => self.scan_symbol(),
+    fn scan_root(&mut self, start: usize) -> TokenKind {
+        match self.cursor.peek() {
+            Some(c) => match c {
+                ' ' | '\t' | '\r' => {
+                    self.cursor
+                        .eat_while(|c| c == ' ' || c == '\t' || c == '\r');
+                    TokenKind::Whitespace
+                }
+                '\n' => {
+                    let _ = self.cursor.bump();
+                    TokenKind::Newline
+                }
+                '/' => self.scan_slash_or_comment(start),
+                '"' => self.scan_lit_string(start),
+                '\'' => self.scan_lit_rune(start),
+                '`' => self.scan_escaped_ident(start),
+                '0'..='9' => self.scan_number(start),
+                '$' if self.cursor.peek_nth(1) == Some('"') => {
+                    self.cursor.bump_n(2);
+                    self.scan_template_content(start, true)
+                }
+                c if is_ident_start(c) => self.scan_ident(start),
+                _ => self.scan_symbol(start),
+            },
+            None => TokenKind::EOF,
         }
     }
 
+    fn scan_slash_or_comment(&mut self, start: usize) -> TokenKind {
+        let _ = self.cursor.bump();
+        match self.cursor.peek() {
+            Some('/') => self.scan_line_comment(),
+            Some('*') => self.scan_block_comment(start),
+            Some('=') => {
+                let _ = self.cursor.bump();
+                TokenKind::SlashEq
+            }
+            _ => TokenKind::Slash,
+        }
+    }
+
+    fn scan_line_comment(&mut self) -> TokenKind {
+        let _ = self.cursor.bump();
+        let docstyle = self.cursor.is_next('/');
+        if docstyle {
+            let _ = self.cursor.bump();
+        }
+        self.cursor.eat_while(|c| c != '\n');
+        TokenKind::LineComment { docstyle }
+    }
+
     fn scan_block_comment(&mut self, start: usize) -> TokenKind {
+        let _ = self.cursor.bump();
+        let docstyle = self.cursor.is_next('*') && self.cursor.peek_nth(1) != Some('/');
+        if docstyle {
+            let _ = self.cursor.bump();
+        }
+
         let mut depth = 1;
-        self.cursor.bump_n(2);
         while depth > 0 {
             match (self.cursor.peek(), self.cursor.peek_nth(1)) {
                 (Some('/'), Some('*')) => {
@@ -123,611 +137,367 @@ impl<'a> Lexer<'a> {
                     depth -= 1;
                     self.cursor.bump_n(2);
                 }
-                (Some(_), _) => {
-                    let _: Option<char> = self.cursor.bump();
+                (None, _) => {
+                    self.errors.add(helpers::unclosed_block_comment(
+                        self.make_span(start, self.cursor.pos()),
+                    ));
+                    break;
                 }
-                (None, _) => break,
+                _ => {
+                    let _ = self.cursor.bump();
+                }
             }
         }
-        if depth > 0 {
-            self.report(LexErrorKind::UnclosedBlockComment, start, self.cursor.pos());
-        }
-        self.next_token().kind
+        TokenKind::BlockComment { docstyle }
     }
 
-    fn scan_ident(&mut self) -> TokenKind {
-        let start = self.cursor.pos();
-        self.cursor
-            .eat_while(|c| c.is_ascii_alphanumeric() || c == '_');
+    fn scan_lit_string(&mut self, start: usize) -> TokenKind {
+        let _ = self.cursor.bump();
+        let mut out = String::new();
+        loop {
+            match self.cursor.peek() {
+                Some('"') => {
+                    let _ = self.cursor.bump();
+                    let id = self.interner.intern(&out);
+                    return TokenKind::LitString(Ident::new(
+                        id,
+                        self.make_span(start, self.cursor.pos()),
+                    ));
+                }
+                Some('\\') => {
+                    let _ = self.cursor.bump();
+                    let (c, _) = self.scan_escape(start);
+                    out.push(c);
+                }
+                Some(c) => {
+                    let _ = self.cursor.bump();
+                    out.push(c);
+                }
+                None => {
+                    self.errors.add(helpers::unclosed_string(
+                        self.make_span(start, self.cursor.pos()),
+                    ));
+                    let id = self.interner.intern(&out);
+                    return TokenKind::LitString(Ident::new(
+                        id,
+                        self.make_span(start, self.cursor.pos()),
+                    ));
+                }
+            }
+        }
+    }
+
+    fn scan_template_content(&mut self, start: usize, is_head: bool) -> TokenKind {
+        let mut out = String::new();
+        loop {
+            match self.cursor.peek() {
+                Some('"') => {
+                    let _ = self.cursor.bump();
+                    self.state = LexerState::Normal;
+
+                    let id = self.interner.intern(&out);
+                    let span = self.make_span(start, self.cursor.pos());
+                    if is_head {
+                        return TokenKind::LitTemplateNoSubst(Ident::new(id, span));
+                    }
+                    return TokenKind::TemplateTail(Ident::new(id, span));
+                }
+                Some('{') => {
+                    let _ = self.cursor.bump();
+                    self.braces.push(BraceKind::Template);
+                    self.state = LexerState::Normal;
+
+                    let id = self.interner.intern(&out);
+                    let span = self.make_span(start, self.cursor.pos());
+                    if is_head {
+                        return TokenKind::TemplateHead(Ident::new(id, span));
+                    }
+                    return TokenKind::TemplateMiddle(Ident::new(id, span));
+                }
+                Some('\\') => {
+                    let _ = self.cursor.bump();
+                    let (c, _) = self.scan_escape(start);
+                    out.push(c);
+                }
+                Some(c) => {
+                    let _ = self.cursor.bump();
+                    out.push(c);
+                }
+                None => {
+                    self.errors.add(helpers::unclosed_template(
+                        self.make_span(start, self.cursor.pos()),
+                    ));
+                    let id = self.interner.intern(&out);
+                    return TokenKind::LitString(Ident::new(
+                        id,
+                        self.make_span(start, self.cursor.pos()),
+                    ));
+                }
+            }
+        }
+    }
+
+    fn scan_lit_rune(&mut self, start: usize) -> TokenKind {
+        let _ = self.cursor.bump();
+        let c = match self.cursor.peek() {
+            Some('\\') => {
+                let _ = self.cursor.bump();
+                self.scan_escape(start).0
+            }
+            Some('\'') => {
+                self.errors.add(helpers::invalid_rune(
+                    self.make_span(start, self.cursor.pos()),
+                ));
+                '\0'
+            }
+            Some(c) => {
+                let _ = self.cursor.bump();
+                c
+            }
+            None => {
+                self.errors.add(helpers::unclosed_rune(
+                    self.make_span(start, self.cursor.pos()),
+                ));
+                '\0'
+            }
+        };
+
+        if self.cursor.is_next('\'') {
+            let _ = self.cursor.bump();
+        } else {
+            self.errors.add(helpers::unclosed_rune(
+                self.make_span(start, self.cursor.pos()),
+            ));
+        }
+        TokenKind::LitRune(c)
+    }
+
+    fn scan_escaped_ident(&mut self, start: usize) -> TokenKind {
+        let _ = self.cursor.bump();
+        let mut out = String::new();
+        loop {
+            match self.cursor.peek() {
+                Some('`') => {
+                    let _ = self.cursor.bump();
+                    break;
+                }
+                Some(c) => {
+                    let _ = self.cursor.bump();
+                    out.push(c);
+                }
+                None => {
+                    self.errors.add(helpers::unclosed_escaped_ident(
+                        self.make_span(start, self.cursor.pos()),
+                    ));
+                    break;
+                }
+            }
+        }
+        let id = self.interner.intern(&out);
+        TokenKind::Ident(Ident::new(id, self.make_span(start, self.cursor.pos())))
+    }
+
+    fn scan_number(&mut self, start: usize) -> TokenKind {
+        let base = self.scan_number_base();
+        let radix = base.radix();
+
+        self.cursor.eat_while(|c| c.is_digit(radix) || c == '_');
+
+        let has_frac = self.has_fraction_part(base);
+        let has_exp = self.has_exponent_part(base);
+        let is_float = has_frac || has_exp;
+        let suffix_data = self.scan_number_suffix();
+        self.make_number(start, base, is_float, suffix_data)
+    }
+
+    fn scan_number_base(&mut self) -> NumericBase {
+        if self.cursor.peek() == Some('0') {
+            match self.cursor.peek_nth(1) {
+                Some('x') => {
+                    self.cursor.bump_n(2);
+                    NumericBase::Hex
+                }
+                Some('o') => {
+                    self.cursor.bump_n(2);
+                    NumericBase::Octal
+                }
+                Some('b') => {
+                    self.cursor.bump_n(2);
+                    NumericBase::Binary
+                }
+                _ => NumericBase::Decimal,
+            }
+        } else {
+            NumericBase::Decimal
+        }
+    }
+
+    fn has_fraction_part(&mut self, base: NumericBase) -> bool {
+        if base == NumericBase::Decimal
+            && self.cursor.peek() == Some('.')
+            && self.cursor.peek_nth(1) != Some('.')
+        {
+            let _ = self.cursor.bump();
+            self.cursor.eat_while(is_decimal_digit_part);
+            true
+        } else {
+            false
+        }
+    }
+
+    fn has_exponent_part(&mut self, base: NumericBase) -> bool {
+        if base == NumericBase::Decimal
+            && (self.cursor.peek() == Some('e') || self.cursor.peek() == Some('E'))
+        {
+            let _ = self.cursor.bump();
+            if self.cursor.peek() == Some('+') || self.cursor.peek() == Some('-') {
+                let _ = self.cursor.bump();
+            }
+            self.cursor.eat_while(is_decimal_digit_part);
+            true
+        } else {
+            false
+        }
+    }
+
+    fn scan_number_suffix(&mut self) -> (Option<NumericSuffix>, usize) {
+        let suffix_start = self.cursor.pos();
+        if is_ident_start(self.cursor.peek().unwrap_or('\0')) {
+            self.cursor.eat_while(is_ident_continue);
+            let suf_str = self
+                .source
+                .input
+                .get(suffix_start..self.cursor.pos())
+                .unwrap_or("");
+            (suf_str.parse().ok(), suffix_start)
+        } else {
+            (None, suffix_start)
+        }
+    }
+
+    fn make_number(
+        &mut self,
+        start: usize,
+        base: NumericBase,
+        is_float: bool,
+        suffix_data: (Option<NumericSuffix>, usize),
+    ) -> TokenKind {
+        let (suffix, suffix_start) = suffix_data;
+        let raw_str = self.source.input.get(start..suffix_start).unwrap_or("");
+        let id = self.interner.intern(raw_str);
+
+        if is_float {
+            TokenKind::LitReal {
+                raw: Ident::new(id, self.make_span(start, suffix_start)),
+                suffix,
+            }
+        } else {
+            TokenKind::LitInt {
+                raw: Ident::new(id, self.make_span(start, suffix_start)),
+                base,
+                suffix,
+            }
+        }
+    }
+
+    fn scan_symbol(&mut self, _start: usize) -> TokenKind {
+        let rest = self.cursor.rest();
+        let mut matched_len = 0;
+        let mut matched_kind = None;
+
+        for (kind, sym) in SYMBOLS {
+            if rest.starts_with(sym) && sym.len() > matched_len {
+                matched_len = sym.len();
+                matched_kind = Some(*kind);
+            }
+        }
+
+        if let Some(kind) = matched_kind {
+            self.cursor.bump_n(matched_len);
+            match kind {
+                TokenKind::LBrace => {
+                    self.braces.push(BraceKind::Normal);
+                    TokenKind::LBrace
+                }
+                TokenKind::RBrace => {
+                    if self.braces.last() == Some(&BraceKind::Template) {
+                        let _ = self.braces.pop();
+                        self.state = LexerState::InTemplate;
+                    } else if self.braces.last() == Some(&BraceKind::Normal) {
+                        let _ = self.braces.pop();
+                    }
+                    TokenKind::RBrace
+                }
+                _ => kind,
+            }
+        } else if let Some(c) = self.cursor.bump() {
+            let start = self.cursor.pos() - c.len_utf8();
+            self.errors.add(helpers::unknown_char(
+                c,
+                self.make_span(start, self.cursor.pos()),
+            ));
+            let id = self.interner.intern(&c.to_string());
+            TokenKind::Error(Ident::new(id, self.make_span(start, self.cursor.pos())))
+        } else {
+            TokenKind::EOF
+        }
+    }
+
+    fn scan_ident(&mut self, start: usize) -> TokenKind {
+        self.cursor.eat_while(is_ident_continue);
         let text = self
             .source
             .input
             .get(start..self.cursor.pos())
-            .expect("`start..cursor` within source bounds");
-        if text == "_" {
-            return TokenKind::Underscore;
-        }
+            .unwrap_or("");
 
-        if let Ok(i) = KEYWORDS.binary_search_by_key(&text, |k| k.0) {
-            KEYWORDS[i].1
+        if let Ok(idx) = KEYWORDS.binary_search_by_key(&text, |k| k.0) {
+            KEYWORDS[idx].1
         } else {
             let id = self.interner.intern(text);
-            TokenKind::Ident(Ident::new(id, self.span(start, self.cursor.pos())))
+            TokenKind::Ident(Ident::new(id, self.make_span(start, self.cursor.pos())))
         }
     }
 
-    fn scan_number(&mut self) -> TokenKind {
-        let start = self.cursor.pos();
-
-        let (base, prefix_len, name) = if self.cursor.peek() == Some('0') {
-            if let Some((_, b, n)) = NUM_PREFIXES
-                .iter()
-                .find(|(c, ..)| self.cursor.peek_nth(1) == Some(*c))
-            {
-                (*b, PREFIX_LEN, *n)
-            } else {
-                (DEC_RADIX, 0, "decimal")
-            }
-        } else {
-            (DEC_RADIX, 0, "decimal")
-        };
-
-        self.cursor.bump_n(prefix_len);
-        self.cursor.eat_while(|c| c.is_digit(base) || c == '_');
-
-        let mut end = self.cursor.pos();
-        if end == start + prefix_len {
-            self.report(LexErrorKind::MalformedNumericLit, start, end);
-            return TokenKind::LitInt(0);
-        }
-
-        let is_real = if base == DEC_RADIX {
-            let has_frac = if self.cursor.is_next('.') && self.cursor.peek_nth(1) != Some('.') {
-                let _: Option<char> = self.cursor.bump();
-                if !self.consume_digits() {
-                    self.report(LexErrorKind::MalformedNumericLit, start, self.cursor.pos());
-                }
-                true
-            } else {
-                false
-            };
-            let has_exp = if matches!(self.cursor.peek(), Some('e' | 'E')) {
-                let _: Option<char> = self.cursor.bump();
-                if matches!(self.cursor.peek(), Some('+' | '-')) {
-                    let _: Option<char> = self.cursor.bump();
-                }
-                if !self.consume_digits() {
-                    self.report(LexErrorKind::MalformedNumericLit, start, self.cursor.pos());
-                }
-                true
-            } else {
-                false
-            };
-            end = self.cursor.pos();
-            has_frac || has_exp
-        } else {
-            false
-        };
-
-        let (val, valid) = self.unitize_numeric(start, end);
-        if !valid {
-            self.report(
-                LexErrorKind::MalformedUnderscore((if is_real { "real" } else { name }).into()),
-                start,
-                end,
-            );
-        }
-
-        if is_real {
-            let v = val.parse::<f64>().unwrap_or_else(|_| {
-                self.report(LexErrorKind::MalformedNumericLit, start, end);
-                0.0
-            });
-            TokenKind::LitReal(v)
-        } else {
-            let v = Self::parse_int(&val).unwrap_or_else(|_| {
-                self.report(LexErrorKind::MalformedNumericLit, start, end);
-                0
-            });
-            TokenKind::LitInt(v)
-        }
-    }
-
-    fn scan_symbol(&mut self) -> TokenKind {
-        match self.cursor.peek() {
-            Some('.') => match self.cursor.peek_nth(1) {
-                Some('.') => self.match_tri(2, '<', TokenKind::DotDotLt, TokenKind::DotDot),
-                Some('^') => self.compound(2, TokenKind::DotCaret),
-                _ => self.one(TokenKind::Dot),
-            },
-            Some('<') => match self.cursor.peek_nth(1) {
-                Some('<') => self.compound(2, TokenKind::LtLt),
-                Some('=') => self.compound(2, TokenKind::LtEq),
-                Some('-') => self.compound(2, TokenKind::LtMinus),
-                _ => self.one(TokenKind::Lt),
-            },
-            Some(':') => self.match_bi(
-                1,
-                ':',
-                TokenKind::ColonColon,
-                '=',
-                TokenKind::ColonEq,
-                TokenKind::Colon,
-            ),
-            Some('=') => self.match_maybe(1, '>', TokenKind::EqGt, TokenKind::Eq),
-            Some('>') => match self.cursor.peek_nth(1) {
-                Some('=') => self.compound(2, TokenKind::GtEq),
-                Some('>') => self.compound(2, TokenKind::GtGt),
-                _ => self.one(TokenKind::Gt),
-            },
-            Some('?') => self.match_maybe(1, '?', TokenKind::QuestionQuestion, TokenKind::Question),
-            Some('/') => self.match_maybe(1, '=', TokenKind::SlashEq, TokenKind::Slash),
-            Some('-') => self.match_maybe(1, '>', TokenKind::MinusGt, TokenKind::Minus),
-            Some('*') => self.match_maybe(1, '*', TokenKind::StarStar, TokenKind::Star),
-            Some('[') => self.one(TokenKind::LBrack),
-            Some('|') => self.match_maybe(1, '>', TokenKind::BarGt, TokenKind::Bar),
-            Some('%') => self.one(TokenKind::Percent),
-            Some('&') => self.one(TokenKind::Amp),
-            Some('(') => self.one(TokenKind::LParen),
-            Some(')') => self.one(TokenKind::RParen),
-            Some('+') => self.one(TokenKind::Plus),
-            Some(',') => self.one(TokenKind::Comma),
-            Some(';') => self.one(TokenKind::Semicolon),
-            Some('@') => self.match_maybe(1, '[', TokenKind::AtLBrack, TokenKind::At),
-            Some(']') => self.one(TokenKind::RBrack),
-            Some('^') => self.one(TokenKind::Caret),
-            Some('_') => self.one(TokenKind::Underscore),
-            Some('{') => {
-                self.braces.push(BraceKind::Normal);
-                self.one(TokenKind::LBrace)
-            }
-            Some('}') => {
-                if self.braces.last() == Some(&BraceKind::Normal) {
-                    let _: Option<BraceKind> = self.braces.pop();
-                }
-                self.one(TokenKind::RBrace)
-            }
-            Some('~') => self.one(TokenKind::Tilde),
-            Some('$') => self.one(TokenKind::Dollar),
+    fn scan_escape(&mut self, start_pos: usize) -> (char, usize) {
+        match self.cursor.bump() {
+            Some('n') => ('\n', 1),
+            Some('r') => ('\r', 1),
+            Some('t') => ('\t', 1),
+            Some('\\') => ('\\', 1),
+            Some('\'') => ('\'', 1),
+            Some('"') => ('"', 1),
+            Some('0') => ('\0', 1),
             Some(c) => {
-                let _: Option<char> = self.cursor.bump();
-                self.report(
-                    LexErrorKind::UnknownChar(c),
-                    self.cursor.pos() - c.len_utf8(),
-                    self.cursor.pos(),
-                );
-                let id = self.interner.intern(c.to_string().as_str());
-                TokenKind::Error(Ident::new(
-                    id,
-                    self.span(self.cursor.pos() - c.len_utf8(), self.cursor.pos()),
-                ))
+                self.errors.add(helpers::unknown_escape(
+                    c,
+                    self.make_span(start_pos, self.cursor.pos()),
+                ));
+                (c, 1)
             }
-            None => TokenKind::EOF,
+            None => ('\0', 0),
         }
     }
 
-    fn scan_text_lit(&mut self) -> TokenKind {
-        let start = self.cursor.pos();
-        if let Some(content_end) =
-            self.consume_quoted(start, 1, &['"'], LexErrorKind::UnclosedStringLit)
-        {
-            let raw = self
-                .source
-                .input
-                .get(start + 1..content_end)
-                .expect("`start+1..content_end` within source bounds");
-            let val = unescape(raw, start + 1, &mut self.errors);
-            let id = self.interner.intern(&val);
-            TokenKind::LitString(Ident::new(id, self.span(start, self.cursor.pos())))
-        } else {
-            let id = self.interner.intern(
-                self.source
-                    .input
-                    .get(start..self.cursor.pos())
-                    .expect("`start..cursor` within source bounds"),
-            );
-            TokenKind::Error(Ident::new(id, self.span(start, self.cursor.pos())))
-        }
-    }
-
-    fn scan_rune_lit(&mut self) -> TokenKind {
-        let start = self.cursor.pos();
-        let _: Option<char> = self.cursor.bump();
-
-        let mut val = '\0';
-
-        match self.cursor.peek() {
-            Some('\'') => {
-                self.report(LexErrorKind::InvalidRuneLit, start, start + 2);
-                let _: Option<char> = self.cursor.bump();
-            }
-            Some('\\') => {
-                let _: Option<char> = self.cursor.bump();
-                let c_start = self.cursor.pos();
-                let mut rest_chars = self.cursor.rest().chars();
-                match scan_escape(&mut rest_chars) {
-                    Ok((c, len)) => {
-                        val = c;
-                        self.cursor.bump_n(len);
-                    }
-                    Err((msg, len)) => {
-                        self.report(
-                            LexErrorKind::UnknownEscape(msg),
-                            c_start - 1,
-                            c_start - 1 + 1 + len,
-                        );
-                        self.cursor.bump_n(len);
-                    }
-                }
-            }
-            Some(c) => {
-                val = c;
-                let _: Option<char> = self.cursor.bump();
-            }
-            None => {}
-        }
-
-        if self.cursor.is_next('\'') {
-            let _: Option<char> = self.cursor.bump();
-        } else {
-            self.cursor.eat_while(|c| c != '\'');
-            if self.cursor.is_next('\'') {
-                let _: Option<char> = self.cursor.bump();
-                self.report(LexErrorKind::InvalidRuneLit, start, self.cursor.pos());
-            } else {
-                self.report(LexErrorKind::UnclosedRuneLit, start, start + 1);
-            }
-        }
-
-        TokenKind::LitRune(val)
-    }
-
-    fn scan_template_lit(&mut self, offset: usize, start: usize) -> TokenKind {
-        if let Some(content_end) = self.consume_quoted(
-            start,
-            offset,
-            &['"', '{'],
-            LexErrorKind::UnclosedTemplateLit,
-        ) {
-            let raw = self
-                .source
-                .input
-                .get(start + offset..content_end)
-                .expect("`start+offset..content_end` within source bounds");
-            let val = unescape(raw, start + offset, &mut self.errors);
-            let id = self.interner.intern(&val);
-            let span = self.span(start, self.cursor.pos());
-
-            let is_head = offset == TEMPLATE_PREFIX;
-            let follows_brace = self
-                .source
-                .input
-                .get(content_end..)
-                .is_some_and(|s| s.starts_with('{'));
-            if follows_brace {
-                self.braces.push(BraceKind::Template);
-                if is_head {
-                    TokenKind::TemplateHead(Ident::new(id, span))
-                } else {
-                    TokenKind::TemplateMiddle(Ident::new(id, span))
-                }
-            } else if is_head {
-                TokenKind::LitTemplateNoSubst(Ident::new(id, span))
-            } else {
-                TokenKind::TemplateTail(Ident::new(id, span))
-            }
-        } else {
-            let id = self.interner.intern(
-                self.source
-                    .input
-                    .get(start..self.cursor.pos())
-                    .expect("`start..cursor` within source bounds"),
-            );
-            TokenKind::Error(Ident::new(id, self.span(start, self.cursor.pos())))
-        }
-    }
-
-    fn scan_escaped_ident(&mut self) -> TokenKind {
-        let start = self.cursor.pos();
-        if let Some(content_end) =
-            self.consume_quoted(start, 1, &['`'], LexErrorKind::UnclosedEscapedIdent)
-        {
-            let s = self
-                .source
-                .input
-                .get(start + 1..content_end)
-                .expect("valid format string prefix slice");
-            if s.is_empty() {
-                let id = self.interner.intern("");
-                TokenKind::Error(Ident::new(id, self.span(start, self.cursor.pos())))
-            } else {
-                let id = self.interner.intern(s);
-                TokenKind::Ident(Ident::new(id, self.span(start, self.cursor.pos())))
-            }
-        } else {
-            let id = self.interner.intern(
-                self.source
-                    .input
-                    .get(start..self.cursor.pos())
-                    .expect("`start..cursor` within source bounds"),
-            );
-            TokenKind::Error(Ident::new(id, self.span(start, self.cursor.pos())))
-        }
-    }
-}
-
-impl Lexer<'_> {
-    fn skip_whitespace(&mut self) {
-        self.cursor.eat_while(|c| " \t\r\n".contains(c));
-    }
-
-    fn consume_digits(&mut self) -> bool {
-        let before = self.cursor.pos();
-        self.cursor.eat_while(|c| c.is_ascii_digit() || c == '_');
-        self.cursor.pos() > before
-    }
-
-    fn unitize_numeric(&self, start: usize, end: usize) -> (String, bool) {
-        let mut out = String::with_capacity(end - start);
-        let mut prev_under = false;
-        let mut valid = true;
-        let s = self
-            .source
-            .input
-            .get(start..end)
-            .expect("`start..end` within source bounds");
-        for (i, c) in s.char_indices() {
-            if c == '_' {
-                if i == 0 || i == s.len() - 1 || prev_under {
-                    valid = false;
-                }
-                prev_under = true;
-            } else {
-                prev_under = false;
-                out.push(c);
-            }
-        }
-        (out, valid)
-    }
-
-    fn parse_int(s: &str) -> Result<i64, num::ParseIntError> {
-        const RADIX_PREFIXES: &[(&str, &str, u32)] =
-            &[("0x", "0X", 16), ("0o", "0O", 8), ("0b", "0B", 2)];
-        for &(lower, upper, radix) in RADIX_PREFIXES {
-            if let Some(suffix) = s.strip_prefix(lower).or_else(|| s.strip_prefix(upper)) {
-                return i64::from_str_radix(suffix, radix);
-            }
-        }
-        s.parse()
-    }
-
-    fn one(&mut self, kind: TokenKind) -> TokenKind {
-        let _: Option<char> = self.cursor.bump();
-        kind
-    }
-
-    fn compound(&mut self, len: usize, kind: TokenKind) -> TokenKind {
-        self.cursor.bump_n(len);
-        kind
-    }
-
-    fn match_maybe(&mut self, offset: usize, c: char, yes: TokenKind, no: TokenKind) -> TokenKind {
-        if self.cursor.peek_nth(offset) == Some(c) {
-            self.cursor.bump_n(offset + 1);
-            yes
-        } else {
-            let _: Option<char> = self.cursor.bump();
-            no
-        }
-    }
-
-    fn match_tri(&mut self, offset: usize, c: char, yes: TokenKind, no: TokenKind) -> TokenKind {
-        if self.cursor.peek_nth(offset) == Some(c) {
-            self.cursor.bump_n(offset + 1);
-            yes
-        } else {
-            self.cursor.bump_n(offset);
-            no
-        }
-    }
-
-    fn match_bi(
-        &mut self,
-        offset: usize,
-        c1: char,
-        k1: TokenKind,
-        c2: char,
-        k2: TokenKind,
-        def: TokenKind,
-    ) -> TokenKind {
-        match self.cursor.peek_nth(offset) {
-            Some(c) if c == c1 => {
-                self.cursor.bump_n(offset + 1);
-                k1
-            }
-            Some(c) if c == c2 => {
-                self.cursor.bump_n(offset + 1);
-                k2
-            }
-            _ => {
-                let _: Option<char> = self.cursor.bump();
-                def
-            }
-        }
-    }
-
-    fn consume_quoted(
-        &mut self,
-        start: usize,
-        offset: usize,
-        terms: &[char],
-        err: LexErrorKind,
-    ) -> Option<usize> {
-        self.cursor.bump_n(offset);
-
-        loop {
-            match self.cursor.peek() {
-                Some(c) if terms.contains(&c) => {
-                    let pos = self.cursor.pos();
-                    let _: Option<char> = self.cursor.bump();
-                    return Some(pos);
-                }
-                Some('\\') => {
-                    let _: Option<char> = self.cursor.bump();
-                    let _: Option<char> = self.cursor.bump();
-                }
-                Some(_) => {
-                    let _: Option<char> = self.cursor.bump();
-                }
-                None => {
-                    self.report(err, start, start + 1);
-                    return None;
-                }
-            }
-        }
-    }
-
-    fn report(&mut self, err: LexErrorKind, start: usize, end: usize) {
-        self.errors
-            .add(report(err.into_musi_error(self.span(start, end))));
-    }
-
-    fn span(&self, lo: usize, hi: usize) -> Span {
+    fn make_span(&self, lo: usize, hi: usize) -> Span {
         Span::new(
-            self.source.start + u32::try_from(lo).expect("span `lo` fits in u32"),
-            self.source.start + u32::try_from(hi).expect("span `hi` fits in u32"),
+            self.source.start + u32::try_from(lo).unwrap_or(0),
+            self.source.start + u32::try_from(hi).unwrap_or(0),
         )
     }
 }
 
-#[inline]
-/// Unescape string literal, reporting any errors into diagnostic bag.
-///
-/// # Panics
-///
-/// Panics if `start_pos + offset` or `start_pos + offset + 1 + len` exceeds `u32::MAX`.
-pub fn unescape(s: &str, start_pos: usize, errors: &mut DiagnosticBag) -> String {
-    let mut out = String::with_capacity(s.len());
-    let mut chars = s.chars();
-    let mut offset = 0;
-    while let Some(ch) = chars.next() {
-        if ch == '\\' {
-            match scan_escape(&mut chars) {
-                Ok((esc, len)) => {
-                    out.push(esc);
-                    offset += 1 + len;
-                }
-                Err((esc_err, len)) => {
-                    let err_span = Span::new(
-                        u32::try_from(start_pos + offset).expect("offset out of range"),
-                        u32::try_from(start_pos + offset + 1 + len).expect("offset out of range"),
-                    );
-                    errors.add(report(
-                        LexErrorKind::UnknownEscape(esc_err).into_musi_error(err_span),
-                    ));
-                    offset += 1 + len;
-                }
-            }
-        } else {
-            out.push(ch);
-            offset += ch.len_utf8();
-        }
-    }
-    out
+const fn is_ident_start(c: char) -> bool {
+    c.is_ascii_alphabetic() || c == '_'
 }
 
-/// Parses escape sequence from character iterator.
-///
-/// # Errors
-///
-/// Returns `Err((invalid_sequence, len))` if escape is malformed.
-#[inline]
-pub fn scan_escape(chars: &mut Chars<'_>) -> Result<(char, usize), (String, usize)> {
-    let Some(ch) = chars.next() else {
-        return Ok(('\0', 0));
-    };
-
-    if let Ok(i) = ESCAPES.binary_search_by_key(&ch, |e| e.0) {
-        return Ok((ESCAPES[i].1, 1));
-    }
-
-    match ch {
-        'x' => {
-            let (d1, d2) = (chars.next(), chars.next());
-            match (d1, d2) {
-                (Some(c1), Some(c2)) => {
-                    if let (Some(d1), Some(d2)) = (c1.to_digit(16), c2.to_digit(16))
-                        && let Some(c) = char::from_u32((d1 << 4) | d2)
-                    {
-                        return Ok((c, 3));
-                    }
-                    Err((format!("x{c1}{c2}"), 3))
-                }
-                (Some(c1), None) => Err((format!("x{c1}"), 2)),
-                _ => Err(("x".into(), 1)),
-            }
-        }
-        'u' => {
-            if chars.clone().next() == Some('{') {
-                let mut err_iter = chars.clone();
-                let _: Option<char> = chars.next();
-                let _: Option<char> = err_iter.next();
-
-                let (mut val, mut len) = (0, 3);
-                let mut valid = false;
-
-                for ch in chars.by_ref() {
-                    if ch == '}' {
-                        if !valid {
-                            return Err(("u{}".into(), len));
-                        }
-                        match char::from_u32(val) {
-                            Some(c) => return Ok((c, len)),
-                            None => break, // bad unicode scalar
-                        };
-                    }
-                    if let Some(d) = ch.to_digit(16) {
-                        val = (val << 4) | d;
-                        len += 1;
-                        valid = true;
-                        if len > 8 {
-                            break;
-                        }
-                    } else {
-                        break;
-                    }
-                }
-
-                let mut s = String::with_capacity(len);
-                s.push('u');
-                for _ in 0..(len - 1) {
-                    if let Some(c) = err_iter.next() {
-                        s.push(c);
-                    }
-                }
-                Err((s, len))
-            } else {
-                Err(("u".into(), 1))
-            }
-        }
-        _ => Err((ch.to_string(), 1)),
-    }
+const fn is_ident_continue(c: char) -> bool {
+    c.is_ascii_alphanumeric() || c == '_'
 }
 
-const ESCAPES: &[(char, char)] = &[
-    ('0', '\0'),
-    ('"', '\"'),
-    ('\'', '\''),
-    ('\\', '\\'),
-    ('a', '\x07'),
-    ('b', '\x08'),
-    ('e', '\x1b'),
-    ('f', '\x0c'),
-    ('n', '\n'),
-    ('r', '\r'),
-    ('t', '\t'),
-    ('v', '\x0b'),
-];
+const fn is_decimal_digit_part(c: char) -> bool {
+    c.is_ascii_digit() || c == '_'
+}
 
 #[cfg(test)]
 mod tests;
