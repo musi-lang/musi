@@ -1,5 +1,5 @@
 /// Range of source code.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Span {
     /// Start offset (inclusive).
     pub lo: u32,
@@ -8,6 +8,9 @@ pub struct Span {
 }
 
 impl Span {
+    // Empty span used as placeholder.
+    pub const DUMMY: Self = Self { lo: 0, hi: 0 };
+
     /// Creates new span.
     #[must_use]
     pub const fn new(lo: u32, hi: u32) -> Self {
