@@ -267,17 +267,17 @@ pub struct Token {
 }
 
 impl Token {
-    /// Dummy token for testing/placeholders.
-    pub const DUMMY: Self = Self {
-        kind: TokenKind::EOF,
-        span: Span::DUMMY,
-    };
-
     #[must_use]
     /// Creates new token.
     pub const fn new(kind: TokenKind, span: Span) -> Self {
         Self { kind, span }
     }
+
+    /// Dummy token for testing/placeholders.
+    pub const DUMMY: Self = Self::new(
+        TokenKind::Error(Ident::new(0, Span::new(0, 0))),
+        Span::new(0, 0),
+    );
 }
 
 /// List of language keywords.
