@@ -264,7 +264,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "musi_lex"
+name = "musi_errors"
 version = "0.1.0"
 dependencies = [
  "musi_basic",
@@ -272,12 +272,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "musi_lexgen"
+name = "musi_lex"
 version = "0.1.0"
 dependencies = [
- "proc-macro2",
- "quote",
- "syn",
+ "musi_basic",
+ "musi_errors",
+ "thiserror",
 ]
 
 [[package]]
