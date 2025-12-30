@@ -11,6 +11,7 @@ categories.workspace = true
 
 [dependencies]
 musi_basic = { path = "../musi_basic" }
+musi_errors = { path = "../musi_errors" }
 thiserror = { workspace = true }
 
 [lints]
