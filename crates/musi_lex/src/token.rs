@@ -276,7 +276,7 @@ impl Token {
     /// Dummy token for testing/placeholders.
     pub const DUMMY: Self = Self::new(
         TokenKind::Error(Ident::new(0, Span::new(0, 0))),
-        Span::new(0, 0),
+        Span::DUMMY,
     );
 }
 
