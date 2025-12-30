@@ -1,15 +1,15 @@
 use std::collections::HashMap;
 
-/// String interner for deduplicating strings.
 #[derive(Debug, Default)]
+/// String interner for deduplicating strings.
 pub struct Interner {
     table: HashMap<String, u32>,
     strings: Vec<String>,
 }
 
 impl Interner {
-    /// Creates new empty interner.
     #[must_use]
+    /// Creates new empty interner.
     pub fn new() -> Self {
         Self::default()
     }
@@ -31,15 +31,14 @@ impl Interner {
     }
 
     /// Returns string slice for given ID.
-    #[must_use]
     pub fn lookup(&self, id: u32) -> Option<&str> {
         self.strings
             .get(usize::try_from(id).ok()?)
             .map(String::as_str)
     }
 
-    /// Returns string slice or placeholder for given ID.
     #[must_use]
+    /// Returns string slice or placeholder for given ID.
     pub fn resolve(&self, id: u32) -> &str {
         self.lookup(id).unwrap_or("<unknown>")
     }
@@ -50,14 +49,14 @@ impl Interner {
         self.strings.clear();
     }
 
-    /// Returns number of interned strings.
     #[must_use]
+    /// Returns number of interned strings.
     pub const fn len(&self) -> usize {
         self.strings.len()
     }
 
-    /// Returns `true`` if interner is empty.
     #[must_use]
+    /// Returns `true` if interner is empty.
     pub const fn is_empty(&self) -> bool {
         self.strings.is_empty()
     }
