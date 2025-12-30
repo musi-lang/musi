@@ -4,14 +4,19 @@ use musi_basic::span::Span;
 use std::io::{self, IsTerminal, Write};
 use thiserror::Error;
 
+/// Severity level of diagnostic.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Level {
+    /// Critical error preventing compilation.
     Error,
+    /// Warning about potential issue.
     Warning,
+    /// Informational note.
     Note,
 }
 
+/// Represents compiler diagnostic/message.
 #[derive(Debug, Clone, Error)]
 #[error("{message}")]
 #[non_exhaustive]
@@ -24,6 +29,7 @@ pub struct Diagnostic {
 }
 
 impl Diagnostic {
+    /// Creates new diagnostic with specified level.
     pub fn new(level: Level, message: impl Into<String>, span: Span) -> Self {
         Self {
             code: None,
@@ -34,15 +40,18 @@ impl Diagnostic {
         }
     }
 
+    /// Creates new error diagnostic.
     pub fn error(message: impl Into<String>, span: Span) -> Self {
         Self::new(Level::Error, message, span)
     }
 
+    /// Attaches error code to diagnostic.
     pub const fn with_code(mut self, code: ErrorCode) -> Self {
         self.code = Some(code);
         self
     }
 
+    /// Appends note to diagnostic.
     pub fn with_note(mut self, message: impl Into<String>, span: Span) -> Self {
         self.notes.push((message.into(), span));
         self

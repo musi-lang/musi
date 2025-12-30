@@ -1,26 +1,40 @@
 use std::fmt;
 
+/// Unique identifier for compiler errors.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum ErrorCode {
     // Lexer Errors (1xxx)
-    E1001, // unknown char
-    E1002, // unclosed string
-    E1003, // unclosed template
-    E1004, // unclosed escaped ident
-    E1005, // unclosed rune
-    E1006, // unclosed block comment
-    E1007, // invalid ident
-    E1008, // invalid rune
-    E1009, // malformed numeric
-    E1010, // malformed underscore
-    E1011, // unknown escape
+    /// Unknown character in source.
+    E1001,
+    /// String literal was not closed.
+    E1002,
+    /// Template literal was not closed.
+    E1003,
+    /// Escaped identifier was not closed.
+    E1004,
+    /// Rune literal was not closed.
+    E1005,
+    /// Block comment was not closed.
+    E1006,
+    /// Identifier format is invalid.
+    E1007,
+    /// Rune literal is invalid.
+    E1008,
+    /// Numeric literal is malformed.
+    E1009,
+    /// Underscore placement is invalid.
+    E1010,
+    /// Escape sequence is unknown.
+    E1011,
 
     // Parser Errors (2xxx)
+    /// Generic parser error.
     E2001,
 }
 
 impl ErrorCode {
+    /// Returns numeric representation of error code.
     #[must_use]
     pub const fn as_u16(self) -> u16 {
         match self {

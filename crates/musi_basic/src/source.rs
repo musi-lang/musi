@@ -1,11 +1,16 @@
 use std::{cmp::Ordering, sync::Arc};
 
+/// Single source file in compilation.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct SourceFile {
+    /// File path or name.
     pub name: String,
+    /// Source content.
     pub input: String,
+    /// Absolute start offset in source map.
     pub start: u32,
+    /// Start offsets of each line.
     pub line_starts: Vec<u32>,
 }
 
@@ -43,11 +48,13 @@ impl SourceFile {
         self.start + u32::try_from(self.input.len()).expect("file too large")
     }
 
+    /// Returns `true` if offset describes location in this file.
     #[must_use]
     pub fn contains(&self, offset: u32) -> bool {
         offset >= self.start && offset < self.end_pos()
     }
 
+    /// Returns zero-based line index for given offset.
     #[must_use]
     pub fn line_index(&self, offset: u32) -> usize {
         let rel = offset - self.start;
@@ -57,6 +64,7 @@ impl SourceFile {
         }
     }
 
+    /// Returns one-based line and column for specific offset.
     #[must_use]
     pub fn location_at(&self, offset: u32) -> (usize, usize) {
         let rel = offset - self.start;
@@ -66,6 +74,7 @@ impl SourceFile {
         (line_idx + 1, usize::try_from(col).unwrap_or(0) + 1)
     }
 
+    /// Returns content of specific line (zero-based index).
     #[must_use]
     pub fn line_at(&self, line_idx: usize) -> Option<&str> {
         if line_idx >= self.line_starts.len() {
@@ -86,6 +95,7 @@ impl SourceFile {
         self.input.get(start..end_excl_newline)
     }
 
+    /// Returns absolute offset for given one-based line and column.
     #[must_use]
     pub fn offset_at(&self, line: usize, col: usize) -> Option<u32> {
         if line == 0 || line > self.line_starts.len() {
@@ -97,12 +107,14 @@ impl SourceFile {
     }
 }
 
+/// Collection of source files.
 #[derive(Debug, Default)]
 pub struct SourceMap {
     files: Vec<Arc<SourceFile>>,
 }
 
 impl SourceMap {
+    /// Creates new empty source map.
     #[must_use]
     pub fn new() -> Self {
         Self::default()
@@ -121,6 +133,7 @@ impl SourceMap {
         id
     }
 
+    /// Finds source file containing given offset.
     #[must_use]
     pub fn lookup_source(&self, offset: u32) -> Option<&Arc<SourceFile>> {
         let idx = self.files.binary_search_by(|f| {
@@ -135,6 +148,7 @@ impl SourceMap {
         idx.ok().map(|i| &self.files[i])
     }
 
+    /// Returns source file by ID.
     #[must_use]
     pub fn get(&self, id: u32) -> Option<&Arc<SourceFile>> {
         self.files.get(usize::try_from(id).ok()?)

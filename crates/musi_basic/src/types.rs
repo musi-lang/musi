@@ -1,17 +1,18 @@
 use std::hash;
 
-use crate::diagnostic::Diagnostic;
 use crate::span::Span;
 
-pub type Diagnostics = Vec<Diagnostic>;
-
+/// Identifier with source location.
 #[derive(Debug, Clone, Copy, Eq)]
 pub struct Ident {
+    /// Interned string ID.
     pub id: u32,
+    /// Source location.
     pub span: Span,
 }
 
 impl Ident {
+    /// Creates new identifier.
     #[must_use]
     pub const fn new(id: u32, span: Span) -> Self {
         Self { id, span }

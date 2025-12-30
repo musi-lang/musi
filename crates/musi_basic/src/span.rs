@@ -1,25 +1,32 @@
+/// Range of source code.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default, Hash)]
 pub struct Span {
+    /// Start offset (inclusive).
     pub lo: u32,
+    /// End offset (exclusive).
     pub hi: u32,
 }
 
 impl Span {
+    /// Creates new span.
     #[must_use]
     pub const fn new(lo: u32, hi: u32) -> Self {
         Self { lo, hi }
     }
 
+    /// Returns length of span.
     #[must_use]
     pub const fn len(&self) -> u32 {
         self.hi - self.lo
     }
 
+    /// Returns `true` if span is empty.
     #[must_use]
     pub const fn is_empty(&self) -> bool {
         self.lo >= self.hi
     }
 
+    /// Merges two spans into one covering both.
     #[must_use]
     pub fn merge(self, other: Self) -> Self {
         Self {

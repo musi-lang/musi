@@ -1,5 +1,6 @@
 use std::{hash, marker::PhantomData};
 
+/// Typed identifier for arena-allocated nodes.
 #[derive(Debug)]
 pub struct NodeId<T> {
     index: u32,
@@ -7,6 +8,7 @@ pub struct NodeId<T> {
 }
 
 impl<T> NodeId<T> {
+    /// Creates new node identifier.
     #[must_use]
     pub const fn new(index: u32) -> Self {
         Self {
@@ -15,6 +17,7 @@ impl<T> NodeId<T> {
         }
     }
 
+    /// Returns raw index of node.
     #[must_use]
     pub const fn index(self) -> u32 {
         self.index
@@ -59,6 +62,7 @@ impl<T> Default for NodeId<T> {
     }
 }
 
+/// Arena allocator for AST nodes.
 #[derive(Debug)]
 pub struct Arena<T> {
     nodes: Vec<T>,
@@ -71,11 +75,13 @@ impl<T> Default for Arena<T> {
 }
 
 impl<T> Arena<T> {
+    /// Creates new empty arena.
     #[must_use]
     pub const fn new() -> Self {
         Self { nodes: vec![] }
     }
 
+    /// Creates new arena with specified capacity.
     #[must_use]
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
@@ -83,7 +89,7 @@ impl<T> Arena<T> {
         }
     }
 
-    /// Allocates node and returns its ID.
+    /// Allocates node and returns its unique ID.
     ///
     /// # Panics
     ///
@@ -114,11 +120,13 @@ impl<T> Arena<T> {
         &mut self.nodes[id.as_usize()]
     }
 
+    /// Returns number of nodes in arena.
     #[must_use]
     pub const fn len(&self) -> usize {
         self.nodes.len()
     }
 
+    /// Returns `true` if arena is empty.
     #[must_use]
     pub const fn is_empty(&self) -> bool {
         self.nodes.is_empty()
@@ -128,7 +136,7 @@ impl<T> Arena<T> {
     ///
     /// # Panics
     ///
-    /// Panics if arena contains more than `u32::MAX` nodes.
+    /// Panics if arena contains more than `u32::MAX` nodes during iteration.
     pub fn iter(&self) -> impl Iterator<Item = (NodeId<T>, &T)> {
         self.nodes
             .iter()
