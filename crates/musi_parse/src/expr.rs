@@ -259,7 +259,7 @@ impl Parser<'_> {
         match self.peek_kind() {
             Some(
                 TokenKind::LitInt(_)
-                | TokenKind::LitReal(_)
+                | TokenKind::LitFloat(_)
                 | TokenKind::LitString(_)
                 | TokenKind::LitTemplateNoSubst(_)
                 | TokenKind::LitRune(_)
@@ -313,7 +313,7 @@ impl Parser<'_> {
                 let _ = self.advance();
                 Ok(LitKind::Int(v))
             }
-            Some(TokenKind::LitReal(v)) => {
+            Some(TokenKind::LitFloat(v)) => {
                 let _ = self.advance();
                 Ok(LitKind::Real(v))
             }
@@ -907,7 +907,7 @@ impl Parser<'_> {
             self.peek_kind(),
             Some(
                 TokenKind::LitInt(_)
-                    | TokenKind::LitReal(_)
+                    | TokenKind::LitFloat(_)
                     | TokenKind::LitString(_)
                     | TokenKind::LitRune(_)
                     | TokenKind::LitTemplateNoSubst(_)

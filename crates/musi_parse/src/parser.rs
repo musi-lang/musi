@@ -295,7 +295,7 @@ impl<'a> Parser<'a> {
                 None
                 | Some(
                     TokenKind::LitInt(_)
-                    | TokenKind::LitReal(_)
+                    | TokenKind::LitFloat(_)
                     | TokenKind::LitString(_)
                     | TokenKind::LitRune(_)
                     | TokenKind::LitTemplateNoSubst(_)

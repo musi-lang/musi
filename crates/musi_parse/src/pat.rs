@@ -51,7 +51,7 @@ impl Parser<'_> {
             }
             Some(
                 TokenKind::LitInt(_)
-                | TokenKind::LitReal(_)
+                | TokenKind::LitFloat(_)
                 | TokenKind::LitString(_)
                 | TokenKind::LitRune(_)
                 | TokenKind::KwTrue
@@ -78,7 +78,7 @@ impl Parser<'_> {
                 let _ = self.advance();
                 PatKind::Lit(LitKind::Int(v))
             }
-            Some(TokenKind::LitReal(v)) => {
+            Some(TokenKind::LitFloat(v)) => {
                 let _ = self.advance();
                 PatKind::Lit(LitKind::Real(v))
             }

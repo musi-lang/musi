@@ -89,18 +89,13 @@ pub enum TokenKind {
     // Literals
     /// `42`, `0xFF`, `0b1010`
     LitInt {
-        /// Raw string representation of literal. (e.g., `42`, `FF`)
         raw: Ident,
-        /// Numeric base of literal. (e.g., `0x`)
         base: NumericBase,
-        /// Suffix of literal. (e.g., `_i32`, `_n32`)
         suffix: Option<NumericSuffix>,
     },
     /// `3.14`, `1.5e-10`
     LitFloat {
-        /// Raw string representation of literal. (e.g., `3.14`)
         raw: Ident,
-        /// Suffix of literal. (e.g., `_f64`)
         suffix: Option<NumericSuffix>,
     },
     /// `"hello world"`
@@ -260,9 +255,7 @@ pub enum TokenKind {
 #[non_exhaustive]
 /// Lexical token with span.
 pub struct Token {
-    /// Token kind.
     pub kind: TokenKind,
-    /// Source span.
     pub span: Span,
 }
 
