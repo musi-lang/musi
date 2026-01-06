@@ -305,6 +305,7 @@ version = "0.1.0"
 dependencies = [
  "musi_ast",
  "musi_basic",
+ "musi_errors",
  "musi_lex",
  "thiserror",
 ]
@@ -315,6 +316,7 @@ version = "0.1.0"
 dependencies = [
  "musi_ast",
  "musi_basic",
+ "musi_errors",
  "musi_lex",
  "musi_parse",
  "thiserror",
