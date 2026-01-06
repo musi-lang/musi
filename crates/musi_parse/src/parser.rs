@@ -1,12 +1,9 @@
-use musi_ast::AstArena;
-use musi_basic::{
-    diagnostic::{Diagnostic, DiagnosticBag},
-    error::{IntoMusiError, MusiError},
-    span::Span,
+use musi_ast::{AstArena, Ident};
+use musi_basic::{interner::Interner, span::Span};
+use musi_errors::{
+    Diagnostic, DiagnosticBag, IntoMusiError, MusiError, MusiResult, ParseErrorKind,
 };
-use musi_lex::token::{Token, TokenKind};
-
-use crate::error::ParseErrorKind;
+use musi_lex::token::{NumericBase, Token, TokenKind};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]
@@ -75,9 +72,11 @@ impl Prec {
     #[must_use]
     pub const fn postfix(op: TokenKind) -> Option<u8> {
         match op {
-            TokenKind::LParen | TokenKind::Dot | TokenKind::DotCaret | TokenKind::Question => {
-                Some(17)
-            }
+            TokenKind::LParen
+            | TokenKind::Dot
+            | TokenKind::DotCaret
+            | TokenKind::Question
+            | TokenKind::Bang => Some(17),
             _ => None,
         }
     }
@@ -87,16 +86,18 @@ pub struct Parser<'a> {
     pub tokens: &'a [Token],
     pub index: usize,
     pub arena: &'a mut AstArena,
+    pub interner: &'a Interner,
     pub diagnostics: DiagnosticBag,
 }
 
 impl<'a> Parser<'a> {
     #[must_use]
-    pub fn new(tokens: &'a [Token], arena: &'a mut AstArena) -> Self {
+    pub fn new(tokens: &'a [Token], arena: &'a mut AstArena, interner: &'a Interner) -> Self {
         Self {
             tokens,
             index: 0,
             arena,
+            interner,
             diagnostics: DiagnosticBag::default(),
         }
     }
@@ -265,7 +266,14 @@ impl<'a> Parser<'a> {
     }
 
     pub fn report(&mut self, err: MusiError) {
-        self.diagnostics.add(Diagnostic::from(err));
+        let mut diag = Diagnostic::new(err.level, err.message, err.span);
+        if let Some(code) = err.code {
+            diag = diag.with_code(code);
+        }
+        if let Some(hint) = err.hint {
+            diag = diag.with_note(hint, err.span);
+        }
+        self.diagnostics.add(diag);
     }
 
     pub fn sync(&mut self) {
@@ -292,10 +300,9 @@ impl<'a> Parser<'a> {
                     break;
                 }
                 Some(TokenKind::Dot) if self.peek_nth(1) == Some(TokenKind::LBrace) => break,
-                None
-                | Some(
-                    TokenKind::LitInt(_)
-                    | TokenKind::LitFloat(_)
+                Some(
+                    TokenKind::LitInt { .. }
+                    | TokenKind::LitFloat { .. }
                     | TokenKind::LitString(_)
                     | TokenKind::LitRune(_)
                     | TokenKind::LitTemplateNoSubst(_)
@@ -314,7 +321,6 @@ impl<'a> Parser<'a> {
                     | TokenKind::KwWhile
                     | TokenKind::KwFor
                     | TokenKind::KwMatch
-                    | TokenKind::KwTry
                     | TokenKind::KwReturn
                     | TokenKind::KwDefer
                     | TokenKind::KwBreak
@@ -323,7 +329,6 @@ impl<'a> Parser<'a> {
                     | TokenKind::KwImport
                     | TokenKind::KwRecord
                     | TokenKind::KwChoice
-                    | TokenKind::KwAlias
                     | TokenKind::KwFn
                     | TokenKind::KwVal
                     | TokenKind::KwVar
@@ -359,5 +364,17 @@ impl<'a> Parser<'a> {
                 }
             }
         }
+    }
+
+    pub(crate) fn parse_int(&self, raw: Ident, base: NumericBase) -> MusiResult<i64> {
+        let s = self.interner.lookup(raw.id).unwrap_or("0");
+        i64::from_str_radix(s, base.radix())
+            .map_err(|_| ParseErrorKind::InvalidLiteral.into_musi_error(raw.span))
+    }
+
+    pub(crate) fn parse_float(&self, raw: Ident) -> MusiResult<f64> {
+        let s = self.interner.lookup(raw.id).unwrap_or("0.0");
+        s.parse::<f64>()
+            .map_err(|_| ParseErrorKind::InvalidLiteral.into_musi_error(raw.span))
     }
 }

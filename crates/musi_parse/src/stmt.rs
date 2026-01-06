@@ -1,5 +1,5 @@
 use musi_ast::{Prog, StmtId, StmtKind};
-use musi_basic::error::MusiResult;
+use musi_errors::MusiResult;
 use musi_lex::token::TokenKind;
 
 use crate::Parser;

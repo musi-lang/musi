@@ -121,7 +121,7 @@ impl SymbolCollector<'_> {
                 let sym = self.make_symbol(name_str, SymbolKind::ENUM, expr.span, Some(children));
                 self.symbols.push(sym);
             }
-            ExprKind::Alias { name, .. } => {
+            ExprKind::TypeDef { name, .. } => {
                 let name_str = self.resolve_name(*name);
                 let sym = self.make_symbol(name_str, SymbolKind::TYPE_PARAMETER, expr.span, None);
                 self.symbols.push(sym);

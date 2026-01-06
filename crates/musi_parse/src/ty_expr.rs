@@ -1,11 +1,9 @@
 use musi_ast::{Ident, TyExprId, TyExprKind};
-use musi_basic::{
-    error::{IntoMusiError, MusiResult},
-    span::Span,
-};
+use musi_basic::span::Span;
+use musi_errors::{IntoMusiError, MusiResult, ParseErrorKind};
 use musi_lex::token::TokenKind;
 
-use crate::{Parser, error::ParseErrorKind};
+use crate::Parser;
 
 impl Parser<'_> {
     /// # Errors
@@ -78,9 +76,14 @@ impl Parser<'_> {
     fn parse_ty_expr_array(&mut self) -> MusiResult<TyExprId> {
         let start = self.curr_span();
         let _ = self.advance();
-        let size = if let Some(TokenKind::LitInt(v)) = self.peek_kind() {
+        let size = if let Some(TokenKind::LitInt {
+            raw: v,
+            base,
+            suffix: _,
+        }) = self.peek_kind()
+        {
             let _ = self.advance();
-            Some(v)
+            Some(self.parse_int(v, base)?)
         } else {
             None
         };

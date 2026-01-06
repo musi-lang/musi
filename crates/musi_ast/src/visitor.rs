@@ -198,7 +198,7 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, arena: &AstArena, expr: &Expr) {
                 v.visit_choice_case(arena, c);
             }
         }
-        ExprKind::Alias {
+        ExprKind::TypeDef {
             attrs, ty, name, ..
         } => {
             v.visit_attrs(arena, attrs);

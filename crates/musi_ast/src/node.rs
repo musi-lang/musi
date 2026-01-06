@@ -206,8 +206,8 @@ pub enum ExprKind {
         ty_params: Vec<Ident>,
         cases: Vec<ChoiceCase>,
     },
-    /// `alias Name := Type`
-    Alias {
+    /// `type Name := Type`
+    TypeDef {
         attrs: Vec<Attr>,
         mods: Modifiers,
         name: Ident,

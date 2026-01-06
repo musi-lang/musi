@@ -1,4 +1,4 @@
-use crate::test_utils::TestCtx;
+use crate::TestCtx;
 use musi_ast::TyExprKind;
 
 #[test]

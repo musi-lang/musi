@@ -2,13 +2,11 @@ use musi_ast::{
     Attr, AttrArg, ChoiceCase, ChoiceCaseItem, CondId, CondKind, ExprId, ExprKind, Field, FnSig,
     Ident, LitKind, MatchCase, Modifiers, StmtId, StmtKind, TemplatePart,
 };
-use musi_basic::{
-    error::{IntoMusiError, MusiResult},
-    span::Span,
-};
+use musi_basic::span::Span;
+use musi_errors::{IntoMusiError, MusiResult, ParseErrorKind};
 use musi_lex::token::TokenKind;
 
-use crate::{Parser, error::ParseErrorKind, parser::Prec};
+use crate::{Parser, parser::Prec};
 
 impl Parser<'_> {
     /// # Errors
@@ -215,6 +213,16 @@ impl Parser<'_> {
                 Some(TokenKind::LBrace) => self.parse_postfix_record(lhs, start),
                 _ => self.parse_postfix_field(lhs, start),
             },
+            Some(TokenKind::Question) => {
+                let _ = self.advance();
+                let span = start.merge(self.prev_span());
+                Ok(self.arena.alloc_expr(ExprKind::Propagate(lhs), span))
+            }
+            Some(TokenKind::Bang) => {
+                let _ = self.advance();
+                let span = start.merge(self.prev_span());
+                Ok(self.arena.alloc_expr(ExprKind::Force(lhs), span))
+            }
             _ => Ok(lhs),
         }
     }
@@ -258,8 +266,8 @@ impl Parser<'_> {
         let start = self.curr_span();
         match self.peek_kind() {
             Some(
-                TokenKind::LitInt(_)
-                | TokenKind::LitFloat(_)
+                TokenKind::LitInt { .. }
+                | TokenKind::LitFloat { .. }
                 | TokenKind::LitString(_)
                 | TokenKind::LitTemplateNoSubst(_)
                 | TokenKind::LitRune(_)
@@ -293,7 +301,7 @@ impl Parser<'_> {
             }
             Some(TokenKind::KwRecord) => self.parse_expr_record_def(vec![], Modifiers::default()),
             Some(TokenKind::KwChoice) => self.parse_expr_choice_def(vec![], Modifiers::default()),
-            Some(TokenKind::KwAlias) => self.parse_expr_alias_def(vec![], Modifiers::default()),
+            Some(TokenKind::KwType) => self.parse_expr_type_def(vec![], Modifiers::default()),
             Some(TokenKind::KwFn) => self.parse_expr_fn_def(vec![], Modifiers::default()),
             Some(TokenKind::KwVal | TokenKind::KwVar) => self.parse_expr_bind(Modifiers::default()),
             Some(kind) => Err(ParseErrorKind::UnexpectedToken(kind).into_musi_error(start)),
@@ -309,13 +317,19 @@ impl Parser<'_> {
 
     fn parse_lit(&mut self) -> MusiResult<LitKind> {
         match self.peek_kind() {
-            Some(TokenKind::LitInt(v)) => {
+            Some(TokenKind::LitInt {
+                raw: v,
+                base,
+                suffix: _,
+            }) => {
                 let _ = self.advance();
-                Ok(LitKind::Int(v))
+                let val = self.parse_int(v, base)?;
+                Ok(LitKind::Int(val))
             }
-            Some(TokenKind::LitFloat(v)) => {
+            Some(TokenKind::LitFloat { raw: v, suffix: _ }) => {
                 let _ = self.advance();
-                Ok(LitKind::Real(v))
+                let val = self.parse_float(v)?;
+                Ok(LitKind::Real(val))
             }
             Some(TokenKind::LitString(id) | TokenKind::LitTemplateNoSubst(id)) => {
                 let _ = self.advance();
@@ -532,9 +546,16 @@ impl Parser<'_> {
         let start = self.curr_span();
         let _ = self.expect(TokenKind::KwWhile)?;
         let cond = self.parse_cond()?;
+        let guard = if self.bump_if(TokenKind::KwIf) {
+            Some(self.parse_expr()?)
+        } else {
+            None
+        };
         let body = self.parse_expr_block()?;
         let span = start.merge(self.prev_span());
-        Ok(self.arena.alloc_expr(ExprKind::While { cond, body }, span))
+        Ok(self
+            .arena
+            .alloc_expr(ExprKind::While { cond, guard, body }, span))
     }
 
     fn parse_expr_for(&mut self) -> MusiResult<ExprId> {
@@ -543,11 +564,22 @@ impl Parser<'_> {
         let pat = self.parse_pat()?;
         let _ = self.expect(TokenKind::KwIn)?;
         let iter = self.parse_expr()?;
+        let guard = if self.bump_if(TokenKind::KwIf) {
+            Some(self.parse_expr()?)
+        } else {
+            None
+        };
         let body = self.parse_expr_block()?;
         let span = start.merge(self.prev_span());
-        Ok(self
-            .arena
-            .alloc_expr(ExprKind::For { pat, iter, body }, span))
+        Ok(self.arena.alloc_expr(
+            ExprKind::For {
+                pat,
+                iter,
+                guard,
+                body,
+            },
+            span,
+        ))
     }
 
     fn parse_expr_match(&mut self) -> MusiResult<ExprId> {
@@ -634,42 +666,18 @@ impl Parser<'_> {
 
     fn parse_expr_with_modifiers(&mut self, attrs: Vec<Attr>, start: Span) -> MusiResult<ExprId> {
         let mods = self.parse_modifiers();
-        if mods.externness.1 && self.at(TokenKind::LBrace) {
-            return self.parse_expr_extern_block(mods.externness.0, start);
-        }
+        //     if mods.externness.1 && self.at(TokenKind::LBrace) {
+        //         return self.parse_expr_extern_block(mods.externness.0, start);
+        //     }
         match self.peek_kind() {
             Some(TokenKind::KwRecord) => self.parse_expr_record_def(attrs, mods),
             Some(TokenKind::KwChoice) => self.parse_expr_choice_def(attrs, mods),
-            Some(TokenKind::KwAlias) => self.parse_expr_alias_def(attrs, mods),
+            Some(TokenKind::KwType) => self.parse_expr_type_def(attrs, mods),
             Some(TokenKind::KwFn) => self.parse_expr_fn_def(attrs, mods),
             Some(TokenKind::KwVal | TokenKind::KwVar) => self.parse_expr_bind(mods),
             Some(kind) => Err(ParseErrorKind::UnexpectedToken(kind).into_musi_error(start)),
             None => Err(ParseErrorKind::UnexpectedEof.into_musi_error(start)),
         }
-    }
-
-    fn parse_expr_extern_block(&mut self, abi: Option<Ident>, start: Span) -> MusiResult<ExprId> {
-        let _ = self.expect(TokenKind::LBrace)?;
-        let mut fns = vec![];
-        while !self.at(TokenKind::RBrace) && !self.is_eof() {
-            let _ = self.expect(TokenKind::KwFn)?;
-            let name = self.try_ident();
-            let ty_params = self.parse_ty_expr_params()?;
-            let params = self.opt_delimited(TokenKind::LParen, TokenKind::RParen, |p| {
-                p.separated(TokenKind::Comma, Self::parse_field)
-            })?;
-            let ret = self.maybe(TokenKind::Colon, Self::parse_ty_expr)?;
-            let _ = self.expect(TokenKind::Semicolon)?;
-            fns.push(FnSig {
-                name,
-                ty_params,
-                params,
-                ret,
-            });
-        }
-        let _ = self.expect(TokenKind::RBrace)?;
-        let span = start.merge(self.prev_span());
-        Ok(self.arena.alloc_expr(ExprKind::Extern { abi, fns }, span))
     }
 
     fn parse_expr_record_def(&mut self, attrs: Vec<Attr>, mods: Modifiers) -> MusiResult<ExprId> {
@@ -740,16 +748,16 @@ impl Parser<'_> {
         })
     }
 
-    fn parse_expr_alias_def(&mut self, attrs: Vec<Attr>, mods: Modifiers) -> MusiResult<ExprId> {
+    fn parse_expr_type_def(&mut self, attrs: Vec<Attr>, mods: Modifiers) -> MusiResult<ExprId> {
         let start = self.curr_span();
-        let _ = self.expect(TokenKind::KwAlias)?;
+        let _ = self.expect(TokenKind::KwType)?;
         let name = self.expect_ident()?;
         let ty_params = self.parse_ty_expr_params()?;
         let _ = self.expect(TokenKind::ColonEq)?;
         let ty = self.parse_ty_expr()?;
         let span = start.merge(self.prev_span());
         Ok(self.arena.alloc_expr(
-            ExprKind::Alias {
+            ExprKind::TypeDef {
                 attrs,
                 mods,
                 name,
@@ -775,6 +783,12 @@ impl Parser<'_> {
             self.parse_expr_block()?
         };
         let span = start.merge(self.prev_span());
+        let sig_span = if let Some(id) = name {
+            id.span.merge(self.prev_span())
+        } else {
+            start.merge(self.prev_span())
+        };
+
         Ok(self.arena.alloc_expr(
             ExprKind::Fn {
                 attrs,
@@ -784,6 +798,7 @@ impl Parser<'_> {
                     ty_params,
                     params,
                     ret,
+                    span: sig_span,
                 },
                 body,
             },
@@ -906,8 +921,8 @@ impl Parser<'_> {
         matches!(
             self.peek_kind(),
             Some(
-                TokenKind::LitInt(_)
-                    | TokenKind::LitFloat(_)
+                TokenKind::LitInt { .. }
+                    | TokenKind::LitFloat { .. }
                     | TokenKind::LitString(_)
                     | TokenKind::LitRune(_)
                     | TokenKind::LitTemplateNoSubst(_)
@@ -927,7 +942,6 @@ impl Parser<'_> {
                     | TokenKind::KwWhile
                     | TokenKind::KwFor
                     | TokenKind::KwMatch
-                    | TokenKind::KwTry
                     | TokenKind::KwReturn
                     | TokenKind::KwDefer
                     | TokenKind::KwBreak
@@ -939,7 +953,7 @@ impl Parser<'_> {
                     | TokenKind::KwExtern
                     | TokenKind::KwRecord
                     | TokenKind::KwChoice
-                    | TokenKind::KwAlias
+                    | TokenKind::KwType
                     | TokenKind::KwFn
                     | TokenKind::KwVal
                     | TokenKind::KwVar

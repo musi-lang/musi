@@ -1,17 +1,33 @@
 use musi_ast::{ExprId, ExprKind, Ident, LitKind, PatId, PatKind, TyExprId};
-use musi_basic::{
-    error::{IntoMusiError, MusiResult},
-    span::Span,
-};
+use musi_basic::span::Span;
+use musi_errors::{IntoMusiError, MusiResult, ParseErrorKind};
 use musi_lex::token::TokenKind;
 
-use crate::{Parser, error::ParseErrorKind};
+use crate::Parser;
 
 impl Parser<'_> {
     /// # Errors
     /// Returns `ParseErrorKind` on syntax error.
     pub fn parse_pat(&mut self) -> MusiResult<PatId> {
-        self.parse_pat_or()
+        self.parse_pat_as()
+    }
+
+    fn parse_pat_as(&mut self) -> MusiResult<PatId> {
+        let start = self.curr_span();
+        let pat = self.parse_pat_or()?;
+        if self.bump_if(TokenKind::KwAs) {
+            let binding = self.expect_ident()?;
+            let span = start.merge(self.prev_span());
+            Ok(self.arena.alloc_pat(
+                PatKind::As {
+                    inner: pat,
+                    binding,
+                },
+                span,
+            ))
+        } else {
+            Ok(pat)
+        }
     }
 
     fn parse_pat_or(&mut self) -> MusiResult<PatId> {
@@ -50,8 +66,8 @@ impl Parser<'_> {
                 Ok(self.arena.alloc_pat(PatKind::Wild, start))
             }
             Some(
-                TokenKind::LitInt(_)
-                | TokenKind::LitFloat(_)
+                TokenKind::LitInt { .. }
+                | TokenKind::LitFloat { .. }
                 | TokenKind::LitString(_)
                 | TokenKind::LitRune(_)
                 | TokenKind::KwTrue
@@ -74,35 +90,35 @@ impl Parser<'_> {
     fn parse_pat_lit(&mut self) -> MusiResult<PatId> {
         let start = self.curr_span();
         let kind = match self.peek_kind() {
-            Some(TokenKind::LitInt(v)) => {
+            Some(TokenKind::LitInt {
+                raw: v,
+                base,
+                suffix: _,
+            }) => {
                 let _ = self.advance();
-                PatKind::Lit(LitKind::Int(v))
+                LitKind::Int(self.parse_int(v, base)?)
             }
-            Some(TokenKind::LitFloat(v)) => {
+            Some(TokenKind::LitFloat { raw: v, suffix: _ }) => {
                 let _ = self.advance();
-                PatKind::Lit(LitKind::Real(v))
-            }
-            Some(TokenKind::LitString(ident)) => {
-                let _ = self.advance();
-                PatKind::Lit(LitKind::String(ident))
+                LitKind::Real(self.parse_float(v)?)
             }
             Some(TokenKind::LitRune(c)) => {
                 let _ = self.advance();
-                PatKind::Lit(LitKind::Rune(c))
+                LitKind::Rune(c)
             }
             Some(TokenKind::KwTrue) => {
                 let _ = self.advance();
-                PatKind::Lit(LitKind::Bool(true))
+                LitKind::Bool(true)
             }
             Some(TokenKind::KwFalse) => {
                 let _ = self.advance();
-                PatKind::Lit(LitKind::Bool(false))
+                LitKind::Bool(false)
             }
             _ => {
                 return Err(ParseErrorKind::ExpectedLit.into_musi_error(start));
             }
         };
-        Ok(self.arena.alloc_pat(kind, start))
+        Ok(self.arena.alloc_pat(PatKind::Lit(kind), start))
     }
 
     fn parse_pat_after_ident(&mut self, ident: musi_ast::Ident, start: Span) -> MusiResult<PatId> {
@@ -187,7 +203,7 @@ impl Parser<'_> {
     ) -> PatId {
         let span = start.merge(self.prev_span());
         self.arena.alloc_pat(
-            PatKind::Choice {
+            PatKind::Variant {
                 name,
                 ty_args,
                 args,

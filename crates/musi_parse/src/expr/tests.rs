@@ -1,4 +1,4 @@
-use crate::test_utils::TestCtx;
+use crate::TestCtx;
 use musi_ast::{CondKind, ExprKind, LitKind};
 use musi_lex::token::TokenKind;
 
@@ -494,7 +494,7 @@ fn test_expr_alias() {
     let my_int = ctx.intern("MyInt");
     let id = ctx.parse_expr("alias MyInt := Int");
     let kind = &ctx.expr(id).kind;
-    assert!(matches!(kind, ExprKind::Alias { name, .. } if *name == my_int));
+    assert!(matches!(kind, ExprKind::TypeDef { name, .. } if *name == my_int));
 }
 
 #[test]

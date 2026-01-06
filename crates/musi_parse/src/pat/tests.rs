@@ -1,4 +1,4 @@
-use crate::test_utils::TestCtx;
+use crate::TestCtx;
 use musi_ast::{LitKind, PatKind};
 
 #[test]
@@ -45,7 +45,9 @@ fn test_pat_variant() {
     let some = ctx.intern("Some");
     let id = ctx.parse_pat("Some(x)");
     let kind = &ctx.pat(id).kind;
-    assert!(matches!(kind, PatKind::Choice { name, args, .. } if *name == some && args.len() == 1));
+    assert!(
+        matches!(kind, PatKind::Variant { name, args, .. } if *name == some && args.len() == 1)
+    );
 }
 
 #[test]

@@ -1,7 +1,7 @@
 pub mod cursor;
 pub mod lexer;
-pub mod token;
 pub mod types;
+pub use musi_basic::token;
 
 pub use lexer::*;
 use musi_basic::{interner::Interner, source::SourceFile};
