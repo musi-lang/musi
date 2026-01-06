@@ -212,9 +212,9 @@ expr_def_type = [aux_attr], [aux_modifiers], "type", ident, [ty_expr_params], ":
 
 expr_def_fn = [aux_attr], [aux_modifiers], "fn", aux_fn_sig, [(expr_block | "=>", expr)];
 
-expr_binding = [aux_modifiers], ("val" | "var"), pat, [aux_ty_annot], aux_init, expr;
+expr_binding = [aux_modifiers], ("val" | "var"), pat, [aux_ty_annot], aux_init;
 
-expr_unary_postfix = expr, "(", [aux_args], ")" | expr, ".[", aux_expr_list, "]" | expr, ".", ident | expr, ".^" | expr, "?" | expr, "!";
+expr_unary_postfix = expr, "(", [aux_args], ")" | expr, ".[", aux_expr, "]" | expr, ".", ident | expr, ".^" | expr, "?" | expr, "!";
 
 expr_unary_prefix = ("-" | "not" | "~" | "@"), expr;
 
