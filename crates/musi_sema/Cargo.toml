@@ -13,6 +13,7 @@ categories.workspace = true
 musi_basic = { path = "../musi_basic" }
 musi_ast = { path = "../musi_ast" }
 musi_lex = { path = "../musi_lex" }
+musi_errors = { path = "../musi_errors" }
 thiserror = { workspace = true }
 
 [dev-dependencies]
