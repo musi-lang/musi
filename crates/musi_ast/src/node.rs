@@ -83,7 +83,7 @@ pub enum PatKind {
         fields: Vec<Ident>,
     },
     /// `Some(x)`, `None`
-    Choice {
+    Variant {
         name: Ident,
         ty_args: Vec<TyExprId>,
         args: Vec<PatId>,
@@ -92,6 +92,8 @@ pub enum PatKind {
     Cons(Vec<PatId>),
     /// `a | b`
     Or(Vec<PatId>),
+    /// `pat as name`
+    As { inner: PatId, binding: Ident },
 }
 
 #[derive(Debug, Clone)]
@@ -161,12 +163,14 @@ pub enum ExprKind {
     },
     While {
         cond: CondId,
+        guard: Option<ExprId>,
         body: ExprId,
     },
     /// `for pat in iter { }`
     For {
         pat: PatId,
         iter: ExprId,
+        guard: Option<ExprId>,
         body: ExprId,
     },
     /// `match expr { cases }`
@@ -186,11 +190,6 @@ pub enum ExprKind {
     Unsafe(ExprId),
     /// `import "path"`
     Import(Ident),
-    /// `extern "C" { fn foo(); }`
-    Extern {
-        abi: Option<Ident>,
-        fns: Vec<FnSig>,
-    },
     /// `record Point { x: Int; y: Int }`
     RecordDef {
         attrs: Vec<Attr>,
@@ -231,27 +230,19 @@ pub enum ExprKind {
         init: ExprId,
     },
     /// `f(args)`
-    Call {
-        callee: ExprId,
-        args: Vec<ExprId>,
-    },
+    Call { callee: ExprId, args: Vec<ExprId> },
     /// `arr[i]`
-    Index {
-        base: ExprId,
-        index: ExprId,
-    },
+    Index { base: ExprId, index: ExprId },
     /// `obj.field`
-    Field {
-        base: ExprId,
-        field: Ident,
-    },
+    Field { base: ExprId, field: Ident },
     /// `expr.^`
     Deref(ExprId),
+    /// `expr?` — nil propagation
+    Propagate(ExprId),
+    /// `expr!` — force unwrap
+    Force(ExprId),
     /// `-x`, `not x`, `~x`, `@x`
-    Unary {
-        op: TokenKind,
-        operand: ExprId,
-    },
+    Unary { op: TokenKind, operand: ExprId },
     /// `a + b`, `a and b`
     Binary {
         op: TokenKind,
@@ -265,10 +256,7 @@ pub enum ExprKind {
         inclusive: bool,
     },
     /// `x <- y`
-    Assign {
-        target: ExprId,
-        value: ExprId,
-    },
+    Assign { target: ExprId, value: ExprId },
 }
 
 #[derive(Debug, Clone)]
@@ -307,6 +295,7 @@ pub struct FnSig {
     pub ty_params: Vec<Ident>,
     pub params: Vec<Field>,
     pub ret: Option<TyExprId>,
+    pub span: Span,
 }
 
 /// `case pat if guard => body`

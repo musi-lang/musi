@@ -137,13 +137,24 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, arena: &AstArena, expr: &Expr) {
                 v.visit_expr_id(arena, *id);
             }
         }
-        ExprKind::While { cond, body } => {
+        ExprKind::While { cond, guard, body } => {
             v.visit_cond_id(arena, *cond);
+            if let Some(id) = guard {
+                v.visit_expr_id(arena, *id);
+            }
             v.visit_expr_id(arena, *body);
         }
-        ExprKind::For { pat, iter, body } => {
+        ExprKind::For {
+            pat,
+            iter,
+            guard,
+            body,
+        } => {
             v.visit_pat_id(arena, *pat);
             v.visit_expr_id(arena, *iter);
+            if let Some(id) = guard {
+                v.visit_expr_id(arena, *id);
+            }
             v.visit_expr_id(arena, *body);
         }
         ExprKind::Match { scrutinee, cases } => {
@@ -157,13 +168,12 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, arena: &AstArena, expr: &Expr) {
                 v.visit_expr_id(arena, *id);
             }
         }
-        ExprKind::Defer(id) | ExprKind::Unsafe(id) | ExprKind::Deref(id) => {
+        ExprKind::Defer(id)
+        | ExprKind::Unsafe(id)
+        | ExprKind::Deref(id)
+        | ExprKind::Propagate(id)
+        | ExprKind::Force(id) => {
             v.visit_expr_id(arena, *id);
-        }
-        ExprKind::Extern { fns, .. } => {
-            for sig in fns {
-                v.visit_fn_sig(arena, sig);
-            }
         }
         ExprKind::RecordDef {
             attrs,
@@ -270,11 +280,14 @@ pub fn walk_pat<V: AstVisitor>(v: &mut V, arena: &AstArena, pat: &Pat) {
         PatKind::Tuple(ids) | PatKind::Array(ids) | PatKind::Cons(ids) | PatKind::Or(ids) => {
             v.visit_pat_ids(arena, ids);
         }
-        PatKind::Choice {
+        PatKind::As { inner, binding } => {
+            v.visit_pat_id(arena, *inner);
+            v.visit_ident(arena, *binding);
+        }
+        PatKind::Variant {
             name,
             ty_args,
             args,
-            ..
         } => {
             v.visit_ident(arena, *name);
             v.visit_ty_expr_ids(arena, ty_args);
