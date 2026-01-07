@@ -519,19 +519,19 @@ fn test_expr_fn_arrow() {
 }
 
 #[test]
-fn test_expr_bind_val() {
+fn test_expr_binding_val() {
     let mut ctx = TestCtx::new();
     let id = ctx.parse_expr("val x := 42");
     let kind = &ctx.expr(id).kind;
-    assert!(matches!(kind, ExprKind::Bind { mutable: false, .. }));
+    assert!(matches!(kind, ExprKind::Binding { mutable: false, .. }));
 }
 
 #[test]
-fn test_expr_bind_var() {
+fn test_expr_binding_var() {
     let mut ctx = TestCtx::new();
     let id = ctx.parse_expr("var x := 42");
     let kind = &ctx.expr(id).kind;
-    assert!(matches!(kind, ExprKind::Bind { mutable: true, .. }));
+    assert!(matches!(kind, ExprKind::Binding { mutable: true, .. }));
 }
 
 #[test]

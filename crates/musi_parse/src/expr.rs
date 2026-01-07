@@ -299,7 +299,9 @@ impl Parser<'_> {
             Some(TokenKind::KwChoice) => self.parse_expr_choice_def(vec![], Modifiers::default()),
             Some(TokenKind::KwType) => self.parse_expr_type_def(vec![], Modifiers::default()),
             Some(TokenKind::KwFn) => self.parse_expr_fn_def(vec![], Modifiers::default()),
-            Some(TokenKind::KwVal | TokenKind::KwVar) => self.parse_expr_bind(Modifiers::default()),
+            Some(TokenKind::KwVal | TokenKind::KwVar) => {
+                self.parse_expr_binding(Modifiers::default())
+            }
             Some(kind) => Err(errors::unexpected_token(kind, start)),
             None => Err(errors::unexpected_eof(start)),
         }
@@ -665,7 +667,7 @@ impl Parser<'_> {
             Some(TokenKind::KwChoice) => self.parse_expr_choice_def(attrs, mods),
             Some(TokenKind::KwType) => self.parse_expr_type_def(attrs, mods),
             Some(TokenKind::KwFn) => self.parse_expr_fn_def(attrs, mods),
-            Some(TokenKind::KwVal | TokenKind::KwVar) => self.parse_expr_bind(mods),
+            Some(TokenKind::KwVal | TokenKind::KwVar) => self.parse_expr_binding(mods),
             Some(kind) => Err(errors::unexpected_token(kind, start)),
             None => Err(errors::unexpected_eof(start)),
         }
@@ -796,7 +798,7 @@ impl Parser<'_> {
         ))
     }
 
-    fn parse_expr_bind(&mut self, mods: Modifiers) -> MusiResult<ExprId> {
+    fn parse_expr_binding(&mut self, mods: Modifiers) -> MusiResult<ExprId> {
         let start = self.curr_span();
         let mutable = self.at(TokenKind::KwVar);
         let _ = self.advance();
@@ -806,7 +808,7 @@ impl Parser<'_> {
         let init = self.parse_expr()?;
         let span = start.merge(self.prev_span());
         Ok(self.arena.alloc_expr(
-            ExprKind::Bind {
+            ExprKind::Binding {
                 mods,
                 mutable,
                 pat,

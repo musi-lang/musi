@@ -8,14 +8,14 @@ pub struct Span {
 }
 
 impl Span {
+    /// Empty span used as placeholder.
+    pub const DUMMY: Self = Self { lo: 0, hi: 0 };
+
     /// Creates new span.
     #[must_use]
     pub const fn new(lo: u32, hi: u32) -> Self {
         Self { lo, hi }
     }
-
-    /// Empty span used as placeholder.
-    pub const DUMMY: Self = Self::new(0, 0);
 
     /// Returns length of span.
     #[must_use]
@@ -36,11 +36,5 @@ impl Span {
             lo: self.lo.min(other.lo),
             hi: self.hi.max(other.hi),
         }
-    }
-}
-
-impl Default for Span {
-    fn default() -> Self {
-        Self::DUMMY
     }
 }

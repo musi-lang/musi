@@ -10,12 +10,14 @@ Musi is a hand-written compiler for the Musi programming language (`.ms` files).
 **Crate Architecture** (dependency order):
 
 ```text
-musi_core → musi_lex → musi_ast → musi_parse → musi_sema → musi_codegen
-                                  ↓
-                               musi_lsp
-                               musi_cli (CLI)
-                               musi (REPL)
+Foundation:  musi_core
+Frontend:    musi_lex → musi_ast → musi_parse
+Middle-End:  musi_hir → musi_sema
+Backend:     musi_bc → musi_vm
+Consumers:   musi_cli (compiler), musi_rt (runtime), musi_lsp
 ```
+
+**Current Status**: `musi_core`, `musi_lex`, `musi_ast`, `musi_parse` complete. Middle-end crates pending.
 
 ## Source of Truth
 

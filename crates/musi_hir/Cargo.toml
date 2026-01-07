@@ -1,0 +1,18 @@
+[package]
+name = "musi_hir"
+description = "High-level IR for Musi compiler"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+readme = "README.md"
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+musi_core = { path = "../musi_core" }
+musi_ast = { path = "../musi_ast" }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true

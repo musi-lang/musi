@@ -221,7 +221,7 @@ pub enum ExprKind {
         body: ExprId,
     },
     /// `val x := 1` or `var x := 1`
-    Bind {
+    Binding {
         mods: Modifiers,
         mutable: bool,
         pat: PatId,
