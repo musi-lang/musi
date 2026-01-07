@@ -470,7 +470,7 @@ fn test_expr_import() {
 fn test_expr_record_def() {
     let mut ctx = TestCtx::new();
     let point = ctx.intern("Point");
-    let id = ctx.parse_expr("record Point { x: Int; y: Int }");
+    let id = ctx.parse_expr("record Point { x: Int, y: Int }");
     let kind = &ctx.expr(id).kind;
     assert!(
         matches!(kind, ExprKind::RecordDef { name, fields, .. } if *name == Some(point) && fields.len() == 2)
@@ -489,10 +489,10 @@ fn test_expr_choice_def() {
 }
 
 #[test]
-fn test_expr_alias() {
+fn test_expr_type() {
     let mut ctx = TestCtx::new();
     let my_int = ctx.intern("MyInt");
-    let id = ctx.parse_expr("alias MyInt := Int");
+    let id = ctx.parse_expr("type MyInt := Int");
     let kind = &ctx.expr(id).kind;
     assert!(matches!(kind, ExprKind::TypeDef { name, .. } if *name == my_int));
 }

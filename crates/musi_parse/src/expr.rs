@@ -677,7 +677,7 @@ impl Parser<'_> {
         let name = self.try_ident();
         let ty_params = self.parse_ty_expr_params()?;
         let fields = self.delimited(TokenKind::LBrace, TokenKind::RBrace, |p| {
-            p.separated(TokenKind::Semicolon, Self::parse_field)
+            p.separated(TokenKind::Comma, Self::parse_field)
         })?;
         let span = start.merge(self.prev_span());
         Ok(self.arena.alloc_expr(

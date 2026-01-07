@@ -18,7 +18,7 @@ impl TestCtx {
 
     pub fn tokenize(&mut self, input: &str) -> Vec<Token> {
         let source = SourceFile::new("test.ms".into(), input.into(), 0);
-        let (tokens, _) = musi_lex::tokenize(&source, &mut self.interner);
+        let (tokens, _) = musi_lex::tokenize(&source, &mut self.interner, true);
         tokens
     }
 

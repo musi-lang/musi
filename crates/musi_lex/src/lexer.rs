@@ -454,6 +454,9 @@ impl<'a> Lexer<'a> {
             .input
             .get(start..self.cursor.pos())
             .unwrap_or("");
+        if text == "_" {
+            return TokenKind::Underscore;
+        }
 
         if let Ok(idx) = KEYWORDS.binary_search_by_key(&text, |k| k.0) {
             KEYWORDS[idx].1
