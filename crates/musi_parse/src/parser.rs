@@ -1,31 +1,30 @@
-use musi_ast::{AstArena, Ident};
-use musi_basic::{interner::Interner, span::Span};
-use musi_errors::{
-    Diagnostic, DiagnosticBag, IntoMusiError, MusiError, MusiResult, ParseErrorKind,
-};
+use musi_ast::AstArena;
+use musi_core::{Diagnostic, DiagnosticBag, Interner, MusiError, MusiResult, Span, Symbol};
 use musi_lex::token::{NumericBase, Token, TokenKind};
+
+use crate::errors;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]
 pub enum Prec {
     None = 0,
-    Assign = 1,      // <-
-    Pipe = 2,        // |>
-    Coalesce = 3,    // ??
-    Disjunction = 4, // or
-    Conjunction = 5, // and
-    BitOr = 6,       // |
-    BitXor = 7,      // ^
-    BitAnd = 8,      // &
-    Equality = 9,    // = /=
-    Comparison = 10, // < > <= >= is as in
-    Range = 11,      // .. ..<
-    Cons = 12,       // ::
-    Term = 13,       // + -
-    Factor = 14,     // * / % << >>
-    Power = 15,      // **
-    Unary = 16,      // - not ~ @
-    Postfix = 17,    // () [] . .^ ?
+    Assign = 1,
+    Pipe = 2,
+    Coalesce = 3,
+    Disjunction = 4,
+    Conjunction = 5,
+    BitOr = 6,
+    BitXor = 7,
+    BitAnd = 8,
+    Equality = 9,
+    Comparison = 10,
+    Range = 11,
+    Cons = 12,
+    Term = 13,
+    Factor = 14,
+    Power = 15,
+    Unary = 16,
+    Postfix = 17,
 }
 
 impl Prec {
@@ -163,20 +162,18 @@ impl<'a> Parser<'a> {
     }
 
     /// # Errors
-    /// Returns `ParseErrorKind::ExpectedToken` if current token does not match.
+    /// Returns error if current token does not match expected kind.
     ///
     /// # Panics
-    /// Never panics if `at(kind)` is true.
+    /// Panics if `at(kind)` but `advance()` returns `None` (impossible).
     pub fn expect(&mut self, kind: TokenKind) -> Result<&Token, MusiError> {
         if self.at(kind) {
             Ok(self.advance().expect("checked by `at()`"))
         } else {
-            let err = ParseErrorKind::ExpectedToken(kind);
-            Err(err.into_musi_error(self.curr_span()))
+            Err(errors::expected_token(kind, self.curr_span()))
         }
     }
 
-    /// Consume current token if it matches `kind`, returning true if consumed.
     pub fn bump_if(&mut self, kind: TokenKind) -> bool {
         if self.at(kind) {
             let _ = self.advance();
@@ -186,7 +183,6 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Check if at any closing delimiter (`RParen`, `RBrack`, `RBrace`) or EOF.
     #[must_use]
     pub fn at_closing(&self) -> bool {
         matches!(
@@ -195,11 +191,8 @@ impl<'a> Parser<'a> {
         )
     }
 
-    /// Parse items separated by `sep`, stopping at closing delimiters.
-    /// Trailing separator is allowed.
-    ///
     /// # Errors
-    /// Returns error from `parse` if any item fails to parse.
+    /// Returns error from `parse` if any item fails.
     pub fn separated<T>(
         &mut self,
         sep: TokenKind,
@@ -215,10 +208,8 @@ impl<'a> Parser<'a> {
         Ok(items)
     }
 
-    /// Parse content between `open` and `close` delimiters.
-    ///
     /// # Errors
-    /// Returns error if delimiters are missing or content fails to parse.
+    /// Returns error if delimiters are missing or content fails.
     pub fn delimited<T>(
         &mut self,
         open: TokenKind,
@@ -231,10 +222,8 @@ impl<'a> Parser<'a> {
         Ok(result)
     }
 
-    /// Parse optional content between delimiters, returning empty vec if not present.
-    ///
     /// # Errors
-    /// Returns error if delimiters are present but content fails.
+    /// Returns error if open delim present but content or close fails.
     pub fn opt_delimited<T>(
         &mut self,
         open: TokenKind,
@@ -248,9 +237,6 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// If at `trigger` token, consume it and run parser, returning `Some(result)`.
-    /// Otherwise return `None`.
-    ///
     /// # Errors
     /// Returns error if parser fails after trigger is consumed.
     pub fn maybe<T>(
@@ -265,7 +251,11 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn report(&mut self, err: MusiError) {
+    pub fn report(&mut self, diag: Diagnostic) {
+        self.diagnostics.add(diag);
+    }
+
+    pub fn report_err(&mut self, err: MusiError) {
         let mut diag = Diagnostic::new(err.level, err.message, err.span);
         if let Some(code) = err.code {
             diag = diag.with_code(code);
@@ -300,42 +290,7 @@ impl<'a> Parser<'a> {
                     break;
                 }
                 Some(TokenKind::Dot) if self.peek_nth(1) == Some(TokenKind::LBrace) => break,
-                Some(
-                    TokenKind::LitInt { .. }
-                    | TokenKind::LitFloat { .. }
-                    | TokenKind::LitString(_)
-                    | TokenKind::LitRune(_)
-                    | TokenKind::LitTemplateNoSubst(_)
-                    | TokenKind::TemplateHead(_)
-                    | TokenKind::KwTrue
-                    | TokenKind::KwFalse
-                    | TokenKind::Ident(_)
-                    | TokenKind::LParen
-                    | TokenKind::LBrack
-                    | TokenKind::LBrace
-                    | TokenKind::Minus
-                    | TokenKind::KwNot
-                    | TokenKind::Tilde
-                    | TokenKind::At
-                    | TokenKind::KwIf
-                    | TokenKind::KwWhile
-                    | TokenKind::KwFor
-                    | TokenKind::KwMatch
-                    | TokenKind::KwReturn
-                    | TokenKind::KwDefer
-                    | TokenKind::KwBreak
-                    | TokenKind::KwCycle
-                    | TokenKind::KwUnsafe
-                    | TokenKind::KwImport
-                    | TokenKind::KwRecord
-                    | TokenKind::KwChoice
-                    | TokenKind::KwFn
-                    | TokenKind::KwVal
-                    | TokenKind::KwVar
-                    | TokenKind::KwExport
-                    | TokenKind::KwExtern
-                    | TokenKind::AtLBrack,
-                ) => break,
+                Some(k) if is_stmt_starter(k) => break,
                 _ => {
                     _ = self.advance();
                 }
@@ -366,15 +321,54 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub(crate) fn parse_int(&self, raw: Ident, base: NumericBase) -> MusiResult<i64> {
+    pub(crate) fn parse_int(&self, raw: Symbol, base: NumericBase) -> MusiResult<i64> {
         let s = self.interner.lookup(raw.id).unwrap_or("0");
-        i64::from_str_radix(s, base.radix())
-            .map_err(|_| ParseErrorKind::InvalidLiteral.into_musi_error(raw.span))
+        i64::from_str_radix(s, base.radix()).map_err(|_| errors::invalid_literal(raw.span))
     }
 
-    pub(crate) fn parse_float(&self, raw: Ident) -> MusiResult<f64> {
+    pub(crate) fn parse_float(&self, raw: Symbol) -> MusiResult<f64> {
         let s = self.interner.lookup(raw.id).unwrap_or("0.0");
         s.parse::<f64>()
-            .map_err(|_| ParseErrorKind::InvalidLiteral.into_musi_error(raw.span))
+            .map_err(|_| errors::invalid_literal(raw.span))
     }
+}
+
+const fn is_stmt_starter(k: TokenKind) -> bool {
+    matches!(
+        k,
+        TokenKind::LitInt { .. }
+            | TokenKind::LitFloat { .. }
+            | TokenKind::LitString(_)
+            | TokenKind::LitRune(_)
+            | TokenKind::LitTemplateNoSubst(_)
+            | TokenKind::TemplateHead(_)
+            | TokenKind::KwTrue
+            | TokenKind::KwFalse
+            | TokenKind::Ident(_)
+            | TokenKind::LParen
+            | TokenKind::LBrack
+            | TokenKind::LBrace
+            | TokenKind::Minus
+            | TokenKind::KwNot
+            | TokenKind::Tilde
+            | TokenKind::At
+            | TokenKind::KwIf
+            | TokenKind::KwWhile
+            | TokenKind::KwFor
+            | TokenKind::KwMatch
+            | TokenKind::KwReturn
+            | TokenKind::KwDefer
+            | TokenKind::KwBreak
+            | TokenKind::KwCycle
+            | TokenKind::KwUnsafe
+            | TokenKind::KwImport
+            | TokenKind::KwRecord
+            | TokenKind::KwChoice
+            | TokenKind::KwFn
+            | TokenKind::KwVal
+            | TokenKind::KwVar
+            | TokenKind::KwExport
+            | TokenKind::KwExtern
+            | TokenKind::AtLBrack
+    )
 }

@@ -1,13 +1,13 @@
 pub mod cursor;
+pub mod errors;
 pub mod lexer;
 pub mod types;
-pub use musi_basic::token;
+
+pub use musi_core::token;
 
 pub use lexer::*;
-use musi_basic::{interner::Interner, source::SourceFile};
+use musi_core::{Interner, SourceFile, TokenKind};
 pub use types::*;
-
-use crate::token::TokenKind;
 
 /// Turns source file input into stream of tokens and diagnostics.
 pub fn tokenize(source: &SourceFile, interner: &mut Interner) -> TokenStream {

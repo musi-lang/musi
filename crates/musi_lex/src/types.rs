@@ -1,4 +1,4 @@
-use musi_errors::DiagnosticBag;
+use musi_core::DiagnosticBag;
 
 use crate::token::Token;
 

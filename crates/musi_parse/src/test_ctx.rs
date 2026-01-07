@@ -1,6 +1,5 @@
-use musi_ast::{AstArena, Expr, ExprId, Ident, Pat, PatId, TyExpr, TyExprId};
-use musi_basic::{interner::Interner, source::SourceFile, span::Span};
-use musi_lex::token::Token;
+use musi_ast::{AstArena, Expr, ExprId, Pat, PatId, TyExpr, TyExprId};
+use musi_core::{Interner, SourceFile, Span, Symbol, Token};
 
 use crate::Parser;
 
@@ -53,7 +52,7 @@ impl TestCtx {
         self.arena.ty_exprs.get(id)
     }
 
-    pub fn intern(&mut self, s: &str) -> Ident {
-        Ident::new(self.interner.intern(s), Span::DUMMY)
+    pub fn intern(&mut self, s: &str) -> Symbol {
+        Symbol::new(self.interner.intern(s), Span::DUMMY)
     }
 }

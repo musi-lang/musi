@@ -1,9 +1,9 @@
 use crate::{
     cursor::Cursor,
+    errors,
     token::{KEYWORDS, NumericBase, NumericSuffix, SYMBOLS, Token, TokenKind},
 };
-use musi_basic::{interner::Interner, source::SourceFile, span::Span, types::Ident};
-use musi_errors::{DiagnosticBag, helpers};
+use musi_core::{DiagnosticBag, Interner, SourceFile, Span, Symbol};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LexerState {
@@ -142,7 +142,7 @@ impl<'a> Lexer<'a> {
                     self.cursor.bump_n(2);
                 }
                 (None, _) => {
-                    self.errors.add(helpers::unclosed_block_comment(
+                    self.errors.add(errors::unclosed_block_comment(
                         self.make_span(start, self.cursor.pos()),
                     ));
                     break;
@@ -163,7 +163,7 @@ impl<'a> Lexer<'a> {
                 Some('"') => {
                     let _ = self.cursor.bump();
                     let id = self.interner.intern(&out);
-                    return TokenKind::LitString(Ident::new(
+                    return TokenKind::LitString(Symbol::new(
                         id,
                         self.make_span(start, self.cursor.pos()),
                     ));
@@ -178,11 +178,11 @@ impl<'a> Lexer<'a> {
                     out.push(c);
                 }
                 None => {
-                    self.errors.add(helpers::unclosed_string(
+                    self.errors.add(errors::unclosed_string(
                         self.make_span(start, self.cursor.pos()),
                     ));
                     let id = self.interner.intern(&out);
-                    return TokenKind::LitString(Ident::new(
+                    return TokenKind::LitString(Symbol::new(
                         id,
                         self.make_span(start, self.cursor.pos()),
                     ));
@@ -202,9 +202,9 @@ impl<'a> Lexer<'a> {
                     let id = self.interner.intern(&out);
                     let span = self.make_span(start, self.cursor.pos());
                     if is_head {
-                        return TokenKind::LitTemplateNoSubst(Ident::new(id, span));
+                        return TokenKind::LitTemplateNoSubst(Symbol::new(id, span));
                     }
-                    return TokenKind::TemplateTail(Ident::new(id, span));
+                    return TokenKind::TemplateTail(Symbol::new(id, span));
                 }
                 Some('{') => {
                     let _ = self.cursor.bump();
@@ -214,9 +214,9 @@ impl<'a> Lexer<'a> {
                     let id = self.interner.intern(&out);
                     let span = self.make_span(start, self.cursor.pos());
                     if is_head {
-                        return TokenKind::TemplateHead(Ident::new(id, span));
+                        return TokenKind::TemplateHead(Symbol::new(id, span));
                     }
-                    return TokenKind::TemplateMiddle(Ident::new(id, span));
+                    return TokenKind::TemplateMiddle(Symbol::new(id, span));
                 }
                 Some('\\') => {
                     let _ = self.cursor.bump();
@@ -228,11 +228,11 @@ impl<'a> Lexer<'a> {
                     out.push(c);
                 }
                 None => {
-                    self.errors.add(helpers::unclosed_template(
+                    self.errors.add(errors::unclosed_template(
                         self.make_span(start, self.cursor.pos()),
                     ));
                     let id = self.interner.intern(&out);
-                    return TokenKind::LitString(Ident::new(
+                    return TokenKind::LitString(Symbol::new(
                         id,
                         self.make_span(start, self.cursor.pos()),
                     ));
@@ -249,7 +249,7 @@ impl<'a> Lexer<'a> {
                 self.scan_escape(start).0
             }
             Some('\'') => {
-                self.errors.add(helpers::invalid_rune(
+                self.errors.add(errors::invalid_rune(
                     self.make_span(start, self.cursor.pos()),
                 ));
                 '\0'
@@ -259,7 +259,7 @@ impl<'a> Lexer<'a> {
                 c
             }
             None => {
-                self.errors.add(helpers::unclosed_rune(
+                self.errors.add(errors::unclosed_rune(
                     self.make_span(start, self.cursor.pos()),
                 ));
                 '\0'
@@ -269,7 +269,7 @@ impl<'a> Lexer<'a> {
         if self.cursor.is_next('\'') {
             let _ = self.cursor.bump();
         } else {
-            self.errors.add(helpers::unclosed_rune(
+            self.errors.add(errors::unclosed_rune(
                 self.make_span(start, self.cursor.pos()),
             ));
         }
@@ -290,7 +290,7 @@ impl<'a> Lexer<'a> {
                     out.push(c);
                 }
                 None => {
-                    self.errors.add(helpers::unclosed_escaped_ident(
+                    self.errors.add(errors::unclosed_escaped_ident(
                         self.make_span(start, self.cursor.pos()),
                     ));
                     break;
@@ -298,7 +298,7 @@ impl<'a> Lexer<'a> {
             }
         }
         let id = self.interner.intern(&out);
-        TokenKind::Ident(Ident::new(id, self.make_span(start, self.cursor.pos())))
+        TokenKind::Ident(Symbol::new(id, self.make_span(start, self.cursor.pos())))
     }
 
     fn scan_number(&mut self, start: usize) -> TokenKind {
@@ -392,12 +392,12 @@ impl<'a> Lexer<'a> {
 
         if is_float {
             TokenKind::LitFloat {
-                raw: Ident::new(id, self.make_span(start, suffix_start)),
+                raw: Symbol::new(id, self.make_span(start, suffix_start)),
                 suffix,
             }
         } else {
             TokenKind::LitInt {
-                raw: Ident::new(id, self.make_span(start, suffix_start)),
+                raw: Symbol::new(id, self.make_span(start, suffix_start)),
                 base,
                 suffix,
             }
@@ -436,12 +436,12 @@ impl<'a> Lexer<'a> {
             }
         } else if let Some(c) = self.cursor.bump() {
             let start = self.cursor.pos() - c.len_utf8();
-            self.errors.add(helpers::unknown_char(
+            self.errors.add(errors::unknown_char(
                 c,
                 self.make_span(start, self.cursor.pos()),
             ));
             let id = self.interner.intern(&c.to_string());
-            TokenKind::Error(Ident::new(id, self.make_span(start, self.cursor.pos())))
+            TokenKind::Error(Symbol::new(id, self.make_span(start, self.cursor.pos())))
         } else {
             TokenKind::EOF
         }
@@ -459,7 +459,7 @@ impl<'a> Lexer<'a> {
             KEYWORDS[idx].1
         } else {
             let id = self.interner.intern(text);
-            TokenKind::Ident(Ident::new(id, self.make_span(start, self.cursor.pos())))
+            TokenKind::Ident(Symbol::new(id, self.make_span(start, self.cursor.pos())))
         }
     }
 
@@ -473,7 +473,7 @@ impl<'a> Lexer<'a> {
             Some('"') => ('"', 1),
             Some('0') => ('\0', 1),
             Some(c) => {
-                self.errors.add(helpers::unknown_escape(
+                self.errors.add(errors::unknown_escape(
                     c,
                     self.make_span(start_pos, self.cursor.pos()),
                 ));

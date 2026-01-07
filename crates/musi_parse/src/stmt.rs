@@ -1,12 +1,12 @@
 use musi_ast::{Prog, StmtId, StmtKind};
-use musi_errors::MusiResult;
+use musi_core::MusiResult;
 use musi_lex::token::TokenKind;
 
 use crate::Parser;
 
 impl Parser<'_> {
     /// # Errors
-    /// Returns `ParseErrorKind` on syntax error.
+    /// Returns error on syntax failure.
     pub fn parse_stmt(&mut self) -> MusiResult<StmtId> {
         let expr_id = self.parse_expr()?;
         let _ = self.expect(TokenKind::Semicolon)?;
@@ -20,7 +20,7 @@ impl Parser<'_> {
             match self.parse_stmt() {
                 Ok(stmt_id) => stmts.push(stmt_id),
                 Err(e) => {
-                    self.report(e);
+                    self.report_err(e);
                     self.sync_to_stmt();
                 }
             }

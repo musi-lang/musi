@@ -1,13 +1,12 @@
-use musi_ast::{ExprId, ExprKind, Ident, LitKind, PatId, PatKind, TyExprId};
-use musi_basic::span::Span;
-use musi_errors::{IntoMusiError, MusiResult, ParseErrorKind};
+use musi_ast::{ExprId, ExprKind, LitKind, PatId, PatKind, TyExprId};
+use musi_core::{MusiResult, Span, Symbol};
 use musi_lex::token::TokenKind;
 
-use crate::Parser;
+use crate::{Parser, errors};
 
 impl Parser<'_> {
     /// # Errors
-    /// Returns `ParseErrorKind` on syntax error.
+    /// Returns error on syntax failure.
     pub fn parse_pat(&mut self) -> MusiResult<PatId> {
         self.parse_pat_as()
     }
@@ -82,8 +81,8 @@ impl Parser<'_> {
             }
             Some(TokenKind::LParen) => self.parse_pat_paren(),
             Some(TokenKind::LBrack) => self.parse_pat_array(),
-            Some(kind) => Err(ParseErrorKind::UnexpectedToken(kind).into_musi_error(start)),
-            None => Err(ParseErrorKind::UnexpectedEof.into_musi_error(start)),
+            Some(kind) => Err(errors::unexpected_token(kind, start)),
+            None => Err(errors::unexpected_eof(start)),
         }
     }
 
@@ -114,14 +113,12 @@ impl Parser<'_> {
                 let _ = self.advance();
                 LitKind::Bool(false)
             }
-            _ => {
-                return Err(ParseErrorKind::ExpectedLit.into_musi_error(start));
-            }
+            _ => return Err(errors::expected_lit(start)),
         };
         Ok(self.arena.alloc_pat(PatKind::Lit(kind), start))
     }
 
-    fn parse_pat_after_ident(&mut self, ident: musi_ast::Ident, start: Span) -> MusiResult<PatId> {
+    fn parse_pat_after_ident(&mut self, ident: Symbol, start: Span) -> MusiResult<PatId> {
         if self.at(TokenKind::Dot) && self.peek_nth(1) == Some(TokenKind::LBrace) {
             let ty_expr_id = self.arena.alloc_expr(ExprKind::Ident(ident), start);
             return self.parse_pat_record(Some(ty_expr_id), start);
@@ -140,7 +137,7 @@ impl Parser<'_> {
     }
 
     fn parse_pat_record(&mut self, base: Option<ExprId>, start: Span) -> MusiResult<PatId> {
-        self.advance_by(2); // consume `.` and `{`
+        self.advance_by(2);
         let fields = self.separated(TokenKind::Comma, Self::expect_ident)?;
         let _ = self.expect(TokenKind::RBrace)?;
         let span = start.merge(self.prev_span());
@@ -155,7 +152,8 @@ impl Parser<'_> {
         let start = self.curr_span();
         let _ = self.advance();
         if self.bump_if(TokenKind::RParen) {
-            return Ok(self.make_empty_tuple_pat(start));
+            let span = start.merge(self.prev_span());
+            return Ok(self.arena.alloc_pat(PatKind::Tuple(vec![]), span));
         }
         let first_id = self.parse_pat()?;
         if self.bump_if(TokenKind::Comma) {
@@ -191,12 +189,10 @@ impl Parser<'_> {
         let span = start.merge(self.prev_span());
         Ok(self.arena.alloc_pat(PatKind::Array(pats), span))
     }
-}
 
-impl Parser<'_> {
     fn make_pat_variant(
         &mut self,
-        name: Ident,
+        name: Symbol,
         ty_args: Vec<TyExprId>,
         args: Vec<PatId>,
         start: Span,
@@ -210,11 +206,6 @@ impl Parser<'_> {
             },
             span,
         )
-    }
-
-    fn make_empty_tuple_pat(&mut self, start: Span) -> PatId {
-        let span = start.merge(self.prev_span());
-        self.arena.alloc_pat(PatKind::Tuple(vec![]), span)
     }
 }
 

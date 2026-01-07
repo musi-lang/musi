@@ -1,4 +1,4 @@
-use musi_basic::{
+use musi_core::{
     arena::{Arena, NodeId},
     span::Span,
 };

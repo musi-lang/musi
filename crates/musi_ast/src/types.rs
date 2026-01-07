@@ -1,8 +1,6 @@
-use musi_basic::arena::NodeId;
+use musi_core::NodeId;
 
 use crate::node::{Cond, Expr, Pat, Stmt, TyExpr};
-
-pub use musi_basic::types::Ident;
 
 pub type TyExprId = NodeId<TyExpr>;
 

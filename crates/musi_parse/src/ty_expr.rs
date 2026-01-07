@@ -1,13 +1,12 @@
-use musi_ast::{Ident, TyExprId, TyExprKind};
-use musi_basic::span::Span;
-use musi_errors::{IntoMusiError, MusiResult, ParseErrorKind};
+use musi_ast::{TyExprId, TyExprKind};
+use musi_core::{MusiResult, Span, Symbol};
 use musi_lex::token::TokenKind;
 
-use crate::Parser;
+use crate::{Parser, errors};
 
 impl Parser<'_> {
     /// # Errors
-    /// Returns `ParseErrorKind` on syntax error.
+    /// Returns error on syntax failure.
     pub fn parse_ty_expr(&mut self) -> MusiResult<TyExprId> {
         let start = self.curr_span();
         let ty_id = self.parse_ty_expr_prefix()?;
@@ -15,15 +14,15 @@ impl Parser<'_> {
     }
 
     /// # Errors
-    /// Returns `ParseErrorKind` on syntax error.
-    pub fn parse_ty_expr_params(&mut self) -> MusiResult<Vec<Ident>> {
+    /// Returns error on syntax failure.
+    pub fn parse_ty_expr_params(&mut self) -> MusiResult<Vec<Symbol>> {
         self.opt_delimited(TokenKind::LBrack, TokenKind::RBrack, |p| {
             p.separated(TokenKind::Comma, Self::expect_ident)
         })
     }
 
     /// # Errors
-    /// Returns `ParseErrorKind` on syntax error.
+    /// Returns error on syntax failure.
     pub fn parse_ty_expr_args(&mut self) -> MusiResult<Vec<TyExprId>> {
         self.opt_delimited(TokenKind::LBrack, TokenKind::RBrack, |p| {
             p.separated(TokenKind::Comma, Self::parse_ty_expr)
@@ -104,12 +103,12 @@ impl Parser<'_> {
         match self.peek_kind() {
             Some(TokenKind::Ident(ident)) => self.parse_ty_expr_ident(ident),
             Some(TokenKind::LParen) => self.parse_ty_expr_paren(),
-            Some(kind) => Err(ParseErrorKind::UnexpectedToken(kind).into_musi_error(start)),
-            None => Err(ParseErrorKind::UnexpectedEof.into_musi_error(start)),
+            Some(kind) => Err(errors::unexpected_token(kind, start)),
+            None => Err(errors::unexpected_eof(start)),
         }
     }
 
-    fn parse_ty_expr_ident(&mut self, ident: Ident) -> MusiResult<TyExprId> {
+    fn parse_ty_expr_ident(&mut self, ident: Symbol) -> MusiResult<TyExprId> {
         let start = ident.span;
         let _ = self.advance();
         if self.at(TokenKind::LBrack) {
@@ -129,7 +128,8 @@ impl Parser<'_> {
         let start = self.curr_span();
         let _ = self.advance();
         if self.bump_if(TokenKind::RParen) {
-            return Ok(self.make_empty_ty_expr_tuple(start));
+            let span = start.merge(self.prev_span());
+            return Ok(self.arena.alloc_ty_expr(TyExprKind::Tuple(vec![]), span));
         }
         let first_id = self.parse_ty_expr()?;
         if self.bump_if(TokenKind::Comma) {
@@ -155,13 +155,6 @@ impl Parser<'_> {
         let kind = inner.kind.clone();
         let span = start.merge(self.prev_span());
         Ok(self.arena.alloc_ty_expr(kind, span))
-    }
-}
-
-impl Parser<'_> {
-    fn make_empty_ty_expr_tuple(&mut self, start: Span) -> TyExprId {
-        let span = start.merge(self.prev_span());
-        self.arena.alloc_ty_expr(TyExprKind::Tuple(vec![]), span)
     }
 }
 

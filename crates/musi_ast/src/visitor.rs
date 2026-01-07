@@ -1,7 +1,9 @@
+use musi_core::Symbol;
+
 use crate::{
     AstArena, Attr, AttrArg, ChoiceCase, ChoiceCaseItem, Cond, CondId, CondKind, Expr, ExprId,
-    ExprKind, Field, FnSig, Ident, LitKind, MatchCase, Pat, PatId, PatKind, Prog, Stmt, StmtId,
-    StmtKind, TemplatePart, TyExpr, TyExprId, TyExprKind,
+    ExprKind, Field, FnSig, LitKind, MatchCase, Pat, PatId, PatKind, Prog, Stmt, StmtId, StmtKind,
+    TemplatePart, TyExpr, TyExprId, TyExprKind,
 };
 
 pub trait AstVisitor: Sized {
@@ -94,7 +96,7 @@ pub trait AstVisitor: Sized {
         }
     }
 
-    fn visit_ident(&mut self, _arena: &AstArena, _ident: Ident) {}
+    fn visit_ident(&mut self, _arena: &AstArena, _ident: Symbol) {}
 }
 
 pub fn walk_prog<V: AstVisitor>(v: &mut V, arena: &AstArena, prog: &Prog) {

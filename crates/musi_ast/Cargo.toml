@@ -10,8 +10,7 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
-musi_basic = { path = "../musi_basic" }
-musi_lex = { path = "../musi_lex" }
+musi_core = { path = "../musi_core" }
 
 [lints]
 workspace = true

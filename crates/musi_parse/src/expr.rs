@@ -1,22 +1,21 @@
 use musi_ast::{
     Attr, AttrArg, ChoiceCase, ChoiceCaseItem, CondId, CondKind, ExprId, ExprKind, Field, FnSig,
-    Ident, LitKind, MatchCase, Modifiers, StmtId, StmtKind, TemplatePart,
+    LitKind, MatchCase, Modifiers, StmtId, StmtKind, TemplatePart,
 };
-use musi_basic::span::Span;
-use musi_errors::{IntoMusiError, MusiResult, ParseErrorKind};
+use musi_core::{MusiResult, Span, Symbol};
 use musi_lex::token::TokenKind;
 
-use crate::{Parser, parser::Prec};
+use crate::{Parser, errors, parser::Prec};
 
 impl Parser<'_> {
     /// # Errors
-    /// Returns `ParseErrorKind` on syntax error.
+    /// Returns error on syntax failure.
     pub fn parse_expr(&mut self) -> MusiResult<ExprId> {
         self.parse_expr_bp(0)
     }
 
     /// # Errors
-    /// Returns `ParseErrorKind` on syntax error.
+    /// Returns error on syntax failure.
     pub fn parse_expr_block(&mut self) -> MusiResult<ExprId> {
         let start = self.curr_span();
         let (stmts, expr) =
@@ -26,18 +25,18 @@ impl Parser<'_> {
     }
 
     /// # Errors
-    /// Returns `ParseErrorKind::ExpectedIdent` if current token is not identifier.
-    pub fn expect_ident(&mut self) -> MusiResult<Ident> {
+    /// Returns error if current token is not identifier.
+    pub fn expect_ident(&mut self) -> MusiResult<Symbol> {
         match self.peek_kind() {
             Some(TokenKind::Ident(id)) => {
                 let _ = self.advance();
                 Ok(id)
             }
-            _ => Err(ParseErrorKind::ExpectedIdent.into_musi_error(self.curr_span())),
+            _ => Err(errors::expected_ident(self.curr_span())),
         }
     }
 
-    pub fn try_ident(&mut self) -> Option<Ident> {
+    pub fn try_ident(&mut self) -> Option<Symbol> {
         if let Some(TokenKind::Ident(id)) = self.peek_kind() {
             let _ = self.advance();
             Some(id)
@@ -47,10 +46,7 @@ impl Parser<'_> {
     }
 
     /// # Errors
-    /// Returns `ParseErrorKind` on syntax error.
-    ///
-    /// # Panics
-    /// Never panics - `.expect()` is guarded by prior `Prec::prefix`/`Prec::infix` check.
+    /// Returns error on syntax failure.
     pub fn parse_expr_bp(&mut self, min_bp: u8) -> MusiResult<ExprId> {
         let start = self.curr_span();
         let mut lhs = self.parse_expr_prefix(start)?;
@@ -238,7 +234,7 @@ impl Parser<'_> {
     }
 
     fn parse_postfix_index(&mut self, lhs: ExprId, start: Span) -> MusiResult<ExprId> {
-        self.advance_by(2); // consume `.` and `[`
+        self.advance_by(2);
         let index = self.parse_expr()?;
         let _ = self.expect(TokenKind::RBrack)?;
         let span = start.merge(self.prev_span());
@@ -248,7 +244,7 @@ impl Parser<'_> {
     }
 
     fn parse_postfix_field(&mut self, lhs: ExprId, start: Span) -> MusiResult<ExprId> {
-        let _ = self.advance(); // consume `.`
+        let _ = self.advance();
         let field = self.expect_ident()?;
         let span = start.merge(self.prev_span());
         Ok(self
@@ -257,7 +253,7 @@ impl Parser<'_> {
     }
 
     fn parse_postfix_deref(&mut self, lhs: ExprId, start: Span) -> ExprId {
-        let _ = self.advance(); // consume `.^`
+        let _ = self.advance();
         let span = start.merge(self.prev_span());
         self.arena.alloc_expr(ExprKind::Deref(lhs), span)
     }
@@ -304,8 +300,8 @@ impl Parser<'_> {
             Some(TokenKind::KwType) => self.parse_expr_type_def(vec![], Modifiers::default()),
             Some(TokenKind::KwFn) => self.parse_expr_fn_def(vec![], Modifiers::default()),
             Some(TokenKind::KwVal | TokenKind::KwVar) => self.parse_expr_bind(Modifiers::default()),
-            Some(kind) => Err(ParseErrorKind::UnexpectedToken(kind).into_musi_error(start)),
-            None => Err(ParseErrorKind::UnexpectedEof.into_musi_error(start)),
+            Some(kind) => Err(errors::unexpected_token(kind, start)),
+            None => Err(errors::unexpected_eof(start)),
         }
     }
 
@@ -347,14 +343,14 @@ impl Parser<'_> {
                 let _ = self.advance();
                 Ok(LitKind::Bool(false))
             }
-            _ => Err(ParseErrorKind::ExpectedLit.into_musi_error(self.curr_span())),
+            _ => Err(errors::expected_lit(self.curr_span())),
         }
     }
 
     fn parse_expr_template(&mut self) -> MusiResult<ExprId> {
         let start = self.curr_span();
         let Some(TokenKind::TemplateHead(id)) = self.peek_kind() else {
-            return Err(ParseErrorKind::ExpectedLit.into_musi_error(start));
+            return Err(errors::expected_lit(start));
         };
         let _ = self.advance();
         let mut parts = vec![TemplatePart::Text(id)];
@@ -372,9 +368,7 @@ impl Parser<'_> {
                     break;
                 }
                 _ => {
-                    return Err(
-                        ParseErrorKind::UnclosedTemplateExpr.into_musi_error(self.curr_span())
-                    );
+                    return Err(errors::unclosed_template_expr(self.curr_span()));
                 }
             }
         }
@@ -426,13 +420,13 @@ impl Parser<'_> {
         Ok(self.arena.alloc_expr(ExprKind::Array(elems), span))
     }
 
-    fn parse_expr_ident(&mut self, ident: musi_ast::Ident) -> ExprId {
+    fn parse_expr_ident(&mut self, ident: Symbol) -> ExprId {
         let _ = self.advance();
         self.arena.alloc_expr(ExprKind::Ident(ident), ident.span)
     }
 
     fn parse_postfix_record(&mut self, lhs: ExprId, start: Span) -> MusiResult<ExprId> {
-        self.advance_by(2); // consume `.` and `{`
+        self.advance_by(2);
         let fields = self.separated(TokenKind::Comma, Self::parse_field)?;
         let _ = self.expect(TokenKind::RBrace)?;
         let span = start.merge(self.prev_span());
@@ -447,7 +441,7 @@ impl Parser<'_> {
 
     fn parse_expr_record_anon(&mut self) -> MusiResult<ExprId> {
         let start = self.curr_span();
-        self.advance_by(2); // consume `.` and `{`
+        self.advance_by(2);
 
         let mut base = None;
         if self.is_record_update() {
@@ -651,7 +645,7 @@ impl Parser<'_> {
         let start = self.curr_span();
         let _ = self.expect(TokenKind::KwImport)?;
         let Some(TokenKind::LitString(path)) = self.peek_kind() else {
-            return Err(ParseErrorKind::ExpectedStringLit.into_musi_error(self.curr_span()));
+            return Err(errors::expected_string_lit(self.curr_span()));
         };
         let _ = self.advance();
         let span = start.merge(self.prev_span());
@@ -666,17 +660,14 @@ impl Parser<'_> {
 
     fn parse_expr_with_modifiers(&mut self, attrs: Vec<Attr>, start: Span) -> MusiResult<ExprId> {
         let mods = self.parse_modifiers();
-        //     if mods.externness.1 && self.at(TokenKind::LBrace) {
-        //         return self.parse_expr_extern_block(mods.externness.0, start);
-        //     }
         match self.peek_kind() {
             Some(TokenKind::KwRecord) => self.parse_expr_record_def(attrs, mods),
             Some(TokenKind::KwChoice) => self.parse_expr_choice_def(attrs, mods),
             Some(TokenKind::KwType) => self.parse_expr_type_def(attrs, mods),
             Some(TokenKind::KwFn) => self.parse_expr_fn_def(attrs, mods),
             Some(TokenKind::KwVal | TokenKind::KwVar) => self.parse_expr_bind(mods),
-            Some(kind) => Err(ParseErrorKind::UnexpectedToken(kind).into_musi_error(start)),
-            None => Err(ParseErrorKind::UnexpectedEof.into_musi_error(start)),
+            Some(kind) => Err(errors::unexpected_token(kind, start)),
+            None => Err(errors::unexpected_eof(start)),
         }
     }
 
@@ -783,11 +774,10 @@ impl Parser<'_> {
             self.parse_expr_block()?
         };
         let span = start.merge(self.prev_span());
-        let sig_span = if let Some(id) = name {
-            id.span.merge(self.prev_span())
-        } else {
-            start.merge(self.prev_span())
-        };
+        let sig_span = name.map_or_else(
+            || start.merge(self.prev_span()),
+            |id| id.span.merge(self.prev_span()),
+        );
 
         Ok(self.arena.alloc_expr(
             ExprKind::Fn {

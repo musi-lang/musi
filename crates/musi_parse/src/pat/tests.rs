@@ -1,4 +1,4 @@
-use crate::ctx::TestCtx;
+use crate::test_ctx::TestCtx;
 use musi_ast::{LitKind, PatKind};
 
 #[test]
