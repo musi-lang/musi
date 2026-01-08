@@ -198,28 +198,18 @@
 			"title": "Musi",
 			"properties": {
 				"musi.server.path": {
-					"type": [
-						"string",
-						"null"
-					],
+					"type": ["string", "null"],
 					"default": null,
 					"markdownDescription": "Path to `musi_lsp` binary. If not set, searches in `target/debug`, `target/release`, and `PATH`."
 				},
 				"musi.runtime.path": {
-					"type": [
-						"string",
-						"null"
-					],
+					"type": ["string", "null"],
 					"default": null,
 					"markdownDescription": "Path to Musi runtime environment. Required for code execution and some diagnostics."
 				},
 				"musi.trace.server": {
 					"type": "string",
-					"enum": [
-						"off",
-						"messages",
-						"verbose"
-					],
+					"enum": ["off", "messages", "verbose"],
 					"default": "off",
 					"description": "Traces communication between VS Code and language server."
 				},
@@ -231,12 +221,82 @@
 				"musi.inlayHints.enable": {
 					"type": "boolean",
 					"default": true,
-					"description": "Enable/disable inlay hints."
+					"description": "Enable/disable all inlay hints."
+				},
+				"musi.inlayHints.typeAnnotations.enable": {
+					"type": "boolean",
+					"default": true,
+					"markdownDescription": "Show inferred type annotations for bindings (e.g., `val x := 42` shows `: Int`)."
+				},
+				"musi.inlayHints.parameterNames.enable": {
+					"type": "boolean",
+					"default": true,
+					"markdownDescription": "Show parameter names in function calls (e.g., `foo(x:` before argument)."
+				},
+				"musi.inlayHints.parameterNames.suppressWhenArgumentMatchesName": {
+					"type": "boolean",
+					"default": true,
+					"description": "Suppress parameter name hints when argument name matches parameter."
+				},
+				"musi.inlayHints.returnTypes.enable": {
+					"type": "boolean",
+					"default": true,
+					"description": "Show return type hints for function definitions without explicit return types."
+				},
+				"musi.inlayHints.chainingHints.enable": {
+					"type": "boolean",
+					"default": true,
+					"markdownDescription": "Show type hints for intermediate values in method chains (e.g., after `|>`)."
+				},
+				"musi.semanticHighlighting.enable": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable semantic highlighting from language server."
+				},
+				"musi.semanticHighlighting.distinguishMutability": {
+					"type": "boolean",
+					"default": true,
+					"markdownDescription": "Distinguish between `val` and `var` bindings with different colors."
 				},
 				"musi.completion.enable": {
 					"type": "boolean",
 					"default": true,
 					"description": "Enable/disable code completion."
+				},
+				"musi.completion.autoImport": {
+					"type": "boolean",
+					"default": true,
+					"description": "Automatically add imports when completing symbols from other modules."
+				},
+				"musi.completion.snippets.enable": {
+					"type": "boolean",
+					"default": true,
+					"description": "Include snippet completions (e.g., `fn`, `if`, `match`)."
+				},
+				"musi.hover.enable": {
+					"type": "boolean",
+					"default": true,
+					"description": "Show hover information for symbols."
+				},
+				"musi.hover.showDocumentation": {
+					"type": "boolean",
+					"default": true,
+					"description": "Include documentation comments in hover tooltips."
+				},
+				"musi.hover.showSignature": {
+					"type": "boolean",
+					"default": true,
+					"description": "Show type signature in hover tooltips."
+				},
+				"musi.rename.enablePreview": {
+					"type": "boolean",
+					"default": true,
+					"description": "Show preview of all changes before applying rename."
+				},
+				"musi.references.excludeImports": {
+					"type": "boolean",
+					"default": false,
+					"description": "Exclude imports from find references results."
 				},
 				"musi.formatting.enable": {
 					"type": "boolean",
@@ -247,6 +307,26 @@
 					"type": "number",
 					"default": 2,
 					"description": "Number of spaces for indentation."
+				},
+				"musi.formatting.maxLineWidth": {
+					"type": "number",
+					"default": 100,
+					"description": "Maximum line width before wrapping."
+				},
+				"musi.codeLens.enable": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable/disable code lens annotations."
+				},
+				"musi.codeLens.showReferences": {
+					"type": "boolean",
+					"default": true,
+					"description": "Show reference count above functions and types."
+				},
+				"musi.codeLens.showTest": {
+					"type": "boolean",
+					"default": true,
+					"markdownDescription": "Show 'Test' lens above `@[test]` functions."
 				}
 			}
 		}
