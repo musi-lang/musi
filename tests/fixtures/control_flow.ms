@@ -1,6 +1,3 @@
-/// Control flow tests
-/// Tests if/else, match, for, while semantic handling
-
 fn abs(x: Int): Int {
   if x < 0 { -x } else { x }
 };

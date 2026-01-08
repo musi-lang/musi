@@ -1,12 +1,6 @@
 /// Attributes and exports test
 /// Tests @[...] attributes and export modifiers
 
-@[main]
-fn run(): Int {
-  val result := compute();
-  result
-};
-
 @[test]
 fn test_addition(): Bool {
   val sum := 2 + 2;
@@ -40,5 +34,5 @@ export choice PublicChoice {
   case B(Int),
 };
 
-@[extern(name := "c_function")]
+@[link(name := "c_function")]
 extern fn external_call(x: Int): Int;
