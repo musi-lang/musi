@@ -16,7 +16,7 @@ impl Parser<'_> {
 
     pub fn parse_prog(&mut self) -> Prog {
         let mut stmts = vec![];
-        while !self.is_eof() {
+        while !self.is_eof() && !self.at(TokenKind::EOF) {
             match self.parse_stmt() {
                 Ok(stmt_id) => stmts.push(stmt_id),
                 Err(e) => {
