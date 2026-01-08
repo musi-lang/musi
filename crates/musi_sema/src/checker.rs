@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use musi_ast::{AstArena, CondKind, ExprId, ExprKind, StmtKind};
+use musi_ast::{AstArena, CondId, CondKind, ExprId, ExprKind, Field, MatchCase, StmtId, StmtKind};
 use musi_core::{MusiResult, Span};
 
 use crate::errors;
@@ -89,7 +89,7 @@ impl<'a> Checker<'a> {
         }
     }
 
-    fn check_block(&mut self, stmts: &[musi_ast::StmtId], tail: Option<ExprId>) -> MusiResult<()> {
+    fn check_block(&mut self, stmts: &[StmtId], tail: Option<ExprId>) -> MusiResult<()> {
         for stmt_id in stmts {
             let stmt = self.ast.stmts.get(*stmt_id);
             let StmtKind::Expr(expr_id) = &stmt.kind;
@@ -103,7 +103,7 @@ impl<'a> Checker<'a> {
 
     fn check_if(
         &mut self,
-        cond: musi_ast::CondId,
+        cond: CondId,
         then_br: ExprId,
         else_br: Option<ExprId>,
     ) -> MusiResult<()> {
@@ -112,7 +112,7 @@ impl<'a> Checker<'a> {
         self.check_optional_expr(else_br)
     }
 
-    fn check_cond(&mut self, cond_id: musi_ast::CondId) -> MusiResult<()> {
+    fn check_cond(&mut self, cond_id: CondId) -> MusiResult<()> {
         let cond = self.ast.conds.get(cond_id);
         match &cond.kind.clone() {
             CondKind::Expr(expr_id) => self.check_expr(*expr_id),
@@ -123,12 +123,7 @@ impl<'a> Checker<'a> {
         }
     }
 
-    fn check_while(
-        &mut self,
-        cond: musi_ast::CondId,
-        guard: Option<ExprId>,
-        body: ExprId,
-    ) -> MusiResult<()> {
+    fn check_while(&mut self, cond: CondId, guard: Option<ExprId>, body: ExprId) -> MusiResult<()> {
         self.check_cond(cond)?;
         self.check_optional_expr(guard)?;
         self.with_loop(|this| this.check_expr(body))
@@ -147,7 +142,7 @@ impl<'a> Checker<'a> {
         Ok(())
     }
 
-    fn check_match(&mut self, scrutinee: ExprId, cases: &[musi_ast::MatchCase]) -> MusiResult<()> {
+    fn check_match(&mut self, scrutinee: ExprId, cases: &[MatchCase]) -> MusiResult<()> {
         self.check_expr(scrutinee)?;
         for case in cases {
             if let Some(guard) = case.guard {
@@ -174,7 +169,7 @@ impl<'a> Checker<'a> {
         Ok(())
     }
 
-    fn check_record_fields(&mut self, fields: &[musi_ast::Field], span: Span) -> MusiResult<()> {
+    fn check_record_fields(&mut self, fields: &[Field], span: Span) -> MusiResult<()> {
         let mut seen = HashSet::new();
         for field in fields {
             if !seen.insert(field.name) {

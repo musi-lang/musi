@@ -1,4 +1,7 @@
-use musi_ast::{AstArena, ExprId, ExprKind, LitKind, PatId, PatKind, StmtKind, TyExprKind};
+use musi_ast::{
+    AstArena, ChoiceCase, CondId, CondKind, ExprId, ExprKind, Field, FnSig, LitKind, MatchCase,
+    PatId, PatKind, StmtId, StmtKind, TyExprId, TyExprKind,
+};
 use musi_core::{Interner, MusiResult, Span, Symbol, TokenKind};
 
 use crate::errors;
@@ -38,6 +41,8 @@ impl<'a> Inferer<'a> {
     pub fn infer_expr(&mut self, expr_id: ExprId) -> MusiResult<TyId> {
         let expr = self.ast.exprs.get(expr_id);
         let span = expr.span;
+
+        tracing::debug!(?expr.kind, ?span, "infer_expr");
 
         match &expr.kind.clone() {
             ExprKind::Lit(lit) => Ok(self.infer_lit(lit, span)),
@@ -130,7 +135,7 @@ impl<'a> Inferer<'a> {
 
     fn infer_block(
         &mut self,
-        stmts: &[musi_ast::StmtId],
+        stmts: &[StmtId],
         tail: Option<ExprId>,
         span: Span,
     ) -> MusiResult<TyId> {
@@ -215,7 +220,7 @@ impl<'a> Inferer<'a> {
 
     fn infer_if(
         &mut self,
-        cond: musi_ast::CondId,
+        cond: CondId,
         then_br: ExprId,
         else_br: Option<ExprId>,
         span: Span,
@@ -232,16 +237,16 @@ impl<'a> Inferer<'a> {
         }
     }
 
-    fn infer_cond(&mut self, cond_id: musi_ast::CondId) -> MusiResult<TyId> {
+    fn infer_cond(&mut self, cond_id: CondId) -> MusiResult<TyId> {
         let cond = self.ast.conds.get(cond_id);
         match &cond.kind.clone() {
-            musi_ast::CondKind::Expr(expr_id) => {
+            CondKind::Expr(expr_id) => {
                 let ty = self.infer_expr(*expr_id)?;
                 let bool_ty = self.alloc_ty(TyKind::Bool, Span::DUMMY);
                 self.unify(ty, bool_ty, Span::DUMMY)?;
                 Ok(ty)
             }
-            musi_ast::CondKind::Case { pat, init, .. } => {
+            CondKind::Case { pat, init, .. } => {
                 let init_ty = self.infer_expr(*init)?;
                 self.bind_pattern(*pat, init_ty)?;
                 Ok(init_ty)
@@ -253,7 +258,7 @@ impl<'a> Inferer<'a> {
         &mut self,
         mutable: bool,
         pat: PatId,
-        ty_ann: Option<musi_ast::TyExprId>,
+        ty_ann: Option<TyExprId>,
         init: ExprId,
         span: Span,
     ) -> MusiResult<TyId> {
@@ -322,7 +327,7 @@ impl<'a> Inferer<'a> {
         Ok(())
     }
 
-    fn bind_record_pat(&mut self, fields: &[musi_core::Symbol], ty: TyId, span: Span) {
+    fn bind_record_pat(&mut self, fields: &[Symbol], ty: TyId, span: Span) {
         let ty_kind = &self.ty_arena.get(ty).kind.clone();
         if let TyKind::Record { fields: field_tys } = ty_kind {
             for field_name in fields {
@@ -351,7 +356,7 @@ impl<'a> Inferer<'a> {
         Ok(())
     }
 
-    fn infer_fn(&mut self, sig: &musi_ast::FnSig, body: ExprId, span: Span) -> MusiResult<TyId> {
+    fn infer_fn(&mut self, sig: &FnSig, body: ExprId, span: Span) -> MusiResult<TyId> {
         self.env.enter_scope();
         let param_tys: Vec<TyId> = sig
             .params
@@ -428,7 +433,7 @@ impl<'a> Inferer<'a> {
     fn infer_match(
         &mut self,
         scrutinee: ExprId,
-        cases: &[musi_ast::MatchCase],
+        cases: &[MatchCase],
         span: Span,
     ) -> MusiResult<TyId> {
         let scrutinee_ty = self.infer_expr(scrutinee)?;
@@ -456,7 +461,7 @@ impl<'a> Inferer<'a> {
     fn infer_record(
         &mut self,
         base: Option<ExprId>,
-        fields: &[musi_ast::Field],
+        fields: &[Field],
         span: Span,
     ) -> MusiResult<TyId> {
         let mut field_tys = Vec::new();
@@ -527,13 +532,8 @@ impl<'a> Inferer<'a> {
         Ok(self.alloc_ty(TyKind::Range(start_ty), span))
     }
 
-    fn infer_record_def(
-        &mut self,
-        name: Option<musi_core::Symbol>,
-        fields: &[musi_ast::Field],
-        span: Span,
-    ) -> TyId {
-        let field_tys: Vec<(musi_core::Symbol, TyId)> = fields
+    fn infer_record_def(&mut self, name: Option<Symbol>, fields: &[Field], span: Span) -> TyId {
+        let field_tys: Vec<(Symbol, TyId)> = fields
             .iter()
             .map(|f| (f.name, self.fresh_var(span)))
             .collect();
@@ -546,8 +546,8 @@ impl<'a> Inferer<'a> {
 
     fn infer_choice_def(
         &mut self,
-        name: Option<musi_core::Symbol>,
-        _cases: &[musi_ast::ChoiceCase],
+        name: Option<Symbol>,
+        _cases: &[ChoiceCase],
         span: Span,
     ) -> TyId {
         if let Some(sym) = name {
@@ -557,7 +557,7 @@ impl<'a> Inferer<'a> {
         self.alloc_ty(TyKind::Unit, span)
     }
 
-    fn infer_type_def(&mut self, name: musi_core::Symbol, span: Span) -> TyId {
+    fn infer_type_def(&mut self, name: Symbol, span: Span) -> TyId {
         let alias_ty = self.alloc_ty(TyKind::Named(name), span);
         self.env.bind_ty(name, alias_ty);
         self.alloc_ty(TyKind::Unit, span)
@@ -586,7 +586,7 @@ impl<'a> Inferer<'a> {
         Ok(expected)
     }
 
-    fn lower_ty_expr(&mut self, ty_expr_id: musi_ast::TyExprId) -> TyId {
+    fn lower_ty_expr(&mut self, ty_expr_id: TyExprId) -> TyId {
         let ty_expr = self.ast.ty_exprs.get(ty_expr_id);
         let span = ty_expr.span;
         match &ty_expr.kind.clone() {
@@ -640,7 +640,7 @@ impl<'a> Inferer<'a> {
         }
     }
 
-    fn lower_ty_app(&mut self, _base: Symbol, _args: &[musi_ast::TyExprId], span: Span) -> TyId {
+    fn lower_ty_app(&mut self, _base: Symbol, _args: &[TyExprId], span: Span) -> TyId {
         self.fresh_var(span)
     }
 }

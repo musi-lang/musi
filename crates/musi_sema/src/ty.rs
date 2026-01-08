@@ -1,4 +1,4 @@
-use musi_core::{Arena, NodeId, Span};
+use musi_core::{Arena, NodeId, Span, Symbol};
 
 pub type TyId = NodeId<Ty>;
 
@@ -23,14 +23,9 @@ pub enum TyKind {
     Optional(TyId),
     Ptr(TyId),
     Range(TyId),
-    Named(musi_core::Symbol),
-    Record {
-        fields: Vec<(musi_core::Symbol, TyId)>,
-    },
-    Fn {
-        params: Vec<TyId>,
-        ret: TyId,
-    },
+    Named(Symbol),
+    Record { fields: Vec<(Symbol, TyId)> },
+    Fn { params: Vec<TyId>, ret: TyId },
     Union(Vec<TyId>),
     Var(u32),
 }
