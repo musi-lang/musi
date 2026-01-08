@@ -1,5 +1,5 @@
 use musi_ast::AstArena;
-use musi_core::{Diagnostic, DiagnosticBag, Interner, MusiError, MusiResult, Span, Name};
+use musi_core::{Diagnostic, DiagnosticBag, Interner, MusiError, MusiResult, Name, Span};
 use musi_lex::token::{NumericBase, Token, TokenKind};
 
 use crate::errors;
@@ -291,6 +291,7 @@ impl<'a> Parser<'a> {
                 }
                 Some(TokenKind::Dot) if self.peek_nth(1) == Some(TokenKind::LBrace) => break,
                 Some(k) if is_stmt_starter(k) => break,
+                None => break,
                 _ => {
                     _ = self.advance();
                 }
