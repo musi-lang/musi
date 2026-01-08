@@ -1,7 +1,7 @@
 /// Higher-order functions and closures
 /// Tests function values, pipes, and lambda semantics
 
-fn map[T, U](list: [T], f: T -> U): [U] {
+fn map[T, U](list: []T, f: T -> U): []U {
   var result := [];
   for item in list {
     result <- result :: f(item);
@@ -9,7 +9,7 @@ fn map[T, U](list: [T], f: T -> U): [U] {
   result
 };
 
-fn filter[T](list: [T], pred: T -> Bool): [T] {
+fn filter[T](list: []T, pred: T -> Bool): []T {
   var result := [];
   for item in list {
     if pred(item) {
@@ -19,7 +19,7 @@ fn filter[T](list: [T], pred: T -> Bool): [T] {
   result
 };
 
-fn fold[T, U](list: [T], init: U, f: (U, T) -> U): U {
+fn fold[T, U](list: []T, init: U, f: (U, T) -> U): U {
   var acc := init;
   for item in list {
     acc <- f(acc, item);

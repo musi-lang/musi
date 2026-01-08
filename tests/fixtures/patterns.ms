@@ -27,7 +27,7 @@ fn classify(x: Int): String {
   }
 };
 
-fn first[T](list: [T]): ?T {
+fn first[T](list: []T): ?T {
   match list {
   case [] => None,
   case [head :: _] => Some(head),

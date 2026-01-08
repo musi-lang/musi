@@ -6,7 +6,7 @@ fn swap[T](pair: (T, T)): (T, T) {
   (b, a)
 };
 
-fn repeat[T](value: T, count: Int): [T] {
+fn repeat[T](value: T, count: Int): []T {
   var result := [];
   for _ in 0..<count {
     result <- result :: value;
@@ -35,7 +35,7 @@ fn map_either[L, R, R2](e: Either[L, R], f: R -> R2): Either[L, R2] {
   }
 };
 
-fn flatten[T](nested: [[T]]): [T] {
+fn flatten[T](nested: [][]T): []T {
   var result := [];
   for inner in nested {
     for item in inner {
@@ -45,8 +45,8 @@ fn flatten[T](nested: [[T]]): [T] {
   result
 };
 
-val int_pair := make_pair[Int, Int](1, 2);
-val mixed_pair := make_pair[String, Bool]("hello", true);
+val int_pair := make_pair(1, 2);
+val mixed_pair := make_pair("hello", true);
 
-val swapped := swap[Int]((1, 2));
-val threes := repeat[Int](3, 5);
+val swapped := swap((1, 2));
+val threes := repeat(3, 5);

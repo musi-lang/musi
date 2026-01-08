@@ -20,4 +20,4 @@ fn double(n: Int): Int { n * 2 };
 val result := apply(double, 21);
 
 fn identity[T](x: T): T { x };
-val id_result := identity[Int](42);
+val id_result := identity(42);
