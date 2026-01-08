@@ -25,7 +25,11 @@ const _DEFAULTS: Config = {
 	formattingIndentSize: 2,
 };
 
-function _get<T>(cfg: vscode.WorkspaceConfiguration, key: string, fallback: T): T {
+function _get<T>(
+	cfg: vscode.WorkspaceConfiguration,
+	key: string,
+	fallback: T,
+): T {
 	return cfg.get<T>(key, fallback);
 }
 
@@ -40,11 +44,31 @@ export function getConfig(): Config {
 		serverPath: _get(cfg, "server.path", _DEFAULTS.serverPath),
 		runtimePath: _get(cfg, "runtime.path", _DEFAULTS.runtimePath),
 		traceServer: _get(cfg, "trace.server", _DEFAULTS.traceServer),
-		diagnosticsEnabled: _get(cfg, "diagnostics.enable", _DEFAULTS.diagnosticsEnabled),
-		inlayHintsEnabled: _get(cfg, "inlayHints.enable", _DEFAULTS.inlayHintsEnabled),
-		completionEnabled: _get(cfg, "completion.enable", _DEFAULTS.completionEnabled),
-		formattingEnabled: _get(cfg, "formatting.enable", _DEFAULTS.formattingEnabled),
-		formattingIndentSize: _get(cfg, "formatting.indentSize", _DEFAULTS.formattingIndentSize),
+		diagnosticsEnabled: _get(
+			cfg,
+			"diagnostics.enable",
+			_DEFAULTS.diagnosticsEnabled,
+		),
+		inlayHintsEnabled: _get(
+			cfg,
+			"inlayHints.enable",
+			_DEFAULTS.inlayHintsEnabled,
+		),
+		completionEnabled: _get(
+			cfg,
+			"completion.enable",
+			_DEFAULTS.completionEnabled,
+		),
+		formattingEnabled: _get(
+			cfg,
+			"formatting.enable",
+			_DEFAULTS.formattingEnabled,
+		),
+		formattingIndentSize: _get(
+			cfg,
+			"formatting.indentSize",
+			_DEFAULTS.formattingIndentSize,
+		),
 	};
 }
 

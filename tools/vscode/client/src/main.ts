@@ -33,16 +33,19 @@ async function _startServer() {
 	_statusBar.update("Ready", "ready");
 
 	setTimeout(() => {
-		vscode.window.showInformationMessage("Musi language features ready.", "Dismiss");
+		vscode.window.showInformationMessage(
+			"Musi language features ready.",
+			"Dismiss",
+		);
 	}, 500);
 }
 
 async function _handleActivationError(error: unknown) {
 	const message = error instanceof Error ? error.message : String(error);
-	_statusBar.update("Failedto start", "error");
+	_statusBar.update("Failed to start", "error");
 
 	const action = await vscode.window.showErrorMessage(
-		`Failedto start Musi LSP server: ${message}`,
+		`Failed to start Musi LSP server: ${message}`,
 		"Retry",
 		"Show Logs",
 	);

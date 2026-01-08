@@ -26,11 +26,15 @@ function _createCommands(statusBar: StatusBar): Commands {
 
 				await restartClient(serverPath);
 				statusBar.update("Ready", "ready");
-				vscode.window.showInformationMessage("Musi Language Server restarted successfully.");
+				vscode.window.showInformationMessage(
+					"Musi Language Server restarted successfully.",
+				);
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
 				statusBar.update("Restart failed", "error");
-				vscode.window.showErrorMessage(`Failedto restart Musi LSP: ${message}`);
+				vscode.window.showErrorMessage(
+					`Failed to restart Musi LSP: ${message}`,
+				);
 			}
 		},
 
@@ -44,7 +48,9 @@ function _createCommands(statusBar: StatusBar): Commands {
 			if (client) {
 				client.outputChannel.show();
 			} else {
-				vscode.window.showWarningMessage("Musi Language Server is not running.");
+				vscode.window.showWarningMessage(
+					"Musi Language Server is not running.",
+				);
 			}
 		},
 	};
@@ -55,11 +61,17 @@ function _createCommands(statusBar: StatusBar): Commands {
  * @param context Extension context for managing subscriptions.
  * @param statusBar Status bar instance for visual feedback.
  */
-export function registerCommands(context: vscode.ExtensionContext, statusBar: StatusBar) {
+export function registerCommands(
+	context: vscode.ExtensionContext,
+	statusBar: StatusBar,
+) {
 	const commands = _createCommands(statusBar);
 
 	context.subscriptions.push(
-		vscode.commands.registerCommand("musi.restartServer", commands.restartServer),
+		vscode.commands.registerCommand(
+			"musi.restartServer",
+			commands.restartServer,
+		),
 		vscode.commands.registerCommand("musi.stopServer", commands.stopServer),
 		vscode.commands.registerCommand("musi.showLogs", commands.showLogs),
 	);
