@@ -2,7 +2,7 @@ use musi_ast::{
     Attr, AttrArg, ChoiceCase, ChoiceCaseItem, CondId, CondKind, ExprId, ExprKind, Field, FnSig,
     LitKind, MatchCase, Modifiers, StmtId, StmtKind, TemplatePart,
 };
-use musi_core::{MusiResult, Span, Symbol};
+use musi_core::{MusiResult, Span, Name};
 use musi_lex::token::TokenKind;
 
 use crate::{Parser, errors, parser::Prec};
@@ -26,7 +26,7 @@ impl Parser<'_> {
 
     /// # Errors
     /// Returns error if current token is not identifier.
-    pub fn expect_ident(&mut self) -> MusiResult<Symbol> {
+    pub fn expect_ident(&mut self) -> MusiResult<Name> {
         match self.peek_kind() {
             Some(TokenKind::Ident(id)) => {
                 let _ = self.advance();
@@ -36,7 +36,7 @@ impl Parser<'_> {
         }
     }
 
-    pub fn try_ident(&mut self) -> Option<Symbol> {
+    pub fn try_ident(&mut self) -> Option<Name> {
         if let Some(TokenKind::Ident(id)) = self.peek_kind() {
             let _ = self.advance();
             Some(id)
@@ -422,7 +422,7 @@ impl Parser<'_> {
         Ok(self.arena.alloc_expr(ExprKind::Array(elems), span))
     }
 
-    fn parse_expr_ident(&mut self, ident: Symbol) -> ExprId {
+    fn parse_expr_ident(&mut self, ident: Name) -> ExprId {
         let _ = self.advance();
         self.arena.alloc_expr(ExprKind::Ident(ident), ident.span)
     }

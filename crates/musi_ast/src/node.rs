@@ -1,4 +1,4 @@
-use musi_core::{Span, Symbol, TokenKind};
+use musi_core::{Span, Name, TokenKind};
 
 use crate::{CondId, ExprId, PatId, StmtId, TyExprId};
 
@@ -6,7 +6,7 @@ use crate::{CondId, ExprId, PatId, StmtId, TyExprId};
 pub enum LitKind {
     Int(i64),
     Real(f64),
-    String(Symbol),
+    String(Name),
     Rune(char),
     Bool(bool),
     Template(Vec<TemplatePart>),
@@ -14,7 +14,7 @@ pub enum LitKind {
 
 #[derive(Debug, Clone)]
 pub enum TemplatePart {
-    Text(Symbol),
+    Text(Name),
     Expr(ExprId),
 }
 
@@ -35,9 +35,9 @@ impl TyExpr {
 #[derive(Debug, Clone)]
 pub enum TyExprKind {
     /// `Int`, `String`
-    Ident(Symbol),
+    Ident(Name),
     /// `List[Int]`, `Map[String, Int]`
-    App { base: Symbol, args: Vec<TyExprId> },
+    App { base: Name, args: Vec<TyExprId> },
     /// `?Int`
     Optional(TyExprId),
     /// `[10]Int`, `[]Int`
@@ -67,7 +67,7 @@ impl Pat {
 #[derive(Debug, Clone)]
 pub enum PatKind {
     /// `x`, `foo`
-    Ident(Symbol),
+    Ident(Name),
     /// `42`, `"hello"`
     Lit(LitKind),
     ///`_`
@@ -79,11 +79,11 @@ pub enum PatKind {
     /// `Point.{x, y}`
     Record {
         base: Option<ExprId>,
-        fields: Vec<Symbol>,
+        fields: Vec<Name>,
     },
     /// `Some(x)`, `None`
     Variant {
-        name: Symbol,
+        name: Name,
         ty_args: Vec<TyExprId>,
         args: Vec<PatId>,
     },
@@ -92,7 +92,7 @@ pub enum PatKind {
     /// `a | b`
     Or(Vec<PatId>),
     /// `pat as name`
-    As { inner: PatId, binding: Symbol },
+    As { inner: PatId, binding: Name },
 }
 
 #[derive(Debug, Clone)]
@@ -139,7 +139,7 @@ pub enum ExprKind {
     /// `42`, `"hello"`, `true`
     Lit(LitKind),
     /// `x`, `foo`
-    Ident(Symbol),
+    Ident(Name),
     /// `(a, b, c)`
     Tuple(Vec<ExprId>),
     /// `[a, b, c]`
@@ -188,29 +188,29 @@ pub enum ExprKind {
     /// `unsafe { }`
     Unsafe(ExprId),
     /// `import "path"`
-    Import(Symbol),
+    Import(Name),
     /// `record Point { x: Int; y: Int }`
     RecordDef {
         attrs: Vec<Attr>,
         mods: Modifiers,
-        name: Option<Symbol>,
-        ty_params: Vec<Symbol>,
+        name: Option<Name>,
+        ty_params: Vec<Name>,
         fields: Vec<Field>,
     },
     /// `choice Option[T] { case Some(T), case None }`
     ChoiceDef {
         attrs: Vec<Attr>,
         mods: Modifiers,
-        name: Option<Symbol>,
-        ty_params: Vec<Symbol>,
+        name: Option<Name>,
+        ty_params: Vec<Name>,
         cases: Vec<ChoiceCase>,
     },
     /// `type Name := Type`
     TypeDef {
         attrs: Vec<Attr>,
         mods: Modifiers,
-        name: Symbol,
-        ty_params: Vec<Symbol>,
+        name: Name,
+        ty_params: Vec<Name>,
         ty: TyExprId,
     },
     /// `fn name(params) { body }` or `fn(params) => expr`
@@ -233,7 +233,7 @@ pub enum ExprKind {
     /// `arr[i]`
     Index { base: ExprId, index: ExprId },
     /// `obj.field`
-    Field { base: ExprId, field: Symbol },
+    Field { base: ExprId, field: Name },
     /// `expr.^`
     Deref(ExprId),
     /// `expr?` — nil propagation
@@ -282,7 +282,7 @@ pub enum StmtKind {
 #[derive(Debug, Clone)]
 pub struct Field {
     pub mutable: bool,
-    pub name: Symbol,
+    pub name: Name,
     pub ty: Option<TyExprId>,
     pub init: Option<ExprId>,
 }
@@ -290,8 +290,8 @@ pub struct Field {
 /// `name[T](params): RetType`
 #[derive(Debug, Clone)]
 pub struct FnSig {
-    pub name: Option<Symbol>,
-    pub ty_params: Vec<Symbol>,
+    pub name: Option<Name>,
+    pub ty_params: Vec<Name>,
     pub params: Vec<Field>,
     pub ret: Option<TyExprId>,
     pub span: Span,
@@ -308,7 +308,7 @@ pub struct MatchCase {
 /// `case Name[T](fields)`
 #[derive(Debug, Clone)]
 pub struct ChoiceCase {
-    pub name: Symbol,
+    pub name: Name,
     pub ty_args: Vec<TyExprId>,
     pub fields: Vec<ChoiceCaseItem>,
 }
@@ -322,14 +322,14 @@ pub enum ChoiceCaseItem {
 /// `@[Name(args)]`
 #[derive(Debug, Clone)]
 pub struct Attr {
-    pub name: Symbol,
+    pub name: Name,
     pub args: Vec<AttrArg>,
 }
 
 /// `name := value` or literal
 #[derive(Debug, Clone)]
 pub struct AttrArg {
-    pub name: Option<Symbol>,
+    pub name: Option<Name>,
     pub value: Option<ExprId>,
     pub lit: Option<LitKind>,
 }
@@ -337,7 +337,7 @@ pub struct AttrArg {
 #[derive(Debug, Clone, Default)]
 pub struct Modifiers {
     pub exportness: bool,
-    pub externness: (Option<Symbol>, bool),
+    pub externness: (Option<Name>, bool),
     pub unsafeness: bool,
 }
 

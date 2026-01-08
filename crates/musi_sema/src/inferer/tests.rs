@@ -1,4 +1,5 @@
 use crate::Inferer;
+use crate::symbol::SymbolTable;
 use crate::test_ctx::TestCtx;
 use crate::ty::TyKind;
 
@@ -163,12 +164,14 @@ fn test_infer_binding_with_type_annotation() {
 fn test_infer_binding_optional_type_mismatch() {
     let mut ctx = TestCtx::new();
     let id = ctx.parse_expr("val x: ?Int := 42");
+    let mut symbols = SymbolTable::new();
     let mut inferer = Inferer::new(
         &ctx.ast_arena,
         &ctx.interner,
         &mut ctx.ty_arena,
         &mut ctx.env,
         &mut ctx.table,
+        &mut symbols,
     );
     assert!(inferer.infer_expr(id).is_err());
 }

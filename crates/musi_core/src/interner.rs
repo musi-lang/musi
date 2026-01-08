@@ -1,4 +1,35 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, hash};
+
+use crate::Span;
+
+/// Interned string with source location.
+#[derive(Debug, Clone, Copy, Eq)]
+pub struct Name {
+    /// Interned string ID.
+    pub id: u32,
+    /// Source location.
+    pub span: Span,
+}
+
+impl Name {
+    /// Creates new interned string.
+    #[must_use]
+    pub const fn new(id: u32, span: Span) -> Self {
+        Self { id, span }
+    }
+}
+
+impl PartialEq for Name {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+impl hash::Hash for Name {
+    fn hash<H: hash::Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
+    }
+}
 
 #[derive(Debug, Default)]
 /// String interner for deduplicating strings.

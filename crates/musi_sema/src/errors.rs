@@ -1,4 +1,4 @@
-use musi_core::{MusiError, Span, Symbol};
+use musi_core::{MusiError, Span, Name};
 
 use crate::TyKind;
 
@@ -11,7 +11,7 @@ pub fn type_mismatch(expected: &TyKind, found: &TyKind, span: Span) -> MusiError
 }
 
 #[must_use]
-pub fn unknown_field(field: Symbol, record_ty: &TyKind, span: Span) -> MusiError {
+pub fn unknown_field(field: Name, record_ty: &TyKind, span: Span) -> MusiError {
     MusiError::new(
         format!("unknown field `{:?}` on type `{record_ty:?}`", field.id),
         span,
@@ -42,12 +42,12 @@ pub fn return_outside_fn(span: Span) -> MusiError {
 }
 
 #[must_use]
-pub fn duplicate_field(field: Symbol, span: Span) -> MusiError {
+pub fn duplicate_field(field: Name, span: Span) -> MusiError {
     MusiError::new(format!("duplicate field `{:?}`", field.id), span)
 }
 
 #[must_use]
-pub fn undefined_variable(sym: Symbol, span: Span) -> MusiError {
+pub fn undefined_variable(sym: Name, span: Span) -> MusiError {
     MusiError::new(format!("undefined variable `{:?}`", sym.id), span)
 }
 

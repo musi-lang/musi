@@ -1,5 +1,5 @@
 use musi_ast::{TyExprId, TyExprKind};
-use musi_core::{MusiResult, Span, Symbol};
+use musi_core::{MusiResult, Span, Name};
 use musi_lex::token::TokenKind;
 
 use crate::{Parser, errors};
@@ -15,7 +15,7 @@ impl Parser<'_> {
 
     /// # Errors
     /// Returns error on syntax failure.
-    pub fn parse_ty_expr_params(&mut self) -> MusiResult<Vec<Symbol>> {
+    pub fn parse_ty_expr_params(&mut self) -> MusiResult<Vec<Name>> {
         self.opt_delimited(TokenKind::LBrack, TokenKind::RBrack, |p| {
             p.separated(TokenKind::Comma, Self::expect_ident)
         })
@@ -108,7 +108,7 @@ impl Parser<'_> {
         }
     }
 
-    fn parse_ty_expr_ident(&mut self, ident: Symbol) -> MusiResult<TyExprId> {
+    fn parse_ty_expr_ident(&mut self, ident: Name) -> MusiResult<TyExprId> {
         let start = ident.span;
         let _ = self.advance();
         if self.at(TokenKind::LBrack) {

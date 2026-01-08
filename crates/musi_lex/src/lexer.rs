@@ -3,7 +3,7 @@ use crate::{
     errors,
     token::{KEYWORDS, NumericBase, NumericSuffix, SYMBOLS, Token, TokenKind},
 };
-use musi_core::{DiagnosticBag, Interner, SourceFile, Span, Symbol};
+use musi_core::{DiagnosticBag, Interner, SourceFile, Span, Name};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LexerState {
@@ -163,7 +163,7 @@ impl<'a> Lexer<'a> {
                 Some('"') => {
                     let _ = self.cursor.bump();
                     let id = self.interner.intern(&out);
-                    return TokenKind::LitString(Symbol::new(
+                    return TokenKind::LitString(Name::new(
                         id,
                         self.make_span(start, self.cursor.pos()),
                     ));
@@ -182,7 +182,7 @@ impl<'a> Lexer<'a> {
                         self.make_span(start, self.cursor.pos()),
                     ));
                     let id = self.interner.intern(&out);
-                    return TokenKind::LitString(Symbol::new(
+                    return TokenKind::LitString(Name::new(
                         id,
                         self.make_span(start, self.cursor.pos()),
                     ));
@@ -202,9 +202,9 @@ impl<'a> Lexer<'a> {
                     let id = self.interner.intern(&out);
                     let span = self.make_span(start, self.cursor.pos());
                     if is_head {
-                        return TokenKind::LitTemplateNoSubst(Symbol::new(id, span));
+                        return TokenKind::LitTemplateNoSubst(Name::new(id, span));
                     }
-                    return TokenKind::TemplateTail(Symbol::new(id, span));
+                    return TokenKind::TemplateTail(Name::new(id, span));
                 }
                 Some('{') => {
                     let _ = self.cursor.bump();
@@ -214,9 +214,9 @@ impl<'a> Lexer<'a> {
                     let id = self.interner.intern(&out);
                     let span = self.make_span(start, self.cursor.pos());
                     if is_head {
-                        return TokenKind::TemplateHead(Symbol::new(id, span));
+                        return TokenKind::TemplateHead(Name::new(id, span));
                     }
-                    return TokenKind::TemplateMiddle(Symbol::new(id, span));
+                    return TokenKind::TemplateMiddle(Name::new(id, span));
                 }
                 Some('\\') => {
                     let _ = self.cursor.bump();
@@ -232,7 +232,7 @@ impl<'a> Lexer<'a> {
                         self.make_span(start, self.cursor.pos()),
                     ));
                     let id = self.interner.intern(&out);
-                    return TokenKind::LitString(Symbol::new(
+                    return TokenKind::LitString(Name::new(
                         id,
                         self.make_span(start, self.cursor.pos()),
                     ));
@@ -298,7 +298,7 @@ impl<'a> Lexer<'a> {
             }
         }
         let id = self.interner.intern(&out);
-        TokenKind::Ident(Symbol::new(id, self.make_span(start, self.cursor.pos())))
+        TokenKind::Ident(Name::new(id, self.make_span(start, self.cursor.pos())))
     }
 
     fn scan_number(&mut self, start: usize) -> TokenKind {
@@ -392,12 +392,12 @@ impl<'a> Lexer<'a> {
 
         if is_float {
             TokenKind::LitFloat {
-                raw: Symbol::new(id, self.make_span(start, suffix_start)),
+                raw: Name::new(id, self.make_span(start, suffix_start)),
                 suffix,
             }
         } else {
             TokenKind::LitInt {
-                raw: Symbol::new(id, self.make_span(start, suffix_start)),
+                raw: Name::new(id, self.make_span(start, suffix_start)),
                 base,
                 suffix,
             }
@@ -441,7 +441,7 @@ impl<'a> Lexer<'a> {
                 self.make_span(start, self.cursor.pos()),
             ));
             let id = self.interner.intern(&c.to_string());
-            TokenKind::Error(Symbol::new(id, self.make_span(start, self.cursor.pos())))
+            TokenKind::Error(Name::new(id, self.make_span(start, self.cursor.pos())))
         } else {
             TokenKind::EOF
         }
@@ -462,7 +462,7 @@ impl<'a> Lexer<'a> {
             KEYWORDS[idx].1
         } else {
             let id = self.interner.intern(text);
-            TokenKind::Ident(Symbol::new(id, self.make_span(start, self.cursor.pos())))
+            TokenKind::Ident(Name::new(id, self.make_span(start, self.cursor.pos())))
         }
     }
 

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use musi_core::{MusiError, MusiResult, Span, Symbol};
+use musi_core::{MusiError, MusiResult, Span, Name};
 
 use crate::ty::TyId;
 
@@ -13,8 +13,8 @@ pub struct ValueEntry {
 
 #[derive(Debug, Default)]
 struct Scope {
-    values: HashMap<Symbol, ValueEntry>,
-    tys: HashMap<Symbol, TyId>,
+    values: HashMap<Name, ValueEntry>,
+    tys: HashMap<Name, TyId>,
 }
 
 #[derive(Debug, Default)]
@@ -47,14 +47,14 @@ impl TyEnv {
 
     /// # Panics
     /// Panics if environment has no scopes (invariant violation).
-    pub fn bind_value(&mut self, name: Symbol, ty: TyId, mutable: bool, span: Span) {
+    pub fn bind_value(&mut self, name: Name, ty: TyId, mutable: bool, span: Span) {
         let scope = self.current_scope_mut();
         let _ = scope.values.insert(name, ValueEntry { ty, mutable, span });
     }
 
     /// # Panics
     /// Panics if environment has no scopes (invariant violation).
-    pub fn bind_ty(&mut self, name: Symbol, ty: TyId) {
+    pub fn bind_ty(&mut self, name: Name, ty: TyId) {
         let scope = self.current_scope_mut();
         let _ = scope.tys.insert(name, ty);
     }
@@ -66,7 +66,7 @@ impl TyEnv {
     }
 
     #[must_use]
-    pub fn lookup_value(&self, name: Symbol) -> Option<&ValueEntry> {
+    pub fn lookup_value(&self, name: Name) -> Option<&ValueEntry> {
         for scope in self.scopes.iter().rev() {
             if let Some(entry) = scope.values.get(&name) {
                 return Some(entry);
@@ -76,7 +76,7 @@ impl TyEnv {
     }
 
     #[must_use]
-    pub fn lookup_ty(&self, name: Symbol) -> Option<TyId> {
+    pub fn lookup_ty(&self, name: Name) -> Option<TyId> {
         for scope in self.scopes.iter().rev() {
             if let Some(&ty) = scope.tys.get(&name) {
                 return Some(ty);

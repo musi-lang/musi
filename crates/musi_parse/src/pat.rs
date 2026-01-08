@@ -1,5 +1,5 @@
 use musi_ast::{ExprId, ExprKind, LitKind, PatId, PatKind, TyExprId};
-use musi_core::{MusiResult, Span, Symbol};
+use musi_core::{MusiResult, Span, Name};
 use musi_lex::token::TokenKind;
 
 use crate::{Parser, errors};
@@ -118,7 +118,7 @@ impl Parser<'_> {
         Ok(self.arena.alloc_pat(PatKind::Lit(kind), start))
     }
 
-    fn parse_pat_after_ident(&mut self, ident: Symbol, start: Span) -> MusiResult<PatId> {
+    fn parse_pat_after_ident(&mut self, ident: Name, start: Span) -> MusiResult<PatId> {
         if self.at(TokenKind::Dot) && self.peek_nth(1) == Some(TokenKind::LBrace) {
             let ty_expr_id = self.arena.alloc_expr(ExprKind::Ident(ident), start);
             return self.parse_pat_record(Some(ty_expr_id), start);
@@ -192,7 +192,7 @@ impl Parser<'_> {
 
     fn make_pat_variant(
         &mut self,
-        name: Symbol,
+        name: Name,
         ty_args: Vec<TyExprId>,
         args: Vec<PatId>,
         start: Span,

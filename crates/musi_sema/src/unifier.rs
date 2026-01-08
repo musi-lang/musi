@@ -122,8 +122,8 @@ impl<'a> Unifier<'a> {
 
     fn unify_records(
         &mut self,
-        f1: &[(musi_core::Symbol, TyId)],
-        f2: &[(musi_core::Symbol, TyId)],
+        f1: &[(musi_core::Name, TyId)],
+        f2: &[(musi_core::Name, TyId)],
         span: Span,
         k1: &TyKind,
         k2: &TyKind,

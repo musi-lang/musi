@@ -1,6 +1,5 @@
-use crate::intern::Interner;
+use crate::interner::{Interner, Name};
 use crate::span::Span;
-use crate::symbol::Symbol;
 use std::borrow::Cow;
 use std::fmt;
 use std::str::FromStr;
@@ -84,31 +83,31 @@ impl FromStr for NumericSuffix {
 /// Kind of lexical token.
 pub enum TokenKind {
     /// `variable_name`, `foo`
-    Ident(Symbol),
+    Ident(Name),
 
     /// `42`, `0xFF`, `0b1010`
     LitInt {
-        raw: Symbol,
+        raw: Name,
         base: NumericBase,
         suffix: Option<NumericSuffix>,
     },
     /// `3.14`, `1.5e-10`
     LitFloat {
-        raw: Symbol,
+        raw: Name,
         suffix: Option<NumericSuffix>,
     },
     /// `"hello world"`
-    LitString(Symbol),
+    LitString(Name),
     /// `'a'`, `'\n'`
     LitRune(char),
     /// `$\"text\"`
-    LitTemplateNoSubst(Symbol),
+    LitTemplateNoSubst(Name),
     /// `$\"Head {`
-    TemplateHead(Symbol),
+    TemplateHead(Name),
     /// `} Middle {`
-    TemplateMiddle(Symbol),
+    TemplateMiddle(Name),
     /// `} Tail\"`
-    TemplateTail(Symbol),
+    TemplateTail(Name),
 
     /// ` `, `\t`
     Whitespace,
@@ -247,7 +246,7 @@ pub enum TokenKind {
     Dollar,
 
     // Special
-    Error(Symbol),
+    Error(Name),
     EOF,
 }
 
@@ -262,7 +261,7 @@ pub struct Token {
 impl Token {
     /// Dummy token for testing/placeholders.
     pub const DUMMY: Self = Self {
-        kind: TokenKind::Error(Symbol::new(0, Span::new(0, 0))),
+        kind: TokenKind::Error(Name::new(0, Span::new(0, 0))),
         span: Span::DUMMY,
     };
 

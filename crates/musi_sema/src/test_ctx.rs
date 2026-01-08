@@ -1,7 +1,8 @@
 use musi_ast::{AstArena, ExprId};
-use musi_core::{Interner, SourceFile, Span, Symbol, Token};
+use musi_core::{Interner, Name, SourceFile, Span, Token};
 
 use crate::inferer::Inferer;
+use crate::symbol::SymbolTable;
 use crate::table::UnificationTable;
 use crate::ty::{TyArena, TyKind};
 use crate::ty_env::TyEnv;
@@ -12,6 +13,7 @@ pub struct TestCtx {
     pub ty_arena: TyArena,
     pub env: TyEnv,
     pub table: UnificationTable,
+    pub symbols: SymbolTable,
 }
 
 impl TestCtx {
@@ -22,6 +24,7 @@ impl TestCtx {
             ty_arena: TyArena::new(),
             env: TyEnv::new(),
             table: UnificationTable::new(),
+            symbols: SymbolTable::new(),
         }
     }
 
@@ -44,12 +47,13 @@ impl TestCtx {
             &mut self.ty_arena,
             &mut self.env,
             &mut self.table,
+            &mut self.symbols,
         );
         let ty_id = inferer.infer_expr(expr_id).expect("infer failed");
         self.ty_arena.get(ty_id).kind.clone()
     }
 
-    pub fn intern(&mut self, s: &str) -> Symbol {
-        Symbol::new(self.interner.intern(s), Span::DUMMY)
+    pub fn intern(&mut self, s: &str) -> Name {
+        Name::new(self.interner.intern(s), Span::DUMMY)
     }
 }

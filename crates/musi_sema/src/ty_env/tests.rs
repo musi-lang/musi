@@ -1,12 +1,12 @@
-use musi_core::Symbol;
+use musi_core::Name;
 use musi_core::span::Span;
 
 use crate::ty::TyArena;
 use crate::ty::TyKind;
 use crate::ty_env::TyEnv;
 
-fn dummy_symbol(id: u32) -> Symbol {
-    Symbol::new(id, Span::DUMMY)
+fn dummy_symbol(id: u32) -> Name {
+    Name::new(id, Span::DUMMY)
 }
 
 #[test]

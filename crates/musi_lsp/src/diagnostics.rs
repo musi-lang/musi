@@ -1,91 +1,53 @@
-use musi_core::{Diagnostic as MusiDiagnostic, Interner, Level, MusiError, SourceFile, Span};
-use tower_lsp_server::ls_types::{Diagnostic, DiagnosticSeverity, Position, Range};
+use lsp_types::{self, DiagnosticSeverity, NumberOrString, Position, Range};
+use musi_core::{Diagnostic, Level, SourceFile, Span};
 
-pub fn run_diagnostics(uri_path: &str, text: &str) -> Vec<Diagnostic> {
-    let mut interner = Interner::new();
-    let source = SourceFile::new(uri_path.into(), text.into(), 0);
-    let (tokens, lex_errors) = musi_lex::tokenize(&source, &mut interner, true);
-
-    let mut diagnostics: Vec<Diagnostic> = lex_errors
-        .diagnostics
+pub fn convert_diagnostics(
+    source_file: &SourceFile,
+    musi_diags: &[Diagnostic],
+) -> Vec<lsp_types::Diagnostic> {
+    musi_diags
         .iter()
-        .map(|err| musi_diag_to_lsp(err, text))
-        .collect();
-
-    let parse_result = musi_parse::parse(&tokens, &interner);
-    for diag in &parse_result.diagnostics.diagnostics {
-        diagnostics.push(musi_diag_to_lsp(diag, text));
-    }
-
-    if parse_result.diagnostics.errors == 0 {
-        let sema_result = musi_sema::analyze(&parse_result.arena, &interner, &parse_result.prog);
-        if let Err(err) = sema_result {
-            diagnostics.push(musi_error_to_lsp(&err, text));
-        }
-    }
-
-    diagnostics
+        .map(|d| convert_diagnostic(source_file, d))
+        .collect()
 }
 
-fn musi_diag_to_lsp(diag: &MusiDiagnostic, text: &str) -> Diagnostic {
-    let range = span_to_range(diag.span, text);
-    let severity = match diag.level {
-        Level::Error => DiagnosticSeverity::ERROR,
-        Level::Warning => DiagnosticSeverity::WARNING,
-        Level::Note => DiagnosticSeverity::INFORMATION,
-        _ => DiagnosticSeverity::HINT,
-    };
-    Diagnostic {
-        range,
-        severity: Some(severity),
-        code: None,
-        code_description: None,
+fn convert_diagnostic(source_file: &SourceFile, diag: &Diagnostic) -> lsp_types::Diagnostic {
+    lsp_types::Diagnostic {
+        range: convert_span(source_file, diag.span),
+        severity: Some(convert_level(diag.level)),
+        code: diag
+            .code
+            .map(|c| NumberOrString::Number(i32::from(c.as_u16()))),
         source: Some("musi".to_owned()),
         message: diag.message.clone(),
         related_information: None,
         tags: None,
         data: None,
-    }
-}
-
-fn musi_error_to_lsp(err: &MusiError, text: &str) -> Diagnostic {
-    let range = span_to_range(err.span, text);
-    Diagnostic {
-        range,
-        severity: Some(DiagnosticSeverity::ERROR),
-        code: None,
         code_description: None,
-        source: Some("musi".to_owned()),
-        message: err.message.clone(),
-        related_information: None,
-        tags: None,
-        data: None,
     }
 }
 
-fn span_to_range(span: Span, text: &str) -> Range {
-    let lo: usize = span.lo.try_into().expect("span.lo overflow");
-    let hi: usize = span.hi.try_into().expect("span.hi overflow");
-    let start = offset_to_position(lo, text);
-    let end = offset_to_position(hi, text);
-    Range { start, end }
+fn convert_span(source_file: &SourceFile, span: Span) -> Range {
+    let (start_line, start_col) = source_file.location_at(span.lo);
+    let (end_line, end_col) = source_file.location_at(span.hi);
+
+    // LSP is 0-indexed, Musi is 1-indexed
+    Range {
+        start: Position {
+            line: u32::try_from(start_line - 1).unwrap_or(0),
+            character: u32::try_from(start_col - 1).unwrap_or(0),
+        },
+        end: Position {
+            line: u32::try_from(end_line - 1).unwrap_or(0),
+            character: u32::try_from(end_col - 1).unwrap_or(0),
+        },
+    }
 }
 
-pub fn offset_to_position(offset: usize, text: &str) -> Position {
-    let mut line = 0u32;
-    let mut col = 0u32;
-
-    for (i, ch) in text.char_indices() {
-        if i >= offset {
-            break;
-        }
-        if ch == '\n' {
-            line += 1;
-            col = 0;
-        } else {
-            col += 1;
-        }
+const fn convert_level(level: Level) -> DiagnosticSeverity {
+    match level {
+        Level::Warning => DiagnosticSeverity::WARNING,
+        Level::Note => DiagnosticSeverity::INFORMATION,
+        _ => DiagnosticSeverity::ERROR,
     }
-
-    Position::new(line, col)
 }

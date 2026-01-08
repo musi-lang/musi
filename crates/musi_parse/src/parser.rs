@@ -1,5 +1,5 @@
 use musi_ast::AstArena;
-use musi_core::{Diagnostic, DiagnosticBag, Interner, MusiError, MusiResult, Span, Symbol};
+use musi_core::{Diagnostic, DiagnosticBag, Interner, MusiError, MusiResult, Span, Name};
 use musi_lex::token::{NumericBase, Token, TokenKind};
 
 use crate::errors;
@@ -321,12 +321,12 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub(crate) fn parse_int(&self, raw: Symbol, base: NumericBase) -> MusiResult<i64> {
+    pub(crate) fn parse_int(&self, raw: Name, base: NumericBase) -> MusiResult<i64> {
         let s = self.interner.lookup(raw.id).unwrap_or("0");
         i64::from_str_radix(s, base.radix()).map_err(|_| errors::invalid_literal(raw.span))
     }
 
-    pub(crate) fn parse_float(&self, raw: Symbol) -> MusiResult<f64> {
+    pub(crate) fn parse_float(&self, raw: Name) -> MusiResult<f64> {
         let s = self.interner.lookup(raw.id).unwrap_or("0.0");
         s.parse::<f64>()
             .map_err(|_| errors::invalid_literal(raw.span))

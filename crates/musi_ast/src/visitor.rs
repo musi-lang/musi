@@ -1,4 +1,4 @@
-use musi_core::Symbol;
+use musi_core::Name;
 
 use crate::{
     AstArena, Attr, AttrArg, ChoiceCase, ChoiceCaseItem, Cond, CondId, CondKind, Expr, ExprId,
@@ -96,7 +96,7 @@ pub trait AstVisitor: Sized {
         }
     }
 
-    fn visit_ident(&mut self, _arena: &AstArena, _ident: Symbol) {}
+    fn visit_ident(&mut self, _arena: &AstArena, _ident: Name) {}
 }
 
 pub fn walk_prog<V: AstVisitor>(v: &mut V, arena: &AstArena, prog: &Prog) {
