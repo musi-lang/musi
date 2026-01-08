@@ -1,6 +1,6 @@
 [package]
-name = "musi_hir"
-description = "High-level IR for Musi compiler"
+name = "musi_sema"
+description = "Semantic analysis for Musi compiler"
 version.workspace = true
 edition.workspace = true
 repository.workspace = true
@@ -16,3 +16,7 @@ thiserror = { workspace = true }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+musi_lex = { path = "../musi_lex" }
+musi_parse = { path = "../musi_parse" }
