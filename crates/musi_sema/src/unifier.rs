@@ -28,6 +28,8 @@ impl<'a> Unifier<'a> {
         let k1 = &self.arena.get(ty1).kind;
         let k2 = &self.arena.get(ty2).kind;
 
+        tracing::trace!(?k1, ?k2, "unify_structural");
+
         match (k1, k2) {
             (TyKind::Var(v1), TyKind::Var(v2)) => {
                 self.table.unify_var_var(*v1, *v2);

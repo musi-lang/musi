@@ -31,6 +31,8 @@ pub fn analyze(ast: &AstArena, interner: &Interner, prog: &Prog) -> MusiResult<T
     let mut env = TyEnv::new();
     let mut table = UnificationTable::new();
 
+    tracing::debug!("Starting semantic analysis...");
+
     let mut checker = Checker::new(ast);
     let mut inferer = Inferer::new(ast, interner, &mut ty_arena, &mut env, &mut table);
 
@@ -40,6 +42,8 @@ pub fn analyze(ast: &AstArena, interner: &Interner, prog: &Prog) -> MusiResult<T
         checker.check_expr(*expr_id)?;
         let _ = inferer.infer_expr(*expr_id)?;
     }
+
+    tracing::debug!("Completed semantic analysis");
 
     Ok(TypedModule { ty_arena, env })
 }

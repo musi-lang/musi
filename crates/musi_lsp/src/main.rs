@@ -5,6 +5,7 @@ mod doc_store;
 mod semantic_tokens;
 
 use std::collections::HashMap;
+use std::io;
 use std::sync::Arc;
 
 use bindings::{BindingCollector, BindingInfo, find_binding_at};
@@ -370,6 +371,11 @@ impl Backend {
 
 #[tokio::main]
 async fn main() {
+    tracing_subscriber::fmt()
+        .with_writer(io::stderr)
+        .with_ansi(false)
+        .init();
+
     let (service, socket) = LspService::new(Backend::new);
     Server::new(stdin(), stdout(), socket).serve(service).await;
 }

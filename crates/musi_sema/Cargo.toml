@@ -12,6 +12,7 @@ categories.workspace = true
 [dependencies]
 musi_core = { path = "../musi_core" }
 musi_ast = { path = "../musi_ast" }
+tracing = { workspace = true }
 thiserror = { workspace = true }
 
 [lints]
