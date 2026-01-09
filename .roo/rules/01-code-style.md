@@ -1,153 +1,55 @@
 # Code Style and Formatting
 
-## Comments
+<coding_standards>
 
-### Default behavior: No comments
+## Context Engineering
 
-Add comments ONLY when:
+* **Match Pattern**: Do not introduce new patterns (e.g., new error handling libraries, new folder structures) unless explicitly asked.
+* **Mimicry**: Code you write must be indistinguishable from the existing codebase.
 
-- User explicitly requests them
-- Complex algorithm requires explanation (and user hasn't forbidden comments)
+## Comments & Documentation
 
-Do NOT add:
+* **Inline Comments**: **FORBIDDEN** for obvious logic. **REQUIRED** for:
+  * Unsafe blocks (if allowed).
+  * Complex algorithms (Time complexity > O(n)).
+  * Workarounds for external bugs.
+* **Doc Comments**: Public APIs must have documentation matching the language standard (e.g., Rust `///`, Python `"""`).
 
-- Explanatory comments describing what obvious code does
-- Your internal reasoning as comments
-- "Step 1, Step 2" style monologue
-- Documentation comments unless explicitly requested
+</coding_standards>
 
-If you think code needs comments to be understood, the code probably needs restructuring instead. Ask user first.
+<formatting_rules>
 
-## Code Structure
+* **Strict Adherence**: Follow the project's linter/formatter config (`.rustfmt.toml`, `.eslintrc`, etc.) exactly.
+* **No Reformatting**: Do not reformat unrelated code. It creates noise in the diff.
+* **Imports**: Group imports logically. Remove unused imports immediately.
+</formatting_rules>
 
-### Inlining
+<completeness_enforcement>
 
-- Do not inline everything into dense one-liners
-- Do not expand everything into verbose multiple statements
-- Follow existing codebase style
-- When in doubt: prefer readability over brevity
+## "Definition of Done"
 
-### Formatting
+Every code block provided must be:
 
-- Match existing indentation (spaces/tabs, width)
-- Match existing brace style
-- Match existing naming conventions
-- Do not reformat code that wasn't changed
+1. **Syntactically Correct**: No missing brackets or typos.
+2. **Logically Complete**: All edge cases (nulls, empty lists, errors) handled.
+3. **Dependency Checked**: No usage of functions/types that are not imported or defined.
 
-If existing code has inconsistent formatting, ask which style to use.
-
-## Forbidden Phrases and Patterns
-
-### NEVER use these without explicit request
-
-- "For now, let's..."
-- "To simplify..."
-- "As a starting point..."
-- "We can improve this later..."
-- "This is a simplified version..."
-- "// TODO: implement X"
-- "// Placeholder"
-- "// Will add later"
-
-These indicate incomplete implementation. Complete it or state you cannot.
-
-### NEVER add unsolicited
-
-- Error handling not specified
-- Logging not requested
-- Input validation beyond requirements
-- "Helpful" extra features
-- Performance optimizations not asked for
-- Refactoring of working code
-
-## Implementation Completeness
-
-Every implementation must be:
-
-- **Functional**: Actually works, not just compiles
-- **Complete**: No missing logic paths
-- **Tested**: Runs without errors (if applicable)
-- **Standalone**: No dependencies on unwritten code
-
-### Bad (incomplete)
+### ❌ REJECTED PATTERN (Lazy)
 
 ```python
-def parse_expression():
-    # TODO: implement operator precedence
+def process_data(data):
+    # TODO: implement validation
     pass
 ```
 
-### Good (honest)
->
-> "I need to implement operator precedence parsing. Should I use Pratt parsing, precedence climbing, or another method? What operators and precedence levels exist?"
-
-### Also good (complete)
+### ✅ ACCEPTED PATTERN (Complete)
 
 ```python
-def parse_expression():
-    return parse_precedence(0)
-
-def parse_precedence(min_prec):
-    # [full implementation here]
+def process_data(data):
+    if not data:
+        raise ValueError("data cannot be empty")
+    validate_schema(data) # assumes validate_schema exists in context
+    return _transform(data)
 ```
 
-## When Modifying Existing Code
-
-1. Understand the existing code first
-2. Make minimal changes that accomplish the goal
-3. Maintain existing style
-4. Don't refactor unless asked
-5. Don't "improve" unrelated code
-
-## Syntax and Language Specifics
-
-For custom languages/DSLs/compilers:
-
-- NEVER assume syntax
-- NEVER import patterns from C/Python/etc. without verification
-- Always examine lexer/parser/grammar first
-- Ask about syntax rules if unclear
-
-**Wrong:**
-> "I'll add C-style for loops: `for (i = 0; i < n; i++)`"
-
-**Right:**
-> "What's the syntax for loops in this language? I see `loop` and `while` keywords in the lexer, but need to understand the grammar."
-
-## Code Organization
-
-Maintain existing structure:
-
-- File organization
-- Module boundaries
-- Function granularity
-- Class hierarchies
-
-Don't reorganize unless explicitly asked.
-
-## Testing Code
-
-When writing or fixing tests:
-
-- Tests must actually test the implementation
-- NEVER hard-code expected values just to pass
-- NEVER mock/stub the thing being tested
-- If test fails: fix implementation, not the test
-- Report genuine test failures honestly
-
-### Bad (cheating)
-
-```python
-def test_calculate():
-    result = calculate(2, 3)
-    assert result == 6  # hard-coded, doesn't actually test calculate()
-```
-
-### Good (actual test)
-
-```python
-def test_calculate():
-    result = calculate(2, 3)
-    expected = 2 * 3  # or whatever calculate should do
-    assert result == expected
-```
+</completeness_enforcement>
