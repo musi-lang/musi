@@ -11,7 +11,7 @@ odigit = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7";
 
 bdigit = "0" | "1";
 
-symbol = " " | "!" | "$" | "%" | "(" | ")" | "*" | "+" | "," | "-" | "." | "/" | ":" | ";" | "<" | "=" | ">" | "?" | "@" | "[" | "]" | "`" | "{" | "|" | "}" | "~" | "'" | '"' | '"';
+symbol = " " | "!" | "$" | "%" | "(" | ")" | "*" | "+" | "," | "-" | "." | "/" | ":" | ";" | "<" | "=" | ">" | "?" | "@" | "[" | "]" | "`" | "{" | "|" | "}" | "~" | "'" | '"' | '"' | "#";
 
 char = letter | digit | symbol;
 
@@ -86,6 +86,8 @@ aux_import_list = aux_import_item, {",", aux_import_item}, [","];
 
 aux_import_spec = ["native"], "{", aux_import_list, "}";
 
+loop_label = "#", ident;
+
 (* ========================================================================= *)
 (* TYPE EXPRESSIONS                                                          *)
 (* ========================================================================= *)
@@ -159,9 +161,9 @@ expr_block = "{", {stmt}, [expr], "}";
 
 expr_if = aux_if_branch, {"else", aux_if_branch}, ["else", expr_block];
 
-expr_while = "while", aux_if_cond, [aux_if_guard], expr_block;
+expr_while = [loop_label], "while", aux_if_cond, [aux_if_guard], expr_block;
 
-expr_for = "for", pat, "in", expr, [aux_if_guard], expr_block;
+expr_for = [loop_label], "for", pat, "in", expr, [aux_if_guard], expr_block;
 
 expr_match = "match", expr, "{", aux_match_case, {",", aux_match_case}, [","], "}";
 
@@ -213,11 +215,11 @@ prec_eq = prec_rel, [("=" | "/="), prec_rel];
 
 prec_conj = prec_eq, {"and", prec_eq};
 
-prec_disj = prec_conj, {"or", prec_conj};
+prec_excl_disj = prec_conj, {"xor", prec_conj};
 
-prec_pipe = prec_disj, {"|>", prec_disj};
+prec_disj = prec_excl_disj, {"or", prec_excl_disj};
 
-prec_assign = prec_pipe, ["<-", expr];
+prec_assign = prec_disj, ["<-", expr];
 
 expr = prec_assign;
 
@@ -230,9 +232,9 @@ stmt_export = "export", aux_import_spec, ["from", lit_text], ";";
 
 stmt_return = "return", [expr], ";";
 
-stmt_break = "break", [expr], ";";
+stmt_break = "break", [loop_label], [expr], ";";
 
-stmt_cycle = "cycle", ";";
+stmt_cycle = "cycle", [loop_label], [aux_if_guard], ";";
 
 stmt_defer = "defer", expr, ";";
 
