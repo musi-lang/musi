@@ -138,7 +138,7 @@ pat_primary = pat_ident | pat_lit | pat_wild | pat_paren | pat_tuple | pat_array
 
 pat_cons = pat_primary, {"::", pat_primary};
 
-pat_or = pat_cons, {"|", pat_cons};
+pat_or = pat_cons, {"or", pat_cons};
 
 pat_as = pat_or, ["as", ident];
 
