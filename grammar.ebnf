@@ -42,6 +42,10 @@ aux_attr = "@[", ident, [aux_attr_args], {",", ident, [aux_attr_args]}, "]";
 
 aux_modifiers = {("export" | "unsafe" | "native")};
 
+aux_ty_params = "[", [ident, {",", ident}, [","]], "]";
+
+aux_ty_args = "[", ty_expr, {",", ty_expr}, [","], "]";
+
 aux_ty_annot = ":", ty_expr;
 
 aux_init = ":=", expr;
@@ -52,13 +56,13 @@ aux_field_list = aux_field, {",", aux_field}, [","];
 
 aux_params = "(", [aux_field_list], ")";
 
-aux_fn_sig = [ident], [ty_params], [aux_params], [aux_ty_annot];
+aux_fn_sig = [ident], [aux_ty_params], [aux_params], [aux_ty_annot];
 
 aux_class_constraint = ident, "[", ty_expr, {",", ty_expr}, [","], "]";
 
-aux_class_constraints = "where", aux_class_constraint, {",", aux_class_constraint}, [","];
+aux_class_constraints = "|", aux_class_constraint, {",", aux_class_constraint}, [","];
 
-aux_class_method_sig = "fn", ident, [ty_params], aux_params, [aux_ty_annot];
+aux_class_method_sig = "fn", ident, [aux_ty_params], aux_params, [aux_ty_annot];
 
 aux_class_methods = aux_class_method_sig, {";", aux_class_method_sig}, [";"];
 
@@ -68,7 +72,7 @@ aux_instance_methods = aux_instance_method, {";", aux_instance_method}, [";"];
 
 aux_choice_case_item = ty_expr | aux_field;
 
-aux_choice_case = "case", ident, [ty_args], ["(", [aux_choice_case_item, {",", aux_choice_case_item}, [","]], ")"];
+aux_choice_case = "case", ident, [aux_ty_args], ["(", [aux_choice_case_item, {",", aux_choice_case_item}, [","]], ")"];
 
 aux_choice_items = aux_choice_case, {",", aux_choice_case}, [","];
 
@@ -86,15 +90,15 @@ aux_import_list = aux_import_item, {",", aux_import_item}, [","];
 
 aux_import_spec = ["native"], "{", aux_import_list, "}";
 
-loop_label = "#", ident;
+aux_loop_label = "#", ident;
+
+aux_from_specifier = "from", lit_text, ";";
+
+aux_expr_list = expr, {",", expr}, [","];
 
 (* ========================================================================= *)
 (* TYPE EXPRESSIONS                                                          *)
 (* ========================================================================= *)
-ty_params = "[", [ident, {",", ident}, [","]], "]";
-
-ty_args = "[", ty_expr, {",", ty_expr}, [","], "]";
-
 ty_expr_ident = ident;
 
 ty_expr_paren = "(", ty_expr, ")";
@@ -103,7 +107,7 @@ ty_expr_tuple = "(", [ty_expr, ",", [ty_expr, {",", ty_expr}, [","]]], ")";
 
 ty_expr_primary = ty_expr_ident | ty_expr_paren | ty_expr_tuple;
 
-ty_expr_app = ident, ty_args;
+ty_expr_app = ident, aux_ty_args;
 
 ty_expr_array = "[", [lit_number], "]", ty_expr;
 
@@ -118,7 +122,7 @@ pat_ident = ident;
 
 pat_lit = lit;
 
-pat_wildcard = "_";
+pat_wild = "_";
 
 pat_paren = "(", pat, ")";
 
@@ -128,9 +132,9 @@ pat_array = "[", [pat, {",", pat}, [","]], "]";
 
 pat_record = [ident], ".{", [ident, {",", ident}, [","]], "}";
 
-pat_variant = ident, [ty_args], ["(", [pat, {",", pat}, [","]], ")"];
+pat_variant = ident, [aux_ty_args], ["(", [pat, {",", pat}, [","]], ")"];
 
-pat_primary = pat_ident | pat_lit | pat_wildcard | pat_paren | pat_tuple | pat_array | pat_record | pat_variant;
+pat_primary = pat_ident | pat_lit | pat_wild | pat_paren | pat_tuple | pat_array | pat_record | pat_variant;
 
 pat_cons = pat_primary, {"::", pat_primary};
 
@@ -143,69 +147,70 @@ pat = pat_as;
 (* ========================================================================= *)
 (* EXPRESSIONS                                                               *)
 (* ========================================================================= *)
-expr_list = expr, {",", expr}, [","];
+(* Literals *)
+expr_lit_tuple = "(", [expr, ",", [aux_expr_list]], ")";
 
-expr_lit = lit;
+expr_lit_array = "[", [aux_expr_list], "]";
 
-expr_ident = ident;
+expr_lit_record = ".{", [expr, "with"], [aux_field_list], "}";
 
-expr_paren = "(", expr, ")";
-
-expr_tuple = "(", [expr, ",", [expr_list]], ")";
-
-expr_array = "[", [expr_list], "]";
-
-expr_record = ".{", [expr, "with"], [aux_field_list], "}";
-
+(* Control flow *)
 expr_block = "{", {stmt}, [expr], "}";
 
 expr_if = aux_if_branch, {"else", aux_if_branch}, ["else", expr_block];
 
-expr_while = [loop_label], "while", aux_if_cond, [aux_if_guard], expr_block;
+expr_while = [aux_loop_label], "while", aux_if_cond, [aux_if_guard], expr_block;
 
-expr_for = [loop_label], "for", pat, "in", expr, [aux_if_guard], expr_block;
+expr_for = [aux_loop_label], "for", pat, "in", expr, [aux_if_guard], expr_block;
 
 expr_match = "match", expr, "{", aux_match_case, {",", aux_match_case}, [","], "}";
 
 expr_unsafe = "unsafe", expr_block;
 
-expr_def_record = [aux_attr], "record", [ty_params], "{", [aux_field_list], "}";
+expr_return = "return", [expr];
 
-expr_def_choice = [aux_attr], "choice", [ty_params], "{", aux_choice_items, "}";
+expr_break = "break", [aux_loop_label], [expr];
 
-expr_def_class = [aux_attr], "class", ident, ty_params, [aux_class_constraints], "{", [aux_class_methods], "}";
+expr_cycle = "cycle", [aux_loop_label], [aux_if_guard];
 
-expr_def_instance = [aux_attr], "instance", ident, [ty_args], ":", ty_expr, [aux_class_constraints], "{", aux_instance_methods, "}";
+expr_defer = "defer", expr;
 
-expr_def_alias = [aux_attr], "alias", ident, [ty_params], ":=", ty_expr;
+(* Definitions *)
+expr_record = [aux_attr], "record", [aux_ty_params], "{", [aux_field_list], "}";
 
-expr_def_fn = [aux_attr], [aux_modifiers], "fn", aux_fn_sig, [(expr_block | ("=>", expr))];
+expr_choice = [aux_attr], "choice", [aux_ty_params], "{", [aux_choice_items], "}";
 
-expr_bound = [aux_modifiers], ("val" | "var"), pat, [aux_ty_annot], aux_init;
+expr_class = [aux_attr], "class", ident, aux_ty_params, [aux_class_constraints], "{", [aux_class_methods], "}";
 
-expr_range = expr, (".." | "..<"), [expr];
+expr_instance = [aux_attr], "instance", ident, [aux_ty_args], ":", ty_expr, [aux_class_constraints], "{", aux_instance_methods, "}";
 
-expr_assign = expr, "<-", expr;
+expr_alias = [aux_attr], "alias", ident, [aux_ty_params], ":=", ty_expr;
 
-expr_call = "(", [expr_list], ")";
+expr_fn = [aux_attr], [aux_modifiers], "fn", aux_fn_sig, [(expr_block | ("=>", expr))];
 
-expr_index = ".[", expr_list, "]";
+expr_bind = [aux_attr], [aux_modifiers], ("val" | "var"), pat, [aux_ty_annot], aux_init;
 
-expr_update = ".{", [aux_field_list], "}";
+(* Postfix *)
+expr_call = "(", [aux_expr_list], ")";
+
+expr_index = ".[", aux_expr_list, "]";
 
 expr_field = ".", ident;
 
-prec_primary = expr_lit | expr_ident | expr_paren | expr_tuple | expr_array | expr_record | expr_block | expr_if | expr_while | expr_for | expr_match | expr_unsafe | expr_def_record | expr_def_choice | expr_def_class | expr_def_instance | expr_def_alias | expr_def_fn | expr_bound;
+(* Precedence *)
+prec_primary = lit | ident | "(", expr, ")" | expr_lit_tuple | expr_lit_array | expr_lit_record | expr_block | expr_if | expr_while | expr_for | expr_match | expr_unsafe | expr_return | expr_break | expr_cycle | expr_defer | expr_record | expr_choice | expr_class | expr_instance | expr_alias | expr_fn | expr_bind;
 
-prec_postfix = prec_primary, {expr_call | expr_index | expr_update | expr_field};
+prec_postfix = prec_primary, {expr_call | expr_index | expr_field};
 
-prec_unary = (("-" | "not"), prec_unary) | prec_postfix;
+prec_unary = ("-", prec_unary) | prec_postfix;
 
 prec_mult = prec_unary, {("*" | "/" | "%"), prec_unary};
 
 prec_add = prec_mult, {("+" | "-"), prec_mult};
 
-prec_cons = prec_add, {"::", prec_add};
+prec_shift = prec_add, {("shl" | "shr" | "rol" | "ror"), prec_add};
+
+prec_cons = prec_shift, {"::", prec_shift};
 
 prec_range = prec_cons, [(".." | "..<"), prec_cons];
 
@@ -215,9 +220,7 @@ prec_eq = prec_rel, [("=" | "/="), prec_rel];
 
 prec_conj = prec_eq, {"and", prec_eq};
 
-prec_excl_disj = prec_conj, {"xor", prec_conj};
-
-prec_disj = prec_excl_disj, {"or", prec_excl_disj};
+prec_disj = prec_conj, {("or" | "xor"), prec_conj};
 
 prec_assign = prec_disj, ["<-", expr];
 
@@ -226,21 +229,13 @@ expr = prec_assign;
 (* ========================================================================= *)
 (* STATEMENTS                                                                *)
 (* ========================================================================= *)
-stmt_import = "import", aux_import_spec, "from", lit_text, ";";
+stmt_import = "import", aux_import_spec, aux_from_specifier;
 
-stmt_export = "export", aux_import_spec, ["from", lit_text], ";";
-
-stmt_return = "return", [expr], ";";
-
-stmt_break = "break", [loop_label], [expr], ";";
-
-stmt_cycle = "cycle", [loop_label], [aux_if_guard], ";";
-
-stmt_defer = "defer", expr, ";";
+stmt_export = "export", aux_import_spec, [aux_from_specifier];
 
 stmt_expr = expr, ";";
 
-stmt = stmt_import | stmt_export | stmt_return | stmt_break | stmt_cycle | stmt_defer | stmt_expr;
+stmt = stmt_import | stmt_export | stmt_expr;
 
 (* ========================================================================= *)
 (* PROGRAM                                                                   *)
