@@ -40,7 +40,7 @@ aux_attr_args = "(", [aux_attr_arg, {",", aux_attr_arg}, [","]], ")";
 
 aux_attr = "@[", ident, [aux_attr_args], {",", ident, [aux_attr_args]}, "]";
 
-aux_modifiers = {("export" | "unsafe" | "native")};
+aux_modifiers = {("export" | "unsafe")};
 
 aux_ty_params = "[", [ident, {",", ident}, [","]], "]";
 
@@ -58,31 +58,19 @@ aux_params = "(", [aux_field_list], ")";
 
 aux_fn_sig = [ident], [aux_ty_params], [aux_params], [aux_ty_annot];
 
-aux_class_constraint = ident, "[", ty_expr, {",", ty_expr}, [","], "]";
-
-aux_class_constraints = "|", aux_class_constraint, {",", aux_class_constraint}, [","];
-
-aux_class_method_sig = "fn", ident, [aux_ty_params], aux_params, [aux_ty_annot];
-
-aux_class_methods = aux_class_method_sig, {";", aux_class_method_sig}, [";"];
-
-aux_instance_method = "fn", aux_fn_sig, (expr_block | ("=>", expr));
-
-aux_instance_methods = aux_instance_method, {";", aux_instance_method}, [";"];
-
 aux_choice_case_item = ty_expr | aux_field;
 
-aux_choice_case = "case", ident, [aux_ty_args], ["(", [aux_choice_case_item, {",", aux_choice_case_item}, [","]], ")"];
+aux_choice_case = ident, [aux_ty_args], ["(", [aux_choice_case_item, {",", aux_choice_case_item}, [","]], ")"];
 
 aux_choice_items = aux_choice_case, {",", aux_choice_case}, [","];
 
-aux_if_cond = expr | ("case", pat, ":=", expr);
+aux_if_cond = expr | (pat, ":=", expr);
 
 aux_if_guard = "if", expr;
 
 aux_if_branch = "if", aux_if_cond, expr_block;
 
-aux_match_case = "case", pat, [aux_if_guard], "=>", expr;
+aux_match_case = pat, [aux_if_guard], "=>", expr;
 
 aux_import_item = ident, ["as", ident];
 
@@ -180,15 +168,11 @@ expr_record = [aux_attr], "record", [aux_ty_params], "{", [aux_field_list], "}";
 
 expr_choice = [aux_attr], "choice", [aux_ty_params], "{", [aux_choice_items], "}";
 
-expr_class = [aux_attr], "class", ident, aux_ty_params, [aux_class_constraints], "{", [aux_class_methods], "}";
+expr_interface = [aux_attr], "interface", ident, [aux_ty_params], "{", [aux_field_list], "}";
 
-expr_instance = [aux_attr], "instance", ident, [aux_ty_args], ":", ty_expr, [aux_class_constraints], "{", aux_instance_methods, "}";
+expr_fn_lit = [aux_attr], [aux_modifiers], (aux_fn_sig | aux_params), ("=>", expr);
 
-expr_alias = [aux_attr], "alias", ident, [aux_ty_params], ":=", ty_expr;
-
-expr_fn = [aux_attr], [aux_modifiers], "fn", aux_fn_sig, [(expr_block | ("=>", expr))];
-
-expr_bind = [aux_attr], [aux_modifiers], ("val" | "var"), pat, [aux_ty_annot], aux_init;
+expr_bind = [aux_attr], [aux_modifiers], ("val" | "var"), pat, [aux_ty_annot], [aux_init];
 
 (* Postfix *)
 expr_call = "(", [aux_expr_list], ")";
@@ -198,7 +182,7 @@ expr_index = ".[", aux_expr_list, "]";
 expr_field = ".", ident;
 
 (* Precedence *)
-prec_primary = lit | ident | "(", expr, ")" | expr_lit_tuple | expr_lit_array | expr_lit_record | expr_block | expr_if | expr_while | expr_for | expr_match | expr_unsafe | expr_return | expr_break | expr_cycle | expr_defer | expr_record | expr_choice | expr_class | expr_instance | expr_alias | expr_fn | expr_bind;
+prec_primary = lit | ident | "(", expr, ")" | expr_lit_tuple | expr_lit_array | expr_lit_record | expr_block | expr_if | expr_while | expr_for | expr_match | expr_unsafe | expr_return | expr_break | expr_cycle | expr_defer | expr_record | expr_choice | expr_interface | expr_fn_lit | expr_bind;
 
 prec_postfix = prec_primary, {expr_call | expr_index | expr_field};
 
@@ -214,9 +198,11 @@ prec_cons = prec_shift, {"::", prec_shift};
 
 prec_range = prec_cons, [(".." | "..<"), prec_cons];
 
-prec_rel = prec_range, [("<" | ">" | "<=" | ">=" | "is" | "as" | "in"), prec_range];
+prec_rel = prec_range, [("<" | ">" | "<=" | ">=" | "in"), prec_range];
 
-prec_eq = prec_rel, [("=" | "/="), prec_rel];
+prec_cast = prec_rel, ["<:", prec_rel];
+
+prec_eq = prec_cast, [("=" | "/="), prec_cast];
 
 prec_conj = prec_eq, {"and", prec_eq};
 
