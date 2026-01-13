@@ -42,22 +42,9 @@ val arr: []Int32 := [1, 2, 3];    // GC-managed
 val point: Point := .{x := 1.0, y := 2.0};  // GC-managed
 ```
 
-### Unsafe Blocks
-
-GC disabled. Manual memory management required. Used for FFI and low-level operations.
-
-```musi
-unsafe {
-  val ptr: ^Int32 := malloc(4);
-  ptr.^ <- 42;
-  free(ptr);
-};
-```
-
 **Restrictions in unsafe blocks:**
 
-- No automatic GC
-- Pointer arithmetic allowed
+- Pointer arithmetic allowed (but recommended to use array slices instead)
 - No bounds checking (unless explicit)
 - FFI unrestricted
 
@@ -68,7 +55,7 @@ unsafe {
 Generics are specialized at compile time. Each instantiation produces a separate concrete implementation.
 
 ```musi
-fn identity[T](x: T): T { x };
+val identity[T]: (T) -> T := (x) => x;
 identity[Int32](42);      // generates Int32 version
 identity[String]("hi");   // generates String version
 ```
@@ -79,8 +66,8 @@ Tagged union: `[discriminant:u8][padding][payload]`
 
 ```musi
 choice Option[T] {
-  case Some(T),
-  case None
+  Some(T),
+  None
 };
 ```
 
@@ -108,37 +95,29 @@ Compiled to efficient dispatch:
 
 ### Importing C Functions
 
-Use `extern` modifier on `fn` declarations without a body:
+Use `import native` statement to bring in external functions:
 
 ```musi
-@[link("libc")]
-extern "C" fn malloc(size: Nat64): ^Any;
+import native { malloc, free } from "libc";
 
-@[link("libc")]
-extern "C" fn free(ptr: ^Any): Unit;
-
-@[link("libc")]
-extern "C" fn write(fd: Int32, buf: ^Nat8, count: Nat64): Int64;
+@[link(name := "libc")]
+import native { write } from "libc";
 
 // Symbol override when C name differs from Musi name
-@[link("libc"), symbol("__strdup")]
-extern "C" fn strdup(s: ^Nat8): ^Nat8;
+@[link(name := "libc"), symbol(name := "__strdup")]
+import native { strdup } from "libc";
 ```
 
 **Attributes**:
 
-- `@[link("lib")]` — library to link against
-- `@[symbol("name")]` — C symbol name (defaults to function name)
-
-**ABI string** (optional, defaults to `"C"`):
-
-- `"C"` — cdecl (System V on Unix, cdecl on Windows)
-- `"stdcall"` — Windows stdcall
-- `"fastcall"` — fastcall convention
+- `@[link(name := "lib")]` — library to link against
+- `@[symbol(name := "name")]` — C symbol name (defaults to function name)
 
 **Calling** requires `unsafe` block:
 
 ```musi
+import native { malloc, free } from "libc";
+
 unsafe {
   val ptr := malloc(64);
   defer free(ptr);
@@ -151,40 +130,17 @@ unsafe {
 - Musi pointers ≡ C pointers
 - Primitive types match C types
 
-### Exporting Musi Functions
-
-Use `Callback.register` to expose Musi functions to C at runtime:
-
-```musi
-// Define normal Musi function
-val add_numbers := fn(a: Int32, b: Int32): Int32 => a + b;
-
-// Register for C access
-Callback.register("add_numbers", add_numbers);
-```
-
-**C side**:
-
-```c
-#include <musi/callback.h>
-
-musi_value fn = musi_named_value("add_numbers");
-int result = musi_call_int(fn, 1, 2);
-```
-
-**Effect**: Function registered in runtime table, accessible by name from C.
-
 ## Error Handling
 
 **Musi uses**: `defer` + `Expect[T, E]` (Result type)
 
 ```musi
 choice Expect[T, E] {
-  case Ok(T),
-  case Err(E)
+  Ok(T),
+  Err(E)
 };
 
-fn divide(a: Int32, b: Int32): Expect[Int32, String] {
+val divide: (Int32, Int32) -> Expect[Int32, String] := (a, b) => {
   if b = 0 { return Err("division by zero"); };
   return Ok(a / b);
 };
@@ -193,7 +149,7 @@ fn divide(a: Int32, b: Int32): Expect[Int32, String] {
 **Defer**: cleanup on scope exit (normal or error)
 
 ```musi
-fn process_file(path: String): Expect[Unit, String] {
+val process_file: (String) -> Expect[Unit, String] := (path) => {
   val file := open(path).unwrap();
   defer close(file);
   return read(file);
@@ -203,7 +159,7 @@ fn process_file(path: String): Expect[Unit, String] {
 **Bytecode support for interop**:
 
 - `throw`/`rethrow`: exception-based languages
-- `ldnull`: nullable references (Musi has no null)
+- `ldnil`: optional/nullable references (Musi has no null)
 
 ## Standard Library
 
@@ -213,7 +169,6 @@ fn process_file(path: String): Expect[Unit, String] {
 - `Unit`: empty tuple
 - `Any`: top type (all types are subtypes)
 - `Bool`, `Int*`, `Nat*`, `Float*`, `Rune`, `String`
-- `BigFloat*`: decimal floating-point (STL implementation using `Float*`)
 
 ### Standard Modules
 
@@ -283,7 +238,7 @@ See [BYTECODE.md](./BYTECODE.md) for complete specification.
 ### Generic Function with Monomorphization
 
 ```musi
-fn swap[T](x: T, y: T): (T, T) {
+val swap[T]: (T, T) -> (T, T) := (x, y) => {
   return (y, x);
 };
 
@@ -296,14 +251,14 @@ val b := swap[String]("x", "y");   // generates String version
 ```musi
 import "std/io";
 
-fn safe_divide(a: Int32, b: Int32): Expect[Int32, String] {
+val safe_divide: (Int32, Int32) -> Expect[Int32, String] := (a, b) => {
   if b = 0 { return Err("division by zero"); };
   return Ok(a / b);
 };
 
 match safe_divide(10, 0) {
-case Ok(result) => writeln($"Result: {result}"),
-case Err(msg) => writeln($"Error: {msg}")
+  Ok(result) => writeln($"Result: {result}"),
+  Err(msg) => writeln($"Error: {msg}")
 };
 ```
 
@@ -327,14 +282,14 @@ unsafe {
 
 ```musi
 choice Tree[T] {
-  case Leaf(T),
-  case Node(^Tree[T], ^Tree[T])
+  Leaf(T),
+  Node(^Tree[T], ^Tree[T])
 };
 
-fn height[T](tree: Tree[T]): Int32 {
+val height[T]: (Tree[T]) -> Int32 := (tree) => {
   match tree {
-  case Leaf(_) => 1,
-  case Node(left, right) => 1 + max(height(left.^), height(right.^))
+    Leaf(_) => 1,
+    Node(left, right) => 1 + max(height(left.^), height(right.^))
   }
 };
 ```

@@ -1,461 +1,469 @@
 # Musi Bytecode Specification
 
-## File Format (.mso)
+## Abstract
 
-### Structure
+MSIL (Musi Stack-based Intermediate Language) is a general-purpose bytecode format designed for efficient execution. Inspired by CIL and Java bytecode but optimized for performance and hardware proximity. The instruction set focuses on what CPUs care about: control flow, arithmetic, memory access, and type-aware operations without language-specific constructs.
+
+**Design Principles**:
+
+- **Hardware-inspired**: General-purpose opcodes similar to CPU instruction sets
+- **Type-tagged values**: Operands carry type tags for safety without runtime checks
+- **Stack-based**: Simple, fast evaluation model with minimal state
+- **No language assumptions**: No built-in support for lists, classes, ranges, etc. — these are library constructs
+
+**Compiler Layer**: musi_bytecode (Layer 5) ← musi_types (Layer 4) ← musi_syntax (Layer 3)
+
+## 1. File Format (.mso)
+
+### 1.1 Module Structure
+
+Compiled Musi modules use the `.mso` (Musi Stack Object) format:
+
+```ebnf
+module ::= header constant_pool symbol_table code_section
+```
 
 ```text
-+-------------------+
++-------------------+  ← 32 bytes
 |      Header       |  magic, version, flags, section sizes
-+-------------------+
++-------------------+  ← header.const_pool_len * 8 bytes
 |   Constant Pool   |  string/numeric literals
-+-------------------+
++-------------------+  ← header.symbol_table_len * 16 bytes
 |   Symbol  Table   |  function/type/field names
-+-------------------+
++-------------------+  ← header.code_section_len bytes
 |   Code  Section   |  bytecode instructions
 +-------------------+
 ```
 
-### Header Format
+### 1.2 Header Format
 
-```ebnf
-aux_magic = "0x4D555349";                    // ASCII "MUSI"
-aux_version = n32;                           // version number
-aux_flags = n32;                             // bit flags (reserved)
-aux_const_pool_len = n32;                    // constant pool entry count
-aux_symbol_table_len = n32;                  // symbol table entry count
-aux_code_section_len = n32;                  // code section size in bytes
-aux_mso_header = aux_magic, aux_version, aux_flags, aux_const_pool_len, aux_symbol_table_len, aux_code_section_len;
+```hex
+Offset  Size  Field
+------  ----  -----
+0x00    4     magic: 0x4D555349 (ASCII "MUSI")
+0x04    4     version: u32 (format version)
+0x08    4     flags: u32 (bit flags, reserved)
+0x0C    4     const_pool_len: u32 (entry count)
+0x10    4     symbol_table_len: u32 (entry count)
+0x14    4     code_section_len: u32 (byte length)
+0x18    4     entry_point: u32 (symbol table index)
+0x1C    12    reserved (zero)
 ```
 
-## Type Notation
+### 1.3 Type Notation
 
-- **i8/i16/i32/i64**: integers (signed)
-- **n8/n16/n32/n64**: naturals (unsigned)
-- **r16/r32/r64**: reals (IEEE-754 floats)
-- **ref**: reference
+Instruction operands use the following type prefixes:
 
-## Instruction Set
+| Prefix | Type                    | Size   | Encoding        |
+|--------|-------------------------|--------|-----------------|
+| `i8`   | signed 8-bit integer    | 1 byte | two's complement |
+| `i16`  | signed 16-bit integer   | 2 bytes| little-endian   |
+| `i32`  | signed 32-bit integer   | 4 bytes| little-endian   |
+| `i64`  | signed 64-bit integer   | 8 bytes| little-endian   |
+| `n8`   | unsigned 8-bit integer  | 1 byte | binary          |
+| `n16`  | unsigned 16-bit integer | 2 bytes| little-endian   |
+| `n32`  | unsigned 32-bit integer | 4 bytes| little-endian   |
+| `n64`  | unsigned 64-bit integer | 8 bytes| little-endian   |
+| `r32`  | IEEE 754 single float   | 4 bytes| little-endian   |
+| `r64`  | IEEE 754 double float   | 8 bytes| little-endian   |
+| `ref`  | managed reference       | 8 bytes| heap pointer    |
 
-### Stack Operations
+## 2. Instruction Set Architecture
+
+### 2.1 Design Philosophy
+
+MSIL operations mirror hardware concerns, not language constructs:
+
+**What CPUs care about:**
+
+- Control flow (branches, calls, returns)
+- Arithmetic and bitwise operations
+- Memory access (load/store, addressing modes)
+- Type primitives (integers, floats, references)
+
+**What MSIL abstracts:**
+
+- Register file → operand stack
+- Instruction decoding → bytecode interpretation
+- Memory management → managed heap with GC
+
+**Language constructs become library calls:**
+
+- Lists → cons/car/cdr in stdlib
+- Classes → vtable dispatch via call.virt
+- Ranges/iterators → loops with branch instructions
+- Pattern matching → branch on value tags
+
+For example, a Musi `choice` pattern match compiles to:
+
+```
+; Load variant
+ld.tag variant   ; Get variant tag
+br.else case_some offset_else
+; Handle Some case
+...
+br end_all
+offset_else:
+; Handle None case
+...
+end_all:
+```
+
+### 2.3 Opcode Encoding
+
+MSIL uses two-byte opcodes:
+
+- Primary opcodes: 0x00–0xEF (common operations)
+- Extended opcodes: 0xF0–0xFF (control flow, exceptions)
+- Reserve: 0xFE00–0xFEFF (future expansion)
+
+### 2.2 Stack Operations
+
+| Opcode | Mnemonic | Operands | Description |
+|--------|----------|----------|-------------|
+| 0x00   | `nop`    | —        | No operation |
+| 0x01   | `dup`    | —        | Duplicate top stack value |
+| 0x02   | `drop`   | —        | Discard top stack value |
+| 0x03   | `swap`   | —        | Swap top two values |
+
+**Effect on stack**:
+
+```
+nop:   [...] → [...]
+dup:   [v] → [v, v]
+drop:  [v] → []
+swap:  [v1, v2] → [v2, v1]
+```
+
+### 2.4 Constant Loading
+
+Load immediate values onto operand stack:
+
+| Opcode | Mnemonic | Operands | Value Range |
+|--------|----------|----------|-------------|
+| 0x10   | `ld.i8`  | value:i8 | -128..127 |
+| 0x11   | `ld.i16` | value:i16| -32768..32767 |
+| 0x12   | `ld.i32` | value:i32| –2³¹..2³¹-1 |
+| 0x13   | `ld.i64` | value:i64| –2⁶³..2⁶³-1 |
+| 0x14   | `ld.n8`  | value:n8 | 0..255 |
+| 0x15   | `ld.n16` | value:n16| 0..65535 |
+| 0x16   | `ld.n32` | value:n32| 0..2³²-1 |
+| 0x17   | `ld.n64` | value:n64| 0..2⁶⁴-1 |
+| 0x18   | `ld.r32` | value:r32| IEEE single |
+| 0x19   | `ld.r64` | value:r64| IEEE double |
+| 0x1A   | `ld.str` | index:n32| constant pool |
+| 0x1B   | `ld.true`| —        | `true` |
+| 0x1C   | `ld.false`| —      | `false` |
+| 0x1D   | `ld.nil` | —        | `null` |
+
+**Effect on stack**:
+
+```
+ld.i8(42):  [...] → [..., i32(42)]
+ld.str(3):  [...] → [..., ref(str)]
+```
+
+### 2.5 Local Variables
+
+Local variable storage is per-frame; `index` encodes frame offset:
+
+| Opcode | Mnemonic | Operands | Description |
+|--------|----------|----------|-------------|
+| 0x20   | `ld.loc` | index:n16 | Load local variable |
+| 0x21   | `st.loc` | index:n16 | Store to local variable |
+| 0x22   | `ld.loc.addr`| index:n16 | Load address of local |
+
+**Effect on stack**:
+
+```
+ld.loc(0):  [...] → [..., value]
+st.loc(0):  [..., value] → []
+```
+
+### 2.6 Arguments
+
+Function arguments accessed via frame-relative indexing:
+
+| Opcode | Mnemonic | Operands | Description |
+|--------|----------|----------|-------------|
+| 0x23   | `ld.arg` | index:n16 | Load argument |
+| 0x24   | `st.arg` | index:n16 | Store to argument |
+| 0x25   | `ld.arg.addr`| index:n16 | Load address of argument |
+
+### 2.7 Pointer Operations
+
+Memory load/store through pointer addresses:
 
 | Opcode | Mnemonic | Description |
 |--------|----------|-------------|
-| 0x00 | `nop` | no operation |
-| 0x01 | `dup` | duplicate top stack value |
-| 0x02 | `drop` | discard top stack value |
-| 0x03 | `swap` | swap top two values |
+| 0x30   | `ld.i8.byt`| Load signed 8-bit, byte address |
+| 0x31   | `ld.i16.byt`| Load signed 16-bit, byte address |
+| 0x32   | `ld.i32.byt`| Load signed 32-bit, byte address |
+| 0x33   | `ld.i64.byt`| Load signed 64-bit, byte address |
+| 0x34   | `ld.n8.byt`| Load unsigned 8-bit, byte address |
+| 0x35   | `ld.n16.byt`| Load unsigned 16-bit, byte address |
+| 0x36   | `ld.n32.byt`| Load unsigned 32-bit, byte address |
+| 0x37   | `ld.n64.byt`| Load unsigned 64-bit, byte address |
+| 0x38   | `ld.r32.byt`| Load 32-bit float, byte address |
+| 0x39   | `ld.r64.byt`| Load 64-bit float, byte address |
+| 0x3A   | `ld.ref.byt`| Load reference, byte address |
+| 0x3B   | `st.i8.byt`| Store 8-bit, byte address |
+| 0x3C   | `st.i16.byt`| Store 16-bit, byte address |
+| 0x3D   | `st.i32.byt`| Store 32-bit, byte address |
+| 0x3E   | `st.i64.byt`| Store 64-bit, byte address |
+| 0x3F   | `st.n8.byt`| Store unsigned 8-bit, byte address |
+| 0x40   | `st.n16.byt`| Store unsigned 16-bit, byte address |
+| 0x41   | `st.n32.byt`| Store unsigned 32-bit, byte address |
+| 0x42   | `st.n64.byt`| Store unsigned 64-bit, byte address |
+| 0x43   | `st.r32.byt`| Store 32-bit float, byte address |
+| 0x44   | `st.r64.byt`| Store 64-bit float, byte address |
+| 0x45   | `st.ref.byt`| Store reference, byte address |
 
-### Constant Loading
+**Effect on stack**:
 
-| Opcode | Mnemonic | Operands | Description |
-|--------|----------|----------|-------------|
-| 0x10 | `ld.i8` | value:i8 | load 8-bit signed integer |
-| 0x11 | `ld.i16` | value:i16 | load 16-bit signed integer |
-| 0x12 | `ld.i32` | value:i32 | load 32-bit signed integer |
-| 0x13 | `ld.i64` | value:i64 | load 64-bit signed integer |
-| 0x14 | `ld.n8` | value:n8 | load 8-bit unsigned integer |
-| 0x15 | `ld.n16` | value:n16 | load 16-bit unsigned integer |
-| 0x16 | `ld.n32` | value:n32 | load 32-bit unsigned integer |
-| 0x17 | `ld.n64` | value:n64 | load 64-bit unsigned integer |
-| 0x18 | `ld.r32` | value:r32 | load 32-bit float |
-| 0x19 | `ld.r64` | value:r64 | load 64-bit float |
-| 0x1A | `ld.str` | index:n32 | load string from constant pool |
-| 0x1B | `ld.true` | — | load boolean true |
-| 0x1C | `ld.false` | — | load boolean false |
-| 0x1D | `ld.nil` | — | load null/none reference |
+```
+ld.i32.byt:  [addr] → [value]
+st.i32.byt:  [addr, value] → []
+```
 
-### Local Variables & Arguments
+### 2.8 Arithmetic Operations
 
-| Opcode | Mnemonic | Operands | Description |
-|--------|----------|----------|-------------|
-| 0x20 | `ld.loc` | index:n16 | load local variable |
-| 0x21 | `st.loc` | index:n16 | store to local variable |
-| 0x22 | `ld.loc.addr` | index:n16 | load address of local |
-| 0x23 | `ld.arg` | index:n16 | load argument |
-| 0x24 | `st.arg` | index:n16 | store to argument |
-| 0x25 | `ld.arg.addr` | index:n16 | load address of argument |
-
-### Pointer Operations
+Integer and floating-point arithmetic (type-tagged operands):
 
 | Opcode | Mnemonic | Description |
 |--------|----------|-------------|
-| 0x30 | `ld.ptr.i8` | load signed 8-bit through pointer |
-| 0x31 | `ld.ptr.i16` | load signed 16-bit through pointer |
-| 0x32 | `ld.ptr.i32` | load signed 32-bit through pointer |
-| 0x33 | `ld.ptr.i64` | load signed 64-bit through pointer |
-| 0x34 | `ld.ptr.n8` | load unsigned 8-bit through pointer |
-| 0x35 | `ld.ptr.n16` | load unsigned 16-bit through pointer |
-| 0x36 | `ld.ptr.n32` | load unsigned 32-bit through pointer |
-| 0x37 | `ld.ptr.n64` | load unsigned 64-bit through pointer |
-| 0x38 | `ld.ptr.r32` | load 32-bit float through pointer |
-| 0x39 | `ld.ptr.r64` | load 64-bit float through pointer |
-| 0x3A | `ld.ptr.ref` | load reference through pointer |
-| 0x3B | `st.ptr.i8` | store 8-bit through pointer |
-| 0x3C | `st.ptr.i16` | store 16-bit through pointer |
-| 0x3D | `st.ptr.i32` | store 32-bit through pointer |
-| 0x3E | `st.ptr.i64` | store 64-bit through pointer |
-| 0x3F | `st.ptr.n8` | store 8-bit unsigned through pointer |
-| 0x40 | `st.ptr.n16` | store 16-bit unsigned through pointer |
-| 0x41 | `st.ptr.n32` | store 32-bit unsigned through pointer |
-| 0x42 | `st.ptr.n64` | store 64-bit unsigned through pointer |
-| 0x43 | `st.ptr.r32` | store 32-bit float through pointer |
-| 0x44 | `st.ptr.r64` | store 64-bit float through pointer |
-| 0x45 | `st.ptr.ref` | store reference through pointer |
+| 0x50   | `add`    | Add (int or float, type inferred) |
+| 0x51   | `sub`    | Subtract |
+| 0x52   | `mul`    | Multiply |
+| 0x53   | `div`    | Divide |
+| 0x54   | `rem`    | Remainder (integer) |
+| 0x55   | `neg`    | Negate |
+| 0x56   | `abs`    | Absolute value |
+| 0x57   | `floor`  | Floor (float) |
+| 0x58   | `ceil`   | Ceiling (float) |
+| 0x59   | `round`  | Round to nearest |
+| 0x5A   | `trunc`  | Truncate toward zero |
 
-### Control Flow
+### 2.9 Bitwise Operations
 
-| Opcode | Mnemonic | Operands | Description |
-|--------|----------|----------|-------------|
-| 0x50 | `br` | offset:i32 | unconditional branch |
-| 0x51 | `br.true` | offset:i32 | branch if true |
-| 0x52 | `br.false` | offset:i32 | branch if false |
-| 0x53 | `br.eq` | offset:i32 | branch if equal |
-| 0x54 | `br.ne` | offset:i32 | branch if not equal |
-| 0x55 | `br.lt` | offset:i32 | branch if less than (signed) |
-| 0x56 | `br.le` | offset:i32 | branch if less or equal (signed) |
-| 0x57 | `br.gt` | offset:i32 | branch if greater than (signed) |
-| 0x58 | `br.ge` | offset:i32 | branch if greater or equal (signed) |
-| 0x59 | `br.lt.un` | offset:i32 | branch if less than (unsigned) |
-| 0x5A | `br.le.un` | offset:i32 | branch if less or equal (unsigned) |
-| 0x5B | `br.gt.un` | offset:i32 | branch if greater than (unsigned) |
-| 0x5C | `br.ge.un` | offset:i32 | branch if greater or equal (unsigned) |
-| 0x5D | `jmp` | default:i32, count:n32, [offsets:i32...] | switch/jump table dispatch |
-| 0x5E | `ret` | — | return from function |
-| 0x5F | `ret.val` | — | return with value from stack |
-
-### Function Calls
-
-| Opcode | Mnemonic | Operands | Description |
-|--------|----------|----------|-------------|
-| 0x60 | `call` | method:n32 | static method call |
-| 0x61 | `call.ptr` | — | call via function pointer |
-| 0x62 | `call.virt` | method:n32 | virtual dispatch |
-| 0x63 | `tail.call` | method:n32 | tail call (static) |
-| 0x64 | `tail.call.virt` | method:n32 | tail call (virtual) |
-
-### Arithmetic Operations
+Bit manipulation on integers:
 
 | Opcode | Mnemonic | Description |
 |--------|----------|-------------|
-| 0x70 | `add` | addition |
-| 0x71 | `sub` | subtraction |
-| 0x72 | `mul` | multiplication |
-| 0x73 | `div` | signed division |
-| 0x74 | `div.un` | unsigned division |
-| 0x75 | `rem` | signed remainder |
-| 0x76 | `rem.un` | unsigned remainder |
-| 0x77 | `neg` | arithmetic negation |
-| 0x78 | `checked.add` | addition with overflow check |
-| 0x79 | `checked.sub` | subtraction with overflow check |
-| 0x7A | `checked.mul` | multiplication with overflow check |
+| 0x60   | `and`    | Bitwise AND |
+| 0x61   | `or`     | Bitwise OR |
+| 0x62   | `xor`    | Bitwise XOR |
+| 0x63   | `not`    | Bitwise NOT |
+| 0x64   | `shl`    | Shift left |
+| 0x65   | `shr`    | Shift right (arithmetic) |
+| 0x66   | `rol`    | Rotate left |
+| 0x67   | `ror`    | Rotate right |
 
-### Bitwise Operations
+### 2.10 Comparison Operations
 
-| Opcode | Mnemonic | Description |
-|--------|----------|-------------|
-| 0x80 | `and` | bitwise AND |
-| 0x81 | `or` | bitwise OR |
-| 0x82 | `xor` | bitwise XOR |
-| 0x83 | `not` | bitwise NOT |
-| 0x84 | `shl` | shift left |
-| 0x85 | `shr` | shift right (signed) |
-| 0x86 | `shr.un` | shift right (unsigned) |
-
-### Conversions
+Comparison and equality checks:
 
 | Opcode | Mnemonic | Description |
 |--------|----------|-------------|
-| 0x90 | `conv.i8` | convert to 8-bit signed |
-| 0x91 | `conv.i16` | convert to 16-bit signed |
-| 0x92 | `conv.i32` | convert to 32-bit signed |
-| 0x93 | `conv.i64` | convert to 64-bit signed |
-| 0x94 | `conv.n8` | convert to 8-bit unsigned |
-| 0x95 | `conv.n16` | convert to 16-bit unsigned |
-| 0x96 | `conv.n32` | convert to 32-bit unsigned |
-| 0x97 | `conv.n64` | convert to 64-bit unsigned |
-| 0x98 | `conv.r32` | convert to 32-bit float |
-| 0x99 | `conv.r64` | convert to 64-bit float |
-| 0x9A | `checked.conv.i32` | checked conversion (throw on overflow) |
-| 0x9B | `checked.conv.i64` | checked conversion |
-| 0x9C | `checked.conv.n32` | checked conversion |
-| 0x9D | `checked.conv.n64` | checked conversion |
+| 0x70   | `eq`     | Equal (returns bool) |
+| 0x71   | `neq`    | Not equal |
+| 0x72   | `lt`     | Less than |
+| 0x73   | `lte`    | Less than or equal |
+| 0x74   | `gt`     | Greater than |
+| 0x75   | `gte`    | Greater than or equal |
 
-### Object & Field Operations
+### 2.11 Control Flow
+
+Branches, calls, and returns:
 
 | Opcode | Mnemonic | Operands | Description |
 |--------|----------|----------|-------------|
-| 0xA0 | `new.obj` | init:n32 | allocate object, call initializer |
-| 0xA1 | `new.arr` | type:n32 | allocate array |
-| 0xA2 | `ld.len` | — | load array length |
-| 0xA3 | `ld.elem` | — | load array element (index on stack) |
-| 0xA4 | `st.elem` | — | store to array element |
-| 0xA5 | `ld.elem.addr` | — | load address of array element |
-| 0xA6 | `ld.fld` | field:n32 | load instance field |
-| 0xA7 | `st.fld` | field:n32 | store to instance field |
-| 0xA8 | `ld.fld.addr` | field:n32 | load address of field |
+| 0x80   | `br`     | offset:i32| Unconditional branch (relative offset) |
+| 0x81   | `br.true`| offset:i32| Branch if top of stack is true |
+| 0x82   | `br.false`| offset:i32| Branch if top of stack is false |
+| 0x83   | `br.null`| offset:i32| Branch if top of stack is null |
+| 0x84   | `br.notnull`| offset:i32| Branch if top of stack is not null |
+| 0x85   | `ret`    | —        | Return from function |
+| 0x86   | `call`   | index:n16| Call function by constant pool index |
+| 0x87   | `call.indirect`| — | Call function pointer on stack |
+| 0x88   | `call.virt`| index:n16| Virtual call (instance method) |
 
-### Sum Type Operations
+### 2.12 Stack Operations
 
-| Opcode | Mnemonic | Operands | Description |
-|--------|----------|----------|-------------|
-| 0xB0 | `new.sum` | type:n32, tag:n16 | construct sum variant |
-| 0xB1 | `ld.tag` | — | load variant's tag |
-| 0xB2 | `ld.sum.fld` | index:n16 | load field from variant |
-| 0xB3 | `br.tag` | tag:n16, offset:i32 | branch if tag matches |
-
-### Closure Operations
+Additional stack manipulation:
 
 | Opcode | Mnemonic | Operands | Description |
 |--------|----------|----------|-------------|
-| 0xB4 | `new.cls` | fn:n32, captures:n16 | create closure |
-| 0xB5 | `ld.capt` | index:n16 | load captured variable |
-| 0xB6 | `st.capt` | index:n16 | store to captured variable |
+| 0x90   | `push`   | value     | Push value onto stack (optimized locals) |
+| 0x91   | `pop`    | —        | Discard top of stack |
+| 0x92   | `dup`    | —        | Duplicate top of stack |
+| 0x93   | `swap`   | —        | Swap top two values |
+| 0x94   | `pick`   | depth:n8 | Duplicate nth value from stack top |
+| 0x95   | `roll`   | depth:n8 | Rotate n values on stack |
 
-### Type Operations
+## 3. Language Constructs to Bytecode
 
-| Opcode | Mnemonic | Operands | Description |
-|--------|----------|----------|-------------|
-| 0xC0 | `typeof` | type:n32 | type test (push boolean) |
-| 0xC1 | `cast` | type:n32 | cast to type (throw on failure) |
-| 0xC2 | `cast.try` | type:n32 | cast to type (Option on failure) |
-| 0xC3 | `box` | type:n32 | box value type to reference |
-| 0xC4 | `unbox` | type:n32 | unbox reference to value type |
-| 0xC5 | `nil.chk` | — | throw if null/none |
+### 3.1 Pattern Matching
 
-### Defer Blocks
+Musi `choice` pattern matching compiles to tag-based dispatch:
 
-| Opcode | Mnemonic | Operands | Description |
-|--------|----------|----------|-------------|
-| 0xD0 | `defer` | block:n32 | register defer block |
-| 0xD1 | `enddefer` | — | end defer block |
-
-Defer blocks execute when current scope exits (normal return, break, or error).
-
-### Memory Management
-
-| Opcode | Mnemonic | Description |
-|--------|----------|-------------|
-| 0xD2 | `pin` | pin object for FFI |
-| 0xD3 | `unpin` | unpin object |
-| 0xD4 | `alloca` | stack allocate |
-| 0xD5 | `sizeof` | get size of type |
-
-### Concurrency & Memory Ordering
-
-| Opcode | Mnemonic | Operands | Description |
-|--------|----------|----------|-------------|
-| 0xE0 | `fence` | mode:n8 | memory fence/barrier |
-| 0xE1 | `volatile.ld` | — | volatile load |
-| 0xE2 | `volatile.st` | — | volatile store |
-| 0xE3 | `atomic.add` | — | atomic add |
-| 0xE4 | `atomic.cas` | — | compare-and-swap |
-| 0xE5 | `atomic.load` | — | atomic load |
-| 0xE6 | `atomic.store` | — | atomic store |
-
-### Exception Handling (Interop Only)
-
-| Opcode | Mnemonic | Operands | Description |
-|--------|----------|----------|-------------|
-| 0xF0 | `throw` | — | throw exception |
-| 0xF1 | `rethrow` | — | rethrow current exception |
-| 0xF2 | `leave` | offset:i32 | exit protected region, branch to offset |
-| 0xF3 | `endfinally` | — | end finally block |
-| 0xF4 | `try` | handler:n32 | begin try block |
-| 0xF5 | `catch` | type:n32 | begin catch block |
-| 0xF6 | `finally` | — | begin finally block |
-
-**Note**: Musi language does not use exceptions. These opcodes exist for interoperability with exception-based languages.
-
-### Extended Bytecode (0xFE prefix)
-
-Extended instructions use two-byte opcodes: `0xFE` followed by extension byte.
-
-#### Dynamic Language Support
-
-| Opcode | Mnemonic | Operands | Description |
-|--------|----------|----------|-------------|
-| 0xFE00 | `ld.dyn` | name:n32 | load dynamic property |
-| 0xFE01 | `st.dyn` | name:n32 | store dynamic property |
-| 0xFE02 | `has.dyn` | name:n32 | check if property exists |
-| 0xFE03 | `del.dyn` | name:n32 | delete dynamic property |
-| 0xFE04 | `call.dyn` | name:n32 | dynamic/late-bound call |
-
-**Note**: These are optional extensions for dynamic language implementations.
-
-## Examples
-
-### Function Call
+**Source:**
 
 ```musi
-fn add(x: Int32, y: Int32): Int32 {
-  return x + y;
-};
-```
-
-**Bytecode:**
-
-```text
-ld.arg 0       // load x
-ld.arg 1       // load y
-add            // add
-ret.val        // return result
-```
-
-### Conditional Branch
-
-```musi
-fn abs(x: Int32): Int32 {
-  if x < 0 { return -x; };
-  x
-};
-```
-
-**Bytecode:**
-
-```text
-ld.arg 0       // load x
-ld.i32 0       // load 0
-br.ge L1       // branch if x >= 0
-ld.arg 0       // load x
-neg            // negate
-ret.val        // return -x
-L1:
-ld.arg 0       // load x
-ret.val        // return x
-```
-
-### Pointer Operation
-
-```musi
-unsafe {
-  val ptr: VarPtr[Int32] := @x;
-  ptr.store(42);
-
-  val value := ptr.pointee;
-};
-```
-
-**Bytecode:**
-
-```text
-ld.loc.addr 0  // load address of x (returns MutPtr[Int32])
-ld.i32 42      // load 42
-st.ptr.i32     // store through pointer
-
-ld.loc.addr 0  // load address of x again
-ld.ptr.i32     // load through pointer (ptr.pointee/ptr.load())
-```
-
-**Note**: Pointers in Musi use generic-style syntax (`Ptr[T]` for immutable, `VarPtr[T]` for mutable), similar to Swift's `UnsafePointer<T>` and `UnsafeMutablePointer<T>`. The `.pointee` property and `.store()` methods compile to `ld.ptr.*` and `st.ptr.*` bytecode instructions.
-
-### Pattern Match to Switch
-
-```musi
-match value {
-case 0 => a(),
-case 1 => b(),
-case 2 => c(),
-case _ => d()
-};
-```
-
-**Bytecode:**
-
-```text
-ld.loc 0                    // load value
-sw Ldefault, 3, [L0, L1, L2]  // switch with default
-L0: call a; br Lend
-L1: call b; br Lend
-L2: call c; br Lend
-Ldefault: call d
-Lend:
-```
-
-### Sum Type (Option)
-
-```musi
-val opt: Option[Int32] := Some(42);
 match opt {
-case Some(x) => x,
-case None => 0
-};
-```
-
-**Bytecode:**
-
-```text
-// Construct Some(42)
-ld.i32 42
-new.sum Option, 1    // tag 1 = Some
-
-// Match
-ld.tag               // get tag
-br.tag 0, Lnone      // if tag 0 (None), branch
-ld.sum.fld 0         // load inner value
-br Lend
-Lnone:
-ld.i32 0
-Lend:
-```
-
-### Tail-Recursive Function
-
-```musi
-fn factorial(n: Int32, acc: Int32): Int32 {
-  if n <= 1 { return acc; };
-  return factorial(n - 1, n * acc);
-};
-```
-
-**Bytecode:**
-
-```text
-ld.arg 0           // load n
-ld.i32 1           // load 1
-br.gt Lrecurse     // if n > 1, recurse
-ld.arg 1           // load acc
-ret.val            // return acc
-Lrecurse:
-ld.arg 0           // load n
-ld.i32 1           // load 1
-sub                // n - 1
-ld.arg 0           // load n
-ld.arg 1           // load acc
-mul                // n * acc
-tail.call factorial
-```
-
-### Labeled Loop with Break
-
-```musi
-#outer for i in 0..10 {
-  for j in 0..10 {
-    if should_exit {
-      break #outer i;  // break outer loop with value
-    };
-  }
+  Some(x) => x,
+  None => 0
 }
 ```
 
 **Bytecode:**
 
-```text
-ld.i32 0
-st.loc 0           // i := 0
-Louter:
-  ld.i32 0
-  st.loc 1         // j := 0
-  Linner:
-    // ... should_exit check ...
-    br.false Lskip
-    ld.loc 0       // load i
-    br Lendouter   // break #outer with value
-  Lskip:
-    // ... increment j ...
-    br Linner
-  Lendinner:
-  // ... increment i ...
-  br Louter
-Lendouter:
 ```
+ld.loc opt           ; load opt onto stack
+ld.tag               ; get variant tag from value
+ld.i8 0              ; Some variant index
+eq
+br.false handle_none ; branch if not Some
+
+handle_some:
+ld.loc opt
+ld.field 0           ; extract payload
+br end_match
+
+handle_none:
+ld.i32 0
+
+end_match:
+```
+
+### 3.2 Method Calls (Virtual Dispatch)
+
+Instance method calls compile to vtable indirection:
+
+**Source:**
+
+```musi
+val Drawable := interface {
+  val Point;
+  draw: (self: Point) -> Unit
+};
+
+val Point := record {
+  x: Int32,
+  y: Int32,
+  draw: (self: Point) -> Unit => (self) => ...
+};
+
+val p: Point := ...
+p.draw();
+```
+
+**Bytecode:**
+
+```
+ld.loc p
+ld.vtable           ; load vtable pointer from object
+ld.ptr 0            ; load method offset for 'draw'
+call.indirect       ; call method via vtable
+```
+
+### 3.3 List Operations
+
+List cons/car/cdr are library functions, not bytecode:
+
+**Source:**
+
+```musi
+val lst := 1 :: [2, 3];
+val head := lst.head;
+```
+
+**Bytecode:**
+
+```
+ld.i32 1
+ld.i32 2
+ld.i32 3
+call List.cons      ; library function, not opcode
+...
+dup
+call List.head      ; library function
+```
+
+### 3.4 Conditional Pattern Binding
+
+Pattern binding in `if` statements:
+
+**Source:**
+
+```musi
+if Some(x) := opt {
+  x + 1
+} else {
+  0
+}
+```
+
+**Bytecode:**
+
+```
+ld.loc opt
+ld.tag
+ld.i8 0              ; Some variant
+br.false else_branch
+ld.loc opt
+st.loc x            ; bind x
+ld.loc x
+ld.i32 1
+add
+br end_if
+
+else_branch:
+ld.i32 0
+
+end_if:
+```
+
+## 4. Implementation Notes
+
+### 4.1 Foreign Function Interface
+
+Layer 6 (musi_vm) exports C-compatible symbols:
+
+```c
+typedef struct MusiVM MusiVM;
+typedef struct MusiValue { uint64_t bits; } MusiValue;
+
+MusiVM* musi_vm_create(void);
+void musi_vm_destroy(MusiVM* vm);
+int musi_vm_load_bytecode(MusiVM* vm, const uint8_t* data, size_t len);
+int musi_vm_run(MusiVM* vm);
+MusiValue musi_vm_call_function(MusiVM* vm, const char* name, ...);
+```
+
+See `RUNTIME.md` for VM embedding details.
+
+### 4.2 Implementation Layer Reference
+
+| Concept | Layer | Crate | File |
+|---------|-------|-------|------|
+| Bytecode module | 5 | musi_bytecode | `src/module.rs` |
+| Emission context | 5 | musi_bytecode | `src/emit.rs` |
+| Instruction encoding | 5 | musi_bytecode | `src/opcode.rs` |
+| VM execution | 6 | musi_vm | `src/vm.rs` |
+| Value system | 6 | musi_vm | `src/value.rs` |
+
+## 5. Verifiability
+
+Bytecode modules contain sufficient structure for static verification:
+
+1. **Stack depth**: Each instruction's net stack effect is computable
+2. **Control flow**: Jump targets are within code section bounds
+3. **Symbol resolution**: All identifiers resolve in symbol table
+4. **Type safety**: Runtime type tags prevent memory unsafety
+
+## References
+
+- [ARCHITECTURE.md](./ARCHITECTURE.md): Compiler architecture and layer model
+- [RUNTIME.md](./RUNTIME.md): Virtual machine implementation
+- `grammar.ebnf`: Source language grammar specification

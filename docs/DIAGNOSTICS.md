@@ -76,6 +76,7 @@ The **infix** connects subject to object. Used for type errors and conversions:
 | :--- | :--- | :--- |
 | `to` | `cannot convert %0 to %1` | "cannot convert type 'String' to type 'Int32'" |
 | `as` | `cannot use %0 as %1` | "cannot use type 'Int32' as function" |
+| `<:` | `cast failed: %0 is not %1` | "cast failed: Any is not Int32" |
 | `for` | `%0 for %1` | "missing argument for parameter 'x'" |
 | `in` | `%0 in %1` | "duplicate field 'x' in record" |
 | `of` | `%0 of %1` | "invalid member of 'Point'" |
@@ -134,6 +135,8 @@ unclosed block comment; missing '*/'
 - Undefined identifier
 - Duplicate definition
 - Invalid scope
+- Typeclass constraint not satisfied
+- Instance method not found
 
 **Purpose**: Accumulate errors without early exit. Success carries both value and diagnostic bag.
 
@@ -298,7 +301,7 @@ note: similar name 'y' found in parent scope
 ### Pattern Match Exhaustiveness
 
 ```text
-warning: non-exhaustive pattern match; missing case 'None'
+warning: non-exhaustive pattern match; missing variant 'None'
 ```
 
 ### Duplicate Definition
@@ -306,4 +309,31 @@ warning: non-exhaustive pattern match; missing case 'None'
 ```text
 error: duplicate definition of 'x'
 note: previous definition here
+```
+
+### Typeclass Constraint Not Satisfied
+
+```text
+error: type 'Point' does not satisfy interface 'Eq'
+note: missing method 'eq: (self: Point, other: Point) -> Bool'
+```
+
+### Interface Method Signature Mismatch
+
+```text
+error: method 'eq' signature does not match interface 'Eq'
+note: interface expects '(self: T, other: T) -> Bool', found '(self: T) -> Bool'
+```
+
+### Invalid Loop Label
+
+```text
+error: undefined loop label '#outer'
+```
+
+### Pattern Binding In Conditional
+
+```text
+error: pattern binding type mismatch
+note: expected 'Option[T]' but found 'Result[T, E]'
 ```

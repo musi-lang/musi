@@ -20,10 +20,6 @@ Musi uses **gradual typing** with local `Hindley-Milner` inference. You can writ
 
 - `Float16`, `Float32`, `Float64`
 
-**Decimals (IEEE-754 decimal, software):**
-
-- `BigFloat32`, `BigFloat64`, `BigFloat128`
-
 **Text:**
 
 - `Rune` (single UTF-32 character)
@@ -42,8 +38,6 @@ Musi uses **gradual typing** with local `Hindley-Milner` inference. You can writ
 ### Building Complex Types
 
 - **Generics:** `List[T]`
-- **Optional:** `?T` (same as `Option[T]`)
-- **Pointer:** `^T` (raw pointer, reading is safe, writing is not)
 - **Array:** `[]T` (dynamic slice) or `[N]T` (fixed size)
 - **Tuple:** `(A, B, C)`
 - **Function:** `A -> B`
@@ -51,59 +45,70 @@ Musi uses **gradual typing** with local `Hindley-Milner` inference. You can writ
 **Examples:**
 
 ```musi
-val i: Int32 := 0;
+val i: Int32 := 0;           // immutable binding
 val s: String := "hello";
-val opt: ?Int32 := 10;
-val ptr: ^Int32 := @i;      // @ is addr-of, borrowed from Pascal
+val opt: Option[Int32] := Some(10);
+val ptr: Ptr[Int32] := addr_of(i);
 val list: List[String] := List.{ head := "a", tail := None };
-val func: Int32 -> Bool := fn (x) { x > 0 };
+val func: (Int32) -> Bool := (x) => x > 0;
 ```
+
+**Mutation:**
+
+```musi
+var x: Int32 := 10;         // mutable binding
+x <- 20;                    // mutate (assignment with <-)
+```
+
+**Note:** `:=` is for initialization (both `val` and `var`), `<-` is for assignment/mutation (only `var`).
 
 ### Functions as Types
 
-Functions are first-class values. The `->` operator constructs **function types** (also called the "function space" or "arrow type").
+Functions are first-class values. `->` operator constructs **function types** (also called "function space" or "arrow type").
 
-**Important:** `->` is for *type expressions*, not function definitions. Function definitions use `fn` with either a block `{ }` or expression body `=>`.
+**Important:** `->` is for *type expressions*, not function literals. Function literals use `(params) => body` syntax.
 
 ```musi
+// Function with type annotation on binding
+val add: Int -> Int -> Int := (x, y) => x + y;
+
+// Expression body (single expression)
+val add: (Int, Int) -> Int := (x, y) => x + y;
+
 // Block body (multiple statements, implicit return of last expression)
-val add: Int -> Int -> Int := fn(x, y) { x + y };
-
-// Expression body (single expression, like C#)
-val add: Int -> Int -> Int := fn(x, y) => x + y;
-
-// Fully explicit
-val add: Int -> Int -> Int := fn(x: Int, y: Int): Int => x + y;
+val add: (Int, Int) -> Int := (x, y) => {
+  x + y
+};
 
 // Compare to OCaml:
 // let add : int -> int -> int = fun x y -> x + y
 ```
 
-**Right-associative:** `A -> B -> C` means `A -> (B -> C)` (returns a function).
+**Right-associative:** `A -> B -> C` means `A -> (B -> C)` (returns function).
 
-**From type theory:** The `->` notation comes from type theory and mathematical logic, where it represents the function space (the set of all functions from A to B). This is why Musi uses `=>` for match case arrows instead of `->` — to avoid ambiguity between function types and pattern matching. Lean4 makes the same distinction.
+**From type theory:** `->` notation comes from type theory and mathematical logic, where it represents function space (the set of all functions from to B). This is why Musi uses `=>` for match case arrows instead of `->` — to avoid ambiguity between function types and pattern matching. Lean4 makes same distinction.
 
 **Curried (default way):**
 
 ```musi
-val add: Int32 -> Int32 -> Int32 := fn(x, y) { x + y };
+val add: Int32 -> Int32 -> Int32 := (x, y) => x + y;
 val add5 := add(5);  // partial application returns Int32 -> Int32
 ```
 
 **Tupled (for interop or when you need it):**
 
 ```musi
-val add_pair: (Int32, Int32) -> Int32 := fn(pair) { pair.0 + pair.1 };
+val add_pair: (Int32, Int32) -> Int32 := (pair) => pair.0 + pair.1;
 ```
 
 **Higher-order functions:**
 
 ```musi
-// map takes a function and returns a function
-val map: (A -> B) -> []A -> []B := fn(f, xs) { ... };
+// map takes function and returns function
+val map: ((A -> B), []A) -> []B := (f, xs) => { ... };
 
 // compose takes two functions and returns their composition
-val compose: (B -> C) -> (A -> B) -> A -> C := fn(g, f, x) { g(f(x)) };
+val compose: ((B -> C), (A -> B)) -> (A -> C) := (g, f) => (x) => g(f(x));
 ```
 
 ## Writing Code
@@ -131,13 +136,7 @@ true, false
 
 **Arithmetic:**
 
-- `+`, `-`, `*`, `/`, `%` (remainder), `**` (power)
-
-**Bitwise:**
-
-Also, these are non-shorting in logical context.
-
-- `&`, `|`, `^`, `<<`, `>>`, `~` (not)
+- `+`, `-`, `*`, `/`, `%` (remainder)
 
 **Logical:**
 
@@ -145,38 +144,116 @@ Also, these are non-shorting in logical context.
 
 **Comparison:**
 
-- `<`, `>`, `<=`, `>=`, `=`, `/=` (not equal)
+- `<`, `>`, `<=`, `>=`, `=` (equality), `/=` (not equal)
+- `in` (membership test)
 
-**Special:**
+**Type Operators:**
 
-- `|>` (pipe, for chaining functions)
-- `??` (optional coalesce, like `??` in Swift)
+- `in` (type test): `x in Int32`
+- `<:` (type cast): `y := x <: Int;` (runtime check if downcast, safe if upcast)
+
+**List Operators:**
+
+- `::` (cons): `head :: tail` (prepend to list)
+
+**Range Operators:**
+
+- `..` (inclusive range): `1..10` (1 to 10)
+- `..<` (exclusive range): `1..<10` (1 to 9)
 
 ## Data Structures
 
-### Records
+### Types as Values (Zig-Inspired)
 
-Product types with named fields:
+In Musi, **types are first-class values**. You define types using `record` or `choice` expressions and bind them to names using `val`:
 
 ```musi
-record Point[T] { x: T, y: T };
+// Define record type (product type)
+val Point := record {
+  x: Int32,
+  y: Int32,
 
+  distance: (self: Point) -> Float32 => (self) =>
+    sqrt(self.x * self.x + self.y * self.y),
+
+  move: (self: Point, dx: Int32, dy: Int32) -> Point => (self, dx, dy) => .{
+    x := self.x + dx,
+    y := self.y + dy
+  }
+};
+
+// Create instance
 val p := Point.{ x := 10, y := 20 };
-val x := p.x;
+val d := p.distance();
 ```
+
+**Key insight:** `record` is expression that returns type value, which you bind to name. This is exactly how Zig's `struct` works.
+
+### Records
+
+Product types with named fields and optional methods:
+
+```musi
+// Generic record
+val Point := record[T] {
+  x: T,
+  y: T,
+
+  distance: (self: Point[T]) -> T => (self) => sqrt(self.x * self.x + self.y * self.y)
+};
+
+// Anonymous record literal (structural type)
+val p := .{ x := 10, y := 20 };
+
+// Named construction
+val p2 := Point[Int32].{ x := 5, y := 15 };
+
+// Record update with "with" keyword
+val p3 := .{ p with x := 20 };  // Update existing record
+```
+
+**Records can contain:**
+
+- Fields (data)
+- Methods (functions with explicit `self` parameter)
+- Associated constants (`val` declarations)
+- Nested type definitions
 
 ### Choice Types
 
 Tagged unions for when something can be one thing or another:
 
 ```musi
-choice Option[T] {
-  case Some(T),
-  case None
+val Option := choice[T] {
+  Some(T),
+  None,
+
+  unwrap_or: (self: Option[T], default: T) -> T => (self, default) => match self {
+    Some(x) => x,
+    None => default
+  }
 };
 
-// use backticks to escape reserved keywords or operators
+// Use backticks to escape reserved keywords or operators
 val `val` := Option.Some(42);
+val result := `val`.unwrap_or(0);
+```
+
+### Type Bindings
+
+In Musi, **types are first-class values**. Type aliases are created by binding type values using `val` or `var`:
+
+```musi
+val Meters := Float64;
+val Callback[T] := T -> Unit;
+val Point2D := record { x: Int32, y: Int32 };
+```
+
+Since types are values, the same binding syntax works for type definitions, type aliases, and regular values.
+
+```musi
+val Point := record { x: Int32, y: Int32 };
+val MyPoint := Point;  // type alias - just binds type value to new name
 ```
 
 ### Pattern Matching
@@ -184,9 +261,16 @@ val `val` := Option.Some(42);
 Match on values, structure, variants, whatever:
 
 ```musi
-match `val` {
-case Some(x) => x,
-case None => 0
+match value {
+  Some(x) => x,
+  None => 0
+}
+
+// Pattern matching with guards
+match point {
+  .{ x, y } if x > 0 and y > 0 => "Quadrant I",
+  .{ x, y } if x < 0 and y > 0 => "Quadrant II",
+  _ => "Other"
 };
 ```
 
@@ -206,6 +290,28 @@ for item in list {
 };
 ```
 
+**Pattern binding in conditionals:**
+
+```musi
+val opt: Option[Int32] := Some(42);
+
+if Some(x) := opt {
+  writeln($"Got value: {x}");
+} else {
+  writeln("No value");
+};
+```
+
+**Labeled loops and `cycle`:**
+
+```musi
+#outer: for item in list {
+  #inner: for sub in item.items {
+    if should_break { cycle #outer; }  // break outer loop
+  }
+};
+```
+
 **Defer** runs code at end of block (LIFO order, like Go):
 
 ```musi
@@ -213,18 +319,132 @@ val f := open("file.txt");
 defer close(f);  // runs when block exits
 ```
 
+## Modules and Namespacing
+
+### File = Module
+
+Every file is module. No `module` or `namespace` keyword needed.
+
+### Export Syntax
+
+Two styles are supported:
+
+### Export syntax
+
+Use statement-style exports at module boundaries:
+
+```musi
+// geometry.ms
+val Point := record {
+  x: Int32,
+  y: Int32,
+
+  distance: (self: Point) -> Float32 => (self) => sqrt(self.x * self.x + self.y * self.y)
+};
+
+val Circle := record {
+  center: Point,
+  radius: Float32,
+
+  area: (self: Circle) -> Float32 => (self) => 3.14159 * self.radius * self.radius
+};
+
+// Export at end of file
+export { Point, Circle };
+```
+
+### Import (ES6-style)
+
+```musi
+// Import specific items
+import { Point, Circle } from "./geometry";
+
+// Import with renaming
+import { Point as P } from "./geometry";
+
+// Use imported types
+val p := Point.{ x := 5, y := 10 };
+val c := Circle.{ center := p, radius := 5.0 };
+```
+
+### Nested Types as Namespaces
+
+Records and choices can contain nested type definitions, creating natural namespaces:
+
+```musi
+val Geometry := record {
+  val Point := record {
+    x: Int32,
+    y: Int32,
+
+    distance: (self: Point) -> Float32 => (self) => sqrt(self.x * self.x + self.y * self.y)
+  },
+
+  val Circle := record {
+    center: Point,
+    radius: Float32
+  }
+};
+
+// Usage
+val p := Geometry.Point.{ x := 5, y := 10 };
+```
+
+## Structural Interfaces
+
+Interfaces define structural contracts that types satisfy by having matching method signatures. Go/TypeScript style - no explicit implementation declaration needed.
+
+```musi
+val Drawable[T] := interface {
+  val T;
+  draw: (self: T) -> Unit
+};
+
+// Type automatically satisfies Drawable if it has matching method
+val Point := record {
+  x: Int32,
+  y: Int32,
+  draw: (self: Point) -> Unit := (self) => {
+    writeln($"Point at {self.x}, {self.y}")
+  }
+};
+```
+
+Interfaces are just type values:
+
+```musi
+val Show[T] := interface {
+  val T;
+  show: (self: T) -> String
+};
+
+val Eq[T] := interface {
+  val T;
+  eq: (self: T, other: T) -> Bool
+};
+
+// Types automatically satisfy if they have matching methods
+// No explicit impl declarations needed - structural checking only
+```
+
+**Key points:**
+
+- Interfaces define behavior contracts (type signatures)
+- Any type with matching method signatures automatically satisfies the interface
+- Supports ad-hoc polymorphism without explicit implementations
+- "Types are values" philosophy applies - interfaces are bound with `val`
+
 ## Systems Programming
 
 ### Foreign Function Interface (FFI)
 
-Import C functions using `extern` modifier on `fn` (no body):
+**Import** C functions using `import native` statement:
 
 ```musi
-@[link("libc")]
-extern "C" fn malloc(size: Nat64): ^Any;
+import native { malloc, free } from "libc";
 
-@[link("libc")]
-extern "C" fn free(ptr: ^Any): Unit;
+@[link(name := "libc")]
+import native { write } from "libc";
 ```
 
 **Calling** C functions requires `unsafe` block:
@@ -236,36 +456,74 @@ unsafe {
 };
 ```
 
-Export Musi functions to C using `Callback.register`:
-
-```musi
-val my_add := fn(x: Int32, y: Int32): Int32 => x + y;
-Callback.register("my_add", my_add);
-```
-
 ### Attributes
 
 Compiler hints using `@[...]` syntax:
 
 ```musi
 @[inline]
-fn fast_add(x: Int32, y: Int32) { x + y };
+val fast_add: (Int32, Int32) -> Int32 := (x, y) => x + y;
 ```
 
 ## Why Square Brackets for Generics?
 
-You may/may not wonder why `List[Int]` instead of `List<Int>` like C++ or Rust.
+You may wonder why `List[Int]` instead of `List<Int>` like C++ or Rust.
 
 **Three reasons:**
 
 ### 1. Parsing is simpler
 
-Angle brackets clash with less-than and greater-than operators. The parser cannot tell if `a<b>` is generic type or comparison without looking ahead or knowing what `a` is. This breaks grammar rules that keep parsing simple.
+Angle brackets clash with less-than and greater-than operators. parser cannot tell if `a<b>` is generic type or comparison without looking ahead or knowing what `a` is. This breaks grammar rules that keep parsing simple.
 
-### 12. No "turbofish" needed
+### 2. No "turbofish" needed
 
 Rust needs `::<>` syntax to disambiguate generics in some contexts. Square brackets avoid this entirely.
 
-### 13. Conceptual consistency
+### 3. Conceptual consistency
 
 Generics are like "indexing into family of types". So `List[Int]` (type indexing) looks like `array.[0]` (value indexing). Same bracket syntax, similar mental model.
+
+## Complete Example
+
+```musi
+// geometry.ms
+val Point := record[T] {
+  x: T,
+  y: T,
+
+  distance: (self: Point[T]) -> Float64 => (self) => {
+    sqrt(self.x * self.x + self.y * self.y)
+  },
+
+  move: (self: Point[T], dx: T, dy: T) -> Point[T] => (self, dx, dy) => .{
+    x := self.x + dx,
+    y := self.y + dy
+  },
+
+  val zero: Point[Int32] := .{ x := 0, y := 0 }
+};
+
+val Shape := choice {
+  Circle(center: Point[Int32], radius: Float64),
+  Rect(p1: Point[Int32], p2: Point[Int32]),
+
+  area: (self: Shape) -> Float64 => (self) => match self {
+    Circle(_, r) => 3.14159 * r * r,
+    Rect(p1, p2) => abs((p2.x - p1.x) * (p2.y - p1.y))
+  }
+};
+
+export { Point, Shape };
+
+// main.ms
+import { Point, Shape } from "./geometry";
+
+val p := Point[Int32].{ x := 5, y := 10 };
+val d := p.distance();
+
+val c := Shape.Circle(Point.zero, 10.0);
+val area := c.area();
+
+writeln($"Point distance: {d}");
+writeln($"Circle area: {area}");
+```
