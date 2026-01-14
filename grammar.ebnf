@@ -29,7 +29,9 @@ lit_rune = "'", (escape_char | (char - "'")), "'";
 
 lit_template = "$", '"', {text_content | ("{", expr, "}")}, '"';
 
-lit = lit_number | lit_text | lit_rune | lit_template | "true" | "false";
+lit_bool = "true" | "false";
+
+lit = lit_number | lit_text | lit_rune | lit_template | lit_bool;
 
 (* ========================================================================= *)
 (* AUXILIARIES                                                               *)
