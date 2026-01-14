@@ -1,0 +1,10 @@
+[package]
+name = "musi_vm"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+musi_core = { path = "../musi_core" }
+musi_bc = { path = "../musi_bc" }
+thiserror = { workspace = true }

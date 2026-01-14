@@ -1,0 +1,10 @@
+[package]
+name = "musi_types"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+musi_core = { path = "../musi_core" }
+musi_syntax = { path = "../musi_syntax" }
+thiserror = { workspace = true }
