@@ -1,41 +1,40 @@
-# Musi
+# Musi - Programming Language
+
+Musi is programming language with clean type system, functional features, and efficient stack-based bytecode execution.
 
 > [!WARNING]
-> Musi is currently under active development. Language design and implementation are subject to change.
+> Musi is under active development. Language design and implementation subject to change.
 
-Musi is systems programming language designed for clarity, safety, and performance. It combines readable syntax with strict, stack-only memory model.
+## Features
 
-## Key Features
+- **Type-safe** with bidirectional type inference
+- **Functional features** pattern matching, lambda literals, cons (`::`s) for lists
+- **General-purpose** strings, records, choices (tagged unions), interfaces
+- **Efficient execution** stack-based MSIL bytecode with mark-sweep GC
+- **Editor integration** full LSP support with diagnostics and code navigation
+- **Production-ready** index-based references (no lifetimes), union-find unification
 
-- **Expression-oriented**: Every construct in language produces value.
-- **Strong static typing**: Includes automatic type inference to keep code clean and concise.
-- **Stack-only memory**: Uses region-based arena allocators for predictable performance and memory safety.
-- **Safety checks**: Provides compile-time checking of lifetimes, ensuring high level of safety.
-- **Pattern matching**: Supports exhaustive pattern matching with guards for robust logic.
-- **Error handling**: Uses fallible types (`Expect<T, E>`) for structured and reliable error management.
+## Architecture
 
-## Installation
+Musi compiler is organized into **7 core phases** across interdependent crate architecture:
 
-- **Linux**: Install `opam` using your package manager.
-- **macOS**: Install `pkg-config` and `opam` using [Homebrew](https://brew.sh/).
-- **Windows**: Install `opam` using [Chocolatey](https://chocolatey.org/install), [Scoop](https://scoop.sh/), or [WinGet](https://docs.microsoft.com/en-us/windows/package-manager/winget/).
-
-```bash
-opam init
-
-git clone https://github.com/musi-lang/musi.git
-cd musi
-
-opam install ocamlformat ocaml-lsp-server dune
-opam exec -- dune pkg lock
-opam exec -- dune build
+```text
+musi_cli            (binary crate - CLI interface)
+├─ musi_lexer       (Layer 1: Tokenisation, source mapping)
+├─ musi_parser      (Layer 2: Hand-written RDP + Pratt parser)
+├─ musi_types       (Layer 4: Type system, union-find unification)
+├─ musi_sema        (Layer 3: Bidirectional type inference, module resolution)
+└─ musi_codegen     (Layer 5: Bytecode emission, .mso generation)
+└─ musi_runtime     (Layer 6: MSIL interpreter, mark-sweep GC)
+└─ musi_lsp         (Layer 7: Language Server Protocol)
 ```
 
-## Running and Testing
+## Building
 
 ```bash
-opam exec -- dune exec bin/main.exe
-opam exec -- dune test
+cargo build --release
+cargo test --workspace
+cargo clippy --workspace
 ```
 
 ## Contributing
@@ -48,4 +47,4 @@ All contributors are expected to follow [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
 
-Project licensed under terms of [LICENSE](LICENSE) file.
+This project is licensed under MIT License - see the [LICENSE](LICENSE) file for details.
