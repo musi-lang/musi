@@ -1,5 +1,5 @@
 [package]
-name = "musi_lex"
+name = "musi_lexer"
 version.workspace = true
 edition.workspace = true
 

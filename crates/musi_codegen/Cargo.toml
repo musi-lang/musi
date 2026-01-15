@@ -6,6 +6,6 @@ edition.workspace = true
 [dependencies]
 musi_sema = { path = "../musi_sema" }
 musi_types = { path = "../musi_types" }
-musi_lex = { path = "../musi_lex" }
+musi_lexer = { path = "../musi_lexer" }
 thiserror = { workspace = true }
 tracing = { workspace = true }

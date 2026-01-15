@@ -1,10 +1,10 @@
 [package]
-name = "musi_parse"
+name = "musi_parser"
 version.workspace = true
 edition.workspace = true
 
 [dependencies]
-musi_lex = { path = "../musi_lex" }
+musi_lexer = { path = "../musi_lexer" }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 

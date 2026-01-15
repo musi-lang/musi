@@ -8,8 +8,8 @@ name = "musi"
 path = "src/main.rs"
 
 [dependencies]
-musi_lex = { path = "../musi_lex" }
-musi_parse = { path = "../musi_parse" }
+musi_lexer = { path = "../musi_lexer" }
+musi_parser = { path = "../musi_parser" }
 musi_sema = { path = "../musi_sema" }
 musi_codegen = { path = "../musi_codegen" }
 musi_runtime = { path = "../musi_runtime" }

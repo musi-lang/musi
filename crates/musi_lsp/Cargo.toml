@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-musi_parse = { path = "../musi_parse" }
+musi_parser = { path = "../musi_parser" }
 musi_sema = { path = "../musi_sema" }
 lsp-types = "0.97.0"
 lsp-server = "0.7.9"
