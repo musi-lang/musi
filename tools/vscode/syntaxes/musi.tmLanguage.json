@@ -57,7 +57,7 @@
                 },
                 {
                     "name": "storage.type.musi",
-                    "match": "\\b(val|var|record|choice|interface)\\b"
+                    "match": "\\b(fn|val|var|record|choice|interface)\\b"
                 },
                 {
                     "name": "storage.modifier.musi",
