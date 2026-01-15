@@ -20,8 +20,8 @@ Musi compiler is organized into **7 core phases** across interdependent crate ar
 
 ```text
 musi_cli            (binary crate - CLI interface)
-├─ musi_lexer       (Layer 1: Tokenisation, source mapping)
-├─ musi_parser      (Layer 2: Hand-written RDP + Pratt parser)
+├─ musi_lex         (Layer 1: Tokenisation, source mapping)
+├─ musi_parse       (Layer 2: Hand-written RDP + Pratt parser)
 ├─ musi_types       (Layer 4: Type system, union-find unification)
 ├─ musi_sema        (Layer 3: Bidirectional type inference, module resolution)
 └─ musi_codegen     (Layer 5: Bytecode emission, .mso generation)
