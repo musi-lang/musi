@@ -1,0 +1,15 @@
+[package]
+name = "musi_lex"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "lexing"
+harness = false

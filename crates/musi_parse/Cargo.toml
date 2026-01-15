@@ -1,0 +1,16 @@
+[package]
+name = "musi_parse"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+musi_lex = { path = "../musi_lex" }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "parsing"
+harness = false

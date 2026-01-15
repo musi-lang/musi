@@ -1,0 +1,8 @@
+[package]
+name = "musi_types"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+tracing = { workspace = true }

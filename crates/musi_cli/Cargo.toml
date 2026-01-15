@@ -1,0 +1,25 @@
+[package]
+name = "musi_cli"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "musi"
+path = "src/main.rs"
+
+[dependencies]
+musi_lex = { path = "../musi_lex" }
+musi_parse = { path = "../musi_parse" }
+musi_sema = { path = "../musi_sema" }
+musi_codegen = { path = "../musi_codegen" }
+musi_runtime = { path = "../musi_runtime" }
+musi_lsp = { path = "../musi_lsp" }
+clap = { version = "4.5.54", features = ["derive"] }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+assert_cmd = "2.1.2"

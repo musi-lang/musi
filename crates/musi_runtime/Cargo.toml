@@ -1,0 +1,16 @@
+[package]
+name = "musi_runtime"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+musi_codegen = { path = "../musi_codegen" }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "vm_execution"
+harness = false
