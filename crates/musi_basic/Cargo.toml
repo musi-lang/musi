@@ -1,0 +1,7 @@
+[package]
+name = "musi_basic"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
