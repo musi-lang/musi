@@ -9,6 +9,7 @@ categories.workspace = true
 publish = false
 readme.workspace = true
 [dependencies]
+musi_core = { path = "../musi_core" }
 musi_source = { path = "../musi_source" }
 
 [dev-dependencies]
