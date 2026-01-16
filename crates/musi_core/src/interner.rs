@@ -24,10 +24,7 @@ impl Interner {
         Self { strings: vec![] }
     }
 
-    /// Intern string and return compact identifier
-    ///
     /// # Panics
-    /// If `Interner` would exceed `u32::MAX` strings
     pub fn intern(&mut self, s: &str) -> Name {
         let id = self
             .strings
@@ -41,10 +38,7 @@ impl Interner {
         Name(id.try_into().expect("interner overflow: too many strings"))
     }
 
-    /// Get string slice from interned identifier
-    ///
     /// # Panics
-    /// If `Name` ID exceeds `usize::MAX`
     #[must_use]
     pub fn resolve(&self, name: Name) -> &str {
         self.strings
