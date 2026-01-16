@@ -19,7 +19,11 @@ escape_char = '\\', char;
 
 text_content = escape_char | (char - '"');
 
-ident = (letter, {letter | digit | "_"}) | ("`", {char}, "`");
+escaped_ident = "`", {char}, "`";
+
+ty_ident = "'", {char};
+
+ident = (letter, {letter | digit | "_"}) | escaped_ident | ty_ident;
 
 lit_number = (digit, {digit}, [".", digit, {digit}]) | ("0x", xdigit, {xdigit}) | ("0o", odigit, {odigit}) | ("0b", bdigit, {bdigit});
 
