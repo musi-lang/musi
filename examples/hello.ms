@@ -1,3 +1,3 @@
-val io := import "std/io";
+import * as io from "std/io";
 
 io.writeln("Hello, world!");
