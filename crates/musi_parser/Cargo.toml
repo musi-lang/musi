@@ -2,6 +2,16 @@
 name = "musi_parser"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "Musi syntax parser"
+publish = false
+readme.workspace = true
+
+[lints]
+workspace = true
 
 [dependencies]
 musi_lexer = { path = "../musi_lexer" }
@@ -11,6 +21,6 @@ tracing = { workspace = true }
 [dev-dependencies]
 criterion = { workspace = true }
 
-[[bench]]
-name = "parsing"
-harness = false
+#[[bench]]
+#name = "parsing"
+#harness = false

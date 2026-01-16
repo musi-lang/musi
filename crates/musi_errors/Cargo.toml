@@ -1,25 +1,18 @@
 [package]
-name = "musi_lexer"
+name = "musi_errors"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 keywords.workspace = true
 categories.workspace = true
-description = "Musi lexical tokenizer"
 publish = false
 readme.workspace = true
+[dependencies]
+musi_source = { path = "../musi_source" }
+
+[dev-dependencies]
+tempfile = "3.24.0"
 
 [lints]
 workspace = true
-
-[dependencies]
-thiserror = { workspace = true }
-tracing = { workspace = true }
-
-[dev-dependencies]
-criterion = { workspace = true }
-
-#[[bench]]
-#name = "lexing"
-#harness = false

@@ -1,19 +1,15 @@
 [package]
-name = "musi_lexer"
+name = "musi_sema"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 keywords.workspace = true
 categories.workspace = true
-description = "Musi lexical tokenizer"
-publish = false
-readme.workspace = true
-
-[lints]
-workspace = true
-
-[dependencies]
+description = Musi semantic analysis and type inferencepublish = false
+readme.workspace = true[dependencies]
+musi_parser = { path = "../musi_parser" }
+musi_types = { path = "../musi_types" }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 
@@ -21,5 +17,8 @@ tracing = { workspace = true }
 criterion = { workspace = true }
 
 #[[bench]]
-#name = "lexing"
+#name = "type_inference"
 #harness = false
+
+[lints]
+workspace = true

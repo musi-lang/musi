@@ -2,6 +2,13 @@
 name = "musi_codegen"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "Musi bytecode generation"
+publish = false
+readme.workspace = true
 
 [dependencies]
 musi_sema = { path = "../musi_sema" }
@@ -9,3 +16,6 @@ musi_types = { path = "../musi_types" }
 musi_lexer = { path = "../musi_lexer" }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+
+[lints]
+workspace = true

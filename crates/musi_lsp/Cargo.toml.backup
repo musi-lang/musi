@@ -6,16 +6,12 @@ license.workspace = true
 repository.workspace = true
 keywords.workspace = true
 categories.workspace = true
-description = "Musi language server protocol implementation"
-publish = false
-readme.workspace = true
-
-[lints]
-workspace = true
-
-[dependencies]
+description = Musi language server protocol implementationpublish = false
+readme.workspace = true[dependencies]
 musi_parser = { path = "../musi_parser" }
 musi_sema = { path = "../musi_sema" }
+lsp-types = "0.97.0"
+lsp-server = "0.7.9"
 thiserror = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
@@ -23,4 +19,3 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { version = "1.49.0", features = ["full"] }
 crossbeam-channel = "0.5.15"
-tower-lsp-server = "0.23.0"

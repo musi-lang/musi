@@ -6,14 +6,8 @@ license.workspace = true
 repository.workspace = true
 keywords.workspace = true
 categories.workspace = true
-description = "Musi lexical tokenizer"
-publish = false
-readme.workspace = true
-
-[lints]
-workspace = true
-
-[dependencies]
+description = Musi lexical tokenizerpublish = false
+readme.workspace = true[dependencies]
 thiserror = { workspace = true }
 tracing = { workspace = true }
 
@@ -23,3 +17,6 @@ criterion = { workspace = true }
 #[[bench]]
 #name = "lexing"
 #harness = false
+
+[lints]
+workspace = true
