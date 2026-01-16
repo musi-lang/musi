@@ -11,8 +11,6 @@ MSIL (Musi Stack-based Intermediate Language) is a general-purpose bytecode form
 - **Stack-based**: Simple, fast evaluation model with minimal state
 - **No language assumptions**: No built-in support for lists, classes, ranges, etc. — these are library constructs
 
-**Compiler Layer**: musi_bytecode (Layer 5) ← musi_types (Layer 4) ← musi_syntax (Layer 3)
-
 ## 1. File Format (.mso)
 
 ### 1.1 Module Structure
@@ -20,34 +18,47 @@ MSIL (Musi Stack-based Intermediate Language) is a general-purpose bytecode form
 Compiled Musi modules use the `.mso` (Musi Stack Object) format:
 
 ```ebnf
-module ::= header constant_pool symbol_table code_section
+mso_file ::= header const_pool symbol_table type_table function_table code_section attr_table
 ```
 
 ```text
-+-------------------+  ← 32 bytes
++-------------------+
 |      Header       |  magic, version, flags, section sizes
-+-------------------+  ← header.const_pool_len * 8 bytes
-|   Constant Pool   |  string/numeric literals
-+-------------------+  ← header.symbol_table_len * 16 bytes
-|   Symbol  Table   |  function/type/field names
-+-------------------+  ← header.code_section_len bytes
++-------------------+
+|   Constant Pool   |  literals (strings/numbers)
++-------------------+
+|   Symbol  Table   |  names (func/type/field)
++-------------------+
+|    Type Table     |  type descriptors
++-------------------+
+|  Function Table   |  signatures, locals, code offsets
++-------------------+
 |   Code  Section   |  bytecode instructions
 +-------------------+
+|  Attribute Table  |  optional metadata (debug, docs)
++-------------------+
 ```
+
+Notes:
+
+- Tables are dense and indexed; no per-entry attribute lists unless enabled.
+- `attr_table` is optional and may be omitted in release builds.
 
 ### 1.2 Header Format
 
 ```hex
 Offset  Size  Field
 ------  ----  -----
-0x00    4     magic: 0x4D555349 (ASCII "MUSI")
+0x00    4     magic: 0x4D555249 (ASCII "MUSI")
 0x04    4     version: u32 (format version)
 0x08    4     flags: u32 (bit flags, reserved)
 0x0C    4     const_pool_len: u32 (entry count)
 0x10    4     symbol_table_len: u32 (entry count)
-0x14    4     code_section_len: u32 (byte length)
-0x18    4     entry_point: u32 (symbol table index)
-0x1C    12    reserved (zero)
+0x14    4     type_table_len: u32 (entry count)
+0x18    4     function_table_len: u32 (entry count)
+0x1C    4     code_section_len: u32 (byte length)
+0x20    4     entry_point: u32 (symbol table index)
+0x24    12    reserved (zero)
 ```
 
 ### 1.3 Type Notation
@@ -113,9 +124,21 @@ end_all:
 
 MSIL uses two-byte opcodes:
 
-- Primary opcodes: 0x00–0xEF (common operations)
-- Extended opcodes: 0xF0–0xFF (control flow, exceptions)
-- Reserve: 0xFE00–0xFEFF (future expansion)
+- Primary opcodes: 0x00—0xEF (common operations)
+- Extended opcodes: 0xF0—0xFF (control flow, exceptions)
+- Reserve: 0xFE00—0xFEFF (future expansion)
+
+### 2.3.1 Mnemonic Scheme
+
+Mnemonics follow a categorical, consistent structure:
+
+- `action.category[.area][.type]`
+- `action`: `ld`, `st`, `br`, `call`, `new`, `conv`, `tail`, etc.
+- `category`: `imm`, `loc`, `arg`, `mem`, `fld`, `elem`, `type`, `attr`, etc.
+- `area` (optional): `addr`, `ind`, `virt`, `len`, `tag`, etc.
+- `type` (optional): `i8`, `i16`, `n32`, `r64`, `ref`, etc.
+
+No aliases are defined. If a value can be expressed via existing primitives, no dedicated opcode is added.
 
 ### 2.2 Stack Operations
 
@@ -141,26 +164,28 @@ Load immediate values onto operand stack:
 
 | Opcode | Mnemonic | Operands | Value Range |
 |--------|----------|----------|-------------|
-| 0x10   | `ld.i8`  | value:i8 | -128..127 |
-| 0x11   | `ld.i16` | value:i16| -32768..32767 |
-| 0x12   | `ld.i32` | value:i32| –2³¹..2³¹-1 |
-| 0x13   | `ld.i64` | value:i64| –2⁶³..2⁶³-1 |
-| 0x14   | `ld.n8`  | value:n8 | 0..255 |
-| 0x15   | `ld.n16` | value:n16| 0..65535 |
-| 0x16   | `ld.n32` | value:n32| 0..2³²-1 |
-| 0x17   | `ld.n64` | value:n64| 0..2⁶⁴-1 |
-| 0x18   | `ld.r32` | value:r32| IEEE single |
-| 0x19   | `ld.r64` | value:r64| IEEE double |
-| 0x1A   | `ld.str` | index:n32| constant pool |
-| 0x1B   | `ld.true`| —        | `true` |
-| 0x1C   | `ld.false`| —      | `false` |
-| 0x1D   | `ld.nil` | —        | `null` |
+| 0x10   | `ld.imm.i8`  | value:i8 | -128..127 |
+| 0x11   | `ld.imm.i16` | value:i16| -32768..32767 |
+| 0x12   | `ld.imm.i32` | value:i32| −2³¹..2³¹-1 |
+| 0x13   | `ld.imm.i64` | value:i64| −2⁶³..2⁶³-1 |
+| 0x14   | `ld.imm.n8`  | value:n8 | 0..255 |
+| 0x15   | `ld.imm.n16` | value:n16| 0..65535 |
+| 0x16   | `ld.imm.n32` | value:n32| 0..2³²-1 |
+| 0x17   | `ld.imm.n64` | value:n64| 0..2⁶⁴-1 |
+| 0x18   | `ld.imm.r32` | value:r32| IEEE single |
+| 0x19   | `ld.imm.r64` | value:r64| IEEE double |
+| 0x1A   | `ld.imm.str` | index:n32| constant pool |
+| 0x1B   | `rsvd` | —      | reserved |
+| 0x1C   | `rsvd` | —      | reserved |
+| 0x1D   | `ld.imm.nil` | —        | `null` (not in Musi) |
+
+Note: `Bool` is represented as `0`/`1`; use `ld.imm.i8` or `ld.imm.n8` for boolean literals.
 
 **Effect on stack**:
 
 ```
-ld.i8(42):  [...] → [..., i32(42)]
-ld.str(3):  [...] → [..., ref(str)]
+ld.imm.i8(42):  [...] → [..., i32(42)]
+ld.imm.str(3):  [...] → [..., ref(str)]
 ```
 
 ### 2.5 Local Variables
@@ -190,40 +215,40 @@ Function arguments accessed via frame-relative indexing:
 | 0x24   | `st.arg` | index:n16 | Store to argument |
 | 0x25   | `ld.arg.addr`| index:n16 | Load address of argument |
 
-### 2.7 Pointer Operations
+### 2.7 Memory Operations
 
 Memory load/store through pointer addresses:
 
 | Opcode | Mnemonic | Description |
 |--------|----------|-------------|
-| 0x30   | `ld.i8.byt`| Load signed 8-bit, byte address |
-| 0x31   | `ld.i16.byt`| Load signed 16-bit, byte address |
-| 0x32   | `ld.i32.byt`| Load signed 32-bit, byte address |
-| 0x33   | `ld.i64.byt`| Load signed 64-bit, byte address |
-| 0x34   | `ld.n8.byt`| Load unsigned 8-bit, byte address |
-| 0x35   | `ld.n16.byt`| Load unsigned 16-bit, byte address |
-| 0x36   | `ld.n32.byt`| Load unsigned 32-bit, byte address |
-| 0x37   | `ld.n64.byt`| Load unsigned 64-bit, byte address |
-| 0x38   | `ld.r32.byt`| Load 32-bit float, byte address |
-| 0x39   | `ld.r64.byt`| Load 64-bit float, byte address |
-| 0x3A   | `ld.ref.byt`| Load reference, byte address |
-| 0x3B   | `st.i8.byt`| Store 8-bit, byte address |
-| 0x3C   | `st.i16.byt`| Store 16-bit, byte address |
-| 0x3D   | `st.i32.byt`| Store 32-bit, byte address |
-| 0x3E   | `st.i64.byt`| Store 64-bit, byte address |
-| 0x3F   | `st.n8.byt`| Store unsigned 8-bit, byte address |
-| 0x40   | `st.n16.byt`| Store unsigned 16-bit, byte address |
-| 0x41   | `st.n32.byt`| Store unsigned 32-bit, byte address |
-| 0x42   | `st.n64.byt`| Store unsigned 64-bit, byte address |
-| 0x43   | `st.r32.byt`| Store 32-bit float, byte address |
-| 0x44   | `st.r64.byt`| Store 64-bit float, byte address |
-| 0x45   | `st.ref.byt`| Store reference, byte address |
+| 0x30   | `ld.mem.i8`  | Load signed 8-bit from memory address |
+| 0x31   | `ld.mem.i16` | Load signed 16-bit from memory address |
+| 0x32   | `ld.mem.i32` | Load signed 32-bit from memory address |
+| 0x33   | `ld.mem.i64` | Load signed 64-bit from memory address |
+| 0x34   | `ld.mem.n8`  | Load unsigned 8-bit from memory address |
+| 0x35   | `ld.mem.n16` | Load unsigned 16-bit from memory address |
+| 0x36   | `ld.mem.n32` | Load unsigned 32-bit from memory address |
+| 0x37   | `ld.mem.n64` | Load unsigned 64-bit from memory address |
+| 0x38   | `ld.mem.r32` | Load 32-bit float from memory address |
+| 0x39   | `ld.mem.r64` | Load 64-bit float from memory address |
+| 0x3A   | `ld.mem.ref` | Load reference from memory address |
+| 0x3B   | `st.mem.i8`  | Store 8-bit to memory address |
+| 0x3C   | `st.mem.i16` | Store 16-bit to memory address |
+| 0x3D   | `st.mem.i32` | Store 32-bit to memory address |
+| 0x3E   | `st.mem.i64` | Store 64-bit to memory address |
+| 0x3F   | `st.mem.n8`  | Store unsigned 8-bit to memory address |
+| 0x40   | `st.mem.n16` | Store unsigned 16-bit to memory address |
+| 0x41   | `st.mem.n32` | Store unsigned 32-bit to memory address |
+| 0x42   | `st.mem.n64` | Store unsigned 64-bit to memory address |
+| 0x43   | `st.mem.r32` | Store 32-bit float to memory address |
+| 0x44   | `st.mem.r64` | Store 64-bit float to memory address |
+| 0x45   | `st.mem.ref` | Store reference to memory address |
 
 **Effect on stack**:
 
 ```
-ld.i32.byt:  [addr] → [value]
-st.i32.byt:  [addr, value] → []
+ld.mem.i32:  [addr] → [value]
+st.mem.i32:  [addr, value] → []
 ```
 
 ### 2.8 Arithmetic Operations
@@ -238,11 +263,6 @@ Integer and floating-point arithmetic (type-tagged operands):
 | 0x53   | `div`    | Divide |
 | 0x54   | `rem`    | Remainder (integer) |
 | 0x55   | `neg`    | Negate |
-| 0x56   | `abs`    | Absolute value |
-| 0x57   | `floor`  | Floor (float) |
-| 0x58   | `ceil`   | Ceiling (float) |
-| 0x59   | `round`  | Round to nearest |
-| 0x5A   | `trunc`  | Truncate toward zero |
 
 ### 2.9 Bitwise Operations
 
@@ -281,11 +301,9 @@ Branches, calls, and returns:
 | 0x80   | `br`     | offset:i32| Unconditional branch (relative offset) |
 | 0x81   | `br.true`| offset:i32| Branch if top of stack is true |
 | 0x82   | `br.false`| offset:i32| Branch if top of stack is false |
-| 0x83   | `br.null`| offset:i32| Branch if top of stack is null |
-| 0x84   | `br.notnull`| offset:i32| Branch if top of stack is not null |
 | 0x85   | `ret`    | —        | Return from function |
 | 0x86   | `call`   | index:n16| Call function by constant pool index |
-| 0x87   | `call.indirect`| — | Call function pointer on stack |
+| 0x87   | `call.ind`| — | Call function pointer on stack |
 | 0x88   | `call.virt`| index:n16| Virtual call (instance method) |
 
 ### 2.12 Stack Operations
@@ -294,176 +312,119 @@ Additional stack manipulation:
 
 | Opcode | Mnemonic | Operands | Description |
 |--------|----------|----------|-------------|
-| 0x90   | `push`   | value     | Push value onto stack (optimized locals) |
-| 0x91   | `pop`    | —        | Discard top of stack |
-| 0x92   | `dup`    | —        | Duplicate top of stack |
-| 0x93   | `swap`   | —        | Swap top two values |
 | 0x94   | `pick`   | depth:n8 | Duplicate nth value from stack top |
 | 0x95   | `roll`   | depth:n8 | Rotate n values on stack |
 
-## 3. Language Constructs to Bytecode
+### 2.13 Object Operations
 
-### 3.1 Pattern Matching
+Object field access and allocation:
 
-Musi `choice` pattern matching compiles to tag-based dispatch:
+| Opcode | Mnemonic | Operands | Description |
+|--------|----------|----------|-------------|
+| 0xA0   | `new.obj` | type:n16 | Allocate new object |
+| 0xA1   | `ld.fld`  | field:n16 | Load object field |
+| 0xA2   | `st.fld`  | field:n16 | Store object field |
+| 0xA3   | `ld.fld.addr` | field:n16 | Load field address |
 
-**Source:**
-
-```musi
-match opt {
-  Some(x) => x,
-  None => 0
-}
-```
-
-**Bytecode:**
+**Effect on stack**:
 
 ```
-ld.loc opt           ; load opt onto stack
-ld.tag               ; get variant tag from value
-ld.i8 0              ; Some variant index
-eq
-br.false handle_none ; branch if not Some
-
-handle_some:
-ld.loc opt
-ld.field 0           ; extract payload
-br end_match
-
-handle_none:
-ld.i32 0
-
-end_match:
+new.obj: [...] → [..., ref(object)]
+ld.fld:  [..., ref(object)] → [..., value]
+st.fld:  [..., ref(object), value] → [...]
 ```
 
-### 3.2 Method Calls (Virtual Dispatch)
+### 2.14 Array Operations
 
-Instance method calls compile to vtable indirection:
+Array element access and allocation:
 
-**Source:**
+| Opcode | Mnemonic | Operands | Description |
+|--------|----------|----------|-------------|
+| 0xB0   | `new.arr` | type:n16, size:n32 | Allocate array |
+| 0xB1   | `ld.elem` | type:n8 | Load array element |
+| 0xB2   | `st.elem` | type:n8 | Store array element |
+| 0xB3   | `ld.elem.addr` | type:n8 | Load element address |
+| 0xB4   | `ld.arr.len` | — | Load array length |
 
-```musi
-val Drawable := interface {
-  val Point;
-  draw: (self: Point) -> Unit
-};
-
-val Point := record {
-  x: Int32,
-  y: Int32,
-  draw: (self: Point) -> Unit => (self) => ...
-};
-
-val p: Point := ...
-p.draw();
-```
-
-**Bytecode:**
+**Effect on stack**:
 
 ```
-ld.loc p
-ld.vtable           ; load vtable pointer from object
-ld.ptr 0            ; load method offset for 'draw'
-call.indirect       ; call method via vtable
+new.arr: [...] → [..., ref(array)]
+ld.elem: [..., ref(array), index] → [..., value]
+st.elem: [..., ref(array), index, value] → [...]
 ```
 
-### 3.3 List Operations
+### 2.15 Type Operations
 
-List cons/car/cdr are library functions, not bytecode:
+Type operations for gradual typing and dynamic dispatch:
 
-**Source:**
+| Opcode | Mnemonic | Operands | Description |
+|--------|----------|----------|-------------|
+| 0xC0   | `ld.typ` | type:n16 | Load type object |
+| 0xC1   | `is.typ` | type:n16 | Type check → bool |
+| 0xC2   | `conv.typ` | type:n16 | Type conversion |
+| 0xC3   | `conv.box` | type:n16 | Box value type |
+| 0xC4   | `conv.unbox` | type:n16 | Unbox to value type |
+| 0xC5   | `ld.typ.tag` | — | Get runtime type tag → i32 |
 
-```musi
-val lst := 1 :: [2, 3];
-val head := lst.head;
-```
-
-**Bytecode:**
-
-```
-ld.i32 1
-ld.i32 2
-ld.i32 3
-call List.cons      ; library function, not opcode
-...
-dup
-call List.head      ; library function
-```
-
-### 3.4 Conditional Pattern Binding
-
-Pattern binding in `if` statements:
-
-**Source:**
-
-```musi
-if Some(x) := opt {
-  x + 1
-} else {
-  0
-}
-```
-
-**Bytecode:**
+**Effect on stack**:
 
 ```
-ld.loc opt
-ld.tag
-ld.i8 0              ; Some variant
-br.false else_branch
-ld.loc opt
-st.loc x            ; bind x
-ld.loc x
-ld.i32 1
-add
-br end_if
-
-else_branch:
-ld.i32 0
-
-end_if:
+is.typ:  [..., value] → [..., bool]
+conv.typ: [..., value] → [..., converted]
+ld.typ.tag:   [..., value] → [..., type_tag]
 ```
 
-## 4. Implementation Notes
+### 2.16 Exception Handling (Extended Opcodes: 0xF0-0xFF)
 
-### 4.1 Foreign Function Interface
+Exception handling for language interop:
 
-Layer 6 (musi_vm) exports C-compatible symbols:
+| Opcode | Mnemonic | Operands | Description |
+|--------|----------|----------|-------------|
+| 0xF0   | `throw` | — | Throw exception object |
+| 0xF1   | `rethrow` | — | Rethrow current exception |
+| 0xF2   | `try` | handler:i32 | Begin try block |
+| 0xF3   | `catch` | type:n16 | Begin catch handler |
+| 0xF4   | `finally` | — | Begin finally block |
+| 0xF5   | `leave` | offset:i32 | Leave protected region |
 
-```c
-typedef struct MusiVM MusiVM;
-typedef struct MusiValue { uint64_t bits; } MusiValue;
+**Effect on stack**:
 
-MusiVM* musi_vm_create(void);
-void musi_vm_destroy(MusiVM* vm);
-int musi_vm_load_bytecode(MusiVM* vm, const uint8_t* data, size_t len);
-int musi_vm_run(MusiVM* vm);
-MusiValue musi_vm_call_function(MusiVM* vm, const char* name, ...);
+```
+throw: [..., exception] → [exception propagates]
+try:   [...] → [...] (establishes exception handler)
 ```
 
-See `RUNTIME.md` for VM embedding details.
+### 2.17 Dynamic Operations (Optional)
 
-### 4.2 Implementation Layer Reference
+Dynamic operations for fully dynamic languages:
 
-| Concept | Layer | Crate | File |
-|---------|-------|-------|------|
-| Bytecode module | 5 | musi_bytecode | `src/module.rs` |
-| Emission context | 5 | musi_bytecode | `src/emit.rs` |
-| Instruction encoding | 5 | musi_bytecode | `src/opcode.rs` |
-| VM execution | 6 | musi_vm | `src/vm.rs` |
-| Value system | 6 | musi_vm | `src/value.rs` |
+| Opcode | Mnemonic | Operands | Description |
+|--------|----------|----------|-------------|
+| 0xD0   | `get.attr` | name:n32 | Get attribute by name |
+| 0xD1   | `set.attr` | name:n32 | Set attribute by name |
+| 0xD2   | `inv.dyn` | name:n32 | Dynamic method invocation |
+| 0xD3   | `has.attr` | name:n32 | Check attribute existence → bool |
 
-## 5. Verifiability
+**Effect on stack**:
 
-Bytecode modules contain sufficient structure for static verification:
+```
+get.attr: [..., object] → [..., value]
+set.attr: [..., object, value] → [...]
+inv.dyn: [..., object, args...] → [..., result]
+```
 
-1. **Stack depth**: Each instruction's net stack effect is computable
-2. **Control flow**: Jump targets are within code section bounds
-3. **Symbol resolution**: All identifiers resolve in symbol table
-4. **Type safety**: Runtime type tags prevent memory unsafety
+### 2.18 Tail Call Optimization
 
-## References
+Tail call operations for functional languages:
 
-- [ARCHITECTURE.md](./ARCHITECTURE.md): Compiler architecture and layer model
-- [RUNTIME.md](./RUNTIME.md): Virtual machine implementation
-- `grammar.ebnf`: Source language grammar specification
+| Opcode | Mnemonic | Operands | Description |
+|--------|----------|----------|-------------|
+| 0xE0   | `tail.call` | index:n16 | Tail-optimized call |
+| 0xE1   | `tail.call.ind` | — | Tail-optimized indirect call |
+
+**Effect on stack**:
+
+```
+tail.call: [..., args...] → [..., result] (reuses current frame)
+```

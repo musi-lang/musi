@@ -198,18 +198,28 @@
 			"title": "Musi",
 			"properties": {
 				"musi.server.path": {
-					"type": ["string", "null"],
+					"type": [
+						"string",
+						"null"
+					],
 					"default": null,
 					"markdownDescription": "Path to `musi_lsp` binary. If not set, searches in `target/debug`, `target/release`, and `PATH`."
 				},
 				"musi.runtime.path": {
-					"type": ["string", "null"],
+					"type": [
+						"string",
+						"null"
+					],
 					"default": null,
 					"markdownDescription": "Path to Musi runtime environment. Required for code execution and some diagnostics."
 				},
 				"musi.trace.server": {
 					"type": "string",
-					"enum": ["off", "messages", "verbose"],
+					"enum": [
+						"off",
+						"messages",
+						"verbose"
+					],
 					"default": "off",
 					"description": "Traces communication between VS Code and language server."
 				},
@@ -326,7 +336,7 @@
 				"musi.codeLens.showTest": {
 					"type": "boolean",
 					"default": true,
-					"markdownDescription": "Show 'Test' lens above `@[test]` functions."
+					"markdownDescription": "Show 'Test' lens above `#[test]` functions."
 				}
 			}
 		}

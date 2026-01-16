@@ -97,22 +97,34 @@
     "files": {
       "type": "array",
       "description": "Files to include when publishing.",
-      "items": { "type": "string" }
+      "items": {
+        "type": "string"
+      }
     },
     "keywords": {
       "type": "array",
       "description": "Keywords for discovery.",
-      "items": { "type": "string" }
+      "items": {
+        "type": "string"
+      }
     },
     "author": {
       "oneOf": [
-        { "type": "string" },
+        {
+          "type": "string"
+        },
         {
           "type": "object",
           "properties": {
-            "name": { "type": "string" },
-            "email": { "type": "string" },
-            "url": { "type": "string" }
+            "name": {
+              "type": "string"
+            },
+            "email": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string"
+            }
           }
         }
       ]
@@ -127,25 +139,40 @@
     },
     "repository": {
       "oneOf": [
-        { "type": "string" },
+        {
+          "type": "string"
+        },
         {
           "type": "object",
           "properties": {
-            "type": { "type": "string", "default": "git" },
-            "url": { "type": "string" },
-            "directory": { "type": "string" }
+            "type": {
+              "type": "string",
+              "default": "git"
+            },
+            "url": {
+              "type": "string"
+            },
+            "directory": {
+              "type": "string"
+            }
           }
         }
       ]
     },
     "bugs": {
       "oneOf": [
-        { "type": "string" },
+        {
+          "type": "string"
+        },
         {
           "type": "object",
           "properties": {
-            "url": { "type": "string" },
-            "email": { "type": "string" }
+            "url": {
+              "type": "string"
+            },
+            "email": {
+              "type": "string"
+            }
           }
         }
       ]
@@ -159,14 +186,18 @@
       "oneOf": [
         {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         },
         {
           "type": "object",
           "properties": {
             "packages": {
               "type": "array",
-              "items": { "type": "string" }
+              "items": {
+                "type": "string"
+              }
             }
           }
         }
@@ -180,7 +211,9 @@
     "exclude": {
       "type": "array",
       "description": "Global exclude patterns.",
-      "items": { "type": "string" }
+      "items": {
+        "type": "string"
+      }
     },
     "compilerOptions": {
       "type": "object",
@@ -189,14 +222,23 @@
         "target": {
           "type": "string",
           "description": "Compilation target.",
-          "enum": ["MS2025", "native", "wasm", "embedded"],
+          "enum": [
+            "MS2025",
+            "native",
+            "wasm",
+            "embedded"
+          ],
           "default": "MS2025"
         },
         "lib": {
           "type": "array",
           "description": "Library files to include.",
-          "items": { "type": "string" },
-          "default": ["MS2025"]
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "MS2025"
+          ]
         },
         "outDir": {
           "type": "string",
@@ -218,7 +260,9 @@
           "description": "Path aliases for imports.",
           "additionalProperties": {
             "type": "array",
-            "items": { "type": "string" }
+            "items": {
+              "type": "string"
+            }
           }
         },
         "strict": {
@@ -326,12 +370,16 @@
     "include": {
       "type": "array",
       "description": "Glob patterns to include in compilation.",
-      "items": { "type": "string" }
+      "items": {
+        "type": "string"
+      }
     },
     "compileFiles": {
       "type": "array",
       "description": "Explicit list of files to compile.",
-      "items": { "type": "string" }
+      "items": {
+        "type": "string"
+      }
     },
     "references": {
       "type": "array",
@@ -352,19 +400,32 @@
       "properties": {
         "watchFile": {
           "type": "string",
-          "enum": ["fixedPollingInterval", "priorityPollingInterval", "dynamicPriorityPolling", "useFsEvents"]
+          "enum": [
+            "fixedPollingInterval",
+            "priorityPollingInterval",
+            "dynamicPriorityPolling",
+            "useFsEvents"
+          ]
         },
         "watchDirectory": {
           "type": "string",
-          "enum": ["useFsEvents", "fixedPollingInterval", "dynamicPriorityPolling"]
+          "enum": [
+            "useFsEvents",
+            "fixedPollingInterval",
+            "dynamicPriorityPolling"
+          ]
         },
         "excludeFiles": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         },
         "excludeDirectories": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         }
       }
     },
@@ -373,15 +434,23 @@
       "description": "Task definitions for 'musi task'.",
       "additionalProperties": {
         "oneOf": [
-          { "type": "string" },
+          {
+            "type": "string"
+          },
           {
             "type": "object",
             "properties": {
-              "description": { "type": "string" },
-              "command": { "type": "string" },
+              "description": {
+                "type": "string"
+              },
+              "command": {
+                "type": "string"
+              },
               "dependencies": {
                 "type": "array",
-                "items": { "type": "string" }
+                "items": {
+                  "type": "string"
+                }
               }
             }
           }
@@ -392,26 +461,78 @@
       "type": "object",
       "description": "Formatter configuration.",
       "properties": {
-        "include": { "type": "array", "items": { "type": "string" } },
-        "exclude": { "type": "array", "items": { "type": "string" } },
-        "useTabs": { "type": "boolean", "default": false },
-        "lineWidth": { "type": "number", "default": 80 },
-        "indentWidth": { "type": "number", "default": 2 },
-        "proseWrap": { "type": "string", "enum": ["always", "never", "preserve"], "default": "preserve" }
+        "include": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "useTabs": {
+          "type": "boolean",
+          "default": false
+        },
+        "lineWidth": {
+          "type": "number",
+          "default": 80
+        },
+        "indentWidth": {
+          "type": "number",
+          "default": 2
+        },
+        "proseWrap": {
+          "type": "string",
+          "enum": [
+            "always",
+            "never",
+            "preserve"
+          ],
+          "default": "preserve"
+        }
       }
     },
     "lint": {
       "type": "object",
       "description": "Linter configuration.",
       "properties": {
-        "include": { "type": "array", "items": { "type": "string" } },
-        "exclude": { "type": "array", "items": { "type": "string" } },
+        "include": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "rules": {
           "type": "object",
           "properties": {
-            "tags": { "type": "array", "items": { "type": "string" } },
-            "exclude": { "type": "array", "items": { "type": "string" } },
-            "include": { "type": "array", "items": { "type": "string" } }
+            "tags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "exclude": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "include": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           }
         }
       }
@@ -420,30 +541,70 @@
       "type": "object",
       "description": "Test configuration.",
       "properties": {
-        "include": { "type": "array", "items": { "type": "string" } },
-        "exclude": { "type": "array", "items": { "type": "string" } }
+        "include": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
       }
     },
     "bench": {
       "type": "object",
       "description": "Benchmark configuration.",
       "properties": {
-        "include": { "type": "array", "items": { "type": "string" } },
-        "exclude": { "type": "array", "items": { "type": "string" } }
+        "include": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
       }
     },
     "publish": {
       "type": "object",
       "description": "Publish configuration.",
       "properties": {
-        "include": { "type": "array", "items": { "type": "string" } },
-        "exclude": { "type": "array", "items": { "type": "string" } }
+        "include": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
       }
     },
     "depsDir": {
       "oneOf": [
-        { "type": "string", "enum": ["auto", "manual", "none"], "default": "auto" },
-        { "type": "boolean" }
+        {
+          "type": "string",
+          "enum": [
+            "auto",
+            "manual",
+            "none"
+          ],
+          "default": "auto"
+        },
+        {
+          "type": "boolean"
+        }
       ]
     },
     "vendor": {
@@ -453,13 +614,23 @@
     },
     "lock": {
       "oneOf": [
-        { "type": "boolean" },
-        { "type": "string" },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "string"
+        },
         {
           "type": "object",
           "properties": {
-            "path": { "type": "string", "default": "musi.lock" },
-            "frozen": { "type": "boolean", "default": false }
+            "path": {
+              "type": "string",
+              "default": "musi.lock"
+            },
+            "frozen": {
+              "type": "boolean",
+              "default": false
+            }
           }
         }
       ],
