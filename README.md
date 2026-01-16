@@ -14,21 +14,6 @@ Musi is programming language with clean type system, functional features, and ef
 - **Editor integration** full LSP support with diagnostics and code navigation
 - **Production-ready** index-based references (no lifetimes), union-find unification
 
-## Architecture
-
-Musi compiler is organized into **7 core phases** across interdependent crate architecture:
-
-```text
-musi_cli            (binary crate - CLI interface)
-├─ musi_lexer       (Layer 1: Tokenisation, source mapping)
-├─ musi_parser      (Layer 2: Hand-written RDP + Pratt parser)
-├─ musi_types       (Layer 4: Type system, union-find unification)
-├─ musi_sema        (Layer 3: Bidirectional type inference, module resolution)
-└─ musi_codegen     (Layer 5: Bytecode emission, .mso generation)
-└─ musi_runtime     (Layer 6: MSIL interpreter, mark-sweep GC)
-└─ musi_lsp         (Layer 7: Language Server Protocol)
-```
-
 ## Building
 
 ```bash
