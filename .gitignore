@@ -1,11 +1,8 @@
 .agents/
 .claude/
-.clavix/
 .github/
 !.github/workflows
 .opencode/
-.roo/
-crates_old/
 
 .cursorignore
 .cursorindexingignore
