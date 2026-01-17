@@ -212,7 +212,6 @@ MusiValue musi_vm_call_function(MusiVM* vm, const char* name, ...);
 - `musi cache`: Cache dependencies
 - `musi eval`: Evaluate inline script
 - `musi repl`: Interactive REPL
-- `musi lsp`: Start language server
 
 **Dependencies**: All layers (makes driver monolithic but practical)
 **Rationale**: Entry point for both runtime execution (CLI) and interactive development (LSP). Single binary provides unified user experience like Deno/Bun.

@@ -43,9 +43,9 @@ $"Value: {x + 1}"   // Template string with interpolation
 
 ### 1.3 Keywords and Symbols
 
-Keywords: `val`, `var`, `fn`, `if`, `else`, `match`, `while`, `for`, `in`, `return`, `break`, `cycle`, `defer`, `record`, `choice`, `import`, `export`, `unsafe`, `and`, `or`, `xor`, `not`, `in`, `as`, `with`, `shl`, `shr`, `rol`, `ror`
+Keywords: `val`, `var`, `fn`, `if`, `else`, `match`, `while`, `for`, `in`, `return`, `break`, `cycle`, `defer`, `record`, `choice`, `import`, `export`, `native`, `opaque`, `and`, `or`, `xor`, `not`, `in`, `as`, `with`, `shl`, `shr`, `rol`, `ror`
 
-Symbols: `:=`, `<-`, `=>`, `->`, `::`, `..`, `..<`, `=`, `/=`, `<`, `>`, `<=`, `>=`, `.`, `.[`, `.^`, `(`, `)`, `{`, `}`, `[`, `]`, `,`, `;`, `:`, `#[`, `@`
+Symbols: `:=`, `<-`, `=>`, `->`, `::`, `..`, `..<`, `=`, `/=`, `<`, `>`, `<=`, `>=`, `.`, `.[`, `(`, `)`, `{`, `}`, `[`, `]`, `,`, `;`, `:`, `#[`
 
 ## 2. Modules and Imports
 
@@ -85,7 +85,7 @@ y <- "world";             // assignment to mutable
 Types are optional due to gradual typing:
 
 ```musi
-val x: Int32 := 42;
+val x: Int[32] := 42;
 val y := "inferred as String";
 ```
 
@@ -95,10 +95,10 @@ Two syntax forms for functions:
 
 ```musi
 // Arrow function (expression body)
-val add := fn (x: Int32, y: Int32) => x + y;
+val add := fn(x: Int[32], y: Int[32]) => x + y;
 
 // Block function (statement body)
-val greet := fn (name: String) => {
+val greet := fn(name: String) {
   val greeting := $"Hello, {name}!";
   writeln(greeting);
 };
@@ -110,8 +110,8 @@ Record types define product types with named fields:
 
 ```musi
 val Point := record {
-  x: Int32,
-  y: Int32
+  x: Int[32],
+  y: Int[32]
 };
 
 // Create instance with object literal
@@ -135,7 +135,34 @@ val opt := Some(42);
 val nothing := None;
 ```
 
-### 3.6 Structural Typing
+### 3.6 Opaque Types
+
+Opaque type aliases hide the underlying type representation outside the defining module:
+
+```musi
+// Inside user_id.ms
+opaque val UserId := String;
+
+val create_user_id := fn(s: String): UserId => {
+  if validate_id(s) { s as UserId } else { panic("Invalid ID") }
+};
+
+export { UserId, create_user_id };
+
+// Outside module - UserId is opaque
+import { UserId, create_user_id } from "./user_id";
+
+val id := create_user_id("user_123");
+// id ++ "_suffix"  // ERROR: UserId is not String outside module
+```
+
+This enables:
+
+- **Newtypes**: Wrap primitives with semantic meaning (UserId, Email, Meters)
+- **Information hiding**: Expose only safe operations
+- **FFI handles**: Wrap native pointers in opaque types
+
+### 3.7 Structural Typing
 
 Records define structural contracts. Any type with matching structure is compatible:
 
@@ -145,7 +172,7 @@ val Drawable := record {
 };
 
 val Circle := record {
-  radius: Float64,
+  radius: Float[64],
   draw: Circle -> Unit
 };
 
@@ -278,7 +305,7 @@ in  // membership test
 
 ```musi
 as  // type cast (runtime check for downcast, safe for upcast)
-in  // type test: `x in Int32`
+in  // type test: `x in Int[32]`
 ```
 
 ### 5.5 List Operators
@@ -307,22 +334,32 @@ in  // type test: `x in Int32`
 **Integers (signed):**
 
 ```musi
-Int // platform-dependent
-Int8, Int16, Int32, Int64
+Int['N]  // parametric integer (N = bit width)
+Int[8], Int[16], Int[32], Int[64]
+
+// Type aliases
+val Int8 := Int[8];
+val Int32 := Int[32];
 ```
 
 **Naturals (unsigned):**
 
 ```musi
-Nat // platform-dependent
-Nat8, Nat16, Nat32, Nat64
+Nat['N]  // parametric natural
+Nat[8], Nat[16], Nat[32], Nat[64]
+
+val Nat8 := Nat[8];
+val Nat32 := Nat[32];
 ```
 
 **Floats (IEEE-754 binary):**
 
 ```musi
-Float // platform-dependent
-Float32, Float64
+Float['N]  // parametric float
+Float[32], Float[64]
+
+val Float32 := Float[32];
+val Float64 := Float[64];
 ```
 
 **Text:**
@@ -360,7 +397,7 @@ HashMap['K, 'V]
 
 ```musi
 []T        // dynamic slice
-['N]T       // fixed-size array
+['N]T      // fixed-size array
 ```
 
 **Tuples:**
@@ -374,6 +411,7 @@ HashMap['K, 'V]
 ```musi
 fn(A, B) -> C         // function type
 fn(A) -> fn(B) -> C   // curried function (right-associative)
+A -> B -> C           // shorthand for curried function
 ```
 
 ### 6.3 Type Inference
@@ -381,8 +419,8 @@ fn(A) -> fn(B) -> C   // curried function (right-associative)
 Musi uses local bidirectional type inference. Types can be explicitly annotated or inferred:
 
 ```musi
-val x := 42;        // inferred as Int32
-val y: Int64 := 42; // explicit annotation
+val x := 42;            // inferred as Int[32]
+val y: Int[64] := 42;   // explicit annotation
 ```
 
 > NOTE: If type inference fails, you can always provide an explicit type annotation, or else it defaults to `Any`.
@@ -393,7 +431,7 @@ The `Any` type enables opt-out of static type checking (unless you toggle `noImp
 
 ```musi
 val dynamic: Any := 42;
-val back: Int32 := dynamic;  // runtime type check
+val back: Int[32] := dynamic;  // runtime type check
 ```
 
 ### 6.5 Structural Subtyping
@@ -401,48 +439,104 @@ val back: Int32 := dynamic;  // runtime type check
 Records use structural subtyping:
 
 ```musi
-val Point := record { x: Int32, y: Int32 };
-val NamedPoint := record { x: Int32, y: Int32, name: String };
+val Point := record { x: Int[32], y: Int[32] };
+val NamedPoint := record { x: Int[32], y: Int[32], name: String };
 
 // NamedPoint is subtype of Point (has all required fields)
 val p: Point := named_point_instance;
 ```
 
-## 7. Attributes
+## 7. FFI and Native Code
+
+### 7.1 Native Functions
+
+Declare externally implemented functions:
+
+```musi
+// SAFETY: Function signature matches libc malloc
+#[link(name := "libc")]
+native "C" fn malloc(size: Int[64]): Ptr[Nat8];
+
+#[link(name := "libc")]
+native "C" fn free(ptr: Ptr[Nat8]);
+```
+
+### 7.2 Native Types
+
+Define opaque handles for external resources:
+
+```musi
+native record NativeHandle;
+
+opaque val GLTexture := NativeHandle;
+opaque val FileHandle := NativeHandle;
+```
+
+### 7.3 Exporting to Native Code
+
+```musi
+#[no_mangle]
+native "C" val add_numbers := fn(a: Int[32], b: Int[32]): Int[32] => a + b;
+
+export { add_numbers };
+```
+
+### 7.4 Memory Safety
+
+Pointers are opaque - no pointer arithmetic allowed. Access through slices:
+
+```musi
+native fn ptr_to_slice[T](ptr: Ptr[T], len: Int[64]): []T;
+
+val ptr := malloc(100);
+val slice := ptr_to_slice[Nat8](ptr, 100);
+slice.[0] <- 42;  // bounds-checked access
+```
+
+See `UNSAFE-AND-FFI.md` for detailed FFI documentation.
+
+## 8. Attributes
 
 Attributes provide compiler hints and metadata:
 
 ```musi
 #[inline]
-fn fast_add(x: Int32, y: Int32) => x + y;
+fn fast_add(x: Int[32], y: Int[32]) => x + y;
 
 #[deprecated("use `new_function` instead")]
-val old_function := fn() => { };
+val old_function := fn() {};
+
+#[link(name := "mylib")]
+native "C" fn external_func();
+
+#[no_mangle]
+native "C" val exported_func := fn() {};
 ```
 
-## 8. Modifiers
+## 9. Modifiers
 
 Modifiers affect the behavior of declarations:
 
 ```musi
 export    // export from module
-unsafe    // allow unsafe operations (FFI, pointer arithmetic)
+native    // external implementation (FFI)
+opaque    // hide type representation
 ```
 
-## 9. Standard Library
+## 10. Standard Library
 
-### 9.1 Prelude
+### 10.1 Prelude
 
 The `prelude.ms` module is imported implicitly, providing common types and functions:
 
 ```musi
 // Automatically available
-val Option['T] := choice { Some(T), None };
-val Result['T, 'E] := choice { Ok(T), Err(E) };
+val Option['T] := choice { Some('T), None };
+val Result['T, 'E] := choice { Ok('T), Err('E) };
 val List['T] := /* ... */;
 ```
 
-### 9.2 Explicit Imports
+### 10.2 Explicit Imports
 
 Other standard library modules require explicit import:
 
@@ -451,26 +545,26 @@ import { List, HashMap } from "std/collections";
 import { read_file, write_file } from "std/fs";
 ```
 
-## 10. Complete Example
+## 11. Complete Example
 
 ```musi
 // geometry.ms
 val Point := record {
-  x: Int32,
-  y: Int32
+  x: Int[32],
+  y: Int[32]
 };
 
-val distance := fn (p: Point) => {
+val distance := fn(p: Point) {
   val squared := p.x * p.x + p.y * p.y;
   sqrt(squared)
 };
 
 val Shape := choice {
-  Circle(center: Point, radius: Float64),
+  Circle(center: Point, radius: Float[64]),
   Rect(p1: Point, p2: Point)
 };
 
-val shape_area := fn (s: Shape) => match s {
+val shape_area := fn(s: Shape) => match s {
   Circle(_, r) -> 3.14159 * r * r,
   Rect(p1, p2) -> abs((p2.x - p1.x) * (p2.y - p1.y))
 };
@@ -478,7 +572,7 @@ val shape_area := fn (s: Shape) => match s {
 export { Point, distance, Shape, shape_area };
 
 // main.ms
-import { Point, distance, Shape, shape_area} from "./geometry";
+import { Point, distance, Shape, shape_area } from "./geometry";
 
 val p: Point := .{ x := 5, y := 10 };
 val d := distance(p);
@@ -495,49 +589,3 @@ Run with:
 ```bash
 musi run main.ms
 ```
-
-## 11. Syntax Summary
-
-### 11.1 Expressions
-
-| Form | Syntax |
-|------|--------|
-| Block | `{ stmt* expr? }` |
-| If | `if cond expr_block (else if cond expr_block)* (else expr_block)?` |
-| While | `(label:)? while cond (if guard)? expr_block` |
-| For | `(label:)? for pat in expr (if guard)? expr_block` |
-| Match | `match expr { pat (if guard)? (-> expr)?,+ }` |
-| Return | `return expr?` |
-| Break | `break (:label \| expr)?` |
-| Cycle | `cycle (:label)? (if guard)?` |
-| Defer | `defer expr` |
-| Record | `record { field,+ }` |
-| Choice | `choice { case,+ }` |
-| Function | `fn (params) => expr` or `fn (params) expr_block` |
-| Binding | `(export\|unsafe)? (val\|var) pat (: ty_expr)? (:= expr)?` |
-
-### 11.2 Patterns
-
-| Form | Syntax |
-|------|--------|
-| Identifier | `ident` |
-| Literal | `lit` |
-| Wildcard | `_` |
-| Tuple | `(pat,*)` |
-| Array | `[pat,*]` |
-| Object | `.{ field := pat, ... }` or `TypeName.{ field := pat, ... }` |
-| Variant | `ident (ty_args)? (pat,*)?` |
-| Cons | `pat :: pat` |
-| Or | `pat \| pat` |
-| As | `pat as ident` |
-
-### 11.3 Type Expressions
-
-| Form | Syntax |
-|------|--------|
-| Identifier | `ident` |
-| Tuple | `(ty_expr, ty_expr, ...)` |
-| Application | `ident ["'", ty_expr, ...]` |
-| Array | `[lit?] ty_expr` |
-| Function | `ty_expr -> ty_expr` |
-| Pointer | `^ty_expr` |
