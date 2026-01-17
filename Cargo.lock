@@ -610,16 +610,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "musi_core"
+version = "0.1.0"
+
+[[package]]
 name = "musi_errors"
 version = "0.1.0"
 dependencies = [
  "musi_source",
  "tempfile",
 ]
-
-[[package]]
-name = "musi_interner"
-version = "0.1.0"
 
 [[package]]
 name = "musi_lexer"
