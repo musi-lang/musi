@@ -41,12 +41,6 @@ $"Value: {x + 1}"   // Template string with interpolation
 (1, "hello", True)  // tuple literal
 ```
 
-### 1.3 Keywords and Symbols
-
-Keywords: `val`, `var`, `fn`, `if`, `else`, `match`, `while`, `for`, `in`, `return`, `break`, `cycle`, `defer`, `record`, `choice`, `import`, `export`, `native`, `opaque`, `and`, `or`, `xor`, `not`, `in`, `as`, `with`, `shl`, `shr`, `rol`, `ror`
-
-Symbols: `:=`, `<-`, `=>`, `->`, `::`, `..`, `..<`, `=`, `/=`, `<`, `>`, `<=`, `>=`, `.`, `.[`, `(`, `)`, `{`, `}`, `[`, `]`, `,`, `;`, `:`, `#[`
-
 ## 2. Modules and Imports
 
 ### 2.1 Module System
@@ -126,8 +120,8 @@ val p2 := .{ p with x := 30 };
 Choice types define tagged unions:
 
 ```musi
-val Option['T] := choice {
-  Some('T),
+val Option[T] := choice {
+  Some(T),
   None
 };
 
@@ -305,7 +299,6 @@ in  // membership test
 
 ```musi
 as  // type cast (runtime check for downcast, safe for upcast)
-in  // type test: `x in Int[32]`
 ```
 
 ### 5.5 List Operators
@@ -334,7 +327,7 @@ in  // type test: `x in Int[32]`
 **Integers (signed):**
 
 ```musi
-Int['N]  // parametric integer (N = bit width)
+Int[N]  // parametric integer (N = bit width)
 Int[8], Int[16], Int[32], Int[64]
 
 // Type aliases
@@ -345,7 +338,7 @@ val Int32 := Int[32];
 **Naturals (unsigned):**
 
 ```musi
-Nat['N]  // parametric natural
+Nat[N]  // parametric natural
 Nat[8], Nat[16], Nat[32], Nat[64]
 
 val Nat8 := Nat[8];
@@ -355,7 +348,7 @@ val Nat32 := Nat[32];
 **Floats (IEEE-754 binary):**
 
 ```musi
-Float['N]  // parametric float
+Float[N]  // parametric float
 Float[32], Float[64]
 
 val Float32 := Float[32];
@@ -379,8 +372,8 @@ Bool  // True or False (sum type)
 
 ```musi
 Unit   // empty tuple (), like void but better
-Any    // top type - all types are subtypes of Any
-Never  // bottom type - Never is subtype of all types
+Any       // top type - all types are subtypes of Any
+Nothing   // bottom type - Nothing is subtype of all types
 ```
 
 ### 6.2 Complex Types
@@ -388,16 +381,16 @@ Never  // bottom type - Never is subtype of all types
 **Generics:**
 
 ```musi
-List['T]
-Option['T]
-HashMap['K, 'V]
+List[T]
+Option[T]
+HashMap[K, V]
 ```
 
 **Arrays:**
 
 ```musi
 []T        // dynamic slice
-['N]T      // fixed-size array
+[N]T      // fixed-size array
 ```
 
 **Tuples:**
@@ -531,9 +524,9 @@ The `prelude.ms` module is imported implicitly, providing common types and funct
 
 ```musi
 // Automatically available
-val Option['T] := choice { Some('T), None };
-val Result['T, 'E] := choice { Ok('T), Err('E) };
-val List['T] := /* ... */;
+val Option[T] := choice { Some(T), None };
+val Result[T, E] := choice { Ok(T), Err(E) };
+val List[T] := /* ... */;
 ```
 
 ### 10.2 Explicit Imports
