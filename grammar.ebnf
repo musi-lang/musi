@@ -154,14 +154,14 @@ aux_obj_update = expr, "with", aux_obj_fields;
 (* ========================================================================= *)
 (* MATCH ARMS                                                                *)
 (* ========================================================================= *)
-match_arm = [attr], pat, [aux_guard], "->", expr;
+match_arm = [attr], "case", pat, [aux_guard], "->", expr;
 
 aux_match_arms = match_arm, {",", match_arm}, [","];
 
 (* ========================================================================= *)
 (* CHOICE CASES                                                              *)
 (* ========================================================================= *)
-choice_case = ident, [aux_ty_args], ["(", [aux_obj_fields], ")"];
+choice_case = [attr], "case", ident, [aux_ty_args], ["(", [aux_obj_fields], ")"];
 
 aux_choice_cases = choice_case, {",", choice_case}, [","];
 
@@ -228,7 +228,7 @@ prec_expr_mult = prec_expr_unary, {("*" | "/" | "%"), prec_expr_unary};
 
 prec_expr_add = prec_expr_mult, {("+" | "-"), prec_expr_mult};
 
-prec_expr_shift = prec_expr_add, {("shl" | "shr" | "rol" | "ror"), prec_expr_add};
+prec_expr_shift = prec_expr_add, {("shl" | "shr"), prec_expr_add};
 
 prec_expr_cons = prec_expr_shift, {"::", prec_expr_shift};
 
