@@ -1,0 +1,15 @@
+[package]
+name = "musi_core"
+description = "todo"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+readme = "README.md"
+license.workspace = true
+keywords = ["todo"]
+categories = ["todo"]
+
+[dependencies]
+
+[lints]
+workspace = true
