@@ -279,8 +279,6 @@ xor  // bitwise XOR / logical XOR
 not  // bitwise NOT / logical NOT
 shl  // shift left
 shr  // shift right
-rol  // rotate left
-ror  // rotate right
 ```
 
 ### 5.3 Comparison
@@ -371,7 +369,7 @@ Bool  // True or False (sum type)
 **Special:**
 
 ```musi
-Unit   // empty tuple (), like void but better
+Unit      // empty tuple (), like void but better
 Any       // top type - all types are subtypes of Any
 Nothing   // bottom type - Nothing is subtype of all types
 ```
@@ -383,7 +381,7 @@ Nothing   // bottom type - Nothing is subtype of all types
 ```musi
 List[T]
 Option[T]
-HashMap[K, V]
+Dict[K, V]
 ```
 
 **Arrays:**
