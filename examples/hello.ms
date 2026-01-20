@@ -1,3 +1,1 @@
-import * as io from "std/io";
-
-io.writeln("Hello, world!");
+__builtin_writeln("Hello, world!");
