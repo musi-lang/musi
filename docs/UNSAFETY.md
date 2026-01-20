@@ -253,7 +253,7 @@ Since pointer arithmetic and direct dereferencing are **impossible**, and all ac
 
 ## Example: OpenGL Bindings
 
-```
+```musi
 native record NativeHandle;
 
 opaque val GLTexture := NativeHandle;
