@@ -11,7 +11,7 @@ odigit = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7";
 
 bdigit = "0" | "1";
 
-symbol = " " | "$" | "%" | "(" | ")" | "*" | "+" | "," | "-" | "." | "/" | ":" | ";" | "<" | "=" | ">" | "[" | "]" | "`" | "{" | "|" | "}" | "'" | '"' | "#";
+symbol = " " | "$" | "%" | "!" | "@" | "(" | ")" | "*" | "+" | "," | "-" | "." | "/" | ":" | ";" | "<" | "=" | ">" | "[" | "]" | "`" | "{" | "|" | "}" | "'" | '"' | "#";
 
 char = letter | digit | symbol;
 
@@ -222,7 +222,7 @@ prec_expr_primary = lit | ident | "(", expr, ")" | expr_lit_tuple | expr_lit_arr
 
 prec_expr_postfix = expr_call | expr_index | expr_field | expr_cast | prec_expr_primary;
 
-prec_expr_unary = ("-" | "not", prec_expr_unary) | prec_expr_postfix;
+prec_expr_unary = ("-" | "not" | "!" | "@", prec_expr_unary) | prec_expr_postfix;
 
 prec_expr_mult = prec_expr_unary, {("*" | "/" | "%"), prec_expr_unary};
 
