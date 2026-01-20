@@ -128,7 +128,7 @@ ast_attr = lex_id, ["(", [ast_attr_arg, {",", ast_attr_arg}], ")"];
 
 ast_attr_arg = (lex_id, [assign_init]) | lit;
 
-ast_modifiers = {lex_keyword};
+ast_modifiers = {"export" | "opaque" | ("native", [lit_string] (* ABI *))};
 
 (* ========================================================================= *)
 (* PATTERNS                                                                  *)
