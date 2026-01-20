@@ -1,5 +1,5 @@
 [package]
-name = "musi_core"
+name = "musi_shared"
 description = "todo"
 version.workspace = true
 edition.workspace = true
