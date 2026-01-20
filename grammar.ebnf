@@ -69,7 +69,7 @@ export_item_list = ast_export_item, {",", ast_export_item};
 (* ========================================================================= *)
 ty_annot = ":", ast_ty;
 
-assign_init = ":=", ast_expr;
+bind_init = ":=", ast_expr;
 
 cond_block = "if", ast_cond, ast_block;
 
@@ -126,7 +126,7 @@ ast_attrs = "#[", [attr_list], "]";
 
 ast_attr = lex_id, ["(", [ast_attr_arg, {",", ast_attr_arg}], ")"];
 
-ast_attr_arg = (lex_id, [assign_init]) | lit;
+ast_attr_arg = (lex_id, [bind_init]) | lit;
 
 ast_modifiers = {"export" | "opaque" | ("native", [lit_string] (* ABI *))};
 
@@ -167,7 +167,7 @@ ast_expr_array = "[", [expr_list], "]";
 
 ast_expr_rec_lit = [lex_id], ".{", [(ast_expr_update | rec_lit_field_list)], "}";
 
-ast_rec_lit_field = field_base, [":", ast_expr];
+ast_rec_lit_field = field_base, bind_init;
 
 ast_expr_update = ast_expr, "with", rec_lit_field_list;
 
@@ -175,7 +175,7 @@ ast_block = [{lex_keyword}], "{", {ast_stmt}, [ast_expr], "}";
 
 ast_expr_block = ast_block;
 
-ast_cond = ast_expr | ((val_or_var), ast_pat, assign_init);
+ast_cond = ast_expr | ((val_or_var), ast_pat, bind_init);
 
 ast_expr_if = "if", ast_cond, ast_block, {"else", cond_block}, ["else", ast_block];
 
@@ -199,7 +199,7 @@ ast_expr_sum_def = decl_prefix, "choice", [ast_ty_params], "{", [sum_case_list],
 
 ast_expr_fn = decl_prefix, "fn", [lex_id], [ast_ty_params], ast_params, [ty_annot], [ast_block];
 
-ast_expr_bind = decl_prefix, (val_or_var), ast_pat, [ty_annot], [assign_init];
+ast_expr_bind = decl_prefix, (val_or_var), ast_pat, [ty_annot], [bind_init];
 
 (* BP 0020 *)
 ast_expr_postfix = ast_expr_atom, {ast_postfix_op};
