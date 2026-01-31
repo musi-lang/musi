@@ -11,7 +11,7 @@ odigit = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7";
 
 bdigit = "0" | "1";
 
-symbol = " " | "$" | "%" | "!" | "@" | "(" | ")" | "*" | "+" | "," | "-" | "." | "/" | ":" | ";" | "<" | "=" | ">" | "[" | "]" | "`" | "{" | "|" | "}" | "'" | '"' | "#";
+symbol = " " | "%" | "!" | "@" | "(" | ")" | "*" | "+" | "," | "-" | "." | "/" | ":" | ";" | "<" | "=" | ">" | "[" | "]" | "`" | "{" | "|" | "}" | "'" | '"' | "#";
 
 char = letter | digit | symbol;
 
@@ -31,11 +31,9 @@ lit_string = '"', {text_content}, '"';
 
 lit_char = "'", (escape_char | (char - "'")), "'";
 
-lit_template = "$", '"', {text_content | ("{", ast_expr, "}")}, '"';
+lit = lit_number | lit_string | lit_char;
 
-lit = lit_number | lit_string | lit_char | lit_template;
-
-lex_keyword = "record" | "choice" | "fn" | "val" | "var" | "import" | "export" | "match" | "case" | "if" | "else" | "while" | "for" | "in" | "return" | "break" | "cycle" | "defer" | "and" | "or" | "xor" | "not" | "native" | "from" | "as" | "with";
+lex_keyword = "record" | "choice" | "fn" | "val" | "var" | "import" | "export" | "match" | "case" | "if" | "then" | "else" | "while" | "loop" | "for" | "in" | "return" | "break" | "cycle" | "defer" | "and" | "or" | "xor" | "not" | "opaque" | "native" | "from" | "as" | "with";
 
 (* ========================================================================= *)
 (* COMMON LIST PATTERNS                                                      *)
@@ -56,10 +54,6 @@ rec_field_list = ast_rec_field, {",", ast_rec_field};
 
 rec_lit_field_list = ast_rec_lit_field, {",", ast_rec_lit_field};
 
-arm_list = ast_arm, {",", ast_arm};
-
-sum_case_list = ast_sum_case, {",", ast_sum_case};
-
 import_item_list = ast_import_item, {",", ast_import_item};
 
 export_item_list = ast_export_item, {",", ast_export_item};
@@ -71,19 +65,6 @@ ty_annot = ":", ast_ty;
 
 bind_init = ":=", ast_expr;
 
-cond_block = "if", ast_cond, ast_block;
-
-expr_parens = "(", [expr_list], ")";
-
-pat_parens = "(", [pat_list], ")";
-
-ty_brackets = "[", [ty_list], "]";
-
-(* ========================================================================= *)
-(* COMMON MODIFIERS & ANNOTATIONS                                            *)
-(* ========================================================================= *)
-decl_prefix = [ast_attrs], [ast_modifiers];
-
 val_or_var = "val" | "var";
 
 loop_label = lex_id, ":";
@@ -91,33 +72,6 @@ loop_label = lex_id, ":";
 guard = "if", ast_expr;
 
 field_base = [ast_attrs], ["var"], lex_id;
-
-ast_from_clause = "from", lit_string;
-
-ast_wildcard_alias = "*", "as", lex_id;
-
-ast_alias = "as", lex_id;
-
-(* ========================================================================= *)
-(* TYPE EXPRESSIONS                                                          *)
-(* ========================================================================= *)
-ast_ty = ast_ty_var | ast_ty_prod | ast_ty_arr | ast_ty_arrow | ast_ty_app | ast_ty_group;
-
-ast_ty_var = lex_id;
-
-ast_ty_prod = expr_parens;
-
-ast_ty_arr = "[", [lit_number], "]", ast_ty;
-
-ast_ty_arrow = ast_ty, "->", ast_ty;
-
-ast_ty_app = lex_id, ty_brackets;
-
-ast_ty_group = "(", ast_ty, ")";
-
-ast_ty_params = "[", [id_list], "]";
-
-ast_ty_args = ty_brackets;
 
 (* ========================================================================= *)
 (* ATTRIBUTES & MODIFIERS                                                    *)
@@ -129,6 +83,27 @@ ast_attr = lex_id, ["(", [ast_attr_arg, {",", ast_attr_arg}], ")"];
 ast_attr_arg = (lex_id, [bind_init]) | lit;
 
 ast_modifiers = {"export" | "opaque" | ("native", [lit_string] (* ABI *))};
+
+decl_prefix = [ast_attrs], [ast_modifiers];
+
+(* ========================================================================= *)
+(* TYPE EXPRESSIONS                                                          *)
+(* ========================================================================= *)
+ast_ty = ast_ty_var | ast_ty_prod | ast_ty_arr | ast_ty_arrow | ast_ty_app | ast_ty_group;
+
+ast_ty_var = lex_id;
+
+ast_ty_prod = "(", [ty_list], ")";
+
+ast_ty_arr = "[", [lit_number], "]", ast_ty;
+
+ast_ty_arrow = ast_ty, "->", ast_ty;
+
+ast_ty_app = lex_id, "(", [ty_list], ")";
+
+ast_ty_group = "(", ast_ty, ")";
+
+ast_ty_params = "(", [id_list], ")";
 
 (* ========================================================================= *)
 (* PATTERNS                                                                  *)
@@ -143,47 +118,51 @@ ast_pat_lit = lit;
 
 ast_pat_wild = "_";
 
-ast_pat_prod = pat_parens;
+ast_pat_prod = "(", [pat_list], ")";
 
 ast_pat_arr = "[", [pat_list], "]";
 
-ast_pat_rec = [lex_id], ".{", [ast_pat_rec_field, {",", ast_pat_rec_field}], "}";
+ast_pat_rec = [lex_id], "{", [ast_pat_rec_field, {",", ast_pat_rec_field}], "}";
 
 ast_pat_rec_field = field_base, [":", ast_pat];
 
-ast_pat_sum = lex_id, [ast_ty_args], [pat_parens];
+ast_pat_sum = lex_id, ["(", [ty_list], ")"], ["(", [pat_list], ")"];
 
 (* ========================================================================= *)
 (* EXPRESSIONS - PRATT PRECEDENCE HIERARCHY                                  *)
 (* ========================================================================= *)
 (* BP 0010 *)
-ast_expr_atom = lit | lex_id | ast_expr_group | ast_expr_tuple | ast_expr_array | ast_expr_rec_lit | ast_expr_block | ast_expr_if | ast_expr_while | ast_expr_for | ast_expr_match | ast_expr_return | ast_expr_break | ast_expr_cycle | ast_expr_defer | ast_expr_rec_def | ast_expr_sum_def | ast_expr_fn | ast_expr_bind;
+ast_expr_atom = lit | lex_id | ast_expr_group | ast_expr_tuple | ast_expr_array | ast_expr_rec_lit | ast_expr_block | ast_expr_if | ast_expr_while | ast_expr_loop | ast_expr_for | ast_expr_match | ast_expr_return | ast_expr_break | ast_expr_cycle | ast_expr_defer | ast_expr_def_record | ast_expr_def_choice | ast_expr_def_fn | ast_expr_bind | ast_expr_import | ast_expr_export;
 
 ast_expr_group = "(", ast_expr, ")";
 
-ast_expr_tuple = expr_parens;
+ast_expr_tuple = "(", ")" | "(", ast_expr, ",", [expr_list], ")";
 
 ast_expr_array = "[", [expr_list], "]";
 
-ast_expr_rec_lit = [lex_id], ".{", [(ast_expr_update | rec_lit_field_list)], "}";
+ast_expr_rec_lit = [lex_id], "{", [(ast_expr_update | rec_lit_field_list)], "}";
 
 ast_rec_lit_field = field_base, bind_init;
 
 ast_expr_update = ast_expr, "with", rec_lit_field_list;
 
-ast_block = [{lex_keyword}], "{", {ast_stmt}, [ast_expr], "}";
+ast_block = "(", {ast_stmt}, [ast_expr], ")";
 
 ast_expr_block = ast_block;
 
 ast_cond = ast_expr | ((val_or_var), ast_pat, bind_init);
 
-ast_expr_if = "if", ast_cond, ast_block, {"else", cond_block}, ["else", ast_block];
+ast_expr_if = "if", ast_cond, "then", ast_block, {"else", "if", ast_cond, "then", ast_block}, ["else", ast_block];
 
-ast_expr_while = [ast_attrs], [loop_label], "while", ast_cond, [guard], ast_block;
+ast_expr_while = [ast_attrs], [loop_label], "while", ast_cond, [guard], "loop", ast_block;
 
-ast_expr_for = [ast_attrs], [loop_label], "for", ast_pat, "in", ast_expr, [guard], ast_block;
+ast_expr_loop = [ast_attrs], [loop_label], "loop", ast_block, ["while", ast_cond];
 
-ast_expr_match = [ast_attrs], "match", ast_expr, "{", [arm_list], "}";
+ast_expr_for = [ast_attrs], [loop_label], "for", ast_pat, "in", ast_expr, [guard], "loop", ast_block;
+
+ast_expr_match = [ast_attrs], "match", ast_expr, "with", ast_arm, {ast_arm};
+
+ast_arm = [ast_attrs], "case", ast_pat, [guard], "=>", ast_expr;
 
 ast_expr_return = "return", [ast_expr];
 
@@ -193,20 +172,46 @@ ast_expr_cycle = "cycle", [lex_id], [guard];
 
 ast_expr_defer = "defer", ast_expr;
 
-ast_expr_rec_def = decl_prefix, "record", [ast_ty_params], "{", [rec_field_list], "}";
+ast_expr_def_record = decl_prefix, "record", [lex_id], [ast_ty_params], "{", [rec_field_list], "}";
 
-ast_expr_sum_def = decl_prefix, "choice", [ast_ty_params], "{", [sum_case_list], "}";
+ast_rec_field = field_base, [ty_annot];
 
-ast_expr_fn = decl_prefix, "fn", [lex_id], [ast_ty_params], ast_params, [ty_annot], [ast_block];
+ast_expr_def_choice = decl_prefix, "choice", [lex_id], [ast_ty_params], "(", ast_choice_case, {ast_choice_case}, ")";
+
+ast_choice_case = [ast_attrs], "case", lex_id, ["(", [ty_list], ")"], ["(", [rec_field_list], ")"];
+
+ast_expr_def_fn = decl_prefix, "fn", [lex_id], [ast_ty_params], ast_params, [ty_annot], [ast_block];
+
+ast_params = "(", [param_list], ")";
+
+ast_param = field_base, [ty_annot];
 
 ast_expr_bind = decl_prefix, (val_or_var), ast_pat, [ty_annot], [bind_init];
+
+ast_expr_import = "from", lit_string, "import", ast_import_clause;
+
+ast_import_clause = ast_wildcard_alias | ("{", import_item_list, "}");
+
+ast_import_item = lex_id, [ast_alias];
+
+ast_wildcard_alias = "*", "as", lex_id;
+
+ast_alias = "as", lex_id;
+
+ast_expr_export = "export", ast_export_clause, [ast_from_clause];
+
+ast_export_clause = ast_wildcard_alias | ("{", export_item_list, "}");
+
+ast_export_item = lex_id, [ast_alias];
+
+ast_from_clause = "from", lit_string;
 
 (* BP 0020 *)
 ast_expr_postfix = ast_expr_atom, {ast_postfix_op};
 
 ast_postfix_op = ast_call | ast_index | ast_field | ast_cast;
 
-ast_call = expr_parens;
+ast_call = "(", [expr_list], ")";
 
 ast_index = ".[", [expr_list], "]";
 
@@ -215,10 +220,10 @@ ast_field = ".", (lex_id | lit_number);
 ast_cast = "as", ast_ty;
 
 (* BP 0030 *)
-ast_expr_prefix = ("-" | "not" | "!" | "@" | "~"), ast_expr_prefix | ast_expr_postfix;
+ast_expr_prefix = ("-" | "not" (* logical NOT *) | "!" (* dereference *) | "@" (* address-of *) | "~" (* bitwise NOT *)), ast_expr_prefix | ast_expr_postfix;
 
 (* BP 0040 *)
-ast_expr_multiplicative = ast_expr_prefix, {("*" | "/" | "%"), ast_expr_prefix};
+ast_expr_multiplicative = ast_expr_prefix, {("*" | "/" | "%" (* remainder *)), ast_expr_prefix};
 
 (* BP 0050 *)
 ast_expr_additive = ast_expr_multiplicative, {("+" | "-"), ast_expr_multiplicative};
@@ -256,36 +261,8 @@ ast_expr_assign = ast_expr_disj, ["<-", ast_expr];
 ast_expr = ast_expr_assign;
 
 (* ========================================================================= *)
-(* IMPORT/EXPORT                                                             *)
+(* STATEMENTS & ROOT                                                         *)
 (* ========================================================================= *)
-ast_stmt_import = "import", ast_import_clause, ast_from_clause;
-
-ast_import_clause = ast_wildcard_alias | ("{", import_item_list, "}");
-
-ast_import_item = lex_id, [ast_alias];
-
-ast_stmt_export = "export", ast_export_clause, [ast_from_clause];
-
-ast_export_clause = ast_wildcard_alias | ("{", export_item_list, "}");
-
-ast_export_item = lex_id, [ast_alias];
-
-(* ========================================================================= *)
-(* STATEMENTS & ROOT                                                        *)
-(* ========================================================================= *)
-ast_stmt = (ast_stmt_import | ast_stmt_export | ast_expr), ";";
+ast_stmt = ast_expr, ";";
 
 ast_root = {ast_stmt};
-
-(* ========================================================================= *)
-(* AUXILIARY PRODUCTIONS                                                     *)
-(* ========================================================================= *)
-ast_params = "(", [param_list], ")";
-
-ast_param = field_base, [ty_annot];
-
-ast_arm = [ast_attrs], "case", ast_pat, [guard], "=>", ast_expr;
-
-ast_rec_field = field_base, [ty_annot];
-
-ast_sum_case = [ast_attrs], "case", lex_id, [ast_ty_args], ["(", [rec_field_list], ")"];
