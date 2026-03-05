@@ -1,5 +1,5 @@
 {
-	"$schema": "https://biomejs.dev/schemas/2.3.10/schema.json",
+	"$schema": "https://biomejs.dev/schemas/2.4.4/schema.json",
 	"vcs": {
 		"enabled": true,
 		"clientKind": "git",
@@ -12,10 +12,27 @@
 			"**/*.mjs",
 			"**/*.ts",
 			"**/*.tsx",
-			"**/*.mts"
+			"**/*.mts",
+			"!**/node_modules",
+			"!**/dist"
 		],
 		"ignoreUnknown": true
 	},
+	"overrides": [
+		{
+			"includes": [
+				"!./opencode/**",
+				"templates/tools/**" // opencode discovers tools via default export
+			],
+			"linter": {
+				"rules": {
+					"style": {
+						"noDefaultExport": "off"
+					}
+				}
+			}
+		}
+	],
 	"formatter": {
 		"enabled": true,
 		"indentStyle": "tab"
@@ -42,7 +59,7 @@
 			},
 			"correctness": {
 				"noConstantMathMinMaxClamp": "error",
-				"noNodejsModules": "error",
+				"noNodejsModules": "off",
 				"noUndeclaredDependencies": "error",
 				"noUndeclaredVariables": "error",
 				"noUnusedFunctionParameters": "warn",
@@ -76,11 +93,17 @@
 				"useConsistentBuiltinInstantiation": "warn",
 				"useDefaultSwitchClause": "info",
 				"useExplicitLengthCheck": "warn",
-				"useFilenamingConvention": "warn",
+				"useFilenamingConvention": {
+					"level": "warn",
+					"options": {
+						"strictCase": false,
+						"requireAscii": true,
+						"match": "%?(.+?)[.](.+)"
+					}
+				},
 				"useForOf": "info",
 				"useFragmentSyntax": "warn",
 				"useLiteralEnumMembers": "warn",
-				"useNamingConvention": "warn",
 				"useNodeAssertStrict": "error",
 				"useShorthandAssign": "info",
 				"useThrowNewError": "error",
@@ -110,6 +133,7 @@
 		}
 	},
 	"javascript": {
+		"globals": ["Bun", "$"],
 		"formatter": {
 			"quoteStyle": "double"
 		}
