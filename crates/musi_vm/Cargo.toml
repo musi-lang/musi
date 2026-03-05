@@ -1,0 +1,17 @@
+[package]
+name = "musi_vm"
+description = "Stack-based virtual machine for the Musi language"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+readme = "README.md"
+license.workspace = true
+keywords = ["compiler", "musi", "vm", "interpreter"]
+categories = ["development-tools"]
+
+[dependencies]
+musi_codegen = { path = "../musi_codegen" }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,0 +1,19 @@
+//! Stack-based virtual machine for the Musi language.
+//!
+//! Executes `.mso` modules produced by `musi_codegen`.  The VM uses a
+//! call-stack of [`vm::CallFrame`]s and a shared operand stack of [`Value`]s.
+//! Native functions are dispatched through a [`NativeRegistry`].
+
+#![allow(clippy::module_name_repetitions)]
+#![allow(clippy::exhaustive_structs)]
+#![allow(clippy::exhaustive_enums)]
+
+pub mod error;
+pub mod native;
+pub mod value;
+pub mod vm;
+
+pub use error::VmError;
+pub use native::NativeRegistry;
+pub use value::Value;
+pub use vm::Vm;
