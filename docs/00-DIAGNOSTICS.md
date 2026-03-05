@@ -19,8 +19,8 @@ test.ms:1:17: error: cannot convert type 'String' to expected type 'Int32'
 ### Source Display
 
 ```text
- 1 | val x: Int32 := "hello";
-   |                 ^^^^^^^
+ 1 | const x: Int32 := "hello";
+   |                   ^^^^^^^
 ```
 
 ### Colors
@@ -41,7 +41,7 @@ test.ms:1:17: error: cannot convert type 'String' to expected type 'Int32'
 **Example:**
 
 ```text
-error: missing ';' after value binding; add ';'
+error: missing ';' after constant binding; add ';'
 ```
 
 ## Error Archetypes
@@ -52,43 +52,43 @@ Strict taxonomy for error messages inspired by Clang. Messages are composed from
 
 The **prefix** indicates what went wrong. Always use these exact words:
 
-| Prefix | When to Use | Example |
-| :--- | :--- | :--- |
-| `unknown` | Entity exists but not recognized | "unknown escape sequence '\\q'" |
-| `unclosed` | Opening delimiter without closing | "unclosed block comment" |
-| `expected` | Parser needed something specific | "expected identifier after 'val'" |
-| `unexpected` | Parser encountered wrong token | "unexpected token 'else'" |
-| `missing` | Required element absent | "missing return type annotation" |
-| `invalid` | Syntactically present but wrong | "invalid rune literal" |
-| `malformed` | Structure is wrong/incomplete | "malformed hex literal '0x'" |
-| `illegal` | Forbidden in this context | "illegal character in identifier" |
-| `cannot` | Semantic impossibility | "cannot convert type 'String' to type 'Int32'" |
-| `undefined` | Name not in scope | "undefined identifier 'foo'" |
-| `duplicate` | Already defined | "duplicate definition of 'x'" |
-| `unused` | Declared but never used | "unused variable 'temp'" |
-| `unreachable` | Code will never execute | "unreachable code after 'return'" |
+| Prefix        | When to Use                       | Example                                        |
+| :------------ | :-------------------------------- | :--------------------------------------------- |
+| `unknown`     | Entity exists but not recognized  | "unknown escape sequence '\\q'"                |
+| `unclosed`    | Opening delimiter without closing | "unclosed block comment"                       |
+| `expected`    | Parser needed something specific  | "expected identifier after 'val'"              |
+| `unexpected`  | Parser encountered wrong token    | "unexpected token 'else'"                      |
+| `missing`     | Required element absent           | "missing return type annotation"               |
+| `invalid`     | Syntactically present but wrong   | "invalid rune literal"                         |
+| `malformed`   | Structure is wrong/incomplete     | "malformed hex literal '0x'"                   |
+| `illegal`     | Forbidden in this context         | "illegal character in identifier"              |
+| `cannot`      | Semantic impossibility            | "cannot convert type 'String' to type 'Int32'" |
+| `undefined`   | Name not in scope                 | "undefined identifier 'foo'"                   |
+| `duplicate`   | Already defined                   | "duplicate definition of 'x'"                  |
+| `unused`      | Declared but never used           | "unused variable 'temp'"                       |
+| `unreachable` | Code will never execute           | "unreachable code after 'return'"              |
 
 ### Infix Archetypes
 
 The **infix** connects subject to object. Used for type errors and conversions:
 
-| Infix | Pattern | Example |
-| :--- | :--- | :--- |
-| `to` | `cannot convert %0 to %1` | "cannot convert type 'String' to type 'Int32'" |
-| `as` | `cannot use %0 as %1` | "cannot use type 'Int32' as function" |
-| `<:` | `cast failed: %0 is not %1` | "cast failed: Any is not Int32" |
-| `for` | `%0 for %1` | "missing argument for parameter 'x'" |
-| `in` | `%0 in %1` | "duplicate field 'x' in record" |
-| `of` | `%0 of %1` | "invalid member of 'Point'" |
+| Infix | Pattern                     | Example                                        |
+| :---- | :-------------------------- | :--------------------------------------------- |
+| `to`  | `cannot convert %0 to %1`   | "cannot convert type 'String' to type 'Int32'" |
+| `as`  | `cannot use %0 as %1`       | "cannot use type 'Int32' as function"          |
+| `<:`  | `cast failed: %0 is not %1` | "cast failed: Any is not Int32"                |
+| `for` | `%0 for %1`                 | "missing argument for parameter 'x'"           |
+| `in`  | `%0 in %1`                  | "duplicate field 'x' in record"                |
+| `of`  | `%0 of %1`                  | "invalid member of 'Point'"                    |
 
 ### Suffix Archetypes
 
 The **suffix** provides context or hints after semicolon:
 
-| Suffix | When to Use | Example |
-| :--- | :--- | :--- |
-| `; add %0` | Suggest addition | "missing type; add annotation" |
-| `; remove %0` | Suggest removal | "duplicate modifier; remove 'export'" |
+| Suffix                 | When to Use        | Example                                   |
+| :--------------------- | :----------------- | :---------------------------------------- |
+| `; add %0`             | Suggest addition   | "missing type; add annotation"            |
+| `; remove %0`          | Suggest removal    | "duplicate modifier; remove 'export'"     |
 | `; did you mean '%0'?` | Suggest correction | "undefined 'prnt'; did you mean 'print'?" |
 
 ### Composing Messages
@@ -192,30 +192,30 @@ Yields: "expected identifier" (if index = 0)
 ### Type Mismatch
 
 ```musi
-val x: Int32 := "hello";
+const x: Int32 := "hello";
 ```
 
 **Output:**
 
 ```text
 test.ms:1:17: error: cannot convert type 'String' to type 'Int32'
- 1 | val x: Int32 := "hello";
-   |                 ^^^^^^^
+ 1 | const x: Int32 := "hello";
+   |                   ^^^^^^^
 ```
 
 ### Missing Semicolon
 
 ```musi
-val x: Int32 := 42
-val y: Int32 := x + 1;
+const x: Int32 := 42
+const y: Int32 := x + 1;
 ```
 
 **Output:**
 
 ```text
 file.ms:1:19: error: expected ';' after value binding
- 1 | val x: Int32 := 42
-   |                   ^
+ 1 | const x: Int32 := 42
+   |                     ^
 ```
 
 ### Undefined Variable
@@ -228,31 +228,31 @@ val result := undefined_var + 1;
 
 ```text
 file.ms:1:15: error: undefined identifier 'undefined_var'; did you mean 'defined_var'?
- 1 | val result := undefined_var + 1;
-   |               ^^^^^^^^^^^^^
+ 1 | const result := undefined_var + 1;
+   |                 ^^^^^^^^^^^^^
 ```
 
 ### Multiple Errors with Notes
 
 ```musi
-val x: Int32 := "text";
-val y: String := x + 1;
+const x: Int32 := "text";
+const y: String := x + 1;
 ```
 
 **Output:**
 
 ```text
 file.ms:1:17: error: cannot convert type 'String' to type 'Int32'
- 1 | val x: Int32 := "text";
-   |                 ^^^^^^
+ 1 | const x: Int32 := "text";
+   |                   ^^^^^^
 
 file.ms:2:18: error: cannot convert type 'Int32' to type 'String'
- 2 | val y: String := x + 1;
-   |                  ^^^^^
+ 2 | const y: String := x + 1;
+   |                    ^^^^^
 
 file.ms:1:17: note: 'x' has type 'Int32'
- 1 | val x: Int32 := "text";
-   |     ^
+ 1 | const x: Int32 := "text";
+   |       ^
 ```
 
 ## Testing Framework
@@ -261,7 +261,7 @@ file.ms:1:17: note: 'x' has type 'Int32'
 
 ```musi
 // ERROR: expected ';' after value binding
-val x: Int32 := 42
+const x: Int32 := 42
 ```
 
 **Verification:**
@@ -328,7 +328,7 @@ note: interface expects '(self: T, other: T) -> Bool', found '(self: T) -> Bool'
 ### Invalid Loop Label
 
 ```text
-error: undefined loop label '#outer'
+error: undefined loop label 'outer'
 ```
 
 ### Pattern Binding In Conditional
