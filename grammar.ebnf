@@ -118,7 +118,7 @@ ast_ty_prod = "(", [ty_list], ")";
 (* [5]Int, []Int *)
 ast_ty_arr = "[", [lit_number], "]", ast_ty;
 
-ast_ty_params = "(", [ty_param_list], ")";
+ast_ty_params = "[", [ty_param_list], "]";
 
 ty_param_list = ty_ident, {",", ty_ident};
 
@@ -238,8 +238,9 @@ ast_expr_def_choice = "choice", [lex_id], [ast_ty_params], "{", ["|"], ast_choic
 
 ast_choice_variant  = [ast_attrs], lex_id, [ast_variant_payload];
 
-ast_variant_payload = ("(", [ty_list], ")")        (* positional: Name(T1, T2)  *)
-                    | ("{", [rec_field_list], "}"); (* named:      Name{ f: T }  *)
+ast_variant_payload = ("(", [ty_list], ")")        (* positional:   Name(T1, T2)      *)
+                    | ("{", [rec_field_list], "}")  (* named-field:  Name{ f: T }      *)
+                    | (":=", lit);                  (* discriminant: Name := 0/"tag"/… *)
 
 (* Unified fn: named definition vs anonymous lambda — LL(1) on token after "fn" *)
 ast_expr_def_fn = "fn", ast_fn_kind;
@@ -330,3 +331,10 @@ ast_expr = ast_expr_assign;
 ast_stmt = ast_expr, ";";
 
 ast_root = {ast_stmt};
+
+(* ========================================================================= *)
+(* PLANNED SYNTAX (not yet implemented)                                      *)
+(* ========================================================================= *)
+(* ?'T            — sugar for Option['T]   (needs Question token)            *)
+(* expr?.field    — optional chaining      (needs QuestionDot compound token)*)
+(* expr ?? dflt   — nil coalescing         (needs QuestionQuestion token)    *)

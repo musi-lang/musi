@@ -148,13 +148,13 @@
             ]
         },
         "rune": {
-            "name": "string.quoted.single.musi",
-            "begin": "'",
-            "end": "'",
             "patterns": [
                 {
-                    "name": "constant.character.escape.musi",
-                    "match": "\\\\."
+                    "name": "string.quoted.single.musi",
+                    "match": "'(?:[^'\\\\\\n]|\\\\.)'",
+                    "captures": {
+                        "0": { "name": "string.quoted.single.musi" }
+                    }
                 }
             ]
         },
