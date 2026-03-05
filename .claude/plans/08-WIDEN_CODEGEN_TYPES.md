@@ -1,4 +1,4 @@
-# Phase 8 — Widen Codegen: Records, Choices, Match, Functions
+# Phase 8 -- Widen Codegen: Records, Choices, Match, Functions
 
 **Crate:** `musi_codegen`, `musi_vm`
 **Goal:** User-defined types, pattern matching, user-defined functions.
@@ -170,7 +170,7 @@ ld.imm.i64 10
 call <lambda_fn_idx>
 ```
 
-For Phase 8, lambdas don't capture — they're just anonymous function table entries. Closures come in Phase 9.
+For Phase 8, lambdas don't capture -- they're just anonymous function table entries. Closures come in Phase 9.
 
 ### Recursive Functions
 

@@ -1,4 +1,4 @@
-// std/prelude.ms — standard definitions always in scope
+// std/prelude.ms -- standard definitions always in scope
 
 // Platform-sized numerics
 #[intrinsic("int")]   export native opaque record Int {};

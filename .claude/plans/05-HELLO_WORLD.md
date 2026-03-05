@@ -1,4 +1,4 @@
-# Phase 5 — Prelude + Hello World End-to-End
+# Phase 5 -- Prelude + Hello World End-to-End
 
 **Crate:** `musi_codegen`, `musi_vm`, `musi`
 **Goal:** Wire source → execution. Parse a real `.ms` file, emit bytecode, run in VM.
@@ -19,7 +19,7 @@ A real `.ms` file declaring core builtins:
 ```
 
 - Compiler implicitly loads the prelude before the user's file.
-- User can read it — not magic.
+- User can read it -- not magic.
 - Parser handles `native fn` (no body, terminated by `;`).
 - Codegen reads `#[intrinsic(...)]` attr to assign intrinsic IDs.
 

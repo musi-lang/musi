@@ -8,13 +8,11 @@ use crate::error::VmError;
 use crate::native::NativeRegistry;
 use crate::value::Value;
 
-// ── Call frame ────────────────────────────────────────────────────────────────
-
 /// A single activation record on the call stack.
 pub struct CallFrame {
     /// Index of the currently executing function in the function table.
     pub function_idx: u16,
-    /// Program counter — byte offset within the function's code slice.
+    /// Program counter -- byte offset within the function's code slice.
     pub pc: usize,
     /// Local variable slots (indices `0..param_count` are filled by arguments).
     pub locals: Vec<Value>,
@@ -23,8 +21,6 @@ pub struct CallFrame {
     pub stack_base: usize,
 }
 
-// ── Interpreter signal ────────────────────────────────────────────────────────
-
 /// Returned by [`Vm::step`] to tell the dispatch loop what to do next.
 enum Signal {
     /// Continue executing the next instruction.
@@ -32,8 +28,6 @@ enum Signal {
     /// Execution is complete; return this value to the caller.
     Return(Value),
 }
-
-// ── VM ────────────────────────────────────────────────────────────────────────
 
 /// The Musi virtual machine.
 ///
@@ -131,9 +125,9 @@ impl Vm {
     fn step(&mut self, op: Opcode) -> Result<Signal, VmError> {
         match op {
             Opcode::Nop => Ok(Signal::Continue),
-            Opcode::Halt => {
-                Ok(Signal::Return(self.stack.last().map_or(Value::Unit, Clone::clone)))
-            }
+            Opcode::Halt => Ok(Signal::Return(
+                self.stack.last().map_or(Value::Unit, Clone::clone),
+            )),
             Opcode::Ret => self.exec_ret(),
             Opcode::Drop => {
                 let _ = self.stack.pop().ok_or(VmError::StackUnderflow)?;
@@ -422,10 +416,12 @@ impl Vm {
                 self.stack.push(Value::Int(!v));
                 Ok(Signal::Continue)
             }
-            Opcode::Shl => self
-                .push_i64_bin(|a, b| a.wrapping_shl(u32::try_from(b).unwrap_or(u32::MAX))),
-            Opcode::Shr => self
-                .push_i64_bin(|a, b| a.wrapping_shr(u32::try_from(b).unwrap_or(u32::MAX))),
+            Opcode::Shl => {
+                self.push_i64_bin(|a, b| a.wrapping_shl(u32::try_from(b).unwrap_or(u32::MAX)))
+            }
+            Opcode::Shr => {
+                self.push_i64_bin(|a, b| a.wrapping_shr(u32::try_from(b).unwrap_or(u32::MAX)))
+            }
             // step() only routes bitwise opcodes here.
             _ => Ok(Signal::Continue),
         }
@@ -491,8 +487,6 @@ impl Vm {
     }
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
 /// Applies a branch offset to a program counter.
 ///
 /// `pc` is the byte position *after* the current instruction (already advanced).
@@ -552,9 +546,6 @@ fn const_entry_to_value(entry: &ConstEntry) -> Value {
         ConstEntry::String(s) => Value::String(Rc::from(s.as_ref())),
     }
 }
-
-// ── Tests ─────────────────────────────────────────────────────────────────────
-
 
 #[cfg(test)]
 mod tests;

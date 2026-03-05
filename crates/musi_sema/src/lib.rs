@@ -2,10 +2,10 @@
 //!
 //! This crate performs two passes over a parsed module:
 //!
-//! 1. **Name resolution** — binds every identifier to a [`DefId`], reports
+//! 1. **Name resolution** -- binds every identifier to a [`DefId`], reports
 //!    undefined names (with edit-distance suggestions) and duplicate definitions.
 //!
-//! 2. **Type checking** — bidirectional, HM-style inference with unification
+//! 2. **Type checking** -- bidirectional, HM-style inference with unification
 //!    variables.  Infers types bottom-up and checks them top-down; emits
 //!    diagnostics for type mismatches.
 //!
@@ -37,10 +37,6 @@ use musi_parse::ParsedModule;
 use musi_parse::ast::Expr;
 use musi_shared::{DiagnosticBag, FileId, Idx, Interner, Span};
 
-// ---------------------------------------------------------------------------
-// Public output
-// ---------------------------------------------------------------------------
-
 /// The complete result of semantic analysis of a single module.
 pub struct SemaResult {
     /// All definitions encountered (index = [`DefId`].0).
@@ -52,10 +48,6 @@ pub struct SemaResult {
     /// The inferred type of each expression node.
     pub expr_types: HashMap<Idx<Expr>, Type>,
 }
-
-// ---------------------------------------------------------------------------
-// Entry point
-// ---------------------------------------------------------------------------
 
 /// Runs name resolution and type checking on `module`.
 ///
@@ -93,11 +85,6 @@ pub fn analyze(
         expr_types,
     }
 }
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 
 #[cfg(test)]
 mod tests;

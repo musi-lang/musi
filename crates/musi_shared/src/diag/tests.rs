@@ -1,4 +1,4 @@
-// Tests for the parent module — extracted from the inline test block.
+// Tests for the parent module -- extracted from the inline test block.
     use super::*;
     use crate::{SourceDb, Span};
 

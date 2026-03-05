@@ -1,4 +1,4 @@
-# Phase 2 — Lexer
+# Phase 2 -- Lexer
 
 **Crate:** `musi_lex`
 **Goal:** Complete tokenizer covering every lexical production in the grammar.
@@ -22,56 +22,56 @@ Every distinct token the grammar requires.
 
 > **Note:** `shl` and `shr` appear as infix operators in `ast_expr_shift` but are absent from
 > `lex_keyword`. They must be treated as keywords (otherwise `let shl = 5;` would be valid).
-> Grammar needs a fix; the lexer will treat them as keywords (`Shl`, `Shr`) — total 33 keywords.
+> Grammar needs a fix; the lexer will treat them as keywords (`Shl`, `Shr`) -- total 33 keywords.
 
 **Punctuation / Operators:**
 
-| Token text | Variant name   |
-|------------|----------------|
-| `(`        | `LParen`       |
-| `)`        | `RParen`       |
-| `{`        | `LBrace`       |
-| `}`        | `RBrace`       |
-| `[`        | `LBracket`     |
-| `]`        | `RBracket`     |
-| `,`        | `Comma`        |
-| `;`        | `Semi`         |
-| `:`        | `Colon`        |
-| `::`       | `ColonColon`   |
-| `.`        | `Dot`          |
-| `..`       | `DotDot`       |
-| `..<`      | `DotDotLt`     |
-| `->`       | `MinusGt`      |
-| `=>`       | `EqGt`         |
-| `<-`       | `LtMinus`      |
-| `:=`       | `ColonEq`      |
-| `=`        | `Eq`           |
-| `/=`       | `SlashEq`      |
-| `+`        | `Plus`         |
-| `-`        | `Minus`        |
-| `*`        | `Star`         |
-| `/`        | `Slash`        |
-| `%`        | `Percent`      |
-| `<`        | `Lt`           |
-| `>`        | `Gt`           |
-| `<=`       | `LtEq`         |
-| `>=`       | `GtEq`         |
-| `\|`       | `Pipe`         |
-| `&`        | `Amp`          |
-| `^`        | `Caret`        |
-| `~`        | `Tilde`        |
-| `!`        | `Bang`         |
-| `@`        | `At`           |
-| `#`        | `Hash`         |
-| `_`        | `Underscore`   |
+| Token text | Variant name |
+| ---------- | ------------ |
+| `(`        | `LParen`     |
+| `)`        | `RParen`     |
+| `{`        | `LBrace`     |
+| `}`        | `RBrace`     |
+| `[`        | `LBracket`   |
+| `]`        | `RBracket`   |
+| `,`        | `Comma`      |
+| `;`        | `Semi`       |
+| `:`        | `Colon`      |
+| `::`       | `ColonColon` |
+| `.`        | `Dot`        |
+| `..`       | `DotDot`     |
+| `..<`      | `DotDotLt`   |
+| `->`       | `MinusGt`    |
+| `=>`       | `EqGt`       |
+| `<-`       | `LtMinus`    |
+| `:=`       | `ColonEq`    |
+| `=`        | `Eq`         |
+| `/=`       | `SlashEq`    |
+| `+`        | `Plus`       |
+| `-`        | `Minus`      |
+| `*`        | `Star`       |
+| `/`        | `Slash`      |
+| `%`        | `Percent`    |
+| `<`        | `Lt`         |
+| `>`        | `Gt`         |
+| `<=`       | `LtEq`       |
+| `>=`       | `GtEq`       |
+| `\|`       | `Pipe`       |
+| `&`        | `Amp`        |
+| `^`        | `Caret`      |
+| `~`        | `Tilde`      |
+| `!`        | `Bang`       |
+| `@`        | `At`         |
+| `#`        | `Hash`       |
+| `_`        | `Underscore` |
 
 **Compound tokens (3):**
 
-| Token text | Variant name   | Meaning              |
-|------------|----------------|----------------------|
-| `.[`       | `DotLBracket`  | index access         |
-| `.{`       | `DotLBrace`    | record dot update    |
-| `<..`      | `LtDotDot`     | spread operator      |
+| Token text | Variant name  | Meaning           |
+| ---------- | ------------- | ----------------- |
+| `.[`       | `DotLBracket` | index access      |
+| `.{`       | `DotLBrace`   | record dot update |
+| `<..`      | `LtDotDot`    | spread operator   |
 
 **Literals (4 kinds):**
 `IntLit`, `FloatLit`, `StringLit`, `CharLit`
@@ -144,7 +144,7 @@ If match → keyword `TokenKind`, else → `Ident`.
 **Comment handling:**
 - `//` line comment → skip to end of line
 - `///` line doc comment → emit `DocComment` token with interned text
-- `/*` block comment → skip (may nest? — grammar says `{char}` which is non-nesting; treat as non-nesting)
+- `/*` block comment → skip (may nest? -- grammar says `{char}` which is non-nesting; treat as non-nesting)
 
 **Error recovery:** Invalid character → emit `Error` token with single-char span, advance one byte,
 continue lexing.

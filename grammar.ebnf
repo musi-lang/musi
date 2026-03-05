@@ -164,7 +164,7 @@ ast_expr_atom =
   | ast_expr_import
   | ast_expr_with_prefix;
 
-(* Unified ( ) form: unit, single expression, tuple, block — left-factored on ( *)
+(* Unified ( ) form: unit, single expression, tuple, block -- left-factored on ( *)
 ast_expr_paren = "(", ast_expr_paren_tail;
 ast_expr_paren_tail =
     ")"                                              (* unit: ()              *)
@@ -212,7 +212,7 @@ ast_import_item = lex_id, [ast_alias];
 ast_alias = "as", lex_id;
 
 (* All constructs that may carry [ast_attrs] or [ast_modifiers] prefix.      *)
-(* FIRST of each branch is a distinct keyword — fully LL(1).                 *)
+(* FIRST of each branch is a distinct keyword -- fully LL(1).                 *)
 ast_expr_with_prefix = [ast_attrs], ast_expr_after_attrs;
 
 ast_expr_after_attrs =
@@ -223,7 +223,7 @@ ast_expr_after_attrs =
   | ast_expr_match                                   (* match                 *)
   | ast_expr_label;                                  (* label                 *)
 
-(* Declaration body — dispatches on first keyword after optional modifiers   *)
+(* Declaration body -- dispatches on first keyword after optional modifiers   *)
 ast_expr_decl_kw =
     ast_expr_def_record
   | ast_expr_def_choice
@@ -240,9 +240,9 @@ ast_choice_variant  = [ast_attrs], lex_id, [ast_variant_payload];
 
 ast_variant_payload = ("(", [ty_list], ")")        (* positional:   Name(T1, T2)      *)
                     | ("{", [rec_field_list], "}")  (* named-field:  Name{ f: T }      *)
-                    | (":=", lit);                  (* discriminant: Name := 0/"tag"/… *)
+                    | (":=", lit);                  (* discriminant: Name := 0/"tag"/... *)
 
-(* Unified fn: named definition vs anonymous lambda — LL(1) on token after "fn" *)
+(* Unified fn: named definition vs anonymous lambda -- LL(1) on token after "fn" *)
 ast_expr_def_fn = "fn", ast_fn_kind;
 
 ast_fn_kind =
@@ -255,7 +255,7 @@ ast_param = field_base, [ty_annot];
 
 ast_expr_bind = const_or_var, ast_pat, [ty_annot], [bind_init];
 
-(* Loop constructs — [ast_attrs] and loop_label removed; handled by ast_expr_with_prefix *)
+(* Loop constructs -- [ast_attrs] and loop_label removed; handled by ast_expr_with_prefix *)
 ast_expr_while = "while", ast_cond, [guard], "loop", ast_block;
 
 ast_expr_loop  = "loop", ast_block, ["while", ast_cond];
@@ -266,7 +266,7 @@ ast_expr_match = "match", ast_expr, "with", ast_arm, {ast_arm};
 
 ast_arm = [ast_attrs], "case", ast_pat, [guard], "=>", ast_expr;
 
-(* Labeled block — replaces the old  name: while/loop/for  prefix syntax     *)
+(* Labeled block -- replaces the old  name: while/loop/for  prefix syntax     *)
 ast_expr_label = "label", lex_id, ast_block;
 
 (* BP 0020 *)
@@ -335,6 +335,6 @@ ast_root = {ast_stmt};
 (* ========================================================================= *)
 (* PLANNED SYNTAX (not yet implemented)                                      *)
 (* ========================================================================= *)
-(* ?'T            — sugar for Option['T]   (needs Question token)            *)
-(* expr?.field    — optional chaining      (needs QuestionDot compound token)*)
-(* expr ?? dflt   — nil coalescing         (needs QuestionQuestion token)    *)
+(* ?'T            -- sugar for Option['T]   (needs Question token)            *)
+(* expr?.field    -- optional chaining      (needs QuestionDot compound token)*)
+(* expr ?? dflt   -- nil coalescing         (needs QuestionQuestion token)    *)

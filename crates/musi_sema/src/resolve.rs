@@ -20,10 +20,6 @@ use musi_shared::{DiagnosticBag, FileId, Idx, Interner, Span, Symbol};
 use crate::def::{DefId, DefInfo, DefKind};
 use crate::scope::{ScopeId, ScopeTree};
 
-// ---------------------------------------------------------------------------
-// Public output
-// ---------------------------------------------------------------------------
-
 /// The result of the name-resolution pass.
 pub struct ResolveResult {
     /// All definitions encountered (index = `DefId.0`).
@@ -40,10 +36,6 @@ pub struct ResolveResult {
     /// The root (module-level) scope.
     pub root: ScopeId,
 }
-
-// ---------------------------------------------------------------------------
-// Resolver
-// ---------------------------------------------------------------------------
 
 struct Resolver<'a> {
     interner: &'a Interner,
@@ -70,10 +62,6 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    // -----------------------------------------------------------------------
-    // DefId allocation
-    // -----------------------------------------------------------------------
-
     fn alloc_def(&mut self, name: Symbol, kind: DefKind, span: Span) -> DefId {
         let id = DefId(self.next_id);
         self.next_id += 1;
@@ -99,10 +87,6 @@ impl<'a> Resolver<'a> {
             );
         }
     }
-
-    // -----------------------------------------------------------------------
-    // Pass 1: collect top-level declarations
-    // -----------------------------------------------------------------------
 
     /// Registers all module-level `fn`, `record`, and `choice` names into
     /// `root_scope`, enabling forward references to functions and types.
@@ -132,10 +116,6 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    // -----------------------------------------------------------------------
-    // Pass 2: resolve references
-    // -----------------------------------------------------------------------
-
     fn resolve_items(&mut self, module: &ParsedModule, root_scope: ScopeId) {
         for &item_idx in &module.items {
             self.resolve_expr(item_idx, &module.ctx, root_scope);
@@ -149,7 +129,6 @@ impl<'a> Resolver<'a> {
     fn resolve_expr(&mut self, idx: Idx<Expr>, ctx: &ParseCtx, scope: ScopeId) {
         let expr = ctx.exprs.get(idx);
         match expr {
-            // ---- Atoms ----------------------------------------------------
             Expr::Ident { name, span } => {
                 let name = *name;
                 let span = *span;
@@ -208,7 +187,6 @@ impl<'a> Resolver<'a> {
                 }
             }
 
-            // ---- Control flow ---------------------------------------------
             Expr::If {
                 cond,
                 then_body,
@@ -295,7 +273,6 @@ impl<'a> Resolver<'a> {
 
             Expr::Import { .. } => {}
 
-            // ---- Declarations --------------------------------------------
             Expr::Record { .. } => {
                 // No sub-expressions; type name registered by caller.
             }
@@ -335,16 +312,13 @@ impl<'a> Resolver<'a> {
                 kind, pat, init, ..
             } => {
                 let kind = *kind;
-                // Resolve initializer first (before the binding is visible).
                 if let Some(&init_idx) = init.as_ref() {
                     self.resolve_expr(init_idx, ctx, scope);
                 }
-                // Register the pattern bindings into the current scope.
                 self.collect_pat_defs(pat, kind, scope);
                 self.resolve_pat(pat, ctx, scope);
             }
 
-            // ---- Operators -----------------------------------------------
             Expr::Prefix { operand, .. } => self.resolve_expr(*operand, ctx, scope),
 
             Expr::Binary { lhs, rhs, .. } => {
@@ -415,10 +389,6 @@ impl<'a> Resolver<'a> {
             _ => self.resolve_expr(stmt, ctx, block_scope),
         }
     }
-
-    // -----------------------------------------------------------------------
-    // Helpers
-    // -----------------------------------------------------------------------
 
     fn resolve_cond(&mut self, cond: &Cond, ctx: &ParseCtx, scope: ScopeId) {
         match cond {
@@ -527,7 +497,7 @@ impl<'a> Resolver<'a> {
                     match field.pat {
                         Some(ref sub) => self.collect_pat_defs(sub, kind, scope),
                         None => {
-                            // Shorthand `{ x }` — bind `x`.
+                            // Shorthand `{ x }` -- bind `x`.
                             let def_kind = if kind == BindKind::Var {
                                 DefKind::Var
                             } else {
@@ -563,10 +533,6 @@ impl<'a> Resolver<'a> {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Public entry point
-// ---------------------------------------------------------------------------
-
 /// Runs name resolution on `module` and returns the [`ResolveResult`].
 ///
 /// Errors and warnings are pushed into `diags`.
@@ -590,10 +556,6 @@ pub fn resolve(
         root,
     }
 }
-
-// ---------------------------------------------------------------------------
-// Edit-distance suggestion
-// ---------------------------------------------------------------------------
 
 /// Returns the best name suggestion for `query` among `candidates`, or `None`
 /// if all candidates exceed the threshold distance (`query.len() / 3 + 1`).

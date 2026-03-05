@@ -14,11 +14,11 @@ pub type NativeFn = fn(&Vm, &[Value]) -> Value;
 
 /// Intrinsic IDs for the built-in native functions.
 pub mod intrinsics {
-    /// `writeln(value)` — print a value followed by a newline.
+    /// `writeln(value)` -- print a value followed by a newline.
     pub const WRITELN: u16 = 1;
-    /// `write(value)` — print a value without a trailing newline.
+    /// `write(value)` -- print a value without a trailing newline.
     pub const WRITE: u16 = 2;
-    /// `int_to_string(n)` — convert an i64 to its decimal string representation.
+    /// `int_to_string(n)` -- convert an i64 to its decimal string representation.
     pub const INT_TO_STRING: u16 = 3;
 }
 
@@ -63,8 +63,6 @@ impl Default for NativeRegistry {
         Self::new()
     }
 }
-
-// ── Built-in intrinsics ───────────────────────────────────────────────────────
 
 /// Prints all arguments followed by a newline.
 ///

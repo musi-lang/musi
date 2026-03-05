@@ -1,4 +1,4 @@
-# Phase 4 — Bytecode Format + VM Core
+# Phase 4 -- Bytecode Format + VM Core
 
 **Crate:** `musi_codegen`, `musi_vm`
 **Goal:** Define .mso binary format, implement a minimal VM that can execute a hand-built bytecode program.
@@ -152,8 +152,8 @@ NativeRegistry = {
 
 ### Serialization / Deserialization
 
-- `Module::serialize(&self) → Vec<u8>` — write .mso bytes.
-- `Module::deserialize(bytes: &[u8]) → Result<Module>` — parse .mso bytes.
+- `Module::serialize(&self) → Vec<u8>` -- write .mso bytes.
+- `Module::deserialize(bytes: &[u8]) → Result<Module>` -- parse .mso bytes.
 - Validate magic, version, section bounds.
 
 ---

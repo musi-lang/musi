@@ -5,8 +5,6 @@ use core::fmt;
 use core::hash::{Hash, Hasher};
 use core::marker::PhantomData;
 
-// ── Idx<T> ──────────────────────────────────────────────────────────────────
-
 /// A strongly-typed index into an [`Arena<T>`].
 ///
 /// The phantom type parameter prevents mixing indices from different arenas.
@@ -69,8 +67,6 @@ impl<T> fmt::Debug for Idx<T> {
         write!(f, "Idx({})", self.raw)
     }
 }
-
-// ── Arena<T> ─────────────────────────────────────────────────────────────────
 
 /// A typed bump-allocation pool.
 ///
@@ -149,8 +145,6 @@ impl<T> Default for Arena<T> {
     }
 }
 
-// ── Slice<T> ─────────────────────────────────────────────────────────────────
-
 /// A compact, copyable handle to a contiguous range of items in a [`SliceArena<T>`].
 ///
 /// `Slice<T>` encodes a start index and length. Like [`Idx<T>`], it uses
@@ -217,13 +211,11 @@ impl<T> fmt::Debug for Slice<T> {
     }
 }
 
-// ── SliceArena<T> ────────────────────────────────────────────────────────────
-
 /// An arena that stores items contiguously and hands out [`Slice<T>`] handles.
 ///
 /// Unlike [`Arena<T>`] (which allocates one item at a time), `SliceArena<T>`
 /// accepts batches of items via [`alloc_slice`](SliceArena::alloc_slice) and
-/// returns a `Slice<T>` that is `Copy` — no heap allocation to share the handle.
+/// returns a `Slice<T>` that is `Copy` -- no heap allocation to share the handle.
 ///
 /// This is the intended backing store for multi-element fields in flat AST nodes,
 /// replacing `Vec<Param>`, `Vec<TyParam>`, etc.
@@ -309,8 +301,6 @@ impl<T> Default for SliceArena<T> {
         Self::new()
     }
 }
-
-// ── Tests ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests;

@@ -1,4 +1,4 @@
-# Phase 1 — Shared Infrastructure
+# Phase 1 -- Shared Infrastructure
 
 **Crate:** `musi_shared`
 **Goal:** Foundational types every other crate depends on.
@@ -41,10 +41,10 @@ SourceFile = {
 }
 ```
 
-- `SourceDb::add(name, source) → FileId` — registers a file, computes `line_starts`.
-- `SourceDb::lookup(file_id, byte_offset) → (line: u32, col: u32)` — binary search on `line_starts`.
-- `SourceDb::source(file_id) → &str` — retrieve full source text.
-- `SourceDb::name(file_id) → &str` — retrieve file name.
+- `SourceDb::add(name, source) → FileId` -- registers a file, computes `line_starts`.
+- `SourceDb::lookup(file_id, byte_offset) → (line: u32, col: u32)` -- binary search on `line_starts`.
+- `SourceDb::source(file_id) → &str` -- retrieve full source text.
+- `SourceDb::name(file_id) → &str` -- retrieve file name.
 - Line/col are 1-based for display.
 
 ### String Interner
@@ -60,8 +60,8 @@ Interner = {
 }
 ```
 
-- `Interner::intern(s: &str) → Symbol` — returns existing symbol or inserts new.
-- `Interner::resolve(sym: Symbol) → &str` — retrieve interned string.
+- `Interner::intern(s: &str) → Symbol` -- returns existing symbol or inserts new.
+- `Interner::resolve(sym: Symbol) → &str` -- retrieve interned string.
 - Same string interned twice → same `Symbol` value (identity test via `==`).
 - Pre-intern keywords at construction for fast keyword lookup.
 
@@ -90,7 +90,7 @@ DiagnosticBag = {
 }
 ```
 
-- `DiagnosticBag::error(message, span, file_id) → &mut Diagnostic` — append an error.
+- `DiagnosticBag::error(message, span, file_id) → &mut Diagnostic` -- append an error.
 - `DiagnosticBag::has_errors() → bool`.
 - `DiagnosticBag::iter() → impl Iterator<Item = &Diagnostic>`.
 - Rendering: `file:line:col: severity: message` format. Detailed rendering (source underlines, colors) is Phase 12.
@@ -107,11 +107,11 @@ Arena<T> = {
 }
 ```
 
-- `Arena::alloc(value: T) → Idx<T>` — push and return index.
-- `Arena::get(idx: Idx<T>) → &T` — index into the vec.
+- `Arena::alloc(value: T) → Idx<T>` -- push and return index.
+- `Arena::get(idx: Idx<T>) → &T` -- index into the vec.
 - `Arena::get_mut(idx: Idx<T>) → &mut T`.
 - Typed index prevents mixing arenas (phantom type parameter on `Idx`).
-- No lifetimes — bootstrap-friendly.
+- No lifetimes -- bootstrap-friendly.
 
 ---
 

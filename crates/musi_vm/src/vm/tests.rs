@@ -210,7 +210,7 @@
         Opcode::LdImmUnit.encode_into(&mut code); // 1 byte   [26)
         Opcode::Drop.encode_into(&mut code); // 1 byte   [27)
 
-        // while y < x — loop start at byte 28
+        // while y < x -- loop start at byte 28
         let loop_start: usize = 28;
         assert_eq!(code.len(), loop_start, "loop_start mismatch");
 
@@ -218,7 +218,7 @@
         Opcode::LdLoc(0).encode_into(&mut code); // 3 bytes  [31..34)  load x
         Opcode::LtI64.encode_into(&mut code); // 1 byte   [34)      y < x
 
-        // BrFalse placeholder — will be patched
+        // BrFalse placeholder -- will be patched
         let brfalse_pos = code.len(); // 35
         code.push(0x62); // BR_FALSE tag
         code.extend_from_slice(&i32::MAX.to_le_bytes()); // placeholder

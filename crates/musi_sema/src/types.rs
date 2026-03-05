@@ -7,17 +7,9 @@ use core::fmt;
 
 use crate::def::DefId;
 
-// ---------------------------------------------------------------------------
-// TypeVarId
-// ---------------------------------------------------------------------------
-
 /// A unique identifier for a unification variable.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TypeVarId(pub u32);
-
-// ---------------------------------------------------------------------------
-// PrimTy
-// ---------------------------------------------------------------------------
 
 /// Built-in primitive types in Musi.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -103,10 +95,6 @@ impl fmt::Display for PrimTy {
         f.write_str(self.name())
     }
 }
-
-// ---------------------------------------------------------------------------
-// Type
-// ---------------------------------------------------------------------------
 
 /// A resolved semantic type.
 ///

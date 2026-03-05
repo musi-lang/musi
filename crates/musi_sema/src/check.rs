@@ -19,10 +19,6 @@ use musi_shared::{DiagnosticBag, FileId, Idx, Interner, Span, Symbol};
 use crate::def::{DefId, DefInfo, DefKind};
 use crate::types::{PrimTy, Type, TypeVarId};
 
-// ---------------------------------------------------------------------------
-// Unification table
-// ---------------------------------------------------------------------------
-
 /// A union-find table for type unification variables.
 pub struct UnifyTable {
     vars: Vec<Option<Type>>,
@@ -222,10 +218,6 @@ impl Default for UnifyTable {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Instantiation helper
-// ---------------------------------------------------------------------------
-
 /// Substitutes `scheme_vars[i]` → `fresh_vars[i]` throughout `ty`.
 fn instantiate(ty: &Type, scheme_vars: &[TypeVarId], fresh_vars: &[TypeVarId]) -> Type {
     match ty {
@@ -260,10 +252,6 @@ fn instantiate(ty: &Type, scheme_vars: &[TypeVarId], fresh_vars: &[TypeVarId]) -
     }
 }
 
-// ---------------------------------------------------------------------------
-// Type scope (type parameters)
-// ---------------------------------------------------------------------------
-
 /// A stack of type-parameter scopes.  `'T` in a generic function maps to a
 /// [`TypeVarId`] that was allocated when the function was entered.
 type TyScope = Vec<HashMap<Symbol, TypeVarId>>;
@@ -275,10 +263,6 @@ fn ty_scope_lookup(stack: &TyScope, name: Symbol) -> Option<TypeVarId> {
         .find_map(|frame| frame.get(&name).copied())
 }
 
-// ---------------------------------------------------------------------------
-// FnDef view (avoids too-many-arguments on infer_fn_def)
-// ---------------------------------------------------------------------------
-
 struct FnDefNode<'a> {
     name: musi_shared::Symbol,
     ty_params: &'a [musi_parse::ast::TyParam],
@@ -287,10 +271,6 @@ struct FnDefNode<'a> {
     body: Option<musi_shared::Idx<musi_parse::ast::Expr>>,
     span: musi_shared::Span,
 }
-
-// ---------------------------------------------------------------------------
-// TypeChecker
-// ---------------------------------------------------------------------------
 
 pub struct TypeChecker<'a> {
     interner: &'a Interner,
@@ -333,10 +313,6 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
-    // -----------------------------------------------------------------------
-    // Public entry
-    // -----------------------------------------------------------------------
-
     /// Type-checks an entire module, walking each top-level item in order.
     pub fn check_module(&mut self, module: &ParsedModule) {
         for &item_idx in &module.items {
@@ -344,10 +320,6 @@ impl<'a> TypeChecker<'a> {
             let _prev = self.expr_types.insert(item_idx, ty);
         }
     }
-
-    // -----------------------------------------------------------------------
-    // Type resolution (AST Ty → semantic Type)
-    // -----------------------------------------------------------------------
 
     fn resolve_ty(&self, ty: &Ty) -> Type {
         match ty {
@@ -358,7 +330,7 @@ impl<'a> TypeChecker<'a> {
                     if args.is_empty() {
                         return Type::Prim(prim);
                     }
-                    // Primitive with type args — not valid, but degrade gracefully.
+                    // Primitive with type args -- not valid, but degrade gracefully.
                     return Type::Prim(prim);
                 }
                 // Look up user-defined type by name.
@@ -369,7 +341,7 @@ impl<'a> TypeChecker<'a> {
                         Type::Named(id, resolved)
                     }
                     None => {
-                        // Unknown type name — error was already reported by the
+                        // Unknown type name -- error was already reported by the
                         // resolver if it's truly undefined.
                         Type::Error
                     }
@@ -379,7 +351,7 @@ impl<'a> TypeChecker<'a> {
                 match ty_scope_lookup(&self.ty_scope, *name) {
                     Some(var_id) => Type::Var(var_id),
                     None => {
-                        // Unbound type variable — resolver should have caught this.
+                        // Unbound type variable -- resolver should have caught this.
                         Type::Error
                     }
                 }
@@ -407,10 +379,6 @@ impl<'a> TypeChecker<'a> {
             .map(|d| d.id)
     }
 
-    // -----------------------------------------------------------------------
-    // Type inference (bottom-up)
-    // -----------------------------------------------------------------------
-
     /// Infers and records the type of the expression at `idx`.
     pub fn infer(&mut self, idx: Idx<Expr>, ctx: &ParseCtx) -> Type {
         let ty = self.infer_inner(idx, ctx);
@@ -427,23 +395,33 @@ impl<'a> TypeChecker<'a> {
             Expr::Ident { span, .. } => self.infer_ident(idx, *span),
             Expr::Paren { inner, .. } => self.infer(*inner, ctx),
             Expr::Tuple { elements, .. } => self.infer_tuple(elements, ctx),
-            Expr::Block { stmts, tail, .. } => {
-                self.infer_block(stmts, tail.as_ref().copied(), ctx)
-            }
+            Expr::Block { stmts, tail, .. } => self.infer_block(stmts, tail.as_ref().copied(), ctx),
             Expr::Array { items, .. } => self.infer_array_expr(items, ctx),
             Expr::AnonRec { fields, .. } => self.infer_anon_rec_expr(fields, ctx),
-            Expr::Prefix { op, operand, span } => {
-                self.infer_prefix_op(*op, *operand, *span, ctx)
-            }
+            Expr::Prefix { op, operand, span } => self.infer_prefix_op(*op, *operand, *span, ctx),
             Expr::Binary { op, lhs, rhs, span } => self.infer_binary(*op, *lhs, *rhs, *span, ctx),
-            Expr::Assign { target, value, span } => {
-                self.infer_assign(*target, *value, *span, ctx)
-            }
+            Expr::Assign {
+                target,
+                value,
+                span,
+            } => self.infer_assign(*target, *value, *span, ctx),
             Expr::Postfix { base, op, span } => self.infer_postfix(*base, op, *span, ctx),
-            Expr::Bind { pat, ty: ann_ty, init, span, .. } => {
-                self.infer_bind_expr(pat, ann_ty.as_ref(), init.as_ref().copied(), *span, ctx)
-            }
-            Expr::FnDef { name, ty_params, params, ret_ty, body, span, .. } => {
+            Expr::Bind {
+                pat,
+                ty: ann_ty,
+                init,
+                span,
+                ..
+            } => self.infer_bind_expr(pat, ann_ty.as_ref(), init.as_ref().copied(), *span, ctx),
+            Expr::FnDef {
+                name,
+                ty_params,
+                params,
+                ret_ty,
+                body,
+                span,
+                ..
+            } => {
                 let node = FnDefNode {
                     name: *name,
                     ty_params,
@@ -454,32 +432,43 @@ impl<'a> TypeChecker<'a> {
                 };
                 self.infer_fn_def(node, ctx)
             }
-            Expr::Lambda { ty_params, params, ret_ty, body, .. } => {
-                self.infer_lambda_expr(ty_params, params, ret_ty.as_ref(), *body, ctx)
-            }
+            Expr::Lambda {
+                ty_params,
+                params,
+                ret_ty,
+                body,
+                ..
+            } => self.infer_lambda_expr(ty_params, params, ret_ty.as_ref(), *body, ctx),
             Expr::Record { .. } | Expr::Choice { .. } => Type::Prim(PrimTy::Unit),
-            Expr::If { cond, then_body, elif_chains, else_body, span } => {
-                self.infer_if(
-                    cond,
-                    *then_body,
-                    elif_chains,
-                    else_body.as_ref().copied(),
-                    *span,
-                    ctx,
-                )
-            }
-            Expr::Match { scrutinee, arms, .. } => {
-                self.infer_match_expr(*scrutinee, arms, ctx)
-            }
-            Expr::While { cond, guard, body, span } => {
-                self.infer_while_expr(cond, guard.as_ref().copied(), *body, *span, ctx)
-            }
-            Expr::Loop { body, post_cond, .. } => {
-                self.infer_loop_expr(*body, post_cond.as_deref(), ctx)
-            }
-            Expr::For { iter, body, guard, .. } => {
-                self.infer_for_expr(*iter, *body, guard.as_ref().copied(), ctx)
-            }
+            Expr::If {
+                cond,
+                then_body,
+                elif_chains,
+                else_body,
+                span,
+            } => self.infer_if(
+                cond,
+                *then_body,
+                elif_chains,
+                else_body.as_ref().copied(),
+                *span,
+                ctx,
+            ),
+            Expr::Match {
+                scrutinee, arms, ..
+            } => self.infer_match_expr(*scrutinee, arms, ctx),
+            Expr::While {
+                cond,
+                guard,
+                body,
+                span,
+            } => self.infer_while_expr(cond, guard.as_ref().copied(), *body, *span, ctx),
+            Expr::Loop {
+                body, post_cond, ..
+            } => self.infer_loop_expr(*body, post_cond.as_deref(), ctx),
+            Expr::For {
+                iter, body, guard, ..
+            } => self.infer_for_expr(*iter, *body, guard.as_ref().copied(), ctx),
             Expr::Label { body, .. } => self.infer(*body, ctx),
             Expr::Return { value, .. } => {
                 if let Some(&v) = value.as_ref() {
@@ -507,10 +496,6 @@ impl<'a> TypeChecker<'a> {
             Expr::Error { .. } => Type::Error,
         }
     }
-
-    // -----------------------------------------------------------------------
-    // infer_inner helpers
-    // -----------------------------------------------------------------------
 
     fn infer_lit(value: &LitValue) -> Type {
         match value {
@@ -558,13 +543,9 @@ impl<'a> TypeChecker<'a> {
             };
             let item_ty = self.infer(item_idx, ctx);
             let span = self.expr_span(item_idx, ctx);
-            let unified = self.unify_table.unify(
-                Type::Var(elem_ty),
-                item_ty,
-                span,
-                self.diags,
-                self.file_id,
-            );
+            let unified =
+                self.unify_table
+                    .unify(Type::Var(elem_ty), item_ty, span, self.diags, self.file_id);
             let _prev = self.expr_types.insert(item_idx, unified);
         }
         Type::Array(Box::new(Type::Var(elem_ty)), None)
@@ -573,8 +554,12 @@ impl<'a> TypeChecker<'a> {
     fn infer_rec_fields(&mut self, fields: &[RecLitField], ctx: &ParseCtx) {
         for field in fields {
             match field {
-                RecLitField::Named { value, .. } => { let _ty = self.infer(*value, ctx); }
-                RecLitField::Spread { expr: e, .. } => { let _ty = self.infer(*e, ctx); }
+                RecLitField::Named { value, .. } => {
+                    let _ty = self.infer(*value, ctx);
+                }
+                RecLitField::Spread { expr: e, .. } => {
+                    let _ty = self.infer(*e, ctx);
+                }
             }
         }
     }
@@ -582,7 +567,7 @@ impl<'a> TypeChecker<'a> {
     fn infer_anon_rec_expr(&mut self, fields: &[RecLitField], ctx: &ParseCtx) -> Type {
         // We don't track anonymous record types in the type table yet.
         self.infer_rec_fields(fields, ctx);
-        Type::Error // unresolved named rec type — Phase 8
+        Type::Error // unresolved named rec type -- Phase 8
     }
 
     fn infer_prefix_op(
@@ -618,9 +603,9 @@ impl<'a> TypeChecker<'a> {
     ) -> Type {
         let target_ty = self.infer(target, ctx);
         let value_ty = self.infer(value, ctx);
-        let _unified =
-            self.unify_table
-                .unify(target_ty, value_ty, span, self.diags, self.file_id);
+        let _unified = self
+            .unify_table
+            .unify(target_ty, value_ty, span, self.diags, self.file_id);
         Type::Prim(PrimTy::Unit)
     }
 
@@ -632,13 +617,9 @@ impl<'a> TypeChecker<'a> {
         span: Span,
         ctx: &ParseCtx,
     ) -> Type {
-        // Resolve the declared type annotation, if any.
         let ann = ann_ty.map(|t| self.resolve_ty(t));
 
-        // Infer the initializer type, if any.
         let init_ty = init.map(|e| self.infer(e, ctx));
-
-        // Determine the binding's type.
         let binding_ty = match (ann, init_ty) {
             (Some(a), Some(i)) => {
                 let _u = self
@@ -654,7 +635,6 @@ impl<'a> TypeChecker<'a> {
             }
         };
 
-        // Store the type in each DefInfo referenced by the pattern.
         self.set_pat_type(pat, binding_ty);
 
         Type::Prim(PrimTy::Unit)
@@ -769,15 +749,9 @@ impl<'a> TypeChecker<'a> {
         Type::Prim(PrimTy::Unit)
     }
 
-    // -----------------------------------------------------------------------
-    // FnDef type inference
-    // -----------------------------------------------------------------------
-
     fn infer_fn_def(&mut self, node: FnDefNode<'_>, ctx: &ParseCtx) -> Type {
-        // 1. Build a type-parameter scope frame.
         let ty_param_vars = self.push_ty_param_scope(node.ty_params);
 
-        // 2. Resolve parameter types.
         let mut param_types: Vec<Type> = Vec::new();
         for p in node.params {
             let pty = match p.ty.as_ref() {
@@ -788,18 +762,15 @@ impl<'a> TypeChecker<'a> {
         }
         self.set_param_types(node.params, &param_types);
 
-        // 3. Resolve the return type (or allocate a fresh var).
         let ret_var = self.unify_table.fresh();
         let expected_ret = node.ret_ty.map(|t| self.resolve_ty(t));
 
-        // 4. Pre-register the function type so recursive calls work.
         let preliminary_ty = Type::Arrow(param_types.clone(), Box::new(Type::Var(ret_var)));
         let def_id = self.find_def_by_name(node.name);
         if let Some(id) = def_id {
             self.set_def_type(id, preliminary_ty);
         }
 
-        // 5. Type-check the body.
         if let Some(body_idx) = node.body {
             let body_ty = self.infer(body_idx, ctx);
             let body_span = self.expr_span(body_idx, ctx);
@@ -812,7 +783,6 @@ impl<'a> TypeChecker<'a> {
             );
         }
 
-        // 6. Unify with explicit return annotation if present.
         if let Some(ann_ret) = expected_ret {
             let actual_ret = self.unify_table.resolve(Type::Var(ret_var));
             let _u =
@@ -820,16 +790,13 @@ impl<'a> TypeChecker<'a> {
                     .unify(ann_ret, actual_ret, node.span, self.diags, self.file_id);
         }
 
-        // 7. Pop the type-parameter scope.
         let _frame = self.ty_scope.pop();
 
-        // 8. Determine which ty_param_vars are still free → these are scheme vars.
         let scheme_vars: Vec<TypeVarId> = ty_param_vars
             .into_iter()
             .filter(|&v| self.unify_table.is_free(v))
             .collect();
 
-        // 9. Build the final function type and store it.
         let final_ret = self.unify_table.resolve(Type::Var(ret_var));
         let final_ty = Type::Arrow(param_types, Box::new(final_ret));
         if let Some(id) = def_id {
@@ -841,10 +808,6 @@ impl<'a> TypeChecker<'a> {
 
         Type::Prim(PrimTy::Unit)
     }
-
-    // -----------------------------------------------------------------------
-    // Binary operator inference
-    // -----------------------------------------------------------------------
 
     fn infer_binary(
         &mut self,
@@ -859,11 +822,18 @@ impl<'a> TypeChecker<'a> {
 
         match op {
             // Arithmetic + bitwise: both sides must agree, result same type.
-            BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Rem
-            | BinOp::BitOr | BinOp::BitXor | BinOp::BitAnd | BinOp::Shl | BinOp::Shr => {
-                self.unify_table
-                    .unify(lhs_ty, rhs_ty, span, self.diags, self.file_id)
-            }
+            BinOp::Add
+            | BinOp::Sub
+            | BinOp::Mul
+            | BinOp::Div
+            | BinOp::Rem
+            | BinOp::BitOr
+            | BinOp::BitXor
+            | BinOp::BitAnd
+            | BinOp::Shl
+            | BinOp::Shr => self
+                .unify_table
+                .unify(lhs_ty, rhs_ty, span, self.diags, self.file_id),
 
             // Logical: both sides must be Bool, result is Bool.
             BinOp::And | BinOp::Or | BinOp::Xor => {
@@ -913,10 +883,6 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
-    // -----------------------------------------------------------------------
-    // Postfix inference (calls, field access, …)
-    // -----------------------------------------------------------------------
-
     fn infer_postfix(
         &mut self,
         base: Idx<Expr>,
@@ -945,7 +911,7 @@ impl<'a> TypeChecker<'a> {
 
             PostfixOp::Field { .. } => {
                 let _base_ty = self.infer(base, ctx);
-                // Field access type — needs record type knowledge (Phase 8).
+                // Field access type -- needs record type knowledge (Phase 8).
                 Type::Var(self.unify_table.fresh())
             }
 
@@ -1047,7 +1013,7 @@ impl<'a> TypeChecker<'a> {
             }
 
             Type::Var(v) => {
-                // Unknown function type — infer args, build Arrow from result.
+                // Unknown function type -- infer args, build Arrow from result.
                 let arg_types: Vec<Type> = args.iter().map(|&a| self.infer(a, ctx)).collect();
                 let ret_var = self.unify_table.fresh();
                 let arrow = Type::Arrow(arg_types, Box::new(Type::Var(ret_var)));
@@ -1073,10 +1039,6 @@ impl<'a> TypeChecker<'a> {
             }
         }
     }
-
-    // -----------------------------------------------------------------------
-    // Control flow helpers
-    // -----------------------------------------------------------------------
 
     fn infer_if(
         &mut self,
@@ -1159,10 +1121,6 @@ impl<'a> TypeChecker<'a> {
         self.infer(arm.body, ctx)
     }
 
-    // -----------------------------------------------------------------------
-    // Pattern type assignment
-    // -----------------------------------------------------------------------
-
     fn set_pat_type(&mut self, pat: &Pat, ty: Type) {
         match pat {
             Pat::Ident { span, .. } => {
@@ -1183,10 +1141,6 @@ impl<'a> TypeChecker<'a> {
             Pat::Arr { .. } | Pat::AnonRec { .. } | Pat::Or { .. } => {}
         }
     }
-
-    // -----------------------------------------------------------------------
-    // Utility
-    // -----------------------------------------------------------------------
 
     fn set_def_type(&mut self, def_id: DefId, ty: Type) {
         let idx = usize::try_from(def_id.0).expect("DefId in range");
@@ -1253,12 +1207,7 @@ impl<'a> TypeChecker<'a> {
     fn expr_span(&self, idx: Idx<Expr>, ctx: &ParseCtx) -> Span {
         span_of_expr(ctx.exprs.get(idx))
     }
-
 }
-
-// ---------------------------------------------------------------------------
-// Span extraction
-// ---------------------------------------------------------------------------
 
 fn span_of_expr(expr: &Expr) -> Span {
     match expr {

@@ -1,4 +1,4 @@
-# Phase 10 — Modules
+# Phase 10 -- Modules
 
 **Crate:** `musi_sema`, `musi_codegen`
 **Goal:** `import`/`export`, separate compilation units, .mso linking.

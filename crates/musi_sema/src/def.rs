@@ -4,20 +4,12 @@ use musi_shared::{Span, Symbol};
 
 use crate::types::{Type, TypeVarId};
 
-// ---------------------------------------------------------------------------
-// DefId
-// ---------------------------------------------------------------------------
-
-/// A unique identifier for a definition (binding, function, type, variant, …).
+/// A unique identifier for a definition (binding, function, type, variant, ...).
 ///
 /// `DefId`s are allocated monotonically; `DefId(n)` corresponds to index `n`
 /// in the `Vec<DefInfo>` owned by the analysis result.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct DefId(pub u32);
-
-// ---------------------------------------------------------------------------
-// DefKind
-// ---------------------------------------------------------------------------
 
 /// The syntactic category of a definition.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,10 +27,6 @@ pub enum DefKind {
     /// Choice variant constructor.
     Variant,
 }
-
-// ---------------------------------------------------------------------------
-// DefInfo
-// ---------------------------------------------------------------------------
 
 /// All metadata the compiler knows about a single definition.
 #[derive(Debug, Clone)]

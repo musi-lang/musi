@@ -11,10 +11,6 @@ use crate::ast::{
     PrefixOp, RecField, RecLitField, Ty, TyParam, VariantPayload,
 };
 
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
-
 /// Renders `module` as a multi-line S-expression string.
 #[must_use]
 pub fn dump(module: &ParsedModule, interner: &Interner) -> String {
@@ -41,10 +37,6 @@ pub fn dump_expr(idx: Idx<Expr>, module: &ParsedModule, interner: &Interner) -> 
     p.buf
 }
 
-// ---------------------------------------------------------------------------
-// View types
-// ---------------------------------------------------------------------------
-
 struct FnDefView<'a> {
     attrs: &'a [Attr],
     modifiers: &'a [Modifier],
@@ -54,10 +46,6 @@ struct FnDefView<'a> {
     ret_ty: Option<&'a Ty>,
     body: Option<Idx<Expr>>,
 }
-
-// ---------------------------------------------------------------------------
-// Printer
-// ---------------------------------------------------------------------------
 
 struct Printer<'a> {
     buf: String,
@@ -95,8 +83,6 @@ impl<'a> Printer<'a> {
         }
     }
 
-    // -- Module -------------------------------------------------------------
-
     fn print_module(&mut self) {
         if self.module.items.is_empty() {
             self.write("(module)");
@@ -111,8 +97,6 @@ impl<'a> Printer<'a> {
         self.indent -= 2;
         self.write_char(')');
     }
-
-    // -- Expr (dispatch) ----------------------------------------------------
 
     fn print_expr(&mut self, idx: Idx<Expr>) {
         let expr = self.module.ctx.exprs.get(idx).clone();
@@ -257,8 +241,6 @@ impl<'a> Printer<'a> {
             Expr::Error { .. } => self.write("error"),
         }
     }
-
-    // -- Expr nodes ---------------------------------------------------------
 
     fn print_block(&mut self, stmts: &[Idx<Expr>], tail: Option<Idx<Expr>>) {
         self.write("(block");
@@ -454,8 +436,6 @@ impl<'a> Printer<'a> {
         }
     }
 
-    // -- Declarations -------------------------------------------------------
-
     fn print_fn_def(&mut self, node: FnDefView<'_>) {
         self.write("(fn_def");
         self.print_attrs(node.attrs);
@@ -593,8 +573,6 @@ impl<'a> Printer<'a> {
         self.write_char(')');
     }
 
-    // -- Postfix ------------------------------------------------------------
-
     fn print_postfix(&mut self, base: Idx<Expr>, op: &PostfixOp) {
         match op {
             PostfixOp::Call { args, .. } => {
@@ -639,8 +617,6 @@ impl<'a> Printer<'a> {
             }
         }
     }
-
-    // -- Ty -----------------------------------------------------------------
 
     fn print_ty(&mut self, ty: &Ty) {
         match ty {
@@ -699,8 +675,6 @@ impl<'a> Printer<'a> {
             Ty::Error { .. } => self.write("error_ty"),
         }
     }
-
-    // -- Pat ----------------------------------------------------------------
 
     fn print_pat(&mut self, pat: &Pat) {
         match pat {
@@ -803,8 +777,6 @@ impl<'a> Printer<'a> {
         }
         self.write_char(')');
     }
-
-    // -- Shared helpers -----------------------------------------------------
 
     fn print_lit(&mut self, value: &LitValue) {
         match value {
@@ -1041,10 +1013,6 @@ impl<'a> Printer<'a> {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Operator rendering
-// ---------------------------------------------------------------------------
-
 const fn binop_str(op: BinOp) -> &'static str {
     match op {
         BinOp::Add => "+",
@@ -1082,10 +1050,6 @@ const fn prefix_str(op: PrefixOp) -> &'static str {
         PrefixOp::BitNot => "~",
     }
 }
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests;

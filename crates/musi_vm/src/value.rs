@@ -18,7 +18,7 @@ pub enum Value {
     Bool(bool),
     /// A reference-counted, immutable UTF-8 string.
     String(Rc<str>),
-    /// The unit value — the type with exactly one inhabitant.
+    /// The unit value -- the type with exactly one inhabitant.
     Unit,
 }
 

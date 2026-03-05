@@ -1,4 +1,4 @@
-# Phase 7 — Name Resolution + Type System
+# Phase 7 -- Name Resolution + Type System
 
 **Crate:** `musi_sema`
 **Goal:** Scope analysis + bidirectional type checking with HM-style inference.
@@ -106,7 +106,7 @@ fn unify(a: Type, b: Type) → Result<(), TypeError>:
 ```
 
 **Generics:**
-- `fn id[T](x: T): T = x;` — `T` is a type parameter → fresh `TypeVar` at each call site.
+- `fn id[T](x: T): T = x;` -- `T` is a type parameter → fresh `TypeVar` at each call site.
 - Instantiation: when calling a generic function, create fresh type vars for each type param, substitute into parameter/return types, then unify with actual arguments.
 
 ### Type Checking Specific Constructs

@@ -1,4 +1,4 @@
-# Phase 6 — Widen Codegen: Bindings, Arithmetic, Control Flow
+# Phase 6 -- Widen Codegen: Bindings, Arithmetic, Control Flow
 
 **Crate:** `musi_codegen`, `musi_vm`
 **Goal:** Extend codegen+VM to handle variables, operators, branching, loops, blocks.

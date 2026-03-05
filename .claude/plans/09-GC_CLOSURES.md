@@ -1,4 +1,4 @@
-# Phase 9 — Garbage Collector + Closures
+# Phase 9 -- Garbage Collector + Closures
 
 **Crate:** `musi_vm`, `musi_codegen`
 **Goal:** Mark-sweep GC for heap objects, closure support for capturing lambdas.
@@ -81,7 +81,7 @@ fn mark(value: Value):
 
 **Safety:**
 - GC only runs at allocation points (no mid-instruction collection).
-- All roots are on the Rust stack or in VM data structures — no hidden roots.
+- All roots are on the Rust stack or in VM data structures -- no hidden roots.
 
 ### Closure Codegen
 
@@ -99,7 +99,7 @@ fn analyze_captures(lambda_body, enclosing_scope) → Vec<CapturedVar>:
 **New opcodes:**
 ```
 Opcode +=
-  | new.closure(u16, u8)   // fn_idx, capture_count — pops N captured values, pushes closure obj
+  | new.closure(u16, u8)   // fn_idx, capture_count -- pops N captured values, pushes closure obj
   | ld.cap(u16)             // load from capture environment (index into closure's env)
 ```
 

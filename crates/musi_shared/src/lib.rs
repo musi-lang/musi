@@ -2,11 +2,11 @@
 //!
 //! Every other crate in the workspace depends on this one.  It provides:
 //!
-//! - [`Span`] — a byte-range source location
-//! - [`FileId`] / [`SourceDb`] — file registry with line/column lookup
-//! - [`Symbol`] / [`Interner`] — arena-backed string deduplication
-//! - [`Diagnostic`] / [`DiagnosticBag`] — structured, accumulating error reporting
-//! - [`Idx`] / [`Arena`] — a typed bump-allocation pool
+//! - [`Span`] -- a byte-range source location
+//! - [`FileId`] / [`SourceDb`] -- file registry with line/column lookup
+//! - [`Symbol`] / [`Interner`] -- arena-backed string deduplication
+//! - [`Diagnostic`] / [`DiagnosticBag`] -- structured, accumulating error reporting
+//! - [`Idx`] / [`Arena`] -- a typed bump-allocation pool
 
 // These are infrastructure types that are intentionally named after their module
 // (e.g. `arena::Arena`) and intentionally exhaustive for pattern matching.

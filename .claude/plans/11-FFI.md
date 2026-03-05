@@ -1,4 +1,4 @@
-# Phase 11 — FFI
+# Phase 11 -- FFI
 
 **Crate:** `musi_vm`, `musi_codegen`
 **Goal:** C interop via `native` + attributes, no magic.
@@ -54,7 +54,7 @@ record CPoint {
 - Without `#[repr("C")]` → Musi's own layout (may differ).
 - Codegen emits type metadata so VM knows how to marshal.
 
-### `Ptr[T]` — User-Defined with Intrinsic Ops
+### `Ptr[T]` -- User-Defined with Intrinsic Ops
 
 Declared in stdlib (not hardcoded):
 
@@ -116,7 +116,7 @@ fn reset():
 ```
 
 - Used for temporary C strings and struct copies during FFI calls.
-- Reset after each FFI call returns — no leak.
+- Reset after each FFI call returns -- no leak.
 
 ### Return Value Translation
 

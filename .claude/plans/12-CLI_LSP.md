@@ -1,4 +1,4 @@
-# Phase 12 — CLI + LSP
+# Phase 12 -- CLI + LSP
 
 **Crate:** `musi`, `musi_lsp`
 **Goal:** Polish CLI subcommands, wire LSP for VS Code diagnostics and navigation.
@@ -10,31 +10,31 @@
 
 ### CLI Subcommands
 
-**`musi run <file.ms>`** — compile and execute (exists from Phase 5, polished here)
+**`musi run <file.ms>`** -- compile and execute (exists from Phase 5, polished here)
 - Full pipeline: lex → parse → sema → codegen → VM exec
 - Exit 0 on success, exit 1 on compile error, exit 2 on runtime error
 
-**`musi check <file.ms>`** — type-check without executing
+**`musi check <file.ms>`** -- type-check without executing
 - Pipeline: lex → parse → sema
 - Report all diagnostics
 - Exit 0 if no errors, exit 1 if errors
 
-**`musi build <file.ms> -o <out.mso>`** — compile to .mso without executing
+**`musi build <file.ms> -o <out.mso>`** -- compile to .mso without executing
 - Pipeline: lex → parse → sema → codegen → serialize
 - Write .mso to output path
 
-**`musi dump-tokens <file.ms>`** — print token stream
+**`musi dump-tokens <file.ms>`** -- print token stream
 - One token per line: `<span> <kind> [<text>]`
 - Useful for debugging lexer
 
-**`musi dump-ast <file.ms>`** — print AST as S-expressions
+**`musi dump-ast <file.ms>`** -- print AST as S-expressions
 - Uses the S-expression dumper from Phase 3
 - Useful for debugging parser
 
 **Common flags:**
-- `--no-color` — disable ANSI colors
-- `--quiet` — suppress warnings, only show errors
-- `-v` / `--verbose` — show timing info, phase progression
+- `--no-color` -- disable ANSI colors
+- `--quiet` -- suppress warnings, only show errors
+- `-v` / `--verbose` -- show timing info, phase progression
 
 ### Diagnostic Rendering
 

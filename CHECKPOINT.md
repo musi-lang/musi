@@ -111,17 +111,17 @@ After the lexer fix, run tests per-crate (see Memory Constraints below):
 All lint suppressions eliminated and code quality improved across all crates:
 - **`size_hint` bug fixed** in `lexer.rs`: `remaining/2+1` → `remaining+1`
 - **`dead_code` removed**: `alloc_ty`/`alloc_pat` helpers deleted from `parser.rs`
-- **`NativeFn` type changed**: `fn(&mut Vm, ...)` → `fn(&Vm, ...)` — removes `needless_pass_by_ref_mut`
-- **`vm.rs run()` split**: `Signal` enum + `push_entry_frame`, `fetch_and_advance`, `step`, `exec_arith`, `exec_cmp`, `exec_bitwise`, generic `push_i64/f64_bin/cmp` helpers — removes `cognitive_complexity` + `too_many_lines`
-- **`sexpr.rs`**: `FnDefView<'a>` struct — removes `too_many_arguments` on `print_fn_def`
-- **`check.rs`**: `FnDefNode<'a>` struct + 13 helpers extracted from `infer_inner` — removes `too_many_arguments` + `too_many_lines`
+- **`NativeFn` type changed**: `fn(&mut Vm, ...)` → `fn(&Vm, ...)` -- removes `needless_pass_by_ref_mut`
+- **`vm.rs run()` split**: `Signal` enum + `push_entry_frame`, `fetch_and_advance`, `step`, `exec_arith`, `exec_cmp`, `exec_bitwise`, generic `push_i64/f64_bin/cmp` helpers -- removes `cognitive_complexity` + `too_many_lines`
+- **`sexpr.rs`**: `FnDefView<'a>` struct -- removes `too_many_arguments` on `print_fn_def`
+- **`check.rs`**: `FnDefNode<'a>` struct + 13 helpers extracted from `infer_inner` -- removes `too_many_arguments` + `too_many_lines`
 - **All inline tests moved** to sibling `<module>/tests.rs` files across all 6 crates (16 test files created)
 - **`parser.rs` reduced** 2250 → 1599 lines via helpers: `parse_separated_list`, `parse_and_alloc_expr`, `parse_option`, `parse_optional_guard`, `parse_delimited`, `parse_optional_expr`, `parse_field_header`, `wrap_postfix`, `parse_pipe_separated`
 - **`lexer.rs` reduced** 1101 → 598 lines via helpers: `emit_interned`, `lex_maybe_two_char`, `consume_ident_chars`, `consume_until_newline`, `consume_hex_digits`, tightened `skip_whitespace`
 
 **Remaining LOC reduction candidates (next session):**
-- `check.rs` (1340 lines): `infer_binary` ~80 lines, `infer_if`/`infer_postfix` ~100 lines — share `unify(expected, actual, span, diags, file_id)` call structure
-- `emitter.rs` (1102 lines): big match on AST nodes — same class of problem as `parser.rs`
+- `check.rs` (1340 lines): `infer_binary` ~80 lines, `infer_if`/`infer_postfix` ~100 lines -- share `unify(expected, actual, span, diags, file_id)` call structure
+- `emitter.rs` (1102 lines): big match on AST nodes -- same class of problem as `parser.rs`
 - `resolve.rs` (648 lines): scope/list patterns
 
 ### Priority 2: Commit All Accumulated Work
@@ -191,35 +191,35 @@ Milestones: Option type match, record field access, spread, `factorial(10)` -> 3
 
 ## Key Files Reference
 
-| File | Role |
-|---|---|
-| `CLAUDE.md` | Project instructions, design rationale, key grammar decisions |
-| `grammar.ebnf` | Canonical language grammar (source of truth, 341 lines) |
-| `std/prelude.ms` | Standard prelude (embedded in CLI via `include_str!`) |
-| `examples/hello.ms` | Hello world example |
-| `.cargo/config.toml` | Memory-saving build settings |
-| `.claude/plans/01-SHARED.md` through `12-CLI_LSP.md` | Phase-by-phase implementation plans |
-| `crates/musi_shared/src/lib.rs` | Re-exports for span, source, intern, diag, arena |
-| `crates/musi_lex/src/lexer.rs` | Lexer implementation (HAS BUILD ERROR on lines 152, 191) |
-| `crates/musi_lex/src/token.rs` | Token and TokenKind definitions |
-| `crates/musi_parse/src/parser.rs` | LL(1)+Pratt parser (1599 lines) |
-| `crates/musi_parse/src/ast.rs` | AST node definitions |
-| `crates/musi_parse/src/sexpr.rs` | S-expression pretty printer for AST (test helper) |
-| `crates/musi_codegen/src/emitter.rs` | AST -> bytecode emitter (1102 lines) |
-| `crates/musi_codegen/src/opcode.rs` | Opcode enum definitions |
-| `crates/musi_codegen/src/module.rs` | Module container (.mso format) |
-| `crates/musi_vm/src/vm.rs` | Stack-based VM execution loop (560 lines) |
-| `crates/musi_vm/src/value.rs` | Runtime value representation (`Value::String(Rc<str>)`) |
-| `crates/musi_vm/src/native.rs` | Native function registry (writeln, write, int_to_string) |
-| `crates/musi_sema/src/lib.rs` | Sema entry point + `analyze()` function |
-| `crates/musi_sema/src/resolve.rs` | Two-pass name resolution (648 lines) |
-| `crates/musi_sema/src/check.rs` | Bidirectional type checker (1340 lines) |
-| `crates/musi_sema/src/types.rs` | Type representation (PrimTy, Type, TypeVarId) |
-| `crates/musi_sema/src/scope.rs` | Scope tree for name resolution |
-| `crates/musi_sema/src/def.rs` | DefId, DefInfo, DefKind |
-| `crates/musi_sema/src/tests.rs` | 18 sema tests |
-| `crates/musi/src/main.rs` | CLI binary (`musi run <file.ms>`) |
-| `tools/vscode/syntaxes/musi.tmLanguage.json` | VS Code TextMate grammar |
+| File                                                 | Role                                                          |
+| ---------------------------------------------------- | ------------------------------------------------------------- |
+| `CLAUDE.md`                                          | Project instructions, design rationale, key grammar decisions |
+| `grammar.ebnf`                                       | Canonical language grammar (source of truth, 341 lines)       |
+| `std/prelude.ms`                                     | Standard prelude (embedded in CLI via `include_str!`)         |
+| `examples/hello.ms`                                  | Hello world example                                           |
+| `.cargo/config.toml`                                 | Memory-saving build settings                                  |
+| `.claude/plans/01-SHARED.md` through `12-CLI_LSP.md` | Phase-by-phase implementation plans                           |
+| `crates/musi_shared/src/lib.rs`                      | Re-exports for span, source, intern, diag, arena              |
+| `crates/musi_lex/src/lexer.rs`                       | Lexer implementation (HAS BUILD ERROR on lines 152, 191)      |
+| `crates/musi_lex/src/token.rs`                       | Token and TokenKind definitions                               |
+| `crates/musi_parse/src/parser.rs`                    | LL(1)+Pratt parser (1599 lines)                               |
+| `crates/musi_parse/src/ast.rs`                       | AST node definitions                                          |
+| `crates/musi_parse/src/sexpr.rs`                     | S-expression pretty printer for AST (test helper)             |
+| `crates/musi_codegen/src/emitter.rs`                 | AST -> bytecode emitter (1102 lines)                          |
+| `crates/musi_codegen/src/opcode.rs`                  | Opcode enum definitions                                       |
+| `crates/musi_codegen/src/module.rs`                  | Module container (.mso format)                                |
+| `crates/musi_vm/src/vm.rs`                           | Stack-based VM execution loop (560 lines)                     |
+| `crates/musi_vm/src/value.rs`                        | Runtime value representation (`Value::String(Rc<str>)`)       |
+| `crates/musi_vm/src/native.rs`                       | Native function registry (writeln, write, int_to_string)      |
+| `crates/musi_sema/src/lib.rs`                        | Sema entry point + `analyze()` function                       |
+| `crates/musi_sema/src/resolve.rs`                    | Two-pass name resolution (648 lines)                          |
+| `crates/musi_sema/src/check.rs`                      | Bidirectional type checker (1340 lines)                       |
+| `crates/musi_sema/src/types.rs`                      | Type representation (PrimTy, Type, TypeVarId)                 |
+| `crates/musi_sema/src/scope.rs`                      | Scope tree for name resolution                                |
+| `crates/musi_sema/src/def.rs`                        | DefId, DefInfo, DefKind                                       |
+| `crates/musi_sema/src/tests.rs`                      | 18 sema tests                                                 |
+| `crates/musi/src/main.rs`                            | CLI binary (`musi run <file.ms>`)                             |
+| `tools/vscode/syntaxes/musi.tmLanguage.json`         | VS Code TextMate grammar                                      |
 
 ### Crate Dependency Graph
 ```

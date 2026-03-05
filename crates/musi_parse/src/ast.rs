@@ -6,10 +6,6 @@
 
 use musi_shared::{Arena, Idx, Span, Symbol};
 
-// ---------------------------------------------------------------------------
-// Arena container
-// ---------------------------------------------------------------------------
-
 /// Holds the three arenas that back all AST nodes for a single parse.
 pub struct ParseCtx {
     pub exprs: Arena<Expr>,
@@ -41,10 +37,6 @@ pub struct ParsedModule {
     pub ctx: ParseCtx,
     pub span: Span,
 }
-
-// ---------------------------------------------------------------------------
-// Supporting leaf types
-// ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum LitValue {
@@ -138,7 +130,7 @@ pub struct ChoiceVariant {
 pub enum VariantPayload {
     Positional(Vec<Ty>),
     Named(Vec<RecField>),
-    Discriminant(LitValue), // Name := 0 / "tag" / …
+    Discriminant(LitValue), // Name := 0 / "tag" / ...
 }
 
 /// A condition in `if`/`while`/`loop` -- either a plain expression or a
@@ -153,10 +145,6 @@ pub enum Cond {
         span: Span,
     },
 }
-
-// ---------------------------------------------------------------------------
-// Operators
-// ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinOp {
@@ -239,10 +227,6 @@ pub enum RecLitField {
     },
 }
 
-// ---------------------------------------------------------------------------
-// Ty
-// ---------------------------------------------------------------------------
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum Ty {
     Arrow {
@@ -272,10 +256,6 @@ pub enum Ty {
         span: Span,
     },
 }
-
-// ---------------------------------------------------------------------------
-// Pat
-// ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Pat {
@@ -326,10 +306,6 @@ pub struct PatField {
     pub pat: Option<Pat>,
     pub span: Span,
 }
-
-// ---------------------------------------------------------------------------
-// Expr
-// ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
@@ -520,10 +496,6 @@ pub enum ImportClause {
     Glob,
     Items(Vec<ImportItem>),
 }
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests;

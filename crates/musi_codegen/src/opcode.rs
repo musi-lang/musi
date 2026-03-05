@@ -1,8 +1,7 @@
-//! The Musi instruction set — a minimal stack-based bytecode.
+//! The Musi instruction set -- a minimal stack-based bytecode.
 
 use crate::error::DeserError;
 
-// Opcode tag constants
 const NOP: u8 = 0x00;
 const HALT: u8 = 0x01;
 const RET: u8 = 0x02;
@@ -15,35 +14,35 @@ const LD_CONST: u8 = 0x14;
 const LD_LOC: u8 = 0x15;
 const ST_LOC: u8 = 0x16;
 const CALL: u8 = 0x20;
-// Arithmetic — integer
+// Arithmetic -- integer
 const ADD_I64: u8 = 0x30;
 const SUB_I64: u8 = 0x31;
 const MUL_I64: u8 = 0x32;
 const DIV_I64: u8 = 0x33;
 const REM_I64: u8 = 0x34;
 const NEG_I64: u8 = 0x35;
-// Arithmetic — float
+// Arithmetic -- float
 const ADD_F64: u8 = 0x36;
 const SUB_F64: u8 = 0x37;
 const MUL_F64: u8 = 0x38;
 const DIV_F64: u8 = 0x39;
 const REM_F64: u8 = 0x3A;
 const NEG_F64: u8 = 0x3B;
-// Comparison — integer
+// Comparison -- integer
 const EQ_I64: u8 = 0x40;
 const NEQ_I64: u8 = 0x41;
 const LT_I64: u8 = 0x42;
 const GT_I64: u8 = 0x43;
 const LEQ_I64: u8 = 0x44;
 const GEQ_I64: u8 = 0x45;
-// Comparison — float
+// Comparison -- float
 const EQ_F64: u8 = 0x46;
 const NEQ_F64: u8 = 0x47;
 const LT_F64: u8 = 0x48;
 const GT_F64: u8 = 0x49;
 const LEQ_F64: u8 = 0x4A;
 const GEQ_F64: u8 = 0x4B;
-// Comparison — bool / string
+// Comparison -- bool / string
 const EQ_BOOL: u8 = 0x4C;
 const NEQ_BOOL: u8 = 0x4D;
 const EQ_STR: u8 = 0x4E;
@@ -56,7 +55,7 @@ const BIT_XOR: u8 = 0x53;
 const BIT_NOT: u8 = 0x54;
 const SHL: u8 = 0x55;
 const SHR: u8 = 0x56;
-// Control flow — relative jumps
+// Control flow -- relative jumps
 const BR: u8 = 0x60;
 const BR_TRUE: u8 = 0x61;
 const BR_FALSE: u8 = 0x62;
@@ -93,7 +92,6 @@ pub enum Opcode {
     StLoc(u16),
     /// Call a function by its function-table index.
     Call(u16),
-    // ── Arithmetic — integer ─────────────────────────────────────────────────
     /// Pop two i64, push their wrapping sum.
     AddI64,
     /// Pop two i64, push their wrapping difference.
@@ -106,7 +104,6 @@ pub enum Opcode {
     RemI64,
     /// Pop one i64, push its wrapping negation.
     NegI64,
-    // ── Arithmetic — float ───────────────────────────────────────────────────
     /// Pop two f64, push their sum.
     AddF64,
     /// Pop two f64, push their difference.
@@ -119,7 +116,6 @@ pub enum Opcode {
     RemF64,
     /// Pop one f64, push its negation.
     NegF64,
-    // ── Comparison — integer ─────────────────────────────────────────────────
     /// Pop two i64, push `lhs == rhs` as bool.
     EqI64,
     /// Pop two i64, push `lhs != rhs` as bool.
@@ -132,7 +128,6 @@ pub enum Opcode {
     LeqI64,
     /// Pop two i64, push `lhs >= rhs` as bool.
     GeqI64,
-    // ── Comparison — float ───────────────────────────────────────────────────
     /// Pop two f64, push `lhs == rhs` as bool.
     EqF64,
     /// Pop two f64, push `lhs != rhs` as bool.
@@ -145,7 +140,6 @@ pub enum Opcode {
     LeqF64,
     /// Pop two f64, push `lhs >= rhs` as bool.
     GeqF64,
-    // ── Comparison — bool / string ───────────────────────────────────────────
     /// Pop two bools, push `lhs == rhs`.
     EqBool,
     /// Pop two bools, push `lhs != rhs`.
@@ -154,7 +148,6 @@ pub enum Opcode {
     EqStr,
     /// Pop two strings, push `lhs != rhs`.
     NeqStr,
-    // ── Logical / bitwise ────────────────────────────────────────────────────
     /// Pop one bool, push `!value`.
     Not,
     /// Pop two i64, push `lhs & rhs`.
@@ -169,14 +162,12 @@ pub enum Opcode {
     Shl,
     /// Pop two i64, push `lhs >> rhs`.
     Shr,
-    // ── Control flow — relative jumps ────────────────────────────────────────
     /// Unconditional jump; i32 offset from the byte after this instruction.
     Br(i32),
     /// Pop bool, jump if true; i32 offset from the byte after this instruction.
     BrTrue(i32),
     /// Pop bool, jump if false; i32 offset from the byte after this instruction.
     BrFalse(i32),
-    // ── String ───────────────────────────────────────────────────────────────
     /// Pop two strings (bottom then top), push their concatenation.
     ConcatStr,
 }
@@ -278,10 +269,7 @@ impl Opcode {
     /// Returns [`DeserError::UnexpectedEof`] if the slice is too short, or
     /// [`DeserError::UnknownOpcode`] if the tag byte is not recognised.
     pub fn decode(code: &[u8], offset: usize) -> Result<(Self, usize), DeserError> {
-        let tag = code
-            .get(offset)
-            .copied()
-            .ok_or(DeserError::UnexpectedEof)?;
+        let tag = code.get(offset).copied().ok_or(DeserError::UnexpectedEof)?;
         match tag {
             NOP => Ok((Self::Nop, 1)),
             HALT => Ok((Self::Halt, 1)),

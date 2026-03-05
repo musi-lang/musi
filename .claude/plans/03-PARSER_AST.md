@@ -1,4 +1,4 @@
-# Phase 3 — Parser + AST
+# Phase 3 -- Parser + AST
 
 **Crate:** `musi_parse`
 **Goal:** Complete LL(1) + Pratt parser producing a full AST, plus all AST type definitions.
@@ -13,9 +13,9 @@
 ```
 crates/musi_parse/src/
   lib.rs
-  ast.rs      — all AST type definitions + ParseCtx + ParsedModule
-  parser.rs   — Parser struct, all parse methods (LL(1) + Pratt)
-  sexpr.rs    — deterministic S-expression printer for AST debugging
+  ast.rs      -- all AST type definitions + ParseCtx + ParsedModule
+  parser.rs   -- Parser struct, all parse methods (LL(1) + Pratt)
+  sexpr.rs    -- deterministic S-expression printer for AST debugging
 ```
 
 ---
@@ -71,7 +71,7 @@ pub enum AttrArg {
 }
 
 pub struct TyParam {
-    pub name:   Symbol,    // 'a, 'key — the ident token text including the '
+    pub name:   Symbol,    // 'a, 'key -- the ident token text including the '
     pub bounds: Vec<Ty>,
     pub span:   Span,
 }
@@ -118,7 +118,7 @@ pub enum VariantPayload {
     Named(Vec<RecField>),
 }
 
-/// A condition in `if`/`while`/`loop` — either a plain expression or a
+/// A condition in `if`/`while`/`loop` -- either a plain expression or a
 /// pattern-binding destructure: `case const/var pat := expr`.
 pub enum Cond {
     Expr(Idx<Expr>),
@@ -300,22 +300,22 @@ pub enum ImportClause {
 
 ## Pratt Precedence Table (grammar-derived)
 
-| BP | Operator(s) | Associativity | Token(s) |
-|----|-------------|---------------|----------|
-| 10 | assign `<-` | Right | `LtMinus` |
-| 20 | `or` `xor` | Left | `Or` `Xor` |
-| 30 | `and` | Left | `And` |
-| 40 | `=` `/=` | None (1 use max) | `Eq` `SlashEq` |
-| 50 | `<` `>` `<=` `>=` `in` | None | `Lt` `Gt` `LtEq` `GtEq` `In` |
-| 60 | `..` `..<` | None | `DotDot` `DotDotLt` |
-| 70 | `::` | Left | `ColonColon` |
-| 80 | `\|` `^` | Left | `Pipe` `Caret` |
-| 90 | `&` | Left | `Amp` |
-| 100 | `shl` `shr` | Left | `Shl` `Shr` |
-| 110 | `+` `-` | Left | `Plus` `Minus` |
-| 120 | `*` `/` `%` | Left | `Star` `Slash` `Percent` |
-| 130 | prefix `-` `not` `!` `@` `~` | — | |
-| 140 | postfix call `.[` `.` `.{` `as` | — | |
+| BP  | Operator(s)                     | Associativity    | Token(s)                     |
+| --- | ------------------------------- | ---------------- | ---------------------------- |
+| 10  | assign `<-`                     | Right            | `LtMinus`                    |
+| 20  | `or` `xor`                      | Left             | `Or` `Xor`                   |
+| 30  | `and`                           | Left             | `And`                        |
+| 40  | `=` `/=`                        | None (1 use max) | `Eq` `SlashEq`               |
+| 50  | `<` `>` `<=` `>=` `in`          | None             | `Lt` `Gt` `LtEq` `GtEq` `In` |
+| 60  | `..` `..<`                      | None             | `DotDot` `DotDotLt`          |
+| 70  | `::`                            | Left             | `ColonColon`                 |
+| 80  | `\|` `^`                        | Left             | `Pipe` `Caret`               |
+| 90  | `&`                             | Left             | `Amp`                        |
+| 100 | `shl` `shr`                     | Left             | `Shl` `Shr`                  |
+| 110 | `+` `-`                         | Left             | `Plus` `Minus`               |
+| 120 | `*` `/` `%`                     | Left             | `Star` `Slash` `Percent`     |
+| 130 | prefix `-` `not` `!` `@` `~`    | --               |                              |
+| 140 | postfix call `.[` `.` `.{` `as` | --               |                              |
 
 **Non-associative operators** (`=`/`/=`, comparisons, ranges): parse right side at
 `own_bp + 1` so a second occurrence fails to nest (produces `Expr::Error` on parse error).
@@ -343,35 +343,35 @@ Tokens must include a terminal `Eof`. Input is `&[Token]` (pre-collected from `L
 
 ### Key LL(1) dispatch points (as per CLAUDE.md)
 
-1. **`parse_expr_paren`** — after `(`:
+1. **`parse_expr_paren`** -- after `(`:
    - next is `)` → Unit
    - else parse expr, then peek: `)` → Paren, `,` → Tuple, `;` → Block
 
-2. **`parse_pat_ident`** — after ident:
+2. **`parse_pat_ident`** -- after ident:
    - next is `(` → positional sum PatSuffix
    - next is `{` → named-field PatSuffix
    - else → variable binding
 
-3. **`parse_fn_kind`** — after `fn`:
+3. **`parse_fn_kind`** -- after `fn`:
    - next is `Ident` → named FnDef (letter/`_` disambiguates from `(`)
    - next is `(` or `[` → Lambda
 
-4. **`parse_choice_body`** — after `{`:
+4. **`parse_choice_body`** -- after `{`:
    - optional leading `|`
    - then variant list separated by `|`
 
-5. **`parse_expr_with_prefix`** — after optional attrs + modifiers, dispatch on keyword:
+5. **`parse_expr_with_prefix`** -- after optional attrs + modifiers, dispatch on keyword:
    `fn` / `record` / `choice` / `const` / `var` / `if` / `match` / `while` / `loop` /
    `for` / `label` / `return` / `break` / `cycle` / `defer` / `import` → dedicated rules
    Else → Pratt expression
 
-6. **`parse_cond`** — if next is `case` → `Cond::Case { kind, pat, init }`; else → `Cond::Expr`
+6. **`parse_cond`** -- if next is `case` → `Cond::Case { kind, pat, init }`; else → `Cond::Expr`
 
 ### Error recovery
 
 - On unexpected token: emit diagnostic, advance past the offending token or to the next
   sync point (`;`, `)`, `}`, `]`, `Eof`), return `Expr::Error { span }`.
-- Never bail — always produce a (possibly partial) AST.
+- Never bail -- always produce a (possibly partial) AST.
 - `Error` nodes suppress cascading diagnostics at semantic level.
 
 ### Public API

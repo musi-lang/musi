@@ -8,7 +8,7 @@ use crate::token::{Token, TokenKind, keyword_from_str};
 
 /// A single-pass lexer that converts a source byte slice into [`Token`]s.
 ///
-/// Implements [`Iterator`] — each call to [`next`](Iterator::next) produces the
+/// Implements [`Iterator`] -- each call to [`next`](Iterator::next) produces the
 /// next token.  After [`TokenKind::Eof`] is emitted the iterator is exhausted.
 pub struct Lexer<'src> {
     source: &'src [u8],
@@ -60,8 +60,6 @@ impl Iterator for Lexer<'_> {
         (0, Some(upper))
     }
 }
-
-// ── Helpers ────────────────────────────────────────────────────────────────
 
 impl Lexer<'_> {
     #[must_use]
@@ -134,7 +132,10 @@ impl Lexer<'_> {
 
     /// Advances while the next byte is an ASCII alphanumeric character or `_`.
     fn consume_ident_chars(&mut self) {
-        while self.peek().is_some_and(|b| b.is_ascii_alphanumeric() || b == b'_') {
+        while self
+            .peek()
+            .is_some_and(|b| b.is_ascii_alphanumeric() || b == b'_')
+        {
             let _ = self.advance();
         }
     }
@@ -157,8 +158,6 @@ impl Lexer<'_> {
         }
     }
 }
-
-// ── Core dispatch ──────────────────────────────────────────────────────────
 
 impl Lexer<'_> {
     fn next_token(&mut self) -> Token {
@@ -194,13 +193,11 @@ impl Lexer<'_> {
     }
 }
 
-// ── Lexing methods ─────────────────────────────────────────────────────────
-
 impl Lexer<'_> {
     fn lex_word(&mut self, start: usize) -> Token {
         self.consume_ident_chars();
         let text = str::from_utf8(&self.source[start..self.pos]).unwrap_or("");
-        // A bare `_` is the wildcard token, not an identifier.
+        // bare underscore is the wildcard token, not an identifier.
         if text == "_" {
             return self.emit(TokenKind::Underscore, start);
         }
@@ -253,7 +250,7 @@ impl Lexer<'_> {
                 // then it's a char literal. Otherwise, if it starts with a letter,
                 // it's a type ident.
                 if self.peek_at(1) == Some(b'\'') {
-                    // 'x' — single char literal
+                    // 'x' -- single char literal
                     let _ch = self.advance();
                     let _close = self.advance();
                     self.emit_interned(TokenKind::CharLit, start)
@@ -261,7 +258,7 @@ impl Lexer<'_> {
                     // type ident: 'a, 'key, etc.
                     self.lex_ty_ident(start)
                 } else {
-                    // Single non-letter char not followed by ' — error
+                    // Single non-letter char not followed by ' -- error
                     let _ch = self.advance();
                     self.error_token("expected closing quote for character literal", start)
                 }
@@ -411,7 +408,7 @@ impl Lexer<'_> {
 
         match self.peek() {
             Some(b'/') => {
-                // line comment — check for doc comment (///)
+                // line comment -- check for doc comment (///)
                 let _slash2 = self.advance();
 
                 if self.peek() == Some(b'/') {
@@ -426,7 +423,7 @@ impl Lexer<'_> {
                     return self.emit_sym(TokenKind::DocComment, start, sym);
                 }
 
-                // regular line comment — skip to end of line
+                // regular line comment -- skip to end of line
                 self.consume_until_newline();
 
                 // tail-recurse: skip the comment and return the next real token
@@ -539,8 +536,6 @@ impl Lexer<'_> {
         }
     }
 }
-
-// ── Free helper functions ──────────────────────────────────────────────────
 
 #[must_use]
 const fn is_hex_digit(b: u8) -> bool {

@@ -9,8 +9,6 @@ const MAGIC: [u8; 4] = *b"MUSI";
 /// The only supported format version.
 const VERSION: u16 = 1;
 
-// ── Const pool ────────────────────────────────────────────────────────────────
-
 /// A single entry in the const pool.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ConstEntry {
@@ -64,8 +62,6 @@ impl ConstEntry {
     }
 }
 
-// ── Symbol table ──────────────────────────────────────────────────────────────
-
 /// Bit flags for a symbol table entry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SymbolFlags(u8);
@@ -106,7 +102,7 @@ impl SymbolFlags {
 pub struct SymbolEntry {
     /// The symbol's name (UTF-8).
     pub name: Box<str>,
-    /// Flags (native, export, …).
+    /// Flags (native, export, ...).
     pub flags: SymbolFlags,
     /// Intrinsic ID used when the native flag is set; `0xFFFF` means none.
     pub intrinsic_id: u16,
@@ -134,8 +130,6 @@ impl SymbolEntry {
         })
     }
 }
-
-// ── Function table ────────────────────────────────────────────────────────────
 
 /// A single entry in the function table.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -172,8 +166,6 @@ impl FunctionEntry {
     }
 }
 
-// ── Module ────────────────────────────────────────────────────────────────────
-
 /// A compiled Musi module in memory.
 ///
 /// Corresponds to the `.mso` binary format: header, const pool, symbol table,
@@ -184,7 +176,7 @@ pub struct Module {
     pub const_pool: Vec<ConstEntry>,
     /// Named symbols; each [`FunctionEntry`] points into this table.
     pub symbol_table: Vec<SymbolEntry>,
-    /// Function definitions (code offsets, parameter counts, …).
+    /// Function definitions (code offsets, parameter counts, ...).
     pub function_table: Vec<FunctionEntry>,
     /// Raw bytecode for all functions, concatenated.
     pub code: Vec<u8>,
@@ -207,7 +199,7 @@ impl Module {
     /// # Panics
     ///
     /// Panics if any section contains more than `u32::MAX` entries or bytes
-    /// (impossible in practice — this would require >4 GiB of data).
+    /// (impossible in practice -- this would require >4 GiB of data).
     #[must_use]
     pub fn serialize(&self) -> Vec<u8> {
         let mut buf = Vec::new();
@@ -307,8 +299,6 @@ impl Default for Module {
     }
 }
 
-// ── Binary reader ─────────────────────────────────────────────────────────────
-
 /// A cursor over a borrowed byte slice.
 struct Reader<'a> {
     data: &'a [u8],
@@ -380,8 +370,6 @@ impl<'a> Reader<'a> {
         Ok(s.into())
     }
 }
-
-// ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests;

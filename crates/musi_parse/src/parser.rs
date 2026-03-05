@@ -14,8 +14,6 @@ use crate::ast::{
     PatSuffix, PostfixOp, PrefixOp, RecField, RecLitField, Ty, TyParam, VariantPayload,
 };
 
-// ── Public entry point ──────────────────────────────────────────────────────
-
 /// Parses a token stream into a [`ParsedModule`].
 ///
 /// `tokens` **must** end with [`TokenKind::Eof`].
@@ -28,8 +26,6 @@ pub fn parse(
     let mut parser = Parser::new(tokens, file_id, diags, interner);
     parser.parse_program()
 }
-
-// ── Parser ──────────────────────────────────────────────────────────────────
 
 struct Parser<'a> {
     tokens: &'a [Token],
@@ -57,8 +53,6 @@ impl<'a> Parser<'a> {
             ctx: ParseCtx::new(),
         }
     }
-
-    // ── Cursor helpers ──────────────────────────────────────────────────
 
     /// Returns the current token without advancing.
     /// Safe: the token list always ends with `Eof`.
@@ -107,7 +101,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Expects `kind` — consumes if matching, otherwise emits an error and returns
+    /// Expects `kind` -- consumes if matching, otherwise emits an error and returns
     /// a dummy span at the current position.
     fn expect(&mut self, kind: TokenKind) -> Span {
         if self.at(kind) {
@@ -116,7 +110,11 @@ impl<'a> Parser<'a> {
             let got = self.peek();
             let got_text = kind_text(got.kind);
             let exp_text = kind_text(kind);
-            let _diag = self.diags.error(format!("expected {exp_text}, found {got_text}"), got.span, self.file_id);
+            let _diag = self.diags.error(
+                format!("expected {exp_text}, found {got_text}"),
+                got.span,
+                self.file_id,
+            );
             Span::DUMMY
         }
     }
@@ -141,13 +139,9 @@ impl<'a> Parser<'a> {
         }
     }
 
-    // ── Arena allocation helpers ────────────────────────────────────────
-
     fn alloc_expr(&mut self, e: Expr) -> Idx<Expr> {
         self.ctx.exprs.alloc(e)
     }
-
-    // ── Error recovery ──────────────────────────────────────────────────
 
     /// Skips tokens until a likely synchronization point.
     fn recover(&mut self) {
@@ -174,8 +168,6 @@ impl<'a> Parser<'a> {
         }
     }
 
-    // ── Top-level ───────────────────────────────────────────────────────
-
     fn parse_program(&mut self) -> ParsedModule {
         let start = self.start_span();
         let mut items = Vec::new();
@@ -190,7 +182,11 @@ impl<'a> Parser<'a> {
             // iteration, force-advance one token.
             if self.pos == pos_before {
                 let span = self.peek().span;
-                let _d = self.diags.error(format!("unexpected `{}`", kind_text(self.peek_kind())), span, self.file_id);
+                let _d = self.diags.error(
+                    format!("unexpected `{}`", kind_text(self.peek_kind())),
+                    span,
+                    self.file_id,
+                );
                 let _tok = self.advance();
             }
         }
@@ -199,8 +195,6 @@ impl<'a> Parser<'a> {
         ParsedModule { items, ctx, span }
     }
 
-    // ── Expression parsing (Pratt) ──────────────────────────────────────
-
     fn parse_expr(&mut self) -> Expr {
         self.parse_pratt(0)
     }
@@ -208,13 +202,9 @@ impl<'a> Parser<'a> {
     fn parse_pratt(&mut self, min_bp: u8) -> Expr {
         let start = self.start_span();
 
-        // 1. Prefix / atom
         let mut lhs = self.parse_prefix_or_atom();
-
-        // 2. Postfix chain
         lhs = self.parse_postfix_chain(lhs, start);
 
-        // 3. Infix chain
         loop {
             let Some((l_bp, r_bp, op_kind)) = self.infix_info() else {
                 break;
@@ -246,8 +236,6 @@ impl<'a> Parser<'a> {
         lhs
     }
 
-    // ── Infix precedence table ──────────────────────────────────────────
-
     /// Returns `(left_bp, right_bp, kind)` for the current token if it is an
     /// infix operator, or `None` otherwise.
     #[must_use]
@@ -258,39 +246,39 @@ impl<'a> Parser<'a> {
 
         let kind = self.peek_kind();
         let (l, r, op) = match kind {
-            // BP 10 — assign (right-assoc)
+            // BP 10 -- assign (right-assoc)
             T::LtMinus => (10, 9, Assign),
-            // BP 20 — or / xor (left-assoc)
+            // BP 20 -- or / xor (left-assoc)
             T::Or => (20, 21, Binary(B::Or)),
             T::Xor => (20, 21, Binary(B::Xor)),
-            // BP 30 — and (left-assoc)
+            // BP 30 -- and (left-assoc)
             T::And => (30, 31, Binary(B::And)),
-            // BP 40 — equality (non-assoc)
+            // BP 40 -- equality (non-assoc)
             T::Eq => (40, 41, Binary(B::Eq)),
             T::SlashEq => (40, 41, Binary(B::NotEq)),
-            // BP 50 — comparison (non-assoc)
+            // BP 50 -- comparison (non-assoc)
             T::Lt => (50, 51, Binary(B::Lt)),
             T::Gt => (50, 51, Binary(B::Gt)),
             T::LtEq => (50, 51, Binary(B::LtEq)),
             T::GtEq => (50, 51, Binary(B::GtEq)),
             T::In => (50, 51, Binary(B::In)),
-            // BP 60 — range (non-assoc)
+            // BP 60 -- range (non-assoc)
             T::DotDot => (60, 61, Binary(B::Range)),
             T::DotDotLt => (60, 61, Binary(B::RangeExcl)),
-            // BP 70 — cons (left-assoc)
+            // BP 70 -- cons (left-assoc)
             T::ColonColon => (70, 71, Binary(B::Cons)),
-            // BP 80 — bitwise or / xor (left-assoc)
+            // BP 80 -- bitwise or / xor (left-assoc)
             T::Pipe => (80, 81, Binary(B::BitOr)),
             T::Caret => (80, 81, Binary(B::BitXor)),
-            // BP 90 — bitwise and (left-assoc)
+            // BP 90 -- bitwise and (left-assoc)
             T::Amp => (90, 91, Binary(B::BitAnd)),
-            // BP 100 — shift (left-assoc)
+            // BP 100 -- shift (left-assoc)
             T::Shl => (100, 101, Binary(B::Shl)),
             T::Shr => (100, 101, Binary(B::Shr)),
-            // BP 110 — additive (left-assoc)
+            // BP 110 -- additive (left-assoc)
             T::Plus => (110, 111, Binary(B::Add)),
             T::Minus => (110, 111, Binary(B::Sub)),
-            // BP 120 — multiplicative (left-assoc)
+            // BP 120 -- multiplicative (left-assoc)
             T::Star => (120, 121, Binary(B::Mul)),
             T::Slash => (120, 121, Binary(B::Div)),
             T::Percent => (120, 121, Binary(B::Rem)),
@@ -298,8 +286,6 @@ impl<'a> Parser<'a> {
         };
         Some((l, r, op))
     }
-
-    // ── Postfix parsing ─────────────────────────────────────────────────
 
     fn parse_postfix_chain(&mut self, mut lhs: Expr, start: u32) -> Expr {
         loop {
@@ -310,7 +296,14 @@ impl<'a> Parser<'a> {
                     let args = self.parse_expr_list(TokenKind::RParen);
                     let _rp = self.expect(TokenKind::RParen);
                     let base = self.alloc_expr(lhs);
-                    lhs = self.wrap_postfix(base, PostfixOp::Call { args, span: self.finish_span(start) }, start);
+                    lhs = self.wrap_postfix(
+                        base,
+                        PostfixOp::Call {
+                            args,
+                            span: self.finish_span(start),
+                        },
+                        start,
+                    );
                 }
                 // Index: e.[args]
                 TokenKind::DotLBracket => {
@@ -318,15 +311,30 @@ impl<'a> Parser<'a> {
                     let args = self.parse_expr_list(TokenKind::RBracket);
                     let _rb = self.expect(TokenKind::RBracket);
                     let base = self.alloc_expr(lhs);
-                    lhs = self.wrap_postfix(base, PostfixOp::Index { args, span: self.finish_span(start) }, start);
+                    lhs = self.wrap_postfix(
+                        base,
+                        PostfixOp::Index {
+                            args,
+                            span: self.finish_span(start),
+                        },
+                        start,
+                    );
                 }
                 // RecDot: e.{ fields }
                 TokenKind::DotLBrace => {
                     let _dlb = self.advance();
-                    let fields = self.parse_separated_list(TokenKind::RBrace, |p| p.parse_rec_lit_field());
+                    let fields =
+                        self.parse_separated_list(TokenKind::RBrace, |p| p.parse_rec_lit_field());
                     let _rb = self.expect(TokenKind::RBrace);
                     let base = self.alloc_expr(lhs);
-                    lhs = self.wrap_postfix(base, PostfixOp::RecDot { fields, span: self.finish_span(start) }, start);
+                    lhs = self.wrap_postfix(
+                        base,
+                        PostfixOp::RecDot {
+                            fields,
+                            span: self.finish_span(start),
+                        },
+                        start,
+                    );
                 }
                 // Field: e.name or e.0
                 TokenKind::Dot => {
@@ -337,10 +345,18 @@ impl<'a> Parser<'a> {
                             let name = self.expect_symbol();
                             let f_span = self.finish_span(field_start);
                             let base = self.alloc_expr(lhs);
-                            lhs = self.wrap_postfix(base, PostfixOp::Field { name, span: f_span }, start);
+                            lhs = self.wrap_postfix(
+                                base,
+                                PostfixOp::Field { name, span: f_span },
+                                start,
+                            );
                         }
                         _ => {
-                            let _err = self.diags.error("expected field name", self.peek().span, self.file_id);
+                            let _err = self.diags.error(
+                                "expected field name",
+                                self.peek().span,
+                                self.file_id,
+                            );
                             break;
                         }
                     }
@@ -350,15 +366,20 @@ impl<'a> Parser<'a> {
                     let _as_kw = self.advance();
                     let ty = self.parse_ty();
                     let base = self.alloc_expr(lhs);
-                    lhs = self.wrap_postfix(base, PostfixOp::As { ty, span: self.finish_span(start) }, start);
+                    lhs = self.wrap_postfix(
+                        base,
+                        PostfixOp::As {
+                            ty,
+                            span: self.finish_span(start),
+                        },
+                        start,
+                    );
                 }
                 _ => break,
             }
         }
         lhs
     }
-
-    // ── Prefix / atom dispatch ──────────────────────────────────────────
 
     fn parse_prefix(&mut self, op: PrefixOp) -> Expr {
         let start = self.start_span();
@@ -443,8 +464,6 @@ impl<'a> Parser<'a> {
         }
     }
 
-    // ── Literal ─────────────────────────────────────────────────────────
-
     fn parse_lit(&mut self) -> Expr {
         let start = self.start_span();
         let value = self.parse_lit_value();
@@ -453,8 +472,6 @@ impl<'a> Parser<'a> {
             span: self.finish_span(start),
         }
     }
-
-    // ── Parenthesised expression (LL(1)) ────────────────────────────────
 
     fn parse_expr_paren(&mut self) -> Expr {
         let start = self.start_span();
@@ -475,7 +492,9 @@ impl<'a> Parser<'a> {
             TokenKind::Comma => {
                 let _comma = self.advance();
                 let mut elements = vec![self.alloc_expr(first)];
-                elements.extend(self.parse_separated_list(TokenKind::RParen, |p| p.parse_and_alloc_expr()));
+                elements.extend(
+                    self.parse_separated_list(TokenKind::RParen, |p| p.parse_and_alloc_expr()),
+                );
                 let _rp = self.expect(TokenKind::RParen);
                 Expr::Tuple {
                     elements,
@@ -500,8 +519,6 @@ impl<'a> Parser<'a> {
             }
         }
     }
-
-    // ── Array literal ───────────────────────────────────────────────────
 
     fn parse_array_lit(&mut self) -> Expr {
         let start = self.start_span();
@@ -530,18 +547,16 @@ impl<'a> Parser<'a> {
         }
     }
 
-    // ── Anonymous record literal ────────────────────────────────────────
-
     fn parse_anon_rec_lit(&mut self) -> Expr {
         let start = self.start_span();
-        let fields = self.parse_delimited(TokenKind::LBrace, TokenKind::RBrace, |p| p.parse_rec_lit_field());
+        let fields = self.parse_delimited(TokenKind::LBrace, TokenKind::RBrace, |p| {
+            p.parse_rec_lit_field()
+        });
         Expr::AnonRec {
             fields,
             span: self.finish_span(start),
         }
     }
-
-    // ── Record literal fields ───────────────────────────────────────────
 
     fn parse_rec_lit_field(&mut self) -> RecLitField {
         let start = self.start_span();
@@ -569,8 +584,6 @@ impl<'a> Parser<'a> {
             span: self.finish_span(start),
         }
     }
-
-    // ── If ──────────────────────────────────────────────────────────────
 
     fn parse_if(&mut self) -> Expr {
         let start = self.start_span();
@@ -607,8 +620,6 @@ impl<'a> Parser<'a> {
         }
     }
 
-    // ── Cond ────────────────────────────────────────────────────────────
-
     fn parse_cond(&mut self) -> Cond {
         if self.at(TokenKind::Case) {
             let start = self.start_span();
@@ -627,8 +638,6 @@ impl<'a> Parser<'a> {
             Cond::Expr(self.parse_and_alloc_expr())
         }
     }
-
-    // ── Match ───────────────────────────────────────────────────────────
 
     fn parse_match(&mut self) -> Expr {
         let start = self.start_span();
@@ -664,8 +673,6 @@ impl<'a> Parser<'a> {
             span: self.finish_span(start),
         }
     }
-
-    // ── Return / Break / Cycle / Defer ──────────────────────────────────
 
     fn parse_return(&mut self) -> Expr {
         let start = self.start_span();
@@ -711,8 +718,6 @@ impl<'a> Parser<'a> {
         }
     }
 
-    // ── Import ──────────────────────────────────────────────────────────
-
     fn parse_import(&mut self) -> Expr {
         let start = self.start_span();
         let _imp = self.expect(TokenKind::Import);
@@ -741,8 +746,6 @@ impl<'a> Parser<'a> {
             span: self.finish_span(start),
         }
     }
-
-    // ── Constructs with attrs/modifiers prefix ──────────────────────────
 
     fn parse_with_prefix(&mut self) -> Expr {
         let attrs = self.maybe_attrs();
@@ -830,8 +833,6 @@ impl<'a> Parser<'a> {
         mods
     }
 
-    // ── fn (named def or lambda) ────────────────────────────────────────
-
     fn parse_fn_expr(&mut self, attrs: Vec<Attr>, modifiers: Vec<Modifier>) -> Expr {
         let start = self.start_span();
         let _fn = self.expect(TokenKind::Fn);
@@ -841,7 +842,8 @@ impl<'a> Parser<'a> {
             // Named function definition
             let name = self.expect_symbol();
             let ty_params = self.maybe_ty_params();
-            let params = self.parse_delimited(TokenKind::LParen, TokenKind::RParen, |p| p.parse_param());
+            let params =
+                self.parse_delimited(TokenKind::LParen, TokenKind::RParen, |p| p.parse_param());
             let ret_ty = self.parse_option(TokenKind::Colon, |p| p.parse_ty());
             let body = if self.at(TokenKind::LParen) {
                 Some(self.parse_alloc_block())
@@ -861,7 +863,8 @@ impl<'a> Parser<'a> {
         } else {
             // Lambda: fn [ty_params] (params) [: ret_ty] => expr
             let ty_params = self.maybe_ty_params();
-            let params = self.parse_delimited(TokenKind::LParen, TokenKind::RParen, |p| p.parse_param());
+            let params =
+                self.parse_delimited(TokenKind::LParen, TokenKind::RParen, |p| p.parse_param());
             let ret_ty = self.parse_option(TokenKind::Colon, |p| p.parse_ty());
             let _arrow = self.expect(TokenKind::EqGt);
             let body = self.parse_and_alloc_expr();
@@ -888,14 +891,14 @@ impl<'a> Parser<'a> {
         }
     }
 
-    // ── Record ──────────────────────────────────────────────────────────
-
     fn parse_record(&mut self, attrs: Vec<Attr>, modifiers: Vec<Modifier>) -> Expr {
         let start = self.start_span();
         let _rec = self.expect(TokenKind::Record);
         let name = self.optional_ident();
         let ty_params = self.maybe_ty_params();
-        let fields = self.parse_delimited(TokenKind::LBrace, TokenKind::RBrace, |p| p.parse_rec_field());
+        let fields = self.parse_delimited(TokenKind::LBrace, TokenKind::RBrace, |p| {
+            p.parse_rec_field()
+        });
         Expr::Record {
             attrs,
             modifiers,
@@ -917,8 +920,6 @@ impl<'a> Parser<'a> {
             span: self.finish_span(start),
         }
     }
-
-    // ── Choice ──────────────────────────────────────────────────────────
 
     fn parse_choice(&mut self, attrs: Vec<Attr>, modifiers: Vec<Modifier>) -> Expr {
         let start = self.start_span();
@@ -944,11 +945,14 @@ impl<'a> Parser<'a> {
         let name = self.expect_symbol();
         let payload = match self.peek_kind() {
             TokenKind::LParen => {
-                let tys = self.parse_delimited(TokenKind::LParen, TokenKind::RParen, |p| p.parse_ty());
+                let tys =
+                    self.parse_delimited(TokenKind::LParen, TokenKind::RParen, |p| p.parse_ty());
                 Some(VariantPayload::Positional(tys))
             }
             TokenKind::LBrace => {
-                let fields = self.parse_delimited(TokenKind::LBrace, TokenKind::RBrace, |p| p.parse_rec_field());
+                let fields = self.parse_delimited(TokenKind::LBrace, TokenKind::RBrace, |p| {
+                    p.parse_rec_field()
+                });
                 Some(VariantPayload::Named(fields))
             }
             TokenKind::ColonEq => {
@@ -966,8 +970,6 @@ impl<'a> Parser<'a> {
         }
     }
 
-    // ── Bind (const/var) ────────────────────────────────────────────────
-
     fn parse_bind(&mut self, attrs: Vec<Attr>, modifiers: Vec<Modifier>) -> Expr {
         let start = self.start_span();
         let kind = self.parse_bind_kind();
@@ -984,8 +986,6 @@ impl<'a> Parser<'a> {
             span: self.finish_span(start),
         }
     }
-
-    // ── While / Loop / For / Label ──────────────────────────────────────
 
     fn parse_while(&mut self) -> Expr {
         let start = self.start_span();
@@ -1044,15 +1044,11 @@ impl<'a> Parser<'a> {
         }
     }
 
-    // ── Block: ( stmts; ... [tail] ) ────────────────────────────────────
-
     fn parse_block(&mut self) -> Expr {
         let start = self.start_span();
         let _lp = self.expect(TokenKind::LParen);
         self.parse_block_tail(Vec::new(), start)
     }
-
-    // ── Type parsing ────────────────────────────────────────────────────
 
     fn parse_ty(&mut self) -> Ty {
         let start = self.start_span();
@@ -1103,7 +1099,8 @@ impl<'a> Parser<'a> {
             }
             TokenKind::LParen => {
                 let start = self.start_span();
-                let elements = self.parse_delimited(TokenKind::LParen, TokenKind::RParen, |p| p.parse_ty());
+                let elements =
+                    self.parse_delimited(TokenKind::LParen, TokenKind::RParen, |p| p.parse_ty());
                 Ty::Prod {
                     elements,
                     span: self.finish_span(start),
@@ -1128,7 +1125,9 @@ impl<'a> Parser<'a> {
             }
             _ => {
                 let span = self.peek().span;
-                let _diag = self.diags.error("expected type expression", span, self.file_id);
+                let _diag = self
+                    .diags
+                    .error("expected type expression", span, self.file_id);
                 Ty::Error {
                     span: self.finish_span(span.start),
                 }
@@ -1137,7 +1136,7 @@ impl<'a> Parser<'a> {
     }
 
     fn maybe_ty_params(&mut self) -> Vec<TyParam> {
-        // Type params use `[` with `'T` inside — truly LL(1): `[` alone is enough.
+        // Type params use `[` with `'T` inside -- truly LL(1): `[` alone is enough.
         //   fn name['T, 'U](params) ...
         //   choice Foo['T] { ... }
         // The grammar says `ast_ty_params = "[", [ty_param_list], "]"`.
@@ -1154,8 +1153,6 @@ impl<'a> Parser<'a> {
             }
         })
     }
-
-    // ── Pattern parsing ─────────────────────────────────────────────────
 
     fn parse_pat(&mut self) -> Pat {
         let start = self.start_span();
@@ -1195,7 +1192,8 @@ impl<'a> Parser<'a> {
             }
             TokenKind::LParen => {
                 let start = self.start_span();
-                let elements = self.parse_delimited(TokenKind::LParen, TokenKind::RParen, |p| p.parse_pat());
+                let elements =
+                    self.parse_delimited(TokenKind::LParen, TokenKind::RParen, |p| p.parse_pat());
                 Pat::Prod {
                     elements,
                     span: self.finish_span(start),
@@ -1203,7 +1201,10 @@ impl<'a> Parser<'a> {
             }
             TokenKind::LBracket => {
                 let start = self.start_span();
-                let elements = self.parse_delimited(TokenKind::LBracket, TokenKind::RBracket, |p| p.parse_pat());
+                let elements =
+                    self.parse_delimited(TokenKind::LBracket, TokenKind::RBracket, |p| {
+                        p.parse_pat()
+                    });
                 Pat::Arr {
                     elements,
                     span: self.finish_span(start),
@@ -1211,7 +1212,9 @@ impl<'a> Parser<'a> {
             }
             TokenKind::LBrace => {
                 let start = self.start_span();
-                let fields = self.parse_delimited(TokenKind::LBrace, TokenKind::RBrace, |p| p.parse_pat_field());
+                let fields = self.parse_delimited(TokenKind::LBrace, TokenKind::RBrace, |p| {
+                    p.parse_pat_field()
+                });
                 Pat::AnonRec {
                     fields,
                     span: self.finish_span(start),
@@ -1234,7 +1237,8 @@ impl<'a> Parser<'a> {
         match self.peek_kind() {
             // Positional sum pattern: Name(p1, p2)
             TokenKind::LParen => {
-                let args = self.parse_delimited(TokenKind::LParen, TokenKind::RParen, |p| p.parse_pat());
+                let args =
+                    self.parse_delimited(TokenKind::LParen, TokenKind::RParen, |p| p.parse_pat());
                 let span = self.finish_span(start);
                 Pat::Ident {
                     name,
@@ -1244,7 +1248,9 @@ impl<'a> Parser<'a> {
             }
             // Named-field pattern: Name{ f: p }
             TokenKind::LBrace => {
-                let fields = self.parse_delimited(TokenKind::LBrace, TokenKind::RBrace, |p| p.parse_pat_field());
+                let fields = self.parse_delimited(TokenKind::LBrace, TokenKind::RBrace, |p| {
+                    p.parse_pat_field()
+                });
                 let span = self.finish_span(start);
                 Pat::Ident {
                     name,
@@ -1252,7 +1258,7 @@ impl<'a> Parser<'a> {
                     span,
                 }
             }
-            // Bare ident — variable binding
+            // Bare ident -- variable binding
             _ => Pat::Ident {
                 name,
                 suffix: None,
@@ -1272,8 +1278,6 @@ impl<'a> Parser<'a> {
             span: self.finish_span(start),
         }
     }
-
-    // ── Shared helpers ──────────────────────────────────────────────────
 
     /// Parses a comma-separated list of items until `closing` is the next token.
     /// Handles a trailing comma before `closing` gracefully.
@@ -1451,9 +1455,11 @@ impl<'a> Parser<'a> {
         if let Some(sym) = tok.symbol {
             return sym;
         }
-        // Underscore has no interned symbol — return sentinel; other tokens are errors
+        // Underscore has no interned symbol -- return sentinel; other tokens are errors
         if tok.kind != TokenKind::Underscore {
-            let _diag = self.diags.error("expected identifier", tok.span, self.file_id);
+            let _diag = self
+                .diags
+                .error("expected identifier", tok.span, self.file_id);
         }
         Symbol(u32::MAX)
     }
@@ -1463,9 +1469,12 @@ impl<'a> Parser<'a> {
         let sym = tok.symbol.unwrap_or(Symbol(u32::MAX));
         match tok.kind {
             TokenKind::IntLit => LitValue::Int(parse_int_lit(self.resolve(sym))),
-            TokenKind::FloatLit => {
-                LitValue::Float(self.resolve(sym).replace('_', "").parse::<f64>().unwrap_or(0.0))
-            }
+            TokenKind::FloatLit => LitValue::Float(
+                self.resolve(sym)
+                    .replace('_', "")
+                    .parse::<f64>()
+                    .unwrap_or(0.0),
+            ),
             TokenKind::StringLit => LitValue::Str(sym),
             TokenKind::CharLit => LitValue::Char(parse_char_lit(self.resolve(sym))),
             _ => {
@@ -1486,8 +1495,6 @@ impl<'a> Parser<'a> {
         self.parse_separated_list(closing, |p| p.parse_and_alloc_expr())
     }
 }
-
-// ── Free helpers ────────────────────────────────────────────────────────────
 
 enum InfixKind {
     Binary(BinOp),
@@ -1577,7 +1584,10 @@ fn strip_radix_prefix(s: &str) -> (&str, u32) {
 
 /// Parses the text of a character literal (`'x'` or `'\n'`) into a `char`.
 fn parse_char_lit(text: &str) -> char {
-    let inner = text.strip_prefix('\'').and_then(|s| s.strip_suffix('\'')).unwrap_or(text);
+    let inner = text
+        .strip_prefix('\'')
+        .and_then(|s| s.strip_suffix('\''))
+        .unwrap_or(text);
     if let Some(esc) = inner.strip_prefix('\\') {
         match esc.as_bytes().first() {
             Some(b'n') => '\n',
@@ -1592,8 +1602,6 @@ fn parse_char_lit(text: &str) -> char {
         inner.chars().next().unwrap_or('\0')
     }
 }
-
-// ── Tests ───────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests;

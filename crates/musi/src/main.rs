@@ -21,8 +21,6 @@ const PRELUDE_FILENAME: &str = "<prelude>";
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-
-    // Expect exactly: musi run <file>
     if args.len() != 3 || args[1] != "run" {
         eprintln!("Usage: musi run <file.ms>");
         process::exit(2);
@@ -42,17 +40,10 @@ fn main() {
     let mut source_db = SourceDb::new();
     let mut diags = DiagnosticBag::new();
 
-    // Register the user file in the source database.
     let user_file_id = source_db.add(file_path.as_str(), src.as_str());
-
-    // Lex the user source.
-    let user_tokens: Vec<_> =
-        Lexer::new(&src, user_file_id, &mut interner, &mut diags).collect();
-
-    // Parse the user source.
+    let user_tokens: Vec<_> = Lexer::new(&src, user_file_id, &mut interner, &mut diags).collect();
     let user_module = parse(&user_tokens, user_file_id, &mut diags, &interner);
 
-    // Report any lex/parse errors and stop.
     if diags.has_errors() {
         for diag in diags.iter() {
             eprintln!("{}", diag.render_simple(&source_db));
@@ -60,13 +51,11 @@ fn main() {
         process::exit(1);
     }
 
-    // Register and parse the prelude.
     let prelude_file_id = source_db.add(PRELUDE_FILENAME, PRELUDE_SRC);
     let prelude_tokens: Vec<_> =
         Lexer::new(PRELUDE_SRC, prelude_file_id, &mut interner, &mut diags).collect();
     let prelude_module = parse(&prelude_tokens, prelude_file_id, &mut diags, &interner);
 
-    // Report any prelude lex/parse errors and stop.
     if diags.has_errors() {
         for diag in diags.iter() {
             eprintln!("{}", diag.render_simple(&source_db));
@@ -74,7 +63,6 @@ fn main() {
         process::exit(1);
     }
 
-    // Code generation.
     let module = match emit(&prelude_module, &user_module, &interner) {
         Ok(m) => m,
         Err(e) => {
@@ -93,20 +81,16 @@ fn main() {
                     format!("codegen error: undefined variable '{name}'")
                 }
                 CodegenError::TooManyLocals => "codegen error: too many local variables".into(),
-                CodegenError::JumpOffsetOverflow => {
-                    "codegen error: jump offset overflow".into()
-                }
+                CodegenError::JumpOffsetOverflow => "codegen error: jump offset overflow".into(),
             };
             eprintln!("{msg}");
             process::exit(1);
         }
     };
 
-    // Find the entry point: the last function in the table is `main`.
     let main_fn_idx =
         u16::try_from(module.function_table.len() - 1).expect("function table index fits u16");
 
-    // Run.
     let mut vm = Vm::new(module, NativeRegistry::new());
     match vm.run(main_fn_idx) {
         Ok(_) => {}

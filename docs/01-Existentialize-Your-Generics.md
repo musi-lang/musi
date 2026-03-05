@@ -1,7 +1,7 @@
 # Existentialize Your Generics
 
 **Authors:** Dimi Racordon, Matt Bovel, Hamza Remmal
-**Affiliation:** EPFL, LAMP — Lausanne, Switzerland
+**Affiliation:** EPFL, LAMP -- Lausanne, Switzerland
 **Venue:** MPLR '25, October 12–18, 2025, Singapore
 **DOI:** https://doi.org/10.1145/3759426.3760975
 
@@ -11,7 +11,7 @@
 
 The two main approaches to compile generic programs are dynamic dispatch and monomorphization. While monomorphization is typically preferred in low-latency applications (where boxing overhead can be prohibitive), it comes at the cost of modularity, expressiveness, and code size.
 
-The Swift programming language proposes an interesting third alternative: supporting dynamic dispatch without boxing by factoring method tables out of object headers. This paper examines the merits of that strategy — called **existentialization** — across different programming languages. Our study shows that existentialization can produce code with competitive performance relative to monomorphization.
+The Swift programming language proposes an interesting third alternative: supporting dynamic dispatch without boxing by factoring method tables out of object headers. This paper examines the merits of that strategy -- called **existentialization** -- across different programming languages. Our study shows that existentialization can produce code with competitive performance relative to monomorphization.
 
 **CCS Concepts:** Software and its engineering → Object oriented languages; Polymorphism; Classes and objects; Source code generation.
 
@@ -23,8 +23,8 @@ The Swift programming language proposes an interesting third alternative: suppor
 
 Generic programming is the discipline of lifting general abstractions from concrete implementations. Two main strategies exist in mainstream languages:
 
-1. **Dynamic dispatch** — defers function selection to runtime.
-2. **Monomorphization** — creates specialized copies of polymorphic functions/data structures by substituting concrete types for generic parameters.
+1. **Dynamic dispatch** -- defers function selection to runtime.
+2. **Monomorphization** -- creates specialized copies of polymorphic functions/data structures by substituting concrete types for generic parameters.
 
 Languages targeting low-latency applications typically use monomorphization, since it compiles as efficiently as non-generic code. However, it has three important limitations:
 
@@ -34,7 +34,7 @@ Languages targeting low-latency applications typically use monomorphization, sin
 
 Dynamic dispatch avoids these limitations but introduces a different challenge: if `f` is compiled only once, how should its arguments be represented? In object-oriented languages (e.g., Java), values are boxed with object headers providing runtime type info and method dispatch. In systems programming, boxing is discouraged due to indirection overhead and cache unfriendliness.
 
-One workaround is to box values "on demand" into **existential containers** (e.g., `dyn trait` in Rust). However, this weakens type system guarantees (e.g., the binary method problem), may require costly heap allocation, and scales poorly — transforming a `Vec<Circle>` into `Vec<Box<dyn Shape>>` can turn an O(1) operation into O(n).
+One workaround is to box values "on demand" into **existential containers** (e.g., `dyn trait` in Rust). However, this weakens type system guarantees (e.g., the binary method problem), may require costly heap allocation, and scales poorly -- transforming a `Vec<Circle>` into `Vec<Box<dyn Shape>>` can turn an O(1) operation into O(n).
 
 **Swift's approach:** When a polymorphic function cannot be monomorphized, it is compiled to a monomorphic version accepting type parameters as additional *term* parameters. The information otherwise stored in object headers is factored out, so generic arguments can be passed as type-erased pointers to unboxed concrete values. This is **existentialization**, a key part of Swift's resilient binary interface strategy.
 
@@ -53,7 +53,7 @@ Swift's compiler currently favors monomorphization when applicable, suggesting e
 
 In managed languages, an object is typically a heap-allocated structure containing fields plus a header with runtime type information (identity hash, GC metadata, klass pointer to class metadata including field layouts, vtable, etc.).
 
-**Example — Scala (boxed):**
+**Example -- Scala (boxed):**
 
 ```scala
 class Vector2(x: Float, y: Float)
@@ -63,7 +63,7 @@ class Circle(origin: Vector2, radius: Float):
 
 In memory, a `Circle` instance has an object header (mark word + klass pointer), followed by a reference to a separately heap-allocated `Vector2` instance. Reading `origin` requires a pointer indirection.
 
-**Example — Swift (inline):**
+**Example -- Swift (inline):**
 
 ```swift
 struct Vector2 {
@@ -76,13 +76,13 @@ struct Circle {
 }
 ```
 
-A `Circle` is represented as three contiguous floats — no header, no indirection. This pairs well with monomorphization, but requires carrying type info across module boundaries when doing separate compilation.
+A `Circle` is represented as three contiguous floats -- no header, no indirection. This pairs well with monomorphization, but requires carrying type info across module boundaries when doing separate compilation.
 
 ### 2.2 Resilience Boundaries
 
 To support individual component updates, libraries should maintain ABI-compatible interfaces. In Scala (boxed), adding a field to `Circle` is not a breaking change since the class contents are boxed and layout is not part of the ABI. In Swift (inline), the same change *is* a breaking change unless compiled with library evolution support, because it changes the struct size.
 
-To support this in inline-representation languages, clients must not emit code that depends on specific memory layouts — instead obtaining sizes, alignments, and field offsets at runtime. In Swift, ABI compatibility is described relative to **resilience boundaries** defined in package manifests.
+To support this in inline-representation languages, clients must not emit code that depends on specific memory layouts -- instead obtaining sizes, alignments, and field offsets at runtime. In Swift, ABI compatibility is described relative to **resilience boundaries** defined in package manifests.
 
 ---
 
@@ -101,11 +101,11 @@ Existentialization focuses on the type-specific part.
 
 **Memory Layout.** Type metadata must encode size and alignment. If the language supports direct field access, it should also describe the memory layout of stored members (mirroring class contents). Alternatively, getters/setters can be generated, trading speed for memory.
 
-**Runtime-Sized Types.** Types with sizes determined only at runtime (e.g., C VLAs) require no special consideration — allocating any generic type already requires runtime-sized allocation in the compilation target. Stack allocation is possible on systems with low-level stack pointer instructions; otherwise, use fixed-size buffers with heap fallback.
+**Runtime-Sized Types.** Types with sizes determined only at runtime (e.g., C VLAs) require no special consideration -- allocating any generic type already requires runtime-sized allocation in the compilation target. Stack allocation is possible on systems with low-level stack pointer instructions; otherwise, use fixed-size buffers with heap fallback.
 
 **Primitive Operations.** Operations universally supported for all types (assignment, copy, deinitialization) must be dynamically dispatched in generic contexts.
 
-**Example — type metadata in C++:**
+**Example -- type metadata in C++:**
 
 ```cpp
 template<size_t n>
@@ -135,7 +135,7 @@ const Type Vector2{
 
 Existentializing a generic function means replacing type parameters with term parameters accepting type metadata, then replacing type-dependent operations with calls through that metadata.
 
-**Example — polymorphic identity in Swift:**
+**Example -- polymorphic identity in Swift:**
 
 ```swift
 func id<T>(_ x: T) -> T { x }
@@ -161,9 +161,9 @@ This satisfies resilient ABI requirements: the body of `id` can be modified with
 
 ### 3.3 Generating Type Metadata
 
-Static metadata (global variables) is not always sufficient — the set of all instantiated types cannot be enumerated ahead of time in general.
+Static metadata (global variables) is not always sufficient -- the set of all instantiated types cannot be enumerated ahead of time in general.
 
-**Example — generic swap in C++:**
+**Example -- generic swap in C++:**
 
 ```cpp
 template<typename T, typename U>
@@ -195,7 +195,7 @@ Two approaches for dispatching user-defined methods:
 1. **Closed method sets** (e.g., Java): store virtual method tables directly in type metadata.
 2. **Open method sets / type classes** (e.g., Swift protocols, Rust traits): use **dictionary-passing**.
 
-**Example — dictionary-passing in Swift:**
+**Example -- dictionary-passing in Swift:**
 
 ```swift
 protocol Shape {
@@ -297,7 +297,7 @@ bool is_two(void* v, Type const* T) {
 }
 ```
 
-Since metadata is interned, pointer equality implies type equality — solving the type erasure problem.
+Since metadata is interned, pointer equality implies type equality -- solving the type erasure problem.
 
 ---
 
@@ -333,7 +333,7 @@ Languages tested: **Swift** (native existentialization), **C++**, **Rust**, **Sc
 
 ### 4.2 Setup in Swift
 
-Monomorphized variant — fully specialized by compiler; LLVM IR confirms `area()` is inlined:
+Monomorphized variant -- fully specialized by compiler; LLVM IR confirms `area()` is inlined:
 
 ```swift
 public func area<T: Shape>(
@@ -348,7 +348,7 @@ public func area<T: Shape>(
 }
 ```
 
-Partially existentialized — forced via `@_optimize(none)` forwarder to prevent monomorphization:
+Partially existentialized -- forced via `@_optimize(none)` forwarder to prevent monomorphization:
 
 ```swift
 @_optimize(none)
@@ -359,7 +359,7 @@ public func areaPartialExist<T: Shape>(
 
 LLVM IR confirms three witness parameters and dynamic dispatch through a pointer in the Shape witness.
 
-Fully existentialized — same trick with an additional type parameter for the collection:
+Fully existentialized -- same trick with an additional type parameter for the collection:
 
 ```swift
 func areaColl<T: Shape, C: Collection<T>>(_ shapes: C) -> Double {
@@ -486,13 +486,13 @@ Results normalized relative to C++ monomorphized baseline. Benchmarks: 50 warm-u
 
 ## 5. Conclusion
 
-We studied existentialization — a technique originating in Swift for separate compilation of generic functions and data structures. Unlike traditional dynamic dispatch, existentialization avoids boxing, supporting efficient inline data representations. Type information (sizes, method tables) is passed separately, reminiscent of dictionary-passing in type-class systems.
+We studied existentialization -- a technique originating in Swift for separate compilation of generic functions and data structures. Unlike traditional dynamic dispatch, existentialization avoids boxing, supporting efficient inline data representations. Type information (sizes, method tables) is passed separately, reminiscent of dictionary-passing in type-class systems.
 
 We applied existentialization manually across C++, Rust, Scala, TypeScript, and Swift to evaluate performance. Key findings:
 
 - Monomorphization still produces the fastest bare-metal code.
 - Existentialization yields **competitive performance** in most cases.
-- Swift's implementation shows significant slowdowns due to heap allocation and unnecessary copying — addressable via borrowed references or improved compiler optimization of iteration patterns.
+- Swift's implementation shows significant slowdowns due to heap allocation and unnecessary copying -- addressable via borrowed references or improved compiler optimization of iteration patterns.
 - JIT-compiled languages (Scala, TypeScript) fully eliminate existentialization overhead, making it a strong alternative to subtyping for generic compilation.
 
 ---

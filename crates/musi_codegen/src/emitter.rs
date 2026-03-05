@@ -10,14 +10,12 @@ use std::collections::HashMap;
 use std::fmt;
 
 use musi_parse::ast::{
-    AttrArg, BinOp, Cond, ElifChain, Expr, LitValue, Modifier, Pat, PostfixOp, PrefixOp,
-    ParsedModule,
+    AttrArg, BinOp, Cond, ElifChain, Expr, LitValue, Modifier, ParsedModule, Pat, PostfixOp,
+    PrefixOp,
 };
 use musi_shared::{Arena, Idx, Interner};
 
 use crate::{ConstEntry, FunctionEntry, Module, Opcode, SymbolEntry, SymbolFlags};
-
-// ── Error ─────────────────────────────────────────────────────────────────────
 
 /// Errors that can occur during bytecode generation.
 #[derive(Debug)]
@@ -62,8 +60,6 @@ impl fmt::Display for CodegenError {
     }
 }
 
-// ── Intrinsic table ───────────────────────────────────────────────────────────
-
 /// Returns the intrinsic id for a well-known native function name, or `None`.
 fn intrinsic_id_for(name: &str) -> Option<u16> {
     match name {
@@ -74,8 +70,6 @@ fn intrinsic_id_for(name: &str) -> Option<u16> {
     }
 }
 
-// ── Loop context ──────────────────────────────────────────────────────────────
-
 /// State needed while emitting a loop body to support `break` and `cycle`.
 struct LoopCtx {
     /// Byte position of the first instruction of the loop (for `cycle` / back-edges).
@@ -84,8 +78,6 @@ struct LoopCtx {
     /// These are patched to the instruction after the loop once the loop ends.
     break_fixups: Vec<usize>,
 }
-
-// ── Internal emitter state ────────────────────────────────────────────────────
 
 /// Accumulates raw bytecode for a single function body.
 ///
@@ -114,8 +106,6 @@ impl FnEmitter {
             loop_stack: Vec::new(),
         }
     }
-
-    // ── Scope management ──────────────────────────────────────────────────────
 
     fn push_scope(&mut self) {
         self.scopes.push(HashMap::new());
@@ -150,8 +140,6 @@ impl FnEmitter {
         None
     }
 
-    // ── Low-level emission ────────────────────────────────────────────────────
-
     /// Encodes `op` directly into the code buffer.
     fn push(&mut self, op: &Opcode) {
         op.encode_into(&mut self.code);
@@ -161,8 +149,6 @@ impl FnEmitter {
     const fn len(&self) -> usize {
         self.code.len()
     }
-
-    // ── Jump patching ─────────────────────────────────────────────────────────
 
     /// Emits a 5-byte branch instruction with a placeholder offset of `i32::MAX`.
     ///
@@ -181,17 +167,13 @@ impl FnEmitter {
     /// The offset is relative to the byte *after* the 5-byte instruction, i.e.:
     ///   `offset = current_len - (fixup_pos + 5)`
     fn patch_jump_to_here(&mut self, fixup_pos: usize) -> Result<(), CodegenError> {
-        let after_instr = fixup_pos
-            .checked_add(5)
-            .expect("fixup_pos + 5 fits usize");
+        let after_instr = fixup_pos.checked_add(5).expect("fixup_pos + 5 fits usize");
         let target = self.code.len();
-        let target_isize =
-            isize::try_from(target).map_err(|_| CodegenError::JumpOffsetOverflow)?;
+        let target_isize = isize::try_from(target).map_err(|_| CodegenError::JumpOffsetOverflow)?;
         let after_isize =
             isize::try_from(after_instr).map_err(|_| CodegenError::JumpOffsetOverflow)?;
         let offset_isize = target_isize.wrapping_sub(after_isize);
-        let offset =
-            i32::try_from(offset_isize).map_err(|_| CodegenError::JumpOffsetOverflow)?;
+        let offset = i32::try_from(offset_isize).map_err(|_| CodegenError::JumpOffsetOverflow)?;
         self.code[fixup_pos + 1..fixup_pos + 5].copy_from_slice(&offset.to_le_bytes());
         Ok(())
     }
@@ -200,7 +182,6 @@ impl FnEmitter {
     ///
     /// The offset is relative to the byte *after* the 5-byte instruction.
     fn emit_br_back(&mut self, target_pos: usize) -> Result<(), CodegenError> {
-        // The Br instruction will be at the current position; it is 5 bytes long.
         let after_instr = self
             .code
             .len()
@@ -211,13 +192,10 @@ impl FnEmitter {
         let after_isize =
             isize::try_from(after_instr).map_err(|_| CodegenError::JumpOffsetOverflow)?;
         let offset_isize = target_isize.wrapping_sub(after_isize);
-        let offset =
-            i32::try_from(offset_isize).map_err(|_| CodegenError::JumpOffsetOverflow)?;
+        let offset = i32::try_from(offset_isize).map_err(|_| CodegenError::JumpOffsetOverflow)?;
         self.push(&Opcode::Br(offset));
         Ok(())
     }
-
-    // ── Loop context ──────────────────────────────────────────────────────────
 
     fn push_loop(&mut self, start_pos: usize) {
         self.loop_stack.push(LoopCtx {
@@ -272,8 +250,6 @@ impl FnEmitter {
         Ok(())
     }
 
-    // ── Finalisation ──────────────────────────────────────────────────────────
-
     /// Returns the total local count (used to populate `FunctionEntry::local_count`).
     const fn local_count(&self) -> u16 {
         self.next_slot
@@ -290,15 +266,11 @@ impl FnEmitter {
     }
 }
 
-// ── Registration context ──────────────────────────────────────────────────────
-
 /// Bundles the mutable module and fn-map together to keep argument counts low.
 struct RegCtx<'a> {
     module: &'a mut Module,
     fn_map: &'a mut HashMap<String, u16>,
 }
-
-// ── Public API ────────────────────────────────────────────────────────────────
 
 /// Compiles a prelude module and a user module into a [`Module`] ready for the
 /// Musi VM.
@@ -324,8 +296,6 @@ pub fn emit(
         fn_map: &mut fn_map,
     };
 
-    // ── Pass 1: register all FnDef declarations ───────────────────────────────
-    // Prelude first so prelude natives are visible to user code.
     for item_idx in &prelude.items {
         register_fn_def(*item_idx, &prelude.ctx.exprs, interner, &mut reg)?;
     }
@@ -333,15 +303,12 @@ pub fn emit(
         register_fn_def(*item_idx, &user.ctx.exprs, interner, &mut reg)?;
     }
 
-    // ── Pass 2: emit main body from user items ────────────────────────────────
     let mut main_emitter = FnEmitter::new();
-    // Top-level statements live in an implicit scope.
     main_emitter.push_scope();
 
     for item_idx in &user.items {
         let expr = user.ctx.exprs.get(*item_idx);
         match expr {
-            // Skip declarations — they were handled in Pass 1.
             Expr::FnDef { .. }
             | Expr::Lambda { .. }
             | Expr::Record { .. }
@@ -363,14 +330,12 @@ pub fn emit(
     main_emitter.pop_scope();
     main_emitter.push(&Opcode::Halt);
 
-    // ── Finalize main ─────────────────────────────────────────────────────────
     let local_count = main_emitter.local_count();
-    let code_offset = u32::try_from(module.code.len())
-        .map_err(|_| CodegenError::TooManyConstants)?;
+    let code_offset =
+        u32::try_from(module.code.len()).map_err(|_| CodegenError::TooManyConstants)?;
     let code_byte_len = main_emitter.byte_len();
     main_emitter.flush_into(&mut module.code);
-    let code_length =
-        u32::try_from(code_byte_len).map_err(|_| CodegenError::TooManyConstants)?;
+    let code_length = u32::try_from(code_byte_len).map_err(|_| CodegenError::TooManyConstants)?;
 
     let main_sym_idx = push_symbol(
         &mut module,
@@ -381,7 +346,6 @@ pub fn emit(
         },
     )?;
 
-    // Index not needed beyond this point; bind to _ to satisfy unused_results.
     let _main_fn_idx = push_function(
         &mut module,
         FunctionEntry {
@@ -395,8 +359,6 @@ pub fn emit(
 
     Ok(module)
 }
-
-// ── Pass 1 helpers ────────────────────────────────────────────────────────────
 
 /// Attempts to register a single top-level item as a function definition.
 /// Non-`FnDef` items are silently skipped.
@@ -420,10 +382,7 @@ fn register_fn_def(
 
     let fn_name = interner.resolve(*name).to_owned();
 
-    let is_native = body.is_none()
-        || modifiers
-            .iter()
-            .any(|m| matches!(m, Modifier::Native(_)));
+    let is_native = body.is_none() || modifiers.iter().any(|m| matches!(m, Modifier::Native(_)));
     let flags_raw: u8 = if is_native { SymbolFlags::NATIVE } else { 0 };
 
     let intrinsic_id: u16 = if is_native {
@@ -435,19 +394,16 @@ fn register_fn_def(
                 AttrArg::Named { name: arg_name, .. } => {
                     intrinsic_id_for(interner.resolve(*arg_name))
                 }
-                AttrArg::Lit(LitValue::Str(sym), _) => {
-                    intrinsic_id_for(interner.resolve(*sym))
-                }
+                AttrArg::Lit(LitValue::Str(sym), _) => intrinsic_id_for(interner.resolve(*sym)),
                 AttrArg::Lit(
-                    LitValue::Int(_)
-                    | LitValue::Float(_)
-                    | LitValue::Char(_)
-                    | LitValue::Bool(_),
+                    LitValue::Int(_) | LitValue::Float(_) | LitValue::Char(_) | LitValue::Bool(_),
                     _,
                 ) => None,
             })
         });
-        found.or_else(|| intrinsic_id_for(&fn_name)).unwrap_or(0xFFFF)
+        found
+            .or_else(|| intrinsic_id_for(&fn_name))
+            .unwrap_or(0xFFFF)
     } else {
         0xFFFF
     };
@@ -479,8 +435,6 @@ fn register_fn_def(
     Ok(())
 }
 
-// ── Pass 2 helpers ────────────────────────────────────────────────────────────
-
 /// Emits bytecode for a single expression, leaving one value on the stack.
 fn emit_expr(
     expr: &Expr,
@@ -491,7 +445,6 @@ fn emit_expr(
     out: &mut FnEmitter,
 ) -> Result<(), CodegenError> {
     match expr {
-        // ── Atoms ─────────────────────────────────────────────────────────────
         Expr::Lit { value, .. } => emit_lit(value, interner, module, out),
 
         Expr::Unit { .. } => {
@@ -513,23 +466,18 @@ fn emit_expr(
             Ok(())
         }
 
-        // ── Variable binding ──────────────────────────────────────────────────
         Expr::Bind { pat, init, .. } => {
             let Pat::Ident { name, .. } = pat else {
                 return Err(CodegenError::UnsupportedExpr);
             };
             let name_str = interner.resolve(*name);
-            // Allocate the slot before emitting the init so that any later
-            // shadowing works correctly.
             let slot = out.define_local(name_str)?;
             emit_optional_expr(*init, exprs, interner, module, fn_map, out)?;
             out.push(&Opcode::StLoc(slot));
-            // A binding expression produces Unit.
             out.push(&Opcode::LdImmUnit);
             Ok(())
         }
 
-        // ── Assignment ────────────────────────────────────────────────────────
         Expr::Assign { target, value, .. } => {
             let target_expr = exprs.get(*target);
             let Expr::Ident { name, .. } = target_expr else {
@@ -546,7 +494,6 @@ fn emit_expr(
             Ok(())
         }
 
-        // ── Prefix operators ──────────────────────────────────────────────────
         Expr::Prefix { op, operand, .. } => {
             let opcode = match op {
                 PrefixOp::Neg => Opcode::NegI64,
@@ -562,12 +509,10 @@ fn emit_expr(
             Ok(())
         }
 
-        // ── Binary operators ──────────────────────────────────────────────────
         Expr::Binary { op, lhs, rhs, .. } => {
             emit_binary(*op, *lhs, *rhs, exprs, interner, module, fn_map, out)
         }
 
-        // ── Block ─────────────────────────────────────────────────────────────
         Expr::Block { stmts, tail, .. } => {
             out.push_scope();
             for stmt_idx in stmts {
@@ -580,7 +525,6 @@ fn emit_expr(
             Ok(())
         }
 
-        // ── Postfix (function call) ────────────────────────────────────────────
         Expr::Postfix {
             base,
             op: PostfixOp::Call { args, .. },
@@ -605,7 +549,6 @@ fn emit_expr(
             Ok(())
         }
 
-        // ── Control flow — if/elif/else ────────────────────────────────────────
         Expr::If {
             cond,
             then_body,
@@ -624,31 +567,37 @@ fn emit_expr(
             out,
         ),
 
-        // ── Control flow — while ───────────────────────────────────────────────
-        Expr::While { cond, guard, body, .. } => {
+        Expr::While {
+            cond, guard, body, ..
+        } => {
             if guard.is_some() {
                 return Err(CodegenError::UnsupportedExpr);
             }
             emit_while(cond, *body, exprs, interner, module, fn_map, out)
         }
 
-        // ── Control flow — loop ────────────────────────────────────────────────
-        Expr::Loop { body, post_cond, .. } => {
+        Expr::Loop {
+            body, post_cond, ..
+        } => {
             if post_cond.is_some() {
                 return Err(CodegenError::UnsupportedExpr);
             }
             emit_loop(*body, exprs, interner, module, fn_map, out)
         }
 
-        // ── Control flow — for ─────────────────────────────────────────────────
-        Expr::For { pat, iter, guard, body, .. } => {
+        Expr::For {
+            pat,
+            iter,
+            guard,
+            body,
+            ..
+        } => {
             if guard.is_some() {
                 return Err(CodegenError::UnsupportedExpr);
             }
             emit_for(pat, *iter, *body, exprs, interner, module, fn_map, out)
         }
 
-        // ── Control flow — break ───────────────────────────────────────────────
         Expr::Break { label, value, .. } => {
             if label.is_some() {
                 return Err(CodegenError::UnsupportedExpr);
@@ -659,7 +608,6 @@ fn emit_expr(
             Ok(())
         }
 
-        // ── Control flow — cycle ───────────────────────────────────────────────
         Expr::Cycle { label, guard, .. } => {
             if label.is_some() || guard.is_some() {
                 return Err(CodegenError::UnsupportedExpr);
@@ -671,14 +619,12 @@ fn emit_expr(
             Ok(())
         }
 
-        // ── Control flow — return ──────────────────────────────────────────────
         Expr::Return { value, .. } => {
             emit_optional_expr(*value, exprs, interner, module, fn_map, out)?;
             out.push(&Opcode::Ret);
             Ok(())
         }
 
-        // ── Unsupported ───────────────────────────────────────────────────────
         Expr::Tuple { .. }
         | Expr::Array { .. }
         | Expr::AnonRec { .. }
@@ -717,8 +663,6 @@ fn emit_optional_expr(
     }
 }
 
-// ── Binary operator emission ──────────────────────────────────────────────────
-
 fn emit_short_circuit_binop(
     lhs: Idx<Expr>,
     rhs: Idx<Expr>,
@@ -747,10 +691,31 @@ fn emit_binary(
     fn_map: &HashMap<String, u16>,
     out: &mut FnEmitter,
 ) -> Result<(), CodegenError> {
-    // Short-circuit operators require special control-flow treatment.
     match op {
-        BinOp::And => return emit_short_circuit_binop(lhs, rhs, FnEmitter::BR_FALSE, exprs, interner, module, fn_map, out),
-        BinOp::Or  => return emit_short_circuit_binop(lhs, rhs, FnEmitter::BR_TRUE, exprs, interner, module, fn_map, out),
+        BinOp::And => {
+            return emit_short_circuit_binop(
+                lhs,
+                rhs,
+                FnEmitter::BR_FALSE,
+                exprs,
+                interner,
+                module,
+                fn_map,
+                out,
+            );
+        }
+        BinOp::Or => {
+            return emit_short_circuit_binop(
+                lhs,
+                rhs,
+                FnEmitter::BR_TRUE,
+                exprs,
+                interner,
+                module,
+                fn_map,
+                out,
+            );
+        }
         BinOp::Add
         | BinOp::Sub
         | BinOp::Mul
@@ -774,7 +739,6 @@ fn emit_binary(
         | BinOp::Cons => {}
     }
 
-    // For all remaining ops: emit lhs, rhs, then the opcode.
     let lhs_expr = exprs.get(lhs);
     emit_expr(lhs_expr, exprs, interner, module, fn_map, out)?;
     let rhs_expr = exprs.get(rhs);
@@ -797,20 +761,13 @@ fn emit_binary(
         BinOp::Gt => Opcode::GtI64,
         BinOp::LtEq => Opcode::LeqI64,
         BinOp::GtEq => Opcode::GeqI64,
-        BinOp::In
-        | BinOp::Range
-        | BinOp::RangeExcl
-        | BinOp::Cons
-        | BinOp::And
-        | BinOp::Or => {
+        BinOp::In | BinOp::Range | BinOp::RangeExcl | BinOp::Cons | BinOp::And | BinOp::Or => {
             return Err(CodegenError::UnsupportedExpr);
         }
     };
     out.push(&opcode);
     Ok(())
 }
-
-// ── If / elif / else emission ─────────────────────────────────────────────────
 
 fn emit_if(
     cond: &Cond,
@@ -823,24 +780,17 @@ fn emit_if(
     fn_map: &HashMap<String, u16>,
     out: &mut FnEmitter,
 ) -> Result<(), CodegenError> {
-    // Emit the condition.
     emit_cond(cond, exprs, interner, module, fn_map, out)?;
 
     let else_fixup = out.emit_jump_placeholder(FnEmitter::BR_FALSE);
-
-    // Then body.
     let then_expr = exprs.get(then_body);
     emit_expr(then_expr, exprs, interner, module, fn_map, out)?;
 
     let first_end_fixup = out.emit_jump_placeholder(FnEmitter::BR);
-
-    // Patch the brfalse to here (start of elif/else).
     out.patch_jump_to_here(else_fixup)?;
 
-    // Collect all Br-to-end fixups so they can be patched together.
     let mut end_fixups: Vec<usize> = vec![first_end_fixup];
 
-    // Emit elif chains.
     for chain in elif_chains {
         if chain.guard.is_some() {
             return Err(CodegenError::UnsupportedExpr);
@@ -851,21 +801,17 @@ fn emit_if(
         emit_expr(body_expr, exprs, interner, module, fn_map, out)?;
         let end_fixup = out.emit_jump_placeholder(FnEmitter::BR);
         end_fixups.push(end_fixup);
-        // Patch the brfalse to here (start of next elif/else).
         out.patch_jump_to_here(next_fixup)?;
     }
 
     emit_optional_expr(else_body, exprs, interner, module, fn_map, out)?;
 
-    // Patch all unconditional jumps to the end (current position).
     for fixup in end_fixups {
         out.patch_jump_to_here(fixup)?;
     }
 
     Ok(())
 }
-
-// ── Condition emission ────────────────────────────────────────────────────────
 
 fn emit_cond(
     cond: &Cond,
@@ -883,8 +829,6 @@ fn emit_cond(
         Cond::Case { .. } => Err(CodegenError::UnsupportedExpr),
     }
 }
-
-// ── While emission ────────────────────────────────────────────────────────────
 
 fn emit_while(
     cond: &Cond,
@@ -910,8 +854,6 @@ fn emit_while(
     out.close_loop()
 }
 
-// ── Loop emission ─────────────────────────────────────────────────────────────
-
 fn emit_loop(
     body: Idx<Expr>,
     exprs: &Arena<Expr>,
@@ -930,8 +872,6 @@ fn emit_loop(
     out.close_loop()
 }
 
-// ── For emission ──────────────────────────────────────────────────────────────
-
 fn emit_for(
     pat: &Pat,
     iter: Idx<Expr>,
@@ -942,12 +882,15 @@ fn emit_for(
     fn_map: &HashMap<String, u16>,
     out: &mut FnEmitter,
 ) -> Result<(), CodegenError> {
-    // Only simple identifier patterns are supported.
-    let Pat::Ident { name: pat_name, suffix: None, .. } = pat else {
+    let Pat::Ident {
+        name: pat_name,
+        suffix: None,
+        ..
+    } = pat
+    else {
         return Err(CodegenError::UnsupportedExpr);
     };
 
-    // Only range iterators are supported: `a..b` or `a..<b`.
     let iter_expr = exprs.get(iter);
     let Expr::Binary { op, lhs, rhs, .. } = iter_expr else {
         return Err(CodegenError::UnsupportedExpr);
@@ -958,15 +901,12 @@ fn emit_for(
     // Both `a..b` and `a..<b` produce `a <= x < b` semantics; use LtI64.
     let use_lt = true;
 
-    // Emit a new scope for the loop variables.
     out.push_scope();
 
-    // Allocate counter and limit slots.
     let pat_name_str = interner.resolve(*pat_name);
     let counter_slot = out.define_local(pat_name_str)?;
     let limit_slot = out.define_local("$limit")?;
 
-    // Initialise counter = lhs, limit = rhs.
     let lhs_expr = exprs.get(*lhs);
     emit_expr(lhs_expr, exprs, interner, module, fn_map, out)?;
     out.push(&Opcode::StLoc(counter_slot));
@@ -988,18 +928,15 @@ fn emit_for(
     }
     let end_fixup = out.emit_jump_placeholder(FnEmitter::BR_FALSE);
 
-    // Body.
     let body_expr = exprs.get(body);
     emit_expr(body_expr, exprs, interner, module, fn_map, out)?;
     out.push(&Opcode::Drop);
 
-    // Increment: counter = counter + 1.
     out.push(&Opcode::LdLoc(counter_slot));
     out.push(&Opcode::LdImmI64(1));
     out.push(&Opcode::AddI64);
     out.push(&Opcode::StLoc(counter_slot));
 
-    // Back-edge.
     out.emit_br_back(start_pos)?;
 
     out.patch_jump_to_here(end_fixup)?;
@@ -1036,7 +973,6 @@ fn emit_lit(
             Ok(())
         }
         LitValue::Char(c) => {
-            // Encode char as i64 Unicode scalar value.
             let code_point = i64::from(u32::from(*c));
             out.push(&Opcode::LdImmI64(code_point));
             Ok(())
@@ -1044,13 +980,10 @@ fn emit_lit(
     }
 }
 
-// ── Module mutation helpers ───────────────────────────────────────────────────
-
 /// Pushes a [`SymbolEntry`] and returns its index, or errors if the table is
 /// full.
 fn push_symbol(module: &mut Module, entry: SymbolEntry) -> Result<u16, CodegenError> {
-    let idx = u16::try_from(module.symbol_table.len())
-        .map_err(|_| CodegenError::TooManySymbols)?;
+    let idx = u16::try_from(module.symbol_table.len()).map_err(|_| CodegenError::TooManySymbols)?;
     module.symbol_table.push(entry);
     Ok(idx)
 }
@@ -1058,8 +991,8 @@ fn push_symbol(module: &mut Module, entry: SymbolEntry) -> Result<u16, CodegenEr
 /// Pushes a [`FunctionEntry`] and returns its index, or errors if the table is
 /// full.
 fn push_function(module: &mut Module, entry: FunctionEntry) -> Result<u16, CodegenError> {
-    let idx = u16::try_from(module.function_table.len())
-        .map_err(|_| CodegenError::TooManyFunctions)?;
+    let idx =
+        u16::try_from(module.function_table.len()).map_err(|_| CodegenError::TooManyFunctions)?;
     module.function_table.push(entry);
     Ok(idx)
 }
@@ -1067,8 +1000,7 @@ fn push_function(module: &mut Module, entry: FunctionEntry) -> Result<u16, Codeg
 /// Pushes a [`ConstEntry`] and returns its index, or errors if the pool is
 /// full.
 fn push_const(module: &mut Module, entry: ConstEntry) -> Result<u16, CodegenError> {
-    let idx = u16::try_from(module.const_pool.len())
-        .map_err(|_| CodegenError::TooManyConstants)?;
+    let idx = u16::try_from(module.const_pool.len()).map_err(|_| CodegenError::TooManyConstants)?;
     module.const_pool.push(entry);
     Ok(idx)
 }
