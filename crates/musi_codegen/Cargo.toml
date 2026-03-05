@@ -1,0 +1,18 @@
+[package]
+name = "musi_codegen"
+description = "Bytecode format (.mso) and serialization for the Musi compiler"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+readme = "README.md"
+license.workspace = true
+keywords = ["compiler", "musi", "bytecode"]
+categories = ["development-tools"]
+
+[dependencies]
+thiserror = { workspace = true }
+musi_shared = { path = "../musi_shared" }
+musi_parse  = { path = "../musi_parse" }
+
+[lints]
+workspace = true
