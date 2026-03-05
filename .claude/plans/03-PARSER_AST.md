@@ -1,192 +1,415 @@
 # Phase 3 — Parser + AST
 
 **Crate:** `musi_parse`
-**Goal:** Complete recursive-descent LL(1) parser producing a full AST, plus AST type definitions.
+**Goal:** Complete LL(1) + Pratt parser producing a full AST, plus all AST type definitions.
 **Dependencies:** Phase 1 (musi_shared), Phase 2 (musi_lex)
 
 ---
 
 ## Deliverables
 
-### AST Types
-
-All nodes carry `Span`. Recursive children are `Idx<T>` (arena-allocated).
-
-**Module: `ast::ty`**
+### File layout
 
 ```
-Ty =
-  | Arrow { params: Vec<Ty>, ret: Idx<Ty> }
-  | Named { name: Symbol, type_args: Vec<Ty> }
-  | Prod { elements: Vec<Ty> }          // (A, B, C)
-  | Arr { element: Idx<Ty>, size: Option<Idx<Expr>> }
-  | Var { name: Symbol }                 // 'a
+crates/musi_parse/src/
+  lib.rs
+  ast.rs      — all AST type definitions + ParseCtx + ParsedModule
+  parser.rs   — Parser struct, all parse methods (LL(1) + Pratt)
+  sexpr.rs    — deterministic S-expression printer for AST debugging
 ```
 
-**Module: `ast::pat`**
+---
 
-```
-Pat =
-  | Ident { name: Symbol, suffix: Option<PatSuffix> }
-  | Lit { value: LitValue }
-  | Wild                                  // _
-  | Prod { elements: Vec<Pat> }
-  | Arr { elements: Vec<Pat>, rest: Option<Symbol> }
-  | AnonRec { fields: Vec<PatField> }
-  | Or { alternatives: Vec<Pat> }
+## AST Types (`ast.rs`)
 
-PatSuffix =
-  | Positional { args: Vec<Pat> }        // Name(p1, p2)
-  | NamedField { fields: Vec<PatField> } // Name{ f: p }
-```
+All node types contain a `span: Span` field. Recursive single children use `Idx<T>` (arena-allocated). List children use `Vec<Idx<T>>` or `Vec<T>` for leaf-like items (Ty, Pat, etc. that are small).
 
-**Module: `ast::expr`**
+### Arena container
 
-```
-Expr =
-  // Atoms
-  | Lit { value: LitValue }
-  | Ident { name: Symbol }
-  | Unit                                  // ()
-  | Paren { inner: Idx<Expr> }           // (e)
-  | Tuple { elements: Vec<Expr> }        // (e1, e2, ...)
-  | Block { stmts: Vec<Expr>, tail: Option<Idx<Expr>> }  // (s; s; e)
-  | Array { items: Vec<ArrayItem> }
-  | RecLit { base: Idx<Expr>, fields: Vec<RecLitField> }  // expr.{ fields }
+```rust
+pub struct ParseCtx {
+    pub exprs: Arena<Expr>,
+    pub tys:   Arena<Ty>,
+    pub pats:  Arena<Pat>,
+}
 
-  // Control flow
-  | If { cond: Idx<Expr>, then_body: Idx<Expr>, elif_chains: Vec<ElifChain>, else_body: Option<Idx<Expr>> }
-  | Match { scrutinee: Idx<Expr>, arms: Vec<MatchArm> }
-  | While { cond: Idx<Expr>, body: Idx<Expr> }
-  | Loop { body: Idx<Expr> }
-  | For { pat: Pat, iter: Idx<Expr>, body: Idx<Expr> }
-  | Label { name: Symbol, body: Idx<Expr> }
-  | Return { value: Option<Idx<Expr>> }
-  | Break { label: Option<Symbol>, value: Option<Idx<Expr>> }
-  | Cycle { label: Option<Symbol> }
-  | Defer { body: Idx<Expr> }
-  | Import { items: Vec<ImportItem>, path: Symbol }
-
-  // Declarations (expression-level in Musi)
-  | Record { attrs: Vec<Attr>, name: Symbol, ty_params: Vec<TyParam>, fields: Vec<RecField> }
-  | Choice { attrs: Vec<Attr>, name: Symbol, ty_params: Vec<TyParam>, variants: Vec<ChoiceVariant> }
-  | FnDef { attrs: Vec<Attr>, name: Symbol, ty_params: Vec<TyParam>, params: Vec<Param>, ret_ty: Option<Ty>, body: Idx<Expr> }
-  | Lambda { ty_params: Vec<TyParam>, params: Vec<Param>, ret_ty: Option<Ty>, body: Idx<Expr> }
-  | Bind { kind: BindKind, pat: Pat, ty: Option<Ty>, init: Idx<Expr> }
-
-  // Operators
-  | Postfix { base: Idx<Expr>, op: PostfixOp }
-  | Prefix { op: PrefixOp, operand: Idx<Expr> }
-  | Binary { op: BinOp, lhs: Idx<Expr>, rhs: Idx<Expr> }
-  | Assign { target: Idx<Expr>, value: Idx<Expr> }
-
-  // Error recovery
-  | Error
+pub struct ParsedModule {
+    pub items: Vec<Idx<Expr>>,   // top-level statement expressions
+    pub ctx:   ParseCtx,
+    pub span:  Span,
+}
 ```
 
-**Supporting types:**
+### Supporting leaf types
 
+```rust
+pub enum LitValue {
+    Int(i64),
+    Float(f64),
+    Str(Symbol),
+    Char(char),
+    Bool(bool),
+}
+
+pub enum BindKind { Const, Var }
+
+pub enum Modifier {
+    Export,
+    Opaque,
+    Native(Option<Symbol>),   // native ["abi-string"]
+}
+
+pub struct Attr {
+    pub name:   Symbol,
+    pub args:   Vec<AttrArg>,
+    pub span:   Span,
+}
+
+pub enum AttrArg {
+    Named { name: Symbol, value: Option<LitValue>, span: Span },
+    Lit(LitValue, Span),
+}
+
+pub struct TyParam {
+    pub name:   Symbol,    // 'a, 'key — the ident token text including the '
+    pub bounds: Vec<Ty>,
+    pub span:   Span,
+}
+
+pub struct Param {
+    pub attrs:   Vec<Attr>,
+    pub mutable: bool,
+    pub name:    Symbol,   // _ is allowed (wildcard param)
+    pub ty:      Option<Ty>,
+    pub span:    Span,
+}
+
+pub struct RecField {
+    pub attrs:   Vec<Attr>,
+    pub mutable: bool,
+    pub name:    Symbol,
+    pub ty:      Option<Ty>,
+    pub span:    Span,
+}
+
+pub struct ImportItem {
+    pub name:  Symbol,
+    pub alias: Option<Symbol>,
+    pub span:  Span,
+}
+
+pub struct MatchArm {
+    pub attrs: Vec<Attr>,
+    pub pat:   Pat,
+    pub guard: Option<Idx<Expr>>,
+    pub body:  Idx<Expr>,
+    pub span:  Span,
+}
+
+pub struct ChoiceVariant {
+    pub attrs:   Vec<Attr>,
+    pub name:    Symbol,
+    pub payload: Option<VariantPayload>,
+    pub span:    Span,
+}
+
+pub enum VariantPayload {
+    Positional(Vec<Ty>),
+    Named(Vec<RecField>),
+}
+
+/// A condition in `if`/`while`/`loop` — either a plain expression or a
+/// pattern-binding destructure: `case const/var pat := expr`.
+pub enum Cond {
+    Expr(Idx<Expr>),
+    Case {
+        kind: BindKind,
+        pat:  Pat,
+        init: Idx<Expr>,
+        span: Span,
+    },
+}
 ```
-LitValue = Int(i64) | Float(f64) | String(Symbol) | Char(char) | Bool(bool)
-BindKind = Const | Var
-BinOp = Add | Sub | Mul | Div | Mod | Eq | Neq | Lt | Gt | Leq | Geq | And | Or | BitAnd | BitOr | BitXor | Shl | Shr | Range | RangeInc | Pipe | As | Is
-PrefixOp = Neg | Not | BitNot | Deref | AddrOf
-PostfixOp = Call(Vec<Expr>) | Index(Idx<Expr>) | Field(Symbol) | Try
-ArrayItem = Single(Expr) | Spread(Expr)
-RecLitField = Named { name: Symbol, value: Expr } | Spread(Expr)
-MatchArm = { pat: Pat, guard: Option<Expr>, body: Expr }
-ChoiceVariant = { attrs: Vec<Attr>, name: Symbol, payload: Option<VariantPayload> }
-VariantPayload = Positional(Vec<Ty>) | Named(Vec<RecField>)
-RecField = { name: Symbol, ty: Ty, default: Option<Expr> }
-Param = { pat: Pat, ty: Option<Ty> }
-TyParam = { name: Symbol, bounds: Vec<Ty> }
-Attr = { name: Symbol, args: Vec<AttrArg> }
-ImportItem = { name: Symbol, alias: Option<Symbol> }
-ElifChain = { cond: Expr, body: Expr }
+
+### BinOp (grammar-derived, NOT the plan's original table)
+
+```rust
+pub enum BinOp {
+    // Arithmetic
+    Add, Sub, Mul, Div, Rem,
+    // Bitwise
+    BitOr, BitXor, BitAnd, Shl, Shr,
+    // Logical
+    And, Or, Xor,
+    // Comparison (non-associative in grammar)
+    Eq, NotEq, Lt, Gt, LtEq, GtEq, In,
+    // Range (non-associative)
+    Range,      // ..
+    RangeExcl,  // ..<
+    // Cons (left-assoc)
+    Cons,       // ::
+}
 ```
 
-### Parser
+### PrefixOp
 
-One method per grammar rule. Recursive descent with Pratt-style expression parsing.
+```rust
+pub enum PrefixOp {
+    Neg,    // -
+    Not,    // not
+    Deref,  // !
+    AddrOf, // @
+    BitNot, // ~
+}
+```
 
-**Pratt precedence (13 levels, low to high):**
+### PostfixOp
 
-| Level | Operators | Assoc |
-|-------|-----------|-------|
-| 1 | `<-` (assign) | Right |
-| 2 | `..` `..=` (range) | None |
-| 3 | `\|>` (pipe) | Left |
-| 4 | `or` | Left |
-| 5 | `and` | Left |
-| 6 | `==` `!=` | Left |
-| 7 | `<` `>` `<=` `>=` `is` `as` | Left |
-| 8 | `\|` (bitor) | Left |
-| 9 | `^` (bitxor) | Left |
-| 10 | `&` (bitand) | Left |
-| 11 | `<<` `>>` (shift) | Left |
-| 12 | `+` `-` | Left |
-| 13 | `*` `/` `%` | Left |
+```rust
+pub enum PostfixOp {
+    Call  { args: Vec<Idx<Expr>>, span: Span },
+    Index { args: Vec<Idx<Expr>>, span: Span },         // .[ expr_list ]
+    Field { name: Symbol, span: Span },                  // .name or .0
+    RecDot { fields: Vec<RecLitField>, span: Span },    // .{ fields }
+    As    { ty: Ty, span: Span },                        // as Type (postfix cast)
+}
 
-Prefix: `not`, `-`, `~`, `!`, `@` (higher than any infix).
-Postfix: `.field`, `.[index]`, `(args)`, `.{rec}` (highest precedence).
+pub enum RecLitField {
+    Named  { attrs: Vec<Attr>, mutable: bool, name: Symbol, value: Idx<Expr>, span: Span },
+    Spread { expr: Idx<Expr>, span: Span },
+}
+```
 
-**Key LL(1) decision points:**
+### Ty
 
-1. **`parse_expr_paren`**: After `(`, peek:
-   - `)` → Unit
-   - Otherwise: parse expr, then peek `)` (paren) / `,` (tuple) / `;` (block)
+```rust
+pub enum Ty {
+    Arrow  { params: Vec<Ty>, ret: Box<Ty>, span: Span },
+    Named  { name: Symbol, args: Vec<Ty>, span: Span },    // Int or Option['T]
+    Prod   { elements: Vec<Ty>, span: Span },               // (A, B) or ()
+    Arr    { element: Box<Ty>, size: Option<Idx<Expr>>, span: Span },
+    Var    { name: Symbol, span: Span },                    // 'a
+    Error  { span: Span },
+}
+```
 
-2. **`parse_pat_ident`**: After ident, peek:
-   - `(` → positional sum pattern
-   - `{` → named-field pattern
-   - Otherwise → variable binding
+### Pat
 
-3. **`parse_fn_kind`**: After `fn`, peek:
-   - Ident (letter/`_`) → named function definition
-   - `(` or `[` → lambda
+```rust
+pub enum Pat {
+    Ident  { name: Symbol, suffix: Option<PatSuffix>, span: Span },
+    Lit    { value: LitValue, span: Span },
+    Wild   { span: Span },                                  // _
+    Prod   { elements: Vec<Pat>, span: Span },              // (p1, p2)
+    Arr    { elements: Vec<Pat>, span: Span },              // [p1, p2]
+    AnonRec { fields: Vec<PatField>, span: Span },          // { f: p }
+    Or     { alternatives: Vec<Pat>, span: Span },
+    Error  { span: Span },
+}
 
-4. **`parse_choice_body`**: After `{`, optional leading `|`, then variant list separated by `|`.
+pub enum PatSuffix {
+    Positional { args: Vec<Pat>, span: Span },             // Name(p1, p2)
+    Named      { fields: Vec<PatField>, span: Span },      // Name{ f: p }
+}
 
-5. **`parse_expr_with_prefix`**: After optional attrs, peek keyword:
-   - `fn` → fn_kind
-   - `record` → record def
-   - `choice` → choice def
-   - `if` → if expr
-   - `match` → match
-   - `while` → while
-   - `loop` → loop
-   - `for` → for
-   - `label` → label
-   - `const`/`var` → bind
-   - `return` → return
-   - `break` → break
-   - `cycle` → cycle
-   - `defer` → defer
-   - `import` → import
-   - Otherwise → Pratt expression
+pub struct PatField {
+    pub attrs:   Vec<Attr>,
+    pub mutable: bool,
+    pub name:    Symbol,
+    pub pat:     Option<Pat>,   // None = shorthand (field name is also binding)
+    pub span:    Span,
+}
+```
 
-### Error Recovery
+### Expr
 
-- On unexpected token: emit diagnostic, skip tokens until sync point (`;`, `)`, `}`, `]`).
-- Insert `Expr::Error` / `Pat::Error` / `Ty::Error` node.
-- Continue parsing after sync point.
-- Collect all diagnostics — don't bail on first error.
+```rust
+pub enum Expr {
+    // Atoms
+    Lit    { value: LitValue, span: Span },
+    Ident  { name: Symbol, span: Span },
+    Unit   { span: Span },                                  // ()
+    Paren  { inner: Idx<Expr>, span: Span },               // (e)
+    Tuple  { elements: Vec<Idx<Expr>>, span: Span },       // (e1, e2)
+    Block  { stmts: Vec<Idx<Expr>>, tail: Option<Idx<Expr>>, span: Span },  // (s; s; e)
+    Array  { items: Vec<ArrayItem>, span: Span },
+    AnonRec { fields: Vec<RecLitField>, span: Span },       // { f := v }
 
-### S-Expression Dumper
+    // Control flow
+    If     { cond: Box<Cond>, then_body: Idx<Expr>,
+             elif_chains: Vec<ElifChain>, else_body: Option<Idx<Expr>>, span: Span },
+    Match  { scrutinee: Idx<Expr>, arms: Vec<MatchArm>, span: Span },
+    While  { cond: Box<Cond>, guard: Option<Idx<Expr>>, body: Idx<Expr>, span: Span },
+    Loop   { body: Idx<Expr>, post_cond: Option<Box<Cond>>, span: Span },
+    For    { pat: Pat, iter: Idx<Expr>, guard: Option<Idx<Expr>>, body: Idx<Expr>, span: Span },
+    Label  { name: Symbol, body: Idx<Expr>, span: Span },
+    Return { value: Option<Idx<Expr>>, span: Span },
+    Break  { label: Option<Symbol>, value: Option<Idx<Expr>>, span: Span },
+    Cycle  { label: Option<Symbol>, guard: Option<Idx<Expr>>, span: Span },
+    Defer  { body: Idx<Expr>, span: Span },
+    Import { items: ImportClause, path: Symbol, span: Span },
 
-Deterministic, diff-friendly text format for AST debugging.
+    // Declarations (first-class expressions in Musi)
+    Record { attrs: Vec<Attr>, modifiers: Vec<Modifier>,
+             name: Option<Symbol>, ty_params: Vec<TyParam>,
+             fields: Vec<RecField>, span: Span },
+    Choice { attrs: Vec<Attr>, modifiers: Vec<Modifier>,
+             name: Option<Symbol>, ty_params: Vec<TyParam>,
+             variants: Vec<ChoiceVariant>, span: Span },
+    FnDef  { attrs: Vec<Attr>, modifiers: Vec<Modifier>,
+             name: Symbol, ty_params: Vec<TyParam>,
+             params: Vec<Param>, ret_ty: Option<Ty>,
+             body: Option<Idx<Expr>>,    // None = native fn (no body)
+             span: Span },
+    Lambda { attrs: Vec<Attr>,
+             ty_params: Vec<TyParam>, params: Vec<Param>,
+             ret_ty: Option<Ty>, body: Idx<Expr>, span: Span },
+    Bind   { attrs: Vec<Attr>, modifiers: Vec<Modifier>,
+             kind: BindKind, pat: Pat,
+             ty: Option<Ty>, init: Option<Idx<Expr>>, span: Span },
+
+    // Operators
+    Prefix  { op: PrefixOp, operand: Idx<Expr>, span: Span },
+    Binary  { op: BinOp, lhs: Idx<Expr>, rhs: Idx<Expr>, span: Span },
+    Assign  { target: Idx<Expr>, value: Idx<Expr>, span: Span },   // <-
+    Postfix { base: Idx<Expr>, op: PostfixOp, span: Span },
+
+    // Error sentinel
+    Error { span: Span },
+}
+
+pub struct ElifChain {
+    pub cond: Box<Cond>,
+    pub guard: Option<Idx<Expr>>,
+    pub body: Idx<Expr>,
+    pub span: Span,
+}
+
+pub enum ArrayItem {
+    Single(Idx<Expr>),
+    Spread(Idx<Expr>),
+}
+
+pub enum ImportClause {
+    Glob,
+    Items(Vec<ImportItem>),
+}
+```
+
+---
+
+## Pratt Precedence Table (grammar-derived)
+
+| BP | Operator(s) | Associativity | Token(s) |
+|----|-------------|---------------|----------|
+| 10 | assign `<-` | Right | `LtMinus` |
+| 20 | `or` `xor` | Left | `Or` `Xor` |
+| 30 | `and` | Left | `And` |
+| 40 | `=` `/=` | None (1 use max) | `Eq` `SlashEq` |
+| 50 | `<` `>` `<=` `>=` `in` | None | `Lt` `Gt` `LtEq` `GtEq` `In` |
+| 60 | `..` `..<` | None | `DotDot` `DotDotLt` |
+| 70 | `::` | Left | `ColonColon` |
+| 80 | `\|` `^` | Left | `Pipe` `Caret` |
+| 90 | `&` | Left | `Amp` |
+| 100 | `shl` `shr` | Left | `Shl` `Shr` |
+| 110 | `+` `-` | Left | `Plus` `Minus` |
+| 120 | `*` `/` `%` | Left | `Star` `Slash` `Percent` |
+| 130 | prefix `-` `not` `!` `@` `~` | — | |
+| 140 | postfix call `.[` `.` `.{` `as` | — | |
+
+**Non-associative operators** (`=`/`/=`, comparisons, ranges): parse right side at
+`own_bp + 1` so a second occurrence fails to nest (produces `Expr::Error` on parse error).
+
+**`<-` assign**: treated as infix at BP 10 producing `Expr::Assign { target, value }`.
+Right-associative: parse right side at BP 9.
+
+---
+
+## Parser (`parser.rs`)
+
+### Parser struct
+
+```rust
+pub struct Parser<'a> {
+    tokens:  &'a [Token],
+    pos:     usize,
+    file_id: FileId,
+    diags:   &'a mut DiagnosticBag,
+    ctx:     ParseCtx,
+}
+```
+
+Tokens must include a terminal `Eof`. Input is `&[Token]` (pre-collected from `Lexer`).
+
+### Key LL(1) dispatch points (as per CLAUDE.md)
+
+1. **`parse_expr_paren`** — after `(`:
+   - next is `)` → Unit
+   - else parse expr, then peek: `)` → Paren, `,` → Tuple, `;` → Block
+
+2. **`parse_pat_ident`** — after ident:
+   - next is `(` → positional sum PatSuffix
+   - next is `{` → named-field PatSuffix
+   - else → variable binding
+
+3. **`parse_fn_kind`** — after `fn`:
+   - next is `Ident` → named FnDef (letter/`_` disambiguates from `(`)
+   - next is `(` or `[` → Lambda
+
+4. **`parse_choice_body`** — after `{`:
+   - optional leading `|`
+   - then variant list separated by `|`
+
+5. **`parse_expr_with_prefix`** — after optional attrs + modifiers, dispatch on keyword:
+   `fn` / `record` / `choice` / `const` / `var` / `if` / `match` / `while` / `loop` /
+   `for` / `label` / `return` / `break` / `cycle` / `defer` / `import` → dedicated rules
+   Else → Pratt expression
+
+6. **`parse_cond`** — if next is `case` → `Cond::Case { kind, pat, init }`; else → `Cond::Expr`
+
+### Error recovery
+
+- On unexpected token: emit diagnostic, advance past the offending token or to the next
+  sync point (`;`, `)`, `}`, `]`, `Eof`), return `Expr::Error { span }`.
+- Never bail — always produce a (possibly partial) AST.
+- `Error` nodes suppress cascading diagnostics at semantic level.
+
+### Public API
+
+```rust
+pub fn parse(
+    tokens: &[Token],
+    file_id: FileId,
+    diags: &mut DiagnosticBag,
+) -> ParsedModule
+```
+
+---
+
+## S-Expression Dumper (`sexpr.rs`)
+
+Deterministic, diff-friendly text representation for testing.
 
 ```
 (fn_def main []
   (block
-    (call (ident writeln) [(lit_string "Hello, world!")])))
+    (call (ident writeln) [(lit_str "Hello, world!")])))
 ```
+
+```rust
+pub fn dump(module: &ParsedModule, interner: &Interner) -> String
+```
+
+Walks the AST recursively. Every node type has a distinct prefix keyword.
+Symbols are resolved via `interner.resolve(sym)`.
 
 ---
 
 ## Milestone
 
-1. Parse a program using every grammar construct (record, choice, fn, match, if/elif/else, for, while, loop, label, import, all operators).
-2. Parse broken input → diagnostics + partial AST (with Error nodes).
-3. Parse → dump → parse → dump is idempotent.
-4. `cargo test -p musi_parse` passes.
+1. Parse a program using every grammar construct (record, choice, fn, match, if/elif/else,
+   for, while, loop, label, import, all operators, all literal types).
+2. Parse broken input → diagnostics + partial AST with `Error` nodes.
+3. `dump` → re-parse the original → `dump` again → identical output (idempotent via the
+   source, not re-parsing the s-expr).
+4. `cargo test -p musi_parse` passes with 0 clippy warnings.
