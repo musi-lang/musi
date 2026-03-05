@@ -1,8 +1,4 @@
-.agents/
-.claude/
-.github/
 !.github/workflows
-.opencode/
 
 .cursorignore
 .cursorindexingignore
