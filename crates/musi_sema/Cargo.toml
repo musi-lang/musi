@@ -1,0 +1,20 @@
+[package]
+name = "musi_sema"
+description.workspace = true
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+readme.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+musi_shared = { path = "../musi_shared" }
+musi_parse = { path = "../musi_parse" }
+
+[dev-dependencies]
+musi_lex = { path = "../musi_lex" }
+
+[lints]
+workspace = true
