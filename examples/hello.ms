@@ -1,1 +1,1 @@
-__builtin_writeln("Hello, world!");
+writeln("Hello, world!");

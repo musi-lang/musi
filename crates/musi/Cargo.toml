@@ -1,0 +1,24 @@
+[package]
+name = "musi"
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[[bin]]
+name = "musi"
+path = "src/main.rs"
+
+[dependencies]
+musi_shared  = { path = "../musi_shared" }
+musi_lex     = { path = "../musi_lex" }
+musi_parse   = { path = "../musi_parse" }
+musi_codegen = { path = "../musi_codegen" }
+musi_vm      = { path = "../musi_vm" }
+
+[lints]
+workspace = true
