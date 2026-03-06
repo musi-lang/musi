@@ -1,6 +1,8 @@
 //! The `.mso` binary container: const pool, symbol table, function table, code.
 
-use core::str;
+use std::io::{Cursor, Read as _};
+
+use byteorder::{LE, ReadBytesExt as _};
 
 use crate::error::{CodegenError, DeserError};
 
@@ -8,6 +10,24 @@ use crate::error::{CodegenError, DeserError};
 const MAGIC: [u8; 4] = *b"MUSI";
 /// The only supported format version.
 const VERSION: u16 = 1;
+
+/// Reads `len` bytes from `r` and interprets them as UTF-8.
+fn read_str(r: &mut Cursor<&[u8]>, len: usize) -> Result<Box<str>, DeserError> {
+    let mut buf = vec![0u8; len];
+    r.read_exact(&mut buf).map_err(|_| DeserError::UnexpectedEof)?;
+    std::str::from_utf8(&buf)
+        .map_err(|_| DeserError::InvalidUtf8)
+        .map(Into::into)
+}
+
+/// Appends `entry` to `vec` and returns its index as a `u16`.
+///
+/// Returns `err` if the vector already has `u16::MAX` elements.
+fn push_entry<T>(vec: &mut Vec<T>, entry: T, err: CodegenError) -> Result<u16, CodegenError> {
+    let idx = u16::try_from(vec.len()).map_err(|_| err)?;
+    vec.push(entry);
+    Ok(idx)
+}
 
 /// A single entry in the const pool.
 #[derive(Debug, Clone, PartialEq)]
@@ -40,15 +60,15 @@ impl ConstEntry {
         }
     }
 
-    fn decode(reader: &mut Reader<'_>) -> Result<Self, DeserError> {
-        let tag = reader.read_u8()?;
+    fn decode(r: &mut Cursor<&[u8]>) -> Result<Self, DeserError> {
+        let tag = r.read_u8().map_err(|_| DeserError::UnexpectedEof)?;
         match tag {
-            0x01 => Ok(Self::Int(reader.read_i64()?)),
-            0x02 => Ok(Self::Float(reader.read_f64()?)),
+            0x01 => Ok(Self::Int(r.read_i64::<LE>().map_err(|_| DeserError::UnexpectedEof)?)),
+            0x02 => Ok(Self::Float(r.read_f64::<LE>().map_err(|_| DeserError::UnexpectedEof)?)),
             0x03 => {
-                let len = reader.read_u32()?;
+                let len = r.read_u32::<LE>().map_err(|_| DeserError::UnexpectedEof)?;
                 let len_usize = usize::try_from(len).map_err(|_| DeserError::UnexpectedEof)?;
-                Ok(Self::String(reader.read_str(len_usize)?))
+                Ok(Self::String(read_str(r, len_usize)?))
             }
             _ => Err(DeserError::UnknownConstTag(tag)),
         }
@@ -99,6 +119,8 @@ pub struct SymbolEntry {
     pub flags: SymbolFlags,
     /// Intrinsic ID used when the native flag is set; `0xFFFF` means none.
     pub intrinsic_id: u16,
+    /// ABI string for native functions (e.g. `"C"`, `"musi"`). Empty string = no ABI.
+    pub abi: Box<str>,
 }
 
 impl SymbolEntry {
@@ -109,17 +131,24 @@ impl SymbolEntry {
         buf.extend_from_slice(name_bytes);
         buf.push(self.flags.raw());
         buf.extend_from_slice(&self.intrinsic_id.to_le_bytes());
+        let abi_bytes = self.abi.as_bytes();
+        let abi_len = u16::try_from(abi_bytes.len()).expect("ABI string fits u16");
+        buf.extend_from_slice(&abi_len.to_le_bytes());
+        buf.extend_from_slice(abi_bytes);
     }
 
-    fn decode(reader: &mut Reader<'_>) -> Result<Self, DeserError> {
-        let name_len = reader.read_u16()?;
-        let name = reader.read_str(usize::from(name_len))?;
-        let flags = SymbolFlags::new(reader.read_u8()?);
-        let intrinsic_id = reader.read_u16()?;
+    fn decode(r: &mut Cursor<&[u8]>) -> Result<Self, DeserError> {
+        let name_len = r.read_u16::<LE>().map_err(|_| DeserError::UnexpectedEof)?;
+        let name = read_str(r, usize::from(name_len))?;
+        let flags = SymbolFlags::new(r.read_u8().map_err(|_| DeserError::UnexpectedEof)?);
+        let intrinsic_id = r.read_u16::<LE>().map_err(|_| DeserError::UnexpectedEof)?;
+        let abi_len = r.read_u16::<LE>().map_err(|_| DeserError::UnexpectedEof)?;
+        let abi = read_str(r, usize::from(abi_len))?;
         Ok(Self {
             name,
             flags,
             intrinsic_id,
+            abi,
         })
     }
 }
@@ -148,13 +177,13 @@ impl FunctionEntry {
         buf.extend_from_slice(&self.code_length.to_le_bytes());
     }
 
-    fn decode(reader: &mut Reader<'_>) -> Result<Self, DeserError> {
+    fn decode(r: &mut Cursor<&[u8]>) -> Result<Self, DeserError> {
         Ok(Self {
-            symbol_idx: reader.read_u16()?,
-            param_count: reader.read_u8()?,
-            local_count: reader.read_u16()?,
-            code_offset: reader.read_u32()?,
-            code_length: reader.read_u32()?,
+            symbol_idx: r.read_u16::<LE>().map_err(|_| DeserError::UnexpectedEof)?,
+            param_count: r.read_u8().map_err(|_| DeserError::UnexpectedEof)?,
+            local_count: r.read_u16::<LE>().map_err(|_| DeserError::UnexpectedEof)?,
+            code_offset: r.read_u32::<LE>().map_err(|_| DeserError::UnexpectedEof)?,
+            code_length: r.read_u32::<LE>().map_err(|_| DeserError::UnexpectedEof)?,
         })
     }
 }
@@ -254,43 +283,46 @@ impl Module {
     /// Returns a [`DeserError`] if the bytes are malformed, truncated, contain
     /// an unknown section tag, or use an unsupported version number.
     pub fn deserialize(bytes: &[u8]) -> Result<Self, DeserError> {
-        let mut r = Reader::new(bytes);
+        let mut r = Cursor::new(bytes);
 
         // Header
-        if r.read_4()? != MAGIC {
+        let mut magic = [0u8; 4];
+        r.read_exact(&mut magic).map_err(|_| DeserError::UnexpectedEof)?;
+        if magic != MAGIC {
             return Err(DeserError::InvalidMagic);
         }
-        let version = r.read_u16()?;
+        let version = r.read_u16::<LE>().map_err(|_| DeserError::UnexpectedEof)?;
         if version != VERSION {
             return Err(DeserError::UnsupportedVersion(version));
         }
-        let _flags = r.read_u16()?;
+        let _flags = r.read_u16::<LE>().map_err(|_| DeserError::UnexpectedEof)?;
 
         // Const pool
-        let n = r.read_u32()?;
+        let n = r.read_u32::<LE>().map_err(|_| DeserError::UnexpectedEof)?;
         let mut const_pool = Vec::new();
         for _ in 0..n {
             const_pool.push(ConstEntry::decode(&mut r)?);
         }
 
         // Symbol table
-        let n = r.read_u32()?;
+        let n = r.read_u32::<LE>().map_err(|_| DeserError::UnexpectedEof)?;
         let mut symbol_table = Vec::new();
         for _ in 0..n {
             symbol_table.push(SymbolEntry::decode(&mut r)?);
         }
 
         // Function table
-        let n = r.read_u32()?;
+        let n = r.read_u32::<LE>().map_err(|_| DeserError::UnexpectedEof)?;
         let mut function_table = Vec::new();
         for _ in 0..n {
             function_table.push(FunctionEntry::decode(&mut r)?);
         }
 
         // Code section
-        let code_len = r.read_u32()?;
+        let code_len = r.read_u32::<LE>().map_err(|_| DeserError::UnexpectedEof)?;
         let code_len_usize = usize::try_from(code_len).map_err(|_| DeserError::UnexpectedEof)?;
-        let code = r.read_bytes(code_len_usize)?.to_vec();
+        let mut code = vec![0u8; code_len_usize];
+        r.read_exact(&mut code).map_err(|_| DeserError::UnexpectedEof)?;
 
         Ok(Self {
             const_pool,
@@ -308,10 +340,7 @@ impl Module {
     /// Returns [`CodegenError::TooManySymbols`] if the symbol table already
     /// contains `u16::MAX` entries.
     pub fn push_symbol(&mut self, entry: SymbolEntry) -> Result<u16, CodegenError> {
-        let idx =
-            u16::try_from(self.symbol_table.len()).map_err(|_| CodegenError::TooManySymbols)?;
-        self.symbol_table.push(entry);
-        Ok(idx)
+        push_entry(&mut self.symbol_table, entry, CodegenError::TooManySymbols)
     }
 
     /// Appends a function entry and returns its index.
@@ -321,10 +350,7 @@ impl Module {
     /// Returns [`CodegenError::TooManyFunctions`] if the function table already
     /// contains `u16::MAX` entries.
     pub fn push_function(&mut self, entry: FunctionEntry) -> Result<u16, CodegenError> {
-        let idx =
-            u16::try_from(self.function_table.len()).map_err(|_| CodegenError::TooManyFunctions)?;
-        self.function_table.push(entry);
-        Ok(idx)
+        push_entry(&mut self.function_table, entry, CodegenError::TooManyFunctions)
     }
 
     /// Appends a const-pool entry and returns its index.
@@ -334,10 +360,7 @@ impl Module {
     /// Returns [`CodegenError::TooManyConstants`] if the const pool already
     /// contains `u16::MAX` entries.
     pub fn push_const(&mut self, entry: ConstEntry) -> Result<u16, CodegenError> {
-        let idx =
-            u16::try_from(self.const_pool.len()).map_err(|_| CodegenError::TooManyConstants)?;
-        self.const_pool.push(entry);
-        Ok(idx)
+        push_entry(&mut self.const_pool, entry, CodegenError::TooManyConstants)
     }
 
     /// Interns a string in the const pool, reusing an existing entry if present.
@@ -360,78 +383,6 @@ impl Module {
 impl Default for Module {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-/// A cursor over a borrowed byte slice.
-struct Reader<'a> {
-    data: &'a [u8],
-    pos: usize,
-}
-
-impl<'a> Reader<'a> {
-    const fn new(data: &'a [u8]) -> Self {
-        Self { data, pos: 0 }
-    }
-
-    /// Advances `pos` by `n` and returns a slice of those bytes.
-    ///
-    /// The returned slice carries the *data* lifetime `'a`, not the `&mut self`
-    /// borrow lifetime, so callers can invoke further methods right after.
-    fn read_bytes(&mut self, n: usize) -> Result<&'a [u8], DeserError> {
-        let end = self.pos.checked_add(n).ok_or(DeserError::UnexpectedEof)?;
-        let slice = self
-            .data
-            .get(self.pos..end)
-            .ok_or(DeserError::UnexpectedEof)?;
-        self.pos = end;
-        Ok(slice)
-    }
-
-    fn read_u8(&mut self) -> Result<u8, DeserError> {
-        let s = self.read_bytes(1)?;
-        s.first().copied().ok_or(DeserError::UnexpectedEof)
-    }
-
-    fn read_u16(&mut self) -> Result<u16, DeserError> {
-        let s = self.read_bytes(2)?;
-        let mut arr = [0u8; 2];
-        arr.copy_from_slice(s);
-        Ok(u16::from_le_bytes(arr))
-    }
-
-    fn read_u32(&mut self) -> Result<u32, DeserError> {
-        let s = self.read_bytes(4)?;
-        let mut arr = [0u8; 4];
-        arr.copy_from_slice(s);
-        Ok(u32::from_le_bytes(arr))
-    }
-
-    fn read_i64(&mut self) -> Result<i64, DeserError> {
-        let s = self.read_bytes(8)?;
-        let mut arr = [0u8; 8];
-        arr.copy_from_slice(s);
-        Ok(i64::from_le_bytes(arr))
-    }
-
-    fn read_f64(&mut self) -> Result<f64, DeserError> {
-        let s = self.read_bytes(8)?;
-        let mut arr = [0u8; 8];
-        arr.copy_from_slice(s);
-        Ok(f64::from_le_bytes(arr))
-    }
-
-    fn read_4(&mut self) -> Result<[u8; 4], DeserError> {
-        let s = self.read_bytes(4)?;
-        let mut arr = [0u8; 4];
-        arr.copy_from_slice(s);
-        Ok(arr)
-    }
-
-    fn read_str(&mut self, len: usize) -> Result<Box<str>, DeserError> {
-        let bytes = self.read_bytes(len)?;
-        let s = str::from_utf8(bytes).map_err(|_| DeserError::InvalidUtf8)?;
-        Ok(s.into())
     }
 }
 
