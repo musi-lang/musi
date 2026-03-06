@@ -39,6 +39,10 @@ atom_dot_lbrack = ".[";
 
 atom_dot_lbrace = ".{";
 
+(* UDN compound tokens *)
+question_dot      = "?.";  (* optional chaining *)
+question_question = "??";  (* nil coalescing    *)
+
 spread_op = "<..";
 
 line_comment = "//", {char - "\n"}, "\n";
@@ -104,10 +108,13 @@ ast_ty = ast_ty_arrow;
 
 ast_ty_arrow = ast_ty_noarrow, {"->", ast_ty_noarrow};
 
-ast_ty_noarrow = ast_ty_var | ast_ty_named | ast_ty_prod | ast_ty_arr;
+ast_ty_noarrow = ast_ty_var | ast_ty_option | ast_ty_named | ast_ty_prod | ast_ty_arr;
 
 (* 'T, 'a, 'key *)
 ast_ty_var = ty_ident;
+
+(* UDN: ?T sugar for Option[T] -- LL(1): "?" is never a type FIRST token otherwise *)
+ast_ty_option = "?", ast_ty_noarrow;
 
 (* Int, Option, Option['T], Map['K, 'V] *)
 ast_ty_named = lex_id, ["[", [ty_list], "]"];
@@ -156,6 +163,7 @@ ast_expr_atom =
   | ast_expr_paren
   | ast_expr_array
   | ast_expr_rec_lit
+  | ast_expr_dot_prefix    (* UDN: .Name or .Name(args) -- dot at atom position *)
   | ast_expr_if
   | ast_expr_return
   | ast_expr_break
@@ -183,6 +191,12 @@ ast_array_items  = ast_array_item, {",", ast_array_item};
 ast_array_item   = ast_expr | (spread_op, ast_expr);  (* <.. expr spreads an iterable *)
 
 ast_expr_rec_lit = ".{", [rec_lit_field_list], "}";
+
+(* UDN: dot-prefix constructor/value shorthand -- "." at atom position *)
+(* LL(1): Dot FIRST set is disjoint from all other atom FIRST sets     *)
+(* .None              -- zero-arg constructor                          *)
+(* .Some(x)           -- call form                                     *)
+ast_expr_dot_prefix = ".", lex_id, ["(", [expr_list], ")"];
 
 ast_rec_lit_field = (field_base, [bind_init])           (* field := val, or shorthand { x } = { x := x } *)
                   | (spread_op, ast_expr);              (* <.. expr spreads a record *)
@@ -307,7 +321,7 @@ ast_expr_label = "label", lex_id, ast_block;
 (* BP 0020 *)
 ast_expr_postfix = ast_expr_atom, {ast_postfix_op};
 
-ast_postfix_op = ast_call | ast_index | ast_field | ast_rec_dot | ast_cast;
+ast_postfix_op = ast_call | ast_index | ast_field | ast_opt_field | ast_rec_dot | ast_cast;
 
 ast_call = "(", [expr_list], ")";
 
@@ -316,6 +330,9 @@ ast_index = atom_dot_lbrack, [expr_list], "]";
 ast_rec_dot = atom_dot_lbrace, rec_lit_field_list, "}";
 
 ast_field = ".", (lex_id | lit_number);
+
+(* UDN: optional chaining -- ?.field; propagates None if receiver is None *)
+ast_opt_field = question_dot, (lex_id | lit_number);
 
 ast_cast = "as", ast_ty;
 
@@ -355,8 +372,12 @@ ast_expr_conj = ast_expr_equality, {"and", ast_expr_equality};
 (* BP 0120 *)
 ast_expr_disj = ast_expr_conj, {("or" | "xor"), ast_expr_conj};
 
+(* BP 0125 -- UDN: nil coalescing; lower than or/xor, higher than assign *)
+(* "??" FIRST is disjoint from "<-" FIRST so LL(1) is preserved         *)
+ast_expr_nil_coal = ast_expr_disj, ["??", ast_expr_disj];
+
 (* BP 0130 *)
-ast_expr_assign = ast_expr_disj, ["<-", ast_expr];
+ast_expr_assign = ast_expr_nil_coal, ["<-", ast_expr];
 
 ast_expr = ast_expr_assign;
 
@@ -368,8 +389,9 @@ ast_stmt = ast_expr, ";";
 ast_root = {ast_stmt};
 
 (* ========================================================================= *)
-(* PLANNED SYNTAX (not yet implemented)                                      *)
+(* IMPLEMENTED UDN (Universal Dot Notation)                                  *)
 (* ========================================================================= *)
-(* ?'T            -- sugar for Option['T]   (needs Question token)            *)
-(* expr?.field    -- optional chaining      (needs QuestionDot compound token)*)
-(* expr ?? dflt   -- nil coalescing         (needs QuestionQuestion token)    *)
+(* ?T             -- sugar for Option[T]    (ast_ty_option)                  *)
+(* expr?.field    -- optional chaining      (ast_opt_field postfix)          *)
+(* expr ?? dflt   -- nil coalescing         (ast_expr_nil_coal, BP 0125)     *)
+(* .Name(args)    -- dot-prefix constructor (ast_expr_dot_prefix)            *)

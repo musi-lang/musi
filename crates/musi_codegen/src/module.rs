@@ -164,8 +164,8 @@ impl FunctionEntry {
 pub struct MethodEntry {
     /// Method name, e.g. `"eq"`.
     pub name: Box<str>,
-    /// Type tag of the receiver (see `TypeTag` in the emitter).
-    pub type_tag: u8,
+    /// Type tag of the receiver (0–9 = primitives, 10+ = user-defined types).
+    pub type_tag: u16,
     /// Index into `function_table`.
     pub fn_idx: u16,
 }

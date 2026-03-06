@@ -62,7 +62,7 @@ fn encoded_len_matches_actual() {
         Opcode::HaltError,
         Opcode::LdFnIdx(0),
         Opcode::CallDynamic,
-        Opcode::NewObj(0),
+        Opcode::NewObj { type_tag: 0, field_count: 0 },
         Opcode::LdFld(0),
         Opcode::LdTag,
     ];
@@ -103,7 +103,7 @@ fn new_opcodes_round_trip() {
         Opcode::HaltError,
         Opcode::LdFnIdx(7),
         Opcode::CallDynamic,
-        Opcode::NewObj(3),
+        Opcode::NewObj { type_tag: 0, field_count: 3 },
         Opcode::LdFld(2),
         Opcode::LdTag,
     ];

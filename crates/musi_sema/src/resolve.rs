@@ -345,7 +345,7 @@ impl<'a> Resolver<'a> {
                             self.resolve_field_init(field, ctx, scope);
                         }
                     }
-                    PostfixOp::Field { .. } | PostfixOp::As { .. } => {}
+                    PostfixOp::Field { .. } | PostfixOp::OptField { .. } | PostfixOp::As { .. } => {}
                 }
             }
 

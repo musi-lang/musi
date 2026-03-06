@@ -473,3 +473,25 @@ fn size_hint_upper_bounds_token_count() {
     assert!(upper.is_some());
     assert!(tokens.len() <= upper.expect("has upper bound"));
 }
+
+#[test]
+fn lex_question_tokens() {
+    assert_eq!(lex_kinds("?"), vec![TokenKind::Question, TokenKind::Eof]);
+    assert_eq!(lex_kinds("?."), vec![TokenKind::QuestionDot, TokenKind::Eof]);
+    assert_eq!(lex_kinds("??"), vec![TokenKind::QuestionQuestion, TokenKind::Eof]);
+}
+
+#[test]
+fn lex_question_disambiguation() {
+    assert_eq!(
+        lex_kinds("x?.y ?? z"),
+        vec![
+            TokenKind::Ident,
+            TokenKind::QuestionDot,
+            TokenKind::Ident,
+            TokenKind::QuestionQuestion,
+            TokenKind::Ident,
+            TokenKind::Eof,
+        ]
+    );
+}

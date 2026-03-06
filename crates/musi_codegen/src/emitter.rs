@@ -221,7 +221,8 @@ impl Clone for VariantInfo {
 
 struct PendingLambda {
     fn_idx: u16,
-    param_names: Vec<String>,
+    /// (param_name, optional_type_name)
+    params: Vec<(String, Option<String>)>,
     body: Idx<Expr>,
 }
 
@@ -233,6 +234,26 @@ struct EmitState {
     pending_lambdas: Vec<PendingLambda>,
     /// Names of methods declared in any `class` body -- used to route UFCS calls to CallMethod.
     class_method_names: std::collections::HashSet<String>,
+    /// User-defined type tags assigned to named record/choice types (starts at 10).
+    type_tag_map: HashMap<String, u16>,
+    next_type_tag: u16,
+}
+
+fn ty_name_str(ty: &Ty, interner: &Interner) -> Option<String> {
+    if let Ty::Named { name, args, .. } = ty {
+        if args.is_empty() {
+            return Some(interner.resolve(*name).to_owned());
+        }
+    }
+    None
+}
+
+fn param_list_with_types(params: &[musi_ast::Param], interner: &Interner) -> Vec<(String, Option<String>)> {
+    params.iter().map(|p| {
+        let name = interner.resolve(p.name).to_owned();
+        let type_name = p.ty.as_ref().and_then(|t| ty_name_str(t, interner));
+        (name, type_name)
+    }).collect()
 }
 
 fn register_fn_def(
@@ -324,6 +345,11 @@ fn register_record(
         .iter()
         .map(|f| interner.resolve(f.name).to_owned())
         .collect();
+    if !state.type_tag_map.contains_key(&type_name) {
+        let tag = state.next_type_tag;
+        state.next_type_tag = state.next_type_tag.saturating_add(1);
+        let _prev = state.type_tag_map.insert(type_name.clone(), tag);
+    }
     let _prev = state.type_map.insert(type_name, TypeInfo { field_names });
 }
 
@@ -342,6 +368,11 @@ fn register_choice(
         return Ok(());
     };
     let type_name = interner.resolve(*name).to_owned();
+    if !state.type_tag_map.contains_key(&type_name) {
+        let tag = state.next_type_tag;
+        state.next_type_tag = state.next_type_tag.saturating_add(1);
+        let _prev = state.type_tag_map.insert(type_name.clone(), tag);
+    }
 
     let max_payload = variants.iter().map(payload_count).max().unwrap_or(0);
     let total_field_count = max_payload + 1; // +1 for discriminant
@@ -394,17 +425,23 @@ fn register_given_def(
     exprs: &Arena<Expr>,
     interner: &Interner,
     module: &mut Module,
-    _state: &mut EmitState,
+    state: &mut EmitState,
 ) -> Result<(), CodegenError> {
     let Expr::GivenDef { class_app, members, .. } = exprs.get(item_idx) else {
         return Ok(());
     };
 
-    let type_tag = match class_app {
+    let type_tag: u16 = match class_app {
         Ty::Named { args, .. } if !args.is_empty() => {
             if let Ty::Named { name: arg_name, .. } = &args[0] {
                 let arg_str = interner.resolve(*arg_name);
-                TypeTag::from_type_name(arg_str).ok_or(CodegenError::UnsupportedExpr)?
+                if let Some(prim) = TypeTag::from_type_name(arg_str) {
+                    prim as u16
+                } else if let Some(&user_tag) = state.type_tag_map.get(arg_str) {
+                    user_tag
+                } else {
+                    return Ok(());
+                }
             } else {
                 return Ok(());
             }
@@ -443,7 +480,7 @@ fn register_given_def(
 
         module.method_table.push(MethodEntry {
             name: fn_name.clone().into_boxed_str(),
-            type_tag: type_tag as u8,
+            type_tag,
             fn_idx,
         });
         // Do NOT insert into fn_map: class methods are dispatched via CallMethod,
@@ -479,7 +516,7 @@ fn payload_count(v: &ChoiceVariant) -> u16 {
 
 fn emit_fn_body(
     fn_idx: u16,
-    param_names: &[String],
+    params: &[(String, Option<String>)],
     body_idx: Idx<Expr>,
     arenas: &EmitArenas<'_>,
     state: &mut EmitState,
@@ -487,8 +524,13 @@ fn emit_fn_body(
 ) -> Result<(), CodegenError> {
     let mut out = FnEmitter::new();
     out.push_scope();
-    for name in param_names {
-        let _slot = out.define_local(name)?;
+    for (name, type_name_opt) in params {
+        let slot = out.define_local(name)?;
+        if let Some(type_name) = type_name_opt {
+            if state.type_map.contains_key(type_name) {
+                let _prev = out.local_types.insert(slot, type_name.clone());
+            }
+        }
     }
     let body = arenas.exprs.get(body_idx).clone();
     emit_expr(arenas, state, &body, module, &mut out)?;
@@ -534,14 +576,15 @@ fn emit_expr(
 
         Expr::Ident { name, .. } => {
             let name_str = arenas.interner.resolve(*name);
-            if let Some(vinfo) = state.variant_map.get(name_str) {
+            if let Some(vinfo) = state.variant_map.get(name_str).cloned() {
                 let disc = vinfo.discriminant;
                 let total = vinfo.total_field_count;
+                let type_tag = state.type_tag_map.get(&vinfo.type_name).copied().unwrap_or(0);
                 out.push(&Opcode::LdImmI64(disc));
                 for _ in 0..total.saturating_sub(1) {
                     out.push(&Opcode::LdImmUnit);
                 }
-                out.push(&Opcode::NewObj(total));
+                out.push(&Opcode::NewObj { type_tag, field_count: total });
                 return Ok(());
             }
             let slot = out
@@ -626,11 +669,8 @@ fn emit_expr(
                 .checked_add(1)
                 .ok_or(CodegenError::TooManyFunctions)?;
 
-            let param_names: Vec<String> = params
-                .iter()
-                .map(|p| arenas.interner.resolve(p.name).to_owned())
-                .collect();
-            let param_count = u8::try_from(param_names.len())
+            let params_with_types = param_list_with_types(params, arenas.interner);
+            let param_count = u8::try_from(params_with_types.len())
                 .map_err(|_| CodegenError::ParameterCountOverflow)?;
 
             let sym_idx = module.push_symbol(SymbolEntry {
@@ -648,7 +688,7 @@ fn emit_expr(
             let _prev = state.fn_map.insert(lambda_name, fn_idx);
             state.pending_lambdas.push(PendingLambda {
                 fn_idx,
-                param_names,
+                params: params_with_types,
                 body: *body,
             });
             out.push(&Opcode::LdFnIdx(fn_idx));
@@ -736,6 +776,17 @@ fn emit_expr(
             scrutinee, arms, ..
         } => emit_match(arenas, state, *scrutinee, arms, module, out),
 
+        Expr::DotPrefix { name, args, .. } => {
+            let name_str = arenas.interner.resolve(*name);
+            if let Some(vinfo) = state.variant_map.get(name_str).cloned() {
+                return emit_variant_construct(&vinfo, args, arenas, state, module, out);
+            }
+            if let Some(&fn_idx) = state.fn_map.get(name_str) {
+                return emit_static_call(fn_idx, args, arenas, state, module, out);
+            }
+            Err(CodegenError::UnknownFunction(name_str.into()))
+        }
+
         Expr::Tuple { .. }
         | Expr::Array { .. }
         | Expr::AnonRec { .. }
@@ -765,7 +816,7 @@ fn emit_postfix(
         PostfixOp::Call { args, .. } => emit_call(arenas, state, base, args, module, out),
         PostfixOp::Field { name, .. } => emit_field_access(arenas, state, base, *name, module, out),
         PostfixOp::RecDot { fields, .. } => emit_rec_dot(arenas, state, base, fields, module, out),
-        PostfixOp::Index { .. } | PostfixOp::As { .. } => Err(CodegenError::UnsupportedExpr),
+        PostfixOp::OptField { .. } | PostfixOp::Index { .. } | PostfixOp::As { .. } => Err(CodegenError::UnsupportedExpr),
     }
 }
 
@@ -791,6 +842,7 @@ fn emit_variant_construct(
     module: &mut Module,
     out: &mut FnEmitter,
 ) -> Result<(), CodegenError> {
+    let type_tag = state.type_tag_map.get(&vinfo.type_name).copied().unwrap_or(0);
     out.push(&Opcode::LdImmI64(vinfo.discriminant));
     emit_args(arenas, state, args, module, out)?;
     let provided = u16::try_from(args.len()).map_err(|_| CodegenError::UnsupportedExpr)?;
@@ -800,7 +852,7 @@ fn emit_variant_construct(
     for _ in vinfo.payload_count.saturating_add(1)..vinfo.total_field_count {
         out.push(&Opcode::LdImmUnit);
     }
-    out.push(&Opcode::NewObj(vinfo.total_field_count));
+    out.push(&Opcode::NewObj { type_tag, field_count: vinfo.total_field_count });
     Ok(())
 }
 
@@ -1072,7 +1124,8 @@ fn emit_rec_dot(
             ));
         }
     }
-    out.push(&Opcode::NewObj(field_count));
+    let type_tag = state.type_tag_map.get(&type_name).copied().unwrap_or(0);
+    out.push(&Opcode::NewObj { type_tag, field_count });
     Ok(())
 }
 
@@ -1263,9 +1316,25 @@ fn track_type_of_binding(
             ..
         } => {
             if let Expr::Ident { name, .. } = arenas.exprs.get(*base) {
+                // Variant constructor: SomeVariant(args)
                 let variant_name = arenas.interner.resolve(*name);
                 if let Some(vinfo) = state.variant_map.get(variant_name) {
                     let _prev = out.local_types.insert(slot, vinfo.type_name.clone());
+                }
+            } else if let Expr::Postfix {
+                base: recv_idx,
+                op: PostfixOp::Field { .. },
+                ..
+            } = arenas.exprs.get(*base)
+            {
+                // UFCS call: receiver.method(args) — propagate receiver's type
+                if let Expr::Ident { name: recv_name, .. } = arenas.exprs.get(*recv_idx) {
+                    let recv_str = arenas.interner.resolve(*recv_name);
+                    if let Some(recv_slot) = out.lookup_local(recv_str) {
+                        if let Some(type_name) = out.local_types.get(&recv_slot).cloned() {
+                            let _prev = out.local_types.insert(slot, type_name);
+                        }
+                    }
                 }
             }
         }
@@ -1351,6 +1420,10 @@ fn emit_binary(
         BinOp::Gt => Opcode::GtI64,
         BinOp::LtEq => Opcode::LeqI64,
         BinOp::GtEq => Opcode::GeqI64,
+        BinOp::NilCoalesce => {
+            out.push(&Opcode::NilCoalesce);
+            return Ok(());
+        }
         BinOp::In | BinOp::Range | BinOp::RangeExcl | BinOp::Cons | BinOp::And | BinOp::Or => {
             return Err(CodegenError::UnsupportedExpr);
         }
@@ -1555,7 +1628,7 @@ fn emit_module_fn_bodies(
         exprs: &parsed.ctx.exprs,
         interner,
     };
-    let mut pending: Vec<(u16, Vec<String>, Idx<Expr>)> = Vec::new();
+    let mut pending: Vec<(u16, Vec<(String, Option<String>)>, Idx<Expr>)> = Vec::new();
     for &item_idx in &parsed.items {
         match parsed.ctx.exprs.get(item_idx) {
             Expr::FnDef {
@@ -1573,20 +1646,21 @@ fn emit_module_fn_bodies(
                     .fn_map
                     .get(&fn_name)
                     .ok_or_else(|| CodegenError::UnknownFunction(fn_name.clone().into_boxed_str()))?;
-                let param_names = params
-                    .iter()
-                    .map(|p| interner.resolve(p.name).to_owned())
-                    .collect();
-                pending.push((fn_idx, param_names, *body_idx));
+                let param_info = param_list_with_types(params, interner);
+                pending.push((fn_idx, param_info, *body_idx));
             }
             Expr::GivenDef { class_app, members, .. } => {
                 // Determine the type_tag so we can find the exact method_table entry
                 // for this given, even when multiple givens implement the same method name.
-                let type_tag_opt = match class_app {
+                let type_tag_opt: Option<u16> = match class_app {
                     Ty::Named { args, .. } if !args.is_empty() => {
                         if let Ty::Named { name: arg_name, .. } = &args[0] {
                             let arg_str = interner.resolve(*arg_name);
-                            TypeTag::from_type_name(arg_str).map(|t| t as u8)
+                            if let Some(prim) = TypeTag::from_type_name(arg_str) {
+                                Some(prim as u16)
+                            } else {
+                                state.type_tag_map.get(arg_str).copied()
+                            }
                         } else {
                             None
                         }
@@ -1623,11 +1697,8 @@ fn emit_module_fn_bodies(
                         Some(entry) => entry.fn_idx,
                         None => continue,
                     };
-                    let param_names = params
-                        .iter()
-                        .map(|p| interner.resolve(p.name).to_owned())
-                        .collect();
-                    pending.push((fn_idx, param_names, *body_idx));
+                    let param_info = param_list_with_types(params, interner);
+                    pending.push((fn_idx, param_info, *body_idx));
                 }
             }
             _ => {}
@@ -1712,6 +1783,8 @@ pub fn emit(
         lambda_counter: 0,
         pending_lambdas: Vec::new(),
         class_method_names: std::collections::HashSet::new(),
+        type_tag_map: HashMap::new(),
+        next_type_tag: 10,
     };
 
     register_module_decls(prelude, interner, &mut module, &mut state)?;
@@ -1744,7 +1817,7 @@ fn emit_pending_lambdas(
         for lam in pending {
             emit_fn_body(
                 lam.fn_idx,
-                &lam.param_names,
+                &lam.params,
                 lam.body,
                 arenas,
                 state,

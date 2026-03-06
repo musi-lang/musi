@@ -183,6 +183,8 @@ pub enum BinOp {
     RangeExcl,
     // Cons (left-assoc)
     Cons,
+    // Nil coalescing: lhs ?? rhs
+    NilCoalesce,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -199,6 +201,7 @@ pub enum PostfixOp {
     Call { args: Vec<Idx<Expr>>, span: Span },
     Index { args: Vec<Idx<Expr>>, span: Span },
     Field { name: Symbol, span: Span },
+    OptField { name: Symbol, span: Span },
     RecDot { fields: Vec<FieldInit>, span: Span },
     As { ty: Ty, span: Span },
 }
@@ -224,6 +227,11 @@ pub enum Ty {
     Arrow {
         params: Vec<Self>,
         ret: Box<Self>,
+        span: Span,
+    },
+    /// `?T` sugar for `Option[T]`.
+    Option {
+        inner: Box<Self>,
         span: Span,
     },
     Named {
@@ -488,6 +496,13 @@ pub enum Expr {
     Postfix {
         base: Idx<Self>,
         op: PostfixOp,
+        span: Span,
+    },
+
+    // Dot-prefix constructor/call shorthand: .Name or .Name(args)
+    DotPrefix {
+        name: Symbol,
+        args: Vec<Idx<Self>>,
         span: Span,
     },
 

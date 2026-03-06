@@ -242,6 +242,8 @@ impl<'a> Parser<'a> {
         let (l, r, op) = match kind {
             // BP 10 -- assign (right-assoc)
             T::LtMinus => (10, 9, Assign),
+            // BP 15 -- nil coalescing (right-assoc)
+            T::QuestionQuestion => (15, 14, Binary(B::NilCoalesce)),
             // BP 20 -- or / xor (left-assoc)
             T::Or => (20, 21, Binary(B::Or)),
             T::Xor => (20, 21, Binary(B::Xor)),
@@ -355,6 +357,19 @@ impl<'a> Parser<'a> {
                         }
                     }
                 }
+                // OptField: e?.field
+                TokenKind::QuestionDot => {
+                    let _qd = self.advance();
+                    let field_start = self.start_span();
+                    let name = self.expect_symbol();
+                    let f_span = self.finish_span(field_start);
+                    let base = self.alloc_expr(lhs);
+                    lhs = self.wrap_postfix(
+                        base,
+                        PostfixOp::OptField { name, span: f_span },
+                        start,
+                    );
+                }
                 // As cast: e as T
                 TokenKind::As => {
                     let _as_kw = self.advance();
@@ -414,6 +429,9 @@ impl<'a> Parser<'a> {
             TokenKind::LBracket => self.parse_array_lit(),
 
             TokenKind::DotLBrace => self.parse_anon_rec_lit(),
+
+            // Dot-prefix: .Name or .Name(args)  -- constructor/variant shorthand
+            TokenKind::Dot => self.parse_dot_prefix(),
 
             TokenKind::If => self.parse_if(),
             TokenKind::Match => self.parse_match(),
@@ -544,6 +562,25 @@ impl<'a> Parser<'a> {
         let _rb = self.expect(TokenKind::RBrace);
         Expr::AnonRec {
             fields,
+            span: self.finish_span(start),
+        }
+    }
+
+    fn parse_dot_prefix(&mut self) -> Expr {
+        let start = self.start_span();
+        let _dot = self.expect(TokenKind::Dot);
+        let name = self.expect_symbol();
+        let args = if self.at(TokenKind::LParen) {
+            let _lp = self.advance();
+            let args = self.parse_expr_list(TokenKind::RParen);
+            let _rp = self.expect(TokenKind::RParen);
+            args
+        } else {
+            Vec::new()
+        };
+        Expr::DotPrefix {
+            name,
+            args,
             span: self.finish_span(start),
         }
     }
@@ -1272,6 +1309,15 @@ impl<'a> Parser<'a> {
 
     fn parse_ty_noarrow(&mut self) -> Ty {
         match self.peek_kind() {
+            TokenKind::Question => {
+                let start = self.start_span();
+                let _q = self.advance();
+                let inner = Box::new(self.parse_ty_noarrow());
+                Ty::Option {
+                    inner,
+                    span: self.finish_span(start),
+                }
+            }
             TokenKind::TyIdent => {
                 let start = self.start_span();
                 let name = self.expect_symbol();

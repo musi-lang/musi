@@ -60,6 +60,14 @@ class Mul['T] {
     fn mul(a: 'T, b: 'T): 'T;
 };
 
+class Div['T] {
+    fn div(a: 'T, b: 'T): 'T;
+};
+
+class Rem['T] {
+    fn rem(a: 'T, b: 'T): 'T;
+};
+
 class Show['T] {
     fn show(a: 'T): String;
 };
@@ -91,6 +99,14 @@ given Mul[Int] {
     fn mul(a: Int, b: Int): Int => a * b;
 };
 
+given Div[Int] {
+    fn div(a: Int, b: Int): Int => a / b;
+};
+
+given Rem[Int] {
+    fn rem(a: Int, b: Int): Int => a % b;
+};
+
 given Show[Int] {
     fn show(a: Int): String => int_to_string(a);
 };
@@ -110,6 +126,14 @@ given Ord[Float] {
 
 given Add[Float] {
     fn add(a: Float, b: Float): Float => a + b;
+};
+
+given Div[Float] {
+    fn div(a: Float, b: Float): Float => a / b;
+};
+
+given Eq[Bool] {
+    fn eq(a: Bool, b: Bool): Bool => a = b;
 };
 
 given Show[Float] {

@@ -364,7 +364,7 @@ fn new_obj_and_ld_fld() {
     let mut code = Vec::new();
     Opcode::LdImmI64(10).encode_into(&mut code);
     Opcode::LdImmI64(20).encode_into(&mut code);
-    Opcode::NewObj(2).encode_into(&mut code);
+    Opcode::NewObj { type_tag: 0, field_count: 2 }.encode_into(&mut code);
     Opcode::LdFld(1).encode_into(&mut code);
     Opcode::Halt.encode_into(&mut code);
     let code_len = u32::try_from(code.len()).expect("fits");
@@ -396,7 +396,7 @@ fn ld_tag_reads_discriminant() {
     let mut code = Vec::new();
     Opcode::LdImmI64(42).encode_into(&mut code);
     Opcode::LdImmUnit.encode_into(&mut code);
-    Opcode::NewObj(2).encode_into(&mut code);
+    Opcode::NewObj { type_tag: 0, field_count: 2 }.encode_into(&mut code);
     Opcode::LdTag.encode_into(&mut code);
     Opcode::Halt.encode_into(&mut code);
     let code_len = u32::try_from(code.len()).expect("fits");
@@ -557,4 +557,23 @@ same;
 "#,
     );
     assert_eq!(result, Value::Unit);
+}
+
+#[test]
+fn user_type_operator_dispatch_via_given() {
+    // given Add[Vec2] lets v1.add(v2) dispatch to user-defined method without panic
+    let _result = run_src(
+        r#"
+record Vec2 { x: Int, y: Int };
+
+given Add[Vec2] {
+    fn add(a: Vec2, b: Vec2): Vec2 => Vec2.{ x := a.x + b.x, y := a.y + b.y };
+};
+
+const v1 := Vec2.{ x := 1, y := 2 };
+const v2 := Vec2.{ x := 3, y := 4 };
+const v3 := v1.add(v2);
+writeln(int_to_string(v3.x));
+"#,
+    );
 }

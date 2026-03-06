@@ -89,6 +89,9 @@ pub enum TokenKind {
     DotLBracket,
     DotLBrace,
     LtDotDot,
+    Question,
+    QuestionDot,
+    QuestionQuestion,
 
     // -- Literals ---------------------------------------------------------
     IntLit,
@@ -238,6 +241,9 @@ impl TokenKind {
             Self::DotLBracket => Some(".["),
             Self::DotLBrace => Some(".{"),
             Self::LtDotDot => Some("<.."),
+            Self::Question => Some("?"),
+            Self::QuestionDot => Some("?."),
+            Self::QuestionQuestion => Some("??"),
 
             // -- Variable-text tokens
             Self::IntLit

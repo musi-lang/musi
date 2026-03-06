@@ -259,6 +259,7 @@ impl Lexer<'_> {
             b'"' => self.lex_string(start),
             b'/' => self.lex_slash(start),
             b'.' => self.lex_dot(start),
+            b'?' => self.lex_question(start),
             b'<' => self.lex_lt(start),
             b':' => self.lex_colon(start),
             b'-' => self.lex_minus(start),
@@ -468,6 +469,21 @@ impl Lexer<'_> {
                 }
             }
             _ => self.emit(TokenKind::Dot, start),
+        }
+    }
+
+    fn lex_question(&mut self, start: usize) -> Token {
+        let _ = self.advance();
+        match self.peek() {
+            Some(b'?') => {
+                let _ = self.advance();
+                self.emit(TokenKind::QuestionQuestion, start)
+            }
+            Some(b'.') => {
+                let _ = self.advance();
+                self.emit(TokenKind::QuestionDot, start)
+            }
+            _ => self.emit(TokenKind::Question, start),
         }
     }
 

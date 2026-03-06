@@ -126,6 +126,16 @@ impl<'a> Printer<'a> {
             Expr::Array { ref items, .. } => self.print_array(items),
             Expr::AnonRec { ref fields, .. } => self.print_anon_rec(fields),
             Expr::Binary { op, lhs, rhs, .. } => self.print_binary(op, lhs, rhs),
+            Expr::DotPrefix { name, ref args, .. } => {
+                self.write("(dot-prefix ");
+                self.write(self.sym(name));
+                if !args.is_empty() {
+                    self.write(" [");
+                    self.space_separated_exprs(args);
+                    self.write_char(']');
+                }
+                self.write_char(')');
+            }
             Expr::Prefix { op, operand, .. } => self.print_prefix(op, operand),
             Expr::Assign { target, value, .. } => {
                 self.write("(assign ");
@@ -738,6 +748,13 @@ impl<'a> Printer<'a> {
                 }
                 self.write("])");
             }
+            PostfixOp::OptField { name, .. } => {
+                self.write("(opt-field ");
+                self.print_expr(base);
+                self.write_char(' ');
+                self.write(self.sym(*name));
+                self.write_char(')');
+            }
             PostfixOp::As { ty, .. } => {
                 self.write("(as ");
                 self.print_expr(base);
@@ -801,6 +818,11 @@ impl<'a> Printer<'a> {
             }
             Ty::Var { name, .. } => {
                 self.write(self.sym(*name));
+            }
+            Ty::Option { inner, .. } => {
+                self.write("(option ");
+                self.print_ty(inner);
+                self.write_char(')');
             }
             Ty::Error { .. } => self.write("error_ty"),
         }
@@ -1161,6 +1183,7 @@ const fn binop_str(op: BinOp) -> &'static str {
         BinOp::Range => "..",
         BinOp::RangeExcl => "..<",
         BinOp::Cons => "::",
+        BinOp::NilCoalesce => "??",
     }
 }
 

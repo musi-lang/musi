@@ -323,3 +323,47 @@ fn parse_fn_with_where() {
         "expected FnDef with 1 where constraint and body, got: {expr:?}"
     );
 }
+
+// 25. UDN: ?Type sugar -> Ty::Option
+#[test]
+fn parse_option_type_sugar() {
+    let module = parse_ok("fn f(x: ?Int): ?Int => x;");
+    assert_eq!(module.items.len(), 1);
+    let expr = module.ctx.exprs.get(module.items[0]);
+    let Expr::FnDef { params, ret_ty, .. } = expr else { panic!("expected FnDef") };
+    assert!(matches!(params[0].ty, Some(Ty::Option { .. })), "param type should be Ty::Option");
+    assert!(matches!(ret_ty, Some(Ty::Option { .. })), "return type should be Ty::Option");
+}
+
+// 26. UDN: dot-prefix constructor .Name(args)
+#[test]
+fn parse_dot_prefix_call() {
+    let module = parse_ok("const x := .Some(42);");
+    assert_eq!(module.items.len(), 1);
+    let expr = module.ctx.exprs.get(module.items[0]);
+    let Expr::Bind { init: Some(init_idx), .. } = expr else { panic!("expected Bind") };
+    let init = module.ctx.exprs.get(*init_idx);
+    assert!(matches!(init, Expr::DotPrefix { args, .. } if args.len() == 1), "expected DotPrefix with 1 arg");
+}
+
+// 27. UDN: nil coalescing ??
+#[test]
+fn parse_nil_coalesce() {
+    let module = parse_ok("const x := opt ?? 0;");
+    assert_eq!(module.items.len(), 1);
+    let expr = module.ctx.exprs.get(module.items[0]);
+    let Expr::Bind { init: Some(init_idx), .. } = expr else { panic!("expected Bind") };
+    let init = module.ctx.exprs.get(*init_idx);
+    assert!(matches!(init, Expr::Binary { op: BinOp::NilCoalesce, .. }), "expected NilCoalesce");
+}
+
+// 28. UDN: optional chaining ?.
+#[test]
+fn parse_optional_chain() {
+    let module = parse_ok("const x := opt?.value;");
+    assert_eq!(module.items.len(), 1);
+    let expr = module.ctx.exprs.get(module.items[0]);
+    let Expr::Bind { init: Some(init_idx), .. } = expr else { panic!("expected Bind") };
+    let init = module.ctx.exprs.get(*init_idx);
+    assert!(matches!(init, Expr::Postfix { op: PostfixOp::OptField { .. }, .. }), "expected OptField");
+}

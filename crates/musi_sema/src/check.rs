@@ -358,6 +358,11 @@ impl<'a> TypeChecker<'a> {
                 Type::Tuple(elems)
             }
             Ty::Arr { element, .. } => Type::Array(Box::new(self.resolve_ty(element)), None),
+            Ty::Option { inner, .. } => {
+                // ?T → Option[T]; not fully resolved yet.
+                let _inner_ty = self.resolve_ty(inner);
+                Type::Error
+            }
             Ty::Error { .. } => Type::Error,
         }
     }
@@ -830,6 +835,11 @@ impl<'a> TypeChecker<'a> {
                 // Cons: result type is an array of the lhs element type.
                 Type::Array(Box::new(lhs_ty), None)
             }
+
+            BinOp::NilCoalesce => {
+                // lhs ?? rhs: lhs is Option[T], rhs is T, result is T.
+                Type::Var(self.unify_table.fresh())
+            }
         }
     }
 
@@ -870,6 +880,11 @@ impl<'a> TypeChecker<'a> {
                 self.infer_field_inits(fields, ctx);
                 // Result is same type as base (record update).
                 base_ty
+            }
+
+            PostfixOp::OptField { .. } => {
+                let _base_ty = self.infer(base, ctx);
+                Type::Var(self.unify_table.fresh())
             }
 
             PostfixOp::As { ty, .. } => {
@@ -1187,11 +1202,14 @@ const fn span_of_expr(expr: &Expr) -> Span {
         | Expr::Choice { span, .. }
         | Expr::FnDef { span, .. }
         | Expr::Lambda { span, .. }
+        | Expr::ClassDef { span, .. }
+        | Expr::GivenDef { span, .. }
         | Expr::Bind { span, .. }
         | Expr::Prefix { span, .. }
         | Expr::Binary { span, .. }
         | Expr::Assign { span, .. }
         | Expr::Postfix { span, .. }
+        | Expr::DotPrefix { span, .. }
         | Expr::Error { span } => *span,
     }
 }

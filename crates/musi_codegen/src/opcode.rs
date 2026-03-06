@@ -22,6 +22,8 @@ const NEW_OBJ: u8 = 0x80;
 const LD_FLD: u8 = 0x81;
 const LD_TAG: u8 = 0x82;
 const CALL_METHOD: u8 = 0x83;
+const NIL_COALESCE: u8 = 0x84;
+const OPT_FIELD: u8 = 0x85;
 // Arithmetic -- integer
 const ADD_I64: u8 = 0x30;
 const SUB_I64: u8 = 0x31;
@@ -106,8 +108,8 @@ pub enum Opcode {
     LdFnIdx(u16),
     /// Pop a `Value::Function` from the stack and call it.
     CallDynamic,
-    /// Pop N values from the stack and create a `Value::Object`.
-    NewObj(u16),
+    /// Pop `field_count` values from the stack and create a `Value::Object` with the given type tag.
+    NewObj { type_tag: u16, field_count: u16 },
     /// Pop a `Value::Object` and push the field at the given index.
     LdFld(u16),
     /// Pop a `Value::Object` and push field[0] as an Int (discriminant).
@@ -193,6 +195,10 @@ pub enum Opcode {
     /// Pop `arg_count` values (receiver is the first arg pushed), dispatch on receiver type.
     /// `method_idx` is a const-pool index for the method name string.
     CallMethod { method_idx: u16, arg_count: u16 },
+    /// Pop rhs (default), pop lhs (Option value): push lhs inner if Some, else push rhs.
+    NilCoalesce,
+    /// Pop an Option value; if None push None, else access field at index and wrap in Some.
+    OptField(u16),
 }
 
 impl Opcode {
@@ -235,9 +241,10 @@ impl Opcode {
                 buf.extend_from_slice(&idx.to_le_bytes());
             }
             Self::CallDynamic => buf.push(CALL_DYNAMIC),
-            Self::NewObj(n) => {
+            Self::NewObj { type_tag, field_count } => {
                 buf.push(NEW_OBJ);
-                buf.extend_from_slice(&n.to_le_bytes());
+                buf.extend_from_slice(&type_tag.to_le_bytes());
+                buf.extend_from_slice(&field_count.to_le_bytes());
             }
             Self::LdFld(idx) => {
                 buf.push(LD_FLD);
@@ -292,6 +299,11 @@ impl Opcode {
                 buf.extend_from_slice(&offset.to_le_bytes());
             }
             Self::ConcatStr => buf.push(CONCAT_STR),
+            Self::NilCoalesce => buf.push(NIL_COALESCE),
+            Self::OptField(idx) => {
+                buf.push(OPT_FIELD);
+                buf.extend_from_slice(&idx.to_le_bytes());
+            }
             Self::CallMethod { method_idx, arg_count } => {
                 buf.push(CALL_METHOD);
                 buf.extend_from_slice(&method_idx.to_le_bytes());
@@ -332,7 +344,11 @@ impl Opcode {
             CALL => Ok((Self::Call(read_u16(code, offset + 1)?), 3)),
             LD_FN_IDX => Ok((Self::LdFnIdx(read_u16(code, offset + 1)?), 3)),
             CALL_DYNAMIC => Ok((Self::CallDynamic, 1)),
-            NEW_OBJ => Ok((Self::NewObj(read_u16(code, offset + 1)?), 3)),
+            NEW_OBJ => {
+                let type_tag = read_u16(code, offset + 1)?;
+                let field_count = read_u16(code, offset + 3)?;
+                Ok((Self::NewObj { type_tag, field_count }, 5))
+            }
             LD_FLD => Ok((Self::LdFld(read_u16(code, offset + 1)?), 3)),
             LD_TAG => Ok((Self::LdTag, 1)),
             ADD_I64 => Ok((Self::AddI64, 1)),
@@ -374,6 +390,8 @@ impl Opcode {
             BR_TRUE => Ok((Self::BrTrue(read_i32(code, offset + 1)?), 5)),
             BR_FALSE => Ok((Self::BrFalse(read_i32(code, offset + 1)?), 5)),
             CONCAT_STR => Ok((Self::ConcatStr, 1)),
+            NIL_COALESCE => Ok((Self::NilCoalesce, 1)),
+            OPT_FIELD => Ok((Self::OptField(read_u16(code, offset + 1)?), 3)),
             CALL_METHOD => {
                 let method_idx = read_u16(code, offset + 1)?;
                 let arg_count = read_u16(code, offset + 3)?;
@@ -431,17 +449,18 @@ impl Opcode {
             | Self::BitNot
             | Self::Shl
             | Self::Shr
-            | Self::ConcatStr => 1,
+            | Self::ConcatStr
+            | Self::NilCoalesce => 1,
             Self::LdImmI64(_) | Self::LdImmF64(_) => 9,
             Self::LdConst(_)
             | Self::LdLoc(_)
             | Self::StLoc(_)
             | Self::Call(_)
             | Self::LdFnIdx(_)
-            | Self::NewObj(_)
-            | Self::LdFld(_) => 3,
+            | Self::LdFld(_)
+            | Self::OptField(_) => 3,
             Self::Br(_) | Self::BrTrue(_) | Self::BrFalse(_) => 5,
-            Self::CallMethod { .. } => 5,
+            Self::NewObj { .. } | Self::CallMethod { .. } => 5,
         }
     }
 }

@@ -346,6 +346,11 @@
                     "match": "<\\.\\."
                 },
                 {
+                    "comment": "UDN: optional chaining ?. and nil coalescing ??",
+                    "name": "keyword.operator.optional.musi",
+                    "match": "\\?\\.|\\?\\?"
+                },
+                {
                     "name": "keyword.operator.cons.musi",
                     "match": "::"
                 },

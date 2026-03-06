@@ -141,7 +141,7 @@ impl Vm {
                 Ok(Signal::Continue)
             }
             Opcode::HaltError => Err(VmError::MatchFailure),
-            Opcode::NewObj(n) => self.exec_new_obj(n),
+            Opcode::NewObj { type_tag, field_count } => self.exec_new_obj(type_tag, field_count),
             Opcode::LdFld(idx) => self.exec_ld_fld(idx),
             Opcode::LdTag => self.exec_ld_tag(),
             Opcode::AddI64
@@ -187,6 +187,8 @@ impl Vm {
             Opcode::BrTrue(offset) => self.exec_br_cond(offset, true),
             Opcode::BrFalse(offset) => self.exec_br_cond(offset, false),
             Opcode::ConcatStr => self.exec_concat_str(),
+            Opcode::NilCoalesce => self.exec_nil_coalesce(),
+            Opcode::OptField(field_idx) => self.exec_opt_field(field_idx),
             Opcode::CallMethod { method_idx, arg_count } => {
                 self.exec_call_method(method_idx, arg_count)?;
                 Ok(Signal::Continue)
@@ -194,23 +196,23 @@ impl Vm {
         }
     }
 
-    fn exec_new_obj(&mut self, n: u16) -> Result<Signal, VmError> {
-        let n_usize = usize::from(n);
+    fn exec_new_obj(&mut self, type_tag: u16, field_count: u16) -> Result<Signal, VmError> {
+        let n = usize::from(field_count);
         let stack_len = self.stack.len();
-        if stack_len < n_usize {
+        if stack_len < n {
             return Err(VmError::StackUnderflow);
         }
-        let fields: Vec<Value> = self.stack.drain(stack_len - n_usize..).collect();
-        self.stack.push(Value::Object(Rc::new(fields)));
+        let fields: Vec<Value> = self.stack.drain(stack_len - n..).collect();
+        self.stack.push(Value::Object { type_tag, fields: Rc::new(fields) });
         Ok(Signal::Continue)
     }
 
     fn exec_ld_fld(&mut self, idx: u16) -> Result<Signal, VmError> {
         let obj = self.stack.pop().ok_or(VmError::StackUnderflow)?;
-        let Value::Object(rc) = obj else {
+        let Value::Object { fields, .. } = obj else {
             return Err(VmError::TypeMismatch);
         };
-        let field = rc
+        let field = fields
             .get(usize::from(idx))
             .ok_or(VmError::FieldOutOfBounds(idx))?
             .clone();
@@ -220,10 +222,10 @@ impl Vm {
 
     fn exec_ld_tag(&mut self) -> Result<Signal, VmError> {
         let obj = self.stack.pop().ok_or(VmError::StackUnderflow)?;
-        let Value::Object(rc) = obj else {
+        let Value::Object { fields, .. } = obj else {
             return Err(VmError::TypeMismatch);
         };
-        let tag = rc.first().ok_or(VmError::FieldOutOfBounds(0))?.clone();
+        let tag = fields.first().ok_or(VmError::FieldOutOfBounds(0))?.clone();
         self.stack.push(tag);
         Ok(Signal::Continue)
     }
@@ -325,12 +327,40 @@ impl Vm {
         Ok(Signal::Continue)
     }
 
+    fn try_dispatch_binop(&mut self, method: &str) -> Option<Result<Signal, VmError>> {
+        let len = self.stack.len();
+        if len < 2 {
+            return None;
+        }
+        let type_tag = match &self.stack[len - 2] {
+            Value::Object { type_tag, .. } if *type_tag != 0 => *type_tag,
+            _ => return None,
+        };
+        let fn_idx = self
+            .module
+            .method_table
+            .iter()
+            .find(|e| e.name.as_ref() == method && e.type_tag == type_tag)
+            .map(|e| e.fn_idx)?;
+        Some(self.exec_call(fn_idx).map(|()| Signal::Continue))
+    }
+
     fn exec_arith(&mut self, op: &Opcode) -> Result<Signal, VmError> {
         match op {
-            Opcode::AddI64 => self.push_i64_bin(i64::wrapping_add),
-            Opcode::SubI64 => self.push_i64_bin(i64::wrapping_sub),
-            Opcode::MulI64 => self.push_i64_bin(i64::wrapping_mul),
+            Opcode::AddI64 => {
+                if let Some(r) = self.try_dispatch_binop("add") { return r; }
+                self.push_i64_bin(i64::wrapping_add)
+            }
+            Opcode::SubI64 => {
+                if let Some(r) = self.try_dispatch_binop("sub") { return r; }
+                self.push_i64_bin(i64::wrapping_sub)
+            }
+            Opcode::MulI64 => {
+                if let Some(r) = self.try_dispatch_binop("mul") { return r; }
+                self.push_i64_bin(i64::wrapping_mul)
+            }
             Opcode::DivI64 => {
+                if let Some(r) = self.try_dispatch_binop("div") { return r; }
                 let rhs = pop_i64(&mut self.stack)?;
                 let lhs = pop_i64(&mut self.stack)?;
                 if rhs == 0 {
@@ -340,6 +370,7 @@ impl Vm {
                 Ok(Signal::Continue)
             }
             Opcode::RemI64 => {
+                if let Some(r) = self.try_dispatch_binop("rem") { return r; }
                 let rhs = pop_i64(&mut self.stack)?;
                 let lhs = pop_i64(&mut self.stack)?;
                 if rhs == 0 {
@@ -367,15 +398,80 @@ impl Vm {
         }
     }
 
+    fn exec_nil_coalesce(&mut self) -> Result<Signal, VmError> {
+        let rhs = self.stack.pop().ok_or(VmError::StackUnderflow)?;
+        let lhs = self.stack.pop().ok_or(VmError::StackUnderflow)?;
+        match lhs {
+            Value::Object { ref fields, .. } => {
+                match fields.first() {
+                    Some(Value::Int(0)) => self.stack.push(rhs),
+                    _ => {
+                        let inner = fields.get(1).ok_or(VmError::FieldOutOfBounds(1))?.clone();
+                        self.stack.push(inner);
+                    }
+                }
+            }
+            _ => return Err(VmError::TypeMismatch),
+        }
+        Ok(Signal::Continue)
+    }
+
+    fn exec_opt_field(&mut self, field_idx: u16) -> Result<Signal, VmError> {
+        let obj = self.stack.pop().ok_or(VmError::StackUnderflow)?;
+        match obj {
+            Value::Object { ref fields, type_tag } => {
+                match fields.first() {
+                    Some(Value::Int(0)) => {
+                        // None → push None (same structure)
+                        self.stack.push(Value::Object { type_tag, fields: Rc::new(vec![Value::Int(0)]) });
+                    }
+                    _ => {
+                        // Some(inner) → access field[field_idx] on inner, wrap in Some
+                        let inner = fields.get(1).ok_or(VmError::FieldOutOfBounds(1))?.clone();
+                        let Value::Object { fields: inner_fields, .. } = inner else {
+                            return Err(VmError::TypeMismatch);
+                        };
+                        let field_val = inner_fields
+                            .get(usize::from(field_idx))
+                            .ok_or(VmError::FieldOutOfBounds(field_idx))?
+                            .clone();
+                        // Wrap in Some: [discriminant=1, field_val]
+                        self.stack.push(Value::Object { type_tag, fields: Rc::new(vec![Value::Int(1), field_val]) });
+                    }
+                }
+            }
+            _ => return Err(VmError::TypeMismatch),
+        }
+        Ok(Signal::Continue)
+    }
+
     #[allow(clippy::float_cmp)]
     fn exec_cmp(&mut self, op: &Opcode) -> Result<Signal, VmError> {
         match op {
-            Opcode::EqI64 => self.push_i64_cmp(|a, b| a == b),
-            Opcode::NeqI64 => self.push_i64_cmp(|a, b| a != b),
-            Opcode::LtI64 => self.push_i64_cmp(|a, b| a < b),
-            Opcode::GtI64 => self.push_i64_cmp(|a, b| a > b),
-            Opcode::LeqI64 => self.push_i64_cmp(|a, b| a <= b),
-            Opcode::GeqI64 => self.push_i64_cmp(|a, b| a >= b),
+            Opcode::EqI64 => {
+                if let Some(r) = self.try_dispatch_binop("eq") { return r; }
+                self.push_i64_cmp(|a, b| a == b)
+            }
+            Opcode::NeqI64 => {
+                if let Some(r) = self.try_dispatch_binop("neq") { return r; }
+                self.push_i64_cmp(|a, b| a != b)
+            }
+            Opcode::LtI64 => {
+                if let Some(r) = self.try_dispatch_binop("lt") { return r; }
+                self.push_i64_cmp(|a, b| a < b)
+            }
+            Opcode::GtI64 => {
+                if let Some(r) = self.try_dispatch_binop("gt") { return r; }
+                self.push_i64_cmp(|a, b| a > b)
+            }
+            Opcode::LeqI64 => {
+                if let Some(r) = self.try_dispatch_binop("leq") { return r; }
+                self.push_i64_cmp(|a, b| a <= b)
+            }
+            Opcode::GeqI64 => {
+                if let Some(r) = self.try_dispatch_binop("geq") { return r; }
+                self.push_i64_cmp(|a, b| a >= b)
+            }
             Opcode::EqF64 => self.push_f64_cmp(|a, b| a == b),
             Opcode::NeqF64 => self.push_f64_cmp(|a, b| a != b),
             Opcode::LtF64 => self.push_f64_cmp(|a, b| a < b),
@@ -440,7 +536,7 @@ impl Vm {
         let receiver_pos = stack_len
             .checked_sub(usize::from(arg_count))
             .ok_or(VmError::StackUnderflow)?;
-        let recv_tag = type_tag_of(&self.stack[receiver_pos]);
+        let recv_tag: u16 = type_tag_of(&self.stack[receiver_pos]);
 
         let method_name: Box<str> = match self.module.const_pool.get(usize::from(method_idx)) {
             Some(ConstEntry::String(s)) => s.clone(),
@@ -509,13 +605,14 @@ impl Vm {
     }
 }
 
-fn type_tag_of(v: &Value) -> u8 {
+fn type_tag_of(v: &Value) -> u16 {
     match v {
-        Value::Int(_) | Value::Function(_) => 0,
-        Value::Float(_) => 1,
-        Value::String(_) => 2,
-        Value::Unit => 3,
-        Value::Object(_) => 255,
+        Value::Int(_) => 1,
+        Value::Float(_) => 2,
+        Value::String(_) => 4,
+        Value::Unit => 5,
+        Value::Function(_) => 6,
+        Value::Object { type_tag, .. } => *type_tag,
     }
 }
 
@@ -545,7 +642,7 @@ fn pop_f64(stack: &mut Vec<Value>) -> Result<f64, VmError> {
 
 fn pop_bool_obj(stack: &mut Vec<Value>) -> Result<bool, VmError> {
     match stack.pop().ok_or(VmError::StackUnderflow)? {
-        Value::Object(rc) => match rc.first().ok_or(VmError::FieldOutOfBounds(0))? {
+        Value::Object { ref fields, .. } => match fields.first().ok_or(VmError::FieldOutOfBounds(0))? {
             Value::Int(n) => Ok(*n != 0),
             _ => Err(VmError::TypeMismatch),
         },
@@ -554,7 +651,7 @@ fn pop_bool_obj(stack: &mut Vec<Value>) -> Result<bool, VmError> {
 }
 
 fn bool_obj(b: bool) -> Value {
-    Value::Object(Rc::new(vec![Value::Int(i64::from(b))]))
+    Value::Object { type_tag: 0, fields: Rc::new(vec![Value::Int(i64::from(b))]) }
 }
 
 fn pop_str(stack: &mut Vec<Value>) -> Result<Rc<str>, VmError> {
