@@ -228,6 +228,8 @@ struct PendingLambda {
 
 struct EmitState {
     fn_map: HashMap<String, u16>,
+    /// Maps function name → return type name (only for fns with a named return type).
+    fn_return_types: HashMap<String, String>,
     type_map: HashMap<String, TypeInfo>,
     variant_map: HashMap<String, VariantInfo>,
     lambda_counter: u16,
@@ -240,10 +242,8 @@ struct EmitState {
 }
 
 fn ty_name_str(ty: &Ty, interner: &Interner) -> Option<String> {
-    if let Ty::Named { name, args, .. } = ty {
-        if args.is_empty() {
-            return Some(interner.resolve(*name).to_owned());
-        }
+    if let Ty::Named { name, .. } = ty {
+        return Some(interner.resolve(*name).to_owned());
     }
     None
 }
@@ -268,6 +268,7 @@ fn register_fn_def(
         modifiers,
         name,
         params,
+        ret_ty,
         body,
         ..
     } = exprs.get(item_idx)
@@ -322,7 +323,10 @@ fn register_fn_def(
         code_length: 0,
     })?;
 
-    let _prev = state.fn_map.insert(fn_name, fn_idx);
+    let _prev = state.fn_map.insert(fn_name.clone(), fn_idx);
+    if let Some(ret_name) = ret_ty.as_ref().and_then(|t| ty_name_str(t, interner)) {
+        let _prev = state.fn_return_types.insert(fn_name, ret_name);
+    }
     Ok(())
 }
 
@@ -1365,10 +1369,15 @@ fn track_type_of_binding(
             ..
         } => {
             if let Expr::Ident { name, .. } = arenas.exprs.get(*base) {
+                let callee_name = arenas.interner.resolve(*name);
                 // Variant constructor: SomeVariant(args)
-                let variant_name = arenas.interner.resolve(*name);
-                if let Some(vinfo) = state.variant_map.get(variant_name) {
+                if let Some(vinfo) = state.variant_map.get(callee_name) {
                     let _prev = out.local_types.insert(slot, vinfo.type_name.clone());
+                } else if let Some(ret_type) = state.fn_return_types.get(callee_name).cloned() {
+                    // Function call with known return type
+                    if state.type_map.contains_key(&ret_type) {
+                        let _prev = out.local_types.insert(slot, ret_type);
+                    }
                 }
             } else if let Expr::Postfix {
                 base: recv_idx,
@@ -1727,7 +1736,9 @@ fn emit_lit(
 ) -> Result<(), CodegenError> {
     match value {
         LitValue::Str(sym) => {
-            let s: Box<str> = arenas.interner.resolve(*sym).into();
+            let raw = arenas.interner.resolve(*sym);
+            let unquoted = raw.strip_prefix('"').and_then(|s| s.strip_suffix('"')).unwrap_or(raw);
+            let s: Box<str> = unquoted.into();
             let const_idx = module.push_const(ConstEntry::String(s))?;
             out.push(&Opcode::LdConst(const_idx));
             Ok(())
@@ -1907,6 +1918,7 @@ pub fn emit(
     let mut module = Module::new();
     let mut state = EmitState {
         fn_map: HashMap::new(),
+        fn_return_types: HashMap::new(),
         type_map: HashMap::new(),
         variant_map: HashMap::new(),
         lambda_counter: 0,
