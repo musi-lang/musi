@@ -174,8 +174,8 @@ impl<'a> Parser<'a> {
         while !self.at(TokenKind::Eof) {
             let pos_before = self.pos;
             items.push(self.parse_and_alloc_expr());
-            // Each top-level item is followed by `;` (optional at EOF).
-            let _semi = self.eat(TokenKind::Semi);
+            // Every top-level statement requires a mandatory `;`.
+            let _semi = self.expect(TokenKind::Semi);
             // Guarantee progress: `recover()` stops at `)` / `}` / `]` without
             // consuming them, so a stray closing bracket at top level would
             // otherwise loop forever.  If no tokens were consumed in this

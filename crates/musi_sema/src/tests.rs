@@ -129,7 +129,7 @@ fn undefined_name_suggests_close_match() {
     // function `foo` and try to call `fob`.
     let (_result, diags) = analyze_src(
         r#"
-fn foo(x: Int): Int (x)
+fn foo(x: Int): Int (x);
 const z := fob(1);
 "#,
     );
@@ -146,7 +146,7 @@ const z := fob(1);
 fn well_typed_simple_fn() {
     let (_result, diags) = analyze_src(
         r#"
-fn add(a: Int, b: Int): Int (a + b)
+fn add(a: Int, b: Int): Int (a + b);
 const result := add(1, 2);
 "#,
     );
@@ -206,7 +206,7 @@ counter <- counter + 1;
 fn well_typed_choice_type() {
     let (_result, diags) = analyze_src(
         r#"
-choice Color { Red | Green | Blue }
+choice Color { Red | Green | Blue };
 const c := Red;
 "#,
     );
@@ -221,7 +221,7 @@ const c := Red;
 fn well_typed_record_type() {
     let (_result, diags) = analyze_src(
         r#"
-record Point { x: Int, y: Int }
+record Point { x: Int, y: Int };
 "#,
     );
     assert!(
@@ -235,7 +235,7 @@ record Point { x: Int, y: Int }
 fn well_typed_generic_identity() {
     let (_result, diags) = analyze_src(
         r#"
-fn id['T](x: 'T): 'T (x)
+fn id['T](x: 'T): 'T (x);
 const n := id(42);
 const s := id("hello");
 "#,
@@ -280,7 +280,7 @@ fn recursive_function_type_checked() {
         r#"
 fn fact(n: Int): Int (
     if n < 1 then (1) else (n)
-)
+);
 "#,
     );
     assert!(
