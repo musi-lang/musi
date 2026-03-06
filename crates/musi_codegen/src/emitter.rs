@@ -310,6 +310,7 @@ fn register_fn_def(
         name: fn_name.clone().into_boxed_str(),
         flags: SymbolFlags::new(flags_raw),
         intrinsic_id,
+        abi: Box::from(""),
     })?;
 
     let param_count =
@@ -473,6 +474,7 @@ fn register_given_def(
             name: fn_name.clone().into_boxed_str(),
             flags: SymbolFlags::new(0),
             intrinsic_id: intrinsics::NONE_ID,
+            abi: Box::from(""),
         })?;
         let fn_idx = module.push_function(FunctionEntry {
             symbol_idx: sym_idx,
@@ -681,6 +683,7 @@ fn emit_expr(
                 name: lambda_name.clone().into_boxed_str(),
                 flags: SymbolFlags::new(0),
                 intrinsic_id: intrinsics::NONE_ID,
+                abi: Box::from(""),
             })?;
             let fn_idx = module.push_function(FunctionEntry {
                 symbol_idx: sym_idx,
@@ -1893,6 +1896,7 @@ fn emit_main_body(
         name: "main".into(),
         flags: SymbolFlags::new(0),
         intrinsic_id: intrinsics::NONE_ID,
+        abi: Box::from(""),
     })?;
     let _main = module.push_function(FunctionEntry {
         symbol_idx: sym_idx,

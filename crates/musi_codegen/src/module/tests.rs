@@ -22,11 +22,13 @@ fn hello_module() -> Module {
                 name: "writeln".into(),
                 flags: SymbolFlags::new(SymbolFlags::NATIVE | SymbolFlags::EXPORT),
                 intrinsic_id: 1,
+                abi: Box::from(""),
             },
             SymbolEntry {
                 name: "main".into(),
                 flags: SymbolFlags::new(SymbolFlags::EXPORT),
                 intrinsic_id: 0xFFFF,
+                abi: Box::from(""),
             },
         ],
         function_table: vec![
