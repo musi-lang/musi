@@ -1,3 +1,4 @@
+use musi_ast::{BindKind, PostfixOp, PrefixOp, Ty};
 use musi_lex::lex;
 use musi_shared::{DiagnosticBag, FileId, Interner};
 
@@ -277,7 +278,9 @@ fn parse_class_def_with_superclass() {
 // 21. class with a law declaration
 #[test]
 fn parse_class_def_with_law() {
-    let module = parse_ok("class Eq['T] { fn eq(a: 'T, b: 'T): Bool; law reflexivity(a: 'T) => eq(a, a); };");
+    let module = parse_ok(
+        "class Eq['T] { fn eq(a: 'T, b: 'T): Bool; law reflexivity(a: 'T) => eq(a, a); };",
+    );
     assert_eq!(module.items.len(), 1);
     let expr = module.ctx.exprs.get(module.items[0]);
     assert!(
@@ -330,9 +333,17 @@ fn parse_option_type_sugar() {
     let module = parse_ok("fn f(x: ?Int): ?Int => x;");
     assert_eq!(module.items.len(), 1);
     let expr = module.ctx.exprs.get(module.items[0]);
-    let Expr::FnDef { params, ret_ty, .. } = expr else { panic!("expected FnDef") };
-    assert!(matches!(params[0].ty, Some(Ty::Option { .. })), "param type should be Ty::Option");
-    assert!(matches!(ret_ty, Some(Ty::Option { .. })), "return type should be Ty::Option");
+    let Expr::FnDef { params, ret_ty, .. } = expr else {
+        panic!("expected FnDef")
+    };
+    assert!(
+        matches!(params[0].ty, Some(Ty::Option { .. })),
+        "param type should be Ty::Option"
+    );
+    assert!(
+        matches!(ret_ty, Some(Ty::Option { .. })),
+        "return type should be Ty::Option"
+    );
 }
 
 // 26. UDN: dot-prefix constructor .Name(args)
@@ -341,9 +352,18 @@ fn parse_dot_prefix_call() {
     let module = parse_ok("const x := .Some(42);");
     assert_eq!(module.items.len(), 1);
     let expr = module.ctx.exprs.get(module.items[0]);
-    let Expr::Bind { init: Some(init_idx), .. } = expr else { panic!("expected Bind") };
+    let Expr::Bind {
+        init: Some(init_idx),
+        ..
+    } = expr
+    else {
+        panic!("expected Bind")
+    };
     let init = module.ctx.exprs.get(*init_idx);
-    assert!(matches!(init, Expr::DotPrefix { args, .. } if args.len() == 1), "expected DotPrefix with 1 arg");
+    assert!(
+        matches!(init, Expr::DotPrefix { args, .. } if args.len() == 1),
+        "expected DotPrefix with 1 arg"
+    );
 }
 
 // 27. UDN: nil coalescing ??
@@ -352,9 +372,24 @@ fn parse_nil_coalesce() {
     let module = parse_ok("const x := opt ?? 0;");
     assert_eq!(module.items.len(), 1);
     let expr = module.ctx.exprs.get(module.items[0]);
-    let Expr::Bind { init: Some(init_idx), .. } = expr else { panic!("expected Bind") };
+    let Expr::Bind {
+        init: Some(init_idx),
+        ..
+    } = expr
+    else {
+        panic!("expected Bind")
+    };
     let init = module.ctx.exprs.get(*init_idx);
-    assert!(matches!(init, Expr::Binary { op: BinOp::NilCoalesce, .. }), "expected NilCoalesce");
+    assert!(
+        matches!(
+            init,
+            Expr::Binary {
+                op: BinOp::NilCoalesce,
+                ..
+            }
+        ),
+        "expected NilCoalesce"
+    );
 }
 
 // 28. UDN: optional chaining ?.
@@ -363,9 +398,24 @@ fn parse_optional_chain() {
     let module = parse_ok("const x := opt?.value;");
     assert_eq!(module.items.len(), 1);
     let expr = module.ctx.exprs.get(module.items[0]);
-    let Expr::Bind { init: Some(init_idx), .. } = expr else { panic!("expected Bind") };
+    let Expr::Bind {
+        init: Some(init_idx),
+        ..
+    } = expr
+    else {
+        panic!("expected Bind")
+    };
     let init = module.ctx.exprs.get(*init_idx);
-    assert!(matches!(init, Expr::Postfix { op: PostfixOp::OptField { .. }, .. }), "expected OptField");
+    assert!(
+        matches!(
+            init,
+            Expr::Postfix {
+                op: PostfixOp::OptField { .. },
+                ..
+            }
+        ),
+        "expected OptField"
+    );
 }
 
 // 29. Dot-prefix pattern in match arm
@@ -383,9 +433,15 @@ fn parse_var_in_case_pattern() {
     let module = parse_ok("if case .Some(var v) := x then v;");
     assert_eq!(module.items.len(), 1);
     let expr = module.ctx.exprs.get(module.items[0]);
-    let Expr::If { cond, .. } = expr else { panic!("expected If") };
-    let Cond::Case { pat, .. } = cond.as_ref() else { panic!("expected Case cond") };
-    let Pat::DotPrefix { args, .. } = pat else { panic!("expected DotPrefix in case") };
+    let Expr::If { cond, .. } = expr else {
+        panic!("expected If")
+    };
+    let Cond::Case { pat, .. } = cond.as_ref() else {
+        panic!("expected Case cond")
+    };
+    let Pat::DotPrefix { args, .. } = pat else {
+        panic!("expected DotPrefix in case")
+    };
     assert_eq!(args.len(), 1);
     assert!(
         matches!(args[0], Pat::Ident { is_mut: true, .. }),
@@ -400,7 +456,9 @@ fn parse_match_arm_guard() {
     let module = parse_ok("match x with (Some(v) if v > 0 => v | _ => 0);");
     assert_eq!(module.items.len(), 1);
     let expr = module.ctx.exprs.get(module.items[0]);
-    let Expr::Match { arms, .. } = expr else { panic!("expected Match") };
+    let Expr::Match { arms, .. } = expr else {
+        panic!("expected Match")
+    };
     assert!(arms[0].guard.is_some(), "first arm should have a guard");
     assert!(arms[1].guard.is_none(), "second arm should have no guard");
 }
@@ -411,7 +469,15 @@ fn parse_if_case_no_bind_kind() {
     let module = parse_ok("if case .Some(v) := thing then v else 0;");
     assert_eq!(module.items.len(), 1);
     let expr = module.ctx.exprs.get(module.items[0]);
-    let Expr::If { cond, else_body, .. } = expr else { panic!("expected If") };
-    assert!(matches!(cond.as_ref(), Cond::Case { .. }), "expected Case cond");
+    let Expr::If {
+        cond, else_body, ..
+    } = expr
+    else {
+        panic!("expected If")
+    };
+    assert!(
+        matches!(cond.as_ref(), Cond::Case { .. }),
+        "expected Case cond"
+    );
     assert!(else_body.is_some(), "expected else branch");
 }

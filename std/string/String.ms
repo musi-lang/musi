@@ -1,8 +1,8 @@
-#[intrinsic("string_length")]   export native fn string_length(s: String): Int;
-#[intrinsic("string_concat")]   export native fn string_concat(a: String, b: String): String;
-#[intrinsic("string_slice")]    export native fn string_slice(s: String, start: Int, end: Int): String;
-#[intrinsic("string_to_int")]   export native fn string_to_int(s: String): Option[Int];
-#[intrinsic("string_contains")] export native fn string_contains(s: String, sub: String): Bool;
+#[intrinsic("string_length")]   export extrin fn string_length(s: String): Int;
+#[intrinsic("string_concat")]   export extrin fn string_concat(a: String, b: String): String;
+#[intrinsic("string_slice")]    export extrin fn string_slice(s: String, start: Int, end: Int): String;
+#[intrinsic("string_to_int")]   export extrin fn string_to_int(s: String): Option[Int];
+#[intrinsic("string_contains")] export extrin fn string_contains(s: String, sub: String): Bool;
 
 export fn string_is_empty(s: String): Bool => string_length(s) = 0;
 

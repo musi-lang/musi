@@ -27,7 +27,7 @@ pub enum TokenKind {
     Import,
     From,
     Export,
-    Native,
+    Extrin,
     Opaque,
     Record,
     Choice,
@@ -131,7 +131,7 @@ impl TokenKind {
                 | Self::Import
                 | Self::From
                 | Self::Export
-                | Self::Native
+                | Self::Extrin
                 | Self::Opaque
                 | Self::Record
                 | Self::Choice
@@ -179,7 +179,7 @@ impl TokenKind {
             Self::Import => Some("import"),
             Self::From => Some("from"),
             Self::Export => Some("export"),
-            Self::Native => Some("native"),
+            Self::Extrin => Some("extrin"),
             Self::Opaque => Some("opaque"),
             Self::Record => Some("record"),
             Self::Choice => Some("choice"),
@@ -282,7 +282,7 @@ pub fn keyword_from_str(s: &str) -> Option<TokenKind> {
         "import" => Some(TokenKind::Import),
         "from" => Some(TokenKind::From),
         "export" => Some(TokenKind::Export),
-        "native" => Some(TokenKind::Native),
+        "extrin" => Some(TokenKind::Extrin),
         "opaque" => Some(TokenKind::Opaque),
         "record" => Some(TokenKind::Record),
         "choice" => Some(TokenKind::Choice),

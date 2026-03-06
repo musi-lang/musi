@@ -191,7 +191,7 @@
                 },
                 {
                     "name": "storage.modifier.musi",
-                    "match": "\\b(opaque|native)\\b"
+                    "match": "\\b(opaque|extrin)\\b"
                 }
             ]
         },

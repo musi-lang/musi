@@ -9,10 +9,11 @@
 #![allow(clippy::exhaustive_enums)]
 
 pub mod error;
+pub mod ffi;
 pub mod native;
 pub mod value;
 pub mod vm;
 
 pub use error::VmError;
 pub use value::Value;
-pub use vm::Vm;
+pub use vm::{TestResult, Vm};

@@ -65,4 +65,16 @@ pub enum VmError {
     /// No method implementation found for the given name and receiver type.
     #[error("no method implementation found")]
     MethodNotFound,
+
+    /// An extrin function call (FFI) failed.
+    #[error("FFI error: {0}")]
+    FfiFailed(Box<str>),
+
+    /// Array index was out of bounds.
+    #[error("index {index} out of bounds for array of length {len}")]
+    IndexOutOfBounds { index: i64, len: usize },
+
+    /// An `assert` or `assert_msg` call failed.
+    #[error("assertion failed: {0}")]
+    AssertionFailed(Box<str>),
 }

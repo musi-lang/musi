@@ -24,6 +24,13 @@ const LD_TAG: u8 = 0x82;
 const CALL_METHOD: u8 = 0x83;
 const NIL_COALESCE: u8 = 0x84;
 const OPT_FIELD: u8 = 0x85;
+// Array ops
+const NEW_ARR: u8 = 0x90;
+const ARR_GET: u8 = 0x91;
+const ARR_SET: u8 = 0x92;
+const ARR_LEN: u8 = 0x93;
+const ARR_PUSH: u8 = 0x94;
+const ARR_SLICE: u8 = 0x95;
 // Arithmetic -- integer
 const ADD_I64: u8 = 0x30;
 const SUB_I64: u8 = 0x31;
@@ -199,6 +206,18 @@ pub enum Opcode {
     NilCoalesce,
     /// Pop an Option value; if None push None, else access field at index and wrap in Some.
     OptField(u16),
+    /// Pop N values, create an Array of N elements, push it.
+    NewArr(u16),
+    /// Pop Int index, pop Array, push element (bounds-checked).
+    ArrGet,
+    /// Pop value, pop Int index, pop Array, set element in-place (bounds-checked).
+    ArrSet,
+    /// Pop Array, push Int length.
+    ArrLen,
+    /// Pop value, pop Array, append value in-place, push Unit.
+    ArrPush,
+    /// Pop Int end, pop Int start, pop Array, push new Array slice.
+    ArrSlice,
 }
 
 impl Opcode {
@@ -309,6 +328,15 @@ impl Opcode {
                 buf.extend_from_slice(&method_idx.to_le_bytes());
                 buf.extend_from_slice(&arg_count.to_le_bytes());
             }
+            Self::NewArr(n) => {
+                buf.push(NEW_ARR);
+                buf.extend_from_slice(&n.to_le_bytes());
+            }
+            Self::ArrGet => buf.push(ARR_GET),
+            Self::ArrSet => buf.push(ARR_SET),
+            Self::ArrLen => buf.push(ARR_LEN),
+            Self::ArrPush => buf.push(ARR_PUSH),
+            Self::ArrSlice => buf.push(ARR_SLICE),
         }
     }
 
@@ -397,6 +425,12 @@ impl Opcode {
                 let arg_count = read_u16(code, offset + 3)?;
                 Ok((Self::CallMethod { method_idx, arg_count }, 5))
             }
+            NEW_ARR => Ok((Self::NewArr(read_u16(code, offset + 1)?), 3)),
+            ARR_GET => Ok((Self::ArrGet, 1)),
+            ARR_SET => Ok((Self::ArrSet, 1)),
+            ARR_LEN => Ok((Self::ArrLen, 1)),
+            ARR_PUSH => Ok((Self::ArrPush, 1)),
+            ARR_SLICE => Ok((Self::ArrSlice, 1)),
             _ => Err(DeserError::UnknownOpcode { tag, offset }),
         }
     }
@@ -450,7 +484,12 @@ impl Opcode {
             | Self::Shl
             | Self::Shr
             | Self::ConcatStr
-            | Self::NilCoalesce => 1,
+            | Self::NilCoalesce
+            | Self::ArrGet
+            | Self::ArrSet
+            | Self::ArrLen
+            | Self::ArrPush
+            | Self::ArrSlice => 1,
             Self::LdImmI64(_) | Self::LdImmF64(_) => 9,
             Self::LdConst(_)
             | Self::LdLoc(_)
@@ -458,7 +497,8 @@ impl Opcode {
             | Self::Call(_)
             | Self::LdFnIdx(_)
             | Self::LdFld(_)
-            | Self::OptField(_) => 3,
+            | Self::OptField(_)
+            | Self::NewArr(_) => 3,
             Self::Br(_) | Self::BrTrue(_) | Self::BrFalse(_) => 5,
             Self::NewObj { .. } | Self::CallMethod { .. } => 5,
         }

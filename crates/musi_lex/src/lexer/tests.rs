@@ -61,7 +61,7 @@ fn all_keywords() {
         ("import", TokenKind::Import),
         ("from", TokenKind::From),
         ("export", TokenKind::Export),
-        ("native", TokenKind::Native),
+        ("extrin", TokenKind::Extrin),
         ("opaque", TokenKind::Opaque),
         ("record", TokenKind::Record),
         ("choice", TokenKind::Choice),

@@ -48,11 +48,13 @@ fn hello_module() -> Module {
                 name: "writeln".into(),
                 flags: SymbolFlags::new(SymbolFlags::NATIVE | SymbolFlags::EXPORT),
                 intrinsic_id: 0,
+                abi: Box::from(""), link_lib: None, link_name: None,
             },
             SymbolEntry {
                 name: "main".into(),
                 flags: SymbolFlags::new(SymbolFlags::EXPORT),
                 intrinsic_id: 0xFFFF,
+                abi: Box::from(""), link_lib: None, link_name: None,
             },
         ],
         function_table: vec![
@@ -99,6 +101,7 @@ fn halt_returns_top_of_stack() {
             name: "main".into(),
             flags: SymbolFlags::new(SymbolFlags::EXPORT),
             intrinsic_id: 0xFFFF,
+            abi: Box::from(""), link_lib: None, link_name: None,
         }],
         function_table: vec![FunctionEntry {
             symbol_idx: 0,
@@ -132,6 +135,7 @@ fn local_store_and_load() {
             name: "main".into(),
             flags: SymbolFlags::new(SymbolFlags::EXPORT),
             intrinsic_id: 0xFFFF,
+            abi: Box::from(""), link_lib: None, link_name: None,
         }],
         function_table: vec![FunctionEntry {
             symbol_idx: 0,
@@ -176,11 +180,13 @@ fn ret_returns_to_caller() {
                 name: "callee".into(),
                 flags: SymbolFlags::new(0),
                 intrinsic_id: 0xFFFF,
+                abi: Box::from(""), link_lib: None, link_name: None,
             },
             SymbolEntry {
                 name: "main".into(),
                 flags: SymbolFlags::new(SymbolFlags::EXPORT),
                 intrinsic_id: 0xFFFF,
+                abi: Box::from(""), link_lib: None, link_name: None,
             },
         ],
         function_table: vec![
@@ -295,6 +301,7 @@ fn while_loop_counts_to_10() {
             name: "main".into(),
             flags: SymbolFlags::new(SymbolFlags::EXPORT),
             intrinsic_id: 0xFFFF,
+            abi: Box::from(""), link_lib: None, link_name: None,
         }],
         function_table: vec![FunctionEntry {
             symbol_idx: 0,
@@ -375,6 +382,7 @@ fn new_obj_and_ld_fld() {
             name: "main".into(),
             flags: SymbolFlags::new(0),
             intrinsic_id: 0xFFFF,
+            abi: Box::from(""), link_lib: None, link_name: None,
         }],
         function_table: vec![FunctionEntry {
             symbol_idx: 0,
@@ -407,6 +415,7 @@ fn ld_tag_reads_discriminant() {
             name: "main".into(),
             flags: SymbolFlags::new(0),
             intrinsic_id: 0xFFFF,
+            abi: Box::from(""), link_lib: None, link_name: None,
         }],
         function_table: vec![FunctionEntry {
             symbol_idx: 0,
@@ -452,11 +461,13 @@ fn ld_fn_idx_and_call_dynamic() {
                 name: "double".into(),
                 flags: SymbolFlags::new(0),
                 intrinsic_id: 0xFFFF,
+                abi: Box::from(""), link_lib: None, link_name: None,
             },
             SymbolEntry {
                 name: "main".into(),
                 flags: SymbolFlags::new(0),
                 intrinsic_id: 0xFFFF,
+                abi: Box::from(""), link_lib: None, link_name: None,
             },
         ],
         function_table: vec![
@@ -498,6 +509,7 @@ fn dup_clones_top_of_stack() {
             name: "main".into(),
             flags: SymbolFlags::new(0),
             intrinsic_id: 0xFFFF,
+            abi: Box::from(""), link_lib: None, link_name: None,
         }],
         function_table: vec![FunctionEntry {
             symbol_idx: 0,

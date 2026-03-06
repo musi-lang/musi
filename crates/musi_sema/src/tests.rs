@@ -19,7 +19,7 @@ fn analyze_src(src: &str) -> (SemaResult, DiagnosticBag) {
         "parse produced errors -- fix the test source:\n{:#?}",
         error_messages(&diags)
     );
-    let result = analyze(&module, &interner, file_id, &mut diags);
+    let result = analyze(&module, &interner, file_id, &mut diags, &HashMap::new());
     (result, diags)
 }
 
@@ -72,7 +72,7 @@ fn infers_int_addition() {
 
 #[test]
 fn infers_bool_from_comparison() {
-    let (result, diags) = analyze_src(r#"const b := 1 == 1;"#);
+    let (result, diags) = analyze_src(r#"const b := 1 = 1;"#);
     assert!(
         !diags.has_errors(),
         "unexpected errors: {:?}",
@@ -161,7 +161,7 @@ const result := add(1, 2);
 fn well_typed_if_expression() {
     let (_result, diags) = analyze_src(
         r#"
-const x := if true then (1) else (2);
+const x := if 1 = 1 then (1) else (2);
 "#,
     );
     assert!(

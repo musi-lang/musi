@@ -10,6 +10,7 @@ keywords = ["compiler", "musi", "vm", "interpreter"]
 categories = ["development-tools"]
 
 [dependencies]
+libloading = "0.9.0"
 musi_codegen = { path = "../musi_codegen" }
 thiserror = { workspace = true }
 

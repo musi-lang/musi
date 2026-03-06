@@ -121,6 +121,32 @@ pub struct SymbolEntry {
     pub intrinsic_id: u16,
     /// ABI string for native functions (e.g. `"C"`, `"musi"`). Empty string = no ABI.
     pub abi: Box<str>,
+    /// Library to load for extrin fns (from `#[link("libm")]`). `None` = default namespace.
+    pub link_lib: Option<Box<str>>,
+    /// Symbol name override for extrin fns (from `#[link(name := "sym")]`). `None` = use `name`.
+    pub link_name: Option<Box<str>>,
+}
+
+fn encode_opt_str(buf: &mut Vec<u8>, s: &Option<Box<str>>) {
+    match s {
+        None => buf.push(0),
+        Some(v) => {
+            let bytes = v.as_bytes();
+            let len = u16::try_from(bytes.len()).expect("string fits u16");
+            buf.push(1);
+            buf.extend_from_slice(&len.to_le_bytes());
+            buf.extend_from_slice(bytes);
+        }
+    }
+}
+
+fn decode_opt_str(r: &mut Cursor<&[u8]>) -> Result<Option<Box<str>>, DeserError> {
+    let tag = r.read_u8().map_err(|_| DeserError::UnexpectedEof)?;
+    if tag == 0 {
+        return Ok(None);
+    }
+    let len = r.read_u16::<LE>().map_err(|_| DeserError::UnexpectedEof)?;
+    Ok(Some(read_str(r, usize::from(len))?))
 }
 
 impl SymbolEntry {
@@ -135,6 +161,8 @@ impl SymbolEntry {
         let abi_len = u16::try_from(abi_bytes.len()).expect("ABI string fits u16");
         buf.extend_from_slice(&abi_len.to_le_bytes());
         buf.extend_from_slice(abi_bytes);
+        encode_opt_str(buf, &self.link_lib);
+        encode_opt_str(buf, &self.link_name);
     }
 
     fn decode(r: &mut Cursor<&[u8]>) -> Result<Self, DeserError> {
@@ -144,11 +172,15 @@ impl SymbolEntry {
         let intrinsic_id = r.read_u16::<LE>().map_err(|_| DeserError::UnexpectedEof)?;
         let abi_len = r.read_u16::<LE>().map_err(|_| DeserError::UnexpectedEof)?;
         let abi = read_str(r, usize::from(abi_len))?;
+        let link_lib = decode_opt_str(r)?;
+        let link_name = decode_opt_str(r)?;
         Ok(Self {
             name,
             flags,
             intrinsic_id,
             abi,
+            link_lib,
+            link_name,
         })
     }
 }

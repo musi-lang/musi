@@ -11,13 +11,14 @@
 use std::collections::HashMap;
 
 use musi_ast::{
-    ArrayItem, AstArenas, BindKind, ChoiceVariant, Cond, ElifBranch, Expr, FieldInit, MatchArm,
-    Pat, PatField, PatSuffix, ParsedModule, PostfixOp, VariantPayload,
+    ArrayItem, AstArenas, BindKind, ChoiceVariant, Cond, ElifBranch, Expr, FieldInit, ImportClause,
+    MatchArm, Pat, PatField, PatSuffix, ParsedModule, PostfixOp, VariantPayload,
 };
 use musi_shared::{DiagnosticBag, FileId, Idx, Interner, Span, Symbol};
 
 use crate::def::{DefId, DefInfo, DefKind};
 use crate::scope::{ScopeId, ScopeTree};
+use crate::ModuleExports;
 
 /// The result of the name-resolution pass.
 pub struct ResolveResult {
@@ -112,6 +113,54 @@ impl<'a> Resolver<'a> {
                 }
                 _ => {}
             }
+        }
+    }
+
+    fn collect_imports(
+        &mut self,
+        module: &ParsedModule,
+        root_scope: ScopeId,
+        imports: &HashMap<String, ModuleExports>,
+        interner: &Interner,
+    ) {
+        for &item_idx in &module.items {
+            let Expr::Import { items, path, span } = module.ctx.exprs.get(item_idx) else {
+                continue;
+            };
+            let raw_path = interner.resolve(*path);
+            let path_str = raw_path.trim_matches('"').to_owned();
+            let Some(module_exports) = imports.get(&path_str) else {
+                continue;
+            };
+            let ImportClause::Items(import_items) = items else {
+                continue;
+            };
+            for import_item in import_items {
+                let name_str = interner.resolve(import_item.name);
+                let _exported_name = import_item.alias
+                    .map(|a| interner.resolve(a).to_owned())
+                    .unwrap_or_else(|| name_str.to_owned());
+                let Some(ty) = module_exports.names.get(name_str) else {
+                    continue;
+                };
+                let def_id = DefId(self.next_id);
+                self.next_id += 1;
+                let mut info = DefInfo {
+                    id: def_id,
+                    name: import_item.name,
+                    kind: DefKind::Const,
+                    span: import_item.span,
+                    ty: Some(ty.clone()),
+                    scheme_vars: Vec::new(),
+                };
+                // Use alias symbol if provided for scope binding
+                let bind_sym = import_item.alias.unwrap_or(import_item.name);
+                info.name = bind_sym;
+                self.defs.push(info);
+                let prev = self.scopes.define(root_scope, bind_sym, def_id);
+                let _ = prev; // silently allow shadowing imports
+            }
+            let _ = span;
         }
     }
 
@@ -547,11 +596,13 @@ pub fn resolve(
     interner: &Interner,
     file_id: FileId,
     diags: &mut DiagnosticBag,
+    imports: &HashMap<String, ModuleExports>,
 ) -> ResolveResult {
     let mut resolver = Resolver::new(interner, diags, file_id);
     let root = resolver.scopes.push_root();
 
     resolver.collect_top_level(module, root);
+    resolver.collect_imports(module, root, imports, interner);
     resolver.resolve_items(module, root);
 
     ResolveResult {

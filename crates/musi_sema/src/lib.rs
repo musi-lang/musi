@@ -33,7 +33,7 @@ pub use types::{PrimTy, Type, TypeVarId};
 
 use std::collections::HashMap;
 
-use musi_ast::{Expr, ParsedModule};
+use musi_ast::{Expr, Modifier, ParsedModule};
 use musi_shared::{DiagnosticBag, FileId, Idx, Interner, Span};
 
 /// The complete result of semantic analysis of a single module.
@@ -48,18 +48,62 @@ pub struct SemaResult {
     pub expr_types: HashMap<Idx<Expr>, Type>,
 }
 
+/// Externally-visible types exported by a module (name → inferred [`Type`]).
+pub struct ModuleExports {
+    pub names: HashMap<String, Type>,
+}
+
+/// Extracts the exported name-to-type map from a completed analysis.
+pub fn exports_of(result: &SemaResult, module: &ParsedModule, interner: &Interner) -> ModuleExports {
+    let mut names: HashMap<String, Type> = HashMap::new();
+    for &item_idx in &module.items {
+        match module.ctx.exprs.get(item_idx) {
+            Expr::FnDef { name, modifiers, .. } => {
+                if modifiers.iter().any(|m| matches!(m, Modifier::Export)) {
+                    let name_str = interner.resolve(*name).to_owned();
+                    // Find the DefId for this function in the resolver results
+                    if let Some(ty) = result.defs.iter()
+                        .find(|d| interner.resolve(d.name) == name_str)
+                        .and_then(|d| d.ty.clone())
+                    {
+                        let _prev = names.insert(name_str, ty);
+                    }
+                }
+            }
+            Expr::Export { items, .. } => {
+                // `export { name1, name2 } from "path"` — re-exports
+                for item in items {
+                    let name_str = interner.resolve(item.name).to_owned();
+                    if let Some(ty) = result.defs.iter()
+                        .find(|d| interner.resolve(d.name) == name_str)
+                        .and_then(|d| d.ty.clone())
+                    {
+                        let _prev = names.insert(name_str, ty);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    ModuleExports { names }
+}
+
 /// Runs name resolution and type checking on `module`.
 ///
 /// Diagnostics (errors and warnings) are pushed into `diags`.  The caller
 /// should check `diags.has_errors()` after this call.
+///
+/// `imports` maps each imported module path to its exported types, enabling
+/// cross-module type resolution.
 pub fn analyze(
     module: &ParsedModule,
     interner: &Interner,
     file_id: FileId,
     diags: &mut DiagnosticBag,
+    imports: &HashMap<String, ModuleExports>,
 ) -> SemaResult {
     // Pass 1 & 2: name resolution.
-    let resolved = resolve(module, interner, file_id, diags);
+    let resolved = resolve(module, interner, file_id, diags, imports);
 
     // Pass 3: type checking.
     // The checker borrows expr_defs and pat_defs; we scope it so those borrows

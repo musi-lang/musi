@@ -20,6 +20,15 @@ pub enum Intrinsic {
     FloatFloor    = 12,
     FloatCeil     = 13,
     ReadLine      = 14,
+    ArrayLength   = 15,
+    ArrayPush     = 16,
+    ArrayPop      = 17,
+    ArrayGet      = 18,
+    ArraySet      = 19,
+    ArraySlice    = 20,
+    Assert        = 21,
+    AssertMsg     = 22,
+    Test          = 23,
 }
 
 /// Name strings indexed by variant discriminant.
@@ -28,6 +37,9 @@ const NAMES: &[&str] = &[
     "string_length", "nat_to_string", "string_concat", "string_slice",
     "string_to_int", "string_contains", "float_sqrt", "float_pow",
     "float_floor", "float_ceil", "read_line",
+    "array_length", "array_push", "array_pop", "array_get", "array_set",
+    "array_slice",
+    "assert", "assert_msg", "test",
 ];
 
 impl Intrinsic {
@@ -60,6 +72,15 @@ impl Intrinsic {
             12 => Some(Self::FloatFloor),
             13 => Some(Self::FloatCeil),
             14 => Some(Self::ReadLine),
+            15 => Some(Self::ArrayLength),
+            16 => Some(Self::ArrayPush),
+            17 => Some(Self::ArrayPop),
+            18 => Some(Self::ArrayGet),
+            19 => Some(Self::ArraySet),
+            20 => Some(Self::ArraySlice),
+            21 => Some(Self::Assert),
+            22 => Some(Self::AssertMsg),
+            23 => Some(Self::Test),
             _  => None,
         }
     }

@@ -60,7 +60,7 @@ pub enum BindKind {
 pub enum Modifier {
     Export,
     Opaque,
-    Native(Option<Symbol>),
+    Extrin(Option<Symbol>),
 }
 
 #[derive(Debug, Clone, PartialEq)]

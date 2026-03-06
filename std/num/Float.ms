@@ -1,7 +1,7 @@
-#[intrinsic("float_sqrt")]  export native fn float_sqrt(n: Float): Float;
-#[intrinsic("float_pow")]   export native fn float_pow(base: Float, exp: Float): Float;
-#[intrinsic("float_floor")] export native fn float_floor(n: Float): Float;
-#[intrinsic("float_ceil")]  export native fn float_ceil(n: Float): Float;
+#[intrinsic("float_sqrt")]  export extrin fn float_sqrt(n: Float): Float;
+#[intrinsic("float_pow")]   export extrin fn float_pow(base: Float, exp: Float): Float;
+#[intrinsic("float_floor")] export extrin fn float_floor(n: Float): Float;
+#[intrinsic("float_ceil")]  export extrin fn float_ceil(n: Float): Float;
 
 export fn float_round(n: Float): Float => float_floor(n + 0.5);
 

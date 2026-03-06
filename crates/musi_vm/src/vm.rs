@@ -1,8 +1,10 @@
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use musi_codegen::intrinsics::Intrinsic;
 use musi_codegen::{ConstEntry, Module, Opcode};
 
+use crate::ffi::FfiState;
 use crate::native;
 
 use crate::error::VmError;
@@ -20,16 +22,44 @@ enum Signal {
     Return(Value),
 }
 
+pub struct TestResult {
+    pub label: Box<str>,
+    pub passed: bool,
+    pub error: Option<Box<str>>,
+}
+
 pub struct Vm {
     pub(crate) stack: Vec<Value>,
     pub(crate) frames: Vec<CallFrame>,
     pub(crate) module: Module,
+    pub(crate) ffi: FfiState,
+    test_mode: bool,
+    pub test_results: Vec<TestResult>,
 }
 
 impl Vm {
     #[must_use]
-    pub const fn new(module: Module) -> Self {
-        Self { stack: Vec::new(), frames: Vec::new(), module }
+    pub fn new(module: Module) -> Self {
+        Self {
+            stack: Vec::new(),
+            frames: Vec::new(),
+            ffi: FfiState::new(),
+            module,
+            test_mode: false,
+            test_results: Vec::new(),
+        }
+    }
+
+    /// Run the module in test mode: intercepts `test(name, f)` calls, runs each
+    /// test function, catches `AssertionFailed`, and collects results.
+    ///
+    /// # Errors
+    ///
+    /// Returns `VmError` on any non-assertion runtime error.
+    pub fn run_tests(&mut self, entry_fn: u16) -> Result<(), VmError> {
+        self.test_mode = true;
+        let _ = self.run(entry_fn)?;
+        Ok(())
     }
 
     /// Run the VM starting at the given function table index.
@@ -46,6 +76,17 @@ impl Vm {
                 Signal::Return(v) => return Ok(v),
             }
         }
+    }
+
+    fn run_until_depth(&mut self, depth: usize) -> Result<(), VmError> {
+        while self.frames.len() > depth {
+            let op = self.fetch_and_advance()?;
+            match self.step(op)? {
+                Signal::Continue => {}
+                Signal::Return(_) => break,
+            }
+        }
+        Ok(())
     }
 
     fn push_entry_frame(&mut self, entry_fn: u16) -> Result<(), VmError> {
@@ -193,6 +234,12 @@ impl Vm {
                 self.exec_call_method(method_idx, arg_count)?;
                 Ok(Signal::Continue)
             }
+            Opcode::NewArr(n) => self.exec_new_arr(n),
+            Opcode::ArrGet => self.exec_arr_get(),
+            Opcode::ArrSet => self.exec_arr_set(),
+            Opcode::ArrLen => self.exec_arr_len(),
+            Opcode::ArrPush => self.exec_arr_push(),
+            Opcode::ArrSlice => self.exec_arr_slice(),
         }
     }
 
@@ -554,6 +601,77 @@ impl Vm {
         self.exec_call(fn_idx)
     }
 
+    fn exec_new_arr(&mut self, n: u16) -> Result<Signal, VmError> {
+        let count = usize::from(n);
+        let stack_len = self.stack.len();
+        if stack_len < count {
+            return Err(VmError::StackUnderflow);
+        }
+        let items: Vec<Value> = self.stack.drain(stack_len - count..).collect();
+        self.stack.push(Value::Array(Rc::new(RefCell::new(items))));
+        Ok(Signal::Continue)
+    }
+
+    fn exec_arr_get(&mut self) -> Result<Signal, VmError> {
+        let idx = pop_i64(&mut self.stack)?;
+        let arr = self.stack.pop().ok_or(VmError::StackUnderflow)?;
+        let Value::Array(a) = arr else { return Err(VmError::TypeMismatch); };
+        let borrowed = a.borrow();
+        let len = borrowed.len();
+        let i = usize::try_from(idx).map_err(|_| VmError::IndexOutOfBounds { index: idx, len })?;
+        let val = borrowed.get(i).ok_or(VmError::IndexOutOfBounds { index: idx, len })?.clone();
+        drop(borrowed);
+        self.stack.push(val);
+        Ok(Signal::Continue)
+    }
+
+    fn exec_arr_set(&mut self) -> Result<Signal, VmError> {
+        let val = self.stack.pop().ok_or(VmError::StackUnderflow)?;
+        let idx = pop_i64(&mut self.stack)?;
+        let arr = self.stack.pop().ok_or(VmError::StackUnderflow)?;
+        let Value::Array(a) = arr else { return Err(VmError::TypeMismatch); };
+        let mut borrowed = a.borrow_mut();
+        let len = borrowed.len();
+        let i = usize::try_from(idx).map_err(|_| VmError::IndexOutOfBounds { index: idx, len })?;
+        let slot = borrowed.get_mut(i).ok_or(VmError::IndexOutOfBounds { index: idx, len })?;
+        *slot = val;
+        drop(borrowed);
+        self.stack.push(Value::Unit);
+        Ok(Signal::Continue)
+    }
+
+    fn exec_arr_len(&mut self) -> Result<Signal, VmError> {
+        let arr = self.stack.pop().ok_or(VmError::StackUnderflow)?;
+        let Value::Array(a) = arr else { return Err(VmError::TypeMismatch); };
+        let len = a.borrow().len() as i64;
+        self.stack.push(Value::Int(len));
+        Ok(Signal::Continue)
+    }
+
+    fn exec_arr_push(&mut self) -> Result<Signal, VmError> {
+        let val = self.stack.pop().ok_or(VmError::StackUnderflow)?;
+        let arr = self.stack.pop().ok_or(VmError::StackUnderflow)?;
+        let Value::Array(a) = arr else { return Err(VmError::TypeMismatch); };
+        a.borrow_mut().push(val);
+        self.stack.push(Value::Unit);
+        Ok(Signal::Continue)
+    }
+
+    fn exec_arr_slice(&mut self) -> Result<Signal, VmError> {
+        let end = pop_i64(&mut self.stack)?;
+        let start = pop_i64(&mut self.stack)?;
+        let arr = self.stack.pop().ok_or(VmError::StackUnderflow)?;
+        let Value::Array(a) = arr else { return Err(VmError::TypeMismatch); };
+        let borrowed = a.borrow();
+        let len = borrowed.len() as i64;
+        let lo = start.clamp(0, len) as usize;
+        let hi = end.clamp(0, len) as usize;
+        let slice: Vec<Value> = borrowed[lo..hi.max(lo)].to_vec();
+        drop(borrowed);
+        self.stack.push(Value::Array(Rc::new(RefCell::new(slice))));
+        Ok(Signal::Continue)
+    }
+
     fn exec_call(&mut self, fn_idx: u16) -> Result<(), VmError> {
         let (param_count, local_count, symbol_idx) = {
             let func = self
@@ -584,10 +702,64 @@ impl Vm {
         let args: Vec<Value> = self.stack.drain(stack_len - param_count..).collect();
 
         if is_native {
-            let intrinsic = Intrinsic::from_id(intrinsic_id)
-                .ok_or(VmError::UnknownIntrinsic(intrinsic_id))?;
-            let result = native::dispatch(self, intrinsic, &args);
-            self.stack.push(result);
+            if intrinsic_id == u16::MAX {
+                // extrin fn — dispatch via dlopen/dlsym
+                let result = self.ffi.call(fn_idx, &args, &self.module)?;
+                self.stack.push(result);
+            } else {
+                let intrinsic = Intrinsic::from_id(intrinsic_id)
+                    .ok_or(VmError::UnknownIntrinsic(intrinsic_id))?;
+                match intrinsic {
+                    Intrinsic::Assert => {
+                        let cond = args.first().cloned().unwrap_or(Value::Unit);
+                        if !is_truthy(&cond) {
+                            return Err(VmError::AssertionFailed("assertion failed".into()));
+                        }
+                        self.stack.push(Value::Unit);
+                    }
+                    Intrinsic::AssertMsg => {
+                        let cond = args.first().cloned().unwrap_or(Value::Unit);
+                        let msg: Box<str> = args.get(1)
+                            .and_then(|v| if let Value::String(s) = v { Some(Box::from(s.as_ref())) } else { None })
+                            .unwrap_or_else(|| Box::from("assertion failed"));
+                        if !is_truthy(&cond) {
+                            return Err(VmError::AssertionFailed(msg));
+                        }
+                        self.stack.push(Value::Unit);
+                    }
+                    Intrinsic::Test => {
+                        let name: Box<str> = args.first()
+                            .and_then(|v| if let Value::String(s) = v { Some(Box::from(s.as_ref())) } else { None })
+                            .unwrap_or_else(|| Box::from("<unnamed>"));
+                        let f_idx = args.get(1)
+                            .and_then(|v| if let Value::Function(idx) = v { Some(*idx) } else { None });
+                        if let Some(test_fn_idx) = f_idx {
+                            let depth = self.frames.len();
+                            self.exec_call(test_fn_idx)?;
+                            if self.test_mode {
+                                let run_result = self.run_until_depth(depth);
+                                let _ = self.stack.pop();
+                                match run_result {
+                                    Ok(()) => self.test_results.push(TestResult { label: name, passed: true, error: None }),
+                                    Err(VmError::AssertionFailed(msg)) => {
+                                        self.frames.truncate(depth);
+                                        self.test_results.push(TestResult { label: name, passed: false, error: Some(msg) });
+                                    }
+                                    Err(e) => return Err(e),
+                                }
+                            } else {
+                                self.run_until_depth(depth)?;
+                                let _ = self.stack.pop();
+                            }
+                        }
+                        self.stack.push(Value::Unit);
+                    }
+                    _ => {
+                        let result = native::dispatch(self, intrinsic, &args);
+                        self.stack.push(result);
+                    }
+                }
+            }
         } else {
             let stack_base = self.stack.len();
             let mut locals: Vec<Value> = args;
@@ -605,6 +777,13 @@ impl Vm {
     }
 }
 
+fn is_truthy(v: &Value) -> bool {
+    match v {
+        Value::Object { fields, .. } => fields.first().map_or(false, |f| matches!(f, Value::Int(n) if *n != 0)),
+        _ => false,
+    }
+}
+
 fn type_tag_of(v: &Value) -> u16 {
     match v {
         Value::Int(_) => 1,
@@ -613,6 +792,7 @@ fn type_tag_of(v: &Value) -> u16 {
         Value::Unit => 5,
         Value::Function(_) => 6,
         Value::Object { type_tag, .. } => *type_tag,
+        Value::Array(_) => 7,
     }
 }
 

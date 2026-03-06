@@ -1,5 +1,6 @@
 //! Native built-in function dispatch.
 
+use std::cell::RefCell;
 use std::io::BufRead as _;
 use std::rc::Rc;
 
@@ -26,6 +27,14 @@ pub fn dispatch(vm: &Vm, intrinsic: Intrinsic, args: &[Value]) -> Value {
         Intrinsic::FloatFloor     => intrinsic_float_floor(vm, args),
         Intrinsic::FloatCeil      => intrinsic_float_ceil(vm, args),
         Intrinsic::ReadLine       => intrinsic_read_line(vm, args),
+        Intrinsic::ArrayLength    => intrinsic_array_length(vm, args),
+        Intrinsic::ArrayPush      => intrinsic_array_push(vm, args),
+        Intrinsic::ArrayPop       => intrinsic_array_pop(vm, args),
+        Intrinsic::ArrayGet       => intrinsic_array_get(vm, args),
+        Intrinsic::ArraySet       => intrinsic_array_set(vm, args),
+        Intrinsic::ArraySlice     => intrinsic_array_slice(vm, args),
+        // Assert/AssertMsg/Test are handled directly in vm::exec_call before dispatch reaches here.
+        Intrinsic::Assert | Intrinsic::AssertMsg | Intrinsic::Test => Value::Unit,
     }
 }
 
@@ -168,6 +177,75 @@ fn intrinsic_read_line(_vm: &Vm, _args: &[Value]) -> Value {
         }
     }
     Value::String(Rc::from(line.as_str()))
+}
+
+fn intrinsic_array_length(_vm: &Vm, args: &[Value]) -> Value {
+    match args.first() {
+        Some(Value::Array(a)) => Value::Int(a.borrow().len() as i64),
+        _ => Value::Int(0),
+    }
+}
+
+fn intrinsic_array_push(_vm: &Vm, args: &[Value]) -> Value {
+    match (args.first(), args.get(1)) {
+        (Some(Value::Array(a)), Some(val)) => {
+            a.borrow_mut().push(val.clone());
+            Value::Unit
+        }
+        _ => Value::Unit,
+    }
+}
+
+fn intrinsic_array_pop(_vm: &Vm, args: &[Value]) -> Value {
+    match args.first() {
+        Some(Value::Array(a)) => match a.borrow_mut().pop() {
+            Some(v) => option_some(v),
+            None => option_none(),
+        },
+        _ => option_none(),
+    }
+}
+
+fn intrinsic_array_get(_vm: &Vm, args: &[Value]) -> Value {
+    match (args.first(), args.get(1)) {
+        (Some(Value::Array(a)), Some(Value::Int(idx))) => {
+            let borrowed = a.borrow();
+            match usize::try_from(*idx).ok().and_then(|i| borrowed.get(i)) {
+                Some(v) => v.clone(),
+                None => Value::Unit,
+            }
+        }
+        _ => Value::Unit,
+    }
+}
+
+fn intrinsic_array_set(_vm: &Vm, args: &[Value]) -> Value {
+    match (args.first(), args.get(1), args.get(2)) {
+        (Some(Value::Array(a)), Some(Value::Int(idx)), Some(val)) => {
+            if let Ok(i) = usize::try_from(*idx) {
+                let mut borrowed = a.borrow_mut();
+                if let Some(slot) = borrowed.get_mut(i) {
+                    *slot = val.clone();
+                }
+            }
+            Value::Unit
+        }
+        _ => Value::Unit,
+    }
+}
+
+fn intrinsic_array_slice(_vm: &Vm, args: &[Value]) -> Value {
+    match (args.first(), args.get(1), args.get(2)) {
+        (Some(Value::Array(a)), Some(Value::Int(start)), Some(Value::Int(end))) => {
+            let borrowed = a.borrow();
+            let len = borrowed.len() as i64;
+            let lo = (*start).clamp(0, len) as usize;
+            let hi = (*end).clamp(0, len) as usize;
+            let slice: Vec<Value> = borrowed[lo..hi.max(lo)].to_vec();
+            Value::Array(Rc::new(RefCell::new(slice)))
+        }
+        _ => Value::Array(Rc::new(RefCell::new(Vec::new()))),
+    }
 }
 
 #[cfg(test)]

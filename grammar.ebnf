@@ -33,7 +33,7 @@ lit_char = "'", (escape_char | (char - "'")), "'";
 
 lit = lit_number | lit_string | lit_char;
 
-lex_keyword = "record" | "choice" | "fn" | "const" | "var" | "import" | "export" | "match" | "case" | "if" | "then" | "else" | "elif" | "while" | "loop" | "for" | "in" | "return" | "break" | "cycle" | "defer" | "and" | "or" | "xor" | "not" | "opaque" | "native" | "from" | "as" | "with" | "label" | "using" | "class" | "given" | "satisfies" | "where" | "law";
+lex_keyword = "record" | "choice" | "fn" | "const" | "var" | "import" | "export" | "match" | "case" | "if" | "then" | "else" | "elif" | "while" | "loop" | "for" | "in" | "return" | "break" | "cycle" | "defer" | "and" | "or" | "xor" | "not" | "opaque" | "extrin" | "from" | "as" | "with" | "label" | "using" | "class" | "given" | "satisfies" | "where" | "law";
 
 atom_dot_lbrack = ".[";
 
@@ -98,7 +98,7 @@ ast_attr = lex_id, ["(", [ast_attr_arg, {",", ast_attr_arg}], ")"];
 
 ast_attr_arg = (lex_id, [bind_init]) | lit;
 
-ast_modifiers = {"export" | "opaque" | ("native", [lit_string] (* ABI *))};
+ast_modifiers = {"export" | "opaque" | ("extrin", [lit_string] (* ABI *))};
 
 
 (* ========================================================================= *)

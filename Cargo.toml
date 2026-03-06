@@ -24,7 +24,7 @@ criterion = "0.8.2"
 [workspace.lints.rust]
 keyword_idents_2024 = "forbid"
 missing_unsafe_on_extern = "forbid"
-unsafe_code = "forbid"
+unsafe_code = "deny"
 unsafe_op_in_unsafe_fn = "forbid"
 unused_results = "forbid"
 
