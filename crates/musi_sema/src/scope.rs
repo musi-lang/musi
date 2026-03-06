@@ -26,7 +26,7 @@ pub struct ScopeTree {
 impl ScopeTree {
     /// Creates an empty scope tree.
     #[must_use]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self { scopes: Vec::new() }
     }
 
@@ -46,24 +46,28 @@ impl ScopeTree {
     ///
     /// Returns the previous definition if the name was already bound in this
     /// exact scope (not a parent), so callers can diagnose shadowing.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `scope` is not a valid handle returned by this `ScopeTree`.
     pub fn define(&mut self, scope: ScopeId, name: Symbol, def_id: DefId) -> Option<DefId> {
         let idx = usize::try_from(scope.0).expect("ScopeId in range");
-        self.scopes
-            .get_mut(idx)
-            .expect("ScopeId is valid")
-            .bindings
-            .insert(name, def_id)
+        self.scopes[idx].bindings.insert(name, def_id)
     }
 
     /// Looks up `name` starting from `scope` and walking towards the root.
     ///
     /// Returns the first [`DefId`] found, or `None` if the name is unbound.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `scope` is not a valid handle returned by this `ScopeTree`.
     #[must_use]
     pub fn lookup(&self, scope: ScopeId, name: Symbol) -> Option<DefId> {
         let mut cur = scope;
         loop {
             let idx = usize::try_from(cur.0).expect("ScopeId in range");
-            let s = self.scopes.get(idx).expect("ScopeId is valid");
+            let s = &self.scopes[idx];
             if let Some(&def) = s.bindings.get(&name) {
                 return Some(def);
             }
@@ -72,25 +76,28 @@ impl ScopeTree {
     }
 
     /// Looks up `name` in `scope` only (not parents).
+    ///
+    /// # Panics
+    ///
+    /// Panics if `scope` is not a valid handle returned by this `ScopeTree`.
     #[must_use]
     pub fn lookup_local(&self, scope: ScopeId, name: Symbol) -> Option<DefId> {
         let idx = usize::try_from(scope.0).expect("ScopeId in range");
-        self.scopes
-            .get(idx)
-            .expect("ScopeId is valid")
-            .bindings
-            .get(&name)
-            .copied()
+        self.scopes[idx].bindings.get(&name).copied()
     }
 
     /// Returns all names visible from `scope` (this scope and all ancestors).
+    ///
+    /// # Panics
+    ///
+    /// Panics if `scope` is not a valid handle returned by this `ScopeTree`.
     #[must_use]
     pub fn visible_names(&self, scope: ScopeId) -> Vec<Symbol> {
         let mut names = Vec::new();
         let mut cur = scope;
         loop {
             let idx = usize::try_from(cur.0).expect("ScopeId in range");
-            let s = self.scopes.get(idx).expect("ScopeId is valid");
+            let s = &self.scopes[idx];
             names.extend(s.bindings.keys().copied());
             match s.parent {
                 Some(p) => cur = p,

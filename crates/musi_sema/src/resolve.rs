@@ -128,30 +128,14 @@ impl<'a> Resolver<'a> {
     fn resolve_expr(&mut self, idx: Idx<Expr>, ctx: &AstArenas, scope: ScopeId) {
         let expr = ctx.exprs.get(idx);
         match expr {
-            Expr::Ident { name, span } => {
-                let name = *name;
-                let span = *span;
-                match self.scopes.lookup(scope, name) {
-                    Some(def_id) => {
-                        let _prev = self.expr_defs.insert(idx, def_id);
-                    }
-                    None => {
-                        let name_str = self.interner.resolve(name);
-                        let visible = self.scopes.visible_names(scope);
-                        let suggestion = best_suggestion(name_str, &visible, self.interner);
-                        let msg = match suggestion {
-                            Some(s) => {
-                                let s_str = self.interner.resolve(s);
-                                format!("undefined name `{name_str}`; did you mean `{s_str}`?")
-                            }
-                            None => format!("undefined name `{name_str}`"),
-                        };
-                        let _d = self.diags.error(msg, span, self.file_id);
-                    }
-                }
-            }
+            Expr::Ident { name, span } => self.resolve_ident(idx, *name, *span, scope),
 
-            Expr::Lit { .. } | Expr::Unit { .. } | Expr::Error { .. } => {}
+            Expr::Lit { .. }
+            | Expr::Unit { .. }
+            | Expr::Error { .. }
+            | Expr::Import { .. }
+            | Expr::Export { .. }
+            | Expr::Record { .. } => {}
 
             Expr::Paren { inner, .. } => self.resolve_expr(*inner, ctx, scope),
 
@@ -182,39 +166,22 @@ impl<'a> Resolver<'a> {
 
             Expr::AnonRec { fields, .. } => {
                 for field in fields {
-                    self.resolve_rec_lit_field(field, ctx, scope);
+                    self.resolve_field_init(field, ctx, scope);
                 }
             }
 
-            Expr::If {
-                cond,
-                then_body,
-                elif_chains,
-                else_body,
-                ..
-            } => {
-                self.resolve_cond(cond, ctx, scope);
-                self.resolve_expr(*then_body, ctx, scope);
-                for chain in elif_chains {
-                    self.resolve_elif(chain, ctx, scope);
-                }
-                if let Some(&eb) = else_body.as_ref() {
-                    self.resolve_expr(eb, ctx, scope);
-                }
+            Expr::If { cond, then_body, elif_chains, else_body, .. } => {
+                self.resolve_if_expr(cond, *then_body, elif_chains, else_body.as_ref().copied(), ctx, scope);
             }
 
-            Expr::Match {
-                scrutinee, arms, ..
-            } => {
+            Expr::Match { scrutinee, arms, .. } => {
                 self.resolve_expr(*scrutinee, ctx, scope);
                 for arm in arms {
                     self.resolve_match_arm(arm, ctx, scope);
                 }
             }
 
-            Expr::While {
-                cond, guard, body, ..
-            } => {
+            Expr::While { cond, guard, body, .. } => {
                 self.resolve_cond(cond, ctx, scope);
                 if let Some(&g) = guard.as_ref() {
                     self.resolve_expr(g, ctx, scope);
@@ -222,41 +189,22 @@ impl<'a> Resolver<'a> {
                 self.resolve_expr(*body, ctx, scope);
             }
 
-            Expr::Loop {
-                body, post_cond, ..
-            } => {
+            Expr::Loop { body, post_cond, .. } => {
                 self.resolve_expr(*body, ctx, scope);
                 if let Some(pc) = post_cond.as_deref() {
                     self.resolve_cond(pc, ctx, scope);
                 }
             }
 
-            Expr::For {
-                pat,
-                iter,
-                guard,
-                body,
-                ..
-            } => {
-                self.resolve_expr(*iter, ctx, scope);
-                let for_scope = self.scopes.push_child(scope);
-                self.collect_pat_defs(pat, BindKind::Const, for_scope);
-                self.resolve_pat(pat, ctx, for_scope);
-                if let Some(&g) = guard.as_ref() {
-                    self.resolve_expr(g, ctx, for_scope);
-                }
-                self.resolve_expr(*body, ctx, for_scope);
+            Expr::For { pat, iter, guard, body, .. } => {
+                self.resolve_for_expr(pat, *iter, guard.as_ref().copied(), *body, ctx, scope);
             }
 
-            Expr::Label { body, .. } => self.resolve_expr(*body, ctx, scope),
-
-            Expr::Return { value, .. } => {
-                if let Some(&v) = value.as_ref() {
-                    self.resolve_expr(v, ctx, scope);
-                }
+            Expr::Label { body, .. } | Expr::Defer { body, .. } => {
+                self.resolve_expr(*body, ctx, scope);
             }
 
-            Expr::Break { value, .. } => {
+            Expr::Return { value, .. } | Expr::Break { value, .. } => {
                 if let Some(&v) = value.as_ref() {
                     self.resolve_expr(v, ctx, scope);
                 }
@@ -268,24 +216,80 @@ impl<'a> Resolver<'a> {
                 }
             }
 
-            Expr::Defer { body, .. } => self.resolve_expr(*body, ctx, scope),
-
-            Expr::Import { .. } => {}
-
-            Expr::Record { .. } => {
-                // No sub-expressions; type name registered by caller.
+            Expr::Using { init, body, .. } => {
+                self.resolve_expr(*init, ctx, scope);
+                self.resolve_expr(*body, ctx, scope);
             }
 
+            other => self.resolve_expr_decl(other, ctx, scope),
+        }
+    }
+
+    fn resolve_ident(&mut self, idx: Idx<Expr>, name: Symbol, span: Span, scope: ScopeId) {
+        if let Some(def_id) = self.scopes.lookup(scope, name) {
+            let _prev = self.expr_defs.insert(idx, def_id);
+        } else {
+            let name_str = self.interner.resolve(name);
+            let visible = self.scopes.visible_names(scope);
+            let suggestion = best_suggestion(name_str, &visible, self.interner);
+            let msg = match suggestion {
+                Some(s) => {
+                    let s_str = self.interner.resolve(s);
+                    format!("undefined name `{name_str}`; did you mean `{s_str}`?")
+                }
+                None => format!("undefined name `{name_str}`"),
+            };
+            let _d = self.diags.error(msg, span, self.file_id);
+        }
+    }
+
+    fn resolve_if_expr(
+        &mut self,
+        cond: &Cond,
+        then_body: Idx<Expr>,
+        elif_chains: &[ElifBranch],
+        else_body: Option<Idx<Expr>>,
+        ctx: &AstArenas,
+        scope: ScopeId,
+    ) {
+        self.resolve_cond(cond, ctx, scope);
+        self.resolve_expr(then_body, ctx, scope);
+        for chain in elif_chains {
+            self.resolve_elif(chain, ctx, scope);
+        }
+        if let Some(eb) = else_body {
+            self.resolve_expr(eb, ctx, scope);
+        }
+    }
+
+    fn resolve_for_expr(
+        &mut self,
+        pat: &Pat,
+        iter: Idx<Expr>,
+        guard: Option<Idx<Expr>>,
+        body: Idx<Expr>,
+        ctx: &AstArenas,
+        scope: ScopeId,
+    ) {
+        self.resolve_expr(iter, ctx, scope);
+        let for_scope = self.scopes.push_child(scope);
+        self.collect_pat_defs(pat, BindKind::Const, for_scope);
+        self.resolve_pat(pat, ctx, for_scope);
+        if let Some(g) = guard {
+            self.resolve_expr(g, ctx, for_scope);
+        }
+        self.resolve_expr(body, ctx, for_scope);
+    }
+
+    fn resolve_expr_decl(&mut self, expr: &Expr, ctx: &AstArenas, scope: ScopeId) {
+        match expr {
             Expr::Choice { variants, .. } => {
-                // Register variant constructors in the current scope.
                 for variant in variants {
                     self.register_variant(variant, scope);
                 }
             }
 
             Expr::FnDef { params, body, .. } => {
-                // Function name is registered by the caller (collect_top_level
-                // for module-level, or resolve_block_stmt for local fns).
                 let fn_scope = self.scopes.push_child(scope);
                 for param in params {
                     let def_id = self.alloc_def(param.name, DefKind::Param, param.span);
@@ -307,9 +311,7 @@ impl<'a> Resolver<'a> {
                 self.resolve_expr(*body, ctx, lam_scope);
             }
 
-            Expr::Bind {
-                kind, pat, init, ..
-            } => {
+            Expr::Bind { kind, pat, init, .. } => {
                 let kind = *kind;
                 if let Some(&init_idx) = init.as_ref() {
                     self.resolve_expr(init_idx, ctx, scope);
@@ -340,12 +342,14 @@ impl<'a> Resolver<'a> {
                     }
                     PostfixOp::RecDot { fields, .. } => {
                         for field in fields {
-                            self.resolve_rec_lit_field(field, ctx, scope);
+                            self.resolve_field_init(field, ctx, scope);
                         }
                     }
                     PostfixOp::Field { .. } | PostfixOp::As { .. } => {}
                 }
             }
+
+            _ => {}
         }
     }
 
@@ -433,7 +437,8 @@ impl<'a> Resolver<'a> {
             Pat::Ident {
                 suffix: Some(PatSuffix::Named { fields, .. }),
                 ..
-            } => {
+            }
+            | Pat::AnonRec { fields, .. } => {
                 for f in fields {
                     self.resolve_pat_field(f, ctx, scope);
                 }
@@ -441,11 +446,6 @@ impl<'a> Resolver<'a> {
             Pat::Prod { elements, .. } | Pat::Arr { elements, .. } => {
                 for elem in elements {
                     self.resolve_pat(elem, ctx, scope);
-                }
-            }
-            Pat::AnonRec { fields, .. } => {
-                for f in fields {
-                    self.resolve_pat_field(f, ctx, scope);
                 }
             }
             Pat::Or { alternatives, .. } => {
@@ -466,7 +466,7 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    fn resolve_rec_lit_field(&mut self, field: &FieldInit, ctx: &AstArenas, scope: ScopeId) {
+    fn resolve_field_init(&mut self, field: &FieldInit, ctx: &AstArenas, scope: ScopeId) {
         match field {
             FieldInit::Named { value, .. } => self.resolve_expr(*value, ctx, scope),
             FieldInit::Spread { expr: e, .. } => self.resolve_expr(*e, ctx, scope),
@@ -493,19 +493,18 @@ impl<'a> Resolver<'a> {
             }
             Pat::AnonRec { fields, .. } => {
                 for field in fields {
-                    match field.pat {
-                        Some(ref sub) => self.collect_pat_defs(sub, kind, scope),
-                        None => {
-                            // Shorthand `{ x }` -- bind `x`.
-                            let def_kind = if kind == BindKind::Var {
-                                DefKind::Var
-                            } else {
-                                DefKind::Const
-                            };
-                            let def_id = self.alloc_def(field.name, def_kind, field.span);
-                            self.define_in_scope(scope, field.name, def_id, field.span);
-                            let _prev = self.pat_defs.insert(field.span, def_id);
-                        }
+                    if let Some(ref sub) = field.pat {
+                        self.collect_pat_defs(sub, kind, scope);
+                    } else {
+                        // Shorthand `{ x }` -- bind `x`.
+                        let def_kind = if kind == BindKind::Var {
+                            DefKind::Var
+                        } else {
+                            DefKind::Const
+                        };
+                        let def_id = self.alloc_def(field.name, def_kind, field.span);
+                        self.define_in_scope(scope, field.name, def_id, field.span);
+                        let _prev = self.pat_defs.insert(field.span, def_id);
                     }
                 }
             }

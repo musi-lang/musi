@@ -1,9 +1,9 @@
-//! The Musi stack-based virtual machine.
-
 use std::rc::Rc;
 
 use musi_codegen::intrinsics::Intrinsic;
 use musi_codegen::{ConstEntry, Module, Opcode};
+
+use crate::native;
 
 use crate::error::VmError;
 use crate::value::Value;
@@ -12,7 +12,6 @@ pub struct CallFrame {
     pub function_idx: u16,
     pub pc: usize,
     pub locals: Vec<Value>,
-    /// Operand-stack depth when this frame was pushed; restored on `ret`.
     pub stack_base: usize,
 }
 
@@ -29,16 +28,15 @@ pub struct Vm {
 
 impl Vm {
     #[must_use]
-    pub fn new(module: Module) -> Self {
+    pub const fn new(module: Module) -> Self {
         Self { stack: Vec::new(), frames: Vec::new(), module }
     }
 
-    /// Executes `entry_fn` (function-table index) and returns its result.
+    /// Run the VM starting at the given function table index.
     ///
     /// # Errors
     ///
-    /// Returns [`VmError`] on stack underflow, out-of-bounds access,
-    /// unregistered intrinsic, or decode failure.
+    /// Returns `VmError` on any runtime error (type mismatch, stack underflow, etc.).
     pub fn run(&mut self, entry_fn: u16) -> Result<Value, VmError> {
         self.push_entry_frame(entry_fn)?;
         loop {
@@ -114,10 +112,6 @@ impl Vm {
                 self.stack.push(Value::Float(v));
                 Ok(Signal::Continue)
             }
-            Opcode::LdImmBool(v) => {
-                self.stack.push(Value::Bool(v));
-                Ok(Signal::Continue)
-            }
             Opcode::LdImmUnit => {
                 self.stack.push(Value::Unit);
                 Ok(Signal::Continue)
@@ -126,7 +120,7 @@ impl Vm {
             Opcode::LdLoc(idx) => self.exec_ld_loc(idx),
             Opcode::StLoc(idx) => self.exec_st_loc(idx),
             Opcode::Call(fn_idx) => {
-                self.execute_call(fn_idx)?;
+                self.exec_call(fn_idx)?;
                 Ok(Signal::Continue)
             }
             Opcode::LdFnIdx(idx) => {
@@ -138,7 +132,7 @@ impl Vm {
                 let Value::Function(fn_idx) = v else {
                     return Err(VmError::NotAFunction);
                 };
-                self.execute_call(fn_idx)?;
+                self.exec_call(fn_idx)?;
                 Ok(Signal::Continue)
             }
             Opcode::Dup => {
@@ -147,37 +141,9 @@ impl Vm {
                 Ok(Signal::Continue)
             }
             Opcode::HaltError => Err(VmError::MatchFailure),
-            Opcode::NewObj(n) => {
-                let n_usize = usize::from(n);
-                let stack_len = self.stack.len();
-                if stack_len < n_usize {
-                    return Err(VmError::StackUnderflow);
-                }
-                let fields: Vec<Value> = self.stack.drain(stack_len - n_usize..).collect();
-                self.stack.push(Value::Object(Rc::new(fields)));
-                Ok(Signal::Continue)
-            }
-            Opcode::LdFld(idx) => {
-                let obj = self.stack.pop().ok_or(VmError::StackUnderflow)?;
-                let Value::Object(rc) = obj else {
-                    return Err(VmError::TypeMismatch);
-                };
-                let field = rc
-                    .get(usize::from(idx))
-                    .ok_or(VmError::FieldOutOfBounds(idx))?
-                    .clone();
-                self.stack.push(field);
-                Ok(Signal::Continue)
-            }
-            Opcode::LdTag => {
-                let obj = self.stack.pop().ok_or(VmError::StackUnderflow)?;
-                let Value::Object(rc) = obj else {
-                    return Err(VmError::TypeMismatch);
-                };
-                let tag = rc.first().ok_or(VmError::FieldOutOfBounds(0))?.clone();
-                self.stack.push(tag);
-                Ok(Signal::Continue)
-            }
+            Opcode::NewObj(n) => self.exec_new_obj(n),
+            Opcode::LdFld(idx) => self.exec_ld_fld(idx),
+            Opcode::LdTag => self.exec_ld_tag(),
             Opcode::AddI64
             | Opcode::SubI64
             | Opcode::MulI64
@@ -189,7 +155,7 @@ impl Vm {
             | Opcode::MulF64
             | Opcode::DivF64
             | Opcode::RemF64
-            | Opcode::NegF64 => self.exec_arith(op),
+            | Opcode::NegF64 => self.exec_arith(&op),
             Opcode::EqI64
             | Opcode::NeqI64
             | Opcode::LtI64
@@ -205,14 +171,14 @@ impl Vm {
             | Opcode::EqBool
             | Opcode::NeqBool
             | Opcode::EqStr
-            | Opcode::NeqStr => self.exec_cmp(op),
+            | Opcode::NeqStr => self.exec_cmp(&op),
             Opcode::Not
             | Opcode::BitAnd
             | Opcode::BitOr
             | Opcode::BitXor
             | Opcode::BitNot
             | Opcode::Shl
-            | Opcode::Shr => self.exec_bitwise(op),
+            | Opcode::Shr => self.exec_bitwise(&op),
             Opcode::Br(offset) => {
                 let frame = self.frames.last_mut().ok_or(VmError::NoFrames)?;
                 frame.pc = apply_branch_offset(frame.pc, offset)?;
@@ -221,7 +187,45 @@ impl Vm {
             Opcode::BrTrue(offset) => self.exec_br_cond(offset, true),
             Opcode::BrFalse(offset) => self.exec_br_cond(offset, false),
             Opcode::ConcatStr => self.exec_concat_str(),
+            Opcode::CallMethod { method_idx, arg_count } => {
+                self.exec_call_method(method_idx, arg_count)?;
+                Ok(Signal::Continue)
+            }
         }
+    }
+
+    fn exec_new_obj(&mut self, n: u16) -> Result<Signal, VmError> {
+        let n_usize = usize::from(n);
+        let stack_len = self.stack.len();
+        if stack_len < n_usize {
+            return Err(VmError::StackUnderflow);
+        }
+        let fields: Vec<Value> = self.stack.drain(stack_len - n_usize..).collect();
+        self.stack.push(Value::Object(Rc::new(fields)));
+        Ok(Signal::Continue)
+    }
+
+    fn exec_ld_fld(&mut self, idx: u16) -> Result<Signal, VmError> {
+        let obj = self.stack.pop().ok_or(VmError::StackUnderflow)?;
+        let Value::Object(rc) = obj else {
+            return Err(VmError::TypeMismatch);
+        };
+        let field = rc
+            .get(usize::from(idx))
+            .ok_or(VmError::FieldOutOfBounds(idx))?
+            .clone();
+        self.stack.push(field);
+        Ok(Signal::Continue)
+    }
+
+    fn exec_ld_tag(&mut self) -> Result<Signal, VmError> {
+        let obj = self.stack.pop().ok_or(VmError::StackUnderflow)?;
+        let Value::Object(rc) = obj else {
+            return Err(VmError::TypeMismatch);
+        };
+        let tag = rc.first().ok_or(VmError::FieldOutOfBounds(0))?.clone();
+        self.stack.push(tag);
+        Ok(Signal::Continue)
     }
 
     fn exec_ret(&mut self) -> Result<Signal, VmError> {
@@ -275,8 +279,8 @@ impl Vm {
     }
 
     fn exec_br_cond(&mut self, offset: i32, when: bool) -> Result<Signal, VmError> {
-        let v = self.stack.pop().ok_or(VmError::StackUnderflow)?;
-        if matches!(v, Value::Bool(b) if b == when) {
+        let cond = pop_bool_obj(&mut self.stack)?;
+        if cond == when {
             let frame = self.frames.last_mut().ok_or(VmError::NoFrames)?;
             frame.pc = apply_branch_offset(frame.pc, offset)?;
         }
@@ -303,7 +307,7 @@ impl Vm {
     fn push_i64_cmp<F: FnOnce(i64, i64) -> bool>(&mut self, f: F) -> Result<Signal, VmError> {
         let rhs = pop_i64(&mut self.stack)?;
         let lhs = pop_i64(&mut self.stack)?;
-        self.stack.push(Value::Bool(f(lhs, rhs)));
+        self.stack.push(bool_obj(f(lhs, rhs)));
         Ok(Signal::Continue)
     }
 
@@ -317,11 +321,11 @@ impl Vm {
     fn push_f64_cmp<F: FnOnce(f64, f64) -> bool>(&mut self, f: F) -> Result<Signal, VmError> {
         let rhs = pop_f64(&mut self.stack)?;
         let lhs = pop_f64(&mut self.stack)?;
-        self.stack.push(Value::Bool(f(lhs, rhs)));
+        self.stack.push(bool_obj(f(lhs, rhs)));
         Ok(Signal::Continue)
     }
 
-    fn exec_arith(&mut self, op: Opcode) -> Result<Signal, VmError> {
+    fn exec_arith(&mut self, op: &Opcode) -> Result<Signal, VmError> {
         match op {
             Opcode::AddI64 => self.push_i64_bin(i64::wrapping_add),
             Opcode::SubI64 => self.push_i64_bin(i64::wrapping_sub),
@@ -359,12 +363,12 @@ impl Vm {
                 self.stack.push(Value::Float(-v));
                 Ok(Signal::Continue)
             }
-            _ => Ok(Signal::Continue),
+            _ => Err(VmError::TypeMismatch),
         }
     }
 
     #[allow(clippy::float_cmp)]
-    fn exec_cmp(&mut self, op: Opcode) -> Result<Signal, VmError> {
+    fn exec_cmp(&mut self, op: &Opcode) -> Result<Signal, VmError> {
         match op {
             Opcode::EqI64 => self.push_i64_cmp(|a, b| a == b),
             Opcode::NeqI64 => self.push_i64_cmp(|a, b| a != b),
@@ -379,38 +383,38 @@ impl Vm {
             Opcode::LeqF64 => self.push_f64_cmp(|a, b| a <= b),
             Opcode::GeqF64 => self.push_f64_cmp(|a, b| a >= b),
             Opcode::EqBool => {
-                let rhs = pop_bool(&mut self.stack)?;
-                let lhs = pop_bool(&mut self.stack)?;
-                self.stack.push(Value::Bool(lhs == rhs));
+                let rhs = pop_bool_obj(&mut self.stack)?;
+                let lhs = pop_bool_obj(&mut self.stack)?;
+                self.stack.push(bool_obj(lhs == rhs));
                 Ok(Signal::Continue)
             }
             Opcode::NeqBool => {
-                let rhs = pop_bool(&mut self.stack)?;
-                let lhs = pop_bool(&mut self.stack)?;
-                self.stack.push(Value::Bool(lhs != rhs));
+                let rhs = pop_bool_obj(&mut self.stack)?;
+                let lhs = pop_bool_obj(&mut self.stack)?;
+                self.stack.push(bool_obj(lhs != rhs));
                 Ok(Signal::Continue)
             }
             Opcode::EqStr => {
                 let rhs = pop_str(&mut self.stack)?;
                 let lhs = pop_str(&mut self.stack)?;
-                self.stack.push(Value::Bool(*lhs == *rhs));
+                self.stack.push(bool_obj(*lhs == *rhs));
                 Ok(Signal::Continue)
             }
             Opcode::NeqStr => {
                 let rhs = pop_str(&mut self.stack)?;
                 let lhs = pop_str(&mut self.stack)?;
-                self.stack.push(Value::Bool(*lhs != *rhs));
+                self.stack.push(bool_obj(*lhs != *rhs));
                 Ok(Signal::Continue)
             }
-            _ => Ok(Signal::Continue),
+            _ => Err(VmError::TypeMismatch),
         }
     }
 
-    fn exec_bitwise(&mut self, op: Opcode) -> Result<Signal, VmError> {
+    fn exec_bitwise(&mut self, op: &Opcode) -> Result<Signal, VmError> {
         match op {
             Opcode::Not => {
-                let v = pop_bool(&mut self.stack)?;
-                self.stack.push(Value::Bool(!v));
+                let v = pop_bool_obj(&mut self.stack)?;
+                self.stack.push(bool_obj(!v));
                 Ok(Signal::Continue)
             }
             Opcode::BitAnd => self.push_i64_bin(|a, b| a & b),
@@ -427,11 +431,34 @@ impl Vm {
             Opcode::Shr => {
                 self.push_i64_bin(|a, b| a.wrapping_shr(u32::try_from(b).unwrap_or(u32::MAX)))
             }
-            _ => Ok(Signal::Continue),
+            _ => Err(VmError::TypeMismatch),
         }
     }
 
-    fn execute_call(&mut self, fn_idx: u16) -> Result<(), VmError> {
+    fn exec_call_method(&mut self, method_idx: u16, arg_count: u16) -> Result<(), VmError> {
+        let stack_len = self.stack.len();
+        let receiver_pos = stack_len
+            .checked_sub(usize::from(arg_count))
+            .ok_or(VmError::StackUnderflow)?;
+        let recv_tag = type_tag_of(&self.stack[receiver_pos]);
+
+        let method_name: Box<str> = match self.module.const_pool.get(usize::from(method_idx)) {
+            Some(ConstEntry::String(s)) => s.clone(),
+            _ => return Err(VmError::MethodNotFound),
+        };
+
+        let fn_idx = self
+            .module
+            .method_table
+            .iter()
+            .find(|e| e.name.as_ref() == method_name.as_ref() && e.type_tag == recv_tag)
+            .map(|e| e.fn_idx)
+            .ok_or(VmError::MethodNotFound)?;
+
+        self.exec_call(fn_idx)
+    }
+
+    fn exec_call(&mut self, fn_idx: u16) -> Result<(), VmError> {
         let (param_count, local_count, symbol_idx) = {
             let func = self
                 .module
@@ -463,7 +490,7 @@ impl Vm {
         if is_native {
             let intrinsic = Intrinsic::from_id(intrinsic_id)
                 .ok_or(VmError::UnknownIntrinsic(intrinsic_id))?;
-            let result = crate::native::dispatch(self, intrinsic, &args);
+            let result = native::dispatch(self, intrinsic, &args);
             self.stack.push(result);
         } else {
             let stack_base = self.stack.len();
@@ -482,7 +509,15 @@ impl Vm {
     }
 }
 
-// -- Helpers ------------------------------------------------------------------
+fn type_tag_of(v: &Value) -> u8 {
+    match v {
+        Value::Int(_) | Value::Function(_) => 0,
+        Value::Float(_) => 1,
+        Value::String(_) => 2,
+        Value::Unit => 3,
+        Value::Object(_) => 255,
+    }
+}
 
 fn apply_branch_offset(pc: usize, offset: i32) -> Result<usize, VmError> {
     if offset >= 0 {
@@ -508,11 +543,18 @@ fn pop_f64(stack: &mut Vec<Value>) -> Result<f64, VmError> {
     }
 }
 
-fn pop_bool(stack: &mut Vec<Value>) -> Result<bool, VmError> {
+fn pop_bool_obj(stack: &mut Vec<Value>) -> Result<bool, VmError> {
     match stack.pop().ok_or(VmError::StackUnderflow)? {
-        Value::Bool(v) => Ok(v),
+        Value::Object(rc) => match rc.first().ok_or(VmError::FieldOutOfBounds(0))? {
+            Value::Int(n) => Ok(*n != 0),
+            _ => Err(VmError::TypeMismatch),
+        },
         _ => Err(VmError::TypeMismatch),
     }
+}
+
+fn bool_obj(b: bool) -> Value {
+    Value::Object(Rc::new(vec![Value::Int(i64::from(b))]))
 }
 
 fn pop_str(stack: &mut Vec<Value>) -> Result<Rc<str>, VmError> {
@@ -526,7 +568,6 @@ fn const_entry_to_value(entry: &ConstEntry) -> Value {
     match entry {
         ConstEntry::Int(v) => Value::Int(*v),
         ConstEntry::Float(v) => Value::Float(*v),
-        ConstEntry::Bool(v) => Value::Bool(*v),
         ConstEntry::String(s) => Value::String(Rc::from(s.as_ref())),
     }
 }

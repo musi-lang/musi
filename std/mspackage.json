@@ -1,0 +1,19 @@
+{
+	"name": "std",
+	"version": "0.1.0",
+	"description": "Musi standard library",
+	"license": "MIT",
+	"exports": {
+		".": "./prelude.ms",
+		"./core/bool": "./core/Bool.ms",
+		"./core/option": "./core/Option.ms",
+		"./core/expect": "./core/Expect.ms",
+		"./core/ordering": "./core/Ordering.ms",
+		"./core/pair": "./core/Pair.ms",
+		"./io": "./io/Io.ms",
+		"./num/int": "./num/Int.ms",
+		"./num/nat": "./num/Nat.ms",
+		"./num/float": "./num/Float.ms",
+		"./string": "./string/String.ms"
+	}
+}

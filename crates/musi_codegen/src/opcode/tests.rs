@@ -45,19 +45,6 @@ fn call_round_trip() {
 }
 
 #[test]
-fn bool_round_trip() {
-    for v in [true, false] {
-        let op = Opcode::LdImmBool(v);
-        let mut buf = Vec::new();
-        op.encode_into(&mut buf);
-        assert_eq!(buf.len(), 2);
-        let (decoded, size) = Opcode::decode(&buf, 0).expect("decode bool");
-        assert_eq!(decoded, Opcode::LdImmBool(v));
-        assert_eq!(size, 2);
-    }
-}
-
-#[test]
 fn encoded_len_matches_actual() {
     let ops = [
         Opcode::Nop,
@@ -67,7 +54,6 @@ fn encoded_len_matches_actual() {
         Opcode::LdImmUnit,
         Opcode::LdImmI64(0),
         Opcode::LdImmF64(0.0),
-        Opcode::LdImmBool(false),
         Opcode::LdConst(0),
         Opcode::LdLoc(0),
         Opcode::StLoc(0),
@@ -124,7 +110,8 @@ fn new_opcodes_round_trip() {
     for op in cases {
         let mut buf = Vec::new();
         op.encode_into(&mut buf);
-        let (decoded, size) = Opcode::decode(&buf, 0).unwrap_or_else(|e| panic!("decode {op:?}: {e}"));
+        let (decoded, size) =
+            Opcode::decode(&buf, 0).unwrap_or_else(|e| panic!("decode {op:?}: {e}"));
         assert_eq!(&decoded, op, "round-trip {op:?}");
         assert_eq!(size, op.encoded_len(), "encoded_len {op:?}");
     }

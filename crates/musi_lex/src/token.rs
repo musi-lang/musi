@@ -38,6 +38,12 @@ pub enum TokenKind {
     As,
     With,
     Label,
+    Using,
+    Class,
+    Given,
+    Satisfies,
+    Where,
+    Law,
     Shl,
     Shr,
 
@@ -133,6 +139,12 @@ impl TokenKind {
                 | Self::As
                 | Self::With
                 | Self::Label
+                | Self::Using
+                | Self::Class
+                | Self::Given
+                | Self::Satisfies
+                | Self::Where
+                | Self::Law
                 | Self::Shl
                 | Self::Shr
         )
@@ -175,6 +187,12 @@ impl TokenKind {
             Self::As => Some("as"),
             Self::With => Some("with"),
             Self::Label => Some("label"),
+            Self::Using => Some("using"),
+            Self::Class => Some("class"),
+            Self::Given => Some("given"),
+            Self::Satisfies => Some("satisfies"),
+            Self::Where => Some("where"),
+            Self::Law => Some("law"),
             Self::Shl => Some("shl"),
             Self::Shr => Some("shr"),
 
@@ -269,6 +287,12 @@ pub fn keyword_from_str(s: &str) -> Option<TokenKind> {
         "as" => Some(TokenKind::As),
         "with" => Some(TokenKind::With),
         "label" => Some(TokenKind::Label),
+        "using" => Some(TokenKind::Using),
+        "class" => Some(TokenKind::Class),
+        "given" => Some(TokenKind::Given),
+        "satisfies" => Some(TokenKind::Satisfies),
+        "where" => Some(TokenKind::Where),
+        "law" => Some(TokenKind::Law),
         "shl" => Some(TokenKind::Shl),
         "shr" => Some(TokenKind::Shr),
         _ => None,

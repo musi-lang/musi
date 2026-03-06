@@ -1,0 +1,7 @@
+{
+	"name": "musi",
+	"version": "0.1.0",
+	"imports": {
+		"std/": "./std/"
+	}
+}

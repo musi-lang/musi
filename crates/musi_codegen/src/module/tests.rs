@@ -48,6 +48,7 @@ fn hello_module() -> Module {
             },
         ],
         code,
+        method_table: Vec::new(),
     }
 }
 
@@ -111,7 +112,7 @@ fn const_pool_all_variants() {
     m.const_pool.push(ConstEntry::Int(-1));
     m.const_pool.push(ConstEntry::Float(2.5));
     m.const_pool.push(ConstEntry::String("hi".into()));
-    m.const_pool.push(ConstEntry::Bool(true));
+    m.const_pool.push(ConstEntry::Int(1));
     let bytes = m.serialize();
     let restored = Module::deserialize(&bytes).expect("deserialize");
     assert_eq!(m, restored);

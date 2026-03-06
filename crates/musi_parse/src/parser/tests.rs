@@ -45,10 +45,10 @@ fn parse_hello_world() {
     );
 }
 
-// 2. fn add(a, b) (a + b) -- FnDef with 2 params and body
+// 2. fn add(a, b) => a + b -- FnDef with 2 params and body
 #[test]
 fn parse_fn_def() {
-    let module = parse_ok("fn add(a, b) (a + b);");
+    let module = parse_ok("fn add(a, b) => a + b;");
     assert_eq!(module.items.len(), 1);
     let expr = module.ctx.exprs.get(module.items[0]);
     assert!(matches!(expr, Expr::FnDef { params, body: Some(_), .. } if params.len() == 2));
@@ -92,7 +92,7 @@ fn parse_if_then_else() {
 // 5. match with 2 arms
 #[test]
 fn parse_match_expr() {
-    let module = parse_ok("match x with case 0 => \"zero\" case _ => \"other\";");
+    let module = parse_ok("match x with (0 => \"zero\" | _ => \"other\");");
     let expr = module.ctx.exprs.get(module.items[0]);
     assert!(matches!(expr, Expr::Match { arms, .. } if arms.len() == 2));
 }
@@ -247,5 +247,79 @@ fn parse_assign() {
     assert!(
         matches!(expr, Expr::Assign { .. }),
         "expected Assign, got: {expr:?}"
+    );
+}
+
+// 19. class Eq['T] { fn eq(a: 'T, b: 'T): Bool; }
+#[test]
+fn parse_class_def_simple() {
+    let module = parse_ok("class Eq['T] { fn eq(a: 'T, b: 'T): Bool; };");
+    assert_eq!(module.items.len(), 1);
+    let expr = module.ctx.exprs.get(module.items[0]);
+    assert!(
+        matches!(expr, Expr::ClassDef { members, supers, .. } if members.len() == 1 && supers.is_empty()),
+        "expected ClassDef with 1 member and no supers, got: {expr:?}"
+    );
+}
+
+// 20. class Ord['T] satisfies Eq['T] { fn lt(a: 'T, b: 'T): Bool; }
+#[test]
+fn parse_class_def_with_superclass() {
+    let module = parse_ok("class Ord['T] satisfies Eq['T] { fn lt(a: 'T, b: 'T): Bool; };");
+    assert_eq!(module.items.len(), 1);
+    let expr = module.ctx.exprs.get(module.items[0]);
+    assert!(
+        matches!(expr, Expr::ClassDef { supers, .. } if supers.len() == 1),
+        "expected ClassDef with 1 super, got: {expr:?}"
+    );
+}
+
+// 21. class with a law declaration
+#[test]
+fn parse_class_def_with_law() {
+    let module = parse_ok("class Eq['T] { fn eq(a: 'T, b: 'T): Bool; law reflexivity(a: 'T) => eq(a, a); };");
+    assert_eq!(module.items.len(), 1);
+    let expr = module.ctx.exprs.get(module.items[0]);
+    assert!(
+        matches!(expr, Expr::ClassDef { members, .. } if members.len() == 2),
+        "expected ClassDef with 2 members (method + law), got: {expr:?}"
+    );
+}
+
+// 22. given Eq[Int] { fn eq(a: Int, b: Int): Bool => a = b; }
+#[test]
+fn parse_given_def_simple() {
+    let module = parse_ok("given Eq[Int] { fn eq(a: Int, b: Int): Bool => a = b; };");
+    assert_eq!(module.items.len(), 1);
+    let expr = module.ctx.exprs.get(module.items[0]);
+    assert!(
+        matches!(expr, Expr::GivenDef { constraints, members, .. } if constraints.is_empty() && members.len() == 1),
+        "expected GivenDef with no constraints and 1 member, got: {expr:?}"
+    );
+}
+
+// 23. given Eq[Option['T]] where 'T satisfies Eq { fn eq(a: Option['T], b: Option['T]): Bool => true; }
+#[test]
+fn parse_given_def_with_where() {
+    let module = parse_ok(
+        "given Eq[Option['T]] where 'T satisfies Eq { fn eq(a: Option['T], b: Option['T]): Bool => true; };",
+    );
+    assert_eq!(module.items.len(), 1);
+    let expr = module.ctx.exprs.get(module.items[0]);
+    assert!(
+        matches!(expr, Expr::GivenDef { constraints, .. } if constraints.len() == 1),
+        "expected GivenDef with 1 constraint, got: {expr:?}"
+    );
+}
+
+// 24. fn compare['T](a: 'T, b: 'T): Bool where 'T satisfies Ord => true
+#[test]
+fn parse_fn_with_where() {
+    let module = parse_ok("fn compare['T](a: 'T, b: 'T): Bool where 'T satisfies Ord => true;");
+    assert_eq!(module.items.len(), 1);
+    let expr = module.ctx.exprs.get(module.items[0]);
+    assert!(
+        matches!(expr, Expr::FnDef { where_clause, body: Some(_), .. } if where_clause.len() == 1),
+        "expected FnDef with 1 where constraint and body, got: {expr:?}"
     );
 }

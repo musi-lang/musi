@@ -18,8 +18,6 @@ pub enum ConstEntry {
     Float(f64),
     /// A UTF-8 string constant.
     String(Box<str>),
-    /// A boolean constant.
-    Bool(bool),
 }
 
 impl ConstEntry {
@@ -39,10 +37,6 @@ impl ConstEntry {
                 buf.extend_from_slice(&len.to_le_bytes());
                 buf.extend_from_slice(s.as_bytes());
             }
-            Self::Bool(v) => {
-                buf.push(0x04);
-                buf.push(u8::from(*v));
-            }
         }
     }
 
@@ -56,7 +50,6 @@ impl ConstEntry {
                 let len_usize = usize::try_from(len).map_err(|_| DeserError::UnexpectedEof)?;
                 Ok(Self::String(reader.read_str(len_usize)?))
             }
-            0x04 => Ok(Self::Bool(reader.read_u8()? != 0)),
             _ => Err(DeserError::UnknownConstTag(tag)),
         }
     }
@@ -166,10 +159,22 @@ impl FunctionEntry {
     }
 }
 
+/// A method registered via `given` — maps (method name, type tag) → function index.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MethodEntry {
+    /// Method name, e.g. `"eq"`.
+    pub name: Box<str>,
+    /// Type tag of the receiver (see `TypeTag` in the emitter).
+    pub type_tag: u8,
+    /// Index into `function_table`.
+    pub fn_idx: u16,
+}
+
 /// A compiled Musi module in memory.
 ///
 /// Corresponds to the `.mso` binary format: header, const pool, symbol table,
 /// function table, and a flat code section.
+/// `method_table` is runtime-only and is not serialized.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Module {
     /// Constants referenced by bytecode via `LdConst`.
@@ -180,6 +185,8 @@ pub struct Module {
     pub function_table: Vec<FunctionEntry>,
     /// Raw bytecode for all functions, concatenated.
     pub code: Vec<u8>,
+    /// Runtime dispatch table for class method implementations.
+    pub method_table: Vec<MethodEntry>,
 }
 
 impl Module {
@@ -191,6 +198,7 @@ impl Module {
             symbol_table: Vec::new(),
             function_table: Vec::new(),
             code: Vec::new(),
+            method_table: Vec::new(),
         }
     }
 
@@ -289,6 +297,7 @@ impl Module {
             symbol_table,
             function_table,
             code,
+            method_table: Vec::new(),
         })
     }
 
@@ -329,6 +338,22 @@ impl Module {
             u16::try_from(self.const_pool.len()).map_err(|_| CodegenError::TooManyConstants)?;
         self.const_pool.push(entry);
         Ok(idx)
+    }
+
+    /// Interns a string in the const pool, reusing an existing entry if present.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CodegenError::TooManyConstants`] if the const pool is full.
+    pub fn add_string_const(&mut self, s: &str) -> Result<u16, CodegenError> {
+        for (i, entry) in self.const_pool.iter().enumerate() {
+            if let ConstEntry::String(existing) = entry {
+                if existing.as_ref() == s {
+                    return u16::try_from(i).map_err(|_| CodegenError::TooManyConstants);
+                }
+            }
+        }
+        self.push_const(ConstEntry::String(s.into()))
     }
 }
 

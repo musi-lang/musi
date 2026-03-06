@@ -1,255 +1,232 @@
-# Checkpoint -- Musi Language Compiler
+# Musi Compiler -- Session Checkpoint (2026-03-06)
 
-**Date:** 2026-03-05
-**Branch:** `main` (all changes uncommitted -- substantial new code across 7 crates)
-**Rust toolchain:** `stable-aarch64-apple-darwin`, rustc 1.93.0 (2026-01-19), edition 2024
+Read `CLAUDE.md` for grammar design rules (LL(1), mathematical purity).
+Read `MEMORY.md` at `~/.claude/projects/-Users-krystian-CodeProjects-musi/memory/MEMORY.md` for full technical memory (workflow constraints, naming conventions, phase history).
 
 ---
 
 ## Original Goal
 
-Build the Musi programming language compiler and VM from scratch. The project follows a phased implementation plan (12 phases total). Phases 1--7 are complete. The immediate previous session diagnosed and fixed an infinite-loop / OOM issue in `musi_sema` tests, and applied a robustness fix to the parser's `parse_program` loop.
+Implement type classes for the Musi programming language compiler: design keywords, add lexer/parser/AST support, implement runtime dispatch via a new `CallMethod` opcode, wire type class methods into UFCS, and build out the standard library with class/given definitions in the prelude.
 
 ---
 
-## Completed Work (All Phases)
+## Completed Work
 
-### Phase 1 -- musi_shared (34 tests)
-`crates/musi_shared/src/`: `span.rs`, `source.rs`, `intern.rs`, `diag.rs`, `arena.rs` (each with sibling `/tests.rs`)
-- `Idx<T>` typed index with `PhantomData<fn() -> T>`; manual Clone/Copy/Eq/Hash
-- `Arena<T>`, `SliceArena<T>` + `Slice<T>` (Copy) for flat AST
-- `Interner` (string interning), `SourceDb`, `DiagnosticBag`, `Span`
-- Perf pass: `Arc<str>` for diag messages, `Box<str>` for source name/content
+### 1. Type Class Language Design (finalized)
 
-### Phase 2 -- musi_lex (55 tests)
-`crates/musi_lex/src/`: `lib.rs`, `token.rs`+`token/tests.rs`, `lexer.rs`+`lexer/tests.rs`
-- 33 keywords, compound tokens (`DotLBracket`, `DotLBrace`, `LtDotDot`, `DotDotLt`)
-- `TyIdent` (`'T`), `Ident`, char literals vs type variables disambiguation
-- Iterator-based `Lexer::new(source, file_id, interner, diags)` with `size_hint()`
+Five new keywords: `class`, `given`, `satisfies`, `where`, `law`.
 
-### Phase 3 -- musi_parse (37 tests)
-`crates/musi_parse/src/`: `lib.rs`, `ast.rs`+`ast/tests.rs`, `parser.rs`+`parser/tests.rs`, `sexpr.rs`+`sexpr/tests.rs`
-- `parse(tokens, file_id, diags, interner) -> ParsedModule`
-- Strict LL(1) + Pratt precedence; 1599 lines in `parser.rs`
-- Left-factored: `ast_expr_paren`, `ast_fn_kind`, `ast_ty_named`, `ast_pat_ident`
-- `ParsedModule { items: Vec<Idx<Expr>>, ctx: ParseCtx, span }`
+```
+class Eq['T] { fn eq(a: 'T, b: 'T): Bool; };
+given Eq[Int] { fn eq(a: Int, b: Int): Bool => a = b; };
+given Eq[Option['T]] where 'T satisfies Eq { ... };
+fn sort['T](arr: ['T]): ['T] where 'T satisfies Ord => ...;
+class Ord['T] satisfies Eq['T] { ... };
+```
 
-### Phase 4 -- musi_codegen + musi_vm (26 tests total)
-`crates/musi_codegen/src/`: `lib.rs`, `error.rs`, `opcode.rs`+`opcode/tests.rs`, `module.rs`+`module/tests.rs`, `emitter.rs`
-`crates/musi_vm/src/`: `lib.rs`, `error.rs`, `value.rs`+`value/tests.rs`, `native.rs`+`native/tests.rs`, `vm.rs`+`vm/tests.rs`
-- Bytecode: `emit(prelude, user, interner) -> Result<Module, CodegenError>`
-- VM: `Vm::new(module, natives).run(entry_fn: u16) -> Result<Value, VmError>`
-- Intrinsics: writeln=1, write=2, int_to_string=3
+- Comma-separated multiple constraints and superclasses
+- `class`/`given` are NOT exported (coherence rule)
+- `law` has syntax but no runtime enforcement
 
-### Phase 5 -- Hello World e2e
-`crates/musi/src/main.rs` -- CLI binary, `musi run <file.ms>`
-`std/prelude.ms` -- embedded via `include_str!("../../../std/prelude.ms")`
-`examples/hello.ms` -- `writeln("Hello, world!");`
-Pipeline: read file -> lex -> parse -> check errors -> emit(prelude, user) -> Vm::run
+### 2. Lexer (musi_lex) -- 55/55 tests pass
 
-### Phase 6 -- Widen Codegen (bindings, arithmetic, control flow)
-- New opcodes: arithmetic, comparison, logical/bitwise, `br`/`br.true`/`br.false`, `concat.str`
-- `const`/`var` bindings with scope stack -> local slots
-- All binary ops, prefix ops, if/elif/else, while/loop/for (range-based), break/cycle with labels, blocks
-- DocComment token fix: leading `///` tokens consumed at start of `parse_prefix_or_atom`
-- Milestone: `while y < x loop (y <- y + 1;); writeln(int_to_string(y));` -> prints "10"
+Added `Class`, `Given`, `Satisfies`, `Where`, `Law` to `TokenKind`, `keyword_from_str`, `is_keyword`, `fixed_text`. All keyword-count test assertions updated.
 
-### Phase 7 -- musi_sema (name resolution + type checking, 18 tests)
-`crates/musi_sema/src/`: `lib.rs`, `check.rs` (1340 lines), `resolve.rs` (648 lines), `types.rs`, `scope.rs`, `def.rs`, `tests.rs`
-- Two-pass name resolution: collect top-level decls, then resolve references
-- Bidirectional type checker with HM-style unification (union-find `UnifyTable`)
-- Edit-distance suggestions for undefined names
-- `SemaResult { defs, expr_defs, pat_defs, expr_types }`
-- `Type::Error` poison type to suppress cascading diagnostics
+Files modified:
+- `crates/musi_lex/src/token.rs`
+- `crates/musi_lex/src/token/tests.rs` (keyword count assertions)
+- `crates/musi_lex/src/lexer/tests.rs`
 
-### Previous Session Fixes
-- Fixed 2 `musi_sema` tests that used wrong `if` syntax (missing `then` keyword)
-- Added parse-error guard assertion in sema test helper `analyze_src()`
-- Applied `parse_program` robustness fix: tracks `pos_before` and force-advances on zero progress to prevent infinite loops on stray closing brackets
+### 3. AST (musi_ast) -- new nodes
+
+- `Constraint { ty_var: Symbol, bound: Ty, span: Span }` -- a single `where` constraint
+- `ClassMember` enum -- `Method(Idx<Expr>)` or `Law { name, params, body, span }`
+- `Expr::ClassDef { name, ty_params, supers, members, span }`
+- `Expr::GivenDef { class_app: Ty, constraints, members, span }`
+- `Expr::FnDef` and `Expr::Lambda` gained `where_clause: Vec<Constraint>`
+
+File: `crates/musi_ast/src/lib.rs`
+
+### 4. Parser (musi_parse) -- 43/43 tests pass (was 37; 6 new tests)
+
+Full parsing of `class`, `given`, `where`, `satisfies`, `law`. Grammar rules added to `grammar.ebnf` (lines 234-289).
+
+Files modified:
+- `crates/musi_parse/src/parser.rs` -- parsing logic
+- `crates/musi_parse/src/parser/tests.rs` -- 6 new tests
+- `crates/musi_parse/src/sexpr.rs` -- display for new nodes
+- `crates/musi_parse/src/sexpr/tests.rs` -- s-expr tests
+
+### 5. Codegen (musi_codegen) -- 16/16 tests pass
+
+**New opcode**: `CallMethod { method_idx: u16, arg_count: u16 }` (byte 0x83, 5 bytes total).
+- `method_idx` = const-pool index for method name string
+- `arg_count` = total args including receiver as arg0
+
+**New module field**: `Module.method_table: Vec<MethodEntry>` (runtime-only, not serialized).
+- `MethodEntry { name: Box<str>, type_tag: u8, fn_idx: u16 }`
+
+**EmitState.class_method_names**: `HashSet<String>` populated from ClassDef/GivenDef members. Used in UFCS routing.
+
+**UFCS dispatch priority** (in `emit_ufcs_call`):
+1. Field access on record -> load field + CallDynamic
+2. Free function in fn_map -> Call(fn_idx)
+3. Class method name in class_method_names -> CallMethod
+
+**Critical bug fixed**: `emit_module_fn_bodies(prelude, ...)` was missing from `emit()`, so prelude given methods had `code_length=0` and caused `UnexpectedEof` at runtime.
+
+**New intrinsic**: `FloatToString` (id=3). IntToString is id=2. (Previously int_to_string was id=3.)
+
+Files modified:
+- `crates/musi_codegen/src/opcode.rs` -- CallMethod opcode
+- `crates/musi_codegen/src/opcode/tests.rs`
+- `crates/musi_codegen/src/module.rs` -- MethodEntry, method_table
+- `crates/musi_codegen/src/module/tests.rs`
+- `crates/musi_codegen/src/emitter.rs` -- ClassDef/GivenDef emission, UFCS routing, emit_module_fn_bodies fix
+- `crates/musi_codegen/src/error.rs`
+- `crates/musi_codegen/src/intrinsics.rs` -- FloatToString added
+
+### 6. VM (musi_vm) -- 24/24 tests pass (was 21; 3 new tests)
+
+`exec_call_method`: inspects receiver's `type_tag_of()`, looks up `(name, tag)` in `module.method_table`, calls that `fn_idx`. Error if no matching entry.
+
+Files modified:
+- `crates/musi_vm/src/vm.rs` -- CallMethod dispatch
+- `crates/musi_vm/src/vm/tests.rs` -- 3 new tests
+- `crates/musi_vm/src/error.rs` -- new error variant
+- `crates/musi_vm/src/native.rs` -- FloatToString dispatch
+- `crates/musi_vm/src/value.rs` + `value/tests.rs`
+
+### 7. Standard Library Restructured
+
+New files:
+- `std/core/Ordering.ms` -- `choice Ordering { Lt | Eq | Gt }` + helper functions
+- `std/core/Pair.ms` -- `record Pair['A, 'B]` + helper functions
+- `std/mspackage.json` -- module exports
+
+Updated:
+- `std/prelude.ms` -- type classes (Eq, Ord, Add, Sub, Mul, Show) and given instances for Int, Float, String
+- `std/string/String.ms` -- fixed `==` to `=`
+- `std/num/Float.ms` -- added float_abs/min/max/clamp + short alias `fabs`
+- `std/num/Int.ms` -- added short aliases `abs`, `clamp`
+- `std/core/Option.ms` -- added short aliases
+
+### 8. Examples Reorganized
+
+`examples/01-hello/` through `examples/09-type-classes/` -- each with `mspackage.json`. All 9 verified working. Original flat files preserved alongside.
+
+`examples/09-type-classes/type_classes.ms` demonstrates `a.max(b)`, `a.min(b)`, `a.eq(a)` via type class dispatch.
+
+### 9. Grammar Updated
+
+`grammar.ebnf` -- added `class`/`given`/`where`/`law`/`satisfies` rules (lines 234-289). Keywords list updated (line 36).
 
 ---
 
 ## Current State
 
-### Build Status -- ALL CLEAN
-
-Every crate builds without errors or warnings (verified one-at-a-time with `CARGO_BUILD_JOBS=1`):
-- `musi_shared` ✓  `musi_lex` ✓  `musi_parse` ✓  `musi_codegen` ✓  `musi_vm` ✓  `musi_sema` ✓  `musi` ✓
-
-Note: `musi_sema` must be compiled alone (`CARGO_BUILD_JOBS=1`) -- parallel compilation of it alongside other crates caused an 80 GB swap spike and system crash (the sema crate is large: `check.rs` 1340 lines, `resolve.rs` 648 lines).
-
-### Git State
-
-All changes are **uncommitted** on `main`. This includes the entire implementation across phases 1--7 (thousands of lines across 7 crates). The git status shows:
-- Modified: `.claude/plans/02-LEXER.md`, `.claude/plans/03-PARSER_AST.md`, `Cargo.lock`, `Cargo.toml`, `crates/musi_shared/Cargo.toml`, `crates/musi_shared/src/lib.rs`, `examples/hello.ms`, `grammar.ebnf`, `tools/vscode/syntaxes/musi.tmLanguage.json`
-- Deleted: `tests/.gitkeep`
-- Untracked (new): `.cargo/`, `crates/musi/`, `crates/musi_codegen/`, `crates/musi_lex/`, `crates/musi_parse/`, `crates/musi_sema/`, `crates/musi_vm/`, `std/`, many new source files in `crates/musi_shared/src/`
-
-### No Running Processes
-
-No background processes or environment state.
+- **Branch**: `main` -- all changes are unstaged working-tree modifications (nothing committed this session)
+- **Last action**: verified all 9 example programs run correctly
+- **All tests pass**: musi_lex=55, musi_parse=43, musi_codegen=16, musi_vm=24
+- **musi_sema**: NOT tested or compiled this session. Has text-level patches for `where_clause` fields but unverified. Compiling musi_sema is dangerous (80GB swap risk).
+- **No build errors** in musi_lex, musi_parse, musi_codegen, musi_vm, musi (CLI)
+- **e2e**: `cargo run -- run examples/09-type-classes/type_classes.ms` prints `7`, `3`, `1`, `0`
 
 ---
 
 ## Remaining Work
 
-### Priority 0 (BLOCKING): Fix musi_lex Build Error
+### High Priority
 
-**File:** `crates/musi_lex/src/lexer.rs`
-### Priority 1: Verify All Tests Pass
+1. **musi_sema type class support** -- sema currently ignores ClassDef/GivenDef/where clauses entirely. Needs:
+   - Class registry: store class name -> method signatures
+   - Given registry: store concrete implementations per type
+   - Constraint checking: verify `where 'T satisfies Eq` constraints at call sites
+   - WARNING: compiling musi_sema is dangerous. Always use `CARGO_BUILD_JOBS=1 timeout 120s cargo build -p musi_sema`
 
-After the lexer fix, run tests per-crate (see Memory Constraints below):
-1. `musi_shared` -- 34 tests
-2. `musi_lex` -- 55 tests (was 54 in earlier count; verify)
-3. `musi_parse` -- 37 tests
-4. `musi_codegen` -- 16 tests
-5. `musi_vm` -- 10-11 tests
-6. `musi_sema` -- 18 tests
+2. **Object type dispatch** -- `given Eq[Point]` for user-defined record/choice types needs a real `type_id` in `Value::Object`. Currently `type_tag_of(Object) = 255` (unsupported). The method_table lookup will fail for user types.
 
-### Refactoring Done This Session (do NOT redo)
+3. **Default methods in classes** -- `class Ord['T] { fn gt(a,b) => not lt(b,a); }` -- parser accepts default bodies, but codegen ignores them. Need to emit default implementations when a `given` block omits them.
 
-All lint suppressions eliminated and code quality improved across all crates:
-- **`size_hint` bug fixed** in `lexer.rs`: `remaining/2+1` → `remaining+1`
-- **`dead_code` removed**: `alloc_ty`/`alloc_pat` helpers deleted from `parser.rs`
-- **`NativeFn` type changed**: `fn(&mut Vm, ...)` → `fn(&Vm, ...)` -- removes `needless_pass_by_ref_mut`
-- **`vm.rs run()` split**: `Signal` enum + `push_entry_frame`, `fetch_and_advance`, `step`, `exec_arith`, `exec_cmp`, `exec_bitwise`, generic `push_i64/f64_bin/cmp` helpers -- removes `cognitive_complexity` + `too_many_lines`
-- **`sexpr.rs`**: `FnDefView<'a>` struct -- removes `too_many_arguments` on `print_fn_def`
-- **`check.rs`**: `FnDefNode<'a>` struct + 13 helpers extracted from `infer_inner` -- removes `too_many_arguments` + `too_many_lines`
-- **All inline tests moved** to sibling `<module>/tests.rs` files across all 6 crates (16 test files created)
-- **`parser.rs` reduced** 2250 → 1599 lines via helpers: `parse_separated_list`, `parse_and_alloc_expr`, `parse_option`, `parse_optional_guard`, `parse_delimited`, `parse_optional_expr`, `parse_field_header`, `wrap_postfix`, `parse_pipe_separated`
-- **`lexer.rs` reduced** 1101 → 598 lines via helpers: `emit_interned`, `lex_maybe_two_char`, `consume_ident_chars`, `consume_until_newline`, `consume_hex_digits`, tightened `skip_whitespace`
+### Medium Priority
 
-**Remaining LOC reduction candidates (next session):**
-- `check.rs` (1340 lines): `infer_binary` ~80 lines, `infer_if`/`infer_postfix` ~100 lines -- share `unify(expected, actual, span, diags, file_id)` call structure
-- `emitter.rs` (1102 lines): big match on AST nodes -- same class of problem as `parser.rs`
-- `resolve.rs` (648 lines): scope/list patterns
+4. **musi_sema pattern matching for new AST fields** -- FnDef/Lambda now have `where_clause: Vec<Constraint>`. Text patches were applied to musi_sema but never compiled. May have match-arm exhaustiveness issues.
 
-### Priority 2: Commit All Accumulated Work
+5. **String/Record as fn parameters** -- passing String or Record values as function parameters does not work correctly in all cases. Mentioned in examples notes.
 
-All changes from phases 1--7 are uncommitted. This is a large amount of work that should be committed (potentially as multiple logical commits or one checkpoint commit). Review for any sensitive files before staging.
+6. **Optional chaining `?.`** and **nil coalescing `??`** -- planned in MEMORY.md, not started.
 
-### Priority 3: Phase 8 -- Widen Codegen (Records, Choices, Match, Functions)
+7. **`?'T` sugar for `Option['T]`** -- planned, not started.
 
-See `.claude/plans/08-WIDEN_CODEGEN_TYPES.md` for the full plan. Key deliverables:
-- Type table in `.mso` module format
-- `new.obj`, `ld.fld`, `st.fld`, `ld.tag`, `eq.tag`, `dup` opcodes
-- Record allocation, field access, spread (`<..`)
-- Choice (tagged union) construction
-- Pattern match -> sequential test-and-branch compilation
-- User-defined function calls (currently only intrinsics work)
-- Non-capturing lambda support
-- Recursive function support
+8. **Keyword-operator conflicts** -- `not`/`and`/`or` are reserved keywords and cannot be used as class method names. No workaround implemented.
 
-Milestones: Option type match, record field access, spread, `factorial(10)` -> 3628800, lambda `fn(x) => x * 2`
+### Low Priority
 
-### Future Phases (not yet started)
-- Phase 9: Garbage collector + closures (capturing lambdas)
-- Phase 10: Module system (import/export, separate compilation)
-- Phase 11: FFI
-- Phase 12: CLI + LSP
+9. **`law` enforcement** -- property testing / quickcheck integration for law declarations.
+
+10. **Parameterized given instances** -- `given Eq[Option['T]] where 'T satisfies Eq` parses but codegen does not handle the type-variable dispatch.
+
+11. **Commit all changes** -- everything is in the working tree, nothing committed.
 
 ---
 
-## Important Context & Gotchas
+## Important Context and Gotchas
 
-### Memory Constraints (CRITICAL)
-- **32GB unified memory, ~12GB free** -- OOM kills are real
-- **NEVER run `cargo test --workspace`** -- always test per-crate
-- `.cargo/config.toml` sets: `CARGO_INCREMENTAL=0`, `CARGO_BUILD_JOBS=3`, `RUSTFLAGS="-Cdebuginfo=1"`
-- **Correct test workflow:**
-  1. `cargo build --tests -p <crate>` -- compile
-  2. Run binary directly: `./target/debug/deps/<crate>-<hash>` (no extension = executable)
-  3. Single test: `./target/debug/deps/<crate>-<hash> -- <test_name> --exact`
+### Workflow (CRITICAL -- read before doing anything)
+- **32GB unified memory, ~12GB free**. OOM kills are real.
+- **musi_sema compilation can crash the system** -- 80GB swap spike. Always: `CARGO_BUILD_JOBS=1 timeout 120s cargo build -p musi_sema`
+- **Test workflow**: `cargo build --tests -p <crate>` then find binary with `ls -t target/debug/deps/<crate>-* | grep -v '\.' | head -1` then `timeout 5s ./<binary>`
+- **Never**: `cargo test --workspace` or `cargo test -p musi_sema` directly
+- **Max 3 agent threads** at once
 
-### Parser Design (LL(1) -- Non-negotiable)
-- Strictly LL(1): every parse decision = exactly one token of lookahead
-- No left recursion; expressions use Pratt / iterated forms
-- All alternatives have disjoint FIRST sets
-- When proposing new syntax, compute FIRST sets explicitly
-- `recover()` stops AT sync tokens (`;`, `)`, `}`, `]`, EOF) without consuming them -- correct for nested contexts
-- `parse_program` has a safety net: force-advances if no progress was made in an iteration
+### Architecture Decisions
+- `CallMethod` opcode uses const-pool string lookup for method name, not a numeric method ID. This is simple but O(n) in method_table size.
+- `class_method_names` is a flat `HashSet<String>` -- no per-class scoping. If two classes define a method with the same name, UFCS will route both to CallMethod and the VM will pick based on receiver type tag.
+- `method_table` is runtime-only (not serialized to .mso). This means .mso files cannot be loaded and run without re-emitting.
+- Intrinsic IDs changed: `Writeln=0, Write=1, IntToString=2, FloatToString=3`. Previous sessions had different numbering.
+- `emit_module_fn_bodies` is called three times in `emit()`: once for prelude, once per dep, once for user module. Order matters.
 
-### Musi `if` Syntax
-- `if cond then expr {elif} [else]` -- `then` keyword is REQUIRED
-- Without `then`, parser misreads `if cond (body)` as a function call
+### Things That Were Tried and Worked
+- UFCS for primitives (`10.double()`, `3.add(4)`) works via free-function lookup in fn_map.
+- UFCS for type class methods (`a.max(b)`) works via CallMethod + method_table.
+- Type tag mapping: Int=1, Float=2, Bool=3, String=4, Unit=5, Object=255.
 
-### DocComment Handling
-- `///` tokens consumed at start of `parse_prefix_or_atom` (discarded for now)
-- Proper doc-comment attachment to AST nodes is future work
-
-### Workspace Lints (Strict)
-- `unsafe_code = "forbid"`, `unused_results = "forbid"`, `as_conversions = "deny"`
-- All numeric casts: `try_from().expect()` -- the `as` keyword is workspace-denied
-- Clippy: `pedantic`, `nursery`, `complexity`, `correctness`, `perf`, `style`, `suspicious` all set to `deny`
-- Use `let _prev = map.insert(...)` pattern to satisfy `unused_results`
-
-### Things That Did NOT Work
-- Making `error_expr()` always advance at least one token: rejected because it over-consumes in nested contexts where `)` should terminate the enclosing construct
-- `u8::is_ascii_*` as bare function references in `is_some_and()`: broke in rustc 1.93.0 / edition 2024 due to `fn(&self)` vs `FnOnce(T)` mismatch
+### Comment Policy
+- Comments are noise. Only write comments where logic is non-obvious.
+- No doc comments repeating what code says.
+- Section dividers: `// -- Name ---`
 
 ---
 
 ## Key Files Reference
 
-| File                                                 | Role                                                          |
-| ---------------------------------------------------- | ------------------------------------------------------------- |
-| `CLAUDE.md`                                          | Project instructions, design rationale, key grammar decisions |
-| `grammar.ebnf`                                       | Canonical language grammar (source of truth, 341 lines)       |
-| `std/prelude.ms`                                     | Standard prelude (embedded in CLI via `include_str!`)         |
-| `examples/hello.ms`                                  | Hello world example                                           |
-| `.cargo/config.toml`                                 | Memory-saving build settings                                  |
-| `.claude/plans/01-SHARED.md` through `12-CLI_LSP.md` | Phase-by-phase implementation plans                           |
-| `crates/musi_shared/src/lib.rs`                      | Re-exports for span, source, intern, diag, arena              |
-| `crates/musi_lex/src/lexer.rs`                       | Lexer implementation (HAS BUILD ERROR on lines 152, 191)      |
-| `crates/musi_lex/src/token.rs`                       | Token and TokenKind definitions                               |
-| `crates/musi_parse/src/parser.rs`                    | LL(1)+Pratt parser (1599 lines)                               |
-| `crates/musi_parse/src/ast.rs`                       | AST node definitions                                          |
-| `crates/musi_parse/src/sexpr.rs`                     | S-expression pretty printer for AST (test helper)             |
-| `crates/musi_codegen/src/emitter.rs`                 | AST -> bytecode emitter (1102 lines)                          |
-| `crates/musi_codegen/src/opcode.rs`                  | Opcode enum definitions                                       |
-| `crates/musi_codegen/src/module.rs`                  | Module container (.mso format)                                |
-| `crates/musi_vm/src/vm.rs`                           | Stack-based VM execution loop (560 lines)                     |
-| `crates/musi_vm/src/value.rs`                        | Runtime value representation (`Value::String(Rc<str>)`)       |
-| `crates/musi_vm/src/native.rs`                       | Native function registry (writeln, write, int_to_string)      |
-| `crates/musi_sema/src/lib.rs`                        | Sema entry point + `analyze()` function                       |
-| `crates/musi_sema/src/resolve.rs`                    | Two-pass name resolution (648 lines)                          |
-| `crates/musi_sema/src/check.rs`                      | Bidirectional type checker (1340 lines)                       |
-| `crates/musi_sema/src/types.rs`                      | Type representation (PrimTy, Type, TypeVarId)                 |
-| `crates/musi_sema/src/scope.rs`                      | Scope tree for name resolution                                |
-| `crates/musi_sema/src/def.rs`                        | DefId, DefInfo, DefKind                                       |
-| `crates/musi_sema/src/tests.rs`                      | 18 sema tests                                                 |
-| `crates/musi/src/main.rs`                            | CLI binary (`musi run <file.ms>`)                             |
-| `tools/vscode/syntaxes/musi.tmLanguage.json`         | VS Code TextMate grammar                                      |
-
-### Crate Dependency Graph
-```
-musi_shared  (leaf -- no deps)
-    |
-musi_lex  (depends on musi_shared)
-    |
-musi_parse  (depends on musi_shared, musi_lex)
-    |          \
-musi_codegen    musi_sema
-(+ musi_shared,  (+ musi_shared, musi_parse;
-  musi_parse)     dev-dep: musi_lex)
-    |
-musi_vm  (depends on musi_codegen)
-    |
-musi  (CLI -- depends on all except musi_sema)
-```
+| File | Role |
+|------|------|
+| `grammar.ebnf` | Canonical LL(1) grammar -- source of truth |
+| `CLAUDE.md` | AI assistant instructions (LL(1) rules, design constraints) |
+| `std/prelude.ms` | Standard prelude with type classes + given instances |
+| `crates/musi_ast/src/lib.rs` | All AST node definitions |
+| `crates/musi_lex/src/token.rs` | Token kinds including 5 new keywords |
+| `crates/musi_parse/src/parser.rs` | LL(1) recursive descent parser |
+| `crates/musi_codegen/src/emitter.rs` | Bytecode emitter (ClassDef/GivenDef/UFCS) |
+| `crates/musi_codegen/src/opcode.rs` | Instruction set (CallMethod = 0x83) |
+| `crates/musi_codegen/src/module.rs` | Module struct with method_table |
+| `crates/musi_codegen/src/intrinsics.rs` | Intrinsic enum (4 entries) |
+| `crates/musi_vm/src/vm.rs` | Stack-based VM with CallMethod dispatch |
+| `crates/musi_vm/src/native.rs` | Native function dispatch |
+| `crates/musi_sema/src/check.rs` | Type checker (~1300 lines, dangerous to compile) |
+| `crates/musi_sema/src/resolve.rs` | Name resolver (~640 lines) |
+| `crates/musi/src/main.rs` | CLI binary |
+| `examples/09-type-classes/type_classes.ms` | Working type class demo |
+| `.cargo/config.toml` | Memory-saving build settings |
 
 ---
 
 ## Suggested Next Steps
 
-1. **Fix the musi_lex build error** -- change lines 152 and 191 of `crates/musi_lex/src/lexer.rs` to use closure wrappers (`|b| b.is_ascii_hexdigit()` and `|b| b.is_ascii_whitespace()`). This is a 2-line fix that unblocks the entire workspace.
+1. **Commit the working-tree changes.** Everything from this session is uncommitted. Review with `git diff` and create a commit covering the type class implementation.
 
-2. **Build and run all tests per-crate** to verify the fix and confirm all 170+ tests still pass. Use the per-crate binary-direct workflow described in Memory Constraints.
+2. **Tackle musi_sema ClassDef/GivenDef handling.** Start by reading `crates/musi_sema/src/check.rs` to find where `Expr::FnDef` is handled, then add arms for `Expr::ClassDef` and `Expr::GivenDef`. Build with `CARGO_BUILD_JOBS=1 timeout 120s cargo build -p musi_sema`. Do NOT compile alongside other crates.
 
-3. **Commit the accumulated work** -- all phases 1--7 are uncommitted. Stage and commit logically (one large checkpoint commit is acceptable given the volume).
-
-4. **Begin Phase 8** -- follow `.claude/plans/08-WIDEN_CODEGEN_TYPES.md`. Start with adding the type table to the module format, then implement `new.obj`/`ld.fld`/`st.fld` opcodes for record support.
-
----
-
-*Consult `CLAUDE.md` for language design constraints (LL(1), mathematical purity). Consult `~/.claude/projects/-Users-krystian-CodeProjects-musi/memory/MEMORY.md` for accumulated project memory including all phase details.*
+3. **Implement default method emission** in `crates/musi_codegen/src/emitter.rs`. When a `given` block omits a method that the `class` defined with a default body, emit the default body as a fallback implementation.

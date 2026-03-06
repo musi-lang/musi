@@ -10,7 +10,6 @@ const DUP: u8 = 0x04;
 const HALT_ERROR: u8 = 0x05;
 const LD_IMM_I64: u8 = 0x10;
 const LD_IMM_F64: u8 = 0x11;
-const LD_IMM_BOOL: u8 = 0x12;
 const LD_IMM_UNIT: u8 = 0x13;
 const LD_CONST: u8 = 0x14;
 const LD_LOC: u8 = 0x15;
@@ -22,6 +21,7 @@ const CALL_DYNAMIC: u8 = 0x22;
 const NEW_OBJ: u8 = 0x80;
 const LD_FLD: u8 = 0x81;
 const LD_TAG: u8 = 0x82;
+const CALL_METHOD: u8 = 0x83;
 // Arithmetic -- integer
 const ADD_I64: u8 = 0x30;
 const SUB_I64: u8 = 0x31;
@@ -74,7 +74,7 @@ const CONCAT_STR: u8 = 0x70;
 ///
 /// Instructions are encoded as a tag byte followed by an optional payload,
 /// all in little-endian byte order.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Opcode {
     /// No operation.
     Nop,
@@ -92,8 +92,6 @@ pub enum Opcode {
     LdImmI64(i64),
     /// Push an immediate 64-bit float.
     LdImmF64(f64),
-    /// Push an immediate boolean.
-    LdImmBool(bool),
     /// Push `Unit`.
     LdImmUnit,
     /// Push a value from the const pool by index.
@@ -104,15 +102,15 @@ pub enum Opcode {
     StLoc(u16),
     /// Call a function by its function-table index.
     Call(u16),
-    /// Push a function value (Value::Function) by its function-table index.
+    /// Push a function value (`Value::Function`) by its function-table index.
     LdFnIdx(u16),
-    /// Pop a Value::Function from the stack and call it.
+    /// Pop a `Value::Function` from the stack and call it.
     CallDynamic,
-    /// Pop N values from the stack and create a Value::Object.
+    /// Pop N values from the stack and create a `Value::Object`.
     NewObj(u16),
-    /// Pop a Value::Object and push the field at the given index.
+    /// Pop a `Value::Object` and push the field at the given index.
     LdFld(u16),
-    /// Pop a Value::Object and push field[0] as an Int (discriminant).
+    /// Pop a `Value::Object` and push field[0] as an Int (discriminant).
     LdTag,
     /// Pop two i64, push their wrapping sum.
     AddI64,
@@ -192,6 +190,9 @@ pub enum Opcode {
     BrFalse(i32),
     /// Pop two strings (bottom then top), push their concatenation.
     ConcatStr,
+    /// Pop `arg_count` values (receiver is the first arg pushed), dispatch on receiver type.
+    /// `method_idx` is a const-pool index for the method name string.
+    CallMethod { method_idx: u16, arg_count: u16 },
 }
 
 impl Opcode {
@@ -212,10 +213,6 @@ impl Opcode {
             Self::LdImmF64(v) => {
                 buf.push(LD_IMM_F64);
                 buf.extend_from_slice(&v.to_le_bytes());
-            }
-            Self::LdImmBool(v) => {
-                buf.push(LD_IMM_BOOL);
-                buf.push(u8::from(*v));
             }
             Self::LdConst(idx) => {
                 buf.push(LD_CONST);
@@ -295,6 +292,11 @@ impl Opcode {
                 buf.extend_from_slice(&offset.to_le_bytes());
             }
             Self::ConcatStr => buf.push(CONCAT_STR),
+            Self::CallMethod { method_idx, arg_count } => {
+                buf.push(CALL_METHOD);
+                buf.extend_from_slice(&method_idx.to_le_bytes());
+                buf.extend_from_slice(&arg_count.to_le_bytes());
+            }
         }
     }
 
@@ -323,13 +325,6 @@ impl Opcode {
             LD_IMM_F64 => {
                 let b = read_8(code, offset + 1)?;
                 Ok((Self::LdImmF64(f64::from_le_bytes(b)), 9))
-            }
-            LD_IMM_BOOL => {
-                let b = code
-                    .get(offset + 1)
-                    .copied()
-                    .ok_or(DeserError::UnexpectedEof)?;
-                Ok((Self::LdImmBool(b != 0), 2))
             }
             LD_CONST => Ok((Self::LdConst(read_u16(code, offset + 1)?), 3)),
             LD_LOC => Ok((Self::LdLoc(read_u16(code, offset + 1)?), 3)),
@@ -379,6 +374,11 @@ impl Opcode {
             BR_TRUE => Ok((Self::BrTrue(read_i32(code, offset + 1)?), 5)),
             BR_FALSE => Ok((Self::BrFalse(read_i32(code, offset + 1)?), 5)),
             CONCAT_STR => Ok((Self::ConcatStr, 1)),
+            CALL_METHOD => {
+                let method_idx = read_u16(code, offset + 1)?;
+                let arg_count = read_u16(code, offset + 3)?;
+                Ok((Self::CallMethod { method_idx, arg_count }, 5))
+            }
             _ => Err(DeserError::UnknownOpcode { tag, offset }),
         }
     }
@@ -433,7 +433,6 @@ impl Opcode {
             | Self::Shr
             | Self::ConcatStr => 1,
             Self::LdImmI64(_) | Self::LdImmF64(_) => 9,
-            Self::LdImmBool(_) => 2,
             Self::LdConst(_)
             | Self::LdLoc(_)
             | Self::StLoc(_)
@@ -442,6 +441,7 @@ impl Opcode {
             | Self::NewObj(_)
             | Self::LdFld(_) => 3,
             Self::Br(_) | Self::BrTrue(_) | Self::BrFalse(_) => 5,
+            Self::CallMethod { .. } => 5,
         }
     }
 }

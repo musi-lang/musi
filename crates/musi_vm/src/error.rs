@@ -54,11 +54,15 @@ pub enum VmError {
     #[error("non-exhaustive match")]
     MatchFailure,
 
-    /// CallDynamic was given a non-Function value.
+    /// `CallDynamic` was given a non-Function value.
     #[error("value is not a function")]
     NotAFunction,
 
     /// A field index exceeded the object's field count.
     #[error("field index {0} out of bounds")]
     FieldOutOfBounds(u16),
+
+    /// No method implementation found for the given name and receiver type.
+    #[error("no method implementation found")]
+    MethodNotFound,
 }

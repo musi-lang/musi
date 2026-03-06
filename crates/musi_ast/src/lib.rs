@@ -48,7 +48,6 @@ pub enum LitValue {
     Float(f64),
     Str(Symbol),
     Char(char),
-    Bool(bool),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -197,26 +196,11 @@ pub enum PrefixOp {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PostfixOp {
-    Call {
-        args: Vec<Idx<Expr>>,
-        span: Span,
-    },
-    Index {
-        args: Vec<Idx<Expr>>,
-        span: Span,
-    },
-    Field {
-        name: Symbol,
-        span: Span,
-    },
-    RecDot {
-        fields: Vec<FieldInit>,
-        span: Span,
-    },
-    As {
-        ty: Ty,
-        span: Span,
-    },
+    Call { args: Vec<Idx<Expr>>, span: Span },
+    Index { args: Vec<Idx<Expr>>, span: Span },
+    Field { name: Symbol, span: Span },
+    RecDot { fields: Vec<FieldInit>, span: Span },
+    As { ty: Ty, span: Span },
 }
 
 /// A field initializer in a record literal or record-update expression.
@@ -410,6 +394,17 @@ pub enum Expr {
         path: Symbol,
         span: Span,
     },
+    Export {
+        items: Vec<ExportItem>,
+        path: Symbol,
+        span: Span,
+    },
+    Using {
+        name: Symbol,
+        init: Idx<Self>,
+        body: Idx<Self>,
+        span: Span,
+    },
 
     // Declarations (first-class expressions in Musi)
     Record {
@@ -435,6 +430,7 @@ pub enum Expr {
         ty_params: Vec<TyParam>,
         params: Vec<Param>,
         ret_ty: Option<Ty>,
+        where_clause: Vec<Constraint>,
         body: Option<Idx<Self>>,
         span: Span,
     },
@@ -443,7 +439,23 @@ pub enum Expr {
         ty_params: Vec<TyParam>,
         params: Vec<Param>,
         ret_ty: Option<Ty>,
+        where_clause: Vec<Constraint>,
         body: Idx<Self>,
+        span: Span,
+    },
+
+    // Type class declarations
+    ClassDef {
+        name: Symbol,
+        ty_params: Vec<TyParam>,
+        supers: Vec<Ty>,
+        members: Vec<ClassMember>,
+        span: Span,
+    },
+    GivenDef {
+        class_app: Ty,
+        constraints: Vec<Constraint>,
+        members: Vec<ClassMember>,
         span: Span,
     },
     Bind {
@@ -485,6 +497,26 @@ pub enum Expr {
     },
 }
 
+/// A single constraint in a `where` clause: `'T satisfies Ord`
+#[derive(Debug, Clone, PartialEq)]
+pub struct Constraint {
+    pub ty_var: Symbol,
+    pub bound: Ty,
+    pub span: Span,
+}
+
+/// Class member: either a fn declaration or a law
+#[derive(Debug, Clone, PartialEq)]
+pub enum ClassMember {
+    Method(Idx<Expr>),
+    Law {
+        name: Symbol,
+        params: Vec<Param>,
+        body: Idx<Expr>,
+        span: Span,
+    },
+}
+
 /// One `elif` branch in an if-elif-else chain.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ElifBranch {
@@ -503,5 +535,13 @@ pub enum ArrayItem {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ImportClause {
     Glob,
+    GlobAs(Symbol),
     Items(Vec<ImportItem>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExportItem {
+    pub name: Symbol,
+    pub alias: Option<Symbol>,
+    pub span: Span,
 }

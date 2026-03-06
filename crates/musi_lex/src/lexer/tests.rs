@@ -72,6 +72,12 @@ fn all_keywords() {
         ("as", TokenKind::As),
         ("with", TokenKind::With),
         ("label", TokenKind::Label),
+        ("using", TokenKind::Using),
+        ("class", TokenKind::Class),
+        ("given", TokenKind::Given),
+        ("satisfies", TokenKind::Satisfies),
+        ("where", TokenKind::Where),
+        ("law", TokenKind::Law),
         ("shl", TokenKind::Shl),
         ("shr", TokenKind::Shr),
     ];

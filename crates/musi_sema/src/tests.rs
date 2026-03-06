@@ -71,8 +71,8 @@ fn infers_int_addition() {
 }
 
 #[test]
-fn infers_bool_from_literal() {
-    let (result, diags) = analyze_src(r#"const b := true;"#);
+fn infers_bool_from_comparison() {
+    let (result, diags) = analyze_src(r#"const b := 1 == 1;"#);
     assert!(
         !diags.has_errors(),
         "unexpected errors: {:?}",
@@ -87,7 +87,7 @@ fn infers_bool_from_literal() {
             b_def.and_then(|d| d.ty.as_ref()),
             Some(Type::Prim(PrimTy::Bool))
         ),
-        "expected b : Bool"
+        "expected b : Bool (from comparison)"
     );
 }
 
@@ -129,7 +129,7 @@ fn undefined_name_suggests_close_match() {
     // function `foo` and try to call `fob`.
     let (_result, diags) = analyze_src(
         r#"
-fn foo(x: Int): Int (x);
+fn foo(x: Int): Int => x;
 const z := fob(1);
 "#,
     );
@@ -146,7 +146,7 @@ const z := fob(1);
 fn well_typed_simple_fn() {
     let (_result, diags) = analyze_src(
         r#"
-fn add(a: Int, b: Int): Int (a + b);
+fn add(a: Int, b: Int): Int => a + b;
 const result := add(1, 2);
 "#,
     );
@@ -235,7 +235,7 @@ record Point { x: Int, y: Int };
 fn well_typed_generic_identity() {
     let (_result, diags) = analyze_src(
         r#"
-fn id['T](x: 'T): 'T (x);
+fn id['T](x: 'T): 'T => x;
 const n := id(42);
 const s := id("hello");
 "#,
@@ -278,9 +278,7 @@ fn type_annotation_matches_literal() {
 fn recursive_function_type_checked() {
     let (_result, diags) = analyze_src(
         r#"
-fn fact(n: Int): Int (
-    if n < 1 then (1) else (n)
-);
+fn fact(n: Int): Int => if n < 1 then (1) else (n);
 "#,
     );
     assert!(

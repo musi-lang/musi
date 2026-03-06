@@ -1,9 +1,8 @@
 choice Option { Some(Int) | None };
 
-fn unwrap_or(opt: Option, default: Int): Int (
-    match opt with
-        case Some(v) => v
-        case None => default
+fn unwrap_or(opt: Option, default: Int): Int => match opt with (
+    Some(v) => v
+  | None    => default
 );
 
 const a := Some(42);

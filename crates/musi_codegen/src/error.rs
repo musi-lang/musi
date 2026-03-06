@@ -1,6 +1,7 @@
 //! Error types for the Musi bytecode format and code generator.
 
 use core::fmt;
+use std::error::Error;
 
 use thiserror::Error;
 
@@ -60,4 +61,4 @@ impl fmt::Display for CodegenError {
     }
 }
 
-impl std::error::Error for CodegenError {}
+impl Error for CodegenError {}

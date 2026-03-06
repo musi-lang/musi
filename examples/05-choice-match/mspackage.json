@@ -1,0 +1,5 @@
+{
+  "name": "choice-match",
+  "version": "0.1.0",
+  "description": "Algebraic data types and pattern matching"
+}

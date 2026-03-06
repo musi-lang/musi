@@ -16,7 +16,10 @@ pub struct Idx<T> {
 
 impl<T> Idx<T> {
     pub(crate) fn new(raw: u32) -> Self {
-        Self { raw, _phantom: PhantomData }
+        Self {
+            raw,
+            _phantom: PhantomData,
+        }
     }
 
     pub(crate) fn as_usize(self) -> usize {
@@ -77,7 +80,9 @@ impl<T> Arena<T> {
 
     #[must_use]
     pub fn with_capacity(cap: usize) -> Self {
-        Self { items: Vec::with_capacity(cap) }
+        Self {
+            items: Vec::with_capacity(cap),
+        }
     }
 
     /// Allocates a value and returns its index.
@@ -105,6 +110,11 @@ impl<T> Arena<T> {
         self.items.iter()
     }
 
+    /// Returns an iterator over pairs of `(Idx<T>, &T)`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the arena contains more than `u32::MAX` items (should never occur).
     pub fn iter_idx(&self) -> impl Iterator<Item = (Idx<T>, &T)> {
         self.items.iter().enumerate().map(|(i, v)| {
             let raw = u32::try_from(i).expect("arena index in range");
@@ -113,12 +123,12 @@ impl<T> Arena<T> {
     }
 
     #[must_use]
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         self.items.len()
     }
 
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.items.is_empty()
     }
 }
@@ -141,9 +151,19 @@ pub struct Slice<T> {
 impl<T> Slice<T> {
     #[must_use]
     pub const fn empty() -> Self {
-        Self { start: 0, len: 0, _phantom: PhantomData }
+        Self {
+            start: 0,
+            len: 0,
+            _phantom: PhantomData,
+        }
     }
 
+    /// Returns the length of this slice.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the `len` field does not fit in a `usize` (should not occur
+    /// on any reasonable platform).
     #[must_use]
     pub fn len(&self) -> usize {
         usize::try_from(self.len).expect("slice length fits in usize")
@@ -201,7 +221,9 @@ impl<T> SliceArena<T> {
 
     #[must_use]
     pub fn with_capacity(cap: usize) -> Self {
-        Self { items: Vec::with_capacity(cap) }
+        Self {
+            items: Vec::with_capacity(cap),
+        }
     }
 
     /// Appends all items from `iter` and returns a [`Slice<T>`] handle.
@@ -214,9 +236,18 @@ impl<T> SliceArena<T> {
         let start = u32::try_from(self.items.len()).expect("slice arena overflow");
         self.items.extend(iter);
         let end = u32::try_from(self.items.len()).expect("slice arena overflow");
-        Slice { start, len: end - start, _phantom: PhantomData }
+        Slice {
+            start,
+            len: end - start,
+            _phantom: PhantomData,
+        }
     }
 
+    /// Returns an immutable slice corresponding to `slice`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `slice` is out of bounds for this arena.
     #[must_use]
     pub fn get_slice(&self, slice: Slice<T>) -> &[T] {
         let start = usize::try_from(slice.start).expect("slice start in range");
@@ -230,6 +261,11 @@ impl<T> SliceArena<T> {
         &self.items[start..start + len]
     }
 
+    /// Returns a mutable slice corresponding to `slice`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `slice` is out of bounds for this arena.
     pub fn get_slice_mut(&mut self, slice: Slice<T>) -> &mut [T] {
         let start = usize::try_from(slice.start).expect("slice start in range");
         let len = usize::try_from(slice.len).expect("slice len in range");
@@ -243,12 +279,12 @@ impl<T> SliceArena<T> {
     }
 
     #[must_use]
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         self.items.len()
     }
 
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.items.is_empty()
     }
 }

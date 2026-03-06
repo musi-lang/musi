@@ -36,6 +36,12 @@ fn keyword_from_str_returns_some_for_every_keyword() {
         ("as", TokenKind::As),
         ("with", TokenKind::With),
         ("label", TokenKind::Label),
+        ("using", TokenKind::Using),
+        ("class", TokenKind::Class),
+        ("given", TokenKind::Given),
+        ("satisfies", TokenKind::Satisfies),
+        ("where", TokenKind::Where),
+        ("law", TokenKind::Law),
         ("shl", TokenKind::Shl),
         ("shr", TokenKind::Shr),
     ];
@@ -58,6 +64,11 @@ fn is_keyword_true_for_keywords() {
     assert!(TokenKind::Const.is_keyword());
     assert!(TokenKind::Match.is_keyword());
     assert!(TokenKind::Shr.is_keyword());
+    assert!(TokenKind::Class.is_keyword());
+    assert!(TokenKind::Given.is_keyword());
+    assert!(TokenKind::Satisfies.is_keyword());
+    assert!(TokenKind::Where.is_keyword());
+    assert!(TokenKind::Law.is_keyword());
 }
 
 #[test]

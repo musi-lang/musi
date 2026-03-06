@@ -22,7 +22,6 @@
     #[test]
     fn display_formats() {
         assert_eq!(Value::Int(-7).to_string(), "-7");
-        assert_eq!(Value::Bool(true).to_string(), "true");
         assert_eq!(Value::String(Rc::from("hi")).to_string(), "hi");
         assert_eq!(Value::Unit.to_string(), "()");
     }

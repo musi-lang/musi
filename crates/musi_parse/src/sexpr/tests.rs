@@ -183,6 +183,7 @@
                 },
             ],
             ret_ty: Some(int_ty),
+            where_clause: vec![],
             body: Some(body),
             span: Span::DUMMY,
         });
@@ -202,22 +203,22 @@
     }
 
     #[test]
-    fn unit_and_bool_rendering() {
+    fn unit_and_int_rendering() {
         let mut ctx = AstArenas::new();
         let unit = ctx.exprs.alloc(Expr::Unit { span: Span::DUMMY });
-        let bool_true = ctx.exprs.alloc(Expr::Lit {
-            value: LitValue::Bool(true),
+        let int_lit = ctx.exprs.alloc(Expr::Lit {
+            value: LitValue::Int(42),
             span: Span::DUMMY,
         });
         let module = ParsedModule {
-            items: vec![unit, bool_true],
+            items: vec![unit, int_lit],
             ctx,
             span: Span::DUMMY,
         };
         let interner = Interner::new();
         let out = dump(&module, &interner);
         assert!(out.contains("unit"));
-        assert!(out.contains("(lit_bool true)"));
+        assert!(out.contains("(lit_int 42)"));
     }
 
     #[test]

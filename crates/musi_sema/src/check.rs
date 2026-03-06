@@ -25,11 +25,15 @@ pub struct UnifyTable {
 
 impl UnifyTable {
     #[must_use]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self { vars: Vec::new() }
     }
 
     /// Allocates a fresh, unbound unification variable.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the number of type variables overflows `u32`.
     #[must_use]
     pub fn fresh(&mut self) -> TypeVarId {
         let id = TypeVarId(u32::try_from(self.vars.len()).expect("type var overflow"));
@@ -38,23 +42,28 @@ impl UnifyTable {
     }
 
     /// Returns `true` if `v` is not yet bound to any type.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `v` is not a valid `TypeVarId` from this table.
     #[must_use]
     pub fn is_free(&self, v: TypeVarId) -> bool {
         let idx = usize::try_from(v.0).expect("TypeVarId in range");
-        self.vars.get(idx).expect("TypeVarId is valid").is_none()
+        self.vars[idx].is_none()
     }
 
     /// Follows the chain of variable bindings until reaching a concrete type
     /// or a free variable.
+    ///
+    /// # Panics
+    ///
+    /// Panics if a `TypeVarId` is not valid for this table.
     #[must_use]
     pub fn resolve(&self, ty: Type) -> Type {
         match ty {
             Type::Var(v) => {
                 let idx = usize::try_from(v.0).expect("TypeVarId in range");
-                match self.vars.get(idx).expect("TypeVarId is valid") {
-                    Some(bound) => self.resolve(bound.clone()),
-                    None => Type::Var(v),
-                }
+                self.vars[idx].as_ref().map_or(Type::Var(v), |bound| self.resolve(bound.clone()))
             }
             other => other,
         }
@@ -62,7 +71,7 @@ impl UnifyTable {
 
     fn bind(&mut self, v: TypeVarId, ty: Type) {
         let idx = usize::try_from(v.0).expect("TypeVarId in range");
-        *self.vars.get_mut(idx).expect("TypeVarId is valid") = Some(ty);
+        self.vars[idx] = Some(ty);
     }
 
     /// Returns `true` if `v` appears anywhere in `ty` (occurs check).
@@ -73,10 +82,7 @@ impl UnifyTable {
                     return true;
                 }
                 let idx = usize::try_from(w.0).expect("TypeVarId in range");
-                match self.vars.get(idx).expect("TypeVarId is valid") {
-                    Some(bound) => self.occurs(v, bound),
-                    None => false,
-                }
+                self.vars[idx].as_ref().is_some_and(|bound| self.occurs(v, bound))
             }
             Type::Prim(_) | Type::Error => false,
             Type::Tuple(elems) => elems.iter().any(|t| self.occurs(v, t)),
@@ -220,10 +226,8 @@ impl Default for UnifyTable {
 /// Substitutes `scheme_vars[i]` → `fresh_vars[i]` throughout `ty`.
 fn instantiate(ty: &Type, scheme_vars: &[TypeVarId], fresh_vars: &[TypeVarId]) -> Type {
     match ty {
-        Type::Var(v) => match scheme_vars.iter().position(|sv| sv == v) {
-            Some(pos) => Type::Var(fresh_vars[pos]),
-            None => Type::Var(*v),
-        },
+        Type::Var(v) => scheme_vars.iter().position(|sv| sv == v)
+            .map_or(Type::Var(*v), |pos| Type::Var(fresh_vars[pos])),
         Type::Prim(p) => Type::Prim(*p),
         Type::Error => Type::Error,
         Type::Tuple(elems) => Type::Tuple(
@@ -262,6 +266,7 @@ fn ty_scope_lookup(stack: &TyScope, name: Symbol) -> Option<TypeVarId> {
         .find_map(|frame| frame.get(&name).copied())
 }
 
+#[derive(Clone, Copy)]
 struct FnDefNode<'a> {
     name: musi_shared::Symbol,
     ty_params: &'a [musi_ast::TyParam],
@@ -277,9 +282,9 @@ pub struct TypeChecker<'a> {
     diags: &'a mut DiagnosticBag,
     /// Unification table (shared across the entire analysis).
     pub unify_table: UnifyTable,
-    /// Expression node → DefId (from the resolver).
+    /// Expression node → `DefId` (from the resolver).
     expr_defs: &'a HashMap<Idx<Expr>, DefId>,
-    /// Pattern binding site span → DefId (from the resolver).
+    /// Pattern binding site span → `DefId` (from the resolver).
     pat_defs: &'a HashMap<Span, DefId>,
     /// All definitions (owned; types are written back here).
     pub defs: Vec<DefInfo>,
@@ -334,26 +339,13 @@ impl<'a> TypeChecker<'a> {
                 }
                 // Look up user-defined type by name.
                 let def_id = self.find_type_def(*name);
-                match def_id {
-                    Some(id) => {
-                        let resolved: Vec<Type> = args.iter().map(|a| self.resolve_ty(a)).collect();
-                        Type::Named(id, resolved)
-                    }
-                    None => {
-                        // Unknown type name -- error was already reported by the
-                        // resolver if it's truly undefined.
-                        Type::Error
-                    }
-                }
+                def_id.map_or(Type::Error, |id| {
+                    let resolved: Vec<Type> = args.iter().map(|a| self.resolve_ty(a)).collect();
+                    Type::Named(id, resolved)
+                })
             }
             Ty::Var { name, .. } => {
-                match ty_scope_lookup(&self.ty_scope, *name) {
-                    Some(var_id) => Type::Var(var_id),
-                    None => {
-                        // Unbound type variable -- resolver should have caught this.
-                        Type::Error
-                    }
-                }
+                ty_scope_lookup(&self.ty_scope, *name).map_or(Type::Error, Type::Var)
             }
             Ty::Arrow { params, ret, .. } => {
                 let resolved_params: Vec<Type> =
@@ -380,17 +372,21 @@ impl<'a> TypeChecker<'a> {
 
     /// Infers and records the type of the expression at `idx`.
     pub fn infer(&mut self, idx: Idx<Expr>, ctx: &AstArenas) -> Type {
-        let ty = self.infer_inner(idx, ctx);
-        let resolved = self.unify_table.resolve(ty.clone());
+        let ty = self.infer_expr(idx, ctx);
+        let resolved = self.unify_table.resolve(ty);
         let _prev = self.expr_types.insert(idx, resolved.clone());
         resolved
     }
 
-    fn infer_inner(&mut self, idx: Idx<Expr>, ctx: &AstArenas) -> Type {
+    fn infer_expr(&mut self, idx: Idx<Expr>, ctx: &AstArenas) -> Type {
         let expr = ctx.exprs.get(idx);
         match expr {
             Expr::Lit { value, .. } => Self::infer_lit(value),
-            Expr::Unit { .. } => Type::Prim(PrimTy::Unit),
+            Expr::Unit { .. }
+            | Expr::Record { .. }
+            | Expr::Choice { .. }
+            | Expr::Import { .. }
+            | Expr::Export { .. } => Type::Prim(PrimTy::Unit),
             Expr::Ident { span, .. } => self.infer_ident(idx, *span),
             Expr::Paren { inner, .. } => self.infer(*inner, ctx),
             Expr::Tuple { elements, .. } => self.infer_tuple(elements, ctx),
@@ -399,28 +395,11 @@ impl<'a> TypeChecker<'a> {
             Expr::AnonRec { fields, .. } => self.infer_anon_rec_expr(fields, ctx),
             Expr::Prefix { op, operand, span } => self.infer_prefix_op(*op, *operand, *span, ctx),
             Expr::Binary { op, lhs, rhs, span } => self.infer_binary(*op, *lhs, *rhs, *span, ctx),
-            Expr::Assign {
-                target,
-                value,
-                span,
-            } => self.infer_assign(*target, *value, *span, ctx),
+            Expr::Assign { target, value, span } => self.infer_assign(*target, *value, *span, ctx),
             Expr::Postfix { base, op, span } => self.infer_postfix(*base, op, *span, ctx),
-            Expr::Bind {
-                pat,
-                ty: ann_ty,
-                init,
-                span,
-                ..
-            } => self.infer_bind_expr(pat, ann_ty.as_ref(), init.as_ref().copied(), *span, ctx),
-            Expr::FnDef {
-                name,
-                ty_params,
-                params,
-                ret_ty,
-                body,
-                span,
-                ..
-            } => {
+            Expr::Bind { pat, ty: ann_ty, init, span, .. } =>
+                self.infer_bind_expr(pat, ann_ty.as_ref(), init.as_ref().copied(), *span, ctx),
+            Expr::FnDef { name, ty_params, params, ret_ty, body, span, .. } => {
                 let node = FnDefNode {
                     name: *name,
                     ty_params,
@@ -431,51 +410,26 @@ impl<'a> TypeChecker<'a> {
                 };
                 self.infer_fn_def(node, ctx)
             }
-            Expr::Lambda {
-                ty_params,
-                params,
-                ret_ty,
-                body,
-                ..
-            } => self.infer_lambda_expr(ty_params, params, ret_ty.as_ref(), *body, ctx),
-            Expr::Record { .. } | Expr::Choice { .. } => Type::Prim(PrimTy::Unit),
-            Expr::If {
-                cond,
-                then_body,
-                elif_chains,
-                else_body,
-                span,
-            } => self.infer_if(
-                cond,
-                *then_body,
-                elif_chains,
-                else_body.as_ref().copied(),
-                *span,
-                ctx,
-            ),
-            Expr::Match {
-                scrutinee, arms, ..
-            } => self.infer_match_expr(*scrutinee, arms, ctx),
-            Expr::While {
-                cond,
-                guard,
-                body,
-                span,
-            } => self.infer_while_expr(cond, guard.as_ref().copied(), *body, *span, ctx),
-            Expr::Loop {
-                body, post_cond, ..
-            } => self.infer_loop_expr(*body, post_cond.as_deref(), ctx),
-            Expr::For {
-                iter, body, guard, ..
-            } => self.infer_for_expr(*iter, *body, guard.as_ref().copied(), ctx),
+            Expr::Lambda { ty_params, params, ret_ty, body, .. } =>
+                self.infer_lambda_expr(ty_params, params, ret_ty.as_ref(), *body, ctx),
+            other => self.infer_expr_stmt(other, ctx),
+        }
+    }
+
+    fn infer_expr_stmt(&mut self, expr: &Expr, ctx: &AstArenas) -> Type {
+        match expr {
+            Expr::If { cond, then_body, elif_chains, else_body, span } =>
+                self.infer_if(cond, *then_body, elif_chains, else_body.as_ref().copied(), *span, ctx),
+            Expr::Match { scrutinee, arms, .. } =>
+                self.infer_match_expr(*scrutinee, arms, ctx),
+            Expr::While { cond, guard, body, span } =>
+                self.infer_while_expr(cond, guard.as_ref().copied(), *body, *span, ctx),
+            Expr::Loop { body, post_cond, .. } =>
+                self.infer_loop_expr(*body, post_cond.as_deref(), ctx),
+            Expr::For { iter, body, guard, .. } =>
+                self.infer_for_expr(*iter, *body, guard.as_ref().copied(), ctx),
             Expr::Label { body, .. } => self.infer(*body, ctx),
-            Expr::Return { value, .. } => {
-                if let Some(&v) = value.as_ref() {
-                    let _ty = self.infer(v, ctx);
-                }
-                Type::Var(self.unify_table.fresh())
-            }
-            Expr::Break { value, .. } => {
+            Expr::Return { value, .. } | Expr::Break { value, .. } => {
                 if let Some(&v) = value.as_ref() {
                     let _ty = self.infer(v, ctx);
                 }
@@ -491,18 +445,20 @@ impl<'a> TypeChecker<'a> {
                 let _ty = self.infer(*body, ctx);
                 Type::Prim(PrimTy::Unit)
             }
-            Expr::Import { .. } => Type::Prim(PrimTy::Unit),
-            Expr::Error { .. } => Type::Error,
+            Expr::Using { init, body, .. } => {
+                let _init_ty = self.infer(*init, ctx);
+                self.infer(*body, ctx)
+            }
+            _ => Type::Error,
         }
     }
 
-    fn infer_lit(value: &LitValue) -> Type {
+    const fn infer_lit(value: &LitValue) -> Type {
         match value {
             LitValue::Int(_) => Type::Prim(PrimTy::Int),
             LitValue::Float(_) => Type::Prim(PrimTy::Float),
             LitValue::Str(_) => Type::Prim(PrimTy::String),
             LitValue::Char(_) => Type::Prim(PrimTy::Rune),
-            LitValue::Bool(_) => Type::Prim(PrimTy::Bool),
         }
     }
 
@@ -527,11 +483,7 @@ impl<'a> TypeChecker<'a> {
         for &stmt in stmts {
             let _ty = self.infer(stmt, ctx);
         }
-        if let Some(t) = tail {
-            self.infer(t, ctx)
-        } else {
-            Type::Prim(PrimTy::Unit)
-        }
+        tail.map_or(Type::Prim(PrimTy::Unit), |t| self.infer(t, ctx))
     }
 
     fn infer_array_expr(&mut self, items: &[ArrayItem], ctx: &AstArenas) -> Type {
@@ -541,7 +493,7 @@ impl<'a> TypeChecker<'a> {
                 ArrayItem::Single(i) | ArrayItem::Spread(i) => i,
             };
             let item_ty = self.infer(item_idx, ctx);
-            let span = self.expr_span(item_idx, ctx);
+            let span = Self::expr_span(item_idx, ctx);
             let unified =
                 self.unify_table
                     .unify(Type::Var(elem_ty), item_ty, span, self.diags, self.file_id);
@@ -550,7 +502,7 @@ impl<'a> TypeChecker<'a> {
         Type::Array(Box::new(Type::Var(elem_ty)), None)
     }
 
-    fn infer_rec_fields(&mut self, fields: &[FieldInit], ctx: &AstArenas) {
+    fn infer_field_inits(&mut self, fields: &[FieldInit], ctx: &AstArenas) {
         for field in fields {
             match field {
                 FieldInit::Named { value, .. } => {
@@ -565,7 +517,7 @@ impl<'a> TypeChecker<'a> {
 
     fn infer_anon_rec_expr(&mut self, fields: &[FieldInit], ctx: &AstArenas) -> Type {
         // We don't track anonymous record types in the type table yet.
-        self.infer_rec_fields(fields, ctx);
+        self.infer_field_inits(fields, ctx);
         Type::Error // unresolved named rec type -- Phase 8
     }
 
@@ -588,8 +540,7 @@ impl<'a> TypeChecker<'a> {
                 self.unify_table
                     .unify(expected, operand_ty, span, self.diags, self.file_id)
             }
-            PrefixOp::BitNot => operand_ty,
-            PrefixOp::Deref | PrefixOp::AddrOf => operand_ty,
+            PrefixOp::BitNot | PrefixOp::Deref | PrefixOp::AddrOf => operand_ty,
         }
     }
 
@@ -661,7 +612,7 @@ impl<'a> TypeChecker<'a> {
 
         let ret_var = self.unify_table.fresh();
         let body_ty = self.infer(body, ctx);
-        let body_span = self.expr_span(body, ctx);
+        let body_span = Self::expr_span(body, ctx);
         let _u = self.unify_table.unify(
             Type::Var(ret_var),
             body_ty,
@@ -772,7 +723,7 @@ impl<'a> TypeChecker<'a> {
 
         if let Some(body_idx) = node.body {
             let body_ty = self.infer(body_idx, ctx);
-            let body_span = self.expr_span(body_idx, ctx);
+            let body_span = Self::expr_span(body_idx, ctx);
             let _u = self.unify_table.unify(
                 Type::Var(ret_var),
                 body_ty,
@@ -801,7 +752,7 @@ impl<'a> TypeChecker<'a> {
         if let Some(id) = def_id {
             let idx = usize::try_from(id.0).expect("DefId in range");
             let info = self.defs.get_mut(idx).expect("DefId is valid");
-            info.ty = Some(final_ty.clone());
+            info.ty = Some(final_ty);
             info.scheme_vars = scheme_vars;
         }
 
@@ -916,7 +867,7 @@ impl<'a> TypeChecker<'a> {
 
             PostfixOp::RecDot { fields, .. } => {
                 let base_ty = self.infer(base, ctx);
-                self.infer_rec_fields(fields, ctx);
+                self.infer_field_inits(fields, ctx);
                 // Result is same type as base (record update).
                 base_ty
             }
@@ -928,7 +879,7 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
-    fn infer_args_discard(&mut self, args: &[Idx<Expr>], ctx: &AstArenas) {
+    fn infer_args(&mut self, args: &[Idx<Expr>], ctx: &AstArenas) {
         for &a in args {
             let _ty = self.infer(a, ctx);
         }
@@ -984,14 +935,14 @@ impl<'a> TypeChecker<'a> {
                         span,
                         self.file_id,
                     );
-                    self.infer_args_discard(args, ctx);
+                    self.infer_args(args, ctx);
                     return Type::Error;
                 }
 
                 let mut all_ok = true;
                 for (&arg_idx, param_ty) in args.iter().zip(param_tys_inst.iter()) {
                     let arg_ty = self.infer(arg_idx, ctx);
-                    let arg_span = self.expr_span(arg_idx, ctx);
+                    let arg_span = Self::expr_span(arg_idx, ctx);
                     let u = self.unify_table.unify(
                         param_ty.clone(),
                         arg_ty,
@@ -1023,7 +974,7 @@ impl<'a> TypeChecker<'a> {
             }
 
             Type::Error => {
-                self.infer_args_discard(args, ctx);
+                self.infer_args(args, ctx);
                 Type::Error
             }
 
@@ -1033,7 +984,7 @@ impl<'a> TypeChecker<'a> {
                     span,
                     self.file_id,
                 );
-                self.infer_args_discard(args, ctx);
+                self.infer_args(args, ctx);
                 Type::Error
             }
         }
@@ -1051,20 +1002,20 @@ impl<'a> TypeChecker<'a> {
         self.check_cond(cond, span, ctx);
         let then_ty = self.infer(then_body, ctx);
         let result_var = self.unify_table.fresh();
-        let then_span = self.expr_span(then_body, ctx);
+        let then_span = Self::expr_span(then_body, ctx);
         let _u = self.unify_branch_type(result_var, then_ty, then_span);
 
         for chain in elif_chains {
             self.check_cond(&chain.cond, span, ctx);
             let elif_ty = self.infer(chain.body, ctx);
-            let elif_span = self.expr_span(chain.body, ctx);
+            let elif_span = Self::expr_span(chain.body, ctx);
             let _u = self.unify_branch_type(result_var, elif_ty, elif_span);
         }
 
         match else_body {
             Some(eb) => {
                 let else_ty = self.infer(eb, ctx);
-                let else_span = self.expr_span(eb, ctx);
+                let else_span = Self::expr_span(eb, ctx);
                 self.unify_branch_type(result_var, else_ty, else_span)
             }
             None => {
@@ -1087,7 +1038,7 @@ impl<'a> TypeChecker<'a> {
     fn check_guard(&mut self, guard: Option<Idx<Expr>>, ctx: &AstArenas) {
         if let Some(g) = guard {
             let gty = self.infer(g, ctx);
-            let gspan = self.expr_span(g, ctx);
+            let gspan = Self::expr_span(g, ctx);
             let _u = self.unify_table.unify(
                 Type::Prim(PrimTy::Bool),
                 gty,
@@ -1136,8 +1087,12 @@ impl<'a> TypeChecker<'a> {
                     }
                 }
             }
-            Pat::Wild { .. } | Pat::Lit { .. } | Pat::Error { .. } => {}
-            Pat::Arr { .. } | Pat::AnonRec { .. } | Pat::Or { .. } => {}
+            Pat::Wild { .. }
+            | Pat::Lit { .. }
+            | Pat::Error { .. }
+            | Pat::Arr { .. }
+            | Pat::AnonRec { .. }
+            | Pat::Or { .. } => {}
         }
     }
 
@@ -1151,31 +1106,28 @@ impl<'a> TypeChecker<'a> {
     fn def_type(&mut self, def_id: DefId, span: Span) -> Type {
         let idx = usize::try_from(def_id.0).expect("DefId in range");
         let info = self.defs.get(idx).expect("DefId is valid");
-        match &info.ty {
-            Some(ty) => {
-                let ty = ty.clone();
-                let scheme_vars = info.scheme_vars.clone();
-                if scheme_vars.is_empty() {
-                    self.unify_table.resolve(ty)
-                } else {
-                    // Instantiate generic type.
-                    let fresh: Vec<TypeVarId> = scheme_vars
-                        .iter()
-                        .map(|_| self.unify_table.fresh())
-                        .collect();
-                    instantiate(&ty, &scheme_vars, &fresh)
-                }
+        if let Some(ty) = &info.ty {
+            let ty = ty.clone();
+            let scheme_vars = info.scheme_vars.clone();
+            if scheme_vars.is_empty() {
+                self.unify_table.resolve(ty)
+            } else {
+                // Instantiate generic type.
+                let fresh: Vec<TypeVarId> = scheme_vars
+                    .iter()
+                    .map(|_| self.unify_table.fresh())
+                    .collect();
+                instantiate(&ty, &scheme_vars, &fresh)
             }
-            None => {
-                // Not yet typed; assign a fresh var.
-                let v = self.unify_table.fresh();
-                let _ = span;
-                let idx2 = usize::try_from(def_id.0).expect("DefId in range");
-                if let Some(info) = self.defs.get_mut(idx2) {
-                    info.ty = Some(Type::Var(v));
-                }
-                Type::Var(v)
+        } else {
+            // Not yet typed; assign a fresh var.
+            let v = self.unify_table.fresh();
+            let _ = span;
+            let idx2 = usize::try_from(def_id.0).expect("DefId in range");
+            if let Some(info) = self.defs.get_mut(idx2) {
+                info.ty = Some(Type::Var(v));
             }
+            Type::Var(v)
         }
     }
 
@@ -1203,12 +1155,12 @@ impl<'a> TypeChecker<'a> {
         self.defs.iter().find(|d| d.name == name).map(|d| d.id)
     }
 
-    fn expr_span(&self, idx: Idx<Expr>, ctx: &AstArenas) -> Span {
+    fn expr_span(idx: Idx<Expr>, ctx: &AstArenas) -> Span {
         span_of_expr(ctx.exprs.get(idx))
     }
 }
 
-fn span_of_expr(expr: &Expr) -> Span {
+const fn span_of_expr(expr: &Expr) -> Span {
     match expr {
         Expr::Lit { span, .. }
         | Expr::Ident { span, .. }
@@ -1229,6 +1181,8 @@ fn span_of_expr(expr: &Expr) -> Span {
         | Expr::Cycle { span, .. }
         | Expr::Defer { span, .. }
         | Expr::Import { span, .. }
+        | Expr::Export { span, .. }
+        | Expr::Using { span, .. }
         | Expr::Record { span, .. }
         | Expr::Choice { span, .. }
         | Expr::FnDef { span, .. }

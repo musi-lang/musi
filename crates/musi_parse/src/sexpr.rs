@@ -6,9 +6,10 @@
 use musi_shared::{Idx, Interner, Symbol};
 
 use crate::ast::{
-    ArrayItem, Attr, AttrArg, BinOp, BindKind, ChoiceVariant, Cond, ElifBranch, Expr, FieldInit,
-    ImportClause, LitValue, MatchArm, Modifier, Param, ParsedModule, Pat, PatField, PatSuffix,
-    PostfixOp, PrefixOp, RecField, Ty, TyParam, VariantPayload,
+    ArrayItem, Attr, AttrArg, BinOp, BindKind, ChoiceVariant, ClassMember, Cond, Constraint,
+    ElifBranch, ExportItem, Expr, FieldInit, ImportClause, LitValue, MatchArm, Modifier, Param,
+    ParsedModule, Pat, PatField, PatSuffix, PostfixOp, PrefixOp, RecField, Ty, TyParam,
+    VariantPayload,
 };
 
 /// Renders `module` as a multi-line S-expression string.
@@ -44,6 +45,7 @@ struct FnDefView<'a> {
     ty_params: &'a [TyParam],
     params: &'a [Param],
     ret_ty: Option<&'a Ty>,
+    where_clause: &'a [Constraint],
     body: Option<Idx<Expr>>,
 }
 
@@ -147,98 +149,116 @@ impl<'a> Printer<'a> {
                 ref arms,
                 ..
             } => self.print_match(scrutinee, arms),
-            Expr::While {
-                ref cond,
-                guard,
-                body,
-                ..
-            } => self.print_while(cond, guard, body),
-            Expr::Loop {
-                body,
-                ref post_cond,
-                ..
-            } => {
-                self.print_loop(body, post_cond.as_deref());
-            }
-            Expr::For {
-                ref pat,
-                iter,
-                guard,
-                body,
-                ..
-            } => {
-                self.print_for(pat, iter, guard, body);
-            }
+            other => self.print_expr_stmt(&other),
+        }
+    }
+
+    fn print_expr_stmt(&mut self, expr: &Expr) {
+        match expr {
+            Expr::While { cond, guard, body, .. } => self.print_while(cond, *guard, *body),
+            Expr::Loop { body, post_cond, .. } => self.print_loop(*body, post_cond.as_deref()),
+            Expr::For { pat, iter, guard, body, .. } => self.print_for(pat, *iter, *guard, *body),
             Expr::Label { name, body, .. } => {
                 self.write("(label ");
-                self.write(self.sym(name));
+                self.write(self.sym(*name));
                 self.write_char(' ');
-                self.print_expr(body);
+                self.print_expr(*body);
                 self.write_char(')');
             }
-            Expr::Return { value, .. } => self.print_optional_tag("return", value),
-            Expr::Break { label, value, .. } => self.print_break(label, value),
-            Expr::Cycle { label, guard, .. } => self.print_cycle(label, guard),
+            Expr::Return { value, .. } => self.print_optional_tag("return", *value),
+            Expr::Break { label, value, .. } => self.print_break(*label, *value),
+            Expr::Cycle { label, guard, .. } => self.print_cycle(*label, *guard),
             Expr::Defer { body, .. } => {
                 self.write("(defer ");
-                self.print_expr(body);
+                self.print_expr(*body);
                 self.write_char(')');
             }
-            Expr::Import {
-                ref items, path, ..
-            } => self.print_import(items, path),
+            Expr::Import { items, path, .. } => self.print_import(items, *path),
+            Expr::Export { items, path, .. } => self.print_export(items, *path),
+            Expr::Using { name, init, body, .. } => {
+                self.write("(using ");
+                self.write(self.sym(*name));
+                self.write_char(' ');
+                self.print_expr(*init);
+                self.write_char(' ');
+                self.print_expr(*body);
+                self.write_char(')');
+            }
+            other => self.print_expr_decl(other),
+        }
+    }
+
+    fn print_expr_decl(&mut self, expr: &Expr) {
+        match expr {
             Expr::FnDef {
-                ref attrs,
-                ref modifiers,
-                name,
-                ref ty_params,
-                ref params,
-                ref ret_ty,
-                body,
-                ..
-            } => self.print_fn_def(FnDefView {
                 attrs,
                 modifiers,
                 name,
                 ty_params,
                 params,
-                ret_ty: ret_ty.as_ref(),
+                ret_ty,
+                where_clause,
                 body,
+                ..
+            } => self.print_fn_def(&FnDefView {
+                attrs,
+                modifiers,
+                name: *name,
+                ty_params,
+                params,
+                ret_ty: ret_ty.as_ref(),
+                where_clause,
+                body: *body,
             }),
             Expr::Lambda {
-                ref attrs,
-                ref ty_params,
-                ref params,
-                ref ret_ty,
+                attrs,
+                ty_params,
+                params,
+                ret_ty,
+                where_clause,
                 body,
                 ..
-            } => self.print_lambda(attrs, ty_params, params, ret_ty.as_ref(), body),
+            } => self.print_lambda(attrs, ty_params, params, ret_ty.as_ref(), where_clause, *body),
+            Expr::ClassDef {
+                name,
+                ty_params,
+                supers,
+                members,
+                ..
+            } => self.print_class_def(*name, ty_params, supers, members),
+            Expr::GivenDef {
+                class_app,
+                constraints,
+                members,
+                ..
+            } => self.print_given_def(class_app, constraints, members),
             Expr::Record {
-                ref attrs,
-                ref modifiers,
+                attrs,
+                modifiers,
                 name,
-                ref ty_params,
-                ref fields,
+                ty_params,
+                fields,
                 ..
-            } => self.print_record(attrs, modifiers, name, ty_params, fields),
+            } => self.print_record(attrs, modifiers, *name, ty_params, fields),
             Expr::Choice {
-                ref attrs,
-                ref modifiers,
+                attrs,
+                modifiers,
                 name,
-                ref ty_params,
-                ref variants,
+                ty_params,
+                variants,
                 ..
-            } => self.print_choice(attrs, modifiers, name, ty_params, variants),
+            } => self.print_choice(attrs, modifiers, *name, ty_params, variants),
             Expr::Bind {
-                ref attrs,
-                ref modifiers,
+                attrs,
+                modifiers,
                 kind,
-                ref pat,
-                ref ty,
+                pat,
+                ty,
                 init,
                 ..
-            } => self.print_bind(attrs, modifiers, kind, pat, ty.as_ref(), init),
+            } => self.print_bind(attrs, modifiers, *kind, pat, ty.as_ref(), *init),
             Expr::Error { .. } => self.write("error"),
+            _ => {}
         }
     }
 
@@ -410,6 +430,10 @@ impl<'a> Printer<'a> {
         self.write(self.sym(path));
         match items {
             ImportClause::Glob => self.write(" *"),
+            ImportClause::GlobAs(name) => {
+                self.write(" * as ");
+                self.write(self.sym(*name));
+            }
             ImportClause::Items(list) => {
                 self.write(" [");
                 for (i, item) in list.iter().enumerate() {
@@ -428,6 +452,23 @@ impl<'a> Printer<'a> {
         self.write_char(')');
     }
 
+    fn print_export(&mut self, items: &[ExportItem], path: Symbol) {
+        self.write("(export ");
+        self.write(self.sym(path));
+        self.write(" [");
+        for (i, item) in items.iter().enumerate() {
+            if i > 0 {
+                self.write_char(' ');
+            }
+            self.write(self.sym(item.name));
+            if let Some(alias) = item.alias {
+                self.write(" as ");
+                self.write(self.sym(alias));
+            }
+        }
+        self.write("])");
+    }
+
     fn print_optional_guard(&mut self, guard: Option<Idx<Expr>>) {
         if let Some(g) = guard {
             self.write(" (guard ");
@@ -436,7 +477,7 @@ impl<'a> Printer<'a> {
         }
     }
 
-    fn print_fn_def(&mut self, node: FnDefView<'_>) {
+    fn print_fn_def(&mut self, node: &FnDefView<'_>) {
         self.write("(fn_def");
         self.print_attrs(node.attrs);
         self.print_modifiers(node.modifiers);
@@ -454,6 +495,10 @@ impl<'a> Printer<'a> {
             self.print_ty(ret);
             self.write_char(')');
         }
+        if !node.where_clause.is_empty() {
+            self.newline_indent();
+            self.print_where_clause(node.where_clause);
+        }
         if let Some(b) = node.body {
             self.newline_indent();
             self.print_expr(b);
@@ -468,6 +513,7 @@ impl<'a> Printer<'a> {
         ty_params: &[TyParam],
         params: &[Param],
         ret_ty: Option<&Ty>,
+        where_clause: &[Constraint],
         body: Idx<Expr>,
     ) {
         self.write("(lambda");
@@ -484,10 +530,94 @@ impl<'a> Printer<'a> {
             self.print_ty(ret);
             self.write_char(')');
         }
+        if !where_clause.is_empty() {
+            self.newline_indent();
+            self.print_where_clause(where_clause);
+        }
         self.newline_indent();
         self.print_expr(body);
         self.indent -= 2;
         self.write_char(')');
+    }
+
+    fn print_where_clause(&mut self, constraints: &[Constraint]) {
+        self.write("(where");
+        for c in constraints {
+            self.write_char(' ');
+            self.write(self.sym(c.ty_var));
+            self.write(" satisfies ");
+            self.print_ty(&c.bound);
+        }
+        self.write_char(')');
+    }
+
+    fn print_class_def(
+        &mut self,
+        name: Symbol,
+        ty_params: &[TyParam],
+        supers: &[Ty],
+        members: &[ClassMember],
+    ) {
+        self.write("(class ");
+        self.write(self.sym(name));
+        self.write(" [");
+        self.print_ty_params(ty_params);
+        self.write_char(']');
+        self.write(" (supers");
+        for s in supers {
+            self.write_char(' ');
+            self.print_ty(s);
+        }
+        self.write_char(')');
+        self.indent += 2;
+        self.write(" (members");
+        for m in members {
+            self.newline_indent();
+            self.print_class_member(m);
+        }
+        self.write_char(')');
+        self.indent -= 2;
+        self.write_char(')');
+    }
+
+    fn print_given_def(
+        &mut self,
+        class_app: &Ty,
+        constraints: &[Constraint],
+        members: &[ClassMember],
+    ) {
+        self.write("(given ");
+        self.print_ty(class_app);
+        if !constraints.is_empty() {
+            self.write_char(' ');
+            self.print_where_clause(constraints);
+        }
+        self.indent += 2;
+        self.write(" (members");
+        for m in members {
+            self.newline_indent();
+            self.print_class_member(m);
+        }
+        self.write_char(')');
+        self.indent -= 2;
+        self.write_char(')');
+    }
+
+    fn print_class_member(&mut self, member: &ClassMember) {
+        match member {
+            ClassMember::Method(idx) => {
+                self.print_expr(*idx);
+            }
+            ClassMember::Law { name, params, body, .. } => {
+                self.write("(law ");
+                self.write(self.sym(*name));
+                self.write_char(' ');
+                self.print_params_list(params);
+                self.write_char(' ');
+                self.print_expr(*body);
+                self.write_char(')');
+            }
+        }
     }
 
     fn print_record(
@@ -780,13 +910,6 @@ impl<'a> Printer<'a> {
 
     fn print_lit(&mut self, value: &LitValue) {
         match value {
-            LitValue::Bool(b) => {
-                self.write(if *b {
-                    "(lit_bool true)"
-                } else {
-                    "(lit_bool false)"
-                });
-            }
             LitValue::Int(n) => {
                 self.write("(lit_int ");
                 self.write(&n.to_string());

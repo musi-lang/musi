@@ -33,7 +33,7 @@ lit_char = "'", (escape_char | (char - "'")), "'";
 
 lit = lit_number | lit_string | lit_char;
 
-lex_keyword = "record" | "choice" | "fn" | "const" | "var" | "import" | "export" | "match" | "case" | "if" | "then" | "else" | "elif" | "while" | "loop" | "for" | "in" | "return" | "break" | "cycle" | "defer" | "and" | "or" | "xor" | "not" | "opaque" | "native" | "from" | "as" | "with" | "label";
+lex_keyword = "record" | "choice" | "fn" | "const" | "var" | "import" | "export" | "match" | "case" | "if" | "then" | "else" | "elif" | "while" | "loop" | "for" | "in" | "return" | "break" | "cycle" | "defer" | "and" | "or" | "xor" | "not" | "opaque" | "native" | "from" | "as" | "with" | "label" | "using" | "class" | "given" | "satisfies" | "where" | "law";
 
 atom_dot_lbrack = ".[";
 
@@ -162,6 +162,8 @@ ast_expr_atom =
   | ast_expr_cycle
   | ast_expr_defer
   | ast_expr_import
+  | ast_expr_export
+  | ast_expr_using
   | ast_expr_with_prefix;
 
 (* Unified ( ) form: unit, single expression, tuple, block -- left-factored on ( *)
@@ -180,9 +182,9 @@ ast_array_items  = ast_array_item, {",", ast_array_item};
 
 ast_array_item   = ast_expr | (spread_op, ast_expr);  (* <.. expr spreads an iterable *)
 
-ast_expr_rec_lit = "{", [rec_lit_field_list], "}";
+ast_expr_rec_lit = ".{", [rec_lit_field_list], "}";
 
-ast_rec_lit_field = (field_base, bind_init)            (* field := val              *)
+ast_rec_lit_field = (field_base, [bind_init])           (* field := val, or shorthand { x } = { x := x } *)
                   | (spread_op, ast_expr);              (* <.. expr spreads a record *)
 
 ast_block = "(", {ast_stmt}, [ast_expr], ")";
@@ -205,7 +207,14 @@ ast_expr_defer  = "defer", ast_expr;
 
 ast_expr_import = "import", ast_import_clause, "from", lit_string;
 
-ast_import_clause = "*" | ("{", import_item_list, "}");
+ast_import_clause = ("*", ["as", lex_id]) | ("{", import_item_list, "}");
+
+(* Re-export statement: export { name [as alias], ... } from "path" *)
+ast_expr_export = "export", "{", export_item_list, "}", "from", lit_string;
+ast_export_item = lex_id, ["as", lex_id];
+
+(* Resource acquisition: using name := init (body) -- semantics TBD *)
+ast_expr_using = "using", lex_id, ":=", ast_expr, ast_block;
 
 ast_import_item = lex_id, [ast_alias];
 
@@ -221,7 +230,9 @@ ast_expr_after_attrs =
   | ast_expr_loop                                    (* loop                  *)
   | ast_expr_for                                     (* for                   *)
   | ast_expr_match                                   (* match                 *)
-  | ast_expr_label;                                  (* label                 *)
+  | ast_expr_label                                   (* label                 *)
+  | ast_expr_def_class                               (* class -- no export    *)
+  | ast_expr_def_given;                              (* given -- no export    *)
 
 (* Declaration body -- dispatches on first keyword after optional modifiers   *)
 ast_expr_decl_kw =
@@ -246,14 +257,36 @@ ast_variant_payload = ("(", [ty_list], ")")        (* positional:   Name(T1, T2)
 ast_expr_def_fn = "fn", ast_fn_kind;
 
 ast_fn_kind =
-    lex_id, [ast_ty_params], ast_params, [ty_annot], [ast_block]    (* fn definition: fn name(...) *)
-  | [ast_ty_params], ast_params, [ty_annot], "=>", ast_expr;         (* lambda:        fn (...) =>  *)
+    lex_id, [ast_ty_params], ast_params, [ty_annot], [ast_where_clause], ["=>", ast_expr]  (* fn definition: fn name(...) => expr *)
+  | [ast_ty_params], ast_params, [ty_annot], [ast_where_clause], "=>", ast_expr;            (* lambda:        fn (...) => expr    *)
 
 ast_params = "(", [param_list], ")";
 
 ast_param = field_base, [ty_annot];
 
 ast_expr_bind = const_or_var, ast_pat, [ty_annot], [bind_init];
+
+(* ========================================================================= *)
+(* TYPE CLASS DECLARATIONS                                                   *)
+(* ========================================================================= *)
+(* class Eq['T] satisfies Foo['T], Bar['T] { fn ...; law ...; } *)
+ast_expr_def_class = "class", lex_id, [ast_ty_params], [ast_class_supers], "{", {class_member}, "}";
+
+ast_class_supers = "satisfies", ast_ty_named, {",", ast_ty_named};
+
+(* fn declarations (abstract or with default) and law declarations *)
+class_member = (ast_expr_def_fn | ast_class_law), ";";
+
+(* law name(params) => bool_expr -- implicitly Bool; no runtime enforcement *)
+ast_class_law = "law", lex_id, ast_params, "=>", ast_expr;
+
+(* given Eq[Int] { fn ... } or given Eq[Option['T]] where 'T satisfies Eq { fn ... } *)
+ast_expr_def_given = "given", ast_ty_named, [ast_where_clause], "{", {class_member}, "}";
+
+(* Post-hoc constraint clause: where 'T satisfies Ord, 'U satisfies Eq *)
+ast_where_clause = "where", ast_constraint, {",", ast_constraint};
+
+ast_constraint = ty_ident, "satisfies", ast_ty_named;
 
 (* Loop constructs -- [ast_attrs] and loop_label removed; handled by ast_expr_with_prefix *)
 ast_expr_while = "while", ast_cond, [guard], "loop", ast_block;
@@ -262,9 +295,11 @@ ast_expr_loop  = "loop", ast_block, ["while", ast_cond];
 
 ast_expr_for   = "for", ast_pat, "in", ast_expr, [guard], "loop", ast_block;
 
-ast_expr_match = "match", ast_expr, "with", ast_arm, {ast_arm};
+(* Match arms: ( arm | arm | ... ) -- no `case` keyword; | separates arms.
+   Top-level | in arm body must be parenthesized to avoid ambiguity with | separator. *)
+ast_expr_match = "match", ast_expr, "with", "(", ast_arm, {"|", ast_arm}, ")";
 
-ast_arm = [ast_attrs], "case", ast_pat, [guard], "=>", ast_expr;
+ast_arm = [ast_attrs], ast_pat, [guard], "=>", ast_expr;
 
 (* Labeled block -- replaces the old  name: while/loop/for  prefix syntax     *)
 ast_expr_label = "label", lex_id, ast_block;

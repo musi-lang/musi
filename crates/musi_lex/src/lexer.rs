@@ -7,7 +7,7 @@ use musi_shared::{DiagnosticBag, FileId, Interner, Span, Symbol};
 use crate::token::{Token, TokenKind, keyword_from_str};
 use crate::trivia::{Trivia, TriviaKind, TriviaRange};
 
-pub(crate) struct Lexer<'src> {
+pub struct Lexer<'src> {
     source: &'src [u8],
     pos: usize,
     file_id: FileId,
@@ -18,7 +18,7 @@ pub(crate) struct Lexer<'src> {
 }
 
 impl<'src> Lexer<'src> {
-    pub(crate) fn new(
+    pub(crate) const fn new(
         source: &'src str,
         file_id: FileId,
         interner: &'src mut Interner,
@@ -55,8 +55,6 @@ impl Iterator for Lexer<'_> {
         (0, Some(remaining + 1))
     }
 }
-
-// -- Internal helpers ---------------------------------------------------------
 
 impl Lexer<'_> {
     #[must_use]
@@ -148,8 +146,6 @@ impl Lexer<'_> {
     }
 }
 
-// -- Trivia collection --------------------------------------------------------
-
 impl Lexer<'_> {
     fn at_line_comment(&self) -> bool {
         self.peek() == Some(b'/') && self.peek_at(1) == Some(b'/')
@@ -165,7 +161,10 @@ impl Lexer<'_> {
         }
         self.consume_until_newline();
         let span = self.current_span(start);
-        self.trivia.push(Trivia { kind: TriviaKind::LineComment { doc_style }, span });
+        self.trivia.push(Trivia {
+            kind: TriviaKind::LineComment { doc_style },
+            span,
+        });
     }
 
     fn collect_whitespace_trivia(&mut self) {
@@ -174,13 +173,22 @@ impl Lexer<'_> {
             match self.peek() {
                 Some(b'\n') => {
                     let _ = self.advance();
-                    self.trivia.push(Trivia { kind: TriviaKind::Newline, span: self.current_span(start) });
+                    self.trivia.push(Trivia {
+                        kind: TriviaKind::Newline,
+                        span: self.current_span(start),
+                    });
                 }
                 Some(b) if b.is_ascii_whitespace() => {
-                    while self.peek().is_some_and(|b| b.is_ascii_whitespace() && b != b'\n') {
+                    while self
+                        .peek()
+                        .is_some_and(|b| b.is_ascii_whitespace() && b != b'\n')
+                    {
                         let _ = self.advance();
                     }
-                    self.trivia.push(Trivia { kind: TriviaKind::Whitespace, span: self.current_span(start) });
+                    self.trivia.push(Trivia {
+                        kind: TriviaKind::Whitespace,
+                        span: self.current_span(start),
+                    });
                 }
                 _ => break,
             }
@@ -207,10 +215,16 @@ impl Lexer<'_> {
             let trivia_start = self.pos;
             match self.peek() {
                 Some(b) if b.is_ascii_whitespace() && b != b'\n' => {
-                    while self.peek().is_some_and(|b| b.is_ascii_whitespace() && b != b'\n') {
+                    while self
+                        .peek()
+                        .is_some_and(|b| b.is_ascii_whitespace() && b != b'\n')
+                    {
                         let _ = self.advance();
                     }
-                    self.trivia.push(Trivia { kind: TriviaKind::Whitespace, span: self.current_span(trivia_start) });
+                    self.trivia.push(Trivia {
+                        kind: TriviaKind::Whitespace,
+                        span: self.current_span(trivia_start),
+                    });
                 }
                 Some(b'/') if self.at_line_comment() => {
                     self.collect_line_comment_trivia();
@@ -224,8 +238,6 @@ impl Lexer<'_> {
         TriviaRange { start, len: n }
     }
 }
-
-// -- Token dispatch -----------------------------------------------------------
 
 impl Lexer<'_> {
     fn next_token(&mut self) -> Token {
@@ -260,8 +272,6 @@ impl Lexer<'_> {
         tok
     }
 }
-
-// -- Token lexers -------------------------------------------------------------
 
 impl Lexer<'_> {
     fn lex_word(&mut self, start: usize) -> Token {
@@ -409,7 +419,8 @@ impl Lexer<'_> {
                                 2,
                             );
                             let _diag =
-                                self.diags.error("unknown escape sequence", span, self.file_id);
+                                self.diags
+                                    .error("unknown escape sequence", span, self.file_id);
                         }
                         None => return self.error_token("unterminated string literal", start),
                     }
@@ -532,8 +543,6 @@ impl Lexer<'_> {
         }
     }
 }
-
-// -- Character predicates -----------------------------------------------------
 
 #[must_use]
 const fn is_hex_digit(b: u8) -> bool {

@@ -25,7 +25,7 @@ fn run_src(src: &str) -> Value {
 
     assert!(!diags.has_errors(), "parse errors");
 
-    let module = emit(&prelude_module, &user_module, &interner).expect("emit failed");
+    let module = emit(&prelude_module, &[], &user_module, &interner).expect("emit failed");
     let main_fn_idx = u16::try_from(module.function_table.len() - 1).expect("fits");
     let mut vm = Vm::new(module);
     vm.run(main_fn_idx).expect("vm run failed")
@@ -72,6 +72,7 @@ fn hello_module() -> Module {
             },
         ],
         code,
+        method_table: Vec::new(),
     }
 }
 
@@ -107,6 +108,7 @@ fn halt_returns_top_of_stack() {
             code_length: code_len,
         }],
         code,
+        method_table: Vec::new(),
     };
 
     let mut vm = Vm::new(module);
@@ -139,6 +141,7 @@ fn local_store_and_load() {
             code_length: code_len,
         }],
         code,
+        method_table: Vec::new(),
     };
 
     let mut vm = Vm::new(module);
@@ -197,6 +200,7 @@ fn ret_returns_to_caller() {
             },
         ],
         code,
+        method_table: Vec::new(),
     };
 
     let mut vm = Vm::new(module);
@@ -300,6 +304,7 @@ fn while_loop_counts_to_10() {
             code_length: code_len,
         }],
         code,
+        method_table: Vec::new(),
     };
 
     let mut vm = Vm::new(module);
@@ -307,15 +312,11 @@ fn while_loop_counts_to_10() {
     assert_eq!(result, Value::Int(10), "y should equal 10 after loop");
 }
 
-// -- E2e pipeline tests (lex -> parse -> emit -> VM) ---
-
 #[test]
 fn factorial_compiles_and_runs() {
     let result = run_src(
         r#"
-fn factorial(n: Int): Int (
-    if n <= 1 then 1 else n * factorial(n - 1)
-);
+fn factorial(n: Int): Int => if n <= 1 then 1 else n * factorial(n - 1);
 factorial(10);
 "#,
     );
@@ -339,9 +340,10 @@ fn choice_match_compiles_and_runs() {
         r#"
 choice Option { Some(Int) | None };
 const x := Some(42);
-match x with
-    case Some(v) => v
-    case None => 0;
+match x with (
+    Some(v) => v
+  | None    => 0
+);
 "#,
     );
 }
@@ -356,8 +358,6 @@ p.x;
 "#,
     );
 }
-
-// -- VM-level opcode tests ---
 
 #[test]
 fn new_obj_and_ld_fld() {
@@ -384,6 +384,7 @@ fn new_obj_and_ld_fld() {
             code_length: code_len,
         }],
         code,
+        method_table: Vec::new(),
     };
     let mut vm = Vm::new(module);
     let result = vm.run(0).expect("vm run");
@@ -415,6 +416,7 @@ fn ld_tag_reads_discriminant() {
             code_length: code_len,
         }],
         code,
+        method_table: Vec::new(),
     };
     let mut vm = Vm::new(module);
     let result = vm.run(0).expect("vm run");
@@ -474,6 +476,7 @@ fn ld_fn_idx_and_call_dynamic() {
             },
         ],
         code,
+        method_table: Vec::new(),
     };
     let mut vm = Vm::new(module);
     let result = vm.run(1).expect("vm run");
@@ -504,8 +507,54 @@ fn dup_clones_top_of_stack() {
             code_length: code_len,
         }],
         code,
+        method_table: Vec::new(),
     };
     let mut vm = Vm::new(module);
     let result = vm.run(0).expect("vm run");
     assert_eq!(result, Value::Int(14));
+}
+
+#[test]
+fn ufcs_single_arg() {
+    let result = run_src(
+        r#"
+fn double(n: Int): Int => n * 2;
+const x := 5.double();
+x;
+"#,
+    );
+    assert_eq!(result, Value::Unit);
+}
+
+#[test]
+fn ufcs_two_arg() {
+    let result = run_src(
+        r#"
+fn my_add(a: Int, b: Int): Int => a + b;
+const r := 3.my_add(4);
+r;
+"#,
+    );
+    assert_eq!(result, Value::Unit);
+}
+
+#[test]
+fn class_given_dispatch() {
+    let result = run_src(
+        r#"
+class Eq['T] {
+    fn eq(a: 'T, b: 'T): Bool;
+};
+
+given Eq[Int] {
+    fn eq(a: Int, b: Int): Bool => a = b;
+};
+
+const x := 5;
+const y := 5;
+const same := x.eq(y);
+same;
+"#,
+    );
+    assert_eq!(result, Value::Unit);
 }

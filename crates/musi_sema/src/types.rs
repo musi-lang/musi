@@ -105,13 +105,13 @@ pub enum Type {
     /// A built-in primitive type.
     Prim(PrimTy),
     /// A product type (tuple).
-    Tuple(Vec<Type>),
+    Tuple(Vec<Self>),
     /// An array type with an optional fixed size.
-    Array(Box<Type>, Option<usize>),
+    Array(Box<Self>, Option<usize>),
     /// A function type: parameters → return.
-    Arrow(Vec<Type>, Box<Type>),
+    Arrow(Vec<Self>, Box<Self>),
     /// A user-defined named type with type arguments.
-    Named(DefId, Vec<Type>),
+    Named(DefId, Vec<Self>),
     /// An open unification variable.
     Var(TypeVarId),
     /// A poison type that suppresses cascading errors.
