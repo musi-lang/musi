@@ -1,4 +1,3 @@
-// Iterative Fibonacci using mutable variables and a while loop
 fn fib(n: Int): Int => (
     var a := 0;
     var b := 1;

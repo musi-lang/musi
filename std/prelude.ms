@@ -1,5 +1,3 @@
-// std/prelude.ms -- standard definitions always in scope
-
 #[intrinsic("int")]   export native opaque record Int {};
 #[intrinsic("nat")]   export native opaque record Nat {};
 #[intrinsic("float")] export native opaque record Float {};
@@ -32,8 +30,6 @@ export choice Expect['T, 'E] { Fail('E) | Pass('T) };  // explicit error handlin
 #[intrinsic("write")]         export native fn write(s: String): Unit;
 #[intrinsic("int_to_string")]   export native fn int_to_string(n: Int): String;
 #[intrinsic("float_to_string")] export native fn float_to_string(n: Float): String;
-
-// -- Type class declarations --------------------------------------------------
 
 class Eq['T] {
     fn eq(a: 'T, b: 'T): Bool;
@@ -71,8 +67,6 @@ class Rem['T] {
 class Show['T] {
     fn show(a: 'T): String;
 };
-
-// -- Given instances for built-in types ---------------------------------------
 
 given Eq[Int] {
     fn eq(a: Int, b: Int): Bool => a = b;

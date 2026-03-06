@@ -396,11 +396,9 @@ impl<'a> Resolver<'a> {
     fn resolve_cond(&mut self, cond: &Cond, ctx: &AstArenas, scope: ScopeId) {
         match cond {
             Cond::Expr(e) => self.resolve_expr(*e, ctx, scope),
-            Cond::Case {
-                pat, init, kind, ..
-            } => {
+            Cond::Case { pat, init, .. } => {
                 self.resolve_expr(*init, ctx, scope);
-                self.collect_pat_defs(pat, *kind, scope);
+                self.collect_pat_defs(pat, BindKind::Const, scope);
                 self.resolve_pat(pat, ctx, scope);
             }
         }
@@ -457,6 +455,11 @@ impl<'a> Resolver<'a> {
             | Pat::Lit { .. }
             | Pat::Wild { .. }
             | Pat::Error { .. } => {}
+            Pat::DotPrefix { args, .. } => {
+                for a in args {
+                    self.resolve_pat(a, ctx, scope);
+                }
+            }
         }
     }
 
@@ -515,6 +518,11 @@ impl<'a> Resolver<'a> {
                 }
             }
             Pat::Lit { .. } | Pat::Wild { .. } | Pat::Error { .. } => {}
+            Pat::DotPrefix { args, .. } => {
+                for a in args {
+                    self.collect_pat_defs(a, kind, scope);
+                }
+            }
         }
     }
 

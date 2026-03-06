@@ -1107,7 +1107,8 @@ impl<'a> TypeChecker<'a> {
             | Pat::Error { .. }
             | Pat::Arr { .. }
             | Pat::AnonRec { .. }
-            | Pat::Or { .. } => {}
+            | Pat::Or { .. }
+            | Pat::DotPrefix { .. } => {}
         }
     }
 

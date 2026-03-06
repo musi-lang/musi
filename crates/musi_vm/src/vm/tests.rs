@@ -577,3 +577,45 @@ writeln(int_to_string(v3.x));
 "#,
     );
 }
+
+#[test]
+fn match_arm_guard_filters_correctly() {
+    let _r = run_src(r#"
+choice Num { Small(Int) | Large(Int) };
+const x := Small(3);
+const y := Large(10);
+const r1 := match x with (
+    Small(v) if v > 5 => 1
+  | Small(v) => 2
+  | Large(_) => 3
+);
+const r2 := match y with (
+    Small(v) if v > 5 => 1
+  | Small(v) => 2
+  | Large(_) => 3
+);
+writeln(int_to_string(r1));
+writeln(int_to_string(r2));
+"#);
+}
+
+#[test]
+fn dot_prefix_pattern_in_match() {
+    let _r = run_src(r#"
+const x := .Some(42);
+const result := match x with (
+    .Some(v) => v
+  | .None => 0
+);
+writeln(int_to_string(result));
+"#);
+}
+
+#[test]
+fn if_case_pattern_binding() {
+    let _r = run_src(r#"
+const x := .Some(7);
+if case .Some(v) := x then
+    writeln(int_to_string(v));
+"#);
+}

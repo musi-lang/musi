@@ -1,4 +1,3 @@
-// Algebraic data types (choice) and pattern matching
 choice Shape {
     Circle(Int)
   | Rect(Int, Int)

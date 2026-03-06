@@ -913,6 +913,15 @@ impl<'a> Printer<'a> {
                 }
                 self.write("])");
             }
+            Pat::DotPrefix { name, args, .. } => {
+                self.write("(dot-pat ");
+                self.write(self.sym(*name));
+                for a in args {
+                    self.write_char(' ');
+                    self.print_pat(a);
+                }
+                self.write_char(')');
+            }
             Pat::Error { .. } => self.write("error_pat"),
         }
     }
@@ -958,15 +967,8 @@ impl<'a> Printer<'a> {
     fn print_cond(&mut self, cond: &Cond) {
         match cond {
             Cond::Expr(idx) => self.print_expr(*idx),
-            Cond::Case {
-                kind, pat, init, ..
-            } => {
+            Cond::Case { pat, init, .. } => {
                 self.write("(case ");
-                match kind {
-                    BindKind::Const => self.write("const"),
-                    BindKind::Var => self.write("var"),
-                }
-                self.write_char(' ');
                 self.print_pat(pat);
                 self.write(" := ");
                 self.print_expr(*init);

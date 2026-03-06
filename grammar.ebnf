@@ -134,14 +134,20 @@ ty_param_list = ty_ident, {",", ty_ident};
 (* ========================================================================= *)
 ast_pat = ast_pat_primary, ["or", ast_pat_primary, {"or", ast_pat_primary}];
 
-ast_pat_primary = ast_pat_ident | ast_pat_lit | ast_pat_wild | ast_pat_prod | ast_pat_arr | ast_pat_anon_rec;
+ast_pat_primary = ast_pat_ident | ast_pat_lit | ast_pat_wild | ast_pat_prod | ast_pat_arr | ast_pat_anon_rec | ast_pat_dot_prefix;
 
 (* lex_id alone = variable bind; with (...) = positional sum; with {...} = named-field sum *)
-ast_pat_ident        = lex_id, [ast_pat_ident_suffix];
+(* ["var"] prefix marks the binding as mutable; mutability lives at the binding site *)
+ast_pat_ident        = ["var"], lex_id, [ast_pat_ident_suffix];
 ast_pat_ident_suffix = "(", [pat_list], ")"
                      | "{", [ast_pat_rec_field, {",", ast_pat_rec_field}], "}";
 
 ast_pat_anon_rec = "{", [ast_pat_rec_field, {",", ast_pat_rec_field}], "}";
+
+(* "." at start of pattern is unambiguous -- LL(1): Dot not in FIRST of any other pat form *)
+(* .None              -- zero-arg constructor                                               *)
+(* .Some(v)           -- call form                                                          *)
+ast_pat_dot_prefix = ".", lex_id, ["(", [pat_list], ")"];
 
 ast_pat_lit  = lit;
 
@@ -203,7 +209,7 @@ ast_rec_lit_field = (field_base, [bind_init])           (* field := val, or shor
 
 ast_block = "(", {ast_stmt}, [ast_expr], ")";
 
-ast_cond = ast_expr | ("case", (const_or_var), ast_pat, bind_init);
+ast_cond = ast_expr | ("case", ast_pat, bind_init);
 
 ast_expr_if = "if", ast_cond, "then", ast_expr, {elif_clause}, [else_clause];
 
@@ -395,3 +401,4 @@ ast_root = {ast_stmt};
 (* expr?.field    -- optional chaining      (ast_opt_field postfix)          *)
 (* expr ?? dflt   -- nil coalescing         (ast_expr_nil_coal, BP 0125)     *)
 (* .Name(args)    -- dot-prefix constructor (ast_expr_dot_prefix)            *)
+(* Match arm guards are already in the grammar: ast_arm = [attrs], ast_pat, [guard], "=>", ast_expr *)

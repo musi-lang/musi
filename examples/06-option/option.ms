@@ -1,4 +1,3 @@
-// Option type from the prelude: None and Some
 fn safe_div(a: Int, b: Int): Option[Int] =>
     if b = 0 then None else Some(a / b);
 

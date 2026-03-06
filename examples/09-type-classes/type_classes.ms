@@ -1,4 +1,3 @@
-// Demonstrates UFCS with type classes defined in the prelude.
 // a.max(b) routes through given Ord[Int]; a.show() through given Show[Int].
 
 const a := 3;

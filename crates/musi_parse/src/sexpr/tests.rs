@@ -233,10 +233,12 @@
                 args: vec![Pat::Ident {
                     name: x_sym,
                     suffix: None,
+                    is_mut: false,
                     span: Span::DUMMY,
                 }],
                 span: Span::DUMMY,
             }),
+            is_mut: false,
             span: Span::DUMMY,
         };
 
@@ -292,6 +294,7 @@
             pat: Pat::Ident {
                 name: a_sym,
                 suffix: None,
+                is_mut: false,
                 span: Span::DUMMY,
             },
             ty: Some(ty),

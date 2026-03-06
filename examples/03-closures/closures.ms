@@ -1,4 +1,3 @@
-// Lambdas and higher-order functions
 const double := fn(x: Int): Int => x * 2;
 const add := fn(a: Int, b: Int): Int => a + b;
 

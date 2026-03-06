@@ -2,7 +2,7 @@ use musi_lex::lex;
 use musi_shared::{DiagnosticBag, FileId, Interner};
 
 use super::*;
-use crate::ast::{BinOp, Expr};
+use crate::ast::{BinOp, Cond, Expr, Pat};
 
 fn lex_and_parse(src: &str) -> (ParsedModule, DiagnosticBag) {
     let mut interner = Interner::new();
@@ -366,4 +366,52 @@ fn parse_optional_chain() {
     let Expr::Bind { init: Some(init_idx), .. } = expr else { panic!("expected Bind") };
     let init = module.ctx.exprs.get(*init_idx);
     assert!(matches!(init, Expr::Postfix { op: PostfixOp::OptField { .. }, .. }), "expected OptField");
+}
+
+// 29. Dot-prefix pattern in match arm
+#[test]
+fn parse_dot_prefix_pattern_in_match() {
+    let module = parse_ok("match x with (.Some(v) => v | .None => 0);");
+    assert_eq!(module.items.len(), 1);
+    let expr = module.ctx.exprs.get(module.items[0]);
+    assert!(matches!(expr, Expr::Match { .. }), "expected Match");
+}
+
+// 30. var prefix in case pattern
+#[test]
+fn parse_var_in_case_pattern() {
+    let module = parse_ok("if case .Some(var v) := x then v;");
+    assert_eq!(module.items.len(), 1);
+    let expr = module.ctx.exprs.get(module.items[0]);
+    let Expr::If { cond, .. } = expr else { panic!("expected If") };
+    let Cond::Case { pat, .. } = cond.as_ref() else { panic!("expected Case cond") };
+    let Pat::DotPrefix { args, .. } = pat else { panic!("expected DotPrefix in case") };
+    assert_eq!(args.len(), 1);
+    assert!(
+        matches!(args[0], Pat::Ident { is_mut: true, .. }),
+        "expected mutable binding inside DotPrefix, got: {:?}",
+        args[0]
+    );
+}
+
+// 31. match arm guard
+#[test]
+fn parse_match_arm_guard() {
+    let module = parse_ok("match x with (Some(v) if v > 0 => v | _ => 0);");
+    assert_eq!(module.items.len(), 1);
+    let expr = module.ctx.exprs.get(module.items[0]);
+    let Expr::Match { arms, .. } = expr else { panic!("expected Match") };
+    assert!(arms[0].guard.is_some(), "first arm should have a guard");
+    assert!(arms[1].guard.is_none(), "second arm should have no guard");
+}
+
+// 32. if case without const/var keyword
+#[test]
+fn parse_if_case_no_bind_kind() {
+    let module = parse_ok("if case .Some(v) := thing then v else 0;");
+    assert_eq!(module.items.len(), 1);
+    let expr = module.ctx.exprs.get(module.items[0]);
+    let Expr::If { cond, else_body, .. } = expr else { panic!("expected If") };
+    assert!(matches!(cond.as_ref(), Cond::Case { .. }), "expected Case cond");
+    assert!(else_body.is_some(), "expected else branch");
 }

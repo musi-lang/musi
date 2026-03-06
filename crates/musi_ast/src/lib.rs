@@ -140,12 +140,11 @@ pub enum VariantPayload {
 }
 
 /// A condition in `if`/`while`/`loop` -- either a plain expression or a
-/// pattern-binding destructure: `case const/var pat := expr`.
+/// pattern-binding destructure: `case pat := expr`.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Cond {
     Expr(Idx<Expr>),
     Case {
-        kind: BindKind,
         pat: Pat,
         init: Idx<Expr>,
         span: Span,
@@ -262,6 +261,12 @@ pub enum Pat {
     Ident {
         name: Symbol,
         suffix: Option<PatSuffix>,
+        is_mut: bool,
+        span: Span,
+    },
+    DotPrefix {
+        name: Symbol,
+        args: Vec<Pat>,
         span: Span,
     },
     Lit {

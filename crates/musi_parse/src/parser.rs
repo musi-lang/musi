@@ -660,12 +660,10 @@ impl<'a> Parser<'a> {
         if self.at(TokenKind::Case) {
             let start = self.start_span();
             let _case = self.advance();
-            let kind = self.parse_bind_kind();
             let pat = self.parse_pat();
             let _bind = self.expect(TokenKind::ColonEq);
             let init = self.parse_and_alloc_expr();
             Cond::Case {
-                kind,
                 pat,
                 init,
                 span: self.finish_span(start),
@@ -1419,7 +1417,26 @@ impl<'a> Parser<'a> {
 
     fn parse_pat_primary(&mut self) -> Pat {
         match self.peek_kind() {
-            TokenKind::Ident => self.parse_pat_ident(),
+            TokenKind::Ident => self.parse_pat_ident(false),
+            TokenKind::Var => {
+                let _ = self.advance();
+                self.parse_pat_ident(true)
+            }
+            TokenKind::Dot => {
+                let start = self.start_span();
+                let _ = self.advance();
+                let name = self.expect_symbol();
+                let args = if self.at(TokenKind::LParen) {
+                    self.parse_delimited(TokenKind::LParen, TokenKind::RParen, Parser::parse_pat)
+                } else {
+                    Vec::new()
+                };
+                Pat::DotPrefix {
+                    name,
+                    args,
+                    span: self.finish_span(start),
+                }
+            }
             TokenKind::Underscore => {
                 let start = self.start_span();
                 let _us = self.advance();
@@ -1472,7 +1489,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_pat_ident(&mut self) -> Pat {
+    fn parse_pat_ident(&mut self, is_mut: bool) -> Pat {
         let start = self.start_span();
         let name = self.expect_symbol();
         match self.peek_kind() {
@@ -1484,6 +1501,7 @@ impl<'a> Parser<'a> {
                 Pat::Ident {
                     name,
                     suffix: Some(PatSuffix::Positional { args, span }),
+                    is_mut,
                     span,
                 }
             }
@@ -1494,6 +1512,7 @@ impl<'a> Parser<'a> {
                 Pat::Ident {
                     name,
                     suffix: Some(PatSuffix::Named { fields, span }),
+                    is_mut,
                     span,
                 }
             }
@@ -1501,6 +1520,7 @@ impl<'a> Parser<'a> {
             _ => Pat::Ident {
                 name,
                 suffix: None,
+                is_mut,
                 span: self.finish_span(start),
             },
         }

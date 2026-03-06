@@ -1,4 +1,3 @@
-// Importing functions from the standard library
 import { unwrap_or, map } from "std/core/Option";
 
 const x := map(Some(21), fn(n: Int): Int => n * 2);
