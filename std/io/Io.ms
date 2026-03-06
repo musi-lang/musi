@@ -1,2 +1,3 @@
 // writeln and write are in the prelude.
-// Future: file I/O, stdin reading, formatting.
+
+#[intrinsic("read_line")] export native fn read_line(): String;

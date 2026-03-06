@@ -1,3 +1,10 @@
+#[intrinsic("float_sqrt")]  export native fn float_sqrt(n: Float): Float;
+#[intrinsic("float_pow")]   export native fn float_pow(base: Float, exp: Float): Float;
+#[intrinsic("float_floor")] export native fn float_floor(n: Float): Float;
+#[intrinsic("float_ceil")]  export native fn float_ceil(n: Float): Float;
+
+export fn float_round(n: Float): Float => float_floor(n + 0.5);
+
 export fn float_abs(n: Float): Float => if n < 0.0 then 0.0 - n else n;
 export fn float_min(a: Float, b: Float): Float => if a < b then a else b;
 export fn float_max(a: Float, b: Float): Float => if a > b then a else b;
