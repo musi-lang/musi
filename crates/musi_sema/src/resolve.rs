@@ -10,11 +10,10 @@
 
 use std::collections::HashMap;
 
-use musi_parse::ast::{
-    ArrayItem, BindKind, ChoiceVariant, Cond, ElifChain, Expr, MatchArm, Pat, PatField, PatSuffix,
-    PostfixOp, RecLitField, VariantPayload,
+use musi_ast::{
+    ArrayItem, AstArenas, BindKind, ChoiceVariant, Cond, ElifBranch, Expr, FieldInit, MatchArm,
+    Pat, PatField, PatSuffix, ParsedModule, PostfixOp, VariantPayload,
 };
-use musi_parse::{ParseCtx, ParsedModule};
 use musi_shared::{DiagnosticBag, FileId, Idx, Interner, Span, Symbol};
 
 use crate::def::{DefId, DefInfo, DefKind};
@@ -126,7 +125,7 @@ impl<'a> Resolver<'a> {
     ///
     /// For binding constructs (`Bind`, `FnDef`, etc.) this also registers the
     /// newly introduced names into the appropriate scope.
-    fn resolve_expr(&mut self, idx: Idx<Expr>, ctx: &ParseCtx, scope: ScopeId) {
+    fn resolve_expr(&mut self, idx: Idx<Expr>, ctx: &AstArenas, scope: ScopeId) {
         let expr = ctx.exprs.get(idx);
         match expr {
             Expr::Ident { name, span } => {
@@ -352,7 +351,7 @@ impl<'a> Resolver<'a> {
 
     /// Resolves a statement that appears directly inside a block, with special
     /// handling for declarations that extend the block's scope.
-    fn resolve_block_stmt(&mut self, stmt: Idx<Expr>, ctx: &ParseCtx, block_scope: ScopeId) {
+    fn resolve_block_stmt(&mut self, stmt: Idx<Expr>, ctx: &AstArenas, block_scope: ScopeId) {
         let expr = ctx.exprs.get(stmt);
         match expr {
             Expr::FnDef { name, span, .. } => {
@@ -390,7 +389,7 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    fn resolve_cond(&mut self, cond: &Cond, ctx: &ParseCtx, scope: ScopeId) {
+    fn resolve_cond(&mut self, cond: &Cond, ctx: &AstArenas, scope: ScopeId) {
         match cond {
             Cond::Expr(e) => self.resolve_expr(*e, ctx, scope),
             Cond::Case {
@@ -403,7 +402,7 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    fn resolve_elif(&mut self, chain: &ElifChain, ctx: &ParseCtx, scope: ScopeId) {
+    fn resolve_elif(&mut self, chain: &ElifBranch, ctx: &AstArenas, scope: ScopeId) {
         self.resolve_cond(&chain.cond, ctx, scope);
         if let Some(&g) = chain.guard.as_ref() {
             self.resolve_expr(g, ctx, scope);
@@ -411,7 +410,7 @@ impl<'a> Resolver<'a> {
         self.resolve_expr(chain.body, ctx, scope);
     }
 
-    fn resolve_match_arm(&mut self, arm: &MatchArm, ctx: &ParseCtx, scope: ScopeId) {
+    fn resolve_match_arm(&mut self, arm: &MatchArm, ctx: &AstArenas, scope: ScopeId) {
         let arm_scope = self.scopes.push_child(scope);
         self.collect_pat_defs(&arm.pat, BindKind::Const, arm_scope);
         self.resolve_pat(&arm.pat, ctx, arm_scope);
@@ -421,7 +420,7 @@ impl<'a> Resolver<'a> {
         self.resolve_expr(arm.body, ctx, arm_scope);
     }
 
-    fn resolve_pat(&mut self, pat: &Pat, ctx: &ParseCtx, scope: ScopeId) {
+    fn resolve_pat(&mut self, pat: &Pat, ctx: &AstArenas, scope: ScopeId) {
         match pat {
             Pat::Ident {
                 suffix: Some(PatSuffix::Positional { args, .. }),
@@ -461,16 +460,16 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    fn resolve_pat_field(&mut self, field: &PatField, ctx: &ParseCtx, scope: ScopeId) {
+    fn resolve_pat_field(&mut self, field: &PatField, ctx: &AstArenas, scope: ScopeId) {
         if let Some(ref sub) = field.pat {
             self.resolve_pat(sub, ctx, scope);
         }
     }
 
-    fn resolve_rec_lit_field(&mut self, field: &RecLitField, ctx: &ParseCtx, scope: ScopeId) {
+    fn resolve_rec_lit_field(&mut self, field: &FieldInit, ctx: &AstArenas, scope: ScopeId) {
         match field {
-            RecLitField::Named { value, .. } => self.resolve_expr(*value, ctx, scope),
-            RecLitField::Spread { expr: e, .. } => self.resolve_expr(*e, ctx, scope),
+            FieldInit::Named { value, .. } => self.resolve_expr(*value, ctx, scope),
+            FieldInit::Spread { expr: e, .. } => self.resolve_expr(*e, ctx, scope),
         }
     }
 

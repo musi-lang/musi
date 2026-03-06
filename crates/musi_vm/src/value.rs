@@ -4,22 +4,19 @@ use core::fmt;
 use std::rc::Rc;
 
 /// A Musi runtime value.
-///
-/// `Clone` is implemented manually so that the `Rc<str>` variant uses
-/// [`Rc::clone`] (the associated-function form) rather than method syntax,
-/// satisfying `clippy::clone_on_ref_ptr`.
 #[derive(Debug, PartialEq)]
 pub enum Value {
-    /// A 64-bit signed integer.
     Int(i64),
-    /// A 64-bit IEEE 754 float.
     Float(f64),
-    /// A boolean.
     Bool(bool),
-    /// A reference-counted, immutable UTF-8 string.
     String(Rc<str>),
-    /// The unit value -- the type with exactly one inhabitant.
     Unit,
+    /// A first-class function reference (index into the module function table).
+    Function(u16),
+    /// A heap-allocated object (record or choice variant).
+    /// Layout: for records, fields are in declaration order.
+    /// For choices: field[0] = discriminant (Int), field[1..] = payload.
+    Object(Rc<Vec<Value>>),
 }
 
 impl Clone for Value {
@@ -30,6 +27,8 @@ impl Clone for Value {
             Self::Bool(v) => Self::Bool(*v),
             Self::String(s) => Self::String(Rc::clone(s)),
             Self::Unit => Self::Unit,
+            Self::Function(idx) => Self::Function(*idx),
+            Self::Object(rc) => Self::Object(Rc::clone(rc)),
         }
     }
 }
@@ -42,6 +41,8 @@ impl fmt::Display for Value {
             Self::Bool(v) => write!(f, "{v}"),
             Self::String(s) => write!(f, "{s}"),
             Self::Unit => write!(f, "()"),
+            Self::Function(idx) => write!(f, "<fn {idx}>"),
+            Self::Object(_) => write!(f, "<object>"),
         }
     }
 }

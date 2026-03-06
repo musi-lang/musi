@@ -1,5 +1,5 @@
     use super::*;
-    use crate::ast::{ParseCtx, ParsedModule};
+    use crate::ast::{AstArenas, ParsedModule};
     use crate::parser::parse;
     use musi_shared::{DiagnosticBag, FileId, Interner, Span};
 
@@ -9,9 +9,8 @@
         let mut interner = Interner::new();
         let mut diags = DiagnosticBag::new();
         let file_id = FileId(0);
-        let tokens: Vec<_> =
-            musi_lex::Lexer::new(src, file_id, &mut interner, &mut diags).collect();
-        let module = parse(&tokens, file_id, &mut diags, &interner);
+        let lexed = musi_lex::lex(src, file_id, &mut interner, &mut diags);
+        let module = parse(&lexed.tokens, file_id, &mut diags, &interner);
         (module, interner)
     }
 
@@ -24,7 +23,7 @@
 
     #[test]
     fn error_node_does_not_crash() {
-        let mut ctx = ParseCtx::new();
+        let mut ctx = AstArenas::new();
         let err = ctx.exprs.alloc(Expr::Error {
             span: Span::new(0, 1),
         });
@@ -41,7 +40,7 @@
 
     #[test]
     fn dump_expr_single_error() {
-        let mut ctx = ParseCtx::new();
+        let mut ctx = AstArenas::new();
         let err = ctx.exprs.alloc(Expr::Error {
             span: Span::new(0, 1),
         });
@@ -59,7 +58,7 @@
     fn no_spans_in_output() {
         let mut interner = Interner::new();
         let name_sym = interner.intern("x");
-        let mut ctx = ParseCtx::new();
+        let mut ctx = AstArenas::new();
         let ident = ctx.exprs.alloc(Expr::Ident {
             name: name_sym,
             span: Span::new(42, 7),
@@ -79,7 +78,7 @@
     fn binary_precedence_nesting() {
         // Build `1 + 2 * 3` manually: Binary(+, 1, Binary(*, 2, 3))
         let interner = Interner::new();
-        let mut ctx = ParseCtx::new();
+        let mut ctx = AstArenas::new();
         let one = ctx.exprs.alloc(Expr::Lit {
             value: LitValue::Int(1),
             span: Span::new(0, 1),
@@ -117,7 +116,7 @@
     fn lit_str_rendering() {
         let mut interner = Interner::new();
         let hello = interner.intern("Hello, world!");
-        let mut ctx = ParseCtx::new();
+        let mut ctx = AstArenas::new();
         let lit = ctx.exprs.alloc(Expr::Lit {
             value: LitValue::Str(hello),
             span: Span::new(0, 15),
@@ -139,7 +138,7 @@
         let b_sym = interner.intern("b");
         let int_sym = interner.intern("Int32");
 
-        let mut ctx = ParseCtx::new();
+        let mut ctx = AstArenas::new();
 
         let a_ident = ctx.exprs.alloc(Expr::Ident {
             name: a_sym,
@@ -204,7 +203,7 @@
 
     #[test]
     fn unit_and_bool_rendering() {
-        let mut ctx = ParseCtx::new();
+        let mut ctx = AstArenas::new();
         let unit = ctx.exprs.alloc(Expr::Unit { span: Span::DUMMY });
         let bool_true = ctx.exprs.alloc(Expr::Lit {
             value: LitValue::Bool(true),
@@ -240,7 +239,7 @@
             span: Span::DUMMY,
         };
 
-        let mut ctx = ParseCtx::new();
+        let mut ctx = AstArenas::new();
         let scrutinee = ctx.exprs.alloc(Expr::Ident {
             name: x_sym,
             span: Span::DUMMY,
@@ -284,7 +283,7 @@
             span: Span::DUMMY,
         };
 
-        let mut ctx = ParseCtx::new();
+        let mut ctx = AstArenas::new();
         let bind = ctx.exprs.alloc(Expr::Bind {
             attrs: vec![],
             modifiers: vec![],

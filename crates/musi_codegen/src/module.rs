@@ -2,7 +2,7 @@
 
 use core::str;
 
-use crate::error::DeserError;
+use crate::error::{CodegenError, DeserError};
 
 /// Magic bytes at the start of every `.mso` file.
 const MAGIC: [u8; 4] = *b"MUSI";
@@ -290,6 +290,45 @@ impl Module {
             function_table,
             code,
         })
+    }
+
+    /// Appends a symbol entry and returns its index.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CodegenError::TooManySymbols`] if the symbol table already
+    /// contains `u16::MAX` entries.
+    pub fn push_symbol(&mut self, entry: SymbolEntry) -> Result<u16, CodegenError> {
+        let idx =
+            u16::try_from(self.symbol_table.len()).map_err(|_| CodegenError::TooManySymbols)?;
+        self.symbol_table.push(entry);
+        Ok(idx)
+    }
+
+    /// Appends a function entry and returns its index.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CodegenError::TooManyFunctions`] if the function table already
+    /// contains `u16::MAX` entries.
+    pub fn push_function(&mut self, entry: FunctionEntry) -> Result<u16, CodegenError> {
+        let idx =
+            u16::try_from(self.function_table.len()).map_err(|_| CodegenError::TooManyFunctions)?;
+        self.function_table.push(entry);
+        Ok(idx)
+    }
+
+    /// Appends a const-pool entry and returns its index.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CodegenError::TooManyConstants`] if the const pool already
+    /// contains `u16::MAX` entries.
+    pub fn push_const(&mut self, entry: ConstEntry) -> Result<u16, CodegenError> {
+        let idx =
+            u16::try_from(self.const_pool.len()).map_err(|_| CodegenError::TooManyConstants)?;
+        self.const_pool.push(entry);
+        Ok(idx)
     }
 }
 

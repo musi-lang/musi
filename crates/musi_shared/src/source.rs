@@ -6,20 +6,14 @@ use core::fmt;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct FileId(pub u32);
 
-/// A single source file: its identity, name, contents, and line-start index.
 pub struct SourceFile {
-    /// Unique identifier for this file within the [`SourceDb`].
     pub id: FileId,
-    /// Display name (typically the file path).
     pub name: Box<str>,
-    /// Full source text.
     pub source: Box<str>,
-    /// Byte offsets of each line start. `line_starts[0]` is always 0.
     line_starts: Vec<u32>,
 }
 
 impl SourceFile {
-    /// Creates a new `SourceFile`, computing line-start offsets from `source`.
     fn new(id: FileId, name: String, source: String) -> Self {
         let line_starts = compute_line_starts(&source);
         Self {
@@ -49,17 +43,16 @@ pub struct SourceDb {
 }
 
 impl SourceDb {
-    /// Creates an empty `SourceDb`.
     #[must_use]
     pub const fn new() -> Self {
         Self { files: Vec::new() }
     }
 
-    /// Adds a file to the database, returning its [`FileId`].
+    /// Adds a file and returns its [`FileId`].
     ///
     /// # Panics
     ///
-    /// Panics if the number of files exceeds `u32::MAX`.
+    /// Panics if the file count exceeds `u32::MAX`.
     pub fn add(&mut self, name: impl Into<String>, source: impl Into<String>) -> FileId {
         let id = FileId(u32::try_from(self.files.len()).expect("file count fits in u32"));
         let file = SourceFile::new(id, name.into(), source.into());
@@ -67,13 +60,11 @@ impl SourceDb {
         id
     }
 
-    /// Returns the full source text for the given file.
     #[must_use]
     pub fn source(&self, file_id: FileId) -> &str {
         &self.file(file_id).source
     }
 
-    /// Returns the display name for the given file.
     #[must_use]
     pub fn name(&self, file_id: FileId) -> &str {
         &self.file(file_id).name
@@ -96,12 +87,12 @@ impl SourceDb {
         (line, col)
     }
 
-    /// Returns the text of a 1-based `line` number, without any trailing newline.
+    /// Returns the text of 1-based line number `line`, without trailing newline.
     ///
     /// # Panics
     ///
-    /// Panics if `line` is zero or beyond the number of lines in the file.
-    #[allow(clippy::string_slice)] // line-start offsets are always at char boundaries
+    /// Panics if `line` is zero or out of range.
+    #[allow(clippy::string_slice)]
     #[must_use]
     pub fn get_line(&self, file_id: FileId, line: u32) -> &str {
         let file = self.file(file_id);
@@ -123,17 +114,12 @@ impl SourceDb {
         raw.trim_end_matches('\n').trim_end_matches('\r')
     }
 
-    /// Returns the [`SourceFile`] for a given [`FileId`].
     fn file(&self, file_id: FileId) -> &SourceFile {
         let idx = usize::try_from(file_id.0).expect("file id fits in usize");
         &self.files[idx]
     }
 }
 
-/// Computes byte offsets of line starts within `source`.
-///
-/// The first entry is always 0 (the start of the first line).  Every subsequent
-/// entry is the byte offset immediately after a `\n`.
 fn compute_line_starts(source: &str) -> Vec<u32> {
     let mut starts = vec![0u32];
     for (i, byte) in source.bytes().enumerate() {

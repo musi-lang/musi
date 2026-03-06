@@ -1,20 +1,40 @@
-    use super::*;
+use std::rc::Rc;
 
-    #[test]
-    fn registry_has_writeln_and_write() {
-        let reg = NativeRegistry::new();
-        assert!(reg.get(intrinsics::WRITELN).is_some());
-        assert!(reg.get(intrinsics::WRITE).is_some());
-        assert!(reg.get(99).is_none());
-    }
+use musi_codegen::intrinsics::Intrinsic;
+use musi_codegen::Module;
 
-    #[test]
-    fn register_overrides_handler() {
-        let mut reg = NativeRegistry::new();
-        fn custom(_vm: &Vm, _args: &[Value]) -> Value {
-            Value::Int(42)
-        }
-        reg.register(intrinsics::WRITELN, custom);
-        // Lookup still works; the handler itself changed (we just verify it's Some).
-        assert!(reg.get(intrinsics::WRITELN).is_some());
-    }
+use super::*;
+use crate::value::Value;
+use crate::vm::Vm;
+
+fn make_vm() -> Vm {
+    Vm::new(Module::new())
+}
+
+#[test]
+fn writeln_returns_unit() {
+    let vm = make_vm();
+    let result = dispatch(&vm, Intrinsic::Writeln, &[Value::String(Rc::from("test"))]);
+    assert_eq!(result, Value::Unit);
+}
+
+#[test]
+fn write_returns_unit() {
+    let vm = make_vm();
+    let result = dispatch(&vm, Intrinsic::Write, &[Value::String(Rc::from("test"))]);
+    assert_eq!(result, Value::Unit);
+}
+
+#[test]
+fn int_to_string_converts() {
+    let vm = make_vm();
+    let result = dispatch(&vm, Intrinsic::IntToString, &[Value::Int(42)]);
+    assert_eq!(result, Value::String(Rc::from("42")));
+}
+
+#[test]
+fn int_to_string_empty_for_non_int() {
+    let vm = make_vm();
+    let result = dispatch(&vm, Intrinsic::IntToString, &[]);
+    assert_eq!(result, Value::String(Rc::from("")));
+}

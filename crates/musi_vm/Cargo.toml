@@ -13,5 +13,10 @@ categories = ["development-tools"]
 musi_codegen = { path = "../musi_codegen" }
 thiserror = { workspace = true }
 
+[dev-dependencies]
+musi_lex = { path = "../musi_lex" }
+musi_parse = { path = "../musi_parse" }
+musi_shared = { path = "../musi_shared" }
+
 [lints]
 workspace = true

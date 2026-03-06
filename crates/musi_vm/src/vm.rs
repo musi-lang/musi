@@ -2,67 +2,43 @@
 
 use std::rc::Rc;
 
+use musi_codegen::intrinsics::Intrinsic;
 use musi_codegen::{ConstEntry, Module, Opcode};
 
 use crate::error::VmError;
-use crate::native::NativeRegistry;
 use crate::value::Value;
 
-/// A single activation record on the call stack.
 pub struct CallFrame {
-    /// Index of the currently executing function in the function table.
     pub function_idx: u16,
-    /// Program counter -- byte offset within the function's code slice.
     pub pc: usize,
-    /// Local variable slots (indices `0..param_count` are filled by arguments).
     pub locals: Vec<Value>,
-    /// The operand-stack position when this frame was pushed.
-    /// On `ret`, the stack is truncated to this base.
+    /// Operand-stack depth when this frame was pushed; restored on `ret`.
     pub stack_base: usize,
 }
 
-/// Returned by [`Vm::step`] to tell the dispatch loop what to do next.
 enum Signal {
-    /// Continue executing the next instruction.
     Continue,
-    /// Execution is complete; return this value to the caller.
     Return(Value),
 }
 
-/// The Musi virtual machine.
-///
-/// Executes a [`Module`] by maintaining an operand stack and a call stack.
-/// Native functions are dispatched through a [`NativeRegistry`].
 pub struct Vm {
-    /// Operand stack shared across all frames.
     pub(crate) stack: Vec<Value>,
-    /// Call stack (most-recent frame last).
     pub(crate) frames: Vec<CallFrame>,
-    /// The loaded module.
     pub(crate) module: Module,
-    /// Registry of native function handlers.
-    pub(crate) natives: NativeRegistry,
 }
 
 impl Vm {
-    /// Creates a new VM loaded with `module` and `natives`.
     #[must_use]
-    pub const fn new(module: Module, natives: NativeRegistry) -> Self {
-        Self {
-            stack: Vec::new(),
-            frames: Vec::new(),
-            module,
-            natives,
-        }
+    pub fn new(module: Module) -> Self {
+        Self { stack: Vec::new(), frames: Vec::new(), module }
     }
 
-    /// Executes `entry_fn` (a function-table index) and returns its result.
+    /// Executes `entry_fn` (function-table index) and returns its result.
     ///
     /// # Errors
     ///
-    /// Returns a [`VmError`] if the program raises a stack underflow, accesses
-    /// an out-of-bounds index, calls an unregistered intrinsic, or if any
-    /// opcode cannot be decoded.
+    /// Returns [`VmError`] on stack underflow, out-of-bounds access,
+    /// unregistered intrinsic, or decode failure.
     pub fn run(&mut self, entry_fn: u16) -> Result<Value, VmError> {
         self.push_entry_frame(entry_fn)?;
         loop {
@@ -74,7 +50,6 @@ impl Vm {
         }
     }
 
-    /// Pushes the initial call frame for `entry_fn`.
     fn push_entry_frame(&mut self, entry_fn: u16) -> Result<(), VmError> {
         let local_count = self
             .module
@@ -91,7 +66,6 @@ impl Vm {
         Ok(())
     }
 
-    /// Decodes the next opcode from the current frame and advances `pc`.
     fn fetch_and_advance(&mut self) -> Result<Opcode, VmError> {
         let (fn_idx, pc) = {
             let frame = self.frames.last().ok_or(VmError::NoFrames)?;
@@ -121,7 +95,6 @@ impl Vm {
         Ok(op)
     }
 
-    /// Executes a single decoded opcode and returns a [`Signal`].
     fn step(&mut self, op: Opcode) -> Result<Signal, VmError> {
         match op {
             Opcode::Nop => Ok(Signal::Continue),
@@ -154,6 +127,55 @@ impl Vm {
             Opcode::StLoc(idx) => self.exec_st_loc(idx),
             Opcode::Call(fn_idx) => {
                 self.execute_call(fn_idx)?;
+                Ok(Signal::Continue)
+            }
+            Opcode::LdFnIdx(idx) => {
+                self.stack.push(Value::Function(idx));
+                Ok(Signal::Continue)
+            }
+            Opcode::CallDynamic => {
+                let v = self.stack.pop().ok_or(VmError::StackUnderflow)?;
+                let Value::Function(fn_idx) = v else {
+                    return Err(VmError::NotAFunction);
+                };
+                self.execute_call(fn_idx)?;
+                Ok(Signal::Continue)
+            }
+            Opcode::Dup => {
+                let top = self.stack.last().ok_or(VmError::StackUnderflow)?.clone();
+                self.stack.push(top);
+                Ok(Signal::Continue)
+            }
+            Opcode::HaltError => Err(VmError::MatchFailure),
+            Opcode::NewObj(n) => {
+                let n_usize = usize::from(n);
+                let stack_len = self.stack.len();
+                if stack_len < n_usize {
+                    return Err(VmError::StackUnderflow);
+                }
+                let fields: Vec<Value> = self.stack.drain(stack_len - n_usize..).collect();
+                self.stack.push(Value::Object(Rc::new(fields)));
+                Ok(Signal::Continue)
+            }
+            Opcode::LdFld(idx) => {
+                let obj = self.stack.pop().ok_or(VmError::StackUnderflow)?;
+                let Value::Object(rc) = obj else {
+                    return Err(VmError::TypeMismatch);
+                };
+                let field = rc
+                    .get(usize::from(idx))
+                    .ok_or(VmError::FieldOutOfBounds(idx))?
+                    .clone();
+                self.stack.push(field);
+                Ok(Signal::Continue)
+            }
+            Opcode::LdTag => {
+                let obj = self.stack.pop().ok_or(VmError::StackUnderflow)?;
+                let Value::Object(rc) = obj else {
+                    return Err(VmError::TypeMismatch);
+                };
+                let tag = rc.first().ok_or(VmError::FieldOutOfBounds(0))?.clone();
+                self.stack.push(tag);
                 Ok(Signal::Continue)
             }
             Opcode::AddI64
@@ -202,7 +224,6 @@ impl Vm {
         }
     }
 
-    /// Executes a `ret` instruction.
     fn exec_ret(&mut self) -> Result<Signal, VmError> {
         let result = self.stack.pop().ok_or(VmError::StackUnderflow)?;
         let frame = self.frames.pop().ok_or(VmError::NoFrames)?;
@@ -214,7 +235,6 @@ impl Vm {
         Ok(Signal::Continue)
     }
 
-    /// Executes a `ld.const` instruction.
     fn exec_ld_const(&mut self, idx: u16) -> Result<Signal, VmError> {
         let value = {
             let entry = self
@@ -228,7 +248,6 @@ impl Vm {
         Ok(Signal::Continue)
     }
 
-    /// Executes a `ld.loc` instruction.
     fn exec_ld_loc(&mut self, idx: u16) -> Result<Signal, VmError> {
         let local = {
             let frame = self.frames.last().ok_or(VmError::NoFrames)?;
@@ -242,7 +261,6 @@ impl Vm {
         Ok(Signal::Continue)
     }
 
-    /// Executes a `st.loc` instruction.
     fn exec_st_loc(&mut self, idx: u16) -> Result<Signal, VmError> {
         let value = self.stack.pop().ok_or(VmError::StackUnderflow)?;
         let slot = self
@@ -256,7 +274,6 @@ impl Vm {
         Ok(Signal::Continue)
     }
 
-    /// Executes a conditional branch instruction.
     fn exec_br_cond(&mut self, offset: i32, when: bool) -> Result<Signal, VmError> {
         let v = self.stack.pop().ok_or(VmError::StackUnderflow)?;
         if matches!(v, Value::Bool(b) if b == when) {
@@ -266,7 +283,6 @@ impl Vm {
         Ok(Signal::Continue)
     }
 
-    /// Executes a `concat.str` instruction.
     fn exec_concat_str(&mut self) -> Result<Signal, VmError> {
         let rhs = pop_str(&mut self.stack)?;
         let lhs = pop_str(&mut self.stack)?;
@@ -277,7 +293,6 @@ impl Vm {
         Ok(Signal::Continue)
     }
 
-    /// Pops two `i64` values, applies `f`, and pushes the result.
     fn push_i64_bin<F: FnOnce(i64, i64) -> i64>(&mut self, f: F) -> Result<Signal, VmError> {
         let rhs = pop_i64(&mut self.stack)?;
         let lhs = pop_i64(&mut self.stack)?;
@@ -285,7 +300,6 @@ impl Vm {
         Ok(Signal::Continue)
     }
 
-    /// Pops two `i64` values, applies predicate `f`, and pushes the `bool` result.
     fn push_i64_cmp<F: FnOnce(i64, i64) -> bool>(&mut self, f: F) -> Result<Signal, VmError> {
         let rhs = pop_i64(&mut self.stack)?;
         let lhs = pop_i64(&mut self.stack)?;
@@ -293,7 +307,6 @@ impl Vm {
         Ok(Signal::Continue)
     }
 
-    /// Pops two `f64` values, applies `f`, and pushes the result.
     fn push_f64_bin<F: FnOnce(f64, f64) -> f64>(&mut self, f: F) -> Result<Signal, VmError> {
         let rhs = pop_f64(&mut self.stack)?;
         let lhs = pop_f64(&mut self.stack)?;
@@ -301,7 +314,6 @@ impl Vm {
         Ok(Signal::Continue)
     }
 
-    /// Pops two `f64` values, applies predicate `f`, and pushes the `bool` result.
     fn push_f64_cmp<F: FnOnce(f64, f64) -> bool>(&mut self, f: F) -> Result<Signal, VmError> {
         let rhs = pop_f64(&mut self.stack)?;
         let lhs = pop_f64(&mut self.stack)?;
@@ -309,7 +321,6 @@ impl Vm {
         Ok(Signal::Continue)
     }
 
-    /// Executes an arithmetic opcode.
     fn exec_arith(&mut self, op: Opcode) -> Result<Signal, VmError> {
         match op {
             Opcode::AddI64 => self.push_i64_bin(i64::wrapping_add),
@@ -348,14 +359,10 @@ impl Vm {
                 self.stack.push(Value::Float(-v));
                 Ok(Signal::Continue)
             }
-            // step() only routes arithmetic opcodes here.
             _ => Ok(Signal::Continue),
         }
     }
 
-    /// Executes a comparison opcode.
-    ///
-    /// `EqF64`/`NeqF64` perform IEEE 754 bit-exact comparison by design.
     #[allow(clippy::float_cmp)]
     fn exec_cmp(&mut self, op: Opcode) -> Result<Signal, VmError> {
         match op {
@@ -395,12 +402,10 @@ impl Vm {
                 self.stack.push(Value::Bool(*lhs != *rhs));
                 Ok(Signal::Continue)
             }
-            // step() only routes comparison opcodes here.
             _ => Ok(Signal::Continue),
         }
     }
 
-    /// Executes a logical/bitwise opcode.
     fn exec_bitwise(&mut self, op: Opcode) -> Result<Signal, VmError> {
         match op {
             Opcode::Not => {
@@ -422,14 +427,11 @@ impl Vm {
             Opcode::Shr => {
                 self.push_i64_bin(|a, b| a.wrapping_shr(u32::try_from(b).unwrap_or(u32::MAX)))
             }
-            // step() only routes bitwise opcodes here.
             _ => Ok(Signal::Continue),
         }
     }
 
-    /// Handles a `call` instruction.
     fn execute_call(&mut self, fn_idx: u16) -> Result<(), VmError> {
-        // Extract function metadata (scoped borrow of module).
         let (param_count, local_count, symbol_idx) = {
             let func = self
                 .module
@@ -443,7 +445,6 @@ impl Vm {
             )
         };
 
-        // Extract symbol metadata (scoped borrow of module).
         let (is_native, intrinsic_id) = {
             let sym = self
                 .module
@@ -453,7 +454,6 @@ impl Vm {
             (sym.flags.is_native(), sym.intrinsic_id)
         };
 
-        // Pop arguments from the operand stack.
         let stack_len = self.stack.len();
         if stack_len < param_count {
             return Err(VmError::StackUnderflow);
@@ -461,16 +461,11 @@ impl Vm {
         let args: Vec<Value> = self.stack.drain(stack_len - param_count..).collect();
 
         if is_native {
-            // Look up and call the native handler.
-            // `get` returns a Copy fn-pointer, so the borrow ends immediately.
-            let handler = self
-                .natives
-                .get(intrinsic_id)
+            let intrinsic = Intrinsic::from_id(intrinsic_id)
                 .ok_or(VmError::UnknownIntrinsic(intrinsic_id))?;
-            let result = handler(self, &args);
+            let result = crate::native::dispatch(self, intrinsic, &args);
             self.stack.push(result);
         } else {
-            // Push a new call frame; locals[0..param_count] = args.
             let stack_base = self.stack.len();
             let mut locals: Vec<Value> = args;
             while locals.len() < local_count {
@@ -487,10 +482,8 @@ impl Vm {
     }
 }
 
-/// Applies a branch offset to a program counter.
-///
-/// `pc` is the byte position *after* the current instruction (already advanced).
-/// Returns the new PC, or [`VmError::CodeOutOfBounds`] on overflow/underflow.
+// -- Helpers ------------------------------------------------------------------
+
 fn apply_branch_offset(pc: usize, offset: i32) -> Result<usize, VmError> {
     if offset >= 0 {
         pc.checked_add(usize::try_from(offset).map_err(|_| VmError::CodeOutOfBounds)?)
@@ -501,8 +494,6 @@ fn apply_branch_offset(pc: usize, offset: i32) -> Result<usize, VmError> {
     }
 }
 
-/// Pops the top of the stack as an `i64`, returning [`VmError::TypeMismatch`]
-/// if the value is not an `Int`.
 fn pop_i64(stack: &mut Vec<Value>) -> Result<i64, VmError> {
     match stack.pop().ok_or(VmError::StackUnderflow)? {
         Value::Int(v) => Ok(v),
@@ -510,8 +501,6 @@ fn pop_i64(stack: &mut Vec<Value>) -> Result<i64, VmError> {
     }
 }
 
-/// Pops the top of the stack as an `f64`, returning [`VmError::TypeMismatch`]
-/// if the value is not a `Float`.
 fn pop_f64(stack: &mut Vec<Value>) -> Result<f64, VmError> {
     match stack.pop().ok_or(VmError::StackUnderflow)? {
         Value::Float(v) => Ok(v),
@@ -519,8 +508,6 @@ fn pop_f64(stack: &mut Vec<Value>) -> Result<f64, VmError> {
     }
 }
 
-/// Pops the top of the stack as a `bool`, returning [`VmError::TypeMismatch`]
-/// if the value is not a `Bool`.
 fn pop_bool(stack: &mut Vec<Value>) -> Result<bool, VmError> {
     match stack.pop().ok_or(VmError::StackUnderflow)? {
         Value::Bool(v) => Ok(v),
@@ -528,8 +515,6 @@ fn pop_bool(stack: &mut Vec<Value>) -> Result<bool, VmError> {
     }
 }
 
-/// Pops the top of the stack as an `Rc<str>`, returning [`VmError::TypeMismatch`]
-/// if the value is not a `String`.
 fn pop_str(stack: &mut Vec<Value>) -> Result<Rc<str>, VmError> {
     match stack.pop().ok_or(VmError::StackUnderflow)? {
         Value::String(s) => Ok(s),
@@ -537,7 +522,6 @@ fn pop_str(stack: &mut Vec<Value>) -> Result<Rc<str>, VmError> {
     }
 }
 
-/// Converts a const-pool entry to a runtime [`Value`].
 fn const_entry_to_value(entry: &ConstEntry) -> Value {
     match entry {
         ConstEntry::Int(v) => Value::Int(*v),

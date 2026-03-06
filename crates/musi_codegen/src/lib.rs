@@ -9,10 +9,11 @@
 
 pub mod emitter;
 pub mod error;
+pub mod intrinsics;
 pub mod module;
 pub mod opcode;
 
-pub use emitter::{emit, CodegenError};
-pub use error::DeserError;
+pub use emitter::emit;
+pub use error::{CodegenError, DeserError};
 pub use module::{ConstEntry, FunctionEntry, Module, SymbolEntry, SymbolFlags};
 pub use opcode::Opcode;

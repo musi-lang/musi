@@ -11,10 +11,11 @@ categories.workspace = true
 
 [dependencies]
 musi_shared = { path = "../musi_shared" }
-musi_parse = { path = "../musi_parse" }
+musi_ast    = { path = "../musi_ast" }
 
 [dev-dependencies]
-musi_lex = { path = "../musi_lex" }
+musi_lex   = { path = "../musi_lex" }
+musi_parse = { path = "../musi_parse" }
 
 [lints]
 workspace = true

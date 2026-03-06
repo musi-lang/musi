@@ -33,8 +33,7 @@ pub use types::{PrimTy, Type, TypeVarId};
 
 use std::collections::HashMap;
 
-use musi_parse::ParsedModule;
-use musi_parse::ast::Expr;
+use musi_ast::{Expr, ParsedModule};
 use musi_shared::{DiagnosticBag, FileId, Idx, Interner, Span};
 
 /// The complete result of semantic analysis of a single module.

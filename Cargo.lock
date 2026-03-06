@@ -14,10 +14,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "musi_ast"
+version = "0.1.0"
+dependencies = [
+ "musi_shared",
+]
+
+[[package]]
 name = "musi_codegen"
 version = "0.1.0"
 dependencies = [
- "musi_parse",
+ "musi_ast",
  "musi_shared",
  "thiserror",
 ]
@@ -33,6 +40,7 @@ dependencies = [
 name = "musi_parse"
 version = "0.1.0"
 dependencies = [
+ "musi_ast",
  "musi_lex",
  "musi_shared",
 ]
@@ -41,6 +49,7 @@ dependencies = [
 name = "musi_sema"
 version = "0.1.0"
 dependencies = [
+ "musi_ast",
  "musi_lex",
  "musi_parse",
  "musi_shared",
@@ -55,6 +64,9 @@ name = "musi_vm"
 version = "0.1.0"
 dependencies = [
  "musi_codegen",
+ "musi_lex",
+ "musi_parse",
+ "musi_shared",
  "thiserror",
 ]
 

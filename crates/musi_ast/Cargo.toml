@@ -1,18 +1,16 @@
 [package]
-name = "musi_parse"
-description = "LL(1) + Pratt parser and AST for the Musi compiler"
+name = "musi_ast"
+description = "AST type definitions for the Musi compiler"
 version.workspace = true
 edition.workspace = true
 repository.workspace = true
 readme = "README.md"
 license.workspace = true
-keywords = ["compiler", "musi", "parser"]
+keywords = ["compiler", "musi", "ast"]
 categories = ["development-tools"]
 
 [dependencies]
 musi_shared = { path = "../musi_shared" }
-musi_lex    = { path = "../musi_lex" }
-musi_ast    = { path = "../musi_ast" }
 
 [lints]
 workspace = true

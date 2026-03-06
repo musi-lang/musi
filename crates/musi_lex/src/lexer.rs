@@ -5,24 +5,20 @@ use core::str;
 use musi_shared::{DiagnosticBag, FileId, Interner, Span, Symbol};
 
 use crate::token::{Token, TokenKind, keyword_from_str};
+use crate::trivia::{Trivia, TriviaKind, TriviaRange};
 
-/// A single-pass lexer that converts a source byte slice into [`Token`]s.
-///
-/// Implements [`Iterator`] -- each call to [`next`](Iterator::next) produces the
-/// next token.  After [`TokenKind::Eof`] is emitted the iterator is exhausted.
-pub struct Lexer<'src> {
+pub(crate) struct Lexer<'src> {
     source: &'src [u8],
     pos: usize,
     file_id: FileId,
     interner: &'src mut Interner,
     diags: &'src mut DiagnosticBag,
     done: bool,
+    pub(crate) trivia: Vec<Trivia>,
 }
 
 impl<'src> Lexer<'src> {
-    /// Creates a new lexer over `source`.
-    #[must_use]
-    pub const fn new(
+    pub(crate) fn new(
         source: &'src str,
         file_id: FileId,
         interner: &'src mut Interner,
@@ -35,6 +31,7 @@ impl<'src> Lexer<'src> {
             interner,
             diags,
             done: false,
+            trivia: Vec::new(),
         }
     }
 }
@@ -55,11 +52,11 @@ impl Iterator for Lexer<'_> {
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         let remaining = self.source.len().saturating_sub(self.pos);
-        // Upper bound: at most one token per source byte (single-char tokens), plus 1 for EOF.
-        let upper = remaining + 1;
-        (0, Some(upper))
+        (0, Some(remaining + 1))
     }
 }
+
+// -- Internal helpers ---------------------------------------------------------
 
 impl Lexer<'_> {
     #[must_use]
@@ -86,8 +83,7 @@ impl Lexer<'_> {
     }
 
     fn intern_range(&mut self, start: usize, end: usize) -> Symbol {
-        let slice = &self.source[start..end];
-        let text = str::from_utf8(slice).unwrap_or("");
+        let text = str::from_utf8(&self.source[start..end]).unwrap_or("");
         self.interner.intern(text)
     }
 
@@ -105,15 +101,11 @@ impl Lexer<'_> {
         Token::new(TokenKind::Error, span, None)
     }
 
-    /// Interns `start..self.pos` and emits a token with that symbol.
     fn emit_interned(&mut self, kind: TokenKind, start: usize) -> Token {
         let sym = self.intern_range(start, self.pos);
         self.emit_sym(kind, start, sym)
     }
 
-    /// Advances past one already-known leading byte, then checks whether the
-    /// next byte equals `next_byte`.  If so, advances again and emits
-    /// `two_kind`; otherwise emits `one_kind`.
     fn lex_maybe_two_char(
         &mut self,
         start: usize,
@@ -130,7 +122,6 @@ impl Lexer<'_> {
         }
     }
 
-    /// Advances while the next byte is an ASCII alphanumeric character or `_`.
     fn consume_ident_chars(&mut self) {
         while self
             .peek()
@@ -140,14 +131,12 @@ impl Lexer<'_> {
         }
     }
 
-    /// Advances while the next byte is not a newline (stops before `\n`).
     fn consume_until_newline(&mut self) {
         while self.peek().is_some_and(|b| b != b'\n') {
             let _ = self.advance();
         }
     }
 
-    /// Advances through up to `max` ASCII hex digits.
     fn consume_hex_digits(&mut self, max: usize) {
         for _ in 0..max {
             if self.peek().is_some_and(|b| b.is_ascii_hexdigit()) {
@@ -159,17 +148,98 @@ impl Lexer<'_> {
     }
 }
 
+// -- Trivia collection --------------------------------------------------------
+
+impl Lexer<'_> {
+    fn at_line_comment(&self) -> bool {
+        self.peek() == Some(b'/') && self.peek_at(1) == Some(b'/')
+    }
+
+    fn collect_line_comment_trivia(&mut self) {
+        let start = self.pos;
+        let _s1 = self.advance(); // first /
+        let _s2 = self.advance(); // second /
+        let doc_style = self.peek() == Some(b'/');
+        if doc_style {
+            let _s3 = self.advance(); // third /
+        }
+        self.consume_until_newline();
+        let span = self.current_span(start);
+        self.trivia.push(Trivia { kind: TriviaKind::LineComment { doc_style }, span });
+    }
+
+    fn collect_whitespace_trivia(&mut self) {
+        loop {
+            let start = self.pos;
+            match self.peek() {
+                Some(b'\n') => {
+                    let _ = self.advance();
+                    self.trivia.push(Trivia { kind: TriviaKind::Newline, span: self.current_span(start) });
+                }
+                Some(b) if b.is_ascii_whitespace() => {
+                    while self.peek().is_some_and(|b| b.is_ascii_whitespace() && b != b'\n') {
+                        let _ = self.advance();
+                    }
+                    self.trivia.push(Trivia { kind: TriviaKind::Whitespace, span: self.current_span(start) });
+                }
+                _ => break,
+            }
+        }
+    }
+
+    fn collect_leading_trivia(&mut self) -> TriviaRange {
+        let start = u32::try_from(self.trivia.len()).expect("trivia count < 2^32");
+        loop {
+            self.collect_whitespace_trivia();
+            if !self.at_line_comment() {
+                break;
+            }
+            self.collect_line_comment_trivia();
+        }
+        let n = u16::try_from(self.trivia.len() - usize::try_from(start).expect("fits"))
+            .expect("leading trivia < 65536");
+        TriviaRange { start, len: n }
+    }
+
+    fn collect_trailing_trivia(&mut self) -> TriviaRange {
+        let start = u32::try_from(self.trivia.len()).expect("trivia count < 2^32");
+        loop {
+            let trivia_start = self.pos;
+            match self.peek() {
+                Some(b) if b.is_ascii_whitespace() && b != b'\n' => {
+                    while self.peek().is_some_and(|b| b.is_ascii_whitespace() && b != b'\n') {
+                        let _ = self.advance();
+                    }
+                    self.trivia.push(Trivia { kind: TriviaKind::Whitespace, span: self.current_span(trivia_start) });
+                }
+                Some(b'/') if self.at_line_comment() => {
+                    self.collect_line_comment_trivia();
+                    break;
+                }
+                _ => break,
+            }
+        }
+        let n = u16::try_from(self.trivia.len() - usize::try_from(start).expect("fits"))
+            .expect("trailing trivia < 65536");
+        TriviaRange { start, len: n }
+    }
+}
+
+// -- Token dispatch -----------------------------------------------------------
+
 impl Lexer<'_> {
     fn next_token(&mut self) -> Token {
-        self.skip_whitespace();
+        let leading = self.collect_leading_trivia();
 
         let start = self.pos;
 
         let Some(b) = self.peek() else {
-            return self.emit(TokenKind::Eof, start);
+            let mut tok = self.emit(TokenKind::Eof, start);
+            tok.leading_trivia = leading;
+            return tok;
         };
 
-        match b {
+        let mut tok = match b {
             b'a'..=b'z' | b'A'..=b'Z' | b'_' => self.lex_word(start),
             b'`' => self.lex_escaped_ident(start),
             b'\'' => self.lex_tick(start),
@@ -183,21 +253,20 @@ impl Lexer<'_> {
             b'=' => self.lex_eq(start),
             b'>' => self.lex_gt(start),
             _ => self.lex_single(start),
-        }
-    }
+        };
 
-    fn skip_whitespace(&mut self) {
-        while self.peek().is_some_and(|b| b.is_ascii_whitespace()) {
-            let _ = self.advance();
-        }
+        tok.leading_trivia = leading;
+        tok.trailing_trivia = self.collect_trailing_trivia();
+        tok
     }
 }
+
+// -- Token lexers -------------------------------------------------------------
 
 impl Lexer<'_> {
     fn lex_word(&mut self, start: usize) -> Token {
         self.consume_ident_chars();
         let text = str::from_utf8(&self.source[start..self.pos]).unwrap_or("");
-        // bare underscore is the wildcard token, not an identifier.
         if text == "_" {
             return self.emit(TokenKind::Underscore, start);
         }
@@ -209,10 +278,8 @@ impl Lexer<'_> {
     }
 
     fn lex_escaped_ident(&mut self, start: usize) -> Token {
-        // skip opening backtick
         let _open = self.advance();
         let content_start = self.pos;
-
         loop {
             match self.peek() {
                 Some(b'`') => {
@@ -224,67 +291,39 @@ impl Lexer<'_> {
                 Some(_) => {
                     let _ch = self.advance();
                 }
-                None => {
-                    return self.error_token("unterminated escaped identifier", start);
-                }
+                None => return self.error_token("unterminated escaped identifier", start),
             }
         }
     }
 
     fn lex_tick(&mut self, start: usize) -> Token {
-        // skip the leading '
         let _tick = self.advance();
-
-        // Try to determine if this is a char literal or a type ident.
-        // Char literal: 'x' or '\n' (escape_char followed by ')
-        // Type ident:   'a, 'key (letter followed by alphanumeric, no closing ')
-
         match self.peek() {
-            Some(b'\\') => {
-                // Must be a char literal with an escape sequence
-                self.lex_char_lit_escape(start)
-            }
+            Some(b'\\') => self.lex_char_lit_escape(start),
             Some(c) if c.is_ascii_alphanumeric() || c == b' ' || is_symbol_char(c) => {
-                // Could be 'x' (char lit) or 'a (type ident).
-                // Check: if next char is a letter/digit and the char after that is '
-                // then it's a char literal. Otherwise, if it starts with a letter,
-                // it's a type ident.
                 if self.peek_at(1) == Some(b'\'') {
-                    // 'x' -- single char literal
                     let _ch = self.advance();
                     let _close = self.advance();
                     self.emit_interned(TokenKind::CharLit, start)
                 } else if c.is_ascii_alphabetic() {
-                    // type ident: 'a, 'key, etc.
                     self.lex_ty_ident(start)
                 } else {
-                    // Single non-letter char not followed by ' -- error
                     let _ch = self.advance();
                     self.error_token("expected closing quote for character literal", start)
                 }
             }
-            _ => {
-                // bare ' with nothing useful after it
-                self.error_token("unexpected character after quote", start)
-            }
+            _ => self.error_token("unexpected character after quote", start),
         }
     }
 
     fn lex_char_lit_escape(&mut self, start: usize) -> Token {
-        // We've consumed the opening '. Current byte is '\'.
-        let _backslash = self.advance(); // consume '\'
-
-        // consume the escaped char
+        let _backslash = self.advance();
         match self.peek() {
             Some(_) => {
                 let _esc = self.advance();
             }
-            None => {
-                return self.error_token("unterminated character literal", start);
-            }
+            None => return self.error_token("unterminated character literal", start),
         }
-
-        // expect closing '
         match self.peek() {
             Some(b'\'') => {
                 let _close = self.advance();
@@ -295,15 +334,12 @@ impl Lexer<'_> {
     }
 
     fn lex_ty_ident(&mut self, start: usize) -> Token {
-        // We've consumed the opening '. The current byte is the first letter.
-        // Consume letter followed by [A-Za-z0-9_]*
         self.consume_ident_chars();
         self.emit_interned(TokenKind::TyIdent, start)
     }
 
     fn lex_number(&mut self, start: usize) -> Token {
         let first = self.advance();
-
         if first == b'0' {
             match self.peek() {
                 Some(b'x') => return self.lex_number_prefixed(start, is_hex_digit),
@@ -312,23 +348,16 @@ impl Lexer<'_> {
                 _ => {}
             }
         }
-
-        // Decimal: consume digits and underscores
         self.consume_digits_with_sep(is_decimal_digit);
-
-        // Check for a fractional part: '.' followed by a digit
         if self.peek() == Some(b'.') && self.peek_at(1).is_some_and(|c| c.is_ascii_digit()) {
             let _dot = self.advance();
-            // Must have at least one digit (already checked above)
             self.consume_digits_with_sep(is_decimal_digit);
             return self.emit_interned(TokenKind::FloatLit, start);
         }
-
         self.emit_interned(TokenKind::IntLit, start)
     }
 
     fn lex_number_prefixed(&mut self, start: usize, is_digit: fn(u8) -> bool) -> Token {
-        // consume the prefix character ('x', 'o', or 'b')
         let _prefix = self.advance();
         self.consume_digits_with_sep(is_digit);
         self.emit_interned(TokenKind::IntLit, start)
@@ -345,9 +374,7 @@ impl Lexer<'_> {
     }
 
     fn lex_string(&mut self, start: usize) -> Token {
-        // skip opening quote
         let _open = self.advance();
-
         loop {
             match self.peek() {
                 Some(b'"') => {
@@ -359,12 +386,10 @@ impl Lexer<'_> {
                     match self.peek() {
                         Some(b'x') => {
                             let _x = self.advance();
-                            // consume up to 2 hex digits
                             self.consume_hex_digits(2);
                         }
                         Some(b'u') => {
                             let _u = self.advance();
-                            // expect '{' then up to 6 hex digits then '}'
                             if self.peek() == Some(b'{') {
                                 let _lb = self.advance();
                                 self.consume_hex_digits(6);
@@ -377,58 +402,32 @@ impl Lexer<'_> {
                             let _esc = self.advance();
                         }
                         Some(_) => {
-                            let err_start = self.pos - 1; // backslash pos
+                            let err_start = self.pos - 1;
                             let _ch = self.advance();
                             let span = Span::new(
                                 u32::try_from(err_start).expect("source larger than 4 GiB"),
                                 2,
                             );
                             let _diag =
-                                self.diags
-                                    .error("unknown escape sequence", span, self.file_id);
-                            // continue lexing the string
+                                self.diags.error("unknown escape sequence", span, self.file_id);
                         }
-                        None => {
-                            return self.error_token("unterminated string literal", start);
-                        }
+                        None => return self.error_token("unterminated string literal", start),
                     }
                 }
                 Some(_) => {
                     let _ch = self.advance();
                 }
-                None => {
-                    return self.error_token("unterminated string literal", start);
-                }
+                None => return self.error_token("unterminated string literal", start),
             }
         }
     }
 
+    // Comments are consumed as trivia during leading/trailing trivia collection.
+    // By the time lex_slash is called, we know the current byte is `/` but NOT
+    // followed by another `/` (that would have been trivia).
     fn lex_slash(&mut self, start: usize) -> Token {
         let _slash = self.advance();
-
         match self.peek() {
-            Some(b'/') => {
-                // line comment -- check for doc comment (///)
-                let _slash2 = self.advance();
-
-                if self.peek() == Some(b'/') {
-                    // doc comment: ///
-                    let _slash3 = self.advance();
-                    let content_start = self.pos;
-
-                    // consume to end of line
-                    self.consume_until_newline();
-
-                    let sym = self.intern_range(content_start, self.pos);
-                    return self.emit_sym(TokenKind::DocComment, start, sym);
-                }
-
-                // regular line comment -- skip to end of line
-                self.consume_until_newline();
-
-                // tail-recurse: skip the comment and return the next real token
-                self.next_token()
-            }
             Some(b'=') => {
                 let _eq = self.advance();
                 self.emit(TokenKind::SlashEq, start)
@@ -439,7 +438,6 @@ impl Lexer<'_> {
 
     fn lex_dot(&mut self, start: usize) -> Token {
         let _dot = self.advance();
-
         match self.peek() {
             Some(b'[') => {
                 let _lb = self.advance();
@@ -464,7 +462,6 @@ impl Lexer<'_> {
 
     fn lex_lt(&mut self, start: usize) -> Token {
         let _lt = self.advance();
-
         match self.peek() {
             Some(b'.') if self.peek_at(1) == Some(b'.') => {
                 let _d1 = self.advance();
@@ -485,7 +482,6 @@ impl Lexer<'_> {
 
     fn lex_colon(&mut self, start: usize) -> Token {
         let _c = self.advance();
-
         match self.peek() {
             Some(b':') => {
                 let _c2 = self.advance();
@@ -536,6 +532,8 @@ impl Lexer<'_> {
         }
     }
 }
+
+// -- Character predicates -----------------------------------------------------
 
 #[must_use]
 const fn is_hex_digit(b: u8) -> bool {

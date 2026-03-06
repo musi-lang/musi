@@ -49,4 +49,16 @@ pub enum VmError {
     /// An operand on the stack had an unexpected type.
     #[error("type mismatch")]
     TypeMismatch,
+
+    /// A match expression had no matching arm.
+    #[error("non-exhaustive match")]
+    MatchFailure,
+
+    /// CallDynamic was given a non-Function value.
+    #[error("value is not a function")]
+    NotAFunction,
+
+    /// A field index exceeded the object's field count.
+    #[error("field index {0} out of bounds")]
+    FieldOutOfBounds(u16),
 }

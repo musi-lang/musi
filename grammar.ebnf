@@ -305,7 +305,7 @@ ast_expr_bw_disj = ast_expr_bw_conj, {("|" | "^"), ast_expr_bw_conj};
 (* BP 0070 *)
 ast_expr_cons = ast_expr_bw_disj, {"::", ast_expr_bw_disj};
 
-(* BP 0080 *)
+(* BP 0080 -- ".." is inclusive [a, b], "..<" is exclusive [a, b); both sides required *)
 ast_expr_range = ast_expr_cons, [(".." | "..<"), ast_expr_cons];
 
 (* BP 0090 *)

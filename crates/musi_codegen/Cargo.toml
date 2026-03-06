@@ -12,7 +12,7 @@ categories = ["development-tools"]
 [dependencies]
 thiserror = { workspace = true }
 musi_shared = { path = "../musi_shared" }
-musi_parse  = { path = "../musi_parse" }
+musi_ast    = { path = "../musi_ast" }
 
 [lints]
 workspace = true

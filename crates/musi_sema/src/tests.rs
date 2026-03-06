@@ -1,4 +1,4 @@
-use musi_lex::Lexer;
+use musi_lex::lex;
 use musi_parse::parse;
 use musi_shared::{DiagnosticBag, Interner, SourceDb};
 
@@ -9,8 +9,8 @@ fn analyze_src(src: &str) -> (SemaResult, DiagnosticBag) {
     let mut db = SourceDb::new();
     let file_id = db.add("test.ms", src);
     let mut diags = DiagnosticBag::new();
-    let tokens: Vec<_> = Lexer::new(src, file_id, &mut interner, &mut diags).collect();
-    let module = parse(&tokens, file_id, &mut diags, &interner);
+    let lexed = lex(src, file_id, &mut interner, &mut diags);
+    let module = parse(&lexed.tokens, file_id, &mut diags, &interner);
     // Fail fast: parse errors mean the test itself is wrong (bad syntax).
     // The parser collects these into `diags` rather than panicking, but
     // semantic analysis on a malformed AST is meaningless and can loop.

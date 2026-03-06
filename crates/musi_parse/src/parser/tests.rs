@@ -1,4 +1,4 @@
-use musi_lex::Lexer;
+use musi_lex::lex;
 use musi_shared::{DiagnosticBag, FileId, Interner};
 
 use super::*;
@@ -8,9 +8,9 @@ fn lex_and_parse(src: &str) -> (ParsedModule, DiagnosticBag) {
     let mut interner = Interner::new();
     let mut lex_diags = DiagnosticBag::new();
     let file_id = FileId(0);
-    let tokens: Vec<Token> = Lexer::new(src, file_id, &mut interner, &mut lex_diags).collect();
+    let lexed = lex(src, file_id, &mut interner, &mut lex_diags);
     let mut parse_diags = DiagnosticBag::new();
-    let module = parse(&tokens, file_id, &mut parse_diags, &interner);
+    let module = parse(&lexed.tokens, file_id, &mut parse_diags, &interner);
     // Merge lex errors into parse diags for uniform checking
     for d in lex_diags.iter() {
         parse_diags.push(d.clone());

@@ -1,9 +1,9 @@
     use super::*;
-    use musi_shared::Span;
+    use musi_shared::{Span, Symbol};
 
     #[test]
     fn parse_ctx_new_creates_empty_arenas() {
-        let ctx = ParseCtx::new();
+        let ctx = AstArenas::new();
         assert!(ctx.exprs.is_empty());
         assert!(ctx.tys.is_empty());
         assert!(ctx.pats.is_empty());
@@ -11,7 +11,7 @@
 
     #[test]
     fn parse_ctx_default_matches_new() {
-        let ctx = ParseCtx::default();
+        let ctx = AstArenas::default();
         assert!(ctx.exprs.is_empty());
         assert!(ctx.tys.is_empty());
         assert!(ctx.pats.is_empty());
@@ -19,7 +19,7 @@
 
     #[test]
     fn alloc_expr_and_retrieve() {
-        let mut ctx = ParseCtx::new();
+        let mut ctx = AstArenas::new();
         let span = Span::new(0, 5);
         let idx = ctx.exprs.alloc(Expr::Unit { span });
         let node = ctx.exprs.get(idx);
@@ -28,7 +28,7 @@
 
     #[test]
     fn alloc_ty_and_retrieve() {
-        let mut ctx = ParseCtx::new();
+        let mut ctx = AstArenas::new();
         let span = Span::new(10, 3);
         let idx = ctx.tys.alloc(Ty::Var {
             name: Symbol(0),
@@ -46,7 +46,7 @@
 
     #[test]
     fn alloc_pat_and_retrieve() {
-        let mut ctx = ParseCtx::new();
+        let mut ctx = AstArenas::new();
         let span = Span::new(20, 1);
         let idx = ctx.pats.alloc(Pat::Wild { span });
         let node = ctx.pats.get(idx);
@@ -55,7 +55,7 @@
 
     #[test]
     fn multiple_exprs_independent_indices() {
-        let mut ctx = ParseCtx::new();
+        let mut ctx = AstArenas::new();
         let a = ctx.exprs.alloc(Expr::Unit {
             span: Span::new(0, 2),
         });
@@ -96,7 +96,7 @@
 
     #[test]
     fn binary_expr_round_trip() {
-        let mut ctx = ParseCtx::new();
+        let mut ctx = AstArenas::new();
         let lhs = ctx.exprs.alloc(Expr::Lit {
             value: LitValue::Int(1),
             span: Span::new(0, 1),
@@ -135,7 +135,7 @@
 
     #[test]
     fn parsed_module_stores_items() {
-        let mut ctx = ParseCtx::new();
+        let mut ctx = AstArenas::new();
         let a = ctx.exprs.alloc(Expr::Unit {
             span: Span::new(0, 2),
         });

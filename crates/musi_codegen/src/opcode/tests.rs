@@ -72,6 +72,13 @@ fn encoded_len_matches_actual() {
         Opcode::LdLoc(0),
         Opcode::StLoc(0),
         Opcode::Call(0),
+        Opcode::Dup,
+        Opcode::HaltError,
+        Opcode::LdFnIdx(0),
+        Opcode::CallDynamic,
+        Opcode::NewObj(0),
+        Opcode::LdFld(0),
+        Opcode::LdTag,
     ];
     for op in &ops {
         let mut buf = Vec::new();
@@ -101,6 +108,26 @@ fn unexpected_eof_on_truncated_i64() {
     // LD_IMM_I64 tag present but payload truncated
     let result = Opcode::decode(&[0x10], 0);
     assert!(matches!(result, Err(DeserError::UnexpectedEof)));
+}
+
+#[test]
+fn new_opcodes_round_trip() {
+    let cases: &[Opcode] = &[
+        Opcode::Dup,
+        Opcode::HaltError,
+        Opcode::LdFnIdx(7),
+        Opcode::CallDynamic,
+        Opcode::NewObj(3),
+        Opcode::LdFld(2),
+        Opcode::LdTag,
+    ];
+    for op in cases {
+        let mut buf = Vec::new();
+        op.encode_into(&mut buf);
+        let (decoded, size) = Opcode::decode(&buf, 0).unwrap_or_else(|e| panic!("decode {op:?}: {e}"));
+        assert_eq!(&decoded, op, "round-trip {op:?}");
+        assert_eq!(size, op.encoded_len(), "encoded_len {op:?}");
+    }
 }
 
 #[test]

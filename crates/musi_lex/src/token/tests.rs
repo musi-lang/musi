@@ -93,7 +93,6 @@ fn fixed_text_returns_none_for_variable_tokens() {
     assert_eq!(TokenKind::FloatLit.fixed_text(), None);
     assert_eq!(TokenKind::StringLit.fixed_text(), None);
     assert_eq!(TokenKind::CharLit.fixed_text(), None);
-    assert_eq!(TokenKind::DocComment.fixed_text(), None);
     assert_eq!(TokenKind::Error.fixed_text(), None);
     assert_eq!(TokenKind::Eof.fixed_text(), None);
 }

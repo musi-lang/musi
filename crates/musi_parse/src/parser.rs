@@ -1,7 +1,7 @@
 //! LL(1) + Pratt parser for the Musi language.
 //!
 //! Produces a typed AST from a flat [`Token`] slice.  All recursive children are
-//! arena-allocated via [`ParseCtx`]; clients hold [`Idx`] handles.
+//! arena-allocated via [`AstArenas`]; clients hold [`Idx`] handles.
 
 use core::mem;
 
@@ -9,9 +9,9 @@ use musi_lex::token::{Token, TokenKind};
 use musi_shared::{DiagnosticBag, FileId, Idx, Interner, Span, Symbol};
 
 use crate::ast::{
-    ArrayItem, Attr, AttrArg, BinOp, BindKind, ChoiceVariant, Cond, ElifChain, Expr, ImportClause,
-    ImportItem, LitValue, MatchArm, Modifier, Param, ParseCtx, ParsedModule, Pat, PatField,
-    PatSuffix, PostfixOp, PrefixOp, RecField, RecLitField, Ty, TyParam, VariantPayload,
+    ArrayItem, Attr, AttrArg, AstArenas, BinOp, BindKind, ChoiceVariant, Cond, ElifBranch, Expr,
+    FieldInit, ImportClause, ImportItem, LitValue, MatchArm, Modifier, Param, ParsedModule, Pat,
+    PatField, PatSuffix, PostfixOp, PrefixOp, RecField, Ty, TyParam, VariantPayload,
 };
 
 /// Parses a token stream into a [`ParsedModule`].
@@ -33,7 +33,7 @@ struct Parser<'a> {
     file_id: FileId,
     diags: &'a mut DiagnosticBag,
     interner: &'a Interner,
-    ctx: ParseCtx,
+    ctx: AstArenas,
 }
 
 impl<'a> Parser<'a> {
@@ -50,7 +50,7 @@ impl<'a> Parser<'a> {
             file_id,
             diags,
             interner,
-            ctx: ParseCtx::new(),
+            ctx: AstArenas::new(),
         }
     }
 
@@ -394,10 +394,6 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_prefix_or_atom(&mut self) -> Expr {
-        // Doc comments (`///`) are emitted as tokens so their text can be
-        // used for documentation.  The parser doesn't attach them to nodes
-        // yet, so consume and discard any leading doc-comment tokens here.
-        while self.eat(TokenKind::DocComment) {}
         match self.peek_kind() {
             // Prefix operators (BP 130)
             TokenKind::Minus => self.parse_prefix(PrefixOp::Neg),
@@ -558,13 +554,13 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_rec_lit_field(&mut self) -> RecLitField {
+    fn parse_rec_lit_field(&mut self) -> FieldInit {
         let start = self.start_span();
 
         // Spread: <.. expr
         if self.eat(TokenKind::LtDotDot) {
             let idx = self.parse_and_alloc_expr();
-            return RecLitField::Spread {
+            return FieldInit::Spread {
                 expr: idx,
                 span: self.finish_span(start),
             };
@@ -576,7 +572,7 @@ impl<'a> Parser<'a> {
         let name = self.expect_symbol();
         let _bind = self.expect(TokenKind::ColonEq);
         let value = self.parse_and_alloc_expr();
-        RecLitField::Named {
+        FieldInit::Named {
             attrs,
             mutable,
             name,
@@ -601,7 +597,7 @@ impl<'a> Parser<'a> {
             let elif_guard = self.parse_optional_guard();
             let _then = self.expect(TokenKind::Then);
             let elif_body = self.parse_and_alloc_expr();
-            elif_chains.push(ElifChain {
+            elif_chains.push(ElifBranch {
                 cond: elif_cond,
                 guard: elif_guard,
                 body: elif_body,
@@ -809,7 +805,7 @@ impl<'a> Parser<'a> {
         }
         // Literal argument
         let lit = self.parse_lit_value();
-        AttrArg::Lit(lit, self.finish_span(start))
+        AttrArg::Value { value: lit, span: self.finish_span(start) }
     }
 
     fn parse_modifiers(&mut self) -> Vec<Modifier> {
@@ -1511,7 +1507,6 @@ fn kind_text(kind: TokenKind) -> &'static str {
         TokenKind::FloatLit => "float literal",
         TokenKind::StringLit => "string literal",
         TokenKind::CharLit => "character literal",
-        TokenKind::DocComment => "doc comment",
         TokenKind::Eof => "end of file",
         TokenKind::Error => "error token",
         _ => "token",

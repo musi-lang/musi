@@ -6,9 +6,9 @@
 use musi_shared::{Idx, Interner, Symbol};
 
 use crate::ast::{
-    ArrayItem, Attr, AttrArg, BinOp, BindKind, ChoiceVariant, Cond, ElifChain, Expr, ImportClause,
-    LitValue, MatchArm, Modifier, Param, ParsedModule, Pat, PatField, PatSuffix, PostfixOp,
-    PrefixOp, RecField, RecLitField, Ty, TyParam, VariantPayload,
+    ArrayItem, Attr, AttrArg, BinOp, BindKind, ChoiceVariant, Cond, ElifBranch, Expr, FieldInit,
+    ImportClause, LitValue, MatchArm, Modifier, Param, ParsedModule, Pat, PatField, PatSuffix,
+    PostfixOp, PrefixOp, RecField, Ty, TyParam, VariantPayload,
 };
 
 /// Renders `module` as a multi-line S-expression string.
@@ -275,7 +275,7 @@ impl<'a> Printer<'a> {
         self.write("])");
     }
 
-    fn print_anon_rec(&mut self, fields: &[RecLitField]) {
+    fn print_anon_rec(&mut self, fields: &[FieldInit]) {
         self.write("(anon_rec [");
         for (i, field) in fields.iter().enumerate() {
             if i > 0 {
@@ -308,7 +308,7 @@ impl<'a> Printer<'a> {
         &mut self,
         cond: &Cond,
         then_body: Idx<Expr>,
-        elif_chains: &[ElifChain],
+        elif_chains: &[ElifBranch],
         else_body: Option<Idx<Expr>>,
     ) {
         self.write("(if ");
@@ -830,7 +830,7 @@ impl<'a> Printer<'a> {
         }
     }
 
-    fn print_elif(&mut self, elif: &ElifChain) {
+    fn print_elif(&mut self, elif: &ElifBranch) {
         self.write(" (elif ");
         self.print_cond(&elif.cond);
         self.print_optional_guard(elif.guard);
@@ -882,7 +882,7 @@ impl<'a> Printer<'a> {
             } => {
                 self.write(self.sym(*name));
             }
-            AttrArg::Lit(v, ..) => self.print_lit(v),
+            AttrArg::Value { value: v, .. } => self.print_lit(v),
         }
     }
 
@@ -954,9 +954,9 @@ impl<'a> Printer<'a> {
         self.write_char(')');
     }
 
-    fn print_rec_lit_field(&mut self, field: &RecLitField) {
+    fn print_rec_lit_field(&mut self, field: &FieldInit) {
         match field {
-            RecLitField::Named {
+            FieldInit::Named {
                 mutable,
                 name,
                 value,
@@ -971,7 +971,7 @@ impl<'a> Printer<'a> {
                 self.print_expr(*value);
                 self.write_char(')');
             }
-            RecLitField::Spread { expr, .. } => {
+            FieldInit::Spread { expr, .. } => {
                 self.write("(spread ");
                 self.print_expr(*expr);
                 self.write_char(')');

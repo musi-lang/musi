@@ -1,36 +1,63 @@
-//! Deserialization errors for the `.mso` binary format.
+//! Error types for the Musi bytecode format and code generator.
+
+use core::fmt;
 
 use thiserror::Error;
 
-/// Errors that can occur when deserializing a `.mso` binary module.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum DeserError {
-    /// The input ended before all expected data was read.
     #[error("unexpected end of input")]
     UnexpectedEof,
 
-    /// The magic bytes do not match `b\"MUSI\"`.
     #[error("invalid magic bytes (expected b\"MUSI\")")]
     InvalidMagic,
 
-    /// The format version is not supported (only version 1 is).
     #[error("unsupported format version {0}; expected 1")]
     UnsupportedVersion(u16),
 
-    /// An unknown tag was encountered in the const pool.
     #[error("unknown const-pool tag {0:#04x}")]
     UnknownConstTag(u8),
 
-    /// An unknown opcode tag was encountered.
     #[error("unknown opcode {tag:#04x} at offset {offset}")]
-    UnknownOpcode {
-        /// The opcode byte.
-        tag: u8,
-        /// Byte offset of the bad opcode in the code slice.
-        offset: usize,
-    },
+    UnknownOpcode { tag: u8, offset: usize },
 
-    /// A symbol name contained invalid UTF-8.
     #[error("symbol name is not valid UTF-8")]
     InvalidUtf8,
 }
+
+#[derive(Debug)]
+pub enum CodegenError {
+    TooManyFunctions,
+    TooManyConstants,
+    TooManySymbols,
+    ParameterCountOverflow,
+    UnknownFunction(Box<str>),
+    UnsupportedExpr,
+    UndefinedVariable(Box<str>),
+    TooManyLocals,
+    JumpOffsetOverflow,
+    UnknownType(Box<str>),
+    UnknownVariant(Box<str>),
+    UnknownField(Box<str>),
+}
+
+impl fmt::Display for CodegenError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::TooManyFunctions => write!(f, "too many functions (limit u16::MAX)"),
+            Self::TooManyConstants => write!(f, "too many constants (limit u16::MAX)"),
+            Self::TooManySymbols => write!(f, "too many symbols (limit u16::MAX)"),
+            Self::ParameterCountOverflow => write!(f, "function has more than u8::MAX parameters"),
+            Self::UnknownFunction(name) => write!(f, "unknown function '{name}'"),
+            Self::UnsupportedExpr => write!(f, "expression kind is not supported"),
+            Self::UndefinedVariable(name) => write!(f, "undefined variable '{name}'"),
+            Self::TooManyLocals => write!(f, "too many local variables (limit u16::MAX)"),
+            Self::JumpOffsetOverflow => write!(f, "jump offset overflowed i32 range"),
+            Self::UnknownType(name) => write!(f, "unknown type '{name}'"),
+            Self::UnknownVariant(name) => write!(f, "unknown variant '{name}'"),
+            Self::UnknownField(name) => write!(f, "unknown field '{name}'"),
+        }
+    }
+}
+
+impl std::error::Error for CodegenError {}

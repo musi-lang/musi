@@ -6,6 +6,8 @@ const NOP: u8 = 0x00;
 const HALT: u8 = 0x01;
 const RET: u8 = 0x02;
 const DROP: u8 = 0x03;
+const DUP: u8 = 0x04;
+const HALT_ERROR: u8 = 0x05;
 const LD_IMM_I64: u8 = 0x10;
 const LD_IMM_F64: u8 = 0x11;
 const LD_IMM_BOOL: u8 = 0x12;
@@ -14,6 +16,12 @@ const LD_CONST: u8 = 0x14;
 const LD_LOC: u8 = 0x15;
 const ST_LOC: u8 = 0x16;
 const CALL: u8 = 0x20;
+const LD_FN_IDX: u8 = 0x21;
+const CALL_DYNAMIC: u8 = 0x22;
+// Object ops
+const NEW_OBJ: u8 = 0x80;
+const LD_FLD: u8 = 0x81;
+const LD_TAG: u8 = 0x82;
 // Arithmetic -- integer
 const ADD_I64: u8 = 0x30;
 const SUB_I64: u8 = 0x31;
@@ -76,6 +84,10 @@ pub enum Opcode {
     Ret,
     /// Discard the top of the operand stack.
     Drop,
+    /// Clone the top of the operand stack and push the copy.
+    Dup,
+    /// Terminate execution with a runtime error (non-exhaustive match).
+    HaltError,
     /// Push an immediate 64-bit signed integer.
     LdImmI64(i64),
     /// Push an immediate 64-bit float.
@@ -92,6 +104,16 @@ pub enum Opcode {
     StLoc(u16),
     /// Call a function by its function-table index.
     Call(u16),
+    /// Push a function value (Value::Function) by its function-table index.
+    LdFnIdx(u16),
+    /// Pop a Value::Function from the stack and call it.
+    CallDynamic,
+    /// Pop N values from the stack and create a Value::Object.
+    NewObj(u16),
+    /// Pop a Value::Object and push the field at the given index.
+    LdFld(u16),
+    /// Pop a Value::Object and push field[0] as an Int (discriminant).
+    LdTag,
     /// Pop two i64, push their wrapping sum.
     AddI64,
     /// Pop two i64, push their wrapping difference.
@@ -180,6 +202,8 @@ impl Opcode {
             Self::Halt => buf.push(HALT),
             Self::Ret => buf.push(RET),
             Self::Drop => buf.push(DROP),
+            Self::Dup => buf.push(DUP),
+            Self::HaltError => buf.push(HALT_ERROR),
             Self::LdImmUnit => buf.push(LD_IMM_UNIT),
             Self::LdImmI64(v) => {
                 buf.push(LD_IMM_I64);
@@ -209,6 +233,20 @@ impl Opcode {
                 buf.push(CALL);
                 buf.extend_from_slice(&fn_idx.to_le_bytes());
             }
+            Self::LdFnIdx(idx) => {
+                buf.push(LD_FN_IDX);
+                buf.extend_from_slice(&idx.to_le_bytes());
+            }
+            Self::CallDynamic => buf.push(CALL_DYNAMIC),
+            Self::NewObj(n) => {
+                buf.push(NEW_OBJ);
+                buf.extend_from_slice(&n.to_le_bytes());
+            }
+            Self::LdFld(idx) => {
+                buf.push(LD_FLD);
+                buf.extend_from_slice(&idx.to_le_bytes());
+            }
+            Self::LdTag => buf.push(LD_TAG),
             Self::AddI64 => buf.push(ADD_I64),
             Self::SubI64 => buf.push(SUB_I64),
             Self::MulI64 => buf.push(MUL_I64),
@@ -275,6 +313,8 @@ impl Opcode {
             HALT => Ok((Self::Halt, 1)),
             RET => Ok((Self::Ret, 1)),
             DROP => Ok((Self::Drop, 1)),
+            DUP => Ok((Self::Dup, 1)),
+            HALT_ERROR => Ok((Self::HaltError, 1)),
             LD_IMM_UNIT => Ok((Self::LdImmUnit, 1)),
             LD_IMM_I64 => {
                 let b = read_8(code, offset + 1)?;
@@ -295,6 +335,11 @@ impl Opcode {
             LD_LOC => Ok((Self::LdLoc(read_u16(code, offset + 1)?), 3)),
             ST_LOC => Ok((Self::StLoc(read_u16(code, offset + 1)?), 3)),
             CALL => Ok((Self::Call(read_u16(code, offset + 1)?), 3)),
+            LD_FN_IDX => Ok((Self::LdFnIdx(read_u16(code, offset + 1)?), 3)),
+            CALL_DYNAMIC => Ok((Self::CallDynamic, 1)),
+            NEW_OBJ => Ok((Self::NewObj(read_u16(code, offset + 1)?), 3)),
+            LD_FLD => Ok((Self::LdFld(read_u16(code, offset + 1)?), 3)),
+            LD_TAG => Ok((Self::LdTag, 1)),
             ADD_I64 => Ok((Self::AddI64, 1)),
             SUB_I64 => Ok((Self::SubI64, 1)),
             MUL_I64 => Ok((Self::MulI64, 1)),
@@ -346,7 +391,11 @@ impl Opcode {
             | Self::Halt
             | Self::Ret
             | Self::Drop
+            | Self::Dup
+            | Self::HaltError
             | Self::LdImmUnit
+            | Self::CallDynamic
+            | Self::LdTag
             | Self::AddI64
             | Self::SubI64
             | Self::MulI64
@@ -385,7 +434,13 @@ impl Opcode {
             | Self::ConcatStr => 1,
             Self::LdImmI64(_) | Self::LdImmF64(_) => 9,
             Self::LdImmBool(_) => 2,
-            Self::LdConst(_) | Self::LdLoc(_) | Self::StLoc(_) | Self::Call(_) => 3,
+            Self::LdConst(_)
+            | Self::LdLoc(_)
+            | Self::StLoc(_)
+            | Self::Call(_)
+            | Self::LdFnIdx(_)
+            | Self::NewObj(_)
+            | Self::LdFld(_) => 3,
             Self::Br(_) | Self::BrTrue(_) | Self::BrFalse(_) => 5,
         }
     }

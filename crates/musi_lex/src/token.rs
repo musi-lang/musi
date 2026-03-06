@@ -2,10 +2,11 @@
 
 use musi_shared::{Span, Symbol};
 
-/// Every distinct token the Musi lexer can produce.
+use crate::trivia::TriviaRange;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TokenKind {
-    // ── Keywords ─────────────────────────────────────────────────────
+    // -- Keywords ---------------------------------------------------------
     Fn,
     Const,
     Var,
@@ -40,7 +41,7 @@ pub enum TokenKind {
     Shl,
     Shr,
 
-    // ── Punctuation ──────────────────────────────────────────────────
+    // -- Punctuation ------------------------------------------------------
     LParen,
     RParen,
     LBrace,
@@ -78,27 +79,25 @@ pub enum TokenKind {
     Hash,
     Underscore,
 
-    // ── Compound tokens ──────────────────────────────────────────────
+    // -- Compound tokens --------------------------------------------------
     DotLBracket,
     DotLBrace,
     LtDotDot,
 
-    // ── Literals ─────────────────────────────────────────────────────
+    // -- Literals ---------------------------------------------------------
     IntLit,
     FloatLit,
     StringLit,
     CharLit,
 
-    // ── Other ────────────────────────────────────────────────────────
+    // -- Other ------------------------------------------------------------
     Ident,
     TyIdent,
-    DocComment,
     Eof,
     Error,
 }
 
 impl TokenKind {
-    /// Returns `true` if this token is a keyword.
     #[must_use]
     pub const fn is_keyword(self) -> bool {
         matches!(
@@ -139,13 +138,12 @@ impl TokenKind {
         )
     }
 
-    /// Returns the source text of a fixed token (keywords and punctuation).
-    ///
-    /// Returns `None` for tokens whose text varies (literals, identifiers, etc.).
+    /// Returns the fixed source text for structural tokens, or `None` for
+    /// tokens whose text varies (literals, identifiers, etc.).
     #[must_use]
     pub const fn fixed_text(self) -> Option<&'static str> {
         match self {
-            // Keywords
+            // -- Keywords
             Self::Fn => Some("fn"),
             Self::Const => Some("const"),
             Self::Var => Some("var"),
@@ -180,7 +178,7 @@ impl TokenKind {
             Self::Shl => Some("shl"),
             Self::Shr => Some("shr"),
 
-            // Punctuation
+            // -- Punctuation
             Self::LParen => Some("("),
             Self::RParen => Some(")"),
             Self::LBrace => Some("{"),
@@ -218,26 +216,25 @@ impl TokenKind {
             Self::Hash => Some("#"),
             Self::Underscore => Some("_"),
 
-            // Compound tokens
+            // -- Compound tokens
             Self::DotLBracket => Some(".["),
             Self::DotLBrace => Some(".{"),
             Self::LtDotDot => Some("<.."),
 
-            // Variable-text tokens
+            // -- Variable-text tokens
             Self::IntLit
             | Self::FloatLit
             | Self::StringLit
             | Self::CharLit
             | Self::Ident
             | Self::TyIdent
-            | Self::DocComment
             | Self::Eof
             | Self::Error => None,
         }
     }
 }
 
-/// Maps a string to its keyword [`TokenKind`], or `None` if it is not a keyword.
+/// Maps a keyword string to its [`TokenKind`], or `None`.
 #[must_use]
 pub fn keyword_from_str(s: &str) -> Option<TokenKind> {
     match s {
@@ -278,21 +275,30 @@ pub fn keyword_from_str(s: &str) -> Option<TokenKind> {
     }
 }
 
-/// A single lexed token with its kind, source location, and optional interned text.
+/// A single lexed token: its kind, source span, optional interned text,
+/// and trivia ranges into the `LexedSource::trivia` vec.
+///
+/// `symbol` is `Some` for: `Ident`, `TyIdent`, `IntLit`, `FloatLit`,
+/// `StringLit`, `CharLit`. It is `None` for structural tokens.
 #[derive(Debug, Clone)]
 pub struct Token {
     pub kind: TokenKind,
     pub span: Span,
-    /// Interned text for: `Ident`, `TyIdent`, `IntLit`, `FloatLit`, `StringLit`,
-    /// `CharLit`, `DocComment`. `None` for purely structural tokens.
     pub symbol: Option<Symbol>,
+    pub leading_trivia: TriviaRange,
+    pub trailing_trivia: TriviaRange,
 }
 
 impl Token {
-    /// Creates a new token.
     #[must_use]
     pub const fn new(kind: TokenKind, span: Span, symbol: Option<Symbol>) -> Self {
-        Self { kind, span, symbol }
+        Self {
+            kind,
+            span,
+            symbol,
+            leading_trivia: TriviaRange { start: 0, len: 0 },
+            trailing_trivia: TriviaRange { start: 0, len: 0 },
+        }
     }
 }
 

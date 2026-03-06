@@ -256,14 +256,12 @@ fn unknown_character_produces_error_and_continues() {
 }
 
 #[test]
-fn doc_comment() {
-    let (tokens, interner, _) = lex_with_interner("/// hello docs\nfoo");
-    assert_eq!(tokens[0].kind, TokenKind::DocComment);
-    assert_eq!(
-        interner.resolve(tokens[0].symbol.expect("has symbol")),
-        " hello docs"
-    );
-    assert_eq!(tokens[1].kind, TokenKind::Ident);
+fn doc_comment_becomes_trivia() {
+    // Doc comments are collected as leading trivia, not emitted as tokens.
+    let (tokens, _interner, _) = lex_with_interner("/// hello docs\nfoo");
+    assert_eq!(tokens[0].kind, TokenKind::Ident); // foo
+    assert_eq!(tokens[1].kind, TokenKind::Eof);
+    assert!(tokens[0].leading_trivia.len > 0, "doc comment should be in leading trivia");
 }
 
 #[test]
@@ -451,11 +449,10 @@ fn hex_with_underscores() {
 }
 
 #[test]
-fn multiple_doc_comments() {
+fn multiple_doc_comments_become_trivia() {
+    // Both doc comments are trivia; only Eof token is produced.
     let kinds = lex_kinds("/// first\n/// second\n");
-    assert_eq!(kinds[0], TokenKind::DocComment);
-    assert_eq!(kinds[1], TokenKind::DocComment);
-    assert_eq!(kinds[2], TokenKind::Eof);
+    assert_eq!(kinds[0], TokenKind::Eof);
 }
 
 #[test]

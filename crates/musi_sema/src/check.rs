@@ -9,11 +9,10 @@
 
 use std::collections::HashMap;
 
-use musi_parse::ast::{
-    ArrayItem, BinOp, Cond, ElifChain, Expr, LitValue, MatchArm, Param, Pat, PostfixOp, PrefixOp,
-    RecLitField, Ty, TyParam,
+use musi_ast::{
+    ArrayItem, AstArenas, BinOp, Cond, ElifBranch, Expr, FieldInit, LitValue, MatchArm, Param,
+    Pat, ParsedModule, PostfixOp, PrefixOp, Ty, TyParam,
 };
-use musi_parse::{ParseCtx, ParsedModule};
 use musi_shared::{DiagnosticBag, FileId, Idx, Interner, Span, Symbol};
 
 use crate::def::{DefId, DefInfo, DefKind};
@@ -265,10 +264,10 @@ fn ty_scope_lookup(stack: &TyScope, name: Symbol) -> Option<TypeVarId> {
 
 struct FnDefNode<'a> {
     name: musi_shared::Symbol,
-    ty_params: &'a [musi_parse::ast::TyParam],
-    params: &'a [musi_parse::ast::Param],
-    ret_ty: Option<&'a musi_parse::ast::Ty>,
-    body: Option<musi_shared::Idx<musi_parse::ast::Expr>>,
+    ty_params: &'a [musi_ast::TyParam],
+    params: &'a [musi_ast::Param],
+    ret_ty: Option<&'a musi_ast::Ty>,
+    body: Option<musi_shared::Idx<musi_ast::Expr>>,
     span: musi_shared::Span,
 }
 
@@ -380,14 +379,14 @@ impl<'a> TypeChecker<'a> {
     }
 
     /// Infers and records the type of the expression at `idx`.
-    pub fn infer(&mut self, idx: Idx<Expr>, ctx: &ParseCtx) -> Type {
+    pub fn infer(&mut self, idx: Idx<Expr>, ctx: &AstArenas) -> Type {
         let ty = self.infer_inner(idx, ctx);
         let resolved = self.unify_table.resolve(ty.clone());
         let _prev = self.expr_types.insert(idx, resolved.clone());
         resolved
     }
 
-    fn infer_inner(&mut self, idx: Idx<Expr>, ctx: &ParseCtx) -> Type {
+    fn infer_inner(&mut self, idx: Idx<Expr>, ctx: &AstArenas) -> Type {
         let expr = ctx.exprs.get(idx);
         match expr {
             Expr::Lit { value, .. } => Self::infer_lit(value),
@@ -514,7 +513,7 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
-    fn infer_tuple(&mut self, elements: &[Idx<Expr>], ctx: &ParseCtx) -> Type {
+    fn infer_tuple(&mut self, elements: &[Idx<Expr>], ctx: &AstArenas) -> Type {
         let elems: Vec<Type> = elements.iter().map(|&e| self.infer(e, ctx)).collect();
         Type::Tuple(elems)
     }
@@ -523,7 +522,7 @@ impl<'a> TypeChecker<'a> {
         &mut self,
         stmts: &[Idx<Expr>],
         tail: Option<Idx<Expr>>,
-        ctx: &ParseCtx,
+        ctx: &AstArenas,
     ) -> Type {
         for &stmt in stmts {
             let _ty = self.infer(stmt, ctx);
@@ -535,7 +534,7 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
-    fn infer_array_expr(&mut self, items: &[ArrayItem], ctx: &ParseCtx) -> Type {
+    fn infer_array_expr(&mut self, items: &[ArrayItem], ctx: &AstArenas) -> Type {
         let elem_ty = self.unify_table.fresh();
         for &item in items {
             let item_idx = match item {
@@ -551,20 +550,20 @@ impl<'a> TypeChecker<'a> {
         Type::Array(Box::new(Type::Var(elem_ty)), None)
     }
 
-    fn infer_rec_fields(&mut self, fields: &[RecLitField], ctx: &ParseCtx) {
+    fn infer_rec_fields(&mut self, fields: &[FieldInit], ctx: &AstArenas) {
         for field in fields {
             match field {
-                RecLitField::Named { value, .. } => {
+                FieldInit::Named { value, .. } => {
                     let _ty = self.infer(*value, ctx);
                 }
-                RecLitField::Spread { expr: e, .. } => {
+                FieldInit::Spread { expr: e, .. } => {
                     let _ty = self.infer(*e, ctx);
                 }
             }
         }
     }
 
-    fn infer_anon_rec_expr(&mut self, fields: &[RecLitField], ctx: &ParseCtx) -> Type {
+    fn infer_anon_rec_expr(&mut self, fields: &[FieldInit], ctx: &AstArenas) -> Type {
         // We don't track anonymous record types in the type table yet.
         self.infer_rec_fields(fields, ctx);
         Type::Error // unresolved named rec type -- Phase 8
@@ -575,7 +574,7 @@ impl<'a> TypeChecker<'a> {
         op: PrefixOp,
         operand: Idx<Expr>,
         span: Span,
-        ctx: &ParseCtx,
+        ctx: &AstArenas,
     ) -> Type {
         let operand_ty = self.infer(operand, ctx);
         match op {
@@ -599,7 +598,7 @@ impl<'a> TypeChecker<'a> {
         target: Idx<Expr>,
         value: Idx<Expr>,
         span: Span,
-        ctx: &ParseCtx,
+        ctx: &AstArenas,
     ) -> Type {
         let target_ty = self.infer(target, ctx);
         let value_ty = self.infer(value, ctx);
@@ -611,11 +610,11 @@ impl<'a> TypeChecker<'a> {
 
     fn infer_bind_expr(
         &mut self,
-        pat: &musi_parse::ast::Pat,
-        ann_ty: Option<&musi_parse::ast::Ty>,
+        pat: &musi_ast::Pat,
+        ann_ty: Option<&musi_ast::Ty>,
         init: Option<Idx<Expr>>,
         span: Span,
-        ctx: &ParseCtx,
+        ctx: &AstArenas,
     ) -> Type {
         let ann = ann_ty.map(|t| self.resolve_ty(t));
 
@@ -642,11 +641,11 @@ impl<'a> TypeChecker<'a> {
 
     fn infer_lambda_expr(
         &mut self,
-        ty_params: &[musi_parse::ast::TyParam],
-        params: &[musi_parse::ast::Param],
-        ret_ty: Option<&musi_parse::ast::Ty>,
+        ty_params: &[musi_ast::TyParam],
+        params: &[musi_ast::Param],
+        ret_ty: Option<&musi_ast::Ty>,
         body: Idx<Expr>,
-        ctx: &ParseCtx,
+        ctx: &AstArenas,
     ) -> Type {
         let _ty_param_vars = self.push_ty_param_scope(ty_params);
 
@@ -691,7 +690,7 @@ impl<'a> TypeChecker<'a> {
         &mut self,
         scrutinee: Idx<Expr>,
         arms: &[MatchArm],
-        ctx: &ParseCtx,
+        ctx: &AstArenas,
     ) -> Type {
         let _scrut_ty = self.infer(scrutinee, ctx);
         let result_var = self.unify_table.fresh();
@@ -714,7 +713,7 @@ impl<'a> TypeChecker<'a> {
         guard: Option<Idx<Expr>>,
         body: Idx<Expr>,
         span: Span,
-        ctx: &ParseCtx,
+        ctx: &AstArenas,
     ) -> Type {
         self.check_cond(cond, span, ctx);
         self.check_guard(guard, ctx);
@@ -726,7 +725,7 @@ impl<'a> TypeChecker<'a> {
         &mut self,
         body: Idx<Expr>,
         post_cond: Option<&Cond>,
-        ctx: &ParseCtx,
+        ctx: &AstArenas,
     ) -> Type {
         let _body_ty = self.infer(body, ctx);
         if let Some(pc) = post_cond {
@@ -741,7 +740,7 @@ impl<'a> TypeChecker<'a> {
         iter: Idx<Expr>,
         body: Idx<Expr>,
         guard: Option<Idx<Expr>>,
-        ctx: &ParseCtx,
+        ctx: &AstArenas,
     ) -> Type {
         let _iter_ty = self.infer(iter, ctx);
         self.check_guard(guard, ctx);
@@ -749,7 +748,7 @@ impl<'a> TypeChecker<'a> {
         Type::Prim(PrimTy::Unit)
     }
 
-    fn infer_fn_def(&mut self, node: FnDefNode<'_>, ctx: &ParseCtx) -> Type {
+    fn infer_fn_def(&mut self, node: FnDefNode<'_>, ctx: &AstArenas) -> Type {
         let ty_param_vars = self.push_ty_param_scope(node.ty_params);
 
         let mut param_types: Vec<Type> = Vec::new();
@@ -815,7 +814,7 @@ impl<'a> TypeChecker<'a> {
         lhs: Idx<Expr>,
         rhs: Idx<Expr>,
         span: Span,
-        ctx: &ParseCtx,
+        ctx: &AstArenas,
     ) -> Type {
         let lhs_ty = self.infer(lhs, ctx);
         let rhs_ty = self.infer(rhs, ctx);
@@ -888,7 +887,7 @@ impl<'a> TypeChecker<'a> {
         base: Idx<Expr>,
         op: &PostfixOp,
         span: Span,
-        ctx: &ParseCtx,
+        ctx: &AstArenas,
     ) -> Type {
         match op {
             PostfixOp::Call { args, .. } => {
@@ -929,7 +928,7 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
-    fn infer_args_discard(&mut self, args: &[Idx<Expr>], ctx: &ParseCtx) {
+    fn infer_args_discard(&mut self, args: &[Idx<Expr>], ctx: &AstArenas) {
         for &a in args {
             let _ty = self.infer(a, ctx);
         }
@@ -941,7 +940,7 @@ impl<'a> TypeChecker<'a> {
         base: Idx<Expr>,
         args: &[Idx<Expr>],
         span: Span,
-        ctx: &ParseCtx,
+        ctx: &AstArenas,
     ) -> Type {
         let resolved_callee = self.unify_table.resolve(callee_ty);
         match resolved_callee {
@@ -1044,10 +1043,10 @@ impl<'a> TypeChecker<'a> {
         &mut self,
         cond: &Cond,
         then_body: Idx<Expr>,
-        elif_chains: &[ElifChain],
+        elif_chains: &[ElifBranch],
         else_body: Option<Idx<Expr>>,
         span: Span,
-        ctx: &ParseCtx,
+        ctx: &AstArenas,
     ) -> Type {
         self.check_cond(cond, span, ctx);
         let then_ty = self.infer(then_body, ctx);
@@ -1085,7 +1084,7 @@ impl<'a> TypeChecker<'a> {
         )
     }
 
-    fn check_guard(&mut self, guard: Option<Idx<Expr>>, ctx: &ParseCtx) {
+    fn check_guard(&mut self, guard: Option<Idx<Expr>>, ctx: &AstArenas) {
         if let Some(g) = guard {
             let gty = self.infer(g, ctx);
             let gspan = self.expr_span(g, ctx);
@@ -1099,7 +1098,7 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
-    fn check_cond(&mut self, cond: &Cond, span: Span, ctx: &ParseCtx) {
+    fn check_cond(&mut self, cond: &Cond, span: Span, ctx: &AstArenas) {
         match cond {
             Cond::Expr(e) => {
                 let ty = self.infer(*e, ctx);
@@ -1117,7 +1116,7 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
-    fn infer_match_arm(&mut self, arm: &MatchArm, ctx: &ParseCtx) -> Type {
+    fn infer_match_arm(&mut self, arm: &MatchArm, ctx: &AstArenas) -> Type {
         self.infer(arm.body, ctx)
     }
 
@@ -1204,7 +1203,7 @@ impl<'a> TypeChecker<'a> {
         self.defs.iter().find(|d| d.name == name).map(|d| d.id)
     }
 
-    fn expr_span(&self, idx: Idx<Expr>, ctx: &ParseCtx) -> Span {
+    fn expr_span(&self, idx: Idx<Expr>, ctx: &AstArenas) -> Span {
         span_of_expr(ctx.exprs.get(idx))
     }
 }

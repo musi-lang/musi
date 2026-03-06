@@ -10,11 +10,11 @@ use std::env;
 use std::fs;
 use std::process;
 
-use musi_codegen::{CodegenError, emit};
-use musi_lex::Lexer;
+use musi_codegen::emit;
+use musi_lex::lex;
 use musi_parse::parse;
 use musi_shared::{DiagnosticBag, Interner, SourceDb};
-use musi_vm::{NativeRegistry, Vm};
+use musi_vm::Vm;
 
 const PRELUDE_SRC: &str = include_str!("../../../std/prelude.ms");
 const PRELUDE_FILENAME: &str = "<prelude>";
@@ -41,8 +41,8 @@ fn main() {
     let mut diags = DiagnosticBag::new();
 
     let user_file_id = source_db.add(file_path.as_str(), src.as_str());
-    let user_tokens: Vec<_> = Lexer::new(&src, user_file_id, &mut interner, &mut diags).collect();
-    let user_module = parse(&user_tokens, user_file_id, &mut diags, &interner);
+    let user_lexed = lex(&src, user_file_id, &mut interner, &mut diags);
+    let user_module = parse(&user_lexed.tokens, user_file_id, &mut diags, &interner);
 
     if diags.has_errors() {
         for diag in diags.iter() {
@@ -52,9 +52,8 @@ fn main() {
     }
 
     let prelude_file_id = source_db.add(PRELUDE_FILENAME, PRELUDE_SRC);
-    let prelude_tokens: Vec<_> =
-        Lexer::new(PRELUDE_SRC, prelude_file_id, &mut interner, &mut diags).collect();
-    let prelude_module = parse(&prelude_tokens, prelude_file_id, &mut diags, &interner);
+    let prelude_lexed = lex(PRELUDE_SRC, prelude_file_id, &mut interner, &mut diags);
+    let prelude_module = parse(&prelude_lexed.tokens, prelude_file_id, &mut diags, &interner);
 
     if diags.has_errors() {
         for diag in diags.iter() {
@@ -66,24 +65,7 @@ fn main() {
     let module = match emit(&prelude_module, &user_module, &interner) {
         Ok(m) => m,
         Err(e) => {
-            let msg = match e {
-                CodegenError::TooManyFunctions => "codegen error: too many functions".into(),
-                CodegenError::TooManyConstants => "codegen error: too many constants".into(),
-                CodegenError::TooManySymbols => "codegen error: too many symbols".into(),
-                CodegenError::ParameterCountOverflow => {
-                    "codegen error: parameter count overflow".into()
-                }
-                CodegenError::UnknownFunction(name) => {
-                    format!("codegen error: unknown function '{name}'")
-                }
-                CodegenError::UnsupportedExpr => "codegen error: unsupported expression".into(),
-                CodegenError::UndefinedVariable(name) => {
-                    format!("codegen error: undefined variable '{name}'")
-                }
-                CodegenError::TooManyLocals => "codegen error: too many local variables".into(),
-                CodegenError::JumpOffsetOverflow => "codegen error: jump offset overflow".into(),
-            };
-            eprintln!("{msg}");
+            eprintln!("codegen error: {e}");
             process::exit(1);
         }
     };
@@ -91,7 +73,7 @@ fn main() {
     let main_fn_idx =
         u16::try_from(module.function_table.len() - 1).expect("function table index fits u16");
 
-    let mut vm = Vm::new(module, NativeRegistry::new());
+    let mut vm = Vm::new(module);
     match vm.run(main_fn_idx) {
         Ok(_) => {}
         Err(e) => {
