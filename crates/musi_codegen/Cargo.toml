@@ -10,6 +10,7 @@ keywords = ["compiler", "musi", "bytecode"]
 categories = ["development-tools"]
 
 [dependencies]
+byteorder = { workspace = true }
 thiserror = { workspace = true }
 musi_shared = { path = "../musi_shared" }
 musi_ast    = { path = "../musi_ast" }
