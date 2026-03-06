@@ -1196,6 +1196,23 @@ fn emit_discriminant_test(disc: i64, scrutinee_slot: u16, out: &mut FnEmitter) -
     out.emit_jump_placeholder(FnEmitter::BR_FALSE)
 }
 
+/// Returns `(variant_name, sub_patterns)` for patterns that match a choice variant.
+/// Covers both `Name(args)` (Pat::Ident + Positional) and `.Name(args)` (Pat::DotPrefix).
+fn variant_name_and_args<'p>(
+    pat: &'p Pat,
+    interner: &'p Interner,
+) -> Option<(&'p str, &'p [Pat])> {
+    match pat {
+        Pat::Ident {
+            name,
+            suffix: Some(PatSuffix::Positional { args, .. }),
+            ..
+        } => Some((interner.resolve(*name), args.as_slice())),
+        Pat::DotPrefix { name, args, .. } => Some((interner.resolve(*name), args.as_slice())),
+        _ => None,
+    }
+}
+
 fn emit_pattern_test(
     arenas: &EmitArenas<'_>,
     state: &EmitState,
@@ -1228,31 +1245,18 @@ fn emit_pattern_test(
             Ok(Some(fixup))
         }
 
-        Pat::Ident {
-            name,
-            suffix: Some(PatSuffix::Positional { .. }),
-            ..
-        } => {
-            let variant_name = arenas.interner.resolve(*name);
-            let vinfo = state
-                .variant_map
-                .get(variant_name)
-                .ok_or_else(|| CodegenError::UnknownVariant(variant_name.into()))?;
-            let fixup = emit_discriminant_test(vinfo.discriminant, scrutinee_slot, out);
-            Ok(Some(fixup))
+        pat => {
+            if let Some((variant_name, _)) = variant_name_and_args(pat, arenas.interner) {
+                let vinfo = state
+                    .variant_map
+                    .get(variant_name)
+                    .ok_or_else(|| CodegenError::UnknownVariant(variant_name.into()))?;
+                let fixup = emit_discriminant_test(vinfo.discriminant, scrutinee_slot, out);
+                Ok(Some(fixup))
+            } else {
+                Err(CodegenError::UnsupportedExpr)
+            }
         }
-
-        Pat::DotPrefix { name, .. } => {
-            let name_str = arenas.interner.resolve(*name);
-            let vinfo = state
-                .variant_map
-                .get(name_str)
-                .ok_or_else(|| CodegenError::UnknownVariant(name_str.into()))?;
-            let fixup = emit_discriminant_test(vinfo.discriminant, scrutinee_slot, out);
-            Ok(Some(fixup))
-        }
-
-        _ => Err(CodegenError::UnsupportedExpr),
     }
 }
 
@@ -1276,70 +1280,40 @@ fn emit_pattern_bindings(
             Ok(())
         }
 
-        Pat::Ident {
-            suffix: Some(PatSuffix::Positional { args: sub_pats, .. }),
-            ..
-        } => {
-            for (field_i, sub_pat) in sub_pats.iter().enumerate() {
-                let field_idx =
-                    u16::try_from(field_i + 1).map_err(|_| CodegenError::UnsupportedExpr)?;
-                match sub_pat {
-                    Pat::Wild { .. } => {}
-                    Pat::Ident {
-                        name, suffix: None, ..
-                    } => {
-                        let name_str = arenas.interner.resolve(*name);
-                        let sub_slot = out.define_local(name_str)?;
-                        out.push(&Opcode::LdLoc(scrutinee_slot));
-                        out.push(&Opcode::LdFld(field_idx));
-                        out.push(&Opcode::StLoc(sub_slot));
-                    }
-                    _ => {
-                        let temp_name =
-                            format!("$sub_{}_{}_{}", scrutinee_slot, field_i, out.next_slot);
-                        let temp_slot = out.define_local(&temp_name)?;
-                        out.push(&Opcode::LdLoc(scrutinee_slot));
-                        out.push(&Opcode::LdFld(field_idx));
-                        out.push(&Opcode::StLoc(temp_slot));
-                        emit_pattern_bindings(arenas, state, sub_pat, temp_slot, out)?;
-                    }
-                }
-            }
-            Ok(())
-        }
-
         Pat::Wild { .. } | Pat::Lit { .. } => Ok(()),
 
-        Pat::DotPrefix { args: sub_pats, .. } => {
-            for (field_i, sub_pat) in sub_pats.iter().enumerate() {
-                let field_idx =
-                    u16::try_from(field_i + 1).map_err(|_| CodegenError::UnsupportedExpr)?;
-                match sub_pat {
-                    Pat::Wild { .. } => {}
-                    Pat::Ident {
-                        name, suffix: None, ..
-                    } => {
-                        let name_str = arenas.interner.resolve(*name);
-                        let sub_slot = out.define_local(name_str)?;
-                        out.push(&Opcode::LdLoc(scrutinee_slot));
-                        out.push(&Opcode::LdFld(field_idx));
-                        out.push(&Opcode::StLoc(sub_slot));
-                    }
-                    _ => {
-                        let temp_name =
-                            format!("$sub_{}_{}_{}", scrutinee_slot, field_i, out.next_slot);
-                        let temp_slot = out.define_local(&temp_name)?;
-                        out.push(&Opcode::LdLoc(scrutinee_slot));
-                        out.push(&Opcode::LdFld(field_idx));
-                        out.push(&Opcode::StLoc(temp_slot));
-                        emit_pattern_bindings(arenas, state, sub_pat, temp_slot, out)?;
+        pat => {
+            if let Some((_, sub_pats)) = variant_name_and_args(pat, arenas.interner) {
+                for (field_i, sub_pat) in sub_pats.iter().enumerate() {
+                    let field_idx =
+                        u16::try_from(field_i + 1).map_err(|_| CodegenError::UnsupportedExpr)?;
+                    match sub_pat {
+                        Pat::Wild { .. } => {}
+                        Pat::Ident {
+                            name, suffix: None, ..
+                        } => {
+                            let name_str = arenas.interner.resolve(*name);
+                            let sub_slot = out.define_local(name_str)?;
+                            out.push(&Opcode::LdLoc(scrutinee_slot));
+                            out.push(&Opcode::LdFld(field_idx));
+                            out.push(&Opcode::StLoc(sub_slot));
+                        }
+                        _ => {
+                            let temp_name =
+                                format!("$sub_{}_{}_{}", scrutinee_slot, field_i, out.next_slot);
+                            let temp_slot = out.define_local(&temp_name)?;
+                            out.push(&Opcode::LdLoc(scrutinee_slot));
+                            out.push(&Opcode::LdFld(field_idx));
+                            out.push(&Opcode::StLoc(temp_slot));
+                            emit_pattern_bindings(arenas, state, sub_pat, temp_slot, out)?;
+                        }
                     }
                 }
+                Ok(())
+            } else {
+                Err(CodegenError::UnsupportedExpr)
             }
-            Ok(())
         }
-
-        _ => Err(CodegenError::UnsupportedExpr),
     }
 }
 
