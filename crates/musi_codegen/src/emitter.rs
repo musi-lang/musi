@@ -277,6 +277,16 @@ fn register_fn_def(
     };
 
     let fn_name = interner.resolve(*name).to_owned();
+    let native_abi: Box<str> = modifiers
+        .iter()
+        .find_map(|m| {
+            if let Modifier::Native(Some(sym)) = m {
+                Some(Box::from(interner.resolve(*sym)))
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(|| Box::from(""));
     let is_native = body.is_none() || modifiers.iter().any(|m| matches!(m, Modifier::Native(_)));
     let is_export = modifiers.iter().any(|m| matches!(m, Modifier::Export));
     let flags_raw: u8 = if is_native { SymbolFlags::NATIVE } else { 0 }
@@ -310,7 +320,7 @@ fn register_fn_def(
         name: fn_name.clone().into_boxed_str(),
         flags: SymbolFlags::new(flags_raw),
         intrinsic_id,
-        abi: Box::from(""),
+        abi: native_abi,
     })?;
 
     let param_count =
