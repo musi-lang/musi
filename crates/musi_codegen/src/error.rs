@@ -1,8 +1,5 @@
 //! Error types for the Musi bytecode format and code generator.
 
-use core::fmt;
-use std::error::Error;
-
 use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -26,39 +23,30 @@ pub enum DeserError {
     InvalidUtf8,
 }
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum CodegenError {
+    #[error("too many functions (limit u16::MAX)")]
     TooManyFunctions,
+    #[error("too many constants (limit u16::MAX)")]
     TooManyConstants,
+    #[error("too many symbols (limit u16::MAX)")]
     TooManySymbols,
+    #[error("function has more than u8::MAX parameters")]
     ParameterCountOverflow,
+    #[error("unknown function '{0}'")]
     UnknownFunction(Box<str>),
+    #[error("expression kind is not supported")]
     UnsupportedExpr,
+    #[error("undefined variable '{0}'")]
     UndefinedVariable(Box<str>),
+    #[error("too many local variables (limit u16::MAX)")]
     TooManyLocals,
+    #[error("jump offset overflowed i32 range")]
     JumpOffsetOverflow,
+    #[error("unknown type '{0}'")]
     UnknownType(Box<str>),
+    #[error("unknown variant '{0}'")]
     UnknownVariant(Box<str>),
+    #[error("unknown field '{0}'")]
     UnknownField(Box<str>),
 }
-
-impl fmt::Display for CodegenError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::TooManyFunctions => write!(f, "too many functions (limit u16::MAX)"),
-            Self::TooManyConstants => write!(f, "too many constants (limit u16::MAX)"),
-            Self::TooManySymbols => write!(f, "too many symbols (limit u16::MAX)"),
-            Self::ParameterCountOverflow => write!(f, "function has more than u8::MAX parameters"),
-            Self::UnknownFunction(name) => write!(f, "unknown function '{name}'"),
-            Self::UnsupportedExpr => write!(f, "expression kind is not supported"),
-            Self::UndefinedVariable(name) => write!(f, "undefined variable '{name}'"),
-            Self::TooManyLocals => write!(f, "too many local variables (limit u16::MAX)"),
-            Self::JumpOffsetOverflow => write!(f, "jump offset overflowed i32 range"),
-            Self::UnknownType(name) => write!(f, "unknown type '{name}'"),
-            Self::UnknownVariant(name) => write!(f, "unknown variant '{name}'"),
-            Self::UnknownField(name) => write!(f, "unknown field '{name}'"),
-        }
-    }
-}
-
-impl Error for CodegenError {}
