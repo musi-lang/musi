@@ -43,4 +43,6 @@ pub struct DefInfo {
     /// type-checking the body, representing universally-quantified type params.
     /// Empty for monomorphic definitions.
     pub scheme_vars: Vec<TypeVarId>,
+    /// How many times this definition is referenced (used for unused-variable warnings).
+    pub use_count: u32,
 }

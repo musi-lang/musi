@@ -77,6 +77,7 @@ impl<'a> Resolver<'a> {
             span,
             ty: None,
             scheme_vars: Vec::new(),
+            use_count: 0,
         });
         id
     }
@@ -146,6 +147,7 @@ impl<'a> Resolver<'a> {
                         span: *span,
                         ty: None,
                         scheme_vars: Vec::new(),
+                        use_count: 0,
                     });
                     let prev = self.scopes.define(root_scope, *alias, def_id);
                     let _ = prev;
@@ -173,6 +175,7 @@ impl<'a> Resolver<'a> {
                             span: import_item.span,
                             ty: Some(ty.clone()),
                             scheme_vars: Vec::new(),
+                            use_count: 0,
                         };
                         let bind_sym = import_item.alias.unwrap_or(import_item.name);
                         info.name = bind_sym;
@@ -372,6 +375,8 @@ impl<'a> Resolver<'a> {
     fn resolve_ident(&mut self, idx: Idx<Expr>, name: Symbol, span: Span, scope: ScopeId) {
         if let Some(def_id) = self.scopes.lookup(scope, name) {
             let _prev = self.expr_defs.insert(idx, def_id);
+            let def_idx = usize::try_from(def_id.0).expect("def index in range");
+            self.defs[def_idx].use_count += 1;
         } else {
             let name_str = self.interner.resolve(name);
             let visible = self.scopes.visible_names(scope);

@@ -133,6 +133,25 @@ pub fn analyze<S: BuildHasher>(
         (checker.defs, checker.expr_types)
     };
 
+    // Emit warnings for unused definitions.
+    for def in &defs {
+        if def.use_count == 0
+            && def.span != Span::DUMMY
+            && matches!(def.kind, DefKind::Const | DefKind::Var | DefKind::Param)
+        {
+            let name_str = interner.resolve(def.name);
+            if name_str == "_" || name_str.starts_with('_') {
+                continue;
+            }
+            let msg = if def.kind == DefKind::Param {
+                format!("unused parameter `{name_str}`")
+            } else {
+                format!("unused variable `{name_str}`")
+            };
+            let _d = diags.warning(msg, def.span, file_id);
+        }
+    }
+
     SemaResult {
         defs,
         expr_defs: resolved.expr_defs,
