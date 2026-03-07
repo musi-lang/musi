@@ -25,6 +25,21 @@ export fn lcm(a: Int, b: Int): Int => (
     if g = 0 then 0 else abs(a / g * b)
 );
 
+// -- Float trig & transcendental (wraps musi:math / prelude intrinsics) ------
+
+export fn pi(): Float => 3.141592653589793;
+export fn tau(): Float => 6.283185307179586;
+export fn euler_num(): Float => 2.718281828459045;
+export fn degrees(rad: Float): Float => rad * 180.0 / pi();
+export fn radians(deg: Float): Float => deg * pi() / 180.0;
+export fn ln(x: Float): Float => log(x);
+export fn log2(x: Float): Float => log(x) / log(2.0);
+export fn log10(x: Float): Float => log(x) / log(10.0);
+export fn float_abs(x: Float): Float => if x < 0.0 then 0.0 - x else x;
+export fn float_sign(x: Float): Float => if x > 0.0 then 1.0 else if x < 0.0 then 0.0 - 1.0 else 0.0;
+
+// -- Integer algorithms -------------------------------------------------------
+
 export fn pow_int(base: Int, exp: Int): Int => (
     var result := 1;
     var e := exp;
