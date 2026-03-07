@@ -50,7 +50,6 @@ pub fn run(args: InitArgs) {
         "$schema": "https://musi-lang.org/schemas/mspackage-schema.v1.json",
         "name": name,
         "version": "0.1.0",
-        "description": "",
         "main": "./index.ms"
     });
 
@@ -65,11 +64,29 @@ pub fn run(args: InitArgs) {
 
     let index_path = Path::new("index.ms");
     if !index_path.exists() {
-        fs::write(index_path, format!("writeln(\"Hello from {name}!\");\n")).unwrap_or_else(|e| {
+        fs::write(index_path, INDEX_TEMPLATE).unwrap_or_else(|e| {
             eprintln!("error: failed to write index.ms: {e}");
             process::exit(1);
         });
     }
 
-    println!("Initialized package {name}");
+    let test_path = Path::new("add.test.ms");
+    if !test_path.exists() {
+        fs::write(test_path, ADD_TEST_TEMPLATE).unwrap_or_else(|e| {
+            eprintln!("error: failed to write add.test.ms: {e}");
+            process::exit(1);
+        });
+    }
+
+    println!("     Created package `{name}`");
 }
+
+const INDEX_TEMPLATE: &str = "writeln(\"Hello, world!\");\n";
+
+const ADD_TEST_TEMPLATE: &str = r#"import { assert_eq_int } from "std/assert";
+
+fn add(a: Int, b: Int): Int => a + b;
+
+#[test("it works")]
+fn it_works() => assert_eq_int(add(2, 2), 4);
+"#;

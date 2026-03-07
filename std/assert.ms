@@ -11,7 +11,7 @@ export fn assert_false(cond: Bool): Unit => match cond with (
 );
 
 export fn assert_eq_int(a: Int, b: Int): Unit =>
-    assert_msg(a = b, string_concat(int_to_string(a), string_concat(" != ", int_to_string(b))));
+    assert_msg(a = b, string_concat(int_to_string(a), string_concat(" /= ", int_to_string(b))));
 
 export fn assert_ne_int(a: Int, b: Int): Unit => match a = b with (
     .False => ()
@@ -19,7 +19,7 @@ export fn assert_ne_int(a: Int, b: Int): Unit => match a = b with (
 );
 
 export fn assert_eq_str(a: String, b: String): Unit =>
-    assert_msg(a = b, string_concat(a, string_concat(" != ", b)));
+    assert_msg(a = b, string_concat(a, string_concat(" /= ", b)));
 
 export fn assert_ne_str(a: String, b: String): Unit => match a = b with (
     .False => ()
