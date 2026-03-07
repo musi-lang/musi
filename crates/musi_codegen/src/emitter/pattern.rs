@@ -187,16 +187,13 @@ pub(super) fn emit_match(
     for arm in arms {
         let next_arm_fixup = emit_pattern_test(arenas, state, &arm.pat, scrutinee_slot, module, out)?;
 
+        out.push_scope();
+        emit_pattern_bindings(arenas, state, &arm.pat, scrutinee_slot, out)?;
         let guard_fixup: Option<usize> = if let Some(guard_idx) = arm.guard {
-            out.push_scope();
-            emit_pattern_bindings(arenas, state, &arm.pat, scrutinee_slot, out)?;
             let guard_expr = arenas.exprs.get(guard_idx).clone();
             emit_expr(arenas, state, &guard_expr, module, out)?;
-            let fixup = out.emit_jump_placeholder(FnEmitter::BR_FALSE);
-            Some(fixup)
+            Some(out.emit_jump_placeholder(FnEmitter::BR_FALSE))
         } else {
-            out.push_scope();
-            emit_pattern_bindings(arenas, state, &arm.pat, scrutinee_slot, out)?;
             None
         };
 

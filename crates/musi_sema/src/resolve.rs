@@ -95,8 +95,7 @@ impl<'a> Resolver<'a> {
             let expr = module.ctx.exprs.get(item_idx);
             match expr {
                 Expr::FnDef { name, span, .. } => {
-                    let def_id = self.alloc_def(*name, DefKind::Fn, *span);
-                    self.define_in_scope(root_scope, *name, def_id, *span);
+                    self.alloc_and_define(*name, DefKind::Fn, *span, root_scope);
                 }
                 Expr::Record {
                     name: Some(name),
@@ -108,8 +107,7 @@ impl<'a> Resolver<'a> {
                     span,
                     ..
                 } => {
-                    let def_id = self.alloc_def(*name, DefKind::Type, *span);
-                    self.define_in_scope(root_scope, *name, def_id, *span);
+                    self.alloc_and_define(*name, DefKind::Type, *span, root_scope);
                 }
                 _ => {}
             }
@@ -285,6 +283,13 @@ impl<'a> Resolver<'a> {
     fn alloc_and_define(&mut self, name: Symbol, kind: DefKind, span: Span, scope: ScopeId) {
         let def_id = self.alloc_def(name, kind, span);
         self.define_in_scope(scope, name, def_id, span);
+    }
+
+    fn define_pat_name(&mut self, name: Symbol, kind: BindKind, span: Span, scope: ScopeId) {
+        let def_kind = if kind == BindKind::Var { DefKind::Var } else { DefKind::Const };
+        let def_id = self.alloc_def(name, def_kind, span);
+        self.define_in_scope(scope, name, def_id, span);
+        let _prev = self.pat_defs.insert(span, def_id);
     }
 
     fn resolve_ident(&mut self, idx: Idx<Expr>, name: Symbol, span: Span, scope: ScopeId) {
@@ -516,16 +521,7 @@ impl<'a> Resolver<'a> {
     /// Registers all names introduced by a pattern into `scope`.
     fn collect_pat_defs(&mut self, pat: &Pat, kind: BindKind, scope: ScopeId) {
         match pat {
-            Pat::Ident { name, span, .. } => {
-                let def_kind = if kind == BindKind::Var {
-                    DefKind::Var
-                } else {
-                    DefKind::Const
-                };
-                let def_id = self.alloc_def(*name, def_kind, *span);
-                self.define_in_scope(scope, *name, def_id, *span);
-                let _prev = self.pat_defs.insert(*span, def_id);
-            }
+            Pat::Ident { name, span, .. } => self.define_pat_name(*name, kind, *span, scope),
             Pat::Prod { elements, .. } | Pat::Arr { elements, .. } => {
                 for elem in elements {
                     self.collect_pat_defs(elem, kind, scope);
@@ -537,14 +533,7 @@ impl<'a> Resolver<'a> {
                         self.collect_pat_defs(sub, kind, scope);
                     } else {
                         // Shorthand `{ x }` -- bind `x`.
-                        let def_kind = if kind == BindKind::Var {
-                            DefKind::Var
-                        } else {
-                            DefKind::Const
-                        };
-                        let def_id = self.alloc_def(field.name, def_kind, field.span);
-                        self.define_in_scope(scope, field.name, def_id, field.span);
-                        let _prev = self.pat_defs.insert(field.span, def_id);
+                        self.define_pat_name(field.name, kind, field.span, scope);
                     }
                 }
             }
