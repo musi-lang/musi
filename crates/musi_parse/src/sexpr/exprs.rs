@@ -1,8 +1,8 @@
-//! Printer methods for block, array, and basic expression forms.
+//! Printer methods for expressions: block, array, postfix, binary, prefix.
 
 use musi_shared::Idx;
 
-use crate::ast::{ArrayItem, Expr, FieldInit};
+use crate::ast::{ArrayItem, Expr, FieldInit, PostfixOp};
 
 use super::{binop_str, prefix_str, Printer};
 
@@ -72,5 +72,57 @@ impl<'a> Printer<'a> {
         self.write_char(' ');
         self.print_expr(operand);
         self.write_char(')');
+    }
+
+    pub(super) fn print_postfix(&mut self, base: Idx<Expr>, op: &PostfixOp) {
+        match op {
+            PostfixOp::Call { args, .. } => {
+                self.write("(call ");
+                self.print_expr(base);
+                self.write(" [");
+                self.space_separated_exprs(args);
+                self.write("])");
+            }
+            PostfixOp::Index { args, .. } => {
+                self.write("(index ");
+                self.print_expr(base);
+                self.write(" [");
+                self.space_separated_exprs(args);
+                self.write("])");
+            }
+            PostfixOp::Field { name, .. } => {
+                self.write("(field ");
+                self.print_expr(base);
+                self.write_char(' ');
+                self.write(self.sym(*name));
+                self.write_char(')');
+            }
+            PostfixOp::RecDot { fields, .. } => {
+                self.write("(rec_dot ");
+                self.print_expr(base);
+                self.write(" [");
+                for (i, field) in fields.iter().enumerate() {
+                    if i > 0 {
+                        self.write_char(' ');
+                    }
+                    self.print_rec_lit_field(field);
+                }
+                self.write("])");
+            }
+            PostfixOp::OptField { name, .. } => {
+                self.write("(opt-field ");
+                self.print_expr(base);
+                self.write_char(' ');
+                self.write(self.sym(*name));
+                self.write_char(')');
+            }
+            PostfixOp::As { ty, .. } => {
+                self.write("(as ");
+                self.print_expr(base);
+                self.write_char(' ');
+                self.print_ty(ty);
+                self.write_char(')');
+            }
+        }
     }
 }

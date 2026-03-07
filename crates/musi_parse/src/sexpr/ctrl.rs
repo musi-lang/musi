@@ -1,4 +1,4 @@
-//! Printer methods for control flow statements and imports.
+//! Printer methods for control flow: if, match, loops, jumps, and imports.
 
 use musi_shared::{Idx, Symbol};
 
@@ -130,16 +130,7 @@ impl<'a> Printer<'a> {
             }
             ImportClause::Items(list) => {
                 self.write(" [");
-                for (i, item) in list.iter().enumerate() {
-                    if i > 0 {
-                        self.write_char(' ');
-                    }
-                    self.write(self.sym(item.name));
-                    if let Some(alias) = item.alias {
-                        self.write(" as ");
-                        self.write(self.sym(alias));
-                    }
-                }
+                self.print_symbol_alias_list(list.iter().map(|i| (i.name, i.alias)));
                 self.write_char(']');
             }
         }
@@ -150,16 +141,7 @@ impl<'a> Printer<'a> {
         self.write("(export ");
         self.write(self.sym(path));
         self.write(" [");
-        for (i, item) in items.iter().enumerate() {
-            if i > 0 {
-                self.write_char(' ');
-            }
-            self.write(self.sym(item.name));
-            if let Some(alias) = item.alias {
-                self.write(" as ");
-                self.write(self.sym(alias));
-            }
-        }
+        self.print_symbol_alias_list(items.iter().map(|i| (i.name, i.alias)));
         self.write("])");
     }
 
@@ -168,6 +150,22 @@ impl<'a> Printer<'a> {
             self.write(" (guard ");
             self.print_expr(g);
             self.write_char(')');
+        }
+    }
+
+    fn print_symbol_alias_list(
+        &mut self,
+        items: impl IntoIterator<Item = (Symbol, Option<Symbol>)>,
+    ) {
+        for (i, (name, alias)) in items.into_iter().enumerate() {
+            if i > 0 {
+                self.write_char(' ');
+            }
+            self.write(self.sym(name));
+            if let Some(a) = alias {
+                self.write(" as ");
+                self.write(self.sym(a));
+            }
         }
     }
 

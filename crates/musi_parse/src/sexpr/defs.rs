@@ -1,4 +1,4 @@
-//! Printer methods for declarations: fn, lambda, record, choice, bind, class, given.
+//! Printer methods for definitions: fn, lambda, record, choice, bind, class, given.
 
 use musi_shared::{Idx, Symbol};
 
@@ -16,22 +16,7 @@ impl<'a> Printer<'a> {
         self.print_modifiers(node.modifiers);
         self.write_char(' ');
         self.write(self.sym(node.name));
-        self.write(" [");
-        self.print_ty_params(node.ty_params);
-        self.write_char(']');
-        self.indent += 2;
-        self.newline_indent();
-        self.print_params_list(node.params);
-        if let Some(ret) = node.ret_ty {
-            self.newline_indent();
-            self.write("(ret ");
-            self.print_ty(ret);
-            self.write_char(')');
-        }
-        if !node.where_clause.is_empty() {
-            self.newline_indent();
-            self.print_where_clause(node.where_clause);
-        }
+        self.print_fn_signature(node.ty_params, node.params, node.ret_ty, node.where_clause);
         if let Some(b) = node.body {
             self.newline_indent();
             self.print_expr(b);
@@ -51,22 +36,7 @@ impl<'a> Printer<'a> {
     ) {
         self.write("(lambda");
         self.print_attrs(attrs);
-        self.write(" [");
-        self.print_ty_params(ty_params);
-        self.write_char(']');
-        self.indent += 2;
-        self.newline_indent();
-        self.print_params_list(params);
-        if let Some(ret) = ret_ty {
-            self.newline_indent();
-            self.write("(ret ");
-            self.print_ty(ret);
-            self.write_char(')');
-        }
-        if !where_clause.is_empty() {
-            self.newline_indent();
-            self.print_where_clause(where_clause);
-        }
+        self.print_fn_signature(ty_params, params, ret_ty, where_clause);
         self.newline_indent();
         self.print_expr(body);
         self.indent -= 2;
@@ -102,15 +72,7 @@ impl<'a> Printer<'a> {
             self.print_ty(s);
         }
         self.write_char(')');
-        self.indent += 2;
-        self.write(" (members");
-        for m in members {
-            self.newline_indent();
-            self.print_class_member(m);
-        }
-        self.write_char(')');
-        self.indent -= 2;
-        self.write_char(')');
+        self.print_members_block(members);
     }
 
     pub(super) fn print_given_def(
@@ -151,6 +113,18 @@ impl<'a> Printer<'a> {
                 self.write_char(')');
             }
         }
+    }
+
+    fn print_members_block(&mut self, members: &[ClassMember]) {
+        self.indent += 2;
+        self.write(" (members");
+        for m in members {
+            self.newline_indent();
+            self.print_class_member(m);
+        }
+        self.write_char(')');
+        self.indent -= 2;
+        self.write_char(')');
     }
 
     pub(super) fn print_record(

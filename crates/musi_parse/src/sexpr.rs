@@ -3,10 +3,11 @@
 //! Output is diff-friendly and intended for snapshot tests.
 //! Spans are omitted so that output does not depend on source positions.
 
-mod decls;
+mod ctrl;
+mod defs;
 mod exprs;
-mod stmts;
-mod types_and_pats;
+mod meta;
+mod types;
 
 use musi_shared::{Idx, Interner, Symbol};
 
