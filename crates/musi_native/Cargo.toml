@@ -1,0 +1,14 @@
+[package]
+name = "musi_native"
+description = "Rust-backed native modules for the Musi language runtime"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+musi_macros = { path = "../musi_macros" }
+musi_vm     = { path = "../musi_vm" }
+
+[lints]
+workspace = true

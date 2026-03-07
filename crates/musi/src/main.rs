@@ -112,16 +112,24 @@ fn cmd_check(file_path: &str) {
     while qi < queue.len() {
         let import_path = queue[qi].clone();
         qi += 1;
-        let full_path = resolve_import_path(&import_path, user_file_path);
-        let key = full_path.to_string_lossy().into_owned();
-        if !compiled.insert(key.clone()) {
-            continue;
+
+        let dep_src_owned: String;
+        let key: String;
+        if let Some(native_src) = musi_native::source_for(&import_path) {
+            key = import_path.clone();
+            if !compiled.insert(key.clone()) { continue; }
+            dep_src_owned = native_src.to_owned();
+        } else {
+            let full_path = resolve_import_path(&import_path, user_file_path);
+            key = full_path.to_string_lossy().into_owned();
+            if !compiled.insert(key.clone()) { continue; }
+            dep_src_owned = match fs::read_to_string(&full_path) {
+                Ok(s) => s,
+                Err(_) => continue, // skip missing std files in check mode
+            };
         }
-        let dep_src = match fs::read_to_string(&full_path) {
-            Ok(s) => s,
-            Err(_) => continue, // skip missing std files in check mode
-        };
-        let (dep_file_id, dep_module) = parse_file(key.as_str(), &dep_src, &mut interner, &mut source_db, &mut diags);
+
+        let (dep_file_id, dep_module) = parse_file(key.as_str(), &dep_src_owned, &mut interner, &mut source_db, &mut diags);
         for path in collect_dep_paths(&dep_module, &interner) {
             queue.push(path);
         }
@@ -182,22 +190,28 @@ fn compile_file(file_path: &str) -> Module {
         let import_path = queue[qi].clone();
         qi += 1;
 
-        let full_path = resolve_import_path(&import_path, user_file_path);
-        let key = full_path.to_string_lossy().into_owned();
-        if !compiled.insert(key.clone()) {
-            continue;
+        // musi:* specifiers are served from the embedded native module registry.
+        let dep_src_owned: String;
+        let key: String;
+        if let Some(native_src) = musi_native::source_for(&import_path) {
+            key = import_path.clone();
+            if !compiled.insert(key.clone()) { continue; }
+            dep_src_owned = native_src.to_owned();
+        } else {
+            let full_path = resolve_import_path(&import_path, user_file_path);
+            key = full_path.to_string_lossy().into_owned();
+            if !compiled.insert(key.clone()) { continue; }
+            dep_src_owned = match fs::read_to_string(&full_path) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("error: cannot read import '{}': {e}", full_path.display());
+                    process::exit(1);
+                }
+            };
         }
 
-        let dep_src = match fs::read_to_string(&full_path) {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("error: cannot read import '{}': {e}", full_path.display());
-                process::exit(1);
-            }
-        };
-
-        let dep_file_id = source_db.add(key.as_str(), dep_src.as_str());
-        let dep_lexed = lex(&dep_src, dep_file_id, &mut interner, &mut diags);
+        let dep_file_id = source_db.add(key.as_str(), dep_src_owned.as_str());
+        let dep_lexed = lex(&dep_src_owned, dep_file_id, &mut interner, &mut diags);
         let dep_module = parse(&dep_lexed.tokens, dep_file_id, &mut diags, &interner);
 
         for path in collect_dep_paths(&dep_module, &interner) {
