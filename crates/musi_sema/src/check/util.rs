@@ -81,12 +81,32 @@ impl<'a> TypeChecker<'a> {
         vars
     }
 
+    /// Resolves parameter types (defaulting to fresh type vars) and records them.
+    /// Returns the collected `Vec<Type>` for use in building function types.
+    pub(super) fn collect_param_types(&mut self, params: &[Param]) -> Vec<Type> {
+        let mut param_types: Vec<Type> = Vec::new();
+        for p in params {
+            let pty = match p.ty.as_ref() {
+                Some(t) => self.resolve_ty(t),
+                None => Type::Var(self.unify_table.fresh()),
+            };
+            param_types.push(pty);
+        }
+        self.set_param_types(params, &param_types);
+        param_types
+    }
+
     pub(super) fn set_param_types(&mut self, params: &[Param], param_types: &[Type]) {
         for (p, pty) in params.iter().zip(param_types.iter()) {
             if let Some(&def_id) = self.pat_defs.get(&p.span) {
                 self.set_def_type(def_id, pty.clone());
             }
         }
+    }
+
+    /// Shorthand for `self.unify_table.unify(a, b, span, self.diags, self.file_id)`.
+    pub(super) fn unify(&mut self, a: Type, b: Type, span: Span) -> Type {
+        self.unify_table.unify(a, b, span, self.diags, self.file_id)
     }
 
     pub(super) fn find_def_by_name(&self, name: Symbol) -> Option<DefId> {

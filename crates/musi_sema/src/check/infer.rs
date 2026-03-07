@@ -146,9 +146,7 @@ impl<'a> TypeChecker<'a> {
             };
             let item_ty = self.infer(item_idx, ctx);
             let span = Self::expr_span(item_idx, ctx);
-            let unified =
-                self.unify_table
-                    .unify(Type::Var(elem_ty), item_ty, span, self.diags, self.file_id);
+            let unified = self.unify(Type::Var(elem_ty), item_ty, span);
             let _prev = self.expr_types.insert(item_idx, unified);
         }
         Type::Array(Box::new(Type::Var(elem_ty)), None)
@@ -181,16 +179,8 @@ impl<'a> TypeChecker<'a> {
     ) -> Type {
         let operand_ty = self.infer(operand, ctx);
         match op {
-            PrefixOp::Neg => {
-                let expected = Type::Prim(PrimTy::Int);
-                self.unify_table
-                    .unify(expected, operand_ty, span, self.diags, self.file_id)
-            }
-            PrefixOp::Not => {
-                let expected = Type::Prim(PrimTy::Bool);
-                self.unify_table
-                    .unify(expected, operand_ty, span, self.diags, self.file_id)
-            }
+            PrefixOp::Neg => self.unify(Type::Prim(PrimTy::Int), operand_ty, span),
+            PrefixOp::Not => self.unify(Type::Prim(PrimTy::Bool), operand_ty, span),
             PrefixOp::BitNot | PrefixOp::Deref | PrefixOp::AddrOf => operand_ty,
         }
     }
@@ -204,9 +194,7 @@ impl<'a> TypeChecker<'a> {
     ) -> Type {
         let target_ty = self.infer(target, ctx);
         let value_ty = self.infer(value, ctx);
-        let _unified = self
-            .unify_table
-            .unify(target_ty, value_ty, span, self.diags, self.file_id);
+        let _unified = self.unify(target_ty, value_ty, span);
         Type::Prim(PrimTy::Unit)
     }
 
@@ -250,37 +238,16 @@ impl<'a> TypeChecker<'a> {
         ctx: &AstArenas,
     ) -> Type {
         let _ty_param_vars = self.push_ty_param_scope(ty_params);
-
-        let mut param_types: Vec<Type> = Vec::new();
-        for p in params {
-            let pty = match p.ty.as_ref() {
-                Some(t) => self.resolve_ty(t),
-                None => Type::Var(self.unify_table.fresh()),
-            };
-            param_types.push(pty);
-        }
-        self.set_param_types(params, &param_types);
+        let param_types = self.collect_param_types(params);
 
         let ret_var = self.unify_table.fresh();
         let body_ty = self.infer(body, ctx);
         let body_span = Self::expr_span(body, ctx);
-        let _u = self.unify_table.unify(
-            Type::Var(ret_var),
-            body_ty,
-            body_span,
-            self.diags,
-            self.file_id,
-        );
+        let _u = self.unify(Type::Var(ret_var), body_ty, body_span);
         let ret_type = self.unify_table.resolve(Type::Var(ret_var));
         if let Some(ann) = ret_ty {
             let ann_type = self.resolve_ty(ann);
-            let _u = self.unify_table.unify(
-                ann_type,
-                ret_type.clone(),
-                body_span,
-                self.diags,
-                self.file_id,
-            );
+            let _u = self.unify(ann_type, ret_type.clone(), body_span);
         }
 
         let _frame = self.ty_scope.pop();
@@ -298,13 +265,7 @@ impl<'a> TypeChecker<'a> {
         let result_var = self.unify_table.fresh();
         for arm in arms {
             let arm_ty = self.infer_match_arm(arm, ctx);
-            let _u = self.unify_table.unify(
-                Type::Var(result_var),
-                arm_ty,
-                Span::default(),
-                self.diags,
-                self.file_id,
-            );
+            let _u = self.unify(Type::Var(result_var), arm_ty, Span::default());
         }
         self.unify_table.resolve(Type::Var(result_var))
     }
@@ -352,16 +313,7 @@ impl<'a> TypeChecker<'a> {
 
     fn infer_fn_def(&mut self, node: FnDefNode<'_>, ctx: &AstArenas) -> Type {
         let ty_param_vars = self.push_ty_param_scope(node.ty_params);
-
-        let mut param_types: Vec<Type> = Vec::new();
-        for p in node.params {
-            let pty = match p.ty.as_ref() {
-                Some(t) => self.resolve_ty(t),
-                None => Type::Var(self.unify_table.fresh()),
-            };
-            param_types.push(pty);
-        }
-        self.set_param_types(node.params, &param_types);
+        let param_types = self.collect_param_types(node.params);
 
         let ret_var = self.unify_table.fresh();
         let expected_ret = node.ret_ty.map(|t| self.resolve_ty(t));
@@ -375,20 +327,12 @@ impl<'a> TypeChecker<'a> {
         if let Some(body_idx) = node.body {
             let body_ty = self.infer(body_idx, ctx);
             let body_span = Self::expr_span(body_idx, ctx);
-            let _u = self.unify_table.unify(
-                Type::Var(ret_var),
-                body_ty,
-                body_span,
-                self.diags,
-                self.file_id,
-            );
+            let _u = self.unify(Type::Var(ret_var), body_ty, body_span);
         }
 
         if let Some(ann_ret) = expected_ret {
             let actual_ret = self.unify_table.resolve(Type::Var(ret_var));
-            let _u =
-                self.unify_table
-                    .unify(ann_ret, actual_ret, node.span, self.diags, self.file_id);
+            let _u = self.unify(ann_ret, actual_ret, node.span);
         }
 
         let _frame = self.ty_scope.pop();
@@ -438,20 +382,8 @@ impl<'a> TypeChecker<'a> {
 
             // Logical: both sides must be Bool, result is Bool.
             BinOp::And | BinOp::Or | BinOp::Xor => {
-                let _u = self.unify_table.unify(
-                    Type::Prim(PrimTy::Bool),
-                    lhs_ty,
-                    span,
-                    self.diags,
-                    self.file_id,
-                );
-                let _v = self.unify_table.unify(
-                    Type::Prim(PrimTy::Bool),
-                    rhs_ty,
-                    span,
-                    self.diags,
-                    self.file_id,
-                );
+                let _u = self.unify(Type::Prim(PrimTy::Bool), lhs_ty, span);
+                let _v = self.unify(Type::Prim(PrimTy::Bool), rhs_ty, span);
                 Type::Prim(PrimTy::Bool)
             }
 
@@ -606,13 +538,7 @@ impl<'a> TypeChecker<'a> {
                 for (&arg_idx, param_ty) in args.iter().zip(param_tys_inst.iter()) {
                     let arg_ty = self.infer(arg_idx, ctx);
                     let arg_span = Self::expr_span(arg_idx, ctx);
-                    let u = self.unify_table.unify(
-                        param_ty.clone(),
-                        arg_ty,
-                        arg_span,
-                        self.diags,
-                        self.file_id,
-                    );
+                    let u = self.unify(param_ty.clone(), arg_ty, arg_span);
                     if u == Type::Error {
                         all_ok = false;
                     }
@@ -629,9 +555,7 @@ impl<'a> TypeChecker<'a> {
                 let arg_types: Vec<Type> = args.iter().map(|&a| self.infer(a, ctx)).collect();
                 let ret_var = self.unify_table.fresh();
                 let arrow = Type::Arrow(arg_types, Box::new(Type::Var(ret_var)));
-                let _u =
-                    self.unify_table
-                        .unify(Type::Var(v), arrow, span, self.diags, self.file_id);
+                let _u = self.unify(Type::Var(v), arrow, span);
                 self.unify_table.resolve(Type::Var(ret_var))
             }
 
@@ -685,26 +609,14 @@ impl<'a> TypeChecker<'a> {
     }
 
     fn unify_branch_type(&mut self, result_var: TypeVarId, branch_ty: Type, span: Span) -> Type {
-        self.unify_table.unify(
-            Type::Var(result_var),
-            branch_ty,
-            span,
-            self.diags,
-            self.file_id,
-        )
+        self.unify(Type::Var(result_var), branch_ty, span)
     }
 
     fn check_guard(&mut self, guard: Option<Idx<Expr>>, ctx: &AstArenas) {
         if let Some(g) = guard {
             let gty = self.infer(g, ctx);
             let gspan = Self::expr_span(g, ctx);
-            let _u = self.unify_table.unify(
-                Type::Prim(PrimTy::Bool),
-                gty,
-                gspan,
-                self.diags,
-                self.file_id,
-            );
+            let _u = self.unify(Type::Prim(PrimTy::Bool), gty, gspan);
         }
     }
 
@@ -712,13 +624,7 @@ impl<'a> TypeChecker<'a> {
         match cond {
             Cond::Expr(e) => {
                 let ty = self.infer(*e, ctx);
-                let _u = self.unify_table.unify(
-                    Type::Prim(PrimTy::Bool),
-                    ty,
-                    span,
-                    self.diags,
-                    self.file_id,
-                );
+                let _u = self.unify(Type::Prim(PrimTy::Bool), ty, span);
             }
             Cond::Case { init, .. } => {
                 let _ty = self.infer(*init, ctx);

@@ -274,6 +274,19 @@ impl<'a> Resolver<'a> {
         }
     }
 
+    fn register_params(&mut self, params: &[musi_ast::Param], scope: ScopeId) {
+        for param in params {
+            let def_id = self.alloc_def(param.name, DefKind::Param, param.span);
+            self.define_in_scope(scope, param.name, def_id, param.span);
+            let _prev = self.pat_defs.insert(param.span, def_id);
+        }
+    }
+
+    fn alloc_and_define(&mut self, name: Symbol, kind: DefKind, span: Span, scope: ScopeId) {
+        let def_id = self.alloc_def(name, kind, span);
+        self.define_in_scope(scope, name, def_id, span);
+    }
+
     fn resolve_ident(&mut self, idx: Idx<Expr>, name: Symbol, span: Span, scope: ScopeId) {
         if let Some(def_id) = self.scopes.lookup(scope, name) {
             let _prev = self.expr_defs.insert(idx, def_id);
@@ -340,11 +353,7 @@ impl<'a> Resolver<'a> {
 
             Expr::FnDef { params, body, .. } => {
                 let fn_scope = self.scopes.push_child(scope);
-                for param in params {
-                    let def_id = self.alloc_def(param.name, DefKind::Param, param.span);
-                    self.define_in_scope(fn_scope, param.name, def_id, param.span);
-                    let _prev = self.pat_defs.insert(param.span, def_id);
-                }
+                self.register_params(params, fn_scope);
                 if let Some(&body_idx) = body.as_ref() {
                     self.resolve_expr(body_idx, ctx, fn_scope);
                 }
@@ -352,11 +361,7 @@ impl<'a> Resolver<'a> {
 
             Expr::Lambda { params, body, .. } => {
                 let lam_scope = self.scopes.push_child(scope);
-                for param in params {
-                    let def_id = self.alloc_def(param.name, DefKind::Param, param.span);
-                    self.define_in_scope(lam_scope, param.name, def_id, param.span);
-                    let _prev = self.pat_defs.insert(param.span, def_id);
-                }
+                self.register_params(params, lam_scope);
                 self.resolve_expr(*body, ctx, lam_scope);
             }
 
@@ -410,32 +415,15 @@ impl<'a> Resolver<'a> {
             Expr::FnDef { name, span, .. } => {
                 // Register the local function name before resolving the body
                 // so it is at least visible to code after it in the block.
-                let name = *name;
-                let span = *span;
-                let def_id = self.alloc_def(name, DefKind::Fn, span);
-                self.define_in_scope(block_scope, name, def_id, span);
+                self.alloc_and_define(*name, DefKind::Fn, *span, block_scope);
                 self.resolve_expr(stmt, ctx, block_scope);
             }
-            Expr::Choice {
-                name: Some(name),
-                span,
-                ..
-            } => {
-                let name = *name;
-                let span = *span;
-                let def_id = self.alloc_def(name, DefKind::Type, span);
-                self.define_in_scope(block_scope, name, def_id, span);
+            Expr::Choice { name: Some(name), span, .. } => {
+                self.alloc_and_define(*name, DefKind::Type, *span, block_scope);
                 self.resolve_expr(stmt, ctx, block_scope);
             }
-            Expr::Record {
-                name: Some(name),
-                span,
-                ..
-            } => {
-                let name = *name;
-                let span = *span;
-                let def_id = self.alloc_def(name, DefKind::Type, span);
-                self.define_in_scope(block_scope, name, def_id, span);
+            Expr::Record { name: Some(name), span, .. } => {
+                self.alloc_and_define(*name, DefKind::Type, *span, block_scope);
                 // No sub-expressions to resolve.
             }
             _ => self.resolve_expr(stmt, ctx, block_scope),
