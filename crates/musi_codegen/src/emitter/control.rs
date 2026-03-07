@@ -376,7 +376,11 @@ pub(super) fn emit_short_circuit(
 ) -> Result<(), CodegenError> {
     let lhs_expr = arenas.exprs.get(lhs).clone();
     emit_expr(arenas, state, &lhs_expr, module, out)?;
+    // Dup so the value survives on the short-circuit path.
+    out.push(&Opcode::Dup);
     let fixup = out.emit_jump_placeholder(branch_tag);
+    // On the fall-through path the dup'd value is no longer needed.
+    out.push(&Opcode::Drop);
     let rhs_expr = arenas.exprs.get(rhs).clone();
     emit_expr(arenas, state, &rhs_expr, module, out)?;
     out.patch_jump_to_here(fixup)

@@ -304,7 +304,9 @@ pub(super) fn emit_expr(
         }
 
         Expr::Array { items, .. } => {
-            let has_spread = items.iter().any(|i| matches!(i, musi_ast::ArrayItem::Spread(_)));
+            let has_spread = items
+                .iter()
+                .any(|i| matches!(i, musi_ast::ArrayItem::Spread(_)));
             if has_spread {
                 // Spread path: build incrementally starting from an empty array.
                 out.push(&Opcode::NewArr(0));

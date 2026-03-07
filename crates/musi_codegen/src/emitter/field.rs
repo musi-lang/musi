@@ -60,6 +60,14 @@ pub(super) fn emit_field_access(
     let field_name = arenas.interner.resolve(field_sym);
     let base_expr = arenas.exprs.get(base);
 
+    // Numeric field (e.g. pair.0, pair.1) -- works for tuples/anon records without type info.
+    if let Ok(n) = field_name.parse::<u16>() {
+        let base_cloned = base_expr.clone();
+        emit_expr(arenas, state, &base_cloned, module, out)?;
+        out.push(&Opcode::LdFld(n));
+        return Ok(());
+    }
+
     if let Expr::Ident {
         name: base_name, ..
     } = base_expr

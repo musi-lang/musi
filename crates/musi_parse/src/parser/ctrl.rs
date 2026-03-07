@@ -291,6 +291,4 @@ impl Parser<'_> {
             span: self.finish_span(start),
         }
     }
-
-
 }
