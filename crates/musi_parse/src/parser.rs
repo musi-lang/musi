@@ -3,9 +3,10 @@
 //! Produces a typed AST from a flat [`Token`] slice.  All recursive children are
 //! arena-allocated via [`AstArenas`]; clients hold [`Idx`] handles.
 
+mod ctrl;
+mod defs;
 mod exprs;
-mod stmts_decls;
-mod types_and_pats;
+mod types;
 mod util;
 
 use core::mem;

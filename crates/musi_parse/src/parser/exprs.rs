@@ -403,6 +403,12 @@ impl<'a> Parser<'a> {
         }
     }
 
+    pub(super) fn parse_block(&mut self) -> Expr {
+        let start = self.start_span();
+        let _lp = self.expect(TokenKind::LParen);
+        self.parse_block_tail(Vec::new(), start)
+    }
+
     pub(super) fn parse_rec_lit_field(&mut self) -> FieldInit {
         let start = self.start_span();
 

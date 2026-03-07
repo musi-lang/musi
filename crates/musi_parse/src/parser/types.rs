@@ -1,7 +1,7 @@
 //! Type and pattern parsing.
 
 use musi_lex::token::TokenKind;
-use crate::ast::{ClassMember, Constraint, Expr, Pat, PatField, PatSuffix, Ty, TyParam};
+use crate::ast::{Constraint, Pat, PatField, PatSuffix, Ty, TyParam};
 
 use super::Parser;
 
@@ -43,43 +43,6 @@ impl<'a> Parser<'a> {
             }
         }
         constraints
-    }
-
-    pub(super) fn parse_class_body(&mut self) -> Vec<ClassMember> {
-        let mut members = Vec::new();
-        while !self.at(TokenKind::RBrace) && !self.at(TokenKind::Eof) {
-            let member = if self.at(TokenKind::Law) {
-                let m_start = self.start_span();
-                let _law = self.expect(TokenKind::Law);
-                let name = self.expect_symbol();
-                let params = self.parse_delimited(
-                    TokenKind::LParen,
-                    TokenKind::RParen,
-                    Parser::parse_param,
-                );
-                let _arrow = self.expect(TokenKind::EqGt);
-                let body = self.parse_and_alloc_expr();
-                ClassMember::Law {
-                    name,
-                    params,
-                    body,
-                    span: self.finish_span(m_start),
-                }
-            } else {
-                let fn_expr = self.parse_fn_expr(Vec::new(), Vec::new());
-                let idx = self.alloc_expr(fn_expr);
-                ClassMember::Method(idx)
-            };
-            members.push(member);
-            let _semi = self.expect(TokenKind::Semi);
-        }
-        members
-    }
-
-    pub(super) fn parse_block(&mut self) -> Expr {
-        let start = self.start_span();
-        let _lp = self.expect(TokenKind::LParen);
-        self.parse_block_tail(Vec::new(), start)
     }
 
     pub(super) fn parse_ty(&mut self) -> Ty {
