@@ -1,4 +1,5 @@
 use super::*;
+use crate::native_registry::NativeRegistry;
 use musi_codegen::{ConstEntry, FunctionEntry, Module, Opcode, SymbolEntry, SymbolFlags};
 
 use crate::error::VmError;
@@ -27,7 +28,7 @@ fn run_src(src: &str) -> Value {
 
     let module = emit(&prelude_module, &[], &user_module, &interner).expect("emit failed");
     let main_fn_idx = u16::try_from(module.function_table.len() - 1).expect("fits");
-    let mut vm = Vm::new(module);
+    let mut vm = Vm::new(module, NativeRegistry::new(&[]));
     vm.run(main_fn_idx).expect("vm run failed")
 }
 
@@ -85,7 +86,7 @@ fn hello_module() -> Module {
 #[test]
 fn hello_world_executes_without_error() {
     let module = hello_module();
-    let mut vm = Vm::new(module);
+    let mut vm = Vm::new(module, NativeRegistry::new(&[]));
     // entry point = fn 1 (main)
     let result = vm.run(1).expect("vm run");
     assert_eq!(result, Value::Unit);
@@ -120,7 +121,7 @@ fn halt_returns_top_of_stack() {
         method_table: Vec::new(),
     };
 
-    let mut vm = Vm::new(module);
+    let mut vm = Vm::new(module, NativeRegistry::new(&[]));
     let result = vm.run(0).expect("vm run");
     assert_eq!(result, Value::Int(99));
 }
@@ -156,7 +157,7 @@ fn local_store_and_load() {
         method_table: Vec::new(),
     };
 
-    let mut vm = Vm::new(module);
+    let mut vm = Vm::new(module, NativeRegistry::new(&[]));
     let result = vm.run(0).expect("vm run");
     assert_eq!(result, Value::Int(7));
 }
@@ -221,7 +222,7 @@ fn ret_returns_to_caller() {
         method_table: Vec::new(),
     };
 
-    let mut vm = Vm::new(module);
+    let mut vm = Vm::new(module, NativeRegistry::new(&[]));
     let result = vm.run(1).expect("vm run");
     assert_eq!(result, Value::Int(42));
 }
@@ -229,7 +230,7 @@ fn ret_returns_to_caller() {
 #[test]
 fn unknown_function_index_is_error() {
     let module = Module::new();
-    let mut vm = Vm::new(module);
+    let mut vm = Vm::new(module, NativeRegistry::new(&[]));
     let err = vm.run(0).expect_err("should fail");
     assert!(matches!(err, VmError::FunctionOutOfBounds(0)));
 }
@@ -328,7 +329,7 @@ fn while_loop_counts_to_10() {
         method_table: Vec::new(),
     };
 
-    let mut vm = Vm::new(module);
+    let mut vm = Vm::new(module, NativeRegistry::new(&[]));
     let result = vm.run(0).expect("while loop should terminate");
     assert_eq!(result, Value::Int(10), "y should equal 10 after loop");
 }
@@ -414,7 +415,7 @@ fn new_obj_and_ld_fld() {
         code,
         method_table: Vec::new(),
     };
-    let mut vm = Vm::new(module);
+    let mut vm = Vm::new(module, NativeRegistry::new(&[]));
     let result = vm.run(0).expect("vm run");
     assert_eq!(result, Value::Int(20));
 }
@@ -453,7 +454,7 @@ fn ld_tag_reads_discriminant() {
         code,
         method_table: Vec::new(),
     };
-    let mut vm = Vm::new(module);
+    let mut vm = Vm::new(module, NativeRegistry::new(&[]));
     let result = vm.run(0).expect("vm run");
     assert_eq!(result, Value::Int(42));
 }
@@ -519,7 +520,7 @@ fn ld_fn_idx_and_call_dynamic() {
         code,
         method_table: Vec::new(),
     };
-    let mut vm = Vm::new(module);
+    let mut vm = Vm::new(module, NativeRegistry::new(&[]));
     let result = vm.run(1).expect("vm run");
     assert_eq!(result, Value::Int(42));
 }
@@ -553,7 +554,7 @@ fn dup_clones_top_of_stack() {
         code,
         method_table: Vec::new(),
     };
-    let mut vm = Vm::new(module);
+    let mut vm = Vm::new(module, NativeRegistry::new(&[]));
     let result = vm.run(0).expect("vm run");
     assert_eq!(result, Value::Int(14));
 }
