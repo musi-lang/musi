@@ -360,6 +360,30 @@ impl Vm {
         Ok(Signal::Continue)
     }
 
+    fn dispatch_or_i64_bin(&mut self, method: &str, op: fn(i64, i64) -> i64) -> Result<Signal, VmError> {
+        if let Some(r) = self.try_dispatch_binop(method) { return r; }
+        self.push_i64_bin(op)
+    }
+
+    fn dispatch_or_i64_cmp(&mut self, method: &str, op: fn(i64, i64) -> bool) -> Result<Signal, VmError> {
+        if let Some(r) = self.try_dispatch_binop(method) { return r; }
+        self.push_i64_cmp(op)
+    }
+
+    fn push_bool_cmp(&mut self, op: fn(bool, bool) -> bool) -> Result<Signal, VmError> {
+        let rhs = pop_bool_obj(&mut self.stack)?;
+        let lhs = pop_bool_obj(&mut self.stack)?;
+        self.stack.push(bool_obj(op(lhs, rhs)));
+        Ok(Signal::Continue)
+    }
+
+    fn push_str_cmp(&mut self, op: fn(&str, &str) -> bool) -> Result<Signal, VmError> {
+        let rhs = pop_str(&mut self.stack)?;
+        let lhs = pop_str(&mut self.stack)?;
+        self.stack.push(bool_obj(op(&lhs, &rhs)));
+        Ok(Signal::Continue)
+    }
+
     fn push_f64_bin<F: FnOnce(f64, f64) -> f64>(&mut self, f: F) -> Result<Signal, VmError> {
         let rhs = pop_f64(&mut self.stack)?;
         let lhs = pop_f64(&mut self.stack)?;
@@ -394,18 +418,9 @@ impl Vm {
 
     fn exec_arith(&mut self, op: &Opcode) -> Result<Signal, VmError> {
         match op {
-            Opcode::AddI64 => {
-                if let Some(r) = self.try_dispatch_binop("add") { return r; }
-                self.push_i64_bin(i64::wrapping_add)
-            }
-            Opcode::SubI64 => {
-                if let Some(r) = self.try_dispatch_binop("sub") { return r; }
-                self.push_i64_bin(i64::wrapping_sub)
-            }
-            Opcode::MulI64 => {
-                if let Some(r) = self.try_dispatch_binop("mul") { return r; }
-                self.push_i64_bin(i64::wrapping_mul)
-            }
+            Opcode::AddI64 => self.dispatch_or_i64_bin("add", i64::wrapping_add),
+            Opcode::SubI64 => self.dispatch_or_i64_bin("sub", i64::wrapping_sub),
+            Opcode::MulI64 => self.dispatch_or_i64_bin("mul", i64::wrapping_mul),
             Opcode::DivI64 => {
                 if let Some(r) = self.try_dispatch_binop("div") { return r; }
                 let rhs = pop_i64(&mut self.stack)?;
@@ -495,60 +510,22 @@ impl Vm {
     #[allow(clippy::float_cmp)]
     fn exec_cmp(&mut self, op: &Opcode) -> Result<Signal, VmError> {
         match op {
-            Opcode::EqI64 => {
-                if let Some(r) = self.try_dispatch_binop("eq") { return r; }
-                self.push_i64_cmp(|a, b| a == b)
-            }
-            Opcode::NeqI64 => {
-                if let Some(r) = self.try_dispatch_binop("neq") { return r; }
-                self.push_i64_cmp(|a, b| a != b)
-            }
-            Opcode::LtI64 => {
-                if let Some(r) = self.try_dispatch_binop("lt") { return r; }
-                self.push_i64_cmp(|a, b| a < b)
-            }
-            Opcode::GtI64 => {
-                if let Some(r) = self.try_dispatch_binop("gt") { return r; }
-                self.push_i64_cmp(|a, b| a > b)
-            }
-            Opcode::LeqI64 => {
-                if let Some(r) = self.try_dispatch_binop("leq") { return r; }
-                self.push_i64_cmp(|a, b| a <= b)
-            }
-            Opcode::GeqI64 => {
-                if let Some(r) = self.try_dispatch_binop("geq") { return r; }
-                self.push_i64_cmp(|a, b| a >= b)
-            }
+            Opcode::EqI64  => self.dispatch_or_i64_cmp("eq",  |a, b| a == b),
+            Opcode::NeqI64 => self.dispatch_or_i64_cmp("neq", |a, b| a != b),
+            Opcode::LtI64  => self.dispatch_or_i64_cmp("lt",  |a, b| a < b),
+            Opcode::GtI64  => self.dispatch_or_i64_cmp("gt",  |a, b| a > b),
+            Opcode::LeqI64 => self.dispatch_or_i64_cmp("leq", |a, b| a <= b),
+            Opcode::GeqI64 => self.dispatch_or_i64_cmp("geq", |a, b| a >= b),
             Opcode::EqF64 => self.push_f64_cmp(|a, b| a == b),
             Opcode::NeqF64 => self.push_f64_cmp(|a, b| a != b),
             Opcode::LtF64 => self.push_f64_cmp(|a, b| a < b),
             Opcode::GtF64 => self.push_f64_cmp(|a, b| a > b),
             Opcode::LeqF64 => self.push_f64_cmp(|a, b| a <= b),
             Opcode::GeqF64 => self.push_f64_cmp(|a, b| a >= b),
-            Opcode::EqBool => {
-                let rhs = pop_bool_obj(&mut self.stack)?;
-                let lhs = pop_bool_obj(&mut self.stack)?;
-                self.stack.push(bool_obj(lhs == rhs));
-                Ok(Signal::Continue)
-            }
-            Opcode::NeqBool => {
-                let rhs = pop_bool_obj(&mut self.stack)?;
-                let lhs = pop_bool_obj(&mut self.stack)?;
-                self.stack.push(bool_obj(lhs != rhs));
-                Ok(Signal::Continue)
-            }
-            Opcode::EqStr => {
-                let rhs = pop_str(&mut self.stack)?;
-                let lhs = pop_str(&mut self.stack)?;
-                self.stack.push(bool_obj(*lhs == *rhs));
-                Ok(Signal::Continue)
-            }
-            Opcode::NeqStr => {
-                let rhs = pop_str(&mut self.stack)?;
-                let lhs = pop_str(&mut self.stack)?;
-                self.stack.push(bool_obj(*lhs != *rhs));
-                Ok(Signal::Continue)
-            }
+            Opcode::EqBool  => self.push_bool_cmp(|a, b| a == b),
+            Opcode::NeqBool => self.push_bool_cmp(|a, b| a != b),
+            Opcode::EqStr   => self.push_str_cmp(|a, b| a == b),
+            Opcode::NeqStr  => self.push_str_cmp(|a, b| a != b),
             _ => Err(VmError::TypeMismatch),
         }
     }
