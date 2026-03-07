@@ -67,6 +67,7 @@ enum ReturnKind {
     Value,       // Value pass-through
     OptionI64,   // Option<i64>
     OptionValue, // Option<Value>
+    OptionStr,   // Option<String>
 }
 
 impl ParamKind {
@@ -92,6 +93,7 @@ impl ReturnKind {
             Self::Value       => "'T",
             Self::OptionI64   => "Option[Int]",
             Self::OptionValue => "Option['T]",
+            Self::OptionStr   => "Option[String]",
         }
     }
 }
@@ -138,7 +140,8 @@ fn classify_return(ty: &Type) -> Option<ReturnKind> {
                         if let Some(id) = ip.path.get_ident() {
                             return match id.to_string().as_str() {
                                 "i64"   => Some(ReturnKind::OptionI64),
-                                "Value" => Some(ReturnKind::OptionValue),
+                                "Value"  => Some(ReturnKind::OptionValue),
+                                "String" => Some(ReturnKind::OptionStr),
                                 _       => None,
                             };
                         }
@@ -210,6 +213,12 @@ fn gen_return_wrap(kind: &ReturnKind, expr: TokenStream2) -> TokenStream2 {
         },
         ReturnKind::OptionValue => quote! {
             match #expr { Some(v) => option_some(v), None => option_none() }
+        },
+        ReturnKind::OptionStr => quote! {
+            match #expr {
+                Some(s) => option_some(Value::String(Rc::from(s.as_str()))),
+                None    => option_none(),
+            }
         },
     }
 }
