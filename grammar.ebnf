@@ -33,7 +33,7 @@ lit_char = "'", (escape_char | (char - "'")), "'";
 
 lit = lit_number | lit_string | lit_char;
 
-lex_keyword = "record" | "choice" | "fn" | "const" | "var" | "import" | "export" | "match" | "case" | "if" | "then" | "else" | "elif" | "while" | "loop" | "for" | "in" | "return" | "break" | "cycle" | "defer" | "and" | "or" | "xor" | "not" | "opaque" | "extrin" | "from" | "as" | "with" | "label" | "using" | "class" | "given" | "satisfies" | "where" | "law";
+lex_keyword = "record" | "choice" | "fn" | "const" | "var" | "import" | "export" | "match" | "case" | "if" | "then" | "else" | "elif" | "while" | "loop" | "for" | "in" | "return" | "break" | "cycle" | "defer" | "and" | "or" | "xor" | "not" | "shl" | "shr" | "opaque" | "extrin" | "from" | "as" | "with" | "label" | "using" | "class" | "given" | "satisfies" | "where" | "law";
 
 atom_dot_lbrack = ".[";
 
@@ -98,7 +98,9 @@ ast_attr = lex_id, ["(", [ast_attr_arg, {",", ast_attr_arg}], ")"];
 
 ast_attr_arg = (lex_id, [bind_init]) | lit;
 
-ast_modifiers = {"export" | "opaque" | ("extrin", [lit_string] (* ABI *))};
+(* Non-export modifiers only. "export" is handled explicitly in ast_expr_after_attrs *)
+(* to maintain LL(1): after "export", FIRST("{") = re-export vs FIRST(decl) = definition. *)
+ast_modifiers = {"opaque" | ("extrin", [lit_string] (* ABI *))};
 
 
 (* ========================================================================= *)
@@ -176,7 +178,6 @@ ast_expr_atom =
   | ast_expr_cycle
   | ast_expr_defer
   | ast_expr_import
-  | ast_expr_export
   | ast_expr_using
   | ast_expr_with_prefix;
 
@@ -229,8 +230,7 @@ ast_expr_import = "import", ast_import_clause, "from", lit_string;
 
 ast_import_clause = ("*", ["as", lex_id]) | ("{", import_item_list, "}");
 
-(* Re-export statement: export { name [as alias], ... } from "path" *)
-ast_expr_export = "export", "{", export_item_list, "}", "from", lit_string;
+(* Re-export: export { name [as alias], ... } from "path" -- parsed via ast_export_tail *)
 ast_export_item = lex_id, ["as", lex_id];
 
 (* Resource acquisition: using name := init (body) -- semantics TBD *)
@@ -240,21 +240,31 @@ ast_import_item = lex_id, [ast_alias];
 
 ast_alias = "as", lex_id;
 
-(* All constructs that may carry [ast_attrs] or [ast_modifiers] prefix.      *)
-(* FIRST of each branch is a distinct keyword -- fully LL(1).                 *)
+(* All constructs that may carry [ast_attrs] or [ast_modifiers] prefix.        *)
 ast_expr_with_prefix = [ast_attrs], ast_expr_after_attrs;
 
+(* Dispatches on first keyword -- fully LL(1).                                 *)
+(* "export" is factored out explicitly: after consuming "export", the next     *)
+(* token is either "{" (re-export) or a declaration keyword (definition).      *)
+(* All other FIRST tokens are disjoint.                                        *)
 ast_expr_after_attrs =
-    [ast_modifiers], ast_expr_decl_kw               (* export?/record/choice/fn/const/var *)
+    "export", ast_export_tail                        (* export def or re-export *)
+  | ast_modifiers, ast_expr_decl_kw                  (* opaque?/extrin? record/choice/fn/const/var *)
   | ast_expr_while                                   (* while                 *)
-  | ast_expr_loop                                    (* loop                  *)
+  | ast_expr_loop                                    (* loop { } [while cond] -- do-while *)
   | ast_expr_for                                     (* for                   *)
   | ast_expr_match                                   (* match                 *)
   | ast_expr_label                                   (* label                 *)
   | ast_expr_def_class                               (* class -- no export    *)
   | ast_expr_def_given;                              (* given -- no export    *)
 
-(* Declaration body -- dispatches on first keyword after optional modifiers   *)
+(* After "export": FIRST("{") = re-export, FIRST(decl keyword) = definition.  *)
+(* Disjoint sets guarantee LL(1) at this decision point.                       *)
+ast_export_tail =
+    "{", export_item_list, "}", "from", lit_string   (* re-export: export { foo } from "path" *)
+  | ast_modifiers, ast_expr_decl_kw;                 (* export [opaque] [extrin] record/fn/... *)
+
+(* Declaration body -- dispatches on first keyword after optional modifiers.   *)
 ast_expr_decl_kw =
     ast_expr_def_record
   | ast_expr_def_choice
@@ -395,10 +405,20 @@ ast_stmt = ast_expr, ";";
 ast_root = {ast_stmt};
 
 (* ========================================================================= *)
-(* IMPLEMENTED UDN (Universal Dot Notation)                                  *)
+(* UDN (Universal Dot Notation) -- all implemented                          *)
 (* ========================================================================= *)
-(* ?T             -- sugar for Option[T]    (ast_ty_option)                  *)
-(* expr?.field    -- optional chaining      (ast_opt_field postfix)          *)
-(* expr ?? dflt   -- nil coalescing         (ast_expr_nil_coal, BP 0125)     *)
-(* .Name(args)    -- dot-prefix constructor (ast_expr_dot_prefix)            *)
-(* Match arm guards are already in the grammar: ast_arm = [attrs], ast_pat, [guard], "=>", ast_expr *)
+(* ?T             -- Option[T] sugar         (ast_ty_option)                 *)
+(* expr?.field    -- optional chaining       (ast_opt_field postfix)         *)
+(* expr ?? dflt   -- nil coalescing          (ast_expr_nil_coal, BP 0125)    *)
+(* .Name(args)    -- dot-prefix constructor  (ast_expr_dot_prefix atom)      *)
+(* .Name(args)    -- dot-prefix pattern      (ast_pat_dot_prefix)            *)
+(* expr.{ f := v }  -- record update / literal (ast_rec_dot postfix)        *)
+
+(* ========================================================================= *)
+(* LL(1) NOTES                                                               *)
+(* ========================================================================= *)
+(* "export" is LL(1) because ast_export_tail dispatches on "{" vs decl kw.  *)
+(* "fn" is LL(1): named def starts with lex_id, lambda starts with "(" or "[". *)
+(* "(" is LL(1): unit "()", paren "(e)", tuple "(e,...)", block "(s;...e)".  *)
+(* Pattern ident is LL(1): var bind vs positional sum vs named-field on next *)
+(*   token: ident alone, "(" = positional, "{" = named-field, else = bind.  *))
