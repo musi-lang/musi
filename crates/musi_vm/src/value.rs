@@ -2,7 +2,37 @@
 
 use core::fmt;
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
+
+use crate::error::VmError;
+
+/// Hashable subset of Value. Float/Object/Array cannot be map keys.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum HashKey {
+    Int(i64),
+    Str(Rc<str>),
+}
+
+impl TryFrom<&Value> for HashKey {
+    type Error = VmError;
+    fn try_from(v: &Value) -> Result<Self, Self::Error> {
+        match v {
+            Value::Int(n) => Ok(Self::Int(*n)),
+            Value::String(s) => Ok(Self::Str(Rc::clone(s))),
+            _ => Err(VmError::UnhashableKey),
+        }
+    }
+}
+
+impl From<&HashKey> for Value {
+    fn from(k: &HashKey) -> Self {
+        match k {
+            HashKey::Int(n) => Self::Int(*n),
+            HashKey::Str(s) => Self::String(Rc::clone(s)),
+        }
+    }
+}
 
 /// A Musi runtime value.
 #[derive(Debug, PartialEq)]
@@ -23,6 +53,8 @@ pub enum Value {
     },
     /// A mutable array value.
     Array(Rc<RefCell<Vec<Self>>>),
+    /// A mutable hash map value.
+    Map(Rc<RefCell<HashMap<HashKey, Self>>>),
 }
 
 impl Clone for Value {
@@ -38,6 +70,7 @@ impl Clone for Value {
                 fields: Rc::clone(fields),
             },
             Self::Array(a) => Self::Array(Rc::clone(a)),
+            Self::Map(m) => Self::Map(Rc::clone(m)),
         }
     }
 }
@@ -61,6 +94,17 @@ impl fmt::Display for Value {
                     write!(f, "{v}")?;
                 }
                 write!(f, "]")
+            }
+            Self::Map(m) => {
+                let map = m.borrow();
+                write!(f, "{{")?;
+                for (i, (k, v)) in map.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}: {v}", Self::from(k))?;
+                }
+                write!(f, "}}")
             }
         }
     }

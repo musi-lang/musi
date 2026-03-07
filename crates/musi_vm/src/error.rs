@@ -77,4 +77,8 @@ pub enum VmError {
     /// An `assert` or `assert_msg` call failed.
     #[error("assertion failed: {0}")]
     AssertionFailed(Box<str>),
+
+    /// A value that cannot be used as a `HashMap` key.
+    #[error("value is not hashable (only Int, String can be map keys)")]
+    UnhashableKey,
 }

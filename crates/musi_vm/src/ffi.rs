@@ -172,6 +172,7 @@ const fn type_name_of(v: &Value) -> &'static str {
         Value::Function(_) => "Function",
         Value::Object { .. } => "Object",
         Value::Array(_) => "Array",
+        Value::Map(_) => "Map",
     }
 }
 
