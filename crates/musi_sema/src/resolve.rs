@@ -47,6 +47,8 @@ struct Resolver<'a> {
     next_id: u32,
     expr_defs: HashMap<Idx<Expr>, DefId>,
     pat_defs: HashMap<Span, DefId>,
+    /// Exports keyed by alias symbol for `import * as Name` imports.
+    namespace_exports: HashMap<Symbol, HashMap<String, crate::types::Type>>,
 }
 
 impl<'a> Resolver<'a> {
@@ -60,6 +62,7 @@ impl<'a> Resolver<'a> {
             next_id: 0,
             expr_defs: HashMap::new(),
             pat_defs: HashMap::new(),
+            namespace_exports: HashMap::new(),
         }
     }
 
@@ -131,33 +134,52 @@ impl<'a> Resolver<'a> {
             let Some(module_exports) = imports.get(&path_str) else {
                 continue;
             };
-            let ImportClause::Items(import_items) = items else {
-                continue;
-            };
-            for import_item in import_items {
-                let name_str = interner.resolve(import_item.name);
-                let _exported_name = import_item
-                    .alias
-                    .map_or_else(|| name_str.to_owned(), |a| interner.resolve(a).to_owned());
-                let Some(ty) = module_exports.names.get(name_str) else {
-                    continue;
-                };
-                let def_id = DefId(self.next_id);
-                self.next_id += 1;
-                let mut info = DefInfo {
-                    id: def_id,
-                    name: import_item.name,
-                    kind: DefKind::Const,
-                    span: import_item.span,
-                    ty: Some(ty.clone()),
-                    scheme_vars: Vec::new(),
-                };
-                // Use alias symbol if provided for scope binding
-                let bind_sym = import_item.alias.unwrap_or(import_item.name);
-                info.name = bind_sym;
-                self.defs.push(info);
-                let prev = self.scopes.define(root_scope, bind_sym, def_id);
-                let _ = prev; // silently allow shadowing imports
+            match items {
+                ImportClause::GlobAs(alias) => {
+                    let def_id = DefId(self.next_id);
+                    self.next_id += 1;
+                    self.defs.push(DefInfo {
+                        id: def_id,
+                        name: *alias,
+                        kind: DefKind::Namespace,
+                        span: *span,
+                        ty: None,
+                        scheme_vars: Vec::new(),
+                    });
+                    let prev = self.scopes.define(root_scope, *alias, def_id);
+                    let _ = prev;
+                    let _prev = self.namespace_exports
+                        .insert(*alias, module_exports.names.clone());
+                }
+
+                ImportClause::Items(import_items) => {
+                    for import_item in import_items {
+                        let name_str = interner.resolve(import_item.name);
+                        let _exported_name = import_item
+                            .alias
+                            .map_or_else(|| name_str.to_owned(), |a| interner.resolve(a).to_owned());
+                        let Some(ty) = module_exports.names.get(name_str) else {
+                            continue;
+                        };
+                        let def_id = DefId(self.next_id);
+                        self.next_id += 1;
+                        let mut info = DefInfo {
+                            id: def_id,
+                            name: import_item.name,
+                            kind: DefKind::Const,
+                            span: import_item.span,
+                            ty: Some(ty.clone()),
+                            scheme_vars: Vec::new(),
+                        };
+                        let bind_sym = import_item.alias.unwrap_or(import_item.name);
+                        info.name = bind_sym;
+                        self.defs.push(info);
+                        let prev = self.scopes.define(root_scope, bind_sym, def_id);
+                        let _ = prev; // silently allow shadowing imports
+                    }
+                }
+
+                ImportClause::Glob => {}
             }
             let _ = span;
         }
@@ -436,8 +458,28 @@ impl<'a> Resolver<'a> {
                             self.resolve_field_init(field, ctx, scope);
                         }
                     }
-                    PostfixOp::Field { .. } | PostfixOp::OptField { .. } | PostfixOp::As { .. } => {
+                    PostfixOp::Field { name: field_sym, span: field_span } => {
+                        // Validate field access on namespace aliases.
+                        if let Expr::Ident { name: base_sym, .. } = ctx.exprs.get(*base) {
+                            if let Some(def_id) = self.expr_defs.get(base) {
+                                let kind = self.defs[def_id.0 as usize].kind;
+                                if kind == DefKind::Namespace {
+                                    let field_str = self.interner.resolve(*field_sym);
+                                    if let Some(exports) = self.namespace_exports.get(base_sym) {
+                                        if !exports.contains_key(field_str) {
+                                            let ns_str = self.interner.resolve(*base_sym);
+                                            let _d = self.diags.error(
+                                                format!("no export `{field_str}` in namespace `{ns_str}`"),
+                                                *field_span,
+                                                self.file_id,
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
+                    PostfixOp::OptField { .. } | PostfixOp::As { .. } => {}
                 }
             }
 

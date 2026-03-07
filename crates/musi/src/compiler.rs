@@ -179,8 +179,9 @@ pub(crate) fn compile_file(file_path: &str) -> Module {
         print_diags_and_exit(&diags, &source_db);
     }
 
+    let dep_paths: Vec<&str> = deps.iter().map(|(p, _, _)| p.as_str()).collect();
     let dep_modules: Vec<&ParsedModule> = deps.iter().map(|(_, m, _)| m).collect();
-    match emit(&prelude_module, &dep_modules, &user_module, &interner) {
+    match emit(&prelude_module, &dep_modules, &dep_paths, &user_module, &interner) {
         Ok(m) => m,
         Err(e) => {
             eprintln!("codegen error: {e}");

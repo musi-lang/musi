@@ -239,6 +239,10 @@ pub(super) struct EmitState {
     pub(super) class_method_names: HashSet<String>,
     pub(super) type_tag_map: HashMap<String, u16>,
     pub(super) next_type_tag: u16,
+    /// Maps namespace alias name → dep index (parallel to the `deps` slice).
+    pub(super) pkg_map: HashMap<String, usize>,
+    /// Per-dep exported function name → function index, captured right after each dep's registration.
+    pub(super) dep_fn_maps: Vec<HashMap<String, u16>>,
 }
 
 // -- Free helpers -------------------------------------------------------------

@@ -135,6 +135,7 @@ pub(super) fn emit_module_fn_bodies(
     interner: &Interner,
     state: &mut EmitState,
     module: &mut Module,
+    fn_map_snapshot: Option<&HashMap<String, u16>>,
 ) -> Result<(), CodegenError> {
     let arenas = EmitArenas {
         exprs: &parsed.ctx.exprs,
@@ -157,9 +158,14 @@ pub(super) fn emit_module_fn_bodies(
                     continue;
                 }
                 let fn_name = interner.resolve(*name).to_owned();
-                let fn_idx = *state.fn_map.get(&fn_name).ok_or_else(|| {
-                    CodegenError::UnknownFunction(fn_name.clone().into_boxed_str())
-                })?;
+                // Use the per-dep snapshot when available so that same-named functions
+                // across different deps resolve to their own indices.
+                let fn_idx = fn_map_snapshot
+                    .and_then(|m| m.get(&fn_name).copied())
+                    .or_else(|| state.fn_map.get(&fn_name).copied())
+                    .ok_or_else(|| {
+                        CodegenError::UnknownFunction(fn_name.clone().into_boxed_str())
+                    })?;
                 let param_info = param_list_with_types(params, interner);
                 let ret_name = ret_ty.as_ref().and_then(|t| ty_name_str(t, interner));
                 pending.push((fn_idx, param_info, *body_idx, ret_name));

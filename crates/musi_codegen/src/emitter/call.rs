@@ -99,6 +99,19 @@ pub(super) fn emit_ufcs_call(
 ) -> Result<(), CodegenError> {
     let method_name = arenas.interner.resolve(method_sym);
 
+    // Check if receiver is a namespace alias (`import * as Name`).
+    if let Expr::Ident { name: recv_sym, .. } = arenas.exprs.get(recv_idx) {
+        let recv_name = arenas.interner.resolve(*recv_sym);
+        if let Some(&dep_idx) = state.pkg_map.get(recv_name) {
+            if let Some(fn_idx) = state.dep_fn_maps.get(dep_idx).and_then(|m| m.get(method_name)).copied() {
+                return emit_static_call(fn_idx, args, arenas, state, module, out);
+            }
+            return Err(CodegenError::UnknownFunction(
+                format!("{recv_name}.{method_name}").into_boxed_str(),
+            ));
+        }
+    }
+
     if receiver_has_field(recv_idx, method_name, arenas, state, out) {
         emit_args(arenas, state, args, module, out)?;
         emit_field_access(arenas, state, recv_idx, method_sym, module, out)?;

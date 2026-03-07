@@ -77,7 +77,7 @@ impl Diagnostic {
         format!("{file}:{line}:{col}: {severity}: {}", self.message)
     }
 
-    /// Renders a rich, rustc-style diagnostic with source context and underlines.
+    /// Renders a rich, clang-style diagnostic with source context and underlines.
     ///
     /// Uses ANSI colors when `use_color` is true.
     #[must_use]
@@ -96,29 +96,23 @@ impl Diagnostic {
 
         let mut out = String::new();
 
-        // Header: "error: message"
-        let _ = writeln!(out, "{sev_start}{severity}{reset}: {}", self.message);
+        // Header: "file:line:col: error: message" (clang-style)
+        let _ = writeln!(out, "{file}:{line}:{col}: {sev_start}{severity}{reset}: {}", self.message);
 
         let line_str = line.to_string();
         let gutter_width = line_str.len();
 
-        // Location: " --> file:line:col"
-        let _ = writeln!(out, "{:gutter_width$}--> {file}:{line}:{col}", " ");
-
-        // Blank gutter line
-        let _ = writeln!(out, "{:gutter_width$} |", " ");
-
-        // Source line
+        // Source line: " 1 | source_line"
         let source_line = source_db.get_line(self.primary.file_id, line);
-        let _ = writeln!(out, "{line_str} | {source_line}");
+        let _ = writeln!(out, " {line_str} | {source_line}");
 
-        // Underline
+        // Underline: "   | spaces + carets"
         let underline_col = (col as usize).saturating_sub(1);
         let caret_len = (self.primary.span.length as usize).max(1);
         let _ = write!(
             out,
-            "{:gutter_width$} | {:underline_col$}{sev_start}{:^>caret_len$}{reset}",
-            " ", "", ""
+            " {:gutter_width$} | {:underline_col$}{sev_start}{:^>caret_len$}{reset}",
+            "", "", ""
         );
 
         // Secondary labels
@@ -132,20 +126,17 @@ impl Diagnostic {
                 ("", "")
             };
 
-            let _ = write!(out, "\n{note_start}note{note_reset}: {}", label.message);
-            let _ = write!(out, "\n{:gutter_width$}--> {s_file}:{s_line}:{s_col}", " ");
-
             let s_line_str = s_line.to_string();
             let s_gutter = s_line_str.len().max(gutter_width);
             let s_source = source_db.get_line(label.file_id, s_line);
             let s_underline_col = (s_col as usize).saturating_sub(1);
             let s_caret_len = (label.span.length as usize).max(1);
 
-            let _ = write!(out, "\n{:s_gutter$} |", " ");
-            let _ = write!(out, "\n{s_line_str:>s_gutter$} | {s_source}");
+            let _ = write!(out, "\n{s_file}:{s_line}:{s_col}: {note_start}note{note_reset}: {}", label.message);
+            let _ = write!(out, "\n {s_line_str:>s_gutter$} | {s_source}");
             let _ = write!(
                 out,
-                "\n{:s_gutter$} | {:s_underline_col$}{note_start}{:^>s_caret_len$}{note_reset}",
+                "\n {:s_gutter$} | {:s_underline_col$}{note_start}{:^>s_caret_len$}{note_reset}",
                 " ", "", ""
             );
         }

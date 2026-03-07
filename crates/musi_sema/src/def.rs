@@ -26,6 +26,8 @@ pub enum DefKind {
     Param,
     /// Choice variant constructor.
     Variant,
+    /// Glob namespace import (`import * as Name from "path"`).
+    Namespace,
 }
 
 /// All metadata the compiler knows about a single definition.

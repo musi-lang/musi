@@ -26,7 +26,7 @@ fn run_src(src: &str) -> Value {
 
     assert!(!diags.has_errors(), "parse errors");
 
-    let module = emit(&prelude_module, &[], &user_module, &interner).expect("emit failed");
+    let module = emit(&prelude_module, &[], &[], &user_module, &interner).expect("emit failed");
     let main_fn_idx = u16::try_from(module.function_table.len() - 1).expect("fits");
     let mut vm = Vm::new(module, NativeRegistry::new(&[]));
     vm.run(main_fn_idx).expect("vm run failed")
