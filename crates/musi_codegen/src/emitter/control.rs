@@ -160,13 +160,13 @@ pub(super) fn emit_while(
     out.push(&Opcode::Drop);
     out.emit_br_back(start_pos)?;
 
-    // Guard-false path: pop Case scope (if any) then loop back to re-evaluate condition
+    // Guard-false path: exit loop (same semantics as condition-false)
     if let Some(gf) = guard_fixup {
         out.patch_jump_to_here(gf)?;
         if matches!(cond, Cond::Case { .. }) {
             out.pop_scope();
         }
-        out.emit_br_back(start_pos)?;
+        // fall through to end_fixup — guard false exits the loop
     }
 
     out.patch_jump_to_here(end_fixup)?;

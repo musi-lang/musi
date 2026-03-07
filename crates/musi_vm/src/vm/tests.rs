@@ -719,15 +719,14 @@ writeln(int_to_string(x + y));
 
 #[test]
 fn while_with_guard_skips() {
+    // guard false exits the loop early: i reaches 5 (not 10) because guard i < 5 fails
     let _r = run_src(
         r#"
 var i := 0;
-var sum := 0;
-while i < 10 if i % 2 = 0 loop (
-    sum <- sum + i;
+while i < 10 if i < 5 loop (
     i <- i + 1;
 );
-writeln(int_to_string(sum));
+writeln(int_to_string(i));
 "#,
     );
 }
