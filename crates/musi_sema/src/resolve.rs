@@ -19,8 +19,8 @@ use musi_shared::{DiagnosticBag, FileId, Idx, Interner, Slice, Span, Symbol};
 
 use crate::ModuleExports;
 use crate::def::{DefId, DefInfo, DefKind};
-use crate::types::Type;
 use crate::scope::{ScopeId, ScopeTree};
+use crate::types::Type;
 
 /// The result of the name-resolution pass.
 pub struct ResolveResult {
@@ -212,28 +212,13 @@ impl<'a> Resolver<'a> {
 
             Expr::Paren { inner, .. } => self.resolve_expr(*inner, ctx, scope),
 
-            Expr::Tuple { elements, .. } => {
-                for &e in ctx.expr_lists.get_slice(*elements) {
-                    self.resolve_expr(e, ctx, scope);
-                }
-            }
+            Expr::Tuple { elements, .. } => self.resolve_tuple_expr(*elements, ctx, scope),
 
             Expr::Block { stmts, tail, .. } => self.resolve_block_expr(*stmts, *tail, ctx, scope),
 
-            Expr::Array { items, .. } => {
-                for &item in items {
-                    self.resolve_expr(
-                        match item { ArrayItem::Single(i) | ArrayItem::Spread(i) => i },
-                        ctx, scope,
-                    );
-                }
-            }
+            Expr::Array { items, .. } => self.resolve_array_expr(items, ctx, scope),
 
-            Expr::AnonRec { fields, .. } => {
-                for field in fields {
-                    self.resolve_field_init(field, ctx, scope);
-                }
-            }
+            Expr::AnonRec { fields, .. } => self.resolve_anonrec_expr(fields, ctx, scope),
 
             Expr::If {
                 cond,
@@ -241,44 +226,26 @@ impl<'a> Resolver<'a> {
                 elif_chains,
                 else_body,
                 ..
-            } => {
-                self.resolve_if_expr(
-                    cond,
-                    *then_body,
-                    elif_chains,
-                    else_body.as_ref().copied(),
-                    ctx,
-                    scope,
-                );
-            }
+            } => self.resolve_if_expr(
+                cond,
+                *then_body,
+                elif_chains,
+                else_body.as_ref().copied(),
+                ctx,
+                scope,
+            ),
 
             Expr::Match {
                 scrutinee, arms, ..
-            } => {
-                self.resolve_expr(*scrutinee, ctx, scope);
-                for arm in arms {
-                    self.resolve_match_arm(arm, ctx, scope);
-                }
-            }
+            } => self.resolve_match_expr(*scrutinee, arms, ctx, scope),
 
             Expr::While {
                 cond, guard, body, ..
-            } => {
-                self.resolve_cond(cond, ctx, scope);
-                if let Some(&g) = guard.as_ref() {
-                    self.resolve_expr(g, ctx, scope);
-                }
-                self.resolve_expr(*body, ctx, scope);
-            }
+            } => self.resolve_while_expr(cond, guard.as_ref(), *body, ctx, scope),
 
             Expr::Loop {
                 body, post_cond, ..
-            } => {
-                self.resolve_expr(*body, ctx, scope);
-                if let Some(pc) = post_cond.as_deref() {
-                    self.resolve_cond(pc, ctx, scope);
-                }
-            }
+            } => self.resolve_loop_expr(*body, post_cond.as_deref(), ctx, scope),
 
             Expr::For {
                 pat,
@@ -286,9 +253,7 @@ impl<'a> Resolver<'a> {
                 guard,
                 body,
                 ..
-            } => {
-                self.resolve_for_expr(pat, *iter, guard.as_ref().copied(), *body, ctx, scope);
-            }
+            } => self.resolve_for_expr(pat, *iter, guard.as_ref().copied(), *body, ctx, scope),
 
             Expr::Label { body, .. } | Expr::Defer { body, .. } => {
                 self.resolve_expr(*body, ctx, scope);
@@ -312,6 +277,71 @@ impl<'a> Resolver<'a> {
             }
 
             other => self.resolve_expr_decl(other, ctx, scope),
+        }
+    }
+
+    fn resolve_tuple_expr(&mut self, elements: Slice<Idx<Expr>>, ctx: &AstArenas, scope: ScopeId) {
+        for &e in ctx.expr_lists.get_slice(elements) {
+            self.resolve_expr(e, ctx, scope);
+        }
+    }
+
+    fn resolve_array_expr(&mut self, items: &[ArrayItem], ctx: &AstArenas, scope: ScopeId) {
+        for &item in items {
+            self.resolve_expr(
+                match item {
+                    ArrayItem::Single(i) | ArrayItem::Spread(i) => i,
+                },
+                ctx,
+                scope,
+            );
+        }
+    }
+
+    fn resolve_anonrec_expr(&mut self, fields: &[FieldInit], ctx: &AstArenas, scope: ScopeId) {
+        for field in fields {
+            self.resolve_field_init(field, ctx, scope);
+        }
+    }
+
+    fn resolve_match_expr(
+        &mut self,
+        scrutinee: Idx<Expr>,
+        arms: &[MatchArm],
+        ctx: &AstArenas,
+        scope: ScopeId,
+    ) {
+        self.resolve_expr(scrutinee, ctx, scope);
+        for arm in arms {
+            self.resolve_match_arm(arm, ctx, scope);
+        }
+    }
+
+    fn resolve_while_expr(
+        &mut self,
+        cond: &Cond,
+        guard: Option<&Idx<Expr>>,
+        body: Idx<Expr>,
+        ctx: &AstArenas,
+        scope: ScopeId,
+    ) {
+        self.resolve_cond(cond, ctx, scope);
+        if let Some(&g) = guard {
+            self.resolve_expr(g, ctx, scope);
+        }
+        self.resolve_expr(body, ctx, scope);
+    }
+
+    fn resolve_loop_expr(
+        &mut self,
+        body: Idx<Expr>,
+        post_cond: Option<&Cond>,
+        ctx: &AstArenas,
+        scope: ScopeId,
+    ) {
+        self.resolve_expr(body, ctx, scope);
+        if let Some(pc) = post_cond {
+            self.resolve_cond(pc, ctx, scope);
         }
     }
 
@@ -469,7 +499,10 @@ impl<'a> Resolver<'a> {
                     self.resolve_field_init(field, ctx, scope);
                 }
             }
-            PostfixOp::Field { name: field_sym, span: field_span } => {
+            PostfixOp::Field {
+                name: field_sym,
+                span: field_span,
+            } => {
                 // Validate field access on namespace aliases.
                 if let Expr::Ident { name: base_sym, .. } = ctx.exprs.get(base)
                     && let Some(def_id) = self.expr_defs.get(&base)

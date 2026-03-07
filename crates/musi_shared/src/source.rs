@@ -108,7 +108,9 @@ impl SourceDb {
         let raw = if line_idx + 1 < file.line_starts.len() {
             let end = usize::try_from(file.line_starts[line_idx + 1])
                 .expect("next line start offset fits in usize");
-            file.source.get(start..end).expect("valid UTF-8 line boundary")
+            file.source
+                .get(start..end)
+                .expect("valid UTF-8 line boundary")
         } else {
             file.source.get(start..).expect("valid UTF-8 line start")
         };

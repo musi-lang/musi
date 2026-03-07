@@ -113,7 +113,9 @@ impl Diagnostic {
 
         // Underline: "   | spaces + carets"
         let underline_col = usize::try_from(col).unwrap_or(0).saturating_sub(1);
-        let caret_len = usize::try_from(self.primary.span.length).unwrap_or(1).max(1);
+        let caret_len = usize::try_from(self.primary.span.length)
+            .unwrap_or(1)
+            .max(1);
         write!(
             out,
             " {:gutter_width$} | {:underline_col$}{sev_start}{:^>caret_len$}{reset}",

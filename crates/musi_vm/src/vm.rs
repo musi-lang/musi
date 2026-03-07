@@ -140,33 +140,19 @@ impl Vm {
     fn step(&mut self, op: Opcode) -> Result<Signal, VmError> {
         match op {
             Opcode::Nop => Ok(Signal::Continue),
-            Opcode::Halt => Ok(Signal::Return(
-                self.stack.last().map_or(Value::Unit, Clone::clone),
-            )),
+            Opcode::Halt => Ok(self.exec_halt()),
             Opcode::Ret => self.exec_ret(),
-            Opcode::Drop => {
-                let _ = self.stack.pop().ok_or(VmError::StackUnderflow)?;
-                Ok(Signal::Continue)
-            }
-            Opcode::LdImmI64(v) => { self.stack.push(Value::Int(v)); Ok(Signal::Continue) }
-            Opcode::LdImmF64(v) => { self.stack.push(Value::Float(v)); Ok(Signal::Continue) }
-            Opcode::LdImmUnit => { self.stack.push(Value::Unit); Ok(Signal::Continue) }
+            Opcode::Drop => self.exec_drop(),
+            Opcode::LdImmI64(v) => Ok(self.exec_ld_imm_i64(v)),
+            Opcode::LdImmF64(v) => Ok(self.exec_ld_imm_f64(v)),
+            Opcode::LdImmUnit => Ok(self.exec_ld_imm_unit()),
             Opcode::LdConst(idx) => self.exec_ld_const(idx),
             Opcode::LdLoc(idx) => self.exec_ld_loc(idx),
             Opcode::StLoc(idx) => self.exec_st_loc(idx),
-            Opcode::Call(fn_idx) => {
-                self.exec_call(fn_idx)?;
-                Ok(Signal::Continue)
-            }
-            Opcode::LdFnIdx(idx) => {
-                self.stack.push(Value::Function(idx));
-                Ok(Signal::Continue)
-            }
+            Opcode::Call(fn_idx) => self.exec_call_and_continue(fn_idx),
+            Opcode::LdFnIdx(idx) => Ok(self.exec_ld_fn_idx(idx)),
             Opcode::CallDynamic => self.exec_call_dynamic(),
-            Opcode::Dup => {
-                let top = self.stack.last().ok_or(VmError::StackUnderflow)?.clone();
-                self.stack.push(top); Ok(Signal::Continue)
-            }
+            Opcode::Dup => self.exec_dup(),
             Opcode::HaltError => Err(VmError::MatchFailure),
             Opcode::NewObj {
                 type_tag,
@@ -209,11 +195,7 @@ impl Vm {
             | Opcode::BitNot
             | Opcode::Shl
             | Opcode::Shr => self.exec_bitwise(&op),
-            Opcode::Br(offset) => {
-                let frame = self.frames.last_mut().ok_or(VmError::NoFrames)?;
-                frame.pc = apply_branch_offset(frame.pc, offset)?;
-                Ok(Signal::Continue)
-            }
+            Opcode::Br(offset) => self.exec_br(offset),
             Opcode::BrTrue(offset) => self.exec_br_cond(offset, true),
             Opcode::BrFalse(offset) => self.exec_br_cond(offset, false),
             Opcode::ConcatStr => self.exec_concat_str(),
@@ -222,10 +204,7 @@ impl Vm {
             Opcode::CallMethod {
                 method_idx,
                 arg_count,
-            } => {
-                self.exec_call_method(method_idx, arg_count)?;
-                Ok(Signal::Continue)
-            }
+            } => self.exec_call_method_and_continue(method_idx, arg_count),
             Opcode::NewArr(n) => self.exec_new_arr(n),
             Opcode::ArrGet => self.exec_arr_get(),
             Opcode::ArrSet => self.exec_arr_set(),
@@ -233,6 +212,61 @@ impl Vm {
             Opcode::ArrPush => self.exec_arr_push(),
             Opcode::ArrSlice => self.exec_arr_slice(),
         }
+    }
+
+    fn exec_halt(&self) -> Signal {
+        Signal::Return(self.stack.last().map_or(Value::Unit, Clone::clone))
+    }
+
+    fn exec_drop(&mut self) -> Result<Signal, VmError> {
+        let _ = self.stack.pop().ok_or(VmError::StackUnderflow)?;
+        Ok(Signal::Continue)
+    }
+
+    fn exec_ld_imm_i64(&mut self, v: i64) -> Signal {
+        self.stack.push(Value::Int(v));
+        Signal::Continue
+    }
+
+    fn exec_ld_imm_f64(&mut self, v: f64) -> Signal {
+        self.stack.push(Value::Float(v));
+        Signal::Continue
+    }
+
+    fn exec_ld_imm_unit(&mut self) -> Signal {
+        self.stack.push(Value::Unit);
+        Signal::Continue
+    }
+
+    fn exec_call_and_continue(&mut self, fn_idx: u16) -> Result<Signal, VmError> {
+        self.exec_call(fn_idx)?;
+        Ok(Signal::Continue)
+    }
+
+    fn exec_ld_fn_idx(&mut self, idx: u16) -> Signal {
+        self.stack.push(Value::Function(idx));
+        Signal::Continue
+    }
+
+    fn exec_dup(&mut self) -> Result<Signal, VmError> {
+        let top = self.stack.last().ok_or(VmError::StackUnderflow)?.clone();
+        self.stack.push(top);
+        Ok(Signal::Continue)
+    }
+
+    fn exec_br(&mut self, offset: i32) -> Result<Signal, VmError> {
+        let frame = self.frames.last_mut().ok_or(VmError::NoFrames)?;
+        frame.pc = apply_branch_offset(frame.pc, offset)?;
+        Ok(Signal::Continue)
+    }
+
+    fn exec_call_method_and_continue(
+        &mut self,
+        method_idx: u16,
+        arg_count: u16,
+    ) -> Result<Signal, VmError> {
+        self.exec_call_method(method_idx, arg_count)?;
+        Ok(Signal::Continue)
     }
 
     fn exec_new_obj(&mut self, type_tag: u16, field_count: u16) -> Result<Signal, VmError> {
