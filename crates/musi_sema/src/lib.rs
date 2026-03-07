@@ -47,6 +47,9 @@ pub struct SemaResult {
     pub pat_defs: HashMap<Span, DefId>,
     /// The inferred type of each expression node.
     pub expr_types: HashMap<Idx<Expr>, Type>,
+    /// The unification table used during type checking.
+    /// Retained so callers can call [`UnifyTable::freeze_type`] before exporting types.
+    pub unify_table: UnifyTable,
 }
 
 /// Externally-visible types exported by a module (name → inferred [`Type`]).
@@ -76,7 +79,9 @@ pub fn exports_of(
                         .find(|d| interner.resolve(d.name) == name_str)
                         .and_then(|d| d.ty.clone())
                     {
-                        let _prev = names.insert(name_str, ty);
+                        // Freeze: resolve bound vars and erase free ones so that
+                        // TypeVarIds do not escape into a foreign UnifyTable.
+                        let _prev = names.insert(name_str, result.unify_table.freeze_type(ty));
                     }
                 }
             }
@@ -90,7 +95,7 @@ pub fn exports_of(
                         .find(|d| interner.resolve(d.name) == name_str)
                         .and_then(|d| d.ty.clone())
                     {
-                        let _prev = names.insert(name_str, ty);
+                        let _prev = names.insert(name_str, result.unify_table.freeze_type(ty));
                     }
                 }
             }
@@ -120,7 +125,7 @@ pub fn analyze<S: BuildHasher>(
     // Pass 3: type checking.
     // The checker borrows expr_defs and pat_defs; we scope it so those borrows
     // are released before we move the fields into SemaResult.
-    let (defs, expr_types) = {
+    let (defs, expr_types, unify_table) = {
         let mut checker = TypeChecker::new(
             interner,
             file_id,
@@ -130,7 +135,7 @@ pub fn analyze<S: BuildHasher>(
             resolved.defs,
         );
         checker.check_module(module);
-        (checker.defs, checker.expr_types)
+        (checker.defs, checker.expr_types, checker.unify_table)
     };
 
     // Emit warnings for unused definitions.
@@ -157,6 +162,7 @@ pub fn analyze<S: BuildHasher>(
         expr_defs: resolved.expr_defs,
         pat_defs: resolved.pat_defs,
         expr_types,
+        unify_table,
     }
 }
 

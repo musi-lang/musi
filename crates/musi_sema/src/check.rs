@@ -71,6 +71,35 @@ impl UnifyTable {
         }
     }
 
+    /// Recursively resolves bound type variables and erases free ones to [`Type::Error`].
+    ///
+    /// Call this before exporting a type from a module so that `TypeVarId`s
+    /// do not escape into a different `UnifyTable` (which would cause an OOB panic).
+    #[must_use]
+    pub fn freeze_type(&self, ty: Type) -> Type {
+        match ty {
+            Type::Var(v) => {
+                let idx = usize::try_from(v.0).expect("TypeVarId in range");
+                match self.vars.get(idx) {
+                    Some(Some(bound)) => self.freeze_type(bound.clone()),
+                    _ => Type::Error, // free or foreign var → erase
+                }
+            }
+            Type::Arrow(params, ret) => Type::Arrow(
+                params.into_iter().map(|p| self.freeze_type(p)).collect(),
+                Box::new(self.freeze_type(*ret)),
+            ),
+            Type::Tuple(elems) => {
+                Type::Tuple(elems.into_iter().map(|e| self.freeze_type(e)).collect())
+            }
+            Type::Array(elem, size) => Type::Array(Box::new(self.freeze_type(*elem)), size),
+            Type::Named(id, args) => {
+                Type::Named(id, args.into_iter().map(|a| self.freeze_type(a)).collect())
+            }
+            other => other,
+        }
+    }
+
     fn unify_sequence(
         &mut self,
         a: Vec<Type>,
