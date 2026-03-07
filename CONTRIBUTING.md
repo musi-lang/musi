@@ -4,110 +4,134 @@ Thanks for helping Musi grow. This guide keeps expectations clear and simple so 
 
 ## Before Starting
 
-- Read language guide in `docs/` to understand current syntax and roadmap.
-- Set up toolchain listed in [Development Setup](#development-setup).
+- Read `grammar.ebnf` to understand the canonical language syntax.
+- Read `CLAUDE.md` for the two non-negotiable design constraints (LL(1), mathematical purity).
 - Check open issues to avoid duplicating work.
-- Keep British spelling in docs and commit messages.
 
 ## Standard Workflow
 
-1. Fork repository.
-2. Clone fork: `git clone https://github.com/<your-user>/musi.git`.
-3. Create topic branch: `git checkout -b feat/<short-description>`.
+1. Fork the repository.
+2. Clone your fork: `git clone https://github.com/<your-user>/musi.git`
+3. Create a topic branch: `git checkout -b feat/<short-description>`
 4. Make focused changes.
-5. Run `opam exec -- dune test` (and any extra commands relevant to change).
-6. Commit with clear message explaining *why* change exists.
-7. Push and open pull request describing behaviour changes and tests.
+5. Build and test the relevant crates (see [Testing](#testing)).
+6. Commit with a clear message explaining *why* the change exists.
+7. Push and open a pull request describing the behaviour change and how you tested it.
 
 ## Coding Guidelines
 
 ### Core Principles
 
-- **KISS** -- prefer simplest solution that works today.
-- **DRY** -- extract shared behaviour quickly to keep one source of truth.
-- **YAGNI** -- do not build future features until roadmap calls for them.
+- **KISS** -- prefer the simplest solution that works today.
+- **YAGNI** -- do not build future features until they are needed.
+- **No over-engineering** -- three similar lines of code is better than a premature abstraction.
 
 ### Naming
 
-- Modules and variant constructors use `PascalCase` (`Expr`, `Token`, `Some`).
-- Functions and values use `snake_case`.
-- Use `t` for primary types inside modules.
-- Use `_opt` suffix for functions that return `option`.
-- Use `try_` prefix for functions that return `result`.
+- Types and enum variants use `PascalCase` (`Expr`, `TokenKind`, `VmError`).
+- Functions, methods, and local variables use `snake_case`.
 - Prefix intentionally unused bindings with `_`.
 
-### OCaml Style
+### Rust Style
 
-- Add type annotations when inference is unclear, especially in `.mli` files.
-- Pattern match exhaustively instead of relying on `_` fallbacks.
-- Keep data immutable unless mutable field is required; mark with `mutable`.
-- Prefer small functions (under 50 lines) and shallow nesting (no more than four levels).
+- Follow Rust edition 2024 conventions.
+- Use `thiserror` for error types; avoid `anyhow`.
+- Prefer `match` exhaustiveness over `_` fallbacks where practical.
+- Keep functions short and focused; avoid nesting beyond three levels.
 - Remove dead or commented-out code before submitting.
 
-### Comments and Docs
+### Comments
 
-- Comment to explain *why* choice was made, not what code already states.
-- Update documentation and examples whenever behaviour changes.
-- Follow language guide structure when adding new docs; place new book chapters under `docs/language-guide/`.
+Comments are noise. Only add them where the logic is genuinely non-obvious. Section dividers use the form `// -- Name ---`.
 
-## Testing Expectations
+### Grammar Changes
 
-- Run `opam exec -- dune test` before every push.
-- Add or update targeted tests for every bug fix or new feature.
-- Mention any skipped or flaky tests in pull request so reviewers know risk.
+Every grammar change must satisfy both constraints in `CLAUDE.md`:
 
-## Using AI Assistants
+1. **Strict LL(1)** -- compute FIRST sets explicitly and verify disjointness.
+2. **Mathematical purity** -- syntax must reflect type-theoretic meaning.
 
-No AI configuration files live in repository yet, but you may use own tools. You remain responsible for code quality:
+## Testing
 
-- Understand surrounding code before pasting AI suggestions.
-- Review and test generated code carefully.
-- Never merge output you do not fully understand.
+The workspace is large and compiling everything at once may exhaust memory on smaller machines. Test crates individually:
+
+```bash
+# Build test binaries for the crates you changed
+cargo build --tests -p musi_lex
+cargo build --tests -p musi_parse
+cargo build --tests -p musi_codegen
+cargo build --tests -p musi_vm
+
+# Run the built binary (hash will differ)
+./target/debug/deps/musi_parse-<hash>
+```
+
+Run `cargo clippy -p <crate>` on every crate you touch.
+
+Avoid `cargo test --workspace` -- it may OOM on machines with less than 16 GB free RAM.
 
 ## Pull Request Checklist
 
-- [ ] Tests pass locally with `opam exec -- dune test`.
-- [ ] Docs and comments updated if behaviour changed.
-- [ ] Commit messages explain intent.
-- [ ] PR description covers motivation, approach, and testing.
+- [ ] Relevant crates build cleanly with no warnings.
+- [ ] `cargo clippy -p <crate>` passes for each changed crate.
+- [ ] Tests pass for changed crates.
+- [ ] Grammar changes verified LL(1) and documented in `grammar.ebnf`.
+- [ ] Commit messages explain intent (the *why*, not the *what*).
+- [ ] PR description covers motivation, approach, and how it was tested.
 
 ## Reporting Issues
 
-When filing bug, include:
+When filing a bug, include:
 
 - Steps to reproduce.
 - Expected versus actual behaviour.
-- Output snippets or logs when helpful.
-- Musi commit hash, OCaml version, and platform.
+- Relevant source snippet or error output.
+- Musi commit hash and platform (OS + architecture).
 
-Feature requests should describe use case and why Musi needs it now.
+Feature requests should describe the use case and why it fits the language design constraints.
 
 ## Development Setup
 
 ### Prerequisites
 
-- OCaml 5.4.0 or newer
-- opam
-- Dune 3.20.2 or newer
+- Rust 1.88 or newer (edition 2024)
+- Cargo (comes with Rust)
 - Git
 
 ### Typical Commands
 
 ```bash
-# lock dependencies
-opam exec -- dune pkg lock
+# Build the toolchain
+cargo build
 
-# compile everything
-opam exec -- dune build
+# Build release binary
+cargo build --release
 
-# run all tests
-opam exec -- dune test
+# Run a Musi program
+./target/release/musi run examples/hello.ms
+
+# Type-check a file
+./target/release/musi check myfile.ms
+
+# Run tests in a file
+./target/release/musi test myfile.test.ms
+
+# Lint
+cargo clippy --workspace
 ```
+
+## Using AI Assistants
+
+You may use AI tools. You remain responsible for code quality:
+
+- Understand surrounding code before accepting AI suggestions.
+- Review and test generated code carefully.
+- Never merge output you do not fully understand.
 
 ## Questions and Support
 
-Open issue if you need clarification on direction, architecture, or roadmap priorities. Discussions stay public so future contributors benefit from context.
+Open an issue if you need clarification on direction, architecture, or roadmap priorities. Discussions stay public so future contributors benefit from context.
 
 ## Code of Conduct
 
-All contributors must follow [Code of Conduct](CODE_OF_CONDUCT.md).
+All contributors must follow the [Code of Conduct](CODE_OF_CONDUCT.md).
