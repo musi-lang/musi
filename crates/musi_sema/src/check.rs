@@ -69,6 +69,17 @@ impl UnifyTable {
         }
     }
 
+    fn unify_sequence(
+        &mut self,
+        a: Vec<Type>,
+        b: Vec<Type>,
+        span: Span,
+        diags: &mut DiagnosticBag,
+        file_id: FileId,
+    ) -> Vec<Type> {
+        a.into_iter().zip(b).map(|(ta, tb)| self.unify(ta, tb, span, diags, file_id)).collect()
+    }
+
     fn bind(&mut self, v: TypeVarId, ty: Type) {
         let idx = usize::try_from(v.0).expect("TypeVarId in range");
         self.vars[idx] = Some(ty);
@@ -153,11 +164,7 @@ impl UnifyTable {
                     );
                     return Type::Error;
                 }
-                let params: Vec<Type> = p1
-                    .into_iter()
-                    .zip(p2)
-                    .map(|(pa, pb)| self.unify(pa, pb, span, diags, file_id))
-                    .collect();
+                let params = self.unify_sequence(p1, p2, span, diags, file_id);
                 let ret = Box::new(self.unify(*r1, *r2, span, diags, file_id));
                 Type::Arrow(params, ret)
             }
@@ -176,11 +183,7 @@ impl UnifyTable {
                         diags.error(String::from("type argument count mismatch"), span, file_id);
                     return Type::Error;
                 }
-                let args: Vec<Type> = a1
-                    .into_iter()
-                    .zip(a2)
-                    .map(|(ta, tb)| self.unify(ta, tb, span, diags, file_id))
-                    .collect();
+                let args = self.unify_sequence(a1, a2, span, diags, file_id);
                 Type::Named(d1, args)
             }
 
@@ -197,11 +200,7 @@ impl UnifyTable {
                     );
                     return Type::Error;
                 }
-                let elems: Vec<Type> = a
-                    .into_iter()
-                    .zip(b)
-                    .map(|(ta, tb)| self.unify(ta, tb, span, diags, file_id))
-                    .collect();
+                let elems = self.unify_sequence(a, b, span, diags, file_id);
                 Type::Tuple(elems)
             }
 

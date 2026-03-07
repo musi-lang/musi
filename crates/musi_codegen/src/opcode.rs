@@ -230,85 +230,63 @@ fn push_i32_op(buf: &mut Vec<u8>, tag: u8, val: i32) {
     buf.extend_from_slice(&val.to_le_bytes());
 }
 
+/// Maps simple (no-payload) opcode variants to their byte constants.
+///
+/// Used by both `encode_into` and `decode` to avoid repeating 51 match arms twice.
+macro_rules! for_simple_opcodes {
+    ($m:ident) => {
+        $m! {
+            Nop => NOP, Halt => HALT, Ret => RET, Drop => DROP, Dup => DUP,
+            HaltError => HALT_ERROR, LdImmUnit => LD_IMM_UNIT, CallDynamic => CALL_DYNAMIC,
+            LdTag => LD_TAG, AddI64 => ADD_I64, SubI64 => SUB_I64, MulI64 => MUL_I64,
+            DivI64 => DIV_I64, RemI64 => REM_I64, NegI64 => NEG_I64, AddF64 => ADD_F64,
+            SubF64 => SUB_F64, MulF64 => MUL_F64, DivF64 => DIV_F64, RemF64 => REM_F64,
+            NegF64 => NEG_F64, EqI64 => EQ_I64, NeqI64 => NEQ_I64, LtI64 => LT_I64,
+            GtI64 => GT_I64, LeqI64 => LEQ_I64, GeqI64 => GEQ_I64, EqF64 => EQ_F64,
+            NeqF64 => NEQ_F64, LtF64 => LT_F64, GtF64 => GT_F64, LeqF64 => LEQ_F64,
+            GeqF64 => GEQ_F64, EqBool => EQ_BOOL, NeqBool => NEQ_BOOL, EqStr => EQ_STR,
+            NeqStr => NEQ_STR, Not => NOT, BitAnd => BIT_AND, BitOr => BIT_OR,
+            BitXor => BIT_XOR, BitNot => BIT_NOT, Shl => SHL, Shr => SHR,
+            ConcatStr => CONCAT_STR, NilCoalesce => NIL_COALESCE, ArrGet => ARR_GET,
+            ArrSet => ARR_SET, ArrLen => ARR_LEN, ArrPush => ARR_PUSH, ArrSlice => ARR_SLICE,
+        }
+    };
+}
+
 impl Opcode {
     /// Encodes this opcode into `buf` as little-endian bytes.
     pub fn encode_into(&self, buf: &mut Vec<u8>) {
-        match self {
-            Self::Nop => buf.push(NOP),
-            Self::Halt => buf.push(HALT),
-            Self::Ret => buf.push(RET),
-            Self::Drop => buf.push(DROP),
-            Self::Dup => buf.push(DUP),
-            Self::HaltError => buf.push(HALT_ERROR),
-            Self::LdImmUnit => buf.push(LD_IMM_UNIT),
-            Self::LdImmI64(v) => { buf.push(LD_IMM_I64); buf.extend_from_slice(&v.to_le_bytes()); }
-            Self::LdImmF64(v) => { buf.push(LD_IMM_F64); buf.extend_from_slice(&v.to_le_bytes()); }
-            Self::LdConst(v)  => push_u16_op(buf, LD_CONST,  *v),
-            Self::LdLoc(v)    => push_u16_op(buf, LD_LOC,    *v),
-            Self::StLoc(v)    => push_u16_op(buf, ST_LOC,    *v),
-            Self::Call(v)     => push_u16_op(buf, CALL,      *v),
-            Self::LdFnIdx(v)  => push_u16_op(buf, LD_FN_IDX, *v),
-            Self::LdFld(v)    => push_u16_op(buf, LD_FLD,    *v),
-            Self::OptField(v) => push_u16_op(buf, OPT_FIELD, *v),
-            Self::NewArr(v)   => push_u16_op(buf, NEW_ARR,   *v),
-            Self::CallDynamic => buf.push(CALL_DYNAMIC),
-            Self::NewObj { type_tag, field_count } => {
-                buf.push(NEW_OBJ);
-                buf.extend_from_slice(&type_tag.to_le_bytes());
-                buf.extend_from_slice(&field_count.to_le_bytes());
-            }
-            Self::LdTag => buf.push(LD_TAG),
-            Self::AddI64 => buf.push(ADD_I64),
-            Self::SubI64 => buf.push(SUB_I64),
-            Self::MulI64 => buf.push(MUL_I64),
-            Self::DivI64 => buf.push(DIV_I64),
-            Self::RemI64 => buf.push(REM_I64),
-            Self::NegI64 => buf.push(NEG_I64),
-            Self::AddF64 => buf.push(ADD_F64),
-            Self::SubF64 => buf.push(SUB_F64),
-            Self::MulF64 => buf.push(MUL_F64),
-            Self::DivF64 => buf.push(DIV_F64),
-            Self::RemF64 => buf.push(REM_F64),
-            Self::NegF64 => buf.push(NEG_F64),
-            Self::EqI64  => buf.push(EQ_I64),
-            Self::NeqI64 => buf.push(NEQ_I64),
-            Self::LtI64  => buf.push(LT_I64),
-            Self::GtI64  => buf.push(GT_I64),
-            Self::LeqI64 => buf.push(LEQ_I64),
-            Self::GeqI64 => buf.push(GEQ_I64),
-            Self::EqF64  => buf.push(EQ_F64),
-            Self::NeqF64 => buf.push(NEQ_F64),
-            Self::LtF64  => buf.push(LT_F64),
-            Self::GtF64  => buf.push(GT_F64),
-            Self::LeqF64 => buf.push(LEQ_F64),
-            Self::GeqF64 => buf.push(GEQ_F64),
-            Self::EqBool  => buf.push(EQ_BOOL),
-            Self::NeqBool => buf.push(NEQ_BOOL),
-            Self::EqStr   => buf.push(EQ_STR),
-            Self::NeqStr  => buf.push(NEQ_STR),
-            Self::Not    => buf.push(NOT),
-            Self::BitAnd => buf.push(BIT_AND),
-            Self::BitOr  => buf.push(BIT_OR),
-            Self::BitXor => buf.push(BIT_XOR),
-            Self::BitNot => buf.push(BIT_NOT),
-            Self::Shl    => buf.push(SHL),
-            Self::Shr    => buf.push(SHR),
-            Self::Br(offset)      => push_i32_op(buf, BR,       *offset),
-            Self::BrTrue(offset)  => push_i32_op(buf, BR_TRUE,  *offset),
-            Self::BrFalse(offset) => push_i32_op(buf, BR_FALSE, *offset),
-            Self::ConcatStr   => buf.push(CONCAT_STR),
-            Self::NilCoalesce => buf.push(NIL_COALESCE),
-            Self::CallMethod { method_idx, arg_count } => {
-                buf.push(CALL_METHOD);
-                buf.extend_from_slice(&method_idx.to_le_bytes());
-                buf.extend_from_slice(&arg_count.to_le_bytes());
-            }
-            Self::ArrGet   => buf.push(ARR_GET),
-            Self::ArrSet   => buf.push(ARR_SET),
-            Self::ArrLen   => buf.push(ARR_LEN),
-            Self::ArrPush  => buf.push(ARR_PUSH),
-            Self::ArrSlice => buf.push(ARR_SLICE),
+        macro_rules! encode_simple {
+            ($($var:ident => $byte:ident),+ $(,)?) => {
+                match self {
+                    $(Self::$var => buf.push($byte),)+
+                    Self::LdImmI64(v) => { buf.push(LD_IMM_I64); buf.extend_from_slice(&v.to_le_bytes()); }
+                    Self::LdImmF64(v) => { buf.push(LD_IMM_F64); buf.extend_from_slice(&v.to_le_bytes()); }
+                    Self::LdConst(v)  => push_u16_op(buf, LD_CONST,  *v),
+                    Self::LdLoc(v)    => push_u16_op(buf, LD_LOC,    *v),
+                    Self::StLoc(v)    => push_u16_op(buf, ST_LOC,    *v),
+                    Self::Call(v)     => push_u16_op(buf, CALL,      *v),
+                    Self::LdFnIdx(v)  => push_u16_op(buf, LD_FN_IDX, *v),
+                    Self::LdFld(v)    => push_u16_op(buf, LD_FLD,    *v),
+                    Self::OptField(v) => push_u16_op(buf, OPT_FIELD, *v),
+                    Self::NewArr(v)   => push_u16_op(buf, NEW_ARR,   *v),
+                    Self::NewObj { type_tag, field_count } => {
+                        buf.push(NEW_OBJ);
+                        buf.extend_from_slice(&type_tag.to_le_bytes());
+                        buf.extend_from_slice(&field_count.to_le_bytes());
+                    }
+                    Self::Br(offset)      => push_i32_op(buf, BR,       *offset),
+                    Self::BrTrue(offset)  => push_i32_op(buf, BR_TRUE,  *offset),
+                    Self::BrFalse(offset) => push_i32_op(buf, BR_FALSE, *offset),
+                    Self::CallMethod { method_idx, arg_count } => {
+                        buf.push(CALL_METHOD);
+                        buf.extend_from_slice(&method_idx.to_le_bytes());
+                        buf.extend_from_slice(&arg_count.to_le_bytes());
+                    }
+                }
+            };
         }
+        for_simple_opcodes!(encode_simple);
     }
 
     /// Decodes one opcode from `code[offset..]`.
@@ -321,89 +299,44 @@ impl Opcode {
     /// [`DeserError::UnknownOpcode`] if the tag byte is not recognised.
     pub fn decode(code: &[u8], offset: usize) -> Result<(Self, usize), DeserError> {
         let tag = code.get(offset).copied().ok_or(DeserError::UnexpectedEof)?;
-        match tag {
-            NOP => Ok((Self::Nop, 1)),
-            HALT => Ok((Self::Halt, 1)),
-            RET => Ok((Self::Ret, 1)),
-            DROP => Ok((Self::Drop, 1)),
-            DUP => Ok((Self::Dup, 1)),
-            HALT_ERROR => Ok((Self::HaltError, 1)),
-            LD_IMM_UNIT => Ok((Self::LdImmUnit, 1)),
-            LD_IMM_I64 => {
-                let b = read_8(code, offset + 1)?;
-                Ok((Self::LdImmI64(i64::from_le_bytes(b)), 9))
-            }
-            LD_IMM_F64 => {
-                let b = read_8(code, offset + 1)?;
-                Ok((Self::LdImmF64(f64::from_le_bytes(b)), 9))
-            }
-            LD_CONST => Ok((Self::LdConst(read_u16(code, offset + 1)?), 3)),
-            LD_LOC => Ok((Self::LdLoc(read_u16(code, offset + 1)?), 3)),
-            ST_LOC => Ok((Self::StLoc(read_u16(code, offset + 1)?), 3)),
-            CALL => Ok((Self::Call(read_u16(code, offset + 1)?), 3)),
-            LD_FN_IDX => Ok((Self::LdFnIdx(read_u16(code, offset + 1)?), 3)),
-            CALL_DYNAMIC => Ok((Self::CallDynamic, 1)),
-            NEW_OBJ => {
-                let type_tag = read_u16(code, offset + 1)?;
-                let field_count = read_u16(code, offset + 3)?;
-                Ok((Self::NewObj { type_tag, field_count }, 5))
-            }
-            LD_FLD => Ok((Self::LdFld(read_u16(code, offset + 1)?), 3)),
-            LD_TAG => Ok((Self::LdTag, 1)),
-            ADD_I64 => Ok((Self::AddI64, 1)),
-            SUB_I64 => Ok((Self::SubI64, 1)),
-            MUL_I64 => Ok((Self::MulI64, 1)),
-            DIV_I64 => Ok((Self::DivI64, 1)),
-            REM_I64 => Ok((Self::RemI64, 1)),
-            NEG_I64 => Ok((Self::NegI64, 1)),
-            ADD_F64 => Ok((Self::AddF64, 1)),
-            SUB_F64 => Ok((Self::SubF64, 1)),
-            MUL_F64 => Ok((Self::MulF64, 1)),
-            DIV_F64 => Ok((Self::DivF64, 1)),
-            REM_F64 => Ok((Self::RemF64, 1)),
-            NEG_F64 => Ok((Self::NegF64, 1)),
-            EQ_I64 => Ok((Self::EqI64, 1)),
-            NEQ_I64 => Ok((Self::NeqI64, 1)),
-            LT_I64 => Ok((Self::LtI64, 1)),
-            GT_I64 => Ok((Self::GtI64, 1)),
-            LEQ_I64 => Ok((Self::LeqI64, 1)),
-            GEQ_I64 => Ok((Self::GeqI64, 1)),
-            EQ_F64 => Ok((Self::EqF64, 1)),
-            NEQ_F64 => Ok((Self::NeqF64, 1)),
-            LT_F64 => Ok((Self::LtF64, 1)),
-            GT_F64 => Ok((Self::GtF64, 1)),
-            LEQ_F64 => Ok((Self::LeqF64, 1)),
-            GEQ_F64 => Ok((Self::GeqF64, 1)),
-            EQ_BOOL => Ok((Self::EqBool, 1)),
-            NEQ_BOOL => Ok((Self::NeqBool, 1)),
-            EQ_STR => Ok((Self::EqStr, 1)),
-            NEQ_STR => Ok((Self::NeqStr, 1)),
-            NOT => Ok((Self::Not, 1)),
-            BIT_AND => Ok((Self::BitAnd, 1)),
-            BIT_OR => Ok((Self::BitOr, 1)),
-            BIT_XOR => Ok((Self::BitXor, 1)),
-            BIT_NOT => Ok((Self::BitNot, 1)),
-            SHL => Ok((Self::Shl, 1)),
-            SHR => Ok((Self::Shr, 1)),
-            BR => Ok((Self::Br(read_i32(code, offset + 1)?), 5)),
-            BR_TRUE => Ok((Self::BrTrue(read_i32(code, offset + 1)?), 5)),
-            BR_FALSE => Ok((Self::BrFalse(read_i32(code, offset + 1)?), 5)),
-            CONCAT_STR => Ok((Self::ConcatStr, 1)),
-            NIL_COALESCE => Ok((Self::NilCoalesce, 1)),
-            OPT_FIELD => Ok((Self::OptField(read_u16(code, offset + 1)?), 3)),
-            CALL_METHOD => {
-                let method_idx = read_u16(code, offset + 1)?;
-                let arg_count = read_u16(code, offset + 3)?;
-                Ok((Self::CallMethod { method_idx, arg_count }, 5))
-            }
-            NEW_ARR => Ok((Self::NewArr(read_u16(code, offset + 1)?), 3)),
-            ARR_GET => Ok((Self::ArrGet, 1)),
-            ARR_SET => Ok((Self::ArrSet, 1)),
-            ARR_LEN => Ok((Self::ArrLen, 1)),
-            ARR_PUSH => Ok((Self::ArrPush, 1)),
-            ARR_SLICE => Ok((Self::ArrSlice, 1)),
-            _ => Err(DeserError::UnknownOpcode { tag, offset }),
+        macro_rules! decode_simple {
+            ($($var:ident => $byte:ident),+ $(,)?) => {
+                match tag {
+                    $($byte => Ok((Self::$var, 1)),)+
+                    LD_IMM_I64 => {
+                        let b = read_bytes::<8>(code, offset + 1)?;
+                        Ok((Self::LdImmI64(i64::from_le_bytes(b)), 9))
+                    }
+                    LD_IMM_F64 => {
+                        let b = read_bytes::<8>(code, offset + 1)?;
+                        Ok((Self::LdImmF64(f64::from_le_bytes(b)), 9))
+                    }
+                    LD_CONST => Ok((Self::LdConst(read_u16(code, offset + 1)?), 3)),
+                    LD_LOC => Ok((Self::LdLoc(read_u16(code, offset + 1)?), 3)),
+                    ST_LOC => Ok((Self::StLoc(read_u16(code, offset + 1)?), 3)),
+                    CALL => Ok((Self::Call(read_u16(code, offset + 1)?), 3)),
+                    LD_FN_IDX => Ok((Self::LdFnIdx(read_u16(code, offset + 1)?), 3)),
+                    LD_FLD => Ok((Self::LdFld(read_u16(code, offset + 1)?), 3)),
+                    OPT_FIELD => Ok((Self::OptField(read_u16(code, offset + 1)?), 3)),
+                    NEW_ARR => Ok((Self::NewArr(read_u16(code, offset + 1)?), 3)),
+                    NEW_OBJ => {
+                        let type_tag = read_u16(code, offset + 1)?;
+                        let field_count = read_u16(code, offset + 3)?;
+                        Ok((Self::NewObj { type_tag, field_count }, 5))
+                    }
+                    BR => Ok((Self::Br(read_i32(code, offset + 1)?), 5)),
+                    BR_TRUE => Ok((Self::BrTrue(read_i32(code, offset + 1)?), 5)),
+                    BR_FALSE => Ok((Self::BrFalse(read_i32(code, offset + 1)?), 5)),
+                    CALL_METHOD => {
+                        let method_idx = read_u16(code, offset + 1)?;
+                        let arg_count = read_u16(code, offset + 3)?;
+                        Ok((Self::CallMethod { method_idx, arg_count }, 5))
+                    }
+                    _ => Err(DeserError::UnknownOpcode { tag, offset }),
+                }
+            };
         }
+        for_simple_opcodes!(decode_simple)
     }
 
     /// Returns the encoded byte length of this opcode.
@@ -429,28 +362,18 @@ impl Opcode {
     }
 }
 
-fn read_8(code: &[u8], offset: usize) -> Result<[u8; 8], DeserError> {
-    let end = offset.checked_add(8).ok_or(DeserError::UnexpectedEof)?;
+fn read_bytes<const N: usize>(code: &[u8], offset: usize) -> Result<[u8; N], DeserError> {
+    let end = offset.checked_add(N).ok_or(DeserError::UnexpectedEof)?;
     let slice = code.get(offset..end).ok_or(DeserError::UnexpectedEof)?;
-    let mut arr = [0u8; 8];
-    arr.copy_from_slice(slice);
-    Ok(arr)
+    slice.try_into().map_err(|_| DeserError::UnexpectedEof)
 }
 
-fn read_u16(code: &[u8], offset: usize) -> Result<u16, DeserError> {
-    let end = offset.checked_add(2).ok_or(DeserError::UnexpectedEof)?;
-    let slice = code.get(offset..end).ok_or(DeserError::UnexpectedEof)?;
-    let mut arr = [0u8; 2];
-    arr.copy_from_slice(slice);
-    Ok(u16::from_le_bytes(arr))
+fn read_u16(code: &[u8], o: usize) -> Result<u16, DeserError> {
+    read_bytes(code, o).map(u16::from_le_bytes)
 }
 
-fn read_i32(code: &[u8], offset: usize) -> Result<i32, DeserError> {
-    let end = offset.checked_add(4).ok_or(DeserError::UnexpectedEof)?;
-    let slice = code.get(offset..end).ok_or(DeserError::UnexpectedEof)?;
-    let mut arr = [0u8; 4];
-    arr.copy_from_slice(slice);
-    Ok(i32::from_le_bytes(arr))
+fn read_i32(code: &[u8], o: usize) -> Result<i32, DeserError> {
+    read_bytes(code, o).map(i32::from_le_bytes)
 }
 
 #[cfg(test)]

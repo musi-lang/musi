@@ -14,22 +14,12 @@ impl<'a> Printer<'a> {
                 self.write("(apply ");
                 self.write(self.sym(*name));
                 self.write(" [");
-                for (i, arg) in args.iter().enumerate() {
-                    if i > 0 {
-                        self.write_char(' ');
-                    }
-                    self.print_ty(arg);
-                }
+                self.write_space_separated(args, |p, a| p.print_ty(a));
                 self.write("])");
             }
             Ty::Arrow { params, ret, .. } => {
                 self.write("(fn [");
-                for (i, p) in params.iter().enumerate() {
-                    if i > 0 {
-                        self.write_char(' ');
-                    }
-                    self.print_ty(p);
-                }
+                self.write_space_separated(params, |p, t| p.print_ty(t));
                 self.write("] ");
                 self.print_ty(ret);
                 self.write_char(')');
@@ -39,12 +29,7 @@ impl<'a> Printer<'a> {
             }
             Ty::Prod { elements, .. } => {
                 self.write("(prod [");
-                for (i, e) in elements.iter().enumerate() {
-                    if i > 0 {
-                        self.write_char(' ');
-                    }
-                    self.print_ty(e);
-                }
+                self.write_space_separated(elements, |p, e| p.print_ty(e));
                 self.write("])");
             }
             Ty::Arr { element, size, .. } => {
@@ -83,12 +68,7 @@ impl<'a> Printer<'a> {
                 self.write("(pat_sum ");
                 self.write(self.sym(*name));
                 self.write(" [");
-                for (i, a) in args.iter().enumerate() {
-                    if i > 0 {
-                        self.write_char(' ');
-                    }
-                    self.print_pat(a);
-                }
+                self.write_space_separated(args, |p, a| p.print_pat(a));
                 self.write("])");
             }
             Pat::Ident {
@@ -99,12 +79,7 @@ impl<'a> Printer<'a> {
                 self.write("(pat_sum_named ");
                 self.write(self.sym(*name));
                 self.write(" [");
-                for (i, f) in fields.iter().enumerate() {
-                    if i > 0 {
-                        self.write_char(' ');
-                    }
-                    self.print_pat_field(f);
-                }
+                self.write_space_separated(fields, |p, f| p.print_pat_field(f));
                 self.write("])");
             }
             Pat::Lit { value, .. } => {
@@ -115,42 +90,22 @@ impl<'a> Printer<'a> {
             Pat::Wild { .. } => self.write("_"),
             Pat::Prod { elements, .. } => {
                 self.write("(pat_prod [");
-                for (i, e) in elements.iter().enumerate() {
-                    if i > 0 {
-                        self.write_char(' ');
-                    }
-                    self.print_pat(e);
-                }
+                self.write_space_separated(elements, |p, e| p.print_pat(e));
                 self.write("])");
             }
             Pat::Arr { elements, .. } => {
                 self.write("(pat_arr [");
-                for (i, e) in elements.iter().enumerate() {
-                    if i > 0 {
-                        self.write_char(' ');
-                    }
-                    self.print_pat(e);
-                }
+                self.write_space_separated(elements, |p, e| p.print_pat(e));
                 self.write("])");
             }
             Pat::AnonRec { fields, .. } => {
                 self.write("(pat_rec [");
-                for (i, f) in fields.iter().enumerate() {
-                    if i > 0 {
-                        self.write_char(' ');
-                    }
-                    self.print_pat_field(f);
-                }
+                self.write_space_separated(fields, |p, f| p.print_pat_field(f));
                 self.write("])");
             }
             Pat::Or { alternatives, .. } => {
                 self.write("(pat_or [");
-                for (i, a) in alternatives.iter().enumerate() {
-                    if i > 0 {
-                        self.write_char(' ');
-                    }
-                    self.print_pat(a);
-                }
+                self.write_space_separated(alternatives, |p, a| p.print_pat(a));
                 self.write("])");
             }
             Pat::DotPrefix { name, args, .. } => {

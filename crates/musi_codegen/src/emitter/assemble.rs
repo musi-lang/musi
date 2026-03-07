@@ -10,7 +10,7 @@ use crate::error::CodegenError;
 use crate::{FunctionEntry, Module, Opcode, SymbolEntry, SymbolFlags};
 use crate::intrinsics;
 
-use super::state::{EmitArenas, EmitState, FnEmitter, TypeTag, param_list_with_types, ty_name_str};
+use super::state::{EmitArenas, EmitState, FnEmitter, TypeTag, param_list_with_types, resolve_type_tag, ty_name_str};
 use super::expr::emit_expr;
 
 pub(super) fn emit_fn_body(
@@ -128,24 +128,7 @@ pub(super) fn emit_module_fn_bodies(
                 pending.push((fn_idx, param_info, *body_idx, ret_name));
             }
             Expr::GivenDef { class_app, members, .. } => {
-                let type_tag_opt: Option<u16> = match class_app {
-                    Ty::Named { args, .. } if !args.is_empty() => {
-                        if let Ty::Named { name: arg_name, .. } = &args[0] {
-                            let arg_str = interner.resolve(*arg_name);
-                            if let Some(prim) = TypeTag::from_type_name(arg_str) {
-                                Some(prim as u16)
-                            } else {
-                                state.type_tag_map.get(arg_str).copied()
-                            }
-                        } else if matches!(&args[0], Ty::Arr { .. }) {
-                            Some(TypeTag::Array as u16)
-                        } else {
-                            None
-                        }
-                    }
-                    _ => None,
-                };
-                let Some(type_tag) = type_tag_opt else { continue; };
+                let Some(type_tag) = resolve_type_tag(class_app, interner, state) else { continue; };
                 let members = members.clone();
                 for member in &members {
                     let ClassMember::Method(method_idx) = member else { continue; };

@@ -186,6 +186,21 @@ pub(super) struct EmitState {
 
 // -- Free helpers -------------------------------------------------------------
 
+pub(super) fn resolve_type_tag(class_app: &Ty, interner: &Interner, state: &EmitState) -> Option<u16> {
+    let Ty::Named { args, .. } = class_app else { return None; };
+    let first = args.first()?;
+    if let Ty::Named { name: arg_name, .. } = first {
+        let arg_str = interner.resolve(*arg_name);
+        TypeTag::from_type_name(arg_str)
+            .map(|t| t as u16)
+            .or_else(|| state.type_tag_map.get(arg_str).copied())
+    } else if matches!(first, Ty::Arr { .. }) {
+        Some(TypeTag::Array as u16)
+    } else {
+        None
+    }
+}
+
 pub(super) fn ty_name_str(ty: &Ty, interner: &Interner) -> Option<String> {
     if let Ty::Named { name, .. } = ty {
         return Some(interner.resolve(*name).to_owned());

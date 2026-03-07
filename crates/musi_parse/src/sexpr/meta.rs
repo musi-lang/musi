@@ -62,21 +62,18 @@ impl<'a> Printer<'a> {
     }
 
     pub(super) fn print_ty_params(&mut self, ty_params: &[TyParam]) {
-        for (i, tp) in ty_params.iter().enumerate() {
-            if i > 0 {
-                self.write_char(' ');
-            }
-            self.write(self.sym(tp.name));
+        self.write_space_separated(ty_params, |p, tp| {
+            p.write(p.sym(tp.name));
             if !tp.bounds.is_empty() {
-                self.write(": ");
+                p.write(": ");
                 for (j, b) in tp.bounds.iter().enumerate() {
                     if j > 0 {
-                        self.write(" + ");
+                        p.write(" + ");
                     }
-                    self.print_ty(b);
+                    p.print_ty(b);
                 }
             }
-        }
+        });
     }
 
     pub(super) fn print_params_list(&mut self, params: &[Param]) {

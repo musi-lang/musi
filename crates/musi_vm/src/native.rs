@@ -63,19 +63,18 @@ fn do_write(args: &[Value], newline: bool) -> Value {
 fn intrinsic_writeln(_vm: &Vm, args: &[Value]) -> Value { do_write(args, true) }
 fn intrinsic_write(_vm: &Vm, args: &[Value]) -> Value { do_write(args, false) }
 
-fn intrinsic_int_to_string(_vm: &Vm, args: &[Value]) -> Value {
-    match args.first() {
-        Some(Value::Int(n)) => Value::String(Rc::from(n.to_string().as_str())),
-        _ => Value::String(Rc::from("")),
-    }
+macro_rules! to_string_intrinsic {
+    ($name:ident, $variant:ident) => {
+        fn $name(_vm: &Vm, args: &[Value]) -> Value {
+            match args.first() {
+                Some(Value::$variant(n)) => Value::String(Rc::from(n.to_string().as_str())),
+                _ => Value::String(Rc::from("")),
+            }
+        }
+    };
 }
-
-fn intrinsic_float_to_string(_vm: &Vm, args: &[Value]) -> Value {
-    match args.first() {
-        Some(Value::Float(f)) => Value::String(Rc::from(f.to_string().as_str())),
-        _ => Value::String(Rc::from("")),
-    }
-}
+to_string_intrinsic!(intrinsic_int_to_string, Int);
+to_string_intrinsic!(intrinsic_float_to_string, Float);
 
 fn intrinsic_string_length(_vm: &Vm, args: &[Value]) -> Value {
     match args.first() {
@@ -84,9 +83,7 @@ fn intrinsic_string_length(_vm: &Vm, args: &[Value]) -> Value {
     }
 }
 
-fn intrinsic_nat_to_string(vm: &Vm, args: &[Value]) -> Value {
-    intrinsic_int_to_string(vm, args)
-}
+fn intrinsic_nat_to_string(vm: &Vm, args: &[Value]) -> Value { intrinsic_int_to_string(vm, args) }
 
 fn intrinsic_string_concat(_vm: &Vm, args: &[Value]) -> Value {
     match (args.first(), args.get(1)) {
@@ -100,14 +97,19 @@ fn intrinsic_string_concat(_vm: &Vm, args: &[Value]) -> Value {
     }
 }
 
+fn slice_range(start: i64, end: i64, len: i64) -> (usize, usize) {
+    let lo = start.clamp(0, len) as usize;
+    let hi = end.clamp(0, len) as usize;
+    (lo, hi.max(lo))
+}
+
 fn intrinsic_string_slice(_vm: &Vm, args: &[Value]) -> Value {
     match (args.first(), args.get(1), args.get(2)) {
         (Some(Value::String(s)), Some(Value::Int(start)), Some(Value::Int(end))) => {
             let chars: Vec<char> = s.chars().collect();
             let len = i64::try_from(chars.len()).unwrap_or(i64::MAX);
-            let lo = (*start).clamp(0, len) as usize;
-            let hi = (*end).clamp(0, len) as usize;
-            let slice: String = chars[lo..hi.max(lo)].iter().collect();
+            let (lo, hi) = slice_range(*start, *end, len);
+            let slice: String = chars[lo..hi].iter().collect();
             Value::String(Rc::from(slice.as_str()))
         }
         _ => Value::String(Rc::from("")),
@@ -222,9 +224,8 @@ fn intrinsic_array_slice(_vm: &Vm, args: &[Value]) -> Value {
         (Some(Value::Array(a)), Some(Value::Int(start)), Some(Value::Int(end))) => {
             let borrowed = a.borrow();
             let len = borrowed.len() as i64;
-            let lo = (*start).clamp(0, len) as usize;
-            let hi = (*end).clamp(0, len) as usize;
-            let slice: Vec<Value> = borrowed[lo..hi.max(lo)].to_vec();
+            let (lo, hi) = slice_range(*start, *end, len);
+            let slice: Vec<Value> = borrowed[lo..hi].to_vec();
             Value::Array(Rc::new(RefCell::new(slice)))
         }
         _ => Value::Array(Rc::new(RefCell::new(Vec::new()))),

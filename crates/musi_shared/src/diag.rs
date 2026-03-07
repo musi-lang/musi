@@ -72,6 +72,14 @@ pub struct DiagnosticBag {
     diagnostics: Vec<Diagnostic>,
 }
 
+macro_rules! severity_builder {
+    ($fn:ident, $sev:expr) => {
+        pub fn $fn(&mut self, message: impl Into<Arc<str>>, span: Span, file_id: FileId) -> &mut Diagnostic {
+            self.push_with_severity($sev, message, span, file_id)
+        }
+    };
+}
+
 impl DiagnosticBag {
     #[must_use]
     pub const fn new() -> Self {
@@ -84,32 +92,9 @@ impl DiagnosticBag {
         }
     }
 
-    pub fn error(
-        &mut self,
-        message: impl Into<Arc<str>>,
-        span: Span,
-        file_id: FileId,
-    ) -> &mut Diagnostic {
-        self.push_with_severity(Severity::Error, message, span, file_id)
-    }
-
-    pub fn warning(
-        &mut self,
-        message: impl Into<Arc<str>>,
-        span: Span,
-        file_id: FileId,
-    ) -> &mut Diagnostic {
-        self.push_with_severity(Severity::Warning, message, span, file_id)
-    }
-
-    pub fn note(
-        &mut self,
-        message: impl Into<Arc<str>>,
-        span: Span,
-        file_id: FileId,
-    ) -> &mut Diagnostic {
-        self.push_with_severity(Severity::Note, message, span, file_id)
-    }
+    severity_builder!(error, Severity::Error);
+    severity_builder!(warning, Severity::Warning);
+    severity_builder!(note, Severity::Note);
 
     #[must_use]
     pub fn has_errors(&self) -> bool {

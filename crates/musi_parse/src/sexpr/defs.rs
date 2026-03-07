@@ -87,15 +87,7 @@ impl<'a> Printer<'a> {
             self.write_char(' ');
             self.print_where_clause(constraints);
         }
-        self.indent += 2;
-        self.write(" (members");
-        for m in members {
-            self.newline_indent();
-            self.print_class_member(m);
-        }
-        self.write_char(')');
-        self.indent -= 2;
-        self.write_char(')');
+        self.print_members_block(members);
     }
 
     pub(super) fn print_class_member(&mut self, member: &ClassMember) {

@@ -79,13 +79,15 @@ impl<'a> Printer<'a> {
         self.interner.resolve(s)
     }
 
-    fn space_separated_exprs(&mut self, exprs: &[Idx<Expr>]) {
-        for (i, &e) in exprs.iter().enumerate() {
-            if i > 0 {
-                self.write_char(' ');
-            }
-            self.print_expr(e);
+    fn write_space_separated<T>(&mut self, items: &[T], mut f: impl FnMut(&mut Self, &T)) {
+        for (i, x) in items.iter().enumerate() {
+            if i > 0 { self.write_char(' '); }
+            f(self, x);
         }
+    }
+
+    fn space_separated_exprs(&mut self, exprs: &[Idx<Expr>]) {
+        self.write_space_separated(exprs, |p, &e| p.print_expr(e));
     }
 
     fn print_module(&mut self) {

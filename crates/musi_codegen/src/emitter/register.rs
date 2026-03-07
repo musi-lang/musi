@@ -7,7 +7,8 @@ use crate::module::MethodEntry;
 use crate::{FunctionEntry, Module, SymbolEntry, SymbolFlags};
 
 use super::state::{
-    EmitState, TypeInfo, TypeTag, VariantInfo, payload_count, push_plain_fn, ty_name_str,
+    EmitState, TypeInfo, TypeTag, VariantInfo, payload_count, push_plain_fn, resolve_type_tag,
+    ty_name_str,
 };
 
 pub(super) fn register_fn_def(
@@ -181,25 +182,7 @@ pub(super) fn register_given_def(
 ) -> Result<(), CodegenError> {
     let Expr::GivenDef { class_app, members, .. } = exprs.get(item_idx) else { return Ok(()); };
 
-    let type_tag: u16 = match class_app {
-        Ty::Named { args, .. } if !args.is_empty() => {
-            if let Ty::Named { name: arg_name, .. } = &args[0] {
-                let arg_str = interner.resolve(*arg_name);
-                if let Some(prim) = TypeTag::from_type_name(arg_str) {
-                    prim as u16
-                } else if let Some(&user_tag) = state.type_tag_map.get(arg_str) {
-                    user_tag
-                } else {
-                    return Ok(());
-                }
-            } else if matches!(&args[0], Ty::Arr { .. }) {
-                TypeTag::Array as u16
-            } else {
-                return Ok(());
-            }
-        }
-        _ => return Ok(()),
-    };
+    let Some(type_tag) = resolve_type_tag(class_app, interner, state) else { return Ok(()); };
 
     let members = members.clone();
     for member in &members {

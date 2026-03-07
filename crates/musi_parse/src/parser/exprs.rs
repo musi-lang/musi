@@ -107,33 +107,15 @@ impl<'a> Parser<'a> {
             match self.peek_kind() {
                 // Call: f(args)
                 TokenKind::LParen => {
-                    let _lp = self.advance();
-                    let args = self.parse_expr_list(TokenKind::RParen);
-                    let _rp = self.expect(TokenKind::RParen);
-                    let base = self.alloc_expr(lhs);
-                    lhs = self.wrap_postfix(
-                        base,
-                        PostfixOp::Call {
-                            args,
-                            span: self.finish_span(start),
-                        },
-                        start,
-                    );
+                    let _ = self.advance();
+                    lhs = self.parse_list_postfix(lhs, start, TokenKind::RParen,
+                        |args, span| PostfixOp::Call { args, span });
                 }
                 // Index: e.[args]
                 TokenKind::DotLBracket => {
-                    let _dlb = self.advance();
-                    let args = self.parse_expr_list(TokenKind::RBracket);
-                    let _rb = self.expect(TokenKind::RBracket);
-                    let base = self.alloc_expr(lhs);
-                    lhs = self.wrap_postfix(
-                        base,
-                        PostfixOp::Index {
-                            args,
-                            span: self.finish_span(start),
-                        },
-                        start,
-                    );
+                    let _ = self.advance();
+                    lhs = self.parse_list_postfix(lhs, start, TokenKind::RBracket,
+                        |args, span| PostfixOp::Index { args, span });
                 }
                 // RecDot: e.{ fields }
                 TokenKind::DotLBrace => {

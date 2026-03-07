@@ -24,30 +24,20 @@ impl<'a> Printer<'a> {
 
     pub(super) fn print_array(&mut self, items: &[ArrayItem]) {
         self.write("(array [");
-        for (i, item) in items.iter().enumerate() {
-            if i > 0 {
-                self.write_char(' ');
+        self.write_space_separated(items, |p, item| match *item {
+            ArrayItem::Single(e) => p.print_expr(e),
+            ArrayItem::Spread(e) => {
+                p.write("(spread ");
+                p.print_expr(e);
+                p.write_char(')');
             }
-            match *item {
-                ArrayItem::Single(e) => self.print_expr(e),
-                ArrayItem::Spread(e) => {
-                    self.write("(spread ");
-                    self.print_expr(e);
-                    self.write_char(')');
-                }
-            }
-        }
+        });
         self.write("])");
     }
 
     pub(super) fn print_anon_rec(&mut self, fields: &[FieldInit]) {
         self.write("(anon_rec [");
-        for (i, field) in fields.iter().enumerate() {
-            if i > 0 {
-                self.write_char(' ');
-            }
-            self.print_rec_lit_field(field);
-        }
+        self.write_space_separated(fields, |p, f| p.print_rec_lit_field(f));
         self.write("])");
     }
 
@@ -101,12 +91,7 @@ impl<'a> Printer<'a> {
                 self.write("(rec_dot ");
                 self.print_expr(base);
                 self.write(" [");
-                for (i, field) in fields.iter().enumerate() {
-                    if i > 0 {
-                        self.write_char(' ');
-                    }
-                    self.print_rec_lit_field(field);
-                }
+                self.write_space_separated(fields, |p, f| p.print_rec_lit_field(f));
                 self.write("])");
             }
             PostfixOp::OptField { name, .. } => {

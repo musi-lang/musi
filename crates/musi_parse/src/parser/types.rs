@@ -85,22 +85,7 @@ impl<'a> Parser<'a> {
                     span: self.finish_span(start),
                 }
             }
-            TokenKind::Ident => {
-                let start = self.start_span();
-                let name = self.expect_symbol();
-                let args = if self.eat(TokenKind::LBracket) {
-                    let tys = self.parse_separated_list(TokenKind::RBracket, Parser::parse_ty);
-                    let _rb = self.expect(TokenKind::RBracket);
-                    tys
-                } else {
-                    Vec::new()
-                };
-                Ty::Named {
-                    name,
-                    args,
-                    span: self.finish_span(start),
-                }
-            }
+            TokenKind::Ident => self.parse_ty_named(),
             TokenKind::LParen => {
                 let start = self.start_span();
                 let elements =

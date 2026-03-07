@@ -194,4 +194,15 @@ impl<'a> Parser<'a> {
     pub(super) fn parse_expr_list(&mut self, closing: TokenKind) -> Vec<Idx<Expr>> {
         self.parse_separated_list(closing, Parser::parse_and_alloc_expr)
     }
+
+    /// Parses `args_list close`, allocates `lhs` as the base, and wraps in a postfix node.
+    pub(super) fn parse_list_postfix<F>(
+        &mut self, lhs: Expr, start: u32, close: TokenKind, make_op: F,
+    ) -> Expr
+    where F: FnOnce(Vec<Idx<Expr>>, musi_shared::Span) -> crate::ast::PostfixOp {
+        let args = self.parse_expr_list(close);
+        let _close = self.expect(close);
+        let base = self.alloc_expr(lhs);
+        self.wrap_postfix(base, make_op(args, self.finish_span(start)), start)
+    }
 }
