@@ -19,6 +19,11 @@ mod state;
 
 use state::EmitState;
 
+/// Compile a set of parsed modules into a bytecode [`Module`].
+///
+/// # Errors
+///
+/// Returns [`CodegenError`] if any expression or declaration cannot be compiled.
 pub fn emit(
     prelude: &ParsedModule,
     deps: &[&ParsedModule],
@@ -65,8 +70,11 @@ pub fn emit(
 
     // Build pkg_map: alias name → dep index, from the user module's GlobAs imports.
     for &item_idx in user.ctx.expr_lists.get_slice(user.items) {
-        if let Expr::Import { items: ImportClause::GlobAs(alias), path, .. } =
-            user.ctx.exprs.get(item_idx)
+        if let Expr::Import {
+            items: ImportClause::GlobAs(alias),
+            path,
+            ..
+        } = user.ctx.exprs.get(item_idx)
         {
             let import_path = interner.resolve(*path).trim_matches('"').to_owned();
             if let Some(dep_idx) = dep_paths.iter().position(|p| *p == import_path) {

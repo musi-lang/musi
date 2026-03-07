@@ -94,7 +94,6 @@ impl SourceDb {
     /// # Panics
     ///
     /// Panics if `line` is zero or out of range.
-    #[allow(clippy::string_slice)]
     #[must_use]
     pub fn get_line(&self, file_id: FileId, line: u32) -> &str {
         let file = self.file(file_id);
@@ -109,9 +108,9 @@ impl SourceDb {
         let raw = if line_idx + 1 < file.line_starts.len() {
             let end = usize::try_from(file.line_starts[line_idx + 1])
                 .expect("next line start offset fits in usize");
-            &file.source[start..end]
+            file.source.get(start..end).expect("valid UTF-8 line boundary")
         } else {
-            &file.source[start..]
+            file.source.get(start..).expect("valid UTF-8 line start")
         };
         raw.trim_end_matches('\n').trim_end_matches('\r')
     }

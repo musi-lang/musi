@@ -11,12 +11,12 @@ use crate::compiler::{
 };
 
 #[derive(Args)]
-pub(crate) struct CheckArgs {
+pub struct CheckArgs {
     /// Musi source file to type-check
-    pub(crate) file: PathBuf,
+    pub file: PathBuf,
 }
 
-pub(crate) fn run(args: CheckArgs) {
+pub fn run(args: &CheckArgs) {
     let file_path_str = args.file.to_string_lossy();
     let file_path = file_path_str.as_ref();
     let src = read_file(file_path);
@@ -84,8 +84,8 @@ pub(crate) fn run(args: CheckArgs) {
     let _result = musi_sema::analyze(&user_module, &interner, file_id, &mut diags, &import_map);
 
     if diags.has_errors() {
-        use std::io::IsTerminal;
-        let use_color = std::io::stderr().is_terminal();
+        use std::io::{IsTerminal, stderr};
+        let use_color = stderr().is_terminal();
         for diag in diags.iter() {
             eprintln!("{}", diag.render_rich(&source_db, use_color));
         }

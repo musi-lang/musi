@@ -219,8 +219,7 @@ fn kind_text(kind: TokenKind) -> &'static str {
 /// Returns `true` if `kind` can start an expression (used for optional expr
 /// parsing in `return`, `break`, etc.).
 #[must_use]
-#[allow(clippy::missing_const_for_fn)] // matches! is not const-compatible
-fn can_start_expr(kind: TokenKind) -> bool {
+const fn can_start_expr(kind: TokenKind) -> bool {
     matches!(
         kind,
         TokenKind::Ident

@@ -103,7 +103,12 @@ pub(super) fn emit_ufcs_call(
     if let Expr::Ident { name: recv_sym, .. } = arenas.exprs.get(recv_idx) {
         let recv_name = arenas.interner.resolve(*recv_sym);
         if let Some(&dep_idx) = state.pkg_map.get(recv_name) {
-            if let Some(fn_idx) = state.dep_fn_maps.get(dep_idx).and_then(|m| m.get(method_name)).copied() {
+            if let Some(fn_idx) = state
+                .dep_fn_maps
+                .get(dep_idx)
+                .and_then(|m| m.get(method_name))
+                .copied()
+            {
                 return emit_static_call(fn_idx, args, arenas, state, module, out);
             }
             return Err(CodegenError::UnknownFunction(

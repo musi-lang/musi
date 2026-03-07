@@ -137,7 +137,6 @@ impl Vm {
         Ok(op)
     }
 
-    #[allow(clippy::too_many_lines)]
     fn step(&mut self, op: Opcode) -> Result<Signal, VmError> {
         match op {
             Opcode::Nop => Ok(Signal::Continue),
@@ -149,18 +148,9 @@ impl Vm {
                 let _ = self.stack.pop().ok_or(VmError::StackUnderflow)?;
                 Ok(Signal::Continue)
             }
-            Opcode::LdImmI64(v) => {
-                self.stack.push(Value::Int(v));
-                Ok(Signal::Continue)
-            }
-            Opcode::LdImmF64(v) => {
-                self.stack.push(Value::Float(v));
-                Ok(Signal::Continue)
-            }
-            Opcode::LdImmUnit => {
-                self.stack.push(Value::Unit);
-                Ok(Signal::Continue)
-            }
+            Opcode::LdImmI64(v) => { self.stack.push(Value::Int(v)); Ok(Signal::Continue) }
+            Opcode::LdImmF64(v) => { self.stack.push(Value::Float(v)); Ok(Signal::Continue) }
+            Opcode::LdImmUnit => { self.stack.push(Value::Unit); Ok(Signal::Continue) }
             Opcode::LdConst(idx) => self.exec_ld_const(idx),
             Opcode::LdLoc(idx) => self.exec_ld_loc(idx),
             Opcode::StLoc(idx) => self.exec_st_loc(idx),
@@ -172,18 +162,10 @@ impl Vm {
                 self.stack.push(Value::Function(idx));
                 Ok(Signal::Continue)
             }
-            Opcode::CallDynamic => {
-                let v = self.stack.pop().ok_or(VmError::StackUnderflow)?;
-                let Value::Function(fn_idx) = v else {
-                    return Err(VmError::NotAFunction);
-                };
-                self.exec_call(fn_idx)?;
-                Ok(Signal::Continue)
-            }
+            Opcode::CallDynamic => self.exec_call_dynamic(),
             Opcode::Dup => {
                 let top = self.stack.last().ok_or(VmError::StackUnderflow)?.clone();
-                self.stack.push(top);
-                Ok(Signal::Continue)
+                self.stack.push(top); Ok(Signal::Continue)
             }
             Opcode::HaltError => Err(VmError::MatchFailure),
             Opcode::NewObj {
@@ -287,6 +269,64 @@ impl Vm {
         };
         let tag = fields.first().ok_or(VmError::FieldOutOfBounds(0))?.clone();
         self.stack.push(tag);
+        Ok(Signal::Continue)
+    }
+
+    fn exec_intrinsic_test(&mut self, args: &[Value]) -> Result<(), VmError> {
+        let name: Box<str> = args
+            .first()
+            .and_then(|v| {
+                if let Value::String(s) = v {
+                    Some(Box::from(s.as_ref()))
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_else(|| Box::from("<unnamed>"));
+        let test_fn_idx = args.get(1).and_then(|v| {
+            if let Value::Function(idx) = v {
+                Some(*idx)
+            } else {
+                None
+            }
+        });
+        if let Some(test_fn_idx) = test_fn_idx {
+            let depth = self.frames.len();
+            self.exec_call(test_fn_idx)?;
+            if self.test_mode {
+                let run_result = self.run_until_depth(depth);
+                let _ = self.stack.pop();
+                match run_result {
+                    Ok(()) => self.test_results.push(TestResult {
+                        label: name,
+                        passed: true,
+                        error: None,
+                    }),
+                    Err(VmError::AssertionFailed(msg)) => {
+                        self.frames.truncate(depth);
+                        self.test_results.push(TestResult {
+                            label: name,
+                            passed: false,
+                            error: Some(msg),
+                        });
+                    }
+                    Err(e) => return Err(e),
+                }
+            } else {
+                self.run_until_depth(depth)?;
+                let _ = self.stack.pop();
+            }
+        }
+        self.stack.push(Value::Unit);
+        Ok(())
+    }
+
+    fn exec_call_dynamic(&mut self) -> Result<Signal, VmError> {
+        let v = self.stack.pop().ok_or(VmError::StackUnderflow)?;
+        let Value::Function(fn_idx) = v else {
+            return Err(VmError::NotAFunction);
+        };
+        self.exec_call(fn_idx)?;
         Ok(Signal::Continue)
     }
 
@@ -495,7 +535,7 @@ impl Vm {
         match lhs {
             Value::Object { ref fields, .. } => {
                 if matches!(fields.first(), Some(Value::Int(0))) {
-                    self.stack.push(rhs)
+                    self.stack.push(rhs);
                 } else {
                     let inner = fields.get(1).ok_or(VmError::FieldOutOfBounds(1))?.clone();
                     self.stack.push(inner);
@@ -687,7 +727,6 @@ impl Vm {
         Ok(Signal::Continue)
     }
 
-    #[allow(clippy::too_many_lines)]
     fn exec_call(&mut self, fn_idx: u16) -> Result<(), VmError> {
         let (param_count, local_count, symbol_idx) = {
             let func = self
@@ -750,53 +789,7 @@ impl Vm {
                         }
                         self.stack.push(Value::Unit);
                     }
-                    Intrinsic::Test => {
-                        let name: Box<str> = args
-                            .first()
-                            .and_then(|v| {
-                                if let Value::String(s) = v {
-                                    Some(Box::from(s.as_ref()))
-                                } else {
-                                    None
-                                }
-                            })
-                            .unwrap_or_else(|| Box::from("<unnamed>"));
-                        let test_fn_idx = args.get(1).and_then(|v| {
-                            if let Value::Function(idx) = v {
-                                Some(*idx)
-                            } else {
-                                None
-                            }
-                        });
-                        if let Some(test_fn_idx) = test_fn_idx {
-                            let depth = self.frames.len();
-                            self.exec_call(test_fn_idx)?;
-                            if self.test_mode {
-                                let run_result = self.run_until_depth(depth);
-                                let _ = self.stack.pop();
-                                match run_result {
-                                    Ok(()) => self.test_results.push(TestResult {
-                                        label: name,
-                                        passed: true,
-                                        error: None,
-                                    }),
-                                    Err(VmError::AssertionFailed(msg)) => {
-                                        self.frames.truncate(depth);
-                                        self.test_results.push(TestResult {
-                                            label: name,
-                                            passed: false,
-                                            error: Some(msg),
-                                        });
-                                    }
-                                    Err(e) => return Err(e),
-                                }
-                            } else {
-                                self.run_until_depth(depth)?;
-                                let _ = self.stack.pop();
-                            }
-                        }
-                        self.stack.push(Value::Unit);
-                    }
+                    Intrinsic::Test => self.exec_intrinsic_test(&args)?,
                     _ => {
                         let result = self
                             .registry

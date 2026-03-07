@@ -9,13 +9,13 @@ use musi_vm::{NativeRegistry, Vm};
 use crate::compiler;
 
 #[derive(Args)]
-pub(crate) struct TestArgs {
+pub struct TestArgs {
     /// File, or directory to search recursively for *.test.ms / *.spec.ms.
     /// Defaults to the current directory.
-    pub(crate) target: Option<PathBuf>,
+    pub target: Option<PathBuf>,
 }
 
-pub(crate) fn run(args: TestArgs) {
+pub fn run(args: TestArgs) {
     let target = args.target.unwrap_or_else(|| PathBuf::from("."));
 
     let files = if target.is_file() {
@@ -81,10 +81,7 @@ fn collect_test_files(dir: &Path) -> Vec<PathBuf> {
 }
 
 fn collect_recursive(dir: &Path, out: &mut Vec<PathBuf>) {
-    let entries = match fs::read_dir(dir) {
-        Ok(e) => e,
-        Err(_) => return,
-    };
+    let Ok(entries) = fs::read_dir(dir) else { return };
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_dir() {

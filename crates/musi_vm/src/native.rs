@@ -1,8 +1,8 @@
 //! Native built-in function dispatch (core prelude ops only).
 //!
-//! musi:string / musi:math / musi:io functions are served by the NativeRegistry
+//! `musi:string` / `musi:math` / `musi:io` functions are served by the `NativeRegistry`
 //! and take priority over this fallback. Only irreducible VM primitives live here:
-//! writeln, write, int_to_string, float_to_string, string_concat, and arrays.
+//! `writeln`, `write`, `int_to_string`, `float_to_string`, `string_concat`, and arrays.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -141,10 +141,10 @@ fn intrinsic_array_get(_vm: &Vm, args: &[Value]) -> Value {
 fn intrinsic_array_set(_vm: &Vm, args: &[Value]) -> Value {
     match (args.first(), args.get(1), args.get(2)) {
         (Some(Value::Array(a)), Some(Value::Int(idx)), Some(val)) => {
-            if let Ok(i) = usize::try_from(*idx) {
-                if let Some(slot) = a.borrow_mut().get_mut(i) {
-                    *slot = val.clone();
-                }
+            if let Ok(i) = usize::try_from(*idx)
+                && let Some(slot) = a.borrow_mut().get_mut(i)
+            {
+                *slot = val.clone();
             }
             Value::Unit
         }

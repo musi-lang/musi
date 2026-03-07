@@ -15,10 +15,11 @@ use musi_ast::{
     ArrayItem, AstArenas, BindKind, ChoiceVariant, Cond, ElifBranch, Expr, FieldInit, ImportClause,
     MatchArm, ParsedModule, Pat, PatField, PatSuffix, PostfixOp, VariantPayload,
 };
-use musi_shared::{DiagnosticBag, FileId, Idx, Interner, Span, Symbol};
+use musi_shared::{DiagnosticBag, FileId, Idx, Interner, Slice, Span, Symbol};
 
 use crate::ModuleExports;
 use crate::def::{DefId, DefInfo, DefKind};
+use crate::types::Type;
 use crate::scope::{ScopeId, ScopeTree};
 
 /// The result of the name-resolution pass.
@@ -48,7 +49,7 @@ struct Resolver<'a> {
     expr_defs: HashMap<Idx<Expr>, DefId>,
     pat_defs: HashMap<Span, DefId>,
     /// Exports keyed by alias symbol for `import * as Name` imports.
-    namespace_exports: HashMap<Symbol, HashMap<String, crate::types::Type>>,
+    namespace_exports: HashMap<Symbol, HashMap<String, Type>>,
 }
 
 impl<'a> Resolver<'a> {
@@ -217,22 +218,14 @@ impl<'a> Resolver<'a> {
                 }
             }
 
-            Expr::Block { stmts, tail, .. } => {
-                let block_scope = self.scopes.push_child(scope);
-                for &stmt in ctx.expr_lists.get_slice(*stmts) {
-                    self.resolve_block_stmt(stmt, ctx, block_scope);
-                }
-                if let Some(&t) = tail.as_ref() {
-                    self.resolve_expr(t, ctx, block_scope);
-                }
-            }
+            Expr::Block { stmts, tail, .. } => self.resolve_block_expr(*stmts, *tail, ctx, scope),
 
             Expr::Array { items, .. } => {
                 for &item in items {
-                    let item_idx = match item {
-                        ArrayItem::Single(i) | ArrayItem::Spread(i) => i,
-                    };
-                    self.resolve_expr(item_idx, ctx, scope);
+                    self.resolve_expr(
+                        match item { ArrayItem::Single(i) | ArrayItem::Spread(i) => i },
+                        ctx, scope,
+                    );
                 }
             }
 
@@ -449,43 +442,7 @@ impl<'a> Resolver<'a> {
 
             Expr::Postfix { base, op, .. } => {
                 self.resolve_expr(*base, ctx, scope);
-                match op {
-                    PostfixOp::Call { args, .. } | PostfixOp::Index { args, .. } => {
-                        for &arg in ctx.expr_lists.get_slice(*args) {
-                            self.resolve_expr(arg, ctx, scope);
-                        }
-                    }
-                    PostfixOp::RecDot { fields, .. } => {
-                        for field in fields {
-                            self.resolve_field_init(field, ctx, scope);
-                        }
-                    }
-                    PostfixOp::Field {
-                        name: field_sym,
-                        span: field_span,
-                    } => {
-                        // Validate field access on namespace aliases.
-                        if let Expr::Ident { name: base_sym, .. } = ctx.exprs.get(*base) {
-                            if let Some(def_id) = self.expr_defs.get(base) {
-                                let kind = self.defs[def_id.0 as usize].kind;
-                                if kind == DefKind::Namespace {
-                                    let field_str = self.interner.resolve(*field_sym);
-                                    if let Some(exports) = self.namespace_exports.get(base_sym) {
-                                        if !exports.contains_key(field_str) {
-                                            let ns_str = self.interner.resolve(*base_sym);
-                                            let _d = self.diags.error(
-                                                format!("no export `{field_str}` in namespace `{ns_str}`"),
-                                                *field_span,
-                                                self.file_id,
-                                            );
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    PostfixOp::OptField { .. } | PostfixOp::As { .. } => {}
-                }
+                self.resolve_postfix(*base, op, ctx, scope);
             }
 
             _ => {}
@@ -494,6 +451,65 @@ impl<'a> Resolver<'a> {
 
     /// Resolves a statement that appears directly inside a block, with special
     /// handling for declarations that extend the block's scope.
+    fn resolve_postfix(
+        &mut self,
+        base: Idx<Expr>,
+        op: &PostfixOp,
+        ctx: &AstArenas,
+        scope: ScopeId,
+    ) {
+        match op {
+            PostfixOp::Call { args, .. } | PostfixOp::Index { args, .. } => {
+                for &arg in ctx.expr_lists.get_slice(*args) {
+                    self.resolve_expr(arg, ctx, scope);
+                }
+            }
+            PostfixOp::RecDot { fields, .. } => {
+                for field in fields {
+                    self.resolve_field_init(field, ctx, scope);
+                }
+            }
+            PostfixOp::Field { name: field_sym, span: field_span } => {
+                // Validate field access on namespace aliases.
+                if let Expr::Ident { name: base_sym, .. } = ctx.exprs.get(base)
+                    && let Some(def_id) = self.expr_defs.get(&base)
+                {
+                    let def_idx = usize::try_from(def_id.0).expect("def index fits usize");
+                    if self.defs[def_idx].kind == DefKind::Namespace {
+                        let field_str = self.interner.resolve(*field_sym);
+                        if let Some(exports) = self.namespace_exports.get(base_sym)
+                            && !exports.contains_key(field_str)
+                        {
+                            let ns_str = self.interner.resolve(*base_sym);
+                            let _d = self.diags.error(
+                                format!("no export `{field_str}` in namespace `{ns_str}`"),
+                                *field_span,
+                                self.file_id,
+                            );
+                        }
+                    }
+                }
+            }
+            PostfixOp::OptField { .. } | PostfixOp::As { .. } => {}
+        }
+    }
+
+    fn resolve_block_expr(
+        &mut self,
+        stmts: Slice<Idx<Expr>>,
+        tail: Option<Idx<Expr>>,
+        ctx: &AstArenas,
+        scope: ScopeId,
+    ) {
+        let block_scope = self.scopes.push_child(scope);
+        for &stmt in ctx.expr_lists.get_slice(stmts) {
+            self.resolve_block_stmt(stmt, ctx, block_scope);
+        }
+        if let Some(t) = tail {
+            self.resolve_expr(t, ctx, block_scope);
+        }
+    }
+
     fn resolve_block_stmt(&mut self, stmt: Idx<Expr>, ctx: &AstArenas, block_scope: ScopeId) {
         let expr = ctx.exprs.get(stmt);
         match expr {
@@ -650,6 +666,11 @@ impl<'a> Resolver<'a> {
 }
 
 /// Runs name resolution on `module` and returns the [`ResolveResult`].
+///
+/// # Panics
+///
+/// Panics if the internal definition list is unexpectedly empty after
+/// allocating a prelude-injected definition (indicates a logic error).
 ///
 /// Errors and warnings are pushed into `diags`.
 pub fn resolve<S: BuildHasher>(

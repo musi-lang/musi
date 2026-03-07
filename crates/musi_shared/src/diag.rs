@@ -97,23 +97,29 @@ impl Diagnostic {
         let mut out = String::new();
 
         // Header: "file:line:col: error: message" (clang-style)
-        let _ = writeln!(out, "{file}:{line}:{col}: {sev_start}{severity}{reset}: {}", self.message);
+        writeln!(
+            out,
+            "{file}:{line}:{col}: {sev_start}{severity}{reset}: {}",
+            self.message
+        )
+        .unwrap();
 
         let line_str = line.to_string();
         let gutter_width = line_str.len();
 
         // Source line: " 1 | source_line"
         let source_line = source_db.get_line(self.primary.file_id, line);
-        let _ = writeln!(out, " {line_str} | {source_line}");
+        writeln!(out, " {line_str} | {source_line}").unwrap();
 
         // Underline: "   | spaces + carets"
-        let underline_col = (col as usize).saturating_sub(1);
-        let caret_len = (self.primary.span.length as usize).max(1);
-        let _ = write!(
+        let underline_col = usize::try_from(col).unwrap_or(0).saturating_sub(1);
+        let caret_len = usize::try_from(self.primary.span.length).unwrap_or(1).max(1);
+        write!(
             out,
             " {:gutter_width$} | {:underline_col$}{sev_start}{:^>caret_len$}{reset}",
             "", "", ""
-        );
+        )
+        .unwrap();
 
         // Secondary labels
         for label in &self.secondary {
@@ -129,16 +135,22 @@ impl Diagnostic {
             let s_line_str = s_line.to_string();
             let s_gutter = s_line_str.len().max(gutter_width);
             let s_source = source_db.get_line(label.file_id, s_line);
-            let s_underline_col = (s_col as usize).saturating_sub(1);
-            let s_caret_len = (label.span.length as usize).max(1);
+            let s_underline_col = usize::try_from(s_col).unwrap_or(0).saturating_sub(1);
+            let s_caret_len = usize::try_from(label.span.length).unwrap_or(1).max(1);
 
-            let _ = write!(out, "\n{s_file}:{s_line}:{s_col}: {note_start}note{note_reset}: {}", label.message);
-            let _ = write!(out, "\n {s_line_str:>s_gutter$} | {s_source}");
-            let _ = write!(
+            write!(
+                out,
+                "\n{s_file}:{s_line}:{s_col}: {note_start}note{note_reset}: {}",
+                label.message
+            )
+            .unwrap();
+            write!(out, "\n {s_line_str:>s_gutter$} | {s_source}").unwrap();
+            write!(
                 out,
                 "\n {:s_gutter$} | {:s_underline_col$}{note_start}{:^>s_caret_len$}{note_reset}",
                 " ", "", ""
-            );
+            )
+            .unwrap();
         }
 
         out

@@ -7,17 +7,17 @@ use clap::Args;
 use crate::compiler;
 
 #[derive(Args)]
-pub(crate) struct BuildArgs {
+pub struct BuildArgs {
     /// Output directory for compiled artifacts
     #[arg(long)]
-    pub(crate) out_dir: Option<PathBuf>,
+    pub out_dir: Option<PathBuf>,
 
     /// Entry file to compile
     #[arg(long)]
-    pub(crate) entry: Option<PathBuf>,
+    pub entry: Option<PathBuf>,
 }
 
-pub(crate) fn run(args: BuildArgs) {
+pub fn run(args: BuildArgs) {
     let Some((cfg, _)) = compiler::load_project_config() else {
         eprintln!("error: no mspackage.json found; run 'musi init' to create one");
         process::exit(1);
@@ -36,7 +36,10 @@ pub(crate) fn run(args: BuildArgs) {
     });
 
     if let Err(e) = fs::create_dir_all(&out_dir) {
-        eprintln!("error: cannot create output directory '{}': {e}", out_dir.display());
+        eprintln!(
+            "error: cannot create output directory '{}': {e}",
+            out_dir.display()
+        );
         process::exit(1);
     }
 

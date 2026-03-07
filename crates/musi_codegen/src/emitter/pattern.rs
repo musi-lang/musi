@@ -86,10 +86,8 @@ pub(super) fn emit_pattern_test(
     }
 }
 
-#[allow(clippy::only_used_in_recursion)]
 pub(super) fn emit_pattern_bindings(
     arenas: &EmitArenas<'_>,
-    state: &mut EmitState,
     pat: &Pat,
     scrutinee_slot: u16,
     out: &mut FnEmitter,
@@ -130,7 +128,7 @@ pub(super) fn emit_pattern_bindings(
                             out.push(&Opcode::LdLoc(scrutinee_slot));
                             out.push(&Opcode::LdFld(field_idx));
                             out.push(&Opcode::StLoc(temp_slot));
-                            emit_pattern_bindings(arenas, state, sub_pat, temp_slot, out)?;
+                            emit_pattern_bindings(arenas, sub_pat, temp_slot, out)?;
                         }
                     }
                 }
@@ -222,7 +220,7 @@ pub(super) fn emit_match(
             emit_pattern_test(arenas, state, &arm.pat, scrutinee_slot, module, out)?;
 
         out.push_scope();
-        emit_pattern_bindings(arenas, state, &arm.pat, scrutinee_slot, out)?;
+        emit_pattern_bindings(arenas, &arm.pat, scrutinee_slot, out)?;
         let guard_fixup: Option<usize> = if let Some(guard_idx) = arm.guard {
             let guard_expr = arenas.exprs.get(guard_idx).clone();
             emit_expr(arenas, state, &guard_expr, module, out)?;

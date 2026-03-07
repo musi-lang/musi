@@ -4,9 +4,9 @@
 #![allow(clippy::exhaustive_structs)]
 #![allow(clippy::exhaustive_enums)]
 
-mod cmds;
-mod compiler;
-mod config;
+pub(crate) mod cmds;
+pub(crate) mod compiler;
+pub(crate) mod config;
 
 use clap::{Parser, Subcommand};
 
@@ -41,8 +41,8 @@ fn main() {
         Cmd::Run(args) => run_cmd::run(args),
         Cmd::Build(args) => build_cmd::run(args),
         Cmd::Init(args) => init_cmd::run(args),
-        Cmd::Check(args) => check_cmd::run(args),
+        Cmd::Check(args) => check_cmd::run(&args),
         Cmd::Test(args) => test_cmd::run(args),
-        Cmd::Task(args) => task_cmd::run(args),
+        Cmd::Task(args) => task_cmd::run(&args),
     }
 }

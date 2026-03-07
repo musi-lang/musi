@@ -7,12 +7,12 @@ use crate::compiler;
 use crate::config::TaskEntry;
 
 #[derive(Args)]
-pub(crate) struct TaskArgs {
+pub struct TaskArgs {
     /// Name of the task to run
-    pub(crate) name: String,
+    pub name: String,
 }
 
-pub(crate) fn run(args: TaskArgs) {
+pub fn run(args: &TaskArgs) {
     let (cfg, _) = compiler::load_project_config().unwrap_or_else(|| {
         eprintln!("error: no mspackage.json found");
         process::exit(1);

@@ -8,12 +8,12 @@ use musi_vm::{NativeRegistry, Vm};
 use crate::compiler;
 
 #[derive(Args)]
-pub(crate) struct RunArgs {
+pub struct RunArgs {
     /// Musi source file to compile and execute (defaults to `main` in mspackage.json)
-    pub(crate) file: Option<PathBuf>,
+    pub file: Option<PathBuf>,
 }
 
-pub(crate) fn run(args: RunArgs) {
+pub fn run(args: RunArgs) {
     let resolved = args.file.unwrap_or_else(|| {
         if let Some((cfg, _)) = compiler::load_project_config() {
             let main = cfg.main.unwrap_or_else(|| "./index.ms".to_owned());

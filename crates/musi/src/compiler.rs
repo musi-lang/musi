@@ -11,10 +11,12 @@ use musi_lex::lex;
 use musi_parse::{ParsedModule, parse};
 use musi_shared::{DiagnosticBag, FileId, Interner, SourceDb};
 
-pub(crate) const PRELUDE_SRC: &str = include_str!("../../../std/prelude.ms");
-pub(crate) const PRELUDE_FILENAME: &str = "<prelude>";
+use crate::config::{MusiConfig, find_and_load};
 
-pub(crate) fn read_file(file_path: &str) -> String {
+pub const PRELUDE_SRC: &str = include_str!("../../../std/prelude.ms");
+pub const PRELUDE_FILENAME: &str = "<prelude>";
+
+pub fn read_file(file_path: &str) -> String {
     match fs::read_to_string(file_path) {
         Ok(s) => s,
         Err(e) => {
@@ -24,7 +26,7 @@ pub(crate) fn read_file(file_path: &str) -> String {
     }
 }
 
-pub(crate) fn parse_file(
+pub fn parse_file(
     file_path: &str,
     src: &str,
     interner: &mut Interner,
@@ -37,9 +39,9 @@ pub(crate) fn parse_file(
     (file_id, module)
 }
 
-pub(crate) fn print_diags_and_exit(diags: &DiagnosticBag, source_db: &SourceDb) -> ! {
-    use std::io::IsTerminal;
-    let use_color = std::io::stderr().is_terminal();
+pub fn print_diags_and_exit(diags: &DiagnosticBag, source_db: &SourceDb) -> ! {
+    use std::io::{IsTerminal, stderr};
+    let use_color = stderr().is_terminal();
     for diag in diags.iter() {
         eprintln!("{}", diag.render_rich(source_db, use_color));
     }
@@ -47,7 +49,7 @@ pub(crate) fn print_diags_and_exit(diags: &DiagnosticBag, source_db: &SourceDb) 
 }
 
 /// Returns all dependency path strings from top-level `import` and `export { } from` statements.
-pub(crate) fn collect_dep_paths(module: &ParsedModule, interner: &Interner) -> Vec<String> {
+pub fn collect_dep_paths(module: &ParsedModule, interner: &Interner) -> Vec<String> {
     use musi_parse::ast::Expr;
     let mut paths = Vec::new();
     for &item_idx in module.ctx.expr_lists.get_slice(module.items) {
@@ -62,7 +64,7 @@ pub(crate) fn collect_dep_paths(module: &ParsedModule, interner: &Interner) -> V
 }
 
 /// Resolves an import path string to a filesystem path.
-pub(crate) fn resolve_import_path(import_path: &str, importer: &Path) -> PathBuf {
+pub fn resolve_import_path(import_path: &str, importer: &Path) -> PathBuf {
     if import_path.starts_with("./") || import_path.starts_with("../") {
         let base = importer.parent().unwrap_or_else(|| Path::new("."));
         base.join(import_path).with_extension("ms")
@@ -73,18 +75,18 @@ pub(crate) fn resolve_import_path(import_path: &str, importer: &Path) -> PathBuf
 }
 
 /// Load project config from the current working directory (walks up to find mspackage.json).
-pub(crate) fn load_project_config() -> Option<(crate::config::MusiConfig, PathBuf)> {
+pub fn load_project_config() -> Option<(MusiConfig, PathBuf)> {
     let cwd = env::current_dir().ok()?;
-    crate::config::find_and_load(&cwd)
+    find_and_load(&cwd)
 }
 
 /// Resolved dependency: import path string, parsed module, and file ID.
-pub(crate) type ResolvedDep = (String, ParsedModule, FileId);
+pub type ResolvedDep = (String, ParsedModule, FileId);
 
 /// BFS-collect and parse all transitive dependencies of `root_module`.
 /// When `tolerate_missing` is true, missing non-native imports are silently skipped
 /// (used by `check` which doesn't need every file to exist).
-pub(crate) fn collect_and_parse_deps(
+pub fn collect_and_parse_deps(
     root_module: &ParsedModule,
     root_file_path: &Path,
     interner: &mut Interner,
@@ -138,7 +140,7 @@ pub(crate) fn collect_and_parse_deps(
 }
 
 /// Full compile pipeline: parse + BFS deps + codegen. Exits on error.
-pub(crate) fn compile_file(file_path: &str) -> Module {
+pub fn compile_file(file_path: &str) -> Module {
     let src = read_file(file_path);
 
     let mut interner = Interner::new();

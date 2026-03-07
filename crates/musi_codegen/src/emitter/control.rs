@@ -48,7 +48,7 @@ fn emit_branch_cond(
             let fixup = test_fixup
                 .map_or_else(|| Ok(out.emit_jump_placeholder(FnEmitter::BR_FALSE)), Ok)?;
             out.push_scope();
-            emit_pattern_bindings(arenas, state, pat, tmp_slot, out)?;
+            emit_pattern_bindings(arenas, pat, tmp_slot, out)?;
             Ok(fixup)
         }
     }
