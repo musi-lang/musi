@@ -1,0 +1,21 @@
+[package]
+name = "musi_macros"
+description = "Proc-macro for defining Musi native modules"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = { workspace = true }
+quote      = { workspace = true }
+syn        = { workspace = true }
+
+# Proc-macro crates need their own lint config; workspace lints conflict with
+# how syn/quote generate and consume token streams.
+[lints.rust]
+unsafe_code      = "deny"
+unused_results   = "forbid"
