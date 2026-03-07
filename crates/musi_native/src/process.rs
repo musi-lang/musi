@@ -1,3 +1,4 @@
+#![allow(clippy::absolute_paths)]
 use musi_macros::musi_module;
 
 #[musi_module]
@@ -16,7 +17,7 @@ pub mod process {
         std::env::var(key).ok()
     }
 
-    pub fn process_exit(code: i64) -> () {
+    pub fn process_exit(code: i64) {
         std::process::exit(i32::try_from(code).unwrap_or(1));
     }
 

@@ -262,7 +262,7 @@ fn cmd_test(file_path: &str) {
     let registry = musi_vm::NativeRegistry::new(musi_native::REGISTRY);
     let mut vm = Vm::new(module, registry);
     match vm.run_tests(main_fn_idx) {
-        Ok(_) => {}
+        Ok(()) => {}
         Err(e) => {
             eprintln!("runtime error: {e}");
             process::exit(1);
@@ -282,11 +282,11 @@ fn cmd_test(file_path: &str) {
         }
     }
 
-    if !results.is_empty() {
+    if results.is_empty() {
+        println!("no tests found");
+    } else {
         println!();
         println!("{passed} passed, {failed} failed");
-    } else {
-        println!("no tests found");
     }
 
     if failed > 0 {

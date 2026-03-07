@@ -28,9 +28,9 @@ const ASSERT_SOURCE: &str = concat!(
     "#[intrinsic(\"test\")] export extrin fn test(name: String, f: () -> Unit): Unit;\n",
 );
 
-fn _native_assert(_args: &[registry::Value]) -> registry::Value     { registry::Value::Unit }
-fn _native_assert_msg(_args: &[registry::Value]) -> registry::Value { registry::Value::Unit }
-fn _native_test(_args: &[registry::Value]) -> registry::Value       { registry::Value::Unit }
+const fn _native_assert(_args: &[registry::Value]) -> registry::Value     { registry::Value::Unit }
+const fn _native_assert_msg(_args: &[registry::Value]) -> registry::Value { registry::Value::Unit }
+const fn _native_test(_args: &[registry::Value]) -> registry::Value       { registry::Value::Unit }
 
 const ASSERT_FUNCTIONS: &[(&str, registry::NativeFn)] = &[
     ("assert",     _native_assert),

@@ -24,6 +24,10 @@ pub fn bool_val(b: bool) -> Value {
 }
 
 /// Clamp a `[start, end)` pair to `[0, len]` and return `(lo, hi)` as `usize`.
+///
+/// # Panics
+/// Never panics: both values are clamped to `[0, len]` before conversion,
+/// guaranteeing they fit in `usize` on any platform where `i64::MAX <= usize::MAX`.
 #[must_use]
 pub fn slice_range(start: i64, end: i64, len: i64) -> (usize, usize) {
     let lo = start.max(0).min(len);

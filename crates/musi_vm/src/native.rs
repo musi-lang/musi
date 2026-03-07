@@ -1,7 +1,7 @@
 //! Native built-in function dispatch.
 
 use std::cell::RefCell;
-use std::io::BufRead as _;
+use std::io::{BufRead as _, stdin};
 use std::rc::Rc;
 
 use musi_codegen::intrinsics::Intrinsic;
@@ -33,10 +33,7 @@ pub fn dispatch(vm: &Vm, intrinsic: Intrinsic, args: &[Value]) -> Value {
         Intrinsic::ArrayGet => intrinsic_array_get(vm, args),
         Intrinsic::ArraySet => intrinsic_array_set(vm, args),
         Intrinsic::ArraySlice => intrinsic_array_slice(vm, args),
-        // Assert/AssertMsg/Test are handled directly in vm::exec_call before dispatch reaches here.
-        Intrinsic::Assert | Intrinsic::AssertMsg | Intrinsic::Test => Value::Unit,
-        // System module intrinsics (musi:fs, musi:path, musi:os, musi:process, musi:time)
-        // are dispatched via Vm::registry before this function is called; unreachable here.
+        // Assert/AssertMsg/Test and system module intrinsics are intercepted before dispatch.
         _ => Value::Unit,
     }
 }
@@ -120,8 +117,8 @@ fn intrinsic_string_concat(_vm: &Vm, args: &[Value]) -> Value {
 }
 
 fn slice_range(start: i64, end: i64, len: i64) -> (usize, usize) {
-    let lo = start.clamp(0, len) as usize;
-    let hi = end.clamp(0, len) as usize;
+    let lo = usize::try_from(start.clamp(0, len)).unwrap_or(0);
+    let hi = usize::try_from(end.clamp(0, len)).unwrap_or(0);
     (lo, hi.max(lo))
 }
 
@@ -140,10 +137,9 @@ fn intrinsic_string_slice(_vm: &Vm, args: &[Value]) -> Value {
 
 fn intrinsic_string_to_int(_vm: &Vm, args: &[Value]) -> Value {
     match args.first() {
-        Some(Value::String(s)) => match s.parse::<i64>() {
-            Ok(n) => option_some(Value::Int(n)),
-            Err(_) => option_none(),
-        },
+        Some(Value::String(s)) => s
+            .parse::<i64>()
+            .map_or_else(|_| option_none(), |n| option_some(Value::Int(n))),
         _ => option_none(),
     }
 }
@@ -180,9 +176,9 @@ fn intrinsic_float_pow(_vm: &Vm, args: &[Value]) -> Value {
 }
 
 fn intrinsic_read_line(_vm: &Vm, _args: &[Value]) -> Value {
-    let stdin = std::io::stdin();
+    let stdin = stdin();
     let mut line = String::new();
-    let _ = stdin.lock().read_line(&mut line);
+    let _bytes = stdin.lock().read_line(&mut line).unwrap_or_default();
     if line.ends_with('\n') {
         let _ = line.pop();
         if line.ends_with('\r') {
@@ -194,7 +190,9 @@ fn intrinsic_read_line(_vm: &Vm, _args: &[Value]) -> Value {
 
 fn intrinsic_array_length(_vm: &Vm, args: &[Value]) -> Value {
     match args.first() {
-        Some(Value::Array(a)) => Value::Int(a.borrow().len() as i64),
+        Some(Value::Array(a)) => {
+            Value::Int(i64::try_from(a.borrow().len()).unwrap_or(i64::MAX))
+        }
         _ => Value::Int(0),
     }
 }
@@ -211,10 +209,10 @@ fn intrinsic_array_push(_vm: &Vm, args: &[Value]) -> Value {
 
 fn intrinsic_array_pop(_vm: &Vm, args: &[Value]) -> Value {
     match args.first() {
-        Some(Value::Array(a)) => match a.borrow_mut().pop() {
-            Some(v) => option_some(v),
-            None => option_none(),
-        },
+        Some(Value::Array(a)) => a
+            .borrow_mut()
+            .pop()
+            .map_or_else(option_none, option_some),
         _ => option_none(),
     }
 }
@@ -223,10 +221,10 @@ fn intrinsic_array_get(_vm: &Vm, args: &[Value]) -> Value {
     match (args.first(), args.get(1)) {
         (Some(Value::Array(a)), Some(Value::Int(idx))) => {
             let borrowed = a.borrow();
-            match usize::try_from(*idx).ok().and_then(|i| borrowed.get(i)) {
-                Some(v) => v.clone(),
-                None => Value::Unit,
-            }
+            usize::try_from(*idx)
+                .ok()
+                .and_then(|i| borrowed.get(i))
+                .map_or(Value::Unit, Clone::clone)
         }
         _ => Value::Unit,
     }
@@ -251,7 +249,7 @@ fn intrinsic_array_slice(_vm: &Vm, args: &[Value]) -> Value {
     match (args.first(), args.get(1), args.get(2)) {
         (Some(Value::Array(a)), Some(Value::Int(start)), Some(Value::Int(end))) => {
             let borrowed = a.borrow();
-            let len = borrowed.len() as i64;
+            let len = i64::try_from(borrowed.len()).unwrap_or(i64::MAX);
             let (lo, hi) = slice_range(*start, *end, len);
             let slice: Vec<Value> = borrowed[lo..hi].to_vec();
             Value::Array(Rc::new(RefCell::new(slice)))

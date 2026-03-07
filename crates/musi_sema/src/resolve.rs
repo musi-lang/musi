@@ -9,6 +9,7 @@
 //! Inner scopes (function bodies, blocks) are pushed/popped on the fly.
 
 use std::collections::HashMap;
+use std::hash::BuildHasher;
 
 use musi_ast::{
     ArrayItem, AstArenas, BindKind, ChoiceVariant, Cond, ElifBranch, Expr, FieldInit, ImportClause,
@@ -114,7 +115,7 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    fn collect_imports<S: std::hash::BuildHasher>(
+    fn collect_imports<S: BuildHasher>(
         &mut self,
         module: &ParsedModule,
         root_scope: ScopeId,
@@ -563,7 +564,7 @@ impl<'a> Resolver<'a> {
 /// Runs name resolution on `module` and returns the [`ResolveResult`].
 ///
 /// Errors and warnings are pushed into `diags`.
-pub fn resolve<S: std::hash::BuildHasher>(
+pub fn resolve<S: BuildHasher>(
     module: &ParsedModule,
     interner: &Interner,
     file_id: FileId,

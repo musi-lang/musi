@@ -32,6 +32,7 @@ pub use scope::{ScopeId, ScopeTree};
 pub use types::{PrimTy, Type, TypeVarId};
 
 use std::collections::HashMap;
+use std::hash::BuildHasher;
 
 use musi_ast::{Expr, Modifier, ParsedModule};
 use musi_shared::{DiagnosticBag, FileId, Idx, Interner, Span};
@@ -96,7 +97,7 @@ pub fn exports_of(result: &SemaResult, module: &ParsedModule, interner: &Interne
 ///
 /// `imports` maps each imported module path to its exported types, enabling
 /// cross-module type resolution.
-pub fn analyze<S: std::hash::BuildHasher>(
+pub fn analyze<S: BuildHasher>(
     module: &ParsedModule,
     interner: &Interner,
     file_id: FileId,

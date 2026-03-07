@@ -3,6 +3,7 @@
 #![allow(unsafe_code)]
 
 use std::collections::HashMap;
+use std::mem::transmute;
 
 use musi_codegen::Module;
 
@@ -13,7 +14,7 @@ use crate::value::Value;
 pub struct FfiState {
     /// Loaded shared libraries keyed by name. `None` key = default namespace.
     libs: HashMap<Option<Box<str>>, libloading::Library>,
-    /// Resolved function pointers keyed by (fn_idx).
+    /// Resolved function pointers keyed by (`fn_idx`).
     symbols: HashMap<u16, FfiSymbol>,
 }
 
@@ -22,6 +23,12 @@ struct FfiSymbol {
     ptr: *const (),
     /// Number of parameters (used to pick calling convention shim).
     param_count: u8,
+}
+
+impl Default for FfiState {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl FfiState {
@@ -36,7 +43,7 @@ impl FfiState {
     /// Resolves the function pointer for an extrin function, loading the library if needed.
     fn resolve(&mut self, fn_idx: u16, module: &Module) -> Result<&FfiSymbol, VmError> {
         if self.symbols.contains_key(&fn_idx) {
-            return self.symbols.get(&fn_idx).ok_or(VmError::FfiFailed("symbol vanished".into()));
+            return self.symbols.get(&fn_idx).ok_or_else(|| VmError::FfiFailed("symbol vanished".into()));
         }
 
         let func = module
@@ -58,23 +65,22 @@ impl FfiState {
         }
 
         let lib = self.libs.get(&lib_key)
-            .ok_or(VmError::FfiFailed("library not loaded".into()))?;
+            .ok_or_else(|| VmError::FfiFailed("library not loaded".into()))?;
 
-        // SAFETY: We trust the user-declared extrin fn signature matches the native symbol.
-        // The pointer is stored and called later with the declared argument types.
-        let ptr: *const () = unsafe {
-            let sym_ref: libloading::Symbol<'_, *const ()> = lib
-                .get(c_name.as_bytes())
-                .map_err(|e| VmError::FfiFailed(format!("dlsym '{}': {}", c_name, e).into()))?;
-            *sym_ref
-        };
+        // SAFETY: lib.get resolves the named symbol from a loaded shared library.
+        let sym_result: Result<libloading::Symbol<'_, *const ()>, _> =
+            unsafe { lib.get(c_name.as_bytes()) };
+        let sym_ref = sym_result
+            .map_err(|e| VmError::FfiFailed(format!("dlsym '{c_name}': {e}").into()))?;
+        // Symbol<*const ()> wraps a raw fn pointer; Deref copies the pointer value (safe).
+        let ptr: *const () = *sym_ref;
 
         let _prev = self.symbols.insert(fn_idx, FfiSymbol {
             ptr,
             param_count: func.param_count,
         });
 
-        self.symbols.get(&fn_idx).ok_or(VmError::FfiFailed("symbol vanished".into()))
+        self.symbols.get(&fn_idx).ok_or_else(|| VmError::FfiFailed("symbol vanished".into()))
     }
 
     /// Calls an extrin function with the given arguments, returning its result as a `Value`.
@@ -86,6 +92,9 @@ impl FfiState {
     /// - `(i64, i64) -> i64`
     /// - `() -> f64`
     /// - `() -> i64`
+    ///
+    /// # Errors
+    /// Returns `VmError` if the symbol cannot be resolved or the argument types do not match.
     pub fn call(
         &mut self,
         fn_idx: u16,
@@ -100,37 +109,40 @@ impl FfiState {
             // () -> f64
             (0, []) => {
                 // SAFETY: extrin fn declared with matching signature
-                let f: unsafe extern "C" fn() -> f64 = unsafe { std::mem::transmute(ptr) };
+                let f: unsafe extern "C" fn() -> f64 = unsafe { transmute(ptr) };
+                // SAFETY: calling the resolved fn with the declared signature
                 let result = unsafe { f() };
                 Ok(Value::Float(result))
             }
             // (f64) -> f64
             (1, [Value::Float(a)]) => {
                 // SAFETY: extrin fn declared with matching signature
-                let f: unsafe extern "C" fn(f64) -> f64 = unsafe { std::mem::transmute(ptr) };
+                let f: unsafe extern "C" fn(f64) -> f64 = unsafe { transmute(ptr) };
+                // SAFETY: calling the resolved fn with the declared signature
                 let result = unsafe { f(*a) };
                 Ok(Value::Float(result))
             }
             // (i64) -> i64
             (1, [Value::Int(a)]) => {
                 // SAFETY: extrin fn declared with matching signature
-                let f: unsafe extern "C" fn(i64) -> i64 = unsafe { std::mem::transmute(ptr) };
+                let f: unsafe extern "C" fn(i64) -> i64 = unsafe { transmute(ptr) };
+                // SAFETY: calling the resolved fn with the declared signature
                 let result = unsafe { f(*a) };
                 Ok(Value::Int(result))
             }
             // (f64, f64) -> f64
             (2, [Value::Float(a), Value::Float(b)]) => {
                 // SAFETY: extrin fn declared with matching signature
-                let f: unsafe extern "C" fn(f64, f64) -> f64 =
-                    unsafe { std::mem::transmute(ptr) };
+                let f: unsafe extern "C" fn(f64, f64) -> f64 = unsafe { transmute(ptr) };
+                // SAFETY: calling the resolved fn with the declared signature
                 let result = unsafe { f(*a, *b) };
                 Ok(Value::Float(result))
             }
             // (i64, i64) -> i64
             (2, [Value::Int(a), Value::Int(b)]) => {
                 // SAFETY: extrin fn declared with matching signature
-                let f: unsafe extern "C" fn(i64, i64) -> i64 =
-                    unsafe { std::mem::transmute(ptr) };
+                let f: unsafe extern "C" fn(i64, i64) -> i64 = unsafe { transmute(ptr) };
+                // SAFETY: calling the resolved fn with the declared signature
                 let result = unsafe { f(*a, *b) };
                 Ok(Value::Int(result))
             }
@@ -146,7 +158,7 @@ impl FfiState {
     }
 }
 
-fn type_name_of(v: &Value) -> &'static str {
+const fn type_name_of(v: &Value) -> &'static str {
     match v {
         Value::Int(_) => "Int",
         Value::Float(_) => "Float",
@@ -166,13 +178,12 @@ fn load_library(name: Option<&str>) -> Result<libloading::Library, VmError> {
             for candidate in &candidates {
                 // SAFETY: Loading a shared library is inherently unsafe.
                 // We trust the user's #[link] attribute specifies a legitimate library.
-                match unsafe { libloading::Library::new(candidate) } {
-                    Ok(lib) => return Ok(lib),
-                    Err(_) => continue,
+                if let Ok(lib) = unsafe { libloading::Library::new(candidate) } {
+                    return Ok(lib);
                 }
             }
             Err(VmError::FfiFailed(
-                format!("could not load library '{}' (tried: {:?})", lib_name, candidates).into(),
+                format!("could not load library '{lib_name}' (tried: {candidates:?})").into(),
             ))
         }
         None => {
@@ -183,7 +194,7 @@ fn load_library(name: Option<&str>) -> Result<libloading::Library, VmError> {
             {
                 // SAFETY: libSystem.B.dylib is always available on macOS
                 unsafe { libloading::Library::new("libSystem.B.dylib") }
-                    .map_err(|e| VmError::FfiFailed(format!("default namespace: {}", e).into()))
+                    .map_err(|e| VmError::FfiFailed(format!("default namespace: {e}").into()))
             }
             #[cfg(target_os = "linux")]
             {

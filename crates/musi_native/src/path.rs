@@ -1,3 +1,4 @@
+#![allow(clippy::absolute_paths)]
 use musi_macros::musi_module;
 
 #[musi_module]

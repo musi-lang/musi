@@ -137,6 +137,7 @@ impl Vm {
         Ok(op)
     }
 
+    #[allow(clippy::too_many_lines)]
     fn step(&mut self, op: Opcode) -> Result<Signal, VmError> {
         match op {
             Opcode::Nop => Ok(Signal::Continue),
@@ -468,12 +469,9 @@ impl Vm {
         let lhs = self.stack.pop().ok_or(VmError::StackUnderflow)?;
         match lhs {
             Value::Object { ref fields, .. } => {
-                match fields.first() {
-                    Some(Value::Int(0)) => self.stack.push(rhs),
-                    _ => {
-                        let inner = fields.get(1).ok_or(VmError::FieldOutOfBounds(1))?.clone();
-                        self.stack.push(inner);
-                    }
+                if matches!(fields.first(), Some(Value::Int(0))) { self.stack.push(rhs) } else {
+                    let inner = fields.get(1).ok_or(VmError::FieldOutOfBounds(1))?.clone();
+                    self.stack.push(inner);
                 }
             }
             _ => return Err(VmError::TypeMismatch),
@@ -485,24 +483,21 @@ impl Vm {
         let obj = self.stack.pop().ok_or(VmError::StackUnderflow)?;
         match obj {
             Value::Object { ref fields, type_tag } => {
-                match fields.first() {
-                    Some(Value::Int(0)) => {
-                        // None → push None (same structure)
-                        self.stack.push(Value::Object { type_tag, fields: Rc::new(vec![Value::Int(0)]) });
-                    }
-                    _ => {
-                        // Some(inner) → access field[field_idx] on inner, wrap in Some
-                        let inner = fields.get(1).ok_or(VmError::FieldOutOfBounds(1))?.clone();
-                        let Value::Object { fields: inner_fields, .. } = inner else {
-                            return Err(VmError::TypeMismatch);
-                        };
-                        let field_val = inner_fields
-                            .get(usize::from(field_idx))
-                            .ok_or(VmError::FieldOutOfBounds(field_idx))?
-                            .clone();
-                        // Wrap in Some: [discriminant=1, field_val]
-                        self.stack.push(Value::Object { type_tag, fields: Rc::new(vec![Value::Int(1), field_val]) });
-                    }
+                if matches!(fields.first(), Some(Value::Int(0))) {
+                    // None → push None (same structure)
+                    self.stack.push(Value::Object { type_tag, fields: Rc::new(vec![Value::Int(0)]) });
+                } else {
+                    // Some(inner) → access field[field_idx] on inner, wrap in Some
+                    let inner = fields.get(1).ok_or(VmError::FieldOutOfBounds(1))?.clone();
+                    let Value::Object { fields: inner_fields, .. } = inner else {
+                        return Err(VmError::TypeMismatch);
+                    };
+                    let field_val = inner_fields
+                        .get(usize::from(field_idx))
+                        .ok_or(VmError::FieldOutOfBounds(field_idx))?
+                        .clone();
+                    // Wrap in Some: [discriminant=1, field_val]
+                    self.stack.push(Value::Object { type_tag, fields: Rc::new(vec![Value::Int(1), field_val]) });
                 }
             }
             _ => return Err(VmError::TypeMismatch),
@@ -620,7 +615,7 @@ impl Vm {
 
     fn exec_arr_len(&mut self) -> Result<Signal, VmError> {
         let a = pop_array(&mut self.stack)?;
-        let len = a.borrow().len() as i64;
+        let len = i64::try_from(a.borrow().len()).unwrap_or(i64::MAX);
         self.stack.push(Value::Int(len));
         Ok(Signal::Continue)
     }
@@ -638,15 +633,16 @@ impl Vm {
         let start = pop_i64(&mut self.stack)?;
         let a = pop_array(&mut self.stack)?;
         let borrowed = a.borrow();
-        let len = borrowed.len() as i64;
-        let lo = start.clamp(0, len) as usize;
-        let hi = end.clamp(0, len) as usize;
+        let len = i64::try_from(borrowed.len()).unwrap_or(i64::MAX);
+        let lo = usize::try_from(start.clamp(0, len)).unwrap_or(0);
+        let hi = usize::try_from(end.clamp(0, len)).unwrap_or(0);
         let slice: Vec<Value> = borrowed[lo..hi.max(lo)].to_vec();
         drop(borrowed);
         self.stack.push(Value::Array(Rc::new(RefCell::new(slice))));
         Ok(Signal::Continue)
     }
 
+    #[allow(clippy::too_many_lines)]
     fn exec_call(&mut self, fn_idx: u16) -> Result<(), VmError> {
         let (param_count, local_count, symbol_idx) = {
             let func = self
@@ -706,9 +702,9 @@ impl Vm {
                         let name: Box<str> = args.first()
                             .and_then(|v| if let Value::String(s) = v { Some(Box::from(s.as_ref())) } else { None })
                             .unwrap_or_else(|| Box::from("<unnamed>"));
-                        let f_idx = args.get(1)
+                        let test_fn_idx = args.get(1)
                             .and_then(|v| if let Value::Function(idx) = v { Some(*idx) } else { None });
-                        if let Some(test_fn_idx) = f_idx {
+                        if let Some(test_fn_idx) = test_fn_idx {
                             let depth = self.frames.len();
                             self.exec_call(test_fn_idx)?;
                             if self.test_mode {
@@ -730,11 +726,8 @@ impl Vm {
                         self.stack.push(Value::Unit);
                     }
                     _ => {
-                        let result = if let Some(f) = self.registry.lookup_id(intrinsic_id) {
-                            f(&args)
-                        } else {
-                            native::dispatch(self, intrinsic, &args)
-                        };
+                        let result = self.registry.lookup_id(intrinsic_id)
+                            .map_or_else(|| native::dispatch(self, intrinsic, &args), |f| f(&args));
                         self.stack.push(result);
                     }
                 }
@@ -758,12 +751,12 @@ impl Vm {
 
 fn is_truthy(v: &Value) -> bool {
     match v {
-        Value::Object { fields, .. } => fields.first().map_or(false, |f| matches!(f, Value::Int(n) if *n != 0)),
+        Value::Object { fields, .. } => fields.first().is_some_and(|f| matches!(f, Value::Int(n) if *n != 0)),
         _ => false,
     }
 }
 
-fn type_tag_of(v: &Value) -> u16 {
+const fn type_tag_of(v: &Value) -> u16 {
     match v {
         Value::Int(_) => 1,
         Value::Float(_) => 2,
