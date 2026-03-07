@@ -242,7 +242,8 @@ fn cmd_run(file_path: &str) {
     let main_fn_idx =
         u16::try_from(module.function_table.len() - 1).expect("function table index fits u16");
 
-    let mut vm = Vm::new(module);
+    let registry = musi_vm::NativeRegistry::new(musi_native::REGISTRY);
+    let mut vm = Vm::new(module, registry);
     match vm.run(main_fn_idx) {
         Ok(_) => {}
         Err(e) => {
@@ -258,7 +259,8 @@ fn cmd_test(file_path: &str) {
     let main_fn_idx =
         u16::try_from(module.function_table.len() - 1).expect("function table index fits u16");
 
-    let mut vm = Vm::new(module);
+    let registry = musi_vm::NativeRegistry::new(musi_native::REGISTRY);
+    let mut vm = Vm::new(module, registry);
     match vm.run_tests(main_fn_idx) {
         Ok(_) => {}
         Err(e) => {

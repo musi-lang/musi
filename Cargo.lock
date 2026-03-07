@@ -42,6 +42,7 @@ version = "0.1.0"
 dependencies = [
  "musi_codegen",
  "musi_lex",
+ "musi_native",
  "musi_parse",
  "musi_sema",
  "musi_shared",
@@ -70,6 +71,23 @@ name = "musi_lex"
 version = "0.1.0"
 dependencies = [
  "musi_shared",
+]
+
+[[package]]
+name = "musi_macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "musi_native"
+version = "0.1.0"
+dependencies = [
+ "musi_macros",
+ "musi_vm",
 ]
 
 [[package]]
