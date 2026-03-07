@@ -55,3 +55,11 @@ export fn string_words(s: String): []String => string_split(string_trim(s), " ")
 
 export fn string_replace(s: String, pat: String, to: String): String =>
     string_join(string_split(s, pat), to);
+
+// Return the byte at index i as a one-character string.
+// Safe for ASCII; may return a partial UTF-8 sequence for multi-byte chars.
+export fn string_char_at(s: String, i: Int): String => string_slice(s, i, i + 1);
+
+// Count non-overlapping occurrences of sub in s.
+export fn string_count(s: String, sub: String): Int =>
+    array_length(string_split(s, sub)) - 1;
