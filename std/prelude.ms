@@ -187,13 +187,13 @@ given Iterable[[]'T, 'T] {
 #[intrinsic("log")]   export extrin fn log(x: Float): Float;
 #[intrinsic("exp")]   export extrin fn exp(x: Float): Float;
 
-// -- map (keys must be Int or String at runtime; values typed as String pending generics) --
-export opaque record Map {};
-#[intrinsic("map_new")]    export extrin fn map_new(): Map;
-#[intrinsic("map_get")]    export extrin fn map_get(m: Map, key: String): Option[String];
-#[intrinsic("map_set")]    export extrin fn map_set(m: Map, key: String, val: String): Unit;
-#[intrinsic("map_has")]    export extrin fn map_has(m: Map, key: String): Bool;
-#[intrinsic("map_delete")] export extrin fn map_delete(m: Map, key: String): Unit;
-#[intrinsic("map_keys")]   export extrin fn map_keys(m: Map): []String;
-#[intrinsic("map_values")] export extrin fn map_values(m: Map): []String;
-#[intrinsic("map_len")]    export extrin fn map_len(m: Map): Int;
+// -- map (keys must be Int or String at runtime) --
+export opaque record Map['K, 'V] {};
+#[intrinsic("map_new")]    export extrin fn map_new['K, 'V](): Map['K, 'V];
+#[intrinsic("map_get")]    export extrin fn map_get['K, 'V](m: Map['K, 'V], key: 'K): Option['V];
+#[intrinsic("map_set")]    export extrin fn map_set['K, 'V](m: Map['K, 'V], key: 'K, val: 'V): Unit;
+#[intrinsic("map_has")]    export extrin fn map_has['K, 'V](m: Map['K, 'V], key: 'K): Bool;
+#[intrinsic("map_delete")] export extrin fn map_delete['K, 'V](m: Map['K, 'V], key: 'K): Unit;
+#[intrinsic("map_keys")]   export extrin fn map_keys['K, 'V](m: Map['K, 'V]): []'K;
+#[intrinsic("map_values")] export extrin fn map_values['K, 'V](m: Map['K, 'V]): []['V;
+#[intrinsic("map_len")]    export extrin fn map_len['K, 'V](m: Map['K, 'V]): Int;

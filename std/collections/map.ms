@@ -1,46 +1,49 @@
 // std/collections/map.ms — HashMap utilities
-// Map handles use the opaque Map type from prelude.
-// Key and value types are String (pending generics for Map['K,'V]).
-// Prelude exposes map_new/get/set/has/delete/keys/values/len.
 // import { map_get_or, map_update, map_from_pairs, map_to_pairs, map_count_by, map_merge } from "std/collections/map"
 
 import { unwrap_or } from "std/core/option";
 
-export fn map_get_or(m: Map, key: String, default: String): String =>
+export fn map_get_or['K, 'V](m: Map['K, 'V], key: 'K, default: 'V): 'V =>
     unwrap_or(map_get(m, key), default);
 
-export fn map_update(m: Map, key: String, f: String -> String, default: String): Unit =>
+export fn map_update['K, 'V](m: Map['K, 'V], key: 'K, f: 'V -> 'V, default: 'V): Unit =>
     map_set(m, key, f(map_get_or(m, key, default)));
 
-export fn map_from_pairs(pairs: [](String, String)): Map => (
+export fn map_from_pairs['K, 'V](pairs: []('K, 'V)): Map['K, 'V] => (
     const m := map_new();
     for pair in pairs loop (map_set(m, pair.0, pair.1));
     m
 );
 
-export fn map_to_pairs(m: Map): [](String, String) => (
+export fn map_to_pairs['K, 'V](m: Map['K, 'V]): []('K, 'V) => (
     var result := [];
     for k in map_keys(m) loop (
-        array_push(result, (k, map_get_or(m, k, "")))
+        match map_get(m, k) with (
+            .Some(v) => array_push(result, (k, v))
+            | .None => ()
+        )
     );
     result
 );
 
-// Count occurrences; values stored as int strings ("0", "1", ...).
-export fn map_count_by['T](arr: []'T, key_fn: 'T -> String): Map => (
+// Count occurrences of each key produced by key_fn.
+export fn map_count_by['T](arr: []'T, key_fn: 'T -> String): Map[String, Int] => (
     const m := map_new();
     for x in arr loop (
         const k := key_fn(x);
-        const cur_str := map_get_or(m, k, "0");
-        const cur := unwrap_or(string_to_int(cur_str), 0);
-        map_set(m, k, int_to_string(cur + 1))
+        const cur := unwrap_or(map_get(m, k), 0);
+        map_set(m, k, cur + 1)
     );
     m
 );
 
-export fn map_merge(a: Map, b: Map): Map => (
+export fn map_merge['K, 'V](a: Map['K, 'V], b: Map['K, 'V]): Map['K, 'V] => (
     const r := map_new();
-    for k in map_keys(a) loop (map_set(r, k, map_get_or(a, k, "")));
-    for k in map_keys(b) loop (map_set(r, k, map_get_or(b, k, "")));
+    for k in map_keys(a) loop (
+        match map_get(a, k) with (.Some(v) => map_set(r, k, v) | .None => ())
+    );
+    for k in map_keys(b) loop (
+        match map_get(b, k) with (.Some(v) => map_set(r, k, v) | .None => ())
+    );
     r
 );
