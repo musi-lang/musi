@@ -152,7 +152,7 @@ checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 
 [[package]]
 name = "musi"
-version = "0.1.0"
+version = "0.1.0-alpha1"
 dependencies = [
  "clap",
  "musi_codegen",
@@ -168,14 +168,14 @@ dependencies = [
 
 [[package]]
 name = "musi_ast"
-version = "0.1.0"
+version = "0.1.0-alpha1"
 dependencies = [
  "musi_shared",
 ]
 
 [[package]]
 name = "musi_codegen"
-version = "0.1.0"
+version = "0.1.0-alpha1"
 dependencies = [
  "byteorder",
  "musi_ast",
@@ -185,14 +185,14 @@ dependencies = [
 
 [[package]]
 name = "musi_lex"
-version = "0.1.0"
+version = "0.1.0-alpha1"
 dependencies = [
  "musi_shared",
 ]
 
 [[package]]
 name = "musi_macros"
-version = "0.1.0"
+version = "0.1.0-alpha1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -201,7 +201,7 @@ dependencies = [
 
 [[package]]
 name = "musi_native"
-version = "0.1.0"
+version = "0.1.0-alpha1"
 dependencies = [
  "musi_macros",
  "musi_vm",
@@ -209,7 +209,7 @@ dependencies = [
 
 [[package]]
 name = "musi_parse"
-version = "0.1.0"
+version = "0.1.0-alpha1"
 dependencies = [
  "musi_ast",
  "musi_lex",
@@ -218,7 +218,7 @@ dependencies = [
 
 [[package]]
 name = "musi_sema"
-version = "0.1.0"
+version = "0.1.0-alpha1"
 dependencies = [
  "musi_ast",
  "musi_lex",
@@ -228,7 +228,7 @@ dependencies = [
 
 [[package]]
 name = "musi_shared"
-version = "0.1.0"
+version = "0.1.0-alpha1"
 dependencies = [
  "intaglio",
  "memchr",
@@ -236,7 +236,7 @@ dependencies = [
 
 [[package]]
 name = "musi_vm"
-version = "0.1.0"
+version = "0.1.0-alpha1"
 dependencies = [
  "libloading",
  "musi_codegen",
