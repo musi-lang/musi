@@ -5,11 +5,12 @@
 //! `writeln`, `write`, `int_to_string`, `float_to_string`, `string_concat`, and arrays.
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use musi_codegen::intrinsics::Intrinsic;
 
-use crate::value::Value;
+use crate::value::{HashKey, Value};
 use crate::vm::Vm;
 
 #[must_use]
@@ -26,8 +27,225 @@ pub fn dispatch(vm: &Vm, intrinsic: Intrinsic, args: &[Value]) -> Value {
         Intrinsic::ArrayGet => intrinsic_array_get(vm, args),
         Intrinsic::ArraySet => intrinsic_array_set(vm, args),
         Intrinsic::ArraySlice => intrinsic_array_slice(vm, args),
+        // -- string extended --
+        Intrinsic::StringSplit => intrinsic_string_split(vm, args),
+        Intrinsic::StringTrim => intrinsic_string_trim(vm, args),
+        Intrinsic::StringToLower => intrinsic_string_to_lower(vm, args),
+        Intrinsic::StringToUpper => intrinsic_string_to_upper(vm, args),
+        Intrinsic::StringToFloat => intrinsic_string_to_float(vm, args),
+        Intrinsic::StringIndexOf => intrinsic_string_index_of(vm, args),
+        // -- numeric casts --
+        Intrinsic::IntToFloat => intrinsic_int_to_float(vm, args),
+        Intrinsic::FloatToInt => intrinsic_float_to_int(vm, args),
+        // -- math trig --
+        Intrinsic::Sin => intrinsic_trig1(vm, args, f64::sin),
+        Intrinsic::Cos => intrinsic_trig1(vm, args, f64::cos),
+        Intrinsic::Tan => intrinsic_trig1(vm, args, f64::tan),
+        Intrinsic::Log => intrinsic_trig1(vm, args, f64::ln),
+        Intrinsic::Exp => intrinsic_trig1(vm, args, f64::exp),
+        Intrinsic::Atan2 => intrinsic_atan2(vm, args),
+        // -- map --
+        Intrinsic::MapNew => intrinsic_map_new(vm, args),
+        Intrinsic::MapGet => intrinsic_map_get(vm, args),
+        Intrinsic::MapSet => intrinsic_map_set(vm, args),
+        Intrinsic::MapHas => intrinsic_map_has(vm, args),
+        Intrinsic::MapDelete => intrinsic_map_delete(vm, args),
+        Intrinsic::MapKeys => intrinsic_map_keys(vm, args),
+        Intrinsic::MapValues => intrinsic_map_values(vm, args),
+        Intrinsic::MapLen => intrinsic_map_len(vm, args),
         // All other intrinsics are intercepted before dispatch or served by NativeRegistry.
         _ => Value::Unit,
+    }
+}
+
+// -- string extended ----------------------------------------------------------
+
+fn strings_to_array(parts: impl Iterator<Item = String>) -> Value {
+    let vec: Vec<Value> = parts.map(|s| Value::String(Rc::from(s.as_str()))).collect();
+    Value::Array(Rc::new(RefCell::new(vec)))
+}
+
+fn intrinsic_string_split(_vm: &Vm, args: &[Value]) -> Value {
+    match (args.first(), args.get(1)) {
+        (Some(Value::String(s)), Some(Value::String(delim))) => {
+            if delim.is_empty() {
+                strings_to_array(s.chars().map(|c| c.to_string()))
+            } else {
+                strings_to_array(s.split(delim.as_ref()).map(str::to_owned))
+            }
+        }
+        _ => Value::Array(Rc::new(RefCell::new(Vec::new()))),
+    }
+}
+
+fn intrinsic_string_trim(_vm: &Vm, args: &[Value]) -> Value {
+    match args.first() {
+        Some(Value::String(s)) => Value::String(Rc::from(s.trim())),
+        _ => Value::String(Rc::from("")),
+    }
+}
+
+fn intrinsic_string_to_lower(_vm: &Vm, args: &[Value]) -> Value {
+    match args.first() {
+        Some(Value::String(s)) => Value::String(Rc::from(s.to_lowercase().as_str())),
+        _ => Value::String(Rc::from("")),
+    }
+}
+
+fn intrinsic_string_to_upper(_vm: &Vm, args: &[Value]) -> Value {
+    match args.first() {
+        Some(Value::String(s)) => Value::String(Rc::from(s.to_uppercase().as_str())),
+        _ => Value::String(Rc::from("")),
+    }
+}
+
+fn intrinsic_string_to_float(_vm: &Vm, args: &[Value]) -> Value {
+    match args.first() {
+        Some(Value::String(s)) => s
+            .parse::<f64>()
+            .map_or_else(|_| option_none(), |f| option_some(Value::Float(f))),
+        _ => option_none(),
+    }
+}
+
+fn intrinsic_string_index_of(_vm: &Vm, args: &[Value]) -> Value {
+    match (args.first(), args.get(1)) {
+        (Some(Value::String(s)), Some(Value::String(sub))) => {
+            s.find(sub.as_ref()).map_or_else(option_none, |i| {
+                option_some(Value::Int(i64::try_from(i).unwrap_or(i64::MAX)))
+            })
+        }
+        _ => option_none(),
+    }
+}
+
+// -- numeric casts ------------------------------------------------------------
+
+#[allow(
+    clippy::cast_precision_loss,
+    clippy::as_conversions,
+    clippy::missing_const_for_fn
+)]
+fn intrinsic_int_to_float(_vm: &Vm, args: &[Value]) -> Value {
+    match args.first() {
+        Some(Value::Int(n)) => Value::Float(*n as f64),
+        _ => Value::Float(0.0),
+    }
+}
+
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::as_conversions,
+    clippy::missing_const_for_fn
+)]
+fn intrinsic_float_to_int(_vm: &Vm, args: &[Value]) -> Value {
+    match args.first() {
+        Some(Value::Float(f)) => Value::Int(*f as i64),
+        _ => Value::Int(0),
+    }
+}
+
+// -- math trig ----------------------------------------------------------------
+
+fn intrinsic_trig1(_vm: &Vm, args: &[Value], f: fn(f64) -> f64) -> Value {
+    match args.first() {
+        Some(Value::Float(x)) => Value::Float(f(*x)),
+        _ => Value::Float(0.0),
+    }
+}
+
+fn intrinsic_atan2(_vm: &Vm, args: &[Value]) -> Value {
+    match (args.first(), args.get(1)) {
+        (Some(Value::Float(y)), Some(Value::Float(x))) => Value::Float(y.atan2(*x)),
+        _ => Value::Float(0.0),
+    }
+}
+
+// -- map ----------------------------------------------------------------------
+
+fn bool_object(b: bool) -> Value {
+    Value::Object {
+        type_tag: 0,
+        fields: Rc::new(vec![Value::Int(i64::from(b))]),
+    }
+}
+
+fn intrinsic_map_new(_vm: &Vm, _args: &[Value]) -> Value {
+    Value::Map(Rc::new(RefCell::new(HashMap::new())))
+}
+
+fn intrinsic_map_get(_vm: &Vm, args: &[Value]) -> Value {
+    match (args.first(), args.get(1)) {
+        (Some(Value::Map(m)), Some(key)) => HashKey::try_from(key).map_or_else(
+            |_| option_none(),
+            |hk| {
+                m.borrow()
+                    .get(&hk)
+                    .map_or_else(option_none, |v| option_some(v.clone()))
+            },
+        ),
+        _ => option_none(),
+    }
+}
+
+fn intrinsic_map_set(_vm: &Vm, args: &[Value]) -> Value {
+    match (args.first(), args.get(1), args.get(2)) {
+        (Some(Value::Map(m)), Some(key), Some(val)) => {
+            if let Ok(hk) = HashKey::try_from(key) {
+                let _prev = m.borrow_mut().insert(hk, val.clone());
+            }
+            Value::Unit
+        }
+        _ => Value::Unit,
+    }
+}
+
+fn intrinsic_map_has(_vm: &Vm, args: &[Value]) -> Value {
+    match (args.first(), args.get(1)) {
+        (Some(Value::Map(m)), Some(key)) => HashKey::try_from(key).map_or_else(
+            |_| bool_object(false),
+            |hk| bool_object(m.borrow().contains_key(&hk)),
+        ),
+        _ => bool_object(false),
+    }
+}
+
+fn intrinsic_map_delete(_vm: &Vm, args: &[Value]) -> Value {
+    match (args.first(), args.get(1)) {
+        (Some(Value::Map(m)), Some(key)) => {
+            if let Ok(hk) = HashKey::try_from(key) {
+                let _prev = m.borrow_mut().remove(&hk);
+            }
+            Value::Unit
+        }
+        _ => Value::Unit,
+    }
+}
+
+fn intrinsic_map_keys(_vm: &Vm, args: &[Value]) -> Value {
+    match args.first() {
+        Some(Value::Map(m)) => {
+            let keys: Vec<Value> = m.borrow().keys().map(Value::from).collect();
+            Value::Array(Rc::new(RefCell::new(keys)))
+        }
+        _ => Value::Array(Rc::new(RefCell::new(Vec::new()))),
+    }
+}
+
+fn intrinsic_map_values(_vm: &Vm, args: &[Value]) -> Value {
+    match args.first() {
+        Some(Value::Map(m)) => {
+            let vals: Vec<Value> = m.borrow().values().cloned().collect();
+            Value::Array(Rc::new(RefCell::new(vals)))
+        }
+        _ => Value::Array(Rc::new(RefCell::new(Vec::new()))),
+    }
+}
+
+fn intrinsic_map_len(_vm: &Vm, args: &[Value]) -> Value {
+    match args.first() {
+        Some(Value::Map(m)) => Value::Int(i64::try_from(m.borrow().len()).unwrap_or(i64::MAX)),
+        _ => Value::Int(0),
     }
 }
 

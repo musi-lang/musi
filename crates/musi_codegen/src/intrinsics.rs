@@ -113,6 +113,32 @@ define_intrinsics! {
     53 => Fmin           "fmin",
     54 => Fmax           "fmax",
     55 => Fclamp         "fclamp",
+    // -- string extended --
+    56 => StringSplit    "string_split",
+    57 => StringTrim     "string_trim",
+    58 => StringToLower  "string_to_lower",
+    59 => StringToUpper  "string_to_upper",
+    60 => StringToFloat  "string_to_float",
+    61 => StringIndexOf  "string_index_of",
+    // -- numeric casts --
+    62 => IntToFloat     "int_to_float",
+    63 => FloatToInt     "float_to_int",
+    // -- math trig --
+    64 => Sin            "sin",
+    65 => Cos            "cos",
+    66 => Tan            "tan",
+    67 => Atan2          "atan2",
+    68 => Log            "log",
+    69 => Exp            "exp",
+    // -- map --
+    70 => MapNew         "map_new",
+    71 => MapGet         "map_get",
+    72 => MapSet         "map_set",
+    73 => MapHas         "map_has",
+    74 => MapDelete      "map_delete",
+    75 => MapKeys        "map_keys",
+    76 => MapValues      "map_values",
+    77 => MapLen         "map_len",
 }
 
 /// Sentinel stored in `SymbolEntry.intrinsic_id` for non-intrinsic functions.

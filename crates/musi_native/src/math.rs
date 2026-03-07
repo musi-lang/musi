@@ -30,4 +30,28 @@ pub mod math {
     pub fn fclamp(n: f64, lo: f64, hi: f64) -> f64 {
         n.clamp(lo, hi)
     }
+
+    pub fn sin(x: f64) -> f64 {
+        x.sin()
+    }
+
+    pub fn cos(x: f64) -> f64 {
+        x.cos()
+    }
+
+    pub fn tan(x: f64) -> f64 {
+        x.tan()
+    }
+
+    pub fn atan2(y: f64, x: f64) -> f64 {
+        y.atan2(x)
+    }
+
+    pub fn log(x: f64) -> f64 {
+        x.ln()
+    }
+
+    pub fn exp(x: f64) -> f64 {
+        x.exp()
+    }
 }
