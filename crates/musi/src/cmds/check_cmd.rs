@@ -1,12 +1,10 @@
-use std::collections::HashMap;
 use std::path::PathBuf;
-use std::process;
 
 use clap::Args;
 use musi_shared::{DiagnosticBag, Interner, SourceDb};
 
 use crate::compiler::{
-    PRELUDE_FILENAME, PRELUDE_SRC, collect_and_parse_deps, parse_file, print_diags_and_exit,
+    self, PRELUDE_FILENAME, PRELUDE_SRC, collect_and_parse_deps, parse_file, print_diags_and_exit,
     read_file,
 };
 
@@ -35,17 +33,6 @@ pub fn run(args: &CheckArgs) {
         &interner,
     );
 
-    // Analyze prelude with no imports → get its exports.
-    let empty_imports: HashMap<String, musi_sema::ModuleExports> = HashMap::new();
-    let prelude_result = musi_sema::analyze(
-        &prelude_module,
-        &interner,
-        prelude_file_id,
-        &mut diags,
-        &empty_imports,
-    );
-    let prelude_exports = musi_sema::exports_of(&prelude_result, &prelude_module, &interner);
-
     if diags.has_errors() {
         print_diags_and_exit(&diags, &source_db);
     }
@@ -59,37 +46,26 @@ pub fn run(args: &CheckArgs) {
     }
 
     // Parse deps (best-effort: tolerate missing files).
-    let user_file_path = args.file.as_path();
     let dep_modules = collect_and_parse_deps(
         &user_module,
-        user_file_path,
+        args.file.as_path(),
         &mut interner,
         &mut source_db,
         &mut diags,
         true,
     );
 
-    // Analyze each dep with prelude exports + already-analyzed preceding deps.
-    // Seed the map with prelude exports under an internal key.
-    let mut import_map: HashMap<String, musi_sema::ModuleExports> = HashMap::new();
-    let _prev = import_map.insert(PRELUDE_FILENAME.to_owned(), prelude_exports);
-
-    for (path, dep_module, dep_file_id) in &dep_modules {
-        let dep_result =
-            musi_sema::analyze(dep_module, &interner, *dep_file_id, &mut diags, &import_map);
-        let exports = musi_sema::exports_of(&dep_result, dep_module, &interner);
-        let _prev = import_map.insert(path.clone(), exports);
-    }
-
-    let _result = musi_sema::analyze(&user_module, &interner, file_id, &mut diags, &import_map);
-
-    if diags.has_errors() {
-        use std::io::{IsTerminal, stderr};
-        let use_color = stderr().is_terminal();
-        for diag in diags.iter() {
-            eprintln!("{}", diag.render_rich(&source_db, use_color));
-        }
-        process::exit(1);
+    // Run sema.
+    if !compiler::run_sema(
+        &prelude_module,
+        prelude_file_id,
+        &dep_modules,
+        &user_module,
+        file_id,
+        &interner,
+        &mut diags,
+    ) {
+        print_diags_and_exit(&diags, &source_db);
     }
 
     println!("\u{2713} no type errors");

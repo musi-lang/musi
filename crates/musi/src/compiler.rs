@@ -16,6 +16,27 @@ use crate::config::{MusiConfig, find_and_load};
 pub const PRELUDE_SRC: &str = include_str!("../../../std/prelude.ms");
 pub const PRELUDE_FILENAME: &str = "<prelude>";
 
+/// Embedded std library sources -- served without disk access.
+/// Keys match the import path strings used in Musi source (without .ms extension).
+fn embedded_std(path: &str) -> Option<&'static str> {
+    match path {
+        "std/assert" => Some(include_str!("../../../std/assert.ms")),
+        "std/math" => Some(include_str!("../../../std/math.ms")),
+        "std/string" => Some(include_str!("../../../std/string.ms")),
+        "std/core/bool" => Some(include_str!("../../../std/core/bool.ms")),
+        "std/core/option" => Some(include_str!("../../../std/core/option.ms")),
+        "std/core/ordering" => Some(include_str!("../../../std/core/ordering.ms")),
+        "std/core/pair" => Some(include_str!("../../../std/core/pair.ms")),
+        "std/core/result" => Some(include_str!("../../../std/core/result.ms")),
+        "std/collections/array" => Some(include_str!("../../../std/collections/array.ms")),
+        "std/collections/list" => Some(include_str!("../../../std/collections/list.ms")),
+        "std/collections/map" => Some(include_str!("../../../std/collections/map.ms")),
+        "std/collections/set" => Some(include_str!("../../../std/collections/set.ms")),
+        "std/encoding/csv" => Some(include_str!("../../../std/encoding/csv.ms")),
+        _ => None,
+    }
+}
+
 pub fn read_file(file_path: &str) -> String {
     match fs::read_to_string(file_path) {
         Ok(s) => s,
@@ -105,7 +126,13 @@ pub fn collect_and_parse_deps(
 
         let dep_src_owned: String;
         let key: String;
-        if let Some(native_src) = musi_native::source_for(&import_path) {
+        if let Some(std_src) = embedded_std(&import_path) {
+            key = import_path.clone();
+            if !compiled.insert(key.clone()) {
+                continue;
+            }
+            dep_src_owned = std_src.to_owned();
+        } else if let Some(native_src) = musi_native::source_for(&import_path) {
             key = import_path.clone();
             if !compiled.insert(key.clone()) {
                 continue;
@@ -137,6 +164,43 @@ pub fn collect_and_parse_deps(
         deps.push((import_path, dep_module, dep_file_id));
     }
     deps
+}
+
+/// Run semantic analysis on parsed prelude, deps, and user module.
+/// Returns `true` if clean (no errors). Diagnostics are accumulated in `diags`.
+pub fn run_sema(
+    prelude_module: &ParsedModule,
+    prelude_file_id: FileId,
+    deps: &[ResolvedDep],
+    user_module: &ParsedModule,
+    user_file_id: FileId,
+    interner: &Interner,
+    diags: &mut DiagnosticBag,
+) -> bool {
+    use std::collections::HashMap;
+
+    let empty_imports: HashMap<String, musi_sema::ModuleExports> = HashMap::new();
+    let prelude_result = musi_sema::analyze(
+        prelude_module,
+        interner,
+        prelude_file_id,
+        diags,
+        &empty_imports,
+    );
+    let prelude_exports = musi_sema::exports_of(&prelude_result, prelude_module, interner);
+
+    let mut import_map: HashMap<String, musi_sema::ModuleExports> = HashMap::new();
+    let _ = import_map.insert(PRELUDE_FILENAME.to_owned(), prelude_exports);
+
+    for (path, dep_module, dep_file_id) in deps {
+        let dep_result = musi_sema::analyze(dep_module, interner, *dep_file_id, diags, &import_map);
+        let exports = musi_sema::exports_of(&dep_result, dep_module, interner);
+        let _ = import_map.insert(path.clone(), exports);
+    }
+
+    let _result = musi_sema::analyze(user_module, interner, user_file_id, diags, &import_map);
+
+    !diags.has_errors()
 }
 
 /// Full compile pipeline: parse + BFS deps + codegen. Exits on error.

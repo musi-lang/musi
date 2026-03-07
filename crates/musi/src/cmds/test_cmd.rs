@@ -3,10 +3,17 @@ use std::path::{Path, PathBuf};
 use std::process;
 
 use clap::Args;
+use musi_codegen::emit;
+use musi_lex::lex;
 use musi_native::REGISTRY;
+use musi_parse::parse;
+use musi_shared::{DiagnosticBag, Interner, SourceDb};
 use musi_vm::{NativeRegistry, Vm};
 
-use crate::compiler;
+use crate::compiler::{
+    self, PRELUDE_FILENAME, PRELUDE_SRC, collect_and_parse_deps, parse_file, print_diags_and_exit,
+    read_file,
+};
 
 #[derive(Args)]
 pub struct TestArgs {
@@ -33,8 +40,76 @@ pub fn run(args: TestArgs) {
     let mut total_failed = 0usize;
 
     for file in &files {
-        let path = file.to_string_lossy();
-        let module = compiler::compile_file(&path);
+        let path_str = file.to_string_lossy();
+
+        let src = read_file(&path_str);
+        let mut interner = Interner::new();
+        let mut source_db = SourceDb::new();
+        let mut diags = DiagnosticBag::new();
+
+        // Parse prelude.
+        let prelude_file_id = source_db.add(PRELUDE_FILENAME, PRELUDE_SRC);
+        let prelude_lexed = lex(PRELUDE_SRC, prelude_file_id, &mut interner, &mut diags);
+        let prelude_module = parse(
+            &prelude_lexed.tokens,
+            prelude_file_id,
+            &mut diags,
+            &interner,
+        );
+
+        // Parse user file.
+        let (user_file_id, user_module) =
+            parse_file(&path_str, &src, &mut interner, &mut source_db, &mut diags);
+
+        if diags.has_errors() {
+            print_diags_and_exit(&diags, &source_db);
+        }
+
+        // Parse deps.
+        let deps = collect_and_parse_deps(
+            &user_module,
+            file.as_path(),
+            &mut interner,
+            &mut source_db,
+            &mut diags,
+            false,
+        );
+
+        if diags.has_errors() {
+            print_diags_and_exit(&diags, &source_db);
+        }
+
+        // Run sema check.
+        if !compiler::run_sema(
+            &prelude_module,
+            prelude_file_id,
+            &deps,
+            &user_module,
+            user_file_id,
+            &interner,
+            &mut diags,
+        ) {
+            print_diags_and_exit(&diags, &source_db);
+        }
+
+        // Codegen.
+        let dep_paths: Vec<&str> = deps.iter().map(|(p, _, _)| p.as_str()).collect();
+        let dep_modules: Vec<&musi_parse::ParsedModule> = deps.iter().map(|(_, m, _)| m).collect();
+        let module = match emit(
+            &prelude_module,
+            &dep_modules,
+            &dep_paths,
+            &user_module,
+            &interner,
+        ) {
+            Ok(m) => m,
+            Err(e) => {
+                eprintln!("codegen error in {path_str}: {e}");
+                process::exit(1);
+            }
+        };
+
+        // Run tests.
         let main_fn_idx =
             u16::try_from(module.function_table.len() - 1).expect("function table fits u16");
 
@@ -43,14 +118,14 @@ pub fn run(args: TestArgs) {
         match vm.run_tests(main_fn_idx) {
             Ok(()) => {}
             Err(e) => {
-                eprintln!("runtime error in {path}: {e}");
+                eprintln!("runtime error in {path_str}: {e}");
                 process::exit(1);
             }
         }
 
         let results = &vm.test_results;
         if !results.is_empty() {
-            println!("{path}");
+            println!("{path_str}");
         }
         for r in results {
             if r.passed {
