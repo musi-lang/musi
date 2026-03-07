@@ -758,3 +758,44 @@ writeln(int_to_string(s));
 "#,
     );
 }
+
+#[test]
+fn named_record_pattern_in_match() {
+    let _r = run_src(
+        r#"
+record Point { x: Int, y: Int };
+const p := Point.{ x := 3, y := 7 };
+const result := match p with (
+    Point { x, y } => x + y
+);
+writeln(int_to_string(result));
+"#,
+    );
+}
+
+#[test]
+fn do_while_loop() {
+    let _r = run_src(
+        r#"
+var i := 0;
+loop (i <- i + 1) while i < 5;
+writeln(int_to_string(i));
+"#,
+    );
+}
+
+#[test]
+fn cycle_guard() {
+    let _r = run_src(
+        r#"
+var i := 0;
+var s := 0;
+while i < 10 loop (
+    i <- i + 1;
+    cycle if i % 2 = 0;
+    s <- s + i;
+);
+writeln(int_to_string(s));
+"#,
+    );
+}

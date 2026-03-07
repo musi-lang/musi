@@ -36,7 +36,12 @@ pub(super) fn emit_pattern_test(
     out: &mut FnEmitter,
 ) -> Result<Option<usize>, CodegenError> {
     match pat {
-        Pat::Wild { .. } | Pat::Prod { .. } => Ok(None),
+        Pat::Wild { .. }
+        | Pat::Prod { .. }
+        | Pat::Ident {
+            suffix: Some(PatSuffix::Named { .. }),
+            ..
+        } => Ok(None),
 
         Pat::Ident {
             name, suffix: None, ..
@@ -54,10 +59,17 @@ pub(super) fn emit_pattern_test(
             ..
         } => {
             let name_str = arenas.interner.resolve(*name);
-            if state.variant_map.contains_key(name_str) {
-                return Err(CodegenError::VariantPatternRequiresDot(name_str.into()));
-            }
-            Err(CodegenError::UnsupportedExpr)
+            state
+                .variant_map
+                .get(name_str)
+                .map(|vinfo| {
+                    Some(emit_discriminant_test(
+                        vinfo.discriminant,
+                        scrutinee_slot,
+                        out,
+                    ))
+                })
+                .ok_or_else(|| CodegenError::VariantPatternRequiresDot(name_str.into()))
         }
 
         Pat::Lit { value, .. } => {
@@ -88,6 +100,7 @@ pub(super) fn emit_pattern_test(
 
 pub(super) fn emit_pattern_bindings(
     arenas: &EmitArenas<'_>,
+    state: &EmitState,
     pat: &Pat,
     scrutinee_slot: u16,
     out: &mut FnEmitter,
@@ -114,7 +127,7 @@ pub(super) fn emit_pattern_bindings(
                 out.push(&Opcode::LdLoc(scrutinee_slot));
                 out.push(&Opcode::LdFld(field_idx));
                 out.push(&Opcode::StLoc(temp_slot));
-                emit_pattern_bindings(arenas, sub_pat, temp_slot, out)?;
+                emit_pattern_bindings(arenas, state, sub_pat, temp_slot, out)?;
             }
             Ok(())
         }
@@ -136,7 +149,7 @@ pub(super) fn emit_pattern_bindings(
                         out.push(&Opcode::LdLoc(scrutinee_slot));
                         out.push(&Opcode::LdFld(field_idx));
                         out.push(&Opcode::StLoc(temp_slot));
-                        emit_pattern_bindings(arenas, alias_pat, temp_slot, out)?;
+                        emit_pattern_bindings(arenas, state, alias_pat, temp_slot, out)?;
                     }
                 } else {
                     let bind_name = arenas.interner.resolve(field.name).to_owned();
@@ -145,6 +158,60 @@ pub(super) fn emit_pattern_bindings(
                     out.push(&Opcode::LdFld(field_idx));
                     out.push(&Opcode::StLoc(slot));
                 }
+            }
+            Ok(())
+        }
+
+        // Named record pattern: Point { x, y } — look up field order from state.type_map
+        Pat::Ident {
+            name,
+            suffix: Some(PatSuffix::Named { fields, .. }),
+            ..
+        } => {
+            let type_name = arenas.interner.resolve(*name);
+            let field_names = state
+                .type_map
+                .get(type_name)
+                .map(|ti| ti.field_names.clone())
+                .unwrap_or_default();
+            for field in fields {
+                let field_str = arenas.interner.resolve(field.name);
+                let field_idx = field_names
+                    .iter()
+                    .position(|n| n == field_str)
+                    .and_then(|i| u16::try_from(i).ok())
+                    .ok_or(CodegenError::UnsupportedExpr)?;
+                if let Some(alias_pat) = &field.pat {
+                    let temp_name = format!("$nrec_{}_{}", scrutinee_slot, out.next_slot);
+                    let temp_slot = out.define_local(&temp_name)?;
+                    out.push(&Opcode::LdLoc(scrutinee_slot));
+                    out.push(&Opcode::LdFld(field_idx));
+                    out.push(&Opcode::StLoc(temp_slot));
+                    emit_pattern_bindings(arenas, state, alias_pat, temp_slot, out)?;
+                } else {
+                    let slot = out.define_local(field_str)?;
+                    out.push(&Opcode::LdLoc(scrutinee_slot));
+                    out.push(&Opcode::LdFld(field_idx));
+                    out.push(&Opcode::StLoc(slot));
+                }
+            }
+            Ok(())
+        }
+
+        // Positional variant pattern: Name(a, b) — same as DotPrefix but without dot
+        Pat::Ident {
+            suffix: Some(PatSuffix::Positional { args, .. }),
+            ..
+        } => {
+            for (field_i, sub_pat) in args.iter().enumerate() {
+                let field_idx =
+                    u16::try_from(field_i + 1).map_err(|_| CodegenError::UnsupportedExpr)?;
+                let temp_name = format!("$pos_{}_{}_{}", scrutinee_slot, field_i, out.next_slot);
+                let temp_slot = out.define_local(&temp_name)?;
+                out.push(&Opcode::LdLoc(scrutinee_slot));
+                out.push(&Opcode::LdFld(field_idx));
+                out.push(&Opcode::StLoc(temp_slot));
+                emit_pattern_bindings(arenas, state, sub_pat, temp_slot, out)?;
             }
             Ok(())
         }
@@ -173,7 +240,7 @@ pub(super) fn emit_pattern_bindings(
                             out.push(&Opcode::LdLoc(scrutinee_slot));
                             out.push(&Opcode::LdFld(field_idx));
                             out.push(&Opcode::StLoc(temp_slot));
-                            emit_pattern_bindings(arenas, sub_pat, temp_slot, out)?;
+                            emit_pattern_bindings(arenas, state, sub_pat, temp_slot, out)?;
                         }
                     }
                 }
@@ -265,7 +332,7 @@ pub(super) fn emit_match(
             emit_pattern_test(arenas, state, &arm.pat, scrutinee_slot, module, out)?;
 
         out.push_scope();
-        emit_pattern_bindings(arenas, &arm.pat, scrutinee_slot, out)?;
+        emit_pattern_bindings(arenas, state, &arm.pat, scrutinee_slot, out)?;
         let guard_fixup: Option<usize> = if let Some(guard_idx) = arm.guard {
             let guard_expr = arenas.exprs.get(guard_idx).clone();
             emit_expr(arenas, state, &guard_expr, module, out)?;

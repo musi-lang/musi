@@ -48,7 +48,7 @@ fn emit_branch_cond(
             let fixup = test_fixup
                 .map_or_else(|| Ok(out.emit_jump_placeholder(FnEmitter::BR_FALSE)), Ok)?;
             out.push_scope();
-            emit_pattern_bindings(arenas, pat, tmp_slot, out)?;
+            emit_pattern_bindings(arenas, state, pat, tmp_slot, out)?;
             Ok(fixup)
         }
     }
@@ -104,16 +104,23 @@ pub(super) fn emit_if(
 
     let mut end_fixups = vec![first_end_fixup];
     for branch in data.elif_chains {
-        if branch.guard.is_some() {
-            return Err(CodegenError::UnsupportedExpr);
-        }
         let next_fixup = emit_branch_cond(arenas, state, &branch.cond, module, out)?;
+        let guard_fixup = if let Some(guard_idx) = branch.guard {
+            let guard_expr = arenas.exprs.get(guard_idx).clone();
+            emit_expr(arenas, state, &guard_expr, module, out)?;
+            Some(out.emit_jump_placeholder(FnEmitter::BR_FALSE))
+        } else {
+            None
+        };
         let branch_body = arenas.exprs.get(branch.body).clone();
         emit_expr(arenas, state, &branch_body, module, out)?;
         if matches!(branch.cond.as_ref(), Cond::Case { .. }) {
             out.pop_scope();
         }
         end_fixups.push(out.emit_jump_placeholder(FnEmitter::BR));
+        if let Some(gf) = guard_fixup {
+            out.patch_jump_to_here(gf)?;
+        }
         out.patch_jump_to_here(next_fixup)?;
     }
 
@@ -170,6 +177,7 @@ pub(super) fn emit_loop(
     arenas: &EmitArenas<'_>,
     state: &mut EmitState,
     body: Idx<Expr>,
+    post_cond: Option<&Cond>,
     module: &mut Module,
     out: &mut FnEmitter,
 ) -> Result<(), CodegenError> {
@@ -177,7 +185,14 @@ pub(super) fn emit_loop(
     let body_expr = arenas.exprs.get(body).clone();
     emit_expr(arenas, state, &body_expr, module, out)?;
     out.push(&Opcode::Drop);
-    out.emit_br_back(start_pos)?;
+    if let Some(cond) = post_cond {
+        emit_cond(arenas, state, cond, module, out)?;
+        let end_fixup = out.emit_jump_placeholder(FnEmitter::BR_FALSE);
+        out.emit_br_back(start_pos)?;
+        out.patch_jump_to_here(end_fixup)?;
+    } else {
+        out.emit_br_back(start_pos)?;
+    }
     out.close_loop()
 }
 
@@ -323,7 +338,7 @@ pub(super) fn emit_for(
     // For non-Ident patterns, bind into an inner scope
     if !is_ident {
         out.push_scope();
-        emit_pattern_bindings(arenas, pat, elem_slot, out)?;
+        emit_pattern_bindings(arenas, state, pat, elem_slot, out)?;
     }
 
     let body_expr = arenas.exprs.get(body).clone();

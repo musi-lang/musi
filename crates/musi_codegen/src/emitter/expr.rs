@@ -1,10 +1,10 @@
 #![allow(clippy::too_many_lines)]
 
-use musi_ast::{Expr, FieldInit, Modifier, Pat, PostfixOp, PrefixOp};
+use musi_ast::{AttrArg, Expr, FieldInit, LitValue, Modifier, Pat, PostfixOp, PrefixOp};
 use musi_shared::Idx;
 
 use crate::error::CodegenError;
-use crate::{Module, Opcode};
+use crate::{ConstEntry, Module, Opcode};
 
 use super::call::{emit_static_call, emit_variant_construct};
 use super::control::{ForData, IfData, emit_binary, emit_for, emit_if, emit_loop, emit_while};
@@ -115,7 +115,7 @@ pub(super) fn emit_expr(
                 let tmp_name = format!("$bind_{}", out.next_slot);
                 let tmp_slot = out.define_local(&tmp_name)?;
                 out.push(&Opcode::StLoc(tmp_slot));
-                super::pattern::emit_pattern_bindings(arenas, pat, tmp_slot, out)?;
+                super::pattern::emit_pattern_bindings(arenas, state, pat, tmp_slot, out)?;
             }
             out.push(&Opcode::LdImmUnit);
             Ok(())
@@ -235,12 +235,7 @@ pub(super) fn emit_expr(
 
         Expr::Loop {
             body, post_cond, ..
-        } => {
-            if post_cond.is_some() {
-                return Err(CodegenError::UnsupportedExpr);
-            }
-            emit_loop(arenas, state, *body, module, out)
-        }
+        } => emit_loop(arenas, state, *body, post_cond.as_deref(), module, out),
 
         Expr::For {
             pat,
@@ -272,13 +267,23 @@ pub(super) fn emit_expr(
         }
 
         Expr::Cycle { label, guard, .. } => {
-            if label.is_some() || guard.is_some() {
+            if label.is_some() {
                 return Err(CodegenError::UnsupportedExpr);
             }
             let start_pos = out
                 .current_loop_start()
                 .ok_or(CodegenError::UnsupportedExpr)?;
-            out.emit_br_back(start_pos)?;
+            if let Some(guard_idx) = guard {
+                let guard_expr = arenas.exprs.get(*guard_idx).clone();
+                emit_expr(arenas, state, &guard_expr, module, out)?;
+                let skip_fixup = out.emit_jump_placeholder(FnEmitter::BR_FALSE);
+                out.emit_br_back(start_pos)?;
+                out.patch_jump_to_here(skip_fixup)?;
+                // Guard was false: fall through, push Unit so caller can Drop
+                out.push(&Opcode::LdImmUnit);
+            } else {
+                out.emit_br_back(start_pos)?;
+            }
             Ok(())
         }
 
@@ -345,6 +350,7 @@ pub(super) fn emit_expr(
         }
 
         Expr::FnDef {
+            attrs,
             name,
             params,
             body: Some(body_idx),
@@ -361,6 +367,27 @@ pub(super) fn emit_expr(
             let slot = out.define_local(&fn_name)?;
             out.push(&Opcode::LdFnIdx(fn_idx));
             out.push(&Opcode::StLoc(slot));
+
+            // Emit test registration for #[test("label")] functions
+            for attr in attrs {
+                if arenas.interner.resolve(attr.name) == "test"
+                    && let Some(AttrArg::Value {
+                        value: LitValue::Str(label_sym),
+                        ..
+                    }) = attr.args.first()
+                {
+                    let raw = arenas.interner.resolve(*label_sym);
+                    let label: Box<str> = raw.trim_matches('"').into();
+                    let label_const = module.push_const(ConstEntry::String(label))?;
+                    if let Some(&test_fn_idx) = state.fn_map.get("test") {
+                        out.push(&Opcode::LdConst(label_const));
+                        out.push(&Opcode::LdFnIdx(fn_idx));
+                        out.push(&Opcode::Call(test_fn_idx));
+                        out.push(&Opcode::Drop);
+                    }
+                }
+            }
+
             out.push(&Opcode::LdImmUnit);
             Ok(())
         }
