@@ -21,6 +21,7 @@ musi_codegen = { path = "../musi_codegen" }
 musi_vm      = { path = "../musi_vm" }
 musi_native  = { path = "../musi_native" }
 musi_sema    = { path = "../musi_sema" }
+clap.workspace = true
 
 [lints]
 workspace = true
