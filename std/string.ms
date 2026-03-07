@@ -1,7 +1,7 @@
 // std/string.ms — pure String utilities built on musi:string intrinsics
 // Intrinsic ops: import { string_length, string_slice, string_to_int, string_contains, nat_to_string } from "musi:string"
 
-import { string_length, string_slice } from "musi:string"
+import { string_length, string_slice } from "musi:string";
 
 export fn string_is_empty(s: String): Bool => string_length(s) = 0;
 
@@ -34,3 +34,24 @@ export fn string_pad_end(s: String, width: Int, pad: String): String => (
     while string_length(result) < width loop (result <- string_concat(result, pad));
     result
 );
+
+export fn string_join(parts: []String, sep: String): String => (
+    const n := array_length(parts);
+    if n = 0 then ""
+    else (
+        var result := array_get(parts, 0);
+        var i := 1;
+        while i < n loop (
+            result <- string_concat(result, string_concat(sep, array_get(parts, i)));
+            i <- i + 1
+        );
+        result
+    )
+);
+
+export fn string_lines(s: String): []String => string_split(s, "\n");
+
+export fn string_words(s: String): []String => string_split(string_trim(s), " ");
+
+export fn string_replace(s: String, pat: String, to: String): String =>
+    string_join(string_split(s, pat), to);
