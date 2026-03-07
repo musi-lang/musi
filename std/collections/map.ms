@@ -1,24 +1,24 @@
 // std/collections/map.ms — HashMap utilities
-// NOTE: Map handles are typed as String in signatures below; this is a placeholder
-// until a proper opaque Map type exists. The runtime value is Value::Map, not a string.
-// Keys must be Int or String at runtime. Prelude exposes map_new/get/set/has/delete/keys/values/len.
+// Map handles use the opaque Map type from prelude.
+// Key and value types are String (pending generics for Map['K,'V]).
+// Prelude exposes map_new/get/set/has/delete/keys/values/len.
 // import { map_get_or, map_update, map_from_pairs, map_to_pairs, map_count_by, map_merge } from "std/collections/map"
 
 import { unwrap_or } from "std/core/option";
 
-export fn map_get_or(m: String, key: String, default: String): String =>
+export fn map_get_or(m: Map, key: String, default: String): String =>
     unwrap_or(map_get(m, key), default);
 
-export fn map_update(m: String, key: String, f: String -> String, default: String): Unit =>
+export fn map_update(m: Map, key: String, f: String -> String, default: String): Unit =>
     map_set(m, key, f(map_get_or(m, key, default)));
 
-export fn map_from_pairs(pairs: [](String, String)): String => (
+export fn map_from_pairs(pairs: [](String, String)): Map => (
     const m := map_new();
     for pair in pairs loop (map_set(m, pair.0, pair.1));
     m
 );
 
-export fn map_to_pairs(m: String): [](String, String) => (
+export fn map_to_pairs(m: Map): [](String, String) => (
     var result := [];
     for k in map_keys(m) loop (
         array_push(result, (k, map_get_or(m, k, "")))
@@ -27,7 +27,7 @@ export fn map_to_pairs(m: String): [](String, String) => (
 );
 
 // Count occurrences; values stored as int strings ("0", "1", ...).
-export fn map_count_by['T](arr: []'T, key_fn: 'T -> String): String => (
+export fn map_count_by['T](arr: []'T, key_fn: 'T -> String): Map => (
     const m := map_new();
     for x in arr loop (
         const k := key_fn(x);
@@ -38,7 +38,7 @@ export fn map_count_by['T](arr: []'T, key_fn: 'T -> String): String => (
     m
 );
 
-export fn map_merge(a: String, b: String): String => (
+export fn map_merge(a: Map, b: Map): Map => (
     const r := map_new();
     for k in map_keys(a) loop (map_set(r, k, map_get_or(a, k, "")));
     for k in map_keys(b) loop (map_set(r, k, map_get_or(b, k, "")));

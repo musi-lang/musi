@@ -159,3 +159,41 @@ given Iterable[[]'T, 'T] {
 #[intrinsic("assert")]     export extrin fn assert(cond: Bool): Unit;
 #[intrinsic("assert_msg")] export extrin fn assert_msg(cond: Bool, msg: String): Unit;
 #[intrinsic("test")]       export extrin fn test(name: String, f: () -> Unit): Unit;
+
+// -- string core (musi:string) --
+#[intrinsic("string_length")]   export extrin fn string_length(s: String): Int;
+#[intrinsic("string_slice")]    export extrin fn string_slice(s: String, start: Int, end: Int): String;
+#[intrinsic("string_to_int")]   export extrin fn string_to_int(s: String): Option[Int];
+#[intrinsic("string_contains")] export extrin fn string_contains(s: String, sub: String): Bool;
+#[intrinsic("nat_to_string")]   export extrin fn nat_to_string(n: Nat): String;
+
+// -- string extended --
+#[intrinsic("string_split")]    export extrin fn string_split(s: String, delim: String): []String;
+#[intrinsic("string_trim")]     export extrin fn string_trim(s: String): String;
+#[intrinsic("string_to_lower")] export extrin fn string_to_lower(s: String): String;
+#[intrinsic("string_to_upper")] export extrin fn string_to_upper(s: String): String;
+#[intrinsic("string_to_float")] export extrin fn string_to_float(s: String): Option[Float];
+#[intrinsic("string_index_of")] export extrin fn string_index_of(s: String, sub: String): Option[Int];
+
+// -- numeric casts --
+#[intrinsic("int_to_float")] export extrin fn int_to_float(n: Int): Float;
+#[intrinsic("float_to_int")] export extrin fn float_to_int(f: Float): Int;
+
+// -- math trig (musi:math) --
+#[intrinsic("sin")]   export extrin fn sin(x: Float): Float;
+#[intrinsic("cos")]   export extrin fn cos(x: Float): Float;
+#[intrinsic("tan")]   export extrin fn tan(x: Float): Float;
+#[intrinsic("atan2")] export extrin fn atan2(y: Float, x: Float): Float;
+#[intrinsic("log")]   export extrin fn log(x: Float): Float;
+#[intrinsic("exp")]   export extrin fn exp(x: Float): Float;
+
+// -- map (keys must be Int or String at runtime; values typed as String pending generics) --
+export opaque record Map {};
+#[intrinsic("map_new")]    export extrin fn map_new(): Map;
+#[intrinsic("map_get")]    export extrin fn map_get(m: Map, key: String): Option[String];
+#[intrinsic("map_set")]    export extrin fn map_set(m: Map, key: String, val: String): Unit;
+#[intrinsic("map_has")]    export extrin fn map_has(m: Map, key: String): Bool;
+#[intrinsic("map_delete")] export extrin fn map_delete(m: Map, key: String): Unit;
+#[intrinsic("map_keys")]   export extrin fn map_keys(m: Map): []String;
+#[intrinsic("map_values")] export extrin fn map_values(m: Map): []String;
+#[intrinsic("map_len")]    export extrin fn map_len(m: Map): Int;
