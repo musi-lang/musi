@@ -70,6 +70,12 @@ pub(crate) fn resolve_import_path(import_path: &str, importer: &Path) -> PathBuf
     }
 }
 
+/// Load project config from the current working directory (walks up to find mspackage.json).
+pub(crate) fn load_project_config() -> Option<(crate::config::MusiConfig, PathBuf)> {
+    let cwd = env::current_dir().ok()?;
+    crate::config::find_and_load(&cwd)
+}
+
 /// Full compile pipeline: parse + BFS deps + codegen. Exits on error.
 pub(crate) fn compile_file(file_path: &str) -> Module {
     let src = read_file(file_path);

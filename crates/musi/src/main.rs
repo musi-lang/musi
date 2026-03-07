@@ -6,6 +6,7 @@
 
 mod cmds;
 mod compiler;
+mod config;
 
 use clap::{Parser, Subcommand};
 

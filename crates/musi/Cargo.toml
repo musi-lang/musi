@@ -22,6 +22,8 @@ musi_vm      = { path = "../musi_vm" }
 musi_native  = { path = "../musi_native" }
 musi_sema    = { path = "../musi_sema" }
 clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 
 [lints]
 workspace = true
