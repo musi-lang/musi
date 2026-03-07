@@ -35,6 +35,9 @@ pub fn dispatch(vm: &Vm, intrinsic: Intrinsic, args: &[Value]) -> Value {
         Intrinsic::ArraySlice     => intrinsic_array_slice(vm, args),
         // Assert/AssertMsg/Test are handled directly in vm::exec_call before dispatch reaches here.
         Intrinsic::Assert | Intrinsic::AssertMsg | Intrinsic::Test => Value::Unit,
+        // System module intrinsics (musi:fs, musi:path, musi:os, musi:process, musi:time)
+        // are dispatched via Vm::registry before this function is called; unreachable here.
+        _ => Value::Unit,
     }
 }
 

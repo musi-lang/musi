@@ -8,7 +8,7 @@ use crate::value::Value;
 use crate::vm::Vm;
 
 fn make_vm() -> Vm {
-    Vm::new(Module::new())
+    Vm::new(Module::new(), crate::native_registry::NativeRegistry::empty())
 }
 
 #[test]

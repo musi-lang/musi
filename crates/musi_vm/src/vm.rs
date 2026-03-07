@@ -6,6 +6,7 @@ use musi_codegen::{ConstEntry, Module, Opcode};
 
 use crate::ffi::FfiState;
 use crate::native;
+use crate::native_registry::NativeRegistry;
 
 use crate::error::VmError;
 use crate::value::Value;
@@ -33,18 +34,20 @@ pub struct Vm {
     pub(crate) frames: Vec<CallFrame>,
     pub(crate) module: Module,
     pub(crate) ffi: FfiState,
+    pub(crate) registry: NativeRegistry,
     test_mode: bool,
     pub test_results: Vec<TestResult>,
 }
 
 impl Vm {
     #[must_use]
-    pub fn new(module: Module) -> Self {
+    pub fn new(module: Module, registry: NativeRegistry) -> Self {
         Self {
             stack: Vec::new(),
             frames: Vec::new(),
             ffi: FfiState::new(),
             module,
+            registry,
             test_mode: false,
             test_results: Vec::new(),
         }
@@ -727,7 +730,11 @@ impl Vm {
                         self.stack.push(Value::Unit);
                     }
                     _ => {
-                        let result = native::dispatch(self, intrinsic, &args);
+                        let result = if let Some(f) = self.registry.lookup_id(intrinsic_id) {
+                            f(&args)
+                        } else {
+                            native::dispatch(self, intrinsic, &args)
+                        };
                         self.stack.push(result);
                     }
                 }
