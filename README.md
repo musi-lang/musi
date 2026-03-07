@@ -15,6 +15,7 @@ Musi is a programming language with a mathematically-motivated type system, func
 
 - Records -- `record Point { x: Float, y: Float }` -- product types, fields separated by `,`
 - Choices -- `choice Shape { Circle(Float) | Rect(Float, Float) | Point }` -- sum types, variants separated by `|`
+- Generics -- `Option['T]`, `Map['K,'V]`, `fn id['T](x: 'T): 'T` -- type parameters in `[...]`
 - Spread -- `point.{ <..old, x := 1.0 }` -- functional record update via `<..` spread operator
 - Pattern matching -- exhaustive `match` with `case` arms, or-patterns, destructuring
 
