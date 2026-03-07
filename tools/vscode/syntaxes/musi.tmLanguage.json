@@ -154,7 +154,7 @@
         },
         "keywords": {
             "patterns": [
-                {{
+                {
                     "name": "keyword.control.musi",
                     "match": "\\b(if|then|elif|else|while|loop|for|in|match|case|with|return|break|cycle|defer|using|satisfies|where)\\b"
                 },
