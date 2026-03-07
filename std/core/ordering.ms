@@ -1,5 +1,5 @@
-// std/ordering.ms — Ordering type and comparison utilities
-// import { Ordering, is_lt, is_eq, is_gt, invert, then_with, compare_int } from "std/ordering"
+// std/core/ordering.ms — Ordering type and comparison utilities
+// import { Ordering, is_lt, is_eq, is_gt, invert, then_with, compare_int } from "std/core/ordering"
 
 export choice Ordering { Lt | Eq | Gt };
 

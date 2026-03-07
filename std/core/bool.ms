@@ -1,5 +1,5 @@
-// std/bool.ms — Bool utilities beyond the built-in operators (not, and, or, xor)
-// import { bool_to_string, bool_from_int } from "std/bool"
+// std/core/bool.ms — Bool utilities beyond the built-in operators (not, and, or, xor)
+// import { bool_to_string, bool_from_int } from "std/core/bool"
 
 // Bool → "true" / "false"
 export fn bool_to_string(b: Bool): String => match b with (

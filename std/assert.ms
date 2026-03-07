@@ -1,6 +1,6 @@
 // std/assert.ms — assertion helpers for use inside test() blocks
-// assert_msg and test are in the prelude.
-// import { assert_true, assert_false, assert_eq_int, assert_eq_str, assert_some, assert_none } from "std/assert"
+// assert, assert_msg, test are auto-imported from prelude.
+// import { assert_eq_int, assert_eq_str, assert_some, assert_none, ... } from "std/assert"
 
 export fn assert_true(cond: Bool): Unit =>
     assert_msg(cond, "expected true");

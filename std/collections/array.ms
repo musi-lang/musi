@@ -1,5 +1,5 @@
-// std/array.ms — array/slice utilities (arrays are []'T, backed by the VM)
-// import { array_map, array_filter, array_fold, array_find, array_contains, ... } from "std/array"
+// std/collections/array.ms — array/slice utilities (arrays are []'T, backed by the VM)
+// import { array_map, array_filter, array_fold, array_find, array_contains, ... } from "std/collections/array"
 
 export fn array_map['T, 'U](arr: []'T, f: 'T -> 'U): []'U => (
     var result := [];

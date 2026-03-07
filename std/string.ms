@@ -1,24 +1,21 @@
-// std/string.ms — String utilities
-// import { string_length, string_slice, string_contains, string_is_empty, ... } from "std/string"
+// std/string.ms — pure String utilities built on musi:string intrinsics
+// Intrinsic ops: import { string_length, string_slice, string_to_int, string_contains, nat_to_string } from "musi:string"
 
-#[intrinsic("string_length")]   export extrin fn string_length(s: String): Int;
-#[intrinsic("string_slice")]    export extrin fn slice(s: String, start: Int, end: Int): String;
-#[intrinsic("string_to_int")]   export extrin fn parse_int(s: String): Option[Int];
-#[intrinsic("string_contains")] export extrin fn string_contains(s: String, sub: String): Bool;
+import { string_length, string_slice } from "musi:string"
 
 export fn string_is_empty(s: String): Bool => string_length(s) = 0;
 
 export fn string_starts_with(s: String, prefix: String): Bool => (
     const plen := string_length(prefix);
     if plen > string_length(s) then .False
-    else string_contains(slice(s, 0, plen), prefix)
+    else string_contains(string_slice(s, 0, plen), prefix)
 );
 
 export fn string_ends_with(s: String, suffix: String): Bool => (
     const slen := string_length(s);
     const sflen := string_length(suffix);
     if sflen > slen then .False
-    else string_contains(slice(s, slen - sflen, slen), suffix)
+    else string_contains(string_slice(s, slen - sflen, slen), suffix)
 );
 
 fn repeat_aux(s: String, acc: String, n: Int): String =>

@@ -1,5 +1,5 @@
-// std/pair.ms — Pair['A, 'B] product type
-// import { Pair, new, first, second, swap, map_first, map_second } from "std/pair"
+// std/core/pair.ms — Pair['A, 'B] product type
+// import { Pair, new, first, second, swap, map_first, map_second } from "std/core/pair"
 
 export record Pair['A, 'B] { first: 'A, second: 'B };
 

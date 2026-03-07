@@ -1,5 +1,5 @@
-// std/option.ms — Option['T] utilities (type defined in prelude)
-// import { is_some, is_none, unwrap_or, option_map, option_and_then, ... } from "std/option"
+// std/core/option.ms — Option['T] utilities (type defined in prelude)
+// import { is_some, is_none, unwrap_or, option_map, option_and_then, ... } from "std/core/option"
 
 export fn is_some['T](opt: Option['T]): Bool => match opt with (
     .None    => .False

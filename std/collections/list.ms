@@ -1,5 +1,5 @@
-// std/list.ms — singly-linked List['T] and utilities
-// import { List, list_length, list_head, list_tail, list_map, list_filter, list_fold, ... } from "std/list"
+// std/collections/list.ms — singly-linked List['T] and utilities
+// import { List, list_length, list_head, list_tail, list_map, list_filter, list_fold, ... } from "std/collections/list"
 
 export choice List['T] { Nil | Cons('T, List['T]) };
 

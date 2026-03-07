@@ -1,5 +1,5 @@
-// std/result.ms — Expect['T, 'E] utilities (type defined in prelude; Pass=Ok, Fail=Err)
-// import { is_ok, is_err, result_unwrap_or, result_map, result_and_then, ... } from "std/result"
+// std/core/result.ms — Expect['T, 'E] utilities (type defined in prelude; Pass=Ok, Fail=Err)
+// import { is_ok, is_err, result_unwrap_or, result_map, result_and_then, ... } from "std/core/result"
 
 export fn is_ok['T, 'E](r: Expect['T, 'E]): Bool => match r with (
     .Fail(_) => .False
