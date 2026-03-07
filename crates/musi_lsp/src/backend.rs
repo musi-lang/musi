@@ -6,7 +6,7 @@ use tower_lsp_server::jsonrpc;
 use tower_lsp_server::ls_types::*;
 use tower_lsp_server::{Client, LanguageServer};
 
-use crate::diagnostics;
+use crate::{diagnostics, semantic_tokens};
 
 pub struct MusiBackend {
     client: Client,
@@ -43,6 +43,7 @@ impl LanguageServer for MusiBackend {
                     ..CompletionOptions::default()
                 }),
                 hover_provider: Some(HoverProviderCapability::Simple(false)),
+                semantic_tokens_provider: Some(semantic_tokens::provider()),
                 ..ServerCapabilities::default()
             },
         })
@@ -104,6 +105,16 @@ impl LanguageServer for MusiBackend {
         _params: CompletionParams,
     ) -> jsonrpc::Result<Option<CompletionResponse>> {
         Ok(Some(CompletionResponse::Array(keyword_completions())))
+    }
+
+    async fn semantic_tokens_full(
+        &self,
+        params: SemanticTokensParams,
+    ) -> jsonrpc::Result<Option<SemanticTokensResult>> {
+        let uri = params.text_document.uri;
+        let docs = self.documents.read().await;
+        let result = docs.get(&uri).map(|text| semantic_tokens::compute(text));
+        Ok(result)
     }
 }
 

@@ -147,10 +147,30 @@
 					],
 					"enumMember.declaration": [
 						"variable.other.enummember.musi"
+					],
+					"typeParameter": [
+						"storage.type.parameter.musi"
+					],
+					"typeParameter.declaration": [
+						"storage.type.parameter.musi"
 					]
 				}
 			}
 		],
+		"configurationDefaults": {
+			"[musi]": {
+				"editor.semanticHighlighting.enabled": true
+			},
+			"editor.semanticTokenColorCustomizations": {
+				"[*]": {
+					"rules": {
+						"*.mutable": {
+							"underline": true
+						}
+					}
+				}
+			}
+		},
 		"commands": [
 			{
 				"command": "musi.restartServer",

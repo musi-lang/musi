@@ -1,5 +1,6 @@
 mod backend;
 mod diagnostics;
+mod semantic_tokens;
 
 use backend::MusiBackend;
 use tower_lsp_server::{LspService, Server};
