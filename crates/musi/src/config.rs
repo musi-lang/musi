@@ -1,5 +1,6 @@
 //! mspackage.json configuration loader.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
@@ -17,6 +18,38 @@ pub(crate) struct CompilerOptions {
     pub(crate) no_emit: bool,
 }
 
+/// A task definition from the `tasks` field in mspackage.json.
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub(crate) enum TaskEntry {
+    /// Simple form: just a shell command string.
+    Simple(String),
+    /// Full form: command + optional description + optional dependencies.
+    Full {
+        command: String,
+        #[serde(default)]
+        #[allow(dead_code)]
+        description: String,
+        #[serde(default)]
+        dependencies: Vec<String>,
+    },
+}
+
+impl TaskEntry {
+    pub(crate) fn command(&self) -> &str {
+        match self {
+            Self::Simple(cmd) | Self::Full { command: cmd, .. } => cmd,
+        }
+    }
+
+    pub(crate) fn dependencies(&self) -> &[String] {
+        match self {
+            Self::Simple(_) => &[],
+            Self::Full { dependencies, .. } => dependencies,
+        }
+    }
+}
+
 /// Parsed representation of mspackage.json.
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -27,6 +60,8 @@ pub(crate) struct MusiConfig {
     /// Main entry point (default: "./index.ms").
     pub(crate) main: Option<String>,
     pub(crate) compiler_options: CompilerOptions,
+    #[serde(default)]
+    pub(crate) tasks: HashMap<String, TaskEntry>,
 }
 
 /// Name of the package manifest file.

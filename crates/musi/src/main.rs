@@ -10,7 +10,7 @@ mod config;
 
 use clap::{Parser, Subcommand};
 
-use cmds::{check_cmd, run_cmd, test_cmd};
+use cmds::{build_cmd, check_cmd, init_cmd, run_cmd, task_cmd, test_cmd};
 
 #[derive(Parser)]
 #[command(name = "musi", about = "The Musi language toolchain", version)]
@@ -23,17 +23,26 @@ struct Cli {
 enum Cmd {
     /// Compile and execute a Musi program
     Run(run_cmd::RunArgs),
+    /// Compile a Musi program to a .mso binary
+    Build(build_cmd::BuildArgs),
+    /// Initialize a new Musi package
+    Init(init_cmd::InitArgs),
     /// Type-check a Musi program
     Check(check_cmd::CheckArgs),
     /// Run tests (*.test.ms / *.spec.ms)
     Test(test_cmd::TestArgs),
+    /// Run a project task defined in mspackage.json
+    Task(task_cmd::TaskArgs),
 }
 
 fn main() {
     let cli = Cli::parse();
     match cli.command {
         Cmd::Run(args) => run_cmd::run(args),
+        Cmd::Build(args) => build_cmd::run(args),
+        Cmd::Init(args) => init_cmd::run(args),
         Cmd::Check(args) => check_cmd::run(args),
         Cmd::Test(args) => test_cmd::run(args),
+        Cmd::Task(args) => task_cmd::run(args),
     }
 }
