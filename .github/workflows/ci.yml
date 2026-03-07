@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  CARGO_BUILD_JOBS: 3
+  RUSTFLAGS: "-Cdebuginfo=1 -Ccodegen-units=1"
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Build workspace
+        run: cargo build --workspace
+
+      - name: Clippy
+        run: cargo clippy --workspace -- -D warnings
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-test-
+
+      - name: Build test binaries
+        run: cargo build --tests -p musi_shared -p musi_lex -p musi_parse -p musi_codegen -p musi_vm
+
+      - name: Run tests (musi_shared)
+        run: |
+          bin=$(ls target/debug/deps/musi_shared-* | grep -v '\.d$' | head -1)
+          timeout 30s "$bin"
+
+      - name: Run tests (musi_lex)
+        run: |
+          bin=$(ls target/debug/deps/musi_lex-* | grep -v '\.d$' | head -1)
+          timeout 30s "$bin"
+
+      - name: Run tests (musi_parse)
+        run: |
+          bin=$(ls target/debug/deps/musi_parse-* | grep -v '\.d$' | head -1)
+          timeout 30s "$bin"
+
+      - name: Run tests (musi_codegen)
+        run: |
+          bin=$(ls target/debug/deps/musi_codegen-* | grep -v '\.d$' | head -1)
+          timeout 30s "$bin"
+
+      - name: Run tests (musi_vm)
+        run: |
+          bin=$(ls target/debug/deps/musi_vm-* | grep -v '\.d$' | head -1)
+          timeout 30s "$bin"
