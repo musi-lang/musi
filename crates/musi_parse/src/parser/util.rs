@@ -7,7 +7,7 @@ use crate::ast::{Attr, BindKind, Expr, LitValue, PostfixOp};
 
 use super::{can_start_expr, parse_char_lit, parse_int_lit, Parser};
 
-impl<'a> Parser<'a> {
+impl Parser<'_> {
     pub(super) fn parse_separated_list<T, F>(&mut self, closing: TokenKind, mut f: F) -> Vec<T>
     where
         F: FnMut(&mut Self) -> T,
@@ -202,7 +202,7 @@ impl<'a> Parser<'a> {
     pub(super) fn parse_list_postfix<F>(
         &mut self, lhs: Expr, start: u32, close: TokenKind, make_op: F,
     ) -> Expr
-    where F: FnOnce(Slice<Idx<Expr>>, musi_shared::Span) -> crate::ast::PostfixOp {
+    where F: FnOnce(Slice<Idx<Expr>>, musi_shared::Span) -> PostfixOp {
         let args = self.parse_expr_list(close);
         let _close = self.expect(close);
         let base = self.alloc_expr(lhs);

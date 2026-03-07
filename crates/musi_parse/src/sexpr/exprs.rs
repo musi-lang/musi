@@ -2,11 +2,11 @@
 
 use musi_shared::Idx;
 
-use crate::ast::{ArrayItem, Expr, FieldInit, PostfixOp};
+use crate::ast::{ArrayItem, BinOp, Expr, FieldInit, PostfixOp, PrefixOp};
 
 use super::{binop_str, prefix_str, Printer};
 
-impl<'a> Printer<'a> {
+impl Printer<'_> {
     pub(super) fn print_block(&mut self, stmts: &[Idx<Expr>], tail: Option<Idx<Expr>>) {
         self.write("(block");
         self.indent += 2;
@@ -37,13 +37,13 @@ impl<'a> Printer<'a> {
 
     pub(super) fn print_anon_rec(&mut self, fields: &[FieldInit]) {
         self.write("(anon_rec [");
-        self.write_space_separated(fields, |p, f| p.print_rec_lit_field(f));
+        self.write_space_separated(fields, super::Printer::print_rec_lit_field);
         self.write("])");
     }
 
     pub(super) fn print_binary(
         &mut self,
-        op: crate::ast::BinOp,
+        op: BinOp,
         lhs: Idx<Expr>,
         rhs: Idx<Expr>,
     ) {
@@ -56,7 +56,7 @@ impl<'a> Printer<'a> {
         self.write_char(')');
     }
 
-    pub(super) fn print_prefix(&mut self, op: crate::ast::PrefixOp, operand: Idx<Expr>) {
+    pub(super) fn print_prefix(&mut self, op: PrefixOp, operand: Idx<Expr>) {
         self.write("(prefix ");
         self.write(prefix_str(op));
         self.write_char(' ');
@@ -91,7 +91,7 @@ impl<'a> Printer<'a> {
                 self.write("(rec_dot ");
                 self.print_expr(base);
                 self.write(" [");
-                self.write_space_separated(fields, |p, f| p.print_rec_lit_field(f));
+                self.write_space_separated(fields, super::Printer::print_rec_lit_field);
                 self.write("])");
             }
             PostfixOp::OptField { name, .. } => {

@@ -164,12 +164,11 @@ pub(super) fn register_class_def(
 ) {
     let Expr::ClassDef { members, .. } = exprs.get(item_idx) else { return; };
     for member in members {
-        if let ClassMember::Method(method_idx) = member {
-            if let Expr::FnDef { name, .. } = exprs.get(*method_idx) {
+        if let ClassMember::Method(method_idx) = member
+            && let Expr::FnDef { name, .. } = exprs.get(*method_idx) {
                 let name_str = interner.resolve(*name).to_owned();
                 let _inserted = state.class_method_names.insert(name_str);
             }
-        }
     }
 }
 
@@ -178,7 +177,7 @@ pub(super) fn register_given_def(
     exprs: &Arena<Expr>,
     interner: &Interner,
     module: &mut Module,
-    state: &mut EmitState,
+    state: &EmitState,
 ) -> Result<(), CodegenError> {
     let Expr::GivenDef { class_app, members, .. } = exprs.get(item_idx) else { return Ok(()); };
 

@@ -12,27 +12,27 @@ use crate::vm::Vm;
 #[must_use]
 pub fn dispatch(vm: &Vm, intrinsic: Intrinsic, args: &[Value]) -> Value {
     match intrinsic {
-        Intrinsic::Writeln        => intrinsic_writeln(vm, args),
-        Intrinsic::Write          => intrinsic_write(vm, args),
-        Intrinsic::IntToString    => intrinsic_int_to_string(vm, args),
-        Intrinsic::FloatToString  => intrinsic_float_to_string(vm, args),
-        Intrinsic::StringLength   => intrinsic_string_length(vm, args),
-        Intrinsic::NatToString    => intrinsic_nat_to_string(vm, args),
-        Intrinsic::StringConcat   => intrinsic_string_concat(vm, args),
-        Intrinsic::StringSlice    => intrinsic_string_slice(vm, args),
-        Intrinsic::StringToInt    => intrinsic_string_to_int(vm, args),
+        Intrinsic::Writeln => intrinsic_writeln(vm, args),
+        Intrinsic::Write => intrinsic_write(vm, args),
+        Intrinsic::IntToString => intrinsic_int_to_string(vm, args),
+        Intrinsic::FloatToString => intrinsic_float_to_string(vm, args),
+        Intrinsic::StringLength => intrinsic_string_length(vm, args),
+        Intrinsic::NatToString => intrinsic_nat_to_string(vm, args),
+        Intrinsic::StringConcat => intrinsic_string_concat(vm, args),
+        Intrinsic::StringSlice => intrinsic_string_slice(vm, args),
+        Intrinsic::StringToInt => intrinsic_string_to_int(vm, args),
         Intrinsic::StringContains => intrinsic_string_contains(vm, args),
-        Intrinsic::FloatSqrt      => intrinsic_float_sqrt(vm, args),
-        Intrinsic::FloatPow       => intrinsic_float_pow(vm, args),
-        Intrinsic::FloatFloor     => intrinsic_float_floor(vm, args),
-        Intrinsic::FloatCeil      => intrinsic_float_ceil(vm, args),
-        Intrinsic::ReadLine       => intrinsic_read_line(vm, args),
-        Intrinsic::ArrayLength    => intrinsic_array_length(vm, args),
-        Intrinsic::ArrayPush      => intrinsic_array_push(vm, args),
-        Intrinsic::ArrayPop       => intrinsic_array_pop(vm, args),
-        Intrinsic::ArrayGet       => intrinsic_array_get(vm, args),
-        Intrinsic::ArraySet       => intrinsic_array_set(vm, args),
-        Intrinsic::ArraySlice     => intrinsic_array_slice(vm, args),
+        Intrinsic::FloatSqrt => intrinsic_float_sqrt(vm, args),
+        Intrinsic::FloatPow => intrinsic_float_pow(vm, args),
+        Intrinsic::FloatFloor => intrinsic_float_floor(vm, args),
+        Intrinsic::FloatCeil => intrinsic_float_ceil(vm, args),
+        Intrinsic::ReadLine => intrinsic_read_line(vm, args),
+        Intrinsic::ArrayLength => intrinsic_array_length(vm, args),
+        Intrinsic::ArrayPush => intrinsic_array_push(vm, args),
+        Intrinsic::ArrayPop => intrinsic_array_pop(vm, args),
+        Intrinsic::ArrayGet => intrinsic_array_get(vm, args),
+        Intrinsic::ArraySet => intrinsic_array_set(vm, args),
+        Intrinsic::ArraySlice => intrinsic_array_slice(vm, args),
         // Assert/AssertMsg/Test are handled directly in vm::exec_call before dispatch reaches here.
         Intrinsic::Assert | Intrinsic::AssertMsg | Intrinsic::Test => Value::Unit,
         // System module intrinsics (musi:fs, musi:path, musi:os, musi:process, musi:time)
@@ -44,27 +44,42 @@ pub fn dispatch(vm: &Vm, intrinsic: Intrinsic, args: &[Value]) -> Value {
 // -- option helpers -----------------------------------------------------------
 
 fn option_none() -> Value {
-    Value::Object { type_tag: 0, fields: Rc::new(vec![Value::Int(0)]) }
+    Value::Object {
+        type_tag: 0,
+        fields: Rc::new(vec![Value::Int(0)]),
+    }
 }
 
 fn option_some(v: Value) -> Value {
-    Value::Object { type_tag: 0, fields: Rc::new(vec![Value::Int(1), v]) }
+    Value::Object {
+        type_tag: 0,
+        fields: Rc::new(vec![Value::Int(1), v]),
+    }
 }
 
 fn bool_val(b: bool) -> Value {
-    Value::Object { type_tag: 0, fields: Rc::new(vec![Value::Int(i64::from(b))]) }
+    Value::Object {
+        type_tag: 0,
+        fields: Rc::new(vec![Value::Int(i64::from(b))]),
+    }
 }
 
 fn do_write(args: &[Value], newline: bool) -> Value {
     for arg in args {
         print!("{arg}");
     }
-    if newline { println!(); }
+    if newline {
+        println!();
+    }
     Value::Unit
 }
 
-fn intrinsic_writeln(_vm: &Vm, args: &[Value]) -> Value { do_write(args, true) }
-fn intrinsic_write(_vm: &Vm, args: &[Value]) -> Value { do_write(args, false) }
+fn intrinsic_writeln(_vm: &Vm, args: &[Value]) -> Value {
+    do_write(args, true)
+}
+fn intrinsic_write(_vm: &Vm, args: &[Value]) -> Value {
+    do_write(args, false)
+}
 
 macro_rules! to_string_intrinsic {
     ($name:ident, $variant:ident) => {
@@ -81,12 +96,16 @@ to_string_intrinsic!(intrinsic_float_to_string, Float);
 
 fn intrinsic_string_length(_vm: &Vm, args: &[Value]) -> Value {
     match args.first() {
-        Some(Value::String(s)) => Value::Int(i64::try_from(s.chars().count()).expect("string too long")),
+        Some(Value::String(s)) => {
+            Value::Int(i64::try_from(s.chars().count()).expect("string too long"))
+        }
         _ => Value::Int(0),
     }
 }
 
-fn intrinsic_nat_to_string(vm: &Vm, args: &[Value]) -> Value { intrinsic_int_to_string(vm, args) }
+fn intrinsic_nat_to_string(vm: &Vm, args: &[Value]) -> Value {
+    intrinsic_int_to_string(vm, args)
+}
 
 fn intrinsic_string_concat(_vm: &Vm, args: &[Value]) -> Value {
     match (args.first(), args.get(1)) {
@@ -122,7 +141,7 @@ fn intrinsic_string_slice(_vm: &Vm, args: &[Value]) -> Value {
 fn intrinsic_string_to_int(_vm: &Vm, args: &[Value]) -> Value {
     match args.first() {
         Some(Value::String(s)) => match s.parse::<i64>() {
-            Ok(n)  => option_some(Value::Int(n)),
+            Ok(n) => option_some(Value::Int(n)),
             Err(_) => option_none(),
         },
         _ => option_none(),
@@ -143,9 +162,15 @@ fn unary_float(args: &[Value], op: fn(f64) -> f64) -> Value {
     }
 }
 
-fn intrinsic_float_sqrt(_vm: &Vm, args: &[Value]) -> Value { unary_float(args, f64::sqrt) }
-fn intrinsic_float_floor(_vm: &Vm, args: &[Value]) -> Value { unary_float(args, f64::floor) }
-fn intrinsic_float_ceil(_vm: &Vm, args: &[Value]) -> Value { unary_float(args, f64::ceil) }
+fn intrinsic_float_sqrt(_vm: &Vm, args: &[Value]) -> Value {
+    unary_float(args, f64::sqrt)
+}
+fn intrinsic_float_floor(_vm: &Vm, args: &[Value]) -> Value {
+    unary_float(args, f64::floor)
+}
+fn intrinsic_float_ceil(_vm: &Vm, args: &[Value]) -> Value {
+    unary_float(args, f64::ceil)
+}
 
 fn intrinsic_float_pow(_vm: &Vm, args: &[Value]) -> Value {
     match (args.first(), args.get(1)) {

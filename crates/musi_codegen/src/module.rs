@@ -1,6 +1,7 @@
 //! The `.mso` binary container: const pool, symbol table, function table, code.
 
 use std::io::{Cursor, Read as _};
+use std::str::from_utf8;
 
 use byteorder::{LE, ReadBytesExt as _};
 
@@ -15,7 +16,7 @@ const VERSION: u16 = 1;
 fn read_str(r: &mut Cursor<&[u8]>, len: usize) -> Result<Box<str>, DeserError> {
     let mut buf = vec![0u8; len];
     r.read_exact(&mut buf).map_err(|_| DeserError::UnexpectedEof)?;
-    std::str::from_utf8(&buf)
+    from_utf8(&buf)
         .map_err(|_| DeserError::InvalidUtf8)
         .map(Into::into)
 }
@@ -31,7 +32,7 @@ fn read_section<T>(
     decode: fn(&mut Cursor<&[u8]>) -> Result<T, DeserError>,
 ) -> Result<Vec<T>, DeserError> {
     let n = r.read_u32::<LE>().map_err(|_| DeserError::UnexpectedEof)?;
-    let mut items = Vec::with_capacity(n as usize);
+    let mut items = Vec::with_capacity(usize::try_from(n).unwrap_or(0));
     for _ in 0..n { items.push(decode(r)?); }
     Ok(items)
 }
@@ -143,7 +144,7 @@ pub struct SymbolEntry {
     pub link_name: Option<Box<str>>,
 }
 
-fn encode_opt_str(buf: &mut Vec<u8>, s: &Option<Box<str>>) {
+fn encode_opt_str(buf: &mut Vec<u8>, s: Option<&str>) {
     match s {
         None => buf.push(0),
         Some(v) => {
@@ -177,8 +178,8 @@ impl SymbolEntry {
         let abi_len = u16::try_from(abi_bytes.len()).expect("ABI string fits u16");
         buf.extend_from_slice(&abi_len.to_le_bytes());
         buf.extend_from_slice(abi_bytes);
-        encode_opt_str(buf, &self.link_lib);
-        encode_opt_str(buf, &self.link_name);
+        encode_opt_str(buf, self.link_lib.as_deref());
+        encode_opt_str(buf, self.link_name.as_deref());
     }
 
     fn decode(r: &mut Cursor<&[u8]>) -> Result<Self, DeserError> {
@@ -383,11 +384,10 @@ impl Module {
     /// Returns [`CodegenError::TooManyConstants`] if the const pool is full.
     pub fn add_string_const(&mut self, s: &str) -> Result<u16, CodegenError> {
         for (i, entry) in self.const_pool.iter().enumerate() {
-            if let ConstEntry::String(existing) = entry {
-                if existing.as_ref() == s {
+            if let ConstEntry::String(existing) = entry
+                && existing.as_ref() == s {
                     return u16::try_from(i).map_err(|_| CodegenError::TooManyConstants);
                 }
-            }
         }
         self.push_const(ConstEntry::String(s.into()))
     }

@@ -45,9 +45,7 @@ fn emit_branch_cond(
         }
         Cond::Case { pat, init, .. } => {
             let (tmp_slot, test_fixup) = emit_case_cond(arenas, state, pat, *init, module, out)?;
-            let fixup = test_fixup
-                .map(Ok)
-                .unwrap_or_else(|| Ok(out.emit_jump_placeholder(FnEmitter::BR_FALSE)))?;
+            let fixup = test_fixup.map_or_else(|| Ok(out.emit_jump_placeholder(FnEmitter::BR_FALSE)), Ok)?;
             out.push_scope();
             emit_pattern_bindings(arenas, state, pat, tmp_slot, out)?;
             Ok(fixup)
@@ -191,8 +189,8 @@ pub(super) fn emit_for(
 
     let iter_expr = arenas.exprs.get(iter).clone();
 
-    if let Expr::Binary { op, lhs, rhs, .. } = &iter_expr {
-        if matches!(op, BinOp::Range | BinOp::RangeExcl) {
+    if let Expr::Binary { op, lhs, rhs, .. } = &iter_expr
+        && matches!(op, BinOp::Range | BinOp::RangeExcl) {
             let cmp_op = if matches!(op, BinOp::RangeExcl) {
                 Opcode::LtI64
             } else {
@@ -220,7 +218,6 @@ pub(super) fn emit_for(
             emit_expr(arenas, state, &body_expr, module, out)?;
             return emit_for_loop_tail(out, counter_slot, start_pos, end_fixup);
         }
-    }
 
     let iter_len_idx = module.add_string_const("iter_len")?;
     let iter_get_idx = module.add_string_const("iter_get")?;

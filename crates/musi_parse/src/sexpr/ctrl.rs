@@ -6,7 +6,7 @@ use crate::ast::{Cond, ElifBranch, ExportItem, Expr, ImportClause, MatchArm, Pat
 
 use super::Printer;
 
-impl<'a> Printer<'a> {
+impl Printer<'_> {
     pub(super) fn print_if(
         &mut self,
         cond: &Cond,

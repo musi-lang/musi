@@ -4,7 +4,7 @@ use crate::ast::{LitValue, Pat, PatField, PatSuffix, Ty};
 
 use super::Printer;
 
-impl<'a> Printer<'a> {
+impl Printer<'_> {
     pub(super) fn print_ty(&mut self, ty: &Ty) {
         match ty {
             Ty::Named { name, args, .. } if args.is_empty() => {
@@ -14,12 +14,12 @@ impl<'a> Printer<'a> {
                 self.write("(apply ");
                 self.write(self.sym(*name));
                 self.write(" [");
-                self.write_space_separated(args, |p, a| p.print_ty(a));
+                self.write_space_separated(args, super::Printer::print_ty);
                 self.write("])");
             }
             Ty::Arrow { params, ret, .. } => {
                 self.write("(fn [");
-                self.write_space_separated(params, |p, t| p.print_ty(t));
+                self.write_space_separated(params, super::Printer::print_ty);
                 self.write("] ");
                 self.print_ty(ret);
                 self.write_char(')');
@@ -29,7 +29,7 @@ impl<'a> Printer<'a> {
             }
             Ty::Prod { elements, .. } => {
                 self.write("(prod [");
-                self.write_space_separated(elements, |p, e| p.print_ty(e));
+                self.write_space_separated(elements, super::Printer::print_ty);
                 self.write("])");
             }
             Ty::Arr { element, size, .. } => {
@@ -68,7 +68,7 @@ impl<'a> Printer<'a> {
                 self.write("(pat_sum ");
                 self.write(self.sym(*name));
                 self.write(" [");
-                self.write_space_separated(args, |p, a| p.print_pat(a));
+                self.write_space_separated(args, super::Printer::print_pat);
                 self.write("])");
             }
             Pat::Ident {
@@ -79,7 +79,7 @@ impl<'a> Printer<'a> {
                 self.write("(pat_sum_named ");
                 self.write(self.sym(*name));
                 self.write(" [");
-                self.write_space_separated(fields, |p, f| p.print_pat_field(f));
+                self.write_space_separated(fields, super::Printer::print_pat_field);
                 self.write("])");
             }
             Pat::Lit { value, .. } => {
@@ -90,22 +90,22 @@ impl<'a> Printer<'a> {
             Pat::Wild { .. } => self.write("_"),
             Pat::Prod { elements, .. } => {
                 self.write("(pat_prod [");
-                self.write_space_separated(elements, |p, e| p.print_pat(e));
+                self.write_space_separated(elements, super::Printer::print_pat);
                 self.write("])");
             }
             Pat::Arr { elements, .. } => {
                 self.write("(pat_arr [");
-                self.write_space_separated(elements, |p, e| p.print_pat(e));
+                self.write_space_separated(elements, super::Printer::print_pat);
                 self.write("])");
             }
             Pat::AnonRec { fields, .. } => {
                 self.write("(pat_rec [");
-                self.write_space_separated(fields, |p, f| p.print_pat_field(f));
+                self.write_space_separated(fields, super::Printer::print_pat_field);
                 self.write("])");
             }
             Pat::Or { alternatives, .. } => {
                 self.write("(pat_or [");
-                self.write_space_separated(alternatives, |p, a| p.print_pat(a));
+                self.write_space_separated(alternatives, super::Printer::print_pat);
                 self.write("])");
             }
             Pat::DotPrefix { name, args, .. } => {

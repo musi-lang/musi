@@ -19,6 +19,18 @@ pub(super) enum TypeTag {
     Array = 7,
 }
 
+impl From<TypeTag> for u8 {
+    fn from(t: TypeTag) -> Self {
+        match t {
+            TypeTag::Int   => 0,
+            TypeTag::Float => 1,
+            TypeTag::Str   => 2,
+            TypeTag::Unit  => 3,
+            TypeTag::Array => 7,
+        }
+    }
+}
+
 impl TypeTag {
     pub(super) fn from_type_name(name: &str) -> Option<Self> {
         match name {
@@ -193,10 +205,10 @@ pub(super) fn resolve_type_tag(class_app: &Ty, interner: &Interner, state: &Emit
     if let Ty::Named { name: arg_name, .. } = first {
         let arg_str = interner.resolve(*arg_name);
         TypeTag::from_type_name(arg_str)
-            .map(|t| t as u16)
+            .map(|t| u16::from(u8::from(t)))
             .or_else(|| state.type_tag_map.get(arg_str).copied())
     } else if matches!(first, Ty::Arr { .. }) {
-        Some(TypeTag::Array as u16)
+        Some(u16::from(u8::from(TypeTag::Array)))
     } else {
         None
     }

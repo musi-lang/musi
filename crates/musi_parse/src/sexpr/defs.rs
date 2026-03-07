@@ -9,7 +9,7 @@ use crate::ast::{
 
 use super::{FnDefView, Printer};
 
-impl<'a> Printer<'a> {
+impl Printer<'_> {
     pub(super) fn print_fn_def(&mut self, node: &FnDefView<'_>) {
         self.write("(fn_def");
         self.print_attrs(node.attrs);

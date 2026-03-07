@@ -10,7 +10,7 @@ use crate::types::{Type, TypeVarId};
 
 use super::{instantiate, TypeChecker};
 
-impl<'a> TypeChecker<'a> {
+impl TypeChecker<'_> {
     pub(super) fn set_pat_type(&mut self, pat: &Pat, ty: Type) {
         match pat {
             Pat::Ident { span, .. } => {

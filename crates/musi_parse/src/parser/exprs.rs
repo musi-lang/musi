@@ -7,7 +7,7 @@ use crate::ast::{ArrayItem, BinOp, Expr, FieldInit, PostfixOp, PrefixOp};
 
 use super::{InfixKind, Parser};
 
-impl<'a> Parser<'a> {
+impl Parser<'_> {
     pub(super) fn parse_expr(&mut self) -> Expr {
         self.parse_pratt(0)
     }

@@ -101,8 +101,10 @@ impl ReturnKind {
 fn classify_param(ty: &Type) -> Option<ParamKind> {
     match ty {
         Type::Reference(r) => {
-            if let Type::Path(p) = r.elem.as_ref() {
-                if p.path.is_ident("str") { return Some(ParamKind::Str); }
+            if let Type::Path(p) = r.elem.as_ref()
+                && p.path.is_ident("str")
+            {
+                return Some(ParamKind::Str);
             }
             None
         }
@@ -134,19 +136,16 @@ fn classify_return(ty: &Type) -> Option<ReturnKind> {
             // Option<T>
             let seg = p.path.segments.last()?;
             if seg.ident != "Option" { return None; }
-            if let syn::PathArguments::AngleBracketed(ab) = &seg.arguments {
-                if let Some(syn::GenericArgument::Type(inner)) = ab.args.first() {
-                    if let Type::Path(ip) = inner {
-                        if let Some(id) = ip.path.get_ident() {
-                            return match id.to_string().as_str() {
-                                "i64"   => Some(ReturnKind::OptionI64),
-                                "Value"  => Some(ReturnKind::OptionValue),
-                                "String" => Some(ReturnKind::OptionStr),
-                                _       => None,
-                            };
-                        }
-                    }
-                }
+            if let syn::PathArguments::AngleBracketed(ab) = &seg.arguments
+                && let Some(syn::GenericArgument::Type(Type::Path(ip))) = ab.args.first()
+                && let Some(id) = ip.path.get_ident()
+            {
+                return match id.to_string().as_str() {
+                    "i64"    => Some(ReturnKind::OptionI64),
+                    "Value"  => Some(ReturnKind::OptionValue),
+                    "String" => Some(ReturnKind::OptionStr),
+                    _        => None,
+                };
             }
             None
         }

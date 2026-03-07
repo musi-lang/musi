@@ -7,7 +7,7 @@ use crate::ast::{Cond, ElifBranch, ExportItem, Expr, ImportClause, ImportItem, M
 
 use super::{InfixKind, Parser};
 
-impl<'a> Parser<'a> {
+impl Parser<'_> {
     pub(super) fn parse_if(&mut self) -> Expr {
         let start = self.start_span();
         let _if = self.expect(TokenKind::If);

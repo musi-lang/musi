@@ -7,7 +7,7 @@ use crate::ast::{
 
 use super::Printer;
 
-impl<'a> Printer<'a> {
+impl Printer<'_> {
     pub(super) fn print_attrs(&mut self, attrs: &[Attr]) {
         for attr in attrs {
             self.write(" #[");

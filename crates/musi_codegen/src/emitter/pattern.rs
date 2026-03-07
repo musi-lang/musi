@@ -75,6 +75,7 @@ pub(super) fn emit_pattern_test(
     }
 }
 
+#[allow(clippy::only_used_in_recursion)]
 pub(super) fn emit_pattern_bindings(
     arenas: &EmitArenas<'_>,
     state: &mut EmitState,
@@ -149,21 +150,18 @@ pub(super) fn track_type_of_binding(
         Expr::Postfix { base, op: PostfixOp::Call { .. }, .. } => {
             if let Expr::Ident { name, .. } = arenas.exprs.get(*base) {
                 let callee_name = arenas.interner.resolve(*name);
-                if let Some(ret_type) = state.fn_return_types.get(callee_name).cloned() {
-                    if state.type_map.contains_key(&ret_type) {
+                if let Some(ret_type) = state.fn_return_types.get(callee_name).cloned()
+                    && state.type_map.contains_key(&ret_type) {
                         let _prev = out.local_types.insert(slot, ret_type);
                     }
-                }
-            } else if let Expr::Postfix { base: recv_idx, op: PostfixOp::Field { .. }, .. } = arenas.exprs.get(*base) {
-                if let Expr::Ident { name: recv_name, .. } = arenas.exprs.get(*recv_idx) {
+            } else if let Expr::Postfix { base: recv_idx, op: PostfixOp::Field { .. }, .. } = arenas.exprs.get(*base)
+                && let Expr::Ident { name: recv_name, .. } = arenas.exprs.get(*recv_idx) {
                     let recv_str = arenas.interner.resolve(*recv_name);
-                    if let Some(recv_slot) = out.lookup_local(recv_str) {
-                        if let Some(type_name) = out.local_types.get(&recv_slot).cloned() {
+                    if let Some(recv_slot) = out.lookup_local(recv_str)
+                        && let Some(type_name) = out.local_types.get(&recv_slot).cloned() {
                             let _prev = out.local_types.insert(slot, type_name);
                         }
-                    }
                 }
-            }
         }
         _ => {}
     }

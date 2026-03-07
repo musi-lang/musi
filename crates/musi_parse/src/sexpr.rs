@@ -127,7 +127,7 @@ impl<'a> Printer<'a> {
                 self.write("])");
             }
             Expr::Block { stmts, tail, .. } => {
-                self.print_block(self.module.ctx.expr_lists.get_slice(stmts), tail)
+                self.print_block(self.module.ctx.expr_lists.get_slice(stmts), tail);
             }
             Expr::Array { ref items, .. } => self.print_array(items),
             Expr::AnonRec { ref fields, .. } => self.print_anon_rec(fields),

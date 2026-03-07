@@ -270,7 +270,7 @@ pub enum Pat {
     },
     DotPrefix {
         name: Symbol,
-        args: Vec<Pat>,
+        args: Vec<Self>,
         span: Span,
     },
     Lit {

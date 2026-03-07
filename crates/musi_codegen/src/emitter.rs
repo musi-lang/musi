@@ -1,6 +1,6 @@
 #![allow(clippy::too_many_lines)]
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use musi_ast::ParsedModule;
 use musi_shared::Interner;
@@ -38,7 +38,7 @@ pub fn emit(
         variant_map: HashMap::new(),
         lambda_counter: 0,
         pending_lambdas: Vec::new(),
-        class_method_names: std::collections::HashSet::new(),
+        class_method_names: HashSet::new(),
         type_tag_map: HashMap::new(),
         next_type_tag: 10,
     };

@@ -56,8 +56,8 @@ pub(super) fn emit_field_access(
         let slot = out.lookup_local(base_name_str)
             .ok_or_else(|| CodegenError::UndefinedVariable(base_name_str.into()))?;
 
-        if let Some(type_name) = out.local_types.get(&slot).cloned() {
-            if let Some(type_info) = state.type_map.get(&type_name) {
+        if let Some(type_name) = out.local_types.get(&slot).cloned()
+            && let Some(type_info) = state.type_map.get(&type_name) {
                 let field_idx = type_info.field_names.iter().position(|f| f == field_name)
                     .ok_or_else(|| CodegenError::UnknownField(field_name.into()))?;
                 let field_idx_u16 = u16::try_from(field_idx).map_err(|_| CodegenError::UnsupportedExpr)?;
@@ -66,7 +66,6 @@ pub(super) fn emit_field_access(
                 out.push(&Opcode::LdFld(field_idx_u16));
                 return Ok(());
             }
-        }
 
         if let Some(layout) = out.anon_layouts.get(&slot).cloned() {
             let field_idx = layout.iter().position(|f| f == field_name)

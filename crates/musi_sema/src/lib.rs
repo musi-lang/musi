@@ -54,6 +54,7 @@ pub struct ModuleExports {
 }
 
 /// Extracts the exported name-to-type map from a completed analysis.
+#[must_use] 
 pub fn exports_of(result: &SemaResult, module: &ParsedModule, interner: &Interner) -> ModuleExports {
     let mut names: HashMap<String, Type> = HashMap::new();
     for &item_idx in module.ctx.expr_lists.get_slice(module.items) {
@@ -95,12 +96,12 @@ pub fn exports_of(result: &SemaResult, module: &ParsedModule, interner: &Interne
 ///
 /// `imports` maps each imported module path to its exported types, enabling
 /// cross-module type resolution.
-pub fn analyze(
+pub fn analyze<S: std::hash::BuildHasher>(
     module: &ParsedModule,
     interner: &Interner,
     file_id: FileId,
     diags: &mut DiagnosticBag,
-    imports: &HashMap<String, ModuleExports>,
+    imports: &HashMap<String, ModuleExports, S>,
 ) -> SemaResult {
     // Pass 1 & 2: name resolution.
     let resolved = resolve(module, interner, file_id, diags, imports);

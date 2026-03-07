@@ -5,6 +5,9 @@ version.workspace = true
 edition.workspace = true
 repository.workspace = true
 license.workspace = true
+readme = "README.md"
+keywords = ["compiler", "musi", "native", "ffi"]
+categories = ["development-tools"]
 
 [dependencies]
 musi_macros = { path = "../musi_macros" }

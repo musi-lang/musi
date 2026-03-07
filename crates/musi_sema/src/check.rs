@@ -291,7 +291,7 @@ pub struct TypeChecker<'a> {
     pub expr_types: HashMap<Idx<Expr>, Type>,
     /// Stack of type-parameter scopes.
     ty_scope: TyScope,
-    /// Record field types collected from `record` definitions: type DefId → field name → type.
+    /// Record field types collected from `record` definitions: type `DefId` → field name → type.
     record_fields: HashMap<DefId, HashMap<Symbol, Type>>,
 }
 
@@ -367,11 +367,8 @@ impl<'a> TypeChecker<'a> {
             Ty::Arr { element, .. } => Type::Array(Box::new(self.resolve_ty(element)), None),
             Ty::Option { inner, .. } => {
                 let inner_ty = self.resolve_ty(inner);
-                if let Some(opt_id) = self.find_type_def_by_str("Option") {
-                    Type::Named(opt_id, vec![inner_ty])
-                } else {
-                    Type::Error
-                }
+                self.find_type_def_by_str("Option")
+                    .map_or(Type::Error, |opt_id| Type::Named(opt_id, vec![inner_ty]))
             }
             Ty::Error { .. } => Type::Error,
         }

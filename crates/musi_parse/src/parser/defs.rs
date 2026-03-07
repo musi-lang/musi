@@ -8,7 +8,7 @@ use crate::ast::{
 
 use super::Parser;
 
-impl<'a> Parser<'a> {
+impl Parser<'_> {
     pub(super) fn parse_expr_after_attrs(&mut self) -> Expr {
         let attrs = self.parse_opt_attrs();
         let modifiers = self.parse_modifiers();

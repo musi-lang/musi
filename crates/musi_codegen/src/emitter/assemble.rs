@@ -7,6 +7,9 @@ use musi_ast::{ClassMember, Expr, Modifier, ParsedModule};
 use musi_shared::{Idx, Interner};
 
 use crate::error::CodegenError;
+
+/// `(fn_idx, params, body_idx, ret_ty)` for lambdas pending emission.
+type PendingLambda = (u16, Vec<(String, Option<String>)>, Idx<Expr>, Option<String>);
 use crate::intrinsics;
 use crate::{FunctionEntry, Module, Opcode, SymbolEntry, SymbolFlags};
 
@@ -39,17 +42,16 @@ pub(super) fn emit_fn_body_with_ret(
     out.push_scope();
     for (name, type_name_opt) in params {
         let slot = out.define_local(name)?;
-        if let Some(type_name) = type_name_opt {
-            if state.type_map.contains_key(type_name) {
+        if let Some(type_name) = type_name_opt
+            && state.type_map.contains_key(type_name) {
                 let _prev = out.local_types.insert(slot, type_name.clone());
             }
-        }
     }
     let body = arenas.exprs.get(body_idx).clone();
 
     // If the body is an AnonRec and we know the return type, use the named type
-    if let (Some(ty_name), Expr::AnonRec { fields, .. }) = (ret_ty, &body) {
-        if let (Some(type_info), Some(&type_tag)) =
+    if let (Some(ty_name), Expr::AnonRec { fields, .. }) = (ret_ty, &body)
+        && let (Some(type_info), Some(&type_tag)) =
             (state.type_map.get(ty_name), state.type_tag_map.get(ty_name))
         {
             let declared_fields = type_info.field_names.clone();
@@ -81,7 +83,6 @@ pub(super) fn emit_fn_body_with_ret(
             out.pop_scope();
             return finalize_fn_body(fn_idx, out, module);
         }
-    }
 
     emit_expr(arenas, state, &body, module, &mut out)?;
     out.push(&Opcode::Ret);
@@ -134,12 +135,7 @@ pub(super) fn emit_module_fn_bodies(
         expr_lists: &parsed.ctx.expr_lists,
         interner,
     };
-    let mut pending: Vec<(
-        u16,
-        Vec<(String, Option<String>)>,
-        Idx<Expr>,
-        Option<String>,
-    )> = Vec::new();
+    let mut pending: Vec<PendingLambda> = Vec::new();
 
     for &item_idx in parsed.ctx.expr_lists.get_slice(parsed.items) {
         match parsed.ctx.exprs.get(item_idx) {

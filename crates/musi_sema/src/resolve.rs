@@ -114,11 +114,11 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    fn collect_imports(
+    fn collect_imports<S: std::hash::BuildHasher>(
         &mut self,
         module: &ParsedModule,
         root_scope: ScopeId,
-        imports: &HashMap<String, ModuleExports>,
+        imports: &HashMap<String, ModuleExports, S>,
         interner: &Interner,
     ) {
         for &item_idx in module.ctx.expr_lists.get_slice(module.items) {
@@ -135,9 +135,7 @@ impl<'a> Resolver<'a> {
             };
             for import_item in import_items {
                 let name_str = interner.resolve(import_item.name);
-                let _exported_name = import_item.alias
-                    .map(|a| interner.resolve(a).to_owned())
-                    .unwrap_or_else(|| name_str.to_owned());
+                let _exported_name = import_item.alias.map_or_else(|| name_str.to_owned(), |a| interner.resolve(a).to_owned());
                 let Some(ty) = module_exports.names.get(name_str) else {
                     continue;
                 };
@@ -469,7 +467,8 @@ impl<'a> Resolver<'a> {
             Pat::Ident {
                 suffix: Some(PatSuffix::Positional { args, .. }),
                 ..
-            } => {
+            }
+            | Pat::DotPrefix { args, .. } => {
                 for a in args {
                     self.resolve_pat(a, ctx, scope);
                 }
@@ -497,12 +496,8 @@ impl<'a> Resolver<'a> {
             | Pat::Lit { .. }
             | Pat::Wild { .. }
             | Pat::Error { .. } => {}
-            Pat::DotPrefix { args, .. } => {
-                for a in args {
-                    self.resolve_pat(a, ctx, scope);
-                }
-            }
         }
+
     }
 
     fn resolve_pat_field(&mut self, field: &PatField, ctx: &AstArenas, scope: ScopeId) {
@@ -568,12 +563,12 @@ impl<'a> Resolver<'a> {
 /// Runs name resolution on `module` and returns the [`ResolveResult`].
 ///
 /// Errors and warnings are pushed into `diags`.
-pub fn resolve(
+pub fn resolve<S: std::hash::BuildHasher>(
     module: &ParsedModule,
     interner: &Interner,
     file_id: FileId,
     diags: &mut DiagnosticBag,
-    imports: &HashMap<String, ModuleExports>,
+    imports: &HashMap<String, ModuleExports, S>,
 ) -> ResolveResult {
     let mut resolver = Resolver::new(interner, diags, file_id);
     let root = resolver.scopes.push_root();

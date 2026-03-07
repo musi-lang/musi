@@ -5,6 +5,9 @@ version.workspace = true
 edition.workspace = true
 repository.workspace = true
 license.workspace = true
+readme = "README.md"
+keywords = ["compiler", "musi", "proc-macro"]
+categories = ["development-tools"]
 
 [lib]
 proc-macro = true
@@ -19,3 +22,6 @@ syn        = { workspace = true }
 [lints.rust]
 unsafe_code      = "deny"
 unused_results   = "forbid"
+
+[lints.clippy]
+cargo_common_metadata = "allow"

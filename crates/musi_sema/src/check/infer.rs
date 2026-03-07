@@ -10,7 +10,7 @@ use crate::types::{PrimTy, Type, TypeVarId};
 
 use super::{instantiate, FnDefNode, TypeChecker};
 
-impl<'a> TypeChecker<'a> {
+impl TypeChecker<'_> {
     pub(super) fn infer_expr(&mut self, idx: Idx<Expr>, ctx: &AstArenas) -> Type {
         let expr = ctx.exprs.get(idx);
         match expr {
@@ -18,7 +18,8 @@ impl<'a> TypeChecker<'a> {
             Expr::Unit { .. }
             | Expr::Choice { .. }
             | Expr::Import { .. }
-            | Expr::Export { .. } => Type::Prim(PrimTy::Unit),
+            | Expr::Export { .. }
+            | Expr::Record { name: None, .. } => Type::Prim(PrimTy::Unit),
             Expr::Record { name: Some(sym), fields, .. } => {
                 use std::collections::HashMap;
                 use musi_shared::Symbol;
@@ -31,7 +32,6 @@ impl<'a> TypeChecker<'a> {
                 }
                 Type::Prim(PrimTy::Unit)
             }
-            Expr::Record { name: None, .. } => Type::Prim(PrimTy::Unit),
             Expr::Ident { span, .. } => self.infer_ident(idx, *span),
             Expr::Paren { inner, .. } => self.infer(*inner, ctx),
             Expr::Tuple { elements, .. } => self.infer_tuple(ctx.expr_lists.get_slice(*elements), ctx),
@@ -441,13 +441,11 @@ impl<'a> TypeChecker<'a> {
             PostfixOp::Field { name, .. } => {
                 let base_ty = self.infer(base, ctx);
                 let resolved = self.unify_table.resolve(base_ty);
-                if let Type::Named(def_id, _) = &resolved {
-                    if let Some(fields) = self.record_fields.get(def_id) {
-                        if let Some(field_ty) = fields.get(name) {
+                if let Type::Named(def_id, _) = &resolved
+                    && let Some(fields) = self.record_fields.get(def_id)
+                        && let Some(field_ty) = fields.get(name) {
                             return field_ty.clone();
                         }
-                    }
-                }
                 Type::Var(self.unify_table.fresh())
             }
 

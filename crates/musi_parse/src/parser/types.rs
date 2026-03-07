@@ -5,7 +5,7 @@ use crate::ast::{Constraint, Pat, PatField, PatSuffix, Ty, TyParam};
 
 use super::Parser;
 
-impl<'a> Parser<'a> {
+impl Parser<'_> {
     pub(super) fn parse_ty_named(&mut self) -> Ty {
         let start = self.start_span();
         let name = self.expect_symbol();

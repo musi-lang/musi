@@ -102,6 +102,7 @@ impl Intrinsic {
     }
 
     #[must_use]
+    #[allow(clippy::as_conversions)] // repr(u16) enum — cast is always exact
     pub const fn id(self) -> u16 {
         self as u16
     }

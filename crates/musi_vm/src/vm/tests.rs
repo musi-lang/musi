@@ -48,13 +48,17 @@ fn hello_module() -> Module {
                 name: "writeln".into(),
                 flags: SymbolFlags::new(SymbolFlags::NATIVE | SymbolFlags::EXPORT),
                 intrinsic_id: 0,
-                abi: Box::from(""), link_lib: None, link_name: None,
+                abi: Box::from(""),
+                link_lib: None,
+                link_name: None,
             },
             SymbolEntry {
                 name: "main".into(),
                 flags: SymbolFlags::new(SymbolFlags::EXPORT),
                 intrinsic_id: 0xFFFF,
-                abi: Box::from(""), link_lib: None, link_name: None,
+                abi: Box::from(""),
+                link_lib: None,
+                link_name: None,
             },
         ],
         function_table: vec![
@@ -101,7 +105,9 @@ fn halt_returns_top_of_stack() {
             name: "main".into(),
             flags: SymbolFlags::new(SymbolFlags::EXPORT),
             intrinsic_id: 0xFFFF,
-            abi: Box::from(""), link_lib: None, link_name: None,
+            abi: Box::from(""),
+            link_lib: None,
+            link_name: None,
         }],
         function_table: vec![FunctionEntry {
             symbol_idx: 0,
@@ -135,7 +141,9 @@ fn local_store_and_load() {
             name: "main".into(),
             flags: SymbolFlags::new(SymbolFlags::EXPORT),
             intrinsic_id: 0xFFFF,
-            abi: Box::from(""), link_lib: None, link_name: None,
+            abi: Box::from(""),
+            link_lib: None,
+            link_name: None,
         }],
         function_table: vec![FunctionEntry {
             symbol_idx: 0,
@@ -180,13 +188,17 @@ fn ret_returns_to_caller() {
                 name: "callee".into(),
                 flags: SymbolFlags::new(0),
                 intrinsic_id: 0xFFFF,
-                abi: Box::from(""), link_lib: None, link_name: None,
+                abi: Box::from(""),
+                link_lib: None,
+                link_name: None,
             },
             SymbolEntry {
                 name: "main".into(),
                 flags: SymbolFlags::new(SymbolFlags::EXPORT),
                 intrinsic_id: 0xFFFF,
-                abi: Box::from(""), link_lib: None, link_name: None,
+                abi: Box::from(""),
+                link_lib: None,
+                link_name: None,
             },
         ],
         function_table: vec![
@@ -301,7 +313,9 @@ fn while_loop_counts_to_10() {
             name: "main".into(),
             flags: SymbolFlags::new(SymbolFlags::EXPORT),
             intrinsic_id: 0xFFFF,
-            abi: Box::from(""), link_lib: None, link_name: None,
+            abi: Box::from(""),
+            link_lib: None,
+            link_name: None,
         }],
         function_table: vec![FunctionEntry {
             symbol_idx: 0,
@@ -371,7 +385,11 @@ fn new_obj_and_ld_fld() {
     let mut code = Vec::new();
     Opcode::LdImmI64(10).encode_into(&mut code);
     Opcode::LdImmI64(20).encode_into(&mut code);
-    Opcode::NewObj { type_tag: 0, field_count: 2 }.encode_into(&mut code);
+    Opcode::NewObj {
+        type_tag: 0,
+        field_count: 2,
+    }
+    .encode_into(&mut code);
     Opcode::LdFld(1).encode_into(&mut code);
     Opcode::Halt.encode_into(&mut code);
     let code_len = u32::try_from(code.len()).expect("fits");
@@ -382,7 +400,9 @@ fn new_obj_and_ld_fld() {
             name: "main".into(),
             flags: SymbolFlags::new(0),
             intrinsic_id: 0xFFFF,
-            abi: Box::from(""), link_lib: None, link_name: None,
+            abi: Box::from(""),
+            link_lib: None,
+            link_name: None,
         }],
         function_table: vec![FunctionEntry {
             symbol_idx: 0,
@@ -404,7 +424,11 @@ fn ld_tag_reads_discriminant() {
     let mut code = Vec::new();
     Opcode::LdImmI64(42).encode_into(&mut code);
     Opcode::LdImmUnit.encode_into(&mut code);
-    Opcode::NewObj { type_tag: 0, field_count: 2 }.encode_into(&mut code);
+    Opcode::NewObj {
+        type_tag: 0,
+        field_count: 2,
+    }
+    .encode_into(&mut code);
     Opcode::LdTag.encode_into(&mut code);
     Opcode::Halt.encode_into(&mut code);
     let code_len = u32::try_from(code.len()).expect("fits");
@@ -415,7 +439,9 @@ fn ld_tag_reads_discriminant() {
             name: "main".into(),
             flags: SymbolFlags::new(0),
             intrinsic_id: 0xFFFF,
-            abi: Box::from(""), link_lib: None, link_name: None,
+            abi: Box::from(""),
+            link_lib: None,
+            link_name: None,
         }],
         function_table: vec![FunctionEntry {
             symbol_idx: 0,
@@ -461,13 +487,17 @@ fn ld_fn_idx_and_call_dynamic() {
                 name: "double".into(),
                 flags: SymbolFlags::new(0),
                 intrinsic_id: 0xFFFF,
-                abi: Box::from(""), link_lib: None, link_name: None,
+                abi: Box::from(""),
+                link_lib: None,
+                link_name: None,
             },
             SymbolEntry {
                 name: "main".into(),
                 flags: SymbolFlags::new(0),
                 intrinsic_id: 0xFFFF,
-                abi: Box::from(""), link_lib: None, link_name: None,
+                abi: Box::from(""),
+                link_lib: None,
+                link_name: None,
             },
         ],
         function_table: vec![
@@ -509,7 +539,9 @@ fn dup_clones_top_of_stack() {
             name: "main".into(),
             flags: SymbolFlags::new(0),
             intrinsic_id: 0xFFFF,
-            abi: Box::from(""), link_lib: None, link_name: None,
+            abi: Box::from(""),
+            link_lib: None,
+            link_name: None,
         }],
         function_table: vec![FunctionEntry {
             symbol_idx: 0,
@@ -592,7 +624,8 @@ writeln(int_to_string(v3.x));
 
 #[test]
 fn match_arm_guard_filters_correctly() {
-    let _r = run_src(r#"
+    let _r = run_src(
+        r#"
 choice Num { Small(Int) | Large(Int) };
 const x := Small(3);
 const y := Large(10);
@@ -608,26 +641,31 @@ const r2 := match y with (
 );
 writeln(int_to_string(r1));
 writeln(int_to_string(r2));
-"#);
+"#,
+    );
 }
 
 #[test]
 fn dot_prefix_pattern_in_match() {
-    let _r = run_src(r#"
+    let _r = run_src(
+        r#"
 const x := .Some(42);
 const result := match x with (
     .Some(v) => v
   | .None => 0
 );
 writeln(int_to_string(result));
-"#);
+"#,
+    );
 }
 
 #[test]
 fn if_case_pattern_binding() {
-    let _r = run_src(r#"
+    let _r = run_src(
+        r#"
 const x := .Some(7);
 if case .Some(v) := x then
     writeln(int_to_string(v));
-"#);
+"#,
+    );
 }
