@@ -6,9 +6,9 @@ use musi_shared::Idx;
 use crate::error::CodegenError;
 use crate::{ConstEntry, Module, Opcode};
 
-use super::state::{EmitArenas, EmitState, FnEmitter};
 use super::expr::{emit_expr, emit_expr_or_unit};
 use super::pattern::{emit_pattern_bindings, emit_pattern_test};
+use super::state::{EmitArenas, EmitState, FnEmitter};
 
 pub(super) fn emit_case_cond(
     arenas: &EmitArenas<'_>,
@@ -89,23 +89,31 @@ pub(super) fn emit_if(
     let else_fixup = emit_branch_cond(arenas, state, data.cond, module, out)?;
     let then = arenas.exprs.get(data.then_body).clone();
     emit_expr(arenas, state, &then, module, out)?;
-    if matches!(data.cond, Cond::Case { .. }) { out.pop_scope(); }
+    if matches!(data.cond, Cond::Case { .. }) {
+        out.pop_scope();
+    }
     let first_end_fixup = out.emit_jump_placeholder(FnEmitter::BR);
     out.patch_jump_to_here(else_fixup)?;
 
     let mut end_fixups = vec![first_end_fixup];
     for branch in data.elif_chains {
-        if branch.guard.is_some() { return Err(CodegenError::UnsupportedExpr); }
+        if branch.guard.is_some() {
+            return Err(CodegenError::UnsupportedExpr);
+        }
         let next_fixup = emit_branch_cond(arenas, state, &branch.cond, module, out)?;
         let branch_body = arenas.exprs.get(branch.body).clone();
         emit_expr(arenas, state, &branch_body, module, out)?;
-        if matches!(branch.cond.as_ref(), Cond::Case { .. }) { out.pop_scope(); }
+        if matches!(branch.cond.as_ref(), Cond::Case { .. }) {
+            out.pop_scope();
+        }
         end_fixups.push(out.emit_jump_placeholder(FnEmitter::BR));
         out.patch_jump_to_here(next_fixup)?;
     }
 
     emit_expr_or_unit(arenas, state, data.else_body, module, out)?;
-    for fixup in end_fixups { out.patch_jump_to_here(fixup)?; }
+    for fixup in end_fixups {
+        out.patch_jump_to_here(fixup)?;
+    }
     Ok(())
 }
 
@@ -121,7 +129,9 @@ pub(super) fn emit_while(
     let end_fixup = emit_branch_cond(arenas, state, cond, module, out)?;
     let body_expr = arenas.exprs.get(body).clone();
     emit_expr(arenas, state, &body_expr, module, out)?;
-    if matches!(cond, Cond::Case { .. }) { out.pop_scope(); }
+    if matches!(cond, Cond::Case { .. }) {
+        out.pop_scope();
+    }
     out.push(&Opcode::Drop);
     out.emit_br_back(start_pos)?;
     out.patch_jump_to_here(end_fixup)?;
@@ -170,7 +180,12 @@ pub(super) fn emit_for(
     module: &mut Module,
     out: &mut FnEmitter,
 ) -> Result<(), CodegenError> {
-    let Pat::Ident { name: pat_name, suffix: None, .. } = pat else {
+    let Pat::Ident {
+        name: pat_name,
+        suffix: None,
+        ..
+    } = pat
+    else {
         return Err(CodegenError::UnsupportedExpr);
     };
 
@@ -178,7 +193,11 @@ pub(super) fn emit_for(
 
     if let Expr::Binary { op, lhs, rhs, .. } = &iter_expr {
         if matches!(op, BinOp::Range | BinOp::RangeExcl) {
-            let cmp_op = if matches!(op, BinOp::RangeExcl) { Opcode::LtI64 } else { Opcode::LeqI64 };
+            let cmp_op = if matches!(op, BinOp::RangeExcl) {
+                Opcode::LtI64
+            } else {
+                Opcode::LeqI64
+            };
 
             out.push_scope();
             let counter_slot = out.define_local(arenas.interner.resolve(*pat_name))?;
@@ -214,7 +233,10 @@ pub(super) fn emit_for(
     emit_expr(arenas, state, &iter_expr, module, out)?;
     out.push(&Opcode::StLoc(arr_slot));
     out.push(&Opcode::LdLoc(arr_slot));
-    out.push(&Opcode::CallMethod { method_idx: iter_len_idx, arg_count: 1 });
+    out.push(&Opcode::CallMethod {
+        method_idx: iter_len_idx,
+        arg_count: 1,
+    });
     out.push(&Opcode::StLoc(len_slot));
     out.push(&Opcode::LdImmI64(0));
     out.push(&Opcode::StLoc(i_slot));
@@ -227,7 +249,10 @@ pub(super) fn emit_for(
 
     out.push(&Opcode::LdLoc(arr_slot));
     out.push(&Opcode::LdLoc(i_slot));
-    out.push(&Opcode::CallMethod { method_idx: iter_get_idx, arg_count: 2 });
+    out.push(&Opcode::CallMethod {
+        method_idx: iter_get_idx,
+        arg_count: 2,
+    });
     out.push(&Opcode::StLoc(elem_slot));
 
     let body_expr = arenas.exprs.get(body).clone();
@@ -312,14 +337,26 @@ pub(super) fn emit_lit(
     match value {
         LitValue::Str(sym) => {
             let raw = arenas.interner.resolve(*sym);
-            let unquoted = raw.strip_prefix('"').and_then(|s| s.strip_suffix('"')).unwrap_or(raw);
+            let unquoted = raw
+                .strip_prefix('"')
+                .and_then(|s| s.strip_suffix('"'))
+                .unwrap_or(raw);
             let s: Box<str> = unquoted.into();
             let const_idx = module.push_const(ConstEntry::String(s))?;
             out.push(&Opcode::LdConst(const_idx));
             Ok(())
         }
-        LitValue::Int(v) => { out.push(&Opcode::LdImmI64(*v)); Ok(()) }
-        LitValue::Float(v) => { out.push(&Opcode::LdImmF64(*v)); Ok(()) }
-        LitValue::Char(c) => { out.push(&Opcode::LdImmI64(i64::from(u32::from(*c)))); Ok(()) }
+        LitValue::Int(v) => {
+            out.push(&Opcode::LdImmI64(*v));
+            Ok(())
+        }
+        LitValue::Float(v) => {
+            out.push(&Opcode::LdImmF64(*v));
+            Ok(())
+        }
+        LitValue::Char(c) => {
+            out.push(&Opcode::LdImmI64(i64::from(u32::from(*c))));
+            Ok(())
+        }
     }
 }

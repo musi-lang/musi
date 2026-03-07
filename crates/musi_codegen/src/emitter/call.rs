@@ -1,13 +1,13 @@
 use musi_ast::{Expr, PostfixOp};
 use musi_shared::Idx;
 
-use crate::error::CodegenError;
 use crate::Module;
 use crate::Opcode;
+use crate::error::CodegenError;
 
-use super::state::{EmitArenas, EmitState, FnEmitter, VariantInfo};
 use super::expr::{emit_args, emit_expr};
 use super::field::emit_field_access;
+use super::state::{EmitArenas, EmitState, FnEmitter, VariantInfo};
 
 pub(super) fn emit_variant_construct(
     vinfo: &VariantInfo,
@@ -17,13 +17,24 @@ pub(super) fn emit_variant_construct(
     module: &mut Module,
     out: &mut FnEmitter,
 ) -> Result<(), CodegenError> {
-    let type_tag = state.type_tag_map.get(&vinfo.type_name).copied().unwrap_or(0);
+    let type_tag = state
+        .type_tag_map
+        .get(&vinfo.type_name)
+        .copied()
+        .unwrap_or(0);
     out.push(&Opcode::LdImmI64(vinfo.discriminant));
     emit_args(arenas, state, args, module, out)?;
     let provided = u16::try_from(args.len()).map_err(|_| CodegenError::UnsupportedExpr)?;
-    for _ in provided..vinfo.payload_count { out.push(&Opcode::LdImmUnit); }
-    for _ in vinfo.payload_count.saturating_add(1)..vinfo.total_field_count { out.push(&Opcode::LdImmUnit); }
-    out.push(&Opcode::NewObj { type_tag, field_count: vinfo.total_field_count });
+    for _ in provided..vinfo.payload_count {
+        out.push(&Opcode::LdImmUnit);
+    }
+    for _ in vinfo.payload_count.saturating_add(1)..vinfo.total_field_count {
+        out.push(&Opcode::LdImmUnit);
+    }
+    out.push(&Opcode::NewObj {
+        type_tag,
+        field_count: vinfo.total_field_count,
+    });
     Ok(())
 }
 
@@ -62,13 +73,19 @@ pub(super) fn receiver_has_field(
     out: &FnEmitter,
 ) -> bool {
     (|| -> Option<bool> {
-        let Expr::Ident { name: recv_name, .. } = arenas.exprs.get(recv_idx) else { return None; };
+        let Expr::Ident {
+            name: recv_name, ..
+        } = arenas.exprs.get(recv_idx)
+        else {
+            return None;
+        };
         let recv_str = arenas.interner.resolve(*recv_name);
         let slot = out.lookup_local(recv_str)?;
         let type_name = out.local_types.get(&slot)?;
         let tinfo = state.type_map.get(type_name)?;
         Some(tinfo.field_names.iter().any(|f| f == field_name))
-    })().unwrap_or(false)
+    })()
+    .unwrap_or(false)
 }
 
 pub(super) fn emit_ufcs_call(
@@ -103,7 +120,10 @@ pub(super) fn emit_ufcs_call(
         let recv_expr = arenas.exprs.get(recv_idx).clone();
         emit_expr(arenas, state, &recv_expr, module, out)?;
         emit_args(arenas, state, args, module, out)?;
-        out.push(&Opcode::CallMethod { method_idx: name_const_idx, arg_count });
+        out.push(&Opcode::CallMethod {
+            method_idx: name_const_idx,
+            arg_count,
+        });
         return Ok(());
     }
 
@@ -150,9 +170,12 @@ pub(super) fn emit_call(
 
     if let Expr::Postfix {
         base: recv_idx,
-        op: PostfixOp::Field { name: method_sym, .. },
+        op: PostfixOp::Field {
+            name: method_sym, ..
+        },
         ..
-    } = base_expr.clone() {
+    } = base_expr.clone()
+    {
         return emit_ufcs_call(recv_idx, method_sym, args, arenas, state, module, out);
     }
 
