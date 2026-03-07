@@ -88,12 +88,8 @@ impl Printer<'_> {
         self.write_char(')');
     }
 
-    pub(super) fn print_break(&mut self, label: Option<Symbol>, value: Option<Idx<Expr>>) {
+    pub(super) fn print_break(&mut self, value: Option<Idx<Expr>>) {
         self.write("(break");
-        if let Some(l) = label {
-            self.write_char(' ');
-            self.write(self.sym(l));
-        }
         if let Some(v) = value {
             self.write_char(' ');
             self.print_expr(v);
@@ -101,12 +97,8 @@ impl Printer<'_> {
         self.write_char(')');
     }
 
-    pub(super) fn print_cycle(&mut self, label: Option<Symbol>, guard: Option<Idx<Expr>>) {
+    pub(super) fn print_cycle(&mut self, guard: Option<Idx<Expr>>) {
         self.write("(cycle");
-        if let Some(l) = label {
-            self.write_char(' ');
-            self.write(self.sym(l));
-        }
         if let Some(g) = guard {
             self.write_char(' ');
             self.print_expr(g);

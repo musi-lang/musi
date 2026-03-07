@@ -22,7 +22,6 @@ impl Parser<'_> {
             TokenKind::Loop => self.parse_loop(),
             TokenKind::For => self.parse_for(),
             TokenKind::Match => self.parse_match(),
-            TokenKind::Label => self.parse_label(),
             TokenKind::Class => self.parse_class_def(),
             TokenKind::Given => self.parse_given_def(),
             _ => self.error_expr("expected declaration or loop after attributes/modifiers"),

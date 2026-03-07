@@ -33,7 +33,7 @@ lit_char = "'", (escape_char | (char - "'")), "'";
 
 lit = lit_number | lit_string | lit_char;
 
-lex_keyword = "record" | "choice" | "fn" | "const" | "var" | "import" | "export" | "match" | "case" | "if" | "then" | "else" | "elif" | "while" | "loop" | "for" | "in" | "return" | "break" | "cycle" | "defer" | "and" | "or" | "xor" | "not" | "shl" | "shr" | "opaque" | "extrin" | "from" | "as" | "with" | "label" | "using" | "class" | "given" | "satisfies" | "where" | "law";
+lex_keyword = "record" | "choice" | "fn" | "const" | "var" | "import" | "export" | "match" | "case" | "if" | "then" | "else" | "elif" | "while" | "loop" | "for" | "in" | "return" | "break" | "cycle" | "defer" | "and" | "or" | "xor" | "not" | "shl" | "shr" | "opaque" | "extrin" | "from" | "as" | "with" | "using" | "class" | "given" | "satisfies" | "where" | "law";
 
 atom_dot_lbrack = ".[";
 
@@ -222,7 +222,7 @@ ast_expr_return = "return", [ast_expr];
 
 ast_expr_break  = "break", [ast_expr];
 
-ast_expr_cycle  = "cycle", [lex_id], [guard];
+ast_expr_cycle  = "cycle", [guard];
 
 ast_expr_defer  = "defer", ast_expr;
 
@@ -254,7 +254,7 @@ ast_expr_after_attrs =
   | ast_expr_loop                                    (* loop { } [while cond] -- do-while *)
   | ast_expr_for                                     (* for                   *)
   | ast_expr_match                                   (* match                 *)
-  | ast_expr_label                                   (* label                 *)
+
   | ast_expr_def_class                               (* class -- no export    *)
   | ast_expr_def_given;                              (* given -- no export    *)
 
@@ -318,7 +318,7 @@ ast_where_clause = "where", ast_constraint, {",", ast_constraint};
 
 ast_constraint = ty_ident, "satisfies", ast_ty_named;
 
-(* Loop constructs -- [ast_attrs] and loop_label removed; handled by ast_expr_with_prefix *)
+(* Loop constructs -- [ast_attrs] removed; handled by ast_expr_with_prefix *)
 ast_expr_while = "while", ast_cond, [guard], "loop", ast_block;
 
 ast_expr_loop  = "loop", ast_block, ["while", ast_cond];
@@ -332,7 +332,7 @@ ast_expr_match = "match", ast_expr, "with", "(", ast_arm, {"|", ast_arm}, ")";
 ast_arm = [ast_attrs], ast_pat, [guard], "=>", ast_expr;
 
 (* Labeled block -- replaces the old  name: while/loop/for  prefix syntax     *)
-ast_expr_label = "label", lex_id, ast_block;
+
 
 (* BP 0020 *)
 ast_expr_postfix = ast_expr_atom, {ast_postfix_op};

@@ -130,7 +130,6 @@ impl TypeChecker<'_> {
             Expr::For {
                 iter, body, guard, ..
             } => self.infer_for_expr(*iter, *body, guard.as_ref().copied(), ctx),
-            Expr::Label { body, .. } => self.infer(*body, ctx),
             Expr::Return { value, .. } | Expr::Break { value, .. } => {
                 if let Some(&v) = value.as_ref() {
                     let _ty = self.infer(v, ctx);

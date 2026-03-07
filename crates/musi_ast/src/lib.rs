@@ -383,22 +383,15 @@ pub enum Expr {
         body: Idx<Self>,
         span: Span,
     },
-    Label {
-        name: Symbol,
-        body: Idx<Self>,
-        span: Span,
-    },
     Return {
         value: Option<Idx<Self>>,
         span: Span,
     },
     Break {
-        label: Option<Symbol>,
         value: Option<Idx<Self>>,
         span: Span,
     },
     Cycle {
-        label: Option<Symbol>,
         guard: Option<Idx<Self>>,
         span: Span,
     },

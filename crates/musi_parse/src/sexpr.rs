@@ -187,16 +187,9 @@ impl<'a> Printer<'a> {
                 body,
                 ..
             } => self.print_for(pat, *iter, *guard, *body),
-            Expr::Label { name, body, .. } => {
-                self.write("(label ");
-                self.write(self.sym(*name));
-                self.write_char(' ');
-                self.print_expr(*body);
-                self.write_char(')');
-            }
             Expr::Return { value, .. } => self.print_optional_tag("return", *value),
-            Expr::Break { label, value, .. } => self.print_break(*label, *value),
-            Expr::Cycle { label, guard, .. } => self.print_cycle(*label, *guard),
+            Expr::Break { value, .. } => self.print_break(*value),
+            Expr::Cycle { guard, .. } => self.print_cycle(*guard),
             Expr::Defer { body, .. } => {
                 self.write("(defer ");
                 self.print_expr(*body);

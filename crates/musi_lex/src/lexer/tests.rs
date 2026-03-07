@@ -71,7 +71,6 @@ fn all_keywords() {
         ("not", TokenKind::Not),
         ("as", TokenKind::As),
         ("with", TokenKind::With),
-        ("label", TokenKind::Label),
         ("using", TokenKind::Using),
         ("class", TokenKind::Class),
         ("given", TokenKind::Given),

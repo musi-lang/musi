@@ -37,7 +37,6 @@ Consequences:
 - `ast_expr_paren` -- left-factored `(` form covering unit `()`, single expression `(e)`, tuple `(e, ...)`, and block `(e; ...)`
 - `ast_expr_with_prefix = [ast_attrs], ast_expr_after_attrs` -- all constructs with optional attribute prefix go through this single rule; dispatches on keyword
 - `ast_fn_kind` -- unified rule for `fn`: `lex_id ...` = named definition, `[ty_params] params ... =>` = lambda; LL(1) because a name (letter) and `(` are disjoint first tokens
-- `ast_expr_label = "label", lex_id, ast_block` -- labeled blocks replace the old `name: while` prefix syntax; `label` is a keyword so FIRST is unambiguous
 - `ast_rec_lit_field = (field_base, bind_init) | (spread_op, ast_expr)` -- `<..` spread is LL(1) since it never starts `field_base`
 - `ast_rec_update` does not exist as a separate rule -- functional record update is `.{ <..base, field := val }` using spread
 

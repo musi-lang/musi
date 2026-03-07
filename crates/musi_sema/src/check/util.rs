@@ -133,7 +133,6 @@ pub(super) const fn span_of_expr(expr: &Expr) -> Span {
         | Expr::While { span, .. }
         | Expr::Loop { span, .. }
         | Expr::For { span, .. }
-        | Expr::Label { span, .. }
         | Expr::Return { span, .. }
         | Expr::Break { span, .. }
         | Expr::Cycle { span, .. }

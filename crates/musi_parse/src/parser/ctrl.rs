@@ -151,7 +151,6 @@ impl Parser<'_> {
         let _brk = self.expect(TokenKind::Break);
         let value = self.parse_opt_expr();
         Expr::Break {
-            label: None,
             value,
             span: self.finish_span(start),
         }
@@ -160,10 +159,8 @@ impl Parser<'_> {
     pub(super) fn parse_cycle(&mut self) -> Expr {
         let start = self.start_span();
         let _cyc = self.expect(TokenKind::Cycle);
-        let label = self.optional_ident();
         let guard = self.parse_opt_guard();
         Expr::Cycle {
-            label,
             guard,
             span: self.finish_span(start),
         }
@@ -295,15 +292,5 @@ impl Parser<'_> {
         }
     }
 
-    pub(super) fn parse_label(&mut self) -> Expr {
-        let start = self.start_span();
-        let _label = self.expect(TokenKind::Label);
-        let name = self.expect_symbol();
-        let body = self.parse_alloc_block();
-        Expr::Label {
-            name,
-            body,
-            span: self.finish_span(start),
-        }
-    }
+
 }

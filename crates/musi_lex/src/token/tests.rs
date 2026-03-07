@@ -35,7 +35,6 @@ fn keyword_from_str_returns_some_for_every_keyword() {
         ("not", TokenKind::Not),
         ("as", TokenKind::As),
         ("with", TokenKind::With),
-        ("label", TokenKind::Label),
         ("using", TokenKind::Using),
         ("class", TokenKind::Class),
         ("given", TokenKind::Given),

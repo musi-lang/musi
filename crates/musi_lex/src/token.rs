@@ -37,7 +37,6 @@ pub enum TokenKind {
     Not,
     As,
     With,
-    Label,
     Using,
     Class,
     Given,
@@ -141,7 +140,6 @@ impl TokenKind {
                 | Self::Not
                 | Self::As
                 | Self::With
-                | Self::Label
                 | Self::Using
                 | Self::Class
                 | Self::Given
@@ -189,7 +187,6 @@ impl TokenKind {
             Self::Not => Some("not"),
             Self::As => Some("as"),
             Self::With => Some("with"),
-            Self::Label => Some("label"),
             Self::Using => Some("using"),
             Self::Class => Some("class"),
             Self::Given => Some("given"),
@@ -292,7 +289,6 @@ pub fn keyword_from_str(s: &str) -> Option<TokenKind> {
         "not" => Some(TokenKind::Not),
         "as" => Some(TokenKind::As),
         "with" => Some(TokenKind::With),
-        "label" => Some(TokenKind::Label),
         "using" => Some(TokenKind::Using),
         "class" => Some(TokenKind::Class),
         "given" => Some(TokenKind::Given),

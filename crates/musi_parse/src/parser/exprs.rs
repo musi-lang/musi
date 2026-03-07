@@ -263,8 +263,6 @@ impl Parser<'_> {
             TokenKind::While => self.parse_while(),
             TokenKind::Loop => self.parse_loop(),
             TokenKind::For => self.parse_for(),
-            TokenKind::Label => self.parse_label(),
-
             TokenKind::Class => self.parse_class_def(),
             TokenKind::Given => self.parse_given_def(),
 

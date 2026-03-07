@@ -246,7 +246,6 @@ const fn can_start_expr(kind: TokenKind) -> bool {
             | TokenKind::While
             | TokenKind::Loop
             | TokenKind::For
-            | TokenKind::Label
             | TokenKind::Return
             | TokenKind::Break
             | TokenKind::Cycle

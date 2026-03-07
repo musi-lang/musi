@@ -255,7 +255,7 @@ impl<'a> Resolver<'a> {
                 ..
             } => self.resolve_for_expr(pat, *iter, guard.as_ref().copied(), *body, ctx, scope),
 
-            Expr::Label { body, .. } | Expr::Defer { body, .. } => {
+            Expr::Defer { body, .. } => {
                 self.resolve_expr(*body, ctx, scope);
             }
 

@@ -21,17 +21,17 @@ Musi is a programming language with a mathematically-motivated type system, func
 ## Features
 
 - **Type-safe** with bidirectional type inference
-- **Functional** -- pattern matching, lambda literals, labeled blocks, cons (`::`) for lists
-- **General-purpose** -- strings, records, choices (tagged unions), interfaces
-- **Efficient execution** -- stack-based MSIL bytecode with mark-sweep GC
-- **Editor integration** -- full LSP support with diagnostics and code navigation
-- **Production-ready** -- index-based references (no lifetimes), union-find unification
+- **Functional** -- pattern matching, lambda literals, higher-order functions, cons (`::`) for lists
+- **General-purpose** -- strings, arrays, records, choices (tagged unions), type classes
+- **Efficient execution** -- stack-based MSIL bytecode with reference-counted heap values
+- **Editor integration** -- VS Code extension with syntax highlighting and snippets
+- **Sound implementation** -- index-based AST (no lifetimes), union-find type unification
 
 ## Building
 
 ```bash
 cargo build --release
-cargo test --workspace
+cargo build --tests -p musi_parse -p musi_codegen -p musi_vm
 cargo clippy --workspace
 ```
 

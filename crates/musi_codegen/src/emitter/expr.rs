@@ -256,20 +256,14 @@ pub(super) fn emit_expr(
             out,
         ),
 
-        Expr::Break { label, value, .. } => {
-            if label.is_some() {
-                return Err(CodegenError::UnsupportedExpr);
-            }
+        Expr::Break { value, .. } => {
             emit_expr_or_unit(arenas, state, *value, module, out)?;
             let fixup = out.emit_jump_placeholder(FnEmitter::BR);
             out.push_break_fixup(fixup);
             Ok(())
         }
 
-        Expr::Cycle { label, guard, .. } => {
-            if label.is_some() {
-                return Err(CodegenError::UnsupportedExpr);
-            }
+        Expr::Cycle { guard, .. } => {
             let start_pos = out
                 .current_loop_start()
                 .ok_or(CodegenError::UnsupportedExpr)?;
@@ -310,18 +304,36 @@ pub(super) fn emit_expr(
         }
 
         Expr::Array { items, .. } => {
-            let mut count = 0u16;
-            for item in items {
-                match item {
-                    musi_ast::ArrayItem::Single(e) => {
+            let has_spread = items.iter().any(|i| matches!(i, musi_ast::ArrayItem::Spread(_)));
+            if has_spread {
+                // Spread path: build incrementally starting from an empty array.
+                out.push(&Opcode::NewArr(0));
+                for item in items {
+                    match item {
+                        musi_ast::ArrayItem::Single(e) => {
+                            let expr = arenas.exprs.get(*e).clone();
+                            emit_expr(arenas, state, &expr, module, out)?;
+                            out.push(&Opcode::ArrPush1);
+                        }
+                        musi_ast::ArrayItem::Spread(e) => {
+                            let expr = arenas.exprs.get(*e).clone();
+                            emit_expr(arenas, state, &expr, module, out)?;
+                            out.push(&Opcode::ArrConcat);
+                        }
+                    }
+                }
+            } else {
+                // Fast path: push all elements then create array in one shot.
+                let mut count = 0u16;
+                for item in items {
+                    if let musi_ast::ArrayItem::Single(e) = item {
                         let expr = arenas.exprs.get(*e).clone();
                         emit_expr(arenas, state, &expr, module, out)?;
                         count += 1;
                     }
-                    musi_ast::ArrayItem::Spread(_) => {}
                 }
+                out.push(&Opcode::NewArr(count));
             }
-            out.push(&Opcode::NewArr(count));
             Ok(())
         }
 
@@ -406,8 +418,7 @@ pub(super) fn emit_expr(
             Ok(())
         }
 
-        Expr::Label { .. }
-        | Expr::Defer { .. }
+        Expr::Defer { .. }
         | Expr::Import { .. }
         | Expr::Export { .. }
         | Expr::Using { .. }

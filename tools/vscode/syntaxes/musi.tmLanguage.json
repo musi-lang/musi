@@ -154,25 +154,9 @@
         },
         "keywords": {
             "patterns": [
-                {
-                    "comment": "break/cycle with a label target",
-                    "match": "\\b(break|cycle)\\b\\s+([a-zA-Z_][a-zA-Z0-9_]*)",
-                    "captures": {
-                        "1": { "name": "keyword.control.musi" },
-                        "2": { "name": "entity.name.label.musi" }
-                    }
-                },
-                {
-                    "comment": "label declaration: label outer ( ... )",
-                    "match": "\\b(label)\\b\\s+([a-zA-Z_][a-zA-Z0-9_]*)",
-                    "captures": {
-                        "1": { "name": "keyword.control.musi" },
-                        "2": { "name": "entity.name.label.musi" }
-                    }
-                },
-                {
+                {{
                     "name": "keyword.control.musi",
-                    "match": "\\b(if|then|elif|else|while|loop|for|in|match|case|with|return|break|cycle|defer|label|using|satisfies|where)\\b"
+                    "match": "\\b(if|then|elif|else|while|loop|for|in|match|case|with|return|break|cycle|defer|using|satisfies|where)\\b"
                 },
                 {
                     "comment": "module-level import keywords (export is a modifier, not an import keyword)",
