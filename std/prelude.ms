@@ -30,6 +30,7 @@ export choice Expect['T, 'E] { Fail('E) | Pass('T) };  // explicit error handlin
 #[intrinsic("write")]         export extrin fn write(s: String): Unit;
 #[intrinsic("int_to_string")]   export extrin fn int_to_string(n: Int): String;
 #[intrinsic("float_to_string")] export extrin fn float_to_string(n: Float): String;
+#[intrinsic("string_concat")]   export extrin fn string_concat(a: String, b: String): String;
 
 class Eq['T] {
     fn eq(a: 'T, b: 'T): Bool;
