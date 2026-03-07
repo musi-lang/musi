@@ -20,6 +20,15 @@ impl Severity {
             Self::Note => "note",
         }
     }
+
+    #[must_use]
+    const fn ansi_color(self) -> &'static str {
+        match self {
+            Self::Error => "\x1b[31m",   // red
+            Self::Warning => "\x1b[33m", // yellow
+            Self::Note => "\x1b[36m",    // cyan
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -66,6 +75,82 @@ impl Diagnostic {
         let file = source_db.name(self.primary.file_id);
         let severity = self.severity.label();
         format!("{file}:{line}:{col}: {severity}: {}", self.message)
+    }
+
+    /// Renders a rich, rustc-style diagnostic with source context and underlines.
+    ///
+    /// Uses ANSI colors when `use_color` is true.
+    #[must_use]
+    pub fn render_rich(&self, source_db: &SourceDb, use_color: bool) -> String {
+        use std::fmt::Write;
+
+        let (line, col) = source_db.lookup(self.primary.file_id, self.primary.span.start);
+        let file = source_db.name(self.primary.file_id);
+        let severity = self.severity.label();
+
+        let (sev_start, reset) = if use_color {
+            (self.severity.ansi_color(), "\x1b[0m")
+        } else {
+            ("", "")
+        };
+
+        let mut out = String::new();
+
+        // Header: "error: message"
+        let _ = writeln!(out, "{sev_start}{severity}{reset}: {}", self.message);
+
+        let line_str = line.to_string();
+        let gutter_width = line_str.len();
+
+        // Location: " --> file:line:col"
+        let _ = writeln!(out, "{:gutter_width$}--> {file}:{line}:{col}", " ");
+
+        // Blank gutter line
+        let _ = writeln!(out, "{:gutter_width$} |", " ");
+
+        // Source line
+        let source_line = source_db.get_line(self.primary.file_id, line);
+        let _ = writeln!(out, "{line_str} | {source_line}");
+
+        // Underline
+        let underline_col = (col as usize).saturating_sub(1);
+        let caret_len = (self.primary.span.length as usize).max(1);
+        let _ = write!(
+            out,
+            "{:gutter_width$} | {:underline_col$}{sev_start}{:^>caret_len$}{reset}",
+            " ", "", ""
+        );
+
+        // Secondary labels
+        for label in &self.secondary {
+            let (s_line, s_col) = source_db.lookup(label.file_id, label.span.start);
+            let s_file = source_db.name(label.file_id);
+
+            let (note_start, note_reset) = if use_color {
+                (Severity::Note.ansi_color(), "\x1b[0m")
+            } else {
+                ("", "")
+            };
+
+            let _ = write!(out, "\n{note_start}note{note_reset}: {}", label.message);
+            let _ = write!(out, "\n{:gutter_width$}--> {s_file}:{s_line}:{s_col}", " ");
+
+            let s_line_str = s_line.to_string();
+            let s_gutter = s_line_str.len().max(gutter_width);
+            let s_source = source_db.get_line(label.file_id, s_line);
+            let s_underline_col = (s_col as usize).saturating_sub(1);
+            let s_caret_len = (label.span.length as usize).max(1);
+
+            let _ = write!(out, "\n{:s_gutter$} |", " ");
+            let _ = write!(out, "\n{s_line_str:>s_gutter$} | {s_source}");
+            let _ = write!(
+                out,
+                "\n{:s_gutter$} | {:s_underline_col$}{note_start}{:^>s_caret_len$}{note_reset}",
+                " ", "", ""
+            );
+        }
+
+        out
     }
 }
 

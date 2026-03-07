@@ -1,14 +1,11 @@
-use std::collections::{HashMap, HashSet};
-use std::fs;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process;
 
 use clap::Args;
 use musi_shared::{DiagnosticBag, Interner, SourceDb};
 
-use crate::compiler::{
-    collect_dep_paths, parse_file, print_diags_and_exit, read_file, resolve_import_path,
-};
+use crate::compiler::{collect_and_parse_deps, parse_file, print_diags_and_exit, read_file};
 
 #[derive(Args)]
 pub(crate) struct CheckArgs {
@@ -33,47 +30,14 @@ pub(crate) fn run(args: CheckArgs) {
     }
 
     let user_file_path = args.file.as_path();
-    let mut queue: Vec<String> = collect_dep_paths(&user_module, &interner);
-    let mut compiled: HashSet<String> = HashSet::new();
-    let mut dep_modules = Vec::new();
-    let mut qi = 0;
-
-    while qi < queue.len() {
-        let import_path = queue[qi].clone();
-        qi += 1;
-
-        let dep_src_owned: String;
-        let key: String;
-        if let Some(native_src) = musi_native::source_for(&import_path) {
-            key = import_path.clone();
-            if !compiled.insert(key.clone()) {
-                continue;
-            }
-            dep_src_owned = native_src.to_owned();
-        } else {
-            let full_path = resolve_import_path(&import_path, user_file_path);
-            key = full_path.to_string_lossy().into_owned();
-            if !compiled.insert(key.clone()) {
-                continue;
-            }
-            dep_src_owned = match fs::read_to_string(&full_path) {
-                Ok(s) => s,
-                Err(_) => continue, // tolerate missing std files in check mode
-            };
-        }
-
-        let (dep_file_id, dep_module) = parse_file(
-            &key,
-            &dep_src_owned,
-            &mut interner,
-            &mut source_db,
-            &mut diags,
-        );
-        for path in collect_dep_paths(&dep_module, &interner) {
-            queue.push(path);
-        }
-        dep_modules.push((import_path, dep_module, dep_file_id));
-    }
+    let dep_modules = collect_and_parse_deps(
+        &user_module,
+        user_file_path,
+        &mut interner,
+        &mut source_db,
+        &mut diags,
+        true,
+    );
 
     let mut import_map: HashMap<String, musi_sema::ModuleExports> = HashMap::new();
     let empty_imports = HashMap::new();
@@ -92,11 +56,13 @@ pub(crate) fn run(args: CheckArgs) {
     let _result = musi_sema::analyze(&user_module, &interner, file_id, &mut diags, &import_map);
 
     if diags.has_errors() {
+        use std::io::IsTerminal;
+        let use_color = std::io::stderr().is_terminal();
         for diag in diags.iter() {
-            eprintln!("{}", diag.render_simple(&source_db));
+            eprintln!("{}", diag.render_rich(&source_db, use_color));
         }
         process::exit(1);
     }
 
-    process::exit(0);
+    println!("\u{2713} no type errors");
 }
