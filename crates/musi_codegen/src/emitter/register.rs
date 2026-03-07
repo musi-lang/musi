@@ -7,7 +7,7 @@ use crate::module::MethodEntry;
 use crate::{FunctionEntry, Module, SymbolEntry, SymbolFlags};
 
 use super::state::{
-    EmitState, TypeInfo, TypeTag, VariantInfo, payload_count, ty_name_str,
+    EmitState, TypeInfo, TypeTag, VariantInfo, payload_count, push_plain_fn, ty_name_str,
 };
 
 pub(super) fn register_fn_def(
@@ -99,6 +99,14 @@ pub(super) fn register_fn_def(
     Ok(())
 }
 
+fn ensure_type_tag(state: &mut EmitState, type_name: &str) {
+    if !state.type_tag_map.contains_key(type_name) {
+        let tag = state.next_type_tag;
+        state.next_type_tag = state.next_type_tag.saturating_add(1);
+        let _prev = state.type_tag_map.insert(type_name.to_owned(), tag);
+    }
+}
+
 pub(super) fn register_record(
     item_idx: Idx<Expr>,
     exprs: &Arena<Expr>,
@@ -110,11 +118,7 @@ pub(super) fn register_record(
     let field_names: Vec<String> = fields.iter()
         .map(|f| interner.resolve(f.name).to_owned())
         .collect();
-    if !state.type_tag_map.contains_key(&type_name) {
-        let tag = state.next_type_tag;
-        state.next_type_tag = state.next_type_tag.saturating_add(1);
-        let _prev = state.type_tag_map.insert(type_name.clone(), tag);
-    }
+    ensure_type_tag(state, &type_name);
     let _prev = state.type_map.insert(type_name, TypeInfo { field_names });
 }
 
@@ -128,11 +132,7 @@ pub(super) fn register_choice(
         return Ok(());
     };
     let type_name = interner.resolve(*name).to_owned();
-    if !state.type_tag_map.contains_key(&type_name) {
-        let tag = state.next_type_tag;
-        state.next_type_tag = state.next_type_tag.saturating_add(1);
-        let _prev = state.type_tag_map.insert(type_name.clone(), tag);
-    }
+    ensure_type_tag(state, &type_name);
 
     let max_payload = variants.iter().map(payload_count).max().unwrap_or(0);
     let total_field_count = max_payload + 1;
@@ -209,27 +209,8 @@ pub(super) fn register_given_def(
         if modifiers.iter().any(|m| matches!(m, Modifier::Extrin(_))) { continue; }
         let fn_name = interner.resolve(*name).to_owned();
         let param_count = u8::try_from(params.len()).map_err(|_| CodegenError::ParameterCountOverflow)?;
-
-        let sym_idx = module.push_symbol(SymbolEntry {
-            name: fn_name.clone().into_boxed_str(),
-            flags: SymbolFlags::new(0),
-            intrinsic_id: intrinsics::NONE_ID,
-            abi: Box::from(""),
-            link_lib: None,
-            link_name: None,
-        })?;
-        let fn_idx = module.push_function(FunctionEntry {
-            symbol_idx: sym_idx,
-            param_count,
-            local_count: 0,
-            code_offset: 0,
-            code_length: 0,
-        })?;
-        module.method_table.push(MethodEntry {
-            name: fn_name.clone().into_boxed_str(),
-            type_tag,
-            fn_idx,
-        });
+        let fn_idx = push_plain_fn(&fn_name, param_count, module)?;
+        module.method_table.push(MethodEntry { name: fn_name.into_boxed_str(), type_tag, fn_idx });
     }
     Ok(())
 }

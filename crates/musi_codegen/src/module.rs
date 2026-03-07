@@ -20,6 +20,22 @@ fn read_str(r: &mut Cursor<&[u8]>, len: usize) -> Result<Box<str>, DeserError> {
         .map(Into::into)
 }
 
+fn write_section<T>(buf: &mut Vec<u8>, items: &[T], encode: fn(&T, &mut Vec<u8>), msg: &str) {
+    let count = u32::try_from(items.len()).expect(msg);
+    buf.extend_from_slice(&count.to_le_bytes());
+    for item in items { encode(item, buf); }
+}
+
+fn read_section<T>(
+    r: &mut Cursor<&[u8]>,
+    decode: fn(&mut Cursor<&[u8]>) -> Result<T, DeserError>,
+) -> Result<Vec<T>, DeserError> {
+    let n = r.read_u32::<LE>().map_err(|_| DeserError::UnexpectedEof)?;
+    let mut items = Vec::with_capacity(n as usize);
+    for _ in 0..n { items.push(decode(r)?); }
+    Ok(items)
+}
+
 /// Appends `entry` to `vec` and returns its index as a `u16`.
 ///
 /// Returns `err` if the vector already has `u16::MAX` elements.
@@ -278,27 +294,9 @@ impl Module {
         buf.extend_from_slice(&VERSION.to_le_bytes());
         buf.extend_from_slice(&0u16.to_le_bytes()); // flags (reserved)
 
-        // Const pool
-        let count = u32::try_from(self.const_pool.len()).expect("const pool count fits u32");
-        buf.extend_from_slice(&count.to_le_bytes());
-        for entry in &self.const_pool {
-            entry.encode_into(&mut buf);
-        }
-
-        // Symbol table
-        let count = u32::try_from(self.symbol_table.len()).expect("symbol table count fits u32");
-        buf.extend_from_slice(&count.to_le_bytes());
-        for sym in &self.symbol_table {
-            sym.encode_into(&mut buf);
-        }
-
-        // Function table
-        let count =
-            u32::try_from(self.function_table.len()).expect("function table count fits u32");
-        buf.extend_from_slice(&count.to_le_bytes());
-        for func in &self.function_table {
-            func.encode_into(&mut buf);
-        }
+        write_section(&mut buf, &self.const_pool,     ConstEntry::encode_into,    "const pool count fits u32");
+        write_section(&mut buf, &self.symbol_table,   SymbolEntry::encode_into,   "symbol table count fits u32");
+        write_section(&mut buf, &self.function_table, FunctionEntry::encode_into, "function table count fits u32");
 
         // Code section
         let length = u32::try_from(self.code.len()).expect("code section length fits u32");
@@ -329,26 +327,9 @@ impl Module {
         }
         let _flags = r.read_u16::<LE>().map_err(|_| DeserError::UnexpectedEof)?;
 
-        // Const pool
-        let n = r.read_u32::<LE>().map_err(|_| DeserError::UnexpectedEof)?;
-        let mut const_pool = Vec::new();
-        for _ in 0..n {
-            const_pool.push(ConstEntry::decode(&mut r)?);
-        }
-
-        // Symbol table
-        let n = r.read_u32::<LE>().map_err(|_| DeserError::UnexpectedEof)?;
-        let mut symbol_table = Vec::new();
-        for _ in 0..n {
-            symbol_table.push(SymbolEntry::decode(&mut r)?);
-        }
-
-        // Function table
-        let n = r.read_u32::<LE>().map_err(|_| DeserError::UnexpectedEof)?;
-        let mut function_table = Vec::new();
-        for _ in 0..n {
-            function_table.push(FunctionEntry::decode(&mut r)?);
-        }
+        let const_pool    = read_section(&mut r, ConstEntry::decode)?;
+        let symbol_table  = read_section(&mut r, SymbolEntry::decode)?;
+        let function_table = read_section(&mut r, FunctionEntry::decode)?;
 
         // Code section
         let code_len = r.read_u32::<LE>().map_err(|_| DeserError::UnexpectedEof)?;

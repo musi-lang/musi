@@ -4,7 +4,8 @@ use musi_ast::{ChoiceVariant, Expr, Ty, VariantPayload};
 use musi_shared::{Arena, Idx, Interner};
 
 use crate::error::CodegenError;
-use crate::Opcode;
+use crate::intrinsics;
+use crate::{FunctionEntry, Module, Opcode, SymbolEntry, SymbolFlags};
 
 // -- TypeTag ------------------------------------------------------------------
 
@@ -157,22 +158,12 @@ pub(super) struct TypeInfo {
     pub(super) field_names: Vec<String>,
 }
 
+#[derive(Clone)]
 pub(super) struct VariantInfo {
     pub(super) type_name: String,
     pub(super) discriminant: i64,
     pub(super) payload_count: u16,
     pub(super) total_field_count: u16,
-}
-
-impl Clone for VariantInfo {
-    fn clone(&self) -> Self {
-        Self {
-            type_name: self.type_name.clone(),
-            discriminant: self.discriminant,
-            payload_count: self.payload_count,
-            total_field_count: self.total_field_count,
-        }
-    }
 }
 
 pub(super) struct PendingLambda {
@@ -219,4 +210,46 @@ pub(super) fn payload_count(v: &ChoiceVariant) -> u16 {
         Some(VariantPayload::Positional(tys)) => u16::try_from(tys.len()).unwrap_or(u16::MAX),
         Some(VariantPayload::Named(fields)) => u16::try_from(fields.len()).unwrap_or(u16::MAX),
     }
+}
+
+// -- Shared emitter helpers ---------------------------------------------------
+
+/// Creates a plain (non-native, non-export) symbol + function entry and returns the function index.
+pub(super) fn push_plain_fn(
+    name: &str,
+    param_count: u8,
+    module: &mut Module,
+) -> Result<u16, CodegenError> {
+    let sym_idx = module.push_symbol(SymbolEntry {
+        name: name.into(),
+        flags: SymbolFlags::new(0),
+        intrinsic_id: intrinsics::NONE_ID,
+        abi: Box::from(""),
+        link_lib: None,
+        link_name: None,
+    })?;
+    module.push_function(FunctionEntry {
+        symbol_idx: sym_idx,
+        param_count,
+        local_count: 0,
+        code_offset: 0,
+        code_length: 0,
+    })
+}
+
+/// Registers a closure/lambda/inner-fn: creates the fn entry, inserts into `fn_map`,
+/// and schedules the body for emission. Returns the function index.
+pub(super) fn register_fn_closure(
+    name: &str,
+    params_with_types: Vec<(String, Option<String>)>,
+    body: Idx<Expr>,
+    state: &mut EmitState,
+    module: &mut Module,
+) -> Result<u16, CodegenError> {
+    let param_count = u8::try_from(params_with_types.len())
+        .map_err(|_| CodegenError::ParameterCountOverflow)?;
+    let fn_idx = push_plain_fn(name, param_count, module)?;
+    let _prev = state.fn_map.insert(name.to_owned(), fn_idx);
+    state.pending_lambdas.push(PendingLambda { fn_idx, params: params_with_types, body });
+    Ok(fn_idx)
 }

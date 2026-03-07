@@ -4,10 +4,9 @@ use musi_ast::{Expr, FieldInit, Modifier, Pat, PostfixOp, PrefixOp};
 use musi_shared::Idx;
 
 use crate::error::CodegenError;
-use crate::intrinsics;
-use crate::{FunctionEntry, Module, Opcode, SymbolEntry, SymbolFlags};
+use crate::{Module, Opcode};
 
-use super::state::{EmitArenas, EmitState, FnEmitter, PendingLambda, param_list_with_types};
+use super::state::{EmitArenas, EmitState, FnEmitter, param_list_with_types, register_fn_closure};
 use super::call::{emit_static_call, emit_variant_construct};
 use super::field::emit_postfix;
 use super::pattern::emit_match;
@@ -167,28 +166,8 @@ pub(super) fn emit_expr(
         Expr::Lambda { params, body, .. } => {
             let lambda_name = format!("__lambda_{}", state.lambda_counter);
             state.lambda_counter = state.lambda_counter.checked_add(1).ok_or(CodegenError::TooManyFunctions)?;
-
             let params_with_types = param_list_with_types(params, arenas.interner);
-            let param_count = u8::try_from(params_with_types.len())
-                .map_err(|_| CodegenError::ParameterCountOverflow)?;
-
-            let sym_idx = module.push_symbol(SymbolEntry {
-                name: lambda_name.clone().into_boxed_str(),
-                flags: SymbolFlags::new(0),
-                intrinsic_id: intrinsics::NONE_ID,
-                abi: Box::from(""),
-                link_lib: None,
-                link_name: None,
-            })?;
-            let fn_idx = module.push_function(FunctionEntry {
-                symbol_idx: sym_idx,
-                param_count,
-                local_count: 0,
-                code_offset: 0,
-                code_length: 0,
-            })?;
-            let _prev = state.fn_map.insert(lambda_name, fn_idx);
-            state.pending_lambdas.push(PendingLambda { fn_idx, params: params_with_types, body: *body });
+            let fn_idx = register_fn_closure(&lambda_name, params_with_types, *body, state, module)?;
             out.push(&Opcode::LdFnIdx(fn_idx));
             Ok(())
         }
@@ -283,25 +262,7 @@ pub(super) fn emit_expr(
             if modifiers.iter().any(|m| matches!(m, Modifier::Extrin(_))) { return Ok(()); }
             let fn_name = arenas.interner.resolve(*name).to_owned();
             let params_with_types = param_list_with_types(params, arenas.interner);
-            let param_count = u8::try_from(params_with_types.len())
-                .map_err(|_| CodegenError::ParameterCountOverflow)?;
-            let sym_idx = module.push_symbol(SymbolEntry {
-                name: fn_name.clone().into_boxed_str(),
-                flags: SymbolFlags::new(0),
-                intrinsic_id: intrinsics::NONE_ID,
-                abi: Box::from(""),
-                link_lib: None,
-                link_name: None,
-            })?;
-            let fn_idx = module.push_function(FunctionEntry {
-                symbol_idx: sym_idx,
-                param_count,
-                local_count: 0,
-                code_offset: 0,
-                code_length: 0,
-            })?;
-            let _prev = state.fn_map.insert(fn_name.clone(), fn_idx);
-            state.pending_lambdas.push(PendingLambda { fn_idx, params: params_with_types, body: *body_idx });
+            let fn_idx = register_fn_closure(&fn_name, params_with_types, *body_idx, state, module)?;
             let slot = out.define_local(&fn_name)?;
             out.push(&Opcode::LdFnIdx(fn_idx));
             out.push(&Opcode::StLoc(slot));

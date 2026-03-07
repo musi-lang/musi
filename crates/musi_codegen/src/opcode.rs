@@ -220,6 +220,16 @@ pub enum Opcode {
     ArrSlice,
 }
 
+fn push_u16_op(buf: &mut Vec<u8>, tag: u8, val: u16) {
+    buf.push(tag);
+    buf.extend_from_slice(&val.to_le_bytes());
+}
+
+fn push_i32_op(buf: &mut Vec<u8>, tag: u8, val: i32) {
+    buf.push(tag);
+    buf.extend_from_slice(&val.to_le_bytes());
+}
+
 impl Opcode {
     /// Encodes this opcode into `buf` as little-endian bytes.
     pub fn encode_into(&self, buf: &mut Vec<u8>) {
@@ -231,43 +241,21 @@ impl Opcode {
             Self::Dup => buf.push(DUP),
             Self::HaltError => buf.push(HALT_ERROR),
             Self::LdImmUnit => buf.push(LD_IMM_UNIT),
-            Self::LdImmI64(v) => {
-                buf.push(LD_IMM_I64);
-                buf.extend_from_slice(&v.to_le_bytes());
-            }
-            Self::LdImmF64(v) => {
-                buf.push(LD_IMM_F64);
-                buf.extend_from_slice(&v.to_le_bytes());
-            }
-            Self::LdConst(idx) => {
-                buf.push(LD_CONST);
-                buf.extend_from_slice(&idx.to_le_bytes());
-            }
-            Self::LdLoc(idx) => {
-                buf.push(LD_LOC);
-                buf.extend_from_slice(&idx.to_le_bytes());
-            }
-            Self::StLoc(idx) => {
-                buf.push(ST_LOC);
-                buf.extend_from_slice(&idx.to_le_bytes());
-            }
-            Self::Call(fn_idx) => {
-                buf.push(CALL);
-                buf.extend_from_slice(&fn_idx.to_le_bytes());
-            }
-            Self::LdFnIdx(idx) => {
-                buf.push(LD_FN_IDX);
-                buf.extend_from_slice(&idx.to_le_bytes());
-            }
+            Self::LdImmI64(v) => { buf.push(LD_IMM_I64); buf.extend_from_slice(&v.to_le_bytes()); }
+            Self::LdImmF64(v) => { buf.push(LD_IMM_F64); buf.extend_from_slice(&v.to_le_bytes()); }
+            Self::LdConst(v)  => push_u16_op(buf, LD_CONST,  *v),
+            Self::LdLoc(v)    => push_u16_op(buf, LD_LOC,    *v),
+            Self::StLoc(v)    => push_u16_op(buf, ST_LOC,    *v),
+            Self::Call(v)     => push_u16_op(buf, CALL,      *v),
+            Self::LdFnIdx(v)  => push_u16_op(buf, LD_FN_IDX, *v),
+            Self::LdFld(v)    => push_u16_op(buf, LD_FLD,    *v),
+            Self::OptField(v) => push_u16_op(buf, OPT_FIELD, *v),
+            Self::NewArr(v)   => push_u16_op(buf, NEW_ARR,   *v),
             Self::CallDynamic => buf.push(CALL_DYNAMIC),
             Self::NewObj { type_tag, field_count } => {
                 buf.push(NEW_OBJ);
                 buf.extend_from_slice(&type_tag.to_le_bytes());
                 buf.extend_from_slice(&field_count.to_le_bytes());
-            }
-            Self::LdFld(idx) => {
-                buf.push(LD_FLD);
-                buf.extend_from_slice(&idx.to_le_bytes());
             }
             Self::LdTag => buf.push(LD_TAG),
             Self::AddI64 => buf.push(ADD_I64),
@@ -282,60 +270,43 @@ impl Opcode {
             Self::DivF64 => buf.push(DIV_F64),
             Self::RemF64 => buf.push(REM_F64),
             Self::NegF64 => buf.push(NEG_F64),
-            Self::EqI64 => buf.push(EQ_I64),
+            Self::EqI64  => buf.push(EQ_I64),
             Self::NeqI64 => buf.push(NEQ_I64),
-            Self::LtI64 => buf.push(LT_I64),
-            Self::GtI64 => buf.push(GT_I64),
+            Self::LtI64  => buf.push(LT_I64),
+            Self::GtI64  => buf.push(GT_I64),
             Self::LeqI64 => buf.push(LEQ_I64),
             Self::GeqI64 => buf.push(GEQ_I64),
-            Self::EqF64 => buf.push(EQ_F64),
+            Self::EqF64  => buf.push(EQ_F64),
             Self::NeqF64 => buf.push(NEQ_F64),
-            Self::LtF64 => buf.push(LT_F64),
-            Self::GtF64 => buf.push(GT_F64),
+            Self::LtF64  => buf.push(LT_F64),
+            Self::GtF64  => buf.push(GT_F64),
             Self::LeqF64 => buf.push(LEQ_F64),
             Self::GeqF64 => buf.push(GEQ_F64),
-            Self::EqBool => buf.push(EQ_BOOL),
+            Self::EqBool  => buf.push(EQ_BOOL),
             Self::NeqBool => buf.push(NEQ_BOOL),
-            Self::EqStr => buf.push(EQ_STR),
-            Self::NeqStr => buf.push(NEQ_STR),
-            Self::Not => buf.push(NOT),
+            Self::EqStr   => buf.push(EQ_STR),
+            Self::NeqStr  => buf.push(NEQ_STR),
+            Self::Not    => buf.push(NOT),
             Self::BitAnd => buf.push(BIT_AND),
-            Self::BitOr => buf.push(BIT_OR),
+            Self::BitOr  => buf.push(BIT_OR),
             Self::BitXor => buf.push(BIT_XOR),
             Self::BitNot => buf.push(BIT_NOT),
-            Self::Shl => buf.push(SHL),
-            Self::Shr => buf.push(SHR),
-            Self::Br(offset) => {
-                buf.push(BR);
-                buf.extend_from_slice(&offset.to_le_bytes());
-            }
-            Self::BrTrue(offset) => {
-                buf.push(BR_TRUE);
-                buf.extend_from_slice(&offset.to_le_bytes());
-            }
-            Self::BrFalse(offset) => {
-                buf.push(BR_FALSE);
-                buf.extend_from_slice(&offset.to_le_bytes());
-            }
-            Self::ConcatStr => buf.push(CONCAT_STR),
+            Self::Shl    => buf.push(SHL),
+            Self::Shr    => buf.push(SHR),
+            Self::Br(offset)      => push_i32_op(buf, BR,       *offset),
+            Self::BrTrue(offset)  => push_i32_op(buf, BR_TRUE,  *offset),
+            Self::BrFalse(offset) => push_i32_op(buf, BR_FALSE, *offset),
+            Self::ConcatStr   => buf.push(CONCAT_STR),
             Self::NilCoalesce => buf.push(NIL_COALESCE),
-            Self::OptField(idx) => {
-                buf.push(OPT_FIELD);
-                buf.extend_from_slice(&idx.to_le_bytes());
-            }
             Self::CallMethod { method_idx, arg_count } => {
                 buf.push(CALL_METHOD);
                 buf.extend_from_slice(&method_idx.to_le_bytes());
                 buf.extend_from_slice(&arg_count.to_le_bytes());
             }
-            Self::NewArr(n) => {
-                buf.push(NEW_ARR);
-                buf.extend_from_slice(&n.to_le_bytes());
-            }
-            Self::ArrGet => buf.push(ARR_GET),
-            Self::ArrSet => buf.push(ARR_SET),
-            Self::ArrLen => buf.push(ARR_LEN),
-            Self::ArrPush => buf.push(ARR_PUSH),
+            Self::ArrGet   => buf.push(ARR_GET),
+            Self::ArrSet   => buf.push(ARR_SET),
+            Self::ArrLen   => buf.push(ARR_LEN),
+            Self::ArrPush  => buf.push(ARR_PUSH),
             Self::ArrSlice => buf.push(ARR_SLICE),
         }
     }
@@ -439,57 +410,6 @@ impl Opcode {
     #[must_use]
     pub const fn encoded_len(&self) -> usize {
         match self {
-            Self::Nop
-            | Self::Halt
-            | Self::Ret
-            | Self::Drop
-            | Self::Dup
-            | Self::HaltError
-            | Self::LdImmUnit
-            | Self::CallDynamic
-            | Self::LdTag
-            | Self::AddI64
-            | Self::SubI64
-            | Self::MulI64
-            | Self::DivI64
-            | Self::RemI64
-            | Self::NegI64
-            | Self::AddF64
-            | Self::SubF64
-            | Self::MulF64
-            | Self::DivF64
-            | Self::RemF64
-            | Self::NegF64
-            | Self::EqI64
-            | Self::NeqI64
-            | Self::LtI64
-            | Self::GtI64
-            | Self::LeqI64
-            | Self::GeqI64
-            | Self::EqF64
-            | Self::NeqF64
-            | Self::LtF64
-            | Self::GtF64
-            | Self::LeqF64
-            | Self::GeqF64
-            | Self::EqBool
-            | Self::NeqBool
-            | Self::EqStr
-            | Self::NeqStr
-            | Self::Not
-            | Self::BitAnd
-            | Self::BitOr
-            | Self::BitXor
-            | Self::BitNot
-            | Self::Shl
-            | Self::Shr
-            | Self::ConcatStr
-            | Self::NilCoalesce
-            | Self::ArrGet
-            | Self::ArrSet
-            | Self::ArrLen
-            | Self::ArrPush
-            | Self::ArrSlice => 1,
             Self::LdImmI64(_) | Self::LdImmF64(_) => 9,
             Self::LdConst(_)
             | Self::LdLoc(_)
@@ -499,8 +419,12 @@ impl Opcode {
             | Self::LdFld(_)
             | Self::OptField(_)
             | Self::NewArr(_) => 3,
-            Self::Br(_) | Self::BrTrue(_) | Self::BrFalse(_) => 5,
-            Self::NewObj { .. } | Self::CallMethod { .. } => 5,
+            Self::Br(_)
+            | Self::BrTrue(_)
+            | Self::BrFalse(_)
+            | Self::NewObj { .. }
+            | Self::CallMethod { .. } => 5,
+            _ => 1,
         }
     }
 }
