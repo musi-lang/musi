@@ -139,12 +139,12 @@ given Show[String] {
     fn show(a: String): String => a;
 };
 
-#[intrinsic("array_length")]  export extrin fn array_length(arr: []Int): Int;
-#[intrinsic("array_push")]    export extrin fn array_push(arr: []Int, val: Int): Unit;
-#[intrinsic("array_pop")]     export extrin fn array_pop(arr: []Int): Option[Int];
-#[intrinsic("array_get")]     export extrin fn array_get(arr: []Int, idx: Int): Int;
-#[intrinsic("array_set")]     export extrin fn array_set(arr: []Int, idx: Int, val: Int): Unit;
-#[intrinsic("array_slice")]   export extrin fn array_slice(arr: []Int, start: Int, end: Int): []Int;
+#[intrinsic("array_length")]  export extrin fn array_length['T](arr: []'T): Int;
+#[intrinsic("array_push")]    export extrin fn array_push['T](arr: []'T, val: 'T): Unit;
+#[intrinsic("array_pop")]     export extrin fn array_pop['T](arr: []'T): Option['T];
+#[intrinsic("array_get")]     export extrin fn array_get['T](arr: []'T, idx: Int): 'T;
+#[intrinsic("array_set")]     export extrin fn array_set['T](arr: []'T, idx: Int, val: 'T): Unit;
+#[intrinsic("array_slice")]   export extrin fn array_slice['T](arr: []'T, start: Int, end: Int): []'T;
 
 class Iterable['C, 'E] {
     fn iter_len(c: 'C): Int;
