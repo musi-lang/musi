@@ -52,20 +52,16 @@ fn bool_val(b: bool) -> Value {
     Value::Object { type_tag: 0, fields: Rc::new(vec![Value::Int(i64::from(b))]) }
 }
 
-fn intrinsic_writeln(_vm: &Vm, args: &[Value]) -> Value {
+fn do_write(args: &[Value], newline: bool) -> Value {
     for arg in args {
         print!("{arg}");
     }
-    println!();
+    if newline { println!(); }
     Value::Unit
 }
 
-fn intrinsic_write(_vm: &Vm, args: &[Value]) -> Value {
-    for arg in args {
-        print!("{arg}");
-    }
-    Value::Unit
-}
+fn intrinsic_writeln(_vm: &Vm, args: &[Value]) -> Value { do_write(args, true) }
+fn intrinsic_write(_vm: &Vm, args: &[Value]) -> Value { do_write(args, false) }
 
 fn intrinsic_int_to_string(_vm: &Vm, args: &[Value]) -> Value {
     match args.first() {
@@ -88,11 +84,8 @@ fn intrinsic_string_length(_vm: &Vm, args: &[Value]) -> Value {
     }
 }
 
-fn intrinsic_nat_to_string(_vm: &Vm, args: &[Value]) -> Value {
-    match args.first() {
-        Some(Value::Int(n)) => Value::String(Rc::from(n.to_string().as_str())),
-        _ => Value::String(Rc::from("")),
-    }
+fn intrinsic_nat_to_string(vm: &Vm, args: &[Value]) -> Value {
+    intrinsic_int_to_string(vm, args)
 }
 
 fn intrinsic_string_concat(_vm: &Vm, args: &[Value]) -> Value {
@@ -138,30 +131,20 @@ fn intrinsic_string_contains(_vm: &Vm, args: &[Value]) -> Value {
     }
 }
 
-fn intrinsic_float_sqrt(_vm: &Vm, args: &[Value]) -> Value {
+fn unary_float(args: &[Value], op: fn(f64) -> f64) -> Value {
     match args.first() {
-        Some(Value::Float(f)) => Value::Float(f.sqrt()),
+        Some(Value::Float(f)) => Value::Float(op(*f)),
         _ => Value::Float(0.0),
     }
 }
+
+fn intrinsic_float_sqrt(_vm: &Vm, args: &[Value]) -> Value { unary_float(args, f64::sqrt) }
+fn intrinsic_float_floor(_vm: &Vm, args: &[Value]) -> Value { unary_float(args, f64::floor) }
+fn intrinsic_float_ceil(_vm: &Vm, args: &[Value]) -> Value { unary_float(args, f64::ceil) }
 
 fn intrinsic_float_pow(_vm: &Vm, args: &[Value]) -> Value {
     match (args.first(), args.get(1)) {
         (Some(Value::Float(base)), Some(Value::Float(exp))) => Value::Float(base.powf(*exp)),
-        _ => Value::Float(0.0),
-    }
-}
-
-fn intrinsic_float_floor(_vm: &Vm, args: &[Value]) -> Value {
-    match args.first() {
-        Some(Value::Float(f)) => Value::Float(f.floor()),
-        _ => Value::Float(0.0),
-    }
-}
-
-fn intrinsic_float_ceil(_vm: &Vm, args: &[Value]) -> Value {
-    match args.first() {
-        Some(Value::Float(f)) => Value::Float(f.ceil()),
         _ => Value::Float(0.0),
     }
 }

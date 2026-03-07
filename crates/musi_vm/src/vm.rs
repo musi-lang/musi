@@ -614,8 +614,7 @@ impl Vm {
 
     fn exec_arr_get(&mut self) -> Result<Signal, VmError> {
         let idx = pop_i64(&mut self.stack)?;
-        let arr = self.stack.pop().ok_or(VmError::StackUnderflow)?;
-        let Value::Array(a) = arr else { return Err(VmError::TypeMismatch); };
+        let a = pop_array(&mut self.stack)?;
         let borrowed = a.borrow();
         let len = borrowed.len();
         let i = usize::try_from(idx).map_err(|_| VmError::IndexOutOfBounds { index: idx, len })?;
@@ -628,8 +627,7 @@ impl Vm {
     fn exec_arr_set(&mut self) -> Result<Signal, VmError> {
         let val = self.stack.pop().ok_or(VmError::StackUnderflow)?;
         let idx = pop_i64(&mut self.stack)?;
-        let arr = self.stack.pop().ok_or(VmError::StackUnderflow)?;
-        let Value::Array(a) = arr else { return Err(VmError::TypeMismatch); };
+        let a = pop_array(&mut self.stack)?;
         let mut borrowed = a.borrow_mut();
         let len = borrowed.len();
         let i = usize::try_from(idx).map_err(|_| VmError::IndexOutOfBounds { index: idx, len })?;
@@ -641,8 +639,7 @@ impl Vm {
     }
 
     fn exec_arr_len(&mut self) -> Result<Signal, VmError> {
-        let arr = self.stack.pop().ok_or(VmError::StackUnderflow)?;
-        let Value::Array(a) = arr else { return Err(VmError::TypeMismatch); };
+        let a = pop_array(&mut self.stack)?;
         let len = a.borrow().len() as i64;
         self.stack.push(Value::Int(len));
         Ok(Signal::Continue)
@@ -650,8 +647,7 @@ impl Vm {
 
     fn exec_arr_push(&mut self) -> Result<Signal, VmError> {
         let val = self.stack.pop().ok_or(VmError::StackUnderflow)?;
-        let arr = self.stack.pop().ok_or(VmError::StackUnderflow)?;
-        let Value::Array(a) = arr else { return Err(VmError::TypeMismatch); };
+        let a = pop_array(&mut self.stack)?;
         a.borrow_mut().push(val);
         self.stack.push(Value::Unit);
         Ok(Signal::Continue)
@@ -660,8 +656,7 @@ impl Vm {
     fn exec_arr_slice(&mut self) -> Result<Signal, VmError> {
         let end = pop_i64(&mut self.stack)?;
         let start = pop_i64(&mut self.stack)?;
-        let arr = self.stack.pop().ok_or(VmError::StackUnderflow)?;
-        let Value::Array(a) = arr else { return Err(VmError::TypeMismatch); };
+        let a = pop_array(&mut self.stack)?;
         let borrowed = a.borrow();
         let len = borrowed.len() as i64;
         let lo = start.clamp(0, len) as usize;
@@ -803,6 +798,13 @@ fn apply_branch_offset(pc: usize, offset: i32) -> Result<usize, VmError> {
     } else {
         let back = usize::try_from(offset.unsigned_abs()).map_err(|_| VmError::CodeOutOfBounds)?;
         pc.checked_sub(back).ok_or(VmError::CodeOutOfBounds)
+    }
+}
+
+fn pop_array(stack: &mut Vec<Value>) -> Result<Rc<RefCell<Vec<Value>>>, VmError> {
+    match stack.pop().ok_or(VmError::StackUnderflow)? {
+        Value::Array(a) => Ok(a),
+        _ => Err(VmError::TypeMismatch),
     }
 }
 
