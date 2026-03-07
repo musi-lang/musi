@@ -223,6 +223,23 @@ impl UnifyTable {
                 Type::Named(d1, args)
             }
 
+            (Type::Array(elem1, size1), Type::Array(elem2, size2)) => {
+                if size1 != size2 {
+                    let _d = diags.error(
+                        format!(
+                            "array size mismatch: expected {}, found {}",
+                            size1.map_or_else(|| "unsized".to_owned(), |n| n.to_string()),
+                            size2.map_or_else(|| "unsized".to_owned(), |n| n.to_string()),
+                        ),
+                        span,
+                        file_id,
+                    );
+                    return Type::Error;
+                }
+                let elem = self.unify(*elem1, *elem2, span, diags, file_id);
+                Type::Array(Box::new(elem), size1)
+            }
+
             (Type::Tuple(a), Type::Tuple(b)) => {
                 if a.len() != b.len() {
                     let _d = diags.error(
