@@ -1,22 +1,12 @@
 //! Shared types and helpers re-exported into every native module's scope.
 
+pub use musi_vm::native_registry::{NativeFn, NativeModuleEntry};
 pub use musi_vm::value::Value;
 
-/// A native function callable from Musi: takes a slice of argument values,
-/// returns a result value.
-pub type NativeFn = fn(&[Value]) -> Value;
-
-/// One `musi:*` built-in module entry: its import specifier, the Musi source
-/// text the compiler sees, and the flat function table used for VM dispatch.
-pub struct NativeModuleEntry {
-    pub specifier: &'static str,
-    pub source:    &'static str,
-    pub functions: &'static [(&'static str, NativeFn)],
-}
+use std::cell::RefCell;
+use std::rc::Rc;
 
 // -- Value constructors -------------------------------------------------------
-
-use std::rc::Rc;
 
 #[must_use]
 pub fn option_none() -> Value {
@@ -42,4 +32,14 @@ pub fn slice_range(start: i64, end: i64, len: i64) -> (usize, usize) {
         usize::try_from(lo).expect("lo fits usize"),
         usize::try_from(hi).expect("hi fits usize"),
     )
+}
+
+/// Build a `Value::Array` from a `Vec<String>`.
+#[must_use]
+pub fn array_of_strings(strings: Vec<String>) -> Value {
+    let items: Vec<Value> = strings
+        .into_iter()
+        .map(|s| Value::String(Rc::from(s.as_str())))
+        .collect();
+    Value::Array(Rc::new(RefCell::new(items)))
 }

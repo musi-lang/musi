@@ -1,26 +1,26 @@
-//! Rust-backed native modules for Musi.
+//! Rust-backed `musi:*` system modules.
 //!
-//! Each submodule is declared with `#[musi_module]` and produces:
+//! Each submodule is annotated with `#[musi_module]` and produces:
 //! - `SPECIFIER`   — the `"musi:..."` import string
-//! - `MUSI_SOURCE` — the Musi source the compiler parses
-//! - `FUNCTIONS`   — `&[(&str, NativeFn)]` for VM dispatch (future wiring)
+//! - `MUSI_SOURCE` — Musi source the compiler parses (intrinsic declarations)
+//! - `FUNCTIONS`   — `&[(&str, NativeFn)]` registered into the VM at startup
 //!
-//! The flat [`REGISTRY`] slice is consumed by the CLI resolver and eventually
-//! by the VM to replace the hard-coded `native::dispatch` match.
+//! The flat [`REGISTRY`] slice is consumed by the CLI resolver (to serve
+//! inline source for `musi:*` imports) and by the VM (for dispatch).
 
 #![allow(clippy::module_name_repetitions)]
 
 pub mod registry;
 
-mod array;
-mod io;
-mod math;
-mod num;
-mod string;
+mod fs;
+mod os;
+mod path;
+mod process;
+mod time;
 
 use registry::NativeModuleEntry;
 
-// -- assert builtins (VM intercepts these; bodies are no-ops) -----------------
+// -- musi:assert (VM-intercepted; wrapper bodies are unreachable) -------------
 
 const ASSERT_SOURCE: &str = concat!(
     "#[intrinsic(\"assert\")] export extrin fn assert(cond: Bool): Unit;\n",
@@ -40,32 +40,32 @@ const ASSERT_FUNCTIONS: &[(&str, registry::NativeFn)] = &[
 
 // -- global registry ----------------------------------------------------------
 
-/// All built-in `musi:*` modules, in declaration order.
+/// All `musi:*` system modules in declaration order.
 pub static REGISTRY: &[NativeModuleEntry] = &[
     NativeModuleEntry {
-        specifier: io::io::SPECIFIER,
-        source:    io::io::MUSI_SOURCE,
-        functions: io::io::FUNCTIONS,
+        specifier: fs::fs::SPECIFIER,
+        source:    fs::fs::MUSI_SOURCE,
+        functions: fs::fs::FUNCTIONS,
     },
     NativeModuleEntry {
-        specifier: string::string::SPECIFIER,
-        source:    string::string::MUSI_SOURCE,
-        functions: string::string::FUNCTIONS,
+        specifier: path::path::SPECIFIER,
+        source:    path::path::MUSI_SOURCE,
+        functions: path::path::FUNCTIONS,
     },
     NativeModuleEntry {
-        specifier: array::array::SPECIFIER,
-        source:    array::array::MUSI_SOURCE,
-        functions: array::array::FUNCTIONS,
+        specifier: os::os::SPECIFIER,
+        source:    os::os::MUSI_SOURCE,
+        functions: os::os::FUNCTIONS,
     },
     NativeModuleEntry {
-        specifier: math::math::SPECIFIER,
-        source:    math::math::MUSI_SOURCE,
-        functions: math::math::FUNCTIONS,
+        specifier: process::process::SPECIFIER,
+        source:    process::process::MUSI_SOURCE,
+        functions: process::process::FUNCTIONS,
     },
     NativeModuleEntry {
-        specifier: num::num::SPECIFIER,
-        source:    num::num::MUSI_SOURCE,
-        functions: num::num::FUNCTIONS,
+        specifier: time::time::SPECIFIER,
+        source:    time::time::MUSI_SOURCE,
+        functions: time::time::FUNCTIONS,
     },
     NativeModuleEntry {
         specifier: "musi:assert",
@@ -74,7 +74,7 @@ pub static REGISTRY: &[NativeModuleEntry] = &[
     },
 ];
 
-/// Return the Musi source text for a given `musi:*` specifier, or `None`.
+/// Return the Musi source text for a `musi:*` specifier, or `None`.
 #[must_use]
 pub fn source_for(specifier: &str) -> Option<&'static str> {
     REGISTRY.iter().find(|e| e.specifier == specifier).map(|e| e.source)
