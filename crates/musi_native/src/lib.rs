@@ -13,65 +13,26 @@
 pub mod registry;
 
 mod fs;
+mod io;
+mod math;
 mod os;
 mod path;
 mod process;
+mod string;
 mod time;
 
 use registry::NativeModuleEntry;
 
-// -- musi:assert (VM-intercepted; wrapper bodies are unreachable) -------------
-
-const ASSERT_SOURCE: &str = concat!(
-    "#[intrinsic(\"assert\")] export extrin fn assert(cond: Bool): Unit;\n",
-    "#[intrinsic(\"assert_msg\")] export extrin fn assert_msg(cond: Bool, msg: String): Unit;\n",
-    "#[intrinsic(\"test\")] export extrin fn test(name: String, f: () -> Unit): Unit;\n",
-);
-
-const fn _native_assert(_args: &[registry::Value]) -> registry::Value     { registry::Value::Unit }
-const fn _native_assert_msg(_args: &[registry::Value]) -> registry::Value { registry::Value::Unit }
-const fn _native_test(_args: &[registry::Value]) -> registry::Value       { registry::Value::Unit }
-
-const ASSERT_FUNCTIONS: &[(&str, registry::NativeFn)] = &[
-    ("assert",     _native_assert),
-    ("assert_msg", _native_assert_msg),
-    ("test",       _native_test),
-];
-
-// -- global registry ----------------------------------------------------------
-
 /// All `musi:*` system modules in declaration order.
 pub static REGISTRY: &[NativeModuleEntry] = &[
-    NativeModuleEntry {
-        specifier: fs::fs::SPECIFIER,
-        source:    fs::fs::MUSI_SOURCE,
-        functions: fs::fs::FUNCTIONS,
-    },
-    NativeModuleEntry {
-        specifier: path::path::SPECIFIER,
-        source:    path::path::MUSI_SOURCE,
-        functions: path::path::FUNCTIONS,
-    },
-    NativeModuleEntry {
-        specifier: os::os::SPECIFIER,
-        source:    os::os::MUSI_SOURCE,
-        functions: os::os::FUNCTIONS,
-    },
-    NativeModuleEntry {
-        specifier: process::process::SPECIFIER,
-        source:    process::process::MUSI_SOURCE,
-        functions: process::process::FUNCTIONS,
-    },
-    NativeModuleEntry {
-        specifier: time::time::SPECIFIER,
-        source:    time::time::MUSI_SOURCE,
-        functions: time::time::FUNCTIONS,
-    },
-    NativeModuleEntry {
-        specifier: "musi:assert",
-        source:    ASSERT_SOURCE,
-        functions: ASSERT_FUNCTIONS,
-    },
+    NativeModuleEntry { specifier: fs::fs::SPECIFIER,         source: fs::fs::MUSI_SOURCE,         functions: fs::fs::FUNCTIONS },
+    NativeModuleEntry { specifier: io::io::SPECIFIER,         source: io::io::MUSI_SOURCE,         functions: io::io::FUNCTIONS },
+    NativeModuleEntry { specifier: math::math::SPECIFIER,     source: math::math::MUSI_SOURCE,     functions: math::math::FUNCTIONS },
+    NativeModuleEntry { specifier: os::os::SPECIFIER,         source: os::os::MUSI_SOURCE,         functions: os::os::FUNCTIONS },
+    NativeModuleEntry { specifier: path::path::SPECIFIER,     source: path::path::MUSI_SOURCE,     functions: path::path::FUNCTIONS },
+    NativeModuleEntry { specifier: process::process::SPECIFIER, source: process::process::MUSI_SOURCE, functions: process::process::FUNCTIONS },
+    NativeModuleEntry { specifier: string::string::SPECIFIER, source: string::string::MUSI_SOURCE, functions: string::string::FUNCTIONS },
+    NativeModuleEntry { specifier: time::time::SPECIFIER,     source: time::time::MUSI_SOURCE,     functions: time::time::FUNCTIONS },
 ];
 
 /// Return the Musi source text for a `musi:*` specifier, or `None`.
