@@ -45,7 +45,8 @@ fn emit_branch_cond(
         }
         Cond::Case { pat, init, .. } => {
             let (tmp_slot, test_fixup) = emit_case_cond(arenas, state, pat, *init, module, out)?;
-            let fixup = test_fixup.map_or_else(|| Ok(out.emit_jump_placeholder(FnEmitter::BR_FALSE)), Ok)?;
+            let fixup = test_fixup
+                .map_or_else(|| Ok(out.emit_jump_placeholder(FnEmitter::BR_FALSE)), Ok)?;
             out.push_scope();
             emit_pattern_bindings(arenas, state, pat, tmp_slot, out)?;
             Ok(fixup)
@@ -190,34 +191,35 @@ pub(super) fn emit_for(
     let iter_expr = arenas.exprs.get(iter).clone();
 
     if let Expr::Binary { op, lhs, rhs, .. } = &iter_expr
-        && matches!(op, BinOp::Range | BinOp::RangeExcl) {
-            let cmp_op = if matches!(op, BinOp::RangeExcl) {
-                Opcode::LtI64
-            } else {
-                Opcode::LeqI64
-            };
+        && matches!(op, BinOp::Range | BinOp::RangeExcl)
+    {
+        let cmp_op = if matches!(op, BinOp::RangeExcl) {
+            Opcode::LtI64
+        } else {
+            Opcode::LeqI64
+        };
 
-            out.push_scope();
-            let counter_slot = out.define_local(arenas.interner.resolve(*pat_name))?;
-            let limit_slot = out.define_local("$limit")?;
+        out.push_scope();
+        let counter_slot = out.define_local(arenas.interner.resolve(*pat_name))?;
+        let limit_slot = out.define_local("$limit")?;
 
-            let lhs_expr = arenas.exprs.get(*lhs).clone();
-            emit_expr(arenas, state, &lhs_expr, module, out)?;
-            out.push(&Opcode::StLoc(counter_slot));
-            let rhs_expr = arenas.exprs.get(*rhs).clone();
-            emit_expr(arenas, state, &rhs_expr, module, out)?;
-            out.push(&Opcode::StLoc(limit_slot));
+        let lhs_expr = arenas.exprs.get(*lhs).clone();
+        emit_expr(arenas, state, &lhs_expr, module, out)?;
+        out.push(&Opcode::StLoc(counter_slot));
+        let rhs_expr = arenas.exprs.get(*rhs).clone();
+        emit_expr(arenas, state, &rhs_expr, module, out)?;
+        out.push(&Opcode::StLoc(limit_slot));
 
-            let start_pos = out.start_loop();
-            out.push(&Opcode::LdLoc(counter_slot));
-            out.push(&Opcode::LdLoc(limit_slot));
-            out.push(&cmp_op);
-            let end_fixup = out.emit_jump_placeholder(FnEmitter::BR_FALSE);
+        let start_pos = out.start_loop();
+        out.push(&Opcode::LdLoc(counter_slot));
+        out.push(&Opcode::LdLoc(limit_slot));
+        out.push(&cmp_op);
+        let end_fixup = out.emit_jump_placeholder(FnEmitter::BR_FALSE);
 
-            let body_expr = arenas.exprs.get(body).clone();
-            emit_expr(arenas, state, &body_expr, module, out)?;
-            return emit_for_loop_tail(out, counter_slot, start_pos, end_fixup);
-        }
+        let body_expr = arenas.exprs.get(body).clone();
+        emit_expr(arenas, state, &body_expr, module, out)?;
+        return emit_for_loop_tail(out, counter_slot, start_pos, end_fixup);
+    }
 
     let iter_len_idx = module.add_string_const("iter_len")?;
     let iter_get_idx = module.add_string_const("iter_get")?;

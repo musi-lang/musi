@@ -108,14 +108,16 @@ impl Parser<'_> {
                 // Call: f(args)
                 TokenKind::LParen => {
                     let _ = self.advance();
-                    lhs = self.parse_list_postfix(lhs, start, TokenKind::RParen,
-                        |args, span| PostfixOp::Call { args, span });
+                    lhs = self.parse_list_postfix(lhs, start, TokenKind::RParen, |args, span| {
+                        PostfixOp::Call { args, span }
+                    });
                 }
                 // Index: e.[args]
                 TokenKind::DotLBracket => {
                     let _ = self.advance();
-                    lhs = self.parse_list_postfix(lhs, start, TokenKind::RBracket,
-                        |args, span| PostfixOp::Index { args, span });
+                    lhs = self.parse_list_postfix(lhs, start, TokenKind::RBracket, |args, span| {
+                        PostfixOp::Index { args, span }
+                    });
                 }
                 // RecDot: e.{ fields }
                 TokenKind::DotLBrace => {
@@ -165,11 +167,8 @@ impl Parser<'_> {
                     let name = self.expect_symbol();
                     let f_span = self.finish_span(field_start);
                     let base = self.alloc_expr(lhs);
-                    lhs = self.wrap_postfix(
-                        base,
-                        PostfixOp::OptField { name, span: f_span },
-                        start,
-                    );
+                    lhs =
+                        self.wrap_postfix(base, PostfixOp::OptField { name, span: f_span }, start);
                 }
                 // As cast: e as T
                 TokenKind::As => {

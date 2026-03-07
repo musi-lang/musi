@@ -15,17 +15,17 @@ use crate::vm::Vm;
 #[must_use]
 pub fn dispatch(vm: &Vm, intrinsic: Intrinsic, args: &[Value]) -> Value {
     match intrinsic {
-        Intrinsic::Writeln       => intrinsic_writeln(vm, args),
-        Intrinsic::Write         => intrinsic_write(vm, args),
-        Intrinsic::IntToString   => intrinsic_int_to_string(vm, args),
+        Intrinsic::Writeln => intrinsic_writeln(vm, args),
+        Intrinsic::Write => intrinsic_write(vm, args),
+        Intrinsic::IntToString => intrinsic_int_to_string(vm, args),
         Intrinsic::FloatToString => intrinsic_float_to_string(vm, args),
-        Intrinsic::StringConcat  => intrinsic_string_concat(vm, args),
-        Intrinsic::ArrayLength   => intrinsic_array_length(vm, args),
-        Intrinsic::ArrayPush     => intrinsic_array_push(vm, args),
-        Intrinsic::ArrayPop      => intrinsic_array_pop(vm, args),
-        Intrinsic::ArrayGet      => intrinsic_array_get(vm, args),
-        Intrinsic::ArraySet      => intrinsic_array_set(vm, args),
-        Intrinsic::ArraySlice    => intrinsic_array_slice(vm, args),
+        Intrinsic::StringConcat => intrinsic_string_concat(vm, args),
+        Intrinsic::ArrayLength => intrinsic_array_length(vm, args),
+        Intrinsic::ArrayPush => intrinsic_array_push(vm, args),
+        Intrinsic::ArrayPop => intrinsic_array_pop(vm, args),
+        Intrinsic::ArrayGet => intrinsic_array_get(vm, args),
+        Intrinsic::ArraySet => intrinsic_array_set(vm, args),
+        Intrinsic::ArraySlice => intrinsic_array_slice(vm, args),
         // All other intrinsics are intercepted before dispatch or served by NativeRegistry.
         _ => Value::Unit,
     }
@@ -34,23 +34,37 @@ pub fn dispatch(vm: &Vm, intrinsic: Intrinsic, args: &[Value]) -> Value {
 // -- option / bool helpers ----------------------------------------------------
 
 fn option_none() -> Value {
-    Value::Object { type_tag: 0, fields: Rc::new(vec![Value::Int(0)]) }
+    Value::Object {
+        type_tag: 0,
+        fields: Rc::new(vec![Value::Int(0)]),
+    }
 }
 
 fn option_some(v: Value) -> Value {
-    Value::Object { type_tag: 0, fields: Rc::new(vec![Value::Int(1), v]) }
+    Value::Object {
+        type_tag: 0,
+        fields: Rc::new(vec![Value::Int(1), v]),
+    }
 }
 
 // -- I/O ----------------------------------------------------------------------
 
 fn do_write(args: &[Value], newline: bool) -> Value {
-    for arg in args { print!("{arg}"); }
-    if newline { println!(); }
+    for arg in args {
+        print!("{arg}");
+    }
+    if newline {
+        println!();
+    }
     Value::Unit
 }
 
-fn intrinsic_writeln(_vm: &Vm, args: &[Value]) -> Value { do_write(args, true) }
-fn intrinsic_write(_vm: &Vm, args: &[Value]) -> Value   { do_write(args, false) }
+fn intrinsic_writeln(_vm: &Vm, args: &[Value]) -> Value {
+    do_write(args, true)
+}
+fn intrinsic_write(_vm: &Vm, args: &[Value]) -> Value {
+    do_write(args, false)
+}
 
 // -- type conversions ---------------------------------------------------------
 
@@ -96,7 +110,10 @@ fn intrinsic_array_length(_vm: &Vm, args: &[Value]) -> Value {
 
 fn intrinsic_array_push(_vm: &Vm, args: &[Value]) -> Value {
     match (args.first(), args.get(1)) {
-        (Some(Value::Array(a)), Some(val)) => { a.borrow_mut().push(val.clone()); Value::Unit }
+        (Some(Value::Array(a)), Some(val)) => {
+            a.borrow_mut().push(val.clone());
+            Value::Unit
+        }
         _ => Value::Unit,
     }
 }
@@ -112,7 +129,8 @@ fn intrinsic_array_get(_vm: &Vm, args: &[Value]) -> Value {
     match (args.first(), args.get(1)) {
         (Some(Value::Array(a)), Some(Value::Int(idx))) => {
             let borrowed = a.borrow();
-            usize::try_from(*idx).ok()
+            usize::try_from(*idx)
+                .ok()
                 .and_then(|i| borrowed.get(i))
                 .map_or(Value::Unit, Clone::clone)
         }
@@ -124,7 +142,9 @@ fn intrinsic_array_set(_vm: &Vm, args: &[Value]) -> Value {
     match (args.first(), args.get(1), args.get(2)) {
         (Some(Value::Array(a)), Some(Value::Int(idx)), Some(val)) => {
             if let Ok(i) = usize::try_from(*idx) {
-                if let Some(slot) = a.borrow_mut().get_mut(i) { *slot = val.clone(); }
+                if let Some(slot) = a.borrow_mut().get_mut(i) {
+                    *slot = val.clone();
+                }
             }
             Value::Unit
         }

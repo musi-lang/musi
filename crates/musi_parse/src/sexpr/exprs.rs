@@ -4,7 +4,7 @@ use musi_shared::Idx;
 
 use crate::ast::{ArrayItem, BinOp, Expr, FieldInit, PostfixOp, PrefixOp};
 
-use super::{binop_str, prefix_str, Printer};
+use super::{Printer, binop_str, prefix_str};
 
 impl Printer<'_> {
     pub(super) fn print_block(&mut self, stmts: &[Idx<Expr>], tail: Option<Idx<Expr>>) {
@@ -41,12 +41,7 @@ impl Printer<'_> {
         self.write("])");
     }
 
-    pub(super) fn print_binary(
-        &mut self,
-        op: BinOp,
-        lhs: Idx<Expr>,
-        rhs: Idx<Expr>,
-    ) {
+    pub(super) fn print_binary(&mut self, op: BinOp, lhs: Idx<Expr>, rhs: Idx<Expr>) {
         self.write("(binary ");
         self.write(binop_str(op));
         self.write_char(' ');

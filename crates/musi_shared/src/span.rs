@@ -8,7 +8,10 @@ pub struct Span {
 }
 
 impl Span {
-    pub const DUMMY: Self = Self { start: 0, length: 0 };
+    pub const DUMMY: Self = Self {
+        start: 0,
+        length: 0,
+    };
 
     #[must_use]
     pub const fn new(start: u32, length: u32) -> Self {
@@ -25,7 +28,10 @@ impl Span {
     pub fn merge(self, other: Self) -> Self {
         let start = self.start.min(other.start);
         let end = self.end().max(other.end());
-        Self { start, length: end - start }
+        Self {
+            start,
+            length: end - start,
+        }
     }
 }
 

@@ -8,7 +8,7 @@ use musi_shared::{Idx, Span, Symbol};
 use crate::def::DefId;
 use crate::types::{Type, TypeVarId};
 
-use super::{instantiate, TypeChecker};
+use super::{TypeChecker, instantiate};
 
 impl TypeChecker<'_> {
     pub(super) fn set_pat_type(&mut self, pat: &Pat, ty: Type) {

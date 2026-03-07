@@ -186,7 +186,10 @@ impl Vm {
                 Ok(Signal::Continue)
             }
             Opcode::HaltError => Err(VmError::MatchFailure),
-            Opcode::NewObj { type_tag, field_count } => self.exec_new_obj(type_tag, field_count),
+            Opcode::NewObj {
+                type_tag,
+                field_count,
+            } => self.exec_new_obj(type_tag, field_count),
             Opcode::LdFld(idx) => self.exec_ld_fld(idx),
             Opcode::LdTag => self.exec_ld_tag(),
             Opcode::AddI64
@@ -234,7 +237,10 @@ impl Vm {
             Opcode::ConcatStr => self.exec_concat_str(),
             Opcode::NilCoalesce => self.exec_nil_coalesce(),
             Opcode::OptField(field_idx) => self.exec_opt_field(field_idx),
-            Opcode::CallMethod { method_idx, arg_count } => {
+            Opcode::CallMethod {
+                method_idx,
+                arg_count,
+            } => {
                 self.exec_call_method(method_idx, arg_count)?;
                 Ok(Signal::Continue)
             }
@@ -254,7 +260,10 @@ impl Vm {
             return Err(VmError::StackUnderflow);
         }
         let fields: Vec<Value> = self.stack.drain(stack_len - n..).collect();
-        self.stack.push(Value::Object { type_tag, fields: Rc::new(fields) });
+        self.stack.push(Value::Object {
+            type_tag,
+            fields: Rc::new(fields),
+        });
         Ok(Signal::Continue)
     }
 
@@ -364,13 +373,25 @@ impl Vm {
         Ok(Signal::Continue)
     }
 
-    fn dispatch_or_i64_bin(&mut self, method: &str, op: fn(i64, i64) -> i64) -> Result<Signal, VmError> {
-        if let Some(r) = self.try_dispatch_binop(method) { return r; }
+    fn dispatch_or_i64_bin(
+        &mut self,
+        method: &str,
+        op: fn(i64, i64) -> i64,
+    ) -> Result<Signal, VmError> {
+        if let Some(r) = self.try_dispatch_binop(method) {
+            return r;
+        }
         self.push_i64_bin(op)
     }
 
-    fn dispatch_or_i64_cmp(&mut self, method: &str, op: fn(i64, i64) -> bool) -> Result<Signal, VmError> {
-        if let Some(r) = self.try_dispatch_binop(method) { return r; }
+    fn dispatch_or_i64_cmp(
+        &mut self,
+        method: &str,
+        op: fn(i64, i64) -> bool,
+    ) -> Result<Signal, VmError> {
+        if let Some(r) = self.try_dispatch_binop(method) {
+            return r;
+        }
         self.push_i64_cmp(op)
     }
 
@@ -426,7 +447,9 @@ impl Vm {
             Opcode::SubI64 => self.dispatch_or_i64_bin("sub", i64::wrapping_sub),
             Opcode::MulI64 => self.dispatch_or_i64_bin("mul", i64::wrapping_mul),
             Opcode::DivI64 => {
-                if let Some(r) = self.try_dispatch_binop("div") { return r; }
+                if let Some(r) = self.try_dispatch_binop("div") {
+                    return r;
+                }
                 let rhs = pop_i64(&mut self.stack)?;
                 let lhs = pop_i64(&mut self.stack)?;
                 if rhs == 0 {
@@ -436,7 +459,9 @@ impl Vm {
                 Ok(Signal::Continue)
             }
             Opcode::RemI64 => {
-                if let Some(r) = self.try_dispatch_binop("rem") { return r; }
+                if let Some(r) = self.try_dispatch_binop("rem") {
+                    return r;
+                }
                 let rhs = pop_i64(&mut self.stack)?;
                 let lhs = pop_i64(&mut self.stack)?;
                 if rhs == 0 {
@@ -469,7 +494,9 @@ impl Vm {
         let lhs = self.stack.pop().ok_or(VmError::StackUnderflow)?;
         match lhs {
             Value::Object { ref fields, .. } => {
-                if matches!(fields.first(), Some(Value::Int(0))) { self.stack.push(rhs) } else {
+                if matches!(fields.first(), Some(Value::Int(0))) {
+                    self.stack.push(rhs)
+                } else {
                     let inner = fields.get(1).ok_or(VmError::FieldOutOfBounds(1))?.clone();
                     self.stack.push(inner);
                 }
@@ -482,14 +509,24 @@ impl Vm {
     fn exec_opt_field(&mut self, field_idx: u16) -> Result<Signal, VmError> {
         let obj = self.stack.pop().ok_or(VmError::StackUnderflow)?;
         match obj {
-            Value::Object { ref fields, type_tag } => {
+            Value::Object {
+                ref fields,
+                type_tag,
+            } => {
                 if matches!(fields.first(), Some(Value::Int(0))) {
                     // None → push None (same structure)
-                    self.stack.push(Value::Object { type_tag, fields: Rc::new(vec![Value::Int(0)]) });
+                    self.stack.push(Value::Object {
+                        type_tag,
+                        fields: Rc::new(vec![Value::Int(0)]),
+                    });
                 } else {
                     // Some(inner) → access field[field_idx] on inner, wrap in Some
                     let inner = fields.get(1).ok_or(VmError::FieldOutOfBounds(1))?.clone();
-                    let Value::Object { fields: inner_fields, .. } = inner else {
+                    let Value::Object {
+                        fields: inner_fields,
+                        ..
+                    } = inner
+                    else {
                         return Err(VmError::TypeMismatch);
                     };
                     let field_val = inner_fields
@@ -497,7 +534,10 @@ impl Vm {
                         .ok_or(VmError::FieldOutOfBounds(field_idx))?
                         .clone();
                     // Wrap in Some: [discriminant=1, field_val]
-                    self.stack.push(Value::Object { type_tag, fields: Rc::new(vec![Value::Int(1), field_val]) });
+                    self.stack.push(Value::Object {
+                        type_tag,
+                        fields: Rc::new(vec![Value::Int(1), field_val]),
+                    });
                 }
             }
             _ => return Err(VmError::TypeMismatch),
@@ -508,10 +548,10 @@ impl Vm {
     #[allow(clippy::float_cmp)]
     fn exec_cmp(&mut self, op: &Opcode) -> Result<Signal, VmError> {
         match op {
-            Opcode::EqI64  => self.dispatch_or_i64_cmp("eq",  |a, b| a == b),
+            Opcode::EqI64 => self.dispatch_or_i64_cmp("eq", |a, b| a == b),
             Opcode::NeqI64 => self.dispatch_or_i64_cmp("neq", |a, b| a != b),
-            Opcode::LtI64  => self.dispatch_or_i64_cmp("lt",  |a, b| a < b),
-            Opcode::GtI64  => self.dispatch_or_i64_cmp("gt",  |a, b| a > b),
+            Opcode::LtI64 => self.dispatch_or_i64_cmp("lt", |a, b| a < b),
+            Opcode::GtI64 => self.dispatch_or_i64_cmp("gt", |a, b| a > b),
             Opcode::LeqI64 => self.dispatch_or_i64_cmp("leq", |a, b| a <= b),
             Opcode::GeqI64 => self.dispatch_or_i64_cmp("geq", |a, b| a >= b),
             Opcode::EqF64 => self.push_f64_cmp(|a, b| a == b),
@@ -520,10 +560,10 @@ impl Vm {
             Opcode::GtF64 => self.push_f64_cmp(|a, b| a > b),
             Opcode::LeqF64 => self.push_f64_cmp(|a, b| a <= b),
             Opcode::GeqF64 => self.push_f64_cmp(|a, b| a >= b),
-            Opcode::EqBool  => self.push_bool_cmp(|a, b| a == b),
+            Opcode::EqBool => self.push_bool_cmp(|a, b| a == b),
             Opcode::NeqBool => self.push_bool_cmp(|a, b| a != b),
-            Opcode::EqStr   => self.push_str_cmp(|a, b| a == b),
-            Opcode::NeqStr  => self.push_str_cmp(|a, b| a != b),
+            Opcode::EqStr => self.push_str_cmp(|a, b| a == b),
+            Opcode::NeqStr => self.push_str_cmp(|a, b| a != b),
             _ => Err(VmError::TypeMismatch),
         }
     }
@@ -593,7 +633,10 @@ impl Vm {
         let borrowed = a.borrow();
         let len = borrowed.len();
         let i = usize::try_from(idx).map_err(|_| VmError::IndexOutOfBounds { index: idx, len })?;
-        let val = borrowed.get(i).ok_or(VmError::IndexOutOfBounds { index: idx, len })?.clone();
+        let val = borrowed
+            .get(i)
+            .ok_or(VmError::IndexOutOfBounds { index: idx, len })?
+            .clone();
         drop(borrowed);
         self.stack.push(val);
         Ok(Signal::Continue)
@@ -606,7 +649,9 @@ impl Vm {
         let mut borrowed = a.borrow_mut();
         let len = borrowed.len();
         let i = usize::try_from(idx).map_err(|_| VmError::IndexOutOfBounds { index: idx, len })?;
-        let slot = borrowed.get_mut(i).ok_or(VmError::IndexOutOfBounds { index: idx, len })?;
+        let slot = borrowed
+            .get_mut(i)
+            .ok_or(VmError::IndexOutOfBounds { index: idx, len })?;
         *slot = val;
         drop(borrowed);
         self.stack.push(Value::Unit);
@@ -690,8 +735,15 @@ impl Vm {
                     }
                     Intrinsic::AssertMsg => {
                         let cond = args.first().cloned().unwrap_or(Value::Unit);
-                        let msg: Box<str> = args.get(1)
-                            .and_then(|v| if let Value::String(s) = v { Some(Box::from(s.as_ref())) } else { None })
+                        let msg: Box<str> = args
+                            .get(1)
+                            .and_then(|v| {
+                                if let Value::String(s) = v {
+                                    Some(Box::from(s.as_ref()))
+                                } else {
+                                    None
+                                }
+                            })
                             .unwrap_or_else(|| Box::from("assertion failed"));
                         if !is_truthy(&cond) {
                             return Err(VmError::AssertionFailed(msg));
@@ -699,11 +751,23 @@ impl Vm {
                         self.stack.push(Value::Unit);
                     }
                     Intrinsic::Test => {
-                        let name: Box<str> = args.first()
-                            .and_then(|v| if let Value::String(s) = v { Some(Box::from(s.as_ref())) } else { None })
+                        let name: Box<str> = args
+                            .first()
+                            .and_then(|v| {
+                                if let Value::String(s) = v {
+                                    Some(Box::from(s.as_ref()))
+                                } else {
+                                    None
+                                }
+                            })
                             .unwrap_or_else(|| Box::from("<unnamed>"));
-                        let test_fn_idx = args.get(1)
-                            .and_then(|v| if let Value::Function(idx) = v { Some(*idx) } else { None });
+                        let test_fn_idx = args.get(1).and_then(|v| {
+                            if let Value::Function(idx) = v {
+                                Some(*idx)
+                            } else {
+                                None
+                            }
+                        });
                         if let Some(test_fn_idx) = test_fn_idx {
                             let depth = self.frames.len();
                             self.exec_call(test_fn_idx)?;
@@ -711,10 +775,18 @@ impl Vm {
                                 let run_result = self.run_until_depth(depth);
                                 let _ = self.stack.pop();
                                 match run_result {
-                                    Ok(()) => self.test_results.push(TestResult { label: name, passed: true, error: None }),
+                                    Ok(()) => self.test_results.push(TestResult {
+                                        label: name,
+                                        passed: true,
+                                        error: None,
+                                    }),
                                     Err(VmError::AssertionFailed(msg)) => {
                                         self.frames.truncate(depth);
-                                        self.test_results.push(TestResult { label: name, passed: false, error: Some(msg) });
+                                        self.test_results.push(TestResult {
+                                            label: name,
+                                            passed: false,
+                                            error: Some(msg),
+                                        });
                                     }
                                     Err(e) => return Err(e),
                                 }
@@ -726,7 +798,9 @@ impl Vm {
                         self.stack.push(Value::Unit);
                     }
                     _ => {
-                        let result = self.registry.lookup_id(intrinsic_id)
+                        let result = self
+                            .registry
+                            .lookup_id(intrinsic_id)
                             .map_or_else(|| native::dispatch(self, intrinsic, &args), |f| f(&args));
                         self.stack.push(result);
                     }
@@ -751,7 +825,9 @@ impl Vm {
 
 fn is_truthy(v: &Value) -> bool {
     match v {
-        Value::Object { fields, .. } => fields.first().is_some_and(|f| matches!(f, Value::Int(n) if *n != 0)),
+        Value::Object { fields, .. } => fields
+            .first()
+            .is_some_and(|f| matches!(f, Value::Int(n) if *n != 0)),
         _ => false,
     }
 }
@@ -801,16 +877,21 @@ fn pop_f64(stack: &mut Vec<Value>) -> Result<f64, VmError> {
 
 fn pop_bool_obj(stack: &mut Vec<Value>) -> Result<bool, VmError> {
     match stack.pop().ok_or(VmError::StackUnderflow)? {
-        Value::Object { ref fields, .. } => match fields.first().ok_or(VmError::FieldOutOfBounds(0))? {
-            Value::Int(n) => Ok(*n != 0),
-            _ => Err(VmError::TypeMismatch),
-        },
+        Value::Object { ref fields, .. } => {
+            match fields.first().ok_or(VmError::FieldOutOfBounds(0))? {
+                Value::Int(n) => Ok(*n != 0),
+                _ => Err(VmError::TypeMismatch),
+            }
+        }
         _ => Err(VmError::TypeMismatch),
     }
 }
 
 fn bool_obj(b: bool) -> Value {
-    Value::Object { type_tag: 0, fields: Rc::new(vec![Value::Int(i64::from(b))]) }
+    Value::Object {
+        type_tag: 0,
+        fields: Rc::new(vec![Value::Int(i64::from(b))]),
+    }
 }
 
 fn pop_str(stack: &mut Vec<Value>) -> Result<Rc<str>, VmError> {

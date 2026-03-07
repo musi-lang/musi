@@ -63,7 +63,9 @@ impl UnifyTable {
         match ty {
             Type::Var(v) => {
                 let idx = usize::try_from(v.0).expect("TypeVarId in range");
-                self.vars[idx].as_ref().map_or(Type::Var(v), |bound| self.resolve(bound.clone()))
+                self.vars[idx]
+                    .as_ref()
+                    .map_or(Type::Var(v), |bound| self.resolve(bound.clone()))
             }
             other => other,
         }
@@ -77,7 +79,10 @@ impl UnifyTable {
         diags: &mut DiagnosticBag,
         file_id: FileId,
     ) -> Vec<Type> {
-        a.into_iter().zip(b).map(|(ta, tb)| self.unify(ta, tb, span, diags, file_id)).collect()
+        a.into_iter()
+            .zip(b)
+            .map(|(ta, tb)| self.unify(ta, tb, span, diags, file_id))
+            .collect()
     }
 
     fn bind(&mut self, v: TypeVarId, ty: Type) {
@@ -93,7 +98,9 @@ impl UnifyTable {
                     return true;
                 }
                 let idx = usize::try_from(w.0).expect("TypeVarId in range");
-                self.vars[idx].as_ref().is_some_and(|bound| self.occurs(v, bound))
+                self.vars[idx]
+                    .as_ref()
+                    .is_some_and(|bound| self.occurs(v, bound))
             }
             Type::Prim(_) | Type::Error => false,
             Type::Tuple(elems) => elems.iter().any(|t| self.occurs(v, t)),
@@ -225,7 +232,9 @@ impl Default for UnifyTable {
 /// Substitutes `scheme_vars[i]` → `fresh_vars[i]` throughout `ty`.
 pub(super) fn instantiate(ty: &Type, scheme_vars: &[TypeVarId], fresh_vars: &[TypeVarId]) -> Type {
     match ty {
-        Type::Var(v) => scheme_vars.iter().position(|sv| sv == v)
+        Type::Var(v) => scheme_vars
+            .iter()
+            .position(|sv| sv == v)
             .map_or(Type::Var(*v), |pos| Type::Var(fresh_vars[pos])),
         Type::Prim(p) => Type::Prim(*p),
         Type::Error => Type::Error,

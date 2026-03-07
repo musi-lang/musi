@@ -13,13 +13,13 @@ use std::hash::BuildHasher;
 
 use musi_ast::{
     ArrayItem, AstArenas, BindKind, ChoiceVariant, Cond, ElifBranch, Expr, FieldInit, ImportClause,
-    MatchArm, Pat, PatField, PatSuffix, ParsedModule, PostfixOp, VariantPayload,
+    MatchArm, ParsedModule, Pat, PatField, PatSuffix, PostfixOp, VariantPayload,
 };
 use musi_shared::{DiagnosticBag, FileId, Idx, Interner, Span, Symbol};
 
+use crate::ModuleExports;
 use crate::def::{DefId, DefInfo, DefKind};
 use crate::scope::{ScopeId, ScopeTree};
-use crate::ModuleExports;
 
 /// The result of the name-resolution pass.
 pub struct ResolveResult {
@@ -136,7 +136,9 @@ impl<'a> Resolver<'a> {
             };
             for import_item in import_items {
                 let name_str = interner.resolve(import_item.name);
-                let _exported_name = import_item.alias.map_or_else(|| name_str.to_owned(), |a| interner.resolve(a).to_owned());
+                let _exported_name = import_item
+                    .alias
+                    .map_or_else(|| name_str.to_owned(), |a| interner.resolve(a).to_owned());
                 let Some(ty) = module_exports.names.get(name_str) else {
                     continue;
                 };
@@ -216,18 +218,35 @@ impl<'a> Resolver<'a> {
                 }
             }
 
-            Expr::If { cond, then_body, elif_chains, else_body, .. } => {
-                self.resolve_if_expr(cond, *then_body, elif_chains, else_body.as_ref().copied(), ctx, scope);
+            Expr::If {
+                cond,
+                then_body,
+                elif_chains,
+                else_body,
+                ..
+            } => {
+                self.resolve_if_expr(
+                    cond,
+                    *then_body,
+                    elif_chains,
+                    else_body.as_ref().copied(),
+                    ctx,
+                    scope,
+                );
             }
 
-            Expr::Match { scrutinee, arms, .. } => {
+            Expr::Match {
+                scrutinee, arms, ..
+            } => {
                 self.resolve_expr(*scrutinee, ctx, scope);
                 for arm in arms {
                     self.resolve_match_arm(arm, ctx, scope);
                 }
             }
 
-            Expr::While { cond, guard, body, .. } => {
+            Expr::While {
+                cond, guard, body, ..
+            } => {
                 self.resolve_cond(cond, ctx, scope);
                 if let Some(&g) = guard.as_ref() {
                     self.resolve_expr(g, ctx, scope);
@@ -235,14 +254,22 @@ impl<'a> Resolver<'a> {
                 self.resolve_expr(*body, ctx, scope);
             }
 
-            Expr::Loop { body, post_cond, .. } => {
+            Expr::Loop {
+                body, post_cond, ..
+            } => {
                 self.resolve_expr(*body, ctx, scope);
                 if let Some(pc) = post_cond.as_deref() {
                     self.resolve_cond(pc, ctx, scope);
                 }
             }
 
-            Expr::For { pat, iter, guard, body, .. } => {
+            Expr::For {
+                pat,
+                iter,
+                guard,
+                body,
+                ..
+            } => {
                 self.resolve_for_expr(pat, *iter, guard.as_ref().copied(), *body, ctx, scope);
             }
 
@@ -285,7 +312,11 @@ impl<'a> Resolver<'a> {
     }
 
     fn define_pat_name(&mut self, name: Symbol, kind: BindKind, span: Span, scope: ScopeId) {
-        let def_kind = if kind == BindKind::Var { DefKind::Var } else { DefKind::Const };
+        let def_kind = if kind == BindKind::Var {
+            DefKind::Var
+        } else {
+            DefKind::Const
+        };
         let def_id = self.alloc_def(name, def_kind, span);
         self.define_in_scope(scope, name, def_id, span);
         let _prev = self.pat_defs.insert(span, def_id);
@@ -369,7 +400,9 @@ impl<'a> Resolver<'a> {
                 self.resolve_expr(*body, ctx, lam_scope);
             }
 
-            Expr::Bind { kind, pat, init, .. } => {
+            Expr::Bind {
+                kind, pat, init, ..
+            } => {
                 let kind = *kind;
                 if let Some(&init_idx) = init.as_ref() {
                     self.resolve_expr(init_idx, ctx, scope);
@@ -403,7 +436,8 @@ impl<'a> Resolver<'a> {
                             self.resolve_field_init(field, ctx, scope);
                         }
                     }
-                    PostfixOp::Field { .. } | PostfixOp::OptField { .. } | PostfixOp::As { .. } => {}
+                    PostfixOp::Field { .. } | PostfixOp::OptField { .. } | PostfixOp::As { .. } => {
+                    }
                 }
             }
 
@@ -422,11 +456,19 @@ impl<'a> Resolver<'a> {
                 self.alloc_and_define(*name, DefKind::Fn, *span, block_scope);
                 self.resolve_expr(stmt, ctx, block_scope);
             }
-            Expr::Choice { name: Some(name), span, .. } => {
+            Expr::Choice {
+                name: Some(name),
+                span,
+                ..
+            } => {
                 self.alloc_and_define(*name, DefKind::Type, *span, block_scope);
                 self.resolve_expr(stmt, ctx, block_scope);
             }
-            Expr::Record { name: Some(name), span, .. } => {
+            Expr::Record {
+                name: Some(name),
+                span,
+                ..
+            } => {
                 self.alloc_and_define(*name, DefKind::Type, *span, block_scope);
                 // No sub-expressions to resolve.
             }
@@ -498,7 +540,6 @@ impl<'a> Resolver<'a> {
             | Pat::Wild { .. }
             | Pat::Error { .. } => {}
         }
-
     }
 
     fn resolve_pat_field(&mut self, field: &PatField, ctx: &AstArenas, scope: ScopeId) {

@@ -41,5 +41,8 @@ pub fn lex(
 ) -> LexedSource {
     let mut lx = lexer::Lexer::new(source, file_id, interner, diags);
     let tokens: Vec<Token> = lx.by_ref().collect();
-    LexedSource { tokens, trivia: lx.trivia }
+    LexedSource {
+        tokens,
+        trivia: lx.trivia,
+    }
 }

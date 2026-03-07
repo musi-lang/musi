@@ -1,7 +1,7 @@
 //! Type and pattern parsing.
 
-use musi_lex::token::TokenKind;
 use crate::ast::{Constraint, Pat, PatField, PatSuffix, Ty, TyParam};
+use musi_lex::token::TokenKind;
 
 use super::Parser;
 
@@ -205,8 +205,11 @@ impl Parser<'_> {
             }
             TokenKind::LBracket => {
                 let start = self.start_span();
-                let elements =
-                    self.parse_delimited(TokenKind::LBracket, TokenKind::RBracket, Parser::parse_pat);
+                let elements = self.parse_delimited(
+                    TokenKind::LBracket,
+                    TokenKind::RBracket,
+                    Parser::parse_pat,
+                );
                 Pat::Arr {
                     elements,
                     span: self.finish_span(start),
@@ -214,7 +217,11 @@ impl Parser<'_> {
             }
             TokenKind::LBrace => {
                 let start = self.start_span();
-                let fields = self.parse_delimited(TokenKind::LBrace, TokenKind::RBrace, Parser::parse_pat_field);
+                let fields = self.parse_delimited(
+                    TokenKind::LBrace,
+                    TokenKind::RBrace,
+                    Parser::parse_pat_field,
+                );
                 Pat::AnonRec {
                     fields,
                     span: self.finish_span(start),
@@ -249,7 +256,11 @@ impl Parser<'_> {
             }
             // Named-field pattern: Name{ f: p }
             TokenKind::LBrace => {
-                let fields = self.parse_delimited(TokenKind::LBrace, TokenKind::RBrace, Parser::parse_pat_field);
+                let fields = self.parse_delimited(
+                    TokenKind::LBrace,
+                    TokenKind::RBrace,
+                    Parser::parse_pat_field,
+                );
                 let span = self.finish_span(start);
                 Pat::Ident {
                     name,

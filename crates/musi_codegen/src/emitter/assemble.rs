@@ -9,7 +9,12 @@ use musi_shared::{Idx, Interner};
 use crate::error::CodegenError;
 
 /// `(fn_idx, params, body_idx, ret_ty)` for lambdas pending emission.
-type PendingLambda = (u16, Vec<(String, Option<String>)>, Idx<Expr>, Option<String>);
+type PendingLambda = (
+    u16,
+    Vec<(String, Option<String>)>,
+    Idx<Expr>,
+    Option<String>,
+);
 use crate::intrinsics;
 use crate::{FunctionEntry, Module, Opcode, SymbolEntry, SymbolFlags};
 
@@ -43,9 +48,10 @@ pub(super) fn emit_fn_body_with_ret(
     for (name, type_name_opt) in params {
         let slot = out.define_local(name)?;
         if let Some(type_name) = type_name_opt
-            && state.type_map.contains_key(type_name) {
-                let _prev = out.local_types.insert(slot, type_name.clone());
-            }
+            && state.type_map.contains_key(type_name)
+        {
+            let _prev = out.local_types.insert(slot, type_name.clone());
+        }
     }
     let body = arenas.exprs.get(body_idx).clone();
 
@@ -53,36 +59,36 @@ pub(super) fn emit_fn_body_with_ret(
     if let (Some(ty_name), Expr::AnonRec { fields, .. }) = (ret_ty, &body)
         && let (Some(type_info), Some(&type_tag)) =
             (state.type_map.get(ty_name), state.type_tag_map.get(ty_name))
-        {
-            let declared_fields = type_info.field_names.clone();
-            let explicit: HashMap<String, Idx<Expr>> = fields
-                .iter()
-                .filter_map(|fi| {
-                    if let musi_ast::FieldInit::Named { name, value, .. } = fi {
-                        Some((arenas.interner.resolve(*name).to_owned(), *value))
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            for field_name in &declared_fields {
-                if let Some(&val_idx) = explicit.get(field_name) {
-                    let val = arenas.exprs.get(val_idx).clone();
-                    emit_expr(arenas, state, &val, module, &mut out)?;
+    {
+        let declared_fields = type_info.field_names.clone();
+        let explicit: HashMap<String, Idx<Expr>> = fields
+            .iter()
+            .filter_map(|fi| {
+                if let musi_ast::FieldInit::Named { name, value, .. } = fi {
+                    Some((arenas.interner.resolve(*name).to_owned(), *value))
                 } else {
-                    out.push(&Opcode::LdImmUnit);
+                    None
                 }
+            })
+            .collect();
+        for field_name in &declared_fields {
+            if let Some(&val_idx) = explicit.get(field_name) {
+                let val = arenas.exprs.get(val_idx).clone();
+                emit_expr(arenas, state, &val, module, &mut out)?;
+            } else {
+                out.push(&Opcode::LdImmUnit);
             }
-            let field_count =
-                u16::try_from(declared_fields.len()).map_err(|_| CodegenError::UnsupportedExpr)?;
-            out.push(&Opcode::NewObj {
-                type_tag,
-                field_count,
-            });
-            out.push(&Opcode::Ret);
-            out.pop_scope();
-            return finalize_fn_body(fn_idx, out, module);
         }
+        let field_count =
+            u16::try_from(declared_fields.len()).map_err(|_| CodegenError::UnsupportedExpr)?;
+        out.push(&Opcode::NewObj {
+            type_tag,
+            field_count,
+        });
+        out.push(&Opcode::Ret);
+        out.pop_scope();
+        return finalize_fn_body(fn_idx, out, module);
+    }
 
     emit_expr(arenas, state, &body, module, &mut out)?;
     out.push(&Opcode::Ret);

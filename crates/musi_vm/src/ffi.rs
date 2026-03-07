@@ -43,7 +43,10 @@ impl FfiState {
     /// Resolves the function pointer for an extrin function, loading the library if needed.
     fn resolve(&mut self, fn_idx: u16, module: &Module) -> Result<&FfiSymbol, VmError> {
         if self.symbols.contains_key(&fn_idx) {
-            return self.symbols.get(&fn_idx).ok_or_else(|| VmError::FfiFailed("symbol vanished".into()));
+            return self
+                .symbols
+                .get(&fn_idx)
+                .ok_or_else(|| VmError::FfiFailed("symbol vanished".into()));
         }
 
         let func = module
@@ -64,23 +67,30 @@ impl FfiState {
             let _prev = self.libs.insert(lib_key.clone(), lib);
         }
 
-        let lib = self.libs.get(&lib_key)
+        let lib = self
+            .libs
+            .get(&lib_key)
             .ok_or_else(|| VmError::FfiFailed("library not loaded".into()))?;
 
         // SAFETY: lib.get resolves the named symbol from a loaded shared library.
         let sym_result: Result<libloading::Symbol<'_, *const ()>, _> =
             unsafe { lib.get(c_name.as_bytes()) };
-        let sym_ref = sym_result
-            .map_err(|e| VmError::FfiFailed(format!("dlsym '{c_name}': {e}").into()))?;
+        let sym_ref =
+            sym_result.map_err(|e| VmError::FfiFailed(format!("dlsym '{c_name}': {e}").into()))?;
         // Symbol<*const ()> wraps a raw fn pointer; Deref copies the pointer value (safe).
         let ptr: *const () = *sym_ref;
 
-        let _prev = self.symbols.insert(fn_idx, FfiSymbol {
-            ptr,
-            param_count: func.param_count,
-        });
+        let _prev = self.symbols.insert(
+            fn_idx,
+            FfiSymbol {
+                ptr,
+                param_count: func.param_count,
+            },
+        );
 
-        self.symbols.get(&fn_idx).ok_or_else(|| VmError::FfiFailed("symbol vanished".into()))
+        self.symbols
+            .get(&fn_idx)
+            .ok_or_else(|| VmError::FfiFailed("symbol vanished".into()))
     }
 
     /// Calls an extrin function with the given arguments, returning its result as a `Value`.
@@ -95,12 +105,7 @@ impl FfiState {
     ///
     /// # Errors
     /// Returns `VmError` if the symbol cannot be resolved or the argument types do not match.
-    pub fn call(
-        &mut self,
-        fn_idx: u16,
-        args: &[Value],
-        module: &Module,
-    ) -> Result<Value, VmError> {
+    pub fn call(&mut self, fn_idx: u16, args: &[Value], module: &Module) -> Result<Value, VmError> {
         let sym = self.resolve(fn_idx, module)?;
         let ptr = sym.ptr;
         let param_count = sym.param_count;
@@ -205,7 +210,9 @@ fn load_library(name: Option<&str>) -> Result<libloading::Library, VmError> {
             }
             #[cfg(not(any(target_os = "macos", target_os = "linux")))]
             {
-                Err(VmError::FfiFailed("FFI not supported on this platform".into()))
+                Err(VmError::FfiFailed(
+                    "FFI not supported on this platform".into(),
+                ))
             }
         }
     }

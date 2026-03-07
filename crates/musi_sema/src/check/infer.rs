@@ -1,14 +1,14 @@
 //! Type inference methods for expressions, statements, and declarations.
 
 use musi_ast::{
-    ArrayItem, AstArenas, BinOp, Cond, ElifBranch, Expr, FieldInit, LitValue, MatchArm,
-    PostfixOp, PrefixOp,
+    ArrayItem, AstArenas, BinOp, Cond, ElifBranch, Expr, FieldInit, LitValue, MatchArm, PostfixOp,
+    PrefixOp,
 };
 use musi_shared::{Idx, Span};
 
 use crate::types::{PrimTy, Type, TypeVarId};
 
-use super::{instantiate, FnDefNode, TypeChecker};
+use super::{FnDefNode, TypeChecker, instantiate};
 
 impl TypeChecker<'_> {
     pub(super) fn infer_expr(&mut self, idx: Idx<Expr>, ctx: &AstArenas) -> Type {
@@ -20,9 +20,13 @@ impl TypeChecker<'_> {
             | Expr::Import { .. }
             | Expr::Export { .. }
             | Expr::Record { name: None, .. } => Type::Prim(PrimTy::Unit),
-            Expr::Record { name: Some(sym), fields, .. } => {
-                use std::collections::HashMap;
+            Expr::Record {
+                name: Some(sym),
+                fields,
+                ..
+            } => {
                 use musi_shared::Symbol;
+                use std::collections::HashMap;
                 if let Some(def_id) = self.find_type_def(*sym) {
                     let field_map: HashMap<Symbol, Type> = fields
                         .iter()
@@ -34,17 +38,40 @@ impl TypeChecker<'_> {
             }
             Expr::Ident { span, .. } => self.infer_ident(idx, *span),
             Expr::Paren { inner, .. } => self.infer(*inner, ctx),
-            Expr::Tuple { elements, .. } => self.infer_tuple(ctx.expr_lists.get_slice(*elements), ctx),
-            Expr::Block { stmts, tail, .. } => self.infer_block(ctx.expr_lists.get_slice(*stmts), tail.as_ref().copied(), ctx),
+            Expr::Tuple { elements, .. } => {
+                self.infer_tuple(ctx.expr_lists.get_slice(*elements), ctx)
+            }
+            Expr::Block { stmts, tail, .. } => self.infer_block(
+                ctx.expr_lists.get_slice(*stmts),
+                tail.as_ref().copied(),
+                ctx,
+            ),
             Expr::Array { items, .. } => self.infer_array_expr(items, ctx),
             Expr::AnonRec { fields, .. } => self.infer_anon_rec_expr(fields, ctx),
             Expr::Prefix { op, operand, span } => self.infer_prefix_op(*op, *operand, *span, ctx),
             Expr::Binary { op, lhs, rhs, span } => self.infer_binary(*op, *lhs, *rhs, *span, ctx),
-            Expr::Assign { target, value, span } => self.infer_assign(*target, *value, *span, ctx),
+            Expr::Assign {
+                target,
+                value,
+                span,
+            } => self.infer_assign(*target, *value, *span, ctx),
             Expr::Postfix { base, op, span } => self.infer_postfix(*base, op, *span, ctx),
-            Expr::Bind { pat, ty: ann_ty, init, span, .. } =>
-                self.infer_bind_expr(pat, ann_ty.as_ref(), init.as_ref().copied(), *span, ctx),
-            Expr::FnDef { name, ty_params, params, ret_ty, body, span, .. } => {
+            Expr::Bind {
+                pat,
+                ty: ann_ty,
+                init,
+                span,
+                ..
+            } => self.infer_bind_expr(pat, ann_ty.as_ref(), init.as_ref().copied(), *span, ctx),
+            Expr::FnDef {
+                name,
+                ty_params,
+                params,
+                ret_ty,
+                body,
+                span,
+                ..
+            } => {
                 let node = FnDefNode {
                     name: *name,
                     ty_params,
@@ -55,8 +82,13 @@ impl TypeChecker<'_> {
                 };
                 self.infer_fn_def(node, ctx)
             }
-            Expr::Lambda { ty_params, params, ret_ty, body, .. } =>
-                self.infer_lambda_expr(ty_params, params, ret_ty.as_ref(), *body, ctx),
+            Expr::Lambda {
+                ty_params,
+                params,
+                ret_ty,
+                body,
+                ..
+            } => self.infer_lambda_expr(ty_params, params, ret_ty.as_ref(), *body, ctx),
             Expr::DotPrefix { args, .. } => {
                 for &a in ctx.expr_lists.get_slice(*args) {
                     let _ty = self.infer(a, ctx);
@@ -69,16 +101,35 @@ impl TypeChecker<'_> {
 
     fn infer_expr_stmt(&mut self, expr: &Expr, ctx: &AstArenas) -> Type {
         match expr {
-            Expr::If { cond, then_body, elif_chains, else_body, span } =>
-                self.infer_if(cond, *then_body, elif_chains, else_body.as_ref().copied(), *span, ctx),
-            Expr::Match { scrutinee, arms, .. } =>
-                self.infer_match_expr(*scrutinee, arms, ctx),
-            Expr::While { cond, guard, body, span } =>
-                self.infer_while_expr(cond, guard.as_ref().copied(), *body, *span, ctx),
-            Expr::Loop { body, post_cond, .. } =>
-                self.infer_loop_expr(*body, post_cond.as_deref(), ctx),
-            Expr::For { iter, body, guard, .. } =>
-                self.infer_for_expr(*iter, *body, guard.as_ref().copied(), ctx),
+            Expr::If {
+                cond,
+                then_body,
+                elif_chains,
+                else_body,
+                span,
+            } => self.infer_if(
+                cond,
+                *then_body,
+                elif_chains,
+                else_body.as_ref().copied(),
+                *span,
+                ctx,
+            ),
+            Expr::Match {
+                scrutinee, arms, ..
+            } => self.infer_match_expr(*scrutinee, arms, ctx),
+            Expr::While {
+                cond,
+                guard,
+                body,
+                span,
+            } => self.infer_while_expr(cond, guard.as_ref().copied(), *body, *span, ctx),
+            Expr::Loop {
+                body, post_cond, ..
+            } => self.infer_loop_expr(*body, post_cond.as_deref(), ctx),
+            Expr::For {
+                iter, body, guard, ..
+            } => self.infer_for_expr(*iter, *body, guard.as_ref().copied(), ctx),
             Expr::Label { body, .. } => self.infer(*body, ctx),
             Expr::Return { value, .. } | Expr::Break { value, .. } => {
                 if let Some(&v) = value.as_ref() {
@@ -443,9 +494,10 @@ impl TypeChecker<'_> {
                 let resolved = self.unify_table.resolve(base_ty);
                 if let Type::Named(def_id, _) = &resolved
                     && let Some(fields) = self.record_fields.get(def_id)
-                        && let Some(field_ty) = fields.get(name) {
-                            return field_ty.clone();
-                        }
+                    && let Some(field_ty) = fields.get(name)
+                {
+                    return field_ty.clone();
+                }
                 Type::Var(self.unify_table.fresh())
             }
 

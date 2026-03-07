@@ -1,12 +1,12 @@
 use musi_ast::{Expr, LitValue, MatchArm, Pat, PatSuffix, PostfixOp};
 use musi_shared::{Idx, Interner};
 
-use crate::error::CodegenError;
 use crate::Module;
 use crate::Opcode;
+use crate::error::CodegenError;
 
-use super::state::{EmitArenas, EmitState, FnEmitter};
 use super::expr::emit_expr;
+use super::state::{EmitArenas, EmitState, FnEmitter};
 
 pub(super) fn emit_discriminant_test(disc: i64, scrutinee_slot: u16, out: &mut FnEmitter) -> usize {
     out.push(&Opcode::LdLoc(scrutinee_slot));
@@ -17,7 +17,10 @@ pub(super) fn emit_discriminant_test(disc: i64, scrutinee_slot: u16, out: &mut F
 }
 
 /// Returns `(variant_name, sub_patterns)` for dot-prefix variant patterns.
-pub(super) fn variant_name_and_args<'p>(pat: &'p Pat, interner: &'p Interner) -> Option<(&'p str, &'p [Pat])> {
+pub(super) fn variant_name_and_args<'p>(
+    pat: &'p Pat,
+    interner: &'p Interner,
+) -> Option<(&'p str, &'p [Pat])> {
     match pat {
         Pat::DotPrefix { name, args, .. } => Some((interner.resolve(*name), args.as_slice())),
         _ => None,
@@ -35,7 +38,9 @@ pub(super) fn emit_pattern_test(
     match pat {
         Pat::Wild { .. } => Ok(None),
 
-        Pat::Ident { name, suffix: None, .. } => {
+        Pat::Ident {
+            name, suffix: None, ..
+        } => {
             let name_str = arenas.interner.resolve(*name);
             if state.variant_map.contains_key(name_str) {
                 return Err(CodegenError::VariantPatternRequiresDot(name_str.into()));
@@ -43,7 +48,11 @@ pub(super) fn emit_pattern_test(
             Ok(None) // plain variable binding
         }
 
-        Pat::Ident { name, suffix: Some(PatSuffix::Positional { .. }), .. } => {
+        Pat::Ident {
+            name,
+            suffix: Some(PatSuffix::Positional { .. }),
+            ..
+        } => {
             let name_str = arenas.interner.resolve(*name);
             if state.variant_map.contains_key(name_str) {
                 return Err(CodegenError::VariantPatternRequiresDot(name_str.into()));
@@ -64,7 +73,9 @@ pub(super) fn emit_pattern_test(
 
         pat => {
             if let Some((variant_name, _)) = variant_name_and_args(pat, arenas.interner) {
-                let vinfo = state.variant_map.get(variant_name)
+                let vinfo = state
+                    .variant_map
+                    .get(variant_name)
                     .ok_or_else(|| CodegenError::UnknownVariant(variant_name.into()))?;
                 let fixup = emit_discriminant_test(vinfo.discriminant, scrutinee_slot, out);
                 Ok(Some(fixup))
@@ -84,7 +95,9 @@ pub(super) fn emit_pattern_bindings(
     out: &mut FnEmitter,
 ) -> Result<(), CodegenError> {
     match pat {
-        Pat::Ident { name, suffix: None, .. } => {
+        Pat::Ident {
+            name, suffix: None, ..
+        } => {
             let name_str = arenas.interner.resolve(*name);
             let slot = out.define_local(name_str)?;
             out.push(&Opcode::LdLoc(scrutinee_slot));
@@ -97,10 +110,13 @@ pub(super) fn emit_pattern_bindings(
         pat => {
             if let Some((_, sub_pats)) = variant_name_and_args(pat, arenas.interner) {
                 for (field_i, sub_pat) in sub_pats.iter().enumerate() {
-                    let field_idx = u16::try_from(field_i + 1).map_err(|_| CodegenError::UnsupportedExpr)?;
+                    let field_idx =
+                        u16::try_from(field_i + 1).map_err(|_| CodegenError::UnsupportedExpr)?;
                     match sub_pat {
                         Pat::Wild { .. } => {}
-                        Pat::Ident { name, suffix: None, .. } => {
+                        Pat::Ident {
+                            name, suffix: None, ..
+                        } => {
                             let name_str = arenas.interner.resolve(*name);
                             let sub_slot = out.define_local(name_str)?;
                             out.push(&Opcode::LdLoc(scrutinee_slot));
@@ -108,7 +124,8 @@ pub(super) fn emit_pattern_bindings(
                             out.push(&Opcode::StLoc(sub_slot));
                         }
                         _ => {
-                            let temp_name = format!("$sub_{}_{}_{}", scrutinee_slot, field_i, out.next_slot);
+                            let temp_name =
+                                format!("$sub_{}_{}_{}", scrutinee_slot, field_i, out.next_slot);
                             let temp_slot = out.define_local(&temp_name)?;
                             out.push(&Opcode::LdLoc(scrutinee_slot));
                             out.push(&Opcode::LdFld(field_idx));
@@ -133,7 +150,11 @@ pub(super) fn track_type_of_binding(
     out: &mut FnEmitter,
 ) {
     match init_expr {
-        Expr::Postfix { base, op: PostfixOp::RecDot { .. }, .. } => {
+        Expr::Postfix {
+            base,
+            op: PostfixOp::RecDot { .. },
+            ..
+        } => {
             if let Expr::Ident { name, .. } = arenas.exprs.get(*base) {
                 let type_name = arenas.interner.resolve(*name);
                 if state.type_map.contains_key(type_name) {
@@ -147,21 +168,34 @@ pub(super) fn track_type_of_binding(
                 let _prev = out.local_types.insert(slot, vinfo.type_name.clone());
             }
         }
-        Expr::Postfix { base, op: PostfixOp::Call { .. }, .. } => {
+        Expr::Postfix {
+            base,
+            op: PostfixOp::Call { .. },
+            ..
+        } => {
             if let Expr::Ident { name, .. } = arenas.exprs.get(*base) {
                 let callee_name = arenas.interner.resolve(*name);
                 if let Some(ret_type) = state.fn_return_types.get(callee_name).cloned()
-                    && state.type_map.contains_key(&ret_type) {
-                        let _prev = out.local_types.insert(slot, ret_type);
-                    }
-            } else if let Expr::Postfix { base: recv_idx, op: PostfixOp::Field { .. }, .. } = arenas.exprs.get(*base)
-                && let Expr::Ident { name: recv_name, .. } = arenas.exprs.get(*recv_idx) {
-                    let recv_str = arenas.interner.resolve(*recv_name);
-                    if let Some(recv_slot) = out.lookup_local(recv_str)
-                        && let Some(type_name) = out.local_types.get(&recv_slot).cloned() {
-                            let _prev = out.local_types.insert(slot, type_name);
-                        }
+                    && state.type_map.contains_key(&ret_type)
+                {
+                    let _prev = out.local_types.insert(slot, ret_type);
                 }
+            } else if let Expr::Postfix {
+                base: recv_idx,
+                op: PostfixOp::Field { .. },
+                ..
+            } = arenas.exprs.get(*base)
+                && let Expr::Ident {
+                    name: recv_name, ..
+                } = arenas.exprs.get(*recv_idx)
+            {
+                let recv_str = arenas.interner.resolve(*recv_name);
+                if let Some(recv_slot) = out.lookup_local(recv_str)
+                    && let Some(type_name) = out.local_types.get(&recv_slot).cloned()
+                {
+                    let _prev = out.local_types.insert(slot, type_name);
+                }
+            }
         }
         _ => {}
     }
@@ -184,7 +218,8 @@ pub(super) fn emit_match(
     let mut end_fixups: Vec<usize> = Vec::new();
 
     for arm in arms {
-        let next_arm_fixup = emit_pattern_test(arenas, state, &arm.pat, scrutinee_slot, module, out)?;
+        let next_arm_fixup =
+            emit_pattern_test(arenas, state, &arm.pat, scrutinee_slot, module, out)?;
 
         out.push_scope();
         emit_pattern_bindings(arenas, state, &arm.pat, scrutinee_slot, out)?;
@@ -202,11 +237,17 @@ pub(super) fn emit_match(
 
         end_fixups.push(out.emit_jump_placeholder(FnEmitter::BR));
 
-        if let Some(fixup) = guard_fixup { out.patch_jump_to_here(fixup)?; }
-        if let Some(fixup) = next_arm_fixup { out.patch_jump_to_here(fixup)?; }
+        if let Some(fixup) = guard_fixup {
+            out.patch_jump_to_here(fixup)?;
+        }
+        if let Some(fixup) = next_arm_fixup {
+            out.patch_jump_to_here(fixup)?;
+        }
     }
 
     out.push(&Opcode::HaltError);
-    for fixup in end_fixups { out.patch_jump_to_here(fixup)?; }
+    for fixup in end_fixups {
+        out.patch_jump_to_here(fixup)?;
+    }
     Ok(())
 }

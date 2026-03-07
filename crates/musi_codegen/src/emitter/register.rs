@@ -7,8 +7,7 @@ use crate::module::MethodEntry;
 use crate::{FunctionEntry, Module, SymbolEntry, SymbolFlags};
 
 use super::state::{
-    EmitState, TypeInfo, VariantInfo, payload_count, push_plain_fn, resolve_type_tag,
-    ty_name_str,
+    EmitState, TypeInfo, VariantInfo, payload_count, push_plain_fn, resolve_type_tag, ty_name_str,
 };
 
 pub(super) fn register_fn_def(
@@ -18,17 +17,28 @@ pub(super) fn register_fn_def(
     module: &mut Module,
     state: &mut EmitState,
 ) -> Result<(), CodegenError> {
-    let Expr::FnDef { attrs, modifiers, name, params, ret_ty, body, .. } = exprs.get(item_idx)
+    let Expr::FnDef {
+        attrs,
+        modifiers,
+        name,
+        params,
+        ret_ty,
+        body,
+        ..
+    } = exprs.get(item_idx)
     else {
         return Ok(());
     };
 
     let fn_name = interner.resolve(*name).to_owned();
-    let extrin_abi: Box<str> = modifiers.iter()
+    let extrin_abi: Box<str> = modifiers
+        .iter()
         .find_map(|m| {
             if let Modifier::Extrin(Some(sym)) = m {
                 Some(Box::from(interner.resolve(*sym)))
-            } else { None }
+            } else {
+                None
+            }
         })
         .unwrap_or_else(|| Box::from(""));
     let is_extrin = body.is_none() || modifiers.iter().any(|m| matches!(m, Modifier::Extrin(_)));
@@ -37,34 +47,48 @@ pub(super) fn register_fn_def(
         | if is_export { SymbolFlags::EXPORT } else { 0 };
 
     let intrinsic_id: u16 = if is_extrin {
-        attrs.iter().find_map(|attr| {
-            if interner.resolve(attr.name) != "intrinsic" { return None; }
-            attr.args.first().and_then(|arg| match arg {
-                AttrArg::Named { name: arg_name, .. } => {
-                    Intrinsic::from_name(interner.resolve(*arg_name)).map(Intrinsic::id)
+        attrs
+            .iter()
+            .find_map(|attr| {
+                if interner.resolve(attr.name) != "intrinsic" {
+                    return None;
                 }
-                AttrArg::Value { value: LitValue::Str(sym), .. } => {
-                    Intrinsic::from_name(interner.resolve(*sym)).map(Intrinsic::id)
-                }
-                AttrArg::Value { .. } => None,
+                attr.args.first().and_then(|arg| match arg {
+                    AttrArg::Named { name: arg_name, .. } => {
+                        Intrinsic::from_name(interner.resolve(*arg_name)).map(Intrinsic::id)
+                    }
+                    AttrArg::Value {
+                        value: LitValue::Str(sym),
+                        ..
+                    } => Intrinsic::from_name(interner.resolve(*sym)).map(Intrinsic::id),
+                    AttrArg::Value { .. } => None,
+                })
             })
-        })
-        .or_else(|| Intrinsic::from_name(&fn_name).map(Intrinsic::id))
-        .unwrap_or(intrinsics::NONE_ID)
+            .or_else(|| Intrinsic::from_name(&fn_name).map(Intrinsic::id))
+            .unwrap_or(intrinsics::NONE_ID)
     } else {
         intrinsics::NONE_ID
     };
 
     let (link_lib, link_name) = attrs.iter().fold((None, None), |(lib, nm), attr| {
-        if interner.resolve(attr.name) != "link" { return (lib, nm); }
+        if interner.resolve(attr.name) != "link" {
+            return (lib, nm);
+        }
         let mut new_lib = lib;
         let mut new_nm = nm;
         for arg in &attr.args {
             match arg {
-                AttrArg::Value { value: LitValue::Str(sym), .. } => {
+                AttrArg::Value {
+                    value: LitValue::Str(sym),
+                    ..
+                } => {
                     new_lib = Some(Box::from(interner.resolve(*sym).trim_matches('"')));
                 }
-                AttrArg::Named { name: arg_name, value: Some(LitValue::Str(sym)), .. } => {
+                AttrArg::Named {
+                    name: arg_name,
+                    value: Some(LitValue::Str(sym)),
+                    ..
+                } => {
                     if interner.resolve(*arg_name) == "name" {
                         new_nm = Some(Box::from(interner.resolve(*sym).trim_matches('"')));
                     }
@@ -84,7 +108,8 @@ pub(super) fn register_fn_def(
         link_name,
     })?;
 
-    let param_count = u8::try_from(params.len()).map_err(|_| CodegenError::ParameterCountOverflow)?;
+    let param_count =
+        u8::try_from(params.len()).map_err(|_| CodegenError::ParameterCountOverflow)?;
     let fn_idx = module.push_function(FunctionEntry {
         symbol_idx: sym_idx,
         param_count,
@@ -114,9 +139,17 @@ pub(super) fn register_record(
     interner: &Interner,
     state: &mut EmitState,
 ) {
-    let Expr::Record { name: Some(name), fields, .. } = exprs.get(item_idx) else { return; };
+    let Expr::Record {
+        name: Some(name),
+        fields,
+        ..
+    } = exprs.get(item_idx)
+    else {
+        return;
+    };
     let type_name = interner.resolve(*name).to_owned();
-    let field_names: Vec<String> = fields.iter()
+    let field_names: Vec<String> = fields
+        .iter()
         .map(|f| interner.resolve(f.name).to_owned())
         .collect();
     ensure_type_tag(state, &type_name);
@@ -129,7 +162,12 @@ pub(super) fn register_choice(
     interner: &Interner,
     state: &mut EmitState,
 ) -> Result<(), CodegenError> {
-    let Expr::Choice { name: Some(name), variants, .. } = exprs.get(item_idx) else {
+    let Expr::Choice {
+        name: Some(name),
+        variants,
+        ..
+    } = exprs.get(item_idx)
+    else {
         return Ok(());
     };
     let type_name = interner.resolve(*name).to_owned();
@@ -141,17 +179,23 @@ pub(super) fn register_choice(
     for (disc, variant) in variants.iter().enumerate() {
         let v_name = interner.resolve(variant.name).to_owned();
         let payload = payload_count(variant);
-        let discriminant: i64 = if let Some(musi_ast::VariantPayload::Discriminant(LitValue::Int(v))) = &variant.payload {
+        let discriminant: i64 = if let Some(musi_ast::VariantPayload::Discriminant(
+            LitValue::Int(v),
+        )) = &variant.payload
+        {
             *v
         } else {
             i64::try_from(disc).map_err(|_| CodegenError::UnsupportedExpr)?
         };
-        let _prev = state.variant_map.insert(v_name, VariantInfo {
-            type_name: type_name.clone(),
-            discriminant,
-            payload_count: payload,
-            total_field_count,
-        });
+        let _prev = state.variant_map.insert(
+            v_name,
+            VariantInfo {
+                type_name: type_name.clone(),
+                discriminant,
+                payload_count: payload,
+                total_field_count,
+            },
+        );
     }
     Ok(())
 }
@@ -162,13 +206,16 @@ pub(super) fn register_class_def(
     interner: &Interner,
     state: &mut EmitState,
 ) {
-    let Expr::ClassDef { members, .. } = exprs.get(item_idx) else { return; };
+    let Expr::ClassDef { members, .. } = exprs.get(item_idx) else {
+        return;
+    };
     for member in members {
         if let ClassMember::Method(method_idx) = member
-            && let Expr::FnDef { name, .. } = exprs.get(*method_idx) {
-                let name_str = interner.resolve(*name).to_owned();
-                let _inserted = state.class_method_names.insert(name_str);
-            }
+            && let Expr::FnDef { name, .. } = exprs.get(*method_idx)
+        {
+            let name_str = interner.resolve(*name).to_owned();
+            let _inserted = state.class_method_names.insert(name_str);
+        }
     }
 }
 
@@ -179,20 +226,45 @@ pub(super) fn register_given_def(
     module: &mut Module,
     state: &EmitState,
 ) -> Result<(), CodegenError> {
-    let Expr::GivenDef { class_app, members, .. } = exprs.get(item_idx) else { return Ok(()); };
+    let Expr::GivenDef {
+        class_app, members, ..
+    } = exprs.get(item_idx)
+    else {
+        return Ok(());
+    };
 
-    let Some(type_tag) = resolve_type_tag(class_app, interner, state) else { return Ok(()); };
+    let Some(type_tag) = resolve_type_tag(class_app, interner, state) else {
+        return Ok(());
+    };
 
     let members = members.clone();
     for member in &members {
-        let ClassMember::Method(method_idx) = member else { continue; };
+        let ClassMember::Method(method_idx) = member else {
+            continue;
+        };
         let fn_expr = exprs.get(*method_idx);
-        let Expr::FnDef { name, params, body: Some(_), modifiers, .. } = fn_expr else { continue; };
-        if modifiers.iter().any(|m| matches!(m, Modifier::Extrin(_))) { continue; }
+        let Expr::FnDef {
+            name,
+            params,
+            body: Some(_),
+            modifiers,
+            ..
+        } = fn_expr
+        else {
+            continue;
+        };
+        if modifiers.iter().any(|m| matches!(m, Modifier::Extrin(_))) {
+            continue;
+        }
         let fn_name = interner.resolve(*name).to_owned();
-        let param_count = u8::try_from(params.len()).map_err(|_| CodegenError::ParameterCountOverflow)?;
+        let param_count =
+            u8::try_from(params.len()).map_err(|_| CodegenError::ParameterCountOverflow)?;
         let fn_idx = push_plain_fn(&fn_name, param_count, module)?;
-        module.method_table.push(MethodEntry { name: fn_name.into_boxed_str(), type_tag, fn_idx });
+        module.method_table.push(MethodEntry {
+            name: fn_name.into_boxed_str(),
+            type_tag,
+            fn_idx,
+        });
     }
     Ok(())
 }

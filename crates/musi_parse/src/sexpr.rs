@@ -81,7 +81,9 @@ impl<'a> Printer<'a> {
 
     fn write_space_separated<T>(&mut self, items: &[T], mut f: impl FnMut(&mut Self, &T)) {
         for (i, x) in items.iter().enumerate() {
-            if i > 0 { self.write_char(' '); }
+            if i > 0 {
+                self.write_char(' ');
+            }
             f(self, x);
         }
     }
@@ -172,9 +174,19 @@ impl<'a> Printer<'a> {
 
     fn print_expr_stmt(&mut self, expr: &Expr) {
         match expr {
-            Expr::While { cond, guard, body, .. } => self.print_while(cond, *guard, *body),
-            Expr::Loop { body, post_cond, .. } => self.print_loop(*body, post_cond.as_deref()),
-            Expr::For { pat, iter, guard, body, .. } => self.print_for(pat, *iter, *guard, *body),
+            Expr::While {
+                cond, guard, body, ..
+            } => self.print_while(cond, *guard, *body),
+            Expr::Loop {
+                body, post_cond, ..
+            } => self.print_loop(*body, post_cond.as_deref()),
+            Expr::For {
+                pat,
+                iter,
+                guard,
+                body,
+                ..
+            } => self.print_for(pat, *iter, *guard, *body),
             Expr::Label { name, body, .. } => {
                 self.write("(label ");
                 self.write(self.sym(*name));
@@ -192,7 +204,9 @@ impl<'a> Printer<'a> {
             }
             Expr::Import { items, path, .. } => self.print_import(items, *path),
             Expr::Export { items, path, .. } => self.print_export(items, *path),
-            Expr::Using { name, init, body, .. } => {
+            Expr::Using {
+                name, init, body, ..
+            } => {
                 self.write("(using ");
                 self.write(self.sym(*name));
                 self.write_char(' ');
@@ -235,7 +249,14 @@ impl<'a> Printer<'a> {
                 where_clause,
                 body,
                 ..
-            } => self.print_lambda(attrs, ty_params, params, ret_ty.as_ref(), where_clause, *body),
+            } => self.print_lambda(
+                attrs,
+                ty_params,
+                params,
+                ret_ty.as_ref(),
+                where_clause,
+                *body,
+            ),
             Expr::ClassDef {
                 name,
                 ty_params,

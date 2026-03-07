@@ -3,8 +3,8 @@
 use musi_shared::{Idx, Symbol};
 
 use crate::ast::{
-    Attr, BindKind, ChoiceVariant, ClassMember, Constraint, Expr, FieldInit, Modifier, Param,
-    Pat, RecField, Ty, TyParam,
+    Attr, BindKind, ChoiceVariant, ClassMember, Constraint, Expr, FieldInit, Modifier, Param, Pat,
+    RecField, Ty, TyParam,
 };
 
 use super::{FnDefView, Printer};
@@ -95,7 +95,9 @@ impl Printer<'_> {
             ClassMember::Method(idx) => {
                 self.print_expr(*idx);
             }
-            ClassMember::Law { name, params, body, .. } => {
+            ClassMember::Law {
+                name, params, body, ..
+            } => {
                 self.write("(law ");
                 self.write(self.sym(*name));
                 self.write_char(' ');

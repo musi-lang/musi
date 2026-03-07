@@ -5,8 +5,8 @@ use std::collections::{HashMap, HashSet};
 use musi_ast::ParsedModule;
 use musi_shared::Interner;
 
-use crate::error::CodegenError;
 use crate::Module;
+use crate::error::CodegenError;
 
 mod assemble;
 mod call;

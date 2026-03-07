@@ -13,7 +13,9 @@ pub enum TriviaKind {
     Whitespace,
     Newline,
     /// `doc_style` is true for `///` comments, false for `//`.
-    LineComment { doc_style: bool },
+    LineComment {
+        doc_style: bool,
+    },
     BlockComment,
 }
 

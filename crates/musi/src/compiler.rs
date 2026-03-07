@@ -87,7 +87,12 @@ pub(crate) fn compile_file(file_path: &str) -> Module {
 
     let prelude_file_id = source_db.add(PRELUDE_FILENAME, PRELUDE_SRC);
     let prelude_lexed = lex(PRELUDE_SRC, prelude_file_id, &mut interner, &mut diags);
-    let prelude_module = parse(&prelude_lexed.tokens, prelude_file_id, &mut diags, &interner);
+    let prelude_module = parse(
+        &prelude_lexed.tokens,
+        prelude_file_id,
+        &mut diags,
+        &interner,
+    );
 
     if diags.has_errors() {
         print_diags_and_exit(&diags, &source_db);

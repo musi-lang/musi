@@ -41,12 +41,7 @@ impl Printer<'_> {
         self.write_char(')');
     }
 
-    pub(super) fn print_while(
-        &mut self,
-        cond: &Cond,
-        guard: Option<Idx<Expr>>,
-        body: Idx<Expr>,
-    ) {
+    pub(super) fn print_while(&mut self, cond: &Cond, guard: Option<Idx<Expr>>, body: Idx<Expr>) {
         self.write("(while ");
         self.print_cond(cond);
         self.print_optional_guard(guard);

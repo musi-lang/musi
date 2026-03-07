@@ -22,10 +22,10 @@ pub(super) enum TypeTag {
 impl From<TypeTag> for u8 {
     fn from(t: TypeTag) -> Self {
         match t {
-            TypeTag::Int   => 0,
+            TypeTag::Int => 0,
             TypeTag::Float => 1,
-            TypeTag::Str   => 2,
-            TypeTag::Unit  => 3,
+            TypeTag::Str => 2,
+            TypeTag::Unit => 3,
             TypeTag::Array => 7,
         }
     }
@@ -34,8 +34,8 @@ impl From<TypeTag> for u8 {
 impl TypeTag {
     pub(super) fn from_type_name(name: &str) -> Option<Self> {
         match name {
-            "Int" | "Int8" | "Int16" | "Int32" | "Int64"
-            | "Nat" | "Nat8" | "Nat16" | "Nat32" | "Nat64" => Some(Self::Int),
+            "Int" | "Int8" | "Int16" | "Int32" | "Int64" | "Nat" | "Nat8" | "Nat16" | "Nat32"
+            | "Nat64" => Some(Self::Int),
             "Float" | "Float32" | "Float64" => Some(Self::Float),
             "String" => Some(Self::Str),
             "Unit" => Some(Self::Unit),
@@ -77,26 +77,42 @@ impl FnEmitter {
         }
     }
 
-    pub(super) fn push_scope(&mut self) { self.scopes.push(HashMap::new()); }
-    pub(super) fn pop_scope(&mut self) { let _d = self.scopes.pop(); }
+    pub(super) fn push_scope(&mut self) {
+        self.scopes.push(HashMap::new());
+    }
+    pub(super) fn pop_scope(&mut self) {
+        let _d = self.scopes.pop();
+    }
 
     pub(super) fn define_local(&mut self, name: &str) -> Result<u16, CodegenError> {
         let slot = self.next_slot;
-        self.next_slot = self.next_slot.checked_add(1).ok_or(CodegenError::TooManyLocals)?;
-        let scope = self.scopes.last_mut().expect("define_local called with no active scope");
+        self.next_slot = self
+            .next_slot
+            .checked_add(1)
+            .ok_or(CodegenError::TooManyLocals)?;
+        let scope = self
+            .scopes
+            .last_mut()
+            .expect("define_local called with no active scope");
         let _prev = scope.insert(name.to_owned(), slot);
         Ok(slot)
     }
 
     pub(super) fn lookup_local(&self, name: &str) -> Option<u16> {
         for scope in self.scopes.iter().rev() {
-            if let Some(&slot) = scope.get(name) { return Some(slot); }
+            if let Some(&slot) = scope.get(name) {
+                return Some(slot);
+            }
         }
         None
     }
 
-    pub(super) fn push(&mut self, op: &Opcode) { op.encode_into(&mut self.code); }
-    pub(super) const fn len(&self) -> usize { self.code.len() }
+    pub(super) fn push(&mut self, op: &Opcode) {
+        op.encode_into(&mut self.code);
+    }
+    pub(super) const fn len(&self) -> usize {
+        self.code.len()
+    }
 
     pub(super) fn emit_jump_placeholder(&mut self, opcode_tag: u8) -> usize {
         let pos = self.code.len();
@@ -109,31 +125,48 @@ impl FnEmitter {
         let after_instr = fixup_pos.checked_add(5).expect("fixup_pos + 5 fits usize");
         let target = self.code.len();
         let offset = i32::try_from(
-            isize::try_from(target).map_err(|_| CodegenError::JumpOffsetOverflow)?
-                .wrapping_sub(isize::try_from(after_instr).map_err(|_| CodegenError::JumpOffsetOverflow)?),
-        ).map_err(|_| CodegenError::JumpOffsetOverflow)?;
+            isize::try_from(target)
+                .map_err(|_| CodegenError::JumpOffsetOverflow)?
+                .wrapping_sub(
+                    isize::try_from(after_instr).map_err(|_| CodegenError::JumpOffsetOverflow)?,
+                ),
+        )
+        .map_err(|_| CodegenError::JumpOffsetOverflow)?;
         self.code[fixup_pos + 1..fixup_pos + 5].copy_from_slice(&offset.to_le_bytes());
         Ok(())
     }
 
     pub(super) fn emit_br_back(&mut self, target_pos: usize) -> Result<(), CodegenError> {
-        let after_instr = self.code.len().checked_add(5).expect("code len + 5 fits usize");
+        let after_instr = self
+            .code
+            .len()
+            .checked_add(5)
+            .expect("code len + 5 fits usize");
         let offset = i32::try_from(
-            isize::try_from(target_pos).map_err(|_| CodegenError::JumpOffsetOverflow)?
-                .wrapping_sub(isize::try_from(after_instr).map_err(|_| CodegenError::JumpOffsetOverflow)?),
-        ).map_err(|_| CodegenError::JumpOffsetOverflow)?;
+            isize::try_from(target_pos)
+                .map_err(|_| CodegenError::JumpOffsetOverflow)?
+                .wrapping_sub(
+                    isize::try_from(after_instr).map_err(|_| CodegenError::JumpOffsetOverflow)?,
+                ),
+        )
+        .map_err(|_| CodegenError::JumpOffsetOverflow)?;
         self.push(&Opcode::Br(offset));
         Ok(())
     }
 
     pub(super) fn start_loop(&mut self) -> usize {
         let start_pos = self.len();
-        self.loop_stack.push(LoopCtx { start_pos, break_fixups: Vec::new() });
+        self.loop_stack.push(LoopCtx {
+            start_pos,
+            break_fixups: Vec::new(),
+        });
         start_pos
     }
 
     pub(super) fn pop_loop(&mut self) -> LoopCtx {
-        self.loop_stack.pop().expect("pop_loop called with no active loop")
+        self.loop_stack
+            .pop()
+            .expect("pop_loop called with no active loop")
     }
 
     pub(super) fn current_loop_start(&self) -> Option<usize> {
@@ -141,20 +174,31 @@ impl FnEmitter {
     }
 
     pub(super) fn push_break_fixup(&mut self, fixup_pos: usize) {
-        self.loop_stack.last_mut().expect("push_break_fixup called outside loop")
-            .break_fixups.push(fixup_pos);
+        self.loop_stack
+            .last_mut()
+            .expect("push_break_fixup called outside loop")
+            .break_fixups
+            .push(fixup_pos);
     }
 
     pub(super) fn close_loop(&mut self) -> Result<(), CodegenError> {
         let ctx = self.pop_loop();
-        for pos in ctx.break_fixups { self.patch_jump_to_here(pos)?; }
+        for pos in ctx.break_fixups {
+            self.patch_jump_to_here(pos)?;
+        }
         self.push(&Opcode::LdImmUnit);
         Ok(())
     }
 
-    pub(super) const fn local_count(&self) -> u16 { self.next_slot }
-    pub(super) fn flush_into(self, buf: &mut Vec<u8>) { buf.extend_from_slice(&self.code); }
-    pub(super) const fn byte_len(&self) -> usize { self.code.len() }
+    pub(super) const fn local_count(&self) -> u16 {
+        self.next_slot
+    }
+    pub(super) fn flush_into(self, buf: &mut Vec<u8>) {
+        buf.extend_from_slice(&self.code);
+    }
+    pub(super) const fn byte_len(&self) -> usize {
+        self.code.len()
+    }
 }
 
 // -- EmitArenas ---------------------------------------------------------------
@@ -199,8 +243,14 @@ pub(super) struct EmitState {
 
 // -- Free helpers -------------------------------------------------------------
 
-pub(super) fn resolve_type_tag(class_app: &Ty, interner: &Interner, state: &EmitState) -> Option<u16> {
-    let Ty::Named { args, .. } = class_app else { return None; };
+pub(super) fn resolve_type_tag(
+    class_app: &Ty,
+    interner: &Interner,
+    state: &EmitState,
+) -> Option<u16> {
+    let Ty::Named { args, .. } = class_app else {
+        return None;
+    };
     let first = args.first()?;
     if let Ty::Named { name: arg_name, .. } = first {
         let arg_str = interner.resolve(*arg_name);
@@ -225,11 +275,14 @@ pub(super) fn param_list_with_types(
     params: &[musi_ast::Param],
     interner: &Interner,
 ) -> Vec<(String, Option<String>)> {
-    params.iter().map(|p| {
-        let name = interner.resolve(p.name).to_owned();
-        let type_name = p.ty.as_ref().and_then(|t| ty_name_str(t, interner));
-        (name, type_name)
-    }).collect()
+    params
+        .iter()
+        .map(|p| {
+            let name = interner.resolve(p.name).to_owned();
+            let type_name = p.ty.as_ref().and_then(|t| ty_name_str(t, interner));
+            (name, type_name)
+        })
+        .collect()
 }
 
 pub(super) fn payload_count(v: &ChoiceVariant) -> u16 {
@@ -274,10 +327,14 @@ pub(super) fn register_fn_closure(
     state: &mut EmitState,
     module: &mut Module,
 ) -> Result<u16, CodegenError> {
-    let param_count = u8::try_from(params_with_types.len())
-        .map_err(|_| CodegenError::ParameterCountOverflow)?;
+    let param_count =
+        u8::try_from(params_with_types.len()).map_err(|_| CodegenError::ParameterCountOverflow)?;
     let fn_idx = push_plain_fn(name, param_count, module)?;
     let _prev = state.fn_map.insert(name.to_owned(), fn_idx);
-    state.pending_lambdas.push(PendingLambda { fn_idx, params: params_with_types, body });
+    state.pending_lambdas.push(PendingLambda {
+        fn_idx,
+        params: params_with_types,
+        body,
+    });
     Ok(fn_idx)
 }

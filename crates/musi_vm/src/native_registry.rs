@@ -17,13 +17,13 @@ pub type NativeFn = fn(&[Value]) -> Value;
 /// One `musi:*` module entry: specifier, compiled-in Musi source, function table.
 pub struct NativeModuleEntry {
     pub specifier: &'static str,
-    pub source:    &'static str,
+    pub source: &'static str,
     pub functions: &'static [(&'static str, NativeFn)],
 }
 
 /// Lookup table built once at startup from a slice of [`NativeModuleEntry`]s.
 pub struct NativeRegistry {
-    by_id:   HashMap<u16, NativeFn>,
+    by_id: HashMap<u16, NativeFn>,
     by_spec: HashMap<&'static str, &'static str>,
 }
 
@@ -31,7 +31,7 @@ impl NativeRegistry {
     /// Build a registry from a static slice of module entries.
     #[must_use]
     pub fn new(entries: &[NativeModuleEntry]) -> Self {
-        let mut by_id:   HashMap<u16, NativeFn>              = HashMap::new();
+        let mut by_id: HashMap<u16, NativeFn> = HashMap::new();
         let mut by_spec: HashMap<&'static str, &'static str> = HashMap::new();
 
         for entry in entries {
@@ -49,7 +49,10 @@ impl NativeRegistry {
     /// Empty registry (used in tests / sandboxed contexts).
     #[must_use]
     pub fn empty() -> Self {
-        Self { by_id: HashMap::new(), by_spec: HashMap::new() }
+        Self {
+            by_id: HashMap::new(),
+            by_spec: HashMap::new(),
+        }
     }
 
     /// Look up a native function by intrinsic ID.

@@ -38,8 +38,10 @@ pub mod path {
         for part in p.split('/') {
             match part {
                 "" | "." => {}
-                ".."     => { let _ = parts.pop(); }
-                other    => parts.push(other),
+                ".." => {
+                    let _ = parts.pop();
+                }
+                other => parts.push(other),
             }
         }
         let joined = parts.join("/");

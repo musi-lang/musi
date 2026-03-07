@@ -167,7 +167,11 @@ impl Parser<'_> {
         let _rec = self.expect(TokenKind::Record);
         let name = self.optional_ident();
         let ty_params = self.parse_opt_ty_params();
-        let fields = self.parse_delimited(TokenKind::LBrace, TokenKind::RBrace, Parser::parse_rec_field);
+        let fields = self.parse_delimited(
+            TokenKind::LBrace,
+            TokenKind::RBrace,
+            Parser::parse_rec_field,
+        );
         Expr::Record {
             attrs,
             modifiers,
@@ -219,7 +223,11 @@ impl Parser<'_> {
                 Some(VariantPayload::Positional(tys))
             }
             TokenKind::LBrace => {
-                let fields = self.parse_delimited(TokenKind::LBrace, TokenKind::RBrace, Parser::parse_rec_field);
+                let fields = self.parse_delimited(
+                    TokenKind::LBrace,
+                    TokenKind::RBrace,
+                    Parser::parse_rec_field,
+                );
                 Some(VariantPayload::Named(fields))
             }
             TokenKind::ColonEq => {
@@ -303,11 +311,8 @@ impl Parser<'_> {
                 let m_start = self.start_span();
                 let _law = self.expect(TokenKind::Law);
                 let name = self.expect_symbol();
-                let params = self.parse_delimited(
-                    TokenKind::LParen,
-                    TokenKind::RParen,
-                    Parser::parse_param,
-                );
+                let params =
+                    self.parse_delimited(TokenKind::LParen, TokenKind::RParen, Parser::parse_param);
                 let _arrow = self.expect(TokenKind::EqGt);
                 let body = self.parse_and_alloc_expr();
                 ClassMember::Law {

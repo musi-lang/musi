@@ -2,13 +2,13 @@ use musi_ast::{Expr, FieldInit, PostfixOp};
 use musi_shared::{Idx, Symbol};
 use std::collections::HashMap;
 
-use crate::error::CodegenError;
 use crate::Module;
 use crate::Opcode;
+use crate::error::CodegenError;
 
-use super::state::{EmitArenas, EmitState, FnEmitter};
 use super::call::emit_call;
 use super::expr::emit_expr;
+use super::state::{EmitArenas, EmitState, FnEmitter};
 
 pub(super) fn emit_postfix(
     arenas: &EmitArenas<'_>,
@@ -19,7 +19,14 @@ pub(super) fn emit_postfix(
     out: &mut FnEmitter,
 ) -> Result<(), CodegenError> {
     match op {
-        PostfixOp::Call { args, .. } => emit_call(arenas, state, base, arenas.expr_lists.get_slice(*args), module, out),
+        PostfixOp::Call { args, .. } => emit_call(
+            arenas,
+            state,
+            base,
+            arenas.expr_lists.get_slice(*args),
+            module,
+            out,
+        ),
         PostfixOp::Field { name, .. } => emit_field_access(arenas, state, base, *name, module, out),
         PostfixOp::RecDot { fields, .. } => emit_rec_dot(arenas, state, base, fields, module, out),
         PostfixOp::Index { args, .. } => {
@@ -32,7 +39,9 @@ pub(super) fn emit_postfix(
             out.push(&Opcode::ArrGet);
             Ok(())
         }
-        PostfixOp::OptField { name, .. } => emit_opt_field_access(arenas, state, base, *name, module, out),
+        PostfixOp::OptField { name, .. } => {
+            emit_opt_field_access(arenas, state, base, *name, module, out)
+        }
         PostfixOp::As { .. } => {
             let base_expr = arenas.exprs.get(base).clone();
             emit_expr(arenas, state, &base_expr, module, out)
@@ -51,26 +60,38 @@ pub(super) fn emit_field_access(
     let field_name = arenas.interner.resolve(field_sym);
     let base_expr = arenas.exprs.get(base);
 
-    if let Expr::Ident { name: base_name, .. } = base_expr {
+    if let Expr::Ident {
+        name: base_name, ..
+    } = base_expr
+    {
         let base_name_str = arenas.interner.resolve(*base_name);
-        let slot = out.lookup_local(base_name_str)
+        let slot = out
+            .lookup_local(base_name_str)
             .ok_or_else(|| CodegenError::UndefinedVariable(base_name_str.into()))?;
 
         if let Some(type_name) = out.local_types.get(&slot).cloned()
-            && let Some(type_info) = state.type_map.get(&type_name) {
-                let field_idx = type_info.field_names.iter().position(|f| f == field_name)
-                    .ok_or_else(|| CodegenError::UnknownField(field_name.into()))?;
-                let field_idx_u16 = u16::try_from(field_idx).map_err(|_| CodegenError::UnsupportedExpr)?;
-                let base_cloned = base_expr.clone();
-                emit_expr(arenas, state, &base_cloned, module, out)?;
-                out.push(&Opcode::LdFld(field_idx_u16));
-                return Ok(());
-            }
+            && let Some(type_info) = state.type_map.get(&type_name)
+        {
+            let field_idx = type_info
+                .field_names
+                .iter()
+                .position(|f| f == field_name)
+                .ok_or_else(|| CodegenError::UnknownField(field_name.into()))?;
+            let field_idx_u16 =
+                u16::try_from(field_idx).map_err(|_| CodegenError::UnsupportedExpr)?;
+            let base_cloned = base_expr.clone();
+            emit_expr(arenas, state, &base_cloned, module, out)?;
+            out.push(&Opcode::LdFld(field_idx_u16));
+            return Ok(());
+        }
 
         if let Some(layout) = out.anon_layouts.get(&slot).cloned() {
-            let field_idx = layout.iter().position(|f| f == field_name)
+            let field_idx = layout
+                .iter()
+                .position(|f| f == field_name)
                 .ok_or_else(|| CodegenError::UnknownField(field_name.into()))?;
-            let field_idx_u16 = u16::try_from(field_idx).map_err(|_| CodegenError::UnsupportedExpr)?;
+            let field_idx_u16 =
+                u16::try_from(field_idx).map_err(|_| CodegenError::UnsupportedExpr)?;
             let base_cloned = base_expr.clone();
             emit_expr(arenas, state, &base_cloned, module, out)?;
             out.push(&Opcode::LdFld(field_idx_u16));
@@ -92,14 +113,21 @@ pub(super) fn emit_opt_field_access(
     let field_name = arenas.interner.resolve(field_sym);
     let base_expr = arenas.exprs.get(base);
 
-    if let Expr::Ident { name: base_name, .. } = base_expr {
+    if let Expr::Ident {
+        name: base_name, ..
+    } = base_expr
+    {
         let base_name_str = arenas.interner.resolve(*base_name);
-        let slot = out.lookup_local(base_name_str)
+        let slot = out
+            .lookup_local(base_name_str)
             .ok_or_else(|| CodegenError::UndefinedVariable(base_name_str.into()))?;
 
         let field_idx_u16 = if let Some(type_name) = out.local_types.get(&slot).cloned() {
             if let Some(type_info) = state.type_map.get(&type_name) {
-                let idx = type_info.field_names.iter().position(|f| f == field_name)
+                let idx = type_info
+                    .field_names
+                    .iter()
+                    .position(|f| f == field_name)
                     .ok_or_else(|| CodegenError::UnknownField(field_name.into()))?;
                 u16::try_from(idx).map_err(|_| CodegenError::UnsupportedExpr)?
             } else {
@@ -127,24 +155,40 @@ pub(super) fn emit_rec_dot(
     out: &mut FnEmitter,
 ) -> Result<(), CodegenError> {
     let base_expr = arenas.exprs.get(base);
-    let Expr::Ident { name: type_name_sym, .. } = base_expr else {
+    let Expr::Ident {
+        name: type_name_sym,
+        ..
+    } = base_expr
+    else {
         return Err(CodegenError::UnsupportedExpr);
     };
     let type_name = arenas.interner.resolve(*type_name_sym).to_owned();
 
-    let type_info = state.type_map.get(&type_name)
+    let type_info = state
+        .type_map
+        .get(&type_name)
         .ok_or_else(|| CodegenError::UnknownType(type_name.clone().into_boxed_str()))?;
     let declared_fields = type_info.field_names.clone();
-    let field_count = u16::try_from(declared_fields.len()).map_err(|_| CodegenError::UnsupportedExpr)?;
+    let field_count =
+        u16::try_from(declared_fields.len()).map_err(|_| CodegenError::UnsupportedExpr)?;
 
     let spread_expr: Option<Idx<Expr>> = fields.iter().find_map(|fi| {
-        if let FieldInit::Spread { expr, .. } = fi { Some(*expr) } else { None }
+        if let FieldInit::Spread { expr, .. } = fi {
+            Some(*expr)
+        } else {
+            None
+        }
     });
 
-    let explicit: HashMap<String, Idx<Expr>> = fields.iter()
-        .filter_map(|fi| if let FieldInit::Named { name, value, .. } = fi {
-            Some((arenas.interner.resolve(*name).to_owned(), *value))
-        } else { None })
+    let explicit: HashMap<String, Idx<Expr>> = fields
+        .iter()
+        .filter_map(|fi| {
+            if let FieldInit::Named { name, value, .. } = fi {
+                Some((arenas.interner.resolve(*name).to_owned(), *value))
+            } else {
+                None
+            }
+        })
         .collect();
 
     let spread_slot: Option<u16> = if let Some(spread_idx) = spread_expr {
@@ -153,7 +197,10 @@ pub(super) fn emit_rec_dot(
         let spread = arenas.exprs.get(spread_idx).clone();
         emit_expr(arenas, state, &spread, module, out)?;
         out.push(&Opcode::StLoc(slot));
-        if let Expr::Ident { name: spread_name, .. } = arenas.exprs.get(spread_idx) {
+        if let Expr::Ident {
+            name: spread_name, ..
+        } = arenas.exprs.get(spread_idx)
+        {
             let spread_name_str = arenas.interner.resolve(*spread_name);
             if let Some(src_slot) = out.lookup_local(spread_name_str)
                 && let Some(t) = out.local_types.get(&src_slot).cloned()
@@ -175,10 +222,15 @@ pub(super) fn emit_rec_dot(
             out.push(&Opcode::LdLoc(spread_slot_id));
             out.push(&Opcode::LdFld(fidx));
         } else {
-            return Err(CodegenError::UnknownField(field_name.clone().into_boxed_str()));
+            return Err(CodegenError::UnknownField(
+                field_name.clone().into_boxed_str(),
+            ));
         }
     }
     let type_tag = state.type_tag_map.get(&type_name).copied().unwrap_or(0);
-    out.push(&Opcode::NewObj { type_tag, field_count });
+    out.push(&Opcode::NewObj {
+        type_tag,
+        field_count,
+    });
     Ok(())
 }

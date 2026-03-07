@@ -1,14 +1,17 @@
 use std::rc::Rc;
 
-use musi_codegen::intrinsics::Intrinsic;
 use musi_codegen::Module;
+use musi_codegen::intrinsics::Intrinsic;
 
 use super::*;
 use crate::value::Value;
 use crate::vm::Vm;
 
 fn make_vm() -> Vm {
-    Vm::new(Module::new(), crate::native_registry::NativeRegistry::empty())
+    Vm::new(
+        Module::new(),
+        crate::native_registry::NativeRegistry::empty(),
+    )
 }
 
 #[test]
@@ -45,7 +48,10 @@ fn string_concat_joins_strings() {
     let result = dispatch(
         &vm,
         Intrinsic::StringConcat,
-        &[Value::String(Rc::from("hello")), Value::String(Rc::from(" world"))],
+        &[
+            Value::String(Rc::from("hello")),
+            Value::String(Rc::from(" world")),
+        ],
     );
     assert_eq!(result, Value::String(Rc::from("hello world")));
 }

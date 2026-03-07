@@ -38,7 +38,10 @@ impl Interner {
     /// Panics if the number of interned strings exceeds `u32::MAX`.
     #[must_use]
     pub fn intern(&mut self, s: &str) -> Symbol {
-        let sym = self.0.intern(String::from(s)).expect("symbol table overflow");
+        let sym = self
+            .0
+            .intern(String::from(s))
+            .expect("symbol table overflow");
         Symbol(sym.id())
     }
 

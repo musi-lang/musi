@@ -6,11 +6,11 @@ use musi_shared::Idx;
 use crate::error::CodegenError;
 use crate::{Module, Opcode};
 
-use super::state::{EmitArenas, EmitState, FnEmitter, param_list_with_types, register_fn_closure};
 use super::call::{emit_static_call, emit_variant_construct};
+use super::control::{IfData, emit_binary, emit_for, emit_if, emit_loop, emit_while};
 use super::field::emit_postfix;
 use super::pattern::emit_match;
-use super::control::{IfData, emit_binary, emit_for, emit_if, emit_loop, emit_while};
+use super::state::{EmitArenas, EmitState, FnEmitter, param_list_with_types, register_fn_closure};
 
 pub(super) fn emit_expr_or_unit(
     arenas: &EmitArenas<'_>,
@@ -52,7 +52,10 @@ pub(super) fn emit_expr(
     match expr {
         Expr::Lit { value, .. } => super::control::emit_lit(value, arenas, module, out),
 
-        Expr::Unit { .. } => { out.push(&Opcode::LdImmUnit); Ok(()) }
+        Expr::Unit { .. } => {
+            out.push(&Opcode::LdImmUnit);
+            Ok(())
+        }
 
         Expr::Paren { inner, .. } => {
             let inner_expr = arenas.exprs.get(*inner).clone();
@@ -64,14 +67,17 @@ pub(super) fn emit_expr(
             if state.variant_map.contains_key(name_str) {
                 return Err(CodegenError::VariantConstructRequiresDot(name_str.into()));
             }
-            let slot = out.lookup_local(name_str)
+            let slot = out
+                .lookup_local(name_str)
                 .ok_or_else(|| CodegenError::UndefinedVariable(name_str.into()))?;
             out.push(&Opcode::LdLoc(slot));
             Ok(())
         }
 
         Expr::Bind { pat, init, .. } => {
-            let Pat::Ident { name, .. } = pat else { return Err(CodegenError::UnsupportedExpr); };
+            let Pat::Ident { name, .. } = pat else {
+                return Err(CodegenError::UnsupportedExpr);
+            };
             let name_str = arenas.interner.resolve(*name);
             let slot = out.define_local(name_str)?;
 
@@ -79,10 +85,15 @@ pub(super) fn emit_expr(
                 let init_expr = arenas.exprs.get(*init_idx);
                 super::pattern::track_type_of_binding(init_expr, slot, arenas, state, out);
                 if let Expr::AnonRec { fields, .. } = init_expr {
-                    let field_names: Vec<String> = fields.iter()
-                        .filter_map(|fi| if let FieldInit::Named { name, .. } = fi {
-                            Some(arenas.interner.resolve(*name).to_owned())
-                        } else { None })
+                    let field_names: Vec<String> = fields
+                        .iter()
+                        .filter_map(|fi| {
+                            if let FieldInit::Named { name, .. } = fi {
+                                Some(arenas.interner.resolve(*name).to_owned())
+                            } else {
+                                None
+                            }
+                        })
                         .collect();
                     let _prev = out.anon_layouts.insert(slot, field_names);
                 }
@@ -101,7 +112,8 @@ pub(super) fn emit_expr(
             match target_expr {
                 Expr::Ident { name, .. } => {
                     let name_str = arenas.interner.resolve(*name);
-                    let slot = out.lookup_local(name_str)
+                    let slot = out
+                        .lookup_local(name_str)
                         .ok_or_else(|| CodegenError::UndefinedVariable(name_str.into()))?;
                     let val = arenas.exprs.get(*value).clone();
                     emit_expr(arenas, state, &val, module, out)?;
@@ -109,7 +121,11 @@ pub(super) fn emit_expr(
                     out.push(&Opcode::LdImmUnit);
                     Ok(())
                 }
-                Expr::Postfix { base: arr_base, op: PostfixOp::Index { args, .. }, .. } => {
+                Expr::Postfix {
+                    base: arr_base,
+                    op: PostfixOp::Index { args, .. },
+                    ..
+                } => {
                     let arr_base = *arr_base;
                     let idx_idx = arenas.expr_lists.get_slice(*args).first().copied();
                     let value_idx = *value;
@@ -141,7 +157,9 @@ pub(super) fn emit_expr(
             Ok(())
         }
 
-        Expr::Binary { op, lhs, rhs, .. } => emit_binary(arenas, state, *op, *lhs, *rhs, module, out),
+        Expr::Binary { op, lhs, rhs, .. } => {
+            emit_binary(arenas, state, *op, *lhs, *rhs, module, out)
+        }
 
         Expr::Block { stmts, tail, .. } => {
             out.push_scope();
@@ -159,36 +177,71 @@ pub(super) fn emit_expr(
 
         Expr::Lambda { params, body, .. } => {
             let lambda_name = format!("__lambda_{}", state.lambda_counter);
-            state.lambda_counter = state.lambda_counter.checked_add(1).ok_or(CodegenError::TooManyFunctions)?;
+            state.lambda_counter = state
+                .lambda_counter
+                .checked_add(1)
+                .ok_or(CodegenError::TooManyFunctions)?;
             let params_with_types = param_list_with_types(params, arenas.interner);
-            let fn_idx = register_fn_closure(&lambda_name, params_with_types, *body, state, module)?;
+            let fn_idx =
+                register_fn_closure(&lambda_name, params_with_types, *body, state, module)?;
             out.push(&Opcode::LdFnIdx(fn_idx));
             Ok(())
         }
 
-        Expr::If { cond, then_body, elif_chains, else_body, .. } => emit_if(
-            arenas, state,
-            IfData { cond, then_body: *then_body, elif_chains, else_body: *else_body },
-            module, out,
+        Expr::If {
+            cond,
+            then_body,
+            elif_chains,
+            else_body,
+            ..
+        } => emit_if(
+            arenas,
+            state,
+            IfData {
+                cond,
+                then_body: *then_body,
+                elif_chains,
+                else_body: *else_body,
+            },
+            module,
+            out,
         ),
 
-        Expr::While { cond, guard, body, .. } => {
-            if guard.is_some() { return Err(CodegenError::UnsupportedExpr); }
+        Expr::While {
+            cond, guard, body, ..
+        } => {
+            if guard.is_some() {
+                return Err(CodegenError::UnsupportedExpr);
+            }
             emit_while(arenas, state, cond, *body, module, out)
         }
 
-        Expr::Loop { body, post_cond, .. } => {
-            if post_cond.is_some() { return Err(CodegenError::UnsupportedExpr); }
+        Expr::Loop {
+            body, post_cond, ..
+        } => {
+            if post_cond.is_some() {
+                return Err(CodegenError::UnsupportedExpr);
+            }
             emit_loop(arenas, state, *body, module, out)
         }
 
-        Expr::For { pat, iter, guard, body, .. } => {
-            if guard.is_some() { return Err(CodegenError::UnsupportedExpr); }
+        Expr::For {
+            pat,
+            iter,
+            guard,
+            body,
+            ..
+        } => {
+            if guard.is_some() {
+                return Err(CodegenError::UnsupportedExpr);
+            }
             emit_for(arenas, state, pat, *iter, *body, module, out)
         }
 
         Expr::Break { label, value, .. } => {
-            if label.is_some() { return Err(CodegenError::UnsupportedExpr); }
+            if label.is_some() {
+                return Err(CodegenError::UnsupportedExpr);
+            }
             emit_expr_or_unit(arenas, state, *value, module, out)?;
             let fixup = out.emit_jump_placeholder(FnEmitter::BR);
             out.push_break_fixup(fixup);
@@ -196,8 +249,12 @@ pub(super) fn emit_expr(
         }
 
         Expr::Cycle { label, guard, .. } => {
-            if label.is_some() || guard.is_some() { return Err(CodegenError::UnsupportedExpr); }
-            let start_pos = out.current_loop_start().ok_or(CodegenError::UnsupportedExpr)?;
+            if label.is_some() || guard.is_some() {
+                return Err(CodegenError::UnsupportedExpr);
+            }
+            let start_pos = out
+                .current_loop_start()
+                .ok_or(CodegenError::UnsupportedExpr)?;
             out.emit_br_back(start_pos)?;
             Ok(())
         }
@@ -208,7 +265,9 @@ pub(super) fn emit_expr(
             Ok(())
         }
 
-        Expr::Match { scrutinee, arms, .. } => emit_match(arenas, state, *scrutinee, arms, module, out),
+        Expr::Match {
+            scrutinee, arms, ..
+        } => emit_match(arenas, state, *scrutinee, arms, module, out),
 
         Expr::DotPrefix { name, args, .. } => {
             let name_str = arenas.interner.resolve(*name);
@@ -239,25 +298,43 @@ pub(super) fn emit_expr(
         }
 
         Expr::AnonRec { fields, .. } => {
-            let named: Vec<(String, Idx<Expr>)> = fields.iter()
-                .filter_map(|fi| if let FieldInit::Named { name, value, .. } = fi {
-                    Some((arenas.interner.resolve(*name).to_owned(), *value))
-                } else { None })
+            let named: Vec<(String, Idx<Expr>)> = fields
+                .iter()
+                .filter_map(|fi| {
+                    if let FieldInit::Named { name, value, .. } = fi {
+                        Some((arenas.interner.resolve(*name).to_owned(), *value))
+                    } else {
+                        None
+                    }
+                })
                 .collect();
             for (_, val_idx) in &named {
                 let val = arenas.exprs.get(*val_idx).clone();
                 emit_expr(arenas, state, &val, module, out)?;
             }
-            let field_count = u16::try_from(named.len()).map_err(|_| CodegenError::UnsupportedExpr)?;
-            out.push(&Opcode::NewObj { type_tag: 0, field_count });
+            let field_count =
+                u16::try_from(named.len()).map_err(|_| CodegenError::UnsupportedExpr)?;
+            out.push(&Opcode::NewObj {
+                type_tag: 0,
+                field_count,
+            });
             Ok(())
         }
 
-        Expr::FnDef { name, params, body: Some(body_idx), modifiers, .. } => {
-            if modifiers.iter().any(|m| matches!(m, Modifier::Extrin(_))) { return Ok(()); }
+        Expr::FnDef {
+            name,
+            params,
+            body: Some(body_idx),
+            modifiers,
+            ..
+        } => {
+            if modifiers.iter().any(|m| matches!(m, Modifier::Extrin(_))) {
+                return Ok(());
+            }
             let fn_name = arenas.interner.resolve(*name).to_owned();
             let params_with_types = param_list_with_types(params, arenas.interner);
-            let fn_idx = register_fn_closure(&fn_name, params_with_types, *body_idx, state, module)?;
+            let fn_idx =
+                register_fn_closure(&fn_name, params_with_types, *body_idx, state, module)?;
             let slot = out.define_local(&fn_name)?;
             out.push(&Opcode::LdFnIdx(fn_idx));
             out.push(&Opcode::StLoc(slot));

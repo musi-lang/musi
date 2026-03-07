@@ -267,7 +267,10 @@ fn doc_comment_becomes_trivia() {
     let (tokens, _interner, _) = lex_with_interner("/// hello docs\nfoo");
     assert_eq!(tokens[0].kind, TokenKind::Ident); // foo
     assert_eq!(tokens[1].kind, TokenKind::Eof);
-    assert!(tokens[0].leading_trivia.len > 0, "doc comment should be in leading trivia");
+    assert!(
+        tokens[0].leading_trivia.len > 0,
+        "doc comment should be in leading trivia"
+    );
 }
 
 #[test]
@@ -477,8 +480,14 @@ fn size_hint_upper_bounds_token_count() {
 #[test]
 fn lex_question_tokens() {
     assert_eq!(lex_kinds("?"), vec![TokenKind::Question, TokenKind::Eof]);
-    assert_eq!(lex_kinds("?."), vec![TokenKind::QuestionDot, TokenKind::Eof]);
-    assert_eq!(lex_kinds("??"), vec![TokenKind::QuestionQuestion, TokenKind::Eof]);
+    assert_eq!(
+        lex_kinds("?."),
+        vec![TokenKind::QuestionDot, TokenKind::Eof]
+    );
+    assert_eq!(
+        lex_kinds("??"),
+        vec![TokenKind::QuestionQuestion, TokenKind::Eof]
+    );
 }
 
 #[test]

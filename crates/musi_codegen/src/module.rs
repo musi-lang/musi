@@ -15,7 +15,8 @@ const VERSION: u16 = 1;
 /// Reads `len` bytes from `r` and interprets them as UTF-8.
 fn read_str(r: &mut Cursor<&[u8]>, len: usize) -> Result<Box<str>, DeserError> {
     let mut buf = vec![0u8; len];
-    r.read_exact(&mut buf).map_err(|_| DeserError::UnexpectedEof)?;
+    r.read_exact(&mut buf)
+        .map_err(|_| DeserError::UnexpectedEof)?;
     from_utf8(&buf)
         .map_err(|_| DeserError::InvalidUtf8)
         .map(Into::into)
@@ -24,7 +25,9 @@ fn read_str(r: &mut Cursor<&[u8]>, len: usize) -> Result<Box<str>, DeserError> {
 fn write_section<T>(buf: &mut Vec<u8>, items: &[T], encode: fn(&T, &mut Vec<u8>), msg: &str) {
     let count = u32::try_from(items.len()).expect(msg);
     buf.extend_from_slice(&count.to_le_bytes());
-    for item in items { encode(item, buf); }
+    for item in items {
+        encode(item, buf);
+    }
 }
 
 fn read_section<T>(
@@ -33,7 +36,9 @@ fn read_section<T>(
 ) -> Result<Vec<T>, DeserError> {
     let n = r.read_u32::<LE>().map_err(|_| DeserError::UnexpectedEof)?;
     let mut items = Vec::with_capacity(usize::try_from(n).unwrap_or(0));
-    for _ in 0..n { items.push(decode(r)?); }
+    for _ in 0..n {
+        items.push(decode(r)?);
+    }
     Ok(items)
 }
 
@@ -80,8 +85,12 @@ impl ConstEntry {
     fn decode(r: &mut Cursor<&[u8]>) -> Result<Self, DeserError> {
         let tag = r.read_u8().map_err(|_| DeserError::UnexpectedEof)?;
         match tag {
-            0x01 => Ok(Self::Int(r.read_i64::<LE>().map_err(|_| DeserError::UnexpectedEof)?)),
-            0x02 => Ok(Self::Float(r.read_f64::<LE>().map_err(|_| DeserError::UnexpectedEof)?)),
+            0x01 => Ok(Self::Int(
+                r.read_i64::<LE>().map_err(|_| DeserError::UnexpectedEof)?,
+            )),
+            0x02 => Ok(Self::Float(
+                r.read_f64::<LE>().map_err(|_| DeserError::UnexpectedEof)?,
+            )),
             0x03 => {
                 let len = r.read_u32::<LE>().map_err(|_| DeserError::UnexpectedEof)?;
                 let len_usize = usize::try_from(len).map_err(|_| DeserError::UnexpectedEof)?;
@@ -295,9 +304,24 @@ impl Module {
         buf.extend_from_slice(&VERSION.to_le_bytes());
         buf.extend_from_slice(&0u16.to_le_bytes()); // flags (reserved)
 
-        write_section(&mut buf, &self.const_pool,     ConstEntry::encode_into,    "const pool count fits u32");
-        write_section(&mut buf, &self.symbol_table,   SymbolEntry::encode_into,   "symbol table count fits u32");
-        write_section(&mut buf, &self.function_table, FunctionEntry::encode_into, "function table count fits u32");
+        write_section(
+            &mut buf,
+            &self.const_pool,
+            ConstEntry::encode_into,
+            "const pool count fits u32",
+        );
+        write_section(
+            &mut buf,
+            &self.symbol_table,
+            SymbolEntry::encode_into,
+            "symbol table count fits u32",
+        );
+        write_section(
+            &mut buf,
+            &self.function_table,
+            FunctionEntry::encode_into,
+            "function table count fits u32",
+        );
 
         // Code section
         let length = u32::try_from(self.code.len()).expect("code section length fits u32");
@@ -318,7 +342,8 @@ impl Module {
 
         // Header
         let mut magic = [0u8; 4];
-        r.read_exact(&mut magic).map_err(|_| DeserError::UnexpectedEof)?;
+        r.read_exact(&mut magic)
+            .map_err(|_| DeserError::UnexpectedEof)?;
         if magic != MAGIC {
             return Err(DeserError::InvalidMagic);
         }
@@ -328,15 +353,16 @@ impl Module {
         }
         let _flags = r.read_u16::<LE>().map_err(|_| DeserError::UnexpectedEof)?;
 
-        let const_pool    = read_section(&mut r, ConstEntry::decode)?;
-        let symbol_table  = read_section(&mut r, SymbolEntry::decode)?;
+        let const_pool = read_section(&mut r, ConstEntry::decode)?;
+        let symbol_table = read_section(&mut r, SymbolEntry::decode)?;
         let function_table = read_section(&mut r, FunctionEntry::decode)?;
 
         // Code section
         let code_len = r.read_u32::<LE>().map_err(|_| DeserError::UnexpectedEof)?;
         let code_len_usize = usize::try_from(code_len).map_err(|_| DeserError::UnexpectedEof)?;
         let mut code = vec![0u8; code_len_usize];
-        r.read_exact(&mut code).map_err(|_| DeserError::UnexpectedEof)?;
+        r.read_exact(&mut code)
+            .map_err(|_| DeserError::UnexpectedEof)?;
 
         Ok(Self {
             const_pool,
@@ -364,7 +390,11 @@ impl Module {
     /// Returns [`CodegenError::TooManyFunctions`] if the function table already
     /// contains `u16::MAX` entries.
     pub fn push_function(&mut self, entry: FunctionEntry) -> Result<u16, CodegenError> {
-        push_entry(&mut self.function_table, entry, CodegenError::TooManyFunctions)
+        push_entry(
+            &mut self.function_table,
+            entry,
+            CodegenError::TooManyFunctions,
+        )
     }
 
     /// Appends a const-pool entry and returns its index.
@@ -385,9 +415,10 @@ impl Module {
     pub fn add_string_const(&mut self, s: &str) -> Result<u16, CodegenError> {
         for (i, entry) in self.const_pool.iter().enumerate() {
             if let ConstEntry::String(existing) = entry
-                && existing.as_ref() == s {
-                    return u16::try_from(i).map_err(|_| CodegenError::TooManyConstants);
-                }
+                && existing.as_ref() == s
+            {
+                return u16::try_from(i).map_err(|_| CodegenError::TooManyConstants);
+            }
         }
         self.push_const(ConstEntry::String(s.into()))
     }

@@ -32,7 +32,11 @@ pub struct Label {
 impl Label {
     #[must_use]
     pub fn new(span: Span, file_id: FileId, message: impl Into<Arc<str>>) -> Self {
-        Self { span, file_id, message: message.into() }
+        Self {
+            span,
+            file_id,
+            message: message.into(),
+        }
     }
 }
 
@@ -74,7 +78,12 @@ pub struct DiagnosticBag {
 
 macro_rules! severity_builder {
     ($fn:ident, $sev:expr) => {
-        pub fn $fn(&mut self, message: impl Into<Arc<str>>, span: Span, file_id: FileId) -> &mut Diagnostic {
+        pub fn $fn(
+            &mut self,
+            message: impl Into<Arc<str>>,
+            span: Span,
+            file_id: FileId,
+        ) -> &mut Diagnostic {
             self.push_with_severity($sev, message, span, file_id)
         }
     };
@@ -83,7 +92,9 @@ macro_rules! severity_builder {
 impl DiagnosticBag {
     #[must_use]
     pub const fn new() -> Self {
-        Self { diagnostics: Vec::new() }
+        Self {
+            diagnostics: Vec::new(),
+        }
     }
 
     pub fn push(&mut self, diagnostic: Diagnostic) {
@@ -98,7 +109,9 @@ impl DiagnosticBag {
 
     #[must_use]
     pub fn has_errors(&self) -> bool {
-        self.diagnostics.iter().any(|d| d.severity == Severity::Error)
+        self.diagnostics
+            .iter()
+            .any(|d| d.severity == Severity::Error)
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &Diagnostic> {

@@ -10,17 +10,26 @@ use std::rc::Rc;
 
 #[must_use]
 pub fn option_none() -> Value {
-    Value::Object { type_tag: 0, fields: Rc::new(vec![Value::Int(0)]) }
+    Value::Object {
+        type_tag: 0,
+        fields: Rc::new(vec![Value::Int(0)]),
+    }
 }
 
 #[must_use]
 pub fn option_some(v: Value) -> Value {
-    Value::Object { type_tag: 0, fields: Rc::new(vec![Value::Int(1), v]) }
+    Value::Object {
+        type_tag: 0,
+        fields: Rc::new(vec![Value::Int(1), v]),
+    }
 }
 
 #[must_use]
 pub fn bool_val(b: bool) -> Value {
-    Value::Object { type_tag: 0, fields: Rc::new(vec![Value::Int(i64::from(b))]) }
+    Value::Object {
+        type_tag: 0,
+        fields: Rc::new(vec![Value::Int(i64::from(b))]),
+    }
 }
 
 /// Clamp a `[start, end)` pair to `[0, len]` and return `(lo, hi)` as `usize`.

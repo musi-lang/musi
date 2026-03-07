@@ -33,7 +33,10 @@ fn parse_ok(src: &str) -> ParsedModule {
 fn parse_hello_world() {
     let module = parse_ok("writeln(\"Hello, world!\");");
     assert_eq!(module.items.len(), 1);
-    let expr = module.ctx.exprs.get(module.ctx.expr_lists.get_slice(module.items)[0]);
+    let expr = module
+        .ctx
+        .exprs
+        .get(module.ctx.expr_lists.get_slice(module.items)[0]);
     assert!(
         matches!(
             expr,
@@ -51,7 +54,10 @@ fn parse_hello_world() {
 fn parse_fn_def() {
     let module = parse_ok("fn add(a, b) => a + b;");
     assert_eq!(module.items.len(), 1);
-    let expr = module.ctx.exprs.get(module.ctx.expr_lists.get_slice(module.items)[0]);
+    let expr = module
+        .ctx
+        .exprs
+        .get(module.ctx.expr_lists.get_slice(module.items)[0]);
     assert!(matches!(expr, Expr::FnDef { params, body: Some(_), .. } if params.len() == 2));
 }
 
@@ -59,7 +65,10 @@ fn parse_fn_def() {
 #[test]
 fn parse_const_bind() {
     let module = parse_ok("const x := 42;");
-    let expr = module.ctx.exprs.get(module.ctx.expr_lists.get_slice(module.items)[0]);
+    let expr = module
+        .ctx
+        .exprs
+        .get(module.ctx.expr_lists.get_slice(module.items)[0]);
     assert!(
         matches!(
             expr,
@@ -77,7 +86,10 @@ fn parse_const_bind() {
 #[test]
 fn parse_if_then_else() {
     let module = parse_ok("if true then (1) else (2);");
-    let expr = module.ctx.exprs.get(module.ctx.expr_lists.get_slice(module.items)[0]);
+    let expr = module
+        .ctx
+        .exprs
+        .get(module.ctx.expr_lists.get_slice(module.items)[0]);
     assert!(
         matches!(
             expr,
@@ -94,7 +106,10 @@ fn parse_if_then_else() {
 #[test]
 fn parse_match_expr() {
     let module = parse_ok("match x with (0 => \"zero\" | _ => \"other\");");
-    let expr = module.ctx.exprs.get(module.ctx.expr_lists.get_slice(module.items)[0]);
+    let expr = module
+        .ctx
+        .exprs
+        .get(module.ctx.expr_lists.get_slice(module.items)[0]);
     assert!(matches!(expr, Expr::Match { arms, .. } if arms.len() == 2));
 }
 
@@ -102,7 +117,10 @@ fn parse_match_expr() {
 #[test]
 fn parse_choice_def() {
     let module = parse_ok("choice Option { | Some(Int) | None };");
-    let expr = module.ctx.exprs.get(module.ctx.expr_lists.get_slice(module.items)[0]);
+    let expr = module
+        .ctx
+        .exprs
+        .get(module.ctx.expr_lists.get_slice(module.items)[0]);
     assert!(matches!(expr, Expr::Choice { variants, .. } if variants.len() == 2));
 }
 
@@ -129,7 +147,10 @@ fn parse_binary_ops() {
     ];
     for (src, expected_op) in cases {
         let module = parse_ok(&format!("{src};"));
-        let expr = module.ctx.exprs.get(module.ctx.expr_lists.get_slice(module.items)[0]);
+        let expr = module
+            .ctx
+            .exprs
+            .get(module.ctx.expr_lists.get_slice(module.items)[0]);
         assert!(
             matches!(expr, Expr::Binary { op, .. } if *op == expected_op),
             "for `{src}`: expected {expected_op:?}, got: {expr:?}"
@@ -141,7 +162,10 @@ fn parse_binary_ops() {
 #[test]
 fn pratt_precedence() {
     let module = parse_ok("1 + 2 * 3;");
-    let top = module.ctx.exprs.get(module.ctx.expr_lists.get_slice(module.items)[0]);
+    let top = module
+        .ctx
+        .exprs
+        .get(module.ctx.expr_lists.get_slice(module.items)[0]);
     assert!(
         matches!(top, Expr::Binary { op: BinOp::Add, .. }),
         "expected Add at top"
@@ -159,7 +183,10 @@ fn pratt_precedence() {
 #[test]
 fn parse_lambda() {
     let module = parse_ok("fn (x) => x + 1;");
-    let expr = module.ctx.exprs.get(module.ctx.expr_lists.get_slice(module.items)[0]);
+    let expr = module
+        .ctx
+        .exprs
+        .get(module.ctx.expr_lists.get_slice(module.items)[0]);
     assert!(
         matches!(expr, Expr::Lambda { .. }),
         "expected Lambda, got: {expr:?}"
@@ -170,7 +197,10 @@ fn parse_lambda() {
 #[test]
 fn parse_record_def() {
     let module = parse_ok("record Point { x: Int, y: Int };");
-    let expr = module.ctx.exprs.get(module.ctx.expr_lists.get_slice(module.items)[0]);
+    let expr = module
+        .ctx
+        .exprs
+        .get(module.ctx.expr_lists.get_slice(module.items)[0]);
     assert!(matches!(expr, Expr::Record { fields, .. } if fields.len() == 2));
 }
 
@@ -178,7 +208,10 @@ fn parse_record_def() {
 #[test]
 fn parse_array_literal() {
     let module = parse_ok("[1, 2, 3];");
-    let expr = module.ctx.exprs.get(module.ctx.expr_lists.get_slice(module.items)[0]);
+    let expr = module
+        .ctx
+        .exprs
+        .get(module.ctx.expr_lists.get_slice(module.items)[0]);
     assert!(matches!(expr, Expr::Array { items, .. } if items.len() == 3));
 }
 
@@ -186,7 +219,10 @@ fn parse_array_literal() {
 #[test]
 fn parse_return_expr() {
     let module = parse_ok("return 42;");
-    let expr = module.ctx.exprs.get(module.ctx.expr_lists.get_slice(module.items)[0]);
+    let expr = module
+        .ctx
+        .exprs
+        .get(module.ctx.expr_lists.get_slice(module.items)[0]);
     assert!(
         matches!(expr, Expr::Return { value: Some(_), .. }),
         "expected Return with value, got: {expr:?}"
@@ -197,7 +233,10 @@ fn parse_return_expr() {
 #[test]
 fn parse_unit() {
     let module = parse_ok("();");
-    let expr = module.ctx.exprs.get(module.ctx.expr_lists.get_slice(module.items)[0]);
+    let expr = module
+        .ctx
+        .exprs
+        .get(module.ctx.expr_lists.get_slice(module.items)[0]);
     assert!(
         matches!(expr, Expr::Unit { .. }),
         "expected Unit, got: {expr:?}"
@@ -208,7 +247,10 @@ fn parse_unit() {
 #[test]
 fn parse_tuple() {
     let module = parse_ok("(1, 2, 3);");
-    let expr = module.ctx.exprs.get(module.ctx.expr_lists.get_slice(module.items)[0]);
+    let expr = module
+        .ctx
+        .exprs
+        .get(module.ctx.expr_lists.get_slice(module.items)[0]);
     assert!(matches!(expr, Expr::Tuple { elements, .. } if elements.len() == 3));
 }
 
@@ -216,7 +258,10 @@ fn parse_tuple() {
 #[test]
 fn parse_block_expr() {
     let module = parse_ok("(const x := 1; x);");
-    let expr = module.ctx.exprs.get(module.ctx.expr_lists.get_slice(module.items)[0]);
+    let expr = module
+        .ctx
+        .exprs
+        .get(module.ctx.expr_lists.get_slice(module.items)[0]);
     assert!(
         matches!(expr, Expr::Block { stmts, tail: Some(_), .. } if stmts.len() == 1),
         "expected Block with 1 stmt and tail, got: {expr:?}"
@@ -227,7 +272,10 @@ fn parse_block_expr() {
 #[test]
 fn parse_prefix_neg() {
     let module = parse_ok("-42;");
-    let expr = module.ctx.exprs.get(module.ctx.expr_lists.get_slice(module.items)[0]);
+    let expr = module
+        .ctx
+        .exprs
+        .get(module.ctx.expr_lists.get_slice(module.items)[0]);
     assert!(
         matches!(
             expr,
@@ -244,7 +292,10 @@ fn parse_prefix_neg() {
 #[test]
 fn parse_assign() {
     let module = parse_ok("x <- 42;");
-    let expr = module.ctx.exprs.get(module.ctx.expr_lists.get_slice(module.items)[0]);
+    let expr = module
+        .ctx
+        .exprs
+        .get(module.ctx.expr_lists.get_slice(module.items)[0]);
     assert!(
         matches!(expr, Expr::Assign { .. }),
         "expected Assign, got: {expr:?}"
@@ -256,7 +307,10 @@ fn parse_assign() {
 fn parse_class_def_simple() {
     let module = parse_ok("class Eq['T] { fn eq(a: 'T, b: 'T): Bool; };");
     assert_eq!(module.items.len(), 1);
-    let expr = module.ctx.exprs.get(module.ctx.expr_lists.get_slice(module.items)[0]);
+    let expr = module
+        .ctx
+        .exprs
+        .get(module.ctx.expr_lists.get_slice(module.items)[0]);
     assert!(
         matches!(expr, Expr::ClassDef { members, supers, .. } if members.len() == 1 && supers.is_empty()),
         "expected ClassDef with 1 member and no supers, got: {expr:?}"
@@ -268,7 +322,10 @@ fn parse_class_def_simple() {
 fn parse_class_def_with_superclass() {
     let module = parse_ok("class Ord['T] satisfies Eq['T] { fn lt(a: 'T, b: 'T): Bool; };");
     assert_eq!(module.items.len(), 1);
-    let expr = module.ctx.exprs.get(module.ctx.expr_lists.get_slice(module.items)[0]);
+    let expr = module
+        .ctx
+        .exprs
+        .get(module.ctx.expr_lists.get_slice(module.items)[0]);
     assert!(
         matches!(expr, Expr::ClassDef { supers, .. } if supers.len() == 1),
         "expected ClassDef with 1 super, got: {expr:?}"
@@ -282,7 +339,10 @@ fn parse_class_def_with_law() {
         "class Eq['T] { fn eq(a: 'T, b: 'T): Bool; law reflexivity(a: 'T) => eq(a, a); };",
     );
     assert_eq!(module.items.len(), 1);
-    let expr = module.ctx.exprs.get(module.ctx.expr_lists.get_slice(module.items)[0]);
+    let expr = module
+        .ctx
+        .exprs
+        .get(module.ctx.expr_lists.get_slice(module.items)[0]);
     assert!(
         matches!(expr, Expr::ClassDef { members, .. } if members.len() == 2),
         "expected ClassDef with 2 members (method + law), got: {expr:?}"
@@ -294,7 +354,10 @@ fn parse_class_def_with_law() {
 fn parse_given_def_simple() {
     let module = parse_ok("given Eq[Int] { fn eq(a: Int, b: Int): Bool => a = b; };");
     assert_eq!(module.items.len(), 1);
-    let expr = module.ctx.exprs.get(module.ctx.expr_lists.get_slice(module.items)[0]);
+    let expr = module
+        .ctx
+        .exprs
+        .get(module.ctx.expr_lists.get_slice(module.items)[0]);
     assert!(
         matches!(expr, Expr::GivenDef { constraints, members, .. } if constraints.is_empty() && members.len() == 1),
         "expected GivenDef with no constraints and 1 member, got: {expr:?}"
@@ -308,7 +371,10 @@ fn parse_given_def_with_where() {
         "given Eq[Option['T]] where 'T satisfies Eq { fn eq(a: Option['T], b: Option['T]): Bool => true; };",
     );
     assert_eq!(module.items.len(), 1);
-    let expr = module.ctx.exprs.get(module.ctx.expr_lists.get_slice(module.items)[0]);
+    let expr = module
+        .ctx
+        .exprs
+        .get(module.ctx.expr_lists.get_slice(module.items)[0]);
     assert!(
         matches!(expr, Expr::GivenDef { constraints, .. } if constraints.len() == 1),
         "expected GivenDef with 1 constraint, got: {expr:?}"
@@ -320,7 +386,10 @@ fn parse_given_def_with_where() {
 fn parse_fn_with_where() {
     let module = parse_ok("fn compare['T](a: 'T, b: 'T): Bool where 'T satisfies Ord => true;");
     assert_eq!(module.items.len(), 1);
-    let expr = module.ctx.exprs.get(module.ctx.expr_lists.get_slice(module.items)[0]);
+    let expr = module
+        .ctx
+        .exprs
+        .get(module.ctx.expr_lists.get_slice(module.items)[0]);
     assert!(
         matches!(expr, Expr::FnDef { where_clause, body: Some(_), .. } if where_clause.len() == 1),
         "expected FnDef with 1 where constraint and body, got: {expr:?}"
@@ -332,7 +401,10 @@ fn parse_fn_with_where() {
 fn parse_option_type_sugar() {
     let module = parse_ok("fn f(x: ?Int): ?Int => x;");
     assert_eq!(module.items.len(), 1);
-    let expr = module.ctx.exprs.get(module.ctx.expr_lists.get_slice(module.items)[0]);
+    let expr = module
+        .ctx
+        .exprs
+        .get(module.ctx.expr_lists.get_slice(module.items)[0]);
     let Expr::FnDef { params, ret_ty, .. } = expr else {
         panic!("expected FnDef")
     };
@@ -351,7 +423,10 @@ fn parse_option_type_sugar() {
 fn parse_dot_prefix_call() {
     let module = parse_ok("const x := .Some(42);");
     assert_eq!(module.items.len(), 1);
-    let expr = module.ctx.exprs.get(module.ctx.expr_lists.get_slice(module.items)[0]);
+    let expr = module
+        .ctx
+        .exprs
+        .get(module.ctx.expr_lists.get_slice(module.items)[0]);
     let Expr::Bind {
         init: Some(init_idx),
         ..
@@ -371,7 +446,10 @@ fn parse_dot_prefix_call() {
 fn parse_nil_coalesce() {
     let module = parse_ok("const x := opt ?? 0;");
     assert_eq!(module.items.len(), 1);
-    let expr = module.ctx.exprs.get(module.ctx.expr_lists.get_slice(module.items)[0]);
+    let expr = module
+        .ctx
+        .exprs
+        .get(module.ctx.expr_lists.get_slice(module.items)[0]);
     let Expr::Bind {
         init: Some(init_idx),
         ..
@@ -397,7 +475,10 @@ fn parse_nil_coalesce() {
 fn parse_optional_chain() {
     let module = parse_ok("const x := opt?.value;");
     assert_eq!(module.items.len(), 1);
-    let expr = module.ctx.exprs.get(module.ctx.expr_lists.get_slice(module.items)[0]);
+    let expr = module
+        .ctx
+        .exprs
+        .get(module.ctx.expr_lists.get_slice(module.items)[0]);
     let Expr::Bind {
         init: Some(init_idx),
         ..
@@ -423,7 +504,10 @@ fn parse_optional_chain() {
 fn parse_dot_prefix_pattern_in_match() {
     let module = parse_ok("match x with (.Some(v) => v | .None => 0);");
     assert_eq!(module.items.len(), 1);
-    let expr = module.ctx.exprs.get(module.ctx.expr_lists.get_slice(module.items)[0]);
+    let expr = module
+        .ctx
+        .exprs
+        .get(module.ctx.expr_lists.get_slice(module.items)[0]);
     assert!(matches!(expr, Expr::Match { .. }), "expected Match");
 }
 
@@ -432,7 +516,10 @@ fn parse_dot_prefix_pattern_in_match() {
 fn parse_var_in_case_pattern() {
     let module = parse_ok("if case .Some(var v) := x then v;");
     assert_eq!(module.items.len(), 1);
-    let expr = module.ctx.exprs.get(module.ctx.expr_lists.get_slice(module.items)[0]);
+    let expr = module
+        .ctx
+        .exprs
+        .get(module.ctx.expr_lists.get_slice(module.items)[0]);
     let Expr::If { cond, .. } = expr else {
         panic!("expected If")
     };
@@ -455,7 +542,10 @@ fn parse_var_in_case_pattern() {
 fn parse_match_arm_guard() {
     let module = parse_ok("match x with (.Some(v) if v > 0 => v | _ => 0);");
     assert_eq!(module.items.len(), 1);
-    let expr = module.ctx.exprs.get(module.ctx.expr_lists.get_slice(module.items)[0]);
+    let expr = module
+        .ctx
+        .exprs
+        .get(module.ctx.expr_lists.get_slice(module.items)[0]);
     let Expr::Match { arms, .. } = expr else {
         panic!("expected Match")
     };
@@ -468,7 +558,10 @@ fn parse_match_arm_guard() {
 fn parse_if_case_no_bind_kind() {
     let module = parse_ok("if case .Some(v) := thing then v else 0;");
     assert_eq!(module.items.len(), 1);
-    let expr = module.ctx.exprs.get(module.ctx.expr_lists.get_slice(module.items)[0]);
+    let expr = module
+        .ctx
+        .exprs
+        .get(module.ctx.expr_lists.get_slice(module.items)[0]);
     let Expr::If {
         cond, else_body, ..
     } = expr

@@ -55,16 +55,24 @@ pub struct ModuleExports {
 }
 
 /// Extracts the exported name-to-type map from a completed analysis.
-#[must_use] 
-pub fn exports_of(result: &SemaResult, module: &ParsedModule, interner: &Interner) -> ModuleExports {
+#[must_use]
+pub fn exports_of(
+    result: &SemaResult,
+    module: &ParsedModule,
+    interner: &Interner,
+) -> ModuleExports {
     let mut names: HashMap<String, Type> = HashMap::new();
     for &item_idx in module.ctx.expr_lists.get_slice(module.items) {
         match module.ctx.exprs.get(item_idx) {
-            Expr::FnDef { name, modifiers, .. } => {
+            Expr::FnDef {
+                name, modifiers, ..
+            } => {
                 if modifiers.iter().any(|m| matches!(m, Modifier::Export)) {
                     let name_str = interner.resolve(*name).to_owned();
                     // Find the DefId for this function in the resolver results
-                    if let Some(ty) = result.defs.iter()
+                    if let Some(ty) = result
+                        .defs
+                        .iter()
                         .find(|d| interner.resolve(d.name) == name_str)
                         .and_then(|d| d.ty.clone())
                     {
@@ -76,7 +84,9 @@ pub fn exports_of(result: &SemaResult, module: &ParsedModule, interner: &Interne
                 // `export { name1, name2 } from "path"` — re-exports
                 for item in items {
                     let name_str = interner.resolve(item.name).to_owned();
-                    if let Some(ty) = result.defs.iter()
+                    if let Some(ty) = result
+                        .defs
+                        .iter()
                         .find(|d| interner.resolve(d.name) == name_str)
                         .and_then(|d| d.ty.clone())
                     {

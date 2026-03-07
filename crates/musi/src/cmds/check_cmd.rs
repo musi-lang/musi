@@ -6,7 +6,9 @@ use std::process;
 use clap::Args;
 use musi_shared::{DiagnosticBag, Interner, SourceDb};
 
-use crate::compiler::{collect_dep_paths, parse_file, print_diags_and_exit, read_file, resolve_import_path};
+use crate::compiler::{
+    collect_dep_paths, parse_file, print_diags_and_exit, read_file, resolve_import_path,
+};
 
 #[derive(Args)]
 pub(crate) struct CheckArgs {
@@ -60,8 +62,13 @@ pub(crate) fn run(args: CheckArgs) {
             };
         }
 
-        let (dep_file_id, dep_module) =
-            parse_file(&key, &dep_src_owned, &mut interner, &mut source_db, &mut diags);
+        let (dep_file_id, dep_module) = parse_file(
+            &key,
+            &dep_src_owned,
+            &mut interner,
+            &mut source_db,
+            &mut diags,
+        );
         for path in collect_dep_paths(&dep_module, &interner) {
             queue.push(path);
         }
@@ -71,8 +78,13 @@ pub(crate) fn run(args: CheckArgs) {
     let mut import_map: HashMap<String, musi_sema::ModuleExports> = HashMap::new();
     let empty_imports = HashMap::new();
     for (path, dep_module, dep_file_id) in &dep_modules {
-        let dep_result =
-            musi_sema::analyze(dep_module, &interner, *dep_file_id, &mut diags, &empty_imports);
+        let dep_result = musi_sema::analyze(
+            dep_module,
+            &interner,
+            *dep_file_id,
+            &mut diags,
+            &empty_imports,
+        );
         let exports = musi_sema::exports_of(&dep_result, dep_module, &interner);
         let _prev = import_map.insert(path.clone(), exports);
     }
