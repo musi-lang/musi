@@ -300,11 +300,12 @@ impl<'a> Parser<'a> {
             // Tuple: (e, ...)
             TokenKind::Comma => {
                 let _comma = self.advance();
-                let mut elements = vec![self.alloc_expr(first)];
-                elements.extend(
+                let mut raw = vec![self.alloc_expr(first)];
+                raw.extend(
                     self.parse_separated_list(TokenKind::RParen, Parser::parse_and_alloc_expr),
                 );
                 let _rp = self.expect(TokenKind::RParen);
+                let elements = self.ctx.expr_lists.alloc_slice(raw);
                 Expr::Tuple {
                     elements,
                     span: self.finish_span(start),
@@ -376,7 +377,7 @@ impl<'a> Parser<'a> {
             let _rp = self.expect(TokenKind::RParen);
             args
         } else {
-            Vec::new()
+            self.ctx.expr_lists.alloc_slice([])
         };
         Expr::DotPrefix {
             name,

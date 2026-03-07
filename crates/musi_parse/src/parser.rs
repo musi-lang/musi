@@ -12,7 +12,7 @@ mod util;
 use core::mem;
 
 use musi_lex::token::{Token, TokenKind};
-use musi_shared::{DiagnosticBag, FileId, Idx, Interner, Span};
+use musi_shared::{DiagnosticBag, FileId, Idx, Interner, Slice, Span};
 
 use crate::ast::{AstArenas, BinOp, Expr, ParsedModule};
 
@@ -166,10 +166,10 @@ impl<'a> Parser<'a> {
 
     fn parse_program(&mut self) -> ParsedModule {
         let start = self.start_span();
-        let mut items = Vec::new();
+        let mut raw = Vec::new();
         while !self.at(TokenKind::Eof) {
             let pos_before = self.pos;
-            items.push(self.parse_and_alloc_expr());
+            raw.push(self.parse_and_alloc_expr());
             // Every top-level statement requires a mandatory `;`.
             let _semi = self.expect(TokenKind::Semi);
             // Guarantee progress: `recover()` stops at `)` / `}` / `]` without
@@ -187,6 +187,7 @@ impl<'a> Parser<'a> {
             }
         }
         let span = self.finish_span(start);
+        let items: Slice<_> = self.ctx.expr_lists.alloc_slice(raw);
         let ctx = mem::take(&mut self.ctx);
         ParsedModule { items, ctx, span }
     }

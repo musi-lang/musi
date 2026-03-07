@@ -1,21 +1,14 @@
-//! Arena-backed string interning.
+//! String interning via `intaglio`.
 
-use std::collections::HashMap;
-use std::sync::Arc;
+use intaglio::{Symbol as IntaglioSymbol, SymbolTable};
 
 /// A compact, copyable handle to an interned string.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Symbol(pub u32);
 
-/// Deduplicating string storage.
-///
-/// Each unique string is stored exactly once and assigned a [`Symbol`] handle.
-/// Both the lookup map and the index vec share the same [`Arc<str>`] allocation.
+/// Deduplicating string storage backed by [`intaglio::SymbolTable`].
 #[derive(Debug, Default)]
-pub struct Interner {
-    map: HashMap<Arc<str>, Symbol>,
-    strings: Vec<Arc<str>>,
-}
+pub struct Interner(SymbolTable);
 
 impl Interner {
     #[must_use]
@@ -25,20 +18,17 @@ impl Interner {
 
     #[must_use]
     pub fn with_capacity(sym_count: usize) -> Self {
-        Self {
-            map: HashMap::with_capacity(sym_count),
-            strings: Vec::with_capacity(sym_count),
-        }
+        Self(SymbolTable::with_capacity(sym_count))
     }
 
     #[must_use]
-    pub const fn len(&self) -> usize {
-        self.strings.len()
+    pub fn len(&self) -> usize {
+        self.0.len()
     }
 
     #[must_use]
-    pub const fn is_empty(&self) -> bool {
-        self.strings.is_empty()
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 
     /// Interns `s` and returns its [`Symbol`].
@@ -48,14 +38,8 @@ impl Interner {
     /// Panics if the number of interned strings exceeds `u32::MAX`.
     #[must_use]
     pub fn intern(&mut self, s: &str) -> Symbol {
-        if let Some(&sym) = self.map.get(s) {
-            return sym;
-        }
-        let sym = Symbol(u32::try_from(self.strings.len()).expect("symbol table overflow"));
-        let arc: Arc<str> = s.into();
-        self.strings.push(Arc::clone(&arc));
-        let _prev = self.map.insert(arc, sym);
-        sym
+        let sym = self.0.intern(String::from(s)).expect("symbol table overflow");
+        Symbol(sym.id())
     }
 
     /// Resolves a [`Symbol`] back to its string.
@@ -65,9 +49,8 @@ impl Interner {
     /// Panics if `sym` did not originate from this interner.
     #[must_use]
     pub fn resolve(&self, sym: Symbol) -> &str {
-        let idx = usize::try_from(sym.0).expect("symbol index out of range");
-        self.strings
-            .get(idx)
+        self.0
+            .get(IntaglioSymbol::new(sym.0))
             .expect("symbol not found in this interner")
     }
 }

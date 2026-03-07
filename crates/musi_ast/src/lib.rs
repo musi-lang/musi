@@ -8,13 +8,16 @@
 #![allow(clippy::exhaustive_structs)]
 #![allow(clippy::exhaustive_enums)]
 
-use musi_shared::{Arena, Idx, Span, Symbol};
+use musi_shared::{Arena, Idx, Slice, SliceArena, Span, Symbol};
 
-/// Holds the three arenas that back all AST nodes for a single parse.
+/// Holds the arenas that back all AST nodes for a single parse.
 pub struct AstArenas {
     pub exprs: Arena<Expr>,
     pub tys: Arena<Ty>,
     pub pats: Arena<Pat>,
+    /// Contiguous storage for all `Slice<Idx<Expr>>` sequences in the AST
+    /// (block stmts, tuple elements, call/index args, dot-prefix args).
+    pub expr_lists: SliceArena<Idx<Expr>>,
 }
 
 impl AstArenas {
@@ -24,6 +27,7 @@ impl AstArenas {
             exprs: Arena::new(),
             tys: Arena::new(),
             pats: Arena::new(),
+            expr_lists: SliceArena::new(),
         }
     }
 }
@@ -36,8 +40,8 @@ impl Default for AstArenas {
 
 /// The result of parsing a single source file.
 pub struct ParsedModule {
-    /// Top-level statement expressions.
-    pub items: Vec<Idx<Expr>>,
+    /// Top-level statement expressions (handle into `ctx.expr_lists`).
+    pub items: Slice<Idx<Expr>>,
     pub ctx: AstArenas,
     pub span: Span,
 }
@@ -197,8 +201,8 @@ pub enum PrefixOp {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PostfixOp {
-    Call { args: Vec<Idx<Expr>>, span: Span },
-    Index { args: Vec<Idx<Expr>>, span: Span },
+    Call { args: Slice<Idx<Expr>>, span: Span },
+    Index { args: Slice<Idx<Expr>>, span: Span },
     Field { name: Symbol, span: Span },
     OptField { name: Symbol, span: Span },
     RecDot { fields: Vec<FieldInit>, span: Span },
@@ -331,11 +335,11 @@ pub enum Expr {
         span: Span,
     },
     Tuple {
-        elements: Vec<Idx<Self>>,
+        elements: Slice<Idx<Self>>,
         span: Span,
     },
     Block {
-        stmts: Vec<Idx<Self>>,
+        stmts: Slice<Idx<Self>>,
         tail: Option<Idx<Self>>,
         span: Span,
     },
@@ -507,7 +511,7 @@ pub enum Expr {
     // Dot-prefix constructor/call shorthand: .Name or .Name(args)
     DotPrefix {
         name: Symbol,
-        args: Vec<Idx<Self>>,
+        args: Slice<Idx<Self>>,
         span: Span,
     },
 

@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use musi_ast::{ChoiceVariant, Expr, Ty, VariantPayload};
-use musi_shared::{Arena, Idx, Interner};
+use musi_shared::{Arena, Idx, Interner, SliceArena};
 
 use crate::error::CodegenError;
 use crate::intrinsics;
@@ -149,6 +149,7 @@ impl FnEmitter {
 
 pub(super) struct EmitArenas<'a> {
     pub(super) exprs: &'a Arena<Expr>,
+    pub(super) expr_lists: &'a SliceArena<Idx<Expr>>,
     pub(super) interner: &'a Interner,
 }
 

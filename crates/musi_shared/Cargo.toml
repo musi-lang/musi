@@ -10,6 +10,8 @@ keywords = ["compiler", "musi", "infrastructure"]
 categories = ["development-tools"]
 
 [dependencies]
+intaglio.workspace = true
+memchr.workspace = true
 
 [lints]
 workspace = true

@@ -1,4 +1,4 @@
-use musi_ast::{AttrArg, ClassMember, Expr, LitValue, Modifier, ParsedModule, Ty};
+use musi_ast::{AttrArg, ClassMember, Expr, LitValue, Modifier, ParsedModule};
 use musi_shared::{Arena, Idx, Interner};
 
 use crate::error::CodegenError;
@@ -7,7 +7,7 @@ use crate::module::MethodEntry;
 use crate::{FunctionEntry, Module, SymbolEntry, SymbolFlags};
 
 use super::state::{
-    EmitState, TypeInfo, TypeTag, VariantInfo, payload_count, push_plain_fn, resolve_type_tag,
+    EmitState, TypeInfo, VariantInfo, payload_count, push_plain_fn, resolve_type_tag,
     ty_name_str,
 };
 
@@ -205,7 +205,7 @@ pub(super) fn register_module_decls(
     state: &mut EmitState,
 ) -> Result<(), CodegenError> {
     let exprs = &parsed.ctx.exprs;
-    for &item_idx in &parsed.items {
+    for &item_idx in parsed.ctx.expr_lists.get_slice(parsed.items) {
         register_fn_def(item_idx, exprs, interner, module, state)?;
         register_record(item_idx, exprs, interner, state);
         register_choice(item_idx, exprs, interner, state)?;

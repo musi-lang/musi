@@ -1,7 +1,7 @@
 //! Parser utility methods: list parsers, block helpers, symbol/literal helpers.
 
 use musi_lex::token::TokenKind;
-use musi_shared::{Idx, Symbol};
+use musi_shared::{Idx, Slice, Symbol};
 
 use crate::ast::{Attr, BindKind, Expr, LitValue, PostfixOp};
 
@@ -57,6 +57,7 @@ impl<'a> Parser<'a> {
             } else {
                 let tail = self.alloc_expr(e);
                 let _rp = self.expect(TokenKind::RParen);
+                let stmts: Slice<_> = self.ctx.expr_lists.alloc_slice(stmts);
                 return Expr::Block {
                     stmts,
                     tail: Some(tail),
@@ -65,6 +66,7 @@ impl<'a> Parser<'a> {
             }
         }
         let _rp = self.expect(TokenKind::RParen);
+        let stmts: Slice<_> = self.ctx.expr_lists.alloc_slice(stmts);
         Expr::Block {
             stmts,
             tail: None,
@@ -191,15 +193,16 @@ impl<'a> Parser<'a> {
         self.interner.resolve(sym)
     }
 
-    pub(super) fn parse_expr_list(&mut self, closing: TokenKind) -> Vec<Idx<Expr>> {
-        self.parse_separated_list(closing, Parser::parse_and_alloc_expr)
+    pub(super) fn parse_expr_list(&mut self, closing: TokenKind) -> Slice<Idx<Expr>> {
+        let v = self.parse_separated_list(closing, Parser::parse_and_alloc_expr);
+        self.ctx.expr_lists.alloc_slice(v)
     }
 
     /// Parses `args_list close`, allocates `lhs` as the base, and wraps in a postfix node.
     pub(super) fn parse_list_postfix<F>(
         &mut self, lhs: Expr, start: u32, close: TokenKind, make_op: F,
     ) -> Expr
-    where F: FnOnce(Vec<Idx<Expr>>, musi_shared::Span) -> crate::ast::PostfixOp {
+    where F: FnOnce(Slice<Idx<Expr>>, musi_shared::Span) -> crate::ast::PostfixOp {
         let args = self.parse_expr_list(close);
         let _close = self.expect(close);
         let base = self.alloc_expr(lhs);

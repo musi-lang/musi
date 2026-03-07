@@ -117,7 +117,7 @@ pub(super) fn emit_expr(
                 }
                 Expr::Postfix { base: arr_base, op: PostfixOp::Index { args, .. }, .. } => {
                     let arr_base = *arr_base;
-                    let idx_idx = args.first().copied();
+                    let idx_idx = arenas.expr_lists.get_slice(*args).first().copied();
                     let value_idx = *value;
                     let base_expr = arenas.exprs.get(arr_base).clone();
                     emit_expr(arenas, state, &base_expr, module, out)?;
@@ -151,8 +151,8 @@ pub(super) fn emit_expr(
 
         Expr::Block { stmts, tail, .. } => {
             out.push_scope();
-            for stmt_idx in stmts {
-                let stmt = arenas.exprs.get(*stmt_idx).clone();
+            for &stmt_idx in arenas.expr_lists.get_slice(*stmts) {
+                let stmt = arenas.exprs.get(stmt_idx).clone();
                 emit_expr(arenas, state, &stmt, module, out)?;
                 out.push(&Opcode::Drop);
             }
@@ -218,6 +218,7 @@ pub(super) fn emit_expr(
 
         Expr::DotPrefix { name, args, .. } => {
             let name_str = arenas.interner.resolve(*name);
+            let args = arenas.expr_lists.get_slice(*args);
             if let Some(vinfo) = state.variant_map.get(name_str).cloned() {
                 return emit_variant_construct(&vinfo, args, arenas, state, module, out);
             }

@@ -2,6 +2,8 @@
 
 use core::fmt;
 
+use memchr::memchr_iter;
+
 /// Identifies a source file within a [`SourceDb`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct FileId(pub u32);
@@ -122,12 +124,10 @@ impl SourceDb {
 
 fn compute_line_starts(source: &str) -> Vec<u32> {
     let mut starts = vec![0u32];
-    for (i, byte) in source.bytes().enumerate() {
-        if byte == b'\n' {
-            let offset = u32::try_from(i).expect("source byte offset fits in u32") + 1;
-            starts.push(offset);
-        }
-    }
+    starts.extend(
+        memchr_iter(b'\n', source.as_bytes())
+            .map(|i| u32::try_from(i).expect("source byte offset fits in u32") + 1),
+    );
     starts
 }
 

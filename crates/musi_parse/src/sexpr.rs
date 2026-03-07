@@ -91,13 +91,14 @@ impl<'a> Printer<'a> {
     }
 
     fn print_module(&mut self) {
-        if self.module.items.is_empty() {
+        let items = self.module.ctx.expr_lists.get_slice(self.module.items);
+        if items.is_empty() {
             self.write("(module)");
             return;
         }
         self.write("(module");
         self.indent += 2;
-        for &item in &self.module.items {
+        for &item in items {
             self.newline_indent();
             self.print_expr(item);
         }
@@ -120,20 +121,21 @@ impl<'a> Printer<'a> {
                 self.print_expr(inner);
                 self.write_char(')');
             }
-            Expr::Tuple { ref elements, .. } => {
+            Expr::Tuple { elements, .. } => {
                 self.write("(tuple [");
-                self.space_separated_exprs(elements);
+                self.space_separated_exprs(self.module.ctx.expr_lists.get_slice(elements));
                 self.write("])");
             }
-            Expr::Block {
-                ref stmts, tail, ..
-            } => self.print_block(stmts, tail),
+            Expr::Block { stmts, tail, .. } => {
+                self.print_block(self.module.ctx.expr_lists.get_slice(stmts), tail)
+            }
             Expr::Array { ref items, .. } => self.print_array(items),
             Expr::AnonRec { ref fields, .. } => self.print_anon_rec(fields),
             Expr::Binary { op, lhs, rhs, .. } => self.print_binary(op, lhs, rhs),
-            Expr::DotPrefix { name, ref args, .. } => {
+            Expr::DotPrefix { name, args, .. } => {
                 self.write("(dot-prefix ");
                 self.write(self.sym(name));
+                let args = self.module.ctx.expr_lists.get_slice(args);
                 if !args.is_empty() {
                     self.write(" [");
                     self.space_separated_exprs(args);

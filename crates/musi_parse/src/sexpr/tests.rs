@@ -2,7 +2,7 @@ use super::*;
 use crate::ast::{AstArenas, ParsedModule};
 use crate::parser::parse;
 use musi_ast::{BindKind, LitValue, MatchArm, Pat, PatSuffix};
-use musi_shared::{DiagnosticBag, FileId, Interner, Span};
+use musi_shared::{DiagnosticBag, FileId, Interner, Slice, Span};
 
 /// Helper: lex + parse source text into a `ParsedModule`, returning the
 /// interner alongside for symbol resolution.
@@ -28,8 +28,9 @@ fn error_node_does_not_crash() {
     let err = ctx.exprs.alloc(Expr::Error {
         span: Span::new(0, 1),
     });
+    let items = ctx.expr_lists.alloc_slice([err]);
     let module = ParsedModule {
-        items: vec![err],
+        items,
         ctx,
         span: Span::new(0, 1),
     };
@@ -46,7 +47,7 @@ fn dump_expr_single_error() {
         span: Span::new(0, 1),
     });
     let module = ParsedModule {
-        items: vec![],
+        items: Slice::empty(),
         ctx,
         span: Span::DUMMY,
     };
@@ -64,8 +65,9 @@ fn no_spans_in_output() {
         name: name_sym,
         span: Span::new(42, 7),
     });
+    let items = ctx.expr_lists.alloc_slice([ident]);
     let module = ParsedModule {
-        items: vec![ident],
+        items,
         ctx,
         span: Span::new(0, 50),
     };
@@ -104,8 +106,9 @@ fn binary_precedence_nesting() {
         rhs: mul,
         span: Span::new(0, 9),
     });
+    let items = ctx.expr_lists.alloc_slice([add]);
     let module = ParsedModule {
-        items: vec![add],
+        items,
         ctx,
         span: Span::new(0, 9),
     };
@@ -122,8 +125,9 @@ fn lit_str_rendering() {
         value: LitValue::Str(hello),
         span: Span::new(0, 15),
     });
+    let items = ctx.expr_lists.alloc_slice([lit]);
     let module = ParsedModule {
-        items: vec![lit],
+        items,
         ctx,
         span: Span::new(0, 15),
     };
@@ -189,8 +193,9 @@ fn fn_def_rendering() {
         span: Span::DUMMY,
     });
 
+    let items = ctx.expr_lists.alloc_slice([fn_def]);
     let module = ParsedModule {
-        items: vec![fn_def],
+        items,
         ctx,
         span: Span::DUMMY,
     };
@@ -211,8 +216,9 @@ fn unit_and_int_rendering() {
         value: LitValue::Int(42),
         span: Span::DUMMY,
     });
+    let items = ctx.expr_lists.alloc_slice([unit, int_lit]);
     let module = ParsedModule {
-        items: vec![unit, int_lit],
+        items,
         ctx,
         span: Span::DUMMY,
     };
@@ -261,8 +267,9 @@ fn pattern_rendering() {
         span: Span::DUMMY,
     });
 
+    let items = ctx.expr_lists.alloc_slice([match_expr]);
     let module = ParsedModule {
-        items: vec![match_expr],
+        items,
         ctx,
         span: Span::DUMMY,
     };
@@ -303,8 +310,9 @@ fn type_rendering() {
         span: Span::DUMMY,
     });
 
+    let items = ctx.expr_lists.alloc_slice([bind]);
     let module = ParsedModule {
-        items: vec![bind],
+        items,
         ctx,
         span: Span::DUMMY,
     };

@@ -70,14 +70,14 @@ impl<'a> Printer<'a> {
                 self.write("(call ");
                 self.print_expr(base);
                 self.write(" [");
-                self.space_separated_exprs(args);
+                self.space_separated_exprs(self.module.ctx.expr_lists.get_slice(*args));
                 self.write("])");
             }
             PostfixOp::Index { args, .. } => {
                 self.write("(index ");
                 self.print_expr(base);
                 self.write(" [");
-                self.space_separated_exprs(args);
+                self.space_separated_exprs(self.module.ctx.expr_lists.get_slice(*args));
                 self.write("])");
             }
             PostfixOp::Field { name, .. } => {

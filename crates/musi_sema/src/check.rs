@@ -321,7 +321,7 @@ impl<'a> TypeChecker<'a> {
 
     /// Type-checks an entire module, walking each top-level item in order.
     pub fn check_module(&mut self, module: &ParsedModule) {
-        for &item_idx in &module.items {
+        for &item_idx in module.ctx.expr_lists.get_slice(module.items) {
             let ty = self.infer(item_idx, &module.ctx);
             let _prev = self.expr_types.insert(item_idx, ty);
         }

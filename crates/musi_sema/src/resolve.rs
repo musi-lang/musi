@@ -91,7 +91,7 @@ impl<'a> Resolver<'a> {
     /// Registers all module-level `fn`, `record`, and `choice` names into
     /// `root_scope`, enabling forward references to functions and types.
     fn collect_top_level(&mut self, module: &ParsedModule, root_scope: ScopeId) {
-        for &item_idx in &module.items {
+        for &item_idx in module.ctx.expr_lists.get_slice(module.items) {
             let expr = module.ctx.exprs.get(item_idx);
             match expr {
                 Expr::FnDef { name, span, .. } => {
@@ -121,7 +121,7 @@ impl<'a> Resolver<'a> {
         imports: &HashMap<String, ModuleExports>,
         interner: &Interner,
     ) {
-        for &item_idx in &module.items {
+        for &item_idx in module.ctx.expr_lists.get_slice(module.items) {
             let Expr::Import { items, path, span } = module.ctx.exprs.get(item_idx) else {
                 continue;
             };
@@ -163,7 +163,7 @@ impl<'a> Resolver<'a> {
     }
 
     fn resolve_items(&mut self, module: &ParsedModule, root_scope: ScopeId) {
-        for &item_idx in &module.items {
+        for &item_idx in module.ctx.expr_lists.get_slice(module.items) {
             self.resolve_expr(item_idx, &module.ctx, root_scope);
         }
     }
@@ -187,14 +187,14 @@ impl<'a> Resolver<'a> {
             Expr::Paren { inner, .. } => self.resolve_expr(*inner, ctx, scope),
 
             Expr::Tuple { elements, .. } => {
-                for &e in elements {
+                for &e in ctx.expr_lists.get_slice(*elements) {
                     self.resolve_expr(e, ctx, scope);
                 }
             }
 
             Expr::Block { stmts, tail, .. } => {
                 let block_scope = self.scopes.push_child(scope);
-                for &stmt in stmts {
+                for &stmt in ctx.expr_lists.get_slice(*stmts) {
                     self.resolve_block_stmt(stmt, ctx, block_scope);
                 }
                 if let Some(&t) = tail.as_ref() {
@@ -395,7 +395,7 @@ impl<'a> Resolver<'a> {
                 self.resolve_expr(*base, ctx, scope);
                 match op {
                     PostfixOp::Call { args, .. } | PostfixOp::Index { args, .. } => {
-                        for &arg in args {
+                        for &arg in ctx.expr_lists.get_slice(*args) {
                             self.resolve_expr(arg, ctx, scope);
                         }
                     }

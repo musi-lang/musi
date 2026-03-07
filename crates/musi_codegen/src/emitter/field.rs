@@ -19,13 +19,13 @@ pub(super) fn emit_postfix(
     out: &mut FnEmitter,
 ) -> Result<(), CodegenError> {
     match op {
-        PostfixOp::Call { args, .. } => emit_call(arenas, state, base, args, module, out),
+        PostfixOp::Call { args, .. } => emit_call(arenas, state, base, arenas.expr_lists.get_slice(*args), module, out),
         PostfixOp::Field { name, .. } => emit_field_access(arenas, state, base, *name, module, out),
         PostfixOp::RecDot { fields, .. } => emit_rec_dot(arenas, state, base, fields, module, out),
         PostfixOp::Index { args, .. } => {
             let base_expr = arenas.exprs.get(base).clone();
             emit_expr(arenas, state, &base_expr, module, out)?;
-            if let Some(&idx) = args.first() {
+            if let Some(&idx) = arenas.expr_lists.get_slice(*args).first() {
                 let idx_expr = arenas.exprs.get(idx).clone();
                 emit_expr(arenas, state, &idx_expr, module, out)?;
             }

@@ -142,16 +142,12 @@
         let b = ctx.exprs.alloc(Expr::Unit {
             span: Span::new(3, 2),
         });
-        let module = ParsedModule {
-            items: vec![a, b],
-            ctx,
-            span: Span::new(0, 5),
-        };
-        assert_eq!(module.items.len(), 2);
+        let items = ctx.expr_lists.alloc_slice([a, b]);
+        let module = ParsedModule { items, ctx, span: Span::new(0, 5) };
+        let slice = module.ctx.expr_lists.get_slice(module.items);
+        assert_eq!(slice.len(), 2);
         assert_eq!(
-            *module.ctx.exprs.get(module.items[0]),
-            Expr::Unit {
-                span: Span::new(0, 2),
-            }
+            *module.ctx.exprs.get(slice[0]),
+            Expr::Unit { span: Span::new(0, 2) }
         );
     }

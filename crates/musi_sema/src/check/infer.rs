@@ -34,8 +34,8 @@ impl<'a> TypeChecker<'a> {
             Expr::Record { name: None, .. } => Type::Prim(PrimTy::Unit),
             Expr::Ident { span, .. } => self.infer_ident(idx, *span),
             Expr::Paren { inner, .. } => self.infer(*inner, ctx),
-            Expr::Tuple { elements, .. } => self.infer_tuple(elements, ctx),
-            Expr::Block { stmts, tail, .. } => self.infer_block(stmts, tail.as_ref().copied(), ctx),
+            Expr::Tuple { elements, .. } => self.infer_tuple(ctx.expr_lists.get_slice(*elements), ctx),
+            Expr::Block { stmts, tail, .. } => self.infer_block(ctx.expr_lists.get_slice(*stmts), tail.as_ref().copied(), ctx),
             Expr::Array { items, .. } => self.infer_array_expr(items, ctx),
             Expr::AnonRec { fields, .. } => self.infer_anon_rec_expr(fields, ctx),
             Expr::Prefix { op, operand, span } => self.infer_prefix_op(*op, *operand, *span, ctx),
@@ -58,7 +58,7 @@ impl<'a> TypeChecker<'a> {
             Expr::Lambda { ty_params, params, ret_ty, body, .. } =>
                 self.infer_lambda_expr(ty_params, params, ret_ty.as_ref(), *body, ctx),
             Expr::DotPrefix { args, .. } => {
-                for &a in args {
+                for &a in ctx.expr_lists.get_slice(*args) {
                     let _ty = self.infer(a, ctx);
                 }
                 Type::Var(self.unify_table.fresh())
@@ -423,7 +423,7 @@ impl<'a> TypeChecker<'a> {
         match op {
             PostfixOp::Call { args, .. } => {
                 let callee_ty = self.infer(base, ctx);
-                self.infer_call(callee_ty, base, args, span, ctx)
+                self.infer_call(callee_ty, base, ctx.expr_lists.get_slice(*args), span, ctx)
             }
 
             PostfixOp::Index {
@@ -431,7 +431,7 @@ impl<'a> TypeChecker<'a> {
                 span: idx_span,
             } => {
                 let _base_ty = self.infer(base, ctx);
-                for &a in args {
+                for &a in ctx.expr_lists.get_slice(*args) {
                     let _ty = self.infer(a, ctx);
                 }
                 let _ = idx_span;

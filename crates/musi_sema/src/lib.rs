@@ -56,7 +56,7 @@ pub struct ModuleExports {
 /// Extracts the exported name-to-type map from a completed analysis.
 pub fn exports_of(result: &SemaResult, module: &ParsedModule, interner: &Interner) -> ModuleExports {
     let mut names: HashMap<String, Type> = HashMap::new();
-    for &item_idx in &module.items {
+    for &item_idx in module.ctx.expr_lists.get_slice(module.items) {
         match module.ctx.exprs.get(item_idx) {
             Expr::FnDef { name, modifiers, .. } => {
                 if modifiers.iter().any(|m| matches!(m, Modifier::Export)) {

@@ -3,14 +3,14 @@
 use std::collections::HashMap;
 use std::mem;
 
-use musi_ast::{ClassMember, Expr, Modifier, ParsedModule, Ty};
+use musi_ast::{ClassMember, Expr, Modifier, ParsedModule};
 use musi_shared::{Idx, Interner};
 
 use crate::error::CodegenError;
 use crate::{FunctionEntry, Module, Opcode, SymbolEntry, SymbolFlags};
 use crate::intrinsics;
 
-use super::state::{EmitArenas, EmitState, FnEmitter, TypeTag, param_list_with_types, resolve_type_tag, ty_name_str};
+use super::state::{EmitArenas, EmitState, FnEmitter, param_list_with_types, resolve_type_tag, ty_name_str};
 use super::expr::emit_expr;
 
 pub(super) fn emit_fn_body(
@@ -113,10 +113,10 @@ pub(super) fn emit_module_fn_bodies(
     state: &mut EmitState,
     module: &mut Module,
 ) -> Result<(), CodegenError> {
-    let arenas = EmitArenas { exprs: &parsed.ctx.exprs, interner };
+    let arenas = EmitArenas { exprs: &parsed.ctx.exprs, expr_lists: &parsed.ctx.expr_lists, interner };
     let mut pending: Vec<(u16, Vec<(String, Option<String>)>, Idx<Expr>, Option<String>)> = Vec::new();
 
-    for &item_idx in &parsed.items {
+    for &item_idx in parsed.ctx.expr_lists.get_slice(parsed.items) {
         match parsed.ctx.exprs.get(item_idx) {
             Expr::FnDef { name, params, ret_ty, body: Some(body_idx), modifiers, .. } => {
                 if modifiers.iter().any(|m| matches!(m, Modifier::Extrin(_))) { continue; }
@@ -162,10 +162,10 @@ pub(super) fn emit_main_body(
     state: &mut EmitState,
     module: &mut Module,
 ) -> Result<(), CodegenError> {
-    let arenas = EmitArenas { exprs: &user.ctx.exprs, interner };
+    let arenas = EmitArenas { exprs: &user.ctx.exprs, expr_lists: &user.ctx.expr_lists, interner };
     let mut out = FnEmitter::new();
     out.push_scope();
-    for &item_idx in &user.items {
+    for &item_idx in user.ctx.expr_lists.get_slice(user.items) {
         match user.ctx.exprs.get(item_idx) {
             Expr::FnDef { .. }
             | Expr::Record { .. }

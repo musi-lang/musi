@@ -281,7 +281,7 @@ fn cmd_test(file_path: &str) {
 /// Returns all dependency path strings from top-level `import` and `export { } from` statements.
 fn collect_dep_paths(module: &ParsedModule, interner: &Interner) -> Vec<String> {
     let mut paths = Vec::new();
-    for &item_idx in &module.items {
+    for &item_idx in module.ctx.expr_lists.get_slice(module.items) {
         let raw = match module.ctx.exprs.get(item_idx) {
             Expr::Import { path, .. } | Expr::Export { path, .. } => interner.resolve(*path),
             _ => continue,
