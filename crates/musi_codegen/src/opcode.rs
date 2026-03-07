@@ -31,6 +31,8 @@ const ARR_SET: u8 = 0x92;
 const ARR_LEN: u8 = 0x93;
 const ARR_PUSH: u8 = 0x94;
 const ARR_SLICE: u8 = 0x95;
+const ARR_PUSH1: u8 = 0x96;
+const ARR_CONCAT: u8 = 0x97;
 // Arithmetic -- integer
 const ADD_I64: u8 = 0x30;
 const SUB_I64: u8 = 0x31;
@@ -218,6 +220,10 @@ pub enum Opcode {
     ArrPush,
     /// Pop Int end, pop Int start, pop Array, push new Array slice.
     ArrSlice,
+    /// Pop value, push it into the Array on top of stack (array stays on stack).
+    ArrPush1,
+    /// Pop Array b, pop Array a, push new Array a++b.
+    ArrConcat,
 }
 
 fn push_u16_op(buf: &mut Vec<u8>, tag: u8, val: u16) {
@@ -249,6 +255,7 @@ macro_rules! for_simple_opcodes {
             BitXor => BIT_XOR, BitNot => BIT_NOT, Shl => SHL, Shr => SHR,
             ConcatStr => CONCAT_STR, NilCoalesce => NIL_COALESCE, ArrGet => ARR_GET,
             ArrSet => ARR_SET, ArrLen => ARR_LEN, ArrPush => ARR_PUSH, ArrSlice => ARR_SLICE,
+            ArrPush1 => ARR_PUSH1, ArrConcat => ARR_CONCAT,
         }
     };
 }

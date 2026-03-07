@@ -211,6 +211,8 @@ impl Vm {
             Opcode::ArrLen => self.exec_arr_len(),
             Opcode::ArrPush => self.exec_arr_push(),
             Opcode::ArrSlice => self.exec_arr_slice(),
+            Opcode::ArrPush1 => self.exec_arr_push1(),
+            Opcode::ArrConcat => self.exec_arr_concat(),
         }
     }
 
@@ -433,6 +435,13 @@ impl Vm {
         Ok(Signal::Continue)
     }
 
+    fn top_two_are_float(&self) -> bool {
+        let len = self.stack.len();
+        len >= 2
+            && matches!(self.stack[len - 1], Value::Float(_))
+            && matches!(self.stack[len - 2], Value::Float(_))
+    }
+
     fn push_i64_bin<F: FnOnce(i64, i64) -> i64>(&mut self, f: F) -> Result<Signal, VmError> {
         let rhs = pop_i64(&mut self.stack)?;
         let lhs = pop_i64(&mut self.stack)?;
@@ -517,10 +526,28 @@ impl Vm {
 
     fn exec_arith(&mut self, op: &Opcode) -> Result<Signal, VmError> {
         match op {
-            Opcode::AddI64 => self.dispatch_or_i64_bin("add", i64::wrapping_add),
-            Opcode::SubI64 => self.dispatch_or_i64_bin("sub", i64::wrapping_sub),
-            Opcode::MulI64 => self.dispatch_or_i64_bin("mul", i64::wrapping_mul),
+            Opcode::AddI64 => {
+                if self.top_two_are_float() {
+                    return self.push_f64_bin(|a, b| a + b);
+                }
+                self.dispatch_or_i64_bin("add", i64::wrapping_add)
+            }
+            Opcode::SubI64 => {
+                if self.top_two_are_float() {
+                    return self.push_f64_bin(|a, b| a - b);
+                }
+                self.dispatch_or_i64_bin("sub", i64::wrapping_sub)
+            }
+            Opcode::MulI64 => {
+                if self.top_two_are_float() {
+                    return self.push_f64_bin(|a, b| a * b);
+                }
+                self.dispatch_or_i64_bin("mul", i64::wrapping_mul)
+            }
             Opcode::DivI64 => {
+                if self.top_two_are_float() {
+                    return self.push_f64_bin(|a, b| a / b);
+                }
                 if let Some(r) = self.try_dispatch_binop("div") {
                     return r;
                 }
@@ -533,6 +560,9 @@ impl Vm {
                 Ok(Signal::Continue)
             }
             Opcode::RemI64 => {
+                if self.top_two_are_float() {
+                    return self.push_f64_bin(|a, b| a % b);
+                }
                 if let Some(r) = self.try_dispatch_binop("rem") {
                     return r;
                 }
@@ -545,6 +575,11 @@ impl Vm {
                 Ok(Signal::Continue)
             }
             Opcode::NegI64 => {
+                if matches!(self.stack.last(), Some(Value::Float(_))) {
+                    let v = pop_f64(&mut self.stack)?;
+                    self.stack.push(Value::Float(-v));
+                    return Ok(Signal::Continue);
+                }
                 let v = pop_i64(&mut self.stack)?;
                 self.stack.push(Value::Int(v.wrapping_neg()));
                 Ok(Signal::Continue)
@@ -622,12 +657,42 @@ impl Vm {
     #[allow(clippy::float_cmp)]
     fn exec_cmp(&mut self, op: &Opcode) -> Result<Signal, VmError> {
         match op {
-            Opcode::EqI64 => self.dispatch_or_i64_cmp("eq", |a, b| a == b),
-            Opcode::NeqI64 => self.dispatch_or_i64_cmp("neq", |a, b| a != b),
-            Opcode::LtI64 => self.dispatch_or_i64_cmp("lt", |a, b| a < b),
-            Opcode::GtI64 => self.dispatch_or_i64_cmp("gt", |a, b| a > b),
-            Opcode::LeqI64 => self.dispatch_or_i64_cmp("leq", |a, b| a <= b),
-            Opcode::GeqI64 => self.dispatch_or_i64_cmp("geq", |a, b| a >= b),
+            Opcode::EqI64 => {
+                if self.top_two_are_float() {
+                    return self.push_f64_cmp(|a, b| a == b);
+                }
+                self.dispatch_or_i64_cmp("eq", |a, b| a == b)
+            }
+            Opcode::NeqI64 => {
+                if self.top_two_are_float() {
+                    return self.push_f64_cmp(|a, b| a != b);
+                }
+                self.dispatch_or_i64_cmp("neq", |a, b| a != b)
+            }
+            Opcode::LtI64 => {
+                if self.top_two_are_float() {
+                    return self.push_f64_cmp(|a, b| a < b);
+                }
+                self.dispatch_or_i64_cmp("lt", |a, b| a < b)
+            }
+            Opcode::GtI64 => {
+                if self.top_two_are_float() {
+                    return self.push_f64_cmp(|a, b| a > b);
+                }
+                self.dispatch_or_i64_cmp("gt", |a, b| a > b)
+            }
+            Opcode::LeqI64 => {
+                if self.top_two_are_float() {
+                    return self.push_f64_cmp(|a, b| a <= b);
+                }
+                self.dispatch_or_i64_cmp("leq", |a, b| a <= b)
+            }
+            Opcode::GeqI64 => {
+                if self.top_two_are_float() {
+                    return self.push_f64_cmp(|a, b| a >= b);
+                }
+                self.dispatch_or_i64_cmp("geq", |a, b| a >= b)
+            }
             Opcode::EqF64 => self.push_f64_cmp(|a, b| a == b),
             Opcode::NeqF64 => self.push_f64_cmp(|a, b| a != b),
             Opcode::LtF64 => self.push_f64_cmp(|a, b| a < b),
@@ -744,6 +809,26 @@ impl Vm {
         let a = pop_array(&mut self.stack)?;
         a.borrow_mut().push(val);
         self.stack.push(Value::Unit);
+        Ok(Signal::Continue)
+    }
+
+    fn exec_arr_push1(&mut self) -> Result<Signal, VmError> {
+        let val = self.stack.pop().ok_or(VmError::StackUnderflow)?;
+        match self.stack.last() {
+            Some(Value::Array(a)) => {
+                a.borrow_mut().push(val);
+                Ok(Signal::Continue)
+            }
+            _ => Err(VmError::TypeMismatch),
+        }
+    }
+
+    fn exec_arr_concat(&mut self) -> Result<Signal, VmError> {
+        let b = pop_array(&mut self.stack)?;
+        let a = pop_array(&mut self.stack)?;
+        let mut result = a.borrow().clone();
+        result.extend(b.borrow().iter().cloned());
+        self.stack.push(Value::Array(Rc::new(RefCell::new(result))));
         Ok(Signal::Continue)
     }
 
@@ -868,6 +953,7 @@ const fn type_tag_of(v: &Value) -> u16 {
         Value::Function(_) => 6,
         Value::Object { type_tag, .. } => *type_tag,
         Value::Array(_) => 7,
+        Value::Map(_) => 8,
     }
 }
 
