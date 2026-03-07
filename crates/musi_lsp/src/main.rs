@@ -9,6 +9,6 @@ use tower_lsp_server::{LspService, Server};
 async fn main() {
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
-    let (service, socket) = LspService::new(|client| MusiBackend::new(client));
+    let (service, socket) = LspService::new(MusiBackend::new);
     Server::new(stdin, stdout, socket).serve(service).await;
 }
