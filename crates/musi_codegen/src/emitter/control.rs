@@ -27,6 +27,34 @@ pub(super) fn emit_case_cond(
     Ok((tmp_slot, fixup))
 }
 
+/// Emits the jump condition for an `if`/`elif`/`while` branch, returning the
+/// fixup index for the "condition was false" jump.  For `Cond::Case`, also
+/// pushes a new scope and emits pattern bindings; the caller must call
+/// `out.pop_scope()` after the branch body.
+fn emit_branch_cond(
+    arenas: &EmitArenas<'_>,
+    state: &mut EmitState,
+    cond: &Cond,
+    module: &mut Module,
+    out: &mut FnEmitter,
+) -> Result<usize, CodegenError> {
+    match cond {
+        Cond::Expr(_) => {
+            emit_cond(arenas, state, cond, module, out)?;
+            Ok(out.emit_jump_placeholder(FnEmitter::BR_FALSE))
+        }
+        Cond::Case { pat, init, .. } => {
+            let (tmp_slot, test_fixup) = emit_case_cond(arenas, state, pat, *init, module, out)?;
+            let fixup = test_fixup
+                .map(Ok)
+                .unwrap_or_else(|| Ok(out.emit_jump_placeholder(FnEmitter::BR_FALSE)))?;
+            out.push_scope();
+            emit_pattern_bindings(arenas, state, pat, tmp_slot, out)?;
+            Ok(fixup)
+        }
+    }
+}
+
 pub(super) fn emit_cond(
     arenas: &EmitArenas<'_>,
     state: &mut EmitState,
@@ -58,22 +86,7 @@ pub(super) fn emit_if(
     module: &mut Module,
     out: &mut FnEmitter,
 ) -> Result<(), CodegenError> {
-    let else_fixup = match data.cond {
-        Cond::Expr(_) => {
-            emit_cond(arenas, state, data.cond, module, out)?;
-            out.emit_jump_placeholder(FnEmitter::BR_FALSE)
-        }
-        Cond::Case { pat, init, .. } => {
-            let (tmp_slot, test_fixup) = emit_case_cond(arenas, state, pat, *init, module, out)?;
-            let fixup = test_fixup
-                .map(Ok)
-                .unwrap_or_else(|| Ok(out.emit_jump_placeholder(FnEmitter::BR_FALSE)))?;
-            out.push_scope();
-            emit_pattern_bindings(arenas, state, pat, tmp_slot, out)?;
-            fixup
-        }
-    };
-
+    let else_fixup = emit_branch_cond(arenas, state, data.cond, module, out)?;
     let then = arenas.exprs.get(data.then_body).clone();
     emit_expr(arenas, state, &then, module, out)?;
     if matches!(data.cond, Cond::Case { .. }) { out.pop_scope(); }
@@ -83,21 +96,7 @@ pub(super) fn emit_if(
     let mut end_fixups = vec![first_end_fixup];
     for branch in data.elif_chains {
         if branch.guard.is_some() { return Err(CodegenError::UnsupportedExpr); }
-        let next_fixup = match branch.cond.as_ref() {
-            Cond::Expr(_) => {
-                emit_cond(arenas, state, &branch.cond, module, out)?;
-                out.emit_jump_placeholder(FnEmitter::BR_FALSE)
-            }
-            Cond::Case { pat, init, .. } => {
-                let (tmp_slot, test_fixup) = emit_case_cond(arenas, state, pat, *init, module, out)?;
-                let fixup = test_fixup
-                    .map(Ok)
-                    .unwrap_or_else(|| Ok(out.emit_jump_placeholder(FnEmitter::BR_FALSE)))?;
-                out.push_scope();
-                emit_pattern_bindings(arenas, state, pat, tmp_slot, out)?;
-                fixup
-            }
-        };
+        let next_fixup = emit_branch_cond(arenas, state, &branch.cond, module, out)?;
         let branch_body = arenas.exprs.get(branch.body).clone();
         emit_expr(arenas, state, &branch_body, module, out)?;
         if matches!(branch.cond.as_ref(), Cond::Case { .. }) { out.pop_scope(); }
@@ -118,37 +117,15 @@ pub(super) fn emit_while(
     module: &mut Module,
     out: &mut FnEmitter,
 ) -> Result<(), CodegenError> {
-    match cond {
-        Cond::Expr(_) => {
-            let start_pos = out.start_loop();
-            emit_cond(arenas, state, cond, module, out)?;
-            let end_fixup = out.emit_jump_placeholder(FnEmitter::BR_FALSE);
-            let body_expr = arenas.exprs.get(body).clone();
-            emit_expr(arenas, state, &body_expr, module, out)?;
-            out.push(&Opcode::Drop);
-            out.emit_br_back(start_pos)?;
-            out.patch_jump_to_here(end_fixup)?;
-            out.close_loop()
-        }
-        Cond::Case { pat, init, .. } => {
-            let pat = pat.clone();
-            let init = *init;
-            let start_pos = out.start_loop();
-            let (tmp_slot, test_fixup) = emit_case_cond(arenas, state, &pat, init, module, out)?;
-            let end_fixup = test_fixup
-                .map(Ok)
-                .unwrap_or_else(|| Ok(out.emit_jump_placeholder(FnEmitter::BR_FALSE)))?;
-            out.push_scope();
-            emit_pattern_bindings(arenas, state, &pat, tmp_slot, out)?;
-            let body_expr = arenas.exprs.get(body).clone();
-            emit_expr(arenas, state, &body_expr, module, out)?;
-            out.pop_scope();
-            out.push(&Opcode::Drop);
-            out.emit_br_back(start_pos)?;
-            out.patch_jump_to_here(end_fixup)?;
-            out.close_loop()
-        }
-    }
+    let start_pos = out.start_loop();
+    let end_fixup = emit_branch_cond(arenas, state, cond, module, out)?;
+    let body_expr = arenas.exprs.get(body).clone();
+    emit_expr(arenas, state, &body_expr, module, out)?;
+    if matches!(cond, Cond::Case { .. }) { out.pop_scope(); }
+    out.push(&Opcode::Drop);
+    out.emit_br_back(start_pos)?;
+    out.patch_jump_to_here(end_fixup)?;
+    out.close_loop()
 }
 
 pub(super) fn emit_loop(
@@ -164,6 +141,24 @@ pub(super) fn emit_loop(
     out.push(&Opcode::Drop);
     out.emit_br_back(start_pos)?;
     out.close_loop()
+}
+
+fn emit_for_loop_tail(
+    out: &mut FnEmitter,
+    counter_slot: u16,
+    start_pos: usize,
+    end_fixup: usize,
+) -> Result<(), CodegenError> {
+    out.push(&Opcode::Drop);
+    out.push(&Opcode::LdLoc(counter_slot));
+    out.push(&Opcode::LdImmI64(1));
+    out.push(&Opcode::AddI64);
+    out.push(&Opcode::StLoc(counter_slot));
+    out.emit_br_back(start_pos)?;
+    out.patch_jump_to_here(end_fixup)?;
+    out.close_loop()?;
+    out.pop_scope();
+    Ok(())
 }
 
 pub(super) fn emit_for(
@@ -204,18 +199,7 @@ pub(super) fn emit_for(
 
             let body_expr = arenas.exprs.get(body).clone();
             emit_expr(arenas, state, &body_expr, module, out)?;
-            out.push(&Opcode::Drop);
-
-            out.push(&Opcode::LdLoc(counter_slot));
-            out.push(&Opcode::LdImmI64(1));
-            out.push(&Opcode::AddI64);
-            out.push(&Opcode::StLoc(counter_slot));
-
-            out.emit_br_back(start_pos)?;
-            out.patch_jump_to_here(end_fixup)?;
-            out.close_loop()?;
-            out.pop_scope();
-            return Ok(());
+            return emit_for_loop_tail(out, counter_slot, start_pos, end_fixup);
         }
     }
 
@@ -248,18 +232,7 @@ pub(super) fn emit_for(
 
     let body_expr = arenas.exprs.get(body).clone();
     emit_expr(arenas, state, &body_expr, module, out)?;
-    out.push(&Opcode::Drop);
-
-    out.push(&Opcode::LdLoc(i_slot));
-    out.push(&Opcode::LdImmI64(1));
-    out.push(&Opcode::AddI64);
-    out.push(&Opcode::StLoc(i_slot));
-
-    out.emit_br_back(start_pos)?;
-    out.patch_jump_to_here(end_fixup)?;
-    out.close_loop()?;
-    out.pop_scope();
-    Ok(())
+    emit_for_loop_tail(out, i_slot, start_pos, end_fixup)
 }
 
 pub(super) fn emit_short_circuit(
