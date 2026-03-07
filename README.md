@@ -75,8 +75,8 @@ choice Shape { Circle(Float) | Rect(Float, Float) }
 
 fn area(s: Shape): Float =>
     match s with (
-        .Circle(r)    => 3.14159 * r * r
-      | .Rect(w, h)   => w * h
+        .Circle(r)  => 3.14159 * r * r
+      | .Rect(w, h) => w * h
     );
 ```
 

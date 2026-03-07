@@ -195,5 +195,5 @@ export opaque record Map['K, 'V] {};
 #[intrinsic("map_has")]    export extrin fn map_has['K, 'V](m: Map['K, 'V], key: 'K): Bool;
 #[intrinsic("map_delete")] export extrin fn map_delete['K, 'V](m: Map['K, 'V], key: 'K): Unit;
 #[intrinsic("map_keys")]   export extrin fn map_keys['K, 'V](m: Map['K, 'V]): []'K;
-#[intrinsic("map_values")] export extrin fn map_values['K, 'V](m: Map['K, 'V]): []['V;
+#[intrinsic("map_values")] export extrin fn map_values['K, 'V](m: Map['K, 'V]): []'V;
 #[intrinsic("map_len")]    export extrin fn map_len['K, 'V](m: Map['K, 'V]): Int;
