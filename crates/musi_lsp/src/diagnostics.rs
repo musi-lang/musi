@@ -32,6 +32,11 @@ fn embedded_std(path: &str) -> Option<&'static str> {
     }
 }
 
+/// Returns true if the given URI identifies the prelude (no prelude injection needed).
+fn is_prelude_uri(uri: &str) -> bool {
+    uri.ends_with("std/prelude.ms")
+}
+
 /// Extract import path strings from top-level `import`/`export { } from` statements.
 fn collect_dep_paths(module: &ParsedModule, interner: &Interner) -> Vec<String> {
     let mut paths = Vec::new();
@@ -41,12 +46,16 @@ fn collect_dep_paths(module: &ParsedModule, interner: &Interner) -> Vec<String> 
             _ => continue,
         };
         let stripped = interner.resolve(*raw).trim_matches('"');
-        // Skip native (musi:*) specifiers — no Musi source available in LSP
-        if !stripped.starts_with("musi:") {
-            paths.push(stripped.to_owned());
-        }
+        paths.push(stripped.to_owned());
     }
     paths
+}
+
+/// Returns true if the module has any `musi:*` native import that we cannot resolve.
+fn has_native_import(module: &ParsedModule, interner: &Interner) -> bool {
+    collect_dep_paths(module, interner)
+        .iter()
+        .any(|p| p.starts_with("musi:"))
 }
 
 /// Lex + parse a source string, returning (file_id, module). Errors go into `diags`.
@@ -64,30 +73,51 @@ fn parse_src(
 }
 
 /// Run the full Musi lex + parse + sema pipeline on `source` and return LSP diagnostics.
-/// Diagnostics from prelude/dependency analysis are suppressed; only user-document
-/// diagnostics are returned.
-pub fn compute(source: &str) -> Vec<Diagnostic> {
+///
+/// `uri` is the document URI (used to detect when the user is editing the prelude
+/// itself, in which case prelude auto-injection is suppressed to avoid duplicate
+/// definition errors).
+pub fn compute(source: &str, uri: &str) -> Vec<Diagnostic> {
     let mut interner = Interner::new();
     let mut source_db = SourceDb::new();
 
-    // -- Prelude: analyze with a throw-away bag so its errors don't surface --
-    let mut prelude_diags = DiagnosticBag::new();
-    let (prelude_file_id, prelude_module) =
-        parse_src("<prelude>", PRELUDE_SRC, &mut interner, &mut source_db, &mut prelude_diags);
-    let empty: HashMap<String, ModuleExports> = HashMap::new();
-    let prelude_result = analyze(&prelude_module, &interner, prelude_file_id, &mut prelude_diags, &empty);
-    let prelude_exports = exports_of(&prelude_result, &prelude_module, &interner);
-
-    let mut import_map: HashMap<String, ModuleExports> = HashMap::new();
-    import_map.insert("<prelude>".to_owned(), prelude_exports);
-
-    // -- Parse the user document --
+    // -- Parse the user document first (needed to detect native imports) --
     let mut diags = DiagnosticBag::new();
     let (file_id, module) =
         parse_src("<document>", source, &mut interner, &mut source_db, &mut diags);
 
+    // If the document imports from native (musi:*) modules we can't resolve,
+    // skip sema to avoid flooding with undefined-name errors.
+    if has_native_import(&module, &interner) {
+        return to_lsp_diags(diags.iter().filter(|d| d.primary.file_id == file_id), &source_db);
+    }
+
+    // -- Prelude: analyze with a throw-away bag so its errors don't surface --
+    let mut import_map: HashMap<String, ModuleExports> = HashMap::new();
+
+    if !is_prelude_uri(uri) {
+        // Only inject prelude context when the user document is NOT the prelude itself,
+        // to avoid "duplicate definition" errors when editing prelude.ms.
+        let mut prelude_diags = DiagnosticBag::new();
+        let (prelude_file_id, prelude_module) = parse_src(
+            "<prelude>",
+            PRELUDE_SRC,
+            &mut interner,
+            &mut source_db,
+            &mut prelude_diags,
+        );
+        let empty: HashMap<String, ModuleExports> = HashMap::new();
+        let prelude_result =
+            analyze(&prelude_module, &interner, prelude_file_id, &mut prelude_diags, &empty);
+        let prelude_exports = exports_of(&prelude_result, &prelude_module, &interner);
+        import_map.insert("<prelude>".to_owned(), prelude_exports);
+    }
+
     // -- BFS through embedded imports --
-    let mut dep_queue = collect_dep_paths(&module, &interner);
+    let mut dep_queue = collect_dep_paths(&module, &interner)
+        .into_iter()
+        .filter(|p| !p.starts_with("musi:"))
+        .collect::<Vec<_>>();
     let mut visited: HashSet<String> = HashSet::new();
     let mut qi = 0;
     while qi < dep_queue.len() {
@@ -103,7 +133,9 @@ pub fn compute(source: &str) -> Vec<Diagnostic> {
         let (dep_file_id, dep_module) =
             parse_src(&path, dep_src, &mut interner, &mut source_db, &mut dep_diags);
         for p in collect_dep_paths(&dep_module, &interner) {
-            dep_queue.push(p);
+            if !p.starts_with("musi:") {
+                dep_queue.push(p);
+            }
         }
         let dep_result = analyze(&dep_module, &interner, dep_file_id, &mut dep_diags, &import_map);
         let dep_exports = exports_of(&dep_result, &dep_module, &interner);
@@ -114,27 +146,31 @@ pub fn compute(source: &str) -> Vec<Diagnostic> {
     let _sema = analyze(&module, &interner, file_id, &mut diags, &import_map);
 
     // -- Convert to LSP diagnostics (user document only) --
-    diags
-        .iter()
-        .filter(|d| d.primary.file_id == file_id)
-        .map(|d| {
-            let start = offset_to_position(d.primary.file_id, d.primary.span.start, &source_db);
-            let end = offset_to_position(d.primary.file_id, d.primary.span.end(), &source_db);
-            let tags = if d.severity == Severity::Warning && d.message.starts_with("unused") {
-                Some(vec![DiagnosticTag::UNNECESSARY])
-            } else {
-                None
-            };
-            Diagnostic {
-                range: Range { start, end },
-                severity: Some(severity_to_lsp(d.severity)),
-                message: d.message.to_string(),
-                source: Some("musi".to_owned()),
-                tags,
-                ..Diagnostic::default()
-            }
-        })
-        .collect()
+    to_lsp_diags(diags.iter().filter(|d| d.primary.file_id == file_id), &source_db)
+}
+
+fn to_lsp_diags<'a>(
+    iter: impl Iterator<Item = &'a musi_shared::Diagnostic>,
+    source_db: &SourceDb,
+) -> Vec<Diagnostic> {
+    iter.map(|d| {
+        let start = offset_to_position(d.primary.file_id, d.primary.span.start, source_db);
+        let end = offset_to_position(d.primary.file_id, d.primary.span.end(), source_db);
+        let tags = if d.severity == Severity::Warning && d.message.starts_with("unused") {
+            Some(vec![DiagnosticTag::UNNECESSARY])
+        } else {
+            None
+        };
+        Diagnostic {
+            range: Range { start, end },
+            severity: Some(severity_to_lsp(d.severity)),
+            message: d.message.to_string(),
+            source: Some("musi".to_owned()),
+            tags,
+            ..Diagnostic::default()
+        }
+    })
+    .collect()
 }
 
 fn offset_to_position(file_id: FileId, offset: u32, source_db: &SourceDb) -> Position {

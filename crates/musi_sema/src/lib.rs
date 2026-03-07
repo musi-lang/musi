@@ -143,6 +143,7 @@ pub fn analyze<S: BuildHasher>(
         if def.use_count == 0
             && def.span != Span::DUMMY
             && matches!(def.kind, DefKind::Const | DefKind::Var | DefKind::Param)
+            && !def.is_extrin_param
         {
             let name_str = interner.resolve(def.name);
             if name_str == "_" || name_str.starts_with('_') {

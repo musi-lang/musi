@@ -22,7 +22,7 @@ impl MusiBackend {
     }
 
     async fn publish_diagnostics(&self, uri: Uri, text: &str) {
-        let diags = diagnostics::compute(text);
+        let diags = diagnostics::compute(text, uri.as_str());
         self.client.publish_diagnostics(uri, diags, None).await;
     }
 }

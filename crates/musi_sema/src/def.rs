@@ -45,4 +45,8 @@ pub struct DefInfo {
     pub scheme_vars: Vec<TypeVarId>,
     /// How many times this definition is referenced (used for unused-variable warnings).
     pub use_count: u32,
+    /// True when this is a parameter of an `extrin fn` (no Musi body).
+    /// Suppresses the "unused parameter" warning since extrin params exist for
+    /// the external implementation, not for the Musi body.
+    pub is_extrin_param: bool,
 }

@@ -49,9 +49,16 @@ impl Parser<'_> {
         let start = self.start_span();
         let first = self.parse_ty_noarrow();
 
-        // Check for function type: T1 -> T2
+        // Check for function type: T1 -> T2 or (A, B) -> C
         if self.at(TokenKind::MinusGt) {
-            let mut params = vec![first];
+            // Unpack a Prod (parenthesised type list) into individual params so that
+            // `(A, B) -> C` produces Arrow { params: [A, B] } rather than
+            // Arrow { params: [Tuple([A, B])] }.  This matches the multi-arg call
+            // convention: `f(a, b)` passes two separate arguments, not a tuple.
+            let mut params = match first {
+                Ty::Prod { elements, .. } => elements,
+                other => vec![other],
+            };
             while self.eat(TokenKind::MinusGt) {
                 params.push(self.parse_ty_noarrow());
             }

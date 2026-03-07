@@ -78,6 +78,7 @@ impl<'a> Resolver<'a> {
             ty: None,
             scheme_vars: Vec::new(),
             use_count: 0,
+            is_extrin_param: false,
         });
         id
     }
@@ -148,6 +149,7 @@ impl<'a> Resolver<'a> {
                         ty: None,
                         scheme_vars: Vec::new(),
                         use_count: 0,
+                        is_extrin_param: false,
                     });
                     let prev = self.scopes.define(root_scope, *alias, def_id);
                     let _ = prev;
@@ -176,6 +178,7 @@ impl<'a> Resolver<'a> {
                             ty: Some(ty.clone()),
                             scheme_vars: Vec::new(),
                             use_count: 0,
+                            is_extrin_param: false,
                         };
                         let bind_sym = import_item.alias.unwrap_or(import_item.name);
                         info.name = bind_sym;
@@ -348,9 +351,14 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    fn register_params(&mut self, params: &[musi_ast::Param], scope: ScopeId) {
+    fn register_params(&mut self, params: &[musi_ast::Param], scope: ScopeId, is_extrin: bool) {
         for param in params {
             let def_id = self.alloc_def(param.name, DefKind::Param, param.span);
+            if is_extrin {
+                if let Some(d) = self.defs.last_mut() {
+                    d.is_extrin_param = true;
+                }
+            }
             self.define_in_scope(scope, param.name, def_id, param.span);
             let _prev = self.pat_defs.insert(param.span, def_id);
         }
@@ -440,7 +448,8 @@ impl<'a> Resolver<'a> {
 
             Expr::FnDef { params, body, .. } => {
                 let fn_scope = self.scopes.push_child(scope);
-                self.register_params(params, fn_scope);
+                // extrin fn has no body — suppress "unused param" warnings for its params
+                self.register_params(params, fn_scope, body.is_none());
                 if let Some(&body_idx) = body.as_ref() {
                     self.resolve_expr(body_idx, ctx, fn_scope);
                 }
@@ -448,7 +457,7 @@ impl<'a> Resolver<'a> {
 
             Expr::Lambda { params, body, .. } => {
                 let lam_scope = self.scopes.push_child(scope);
-                self.register_params(params, lam_scope);
+                self.register_params(params, lam_scope, false);
                 self.resolve_expr(*body, ctx, lam_scope);
             }
 
