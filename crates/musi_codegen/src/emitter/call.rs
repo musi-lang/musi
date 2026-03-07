@@ -136,8 +136,8 @@ pub(super) fn emit_call(
 
     if let Expr::Ident { name, .. } = base_expr {
         let callee_str = arenas.interner.resolve(*name);
-        if let Some(vinfo) = state.variant_map.get(callee_str).cloned() {
-            return emit_variant_construct(&vinfo, args, arenas, state, module, out);
+        if state.variant_map.contains_key(callee_str) {
+            return Err(CodegenError::VariantConstructRequiresDot(callee_str.into()));
         }
         if let Some(&fn_idx) = state.fn_map.get(callee_str) {
             return emit_static_call(fn_idx, args, arenas, state, module, out);

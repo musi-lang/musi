@@ -49,4 +49,8 @@ pub enum CodegenError {
     UnknownVariant(Box<str>),
     #[error("unknown field '{0}'")]
     UnknownField(Box<str>),
+    #[error("use dot-prefix to match variant '{0}' — write '.{0}', not '{0}'")]
+    VariantPatternRequiresDot(Box<str>),
+    #[error("use dot-prefix to construct variant '{0}' — write '.{0}', not '{0}'")]
+    VariantConstructRequiresDot(Box<str>),
 }

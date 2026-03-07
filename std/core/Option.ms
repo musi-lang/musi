@@ -1,31 +1,31 @@
 export fn option_is_some['T](opt: Option['T]): Bool => match opt with (
-    None    => False
-  | Some(_) => True
+    .None    => .False
+  | .Some(_) => .True
 );
 
 export fn option_is_none['T](opt: Option['T]): Bool => match opt with (
-    None    => True
-  | Some(_) => False
+    .None    => .True
+  | .Some(_) => .False
 );
 
 export fn option_unwrap_or['T](opt: Option['T], default: 'T): 'T => match opt with (
-    None    => default
-  | Some(v) => v
+    .None    => default
+  | .Some(v) => v
 );
 
 export fn option_map['T, 'U](opt: Option['T], f: 'T -> 'U): Option['U] => match opt with (
-    None    => None
-  | Some(v) => Some(f(v))
+    .None    => .None
+  | .Some(v) => .Some(f(v))
 );
 
 export fn option_and_then['T, 'U](opt: Option['T], f: 'T -> Option['U]): Option['U] => match opt with (
-    None    => None
-  | Some(v) => f(v)
+    .None    => .None
+  | .Some(v) => f(v)
 );
 
 export fn option_or['T](opt: Option['T], fallback: Option['T]): Option['T] => match opt with (
-    None    => fallback
-  | Some(v) => Some(v)
+    .None    => fallback
+  | .Some(v) => .Some(v)
 );
 
 // Short-name aliases

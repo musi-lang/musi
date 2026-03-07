@@ -32,9 +32,9 @@ export fn array_each['T](arr: []'T, f: 'T -> Unit): Unit => (
 );
 
 export fn array_contains['T](arr: []'T, val: 'T): Bool => (
-  var found := False;
+  var found := .False;
   for x in arr loop (
-    if x = val then found <- True
+    if x = val then found <- .True
   );
   found
 );

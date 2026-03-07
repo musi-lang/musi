@@ -16,12 +16,9 @@ pub(super) fn emit_discriminant_test(disc: i64, scrutinee_slot: u16, out: &mut F
     out.emit_jump_placeholder(FnEmitter::BR_FALSE)
 }
 
-/// Returns `(variant_name, sub_patterns)` for patterns that match a choice variant.
+/// Returns `(variant_name, sub_patterns)` for dot-prefix variant patterns.
 pub(super) fn variant_name_and_args<'p>(pat: &'p Pat, interner: &'p Interner) -> Option<(&'p str, &'p [Pat])> {
     match pat {
-        Pat::Ident { name, suffix: Some(PatSuffix::Positional { args, .. }), .. } => {
-            Some((interner.resolve(*name), args.as_slice()))
-        }
         Pat::DotPrefix { name, args, .. } => Some((interner.resolve(*name), args.as_slice())),
         _ => None,
     }
@@ -40,10 +37,18 @@ pub(super) fn emit_pattern_test(
 
         Pat::Ident { name, suffix: None, .. } => {
             let name_str = arenas.interner.resolve(*name);
-            state.variant_map.get(name_str).map_or(Ok(None), |vinfo| {
-                let fixup = emit_discriminant_test(vinfo.discriminant, scrutinee_slot, out);
-                Ok(Some(fixup))
-            })
+            if state.variant_map.contains_key(name_str) {
+                return Err(CodegenError::VariantPatternRequiresDot(name_str.into()));
+            }
+            Ok(None) // plain variable binding
+        }
+
+        Pat::Ident { name, suffix: Some(PatSuffix::Positional { .. }), .. } => {
+            let name_str = arenas.interner.resolve(*name);
+            if state.variant_map.contains_key(name_str) {
+                return Err(CodegenError::VariantPatternRequiresDot(name_str.into()));
+            }
+            Err(CodegenError::UnsupportedExpr)
         }
 
         Pat::Lit { value, .. } => {
@@ -80,11 +85,9 @@ pub(super) fn emit_pattern_bindings(
     match pat {
         Pat::Ident { name, suffix: None, .. } => {
             let name_str = arenas.interner.resolve(*name);
-            if !state.variant_map.contains_key(name_str) {
-                let slot = out.define_local(name_str)?;
-                out.push(&Opcode::LdLoc(scrutinee_slot));
-                out.push(&Opcode::StLoc(slot));
-            }
+            let slot = out.define_local(name_str)?;
+            out.push(&Opcode::LdLoc(scrutinee_slot));
+            out.push(&Opcode::StLoc(slot));
             Ok(())
         }
 
@@ -137,12 +140,16 @@ pub(super) fn track_type_of_binding(
                 }
             }
         }
+        Expr::DotPrefix { name, .. } => {
+            let name_str = arenas.interner.resolve(*name);
+            if let Some(vinfo) = state.variant_map.get(name_str) {
+                let _prev = out.local_types.insert(slot, vinfo.type_name.clone());
+            }
+        }
         Expr::Postfix { base, op: PostfixOp::Call { .. }, .. } => {
             if let Expr::Ident { name, .. } = arenas.exprs.get(*base) {
                 let callee_name = arenas.interner.resolve(*name);
-                if let Some(vinfo) = state.variant_map.get(callee_name) {
-                    let _prev = out.local_types.insert(slot, vinfo.type_name.clone());
-                } else if let Some(ret_type) = state.fn_return_types.get(callee_name).cloned() {
+                if let Some(ret_type) = state.fn_return_types.get(callee_name).cloned() {
                     if state.type_map.contains_key(&ret_type) {
                         let _prev = out.local_types.insert(slot, ret_type);
                     }
@@ -156,12 +163,6 @@ pub(super) fn track_type_of_binding(
                         }
                     }
                 }
-            }
-        }
-        Expr::Ident { name, .. } => {
-            let name_str = arenas.interner.resolve(*name);
-            if let Some(vinfo) = state.variant_map.get(name_str) {
-                let _prev = out.local_types.insert(slot, vinfo.type_name.clone());
             }
         }
         _ => {}

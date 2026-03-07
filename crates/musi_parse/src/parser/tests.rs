@@ -453,7 +453,7 @@ fn parse_var_in_case_pattern() {
 // 31. match arm guard
 #[test]
 fn parse_match_arm_guard() {
-    let module = parse_ok("match x with (Some(v) if v > 0 => v | _ => 0);");
+    let module = parse_ok("match x with (.Some(v) if v > 0 => v | _ => 0);");
     assert_eq!(module.items.len(), 1);
     let expr = module.ctx.exprs.get(module.ctx.expr_lists.get_slice(module.items)[0]);
     let Expr::Match { arms, .. } = expr else {

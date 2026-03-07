@@ -61,14 +61,8 @@ pub(super) fn emit_expr(
 
         Expr::Ident { name, .. } => {
             let name_str = arenas.interner.resolve(*name);
-            if let Some(vinfo) = state.variant_map.get(name_str).cloned() {
-                let disc = vinfo.discriminant;
-                let total = vinfo.total_field_count;
-                let type_tag = state.type_tag_map.get(&vinfo.type_name).copied().unwrap_or(0);
-                out.push(&Opcode::LdImmI64(disc));
-                for _ in 0..total.saturating_sub(1) { out.push(&Opcode::LdImmUnit); }
-                out.push(&Opcode::NewObj { type_tag, field_count: total });
-                return Ok(());
+            if state.variant_map.contains_key(name_str) {
+                return Err(CodegenError::VariantConstructRequiresDot(name_str.into()));
             }
             let slot = out.lookup_local(name_str)
                 .ok_or_else(|| CodegenError::UndefinedVariable(name_str.into()))?;
