@@ -12,7 +12,7 @@ use musi_parse::{ParsedModule, parse};
 use musi_shared::{DiagnosticBag, FileId, Interner, SourceDb};
 
 pub(crate) const PRELUDE_SRC: &str = include_str!("../../../std/prelude.ms");
-const PRELUDE_FILENAME: &str = "<prelude>";
+pub(crate) const PRELUDE_FILENAME: &str = "<prelude>";
 
 pub(crate) fn read_file(file_path: &str) -> String {
     match fs::read_to_string(file_path) {
@@ -181,7 +181,13 @@ pub(crate) fn compile_file(file_path: &str) -> Module {
 
     let dep_paths: Vec<&str> = deps.iter().map(|(p, _, _)| p.as_str()).collect();
     let dep_modules: Vec<&ParsedModule> = deps.iter().map(|(_, m, _)| m).collect();
-    match emit(&prelude_module, &dep_modules, &dep_paths, &user_module, &interner) {
+    match emit(
+        &prelude_module,
+        &dep_modules,
+        &dep_paths,
+        &user_module,
+        &interner,
+    ) {
         Ok(m) => m,
         Err(e) => {
             eprintln!("codegen error: {e}");

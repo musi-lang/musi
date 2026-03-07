@@ -148,16 +148,18 @@ impl<'a> Resolver<'a> {
                     });
                     let prev = self.scopes.define(root_scope, *alias, def_id);
                     let _ = prev;
-                    let _prev = self.namespace_exports
+                    let _prev = self
+                        .namespace_exports
                         .insert(*alias, module_exports.names.clone());
                 }
 
                 ImportClause::Items(import_items) => {
                     for import_item in import_items {
                         let name_str = interner.resolve(import_item.name);
-                        let _exported_name = import_item
-                            .alias
-                            .map_or_else(|| name_str.to_owned(), |a| interner.resolve(a).to_owned());
+                        let _exported_name = import_item.alias.map_or_else(
+                            || name_str.to_owned(),
+                            |a| interner.resolve(a).to_owned(),
+                        );
                         let Some(ty) = module_exports.names.get(name_str) else {
                             continue;
                         };
@@ -458,7 +460,10 @@ impl<'a> Resolver<'a> {
                             self.resolve_field_init(field, ctx, scope);
                         }
                     }
-                    PostfixOp::Field { name: field_sym, span: field_span } => {
+                    PostfixOp::Field {
+                        name: field_sym,
+                        span: field_span,
+                    } => {
                         // Validate field access on namespace aliases.
                         if let Expr::Ident { name: base_sym, .. } = ctx.exprs.get(*base) {
                             if let Some(def_id) = self.expr_defs.get(base) {
@@ -656,6 +661,18 @@ pub fn resolve<S: BuildHasher>(
 ) -> ResolveResult {
     let mut resolver = Resolver::new(interner, diags, file_id);
     let root = resolver.scopes.push_root();
+
+    // Auto-inject prelude exports — they are available without an explicit import.
+    if let Some(prelude) = imports.get("<prelude>") {
+        for (name_str, ty) in &prelude.names {
+            if let Some(sym) = interner.get(name_str) {
+                let def_id = resolver.alloc_def(sym, DefKind::Fn, Span::default());
+                resolver.defs.last_mut().unwrap().ty = Some(ty.clone());
+                let prev = resolver.scopes.define(root, sym, def_id);
+                let _ = prev;
+            }
+        }
+    }
 
     resolver.collect_top_level(module, root);
     resolver.collect_imports(module, root, imports, interner);

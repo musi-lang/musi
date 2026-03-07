@@ -45,6 +45,12 @@ impl Interner {
         Symbol(sym.id())
     }
 
+    /// Returns the [`Symbol`] for `s` if already interned, without mutating.
+    #[must_use]
+    pub fn get(&self, s: &str) -> Option<Symbol> {
+        self.0.check_interned(s).map(|sym| Symbol(sym.id()))
+    }
+
     /// Resolves a [`Symbol`] back to its string.
     ///
     /// # Panics

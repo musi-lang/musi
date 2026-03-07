@@ -361,10 +361,10 @@ fn choice_match_compiles_and_runs() {
     let _result = run_src(
         r#"
 choice Option { Some(Int) | None };
-const x := Some(42);
+const x := .Some(42);
 match x with (
-    Some(v) => v
-  | None    => 0
+    .Some(v) => v
+  | .None    => 0
 );
 "#,
     );
@@ -628,17 +628,17 @@ fn match_arm_guard_filters_correctly() {
     let _r = run_src(
         r#"
 choice Num { Small(Int) | Large(Int) };
-const x := Small(3);
-const y := Large(10);
+const x := .Small(3);
+const y := .Large(10);
 const r1 := match x with (
-    Small(v) if v > 5 => 1
-  | Small(v) => 2
-  | Large(_) => 3
+    .Small(v) if v > 5 => 1
+  | .Small(v) => 2
+  | .Large(_) => 3
 );
 const r2 := match y with (
-    Small(v) if v > 5 => 1
-  | Small(v) => 2
-  | Large(_) => 3
+    .Small(v) if v > 5 => 1
+  | .Small(v) => 2
+  | .Large(_) => 3
 );
 writeln(int_to_string(r1));
 writeln(int_to_string(r2));
