@@ -207,7 +207,7 @@ fn load_library(name: Option<&str>) -> Result<libloading::Library, VmError> {
                 // SAFETY: libc.so.6 is always available on Linux; also try libm
                 unsafe { libloading::Library::new("libm.so.6") }
                     .or_else(|_| unsafe { libloading::Library::new("libm.so") })
-                    .map_err(|e| VmError::FfiFailed(format!("default namespace: {}", e).into()))
+                    .map_err(|e| VmError::FfiFailed(format!("default namespace: {e}").into()))
             }
             #[cfg(not(any(target_os = "macos", target_os = "linux")))]
             {
