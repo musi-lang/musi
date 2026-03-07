@@ -33,6 +33,10 @@ fn embedded_std(path: &str) -> Option<&'static str> {
         "std/collections/map" => Some(include_str!("../../../std/collections/map.ms")),
         "std/collections/set" => Some(include_str!("../../../std/collections/set.ms")),
         "std/encoding/csv" => Some(include_str!("../../../std/encoding/csv.ms")),
+        "std/encoding/json" => Some(include_str!("../../../std/encoding/json.ms")),
+        "std/io" => Some(include_str!("../../../std/io.ms")),
+        "std/path" => Some(include_str!("../../../std/path.ms")),
+        "std/collections/queue" => Some(include_str!("../../../std/collections/queue.ms")),
         _ => None,
     }
 }
