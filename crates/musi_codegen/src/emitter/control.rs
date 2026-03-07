@@ -71,6 +71,14 @@ pub(super) fn emit_cond(
 }
 
 #[derive(Clone, Copy)]
+pub(super) struct ForData<'a> {
+    pub(super) pat: &'a Pat,
+    pub(super) iter: Idx<Expr>,
+    pub(super) guard: Option<Idx<Expr>>,
+    pub(super) body: Idx<Expr>,
+}
+
+#[derive(Clone, Copy)]
 pub(super) struct IfData<'a> {
     pub(super) cond: &'a Cond,
     pub(super) then_body: Idx<Expr>,
@@ -120,12 +128,23 @@ pub(super) fn emit_while(
     arenas: &EmitArenas<'_>,
     state: &mut EmitState,
     cond: &Cond,
+    guard: Option<Idx<Expr>>,
     body: Idx<Expr>,
     module: &mut Module,
     out: &mut FnEmitter,
 ) -> Result<(), CodegenError> {
     let start_pos = out.start_loop();
     let end_fixup = emit_branch_cond(arenas, state, cond, module, out)?;
+
+    // Guard: if false, skip body but still loop back (after popping Case scope if needed)
+    let guard_fixup = if let Some(guard_idx) = guard {
+        let guard_expr = arenas.exprs.get(guard_idx).clone();
+        emit_expr(arenas, state, &guard_expr, module, out)?;
+        Some(out.emit_jump_placeholder(FnEmitter::BR_FALSE))
+    } else {
+        None
+    };
+
     let body_expr = arenas.exprs.get(body).clone();
     emit_expr(arenas, state, &body_expr, module, out)?;
     if matches!(cond, Cond::Case { .. }) {
@@ -133,6 +152,16 @@ pub(super) fn emit_while(
     }
     out.push(&Opcode::Drop);
     out.emit_br_back(start_pos)?;
+
+    // Guard-false path: pop Case scope (if any) then loop back to re-evaluate condition
+    if let Some(gf) = guard_fixup {
+        out.patch_jump_to_here(gf)?;
+        if matches!(cond, Cond::Case { .. }) {
+            out.pop_scope();
+        }
+        out.emit_br_back(start_pos)?;
+    }
+
     out.patch_jump_to_here(end_fixup)?;
     out.close_loop()
 }
@@ -152,44 +181,23 @@ pub(super) fn emit_loop(
     out.close_loop()
 }
 
-fn emit_for_loop_tail(
-    out: &mut FnEmitter,
-    counter_slot: u16,
-    start_pos: usize,
-    end_fixup: usize,
-) -> Result<(), CodegenError> {
-    out.push(&Opcode::Drop);
-    out.push(&Opcode::LdLoc(counter_slot));
-    out.push(&Opcode::LdImmI64(1));
-    out.push(&Opcode::AddI64);
-    out.push(&Opcode::StLoc(counter_slot));
-    out.emit_br_back(start_pos)?;
-    out.patch_jump_to_here(end_fixup)?;
-    out.close_loop()?;
-    out.pop_scope();
-    Ok(())
-}
-
 pub(super) fn emit_for(
     arenas: &EmitArenas<'_>,
     state: &mut EmitState,
-    pat: &Pat,
-    iter: Idx<Expr>,
-    body: Idx<Expr>,
+    data: ForData<'_>,
     module: &mut Module,
     out: &mut FnEmitter,
 ) -> Result<(), CodegenError> {
-    let Pat::Ident {
-        name: pat_name,
-        suffix: None,
-        ..
-    } = pat
-    else {
-        return Err(CodegenError::UnsupportedExpr);
-    };
-
+    let ForData {
+        pat,
+        iter,
+        guard,
+        body,
+    } = data;
+    let is_ident = matches!(pat, Pat::Ident { suffix: None, .. });
     let iter_expr = arenas.exprs.get(iter).clone();
 
+    // -- Range path (BinOp::Range / BinOp::RangeExcl) --
     if let Expr::Binary { op, lhs, rhs, .. } = &iter_expr
         && matches!(op, BinOp::Range | BinOp::RangeExcl)
     {
@@ -200,7 +208,14 @@ pub(super) fn emit_for(
         };
 
         out.push_scope();
-        let counter_slot = out.define_local(arenas.interner.resolve(*pat_name))?;
+        let counter_slot = if is_ident {
+            let Pat::Ident { name, .. } = pat else {
+                return Err(CodegenError::UnsupportedExpr);
+            };
+            out.define_local(arenas.interner.resolve(*name))?
+        } else {
+            out.define_local("$range_i")?
+        };
         let limit_slot = out.define_local("$limit")?;
 
         let lhs_expr = arenas.exprs.get(*lhs).clone();
@@ -216,18 +231,46 @@ pub(super) fn emit_for(
         out.push(&cmp_op);
         let end_fixup = out.emit_jump_placeholder(FnEmitter::BR_FALSE);
 
+        // Guard only supported for Ident patterns on range (non-Ident + guard = UnsupportedExpr)
+        if !is_ident && guard.is_some() {
+            return Err(CodegenError::UnsupportedExpr);
+        }
+
+        let guard_fixup = if let Some(guard_idx) = guard {
+            let guard_expr = arenas.exprs.get(guard_idx).clone();
+            emit_expr(arenas, state, &guard_expr, module, out)?;
+            Some(out.emit_jump_placeholder(FnEmitter::BR_FALSE))
+        } else {
+            None
+        };
+
         let body_expr = arenas.exprs.get(body).clone();
         emit_expr(arenas, state, &body_expr, module, out)?;
-        return emit_for_loop_tail(out, counter_slot, start_pos, end_fixup);
+        out.push(&Opcode::Drop);
+
+        // Guard-false lands after Drop (at counter increment)
+        if let Some(gf) = guard_fixup {
+            out.patch_jump_to_here(gf)?;
+        }
+
+        out.push(&Opcode::LdLoc(counter_slot));
+        out.push(&Opcode::LdImmI64(1));
+        out.push(&Opcode::AddI64);
+        out.push(&Opcode::StLoc(counter_slot));
+        out.emit_br_back(start_pos)?;
+        out.patch_jump_to_here(end_fixup)?;
+        out.close_loop()?;
+        out.pop_scope();
+        return Ok(());
     }
 
+    // -- General array path --
     let iter_len_idx = module.add_string_const("iter_len")?;
     let iter_get_idx = module.add_string_const("iter_get")?;
     out.push_scope();
     let arr_slot = out.define_local("$arr")?;
     let len_slot = out.define_local("$len")?;
     let i_slot = out.define_local("$i")?;
-    let elem_slot = out.define_local(arenas.interner.resolve(*pat_name))?;
 
     emit_expr(arenas, state, &iter_expr, module, out)?;
     out.push(&Opcode::StLoc(arr_slot));
@@ -246,17 +289,65 @@ pub(super) fn emit_for(
     out.push(&Opcode::LtI64);
     let end_fixup = out.emit_jump_placeholder(FnEmitter::BR_FALSE);
 
+    // Fetch element
     out.push(&Opcode::LdLoc(arr_slot));
     out.push(&Opcode::LdLoc(i_slot));
     out.push(&Opcode::CallMethod {
         method_idx: iter_get_idx,
         arg_count: 2,
     });
-    out.push(&Opcode::StLoc(elem_slot));
+
+    // Bind element slot (Ident fast-path uses pat name; else spill to $for_elem)
+    let elem_slot = if is_ident {
+        let Pat::Ident { name, .. } = pat else {
+            return Err(CodegenError::UnsupportedExpr);
+        };
+        let slot = out.define_local(arenas.interner.resolve(*name))?;
+        out.push(&Opcode::StLoc(slot));
+        slot
+    } else {
+        let slot = out.define_local("$for_elem")?;
+        out.push(&Opcode::StLoc(slot));
+        slot
+    };
+
+    // Guard: if false, skip body and jump straight to counter increment
+    let guard_fixup = if let Some(guard_idx) = guard {
+        let guard_expr = arenas.exprs.get(guard_idx).clone();
+        emit_expr(arenas, state, &guard_expr, module, out)?;
+        Some(out.emit_jump_placeholder(FnEmitter::BR_FALSE))
+    } else {
+        None
+    };
+
+    // For non-Ident patterns, bind into an inner scope
+    if !is_ident {
+        out.push_scope();
+        emit_pattern_bindings(arenas, pat, elem_slot, out)?;
+    }
 
     let body_expr = arenas.exprs.get(body).clone();
     emit_expr(arenas, state, &body_expr, module, out)?;
-    emit_for_loop_tail(out, i_slot, start_pos, end_fixup)
+
+    if !is_ident {
+        out.pop_scope();
+    }
+    out.push(&Opcode::Drop);
+
+    // Guard-false lands here (after Drop, before counter increment)
+    if let Some(gf) = guard_fixup {
+        out.patch_jump_to_here(gf)?;
+    }
+
+    out.push(&Opcode::LdLoc(i_slot));
+    out.push(&Opcode::LdImmI64(1));
+    out.push(&Opcode::AddI64);
+    out.push(&Opcode::StLoc(i_slot));
+    out.emit_br_back(start_pos)?;
+    out.patch_jump_to_here(end_fixup)?;
+    out.close_loop()?;
+    out.pop_scope();
+    Ok(())
 }
 
 pub(super) fn emit_short_circuit(

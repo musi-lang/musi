@@ -7,7 +7,7 @@ use crate::error::CodegenError;
 use crate::{Module, Opcode};
 
 use super::call::{emit_static_call, emit_variant_construct};
-use super::control::{IfData, emit_binary, emit_for, emit_if, emit_loop, emit_while};
+use super::control::{ForData, IfData, emit_binary, emit_for, emit_if, emit_loop, emit_while};
 use super::field::emit_postfix;
 use super::pattern::emit_match;
 use super::state::{EmitArenas, EmitState, FnEmitter, param_list_with_types, register_fn_closure};
@@ -75,34 +75,48 @@ pub(super) fn emit_expr(
         }
 
         Expr::Bind { pat, init, .. } => {
-            let Pat::Ident { name, .. } = pat else {
-                return Err(CodegenError::UnsupportedExpr);
-            };
-            let name_str = arenas.interner.resolve(*name);
-            let slot = out.define_local(name_str)?;
-
-            if let Some(init_idx) = init {
-                let init_expr = arenas.exprs.get(*init_idx);
-                super::pattern::track_type_of_binding(init_expr, slot, arenas, state, out);
-                if let Expr::AnonRec { fields, .. } = init_expr {
-                    let field_names: Vec<String> = fields
-                        .iter()
-                        .filter_map(|fi| {
-                            if let FieldInit::Named { name, .. } = fi {
-                                Some(arenas.interner.resolve(*name).to_owned())
-                            } else {
-                                None
-                            }
-                        })
-                        .collect();
-                    let _prev = out.anon_layouts.insert(slot, field_names);
+            if let Pat::Ident {
+                name, suffix: None, ..
+            } = pat
+            {
+                // Fast path: simple name binding (existing behavior preserved)
+                let name_str = arenas.interner.resolve(*name);
+                let slot = out.define_local(name_str)?;
+                if let Some(init_idx) = init {
+                    let init_expr = arenas.exprs.get(*init_idx);
+                    super::pattern::track_type_of_binding(init_expr, slot, arenas, state, out);
+                    if let Expr::AnonRec { fields, .. } = init_expr {
+                        let field_names: Vec<String> = fields
+                            .iter()
+                            .filter_map(|fi| {
+                                if let FieldInit::Named { name, .. } = fi {
+                                    Some(arenas.interner.resolve(*name).to_owned())
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect();
+                        let _prev = out.anon_layouts.insert(slot, field_names);
+                    }
+                    let init_cloned = init_expr.clone();
+                    emit_expr(arenas, state, &init_cloned, module, out)?;
+                } else {
+                    out.push(&Opcode::LdImmUnit);
                 }
-                let init_cloned = init_expr.clone();
-                emit_expr(arenas, state, &init_cloned, module, out)?;
+                out.push(&Opcode::StLoc(slot));
             } else {
-                out.push(&Opcode::LdImmUnit);
+                // Destructuring: emit init, spill to temp, then pattern-bind
+                if let Some(init_idx) = init {
+                    let init_expr = arenas.exprs.get(*init_idx).clone();
+                    emit_expr(arenas, state, &init_expr, module, out)?;
+                } else {
+                    out.push(&Opcode::LdImmUnit);
+                }
+                let tmp_name = format!("$bind_{}", out.next_slot);
+                let tmp_slot = out.define_local(&tmp_name)?;
+                out.push(&Opcode::StLoc(tmp_slot));
+                super::pattern::emit_pattern_bindings(arenas, pat, tmp_slot, out)?;
             }
-            out.push(&Opcode::StLoc(slot));
             out.push(&Opcode::LdImmUnit);
             Ok(())
         }
@@ -209,12 +223,15 @@ pub(super) fn emit_expr(
 
         Expr::While {
             cond, guard, body, ..
-        } => {
-            if guard.is_some() {
-                return Err(CodegenError::UnsupportedExpr);
-            }
-            emit_while(arenas, state, cond, *body, module, out)
-        }
+        } => emit_while(
+            arenas,
+            state,
+            cond,
+            guard.as_ref().copied(),
+            *body,
+            module,
+            out,
+        ),
 
         Expr::Loop {
             body, post_cond, ..
@@ -231,12 +248,18 @@ pub(super) fn emit_expr(
             guard,
             body,
             ..
-        } => {
-            if guard.is_some() {
-                return Err(CodegenError::UnsupportedExpr);
-            }
-            emit_for(arenas, state, pat, *iter, *body, module, out)
-        }
+        } => emit_for(
+            arenas,
+            state,
+            ForData {
+                pat,
+                iter: *iter,
+                guard: guard.as_ref().copied(),
+                body: *body,
+            },
+            module,
+            out,
+        ),
 
         Expr::Break { label, value, .. } => {
             if label.is_some() {
@@ -342,8 +365,21 @@ pub(super) fn emit_expr(
             Ok(())
         }
 
-        Expr::Tuple { .. }
-        | Expr::Label { .. }
+        Expr::Tuple { elements, .. } => {
+            let elems: Vec<Idx<Expr>> = arenas.expr_lists.get_slice(*elements).to_vec();
+            let count = u16::try_from(elems.len()).map_err(|_| CodegenError::UnsupportedExpr)?;
+            for e in elems {
+                let elem_expr = arenas.exprs.get(e).clone();
+                emit_expr(arenas, state, &elem_expr, module, out)?;
+            }
+            out.push(&Opcode::NewObj {
+                type_tag: 0,
+                field_count: count,
+            });
+            Ok(())
+        }
+
+        Expr::Label { .. }
         | Expr::Defer { .. }
         | Expr::Import { .. }
         | Expr::Export { .. }

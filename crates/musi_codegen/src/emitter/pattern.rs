@@ -36,7 +36,7 @@ pub(super) fn emit_pattern_test(
     out: &mut FnEmitter,
 ) -> Result<Option<usize>, CodegenError> {
     match pat {
-        Pat::Wild { .. } => Ok(None),
+        Pat::Wild { .. } | Pat::Prod { .. } => Ok(None),
 
         Pat::Ident {
             name, suffix: None, ..
@@ -105,6 +105,51 @@ pub(super) fn emit_pattern_bindings(
 
         Pat::Wild { .. } | Pat::Lit { .. } => Ok(()),
 
+        // Tuple destructure: (a, b, c) — fields index from 0 (no discriminant)
+        Pat::Prod { elements, .. } => {
+            for (i, sub_pat) in elements.iter().enumerate() {
+                let field_idx = u16::try_from(i).map_err(|_| CodegenError::UnsupportedExpr)?;
+                let temp_name = format!("$tup_{}_{}_{}", scrutinee_slot, i, out.next_slot);
+                let temp_slot = out.define_local(&temp_name)?;
+                out.push(&Opcode::LdLoc(scrutinee_slot));
+                out.push(&Opcode::LdFld(field_idx));
+                out.push(&Opcode::StLoc(temp_slot));
+                emit_pattern_bindings(arenas, sub_pat, temp_slot, out)?;
+            }
+            Ok(())
+        }
+
+        // Record destructure: { x, y } or { x: alias } — fields index from 0
+        Pat::AnonRec { fields, .. } => {
+            for (i, field) in fields.iter().enumerate() {
+                let field_idx = u16::try_from(i).map_err(|_| CodegenError::UnsupportedExpr)?;
+                if let Some(alias_pat) = &field.pat {
+                    if let Pat::Ident { name, .. } = alias_pat {
+                        let bind_name = arenas.interner.resolve(*name).to_owned();
+                        let slot = out.define_local(&bind_name)?;
+                        out.push(&Opcode::LdLoc(scrutinee_slot));
+                        out.push(&Opcode::LdFld(field_idx));
+                        out.push(&Opcode::StLoc(slot));
+                    } else {
+                        let temp_name = format!("$rec_{}_{}_{}", scrutinee_slot, i, out.next_slot);
+                        let temp_slot = out.define_local(&temp_name)?;
+                        out.push(&Opcode::LdLoc(scrutinee_slot));
+                        out.push(&Opcode::LdFld(field_idx));
+                        out.push(&Opcode::StLoc(temp_slot));
+                        emit_pattern_bindings(arenas, alias_pat, temp_slot, out)?;
+                    }
+                } else {
+                    let bind_name = arenas.interner.resolve(field.name).to_owned();
+                    let slot = out.define_local(&bind_name)?;
+                    out.push(&Opcode::LdLoc(scrutinee_slot));
+                    out.push(&Opcode::LdFld(field_idx));
+                    out.push(&Opcode::StLoc(slot));
+                }
+            }
+            Ok(())
+        }
+
+        // Choice variant patterns (.Some(v), .None) — fields index from 1 (field[0] = discriminant)
         pat => {
             if let Some((_, sub_pats)) = variant_name_and_args(pat, arenas.interner) {
                 for (field_i, sub_pat) in sub_pats.iter().enumerate() {

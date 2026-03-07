@@ -670,3 +670,91 @@ if case .Some(v) := x then
 "#,
     );
 }
+
+#[test]
+fn tuple_value_constructs() {
+    let _r = run_src(
+        r#"
+const t := (10, 20);
+writeln(int_to_string(10));
+"#,
+    );
+}
+
+#[test]
+fn tuple_in_match() {
+    let _r = run_src(
+        r#"
+const t := (3, 4);
+const result := match t with (
+    (a, b) => a + b
+);
+writeln(int_to_string(result));
+"#,
+    );
+}
+
+#[test]
+fn bind_tuple_destructure() {
+    let _r = run_src(
+        r#"
+const t := (10, 20);
+const (a, b) := t;
+writeln(int_to_string(a + b));
+"#,
+    );
+}
+
+#[test]
+fn bind_record_destructure() {
+    let _r = run_src(
+        r#"
+record Point { x: Int, y: Int };
+const p := Point.{ x := 3, y := 4 };
+const { x, y } := p;
+writeln(int_to_string(x + y));
+"#,
+    );
+}
+
+#[test]
+fn while_with_guard_skips() {
+    let _r = run_src(
+        r#"
+var i := 0;
+var sum := 0;
+while i < 10 if i % 2 = 0 loop (
+    sum <- sum + i;
+    i <- i + 1;
+);
+writeln(int_to_string(sum));
+"#,
+    );
+}
+
+#[test]
+fn for_with_guard() {
+    let _r = run_src(
+        r#"
+var evens := 0;
+for x in [1, 2, 3, 4, 5, 6] if x % 2 = 0 loop (
+    evens <- evens + x;
+);
+writeln(int_to_string(evens));
+"#,
+    );
+}
+
+#[test]
+fn for_tuple_destructure() {
+    let _r = run_src(
+        r#"
+const pairs := [(1, 2), (3, 4), (5, 6)];
+var s := 0;
+for (a, b) in pairs loop (
+    s <- s + a + b;
+);
+writeln(int_to_string(s));
+"#,
+    );
+}
