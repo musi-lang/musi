@@ -1,5 +1,0 @@
-{
-  "name": "type-classes",
-  "version": "0.1.0",
-  "description": "Type class dispatch via UFCS"
-}
