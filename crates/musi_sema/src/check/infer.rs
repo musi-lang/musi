@@ -211,9 +211,7 @@ impl<'a> TypeChecker<'a> {
         let init_ty = init.map(|e| self.infer(e, ctx));
         let binding_ty = match (ann, init_ty) {
             (Some(a), Some(i)) => {
-                let _u = self
-                    .unify_table
-                    .unify(a.clone(), i, span, self.diags, self.file_id);
+                let _u = self.unify(a.clone(), i, span);
                 a
             }
             (Some(a), None) => a,
@@ -376,9 +374,7 @@ impl<'a> TypeChecker<'a> {
             | BinOp::BitXor
             | BinOp::BitAnd
             | BinOp::Shl
-            | BinOp::Shr => self
-                .unify_table
-                .unify(lhs_ty, rhs_ty, span, self.diags, self.file_id),
+            | BinOp::Shr => self.unify(lhs_ty, rhs_ty, span),
 
             // Logical: both sides must be Bool, result is Bool.
             BinOp::And | BinOp::Or | BinOp::Xor => {
@@ -389,9 +385,7 @@ impl<'a> TypeChecker<'a> {
 
             // Comparison: both sides must agree, result is Bool.
             BinOp::Eq | BinOp::NotEq | BinOp::Lt | BinOp::Gt | BinOp::LtEq | BinOp::GtEq => {
-                let _u = self
-                    .unify_table
-                    .unify(lhs_ty, rhs_ty, span, self.diags, self.file_id);
+                let _u = self.unify(lhs_ty, rhs_ty, span);
                 Type::Prim(PrimTy::Bool)
             }
 
@@ -402,9 +396,7 @@ impl<'a> TypeChecker<'a> {
 
             // Range: both sides Int, result is an array/range.
             BinOp::Range | BinOp::RangeExcl => {
-                let _u = self
-                    .unify_table
-                    .unify(lhs_ty, rhs_ty, span, self.diags, self.file_id);
+                let _u = self.unify(lhs_ty, rhs_ty, span);
                 // For now, return a fresh var (range type not yet modelled).
                 Type::Var(self.unify_table.fresh())
             }
