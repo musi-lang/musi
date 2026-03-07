@@ -28,12 +28,70 @@ Musi is a programming language with a mathematically-motivated type system, func
 - **Editor integration** -- VS Code extension with syntax highlighting and snippets
 - **Sound implementation** -- index-based AST (no lifetimes), union-find type unification
 
-## Building
+## Quick start
+
+```bash
+# Build the toolchain
+cargo build --release
+export PATH="$PWD/target/release:$PATH"
+
+# Run a program
+musi run examples/hello.ms
+
+# Type-check
+musi check myfile.ms
+
+# Run inline tests
+musi test myfile.test.ms
+```
+
+A minimal Musi program:
+
+```musi
+// hello.ms
+writeln("Hello, world!");
+```
+
+A taste of the type system:
+
+```musi
+record Point { x: Float, y: Float }
+
+fn distance(a: Point, b: Point): Float => (
+    const dx := a.x - b.x;
+    const dy := a.y - b.y;
+    sqrt(dx * dx + dy * dy)
+);
+
+const origin := .{ x := 0.0, y := 0.0 };
+const p      := .{ x := 3.0, y := 4.0 };
+writeln(float_to_string(distance(origin, p)));  // 5.0
+```
+
+Pattern matching on a choice type:
+
+```musi
+choice Shape { Circle(Float) | Rect(Float, Float) }
+
+fn area(s: Shape): Float =>
+    match s with (
+        .Circle(r)    => 3.14159 * r * r
+      | .Rect(w, h)   => w * h
+    );
+```
+
+## Building from source
 
 ```bash
 cargo build --release
-cargo build --tests -p musi_parse -p musi_codegen -p musi_vm
 cargo clippy --workspace
+```
+
+Tests are run per-crate to avoid memory pressure:
+
+```bash
+cargo build --tests -p musi_lex -p musi_parse -p musi_codegen -p musi_vm
+./target/debug/deps/musi_parse-<hash>
 ```
 
 ## Contributing
