@@ -491,13 +491,47 @@ impl TypeChecker<'_> {
             PostfixOp::Field { name, .. } => {
                 let base_ty = self.infer(base, ctx);
                 let resolved = self.unify_table.resolve(base_ty);
-                if let Type::Named(def_id, _) = &resolved
-                    && let Some(fields) = self.record_fields.get(def_id)
-                    && let Some(field_ty) = fields.get(name)
-                {
-                    return field_ty.clone();
+                match &resolved {
+                    Type::Named(def_id, _) => {
+                        if let Some(fields) = self.record_fields.get(def_id) {
+                            if let Some(field_ty) = fields.get(name) {
+                                return field_ty.clone();
+                            }
+                            let field_name = self.interner.resolve(*name);
+                            let known: Vec<&str> = fields
+                                .keys()
+                                .map(|k| self.interner.resolve(*k))
+                                .collect();
+                            let ty_name = self.fmt_ty_err(&resolved);
+                            let _d = self.diags.error(
+                                format!(
+                                    "no field `{field_name}` on type `{ty_name}`; available fields: {}",
+                                    known.join(", ")
+                                ),
+                                span,
+                                self.file_id,
+                            );
+                            Type::Error
+                        } else {
+                            // Named type without known record fields — allow through.
+                            Type::Var(self.unify_table.fresh())
+                        }
+                    }
+                    Type::Var(_) | Type::Error => {
+                        // Unknown or error type — don't emit additional noise.
+                        Type::Var(self.unify_table.fresh())
+                    }
+                    _ => {
+                        let field_name = self.interner.resolve(*name);
+                        let ty_name = self.fmt_ty_err(&resolved);
+                        let _d = self.diags.error(
+                            format!("field access `.{field_name}` on non-record type `{ty_name}`"),
+                            span,
+                            self.file_id,
+                        );
+                        Type::Error
+                    }
                 }
-                Type::Var(self.unify_table.fresh())
             }
 
             PostfixOp::RecDot { fields, .. } => {

@@ -1,16 +1,20 @@
 //! Semantic token highlighting for Musi source files.
 //!
-//! Walks the token stream with a lightweight state machine to identify
-//! declarations without requiring full scope analysis. Semantic tokens
-//! override TextMate grammar highlighting, giving precise per-token control.
+//! When sema results are available, tokens are emitted from the resolver
+//! side-tables (`pat_defs` for declarations, `expr_defs` for references).
+//! When sema is unavailable (native-import file), the old lex-based state
+//! machine is used as a fallback.
 
-use musi_lex::{lex, TokenKind};
-use musi_shared::{DiagnosticBag, FileId, Interner, Span, SourceDb};
+use musi_lex::TokenKind;
+use musi_sema::{DefKind, Type};
+use musi_shared::{FileId, SourceDb, Span};
 use tower_lsp_server::ls_types::{
     SemanticToken, SemanticTokenModifier, SemanticTokenType, SemanticTokens,
-    SemanticTokensFullOptions, SemanticTokensLegend, SemanticTokensOptions,
-    SemanticTokensResult, SemanticTokensServerCapabilities,
+    SemanticTokensFullOptions, SemanticTokensLegend, SemanticTokensOptions, SemanticTokensResult,
+    SemanticTokensServerCapabilities,
 };
+
+use crate::analysis::{AnalyzedDoc, expr_span, find_name_token, offset_to_position};
 
 // -- Legend indices (must stay in sync with `legend()` below) ---------------
 
@@ -54,22 +58,6 @@ pub fn provider() -> SemanticTokensServerCapabilities {
     })
 }
 
-// -- State machine ----------------------------------------------------------
-
-#[derive(Clone, Copy)]
-enum ScanState {
-    Default,
-    AfterFn,           // next Ident = function declaration
-    AfterConst,        // next Ident = variable + readonly + declaration
-    AfterVar,          // next Ident = variable + mutable + declaration
-    AfterNamedTypeDef, // record | opaque | class: next Ident = type + declaration
-    AfterChoiceKw,     // choice: next Ident = type + declaration, then WaitBrace
-    WaitChoiceBrace,   // after choice name; looking for `{`
-    ExpectVariant(u32), // inside choice body at brace depth; next Ident = enumMember
-    SkipVariant(u32),  // variant name seen; skip payload until `|` or `}`
-    AfterGiven,        // next Ident = type reference (class being instantiated)
-}
-
 // -- Raw token (absolute position before delta encoding) --------------------
 
 struct RawToken {
@@ -82,27 +70,206 @@ struct RawToken {
 
 // -- Public API -------------------------------------------------------------
 
-/// Lex `source` and produce semantic tokens for VS Code.
-pub fn compute(source: &str) -> SemanticTokensResult {
-    let mut interner = Interner::new();
-    let mut source_db = SourceDb::new();
-    let mut diags = DiagnosticBag::new();
-    let file_id = source_db.add("<document>", source);
-    let lexed = lex(source, file_id, &mut interner, &mut diags);
-
+/// Compute semantic tokens for a document, using sema results when available.
+pub fn compute(doc: &AnalyzedDoc) -> SemanticTokensResult {
     let mut raw: Vec<RawToken> = Vec::new();
+
+    if let Some(sema) = &doc.sema {
+        // -- Sema-based emission --
+
+        // 1. Declarations from pat_defs.
+        //
+        //    `pat_defs` spans can be multi-token (e.g. `a: Shape` for params,
+        //    `Circle(Float)` for variants). We search the token stream for the
+        //    actual Ident token whose symbol matches the definition name so that
+        //    we only colour the name, not the surrounding type annotations.
+        for (span, &def_id) in &sema.pat_defs {
+            let Some(def) = sema.defs.get(def_id.0 as usize) else { continue };
+            let name_span =
+                find_name_token(&doc.lexed.tokens, span.start, def.name)
+                    .unwrap_or(Span {
+                        start: span.start,
+                        length: doc.interner.resolve(def.name).len() as u32,
+                    });
+            let (tt, tm) = classify_def(def.kind, &def.ty, sema, true);
+            if let Some(tt) = tt {
+                push_raw(&mut raw, name_span, tt, tm, doc.file_id, &doc.source_db);
+            }
+        }
+
+        // 2. Named fn/type declarations — not stored in pat_defs so emitted via
+        //    a lightweight lex scan.  The lex scanner gives single-token spans.
+        {
+            #[derive(Clone, Copy)]
+            enum DeclState {
+                Default,
+                AfterFn,   // next Ident (skipping '['/']') = function name
+                AfterType, // record | opaque | class | choice: next Ident = type name
+            }
+            let mut state = DeclState::Default;
+            for tok in &doc.lexed.tokens {
+                let kind = tok.kind;
+                state = match state {
+                    DeclState::Default => match kind {
+                        TokenKind::Fn => DeclState::AfterFn,
+                        TokenKind::Record
+                        | TokenKind::Opaque
+                        | TokenKind::Class
+                        | TokenKind::Choice => DeclState::AfterType,
+                        _ => DeclState::Default,
+                    },
+                    DeclState::AfterFn => match kind {
+                        TokenKind::Ident => {
+                            push_raw(
+                                &mut raw,
+                                tok.span,
+                                TT_FUNCTION,
+                                TM_DECLARATION,
+                                doc.file_id,
+                                &doc.source_db,
+                            );
+                            DeclState::Default
+                        }
+                        TokenKind::LBracket | TokenKind::RBracket => DeclState::AfterFn,
+                        _ => DeclState::Default,
+                    },
+                    DeclState::AfterType => match kind {
+                        TokenKind::Ident => {
+                            push_raw(
+                                &mut raw,
+                                tok.span,
+                                TT_TYPE,
+                                TM_DECLARATION,
+                                doc.file_id,
+                                &doc.source_db,
+                            );
+                            DeclState::Default
+                        }
+                        _ => DeclState::Default,
+                    },
+                };
+            }
+        }
+
+        // 3. References: walk expr_defs (Idx<Expr> → DefId).
+        for (&idx, &def_id) in &sema.expr_defs {
+            let Some(def) = sema.defs.get(def_id.0 as usize) else { continue };
+            let span = expr_span(idx, &doc.module);
+            if span.length == 0 {
+                continue;
+            }
+            let (tt, tm) = classify_def(def.kind, &def.ty, sema, false);
+            if let Some(tt) = tt {
+                push_raw(&mut raw, span, tt, tm, doc.file_id, &doc.source_db);
+            }
+        }
+
+        // 4. Type parameters: lex-based scan for TyIdent tokens.
+        for tok in &doc.lexed.tokens {
+            if tok.kind == TokenKind::TyIdent {
+                push_raw(&mut raw, tok.span, TT_TYPE_PARAM, 0, doc.file_id, &doc.source_db);
+            }
+        }
+
+        // 5. Dot-prefix constructors: `.Name` patterns not preceded by a closer.
+        let mut prev_kind: Option<TokenKind> = None;
+        let mut after_dot = false;
+        for tok in &doc.lexed.tokens {
+            let kind = tok.kind;
+            if after_dot && kind == TokenKind::Ident {
+                push_raw(&mut raw, tok.span, TT_ENUM_MEMBER, 0, doc.file_id, &doc.source_db);
+                after_dot = false;
+            } else if kind == TokenKind::Dot {
+                let is_field_access = matches!(
+                    prev_kind,
+                    Some(TokenKind::Ident | TokenKind::RParen | TokenKind::RBracket)
+                );
+                after_dot = !is_field_access;
+            } else {
+                after_dot = false;
+            }
+            prev_kind = Some(kind);
+        }
+
+        // 6. Sort by (line, col) and dedup before delta-encoding.
+        raw.sort_unstable_by_key(|t| (t.line, t.start_char));
+        raw.dedup_by_key(|t| (t.line, t.start_char));
+    } else {
+        // Fallback: lex-based state machine (no sema available).
+        lex_fallback(doc, &mut raw);
+    }
+
+    SemanticTokensResult::Tokens(SemanticTokens {
+        result_id: None,
+        data: to_delta(raw),
+    })
+}
+
+// -- Classification ---------------------------------------------------------
+
+fn classify_def(
+    kind: DefKind,
+    ty: &Option<Type>,
+    sema: &musi_sema::SemaResult,
+    is_decl: bool,
+) -> (Option<u32>, u32) {
+    let decl = if is_decl { TM_DECLARATION } else { 0 };
+    match kind {
+        DefKind::Fn => (Some(TT_FUNCTION), decl),
+        DefKind::Const => {
+            let is_fn = ty
+                .as_ref()
+                .map(|t| matches!(sema.unify_table.resolve(t.clone()), Type::Arrow(..)))
+                .unwrap_or(false);
+            if is_fn {
+                (Some(TT_FUNCTION), decl)
+            } else {
+                (Some(TT_VARIABLE), decl | TM_READONLY)
+            }
+        }
+        DefKind::Var => (Some(TT_VARIABLE), decl | TM_MUTABLE),
+        DefKind::Param => {
+            // Highlight function-typed params (e.g. `f: A -> B`) as functions.
+            let is_fn = ty
+                .as_ref()
+                .map(|t: &Type| matches!(sema.unify_table.resolve(t.clone()), Type::Arrow(..)))
+                .unwrap_or(false);
+            if is_fn {
+                (Some(TT_FUNCTION), decl | TM_READONLY)
+            } else {
+                (Some(TT_VARIABLE), decl | TM_READONLY)
+            }
+        }
+        DefKind::Type => (Some(TT_TYPE), decl),
+        DefKind::Variant => (Some(TT_ENUM_MEMBER), decl),
+        DefKind::Namespace => (None, 0),
+    }
+}
+
+// -- Lex-based fallback -----------------------------------------------------
+
+#[derive(Clone, Copy)]
+enum ScanState {
+    Default,
+    AfterFn,
+    AfterConst,
+    AfterVar,
+    AfterNamedTypeDef,
+    AfterChoiceKw,
+    WaitChoiceBrace,
+    ExpectVariant(u32),
+    SkipVariant(u32),
+    AfterGiven,
+}
+
+fn lex_fallback(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
     let mut state = ScanState::Default;
 
-    for tok in &lexed.tokens {
+    for tok in &doc.lexed.tokens {
         let kind = tok.kind;
 
-        // Type identifiers (e.g. `'T`) are always typeParameter tokens,
-        // regardless of surrounding context — they can never be confused with
-        // enum members or variables at the TextMate level.
         if kind == TokenKind::TyIdent {
-            push_raw(&mut raw, tok.span, TT_TYPE_PARAM, 0, file_id, &source_db);
-            // Don't reset state — a `'T` in `fn['T] name` shouldn't prevent
-            // `name` from being classified as a function declaration.
+            push_raw(raw, tok.span, TT_TYPE_PARAM, 0, doc.file_id, &doc.source_db);
             continue;
         }
 
@@ -121,31 +288,16 @@ pub fn compute(source: &str) -> SemanticTokensResult {
 
             ScanState::AfterFn => match kind {
                 TokenKind::Ident => {
-                    push_raw(
-                        &mut raw,
-                        tok.span,
-                        TT_FUNCTION,
-                        TM_DECLARATION,
-                        file_id,
-                        &source_db,
-                    );
+                    push_raw(raw, tok.span, TT_FUNCTION, TM_DECLARATION, doc.file_id, &doc.source_db);
                     ScanState::Default
                 }
-                // Skip `[` / `]` wrapping type parameters before the function name.
                 TokenKind::LBracket | TokenKind::RBracket => ScanState::AfterFn,
                 _ => ScanState::Default,
             },
 
             ScanState::AfterConst => match kind {
                 TokenKind::Ident => {
-                    push_raw(
-                        &mut raw,
-                        tok.span,
-                        TT_VARIABLE,
-                        TM_DECLARATION | TM_READONLY,
-                        file_id,
-                        &source_db,
-                    );
+                    push_raw(raw, tok.span, TT_VARIABLE, TM_DECLARATION | TM_READONLY, doc.file_id, &doc.source_db);
                     ScanState::Default
                 }
                 _ => ScanState::Default,
@@ -153,14 +305,7 @@ pub fn compute(source: &str) -> SemanticTokensResult {
 
             ScanState::AfterVar => match kind {
                 TokenKind::Ident => {
-                    push_raw(
-                        &mut raw,
-                        tok.span,
-                        TT_VARIABLE,
-                        TM_DECLARATION | TM_MUTABLE,
-                        file_id,
-                        &source_db,
-                    );
+                    push_raw(raw, tok.span, TT_VARIABLE, TM_DECLARATION | TM_MUTABLE, doc.file_id, &doc.source_db);
                     ScanState::Default
                 }
                 _ => ScanState::Default,
@@ -168,14 +313,7 @@ pub fn compute(source: &str) -> SemanticTokensResult {
 
             ScanState::AfterNamedTypeDef => match kind {
                 TokenKind::Ident => {
-                    push_raw(
-                        &mut raw,
-                        tok.span,
-                        TT_TYPE,
-                        TM_DECLARATION,
-                        file_id,
-                        &source_db,
-                    );
+                    push_raw(raw, tok.span, TT_TYPE, TM_DECLARATION, doc.file_id, &doc.source_db);
                     ScanState::Default
                 }
                 _ => ScanState::Default,
@@ -183,17 +321,9 @@ pub fn compute(source: &str) -> SemanticTokensResult {
 
             ScanState::AfterChoiceKw => match kind {
                 TokenKind::Ident => {
-                    push_raw(
-                        &mut raw,
-                        tok.span,
-                        TT_TYPE,
-                        TM_DECLARATION,
-                        file_id,
-                        &source_db,
-                    );
+                    push_raw(raw, tok.span, TT_TYPE, TM_DECLARATION, doc.file_id, &doc.source_db);
                     ScanState::WaitChoiceBrace
                 }
-                // Anonymous inline choice: `choice { Foo | Bar }`
                 TokenKind::LBrace => ScanState::ExpectVariant(1),
                 _ => ScanState::Default,
             },
@@ -203,20 +333,9 @@ pub fn compute(source: &str) -> SemanticTokensResult {
                 _ => ScanState::WaitChoiceBrace,
             },
 
-            // Inside a choice body. Brace depth 1 = top level of the body.
-            // Only emit enumMember for Idents at depth 1 — deeper Idents are
-            // part of payload type expressions (e.g. record field names inside
-            // `{ field: Type }` variant payloads) and must not be misclassified.
             ScanState::ExpectVariant(depth) => match kind {
                 TokenKind::Ident if depth == 1 => {
-                    push_raw(
-                        &mut raw,
-                        tok.span,
-                        TT_ENUM_MEMBER,
-                        TM_DECLARATION,
-                        file_id,
-                        &source_db,
-                    );
+                    push_raw(raw, tok.span, TT_ENUM_MEMBER, TM_DECLARATION, doc.file_id, &doc.source_db);
                     ScanState::SkipVariant(1)
                 }
                 TokenKind::LBrace => ScanState::ExpectVariant(depth + 1),
@@ -225,8 +344,6 @@ pub fn compute(source: &str) -> SemanticTokensResult {
                 _ => ScanState::ExpectVariant(depth),
             },
 
-            // Skip variant payload tokens until the next `|` (new variant at
-            // depth 1) or `}` (end of choice body), tracking nested `{}`.
             ScanState::SkipVariant(depth) => match kind {
                 TokenKind::Pipe if depth == 1 => ScanState::ExpectVariant(1),
                 TokenKind::LBrace => ScanState::SkipVariant(depth + 1),
@@ -237,20 +354,13 @@ pub fn compute(source: &str) -> SemanticTokensResult {
 
             ScanState::AfterGiven => match kind {
                 TokenKind::Ident => {
-                    // The class name after `given` is a type reference, not a
-                    // new declaration — emit without TM_DECLARATION.
-                    push_raw(&mut raw, tok.span, TT_TYPE, 0, file_id, &source_db);
+                    push_raw(raw, tok.span, TT_TYPE, 0, doc.file_id, &doc.source_db);
                     ScanState::Default
                 }
                 _ => ScanState::Default,
             },
         };
     }
-
-    SemanticTokensResult::Tokens(SemanticTokens {
-        result_id: None,
-        data: to_delta(raw),
-    })
 }
 
 // -- Helpers ----------------------------------------------------------------
@@ -263,12 +373,10 @@ fn push_raw(
     file_id: FileId,
     source_db: &SourceDb,
 ) {
-    let src_len = u32::try_from(source_db.source(file_id).len()).unwrap_or(u32::MAX);
-    let clamped = span.start.min(src_len);
-    let (line1, col1) = source_db.lookup(file_id, clamped);
+    let pos = offset_to_position(file_id, span.start, source_db);
     out.push(RawToken {
-        line: line1 - 1,
-        start_char: col1 - 1,
+        line: pos.line,
+        start_char: pos.character,
         length: span.length,
         token_type,
         token_modifiers,
@@ -276,7 +384,6 @@ fn push_raw(
 }
 
 /// Convert absolute-position tokens to LSP delta-encoded format.
-/// Preserves lexer order (left-to-right), which guarantees monotone (line, col).
 fn to_delta(raw: Vec<RawToken>) -> Vec<SemanticToken> {
     let mut result = Vec::with_capacity(raw.len());
     let mut prev_line: u32 = 0;

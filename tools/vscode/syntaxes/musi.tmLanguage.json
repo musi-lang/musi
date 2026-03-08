@@ -171,7 +171,7 @@
                 {
                     "comment": "storage type keywords -- fn/record/choice have richer dedicated rules above",
                     "name": "storage.type.musi",
-                    "match": "\\b(fn|var|const|record|choice|class|given|law)\\b"
+                    "match": "\\b(fn|var|const|record|choice|class|given)\\b"
                 },
                 {
                     "name": "storage.modifier.musi",
@@ -340,7 +340,7 @@
                 },
                 {
                     "name": "keyword.operator.logical.musi",
-                    "match": "\\b(and|or|xor|not|in)\\b"
+                    "match": "\\b(and|or|xor|not)\\b"
                 },
                 {
                     "name": "keyword.operator.bitwise.musi",
@@ -351,9 +351,14 @@
                     "match": "[+\\-*/%]"
                 },
                 {
-                    "comment": "field access dot -- must not match .. range",
+                    "comment": "array index compound token: .[ as in arr.[0]",
+                    "name": "keyword.operator.index.musi",
+                    "match": "\\.\\["
+                },
+                {
+                    "comment": "field access dot -- must not match .. range or .[ index",
                     "name": "keyword.operator.access.musi",
-                    "match": "\\.(?!\\.)"
+                    "match": "\\.(?![.\\[])"
                 },
                 {
                     "comment": "pipe @, bang !, and bar | outside choice bodies",

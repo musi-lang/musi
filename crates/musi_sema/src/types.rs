@@ -133,24 +133,31 @@ impl fmt::Display for Type {
                 write!(f, ")")
             }
             Self::Array(elem, size) => {
+                // Musi syntax: []elem or [N]elem
                 if let Some(n) = size {
-                    write!(f, "[{elem}; {n}]")
+                    write!(f, "[{n}]{elem}")
                 } else {
-                    write!(f, "[{elem}]")
+                    write!(f, "[]{elem}")
                 }
             }
             Self::Arrow(params, ret) => {
-                write!(f, "fn(")?;
-                for (i, p) in params.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
+                if params.len() == 1 {
+                    write!(f, "{} -> {ret}", &params[0])
+                } else {
+                    write!(f, "(")?;
+                    for (i, p) in params.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        write!(f, "{p}")?;
                     }
-                    write!(f, "{p}")?;
+                    write!(f, ") -> {ret}")
                 }
-                write!(f, "): {ret}")
             }
             Self::Named(id, args) => {
-                write!(f, "Type({})", id.0)?;
+                // Without interner access we fall back to the DefId; callers that have
+                // interner context should use fmt_ty_err() instead.
+                write!(f, "?type{}", id.0)?;
                 if !args.is_empty() {
                     write!(f, "[")?;
                     for (i, a) in args.iter().enumerate() {

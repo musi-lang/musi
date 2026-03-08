@@ -104,9 +104,81 @@ impl TypeChecker<'_> {
         }
     }
 
-    /// Shorthand for `self.unify_table.unify(a, b, span, self.diags, self.file_id)`.
+    /// Format a type for use in error messages, resolving `Named` to the real name.
+    pub(super) fn fmt_ty_err(&self, ty: &Type) -> String {
+        match ty {
+            Type::Named(id, args) => {
+                let name = self
+                    .defs
+                    .get(id.0 as usize)
+                    .map(|d| self.interner.resolve(d.name))
+                    .unwrap_or("?");
+                if args.is_empty() {
+                    name.to_owned()
+                } else {
+                    let as_ = args
+                        .iter()
+                        .map(|a| self.fmt_ty_err(a))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    format!("{name}[{as_}]")
+                }
+            }
+            other => format!("{other}"),
+        }
+    }
+
+    /// Unify `a` and `b`, emitting diagnostics with proper type names on mismatch.
+    ///
+    /// Intercepts `Named`-type mismatches before delegating to `unify_table.unify`
+    /// so that error messages show real names instead of `Type(N)`.
     pub(super) fn unify(&mut self, a: Type, b: Type, span: Span) -> Type {
-        self.unify_table.unify(a, b, span, self.diags, self.file_id)
+        let ra = self.unify_table.resolve(a);
+        let rb = self.unify_table.resolve(b);
+
+        // For mismatches involving Named types, build a human-readable message.
+        // We do this before calling unify_table.unify so that we have interner access.
+        match (&ra, &rb) {
+            // Two different named types.
+            (Type::Named(d1, _), Type::Named(d2, _)) if d1 != d2 => {
+                let sa = self.fmt_ty_err(&ra);
+                let sb = self.fmt_ty_err(&rb);
+                let _d = self.diags.error(
+                    format!("type mismatch: expected `{sa}`, found `{sb}`"),
+                    span,
+                    self.file_id,
+                );
+                return Type::Error;
+            }
+            // Named vs. a concrete non-var/non-error type.
+            (Type::Named(..), rb_inner)
+                if !matches!(rb_inner, Type::Var(_) | Type::Error | Type::Named(..)) =>
+            {
+                let sa = self.fmt_ty_err(&ra);
+                let sb = self.fmt_ty_err(&rb);
+                let _d = self.diags.error(
+                    format!("type mismatch: expected `{sa}`, found `{sb}`"),
+                    span,
+                    self.file_id,
+                );
+                return Type::Error;
+            }
+            (ra_inner, Type::Named(..))
+                if !matches!(ra_inner, Type::Var(_) | Type::Error | Type::Named(..)) =>
+            {
+                let sa = self.fmt_ty_err(&ra);
+                let sb = self.fmt_ty_err(&rb);
+                let _d = self.diags.error(
+                    format!("type mismatch: expected `{sa}`, found `{sb}`"),
+                    span,
+                    self.file_id,
+                );
+                return Type::Error;
+            }
+            _ => {}
+        }
+
+        self.unify_table.unify(ra, rb, span, self.diags, self.file_id)
     }
 
     pub(super) fn find_def_by_name(&self, name: Symbol) -> Option<DefId> {

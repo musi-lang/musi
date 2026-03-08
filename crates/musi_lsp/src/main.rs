@@ -1,6 +1,13 @@
+mod analysis;
 mod backend;
-mod diagnostics;
+mod completion;
+mod document_symbols;
+mod goto_def;
+mod hover;
+mod inlay_hints;
+mod references;
 mod semantic_tokens;
+mod signature_help;
 
 use backend::MusiBackend;
 use tower_lsp_server::{LspService, Server};

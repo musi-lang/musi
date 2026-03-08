@@ -295,3 +295,130 @@ fn edit_distance_simple() {
     // No suggestion available for `foo_bar` with no defined names; just no crash.
     let _ = diags;
 }
+
+#[test]
+fn field_access_on_non_record_type() {
+    let (_result, diags) = analyze_src(r#"const x := 42.foo;"#);
+    assert!(diags.has_errors(), "expected a field-access error");
+    let msgs = error_messages(&diags);
+    assert!(
+        msgs.iter()
+            .any(|m| m.contains("non-record type") && m.contains("foo")),
+        "expected 'field access on non-record type' mentioning `foo`, got: {msgs:?}"
+    );
+}
+
+#[test]
+fn field_access_unknown_field_on_record() {
+    let (_result, diags) = analyze_src(
+        r#"
+record Point { x: Int, y: Int };
+const p := Point.{ x := 1, y := 2 };
+const z := p.xyz;
+"#,
+    );
+    assert!(diags.has_errors(), "expected an unknown-field error");
+    let msgs = error_messages(&diags);
+    assert!(
+        msgs.iter()
+            .any(|m| m.contains("no field") && m.contains("xyz") && m.contains("Point")),
+        "expected 'no field `xyz` on type `Point`', got: {msgs:?}"
+    );
+}
+
+#[test]
+fn field_access_valid_record_field() {
+    let (_result, diags) = analyze_src(
+        r#"
+record Point { x: Int, y: Int };
+const p := Point.{ x := 1, y := 2 };
+const a := p.x;
+"#,
+    );
+    assert!(
+        !diags.has_errors(),
+        "unexpected errors: {:?}",
+        error_messages(&diags)
+    );
+}
+
+#[test]
+fn field_access_on_string_literal() {
+    let (_result, diags) = analyze_src(r#"const z := "hello".bar;"#);
+    assert!(diags.has_errors(), "expected a field-access error");
+    let msgs = error_messages(&diags);
+    assert!(
+        msgs.iter().any(|m| m.contains("non-record type")),
+        "expected 'non-record type' error, got: {msgs:?}"
+    );
+}
+
+#[test]
+fn call_arity_mismatch() {
+    let (_result, diags) = analyze_src(
+        r#"
+fn add(a: Int, b: Int): Int => a + b;
+const r := add(1, 2, 3);
+"#,
+    );
+    assert!(diags.has_errors(), "expected an arity error");
+    let msgs = error_messages(&diags);
+    assert!(
+        msgs.iter()
+            .any(|m| m.contains("expects 2") && m.contains("found 3")),
+        "expected arity mismatch mentioning 2 vs 3, got: {msgs:?}"
+    );
+}
+
+#[test]
+fn call_too_few_arguments() {
+    let (_result, diags) = analyze_src(
+        r#"
+fn add(a: Int, b: Int): Int => a + b;
+const r := add(1);
+"#,
+    );
+    assert!(diags.has_errors(), "expected an arity error");
+    let msgs = error_messages(&diags);
+    assert!(
+        msgs.iter()
+            .any(|m| m.contains("expects 2") && m.contains("found 1")),
+        "expected arity mismatch mentioning 2 vs 1, got: {msgs:?}"
+    );
+}
+
+#[test]
+fn named_type_mismatch_in_error() {
+    let (_result, diags) = analyze_src(
+        r#"
+choice Color { Red | Blue };
+choice Shape { Circle | Square };
+const c: Color := Circle;
+"#,
+    );
+    assert!(diags.has_errors(), "expected a type mismatch error");
+    let msgs = error_messages(&diags);
+    assert!(
+        msgs.iter()
+            .any(|m| m.contains("Color") || m.contains("Shape")),
+        "expected type names in error message, got: {msgs:?}"
+    );
+}
+
+#[test]
+fn field_access_error_lists_available_fields() {
+    let (_result, diags) = analyze_src(
+        r#"
+record Vec2 { x: Float, y: Float };
+const v := Vec2.{ x := 1.0, y := 2.0 };
+const z := v.magnitude;
+"#,
+    );
+    assert!(diags.has_errors(), "expected an unknown-field error");
+    let msgs = error_messages(&diags);
+    // The error should mention available fields.
+    assert!(
+        msgs.iter().any(|m| m.contains("x") && m.contains("y")),
+        "expected available fields listed in error, got: {msgs:?}"
+    );
+}

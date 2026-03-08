@@ -75,6 +75,10 @@ impl UnifyTable {
     ///
     /// Call this before exporting a type from a module so that `TypeVarId`s
     /// do not escape into a different `UnifyTable` (which would cause an OOB panic).
+    ///
+    /// # Panics
+    ///
+    /// Panics if a `TypeVarId` is not valid for this table (i.e., if it is out of bounds).
     #[must_use]
     pub fn freeze_type(&self, ty: Type) -> Type {
         match ty {
@@ -156,116 +160,179 @@ impl UnifyTable {
         let b = self.resolve(b);
 
         match (a, b) {
-            // Both sides already resolved to the same type.
             (ref ra, ref rb) if ra == rb => ra.clone(),
-
-            // Error propagates without emitting cascading diagnostics.
             (Type::Error, _) | (_, Type::Error) => Type::Error,
-
-            // Bind a free variable (with occurs check).
-            (Type::Var(v), t) | (t, Type::Var(v)) => {
-                if self.occurs(v, &t) {
-                    let _d = diags.error(
-                        String::from("infinite type (occurs check failed)"),
-                        span,
-                        file_id,
-                    );
-                    Type::Error
-                } else {
-                    self.bind(v, t.clone());
-                    t
-                }
-            }
-
-            // Structural cases.
-            (Type::Prim(pa), Type::Prim(pb)) => {
-                let _d = diags.error(
-                    format!("type mismatch: expected `{pa}`, found `{pb}`"),
-                    span,
-                    file_id,
-                );
-                Type::Error
-            }
-
+            (Type::Var(v), t) | (t, Type::Var(v)) => self.unify_var(v, t, span, diags, file_id),
+            (Type::Prim(pa), Type::Prim(pb)) => Self::unify_prim(pa, pb, span, diags, file_id),
             (Type::Arrow(p1, r1), Type::Arrow(p2, r2)) => {
-                if p1.len() != p2.len() {
-                    let _d = diags.error(
-                        format!(
-                            "function arity mismatch: expected {} parameter(s), found {}",
-                            p1.len(),
-                            p2.len()
-                        ),
-                        span,
-                        file_id,
-                    );
-                    return Type::Error;
-                }
-                let params = self.unify_sequence(p1, p2, span, diags, file_id);
-                let ret = Box::new(self.unify(*r1, *r2, span, diags, file_id));
-                Type::Arrow(params, ret)
+                self.unify_arrow(p1, *r1, p2, *r2, span, diags, file_id)
             }
-
             (Type::Named(d1, a1), Type::Named(d2, a2)) => {
-                if d1 != d2 {
-                    let _d = diags.error(
-                        String::from("type mismatch: incompatible named types"),
-                        span,
-                        file_id,
-                    );
-                    return Type::Error;
-                }
-                if a1.len() != a2.len() {
-                    let _d =
-                        diags.error(String::from("type argument count mismatch"), span, file_id);
-                    return Type::Error;
-                }
-                let args = self.unify_sequence(a1, a2, span, diags, file_id);
-                Type::Named(d1, args)
+                self.unify_named(d1, a1, d2, a2, span, diags, file_id)
             }
-
             (Type::Array(elem1, size1), Type::Array(elem2, size2)) => {
-                if size1 != size2 {
-                    let _d = diags.error(
-                        format!(
-                            "array size mismatch: expected {}, found {}",
-                            size1.map_or_else(|| "unsized".to_owned(), |n| n.to_string()),
-                            size2.map_or_else(|| "unsized".to_owned(), |n| n.to_string()),
-                        ),
-                        span,
-                        file_id,
-                    );
-                    return Type::Error;
-                }
-                let elem = self.unify(*elem1, *elem2, span, diags, file_id);
-                Type::Array(Box::new(elem), size1)
+                self.unify_array(*elem1, size1, *elem2, size2, span, diags, file_id)
             }
-
-            (Type::Tuple(a), Type::Tuple(b)) => {
-                if a.len() != b.len() {
-                    let _d = diags.error(
-                        format!(
-                            "tuple length mismatch: expected {}, found {}",
-                            a.len(),
-                            b.len()
-                        ),
-                        span,
-                        file_id,
-                    );
-                    return Type::Error;
-                }
-                let elems = self.unify_sequence(a, b, span, diags, file_id);
-                Type::Tuple(elems)
-            }
-
-            (a, b) => {
-                let _d = diags.error(
-                    format!("type mismatch: expected `{a}`, found `{b}`"),
-                    span,
-                    file_id,
-                );
-                Type::Error
-            }
+            (Type::Tuple(a), Type::Tuple(b)) => self.unify_tuple(a, b, span, diags, file_id),
+            (a, b) => Self::unify_mismatch(&a, &b, span, diags, file_id),
         }
+    }
+
+    fn unify_var(
+        &mut self,
+        v: TypeVarId,
+        t: Type,
+        span: Span,
+        diags: &mut DiagnosticBag,
+        file_id: FileId,
+    ) -> Type {
+        if self.occurs(v, &t) {
+            let _d = diags.error(
+                String::from("infinite type (occurs check failed)"),
+                span,
+                file_id,
+            );
+            Type::Error
+        } else {
+            self.bind(v, t.clone());
+            t
+        }
+    }
+
+    fn unify_prim(
+        pa: PrimTy,
+        pb: PrimTy,
+        span: Span,
+        diags: &mut DiagnosticBag,
+        file_id: FileId,
+    ) -> Type {
+        let _d = diags.error(
+            format!("type mismatch: expected `{pa}`, found `{pb}`"),
+            span,
+            file_id,
+        );
+        Type::Error
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn unify_arrow(
+        &mut self,
+        p1: Vec<Type>,
+        r1: Type,
+        p2: Vec<Type>,
+        r2: Type,
+        span: Span,
+        diags: &mut DiagnosticBag,
+        file_id: FileId,
+    ) -> Type {
+        if p1.len() != p2.len() {
+            let _d = diags.error(
+                format!(
+                    "function arity mismatch: expected {} parameter(s), found {}",
+                    p1.len(),
+                    p2.len()
+                ),
+                span,
+                file_id,
+            );
+            return Type::Error;
+        }
+        let params = self.unify_sequence(p1, p2, span, diags, file_id);
+        let ret = Box::new(self.unify(r1, r2, span, diags, file_id));
+        Type::Arrow(params, ret)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn unify_named(
+        &mut self,
+        d1: DefId,
+        a1: Vec<Type>,
+        d2: DefId,
+        a2: Vec<Type>,
+        span: Span,
+        diags: &mut DiagnosticBag,
+        file_id: FileId,
+    ) -> Type {
+        if d1 != d2 {
+            let _d = diags.error(
+                String::from("type mismatch: incompatible named types"),
+                span,
+                file_id,
+            );
+            return Type::Error;
+        }
+        if a1.len() != a2.len() {
+            let _d = diags.error(String::from("type argument count mismatch"), span, file_id);
+            return Type::Error;
+        }
+        let args = self.unify_sequence(a1, a2, span, diags, file_id);
+        Type::Named(d1, args)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn unify_array(
+        &mut self,
+        elem1: Type,
+        size1: Option<usize>,
+        elem2: Type,
+        size2: Option<usize>,
+        span: Span,
+        diags: &mut DiagnosticBag,
+        file_id: FileId,
+    ) -> Type {
+        if size1 != size2 {
+            let _d = diags.error(
+                format!(
+                    "array size mismatch: expected {}, found {}",
+                    size1.map_or_else(|| "unsized".to_owned(), |n| n.to_string()),
+                    size2.map_or_else(|| "unsized".to_owned(), |n| n.to_string()),
+                ),
+                span,
+                file_id,
+            );
+            return Type::Error;
+        }
+        let elem = self.unify(elem1, elem2, span, diags, file_id);
+        Type::Array(Box::new(elem), size1)
+    }
+
+    fn unify_tuple(
+        &mut self,
+        a: Vec<Type>,
+        b: Vec<Type>,
+        span: Span,
+        diags: &mut DiagnosticBag,
+        file_id: FileId,
+    ) -> Type {
+        if a.len() != b.len() {
+            let _d = diags.error(
+                format!(
+                    "tuple length mismatch: expected {}, found {}",
+                    a.len(),
+                    b.len()
+                ),
+                span,
+                file_id,
+            );
+            return Type::Error;
+        }
+        let elems = self.unify_sequence(a, b, span, diags, file_id);
+        Type::Tuple(elems)
+    }
+
+    fn unify_mismatch(
+        a: &Type,
+        b: &Type,
+        span: Span,
+        diags: &mut DiagnosticBag,
+        file_id: FileId,
+    ) -> Type {
+        let _d = diags.error(
+            format!("type mismatch: expected `{a}`, found `{b}`"),
+            span,
+            file_id,
+        );
+        Type::Error
     }
 }
 
