@@ -239,10 +239,27 @@ pub(super) fn emit_main_body(
     };
     let mut out = FnEmitter::new();
     out.push_scope();
+    let mut main_fn_override: Option<u16> = None;
     for &item_idx in user.ctx.expr_lists.get_slice(user.items) {
         match user.ctx.exprs.get(item_idx) {
-            Expr::FnDef { .. }
-            | Expr::Record { .. }
+            Expr::FnDef {
+                attrs,
+                name,
+                modifiers,
+                body,
+                ..
+            } => {
+                if body.is_some()
+                    && !modifiers.iter().any(|m| matches!(m, Modifier::Extrin(_)))
+                    && attrs.iter().any(|a| interner.resolve(a.name) == "main")
+                {
+                    let fn_name = interner.resolve(*name).to_owned();
+                    if let Some(&fi) = state.fn_map.get(&fn_name) {
+                        main_fn_override = Some(fi);
+                    }
+                }
+            }
+            Expr::Record { .. }
             | Expr::Choice { .. }
             | Expr::Import { .. }
             | Expr::Export { .. }
@@ -256,6 +273,10 @@ pub(super) fn emit_main_body(
         }
     }
     emit_pending_lambdas(&arenas, state, module)?;
+    if let Some(fn_idx) = main_fn_override {
+        out.push(&Opcode::Call(fn_idx));
+        out.push(&Opcode::Drop);
+    }
     out.pop_scope();
     out.push(&Opcode::Halt);
 

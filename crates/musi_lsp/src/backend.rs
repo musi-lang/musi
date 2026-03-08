@@ -8,8 +8,8 @@ use tower_lsp_server::{Client, LanguageServer};
 
 use crate::analysis::{AnalyzedDoc, analyze_doc};
 use crate::{
-    code_actions, completion, document_links, document_symbols, goto_def, hover, inlay_hints,
-    references, semantic_tokens, signature_help,
+    code_actions, code_lens, completion, document_links, document_symbols, goto_def, hover,
+    inlay_hints, references, semantic_tokens, signature_help,
 };
 
 pub struct MusiBackend {
@@ -80,6 +80,9 @@ impl LanguageServer for MusiBackend {
                     work_done_progress_options: WorkDoneProgressOptions::default(),
                 }),
                 inlay_hint_provider: Some(OneOf::Left(true)),
+                code_lens_provider: Some(CodeLensOptions {
+                    resolve_provider: Some(false),
+                }),
                 code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
                 document_link_provider: Some(DocumentLinkOptions {
                     resolve_provider: Some(false),
@@ -270,5 +273,18 @@ impl LanguageServer for MusiBackend {
         } else {
             Ok(Some(actions))
         }
+    }
+
+    async fn code_lens(
+        &self,
+        params: CodeLensParams,
+    ) -> jsonrpc::Result<Option<Vec<CodeLens>>> {
+        let uri = params.text_document.uri;
+        let docs = self.documents.read().await;
+        let lenses = docs
+            .get(&uri)
+            .map(|doc| code_lens::code_lens(doc, &uri))
+            .unwrap_or_default();
+        Ok(Some(lenses))
     }
 }

@@ -199,6 +199,22 @@
         "title": "Check File",
         "category": "Musi",
         "description": "Check the current .ms file for errors using musi check."
+      },
+      {
+        "command": "musi.runTask",
+        "title": "Run Task",
+        "category": "Musi",
+        "description": "Pick and run a task from mspackage.json."
+      },
+      {
+        "command": "musi.runTest",
+        "title": "▷ Run test",
+        "category": "Musi"
+      },
+      {
+        "command": "musi.runMain",
+        "title": "▷ Run",
+        "category": "Musi"
       }
     ],
     "keybindings": [
