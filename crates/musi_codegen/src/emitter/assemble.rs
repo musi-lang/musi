@@ -250,13 +250,39 @@ pub(super) fn emit_main_body(
                 body,
                 ..
             } => {
+                let fn_name = interner.resolve(*name).to_owned();
                 if body.is_some()
                     && !modifiers.iter().any(|m| matches!(m, Modifier::Extrin(_)))
-                    && attrs.iter().any(|a| interner.resolve(a.name) == "main")
                 {
-                    let fn_name = interner.resolve(*name).to_owned();
-                    if let Some(&fi) = state.fn_map.get(&fn_name) {
-                        main_fn_override = Some(fi);
+                    if attrs.iter().any(|a| interner.resolve(a.name) == "main") {
+                        if let Some(&fi) = state.fn_map.get(&fn_name) {
+                            main_fn_override = Some(fi);
+                        }
+                    }
+                    // Register tests for #[test("label")] functions
+                    for attr in attrs {
+                        if interner.resolve(attr.name) == "test" {
+                            if let Some(&fn_idx) = state.fn_map.get(&fn_name)
+                                && let Some(&test_fn_idx) = state.fn_map.get("test")
+                            {
+                                // Use function name as label if no explicit label given
+                                let label: Box<str> = if let Some(musi_ast::AttrArg::Value {
+                                    value: musi_ast::LitValue::Str(label_sym),
+                                    ..
+                                }) = attr.args.first()
+                                {
+                                    interner.resolve(*label_sym).trim_matches('"').into()
+                                } else {
+                                    fn_name.clone().into_boxed_str()
+                                };
+                                let label_const =
+                                    module.push_const(crate::ConstEntry::String(label))?;
+                                out.push(&Opcode::LdConst(label_const));
+                                out.push(&Opcode::LdFnIdx(fn_idx));
+                                out.push(&Opcode::Call(test_fn_idx));
+                                out.push(&Opcode::Drop);
+                            }
+                        }
                     }
                 }
             }
