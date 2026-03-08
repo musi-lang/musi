@@ -2,5 +2,12 @@
 	"$schema": "https://raw.githubusercontent.com/musi-lang/musi/refs/heads/main/schemas/mspackage-schema.v1.json",
 	"name": "shapes",
 	"version": "0.1.0",
-	"main": "./index.ms"
+	"description": "Algebraic types, pattern matching, and records (choice + record ADTs).",
+	"keywords": ["adts", "pattern-matching", "records", "choices"],
+	"license": "MIT",
+	"main": "./index.ms",
+	"tasks": {
+		"run": "../../target/release/musi run ./index.ms",
+		"check": "../../target/release/musi check ./index.ms"
+	}
 }

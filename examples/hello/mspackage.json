@@ -2,5 +2,11 @@
 	"$schema": "https://raw.githubusercontent.com/musi-lang/musi/refs/heads/main/schemas/mspackage-schema.v1.json",
 	"name": "hello",
 	"version": "0.1.0",
-	"main": "./index.ms"
+	"description": "Minimal 'Hello, world!' entry point.",
+	"keywords": ["hello-world", "beginner"],
+	"license": "MIT",
+	"main": "./index.ms",
+	"tasks": {
+		"run": "../../target/release/musi run ./index.ms"
+	}
 }
