@@ -211,6 +211,45 @@ impl SymbolEntry {
     }
 }
 
+/// Return type kind for FFI dispatch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[repr(u8)]
+pub enum ReturnKind {
+    /// Unknown or unspecified return type (FFI will infer from arg types).
+    #[default]
+    Unknown = 0,
+    /// Returns `Unit` (void in C).
+    Unit = 1,
+    /// Returns `Int` (i64 in C).
+    Int = 2,
+    /// Returns `Float` (f64 in C).
+    Float = 3,
+}
+
+impl ReturnKind {
+    /// Creates a `ReturnKind` from a raw byte.
+    #[must_use]
+    pub const fn from_u8(v: u8) -> Self {
+        match v {
+            1 => Self::Unit,
+            2 => Self::Int,
+            3 => Self::Float,
+            _ => Self::Unknown,
+        }
+    }
+
+    /// Creates a `ReturnKind` from a type name string.
+    #[must_use]
+    pub fn from_type_name(name: Option<&str>) -> Self {
+        match name {
+            Some("Unit") => Self::Unit,
+            Some("Int" | "Nat" | "Int8" | "Int16" | "Int32" | "Int64" | "Nat8" | "Nat16" | "Nat32" | "Nat64") => Self::Int,
+            Some("Float" | "Float32" | "Float64") => Self::Float,
+            _ => Self::Unknown,
+        }
+    }
+}
+
 /// A single entry in the function table.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FunctionEntry {
@@ -224,8 +263,8 @@ pub struct FunctionEntry {
     pub code_offset: u32,
     /// Byte length of this function's bytecode.
     pub code_length: u32,
-    /// True when the function's declared return type is `Unit` (affects FFI dispatch).
-    pub unit_return: bool,
+    /// Return type kind for FFI dispatch.
+    pub return_kind: ReturnKind,
 }
 
 impl FunctionEntry {
@@ -235,7 +274,7 @@ impl FunctionEntry {
         buf.extend_from_slice(&self.local_count.to_le_bytes());
         buf.extend_from_slice(&self.code_offset.to_le_bytes());
         buf.extend_from_slice(&self.code_length.to_le_bytes());
-        buf.push(u8::from(self.unit_return));
+        buf.push(self.return_kind as u8);
     }
 
     fn decode(r: &mut Cursor<&[u8]>) -> Result<Self, DeserError> {
@@ -245,7 +284,9 @@ impl FunctionEntry {
             local_count: r.read_u16::<LE>().map_err(|_| DeserError::UnexpectedEof)?,
             code_offset: r.read_u32::<LE>().map_err(|_| DeserError::UnexpectedEof)?,
             code_length: r.read_u32::<LE>().map_err(|_| DeserError::UnexpectedEof)?,
-            unit_return: r.read_u8().map_err(|_| DeserError::UnexpectedEof)? != 0,
+            return_kind: ReturnKind::from_u8(
+                r.read_u8().map_err(|_| DeserError::UnexpectedEof)?,
+            ),
         })
     }
 }

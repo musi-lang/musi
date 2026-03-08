@@ -301,7 +301,7 @@ pub(super) fn emit_main_body(
         local_count,
         code_offset,
         code_length,
-        unit_return: false,
+        return_kind: crate::module::ReturnKind::Unknown,
     })?;
     Ok(())
 }

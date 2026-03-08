@@ -110,18 +110,16 @@ pub(super) fn register_fn_def(
 
     let param_count =
         u8::try_from(params.len()).map_err(|_| CodegenError::ParameterCountOverflow)?;
-    let unit_return = ret_ty
-        .as_ref()
-        .and_then(|t| ty_name_str(t, interner))
-        .as_deref()
-        == Some("Unit");
+    let return_kind = crate::module::ReturnKind::from_type_name(
+        ret_ty.as_ref().and_then(|t| ty_name_str(t, interner)).as_deref(),
+    );
     let fn_idx = module.push_function(FunctionEntry {
         symbol_idx: sym_idx,
         param_count,
         local_count: 0,
         code_offset: 0,
         code_length: 0,
-        unit_return,
+        return_kind,
     })?;
 
     let _prev = state.fn_map.insert(fn_name.clone(), fn_idx);

@@ -319,7 +319,7 @@ pub(super) fn push_plain_fn(
         local_count: 0,
         code_offset: 0,
         code_length: 0,
-        unit_return: false,
+        return_kind: crate::module::ReturnKind::Unknown,
     })
 }
 
