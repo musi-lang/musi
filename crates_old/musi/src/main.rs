@@ -1,9 +1,5 @@
 //! The `musi` command-line driver.
 
-#![allow(clippy::module_name_repetitions)]
-#![allow(clippy::exhaustive_structs)]
-#![allow(clippy::exhaustive_enums)]
-
 pub(crate) mod cmds;
 pub(crate) mod compiler;
 pub(crate) mod config;

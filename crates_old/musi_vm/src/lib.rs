@@ -5,10 +5,6 @@
 //! Built-in functions are dispatched via [`NativeRegistry`] (new system
 //! modules) and the legacy `native::dispatch` match (VM primitives 0–23).
 
-#![allow(clippy::module_name_repetitions)]
-#![allow(clippy::exhaustive_structs)]
-#![allow(clippy::exhaustive_enums)]
-
 pub mod error;
 pub mod ffi;
 pub mod native;

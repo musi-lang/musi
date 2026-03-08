@@ -10,9 +10,6 @@
 
 // These are infrastructure types that are intentionally named after their module
 // (e.g. `arena::Arena`) and intentionally exhaustive for pattern matching.
-#![allow(clippy::module_name_repetitions)]
-#![allow(clippy::exhaustive_structs)]
-#![allow(clippy::exhaustive_enums)]
 
 pub mod arena;
 pub mod diag;

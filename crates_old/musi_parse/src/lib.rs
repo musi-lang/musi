@@ -9,10 +9,6 @@
 //! let module = musi_parse::parse(&tokens, file_id, &mut diags, &interner);
 //! ```
 
-#![allow(clippy::module_name_repetitions)]
-#![allow(clippy::exhaustive_structs)]
-#![allow(clippy::exhaustive_enums)]
-
 pub mod ast;
 pub mod parser;
 pub mod sexpr;

@@ -15,10 +15,6 @@
 //! let result = musi_sema::analyze(&module, &interner, file_id, &mut diags);
 //! ```
 
-#![allow(clippy::module_name_repetitions)]
-#![allow(clippy::exhaustive_structs)]
-#![allow(clippy::exhaustive_enums)]
-
 pub mod check;
 pub mod def;
 pub mod resolve;
@@ -27,7 +23,7 @@ pub mod types;
 
 pub use check::{TypeChecker, UnifyTable};
 pub use def::{DefId, DefInfo, DefKind, TypeFlavor};
-pub use resolve::{ResolveResult, resolve};
+pub use resolve::{resolve, ResolveResult};
 pub use scope::{ScopeId, ScopeTree};
 pub use types::{PrimTy, Type, TypeVarId};
 
@@ -83,9 +79,13 @@ pub fn exports_of(
                     };
                     // Find the DefId for this function in the resolver results
                     if let Some(ty) = result.defs.iter().find_map(|d| {
-                        interner
-                            .try_resolve(d.name)
-                            .and_then(|n| if n == name_str { d.ty.clone() } else { None })
+                        interner.try_resolve(d.name).and_then(|n| {
+                            if n == name_str {
+                                d.ty.clone()
+                            } else {
+                                None
+                            }
+                        })
                     }) {
                         // Freeze: resolve bound vars and erase free ones so that
                         // TypeVarIds do not escape into a foreign UnifyTable.
@@ -100,9 +100,13 @@ pub fn exports_of(
                         continue;
                     };
                     if let Some(ty) = result.defs.iter().find_map(|d| {
-                        interner
-                            .try_resolve(d.name)
-                            .and_then(|n| if n == name_str { d.ty.clone() } else { None })
+                        interner.try_resolve(d.name).and_then(|n| {
+                            if n == name_str {
+                                d.ty.clone()
+                            } else {
+                                None
+                            }
+                        })
                     }) {
                         let _prev = names.insert(name_str, result.unify_table.freeze_type(ty));
                     }

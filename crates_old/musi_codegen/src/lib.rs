@@ -3,10 +3,6 @@
 //! Defines the `.mso` binary container format, the [`Opcode`] instruction set,
 //! and the [`Module`] type that holds a compiled Musi program.
 
-#![allow(clippy::module_name_repetitions)]
-#![allow(clippy::exhaustive_structs)]
-#![allow(clippy::exhaustive_enums)]
-
 pub mod emitter;
 pub mod error;
 pub mod intrinsics;

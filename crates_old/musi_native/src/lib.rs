@@ -8,8 +8,6 @@
 //! The flat [`REGISTRY`] slice is consumed by the CLI resolver (to serve
 //! inline source for `musi:*` imports) and by the VM (for dispatch).
 
-#![allow(clippy::module_name_repetitions)]
-
 pub mod registry;
 
 mod fs;

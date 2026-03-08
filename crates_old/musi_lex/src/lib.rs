@@ -10,10 +10,6 @@
 //! into the caller-supplied [`DiagnosticBag`] and produce a [`TokenKind::Error`]
 //! token so that the rest of the stream remains valid.
 
-#![allow(clippy::module_name_repetitions)]
-#![allow(clippy::exhaustive_structs)]
-#![allow(clippy::exhaustive_enums)]
-
 mod lexer;
 pub mod token;
 mod trivia;

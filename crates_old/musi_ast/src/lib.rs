@@ -4,10 +4,6 @@
 //! Recursive expression children are arena-allocated via [`Idx<Expr>`];
 //! types and patterns are stored inline or boxed where noted.
 
-#![allow(clippy::module_name_repetitions)]
-#![allow(clippy::exhaustive_structs)]
-#![allow(clippy::exhaustive_enums)]
-
 use musi_shared::{Arena, Idx, Slice, SliceArena, Span, Symbol};
 
 /// Holds the arenas that back all AST nodes for a single parse.
