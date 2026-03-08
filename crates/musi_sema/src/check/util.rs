@@ -108,11 +108,10 @@ impl TypeChecker<'_> {
     pub(super) fn fmt_ty_err(&self, ty: &Type) -> String {
         match ty {
             Type::Named(id, args) => {
-                let name = self
-                    .defs
-                    .get(id.0 as usize)
-                    .map(|d| self.interner.resolve(d.name))
-                    .unwrap_or("?");
+                let name = usize::try_from(id.0)
+                    .ok()
+                    .and_then(|i| self.defs.get(i))
+                    .map_or("?", |d| self.interner.resolve(d.name));
                 if args.is_empty() {
                     name.to_owned()
                 } else {
@@ -178,7 +177,8 @@ impl TypeChecker<'_> {
             _ => {}
         }
 
-        self.unify_table.unify(ra, rb, span, self.diags, self.file_id)
+        self.unify_table
+            .unify(ra, rb, span, self.diags, self.file_id)
     }
 
     pub(super) fn find_def_by_name(&self, name: Symbol) -> Option<DefId> {

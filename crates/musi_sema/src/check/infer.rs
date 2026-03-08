@@ -1,8 +1,10 @@
 //! Type inference methods for expressions, statements, and declarations.
 
+use std::collections::HashSet;
+
 use musi_ast::{
-    ArrayItem, AstArenas, BinOp, Cond, ElifBranch, Expr, FieldInit, LitValue, MatchArm, PostfixOp,
-    PrefixOp,
+    ArrayItem, AstArenas, BinOp, Cond, ElifBranch, Expr, FieldInit, LitValue, MatchArm, Pat,
+    PostfixOp, PrefixOp,
 };
 use musi_shared::{Idx, Span};
 
@@ -11,15 +13,33 @@ use crate::types::{PrimTy, Type, TypeVarId};
 use super::{FnDefNode, TypeChecker, instantiate};
 
 impl TypeChecker<'_> {
+    #[allow(clippy::too_many_lines)]
     pub(super) fn infer_expr(&mut self, idx: Idx<Expr>, ctx: &AstArenas) -> Type {
         let expr = ctx.exprs.get(idx);
         match expr {
             Expr::Lit { value, .. } => Self::infer_lit(value),
             Expr::Unit { .. }
-            | Expr::Choice { .. }
             | Expr::Import { .. }
             | Expr::Export { .. }
-            | Expr::Record { name: None, .. } => Type::Prim(PrimTy::Unit),
+            | Expr::Record { name: None, .. }
+            | Expr::Choice { name: None, .. } => Type::Prim(PrimTy::Unit),
+            Expr::Choice {
+                name: Some(sym),
+                variants,
+                ..
+            } => {
+                if let Some(def_id) = self.find_type_def(*sym) {
+                    let names: Vec<musi_shared::Symbol> = variants.iter().map(|v| v.name).collect();
+                    let _ = self.choice_variants.insert(def_id, names);
+                    // Give each variant the parent choice type so they unify correctly.
+                    for variant in variants {
+                        if let Some(&var_def_id) = self.pat_defs.get(&variant.span) {
+                            self.set_def_type(var_def_id, Type::Named(def_id, vec![]));
+                        }
+                    }
+                }
+                Type::Prim(PrimTy::Unit)
+            }
             Expr::Record {
                 name: Some(sym),
                 fields,
@@ -116,8 +136,10 @@ impl TypeChecker<'_> {
                 ctx,
             ),
             Expr::Match {
-                scrutinee, arms, ..
-            } => self.infer_match_expr(*scrutinee, arms, ctx),
+                scrutinee,
+                arms,
+                span,
+            } => self.infer_match_expr(*scrutinee, arms, *span, ctx),
             Expr::While {
                 cond,
                 guard,
@@ -307,15 +329,99 @@ impl TypeChecker<'_> {
         &mut self,
         scrutinee: Idx<Expr>,
         arms: &[MatchArm],
+        span: Span,
         ctx: &AstArenas,
     ) -> Type {
-        let _scrut_ty = self.infer(scrutinee, ctx);
+        let scrut_ty = self.infer(scrutinee, ctx);
+        let resolved_scrut = self.unify_table.resolve(scrut_ty);
+
         let result_var = self.unify_table.fresh();
         for arm in arms {
             let arm_ty = self.infer_match_arm(arm, ctx);
             let _u = self.unify(Type::Var(result_var), arm_ty, Span::default());
         }
+
+        self.check_match_exhaustiveness(&resolved_scrut, arms, span);
+
         self.unify_table.resolve(Type::Var(result_var))
+    }
+
+    /// Checks that a `match` on a choice type covers all variants.
+    ///
+    /// Emits a warning if any variant is not covered and no wildcard arm is present.
+    fn check_match_exhaustiveness(&mut self, scrut_ty: &Type, arms: &[MatchArm], span: Span) {
+        let Type::Named(def_id, _) = scrut_ty else {
+            return;
+        };
+
+        // Only check exhaustiveness for choice types.
+        let all_variants = match self.choice_variants.get(def_id) {
+            Some(v) if !v.is_empty() => v.clone(),
+            _ => return,
+        };
+
+        // Collect which top-level patterns appear in the arms.
+        let mut covered: HashSet<musi_shared::Symbol> = HashSet::new();
+        let mut has_wildcard = false;
+
+        for arm in arms {
+            match &arm.pat {
+                Pat::Wild { .. } => {
+                    has_wildcard = true;
+                    break;
+                }
+                Pat::Ident { suffix: None, .. } => {
+                    // A bare identifier with no suffix is a bind-all (wildcard).
+                    has_wildcard = true;
+                    break;
+                }
+                Pat::DotPrefix { name, .. } => {
+                    let _ = covered.insert(*name);
+                }
+                Pat::Or { alternatives, .. } => {
+                    for alt in alternatives {
+                        match alt {
+                            Pat::Wild { .. } | Pat::Ident { suffix: None, .. } => {
+                                has_wildcard = true;
+                            }
+                            Pat::DotPrefix { name, .. } => {
+                                let _ = covered.insert(*name);
+                            }
+                            _ => {}
+                        }
+                    }
+                    if has_wildcard {
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        if has_wildcard {
+            return;
+        }
+
+        let missing: Vec<&str> = all_variants
+            .iter()
+            .filter(|v| !covered.contains(*v))
+            .map(|v| self.interner.resolve(*v))
+            .collect();
+
+        if missing.is_empty() {
+            return;
+        }
+
+        let type_name = self.fmt_ty_err(scrut_ty);
+        let missing_list: Vec<String> = missing.iter().map(|s| format!("`{s}`")).collect();
+        let _d = self.diags.warning(
+            format!(
+                "non-exhaustive match on `{type_name}` — missing variants: {}",
+                missing_list.join(", ")
+            ),
+            span,
+            self.file_id,
+        );
     }
 
     fn infer_while_expr(
@@ -498,10 +604,8 @@ impl TypeChecker<'_> {
                                 return field_ty.clone();
                             }
                             let field_name = self.interner.resolve(*name);
-                            let known: Vec<&str> = fields
-                                .keys()
-                                .map(|k| self.interner.resolve(*k))
-                                .collect();
+                            let known: Vec<&str> =
+                                fields.keys().map(|k| self.interner.resolve(*k)).collect();
                             let ty_name = self.fmt_ty_err(&resolved);
                             let _d = self.diags.error(
                                 format!(
@@ -537,7 +641,13 @@ impl TypeChecker<'_> {
             PostfixOp::RecDot { fields, .. } => {
                 let base_ty = self.infer(base, ctx);
                 self.infer_field_inits(fields, ctx);
-                base_ty
+                // For `TypeName.{...}` record construction, the result type is `TypeName`.
+                if let Expr::Ident { name, .. } = ctx.exprs.get(base)
+                    && let Some(def_id) = self.find_type_def(*name)
+                {
+                    return Type::Named(def_id, vec![]);
+                }
+                self.unify_table.resolve(base_ty)
             }
 
             PostfixOp::OptField { .. } => {

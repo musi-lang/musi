@@ -415,6 +415,8 @@ pub struct TypeChecker<'a> {
     ty_scope: TyScope,
     /// Record field types collected from `record` definitions: type `DefId` → field name → type.
     record_fields: HashMap<DefId, HashMap<Symbol, Type>>,
+    /// Choice variant names collected from `choice` definitions: type `DefId` → variant names.
+    pub(super) choice_variants: HashMap<DefId, Vec<Symbol>>,
 }
 
 impl<'a> TypeChecker<'a> {
@@ -438,6 +440,7 @@ impl<'a> TypeChecker<'a> {
             expr_types: HashMap::new(),
             ty_scope: Vec::new(),
             record_fields: HashMap::new(),
+            choice_variants: HashMap::new(),
         }
     }
 
