@@ -14,7 +14,7 @@ export fn base64_encode(bytes: []Int): String => (
         const b1 := if i + 1 < len then array_get(bytes, i + 1) % 256 else 0;
         const b2 := if i + 2 < len then array_get(bytes, i + 2) % 256 else 0;
 
-        const c0 := b0 / 4;
+        const c0 := b0 / 64;
         const c1 := (b0 % 4) * 16 + b1 / 16;
         const c2 := (b1 % 16) * 4 + b2 / 64;
         const c3 := b2 % 64;
@@ -57,13 +57,13 @@ export fn base64_decode(s: String): Option[[]Int] => (
             const c3 := string_slice(input, i + 3, i + 4);
 
             match b64_char_value(c0) with (
-                .None => valid <- .False
+                .None => (valid <- .False)
               | .Some(v0) => match b64_char_value(c1) with (
-                    .None => valid <- .False
+                    .None => (valid <- .False)
                   | .Some(v1) => match b64_char_value(c2) with (
-                        .None => valid <- .False
+                        .None => (valid <- .False)
                       | .Some(v2) => match b64_char_value(c3) with (
-                            .None => valid <- .False
+                            .None => (valid <- .False)
                           | .Some(v3) => (
                                 array_push(result, v0 * 4 + v1 / 16);
                                 if c2 /= "=" then array_push(result, (v1 % 16) * 16 + v2 / 4);

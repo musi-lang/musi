@@ -11,7 +11,7 @@ export { array_map, array_filter, array_fold, array_each,
 
 // Iterator combinators
 export { range, range_step, enumerate, zip_arrays, repeat_val,
-         cycle, take_while, drop_while, chunks, split_at,
+         array_cycle, take_while, drop_while, chunks, split_at,
          partition, interleave, last, first, init, tail,
          find_index, Indexed, Pair } from "./iter";
 

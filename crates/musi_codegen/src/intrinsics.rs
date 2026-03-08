@@ -130,6 +130,11 @@ define_intrinsics! {
     67 => Atan2          "atan2",
     68 => Log            "log",
     69 => Exp            "exp",
+    // -- rune --
+    78 => RuneToString   "rune_to_string",
+    79 => StringToRunes  "string_to_runes",
+    80 => RuneToInt      "rune_to_int",
+    81 => IntToRune      "int_to_rune",
     // -- map --
     70 => MapNew         "map_new",
     71 => MapGet         "map_get",

@@ -26,6 +26,7 @@ fn embedded_std(path: &str) -> Option<&'static str> {
         "std/core/pair" => Some(include_str!("../../../std/core/pair.ms")),
         "std/core/result" => Some(include_str!("../../../std/core/result.ms")),
         "std/collections/array" => Some(include_str!("../../../std/collections/array.ms")),
+        "std/collections/iter" => Some(include_str!("../../../std/collections/iter.ms")),
         "std/collections/list" => Some(include_str!("../../../std/collections/list.ms")),
         "std/collections/map" => Some(include_str!("../../../std/collections/map.ms")),
         "std/collections/set" => Some(include_str!("../../../std/collections/set.ms")),
@@ -86,7 +87,11 @@ fn embedded_native(path: &str) -> Option<&'static str> {
              export extrin fn string_to_lower(s: String): String;\n\
              export extrin fn string_to_upper(s: String): String;\n\
              export extrin fn string_to_float(s: String): Option[Float];\n\
-             export extrin fn string_index_of(s: String, sub: String): Option[Int];\n",
+             export extrin fn string_index_of(s: String, sub: String): Option[Int];\n\
+             export extrin fn rune_to_string(r: Rune): String;\n\
+             export extrin fn string_to_runes(s: String): []Rune;\n\
+             export extrin fn rune_to_int(r: Rune): Int;\n\
+             export extrin fn int_to_rune(n: Int): Rune;\n",
         ),
         "musi:fs" => Some(
             "export extrin fn fs_read_file(path: String): Option[String];\n\

@@ -105,13 +105,21 @@ impl<'a> Resolver<'a> {
 
     fn define_in_scope(&mut self, scope: ScopeId, name: Symbol, def_id: DefId, dup_span: Span) {
         let prev = self.scopes.define(scope, name, def_id);
-        if let Some(_prev_id) = prev {
-            let name_str = self.interner.resolve(name);
-            let _d = self.diags.error(
-                format!("duplicate definition of `{name_str}`"),
-                dup_span,
-                self.file_id,
-            );
+        if let Some(prev_id) = prev {
+            // Suppress the error when shadowing a prelude-injected def (span == DUMMY).
+            // This allows musi:* modules to redefine names they share with the prelude.
+            let prev_is_injected = self
+                .defs
+                .get(prev_id.0 as usize)
+                .map_or(false, |d| d.span == musi_shared::Span::DUMMY);
+            if !prev_is_injected {
+                let name_str = self.interner.resolve(name);
+                let _d = self.diags.error(
+                    format!("duplicate definition of `{name_str}`"),
+                    dup_span,
+                    self.file_id,
+                );
+            }
         }
     }
 
@@ -158,6 +166,45 @@ impl<'a> Resolver<'a> {
         interner: &Interner,
     ) {
         for &item_idx in module.ctx.expr_lists.get_slice(module.items) {
+            // Handle re-exports: `export { name1, name2 } from "path"`.
+            // Register each re-exported name as a def (for semantic highlighting).
+            if let Expr::Export { items, path, .. } = module.ctx.exprs.get(item_idx) {
+                let Some(raw_path) = interner.try_resolve(*path) else {
+                    continue;
+                };
+                let path_str = raw_path.trim_matches('"').to_owned();
+                if let Some(module_exports) = imports.get(&path_str) {
+                    for item in items {
+                        let Some(name_str) = interner.try_resolve(item.name) else {
+                            continue;
+                        };
+                        let Some(ty) = module_exports.names.get(name_str) else {
+                            continue;
+                        };
+                        let def_id = DefId(self.next_id);
+                        self.next_id += 1;
+                        let bind_sym = item.alias.unwrap_or(item.name);
+                        self.defs.push(DefInfo {
+                            id: def_id,
+                            name: bind_sym,
+                            kind: DefKind::Const,
+                            span: item.span,
+                            ty: Some(ty.clone()),
+                            scheme_vars: Vec::new(),
+                            use_count: 0,
+                            is_extrin_param: false,
+                            is_var: false,
+                            type_flavor: None,
+                            parent_type: None,
+                        });
+                        let _prev = self.pat_defs.insert(item.span, def_id);
+                        let prev = self.scopes.define(root_scope, bind_sym, def_id);
+                        let _ = prev;
+                    }
+                }
+                continue;
+            }
+
             let Expr::Import { items, path, span } = module.ctx.exprs.get(item_idx) else {
                 continue;
             };
@@ -192,10 +239,12 @@ impl<'a> Resolver<'a> {
 
                 ImportClause::Items(import_items) => {
                     for import_item in import_items {
-                        let name_str = interner.resolve(import_item.name);
+                        let Some(name_str) = interner.try_resolve(import_item.name) else {
+                            continue;
+                        };
                         let _exported_name = import_item.alias.map_or_else(
                             || name_str.to_owned(),
-                            |a| interner.resolve(a).to_owned(),
+                            |a| interner.try_resolve(a).unwrap_or("").to_owned(),
                         );
                         let Some(ty) = module_exports.names.get(name_str) else {
                             continue;

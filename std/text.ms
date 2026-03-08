@@ -4,7 +4,14 @@
 /// Split a string into words (by whitespace).
 export fn words(s: String): []String => (
     const parts := string_split(string_trim(s), " ");
-    array_filter(parts, fn(p: String): Bool => string_length(p) > 0)
+    var result := [];
+    var i := 0;
+    while i < array_length(parts) loop (
+        if string_length(array_get(parts, i)) > 0 then
+            array_push(result, array_get(parts, i));
+        i <- i + 1
+    );
+    result
 );
 
 /// Split a string into lines (by newline).

@@ -61,8 +61,6 @@ fn hex_digit_value(c: String): Option[Int] => (
 /// Accepts formats: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx or xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 export fn uuid_parse(s: String): Option[UUID] => (
     const input := string_to_lower(string_trim(s));
-    const len := string_length(input);
-
     // Remove hyphens
     const clean := if string_contains(input, "-")
         then string_concat(
@@ -105,8 +103,8 @@ fn parse_hex_segment(s: String, start: Int, end: Int): Option[Int] => (
     while i < end and valid loop (
         const c := string_slice(s, i, i + 1);
         match hex_digit_value(c) with (
-            .None => valid <- .False
-          | .Some(v) => result <- result * 16 + v
+            .None => (valid <- .False)
+          | .Some(v) => (result <- result * 16 + v)
         );
         i <- i + 1
     );

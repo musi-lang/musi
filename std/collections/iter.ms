@@ -71,7 +71,7 @@ export fn repeat_val['T](val: 'T, n: Int): []'T => (
 );
 
 /// Cycle through an array `n` times (concatenates `n` copies).
-export fn cycle['T](arr: []'T, n: Int): []'T => (
+export fn array_cycle['T](arr: []'T, n: Int): []'T => (
     var result := [];
     var i := 0;
     while i < n loop (

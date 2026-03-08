@@ -609,6 +609,10 @@ const fn is_symbol_char(b: u8) -> bool {
             | b'\''
             | b'"'
             | b'#'
+            | b'~'
+            | b'^'
+            | b'&'
+            | b'?'
     )
 }
 

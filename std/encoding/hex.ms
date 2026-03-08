@@ -53,9 +53,9 @@ export fn hex_decode(s: String): Option[[]Int] => (
             const hi_char := string_to_lower(string_slice(s, i, i + 1));
             const lo_char := string_to_lower(string_slice(s, i + 1, i + 2));
             match hex_char_value(hi_char) with (
-                .None => valid <- .False
+                .None => (valid <- .False)
               | .Some(hi) => match hex_char_value(lo_char) with (
-                    .None => valid <- .False
+                    .None => (valid <- .False)
                   | .Some(lo) => array_push(result, hi * 16 + lo)
                 )
             );
@@ -93,8 +93,8 @@ export fn hex_to_int(s: String): Option[Int] => (
         while i < len and valid loop (
             const c := string_to_lower(string_slice(input, i, i + 1));
             match hex_char_value(c) with (
-                .None => valid <- .False
-              | .Some(v) => result <- result * 16 + v
+                .None => (valid <- .False)
+              | .Some(v) => (result <- result * 16 + v)
             );
             i <- i + 1
         );

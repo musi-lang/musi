@@ -78,13 +78,19 @@ pub fn exports_of(
                 name, modifiers, ..
             } => {
                 if modifiers.iter().any(|m| matches!(m, Modifier::Export)) {
-                    let name_str = interner.resolve(*name).to_owned();
+                    let Some(name_str) = interner.try_resolve(*name).map(str::to_owned) else {
+                        continue;
+                    };
                     // Find the DefId for this function in the resolver results
                     if let Some(ty) = result
                         .defs
                         .iter()
-                        .find(|d| interner.resolve(d.name) == name_str)
-                        .and_then(|d| d.ty.clone())
+                        .filter_map(|d| {
+                            interner.try_resolve(d.name).and_then(|n| {
+                                if n == name_str { d.ty.clone() } else { None }
+                            })
+                        })
+                        .next()
                     {
                         // Freeze: resolve bound vars and erase free ones so that
                         // TypeVarIds do not escape into a foreign UnifyTable.
@@ -95,12 +101,18 @@ pub fn exports_of(
             Expr::Export { items, .. } => {
                 // `export { name1, name2 } from "path"` — re-exports
                 for item in items {
-                    let name_str = interner.resolve(item.name).to_owned();
+                    let Some(name_str) = interner.try_resolve(item.name).map(str::to_owned) else {
+                        continue;
+                    };
                     if let Some(ty) = result
                         .defs
                         .iter()
-                        .find(|d| interner.resolve(d.name) == name_str)
-                        .and_then(|d| d.ty.clone())
+                        .filter_map(|d| {
+                            interner.try_resolve(d.name).and_then(|n| {
+                                if n == name_str { d.ty.clone() } else { None }
+                            })
+                        })
+                        .next()
                     {
                         let _prev = names.insert(name_str, result.unify_table.freeze_type(ty));
                     }
