@@ -61,14 +61,20 @@ pub fn hover(doc: &AnalyzedDoc, position: Position) -> Option<Hover> {
         }
         DefKind::Var => "var",
         // Params are implicitly const — only show "var" when explicitly mutable.
-        DefKind::Param => if def.is_var { "var" } else { "" },
+        DefKind::Param => {
+            if def.is_var {
+                "var"
+            } else {
+                ""
+            }
+        }
         DefKind::Type => match def.type_flavor {
             Some(TypeFlavor::Record) => "record",
             Some(TypeFlavor::Choice) => "choice",
             // `type` is not a Musi keyword — show nothing for imported/opaque types.
             None => "",
         },
-        DefKind::Variant => "",  // display name built below using parent_type
+        DefKind::Variant => "", // display name built below using parent_type
         DefKind::Namespace => return None,
         DefKind::Class => "class",
         DefKind::Given => "given",

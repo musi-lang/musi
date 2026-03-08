@@ -58,7 +58,7 @@ struct Resolver<'a> {
     pat_defs: HashMap<Span, DefId>,
     /// Exports keyed by alias symbol for `import * as Name` imports.
     namespace_exports: HashMap<Symbol, HashMap<String, Type>>,
-    /// Maps named function DefIds to their ordered param names.
+    /// Maps named function `DefIds` to their ordered param names.
     fn_params: HashMap<DefId, Vec<Symbol>>,
     /// Call sites for parameter-name inlay hints.
     call_sites: Vec<(DefId, Vec<Idx<Expr>>)>,
@@ -520,7 +520,13 @@ impl<'a> Resolver<'a> {
                 }
             }
 
-            Expr::FnDef { name, params, ret_ty, body, .. } => {
+            Expr::FnDef {
+                name,
+                params,
+                ret_ty,
+                body,
+                ..
+            } => {
                 let fn_scope = self.scopes.push_child(scope);
                 // extrin fn has no body — suppress "unused param" warnings for its params
                 self.register_params(params, fn_scope, body.is_none());
@@ -537,7 +543,12 @@ impl<'a> Resolver<'a> {
                 }
             }
 
-            Expr::Lambda { params, ret_ty, body, .. } => {
+            Expr::Lambda {
+                params,
+                ret_ty,
+                body,
+                ..
+            } => {
                 let lam_scope = self.scopes.push_child(scope);
                 self.register_params(params, lam_scope, false);
                 if let Some(rt) = ret_ty {
@@ -624,12 +635,11 @@ impl<'a> Resolver<'a> {
                 for &arg in arg_slice {
                     self.resolve_expr(arg, ctx, scope);
                 }
-                // Record call site for parameter-name inlay hints.
-                if let Some(&fn_def_id) = self.expr_defs.get(&base) {
-                    if self.fn_params.contains_key(&fn_def_id) {
-                        let arg_idxs = arg_slice.to_vec();
-                        self.call_sites.push((fn_def_id, arg_idxs));
-                    }
+                if let Some(&fn_def_id) = self.expr_defs.get(&base)
+                    && self.fn_params.contains_key(&fn_def_id)
+                {
+                    let arg_idxs = arg_slice.to_vec();
+                    self.call_sites.push((fn_def_id, arg_idxs));
                 }
             }
             PostfixOp::Index { args, .. } => {
@@ -805,7 +815,9 @@ impl<'a> Resolver<'a> {
     /// Registers all names introduced by a pattern into `scope`.
     fn collect_pat_defs(&mut self, pat: &Pat, kind: BindKind, scope: ScopeId) {
         match pat {
-            Pat::Ident { name, span, is_mut, .. } => {
+            Pat::Ident {
+                name, span, is_mut, ..
+            } => {
                 // Each identifier in a pattern can opt in to `var` via `is_mut`,
                 // overriding the enclosing `kind` (e.g. the for-loop default Const).
                 let effective_kind = if *is_mut { BindKind::Var } else { kind };
@@ -841,7 +853,12 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    fn register_variant(&mut self, variant: &ChoiceVariant, scope: ScopeId, parent: Option<Symbol>) {
+    fn register_variant(
+        &mut self,
+        variant: &ChoiceVariant,
+        scope: ScopeId,
+        parent: Option<Symbol>,
+    ) {
         let def_id = self.alloc_def(variant.name, DefKind::Variant, variant.span);
         if let Some(d) = self.defs.last_mut() {
             d.parent_type = parent;

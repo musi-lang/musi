@@ -67,9 +67,9 @@ fn find_string_token_range(doc: &AnalyzedDoc, path_sym: musi_shared::Symbol) -> 
     let expected = doc.interner.resolve(path_sym);
     for tok in &doc.lexed.tokens {
         if tok.kind == TokenKind::StringLit {
-            let src = doc.source.get(
-                tok.span.start as usize..(tok.span.start + tok.span.length) as usize,
-            )?;
+            let src = doc
+                .source
+                .get(tok.span.start as usize..(tok.span.start + tok.span.length) as usize)?;
             if src == expected {
                 return Some(span_to_range(doc.file_id, tok.span, &doc.source_db));
             }

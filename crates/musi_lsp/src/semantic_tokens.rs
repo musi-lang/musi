@@ -244,7 +244,9 @@ pub fn compute(doc: &AnalyzedDoc) -> SemanticTokensResult {
 fn is_constant_name(name: &str) -> bool {
     !name.is_empty()
         && name.chars().next().is_some_and(|c| c.is_uppercase())
-        && name.chars().all(|c| c.is_uppercase() || c.is_ascii_digit() || c == '_')
+        && name
+            .chars()
+            .all(|c| c.is_uppercase() || c.is_ascii_digit() || c == '_')
 }
 
 fn classify_def(
@@ -444,8 +446,8 @@ fn lex_fallback(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
                 TokenKind::RBrace => ScanState::SkipVariant(depth - 1),
                 // Variant payload type names start with uppercase (e.g. `Circle(Float)`)
                 TokenKind::Ident => {
-                    let text = &doc.source[tok.span.start as usize
-                        ..(tok.span.start + tok.span.length) as usize];
+                    let text = &doc.source
+                        [tok.span.start as usize..(tok.span.start + tok.span.length) as usize];
                     if text.starts_with(|c: char| c.is_uppercase()) {
                         push_raw(raw, tok.span, TT_TYPE, 0, doc.file_id, &doc.source_db);
                     }
