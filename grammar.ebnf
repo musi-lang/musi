@@ -1,424 +1,260 @@
-(* ========================================================================= *)
-(* LEXICAL TOKENS                                                            *)
-(* ========================================================================= *)
-letter = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "I" | "J" | "K" | "L" | "M" | "N" | "O" | "P" | "Q" | "R" | "S" | "T" | "U" | "V" | "W" | "X" | "Y" | "Z" | "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z";
-
-digit = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9";
-
-xdigit = digit | "A" | "B" | "C" | "D" | "E" | "F" | "a" | "b" | "c" | "d" | "e" | "f";
-
-odigit = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7";
-
-bdigit = "0" | "1";
-
-symbol = " " | "%" | "!" | "@" | "(" | ")" | "*" | "+" | "," | "-" | "." | "/" | ":" | ";" | "<" | "=" | ">" | "[" | "]" | "`" | "{" | "|" | "}" | "'" | '"' | "#";
-
-char = letter | digit | symbol;
-
-escape_char = '\\', char;
-
-text_content = escape_char | (char - '"');
-
-escaped_ident = "`", {char}, "`";
-
-ty_ident = "'", letter, {letter | digit | "_"};
-
-ident = (letter, {letter | digit | "_"}) | escaped_ident;
-
-lit_number = (digit, {digit}, [".", digit, {digit}]) | ("0x", xdigit, {xdigit}) | ("0o", odigit, {odigit}) | ("0b", bdigit, {bdigit});
-
-lit_string = '"', {text_content}, '"';
-
-lit_char = "'", (escape_char | (char - "'")), "'";
-
-lit = lit_number | lit_string | lit_char;
-
-lex_keyword = "record" | "choice" | "fn" | "const" | "var" | "import" | "export" | "match" | "case" | "if" | "then" | "else" | "elif" | "while" | "loop" | "for" | "in" | "return" | "break" | "cycle" | "defer" | "and" | "or" | "xor" | "not" | "shl" | "shr" | "opaque" | "extrin" | "from" | "as" | "with" | "using" | "class" | "given" | "satisfies" | "where" | "law";
-
-atom_dot_lbrack = ".[";
-
-atom_dot_lbrace = ".{";
-
-(* UDN compound tokens *)
-question_dot      = "?.";  (* optional chaining *)
-question_question = "??";  (* nil coalescing    *)
-
-spread_op = "<..";
-
-line_comment = "//", {char - "\n"}, "\n";
-
-line_doc_comment = "///", {char - "\n"}, "\n";
-
-block_comment = "/*", {char}, "*/";
-
-block_doc_comment = "/**", {char}, "*/";
-
-(* ========================================================================= *)
-(* COMMON LIST PATTERNS                                                      *)
-(* ========================================================================= *)
-ty_list = ast_ty, {",", ast_ty};
-
-expr_list = ast_expr, {",", ast_expr};
-
-pat_list = ast_pat, {",", ast_pat};
-
-id_list = lex_id, {",", lex_id};
-
-attr_list = ast_attr, {",", ast_attr};
-
-param_list = ast_param, {",", ast_param};
-
-rec_field_list = ast_rec_field, {",", ast_rec_field};
-
-rec_lit_field_list = ast_rec_lit_field, {",", ast_rec_lit_field};
-
-import_item_list = ast_import_item, {",", ast_import_item};
-
-export_item_list = ast_export_item, {",", ast_export_item};
-
-(* ========================================================================= *)
-(* COMMON STRUCTURAL PATTERNS                                                *)
-(* ========================================================================= *)
-ty_annot = ":", ast_ty;
-
-bind_init = ":=", ast_expr;
-
-const_or_var = "const" | "var";
-
-guard = "if", ast_expr;
-
-field_base = [ast_attrs], ["var"], lex_id;
-
-(* ========================================================================= *)
-(* ATTRIBUTES & MODIFIERS                                                    *)
-(* ========================================================================= *)
-ast_attrs = "#[", [attr_list], "]";
-
-ast_attr = lex_id, ["(", [ast_attr_arg, {",", ast_attr_arg}], ")"];
-
-ast_attr_arg = (lex_id, [bind_init]) | lit;
-
-(* Non-export modifiers only. "export" is handled explicitly in ast_expr_after_attrs *)
-(* to maintain LL(1): after "export", FIRST("{") = re-export vs FIRST(decl) = definition. *)
-ast_modifiers = {"opaque" | ("extrin", [lit_string] (* ABI *))};
-
-
-(* ========================================================================= *)
-(* TYPE EXPRESSIONS                                                          *)
-(* ========================================================================= *)
-ast_ty = ast_ty_arrow;
-
-ast_ty_arrow = ast_ty_noarrow, {"->", ast_ty_noarrow};
-
-ast_ty_noarrow = ast_ty_var | ast_ty_option | ast_ty_named | ast_ty_prod | ast_ty_arr;
-
-(* 'T, 'a, 'key *)
-ast_ty_var = ty_ident;
-
-(* UDN: ?T sugar for Option[T] -- LL(1): "?" is never a type FIRST token otherwise *)
-ast_ty_option = "?", ast_ty_noarrow;
-
-(* Int, Option, Option['T], Map['K, 'V] *)
-ast_ty_named = lex_id, ["[", [ty_list], "]"];
-
-(* (), (Int, String), (Int) *)
-ast_ty_prod = "(", [ty_list], ")";
-
-(* [5]Int, []Int *)
-ast_ty_arr = "[", [lit_number], "]", ast_ty;
-
-ast_ty_params = "[", [ty_param_list], "]";
-
-ty_param_list = ty_ident, {",", ty_ident};
-
-(* ========================================================================= *)
-(* PATTERNS                                                                  *)
-(* ========================================================================= *)
-ast_pat = ast_pat_primary, ["or", ast_pat_primary, {"or", ast_pat_primary}];
-
-ast_pat_primary = ast_pat_ident | ast_pat_lit | ast_pat_wild | ast_pat_prod | ast_pat_arr | ast_pat_anon_rec | ast_pat_dot_prefix;
-
-(* lex_id alone = variable bind; with (...) = positional sum; with {...} = named-field sum *)
-(* ["var"] prefix marks the binding as mutable; mutability lives at the binding site *)
-ast_pat_ident        = ["var"], lex_id, [ast_pat_ident_suffix];
-ast_pat_ident_suffix = "(", [pat_list], ")"
-                     | "{", [ast_pat_rec_field, {",", ast_pat_rec_field}], "}";
-
-ast_pat_anon_rec = "{", [ast_pat_rec_field, {",", ast_pat_rec_field}], "}";
-
-(* "." at start of pattern is unambiguous -- LL(1): Dot not in FIRST of any other pat form *)
-(* .None              -- zero-arg constructor                                               *)
-(* .Some(v)           -- call form                                                          *)
-ast_pat_dot_prefix = ".", lex_id, ["(", [pat_list], ")"];
-
-ast_pat_lit  = lit;
-
-ast_pat_wild = "_";
-
-ast_pat_prod = "(", [pat_list], ")";
-
-ast_pat_arr  = "[", [pat_list], "]";
-
-ast_pat_rec_field = field_base, [":", ast_pat];
-
-(* ========================================================================= *)
-(* EXPRESSIONS - PRATT PRECEDENCE HIERARCHY                                  *)
-(* ========================================================================= *)
-(* BP 0010 *)
+(* ===================================================================== *)
+(* Musi Language — Formal Grammar                                        *)
+(* ISO/IEC 14977 EBNF. Maximal munch throughout.                        *)
+(* Source of truth: docs/02-lexical.md, docs/08-grammar.md               *)
+(* ===================================================================== *)
+
+
+(* --------------------------------------------------------------------- *)
+(* §1  Lexical Grammar                                                   *)
+(* --------------------------------------------------------------------- *)
+
+(* 1.1  Character classes *)
+letter    = "A".."Z" | "a".."z" ;
+digit     = "0".."9" ;
+xdigit    = digit | "A".."F" | "a".."f" ;
+
+(* 1.2  Identifiers *)
+ident         = plain_ident | escaped_ident ;
+plain_ident   = letter , { letter | digit | "_" } ;
+escaped_ident = "`" , { any - "`" } , "`" ;
+ty_ident      = "'" , letter , { letter | digit | "_" } ;
+op_ident      = "(" , op_chars , ")" ;
+op_chars      = "+" | "-" | "*" | "/" | "%" | "=" | "/="
+              | "<" | ">" | "<=" | ">=" | "<<" | ">>"
+              | "::" | "|>" ;
+
+(* 1.3  Literals *)
+lit        = lit_int | lit_float | lit_string | lit_fstring | lit_rune ;
+lit_int    = dec_int | hex_int | oct_int | bin_int ;
+dec_int    = digit , { digit | "_" } ;
+hex_int    = "0x" , xdigit , { xdigit | "_" } ;
+oct_int    = "0o" , ("0".."7") , { ("0".."7") | "_" } ;
+bin_int    = "0b" , ("0"|"1") , { ("0"|"1") | "_" } ;
+lit_float  = digit , { digit } , "." , digit , { digit } ,
+             [ ("e"|"E") , ["+"|"-"] , digit , { digit } ] ;
+lit_string  = '"' , { str_char } , '"' ;
+lit_fstring = 'f"' , { fstr_part } , '"' ;
+lit_rune    = "'" , rune_char , "'" ;
+fstr_part  = "{" , ast_expr , "}" | str_char ;
+str_char   = "\\" , any | any - '"' ;
+rune_char  = "\\" , any | any - "'" ;
+
+(* 1.4  Comments *)
+comment = "//" , { any - newline }
+        | "///" , { any - newline }
+        | "/*" , { any } , "*/" ;   (* block comments do not nest *)
+
+(* 1.5  Keywords (26)
+   and or not xor let var ref inout if match defer return try
+   spawn await forall exists where of over in class given law
+   import export *)
+
+(* 1.6  Compound tokens — maximal munch
+   :=  <-  ->  ~>  <:  :>  ?.  ??  ..  ..<  ...
+   <<  >>  /=  <=  >=  |>  ::  =>  #[                *)
+
+
+(* --------------------------------------------------------------------- *)
+(* §2  Parser Grammar                                                    *)
+(* --------------------------------------------------------------------- *)
+
+(* 2.1  Top level *)
+ast_root  = { ast_stmt } ;
+ast_stmt  = ast_expr , ";" ;
+
+(* 2.2  Expressions — precedence (lowest to highest)
+   Precedence: lower rule = tighter binding.
+   Boolean-algebra model: not > and > xor > or > comparisons.
+   This differs from C — do not apply C precedence. *)
+
+ast_expr          = ast_expr_nil_coal , [ "<-" , ast_expr ] ;
+ast_expr_nil_coal = ast_expr_pipe , [ "??" , ast_expr_pipe ] ;
+ast_expr_pipe     = ast_expr_disj , { "|>" , ast_expr_disj } ;
+ast_expr_disj     = ast_expr_conj , { "or" , ast_expr_conj } ;
+ast_expr_conj     = ast_expr_xor  , { "and" , ast_expr_xor } ;
+ast_expr_xor      = ast_expr_cmp  , { "xor" , ast_expr_cmp } ;
+ast_expr_cmp      = ast_expr_range ,
+                    [ ( "=" | "/=" | "<" | ">" | "<=" | ">=" | "in" ) ,
+                      ast_expr_range ] ;
+ast_expr_range    = ast_expr_cons , [ ( ".." | "..<" ) , ast_expr_cons ] ;
+ast_expr_cons     = ast_expr_sft  , { "::" , ast_expr_sft } ;
+ast_expr_sft      = ast_expr_add  , { ( "<<" | ">>" ) , ast_expr_add } ;
+ast_expr_add      = ast_expr_mul  , { ( "+" | "-" ) , ast_expr_mul } ;
+ast_expr_mul      = ast_expr_pre  , { ( "*" | "/" | "%" ) , ast_expr_pre } ;
+ast_expr_pre      = ( "-" | "not" ) , ast_expr_pre | ast_expr_post ;
+ast_expr_post     = ast_expr_atom , { postfix_op } ;
+
+(* No separate bitwise layers — and/or/xor/not are type-directed.
+   No & | ^ ~ operators exist. *)
+
+(* 2.3  Postfix operations *)
+postfix_op = "(" , [ expr_list ] , ")"
+           | ".[" , [ expr_list ] , "]"
+           | ".{" , rec_lit_fields , "}"
+           | "." , ( ident | lit_int )
+           | "?." , ( ident | lit_int )
+           | "..." ;
+
+(* 2.4  Atoms *)
 ast_expr_atom =
-    lit
-  | lex_id
-  | ast_expr_paren
-  | ast_expr_array
-  | ast_expr_rec_lit
-  | ast_expr_dot_prefix    (* UDN: .Name or .Name(args) -- dot at atom position *)
-  | ast_expr_if
-  | ast_expr_return
-  | ast_expr_break
-  | ast_expr_cycle
-  | ast_expr_defer
-  | ast_expr_import
-  | ast_expr_using
-  | ast_expr_with_prefix;
-
-(* Unified ( ) form: unit, single expression, tuple, block -- left-factored on ( *)
-ast_expr_paren = "(", ast_expr_paren_tail;
-ast_expr_paren_tail =
-    ")"                                              (* unit: ()              *)
-  | ast_expr, ast_expr_paren_cont;
-ast_expr_paren_cont =
-    ")"                                              (* single expr: (e)      *)
-  | ",", [expr_list], ")"                            (* tuple: (e, ...)       *)
-  | ";", {ast_stmt}, [ast_expr], ")";                (* block: (s; ... e)     *)
-
-ast_expr_array   = "[", [ast_array_items], "]";
-
-ast_array_items  = ast_array_item, {",", ast_array_item};
-
-ast_array_item   = ast_expr | (spread_op, ast_expr);  (* <.. expr spreads an iterable *)
-
-ast_expr_rec_lit = ".{", [rec_lit_field_list], "}";
-
-(* UDN: dot-prefix constructor/value shorthand -- "." at atom position *)
-(* LL(1): Dot FIRST set is disjoint from all other atom FIRST sets     *)
-(* .None              -- zero-arg constructor                          *)
-(* .Some(x)           -- call form                                     *)
-ast_expr_dot_prefix = ".", lex_id, ["(", [expr_list], ")"];
-
-ast_rec_lit_field = (field_base, [bind_init])           (* field := val, or shorthand { x } = { x := x } *)
-                  | (spread_op, ast_expr);              (* <.. expr spreads a record *)
-
-ast_block = "(", {ast_stmt}, [ast_expr], ")";
-
-ast_cond = ast_expr | ("case", ast_pat, bind_init);
-
-ast_expr_if = "if", ast_cond, "then", ast_expr, {elif_clause}, [else_clause];
-
-elif_clause = "elif", ast_cond, "then", ast_expr;
-
-else_clause = "else", ast_expr;
-
-ast_expr_return = "return", [ast_expr];
-
-ast_expr_break  = "break", [ast_expr];
-
-ast_expr_cycle  = "cycle", [guard];
-
-ast_expr_defer  = "defer", ast_expr;
-
-ast_expr_import = "import", ast_import_clause, "from", lit_string;
-
-ast_import_clause = ("*", ["as", lex_id]) | ("{", import_item_list, "}");
-
-(* Re-export: export { name [as alias], ... } from "path" -- parsed via ast_export_tail *)
-ast_export_item = lex_id, ["as", lex_id];
-
-(* Resource acquisition: using name := init (body) -- semantics TBD *)
-ast_expr_using = "using", lex_id, ":=", ast_expr, ast_block;
-
-ast_import_item = lex_id, [ast_alias];
-
-ast_alias = "as", lex_id;
-
-(* All constructs that may carry [ast_attrs] or [ast_modifiers] prefix.        *)
-ast_expr_with_prefix = [ast_attrs], ast_expr_after_attrs;
-
-(* Dispatches on first keyword -- fully LL(1).                                 *)
-(* "export" is factored out explicitly: after consuming "export", the next     *)
-(* token is either "{" (re-export) or a declaration keyword (definition).      *)
-(* All other FIRST tokens are disjoint.                                        *)
-ast_expr_after_attrs =
-    "export", ast_export_tail                        (* export def or re-export *)
-  | ast_modifiers, ast_expr_decl_kw                  (* opaque?/extrin? record/choice/fn/const/var *)
-  | ast_expr_while                                   (* while                 *)
-  | ast_expr_loop                                    (* loop { } [while cond] -- do-while *)
-  | ast_expr_for                                     (* for                   *)
-  | ast_expr_match                                   (* match                 *)
-
-  | ast_expr_def_class                               (* class -- no export    *)
-  | ast_expr_def_given;                              (* given -- no export    *)
-
-(* After "export": FIRST("{") = re-export, FIRST(decl keyword) = definition.  *)
-(* Disjoint sets guarantee LL(1) at this decision point.                       *)
-ast_export_tail =
-    "{", export_item_list, "}", "from", lit_string   (* re-export: export { foo } from "path" *)
-  | ast_modifiers, ast_expr_decl_kw;                 (* export [opaque] [extrin] record/fn/... *)
-
-(* Declaration body -- dispatches on first keyword after optional modifiers.   *)
-ast_expr_decl_kw =
-    ast_expr_def_record
-  | ast_expr_def_choice
-  | ast_expr_def_fn
-  | ast_expr_bind;
-
-ast_expr_def_record = "record", [lex_id], [ast_ty_params], "{", [rec_field_list], "}";
-
-ast_rec_field = field_base, [ty_annot];
-
-ast_expr_def_choice = "choice", [lex_id], [ast_ty_params], "{", ["|"], ast_choice_variant, {"|", ast_choice_variant}, "}";
-
-ast_choice_variant  = [ast_attrs], lex_id, [ast_variant_payload];
-
-ast_variant_payload = ("(", [ty_list], ")")        (* positional:   Name(T1, T2)      *)
-                    | ("{", [rec_field_list], "}")  (* named-field:  Name{ f: T }      *)
-                    | (":=", lit);                  (* discriminant: Name := 0/"tag"/... *)
-
-(* Unified fn: named definition vs anonymous lambda -- LL(1) on token after "fn" *)
-ast_expr_def_fn = "fn", ast_fn_kind;
-
-ast_fn_kind =
-    lex_id, [ast_ty_params], ast_params, [ty_annot], [ast_where_clause], ["=>", ast_expr]  (* fn definition: fn name(...) => expr *)
-  | [ast_ty_params], ast_params, [ty_annot], [ast_where_clause], "=>", ast_expr;            (* lambda:        fn (...) => expr    *)
-
-ast_params = "(", [param_list], ")";
-
-ast_param = field_base, [ty_annot];
-
-ast_expr_bind = const_or_var, ast_pat, [ty_annot], [bind_init];
-
-(* ========================================================================= *)
-(* TYPE CLASS DECLARATIONS                                                   *)
-(* ========================================================================= *)
-(* class Eq['T] satisfies Foo['T], Bar['T] { fn ...; law ...; } *)
-ast_expr_def_class = "class", lex_id, [ast_ty_params], [ast_class_supers], "{", {class_member}, "}";
-
-ast_class_supers = "satisfies", ast_ty_named, {",", ast_ty_named};
-
-(* fn declarations (abstract or with default) and law declarations *)
-class_member = (ast_expr_def_fn | ast_class_law), ";";
-
-(* law name(params) => bool_expr -- implicitly Bool; no runtime enforcement *)
-ast_class_law = "law", lex_id, ast_params, "=>", ast_expr;
-
-(* given Eq[Int] { fn ... } or given Eq[Option['T]] where 'T satisfies Eq { fn ... } *)
-ast_expr_def_given = "given", ast_ty_named, [ast_where_clause], "{", {class_member}, "}";
-
-(* Post-hoc constraint clause: where 'T satisfies Ord, 'U satisfies Eq *)
-ast_where_clause = "where", ast_constraint, {",", ast_constraint};
-
-ast_constraint = ty_ident, "satisfies", ast_ty_named;
-
-(* Loop constructs -- [ast_attrs] removed; handled by ast_expr_with_prefix *)
-ast_expr_while = "while", ast_cond, [guard], "loop", ast_block;
-
-ast_expr_loop  = "loop", ast_block, ["while", ast_cond];
-
-ast_expr_for   = "for", ast_pat, "in", ast_expr, [guard], "loop", ast_block;
-
-(* Match arms: ( arm | arm | ... ) -- no `case` keyword; | separates arms.
-   Top-level | in arm body must be parenthesized to avoid ambiguity with | separator. *)
-ast_expr_match = "match", ast_expr, "with", "(", ast_arm, {"|", ast_arm}, ")";
-
-ast_arm = [ast_attrs], ast_pat, [guard], "=>", ast_expr;
-
-(* Labeled block -- replaces the old  name: while/loop/for  prefix syntax     *)
-
-
-(* BP 0020 *)
-ast_expr_postfix = ast_expr_atom, {ast_postfix_op};
-
-ast_postfix_op = ast_call | ast_index | ast_field | ast_opt_field | ast_rec_dot | ast_cast;
-
-ast_call = "(", [expr_list], ")";
-
-ast_index = atom_dot_lbrack, [expr_list], "]";
-
-ast_rec_dot = atom_dot_lbrace, rec_lit_field_list, "}";
-
-ast_field = ".", (lex_id | lit_number);
-
-(* UDN: optional chaining -- ?.field; propagates None if receiver is None *)
-ast_opt_field = question_dot, (lex_id | lit_number);
-
-ast_cast = "as", ast_ty;
-
-(* BP 0030 *)
-ast_expr_prefix = ("-" | "not" (* logical NOT *) | "!" (* dereference *) | "@" (* address-of *) | "~" (* bitwise NOT *)), ast_expr_prefix | ast_expr_postfix;
-
-(* BP 0040 *)
-ast_expr_multiplicative = ast_expr_prefix, {("*" | "/" | "%" (* remainder *)), ast_expr_prefix};
-
-(* BP 0050 *)
-ast_expr_additive = ast_expr_multiplicative, {("+" | "-"), ast_expr_multiplicative};
-
-(* BP 0060 *)
-ast_expr_shift = ast_expr_additive, {("shl" | "shr"), ast_expr_additive};
-
-(* BP 0065 *)
-ast_expr_bw_conj = ast_expr_shift, {"&", ast_expr_shift};
-
-(* BP 0066 *)
-ast_expr_bw_disj = ast_expr_bw_conj, {("|" | "^"), ast_expr_bw_conj};
-
-(* BP 0070 *)
-ast_expr_cons = ast_expr_bw_disj, {"::", ast_expr_bw_disj};
-
-(* BP 0080 -- ".." is inclusive [a, b], "..<" is exclusive [a, b); both sides required *)
-ast_expr_range = ast_expr_cons, [(".." | "..<"), ast_expr_cons];
-
-(* BP 0090 *)
-ast_expr_compare = ast_expr_range, [("<" | ">" | "<=" | ">=" | "in"), ast_expr_range];
-
-(* BP 0100 *)
-ast_expr_equality = ast_expr_compare, [("=" | "/="), ast_expr_compare];
-
-(* BP 0110 *)
-ast_expr_conj = ast_expr_equality, {"and", ast_expr_equality};
-
-(* BP 0120 *)
-ast_expr_disj = ast_expr_conj, {("or" | "xor"), ast_expr_conj};
-
-(* BP 0125 -- UDN: nil coalescing; lower than or/xor, higher than assign *)
-(* "??" FIRST is disjoint from "<-" FIRST so LL(1) is preserved         *)
-ast_expr_nil_coal = ast_expr_disj, ["??", ast_expr_disj];
-
-(* BP 0130 *)
-ast_expr_assign = ast_expr_nil_coal, ["<-", ast_expr];
-
-ast_expr = ast_expr_assign;
-
-(* ========================================================================= *)
-(* STATEMENTS & ROOT                                                         *)
-(* ========================================================================= *)
-ast_stmt = ast_expr, ";";
-
-ast_root = {ast_stmt};
-
-(* ========================================================================= *)
-(* UDN (Universal Dot Notation) -- all implemented                          *)
-(* ========================================================================= *)
-(* ?T             -- Option[T] sugar         (ast_ty_option)                 *)
-(* expr?.field    -- optional chaining       (ast_opt_field postfix)         *)
-(* expr ?? dflt   -- nil coalescing          (ast_expr_nil_coal, BP 0125)    *)
-(* .Name(args)    -- dot-prefix constructor  (ast_expr_dot_prefix atom)      *)
-(* .Name(args)    -- dot-prefix pattern      (ast_pat_dot_prefix)            *)
-(* expr.{ f := v }  -- record update / literal (ast_rec_dot postfix)        *)
-
-(* ========================================================================= *)
-(* LL(1) NOTES                                                               *)
-(* ========================================================================= *)
-(* "export" is LL(1) because ast_export_tail dispatches on "{" vs decl kw.  *)
-(* "fn" is LL(1): named def starts with lex_id, lambda starts with "(" or "[". *)
-(* "(" is LL(1): unit "()", paren "(e)", tuple "(e,...)", block "(s;...e)".  *)
-(* Pattern ident is LL(1): var bind vs positional sum vs named-field on next *)
-(*   token: ident alone, "(" = positional, "{" = named-field, else = bind.  *))
+    lit | ident
+  | ast_paren | ast_array | ast_rec_lit
+  | ast_dot_pfx | ast_piecewise | ast_match
+  | ast_let | ast_var | ast_return | ast_defer
+  | ast_spawn | ast_await | ast_import
+  | ast_forall | ast_exists
+  | ast_with_attrs ;
+
+(* 2.5  Parenthesised forms — delimiter determines kind.
+   ()   = unit
+   (,)  = empty tuple
+   (;)  = empty sequence, evaluates to ()
+   (a)  = parenthesised expr
+   (a,) = single-element tuple
+   (a, b) = tuple
+   (a; b) = sequence, returns b
+   (a; b;) = sequence, trailing ; discards, returns () *)
+ast_paren    = "(" , paren_body , ")" ;
+paren_body   =
+    (* empty *)                                       (* unit: () *)
+  | ","                                               (* empty tuple: (,) *)
+  | ";"                                               (* empty sequence: (;) *)
+  | ast_expr , paren_cont ;
+paren_cont   =
+    (* empty *)                                       (* parenthesised expr: (a) *)
+  | "," , [ expr_list ] , [ "," ]                    (* tuple *)
+  | ";" , { ast_stmt } , ast_expr                    (* sequence, returns last expr *)
+  | ";" , { ast_stmt } , ";" ;                       (* sequence, trailing ;, returns () *)
+
+(* 2.6  Arrays *)
+ast_array    = "[" , [ array_items ] , "]" ;
+array_items  = array_item , { "," , array_item } ;
+array_item   = "..." , ast_expr | ast_expr ;
+
+(* 2.7  Record literals: leading dot, comma-separated, := initialisers.
+   Named: Point.{ x := 1, y := 2 }   Anonymous: .{ x := 1, y := 2 } *)
+ast_rec_lit      = [ ident ] , ".{" , [ rec_lit_fields ] , "}" ;
+rec_lit_fields   = rec_lit_field , { "," , rec_lit_field } ;
+rec_lit_field    = ident , [ ":=" , ast_expr ] | "..." , ast_expr ;
+
+(* 2.8  Piecewise — sole conditional form. No if/else. No ternary. *)
+ast_piecewise = "(" , pw_arm , { "|" , pw_arm } , ")" ;
+pw_arm        = ast_expr , "if" , pw_guard ;
+pw_guard      = "_" | ast_expr ;
+
+(* 2.9  Match *)
+ast_match    = "match" , ast_expr ,
+               "(" , match_arm , { "|" , match_arm } , ")" ;
+match_arm    = [ attrs ] , ast_pat , [ "if" , ast_expr ] , "=>" , ast_expr ;
+
+(* 2.10  Bindings *)
+(* Immutable binding. ref = heap allocation. in = ML-style scope. *)
+ast_let      = "let" , [ "ref" ] , ast_pat ,
+               [ ty_annot ] , ":=" , ast_expr ,
+               [ "in" , "(" , ast_expr , ")" ] ;
+
+(* Mutable binding. var appears here and only here — never in ast_ty. *)
+ast_var      = "var" , [ "ref" ] , ast_pat ,
+               [ ty_annot ] , ":=" , ast_expr ;
+
+(* 2.11  Other atom forms *)
+ast_dot_pfx  = "." , ident , [ "(" , [ expr_list ] , ")" ] ;
+ast_return   = "return" , [ ast_expr ] ;
+ast_defer    = "defer" , ast_expr ;   (* ast_paren handles block form *)
+ast_spawn    = "spawn" , ast_expr ;
+ast_await    = "await" , ast_expr ;
+ast_import   = "import" , lit_string ;
+ast_forall   = "forall" , ty_param_list , [ where_clause ] , "->" , ast_expr ;
+ast_exists   = "exists" , ty_param_list , [ where_clause ] , "->" , ast_expr ;
+
+(* 2.12  Declarations *)
+ast_with_attrs = attrs , ast_decl ;
+ast_decl =
+    [ "export" ] , ( ast_let | ast_var )
+  | "export" , "{" , export_list , "}" , [ ":=" , ast_import ]
+  | ast_class_decl
+  | ast_given_decl ;
+
+ast_class_decl = "class" , ident , [ ty_param_list ] ,
+                 [ "where" , ty_named_list ] ,
+                 "{" , { class_member } , "}" ;
+ast_given_decl = "given" , ast_ty_named , [ where_clause ] ,
+                 "{" , { class_member } , "}" ;
+class_member   = ( fn_decl | law_decl ) , ";" ;
+fn_decl        = "let" , op_or_ident , params , [ ty_annot ] ,
+                 [ ":=" , ast_expr ] ;
+law_decl       = "law" , ident , ":=" , ast_expr ;
+op_or_ident    = ident | op_ident ;
+params         = "(" , [ param_list ] , ")" ;
+param_list     = param , { "," , param } ;
+
+(* Parameter modes — inout precedes name, not type.
+   No modifier  = immutable copy
+   var          = mutable local copy
+   inout        = copy-in copy-out, Ada-style, clean call site *)
+param          = [ "inout" | "var" ] , ident , [ ty_annot ] , [ ":=" , ast_expr ] ;
+
+export_list    = export_item , { "," , export_item } ;
+export_item    = ident , [ "as" , ident ] ;
+
+(* 2.13  Types. var never appears here. inout never appears here.
+   Record type fields: semicolons.
+   ref T = heap-allocated reference type. *)
+ast_ty       = ast_ty_arrow ;
+ast_ty_arrow = ast_ty_eff , { ( "->" | "~>" ) , ast_ty_eff } ;
+ast_ty_eff   = ast_ty_sum , [ "over" , effect_set ] ;
+ast_ty_sum   = ast_ty_prod , { "+" , ast_ty_prod } ;
+ast_ty_prod  = ast_ty_base , { "*" , ast_ty_base } ;
+ast_ty_base  =
+    ty_ident
+  | "?" , ast_ty_base
+  | "ref" , ast_ty_base
+  | ident , [ "of" , ty_arg_list ]
+  | "(" , [ ty_list ] , ")"
+  | "[" , [ lit_int ] , "]" , ast_ty
+  | "{" , rec_ty_fields , [ ";" , "..." ] , "}"
+  | "{" , ast_ty , "|" , ast_expr , "}"
+  | "forall" , ty_param_list , [ where_clause ] , "->" , ast_ty
+  | "exists" , ty_param_list , [ where_clause ] , "->" , ast_ty ;
+
+(* Record type fields: semicolons as separators.
+   Fields may have default values. *)
+rec_ty_fields  = rec_ty_field , { ";" , rec_ty_field } ;
+rec_ty_field   = ident , ":" , ast_ty , [ ":=" , ast_expr ] ;
+
+ty_list        = ast_ty , { "," , ast_ty } ;
+ty_arg_list    = ast_ty , { "," , ast_ty } ;
+ty_param_list  = ty_ident , { "," , ty_ident } ;
+ty_annot       = ":" , ast_ty ;
+ty_named_list  = ast_ty_named , { "," , ast_ty_named } ;
+ast_ty_named   = ident , [ "of" , ty_arg_list ] ;
+effect_set     = "{" , effect_list , "}" ;
+effect_list    = effect_item , { "," , effect_item } ;
+effect_item    = ident , [ "of" , ast_ty ] | ty_ident ;
+where_clause   = "where" , constraint , { "," , constraint } ;
+constraint     = ty_ident , ( "<:" | ":>" ) , ast_ty_named ;
+
+(* 2.14  Patterns. var in pattern = mutable bind. . prefix = UDN destructor. *)
+ast_pat         = ast_pat_primary ,
+                  [ "or" , ast_pat_primary , { "or" , ast_pat_primary } ] ;
+ast_pat_primary =
+    "_" | lit
+  | [ "var" ] , ident , [ pat_suffix ]
+  | "." , ident , [ "(" , [ pat_list ] , ")" ]
+  | "{" , [ rec_pat_fields ] , "}"
+  | "(" , [ pat_list ] , ")"
+  | "[" , [ pat_list ] , "]" ;
+pat_suffix      = "(" , [ pat_list ] , ")" | "{" , [ rec_pat_fields ] , "}" ;
+rec_pat_fields  = rec_pat_field , { "," , rec_pat_field } ;
+rec_pat_field   = [ "var" ] , ident , [ ":" , ast_pat ] ;
+pat_list        = ast_pat , { "," , ast_pat } ;
+
+(* 2.15  Attributes *)
+attrs      = attr , { attr } ;
+attr       = "#[" , attr_body , "]" ;
+attr_body  = ident | ident , ":=" , attr_value ;
+attr_value = lit | "(" , lit , { "," , lit } , ")" ;
+
+(* 2.16  Shared *)
+expr_list  = ast_expr , { "," , ast_expr } ;
