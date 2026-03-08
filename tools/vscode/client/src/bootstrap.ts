@@ -45,11 +45,16 @@ function _showConfiguredPathWarning(configuredPath: string) {
  */
 function _getUserConfiguredPath(): string | undefined {
 	const config = getConfig();
-	if (config.serverPath) {
-		if (_exists(config.serverPath)) {
-			return config.serverPath;
+
+	// Check musi.lspPath first (new setting), then fall back to musi.server.path
+	const lspPath = config.lspPath !== "musi-lsp" ? config.lspPath : null;
+	const candidatePath = lspPath ?? config.serverPath;
+
+	if (candidatePath) {
+		if (_exists(candidatePath)) {
+			return candidatePath;
 		}
-		_showConfiguredPathWarning(config.serverPath);
+		_showConfiguredPathWarning(candidatePath);
 	}
 
 	return undefined;

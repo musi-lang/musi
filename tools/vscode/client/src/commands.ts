@@ -9,6 +9,8 @@ interface Commands {
 	restartServer: CommandHandler;
 	stopServer: CommandHandler;
 	showLogs: CommandHandler;
+	runFile: CommandHandler;
+	checkFile: CommandHandler;
 }
 
 function _createCommands(statusBar: StatusBar): Commands {
@@ -53,6 +55,34 @@ function _createCommands(statusBar: StatusBar): Commands {
 				);
 			}
 		},
+
+		runFile() {
+			const editor = vscode.window.activeTextEditor;
+			if (!editor) {
+				vscode.window.showWarningMessage("No active editor.");
+				return;
+			}
+			const file = editor.document.uri.fsPath;
+			const terminal =
+				vscode.window.terminals.find((t) => t.name === "Musi") ??
+				vscode.window.createTerminal("Musi");
+			terminal.show();
+			terminal.sendText(`musi run ${JSON.stringify(file)}`);
+		},
+
+		checkFile() {
+			const editor = vscode.window.activeTextEditor;
+			if (!editor) {
+				vscode.window.showWarningMessage("No active editor.");
+				return;
+			}
+			const file = editor.document.uri.fsPath;
+			const terminal =
+				vscode.window.terminals.find((t) => t.name === "Musi") ??
+				vscode.window.createTerminal("Musi");
+			terminal.show();
+			terminal.sendText(`musi check ${JSON.stringify(file)}`);
+		},
 	};
 }
 
@@ -74,5 +104,7 @@ export function registerCommands(
 		),
 		vscode.commands.registerCommand("musi.stopServer", commands.stopServer),
 		vscode.commands.registerCommand("musi.showLogs", commands.showLogs),
+		vscode.commands.registerCommand("musi.runFile", commands.runFile),
+		vscode.commands.registerCommand("musi.checkFile", commands.checkFile),
 	);
 }

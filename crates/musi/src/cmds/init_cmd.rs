@@ -47,7 +47,7 @@ pub fn run(args: InitArgs) {
     };
 
     let config = serde_json::json!({
-        "$schema": "https://musi-lang.org/schemas/mspackage-schema.v1.json",
+        "$schema": "https://raw.githubusercontent.com/musi-lang/musi/refs/heads/main/schemas/mspackage-schema.v1.json",
         "name": name,
         "version": "0.1.0",
         "main": "./index.ms"

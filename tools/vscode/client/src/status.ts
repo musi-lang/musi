@@ -35,7 +35,15 @@ export class StatusBar {
 	 * @param state Visual state determining colors.
 	 */
 	update(message: string, state: StatusState) {
-		this.#item.text = `$(play) Musi: ${message}`;
+		const icon =
+			state === "ready"
+				? "$(check)"
+				: state === "loading"
+					? "$(sync~spin)"
+					: state === "error"
+						? "$(error)"
+						: "$(play)";
+		this.#item.text = `${icon} Musi LSP`;
 
 		const colors = _STATE_COLORS[state];
 		this.#item.backgroundColor = colors.bg

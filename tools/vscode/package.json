@@ -187,6 +187,18 @@
         "title": "Show Language Server Output",
         "category": "Musi",
         "icon": "$(output)"
+      },
+      {
+        "command": "musi.runFile",
+        "title": "Run File",
+        "category": "Musi",
+        "description": "Run the current .ms file using the Musi runtime."
+      },
+      {
+        "command": "musi.checkFile",
+        "title": "Check File",
+        "category": "Musi",
+        "description": "Check the current .ms file for errors using musi check."
       }
     ],
     "keybindings": [
@@ -215,6 +227,16 @@
     "configuration": {
       "title": "Musi",
       "properties": {
+        "musi.lspPath": {
+          "type": "string",
+          "default": "musi-lsp",
+          "description": "Path to the musi-lsp executable."
+        },
+        "musi.checkOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run musi check when saving a .ms file."
+        },
         "musi.server.path": {
           "type": [
             "string",

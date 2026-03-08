@@ -1,640 +1,625 @@
 {
-  "$id": "https://musi-lang.org/schemas/mspackage-schema.v1.json",
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Musi package configuration file",
-  "description": "Configuration for Musi packages. Combines package metadata, compiler options, and tooling config.",
-  "type": "object",
-  "properties": {
-    "name": {
-      "type": "string",
-      "description": "Package name.",
-      "pattern": "^(@[a-z0-9-~][a-z0-9-._~]*/)?[a-z0-9-~][a-z0-9-._~]*$"
-    },
-    "version": {
-      "type": "string",
-      "description": "Package version (semver).",
-      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[a-zA-Z0-9-]+)?(\\+[a-zA-Z0-9-]+)?$"
-    },
-    "description": {
-      "type": "string",
-      "description": "Brief package description."
-    },
-    "main": {
-      "type": "string",
-      "description": "Main entry point.",
-      "pattern": "^\\./.+\\.ms$",
-      "default": "./index.ms"
-    },
-    "exports": {
-      "oneOf": [
-        {
-          "type": "string",
-          "description": "Path to main module.",
-          "pattern": "^\\./.+\\.ms$"
-        },
-        {
-          "type": "object",
-          "description": "Map of package exports.",
-          "additionalProperties": {
-            "type": "string",
-            "pattern": "^\\./.+\\.ms$"
-          }
-        }
-      ]
-    },
-    "imports": {
-      "type": "object",
-      "description": "Import map for specifier remapping.",
-      "additionalProperties": {
-        "type": "string"
-      }
-    },
-    "dependencies": {
-      "type": "object",
-      "description": "Runtime dependencies.",
-      "additionalProperties": {
-        "type": "string"
-      }
-    },
-    "devDependencies": {
-      "type": "object",
-      "description": "Development dependencies.",
-      "additionalProperties": {
-        "type": "string"
-      }
-    },
-    "peerDependencies": {
-      "type": "object",
-      "description": "Peer dependencies.",
-      "additionalProperties": {
-        "type": "string"
-      }
-    },
-    "optionalDependencies": {
-      "type": "object",
-      "description": "Optional dependencies.",
-      "additionalProperties": {
-        "type": "string"
-      }
-    },
-    "bin": {
-      "oneOf": [
-        {
-          "type": "string",
-          "description": "Path to executable.",
-          "pattern": "^\\./.+\\.ms$"
-        },
-        {
-          "type": "object",
-          "description": "Map of command names to executables.",
-          "additionalProperties": {
-            "type": "string",
-            "pattern": "^\\./.+\\.ms$"
-          }
-        }
-      ]
-    },
-    "files": {
-      "type": "array",
-      "description": "Files to include when publishing.",
-      "items": {
-        "type": "string"
-      }
-    },
-    "keywords": {
-      "type": "array",
-      "description": "Keywords for discovery.",
-      "items": {
-        "type": "string"
-      }
-    },
-    "author": {
-      "oneOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "object",
-          "properties": {
-            "name": {
-              "type": "string"
-            },
-            "email": {
-              "type": "string"
-            },
-            "url": {
-              "type": "string"
-            }
-          }
-        }
-      ]
-    },
-    "license": {
-      "type": "string",
-      "description": "SPDX license identifier."
-    },
-    "homepage": {
-      "type": "string",
-      "description": "Package homepage URL."
-    },
-    "repository": {
-      "oneOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "object",
-          "properties": {
-            "type": {
-              "type": "string",
-              "default": "git"
-            },
-            "url": {
-              "type": "string"
-            },
-            "directory": {
-              "type": "string"
-            }
-          }
-        }
-      ]
-    },
-    "bugs": {
-      "oneOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "object",
-          "properties": {
-            "url": {
-              "type": "string"
-            },
-            "email": {
-              "type": "string"
-            }
-          }
-        }
-      ]
-    },
-    "private": {
-      "type": "boolean",
-      "description": "Prevent publishing.",
-      "default": false
-    },
-    "workspaces": {
-      "oneOf": [
-        {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        {
-          "type": "object",
-          "properties": {
-            "packages": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            }
-          }
-        }
-      ]
-    },
-    "publishRegistry": {
-      "type": "string",
-      "description": "Registry URL for publishing.",
-      "default": "https://msr.musi-lang.org"
-    },
-    "exclude": {
-      "type": "array",
-      "description": "Global exclude patterns.",
-      "items": {
-        "type": "string"
-      }
-    },
-    "compilerOptions": {
-      "type": "object",
-      "description": "Musi compiler configuration.",
-      "properties": {
-        "target": {
-          "type": "string",
-          "description": "Compilation target.",
-          "enum": [
-            "MS2025",
-            "native",
-            "wasm",
-            "embedded"
-          ],
-          "default": "MS2025"
-        },
-        "lib": {
-          "type": "array",
-          "description": "Library files to include.",
-          "items": {
-            "type": "string"
-          },
-          "default": [
-            "MS2025"
-          ]
-        },
-        "outDir": {
-          "type": "string",
-          "description": "Output directory for .mso files.",
-          "default": "./dist"
-        },
-        "rootDir": {
-          "type": "string",
-          "description": "Root source directory.",
-          "default": "./src"
-        },
-        "baseUrl": {
-          "type": "string",
-          "description": "Base directory for module resolution.",
-          "default": "./"
-        },
-        "paths": {
-          "type": "object",
-          "description": "Path aliases for imports.",
-          "additionalProperties": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "strict": {
-          "type": "boolean",
-          "description": "Enable all strict checks.",
-          "default": false
-        },
-        "noImplicitAny": {
-          "type": "boolean",
-          "description": "Error on implied Any.",
-          "default": false
-        },
-        "noImplicitUnit": {
-          "type": "boolean",
-          "description": "Error on implied Unit.",
-          "default": false
-        },
-        "strictFunctionTypes": {
-          "type": "boolean",
-          "description": "Strict function subtyping.",
-          "default": false
-        },
-        "strictOptionalChecks": {
-          "type": "boolean",
-          "description": "Strict optional property checks.",
-          "default": false
-        },
-        "noMissingCasesInMatch": {
-          "type": "boolean",
-          "description": "Require exhaustive match.",
-          "default": false
-        },
-        "exactOptionalPropertyTypes": {
-          "type": "boolean",
-          "description": "Exact optional types (no implicit undefined).",
-          "default": false
-        },
-        "noUnusedLocals": {
-          "type": "boolean",
-          "description": "Error on unused locals.",
-          "default": false
-        },
-        "noUnusedParameters": {
-          "type": "boolean",
-          "description": "Error on unused parameters.",
-          "default": false
-        },
-        "noImplicitReturns": {
-          "type": "boolean",
-          "description": "Error on implicit returns.",
-          "default": false
-        },
-        "allowUnreachableCode": {
-          "type": "boolean",
-          "description": "Allow unreachable code.",
-          "default": false
-        },
-        "allowUnusedLabels": {
-          "type": "boolean",
-          "description": "Allow unused labels.",
-          "default": false
-        },
-        "forceConsistentCasingInFileNames": {
-          "type": "boolean",
-          "description": "Enforce import casing.",
-          "default": true
-        },
-        "skipLibCheck": {
-          "type": "boolean",
-          "description": "Skip library type checking.",
-          "default": true
-        },
-        "noEmit": {
-          "type": "boolean",
-          "description": "Check only, no output.",
-          "default": false
-        },
-        "noEmitOnError": {
-          "type": "boolean",
-          "description": "Suppress output on error.",
-          "default": true
-        },
-        "removeComments": {
-          "type": "boolean",
-          "description": "Remove comments from output.",
-          "default": true
-        },
-        "composite": {
-          "type": "boolean",
-          "description": "Enable project references.",
-          "default": false
-        },
-        "incremental": {
-          "type": "boolean",
-          "description": "Enable incremental compilation.",
-          "default": false
-        },
-        "buildInfoFile": {
-          "type": "string",
-          "description": "Path to incremental build info.",
-          "default": ".msbuildinfo"
-        }
-      }
-    },
-    "include": {
-      "type": "array",
-      "description": "Glob patterns to include in compilation.",
-      "items": {
-        "type": "string"
-      }
-    },
-    "compileFiles": {
-      "type": "array",
-      "description": "Explicit list of files to compile.",
-      "items": {
-        "type": "string"
-      }
-    },
-    "references": {
-      "type": "array",
-      "description": "Project references for multi-project builds.",
-      "items": {
-        "type": "object",
-        "properties": {
-          "path": {
-            "type": "string",
-            "description": "Path to referenced project."
-          }
-        }
-      }
-    },
-    "watchOptions": {
-      "type": "object",
-      "description": "Watch mode settings.",
-      "properties": {
-        "watchFile": {
-          "type": "string",
-          "enum": [
-            "fixedPollingInterval",
-            "priorityPollingInterval",
-            "dynamicPriorityPolling",
-            "useFsEvents"
-          ]
-        },
-        "watchDirectory": {
-          "type": "string",
-          "enum": [
-            "useFsEvents",
-            "fixedPollingInterval",
-            "dynamicPriorityPolling"
-          ]
-        },
-        "excludeFiles": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "excludeDirectories": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        }
-      }
-    },
-    "tasks": {
-      "type": "object",
-      "description": "Task definitions for 'musi task'.",
-      "additionalProperties": {
-        "oneOf": [
-          {
-            "type": "string"
-          },
-          {
-            "type": "object",
-            "properties": {
-              "description": {
-                "type": "string"
-              },
-              "command": {
-                "type": "string"
-              },
-              "dependencies": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              }
-            }
-          }
-        ]
-      }
-    },
-    "fmt": {
-      "type": "object",
-      "description": "Formatter configuration.",
-      "properties": {
-        "include": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "exclude": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "useTabs": {
-          "type": "boolean",
-          "default": false
-        },
-        "lineWidth": {
-          "type": "number",
-          "default": 80
-        },
-        "indentWidth": {
-          "type": "number",
-          "default": 2
-        },
-        "proseWrap": {
-          "type": "string",
-          "enum": [
-            "always",
-            "never",
-            "preserve"
-          ],
-          "default": "preserve"
-        }
-      }
-    },
-    "lint": {
-      "type": "object",
-      "description": "Linter configuration.",
-      "properties": {
-        "include": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "exclude": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "rules": {
-          "type": "object",
-          "properties": {
-            "tags": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "exclude": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "include": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            }
-          }
-        }
-      }
-    },
-    "test": {
-      "type": "object",
-      "description": "Test configuration.",
-      "properties": {
-        "include": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "exclude": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        }
-      }
-    },
-    "bench": {
-      "type": "object",
-      "description": "Benchmark configuration.",
-      "properties": {
-        "include": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "exclude": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        }
-      }
-    },
-    "publish": {
-      "type": "object",
-      "description": "Publish configuration.",
-      "properties": {
-        "include": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "exclude": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        }
-      }
-    },
-    "depsDir": {
-      "oneOf": [
-        {
-          "type": "string",
-          "enum": [
-            "auto",
-            "manual",
-            "none"
-          ],
-          "default": "auto"
-        },
-        {
-          "type": "boolean"
-        }
-      ]
-    },
-    "vendor": {
-      "type": "boolean",
-      "description": "Enable local vendor cache.",
-      "default": false
-    },
-    "lock": {
-      "oneOf": [
-        {
-          "type": "boolean"
-        },
-        {
-          "type": "string"
-        },
-        {
-          "type": "object",
-          "properties": {
-            "path": {
-              "type": "string",
-              "default": "musi.lock"
-            },
-            "frozen": {
-              "type": "boolean",
-              "default": false
-            }
-          }
-        }
-      ],
-      "default": true
-    }
-  }
+	"$id": "https://raw.githubusercontent.com/musi-lang/musi/refs/heads/main/schemas/mspackage-schema.v1.json",
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"title": "Musi package configuration file",
+	"description": "Configuration for Musi packages. Combines package metadata, compiler options, and tooling config.",
+	"type": "object",
+	"properties": {
+		"name": {
+			"type": "string",
+			"description": "Package name.",
+			"pattern": "^(@[a-z0-9-~][a-z0-9-._~]*/)?[a-z0-9-~][a-z0-9-._~]*$"
+		},
+		"version": {
+			"type": "string",
+			"description": "Package version (semver).",
+			"pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[a-zA-Z0-9-]+)?(\\+[a-zA-Z0-9-]+)?$"
+		},
+		"description": {
+			"type": "string",
+			"description": "Brief package description."
+		},
+		"main": {
+			"type": "string",
+			"description": "Main entry point.",
+			"pattern": "^\\./.+\\.ms$",
+			"default": "./index.ms"
+		},
+		"exports": {
+			"oneOf": [
+				{
+					"type": "string",
+					"description": "Path to main module.",
+					"pattern": "^\\./.+\\.ms$"
+				},
+				{
+					"type": "object",
+					"description": "Map of package exports.",
+					"additionalProperties": {
+						"type": "string",
+						"pattern": "^\\./.+\\.ms$"
+					}
+				}
+			]
+		},
+		"imports": {
+			"type": "object",
+			"description": "Import map for specifier remapping.",
+			"additionalProperties": {
+				"type": "string"
+			}
+		},
+		"dependencies": {
+			"type": "object",
+			"description": "Runtime dependencies.",
+			"additionalProperties": {
+				"type": "string"
+			}
+		},
+		"devDependencies": {
+			"type": "object",
+			"description": "Development dependencies.",
+			"additionalProperties": {
+				"type": "string"
+			}
+		},
+		"peerDependencies": {
+			"type": "object",
+			"description": "Peer dependencies.",
+			"additionalProperties": {
+				"type": "string"
+			}
+		},
+		"optionalDependencies": {
+			"type": "object",
+			"description": "Optional dependencies.",
+			"additionalProperties": {
+				"type": "string"
+			}
+		},
+		"bin": {
+			"oneOf": [
+				{
+					"type": "string",
+					"description": "Path to executable.",
+					"pattern": "^\\./.+\\.ms$"
+				},
+				{
+					"type": "object",
+					"description": "Map of command names to executables.",
+					"additionalProperties": {
+						"type": "string",
+						"pattern": "^\\./.+\\.ms$"
+					}
+				}
+			]
+		},
+		"files": {
+			"type": "array",
+			"description": "Files to include when publishing.",
+			"items": {
+				"type": "string"
+			}
+		},
+		"keywords": {
+			"type": "array",
+			"description": "Keywords for discovery.",
+			"items": {
+				"type": "string"
+			}
+		},
+		"author": {
+			"oneOf": [
+				{
+					"type": "string"
+				},
+				{
+					"type": "object",
+					"properties": {
+						"name": {
+							"type": "string"
+						},
+						"email": {
+							"type": "string"
+						},
+						"url": {
+							"type": "string"
+						}
+					}
+				}
+			]
+		},
+		"license": {
+			"type": "string",
+			"description": "SPDX license identifier."
+		},
+		"homepage": {
+			"type": "string",
+			"description": "Package homepage URL."
+		},
+		"repository": {
+			"oneOf": [
+				{
+					"type": "string"
+				},
+				{
+					"type": "object",
+					"properties": {
+						"type": {
+							"type": "string",
+							"default": "git"
+						},
+						"url": {
+							"type": "string"
+						},
+						"directory": {
+							"type": "string"
+						}
+					}
+				}
+			]
+		},
+		"bugs": {
+			"oneOf": [
+				{
+					"type": "string"
+				},
+				{
+					"type": "object",
+					"properties": {
+						"url": {
+							"type": "string"
+						},
+						"email": {
+							"type": "string"
+						}
+					}
+				}
+			]
+		},
+		"private": {
+			"type": "boolean",
+			"description": "Prevent publishing.",
+			"default": false
+		},
+		"workspaces": {
+			"oneOf": [
+				{
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				},
+				{
+					"type": "object",
+					"properties": {
+						"packages": {
+							"type": "array",
+							"items": {
+								"type": "string"
+							}
+						}
+					}
+				}
+			]
+		},
+		"publishRegistry": {
+			"type": "string",
+			"description": "Registry URL for publishing.",
+			"default": "https://msr.musi-lang.org"
+		},
+		"exclude": {
+			"type": "array",
+			"description": "Global exclude patterns.",
+			"items": {
+				"type": "string"
+			}
+		},
+		"compilerOptions": {
+			"type": "object",
+			"description": "Musi compiler configuration.",
+			"properties": {
+				"target": {
+					"type": "string",
+					"description": "Compilation target.",
+					"enum": ["MS2025", "native", "wasm", "embedded"],
+					"default": "MS2025"
+				},
+				"lib": {
+					"type": "array",
+					"description": "Library files to include.",
+					"items": {
+						"type": "string"
+					},
+					"default": ["MS2025"]
+				},
+				"outDir": {
+					"type": "string",
+					"description": "Output directory for .mso files.",
+					"default": "./dist"
+				},
+				"rootDir": {
+					"type": "string",
+					"description": "Root source directory.",
+					"default": "./src"
+				},
+				"baseUrl": {
+					"type": "string",
+					"description": "Base directory for module resolution.",
+					"default": "./"
+				},
+				"paths": {
+					"type": "object",
+					"description": "Path aliases for imports.",
+					"additionalProperties": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					}
+				},
+				"strict": {
+					"type": "boolean",
+					"description": "Enable all strict checks.",
+					"default": false
+				},
+				"noImplicitAny": {
+					"type": "boolean",
+					"description": "Error on implied Any.",
+					"default": false
+				},
+				"noImplicitUnit": {
+					"type": "boolean",
+					"description": "Error on implied Unit.",
+					"default": false
+				},
+				"strictFunctionTypes": {
+					"type": "boolean",
+					"description": "Strict function subtyping.",
+					"default": false
+				},
+				"strictOptionalChecks": {
+					"type": "boolean",
+					"description": "Strict optional property checks.",
+					"default": false
+				},
+				"noMissingCasesInMatch": {
+					"type": "boolean",
+					"description": "Require exhaustive match.",
+					"default": false
+				},
+				"exactOptionalPropertyTypes": {
+					"type": "boolean",
+					"description": "Exact optional types (no implicit undefined).",
+					"default": false
+				},
+				"noUnusedLocals": {
+					"type": "boolean",
+					"description": "Error on unused locals.",
+					"default": false
+				},
+				"noUnusedParameters": {
+					"type": "boolean",
+					"description": "Error on unused parameters.",
+					"default": false
+				},
+				"noImplicitReturns": {
+					"type": "boolean",
+					"description": "Error on implicit returns.",
+					"default": false
+				},
+				"allowUnreachableCode": {
+					"type": "boolean",
+					"description": "Allow unreachable code.",
+					"default": false
+				},
+				"allowUnusedLabels": {
+					"type": "boolean",
+					"description": "Allow unused labels.",
+					"default": false
+				},
+				"forceConsistentCasingInFileNames": {
+					"type": "boolean",
+					"description": "Enforce import casing.",
+					"default": true
+				},
+				"skipLibCheck": {
+					"type": "boolean",
+					"description": "Skip library type checking.",
+					"default": true
+				},
+				"noEmit": {
+					"type": "boolean",
+					"description": "Check only, no output.",
+					"default": false
+				},
+				"noEmitOnError": {
+					"type": "boolean",
+					"description": "Suppress output on error.",
+					"default": true
+				},
+				"removeComments": {
+					"type": "boolean",
+					"description": "Remove comments from output.",
+					"default": true
+				},
+				"composite": {
+					"type": "boolean",
+					"description": "Enable project references.",
+					"default": false
+				},
+				"incremental": {
+					"type": "boolean",
+					"description": "Enable incremental compilation.",
+					"default": false
+				},
+				"buildInfoFile": {
+					"type": "string",
+					"description": "Path to incremental build info.",
+					"default": ".msbuildinfo"
+				}
+			}
+		},
+		"include": {
+			"type": "array",
+			"description": "Glob patterns to include in compilation.",
+			"items": {
+				"type": "string"
+			}
+		},
+		"compileFiles": {
+			"type": "array",
+			"description": "Explicit list of files to compile.",
+			"items": {
+				"type": "string"
+			}
+		},
+		"references": {
+			"type": "array",
+			"description": "Project references for multi-project builds.",
+			"items": {
+				"type": "object",
+				"properties": {
+					"path": {
+						"type": "string",
+						"description": "Path to referenced project."
+					}
+				}
+			}
+		},
+		"watchOptions": {
+			"type": "object",
+			"description": "Watch mode settings.",
+			"properties": {
+				"watchFile": {
+					"type": "string",
+					"enum": [
+						"fixedPollingInterval",
+						"priorityPollingInterval",
+						"dynamicPriorityPolling",
+						"useFsEvents"
+					]
+				},
+				"watchDirectory": {
+					"type": "string",
+					"enum": [
+						"useFsEvents",
+						"fixedPollingInterval",
+						"dynamicPriorityPolling"
+					]
+				},
+				"excludeFiles": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				},
+				"excludeDirectories": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				}
+			}
+		},
+		"tasks": {
+			"type": "object",
+			"description": "Task definitions for 'musi task'.",
+			"additionalProperties": {
+				"oneOf": [
+					{
+						"type": "string"
+					},
+					{
+						"type": "object",
+						"properties": {
+							"description": {
+								"type": "string"
+							},
+							"command": {
+								"type": "string"
+							},
+							"dependencies": {
+								"type": "array",
+								"items": {
+									"type": "string"
+								}
+							}
+						}
+					}
+				]
+			}
+		},
+		"fmt": {
+			"type": "object",
+			"description": "Formatter configuration.",
+			"properties": {
+				"include": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				},
+				"exclude": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				},
+				"useTabs": {
+					"type": "boolean",
+					"default": false
+				},
+				"lineWidth": {
+					"type": "number",
+					"default": 80
+				},
+				"indentWidth": {
+					"type": "number",
+					"default": 2
+				},
+				"proseWrap": {
+					"type": "string",
+					"enum": ["always", "never", "preserve"],
+					"default": "preserve"
+				}
+			}
+		},
+		"lint": {
+			"type": "object",
+			"description": "Linter configuration.",
+			"properties": {
+				"include": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				},
+				"exclude": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				},
+				"rules": {
+					"type": "object",
+					"properties": {
+						"tags": {
+							"type": "array",
+							"items": {
+								"type": "string"
+							}
+						},
+						"exclude": {
+							"type": "array",
+							"items": {
+								"type": "string"
+							}
+						},
+						"include": {
+							"type": "array",
+							"items": {
+								"type": "string"
+							}
+						}
+					}
+				}
+			}
+		},
+		"test": {
+			"type": "object",
+			"description": "Test configuration.",
+			"properties": {
+				"include": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				},
+				"exclude": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				}
+			}
+		},
+		"bench": {
+			"type": "object",
+			"description": "Benchmark configuration.",
+			"properties": {
+				"include": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				},
+				"exclude": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				}
+			}
+		},
+		"publish": {
+			"type": "object",
+			"description": "Publish configuration.",
+			"properties": {
+				"include": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				},
+				"exclude": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				}
+			}
+		},
+		"depsDir": {
+			"oneOf": [
+				{
+					"type": "string",
+					"enum": ["auto", "manual", "none"],
+					"default": "auto"
+				},
+				{
+					"type": "boolean"
+				}
+			]
+		},
+		"vendor": {
+			"type": "boolean",
+			"description": "Enable local vendor cache.",
+			"default": false
+		},
+		"lock": {
+			"oneOf": [
+				{
+					"type": "boolean"
+				},
+				{
+					"type": "string"
+				},
+				{
+					"type": "object",
+					"properties": {
+						"path": {
+							"type": "string",
+							"default": "musi.lock"
+						},
+						"frozen": {
+							"type": "boolean",
+							"default": false
+						}
+					}
+				}
+			],
+			"default": true
+		}
+	}
 }

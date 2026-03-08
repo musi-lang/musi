@@ -4,6 +4,8 @@ import * as vscode from "vscode";
  * Extension configuration values from VS Code settings.
  */
 export interface Config {
+	readonly lspPath: string;
+	readonly checkOnSave: boolean;
 	readonly serverPath: string | null;
 	readonly runtimePath: string | null;
 	readonly traceServer: "off" | "messages" | "verbose";
@@ -15,6 +17,8 @@ export interface Config {
 }
 
 const _DEFAULTS: Config = {
+	lspPath: "musi-lsp",
+	checkOnSave: true,
 	serverPath: null,
 	runtimePath: null,
 	traceServer: "off",
@@ -41,6 +45,8 @@ export function getConfig(): Config {
 	const cfg = vscode.workspace.getConfiguration("musi");
 
 	return {
+		lspPath: _get(cfg, "lspPath", _DEFAULTS.lspPath),
+		checkOnSave: _get(cfg, "checkOnSave", _DEFAULTS.checkOnSave),
 		serverPath: _get(cfg, "server.path", _DEFAULTS.serverPath),
 		runtimePath: _get(cfg, "runtime.path", _DEFAULTS.runtimePath),
 		traceServer: _get(cfg, "trace.server", _DEFAULTS.traceServer),
