@@ -9,7 +9,7 @@ import { musi_glfw_init, musi_glfw_terminate, musi_glfw_create_window,
          musi_gl_viewport, musi_gl_clear_black, musi_gl_clear,
          musi_gl_setup_projection, musi_gl_setup_cube_camera,
          musi_gl_rotate_x, musi_gl_rotate_y, musi_gl_enable_depth,
-         musi_gl_draw_cube_solid, musi_gl_color3_rgb,
+         musi_gl_draw_cube_solid,
          musi_gl_color_buffer_bit, musi_gl_depth_buffer_bit,
          musi_glfw_key_escape, musi_glfw_key_space
        } from "../lib/glfw";
