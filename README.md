@@ -33,16 +33,15 @@ Musi is a programming language with a mathematically-motivated type system, func
 ```bash
 # Build the toolchain
 cargo build --release
-export PATH="$PWD/target/release:$PATH"
 
-# Run a program
-musi run examples/hello.ms
+# Run a program (use ./target/release/musi or add to PATH)
+./target/release/musi run examples/hello/index.ms
 
 # Type-check
-musi check myfile.ms
+./target/release/musi check myfile.ms
 
 # Run inline tests
-musi test myfile.test.ms
+./target/release/musi test myfile.test.ms
 ```
 
 A minimal Musi program:
