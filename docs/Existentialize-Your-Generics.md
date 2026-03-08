@@ -3,7 +3,7 @@
 **Authors:** Dimi Racordon, Matt Bovel, Hamza Remmal
 **Affiliation:** EPFL, LAMP -- Lausanne, Switzerland
 **Venue:** MPLR '25, October 12–18, 2025, Singapore
-**DOI:** https://doi.org/10.1145/3759426.3760975
+**DOI:** <https://doi.org/10.1145/3759426.3760975>
 
 ---
 
@@ -466,7 +466,7 @@ double area_fully_existentialized(
 }
 ```
 
-> Artifact: https://github.com/mbovel/generics-benchmarks
+> Artifact: <https://github.com/mbovel/generics-benchmarks>
 
 ### 4.4 Performance Measurements
 
@@ -507,16 +507,16 @@ Funded by the Swiss National Science Foundation project "Capabilities for Typing
 
 1. Bruce et al. (1995). On Binary Methods. *Theory Pract. Object Syst.* 1(3), 221–242.
 2. Chakravarty et al. (2005). Associated types with class. *POPL 2005*.
-3. Chen, R. (2024). Inside STL: The string. https://devblogs.microsoft.com/oldnewthing/20230803-00/?p=108532
+3. Chen, R. (2024). Inside STL: The string. <https://devblogs.microsoft.com/oldnewthing/20230803-00/?p=108532>
 4. Drossopoulou et al. (1998). What is Java Binary Compatibility? *OOPSLA 1998*.
-5. Gregor, D. (2024). Swift for C++ Practitioners, Part 4: Generics. https://www.douggregor.net/posts/swift-for-cxx-practitioners-generics/
+5. Gregor, D. (2024). Swift for C++ Practitioners, Part 4: Generics. <https://www.douggregor.net/posts/swift-for-cxx-practitioners-generics/>
 6. Iyer et al. (2024). Automatically Reasoning About How Systems Code Uses the CPU Cache. *OSDI 2024*.
 7. Lutze et al. (2025). The Simple Essence of Monomorphization. *Proc. ACM Program. Lang.* 9(OOPSLA1), 1015–1041. doi:10.1145/3720472
 8. Musser & Stepanov (1988). Generic Programming. *ISSAC*.
 9. Pestov, S. (2024). Compiling Swift Generics: Implementation Reference Manual. Unpublished.
 10. Racordon et al. (2024). Existential Containers in Scala. *MPLR 2024*.
 11. Racordon et al. (2025). On the State of Coherence in the Land of Type Classes. *Art Sci. Eng. Program.* 10(1). doi:10.22152/PROGRAMMING-JOURNAL.ORG/2025/10/15
-12. Rose & Cohen (2024). Library Evolution for Stable ABIs. https://github.com/swiftlang/swift-evolution/blob/main/proposals/0260-library-evolution.md
+12. Rose & Cohen (2024). Library Evolution for Stable ABIs. <https://github.com/swiftlang/swift-evolution/blob/main/proposals/0260-library-evolution.md>
 13. Wadler & Blott (1989). How to Make ad-hoc Polymorphism Less ad-hoc. *POPL 1989*.
 14. Wagner et al. (2024). Realistic Realizability: Specifying ABIs You Can Count On. *Proc. ACM Program. Lang.* 8(OOPSLA2), 1249–1278.
 15. Wonnacott, D. (2001). Using Accessory Functions to Generalize Dynamic Dispatch. *COOTS 2001*.

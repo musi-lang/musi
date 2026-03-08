@@ -19,8 +19,8 @@ test.ms:1:17: error: cannot convert type 'String' to expected type 'Int32'
 ### Source Display
 
 ```text
- 1 | const x: Int32 := "hello";
-   |                   ^^^^^^^
+ 1 | let x: Int32 := "hello";
+   |                 ^^^^^^^
 ```
 
 ### Colors
@@ -192,30 +192,30 @@ Yields: "expected identifier" (if index = 0)
 ### Type Mismatch
 
 ```musi
-const x: Int32 := "hello";
+let x: Int32 := "hello";
 ```
 
 **Output:**
 
 ```text
 test.ms:1:17: error: cannot convert type 'String' to type 'Int32'
- 1 | const x: Int32 := "hello";
-   |                   ^^^^^^^
+ 1 | let x: Int32 := "hello";
+   |                 ^^^^^^^
 ```
 
 ### Missing Semicolon
 
 ```musi
-const x: Int32 := 42
-const y: Int32 := x + 1;
+let x: Int32 := 42
+let y: Int32 := x + 1;
 ```
 
 **Output:**
 
 ```text
 file.ms:1:19: error: expected ';' after value binding
- 1 | const x: Int32 := 42
-   |                     ^
+ 1 | let x: Int32 := 42
+   |                   ^
 ```
 
 ### Undefined Variable
@@ -228,31 +228,31 @@ val result := undefined_var + 1;
 
 ```text
 file.ms:1:15: error: undefined identifier 'undefined_var'; did you mean 'defined_var'?
- 1 | const result := undefined_var + 1;
-   |                 ^^^^^^^^^^^^^
+ 1 | let result := undefined_var + 1;
+   |               ^^^^^^^^^^^^^
 ```
 
 ### Multiple Errors with Notes
 
 ```musi
-const x: Int32 := "text";
-const y: String := x + 1;
+let x: Int32 := "text";
+let y: String := x + 1;
 ```
 
 **Output:**
 
 ```text
 file.ms:1:17: error: cannot convert type 'String' to type 'Int32'
- 1 | const x: Int32 := "text";
-   |                   ^^^^^^
+ 1 | let x: Int32 := "text";
+   |                 ^^^^^^
 
 file.ms:2:18: error: cannot convert type 'Int32' to type 'String'
- 2 | const y: String := x + 1;
-   |                    ^^^^^
+ 2 | let y: String := x + 1;
+   |                  ^^^^^
 
 file.ms:1:17: note: 'x' has type 'Int32'
- 1 | const x: Int32 := "text";
-   |       ^
+ 1 | let x: Int32 := "text";
+   |     ^
 ```
 
 ## Testing Framework
@@ -261,7 +261,7 @@ file.ms:1:17: note: 'x' has type 'Int32'
 
 ```musi
 // ERROR: expected ';' after value binding
-const x: Int32 := 42
+let x: Int32 := 42
 ```
 
 **Verification:**
@@ -322,7 +322,7 @@ note: missing method 'eq: (self: Point, other: Point) -> Bool'
 
 ```text
 error: method 'eq' signature does not match interface 'Eq'
-note: interface expects '(self: T, other: T) -> Bool', found '(self: T) -> Bool'
+note: interface expects '(self: 'T, other: 'T) -> Bool', found '(self: 'T) -> Bool'
 ```
 
 ### Invalid Loop Label
