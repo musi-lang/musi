@@ -5,8 +5,8 @@
 use std::collections::HashMap;
 use std::mem::transmute;
 
-use musi_codegen::module::ReturnKind;
 use musi_codegen::Module;
+use musi_codegen::module::ReturnKind;
 
 use crate::error::VmError;
 use crate::value::Value;
@@ -123,77 +123,66 @@ impl FfiState {
         match (param_count, args, return_kind) {
             // () -> ()
             (0, [], ReturnKind::Unit) => {
-                // SAFETY: extrin fn declared with matching signature
                 let f: unsafe extern "C" fn() = unsafe { transmute(ptr) };
                 unsafe { f() };
                 Ok(Value::Unit)
             }
             // () -> i64
             (0, [], ReturnKind::Int) => {
-                // SAFETY: extrin fn declared with matching signature
                 let f: unsafe extern "C" fn() -> i64 = unsafe { transmute(ptr) };
                 let result = unsafe { f() };
                 Ok(Value::Int(result))
             }
             // () -> f64
             (0, [], ReturnKind::Float | ReturnKind::Unknown) => {
-                // SAFETY: extrin fn declared with matching signature
                 let f: unsafe extern "C" fn() -> f64 = unsafe { transmute(ptr) };
                 let result = unsafe { f() };
                 Ok(Value::Float(result))
             }
             // (i64) -> ()
             (1, [Value::Int(a)], ReturnKind::Unit) => {
-                // SAFETY: extrin fn declared with matching signature
                 let f: unsafe extern "C" fn(i64) = unsafe { transmute(ptr) };
                 unsafe { f(*a) };
                 Ok(Value::Unit)
             }
             // (i64) -> i64
             (1, [Value::Int(a)], ReturnKind::Int | ReturnKind::Unknown) => {
-                // SAFETY: extrin fn declared with matching signature
                 let f: unsafe extern "C" fn(i64) -> i64 = unsafe { transmute(ptr) };
                 let result = unsafe { f(*a) };
                 Ok(Value::Int(result))
             }
             // (f64) -> ()
             (1, [Value::Float(a)], ReturnKind::Unit) => {
-                // SAFETY: extrin fn declared with matching signature
                 let f: unsafe extern "C" fn(f64) = unsafe { transmute(ptr) };
                 unsafe { f(*a) };
                 Ok(Value::Unit)
             }
             // (f64) -> f64
             (1, [Value::Float(a)], ReturnKind::Float | ReturnKind::Unknown) => {
-                // SAFETY: extrin fn declared with matching signature
                 let f: unsafe extern "C" fn(f64) -> f64 = unsafe { transmute(ptr) };
                 let result = unsafe { f(*a) };
                 Ok(Value::Float(result))
             }
             // (f64, f64) -> ()
             (2, [Value::Float(a), Value::Float(b)], ReturnKind::Unit) => {
-                // SAFETY: extrin fn declared with matching signature
                 let f: unsafe extern "C" fn(f64, f64) = unsafe { transmute(ptr) };
                 unsafe { f(*a, *b) };
                 Ok(Value::Unit)
             }
             // (i64, i64) -> ()
             (2, [Value::Int(a), Value::Int(b)], ReturnKind::Unit) => {
-                // SAFETY: extrin fn declared with matching signature
                 let f: unsafe extern "C" fn(i64, i64) = unsafe { transmute(ptr) };
                 unsafe { f(*a, *b) };
                 Ok(Value::Unit)
             }
             // (i64, i64) -> i64
             (2, [Value::Int(a), Value::Int(b)], ReturnKind::Int | ReturnKind::Unknown) => {
-                // SAFETY: extrin fn declared with matching signature
                 let f: unsafe extern "C" fn(i64, i64) -> i64 = unsafe { transmute(ptr) };
                 let result = unsafe { f(*a, *b) };
                 Ok(Value::Int(result))
             }
             // (f64, f64) -> f64
             (2, [Value::Float(a), Value::Float(b)], ReturnKind::Float | ReturnKind::Unknown) => {
-                // SAFETY: extrin fn declared with matching signature
                 let f: unsafe extern "C" fn(f64, f64) -> f64 = unsafe { transmute(ptr) };
                 let result = unsafe { f(*a, *b) };
                 Ok(Value::Float(result))

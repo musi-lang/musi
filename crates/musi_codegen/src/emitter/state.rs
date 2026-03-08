@@ -5,6 +5,7 @@ use musi_shared::{Arena, Idx, Interner, SliceArena};
 
 use crate::error::CodegenError;
 use crate::intrinsics;
+use crate::module::ReturnKind;
 use crate::{FunctionEntry, Module, Opcode, SymbolEntry, SymbolFlags};
 
 // -- TypeTag ------------------------------------------------------------------
@@ -319,7 +320,7 @@ pub(super) fn push_plain_fn(
         local_count: 0,
         code_offset: 0,
         code_length: 0,
-        return_kind: crate::module::ReturnKind::Unknown,
+        return_kind: ReturnKind::Unknown,
     })
 }
 

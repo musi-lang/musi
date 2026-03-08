@@ -16,6 +16,7 @@ type PendingLambda = (
     Option<String>,
 );
 use crate::intrinsics;
+use crate::module::ReturnKind;
 use crate::{FunctionEntry, Module, Opcode, SymbolEntry, SymbolFlags};
 
 use super::expr::emit_expr;
@@ -301,7 +302,7 @@ pub(super) fn emit_main_body(
         local_count,
         code_offset,
         code_length,
-        return_kind: crate::module::ReturnKind::Unknown,
+        return_kind: ReturnKind::Unknown,
     })?;
     Ok(())
 }

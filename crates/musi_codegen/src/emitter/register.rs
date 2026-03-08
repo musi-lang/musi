@@ -3,7 +3,7 @@ use musi_shared::{Arena, Idx, Interner};
 
 use crate::error::CodegenError;
 use crate::intrinsics::{self, Intrinsic};
-use crate::module::MethodEntry;
+use crate::module::{MethodEntry, ReturnKind};
 use crate::{FunctionEntry, Module, SymbolEntry, SymbolFlags};
 
 use super::state::{
@@ -110,8 +110,11 @@ pub(super) fn register_fn_def(
 
     let param_count =
         u8::try_from(params.len()).map_err(|_| CodegenError::ParameterCountOverflow)?;
-    let return_kind = crate::module::ReturnKind::from_type_name(
-        ret_ty.as_ref().and_then(|t| ty_name_str(t, interner)).as_deref(),
+    let return_kind = ReturnKind::from_type_name(
+        ret_ty
+            .as_ref()
+            .and_then(|t| ty_name_str(t, interner))
+            .as_deref(),
     );
     let fn_idx = module.push_function(FunctionEntry {
         symbol_idx: sym_idx,

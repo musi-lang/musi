@@ -243,7 +243,10 @@ impl ReturnKind {
     pub fn from_type_name(name: Option<&str>) -> Self {
         match name {
             Some("Unit") => Self::Unit,
-            Some("Int" | "Nat" | "Int8" | "Int16" | "Int32" | "Int64" | "Nat8" | "Nat16" | "Nat32" | "Nat64") => Self::Int,
+            Some(
+                "Int" | "Nat" | "Int8" | "Int16" | "Int32" | "Int64" | "Nat8" | "Nat16" | "Nat32"
+                | "Nat64",
+            ) => Self::Int,
             Some("Float" | "Float32" | "Float64") => Self::Float,
             _ => Self::Unknown,
         }
@@ -274,7 +277,13 @@ impl FunctionEntry {
         buf.extend_from_slice(&self.local_count.to_le_bytes());
         buf.extend_from_slice(&self.code_offset.to_le_bytes());
         buf.extend_from_slice(&self.code_length.to_le_bytes());
-        buf.push(self.return_kind as u8);
+        let return_kind_byte = match self.return_kind {
+            ReturnKind::Unit => 1u8,
+            ReturnKind::Int => 2u8,
+            ReturnKind::Float => 3u8,
+            ReturnKind::Unknown => 0u8,
+        };
+        buf.push(return_kind_byte);
     }
 
     fn decode(r: &mut Cursor<&[u8]>) -> Result<Self, DeserError> {
@@ -284,9 +293,7 @@ impl FunctionEntry {
             local_count: r.read_u16::<LE>().map_err(|_| DeserError::UnexpectedEof)?,
             code_offset: r.read_u32::<LE>().map_err(|_| DeserError::UnexpectedEof)?,
             code_length: r.read_u32::<LE>().map_err(|_| DeserError::UnexpectedEof)?,
-            return_kind: ReturnKind::from_u8(
-                r.read_u8().map_err(|_| DeserError::UnexpectedEof)?,
-            ),
+            return_kind: ReturnKind::from_u8(r.read_u8().map_err(|_| DeserError::UnexpectedEof)?),
         })
     }
 }
