@@ -326,7 +326,7 @@ impl Lexer<'_> {
             let _ = self.advance();
             return self.lex_fstring_head(start);
         }
-        self.eat_while(|b| b.is_ascii_alphanumeric() || b == b'_');
+        self.eat_while(is_ident_char);
         let text = str::from_utf8(&self.source[start..self.pos]).unwrap_or("");
         if text == "_" {
             return self.emit(TokenKind::Underscore, start);
@@ -379,7 +379,7 @@ impl Lexer<'_> {
                     self.advance_by(2);
                     self.emit_interned(TokenKind::RuneLit, start)
                 } else if c.is_ascii_alphabetic() {
-                    self.eat_while(|b| b.is_ascii_alphanumeric() || b == b'_');
+                    self.eat_while(is_ident_char);
                     self.emit_interned(TokenKind::TyIdent, start)
                 } else {
                     let _ = self.advance();
@@ -577,6 +577,10 @@ impl Lexer<'_> {
             }
         }
     }
+}
+
+const fn is_ident_char(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || b == b'_'
 }
 
 const fn is_hex_digit(b: u8) -> bool {
