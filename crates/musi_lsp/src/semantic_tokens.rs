@@ -153,6 +153,21 @@ pub fn compute(doc: &AnalyzedDoc) -> SemanticTokensResult {
             }
         }
 
+        // 2.5. Type annotation references from ty_refs.
+        for (&span, &def_id) in &sema.ty_refs {
+            let Some(def) = sema.defs.get(def_id.0 as usize) else {
+                continue;
+            };
+            if matches!(def.kind, DefKind::Type | DefKind::Class) {
+                let name_span =
+                    find_name_token(&doc.lexed.tokens, span.start, def.name).unwrap_or(Span {
+                        start: span.start,
+                        length: doc.interner.resolve(def.name).len() as u32,
+                    });
+                push_raw(&mut raw, name_span, TT_TYPE, 0, doc.file_id, &doc.source_db);
+            }
+        }
+
         // 3. References: walk expr_defs (Idx<Expr> → DefId).
         for (&idx, &def_id) in &sema.expr_defs {
             let Some(def) = sema.defs.get(def_id.0 as usize) else {
@@ -266,12 +281,13 @@ fn classify_def(
                 .map(|t: &Type| matches!(sema.unify_table.resolve(t.clone()), Type::Arrow(..)))
                 .unwrap_or(false);
             if is_fn {
-                let mods = if is_var_param { TM_MUTABLE } else { TM_READONLY };
+                let mods = if is_var_param { TM_MUTABLE } else { 0 };
                 (Some(TT_FUNCTION), decl | mods)
             } else if is_var_param {
                 (Some(TT_VARIABLE), decl | TM_MUTABLE)
             } else {
-                (Some(TT_VARIABLE), decl | TM_READONLY)
+                // Immutable params — no READONLY modifier (they're not constants)
+                (Some(TT_VARIABLE), decl)
             }
         }
         DefKind::Type => (Some(TT_TYPE), decl),
