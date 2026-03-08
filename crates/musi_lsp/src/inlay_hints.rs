@@ -21,7 +21,7 @@ pub fn inlay_hints(doc: &AnalyzedDoc) -> Vec<InlayHint> {
 
     // -- Type-annotation hints (const/var/unannotated lambda params) ----------
 
-    let unannotated_param_spans = collect_unannotated_lambda_param_spans(doc);
+    let unannotated_param_spans = collect_unannotated_param_spans(doc);
 
     for (span, &def_id) in &sema.pat_defs {
         let Some(def) = sema.defs.get(def_id.0 as usize) else {
@@ -107,18 +107,21 @@ pub fn inlay_hints(doc: &AnalyzedDoc) -> Vec<InlayHint> {
     hints
 }
 
-/// Walk all `Expr::Lambda` nodes and collect spans of unannotated params.
-fn collect_unannotated_lambda_param_spans(
+/// Walk all `Expr::Lambda` and `Expr::FnDef` nodes and collect spans of unannotated params.
+fn collect_unannotated_param_spans(
     doc: &AnalyzedDoc,
 ) -> std::collections::HashSet<musi_shared::Span> {
     let mut spans = std::collections::HashSet::new();
     for expr in doc.module.ctx.exprs.iter() {
-        if let Expr::Lambda { params, .. } = expr {
-            for param in params {
-                if param.ty.is_none() {
-                    spans.insert(param.span);
+        match expr {
+            Expr::Lambda { params, .. } | Expr::FnDef { params, .. } => {
+                for param in params {
+                    if param.ty.is_none() {
+                        spans.insert(param.span);
+                    }
                 }
             }
+            _ => {}
         }
     }
     spans

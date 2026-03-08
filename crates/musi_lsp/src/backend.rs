@@ -90,6 +90,7 @@ impl LanguageServer for MusiBackend {
                 }),
                 ..ServerCapabilities::default()
             },
+            offset_encoding: None,
         })
     }
 

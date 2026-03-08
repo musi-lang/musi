@@ -251,13 +251,11 @@ pub(super) fn emit_main_body(
                 ..
             } => {
                 let fn_name = interner.resolve(*name).to_owned();
-                if body.is_some()
-                    && !modifiers.iter().any(|m| matches!(m, Modifier::Extrin(_)))
-                {
-                    if attrs.iter().any(|a| interner.resolve(a.name) == "main") {
-                        if let Some(&fi) = state.fn_map.get(&fn_name) {
-                            main_fn_override = Some(fi);
-                        }
+                if body.is_some() && !modifiers.iter().any(|m| matches!(m, Modifier::Extrin(_))) {
+                    if attrs.iter().any(|a| interner.resolve(a.name) == "main")
+                        && let Some(&fi) = state.fn_map.get(&fn_name)
+                    {
+                        main_fn_override = Some(fi);
                     }
                     // Register tests for #[test("label")] functions
                     for attr in attrs {
