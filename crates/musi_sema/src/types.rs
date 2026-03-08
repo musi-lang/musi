@@ -37,6 +37,7 @@ pub enum PrimTy {
     // Other
     Bool,
     Unit,
+    Any,
 }
 
 impl PrimTy {
@@ -61,6 +62,7 @@ impl PrimTy {
             Self::String => "String",
             Self::Bool => "Bool",
             Self::Unit => "Unit",
+            Self::Any => "Any",
         }
     }
 
@@ -85,6 +87,7 @@ impl PrimTy {
             "String" => Some(Self::String),
             "Bool" => Some(Self::Bool),
             "Unit" => Some(Self::Unit),
+            "Any" => Some(Self::Any),
             _ => None,
         }
     }

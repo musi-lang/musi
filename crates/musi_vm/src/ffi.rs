@@ -95,24 +95,41 @@ impl FfiState {
 
     /// Calls an extrin function with the given arguments, returning its result as a `Value`.
     ///
-    /// For V1, supports these signatures based on parameter count and types:
+    /// For V1, supports these signatures based on parameter count, types, and `returns_unit`:
     /// - `(f64) -> f64` (e.g. sqrt, floor, ceil)
     /// - `(f64, f64) -> f64` (e.g. pow)
     /// - `(i64) -> i64`
     /// - `(i64, i64) -> i64`
     /// - `() -> f64`
     /// - `() -> i64`
+    /// - `() -> ()` (when `returns_unit = true`)
+    /// - `(i64) -> ()` (when `returns_unit = true`)
+    /// - `(i64, i64) -> ()` (when `returns_unit = true`)
     ///
     /// # Errors
     /// Returns `VmError` if the symbol cannot be resolved or the argument types do not match.
-    pub fn call(&mut self, fn_idx: u16, args: &[Value], module: &Module) -> Result<Value, VmError> {
+    pub fn call(
+        &mut self,
+        fn_idx: u16,
+        args: &[Value],
+        module: &Module,
+        returns_unit: bool,
+    ) -> Result<Value, VmError> {
         let sym = self.resolve(fn_idx, module)?;
         let ptr = sym.ptr;
         let param_count = sym.param_count;
 
-        match (param_count, args) {
-            // () -> f64
-            (0, []) => {
+        match (param_count, args, returns_unit) {
+            // () -> ()
+            (0, [], true) => {
+                // SAFETY: extrin fn declared with matching signature
+                let f: unsafe extern "C" fn() = unsafe { transmute(ptr) };
+                // SAFETY: calling the resolved fn with the declared signature
+                unsafe { f() };
+                Ok(Value::Unit)
+            }
+            // () -> f64 or () -> i64
+            (0, [], false) => {
                 // SAFETY: extrin fn declared with matching signature
                 let f: unsafe extern "C" fn() -> f64 = unsafe { transmute(ptr) };
                 // SAFETY: calling the resolved fn with the declared signature
@@ -120,15 +137,23 @@ impl FfiState {
                 Ok(Value::Float(result))
             }
             // (f64) -> f64
-            (1, [Value::Float(a)]) => {
+            (1, [Value::Float(a)], false) => {
                 // SAFETY: extrin fn declared with matching signature
                 let f: unsafe extern "C" fn(f64) -> f64 = unsafe { transmute(ptr) };
                 // SAFETY: calling the resolved fn with the declared signature
                 let result = unsafe { f(*a) };
                 Ok(Value::Float(result))
             }
+            // (i64) -> ()
+            (1, [Value::Int(a)], true) => {
+                // SAFETY: extrin fn declared with matching signature
+                let f: unsafe extern "C" fn(i64) = unsafe { transmute(ptr) };
+                // SAFETY: calling the resolved fn with the declared signature
+                unsafe { f(*a) };
+                Ok(Value::Unit)
+            }
             // (i64) -> i64
-            (1, [Value::Int(a)]) => {
+            (1, [Value::Int(a)], false) => {
                 // SAFETY: extrin fn declared with matching signature
                 let f: unsafe extern "C" fn(i64) -> i64 = unsafe { transmute(ptr) };
                 // SAFETY: calling the resolved fn with the declared signature
@@ -136,15 +161,23 @@ impl FfiState {
                 Ok(Value::Int(result))
             }
             // (f64, f64) -> f64
-            (2, [Value::Float(a), Value::Float(b)]) => {
+            (2, [Value::Float(a), Value::Float(b)], false) => {
                 // SAFETY: extrin fn declared with matching signature
                 let f: unsafe extern "C" fn(f64, f64) -> f64 = unsafe { transmute(ptr) };
                 // SAFETY: calling the resolved fn with the declared signature
                 let result = unsafe { f(*a, *b) };
                 Ok(Value::Float(result))
             }
+            // (i64, i64) -> ()
+            (2, [Value::Int(a), Value::Int(b)], true) => {
+                // SAFETY: extrin fn declared with matching signature
+                let f: unsafe extern "C" fn(i64, i64) = unsafe { transmute(ptr) };
+                // SAFETY: calling the resolved fn with the declared signature
+                unsafe { f(*a, *b) };
+                Ok(Value::Unit)
+            }
             // (i64, i64) -> i64
-            (2, [Value::Int(a), Value::Int(b)]) => {
+            (2, [Value::Int(a), Value::Int(b)], false) => {
                 // SAFETY: extrin fn declared with matching signature
                 let f: unsafe extern "C" fn(i64, i64) -> i64 = unsafe { transmute(ptr) };
                 // SAFETY: calling the resolved fn with the declared signature
@@ -153,7 +186,7 @@ impl FfiState {
             }
             _ => Err(VmError::FfiFailed(
                 format!(
-                    "unsupported FFI signature: {} params, arg types {:?}",
+                    "unsupported FFI signature: {} params, arg types {:?}, returns_unit={returns_unit}",
                     param_count,
                     args.iter().map(type_name_of).collect::<Vec<_>>()
                 )

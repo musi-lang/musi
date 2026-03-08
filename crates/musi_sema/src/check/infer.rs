@@ -43,6 +43,7 @@ impl TypeChecker<'_> {
             Expr::Record {
                 name: Some(sym),
                 fields,
+                ty_params,
                 ..
             } => {
                 use musi_shared::Symbol;
@@ -53,6 +54,7 @@ impl TypeChecker<'_> {
                         .filter_map(|f| f.ty.as_ref().map(|ty| (f.name, self.resolve_ty(ty))))
                         .collect();
                     let _ = self.record_fields.insert(def_id, field_map);
+                    let _ = self.record_type_param_counts.insert(def_id, ty_params.len());
                 }
                 Type::Prim(PrimTy::Unit)
             }
@@ -645,7 +647,11 @@ impl TypeChecker<'_> {
                 if let Expr::Ident { name, .. } = ctx.exprs.get(base)
                     && let Some(def_id) = self.find_type_def(*name)
                 {
-                    return Type::Named(def_id, vec![]);
+                    let n_params = self.record_type_param_counts.get(&def_id).copied().unwrap_or(0);
+                    let args: Vec<Type> = (0..n_params)
+                        .map(|_| Type::Var(self.unify_table.fresh()))
+                        .collect();
+                    return Type::Named(def_id, args);
                 }
                 self.unify_table.resolve(base_ty)
             }

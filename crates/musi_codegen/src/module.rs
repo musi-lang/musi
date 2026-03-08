@@ -224,6 +224,8 @@ pub struct FunctionEntry {
     pub code_offset: u32,
     /// Byte length of this function's bytecode.
     pub code_length: u32,
+    /// True when the function's declared return type is `Unit` (affects FFI dispatch).
+    pub unit_return: bool,
 }
 
 impl FunctionEntry {
@@ -233,6 +235,7 @@ impl FunctionEntry {
         buf.extend_from_slice(&self.local_count.to_le_bytes());
         buf.extend_from_slice(&self.code_offset.to_le_bytes());
         buf.extend_from_slice(&self.code_length.to_le_bytes());
+        buf.push(u8::from(self.unit_return));
     }
 
     fn decode(r: &mut Cursor<&[u8]>) -> Result<Self, DeserError> {
@@ -242,6 +245,7 @@ impl FunctionEntry {
             local_count: r.read_u16::<LE>().map_err(|_| DeserError::UnexpectedEof)?,
             code_offset: r.read_u32::<LE>().map_err(|_| DeserError::UnexpectedEof)?,
             code_length: r.read_u32::<LE>().map_err(|_| DeserError::UnexpectedEof)?,
+            unit_return: r.read_u8().map_err(|_| DeserError::UnexpectedEof)? != 0,
         })
     }
 }

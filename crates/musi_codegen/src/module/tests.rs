@@ -43,6 +43,7 @@ fn hello_module() -> Module {
                 local_count: 0,
                 code_offset: 0,
                 code_length: 0,
+                unit_return: false,
             },
             // fn 1: main
             FunctionEntry {
@@ -51,6 +52,7 @@ fn hello_module() -> Module {
                 local_count: 0,
                 code_offset: 0,
                 code_length: code_len,
+                unit_return: false,
             },
         ],
         code,

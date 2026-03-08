@@ -162,6 +162,7 @@ impl UnifyTable {
         match (a, b) {
             (ref ra, ref rb) if ra == rb => ra.clone(),
             (Type::Error, _) | (_, Type::Error) => Type::Error,
+            (Type::Prim(PrimTy::Any), other) | (other, Type::Prim(PrimTy::Any)) => other,
             (Type::Var(v), t) | (t, Type::Var(v)) => self.unify_var(v, t, span, diags, file_id),
             (Type::Prim(pa), Type::Prim(pb)) => Self::unify_prim(pa, pb, span, diags, file_id),
             (Type::Arrow(p1, r1), Type::Arrow(p2, r2)) => {
@@ -261,6 +262,15 @@ impl UnifyTable {
             );
             return Type::Error;
         }
+        let (a1, a2) = if a1.is_empty() && !a2.is_empty() {
+            let fresh: Vec<Type> = (0..a2.len()).map(|_| Type::Var(self.fresh())).collect();
+            (fresh, a2)
+        } else if !a1.is_empty() && a2.is_empty() {
+            let fresh: Vec<Type> = (0..a1.len()).map(|_| Type::Var(self.fresh())).collect();
+            (a1, fresh)
+        } else {
+            (a1, a2)
+        };
         if a1.len() != a2.len() {
             let _d = diags.error(String::from("type argument count mismatch"), span, file_id);
             return Type::Error;
@@ -415,6 +425,8 @@ pub struct TypeChecker<'a> {
     ty_scope: TyScope,
     /// Record field types collected from `record` definitions: type `DefId` → field name → type.
     record_fields: HashMap<DefId, HashMap<Symbol, Type>>,
+    /// Number of type parameters for each record type: type `DefId` → param count.
+    pub(super) record_type_param_counts: HashMap<DefId, usize>,
     /// Choice variant names collected from `choice` definitions: type `DefId` → variant names.
     pub(super) choice_variants: HashMap<DefId, Vec<Symbol>>,
 }
@@ -440,6 +452,7 @@ impl<'a> TypeChecker<'a> {
             expr_types: HashMap::new(),
             ty_scope: Vec::new(),
             record_fields: HashMap::new(),
+            record_type_param_counts: HashMap::new(),
             choice_variants: HashMap::new(),
         }
     }

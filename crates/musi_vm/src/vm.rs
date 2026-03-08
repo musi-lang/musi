@@ -847,7 +847,7 @@ impl Vm {
     }
 
     fn exec_call(&mut self, fn_idx: u16) -> Result<(), VmError> {
-        let (param_count, local_count, symbol_idx) = {
+        let (param_count, local_count, symbol_idx, unit_return) = {
             let func = self
                 .module
                 .function_table
@@ -857,6 +857,7 @@ impl Vm {
                 usize::from(func.param_count),
                 usize::from(func.local_count),
                 func.symbol_idx,
+                func.unit_return,
             )
         };
 
@@ -878,7 +879,7 @@ impl Vm {
         if is_native {
             if intrinsic_id == u16::MAX {
                 // extrin fn — dispatch via dlopen/dlsym
-                let result = self.ffi.call(fn_idx, &args, &self.module)?;
+                let result = self.ffi.call(fn_idx, &args, &self.module, unit_return)?;
                 self.stack.push(result);
             } else {
                 let intrinsic = Intrinsic::from_id(intrinsic_id)
