@@ -282,7 +282,7 @@ fn load_package_import(
     }
     match fs::read_to_string(&main_file) {
         Ok(s) => Some((key, s)),
-        Err(e) if tolerate_missing => None,
+        Err(_) if tolerate_missing => None,
         Err(e) => {
             eprintln!("error: cannot read package '{import_path}': {e}");
             process::exit(1);
@@ -303,7 +303,7 @@ fn load_local_import(
     }
     match fs::read_to_string(&full_path) {
         Ok(s) => Some((key, s)),
-        Err(e) if tolerate_missing => None,
+        Err(_) if tolerate_missing => None,
         Err(e) => {
             eprintln!("error: cannot read import '{}': {e}", full_path.display());
             process::exit(1);
