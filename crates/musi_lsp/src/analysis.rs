@@ -377,17 +377,60 @@ pub fn span_to_range(file_id: FileId, span: Span, source_db: &SourceDb) -> Range
     }
 }
 
+/// Check if a token has doc comments in its leading trivia.
+fn has_doc_comments(tok: &Token, trivia: &[Trivia]) -> bool {
+    let tr_start = tok.leading_trivia.start as usize;
+    let tr_end = tr_start + tok.leading_trivia.len as usize;
+    let leading = trivia.get(tr_start..tr_end).unwrap_or(&[]);
+    leading
+        .iter()
+        .any(|t| matches!(t.kind, musi_lex::TriviaKind::LineComment { doc_style: true }))
+}
+
 /// Extract doc-comment text for the definition at `def_start` from `source`.
 ///
 /// Scans the leading trivia of the token at `def_start` and collects `///` lines.
+/// For declarations like `export const X`, the doc comment is attached to `export`,
+/// not to the identifier `X`, so we scan backwards to find the declaration start.
 pub fn extract_doc_comments_from_source(
     def_start: u32,
     source: &str,
     tokens: &[Token],
     trivia: &[musi_lex::Trivia],
 ) -> String {
-    let tok = tokens.iter().find(|t| t.span.start == def_start);
-    let Some(tok) = tok else { return String::new() };
+    // First, try to find the token at def_start (the identifier)
+    let tok_at_def = tokens.iter().find(|t| t.span.start == def_start);
+
+    // If that token has no doc comments, scan backwards to find declaration keywords
+    // (export, const, var, fn, record, choice, class, given) that might have them.
+    let tok = tok_at_def
+        .filter(|t| has_doc_comments(t, trivia))
+        .or_else(|| {
+            // Find the declaration start by scanning backwards from def_start
+            // Look for tokens like `export`, `const`, `var`, `fn`, etc.
+            tokens
+                .iter()
+                .filter(|t| t.span.start < def_start)
+                .filter(|t| {
+                    matches!(
+                        t.kind,
+                        TokenKind::Export
+                            | TokenKind::Const
+                            | TokenKind::Var
+                            | TokenKind::Fn
+                            | TokenKind::Record
+                            | TokenKind::Choice
+                            | TokenKind::Class
+                            | TokenKind::Given
+                    )
+                })
+                .filter(|t| has_doc_comments(t, trivia))
+                .last()
+        });
+
+    let Some(tok) = tok else {
+        return String::new();
+    };
 
     let tr_start = tok.leading_trivia.start as usize;
     let tr_end = tr_start + tok.leading_trivia.len as usize;

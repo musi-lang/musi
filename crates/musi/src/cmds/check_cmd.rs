@@ -31,13 +31,11 @@ pub fn run(args: &CheckArgs) {
         // Use a dummy empty module for prelude when checking prelude.ms
         let dummy_id = source_db.add("<prelude-skip>", "");
         let dummy_lexed = musi_lex::lex("", dummy_id, &mut interner, &mut diags);
-        let dummy_module =
-            musi_parse::parse(&dummy_lexed.tokens, dummy_id, &mut diags, &interner);
+        let dummy_module = musi_parse::parse(&dummy_lexed.tokens, dummy_id, &mut diags, &interner);
         (dummy_id, dummy_module)
     } else {
         let prelude_file_id = source_db.add(PRELUDE_FILENAME, PRELUDE_SRC);
-        let prelude_lexed =
-            musi_lex::lex(PRELUDE_SRC, prelude_file_id, &mut interner, &mut diags);
+        let prelude_lexed = musi_lex::lex(PRELUDE_SRC, prelude_file_id, &mut interner, &mut diags);
         let prelude_module = musi_parse::parse(
             &prelude_lexed.tokens,
             prelude_file_id,

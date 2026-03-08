@@ -12,6 +12,7 @@ use musi_parse::{ParsedModule, parse};
 use musi_shared::{DiagnosticBag, FileId, Interner, SourceDb};
 
 use crate::config::{MusiConfig, find_and_load};
+use crate::fetch::resolve_package_import;
 
 pub const PRELUDE_SRC: &str = include_str!("../../../std/prelude.ms");
 pub const PRELUDE_FILENAME: &str = "<prelude>";
@@ -119,6 +120,11 @@ pub fn collect_and_parse_deps(
     diags: &mut DiagnosticBag,
     tolerate_missing: bool,
 ) -> Vec<ResolvedDep> {
+    // Load project config to get package dependencies
+    let project_deps = load_project_config()
+        .map(|(cfg, _)| cfg.dependencies)
+        .unwrap_or_default();
+
     let mut queue: Vec<String> = collect_dep_paths(root_module, interner);
     let mut compiled: HashSet<String> = HashSet::new();
     let mut deps: Vec<ResolvedDep> = Vec::new();
@@ -142,6 +148,23 @@ pub fn collect_and_parse_deps(
                 continue;
             }
             dep_src_owned = native_src.to_owned();
+        } else if let Some(pkg_path) = resolve_package_import(&import_path, &project_deps) {
+            // Package dependency from mspackage.json
+            let main_file = resolve_package_main(&pkg_path);
+            key = main_file.to_string_lossy().into_owned();
+            if !compiled.insert(key.clone()) {
+                continue;
+            }
+            dep_src_owned = match fs::read_to_string(&main_file) {
+                Ok(s) => s,
+                Err(e) => {
+                    if tolerate_missing {
+                        continue;
+                    }
+                    eprintln!("error: cannot read package '{import_path}': {e}");
+                    process::exit(1);
+                }
+            };
         } else {
             let full_path = resolve_import_path(&import_path, root_file_path);
             key = full_path.to_string_lossy().into_owned();
@@ -168,6 +191,20 @@ pub fn collect_and_parse_deps(
         deps.push((import_path, dep_module, dep_file_id));
     }
     deps
+}
+
+/// Resolve the main entry point for a package directory.
+fn resolve_package_main(pkg_path: &Path) -> PathBuf {
+    // Try to read mspackage.json for the "main" field
+    let config_path = pkg_path.join("mspackage.json");
+    if let Ok(text) = fs::read_to_string(&config_path)
+        && let Ok(config) = serde_json::from_str::<MusiConfig>(&text)
+        && let Some(main) = config.main
+    {
+        return pkg_path.join(main.trim_start_matches("./"));
+    }
+    // Default to index.ms
+    pkg_path.join("index.ms")
 }
 
 /// Run semantic analysis on parsed prelude, deps, and user module.

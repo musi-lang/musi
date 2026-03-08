@@ -40,7 +40,10 @@ pub fn code_lens(doc: &AnalyzedDoc, uri: &Uri) -> Vec<CodeLens> {
                     AttrArg::Value {
                         value: LitValue::Str(sym),
                         ..
-                    } => doc.interner.try_resolve(*sym).map(|s| s.trim_matches('"').to_owned()),
+                    } => doc
+                        .interner
+                        .try_resolve(*sym)
+                        .map(|s| s.trim_matches('"').to_owned()),
                     _ => None,
                 });
                 let title = match label {

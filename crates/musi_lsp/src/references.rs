@@ -18,6 +18,7 @@ pub fn find_references(
     let offset = position_to_offset(&doc.source, position.line, position.character);
 
     // Find the def_id for the symbol under the cursor.
+    // First check expr_defs (references), then pat_defs (definitions).
     let target_def_id = sema
         .expr_defs
         .iter()
@@ -30,9 +31,23 @@ pub fn find_references(
             }
         })
         .min_by_key(|&(_, len)| len)
-        .map(|(def_id, _)| def_id)?;
+        .map(|(def_id, _)| def_id)
+        .or_else(|| {
+            // Also check pat_defs for definitions (e.g., `const x := ...`)
+            sema.pat_defs
+                .iter()
+                .filter_map(|(&span, &def_id)| {
+                    if span.start <= offset && offset <= span.start + span.length {
+                        Some((def_id, span.length))
+                    } else {
+                        None
+                    }
+                })
+                .min_by_key(|&(_, len)| len)
+                .map(|(def_id, _)| def_id)
+        })?;
 
-    // Collect all expr_defs that refer to the same def.
+    // Collect all expr_defs that refer to the same def (references).
     let mut locations: Vec<Location> = sema
         .expr_defs
         .iter()
@@ -49,16 +64,30 @@ pub fn find_references(
         })
         .collect();
 
-    // Optionally include the declaration site.
+    // Also collect pat_defs (pattern bindings) that refer to the same def.
+    for (&span, &def_id) in &sema.pat_defs {
+        if def_id == target_def_id {
+            let range = span_to_range(doc.file_id, span, &doc.source_db);
+            locations.push(Location {
+                uri: uri.clone(),
+                range,
+            });
+        }
+    }
+
+    // Optionally include the declaration site (if not already added via pat_defs).
     if context.include_declaration
         && let Some(def) = sema.defs.get(target_def_id.0 as usize)
         && def.span != musi_shared::Span::DUMMY
     {
         let range = span_to_range(doc.file_id, def.span, &doc.source_db);
-        locations.push(Location {
+        let loc = Location {
             uri: uri.clone(),
             range,
-        });
+        };
+        if !locations.contains(&loc) {
+            locations.push(loc);
+        }
     }
 
     // Sort by position for a stable ordering.

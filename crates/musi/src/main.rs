@@ -7,10 +7,13 @@
 pub(crate) mod cmds;
 pub(crate) mod compiler;
 pub(crate) mod config;
+pub(crate) mod deps;
+pub(crate) mod fetch;
+pub(crate) mod lock;
 
 use clap::{Parser, Subcommand};
 
-use cmds::{build_cmd, check_cmd, init_cmd, run_cmd, task_cmd, test_cmd};
+use cmds::{add_cmd, build_cmd, check_cmd, init_cmd, install_cmd, run_cmd, task_cmd, test_cmd};
 
 #[derive(Parser)]
 #[command(name = "musi", about = "The Musi language toolchain", version)]
@@ -33,6 +36,10 @@ enum Cmd {
     Test(test_cmd::TestArgs),
     /// Run a project task defined in mspackage.json
     Task(task_cmd::TaskArgs),
+    /// Install dependencies from mspackage.json
+    Install(install_cmd::InstallArgs),
+    /// Add a dependency to mspackage.json
+    Add(add_cmd::AddArgs),
 }
 
 fn main() {
@@ -44,5 +51,7 @@ fn main() {
         Cmd::Check(args) => check_cmd::run(&args),
         Cmd::Test(args) => test_cmd::run(args),
         Cmd::Task(args) => task_cmd::run(&args),
+        Cmd::Install(args) => install_cmd::run(&args),
+        Cmd::Add(args) => add_cmd::run(&args),
     }
 }

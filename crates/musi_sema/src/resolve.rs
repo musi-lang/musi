@@ -12,8 +12,8 @@ use std::collections::HashMap;
 use std::hash::BuildHasher;
 
 use musi_ast::{
-    ArrayItem, AstArenas, BindKind, ChoiceVariant, Cond, ElifBranch, Expr, FieldInit, ImportClause,
-    MatchArm, ParsedModule, Pat, PatField, PatSuffix, PostfixOp, VariantPayload,
+    ArrayItem, AstArenas, BindKind, ChoiceVariant, Cond, ElifBranch, Expr, FieldInit, MatchArm,
+    Modifier, ParsedModule, Pat, PatField, PatSuffix, PostfixOp, VariantPayload,
 };
 use musi_shared::{DiagnosticBag, FileId, Idx, Interner, Slice, Span, Symbol};
 
@@ -110,8 +110,8 @@ impl<'a> Resolver<'a> {
             // This allows musi:* modules to redefine names they share with the prelude.
             let prev_is_injected = self
                 .defs
-                .get(prev_id.0 as usize)
-                .map_or(false, |d| d.span == musi_shared::Span::DUMMY);
+                .get(usize::try_from(prev_id.0).unwrap_or(usize::MAX))
+                .is_some_and(|d| d.span == musi_shared::Span::DUMMY);
             if !prev_is_injected {
                 let name_str = self.interner.resolve(name);
                 let _d = self.diags.error(
@@ -158,6 +158,8 @@ impl<'a> Resolver<'a> {
         }
     }
 
+    /// Collects all imports and re-exports from the module, populating the root scope and defs.
+    /// Separated into helpers for readability and to reduce excessive function length.
     fn collect_imports<S: BuildHasher>(
         &mut self,
         module: &ParsedModule,
@@ -166,117 +168,136 @@ impl<'a> Resolver<'a> {
         interner: &Interner,
     ) {
         for &item_idx in module.ctx.expr_lists.get_slice(module.items) {
-            // Handle re-exports: `export { name1, name2 } from "path"`.
-            // Register each re-exported name as a def (for semantic highlighting).
-            if let Expr::Export { items, path, .. } = module.ctx.exprs.get(item_idx) {
-                let Some(raw_path) = interner.try_resolve(*path) else {
-                    continue;
-                };
-                let path_str = raw_path.trim_matches('"').to_owned();
-                if let Some(module_exports) = imports.get(&path_str) {
-                    for item in items {
-                        let Some(name_str) = interner.try_resolve(item.name) else {
-                            continue;
-                        };
-                        let Some(ty) = module_exports.names.get(name_str) else {
-                            continue;
-                        };
-                        let def_id = DefId(self.next_id);
-                        self.next_id += 1;
-                        let bind_sym = item.alias.unwrap_or(item.name);
-                        self.defs.push(DefInfo {
-                            id: def_id,
-                            name: bind_sym,
-                            kind: DefKind::Const,
-                            span: item.span,
-                            ty: Some(ty.clone()),
-                            scheme_vars: Vec::new(),
-                            use_count: 0,
-                            is_extrin_param: false,
-                            is_var: false,
-                            type_flavor: None,
-                            parent_type: None,
-                        });
-                        let _prev = self.pat_defs.insert(item.span, def_id);
-                        let prev = self.scopes.define(root_scope, bind_sym, def_id);
-                        let _ = prev;
-                    }
+            match module.ctx.exprs.get(item_idx) {
+                Expr::Export { items, path, .. } => {
+                    self.handle_export_items(items, *path, root_scope, imports, interner);
                 }
-                continue;
+                Expr::Import { items, path, span } => {
+                    self.handle_import_clause(items, *path, *span, root_scope, imports, interner);
+                }
+                _ => {}
             }
+        }
+    }
 
-            let Expr::Import { items, path, span } = module.ctx.exprs.get(item_idx) else {
+    fn handle_export_items<S: BuildHasher>(
+        &mut self,
+        items: &[musi_ast::ExportItem],
+        path: musi_shared::Symbol,
+        root_scope: ScopeId,
+        imports: &HashMap<String, ModuleExports, S>,
+        interner: &Interner,
+    ) {
+        let Some(raw_path) = interner.try_resolve(path) else {
+            return;
+        };
+        let path_str = raw_path.trim_matches('"');
+        let Some(module_exports) = imports.get(path_str) else {
+            return;
+        };
+        for item in items {
+            let Some(name_str) = interner.try_resolve(item.name) else {
                 continue;
             };
-            let raw_path = interner.resolve(*path);
-            let path_str = raw_path.trim_matches('"').to_owned();
-            let Some(module_exports) = imports.get(&path_str) else {
+            let Some(ty) = module_exports.names.get(name_str) else {
                 continue;
             };
-            match items {
-                ImportClause::GlobAs(alias) => {
+
+            let def_id = DefId(self.next_id);
+            self.next_id += 1;
+            let bind_sym = item.alias.unwrap_or(item.name);
+            self.defs.push(DefInfo {
+                id: def_id,
+                name: bind_sym,
+                kind: DefKind::Const,
+                span: item.span,
+                ty: Some(ty.clone()),
+                scheme_vars: Vec::new(),
+                use_count: 1, // Re-exporting counts as a usage
+                is_extrin_param: false,
+                is_var: false,
+                type_flavor: None,
+                parent_type: None,
+            });
+            let _ = self.pat_defs.insert(item.span, def_id);
+            let _ = self.scopes.define(root_scope, bind_sym, def_id);
+        }
+    }
+
+    fn handle_import_clause<S: BuildHasher>(
+        &mut self,
+        items: &musi_ast::ImportClause,
+        path: musi_shared::Symbol,
+        span: Span,
+        root_scope: ScopeId,
+        imports: &HashMap<String, ModuleExports, S>,
+        interner: &Interner,
+    ) {
+        let raw_path = interner.resolve(path);
+        let path_str = raw_path.trim_matches('"');
+        let Some(module_exports) = imports.get(path_str) else {
+            return;
+        };
+        match items {
+            musi_ast::ImportClause::GlobAs(alias) => {
+                let def_id = DefId(self.next_id);
+                self.next_id += 1;
+                self.defs.push(DefInfo {
+                    id: def_id,
+                    name: *alias,
+                    kind: DefKind::Namespace,
+                    span,
+                    ty: None,
+                    scheme_vars: Vec::new(),
+                    use_count: 0,
+                    is_extrin_param: false,
+                    is_var: false,
+                    type_flavor: None,
+                    parent_type: None,
+                });
+                let _ = self.scopes.define(root_scope, *alias, def_id);
+                let _ = self
+                    .namespace_exports
+                    .insert(*alias, module_exports.names.clone());
+            }
+            musi_ast::ImportClause::Items(import_items) => {
+                for import_item in import_items {
+                    let Some(name_str) = interner.try_resolve(import_item.name) else {
+                        continue;
+                    };
+                    let _exported_name = import_item.alias.map_or_else(
+                        || name_str.to_owned(),
+                        |a| interner.try_resolve(a).unwrap_or("").to_owned(),
+                    );
+                    let Some(ty) = module_exports.names.get(name_str) else {
+                        continue;
+                    };
                     let def_id = DefId(self.next_id);
                     self.next_id += 1;
-                    self.defs.push(DefInfo {
+                    let bind_sym = import_item.alias.unwrap_or(import_item.name);
+                    let info = DefInfo {
                         id: def_id,
-                        name: *alias,
-                        kind: DefKind::Namespace,
-                        span: *span,
-                        ty: None,
+                        name: bind_sym,
+                        kind: DefKind::Const,
+                        span: import_item.span,
+                        ty: Some(ty.clone()),
                         scheme_vars: Vec::new(),
                         use_count: 0,
                         is_extrin_param: false,
                         is_var: false,
                         type_flavor: None,
                         parent_type: None,
-                    });
-                    let prev = self.scopes.define(root_scope, *alias, def_id);
-                    let _ = prev;
-                    let _prev = self
-                        .namespace_exports
-                        .insert(*alias, module_exports.names.clone());
+                    };
+                    self.defs.push(info);
+                    let _ = self.pat_defs.insert(import_item.span, def_id);
+                    let _ = self.scopes.define(root_scope, bind_sym, def_id);
                 }
-
-                ImportClause::Items(import_items) => {
-                    for import_item in import_items {
-                        let Some(name_str) = interner.try_resolve(import_item.name) else {
-                            continue;
-                        };
-                        let _exported_name = import_item.alias.map_or_else(
-                            || name_str.to_owned(),
-                            |a| interner.try_resolve(a).unwrap_or("").to_owned(),
-                        );
-                        let Some(ty) = module_exports.names.get(name_str) else {
-                            continue;
-                        };
-                        let def_id = DefId(self.next_id);
-                        self.next_id += 1;
-                        let mut info = DefInfo {
-                            id: def_id,
-                            name: import_item.name,
-                            kind: DefKind::Const,
-                            span: import_item.span,
-                            ty: Some(ty.clone()),
-                            scheme_vars: Vec::new(),
-                            use_count: 0,
-                            is_extrin_param: false,
-                            is_var: false,
-                            type_flavor: None,
-                            parent_type: None,
-                        };
-                        let bind_sym = import_item.alias.unwrap_or(import_item.name);
-                        info.name = bind_sym;
-                        self.defs.push(info);
-                        let _prev = self.pat_defs.insert(import_item.span, def_id);
-                        let prev = self.scopes.define(root_scope, bind_sym, def_id);
-                        let _ = prev; // silently allow shadowing imports
-                    }
-                }
-
-                ImportClause::Glob => {}
             }
-            let _ = span;
+            musi_ast::ImportClause::Glob => {
+                // Do nothing for plain `import * from ...`
+            }
         }
+        let _ = span;
     }
 
     fn resolve_items(&mut self, module: &ParsedModule, root_scope: ScopeId) {
@@ -614,13 +635,25 @@ impl<'a> Resolver<'a> {
             }
 
             Expr::Bind {
-                kind, pat, init, ..
+                modifiers,
+                kind,
+                pat,
+                init,
+                ..
             } => {
                 let kind = *kind;
+                let is_exported = modifiers.iter().any(|m| matches!(m, Modifier::Export));
                 if let Some(&init_idx) = init.as_ref() {
                     self.resolve_expr(init_idx, ctx, scope);
                 }
+                let defs_before = self.defs.len();
                 self.collect_pat_defs(pat, kind, scope);
+                // Mark exported definitions as "used" (exporting is a usage)
+                if is_exported {
+                    for def in &mut self.defs[defs_before..] {
+                        def.use_count += 1;
+                    }
+                }
                 self.resolve_pat(pat, ctx, scope);
             }
 
