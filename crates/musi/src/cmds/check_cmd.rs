@@ -23,15 +23,29 @@ pub fn run(args: &CheckArgs) {
     let mut source_db = SourceDb::new();
     let mut diags = DiagnosticBag::new();
 
-    // Parse prelude.
-    let prelude_file_id = source_db.add(PRELUDE_FILENAME, PRELUDE_SRC);
-    let prelude_lexed = musi_lex::lex(PRELUDE_SRC, prelude_file_id, &mut interner, &mut diags);
-    let prelude_module = musi_parse::parse(
-        &prelude_lexed.tokens,
-        prelude_file_id,
-        &mut diags,
-        &interner,
-    );
+    // Skip prelude injection when checking the prelude itself.
+    let is_prelude = file_path.ends_with("std/prelude.ms") || file_path.ends_with("prelude.ms");
+
+    // Parse prelude (unless we're checking the prelude itself).
+    let (prelude_file_id, prelude_module) = if is_prelude {
+        // Use a dummy empty module for prelude when checking prelude.ms
+        let dummy_id = source_db.add("<prelude-skip>", "");
+        let dummy_lexed = musi_lex::lex("", dummy_id, &mut interner, &mut diags);
+        let dummy_module =
+            musi_parse::parse(&dummy_lexed.tokens, dummy_id, &mut diags, &interner);
+        (dummy_id, dummy_module)
+    } else {
+        let prelude_file_id = source_db.add(PRELUDE_FILENAME, PRELUDE_SRC);
+        let prelude_lexed =
+            musi_lex::lex(PRELUDE_SRC, prelude_file_id, &mut interner, &mut diags);
+        let prelude_module = musi_parse::parse(
+            &prelude_lexed.tokens,
+            prelude_file_id,
+            &mut diags,
+            &interner,
+        );
+        (prelude_file_id, prelude_module)
+    };
 
     if diags.has_errors() {
         print_diags_and_exit(&diags, &source_db);

@@ -918,22 +918,27 @@ pub fn resolve<S: BuildHasher>(
     let root = resolver.scopes.push_root();
 
     // Auto-inject prelude exports — they are available without an explicit import.
+    // Also inject primitive types ONLY when prelude has exports (i.e., we're not the prelude).
     if let Some(prelude) = imports.get("<prelude>") {
-        for (name_str, ty) in &prelude.names {
-            if let Some(sym) = interner.get(name_str) {
-                let def_id = resolver.alloc_def(sym, DefKind::Fn, Span::default());
-                resolver.defs.last_mut().unwrap().ty = Some(ty.clone());
-                let prev = resolver.scopes.define(root, sym, def_id);
-                let _ = prev;
+        // Skip injection if prelude is empty (means we ARE the prelude being checked).
+        if !prelude.names.is_empty() {
+            for (name_str, ty) in &prelude.names {
+                if let Some(sym) = interner.get(name_str) {
+                    let def_id = resolver.alloc_def(sym, DefKind::Fn, Span::default());
+                    resolver.defs.last_mut().unwrap().ty = Some(ty.clone());
+                    let prev = resolver.scopes.define(root, sym, def_id);
+                    let _ = prev;
+                }
             }
-        }
-    }
 
-    for &name_str in PRIM_TYPE_NAMES {
-        if let Some(sym) = interner.get(name_str) {
-            let def_id = resolver.alloc_def(sym, DefKind::Type, Span::DUMMY);
-            let prev = resolver.scopes.define(root, sym, def_id);
-            let _ = prev;
+            // Inject primitive type names so they are resolvable in type annotations.
+            for &name_str in PRIM_TYPE_NAMES {
+                if let Some(sym) = interner.get(name_str) {
+                    let def_id = resolver.alloc_def(sym, DefKind::Type, Span::DUMMY);
+                    let prev = resolver.scopes.define(root, sym, def_id);
+                    let _ = prev;
+                }
+            }
         }
     }
 
