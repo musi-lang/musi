@@ -212,15 +212,15 @@ pub fn analyze_doc(source: &str, uri: &str) -> (Vec<Diagnostic>, AnalyzedDoc) {
     }
 
     // Extract the document's filesystem path from the URI for resolving user imports.
-    let doc_fs_path: Option<std::path::PathBuf> = uri
-        .strip_prefix("file://")
-        .map(std::path::PathBuf::from);
+    let doc_fs_path: Option<std::path::PathBuf> =
+        uri.strip_prefix("file://").map(std::path::PathBuf::from);
 
     // Queue entries: (import path string, importer FS path for relative resolution)
-    let mut dep_queue: Vec<(String, Option<std::path::PathBuf>)> = collect_dep_paths(&module, &interner)
-        .into_iter()
-        .map(|p| (p, doc_fs_path.clone()))
-        .collect();
+    let mut dep_queue: Vec<(String, Option<std::path::PathBuf>)> =
+        collect_dep_paths(&module, &interner)
+            .into_iter()
+            .map(|p| (p, doc_fs_path.clone()))
+            .collect();
     let mut visited: HashSet<String> = HashSet::new();
     let mut qi = 0;
     while qi < dep_queue.len() {
@@ -230,20 +230,19 @@ pub fn analyze_doc(source: &str, uri: &str) -> (Vec<Diagnostic>, AnalyzedDoc) {
             continue;
         }
         // Try embedded std/native first, then resolve from the filesystem.
-        let (dep_src, dep_fs_path, is_std_dep) =
-            if let Some(s) = embedded_std(&path) {
-                (s.to_owned(), None::<std::path::PathBuf>, true)
-            } else if let Some(s) = embedded_native(&path) {
-                (s.to_owned(), None, false)
-            } else if let Some(ref imp) = importer {
-                let resolved = resolve_lsp_import(&path, imp);
-                match std::fs::read_to_string(&resolved) {
-                    Ok(s) => (s, Some(resolved), false),
-                    Err(_) => continue,
-                }
-            } else {
-                continue;
-            };
+        let (dep_src, dep_fs_path, is_std_dep) = if let Some(s) = embedded_std(&path) {
+            (s.to_owned(), None::<std::path::PathBuf>, true)
+        } else if let Some(s) = embedded_native(&path) {
+            (s.to_owned(), None, false)
+        } else if let Some(ref imp) = importer {
+            let resolved = resolve_lsp_import(&path, imp);
+            match std::fs::read_to_string(&resolved) {
+                Ok(s) => (s, Some(resolved), false),
+                Err(_) => continue,
+            }
+        } else {
+            continue;
+        };
         let mut dep_diags = DiagnosticBag::new();
         let (dep_file_id, dep_module, dep_lexed) = parse_src(
             &path,
@@ -558,7 +557,11 @@ fn resolve_lsp_import(import_path: &str, importer: &std::path::Path) -> std::pat
     } else {
         // Non-relative: try adjacent to the importer first, then as-is from CWD.
         let candidate = base.join(import_path).with_extension("ms");
-        if candidate.exists() { candidate } else { std::path::PathBuf::from(import_path).with_extension("ms") }
+        if candidate.exists() {
+            candidate
+        } else {
+            std::path::PathBuf::from(import_path).with_extension("ms")
+        }
     }
 }
 

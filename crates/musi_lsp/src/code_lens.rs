@@ -52,9 +52,7 @@ pub fn code_lens(doc: &AnalyzedDoc, uri: &Uri) -> Vec<CodeLens> {
                         command: "musi.runTest".to_owned(),
                         arguments: Some(vec![
                             serde_json::Value::String(uri_str.clone()),
-                            serde_json::Value::String(
-                                label.unwrap_or_default(),
-                            ),
+                            serde_json::Value::String(label.unwrap_or_default()),
                         ]),
                     }),
                     data: None,
@@ -66,9 +64,7 @@ pub fn code_lens(doc: &AnalyzedDoc, uri: &Uri) -> Vec<CodeLens> {
                     command: Some(Command {
                         title: "▷ Run".to_owned(),
                         command: "musi.runFile".to_owned(),
-                        arguments: Some(vec![serde_json::Value::String(
-                            uri_str.clone(),
-                        )]),
+                        arguments: Some(vec![serde_json::Value::String(uri_str.clone())]),
                     }),
                     data: None,
                 });

@@ -275,10 +275,7 @@ impl LanguageServer for MusiBackend {
         }
     }
 
-    async fn code_lens(
-        &self,
-        params: CodeLensParams,
-    ) -> jsonrpc::Result<Option<Vec<CodeLens>>> {
+    async fn code_lens(&self, params: CodeLensParams) -> jsonrpc::Result<Option<Vec<CodeLens>>> {
         let uri = params.text_document.uri;
         let docs = self.documents.read().await;
         let lenses = docs

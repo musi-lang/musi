@@ -13,17 +13,29 @@ use crate::analysis::{AnalyzedDoc, span_to_range};
 /// Each import path string becomes a clickable link to the resolved `.ms` file.
 /// Relative imports (`./` or `../`) are resolved against the document's own directory;
 /// non-relative imports are resolved against the workspace root.
-pub fn document_links(doc: &AnalyzedDoc, doc_uri: &Uri, root_uri: Option<&Uri>) -> Vec<DocumentLink> {
+pub fn document_links(
+    doc: &AnalyzedDoc,
+    doc_uri: &Uri,
+    root_uri: Option<&Uri>,
+) -> Vec<DocumentLink> {
     // Base URI for resolving non-relative imports (workspace root).
     let root_base: String = root_uri.map_or_else(String::new, |root| {
         let s = root.as_str();
-        if s.ends_with('/') { s.to_owned() } else { format!("{s}/") }
+        if s.ends_with('/') {
+            s.to_owned()
+        } else {
+            format!("{s}/")
+        }
     });
 
     // Base URI for resolving relative imports: document's directory.
     let doc_dir: String = {
         let s = doc_uri.as_str();
-        if let Some(pos) = s.rfind('/') { format!("{}/", &s[..pos]) } else { root_base.clone() }
+        if let Some(pos) = s.rfind('/') {
+            format!("{}/", &s[..pos])
+        } else {
+            root_base.clone()
+        }
     };
 
     let mut links = Vec::new();

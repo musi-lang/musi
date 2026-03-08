@@ -110,9 +110,11 @@ pub(super) fn register_fn_def(
 
     let param_count =
         u8::try_from(params.len()).map_err(|_| CodegenError::ParameterCountOverflow)?;
-    let unit_return = ret_ty.as_ref()
+    let unit_return = ret_ty
+        .as_ref()
         .and_then(|t| ty_name_str(t, interner))
-        .as_deref() == Some("Unit");
+        .as_deref()
+        == Some("Unit");
     let fn_idx = module.push_function(FunctionEntry {
         symbol_idx: sym_idx,
         param_count,

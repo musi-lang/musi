@@ -321,7 +321,7 @@ impl<'a> Resolver<'a> {
             Expr::DotPrefix { name, args, .. } => {
                 if let Some(def_id) = self.scopes.lookup(scope, *name) {
                     let _prev = self.expr_defs.insert(idx, def_id);
-                    let def_idx = def_id.0 as usize;
+                    let def_idx = usize::try_from(def_id.0).expect("def_id out of usize range");
                     if def_idx < self.defs.len() {
                         self.defs[def_idx].use_count += 1;
                     }
@@ -892,6 +892,13 @@ impl<'a> Resolver<'a> {
     }
 }
 
+// Inject primitive type names so they are resolvable in type annotations.
+// List of primitive type names available for type resolution.
+static PRIM_TYPE_NAMES: &[&str] = &[
+    "Int", "Nat", "Float", "Int8", "Int16", "Int32", "Int64", "Nat8", "Nat16", "Nat32", "Nat64",
+    "Float32", "Float64", "Rune", "String", "Bool", "Unit", "Any",
+];
+
 /// Runs name resolution on `module` and returns the [`ResolveResult`].
 ///
 /// # Panics
@@ -922,14 +929,6 @@ pub fn resolve<S: BuildHasher>(
         }
     }
 
-    // Inject primitive type names so they are resolvable in type annotations.
-    const PRIM_TYPE_NAMES: &[&str] = &[
-        "Int", "Nat", "Float",
-        "Int8", "Int16", "Int32", "Int64",
-        "Nat8", "Nat16", "Nat32", "Nat64",
-        "Float32", "Float64",
-        "Rune", "String", "Bool", "Unit", "Any",
-    ];
     for &name_str in PRIM_TYPE_NAMES {
         if let Some(sym) = interner.get(name_str) {
             let def_id = resolver.alloc_def(sym, DefKind::Type, Span::DUMMY);
