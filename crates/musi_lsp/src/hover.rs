@@ -68,17 +68,27 @@ pub fn hover(doc: &AnalyzedDoc, position: Position) -> Option<Hover> {
             // `type` is not a Musi keyword — show nothing for imported/opaque types.
             None => "",
         },
-        DefKind::Variant => "variant",
+        DefKind::Variant => "",  // display name built below using parent_type
         DefKind::Namespace => return None,
         DefKind::Class => "class",
         DefKind::Given => "given",
     };
 
     let name = doc.interner.resolve(def.name);
-    let signature = if kind_kw.is_empty() {
-        format!("{name}: {ty_str}")
+    // For variants, qualify with parent type: `Shape.Circle` instead of just `Circle`.
+    let display_name: String = if def.kind == DefKind::Variant {
+        if let Some(parent) = def.parent_type {
+            format!("{}.{name}", doc.interner.resolve(parent))
+        } else {
+            name.to_owned()
+        }
     } else {
-        format!("{kind_kw} {name}: {ty_str}")
+        name.to_owned()
+    };
+    let signature = if kind_kw.is_empty() {
+        format!("{display_name}: {ty_str}")
+    } else {
+        format!("{kind_kw} {display_name}: {ty_str}")
     };
 
     let local_doc = extract_doc_comments_from_source(
