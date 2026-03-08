@@ -382,9 +382,12 @@ fn has_doc_comments(tok: &Token, trivia: &[Trivia]) -> bool {
     let tr_start = tok.leading_trivia.start as usize;
     let tr_end = tr_start + tok.leading_trivia.len as usize;
     let leading = trivia.get(tr_start..tr_end).unwrap_or(&[]);
-    leading
-        .iter()
-        .any(|t| matches!(t.kind, musi_lex::TriviaKind::LineComment { doc_style: true }))
+    leading.iter().any(|t| {
+        matches!(
+            t.kind,
+            musi_lex::TriviaKind::LineComment { doc_style: true }
+        )
+    })
 }
 
 /// Extract doc-comment text for the definition at `def_start` from `source`.
@@ -425,7 +428,7 @@ pub fn extract_doc_comments_from_source(
                     )
                 })
                 .filter(|t| has_doc_comments(t, trivia))
-                .last()
+                .next_back()
         });
 
     let Some(tok) = tok else {

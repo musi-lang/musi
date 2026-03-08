@@ -1,6 +1,6 @@
 //! Shared compilation pipeline used by all CLI commands.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -11,8 +11,10 @@ use musi_lex::lex;
 use musi_parse::{ParsedModule, parse};
 use musi_shared::{DiagnosticBag, FileId, Interner, SourceDb};
 
-use crate::config::{MusiConfig, find_and_load};
-use crate::fetch::resolve_package_import;
+use crate::config::{self, MusiConfig, find_and_load};
+use crate::deps;
+use crate::fetch::{self, resolve_package_import};
+use crate::lock::LockFile;
 
 pub const PRELUDE_SRC: &str = include_str!("../../../std/prelude.ms");
 pub const PRELUDE_FILENAME: &str = "<prelude>";
@@ -121,13 +123,18 @@ pub fn collect_and_parse_deps(
     tolerate_missing: bool,
 ) -> Vec<ResolvedDep> {
     // Load project config to get package dependencies
-    let project_deps = load_project_config()
-        .map(|(cfg, _)| cfg.dependencies)
+    let (mut project_config, project_dir) = load_project_config().unzip();
+    let mut project_deps: HashMap<String, String> = project_config
+        .as_ref()
+        .map(|cfg| cfg.dependencies.clone())
         .unwrap_or_default();
+
+    // Track newly added URL imports
+    let mut added_deps: Vec<(String, String)> = Vec::new();
 
     let mut queue: Vec<String> = collect_dep_paths(root_module, interner);
     let mut compiled: HashSet<String> = HashSet::new();
-    let mut deps: Vec<ResolvedDep> = Vec::new();
+    let mut result_deps: Vec<ResolvedDep> = Vec::new();
     let mut qi = 0;
 
     while qi < queue.len() {
@@ -148,6 +155,58 @@ pub fn collect_and_parse_deps(
                 continue;
             }
             dep_src_owned = native_src.to_owned();
+        } else if deps::is_url_import(&import_path) {
+            // URL import (github:scope/repo or https://github.com/...)
+            let Some((spec, subpath)) = deps::parse_url_import(&import_path) else {
+                if tolerate_missing {
+                    continue;
+                }
+                eprintln!("error: invalid URL import '{import_path}'");
+                process::exit(1);
+            };
+
+            // Fetch/install the package
+            let resolved = match fetch::ensure_installed(&spec) {
+                Ok(r) => r,
+                Err(e) => {
+                    if tolerate_missing {
+                        continue;
+                    }
+                    eprintln!("error: failed to fetch '{import_path}': {e}");
+                    process::exit(1);
+                }
+            };
+
+            // Determine the file to load
+            let pkg_path = if let Some(sub) = &subpath {
+                resolved.cache_path.join(sub).with_extension("ms")
+            } else {
+                resolve_package_main(&resolved.cache_path)
+            };
+
+            key = pkg_path.to_string_lossy().into_owned();
+            if !compiled.insert(key.clone()) {
+                continue;
+            }
+
+            dep_src_owned = match fs::read_to_string(&pkg_path) {
+                Ok(s) => s,
+                Err(e) => {
+                    if tolerate_missing {
+                        continue;
+                    }
+                    eprintln!("error: cannot read URL import '{import_path}': {e}");
+                    process::exit(1);
+                }
+            };
+
+            // Add to project deps so subsequent imports resolve
+            let version_str = format!("^{}", resolved.version);
+            if !project_deps.contains_key(&spec.name) {
+                let _prev = project_deps.insert(spec.name.clone(), version_str.clone());
+                added_deps.push((spec.name.clone(), version_str));
+                eprintln!("  Resolved {} -> v{}", spec.name, resolved.version);
+            }
         } else if let Some(pkg_path) = resolve_package_import(&import_path, &project_deps) {
             // Package dependency from mspackage.json
             let main_file = resolve_package_main(&pkg_path);
@@ -188,9 +247,38 @@ pub fn collect_and_parse_deps(
         for path in collect_dep_paths(&dep_module, interner) {
             queue.push(path);
         }
-        deps.push((import_path, dep_module, dep_file_id));
+        result_deps.push((import_path, dep_module, dep_file_id));
     }
-    deps
+
+    // Auto-add URL imports to mspackage.json
+    if !added_deps.is_empty()
+        && let Some(ref mut cfg) = project_config
+        && let Some(ref dir) = project_dir
+    {
+        for (name, version) in &added_deps {
+            let _prev = cfg.dependencies.insert(name.clone(), version.clone());
+        }
+        if let Err(e) = config::save_to_dir(dir, cfg) {
+            eprintln!("warning: failed to update mspackage.json: {e}");
+        } else {
+            eprintln!("  Added {} dependencies to mspackage.json", added_deps.len());
+        }
+
+        // Update lock file
+        let mut lock = LockFile::read_from(dir).unwrap_or_default();
+        for (name, _version) in &added_deps {
+            if let Some(spec) = deps::parse_dep_spec(name, project_deps.get(name).unwrap_or(&"*".to_owned())).ok()
+                && let Ok(resolved) = fetch::ensure_installed(&spec)
+            {
+                lock.add_resolved(&resolved);
+            }
+        }
+        if let Err(e) = lock.write_to(dir) {
+            eprintln!("warning: failed to update musi.lock: {e}");
+        }
+    }
+
+    result_deps
 }
 
 /// Resolve the main entry point for a package directory.

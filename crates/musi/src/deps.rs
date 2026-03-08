@@ -50,6 +50,77 @@ pub enum DepError {
     Io(#[from] io::Error),
 }
 
+/// Parse a URL import path into a DepSpec.
+///
+/// Supported formats:
+/// - `github:scope/repo` (latest version)
+/// - `github:scope/repo@v0.1.0` (specific version)
+/// - `github:scope/repo/path/to/module` (subpath, uses latest)
+/// - `https://github.com/scope/repo` (full URL)
+///
+/// Returns `(DepSpec, Option<subpath>)` where subpath is the path within the repo.
+pub fn parse_url_import(import_path: &str) -> Option<(DepSpec, Option<String>)> {
+    // Handle github: prefix
+    if let Some(rest) = import_path.strip_prefix("github:") {
+        return parse_github_shorthand(rest);
+    }
+
+    // Handle https://github.com/ URLs
+    if let Some(rest) = import_path.strip_prefix("https://github.com/") {
+        return parse_github_shorthand(rest);
+    }
+
+    None
+}
+
+/// Parse GitHub shorthand: `scope/repo[@version][/path]`
+fn parse_github_shorthand(input: &str) -> Option<(DepSpec, Option<String>)> {
+    // Split into parts: scope/repo[@version][/subpath...]
+    let mut parts = input.splitn(2, '/');
+    let owner = parts.next()?;
+    let rest = parts.next()?;
+
+    // Check for version specifier
+    let (repo_and_version, subpath) = if let Some(slash_pos) = rest.find('/') {
+        let (rv, sub) = rest.split_at(slash_pos);
+        (rv, Some(sub.trim_start_matches('/').to_owned()))
+    } else {
+        (rest, None)
+    };
+
+    // Parse repo@version or just repo
+    let (repo, version_str) = if let Some(at_pos) = repo_and_version.find('@') {
+        let (r, v) = repo_and_version.split_at(at_pos);
+        (r, v.trim_start_matches('@').trim_start_matches('v'))
+    } else {
+        (repo_and_version, "*")
+    };
+
+    // Build the DepSpec
+    let version_req = semver::VersionReq::parse(version_str).ok()?;
+    let name = format!("@{owner}/{repo}");
+
+    Some((
+        DepSpec {
+            name,
+            scope: Some(owner.to_owned()),
+            package: repo.to_owned(),
+            version_req,
+            source: DepSource::GitHub {
+                owner: owner.to_owned(),
+                repo: repo.to_owned(),
+            },
+        },
+        subpath,
+    ))
+}
+
+/// Check if an import path is a URL import.
+pub fn is_url_import(import_path: &str) -> bool {
+    import_path.starts_with("github:")
+        || import_path.starts_with("https://github.com/")
+}
+
 /// Parse a dependency spec from name and version string.
 ///
 /// Formats:
@@ -203,5 +274,54 @@ mod tests {
     fn reject_unscoped() {
         let err = parse_dep_spec("plain-name", "^1.0.0").unwrap_err();
         assert!(matches!(err, DepError::InvalidName(_)));
+    }
+
+    #[test]
+    fn url_import_github_shorthand() {
+        let (spec, subpath) = parse_url_import("github:musi-lang/libc-ms").unwrap();
+        assert_eq!(spec.name, "@musi-lang/libc-ms");
+        assert_eq!(spec.scope, Some("musi-lang".to_owned()));
+        assert_eq!(spec.package, "libc-ms");
+        assert!(subpath.is_none());
+        assert!(matches!(
+            spec.source,
+            DepSource::GitHub { owner, repo } if owner == "musi-lang" && repo == "libc-ms"
+        ));
+    }
+
+    #[test]
+    fn url_import_github_with_version() {
+        let (spec, subpath) = parse_url_import("github:user/repo@0.1.0").unwrap();
+        assert_eq!(spec.name, "@user/repo");
+        assert!(subpath.is_none());
+        assert!(spec.version_req.matches(&semver::Version::new(0, 1, 0)));
+    }
+
+    #[test]
+    fn url_import_github_with_v_prefix() {
+        let (spec, _) = parse_url_import("github:user/repo@v1.2.3").unwrap();
+        assert!(spec.version_req.matches(&semver::Version::new(1, 2, 3)));
+    }
+
+    #[test]
+    fn url_import_github_with_subpath() {
+        let (spec, subpath) = parse_url_import("github:user/repo/src/utils").unwrap();
+        assert_eq!(spec.name, "@user/repo");
+        assert_eq!(subpath, Some("src/utils".to_owned()));
+    }
+
+    #[test]
+    fn url_import_https_github() {
+        let (spec, _) = parse_url_import("https://github.com/musi-lang/libc-ms").unwrap();
+        assert_eq!(spec.name, "@musi-lang/libc-ms");
+    }
+
+    #[test]
+    fn is_url_import_detection() {
+        assert!(is_url_import("github:user/repo"));
+        assert!(is_url_import("https://github.com/user/repo"));
+        assert!(!is_url_import("@user/repo"));
+        assert!(!is_url_import("./local/path"));
+        assert!(!is_url_import("std/math"));
     }
 }
