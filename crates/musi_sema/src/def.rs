@@ -28,6 +28,17 @@ pub enum DefKind {
     Variant,
     /// Glob namespace import (`import * as Name from "path"`).
     Namespace,
+    /// Type class definition (`class Name[T] { ... }`).
+    Class,
+    /// Type class instance (`given Name[T] { ... }`).
+    Given,
+}
+
+/// Whether a `Type` def is a record or a choice.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TypeFlavor {
+    Record,
+    Choice,
 }
 
 /// All metadata the compiler knows about a single definition.
@@ -49,4 +60,8 @@ pub struct DefInfo {
     /// Suppresses the "unused parameter" warning since extrin params exist for
     /// the external implementation, not for the Musi body.
     pub is_extrin_param: bool,
+    /// True when this `Param` was declared with `var` (mutable parameter).
+    pub is_var: bool,
+    /// For `DefKind::Type`: whether the type was defined as a `record` or `choice`.
+    pub type_flavor: Option<TypeFlavor>,
 }

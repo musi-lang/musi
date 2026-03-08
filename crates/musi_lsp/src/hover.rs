@@ -1,6 +1,6 @@
 //! Hover provider: shows the type and doc-comment of the symbol under the cursor.
 
-use musi_sema::{DefKind, Type};
+use musi_sema::{DefKind, Type, TypeFlavor};
 use tower_lsp_server::ls_types::{Hover, HoverContents, MarkupContent, MarkupKind, Position};
 
 use crate::analysis::{
@@ -48,10 +48,10 @@ pub fn hover(doc: &AnalyzedDoc, position: Position) -> Option<Hover> {
         "?".to_owned()
     };
 
-    let kind_kw = match def.kind {
+    // `""` = no keyword prefix (params are implicitly const; unknown-flavour types)
+    let kind_kw: &str = match def.kind {
         DefKind::Fn => "fn",
         DefKind::Const => {
-            // `const foo := fn ...` — show as `fn` when the type is Arrow.
             let is_fn = def
                 .ty
                 .as_ref()
@@ -60,14 +60,26 @@ pub fn hover(doc: &AnalyzedDoc, position: Position) -> Option<Hover> {
             if is_fn { "fn" } else { "const" }
         }
         DefKind::Var => "var",
-        DefKind::Param => "param",
-        DefKind::Type => "type",
+        // Params are implicitly const — only show "var" when explicitly mutable.
+        DefKind::Param => if def.is_var { "var" } else { "" },
+        DefKind::Type => match def.type_flavor {
+            Some(TypeFlavor::Record) => "record",
+            Some(TypeFlavor::Choice) => "choice",
+            // `type` is not a Musi keyword — show nothing for imported/opaque types.
+            None => "",
+        },
         DefKind::Variant => "variant",
         DefKind::Namespace => return None,
+        DefKind::Class => "class",
+        DefKind::Given => "given",
     };
 
     let name = doc.interner.resolve(def.name);
-    let signature = format!("{kind_kw} {name}: {ty_str}");
+    let signature = if kind_kw.is_empty() {
+        format!("{name}: {ty_str}")
+    } else {
+        format!("{kind_kw} {name}: {ty_str}")
+    };
 
     let local_doc = extract_doc_comments_from_source(
         def.span.start,

@@ -92,7 +92,8 @@ pub fn compute(doc: &AnalyzedDoc) -> SemanticTokensResult {
                     start: span.start,
                     length: doc.interner.resolve(def.name).len() as u32,
                 });
-            let (tt, tm) = classify_def(def.kind, &def.ty, sema, true);
+            let def_name = doc.interner.resolve(def.name);
+            let (tt, tm) = classify_def(def.kind, &def.ty, sema, true, def_name, def.is_var);
             if let Some(tt) = tt {
                 push_raw(&mut raw, name_span, tt, tm, doc.file_id, &doc.source_db);
             }
@@ -161,7 +162,8 @@ pub fn compute(doc: &AnalyzedDoc) -> SemanticTokensResult {
             if span.length == 0 {
                 continue;
             }
-            let (tt, tm) = classify_def(def.kind, &def.ty, sema, false);
+            let def_name = doc.interner.resolve(def.name);
+            let (tt, tm) = classify_def(def.kind, &def.ty, sema, false, def_name, def.is_var);
             if let Some(tt) = tt {
                 push_raw(&mut raw, span, tt, tm, doc.file_id, &doc.source_db);
             }
@@ -224,11 +226,19 @@ pub fn compute(doc: &AnalyzedDoc) -> SemanticTokensResult {
 
 // -- Classification ---------------------------------------------------------
 
+fn is_constant_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.chars().next().is_some_and(|c| c.is_uppercase())
+        && name.chars().all(|c| c.is_uppercase() || c.is_ascii_digit() || c == '_')
+}
+
 fn classify_def(
     kind: DefKind,
     ty: &Option<Type>,
     sema: &musi_sema::SemaResult,
     is_decl: bool,
+    def_name: &str,
+    is_var_param: bool,
 ) -> (Option<u32>, u32) {
     let decl = if is_decl { TM_DECLARATION } else { 0 };
     match kind {
@@ -240,8 +250,12 @@ fn classify_def(
                 .unwrap_or(false);
             if is_fn {
                 (Some(TT_FUNCTION), decl)
-            } else {
+            } else if is_constant_name(def_name) {
+                // UPPER_SNAKE_CASE → highlight as a constant (readonly)
                 (Some(TT_VARIABLE), decl | TM_READONLY)
+            } else {
+                // regular `const x` → plain immutable variable (no READONLY modifier)
+                (Some(TT_VARIABLE), decl)
             }
         }
         DefKind::Var => (Some(TT_VARIABLE), decl | TM_MUTABLE),
@@ -252,7 +266,10 @@ fn classify_def(
                 .map(|t: &Type| matches!(sema.unify_table.resolve(t.clone()), Type::Arrow(..)))
                 .unwrap_or(false);
             if is_fn {
-                (Some(TT_FUNCTION), decl | TM_READONLY)
+                let mods = if is_var_param { TM_MUTABLE } else { TM_READONLY };
+                (Some(TT_FUNCTION), decl | mods)
+            } else if is_var_param {
+                (Some(TT_VARIABLE), decl | TM_MUTABLE)
             } else {
                 (Some(TT_VARIABLE), decl | TM_READONLY)
             }
@@ -260,6 +277,7 @@ fn classify_def(
         DefKind::Type => (Some(TT_TYPE), decl),
         DefKind::Variant => (Some(TT_ENUM_MEMBER), decl),
         DefKind::Namespace => (None, 0),
+        DefKind::Class | DefKind::Given => (Some(TT_TYPE), decl),
     }
 }
 
@@ -408,6 +426,15 @@ fn lex_fallback(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
                 TokenKind::LBrace => ScanState::SkipVariant(depth + 1),
                 TokenKind::RBrace if depth <= 1 => ScanState::Default,
                 TokenKind::RBrace => ScanState::SkipVariant(depth - 1),
+                // Variant payload type names start with uppercase (e.g. `Circle(Float)`)
+                TokenKind::Ident => {
+                    let text = &doc.source[tok.span.start as usize
+                        ..(tok.span.start + tok.span.length) as usize];
+                    if text.starts_with(|c: char| c.is_uppercase()) {
+                        push_raw(raw, tok.span, TT_TYPE, 0, doc.file_id, &doc.source_db);
+                    }
+                    ScanState::SkipVariant(depth)
+                }
                 _ => ScanState::SkipVariant(depth),
             },
 

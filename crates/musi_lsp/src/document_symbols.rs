@@ -41,6 +41,8 @@ pub fn document_symbols(doc: &AnalyzedDoc) -> DocumentSymbolResponse {
                 }
                 DefKind::Type => SymbolKind::CLASS,
                 DefKind::Variant => SymbolKind::ENUM_MEMBER,
+                DefKind::Class => SymbolKind::INTERFACE,
+                DefKind::Given => SymbolKind::MODULE,
                 // Param / Var / Namespace handled by the filter above
                 _ => return None,
             };

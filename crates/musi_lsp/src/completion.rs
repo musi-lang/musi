@@ -48,6 +48,8 @@ pub fn complete(doc: &AnalyzedDoc, _trigger: Option<char>) -> Vec<CompletionItem
                 DefKind::Param => CompletionItemKind::VARIABLE,
                 DefKind::Type => CompletionItemKind::CLASS,
                 DefKind::Variant => CompletionItemKind::ENUM_MEMBER,
+                DefKind::Class => CompletionItemKind::INTERFACE,
+                DefKind::Given => CompletionItemKind::MODULE,
                 DefKind::Namespace => unreachable!(),
             };
 

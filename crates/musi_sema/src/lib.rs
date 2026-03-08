@@ -26,7 +26,7 @@ pub mod scope;
 pub mod types;
 
 pub use check::{TypeChecker, UnifyTable};
-pub use def::{DefId, DefInfo, DefKind};
+pub use def::{DefId, DefInfo, DefKind, TypeFlavor};
 pub use resolve::{ResolveResult, resolve};
 pub use scope::{ScopeId, ScopeTree};
 pub use types::{PrimTy, Type, TypeVarId};
@@ -35,7 +35,7 @@ use std::collections::HashMap;
 use std::hash::BuildHasher;
 
 use musi_ast::{Expr, Modifier, ParsedModule};
-use musi_shared::{DiagnosticBag, FileId, Idx, Interner, Span};
+use musi_shared::{DiagnosticBag, FileId, Idx, Interner, Span, Symbol};
 
 /// The complete result of semantic analysis of a single module.
 pub struct SemaResult {
@@ -50,6 +50,11 @@ pub struct SemaResult {
     /// The unification table used during type checking.
     /// Retained so callers can call [`UnifyTable::freeze_type`] before exporting types.
     pub unify_table: UnifyTable,
+    /// Maps each named function's `DefId` to its ordered parameter names.
+    /// Used to generate call-site parameter-name inlay hints.
+    pub fn_params: HashMap<DefId, Vec<Symbol>>,
+    /// Call sites: `(fn_def_id, arg_expr_indices)` pairs for parameter-name hints.
+    pub call_sites: Vec<(DefId, Vec<Idx<Expr>>)>,
 }
 
 /// Externally-visible types exported by a module (name → inferred [`Type`]).
@@ -164,6 +169,8 @@ pub fn analyze<S: BuildHasher>(
         pat_defs: resolved.pat_defs,
         expr_types,
         unify_table,
+        fn_params: resolved.fn_params,
+        call_sites: resolved.call_sites,
     }
 }
 

@@ -18,7 +18,7 @@ use musi_ast::{
 use musi_shared::{DiagnosticBag, FileId, Idx, Interner, Slice, Span, Symbol};
 
 use crate::ModuleExports;
-use crate::def::{DefId, DefInfo, DefKind};
+use crate::def::{DefId, DefInfo, DefKind, TypeFlavor};
 use crate::scope::{ScopeId, ScopeTree};
 use crate::types::Type;
 
@@ -37,6 +37,12 @@ pub struct ResolveResult {
     pub scopes: ScopeTree,
     /// The root (module-level) scope.
     pub root: ScopeId,
+    /// Maps each named function's `DefId` to its ordered list of parameter names.
+    /// Used to generate call-site parameter name inlay hints.
+    pub fn_params: HashMap<DefId, Vec<Symbol>>,
+    /// Call sites: each entry is `(fn_def_id, arg_expr_indices)`.
+    /// Enables generating Scala-style `param_name:` inlay hints at call sites.
+    pub call_sites: Vec<(DefId, Vec<Idx<Expr>>)>,
 }
 
 struct Resolver<'a> {
@@ -50,6 +56,10 @@ struct Resolver<'a> {
     pat_defs: HashMap<Span, DefId>,
     /// Exports keyed by alias symbol for `import * as Name` imports.
     namespace_exports: HashMap<Symbol, HashMap<String, Type>>,
+    /// Maps named function DefIds to their ordered param names.
+    fn_params: HashMap<DefId, Vec<Symbol>>,
+    /// Call sites for parameter-name inlay hints.
+    call_sites: Vec<(DefId, Vec<Idx<Expr>>)>,
 }
 
 impl<'a> Resolver<'a> {
@@ -64,6 +74,8 @@ impl<'a> Resolver<'a> {
             expr_defs: HashMap::new(),
             pat_defs: HashMap::new(),
             namespace_exports: HashMap::new(),
+            fn_params: HashMap::new(),
+            call_sites: Vec::new(),
         }
     }
 
@@ -79,6 +91,8 @@ impl<'a> Resolver<'a> {
             scheme_vars: Vec::new(),
             use_count: 0,
             is_extrin_param: false,
+            is_var: false,
+            type_flavor: None,
         });
         id
     }
@@ -95,8 +109,8 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    /// Registers all module-level `fn`, `record`, and `choice` names into
-    /// `root_scope`, enabling forward references to functions and types.
+    /// Registers all module-level `fn`, `record`, `choice`, and `class` names
+    /// into `root_scope`, enabling forward references.
     fn collect_top_level(&mut self, module: &ParsedModule, root_scope: ScopeId) {
         for &item_idx in module.ctx.expr_lists.get_slice(module.items) {
             let expr = module.ctx.exprs.get(item_idx);
@@ -108,13 +122,22 @@ impl<'a> Resolver<'a> {
                     name: Some(name),
                     span,
                     ..
+                } => {
+                    let def_id = self.alloc_def(*name, DefKind::Type, *span);
+                    self.defs.last_mut().unwrap().type_flavor = Some(TypeFlavor::Record);
+                    self.define_in_scope(root_scope, *name, def_id, *span);
                 }
-                | Expr::Choice {
+                Expr::Choice {
                     name: Some(name),
                     span,
                     ..
                 } => {
-                    self.alloc_and_define(*name, DefKind::Type, *span, root_scope);
+                    let def_id = self.alloc_def(*name, DefKind::Type, *span);
+                    self.defs.last_mut().unwrap().type_flavor = Some(TypeFlavor::Choice);
+                    self.define_in_scope(root_scope, *name, def_id, *span);
+                }
+                Expr::ClassDef { name, span, .. } => {
+                    self.alloc_and_define(*name, DefKind::Class, *span, root_scope);
                 }
                 _ => {}
             }
@@ -150,6 +173,8 @@ impl<'a> Resolver<'a> {
                         scheme_vars: Vec::new(),
                         use_count: 0,
                         is_extrin_param: false,
+                        is_var: false,
+                        type_flavor: None,
                     });
                     let prev = self.scopes.define(root_scope, *alias, def_id);
                     let _ = prev;
@@ -179,6 +204,8 @@ impl<'a> Resolver<'a> {
                             scheme_vars: Vec::new(),
                             use_count: 0,
                             is_extrin_param: false,
+                            is_var: false,
+                            type_flavor: None,
                         };
                         let bind_sym = import_item.alias.unwrap_or(import_item.name);
                         info.name = bind_sym;
@@ -360,8 +387,11 @@ impl<'a> Resolver<'a> {
     fn register_params(&mut self, params: &[musi_ast::Param], scope: ScopeId, is_extrin: bool) {
         for param in params {
             let def_id = self.alloc_def(param.name, DefKind::Param, param.span);
-            if is_extrin && let Some(d) = self.defs.last_mut() {
-                d.is_extrin_param = true;
+            if let Some(d) = self.defs.last_mut() {
+                if is_extrin {
+                    d.is_extrin_param = true;
+                }
+                d.is_var = param.mutable;
             }
             self.define_in_scope(scope, param.name, def_id, param.span);
             let _prev = self.pat_defs.insert(param.span, def_id);
@@ -450,10 +480,15 @@ impl<'a> Resolver<'a> {
                 }
             }
 
-            Expr::FnDef { params, body, .. } => {
+            Expr::FnDef { name, params, body, .. } => {
                 let fn_scope = self.scopes.push_child(scope);
                 // extrin fn has no body — suppress "unused param" warnings for its params
                 self.register_params(params, fn_scope, body.is_none());
+                // Record param names for call-site inlay hints.
+                if let Some(fn_def_id) = self.scopes.lookup(scope, *name) {
+                    let param_names: Vec<Symbol> = params.iter().map(|p| p.name).collect();
+                    let _prev = self.fn_params.insert(fn_def_id, param_names);
+                }
                 if let Some(&body_idx) = body.as_ref() {
                     self.resolve_expr(body_idx, ctx, fn_scope);
                 }
@@ -493,6 +528,37 @@ impl<'a> Resolver<'a> {
                 self.resolve_postfix(*base, op, ctx, scope);
             }
 
+            Expr::ClassDef { members, .. } => {
+                for member in members {
+                    match member {
+                        musi_ast::ClassMember::Method(idx) => {
+                            self.resolve_expr(*idx, ctx, scope);
+                        }
+                        musi_ast::ClassMember::Law { params, body, .. } => {
+                            let law_scope = self.scopes.push_child(scope);
+                            self.register_params(params, law_scope, false);
+                            self.resolve_expr(*body, ctx, law_scope);
+                        }
+                    }
+                }
+            }
+
+            Expr::GivenDef { members, .. } => {
+                let given_scope = self.scopes.push_child(scope);
+                for member in members {
+                    match member {
+                        musi_ast::ClassMember::Method(idx) => {
+                            self.resolve_expr(*idx, ctx, given_scope);
+                        }
+                        musi_ast::ClassMember::Law { params, body, .. } => {
+                            let law_scope = self.scopes.push_child(given_scope);
+                            self.register_params(params, law_scope, false);
+                            self.resolve_expr(*body, ctx, law_scope);
+                        }
+                    }
+                }
+            }
+
             _ => {}
         }
     }
@@ -507,7 +573,20 @@ impl<'a> Resolver<'a> {
         scope: ScopeId,
     ) {
         match op {
-            PostfixOp::Call { args, .. } | PostfixOp::Index { args, .. } => {
+            PostfixOp::Call { args, .. } => {
+                let arg_slice = ctx.expr_lists.get_slice(*args);
+                for &arg in arg_slice {
+                    self.resolve_expr(arg, ctx, scope);
+                }
+                // Record call site for parameter-name inlay hints.
+                if let Some(&fn_def_id) = self.expr_defs.get(&base) {
+                    if self.fn_params.contains_key(&fn_def_id) {
+                        let arg_idxs = arg_slice.to_vec();
+                        self.call_sites.push((fn_def_id, arg_idxs));
+                    }
+                }
+            }
+            PostfixOp::Index { args, .. } => {
                 for &arg in ctx.expr_lists.get_slice(*args) {
                     self.resolve_expr(arg, ctx, scope);
                 }
@@ -575,7 +654,9 @@ impl<'a> Resolver<'a> {
                 span,
                 ..
             } => {
-                self.alloc_and_define(*name, DefKind::Type, *span, block_scope);
+                let def_id = self.alloc_def(*name, DefKind::Type, *span);
+                self.defs.last_mut().unwrap().type_flavor = Some(TypeFlavor::Choice);
+                self.define_in_scope(block_scope, *name, def_id, *span);
                 self.resolve_expr(stmt, ctx, block_scope);
             }
             Expr::Record {
@@ -583,8 +664,14 @@ impl<'a> Resolver<'a> {
                 span,
                 ..
             } => {
-                self.alloc_and_define(*name, DefKind::Type, *span, block_scope);
+                let def_id = self.alloc_def(*name, DefKind::Type, *span);
+                self.defs.last_mut().unwrap().type_flavor = Some(TypeFlavor::Record);
+                self.define_in_scope(block_scope, *name, def_id, *span);
                 // No sub-expressions to resolve.
+            }
+            Expr::ClassDef { name, span, .. } => {
+                self.alloc_and_define(*name, DefKind::Class, *span, block_scope);
+                self.resolve_expr(stmt, ctx, block_scope);
             }
             _ => self.resolve_expr(stmt, ctx, block_scope),
         }
@@ -672,7 +759,12 @@ impl<'a> Resolver<'a> {
     /// Registers all names introduced by a pattern into `scope`.
     fn collect_pat_defs(&mut self, pat: &Pat, kind: BindKind, scope: ScopeId) {
         match pat {
-            Pat::Ident { name, span, .. } => self.define_pat_name(*name, kind, *span, scope),
+            Pat::Ident { name, span, is_mut, .. } => {
+                // Each identifier in a pattern can opt in to `var` via `is_mut`,
+                // overriding the enclosing `kind` (e.g. the for-loop default Const).
+                let effective_kind = if *is_mut { BindKind::Var } else { kind };
+                self.define_pat_name(*name, effective_kind, *span, scope);
+            }
             Pat::Prod { elements, .. } | Pat::Arr { elements, .. } => {
                 for elem in elements {
                     self.collect_pat_defs(elem, kind, scope);
@@ -756,6 +848,8 @@ pub fn resolve<S: BuildHasher>(
         pat_defs: resolver.pat_defs,
         scopes: resolver.scopes,
         root,
+        fn_params: resolver.fn_params,
+        call_sites: resolver.call_sites,
     }
 }
 
