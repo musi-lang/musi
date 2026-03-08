@@ -259,27 +259,26 @@ pub(super) fn emit_main_body(
                     }
                     // Register tests for #[test("label")] functions
                     for attr in attrs {
-                        if interner.resolve(attr.name) == "test" {
-                            if let Some(&fn_idx) = state.fn_map.get(&fn_name)
-                                && let Some(&test_fn_idx) = state.fn_map.get("test")
+                        if interner.resolve(attr.name) == "test"
+                            && let Some(&fn_idx) = state.fn_map.get(&fn_name)
+                            && let Some(&test_fn_idx) = state.fn_map.get("test")
+                        {
+                            // Use function name as label if no explicit label given
+                            let label: Box<str> = if let Some(musi_ast::AttrArg::Value {
+                                value: musi_ast::LitValue::Str(label_sym),
+                                ..
+                            }) = attr.args.first()
                             {
-                                // Use function name as label if no explicit label given
-                                let label: Box<str> = if let Some(musi_ast::AttrArg::Value {
-                                    value: musi_ast::LitValue::Str(label_sym),
-                                    ..
-                                }) = attr.args.first()
-                                {
-                                    interner.resolve(*label_sym).trim_matches('"').into()
-                                } else {
-                                    fn_name.clone().into_boxed_str()
-                                };
-                                let label_const =
-                                    module.push_const(crate::ConstEntry::String(label))?;
-                                out.push(&Opcode::LdConst(label_const));
-                                out.push(&Opcode::LdFnIdx(fn_idx));
-                                out.push(&Opcode::Call(test_fn_idx));
-                                out.push(&Opcode::Drop);
-                            }
+                                interner.resolve(*label_sym).trim_matches('"').into()
+                            } else {
+                                fn_name.clone().into_boxed_str()
+                            };
+                            let label_const =
+                                module.push_const(crate::ConstEntry::String(label))?;
+                            out.push(&Opcode::LdConst(label_const));
+                            out.push(&Opcode::LdFnIdx(fn_idx));
+                            out.push(&Opcode::Call(test_fn_idx));
+                            out.push(&Opcode::Drop);
                         }
                     }
                 }

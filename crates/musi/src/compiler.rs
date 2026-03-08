@@ -122,163 +122,233 @@ pub fn collect_and_parse_deps(
     diags: &mut DiagnosticBag,
     tolerate_missing: bool,
 ) -> Vec<ResolvedDep> {
-    // Load project config to get package dependencies
     let (mut project_config, project_dir) = load_project_config().unzip();
     let mut project_deps: HashMap<String, String> = project_config
         .as_ref()
         .map(|cfg| cfg.dependencies.clone())
         .unwrap_or_default();
-
-    // Track newly added URL imports
     let mut added_deps: Vec<(String, String)> = Vec::new();
 
-    let mut queue: Vec<String> = collect_dep_paths(root_module, interner);
+    // Queue stores (import_path, source_file_path) to track where each import came from
+    let mut queue: Vec<(String, PathBuf)> = collect_dep_paths(root_module, interner)
+        .into_iter()
+        .map(|p| (p, root_file_path.to_path_buf()))
+        .collect();
     let mut compiled: HashSet<String> = HashSet::new();
     let mut result_deps: Vec<ResolvedDep> = Vec::new();
     let mut qi = 0;
 
     while qi < queue.len() {
-        let import_path = queue[qi].clone();
+        let (import_path, source_file) = queue[qi].clone();
         qi += 1;
 
-        let dep_src_owned: String;
-        let key: String;
-        if let Some(std_src) = embedded_std(&import_path) {
-            key = import_path.clone();
-            if !compiled.insert(key.clone()) {
-                continue;
-            }
-            dep_src_owned = std_src.to_owned();
-        } else if let Some(native_src) = musi_native::source_for(&import_path) {
-            key = import_path.clone();
-            if !compiled.insert(key.clone()) {
-                continue;
-            }
-            dep_src_owned = native_src.to_owned();
-        } else if deps::is_url_import(&import_path) {
-            // URL import (github:scope/repo or https://github.com/...)
-            let Some((spec, subpath)) = deps::parse_url_import(&import_path) else {
-                if tolerate_missing {
-                    continue;
-                }
-                eprintln!("error: invalid URL import '{import_path}'");
-                process::exit(1);
-            };
+        let Some((key, dep_src_owned)) = load_dep_source(
+            &import_path,
+            &source_file,
+            &mut compiled,
+            &mut project_deps,
+            &mut added_deps,
+            tolerate_missing,
+        ) else {
+            continue;
+        };
 
-            // Fetch/install the package
-            let resolved = match fetch::ensure_installed(&spec) {
-                Ok(r) => r,
-                Err(e) => {
-                    if tolerate_missing {
-                        continue;
-                    }
-                    eprintln!("error: failed to fetch '{import_path}': {e}");
-                    process::exit(1);
-                }
-            };
-
-            // Determine the file to load
-            let pkg_path = if let Some(sub) = &subpath {
-                resolved.cache_path.join(sub).with_extension("ms")
-            } else {
-                resolve_package_main(&resolved.cache_path)
-            };
-
-            key = pkg_path.to_string_lossy().into_owned();
-            if !compiled.insert(key.clone()) {
-                continue;
-            }
-
-            dep_src_owned = match fs::read_to_string(&pkg_path) {
-                Ok(s) => s,
-                Err(e) => {
-                    if tolerate_missing {
-                        continue;
-                    }
-                    eprintln!("error: cannot read URL import '{import_path}': {e}");
-                    process::exit(1);
-                }
-            };
-
-            // Add to project deps so subsequent imports resolve
-            let version_str = format!("^{}", resolved.version);
-            if !project_deps.contains_key(&spec.name) {
-                let _prev = project_deps.insert(spec.name.clone(), version_str.clone());
-                added_deps.push((spec.name.clone(), version_str));
-                eprintln!("  Resolved {} -> v{}", spec.name, resolved.version);
-            }
-        } else if let Some(pkg_path) = resolve_package_import(&import_path, &project_deps) {
-            // Package dependency from mspackage.json
-            let main_file = resolve_package_main(&pkg_path);
-            key = main_file.to_string_lossy().into_owned();
-            if !compiled.insert(key.clone()) {
-                continue;
-            }
-            dep_src_owned = match fs::read_to_string(&main_file) {
-                Ok(s) => s,
-                Err(e) => {
-                    if tolerate_missing {
-                        continue;
-                    }
-                    eprintln!("error: cannot read package '{import_path}': {e}");
-                    process::exit(1);
-                }
-            };
-        } else {
-            let full_path = resolve_import_path(&import_path, root_file_path);
-            key = full_path.to_string_lossy().into_owned();
-            if !compiled.insert(key.clone()) {
-                continue;
-            }
-            dep_src_owned = match fs::read_to_string(&full_path) {
-                Ok(s) => s,
-                Err(e) => {
-                    if tolerate_missing {
-                        continue;
-                    }
-                    eprintln!("error: cannot read import '{}': {e}", full_path.display());
-                    process::exit(1);
-                }
-            };
-        }
-
+        let key_path = PathBuf::from(&key);
         let (dep_file_id, dep_module) =
             parse_file(&key, &dep_src_owned, interner, source_db, diags);
+        // Track transitive deps with their source file for proper relative resolution
         for path in collect_dep_paths(&dep_module, interner) {
-            queue.push(path);
+            queue.push((path, key_path.clone()));
         }
         result_deps.push((import_path, dep_module, dep_file_id));
     }
 
-    // Auto-add URL imports to mspackage.json
-    if !added_deps.is_empty()
-        && let Some(ref mut cfg) = project_config
-        && let Some(ref dir) = project_dir
-    {
-        for (name, version) in &added_deps {
-            let _prev = cfg.dependencies.insert(name.clone(), version.clone());
-        }
-        if let Err(e) = config::save_to_dir(dir, cfg) {
-            eprintln!("warning: failed to update mspackage.json: {e}");
-        } else {
-            eprintln!("  Added {} dependencies to mspackage.json", added_deps.len());
-        }
-
-        // Update lock file
-        let mut lock = LockFile::read_from(dir).unwrap_or_default();
-        for (name, _version) in &added_deps {
-            if let Some(spec) = deps::parse_dep_spec(name, project_deps.get(name).unwrap_or(&"*".to_owned())).ok()
-                && let Ok(resolved) = fetch::ensure_installed(&spec)
-            {
-                lock.add_resolved(&resolved);
-            }
-        }
-        if let Err(e) = lock.write_to(dir) {
-            eprintln!("warning: failed to update musi.lock: {e}");
-        }
-    }
+    update_project_config_with_added_deps(
+        &mut project_config,
+        project_dir.as_ref(),
+        &added_deps,
+        &project_deps,
+    );
 
     result_deps
+}
+
+/// Load source for a single dependency. Returns `None` if we should skip (duplicate or `tolerate_missing`).
+fn load_dep_source(
+    import_path: &str,
+    root_file_path: &Path,
+    compiled: &mut HashSet<String>,
+    project_deps: &mut HashMap<String, String>,
+    added_deps: &mut Vec<(String, String)>,
+    tolerate_missing: bool,
+) -> Option<(String, String)> {
+    if let Some(std_src) = embedded_std(import_path) {
+        let key = import_path.to_owned();
+        if !compiled.insert(key.clone()) {
+            return None;
+        }
+        return Some((key, std_src.to_owned()));
+    }
+    if let Some(native_src) = musi_native::source_for(import_path) {
+        let key = import_path.to_owned();
+        if !compiled.insert(key.clone()) {
+            return None;
+        }
+        return Some((key, native_src.to_owned()));
+    }
+    if deps::is_url_import(import_path) {
+        return load_url_import(
+            import_path,
+            compiled,
+            project_deps,
+            added_deps,
+            tolerate_missing,
+        );
+    }
+    if let Some(pkg_path) = resolve_package_import(import_path, project_deps) {
+        return load_package_import(import_path, &pkg_path, compiled, tolerate_missing);
+    }
+    load_local_import(import_path, root_file_path, compiled, tolerate_missing)
+}
+
+fn load_url_import(
+    import_path: &str,
+    compiled: &mut HashSet<String>,
+    project_deps: &mut HashMap<String, String>,
+    added_deps: &mut Vec<(String, String)>,
+    tolerate_missing: bool,
+) -> Option<(String, String)> {
+    let Some((spec, subpath)) = deps::parse_url_import(import_path) else {
+        if tolerate_missing {
+            return None;
+        }
+        eprintln!("error: invalid URL import '{import_path}'");
+        process::exit(1);
+    };
+    if !tolerate_missing {
+        let resolved = fetch::ensure_installed(&spec).unwrap_or_else(|e| {
+            eprintln!("error: failed to fetch '{import_path}': {e}");
+            process::exit(1);
+        });
+        let pkg_path = subpath.as_ref().map_or_else(
+            || resolve_package_main(&resolved.cache_path),
+            |s| resolved.cache_path.join(s).with_extension("ms"),
+        );
+        let key = pkg_path.to_string_lossy().into_owned();
+        if !compiled.insert(key.clone()) {
+            return None;
+        }
+        let dep_src = fs::read_to_string(&pkg_path).unwrap_or_else(|e| {
+            eprintln!("error: cannot read URL import '{import_path}': {e}");
+            process::exit(1);
+        });
+        let version_str = format!("^{}", resolved.version);
+        if !project_deps.contains_key(&spec.name) {
+            let _ = project_deps.insert(spec.name.clone(), version_str.clone());
+            added_deps.push((spec.name.clone(), version_str));
+            eprintln!("  Resolved {} -> v{}", spec.name, resolved.version);
+        }
+        return Some((key, dep_src));
+    }
+    let resolved = fetch::ensure_installed(&spec).ok()?;
+    let pkg_path = subpath.as_ref().map_or_else(
+        || resolve_package_main(&resolved.cache_path),
+        |s| resolved.cache_path.join(s).with_extension("ms"),
+    );
+    let key = pkg_path.to_string_lossy().into_owned();
+    if !compiled.insert(key.clone()) {
+        return None;
+    }
+    let dep_src = fs::read_to_string(&pkg_path).ok()?;
+    let version_str = format!("^{}", resolved.version);
+    if !project_deps.contains_key(&spec.name) {
+        let _ = project_deps.insert(spec.name.clone(), version_str.clone());
+        added_deps.push((spec.name.clone(), version_str));
+        eprintln!("  Resolved {} -> v{}", spec.name, resolved.version);
+    }
+    Some((key, dep_src))
+}
+
+fn load_package_import(
+    import_path: &str,
+    pkg_path: &Path,
+    compiled: &mut HashSet<String>,
+    tolerate_missing: bool,
+) -> Option<(String, String)> {
+    let main_file = resolve_package_main(pkg_path);
+    let key = main_file.to_string_lossy().into_owned();
+    if !compiled.insert(key.clone()) {
+        return None;
+    }
+    match fs::read_to_string(&main_file) {
+        Ok(s) => Some((key, s)),
+        Err(e) if tolerate_missing => None,
+        Err(e) => {
+            eprintln!("error: cannot read package '{import_path}': {e}");
+            process::exit(1);
+        }
+    }
+}
+
+fn load_local_import(
+    import_path: &str,
+    root_file_path: &Path,
+    compiled: &mut HashSet<String>,
+    tolerate_missing: bool,
+) -> Option<(String, String)> {
+    let full_path = resolve_import_path(import_path, root_file_path);
+    let key = full_path.to_string_lossy().into_owned();
+    if !compiled.insert(key.clone()) {
+        return None;
+    }
+    match fs::read_to_string(&full_path) {
+        Ok(s) => Some((key, s)),
+        Err(e) if tolerate_missing => None,
+        Err(e) => {
+            eprintln!("error: cannot read import '{}': {e}", full_path.display());
+            process::exit(1);
+        }
+    }
+}
+
+fn update_project_config_with_added_deps(
+    project_config: &mut Option<MusiConfig>,
+    project_dir: Option<&PathBuf>,
+    added_deps: &[(String, String)],
+    project_deps: &HashMap<String, String>,
+) {
+    if added_deps.is_empty() {
+        return;
+    }
+    let (Some(cfg), Some(dir)) = (project_config, project_dir) else {
+        return;
+    };
+    for (name, version) in added_deps {
+        let _ = cfg.dependencies.insert(name.clone(), version.clone());
+    }
+    if let Err(e) = config::save_to_dir(dir, cfg) {
+        eprintln!("warning: failed to update mspackage.json: {e}");
+    } else {
+        eprintln!(
+            "  Added {} dependencies to mspackage.json",
+            added_deps.len()
+        );
+    }
+    let mut lock = LockFile::read_from(dir).unwrap_or_default();
+    for (name, _version) in added_deps {
+        let version_owned = project_deps
+            .get(name)
+            .cloned()
+            .unwrap_or_else(|| "*".to_owned());
+        if let Some(spec) = deps::parse_dep_spec(name, &version_owned).ok()
+            && let Ok(resolved) = fetch::ensure_installed(&spec)
+        {
+            lock.add_resolved(&resolved);
+        }
+    }
+    if let Err(e) = lock.write_to(dir) {
+        eprintln!("warning: failed to update musi.lock: {e}");
+    }
 }
 
 /// Resolve the main entry point for a package directory.

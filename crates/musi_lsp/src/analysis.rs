@@ -411,11 +411,9 @@ pub fn extract_doc_comments_from_source(
         .or_else(|| {
             // Find the declaration start by scanning backwards from def_start
             // Look for tokens like `export`, `const`, `var`, `fn`, etc.
-            tokens
-                .iter()
-                .filter(|t| t.span.start < def_start)
-                .filter(|t| {
-                    matches!(
+            tokens.iter().rfind(|t| {
+                t.span.start < def_start
+                    && matches!(
                         t.kind,
                         TokenKind::Export
                             | TokenKind::Const
@@ -426,9 +424,8 @@ pub fn extract_doc_comments_from_source(
                             | TokenKind::Class
                             | TokenKind::Given
                     )
-                })
-                .filter(|t| has_doc_comments(t, trivia))
-                .next_back()
+                    && has_doc_comments(t, trivia)
+            })
         });
 
     let Some(tok) = tok else {

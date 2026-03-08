@@ -50,7 +50,7 @@ pub enum DepError {
     Io(#[from] io::Error),
 }
 
-/// Parse a URL import path into a DepSpec.
+/// Parse a URL import path into a `DepSpec`.
 ///
 /// Supported formats:
 /// - `github:scope/repo` (latest version)
@@ -75,26 +75,23 @@ pub fn parse_url_import(import_path: &str) -> Option<(DepSpec, Option<String>)> 
 
 /// Parse GitHub shorthand: `scope/repo[@version][/path]`
 fn parse_github_shorthand(input: &str) -> Option<(DepSpec, Option<String>)> {
-    // Split into parts: scope/repo[@version][/subpath...]
-    let mut parts = input.splitn(2, '/');
-    let owner = parts.next()?;
-    let rest = parts.next()?;
+    // Split once into scope and the rest (repo[@version][/subpath...])
+    let (owner, rest) = input.split_once('/')?;
 
     // Check for version specifier
-    let (repo_and_version, subpath) = if let Some(slash_pos) = rest.find('/') {
+    let (repo_and_version, subpath) = rest.find('/').map_or((rest, None), |slash_pos| {
         let (rv, sub) = rest.split_at(slash_pos);
         (rv, Some(sub.trim_start_matches('/').to_owned()))
-    } else {
-        (rest, None)
-    };
+    });
 
     // Parse repo@version or just repo
-    let (repo, version_str) = if let Some(at_pos) = repo_and_version.find('@') {
-        let (r, v) = repo_and_version.split_at(at_pos);
-        (r, v.trim_start_matches('@').trim_start_matches('v'))
-    } else {
-        (repo_and_version, "*")
-    };
+    let (repo, version_str) =
+        repo_and_version
+            .find('@')
+            .map_or((repo_and_version, "*"), |at_pos| {
+                let (r, v) = repo_and_version.split_at(at_pos);
+                (r, v.trim_start_matches('@').trim_start_matches('v'))
+            });
 
     // Build the DepSpec
     let version_req = semver::VersionReq::parse(version_str).ok()?;
@@ -117,8 +114,7 @@ fn parse_github_shorthand(input: &str) -> Option<(DepSpec, Option<String>)> {
 
 /// Check if an import path is a URL import.
 pub fn is_url_import(import_path: &str) -> bool {
-    import_path.starts_with("github:")
-        || import_path.starts_with("https://github.com/")
+    import_path.starts_with("github:") || import_path.starts_with("https://github.com/")
 }
 
 /// Parse a dependency spec from name and version string.
@@ -195,8 +191,7 @@ pub fn resolve_cache_path(spec: &DepSpec, version: &str) -> Option<PathBuf> {
 
 /// Check if a dependency is already cached at the specified version.
 pub fn is_cached(spec: &DepSpec, version: &str) -> bool {
-    resolve_cache_path(spec, version)
-        .is_some_and(|p| p.join("mspackage.json").exists())
+    resolve_cache_path(spec, version).is_some_and(|p| p.join("mspackage.json").exists())
 }
 
 /// Parse all dependencies from a config into `DepSpec` list.

@@ -107,7 +107,6 @@ pub fn load_from_dir(dir: &Path) -> Option<MusiConfig> {
 pub fn save_to_dir(dir: &Path, config: &MusiConfig) -> io::Result<()> {
     let path = dir.join(CONFIG_FILENAME);
     // serde_json serialization of MusiConfig is infallible since all fields are serializable
-    let text = serde_json::to_string_pretty(config)
-        .unwrap_or_else(|_| "{}".to_owned());
+    let text = serde_json::to_string_pretty(config).unwrap_or_else(|_| "{}".to_owned());
     fs::write(&path, text)
 }

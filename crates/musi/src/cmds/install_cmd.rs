@@ -88,7 +88,9 @@ pub fn run(args: &InstallArgs) {
     }
 
     // Write lock file
-    if installed > 0 && let Err(e) = lock.write_to(&project_dir) {
+    if installed > 0
+        && let Err(e) = lock.write_to(&project_dir)
+    {
         eprintln!("warning: failed to write lock file: {e}");
     }
 
