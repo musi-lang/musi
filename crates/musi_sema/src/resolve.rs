@@ -603,22 +603,14 @@ impl<'a> Resolver<'a> {
                 ret_ty,
                 body,
                 ..
-            } => {
-                let fn_scope = self.scopes.push_child(scope);
-                // extrin fn has no body — suppress "unused param" warnings for its params
-                self.register_params(params, fn_scope, body.is_none());
-                if let Some(rt) = ret_ty {
-                    self.resolve_ty(rt, fn_scope);
-                }
-                // Record param names for call-site inlay hints.
-                if let Some(fn_def_id) = self.scopes.lookup(scope, *name) {
-                    let param_names: Vec<Symbol> = params.iter().map(|p| p.name).collect();
-                    let _prev = self.fn_params.insert(fn_def_id, param_names);
-                }
-                if let Some(&body_idx) = body.as_ref() {
-                    self.resolve_expr(body_idx, ctx, fn_scope);
-                }
-            }
+            } => self.resolve_expr_decl_fn_def(
+                *name,
+                params,
+                ret_ty.as_ref(),
+                body.as_ref().copied(),
+                ctx,
+                scope,
+            ),
 
             Expr::Lambda {
                 params,
@@ -640,22 +632,7 @@ impl<'a> Resolver<'a> {
                 pat,
                 init,
                 ..
-            } => {
-                let kind = *kind;
-                let is_exported = modifiers.iter().any(|m| matches!(m, Modifier::Export));
-                if let Some(&init_idx) = init.as_ref() {
-                    self.resolve_expr(init_idx, ctx, scope);
-                }
-                let defs_before = self.defs.len();
-                self.collect_pat_defs(pat, kind, scope);
-                // Mark exported definitions as "used" (exporting is a usage)
-                if is_exported {
-                    for def in &mut self.defs[defs_before..] {
-                        def.use_count += 1;
-                    }
-                }
-                self.resolve_pat(pat, ctx, scope);
-            }
+            } => self.resolve_expr_decl_bind(modifiers, *kind, pat, *init, ctx, scope),
 
             Expr::Prefix { operand, .. } => self.resolve_expr(*operand, ctx, scope),
 
@@ -674,38 +651,99 @@ impl<'a> Resolver<'a> {
                 self.resolve_postfix(*base, op, ctx, scope);
             }
 
-            Expr::ClassDef { members, .. } => {
-                for member in members {
-                    match member {
-                        musi_ast::ClassMember::Method(idx) => {
-                            self.resolve_expr(*idx, ctx, scope);
-                        }
-                        musi_ast::ClassMember::Law { params, body, .. } => {
-                            let law_scope = self.scopes.push_child(scope);
-                            self.register_params(params, law_scope, false);
-                            self.resolve_expr(*body, ctx, law_scope);
-                        }
-                    }
-                }
-            }
+            Expr::ClassDef { members, .. } => self.resolve_expr_decl_class_def(members, ctx, scope),
 
             Expr::GivenDef { members, .. } => {
-                let given_scope = self.scopes.push_child(scope);
-                for member in members {
-                    match member {
-                        musi_ast::ClassMember::Method(idx) => {
-                            self.resolve_expr(*idx, ctx, given_scope);
-                        }
-                        musi_ast::ClassMember::Law { params, body, .. } => {
-                            let law_scope = self.scopes.push_child(given_scope);
-                            self.register_params(params, law_scope, false);
-                            self.resolve_expr(*body, ctx, law_scope);
-                        }
-                    }
-                }
+                self.resolve_expr_decl_given_def(members, ctx, scope);
             }
 
             _ => {}
+        }
+    }
+
+    fn resolve_expr_decl_fn_def(
+        &mut self,
+        name: Symbol,
+        params: &[musi_ast::Param],
+        ret_ty: Option<&musi_ast::Ty>,
+        body: Option<Idx<Expr>>,
+        ctx: &AstArenas,
+        scope: ScopeId,
+    ) {
+        let fn_scope = self.scopes.push_child(scope);
+        // extrin fn has no body — suppress "unused param" warnings for its params
+        self.register_params(params, fn_scope, body.is_none());
+        if let Some(rt) = ret_ty {
+            self.resolve_ty(rt, fn_scope);
+        }
+        // Record param names for call-site inlay hints.
+        if let Some(fn_def_id) = self.scopes.lookup(scope, name) {
+            let param_names: Vec<Symbol> = params.iter().map(|p| p.name).collect();
+            let _prev = self.fn_params.insert(fn_def_id, param_names);
+        }
+        if let Some(body_idx) = body {
+            self.resolve_expr(body_idx, ctx, fn_scope);
+        }
+    }
+
+    fn resolve_expr_decl_bind(
+        &mut self,
+        modifiers: &[Modifier],
+        kind: BindKind,
+        pat: &Pat,
+        init: Option<Idx<Expr>>,
+        ctx: &AstArenas,
+        scope: ScopeId,
+    ) {
+        let is_exported = modifiers.iter().any(|m| matches!(m, Modifier::Export));
+        if let Some(init_idx) = init {
+            self.resolve_expr(init_idx, ctx, scope);
+        }
+        let defs_before = self.defs.len();
+        self.collect_pat_defs(pat, kind, scope);
+        // Mark exported definitions as "used" (exporting is a usage)
+        if is_exported {
+            for def in &mut self.defs[defs_before..] {
+                def.use_count += 1;
+            }
+        }
+        self.resolve_pat(pat, ctx, scope);
+    }
+
+    fn resolve_expr_decl_class_def(
+        &mut self,
+        members: &[musi_ast::ClassMember],
+        ctx: &AstArenas,
+        scope: ScopeId,
+    ) {
+        for member in members {
+            match member {
+                musi_ast::ClassMember::Method(idx) => self.resolve_expr(*idx, ctx, scope),
+                musi_ast::ClassMember::Law { params, body, .. } => {
+                    let law_scope = self.scopes.push_child(scope);
+                    self.register_params(params, law_scope, false);
+                    self.resolve_expr(*body, ctx, law_scope);
+                }
+            }
+        }
+    }
+
+    fn resolve_expr_decl_given_def(
+        &mut self,
+        members: &[musi_ast::ClassMember],
+        ctx: &AstArenas,
+        scope: ScopeId,
+    ) {
+        let given_scope = self.scopes.push_child(scope);
+        for member in members {
+            match member {
+                musi_ast::ClassMember::Method(idx) => self.resolve_expr(*idx, ctx, given_scope),
+                musi_ast::ClassMember::Law { params, body, .. } => {
+                    let law_scope = self.scopes.push_child(given_scope);
+                    self.register_params(params, law_scope, false);
+                    self.resolve_expr(*body, ctx, law_scope);
+                }
+            }
         }
     }
 
