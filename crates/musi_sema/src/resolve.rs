@@ -282,6 +282,12 @@ impl<'a> Resolver<'a> {
                 self.resolve_expr(*body, ctx, scope);
             }
 
+            Expr::DotPrefix { args, .. } => {
+                for &arg in ctx.expr_lists.get_slice(*args) {
+                    self.resolve_expr(arg, ctx, scope);
+                }
+            }
+
             other => self.resolve_expr_decl(other, ctx, scope),
         }
     }
@@ -354,10 +360,8 @@ impl<'a> Resolver<'a> {
     fn register_params(&mut self, params: &[musi_ast::Param], scope: ScopeId, is_extrin: bool) {
         for param in params {
             let def_id = self.alloc_def(param.name, DefKind::Param, param.span);
-            if is_extrin {
-                if let Some(d) = self.defs.last_mut() {
-                    d.is_extrin_param = true;
-                }
+            if is_extrin && let Some(d) = self.defs.last_mut() {
+                d.is_extrin_param = true;
             }
             self.define_in_scope(scope, param.name, def_id, param.span);
             let _prev = self.pat_defs.insert(param.span, def_id);

@@ -10,14 +10,15 @@ use super::Parser;
 
 impl Parser<'_> {
     pub(super) fn parse_expr_after_attrs(&mut self) -> Expr {
+        let outer_start = self.start_span(); // before attrs + modifiers, for accurate spans
         let attrs = self.parse_opt_attrs();
         let modifiers = self.parse_modifiers();
 
         match self.peek_kind() {
-            TokenKind::Fn => self.parse_fn_expr(attrs, modifiers),
-            TokenKind::Record => self.parse_record(attrs, modifiers),
-            TokenKind::Choice => self.parse_choice(attrs, modifiers),
-            TokenKind::Const | TokenKind::Var => self.parse_bind(attrs, modifiers),
+            TokenKind::Fn => self.parse_fn_expr(attrs, modifiers, outer_start),
+            TokenKind::Record => self.parse_record(attrs, modifiers, outer_start),
+            TokenKind::Choice => self.parse_choice(attrs, modifiers, outer_start),
+            TokenKind::Const | TokenKind::Var => self.parse_bind(attrs, modifiers, outer_start),
             TokenKind::While => self.parse_while(),
             TokenKind::Loop => self.parse_loop(),
             TokenKind::For => self.parse_for(),
@@ -99,8 +100,7 @@ impl Parser<'_> {
         mods
     }
 
-    pub(super) fn parse_fn_expr(&mut self, attrs: Vec<Attr>, modifiers: Vec<Modifier>) -> Expr {
-        let start = self.start_span();
+    pub(super) fn parse_fn_expr(&mut self, attrs: Vec<Attr>, modifiers: Vec<Modifier>, outer_start: u32) -> Expr {
         let _fn = self.expect(TokenKind::Fn);
 
         // LL(1): if next is Ident or Underscore → named FnDef, else Lambda
@@ -126,7 +126,7 @@ impl Parser<'_> {
                 ret_ty,
                 where_clause,
                 body,
-                span: self.finish_span(start),
+                span: self.finish_span(outer_start),
             }
         } else {
             // Lambda: fn [ty_params] (params) [: ret_ty] [where ...] => expr
@@ -144,7 +144,7 @@ impl Parser<'_> {
                 ret_ty,
                 where_clause,
                 body,
-                span: self.finish_span(start),
+                span: self.finish_span(outer_start),
             }
         }
     }
@@ -161,8 +161,7 @@ impl Parser<'_> {
         }
     }
 
-    pub(super) fn parse_record(&mut self, attrs: Vec<Attr>, modifiers: Vec<Modifier>) -> Expr {
-        let start = self.start_span();
+    pub(super) fn parse_record(&mut self, attrs: Vec<Attr>, modifiers: Vec<Modifier>, outer_start: u32) -> Expr {
         let _rec = self.expect(TokenKind::Record);
         let name = self.optional_ident();
         let ty_params = self.parse_opt_ty_params();
@@ -177,7 +176,7 @@ impl Parser<'_> {
             name,
             ty_params,
             fields,
-            span: self.finish_span(start),
+            span: self.finish_span(outer_start),
         }
     }
 
@@ -193,8 +192,7 @@ impl Parser<'_> {
         }
     }
 
-    pub(super) fn parse_choice(&mut self, attrs: Vec<Attr>, modifiers: Vec<Modifier>) -> Expr {
-        let start = self.start_span();
+    pub(super) fn parse_choice(&mut self, attrs: Vec<Attr>, modifiers: Vec<Modifier>, outer_start: u32) -> Expr {
         let _choice = self.expect(TokenKind::Choice);
         let name = self.optional_ident();
         let ty_params = self.parse_opt_ty_params();
@@ -207,7 +205,7 @@ impl Parser<'_> {
             name,
             ty_params,
             variants,
-            span: self.finish_span(start),
+            span: self.finish_span(outer_start),
         }
     }
 
@@ -244,8 +242,7 @@ impl Parser<'_> {
         }
     }
 
-    pub(super) fn parse_bind(&mut self, attrs: Vec<Attr>, modifiers: Vec<Modifier>) -> Expr {
-        let start = self.start_span();
+    pub(super) fn parse_bind(&mut self, attrs: Vec<Attr>, modifiers: Vec<Modifier>, outer_start: u32) -> Expr {
         let kind = self.parse_bind_kind();
         let pat = self.parse_pat();
         let ty = self.parse_option(TokenKind::Colon, Parser::parse_ty);
@@ -257,7 +254,7 @@ impl Parser<'_> {
             pat,
             ty,
             init,
-            span: self.finish_span(start),
+            span: self.finish_span(outer_start),
         }
     }
 
@@ -321,7 +318,8 @@ impl Parser<'_> {
                     span: self.finish_span(m_start),
                 }
             } else {
-                let fn_expr = self.parse_fn_expr(Vec::new(), Vec::new());
+                let s = self.start_span();
+                let fn_expr = self.parse_fn_expr(Vec::new(), Vec::new(), s);
                 let idx = self.alloc_expr(fn_expr);
                 ClassMember::Method(idx)
             };

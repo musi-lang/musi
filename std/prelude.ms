@@ -1,5 +1,8 @@
+/// Platform-sized signed integer type (typically 64-bit).
 #[intrinsic("int")]   export extrin opaque record Int {};
+/// Platform-sized unsigned integer type (typically 64-bit).
 #[intrinsic("nat")]   export extrin opaque record Nat {};
+/// Platform-sized floating-point type (64-bit IEEE 754).
 #[intrinsic("float")] export extrin opaque record Float {};
 
 #[intrinsic("int8")]  export extrin opaque record Int8 {};
@@ -15,27 +18,40 @@
 #[intrinsic("float32")] export extrin opaque record Float32 {};
 #[intrinsic("float64")] export extrin opaque record Float64 {};
 
-#[intrinsic("rune")]   export extrin opaque record Rune {};   // Unicode scalar value; not a C char
+/// Unicode scalar value (a single code point); not a byte.
+#[intrinsic("rune")]   export extrin opaque record Rune {};
+/// UTF-8 string value.
 #[intrinsic("string")] export extrin opaque record String {};
 
+/// The unit type — the type of expressions that produce no meaningful value.
 #[intrinsic("unit")] export extrin opaque record Unit {};
 
+/// Boolean type. Use `.True` and `.False` as literals.
 export choice Bool { False := 0 | True := 1 };
 
-export choice Option['T] { None | Some('T) };  // no null pointers
+/// Optional value — either `.None` (absent) or `.Some(value)`. No null pointers.
+export choice Option['T] { None | Some('T) };
 
-export choice Expect['T, 'E] { Fail('E) | Pass('T) };  // explicit error handling; no exceptions
+/// Explicit result type — either `.Fail(error)` or `.Pass(value)`. No exceptions.
+export choice Expect['T, 'E] { Fail('E) | Pass('T) };
 
+/// Write a string followed by a newline to stdout.
 #[intrinsic("writeln")]       export extrin fn writeln(s: String): Unit;
+/// Write a string to stdout without a trailing newline.
 #[intrinsic("write")]         export extrin fn write(s: String): Unit;
+/// Convert an integer to its decimal string representation.
 #[intrinsic("int_to_string")]   export extrin fn int_to_string(n: Int): String;
+/// Convert a float to its string representation.
 #[intrinsic("float_to_string")] export extrin fn float_to_string(n: Float): String;
+/// Concatenate two strings.
 #[intrinsic("string_concat")]   export extrin fn string_concat(a: String, b: String): String;
 
+/// Type class for equality comparison. Enables the `=` and `/=` operators.
 class Eq['T] {
     fn eq(a: 'T, b: 'T): Bool;
 };
 
+/// Type class for total ordering. Enables `<`, `>`, `<=`, `>=` operators.
 class Ord['T] satisfies Eq['T] {
     fn lt(a: 'T, b: 'T): Bool;
     fn gt(a: 'T, b: 'T): Bool;
@@ -45,26 +61,32 @@ class Ord['T] satisfies Eq['T] {
     fn max(a: 'T, b: 'T): 'T;
 };
 
+/// Type class for addition. Enables the `+` operator.
 class Add['T] {
     fn add(a: 'T, b: 'T): 'T;
 };
 
+/// Type class for subtraction. Enables the `-` operator.
 class Sub['T] {
     fn sub(a: 'T, b: 'T): 'T;
 };
 
+/// Type class for multiplication. Enables the `*` operator.
 class Mul['T] {
     fn mul(a: 'T, b: 'T): 'T;
 };
 
+/// Type class for division. Enables the `/` operator.
 class Div['T] {
     fn div(a: 'T, b: 'T): 'T;
 };
 
+/// Type class for remainder. Enables the `%` operator.
 class Rem['T] {
     fn rem(a: 'T, b: 'T): 'T;
 };
 
+/// Type class for string conversion. Provides `show(x)` → `String`.
 class Show['T] {
     fn show(a: 'T): String;
 };
@@ -139,11 +161,17 @@ given Show[String] {
     fn show(a: String): String => a;
 };
 
+/// Return the number of elements in an array.
 #[intrinsic("array_length")]  export extrin fn array_length['T](arr: []'T): Int;
+/// Append a value to the end of an array (mutates in place).
 #[intrinsic("array_push")]    export extrin fn array_push['T](arr: []'T, val: 'T): Unit;
+/// Remove and return the last element of an array, or `.None` if empty.
 #[intrinsic("array_pop")]     export extrin fn array_pop['T](arr: []'T): Option['T];
+/// Get the element at index `idx` (panics if out of bounds).
 #[intrinsic("array_get")]     export extrin fn array_get['T](arr: []'T, idx: Int): 'T;
+/// Set the element at index `idx` (mutates in place; panics if out of bounds).
 #[intrinsic("array_set")]     export extrin fn array_set['T](arr: []'T, idx: Int, val: 'T): Unit;
+/// Return a sub-array from `start` (inclusive) to `end` (exclusive).
 #[intrinsic("array_slice")]   export extrin fn array_slice['T](arr: []'T, start: Int, end: Int): []'T;
 
 class Iterable['C, 'E] {
@@ -156,27 +184,43 @@ given Iterable[[]'T, 'T] {
     fn iter_get(c: []'T, i: Int): 'T => array_get(c, i);
 };
 
+/// Assert that a condition is true; panic with a generic message if false.
 #[intrinsic("assert")]     export extrin fn assert(cond: Bool): Unit;
+/// Assert that a condition is true; panic with `msg` if false.
 #[intrinsic("assert_msg")] export extrin fn assert_msg(cond: Bool, msg: String): Unit;
+/// Register a named test case (run with `musi test`).
 #[intrinsic("test")]       export extrin fn test(name: String, f: () -> Unit): Unit;
 
 // -- string core (musi:string) --
+/// Return the byte length of a string.
 #[intrinsic("string_length")]   export extrin fn string_length(s: String): Int;
+/// Return the substring from byte offset `start` (inclusive) to `end` (exclusive).
 #[intrinsic("string_slice")]    export extrin fn string_slice(s: String, start: Int, end: Int): String;
+/// Parse a decimal integer from a string; returns `.None` if the string is not valid.
 #[intrinsic("string_to_int")]   export extrin fn string_to_int(s: String): Option[Int];
+/// Return `.True` if `s` contains the substring `sub`.
 #[intrinsic("string_contains")] export extrin fn string_contains(s: String, sub: String): Bool;
+/// Convert a natural number to its decimal string representation.
 #[intrinsic("nat_to_string")]   export extrin fn nat_to_string(n: Nat): String;
 
 // -- string extended --
+/// Split `s` by the delimiter string `delim`; returns an array of substrings.
 #[intrinsic("string_split")]    export extrin fn string_split(s: String, delim: String): []String;
+/// Remove leading and trailing whitespace from a string.
 #[intrinsic("string_trim")]     export extrin fn string_trim(s: String): String;
+/// Convert all ASCII letters in the string to lowercase.
 #[intrinsic("string_to_lower")] export extrin fn string_to_lower(s: String): String;
+/// Convert all ASCII letters in the string to uppercase.
 #[intrinsic("string_to_upper")] export extrin fn string_to_upper(s: String): String;
+/// Parse a floating-point number from a string; returns `.None` if the string is not valid.
 #[intrinsic("string_to_float")] export extrin fn string_to_float(s: String): Option[Float];
+/// Return the byte offset of the first occurrence of `sub` in `s`, or `.None` if not found.
 #[intrinsic("string_index_of")] export extrin fn string_index_of(s: String, sub: String): Option[Int];
 
 // -- numeric casts --
+/// Convert an integer to a float (lossless for values within float precision).
 #[intrinsic("int_to_float")] export extrin fn int_to_float(n: Int): Float;
+/// Truncate a float to an integer (rounds toward zero).
 #[intrinsic("float_to_int")] export extrin fn float_to_int(f: Float): Int;
 
 // -- math trig (musi:math) --

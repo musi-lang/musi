@@ -6,31 +6,31 @@
 import { fs_read_file, fs_write_file, fs_append_file, fs_read_dir,
          fs_exists, fs_remove, fs_rename, fs_make_dir } from "musi:fs";
 
-// Read entire file to string. Returns None if file is missing or unreadable.
+/// Read entire file contents as a string. Returns `.None` if the file is missing or unreadable.
 export fn io_read(path: String): Option[String] => fs_read_file(path);
 
-// Write content to file, replacing it. Returns True on success.
+/// Write `content` to a file, replacing any existing content. Returns `.True` on success.
 export fn io_write(path: String, content: String): Bool => fs_write_file(path, content);
 
-// Append content to file (creates file if missing). Returns True on success.
+/// Append `content` to a file, creating it if it does not exist. Returns `.True` on success.
 export fn io_append(path: String, content: String): Bool => fs_append_file(path, content);
 
-// List directory entries as an array of names. Returns empty array on failure.
+/// List directory entries as an array of entry names. Returns an empty array on failure.
 export fn io_read_dir(path: String): []String => fs_read_dir(path);
 
-// Check whether a path exists on the filesystem.
+/// Return `.True` if `path` exists on the filesystem.
 export fn io_exists(path: String): Bool => fs_exists(path);
 
-// Remove a file or directory tree. Returns True on success.
+/// Remove a file or directory tree at `path`. Returns `.True` on success.
 export fn io_remove(path: String): Bool => fs_remove(path);
 
-// Rename or move a path. Returns True on success.
+/// Rename or move `src` to `dst`. Returns `.True` on success.
 export fn io_rename(src: String, dst: String): Bool => fs_rename(src, dst);
 
-// Create a directory and any missing parents. Returns True on success.
+/// Create a directory at `path` and any missing parent directories. Returns `.True` on success.
 export fn io_make_dir(path: String): Bool => fs_make_dir(path);
 
-// Read lines from a file. Returns empty array if file is missing.
+/// Read a file and split it into lines. Returns an empty array if the file is missing.
 export fn io_read_lines(path: String): []String => (
     match io_read(path) with (
         .None => []
@@ -38,7 +38,7 @@ export fn io_read_lines(path: String): []String => (
     )
 );
 
-// Write a sequence of lines to a file (joined by newline). Returns True on success.
+/// Write an array of lines to a file, joined by newlines. Returns `.True` on success.
 export fn io_write_lines(path: String, lines: []String): Bool => (
     const n := array_length(lines);
     if n = 0 then io_write(path, "")

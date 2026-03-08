@@ -5,20 +5,20 @@
 
 import { string_replace } from "std/string";
 
-// JSON null literal.
+/// Produce the JSON `null` literal.
 export fn json_null(): String => "null";
 
-// Boolean to JSON ("true" / "false").
+/// Serialise a `Bool` to JSON (`"true"` or `"false"`).
 export fn json_bool(b: Bool): String =>
     match b with ( .True => "true" | .False => "false" );
 
-// Integer to JSON.
+/// Serialise an integer to JSON.
 export fn json_int(n: Int): String => int_to_string(n);
 
-// Float to JSON.
+/// Serialise a float to JSON.
 export fn json_float(f: Float): String => float_to_string(f);
 
-// Escape a raw string and wrap in double quotes.
+/// Escape a string and wrap it in double quotes for use as a JSON string value.
 export fn json_string(s: String): String => (
     var e := string_replace(s,    "\\", "\\\\");
     e <- string_replace(e, "\"", "\\\"");
@@ -28,8 +28,8 @@ export fn json_string(s: String): String => (
     string_concat("\"", string_concat(e, "\""))
 );
 
-// Serialise an array of already-serialised JSON values.
-//   json_array([json_int(1), json_int(2)]) == "[1,2]"
+/// Serialise an array of already-serialised JSON values into a JSON array.
+/// Example: `json_array([json_int(1), json_int(2)])` → `"[1,2]"`
 export fn json_array(items: []String): String => (
     const n := array_length(items);
     if n = 0 then "[]"
@@ -45,13 +45,12 @@ export fn json_array(items: []String): String => (
     )
 );
 
-// Build one JSON object field string: "key":value.
-//   json_field("x", json_int(1)) == "\"x\":1"
+/// Build a single JSON object field: `json_field("x", json_int(1))` → `"\"x\":1"`.
 export fn json_field(key: String, value: String): String =>
     string_concat(json_string(key), string_concat(":", value));
 
-// Serialise an object from already-built field strings.
-//   json_object([json_field("a", json_int(1))]) == "{\"a\":1}"
+/// Serialise an object from already-built field strings.
+/// Example: `json_object([json_field("a", json_int(1))])` → `"{\"a\":1}"`
 export fn json_object(fields: []String): String => (
     const n := array_length(fields);
     if n = 0 then "{}"
