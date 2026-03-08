@@ -1,0 +1,6 @@
+{
+	"$schema": "https://raw.githubusercontent.com/musi-lang/musi/refs/heads/main/schemas/mspackage-schema.v1.json",
+	"name": "glfw-window",
+	"version": "0.1.0",
+	"main": "./index.ms"
+}
