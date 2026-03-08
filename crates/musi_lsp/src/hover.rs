@@ -80,11 +80,12 @@ pub fn hover(doc: &AnalyzedDoc, position: Position) -> Option<Hover> {
         DefKind::Given => "given",
     };
 
-    let name = doc.interner.resolve(def.name);
+    let name = doc.interner.try_resolve(def.name).unwrap_or("<error>");
     // For variants, qualify with parent type: `Shape.Circle` instead of just `Circle`.
     let display_name: String = if def.kind == DefKind::Variant {
         if let Some(parent) = def.parent_type {
-            format!("{}.{name}", doc.interner.resolve(parent))
+            let parent_name = doc.interner.try_resolve(parent).unwrap_or("<error>");
+            format!("{parent_name}.{name}")
         } else {
             name.to_owned()
         }

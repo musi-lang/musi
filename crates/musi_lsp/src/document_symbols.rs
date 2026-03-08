@@ -21,8 +21,8 @@ pub fn document_symbols(doc: &AnalyzedDoc) -> DocumentSymbolResponse {
             def.span != Span::DUMMY
                 // Params, vars, and namespaces are too noisy for the outline
                 && !matches!(def.kind, DefKind::Param | DefKind::Var | DefKind::Namespace)
-                // Skip `_`-prefixed names
-                && !doc.interner.resolve(def.name).starts_with('_')
+                // Skip `_`-prefixed names and invalid symbols
+                && doc.interner.try_resolve(def.name).is_some_and(|n| !n.starts_with('_'))
         })
         .filter_map(|def| {
             let kind = match def.kind {
@@ -47,7 +47,8 @@ pub fn document_symbols(doc: &AnalyzedDoc) -> DocumentSymbolResponse {
                 _ => return None,
             };
 
-            let name = doc.interner.resolve(def.name).to_owned();
+            // Safe: we filtered for valid symbols above
+            let name = doc.interner.try_resolve(def.name)?.to_owned();
             let detail = def
                 .ty
                 .as_ref()

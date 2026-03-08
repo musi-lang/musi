@@ -30,7 +30,9 @@ pub fn code_lens(doc: &AnalyzedDoc, uri: &Uri) -> Vec<CodeLens> {
         let range = span_to_range(doc.file_id, *span, &doc.source_db);
 
         for attr in attrs {
-            let attr_name = doc.interner.resolve(attr.name);
+            let Some(attr_name) = doc.interner.try_resolve(attr.name) else {
+                continue;
+            };
 
             if attr_name == "test" {
                 // #[test("label")] → "▷ Run test: <label>"
@@ -38,7 +40,7 @@ pub fn code_lens(doc: &AnalyzedDoc, uri: &Uri) -> Vec<CodeLens> {
                     AttrArg::Value {
                         value: LitValue::Str(sym),
                         ..
-                    } => Some(doc.interner.resolve(*sym).trim_matches('"').to_owned()),
+                    } => doc.interner.try_resolve(*sym).map(|s| s.trim_matches('"').to_owned()),
                     _ => None,
                 });
                 let title = match label {

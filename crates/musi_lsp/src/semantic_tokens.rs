@@ -87,12 +87,15 @@ pub fn compute(doc: &AnalyzedDoc) -> SemanticTokensResult {
             let Some(def) = sema.defs.get(def_id.0 as usize) else {
                 continue;
             };
+            let def_name = match doc.interner.try_resolve(def.name) {
+                Some(n) => n,
+                None => continue,
+            };
             let name_span =
                 find_name_token(&doc.lexed.tokens, span.start, def.name).unwrap_or(Span {
                     start: span.start,
-                    length: doc.interner.resolve(def.name).len() as u32,
+                    length: def_name.len() as u32,
                 });
-            let def_name = doc.interner.resolve(def.name);
             let (tt, tm) = classify_def(def.kind, &def.ty, sema, true, def_name, def.is_var);
             if let Some(tt) = tt {
                 push_raw(&mut raw, name_span, tt, tm, doc.file_id, &doc.source_db);
@@ -159,10 +162,14 @@ pub fn compute(doc: &AnalyzedDoc) -> SemanticTokensResult {
                 continue;
             };
             if matches!(def.kind, DefKind::Type | DefKind::Class) {
+                let def_name = match doc.interner.try_resolve(def.name) {
+                    Some(n) => n,
+                    None => continue,
+                };
                 let name_span =
                     find_name_token(&doc.lexed.tokens, span.start, def.name).unwrap_or(Span {
                         start: span.start,
-                        length: doc.interner.resolve(def.name).len() as u32,
+                        length: def_name.len() as u32,
                     });
                 push_raw(&mut raw, name_span, TT_TYPE, 0, doc.file_id, &doc.source_db);
             }
@@ -177,7 +184,10 @@ pub fn compute(doc: &AnalyzedDoc) -> SemanticTokensResult {
             if span.length == 0 {
                 continue;
             }
-            let def_name = doc.interner.resolve(def.name);
+            let def_name = match doc.interner.try_resolve(def.name) {
+                Some(n) => n,
+                None => continue,
+            };
             let (tt, tm) = classify_def(def.kind, &def.ty, sema, false, def_name, def.is_var);
             if let Some(tt) = tt {
                 push_raw(&mut raw, span, tt, tm, doc.file_id, &doc.source_db);

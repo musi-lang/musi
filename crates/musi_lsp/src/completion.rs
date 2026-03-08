@@ -18,7 +18,10 @@ pub fn complete(doc: &AnalyzedDoc, _trigger: Option<char>) -> Vec<CompletionItem
 
     if let Some(sema) = &doc.sema {
         for def in &sema.defs {
-            let name = doc.interner.resolve(def.name);
+            // Skip invalid symbols (error sentinels from parse failures).
+            let Some(name) = doc.interner.try_resolve(def.name) else {
+                continue;
+            };
 
             // Skip underscore-prefixed names (conventionally private), and duplicates.
             if name.starts_with('_') || !seen.insert(name.to_owned()) {

@@ -62,6 +62,14 @@ impl Interner {
             .get(IntaglioSymbol::new(sym.0))
             .expect("symbol not found in this interner")
     }
+
+    /// Attempts to resolve a [`Symbol`], returning `None` if invalid.
+    ///
+    /// Use this when the symbol may be an error sentinel (e.g., `Symbol(u32::MAX)`).
+    #[must_use]
+    pub fn try_resolve(&self, sym: Symbol) -> Option<&str> {
+        self.0.get(IntaglioSymbol::new(sym.0))
+    }
 }
 
 #[cfg(test)]
