@@ -75,7 +75,9 @@ pub fn inlay_hints(doc: &AnalyzedDoc) -> Vec<InlayHint> {
         }
 
         for (arg_idx, param_sym) in arg_idxs.iter().zip(param_names.iter()) {
-            let param_name = doc.interner.resolve(*param_sym);
+            let Some(param_name) = doc.interner.try_resolve(*param_sym) else {
+                continue;
+            };
 
             // Skip `_`-prefixed param names (internal/intentionally unnamed).
             if param_name.starts_with('_') {

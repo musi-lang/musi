@@ -49,7 +49,10 @@ fn collect_dep_paths(module: &ParsedModule, interner: &Interner) -> Vec<String> 
             Expr::Import { path, .. } | Expr::Export { path, .. } => path,
             _ => continue,
         };
-        let raw_str = interner.resolve(*raw).trim_matches('"');
+        let Some(raw_str) = interner.try_resolve(*raw) else {
+            continue;
+        };
+        let raw_str = raw_str.trim_matches('"');
         let stripped = raw_str.strip_suffix(".ms").unwrap_or(raw_str);
         paths.push(stripped.to_owned());
     }

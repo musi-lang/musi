@@ -183,7 +183,7 @@ pub fn fmt_type(ty: &Type, doc: &AnalyzedDoc, sema: &musi_sema::SemaResult) -> S
             let name = sema
                 .defs
                 .get(id.0 as usize)
-                .map(|d| doc.interner.resolve(d.name).to_owned())
+                .and_then(|d| doc.interner.try_resolve(d.name).map(str::to_owned))
                 .unwrap_or_else(|| "?type".to_owned());
             if args.is_empty() {
                 name

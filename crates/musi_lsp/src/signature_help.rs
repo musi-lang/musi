@@ -45,11 +45,11 @@ pub fn signature_help(doc: &AnalyzedDoc, position: Position) -> Option<Signature
 
     // Try to get a callee name for a nicer label.
     let callee_name = match doc.module.ctx.exprs.get(base_idx) {
-        Expr::Ident { name, .. } => Some(doc.interner.resolve(*name).to_owned()),
+        Expr::Ident { name, .. } => doc.interner.try_resolve(*name).map(str::to_owned),
         Expr::Postfix {
             op: PostfixOp::Field { name, .. },
             ..
-        } => Some(doc.interner.resolve(*name).to_owned()),
+        } => doc.interner.try_resolve(*name).map(str::to_owned),
         _ => None,
     };
 
@@ -64,7 +64,7 @@ pub fn signature_help(doc: &AnalyzedDoc, position: Position) -> Option<Signature
                 && *name == def.name
             {
                 for p in params {
-                    names.push(Some(doc.interner.resolve(p.name).to_owned()));
+                    names.push(doc.interner.try_resolve(p.name).map(str::to_owned));
                 }
                 found = true;
                 break;

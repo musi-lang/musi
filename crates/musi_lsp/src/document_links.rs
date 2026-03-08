@@ -46,7 +46,9 @@ pub fn document_links(
             _ => continue,
         };
 
-        let raw = doc.interner.resolve(path_sym);
+        let Some(raw) = doc.interner.try_resolve(path_sym) else {
+            continue;
+        };
         // Path symbol includes surrounding quotes; strip them.
         let raw = raw.trim_matches('"');
         // Skip native module paths (e.g. `musi:math`).
@@ -89,7 +91,7 @@ pub fn document_links(
 
 /// Find the StringLit token whose content matches `path_sym` and return its LSP range.
 fn find_string_token_range(doc: &AnalyzedDoc, path_sym: musi_shared::Symbol) -> Option<Range> {
-    let expected = doc.interner.resolve(path_sym);
+    let expected = doc.interner.try_resolve(path_sym)?;
     for tok in &doc.lexed.tokens {
         if tok.kind == TokenKind::StringLit {
             let src = doc
