@@ -9,10 +9,8 @@ use std::collections::{HashMap, HashSet};
 use musi_lex::{LexedSource, Token, TokenKind, Trivia, lex};
 use musi_parse::{ParsedModule, ast::Expr, parse};
 use musi_sema::{DefInfo, ModuleExports, SemaResult, analyze, exports_of};
-use musi_shared::{DiagnosticBag, FileId, Idx, Interner, Severity, Span, SourceDb, Symbol};
-use tower_lsp_server::ls_types::{
-    Diagnostic, DiagnosticSeverity, DiagnosticTag, Position, Range,
-};
+use musi_shared::{DiagnosticBag, FileId, Idx, Interner, Severity, SourceDb, Span, Symbol};
+use tower_lsp_server::ls_types::{Diagnostic, DiagnosticSeverity, DiagnosticTag, Position, Range};
 
 const PRELUDE_SRC: &str = include_str!("../../../std/prelude.ms");
 
@@ -245,7 +243,10 @@ pub fn analyze_doc(source: &str, uri: &str) -> (Vec<Diagnostic>, AnalyzedDoc) {
         let dep_exports = exports_of(&dep_result, &dep_module, &interner);
         // Only add to dep_sources when there's actual source to extract doc comments from.
         if embedded_std(&path).is_some() {
-            dep_sources.insert(path.clone(), build_dep_source(dep_src, dep_lexed, &dep_result));
+            dep_sources.insert(
+                path.clone(),
+                build_dep_source(dep_src, dep_lexed, &dep_result),
+            );
         }
         import_map.insert(path, dep_exports);
     }
@@ -433,10 +434,6 @@ fn severity_to_lsp(s: Severity) -> DiagnosticSeverity {
     }
 }
 
-/// Build a `DepSource` from a dependency's source text, lexed artifacts, and sema result.
-///
-/// `def_spans` maps each exported name to its definition span (the keyword token start)
-/// in the dep source, so that `hover` can retrieve doc comments for imported symbols.
 // -- Cursor-based lookup helpers -------------------------------------------
 
 /// Find the Ident token at or after `start` whose interned symbol equals `name`.
@@ -464,7 +461,7 @@ pub fn def_name_span(def: &DefInfo, tokens: &[Token]) -> Span {
 /// 1. `expr_defs` — reference sites (`Ident` expression nodes)
 /// 2. `pat_defs`  — binding-site spans (`const x`, `var y`, params)
 /// 3. `sema.defs` — name tokens of top-level definitions (fn / record / choice)
-pub fn def_at_cursor<'a>(offset: u32, doc: &'a AnalyzedDoc) -> Option<&'a DefInfo> {
+pub fn def_at_cursor(offset: u32, doc: &AnalyzedDoc) -> Option<&DefInfo> {
     let sema = doc.sema.as_ref()?;
 
     // 1. expr_defs (reference sites)
@@ -507,8 +504,8 @@ pub fn def_at_cursor<'a>(offset: u32, doc: &'a AnalyzedDoc) -> Option<&'a DefInf
         if def.span == musi_shared::Span::DUMMY {
             return false;
         }
-        let name_span = find_name_token(&doc.lexed.tokens, def.span.start, def.name)
-            .unwrap_or(def.span);
+        let name_span =
+            find_name_token(&doc.lexed.tokens, def.span.start, def.name).unwrap_or(def.span);
         name_span.start <= offset && offset <= name_span.start + name_span.length
     })
 }

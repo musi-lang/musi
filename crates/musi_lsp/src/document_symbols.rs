@@ -31,11 +31,13 @@ pub fn document_symbols(doc: &AnalyzedDoc) -> DocumentSymbolResponse {
                     let is_fn = def
                         .ty
                         .as_ref()
-                        .map(|t| {
-                            matches!(sema.unify_table.resolve(t.clone()), Type::Arrow(..))
-                        })
+                        .map(|t| matches!(sema.unify_table.resolve(t.clone()), Type::Arrow(..)))
                         .unwrap_or(false);
-                    if is_fn { SymbolKind::FUNCTION } else { SymbolKind::CONSTANT }
+                    if is_fn {
+                        SymbolKind::FUNCTION
+                    } else {
+                        SymbolKind::CONSTANT
+                    }
                 }
                 DefKind::Type => SymbolKind::CLASS,
                 DefKind::Variant => SymbolKind::ENUM_MEMBER,
@@ -44,9 +46,10 @@ pub fn document_symbols(doc: &AnalyzedDoc) -> DocumentSymbolResponse {
             };
 
             let name = doc.interner.resolve(def.name).to_owned();
-            let detail = def.ty.as_ref().map(|ty| {
-                fmt_type(&sema.unify_table.resolve(ty.clone()), doc, sema)
-            });
+            let detail = def
+                .ty
+                .as_ref()
+                .map(|ty| fmt_type(&sema.unify_table.resolve(ty.clone()), doc, sema));
 
             let name_span = def_name_span(def, &doc.lexed.tokens);
             let range = span_to_range(doc.file_id, def.span, &doc.source_db);

@@ -36,9 +36,7 @@ pub fn complete(doc: &AnalyzedDoc, _trigger: Option<char>) -> Vec<CompletionItem
                     let is_fn = def
                         .ty
                         .as_ref()
-                        .map(|t| {
-                            matches!(sema.unify_table.resolve(t.clone()), Type::Arrow(..))
-                        })
+                        .map(|t| matches!(sema.unify_table.resolve(t.clone()), Type::Arrow(..)))
                         .unwrap_or(false);
                     if is_fn {
                         CompletionItemKind::FUNCTION
@@ -53,9 +51,10 @@ pub fn complete(doc: &AnalyzedDoc, _trigger: Option<char>) -> Vec<CompletionItem
                 DefKind::Namespace => unreachable!(),
             };
 
-            let detail = def.ty.as_ref().map(|ty| {
-                hover::fmt_type(&sema.unify_table.resolve(ty.clone()), doc, sema)
-            });
+            let detail = def
+                .ty
+                .as_ref()
+                .map(|ty| hover::fmt_type(&sema.unify_table.resolve(ty.clone()), doc, sema));
 
             items.push(CompletionItem {
                 label: name.to_owned(),

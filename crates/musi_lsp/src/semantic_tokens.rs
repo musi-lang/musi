@@ -84,13 +84,14 @@ pub fn compute(doc: &AnalyzedDoc) -> SemanticTokensResult {
         //    actual Ident token whose symbol matches the definition name so that
         //    we only colour the name, not the surrounding type annotations.
         for (span, &def_id) in &sema.pat_defs {
-            let Some(def) = sema.defs.get(def_id.0 as usize) else { continue };
+            let Some(def) = sema.defs.get(def_id.0 as usize) else {
+                continue;
+            };
             let name_span =
-                find_name_token(&doc.lexed.tokens, span.start, def.name)
-                    .unwrap_or(Span {
-                        start: span.start,
-                        length: doc.interner.resolve(def.name).len() as u32,
-                    });
+                find_name_token(&doc.lexed.tokens, span.start, def.name).unwrap_or(Span {
+                    start: span.start,
+                    length: doc.interner.resolve(def.name).len() as u32,
+                });
             let (tt, tm) = classify_def(def.kind, &def.ty, sema, true);
             if let Some(tt) = tt {
                 push_raw(&mut raw, name_span, tt, tm, doc.file_id, &doc.source_db);
@@ -153,7 +154,9 @@ pub fn compute(doc: &AnalyzedDoc) -> SemanticTokensResult {
 
         // 3. References: walk expr_defs (Idx<Expr> → DefId).
         for (&idx, &def_id) in &sema.expr_defs {
-            let Some(def) = sema.defs.get(def_id.0 as usize) else { continue };
+            let Some(def) = sema.defs.get(def_id.0 as usize) else {
+                continue;
+            };
             let span = expr_span(idx, &doc.module);
             if span.length == 0 {
                 continue;
@@ -167,7 +170,14 @@ pub fn compute(doc: &AnalyzedDoc) -> SemanticTokensResult {
         // 4. Type parameters: lex-based scan for TyIdent tokens.
         for tok in &doc.lexed.tokens {
             if tok.kind == TokenKind::TyIdent {
-                push_raw(&mut raw, tok.span, TT_TYPE_PARAM, 0, doc.file_id, &doc.source_db);
+                push_raw(
+                    &mut raw,
+                    tok.span,
+                    TT_TYPE_PARAM,
+                    0,
+                    doc.file_id,
+                    &doc.source_db,
+                );
             }
         }
 
@@ -177,7 +187,14 @@ pub fn compute(doc: &AnalyzedDoc) -> SemanticTokensResult {
         for tok in &doc.lexed.tokens {
             let kind = tok.kind;
             if after_dot && kind == TokenKind::Ident {
-                push_raw(&mut raw, tok.span, TT_ENUM_MEMBER, 0, doc.file_id, &doc.source_db);
+                push_raw(
+                    &mut raw,
+                    tok.span,
+                    TT_ENUM_MEMBER,
+                    0,
+                    doc.file_id,
+                    &doc.source_db,
+                );
                 after_dot = false;
             } else if kind == TokenKind::Dot {
                 let is_field_access = matches!(
@@ -288,7 +305,14 @@ fn lex_fallback(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
 
             ScanState::AfterFn => match kind {
                 TokenKind::Ident => {
-                    push_raw(raw, tok.span, TT_FUNCTION, TM_DECLARATION, doc.file_id, &doc.source_db);
+                    push_raw(
+                        raw,
+                        tok.span,
+                        TT_FUNCTION,
+                        TM_DECLARATION,
+                        doc.file_id,
+                        &doc.source_db,
+                    );
                     ScanState::Default
                 }
                 TokenKind::LBracket | TokenKind::RBracket => ScanState::AfterFn,
@@ -297,7 +321,14 @@ fn lex_fallback(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
 
             ScanState::AfterConst => match kind {
                 TokenKind::Ident => {
-                    push_raw(raw, tok.span, TT_VARIABLE, TM_DECLARATION | TM_READONLY, doc.file_id, &doc.source_db);
+                    push_raw(
+                        raw,
+                        tok.span,
+                        TT_VARIABLE,
+                        TM_DECLARATION | TM_READONLY,
+                        doc.file_id,
+                        &doc.source_db,
+                    );
                     ScanState::Default
                 }
                 _ => ScanState::Default,
@@ -305,7 +336,14 @@ fn lex_fallback(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
 
             ScanState::AfterVar => match kind {
                 TokenKind::Ident => {
-                    push_raw(raw, tok.span, TT_VARIABLE, TM_DECLARATION | TM_MUTABLE, doc.file_id, &doc.source_db);
+                    push_raw(
+                        raw,
+                        tok.span,
+                        TT_VARIABLE,
+                        TM_DECLARATION | TM_MUTABLE,
+                        doc.file_id,
+                        &doc.source_db,
+                    );
                     ScanState::Default
                 }
                 _ => ScanState::Default,
@@ -313,7 +351,14 @@ fn lex_fallback(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
 
             ScanState::AfterNamedTypeDef => match kind {
                 TokenKind::Ident => {
-                    push_raw(raw, tok.span, TT_TYPE, TM_DECLARATION, doc.file_id, &doc.source_db);
+                    push_raw(
+                        raw,
+                        tok.span,
+                        TT_TYPE,
+                        TM_DECLARATION,
+                        doc.file_id,
+                        &doc.source_db,
+                    );
                     ScanState::Default
                 }
                 _ => ScanState::Default,
@@ -321,7 +366,14 @@ fn lex_fallback(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
 
             ScanState::AfterChoiceKw => match kind {
                 TokenKind::Ident => {
-                    push_raw(raw, tok.span, TT_TYPE, TM_DECLARATION, doc.file_id, &doc.source_db);
+                    push_raw(
+                        raw,
+                        tok.span,
+                        TT_TYPE,
+                        TM_DECLARATION,
+                        doc.file_id,
+                        &doc.source_db,
+                    );
                     ScanState::WaitChoiceBrace
                 }
                 TokenKind::LBrace => ScanState::ExpectVariant(1),
@@ -335,7 +387,14 @@ fn lex_fallback(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
 
             ScanState::ExpectVariant(depth) => match kind {
                 TokenKind::Ident if depth == 1 => {
-                    push_raw(raw, tok.span, TT_ENUM_MEMBER, TM_DECLARATION, doc.file_id, &doc.source_db);
+                    push_raw(
+                        raw,
+                        tok.span,
+                        TT_ENUM_MEMBER,
+                        TM_DECLARATION,
+                        doc.file_id,
+                        &doc.source_db,
+                    );
                     ScanState::SkipVariant(1)
                 }
                 TokenKind::LBrace => ScanState::ExpectVariant(depth + 1),

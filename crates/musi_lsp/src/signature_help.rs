@@ -22,12 +22,12 @@ pub fn signature_help(doc: &AnalyzedDoc, position: Position) -> Option<Signature
             op: PostfixOp::Call { .. },
             span,
         } = expr
+            && span.start <= offset
+            && offset <= span.start + span.length
         {
-            if span.start <= offset && offset <= span.start + span.length {
-                let better = best.map_or(true, |(_, _, len)| span.length < len);
-                if better {
-                    best = Some((idx, *base, span.length));
-                }
+            let better = best.is_none_or(|(_, _, len)| span.length < len);
+            if better {
+                best = Some((idx, *base, span.length));
             }
         }
     }
@@ -60,14 +60,14 @@ pub fn signature_help(doc: &AnalyzedDoc, position: Position) -> Option<Signature
         let mut names = Vec::new();
         let mut found = false;
         for (_, expr) in doc.module.ctx.exprs.iter_idx() {
-            if let Expr::FnDef { name, params, .. } = expr {
-                if *name == def.name {
-                    for p in params {
-                        names.push(Some(doc.interner.resolve(p.name).to_owned()));
-                    }
-                    found = true;
-                    break;
+            if let Expr::FnDef { name, params, .. } = expr
+                && *name == def.name
+            {
+                for p in params {
+                    names.push(Some(doc.interner.resolve(p.name).to_owned()));
                 }
+                found = true;
+                break;
             }
         }
         if found {
