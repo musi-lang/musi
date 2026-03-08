@@ -263,25 +263,24 @@ pub(super) fn emit_main_body(
                             interner.resolve(attr.name),
                             state.fn_map.get(&fn_name),
                             state.fn_map.get("test"),
-                        ) {
-                            if name == "test" {
-                                // Use function name as label if no explicit label given
-                                let label: Box<str> = if let Some(musi_ast::AttrArg::Value {
-                                    value: musi_ast::LitValue::Str(label_sym),
-                                    ..
-                                }) = attr.args.first()
-                                {
-                                    interner.resolve(*label_sym).trim_matches('"').into()
-                                } else {
-                                    fn_name.clone().into_boxed_str()
-                                };
-                                let label_const =
-                                    module.push_const(crate::ConstEntry::String(label))?;
-                                out.push(&Opcode::LdConst(label_const));
-                                out.push(&Opcode::LdFnIdx(fn_idx));
-                                out.push(&Opcode::Call(test_fn_idx));
-                                out.push(&Opcode::Drop);
-                            }
+                        ) && name == "test"
+                        {
+                            // Use function name as label if no explicit label given
+                            let label: Box<str> = if let Some(musi_ast::AttrArg::Value {
+                                value: musi_ast::LitValue::Str(label_sym),
+                                ..
+                            }) = attr.args.first()
+                            {
+                                interner.resolve(*label_sym).trim_matches('"').into()
+                            } else {
+                                fn_name.clone().into_boxed_str()
+                            };
+                            let label_const =
+                                module.push_const(crate::ConstEntry::String(label))?;
+                            out.push(&Opcode::LdConst(label_const));
+                            out.push(&Opcode::LdFnIdx(fn_idx));
+                            out.push(&Opcode::Call(test_fn_idx));
+                            out.push(&Opcode::Drop);
                         }
                     }
                 }
