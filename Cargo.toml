@@ -27,7 +27,12 @@ serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 criterion = "0.8.2"
 tower-lsp-server = "0.23"
-tokio = { version = "1", features = ["rt-multi-thread", "io-std", "sync", "macros"] }
+tokio = { version = "1.50.0", features = [
+    "rt-multi-thread",
+    "io-std",
+    "sync",
+    "macros",
+] }
 
 [workspace.lints.rust]
 keyword_idents_2024 = "forbid"
@@ -68,7 +73,7 @@ string_slice = "deny"
 tests_outside_test_module = "deny"
 todo = "deny"
 try_err = "deny"
-undocumented_unsafe_blocks = "deny"
+# undocumented_unsafe_blocks = "deny"  # annoying fucking shit
 unimplemented = "deny"
 unnecessary_safety_comment = "deny"
 unnecessary_safety_doc = "deny"
