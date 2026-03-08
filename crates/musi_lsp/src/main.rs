@@ -2,6 +2,7 @@ mod analysis;
 mod backend;
 mod code_actions;
 mod completion;
+mod document_links;
 mod document_symbols;
 mod goto_def;
 mod hover;

@@ -8,8 +8,8 @@ use tower_lsp_server::{Client, LanguageServer};
 
 use crate::analysis::{AnalyzedDoc, analyze_doc};
 use crate::{
-    code_actions, completion, document_symbols, goto_def, hover, inlay_hints, references,
-    semantic_tokens, signature_help,
+    code_actions, completion, document_links, document_symbols, goto_def, hover, inlay_hints,
+    references, semantic_tokens, signature_help,
 };
 
 pub struct MusiBackend {
@@ -81,6 +81,10 @@ impl LanguageServer for MusiBackend {
                 }),
                 inlay_hint_provider: Some(OneOf::Left(true)),
                 code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
+                document_link_provider: Some(DocumentLinkOptions {
+                    resolve_provider: Some(false),
+                    work_done_progress_options: WorkDoneProgressOptions::default(),
+                }),
                 ..ServerCapabilities::default()
             },
         })
@@ -235,6 +239,20 @@ impl LanguageServer for MusiBackend {
         let docs = self.documents.read().await;
         let result = docs.get(&uri).map(document_symbols::document_symbols);
         Ok(result)
+    }
+
+    async fn document_link(
+        &self,
+        params: DocumentLinkParams,
+    ) -> jsonrpc::Result<Option<Vec<DocumentLink>>> {
+        let uri = params.text_document.uri;
+        let docs = self.documents.read().await;
+        let root_uri = self.root_uri.read().await;
+        let links = docs
+            .get(&uri)
+            .map(|doc| document_links::document_links(doc, root_uri.as_ref()))
+            .unwrap_or_default();
+        Ok(Some(links))
     }
 
     async fn code_action(
