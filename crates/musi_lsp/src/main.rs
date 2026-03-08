@@ -1,5 +1,6 @@
 mod analysis;
 mod backend;
+mod code_actions;
 mod completion;
 mod document_symbols;
 mod goto_def;

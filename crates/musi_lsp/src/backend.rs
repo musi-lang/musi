@@ -7,7 +7,10 @@ use tower_lsp_server::ls_types::*;
 use tower_lsp_server::{Client, LanguageServer};
 
 use crate::analysis::{AnalyzedDoc, analyze_doc};
-use crate::{completion, document_symbols, goto_def, hover, inlay_hints, references, semantic_tokens, signature_help};
+use crate::{
+    code_actions, completion, document_symbols, goto_def, hover, inlay_hints, references,
+    semantic_tokens, signature_help,
+};
 
 pub struct MusiBackend {
     client: Client,
@@ -77,6 +80,7 @@ impl LanguageServer for MusiBackend {
                     work_done_progress_options: WorkDoneProgressOptions::default(),
                 }),
                 inlay_hint_provider: Some(OneOf::Left(true)),
+                code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
                 ..ServerCapabilities::default()
             },
         })
@@ -164,7 +168,11 @@ impl LanguageServer for MusiBackend {
         &self,
         params: SignatureHelpParams,
     ) -> jsonrpc::Result<Option<SignatureHelp>> {
-        let uri = params.text_document_position_params.text_document.uri.clone();
+        let uri = params
+            .text_document_position_params
+            .text_document
+            .uri
+            .clone();
         let position = params.text_document_position_params.position;
         let docs = self.documents.read().await;
         let result = docs
@@ -209,10 +217,7 @@ impl LanguageServer for MusiBackend {
         Ok(result)
     }
 
-    async fn inlay_hint(
-        &self,
-        params: InlayHintParams,
-    ) -> jsonrpc::Result<Option<Vec<InlayHint>>> {
+    async fn inlay_hint(&self, params: InlayHintParams) -> jsonrpc::Result<Option<Vec<InlayHint>>> {
         let uri = params.text_document.uri;
         let docs = self.documents.read().await;
         let hints = docs
@@ -230,5 +235,22 @@ impl LanguageServer for MusiBackend {
         let docs = self.documents.read().await;
         let result = docs.get(&uri).map(document_symbols::document_symbols);
         Ok(result)
+    }
+
+    async fn code_action(
+        &self,
+        params: CodeActionParams,
+    ) -> jsonrpc::Result<Option<CodeActionResponse>> {
+        let uri = params.text_document.uri.clone();
+        let docs = self.documents.read().await;
+        let actions = docs
+            .get(&uri)
+            .map(|doc| code_actions::code_actions(doc, &params, &uri))
+            .unwrap_or_default();
+        if actions.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(actions))
+        }
     }
 }
