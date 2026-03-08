@@ -45,6 +45,8 @@ pub struct SemaResult {
     pub expr_defs: HashMap<Idx<Expr>, DefId>,
     /// Maps each binding-site span to its [`DefId`].
     pub pat_defs: HashMap<Span, DefId>,
+    /// Maps each type-annotation span to the `DefId` of the referenced type.
+    pub ty_refs: HashMap<Span, DefId>,
     /// The inferred type of each expression node.
     pub expr_types: HashMap<Idx<Expr>, Type>,
     /// The unification table used during type checking.
@@ -167,6 +169,7 @@ pub fn analyze<S: BuildHasher>(
         defs,
         expr_defs: resolved.expr_defs,
         pat_defs: resolved.pat_defs,
+        ty_refs: resolved.ty_refs,
         expr_types,
         unify_table,
         fn_params: resolved.fn_params,

@@ -64,4 +64,6 @@ pub struct DefInfo {
     pub is_var: bool,
     /// For `DefKind::Type`: whether the type was defined as a `record` or `choice`.
     pub type_flavor: Option<TypeFlavor>,
+    /// For `DefKind::Variant`: the name of the enclosing choice type (for display).
+    pub parent_type: Option<Symbol>,
 }

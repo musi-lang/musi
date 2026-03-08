@@ -43,6 +43,8 @@ pub struct ResolveResult {
     /// Call sites: each entry is `(fn_def_id, arg_expr_indices)`.
     /// Enables generating Scala-style `param_name:` inlay hints at call sites.
     pub call_sites: Vec<(DefId, Vec<Idx<Expr>>)>,
+    /// Maps each type-annotation span to the `DefId` of the referenced type.
+    pub ty_refs: HashMap<Span, DefId>,
 }
 
 struct Resolver<'a> {
@@ -60,6 +62,8 @@ struct Resolver<'a> {
     fn_params: HashMap<DefId, Vec<Symbol>>,
     /// Call sites for parameter-name inlay hints.
     call_sites: Vec<(DefId, Vec<Idx<Expr>>)>,
+    /// Maps each type-annotation span to the `DefId` of the referenced type.
+    ty_refs: HashMap<Span, DefId>,
 }
 
 impl<'a> Resolver<'a> {
@@ -76,6 +80,7 @@ impl<'a> Resolver<'a> {
             namespace_exports: HashMap::new(),
             fn_params: HashMap::new(),
             call_sites: Vec::new(),
+            ty_refs: HashMap::new(),
         }
     }
 
@@ -93,6 +98,7 @@ impl<'a> Resolver<'a> {
             is_extrin_param: false,
             is_var: false,
             type_flavor: None,
+            parent_type: None,
         });
         id
     }
@@ -175,6 +181,7 @@ impl<'a> Resolver<'a> {
                         is_extrin_param: false,
                         is_var: false,
                         type_flavor: None,
+                        parent_type: None,
                     });
                     let prev = self.scopes.define(root_scope, *alias, def_id);
                     let _ = prev;
@@ -206,10 +213,12 @@ impl<'a> Resolver<'a> {
                             is_extrin_param: false,
                             is_var: false,
                             type_flavor: None,
+                            parent_type: None,
                         };
                         let bind_sym = import_item.alias.unwrap_or(import_item.name);
                         info.name = bind_sym;
                         self.defs.push(info);
+                        let _prev = self.pat_defs.insert(import_item.span, def_id);
                         let prev = self.scopes.define(root_scope, bind_sym, def_id);
                         let _ = prev; // silently allow shadowing imports
                     }
@@ -395,6 +404,36 @@ impl<'a> Resolver<'a> {
             }
             self.define_in_scope(scope, param.name, def_id, param.span);
             let _prev = self.pat_defs.insert(param.span, def_id);
+            if let Some(ref ty) = param.ty {
+                self.resolve_ty(ty, scope);
+            }
+        }
+    }
+
+    fn resolve_ty(&mut self, ty: &musi_ast::Ty, scope: ScopeId) {
+        match ty {
+            musi_ast::Ty::Named { name, args, span } => {
+                if let Some(def_id) = self.scopes.lookup(scope, *name) {
+                    let _ = self.ty_refs.insert(*span, def_id);
+                }
+                for arg in args {
+                    self.resolve_ty(arg, scope);
+                }
+            }
+            musi_ast::Ty::Arrow { params, ret, .. } => {
+                for p in params {
+                    self.resolve_ty(p, scope);
+                }
+                self.resolve_ty(ret, scope);
+            }
+            musi_ast::Ty::Option { inner, .. } => self.resolve_ty(inner, scope),
+            musi_ast::Ty::Prod { elements, .. } => {
+                for e in elements {
+                    self.resolve_ty(e, scope);
+                }
+            }
+            musi_ast::Ty::Arr { element, .. } => self.resolve_ty(element, scope),
+            musi_ast::Ty::Var { .. } | musi_ast::Ty::Error { .. } => {}
         }
     }
 
@@ -474,16 +513,20 @@ impl<'a> Resolver<'a> {
 
     fn resolve_expr_decl(&mut self, expr: &Expr, ctx: &AstArenas, scope: ScopeId) {
         match expr {
-            Expr::Choice { variants, .. } => {
+            Expr::Choice { name, variants, .. } => {
+                let parent_sym = *name;
                 for variant in variants {
-                    self.register_variant(variant, scope);
+                    self.register_variant(variant, scope, parent_sym);
                 }
             }
 
-            Expr::FnDef { name, params, body, .. } => {
+            Expr::FnDef { name, params, ret_ty, body, .. } => {
                 let fn_scope = self.scopes.push_child(scope);
                 // extrin fn has no body — suppress "unused param" warnings for its params
                 self.register_params(params, fn_scope, body.is_none());
+                if let Some(rt) = ret_ty {
+                    self.resolve_ty(rt, fn_scope);
+                }
                 // Record param names for call-site inlay hints.
                 if let Some(fn_def_id) = self.scopes.lookup(scope, *name) {
                     let param_names: Vec<Symbol> = params.iter().map(|p| p.name).collect();
@@ -494,9 +537,12 @@ impl<'a> Resolver<'a> {
                 }
             }
 
-            Expr::Lambda { params, body, .. } => {
+            Expr::Lambda { params, ret_ty, body, .. } => {
                 let lam_scope = self.scopes.push_child(scope);
                 self.register_params(params, lam_scope, false);
+                if let Some(rt) = ret_ty {
+                    self.resolve_ty(rt, lam_scope);
+                }
                 self.resolve_expr(*body, ctx, lam_scope);
             }
 
@@ -795,15 +841,29 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    fn register_variant(&mut self, variant: &ChoiceVariant, scope: ScopeId) {
+    fn register_variant(&mut self, variant: &ChoiceVariant, scope: ScopeId, parent: Option<Symbol>) {
         let def_id = self.alloc_def(variant.name, DefKind::Variant, variant.span);
+        if let Some(d) = self.defs.last_mut() {
+            d.parent_type = parent;
+        }
         self.define_in_scope(scope, variant.name, def_id, variant.span);
         let _prev = self.pat_defs.insert(variant.span, def_id);
 
-        if let Some(VariantPayload::Named(ref fields)) = variant.payload {
-            for field in fields {
-                let _fid = self.alloc_def(field.name, DefKind::Const, field.span);
+        match &variant.payload {
+            Some(VariantPayload::Positional(types)) => {
+                for ty in types {
+                    self.resolve_ty(ty, scope);
+                }
             }
+            Some(VariantPayload::Named(fields)) => {
+                for field in fields {
+                    let _fid = self.alloc_def(field.name, DefKind::Const, field.span);
+                    if let Some(ref ty) = field.ty {
+                        self.resolve_ty(ty, scope);
+                    }
+                }
+            }
+            None | Some(VariantPayload::Discriminant(_)) => {}
         }
     }
 }
@@ -846,6 +906,7 @@ pub fn resolve<S: BuildHasher>(
         defs: resolver.defs,
         expr_defs: resolver.expr_defs,
         pat_defs: resolver.pat_defs,
+        ty_refs: resolver.ty_refs,
         scopes: resolver.scopes,
         root,
         fn_params: resolver.fn_params,
