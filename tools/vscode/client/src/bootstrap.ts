@@ -2,7 +2,12 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { getConfig } from "./config";
-import { getCargoBinDir, getServerBinaryName, isWindows } from "./utils";
+import {
+	getCargoBinDir,
+	getCliBinaryName,
+	getServerBinaryName,
+	isWindows,
+} from "./utils";
 
 function _exists(filePath: string): boolean {
 	return fs.existsSync(filePath);
@@ -120,6 +125,117 @@ export async function showServerNotFoundUI() {
 	} else if (action === "Show Build Instructions") {
 		vscode.env.openExternal(
 			vscode.Uri.parse("https://github.com/musi-lang/musi#Installation"),
+		);
+	}
+}
+
+// -- CLI Binary (musi) ---
+
+function _getCliWorkspaceCandidates(workspacePath: string): string[] {
+	const binary = getCliBinaryName();
+	return [
+		path.join(workspacePath, "target", "debug", binary),
+		path.join(workspacePath, "target", "release", binary),
+	];
+}
+
+function _getCliGlobalCandidates(): string[] {
+	const binary = getCliBinaryName();
+	const candidates = [path.join(getCargoBinDir(), binary)];
+
+	if (!isWindows()) {
+		candidates.push(`/usr/local/bin/${binary}`, `/usr/bin/${binary}`);
+	}
+
+	return candidates;
+}
+
+function _getCliUserConfiguredPath(): string | undefined {
+	const config = getConfig();
+
+	if (config.cliPath && config.cliPath !== "musi") {
+		if (_exists(config.cliPath)) {
+			return config.cliPath;
+		}
+		vscode.window.showWarningMessage(
+			`Musi: Configured CLI path does not exist: ${config.cliPath}`,
+		);
+	}
+
+	return undefined;
+}
+
+function _getCliWorkspacePath(): string | undefined {
+	const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+	if (workspacePath) {
+		for (const candidate of _getCliWorkspaceCandidates(workspacePath)) {
+			if (_exists(candidate)) {
+				return candidate;
+			}
+		}
+	}
+
+	return undefined;
+}
+
+function _getCliGlobalPath(): string | undefined {
+	for (const candidate of _getCliGlobalCandidates()) {
+		if (_exists(candidate)) {
+			return candidate;
+		}
+	}
+
+	return undefined;
+}
+
+/**
+ * Locate `musi` CLI binary.
+ *
+ * Search order:
+ * 1. User-configured `musi.cliPath` setting
+ * 2. Workspace `target/debug/musi` or `target/release/musi`
+ * 3. Global paths: `~/.cargo/bin`, `/usr/local/bin`, `/usr/bin`
+ *
+ * @returns Absolute path to CLI binary, or `undefined` if not found.
+ */
+export async function findCliPath(): Promise<string | undefined> {
+	const userPath = _getCliUserConfiguredPath();
+	if (userPath) {
+		return userPath;
+	}
+
+	const workspacePath = _getCliWorkspacePath();
+	if (workspacePath) {
+		return workspacePath;
+	}
+
+	const globalPath = _getCliGlobalPath();
+	if (globalPath) {
+		return globalPath;
+	}
+
+	return undefined;
+}
+
+/**
+ * Display error dialog when CLI binary cannot be found.
+ * Offers options to open terminal for building or configure path.
+ */
+export async function showCliNotFoundUI() {
+	const action = await vscode.window.showErrorMessage(
+		"Musi CLI binary not found. Build with 'cargo build -p musi' or configure musi.cliPath.",
+		"Open Terminal",
+		"Open Settings",
+	);
+
+	if (action === "Open Terminal") {
+		const terminal = vscode.window.createTerminal("Musi Build");
+		terminal.sendText("cargo build -p musi");
+		terminal.show();
+	} else if (action === "Open Settings") {
+		vscode.commands.executeCommand(
+			"workbench.action.openSettings",
+			"musi.cliPath",
 		);
 	}
 }

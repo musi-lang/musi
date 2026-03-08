@@ -248,6 +248,11 @@
           "default": "musi-lsp",
           "description": "Path to the musi-lsp executable."
         },
+        "musi.cliPath": {
+          "type": "string",
+          "default": "musi",
+          "markdownDescription": "Path to `musi` CLI binary. If not set, searches in `target/debug`, `target/release`, `~/.cargo/bin`, and system PATH."
+        },
         "musi.checkOnSave": {
           "type": "boolean",
           "default": true,

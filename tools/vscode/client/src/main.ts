@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { findServerPath, showServerNotFoundUI } from "./bootstrap";
 import { createAndStartClient, getClient, stopClient } from "./client";
+import { MsPackageCodeLensProvider } from "./codelens";
 import { registerCommands } from "./commands";
 import { onConfigChange } from "./config";
 import { StatusBar } from "./status";
@@ -70,6 +71,13 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	registerCommands(context, _statusBar);
 	_setupConfigChangeHandler(context);
+
+	context.subscriptions.push(
+		vscode.languages.registerCodeLensProvider(
+			{ language: "json", pattern: "**/mspackage.json" },
+			new MsPackageCodeLensProvider(),
+		),
+	);
 
 	try {
 		await _startServer();

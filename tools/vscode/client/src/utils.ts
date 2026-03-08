@@ -9,6 +9,14 @@ export function getServerBinaryName(): string {
 }
 
 /**
+ * Get platform-appropriate binary name for `musi` CLI.
+ * Returns `musi.exe` on Windows, `musi` otherwise.
+ */
+export function getCliBinaryName(): string {
+	return os.platform() === "win32" ? "musi.exe" : "musi";
+}
+
+/**
  * Check if current platform is Windows.
  */
 export function isWindows(): boolean {

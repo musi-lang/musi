@@ -1,7 +1,15 @@
+import * as path from "node:path";
 import * as vscode from "vscode";
-import { findServerPath, showServerNotFoundUI } from "./bootstrap";
+import {
+	findCliPath,
+	findServerPath,
+	showCliNotFoundUI,
+	showServerNotFoundUI,
+} from "./bootstrap";
 import { getClient, restartClient, stopClient } from "./client";
 import type { StatusBar } from "./status";
+
+let _cachedCliPath: string | undefined;
 
 type CommandHandler = (...args: unknown[]) => Promise<void> | void;
 
@@ -21,13 +29,14 @@ interface Commands {
 	runFile: CommandHandler;
 	checkFile: CommandHandler;
 	runTask: CommandHandler;
+	runTaskCommand: CommandHandler;
 	runTest: CommandHandler;
 	runMain: CommandHandler;
 }
 
 function _createCommands(statusBar: StatusBar): Commands {
 	return {
-		async restartServer() {
+		async restartServer(..._args: unknown[]) {
 			statusBar.update("Restarting...", "loading");
 
 			try {
@@ -52,12 +61,12 @@ function _createCommands(statusBar: StatusBar): Commands {
 			}
 		},
 
-		async stopServer() {
+		async stopServer(..._args: unknown[]) {
 			await stopClient();
 			statusBar.update("Stopped", "stopped");
 		},
 
-		showLogs() {
+		showLogs(..._args: unknown[]) {
 			const client = getClient();
 			if (client) {
 				client.outputChannel.show();
@@ -68,41 +77,72 @@ function _createCommands(statusBar: StatusBar): Commands {
 			}
 		},
 
-		runFile() {
-			const editor = vscode.window.activeTextEditor;
-			if (!editor) {
-				vscode.window.showWarningMessage("No active editor.");
+		async runFile(...args: unknown[]) {
+			// Allow overridable file for testing/automation
+			let file: string | undefined;
+			if (typeof args[0] === "string") {
+				file = args[0];
+			}
+			if (!file) {
+				const editor = vscode.window.activeTextEditor;
+				if (!editor) {
+					vscode.window.showWarningMessage("No active editor.");
+					return;
+				}
+				file = editor.document.uri.fsPath;
+			}
+			const cliPath = _cachedCliPath ?? (await findCliPath());
+			if (!cliPath) {
+				await showCliNotFoundUI();
 				return;
 			}
-			const file = editor.document.uri.fsPath;
+			_cachedCliPath = cliPath;
 			const terminal =
 				vscode.window.terminals.find((t) => t.name === "Musi") ??
 				vscode.window.createTerminal("Musi");
 			terminal.show();
-			terminal.sendText(`musi run ${JSON.stringify(file)}`);
+			terminal.sendText(
+				`${JSON.stringify(cliPath)} run ${JSON.stringify(file)}`,
+			);
 		},
 
-		checkFile() {
-			const editor = vscode.window.activeTextEditor;
-			if (!editor) {
-				vscode.window.showWarningMessage("No active editor.");
+		async checkFile(...args: unknown[]) {
+			// Allow overridable file for testing/automation
+			let file: string | undefined;
+			if (typeof args[0] === "string") {
+				file = args[0];
+			}
+			if (!file) {
+				const editor = vscode.window.activeTextEditor;
+				if (!editor) {
+					vscode.window.showWarningMessage("No active editor.");
+					return;
+				}
+				file = editor.document.uri.fsPath;
+			}
+			const cliPath = _cachedCliPath ?? (await findCliPath());
+			if (!cliPath) {
+				await showCliNotFoundUI();
 				return;
 			}
-			const file = editor.document.uri.fsPath;
+			_cachedCliPath = cliPath;
 			const terminal =
 				vscode.window.terminals.find((t) => t.name === "Musi") ??
 				vscode.window.createTerminal("Musi");
 			terminal.show();
-			terminal.sendText(`musi check ${JSON.stringify(file)}`);
+			terminal.sendText(
+				`${JSON.stringify(cliPath)} check ${JSON.stringify(file)}`,
+			);
 		},
 
-		async runTask() {
+		async runTask(...args: unknown[]) {
 			const pkgFiles = await vscode.workspace.findFiles(
 				"mspackage.json",
 				"**/node_modules/**",
 				1,
 			);
-			if (!pkgFiles.length) {
+			const pkgFile = pkgFiles[0];
+			if (!pkgFile) {
 				vscode.window.showWarningMessage(
 					"No mspackage.json found in workspace.",
 				);
@@ -110,18 +150,38 @@ function _createCommands(statusBar: StatusBar): Commands {
 			}
 			let pkg: MsPackage;
 			try {
-				const raw = await vscode.workspace.fs.readFile(pkgFiles[0]);
+				const raw = await vscode.workspace.fs.readFile(pkgFile);
 				pkg = JSON.parse(Buffer.from(raw).toString("utf8")) as MsPackage;
 			} catch {
 				vscode.window.showErrorMessage("Failed to parse mspackage.json.");
 				return;
 			}
 			if (!pkg.tasks || !Object.keys(pkg.tasks).length) {
-				vscode.window.showWarningMessage(
-					"No tasks defined in mspackage.json.",
-				);
+				vscode.window.showWarningMessage("No tasks defined in mspackage.json.");
 				return;
 			}
+
+			// Try to use first arg (task name) if provided (e.g. for automation)
+			const quickName = typeof args[0] === "string" ? args[0] : undefined;
+			if (quickName && quickName in pkg.tasks) {
+				const taskEntry = pkg.tasks[quickName];
+				if (!taskEntry) {
+					vscode.window.showErrorMessage(
+						`Task "${quickName}" missing in mspackage.json.`,
+					);
+					return;
+				}
+				const cmd =
+					typeof taskEntry === "string" ? taskEntry : taskEntry.command;
+				const pkgDir = path.dirname(pkgFile.fsPath);
+				const terminal =
+					vscode.window.terminals.find((t) => t.name === "Musi") ??
+					vscode.window.createTerminal("Musi");
+				terminal.show();
+				terminal.sendText(`cd ${JSON.stringify(pkgDir)} && ${cmd}`);
+				return;
+			}
+
 			const items = Object.entries(pkg.tasks).map(([name, entry]) => ({
 				label: name,
 				description:
@@ -133,44 +193,103 @@ function _createCommands(statusBar: StatusBar): Commands {
 				placeHolder: "Select task to run",
 			});
 			if (pick) {
+				const taskEntry = pkg.tasks[pick.label];
+				if (!taskEntry) {
+					vscode.window.showErrorMessage(
+						`Task "${pick.label}" missing in mspackage.json.`,
+					);
+					return;
+				}
+				const cmd =
+					typeof taskEntry === "string" ? taskEntry : taskEntry.command;
+				const pkgDir = path.dirname(pkgFile.fsPath);
 				const terminal =
 					vscode.window.terminals.find((t) => t.name === "Musi") ??
 					vscode.window.createTerminal("Musi");
 				terminal.show();
-				terminal.sendText(`musi task ${pick.label}`);
+				terminal.sendText(`cd ${JSON.stringify(pkgDir)} && ${cmd}`);
 			}
 		},
 
-		runTest(...args: unknown[]) {
-			// Called from CodeLens: args[0] = uri string (ignored), args[1] = label (ignored)
-			// Just run `musi test <file>` on the active editor.
-			const editor = vscode.window.activeTextEditor;
-			if (!editor) {
-				vscode.window.showWarningMessage("No active editor.");
-				return;
+		async runTaskCommand(...args: unknown[]) {
+			const cmd = typeof args[0] === "string" ? args[0] : "";
+			const dir = typeof args[1] === "string" ? args[1] : ".";
+
+			// Warn if task uses `musi` but CLI not found
+			if (cmd.includes("musi") && !_cachedCliPath) {
+				const cliPath = await findCliPath();
+				if (!cliPath) {
+					vscode.window.showWarningMessage(
+						"Musi CLI not found in PATH. Task may fail if it uses 'musi' command.",
+					);
+				} else {
+					_cachedCliPath = cliPath;
+				}
 			}
-			const file = editor.document.uri.fsPath;
+
 			const terminal =
 				vscode.window.terminals.find((t) => t.name === "Musi") ??
 				vscode.window.createTerminal("Musi");
 			terminal.show();
-			terminal.sendText(`musi test ${JSON.stringify(file)}`);
+			terminal.sendText(`cd ${JSON.stringify(dir)} && ${cmd}`);
 		},
 
-		runMain(...args: unknown[]) {
-			// Called from CodeLens: args[0] = uri string (ignored)
-			// Same as runFile.
-			const editor = vscode.window.activeTextEditor;
-			if (!editor) {
-				vscode.window.showWarningMessage("No active editor.");
+		async runTest(...args: unknown[]) {
+			// Try to use first arg (file)
+			let file: string | undefined;
+			if (typeof args[0] === "string") {
+				file = args[0];
+			}
+			if (!file) {
+				const editor = vscode.window.activeTextEditor;
+				if (!editor) {
+					vscode.window.showWarningMessage("No active editor.");
+					return;
+				}
+				file = editor.document.uri.fsPath;
+			}
+			const cliPath = _cachedCliPath ?? (await findCliPath());
+			if (!cliPath) {
+				await showCliNotFoundUI();
 				return;
 			}
-			const file = editor.document.uri.fsPath;
+			_cachedCliPath = cliPath;
 			const terminal =
 				vscode.window.terminals.find((t) => t.name === "Musi") ??
 				vscode.window.createTerminal("Musi");
 			terminal.show();
-			terminal.sendText(`musi run ${JSON.stringify(file)}`);
+			terminal.sendText(
+				`${JSON.stringify(cliPath)} test ${JSON.stringify(file)}`,
+			);
+		},
+
+		async runMain(...args: unknown[]) {
+			// Try to use first arg (file)
+			let file: string | undefined;
+			if (typeof args[0] === "string") {
+				file = args[0];
+			}
+			if (!file) {
+				const editor = vscode.window.activeTextEditor;
+				if (!editor) {
+					vscode.window.showWarningMessage("No active editor.");
+					return;
+				}
+				file = editor.document.uri.fsPath;
+			}
+			const cliPath = _cachedCliPath ?? (await findCliPath());
+			if (!cliPath) {
+				await showCliNotFoundUI();
+				return;
+			}
+			_cachedCliPath = cliPath;
+			const terminal =
+				vscode.window.terminals.find((t) => t.name === "Musi") ??
+				vscode.window.createTerminal("Musi");
+			terminal.show();
+			terminal.sendText(
+				`${JSON.stringify(cliPath)} run ${JSON.stringify(file)}`,
+			);
 		},
 	};
 }
@@ -196,6 +315,10 @@ export function registerCommands(
 		vscode.commands.registerCommand("musi.runFile", commands.runFile),
 		vscode.commands.registerCommand("musi.checkFile", commands.checkFile),
 		vscode.commands.registerCommand("musi.runTask", commands.runTask),
+		vscode.commands.registerCommand(
+			"musi.runTaskCommand",
+			commands.runTaskCommand,
+		),
 		vscode.commands.registerCommand("musi.runTest", commands.runTest),
 		vscode.commands.registerCommand("musi.runMain", commands.runMain),
 	);

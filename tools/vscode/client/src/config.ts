@@ -5,6 +5,7 @@ import * as vscode from "vscode";
  */
 export interface Config {
 	readonly lspPath: string;
+	readonly cliPath: string;
 	readonly checkOnSave: boolean;
 	readonly serverPath: string | null;
 	readonly runtimePath: string | null;
@@ -18,6 +19,7 @@ export interface Config {
 
 const _DEFAULTS: Config = {
 	lspPath: "musi-lsp",
+	cliPath: "musi",
 	checkOnSave: true,
 	serverPath: null,
 	runtimePath: null,
@@ -46,6 +48,7 @@ export function getConfig(): Config {
 
 	return {
 		lspPath: _get(cfg, "lspPath", _DEFAULTS.lspPath),
+		cliPath: _get(cfg, "cliPath", _DEFAULTS.cliPath),
 		checkOnSave: _get(cfg, "checkOnSave", _DEFAULTS.checkOnSave),
 		serverPath: _get(cfg, "server.path", _DEFAULTS.serverPath),
 		runtimePath: _get(cfg, "runtime.path", _DEFAULTS.runtimePath),
