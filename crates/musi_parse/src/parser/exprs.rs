@@ -255,10 +255,22 @@ impl Parser<'_> {
             TokenKind::Hash | TokenKind::Opaque | TokenKind::Extrin => {
                 self.parse_expr_after_attrs()
             }
-            TokenKind::Fn => { let s = self.start_span(); self.parse_fn_expr(Vec::new(), Vec::new(), s) }
-            TokenKind::Record => { let s = self.start_span(); self.parse_record(Vec::new(), Vec::new(), s) }
-            TokenKind::Choice => { let s = self.start_span(); self.parse_choice(Vec::new(), Vec::new(), s) }
-            TokenKind::Const | TokenKind::Var => { let s = self.start_span(); self.parse_bind(Vec::new(), Vec::new(), s) }
+            TokenKind::Fn => {
+                let s = self.start_span();
+                self.parse_fn_expr(Vec::new(), Vec::new(), s)
+            }
+            TokenKind::Record => {
+                let s = self.start_span();
+                self.parse_record(Vec::new(), Vec::new(), s)
+            }
+            TokenKind::Choice => {
+                let s = self.start_span();
+                self.parse_choice(Vec::new(), Vec::new(), s)
+            }
+            TokenKind::Const | TokenKind::Var => {
+                let s = self.start_span();
+                self.parse_bind(Vec::new(), Vec::new(), s)
+            }
 
             TokenKind::While => self.parse_while(),
             TokenKind::Loop => self.parse_loop(),

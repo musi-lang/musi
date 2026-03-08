@@ -100,7 +100,12 @@ impl Parser<'_> {
         mods
     }
 
-    pub(super) fn parse_fn_expr(&mut self, attrs: Vec<Attr>, modifiers: Vec<Modifier>, outer_start: u32) -> Expr {
+    pub(super) fn parse_fn_expr(
+        &mut self,
+        attrs: Vec<Attr>,
+        modifiers: Vec<Modifier>,
+        outer_start: u32,
+    ) -> Expr {
         let _fn = self.expect(TokenKind::Fn);
 
         // LL(1): if next is Ident or Underscore → named FnDef, else Lambda
@@ -161,7 +166,12 @@ impl Parser<'_> {
         }
     }
 
-    pub(super) fn parse_record(&mut self, attrs: Vec<Attr>, modifiers: Vec<Modifier>, outer_start: u32) -> Expr {
+    pub(super) fn parse_record(
+        &mut self,
+        attrs: Vec<Attr>,
+        modifiers: Vec<Modifier>,
+        outer_start: u32,
+    ) -> Expr {
         let _rec = self.expect(TokenKind::Record);
         let name = self.optional_ident();
         let ty_params = self.parse_opt_ty_params();
@@ -192,7 +202,12 @@ impl Parser<'_> {
         }
     }
 
-    pub(super) fn parse_choice(&mut self, attrs: Vec<Attr>, modifiers: Vec<Modifier>, outer_start: u32) -> Expr {
+    pub(super) fn parse_choice(
+        &mut self,
+        attrs: Vec<Attr>,
+        modifiers: Vec<Modifier>,
+        outer_start: u32,
+    ) -> Expr {
         let _choice = self.expect(TokenKind::Choice);
         let name = self.optional_ident();
         let ty_params = self.parse_opt_ty_params();
@@ -242,7 +257,12 @@ impl Parser<'_> {
         }
     }
 
-    pub(super) fn parse_bind(&mut self, attrs: Vec<Attr>, modifiers: Vec<Modifier>, outer_start: u32) -> Expr {
+    pub(super) fn parse_bind(
+        &mut self,
+        attrs: Vec<Attr>,
+        modifiers: Vec<Modifier>,
+        outer_start: u32,
+    ) -> Expr {
         let kind = self.parse_bind_kind();
         let pat = self.parse_pat();
         let ty = self.parse_option(TokenKind::Colon, Parser::parse_ty);
