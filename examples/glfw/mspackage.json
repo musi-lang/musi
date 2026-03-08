@@ -1,0 +1,30 @@
+{
+	"$schema": "https://raw.githubusercontent.com/musi-lang/musi/refs/heads/main/schemas/mspackage-schema.v1.json",
+	"name": "glfw-examples",
+	"version": "0.1.0",
+	"description": "GLFW + OpenGL demos showcasing Musi's FFI capabilities.",
+	"keywords": ["ffi", "glfw", "opengl", "graphics", "demo"],
+	"license": "MIT",
+	"tasks": {
+		"build-shim": {
+			"description": "Compile GLFW+OpenGL shim (requires: brew install glfw)",
+			"command": "cc -shared -fPIC -o lib/libmusi_glfw.dylib lib/glfw_shim.c -L/opt/homebrew/lib -L/usr/local/lib -lglfw -framework OpenGL -DGL_SILENCE_DEPRECATION"
+		},
+		"triangle": {
+			"description": "Run spinning RGB triangle demo",
+			"command": "DYLD_LIBRARY_PATH=lib ../../target/release/musi run triangle/main.ms"
+		},
+		"window": {
+			"description": "Run keyboard input demo",
+			"command": "DYLD_LIBRARY_PATH=lib ../../target/release/musi run window/main.ms"
+		},
+		"shapes": {
+			"description": "Run 2D shapes demo",
+			"command": "DYLD_LIBRARY_PATH=lib ../../target/release/musi run shapes/main.ms"
+		},
+		"cube": {
+			"description": "Run 3D rotating cube demo",
+			"command": "DYLD_LIBRARY_PATH=lib ../../target/release/musi run cube/main.ms"
+		}
+	}
+}
