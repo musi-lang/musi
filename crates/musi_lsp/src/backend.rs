@@ -250,7 +250,7 @@ impl LanguageServer for MusiBackend {
         let root_uri = self.root_uri.read().await;
         let links = docs
             .get(&uri)
-            .map(|doc| document_links::document_links(doc, root_uri.as_ref()))
+            .map(|doc| document_links::document_links(doc, &uri, root_uri.as_ref()))
             .unwrap_or_default();
         Ok(Some(links))
     }

@@ -211,28 +211,49 @@ pub fn analyze_doc(source: &str, uri: &str) -> (Vec<Diagnostic>, AnalyzedDoc) {
         import_map.insert("<prelude>".to_owned(), prelude_exports);
     }
 
-    let mut dep_queue = collect_dep_paths(&module, &interner);
+    // Extract the document's filesystem path from the URI for resolving user imports.
+    let doc_fs_path: Option<std::path::PathBuf> = uri
+        .strip_prefix("file://")
+        .map(std::path::PathBuf::from);
+
+    // Queue entries: (import path string, importer FS path for relative resolution)
+    let mut dep_queue: Vec<(String, Option<std::path::PathBuf>)> = collect_dep_paths(&module, &interner)
+        .into_iter()
+        .map(|p| (p, doc_fs_path.clone()))
+        .collect();
     let mut visited: HashSet<String> = HashSet::new();
     let mut qi = 0;
     while qi < dep_queue.len() {
-        let path = dep_queue[qi].clone();
+        let (path, importer) = dep_queue[qi].clone();
         qi += 1;
         if !visited.insert(path.clone()) {
             continue;
         }
-        let Some(dep_src) = embedded_std(&path).or_else(|| embedded_native(&path)) else {
-            continue;
-        };
+        // Try embedded std/native first, then resolve from the filesystem.
+        let (dep_src, dep_fs_path, is_std_dep) =
+            if let Some(s) = embedded_std(&path) {
+                (s.to_owned(), None::<std::path::PathBuf>, true)
+            } else if let Some(s) = embedded_native(&path) {
+                (s.to_owned(), None, false)
+            } else if let Some(ref imp) = importer {
+                let resolved = resolve_lsp_import(&path, imp);
+                match std::fs::read_to_string(&resolved) {
+                    Ok(s) => (s, Some(resolved), false),
+                    Err(_) => continue,
+                }
+            } else {
+                continue;
+            };
         let mut dep_diags = DiagnosticBag::new();
         let (dep_file_id, dep_module, dep_lexed) = parse_src(
             &path,
-            dep_src,
+            &dep_src,
             &mut interner,
             &mut source_db,
             &mut dep_diags,
         );
         for p in collect_dep_paths(&dep_module, &interner) {
-            dep_queue.push(p);
+            dep_queue.push((p, dep_fs_path.clone()));
         }
         let dep_result = analyze(
             &dep_module,
@@ -242,11 +263,10 @@ pub fn analyze_doc(source: &str, uri: &str) -> (Vec<Diagnostic>, AnalyzedDoc) {
             &import_map,
         );
         let dep_exports = exports_of(&dep_result, &dep_module, &interner);
-        // Only add to dep_sources when there's actual source to extract doc comments from.
-        if embedded_std(&path).is_some() {
+        if is_std_dep {
             dep_sources.insert(
                 path.clone(),
-                build_dep_source(dep_src, dep_lexed, &dep_result),
+                build_dep_source(&dep_src, dep_lexed, &dep_result),
             );
         }
         import_map.insert(path, dep_exports);
@@ -461,7 +481,8 @@ pub fn def_name_span(def: &DefInfo, tokens: &[Token]) -> Span {
 /// Checks (in order):
 /// 1. `expr_defs` — reference sites (`Ident` expression nodes)
 /// 2. `pat_defs`  — binding-site spans (`const x`, `var y`, params)
-/// 3. `sema.defs` — name tokens of top-level definitions (fn / record / choice)
+/// 3. `ty_refs`   — type annotation reference sites (`Bool` in `x: Bool`, etc.)
+/// 4. `sema.defs` — name tokens of top-level definitions (fn / record / choice)
 pub fn def_at_cursor(offset: u32, doc: &AnalyzedDoc) -> Option<&DefInfo> {
     let sema = doc.sema.as_ref()?;
 
@@ -500,7 +521,24 @@ pub fn def_at_cursor(offset: u32, doc: &AnalyzedDoc) -> Option<&DefInfo> {
         return sema.defs.get(def_id.0 as usize);
     }
 
-    // 3. Definition name tokens (fn / record / choice declaration sites)
+    // 3. ty_refs (type annotation reference sites: Bool in `x: Bool`, etc.)
+    if let Some(def_id) = sema
+        .ty_refs
+        .iter()
+        .filter_map(|(span, &def_id)| {
+            if span.start <= offset && offset <= span.start + span.length {
+                Some((def_id, span.length))
+            } else {
+                None
+            }
+        })
+        .min_by_key(|&(_, len)| len)
+        .map(|(def_id, _)| def_id)
+    {
+        return sema.defs.get(def_id.0 as usize);
+    }
+
+    // 4. Definition name tokens (fn / record / choice declaration sites)
     sema.defs.iter().find(|def| {
         if def.span == musi_shared::Span::DUMMY {
             return false;
@@ -509,6 +547,19 @@ pub fn def_at_cursor(offset: u32, doc: &AnalyzedDoc) -> Option<&DefInfo> {
             find_name_token(&doc.lexed.tokens, def.span.start, def.name).unwrap_or(def.span);
         name_span.start <= offset && offset <= name_span.start + name_span.length
     })
+}
+
+/// Resolve a Musi import path to a filesystem path, relative to `importer`.
+/// Mirrors the logic in `compiler::resolve_import_path`.
+fn resolve_lsp_import(import_path: &str, importer: &std::path::Path) -> std::path::PathBuf {
+    let base = importer.parent().unwrap_or(std::path::Path::new("."));
+    if import_path.starts_with("./") || import_path.starts_with("../") {
+        base.join(import_path).with_extension("ms")
+    } else {
+        // Non-relative: try adjacent to the importer first, then as-is from CWD.
+        let candidate = base.join(import_path).with_extension("ms");
+        if candidate.exists() { candidate } else { std::path::PathBuf::from(import_path).with_extension("ms") }
+    }
 }
 
 fn build_dep_source(source: &str, lexed: LexedSource, sema: &SemaResult) -> DepSource {

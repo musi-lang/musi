@@ -11,16 +11,19 @@ use crate::analysis::{AnalyzedDoc, span_to_range};
 /// Compute document links for all import/export path strings in `doc`.
 ///
 /// Each import path string becomes a clickable link to the resolved `.ms` file.
-pub fn document_links(doc: &AnalyzedDoc, root_uri: Option<&Uri>) -> Vec<DocumentLink> {
-    let Some(root) = root_uri else {
-        return vec![];
-    };
-    // Ensure root ends with `/` for URI joining.
-    let root_str = root.as_str();
-    let root_base = if root_str.ends_with('/') {
-        root_str.to_owned()
-    } else {
-        format!("{root_str}/")
+/// Relative imports (`./` or `../`) are resolved against the document's own directory;
+/// non-relative imports are resolved against the workspace root.
+pub fn document_links(doc: &AnalyzedDoc, doc_uri: &Uri, root_uri: Option<&Uri>) -> Vec<DocumentLink> {
+    // Base URI for resolving non-relative imports (workspace root).
+    let root_base: String = root_uri.map_or_else(String::new, |root| {
+        let s = root.as_str();
+        if s.ends_with('/') { s.to_owned() } else { format!("{s}/") }
+    });
+
+    // Base URI for resolving relative imports: document's directory.
+    let doc_dir: String = {
+        let s = doc_uri.as_str();
+        if let Some(pos) = s.rfind('/') { format!("{}/", &s[..pos]) } else { root_base.clone() }
     };
 
     let mut links = Vec::new();
@@ -38,10 +41,20 @@ pub fn document_links(doc: &AnalyzedDoc, root_uri: Option<&Uri>) -> Vec<Document
         if raw.contains(':') {
             continue;
         }
-        let module_key = raw.strip_suffix(".ms").unwrap_or(raw);
-        let rel_path = format!("{module_key}.ms");
-        let target_str = format!("{root_base}{rel_path}");
 
+        let module_key = raw.strip_suffix(".ms").unwrap_or(raw);
+
+        // Resolve relative vs absolute import paths against the correct base.
+        let base = if module_key.starts_with("./") || module_key.starts_with("../") {
+            &doc_dir
+        } else {
+            &root_base
+        };
+        if base.is_empty() {
+            continue;
+        }
+
+        let target_str = format!("{base}{module_key}.ms");
         let Ok(target) = Uri::from_str(&target_str) else {
             continue;
         };
