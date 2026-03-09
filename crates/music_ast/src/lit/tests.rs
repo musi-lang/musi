@@ -79,7 +79,7 @@ fn test_lit_unit_round_trip_through_arena() {
 fn test_lit_fstr_with_interpolation() {
     let mut exprs: Arena<Expr> = Arena::new();
     let expr_idx = exprs.alloc(Expr::Name {
-        ident: Symbol(1),
+        name: Symbol(1),
         span: Span::new(2, 3),
     });
 
