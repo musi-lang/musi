@@ -246,6 +246,7 @@ High two bits of opcode determine length:
 0x66  eff.res.c          ( val -- )         resume continuation (callee side)
 0x67  eff.abt            ( err -- )         abort effect
 0x68  tsk.awt            ( task -- val )    await task
+0x69  inv.dyn   u8       ( callee args... -- ret )   indirect call; u8 = arg count
 
 // §10  Wide Locals / Jumps  (u16 operand)
 0x80  ld.loc.w  0x81  st.loc.w  0x82  ld.cst.w

@@ -28,4 +28,6 @@ pub enum IrConstValue {
     Str(Symbol),
     /// Unit value.
     Unit,
+    /// Function reference by id (NaN-box tag `0x7FF7`).
+    FnRef(u32),
 }
