@@ -10,7 +10,7 @@ use crate::checker::ty::lower_ty;
 
 /// Checks a declaration expression (class, given, effect).
 pub(crate) fn check_decl(ck: &mut Checker<'_>, expr_idx: Idx<music_ast::Expr>) {
-    match ck.ast.exprs[expr_idx].clone() {
+    match ck.ctx.ast.exprs[expr_idx].clone() {
         Expr::Class { members, .. } => {
             for member in &members {
                 match member {
@@ -20,7 +20,7 @@ pub(crate) fn check_decl(ck: &mut Checker<'_>, expr_idx: Idx<music_ast::Expr>) {
                         }
                     }
                     ClassMember::Law { body, .. } => {
-                        let bool_ty = ck.named_ty(ck.well_known.bool);
+                        let bool_ty = ck.named_ty(ck.ctx.well_known.bool);
                         check(ck, *body, bool_ty);
                     }
                 }
@@ -35,7 +35,7 @@ pub(crate) fn check_decl(ck: &mut Checker<'_>, expr_idx: Idx<music_ast::Expr>) {
                         }
                     }
                     ClassMember::Law { body, .. } => {
-                        let bool_ty = ck.named_ty(ck.well_known.bool);
+                        let bool_ty = ck.named_ty(ck.ctx.well_known.bool);
                         check(ck, *body, bool_ty);
                     }
                 }

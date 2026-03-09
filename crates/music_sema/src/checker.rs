@@ -22,56 +22,59 @@ use crate::types::{EffectRow, InstanceInfo, Obligation, Type, fmt_type};
 use crate::unify::UnifyTable;
 use crate::well_known::WellKnown;
 
-/// The bidirectional type checker.
-pub struct Checker<'a> {
+/// Read-only environment for the type checker.
+pub struct CheckContext<'a> {
     pub(crate) ast: &'a AstArenas,
     pub(crate) interner: &'a Interner,
     pub(crate) file_id: FileId,
-    pub(crate) diags: &'a mut DiagnosticBag,
-    pub(crate) defs: &'a mut DefTable,
-    pub(crate) scopes: &'a mut ScopeTree,
+    pub(crate) well_known: &'a WellKnown,
+    pub(crate) expr_defs: &'a HashMap<Idx<music_ast::Expr>, DefId>,
+}
+
+/// Mutable type-checking state built up during checking.
+pub struct TypeStore {
     pub(crate) unify: UnifyTable,
     pub(crate) types: Arena<Type>,
-    pub(crate) well_known: &'a WellKnown,
-    pub(crate) current_scope: ScopeId,
-    pub(crate) current_effects: EffectRow,
     pub(crate) obligations: Vec<Obligation>,
     pub(crate) instances: Vec<InstanceInfo>,
     pub(crate) expr_types: HashMap<Idx<music_ast::Expr>, Idx<Type>>,
-    pub(crate) expr_defs: &'a HashMap<Idx<music_ast::Expr>, DefId>,
+}
+
+/// The bidirectional type checker.
+pub struct Checker<'a> {
+    pub(crate) ctx: CheckContext<'a>,
+    pub(crate) store: TypeStore,
+    pub(crate) diags: &'a mut DiagnosticBag,
+    pub(crate) defs: &'a mut DefTable,
+    pub(crate) scopes: &'a mut ScopeTree,
+    pub(crate) current_scope: ScopeId,
+    pub(crate) current_effects: EffectRow,
 }
 
 impl<'a> Checker<'a> {
     /// Creates a new type checker.
     #[must_use]
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
-        ast: &'a AstArenas,
-        interner: &'a Interner,
-        file_id: FileId,
+        ctx: CheckContext<'a>,
         diags: &'a mut DiagnosticBag,
         defs: &'a mut DefTable,
         scopes: &'a mut ScopeTree,
-        well_known: &'a WellKnown,
         scope: ScopeId,
-        expr_defs: &'a HashMap<Idx<music_ast::Expr>, DefId>,
     ) -> Self {
         Self {
-            ast,
-            interner,
-            file_id,
+            ctx,
+            store: TypeStore {
+                unify: UnifyTable::new(),
+                types: Arena::new(),
+                obligations: vec![],
+                instances: vec![],
+                expr_types: HashMap::new(),
+            },
             diags,
             defs,
             scopes,
-            unify: UnifyTable::new(),
-            types: Arena::new(),
-            well_known,
             current_scope: scope,
             current_effects: EffectRow::PURE,
-            obligations: Vec::new(),
-            instances: Vec::new(),
-            expr_types: HashMap::new(),
-            expr_defs,
         }
     }
 
@@ -87,80 +90,83 @@ impl<'a> Checker<'a> {
 
     /// Creates a fresh unification variable.
     pub(crate) fn fresh_var(&mut self, span: Span) -> Idx<Type> {
-        self.unify.fresh(span, &mut self.types)
+        self.store.unify.fresh(span, &mut self.store.types)
     }
 
     /// Allocates a type in the arena.
     pub(crate) fn alloc_ty(&mut self, ty: Type) -> Idx<Type> {
-        self.types.alloc(ty)
+        self.store.types.alloc(ty)
     }
 
     /// Creates a `Type::Named` for a well-known type with no arguments.
     pub(crate) fn named_ty(&mut self, def: DefId) -> Idx<Type> {
-        self.types.alloc(Type::Named {
-            def,
-            args: Vec::new(),
-        })
+        self.store.types.alloc(Type::Named { def, args: vec![] })
     }
 
     /// Unifies two types, reporting a diagnostic on failure.
     pub(crate) fn unify_or_report(&mut self, expected: Idx<Type>, found: Idx<Type>, span: Span) {
         if !self
+            .store
             .unify
-            .unify(expected, found, &mut self.types, self.well_known)
+            .unify(expected, found, &mut self.store.types, self.ctx.well_known)
         {
             let defs_vec: Vec<_> = self.defs.iter().cloned().collect();
-            let exp_str = fmt_type(expected, &self.types, &defs_vec, self.interner);
-            let found_str = fmt_type(found, &self.types, &defs_vec, self.interner);
+            let exp_str = fmt_type(expected, &self.store.types, &defs_vec, self.ctx.interner);
+            let found_str = fmt_type(found, &self.store.types, &defs_vec, self.ctx.interner);
             let _d = self.diags.report(
                 &SemaError::TypeMismatch {
                     expected: exp_str,
                     found: found_str,
                 },
                 span,
-                self.file_id,
+                self.ctx.file_id,
             );
         }
     }
 
     /// Records the inferred type for an expression.
     pub(crate) fn record_type(&mut self, expr: Idx<music_ast::Expr>, ty: Idx<Type>) {
-        let _prev = self.expr_types.insert(expr, ty);
+        let _prev = self.store.expr_types.insert(expr, ty);
     }
 
     /// Allocates the error (poison) type.
     pub(crate) fn error_ty(&mut self) -> Idx<Type> {
-        self.types.alloc(Type::Error)
+        self.store.types.alloc(Type::Error)
     }
 
     /// Resolves a type through any chain of unification bindings.
     pub(crate) fn resolve_ty(&self, ty: Idx<Type>) -> Idx<Type> {
-        self.unify.resolve(ty, &self.types)
+        self.store.unify.resolve(ty, &self.store.types)
     }
 
     /// Resolves pending typeclass obligations.
     pub fn resolve_obligations(&mut self) {
-        let obligations = mem::take(&mut self.obligations);
+        let obligations = mem::take(&mut self.store.obligations);
         for obligation in &obligations {
-            let resolved = self.instances.iter().any(|inst| {
+            let resolved = self.store.instances.iter().any(|inst| {
                 inst.class == obligation.class
-                    && self.unify.unify(
+                    && self.store.unify.unify(
                         inst.target,
                         obligation
                             .args
                             .first()
                             .copied()
-                            .unwrap_or_else(|| self.types.alloc(Type::Error)),
-                        &mut self.types,
-                        self.well_known,
+                            .unwrap_or_else(|| self.store.types.alloc(Type::Error)),
+                        &mut self.store.types,
+                        self.ctx.well_known,
                     )
             });
             if !resolved {
-                let class_name = self.interner.resolve(self.defs.get(obligation.class).name);
+                let class_name = self
+                    .ctx
+                    .interner
+                    .resolve(self.defs.get(obligation.class).name);
                 let defs_vec: Vec<_> = self.defs.iter().cloned().collect();
                 let ty_str = obligation.args.first().map_or_else(
                     || Box::from("_"),
-                    |&first_arg| fmt_type(first_arg, &self.types, &defs_vec, self.interner),
+                    |&first_arg| {
+                        fmt_type(first_arg, &self.store.types, &defs_vec, self.ctx.interner)
+                    },
                 );
                 let _d = self.diags.report(
                     &SemaError::NoInstance {
@@ -168,7 +174,7 @@ impl<'a> Checker<'a> {
                         ty: ty_str,
                     },
                     obligation.span,
-                    self.file_id,
+                    self.ctx.file_id,
                 );
             }
         }
@@ -178,10 +184,10 @@ impl<'a> Checker<'a> {
     #[must_use]
     pub fn finish(self) -> CheckerResult {
         CheckerResult {
-            types: self.types,
-            unify: self.unify,
-            expr_types: self.expr_types,
-            instances: self.instances,
+            types: self.store.types,
+            unify: self.store.unify,
+            expr_types: self.store.expr_types,
+            instances: self.store.instances,
         }
     }
 }

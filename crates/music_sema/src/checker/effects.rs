@@ -23,7 +23,7 @@ pub(crate) fn check_effects_subset(
     if current_effects.is_pure() {
         let _d = ck
             .diags
-            .report(&SemaError::EffectInPureContext, span, ck.file_id);
+            .report(&SemaError::EffectInPureContext, span, ck.ctx.file_id);
         return;
     }
 
@@ -35,13 +35,13 @@ pub(crate) fn check_effects_subset(
             .any(|cur_eff| cur_eff.def == callee_eff.def);
 
         if !found && current_effects.row_var.is_none() {
-            let effect_name = ck.interner.resolve(ck.defs.get(callee_eff.def).name);
+            let effect_name = ck.ctx.interner.resolve(ck.defs.get(callee_eff.def).name);
             let _d = ck.diags.report(
                 &SemaError::UndeclaredEffect {
                     effect: Box::from(effect_name),
                 },
                 span,
-                ck.file_id,
+                ck.ctx.file_id,
             );
         }
     }

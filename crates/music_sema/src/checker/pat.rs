@@ -9,19 +9,18 @@ use crate::types::Type;
 
 /// Checks a pattern against an expected type.
 pub(crate) fn check_pat(ck: &mut Checker<'_>, pat_idx: Idx<Pat>, expected: Idx<Type>) {
-    match ck.ast.pats[pat_idx].clone() {
+    match ck.ctx.ast.pats[pat_idx].clone() {
         Pat::Lit { lit, span } => {
             let lit_ty = match &lit {
-                Lit::Int { .. } => ck.named_ty(ck.well_known.int),
-                Lit::Float { .. } => ck.named_ty(ck.well_known.float64),
-                Lit::Str { .. } | Lit::FStr { .. } => ck.named_ty(ck.well_known.string),
-                Lit::Rune { .. } => ck.named_ty(ck.well_known.rune),
-                Lit::Unit { .. } => ck.named_ty(ck.well_known.unit),
+                Lit::Int { .. } => ck.named_ty(ck.ctx.well_known.ints.int),
+                Lit::Float { .. } => ck.named_ty(ck.ctx.well_known.floats.float64),
+                Lit::Str { .. } | Lit::FStr { .. } => ck.named_ty(ck.ctx.well_known.string),
+                Lit::Rune { .. } => ck.named_ty(ck.ctx.well_known.rune),
+                Lit::Unit { .. } => ck.named_ty(ck.ctx.well_known.unit),
             };
             ck.unify_or_report(expected, lit_ty, span);
         }
         Pat::Bind { inner, .. } => {
-            // Bind the name to the expected type via pat_defs (not expr_defs).
             // If there's an inner pattern (`x @ pat`), check it too.
             if let Some(inner) = inner {
                 check_pat(ck, inner, expected);
@@ -29,7 +28,7 @@ pub(crate) fn check_pat(ck: &mut Checker<'_>, pat_idx: Idx<Pat>, expected: Idx<T
         }
         Pat::Tuple { elems, span } => {
             let resolved = ck.resolve_ty(expected);
-            match &ck.types[resolved] {
+            match &ck.store.types[resolved] {
                 Type::Tuple {
                     elems: expected_elems,
                 } => {
@@ -43,11 +42,9 @@ pub(crate) fn check_pat(ck: &mut Checker<'_>, pat_idx: Idx<Pat>, expected: Idx<T
                             check_pat(ck, pat_elem, ty_elem);
                         }
                     }
-                    // Arity mismatch is a type error but we don't cascade.
                 }
                 Type::Error => {}
                 _ => {
-                    // Type mismatch: expected a tuple.
                     let fresh_elems: Vec<_> = elems.iter().map(|_| ck.fresh_var(span)).collect();
                     let tup_ty = ck.alloc_ty(Type::Tuple { elems: fresh_elems });
                     ck.unify_or_report(expected, tup_ty, span);
@@ -59,7 +56,7 @@ pub(crate) fn check_pat(ck: &mut Checker<'_>, pat_idx: Idx<Pat>, expected: Idx<T
             if let Type::Record {
                 fields: expected_fields,
                 ..
-            } = &ck.types[resolved]
+            } = &ck.store.types[resolved]
             {
                 let expected_fields = expected_fields.clone();
                 for field in &fields {
@@ -73,7 +70,7 @@ pub(crate) fn check_pat(ck: &mut Checker<'_>, pat_idx: Idx<Pat>, expected: Idx<T
         }
         Pat::Array { elems, .. } => {
             let resolved = ck.resolve_ty(expected);
-            if let Type::Array { elem, .. } = &ck.types[resolved] {
+            if let Type::Array { elem, .. } = &ck.store.types[resolved] {
                 let elem = *elem;
                 for &pat_elem in &elems {
                     check_pat(ck, pat_elem, elem);
@@ -81,7 +78,6 @@ pub(crate) fn check_pat(ck: &mut Checker<'_>, pat_idx: Idx<Pat>, expected: Idx<T
             }
         }
         Pat::Variant { args, .. } => {
-            // Variant patterns: check args against expected variant fields.
             for &arg in &args {
                 let fresh = ck.fresh_var(music_shared::Span::DUMMY);
                 check_pat(ck, arg, fresh);
