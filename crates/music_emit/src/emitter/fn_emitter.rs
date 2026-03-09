@@ -20,6 +20,14 @@ struct Fixup {
     label: IrLabel,
 }
 
+/// Handler table entry for effect push instructions.
+pub struct HandlerEntry {
+    /// The effect id for this handler.
+    pub effect_id: u8,
+    /// The function id of the handler.
+    pub handler_fn_id: u32,
+}
+
 /// Per-function bytecode emitter.
 pub struct FnEmitter {
     /// Emitted bytecode for this function.
@@ -36,6 +44,8 @@ pub struct FnEmitter {
     pub local_count: u16,
     /// Number of parameters.
     pub param_count: u16,
+    /// Collected handler entries for this function.
+    pub handlers: Vec<HandlerEntry>,
 }
 
 impl FnEmitter {
@@ -49,6 +59,7 @@ impl FnEmitter {
             max_stack: 0,
             local_count,
             param_count,
+            handlers: Vec::new(),
         }
     }
 
@@ -148,15 +159,14 @@ impl FnEmitter {
         // net 0: pops obj, pushes val
     }
 
-    pub fn emit_mk_prd(&mut self, field_count: u32, stack_pop: i32) {
-        if let Ok(n) = u8::try_from(field_count) {
-            encode_u8(&mut self.code, Opcode::MK_PRD, n);
-        } else {
-            // No wide variant for mk.prd in spec — clamp to u8
-            encode_u8(&mut self.code, Opcode::MK_PRD, u8::MAX);
-        }
+    pub fn emit_mk_prd(&mut self, field_count: u32, stack_pop: i32) -> Result<(), EmitError> {
+        let n = u8::try_from(field_count).map_err(|_| EmitError::OperandOverflow {
+            desc: "product field count exceeds 255".into(),
+        })?;
+        encode_u8(&mut self.code, Opcode::MK_PRD, n);
         // Pops field_count values, pushes 1 product
         self.pop_n(stack_pop - 1);
+        Ok(())
     }
 
     pub fn emit_mk_var(&mut self, tag: u32) {
@@ -225,20 +235,28 @@ impl FnEmitter {
 
     // ── Effects ─────────────────────────────────────────────────────────
 
-    pub fn emit_eff_psh(&mut self, effect_id: u32) {
-        if let Ok(id) = u8::try_from(effect_id) {
-            encode_u8(&mut self.code, Opcode::EFF_PSH, id);
-        } else {
-            encode_u8(&mut self.code, Opcode::EFF_PSH, u8::MAX);
-        }
+    pub fn emit_eff_psh(
+        &mut self,
+        effect_id: u32,
+        handler_fn_id: u32,
+    ) -> Result<(), EmitError> {
+        let id = u8::try_from(effect_id).map_err(|_| EmitError::OperandOverflow {
+            desc: "effect id exceeds 255".into(),
+        })?;
+        encode_u8(&mut self.code, Opcode::EFF_PSH, id);
+        self.handlers.push(HandlerEntry {
+            effect_id: id,
+            handler_fn_id,
+        });
+        Ok(())
     }
 
-    pub fn emit_eff_pop(&mut self, effect_id: u32) {
-        if let Ok(id) = u8::try_from(effect_id) {
-            encode_u8(&mut self.code, Opcode::EFF_POP, id);
-        } else {
-            encode_u8(&mut self.code, Opcode::EFF_POP, u8::MAX);
-        }
+    pub fn emit_eff_pop(&mut self, effect_id: u32) -> Result<(), EmitError> {
+        let id = u8::try_from(effect_id).map_err(|_| EmitError::OperandOverflow {
+            desc: "effect id exceeds 255".into(),
+        })?;
+        encode_u8(&mut self.code, Opcode::EFF_POP, id);
+        Ok(())
     }
 
     pub fn emit_eff_do(&mut self, op_id: u32, arg_count: i32) {
