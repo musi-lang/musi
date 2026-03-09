@@ -6,7 +6,7 @@
 //! # Module layout
 //!
 //! - [`error`]      — [`EmitError`] enum
-//! - [`opcode`]     — [`Opcode`] enum (94 opcodes), encoding helpers
+//! - [`opcode`]     — [`Opcode`] enum (75 opcodes), encoding helpers
 //! - [`const_pool`] — constant pool builder
 //! - [`type_pool`]  — type pool builder (`Idx<IrType>` → `type_id`)
 //! - [`module`]     — `.msbc` binary assembler (header + 4 sections)

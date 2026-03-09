@@ -437,8 +437,8 @@ fn test_emit_wide_jump_resolves_backward_branch() {
 
     let EmitOutput { bytes } = result.expect("emit succeeded");
     assert!(
-        bytes.contains(&0xD3),
-        "output must contain JMP_W (0xD3) opcode"
+        bytes.contains(&0xD0),
+        "output must contain JMP_W (0xD0) opcode"
     );
 }
 
@@ -507,9 +507,16 @@ fn make_cast_module(from_ty: IrType, to_ty: IrType) -> (IrModule, Interner) {
     (module, interner)
 }
 
-/// Find the first occurrence of `opcode` in the bytecode portion (after header).
+/// Find the first occurrence of `opcode` in the function pool section (past pools/header).
 fn find_opcode(bytes: &[u8], op: Opcode) -> Option<usize> {
-    bytes.iter().position(|&b| b == op.0)
+    // fn_off is at header offset 0x1C (bytes 28..32)
+    assert!(bytes.len() > 31, "bytes too short for header");
+    let fn_off = u32::from_le_bytes([bytes[28], bytes[29], bytes[30], bytes[31]]);
+    let start = usize::try_from(fn_off).expect("fn_off fits usize");
+    bytes[start..]
+        .iter()
+        .position(|&b| b == op.0)
+        .map(|pos| pos + start)
 }
 
 #[test]
