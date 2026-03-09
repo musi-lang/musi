@@ -15,4 +15,8 @@ pub enum EmitError {
     UnresolvableType { desc: Box<str> },
     #[error("unresolvable label in function `{name}`")]
     UnresolvableLabel { name: Box<str> },
+    #[error("operand overflow: {desc}")]
+    OperandOverflow { desc: Box<str> },
+    #[error("unsupported feature: {desc}")]
+    UnsupportedFeature { desc: Box<str> },
 }
