@@ -143,7 +143,7 @@ fn test_binop_cons_round_trip_through_arena() {
         span: Span::new(0, 1),
     });
     let tail = arenas.exprs.alloc(Expr::Name {
-        ident: Symbol(0),
+        name: Symbol(0),
         span: Span::new(5, 2),
     });
     let idx = arenas.exprs.alloc(Expr::BinOp {
