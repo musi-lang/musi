@@ -1,8 +1,10 @@
-use music_shared::Span;
+#![allow(clippy::panic)]
 
-use crate::AstArenas;
+use music_shared::{Span, Symbol};
+
 use crate::expr::{BinOp, BindKind, Expr, LetFields};
 use crate::pat::Pat;
+use crate::{AstArenas, Lit};
 
 #[test]
 fn test_let_fields_round_trip_through_arena() {
@@ -11,7 +13,7 @@ fn test_let_fields_round_trip_through_arena() {
         span: Span::new(4, 1),
     });
     let value = arenas.exprs.alloc(Expr::Lit {
-        lit: crate::lit::Lit::Int {
+        lit: Lit::Int {
             value: 1,
             span: Span::new(8, 1),
         },
@@ -26,7 +28,7 @@ fn test_let_fields_round_trip_through_arena() {
         span: Span::new(0, 10),
     };
     let idx = arenas.exprs.alloc(Expr::Let {
-        fields: fields.clone(),
+        fields,
         body: None,
         span: Span::new(0, 10),
     });
@@ -43,14 +45,14 @@ fn test_let_fields_round_trip_through_arena() {
 fn test_binop_children_accessible_via_idx() {
     let mut arenas = AstArenas::new();
     let left = arenas.exprs.alloc(Expr::Lit {
-        lit: crate::lit::Lit::Int {
+        lit: Lit::Int {
             value: 1,
             span: Span::new(0, 1),
         },
         span: Span::new(0, 1),
     });
     let right = arenas.exprs.alloc(Expr::Lit {
-        lit: crate::lit::Lit::Int {
+        lit: Lit::Int {
             value: 2,
             span: Span::new(4, 1),
         },
@@ -76,7 +78,7 @@ fn test_binop_children_accessible_via_idx() {
 fn test_block_with_no_tail() {
     let mut arenas = AstArenas::new();
     let s1 = arenas.exprs.alloc(Expr::Lit {
-        lit: crate::lit::Lit::Unit {
+        lit: Lit::Unit {
             span: Span::new(1, 2),
         },
         span: Span::new(1, 2),
@@ -100,7 +102,7 @@ fn test_binding_embeds_let_fields() {
         span: Span::new(4, 1),
     });
     let value = arenas.exprs.alloc(Expr::Lit {
-        lit: crate::lit::Lit::Int {
+        lit: Lit::Int {
             value: 42,
             span: Span::new(8, 2),
         },
@@ -134,14 +136,14 @@ fn test_binding_embeds_let_fields() {
 fn test_binop_cons_round_trip_through_arena() {
     let mut arenas = AstArenas::new();
     let head = arenas.exprs.alloc(Expr::Lit {
-        lit: crate::lit::Lit::Int {
+        lit: Lit::Int {
             value: 1,
             span: Span::new(0, 1),
         },
         span: Span::new(0, 1),
     });
     let tail = arenas.exprs.alloc(Expr::Name {
-        ident: music_shared::Symbol(0),
+        ident: Symbol(0),
         span: Span::new(5, 2),
     });
     let idx = arenas.exprs.alloc(Expr::BinOp {

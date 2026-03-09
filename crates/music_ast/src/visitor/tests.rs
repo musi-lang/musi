@@ -1,3 +1,5 @@
+#![allow(clippy::let_underscore_must_use)]
+
 use std::ops::ControlFlow;
 
 use music_shared::{Idx, Span, Symbol};

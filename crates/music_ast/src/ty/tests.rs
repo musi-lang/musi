@@ -1,3 +1,5 @@
+#![allow(clippy::panic)]
+
 use music_shared::{Span, Symbol};
 
 use crate::AstArenas;

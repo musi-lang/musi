@@ -36,3 +36,11 @@ pub struct ExportItem {
     pub alias: Option<Symbol>,
     pub span: Span,
 }
+
+/// An operation in an effect definition.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EffectOp {
+    pub name: Symbol,
+    pub ty: Idx<Ty>,
+    pub span: Span,
+}

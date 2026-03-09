@@ -8,7 +8,7 @@ use std::ops::ControlFlow;
 use music_shared::Idx;
 
 use crate::attr::{Attr, AttrValue};
-use crate::decl::ClassMember;
+use crate::decl::{ClassMember, EffectOp};
 use crate::expr::{Arg, ArrayItem, Expr, LetFields, Param, PwGuard, RecField};
 use crate::lit::{FStrPart, Lit};
 use crate::pat::Pat;
@@ -215,6 +215,8 @@ pub fn walk_expr<V: AstVisitor + ?Sized>(
             walk_constraints(v, constraints, ctx)?;
             walk_class_members(v, members, ctx)
         }
+
+        Expr::Effect { ops, .. } => walk_effect_ops(v, ops, ctx),
     }
 }
 
@@ -433,6 +435,17 @@ fn walk_lit<V: AstVisitor + ?Sized>(
                 v.visit_expr(*expr, ctx)?;
             }
         }
+    }
+    ControlFlow::Continue(())
+}
+
+fn walk_effect_ops<V: AstVisitor + ?Sized>(
+    v: &mut V,
+    ops: &[EffectOp],
+    ctx: &AstArenas,
+) -> ControlFlow<V::Break> {
+    for op in ops {
+        v.visit_ty(op.ty, ctx)?;
     }
     ControlFlow::Continue(())
 }

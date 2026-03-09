@@ -6,7 +6,7 @@ mod tests;
 use music_shared::{Idx, Span, Symbol};
 
 use crate::attr::Attr;
-use crate::decl::{ClassMember, ExportItem};
+use crate::decl::{ClassMember, EffectOp, ExportItem};
 use crate::lit::Lit;
 use crate::pat::Pat;
 use crate::ty::{Constraint, Quantifier, Ty, TyParam};
@@ -167,6 +167,12 @@ pub enum Expr {
         target: TyNamed,
         constraints: Vec<Constraint>,
         members: Vec<ClassMember>,
+        span: Span,
+    },
+    Effect {
+        name: Symbol,
+        params: Vec<TyParam>,
+        ops: Vec<EffectOp>,
         span: Span,
     },
 

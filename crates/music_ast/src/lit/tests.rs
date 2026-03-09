@@ -1,7 +1,11 @@
+#![allow(clippy::panic)]
+
 use music_shared::{Arena, Span, Symbol};
 
 use crate::expr::Expr;
 use crate::lit::{FStrPart, Lit};
+
+use std::f64;
 
 #[test]
 fn test_lit_int_round_trip_through_arena() {
@@ -22,14 +26,14 @@ fn test_lit_int_round_trip_through_arena() {
 fn test_lit_float_round_trip_through_arena() {
     let mut arena: Arena<Lit> = Arena::new();
     let lit = Lit::Float {
-        value: 3.14,
+        value: f64::consts::PI,
         span: Span::new(0, 4),
     };
     let idx = arena.alloc(lit);
     let Lit::Float { value, .. } = &arena[idx] else {
         panic!("expected Float");
     };
-    assert!((*value - 3.14).abs() < f64::EPSILON);
+    assert!((*value - f64::consts::PI).abs() < f64::EPSILON);
 }
 
 #[test]
