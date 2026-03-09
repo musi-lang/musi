@@ -540,7 +540,7 @@ impl Resolver<'_> {
         }
     }
 
-    fn define_in_scope(&mut self, name: music_shared::Symbol, def_id: DefId, span: Span) {
+    fn define_in_scope(&mut self, name: Symbol, def_id: DefId, span: Span) {
         if let Some(prev) = self.scopes.define(self.current_scope, name, def_id) {
             let name_str = self.interner.resolve(name);
             let prev_span = self.defs.get(prev).span;

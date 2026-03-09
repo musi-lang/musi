@@ -1,5 +1,6 @@
 //! Per-expression synthesis and checking.
 
+use music_ast::Ty;
 use music_ast::expr::{
     Arg, ArrayElem, Arrow, BinOp, Expr, FieldKey, LetFields, MatchArm, Param, RecField, UnaryOp,
 };
@@ -12,24 +13,28 @@ use crate::checker::effects::check_effects_subset;
 use crate::checker::pat::check_pat;
 use crate::checker::ty::lower_ty;
 use crate::error::SemaError;
-use crate::resolve::expr_span as resolve_expr_span;
+use crate::resolve;
 use crate::types::{EffectRow, RecordField, Type, fmt_type};
 
 /// Synthesises a type for `expr` (inference mode, direction ↑).
-pub(crate) fn synth(ck: &mut Checker<'_>, expr_idx: Idx<music_ast::Expr>) -> Idx<Type> {
+pub(crate) fn synth(ck: &mut Checker<'_>, expr_idx: Idx<Expr>) -> Idx<Type> {
     let ty = synth_inner(ck, expr_idx);
     ck.record_type(expr_idx, ty);
     ty
 }
 
 /// Checks `expr` against `expected` (checking mode, direction ↓).
-pub(crate) fn check(ck: &mut Checker<'_>, expr_idx: Idx<music_ast::Expr>, expected: Idx<Type>) {
+pub(crate) fn check(ck: &mut Checker<'_>, expr_idx: Idx<Expr>, expected: Idx<Type>) {
     let found = synth_inner(ck, expr_idx);
     ck.record_type(expr_idx, expected);
-    ck.unify_or_report(expected, found, expr_span(&ck.ctx.ast.exprs[expr_idx]));
+    ck.unify_or_report(
+        expected,
+        found,
+        resolve::expr_span(&ck.ctx.ast.exprs[expr_idx]),
+    );
 }
 
-fn synth_inner(ck: &mut Checker<'_>, expr_idx: Idx<music_ast::Expr>) -> Idx<Type> {
+fn synth_inner(ck: &mut Checker<'_>, expr_idx: Idx<Expr>) -> Idx<Type> {
     match ck.ctx.ast.exprs[expr_idx].clone() {
         Expr::Lit { lit, span } => synth_lit(ck, &lit, span),
         Expr::Name { span, .. } => synth_name(ck, expr_idx, span),
@@ -128,11 +133,7 @@ fn synth_inner(ck: &mut Checker<'_>, expr_idx: Idx<music_ast::Expr>) -> Idx<Type
     }
 }
 
-fn synth_block(
-    ck: &mut Checker<'_>,
-    stmts: &[Idx<music_ast::Expr>],
-    tail: Option<Idx<music_ast::Expr>>,
-) -> Idx<Type> {
+fn synth_block(ck: &mut Checker<'_>, stmts: &[Idx<Expr>], tail: Option<Idx<Expr>>) -> Idx<Type> {
     for &stmt in stmts {
         let _ty = synth(ck, stmt);
     }
@@ -143,11 +144,7 @@ fn synth_block(
     }
 }
 
-fn synth_let(
-    ck: &mut Checker<'_>,
-    fields: &LetFields,
-    body: Option<Idx<music_ast::Expr>>,
-) -> Idx<Type> {
+fn synth_let(ck: &mut Checker<'_>, fields: &LetFields, body: Option<Idx<Expr>>) -> Idx<Type> {
     let value_ty = if let Some(ty_ann) = fields.ty {
         let ann = lower_ty(ck, ty_ann);
         check(ck, fields.value, ann);
@@ -181,8 +178,8 @@ fn synth_fn(
     ck: &mut Checker<'_>,
     params: &[Param],
     arrow: Arrow,
-    ret_ty: Option<Idx<music_ast::Ty>>,
-    body: Idx<music_ast::Expr>,
+    ret_ty: Option<Idx<Ty>>,
+    body: Idx<Expr>,
     span: Span,
 ) -> Idx<Type> {
     let param_tys: Vec<Idx<Type>> = params
@@ -219,12 +216,7 @@ fn synth_fn(
     })
 }
 
-fn synth_field(
-    ck: &mut Checker<'_>,
-    object: Idx<music_ast::Expr>,
-    field: FieldKey,
-    span: Span,
-) -> Idx<Type> {
+fn synth_field(ck: &mut Checker<'_>, object: Idx<Expr>, field: FieldKey, span: Span) -> Idx<Type> {
     let obj_ty = synth(ck, object);
     let obj_ty = ck.resolve_ty(obj_ty);
     match &ck.store.types[obj_ty] {
@@ -305,7 +297,7 @@ fn synth_array(ck: &mut Checker<'_>, elems: &[ArrayElem], span: Span) -> Idx<Typ
 
 fn synth_match(
     ck: &mut Checker<'_>,
-    scrutinee: Idx<music_ast::Expr>,
+    scrutinee: Idx<Expr>,
     arms: &[MatchArm],
     span: Span,
 ) -> Idx<Type> {
@@ -333,7 +325,7 @@ fn synth_lit(ck: &mut Checker<'_>, lit: &Lit, _span: Span) -> Idx<Type> {
     }
 }
 
-fn synth_name(ck: &mut Checker<'_>, expr_idx: Idx<music_ast::Expr>, span: Span) -> Idx<Type> {
+fn synth_name(ck: &mut Checker<'_>, expr_idx: Idx<Expr>, span: Span) -> Idx<Type> {
     if let Some(&def_id) = ck.ctx.expr_defs.get(&expr_idx) {
         ck.defs
             .get(def_id)
@@ -345,12 +337,7 @@ fn synth_name(ck: &mut Checker<'_>, expr_idx: Idx<music_ast::Expr>, span: Span) 
     }
 }
 
-fn synth_call(
-    ck: &mut Checker<'_>,
-    callee: Idx<music_ast::Expr>,
-    args: &[Arg],
-    span: Span,
-) -> Idx<Type> {
+fn synth_call(ck: &mut Checker<'_>, callee: Idx<Expr>, args: &[Arg], span: Span) -> Idx<Type> {
     let callee_ty = synth(ck, callee);
     let callee_ty = ck.resolve_ty(callee_ty);
 
@@ -417,8 +404,8 @@ fn synth_call(
 fn synth_binop(
     ck: &mut Checker<'_>,
     op: BinOp,
-    left: Idx<music_ast::Expr>,
-    right: Idx<music_ast::Expr>,
+    left: Idx<Expr>,
+    right: Idx<Expr>,
     span: Span,
 ) -> Idx<Type> {
     let left_ty = synth(ck, left);
@@ -475,12 +462,7 @@ fn synth_binop(
     }
 }
 
-fn synth_unaryop(
-    ck: &mut Checker<'_>,
-    op: UnaryOp,
-    operand: Idx<music_ast::Expr>,
-    span: Span,
-) -> Idx<Type> {
+fn synth_unaryop(ck: &mut Checker<'_>, op: UnaryOp, operand: Idx<Expr>, span: Span) -> Idx<Type> {
     let operand_ty = synth(ck, operand);
     match op {
         UnaryOp::Not => {
@@ -492,8 +474,4 @@ fn synth_unaryop(
             operand_ty
         }
     }
-}
-
-const fn expr_span(expr: &music_ast::Expr) -> Span {
-    resolve_expr_span(expr)
 }

@@ -6,11 +6,11 @@
 
 use music_lex::lex as lex_source;
 use music_parse::parse;
-use music_shared::{DiagnosticBag, Interner, SourceDb};
 use music_sema::def::DefTable;
 use music_sema::resolve;
 use music_sema::scope::ScopeTree;
 use music_sema::well_known;
+use music_shared::{DiagnosticBag, Interner, SourceDb};
 
 /// Helper to lex, parse, and resolve a source string.
 fn resolve_src(src: &str) -> (resolve::ResolveOutput, DiagnosticBag) {
@@ -32,7 +32,8 @@ fn resolve_src(src: &str) -> (resolve::ResolveOutput, DiagnosticBag) {
     let mut defs = DefTable::new();
     let mut scopes = ScopeTree::new();
     let module_scope = scopes.push_root();
-    let _well_known = well_known::init_well_known(&mut interner, &mut defs, module_scope, &mut scopes);
+    let _well_known =
+        well_known::init_well_known(&mut interner, &mut defs, module_scope, &mut scopes);
 
     // Resolve
     let mut diags = DiagnosticBag::new();

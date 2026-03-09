@@ -6,21 +6,21 @@
 
 use music_ast::expr::{Arrow, BindKind, Expr, LetFields, Param, ParamMode};
 use music_ast::pat::Pat;
-use music_ast::{AstArenas, Lit, ParsedModule};
-use music_shared::{DiagnosticBag, FileId, Interner, Severity, Span};
+use music_ast::{AstArenas, Lit, ParsedModule, Stmt};
+use music_shared::{DiagnosticBag, FileId, Idx, Interner, Severity, Span, Symbol};
 
-use crate::{analyze_setup, CheckContext, Checker};
+use crate::{CheckContext, Checker, analyze_setup};
 
 /// Helper to construct a Stmt.
-fn stmt(expr_idx: music_shared::Idx<Expr>) -> music_ast::Stmt {
-    music_ast::Stmt {
+fn stmt(expr_idx: Idx<Expr>) -> Stmt {
+    Stmt {
         expr: expr_idx,
         span: Span::DUMMY,
     }
 }
 
 /// Helper to construct a minimal `ParsedModule` with statements.
-fn make_module(arenas: AstArenas, stmts: Vec<music_ast::Stmt>) -> ParsedModule {
+fn make_module(arenas: AstArenas, stmts: Vec<Stmt>) -> ParsedModule {
     ParsedModule {
         arenas,
         stmts,
@@ -40,7 +40,7 @@ fn lit_int(value: i64) -> Expr {
 }
 
 /// Helper to construct a Name expression.
-fn name_expr(sym: music_shared::Symbol) -> Expr {
+fn name_expr(sym: Symbol) -> Expr {
     Expr::Name {
         name: sym,
         span: Span::DUMMY,
@@ -48,7 +48,7 @@ fn name_expr(sym: music_shared::Symbol) -> Expr {
 }
 
 /// Helper to construct a binding pattern.
-fn bind_pat(sym: music_shared::Symbol) -> Pat {
+fn bind_pat(sym: Symbol) -> Pat {
     Pat::Bind {
         kind: BindKind::Immut,
         name: sym,

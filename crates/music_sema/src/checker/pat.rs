@@ -2,7 +2,7 @@
 
 use music_ast::lit::Lit;
 use music_ast::pat::Pat;
-use music_shared::Idx;
+use music_shared::{Idx, Span};
 
 use crate::checker::Checker;
 use crate::types::Type;
@@ -79,7 +79,7 @@ pub(crate) fn check_pat(ck: &mut Checker<'_>, pat_idx: Idx<Pat>, expected: Idx<T
         }
         Pat::Variant { args, .. } => {
             for &arg in &args {
-                let fresh = ck.fresh_var(music_shared::Span::DUMMY);
+                let fresh = ck.fresh_var(Span::DUMMY);
                 check_pat(ck, arg, fresh);
             }
         }

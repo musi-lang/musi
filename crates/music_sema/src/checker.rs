@@ -12,7 +12,7 @@ pub mod ty;
 use std::collections::HashMap;
 use std::mem;
 
-use music_ast::AstArenas;
+use music_ast::{AstArenas, Expr};
 use music_shared::{Arena, DiagnosticBag, FileId, Idx, Interner, Span};
 
 use crate::def::{DefId, DefTable};
@@ -28,7 +28,7 @@ pub struct CheckContext<'a> {
     pub(crate) interner: &'a Interner,
     pub(crate) file_id: FileId,
     pub(crate) well_known: &'a WellKnown,
-    pub(crate) expr_defs: &'a HashMap<Idx<music_ast::Expr>, DefId>,
+    pub(crate) expr_defs: &'a HashMap<Idx<Expr>, DefId>,
 }
 
 /// Mutable type-checking state built up during checking.
@@ -37,7 +37,7 @@ pub struct TypeStore {
     pub(crate) types: Arena<Type>,
     pub(crate) obligations: Vec<Obligation>,
     pub(crate) instances: Vec<InstanceInfo>,
-    pub(crate) expr_types: HashMap<Idx<music_ast::Expr>, Idx<Type>>,
+    pub(crate) expr_types: HashMap<Idx<Expr>, Idx<Type>>,
 }
 
 /// The bidirectional type checker.
@@ -79,12 +79,12 @@ impl<'a> Checker<'a> {
     }
 
     /// Synthesises a type for `expr` (inference mode, direction ↑).
-    pub fn synth(&mut self, expr: Idx<music_ast::Expr>) -> Idx<Type> {
+    pub fn synth(&mut self, expr: Idx<Expr>) -> Idx<Type> {
         self::expr::synth(self, expr)
     }
 
     /// Checks `expr` against `expected` (checking mode, direction ↓).
-    pub fn check(&mut self, expr: Idx<music_ast::Expr>, expected: Idx<Type>) {
+    pub fn check(&mut self, expr: Idx<Expr>, expected: Idx<Type>) {
         self::expr::check(self, expr, expected);
     }
 
@@ -125,7 +125,7 @@ impl<'a> Checker<'a> {
     }
 
     /// Records the inferred type for an expression.
-    pub(crate) fn record_type(&mut self, expr: Idx<music_ast::Expr>, ty: Idx<Type>) {
+    pub(crate) fn record_type(&mut self, expr: Idx<Expr>, ty: Idx<Type>) {
         let _prev = self.store.expr_types.insert(expr, ty);
     }
 
@@ -196,6 +196,6 @@ impl<'a> Checker<'a> {
 pub struct CheckerResult {
     pub types: Arena<Type>,
     pub unify: UnifyTable,
-    pub expr_types: HashMap<Idx<music_ast::Expr>, Idx<Type>>,
+    pub expr_types: HashMap<Idx<Expr>, Idx<Type>>,
     pub instances: Vec<InstanceInfo>,
 }

@@ -5,16 +5,16 @@
 
 use music_ast::expr::{Arrow, BindKind, Expr, LetFields, Param, ParamMode};
 use music_ast::pat::Pat;
-use music_ast::{AstArenas, ParsedModule, Stmt};
-use music_shared::{DiagnosticBag, FileId, Interner, Span};
+use music_ast::{AstArenas, Lit, ParsedModule, Stmt};
+use music_shared::{DiagnosticBag, FileId, Idx, Interner, Span, Symbol};
 
+use crate::def::DefTable;
 use crate::resolve;
 use crate::scope::ScopeTree;
 use crate::well_known;
-use crate::def::DefTable;
 
 /// Helper to construct a Stmt.
-fn stmt(expr_idx: music_shared::Idx<Expr>) -> Stmt {
+fn stmt(expr_idx: Idx<Expr>) -> Stmt {
     Stmt {
         expr: expr_idx,
         span: Span::DUMMY,
@@ -33,7 +33,7 @@ fn make_module(arenas: AstArenas, stmts: Vec<Stmt>) -> ParsedModule {
 /// Helper to construct a Lit Int expression.
 fn lit_int(value: i64) -> Expr {
     Expr::Lit {
-        lit: music_ast::Lit::Int {
+        lit: Lit::Int {
             value,
             span: Span::DUMMY,
         },
@@ -42,7 +42,7 @@ fn lit_int(value: i64) -> Expr {
 }
 
 /// Helper to construct a Name expression.
-fn name_expr(sym: music_shared::Symbol) -> Expr {
+fn name_expr(sym: Symbol) -> Expr {
     Expr::Name {
         name: sym,
         span: Span::DUMMY,
@@ -50,7 +50,7 @@ fn name_expr(sym: music_shared::Symbol) -> Expr {
 }
 
 /// Helper to construct a binding pattern.
-fn bind_pat(sym: music_shared::Symbol) -> Pat {
+fn bind_pat(sym: Symbol) -> Pat {
     Pat::Bind {
         kind: BindKind::Immut,
         name: sym,
@@ -60,7 +60,10 @@ fn bind_pat(sym: music_shared::Symbol) -> Pat {
 }
 
 /// Resolve an AST module and return the output and diagnostics.
-fn resolve_module(interner: &mut Interner, module: &ParsedModule) -> (resolve::ResolveOutput, DiagnosticBag) {
+fn resolve_module(
+    interner: &mut Interner,
+    module: &ParsedModule,
+) -> (resolve::ResolveOutput, DiagnosticBag) {
     let mut defs = DefTable::new();
     let mut scopes = ScopeTree::new();
     let module_scope = scopes.push_root();

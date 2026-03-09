@@ -35,13 +35,13 @@ pub use well_known::WellKnown;
 
 use std::collections::HashMap;
 
-use music_ast::ParsedModule;
+use music_ast::{Expr, ParsedModule};
 use music_shared::{Arena, DiagnosticBag, FileId, Idx, Interner, Span};
 
 /// Maps from AST nodes to their resolved definitions.
 pub struct ResolutionMap {
     /// Maps each identifier expression to the definition it refers to.
-    pub expr_defs: HashMap<Idx<music_ast::Expr>, DefId>,
+    pub expr_defs: HashMap<Idx<Expr>, DefId>,
     /// Maps each binding-site span to its [`DefId`].
     pub pat_defs: HashMap<Span, DefId>,
 }
@@ -53,7 +53,7 @@ pub struct SemaResult {
     /// Name resolution maps.
     pub resolution: ResolutionMap,
     /// The inferred type of each expression node.
-    pub expr_types: HashMap<Idx<music_ast::Expr>, Idx<Type>>,
+    pub expr_types: HashMap<Idx<Expr>, Idx<Type>>,
     /// The type arena.
     pub types: Arena<Type>,
     /// The unification table (retained so callers can freeze types).

@@ -9,7 +9,7 @@ mod tests;
 
 use std::fmt;
 
-use music_shared::{Arena, Idx, Interner, Symbol};
+use music_shared::{Arena, Idx, Interner, Span, Symbol};
 
 use crate::def::{DefId, DefInfo};
 
@@ -115,7 +115,7 @@ pub struct EffectEntry {
 pub struct Obligation {
     pub class: DefId,
     pub args: Vec<Idx<Type>>,
-    pub span: music_shared::Span,
+    pub span: Span,
 }
 
 /// A typeclass instance.
@@ -126,7 +126,7 @@ pub struct InstanceInfo {
     pub params: Vec<TyVarId>,
     pub constraints: Vec<Obligation>,
     pub members: Vec<(Symbol, DefId)>,
-    pub span: music_shared::Span,
+    pub span: Span,
 }
 
 /// Helper for displaying types with access to the type arena and def table.

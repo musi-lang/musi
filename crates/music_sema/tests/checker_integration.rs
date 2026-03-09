@@ -6,8 +6,8 @@
 
 use music_lex::lex as lex_source;
 use music_parse::parse;
+use music_sema::{SemaResult, analyze};
 use music_shared::{DiagnosticBag, Interner, Severity, SourceDb};
-use music_sema::{analyze, SemaResult};
 
 /// Helper to lex, parse, and analyze a source string.
 fn analyze_src(src: &str) -> (SemaResult, DiagnosticBag) {
