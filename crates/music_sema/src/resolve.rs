@@ -199,15 +199,19 @@ impl Resolver<'_> {
             let _prev = self.output.expr_defs.insert(expr_idx, def_id);
             self.defs.get_mut(def_id).use_count += 1;
         } else {
-            let name_str = self.interner.resolve(name);
-            let _d = self.diags.report(
-                &SemaError::UndefinedName {
-                    name: Box::from(name_str),
-                },
-                span,
-                self.file_id,
-            );
+            self.report_undefined(name, span);
         }
+    }
+
+    fn report_undefined(&mut self, name: Symbol, span: Span) {
+        let name_str = self.interner.resolve(name);
+        let _d = self.diags.report(
+            &SemaError::UndefinedName {
+                name: Box::from(name_str),
+            },
+            span,
+            self.file_id,
+        );
     }
 
     fn resolve_rec_fields(&mut self, fields: &[RecField]) {
@@ -400,14 +404,7 @@ impl Resolver<'_> {
         match self.ast.tys[ty_idx].clone() {
             Ty::Named { name, args, span } => {
                 if self.scopes.lookup(self.current_scope, name).is_none() {
-                    let name_str = self.interner.resolve(name);
-                    let _d = self.diags.report(
-                        &SemaError::UndefinedName {
-                            name: Box::from(name_str),
-                        },
-                        span,
-                        self.file_id,
-                    );
+                    self.report_undefined(name, span);
                 }
                 for &arg in &args {
                     self.resolve_ty(arg);
@@ -460,14 +457,7 @@ impl Resolver<'_> {
 
     fn resolve_ty_named_ref(&mut self, named: &TyNamedRef) {
         if self.scopes.lookup(self.current_scope, named.name).is_none() {
-            let name_str = self.interner.resolve(named.name);
-            let _d = self.diags.report(
-                &SemaError::UndefinedName {
-                    name: Box::from(name_str),
-                },
-                named.span,
-                self.file_id,
-            );
+            self.report_undefined(named.name, named.span);
         }
         for &arg in &named.args {
             self.resolve_ty(arg);
