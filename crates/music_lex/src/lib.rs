@@ -4,6 +4,7 @@
 //! free function, which returns a [`LexedSource`] containing both tokens and
 //! attached trivia (whitespace, newlines, comments).
 
+mod error;
 mod lexer;
 pub mod token;
 mod trivia;
