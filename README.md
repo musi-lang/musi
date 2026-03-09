@@ -19,4 +19,4 @@ All contributors are expected to follow [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
 
-MIT x- see the [LICENSE](LICENSE) file for details.
+MIT - see the [LICENSE](LICENSE) file for details.
