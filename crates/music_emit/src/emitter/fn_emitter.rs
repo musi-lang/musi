@@ -28,7 +28,6 @@ pub struct HandlerEntry {
     pub handler_fn_id: u32,
 }
 
-/// Per-function bytecode emitter.
 pub struct FnEmitter {
     /// Emitted bytecode for this function.
     pub code: Vec<u8>,
@@ -49,23 +48,21 @@ pub struct FnEmitter {
 }
 
 impl FnEmitter {
-    /// Creates a new function emitter with the given local/param counts.
     pub fn new(param_count: u16, local_count: u16) -> Self {
         Self {
-            code: Vec::new(),
+            code: vec![],
             label_targets: HashMap::new(),
-            fixups: Vec::new(),
+            fixups: vec![],
             stack_depth: 0,
             max_stack: 0,
             local_count,
             param_count,
-            handlers: Vec::new(),
+            handlers: vec![],
         }
     }
 
     // ── Stack tracking ──────────────────────────────────────────────────
 
-    /// Record a push of `n` values onto the stack.
     pub fn push_n(&mut self, n: i32) {
         self.stack_depth += n;
         if self.stack_depth > 0 {
@@ -76,7 +73,6 @@ impl FnEmitter {
         }
     }
 
-    /// Record a pop of `n` values from the stack.
     pub const fn pop_n(&mut self, n: i32) {
         self.stack_depth -= n;
     }
@@ -233,11 +229,7 @@ impl FnEmitter {
 
     // ── Effects ─────────────────────────────────────────────────────────
 
-    pub fn emit_eff_psh(
-        &mut self,
-        effect_id: u32,
-        handler_fn_id: u32,
-    ) -> Result<(), EmitError> {
+    pub fn emit_eff_psh(&mut self, effect_id: u32, handler_fn_id: u32) -> Result<(), EmitError> {
         let id = u8::try_from(effect_id).map_err(|_| EmitError::OperandOverflow {
             desc: "effect id exceeds 255".into(),
         })?;
