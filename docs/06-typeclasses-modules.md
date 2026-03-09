@@ -4,8 +4,8 @@
 
 ```musi
 class Eq over 'T {
-    let (=)  : 'T * 'T -> Bool;
-    let (/=) : 'T * 'T -> Bool;
+    let (=)(a: 'T, b: 'T) : Bool;
+    let (/=)(a: 'T, b: 'T) : Bool;
 
     law reflexivity  := forall a -> a = a;
     law symmetry     := forall a b -> (a = b) = (b = a);
@@ -34,10 +34,10 @@ given Eq of List over 'T where 'T <: Eq {
 
 ```musi
 class Ord over 'T where 'T <: Eq {
-    let (<) : 'T * 'T -> Bool;
-    let (<=): 'T * 'T -> Bool;
-    let (>) : 'T * 'T -> Bool;
-    let (>=): 'T * 'T -> Bool;
+    let (<)(a: 'T, b: 'T) : Bool;
+    let (<=)(a: 'T, b: 'T) : Bool;
+    let (>)(a: 'T, b: 'T) : Bool;
+    let (>=)(a: 'T, b: 'T) : Bool;
 }
 ```
 
@@ -47,7 +47,7 @@ Via typeclass only. `and`/`or`/`not`/`xor` are **not overloadable**.
 
 ```musi
 class Add over 'T {
-    let (+) : 'T * 'T -> 'T;
+    let (+)(a: 'T, b: 'T) : 'T;
 }
 
 given Add of Vector2 {
@@ -60,7 +60,7 @@ given Add of Vector2 {
 ### Into (coercion)
 
 ```musi
-class Into over 'A 'B { let into : 'A -> 'B }
+class Into over 'A 'B { let into(a: 'A) : 'B }
 
 let f : Float64 := 5.into();
 let s : String  := 42.into();
@@ -72,7 +72,7 @@ No implicit coercion anywhere. Stdlib aliases: `.toInt` `.toFloat64` `.toString`
 
 ```musi
 class Propagate over 'F 'T 'E {
-    let extract : 'F ~> 'T under { Throw of 'E }
+    let extract(f: 'F) : 'T ~> under { Throw of 'E };
 }
 ```
 
@@ -82,7 +82,7 @@ class Propagate over 'F 'T 'E {
 
 ```musi
 class Iterable over 'T {
-    let next : 'T ~> ?'T under { State }
+    let next(iter: 'T) : ?'T ~> under { State };
 }
 
 xs.map((x) -> x * 2);
