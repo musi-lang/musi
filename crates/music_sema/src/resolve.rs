@@ -261,7 +261,16 @@ impl Resolver<'_> {
         let parent = self.current_scope;
         self.current_scope = self.scopes.push_child(parent);
         for &stmt in stmts {
-            self.resolve_expr(stmt);
+            // Handle block-local bindings: resolve value/type, then define in block scope.
+            if let Expr::Binding { fields, .. } = &self.ast.exprs[stmt] {
+                self.resolve_expr(fields.value);
+                if let Some(ty) = fields.ty {
+                    self.resolve_ty(ty);
+                }
+                self.define_pat(fields.pat, binding_def_kind(fields.kind));
+            } else {
+                self.resolve_expr(stmt);
+            }
         }
         if let Some(t) = tail {
             self.resolve_expr(t);
@@ -300,7 +309,6 @@ impl Resolver<'_> {
         if let Some(ty) = fields.ty {
             self.resolve_ty(ty);
         }
-        self.define_pat(fields.pat, binding_def_kind(fields.kind));
     }
 
     fn resolve_expr_fn(&mut self, params: &[Param], ret_ty: Option<Idx<Ty>>, body: Idx<Expr>) {

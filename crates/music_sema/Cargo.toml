@@ -14,5 +14,9 @@ music_ast = { path = "../music_ast" }
 music_shared = { path = "../music_shared" }
 thiserror = { workspace = true }
 
+[dev-dependencies]
+music_lex = { path = "../music_lex" }
+music_parse = { path = "../music_parse" }
+
 [lints]
 workspace = true
