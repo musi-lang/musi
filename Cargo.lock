@@ -44,6 +44,8 @@ name = "music_sema"
 version = "0.1.0-alpha1"
 dependencies = [
  "music_ast",
+ "music_lex",
+ "music_parse",
  "music_shared",
  "thiserror",
 ]
