@@ -118,33 +118,33 @@ impl TokenKind {
             self,
             Self::KwAnd
                 | Self::KwAs
-                | Self::KwOr
-                | Self::KwNot
-                | Self::KwXor
-                | Self::KwLet
-                | Self::KwVar
-                | Self::KwRef
-                | Self::KwInout
-                | Self::KwIf
-                | Self::KwMatch
-                | Self::KwDefer
-                | Self::KwReturn
-                | Self::KwTry
-                | Self::KwSpawn
                 | Self::KwAwait
-                | Self::KwForall
-                | Self::KwExists
-                | Self::KwEffect
-                | Self::KwWhere
-                | Self::KwOf
-                | Self::KwOver
-                | Self::KwUnder
-                | Self::KwIn
                 | Self::KwClass
-                | Self::KwGiven
-                | Self::KwLaw
-                | Self::KwImport
+                | Self::KwDefer
+                | Self::KwEffect
+                | Self::KwExists
                 | Self::KwExport
+                | Self::KwForall
+                | Self::KwGiven
+                | Self::KwIf
+                | Self::KwImport
+                | Self::KwIn
+                | Self::KwInout
+                | Self::KwLaw
+                | Self::KwLet
+                | Self::KwMatch
+                | Self::KwNot
+                | Self::KwOf
+                | Self::KwOr
+                | Self::KwOver
+                | Self::KwRef
+                | Self::KwReturn
+                | Self::KwSpawn
+                | Self::KwTry
+                | Self::KwUnder
+                | Self::KwVar
+                | Self::KwWhere
+                | Self::KwXor
         )
     }
 
@@ -153,38 +153,36 @@ impl TokenKind {
     #[must_use]
     pub const fn fixed_text(self) -> Option<&'static str> {
         match self {
-            // -- keywords ----------------------------------------------------
             Self::KwAnd => Some("and"),
             Self::KwAs => Some("as"),
-            Self::KwOr => Some("or"),
-            Self::KwNot => Some("not"),
-            Self::KwXor => Some("xor"),
-            Self::KwLet => Some("let"),
-            Self::KwVar => Some("var"),
-            Self::KwRef => Some("ref"),
-            Self::KwInout => Some("inout"),
-            Self::KwIf => Some("if"),
-            Self::KwMatch => Some("match"),
+            Self::KwAwait => Some("await"),
+            Self::KwClass => Some("class"),
             Self::KwDefer => Some("defer"),
             Self::KwEffect => Some("effect"),
-            Self::KwReturn => Some("return"),
-            Self::KwTry => Some("try"),
-            Self::KwSpawn => Some("spawn"),
-            Self::KwAwait => Some("await"),
-            Self::KwForall => Some("forall"),
             Self::KwExists => Some("exists"),
-            Self::KwWhere => Some("where"),
-            Self::KwOf => Some("of"),
-            Self::KwOver => Some("over"),
-            Self::KwUnder => Some("under"),
-            Self::KwIn => Some("in"),
-            Self::KwClass => Some("class"),
-            Self::KwGiven => Some("given"),
-            Self::KwLaw => Some("law"),
-            Self::KwImport => Some("import"),
             Self::KwExport => Some("export"),
+            Self::KwForall => Some("forall"),
+            Self::KwGiven => Some("given"),
+            Self::KwIf => Some("if"),
+            Self::KwImport => Some("import"),
+            Self::KwIn => Some("in"),
+            Self::KwInout => Some("inout"),
+            Self::KwLaw => Some("law"),
+            Self::KwLet => Some("let"),
+            Self::KwMatch => Some("match"),
+            Self::KwNot => Some("not"),
+            Self::KwOf => Some("of"),
+            Self::KwOr => Some("or"),
+            Self::KwOver => Some("over"),
+            Self::KwRef => Some("ref"),
+            Self::KwReturn => Some("return"),
+            Self::KwSpawn => Some("spawn"),
+            Self::KwTry => Some("try"),
+            Self::KwUnder => Some("under"),
+            Self::KwVar => Some("var"),
+            Self::KwWhere => Some("where"),
+            Self::KwXor => Some("xor"),
 
-            // -- delimiters --------------------------------------------------
             Self::LParen => Some("("),
             Self::RParen => Some(")"),
             Self::LBrace => Some("{"),
@@ -192,7 +190,6 @@ impl TokenKind {
             Self::LBracket => Some("["),
             Self::RBracket => Some("]"),
 
-            // -- single-char punctuation -------------------------------------
             Self::Plus => Some("+"),
             Self::Minus => Some("-"),
             Self::Star => Some("*"),
@@ -209,7 +206,6 @@ impl TokenKind {
             Self::Question => Some("?"),
             Self::Underscore => Some("_"),
 
-            // -- multi-char punctuation --------------------------------------
             Self::DotDotDot => Some("..."),
             Self::DotDotLt => Some("..<"),
             Self::ColonColon => Some("::"),
@@ -233,7 +229,6 @@ impl TokenKind {
             Self::EqGt => Some("=>"),
             Self::HashLBracket => Some("#["),
 
-            // -- literals ----------------------------------------------------
             Self::IntLit
             | Self::FloatLit
             | Self::StringLit

@@ -6,33 +6,33 @@ fn test_keyword_from_str_returns_some_for_every_keyword() {
     let keywords = [
         ("and", TokenKind::KwAnd),
         ("as", TokenKind::KwAs),
-        ("or", TokenKind::KwOr),
-        ("not", TokenKind::KwNot),
-        ("xor", TokenKind::KwXor),
-        ("let", TokenKind::KwLet),
-        ("var", TokenKind::KwVar),
-        ("ref", TokenKind::KwRef),
-        ("inout", TokenKind::KwInout),
-        ("if", TokenKind::KwIf),
-        ("match", TokenKind::KwMatch),
+        ("await", TokenKind::KwAwait),
+        ("class", TokenKind::KwClass),
         ("defer", TokenKind::KwDefer),
         ("effect", TokenKind::KwEffect),
-        ("return", TokenKind::KwReturn),
-        ("try", TokenKind::KwTry),
-        ("spawn", TokenKind::KwSpawn),
-        ("await", TokenKind::KwAwait),
-        ("forall", TokenKind::KwForall),
         ("exists", TokenKind::KwExists),
-        ("where", TokenKind::KwWhere),
-        ("of", TokenKind::KwOf),
-        ("over", TokenKind::KwOver),
-        ("under", TokenKind::KwUnder),
-        ("in", TokenKind::KwIn),
-        ("class", TokenKind::KwClass),
-        ("given", TokenKind::KwGiven),
-        ("law", TokenKind::KwLaw),
-        ("import", TokenKind::KwImport),
         ("export", TokenKind::KwExport),
+        ("forall", TokenKind::KwForall),
+        ("given", TokenKind::KwGiven),
+        ("if", TokenKind::KwIf),
+        ("import", TokenKind::KwImport),
+        ("in", TokenKind::KwIn),
+        ("inout", TokenKind::KwInout),
+        ("law", TokenKind::KwLaw),
+        ("let", TokenKind::KwLet),
+        ("match", TokenKind::KwMatch),
+        ("not", TokenKind::KwNot),
+        ("of", TokenKind::KwOf),
+        ("or", TokenKind::KwOr),
+        ("over", TokenKind::KwOver),
+        ("ref", TokenKind::KwRef),
+        ("return", TokenKind::KwReturn),
+        ("spawn", TokenKind::KwSpawn),
+        ("try", TokenKind::KwTry),
+        ("under", TokenKind::KwUnder),
+        ("var", TokenKind::KwVar),
+        ("where", TokenKind::KwWhere),
+        ("xor", TokenKind::KwXor),
     ];
     for (text, expected) in keywords {
         assert_eq!(keyword_from_str(text), Some(expected), "keyword: {text}");
@@ -50,12 +50,12 @@ fn test_keyword_from_str_returns_none_for_non_keyword() {
 #[test]
 fn test_is_keyword_true_for_keywords() {
     assert!(TokenKind::KwAnd.is_keyword());
-    assert!(TokenKind::KwLet.is_keyword());
-    assert!(TokenKind::KwMatch.is_keyword());
     assert!(TokenKind::KwClass.is_keyword());
+    assert!(TokenKind::KwExport.is_keyword());
     assert!(TokenKind::KwGiven.is_keyword());
     assert!(TokenKind::KwLaw.is_keyword());
-    assert!(TokenKind::KwExport.is_keyword());
+    assert!(TokenKind::KwLet.is_keyword());
+    assert!(TokenKind::KwMatch.is_keyword());
 }
 
 #[test]

@@ -47,21 +47,21 @@ pub const fn can_start_expr(kind: TokenKind) -> bool {
             | TokenKind::Dot
             | TokenKind::DotLBrace
             | TokenKind::HashLBracket
-            | TokenKind::KwNot
-            | TokenKind::KwLet
-            | TokenKind::KwVar
-            | TokenKind::KwReturn
-            | TokenKind::KwMatch
-            | TokenKind::KwDefer
-            | TokenKind::KwSpawn
             | TokenKind::KwAwait
-            | TokenKind::KwTry
-            | TokenKind::KwImport
-            | TokenKind::KwExport
-            | TokenKind::KwForall
-            | TokenKind::KwExists
             | TokenKind::KwClass
-            | TokenKind::KwGiven
+            | TokenKind::KwDefer
             | TokenKind::KwEffect
+            | TokenKind::KwExport
+            | TokenKind::KwExists
+            | TokenKind::KwForall
+            | TokenKind::KwGiven
+            | TokenKind::KwImport
+            | TokenKind::KwLet
+            | TokenKind::KwMatch
+            | TokenKind::KwNot
+            | TokenKind::KwReturn
+            | TokenKind::KwSpawn
+            | TokenKind::KwTry
+            | TokenKind::KwVar
     )
 }
