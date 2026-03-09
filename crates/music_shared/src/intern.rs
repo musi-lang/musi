@@ -51,8 +51,6 @@ impl Interner {
         self.0.check_interned(s).map(|sym| Symbol(sym.id()))
     }
 
-    /// Resolves a [`Symbol`] back to its string.
-    ///
     /// # Panics
     ///
     /// Panics if `sym` did not originate from this interner.

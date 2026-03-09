@@ -23,13 +23,11 @@ pub struct Arena<T> {
 }
 
 impl<T> Arena<T> {
-    /// Creates an empty arena.
     #[must_use]
     pub const fn new() -> Self {
         Self { data: vec![] }
     }
 
-    /// Creates an empty arena with at least `cap` capacity pre-allocated.
     #[must_use]
     pub fn with_capacity(cap: usize) -> Self {
         Self {
@@ -63,13 +61,11 @@ impl<T> Arena<T> {
         IdxRange::new(start..end)
     }
 
-    /// Returns the number of items stored in the arena.
     #[must_use]
     pub const fn len(&self) -> usize {
         self.data.len()
     }
 
-    /// Returns `true` when no items have been allocated yet.
     #[must_use]
     pub const fn is_empty(&self) -> bool {
         self.data.is_empty()
@@ -167,7 +163,6 @@ pub struct IdxRange<T> {
 }
 
 impl<T> IdxRange<T> {
-    /// Constructs an `IdxRange` from a half-open `u32` range.
     #[must_use]
     pub const fn new(range: Range<u32>) -> Self {
         Self {
@@ -177,8 +172,6 @@ impl<T> IdxRange<T> {
         }
     }
 
-    /// Returns the number of items in the range.
-    ///
     /// # Panics
     ///
     /// Panics on platforms where `usize` is narrower than 32 bits.
@@ -187,7 +180,6 @@ impl<T> IdxRange<T> {
         usize::try_from(self.end - self.start).expect("platform must be >= 32-bit")
     }
 
-    /// Returns `true` when the range covers no items.
     #[must_use]
     pub const fn is_empty(&self) -> bool {
         self.start == self.end
