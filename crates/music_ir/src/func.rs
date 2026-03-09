@@ -18,7 +18,6 @@ pub struct IrFnId(pub u32);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct IrLocal(pub u32);
 
-/// A function in the IR module.
 #[derive(Debug, Clone)]
 pub struct IrFunction {
     /// Stable function identifier.
@@ -43,7 +42,6 @@ pub struct IrFunction {
     pub span: Span,
 }
 
-/// A formal parameter of an IR function.
 #[derive(Debug, Clone)]
 pub struct IrParam {
     /// The local slot this parameter occupies.
@@ -65,7 +63,6 @@ pub enum IrParamMode {
     Ptr,
 }
 
-/// Declaration of a local variable in a function body.
 #[derive(Debug, Clone)]
 pub struct IrLocalDecl {
     /// The local slot.

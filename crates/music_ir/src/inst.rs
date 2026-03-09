@@ -16,7 +16,6 @@ use crate::types::IrType;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct IrLabel(pub u32);
 
-/// A single instruction in the IR.
 #[derive(Debug, Clone)]
 pub enum IrInst {
     // ── Binding ─────────────────────────────────────────────────────────
@@ -89,7 +88,6 @@ pub enum IrInst {
     Nop,
 }
 
-/// An arm in a `Switch` instruction.
 #[derive(Debug, Clone)]
 pub struct IrSwitchArm {
     /// The constant value to match against.
