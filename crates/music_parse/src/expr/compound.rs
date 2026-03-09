@@ -1,0 +1,243 @@
+//! Compound expression parsing: paren groups, tuples, blocks, piecewise, match, fn literals.
+
+use music_ast::expr::{Arrow, Expr, MatchArm, PwArm, PwGuard};
+use music_ast::lit::Lit;
+use music_lex::token::TokenKind;
+use music_shared::Idx;
+
+use crate::parser::Parser;
+
+impl Parser<'_> {
+    pub(super) fn parse_expr_paren(&mut self) -> Expr {
+        let start = self.start_span();
+        let _lp = self.bump();
+
+        // () -> unit
+        if self.eat(TokenKind::RParen) {
+            return self.maybe_expr_lit_fn(vec![], start);
+        }
+
+        // (,) -> empty tuple
+        if self.at(TokenKind::Comma) && self.peek2() == TokenKind::RParen {
+            let _comma = self.bump();
+            let _rp = self.bump();
+            return Expr::Tuple {
+                elems: vec![],
+                span: self.finish_span(start),
+            };
+        }
+
+        // (;) -> empty block
+        if self.at(TokenKind::Semi) && self.peek2() == TokenKind::RParen {
+            let _semi = self.bump();
+            let _rp = self.bump();
+            return Expr::Block {
+                stmts: vec![],
+                tail: None,
+                span: self.finish_span(start),
+            };
+        }
+
+        let first = self.parse_expr();
+
+        match self.peek_kind() {
+            TokenKind::Comma => self.parse_expr_tuple_tail(first, start),
+            TokenKind::Semi => {
+                let _semi = self.bump();
+                let first_idx = self.alloc_expr(first);
+                self.parse_expr_block_tail(vec![first_idx], start)
+            }
+            TokenKind::KwIf => {
+                let first_idx = self.alloc_expr(first);
+                self.parse_expr_piecewise_tail(first_idx, start)
+            }
+            TokenKind::RParen => self.parse_expr_paren_close(first, start),
+            _ => {
+                let _rp = self.expect(TokenKind::RParen);
+                let inner = self.alloc_expr(first);
+                Expr::Paren {
+                    inner,
+                    span: self.finish_span(start),
+                }
+            }
+        }
+    }
+
+    /// Parses `(a, b, ...)` tuple after the first element and opening comma.
+    fn parse_expr_tuple_tail(&mut self, first: Expr, start: u32) -> Expr {
+        let _comma = self.bump();
+        let mut elems = vec![self.alloc_expr(first)];
+        if !self.at(TokenKind::RParen) {
+            loop {
+                elems.push(self.parse_alloc_expr());
+                if !self.eat(TokenKind::Comma) {
+                    break;
+                }
+                if self.at(TokenKind::RParen) {
+                    break;
+                }
+            }
+        }
+        let _rp = self.expect(TokenKind::RParen);
+        Expr::Tuple {
+            elems,
+            span: self.finish_span(start),
+        }
+    }
+
+    /// Handles `)` after a single expression: either fn literal or parenthesised expr.
+    fn parse_expr_paren_close(&mut self, first: Expr, start: u32) -> Expr {
+        let _rp = self.bump();
+
+        if self.at(TokenKind::DashGt) || self.at(TokenKind::TildeGt) || self.at(TokenKind::Colon) {
+            return self.parse_expr_fn_after_paren(&[first], start);
+        }
+
+        let inner = self.alloc_expr(first);
+        Expr::Paren {
+            inner,
+            span: self.finish_span(start),
+        }
+    }
+
+    fn maybe_expr_lit_fn(&mut self, _exprs: Vec<Expr>, start: u32) -> Expr {
+        // () followed by -> or ~> or : means fn literal
+        if self.at(TokenKind::DashGt) || self.at(TokenKind::TildeGt) || self.at(TokenKind::Colon) {
+            return self.parse_expr_fn_after_paren(&[], start);
+        }
+        Expr::Lit {
+            lit: Lit::Unit {
+                span: self.finish_span(start),
+            },
+            span: self.finish_span(start),
+        }
+    }
+
+    fn parse_expr_fn_after_paren(&mut self, paren_exprs: &[Expr], start: u32) -> Expr {
+        let params = self.reinterpret_as_params(paren_exprs);
+        let ret_ty = self.parse_opt_ty_annot();
+        let arrow = if self.eat(TokenKind::DashGt) {
+            Arrow::Pure
+        } else if self.eat(TokenKind::TildeGt) {
+            Arrow::Effectful
+        } else {
+            let _span = self.expect(TokenKind::DashGt);
+            Arrow::Pure
+        };
+        let body = self.parse_alloc_expr();
+        Expr::Fn {
+            params,
+            arrow,
+            ret_ty,
+            body,
+            span: self.finish_span(start),
+        }
+    }
+
+    fn parse_expr_block_tail(&mut self, mut stmts: Vec<Idx<Expr>>, start: u32) -> Expr {
+        while !self.at(TokenKind::RParen) && !self.at(TokenKind::Eof) {
+            let e = self.parse_expr();
+            if self.eat(TokenKind::Semi) {
+                stmts.push(self.alloc_expr(e));
+            } else {
+                let tail = self.alloc_expr(e);
+                let _rp = self.expect(TokenKind::RParen);
+                return Expr::Block {
+                    stmts,
+                    tail: Some(tail),
+                    span: self.finish_span(start),
+                };
+            }
+        }
+        let _rp = self.expect(TokenKind::RParen);
+        Expr::Block {
+            stmts,
+            tail: None,
+            span: self.finish_span(start),
+        }
+    }
+
+    fn parse_expr_piecewise_tail(&mut self, first_result: Idx<Expr>, start: u32) -> Expr {
+        // first_result if guard | ...
+        let _if = self.expect(TokenKind::KwIf);
+        let first_guard = self.parse_pw_guard();
+        let first_span = self.finish_span(start);
+        let mut arms = vec![PwArm {
+            result: first_result,
+            guard: first_guard,
+            span: first_span,
+        }];
+
+        while self.eat(TokenKind::Pipe) {
+            let arm_start = self.start_span();
+            let result = self.parse_alloc_expr();
+            let _if = self.expect(TokenKind::KwIf);
+            let guard = self.parse_pw_guard();
+            arms.push(PwArm {
+                result,
+                guard,
+                span: self.finish_span(arm_start),
+            });
+        }
+
+        let _rp = self.expect(TokenKind::RParen);
+        Expr::Piecewise {
+            arms,
+            span: self.finish_span(start),
+        }
+    }
+
+    fn parse_pw_guard(&mut self) -> PwGuard {
+        if self.at(TokenKind::Underscore) {
+            let start = self.start_span();
+            let _us = self.bump();
+            PwGuard::Any {
+                span: self.finish_span(start),
+            }
+        } else {
+            let expr = self.parse_alloc_expr();
+            PwGuard::When {
+                expr,
+                span: self.peek().span,
+            }
+        }
+    }
+
+    pub(super) fn parse_expr_match(&mut self) -> Expr {
+        let start = self.start_span();
+        let _match = self.bump();
+        // scrutinee is parsed without postfix to avoid `match x (...)` being
+        // interpreted as `match (x(...))`. `(` after scrutinee starts match arms
+        let scrut_expr = self.parse_expr_nud_chain();
+        let scrutinee = self.alloc_expr(scrut_expr);
+        let _lp = self.expect(TokenKind::LParen);
+        let arms = self.pipe_sep(TokenKind::RParen, Self::parse_match_arm);
+        let _rp = self.expect(TokenKind::RParen);
+        Expr::Match {
+            scrutinee,
+            arms,
+            span: self.finish_span(start),
+        }
+    }
+
+    fn parse_match_arm(&mut self) -> MatchArm {
+        let arm_start = self.start_span();
+        let attrs = self.parse_attrs();
+        let pat = self.parse_alloc_pat();
+        let guard = if self.eat(TokenKind::KwIf) {
+            Some(self.parse_alloc_expr())
+        } else {
+            None
+        };
+        let _arrow = self.expect(TokenKind::EqGt);
+        let result_expr = self.parse_arm_body();
+        let result = self.alloc_expr(result_expr);
+        MatchArm {
+            attrs,
+            pat,
+            guard,
+            result,
+            span: self.finish_span(arm_start),
+        }
+    }
+}
