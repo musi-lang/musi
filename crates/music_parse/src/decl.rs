@@ -5,7 +5,7 @@ mod tests;
 
 use music_ast::attr::{Attr, AttrValue};
 use music_ast::decl::{ClassMember, EffectOp, ExportItem, FnSig};
-use music_ast::expr::{BindKind, Expr, LetFields, Param, ParamMode, TyNamed};
+use music_ast::expr::{BindKind, Expr, LetFields, Param, ParamMode};
 use music_ast::ty::Quantifier;
 use music_lex::token::TokenKind;
 use music_shared::{Span, Symbol};
@@ -14,8 +14,6 @@ use crate::error::ParseError;
 use crate::parser::Parser;
 
 impl Parser<'_> {
-    // -- attributes ----------------------------------------------------------
-
     /// Parses `{ '#[' attr_body ']' }`.
     pub(crate) fn parse_attrs(&mut self) -> Vec<Attr> {
         let mut attrs = vec![];
@@ -56,23 +54,21 @@ impl Parser<'_> {
         }
     }
 
-    // -- LET / VAR bindings --------------------------------------------------
-
     /// Parses `'let' ['ref'] pat [ty_annot] ':=' expr ['in' '(' expr ')']`.
-    pub(crate) fn parse_let(&mut self) -> Expr {
+    pub(crate) fn parse_expr_let(&mut self) -> Expr {
         let start = self.start_span();
         let _let = self.bump();
-        self.parse_binding_body(BindKind::Immut, start)
+        self.parse_expr_binding_immut_body(BindKind::Immut, start)
     }
 
     /// Parses `'var' ['ref'] pat [ty_annot] ':=' expr`.
-    pub(crate) fn parse_var(&mut self) -> Expr {
+    pub(crate) fn parse_expr_binding_mut(&mut self) -> Expr {
         let start = self.start_span();
         let _var = self.bump();
-        self.parse_binding_body(BindKind::Mut, start)
+        self.parse_expr_binding_immut_body(BindKind::Mut, start)
     }
 
-    fn parse_binding_body(&mut self, kind: BindKind, start: u32) -> Expr {
+    fn parse_expr_binding_immut_body(&mut self, kind: BindKind, start: u32) -> Expr {
         let heap = self.eat(TokenKind::KwRef);
         let pat = self.parse_alloc_pat();
         let ty = self.parse_opt_ty_annot();
@@ -113,23 +109,21 @@ impl Parser<'_> {
         }
     }
 
-    // -- annotated declarations (after `#[...]`) --------------------------------
-
     /// Parses `attrs ast_decl`.
-    pub(crate) fn parse_annotated(&mut self) -> Expr {
+    pub(crate) fn parse_expr_annotated_chain(&mut self) -> Expr {
         let start = self.start_span();
         let attrs = self.parse_attrs();
         match self.peek_kind() {
-            TokenKind::KwExport => self.parse_annotated_export(start, attrs),
-            TokenKind::KwLet | TokenKind::KwVar => self.parse_annotated_binding(start, attrs),
-            TokenKind::KwClass => self.parse_annotated_class(start, attrs),
-            TokenKind::KwGiven => self.parse_annotated_given(start, attrs),
-            TokenKind::KwEffect => self.parse_annotated_effect(start, attrs),
+            TokenKind::KwExport => self.parse_expr_annotated_export(start, attrs),
+            TokenKind::KwLet | TokenKind::KwVar => self.parse_expr_annotated_binding(start, attrs),
+            TokenKind::KwClass => self.parse_expr_annotated_class(start, attrs),
+            TokenKind::KwGiven => self.parse_expr_annotated_given(start, attrs),
+            TokenKind::KwEffect => self.parse_expr_annotated_effect(start, attrs),
             _ => self.error_expr(&ParseError::ExpectedDeclAfterAttrs),
         }
     }
 
-    fn parse_annotated_export(&mut self, start: u32, attrs: Vec<Attr>) -> Expr {
+    fn parse_expr_annotated_export(&mut self, start: u32, attrs: Vec<Attr>) -> Expr {
         let exported = true;
         let _export = self.bump();
 
@@ -140,7 +134,7 @@ impl Parser<'_> {
 
         match self.peek_kind() {
             TokenKind::KwLet => {
-                let inner = self.parse_let();
+                let inner = self.parse_expr_let();
                 if let Expr::Let { fields, .. } = inner {
                     return Expr::Binding {
                         exported,
@@ -151,7 +145,7 @@ impl Parser<'_> {
                 inner
             }
             TokenKind::KwVar => {
-                let inner = self.parse_var();
+                let inner = self.parse_expr_binding_mut();
                 if let Expr::Let { fields, .. } = inner {
                     return Expr::Binding {
                         exported,
@@ -161,16 +155,16 @@ impl Parser<'_> {
                 }
                 inner
             }
-            TokenKind::KwEffect => self.parse_effect(),
+            TokenKind::KwEffect => self.parse_expr_effect(),
             _ => self.error_expr(&ParseError::ExpectedAfterExport),
         }
     }
 
-    fn parse_annotated_binding(&mut self, start: u32, attrs: Vec<Attr>) -> Expr {
+    fn parse_expr_annotated_binding(&mut self, start: u32, attrs: Vec<Attr>) -> Expr {
         let inner = if self.at(TokenKind::KwLet) {
-            self.parse_let()
+            self.parse_expr_let()
         } else {
-            self.parse_var()
+            self.parse_expr_binding_mut()
         };
         if let Expr::Let { fields, .. } = inner {
             let binding = Expr::Binding {
@@ -189,8 +183,8 @@ impl Parser<'_> {
         }
     }
 
-    fn parse_annotated_class(&mut self, start: u32, attrs: Vec<Attr>) -> Expr {
-        let inner = self.parse_class();
+    fn parse_expr_annotated_class(&mut self, start: u32, attrs: Vec<Attr>) -> Expr {
+        let inner = self.parse_expr_class();
         let inner_idx = self.alloc_expr(inner);
         Expr::Annotated {
             attrs,
@@ -199,8 +193,8 @@ impl Parser<'_> {
         }
     }
 
-    fn parse_annotated_given(&mut self, start: u32, attrs: Vec<Attr>) -> Expr {
-        let inner = self.parse_given();
+    fn parse_expr_annotated_given(&mut self, start: u32, attrs: Vec<Attr>) -> Expr {
+        let inner = self.parse_expr_given();
         let inner_idx = self.alloc_expr(inner);
         Expr::Annotated {
             attrs,
@@ -209,8 +203,8 @@ impl Parser<'_> {
         }
     }
 
-    fn parse_annotated_effect(&mut self, start: u32, attrs: Vec<Attr>) -> Expr {
-        let inner = self.parse_effect();
+    fn parse_expr_annotated_effect(&mut self, start: u32, attrs: Vec<Attr>) -> Expr {
+        let inner = self.parse_expr_effect();
         let inner_idx = self.alloc_expr(inner);
         Expr::Annotated {
             attrs,
@@ -218,8 +212,6 @@ impl Parser<'_> {
             span: self.finish_span(start),
         }
     }
-
-    // -- export list -----------------------------------------------------------
 
     fn parse_export_list(&mut self, start: u32, _attrs: Vec<Attr>) -> Expr {
         let _lb = self.bump();
@@ -255,9 +247,7 @@ impl Parser<'_> {
         }
     }
 
-    // -- export expression (standalone, no attrs) ------------------------------
-
-    pub(crate) fn parse_export_expr(&mut self) -> Expr {
+    pub(crate) fn parse_expr_export(&mut self) -> Expr {
         let start = self.start_span();
         let _export = self.bump();
 
@@ -268,7 +258,7 @@ impl Parser<'_> {
 
         match self.peek_kind() {
             TokenKind::KwLet => {
-                let inner = self.parse_let();
+                let inner = self.parse_expr_let();
                 if let Expr::Let { fields, .. } = inner {
                     return Expr::Binding {
                         exported: true,
@@ -279,7 +269,7 @@ impl Parser<'_> {
                 inner
             }
             TokenKind::KwVar => {
-                let inner = self.parse_var();
+                let inner = self.parse_expr_binding_mut();
                 if let Expr::Let { fields, .. } = inner {
                     return Expr::Binding {
                         exported: true,
@@ -289,14 +279,12 @@ impl Parser<'_> {
                 }
                 inner
             }
-            TokenKind::KwEffect => self.parse_effect(),
+            TokenKind::KwEffect => self.parse_expr_effect(),
             _ => self.error_expr(&ParseError::ExpectedAfterExport),
         }
     }
 
-    // -- Class ----------------------------------------------------------------
-
-    pub(crate) fn parse_class(&mut self) -> Expr {
+    pub(crate) fn parse_expr_class(&mut self) -> Expr {
         let start = self.start_span();
         let _class = self.expect(TokenKind::KwClass);
         let name = self.expect_symbol();
@@ -322,12 +310,10 @@ impl Parser<'_> {
         }
     }
 
-    // -- Given ----------------------------------------------------------------
-
-    pub(crate) fn parse_given(&mut self) -> Expr {
+    pub(crate) fn parse_expr_given(&mut self) -> Expr {
         let start = self.start_span();
         let _given = self.expect(TokenKind::KwGiven);
-        let target = self.parse_ty_named();
+        let target = self.parse_ty_named_ref();
         let constraints = self.parse_opt_where_clause();
         let _lb = self.expect(TokenKind::LBrace);
         let members = self.parse_class_body();
@@ -340,10 +326,8 @@ impl Parser<'_> {
         }
     }
 
-    // -- Effect ---------------------------------------------------------------
-
     /// Parses `'effect' ident ['of' ty_param_list] '{' { effect_op ';' } '}'`.
-    pub(crate) fn parse_effect(&mut self) -> Expr {
+    pub(crate) fn parse_expr_effect(&mut self) -> Expr {
         let start = self.start_span();
         let _effect = self.expect(TokenKind::KwEffect);
         let name = self.expect_symbol();
@@ -353,7 +337,7 @@ impl Parser<'_> {
             vec![]
         };
         let _lb = self.expect(TokenKind::LBrace);
-        let ops = self.parse_effect_body();
+        let ops = self.parse_effect_op();
         let _rb = self.expect(TokenKind::RBrace);
         Expr::Effect {
             name,
@@ -363,7 +347,7 @@ impl Parser<'_> {
         }
     }
 
-    fn parse_effect_body(&mut self) -> Vec<EffectOp> {
+    fn parse_effect_op(&mut self) -> Vec<EffectOp> {
         let mut ops = vec![];
         while !self.at(TokenKind::RBrace) && !self.at(TokenKind::Eof) {
             let op_start = self.start_span();
@@ -378,25 +362,6 @@ impl Parser<'_> {
             let _semi = self.expect(TokenKind::Semi);
         }
         ops
-    }
-
-    fn parse_ty_named(&mut self) -> TyNamed {
-        let start = self.start_span();
-        let name = self.expect_symbol();
-        let args = if self.eat(TokenKind::KwOf) {
-            let mut list = vec![self.parse_alloc_ty()];
-            while self.eat(TokenKind::Comma) {
-                list.push(self.parse_alloc_ty());
-            }
-            list
-        } else {
-            vec![]
-        };
-        TyNamed {
-            name,
-            args,
-            span: self.finish_span(start),
-        }
     }
 
     fn parse_class_body(&mut self) -> Vec<ClassMember> {
@@ -448,11 +413,11 @@ impl Parser<'_> {
         let _lp = self.expect(TokenKind::LParen);
         let params = self.comma_sep(TokenKind::RParen, Self::parse_param);
         let _rp = self.expect(TokenKind::RParen);
-        let ty = self.parse_opt_ty_annot();
+        let ret = self.parse_opt_ty_annot();
         FnSig {
             name,
             params,
-            ty,
+            ret,
             span: self.finish_span(start),
         }
     }
@@ -462,7 +427,7 @@ impl Parser<'_> {
     fn parse_op_or_ident(&mut self) -> Symbol {
         if self.at(TokenKind::LParen) {
             let _lp = self.bump();
-            // Operator token: try symbol first, fall back to fixed_text sentinel
+            // try symbol first, fall back to fixed_text sentinel
             let tok = self.bump();
             let sym = tok.symbol.unwrap_or(Symbol(u32::MAX));
             let _rp = self.expect(TokenKind::RParen);
@@ -471,8 +436,6 @@ impl Parser<'_> {
             self.expect_symbol()
         }
     }
-
-    // -- Parameters -----------------------------------------------------------
 
     pub(crate) fn parse_param(&mut self) -> Param {
         let start = self.start_span();
@@ -501,9 +464,7 @@ impl Parser<'_> {
         }
     }
 
-    // -- Quantified expressions -----------------------------------------------
-
-    pub(crate) fn parse_quantified_expr(&mut self, kind: Quantifier) -> Expr {
+    pub(crate) fn parse_expr_quantified(&mut self, kind: Quantifier) -> Expr {
         let start = self.start_span();
         let _kw = self.bump();
         let params = self.parse_ty_param_list();
@@ -519,17 +480,15 @@ impl Parser<'_> {
         }
     }
 
-    // -- Function literal reinterpretation ------------------------------------
-
     /// Converts parsed expressions into function parameters.
     /// Each expression must be a Name, optionally with a type annotation following.
     pub(crate) fn reinterpret_as_params(&mut self, exprs: &[Expr]) -> Vec<Param> {
         let mut params = vec![];
         for expr in exprs {
-            if let Expr::Name { ident, span, .. } = expr {
+            if let Expr::Name { name, span, .. } = expr {
                 params.push(Param {
                     mode: ParamMode::Plain,
-                    name: *ident,
+                    name: *name,
                     ty: None,
                     default: None,
                     span: *span,
