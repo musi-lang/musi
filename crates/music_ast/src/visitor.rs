@@ -9,7 +9,7 @@ use music_shared::Idx;
 
 use crate::attr::{Attr, AttrValue};
 use crate::decl::{ClassMember, EffectOp};
-use crate::expr::{Arg, ArrayItem, Expr, LetFields, Param, PwGuard, RecField};
+use crate::expr::{Arg, ArrayElem, Expr, LetFields, Param, PwGuard, RecField};
 use crate::lit::{FStrPart, Lit};
 use crate::pat::Pat;
 use crate::ty::{Constraint, EffectItem, Ty};
@@ -133,10 +133,10 @@ pub fn walk_expr<V: AstVisitor + ?Sized>(
 
         // -- constructors ----------------------------------------------------
         Expr::Record { fields, .. } => walk_rec_fields(v, fields, ctx),
-        Expr::Array { items, .. } => {
-            for item in items {
-                match *item {
-                    ArrayItem::Elem { expr, .. } | ArrayItem::Spread { expr, .. } => {
+        Expr::Array { elems, .. } => {
+            for elem in elems {
+                match *elem {
+                    ArrayElem::Elem { expr, .. } | ArrayElem::Spread { expr, .. } => {
                         v.visit_expr(expr, ctx)?;
                     }
                 }
@@ -337,8 +337,6 @@ pub fn walk_stmt<V: AstVisitor + ?Sized>(
     v.visit_expr(stmt.expr, ctx)
 }
 
-// -- private helpers ---------------------------------------------------------
-
 fn walk_let_fields<V: AstVisitor + ?Sized>(
     v: &mut V,
     fields: &LetFields,
@@ -409,7 +407,7 @@ fn walk_class_members<V: AstVisitor + ?Sized>(
         match member {
             ClassMember::Fn { sig, default, .. } => {
                 walk_params(v, &sig.params, ctx)?;
-                if let Some(ty) = sig.ty {
+                if let Some(ty) = sig.ret {
                     v.visit_ty(ty, ctx)?;
                 }
                 if let Some(def) = *default {
