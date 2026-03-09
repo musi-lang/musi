@@ -50,11 +50,11 @@ impl AstVisitor for CountingVisitor {
 fn test_walk_expr_visits_binop_children_in_order() {
     let mut arenas = AstArenas::new();
     let left = arenas.exprs.alloc(Expr::Name {
-        ident: Symbol(0),
+        name: Symbol(0),
         span: Span::new(0, 1),
     });
     let right = arenas.exprs.alloc(Expr::Name {
-        ident: Symbol(1),
+        name: Symbol(1),
         span: Span::new(4, 1),
     });
     let root = arenas.exprs.alloc(Expr::BinOp {
@@ -92,11 +92,11 @@ impl AstVisitor for BreakAfter {
 fn test_visitor_short_circuits_on_break() {
     let mut arenas = AstArenas::new();
     let left = arenas.exprs.alloc(Expr::Name {
-        ident: Symbol(0),
+        name: Symbol(0),
         span: Span::new(0, 1),
     });
     let right = arenas.exprs.alloc(Expr::Name {
-        ident: Symbol(1),
+        name: Symbol(1),
         span: Span::new(4, 1),
     });
     let root = arenas.exprs.alloc(Expr::BinOp {
@@ -125,7 +125,7 @@ fn test_walk_expr_crosses_into_ty() {
         span: Span::new(6, 3),
     });
     let value = arenas.exprs.alloc(Expr::Name {
-        ident: Symbol(1),
+        name: Symbol(1),
         span: Span::new(12, 1),
     });
     let root = arenas.exprs.alloc(Expr::Let {
@@ -160,7 +160,7 @@ fn test_walk_ty_crosses_into_expr() {
         span: Span::new(0, 3),
     });
     let pred = arenas.exprs.alloc(Expr::Name {
-        ident: Symbol(1),
+        name: Symbol(1),
         span: Span::new(6, 4),
     });
     let refine_ty = arenas.tys.alloc(Ty::Refine {
@@ -202,7 +202,7 @@ fn test_walk_pat_visits_or_branches() {
 fn test_walk_expr_visits_unary_op_defer_operand() {
     let mut arenas = AstArenas::new();
     let inner = arenas.exprs.alloc(Expr::Name {
-        ident: Symbol(0),
+        name: Symbol(0),
         span: Span::new(6, 3),
     });
     let root = arenas.exprs.alloc(Expr::UnaryOp {
