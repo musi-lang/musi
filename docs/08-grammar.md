@@ -168,10 +168,11 @@ ast_decl =
   | ast_given_decl
   | ast_effect_decl ;
 
-ast_class_decl  = "class" , ident , [ ty_param_list ] ,
-                  [ "where" , ty_named_list ] ,
+ast_class_decl  = "class" , ident , [ "over" , ty_param_list ] ,
+                  [ where_clause ] ,
                   "{" , { class_member } , "}" ;
-ast_given_decl  = "given" , ast_ty_named , [ where_clause ] ,
+ast_given_decl  = "given" , ast_ty_named , [ "over" , ty_param_list ] ,
+                  [ where_clause ] ,
                   "{" , { class_member } , "}" ;
 ast_effect_decl = "effect" , ident , [ "of" , ty_param_list ] ,
                   "{" , { effect_op , ";" } , "}" ;
