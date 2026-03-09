@@ -256,31 +256,32 @@ impl Parser<'_> {
             return self.parse_export_list(start, vec![]);
         }
 
+        self.parse_expr_export_rest(start)
+    }
+
+    fn parse_expr_export_rest(&mut self, start: u32) -> Expr {
         match self.peek_kind() {
-            TokenKind::KwLet => {
-                let inner = self.parse_expr_let();
-                if let Expr::Let { fields, .. } = inner {
-                    return Expr::Binding {
-                        exported: true,
-                        fields,
-                        span: self.finish_span(start),
-                    };
-                }
-                inner
-            }
-            TokenKind::KwVar => {
-                let inner = self.parse_expr_binding_mut();
-                if let Expr::Let { fields, .. } = inner {
-                    return Expr::Binding {
-                        exported: true,
-                        fields,
-                        span: self.finish_span(start),
-                    };
-                }
-                inner
-            }
+            TokenKind::KwLet => self.parse_export_binding(start, true),
+            TokenKind::KwVar => self.parse_export_binding(start, false),
             TokenKind::KwEffect => self.parse_expr_effect(),
             _ => self.error_expr(&ParseError::ExpectedAfterExport),
+        }
+    }
+
+    fn parse_export_binding(&mut self, start: u32, immut: bool) -> Expr {
+        let inner = if immut {
+            self.parse_expr_let()
+        } else {
+            self.parse_expr_binding_mut()
+        };
+        if let Expr::Let { fields, .. } = inner {
+            Expr::Binding {
+                exported: true,
+                fields,
+                span: self.finish_span(start),
+            }
+        } else {
+            inner
         }
     }
 
@@ -288,7 +289,7 @@ impl Parser<'_> {
         let start = self.start_span();
         let _class = self.expect(TokenKind::KwClass);
         let name = self.expect_symbol();
-        let params = if self.at(TokenKind::TyIdent) {
+        let params = if self.eat(TokenKind::KwOver) {
             self.parse_ty_param_list()
         } else {
             vec![]
@@ -314,12 +315,18 @@ impl Parser<'_> {
         let start = self.start_span();
         let _given = self.expect(TokenKind::KwGiven);
         let target = self.parse_ty_named_ref();
+        let params = if self.eat(TokenKind::KwOver) {
+            self.parse_ty_param_list()
+        } else {
+            vec![]
+        };
         let constraints = self.parse_opt_where_clause();
         let _lb = self.expect(TokenKind::LBrace);
         let members = self.parse_class_body();
         let _rb = self.expect(TokenKind::RBrace);
         Expr::Given {
             target,
+            params,
             constraints,
             members,
             span: self.finish_span(start),
@@ -483,34 +490,37 @@ impl Parser<'_> {
     /// Converts parsed expressions into function parameters.
     /// Each expression must be a Name, optionally with a type annotation following.
     pub(crate) fn reinterpret_as_params(&mut self, exprs: &[Expr]) -> Vec<Param> {
-        let mut params = vec![];
-        for expr in exprs {
-            if let Expr::Name { name, span, .. } = expr {
-                params.push(Param {
-                    mode: ParamMode::Plain,
-                    name: *name,
-                    ty: None,
-                    default: None,
-                    span: *span,
-                });
+        exprs
+            .iter()
+            .map(|expr| self.reinterpret_single_param(expr))
+            .collect()
+    }
+
+    fn reinterpret_single_param(&mut self, expr: &Expr) -> Param {
+        if let Expr::Name { name, span, .. } = expr {
+            Param {
+                mode: ParamMode::Plain,
+                name: *name,
+                ty: None,
+                default: None,
+                span: *span,
+            }
+        } else {
+            let span = if let Expr::Error { span } = expr {
+                *span
             } else {
-                let span = if let Expr::Error { span } = expr {
-                    *span
-                } else {
-                    Span::DUMMY
-                };
-                let _diag = self
-                    .diags
-                    .report(&ParseError::ExpectedParamName, span, self.file_id);
-                params.push(Param {
-                    mode: ParamMode::Plain,
-                    name: Symbol(u32::MAX),
-                    ty: None,
-                    default: None,
-                    span,
-                });
+                Span::DUMMY
+            };
+            let _diag = self
+                .diags
+                .report(&ParseError::ExpectedParamName, span, self.file_id);
+            Param {
+                mode: ParamMode::Plain,
+                name: Symbol(u32::MAX),
+                ty: None,
+                default: None,
+                span,
             }
         }
-        params
     }
 }
