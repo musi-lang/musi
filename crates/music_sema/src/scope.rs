@@ -27,7 +27,6 @@ pub struct ScopeTree {
 }
 
 impl ScopeTree {
-    /// Creates an empty scope tree.
     #[must_use]
     pub const fn new() -> Self {
         Self { scopes: vec![] }
@@ -39,7 +38,6 @@ impl ScopeTree {
         self.push_scope(None)
     }
 
-    /// Creates and returns a child scope of `parent`.
     #[must_use]
     pub fn push_child(&mut self, parent: ScopeId) -> ScopeId {
         self.push_scope(Some(parent))

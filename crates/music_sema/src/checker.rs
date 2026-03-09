@@ -40,7 +40,6 @@ pub struct TypeStore {
     pub(crate) expr_types: HashMap<Idx<Expr>, Idx<Type>>,
 }
 
-/// The bidirectional type checker.
 pub struct Checker<'a> {
     pub(crate) ctx: CheckContext<'a>,
     pub(crate) store: TypeStore,
@@ -52,7 +51,6 @@ pub struct Checker<'a> {
 }
 
 impl<'a> Checker<'a> {
-    /// Creates a new type checker.
     #[must_use]
     pub fn new(
         ctx: CheckContext<'a>,
@@ -88,12 +86,10 @@ impl<'a> Checker<'a> {
         self::expr::check(self, expr, expected);
     }
 
-    /// Creates a fresh unification variable.
     pub(crate) fn fresh_var(&mut self, span: Span) -> Idx<Type> {
         self.store.unify.fresh(span, &mut self.store.types)
     }
 
-    /// Allocates a type in the arena.
     pub(crate) fn alloc_ty(&mut self, ty: Type) -> Idx<Type> {
         self.store.types.alloc(ty)
     }
@@ -124,7 +120,6 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// Records the inferred type for an expression.
     pub(crate) fn record_type(&mut self, expr: Idx<Expr>, ty: Idx<Type>) {
         let _prev = self.store.expr_types.insert(expr, ty);
     }
@@ -139,7 +134,6 @@ impl<'a> Checker<'a> {
         self.store.unify.resolve(ty, &self.store.types)
     }
 
-    /// Resolves pending typeclass obligations.
     pub fn resolve_obligations(&mut self) {
         let obligations = mem::take(&mut self.store.obligations);
         for obligation in &obligations {
@@ -180,7 +174,6 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// Consumes the checker and returns the collected results.
     #[must_use]
     pub fn finish(self) -> CheckerResult {
         CheckerResult {
@@ -192,7 +185,6 @@ impl<'a> Checker<'a> {
     }
 }
 
-/// Result of the type checking phase.
 pub struct CheckerResult {
     pub types: Arena<Type>,
     pub unify: UnifyTable,

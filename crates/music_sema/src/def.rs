@@ -73,14 +73,11 @@ pub struct DefTable {
 }
 
 impl DefTable {
-    /// Creates an empty definition table.
     #[must_use]
     pub const fn new() -> Self {
         Self { defs: vec![] }
     }
 
-    /// Allocates a new definition and returns its [`DefId`].
-    ///
     /// # Panics
     ///
     /// Panics if the number of definitions exceeds `u32::MAX`.
@@ -99,8 +96,6 @@ impl DefTable {
         id
     }
 
-    /// Returns the [`DefInfo`] for `id`.
-    ///
     /// # Panics
     ///
     /// Panics if `id` was not allocated by this table.
@@ -110,8 +105,6 @@ impl DefTable {
         &self.defs[idx]
     }
 
-    /// Returns a mutable reference to the [`DefInfo`] for `id`.
-    ///
     /// # Panics
     ///
     /// Panics if `id` was not allocated by this table.
@@ -120,25 +113,21 @@ impl DefTable {
         &mut self.defs[idx]
     }
 
-    /// Returns the number of definitions.
     #[must_use]
     pub const fn len(&self) -> usize {
         self.defs.len()
     }
 
-    /// Returns `true` if no definitions have been allocated.
     #[must_use]
     pub const fn is_empty(&self) -> bool {
         self.defs.is_empty()
     }
 
-    /// Consumes the table and returns the underlying `Vec<DefInfo>`.
     #[must_use]
     pub fn into_vec(self) -> Vec<DefInfo> {
         self.defs
     }
 
-    /// Returns an iterator over all definitions.
     pub fn iter(&self) -> impl Iterator<Item = &DefInfo> {
         self.defs.iter()
     }
