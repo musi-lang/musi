@@ -38,9 +38,6 @@ impl Opcode {
     pub const I_REM: Self = Self(0x18);
     pub const I_REM_UN: Self = Self(0x19);
     pub const I_NEG: Self = Self(0x1A);
-    pub const I_ABS: Self = Self(0x1B);
-    pub const I_INC: Self = Self(0x1C);
-    pub const I_DEC: Self = Self(0x1D);
 
     // §2  Float Arithmetic (IEEE 754)
     pub const F_ADD: Self = Self(0x20);
@@ -49,11 +46,6 @@ impl Opcode {
     pub const F_DIV: Self = Self(0x23);
     pub const F_REM: Self = Self(0x24);
     pub const F_NEG: Self = Self(0x25);
-    pub const F_ABS: Self = Self(0x26);
-    pub const F_SQR: Self = Self(0x27);
-    pub const F_FLR: Self = Self(0x28);
-    pub const F_CIL: Self = Self(0x29);
-    pub const F_RND: Self = Self(0x2A);
 
     // §3  Bitwise / Logical
     pub const B_AND: Self = Self(0x30);
@@ -63,31 +55,26 @@ impl Opcode {
     pub const B_SHL: Self = Self(0x34);
     pub const B_SHR: Self = Self(0x36);
     pub const B_SHR_UN: Self = Self(0x37);
-    pub const B_CLZ: Self = Self(0x38);
-    pub const B_CTZ: Self = Self(0x39);
-    pub const B_POP: Self = Self(0x3A);
 
     // §4  Equality
     pub const CMP_EQ: Self = Self(0x3B);
     pub const CMP_NE: Self = Self(0x3C);
 
-    // §5  Locals / Constants / Fields (u8 operand)
+    // §5  Locals / Constants / Structures (u8 operand)
     pub const LD_LOC: Self = Self(0x40);
     pub const ST_LOC: Self = Self(0x41);
     pub const LD_CST: Self = Self(0x42);
-    pub const LD_FLD: Self = Self(0x43);
-    pub const ST_FLD: Self = Self(0x44);
-    pub const MK_PRD: Self = Self(0x45);
-    pub const GET_FLD: Self = Self(0x46);
-    pub const MK_VAR: Self = Self(0x47);
-    pub const GET_PAY: Self = Self(0x48);
-    pub const CMP_TAG: Self = Self(0x49);
-    pub const CNV_WDN: Self = Self(0x4A);
-    pub const CNV_WDN_UN: Self = Self(0x4B);
-    pub const CNV_NRW: Self = Self(0x4C);
-    pub const CNV_SEX: Self = Self(0x4D);
-    pub const EFF_PSH: Self = Self(0x4E);
-    pub const EFF_POP: Self = Self(0x4F);
+    pub const ST_FLD: Self = Self(0x43);
+    pub const MK_PRD: Self = Self(0x44);
+    pub const GET_FLD: Self = Self(0x45);
+    pub const MK_VAR: Self = Self(0x46);
+    pub const GET_PAY: Self = Self(0x47);
+    pub const CMP_TAG: Self = Self(0x48);
+    pub const CNV_WDN: Self = Self(0x49);
+    pub const CNV_WDN_UN: Self = Self(0x4A);
+    pub const CNV_NRW: Self = Self(0x4B);
+    pub const EFF_PSH: Self = Self(0x4C);
+    pub const EFF_POP: Self = Self(0x4D);
 
     // §6  Ordered Comparison (no operand)
     pub const CMP_LT: Self = Self(0x50);
@@ -112,7 +99,7 @@ impl Opcode {
     pub const CNV_FTI: Self = Self(0x5F);
     pub const CNV_TRM: Self = Self(0x60);
 
-    // §9  Structural / Array
+    // §9  Structural / Array / Effects
     pub const GET_TAG: Self = Self(0x61);
     pub const GET_LEN: Self = Self(0x62);
     pub const LD_IDX: Self = Self(0x63);
@@ -128,13 +115,12 @@ impl Opcode {
     pub const LD_LOC_W: Self = Self(0x80);
     pub const ST_LOC_W: Self = Self(0x81);
     pub const LD_CST_W: Self = Self(0x82);
-    pub const LD_FLD_W: Self = Self(0x83);
-    pub const ST_FLD_W: Self = Self(0x84);
-    pub const JMP: Self = Self(0x85);
-    pub const JMP_T: Self = Self(0x86);
-    pub const JMP_F: Self = Self(0x87);
-    pub const MK_VAR_W: Self = Self(0x88);
-    pub const CMP_TAG_W: Self = Self(0x89);
+    pub const ST_FLD_W: Self = Self(0x83);
+    pub const MK_VAR_W: Self = Self(0x84);
+    pub const CMP_TAG_W: Self = Self(0x85);
+    pub const JMP: Self = Self(0x86);
+    pub const JMP_T: Self = Self(0x87);
+    pub const JMP_F: Self = Self(0x88);
 
     // §11  Invocation (u32 operand)
     pub const INV: Self = Self(0xC0);
@@ -148,11 +134,11 @@ impl Opcode {
     pub const MK_ARR: Self = Self(0xC6);
     pub const ALC_REF: Self = Self(0xC7);
     pub const ALC_MAN: Self = Self(0xC8);
-    pub const ALC_ARN: Self = Self(0xCB);
+    pub const ALC_ARN: Self = Self(0xC9);
 
     // §13  Effects (u32 operand)
-    pub const EFF_DO: Self = Self(0xC9);
-    pub const EFF_RES: Self = Self(0xCA);
+    pub const EFF_DO: Self = Self(0xCA);
+    pub const EFF_RES: Self = Self(0xCB);
 
     // §14  Concurrency (u32 operand)
     pub const TSK_SPN: Self = Self(0xCC);
@@ -160,18 +146,10 @@ impl Opcode {
     pub const TSK_CHR: Self = Self(0xCE);
     pub const TSK_CMK: Self = Self(0xCF);
 
-    // §15  Type Intrinsics (u32 operand)
-    pub const PSZ: Self = Self(0xD0);
-    pub const PAL: Self = Self(0xD1);
-    pub const TID: Self = Self(0xD2);
-
-    // §16  Wide Jumps (u32 operand)
-    pub const JMP_W: Self = Self(0xD3);
-    pub const JMP_T_W: Self = Self(0xD4);
-    pub const JMP_F_W: Self = Self(0xD5);
-
-    // §17  Tag Test (u32 operand)
-    pub const TAG_EQ: Self = Self(0xD6);
+    // §15  Wide Jumps (u32 operand)
+    pub const JMP_W: Self = Self(0xD0);
+    pub const JMP_T_W: Self = Self(0xD1);
+    pub const JMP_F_W: Self = Self(0xD2);
 }
 
 /// Encode a no-operand instruction into `buf`.

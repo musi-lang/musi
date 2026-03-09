@@ -178,7 +178,7 @@ High two bits of opcode determine length:
 ## 11.9 Opcode Table
 
 ```
-// §0  Control / Stack
+// §0  Control / Stack                          (no operand)
 0x00  nop               ( -- )
 0x01  hlt               ( -- )          exit, top of stack = status
 0x02  ret               ( val -- )
@@ -189,7 +189,7 @@ High two bits of opcode determine length:
 0x07  pop               ( a -- )
 0x08  swp               ( a b -- b a )
 
-// §1  Integer Arithmetic  (overflow wraps)
+// §1  Integer Arithmetic  (overflow wraps)     (no operand)
 0x10  i.add             ( a b -- a+b )  signed
 0x11  i.add.un          unsigned
 0x12  i.sub             ( a b -- a-b )  signed
@@ -201,18 +201,12 @@ High two bits of opcode determine length:
 0x18  i.rem             signed
 0x19  i.rem.un
 0x1A  i.neg             ( a -- -a )
-0x1B  i.abs
-0x1C  i.inc             ( a -- a+1 )
-0x1D  i.dec             ( a -- a-1 )
 
-// §2  Float Arithmetic  (IEEE 754)
+// §2  Float Arithmetic  (IEEE 754)             (no operand)
 0x20  f.add  0x21  f.sub  0x22  f.mul  0x23  f.div  0x24  f.rem
-0x25  f.neg  0x26  f.abs  0x27  f.sqr  0x28  f.flr  0x29  f.cil
-0x2A  f.rnd             round half to even
+0x25  f.neg
 
-// §3  Bitwise / Logical
-// These implement and/or/not/xor at bytecode level.
-// Source and/or/xor/not compile to these — type-directed semantics resolved before emit.
+// §3  Bitwise / Logical                       (no operand)
 0x30  b.and             ( a b -- a and b )
 0x31  b.or              ( a b -- a or b )
 0x32  b.xor             ( a b -- a xor b )
@@ -220,29 +214,26 @@ High two bits of opcode determine length:
 0x34  b.shl             ( a n -- a << n )
 0x36  b.shr             ( a n -- a >> n )   arithmetic (sign-extend)
 0x37  b.shr.un          ( a n -- a >>> n )  logical (zero-fill)
-0x38  b.clz  0x39  b.ctz  0x3A  b.pop
 
-// §4  Equality
+// §4  Equality                                (no operand)
 0x3B  cmp.eq            ( a b -- Bool )
 0x3C  cmp.ne
 
-// §5  Locals / Constants / Fields  (u8 operand)
+// §5  Locals / Constants / Structures         (u8 operand)
 0x40  ld.loc    u8      ( -- val )      local slot[N]
 0x41  st.loc    u8      ( val -- )
 0x42  ld.cst    u8      ( -- val )      const_pool[N]
-0x43  ld.fld    u8      ( obj -- val )
-0x44  st.fld    u8      ( obj val -- )
-0x45  mk.prd    u8      ( f0..fN -- )   make product, N fields
-0x46  get.fld   u8      ( prod -- val ) Nth field
-0x47  mk.var    u8      ( payload -- ) make variant tag N
-0x48  get.pay   u8      ( var -- val ) Nth payload field
-0x49  cmp.tag   u8      ( var -- Bool ) tag = N?
-0x4A  cnv.wdn   u8      signed widen to N bits
-0x4B  cnv.wdn.un u8     unsigned widen
-0x4C  cnv.nrw   u8      narrow (truncate)
-0x4D  cnv.sex   u8      sign-extend
-0x4E  eff.psh   u8      push effect handler frame
-0x4F  eff.pop   u8      pop effect handler frame
+0x43  st.fld    u8      ( obj val -- )
+0x44  mk.prd    u8      ( f0..fN -- )   make product, N fields
+0x45  get.fld   u8      ( prod -- val ) Nth field
+0x46  mk.var    u8      ( payload -- )  make variant tag N
+0x47  get.pay   u8      ( var -- val )  Nth payload field
+0x48  cmp.tag   u8      ( var -- Bool ) tag = N?
+0x49  cnv.wdn   u8      signed widen to N bits
+0x4A  cnv.wdn.un u8     unsigned widen
+0x4B  cnv.nrw   u8      narrow (truncate)
+0x4C  eff.psh   u8      push effect handler frame
+0x4D  eff.pop   u8      pop effect handler frame
 
 // §6  Ordered Comparison  (no operand, .un pairs)
 0x50  cmp.lt    0x51  cmp.lt.un
@@ -254,12 +245,12 @@ High two bits of opcode determine length:
 0x58  cmp.feq  0x59  cmp.fne  0x5A  cmp.flt
 0x5B  cmp.fle  0x5C  cmp.fgt  0x5D  cmp.fge
 
-// §8  Conversion
+// §8  Conversion                              (no operand)
 0x5E  cnv.itf            ( int -- float )
 0x5F  cnv.fti            ( float -- int )  truncate toward zero
 0x60  cnv.trm            ( a -- b )        transmute bits — Unsafe required
 
-// §9  Structural / Array
+// §9  Structural / Array / Effects            (no operand)
 0x61  get.tag            ( var -- tag:u32 )
 0x62  get.len            ( arr -- len:i64 )
 0x63  ld.idx             ( arr idx -- val )
@@ -272,12 +263,12 @@ High two bits of opcode determine length:
 
 // §10  Wide Locals / Jumps  (u16 operand)
 0x80  ld.loc.w  0x81  st.loc.w  0x82  ld.cst.w
-0x83  ld.fld.w  0x84  st.fld.w
-0x85  jmp       i16    unconditional
-0x86  jmp.t     i16    jump if true
-0x87  jmp.f     i16    jump if false
-0x88  mk.var.w  u16
-0x89  cmp.tag.w u16
+0x83  st.fld.w  u16
+0x84  mk.var.w  u16
+0x85  cmp.tag.w u16
+0x86  jmp       i16    unconditional
+0x87  jmp.t     i16    jump if true
+0x88  jmp.f     i16    jump if false
 
 // §11  Invocation  (u32 operand)
 0xC0  inv        u32    ( args -- ret )    pure
@@ -290,11 +281,11 @@ High two bits of opcode determine length:
 0xC6  mk.arr    u32    ( len -- arr )
 0xC7  alc.ref   u32    ( -- ref )    GC nursery
 0xC8  alc.man   u32    ( -- ptr )    Manual required
-0xCB  alc.arn   u32    ( -- ptr )    Arena required
+0xC9  alc.arn   u32    ( -- ptr )    Arena required
 
 // §13  Effects  (u32 operand)
-0xC9  eff.do    u32    ( args -- ret )   perform effect op_id
-0xCA  eff.res   u32    ( val -- )        resume (handler side)
+0xCA  eff.do    u32    ( args -- ret )   perform effect op_id
+0xCB  eff.res   u32    ( val -- )        resume (handler side)
 
 // §14  Concurrency  (u32 operand)
 0xCC  tsk.spn   u32    ( args -- task )
@@ -302,16 +293,8 @@ High two bits of opcode determine length:
 0xCE  tsk.chr   u32    ( -- val )        channel recv, suspends if empty
 0xCF  tsk.cmk   u32    ( -- chan )        make channel
 
-// §15  Type Intrinsics  (u32 operand)
-0xD0  psz  u32  ( -- i64 )    size of type_id
-0xD1  pal  u32  ( -- i64 )    alignment
-0xD2  tid  u32  ( -- u32 )    push type_id literal
+// §15  Wide Jumps  (u32 operand)
+0xD0  jmp.w  u32    0xD1  jmp.t.w  u32    0xD2  jmp.f.w  u32
 
-// §16  Wide Jumps  (u32 operand)
-0xD3  jmp.w  u32    0xD4  jmp.t.w  u32    0xD5  jmp.f.w  u32
-
-// §17  Tag Test  (u32 operand)
-0xD6  tag.eq  u32   ( var -- Bool )   tag = type_id?
-
-// Total: 94 opcodes
+// Total: 75 opcodes
 ```
