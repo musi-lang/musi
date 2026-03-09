@@ -1,6 +1,6 @@
 //! Type parsing tests.
 
-use music_ast::expr::Expr;
+use music_ast::expr::{Arrow, Expr};
 use music_ast::ty::Ty;
 use music_lex::lex as lex_source;
 use music_lex::token::Token;
@@ -103,4 +103,80 @@ fn test_parse_fn_type_pure() {
     let (ty, diags) = parse_ty_from_let("Int -> String");
     assert!(!diags.has_errors());
     assert!(matches!(ty, Ty::Fn { .. }));
+}
+
+#[test]
+fn test_parse_ty_fn_effectful_under_populates_effects() {
+    let (ty, diags) = parse_ty_from_let("Int ~> String under { IO }");
+    assert!(!diags.has_errors());
+    assert!(
+        matches!(
+            &ty,
+            Ty::Fn { arrow: Arrow::Effectful, effects: Some(eff), .. }
+            if eff.effects.len() == 1
+        ),
+        "expected effectful Fn with one effect"
+    );
+}
+
+#[test]
+fn test_parse_ty_fn_pure_arrow_has_no_effects() {
+    let (ty, diags) = parse_ty_from_let("Int -> String");
+    assert!(!diags.has_errors());
+    assert!(
+        matches!(
+            &ty,
+            Ty::Fn {
+                arrow: Arrow::Pure,
+                effects: None,
+                ..
+            }
+        ),
+        "expected pure Fn with no effects"
+    );
+}
+
+#[test]
+fn test_parse_ty_fn_chain_effects_attach_to_inner() {
+    // `A -> B ~> C under { IO }` should produce:
+    // Fn { params: [A], ret: Fn { params: [B], ret: C, effects: Some({IO}) }, effects: None }
+    let src = "let x : Int -> Bool ~> String under { IO } := 0;";
+    let (tokens, interner, file_id) = lex(src);
+    let mut diags = DiagnosticBag::new();
+    let module = parse(&tokens, file_id, &mut diags, &interner);
+    assert!(!diags.has_errors());
+
+    let expr = &module.arenas.exprs[module.stmts[0].expr];
+    let Expr::Let { fields, .. } = expr else {
+        return;
+    };
+    let ty_idx = fields.ty.expect("type annotation");
+    let outer = &module.arenas.tys[ty_idx];
+
+    // Outer: pure arrow, no effects.
+    assert!(
+        matches!(
+            outer,
+            Ty::Fn {
+                arrow: Arrow::Pure,
+                effects: None,
+                ..
+            }
+        ),
+        "outer arrow should be pure with no effects"
+    );
+
+    // Inner: effectful arrow with one effect.
+    let Ty::Fn { ret, .. } = outer else {
+        return;
+    };
+    let inner = &module.arenas.tys[*ret];
+    assert!(
+        matches!(
+            inner,
+            Ty::Fn { arrow: Arrow::Effectful, effects: Some(eff), .. }
+            if eff.effects.len() == 1
+        ),
+        "inner arrow should be effectful with one effect"
+    );
 }

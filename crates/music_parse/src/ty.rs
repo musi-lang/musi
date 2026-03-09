@@ -22,18 +22,19 @@ impl Parser<'_> {
     /// `ty_arrow = ty_eff { ('->' | '~>') ty_eff }`.
     fn parse_ty_arrow(&mut self) -> Ty {
         let start = self.start_span();
-        let first = self.parse_ty_eff();
+        let (first, first_eff) = self.parse_ty_eff();
 
         if !self.at(TokenKind::DashGt) && !self.at(TokenKind::TildeGt) {
+            // No arrow follows — discard any effect set (it only applies to fn types).
             return first;
         }
 
-        self.parse_ty_arrow_chain(start, first)
+        self.parse_ty_arrow_chain(start, first, first_eff)
     }
 
     /// Parses the chain of arrow types starting with `first`, at source span `start`.
-    fn parse_ty_arrow_chain(&mut self, start: u32, first: Ty) -> Ty {
-        let mut parts = vec![first];
+    fn parse_ty_arrow_chain(&mut self, start: u32, first: Ty, first_eff: Option<EffectSet>) -> Ty {
+        let mut parts: Vec<(Ty, Option<EffectSet>)> = vec![(first, first_eff)];
         let mut arrows = vec![];
         while self.at(TokenKind::DashGt) || self.at(TokenKind::TildeGt) {
             let arrow = if self.eat(TokenKind::DashGt) {
@@ -46,9 +47,11 @@ impl Parser<'_> {
             parts.push(self.parse_ty_eff());
         }
 
-        let mut ret = parts.pop().expect("at least two parts");
+        // Fold right: the effect set from each return-type segment attaches to
+        // the `Ty::Fn` node whose return type it annotates.
+        let (mut ret, mut ret_eff) = parts.pop().expect("at least two parts");
         while let Some(arrow) = arrows.pop() {
-            let param = parts.pop().expect("matching param");
+            let (param, _param_eff) = parts.pop().expect("matching param");
             let params = match param {
                 Ty::Product { fields, .. } => fields,
                 other => {
@@ -60,20 +63,23 @@ impl Parser<'_> {
                 params,
                 ret: ret_idx,
                 arrow,
-                effects: None,
+                effects: ret_eff,
                 span: self.finish_span(start),
             };
+            ret_eff = None;
         }
         ret
     }
 
     /// `ty_eff = ty_sum [ 'under' effect_set ]`.
-    fn parse_ty_eff(&mut self) -> Ty {
+    fn parse_ty_eff(&mut self) -> (Ty, Option<EffectSet>) {
         let ty = self.parse_ty_sum();
-        if self.eat(TokenKind::KwUnder) {
-            let _eff = self.parse_effect_set();
-        }
-        ty
+        let effects = if self.eat(TokenKind::KwUnder) {
+            Some(self.parse_effect_set())
+        } else {
+            None
+        };
+        (ty, effects)
     }
 
     /// `ty_sum = ty_prod { '+' ty_prod }`.
