@@ -1,0 +1,43 @@
+//! VM runtime errors.
+
+/// All errors that can occur during loading, verification, or execution.
+#[derive(Debug, thiserror::Error)]
+pub enum VmError {
+    #[error("bad magic bytes — not a .msbc file")]
+    BadMagic,
+    #[error("checksum mismatch — file may be corrupted")]
+    BadChecksum,
+    #[error("malformed bytecode: {desc}")]
+    Malformed { desc: Box<str> },
+    #[error("verification failed: {desc}")]
+    Verify { desc: Box<str> },
+    #[error("division by zero")]
+    DivideByZero,
+    #[error("call stack overflow")]
+    StackOverflow,
+    #[error("type error: expected {expected}, found {found}")]
+    TypeError {
+        expected: &'static str,
+        found: &'static str,
+    },
+    #[error("index {index} out of bounds (len {len})")]
+    OutOfBounds { index: usize, len: usize },
+    #[error("no handler for effect id {effect_id}")]
+    NoHandler { effect_id: u8 },
+    #[error("effect aborted")]
+    EffectAborted,
+    #[error("unimplemented: {desc}")]
+    Unimplemented { desc: &'static str },
+    #[error("in fn {fn_id} at offset {ip}: {source}")]
+    Runtime {
+        fn_id: u32,
+        ip: usize,
+        source: Box<Self>,
+    },
+    #[error("halted")]
+    Halted,
+    #[error("instruction limit exceeded ({limit})")]
+    InstructionLimitExceeded { limit: u64 },
+    #[error("freed heap object at index {index}")]
+    FreedObject { index: usize },
+}
