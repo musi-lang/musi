@@ -43,12 +43,16 @@ expr::Node =
     Lit       { lit: lit::Node }
   | Name      { ident: String }
 
+  // grouping
+  | Paren     { inner: Box<expr::Node> }
+  | Tuple     { elems: expr::Node+ }
+  | Block     { stmts: stmt::Node*, tail: ?expr::Node }
+
   // bindings — BindKind distinguishes let vs var
   // heap: true = ref keyword present
+  // body: present for let-in expressions, absent for plain let
   | Let       { kind: BindKind, heap: Bool, pat: pat::Node,
-                ty: ?ty::Node, value: Box<expr::Node> }
-  | LetIn     { kind: BindKind, heap: Bool, pat: pat::Node,
-                ty: ?ty::Node, value: Box<expr::Node>, body: Box<expr::Node> }
+                ty: ?ty::Node, value: Box<expr::Node>, body: ?expr::Node }
 
   // functions — anonymous, name comes from enclosing binding
   | Fn        { params: Param*, arrow: Arrow, ret_ty: ?ty::Node, body: Box<expr::Node> }
@@ -66,12 +70,7 @@ expr::Node =
 
   // operators
   | BinOp     { op: BinOp, left: Box<expr::Node>, right: Box<expr::Node> }
-  | UnOp      { op: UnOp, expr: Box<expr::Node> }
-  | Pipe      { left: Box<expr::Node>, right: Box<expr::Node> }
-  | Assign    { target: Box<expr::Node>, value: Box<expr::Node> }
-  | Range     { low: Box<expr::Node>, high: Box<expr::Node>, exclusive: Bool }
-  | Cons      { head: Box<expr::Node>, tail: Box<expr::Node> }
-  | NilCoal   { left: Box<expr::Node>, right: Box<expr::Node> }
+  | UnaryOp   { op: UnaryOp, operand: Box<expr::Node> }
 
   // conditionals
   | Piecewise { arms: PwArm+ }
@@ -79,14 +78,10 @@ expr::Node =
 
   // control flow
   | Return    { value: ?expr::Node }
-  | Defer     { expr: Box<expr::Node> }   // expr is ast_expr; paren sequence = block
-  | Spawn     { expr: Box<expr::Node> }
-  | Await     { expr: Box<expr::Node> }
-  | Try       { expr: Box<expr::Node> }
 
   // quantification
-  | Forall    { params: ty::Param+, constraints: ty::Constraint*, body: Box<expr::Node> }
-  | Exists    { params: ty::Param+, constraints: ty::Constraint*, body: Box<expr::Node> }
+  | Quantified { kind: ty::Quantifier, params: ty::Param+, constraints: ty::Constraint*,
+                 body: Box<expr::Node> }
 
   // module
   | Import    { path: String }
@@ -157,14 +152,21 @@ expr::BinOp =
     Add | Sub | Mul | Div | Rem
   | Eq | Ne | Lt | Le | Gt | Ge
   | And | Or | Xor    // logical on Bool, bitwise on integers — type-directed
-                       // No BitAnd/BitOr/BitXor — and/or/xor are unified
   | Shl | Shr | ShrUn
   | In
+  | Pipe               // |>
+  | Assign             // <-
+  | RangeInc | RangeExc // .. and ..<
+  | Cons               // ::
+  | NilCoal            // ??
 
-expr::UnOp =
+expr::UnaryOp =
     Neg              // arithmetic negation
-  | Not              // logical negation (Bool) or bitwise complement (integers) — type-directed
-                     // No BitNot — not is unified
+  | Not              // logical/bitwise complement — type-directed
+  | Defer            // defer expr
+  | Spawn            // spawn expr
+  | Await            // await expr
+  | Try              // try expr
 ```
 
 ## 9.5 lit
@@ -214,8 +216,8 @@ ty::Node =
   | Record  { fields: RecField*, open: Bool }
   | Refine  { base: Box<ty::Node>, pred: expr::Node } // { T | pred }
   | Array   { len: ?u32, elem: Box<ty::Node> }
-  | Forall  { params: Param+, constraints: Constraint*, body: Box<ty::Node> }
-  | Exists  { params: Param+, constraints: Constraint*, body: Box<ty::Node> }
+  | Quantified { kind: Quantifier, params: Param+, constraints: Constraint*,
+                 body: Box<ty::Node> }
 
 ty::RecField
   name:    String
@@ -232,6 +234,7 @@ ty::Param      { name: String }                        // 'T
 ty::Named      { name: String, args: ty::Node* }
 ty::Constraint { param: String, rel: Rel, bound: Named }
 ty::Rel        = Sub | Super                           // <: or :>
+ty::Quantifier = Forall | Exists
 ```
 
 ## 9.8 decl
@@ -261,7 +264,11 @@ attr::Value = Lit { lit: lit::Node } | Tuple { lits: lit::Node+ }
 ## 9.10 Design Notes
 
 - **`Binding` vs `Let`**: `expr::Let` is a local binding. `expr::Binding` is a top-level declaration wrapping a `Let`, carrying `exported`. The distinction surfaces in the module-scope pass.
-- **`Defer` takes `ast_expr`**: a parenthesised sequence `( a; b; )` is already a valid `ast_expr`. No special defer-block node needed.
+- **`UnaryOp::Defer` takes `ast_expr`**: a parenthesised sequence `( a; b; )` is already a valid `ast_expr`. No special defer-block node needed. `Defer`, `Spawn`, `Await`, and `Try` are all `UnaryOp` discriminants sharing the `Expr::UnaryOp` variant.
 - **`Variant` unifies construction and destruction**: `expr::Variant` constructs, `pat::Variant` destructs. Same shape, different module.
 - **No `ty::Inout`**: `inout` is `expr::ParamMode::Inout` — a property of the parameter declaration, not of the type.
 - **`BindKind` never in `ty::Node`**: `var` is a binding-site concept only. The type checker enforces this.
+- **`Paren` for tooling**: The `Paren` node is semantically transparent but preserved so formatters can distinguish `x` from `(x)` and round-trip faithfully.
+- **`Tuple` vs parenthesised expr**: `(a)` is `Paren`, `(a,)` is `Tuple` with one element, `(a, b)` is `Tuple` with two. The trailing comma forces tuple interpretation.
+- **`Block` as block**: `(a; b; c)` is a block returning `c`. Trailing `;` in `(a; b;)` means the tail is absent and the block evaluates to `()`.
+- **Function literals share `Paren`**: `(x: Int, y: Int) -> body` is parsed as `Paren` (or `Tuple`) followed by `->`. The parser reinterprets the contents as parameters when the arrow is present, producing an `Fn` node. No separate syntax for function parameters in the grammar.

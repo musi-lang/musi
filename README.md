@@ -13,6 +13,10 @@ We welcome contributions from community. Please see [CONTRIBUTING.md](CONTRIBUTI
 
 All contributors are expected to follow [Code of Conduct](CODE_OF_CONDUCT.md).
 
+## Star History
+
+[![Star History Chart](https://api.star-history.com/image?repos=musi-lang/musi&type=timeline&legend=bottom-right)](https://www.star-history.com/?repos=musi-lang%2Fmusi&type=timeline&legend=top-left)
+
 ## License
 
 MIT x- see the [LICENSE](LICENSE) file for details.

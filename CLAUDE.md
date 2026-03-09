@@ -4,6 +4,15 @@
 
 Musi-next is a fresh rewrite of the Musi compiler. `docs/` is the source of truth for the language design. `crates_old/` contains the legacy implementation (reference only, do not modify). The root `grammar.ebnf` is legacy and will be replaced.
 
+## Crate naming: `musi_*` vs `music_*`
+
+The project splits into two families, analogous to `java`/`javac`, `cargo`/`rustc`, `sbt`/`scalac`:
+
+- **`musi_*`** — the runtime and standard library crates
+- **`music_*`** — the compiler crates (`music` = `musi` + `c`, where `c` stands for compiler)
+
+The name has nothing to do with actual music. Do not rename, conflate, or explain these as music-related.
+
 ## Cargo workspace conventions
 
 ### Package metadata vs dependencies

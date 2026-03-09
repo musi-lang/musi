@@ -60,39 +60,38 @@ ast_stmt  = ast_expr , ";" ;
    Boolean-algebra model: not > and > xor > or > comparisons.
    This differs from C — do not apply C precedence. *)
 
-ast_expr        = ast_expr_nil_coal , [ "<-" , ast_expr ] ;
-ast_expr_nil_coal = ast_expr_pipe , [ "??" , ast_expr_pipe ] ;
-ast_expr_pipe   = ast_expr_disj , { "|>" , ast_expr_disj } ;
-ast_expr_disj   = ast_expr_conj , { "or" , ast_expr_conj } ;
-ast_expr_conj   = ast_expr_xor  , { "and" , ast_expr_xor } ;
-ast_expr_xor    = ast_expr_cmp  , { "xor" , ast_expr_cmp } ;
-ast_expr_cmp    = ast_expr_range ,
-                  [ ( "=" | "/=" | "<" | ">" | "<=" | ">=" | "in" ) ,
-                    ast_expr_range ] ;
-ast_expr_range  = ast_expr_cons , [ ( ".." | "..<" ) , ast_expr_cons ] ;
-ast_expr_cons   = ast_expr_sft  , { "::" , ast_expr_sft } ;
-ast_expr_sft    = ast_expr_add  , { ( "<<" | ">>" ) , ast_expr_add } ;
-ast_expr_add    = ast_expr_mul  , { ( "+" | "-" ) , ast_expr_mul } ;
-ast_expr_mul    = ast_expr_pre  , { ( "*" | "/" | "%" ) , ast_expr_pre } ;
-ast_expr_pre    = ( "-" | "not" ) , ast_expr_pre | ast_expr_post ;
-ast_expr_post   = ast_expr_atom , { postfix_op } ;
+ast_expr          = ast_expr_nil_coal , [ "<-" , ast_expr ] ;
+ast_expr_nil_coal = ast_expr_pipe , [ "??" , ast_expr_nil_coal ] ;
+ast_expr_pipe     = ast_expr_cmp , { "|>" , ast_expr_cmp } ;
+ast_expr_cmp      = ast_expr_disj ,
+                    [ ( "=" | "/=" | "<" | ">" | "<=" | ">=" | "in" ) ,
+                      ast_expr_disj ] ;
+ast_expr_disj     = ast_expr_xor , { "or" , ast_expr_xor } ;
+ast_expr_xor      = ast_expr_conj , { "xor" , ast_expr_conj } ;
+ast_expr_conj     = ast_expr_range , { "and" , ast_expr_range } ;
+ast_expr_range    = ast_expr_cons , [ ( ".." | "..<" ) , ast_expr_cons ] ;
+ast_expr_cons     = ast_expr_sft , [ "::" , ast_expr_cons ] ;
+ast_expr_sft      = ast_expr_add , { ( "<<" | ">>" ) , ast_expr_add } ;
+ast_expr_add      = ast_expr_mul , { ( "+" | "-" ) , ast_expr_mul } ;
+ast_expr_mul      = ast_expr_pre , { ( "*" | "/" | "%" ) , ast_expr_pre } ;
+ast_expr_pre      = ( "-" | "not" ) , ast_expr_pre | ast_expr_post ;
+ast_expr_post     = ast_expr_atom , { postfix_op } ;
 
 (* No separate bitwise layers — and/or/xor/not are type-directed.
    No & | ^ ~ operators exist. *)
 
-postfix_op = "(" , [ expr_list ] , ")"
+postfix_op = "(" , [ arg_list ] , ")"
            | ".[" , [ expr_list ] , "]"
            | ".{" , rec_lit_fields , "}"
            | "." , ( ident | lit_int )
-           | "?." , ( ident | lit_int )
-           | "..." ;
+           | "?." , ( ident | lit_int ) ;
 
 ast_expr_atom =
     lit | ident
   | ast_paren | ast_array | ast_rec_lit
   | ast_dot_pfx | ast_piecewise | ast_match
   | ast_let | ast_var | ast_return | ast_defer
-  | ast_spawn | ast_await | ast_import
+  | ast_spawn | ast_await | ast_try | ast_import
   | ast_forall | ast_exists
   | ast_with_attrs ;
 
@@ -105,7 +104,13 @@ ast_expr_atom =
    (a, b) = tuple
    (a; b) = sequence, returns b
    (a; b;) = sequence, trailing ; discards, returns () *)
-ast_paren    = "(" , paren_body , ")" ;
+ast_paren    = "(" , paren_body , ")" , [ fn_tail ] ;
+fn_tail      = [ ":" , ast_ty ] , ( "->" | "~>" ) , ast_expr ;
+
+(* When fn_tail is present, paren contents are reinterpreted as parameters.
+   ":" before the arrow is the return type annotation.
+   "->" = pure function, "~>" = effectful function.
+   The parser validates parameter syntax after disambiguation. *)
 paren_body   =
     (* empty *)                                       (* unit: () *)
   | ","                                               (* empty tuple: (,) *)
@@ -150,6 +155,7 @@ ast_return   = "return" , [ ast_expr ] ;
 ast_defer    = "defer" , ast_expr ;   (* ast_paren handles block form *)
 ast_spawn    = "spawn" , ast_expr ;
 ast_await    = "await" , ast_expr ;
+ast_try      = "try" , ast_expr ;
 ast_import   = "import" , lit_string ;
 ast_forall   = "forall" , ty_param_list , [ where_clause ] , "->" , ast_expr ;
 ast_exists   = "exists" , ty_param_list , [ where_clause ] , "->" , ast_expr ;
@@ -241,17 +247,19 @@ attr_body  = ident | ident , ":=" , attr_value ;
 attr_value = lit | "(" , lit , { "," , lit } , ")" ;
 
 expr_list  = ast_expr , { "," , ast_expr } ;
+arg_list   = arg , { "," , arg } ;
+arg        = "..." | ast_expr ;
 ```
 
 ## 8.4 FIRST & FOLLOW (selected)
 
 | Non-terminal | FIRST |
 |---|---|
-| `ast_expr` | `lit ident ( [ .{ . match let var forall exists return defer spawn await import export class given #[` |
+| `ast_expr` | `lit ident ( [ .{ . match let var forall exists return defer spawn await try import export class given #[` |
 | `ast_ty` | `ident ' ? ( [ { ref forall exists` |
 | `ast_pat` | `_ lit ident var . { ( [` |
 | `ast_piecewise` | `(` |
-| `postfix_op` | `( .[ .{ . ?. ...` |
+| `postfix_op` | `( .[ .{ . ?.` |
 
 | Non-terminal | FOLLOW |
 |---|---|

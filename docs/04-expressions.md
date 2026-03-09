@@ -31,15 +31,15 @@ Boolean-algebra model (VHDL/Pascal). Comparisons sit **below** logical operators
 | 0040 | `* / %`                  | Left  | multiplicative |
 | 0050 | `+ -`                    | Left  | additive |
 | 0060 | `<< >>`                  | Left  | shift |
-| 0065 | `xor`                    | Left  | exclusive or |
-| 0070 | `and`                    | Left  | conjunction |
-| 0075 | `or`                     | Left  | disjunction |
-| 0080 | `::`                     | Right | cons |
-| 0085 | `.. ..<`                 | None  | range |
-| 0090 | `= /= < > <= >= in`      | None  | comparison and membership |
-| 0105 | `??`                     | Right | nil coalesce |
-| 0127 | `\|>`                    | Left  | pipe |
-| 0130 | `<-`                     | Right | mutation — `var` only |
+| 0070 | `::`                     | Right | cons |
+| 0080 | `.. ..<`                 | None  | range |
+| 0090 | `and`                    | Left  | conjunction — tightest logical |
+| 0095 | `xor`                    | Left  | exclusive or |
+| 0100 | `or`                     | Left  | disjunction — loosest logical |
+| 0110 | `= /= < > <= >= in`      | None  | comparison and membership |
+| 0120 | `\|>`                    | Left  | pipe |
+| 0130 | `??`                     | Right | nil coalesce |
+| 0140 | `<-`                     | Right | mutation — `var` only |
 
 > `a and b = c` parses as `(a and b) = c`. Logical operators bind tighter than comparisons.
 
