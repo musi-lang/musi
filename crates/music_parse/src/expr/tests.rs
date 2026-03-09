@@ -27,8 +27,6 @@ fn parse_single_expr(src: &str) -> (Expr, DiagnosticBag) {
     (expr, diags)
 }
 
-// -- Literals ----------------------------------------------------------------
-
 #[test]
 fn test_parse_integer_literal() {
     let (expr, diags) = parse_single_expr("42");
@@ -74,8 +72,6 @@ fn test_parse_name() {
     assert!(!diags.has_errors());
     assert!(matches!(expr, Expr::Name { .. }));
 }
-
-// -- Binary operators --------------------------------------------------------
 
 #[test]
 fn test_parse_addition() {
@@ -156,8 +152,6 @@ fn test_parse_cons_right_associativity() {
     ));
 }
 
-// -- Unary operators ---------------------------------------------------------
-
 #[test]
 fn test_parse_negation() {
     let (expr, diags) = parse_single_expr("-42");
@@ -183,8 +177,6 @@ fn test_parse_not() {
         }
     ));
 }
-
-// -- Grouping ----------------------------------------------------------------
 
 #[test]
 fn test_parse_paren_expr() {
@@ -229,8 +221,6 @@ fn test_parse_block() {
     assert!(tail.is_some());
 }
 
-// -- Postfix -----------------------------------------------------------------
-
 #[test]
 fn test_parse_call() {
     let (expr, diags) = parse_single_expr("f(1, 2)");
@@ -252,20 +242,16 @@ fn test_parse_safe_navigation() {
     assert!(matches!(expr, Expr::Field { safe: true, .. }));
 }
 
-// -- Array literal -----------------------------------------------------------
-
 #[test]
 fn test_parse_array_literal() {
     let (expr, diags) = parse_single_expr("[1, 2, 3]");
     assert!(!diags.has_errors());
     assert!(matches!(expr, Expr::Array { .. }), "expected Array");
-    let Expr::Array { items, .. } = expr else {
+    let Expr::Array { elems, .. } = expr else {
         return;
     };
-    assert_eq!(items.len(), 3);
+    assert_eq!(elems.len(), 3);
 }
-
-// -- Let binding -------------------------------------------------------------
 
 #[test]
 fn test_parse_let_binding() {
@@ -273,8 +259,6 @@ fn test_parse_let_binding() {
     assert!(!diags.has_errors());
     assert!(matches!(expr, Expr::Let { .. }));
 }
-
-// -- Return ------------------------------------------------------------------
 
 #[test]
 fn test_parse_return_with_value() {
@@ -298,8 +282,6 @@ fn test_parse_return_without_value() {
     assert!(value.is_none());
 }
 
-// -- Variant -----------------------------------------------------------------
-
 #[test]
 fn test_parse_variant_no_args() {
     let (expr, diags) = parse_single_expr(".None");
@@ -322,8 +304,6 @@ fn test_parse_variant_with_args() {
     assert_eq!(args.len(), 1);
 }
 
-// -- Match -------------------------------------------------------------------
-
 #[test]
 fn test_parse_match_expr() {
     let (expr, diags) = parse_single_expr("match x (y => 1 | z => 2)");
@@ -334,8 +314,6 @@ fn test_parse_match_expr() {
     };
     assert_eq!(arms.len(), 2);
 }
-
-// -- Record literal ----------------------------------------------------------
 
 #[test]
 fn test_parse_anon_record() {
@@ -352,16 +330,12 @@ fn test_parse_anon_record() {
     assert_eq!(fields.len(), 2);
 }
 
-// -- Import ------------------------------------------------------------------
-
 #[test]
 fn test_parse_import() {
     let (expr, diags) = parse_single_expr("import \"std/io\"");
     assert!(!diags.has_errors());
     assert!(matches!(expr, Expr::Import { .. }));
 }
-
-// -- Keyword prefix operators ------------------------------------------------
 
 #[test]
 fn test_parse_defer() {
