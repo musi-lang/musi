@@ -616,7 +616,7 @@ fn test_emit_get_payload_uses_field_index() {
     module.entry = Some(fn_idx);
 
     let EmitOutput { bytes } = emit(&module, &interner).expect("emit succeeded");
-    let pos = find_opcode(&bytes, Opcode::GET_PAY).expect("must emit GET_PAY");
+    let pos = find_opcode(&bytes, Opcode::LD_PAY).expect("must emit GET_PAY");
     assert_eq!(bytes[pos + 1], 2, "field index must be 2");
 }
 
