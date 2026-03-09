@@ -49,6 +49,14 @@ pub fn emit(module: &IrModule, interner: &Interner) -> Result<EmitOutput, EmitEr
 
     let entry_fn_id = module.entry.map(|idx| module.functions[idx].id.0);
 
-    let bytes = module::assemble(&emitter.cp, &emitter.tp, &functions, entry_fn_id)?;
+    let bytes = module::assemble(
+        &mut emitter.cp,
+        &mut emitter.tp,
+        &functions,
+        &module.effects,
+        &module.types,
+        interner,
+        entry_fn_id,
+    )?;
     Ok(EmitOutput { bytes })
 }
