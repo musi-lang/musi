@@ -1,425 +1,424 @@
 {
-  "name": "vscode-musi",
-  "type": "module",
-  "displayName": "Musi",
-  "description": "Musi language support",
-  "version": "0.1.0",
-  "author": {
-    "name": "xsyetopz"
-  },
-  "license": "MIT",
-  "private": true,
-  "publisher": "xsyetopz",
-  "homepage": "https://github.com/musi-lang/musi",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/musi-lang/musi.git"
-  },
-  "bugs": {
-    "url": "https://github.com/musi-lang/musi/issues"
-  },
-  "keywords": [
-    "Musi"
-  ],
-  "categories": [
-    "Formatters",
-    "Linters",
-    "Programming Languages"
-  ],
-  "icon": "logo.png",
-  "galleryBanner": {
-    "color": "#cc0000",
-    "theme": "dark"
-  },
-  "readme": "README.md",
-  "main": "./dist/extension.js",
-  "engines": {
-    "vscode": "^1.75.0"
-  },
-  "contributes": {
-    "languages": [
-      {
-        "id": "musi",
-        "aliases": [
-          "Musi",
-          "musi"
-        ],
-        "extensions": [
-          ".ms"
-        ],
-        "configuration": "language-configuration.json",
-        "icon": {
-          "light": "logo.png",
-          "dark": "logo.png"
-        }
-      },
-      {
-        "id": "musi-injection",
-        "aliases": [
-          "musi-inj"
-        ]
-      }
-    ],
-    "grammars": [
-      {
-        "language": "musi",
-        "scopeName": "source.musi",
-        "path": "syntaxes/musi.tmLanguage.json"
-      },
-      {
-        "language": "musi-injection",
-        "path": "syntaxes/musi_codeblock.tmLanguage.json",
-        "scopeName": "markdown.musi.codeblock",
-        "injectTo": [
-          "text.html.markdown"
-        ],
-        "embeddedLanguages": {
-          "meta.embedded.block.musi": "musi"
-        }
-      }
-    ],
-    "snippets": [
-      {
-        "language": "musi",
-        "path": "snippets/musi_snippets.json"
-      }
-    ],
-    "semanticTokenScopes": [
-      {
-        "language": "musi",
-        "scopes": {
-          "variable.readonly": [
-            "variable.other.constant.musi"
-          ],
-          "variable.declaration.readonly": [
-            "variable.other.constant.musi"
-          ],
-          "variable.mutable": [
-            "variable.other.musi"
-          ],
-          "variable.declaration.mutable": [
-            "variable.other.musi"
-          ],
-          "parameter.readonly": [
-            "variable.other.constant.musi"
-          ],
-          "parameter.declaration.readonly": [
-            "variable.other.constant.musi"
-          ],
-          "parameter.mutable": [
-            "variable.parameter.musi"
-          ],
-          "parameter.declaration.mutable": [
-            "variable.parameter.musi"
-          ],
-          "property.readonly": [
-            "variable.other.constant.property.musi"
-          ],
-          "property.declaration.readonly": [
-            "variable.other.constant.property.musi"
-          ],
-          "property.mutable": [
-            "variable.other.property.musi"
-          ],
-          "property.declaration.mutable": [
-            "variable.other.property.musi"
-          ],
-          "property": [
-            "variable.other.property.musi"
-          ],
-          "property.declaration": [
-            "variable.other.property.musi"
-          ],
-          "function": [
-            "entity.name.function.musi"
-          ],
-          "function.declaration": [
-            "entity.name.function.musi"
-          ],
-          "type": [
-            "entity.name.type.musi"
-          ],
-          "type.declaration": [
-            "entity.name.type.musi"
-          ],
-          "enumMember": [
-            "variable.other.enummember.musi"
-          ],
-          "enumMember.declaration": [
-            "variable.other.enummember.musi"
-          ],
-          "typeParameter": [
-            "storage.type.parameter.musi"
-          ],
-          "typeParameter.declaration": [
-            "storage.type.parameter.musi"
-          ]
-        }
-      }
-    ],
-    "configurationDefaults": {
-      "[musi]": {
-        "editor.semanticHighlighting.enabled": true
-      },
-      "editor.semanticTokenColorCustomizations": {
-        "rules": {
-          "*.mutable": {
-            "underline": true
-          }
-        }
-      }
-    },
-    "commands": [
-      {
-        "command": "musi.restartServer",
-        "title": "Restart Language Server",
-        "category": "Musi",
-        "icon": "$(refresh)"
-      },
-      {
-        "command": "musi.stopServer",
-        "title": "Stop Language Server",
-        "category": "Musi",
-        "icon": "$(stop)"
-      },
-      {
-        "command": "musi.showLogs",
-        "title": "Show Language Server Output",
-        "category": "Musi",
-        "icon": "$(output)"
-      },
-      {
-        "command": "musi.runFile",
-        "title": "Run File",
-        "category": "Musi",
-        "description": "Run the current .ms file using the Musi runtime."
-      },
-      {
-        "command": "musi.checkFile",
-        "title": "Check File",
-        "category": "Musi",
-        "description": "Check the current .ms file for errors using musi check."
-      },
-      {
-        "command": "musi.runTask",
-        "title": "Run Task",
-        "category": "Musi",
-        "description": "Pick and run a task from mspackage.json."
-      },
-      {
-        "command": "musi.runTest",
-        "title": "▷ Run test",
-        "category": "Musi"
-      },
-      {
-        "command": "musi.runMain",
-        "title": "▷ Run",
-        "category": "Musi"
-      }
-    ],
-    "keybindings": [
-      {
-        "command": "musi.restartServer",
-        "key": "ctrl+shift+R",
-        "mac": "cmd+shift+R",
-        "when": "editorLangId == musi"
-      }
-    ],
-    "menus": {
-      "commandPalette": [
-        {
-          "command": "musi.restartServer",
-          "when": "true"
-        }
-      ],
-      "view/item/context": [
-        {
-          "command": "musi.restartServer",
-          "when": "view == workbench.explorer.fileView",
-          "group": "musi@1"
-        }
-      ]
-    },
-    "configuration": {
-      "title": "Musi",
-      "properties": {
-        "musi.lspPath": {
-          "type": "string",
-          "default": "musi-lsp",
-          "description": "Path to the musi-lsp executable."
-        },
-        "musi.cliPath": {
-          "type": "string",
-          "default": "musi",
-          "markdownDescription": "Path to `musi` CLI binary. If not set, searches in `target/debug`, `target/release`, `~/.cargo/bin`, and system PATH."
-        },
-        "musi.checkOnSave": {
-          "type": "boolean",
-          "default": true,
-          "description": "Run musi check when saving a .ms file."
-        },
-        "musi.server.path": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null,
-          "markdownDescription": "Path to `musi_lsp` binary. If not set, searches in `target/debug`, `target/release`, and `PATH`."
-        },
-        "musi.runtime.path": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null,
-          "markdownDescription": "Path to Musi runtime environment. Required for code execution and some diagnostics."
-        },
-        "musi.trace.server": {
-          "type": "string",
-          "enum": [
-            "off",
-            "messages",
-            "verbose"
-          ],
-          "default": "off",
-          "description": "Traces communication between VS Code and language server."
-        },
-        "musi.diagnostics.enable": {
-          "type": "boolean",
-          "default": true,
-          "description": "Enable/disable diagnostics from language server."
-        },
-        "musi.inlayHints.enable": {
-          "type": "boolean",
-          "default": true,
-          "description": "Enable/disable all inlay hints."
-        },
-        "musi.inlayHints.typeAnnotations.enable": {
-          "type": "boolean",
-          "default": true,
-          "markdownDescription": "Show inferred type annotations for bindings (e.g., `val x := 42` shows `: Int`)."
-        },
-        "musi.inlayHints.parameterNames.enable": {
-          "type": "boolean",
-          "default": true,
-          "markdownDescription": "Show parameter names in function calls (e.g., `foo(x:` before argument)."
-        },
-        "musi.inlayHints.parameterNames.suppressWhenArgumentMatchesName": {
-          "type": "boolean",
-          "default": true,
-          "description": "Suppress parameter name hints when argument name matches parameter."
-        },
-        "musi.inlayHints.returnTypes.enable": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show return type hints for function definitions without explicit return types."
-        },
-        "musi.inlayHints.chainingHints.enable": {
-          "type": "boolean",
-          "default": true,
-          "markdownDescription": "Show type hints for intermediate values in method chains (e.g., after `|>`)."
-        },
-        "musi.semanticHighlighting.enable": {
-          "type": "boolean",
-          "default": true,
-          "description": "Enable semantic highlighting from language server."
-        },
-        "musi.semanticHighlighting.distinguishMutability": {
-          "type": "boolean",
-          "default": true,
-          "markdownDescription": "Distinguish between `val` and `var` bindings with different colors."
-        },
-        "musi.completion.enable": {
-          "type": "boolean",
-          "default": true,
-          "description": "Enable/disable code completion."
-        },
-        "musi.completion.autoImport": {
-          "type": "boolean",
-          "default": true,
-          "description": "Automatically add imports when completing symbols from other modules."
-        },
-        "musi.completion.snippets.enable": {
-          "type": "boolean",
-          "default": true,
-          "description": "Include snippet completions (e.g., `fn`, `if`, `match`)."
-        },
-        "musi.hover.enable": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show hover information for symbols."
-        },
-        "musi.hover.showDocumentation": {
-          "type": "boolean",
-          "default": true,
-          "description": "Include documentation comments in hover tooltips."
-        },
-        "musi.hover.showSignature": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show type signature in hover tooltips."
-        },
-        "musi.rename.enablePreview": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show preview of all changes before applying rename."
-        },
-        "musi.references.excludeImports": {
-          "type": "boolean",
-          "default": false,
-          "description": "Exclude imports from find references results."
-        },
-        "musi.formatting.enable": {
-          "type": "boolean",
-          "default": true,
-          "description": "Enable/disable code formatting."
-        },
-        "musi.formatting.indentSize": {
-          "type": "number",
-          "default": 2,
-          "description": "Number of spaces for indentation."
-        },
-        "musi.formatting.maxLineWidth": {
-          "type": "number",
-          "default": 100,
-          "description": "Maximum line width before wrapping."
-        },
-        "musi.codeLens.enable": {
-          "type": "boolean",
-          "default": true,
-          "description": "Enable/disable code lens annotations."
-        },
-        "musi.codeLens.showReferences": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show reference count above functions and types."
-        },
-        "musi.codeLens.showTest": {
-          "type": "boolean",
-          "default": true,
-          "markdownDescription": "Show 'Test' lens above `#[test]` functions."
-        }
-      }
-    }
-  },
-  "scripts": {
-    "build": "bun build ./client/src/main.ts --outfile=./dist/extension.js --external vscode --target=node",
-    "package": "bun run build && vsce package",
-    "vscode:prepublish": "bun run build"
-  },
-  "devDependencies": {
-    "@biomejs/biome": "latest",
-    "@types/bun": "latest",
-    "@types/node": "latest",
-    "@types/vscode": "^1.75.0",
-    "@vscode/vsce": "latest",
-    "npm": "latest",
-    "typescript": "latest",
-    "vscode-languageclient": "latest"
-  },
-  "trustedDependencies": [
-    "@biomejs/biome",
-    "@vscode/vsce-sign",
-    "keytar"
-  ]
+	"name": "vscode-musi",
+	"type": "module",
+	"displayName": "Musi",
+	"description": "Musi language support",
+	"version": "0.1.0",
+	"author": {
+		"name": "xsyetopz"
+	},
+	"license": "MIT",
+	"private": true,
+	"publisher": "xsyetopz",
+	"homepage": "https://github.com/musi-lang/musi",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/musi-lang/musi.git"
+	},
+	"bugs": {
+		"url": "https://github.com/musi-lang/musi/issues"
+	},
+	"keywords": [
+		"Musi"
+	],
+	"categories": [
+		"Formatters",
+		"Linters",
+		"Programming Languages"
+	],
+	"icon": "logo.png",
+	"galleryBanner": {
+		"color": "#cc0000",
+		"theme": "dark"
+	},
+	"readme": "README.md",
+	"main": "./dist/extension.js",
+	"engines": {
+		"vscode": "^1.75.0"
+	},
+	"contributes": {
+		"languages": [
+			{
+				"id": "musi",
+				"aliases": [
+					"Musi",
+					"musi"
+				],
+				"extensions": [
+					".ms"
+				],
+				"configuration": "language-configuration.json",
+				"icon": {
+					"light": "logo.png",
+					"dark": "logo.png"
+				}
+			},
+			{
+				"id": "musi-injection",
+				"aliases": [
+					"musi-inj"
+				]
+			}
+		],
+		"grammars": [
+			{
+				"language": "musi",
+				"scopeName": "source.musi",
+				"path": "syntaxes/musi.tmLanguage.json"
+			},
+			{
+				"language": "musi-injection",
+				"path": "syntaxes/musi_codeblock.tmLanguage.json",
+				"scopeName": "markdown.musi.codeblock",
+				"injectTo": [
+					"text.html.markdown"
+				],
+				"embeddedLanguages": {
+					"meta.embedded.block.musi": "musi"
+				}
+			}
+		],
+		"snippets": [
+			{
+				"language": "musi",
+				"path": "snippets/musi_snippets.json"
+			}
+		],
+		"semanticTokenScopes": [
+			{
+				"language": "musi",
+				"scopes": {
+					"variable.readonly": [
+						"variable.other.constant.musi"
+					],
+					"variable.declaration.readonly": [
+						"variable.other.constant.musi"
+					],
+					"variable.mutable": [
+						"variable.other.musi"
+					],
+					"variable.declaration.mutable": [
+						"variable.other.musi"
+					],
+					"parameter.readonly": [
+						"variable.other.constant.musi"
+					],
+					"parameter.declaration.readonly": [
+						"variable.other.constant.musi"
+					],
+					"parameter.mutable": [
+						"variable.parameter.musi"
+					],
+					"parameter.declaration.mutable": [
+						"variable.parameter.musi"
+					],
+					"property.readonly": [
+						"variable.other.constant.property.musi"
+					],
+					"property.declaration.readonly": [
+						"variable.other.constant.property.musi"
+					],
+					"property.mutable": [
+						"variable.other.property.musi"
+					],
+					"property.declaration.mutable": [
+						"variable.other.property.musi"
+					],
+					"property": [
+						"variable.other.property.musi"
+					],
+					"property.declaration": [
+						"variable.other.property.musi"
+					],
+					"function": [
+						"entity.name.function.musi"
+					],
+					"function.declaration": [
+						"entity.name.function.musi"
+					],
+					"type": [
+						"entity.name.type.musi"
+					],
+					"type.declaration": [
+						"entity.name.type.musi"
+					],
+					"enumMember": [
+						"variable.other.enummember.musi"
+					],
+					"enumMember.declaration": [
+						"variable.other.enummember.musi"
+					],
+					"typeParameter": [
+						"storage.type.parameter.musi"
+					],
+					"typeParameter.declaration": [
+						"storage.type.parameter.musi"
+					]
+				}
+			}
+		],
+		"configurationDefaults": {
+			"[musi]": {
+				"editor.semanticHighlighting.enabled": true
+			},
+			"editor.semanticTokenColorCustomizations": {
+				"rules": {
+					"*.mutable": {
+						"underline": true
+					}
+				}
+			}
+		},
+		"commands": [
+			{
+				"command": "musi.restartServer",
+				"title": "Restart Language Server",
+				"category": "Musi",
+				"icon": "$(refresh)"
+			},
+			{
+				"command": "musi.stopServer",
+				"title": "Stop Language Server",
+				"category": "Musi",
+				"icon": "$(stop)"
+			},
+			{
+				"command": "musi.showLogs",
+				"title": "Show Language Server Output",
+				"category": "Musi",
+				"icon": "$(output)"
+			},
+			{
+				"command": "musi.runFile",
+				"title": "Run File",
+				"category": "Musi",
+				"description": "Run the current .ms file using the Musi runtime."
+			},
+			{
+				"command": "musi.checkFile",
+				"title": "Check File",
+				"category": "Musi",
+				"description": "Check the current .ms file for errors using musi check."
+			},
+			{
+				"command": "musi.runTask",
+				"title": "Run Task",
+				"category": "Musi",
+				"description": "Pick and run a task from mspackage.json."
+			},
+			{
+				"command": "musi.runTest",
+				"title": "▷ Run test",
+				"category": "Musi"
+			},
+			{
+				"command": "musi.runMain",
+				"title": "▷ Run",
+				"category": "Musi"
+			}
+		],
+		"keybindings": [
+			{
+				"command": "musi.restartServer",
+				"key": "ctrl+shift+R",
+				"mac": "cmd+shift+R",
+				"when": "editorLangId == musi"
+			}
+		],
+		"menus": {
+			"commandPalette": [
+				{
+					"command": "musi.restartServer",
+					"when": "true"
+				}
+			],
+			"view/item/context": [
+				{
+					"command": "musi.restartServer",
+					"when": "view == workbench.explorer.fileView",
+					"group": "musi@1"
+				}
+			]
+		},
+		"configuration": {
+			"title": "Musi",
+			"properties": {
+				"musi.lspPath": {
+					"type": "string",
+					"default": "musi-lsp",
+					"description": "Path to the musi-lsp executable."
+				},
+				"musi.cliPath": {
+					"type": "string",
+					"default": "musi",
+					"markdownDescription": "Path to `musi` CLI binary. If not set, searches in `target/debug`, `target/release`, `~/.cargo/bin`, and system PATH."
+				},
+				"musi.checkOnSave": {
+					"type": "boolean",
+					"default": true,
+					"description": "Run musi check when saving a .ms file."
+				},
+				"musi.server.path": {
+					"type": [
+						"string",
+						"null"
+					],
+					"default": null,
+					"markdownDescription": "Path to `musi_lsp` binary. If not set, searches in `target/debug`, `target/release`, and `PATH`."
+				},
+				"musi.runtime.path": {
+					"type": [
+						"string",
+						"null"
+					],
+					"default": null,
+					"markdownDescription": "Path to Musi runtime environment. Required for code execution and some diagnostics."
+				},
+				"musi.trace.server": {
+					"type": "string",
+					"enum": [
+						"off",
+						"messages",
+						"verbose"
+					],
+					"default": "off",
+					"description": "Traces communication between VS Code and language server."
+				},
+				"musi.diagnostics.enable": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable/disable diagnostics from language server."
+				},
+				"musi.inlayHints.enable": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable/disable all inlay hints."
+				},
+				"musi.inlayHints.typeAnnotations.enable": {
+					"type": "boolean",
+					"default": true,
+					"markdownDescription": "Show inferred type annotations for bindings (e.g., `val x := 42` shows `: Int`)."
+				},
+				"musi.inlayHints.parameterNames.enable": {
+					"type": "boolean",
+					"default": true,
+					"markdownDescription": "Show parameter names in function calls (e.g., `foo(x:` before argument)."
+				},
+				"musi.inlayHints.parameterNames.suppressWhenArgumentMatchesName": {
+					"type": "boolean",
+					"default": true,
+					"description": "Suppress parameter name hints when argument name matches parameter."
+				},
+				"musi.inlayHints.returnTypes.enable": {
+					"type": "boolean",
+					"default": true,
+					"description": "Show return type hints for function definitions without explicit return types."
+				},
+				"musi.inlayHints.chainingHints.enable": {
+					"type": "boolean",
+					"default": true,
+					"markdownDescription": "Show type hints for intermediate values in method chains (e.g., after `|>`)."
+				},
+				"musi.semanticHighlighting.enable": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable semantic highlighting from language server."
+				},
+				"musi.semanticHighlighting.distinguishMutability": {
+					"type": "boolean",
+					"default": true,
+					"markdownDescription": "Distinguish between `val` and `var` bindings with different colors."
+				},
+				"musi.completion.enable": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable/disable code completion."
+				},
+				"musi.completion.autoImport": {
+					"type": "boolean",
+					"default": true,
+					"description": "Automatically add imports when completing symbols from other modules."
+				},
+				"musi.completion.snippets.enable": {
+					"type": "boolean",
+					"default": true,
+					"description": "Include snippet completions (e.g., `fn`, `if`, `match`)."
+				},
+				"musi.hover.enable": {
+					"type": "boolean",
+					"default": true,
+					"description": "Show hover information for symbols."
+				},
+				"musi.hover.showDocumentation": {
+					"type": "boolean",
+					"default": true,
+					"description": "Include documentation comments in hover tooltips."
+				},
+				"musi.hover.showSignature": {
+					"type": "boolean",
+					"default": true,
+					"description": "Show type signature in hover tooltips."
+				},
+				"musi.rename.enablePreview": {
+					"type": "boolean",
+					"default": true,
+					"description": "Show preview of all changes before applying rename."
+				},
+				"musi.references.excludeImports": {
+					"type": "boolean",
+					"default": false,
+					"description": "Exclude imports from find references results."
+				},
+				"musi.formatting.enable": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable/disable code formatting."
+				},
+				"musi.formatting.indentSize": {
+					"type": "number",
+					"default": 2,
+					"description": "Number of spaces for indentation."
+				},
+				"musi.formatting.maxLineWidth": {
+					"type": "number",
+					"default": 100,
+					"description": "Maximum line width before wrapping."
+				},
+				"musi.codeLens.enable": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable/disable code lens annotations."
+				},
+				"musi.codeLens.showReferences": {
+					"type": "boolean",
+					"default": true,
+					"description": "Show reference count above functions and types."
+				},
+				"musi.codeLens.showTest": {
+					"type": "boolean",
+					"default": true,
+					"markdownDescription": "Show 'Test' lens above `#[test]` functions."
+				}
+			}
+		}
+	},
+	"scripts": {
+		"build": "bun build ./client/src/main.ts --outfile=./dist/extension.js --external vscode --target=node",
+		"package": "bun run build && vsce package",
+		"vscode:prepublish": "bun run build"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "latest",
+		"@types/bun": "latest",
+		"@types/node": "latest",
+		"@types/vscode": "^1.75.0",
+		"@vscode/vsce": "latest",
+		"typescript": "latest",
+		"vscode-languageclient": "latest"
+	},
+	"trustedDependencies": [
+		"@biomejs/biome",
+		"@vscode/vsce-sign",
+		"keytar"
+	]
 }
