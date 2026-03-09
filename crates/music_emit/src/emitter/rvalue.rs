@@ -330,7 +330,10 @@ fn emit_callee(fe: &mut FnEmitter, callee: &IrCallee, arg_count: i32, tail: bool
 }
 
 const fn is_signed_int(ty: &IrType) -> bool {
-    matches!(ty, IrType::Int8 | IrType::Int16 | IrType::Int32 | IrType::Int64)
+    matches!(
+        ty,
+        IrType::Int8 | IrType::Int16 | IrType::Int32 | IrType::Int64
+    )
 }
 
 const fn is_unsigned_int(ty: &IrType) -> bool {
