@@ -115,13 +115,13 @@ match expr (
 
 ## 4.8 Functions
 
-```
+```musi
 let add   := (x: Int, y: Int) -> x + y;
-let fetch := (url: Url) ~> String over { IO } -> ...;
+let fetch := (url: Url) ~> String under { IO } -> ...;
 let id    := forall 'T -> (x: 'T) -> 'T -> x;
 ```
 
-`->` pure. `~>` effectful — requires `over { ... }`. Functions are anonymous; the name comes from the enclosing binding.
+`->` pure. `~>` effectful — requires `under { ... }`. Functions are anonymous; the name comes from the enclosing binding.
 
 ### Parameter modes
 

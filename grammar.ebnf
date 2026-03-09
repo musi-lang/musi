@@ -45,9 +45,9 @@ comment = "//" , { any - newline }
         | "///" , { any - newline }
         | "/*" , { any } , "*/" ;   (* block comments do not nest *)
 
-(* 1.5  Keywords (26)
-   and or not xor let var ref inout if match defer return try
-   spawn await forall exists where of over in class given law
+(* 1.5  Keywords (29)
+   and as or not xor let var ref inout if match defer effect return try
+   spawn await forall exists where of over under in class given law
    import export *)
 
 (* 1.6  Compound tokens — maximal munch
@@ -180,13 +180,17 @@ ast_decl =
     [ "export" ] , ( ast_let | ast_var )
   | "export" , "{" , export_list , "}" , [ ":=" , ast_import ]
   | ast_class_decl
-  | ast_given_decl ;
+  | ast_given_decl
+  | ast_effect_decl ;
 
-ast_class_decl = "class" , ident , [ ty_param_list ] ,
-                 [ "where" , ty_named_list ] ,
-                 "{" , { class_member } , "}" ;
-ast_given_decl = "given" , ast_ty_named , [ where_clause ] ,
-                 "{" , { class_member } , "}" ;
+ast_class_decl  = "class" , ident , [ ty_param_list ] ,
+                  [ "where" , ty_named_list ] ,
+                  "{" , { class_member } , "}" ;
+ast_given_decl  = "given" , ast_ty_named , [ where_clause ] ,
+                  "{" , { class_member } , "}" ;
+ast_effect_decl = "effect" , ident , [ "of" , ty_param_list ] ,
+                  "{" , { effect_op , ";" } , "}" ;
+effect_op       = ident , ":" , ast_ty ;
 class_member   = ( fn_decl | law_decl ) , ";" ;
 fn_decl        = "let" , op_or_ident , params , [ ty_annot ] ,
                  [ ":=" , ast_expr ] ;
@@ -209,7 +213,7 @@ export_item    = ident , [ "as" , ident ] ;
    ref T = heap-allocated reference type. *)
 ast_ty       = ast_ty_arrow ;
 ast_ty_arrow = ast_ty_eff , { ( "->" | "~>" ) , ast_ty_eff } ;
-ast_ty_eff   = ast_ty_sum , [ "over" , effect_set ] ;
+ast_ty_eff   = ast_ty_sum , [ "under" , effect_set ] ;
 ast_ty_sum   = ast_ty_prod , { "+" , ast_ty_prod } ;
 ast_ty_prod  = ast_ty_base , { "*" , ast_ty_base } ;
 ast_ty_base  =

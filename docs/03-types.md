@@ -27,7 +27,7 @@ Special identifiers: `Any` (⊤), `Never` (⊥), `Type` (kind of all types).
 
 Fields separated by **semicolons**. Fields may carry default values.
 
-```
+```musi
 let Point  := { x: Int; y: Int };
 let Config := { host: String; port: Int := 8080; debug: Bool := False };
 ```
@@ -36,7 +36,7 @@ let Config := { host: String; port: Int := 8080; debug: Bool := False };
 
 Leading dot, fields separated by **commas**, initialised with `:=`.
 
-```
+```musi
 let p   := Point.{ x := 1, y := 2 };      // named
 let p   := .{ x := 1, y := 2 };           // anonymous — type inferred
 let cfg := Config.{ host := "localhost" }; // omits defaulted fields
@@ -57,7 +57,7 @@ let cfg := Config.{ host := "localhost" }; // omits defaulted fields
 
 ## 3.6 Sum Types
 
-```
+```musi
 let Shape  := Circle + Rect;
 let Option := Some of 'T + None;
 let Result := Ok of 'T + Err of 'E;
@@ -65,20 +65,20 @@ let Result := Ok of 'T + Err of 'E;
 
 Variant construction and destruction use UDN dot-prefix:
 
-```
+```musi
 .Some(5)    .None    .Ok(v)    .Err(e)      // construct
 ```
 
 Sum type literal binding requires type annotation or inference:
 
-```
+```musi
 let x : Option of Int := .Some(5);
 let y : Option of Int := .None;
 ```
 
 ## 3.7 Refinement Types
 
-```
+```musi
 let Positive    := { n: Int | n > 0 };
 let Probability := { f: Float64 | f >= 0.0 and f <= 1.0 };
 let NonEmpty    := forall 'T -> { xs: Array of 'T | xs.length > 0 };
@@ -93,14 +93,14 @@ let NonEmpty    := forall 'T -> { xs: Array of 'T | xs.length > 0 };
 
 `over` declares, `of` instantiates. No angle brackets.
 
-```
+```musi
 let xs : List of Int        := ...;
 let m  : Map of String, Int := ...;
 ```
 
 ## 3.9 Quantification
 
-```
+```musi
 let id   := forall 'T -> (x: 'T) -> 'T -> x;
 let sort := forall 'T where 'T <: Ord -> Array of 'T -> Array of 'T;
 let mkCounter : exists 'S -> { state: 'S; inc: 'S -> 'S };
@@ -110,7 +110,7 @@ let mkCounter : exists 'S -> { state: 'S; inc: 'S -> 'S };
 
 Structural. No declaration required.
 
-```
+```musi
 let Animal := { name: String };
 let Dog    := { name: String; breed: String };
 // Dog <: Animal automatically
@@ -122,7 +122,7 @@ let a : Animal := Dog.{ name := "Rex", breed := "Lab" }; // valid
 
 ## 3.11 Row Polymorphism
 
-```
+```musi
 let greet := (x: { name: String; ... }) -> f"hello {x.name}";
 ```
 
@@ -140,7 +140,7 @@ let greet := (x: { name: String; ... }) -> f"hello {x.name}";
 
 No implicit coercion. All explicit via `Into`:
 
-```
+```musi
 let n : Float64 := 5.into();
 let s : String  := 42.into();
 ```
@@ -149,7 +149,7 @@ let s : String  := 42.into();
 
 Values are stack-allocated and copied by default. `ref` allocates on the heap with shared identity, always mutable through:
 
-```
+```musi
 let p := ref Point.{ x := 1, y := 2 };
 ```
 

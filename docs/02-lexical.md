@@ -2,7 +2,7 @@
 
 ## 2.1 Character Classes
 
-```
+```ebnf
 letter  = A–Z | a–z
 digit   = 0–9
 xdigit  = digit | A–F | a–f
@@ -65,9 +65,9 @@ Numeric separator: `1_000_000`. Scientific: `1.5e10`.
 | `\|>` | pipe |
 | `::`  | cons |
 
-## 2.5 Keywords (24)
+## 2.5 Keywords
 
-`and` `or` `not` `xor` `let` `var` `ref` `inout` `if` `match` `defer` `return` `try` `spawn` `await` `forall` `exists` `where` `of` `over` `in` `class` `given` `law` `import` `export`
+`and` `await` `class` `defer` `exists` `export` `forall` `given` `if` `import` `in` `inout` `law` `let` `match` `not` `of` `or` `over` `ref` `return` `spawn` `try` `under` `var` `where` `xor`
 
 > `Int` `String` `Bool` etc. are stdlib identifiers, not keywords. They can be shadowed.
 

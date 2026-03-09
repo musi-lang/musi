@@ -116,7 +116,7 @@ Handler may resume (`eff.res`) or abort (`eff.abt`). Continuation is single-shot
 
 | Source | Bytecode |
 |--------|----------|
-| `~> over { IO }` | `eff.psh 0x00` at entry |
+| `~> under { IO }` | `eff.psh 0x00` at entry |
 | `await expr` | `eff.do Async.Suspend` |
 | `spawn fn` | `tsk.spn fn_id` |
 | `defer expr` | inserted before each `ret`/`ret.u`, LIFO |

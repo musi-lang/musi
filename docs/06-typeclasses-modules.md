@@ -2,7 +2,7 @@
 
 ## 6.1 Typeclass Declaration
 
-```
+```musi
 class Eq over 'T {
     let (=)  : 'T * 'T -> Bool;
     let (/=) : 'T * 'T -> Bool;
@@ -17,7 +17,7 @@ class Eq over 'T {
 
 ## 6.2 Typeclass Instance
 
-```
+```musi
 given Eq of Int {
     let (=)  := (a, b) -> ...;
     let (/=) := (a, b) -> not (a = b);
@@ -32,7 +32,7 @@ given Eq of List over 'T where 'T <: Eq {
 
 ## 6.3 Superclass Constraints
 
-```
+```musi
 class Ord over 'T where 'T <: Eq {
     let (<) : 'T * 'T -> Bool;
     let (<=): 'T * 'T -> Bool;
@@ -45,7 +45,7 @@ class Ord over 'T where 'T <: Eq {
 
 Via typeclass only. `and`/`or`/`not`/`xor` are **not overloadable**.
 
-```
+```musi
 class Add over 'T {
     let (+) : 'T * 'T -> 'T;
 }
@@ -59,7 +59,7 @@ given Add of Vector2 {
 
 ### Into (coercion)
 
-```
+```musi
 class Into over 'A 'B { let into : 'A -> 'B }
 
 let f : Float64 := 5.into();
@@ -70,9 +70,9 @@ No implicit coercion anywhere. Stdlib aliases: `.toInt` `.toFloat64` `.toString`
 
 ### Propagate (try desugaring)
 
-```
+```musi
 class Propagate over 'F 'T 'E {
-    let extract : 'F ~> 'T over { Throw of 'E }
+    let extract : 'F ~> 'T under { Throw of 'E }
 }
 ```
 
@@ -80,9 +80,9 @@ class Propagate over 'F 'T 'E {
 
 ### Iterable (no loop keywords)
 
-```
+```musi
 class Iterable over 'T {
-    let next : 'T ~> ?'T over { State }
+    let next : 'T ~> ?'T under { State }
 }
 
 xs.map((x) -> x * 2);
@@ -96,7 +96,7 @@ Every `.ms` file is automatically a module. Nothing is public without `export`.
 
 ### Naming
 
-```
+```text
 token.ms         →  Token
 http_client.ms   →  HttpClient      // snake_case → PascalCase
 parser/expr.ms   →  Parser.Expr     // directory = namespace
@@ -106,7 +106,7 @@ Override: `#[module := "Name"]`.
 
 ### Export
 
-```
+```musi
 export let PI := 3.14159;           // inline
 export { PI, sqrt };                // collected
 export { sqrt as squareRoot };      // renamed
@@ -117,14 +117,14 @@ export { map, filter } := import "collections"; // re-export
 
 `import` returns a record value — it is an expression, not a directive.
 
-```
+```musi
 let Math         := import "math";
 let { sqrt, PI } := import "math";  // destructured
 ```
 
 ### First-class modules
 
-```
+```musi
 let compute := (math: { sqrt: Float64 -> Float64 }) -> math.sqrt(4.0);
 compute(import "math");
 compute(import "fastmath");
@@ -136,9 +136,9 @@ Strictly top-to-bottom. Circular imports are a compile error. Dependency graph i
 
 ## 6.7 Entry Point
 
-```
-#[entrypoint]
-let run := () ~> () over { IO } -> ( ... );
+```musi
+#[main]
+let run := () ~> () under { IO } -> ( ... );
 ```
 
-No reserved `main`. Multiple `#[entrypoint]` allowed — test runners, benchmarks, CLI subcommands.
+No reserved `main`. Multiple `#[main]` allowed — test runners, benchmarks, CLI subcommands.

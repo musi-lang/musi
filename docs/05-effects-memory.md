@@ -2,12 +2,12 @@
 
 ## 5.1 Effect System
 
-`->` = pure. `~>` = effectful. Effects declared with `over { ... }`. Undeclared effects are compile errors — not warnings, not lint.
+`->` = pure. `~>` = effectful. Effects declared with `under { ... }`. Undeclared effects are compile errors — not warnings, not lint.
 
-```
+```musi
 let add      : Int * Int -> Int;
-let readFile : Path ~> Bytes over { IO };
-let fetch    : Url ~> String over { IO, Async };
+let readFile : Path ~> Bytes under { IO };
+let fetch    : Url ~> String under { IO, Async };
 ```
 
 ### Built-in effects
@@ -25,10 +25,10 @@ let fetch    : Url ~> String over { IO, Async };
 
 ### Effect operation typing
 
-`never` resume type = continuation cannot be resumed, only aborted.
+`Never` resume type = continuation cannot be resumed, only aborted.
 
-```
-effect Throw of 'E { raise : 'E -> never }
+```musi
+effect Throw of 'E { raise : 'E -> Never }
 effect Async       { suspend : () -> ()  }
 effect State of 'S { get : () -> 'S; put : 'S -> () }
 ```
@@ -43,15 +43,15 @@ Dynamically scoped, statically checked. Missing handler at a function boundary =
 
 ### Effect variables
 
-```
+```musi
 let map : forall 'T 'U 'E ->
-    ('T ~> 'U over 'E) -> Array of 'T ~> Array of 'U over 'E;
+    ('T ~> 'U under 'E) -> Array of 'T ~> Array of 'U under 'E;
 ```
 
 ## 5.2 Throw
 
-```
-let divide := (a, b: Int) ~> Int over { Throw of DivisionByZero } -> (
+```musi
+let divide := (a, b: Int) ~> Int under { Throw of DivisionByZero } -> (
     a / b                   if b /= 0
   | raise(DivisionByZero)   if _
 );
@@ -133,8 +133,8 @@ flowchart LR
 
 Bulk-freed at scope exit. No individual `free` needed. Suitable for request/response cycles, game loops, parsers.
 
-```
-let processRequest := (req: Request) ~> Response over { Arena } -> (
+```musi
+let processRequest := (req: Request) ~> Response under { Arena } -> (
     let buf := alc.arena Bytes(1024);   // freed when function returns
     ...
 );
@@ -159,13 +159,13 @@ defer free(p);
 
 `pin` roots a GC object and yields a stable `Ptr` for FFI:
 
-```
-let pin : forall 'T -> ref 'T ~> Ptr of 'T over { Manual, Unsafe };
+```musi
+let pin : forall 'T -> ref 'T ~> Ptr of 'T under { Manual, Unsafe };
 ```
 
 ## 5.7 defer
 
-```
+```musi
 defer f.close();
 defer (
     release(a);

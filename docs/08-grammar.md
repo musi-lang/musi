@@ -165,13 +165,17 @@ ast_decl =
     [ "export" ] , ( ast_let | ast_var )
   | "export" , "{" , export_list , "}" , [ ":=" , ast_import ]
   | ast_class_decl
-  | ast_given_decl ;
+  | ast_given_decl
+  | ast_effect_decl ;
 
-ast_class_decl = "class" , ident , [ ty_param_list ] ,
-                 [ "where" , ty_named_list ] ,
-                 "{" , { class_member } , "}" ;
-ast_given_decl = "given" , ast_ty_named , [ where_clause ] ,
-                 "{" , { class_member } , "}" ;
+ast_class_decl  = "class" , ident , [ ty_param_list ] ,
+                  [ "where" , ty_named_list ] ,
+                  "{" , { class_member } , "}" ;
+ast_given_decl  = "given" , ast_ty_named , [ where_clause ] ,
+                  "{" , { class_member } , "}" ;
+ast_effect_decl = "effect" , ident , [ "of" , ty_param_list ] ,
+                  "{" , { effect_op , ";" } , "}" ;
+effect_op       = ident , ":" , ast_ty ;
 class_member   = ( fn_decl | law_decl ) , ";" ;
 fn_decl        = "let" , op_or_ident , params , [ ty_annot ] ,
                  [ ":=" , ast_expr ] ;
@@ -194,7 +198,7 @@ export_item    = ident , [ "as" , ident ] ;
    ref T = heap-allocated reference type.  *)
 ast_ty       = ast_ty_arrow ;
 ast_ty_arrow = ast_ty_eff , { ( "->" | "~>" ) , ast_ty_eff } ;
-ast_ty_eff   = ast_ty_sum , [ "over" , effect_set ] ;
+ast_ty_eff   = ast_ty_sum , [ "under" , effect_set ] ;
 ast_ty_sum   = ast_ty_prod , { "+" , ast_ty_prod } ;
 ast_ty_prod  = ast_ty_base , { "*" , ast_ty_base } ;
 ast_ty_base  =
@@ -255,7 +259,7 @@ arg        = "..." | ast_expr ;
 
 | Non-terminal | FIRST |
 |---|---|
-| `ast_expr` | `lit ident ( [ .{ . match let var forall exists return defer spawn await try import export class given #[` |
+| `ast_expr` | `lit ident ( [ .{ . match let var forall exists return defer spawn await try import export class given effect #[` |
 | `ast_ty` | `ident ' ? ( [ { ref forall exists` |
 | `ast_pat` | `_ lit ident var . { ( [` |
 | `ast_piecewise` | `(` |
@@ -264,7 +268,7 @@ arg        = "..." | ast_expr ;
 | Non-terminal | FOLLOW |
 |---|---|
 | `ast_expr` | `; ) ] , => if \| in` |
-| `ast_ty` | `, ) ] } => ; \| of over where` |
+| `ast_ty` | `, ) ] } => ; \| of over under where` |
 | `ast_pat` | `=> if , ) ]` |
 
 ## 8.5 LL(1) Disambiguation

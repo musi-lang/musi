@@ -4,14 +4,14 @@
 
 No OS threads at the language level. Concurrency is cooperative tasks.
 
-```
+```musi
 let t      := spawn fetch(url);   // t : Task of String
 let result := await t;            // suspends until complete
 ```
 
 Both require `Async` effect in the enclosing function. `Task of 'T` is a first-class value.
 
-```
+```musi
 let tasks   := urls.map((url) -> spawn fetch(url));
 let results := tasks.map((t)  -> await t);
 ```
@@ -20,7 +20,7 @@ let results := tasks.map((t)  -> await t);
 
 `Channel` is a stdlib type, not a language construct.
 
-```
+```musi
 let ch := Channel of Int;
 spawn ch.send(42);
 let v  := await ch.recv();   // suspends if empty
@@ -30,7 +30,7 @@ let v  := await ch.recv();   // suspends if empty
 
 No `for`/`while`/`loop` keywords. Tail-recursive calls compile to `inv.tal` — O(1) stack, verifier-guaranteed.
 
-```
+```musi
 let sum := (acc: Int, n: Int) -> (
     acc                   if n = 0
   | sum(acc + n, n - 1)   if _
@@ -39,15 +39,15 @@ let sum := (acc: Int, n: Int) -> (
 
 ## 7.4 extrin — FFI Bindings
 
-```
+```musi
 #[extrin := "C"]
-let malloc : Int ~> Ptr over { Unsafe };
+let malloc : Int ~> Ptr under { Unsafe };
 
 #[extrin := ("C", "sqlite3_open")]
-let dbOpen : CString * Ptr of Ptr ~> CInt over { Unsafe };
+let dbOpen : CString * Ptr of Ptr ~> CInt under { Unsafe };
 
 #[extrin := "JS"]
-let consoleLog : String ~> () over { IO };
+let consoleLog : String ~> () under { IO };
 ```
 
 First arg = ABI string. Optional second = symbol name (defaults to binding name). All C/native `extrin` bindings require at minimum `Unsafe`.
@@ -67,19 +67,19 @@ First arg = ABI string. Optional second = symbol name (defaults to binding name)
 
 ## 7.5 intrin — Compiler Intrinsics
 
-```
+```musi
 #[intrin := "size_of"]   let sizeOf    : forall 'T -> Int;
-#[intrin := "transmute"] let transmute : forall 'T 'U -> 'T ~> 'U over { Unsafe };
+#[intrin := "transmute"] let transmute : forall 'T 'U -> 'T ~> 'U under { Unsafe };
 #[intrin := "unreachable"] let unreachable : forall 'T -> 'T;
-#[intrin := "pin"]       let pin       : forall 'T -> ref 'T ~> Ptr of 'T over { Manual, Unsafe };
+#[intrin := "pin"]       let pin       : forall 'T -> ref 'T ~> Ptr of 'T under { Manual, Unsafe };
 ```
 
 ## 7.6 Safe Wrapper Pattern
 
 Contain all `Unsafe` in one function, expose a typed `Result`:
 
-```
-let openDb := (path: String) ~> Result of Db, SqlError over { IO } -> (
+```musi
+let openDb := (path: String) ~> Result of Db, SqlError under { IO } -> (
     let rc := dbOpen(path.toCString(), inout ptr);
     .Ok(Db.{ ptr := ptr })    if rc = 0
   | .Err(.SqlError(rc))       if _

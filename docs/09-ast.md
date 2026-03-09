@@ -29,7 +29,7 @@ flowchart TD
 
 ## 9.3 stmt
 
-```
+```text
 stmt::Node
   expr: expr::Node
   // semicolon consumed, not stored
@@ -37,7 +37,7 @@ stmt::Node
 
 ## 9.4 expr
 
-```
+```text
 expr::Node =
   // literals & names
     Lit       { lit: lit::Node }
@@ -171,7 +171,7 @@ expr::UnaryOp =
 
 ## 9.5 lit
 
-```
+```text
 lit::Node =
     Int   { value: i64 }
   | Float { value: f64 }
@@ -183,7 +183,7 @@ lit::Node =
 
 ## 9.6 pat
 
-```
+```text
 pat::Node =
     Wild
   | Lit     { lit: lit::Node }
@@ -202,7 +202,7 @@ pat::RecField
 
 ## 9.7 ty
 
-```
+```text
 ty::Node =
     Var     { name: String }                           // 'T
   | Named   { name: String, args: ty::Node* }
@@ -239,7 +239,7 @@ ty::Quantifier = Forall | Exists
 
 ## 9.8 decl
 
-```
+```text
 decl::ClassMember =
     Fn  { sig: FnSig, default: ?expr::Node }
   | Law { name: String, body: expr::Node }
@@ -256,7 +256,7 @@ decl::ExportItem
 
 ## 9.9 attr
 
-```
+```text
 attr::Node  { name: String, value: ?Value }
 attr::Value = Lit { lit: lit::Node } | Tuple { lits: lit::Node+ }
 ```

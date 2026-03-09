@@ -69,7 +69,7 @@ Predicates outside the decidable fragment remain runtime-checked permanently.
 
 ## 13.7 Milestones
 
-```
+```text
 M1   Hello world (tree-walk interpreter)
 M2   Fibonacci, sum — tail calls O(1), verifier passes
 M3   Bytecode emitted and executed
