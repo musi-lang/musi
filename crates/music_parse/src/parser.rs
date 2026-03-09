@@ -41,8 +41,6 @@ impl<'a> Parser<'a> {
         }
     }
 
-    // -- peek & position -----------------------------------------------------
-
     #[must_use]
     pub(crate) fn peek(&self) -> &Token {
         &self.tokens[self.pos]
@@ -65,8 +63,6 @@ impl<'a> Parser<'a> {
     pub(crate) fn at(&self, kind: TokenKind) -> bool {
         self.peek_kind() == kind
     }
-
-    // -- consumption ---------------------------------------------------------
 
     pub(crate) fn bump(&mut self) -> &Token {
         let tok = &self.tokens[self.pos];
@@ -105,8 +101,6 @@ impl<'a> Parser<'a> {
         Symbol(u32::MAX)
     }
 
-    // -- span tracking -------------------------------------------------------
-
     pub(crate) fn start_span(&self) -> u32 {
         self.peek().span.start
     }
@@ -126,8 +120,6 @@ impl<'a> Parser<'a> {
         }
     }
 
-    // -- recovery ------------------------------------------------------------
-
     pub(crate) fn recover_to(&mut self, sync: &[TokenKind]) {
         loop {
             let k = self.peek_kind();
@@ -145,8 +137,6 @@ impl<'a> Parser<'a> {
         }
     }
 
-    // -- arena helpers -------------------------------------------------------
-
     pub(crate) fn alloc_expr(&mut self, e: Expr) -> Idx<Expr> {
         self.arenas.exprs.alloc(e)
     }
@@ -158,8 +148,6 @@ impl<'a> Parser<'a> {
     pub(crate) fn alloc_pat(&mut self, p: Pat) -> Idx<Pat> {
         self.arenas.pats.alloc(p)
     }
-
-    // -- error node factories ------------------------------------------------
 
     pub(crate) fn error_expr(&mut self, err: &ParseError) -> Expr {
         let span = self.peek().span;
@@ -186,8 +174,6 @@ impl<'a> Parser<'a> {
             span: self.finish_span(span.start),
         }
     }
-
-    // -- convenience ---------------------------------------------------------
 
     pub(crate) fn parse_alloc_expr(&mut self) -> Idx<Expr> {
         let e = self.parse_expr();
@@ -220,8 +206,6 @@ impl<'a> Parser<'a> {
     pub(crate) fn resolve(&self, sym: Symbol) -> &str {
         self.interner.resolve(sym)
     }
-
-    // -- list parsing --------------------------------------------------------
 
     pub(crate) fn sep_by<T>(
         &mut self,
@@ -280,8 +264,6 @@ impl<'a> Parser<'a> {
         let _close = self.expect(close);
         items
     }
-
-    // -- program entry -------------------------------------------------------
 
     pub(crate) fn parse_program(&mut self) -> ParsedModule {
         let start = self.start_span();
