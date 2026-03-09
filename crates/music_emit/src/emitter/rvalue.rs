@@ -1,9 +1,9 @@
 //! Rvalue emission: translates `IrRvalue` into bytecode sequences.
 
-use music_ir::{IrBinOp, IrCallee, IrConstValue, IrOperand, IrRvalue, IrUnaryOp};
-use music_shared::{Arena, Interner};
+use std::cmp::Ordering;
 
-use music_ir::IrType;
+use music_ir::{IrBinOp, IrCallee, IrConstValue, IrOperand, IrRvalue, IrType, IrUnaryOp};
+use music_shared::{Arena, Idx, Interner};
 
 use crate::const_pool::ConstPool;
 use crate::error::EmitError;
@@ -77,7 +77,9 @@ pub fn emit_rvalue(
         IrRvalue::MakeVariant { tag, payload, .. } => {
             emit_rvalue_make_variant(fe, cp, *tag, payload, interner)
         }
-        IrRvalue::MakeArray { elems, .. } => emit_rvalue_make_array(fe, cp, elems, interner),
+        IrRvalue::MakeArray { elem_ty, elems } => {
+            emit_rvalue_make_array(fe, cp, tp, type_arena, *elem_ty, elems, interner)
+        }
         IrRvalue::MakeClosure { fn_id, captures } => {
             emit_rvalue_make_closure(fe, cp, fn_id.raw(), captures, interner)
         }
@@ -98,9 +100,12 @@ pub fn emit_rvalue(
             fe.emit_get_tag();
             Ok(())
         }
-        IrRvalue::GetPayload { value, .. } => {
+        IrRvalue::GetPayload { value, field, .. } => {
             emit_operand(fe, cp, value, interner)?;
-            encode_u8(&mut fe.code, Opcode::GET_PAY, 0);
+            let f = u8::try_from(*field).map_err(|_| EmitError::OperandOverflow {
+                desc: "payload field index exceeds 255".into(),
+            })?;
+            encode_u8(&mut fe.code, Opcode::GET_PAY, f);
             Ok(())
         }
         IrRvalue::AllocRef { ty } => {
@@ -114,10 +119,9 @@ pub fn emit_rvalue(
             Ok(())
         }
         IrRvalue::Deref { ptr } => emit_rvalue_deref(fe, cp, ptr, interner),
-        IrRvalue::Cast { operand, .. } => {
+        IrRvalue::Cast { operand, from, to } => {
             emit_operand(fe, cp, operand, interner)?;
-            encode_no_operand(&mut fe.code, Opcode::CNV_TRM);
-            Ok(())
+            emit_rvalue_cast(fe, type_arena, *from, *to)
         }
         IrRvalue::Spawn { callee, args } => emit_rvalue_spawn(fe, cp, callee, args, interner),
         IrRvalue::Await { task } => {
@@ -161,7 +165,7 @@ fn emit_rvalue_make_product(
     let pop_count = i32::try_from(fields.len()).map_err(|_| EmitError::UnresolvableType {
         desc: "too many fields".into(),
     })?;
-    fe.emit_mk_prd(field_count, pop_count);
+    fe.emit_mk_prd(field_count, pop_count)?;
     Ok(())
 }
 
@@ -175,13 +179,24 @@ fn emit_rvalue_make_variant(
     for p in payload {
         emit_operand(fe, cp, p, interner)?;
     }
+    let payload_count = i32::try_from(payload.len()).map_err(|_| EmitError::UnresolvableType {
+        desc: "too many variant payload fields".into(),
+    })?;
     fe.emit_mk_var(tag);
+    if payload_count > 0 {
+        fe.pop_n(payload_count - 1); // N values → 1 variant = -(N-1)
+    } else {
+        fe.push_n(1); // 0 values → 1 variant = +1
+    }
     Ok(())
 }
 
 fn emit_rvalue_make_array(
     fe: &mut FnEmitter,
     cp: &mut ConstPool,
+    tp: &mut TypePool,
+    type_arena: &Arena<IrType>,
+    elem_ty: Idx<IrType>,
     elems: &[IrOperand],
     interner: &Interner,
 ) -> Result<(), EmitError> {
@@ -192,7 +207,8 @@ fn emit_rvalue_make_array(
     if let Some(i) = cp.intern(&len_const, interner)? {
         fe.emit_ld_cst(i);
     }
-    encode_u32(&mut fe.code, Opcode::MK_ARR, 0);
+    let type_id = tp.lower_ir_type(elem_ty, type_arena)?;
+    encode_u32(&mut fe.code, Opcode::MK_ARR, type_id);
     fe.pop_n(1);
     fe.push_n(1);
     emit_rvalue_array_store(fe, cp, elems, interner)
@@ -240,9 +256,9 @@ fn emit_rvalue_make_closure(
     for cap in captures {
         emit_operand(fe, cp, cap, interner)?;
     }
-    fe.emit_mk_prd(capture_count, pop_count);
+    fe.emit_mk_prd(capture_count, pop_count)?;
     // Stack: [fn_id, env_product] → make 2-field product = closure
-    fe.emit_mk_prd(2, 2);
+    fe.emit_mk_prd(2, 2)?;
     Ok(())
 }
 
@@ -275,7 +291,11 @@ fn emit_rvalue_spawn(
     let fn_id = match callee {
         IrCallee::Direct(fn_idx) => fn_idx.raw(),
         IrCallee::Instance { instance_fn, .. } => instance_fn.raw(),
-        IrCallee::Indirect(_) => 0,
+        IrCallee::Indirect(_) => {
+            return Err(EmitError::UnsupportedFeature {
+                desc: "indirect spawn not supported".into(),
+            });
+        }
     };
     encode_u32(&mut fe.code, Opcode::TSK_SPN, fn_id);
     let arg_count = i32::try_from(args.len()).map_err(|_| EmitError::UnresolvableType {
@@ -307,6 +327,99 @@ fn emit_callee(fe: &mut FnEmitter, callee: &IrCallee, arg_count: i32, tail: bool
             }
         }
     }
+}
+
+const fn is_signed_int(ty: &IrType) -> bool {
+    matches!(ty, IrType::Int8 | IrType::Int16 | IrType::Int32 | IrType::Int64)
+}
+
+const fn is_unsigned_int(ty: &IrType) -> bool {
+    matches!(
+        ty,
+        IrType::UInt8 | IrType::UInt16 | IrType::UInt32 | IrType::UInt64
+    )
+}
+
+const fn is_float(ty: &IrType) -> bool {
+    matches!(ty, IrType::Float32 | IrType::Float64)
+}
+
+const fn bit_width(ty: &IrType) -> u8 {
+    match ty {
+        IrType::Int8 | IrType::UInt8 | IrType::Bool => 8,
+        IrType::Int16 | IrType::UInt16 => 16,
+        IrType::Int32 | IrType::UInt32 | IrType::Rune | IrType::Float32 => 32,
+        IrType::Int64 | IrType::UInt64 | IrType::Float64 => 64,
+        _ => 0,
+    }
+}
+
+fn emit_rvalue_cast(
+    fe: &mut FnEmitter,
+    type_arena: &Arena<IrType>,
+    from: Idx<IrType>,
+    to: Idx<IrType>,
+) -> Result<(), EmitError> {
+    let from_ty = type_arena[from].clone();
+    let to_ty = type_arena[to].clone();
+    let from_w = bit_width(&from_ty);
+    let to_w = bit_width(&to_ty);
+
+    // Same type → no-op
+    if from.raw() == to.raw() {
+        return Ok(());
+    }
+
+    // int → float
+    if (is_signed_int(&from_ty) || is_unsigned_int(&from_ty)) && is_float(&to_ty) {
+        encode_no_operand(&mut fe.code, Opcode::CNV_ITF);
+        return Ok(());
+    }
+
+    // float → int
+    if is_float(&from_ty) && (is_signed_int(&to_ty) || is_unsigned_int(&to_ty)) {
+        encode_no_operand(&mut fe.code, Opcode::CNV_FTI);
+        return Ok(());
+    }
+
+    // float → float
+    if is_float(&from_ty) && is_float(&to_ty) {
+        if to_w > from_w {
+            encode_u8(&mut fe.code, Opcode::CNV_WDN, to_w);
+        } else {
+            encode_u8(&mut fe.code, Opcode::CNV_NRW, to_w);
+        }
+        return Ok(());
+    }
+
+    // int → int
+    let from_int = is_signed_int(&from_ty) || is_unsigned_int(&from_ty);
+    let to_int = is_signed_int(&to_ty) || is_unsigned_int(&to_ty);
+    if from_int && to_int {
+        match to_w.cmp(&from_w) {
+            Ordering::Greater => {
+                // Widen
+                if is_unsigned_int(&to_ty) {
+                    encode_u8(&mut fe.code, Opcode::CNV_WDN_UN, to_w);
+                } else {
+                    encode_u8(&mut fe.code, Opcode::CNV_WDN, to_w);
+                }
+            }
+            Ordering::Less => {
+                // Narrow
+                encode_u8(&mut fe.code, Opcode::CNV_NRW, to_w);
+            }
+            Ordering::Equal => {
+                // Same width, different signedness → reinterpret
+                encode_no_operand(&mut fe.code, Opcode::CNV_TRM);
+            }
+        }
+        return Ok(());
+    }
+
+    Err(EmitError::UnresolvableType {
+        desc: "unsupported cast between non-numeric types".into(),
+    })
 }
 
 const fn binop_opcode(op: IrBinOp) -> Opcode {
