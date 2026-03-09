@@ -57,9 +57,9 @@ impl IrModule {
         Self {
             functions: Arena::new(),
             types: Arena::new(),
-            constants: Vec::new(),
+            constants: vec![],
             entry: None,
-            effects: Vec::new(),
+            effects: vec![],
         }
     }
 }
