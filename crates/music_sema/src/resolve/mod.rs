@@ -9,13 +9,15 @@
 #[cfg(test)]
 mod tests;
 
+mod pat;
+mod ty;
+
 use std::collections::HashMap;
 
 use music_ast::decl::{ClassMember, EffectOp};
 use music_ast::expr::{
     Arg, ArrayElem, BindKind, Expr, LetFields, MatchArm, Param, PwGuard, RecField,
 };
-use music_ast::pat::Pat;
 use music_ast::ty::{Constraint, Ty, TyNamedRef, TyParam};
 use music_ast::{AstArenas, ParsedModule};
 use music_shared::{DiagnosticBag, FileId, Idx, Interner, Span, Symbol};
@@ -65,15 +67,15 @@ pub fn resolve(
     resolver.output
 }
 
-struct Resolver<'a> {
-    ast: &'a AstArenas,
-    interner: &'a mut Interner,
-    file_id: FileId,
-    diags: &'a mut DiagnosticBag,
-    defs: &'a mut DefTable,
-    scopes: &'a mut ScopeTree,
-    output: ResolveOutput,
-    current_scope: ScopeId,
+pub(super) struct Resolver<'a> {
+    pub(super) ast: &'a AstArenas,
+    pub(super) interner: &'a mut Interner,
+    pub(super) file_id: FileId,
+    pub(super) diags: &'a mut DiagnosticBag,
+    pub(super) defs: &'a mut DefTable,
+    pub(super) scopes: &'a mut ScopeTree,
+    pub(super) output: ResolveOutput,
+    pub(super) current_scope: ScopeId,
 }
 
 impl Resolver<'_> {
@@ -397,147 +399,6 @@ impl Resolver<'_> {
             self.resolve_ty(op.ty);
         }
         self.current_scope = parent;
-    }
-
-    /// Resolve names in a type annotation.
-    fn resolve_ty(&mut self, ty_idx: Idx<Ty>) {
-        match self.ast.tys[ty_idx].clone() {
-            Ty::Named { name, args, span } => {
-                if self.scopes.lookup(self.current_scope, name).is_none() {
-                    self.report_undefined(name, span);
-                }
-                for &arg in &args {
-                    self.resolve_ty(arg);
-                }
-            }
-            Ty::Option { inner, .. } | Ty::Ref { inner, .. } => {
-                self.resolve_ty(inner);
-            }
-            Ty::Fn { params, ret, .. } => {
-                for &p in &params {
-                    self.resolve_ty(p);
-                }
-                self.resolve_ty(ret);
-            }
-            Ty::Product { fields, .. } => {
-                for &f in &fields {
-                    self.resolve_ty(f);
-                }
-            }
-            Ty::Sum { variants, .. } => {
-                for &v in &variants {
-                    self.resolve_ty(v);
-                }
-            }
-            Ty::Record { fields, .. } => {
-                for f in &fields {
-                    self.resolve_ty(f.ty);
-                }
-            }
-            Ty::Refine { base, pred, .. } => {
-                self.resolve_ty(base);
-                self.resolve_expr(pred);
-            }
-            Ty::Array { elem, .. } => {
-                self.resolve_ty(elem);
-            }
-            Ty::Quantified {
-                params,
-                constraints,
-                body,
-                ..
-            } => {
-                let parent = self.enter_ty_param_scope(&params, &constraints);
-                self.resolve_ty(body);
-                self.current_scope = parent;
-            }
-            Ty::Var { .. } | Ty::Error { .. } => {}
-        }
-    }
-
-    fn resolve_ty_named_ref(&mut self, named: &TyNamedRef) {
-        if self.scopes.lookup(self.current_scope, named.name).is_none() {
-            self.report_undefined(named.name, named.span);
-        }
-        for &arg in &named.args {
-            self.resolve_ty(arg);
-        }
-    }
-
-    /// Resolve pattern bindings, creating defs for each bound name.
-    fn resolve_pat(&mut self, pat_idx: Idx<Pat>) {
-        match self.ast.pats[pat_idx].clone() {
-            Pat::Bind {
-                name, span, inner, ..
-            } => {
-                let id = self.defs.alloc(name, DefKind::Let, span);
-                self.define_in_scope(name, id, span);
-                let _inserted = self.output.pat_defs.insert(span, id);
-                if let Some(inner) = inner {
-                    self.resolve_pat(inner);
-                }
-            }
-            Pat::Variant { args, .. } => {
-                for &arg in &args {
-                    self.resolve_pat(arg);
-                }
-            }
-            Pat::Record { fields, .. } => {
-                for field in &fields {
-                    if let Some(pat) = field.pat {
-                        self.resolve_pat(pat);
-                    }
-                }
-            }
-            Pat::Tuple { elems, .. } | Pat::Array { elems, .. } => {
-                for &elem in &elems {
-                    self.resolve_pat(elem);
-                }
-            }
-            Pat::Or { left, right, .. } => {
-                self.resolve_pat(left);
-                self.resolve_pat(right);
-            }
-            Pat::Wild { .. } | Pat::Lit { .. } | Pat::Error { .. } => {}
-        }
-    }
-
-    /// Define a pattern's bindings in the current scope.
-    fn define_pat(&mut self, pat_idx: Idx<Pat>, kind: DefKind) {
-        match self.ast.pats[pat_idx].clone() {
-            Pat::Bind {
-                name, span, inner, ..
-            } => {
-                let id = self.defs.alloc(name, kind, span);
-                self.define_in_scope(name, id, span);
-                let _inserted = self.output.pat_defs.insert(span, id);
-                if let Some(inner) = inner {
-                    self.define_pat(inner, kind);
-                }
-            }
-            Pat::Variant { args, .. } => {
-                for &arg in &args {
-                    self.define_pat(arg, kind);
-                }
-            }
-            Pat::Record { fields, .. } => {
-                for field in &fields {
-                    if let Some(pat) = field.pat {
-                        self.define_pat(pat, kind);
-                    }
-                }
-            }
-            Pat::Tuple { elems, .. } | Pat::Array { elems, .. } => {
-                for &elem in &elems {
-                    self.define_pat(elem, kind);
-                }
-            }
-            Pat::Or { left, right, .. } => {
-                self.define_pat(left, kind);
-                self.define_pat(right, kind);
-            }
-            Pat::Wild { .. } | Pat::Lit { .. } | Pat::Error { .. } => {}
-        }
     }
 
     fn define_in_scope(&mut self, name: Symbol, def_id: DefId, span: Span) {
