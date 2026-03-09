@@ -29,14 +29,14 @@ pub struct UnifyTable {
     vars: Vec<TyVarEntry>,
 }
 
+// ── Variable management ──────────────────────────────────────────────────────
+
 impl UnifyTable {
-    /// Creates an empty unification table.
     #[must_use]
     pub const fn new() -> Self {
         Self { vars: vec![] }
     }
 
-    /// Allocates a fresh unification variable.
     #[must_use]
     pub fn fresh(&mut self, span: Span, arena: &mut Arena<Type>) -> Idx<Type> {
         let id = self.alloc_var(TyVarKind::Unification, span);
@@ -51,14 +51,11 @@ impl UnifyTable {
         (id, idx)
     }
 
-    /// Returns the [`TyVarId`] for a freshly allocated unification variable.
     #[must_use]
     pub fn fresh_var_id(&mut self, span: Span) -> TyVarId {
         self.alloc_var(TyVarKind::Unification, span)
     }
 
-    /// Returns `true` if `var` has been bound to a type.
-    ///
     /// # Panics
     ///
     /// Panics if `var` is out of range.
@@ -68,8 +65,6 @@ impl UnifyTable {
         self.vars[idx].binding.is_some()
     }
 
-    /// Returns the binding for `var`, if any.
-    ///
     /// # Panics
     ///
     /// Panics if `var` is out of range.
@@ -79,8 +74,6 @@ impl UnifyTable {
         self.vars[idx].binding
     }
 
-    /// Binds `var` to `ty`.
-    ///
     /// # Panics
     ///
     /// Panics if `var` is already bound.
@@ -90,6 +83,20 @@ impl UnifyTable {
         self.vars[idx].binding = Some(ty);
     }
 
+    fn alloc_var(&mut self, kind: TyVarKind, origin: Span) -> TyVarId {
+        let id = TyVarId(u32::try_from(self.vars.len()).expect("type variable count overflow"));
+        self.vars.push(TyVarEntry {
+            _kind: kind,
+            binding: None,
+            _origin: origin,
+        });
+        id
+    }
+}
+
+// ── Resolution ───────────────────────────────────────────────────────────────
+
+impl UnifyTable {
     /// Resolves a type through any chain of bindings.
     ///
     /// If `ty` is `Var(v)` and `v` is bound, follows the binding recursively.
@@ -134,7 +141,11 @@ impl UnifyTable {
             Type::Error => false,
         }
     }
+}
 
+// ── Unification ──────────────────────────────────────────────────────────────
+
+impl UnifyTable {
     /// Unifies two types, returning `true` on success.
     ///
     /// On failure, returns `false` and the caller should report a diagnostic.
@@ -249,7 +260,6 @@ impl UnifyTable {
         true
     }
 
-    /// Unifies two function types.
     fn unify_fn(
         &mut self,
         p1: &[Idx<Type>],
@@ -266,7 +276,6 @@ impl UnifyTable {
         self.unify_pairwise(&pairs, arena, well_known) && self.unify(r1, r2, arena, well_known)
     }
 
-    /// Unifies corresponding pairs of types.
     fn unify_pairwise(
         &mut self,
         pairs: &[(Idx<Type>, Idx<Type>)],
@@ -320,7 +329,11 @@ impl UnifyTable {
                 })
         })
     }
+}
 
+// ── Freezing ─────────────────────────────────────────────────────────────────
+
+impl UnifyTable {
     /// Recursively replaces all solved `Var` with their bindings.
     ///
     /// Unsolved `Var` → `Error` (erasure). Used before exporting types.
@@ -403,16 +416,6 @@ impl UnifyTable {
             }
             Type::Rigid(_) | Type::Error => ty,
         }
-    }
-
-    fn alloc_var(&mut self, kind: TyVarKind, origin: Span) -> TyVarId {
-        let id = TyVarId(u32::try_from(self.vars.len()).expect("type variable count overflow"));
-        self.vars.push(TyVarEntry {
-            _kind: kind,
-            binding: None,
-            _origin: origin,
-        });
-        id
     }
 }
 
