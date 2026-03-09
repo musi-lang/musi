@@ -5,12 +5,12 @@ mod tests;
 
 use music_shared::{Idx, Span, Symbol};
 
+use crate::ExprList;
 use crate::attr::Attr;
 use crate::decl::{ClassMember, EffectOp, ExportItem};
 use crate::lit::Lit;
 use crate::pat::Pat;
-use crate::ty::{Constraint, Quantifier, Ty, TyParam};
-use crate::{ExprList, TyList};
+use crate::ty::{Constraint, Quantifier, Ty, TyNamedRef, TyParam};
 
 /// Expression node. All recursive children use arena indices.
 #[derive(Debug, Clone, PartialEq)]
@@ -21,7 +21,7 @@ pub enum Expr {
         span: Span,
     },
     Name {
-        ident: Symbol,
+        name: Symbol,
         span: Span,
     },
 
@@ -86,7 +86,7 @@ pub enum Expr {
         span: Span,
     },
     Array {
-        items: Vec<ArrayItem>,
+        elems: Vec<ArrayElem>,
         span: Span,
     },
     Variant {
@@ -164,7 +164,7 @@ pub enum Expr {
         span: Span,
     },
     Given {
-        target: TyNamed,
+        target: TyNamedRef,
         constraints: Vec<Constraint>,
         members: Vec<ClassMember>,
         span: Span,
@@ -247,9 +247,9 @@ pub enum RecField {
     },
 }
 
-/// An item in an array literal.
+/// An element in an array literal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ArrayItem {
+pub enum ArrayElem {
     Elem { expr: Idx<Expr>, span: Span },
     Spread { expr: Idx<Expr>, span: Span },
 }
@@ -257,7 +257,7 @@ pub enum ArrayItem {
 /// A field access key.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FieldKey {
-    Name { ident: Symbol, span: Span },
+    Name { name: Symbol, span: Span },
     Pos { index: u32, span: Span },
 }
 
@@ -329,12 +329,4 @@ pub enum UnaryOp {
     Spawn,
     Await,
     Try,
-}
-
-/// A named type reference (used in `Given` targets).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TyNamed {
-    pub name: Symbol,
-    pub args: TyList,
-    pub span: Span,
 }
