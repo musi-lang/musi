@@ -67,3 +67,25 @@ The workspace has aggressive clippy and rustc lints. Key constraints:
 - `LexError` enum for all diagnostic messages — no ad-hoc strings
 - F-strings use Head/Middle/Tail model with mode stack for brace depth tracking
 - Comments are trivia-attached to tokens (rust-analyzer style)
+
+### Error handling
+
+Each compiler crate defines a crate-level `error.rs` module with a single `thiserror`-derived enum:
+
+- `music_lex` → `LexError` in `crates/music_lex/src/error.rs`
+- `music_parse` → `ParseError` in `crates/music_parse/src/error.rs`
+
+Pattern:
+- One enum per crate, named `{Phase}Error` (`LexError`, `ParseError`, `ResolveError`, …)
+- Every variant uses `#[error("...")]` — no ad-hoc string construction
+- All error enums implement `IntoDiagnostic` (from `music_shared`), which bakes in `severity()`
+- Errors are reported via `DiagnosticBag::report(&error, span, file_id)` — never call `.to_string()` manually
+- Visibility: `pub` in a private `mod error` (effectively crate-private; avoids `clippy::redundant_pub_crate`)
+- `thiserror` for the derive; no `anyhow` in compiler crates
+
+Diagnostic message style:
+- Lowercase, no leading articles ("a"/"the"), no contractions
+- No internal jargon — use terms an end user would recognise:
+  - "interpolated string" not "f-string"
+  - "backtick-quoted identifier" not "escaped identifier"
+- `TokenKind` implements `Display` — fixed-text tokens produce `'let'`, `'+'`; variable tokens produce `identifier`, `integer literal`. Use this in error templates, never store pre-formatted `&'static str` descriptions
