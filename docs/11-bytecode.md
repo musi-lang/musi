@@ -1,21 +1,22 @@
 # §11 — Bytecode Format
 
-All values little-endian. Extension `.mso`.
+All values little-endian. Extension `.msbc`.
 
 ## 11.1 File Structure
 
 ```mermaid
 flowchart TD
-    hdr["Header\n32 bytes"]
+    hdr["Header\n36 bytes"]
     cp["Constant Pool"]
     tp["Type Pool"]
+    ep["Effect Pool"]
     fp["Function Pool"]
     dbg["Debug Section\n(if has_dbg)"]
 
-    hdr --> cp --> tp --> fp --> dbg
+    hdr --> cp --> tp --> ep --> fp --> dbg
 ```
 
-### Header (32 bytes)
+### Header (36 bytes)
 
 ```
 0x00  u8[4]  magic        = { 4D 55 53 49 }  "MUSI"
@@ -25,8 +26,9 @@ flowchart TD
 0x0C  u32    entry_point  fn_id, or 0xFFFFFFFF if library
 0x10  u32    const_off
 0x14  u32    type_off
-0x18  u32    fn_off
-0x1C  u32    checksum     CRC32 of [0x00, 0x1C)
+0x18  u32    effect_off
+0x1C  u32    fn_off
+0x20  u32    checksum     CRC32 of [0x00, 0x20)
 ```
 
 ### Flags
@@ -77,7 +79,23 @@ Header: `u32 count`.
 
 Effect mask bits: `0=IO 1=Async 2=State 3=Unsafe 4=Manual 5=Throw 6=Control 7=Arena`.
 
-## 11.4 Function Pool
+## 11.4 Effect Pool
+
+Header: `u32 count`. Variable-length entries:
+
+```
+u32  effect_id
+u32  name_const_idx    // string in const pool
+u16  op_count
+effect_op_entry[]:
+  u32  op_id
+  u32  name_const_idx  // string in const pool
+  u16  param_count
+  u32[] param_type_ids // indexes into type pool
+  u32  ret_type_id
+```
+
+## 11.5 Function Pool
 
 Header: `u32 count`. Variable-length entries:
 
@@ -90,9 +108,13 @@ u16  max_stack
 u16  effect_mask
 u32  code_len
 u8[] code
+u16  handler_count
+handler_entry[]:
+  u8   effect_id
+  u32  handler_fn_id
 ```
 
-## 11.5 Value Representation — Top-16 NaN-Boxing
+## 11.6 Value Representation — Top-16 NaN-Boxing
 
 All stack values are 64-bit words. Tag in the **top 16 bits**, payload in the **bottom 48 bits**.
 
@@ -124,7 +146,7 @@ Tags `0x0000`–`0x7FF0` and `0xFFF0`–`0xFFFF` are used by IEEE 754 doubles (n
 
 **ARM MTE / x86 LAM**: `pin` and `transmute` mask OS-level pointer tag bits before storing in the 48-bit payload.
 
-## 11.6 Heap Object Layout
+## 11.7 Heap Object Layout
 
 ```
 Header (8 bytes):
@@ -140,7 +162,7 @@ Payload:
 
 No vtable. No lock word. No hashcode. Type pool provides exact pointer map for GC.
 
-## 11.7 Instruction Encoding
+## 11.8 Instruction Encoding
 
 High two bits of opcode determine length:
 
@@ -153,7 +175,7 @@ High two bits of opcode determine length:
 
 `.un` variants always at `base + 1` (odd opcode = unsigned). Jump offsets relative to byte after instruction.
 
-## 11.8 Opcode Table
+## 11.9 Opcode Table
 
 ```
 // §0  Control / Stack
