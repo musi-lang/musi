@@ -21,73 +21,38 @@ impl Parser<'_> {
     }
 
     fn parse_pratt(&mut self, min_bp: u16) -> Expr {
+        self.parse_pratt_until(min_bp, None)
+    }
+
+    /// Like `parse_pratt(0)` but stops before `in` (for let-in disambiguation).
+    pub(crate) fn parse_expr_no_in(&mut self) -> Expr {
+        self.parse_pratt_until(0, Some(TokenKind::KwIn))
+    }
+
+    /// Like `parse_pratt(0)` but stops before `|` (pipe-separated arms).
+    pub(crate) fn parse_arm_body(&mut self) -> Expr {
+        self.parse_pratt_until(0, Some(TokenKind::Pipe))
+    }
+
+    /// Core Pratt loop: parses infix operators with binding power >= `min_bp`,
+    /// stopping early if the current token matches `stop`.
+    fn parse_pratt_until(&mut self, min_bp: u16, stop: Option<TokenKind>) -> Expr {
         let start = self.start_span();
         let mut lhs = self.parse_expr_nud_chain();
         lhs = self.parse_expr_postfix_chain(lhs, start);
 
         loop {
+            if let Some(stop_kind) = stop
+                && self.at(stop_kind)
+            {
+                break;
+            }
             let Some((l_bp, r_bp, op)) = self.infix_bp() else {
                 break;
             };
             if l_bp < min_bp {
                 break;
             }
-            let _op_tok = self.bump();
-            let rhs = self.parse_pratt(r_bp);
-            let lhs_idx = self.alloc_expr(lhs);
-            let rhs_idx = self.alloc_expr(rhs);
-            lhs = Expr::BinOp {
-                op,
-                left: lhs_idx,
-                right: rhs_idx,
-                span: self.finish_span(start),
-            };
-        }
-
-        lhs
-    }
-
-    /// Like `parse_pratt(0)` but stops before `in` (for let-in disambiguation).
-    pub(crate) fn parse_expr_no_in(&mut self) -> Expr {
-        let start = self.start_span();
-        let mut lhs = self.parse_expr_nud_chain();
-        lhs = self.parse_expr_postfix_chain(lhs, start);
-
-        loop {
-            if self.at(TokenKind::KwIn) {
-                break;
-            }
-            let Some((_l_bp, r_bp, op)) = self.infix_bp() else {
-                break;
-            };
-            let _op_tok = self.bump();
-            let rhs = self.parse_pratt(r_bp);
-            let lhs_idx = self.alloc_expr(lhs);
-            let rhs_idx = self.alloc_expr(rhs);
-            lhs = Expr::BinOp {
-                op,
-                left: lhs_idx,
-                right: rhs_idx,
-                span: self.finish_span(start),
-            };
-        }
-
-        lhs
-    }
-
-    /// Like `parse_pratt(0)` but stops before `|` (pipe-separated arms).
-    pub(crate) fn parse_arm_body(&mut self) -> Expr {
-        let start = self.start_span();
-        let mut lhs = self.parse_expr_nud_chain();
-        lhs = self.parse_expr_postfix_chain(lhs, start);
-
-        loop {
-            if self.at(TokenKind::Pipe) {
-                break;
-            }
-            let Some((_l_bp, r_bp, op)) = self.infix_bp() else {
-                break;
-            };
             let _op_tok = self.bump();
             let rhs = self.parse_pratt(r_bp);
             let lhs_idx = self.alloc_expr(lhs);
