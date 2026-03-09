@@ -4,24 +4,9 @@ use core::str;
 
 use music_shared::{DiagnosticBag, FileId, Interner, Span, Symbol};
 
+use crate::error::LexError;
 use crate::token::{Token, TokenKind, keyword_from_str};
 use crate::trivia::{Trivia, TriviaKind, TriviaRange};
-
-#[derive(Debug, Clone, Copy, thiserror::Error)]
-enum LexError {
-    #[error("unexpected character `{0}`")]
-    UnexpectedCharacter(char),
-    #[error("unterminated string literal")]
-    UnterminatedString,
-    #[error("unterminated escaped identifier")]
-    UnterminatedEscapedIdent,
-    #[error("unterminated rune literal")]
-    UnterminatedRuneLit,
-    #[error("unterminated f-string literal")]
-    UnterminatedFString,
-    #[error("unclosed block comment")]
-    UnclosedBlockComment,
-}
 
 pub struct Lexer<'src> {
     source: &'src [u8],
@@ -147,7 +132,7 @@ impl Lexer<'_> {
 
     fn error_token(&mut self, error: LexError, start: usize) -> Token {
         let span = self.span_from(start);
-        let _diag = self.diags.error(error.to_string(), span, self.file_id);
+        let _diag = self.diags.report(&error, span, self.file_id);
         Token::new(TokenKind::Error, span, None)
     }
 
@@ -201,11 +186,9 @@ impl Lexer<'_> {
                 }
                 None => {
                     let span = self.span_from(start);
-                    let _d = self.diags.error(
-                        LexError::UnclosedBlockComment.to_string(),
-                        span,
-                        self.file_id,
-                    );
+                    let _d = self
+                        .diags
+                        .report(&LexError::UnclosedBlockComment, span, self.file_id);
                     break;
                 }
             }
