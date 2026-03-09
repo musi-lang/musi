@@ -20,7 +20,6 @@ pub struct IrLabel(pub u32);
 #[derive(Debug, Clone)]
 pub enum IrInst {
     // ── Binding ─────────────────────────────────────────────────────────
-
     /// `let dst = rvalue;`
     Assign {
         dst: IrLocal,
@@ -36,7 +35,6 @@ pub enum IrInst {
     },
 
     // ── Control flow ────────────────────────────────────────────────────
-
     /// Unconditional jump.
     Goto(IrLabel),
 
@@ -66,7 +64,6 @@ pub enum IrInst {
     },
 
     // ── Effects ─────────────────────────────────────────────────────────
-
     /// Push an effect handler onto the handler stack.
     EffectPush {
         effect: IrEffectId,
@@ -75,10 +72,7 @@ pub enum IrInst {
     },
 
     /// Pop an effect handler from the handler stack.
-    EffectPop {
-        effect: IrEffectId,
-        span: Span,
-    },
+    EffectPop { effect: IrEffectId, span: Span },
 
     /// Perform an effect operation (suspend to the nearest handler).
     EffectDo {
@@ -89,10 +83,7 @@ pub enum IrInst {
     },
 
     /// Resume a suspended effect handler with a value.
-    EffectResume {
-        value: IrOperand,
-        span: Span,
-    },
+    EffectResume { value: IrOperand, span: Span },
 
     /// No operation (placeholder, removed by later passes).
     Nop,
@@ -134,7 +125,6 @@ pub enum IrRvalue {
     },
 
     // ── Construction ────────────────────────────────────────────────────
-
     /// Construct a product value (tuple or record).
     MakeProduct {
         ty: Idx<IrType>,
@@ -161,15 +151,11 @@ pub enum IrRvalue {
     },
 
     // ── Access ──────────────────────────────────────────────────────────
-
     /// Read a field from a product value.
     FieldGet { object: IrOperand, index: u32 },
 
     /// Read an element from an array.
-    IndexGet {
-        array: IrOperand,
-        index: IrOperand,
-    },
+    IndexGet { array: IrOperand, index: IrOperand },
 
     /// Extract the tag of a sum value.
     GetTag { value: IrOperand },
@@ -182,7 +168,6 @@ pub enum IrRvalue {
     },
 
     // ── Memory ──────────────────────────────────────────────────────────
-
     /// Allocate a heap reference.
     AllocRef { ty: Idx<IrType> },
 
@@ -193,7 +178,6 @@ pub enum IrRvalue {
     Deref { ptr: IrOperand },
 
     // ── Misc ────────────────────────────────────────────────────────────
-
     /// Type cast.
     Cast {
         operand: IrOperand,
@@ -205,7 +189,6 @@ pub enum IrRvalue {
     Const(IrConstValue),
 
     // ── Concurrency ─────────────────────────────────────────────────────
-
     /// Spawn an async task.
     Spawn {
         callee: IrCallee,

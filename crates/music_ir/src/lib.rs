@@ -32,9 +32,7 @@ pub use func::{IrFnId, IrFunction, IrLocal, IrLocalDecl, IrParam, IrParamMode};
 pub use inst::{
     IrBinOp, IrCallee, IrInst, IrLabel, IrOperand, IrPlace, IrRvalue, IrSwitchArm, IrUnaryOp,
 };
-pub use types::{
-    GenericStrategy, IrEffectMask, IrSumVariant, IrType, TypeMetadata, WitnessEntry,
-};
+pub use types::{GenericStrategy, IrEffectMask, IrSumVariant, IrType, TypeMetadata, WitnessEntry};
 
 use music_shared::{Arena, Idx};
 

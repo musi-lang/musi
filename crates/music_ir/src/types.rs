@@ -32,11 +32,17 @@ pub enum IrType {
     /// A Unicode scalar value.
     Rune,
     /// A product type (tuple or struct — fields accessed by index).
-    Product { fields: Vec<Idx<Self>> },
+    Product {
+        fields: Vec<Idx<Self>>,
+    },
     /// A tagged sum type (ADT / choice).
-    Sum { variants: Vec<IrSumVariant> },
+    Sum {
+        variants: Vec<IrSumVariant>,
+    },
     /// A homogeneous array.
-    Array { elem: Idx<Self> },
+    Array {
+        elem: Idx<Self>,
+    },
     /// A function type.
     Fn {
         params: Vec<Idx<Self>>,
@@ -44,9 +50,13 @@ pub enum IrType {
         effect_mask: IrEffectMask,
     },
     /// A heap reference.
-    Ref { inner: Idx<Self> },
+    Ref {
+        inner: Idx<Self>,
+    },
     /// A raw pointer (lowered from `inout`).
-    Ptr { inner: Idx<Self> },
+    Ptr {
+        inner: Idx<Self>,
+    },
     /// A closure: a function bundled with its captured environment.
     Closure {
         fn_ty: Idx<Self>,
@@ -54,10 +64,14 @@ pub enum IrType {
     },
     /// Opaque type parameter — used in existentialized generic functions.
     /// Size/alignment/operations accessed via the associated witness table.
-    TypeParam { index: u32 },
+    TypeParam {
+        index: u32,
+    },
     /// Witness table (typeclass dictionary) — passed as a runtime value
     /// when a generic function is existentialized rather than monomorphized.
-    WitnessTable { class_def: DefId },
+    WitnessTable {
+        class_def: DefId,
+    },
 }
 
 /// A variant in an IR sum type.
