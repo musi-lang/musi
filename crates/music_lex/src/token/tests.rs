@@ -5,6 +5,7 @@ use music_shared::{Span, Symbol};
 fn test_keyword_from_str_returns_some_for_every_keyword() {
     let keywords = [
         ("and", TokenKind::KwAnd),
+        ("as", TokenKind::KwAs),
         ("or", TokenKind::KwOr),
         ("not", TokenKind::KwNot),
         ("xor", TokenKind::KwXor),
@@ -15,6 +16,7 @@ fn test_keyword_from_str_returns_some_for_every_keyword() {
         ("if", TokenKind::KwIf),
         ("match", TokenKind::KwMatch),
         ("defer", TokenKind::KwDefer),
+        ("effect", TokenKind::KwEffect),
         ("return", TokenKind::KwReturn),
         ("try", TokenKind::KwTry),
         ("spawn", TokenKind::KwSpawn),
@@ -24,6 +26,7 @@ fn test_keyword_from_str_returns_some_for_every_keyword() {
         ("where", TokenKind::KwWhere),
         ("of", TokenKind::KwOf),
         ("over", TokenKind::KwOver),
+        ("under", TokenKind::KwUnder),
         ("in", TokenKind::KwIn),
         ("class", TokenKind::KwClass),
         ("given", TokenKind::KwGiven),
@@ -113,4 +116,34 @@ fn test_token_new_round_trip() {
     assert_eq!(token.kind, TokenKind::Ident);
     assert_eq!(token.span, Span::new(0, 5));
     assert_eq!(token.symbol, Some(sym));
+}
+
+#[test]
+fn test_display_keyword_quoted() {
+    assert_eq!(TokenKind::KwLet.to_string(), "'let'");
+}
+
+#[test]
+fn test_display_symbol_quoted() {
+    assert_eq!(TokenKind::Plus.to_string(), "'+'");
+}
+
+#[test]
+fn test_display_multi_char_symbol_quoted() {
+    assert_eq!(TokenKind::DashGt.to_string(), "'->'");
+}
+
+#[test]
+fn test_display_ident_unquoted() {
+    assert_eq!(TokenKind::Ident.to_string(), "identifier");
+}
+
+#[test]
+fn test_display_fstring_head_uses_interpolated_string() {
+    assert_eq!(TokenKind::FStringHead.to_string(), "interpolated string");
+}
+
+#[test]
+fn test_display_eof() {
+    assert_eq!(TokenKind::Eof.to_string(), "end of file");
 }

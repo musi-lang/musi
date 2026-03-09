@@ -1,5 +1,7 @@
 //! Token types for the Musi lexer.
 
+use std::fmt;
+
 use music_shared::{Span, Symbol};
 
 use crate::trivia::TriviaRange;
@@ -8,9 +10,11 @@ use crate::trivia::TriviaRange;
 pub enum TokenKind {
     // -- keywords ------------------------------------------------------------
     KwAnd,
+    KwAs,
     KwAwait,
     KwClass,
     KwDefer,
+    KwEffect,
     KwExists,
     KwExport,
     KwForall,
@@ -30,6 +34,7 @@ pub enum TokenKind {
     KwReturn,
     KwSpawn,
     KwTry,
+    KwUnder,
     KwVar,
     KwWhere,
     KwXor,
@@ -112,6 +117,7 @@ impl TokenKind {
         matches!(
             self,
             Self::KwAnd
+                | Self::KwAs
                 | Self::KwOr
                 | Self::KwNot
                 | Self::KwXor
@@ -128,9 +134,11 @@ impl TokenKind {
                 | Self::KwAwait
                 | Self::KwForall
                 | Self::KwExists
+                | Self::KwEffect
                 | Self::KwWhere
                 | Self::KwOf
                 | Self::KwOver
+                | Self::KwUnder
                 | Self::KwIn
                 | Self::KwClass
                 | Self::KwGiven
@@ -147,6 +155,7 @@ impl TokenKind {
         match self {
             // -- keywords ----------------------------------------------------
             Self::KwAnd => Some("and"),
+            Self::KwAs => Some("as"),
             Self::KwOr => Some("or"),
             Self::KwNot => Some("not"),
             Self::KwXor => Some("xor"),
@@ -157,6 +166,7 @@ impl TokenKind {
             Self::KwIf => Some("if"),
             Self::KwMatch => Some("match"),
             Self::KwDefer => Some("defer"),
+            Self::KwEffect => Some("effect"),
             Self::KwReturn => Some("return"),
             Self::KwTry => Some("try"),
             Self::KwSpawn => Some("spawn"),
@@ -166,6 +176,7 @@ impl TokenKind {
             Self::KwWhere => Some("where"),
             Self::KwOf => Some("of"),
             Self::KwOver => Some("over"),
+            Self::KwUnder => Some("under"),
             Self::KwIn => Some("in"),
             Self::KwClass => Some("class"),
             Self::KwGiven => Some("given"),
@@ -238,14 +249,38 @@ impl TokenKind {
     }
 }
 
+impl fmt::Display for TokenKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Ident => f.write_str("identifier"),
+            Self::TyIdent => f.write_str("type variable"),
+            Self::IntLit => f.write_str("integer literal"),
+            Self::FloatLit => f.write_str("float literal"),
+            Self::StringLit => f.write_str("string literal"),
+            Self::RuneLit => f.write_str("rune literal"),
+            Self::FStringHead => f.write_str("interpolated string"),
+            Self::FStringMiddle => f.write_str("interpolated string segment"),
+            Self::FStringTail => f.write_str("interpolated string end"),
+            Self::Eof => f.write_str("end of file"),
+            Self::Error => f.write_str("error"),
+            other => {
+                let text = other.fixed_text().unwrap_or("token");
+                write!(f, "'{text}'")
+            }
+        }
+    }
+}
+
 /// Maps a keyword string to its [`TokenKind`], or `None`.
 #[must_use]
 pub fn keyword_from_str(s: &str) -> Option<TokenKind> {
     match s {
         "and" => Some(TokenKind::KwAnd),
+        "as" => Some(TokenKind::KwAs),
         "await" => Some(TokenKind::KwAwait),
         "class" => Some(TokenKind::KwClass),
         "defer" => Some(TokenKind::KwDefer),
+        "effect" => Some(TokenKind::KwEffect),
         "exists" => Some(TokenKind::KwExists),
         "export" => Some(TokenKind::KwExport),
         "forall" => Some(TokenKind::KwForall),
@@ -265,6 +300,7 @@ pub fn keyword_from_str(s: &str) -> Option<TokenKind> {
         "return" => Some(TokenKind::KwReturn),
         "spawn" => Some(TokenKind::KwSpawn),
         "try" => Some(TokenKind::KwTry),
+        "under" => Some(TokenKind::KwUnder),
         "var" => Some(TokenKind::KwVar),
         "where" => Some(TokenKind::KwWhere),
         "xor" => Some(TokenKind::KwXor),
