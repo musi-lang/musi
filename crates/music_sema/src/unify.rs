@@ -121,7 +121,9 @@ impl UnifyTable {
             } => {
                 params.iter().any(|&p| self.occurs(var, p, arena)) || self.occurs(var, *ret, arena)
             }
-            Type::Tuple { elems } => elems.iter().any(|&e| self.occurs(var, e, arena)),
+            Type::Tuple { elems } | Type::AnonSum { variants: elems } => {
+                elems.iter().any(|&e| self.occurs(var, e, arena))
+            }
             Type::Record { fields, .. } => fields.iter().any(|f| self.occurs(var, f.ty, arena)),
             Type::Sum { variants } => variants
                 .iter()
@@ -218,6 +220,14 @@ impl UnifyTable {
             (Type::Ref { inner: i1 }, Type::Ref { inner: i2 }) => {
                 let (i1, i2) = (*i1, *i2);
                 self.unify(i1, i2, arena, well_known)
+            }
+
+            (Type::AnonSum { variants: v1 }, Type::AnonSum { variants: v2 }) => {
+                if v1.len() != v2.len() {
+                    return false;
+                }
+                let pairs: Vec<_> = v1.iter().copied().zip(v2.iter().copied()).collect();
+                self.unify_pairwise(&pairs, arena, well_known)
             }
 
             (Type::Sum { variants: v1 }, Type::Sum { variants: v2 }) => {
@@ -376,6 +386,10 @@ impl UnifyTable {
                     constraints,
                     body,
                 })
+            }
+            Type::AnonSum { variants } => {
+                let variants: Vec<_> = variants.iter().map(|&v| self.freeze(v, arena)).collect();
+                arena.alloc(Type::AnonSum { variants })
             }
             Type::Sum { variants } => {
                 let variants = variants

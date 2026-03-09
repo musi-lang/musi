@@ -248,6 +248,56 @@ fn test_unify_any_with_anything() {
 }
 
 #[test]
+fn test_unify_anon_sum_same_types_succeeds() {
+    let (_, _, _, wk) = make_well_known();
+    let mut table = UnifyTable::new();
+    let mut arena = Arena::new();
+
+    let int_ty = arena.alloc(Type::Named {
+        def: wk.ints.int,
+        args: vec![],
+    });
+    let bool_ty = arena.alloc(Type::Named {
+        def: wk.bool,
+        args: vec![],
+    });
+
+    let sum1 = arena.alloc(Type::AnonSum {
+        variants: vec![int_ty, bool_ty],
+    });
+    let sum2 = arena.alloc(Type::AnonSum {
+        variants: vec![int_ty, bool_ty],
+    });
+
+    assert!(table.unify(sum1, sum2, &mut arena, &wk));
+}
+
+#[test]
+fn test_unify_anon_sum_different_length_fails() {
+    let (_, _, _, wk) = make_well_known();
+    let mut table = UnifyTable::new();
+    let mut arena = Arena::new();
+
+    let int_ty = arena.alloc(Type::Named {
+        def: wk.ints.int,
+        args: vec![],
+    });
+    let bool_ty = arena.alloc(Type::Named {
+        def: wk.bool,
+        args: vec![],
+    });
+
+    let sum1 = arena.alloc(Type::AnonSum {
+        variants: vec![int_ty, bool_ty],
+    });
+    let sum2 = arena.alloc(Type::AnonSum {
+        variants: vec![int_ty],
+    });
+
+    assert!(!table.unify(sum1, sum2, &mut arena, &wk));
+}
+
+#[test]
 fn test_unify_never_with_anything() {
     let (_, _, _, wk) = make_well_known();
     let mut table = UnifyTable::new();

@@ -37,8 +37,10 @@ pub enum Type {
         fields: Vec<RecordField>,
         open: bool,
     },
-    /// A sum type (structural).
+    /// A sum type (structural, named variants).
     Sum { variants: Vec<SumVariant> },
+    /// An anonymous sum type (e.g. `Int + String`).
+    AnonSum { variants: Vec<Idx<Self>> },
     /// An array type with optional fixed length.
     Array { elem: Idx<Self>, len: Option<u32> },
     /// A reference type.
@@ -258,6 +260,7 @@ impl fmt::Display for TypeDisplay<'_> {
                 }
                 Ok(())
             }
+            Type::AnonSum { variants } => self.fmt_types_sep(f, variants, " + "),
             Type::Array { elem, len } => {
                 if let Some(n) = len {
                     write!(f, "[{n}]")?;

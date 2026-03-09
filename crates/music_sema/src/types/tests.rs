@@ -101,6 +101,50 @@ fn test_type_var_and_rigid_distinct() {
 }
 
 #[test]
+fn test_type_anon_sum() {
+    let mut arena = Arena::new();
+    let a = arena.alloc(Type::Named {
+        def: DefId(0),
+        args: vec![],
+    });
+    let b = arena.alloc(Type::Named {
+        def: DefId(1),
+        args: vec![],
+    });
+    let sum = arena.alloc(Type::AnonSum {
+        variants: vec![a, b],
+    });
+    assert!(matches!(&arena[sum], Type::AnonSum { variants } if variants.len() == 2));
+}
+
+#[test]
+fn test_fmt_type_anon_sum() {
+    let mut interner = Interner::new();
+    let mut defs = DefTable::new();
+    let mut arena = Arena::new();
+
+    let sym_int = interner.intern("Int");
+    let sym_str = interner.intern("String");
+    let def_int = defs.alloc(sym_int, DefKind::Type, Span::DUMMY);
+    let def_str = defs.alloc(sym_str, DefKind::Type, Span::DUMMY);
+    let int_ty = arena.alloc(Type::Named {
+        def: def_int,
+        args: vec![],
+    });
+    let str_ty = arena.alloc(Type::Named {
+        def: def_str,
+        args: vec![],
+    });
+    let sum = arena.alloc(Type::AnonSum {
+        variants: vec![int_ty, str_ty],
+    });
+
+    let defs_vec: Vec<_> = defs.iter().cloned().collect();
+    let result = fmt_type(sum, &arena, &defs_vec, &interner);
+    assert_eq!(&*result, "Int + String");
+}
+
+#[test]
 fn test_fmt_type_named() {
     let mut interner = Interner::new();
     let mut defs = DefTable::new();
