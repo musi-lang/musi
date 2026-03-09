@@ -1,3 +1,7 @@
+#![allow(clippy::let_underscore_must_use)]
+
+use std::iter;
+
 use crate::arena::{Arena, Idx, IdxRange};
 
 #[test]
@@ -32,10 +36,10 @@ fn test_alloc_iter_produces_correct_idx_range() {
 #[test]
 fn test_alloc_iter_empty_produces_empty_range() {
     let mut arena: Arena<u32> = Arena::new();
-    let range = arena.alloc_iter(std::iter::empty::<u32>());
+    let range = arena.alloc_iter(iter::empty::<u32>());
     assert!(range.is_empty());
     assert_eq!(range.len(), 0);
-    assert_eq!(&arena[range], &[] as &[u32]);
+    assert_eq!(&arena[range], <&[u32]>::default());
 }
 
 #[test]

@@ -26,7 +26,7 @@ impl<T> Arena<T> {
     /// Creates an empty arena.
     #[must_use]
     pub const fn new() -> Self {
-        Self { data: Vec::new() }
+        Self { data: vec![] }
     }
 
     /// Creates an empty arena with at least `cap` capacity pre-allocated.
