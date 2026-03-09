@@ -1,0 +1,16 @@
+[package]
+name = "musi_vm"
+description = "Musi bytecode interpreter"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+keywords = ["virtual-machine", "interpreter", "bytecode", "musi"]
+categories = ["interpreters"]
+
+[dependencies]
+thiserror = { workspace = true }
+
+[lints]
+workspace = true
