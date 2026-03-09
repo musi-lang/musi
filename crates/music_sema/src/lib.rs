@@ -27,7 +27,7 @@ pub mod well_known;
 pub use checker::{CheckContext, Checker, CheckerResult};
 pub use def::{DefId, DefInfo, DefKind, DefTable, DefTyInfo};
 pub use error::SemaError;
-pub use resolve::{ResolveOutput, ResolveResult};
+pub use resolve::ResolveOutput;
 pub use scope::{ScopeId, ScopeTree};
 pub use types::{EffectRow, InstanceInfo, Obligation, TyVarId, Type};
 pub use unify::UnifyTable;
@@ -87,7 +87,7 @@ pub fn analyze(
         interner,
         file_id,
         well_known: &well_known,
-        expr_defs: &resolved.output.expr_defs,
+        expr_defs: &resolved.expr_defs,
     };
     let mut checker = Checker::new(ctx, diags, &mut defs, &mut scopes, module_scope);
 
@@ -103,8 +103,8 @@ pub fn analyze(
     SemaResult {
         defs: defs.into_vec(),
         resolution: ResolutionMap {
-            expr_defs: resolved.output.expr_defs,
-            pat_defs: resolved.output.pat_defs,
+            expr_defs: resolved.expr_defs,
+            pat_defs: resolved.pat_defs,
         },
         expr_types: result.expr_types,
         types: result.types,
@@ -118,7 +118,7 @@ fn analyze_setup<'a>(
     interner: &'a mut Interner,
     file_id: FileId,
     diags: &'a mut DiagnosticBag,
-) -> (DefTable, WellKnown, ScopeTree, ScopeId, ResolveResult) {
+) -> (DefTable, WellKnown, ScopeTree, ScopeId, ResolveOutput) {
     let mut defs = DefTable::new();
     let mut scopes = ScopeTree::new();
     let module_scope = scopes.push_root();

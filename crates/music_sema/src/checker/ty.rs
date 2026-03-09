@@ -1,13 +1,13 @@
 //! Lowering AST type nodes (`Ty`) to semantic `Type`.
 
 use music_ast::expr::Arrow;
-use music_ast::ty::{Quantifier as AstQuantifier, Ty, TyParam};
+use music_ast::ty::{EffectItem, EffectSet, Quantifier as AstQuantifier, Ty, TyParam};
 use music_shared::{Idx, Span, Symbol};
 
 use crate::checker::Checker;
 use crate::def::DefId;
 use crate::error::SemaError;
-use crate::types::{EffectRow, Quantifier, RecordField, Type};
+use crate::types::{EffectEntry, EffectRow, Quantifier, RecordField, Type};
 
 /// Looks up `name` in scope, reporting `UndefinedName` if missing.
 fn lookup_name_or_error(ck: &mut Checker<'_>, name: Symbol, span: Span) -> Option<DefId> {
@@ -62,16 +62,21 @@ pub(crate) fn lower_ty(ck: &mut Checker<'_>, ty_idx: Idx<Ty>) -> Idx<Type> {
             ck.alloc_ty(Type::Ref { inner: inner_ty })
         }
         Ty::Fn {
-            params, ret, arrow, ..
-        } => lower_ty_fn(ck, &params, ret, arrow),
+            params,
+            ret,
+            arrow,
+            effects,
+            ..
+        } => lower_ty_fn(ck, &params, ret, arrow, effects.as_ref()),
         Ty::Product { fields, .. } => {
             let elems: Vec<_> = fields.iter().map(|&f| lower_ty(ck, f)).collect();
             ck.alloc_ty(Type::Tuple { elems })
         }
         Ty::Sum { variants, .. } => {
             let variant_tys: Vec<_> = variants.iter().map(|&v| lower_ty(ck, v)).collect();
-            // For now, represent as a tuple of variants.
-            ck.alloc_ty(Type::Tuple { elems: variant_tys })
+            ck.alloc_ty(Type::AnonSum {
+                variants: variant_tys,
+            })
         }
         Ty::Record { fields, open, .. } => {
             let rec_fields: Vec<_> = fields
@@ -87,7 +92,9 @@ pub(crate) fn lower_ty(ck: &mut Checker<'_>, ty_idx: Idx<Ty>) -> Idx<Type> {
             })
         }
         Ty::Refine { base, .. } => {
-            // Refinement types: lower the base, ignore predicate for now.
+            // Refinement type predicates are intentionally not checked.
+            // Full refinement checking requires constraint solving (SMT)
+            // and is deferred to a future milestone.
             lower_ty(ck, base)
         }
         Ty::Array { elem, len, .. } => {
@@ -101,24 +108,48 @@ pub(crate) fn lower_ty(ck: &mut Checker<'_>, ty_idx: Idx<Ty>) -> Idx<Type> {
     }
 }
 
-fn lower_ty_fn(ck: &mut Checker<'_>, params: &[Idx<Ty>], ret: Idx<Ty>, arrow: Arrow) -> Idx<Type> {
+fn lower_ty_fn(
+    ck: &mut Checker<'_>,
+    params: &[Idx<Ty>],
+    ret: Idx<Ty>,
+    arrow: Arrow,
+    effects: Option<&EffectSet>,
+) -> Idx<Type> {
     let param_tys: Vec<_> = params.iter().map(|&p| lower_ty(ck, p)).collect();
     let ret_ty = lower_ty(ck, ret);
-    let effect_row = match arrow {
-        Arrow::Pure => EffectRow::PURE,
-        Arrow::Effectful => {
-            // TODO: lower effect set from AST
-            EffectRow {
-                effects: vec![],
-                row_var: None,
-            }
-        }
+    let effect_row = match (arrow, effects) {
+        (Arrow::Pure, _) => EffectRow::PURE,
+        (Arrow::Effectful, Some(eff_set)) => lower_effect_set(ck, eff_set),
+        (Arrow::Effectful, None) => EffectRow {
+            effects: vec![],
+            row_var: None,
+        },
     };
     ck.alloc_ty(Type::Fn {
         params: param_tys,
         ret: ret_ty,
         effects: effect_row,
     })
+}
+
+fn lower_effect_set(ck: &mut Checker<'_>, eff_set: &EffectSet) -> EffectRow {
+    let mut effects = vec![];
+    let mut row_var = None;
+    for item in &eff_set.effects {
+        match item {
+            EffectItem::Named { name, arg, span } => {
+                if let Some(def_id) = lookup_name_or_error(ck, *name, *span) {
+                    let args = arg.iter().map(|&ty_idx| lower_ty(ck, ty_idx)).collect();
+                    effects.push(EffectEntry { def: def_id, args });
+                }
+            }
+            EffectItem::Var { span, .. } => {
+                let var_id = ck.store.unify.fresh_var_id(*span);
+                row_var = Some(var_id);
+            }
+        }
+    }
+    EffectRow { effects, row_var }
 }
 
 fn lower_ty_quantified(

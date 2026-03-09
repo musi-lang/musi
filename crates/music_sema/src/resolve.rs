@@ -30,14 +30,6 @@ pub struct ResolveOutput {
     pub pat_defs: HashMap<Span, DefId>,
 }
 
-/// Result of the resolution pass.
-pub struct ResolveResult {
-    pub defs: DefTable,
-    pub scopes: ScopeTree,
-    pub output: ResolveOutput,
-    pub root_scope: ScopeId,
-}
-
 /// Runs two-pass name resolution over a parsed module.
 #[must_use]
 pub fn resolve(
@@ -48,7 +40,7 @@ pub fn resolve(
     defs: &mut DefTable,
     scopes: &mut ScopeTree,
     module_scope: ScopeId,
-) -> ResolveResult {
+) -> ResolveOutput {
     let mut resolver = Resolver {
         ast: &module.arenas,
         interner,
@@ -70,12 +62,7 @@ pub fn resolve(
         resolver.resolve_expr(stmt.expr);
     }
 
-    ResolveResult {
-        defs: DefTable::new(), // placeholder -- real defs are in shared table
-        scopes: ScopeTree::new(),
-        output: resolver.output,
-        root_scope: module_scope,
-    }
+    resolver.output
 }
 
 struct Resolver<'a> {
