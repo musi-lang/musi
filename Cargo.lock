@@ -30,6 +30,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "music_parse"
+version = "0.1.0-alpha1"
+dependencies = [
+ "music_ast",
+ "music_lex",
+ "music_shared",
+ "thiserror",
+]
+
+[[package]]
 name = "music_shared"
 version = "0.1.0-alpha1"
 dependencies = [
