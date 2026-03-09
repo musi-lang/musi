@@ -14,7 +14,7 @@ use crate::const_pool::ConstPool;
 use crate::error::EmitError;
 use crate::type_pool::TypePool;
 
-use fn_emitter::FnEmitter;
+use fn_emitter::{FnEmitter, HandlerEntry};
 
 /// Per-function bytecode output assembled by the emitter.
 pub struct FnBytecode {
@@ -25,6 +25,7 @@ pub struct FnBytecode {
     pub max_stack: u16,
     pub effect_mask: u16,
     pub code: Vec<u8>,
+    pub handlers: Vec<HandlerEntry>,
 }
 
 /// Orchestrates the full module emission.
@@ -96,6 +97,7 @@ impl<'a> Emitter<'a> {
             max_stack: fe.max_stack,
             effect_mask,
             code: fe.code,
+            handlers: fe.handlers,
         })
     }
 }
@@ -116,6 +118,16 @@ pub fn write_function_pool(buf: &mut Vec<u8>, functions: &[FnBytecode]) -> Resul
         let code_len = u32::try_from(fn_bc.code.len()).map_err(|_| EmitError::FunctionTooLarge)?;
         buf.extend_from_slice(&code_len.to_le_bytes());
         buf.extend_from_slice(&fn_bc.code);
+        // Handler table
+        let handler_count =
+            u16::try_from(fn_bc.handlers.len()).map_err(|_| EmitError::OperandOverflow {
+                desc: "too many handler entries".into(),
+            })?;
+        buf.extend_from_slice(&handler_count.to_le_bytes());
+        for h in &fn_bc.handlers {
+            buf.push(h.effect_id);
+            buf.extend_from_slice(&h.handler_fn_id.to_le_bytes());
+        }
     }
     Ok(())
 }
