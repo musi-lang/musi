@@ -3,6 +3,12 @@
 version = 4
 
 [[package]]
+name = "byteorder"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
+
+[[package]]
 name = "intaglio"
 version = "1.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -19,6 +25,16 @@ name = "music_ast"
 version = "0.1.0-alpha1"
 dependencies = [
  "music_shared",
+]
+
+[[package]]
+name = "music_emit"
+version = "0.1.0-alpha1"
+dependencies = [
+ "byteorder",
+ "music_ir",
+ "music_shared",
+ "thiserror",
 ]
 
 [[package]]
