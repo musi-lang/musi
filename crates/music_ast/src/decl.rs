@@ -25,7 +25,7 @@ pub enum ClassMember {
 pub struct FnSig {
     pub name: Symbol,
     pub params: Vec<Param>,
-    pub ty: Option<Idx<Ty>>,
+    pub ret: Option<Idx<Ty>>,
     pub span: Span,
 }
 
