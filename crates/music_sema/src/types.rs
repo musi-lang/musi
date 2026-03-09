@@ -90,7 +90,7 @@ pub struct EffectRow {
 impl EffectRow {
     /// The empty, pure effect row.
     pub const PURE: Self = Self {
-        effects: Vec::new(),
+        effects: vec![],
         row_var: None,
     };
 
@@ -135,85 +135,111 @@ pub struct TypeDisplay<'a> {
     pub interner: &'a Interner,
 }
 
+impl TypeDisplay<'_> {
+    fn write_ty(&self, f: &mut fmt::Formatter<'_>, ty: Idx<Type>) -> fmt::Result {
+        let d = TypeDisplay {
+            ty,
+            arena: self.arena,
+            defs: self.defs,
+            interner: self.interner,
+        };
+        write!(f, "{d}")
+    }
+
+    fn resolve_def_name(&self, def: DefId) -> Result<&str, fmt::Error> {
+        let idx = usize::try_from(def.0).map_err(|_| fmt::Error)?;
+        Ok(self.interner.resolve(self.defs[idx].name))
+    }
+
+    fn resolve_symbol(&self, sym: Symbol) -> &str {
+        self.interner.resolve(sym)
+    }
+
+    /// Writes types separated by `sep` (e.g. `", "` or `" | "`).
+    fn fmt_types_sep(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+        tys: &[Idx<Type>],
+        sep: &str,
+    ) -> fmt::Result {
+        for (i, &ty) in tys.iter().enumerate() {
+            if i > 0 {
+                write!(f, "{sep}")?;
+            }
+            self.write_ty(f, ty)?;
+        }
+        Ok(())
+    }
+
+    fn fmt_bracketed_types(&self, f: &mut fmt::Formatter<'_>, tys: &[Idx<Type>]) -> fmt::Result {
+        write!(f, "[")?;
+        self.fmt_types_sep(f, tys, ", ")?;
+        write!(f, "]")
+    }
+
+    fn fmt_paren_types(&self, f: &mut fmt::Formatter<'_>, tys: &[Idx<Type>]) -> fmt::Result {
+        write!(f, "(")?;
+        self.fmt_types_sep(f, tys, ", ")?;
+        write!(f, ")")
+    }
+
+    fn fmt_quantifier_params(f: &mut fmt::Formatter<'_>, params: &[TyVarId]) -> fmt::Result {
+        for (i, &v) in params.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "'{}", v.0)?;
+        }
+        Ok(())
+    }
+
+    fn fmt_obligation(&self, f: &mut fmt::Formatter<'_>, ob: &Obligation) -> fmt::Result {
+        write!(f, "{}", self.resolve_def_name(ob.class)?)?;
+        if !ob.args.is_empty() {
+            self.fmt_bracketed_types(f, &ob.args)?;
+        }
+        Ok(())
+    }
+
+    fn fmt_obligations(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+        constraints: &[Obligation],
+    ) -> fmt::Result {
+        for (i, ob) in constraints.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            self.fmt_obligation(f, ob)?;
+        }
+        Ok(())
+    }
+}
+
 impl fmt::Display for TypeDisplay<'_> {
-    #[allow(clippy::too_many_lines)]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.arena[self.ty] {
             Type::Named { def, args } => {
-                let idx = usize::try_from(def.0).map_err(|_| fmt::Error)?;
-                let name = self.interner.resolve(self.defs[idx].name);
-                write!(f, "{name}")?;
+                write!(f, "{}", self.resolve_def_name(*def)?)?;
                 if !args.is_empty() {
-                    write!(f, "[")?;
-                    for (i, &arg) in args.iter().enumerate() {
-                        if i > 0 {
-                            write!(f, ", ")?;
-                        }
-                        let d = TypeDisplay {
-                            ty: arg,
-                            arena: self.arena,
-                            defs: self.defs,
-                            interner: self.interner,
-                        };
-                        write!(f, "{d}")?;
-                    }
-                    write!(f, "]")?;
+                    self.fmt_bracketed_types(f, args)?;
                 }
                 Ok(())
             }
             Type::Fn { params, ret, .. } => {
-                write!(f, "(")?;
-                for (i, &p) in params.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    let d = TypeDisplay {
-                        ty: p,
-                        arena: self.arena,
-                        defs: self.defs,
-                        interner: self.interner,
-                    };
-                    write!(f, "{d}")?;
-                }
-                write!(f, ") -> ")?;
-                let d = TypeDisplay {
-                    ty: *ret,
-                    arena: self.arena,
-                    defs: self.defs,
-                    interner: self.interner,
-                };
-                write!(f, "{d}")
+                self.fmt_paren_types(f, params)?;
+                write!(f, " -> ")?;
+                self.write_ty(f, *ret)
             }
-            Type::Tuple { elems } => {
-                write!(f, "(")?;
-                for (i, &e) in elems.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    let d = TypeDisplay {
-                        ty: e,
-                        arena: self.arena,
-                        defs: self.defs,
-                        interner: self.interner,
-                    };
-                    write!(f, "{d}")?;
-                }
-                write!(f, ")")
-            }
+            Type::Tuple { elems } => self.fmt_paren_types(f, elems),
             Type::Record { fields, open } => {
                 write!(f, "{{ ")?;
                 for (i, field) in fields.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
                     }
-                    let name = self.interner.resolve(field.name);
-                    let d = TypeDisplay {
-                        ty: field.ty,
-                        arena: self.arena,
-                        defs: self.defs,
-                        interner: self.interner,
-                    };
-                    write!(f, "{name}: {d}")?;
+                    write!(f, "{}: ", self.resolve_symbol(field.name))?;
+                    self.write_ty(f, field.ty)?;
                 }
                 if *open {
                     write!(f, ", ..")?;
@@ -225,23 +251,9 @@ impl fmt::Display for TypeDisplay<'_> {
                     if i > 0 {
                         write!(f, " | ")?;
                     }
-                    let name = self.interner.resolve(v.name);
-                    write!(f, "{name}")?;
+                    write!(f, "{}", self.resolve_symbol(v.name))?;
                     if !v.fields.is_empty() {
-                        write!(f, "(")?;
-                        for (j, &ft) in v.fields.iter().enumerate() {
-                            if j > 0 {
-                                write!(f, ", ")?;
-                            }
-                            let d = TypeDisplay {
-                                ty: ft,
-                                arena: self.arena,
-                                defs: self.defs,
-                                interner: self.interner,
-                            };
-                            write!(f, "{d}")?;
-                        }
-                        write!(f, ")")?;
+                        self.fmt_paren_types(f, &v.fields)?;
                     }
                 }
                 Ok(())
@@ -252,35 +264,34 @@ impl fmt::Display for TypeDisplay<'_> {
                 } else {
                     write!(f, "[]")?;
                 }
-                let d = TypeDisplay {
-                    ty: *elem,
-                    arena: self.arena,
-                    defs: self.defs,
-                    interner: self.interner,
-                };
-                write!(f, "{d}")
+                self.write_ty(f, *elem)
             }
             Type::Ref { inner } => {
                 write!(f, "&")?;
-                let d = TypeDisplay {
-                    ty: *inner,
-                    arena: self.arena,
-                    defs: self.defs,
-                    interner: self.interner,
-                };
-                write!(f, "{d}")
+                self.write_ty(f, *inner)
             }
             Type::Var(v) => write!(f, "?{}", v.0),
             Type::Rigid(v) => write!(f, "'{}", v.0),
-            Type::Quantified { body, .. } => {
-                // Simplified display
-                let d = TypeDisplay {
-                    ty: *body,
-                    arena: self.arena,
-                    defs: self.defs,
-                    interner: self.interner,
+            Type::Quantified {
+                kind,
+                params,
+                constraints,
+                body,
+            } => {
+                let kw = match kind {
+                    Quantifier::Forall => "forall",
+                    Quantifier::Exists => "exists",
                 };
-                write!(f, "forall .. {d}")
+                write!(f, "{kw} ")?;
+                Self::fmt_quantifier_params(f, params)?;
+                if !params.is_empty() || !constraints.is_empty() {
+                    write!(f, ". ")?;
+                }
+                if !constraints.is_empty() {
+                    self.fmt_obligations(f, constraints)?;
+                    write!(f, " => ")?;
+                }
+                self.write_ty(f, *body)
             }
             Type::Error => write!(f, "<error>"),
         }

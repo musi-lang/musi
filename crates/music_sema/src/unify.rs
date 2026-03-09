@@ -33,7 +33,7 @@ impl UnifyTable {
     /// Creates an empty unification table.
     #[must_use]
     pub const fn new() -> Self {
-        Self { vars: Vec::new() }
+        Self { vars: vec![] }
     }
 
     /// Allocates a fresh unification variable.
@@ -136,7 +136,6 @@ impl UnifyTable {
     /// Unifies two types, returning `true` on success.
     ///
     /// On failure, returns `false` and the caller should report a diagnostic.
-    #[allow(clippy::too_many_lines)]
     pub fn unify(
         &mut self,
         a: Idx<Type>,
@@ -152,50 +151,27 @@ impl UnifyTable {
         }
 
         match (&arena[a], &arena[b]) {
-            // Error absorbs everything
             (Type::Error, _) | (_, Type::Error) => true,
 
-            // Unification variable: bind (with occurs check)
-            (Type::Var(v), _) => {
-                let v = *v;
-                if self.occurs(v, b, arena) {
-                    return false;
-                }
-                self.bind(v, b);
-                true
-            }
-            (_, Type::Var(v)) => {
-                let v = *v;
-                if self.occurs(v, a, arena) {
-                    return false;
-                }
-                self.bind(v, a);
-                true
-            }
+            (Type::Var(v), _) => self.try_bind_var(*v, b, arena),
+            (_, Type::Var(v)) => self.try_bind_var(*v, a, arena),
 
-            // Rigid variable: only unifies with itself (already handled by a == b)
             (Type::Rigid(_), _) | (_, Type::Rigid(_)) => false,
 
-            // Any (top) unifies with anything
             (Type::Named { def, args }, _) if *def == well_known.any && args.is_empty() => true,
             (_, Type::Named { def, args }) if *def == well_known.any && args.is_empty() => true,
 
-            // Never (bottom) unifies with anything
             (Type::Named { def, args }, _) if *def == well_known.never && args.is_empty() => true,
             (_, Type::Named { def, args }) if *def == well_known.never && args.is_empty() => true,
 
-            // Named: same DefId, recursively unify args
             (Type::Named { def: d1, args: a1 }, Type::Named { def: d2, args: a2 }) => {
                 if d1 != d2 || a1.len() != a2.len() {
                     return false;
                 }
                 let pairs: Vec<_> = a1.iter().copied().zip(a2.iter().copied()).collect();
-                pairs
-                    .iter()
-                    .all(|&(x, y)| self.unify(x, y, arena, well_known))
+                self.unify_pairwise(&pairs, arena, well_known)
             }
 
-            // Fn: same arity, unify params + ret
             (
                 Type::Fn {
                     params: p1,
@@ -208,30 +184,18 @@ impl UnifyTable {
                     ..
                 },
             ) => {
-                if p1.len() != p2.len() {
-                    return false;
-                }
-                let r1 = *r1;
-                let r2 = *r2;
-                let pairs: Vec<_> = p1.iter().copied().zip(p2.iter().copied()).collect();
-                pairs
-                    .iter()
-                    .all(|&(x, y)| self.unify(x, y, arena, well_known))
-                    && self.unify(r1, r2, arena, well_known)
+                let (p1, r1, p2, r2) = (p1.clone(), *r1, p2.clone(), *r2);
+                self.unify_fn(&p1, r1, &p2, r2, arena, well_known)
             }
 
-            // Tuple: same length
             (Type::Tuple { elems: e1 }, Type::Tuple { elems: e2 }) => {
                 if e1.len() != e2.len() {
                     return false;
                 }
                 let pairs: Vec<_> = e1.iter().copied().zip(e2.iter().copied()).collect();
-                pairs
-                    .iter()
-                    .all(|&(x, y)| self.unify(x, y, arena, well_known))
+                self.unify_pairwise(&pairs, arena, well_known)
             }
 
-            // Record: structural match by field name
             (
                 Type::Record {
                     fields: f1,
@@ -241,20 +205,8 @@ impl UnifyTable {
                     fields: f2,
                     open: o2,
                 },
-            ) => {
-                if !o1 && !o2 && f1.len() != f2.len() {
-                    return false;
-                }
-                let f1: Vec<RecordField> = f1.clone();
-                let f2: Vec<RecordField> = f2.clone();
-                f1.iter().all(|field1| {
-                    f2.iter()
-                        .find(|field2| field2.name == field1.name)
-                        .is_some_and(|field2| self.unify(field1.ty, field2.ty, arena, well_known))
-                })
-            }
+            ) => self.unify_record(&f1.clone(), *o1, &f2.clone(), *o2, arena, well_known),
 
-            // Array: unify element type
             (Type::Array { elem: e1, len: l1 }, Type::Array { elem: e2, len: l2 }) => {
                 if l1 != l2 {
                     return false;
@@ -263,35 +215,100 @@ impl UnifyTable {
                 self.unify(e1, e2, arena, well_known)
             }
 
-            // Ref: unify inner
             (Type::Ref { inner: i1 }, Type::Ref { inner: i2 }) => {
                 let (i1, i2) = (*i1, *i2);
                 self.unify(i1, i2, arena, well_known)
             }
 
-            // Sum: structural match by variant name
             (Type::Sum { variants: v1 }, Type::Sum { variants: v2 }) => {
-                if v1.len() != v2.len() {
-                    return false;
-                }
-                let v1: Vec<SumVariant> = v1.clone();
-                let v2: Vec<SumVariant> = v2.clone();
-                v1.iter().all(|var1| {
-                    v2.iter()
-                        .find(|var2| var2.name == var1.name)
-                        .is_some_and(|var2| {
-                            var1.fields.len() == var2.fields.len()
-                                && var1
-                                    .fields
-                                    .iter()
-                                    .zip(var2.fields.iter())
-                                    .all(|(&f1, &f2)| self.unify(f1, f2, arena, well_known))
-                        })
-                })
+                self.unify_sum(&v1.clone(), &v2.clone(), arena, well_known)
             }
 
             _ => false,
         }
+    }
+
+    /// Attempts to bind a unification variable to a target type.
+    ///
+    /// Returns `false` if the occurs check fails (would create infinite type).
+    fn try_bind_var(&mut self, var: TyVarId, target: Idx<Type>, arena: &Arena<Type>) -> bool {
+        if self.occurs(var, target, arena) {
+            return false;
+        }
+        self.bind(var, target);
+        true
+    }
+
+    /// Unifies two function types.
+    fn unify_fn(
+        &mut self,
+        p1: &[Idx<Type>],
+        r1: Idx<Type>,
+        p2: &[Idx<Type>],
+        r2: Idx<Type>,
+        arena: &mut Arena<Type>,
+        well_known: &WellKnown,
+    ) -> bool {
+        if p1.len() != p2.len() {
+            return false;
+        }
+        let pairs: Vec<_> = p1.iter().copied().zip(p2.iter().copied()).collect();
+        self.unify_pairwise(&pairs, arena, well_known) && self.unify(r1, r2, arena, well_known)
+    }
+
+    /// Unifies corresponding pairs of types.
+    fn unify_pairwise(
+        &mut self,
+        pairs: &[(Idx<Type>, Idx<Type>)],
+        arena: &mut Arena<Type>,
+        well_known: &WellKnown,
+    ) -> bool {
+        pairs
+            .iter()
+            .all(|&(x, y)| self.unify(x, y, arena, well_known))
+    }
+
+    fn unify_record(
+        &mut self,
+        f1: &[RecordField],
+        o1: bool,
+        f2: &[RecordField],
+        o2: bool,
+        arena: &mut Arena<Type>,
+        well_known: &WellKnown,
+    ) -> bool {
+        if !o1 && !o2 && f1.len() != f2.len() {
+            return false;
+        }
+        f1.iter().all(|field1| {
+            f2.iter()
+                .find(|field2| field2.name == field1.name)
+                .is_some_and(|field2| self.unify(field1.ty, field2.ty, arena, well_known))
+        })
+    }
+
+    fn unify_sum(
+        &mut self,
+        v1: &[SumVariant],
+        v2: &[SumVariant],
+        arena: &mut Arena<Type>,
+        well_known: &WellKnown,
+    ) -> bool {
+        if v1.len() != v2.len() {
+            return false;
+        }
+        v1.iter().all(|var1| {
+            v2.iter()
+                .find(|var2| var2.name == var1.name)
+                .is_some_and(|var2| {
+                    var1.fields.len() == var2.fields.len()
+                        && var1
+                            .fields
+                            .iter()
+                            .zip(var2.fields.iter())
+                            .all(|(&f1, &f2)| self.unify(f1, f2, arena, well_known))
+                })
+        })
     }
 
     /// Recursively replaces all solved `Var` with their bindings.

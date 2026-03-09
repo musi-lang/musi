@@ -11,32 +11,37 @@ mod tests;
 
 use std::collections::HashMap;
 
-use music_ast::decl::ClassMember;
-use music_ast::expr::{Arg, ArrayElem, BindKind, Expr, PwGuard, RecField};
+use music_ast::decl::{ClassMember, EffectOp};
+use music_ast::expr::{
+    Arg, ArrayElem, BindKind, Expr, LetFields, MatchArm, Param, PwGuard, RecField,
+};
 use music_ast::pat::Pat;
-use music_ast::ty::{Ty, TyNamedRef};
-use music_ast::{AstArenas, Stmt};
-use music_shared::{DiagnosticBag, FileId, Idx, Interner, Span};
+use music_ast::ty::{Constraint, Ty, TyNamedRef, TyParam};
+use music_ast::{AstArenas, ParsedModule};
+use music_shared::{DiagnosticBag, FileId, Idx, Interner, Span, Symbol};
 
 use crate::def::{DefId, DefKind, DefTable};
 use crate::error::SemaError;
 use crate::scope::{ScopeId, ScopeTree};
 
+/// Output accumulators from the resolution pass.
+pub struct ResolveOutput {
+    pub expr_defs: HashMap<Idx<Expr>, DefId>,
+    pub pat_defs: HashMap<Span, DefId>,
+}
+
 /// Result of the resolution pass.
 pub struct ResolveResult {
     pub defs: DefTable,
     pub scopes: ScopeTree,
-    pub expr_defs: HashMap<Idx<Expr>, DefId>,
-    pub pat_defs: HashMap<Span, DefId>,
+    pub output: ResolveOutput,
     pub root_scope: ScopeId,
 }
 
-/// Runs two-pass name resolution over a list of top-level statements.
+/// Runs two-pass name resolution over a parsed module.
 #[must_use]
-#[allow(clippy::too_many_arguments)]
 pub fn resolve(
-    stmts: &[Stmt],
-    ast: &AstArenas,
+    module: &ParsedModule,
     interner: &mut Interner,
     file_id: FileId,
     diags: &mut DiagnosticBag,
@@ -45,32 +50,30 @@ pub fn resolve(
     module_scope: ScopeId,
 ) -> ResolveResult {
     let mut resolver = Resolver {
-        ast,
+        ast: &module.arenas,
         interner,
         file_id,
         diags,
         defs,
         scopes,
-        expr_defs: HashMap::new(),
-        pat_defs: HashMap::new(),
+        output: ResolveOutput {
+            expr_defs: HashMap::new(),
+            pat_defs: HashMap::new(),
+        },
         current_scope: module_scope,
     };
 
-    // Pass 1: collect top-level definitions.
-    for stmt in stmts {
+    for stmt in &module.stmts {
         resolver.collect_top_level(stmt.expr);
     }
-
-    // Pass 2: resolve all references.
-    for stmt in stmts {
+    for stmt in &module.stmts {
         resolver.resolve_expr(stmt.expr);
     }
 
     ResolveResult {
-        defs: DefTable::new(), // placeholder — the real defs are in the shared table
+        defs: DefTable::new(), // placeholder -- real defs are in shared table
         scopes: ScopeTree::new(),
-        expr_defs: resolver.expr_defs,
-        pat_defs: resolver.pat_defs,
+        output: resolver.output,
         root_scope: module_scope,
     }
 }
@@ -82,13 +85,11 @@ struct Resolver<'a> {
     diags: &'a mut DiagnosticBag,
     defs: &'a mut DefTable,
     scopes: &'a mut ScopeTree,
-    expr_defs: HashMap<Idx<Expr>, DefId>,
-    pat_defs: HashMap<Span, DefId>,
+    output: ResolveOutput,
     current_scope: ScopeId,
 }
 
 impl Resolver<'_> {
-    /// Pass 1: register top-level definitions without descending into bodies.
     fn collect_top_level(&mut self, expr_idx: Idx<Expr>) {
         match &self.ast.exprs[expr_idx] {
             Expr::Binding { fields, .. } => {
@@ -114,143 +115,33 @@ impl Resolver<'_> {
     }
 
     /// Pass 2: resolve all name references in an expression.
-    #[allow(clippy::too_many_lines)]
     fn resolve_expr(&mut self, expr_idx: Idx<Expr>) {
         match self.ast.exprs[expr_idx].clone() {
-            Expr::Name { name, span } => {
-                if let Some(def_id) = self.scopes.lookup(self.current_scope, name) {
-                    let _prev = self.expr_defs.insert(expr_idx, def_id);
-                    self.defs.get_mut(def_id).use_count += 1;
-                } else {
-                    let name_str = self.interner.resolve(name);
-                    let _d = self.diags.report(
-                        &SemaError::UndefinedName {
-                            name: Box::from(name_str),
-                        },
-                        span,
-                        self.file_id,
-                    );
-                }
-            }
+            Expr::Name { name, span } => self.resolve_name(expr_idx, name, span),
             Expr::Lit { .. } | Expr::Error { .. } | Expr::Import { .. } | Expr::Export { .. } => {}
-            Expr::Paren { inner, .. } => self.resolve_expr(inner),
-            Expr::Tuple { elems, .. } => {
-                for &elem in &elems {
-                    self.resolve_expr(elem);
+            Expr::Paren { inner, .. } | Expr::Annotated { inner, .. } => self.resolve_expr(inner),
+            Expr::Tuple { elems, .. } | Expr::Variant { args: elems, .. } => {
+                for &e in &elems {
+                    self.resolve_expr(e);
                 }
             }
-            Expr::Block { stmts, tail, .. } => {
-                let parent = self.current_scope;
-                self.current_scope = self.scopes.push_child(parent);
-                for &stmt in &stmts {
-                    self.resolve_expr(stmt);
-                }
-                if let Some(t) = tail {
-                    self.resolve_expr(t);
-                }
-                self.current_scope = parent;
-            }
-            Expr::Let { fields, body, .. } => {
-                // Value first (evaluated in outer scope).
-                self.resolve_expr(fields.value);
-                if let Some(ty) = fields.ty {
-                    self.resolve_ty(ty);
-                }
-
-                // If there is a body (let-in), create a child scope.
-                if let Some(body) = body {
-                    let parent = self.current_scope;
-                    self.current_scope = self.scopes.push_child(parent);
-                    self.define_pat(fields.pat, binding_def_kind(fields.kind));
-                    self.resolve_expr(body);
-                    self.current_scope = parent;
-                } else {
-                    // Statement-level let: define in current scope.
-                    self.define_pat(fields.pat, binding_def_kind(fields.kind));
-                }
-            }
-            Expr::Binding { fields, .. } => {
-                self.resolve_expr(fields.value);
-                if let Some(ty) = fields.ty {
-                    self.resolve_ty(ty);
-                }
-                // Already defined in pass 1 for top-level; re-defining is harmless.
-                self.define_pat(fields.pat, binding_def_kind(fields.kind));
-            }
-            Expr::Fn {
-                params,
-                ret_ty,
-                body,
-                ..
-            } => {
-                let parent = self.current_scope;
-                self.current_scope = self.scopes.push_child(parent);
-                for param in &params {
-                    let id = self.defs.alloc(param.name, DefKind::Param, param.span);
-                    self.define_in_scope(param.name, id, param.span);
-                    let _inserted = self.pat_defs.insert(param.span, id);
-                    if let Some(ty) = param.ty {
-                        self.resolve_ty(ty);
-                    }
-                }
-                if let Some(ret) = ret_ty {
-                    self.resolve_ty(ret);
-                }
-                self.resolve_expr(body);
-                self.current_scope = parent;
-            }
-            Expr::Call { callee, args, .. } => {
-                self.resolve_expr(callee);
-                for arg in &args {
-                    match arg {
-                        Arg::Pos { expr, .. } => self.resolve_expr(*expr),
-                        Arg::Hole { .. } => {}
-                    }
-                }
-            }
+            Expr::Block { stmts, tail, .. } => self.resolve_expr_block(&stmts, tail),
             Expr::BinOp { left, right, .. } => {
                 self.resolve_expr(left);
                 self.resolve_expr(right);
             }
-            Expr::UnaryOp { operand, .. } => {
-                self.resolve_expr(operand);
-            }
-            Expr::Field { object, .. } => {
-                self.resolve_expr(object);
-            }
+            Expr::UnaryOp { operand, .. } => self.resolve_expr(operand),
+            Expr::Field { object, .. } => self.resolve_expr(object),
             Expr::Index { object, index, .. } => {
                 self.resolve_expr(object);
                 self.resolve_expr(index);
             }
+            Expr::Call { callee, args, .. } => self.resolve_expr_call(callee, &args),
             Expr::Update { base, fields, .. } => {
                 self.resolve_expr(base);
-                for field in &fields {
-                    match field {
-                        RecField::Named { value, .. } => {
-                            if let Some(v) = value {
-                                self.resolve_expr(*v);
-                            }
-                        }
-                        RecField::Spread { expr, .. } => {
-                            self.resolve_expr(*expr);
-                        }
-                    }
-                }
+                self.resolve_rec_fields(&fields);
             }
-            Expr::Record { fields, .. } => {
-                for field in &fields {
-                    match field {
-                        RecField::Named { value, .. } => {
-                            if let Some(v) = value {
-                                self.resolve_expr(*v);
-                            }
-                        }
-                        RecField::Spread { expr, .. } => {
-                            self.resolve_expr(*expr);
-                        }
-                    }
-                }
-            }
+            Expr::Record { fields, .. } => self.resolve_rec_fields(&fields),
             Expr::Array { elems, .. } => {
                 for elem in &elems {
                     match elem {
@@ -260,35 +151,12 @@ impl Resolver<'_> {
                     }
                 }
             }
-            Expr::Variant { args, .. } => {
-                for &arg in &args {
-                    self.resolve_expr(arg);
-                }
-            }
             Expr::Piecewise { arms, .. } => {
                 for arm in &arms {
-                    match arm.guard {
-                        PwGuard::When { expr, .. } => {
-                            self.resolve_expr(expr);
-                        }
-                        PwGuard::Any { .. } => {}
+                    if let PwGuard::When { expr, .. } = arm.guard {
+                        self.resolve_expr(expr);
                     }
                     self.resolve_expr(arm.result);
-                }
-            }
-            Expr::Match {
-                scrutinee, arms, ..
-            } => {
-                self.resolve_expr(scrutinee);
-                for arm in &arms {
-                    let parent = self.current_scope;
-                    self.current_scope = self.scopes.push_child(parent);
-                    self.resolve_pat(arm.pat);
-                    if let Some(guard) = arm.guard {
-                        self.resolve_expr(guard);
-                    }
-                    self.resolve_expr(arm.result);
-                    self.current_scope = parent;
                 }
             }
             Expr::Return { value, .. } => {
@@ -296,23 +164,24 @@ impl Resolver<'_> {
                     self.resolve_expr(v);
                 }
             }
+            Expr::Let { fields, body, .. } => self.resolve_expr_let(&fields, body),
+            Expr::Binding { fields, .. } => self.resolve_expr_binding(&fields),
+            Expr::Fn {
+                params,
+                ret_ty,
+                body,
+                ..
+            } => self.resolve_expr_fn(&params, ret_ty, body),
+            Expr::Match {
+                scrutinee, arms, ..
+            } => self.resolve_expr_match(scrutinee, &arms),
             Expr::Quantified {
                 body,
                 params,
                 constraints,
                 ..
             } => {
-                let parent = self.current_scope;
-                self.current_scope = self.scopes.push_child(parent);
-                for param in &params {
-                    let id = self.defs.alloc(param.name, DefKind::Type, param.span);
-                    self.define_in_scope(param.name, id, param.span);
-                }
-                for constraint in &constraints {
-                    self.resolve_ty_named_ref(&constraint.bound);
-                }
-                self.resolve_expr(body);
-                self.current_scope = parent;
+                self.resolve_expr_quantified(body, &params, &constraints);
             }
             Expr::Class {
                 name,
@@ -321,33 +190,7 @@ impl Resolver<'_> {
                 members,
                 ..
             } => {
-                let parent = self.current_scope;
-                self.current_scope = self.scopes.push_child(parent);
-                for param in &params {
-                    let id = self.defs.alloc(param.name, DefKind::Type, param.span);
-                    self.define_in_scope(param.name, id, param.span);
-                }
-                for constraint in &constraints {
-                    self.resolve_ty_named_ref(&constraint.bound);
-                }
-                for member in &members {
-                    match member {
-                        ClassMember::Fn { sig, default, .. } => {
-                            let fn_id = self.defs.alloc(sig.name, DefKind::Fn, sig.span);
-                            // Look up the class DefId
-                            if let Some(class_def) = self.scopes.lookup(parent, name) {
-                                self.defs.get_mut(fn_id).parent = Some(class_def);
-                            }
-                            if let Some(default_body) = default {
-                                self.resolve_expr(*default_body);
-                            }
-                        }
-                        ClassMember::Law { body, .. } => {
-                            self.resolve_expr(*body);
-                        }
-                    }
-                }
-                self.current_scope = parent;
+                self.resolve_expr_class(name, &params, &constraints, &members);
             }
             Expr::Given {
                 target,
@@ -356,55 +199,205 @@ impl Resolver<'_> {
                 members,
                 ..
             } => {
-                self.resolve_ty_named_ref(&target);
-                let parent = self.current_scope;
-                self.current_scope = self.scopes.push_child(parent);
-                for param in &params {
-                    let id = self.defs.alloc(param.name, DefKind::Type, param.span);
-                    self.define_in_scope(param.name, id, param.span);
-                }
-                for constraint in &constraints {
-                    self.resolve_ty_named_ref(&constraint.bound);
-                }
-                for member in &members {
-                    match member {
-                        ClassMember::Fn { sig, default, .. } => {
-                            let _fn_id = self.defs.alloc(sig.name, DefKind::Fn, sig.span);
-                            if let Some(default_body) = default {
-                                self.resolve_expr(*default_body);
-                            }
-                        }
-                        ClassMember::Law { body, .. } => {
-                            self.resolve_expr(*body);
-                        }
-                    }
-                }
-                self.current_scope = parent;
+                self.resolve_expr_given(&target, &params, &constraints, &members);
             }
             Expr::Effect {
                 name, params, ops, ..
-            } => {
-                let parent = self.current_scope;
-                self.current_scope = self.scopes.push_child(parent);
-                for param in &params {
-                    let id = self.defs.alloc(param.name, DefKind::Type, param.span);
-                    self.define_in_scope(param.name, id, param.span);
-                }
-                // Look up the effect DefId from parent scope
-                let effect_def = self.scopes.lookup(parent, name);
-                for op in &ops {
-                    let op_id = self.defs.alloc(op.name, DefKind::EffectOp, op.span);
-                    if let Some(eff) = effect_def {
-                        self.defs.get_mut(op_id).parent = Some(eff);
+            } => self.resolve_expr_effect(name, &params, &ops),
+        }
+    }
+
+    fn resolve_name(&mut self, expr_idx: Idx<Expr>, name: Symbol, span: Span) {
+        if let Some(def_id) = self.scopes.lookup(self.current_scope, name) {
+            let _prev = self.output.expr_defs.insert(expr_idx, def_id);
+            self.defs.get_mut(def_id).use_count += 1;
+        } else {
+            let name_str = self.interner.resolve(name);
+            let _d = self.diags.report(
+                &SemaError::UndefinedName {
+                    name: Box::from(name_str),
+                },
+                span,
+                self.file_id,
+            );
+        }
+    }
+
+    fn resolve_rec_fields(&mut self, fields: &[RecField]) {
+        for field in fields {
+            match field {
+                RecField::Named { value, .. } => {
+                    if let Some(v) = value {
+                        self.resolve_expr(*v);
                     }
-                    self.resolve_ty(op.ty);
                 }
-                self.current_scope = parent;
-            }
-            Expr::Annotated { inner, .. } => {
-                self.resolve_expr(inner);
+                RecField::Spread { expr, .. } => {
+                    self.resolve_expr(*expr);
+                }
             }
         }
+    }
+
+    fn enter_ty_param_scope(&mut self, params: &[TyParam], constraints: &[Constraint]) -> ScopeId {
+        let parent = self.current_scope;
+        self.current_scope = self.scopes.push_child(parent);
+        for param in params {
+            let id = self.defs.alloc(param.name, DefKind::Type, param.span);
+            self.define_in_scope(param.name, id, param.span);
+        }
+        for constraint in constraints {
+            self.resolve_ty_named_ref(&constraint.bound);
+        }
+        parent
+    }
+
+    fn resolve_class_members(&mut self, members: &[ClassMember], parent_def: Option<DefId>) {
+        for member in members {
+            match member {
+                ClassMember::Fn { sig, default, .. } => {
+                    let fn_id = self.defs.alloc(sig.name, DefKind::Fn, sig.span);
+                    if let Some(pd) = parent_def {
+                        self.defs.get_mut(fn_id).parent = Some(pd);
+                    }
+                    if let Some(body) = default {
+                        self.resolve_expr(*body);
+                    }
+                }
+                ClassMember::Law { body, .. } => {
+                    self.resolve_expr(*body);
+                }
+            }
+        }
+    }
+
+    fn resolve_expr_block(&mut self, stmts: &[Idx<Expr>], tail: Option<Idx<Expr>>) {
+        let parent = self.current_scope;
+        self.current_scope = self.scopes.push_child(parent);
+        for &stmt in stmts {
+            self.resolve_expr(stmt);
+        }
+        if let Some(t) = tail {
+            self.resolve_expr(t);
+        }
+        self.current_scope = parent;
+    }
+
+    fn resolve_expr_call(&mut self, callee: Idx<Expr>, args: &[Arg]) {
+        self.resolve_expr(callee);
+        for arg in args {
+            if let Arg::Pos { expr, .. } = arg {
+                self.resolve_expr(*expr);
+            }
+        }
+    }
+
+    fn resolve_expr_let(&mut self, fields: &LetFields, body: Option<Idx<Expr>>) {
+        self.resolve_expr(fields.value);
+        if let Some(ty) = fields.ty {
+            self.resolve_ty(ty);
+        }
+
+        if let Some(body) = body {
+            let parent = self.current_scope;
+            self.current_scope = self.scopes.push_child(parent);
+            self.define_pat(fields.pat, binding_def_kind(fields.kind));
+            self.resolve_expr(body);
+            self.current_scope = parent;
+        } else {
+            self.define_pat(fields.pat, binding_def_kind(fields.kind));
+        }
+    }
+
+    fn resolve_expr_binding(&mut self, fields: &LetFields) {
+        self.resolve_expr(fields.value);
+        if let Some(ty) = fields.ty {
+            self.resolve_ty(ty);
+        }
+        self.define_pat(fields.pat, binding_def_kind(fields.kind));
+    }
+
+    fn resolve_expr_fn(&mut self, params: &[Param], ret_ty: Option<Idx<Ty>>, body: Idx<Expr>) {
+        let parent = self.current_scope;
+        self.current_scope = self.scopes.push_child(parent);
+        for param in params {
+            let id = self.defs.alloc(param.name, DefKind::Param, param.span);
+            self.define_in_scope(param.name, id, param.span);
+            let _inserted = self.output.pat_defs.insert(param.span, id);
+            if let Some(ty) = param.ty {
+                self.resolve_ty(ty);
+            }
+        }
+        if let Some(ret) = ret_ty {
+            self.resolve_ty(ret);
+        }
+        self.resolve_expr(body);
+        self.current_scope = parent;
+    }
+
+    fn resolve_expr_match(&mut self, scrutinee: Idx<Expr>, arms: &[MatchArm]) {
+        self.resolve_expr(scrutinee);
+        for arm in arms {
+            let parent = self.current_scope;
+            self.current_scope = self.scopes.push_child(parent);
+            self.resolve_pat(arm.pat);
+            if let Some(guard) = arm.guard {
+                self.resolve_expr(guard);
+            }
+            self.resolve_expr(arm.result);
+            self.current_scope = parent;
+        }
+    }
+
+    fn resolve_expr_quantified(
+        &mut self,
+        body: Idx<Expr>,
+        params: &[TyParam],
+        constraints: &[Constraint],
+    ) {
+        let parent = self.enter_ty_param_scope(params, constraints);
+        self.resolve_expr(body);
+        self.current_scope = parent;
+    }
+
+    fn resolve_expr_class(
+        &mut self,
+        name: Symbol,
+        params: &[TyParam],
+        constraints: &[Constraint],
+        members: &[ClassMember],
+    ) {
+        let outer = self.current_scope;
+        let parent = self.enter_ty_param_scope(params, constraints);
+        let class_def = self.scopes.lookup(outer, name);
+        self.resolve_class_members(members, class_def);
+        self.current_scope = parent;
+    }
+
+    fn resolve_expr_given(
+        &mut self,
+        target: &TyNamedRef,
+        params: &[TyParam],
+        constraints: &[Constraint],
+        members: &[ClassMember],
+    ) {
+        self.resolve_ty_named_ref(target);
+        let parent = self.enter_ty_param_scope(params, constraints);
+        self.resolve_class_members(members, None);
+        self.current_scope = parent;
+    }
+
+    fn resolve_expr_effect(&mut self, name: Symbol, params: &[TyParam], ops: &[EffectOp]) {
+        let outer = self.current_scope;
+        let parent = self.enter_ty_param_scope(params, &[]);
+        let effect_def = self.scopes.lookup(outer, name);
+        for op in ops {
+            let op_id = self.defs.alloc(op.name, DefKind::EffectOp, op.span);
+            if let Some(eff) = effect_def {
+                self.defs.get_mut(op_id).parent = Some(eff);
+            }
+            self.resolve_ty(op.ty);
+        }
+        self.current_scope = parent;
     }
 
     /// Resolve names in a type annotation.
@@ -462,15 +455,7 @@ impl Resolver<'_> {
                 body,
                 ..
             } => {
-                let parent = self.current_scope;
-                self.current_scope = self.scopes.push_child(parent);
-                for param in &params {
-                    let id = self.defs.alloc(param.name, DefKind::Type, param.span);
-                    self.define_in_scope(param.name, id, param.span);
-                }
-                for constraint in &constraints {
-                    self.resolve_ty_named_ref(&constraint.bound);
-                }
+                let parent = self.enter_ty_param_scope(&params, &constraints);
                 self.resolve_ty(body);
                 self.current_scope = parent;
             }
@@ -502,7 +487,7 @@ impl Resolver<'_> {
             } => {
                 let id = self.defs.alloc(name, DefKind::Let, span);
                 self.define_in_scope(name, id, span);
-                let _inserted = self.pat_defs.insert(span, id);
+                let _inserted = self.output.pat_defs.insert(span, id);
                 if let Some(inner) = inner {
                     self.resolve_pat(inner);
                 }
@@ -540,7 +525,7 @@ impl Resolver<'_> {
             } => {
                 let id = self.defs.alloc(name, kind, span);
                 self.define_in_scope(name, id, span);
-                let _inserted = self.pat_defs.insert(span, id);
+                let _inserted = self.output.pat_defs.insert(span, id);
                 if let Some(inner) = inner {
                     self.define_pat(inner, kind);
                 }

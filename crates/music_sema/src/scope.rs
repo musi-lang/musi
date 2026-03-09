@@ -30,7 +30,7 @@ impl ScopeTree {
     /// Creates an empty scope tree.
     #[must_use]
     pub const fn new() -> Self {
-        Self { scopes: Vec::new() }
+        Self { scopes: vec![] }
     }
 
     /// Creates and returns the root (module-level) scope.
@@ -96,7 +96,7 @@ impl ScopeTree {
     /// Panics if `scope` is not a valid handle returned by this `ScopeTree`.
     #[must_use]
     pub fn visible_names(&self, scope: ScopeId) -> Vec<Symbol> {
-        let mut names = Vec::new();
+        let mut names = vec![];
         let mut cur = scope;
         loop {
             let idx = usize::try_from(cur.0).expect("ScopeId in range");

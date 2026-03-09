@@ -41,6 +41,17 @@ pub enum DefKind {
     Import,
 }
 
+/// Type-checker annotations for a definition, filled during type checking.
+#[derive(Debug, Clone, Default)]
+pub struct DefTyInfo {
+    /// Filled by the type checker once the type has been inferred/checked.
+    pub ty: Option<Idx<Type>>,
+    /// For generic definitions: the type variables that are universally quantified.
+    pub ty_params: Vec<TyVarId>,
+    /// Typeclass constraints on this definition.
+    pub constraints: Vec<Obligation>,
+}
+
 /// All metadata the compiler knows about a single definition.
 #[derive(Debug, Clone)]
 pub struct DefInfo {
@@ -48,16 +59,12 @@ pub struct DefInfo {
     pub name: Symbol,
     pub kind: DefKind,
     pub span: Span,
-    /// Filled by the type checker once the type has been inferred/checked.
-    pub ty: Option<Idx<Type>>,
-    /// For generic definitions: the type variables that are universally quantified.
-    pub ty_params: Vec<TyVarId>,
-    /// Typeclass constraints on this definition.
-    pub constraints: Vec<Obligation>,
-    /// How many times this definition is referenced (for unused warnings).
-    pub use_count: u32,
     /// For variants/members: the enclosing type or class.
     pub parent: Option<DefId>,
+    /// Type-checking data (filled incrementally by the checker).
+    pub ty_info: DefTyInfo,
+    /// How many times this definition is referenced (for unused warnings).
+    pub use_count: u32,
 }
 
 /// Registry of all definitions encountered during analysis.
@@ -69,7 +76,7 @@ impl DefTable {
     /// Creates an empty definition table.
     #[must_use]
     pub const fn new() -> Self {
-        Self { defs: Vec::new() }
+        Self { defs: vec![] }
     }
 
     /// Allocates a new definition and returns its [`DefId`].
@@ -85,11 +92,9 @@ impl DefTable {
             name,
             kind,
             span,
-            ty: None,
-            ty_params: Vec::new(),
-            constraints: Vec::new(),
-            use_count: 0,
             parent: None,
+            ty_info: DefTyInfo::default(),
+            use_count: 0,
         });
         id
     }

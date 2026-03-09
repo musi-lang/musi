@@ -11,25 +11,40 @@ use music_shared::{Interner, Span};
 use crate::def::{DefId, DefKind, DefTable};
 use crate::scope::{ScopeId, ScopeTree};
 
-/// `DefId` handles for all well-known (prelude) types.
-///
-/// Populated once by [`init_well_known`] at the start of analysis.
+/// Well-known signed integer types.
 #[derive(Debug, Clone)]
-pub struct WellKnown {
-    // Signed integers
+pub struct WellKnownInts {
     pub int: DefId,
     pub int8: DefId,
     pub int16: DefId,
     pub int32: DefId,
     pub int64: DefId,
-    // Unsigned integers
+}
+
+/// Well-known unsigned integer types.
+#[derive(Debug, Clone)]
+pub struct WellKnownUInts {
     pub uint8: DefId,
     pub uint16: DefId,
     pub uint32: DefId,
     pub uint64: DefId,
-    // Floats
+}
+
+/// Well-known floating-point types.
+#[derive(Debug, Clone)]
+pub struct WellKnownFloats {
     pub float32: DefId,
     pub float64: DefId,
+}
+
+/// `DefId` handles for all well-known (prelude) types.
+///
+/// Populated once by [`init_well_known`] at the start of analysis.
+#[derive(Debug, Clone)]
+pub struct WellKnown {
+    pub ints: WellKnownInts,
+    pub uints: WellKnownUInts,
+    pub floats: WellKnownFloats,
     // Text
     pub string: DefId,
     pub rune: DefId,
@@ -62,17 +77,23 @@ pub fn init_well_known(
     };
 
     WellKnown {
-        int: register("Int"),
-        int8: register("Int8"),
-        int16: register("Int16"),
-        int32: register("Int32"),
-        int64: register("Int64"),
-        uint8: register("UInt8"),
-        uint16: register("UInt16"),
-        uint32: register("UInt32"),
-        uint64: register("UInt64"),
-        float32: register("Float32"),
-        float64: register("Float64"),
+        ints: WellKnownInts {
+            int: register("Int"),
+            int8: register("Int8"),
+            int16: register("Int16"),
+            int32: register("Int32"),
+            int64: register("Int64"),
+        },
+        uints: WellKnownUInts {
+            uint8: register("UInt8"),
+            uint16: register("UInt16"),
+            uint32: register("UInt32"),
+            uint64: register("UInt64"),
+        },
+        floats: WellKnownFloats {
+            float32: register("Float32"),
+            float64: register("Float64"),
+        },
         string: register("String"),
         rune: register("Rune"),
         bool: register("Bool"),

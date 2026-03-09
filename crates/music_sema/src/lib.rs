@@ -24,10 +24,10 @@ pub mod types;
 pub mod unify;
 pub mod well_known;
 
-pub use checker::{Checker, CheckerResult};
-pub use def::{DefId, DefInfo, DefKind, DefTable};
+pub use checker::{CheckContext, Checker, CheckerResult};
+pub use def::{DefId, DefInfo, DefKind, DefTable, DefTyInfo};
 pub use error::SemaError;
-pub use resolve::ResolveResult;
+pub use resolve::{ResolveOutput, ResolveResult};
 pub use scope::{ScopeId, ScopeTree};
 pub use types::{EffectRow, InstanceInfo, Obligation, TyVarId, Type};
 pub use unify::UnifyTable;
@@ -38,14 +38,20 @@ use std::collections::HashMap;
 use music_ast::ParsedModule;
 use music_shared::{Arena, DiagnosticBag, FileId, Idx, Interner, Span};
 
-/// The complete result of semantic analysis of a single module.
-pub struct SemaResult {
-    /// All definitions encountered (index = `DefId.0`).
-    pub defs: Vec<DefInfo>,
+/// Maps from AST nodes to their resolved definitions.
+pub struct ResolutionMap {
     /// Maps each identifier expression to the definition it refers to.
     pub expr_defs: HashMap<Idx<music_ast::Expr>, DefId>,
     /// Maps each binding-site span to its [`DefId`].
     pub pat_defs: HashMap<Span, DefId>,
+}
+
+/// The complete result of semantic analysis of a single module.
+pub struct SemaResult {
+    /// All definitions encountered (index = `DefId.0`).
+    pub defs: Vec<DefInfo>,
+    /// Name resolution maps.
+    pub resolution: ResolutionMap,
     /// The inferred type of each expression node.
     pub expr_types: HashMap<Idx<music_ast::Expr>, Idx<Type>>,
     /// The type arena.
@@ -73,48 +79,71 @@ pub fn analyze(
     file_id: FileId,
     diags: &mut DiagnosticBag,
 ) -> SemaResult {
-    let mut defs = DefTable::new();
-    let mut scopes = ScopeTree::new();
-    let module_scope = scopes.push_root();
+    let (mut defs, well_known, mut scopes, module_scope, resolved) =
+        analyze_setup(module, interner, file_id, diags);
 
-    // Register well-known types in the module scope.
-    let well_known = well_known::init_well_known(interner, &mut defs, module_scope, &mut scopes);
-
-    // Pass 1 & 2: name resolution.
-    let resolved = resolve::resolve(
-        &module.stmts,
-        &module.arenas,
+    let ctx = CheckContext {
+        ast: &module.arenas,
         interner,
         file_id,
-        diags,
-        &mut defs,
-        &mut scopes,
-        module_scope,
-    );
-
-    // Pass 3: type checking.
-    let mut checker = Checker::new(
-        &module.arenas,
-        interner,
-        file_id,
-        diags,
-        &mut defs,
-        &mut scopes,
-        &well_known,
-        module_scope,
-        &resolved.expr_defs,
-    );
+        well_known: &well_known,
+        expr_defs: &resolved.output.expr_defs,
+    };
+    let mut checker = Checker::new(ctx, diags, &mut defs, &mut scopes, module_scope);
 
     for stmt in &module.stmts {
         let _ty = checker.synth(stmt.expr);
     }
 
-    // Resolve deferred obligations.
     checker.resolve_obligations();
-
     let result = checker.finish();
 
-    // Emit warnings for unused definitions.
+    analyze_emit_unused_warnings(&defs, interner, file_id, diags);
+
+    SemaResult {
+        defs: defs.into_vec(),
+        resolution: ResolutionMap {
+            expr_defs: resolved.output.expr_defs,
+            pat_defs: resolved.output.pat_defs,
+        },
+        expr_types: result.expr_types,
+        types: result.types,
+        unify: result.unify,
+        instances: result.instances,
+    }
+}
+
+fn analyze_setup<'a>(
+    module: &'a ParsedModule,
+    interner: &'a mut Interner,
+    file_id: FileId,
+    diags: &'a mut DiagnosticBag,
+) -> (DefTable, WellKnown, ScopeTree, ScopeId, ResolveResult) {
+    let mut defs = DefTable::new();
+    let mut scopes = ScopeTree::new();
+    let module_scope = scopes.push_root();
+
+    let well_known = well_known::init_well_known(interner, &mut defs, module_scope, &mut scopes);
+
+    let resolved = resolve::resolve(
+        module,
+        interner,
+        file_id,
+        diags,
+        &mut defs,
+        &mut scopes,
+        module_scope,
+    );
+
+    (defs, well_known, scopes, module_scope, resolved)
+}
+
+fn analyze_emit_unused_warnings(
+    defs: &DefTable,
+    interner: &Interner,
+    file_id: FileId,
+    diags: &mut DiagnosticBag,
+) {
     for def in defs.iter() {
         if def.use_count == 0
             && def.span != Span::DUMMY
@@ -135,15 +164,5 @@ pub fn analyze(
             };
             let _d = diags.report(&err, def.span, file_id);
         }
-    }
-
-    SemaResult {
-        defs: defs.into_vec(),
-        expr_defs: resolved.expr_defs,
-        pat_defs: resolved.pat_defs,
-        expr_types: result.expr_types,
-        types: result.types,
-        unify: result.unify,
-        instances: result.instances,
     }
 }
