@@ -1,3 +1,5 @@
+use std::fmt;
+
 use super::*;
 use crate::{SourceDb, Span};
 
@@ -78,4 +80,53 @@ fn test_cap_limits_diagnostic_count() {
     assert_eq!(count, MAX_ERRORS);
     let last = bag.iter().last().expect("non-empty");
     assert!(last.message.contains("too many errors"));
+}
+
+struct MockError {
+    severity: Severity,
+    message: &'static str,
+}
+
+impl fmt::Display for MockError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.message)
+    }
+}
+
+impl IntoDiagnostic for MockError {
+    fn severity(&self) -> Severity {
+        self.severity
+    }
+}
+
+#[test]
+fn test_report_error_creates_error_diagnostic() {
+    let mut bag = DiagnosticBag::new();
+    let mut db = SourceDb::new();
+    let fid = db.add("test.mu", "hello world\n");
+    let err = MockError {
+        severity: Severity::Error,
+        message: "something went wrong",
+    };
+    let _diag = bag.report(&err, Span::new(0, 5), fid);
+    assert!(bag.has_errors());
+    let diag = bag.iter().next().expect("one diagnostic");
+    assert_eq!(&*diag.message, "something went wrong");
+    assert_eq!(diag.severity, Severity::Error);
+}
+
+#[test]
+fn test_report_warning_creates_warning_diagnostic() {
+    let mut bag = DiagnosticBag::new();
+    let mut db = SourceDb::new();
+    let fid = db.add("test.mu", "hello world\n");
+    let warn = MockError {
+        severity: Severity::Warning,
+        message: "be careful",
+    };
+    let _diag = bag.report(&warn, Span::new(0, 5), fid);
+    assert!(!bag.has_errors());
+    let diag = bag.iter().next().expect("one diagnostic");
+    assert_eq!(&*diag.message, "be careful");
+    assert_eq!(diag.severity, Severity::Warning);
 }

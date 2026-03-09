@@ -14,7 +14,7 @@ pub mod source;
 pub mod span;
 
 pub use arena::{Arena, Idx, IdxRange};
-pub use diag::{Diagnostic, DiagnosticBag, Label, Severity};
+pub use diag::{Diagnostic, DiagnosticBag, IntoDiagnostic, Label, Severity};
 pub use intern::{Interner, Symbol};
 pub use source::{FileId, SourceDb, SourceFile};
 pub use span::Span;

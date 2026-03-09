@@ -1,5 +1,7 @@
 //! Structured, accumulating error reporting.
 
+use std::fmt;
+
 use crate::{FileId, SourceDb, Span};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -182,6 +184,13 @@ impl Diagnostic {
     }
 }
 
+/// Trait for errors that can be reported as diagnostics.
+///
+/// Implementors provide their severity; the message comes from [`Display`].
+pub trait IntoDiagnostic: fmt::Display {
+    fn severity(&self) -> Severity;
+}
+
 const MAX_ERRORS: usize = 200;
 
 #[derive(Debug, Default)]
@@ -219,6 +228,15 @@ impl DiagnosticBag {
     severity_builder!(error, Severity::Error);
     severity_builder!(warning, Severity::Warning);
     severity_builder!(note, Severity::Note);
+
+    pub fn report(
+        &mut self,
+        error: &(impl IntoDiagnostic + ?Sized),
+        span: Span,
+        file_id: FileId,
+    ) -> &mut Diagnostic {
+        self.push_with_severity(error.severity(), error.to_string(), span, file_id)
+    }
 
     #[must_use]
     pub fn has_errors(&self) -> bool {
