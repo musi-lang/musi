@@ -9,7 +9,7 @@ use music_shared::Idx;
 
 use crate::attr::{Attr, AttrValue};
 use crate::decl::{ClassMember, EffectOp};
-use crate::expr::{Arg, ArrayElem, Expr, LetFields, Param, PwGuard, RecField};
+use crate::expr::{Arg, ArrayElem, Expr, LetFields, MatchArm, Param, PwGuard, RecField};
 use crate::lit::{FStrPart, Lit};
 use crate::pat::Pat;
 use crate::ty::{Constraint, EffectItem, Ty};
@@ -59,7 +59,6 @@ pub trait AstVisitor {
 }
 
 /// Walk an expression, visiting all children in source order.
-#[allow(clippy::too_many_lines)]
 pub fn walk_expr<V: AstVisitor + ?Sized>(
     v: &mut V,
     idx: Idx<Expr>,
@@ -67,7 +66,7 @@ pub fn walk_expr<V: AstVisitor + ?Sized>(
 ) -> ControlFlow<V::Break> {
     match &ctx.exprs[idx] {
         // -- literals & names ------------------------------------------------
-        Expr::Lit { lit, .. } => walk_lit(v, lit, ctx),
+        Expr::Lit { lit, .. } => walk_expr_lit(v, lit, ctx),
         Expr::Name { .. } | Expr::Error { .. } | Expr::Import { .. } | Expr::Export { .. } => {
             ControlFlow::Continue(())
         }
@@ -80,15 +79,7 @@ pub fn walk_expr<V: AstVisitor + ?Sized>(
             }
             ControlFlow::Continue(())
         }
-        Expr::Block { stmts, tail, .. } => {
-            for &s in stmts {
-                v.visit_expr(s, ctx)?;
-            }
-            if let Some(t) = *tail {
-                v.visit_expr(t, ctx)?;
-            }
-            ControlFlow::Continue(())
-        }
+        Expr::Block { stmts, tail, .. } => walk_expr_block(v, stmts, *tail, ctx),
 
         // -- bindings --------------------------------------------------------
         Expr::Let { fields, body, .. } => {
@@ -113,16 +104,7 @@ pub fn walk_expr<V: AstVisitor + ?Sized>(
             }
             v.visit_expr(*body, ctx)
         }
-        Expr::Call { callee, args, .. } => {
-            v.visit_expr(*callee, ctx)?;
-            for arg in args {
-                match *arg {
-                    Arg::Pos { expr, .. } => v.visit_expr(expr, ctx)?,
-                    Arg::Hole { .. } => {}
-                }
-            }
-            ControlFlow::Continue(())
-        }
+        Expr::Call { callee, args, .. } => walk_expr_call(v, *callee, args, ctx),
 
         // -- access & update -------------------------------------------------
         Expr::Index { object, index, .. } => v.visit_expr_list(&[*object, *index], ctx),
@@ -133,16 +115,7 @@ pub fn walk_expr<V: AstVisitor + ?Sized>(
 
         // -- constructors ----------------------------------------------------
         Expr::Record { fields, .. } => walk_rec_fields(v, fields, ctx),
-        Expr::Array { elems, .. } => {
-            for elem in elems {
-                match *elem {
-                    ArrayElem::Elem { expr, .. } | ArrayElem::Spread { expr, .. } => {
-                        v.visit_expr(expr, ctx)?;
-                    }
-                }
-            }
-            ControlFlow::Continue(())
-        }
+        Expr::Array { elems, .. } => walk_expr_array(v, elems, ctx),
         Expr::Variant { args, .. } => {
             for &a in args {
                 v.visit_expr(a, ctx)?;
@@ -166,18 +139,7 @@ pub fn walk_expr<V: AstVisitor + ?Sized>(
         }
         Expr::Match {
             scrutinee, arms, ..
-        } => {
-            v.visit_expr(*scrutinee, ctx)?;
-            for arm in arms {
-                walk_attrs_values(v, &arm.attrs, ctx)?;
-                v.visit_pat(arm.pat, ctx)?;
-                if let Some(g) = arm.guard {
-                    v.visit_expr(g, ctx)?;
-                }
-                v.visit_expr(arm.result, ctx)?;
-            }
-            ControlFlow::Continue(())
-        }
+        } => walk_expr_match(v, *scrutinee, arms, ctx),
 
         // -- control flow ----------------------------------------------------
         Expr::Return { value, .. } => {
@@ -422,7 +384,7 @@ fn walk_class_members<V: AstVisitor + ?Sized>(
     ControlFlow::Continue(())
 }
 
-fn walk_lit<V: AstVisitor + ?Sized>(
+fn walk_expr_lit<V: AstVisitor + ?Sized>(
     v: &mut V,
     lit: &Lit,
     ctx: &AstArenas,
@@ -448,6 +410,70 @@ fn walk_effect_ops<V: AstVisitor + ?Sized>(
     ControlFlow::Continue(())
 }
 
+fn walk_expr_block<V: AstVisitor + ?Sized>(
+    v: &mut V,
+    stmts: &[Idx<Expr>],
+    tail: Option<Idx<Expr>>,
+    ctx: &AstArenas,
+) -> ControlFlow<V::Break> {
+    for &s in stmts {
+        v.visit_expr(s, ctx)?;
+    }
+    if let Some(t) = tail {
+        v.visit_expr(t, ctx)?;
+    }
+    ControlFlow::Continue(())
+}
+
+fn walk_expr_call<V: AstVisitor + ?Sized>(
+    v: &mut V,
+    callee: Idx<Expr>,
+    args: &[Arg],
+    ctx: &AstArenas,
+) -> ControlFlow<V::Break> {
+    v.visit_expr(callee, ctx)?;
+    for arg in args {
+        match *arg {
+            Arg::Pos { expr, .. } => v.visit_expr(expr, ctx)?,
+            Arg::Hole { .. } => {}
+        }
+    }
+    ControlFlow::Continue(())
+}
+
+fn walk_expr_array<V: AstVisitor + ?Sized>(
+    v: &mut V,
+    elems: &[ArrayElem],
+    ctx: &AstArenas,
+) -> ControlFlow<V::Break> {
+    for elem in elems {
+        match *elem {
+            ArrayElem::Elem { expr, .. } | ArrayElem::Spread { expr, .. } => {
+                v.visit_expr(expr, ctx)?;
+            }
+        }
+    }
+    ControlFlow::Continue(())
+}
+
+fn walk_expr_match<V: AstVisitor + ?Sized>(
+    v: &mut V,
+    scrutinee: Idx<Expr>,
+    arms: &[MatchArm],
+    ctx: &AstArenas,
+) -> ControlFlow<V::Break> {
+    v.visit_expr(scrutinee, ctx)?;
+    for arm in arms {
+        walk_attrs_values(v, &arm.attrs, ctx)?;
+        v.visit_pat(arm.pat, ctx)?;
+        if let Some(g) = arm.guard {
+            v.visit_expr(g, ctx)?;
+        }
+        v.visit_expr(arm.result, ctx)?;
+    }
+    ControlFlow::Continue(())
+}
+
 fn walk_attrs_values<V: AstVisitor + ?Sized>(
     v: &mut V,
     attrs: &[Attr],
@@ -455,7 +481,7 @@ fn walk_attrs_values<V: AstVisitor + ?Sized>(
 ) -> ControlFlow<V::Break> {
     for attr in attrs {
         if let Some(AttrValue::Lit { lit, .. }) = &attr.value {
-            walk_lit(v, lit, ctx)?;
+            walk_expr_lit(v, lit, ctx)?;
         }
     }
     ControlFlow::Continue(())
