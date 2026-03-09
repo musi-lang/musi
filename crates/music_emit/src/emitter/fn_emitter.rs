@@ -148,15 +148,13 @@ impl FnEmitter {
 
     // ── Field / variant access ──────────────────────────────────────────
 
-    pub fn emit_get_fld(&mut self, index: u32) {
-        if let Ok(i) = u8::try_from(index) {
-            encode_u8(&mut self.code, Opcode::GET_FLD, i);
-        } else {
-            // Wide field load (index as u16 operand)
-            let i = u16::try_from(index).expect("field index fits in u16");
-            encode_u16(&mut self.code, Opcode::LD_FLD_W, i);
-        }
+    pub fn emit_get_fld(&mut self, index: u32) -> Result<(), EmitError> {
+        let i = u8::try_from(index).map_err(|_| EmitError::OperandOverflow {
+            desc: "field index exceeds 255".into(),
+        })?;
+        encode_u8(&mut self.code, Opcode::GET_FLD, i);
         // net 0: pops obj, pushes val
+        Ok(())
     }
 
     pub fn emit_mk_prd(&mut self, field_count: u32, stack_pop: i32) -> Result<(), EmitError> {

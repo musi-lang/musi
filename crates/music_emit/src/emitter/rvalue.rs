@@ -85,7 +85,7 @@ pub fn emit_rvalue(
         }
         IrRvalue::FieldGet { object, index } => {
             emit_operand(fe, cp, object, interner)?;
-            fe.emit_get_fld(*index);
+            fe.emit_get_fld(*index)?;
             Ok(())
         }
         IrRvalue::IndexGet { array, index } => {

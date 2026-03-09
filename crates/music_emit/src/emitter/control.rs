@@ -10,7 +10,7 @@ use music_ir::IrType;
 
 use crate::const_pool::ConstPool;
 use crate::error::EmitError;
-use crate::opcode::{Opcode, encode_no_operand, encode_u8};
+use crate::opcode::{Opcode, encode_no_operand, encode_u8, encode_u16};
 use crate::type_pool::TypePool;
 
 use super::fn_emitter::FnEmitter;
@@ -102,11 +102,14 @@ fn emit_inst_store(
         }
         IrPlace::Field { base, index } => {
             fe.emit_ld_loc(*base);
-            encode_u8(
-                &mut fe.code,
-                Opcode::ST_FLD,
-                u8::try_from(*index).unwrap_or(u8::MAX),
-            );
+            if let Ok(i) = u8::try_from(*index) {
+                encode_u8(&mut fe.code, Opcode::ST_FLD, i);
+            } else {
+                let i = u16::try_from(*index).map_err(|_| EmitError::OperandOverflow {
+                    desc: "store field index exceeds 65535".into(),
+                })?;
+                encode_u16(&mut fe.code, Opcode::ST_FLD_W, i);
+            }
             fe.pop_n(2);
         }
         IrPlace::Index { base, index } => {
