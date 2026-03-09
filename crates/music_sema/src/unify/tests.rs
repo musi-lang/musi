@@ -26,8 +26,8 @@ fn test_unify_fresh_var_binds() {
 
     let var = table.fresh(Span::DUMMY, &mut arena);
     let int_ty = arena.alloc(Type::Named {
-        def: wk.int,
-        args: Vec::new(),
+        def: wk.ints.int,
+        args: vec![],
     });
 
     assert!(table.unify(var, int_ty, &mut arena, &wk));
@@ -42,12 +42,12 @@ fn test_unify_same_named_succeeds() {
     let mut arena = Arena::new();
 
     let a = arena.alloc(Type::Named {
-        def: wk.int,
-        args: Vec::new(),
+        def: wk.ints.int,
+        args: vec![],
     });
     let b = arena.alloc(Type::Named {
-        def: wk.int,
-        args: Vec::new(),
+        def: wk.ints.int,
+        args: vec![],
     });
 
     assert!(table.unify(a, b, &mut arena, &wk));
@@ -60,12 +60,12 @@ fn test_unify_different_named_fails() {
     let mut arena = Arena::new();
 
     let a = arena.alloc(Type::Named {
-        def: wk.int,
-        args: Vec::new(),
+        def: wk.ints.int,
+        args: vec![],
     });
     let b = arena.alloc(Type::Named {
         def: wk.bool,
-        args: Vec::new(),
+        args: vec![],
     });
 
     assert!(!table.unify(a, b, &mut arena, &wk));
@@ -79,8 +79,8 @@ fn test_unify_error_absorbs() {
 
     let err = arena.alloc(Type::Error);
     let int_ty = arena.alloc(Type::Named {
-        def: wk.int,
-        args: Vec::new(),
+        def: wk.ints.int,
+        args: vec![],
     });
 
     assert!(table.unify(err, int_ty, &mut arena, &wk));
@@ -112,8 +112,8 @@ fn test_unify_rigid_only_with_itself() {
 
     let (_, rigid) = table.fresh_rigid(Span::DUMMY, &mut arena);
     let int_ty = arena.alloc(Type::Named {
-        def: wk.int,
-        args: Vec::new(),
+        def: wk.ints.int,
+        args: vec![],
     });
 
     assert!(!table.unify(rigid, int_ty, &mut arena, &wk));
@@ -128,12 +128,12 @@ fn test_unify_fn_types_same_arity() {
     let mut arena = Arena::new();
 
     let int_ty = arena.alloc(Type::Named {
-        def: wk.int,
-        args: Vec::new(),
+        def: wk.ints.int,
+        args: vec![],
     });
     let bool_ty = arena.alloc(Type::Named {
         def: wk.bool,
-        args: Vec::new(),
+        args: vec![],
     });
 
     let fn1 = arena.alloc(Type::Fn {
@@ -157,8 +157,8 @@ fn test_unify_fn_types_different_arity_fails() {
     let mut arena = Arena::new();
 
     let int_ty = arena.alloc(Type::Named {
-        def: wk.int,
-        args: Vec::new(),
+        def: wk.ints.int,
+        args: vec![],
     });
 
     let fn1 = arena.alloc(Type::Fn {
@@ -182,12 +182,12 @@ fn test_unify_tuples() {
     let mut arena = Arena::new();
 
     let int_ty = arena.alloc(Type::Named {
-        def: wk.int,
-        args: Vec::new(),
+        def: wk.ints.int,
+        args: vec![],
     });
     let bool_ty = arena.alloc(Type::Named {
         def: wk.bool,
-        args: Vec::new(),
+        args: vec![],
     });
 
     let tup1 = arena.alloc(Type::Tuple {
@@ -208,14 +208,14 @@ fn test_freeze_replaces_solved_vars() {
 
     let var = table.fresh(Span::DUMMY, &mut arena);
     let int_ty = arena.alloc(Type::Named {
-        def: wk.int,
-        args: Vec::new(),
+        def: wk.ints.int,
+        args: vec![],
     });
 
     assert!(table.unify(var, int_ty, &mut arena, &wk));
 
     let frozen = table.freeze(var, &mut arena);
-    assert!(matches!(&arena[frozen], Type::Named { def, .. } if *def == wk.int));
+    assert!(matches!(&arena[frozen], Type::Named { def, .. } if *def == wk.ints.int));
 }
 
 #[test]
@@ -237,11 +237,11 @@ fn test_unify_any_with_anything() {
 
     let any_ty = arena.alloc(Type::Named {
         def: wk.any,
-        args: Vec::new(),
+        args: vec![],
     });
     let int_ty = arena.alloc(Type::Named {
-        def: wk.int,
-        args: Vec::new(),
+        def: wk.ints.int,
+        args: vec![],
     });
 
     assert!(table.unify(any_ty, int_ty, &mut arena, &wk));
@@ -255,11 +255,11 @@ fn test_unify_never_with_anything() {
 
     let never_ty = arena.alloc(Type::Named {
         def: wk.never,
-        args: Vec::new(),
+        args: vec![],
     });
     let int_ty = arena.alloc(Type::Named {
-        def: wk.int,
-        args: Vec::new(),
+        def: wk.ints.int,
+        args: vec![],
     });
 
     assert!(table.unify(never_ty, int_ty, &mut arena, &wk));

@@ -17,8 +17,24 @@ fn test_init_well_known_registers_all_types() {
 
     // All well-known DefIds should be distinct.
     let all = [
-        wk.int, wk.int8, wk.int16, wk.int32, wk.int64, wk.uint8, wk.uint16, wk.uint32, wk.uint64,
-        wk.float32, wk.float64, wk.string, wk.rune, wk.bool, wk.unit, wk.any, wk.never, wk.option,
+        wk.ints.int,
+        wk.ints.int8,
+        wk.ints.int16,
+        wk.ints.int32,
+        wk.ints.int64,
+        wk.uints.uint8,
+        wk.uints.uint16,
+        wk.uints.uint32,
+        wk.uints.uint64,
+        wk.floats.float32,
+        wk.floats.float64,
+        wk.string,
+        wk.rune,
+        wk.bool,
+        wk.unit,
+        wk.any,
+        wk.never,
+        wk.option,
     ];
     for (i, a) in all.iter().enumerate() {
         for b in &all[i + 1..] {
@@ -36,7 +52,7 @@ fn test_init_well_known_types_are_def_kind_type() {
 
     let wk = init_well_known(&mut interner, &mut defs, root, &mut scopes);
 
-    assert_eq!(defs.get(wk.int).kind, DefKind::Type);
+    assert_eq!(defs.get(wk.ints.int).kind, DefKind::Type);
     assert_eq!(defs.get(wk.bool).kind, DefKind::Type);
     assert_eq!(defs.get(wk.string).kind, DefKind::Type);
     assert_eq!(defs.get(wk.never).kind, DefKind::Type);
@@ -53,7 +69,7 @@ fn test_init_well_known_names_resolve_in_scope() {
 
     // "Int" should be resolvable from the root scope.
     let sym_int = interner.get("Int").expect("Int should be interned");
-    assert_eq!(scopes.lookup(root, sym_int), Some(wk.int));
+    assert_eq!(scopes.lookup(root, sym_int), Some(wk.ints.int));
 
     let sym_bool = interner.get("Bool").expect("Bool should be interned");
     assert_eq!(scopes.lookup(root, sym_bool), Some(wk.bool));

@@ -10,7 +10,7 @@ fn test_type_named_no_args() {
     let mut arena = Arena::new();
     let ty = arena.alloc(Type::Named {
         def: DefId(0),
-        args: Vec::new(),
+        args: vec![],
     });
     assert!(matches!(&arena[ty], Type::Named { def: DefId(0), args } if args.is_empty()));
 }
@@ -20,7 +20,7 @@ fn test_type_fn_pure() {
     let mut arena = Arena::new();
     let int_ty = arena.alloc(Type::Named {
         def: DefId(0),
-        args: Vec::new(),
+        args: vec![],
     });
     let fn_ty = arena.alloc(Type::Fn {
         params: vec![int_ty],
@@ -37,11 +37,11 @@ fn test_type_tuple() {
     let mut arena = Arena::new();
     let a = arena.alloc(Type::Named {
         def: DefId(0),
-        args: Vec::new(),
+        args: vec![],
     });
     let b = arena.alloc(Type::Named {
         def: DefId(1),
-        args: Vec::new(),
+        args: vec![],
     });
     let tup = arena.alloc(Type::Tuple { elems: vec![a, b] });
     assert!(matches!(&arena[tup], Type::Tuple { elems } if elems.len() == 2));
@@ -55,7 +55,7 @@ fn test_type_record_fields() {
     let sym_x = interner.intern("x");
     let int_ty = arena.alloc(Type::Named {
         def: DefId(0),
-        args: Vec::new(),
+        args: vec![],
     });
     let rec = arena.alloc(Type::Record {
         fields: vec![RecordField {
@@ -78,7 +78,7 @@ fn test_effect_row_pure() {
 #[test]
 fn test_effect_row_with_row_var_not_pure() {
     let row = EffectRow {
-        effects: Vec::new(),
+        effects: vec![],
         row_var: Some(TyVarId(0)),
     };
     assert!(!row.is_pure());
@@ -110,7 +110,7 @@ fn test_fmt_type_named() {
     let def_id = defs.alloc(sym, DefKind::Type, Span::DUMMY);
     let ty = arena.alloc(Type::Named {
         def: def_id,
-        args: Vec::new(),
+        args: vec![],
     });
 
     let defs_vec: Vec<_> = defs.iter().cloned().collect();

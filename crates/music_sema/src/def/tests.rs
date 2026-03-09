@@ -34,7 +34,7 @@ fn test_def_table_get_returns_correct_info() {
     assert_eq!(info.kind, DefKind::Fn);
     assert_eq!(info.span, span);
     assert_eq!(info.use_count, 0);
-    assert!(info.ty.is_none());
+    assert!(info.ty_info.ty.is_none());
     assert!(info.parent.is_none());
 }
 
