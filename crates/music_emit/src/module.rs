@@ -26,16 +26,16 @@ pub fn assemble(
     entry_fn_id: Option<u32>,
 ) -> Result<Vec<u8>, EmitError> {
     // ── Build section buffers ───────────────────────────────────────────
-    let mut const_section: Vec<u8> = Vec::new();
+    let mut const_section: Vec<u8> = vec![];
     cp.write_into(&mut const_section)?;
 
-    let mut type_section: Vec<u8> = Vec::new();
+    let mut type_section: Vec<u8> = vec![];
     tp.write_into(&mut type_section)?;
 
-    let mut effect_section: Vec<u8> = Vec::new();
+    let mut effect_section: Vec<u8> = vec![];
     write_effect_pool(&mut effect_section, effects, cp, tp, type_arena, interner)?;
 
-    let mut fn_section: Vec<u8> = Vec::new();
+    let mut fn_section: Vec<u8> = vec![];
     write_function_pool(&mut fn_section, functions)?;
 
     // ── Compute offsets ─────────────────────────────────────────────────

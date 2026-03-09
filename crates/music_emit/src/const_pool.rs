@@ -58,7 +58,7 @@ pub struct ConstPool {
 impl ConstPool {
     pub fn new() -> Self {
         Self {
-            entries: Vec::new(),
+            entries: vec![],
             index: HashMap::new(),
         }
     }

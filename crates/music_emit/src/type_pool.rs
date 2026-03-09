@@ -51,7 +51,7 @@ pub struct TypePool {
 impl TypePool {
     pub fn new() -> Self {
         Self {
-            entries: Vec::new(),
+            entries: vec![],
             cache: HashMap::new(),
         }
     }
@@ -190,7 +190,7 @@ impl TypePool {
                 desc: "sum variant count overflow".into(),
             })?;
 
-        let mut data = Vec::new();
+        let mut data = vec![];
         data.extend_from_slice(&variant_count.to_le_bytes());
 
         for (tag_value, variant) in variants.iter().enumerate() {

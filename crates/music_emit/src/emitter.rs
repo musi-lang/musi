@@ -48,7 +48,7 @@ impl<'a> Emitter<'a> {
 
     /// Emit all functions and return their bytecode records.
     pub fn emit_functions(&mut self) -> Result<Vec<FnBytecode>, EmitError> {
-        let mut results = Vec::new();
+        let mut results = vec![];
         for fn_idx in function_indices(self.module) {
             let func = &self.module.functions[fn_idx];
             let fn_bc = self.emit_function(func)?;
