@@ -191,11 +191,10 @@ astDecl =
   | astGivenDecl
   | astEffectDecl ;
 
-astClassDecl  = "class" , ident , [ tyParamList ] ,
-                [ "where" , tyNamedList ] ,
-                "{" , { classMember } , "}" ;
-astGivenDecl  = "given" , astTyNamed , [ whereClause ] ,
-                "{" , { classMember } , "}" ;
+astClassDecl  = "class" , ident , [ "over" , tyParamList ] ,
+                [ whereClause ] , "{" , { classMember } , "}" ;
+astGivenDecl  = "given" , astTyNamed , [ "over" , tyParamList ] ,
+                [ whereClause ] , "{" , { classMember } , "}" ;
 astEffectDecl = "effect" , ident , [ "of" , tyParamList ] ,
                 "{" , { effectOp , ";" } , "}" ;
 effectOp      = ident , ":" , astTy ;
