@@ -61,7 +61,7 @@ fn test_parse_let_in_scoped() {
 
 #[test]
 fn test_parse_class_declaration() {
-    let src = "class Eq 'T { let (=)(a, b) : Bool; };";
+    let src = "class Eq over 'T { let (=)(a, b) : Bool; };";
     let (expr, diags) = parse_single(src);
     assert!(!diags.has_errors(), "diags: {diags:?}");
     assert!(
@@ -139,4 +139,40 @@ fn test_parse_effect_throw_parameterized() {
     };
     assert_eq!(params.len(), 1);
     assert_eq!(ops.len(), 1);
+}
+
+#[test]
+fn test_parse_given_generic_with_over() {
+    let src = "given Eq of List over 'T where 'T <: Eq { let (=)(xs, ys) : Bool; };";
+    let (expr, diags) = parse_single(src);
+    assert!(!diags.has_errors(), "diags: {diags:?}");
+    assert!(
+        matches!(expr, Expr::Given { .. }),
+        "expected Given, got {expr:?}"
+    );
+    let Expr::Given {
+        params,
+        constraints,
+        ..
+    } = expr
+    else {
+        return;
+    };
+    assert_eq!(params.len(), 1);
+    assert_eq!(constraints.len(), 1);
+}
+
+#[test]
+fn test_parse_class_no_params() {
+    let src = "class Marker { };";
+    let (expr, diags) = parse_single(src);
+    assert!(!diags.has_errors(), "diags: {diags:?}");
+    assert!(
+        matches!(expr, Expr::Class { .. }),
+        "expected Class, got {expr:?}"
+    );
+    let Expr::Class { params, .. } = expr else {
+        return;
+    };
+    assert!(params.is_empty());
 }
