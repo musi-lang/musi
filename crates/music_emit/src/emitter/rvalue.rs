@@ -85,7 +85,7 @@ pub fn emit_rvalue(
         }
         IrRvalue::FieldGet { object, index } => {
             emit_operand(fe, cp, object, interner)?;
-            fe.emit_get_fld(*index)?;
+            fe.emit_ld_fld(*index)?;
             Ok(())
         }
         IrRvalue::IndexGet { array, index } => {
@@ -97,7 +97,7 @@ pub fn emit_rvalue(
         }
         IrRvalue::GetTag { value } => {
             emit_operand(fe, cp, value, interner)?;
-            fe.emit_get_tag();
+            fe.emit_ld_tag();
             Ok(())
         }
         IrRvalue::GetPayload { value, field, .. } => {
@@ -105,7 +105,7 @@ pub fn emit_rvalue(
             let f = u8::try_from(*field).map_err(|_| EmitError::OperandOverflow {
                 desc: "payload field index exceeds 255".into(),
             })?;
-            encode_u8(&mut fe.code, Opcode::GET_PAY, f);
+            encode_u8(&mut fe.code, Opcode::LD_PAY, f);
             Ok(())
         }
         IrRvalue::AllocRef { ty } => {

@@ -148,11 +148,11 @@ impl FnEmitter {
 
     // ── Field / variant access ──────────────────────────────────────────
 
-    pub fn emit_get_fld(&mut self, index: u32) -> Result<(), EmitError> {
+    pub fn emit_ld_fld(&mut self, index: u32) -> Result<(), EmitError> {
         let i = u8::try_from(index).map_err(|_| EmitError::OperandOverflow {
             desc: "field index exceeds 255".into(),
         })?;
-        encode_u8(&mut self.code, Opcode::GET_FLD, i);
+        encode_u8(&mut self.code, Opcode::LD_FLD, i);
         // net 0: pops obj, pushes val
         Ok(())
     }
@@ -177,8 +177,8 @@ impl FnEmitter {
         // mk.var consumes payload already on stack, pushes variant
     }
 
-    pub fn emit_get_tag(&mut self) {
-        encode_no_operand(&mut self.code, Opcode::GET_TAG);
+    pub fn emit_ld_tag(&mut self) {
+        encode_no_operand(&mut self.code, Opcode::LD_TAG);
         // net 0: pops val, pushes tag
     }
 

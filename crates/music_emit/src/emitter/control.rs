@@ -141,7 +141,7 @@ fn emit_inst_switch(
 ) -> Result<(), EmitError> {
     for arm in arms {
         emit_operand(fe, cp, scrutinee, interner)?;
-        fe.emit_get_tag();
+        fe.emit_ld_tag();
         let arm_const = arm.value.clone();
         if let Some(i) = cp.intern(&arm_const, interner)? {
             fe.emit_ld_cst(i);
