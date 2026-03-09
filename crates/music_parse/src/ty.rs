@@ -28,7 +28,11 @@ impl Parser<'_> {
             return first;
         }
 
-        // Collect all types in the chain; the last is the return type.
+        self.parse_ty_arrow_chain(start, first)
+    }
+
+    /// Parses the chain of arrow types starting with `first`, at source span `start`.
+    fn parse_ty_arrow_chain(&mut self, start: u32, first: Ty) -> Ty {
         let mut parts = vec![first];
         let mut arrows = vec![];
         while self.at(TokenKind::DashGt) || self.at(TokenKind::TildeGt) {
@@ -42,13 +46,9 @@ impl Parser<'_> {
             parts.push(self.parse_ty_eff());
         }
 
-        // Build right-associative function types.
-        // params -> ret   means Fn { params: [params], ret, arrow }
-        // We take the last arrow and last type as the return.
         let mut ret = parts.pop().expect("at least two parts");
         while let Some(arrow) = arrows.pop() {
             let param = parts.pop().expect("matching param");
-            // Unpack product types into individual params for multi-arg fns.
             let params = match param {
                 Ty::Product { fields, .. } => fields,
                 other => {
@@ -115,119 +115,113 @@ impl Parser<'_> {
     /// Base types: var, option, ref, named, paren, array, record, refinement, quantified.
     fn parse_ty_base(&mut self) -> Ty {
         match self.peek_kind() {
-            // Type variable: 'T
-            TokenKind::TyIdent => {
-                let start = self.start_span();
-                let name = self.expect_symbol();
-                Ty::Var {
-                    name,
-                    span: self.finish_span(start),
-                }
-            }
-
-            // Option type: ?T
-            TokenKind::Question => {
-                let start = self.start_span();
-                let _q = self.bump();
-                let inner = self.parse_ty_base();
-                let inner_idx = self.alloc_ty(inner);
-                Ty::Option {
-                    inner: inner_idx,
-                    span: self.finish_span(start),
-                }
-            }
-
-            // Ref type: ref T
-            TokenKind::KwRef => {
-                let start = self.start_span();
-                let _ref = self.bump();
-                let inner = self.parse_ty_base();
-                let inner_idx = self.alloc_ty(inner);
-                Ty::Ref {
-                    inner: inner_idx,
-                    span: self.finish_span(start),
-                }
-            }
-
-            // Named type: Name [ 'of' type_args ]
-            TokenKind::Ident => {
-                let start = self.start_span();
-                let name = self.expect_symbol();
-                let args = if self.eat(TokenKind::KwOf) {
-                    self.parse_ty_arg_list()
-                } else {
-                    vec![]
-                };
-                Ty::Named {
-                    name,
-                    args,
-                    span: self.finish_span(start),
-                }
-            }
-
-            // Parenthesised type or tuple type: ( types )
-            TokenKind::LParen => {
-                let start = self.start_span();
-                let _lp = self.bump();
-                if self.eat(TokenKind::RParen) {
-                    // Unit type: ()
-                    return Ty::Product {
-                        fields: vec![],
-                        span: self.finish_span(start),
-                    };
-                }
-                let first = self.parse_ty();
-                if self.eat(TokenKind::RParen) {
-                    // Single paren type - just return it
-                    return first;
-                }
-                // Comma-separated types -> product
-                let mut fields = vec![self.alloc_ty(first)];
-                while self.eat(TokenKind::Comma) {
-                    if self.at(TokenKind::RParen) {
-                        break;
-                    }
-                    let t = self.parse_ty();
-                    fields.push(self.alloc_ty(t));
-                }
-                let _rp = self.expect(TokenKind::RParen);
-                Ty::Product {
-                    fields,
-                    span: self.finish_span(start),
-                }
-            }
-
-            // Array type: [len] T
-            TokenKind::LBracket => {
-                let start = self.start_span();
-                let _lb = self.bump();
-                let len = if self.at(TokenKind::IntLit) {
-                    let tok = self.bump();
-                    let sym = tok.symbol.unwrap_or(Symbol(u32::MAX));
-                    let text = self.resolve(sym);
-                    let n = text.replace('_', "").parse::<u32>().unwrap_or(0);
-                    Some(n)
-                } else {
-                    None
-                };
-                let _rb = self.expect(TokenKind::RBracket);
-                let elem = self.parse_ty();
-                let elem_idx = self.alloc_ty(elem);
-                Ty::Array {
-                    len,
-                    elem: elem_idx,
-                    span: self.finish_span(start),
-                }
-            }
-
-            // Record type or refinement type: { ... }
+            TokenKind::TyIdent => self.parse_ty_var(),
+            TokenKind::Question => self.parse_ty_option(),
+            TokenKind::KwRef => self.parse_ty_ref(),
+            TokenKind::Ident => self.parse_ty_named(),
+            TokenKind::LParen => self.parse_ty_paren_or_tuple(),
+            TokenKind::LBracket => self.parse_ty_array(),
             TokenKind::LBrace => self.parse_ty_brace(),
-
-            // Quantified: forall/exists params [where ...] -> T
             TokenKind::KwForall => self.parse_ty_quantified(Quantifier::Forall),
             TokenKind::KwExists => self.parse_ty_quantified(Quantifier::Exists),
-
             _ => self.error_ty(&ParseError::ExpectedType),
+        }
+    }
+
+    fn parse_ty_var(&mut self) -> Ty {
+        let start = self.start_span();
+        let name = self.expect_symbol();
+        Ty::Var {
+            name,
+            span: self.finish_span(start),
+        }
+    }
+
+    fn parse_ty_option(&mut self) -> Ty {
+        let start = self.start_span();
+        let _q = self.bump();
+        let inner = self.parse_ty_base();
+        let inner_idx = self.alloc_ty(inner);
+        Ty::Option {
+            inner: inner_idx,
+            span: self.finish_span(start),
+        }
+    }
+
+    fn parse_ty_ref(&mut self) -> Ty {
+        let start = self.start_span();
+        let _ref = self.bump();
+        let inner = self.parse_ty_base();
+        let inner_idx = self.alloc_ty(inner);
+        Ty::Ref {
+            inner: inner_idx,
+            span: self.finish_span(start),
+        }
+    }
+
+    fn parse_ty_named(&mut self) -> Ty {
+        let start = self.start_span();
+        let name = self.expect_symbol();
+        let args = if self.eat(TokenKind::KwOf) {
+            self.parse_ty_arg_list()
+        } else {
+            vec![]
+        };
+        Ty::Named {
+            name,
+            args,
+            span: self.finish_span(start),
+        }
+    }
+
+    fn parse_ty_paren_or_tuple(&mut self) -> Ty {
+        let start = self.start_span();
+        let _lp = self.bump();
+        if self.eat(TokenKind::RParen) {
+            return Ty::Product {
+                fields: vec![],
+                span: self.finish_span(start),
+            };
+        }
+        let first = self.parse_ty();
+        if self.eat(TokenKind::RParen) {
+            return first;
+        }
+
+        let mut fields = vec![self.alloc_ty(first)];
+        while self.eat(TokenKind::Comma) {
+            if self.at(TokenKind::RParen) {
+                break;
+            }
+            let t = self.parse_ty();
+            fields.push(self.alloc_ty(t));
+        }
+        let _rp = self.expect(TokenKind::RParen);
+        Ty::Product {
+            fields,
+            span: self.finish_span(start),
+        }
+    }
+
+    fn parse_ty_array(&mut self) -> Ty {
+        let start = self.start_span();
+        let _lb = self.bump();
+        let len = if self.at(TokenKind::IntLit) {
+            let tok = self.bump();
+            let sym = tok.symbol.unwrap_or(Symbol(u32::MAX));
+            let text = self.resolve(sym);
+            let n = text.replace('_', "").parse::<u32>().unwrap_or(0);
+            Some(n)
+        } else {
+            None
+        };
+        let _rb = self.expect(TokenKind::RBracket);
+        let elem = self.parse_ty();
+        let elem_idx = self.alloc_ty(elem);
+        Ty::Array {
+            len,
+            elem: elem_idx,
+            span: self.finish_span(start),
         }
     }
 
@@ -236,7 +230,6 @@ impl Parser<'_> {
         let start = self.start_span();
         let _lb = self.bump();
 
-        // Empty record
         if self.eat(TokenKind::RBrace) {
             return Ty::Record {
                 fields: vec![],
@@ -244,15 +237,10 @@ impl Parser<'_> {
                 span: self.finish_span(start),
             };
         }
-
-        // Try to detect refinement type: { T | pred }
-        // Record fields start with `ident :`, refinement starts with a type.
-        // We peek ahead: if ident followed by `:`, it's a record field.
         if self.at(TokenKind::Ident) && self.peek2() == TokenKind::Colon {
             return self.parse_ty_record_body(start);
         }
 
-        // Otherwise, parse as a type; if `|` follows, it's a refinement.
         let ty = self.parse_ty();
         if self.eat(TokenKind::Pipe) {
             let pred = self.parse_expr();
@@ -266,7 +254,6 @@ impl Parser<'_> {
             };
         }
 
-        // If we get here, it might still be a record (shouldn't normally happen).
         let _rb = self.expect(TokenKind::RBrace);
         self.error_ty(&ParseError::ExpectedRecordOrRefinement)
     }
@@ -320,8 +307,6 @@ impl Parser<'_> {
             span: self.finish_span(start),
         }
     }
-
-    // -- Shared type helpers -------------------------------------------------
 
     /// Parses `ty_ident { ',' ty_ident }`.
     pub(crate) fn parse_ty_param_list(&mut self) -> Vec<TyParam> {
