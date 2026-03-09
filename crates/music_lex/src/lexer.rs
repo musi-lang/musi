@@ -2,7 +2,7 @@
 
 use core::str;
 
-use musi_shared::{DiagnosticBag, FileId, Interner, Span, Symbol};
+use music_shared::{DiagnosticBag, FileId, Interner, Span, Symbol};
 
 use crate::token::{Token, TokenKind, keyword_from_str};
 use crate::trivia::{Trivia, TriviaKind, TriviaRange};

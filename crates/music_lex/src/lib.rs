@@ -11,7 +11,7 @@ mod trivia;
 pub use token::{Token, TokenKind};
 pub use trivia::{Trivia, TriviaKind, TriviaRange};
 
-use musi_shared::{DiagnosticBag, FileId, Interner};
+use music_shared::{DiagnosticBag, FileId, Interner};
 
 /// The result of lexing a single source string.
 pub struct LexedSource {

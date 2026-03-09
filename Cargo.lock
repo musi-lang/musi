@@ -15,15 +15,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 
 [[package]]
-name = "musi_lex"
+name = "music_ast"
 version = "0.1.0-alpha1"
 dependencies = [
- "musi_shared",
+ "music_shared",
+]
+
+[[package]]
+name = "music_lex"
+version = "0.1.0-alpha1"
+dependencies = [
+ "music_shared",
  "thiserror",
 ]
 
 [[package]]
-name = "musi_shared"
+name = "music_shared"
 version = "0.1.0-alpha1"
 dependencies = [
  "intaglio",

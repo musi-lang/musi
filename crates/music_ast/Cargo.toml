@@ -1,0 +1,16 @@
+[package]
+name = "music_ast"
+description = "Abstract syntax tree for the Musi compiler"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+readme.workspace = true
+keywords = ["compiler", "musi", "ast"]
+categories = ["development-tools"]
+
+[dependencies]
+music_shared = { path = "../music_shared" }
+
+[lints]
+workspace = true

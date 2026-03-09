@@ -1,5 +1,5 @@
 use super::{Token, TokenKind, keyword_from_str};
-use musi_shared::{Span, Symbol};
+use music_shared::{Span, Symbol};
 
 #[test]
 fn test_keyword_from_str_returns_some_for_every_keyword() {

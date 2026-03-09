@@ -1,12 +1,12 @@
 //! Token types for the Musi lexer.
 
-use musi_shared::{Span, Symbol};
+use music_shared::{Span, Symbol};
 
 use crate::trivia::TriviaRange;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TokenKind {
-    // === Keywords (alphabetically) ===
+    // -- keywords ------------------------------------------------------------
     KwAnd,
     KwAwait,
     KwClass,
@@ -34,7 +34,7 @@ pub enum TokenKind {
     KwWhere,
     KwXor,
 
-    // === Delimiters ===
+    // -- delimiters ----------------------------------------------------------
     LParen,   // (
     RParen,   // )
     LBrace,   // {
@@ -42,7 +42,7 @@ pub enum TokenKind {
     LBracket, // [
     RBracket, // ]
 
-    // === Single-char punctuation ===
+    // -- single-char punctuation ---------------------------------------------
     Plus,       // +
     Minus,      // -
     Star,       // *
@@ -59,7 +59,7 @@ pub enum TokenKind {
     Question,   // ?
     Underscore, // _
 
-    // === Multi-char punctuation ===
+    // -- multi-char punctuation ----------------------------------------------
     // 3-char
     DotDotDot, // ...  spread/splat
     DotDotLt,  // ..<  exclusive range
@@ -86,22 +86,22 @@ pub enum TokenKind {
     EqGt,             // =>   fat arrow (match arms)
     HashLBracket,     // #[   attribute start
 
-    // === Literals ===
+    // -- literals ------------------------------------------------------------
     IntLit,
     FloatLit,
     StringLit,
     RuneLit, // 'x'
 
-    // === F-string tokens ===
+    // -- f-string tokens -----------------------------------------------------
     FStringHead,   // f"...text...{
     FStringMiddle, // }...text...{
     FStringTail,   // }...text..."
 
-    // === Identifiers ===
+    // -- identifiers ---------------------------------------------------------
     Ident,   // regular identifier
     TyIdent, // 'T, 'a — type variable
 
-    // === Sentinel ===
+    // -- sentinel ------------------------------------------------------------
     Eof,
     Error,
 }
@@ -145,6 +145,7 @@ impl TokenKind {
     #[must_use]
     pub const fn fixed_text(self) -> Option<&'static str> {
         match self {
+            // -- keywords ----------------------------------------------------
             Self::KwAnd => Some("and"),
             Self::KwOr => Some("or"),
             Self::KwNot => Some("not"),
@@ -172,6 +173,7 @@ impl TokenKind {
             Self::KwImport => Some("import"),
             Self::KwExport => Some("export"),
 
+            // -- delimiters --------------------------------------------------
             Self::LParen => Some("("),
             Self::RParen => Some(")"),
             Self::LBrace => Some("{"),
@@ -179,6 +181,7 @@ impl TokenKind {
             Self::LBracket => Some("["),
             Self::RBracket => Some("]"),
 
+            // -- single-char punctuation -------------------------------------
             Self::Plus => Some("+"),
             Self::Minus => Some("-"),
             Self::Star => Some("*"),
@@ -195,6 +198,7 @@ impl TokenKind {
             Self::Question => Some("?"),
             Self::Underscore => Some("_"),
 
+            // -- multi-char punctuation --------------------------------------
             Self::DotDotDot => Some("..."),
             Self::DotDotLt => Some("..<"),
             Self::ColonColon => Some("::"),
@@ -218,6 +222,7 @@ impl TokenKind {
             Self::EqGt => Some("=>"),
             Self::HashLBracket => Some("#["),
 
+            // -- literals ----------------------------------------------------
             Self::IntLit
             | Self::FloatLit
             | Self::StringLit

@@ -1,5 +1,5 @@
 [package]
-name = "musi_lex"
+name = "music_lex"
 description = "Lexer (tokenizer) for the Musi compiler"
 version.workspace = true
 edition.workspace = true
@@ -11,7 +11,7 @@ categories = ["development-tools"]
 
 [dependencies]
 thiserror = { workspace = true }
-musi_shared = { path = "../musi_shared" }
+music_shared = { path = "../music_shared" }
 
 [lints]
 workspace = true

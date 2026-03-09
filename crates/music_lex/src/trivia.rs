@@ -1,6 +1,6 @@
 //! Trivia attached to tokens: whitespace, newlines, and comments.
 
-use musi_shared::Span;
+use music_shared::Span;
 
 #[derive(Debug, Clone)]
 pub struct Trivia {

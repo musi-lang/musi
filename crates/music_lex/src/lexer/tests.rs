@@ -1,5 +1,5 @@
 use super::*;
-use musi_shared::{DiagnosticBag, FileId, Interner};
+use music_shared::{DiagnosticBag, FileId, Interner};
 
 fn lex(source: &str) -> (Vec<Token>, DiagnosticBag) {
     let mut interner = Interner::new();
@@ -21,8 +21,6 @@ fn lex_with_interner(source: &str) -> (Vec<Token>, Interner, DiagnosticBag) {
     let tokens: Vec<Token> = Lexer::new(source, file_id, &mut interner, &mut diags).collect();
     (tokens, interner, diags)
 }
-
-// === Keywords ===
 
 #[test]
 fn test_all_keywords_recognized() {
@@ -59,8 +57,6 @@ fn test_all_keywords_recognized() {
         assert_eq!(kinds[0], expected, "keyword: {text}");
     }
 }
-
-// === Multi-char punctuation ===
 
 #[test]
 fn test_dot_disambiguation() {
@@ -182,8 +178,6 @@ fn test_question_disambiguation() {
     );
 }
 
-// === Single-char tokens ===
-
 #[test]
 fn test_single_char_tokens() {
     let kinds = lex_kinds("( ) { } [ ] , ; + * %");
@@ -217,8 +211,6 @@ fn test_standalone_tokens() {
     assert_eq!(lex_kinds("<")[0], TokenKind::Lt);
 }
 
-// === Identifiers ===
-
 #[test]
 fn test_underscore_is_its_own_token() {
     assert_eq!(lex_kinds("_")[0], TokenKind::Underscore);
@@ -250,8 +242,6 @@ fn test_unterminated_escaped_ident() {
     assert_eq!(tokens[0].kind, TokenKind::Error);
     assert!(diags.has_errors());
 }
-
-// === Tick disambiguation ===
 
 #[test]
 fn test_rune_literal() {
@@ -292,8 +282,6 @@ fn test_ty_ident_multi_letter() {
         "'key"
     );
 }
-
-// === Number literals ===
 
 #[test]
 fn test_decimal_literal() {
@@ -395,8 +383,6 @@ fn test_hex_with_underscores() {
     );
 }
 
-// === String literals ===
-
 #[test]
 fn test_string_with_escapes() {
     let (tokens, interner, diags) = lex_with_interner(r#""hello\nworld""#);
@@ -414,8 +400,6 @@ fn test_unterminated_string() {
     assert_eq!(tokens[0].kind, TokenKind::Error);
     assert!(diags.has_errors());
 }
-
-// === F-string tests ===
 
 #[test]
 fn test_fstring_no_interpolation() {
@@ -459,8 +443,6 @@ fn test_fstring_nested_braces() {
     assert_eq!(kinds[7], TokenKind::Eof);
 }
 
-// === Comments as trivia ===
-
 #[test]
 fn test_line_comment_skipped() {
     let kinds = lex_kinds("// this is a comment\nfoo");
@@ -499,8 +481,6 @@ fn test_unclosed_block_comment_produces_error() {
     assert!(diags.has_errors());
 }
 
-// === Error recovery ===
-
 #[test]
 fn test_unknown_character_produces_error_and_continues() {
     let (tokens, diags) = lex("\x01 foo");
@@ -509,8 +489,6 @@ fn test_unknown_character_produces_error_and_continues() {
     assert_eq!(tokens[2].kind, TokenKind::Eof);
     assert!(diags.has_errors());
 }
-
-// === Edge cases ===
 
 #[test]
 fn test_empty_source_yields_eof() {
