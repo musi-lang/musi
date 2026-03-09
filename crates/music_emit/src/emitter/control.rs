@@ -1,7 +1,8 @@
 //! Control-flow instruction emission.
 
 use music_ir::{
-    IrConstValue, IrEffectOpId, IrInst, IrLabel, IrLocal, IrOperand, IrPlace, IrRvalue, IrSwitchArm,
+    IrConstValue, IrEffectOpId, IrInst, IrLabel, IrLocal, IrOperand, IrPlace, IrRvalue,
+    IrSwitchArm,
 };
 use music_shared::{Arena, Interner};
 
@@ -65,11 +66,15 @@ pub fn emit_inst(
             emit_inst_return(fe, cp, value.as_ref(), interner)?;
             return Ok(true);
         }
-        IrInst::EffectPush { effect, .. } => {
-            fe.emit_eff_psh(effect.0);
+        IrInst::EffectPush {
+            effect,
+            handler_fn,
+            ..
+        } => {
+            fe.emit_eff_psh(effect.0, handler_fn.raw())?;
         }
         IrInst::EffectPop { effect, .. } => {
-            fe.emit_eff_pop(effect.0);
+            fe.emit_eff_pop(effect.0)?;
         }
         IrInst::EffectDo { op, args, dst, .. } => {
             emit_inst_effect_do(fe, cp, *op, args, *dst, interner)?;
