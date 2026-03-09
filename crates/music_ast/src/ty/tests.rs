@@ -65,7 +65,7 @@ fn test_refine_type_holds_expr_predicate() {
         span: Span::new(0, 3),
     });
     let pred = arenas.exprs.alloc(Expr::Name {
-        ident: Symbol(1),
+        name: Symbol(1),
         span: Span::new(6, 4),
     });
     let idx = arenas.tys.alloc(Ty::Refine {
