@@ -165,6 +165,7 @@ pub enum Expr {
     },
     Given {
         target: TyNamedRef,
+        params: Vec<TyParam>,
         constraints: Vec<Constraint>,
         members: Vec<ClassMember>,
         span: Span,
