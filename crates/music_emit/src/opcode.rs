@@ -66,9 +66,9 @@ impl Opcode {
     pub const LD_CST: Self = Self(0x42);
     pub const ST_FLD: Self = Self(0x43);
     pub const MK_PRD: Self = Self(0x44);
-    pub const GET_FLD: Self = Self(0x45);
+    pub const LD_FLD: Self = Self(0x45);
     pub const MK_VAR: Self = Self(0x46);
-    pub const GET_PAY: Self = Self(0x47);
+    pub const LD_PAY: Self = Self(0x47);
     pub const CMP_TAG: Self = Self(0x48);
     pub const CNV_WDN: Self = Self(0x49);
     pub const CNV_WDN_UN: Self = Self(0x4A);
@@ -100,8 +100,8 @@ impl Opcode {
     pub const CNV_TRM: Self = Self(0x60);
 
     // §9  Structural / Array / Effects
-    pub const GET_TAG: Self = Self(0x61);
-    pub const GET_LEN: Self = Self(0x62);
+    pub const LD_TAG: Self = Self(0x61);
+    pub const LD_LEN: Self = Self(0x62);
     pub const LD_IDX: Self = Self(0x63);
     pub const ST_IDX: Self = Self(0x64);
     pub const FRE: Self = Self(0x65);

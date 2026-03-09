@@ -225,9 +225,9 @@ High two bits of opcode determine length:
 0x42  ld.cst    u8      ( -- val )      const_pool[N]
 0x43  st.fld    u8      ( obj val -- )
 0x44  mk.prd    u8      ( f0..fN -- )   make product, N fields
-0x45  get.fld   u8      ( prod -- val ) Nth field
+0x45  ld.fld    u8      ( prod -- val ) Nth field
 0x46  mk.var    u8      ( payload -- )  make variant tag N
-0x47  get.pay   u8      ( var -- val )  Nth payload field
+0x47  ld.pay    u8      ( var -- val )  Nth payload field
 0x48  cmp.tag   u8      ( var -- Bool ) tag = N?
 0x49  cnv.wdn   u8      signed widen to N bits
 0x4A  cnv.wdn.un u8     unsigned widen
@@ -251,8 +251,8 @@ High two bits of opcode determine length:
 0x60  cnv.trm            ( a -- b )        transmute bits — Unsafe required
 
 // §9  Structural / Array / Effects            (no operand)
-0x61  get.tag            ( var -- tag:u32 )
-0x62  get.len            ( arr -- len:i64 )
+0x61  ld.tag             ( var -- tag:u32 )
+0x62  ld.len             ( arr -- len:i64 )
 0x63  ld.idx             ( arr idx -- val )
 0x64  st.idx             ( arr idx val -- )
 0x65  fre                ( ptr -- )         Manual required
