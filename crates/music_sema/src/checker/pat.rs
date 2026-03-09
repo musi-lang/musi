@@ -1,0 +1,96 @@
+//! Pattern type checking.
+
+use music_ast::lit::Lit;
+use music_ast::pat::Pat;
+use music_shared::Idx;
+
+use crate::checker::Checker;
+use crate::types::Type;
+
+/// Checks a pattern against an expected type.
+pub(crate) fn check_pat(ck: &mut Checker<'_>, pat_idx: Idx<Pat>, expected: Idx<Type>) {
+    match ck.ast.pats[pat_idx].clone() {
+        Pat::Lit { lit, span } => {
+            let lit_ty = match &lit {
+                Lit::Int { .. } => ck.named_ty(ck.well_known.int),
+                Lit::Float { .. } => ck.named_ty(ck.well_known.float64),
+                Lit::Str { .. } | Lit::FStr { .. } => ck.named_ty(ck.well_known.string),
+                Lit::Rune { .. } => ck.named_ty(ck.well_known.rune),
+                Lit::Unit { .. } => ck.named_ty(ck.well_known.unit),
+            };
+            ck.unify_or_report(expected, lit_ty, span);
+        }
+        Pat::Bind { inner, .. } => {
+            // Bind the name to the expected type via pat_defs (not expr_defs).
+            // If there's an inner pattern (`x @ pat`), check it too.
+            if let Some(inner) = inner {
+                check_pat(ck, inner, expected);
+            }
+        }
+        Pat::Tuple { elems, span } => {
+            let resolved = ck.resolve_ty(expected);
+            match &ck.types[resolved] {
+                Type::Tuple {
+                    elems: expected_elems,
+                } => {
+                    if elems.len() == expected_elems.len() {
+                        let pairs: Vec<_> = elems
+                            .iter()
+                            .copied()
+                            .zip(expected_elems.iter().copied())
+                            .collect();
+                        for (pat_elem, ty_elem) in pairs {
+                            check_pat(ck, pat_elem, ty_elem);
+                        }
+                    }
+                    // Arity mismatch is a type error but we don't cascade.
+                }
+                Type::Error => {}
+                _ => {
+                    // Type mismatch: expected a tuple.
+                    let fresh_elems: Vec<_> = elems.iter().map(|_| ck.fresh_var(span)).collect();
+                    let tup_ty = ck.alloc_ty(Type::Tuple { elems: fresh_elems });
+                    ck.unify_or_report(expected, tup_ty, span);
+                }
+            }
+        }
+        Pat::Record { fields, .. } => {
+            let resolved = ck.resolve_ty(expected);
+            if let Type::Record {
+                fields: expected_fields,
+                ..
+            } = &ck.types[resolved]
+            {
+                let expected_fields = expected_fields.clone();
+                for field in &fields {
+                    if let Some(ef) = expected_fields.iter().find(|ef| ef.name == field.name)
+                        && let Some(pat) = field.pat
+                    {
+                        check_pat(ck, pat, ef.ty);
+                    }
+                }
+            }
+        }
+        Pat::Array { elems, .. } => {
+            let resolved = ck.resolve_ty(expected);
+            if let Type::Array { elem, .. } = &ck.types[resolved] {
+                let elem = *elem;
+                for &pat_elem in &elems {
+                    check_pat(ck, pat_elem, elem);
+                }
+            }
+        }
+        Pat::Variant { args, .. } => {
+            // Variant patterns: check args against expected variant fields.
+            for &arg in &args {
+                let fresh = ck.fresh_var(music_shared::Span::DUMMY);
+                check_pat(ck, arg, fresh);
+            }
+        }
+        Pat::Or { left, right, .. } => {
+            check_pat(ck, left, expected);
+            check_pat(ck, right, expected);
+        }
+        Pat::Wild { .. } | Pat::Error { .. } => {}
+    }
+}
