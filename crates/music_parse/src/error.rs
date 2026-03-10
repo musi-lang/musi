@@ -22,7 +22,7 @@ pub enum ParseError {
     ExpectedParamName,
     #[error("expected string literal after 'import'")]
     ExpectedImportPath,
-    #[error("expected 'let', 'var', 'effect', or '{{' after 'export'")]
+    #[error("expected 'let', 'var', 'effect', 'foreign', or '{{' after 'export'")]
     ExpectedAfterExport,
     #[error("expected declaration after attributes")]
     ExpectedDeclAfterAttrs,

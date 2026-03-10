@@ -159,6 +159,15 @@ impl Parser<'_> {
                 inner
             }
             TokenKind::KwEffect => self.parse_expr_effect(),
+            TokenKind::KwForeign => {
+                let inner = self.parse_expr_foreign_exported();
+                let inner_idx = self.alloc_expr(inner);
+                Expr::Annotated {
+                    attrs,
+                    inner: inner_idx,
+                    span: self.finish_span(start),
+                }
+            }
             _ => self.error_expr(&ParseError::ExpectedAfterExport),
         }
     }
@@ -277,6 +286,7 @@ impl Parser<'_> {
             TokenKind::KwLet => self.parse_export_binding(start, true),
             TokenKind::KwVar => self.parse_export_binding(start, false),
             TokenKind::KwEffect => self.parse_expr_effect(),
+            TokenKind::KwForeign => self.parse_expr_foreign_exported(),
             _ => self.error_expr(&ParseError::ExpectedAfterExport),
         }
     }
@@ -557,6 +567,7 @@ impl Parser<'_> {
             }
             let _rp = self.expect(TokenKind::RParen);
             Expr::Foreign {
+                exported: false,
                 abi,
                 decls,
                 span: self.finish_span(start),
@@ -566,11 +577,23 @@ impl Parser<'_> {
             let _let = self.expect(TokenKind::KwLet);
             let decl = self.parse_foreign_binding();
             Expr::Foreign {
+                exported: false,
                 abi,
                 decls: vec![decl],
                 span: self.finish_span(start),
             }
         }
+    }
+
+    fn parse_expr_foreign_exported(&mut self) -> Expr {
+        let mut expr = self.parse_expr_foreign();
+        if let Expr::Foreign {
+            ref mut exported, ..
+        } = expr
+        {
+            *exported = true;
+        }
+        expr
     }
 
     fn parse_foreign_binding(&mut self) -> ForeignDecl {

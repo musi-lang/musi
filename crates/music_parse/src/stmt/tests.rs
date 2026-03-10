@@ -176,3 +176,40 @@ fn test_parse_class_no_params() {
     };
     assert!(params.is_empty());
 }
+
+#[test]
+fn test_export_foreign_block_parses() {
+    let src = r#"export foreign "C" ( let malloc : Int ~> Int; );"#;
+    let (expr, diags) = parse_single(src);
+    assert!(!diags.has_errors(), "diags: {diags:?}");
+    assert!(
+        matches!(expr, Expr::Foreign { exported: true, .. }),
+        "expected exported Foreign, got {expr:?}"
+    );
+    let Expr::Foreign { decls, .. } = &expr else {
+        return;
+    };
+    assert_eq!(decls.len(), 1);
+}
+
+#[test]
+fn test_export_foreign_single_parses() {
+    let src = r#"export foreign "C" let exit : Int ~> Int;"#;
+    let (expr, diags) = parse_single(src);
+    assert!(!diags.has_errors(), "diags: {diags:?}");
+    assert!(
+        matches!(expr, Expr::Foreign { exported: true, .. }),
+        "expected exported Foreign, got {expr:?}"
+    );
+}
+
+#[test]
+fn test_export_foreign_with_attrs_parses() {
+    let src = r#"#[link := "m"] export foreign "C" ( let sqrt : Float64 ~> Float64; );"#;
+    let (expr, diags) = parse_single(src);
+    assert!(!diags.has_errors(), "diags: {diags:?}");
+    assert!(
+        matches!(expr, Expr::Annotated { .. }),
+        "expected Annotated, got {expr:?}"
+    );
+}

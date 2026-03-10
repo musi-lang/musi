@@ -3,11 +3,12 @@
 #[cfg(test)]
 mod tests;
 
+use music_ast::PatIdx;
 use music_ast::expr::BindKind;
 use music_ast::lit::Lit;
 use music_ast::pat::{Pat, PatRecField};
 use music_lex::token::TokenKind;
-use music_shared::{Idx, Symbol};
+use music_shared::Symbol;
 
 use crate::error::ParseError;
 use crate::parser::Parser;
@@ -155,7 +156,7 @@ impl Parser<'_> {
             BindKind::Immut
         };
         let name = self.expect_symbol();
-        let pat: Option<Idx<Pat>> = if self.eat(TokenKind::Colon) {
+        let pat: Option<PatIdx> = if self.eat(TokenKind::Colon) {
             Some(self.parse_alloc_pat())
         } else {
             None

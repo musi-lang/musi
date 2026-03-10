@@ -1,9 +1,9 @@
 //! Compound expression parsing: paren groups, tuples, blocks, piecewise, match, fn literals.
 
+use music_ast::ExprIdx;
 use music_ast::expr::{Arrow, Expr, MatchArm, PwArm, PwGuard};
 use music_ast::lit::Lit;
 use music_lex::token::TokenKind;
-use music_shared::Idx;
 
 use crate::parser::Parser;
 
@@ -134,7 +134,7 @@ impl Parser<'_> {
         }
     }
 
-    fn parse_expr_block_tail(&mut self, mut stmts: Vec<Idx<Expr>>, start: u32) -> Expr {
+    fn parse_expr_block_tail(&mut self, mut stmts: Vec<ExprIdx>, start: u32) -> Expr {
         while !self.at(TokenKind::RParen) && !self.at(TokenKind::Eof) {
             let e = self.parse_expr();
             if self.eat(TokenKind::Semi) {
@@ -157,7 +157,7 @@ impl Parser<'_> {
         }
     }
 
-    fn parse_expr_piecewise_tail(&mut self, first_result: Idx<Expr>, start: u32) -> Expr {
+    fn parse_expr_piecewise_tail(&mut self, first_result: ExprIdx, start: u32) -> Expr {
         // first_result if guard | ...
         let _if = self.expect(TokenKind::KwIf);
         let first_guard = self.parse_pw_guard();

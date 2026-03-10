@@ -3,12 +3,14 @@
 #[cfg(test)]
 mod tests;
 
-use music_ast::expr::{Arrow, Expr};
+use music_ast::ExprIdx;
+use music_ast::TyIdx;
+use music_ast::expr::Arrow;
 use music_ast::ty::{
     Constraint, EffectItem, EffectSet, Quantifier, Rel, Ty, TyNamedRef, TyParam, TyRecField,
 };
 use music_lex::token::TokenKind;
-use music_shared::{Idx, Symbol};
+use music_shared::Symbol;
 
 use crate::error::ParseError;
 use crate::parser::Parser;
@@ -284,7 +286,7 @@ impl Parser<'_> {
         let name = self.expect_symbol();
         let _colon = self.expect(TokenKind::Colon);
         let ty = self.parse_alloc_ty();
-        let default: Option<Idx<Expr>> = if self.eat(TokenKind::ColonEq) {
+        let default: Option<ExprIdx> = if self.eat(TokenKind::ColonEq) {
             Some(self.parse_alloc_expr())
         } else {
             None
@@ -334,7 +336,7 @@ impl Parser<'_> {
         params
     }
 
-    fn parse_ty_arg_list(&mut self) -> Vec<Idx<Ty>> {
+    fn parse_ty_arg_list(&mut self) -> Vec<TyIdx> {
         let mut args = vec![self.parse_alloc_ty()];
         while self.eat(TokenKind::Comma) {
             args.push(self.parse_alloc_ty());
@@ -390,7 +392,7 @@ impl Parser<'_> {
     }
 
     /// Optional type annotation: `:` ty.
-    pub(crate) fn parse_opt_ty_annot(&mut self) -> Option<Idx<Ty>> {
+    pub(crate) fn parse_opt_ty_annot(&mut self) -> Option<TyIdx> {
         if self.eat(TokenKind::Colon) {
             Some(self.parse_alloc_ty())
         } else {

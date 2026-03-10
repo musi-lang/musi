@@ -8,9 +8,9 @@ use core::mem;
 use music_ast::expr::Expr;
 use music_ast::pat::Pat;
 use music_ast::ty::Ty;
-use music_ast::{AstArenas, ParsedModule, Stmt};
+use music_ast::{AstArenas, ExprIdx, ParsedModule, PatIdx, Stmt, TyIdx};
 use music_lex::token::{Token, TokenKind};
-use music_shared::{DiagnosticBag, FileId, Idx, Interner, Span, Symbol};
+use music_shared::{DiagnosticBag, FileId, Interner, Span, Symbol};
 
 use crate::can_start_expr;
 use crate::error::ParseError;
@@ -137,15 +137,15 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub(crate) fn alloc_expr(&mut self, e: Expr) -> Idx<Expr> {
+    pub(crate) fn alloc_expr(&mut self, e: Expr) -> ExprIdx {
         self.arenas.exprs.alloc(e)
     }
 
-    pub(crate) fn alloc_ty(&mut self, t: Ty) -> Idx<Ty> {
+    pub(crate) fn alloc_ty(&mut self, t: Ty) -> TyIdx {
         self.arenas.tys.alloc(t)
     }
 
-    pub(crate) fn alloc_pat(&mut self, p: Pat) -> Idx<Pat> {
+    pub(crate) fn alloc_pat(&mut self, p: Pat) -> PatIdx {
         self.arenas.pats.alloc(p)
     }
 
@@ -175,27 +175,27 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub(crate) fn parse_alloc_expr(&mut self) -> Idx<Expr> {
+    pub(crate) fn parse_alloc_expr(&mut self) -> ExprIdx {
         let e = self.parse_expr();
         self.alloc_expr(e)
     }
 
-    pub(crate) fn parse_alloc_expr_no_in(&mut self) -> Idx<Expr> {
+    pub(crate) fn parse_alloc_expr_no_in(&mut self) -> ExprIdx {
         let e = self.parse_expr_no_in();
         self.alloc_expr(e)
     }
 
-    pub(crate) fn parse_alloc_ty(&mut self) -> Idx<Ty> {
+    pub(crate) fn parse_alloc_ty(&mut self) -> TyIdx {
         let t = self.parse_ty();
         self.alloc_ty(t)
     }
 
-    pub(crate) fn parse_alloc_pat(&mut self) -> Idx<Pat> {
+    pub(crate) fn parse_alloc_pat(&mut self) -> PatIdx {
         let p = self.parse_pat();
         self.alloc_pat(p)
     }
 
-    pub(crate) fn parse_opt_expr(&mut self) -> Option<Idx<Expr>> {
+    pub(crate) fn parse_opt_expr(&mut self) -> Option<ExprIdx> {
         if can_start_expr(self.peek_kind()) {
             Some(self.parse_alloc_expr())
         } else {
