@@ -21,17 +21,17 @@ fn make_config(std_root: PathBuf, project_root: PathBuf) -> ResolverConfig {
 }
 
 #[test]
-fn test_resolve_musi_core_as_directory_mod() {
+fn test_resolve_musi_core_as_directory_index() {
     let dir = temp_dir();
     let std_root = dir.path().join("std");
     let core_dir = std_root.join("core");
     fs::create_dir_all(&core_dir).unwrap();
-    fs::write(core_dir.join("mod.ms"), "-- core module").unwrap();
+    fs::write(core_dir.join("index.ms"), "-- core module").unwrap();
 
     let config = make_config(std_root, dir.path().to_path_buf());
     let spec = parse_specifier("musi:core").unwrap();
     let result = resolve_import(&spec, dir.path().join("main.ms").as_ref(), &config).unwrap();
-    assert!(result.ends_with("core/mod.ms"));
+    assert!(result.ends_with("core/index.ms"));
 }
 
 #[test]
@@ -88,7 +88,7 @@ fn test_resolve_bare_from_manifest_imports() {
     let std_root = dir.path().join("std");
     let core_dir = std_root.join("core");
     fs::create_dir_all(&core_dir).unwrap();
-    fs::write(core_dir.join("mod.ms"), "-- core").unwrap();
+    fs::write(core_dir.join("index.ms"), "-- core").unwrap();
 
     let mut config = make_config(std_root, dir.path().to_path_buf());
     let _prev = config
@@ -98,7 +98,7 @@ fn test_resolve_bare_from_manifest_imports() {
     let spec = parse_specifier("core").unwrap();
     let importing = dir.path().join("main.ms");
     let result = resolve_import(&spec, &importing, &config).unwrap();
-    assert!(result.ends_with("core/mod.ms"));
+    assert!(result.ends_with("core/index.ms"));
 }
 
 #[test]

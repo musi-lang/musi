@@ -92,7 +92,7 @@ fn resolve_musi(module_path: &str, config: &ResolverConfig) -> Result<PathBuf, R
         return Ok(as_file);
     }
 
-    let as_dir_mod = config.std_root.join(&segments).join("mod.ms");
+    let as_dir_mod = config.std_root.join(&segments).join("index.ms");
     if as_dir_mod.is_file() {
         return Ok(as_dir_mod);
     }
@@ -121,7 +121,7 @@ fn resolve_relative(module_path: &str, importing_file: &Path) -> Result<PathBuf,
         return Ok(with_ext);
     }
 
-    let as_dir_mod = candidate.join("mod.ms");
+    let as_dir_mod = candidate.join("index.ms");
     if as_dir_mod.is_file() {
         return Ok(as_dir_mod);
     }
