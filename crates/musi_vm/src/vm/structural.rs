@@ -293,7 +293,6 @@ fn exec_ld_glb(operand: u32, frame: &mut Frame, globals: &mut Vec<Value>) -> Res
     let idx = usize::try_from(operand).map_err(|_| VmError::Malformed {
         desc: "ld.glb index overflow".into(),
     })?;
-    // Auto-grow globals table on read (uninitialized globals are UNIT).
     if idx >= globals.len() {
         globals.resize(idx + 1, Value::UNIT);
     }
@@ -306,7 +305,6 @@ fn exec_st_glb(operand: u32, frame: &mut Frame, globals: &mut Vec<Value>) -> Res
         desc: "st.glb index overflow".into(),
     })?;
     let val = pop(frame)?;
-    // Auto-grow globals table on write.
     if idx >= globals.len() {
         globals.resize(idx + 1, Value::UNIT);
     }

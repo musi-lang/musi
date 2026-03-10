@@ -81,8 +81,6 @@ impl Vm {
         }
     }
 
-    // ── Configuration ───────────────────────────────────────────────────────
-
     /// Set the maximum number of instructions the VM will execute before
     /// returning `InstructionLimitExceeded`. Pass `None` to disable.
     pub const fn set_instruction_limit(&mut self, limit: Option<u64>) {
@@ -100,39 +98,30 @@ impl Vm {
         self.instruction_count
     }
 
-    // ── Introspection ───────────────────────────────────────────────────────
-
-    /// Borrow the current call stack (read-only).
     #[must_use]
     pub fn frames(&self) -> &[Frame] {
         &self.call_stack
     }
 
-    /// Borrow the heap (read-only).
     #[must_use]
     pub const fn heap(&self) -> &Heap {
         &self.heap
     }
 
-    /// Borrow the global variable table (read-only).
     #[must_use]
     pub fn globals(&self) -> &[Value] {
         &self.globals
     }
 
-    /// Borrow the loaded module (read-only).
     #[must_use]
     pub const fn module(&self) -> &LoadedModule {
         &self.module
     }
 
-    /// Returns `true` if the call stack is non-empty (a function is running).
     #[must_use]
     pub const fn is_running(&self) -> bool {
         !self.call_stack.is_empty()
     }
-
-    // ── Execution ───────────────────────────────────────────────────────────
 
     /// Run the module's entry point and return the result value.
     ///
@@ -267,15 +256,12 @@ impl Vm {
         let op = Opcode(raw_op);
         let (operand, instr_len) = control::decode_operand(&self.module.functions[fn_idx].code, ip);
 
-        // Advance ip past the instruction before dispatch (jumps overwrite it).
         frame.ip = ip + instr_len;
 
-        // Try arith first (no-operand, frequent).
         if arith::exec(op, frame)? {
             return Ok(StepResult::Continue);
         }
 
-        // Structural/locals/array/alloc/globals.
         if structural::exec(
             op,
             operand,
@@ -287,7 +273,6 @@ impl Vm {
             return Ok(StepResult::Continue);
         }
 
-        // Effect opcodes.
         let handlers = &self.module.functions[fn_idx].handlers;
         let eff_action = effects::exec(op, operand, frame, &self.module.effects, handlers)?;
         match eff_action {
@@ -297,7 +282,7 @@ impl Vm {
                 return Err(VmError::EffectAborted);
             }
             effects::EffectAction::DoEffect { handler_fn_id } => {
-                return self.do_call(handler_fn_id);
+                return self.do_call_with_stack_args(handler_fn_id);
             }
             effects::EffectAction::CrossFrameSearch { effect_id } => {
                 return self.exec_eff_do_cross_frame(effect_id);
@@ -307,12 +292,10 @@ impl Vm {
             }
         }
 
-        // Foreign function invocation.
         if op == Opcode::INV_FFI {
             return self.exec_inv_ffi(operand);
         }
 
-        // Control flow (jumps, calls, returns).
         let cf = control::exec(
             op,
             operand,
@@ -342,10 +325,6 @@ impl Vm {
             control::ControlFlow::TailCall { fn_id } => self.do_tail_call(fn_id),
             control::ControlFlow::Halt => Err(VmError::Halted),
         }
-    }
-
-    fn do_call(&mut self, fn_id: u32) -> Result<StepResult, VmError> {
-        self.do_call_with_stack_args(fn_id)
     }
 
     fn do_call_with_stack_args(&mut self, fn_id: u32) -> Result<StepResult, VmError> {
@@ -440,8 +419,6 @@ impl Vm {
         Ok(StepResult::Continue)
     }
 
-    // ── Effect handling ─────────────────────────────────────────────────────
-
     /// Cross-frame `EFF_DO`: search the entire call stack top-to-bottom for a
     /// handler matching `effect_id`. Captures frames between handler and
     /// current frame as a continuation, then calls the handler function.
@@ -478,7 +455,7 @@ impl Vm {
         self.continuations.push(Continuation { frames: captured });
 
         // Call the handler function (it will push a new frame onto call_stack).
-        self.do_call(handler_fn_id)
+        self.do_call_with_stack_args(handler_fn_id)
     }
 
     /// `EFF_RES`: handler-side resume. Pop resume value, restore continuation
@@ -519,8 +496,6 @@ impl Vm {
 
         Ok(StepResult::Continue)
     }
-
-    // ── Foreign function invocation ──────────────────────────────────────────
 
     /// Dispatch an `INV_FFI` opcode: pop args, call the host, push result.
     fn exec_inv_ffi(&mut self, operand: u32) -> Result<StepResult, VmError> {
@@ -565,8 +540,6 @@ impl Vm {
 
         Ok(StepResult::Continue)
     }
-
-    // ── Garbage collection ──────────────────────────────────────────────────
 
     /// Run a mark-sweep garbage collection cycle.
     ///

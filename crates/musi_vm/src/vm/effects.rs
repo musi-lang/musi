@@ -40,8 +40,6 @@ pub fn exec(
     }
 }
 
-/// Push an effect handler frame, looking up the `handler_fn_id` from the
-/// current function's handler table.
 fn exec_eff_psh(
     operand: u32,
     frame: &mut Frame,
@@ -61,9 +59,6 @@ fn exec_eff_psh(
     Ok(EffectAction::Continue)
 }
 
-/// Handle `EFF_DO`: look up which effect owns the given `op_id`, then find
-/// the handler in the current frame's effect stack. If not found, returns
-/// `CrossFrameSearch` so the VM can search the entire call stack.
 fn exec_eff_do(op_id: u32, frame: &Frame, effects: &[LoadedEffect]) -> EffectAction {
     let search_id = resolve_effect_id(op_id, effects);
     let search_id_u8 = u8::try_from(search_id & 0xFF).unwrap_or(u8::MAX);

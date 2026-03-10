@@ -174,21 +174,27 @@ fn exec_bitwise(op: Opcode, frame: &mut Frame) -> Result<bool, VmError> {
         }
         Opcode::B_SHL => {
             let (b, a) = pop2(frame)?;
-            let shift = u32::try_from(b.as_int()? & 63).unwrap_or(0);
+            let shift = u32::try_from(b.as_int()? & 63).map_err(|_| VmError::Malformed {
+                desc: "shift amount overflow".into(),
+            })?;
             frame
                 .stack
                 .push(Value::from_int(a.as_int()?.wrapping_shl(shift)));
         }
         Opcode::B_SHR => {
             let (b, a) = pop2(frame)?;
-            let shift = u32::try_from(b.as_int()? & 63).unwrap_or(0);
+            let shift = u32::try_from(b.as_int()? & 63).map_err(|_| VmError::Malformed {
+                desc: "shift amount overflow".into(),
+            })?;
             frame
                 .stack
                 .push(Value::from_int(a.as_int()?.wrapping_shr(shift)));
         }
         Opcode::B_SHR_UN => {
             let (b, a) = pop2(frame)?;
-            let shift = u32::try_from(b.as_uint()? & 63).unwrap_or(0);
+            let shift = u32::try_from(b.as_uint()? & 63).map_err(|_| VmError::Malformed {
+                desc: "shift amount overflow".into(),
+            })?;
             frame
                 .stack
                 .push(Value::from_uint(a.as_uint()?.wrapping_shr(shift)));

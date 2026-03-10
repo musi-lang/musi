@@ -25,7 +25,7 @@ pub enum ControlFlow {
 
 /// Dispatch §11/§15 control-flow opcodes.
 pub fn exec(op: Opcode, operand: u32, frame: &mut Frame) -> Result<ControlFlow, VmError> {
-    let instr_end = frame.ip; // ip already points past the instruction
+    let base = frame.ip;
     match op {
         Opcode::HLT => Ok(ControlFlow::Halt),
         Opcode::RET => {
@@ -37,12 +37,12 @@ pub fn exec(op: Opcode, operand: u32, frame: &mut Frame) -> Result<ControlFlow, 
             desc: "unr (unreachable) reached at runtime".into(),
         }),
         Opcode::BRK => Ok(ControlFlow::Continue), // breakpoint — no-op in MVP
-        Opcode::JMP => exec_jmp(instr_end, operand),
-        Opcode::JMP_T => exec_jmp_cond(frame, instr_end, operand, true),
-        Opcode::JMP_F => exec_jmp_cond(frame, instr_end, operand, false),
-        Opcode::JMP_W => exec_jmp_wide(instr_end, operand),
-        Opcode::JMP_T_W => exec_jmp_cond_wide(frame, instr_end, operand, true),
-        Opcode::JMP_F_W => exec_jmp_cond_wide(frame, instr_end, operand, false),
+        Opcode::JMP => exec_jmp(base, operand),
+        Opcode::JMP_T => exec_jmp_cond(frame, base, operand, true),
+        Opcode::JMP_F => exec_jmp_cond(frame, base, operand, false),
+        Opcode::JMP_W => exec_jmp_wide(base, operand),
+        Opcode::JMP_T_W => exec_jmp_cond_wide(frame, base, operand, true),
+        Opcode::JMP_F_W => exec_jmp_cond_wide(frame, base, operand, false),
         Opcode::INV | Opcode::INV_EFF => Ok(ControlFlow::Call { fn_id: operand }),
         Opcode::INV_TAL | Opcode::INV_TAL_EFF => Ok(ControlFlow::TailCall { fn_id: operand }),
         Opcode::INV_DYN => exec_inv_dyn(operand, frame),
@@ -57,56 +57,54 @@ pub fn exec(op: Opcode, operand: u32, frame: &mut Frame) -> Result<ControlFlow, 
     }
 }
 
-// ── Jump helpers ─────────────────────────────────────────────────────────────
-
-fn exec_jmp(instr_end: usize, operand: u32) -> Result<ControlFlow, VmError> {
+fn exec_jmp(base: usize, operand: u32) -> Result<ControlFlow, VmError> {
     let offset = read_i16_operand(operand);
-    let target = jump_target(instr_end, offset)?;
+    let target = jump_target(base, offset)?;
     Ok(ControlFlow::Jump { ip: target })
 }
 
 fn exec_jmp_cond(
     frame: &mut Frame,
-    instr_end: usize,
+    base: usize,
     operand: u32,
     jump_when: bool,
 ) -> Result<ControlFlow, VmError> {
     let cond = pop(frame)?;
     let offset = read_i16_operand(operand);
     if cond.as_bool()? == jump_when {
-        let target = jump_target(instr_end, offset)?;
+        let target = jump_target(base, offset)?;
         Ok(ControlFlow::Jump { ip: target })
     } else {
         Ok(ControlFlow::Continue)
     }
 }
 
-fn exec_jmp_wide(instr_end: usize, operand: u32) -> Result<ControlFlow, VmError> {
+fn exec_jmp_wide(base: usize, operand: u32) -> Result<ControlFlow, VmError> {
     let offset = read_i32_operand(operand);
-    let target = jump_target(instr_end, offset)?;
+    let target = jump_target(base, offset)?;
     Ok(ControlFlow::Jump { ip: target })
 }
 
 fn exec_jmp_cond_wide(
     frame: &mut Frame,
-    instr_end: usize,
+    base: usize,
     operand: u32,
     jump_when: bool,
 ) -> Result<ControlFlow, VmError> {
     let cond = pop(frame)?;
     let offset = read_i32_operand(operand);
     if cond.as_bool()? == jump_when {
-        let target = jump_target(instr_end, offset)?;
+        let target = jump_target(base, offset)?;
         Ok(ControlFlow::Jump { ip: target })
     } else {
         Ok(ControlFlow::Continue)
     }
 }
 
-// ── Invocation helpers ───────────────────────────────────────────────────────
-
 fn exec_inv_dyn(operand: u32, frame: &mut Frame) -> Result<ControlFlow, VmError> {
-    let arg_count = usize::from(u8::try_from(operand).unwrap_or(u8::MAX));
+    let arg_count = usize::from(u8::try_from(operand).map_err(|_| VmError::Malformed {
+        desc: "inv.dyn operand overflow".into(),
+    })?);
     let mut args: Vec<Value> = (0..arg_count)
         .map(|_| {
             frame.stack.pop().ok_or_else(|| VmError::Malformed {
@@ -122,8 +120,6 @@ fn exec_inv_dyn(operand: u32, frame: &mut Frame) -> Result<ControlFlow, VmError>
     }
     Ok(ControlFlow::Call { fn_id })
 }
-
-// ── Helpers ─────────────────────────────────────────────────────────────────
 
 fn pop(frame: &mut Frame) -> Result<Value, VmError> {
     frame.stack.pop().ok_or_else(|| VmError::Malformed {
