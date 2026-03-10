@@ -1,1 +1,1 @@
-export let spawn : (() ~> 'T under { Async }) ~> () under { Async }
+export let spawn : (() ~> 'T under { Async }) ~> () under { Async };
