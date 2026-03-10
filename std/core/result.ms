@@ -1,2 +1,2 @@
 #[lang := "result"]
-export let Result := type Ok of 'T + Err of 'E
+export let Result := forall 'T, 'E -> Ok of 'T + Err of 'E;

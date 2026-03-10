@@ -1,2 +1,2 @@
 #[lang := "option"]
-export let Option := type Some of 'T + None
+export let Option := forall 'T -> Some of 'T + None;

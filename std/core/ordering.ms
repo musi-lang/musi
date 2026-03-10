@@ -1,1 +1,1 @@
-export let Ordering := type Lt + Eq + Gt
+export let Ordering := Lt + Eq + Gt;
