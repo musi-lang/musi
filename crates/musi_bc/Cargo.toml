@@ -1,5 +1,5 @@
 [package]
-name = "musi_bytecode"
+name = "musi_bc"
 description = "Musi .msbc bytecode format definitions"
 keywords = ["bytecode", "musi", "format"]
 categories = ["encoding"]

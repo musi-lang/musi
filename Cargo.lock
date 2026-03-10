@@ -359,7 +359,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "musi_bytecode"
+name = "musi_bc"
 version = "0.1.0-alpha1"
 
 [[package]]
@@ -385,7 +385,7 @@ dependencies = [
 name = "musi_vm"
 version = "0.1.0-alpha1"
 dependencies = [
- "musi_bytecode",
+ "musi_bc",
  "thiserror",
 ]
 
@@ -418,7 +418,7 @@ name = "music_emit"
 version = "0.1.0-alpha1"
 dependencies = [
  "byteorder",
- "musi_bytecode",
+ "musi_bc",
  "music_ir",
  "music_shared",
  "thiserror",

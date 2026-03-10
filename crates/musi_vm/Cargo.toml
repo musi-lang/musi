@@ -10,7 +10,7 @@ keywords = ["virtual-machine", "interpreter", "bytecode", "musi"]
 categories = ["interpreters"]
 
 [dependencies]
-musi_bytecode = { path = "../musi_bytecode" }
+musi_bc = { path = "../musi_bc" }
 thiserror     = { workspace = true }
 
 [lints]

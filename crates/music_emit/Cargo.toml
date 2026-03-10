@@ -10,7 +10,7 @@ license.workspace = true
 readme.workspace = true
 
 [dependencies]
-musi_bytecode = { path = "../musi_bytecode" }
+musi_bc = { path = "../musi_bc" }
 music_ir      = { path = "../music_ir" }
 music_shared  = { path = "../music_shared" }
 byteorder     = { workspace = true }
