@@ -337,11 +337,7 @@ impl Parser<'_> {
     }
 
     fn parse_ty_arg_list(&mut self) -> Vec<TyIdx> {
-        let mut args = vec![self.parse_alloc_ty()];
-        while self.eat(TokenKind::Comma) {
-            args.push(self.parse_alloc_ty());
-        }
-        args
+        vec![self.parse_alloc_ty()]
     }
 
     /// Parses a named type reference: `Name [ 'of' type_args ]`.
@@ -367,6 +363,13 @@ impl Parser<'_> {
         }
         let mut constraints = vec![];
         loop {
+            if !self.at(TokenKind::TyIdent) {
+                let span = self.peek().span;
+                let _err = self
+                    .diags
+                    .report(&ParseError::ExpectedTypeVariable, span, self.file_id);
+                break;
+            }
             let c_start = self.start_span();
             let param = self.expect_symbol();
             let rel = if self.eat(TokenKind::LtColon) {

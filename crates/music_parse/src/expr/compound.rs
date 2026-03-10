@@ -1,7 +1,7 @@
 //! Compound expression parsing: paren groups, tuples, blocks, piecewise, match, fn literals.
 
 use music_ast::ExprIdx;
-use music_ast::expr::{Arrow, Expr, MatchArm, PwArm, PwGuard};
+use music_ast::expr::{Expr, MatchArm, PwArm, PwGuard};
 use music_ast::lit::Lit;
 use music_lex::token::TokenKind;
 
@@ -63,13 +63,13 @@ impl Parser<'_> {
         }
     }
 
-    /// Parses `(a, b, ...)` tuple after the first element and opening comma.
+    /// Parses `(a, b, ...)` tuple or multi-param fn literal after the first element and comma.
     fn parse_expr_tuple_tail(&mut self, first: Expr, start: u32) -> Expr {
         let _comma = self.bump();
-        let mut elems = vec![self.alloc_expr(first)];
+        let mut raw_elems = vec![first];
         if !self.at(TokenKind::RParen) {
             loop {
-                elems.push(self.parse_alloc_expr());
+                raw_elems.push(self.parse_expr());
                 if !self.eat(TokenKind::Comma) {
                     break;
                 }
@@ -79,6 +79,12 @@ impl Parser<'_> {
             }
         }
         let _rp = self.expect(TokenKind::RParen);
+
+        if self.at(TokenKind::EqGt) || self.at(TokenKind::Colon) {
+            return self.parse_expr_fn_after_paren(&raw_elems, start);
+        }
+
+        let elems = raw_elems.into_iter().map(|e| self.alloc_expr(e)).collect();
         Expr::Tuple {
             elems,
             span: self.finish_span(start),
@@ -89,7 +95,7 @@ impl Parser<'_> {
     fn parse_expr_paren_close(&mut self, first: Expr, start: u32) -> Expr {
         let _rp = self.bump();
 
-        if self.at(TokenKind::DashGt) || self.at(TokenKind::TildeGt) || self.at(TokenKind::Colon) {
+        if self.at(TokenKind::EqGt) || self.at(TokenKind::Colon) {
             return self.parse_expr_fn_after_paren(&[first], start);
         }
 
@@ -101,8 +107,8 @@ impl Parser<'_> {
     }
 
     fn maybe_expr_lit_fn(&mut self, _exprs: Vec<Expr>, start: u32) -> Expr {
-        // () followed by -> or ~> or : means fn literal
-        if self.at(TokenKind::DashGt) || self.at(TokenKind::TildeGt) || self.at(TokenKind::Colon) {
+        // () followed by => or : means fn literal
+        if self.at(TokenKind::EqGt) || self.at(TokenKind::Colon) {
             return self.parse_expr_fn_after_paren(&[], start);
         }
         Expr::Lit {
@@ -116,18 +122,10 @@ impl Parser<'_> {
     fn parse_expr_fn_after_paren(&mut self, paren_exprs: &[Expr], start: u32) -> Expr {
         let params = self.reinterpret_as_params(paren_exprs);
         let ret_ty = self.parse_opt_ty_annot();
-        let arrow = if self.eat(TokenKind::DashGt) {
-            Arrow::Pure
-        } else if self.eat(TokenKind::TildeGt) {
-            Arrow::Effectful
-        } else {
-            let _span = self.expect(TokenKind::DashGt);
-            Arrow::Pure
-        };
+        let _arrow = self.expect(TokenKind::EqGt);
         let body = self.parse_alloc_expr();
         Expr::Fn {
             params,
-            arrow,
             ret_ty,
             body,
             span: self.finish_span(start),

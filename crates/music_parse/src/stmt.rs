@@ -6,7 +6,7 @@ mod tests;
 use music_ast::attr::{Attr, AttrField, AttrValue};
 use music_ast::decl::{ClassMember, EffectOp, ExportItem, FnSig, ForeignDecl};
 use music_ast::expr::{BindKind, Expr, LetFields, Param, ParamMode};
-use music_ast::ty::Quantifier;
+use music_ast::ty::{Quantifier, TyParam};
 use music_lex::token::TokenKind;
 use music_shared::{Span, Symbol};
 
@@ -70,23 +70,65 @@ impl Parser<'_> {
         self.parse_expr_binding_immut_body(BindKind::Mut, start)
     }
 
+    fn parse_optional_bracket_params(&mut self) -> Vec<TyParam> {
+        if self.eat(TokenKind::LBracket) {
+            let params = self.comma_sep(TokenKind::RBracket, Self::parse_single_bracket_param);
+            let _rb = self.expect(TokenKind::RBracket);
+            params
+        } else {
+            vec![]
+        }
+    }
+
+    fn parse_single_bracket_param(&mut self) -> TyParam {
+        let start = self.start_span();
+        if !self.at(TokenKind::TyIdent) {
+            let span = self.peek().span;
+            let _err = self
+                .diags
+                .report(&ParseError::ExpectedTypeVariable, span, self.file_id);
+        }
+        let name = self.expect_symbol();
+        TyParam {
+            name,
+            span: self.finish_span(start),
+        }
+    }
+
     fn parse_expr_binding_immut_body(&mut self, kind: BindKind, start: u32) -> Expr {
         let heap = self.eat(TokenKind::KwRef);
         let pat = self.parse_alloc_pat();
-        let ty = self.parse_opt_ty_annot();
-        let _ceq = self.expect(TokenKind::ColonEq);
-        // use no-in variant so `in` is not consumed as a binary operator
-        // when this is a let-in scoped binding
-        let value = if kind == BindKind::Immut {
-            self.parse_alloc_expr_no_in()
+        let params = self.parse_optional_bracket_params();
+        let constraints = if params.is_empty() {
+            vec![]
         } else {
-            self.parse_alloc_expr()
+            self.parse_opt_where_clause()
+        };
+        let ty = self.parse_opt_ty_annot();
+        // `:= value` is required unless a type annotation is present (stub declaration)
+        let value = if self.at(TokenKind::ColonEq) {
+            let _ceq = self.bump();
+            // use no-in variant so `in` is not consumed as a binary operator
+            // when this is a let-in scoped binding
+            let v = if kind == BindKind::Immut {
+                self.parse_alloc_expr_no_in()
+            } else {
+                self.parse_alloc_expr()
+            };
+            Some(v)
+        } else if ty.is_some() {
+            None
+        } else {
+            let _ceq = self.expect(TokenKind::ColonEq);
+            None
         };
 
         let fields = LetFields {
             kind,
             heap,
             pat,
+            params,
+            constraints,
             ty,
             value,
             span: self.finish_span(start),
@@ -107,6 +149,19 @@ impl Parser<'_> {
         Expr::Let {
             fields,
             body: None,
+            span: self.finish_span(start),
+        }
+    }
+
+    /// Parses `'choice' '{' type '}'`.
+    pub(crate) fn parse_expr_choice(&mut self) -> Expr {
+        let start = self.start_span();
+        let _choice = self.bump();
+        let _lb = self.expect(TokenKind::LBrace);
+        let body = self.parse_alloc_ty();
+        let _rb = self.expect(TokenKind::RBrace);
+        Expr::Choice {
+            body,
             span: self.finish_span(start),
         }
     }
@@ -157,6 +212,24 @@ impl Parser<'_> {
                     };
                 }
                 inner
+            }
+            TokenKind::KwClass => {
+                let inner = self.parse_expr_class();
+                let inner_idx = self.alloc_expr(inner);
+                Expr::Annotated {
+                    attrs,
+                    inner: inner_idx,
+                    span: self.finish_span(start),
+                }
+            }
+            TokenKind::KwGiven => {
+                let inner = self.parse_expr_given();
+                let inner_idx = self.alloc_expr(inner);
+                Expr::Annotated {
+                    attrs,
+                    inner: inner_idx,
+                    span: self.finish_span(start),
+                }
             }
             TokenKind::KwEffect => self.parse_expr_effect(),
             TokenKind::KwForeign => {
@@ -285,6 +358,8 @@ impl Parser<'_> {
         match self.peek_kind() {
             TokenKind::KwLet => self.parse_export_binding(start, true),
             TokenKind::KwVar => self.parse_export_binding(start, false),
+            TokenKind::KwClass => self.parse_expr_class(),
+            TokenKind::KwGiven => self.parse_expr_given(),
             TokenKind::KwEffect => self.parse_expr_effect(),
             TokenKind::KwForeign => self.parse_expr_foreign_exported(),
             _ => self.error_expr(&ParseError::ExpectedAfterExport),
@@ -313,7 +388,7 @@ impl Parser<'_> {
         let _class = self.expect(TokenKind::KwClass);
         let name = self.expect_symbol();
         let params = if self.eat(TokenKind::KwOver) {
-            self.parse_ty_param_list()
+            self.parse_ty_param_list_maybe_parens()
         } else {
             vec![]
         };
@@ -334,12 +409,24 @@ impl Parser<'_> {
         }
     }
 
+    /// Parses a type parameter list that may optionally be wrapped in parentheses.
+    /// Used after `over` in class/given declarations: `over T` or `over (A, B)`.
+    fn parse_ty_param_list_maybe_parens(&mut self) -> Vec<TyParam> {
+        if self.eat(TokenKind::LParen) {
+            let params = self.parse_ty_param_list();
+            let _rp = self.expect(TokenKind::RParen);
+            params
+        } else {
+            self.parse_ty_param_list()
+        }
+    }
+
     pub(crate) fn parse_expr_given(&mut self) -> Expr {
         let start = self.start_span();
         let _given = self.expect(TokenKind::KwGiven);
         let target = self.parse_ty_named_ref();
         let params = if self.eat(TokenKind::KwOver) {
-            self.parse_ty_param_list()
+            self.parse_ty_param_list_maybe_parens()
         } else {
             vec![]
         };
@@ -389,7 +476,11 @@ impl Parser<'_> {
                 ty,
                 span: self.finish_span(op_start),
             });
-            let _semi = self.expect(TokenKind::Semi);
+            if self.at(TokenKind::RBrace) {
+                let _ = self.eat(TokenKind::Semi);
+            } else {
+                let _semi = self.expect(TokenKind::Semi);
+            }
         }
         ops
     }
@@ -403,7 +494,11 @@ impl Parser<'_> {
                 self.parse_fn_member()
             };
             members.push(member);
-            let _semi = self.expect(TokenKind::Semi);
+            if self.at(TokenKind::RBrace) {
+                let _ = self.eat(TokenKind::Semi);
+            } else {
+                let _semi = self.expect(TokenKind::Semi);
+            }
         }
         members
     }

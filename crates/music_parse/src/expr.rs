@@ -170,6 +170,9 @@ impl Parser<'_> {
             // Export
             TokenKind::KwExport => self.parse_expr_export(),
 
+            // Choice type
+            TokenKind::KwChoice => self.parse_expr_choice(),
+
             // Class / Given / Effect / Foreign
             TokenKind::KwClass => self.parse_expr_class(),
             TokenKind::KwGiven => self.parse_expr_given(),
@@ -179,7 +182,10 @@ impl Parser<'_> {
             // Annotated: #[...] decl
             TokenKind::HashLBracket => self.parse_expr_annotated_chain(),
 
-            _ => self.error_expr(&ParseError::unexpected_kind(self.peek_kind())),
+            _ => {
+                let text = self.peek_text();
+                self.error_expr(&ParseError::unexpected_kind(self.peek_kind(), text))
+            }
         }
     }
 

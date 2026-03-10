@@ -207,6 +207,15 @@ impl<'a> Parser<'a> {
         self.interner.resolve(sym)
     }
 
+    /// Get display text for the current token: resolved symbol if available, else kind display.
+    pub(crate) fn peek_text(&self) -> Box<str> {
+        let tok = self.peek();
+        if let Some(sym) = tok.symbol {
+            return self.interner.resolve(sym).into();
+        }
+        tok.kind.to_string().into()
+    }
+
     pub(crate) fn sep_by<T>(
         &mut self,
         sep: TokenKind,
@@ -281,7 +290,8 @@ impl<'a> Parser<'a> {
 
             if self.pos == pos_before {
                 let span = self.peek().span;
-                let err = ParseError::unexpected_kind(self.peek_kind());
+                let text = self.peek_text();
+                let err = ParseError::unexpected_kind(self.peek_kind(), text);
                 let _d = self.diags.report(&err, span, self.file_id);
                 let _tok = self.bump();
             }

@@ -22,16 +22,18 @@ pub enum ParseError {
     ExpectedParamName,
     #[error("expected string literal after 'import'")]
     ExpectedImportPath,
-    #[error("expected 'let', 'var', 'effect', 'foreign', or '{{' after 'export'")]
+    #[error("expected 'let', 'var', 'class', 'given', 'effect', 'foreign', or '{{' after 'export'")]
     ExpectedAfterExport,
     #[error("expected declaration after attributes")]
     ExpectedDeclAfterAttrs,
     #[error("expected record fields or refinement type")]
     ExpectedRecordOrRefinement,
-    #[error("unexpected {kind}")]
-    UnexpectedKind { kind: TokenKind },
+    #[error("unexpected {kind} '{text}'")]
+    UnexpectedKind { kind: TokenKind, text: Box<str> },
     #[error("unterminated interpolated string literal")]
     UnterminatedFString,
+    #[error("expected type variable (e.g. 'T)")]
+    ExpectedTypeVariable,
 }
 
 impl ParseError {
@@ -39,8 +41,8 @@ impl ParseError {
         Self::ExpectedToken { expected, found }
     }
 
-    pub const fn unexpected_kind(kind: TokenKind) -> Self {
-        Self::UnexpectedKind { kind }
+    pub const fn unexpected_kind(kind: TokenKind, text: Box<str>) -> Self {
+        Self::UnexpectedKind { kind, text }
     }
 }
 
