@@ -8,46 +8,11 @@ use std::iter;
 
 use crate::error::VmError;
 use crate::loader::load;
+#[allow(unused_imports)]
+use crate::opcode::*;
 use crate::value::Value;
 use crate::verifier::verify;
 use crate::vm::{StepResult, Vm};
-
-// ── Opcode constants ─────────────────────────────────────────────────────────
-
-const HLT: u8 = 0x01;
-const RET: u8 = 0x02;
-const RET_U: u8 = 0x03;
-const DUP: u8 = 0x06;
-const POP: u8 = 0x07;
-const I_ADD: u8 = 0x10;
-const I_SUB: u8 = 0x12;
-const I_DIV: u8 = 0x16;
-const I_NEG: u8 = 0x1A;
-const F_ADD: u8 = 0x20;
-const F_MUL: u8 = 0x22;
-const B_AND: u8 = 0x30;
-const B_SHL: u8 = 0x34;
-const CMP_EQ: u8 = 0x3B;
-const CMP_LT: u8 = 0x50;
-const CNV_ITF: u8 = 0x5E;
-const CNV_FTI: u8 = 0x5F;
-const LD_LOC: u8 = 0x40;
-const ST_LOC: u8 = 0x41;
-const LD_CST: u8 = 0x42;
-const MK_PRD: u8 = 0x44;
-const LD_FLD: u8 = 0x45;
-const MK_VAR: u8 = 0x46;
-const CMP_TAG: u8 = 0x48;
-const LD_LEN: u8 = 0x62;
-const LD_IDX: u8 = 0x63;
-const ST_IDX: u8 = 0x64;
-const JMP_F: u8 = 0x88;
-const INV: u8 = 0xC0;
-const INV_TAL: u8 = 0xC2;
-const LD_GLB: u8 = 0xC4;
-const ST_GLB: u8 = 0xC5;
-const MK_ARR: u8 = 0xC6;
-const JMP_W: u8 = 0xD0;
 
 // ── Binary builder helpers ────────────────────────────────────────────────────
 
@@ -160,6 +125,24 @@ fn make_msbc(consts: &[ConstEntry], fns: &[FnDef]) -> Vec<u8> {
     out
 }
 
+/// Load, verify, and run the entry function of a `.msbc` binary.
+fn run_vm(bytes: &[u8]) -> (Vm, Result<Value, VmError>) {
+    let module = load(bytes).expect("loads");
+    verify(&module).expect("verifies");
+    let mut vm = Vm::new(module);
+    let result = vm.run();
+    (vm, result)
+}
+
+/// Load, verify, and call a specific function with arguments.
+fn run_vm_call(bytes: &[u8], fn_id: u32, args: &[Value]) -> (Vm, Result<Value, VmError>) {
+    let module = load(bytes).expect("loads");
+    verify(&module).expect("verifies");
+    let mut vm = Vm::new(module);
+    let result = vm.call_fn(fn_id, args);
+    (vm, result)
+}
+
 fn crc32_test(data: &[u8]) -> u32 {
     const POLY: u32 = 0xEDB8_8320;
     let mut crc: u32 = 0xFFFF_FFFF;
@@ -241,11 +224,8 @@ fn test_run_constant_return_i32() {
         &[ConstEntry::I32(99)],
         &[fn_def(0, 0, 0, vec![LD_CST, 0, RET])],
     );
-    let module = load(&bytes).expect("loads");
-    verify(&module).expect("verifies");
-    let mut vm = Vm::new(module);
-    let result = vm.run().expect("runs");
-    assert_eq!(result.as_int().expect("is int"), 99);
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 99);
 }
 
 #[test]
@@ -254,13 +234,8 @@ fn test_run_add_two_ints() {
         &[],
         &[fn_def(0, 2, 2, vec![LD_LOC, 0, LD_LOC, 1, I_ADD, RET])],
     );
-    let module = load(&bytes).expect("loads");
-    verify(&module).expect("verifies");
-    let mut vm = Vm::new(module);
-    let result = vm
-        .call_fn(0, &[Value::from_int(3), Value::from_int(4)])
-        .expect("runs");
-    assert_eq!(result.as_int().expect("is int"), 7);
+    let (_, result) = run_vm_call(&bytes, 0, &[Value::from_int(3), Value::from_int(4)]);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 7);
 }
 
 #[test]
@@ -276,12 +251,9 @@ fn test_run_conditional_jump() {
             ],
         )],
     );
-    let module = load(&bytes).expect("loads");
-    verify(&module).expect("verifies");
-    let mut vm = Vm::new(module);
-    let result = vm.run().expect("runs");
+    let (_, result) = run_vm(&bytes);
     assert_eq!(
-        result.as_int().expect("is int"),
+        result.expect("runs").as_int().expect("is int"),
         3,
         "jmp.f taken: should return 3"
     );
@@ -290,17 +262,15 @@ fn test_run_conditional_jump() {
 #[test]
 fn test_run_tail_call_countdown() {
     let code = vec![
-        LD_LOC, 0, LD_CST, 0, 0x3B, // cmp.eq
-        JMP_F, 3, 0, LD_CST, 0, RET, LD_LOC, 0, LD_CST, 1, I_SUB, INV_TAL, 0, 0, 0, 0,
+        LD_LOC, 0, LD_CST, 0, CMP_EQ, JMP_F, 3, 0, LD_CST, 0, RET, LD_LOC, 0, LD_CST, 1, I_SUB,
+        INV_TAL, 0, 0, 0, 0,
     ];
     let bytes = make_msbc(
         &[ConstEntry::I32(0), ConstEntry::I32(1)],
         &[fn_def(0, 1, 1, code)],
     );
-    let module = load(&bytes).expect("loads");
-    let mut vm = Vm::new(module);
-    let result = vm.call_fn(0, &[Value::from_int(10)]).expect("runs");
-    assert_eq!(result.as_int().expect("is int"), 0);
+    let (_, result) = run_vm_call(&bytes, 0, &[Value::from_int(10)]);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 0);
 }
 
 #[test]
@@ -314,10 +284,8 @@ fn test_run_make_product_and_load_field() {
             vec![LD_CST, 0, LD_CST, 1, MK_PRD, 2, LD_FLD, 1, RET],
         )],
     );
-    let module = load(&bytes).expect("loads");
-    let mut vm = Vm::new(module);
-    let result = vm.run().expect("runs");
-    assert_eq!(result.as_int().expect("is int"), 20);
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 20);
 }
 
 #[test]
@@ -326,10 +294,8 @@ fn test_run_make_variant_and_check_tag() {
         &[ConstEntry::I32(42)],
         &[fn_def(0, 0, 0, vec![LD_CST, 0, MK_VAR, 7, CMP_TAG, 7, RET])],
     );
-    let module = load(&bytes).expect("loads");
-    let mut vm = Vm::new(module);
-    let result = vm.run().expect("runs");
-    assert!(result.as_bool().expect("is bool"));
+    let (_, result) = run_vm(&bytes);
+    assert!(result.expect("runs").as_bool().expect("is bool"));
 }
 
 // ── Value NaN-boxing tests ────────────────────────────────────────────────────
@@ -383,10 +349,8 @@ fn test_string_const_returns_heap_ref() {
         &[ConstEntry::Str(b"hello".to_vec())],
         &[fn_def(0, 0, 0, vec![LD_CST, 0, RET])],
     );
-    let module = load(&bytes).expect("loads");
-    verify(&module).expect("verifies");
-    let mut vm = Vm::new(module);
-    let result = vm.run().expect("runs");
+    let (vm, result) = run_vm(&bytes);
+    let result = result.expect("runs");
     // Result should be a ref (heap-allocated string), not unit.
     let ptr = result.as_ref().expect("should be a ref");
     let obj = vm.heap().get(ptr).expect("heap lookup");
@@ -414,10 +378,8 @@ fn test_string_const_two_distinct_loads_produce_separate_objects() {
             ],
         )],
     );
-    let module = load(&bytes).expect("loads");
-    let mut vm = Vm::new(module);
-    let result = vm.run().expect("runs");
-    assert!(result.as_ref().is_ok(), "should be a ref");
+    let (_, result) = run_vm(&bytes);
+    assert!(result.expect("runs").as_ref().is_ok(), "should be a ref");
 }
 
 // ── NEW: Global variables ────────────────────────────────────────────────────
@@ -440,10 +402,8 @@ fn test_globals_store_and_load() {
             ],
         )],
     );
-    let module = load(&bytes).expect("loads");
-    let mut vm = Vm::new(module);
-    let result = vm.run().expect("runs");
-    assert_eq!(result.as_int().expect("is int"), 42);
+    let (vm, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 42);
     assert_eq!(
         vm.globals().len(),
         6,
@@ -455,10 +415,11 @@ fn test_globals_store_and_load() {
 fn test_globals_uninitialized_returns_unit() {
     // ld.glb 0 ; ret — uninitialized global should return unit.
     let bytes = make_msbc(&[], &[fn_def(0, 0, 0, vec![LD_GLB, 0, 0, 0, 0, RET])]);
-    let module = load(&bytes).expect("loads");
-    let mut vm = Vm::new(module);
-    let result = vm.run().expect("runs");
-    assert!(result.is_unit(), "uninitialized global should be unit");
+    let (_, result) = run_vm(&bytes);
+    assert!(
+        result.expect("runs").is_unit(),
+        "uninitialized global should be unit"
+    );
 }
 
 // ── NEW: Division by zero ────────────────────────────────────────────────────
@@ -469,11 +430,8 @@ fn test_division_by_zero_returns_error() {
         &[ConstEntry::I32(10), ConstEntry::I32(0)],
         &[fn_def(0, 0, 0, vec![LD_CST, 0, LD_CST, 1, I_DIV, RET])],
     );
-    let module = load(&bytes).expect("loads");
-    let mut vm = Vm::new(module);
-    let result = vm.run();
+    let (_, result) = run_vm(&bytes);
     // Should produce a Runtime error wrapping DivideByZero.
-    assert!(result.is_err());
     let err = result.unwrap_err();
     match &err {
         VmError::Runtime { source, .. } => {
@@ -498,10 +456,8 @@ fn test_float_add_and_multiply() {
             vec![LD_CST, 0, CNV_ITF, 0, LD_CST, 1, CNV_ITF, 0, F_ADD, RET],
         )],
     );
-    let module = load(&bytes).expect("loads");
-    let mut vm = Vm::new(module);
-    let result = vm.run().expect("runs");
-    let f = result.as_float().expect("is float");
+    let (_, result) = run_vm(&bytes);
+    let f = result.expect("runs").as_float().expect("is float");
     assert!((f - 5.0).abs() < f64::EPSILON);
 }
 
@@ -523,10 +479,8 @@ fn test_bitwise_and_and_shift() {
             vec![LD_CST, 0, LD_CST, 1, B_AND, LD_CST, 2, B_SHL, RET],
         )],
     );
-    let module = load(&bytes).expect("loads");
-    let mut vm = Vm::new(module);
-    let result = vm.run().expect("runs");
-    assert_eq!(result.as_int().expect("is int"), 240);
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 240);
 }
 
 // ── NEW: Type conversions ────────────────────────────────────────────────────
@@ -544,10 +498,8 @@ fn test_int_to_float_to_int_roundtrip() {
             vec![LD_CST, 0, CNV_ITF, 0, CNV_FTI, 0, RET],
         )],
     );
-    let module = load(&bytes).expect("loads");
-    let mut vm = Vm::new(module);
-    let result = vm.run().expect("runs");
-    assert_eq!(result.as_int().expect("is int"), 7);
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 7);
 }
 
 // ── NEW: Array operations ────────────────────────────────────────────────────
@@ -577,10 +529,8 @@ fn test_array_create_store_load() {
             ],
         )],
     );
-    let module = load(&bytes).expect("loads");
-    let mut vm = Vm::new(module);
-    let result = vm.run().expect("runs");
-    assert_eq!(result.as_int().expect("is int"), 99);
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 99);
 }
 
 #[test]
@@ -600,10 +550,8 @@ fn test_array_length() {
             ],
         )],
     );
-    let module = load(&bytes).expect("loads");
-    let mut vm = Vm::new(module);
-    let result = vm.run().expect("runs");
-    assert_eq!(result.as_uint().expect("is uint"), 5);
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_uint().expect("is uint"), 5);
 }
 
 // ── NEW: Stack underflow ─────────────────────────────────────────────────────
@@ -612,9 +560,7 @@ fn test_array_length() {
 fn test_stack_underflow_returns_error() {
     // I_ADD on empty stack should error.
     let bytes = make_msbc(&[], &[fn_def(0, 0, 0, vec![I_ADD, RET])]);
-    let module = load(&bytes).expect("loads");
-    let mut vm = Vm::new(module);
-    let result = vm.run();
+    let (_, result) = run_vm(&bytes);
     assert!(result.is_err(), "i.add on empty stack should error");
 }
 
@@ -623,10 +569,7 @@ fn test_stack_underflow_returns_error() {
 #[test]
 fn test_hlt_returns_halted_error() {
     let bytes = make_msbc(&[], &[fn_def(0, 0, 0, vec![HLT])]);
-    let module = load(&bytes).expect("loads");
-    let mut vm = Vm::new(module);
-    let result = vm.run();
-    assert!(result.is_err());
+    let (_, result) = run_vm(&bytes);
     let err = result.unwrap_err();
     match &err {
         VmError::Runtime { source, .. } => {
@@ -676,9 +619,8 @@ fn test_error_context_contains_fn_id_and_ip() {
         &[ConstEntry::I32(1), ConstEntry::I32(0)],
         &[fn_def(0, 0, 0, vec![LD_CST, 0, LD_CST, 1, I_DIV, RET])],
     );
-    let module = load(&bytes).expect("loads");
-    let mut vm = Vm::new(module);
-    let err = vm.run().unwrap_err();
+    let (_, result) = run_vm(&bytes);
+    let err = result.unwrap_err();
     match &err {
         VmError::Runtime { fn_id, ip, .. } => {
             assert_eq!(*fn_id, 0, "fn_id should be 0");
@@ -728,9 +670,8 @@ fn test_introspection_frames_and_heap() {
         &[ConstEntry::I32(10)],
         &[fn_def(0, 0, 0, vec![LD_CST, 0, MK_PRD, 1, RET])],
     );
-    let module = load(&bytes).expect("loads");
-    let mut vm = Vm::new(module);
-    let _ = vm.run().expect("runs");
+    let (vm, result) = run_vm(&bytes);
+    let _ = result.expect("runs");
     // After run, call stack is empty.
     assert!(vm.frames().is_empty());
     // Heap should have at least one object (the product).
@@ -758,9 +699,8 @@ fn test_gc_collects_unreachable_objects() {
             ],
         )],
     );
-    let module = load(&bytes).expect("loads");
-    let mut vm = Vm::new(module);
-    let _ = vm.run().expect("runs");
+    let (mut vm, result) = run_vm(&bytes);
+    let _ = result.expect("runs");
     // Before GC: 2 objects on heap.
     assert_eq!(vm.heap().live_count(), 2);
     let freed = vm.collect_garbage();
@@ -791,9 +731,8 @@ fn test_gc_preserves_reachable_globals() {
             ],
         )],
     );
-    let module = load(&bytes).expect("loads");
-    let mut vm = Vm::new(module);
-    let _ = vm.run().expect("runs");
+    let (mut vm, result) = run_vm(&bytes);
+    let _ = result.expect("runs");
     assert_eq!(vm.heap().live_count(), 1);
     // GC should NOT free the object because it's referenced from globals.
     let freed = vm.collect_garbage();
@@ -814,10 +753,8 @@ fn test_direct_call_with_inv() {
             fn_def(1, 1, 1, vec![LD_LOC, 0, LD_CST, 1, I_ADD, RET]),
         ],
     );
-    let module = load(&bytes).expect("loads");
-    let mut vm = Vm::new(module);
-    let result = vm.run().expect("runs");
-    assert_eq!(result.as_int().expect("is int"), 15);
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 15);
 }
 
 // ── NEW: Wide jump ───────────────────────────────────────────────────────────
@@ -826,8 +763,6 @@ fn test_direct_call_with_inv() {
 fn test_wide_jump() {
     // jmp.w +2 ; hlt ; ld.cst 0 ; ret
     // jmp.w is 5 bytes. Target = 5 + 2 = 7.
-    // hlt is 1 byte at offset 5. ld.cst is at offset 6... no wait.
-    // jmp.w at offset 0 (5 bytes), target = 5+2 = 7.
     // hlt at offset 5 (1 byte).
     // NOP at offset 6 (1 byte).
     // ld.cst at offset 7 (2 bytes).
@@ -847,10 +782,8 @@ fn test_wide_jump() {
             ],
         )],
     );
-    let module = load(&bytes).expect("loads");
-    let mut vm = Vm::new(module);
-    let result = vm.run().expect("runs");
-    assert_eq!(result.as_int().expect("is int"), 42);
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 42);
 }
 
 // ── NEW: Integer negation ────────────────────────────────────────────────────
@@ -861,10 +794,8 @@ fn test_int_negation() {
         &[ConstEntry::I32(42)],
         &[fn_def(0, 0, 0, vec![LD_CST, 0, I_NEG, RET])],
     );
-    let module = load(&bytes).expect("loads");
-    let mut vm = Vm::new(module);
-    let result = vm.run().expect("runs");
-    assert_eq!(result.as_int().expect("is int"), -42);
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), -42);
 }
 
 // ── NEW: Float multiplication ────────────────────────────────────────────────
@@ -881,10 +812,8 @@ fn test_float_multiply() {
             vec![LD_CST, 0, CNV_ITF, 0, LD_CST, 1, CNV_ITF, 0, F_MUL, RET],
         )],
     );
-    let module = load(&bytes).expect("loads");
-    let mut vm = Vm::new(module);
-    let result = vm.run().expect("runs");
-    let f = result.as_float().expect("is float");
+    let (_, result) = run_vm(&bytes);
+    let f = result.expect("runs").as_float().expect("is float");
     assert!((f - 12.0).abs() < f64::EPSILON);
 }
 
@@ -896,10 +825,11 @@ fn test_cmp_eq_equal_values() {
         &[ConstEntry::I32(5)],
         &[fn_def(0, 0, 0, vec![LD_CST, 0, LD_CST, 0, CMP_EQ, RET])],
     );
-    let module = load(&bytes).expect("loads");
-    let mut vm = Vm::new(module);
-    let result = vm.run().expect("runs");
-    assert!(result.as_bool().expect("is bool"), "5 == 5 should be true");
+    let (_, result) = run_vm(&bytes);
+    assert!(
+        result.expect("runs").as_bool().expect("is bool"),
+        "5 == 5 should be true"
+    );
 }
 
 // ── NEW: Value try_as_ref ────────────────────────────────────────────────────
