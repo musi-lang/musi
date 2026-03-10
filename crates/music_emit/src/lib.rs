@@ -15,7 +15,6 @@
 mod const_pool;
 mod emitter;
 mod module;
-mod opcode;
 mod type_pool;
 
 pub mod error;
@@ -49,14 +48,15 @@ pub fn emit(module: &IrModule, interner: &Interner) -> Result<EmitOutput, EmitEr
 
     let entry_fn_id = module.entry.map(|idx| module.functions[idx].id.0);
 
-    let bytes = module::assemble(
-        &mut emitter.cp,
-        &mut emitter.tp,
-        &functions,
-        &module.effects,
-        &module.types,
+    let bytes = module::assemble(module::AssembleParams {
+        cp: &mut emitter.cp,
+        tp: &mut emitter.tp,
+        functions: &functions,
+        effects: &module.effects,
+        foreign_fns: &module.foreign_fns,
+        type_arena: &module.types,
         interner,
         entry_fn_id,
-    )?;
+    })?;
     Ok(EmitOutput { bytes })
 }

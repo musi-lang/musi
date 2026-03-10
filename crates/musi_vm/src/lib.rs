@@ -19,8 +19,8 @@
 mod channel;
 mod error;
 mod heap;
+mod host;
 mod loader;
-pub(crate) mod opcode;
 mod task;
 mod value;
 mod verifier;
@@ -28,7 +28,10 @@ mod vm;
 
 pub use error::VmError;
 pub use heap::Heap;
-pub use loader::{HandlerEntry, LoadedConst, LoadedEffect, LoadedFn, LoadedModule, load};
+pub use host::HostFunctions;
+pub use loader::{
+    HandlerEntry, LoadedConst, LoadedEffect, LoadedFn, LoadedForeignFn, LoadedModule, load,
+};
 pub use value::Value;
 pub use verifier::verify;
 pub use vm::{Frame, StepResult, Vm};
