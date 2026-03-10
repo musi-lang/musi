@@ -2,7 +2,7 @@
 
 ## Project overview
 
-Musi-next is a fresh rewrite of the Musi compiler. `docs/` is the source of truth for the language design. `crates_old/` contains the legacy implementation (reference only, do not modify). The root `grammar.ebnf` is legacy and will be replaced.
+Musi-next is a fresh rewrite of the Musi compiler. `docs/` is the source of truth for the language design. `crates_old/` contains the legacy implementation (reference only, do not modify). The root `grammar.ebnf` documents the current parser grammar.
 
 ## Crate naming: `musi_*` vs `music_*`
 
@@ -83,6 +83,7 @@ Each compiler crate defines a crate-level `error.rs` module with a single `thise
 - `music_parse` → `ParseError` in `crates/music_parse/src/error.rs`
 
 Pattern:
+
 - One enum per crate, named `{Phase}Error` (`LexError`, `ParseError`, `ResolveError`, …)
 - Every variant uses `#[error("...")]` — no ad-hoc string construction
 - All error enums implement `IntoDiagnostic` (from `music_shared`), which bakes in `severity()`
@@ -91,6 +92,7 @@ Pattern:
 - `thiserror` for the derive; no `anyhow` in compiler crates
 
 Diagnostic message style:
+
 - Lowercase, no leading articles ("a"/"the"), no contractions
 - No internal jargon — use terms an end user would recognise:
   - "interpolated string" not "f-string"
@@ -121,38 +123,49 @@ std/
   concurrency/ channel.ms, task.ms
 ```
 
-### Quantification rules in `.ms` files
+### Type parameter syntax in `.ms` files
 
-This is the single most important rule for writing correct Musi type signatures:
+Type variables use plain identifiers (`T`, `U`), not tick-prefixed (`'T`). Generic params use bracket syntax `[T, U]`.
 
-**`forall` is only used in `:=` expression bindings** — where a type variable must be explicitly introduced:
-```
-let Option := forall 'T -> Some of 'T + None
-let Result := forall 'T, 'E -> Ok of 'T + Err of 'E
-let List   := forall 'T -> Nil + Cons of ('T, List of 'T)
-```
+**Type definitions use bracket params on `let` with `choice`:**
 
-**`:` type annotations use bare `'T` — implicitly universally quantified**, no `forall`:
 ```
-let assert_eq : ('T, 'T) -> ()         -- correct
-let assert_eq : forall 'T -> ('T, 'T) -> ()  -- WRONG: forall not needed here
+let Option [T] := choice { Some of T + None };
+let Result [T, E] := choice { Ok of T + Err of E };
+let List [T] := choice { Nil + Cons of (T, List of T) };
 ```
 
-**`class ... over 'T`** — `over` introduces the type param, no `forall`:
+**Polymorphic function stubs use bracket params after the name:**
+
 ```
-class Eq over 'T (
-    let (=)(a: 'T, b: 'T) : Bool
-)
+let assert_eq [T] : (T, T) -> ();
+let map [T, U] : (?T, (T) -> U) -> ?U;
 ```
 
-**`where`** — constraint syntax on `forall`/`class`/`given`:
+**Constrained polymorphic functions use `where` between bracket params and colon:**
+
 ```
-forall 'T where 'T <: Ord -> ...
+let contains [T] where T <: Eq : (List of T, T) -> Bool;
+```
+
+**`class ... over T`** — `over` introduces the type param:
+
+```
+class Eq over T {
+    let (=)(a: T, b: T) : Bool;
+};
+```
+
+**`where`** — constraint syntax on `class`/`given`:
+
+```
+class Ord over T where T <: Eq { ... };
 ```
 
 ### Lang items
 
 `#[lang := "..."]` marks STL types as compiler-known. Enables syntactic sugar:
+
 - `#[lang := "option"]` on `Option` — enables `?T` sugar for `Option of T`
 - `#[lang := "result"]` on `Result` — enables `try`/`?` sugar
 - `#[lang := "propagate"]` on `Propagate` — enables `try` desugaring
@@ -166,9 +179,10 @@ Defines C-interop type aliases: `CInt`, `CUInt`, `CChar`, `CSize`, `CDouble`. Th
 - `~> T under { IO }` — effectful function returning `T` with `IO` effect
 - `~> T under { Async }` — async computation
 - `~> T under { State }` — stateful computation
-- `@musi/core` = implicit prelude (always available)
-- `@musi/*` = explicit stdlib import
-- No `@` prefix = relative path import
+- `musi:core` = implicit prelude (always available)
+- `musi:*` = explicit stdlib import
+- `msr:` = registry package, `git:` = git dependency
+- Bare path = relative import
 
 ## Key Musi differences from C/Rust
 

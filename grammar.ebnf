@@ -1,6 +1,6 @@
 (* ===================================================================== *)
 (* Musi Language — Formal Grammar                                        *)
-(* ISO/IEC 14977 EBNF. Maximal munch throughout.                        *)
+(* ISO/IEC 14977 EBNF. Maximal munch throughout.                         *)
 (* Source of truth: docs/02-lexical.md, docs/08-grammar.md               *)
 (* ===================================================================== *)
 
@@ -53,10 +53,10 @@ comment = "//" , { any - newline }
         | "///" , { any - newline }
         | "/*" , { any } , "*/" ;   (* block comments do not nest *)
 
-(* 1.5  Keywords (29)
+(* 1.5  Keywords (30)
    and as or not xor let var ref inout if match defer effect return try
    spawn await forall exists where of over under in class given law
-   import export *)
+   import export foreign *)
 
 (* 1.6  Compound tokens — maximal munch
    :=  <-  ->  ~>  <:  :>  ?.  ??  ..  ..<  ...
@@ -110,7 +110,7 @@ astExprAtom =
   | astDotPfx | astPiecewise | astMatch
   | astLet | astVar | astReturn | astDefer
   | astSpawn | astAwait | astTry | astImport
-  | astForall | astExists
+  | astChoice | astForall | astExists
   | astWithAttrs ;
 
 (* 2.5  Parenthesised forms — delimiter determines kind.
@@ -123,11 +123,12 @@ astExprAtom =
    (a; b) = sequence, returns b
    (a; b;) = sequence, trailing ; discards, returns () *)
 astParen  = "(" , parenBody , ")" , [ fnTail ] ;
-fnTail    = [ ":" , astTy ] , ( "->" | "~>" ) , astExpr ;
+fnTail    = [ ":" , astTy ] , "=>" , astExpr ;
 
 (* When fnTail is present, paren contents are reinterpreted as parameters.
    ":" before the arrow is the return type annotation.
-   "->" = pure function, "~>" = effectful function.
+   "=>" is the sole value-level arrow (lambdas and match arms).
+   "->" and "~>" are type-only arrows.
    The parser validates parameter syntax after disambiguation. *)
 parenBody =
     (* empty *)                                       (* unit: () *)
@@ -161,15 +162,18 @@ astMatch  = "match" , astExpr ,
             "(" , matchArm , { "|" , matchArm } , ")" ;
 matchArm  = [ attrs ] , astPat , [ "if" , astExpr ] , "=>" , astExpr ;
 
-(* 2.10  Bindings *)
-(* Immutable binding. ref = heap allocation. in = ML-style scope. *)
-astLet = "let" , [ "ref" ] , astPat ,
-         [ tyAnnot ] , ":=" , astExpr ,
-         [ "in" , "(" , astExpr , ")" ] ;
+(* 2.10  Bindings
+   Bracket params introduce type variables: let f [T, U] : sig := body
+   where clause constrains bracket params: let f [T] where T <: Eq : sig *)
+astLet = "let" , [ "ref" ] , astPat , [ bracketParams ] ,
+         [ whereClause ] , [ tyAnnot ] ,
+         ( ":=" , astExpr , [ "in" , "(" , astExpr , ")" ] | (* stub *) ) ;
 
 (* Mutable binding. var appears here and only here — never in astTy. *)
-astVar = "var" , [ "ref" ] , astPat ,
-         [ tyAnnot ] , ":=" , astExpr ;
+astVar = "var" , [ "ref" ] , astPat , [ bracketParams ] ,
+         [ whereClause ] , [ tyAnnot ] , ":=" , astExpr ;
+
+bracketParams = "[" , tyIdent , { "," , tyIdent } , "]" ;
 
 (* 2.11  Other atom forms *)
 astDotPfx  = "." , ident , [ "(" , [ exprList ] , ")" ] ;
@@ -179,6 +183,7 @@ astSpawn   = "spawn" , astExpr ;
 astAwait   = "await" , astExpr ;
 astTry     = "try" , astExpr ;
 astImport  = "import" , litString ;
+astChoice  = "choice" , "{" , astTy , "}" ;
 astForall  = "forall" , tyParamList , [ whereClause ] , "->" , astExpr ;
 astExists  = "exists" , tyParamList , [ whereClause ] , "->" , astExpr ;
 
@@ -189,16 +194,21 @@ astDecl =
   | "export" , "{" , exportList , "}" , [ ":=" , astImport ]
   | astClassDecl
   | astGivenDecl
-  | astEffectDecl ;
+  | astEffectDecl
+  | astForeignDecl ;
 
 astClassDecl  = "class" , ident , [ "over" , tyParamList ] ,
                 [ whereClause ] , "{" , { classMember } , "}" ;
 astGivenDecl  = "given" , astTyNamed , [ "over" , tyParamList ] ,
                 [ whereClause ] , "{" , { classMember } , "}" ;
 astEffectDecl = "effect" , ident , [ "of" , tyParamList ] ,
-                "{" , { effectOp , ";" } , "}" ;
+                "{" , { effectOp , [ ";" ] } , "}" ;
+astForeignDecl = "foreign" , litString ,
+                 ( "let" , foreignBinding
+                 | "(" , { "let" , foreignBinding , ";" } , ")" ) ;
+foreignBinding = ident , [ "as" , litString ] , [ ":" , astTy ] ;
 effectOp      = ident , ":" , astTy ;
-classMember   = ( fnDecl | lawDecl ) , ";" ;
+classMember   = ( fnDecl | lawDecl ) , [ ";" ] ;
 fnDecl        = "let" , opOrIdent , params , [ tyAnnot ] ,
                 [ ":=" , astExpr ] ;
 lawDecl       = "law" , ident , ":=" , astExpr ;
@@ -210,7 +220,7 @@ paramList     = param , { "," , param } ;
    No modifier  = immutable copy
    var          = mutable local copy
    inout        = copy-in copy-out, Ada-style, clean call site *)
-param      = [ "inout" | "var" ] , ident , [ tyAnnot ] , [ ":=" , astExpr ] ;
+param      = [ "inout" | "var" | "ref" ] , ident , [ tyAnnot ] , [ ":=" , astExpr ] ;
 
 exportList = exportItem , { "," , exportItem } ;
 exportItem = ident , [ "as" , ident ] ;
@@ -270,8 +280,12 @@ patList       = astPat , { "," , astPat } ;
 (* 2.15  Attributes *)
 attrs     = attr , { attr } ;
 attr      = "#[" , attrBody , "]" ;
-attrBody  = ident | ident , ":=" , attrValue ;
+attrBody  = ident
+           | ident , ":=" , attrValue
+           | ident , "(" , attrNamedFields , ")" ;
 attrValue = lit | "(" , lit , { "," , lit } , ")" ;
+attrNamedFields = attrNamedField , { "," , attrNamedField } ;
+attrNamedField  = ident , ":=" , lit ;
 
 (* 2.16  Shared *)
 exprList = astExpr , { "," , astExpr } ;
