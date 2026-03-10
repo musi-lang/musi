@@ -62,6 +62,10 @@ pub enum IrType {
         fn_ty: Idx<Self>,
         env_ty: Idx<Self>,
     },
+    /// An opaque foreign type — zero-sized, only used behind `Ptr`.
+    Opaque {
+        name: Symbol,
+    },
     /// Opaque type parameter — used in existentialized generic functions.
     /// Size/alignment/operations accessed via the associated witness table.
     TypeParam {

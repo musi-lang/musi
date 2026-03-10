@@ -74,3 +74,20 @@ pub struct IrLocalDecl {
     /// Source span for diagnostics.
     pub span: Span,
 }
+
+/// A foreign (FFI) function declaration in the IR module.
+#[derive(Debug, Clone)]
+pub struct IrForeignFn {
+    /// Musi-side binding name.
+    pub name: Symbol,
+    /// C-side symbol name (may differ from `name` via `as "..."`).
+    pub ext_name: Symbol,
+    /// Library to link against (`None` = libc/default).
+    pub library: Option<Symbol>,
+    /// Parameter types.
+    pub param_tys: Vec<Idx<IrType>>,
+    /// Return type.
+    pub ret_ty: Idx<IrType>,
+    /// Whether this function is variadic.
+    pub variadic: bool,
+}

@@ -28,7 +28,7 @@ pub mod types;
 pub use constant::{IrConst, IrConstValue};
 pub use effect::{IrEffectDef, IrEffectId, IrEffectOpDef, IrEffectOpId};
 pub use error::IrError;
-pub use func::{IrFnId, IrFunction, IrLocal, IrLocalDecl, IrParam, IrParamMode};
+pub use func::{IrFnId, IrForeignFn, IrFunction, IrLocal, IrLocalDecl, IrParam, IrParamMode};
 pub use inst::{
     IrBinOp, IrCallee, IrInst, IrLabel, IrOperand, IrPlace, IrRvalue, IrSwitchArm, IrUnaryOp,
 };
@@ -48,6 +48,8 @@ pub struct IrModule {
     pub entry: Option<Idx<IrFunction>>,
     /// Effect definitions.
     pub effects: Vec<IrEffectDef>,
+    /// Foreign (FFI) function declarations.
+    pub foreign_fns: Vec<IrForeignFn>,
 }
 
 impl IrModule {
@@ -60,6 +62,7 @@ impl IrModule {
             constants: vec![],
             entry: None,
             effects: vec![],
+            foreign_fns: vec![],
         }
     }
 }
