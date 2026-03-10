@@ -1,14 +1,15 @@
 //! Pattern type checking.
 
+use music_ast::PatIdx;
 use music_ast::lit::Lit;
 use music_ast::pat::Pat;
-use music_shared::{Idx, Span};
+use music_shared::Span;
 
 use crate::checker::Checker;
-use crate::types::Type;
+use crate::types::{Type, TypeIdx};
 
 /// Checks a pattern against an expected type.
-pub(crate) fn check_pat(ck: &mut Checker<'_>, pat_idx: Idx<Pat>, expected: Idx<Type>) {
+pub(crate) fn check_pat(ck: &mut Checker<'_>, pat_idx: PatIdx, expected: TypeIdx) {
     match ck.ctx.ast.pats[pat_idx].clone() {
         Pat::Lit { lit, span } => {
             let lit_ty = match &lit {

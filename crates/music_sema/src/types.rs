@@ -1,7 +1,7 @@
 //! Semantic type representation.
 //!
 //! Types are arena-allocated via `Arena<Type>`, so recursive positions use
-//! `Idx<Type>` (which is `Copy`).  There is no `PrimTy` enum — all types
+//! `TypeIdx` (which is `Copy`).  There is no `PrimTy` enum — all types
 //! including `Int`, `Bool`, `String` are represented as `Type::Named`.
 
 #[cfg(test)]
@@ -13,13 +13,16 @@ use music_shared::{Arena, Idx, Interner, Span, Symbol};
 
 use crate::def::{DefId, DefInfo};
 
+/// Index into the semantic type arena.
+pub type TypeIdx = Idx<Type>;
+
 /// A unique identifier for a type variable (unification or rigid).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TyVarId(pub u32);
 
 /// A resolved semantic type.
 ///
-/// All recursive children use `Idx<Type>` (arena indices) rather than `Box`.
+/// All recursive children use `TypeIdx` (arena indices) rather than `Box`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Type {
     /// A named type (user-defined or prelude-registered), with type arguments.
@@ -71,14 +74,14 @@ pub enum Quantifier {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RecordField {
     pub name: Symbol,
-    pub ty: Idx<Type>,
+    pub ty: TypeIdx,
 }
 
 /// A variant in a structural sum type.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SumVariant {
     pub name: Symbol,
-    pub fields: Vec<Idx<Type>>,
+    pub fields: Vec<TypeIdx>,
 }
 
 /// An effect row: a list of concrete effects plus an optional row variable
@@ -107,14 +110,14 @@ impl EffectRow {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EffectEntry {
     pub def: DefId,
-    pub args: Vec<Idx<Type>>,
+    pub args: Vec<TypeIdx>,
 }
 
 /// A typeclass obligation: "`class` must be satisfied for `args`".
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Obligation {
     pub class: DefId,
-    pub args: Vec<Idx<Type>>,
+    pub args: Vec<TypeIdx>,
     pub span: Span,
 }
 
@@ -122,7 +125,7 @@ pub struct Obligation {
 #[derive(Debug, Clone)]
 pub struct InstanceInfo {
     pub class: DefId,
-    pub target: Idx<Type>,
+    pub target: TypeIdx,
     pub params: Vec<TyVarId>,
     pub constraints: Vec<Obligation>,
     pub members: Vec<(Symbol, DefId)>,
@@ -131,14 +134,14 @@ pub struct InstanceInfo {
 
 /// Helper for displaying types with access to the type arena and def table.
 pub struct TypeDisplay<'a> {
-    pub ty: Idx<Type>,
+    pub ty: TypeIdx,
     pub arena: &'a Arena<Type>,
     pub defs: &'a [DefInfo],
     pub interner: &'a Interner,
 }
 
 impl TypeDisplay<'_> {
-    fn write_ty(&self, f: &mut fmt::Formatter<'_>, ty: Idx<Type>) -> fmt::Result {
+    fn write_ty(&self, f: &mut fmt::Formatter<'_>, ty: TypeIdx) -> fmt::Result {
         let d = TypeDisplay {
             ty,
             arena: self.arena,
@@ -158,12 +161,7 @@ impl TypeDisplay<'_> {
     }
 
     /// Writes types separated by `sep` (e.g. `", "` or `" | "`).
-    fn fmt_types_sep(
-        &self,
-        f: &mut fmt::Formatter<'_>,
-        tys: &[Idx<Type>],
-        sep: &str,
-    ) -> fmt::Result {
+    fn fmt_types_sep(&self, f: &mut fmt::Formatter<'_>, tys: &[TypeIdx], sep: &str) -> fmt::Result {
         for (i, &ty) in tys.iter().enumerate() {
             if i > 0 {
                 write!(f, "{sep}")?;
@@ -173,13 +171,13 @@ impl TypeDisplay<'_> {
         Ok(())
     }
 
-    fn fmt_bracketed_types(&self, f: &mut fmt::Formatter<'_>, tys: &[Idx<Type>]) -> fmt::Result {
+    fn fmt_bracketed_types(&self, f: &mut fmt::Formatter<'_>, tys: &[TypeIdx]) -> fmt::Result {
         write!(f, "[")?;
         self.fmt_types_sep(f, tys, ", ")?;
         write!(f, "]")
     }
 
-    fn fmt_paren_types(&self, f: &mut fmt::Formatter<'_>, tys: &[Idx<Type>]) -> fmt::Result {
+    fn fmt_paren_types(&self, f: &mut fmt::Formatter<'_>, tys: &[TypeIdx]) -> fmt::Result {
         write!(f, "(")?;
         self.fmt_types_sep(f, tys, ", ")?;
         write!(f, ")")
@@ -304,7 +302,7 @@ impl fmt::Display for TypeDisplay<'_> {
 /// Convenience function to format a type as a `Box<str>` for error messages.
 #[must_use]
 pub fn fmt_type(
-    ty: Idx<Type>,
+    ty: TypeIdx,
     arena: &Arena<Type>,
     defs: &[DefInfo],
     interner: &Interner,

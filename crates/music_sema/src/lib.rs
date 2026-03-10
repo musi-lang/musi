@@ -18,6 +18,7 @@
 pub mod checker;
 pub mod def;
 pub mod error;
+pub mod exports;
 pub mod resolve;
 pub mod scope;
 pub mod types;
@@ -29,19 +30,21 @@ pub use def::{DefId, DefInfo, DefKind, DefTable, DefTyInfo};
 pub use error::SemaError;
 pub use resolve::ResolveOutput;
 pub use scope::{ScopeId, ScopeTree};
-pub use types::{EffectRow, InstanceInfo, Obligation, TyVarId, Type};
+pub use types::{EffectRow, InstanceInfo, Obligation, TyVarId, Type, TypeIdx};
 pub use unify::UnifyTable;
 pub use well_known::WellKnown;
 
+pub use exports::{ExportBinding, ModuleExports, collect_exports, exports_to_record_type};
+
 use std::collections::HashMap;
 
-use music_ast::{Expr, ParsedModule};
-use music_shared::{Arena, DiagnosticBag, FileId, Idx, Interner, Span};
+use music_ast::{ExprIdx, ParsedModule};
+use music_shared::{Arena, DiagnosticBag, FileId, Interner, Span, Symbol};
 
 /// Maps from AST nodes to their resolved definitions.
 pub struct ResolutionMap {
     /// Maps each identifier expression to the definition it refers to.
-    pub expr_defs: HashMap<Idx<Expr>, DefId>,
+    pub expr_defs: HashMap<ExprIdx, DefId>,
     /// Maps each binding-site span to its [`DefId`].
     pub pat_defs: HashMap<Span, DefId>,
 }
@@ -53,7 +56,7 @@ pub struct SemaResult {
     /// Name resolution maps.
     pub resolution: ResolutionMap,
     /// The inferred type of each expression node.
-    pub expr_types: HashMap<Idx<Expr>, Idx<Type>>,
+    pub expr_types: HashMap<ExprIdx, TypeIdx>,
     /// The type arena.
     pub types: Arena<Type>,
     /// The unification table (retained so callers can freeze types).
@@ -81,6 +84,19 @@ pub fn analyze(
     file_id: FileId,
     diags: &mut DiagnosticBag,
 ) -> SemaResult {
+    let empty_imports = HashMap::new();
+    analyze_with_imports(module, interner, file_id, diags, &empty_imports)
+}
+
+/// Like [`analyze`], but with pre-computed import types for cross-module resolution.
+#[allow(clippy::implicit_hasher)]
+pub fn analyze_with_imports(
+    module: &ParsedModule,
+    interner: &mut Interner,
+    file_id: FileId,
+    diags: &mut DiagnosticBag,
+    import_types: &HashMap<Symbol, TypeIdx>,
+) -> SemaResult {
     let (mut defs, well_known, mut scopes, module_scope, resolved) =
         analyze_setup(module, interner, file_id, diags);
 
@@ -90,6 +106,7 @@ pub fn analyze(
         file_id,
         well_known: &well_known,
         expr_defs: &resolved.expr_defs,
+        import_types,
     };
     let mut checker = Checker::new(ctx, diags, &mut defs, &mut scopes, module_scope);
 

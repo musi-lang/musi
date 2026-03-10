@@ -6,13 +6,15 @@
 
 use music_ast::expr::{Arrow, BindKind, Expr, LetFields, Param, ParamMode};
 use music_ast::pat::Pat;
-use music_ast::{AstArenas, Lit, ParsedModule, Stmt};
-use music_shared::{DiagnosticBag, FileId, Idx, Interner, Severity, Span, Symbol};
+use music_ast::{AstArenas, ExprIdx, Lit, ParsedModule, Stmt};
+use std::collections::HashMap;
+
+use music_shared::{DiagnosticBag, FileId, Interner, Severity, Span, Symbol};
 
 use crate::{CheckContext, Checker, analyze_setup};
 
 /// Helper to construct a Stmt.
-fn stmt(expr_idx: Idx<Expr>) -> Stmt {
+fn stmt(expr_idx: ExprIdx) -> Stmt {
     Stmt {
         expr: expr_idx,
         span: Span::DUMMY,
@@ -63,12 +65,14 @@ fn check_module(interner: &mut Interner, module: &ParsedModule) -> DiagnosticBag
     let (mut defs, well_known, mut scopes, module_scope, resolved) =
         analyze_setup(module, interner, FileId(0), &mut diags_setup);
 
+    let empty_imports = HashMap::new();
     let ctx = CheckContext {
         ast: &module.arenas,
         interner,
         file_id: FileId(0),
         well_known: &well_known,
         expr_defs: &resolved.expr_defs,
+        import_types: &empty_imports,
     };
     let mut diags = DiagnosticBag::new();
     let mut checker = Checker::new(ctx, &mut diags, &mut defs, &mut scopes, module_scope);

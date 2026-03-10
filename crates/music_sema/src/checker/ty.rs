@@ -1,13 +1,14 @@
 //! Lowering AST type nodes (`Ty`) to semantic `Type`.
 
+use music_ast::TyIdx;
 use music_ast::expr::Arrow;
 use music_ast::ty::{EffectItem, EffectSet, Quantifier as AstQuantifier, Ty, TyParam};
-use music_shared::{Idx, Span, Symbol};
+use music_shared::{Span, Symbol};
 
 use crate::checker::Checker;
 use crate::def::DefId;
 use crate::error::SemaError;
-use crate::types::{EffectEntry, EffectRow, Quantifier, RecordField, Type};
+use crate::types::{EffectEntry, EffectRow, Quantifier, RecordField, Type, TypeIdx};
 
 /// Looks up `name` in scope, reporting `UndefinedName` if missing.
 fn lookup_name_or_error(ck: &mut Checker<'_>, name: Symbol, span: Span) -> Option<DefId> {
@@ -27,7 +28,7 @@ fn lookup_name_or_error(ck: &mut Checker<'_>, name: Symbol, span: Span) -> Optio
 }
 
 /// Lowers an AST `Ty` node to a semantic `Type` in the checker's arena.
-pub(crate) fn lower_ty(ck: &mut Checker<'_>, ty_idx: Idx<Ty>) -> Idx<Type> {
+pub(crate) fn lower_ty(ck: &mut Checker<'_>, ty_idx: TyIdx) -> TypeIdx {
     match ck.ctx.ast.tys[ty_idx].clone() {
         Ty::Var { name, span } => {
             if let Some(def_id) = lookup_name_or_error(ck, name, span) {
@@ -110,11 +111,11 @@ pub(crate) fn lower_ty(ck: &mut Checker<'_>, ty_idx: Idx<Ty>) -> Idx<Type> {
 
 fn lower_ty_fn(
     ck: &mut Checker<'_>,
-    params: &[Idx<Ty>],
-    ret: Idx<Ty>,
+    params: &[TyIdx],
+    ret: TyIdx,
     arrow: Arrow,
     effects: Option<&EffectSet>,
-) -> Idx<Type> {
+) -> TypeIdx {
     let param_tys: Vec<_> = params.iter().map(|&p| lower_ty(ck, p)).collect();
     let ret_ty = lower_ty(ck, ret);
     let effect_row = match (arrow, effects) {
@@ -156,8 +157,8 @@ fn lower_ty_quantified(
     ck: &mut Checker<'_>,
     kind: AstQuantifier,
     params: &[TyParam],
-    body: Idx<Ty>,
-) -> Idx<Type> {
+    body: TyIdx,
+) -> TypeIdx {
     let q = match kind {
         AstQuantifier::Forall => Quantifier::Forall,
         AstQuantifier::Exists => Quantifier::Exists,

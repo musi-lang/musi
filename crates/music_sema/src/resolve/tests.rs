@@ -5,8 +5,8 @@
 
 use music_ast::expr::{Arrow, BindKind, Expr, LetFields, Param, ParamMode};
 use music_ast::pat::Pat;
-use music_ast::{AstArenas, Lit, ParsedModule, Stmt};
-use music_shared::{DiagnosticBag, FileId, Idx, Interner, Span, Symbol};
+use music_ast::{AstArenas, ExprIdx, Lit, ParsedModule, Stmt};
+use music_shared::{DiagnosticBag, FileId, Interner, Span, Symbol};
 
 use crate::def::DefTable;
 use crate::resolve;
@@ -14,7 +14,7 @@ use crate::scope::ScopeTree;
 use crate::well_known;
 
 /// Helper to construct a Stmt.
-fn stmt(expr_idx: Idx<Expr>) -> Stmt {
+fn stmt(expr_idx: ExprIdx) -> Stmt {
     Stmt {
         expr: expr_idx,
         span: Span::DUMMY,

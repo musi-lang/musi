@@ -1,12 +1,12 @@
 //! Type resolution helpers.
 
+use music_ast::TyIdx;
 use music_ast::ty::{Ty, TyNamedRef};
-use music_shared::Idx;
 
 use super::Resolver;
 
 impl Resolver<'_> {
-    pub(super) fn resolve_ty(&mut self, ty_idx: Idx<Ty>) {
+    pub(super) fn resolve_ty(&mut self, ty_idx: TyIdx) {
         match self.ast.tys[ty_idx].clone() {
             Ty::Named { name, args, span } => {
                 if self.scopes.lookup(self.current_scope, name).is_none() {

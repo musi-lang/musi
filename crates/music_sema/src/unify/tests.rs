@@ -214,19 +214,21 @@ fn test_freeze_replaces_solved_vars() {
 
     assert!(table.unify(var, int_ty, &mut arena, &wk));
 
-    let frozen = table.freeze(var, &mut arena);
+    let frozen = table.freeze(var, &mut arena, wk.any);
     assert!(matches!(&arena[frozen], Type::Named { def, .. } if *def == wk.ints.int));
 }
 
 #[test]
-fn test_freeze_unsolved_var_becomes_error() {
-    let (_, _, _, _wk) = make_well_known();
+fn test_freeze_unsolved_var_defaults_to_any() {
+    let (_, _, _, wk) = make_well_known();
     let mut table = UnifyTable::new();
     let mut arena = Arena::new();
 
     let var = table.fresh(Span::DUMMY, &mut arena);
-    let frozen = table.freeze(var, &mut arena);
-    assert!(matches!(&arena[frozen], Type::Error));
+    let frozen = table.freeze(var, &mut arena, wk.any);
+    assert!(
+        matches!(&arena[frozen], Type::Named { def, args } if *def == wk.any && args.is_empty())
+    );
 }
 
 #[test]

@@ -18,9 +18,9 @@ use music_ast::decl::{ClassMember, EffectOp, ForeignDecl};
 use music_ast::expr::{
     Arg, ArrayElem, BindKind, Expr, LetFields, MatchArm, Param, PwGuard, RecField,
 };
-use music_ast::ty::{Constraint, Ty, TyNamedRef, TyParam};
-use music_ast::{AstArenas, ParsedModule};
-use music_shared::{DiagnosticBag, FileId, Idx, Interner, Span, Symbol};
+use music_ast::ty::{Constraint, TyNamedRef, TyParam};
+use music_ast::{AstArenas, ExprIdx, ParsedModule, TyIdx};
+use music_shared::{DiagnosticBag, FileId, Interner, Span, Symbol};
 
 use crate::def::{DefId, DefKind, DefTable};
 use crate::error::SemaError;
@@ -28,7 +28,7 @@ use crate::scope::{ScopeId, ScopeTree};
 
 /// Output accumulators from the resolution pass.
 pub struct ResolveOutput {
-    pub expr_defs: HashMap<Idx<Expr>, DefId>,
+    pub expr_defs: HashMap<ExprIdx, DefId>,
     pub pat_defs: HashMap<Span, DefId>,
 }
 
@@ -79,7 +79,7 @@ pub(super) struct Resolver<'a> {
 }
 
 impl Resolver<'_> {
-    fn collect_top_level(&mut self, expr_idx: Idx<Expr>) {
+    fn collect_top_level(&mut self, expr_idx: ExprIdx) {
         match &self.ast.exprs[expr_idx] {
             Expr::Binding { fields, .. } => {
                 self.define_pat(fields.pat, binding_def_kind(fields.kind));
@@ -118,7 +118,7 @@ impl Resolver<'_> {
     }
 
     /// Pass 2: resolve all name references in an expression.
-    fn resolve_expr(&mut self, expr_idx: Idx<Expr>) {
+    fn resolve_expr(&mut self, expr_idx: ExprIdx) {
         match self.ast.exprs[expr_idx].clone() {
             Expr::Name { name, span } => self.resolve_name(expr_idx, name, span),
             Expr::Lit { .. } | Expr::Error { .. } | Expr::Import { .. } | Expr::Export { .. } => {}
@@ -211,7 +211,7 @@ impl Resolver<'_> {
         }
     }
 
-    fn resolve_name(&mut self, expr_idx: Idx<Expr>, name: Symbol, span: Span) {
+    fn resolve_name(&mut self, expr_idx: ExprIdx, name: Symbol, span: Span) {
         if let Some(def_id) = self.scopes.lookup(self.current_scope, name) {
             let _prev = self.output.expr_defs.insert(expr_idx, def_id);
             self.defs.get_mut(def_id).use_count += 1;
@@ -278,7 +278,7 @@ impl Resolver<'_> {
         }
     }
 
-    fn resolve_expr_block(&mut self, stmts: &[Idx<Expr>], tail: Option<Idx<Expr>>) {
+    fn resolve_expr_block(&mut self, stmts: &[ExprIdx], tail: Option<ExprIdx>) {
         let parent = self.current_scope;
         self.current_scope = self.scopes.push_child(parent);
         for &stmt in stmts {
@@ -299,7 +299,7 @@ impl Resolver<'_> {
         self.current_scope = parent;
     }
 
-    fn resolve_expr_call(&mut self, callee: Idx<Expr>, args: &[Arg]) {
+    fn resolve_expr_call(&mut self, callee: ExprIdx, args: &[Arg]) {
         self.resolve_expr(callee);
         for arg in args {
             if let Arg::Pos { expr, .. } = arg {
@@ -308,7 +308,7 @@ impl Resolver<'_> {
         }
     }
 
-    fn resolve_expr_let(&mut self, fields: &LetFields, body: Option<Idx<Expr>>) {
+    fn resolve_expr_let(&mut self, fields: &LetFields, body: Option<ExprIdx>) {
         self.resolve_expr(fields.value);
         if let Some(ty) = fields.ty {
             self.resolve_ty(ty);
@@ -332,7 +332,7 @@ impl Resolver<'_> {
         }
     }
 
-    fn resolve_expr_fn(&mut self, params: &[Param], ret_ty: Option<Idx<Ty>>, body: Idx<Expr>) {
+    fn resolve_expr_fn(&mut self, params: &[Param], ret_ty: Option<TyIdx>, body: ExprIdx) {
         let parent = self.current_scope;
         self.current_scope = self.scopes.push_child(parent);
         for param in params {
@@ -350,7 +350,7 @@ impl Resolver<'_> {
         self.current_scope = parent;
     }
 
-    fn resolve_expr_match(&mut self, scrutinee: Idx<Expr>, arms: &[MatchArm]) {
+    fn resolve_expr_match(&mut self, scrutinee: ExprIdx, arms: &[MatchArm]) {
         self.resolve_expr(scrutinee);
         for arm in arms {
             let parent = self.current_scope;
@@ -366,7 +366,7 @@ impl Resolver<'_> {
 
     fn resolve_expr_quantified(
         &mut self,
-        body: Idx<Expr>,
+        body: ExprIdx,
         params: &[TyParam],
         constraints: &[Constraint],
     ) {
@@ -441,7 +441,7 @@ impl Resolver<'_> {
         }
     }
 
-    fn span_of_expr(&self, idx: Idx<Expr>) -> Span {
+    fn span_of_expr(&self, idx: ExprIdx) -> Span {
         expr_span(&self.ast.exprs[idx])
     }
 }

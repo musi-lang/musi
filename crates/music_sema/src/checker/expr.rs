@@ -1,30 +1,30 @@
 //! Per-expression synthesis and checking.
 
-use music_ast::Ty;
 use music_ast::expr::{
     Arg, ArrayElem, Arrow, BinOp, Expr, FieldKey, LetFields, MatchArm, Param, RecField, UnaryOp,
 };
 use music_ast::lit::Lit;
-use music_shared::{Idx, Span};
+use music_ast::{ExprIdx, TyIdx};
+use music_shared::{Span, Symbol};
 
 use crate::checker::Checker;
-use crate::checker::decl::check_decl;
 use crate::checker::effects::check_effects_subset;
 use crate::checker::pat::check_pat;
+use crate::checker::stmt::check_stmt;
 use crate::checker::ty::lower_ty;
 use crate::error::SemaError;
 use crate::resolve;
-use crate::types::{EffectRow, RecordField, Type, fmt_type};
+use crate::types::{EffectRow, RecordField, Type, TypeIdx, fmt_type};
 
 /// Synthesises a type for `expr` (inference mode, direction ↑).
-pub(crate) fn synth(ck: &mut Checker<'_>, expr_idx: Idx<Expr>) -> Idx<Type> {
+pub(crate) fn synth(ck: &mut Checker<'_>, expr_idx: ExprIdx) -> TypeIdx {
     let ty = synth_inner(ck, expr_idx);
     ck.record_type(expr_idx, ty);
     ty
 }
 
 /// Checks `expr` against `expected` (checking mode, direction ↓).
-pub(crate) fn check(ck: &mut Checker<'_>, expr_idx: Idx<Expr>, expected: Idx<Type>) {
+pub(crate) fn check(ck: &mut Checker<'_>, expr_idx: ExprIdx, expected: TypeIdx) {
     let found = synth_inner(ck, expr_idx);
     ck.record_type(expr_idx, expected);
     ck.unify_or_report(
@@ -34,7 +34,7 @@ pub(crate) fn check(ck: &mut Checker<'_>, expr_idx: Idx<Expr>, expected: Idx<Typ
     );
 }
 
-fn synth_inner(ck: &mut Checker<'_>, expr_idx: Idx<Expr>) -> Idx<Type> {
+fn synth_inner(ck: &mut Checker<'_>, expr_idx: ExprIdx) -> TypeIdx {
     match ck.ctx.ast.exprs[expr_idx].clone() {
         Expr::Lit { lit, span } => synth_lit(ck, &lit, span),
         Expr::Name { span, .. } => synth_name(ck, expr_idx, span),
@@ -125,15 +125,16 @@ fn synth_inner(ck: &mut Checker<'_>, expr_idx: Idx<Expr>) -> Idx<Type> {
         }
         Expr::Quantified { body, .. } => synth(ck, body),
         Expr::Class { .. } | Expr::Given { .. } | Expr::Effect { .. } | Expr::Foreign { .. } => {
-            check_decl(ck, expr_idx);
+            check_stmt(ck, expr_idx);
             ck.named_ty(ck.ctx.well_known.unit)
         }
-        Expr::Import { .. } | Expr::Export { .. } => ck.named_ty(ck.ctx.well_known.unit),
+        Expr::Import { path, .. } => synth_import(ck, path),
+        Expr::Export { .. } => ck.named_ty(ck.ctx.well_known.unit),
         Expr::Error { .. } => ck.error_ty(),
     }
 }
 
-fn synth_block(ck: &mut Checker<'_>, stmts: &[Idx<Expr>], tail: Option<Idx<Expr>>) -> Idx<Type> {
+fn synth_block(ck: &mut Checker<'_>, stmts: &[ExprIdx], tail: Option<ExprIdx>) -> TypeIdx {
     for &stmt in stmts {
         let _ty = synth(ck, stmt);
     }
@@ -144,7 +145,7 @@ fn synth_block(ck: &mut Checker<'_>, stmts: &[Idx<Expr>], tail: Option<Idx<Expr>
     }
 }
 
-fn synth_let(ck: &mut Checker<'_>, fields: &LetFields, body: Option<Idx<Expr>>) -> Idx<Type> {
+fn synth_let(ck: &mut Checker<'_>, fields: &LetFields, body: Option<ExprIdx>) -> TypeIdx {
     let value_ty = if let Some(ty_ann) = fields.ty {
         let ann = lower_ty(ck, ty_ann);
         check(ck, fields.value, ann);
@@ -162,7 +163,7 @@ fn synth_let(ck: &mut Checker<'_>, fields: &LetFields, body: Option<Idx<Expr>>) 
     }
 }
 
-fn synth_binding(ck: &mut Checker<'_>, fields: &LetFields) -> Idx<Type> {
+fn synth_binding(ck: &mut Checker<'_>, fields: &LetFields) -> TypeIdx {
     let value_ty = if let Some(ty_ann) = fields.ty {
         let ann = lower_ty(ck, ty_ann);
         check(ck, fields.value, ann);
@@ -178,11 +179,11 @@ fn synth_fn(
     ck: &mut Checker<'_>,
     params: &[Param],
     arrow: Arrow,
-    ret_ty: Option<Idx<Ty>>,
-    body: Idx<Expr>,
+    ret_ty: Option<TyIdx>,
+    body: ExprIdx,
     span: Span,
-) -> Idx<Type> {
-    let param_tys: Vec<Idx<Type>> = params
+) -> TypeIdx {
+    let param_tys: Vec<TypeIdx> = params
         .iter()
         .map(|p| {
             if let Some(ty) = p.ty {
@@ -216,7 +217,7 @@ fn synth_fn(
     })
 }
 
-fn synth_field(ck: &mut Checker<'_>, object: Idx<Expr>, field: FieldKey, span: Span) -> Idx<Type> {
+fn synth_field(ck: &mut Checker<'_>, object: ExprIdx, field: FieldKey, span: Span) -> TypeIdx {
     let obj_ty = synth(ck, object);
     let obj_ty = ck.resolve_ty(obj_ty);
     match &ck.store.types[obj_ty] {
@@ -258,7 +259,7 @@ fn synth_field(ck: &mut Checker<'_>, object: Idx<Expr>, field: FieldKey, span: S
     }
 }
 
-fn synth_record(ck: &mut Checker<'_>, fields: &[RecField]) -> Idx<Type> {
+fn synth_record(ck: &mut Checker<'_>, fields: &[RecField]) -> TypeIdx {
     let rec_fields: Vec<_> = fields
         .iter()
         .filter_map(|f| match f {
@@ -280,7 +281,7 @@ fn synth_record(ck: &mut Checker<'_>, fields: &[RecField]) -> Idx<Type> {
     })
 }
 
-fn synth_array(ck: &mut Checker<'_>, elems: &[ArrayElem], span: Span) -> Idx<Type> {
+fn synth_array(ck: &mut Checker<'_>, elems: &[ArrayElem], span: Span) -> TypeIdx {
     let elem_ty = ck.fresh_var(span);
     for elem in elems {
         match elem {
@@ -295,12 +296,7 @@ fn synth_array(ck: &mut Checker<'_>, elems: &[ArrayElem], span: Span) -> Idx<Typ
     })
 }
 
-fn synth_match(
-    ck: &mut Checker<'_>,
-    scrutinee: Idx<Expr>,
-    arms: &[MatchArm],
-    span: Span,
-) -> Idx<Type> {
+fn synth_match(ck: &mut Checker<'_>, scrutinee: ExprIdx, arms: &[MatchArm], span: Span) -> TypeIdx {
     let scrut_ty = synth(ck, scrutinee);
     let result_ty = ck.fresh_var(span);
     for arm in arms {
@@ -315,7 +311,7 @@ fn synth_match(
     result_ty
 }
 
-fn synth_lit(ck: &mut Checker<'_>, lit: &Lit, _span: Span) -> Idx<Type> {
+fn synth_lit(ck: &mut Checker<'_>, lit: &Lit, _span: Span) -> TypeIdx {
     match lit {
         Lit::Int { .. } => ck.named_ty(ck.ctx.well_known.ints.int),
         Lit::Float { .. } => ck.named_ty(ck.ctx.well_known.floats.float64),
@@ -325,7 +321,7 @@ fn synth_lit(ck: &mut Checker<'_>, lit: &Lit, _span: Span) -> Idx<Type> {
     }
 }
 
-fn synth_name(ck: &mut Checker<'_>, expr_idx: Idx<Expr>, span: Span) -> Idx<Type> {
+fn synth_name(ck: &mut Checker<'_>, expr_idx: ExprIdx, span: Span) -> TypeIdx {
     if let Some(&def_id) = ck.ctx.expr_defs.get(&expr_idx) {
         ck.defs
             .get(def_id)
@@ -337,7 +333,7 @@ fn synth_name(ck: &mut Checker<'_>, expr_idx: Idx<Expr>, span: Span) -> Idx<Type
     }
 }
 
-fn synth_call(ck: &mut Checker<'_>, callee: Idx<Expr>, args: &[Arg], span: Span) -> Idx<Type> {
+fn synth_call(ck: &mut Checker<'_>, callee: ExprIdx, args: &[Arg], span: Span) -> TypeIdx {
     let callee_ty = synth(ck, callee);
     let callee_ty = ck.resolve_ty(callee_ty);
 
@@ -404,10 +400,10 @@ fn synth_call(ck: &mut Checker<'_>, callee: Idx<Expr>, args: &[Arg], span: Span)
 fn synth_binop(
     ck: &mut Checker<'_>,
     op: BinOp,
-    left: Idx<Expr>,
-    right: Idx<Expr>,
+    left: ExprIdx,
+    right: ExprIdx,
     span: Span,
-) -> Idx<Type> {
+) -> TypeIdx {
     let left_ty = synth(ck, left);
     let right_ty = synth(ck, right);
 
@@ -462,7 +458,7 @@ fn synth_binop(
     }
 }
 
-fn synth_unaryop(ck: &mut Checker<'_>, op: UnaryOp, operand: Idx<Expr>, span: Span) -> Idx<Type> {
+fn synth_unaryop(ck: &mut Checker<'_>, op: UnaryOp, operand: ExprIdx, span: Span) -> TypeIdx {
     let operand_ty = synth(ck, operand);
     match op {
         UnaryOp::Not => {
@@ -473,5 +469,13 @@ fn synth_unaryop(ck: &mut Checker<'_>, op: UnaryOp, operand: Idx<Expr>, span: Sp
         UnaryOp::Neg | UnaryOp::Defer | UnaryOp::Spawn | UnaryOp::Await | UnaryOp::Try => {
             operand_ty
         }
+    }
+}
+
+fn synth_import(ck: &mut Checker<'_>, path: Symbol) -> TypeIdx {
+    if let Some(&record_ty) = ck.ctx.import_types.get(&path) {
+        record_ty
+    } else {
+        ck.named_ty(ck.ctx.well_known.unit)
     }
 }

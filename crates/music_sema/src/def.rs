@@ -3,9 +3,9 @@
 #[cfg(test)]
 mod tests;
 
-use music_shared::{Idx, Span, Symbol};
+use music_shared::{Span, Symbol};
 
-use crate::types::{Obligation, TyVarId, Type};
+use crate::types::{Obligation, TyVarId, TypeIdx};
 
 /// A unique identifier for a definition (binding, function, type, variant, ...).
 ///
@@ -49,7 +49,7 @@ pub enum DefKind {
 #[derive(Debug, Clone, Default)]
 pub struct DefTyInfo {
     /// Filled by the type checker once the type has been inferred/checked.
-    pub ty: Option<Idx<Type>>,
+    pub ty: Option<TypeIdx>,
     /// For generic definitions: the type variables that are universally quantified.
     pub ty_params: Vec<TyVarId>,
     /// Typeclass constraints on this definition.

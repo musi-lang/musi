@@ -3,9 +3,10 @@
 #[cfg(test)]
 mod tests;
 
-use music_shared::{Arena, Idx, Span};
+use music_shared::{Arena, Span};
 
-use crate::types::{RecordField, SumVariant, TyVarId, Type};
+use crate::DefId;
+use crate::types::{RecordField, SumVariant, TyVarId, Type, TypeIdx};
 use crate::well_known::WellKnown;
 
 /// Whether a type variable is solvable (unification) or rigid (skolem).
@@ -20,7 +21,7 @@ enum TyVarKind {
 /// A single entry in the unification table.
 struct TyVarEntry {
     _kind: TyVarKind,
-    binding: Option<Idx<Type>>,
+    binding: Option<TypeIdx>,
     _origin: Span,
 }
 
@@ -36,14 +37,14 @@ impl UnifyTable {
     }
 
     #[must_use]
-    pub fn fresh(&mut self, span: Span, arena: &mut Arena<Type>) -> Idx<Type> {
+    pub fn fresh(&mut self, span: Span, arena: &mut Arena<Type>) -> TypeIdx {
         let id = self.alloc_var(TyVarKind::Unification, span);
         arena.alloc(Type::Var(id))
     }
 
     /// Allocates a fresh rigid (skolem) variable.
     #[must_use]
-    pub fn fresh_rigid(&mut self, span: Span, arena: &mut Arena<Type>) -> (TyVarId, Idx<Type>) {
+    pub fn fresh_rigid(&mut self, span: Span, arena: &mut Arena<Type>) -> (TyVarId, TypeIdx) {
         let id = self.alloc_var(TyVarKind::Rigid, span);
         let idx = arena.alloc(Type::Rigid(id));
         (id, idx)
@@ -67,7 +68,7 @@ impl UnifyTable {
     ///
     /// Panics if `var` is out of range.
     #[must_use]
-    pub fn probe(&self, var: TyVarId) -> Option<Idx<Type>> {
+    pub fn probe(&self, var: TyVarId) -> Option<TypeIdx> {
         let idx = usize::try_from(var.0).expect("TyVarId in range");
         self.vars[idx].binding
     }
@@ -75,7 +76,7 @@ impl UnifyTable {
     /// # Panics
     ///
     /// Panics if `var` is already bound.
-    pub fn bind(&mut self, var: TyVarId, ty: Idx<Type>) {
+    pub fn bind(&mut self, var: TyVarId, ty: TypeIdx) {
         let idx = usize::try_from(var.0).expect("TyVarId in range");
         assert!(self.vars[idx].binding.is_none(), "variable already bound");
         self.vars[idx].binding = Some(ty);
@@ -98,7 +99,7 @@ impl UnifyTable {
     /// If `ty` is `Var(v)` and `v` is bound, follows the binding recursively.
     /// Otherwise returns `ty` unchanged.
     #[must_use]
-    pub fn resolve(&self, ty: Idx<Type>, arena: &Arena<Type>) -> Idx<Type> {
+    pub fn resolve(&self, ty: TypeIdx, arena: &Arena<Type>) -> TypeIdx {
         match &arena[ty] {
             Type::Var(v) => self
                 .probe(*v)
@@ -112,7 +113,7 @@ impl UnifyTable {
     /// Returns `true` if `var` is found, meaning binding `var` to `ty`
     /// would create an infinite type.
     #[must_use]
-    pub fn occurs(&self, var: TyVarId, ty: Idx<Type>, arena: &Arena<Type>) -> bool {
+    pub fn occurs(&self, var: TyVarId, ty: TypeIdx, arena: &Arena<Type>) -> bool {
         let ty = self.resolve(ty, arena);
         match &arena[ty] {
             Type::Var(v) | Type::Rigid(v) => *v == var,
@@ -145,8 +146,8 @@ impl UnifyTable {
     /// On failure, returns `false` and the caller should report a diagnostic.
     pub fn unify(
         &mut self,
-        a: Idx<Type>,
-        b: Idx<Type>,
+        a: TypeIdx,
+        b: TypeIdx,
         arena: &mut Arena<Type>,
         well_known: &WellKnown,
     ) -> bool {
@@ -246,7 +247,7 @@ impl UnifyTable {
     /// Attempts to bind a unification variable to a target type.
     ///
     /// Returns `false` if the occurs check fails (would create infinite type).
-    fn try_bind_var(&mut self, var: TyVarId, target: Idx<Type>, arena: &Arena<Type>) -> bool {
+    fn try_bind_var(&mut self, var: TyVarId, target: TypeIdx, arena: &Arena<Type>) -> bool {
         if self.occurs(var, target, arena) {
             return false;
         }
@@ -256,10 +257,10 @@ impl UnifyTable {
 
     fn unify_fn(
         &mut self,
-        p1: &[Idx<Type>],
-        r1: Idx<Type>,
-        p2: &[Idx<Type>],
-        r2: Idx<Type>,
+        p1: &[TypeIdx],
+        r1: TypeIdx,
+        p2: &[TypeIdx],
+        r2: TypeIdx,
         arena: &mut Arena<Type>,
         well_known: &WellKnown,
     ) -> bool {
@@ -272,7 +273,7 @@ impl UnifyTable {
 
     fn unify_pairwise(
         &mut self,
-        pairs: &[(Idx<Type>, Idx<Type>)],
+        pairs: &[(TypeIdx, TypeIdx)],
         arena: &mut Arena<Type>,
         well_known: &WellKnown,
     ) -> bool {
@@ -328,19 +329,25 @@ impl UnifyTable {
 impl UnifyTable {
     /// Recursively replaces all solved `Var` with their bindings.
     ///
-    /// Unsolved `Var` → `Error` (erasure). Used before exporting types.
+    /// Unsolved `Var` defaults to `Any` (the top type). Used before exporting types.
     #[must_use]
-    pub fn freeze(&self, ty: Idx<Type>, arena: &mut Arena<Type>) -> Idx<Type> {
+    pub fn freeze(&self, ty: TypeIdx, arena: &mut Arena<Type>, any_def: DefId) -> TypeIdx {
         match arena[ty].clone() {
             Type::Var(v) => {
                 if let Some(bound) = self.probe(v) {
-                    self.freeze(bound, arena)
+                    self.freeze(bound, arena, any_def)
                 } else {
-                    arena.alloc(Type::Error)
+                    arena.alloc(Type::Named {
+                        def: any_def,
+                        args: vec![],
+                    })
                 }
             }
             Type::Named { def, args } => {
-                let args: Vec<_> = args.iter().map(|&a| self.freeze(a, arena)).collect();
+                let args: Vec<_> = args
+                    .iter()
+                    .map(|&a| self.freeze(a, arena, any_def))
+                    .collect();
                 arena.alloc(Type::Named { def, args })
             }
             Type::Fn {
@@ -348,8 +355,11 @@ impl UnifyTable {
                 ret,
                 effects,
             } => {
-                let params: Vec<_> = params.iter().map(|&p| self.freeze(p, arena)).collect();
-                let ret = self.freeze(ret, arena);
+                let params: Vec<_> = params
+                    .iter()
+                    .map(|&p| self.freeze(p, arena, any_def))
+                    .collect();
+                let ret = self.freeze(ret, arena, any_def);
                 arena.alloc(Type::Fn {
                     params,
                     ret,
@@ -357,7 +367,10 @@ impl UnifyTable {
                 })
             }
             Type::Tuple { elems } => {
-                let elems: Vec<_> = elems.iter().map(|&e| self.freeze(e, arena)).collect();
+                let elems: Vec<_> = elems
+                    .iter()
+                    .map(|&e| self.freeze(e, arena, any_def))
+                    .collect();
                 arena.alloc(Type::Tuple { elems })
             }
             Type::Record { fields, open } => {
@@ -365,17 +378,17 @@ impl UnifyTable {
                     .iter()
                     .map(|f| RecordField {
                         name: f.name,
-                        ty: self.freeze(f.ty, arena),
+                        ty: self.freeze(f.ty, arena, any_def),
                     })
                     .collect();
                 arena.alloc(Type::Record { fields, open })
             }
             Type::Array { elem, len } => {
-                let elem = self.freeze(elem, arena);
+                let elem = self.freeze(elem, arena, any_def);
                 arena.alloc(Type::Array { elem, len })
             }
             Type::Ref { inner } => {
-                let inner = self.freeze(inner, arena);
+                let inner = self.freeze(inner, arena, any_def);
                 arena.alloc(Type::Ref { inner })
             }
             Type::Quantified {
@@ -384,7 +397,7 @@ impl UnifyTable {
                 constraints,
                 body,
             } => {
-                let body = self.freeze(body, arena);
+                let body = self.freeze(body, arena, any_def);
                 arena.alloc(Type::Quantified {
                     kind,
                     params,
@@ -393,7 +406,10 @@ impl UnifyTable {
                 })
             }
             Type::AnonSum { variants } => {
-                let variants: Vec<_> = variants.iter().map(|&v| self.freeze(v, arena)).collect();
+                let variants: Vec<_> = variants
+                    .iter()
+                    .map(|&v| self.freeze(v, arena, any_def))
+                    .collect();
                 arena.alloc(Type::AnonSum { variants })
             }
             Type::Sum { variants } => {
@@ -401,7 +417,11 @@ impl UnifyTable {
                     .iter()
                     .map(|v| SumVariant {
                         name: v.name,
-                        fields: v.fields.iter().map(|&f| self.freeze(f, arena)).collect(),
+                        fields: v
+                            .fields
+                            .iter()
+                            .map(|&f| self.freeze(f, arena, any_def))
+                            .collect(),
                     })
                     .collect();
                 arena.alloc(Type::Sum { variants })

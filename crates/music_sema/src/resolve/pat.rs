@@ -1,7 +1,7 @@
 //! Pattern resolution and definition.
 
+use music_ast::PatIdx;
 use music_ast::pat::Pat;
-use music_shared::Idx;
 
 use crate::def::DefKind;
 
@@ -9,7 +9,7 @@ use super::Resolver;
 
 impl Resolver<'_> {
     /// Resolve pattern bindings, creating defs for each bound name.
-    pub(super) fn resolve_pat(&mut self, pat_idx: Idx<Pat>) {
+    pub(super) fn resolve_pat(&mut self, pat_idx: PatIdx) {
         match self.ast.pats[pat_idx].clone() {
             Pat::Bind {
                 name, span, inner, ..
@@ -46,7 +46,7 @@ impl Resolver<'_> {
         }
     }
 
-    pub(super) fn define_pat(&mut self, pat_idx: Idx<Pat>, kind: DefKind) {
+    pub(super) fn define_pat(&mut self, pat_idx: PatIdx, kind: DefKind) {
         match self.ast.pats[pat_idx].clone() {
             Pat::Bind {
                 name, span, inner, ..

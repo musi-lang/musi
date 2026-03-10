@@ -9,7 +9,7 @@ use crate::checker::expr::{check, synth};
 use crate::checker::ty::lower_ty;
 
 /// Checks a declaration expression (class, given, effect, foreign).
-pub(crate) fn check_decl(ck: &mut Checker<'_>, expr_idx: Idx<music_ast::Expr>) {
+pub(crate) fn check_stmt(ck: &mut Checker<'_>, expr_idx: Idx<music_ast::Expr>) {
     match ck.ctx.ast.exprs[expr_idx].clone() {
         Expr::Class { members, .. } => {
             for member in &members {
