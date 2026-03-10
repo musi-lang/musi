@@ -3,44 +3,10 @@
 use crate::error::VmError;
 use crate::heap::Heap;
 use crate::loader::LoadedConst;
+#[allow(clippy::wildcard_imports)]
+use crate::opcode::*;
 use crate::value::Value;
 use crate::vm::Frame;
-
-// Opcode constants.
-const NOP: u8 = 0x00;
-const DUP: u8 = 0x06;
-const POP: u8 = 0x07;
-const SWP: u8 = 0x08;
-
-const LD_LOC: u8 = 0x40;
-const ST_LOC: u8 = 0x41;
-const LD_CST: u8 = 0x42;
-const ST_FLD: u8 = 0x43;
-const MK_PRD: u8 = 0x44;
-const LD_FLD: u8 = 0x45;
-const MK_VAR: u8 = 0x46;
-const LD_PAY: u8 = 0x47;
-const CMP_TAG: u8 = 0x48;
-
-const LD_TAG: u8 = 0x61;
-const LD_LEN: u8 = 0x62;
-const LD_IDX: u8 = 0x63;
-const ST_IDX: u8 = 0x64;
-const FRE: u8 = 0x65;
-
-const LD_LOC_W: u8 = 0x80;
-const ST_LOC_W: u8 = 0x81;
-const LD_CST_W: u8 = 0x82;
-const ST_FLD_W: u8 = 0x83;
-const MK_VAR_W: u8 = 0x84;
-const CMP_TAG_W: u8 = 0x85;
-
-const MK_ARR: u8 = 0xC6;
-const ALC_REF: u8 = 0xC7;
-const ALC_MAN: u8 = 0xC8;
-const ALC_ARN: u8 = 0xC9;
-const LD_GLB: u8 = 0xC4;
-const ST_GLB: u8 = 0xC5;
 
 /// Dispatch §0/§5/§9/§12 structural opcodes.
 ///
@@ -248,18 +214,18 @@ fn exec_array_alloc_globals(
         LD_LEN => exec_ld_len(frame, heap),
         LD_IDX => exec_ld_idx(frame, heap),
         ST_IDX => exec_st_idx(frame, heap),
-        FRE => Err(VmError::Unimplemented {
-            desc: "fre instruction",
-        }),
+        FRE => {
+            let obj_val = pop(frame)?;
+            let ptr = obj_val.as_ref()?;
+            heap.free(ptr)?;
+            Ok(true)
+        }
         MK_ARR => exec_mk_arr(operand, frame, heap),
-        ALC_REF | ALC_ARN => {
+        ALC_REF | ALC_MAN | ALC_ARN => {
             let ptr = heap.alloc(operand, vec![]);
             frame.stack.push(Value::from_ref(ptr));
             Ok(true)
         }
-        ALC_MAN => Err(VmError::Unimplemented {
-            desc: "alc.man requires unsafe",
-        }),
         LD_GLB => exec_ld_glb(operand, frame, globals),
         ST_GLB => exec_st_glb(operand, frame, globals),
         _ => Ok(false),

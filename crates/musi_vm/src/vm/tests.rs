@@ -841,3 +841,108 @@ fn test_value_try_as_ref() {
     assert!(Value::from_int(42).try_as_ref().is_none());
     assert!(Value::UNIT.try_as_ref().is_none());
 }
+
+// ── Tier 1: CNV_TRM ──────────────────────────────────────────────────────────
+
+#[test]
+fn test_cnv_trm_passthrough_preserves_bits() {
+    // Push int 42, CNV_TRM, verify result is int 42.
+    // CNV_TRM (0x60) is a 2-byte instruction.
+    let bytes = make_msbc(
+        &[ConstEntry::I32(42)],
+        &[fn_def(0, 0, 0, vec![LD_CST, 0, CNV_TRM, 0, RET])],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 42);
+}
+
+// ── Tier 1: FRE ──────────────────────────────────────────────────────────────
+
+#[test]
+fn test_fre_frees_heap_object() {
+    // Alloc a product, dup the ref, save one copy, free the other, verify freed.
+    let bytes = make_msbc(
+        &[ConstEntry::I32(1)],
+        &[fn_def(
+            0,
+            1,
+            0,
+            vec![
+                LD_CST, 0,   // push 1
+                MK_PRD, 1,   // mk.prd 1 → ref
+                DUP,         // dup ref
+                ST_LOC, 0,   // save copy to local[0]
+                FRE, 0,      // free the ref on stack (2-byte instr)
+                LD_LOC, 0,   // load the saved ref
+                RET,
+            ],
+        )],
+    );
+    let (vm, result) = run_vm(&bytes);
+    let result = result.expect("runs");
+    let ptr = result.as_ref().expect("is ref");
+    // The object was freed — accessing it should fail.
+    assert!(
+        matches!(vm.heap().get(ptr), Err(VmError::FreedObject { .. })),
+        "object should be freed"
+    );
+}
+
+#[test]
+fn test_fre_double_free_returns_error() {
+    // Alloc, dup, save ref, free twice — second free should error.
+    let bytes = make_msbc(
+        &[ConstEntry::I32(1)],
+        &[fn_def(
+            0,
+            1,
+            0,
+            vec![
+                LD_CST, 0,   // push 1
+                MK_PRD, 1,   // mk.prd 1 → ref
+                DUP,         // dup ref
+                ST_LOC, 0,   // save copy
+                DUP,         // dup again for second free
+                FRE, 0,      // first free
+                FRE, 0,      // second free — should error
+                LD_LOC, 0,
+                RET,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    let err = result.unwrap_err();
+    match &err {
+        VmError::Runtime { source, .. } => {
+            assert!(
+                matches!(**source, VmError::FreedObject { .. }),
+                "expected FreedObject, got {source:?}"
+            );
+        }
+        _ => panic!("expected Runtime error, got {err:?}"),
+    }
+}
+
+// ── Tier 1: ALC_MAN ──────────────────────────────────────────────────────────
+
+#[test]
+fn test_alc_man_allocates_object() {
+    // ALC_MAN allocates like ALC_REF.
+    let bytes = make_msbc(
+        &[],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                ALC_MAN, 0, 0, 0, 0, // alc.man type_id=0
+                RET,
+            ],
+        )],
+    );
+    let (vm, result) = run_vm(&bytes);
+    let result = result.expect("runs");
+    assert!(result.as_ref().is_ok(), "should be a ref");
+    assert!(vm.heap().live_count() >= 1, "heap should have at least 1 object");
+}
+

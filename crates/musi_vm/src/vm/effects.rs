@@ -2,15 +2,9 @@
 
 use crate::error::VmError;
 use crate::loader::{HandlerEntry, LoadedEffect};
+#[allow(clippy::wildcard_imports)]
+use crate::opcode::*;
 use crate::vm::{EffFrame, Frame};
-
-// Opcode constants.
-const EFF_PSH: u8 = 0x4C;
-const EFF_POP: u8 = 0x4D;
-const EFF_RES_C: u8 = 0x66;
-const EFF_ABT: u8 = 0x67;
-const EFF_DO: u8 = 0xCA;
-const EFF_RES: u8 = 0xCB;
 
 /// Dispatch §13 effect opcodes.
 pub fn exec(
@@ -35,16 +29,9 @@ pub fn exec(
             }
             Ok(EffectAction::Continue)
         }
-        EFF_DO => exec_eff_do(operand, frame, effects),
-        EFF_RES => Err(VmError::Unimplemented {
-            desc: "eff.res (caller-side resume) not yet implemented",
-        }),
-        EFF_RES_C => {
-            let _val = frame.stack.pop().ok_or_else(|| VmError::Malformed {
-                desc: "eff.res.c on empty stack".into(),
-            })?;
-            Ok(EffectAction::Continue)
-        }
+        EFF_DO => Ok(exec_eff_do(operand, frame, effects)),
+        EFF_RES => Ok(EffectAction::Resume),
+        EFF_RES_C => Ok(EffectAction::Continue),
         EFF_ABT => {
             frame.eff_stack.clear();
             Ok(EffectAction::Abort)
@@ -75,42 +62,41 @@ fn exec_eff_psh(
 }
 
 /// Handle `EFF_DO`: look up which effect owns the given `op_id`, then find
-/// the handler in the effect stack.
+/// the handler in the current frame's effect stack. If not found, returns
+/// `CrossFrameSearch` so the VM can search the entire call stack.
 fn exec_eff_do(
     op_id: u32,
     frame: &Frame,
     effects: &[LoadedEffect],
-) -> Result<EffectAction, VmError> {
-    // Find the effect that contains this op_id.
-    let effect_id_for_op = effects
-        .iter()
-        .find(|eff| eff.ops.iter().any(|op| op.id == op_id))
-        .map(|eff| eff.id);
-
-    // Fallback: treat op_id as effect_id (backward-compatible with
-    // simple single-operation effects).
-    let search_id = effect_id_for_op.unwrap_or(op_id);
-
+) -> EffectAction {
+    let search_id = resolve_effect_id(op_id, effects);
     let search_id_u8 = u8::try_from(search_id & 0xFF).unwrap_or(u8::MAX);
 
-    frame
+    // Search current frame first.
+    if let Some(eff_frame) = frame
         .eff_stack
         .iter()
         .rev()
         .find(|f| f.effect_id == search_id_u8)
-        .copied()
-        .map_or_else(
-            || {
-                Err(VmError::NoHandler {
-                    effect_id: search_id_u8,
-                })
-            },
-            |eff_frame| {
-                Ok(EffectAction::DoEffect {
-                    handler_fn_id: eff_frame.handler_fn_id,
-                })
-            },
-        )
+    {
+        return EffectAction::DoEffect {
+            handler_fn_id: eff_frame.handler_fn_id,
+        };
+    }
+
+    // Not found in current frame — request cross-frame search.
+    EffectAction::CrossFrameSearch {
+        effect_id: search_id_u8,
+    }
+}
+
+/// Resolve an `op_id` to an `effect_id` by searching the effects table.
+/// Falls back to treating `op_id` as `effect_id` for simple single-op effects.
+pub fn resolve_effect_id(op_id: u32, effects: &[LoadedEffect]) -> u32 {
+    effects
+        .iter()
+        .find(|eff| eff.ops.iter().any(|op| op.id == op_id))
+        .map_or(op_id, |eff| eff.id)
 }
 
 /// What the effect dispatcher wants the main loop to do after handling an opcode.
@@ -122,6 +108,10 @@ pub enum EffectAction {
     Continue,
     /// Call handler function with the operand stack arguments.
     DoEffect { handler_fn_id: u32 },
+    /// Handler not found in current frame — search entire call stack.
+    CrossFrameSearch { effect_id: u8 },
     /// Effect aborted — unwind to nearest handler.
     Abort,
+    /// Resume a captured continuation (`EFF_RES`).
+    Resume,
 }

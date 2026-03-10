@@ -1,63 +1,10 @@
 //! §1–§4 arithmetic, bitwise, comparison, and conversion dispatch.
 
 use crate::error::VmError;
+#[allow(clippy::wildcard_imports)]
+use crate::opcode::*;
 use crate::value::Value;
 use crate::vm::Frame;
-
-// Opcode constants.
-const I_ADD: u8 = 0x10;
-const I_ADD_UN: u8 = 0x11;
-const I_SUB: u8 = 0x12;
-const I_SUB_UN: u8 = 0x13;
-const I_MUL: u8 = 0x14;
-const I_MUL_UN: u8 = 0x15;
-const I_DIV: u8 = 0x16;
-const I_DIV_UN: u8 = 0x17;
-const I_REM: u8 = 0x18;
-const I_REM_UN: u8 = 0x19;
-const I_NEG: u8 = 0x1A;
-
-const F_ADD: u8 = 0x20;
-const F_SUB: u8 = 0x21;
-const F_MUL: u8 = 0x22;
-const F_DIV: u8 = 0x23;
-const F_REM: u8 = 0x24;
-const F_NEG: u8 = 0x25;
-
-const B_AND: u8 = 0x30;
-const B_OR: u8 = 0x31;
-const B_XOR: u8 = 0x32;
-const B_NOT: u8 = 0x33;
-const B_SHL: u8 = 0x34;
-const B_SHR: u8 = 0x36;
-const B_SHR_UN: u8 = 0x37;
-
-const CMP_EQ: u8 = 0x3B;
-const CMP_NE: u8 = 0x3C;
-
-const CMP_LT: u8 = 0x50;
-const CMP_LT_UN: u8 = 0x51;
-const CMP_LE: u8 = 0x52;
-const CMP_LE_UN: u8 = 0x53;
-const CMP_GT: u8 = 0x54;
-const CMP_GT_UN: u8 = 0x55;
-const CMP_GE: u8 = 0x56;
-const CMP_GE_UN: u8 = 0x57;
-
-const CMP_F_EQ: u8 = 0x58;
-const CMP_F_NE: u8 = 0x59;
-const CMP_F_LT: u8 = 0x5A;
-const CMP_F_LE: u8 = 0x5B;
-const CMP_F_GT: u8 = 0x5C;
-const CMP_F_GE: u8 = 0x5D;
-
-const CNV_ITF: u8 = 0x5E;
-const CNV_FTI: u8 = 0x5F;
-const CNV_TRM: u8 = 0x60;
-
-const CNV_WDN: u8 = 0x49;
-const CNV_WDN_UN: u8 = 0x4A;
-const CNV_NRW: u8 = 0x4B;
 
 /// Dispatch §1–§4 arithmetic/compare/convert opcodes.
 ///
@@ -369,9 +316,10 @@ fn exec_conv(op: u8, frame: &mut Frame) -> Result<bool, VmError> {
             frame.stack.push(Value::from_int(n));
         }
         CNV_TRM => {
-            return Err(VmError::Unimplemented {
-                desc: "cnv.trm requires unsafe effect context",
-            });
+            // Bit transmute: in NaN-boxed representation the raw u64 stays
+            // the same — type reinterpretation is a compile-time concern.
+            let a = pop1(frame)?;
+            frame.stack.push(a);
         }
         CNV_WDN | CNV_NRW => {
             let a = pop1(frame)?;

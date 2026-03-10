@@ -134,6 +134,26 @@ impl Heap {
         slot.as_mut().ok_or(VmError::FreedObject { index: ptr })
     }
 
+    /// Manually free a heap object by its index.
+    ///
+    /// # Errors
+    ///
+    /// Returns `OutOfBounds` if `ptr` is not a valid heap index, or
+    /// `FreedObject` if the slot has already been freed.
+    pub fn free(&mut self, ptr: usize) -> Result<(), VmError> {
+        let len = self.objects.len();
+        let slot = self
+            .objects
+            .get_mut(ptr)
+            .ok_or(VmError::OutOfBounds { index: ptr, len })?;
+        if slot.is_none() {
+            return Err(VmError::FreedObject { index: ptr });
+        }
+        *slot = None;
+        self.free_list.push(ptr);
+        Ok(())
+    }
+
     // ── GC ──────────────────────────────────────────────────────────────────
 
     /// Mark all objects reachable from `roots`, clearing previous marks first.

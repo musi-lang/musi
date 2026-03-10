@@ -1,32 +1,11 @@
 //! §11/§15 invocation, return, and jump dispatch.
 
 use crate::error::VmError;
+#[allow(clippy::wildcard_imports)]
+use crate::opcode::*;
 use crate::value::Value;
 use crate::verifier::instr_len;
 use crate::vm::Frame;
-
-// Opcode constants.
-const HLT: u8 = 0x01;
-const RET: u8 = 0x02;
-const RET_U: u8 = 0x03;
-const UNR: u8 = 0x04;
-const BRK: u8 = 0x05;
-const INV_DYN: u8 = 0x69;
-const JMP: u8 = 0x86;
-const JMP_T: u8 = 0x87;
-const JMP_F: u8 = 0x88;
-const INV: u8 = 0xC0;
-const INV_EFF: u8 = 0xC1;
-const INV_TAL: u8 = 0xC2;
-const INV_TAL_EFF: u8 = 0xC3;
-const JMP_W: u8 = 0xD0;
-const JMP_T_W: u8 = 0xD1;
-const JMP_F_W: u8 = 0xD2;
-const TSK_SPN: u8 = 0xCC;
-const TSK_CHS: u8 = 0xCD;
-const TSK_CHR: u8 = 0xCE;
-const TSK_CMK: u8 = 0xCF;
-const TSK_AWT: u8 = 0x68;
 
 /// What the control dispatcher wants the main loop to do next.
 #[derive(Clone, Copy)]
