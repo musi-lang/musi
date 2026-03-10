@@ -153,6 +153,12 @@
 					],
 					"typeParameter.declaration": [
 						"storage.type.parameter.musi"
+					],
+					"operator": [
+						"entity.name.function.musi"
+					],
+					"operator.declaration": [
+						"entity.name.function.musi"
 					]
 				}
 			}
