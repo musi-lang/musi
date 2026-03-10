@@ -266,6 +266,7 @@ const TAG_TY_PRODUCT: u8 = 0x10;
 const TAG_TY_SUM: u8 = 0x11;
 const TAG_TY_FN: u8 = 0x12;
 const TAG_TY_REF: u8 = 0x13;
+const TAG_TY_ANY: u8 = 0x14;
 
 fn parse_type_pool(bytes: &[u8], off: usize) -> Result<Vec<LoadedType>, VmError> {
     let mut cur = off;
@@ -279,7 +280,7 @@ fn parse_type_pool(bytes: &[u8], off: usize) -> Result<Vec<LoadedType>, VmError>
             // No-payload primitive types.
             TAG_TY_UNIT | TAG_TY_BOOL | TAG_TY_I8 | TAG_TY_I16 | TAG_TY_I32 | TAG_TY_I64
             | TAG_TY_U8 | TAG_TY_U16 | TAG_TY_U32 | TAG_TY_U64 | TAG_TY_F32 | TAG_TY_F64
-            | TAG_TY_RUNE => vec![],
+            | TAG_TY_RUNE | TAG_TY_ANY => vec![],
             // 4-byte inner type_id.
             TAG_TY_PTR | TAG_TY_ARR | TAG_TY_REF => read_bytes_at(bytes, &mut cur, 4)?.to_vec(),
             // product: count:u32 + count * type_id:u32

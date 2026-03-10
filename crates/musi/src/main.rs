@@ -10,6 +10,7 @@
 use std::{fs, path::PathBuf, process};
 
 use clap::Parser;
+use musi_std::StdHost;
 use musi_vm::{Vm, load, verify};
 
 #[derive(Parser)]
@@ -43,7 +44,7 @@ fn main() {
         process::exit(1);
     }
 
-    let host = match musi_std::StdHost::new(&module.foreign_fns) {
+    let host = match StdHost::new(&module.foreign_fns) {
         Ok(h) => h,
         Err(e) => {
             eprintln!("error: {e}");
