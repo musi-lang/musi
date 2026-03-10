@@ -104,6 +104,72 @@ Diagnostic message style:
 - No narrational comments describing stack effects, internal arithmetic, or step-by-step play-by-play (e.g., `// net 0: pops obj, pushes val`). The code is the source of truth.
 - No `NEW:` or other historical/temporal markers in comments.
 
+## STL stub files (`std/`)
+
+The `std/` directory at project root contains `.ms` stub files — Musi source declarations with no implementations. These define the public API surface of the standard library. They are organized into subdirectories:
+
+```
+std/
+  core/       option.ms, result.ms, ordering.ms
+  typeclasses/ add.ms, eq.ms, into.ms, iterable.ms, ord.ms, propagate.ms, show.ms
+  collections/ list.ms, map.ms, set.ms
+  io/         file.ms, path.ms, write.ms
+  math/       mod.ms, random.ms
+  text/       fmt.ms, parse.ms
+  testing/    assert.ms, bench.ms
+  ffi/        c.ms
+  concurrency/ channel.ms, task.ms
+```
+
+### Quantification rules in `.ms` files
+
+This is the single most important rule for writing correct Musi type signatures:
+
+**`forall` is only used in `:=` expression bindings** — where a type variable must be explicitly introduced:
+```
+let Option := forall 'T -> Some of 'T + None
+let Result := forall 'T, 'E -> Ok of 'T + Err of 'E
+let List   := forall 'T -> Nil + Cons of ('T, List of 'T)
+```
+
+**`:` type annotations use bare `'T` — implicitly universally quantified**, no `forall`:
+```
+let assert_eq : ('T, 'T) -> ()         -- correct
+let assert_eq : forall 'T -> ('T, 'T) -> ()  -- WRONG: forall not needed here
+```
+
+**`class ... over 'T`** — `over` introduces the type param, no `forall`:
+```
+class Eq over 'T (
+    let (=)(a: 'T, b: 'T) : Bool
+)
+```
+
+**`where`** — constraint syntax on `forall`/`class`/`given`:
+```
+forall 'T where 'T <: Ord -> ...
+```
+
+### Lang items
+
+`#[lang := "..."]` marks STL types as compiler-known. Enables syntactic sugar:
+- `#[lang := "option"]` on `Option` — enables `?T` sugar for `Option of T`
+- `#[lang := "result"]` on `Result` — enables `try`/`?` sugar
+- `#[lang := "propagate"]` on `Propagate` — enables `try` desugaring
+
+### FFI type stubs (`std/ffi/c.ms`)
+
+Defines C-interop type aliases: `CInt`, `CUInt`, `CChar`, `CSize`, `CDouble`. These will eventually move behind `import "musi:ffi"` once the module system is complete. No `CString` stub yet.
+
+### Effect and import conventions
+
+- `~> T under { IO }` — effectful function returning `T` with `IO` effect
+- `~> T under { Async }` — async computation
+- `~> T under { State }` — stateful computation
+- `@musi/core` = implicit prelude (always available)
+- `@musi/*` = explicit stdlib import
+- No `@` prefix = relative path import
+
 ## Key Musi differences from C/Rust
 
 Do not assume C/Rust conventions. Musi has its own idioms:
