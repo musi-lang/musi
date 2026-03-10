@@ -97,6 +97,13 @@ Diagnostic message style:
   - "backtick-quoted identifier" not "escaped identifier"
 - `TokenKind` implements `Display` — fixed-text tokens produce `'let'`, `'+'`; variable tokens produce `identifier`, `integer literal`. Use this in error templates, never store pre-formatted `&'static str` descriptions
 
+### Comments
+
+- No `// ── Section ──...` ASCII dividers in source code. Module structure and function names provide organization. Exception: test files and large enum definitions where section grouping aids readability.
+- No doc comments that restate the field/variant name (e.g., `/// The value.` on a field called `value`). Only add doc comments that provide information beyond what the name already conveys.
+- No narrational comments describing stack effects, internal arithmetic, or step-by-step play-by-play (e.g., `// net 0: pops obj, pushes val`). The code is the source of truth.
+- No `NEW:` or other historical/temporal markers in comments.
+
 ## Key Musi differences from C/Rust
 
 Do not assume C/Rust conventions. Musi has its own idioms:
