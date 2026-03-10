@@ -1,1 +1,1 @@
-export let format : (String, String) -> String
+export let format : (String, String) -> String;
