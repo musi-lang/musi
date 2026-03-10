@@ -37,7 +37,7 @@ lit        = litInt | litFloat | litString | litFstring | litRune ;
 litInt     = decInt | hexInt | octInt | binInt ;
 decInt     = digit , { digit | "_" } ;
 hexInt     = "0x" , xdigit , { xdigit | "_" } ;
-octInt     = "0o" , ("0".."7") , { ("0".."7") | "_" } ;
+octInt     = "0o" , ("0".."7") , { ( "0".."7" ) | "_" } ;
 binInt     = "0b" , ("0"|"1") , { ("0"|"1") | "_" } ;
 litFloat   = digit , { digit } , "." , digit , { digit } ,
              [ ("e"|"E") , ["+"|"-"] , digit , { digit } ] ;

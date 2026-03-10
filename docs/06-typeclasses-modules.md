@@ -137,8 +137,8 @@ Strictly top-to-bottom. Circular imports are a compile error. Dependency graph i
 ## 6.7 Entry Point
 
 ```musi
-#[main]
+#[entrypoint]
 let run := () ~> () under { IO } -> ( ... );
 ```
 
-No reserved `main`. Multiple `#[main]` allowed — test runners, benchmarks, CLI subcommands.
+No reserved `main`. `#[entrypoint]` marks the module's entry point. Duplicate `#[entrypoint]` is a compile error.

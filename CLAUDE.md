@@ -39,10 +39,17 @@ musi_shared = { path = "../musi_shared" }
 
 The workspace has aggressive clippy and rustc lints. Key constraints:
 
+- `unsafe_code = "deny"` — no unsafe code by default. Crates that genuinely require unsafe (e.g. FFI via `musi_std`) opt in with `#![allow(unsafe_code)]` at the crate root
 - `unused_results = "forbid"` — always bind or `let _ =` discarded results
 - `as_conversions = "deny"` — use `u32::try_from(x).expect(...)` not `x as u32`
 - `string_slice = "deny"` — use `.get(range).expect(...)` not `&s[range]` on `str`
 - `panic = "deny"` — no `panic!()` macro (but `expect`/`assert` are fine)
+
+### Full lint check command
+
+```bash
+cargo fmt --all && cargo check && cargo check --tests && cargo clippy && cargo clippy --tests
+```
 
 ## Code conventions
 
@@ -89,3 +96,19 @@ Diagnostic message style:
   - "interpolated string" not "f-string"
   - "backtick-quoted identifier" not "escaped identifier"
 - `TokenKind` implements `Display` — fixed-text tokens produce `'let'`, `'+'`; variable tokens produce `identifier`, `integer literal`. Use this in error templates, never store pre-formatted `&'static str` descriptions
+
+## Key Musi differences from C/Rust
+
+Do not assume C/Rust conventions. Musi has its own idioms:
+
+| Musi | C/Rust | Difference |
+|---|---|---|
+| `#[entrypoint]` attribute | `fn main()` | No reserved function name. Entry point is attribute-based. Error on duplicates. |
+| `:=` | `=` | Binding operator is `:=`, not `=`. `=` is equality. |
+| `() -> body` | `fn() -> body` | Function literals use paren params + arrow. `fn` is NOT a keyword for literals. |
+| `(expr if cond)` | `if cond { expr }` | Piecewise expressions, not if/else. |
+| `and`/`or`/`not`/`xor` | `&&`/`\|\|`/`!` | Keyword logical ops. Also type-directed for bitwise. |
+| `/=` | `!=` | Inequality operator. |
+| `<-` | `=` (assignment) | Mutation uses `<-`, not `=`. |
+| `#[...]` | `#[...]` (Rust) | Attribute syntax. `#[` is a single compound token (`HashLBracket`). |
+| `(a; b; c)` | `{ a; b; c }` | Parentheses delimit blocks/sequences, not braces. |
