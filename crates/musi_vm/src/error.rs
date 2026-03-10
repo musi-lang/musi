@@ -40,4 +40,10 @@ pub enum VmError {
     InstructionLimitExceeded { limit: u64 },
     #[error("freed heap object at index {index}")]
     FreedObject { index: usize },
+    #[error("deadlock: no runnable tasks remain")]
+    Deadlock,
+    #[error("unknown task id {task_id}")]
+    UnknownTask { task_id: u32 },
+    #[error("unknown channel id {channel_id}")]
+    UnknownChannel { channel_id: u32 },
 }

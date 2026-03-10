@@ -1198,3 +1198,20 @@ fn test_eff_res_c_is_noop() {
     assert_eq!(result.expect("runs").as_int().expect("is int"), 77);
 }
 
+// ── Tier 3: Value task/chan tags ──────────────────────────────────────────────
+
+#[test]
+fn test_value_task_roundtrip() {
+    let v = Value::from_task(42);
+    assert_eq!(v.as_task_id().expect("is task"), 42);
+    assert!(v.as_int().is_err());
+    assert!(v.as_chan_id().is_err());
+}
+
+#[test]
+fn test_value_chan_roundtrip() {
+    let v = Value::from_chan(7);
+    assert_eq!(v.as_chan_id().expect("is chan"), 7);
+    assert!(v.as_int().is_err());
+    assert!(v.as_task_id().is_err());
+}

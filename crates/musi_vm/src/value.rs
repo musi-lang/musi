@@ -16,6 +16,8 @@ const TAG_RUNE: u16 = 0x7FF4; // Unicode scalar value (char)
 const TAG_REF: u16 = 0x7FF5; // GC heap index (48-bit)
 const TAG_PTR: u16 = 0x7FF6; // raw pointer — unsafe
 const TAG_FN: u16 = 0x7FF7; // fn_id (32-bit)
+const TAG_TASK: u16 = 0x7FF8; // task handle (32-bit)
+const TAG_CHAN: u16 = 0x7FF9; // channel handle (32-bit)
 const TAG_UNIT: u16 = 0x7FFA;
 
 /// Lower bound of the MUSI non-float tag range.
@@ -113,6 +115,20 @@ impl Value {
     pub const fn from_ref(ptr: u64) -> Self {
         let payload = ptr & PAYLOAD_MASK;
         Self((u16_as_u64(TAG_REF) << 48) | payload)
+    }
+
+    /// Wrap a task id (32-bit).
+    #[must_use]
+    pub const fn from_task(id: u32) -> Self {
+        let payload = u32_as_u64(id);
+        Self((u16_as_u64(TAG_TASK) << 48) | payload)
+    }
+
+    /// Wrap a channel id (32-bit).
+    #[must_use]
+    pub const fn from_chan(id: u32) -> Self {
+        let payload = u32_as_u64(id);
+        Self((u16_as_u64(TAG_CHAN) << 48) | payload)
     }
 
     // ── Tag / type checks ───────────────────────────────────────────────
@@ -237,6 +253,42 @@ impl Value {
         usize::try_from(payload).ok()
     }
 
+    /// Extract a task id.
+    ///
+    /// # Errors
+    ///
+    /// Returns `TypeError` if not a task handle.
+    pub fn as_task_id(self) -> Result<u32, VmError> {
+        if self.tag() != TAG_TASK {
+            return Err(VmError::TypeError {
+                expected: "task",
+                found: tag_name(self.tag()),
+            });
+        }
+        let payload = self.0 & 0xFFFF_FFFF;
+        u32::try_from(payload).map_err(|_| VmError::Malformed {
+            desc: "task_id overflow".into(),
+        })
+    }
+
+    /// Extract a channel id.
+    ///
+    /// # Errors
+    ///
+    /// Returns `TypeError` if not a channel handle.
+    pub fn as_chan_id(self) -> Result<u32, VmError> {
+        if self.tag() != TAG_CHAN {
+            return Err(VmError::TypeError {
+                expected: "chan",
+                found: tag_name(self.tag()),
+            });
+        }
+        let payload = self.0 & 0xFFFF_FFFF;
+        u32::try_from(payload).map_err(|_| VmError::Malformed {
+            desc: "chan_id overflow".into(),
+        })
+    }
+
     /// Extract the function id.
     ///
     /// # Errors
@@ -275,6 +327,8 @@ impl fmt::Debug for Value {
                 ),
                 TAG_REF => write!(f, "ref({})", self.0 & PAYLOAD_MASK),
                 TAG_FN => write!(f, "fn({})", self.0 & 0xFFFF_FFFF),
+                TAG_TASK => write!(f, "task({})", self.0 & 0xFFFF_FFFF),
+                TAG_CHAN => write!(f, "chan({})", self.0 & 0xFFFF_FFFF),
                 TAG_PTR => write!(f, "ptr({})", self.0 & PAYLOAD_MASK),
                 t => write!(
                     f,
@@ -295,6 +349,8 @@ const fn tag_name(tag: u16) -> &'static str {
         TAG_REF => "ref",
         TAG_PTR => "ptr",
         TAG_FN => "fn",
+        TAG_TASK => "task",
+        TAG_CHAN => "chan",
         TAG_UNIT => "unit",
         _ => "float",
     }
