@@ -19,6 +19,7 @@
 mod error;
 mod heap;
 mod loader;
+pub(crate) mod opcode;
 mod value;
 mod verifier;
 mod vm;
