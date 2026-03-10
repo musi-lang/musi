@@ -7,8 +7,8 @@ use music_shared::{Arena, Idx, Interner};
 
 use crate::const_pool::ConstPool;
 use crate::error::EmitError;
-use crate::opcode::{Opcode, encode_no_operand, encode_u8, encode_u32};
 use crate::type_pool::TypePool;
+use musi_bytecode::{Opcode, encode_no_operand, encode_u8, encode_u32};
 
 use super::fn_emitter::FnEmitter;
 
@@ -128,6 +128,9 @@ pub fn emit_rvalue(
             emit_operand(fe, cp, task, interner)?;
             encode_no_operand(&mut fe.code, Opcode::TSK_AWT);
             Ok(())
+        }
+        IrRvalue::ForeignCall { fn_idx, args } => {
+            emit_rvalue_foreign_call(fe, cp, *fn_idx, args, interner)
         }
     }
 }
@@ -301,6 +304,25 @@ fn emit_rvalue_spawn(
     let arg_count = i32::try_from(args.len()).map_err(|_| EmitError::UnresolvableType {
         desc: "too many spawn args".into(),
     })?;
+    fe.pop_n(arg_count);
+    fe.push_n(1);
+    Ok(())
+}
+
+fn emit_rvalue_foreign_call(
+    fe: &mut FnEmitter,
+    cp: &mut ConstPool,
+    fn_idx: u32,
+    args: &[IrOperand],
+    interner: &Interner,
+) -> Result<(), EmitError> {
+    for arg in args {
+        emit_operand(fe, cp, arg, interner)?;
+    }
+    let arg_count = i32::try_from(args.len()).map_err(|_| EmitError::UnresolvableType {
+        desc: "too many FFI args".into(),
+    })?;
+    encode_u32(&mut fe.code, Opcode::INV_FFI, fn_idx);
     fe.pop_n(arg_count);
     fe.push_n(1);
     Ok(())

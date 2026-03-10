@@ -6,8 +6,8 @@ use music_ir::{
 use music_shared::{Idx, Interner, Span, Symbol};
 
 use crate::error::EmitError;
-use crate::opcode::Opcode;
 use crate::{EmitOutput, emit};
+use musi_bytecode::Opcode;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -35,9 +35,9 @@ fn make_local(local: IrLocal, ty: Idx<IrType>, mutable: bool) -> IrLocalDecl {
 
 /// Find the first occurrence of `op` in the function pool section (past header/pools).
 fn find_opcode(bytes: &[u8], op: Opcode) -> Option<usize> {
-    // `fn_off` is at header offset 0x1C (bytes 28..32)
-    assert!(bytes.len() > 31, "bytes too short for header");
-    let fn_off = u32::from_le_bytes([bytes[28], bytes[29], bytes[30], bytes[31]]);
+    // `fn_off` is at header offset 0x20 (bytes 32..36) in the 40-byte header
+    assert!(bytes.len() > 35, "bytes too short for header");
+    let fn_off = u32::from_le_bytes([bytes[32], bytes[33], bytes[34], bytes[35]]);
     let start = usize::try_from(fn_off).expect("fn_off fits usize");
     bytes[start..]
         .iter()
@@ -246,19 +246,24 @@ mod header {
 
         let EmitOutput { bytes } = tm.emit().expect("emit succeeded");
 
-        // Header is now 36 bytes
+        // Header is 40 bytes
         assert_eq!(&bytes[0..4], b"MUSI", "magic must be MUSI");
 
         // Read offsets from header
         let const_off = u32::from_le_bytes([bytes[16], bytes[17], bytes[18], bytes[19]]);
         let type_off = u32::from_le_bytes([bytes[20], bytes[21], bytes[22], bytes[23]]);
         let effect_off = u32::from_le_bytes([bytes[24], bytes[25], bytes[26], bytes[27]]);
-        let fn_off = u32::from_le_bytes([bytes[28], bytes[29], bytes[30], bytes[31]]);
+        let foreign_off = u32::from_le_bytes([bytes[28], bytes[29], bytes[30], bytes[31]]);
+        let fn_off = u32::from_le_bytes([bytes[32], bytes[33], bytes[34], bytes[35]]);
 
-        assert_eq!(const_off, 36, "const_off must start after 36-byte header");
+        assert_eq!(const_off, 40, "const_off must start after 40-byte header");
         assert!(type_off > const_off, "type_off must follow const pool");
         assert!(effect_off >= type_off, "effect_off must follow type pool");
-        assert!(fn_off >= effect_off, "fn_off must follow effect pool");
+        assert!(
+            foreign_off >= effect_off,
+            "foreign_off must follow effect pool"
+        );
+        assert!(fn_off >= foreign_off, "fn_off must follow foreign pool");
 
         // Effect pool should have count=1 (4 bytes for u32 count + effect data)
         let eff_start = usize::try_from(effect_off).expect("fits usize");

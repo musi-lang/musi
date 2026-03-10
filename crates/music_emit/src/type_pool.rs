@@ -115,6 +115,11 @@ impl TypePool {
                 data.extend_from_slice(&env_id.to_le_bytes());
                 Ok(self.push_entry(TAG_PRODUCT, data))
             }
+            // Opaque foreign types are pointers at runtime — emit as *Unit
+            IrType::Opaque { .. } => {
+                let unit_id = self.push_tag_only(TAG_UNIT);
+                Ok(self.push_entry(TAG_PTR, unit_id.to_le_bytes().to_vec()))
+            }
             IrType::TypeParam { index } => Err(EmitError::UnresolvableType {
                 desc: format!("opaque type param {index} in monomorphized IR").into_boxed_str(),
             }),
