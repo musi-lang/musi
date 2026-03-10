@@ -114,7 +114,7 @@ std/
   typeclasses/ add.ms, eq.ms, into.ms, iterable.ms, ord.ms, propagate.ms, show.ms
   collections/ list.ms, map.ms, set.ms
   io/         file.ms, path.ms, write.ms
-  math/       mod.ms, random.ms
+  math/       index.ms, random.ms
   text/       fmt.ms, parse.ms
   testing/    assert.ms, bench.ms
   ffi/        c.ms
