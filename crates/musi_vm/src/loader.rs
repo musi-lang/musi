@@ -5,12 +5,14 @@
 
 use core::str;
 
+use musi_bytecode::crc32_slice;
+
 use crate::error::VmError;
 
 // ── Magic / header constants ────────────────────────────────────────────────
 
 const MAGIC: &[u8; 4] = b"MUSI";
-const HEADER_SIZE: usize = 36;
+const HEADER_SIZE: usize = 40;
 
 // ── Constant pool tags (§11.2) ──────────────────────────────────────────────
 
@@ -60,6 +62,23 @@ pub struct LoadedEffectOp {
     pub ret_type_id: u32,
 }
 
+/// A decoded foreign (FFI) function entry.
+#[derive(Debug, Clone)]
+pub struct LoadedForeignFn {
+    /// C-side symbol name.
+    pub ext_name: Box<str>,
+    /// Library name (empty = default C library).
+    pub lib_name: Box<str>,
+    /// Number of fixed parameters.
+    pub param_count: u16,
+    /// Type pool ids for each parameter.
+    pub param_type_ids: Vec<u32>,
+    /// Type pool id for the return type.
+    pub ret_type_id: u32,
+    /// Whether this function is variadic.
+    pub variadic: bool,
+}
+
 /// A decoded function entry.
 #[derive(Debug, Clone)]
 pub struct LoadedFn {
@@ -89,6 +108,7 @@ pub struct LoadedModule {
     pub consts: Vec<LoadedConst>,
     pub types: Vec<LoadedType>,
     pub effects: Vec<LoadedEffect>,
+    pub foreign_fns: Vec<LoadedForeignFn>,
     pub functions: Vec<LoadedFn>,
 }
 
@@ -127,9 +147,9 @@ pub fn load(bytes: &[u8]) -> Result<LoadedModule, VmError> {
         return Err(VmError::BadMagic);
     }
 
-    // CRC32 over first 32 bytes, stored at offset 32.
-    let stored_crc = read_u32(bytes, 32)?;
-    let computed = crc32_slice(bytes.get(..32).ok_or_else(|| VmError::Malformed {
+    // CRC32 over first 36 bytes, stored at offset 36.
+    let stored_crc = read_u32(bytes, 36)?;
+    let computed = crc32_slice(bytes.get(..36).ok_or_else(|| VmError::Malformed {
         desc: "header truncated before checksum field".into(),
     })?);
     if stored_crc != computed {
@@ -153,13 +173,17 @@ pub fn load(bytes: &[u8]) -> Result<LoadedModule, VmError> {
     let effect_off = usize::try_from(read_u32(bytes, 24)?).map_err(|_| VmError::Malformed {
         desc: "effect_off overflows usize".into(),
     })?;
-    let fn_off = usize::try_from(read_u32(bytes, 28)?).map_err(|_| VmError::Malformed {
+    let foreign_off = usize::try_from(read_u32(bytes, 28)?).map_err(|_| VmError::Malformed {
+        desc: "foreign_off overflows usize".into(),
+    })?;
+    let fn_off = usize::try_from(read_u32(bytes, 32)?).map_err(|_| VmError::Malformed {
         desc: "fn_off overflows usize".into(),
     })?;
 
     let consts = parse_const_pool(bytes, const_off)?;
     let types = parse_type_pool(bytes, type_off)?;
     let effects = parse_effect_pool(bytes, effect_off)?;
+    let foreign_fns = parse_foreign_pool(bytes, foreign_off, &consts)?;
     let functions = parse_fn_pool(bytes, fn_off)?;
 
     Ok(LoadedModule {
@@ -168,6 +192,7 @@ pub fn load(bytes: &[u8]) -> Result<LoadedModule, VmError> {
         consts,
         types,
         effects,
+        foreign_fns,
         functions,
     })
 }
@@ -414,6 +439,69 @@ fn parse_fn_pool(bytes: &[u8], off: usize) -> Result<Vec<LoadedFn>, VmError> {
     Ok(functions)
 }
 
+// ── Foreign pool parser ──────────────────────────────────────────────────────
+
+fn parse_foreign_pool(
+    bytes: &[u8],
+    off: usize,
+    consts: &[LoadedConst],
+) -> Result<Vec<LoadedForeignFn>, VmError> {
+    let mut cur = off;
+    let count = usize::try_from(read_u32_at(bytes, &mut cur)?).map_err(|_| VmError::Malformed {
+        desc: "foreign fn count overflows usize".into(),
+    })?;
+    let mut fns = Vec::with_capacity(count);
+    for _ in 0..count {
+        let ext_name_idx =
+            usize::try_from(read_u32_at(bytes, &mut cur)?).map_err(|_| VmError::Malformed {
+                desc: "ext_name const index overflows usize".into(),
+            })?;
+        let lib_name_idx =
+            usize::try_from(read_u32_at(bytes, &mut cur)?).map_err(|_| VmError::Malformed {
+                desc: "lib_name const index overflows usize".into(),
+            })?;
+        let param_count = read_u16_at(bytes, &mut cur)?;
+        let pc = usize::from(param_count);
+        let mut param_type_ids = Vec::with_capacity(pc);
+        for _ in 0..pc {
+            param_type_ids.push(read_u32_at(bytes, &mut cur)?);
+        }
+        let ret_type_id = read_u32_at(bytes, &mut cur)?;
+        let flags = read_u8_at(bytes, &mut cur)?;
+        let variadic = flags & 1 != 0;
+
+        let ext_name = resolve_string_const(consts, ext_name_idx)?;
+        let lib_name = if lib_name_idx == usize::try_from(0xFFFF_FFFFu32).unwrap_or(usize::MAX) {
+            Box::from("")
+        } else {
+            resolve_string_const(consts, lib_name_idx)?
+        };
+
+        fns.push(LoadedForeignFn {
+            ext_name,
+            lib_name,
+            param_count,
+            param_type_ids,
+            ret_type_id,
+            variadic,
+        });
+    }
+    Ok(fns)
+}
+
+/// Look up a string constant by index.
+fn resolve_string_const(consts: &[LoadedConst], idx: usize) -> Result<Box<str>, VmError> {
+    let c = consts.get(idx).ok_or_else(|| VmError::Malformed {
+        desc: format!("foreign fn const index {idx} out of bounds").into_boxed_str(),
+    })?;
+    match c {
+        LoadedConst::Str(s) => Ok(s.clone()),
+        _ => Err(VmError::Malformed {
+            desc: format!("foreign fn const index {idx} is not a string").into_boxed_str(),
+        }),
+    }
+}
+
 // ── Cursor helpers ──────────────────────────────────────────────────────────
 
 fn read_u8_at(bytes: &[u8], cur: &mut usize) -> Result<u8, VmError> {
@@ -508,37 +596,3 @@ fn read_u32(bytes: &[u8], off: usize) -> Result<u32, VmError> {
     let mut cur = off;
     read_u32_at(bytes, &mut cur)
 }
-
-// ── CRC-32/ISO-HDLC ─────────────────────────────────────────────────────────
-
-fn crc32_slice(data: &[u8]) -> u32 {
-    let mut crc: u32 = 0xFFFF_FFFF;
-    for &byte in data {
-        let low_byte = crc.to_le_bytes()[0];
-        let table_idx = usize::from(low_byte ^ byte);
-        crc = CRC32_TABLE[table_idx] ^ (crc >> 8);
-    }
-    crc ^ 0xFFFF_FFFF
-}
-
-const CRC32_TABLE: [u32; 256] = {
-    let poly: u32 = 0xEDB8_8320;
-    let mut table = [0u32; 256];
-    let mut i = 0usize;
-    while i < 256 {
-        let i_bytes = i.to_le_bytes();
-        let mut crc = u32::from_le_bytes([i_bytes[0], i_bytes[1], i_bytes[2], i_bytes[3]]);
-        let mut j = 0;
-        while j < 8 {
-            if crc & 1 != 0 {
-                crc = (crc >> 1) ^ poly;
-            } else {
-                crc >>= 1;
-            }
-            j += 1;
-        }
-        table[i] = crc;
-        i += 1;
-    }
-    table
-};

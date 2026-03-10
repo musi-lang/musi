@@ -5,23 +5,10 @@
 
 use std::collections::HashSet;
 
+use musi_bytecode::{Opcode, instr_len};
+
 use crate::error::VmError;
 use crate::loader::{LoadedFn, LoadedModule};
-#[allow(clippy::wildcard_imports)]
-use crate::opcode::*;
-
-/// Instruction length from top-2-bits encoding.
-///
-/// `0x00..=0x3F` → 1 byte, `0x40..=0x7F` → 2 bytes,
-/// `0x80..=0xBF` → 3 bytes, `0xC0..=0xFF` → 5 bytes.
-pub const fn instr_len(op: u8) -> usize {
-    match op >> 6 {
-        0 => 1,
-        1 => 2,
-        2 => 3,
-        _ => 5, // 3 → 5
-    }
-}
 
 /// Verify all functions in the module before execution.
 ///
@@ -150,11 +137,111 @@ impl Operands<'_> {
     }
 }
 
-/// Compute the stack depth delta for an opcode and verify its operands.
+/// Stack depth delta for fixed-pattern opcodes (no operand validation needed).
 ///
-/// Returns the net stack change.
-fn verify_op(
-    op: u8,
+/// Returns `Some(delta)` if the opcode is in a fixed group, `None` otherwise.
+const fn fixed_stack_delta(op: Opcode) -> Option<i32> {
+    match op {
+        // Net 0: no-ops, terminators, unary, struct ops, effects, concurrency
+        Opcode::NOP
+        | Opcode::BRK
+        | Opcode::HLT
+        | Opcode::RET
+        | Opcode::RET_U
+        | Opcode::UNR
+        | Opcode::SWP
+        | Opcode::I_NEG
+        | Opcode::F_NEG
+        | Opcode::B_NOT
+        | Opcode::CNV_WDN
+        | Opcode::CNV_WDN_UN
+        | Opcode::CNV_NRW
+        | Opcode::CNV_ITF
+        | Opcode::CNV_FTI
+        | Opcode::CNV_TRM
+        | Opcode::ST_FLD
+        | Opcode::ST_FLD_W
+        | Opcode::LD_FLD
+        | Opcode::MK_PRD
+        | Opcode::MK_VAR
+        | Opcode::MK_VAR_W
+        | Opcode::LD_PAY
+        | Opcode::LD_TAG
+        | Opcode::CMP_TAG
+        | Opcode::CMP_TAG_W
+        | Opcode::LD_LEN
+        | Opcode::LD_IDX
+        | Opcode::ST_IDX
+        | Opcode::EFF_PSH
+        | Opcode::EFF_POP
+        | Opcode::EFF_RES_C
+        | Opcode::EFF_ABT
+        | Opcode::EFF_DO
+        | Opcode::EFF_RES
+        | Opcode::INV_DYN
+        | Opcode::TSK_SPN
+        | Opcode::TSK_CHS
+        | Opcode::TSK_CHR
+        | Opcode::TSK_CMK
+        | Opcode::TSK_AWT => Some(0),
+
+        // Push 1: dup, load global, alloc
+        Opcode::DUP
+        | Opcode::LD_GLB
+        | Opcode::MK_ARR
+        | Opcode::ALC_REF
+        | Opcode::ALC_MAN
+        | Opcode::ALC_ARN => Some(1),
+
+        // Net -1: pop, store global, free, binary ops
+        Opcode::POP
+        | Opcode::ST_GLB
+        | Opcode::FRE
+        | Opcode::I_ADD
+        | Opcode::I_ADD_UN
+        | Opcode::I_SUB
+        | Opcode::I_SUB_UN
+        | Opcode::I_MUL
+        | Opcode::I_MUL_UN
+        | Opcode::I_DIV
+        | Opcode::I_DIV_UN
+        | Opcode::I_REM
+        | Opcode::I_REM_UN
+        | Opcode::F_ADD
+        | Opcode::F_SUB
+        | Opcode::F_MUL
+        | Opcode::F_DIV
+        | Opcode::F_REM
+        | Opcode::B_AND
+        | Opcode::B_OR
+        | Opcode::B_XOR
+        | Opcode::B_SHL
+        | Opcode::B_SHR
+        | Opcode::B_SHR_UN
+        | Opcode::CMP_EQ
+        | Opcode::CMP_NE
+        | Opcode::CMP_LT
+        | Opcode::CMP_LT_UN
+        | Opcode::CMP_LE
+        | Opcode::CMP_LE_UN
+        | Opcode::CMP_GT
+        | Opcode::CMP_GT_UN
+        | Opcode::CMP_GE
+        | Opcode::CMP_GE_UN
+        | Opcode::CMP_F_EQ
+        | Opcode::CMP_F_NE
+        | Opcode::CMP_F_LT
+        | Opcode::CMP_F_LE
+        | Opcode::CMP_F_GT
+        | Opcode::CMP_F_GE => Some(-1),
+
+        _ => None,
+    }
+}
+
+/// Verify opcodes that need operand validation and return their stack delta.
+fn verify_operand_op(
+    op: Opcode,
     ops: &Operands<'_>,
     len: usize,
     module: &LoadedModule,
@@ -163,86 +250,85 @@ fn verify_op(
     boundaries: &HashSet<usize>,
 ) -> Result<i32, VmError> {
     match op {
-        // Net 0: no-ops, terminators, unary, struct ops, effects, concurrency
-        NOP | BRK | HLT | RET | RET_U | UNR | SWP | I_NEG | F_NEG | B_NOT | CNV_WDN
-        | CNV_WDN_UN | CNV_NRW | CNV_ITF | CNV_FTI | CNV_TRM | ST_FLD | ST_FLD_W | LD_FLD
-        | MK_PRD | MK_VAR | MK_VAR_W | LD_PAY | LD_TAG | CMP_TAG | CMP_TAG_W | LD_LEN | LD_IDX
-        | ST_IDX | EFF_PSH | EFF_POP | EFF_RES_C | EFF_ABT | EFF_DO | EFF_RES | INV_DYN
-        | TSK_SPN | TSK_CHS | TSK_CHR | TSK_CMK | TSK_AWT => Ok(0),
-
-        // Push 1: dup, load global, alloc
-        DUP | LD_GLB | MK_ARR | ALC_REF | ALC_MAN | ALC_ARN => Ok(1),
-
-        // Net -1: pop, store global, free, binary ops
-        POP | ST_GLB | FRE | I_ADD | I_ADD_UN | I_SUB | I_SUB_UN | I_MUL | I_MUL_UN | I_DIV
-        | I_DIV_UN | I_REM | I_REM_UN | F_ADD | F_SUB | F_MUL | F_DIV | F_REM | B_AND | B_OR
-        | B_XOR | B_SHL | B_SHR | B_SHR_UN | CMP_EQ | CMP_NE | CMP_LT | CMP_LT_UN | CMP_LE
-        | CMP_LE_UN | CMP_GT | CMP_GT_UN | CMP_GE | CMP_GE_UN | CMP_F_EQ | CMP_F_NE | CMP_F_LT
-        | CMP_F_LE | CMP_F_GT | CMP_F_GE => Ok(-1),
-
-        // Load local (narrow): push 1
-        LD_LOC => {
+        Opcode::LD_LOC => {
             check_local(ops.u8_op(), local_count, "ld.loc")?;
             Ok(1)
         }
-        // Store local (narrow): pop 1
-        ST_LOC => {
+        Opcode::ST_LOC => {
             check_local(ops.u8_op(), local_count, "st.loc")?;
             Ok(-1)
         }
-        // Load local (wide): push 1
-        LD_LOC_W => {
+        Opcode::LD_LOC_W => {
             check_local(ops.u16_op(), local_count, "ld.loc.w")?;
             Ok(1)
         }
-        // Store local (wide): pop 1
-        ST_LOC_W => {
+        Opcode::ST_LOC_W => {
             check_local(ops.u16_op(), local_count, "st.loc.w")?;
             Ok(-1)
         }
-
-        // Load constant: push 1
-        LD_CST => {
+        Opcode::LD_CST => {
             check_const(ops.u8_op(), const_len, "ld.cst")?;
             Ok(1)
         }
-        LD_CST_W => {
+        Opcode::LD_CST_W => {
             check_const(ops.u16_op(), const_len, "ld.cst.w")?;
             Ok(1)
         }
-
-        // Jumps (i16 operand)
-        JMP => {
+        Opcode::JMP => {
             check_jump_target(ops.ip, len, ops.i16_jump(), boundaries)?;
             Ok(0)
         }
-        JMP_T | JMP_F => {
+        Opcode::JMP_T | Opcode::JMP_F => {
             check_jump_target(ops.ip, len, ops.i16_jump(), boundaries)?;
             Ok(-1)
         }
-        // Wide jumps (i32 operand)
-        JMP_W => {
+        Opcode::JMP_W => {
             check_jump_target(ops.ip, len, ops.i32_jump()?, boundaries)?;
             Ok(0)
         }
-        JMP_T_W | JMP_F_W => {
+        Opcode::JMP_T_W | Opcode::JMP_F_W => {
             check_jump_target(ops.ip, len, ops.i32_jump()?, boundaries)?;
             Ok(-1)
         }
-
-        // Invocations
-        INV | INV_EFF => {
+        Opcode::INV | Opcode::INV_EFF => {
             check_fn_id(ops.u32_op(), module, "inv")?;
             Ok(1)
         }
-        INV_TAL | INV_TAL_EFF => {
+        Opcode::INV_TAL | Opcode::INV_TAL_EFF => {
             check_fn_id(ops.u32_op(), module, "inv.tal")?;
             Ok(0)
         }
+        Opcode::INV_FFI => {
+            let idx = usize::try_from(ops.u32_op()).unwrap_or(usize::MAX);
+            if idx >= module.foreign_fns.len() {
+                return Err(VmError::Verify {
+                    desc: format!("inv.ffi index {idx} out of bounds").into_boxed_str(),
+                });
+            }
+            Ok(0)
+        }
         _ => Err(VmError::Verify {
-            desc: format!("unknown opcode {op:#04x}").into_boxed_str(),
+            desc: format!("unknown opcode {:#04x}", op.0).into_boxed_str(),
         }),
     }
+}
+
+/// Compute the stack depth delta for an opcode and verify its operands.
+///
+/// Returns the net stack change.
+fn verify_op(
+    op: Opcode,
+    ops: &Operands<'_>,
+    len: usize,
+    module: &LoadedModule,
+    local_count: usize,
+    const_len: usize,
+    boundaries: &HashSet<usize>,
+) -> Result<i32, VmError> {
+    if let Some(delta) = fixed_stack_delta(op) {
+        return Ok(delta);
+    }
+    verify_operand_op(op, ops, len, module, local_count, const_len, boundaries)
 }
 
 fn verify_fn(func: &LoadedFn, module: &LoadedModule) -> Result<(), VmError> {
@@ -257,8 +343,8 @@ fn verify_fn(func: &LoadedFn, module: &LoadedModule) -> Result<(), VmError> {
     let mut depth: i32 = 0;
 
     while ip < code.len() {
-        let op = code[ip];
-        let len = instr_len(op);
+        let op = Opcode(code[ip]);
+        let len = instr_len(op.0);
         let ops = Operands { code, ip };
 
         depth += verify_op(op, &ops, len, module, local_count, const_len, &boundaries)?;
