@@ -7,7 +7,7 @@ use music_shared::{Idx, Span, Symbol};
 
 use crate::ExprList;
 use crate::attr::Attr;
-use crate::decl::{ClassMember, EffectOp, ExportItem};
+use crate::decl::{ClassMember, EffectOp, ExportItem, ForeignDecl};
 use crate::lit::Lit;
 use crate::pat::Pat;
 use crate::ty::{Constraint, Quantifier, Ty, TyNamedRef, TyParam};
@@ -174,6 +174,11 @@ pub enum Expr {
         name: Symbol,
         params: Vec<TyParam>,
         ops: Vec<EffectOp>,
+        span: Span,
+    },
+    Foreign {
+        abi: Symbol,
+        decls: Vec<ForeignDecl>,
         span: Span,
     },
 

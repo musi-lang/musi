@@ -1,4 +1,4 @@
-//! Declaration-level nodes: class members, function signatures, exports.
+//! Declaration-level nodes: class members, function signatures, exports, foreign.
 
 use music_shared::{Idx, Span, Symbol};
 
@@ -43,4 +43,18 @@ pub struct EffectOp {
     pub name: Symbol,
     pub ty: Idx<Ty>,
     pub span: Span,
+}
+
+/// A declaration inside a `foreign "C" (...)` block.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ForeignDecl {
+    /// A foreign function binding: `let name [as "ext_name"] : ty`.
+    Fn {
+        name: Symbol,
+        ext_name: Option<Symbol>,
+        ty: Idx<Ty>,
+        span: Span,
+    },
+    /// An opaque type declaration: `let NAME;` (no type annotation).
+    OpaqueType { name: Symbol, span: Span },
 }

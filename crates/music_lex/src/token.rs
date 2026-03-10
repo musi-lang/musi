@@ -18,6 +18,7 @@ pub enum TokenKind {
     KwExists,
     KwExport,
     KwForall,
+    KwForeign,
     KwGiven,
     KwIf,
     KwImport,
@@ -125,6 +126,7 @@ impl TokenKind {
                 | Self::KwExists
                 | Self::KwExport
                 | Self::KwForall
+                | Self::KwForeign
                 | Self::KwGiven
                 | Self::KwIf
                 | Self::KwImport
@@ -162,6 +164,7 @@ impl TokenKind {
             Self::KwExists => Some("exists"),
             Self::KwExport => Some("export"),
             Self::KwForall => Some("forall"),
+            Self::KwForeign => Some("foreign"),
             Self::KwGiven => Some("given"),
             Self::KwIf => Some("if"),
             Self::KwImport => Some("import"),
@@ -279,6 +282,7 @@ pub fn keyword_from_str(s: &str) -> Option<TokenKind> {
         "exists" => Some(TokenKind::KwExists),
         "export" => Some(TokenKind::KwExport),
         "forall" => Some(TokenKind::KwForall),
+        "foreign" => Some(TokenKind::KwForeign),
         "given" => Some(TokenKind::KwGiven),
         "if" => Some(TokenKind::KwIf),
         "import" => Some(TokenKind::KwImport),

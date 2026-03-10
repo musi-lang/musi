@@ -170,10 +170,11 @@ impl Parser<'_> {
             // Export
             TokenKind::KwExport => self.parse_expr_export(),
 
-            // Class / Given / Effect
+            // Class / Given / Effect / Foreign
             TokenKind::KwClass => self.parse_expr_class(),
             TokenKind::KwGiven => self.parse_expr_given(),
             TokenKind::KwEffect => self.parse_expr_effect(),
+            TokenKind::KwForeign => self.parse_expr_foreign(),
 
             // Annotated: #[...] decl
             TokenKind::HashLBracket => self.parse_expr_annotated_chain(),

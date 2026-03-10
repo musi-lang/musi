@@ -1,10 +1,10 @@
-//! Declaration parsing: class, given, effect, attrs, fn params, exports.
+//! Declaration parsing: class, given, effect, foreign, attrs, fn params, exports.
 
 #[cfg(test)]
 mod tests;
 
-use music_ast::attr::{Attr, AttrValue};
-use music_ast::decl::{ClassMember, EffectOp, ExportItem, FnSig};
+use music_ast::attr::{Attr, AttrField, AttrValue};
+use music_ast::decl::{ClassMember, EffectOp, ExportItem, FnSig, ForeignDecl};
 use music_ast::expr::{BindKind, Expr, LetFields, Param, ParamMode};
 use music_ast::ty::Quantifier;
 use music_lex::token::TokenKind;
@@ -23,6 +23,8 @@ impl Parser<'_> {
             let name = self.expect_symbol();
             let value = if self.eat(TokenKind::ColonEq) {
                 Some(self.parse_attr_value())
+            } else if self.at(TokenKind::LParen) {
+                Some(self.parse_attr_named_params())
             } else {
                 None
             };
@@ -119,6 +121,7 @@ impl Parser<'_> {
             TokenKind::KwClass => self.parse_expr_annotated_class(start, attrs),
             TokenKind::KwGiven => self.parse_expr_annotated_given(start, attrs),
             TokenKind::KwEffect => self.parse_expr_annotated_effect(start, attrs),
+            TokenKind::KwForeign => self.parse_expr_annotated_foreign(start, attrs),
             _ => self.error_expr(&ParseError::ExpectedDeclAfterAttrs),
         }
     }
@@ -195,6 +198,16 @@ impl Parser<'_> {
 
     fn parse_expr_annotated_given(&mut self, start: u32, attrs: Vec<Attr>) -> Expr {
         let inner = self.parse_expr_given();
+        let inner_idx = self.alloc_expr(inner);
+        Expr::Annotated {
+            attrs,
+            inner: inner_idx,
+            span: self.finish_span(start),
+        }
+    }
+
+    fn parse_expr_annotated_foreign(&mut self, start: u32, attrs: Vec<Attr>) -> Expr {
+        let inner = self.parse_expr_foreign();
         let inner_idx = self.alloc_expr(inner);
         Expr::Annotated {
             attrs,
@@ -494,6 +507,103 @@ impl Parser<'_> {
             .iter()
             .map(|expr| self.reinterpret_single_param(expr))
             .collect()
+    }
+
+    fn parse_attr_named_params(&mut self) -> AttrValue {
+        let start = self.start_span();
+        let _lp = self.bump();
+        let fields = self.comma_sep(TokenKind::RParen, Self::parse_attr_named_field);
+        let _rp = self.expect(TokenKind::RParen);
+        AttrValue::Named {
+            fields,
+            span: self.finish_span(start),
+        }
+    }
+
+    fn parse_attr_named_field(&mut self) -> AttrField {
+        let start = self.start_span();
+        let name = self.expect_symbol();
+        let _ceq = self.expect(TokenKind::ColonEq);
+        let value = self.parse_lit_value();
+        AttrField {
+            name,
+            value,
+            span: self.finish_span(start),
+        }
+    }
+
+    /// Parses `'foreign' string_lit ( foreign_item | '(' { 'let' foreign_binding ';' } ')' )`.
+    pub(crate) fn parse_expr_foreign(&mut self) -> Expr {
+        let start = self.start_span();
+        let _foreign = self.bump();
+
+        // Expect ABI string literal
+        let abi = if self.at(TokenKind::StringLit) {
+            let tok = self.bump();
+            tok.symbol.unwrap_or(Symbol(u32::MAX))
+        } else {
+            let _span = self.expect(TokenKind::StringLit);
+            Symbol(u32::MAX)
+        };
+
+        if self.at(TokenKind::LParen) {
+            // Block form: foreign "C" ( let ...; let ...; )
+            let _lp = self.bump();
+            let mut decls = vec![];
+            while !self.at(TokenKind::RParen) && !self.at(TokenKind::Eof) {
+                let _let = self.expect(TokenKind::KwLet);
+                decls.push(self.parse_foreign_binding());
+                let _semi = self.expect(TokenKind::Semi);
+            }
+            let _rp = self.expect(TokenKind::RParen);
+            Expr::Foreign {
+                abi,
+                decls,
+                span: self.finish_span(start),
+            }
+        } else {
+            // Single item: foreign "C" let ...
+            let _let = self.expect(TokenKind::KwLet);
+            let decl = self.parse_foreign_binding();
+            Expr::Foreign {
+                abi,
+                decls: vec![decl],
+                span: self.finish_span(start),
+            }
+        }
+    }
+
+    fn parse_foreign_binding(&mut self) -> ForeignDecl {
+        let start = self.start_span();
+        let name = self.expect_symbol();
+        let ext_name = if self.eat(TokenKind::KwAs) {
+            if self.at(TokenKind::StringLit) {
+                let tok = self.bump();
+                tok.symbol
+            } else {
+                let _span = self.expect(TokenKind::StringLit);
+                None
+            }
+        } else {
+            None
+        };
+
+        if self.eat(TokenKind::Colon) {
+            // Has type annotation → foreign function
+            let ty = self.parse_alloc_ty();
+            ForeignDecl::Fn {
+                name,
+                ext_name,
+                ty,
+                span: self.finish_span(start),
+            }
+        } else {
+            // No type annotation → opaque type
+            ForeignDecl::OpaqueType {
+                name,
+                span: self.finish_span(start),
+            }
+        }
     }
 
     fn reinterpret_single_param(&mut self, expr: &Expr) -> Param {

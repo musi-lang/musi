@@ -8,7 +8,7 @@ use std::ops::ControlFlow;
 use music_shared::Idx;
 
 use crate::attr::{Attr, AttrValue};
-use crate::decl::{ClassMember, EffectOp};
+use crate::decl::{ClassMember, EffectOp, ForeignDecl};
 use crate::expr::{Arg, ArrayElem, Expr, LetFields, MatchArm, Param, PwGuard, RecField};
 use crate::lit::{FStrPart, Lit};
 use crate::pat::Pat;
@@ -179,6 +179,8 @@ pub fn walk_expr<V: AstVisitor + ?Sized>(
         }
 
         Expr::Effect { ops, .. } => walk_effect_ops(v, ops, ctx),
+
+        Expr::Foreign { decls, .. } => walk_foreign_decls(v, decls, ctx),
     }
 }
 
@@ -470,6 +472,19 @@ fn walk_expr_match<V: AstVisitor + ?Sized>(
             v.visit_expr(g, ctx)?;
         }
         v.visit_expr(arm.result, ctx)?;
+    }
+    ControlFlow::Continue(())
+}
+
+fn walk_foreign_decls<V: AstVisitor + ?Sized>(
+    v: &mut V,
+    decls: &[ForeignDecl],
+    ctx: &AstArenas,
+) -> ControlFlow<V::Break> {
+    for decl in decls {
+        if let ForeignDecl::Fn { ty, .. } = decl {
+            v.visit_ty(*ty, ctx)?;
+        }
     }
     ControlFlow::Continue(())
 }
