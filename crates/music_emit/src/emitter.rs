@@ -7,8 +7,8 @@ mod control;
 mod fn_emitter;
 mod rvalue;
 
-use music_ir::{IrFunction, IrModule};
-use music_shared::{Idx, Interner};
+use music_ir::{IrFnIdx, IrFunction, IrModule};
+use music_shared::Interner;
 
 use crate::const_pool::ConstPool;
 use crate::error::EmitError;
@@ -132,7 +132,7 @@ pub fn write_function_pool(buf: &mut Vec<u8>, functions: &[FnBytecode]) -> Resul
     Ok(())
 }
 
-fn function_indices(module: &IrModule) -> impl Iterator<Item = Idx<IrFunction>> {
+fn function_indices(module: &IrModule) -> impl Iterator<Item = IrFnIdx> {
     let count = u32::try_from(module.functions.len()).expect("function count fits u32");
-    (0..count).map(Idx::from_raw)
+    (0..count).map(IrFnIdx::from_raw)
 }

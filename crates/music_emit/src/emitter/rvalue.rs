@@ -2,8 +2,10 @@
 
 use std::cmp::Ordering;
 
-use music_ir::{IrBinOp, IrCallee, IrConstValue, IrOperand, IrRvalue, IrType, IrUnaryOp};
-use music_shared::{Arena, Idx, Interner};
+use music_ir::{
+    IrBinOp, IrCallee, IrConstValue, IrOperand, IrRvalue, IrType, IrTypeIdx, IrUnaryOp,
+};
+use music_shared::{Arena, Interner};
 
 use crate::const_pool::ConstPool;
 use crate::error::EmitError;
@@ -199,7 +201,7 @@ fn emit_rvalue_make_array(
     cp: &mut ConstPool,
     tp: &mut TypePool,
     type_arena: &Arena<IrType>,
-    elem_ty: Idx<IrType>,
+    elem_ty: IrTypeIdx,
     elems: &[IrOperand],
     interner: &Interner,
 ) -> Result<(), EmitError> {
@@ -214,10 +216,10 @@ fn emit_rvalue_make_array(
     encode_u32(&mut fe.code, Opcode::MK_ARR, type_id);
     fe.pop_n(1);
     fe.push_n(1);
-    emit_rvalue_array_store(fe, cp, elems, interner)
+    emit_rvalue_array_init(fe, cp, elems, interner)
 }
 
-fn emit_rvalue_array_store(
+fn emit_rvalue_array_init(
     fe: &mut FnEmitter,
     cp: &mut ConstPool,
     elems: &[IrOperand],
@@ -382,8 +384,8 @@ const fn bit_width(ty: &IrType) -> u8 {
 fn emit_rvalue_cast(
     fe: &mut FnEmitter,
     type_arena: &Arena<IrType>,
-    from: Idx<IrType>,
-    to: Idx<IrType>,
+    from: IrTypeIdx,
+    to: IrTypeIdx,
 ) -> Result<(), EmitError> {
     let from_ty = type_arena[from].clone();
     let to_ty = type_arena[to].clone();

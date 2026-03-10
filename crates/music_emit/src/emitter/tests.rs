@@ -1,9 +1,9 @@
 use music_ir::{
     IrBinOp, IrCallee, IrConstValue, IrEffectDef, IrEffectId, IrEffectMask, IrEffectOpDef,
-    IrEffectOpId, IrFnId, IrFunction, IrInst, IrLabel, IrLocal, IrLocalDecl, IrModule, IrOperand,
-    IrParam, IrParamMode, IrRvalue, IrType,
+    IrEffectOpId, IrFnId, IrFnIdx, IrFunction, IrInst, IrLabel, IrLocal, IrLocalDecl, IrModule,
+    IrOperand, IrParam, IrParamMode, IrRvalue, IrType, IrTypeIdx,
 };
-use music_shared::{Idx, Interner, Span, Symbol};
+use music_shared::{Interner, Span, Symbol};
 
 use crate::error::EmitError;
 use crate::{EmitOutput, emit};
@@ -15,7 +15,7 @@ fn make_span() -> Span {
     Span::new(0, 0)
 }
 
-fn make_param(local: IrLocal, ty: Idx<IrType>) -> IrParam {
+fn make_param(local: IrLocal, ty: IrTypeIdx) -> IrParam {
     IrParam {
         local,
         ty,
@@ -24,7 +24,7 @@ fn make_param(local: IrLocal, ty: Idx<IrType>) -> IrParam {
     }
 }
 
-fn make_local(local: IrLocal, ty: Idx<IrType>, mutable: bool) -> IrLocalDecl {
+fn make_local(local: IrLocal, ty: IrTypeIdx, mutable: bool) -> IrLocalDecl {
     IrLocalDecl {
         local,
         ty,
@@ -63,19 +63,19 @@ impl TestModule {
         }
     }
 
-    fn int32(&mut self) -> Idx<IrType> {
+    fn int32(&mut self) -> IrTypeIdx {
         self.module.types.alloc(IrType::Int32)
     }
 
-    fn unit(&mut self) -> Idx<IrType> {
+    fn unit(&mut self) -> IrTypeIdx {
         self.module.types.alloc(IrType::Unit)
     }
 
-    fn bool_ty(&mut self) -> Idx<IrType> {
+    fn bool_ty(&mut self) -> IrTypeIdx {
         self.module.types.alloc(IrType::Bool)
     }
 
-    fn alloc_type(&mut self, ty: IrType) -> Idx<IrType> {
+    fn alloc_type(&mut self, ty: IrType) -> IrTypeIdx {
         self.module.types.alloc(ty)
     }
 
@@ -87,10 +87,10 @@ impl TestModule {
         &mut self,
         name: &str,
         params: Vec<IrParam>,
-        ret_ty: Idx<IrType>,
+        ret_ty: IrTypeIdx,
         body: Vec<IrInst>,
         locals: Vec<IrLocalDecl>,
-    ) -> Idx<IrFunction> {
+    ) -> IrFnIdx {
         self.add_fn_ext(name, params, ret_ty, body, locals, false)
     }
 
@@ -98,11 +98,11 @@ impl TestModule {
         &mut self,
         name: &str,
         params: Vec<IrParam>,
-        ret_ty: Idx<IrType>,
+        ret_ty: IrTypeIdx,
         body: Vec<IrInst>,
         locals: Vec<IrLocalDecl>,
         is_closure: bool,
-    ) -> Idx<IrFunction> {
+    ) -> IrFnIdx {
         let sym = self.interner.intern(name);
         let id = IrFnId(self.next_fn_id);
         self.next_fn_id += 1;
@@ -120,7 +120,7 @@ impl TestModule {
         })
     }
 
-    fn set_entry(&mut self, idx: Idx<IrFunction>) {
+    fn set_entry(&mut self, idx: IrFnIdx) {
         self.module.entry = Some(idx);
     }
 

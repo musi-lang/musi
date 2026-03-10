@@ -3,7 +3,7 @@
 //! Writes the 32-byte header followed by the constant pool, type pool,
 //! and function pool, as specified in §11 of the Musi bytecode spec.
 
-use music_ir::{IrEffectDef, IrForeignFn, IrType};
+use music_ir::{IrConstValue, IrEffectDef, IrForeignFn, IrType};
 use music_shared::{Arena, Interner};
 
 use musi_bytecode::crc32_slice;
@@ -147,7 +147,7 @@ fn write_effect_pool(
     for eff in effects {
         buf.extend_from_slice(&eff.id.0.to_le_bytes());
         // Intern effect name into const pool
-        let name_val = music_ir::IrConstValue::Str(eff.name);
+        let name_val = IrConstValue::Str(eff.name);
         let name_idx = cp.intern(&name_val, interner)?.unwrap_or(0);
         let name_const_idx = u32::from(name_idx);
         buf.extend_from_slice(&name_const_idx.to_le_bytes());
@@ -157,7 +157,7 @@ fn write_effect_pool(
         buf.extend_from_slice(&op_count.to_le_bytes());
         for op in &eff.ops {
             buf.extend_from_slice(&op.id.0.to_le_bytes());
-            let op_name_val = music_ir::IrConstValue::Str(op.name);
+            let op_name_val = IrConstValue::Str(op.name);
             let op_name_idx = cp.intern(&op_name_val, interner)?.unwrap_or(0);
             let op_name_const_idx = u32::from(op_name_idx);
             buf.extend_from_slice(&op_name_const_idx.to_le_bytes());
@@ -192,12 +192,12 @@ fn write_foreign_pool(
     buf.extend_from_slice(&count.to_le_bytes());
     for ff in foreign_fns {
         // Intern ext_name and lib_name into const pool
-        let ext_name_val = music_ir::IrConstValue::Str(ff.ext_name);
+        let ext_name_val = IrConstValue::Str(ff.ext_name);
         let ext_name_idx = cp.intern(&ext_name_val, interner)?.unwrap_or(0);
         buf.extend_from_slice(&u32::from(ext_name_idx).to_le_bytes());
 
         if let Some(lib) = ff.library {
-            let lib_name_val = music_ir::IrConstValue::Str(lib);
+            let lib_name_val = IrConstValue::Str(lib);
             let lib_name_idx = cp.intern(&lib_name_val, interner)?.unwrap_or(0);
             buf.extend_from_slice(&u32::from(lib_name_idx).to_le_bytes());
         } else {

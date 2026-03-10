@@ -8,7 +8,7 @@
 //! - [`error`]      — [`EmitError`] enum
 //! - [`opcode`]     — [`Opcode`] enum (75 opcodes), encoding helpers
 //! - [`const_pool`] — constant pool builder
-//! - [`type_pool`]  — type pool builder (`Idx<IrType>` → `type_id`)
+//! - [`type_pool`]  — type pool builder (`IrTypeIdx` → `type_id`)
 //! - [`module`]     — `.msbc` binary assembler (header + 4 sections)
 //! - [`emitter`]    — orchestrator; calls [`emitter::fn_emitter`] per function
 

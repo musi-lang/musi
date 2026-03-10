@@ -1,12 +1,12 @@
-//! Type pool: maps `Idx<IrType>` to a bytecode `type_id` (u32).
+//! Type pool: maps `IrTypeIdx` to a bytecode `type_id` (u32).
 //!
 //! Primitive types have fixed IDs matching §11.3 of the spec.
 //! Compound types are interned by structure.
 
 use std::collections::HashMap;
 
-use music_ir::{IrSumVariant, IrType};
-use music_shared::{Arena, Idx};
+use music_ir::{IrSumVariant, IrType, IrTypeIdx};
+use music_shared::Arena;
 
 use crate::error::EmitError;
 
@@ -30,6 +30,7 @@ const TAG_PRODUCT: u8 = 0x10;
 const TAG_SUM: u8 = 0x11;
 const TAG_FN: u8 = 0x12;
 const TAG_REF: u8 = 0x13;
+const TAG_ANY: u8 = 0x14;
 
 /// A serialized type pool entry.
 struct TypeEntry {
@@ -39,7 +40,7 @@ struct TypeEntry {
 
 /// Type pool builder.
 ///
-/// Maps arena `Idx<IrType>` to bytecode `type_id` (u32).
+/// Maps arena `IrTypeIdx` to bytecode `type_id` (u32).
 /// Primitive types are resolved directly from their variant; compound types are
 /// interned to avoid duplication.
 pub struct TypePool {
@@ -59,7 +60,7 @@ impl TypePool {
     /// Lower an IR type index to a bytecode `type_id`.
     pub fn lower_ir_type(
         &mut self,
-        idx: Idx<IrType>,
+        idx: IrTypeIdx,
         arena: &Arena<IrType>,
     ) -> Result<u32, EmitError> {
         if let Some(&cached) = self.cache.get(&idx.raw()) {
@@ -86,6 +87,7 @@ impl TypePool {
             IrType::Float32 => Ok(self.push_tag_only(TAG_F32)),
             IrType::Float64 => Ok(self.push_tag_only(TAG_F64)),
             IrType::Rune => Ok(self.push_tag_only(TAG_RUNE)),
+            IrType::Any => Ok(self.push_tag_only(TAG_ANY)),
             IrType::Ptr { inner } => {
                 let inner_id = self.lower_ir_type(*inner, arena)?;
                 Ok(self.push_entry(TAG_PTR, inner_id.to_le_bytes().to_vec()))
@@ -133,7 +135,7 @@ impl TypePool {
 
     fn encode_product(
         &mut self,
-        fields: &[Idx<IrType>],
+        fields: &[IrTypeIdx],
         arena: &Arena<IrType>,
     ) -> Result<u32, EmitError> {
         let field_ids: Vec<u32> = fields
@@ -154,8 +156,8 @@ impl TypePool {
 
     fn encode_fn_type(
         &mut self,
-        params: &[Idx<IrType>],
-        ret: Idx<IrType>,
+        params: &[IrTypeIdx],
+        ret: IrTypeIdx,
         effect_mask: u16,
         arena: &Arena<IrType>,
     ) -> Result<u32, EmitError> {
