@@ -1,1 +1,1 @@
-export let Set := type Empty + Node of ('T, Set of 'T)
+export let Set := forall 'T -> Empty + Node of ('T, Set of 'T);

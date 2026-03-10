@@ -1,1 +1,1 @@
-export let List := type Nil + Cons of ('T, List of 'T)
+export let List := forall 'T -> Nil + Cons of ('T, List of 'T);
