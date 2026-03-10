@@ -1,6 +1,6 @@
 //! §13 effect push/pop/do/resume/abort dispatch.
 
-use musi_bytecode::Opcode;
+use musi_bc::Opcode;
 
 use crate::error::VmError;
 use crate::loader::{HandlerEntry, LoadedEffect};

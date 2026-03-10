@@ -1,4 +1,4 @@
-//! `musi_bytecode` — shared `.msbc` bytecode format definitions.
+//! `musi_bc` — shared `.msbc` bytecode format definitions.
 //!
 //! Defines the opcode set, instruction encoding functions, and CRC-32
 //! checksum used by both the `music_emit` compiler crate and the

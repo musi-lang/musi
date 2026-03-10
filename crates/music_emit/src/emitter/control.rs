@@ -10,7 +10,7 @@ use music_ir::IrType;
 use crate::const_pool::ConstPool;
 use crate::error::EmitError;
 use crate::type_pool::TypePool;
-use musi_bytecode::{Opcode, encode_no_operand, encode_u8, encode_u16};
+use musi_bc::{Opcode, encode_no_operand, encode_u8, encode_u16};
 
 use super::fn_emitter::FnEmitter;
 use super::rvalue::{emit_operand, emit_rvalue};

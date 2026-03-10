@@ -5,7 +5,7 @@
 
 use core::str;
 
-use musi_bytecode::crc32_slice;
+use musi_bc::crc32_slice;
 
 use crate::error::VmError;
 

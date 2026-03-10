@@ -1,6 +1,6 @@
 //! §1–§4 arithmetic, bitwise, comparison, and conversion dispatch.
 
-use musi_bytecode::Opcode;
+use musi_bc::Opcode;
 
 use crate::error::VmError;
 use crate::value::Value;

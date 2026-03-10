@@ -6,7 +6,7 @@
 use music_ir::{IrConstValue, IrEffectDef, IrForeignFn, IrType};
 use music_shared::{Arena, Interner};
 
-use musi_bytecode::crc32_slice;
+use musi_bc::crc32_slice;
 
 use crate::const_pool::ConstPool;
 use crate::emitter::{FnBytecode, write_function_pool};

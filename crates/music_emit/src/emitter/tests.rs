@@ -7,7 +7,7 @@ use music_shared::{Interner, Span, Symbol};
 
 use crate::error::EmitError;
 use crate::{EmitOutput, emit};
-use musi_bytecode::Opcode;
+use musi_bc::Opcode;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 

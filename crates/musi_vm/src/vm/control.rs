@@ -1,6 +1,6 @@
 //! §11/§15 invocation, return, and jump dispatch.
 
-use musi_bytecode::{Opcode, instr_len};
+use musi_bc::{Opcode, instr_len};
 
 use crate::error::VmError;
 use crate::value::Value;

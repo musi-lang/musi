@@ -5,7 +5,7 @@
 
 use std::collections::HashSet;
 
-use musi_bytecode::{Opcode, instr_len};
+use musi_bc::{Opcode, instr_len};
 
 use crate::error::VmError;
 use crate::loader::{LoadedFn, LoadedModule};

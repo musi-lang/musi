@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use music_ir::{IrLabel, IrLocal};
 
 use crate::error::EmitError;
-use musi_bytecode::{Opcode, encode_i32, encode_no_operand, encode_u8, encode_u16, encode_u32};
+use musi_bc::{Opcode, encode_i32, encode_no_operand, encode_u8, encode_u16, encode_u32};
 
 /// Fixup record: a forward jump that needs patching once we know the label target.
 struct Fixup {

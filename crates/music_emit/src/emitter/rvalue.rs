@@ -10,7 +10,7 @@ use music_shared::{Arena, Interner};
 use crate::const_pool::ConstPool;
 use crate::error::EmitError;
 use crate::type_pool::TypePool;
-use musi_bytecode::{Opcode, encode_no_operand, encode_u8, encode_u32};
+use musi_bc::{Opcode, encode_no_operand, encode_u8, encode_u32};
 
 use super::fn_emitter::FnEmitter;
 

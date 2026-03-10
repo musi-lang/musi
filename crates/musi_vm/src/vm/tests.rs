@@ -6,7 +6,7 @@
 
 use std::iter;
 
-use musi_bytecode::{Opcode, crc32_slice};
+use musi_bc::{Opcode, crc32_slice};
 
 use crate::error::VmError;
 use crate::loader::load;

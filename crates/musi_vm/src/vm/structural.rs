@@ -1,6 +1,6 @@
 //! §5/§9 locals, constants, struct/array, stack manipulation, and globals dispatch.
 
-use musi_bytecode::Opcode;
+use musi_bc::Opcode;
 
 use crate::error::VmError;
 use crate::heap::Heap;

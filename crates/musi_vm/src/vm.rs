@@ -8,7 +8,7 @@ mod control;
 mod effects;
 mod structural;
 
-use musi_bytecode::Opcode;
+use musi_bc::Opcode;
 
 use crate::error::VmError;
 use crate::heap::Heap;
