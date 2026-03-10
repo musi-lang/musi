@@ -3,11 +3,11 @@
 #[cfg(test)]
 mod tests;
 
-use music_shared::{Idx, Span, Symbol};
+use music_shared::{Span, Symbol};
 
-use crate::PatList;
 use crate::expr::BindKind;
 use crate::lit::Lit;
+use crate::{PatIdx, PatList};
 
 /// A pattern node. Recursive children use arena indices.
 #[derive(Debug, Clone, PartialEq)]
@@ -22,7 +22,7 @@ pub enum Pat {
     Bind {
         kind: BindKind,
         name: Symbol,
-        inner: Option<Idx<Self>>,
+        inner: Option<PatIdx>,
         span: Span,
     },
     Variant {
@@ -43,8 +43,8 @@ pub enum Pat {
         span: Span,
     },
     Or {
-        left: Idx<Self>,
-        right: Idx<Self>,
+        left: PatIdx,
+        right: PatIdx,
         span: Span,
     },
     Error {
@@ -57,6 +57,6 @@ pub enum Pat {
 pub struct PatRecField {
     pub kind: BindKind,
     pub name: Symbol,
-    pub pat: Option<Idx<Pat>>,
+    pub pat: Option<PatIdx>,
     pub span: Span,
 }

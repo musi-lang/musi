@@ -2,13 +2,13 @@
 
 use std::ops::ControlFlow;
 
-use music_shared::{Idx, Span, Symbol};
+use music_shared::{Span, Symbol};
 
 use crate::expr::{BinOp, BindKind, Expr, LetFields, UnaryOp};
 use crate::pat::Pat;
 use crate::ty::Ty;
 use crate::visitor::AstVisitor;
-use crate::{AstArenas, visitor};
+use crate::{AstArenas, ExprIdx, PatIdx, TyIdx, visitor};
 
 /// A visitor that counts how many expr nodes it visits.
 struct CountingVisitor {
@@ -30,17 +30,17 @@ impl CountingVisitor {
 impl AstVisitor for CountingVisitor {
     type Break = ();
 
-    fn visit_expr(&mut self, idx: Idx<Expr>, ctx: &AstArenas) -> ControlFlow<()> {
+    fn visit_expr(&mut self, idx: ExprIdx, ctx: &AstArenas) -> ControlFlow<()> {
         self.expr_count += 1;
         visitor::walk_expr(self, idx, ctx)
     }
 
-    fn visit_ty(&mut self, idx: Idx<Ty>, ctx: &AstArenas) -> ControlFlow<()> {
+    fn visit_ty(&mut self, idx: TyIdx, ctx: &AstArenas) -> ControlFlow<()> {
         self.ty_count += 1;
         visitor::walk_ty(self, idx, ctx)
     }
 
-    fn visit_pat(&mut self, idx: Idx<Pat>, ctx: &AstArenas) -> ControlFlow<()> {
+    fn visit_pat(&mut self, idx: PatIdx, ctx: &AstArenas) -> ControlFlow<()> {
         self.pat_count += 1;
         visitor::walk_pat(self, idx, ctx)
     }
@@ -79,7 +79,7 @@ struct BreakAfter {
 impl AstVisitor for BreakAfter {
     type Break = &'static str;
 
-    fn visit_expr(&mut self, idx: Idx<Expr>, ctx: &AstArenas) -> ControlFlow<&'static str> {
+    fn visit_expr(&mut self, idx: ExprIdx, ctx: &AstArenas) -> ControlFlow<&'static str> {
         self.seen += 1;
         if self.seen >= self.limit {
             return ControlFlow::Break("limit reached");

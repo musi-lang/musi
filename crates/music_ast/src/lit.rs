@@ -3,9 +3,9 @@
 #[cfg(test)]
 mod tests;
 
-use music_shared::{Idx, Span, Symbol};
+use music_shared::{Span, Symbol};
 
-use crate::expr::Expr;
+use crate::ExprIdx;
 
 /// A literal value in the source.
 #[derive(Debug, Clone, PartialEq)]
@@ -37,5 +37,5 @@ impl Lit {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FStrPart {
     Text { raw: Symbol, span: Span },
-    Interpolated { expr: Idx<Expr>, span: Span },
+    Interpolated { expr: ExprIdx, span: Span },
 }

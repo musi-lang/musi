@@ -1,21 +1,21 @@
 //! Declaration-level nodes: class members, function signatures, exports, foreign.
 
-use music_shared::{Idx, Span, Symbol};
+use music_shared::{Span, Symbol};
 
-use crate::expr::{Expr, Param};
-use crate::ty::Ty;
+use crate::expr::Param;
+use crate::{ExprIdx, TyIdx};
 
 /// A member of a class or given declaration.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ClassMember {
     Fn {
         sig: FnSig,
-        default: Option<Idx<Expr>>,
+        default: Option<ExprIdx>,
         span: Span,
     },
     Law {
         name: Symbol,
-        body: Idx<Expr>,
+        body: ExprIdx,
         span: Span,
     },
 }
@@ -25,7 +25,7 @@ pub enum ClassMember {
 pub struct FnSig {
     pub name: Symbol,
     pub params: Vec<Param>,
-    pub ret: Option<Idx<Ty>>,
+    pub ret: Option<TyIdx>,
     pub span: Span,
 }
 
@@ -41,7 +41,7 @@ pub struct ExportItem {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EffectOp {
     pub name: Symbol,
-    pub ty: Idx<Ty>,
+    pub ty: TyIdx,
     pub span: Span,
 }
 
@@ -52,7 +52,7 @@ pub enum ForeignDecl {
     Fn {
         name: Symbol,
         ext_name: Option<Symbol>,
-        ty: Idx<Ty>,
+        ty: TyIdx,
         span: Span,
     },
     /// An opaque type declaration: `let NAME;` (no type annotation).

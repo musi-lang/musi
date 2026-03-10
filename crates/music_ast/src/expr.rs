@@ -3,14 +3,13 @@
 #[cfg(test)]
 mod tests;
 
-use music_shared::{Idx, Span, Symbol};
+use music_shared::{Span, Symbol};
 
-use crate::ExprList;
 use crate::attr::Attr;
 use crate::decl::{ClassMember, EffectOp, ExportItem, ForeignDecl};
 use crate::lit::Lit;
-use crate::pat::Pat;
-use crate::ty::{Constraint, Quantifier, Ty, TyNamedRef, TyParam};
+use crate::ty::{Constraint, Quantifier, TyNamedRef, TyParam};
+use crate::{ExprIdx, ExprList, PatIdx, TyIdx};
 
 /// Expression node. All recursive children use arena indices.
 #[derive(Debug, Clone, PartialEq)]
@@ -27,7 +26,7 @@ pub enum Expr {
 
     // -- grouping ------------------------------------------------------------
     Paren {
-        inner: Idx<Self>,
+        inner: ExprIdx,
         span: Span,
     },
     Tuple {
@@ -36,14 +35,14 @@ pub enum Expr {
     },
     Block {
         stmts: ExprList,
-        tail: Option<Idx<Self>>,
+        tail: Option<ExprIdx>,
         span: Span,
     },
 
     // -- bindings ------------------------------------------------------------
     Let {
         fields: LetFields,
-        body: Option<Idx<Self>>,
+        body: Option<ExprIdx>,
         span: Span,
     },
 
@@ -51,30 +50,30 @@ pub enum Expr {
     Fn {
         params: Vec<Param>,
         arrow: Arrow,
-        ret_ty: Option<Idx<Ty>>,
-        body: Idx<Self>,
+        ret_ty: Option<TyIdx>,
+        body: ExprIdx,
         span: Span,
     },
     Call {
-        callee: Idx<Self>,
+        callee: ExprIdx,
         args: Vec<Arg>,
         span: Span,
     },
 
     // -- access & update -----------------------------------------------------
     Field {
-        object: Idx<Self>,
+        object: ExprIdx,
         field: FieldKey,
         safe: bool,
         span: Span,
     },
     Index {
-        object: Idx<Self>,
-        index: Idx<Self>,
+        object: ExprIdx,
+        index: ExprIdx,
         span: Span,
     },
     Update {
-        base: Idx<Self>,
+        base: ExprIdx,
         fields: Vec<RecField>,
         span: Span,
     },
@@ -98,13 +97,13 @@ pub enum Expr {
     // -- operators -----------------------------------------------------------
     BinOp {
         op: BinOp,
-        left: Idx<Self>,
-        right: Idx<Self>,
+        left: ExprIdx,
+        right: ExprIdx,
         span: Span,
     },
     UnaryOp {
         op: UnaryOp,
-        operand: Idx<Self>,
+        operand: ExprIdx,
         span: Span,
     },
 
@@ -114,14 +113,14 @@ pub enum Expr {
         span: Span,
     },
     Match {
-        scrutinee: Idx<Self>,
+        scrutinee: ExprIdx,
         arms: Vec<MatchArm>,
         span: Span,
     },
 
     // -- control flow --------------------------------------------------------
     Return {
-        value: Option<Idx<Self>>,
+        value: Option<ExprIdx>,
         span: Span,
     },
 
@@ -130,7 +129,7 @@ pub enum Expr {
         kind: Quantifier,
         params: Vec<TyParam>,
         constraints: Vec<Constraint>,
-        body: Idx<Self>,
+        body: ExprIdx,
         span: Span,
     },
 
@@ -146,7 +145,7 @@ pub enum Expr {
     },
     Annotated {
         attrs: Vec<Attr>,
-        inner: Idx<Self>,
+        inner: ExprIdx,
         span: Span,
     },
 
@@ -177,6 +176,7 @@ pub enum Expr {
         span: Span,
     },
     Foreign {
+        exported: bool,
         abi: Symbol,
         decls: Vec<ForeignDecl>,
         span: Span,
@@ -193,9 +193,9 @@ pub enum Expr {
 pub struct LetFields {
     pub kind: BindKind,
     pub heap: bool,
-    pub pat: Idx<Pat>,
-    pub ty: Option<Idx<Ty>>,
-    pub value: Idx<Expr>,
+    pub pat: PatIdx,
+    pub ty: Option<TyIdx>,
+    pub value: ExprIdx,
     pub span: Span,
 }
 
@@ -227,15 +227,15 @@ pub enum Arrow {
 pub struct Param {
     pub mode: ParamMode,
     pub name: Symbol,
-    pub ty: Option<Idx<Ty>>,
-    pub default: Option<Idx<Expr>>,
+    pub ty: Option<TyIdx>,
+    pub default: Option<ExprIdx>,
     pub span: Span,
 }
 
 /// A function argument.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Arg {
-    Pos { expr: Idx<Expr>, span: Span },
+    Pos { expr: ExprIdx, span: Span },
     Hole { span: Span },
 }
 
@@ -244,11 +244,11 @@ pub enum Arg {
 pub enum RecField {
     Named {
         name: Symbol,
-        value: Option<Idx<Expr>>,
+        value: Option<ExprIdx>,
         span: Span,
     },
     Spread {
-        expr: Idx<Expr>,
+        expr: ExprIdx,
         span: Span,
     },
 }
@@ -256,8 +256,8 @@ pub enum RecField {
 /// An element in an array literal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ArrayElem {
-    Elem { expr: Idx<Expr>, span: Span },
-    Spread { expr: Idx<Expr>, span: Span },
+    Elem { expr: ExprIdx, span: Span },
+    Spread { expr: ExprIdx, span: Span },
 }
 
 /// A field access key.
@@ -270,7 +270,7 @@ pub enum FieldKey {
 /// An arm in a piecewise expression.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PwArm {
-    pub result: Idx<Expr>,
+    pub result: ExprIdx,
     pub guard: PwGuard,
     pub span: Span,
 }
@@ -279,16 +279,16 @@ pub struct PwArm {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PwGuard {
     Any { span: Span },
-    When { expr: Idx<Expr>, span: Span },
+    When { expr: ExprIdx, span: Span },
 }
 
 /// An arm in a match expression.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MatchArm {
     pub attrs: Vec<Attr>,
-    pub pat: Idx<Pat>,
-    pub guard: Option<Idx<Expr>>,
-    pub result: Idx<Expr>,
+    pub pat: PatIdx,
+    pub guard: Option<ExprIdx>,
+    pub result: ExprIdx,
     pub span: Span,
 }
 

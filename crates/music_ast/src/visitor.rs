@@ -5,15 +5,13 @@ mod tests;
 
 use std::ops::ControlFlow;
 
-use music_shared::Idx;
-
 use crate::attr::{Attr, AttrValue};
 use crate::decl::{ClassMember, EffectOp, ForeignDecl};
 use crate::expr::{Arg, ArrayElem, Expr, LetFields, MatchArm, Param, PwGuard, RecField};
 use crate::lit::{FStrPart, Lit};
 use crate::pat::Pat;
 use crate::ty::{Constraint, EffectItem, Ty};
-use crate::{AstArenas, Stmt};
+use crate::{AstArenas, ExprIdx, PatIdx, Stmt, TyIdx};
 
 /// Visitor trait for traversing the AST.
 ///
@@ -23,30 +21,26 @@ pub trait AstVisitor {
     /// The type returned on early exit.
     type Break;
 
-    fn visit_expr(&mut self, idx: Idx<Expr>, ctx: &AstArenas) -> ControlFlow<Self::Break> {
+    fn visit_expr(&mut self, idx: ExprIdx, ctx: &AstArenas) -> ControlFlow<Self::Break> {
         walk_expr(self, idx, ctx)
     }
 
-    fn visit_expr_list(
-        &mut self,
-        exprs: &[Idx<Expr>],
-        ctx: &AstArenas,
-    ) -> ControlFlow<Self::Break> {
+    fn visit_expr_list(&mut self, exprs: &[ExprIdx], ctx: &AstArenas) -> ControlFlow<Self::Break> {
         for expr in exprs {
             self.visit_expr(*expr, ctx)?;
         }
         ControlFlow::Continue(())
     }
 
-    fn visit_ty(&mut self, idx: Idx<Ty>, ctx: &AstArenas) -> ControlFlow<Self::Break> {
+    fn visit_ty(&mut self, idx: TyIdx, ctx: &AstArenas) -> ControlFlow<Self::Break> {
         walk_ty(self, idx, ctx)
     }
 
-    fn visit_pat(&mut self, idx: Idx<Pat>, ctx: &AstArenas) -> ControlFlow<Self::Break> {
+    fn visit_pat(&mut self, idx: PatIdx, ctx: &AstArenas) -> ControlFlow<Self::Break> {
         walk_pat(self, idx, ctx)
     }
 
-    fn visit_pat_list(&mut self, pats: &[Idx<Pat>], ctx: &AstArenas) -> ControlFlow<Self::Break> {
+    fn visit_pat_list(&mut self, pats: &[PatIdx], ctx: &AstArenas) -> ControlFlow<Self::Break> {
         for pat in pats {
             self.visit_pat(*pat, ctx)?;
         }
@@ -61,7 +55,7 @@ pub trait AstVisitor {
 /// Walk an expression, visiting all children in source order.
 pub fn walk_expr<V: AstVisitor + ?Sized>(
     v: &mut V,
-    idx: Idx<Expr>,
+    idx: ExprIdx,
     ctx: &AstArenas,
 ) -> ControlFlow<V::Break> {
     match &ctx.exprs[idx] {
@@ -187,7 +181,7 @@ pub fn walk_expr<V: AstVisitor + ?Sized>(
 /// Walk a type node, visiting all children in source order.
 pub fn walk_ty<V: AstVisitor + ?Sized>(
     v: &mut V,
-    idx: Idx<Ty>,
+    idx: TyIdx,
     ctx: &AstArenas,
 ) -> ControlFlow<V::Break> {
     match &ctx.tys[idx] {
@@ -256,7 +250,7 @@ pub fn walk_ty<V: AstVisitor + ?Sized>(
 /// Walk a pattern node, visiting all children in source order.
 pub fn walk_pat<V: AstVisitor + ?Sized>(
     v: &mut V,
-    idx: Idx<Pat>,
+    idx: PatIdx,
     ctx: &AstArenas,
 ) -> ControlFlow<V::Break> {
     match &ctx.pats[idx] {
@@ -414,8 +408,8 @@ fn walk_effect_ops<V: AstVisitor + ?Sized>(
 
 fn walk_expr_block<V: AstVisitor + ?Sized>(
     v: &mut V,
-    stmts: &[Idx<Expr>],
-    tail: Option<Idx<Expr>>,
+    stmts: &[ExprIdx],
+    tail: Option<ExprIdx>,
     ctx: &AstArenas,
 ) -> ControlFlow<V::Break> {
     for &s in stmts {
@@ -429,7 +423,7 @@ fn walk_expr_block<V: AstVisitor + ?Sized>(
 
 fn walk_expr_call<V: AstVisitor + ?Sized>(
     v: &mut V,
-    callee: Idx<Expr>,
+    callee: ExprIdx,
     args: &[Arg],
     ctx: &AstArenas,
 ) -> ControlFlow<V::Break> {
@@ -460,7 +454,7 @@ fn walk_expr_array<V: AstVisitor + ?Sized>(
 
 fn walk_expr_match<V: AstVisitor + ?Sized>(
     v: &mut V,
-    scrutinee: Idx<Expr>,
+    scrutinee: ExprIdx,
     arms: &[MatchArm],
     ctx: &AstArenas,
 ) -> ControlFlow<V::Break> {

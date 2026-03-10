@@ -3,10 +3,10 @@
 #[cfg(test)]
 mod tests;
 
-use music_shared::{Idx, Span, Symbol};
+use music_shared::{Span, Symbol};
 
-use crate::TyList;
-use crate::expr::{Arrow, Expr};
+use crate::expr::Arrow;
+use crate::{ExprIdx, TyIdx, TyList};
 
 /// A type node. Recursive children use arena indices.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -21,16 +21,16 @@ pub enum Ty {
         span: Span,
     },
     Option {
-        inner: Idx<Self>,
+        inner: TyIdx,
         span: Span,
     },
     Ref {
-        inner: Idx<Self>,
+        inner: TyIdx,
         span: Span,
     },
     Fn {
         params: TyList,
-        ret: Idx<Self>,
+        ret: TyIdx,
         arrow: Arrow,
         effects: Option<EffectSet>,
         span: Span,
@@ -49,20 +49,20 @@ pub enum Ty {
         span: Span,
     },
     Refine {
-        base: Idx<Self>,
-        pred: Idx<Expr>,
+        base: TyIdx,
+        pred: ExprIdx,
         span: Span,
     },
     Array {
         len: Option<u32>,
-        elem: Idx<Self>,
+        elem: TyIdx,
         span: Span,
     },
     Quantified {
         kind: Quantifier,
         params: Vec<TyParam>,
         constraints: Vec<Constraint>,
-        body: Idx<Self>,
+        body: TyIdx,
         span: Span,
     },
     Error {
@@ -74,8 +74,8 @@ pub enum Ty {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TyRecField {
     pub name: Symbol,
-    pub ty: Idx<Ty>,
-    pub default: Option<Idx<Expr>>,
+    pub ty: TyIdx,
+    pub default: Option<ExprIdx>,
     pub span: Span,
 }
 
@@ -91,7 +91,7 @@ pub struct EffectSet {
 pub enum EffectItem {
     Named {
         name: Symbol,
-        arg: Option<Idx<Ty>>,
+        arg: Option<TyIdx>,
         span: Span,
     },
     Var {

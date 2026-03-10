@@ -18,12 +18,19 @@ pub use ty::Ty;
 
 use music_shared::{Arena, Idx, Span};
 
+/// Index into the expression arena.
+pub type ExprIdx = Idx<Expr>;
+/// Index into the type-syntax arena.
+pub type TyIdx = Idx<Ty>;
+/// Index into the pattern arena.
+pub type PatIdx = Idx<Pat>;
+
 /// A list of expression indices.
-pub type ExprList = Vec<Idx<Expr>>;
+pub type ExprList = Vec<ExprIdx>;
 /// A list of type indices.
-pub type TyList = Vec<Idx<Ty>>;
+pub type TyList = Vec<TyIdx>;
 /// A list of pattern indices.
-pub type PatList = Vec<Idx<Pat>>;
+pub type PatList = Vec<PatIdx>;
 
 /// Bundled arenas for all recursive AST node categories.
 #[derive(Default)]
@@ -44,7 +51,7 @@ impl AstArenas {
 /// A statement: an expression followed by a semicolon (not stored).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Stmt {
-    pub expr: Idx<Expr>,
+    pub expr: ExprIdx,
     pub span: Span,
 }
 
