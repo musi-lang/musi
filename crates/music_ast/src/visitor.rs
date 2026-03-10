@@ -116,6 +116,7 @@ pub fn walk_expr<V: AstVisitor + ?Sized>(
             }
             ControlFlow::Continue(())
         }
+        Expr::Choice { body, .. } => v.visit_ty(*body, ctx),
 
         // -- operators -------------------------------------------------------
         Expr::BinOp { left, right, .. } => v.visit_expr_list(&[*left, *right], ctx),
@@ -301,10 +302,14 @@ fn walk_let_fields<V: AstVisitor + ?Sized>(
     ctx: &AstArenas,
 ) -> ControlFlow<V::Break> {
     v.visit_pat(fields.pat, ctx)?;
+    walk_constraints(v, &fields.constraints, ctx)?;
     if let Some(ty) = fields.ty {
         v.visit_ty(ty, ctx)?;
     }
-    v.visit_expr(fields.value, ctx)
+    if let Some(val) = fields.value {
+        v.visit_expr(val, ctx)?;
+    }
+    ControlFlow::Continue(())
 }
 
 fn walk_params<V: AstVisitor + ?Sized>(

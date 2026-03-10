@@ -49,7 +49,6 @@ pub enum Expr {
     // -- functions -----------------------------------------------------------
     Fn {
         params: Vec<Param>,
-        arrow: Arrow,
         ret_ty: Option<TyIdx>,
         body: ExprIdx,
         span: Span,
@@ -91,6 +90,10 @@ pub enum Expr {
     Variant {
         name: Symbol,
         args: ExprList,
+        span: Span,
+    },
+    Choice {
+        body: TyIdx,
         span: Span,
     },
 
@@ -194,8 +197,10 @@ pub struct LetFields {
     pub kind: BindKind,
     pub heap: bool,
     pub pat: PatIdx,
+    pub params: Vec<TyParam>,
+    pub constraints: Vec<Constraint>,
     pub ty: Option<TyIdx>,
-    pub value: ExprIdx,
+    pub value: Option<ExprIdx>,
     pub span: Span,
 }
 

@@ -23,8 +23,10 @@ fn test_let_fields_round_trip_through_arena() {
         kind: BindKind::Immut,
         heap: false,
         pat,
+        params: vec![],
+        constraints: vec![],
         ty: None,
-        value,
+        value: Some(value),
         span: Span::new(0, 10),
     };
     let idx = arenas.exprs.alloc(Expr::Let {
@@ -38,7 +40,7 @@ fn test_let_fields_round_trip_through_arena() {
     assert_eq!(stored.kind, BindKind::Immut);
     assert!(!stored.heap);
     assert_eq!(stored.pat, pat);
-    assert_eq!(stored.value, value);
+    assert_eq!(stored.value, Some(value));
 }
 
 #[test]
@@ -112,8 +114,10 @@ fn test_binding_embeds_let_fields() {
         kind: BindKind::Mut,
         heap: true,
         pat,
+        params: vec![],
+        constraints: vec![],
         ty: None,
-        value,
+        value: Some(value),
         span: Span::new(0, 10),
     };
     let idx = arenas.exprs.alloc(Expr::Binding {
