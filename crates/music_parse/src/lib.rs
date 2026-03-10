@@ -3,11 +3,11 @@
 //! Consumes a flat [`Token`] slice and produces a [`ParsedModule`] with
 //! arena-allocated AST nodes.
 
-mod decl;
 mod error;
 mod expr;
 mod parser;
 mod pat;
+mod stmt;
 mod ty;
 
 use music_ast::ParsedModule;

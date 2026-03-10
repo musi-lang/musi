@@ -3,22 +3,22 @@
 #[cfg(test)]
 mod tests;
 
-pub mod decl;
 pub mod effects;
 pub mod expr;
 pub mod pat;
+pub mod stmt;
 pub mod ty;
 
 use std::collections::HashMap;
 use std::mem;
 
-use music_ast::{AstArenas, Expr};
-use music_shared::{Arena, DiagnosticBag, FileId, Idx, Interner, Span};
+use music_ast::{AstArenas, ExprIdx};
+use music_shared::{Arena, DiagnosticBag, FileId, Interner, Span, Symbol};
 
 use crate::def::{DefId, DefTable};
 use crate::error::SemaError;
 use crate::scope::{ScopeId, ScopeTree};
-use crate::types::{EffectRow, InstanceInfo, Obligation, Type, fmt_type};
+use crate::types::{EffectRow, InstanceInfo, Obligation, Type, TypeIdx, fmt_type};
 use crate::unify::UnifyTable;
 use crate::well_known::WellKnown;
 
@@ -28,7 +28,10 @@ pub struct CheckContext<'a> {
     pub(crate) interner: &'a Interner,
     pub(crate) file_id: FileId,
     pub(crate) well_known: &'a WellKnown,
-    pub(crate) expr_defs: &'a HashMap<Idx<Expr>, DefId>,
+    pub(crate) expr_defs: &'a HashMap<ExprIdx, DefId>,
+    /// Pre-computed types for import expressions, keyed by the import path symbol.
+    /// Populated by the multi-file pipeline before sema runs.
+    pub(crate) import_types: &'a HashMap<Symbol, TypeIdx>,
 }
 
 /// Mutable type-checking state built up during checking.
@@ -37,7 +40,7 @@ pub struct TypeStore {
     pub(crate) types: Arena<Type>,
     pub(crate) obligations: Vec<Obligation>,
     pub(crate) instances: Vec<InstanceInfo>,
-    pub(crate) expr_types: HashMap<Idx<Expr>, Idx<Type>>,
+    pub(crate) expr_types: HashMap<ExprIdx, TypeIdx>,
 }
 
 pub struct Checker<'a> {
@@ -77,30 +80,30 @@ impl<'a> Checker<'a> {
     }
 
     /// Synthesises a type for `expr` (inference mode, direction ↑).
-    pub fn synth(&mut self, expr: Idx<Expr>) -> Idx<Type> {
+    pub fn synth(&mut self, expr: ExprIdx) -> TypeIdx {
         self::expr::synth(self, expr)
     }
 
     /// Checks `expr` against `expected` (checking mode, direction ↓).
-    pub fn check(&mut self, expr: Idx<Expr>, expected: Idx<Type>) {
+    pub fn check(&mut self, expr: ExprIdx, expected: TypeIdx) {
         self::expr::check(self, expr, expected);
     }
 
-    pub(crate) fn fresh_var(&mut self, span: Span) -> Idx<Type> {
+    pub(crate) fn fresh_var(&mut self, span: Span) -> TypeIdx {
         self.store.unify.fresh(span, &mut self.store.types)
     }
 
-    pub(crate) fn alloc_ty(&mut self, ty: Type) -> Idx<Type> {
+    pub(crate) fn alloc_ty(&mut self, ty: Type) -> TypeIdx {
         self.store.types.alloc(ty)
     }
 
     /// Creates a `Type::Named` for a well-known type with no arguments.
-    pub(crate) fn named_ty(&mut self, def: DefId) -> Idx<Type> {
+    pub(crate) fn named_ty(&mut self, def: DefId) -> TypeIdx {
         self.store.types.alloc(Type::Named { def, args: vec![] })
     }
 
     /// Unifies two types, reporting a diagnostic on failure.
-    pub(crate) fn unify_or_report(&mut self, expected: Idx<Type>, found: Idx<Type>, span: Span) {
+    pub(crate) fn unify_or_report(&mut self, expected: TypeIdx, found: TypeIdx, span: Span) {
         if !self
             .store
             .unify
@@ -120,17 +123,17 @@ impl<'a> Checker<'a> {
         }
     }
 
-    pub(crate) fn record_type(&mut self, expr: Idx<Expr>, ty: Idx<Type>) {
+    pub(crate) fn record_type(&mut self, expr: ExprIdx, ty: TypeIdx) {
         let _prev = self.store.expr_types.insert(expr, ty);
     }
 
     /// Allocates the error (poison) type.
-    pub(crate) fn error_ty(&mut self) -> Idx<Type> {
+    pub(crate) fn error_ty(&mut self) -> TypeIdx {
         self.store.types.alloc(Type::Error)
     }
 
     /// Resolves a type through any chain of unification bindings.
-    pub(crate) fn resolve_ty(&self, ty: Idx<Type>) -> Idx<Type> {
+    pub(crate) fn resolve_ty(&self, ty: TypeIdx) -> TypeIdx {
         self.store.unify.resolve(ty, &self.store.types)
     }
 
@@ -188,6 +191,6 @@ impl<'a> Checker<'a> {
 pub struct CheckerResult {
     pub types: Arena<Type>,
     pub unify: UnifyTable,
-    pub expr_types: HashMap<Idx<Expr>, Idx<Type>>,
+    pub expr_types: HashMap<ExprIdx, TypeIdx>,
     pub instances: Vec<InstanceInfo>,
 }

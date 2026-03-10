@@ -11,7 +11,6 @@
 //! 7. **Tail-call identification** — mark tail-position calls
 
 pub mod closure;
-pub mod decl;
 pub mod desugar;
 pub mod effect;
 pub mod exist;
@@ -19,6 +18,7 @@ pub mod expr;
 pub mod inout;
 pub mod mono;
 pub mod pat;
+pub mod stmt;
 pub mod tail;
 pub mod ty;
 
@@ -44,5 +44,5 @@ pub fn lower(
     sema: &SemaResult,
     interner: &Interner,
 ) -> Result<IrModule, IrError> {
-    decl::lower_module(parsed, sema, interner)
+    stmt::lower_module(parsed, sema, interner)
 }
