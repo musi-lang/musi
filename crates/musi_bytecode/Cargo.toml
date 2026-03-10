@@ -1,0 +1,13 @@
+[package]
+name = "musi_bytecode"
+description = "Musi .msbc bytecode format definitions"
+keywords = ["bytecode", "musi", "format"]
+categories = ["encoding"]
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true

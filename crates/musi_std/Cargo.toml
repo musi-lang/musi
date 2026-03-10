@@ -1,0 +1,19 @@
+[package]
+name = "musi_std"
+description = "Musi standard library and FFI runtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+keywords = ["musi", "stdlib", "ffi", "runtime"]
+categories = ["interpreters"]
+
+[dependencies]
+libc = { workspace = true }
+libffi = { workspace = true }
+libloading = { workspace = true }
+musi_vm = { path = "../musi_vm" }
+
+[lints]
+workspace = true
