@@ -2,12 +2,22 @@
 
 use std::{fs, path::Path, process};
 
+use musi_manifest::MusiManifest;
+
 use crate::pipeline;
 
 /// Compiles `path` to bytecode and writes it to `output` (or `path.msbc`).
-pub fn run(path: &Path, output: Option<&Path>) -> ! {
-    let Ok(out) = pipeline::run_frontend(path) else {
-        process::exit(1)
+pub fn run(path: &Path, output: Option<&Path>, manifest: Option<&MusiManifest>) -> ! {
+    let out = if manifest.is_some() {
+        match pipeline::run_frontend_multi(path, manifest) {
+            Ok(o) => o,
+            Err(()) => process::exit(1),
+        }
+    } else {
+        match pipeline::run_frontend(path) {
+            Ok(o) => o,
+            Err(()) => process::exit(1),
+        }
     };
     let Ok(bytes) = pipeline::run_backend(&out) else {
         process::exit(1)

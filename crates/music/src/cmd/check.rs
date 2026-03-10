@@ -2,11 +2,18 @@
 
 use std::{path::Path, process};
 
+use musi_manifest::MusiManifest;
+
 use crate::pipeline;
 
 /// Runs the frontend on `path` and exits with `0` on success, `1` on error.
-pub fn run(path: &Path) -> ! {
-    match pipeline::run_frontend(path) {
+pub fn run(path: &Path, manifest: Option<&MusiManifest>) -> ! {
+    let result = if manifest.is_some() {
+        pipeline::run_frontend_multi(path, manifest)
+    } else {
+        pipeline::run_frontend(path)
+    };
+    match result {
         Ok(_) => process::exit(0),
         Err(()) => process::exit(1),
     }

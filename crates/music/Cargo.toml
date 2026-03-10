@@ -14,15 +14,17 @@ name = "music"
 path = "src/main.rs"
 
 [dependencies]
-music_shared = { path = "../music_shared" }
-music_ast    = { path = "../music_ast" }
-music_lex    = { path = "../music_lex" }
-music_parse  = { path = "../music_parse" }
-music_sema   = { path = "../music_sema" }
-music_ir     = { path = "../music_ir" }
-music_emit   = { path = "../music_emit" }
-musi_vm      = { path = "../musi_vm" }
-clap         = { workspace = true }
+music_shared  = { path = "../music_shared" }
+music_ast     = { path = "../music_ast" }
+music_lex     = { path = "../music_lex" }
+music_parse   = { path = "../music_parse" }
+music_sema    = { path = "../music_sema" }
+music_ir      = { path = "../music_ir" }
+music_emit    = { path = "../music_emit" }
+music_resolve = { path = "../music_resolve" }
+musi_vm       = { path = "../musi_vm" }
+musi_manifest = { path = "../musi_manifest" }
+clap          = { workspace = true }
 
 [lints]
 workspace = true
