@@ -16,6 +16,7 @@ use crate::value::Value;
 const MAX_CALL_DEPTH: usize = 1024;
 
 /// An activation record for a single function invocation.
+#[derive(Clone)]
 pub struct Frame {
     /// Index into `module.functions`.
     pub fn_idx: usize,
@@ -36,6 +37,11 @@ pub struct EffFrame {
     pub handler_fn_id: u32,
 }
 
+/// A captured one-shot continuation (frames between handler and `EFF_DO` site).
+struct Continuation {
+    frames: Vec<Frame>,
+}
+
 /// The result of executing a single instruction.
 pub enum StepResult {
     /// Execution continues normally.
@@ -52,6 +58,7 @@ pub struct Vm {
     call_stack: Vec<Frame>,
     instruction_count: u64,
     instruction_limit: Option<u64>,
+    continuations: Vec<Continuation>,
 }
 
 impl Vm {
@@ -65,6 +72,7 @@ impl Vm {
             call_stack: vec![],
             instruction_count: 0,
             instruction_limit: None,
+            continuations: vec![],
         }
     }
 
@@ -280,6 +288,12 @@ impl Vm {
             effects::EffectAction::DoEffect { handler_fn_id } => {
                 return self.do_call(handler_fn_id);
             }
+            effects::EffectAction::CrossFrameSearch { effect_id } => {
+                return self.exec_eff_do_cross_frame(effect_id);
+            }
+            effects::EffectAction::Resume => {
+                return self.exec_eff_res();
+            }
         }
 
         // Control flow (jumps, calls, returns).
@@ -410,6 +424,86 @@ impl Vm {
         Ok(StepResult::Continue)
     }
 
+    // ── Effect handling ─────────────────────────────────────────────────────
+
+    /// Cross-frame `EFF_DO`: search the entire call stack top-to-bottom for a
+    /// handler matching `effect_id`. Captures frames between handler and
+    /// current frame as a continuation, then calls the handler function.
+    fn exec_eff_do_cross_frame(&mut self, effect_id: u8) -> Result<StepResult, VmError> {
+        // Search call stack from top-1 to bottom for a frame with matching handler.
+        let handler_idx = self
+            .call_stack
+            .iter()
+            .enumerate()
+            .rev()
+            .skip(1) // skip current frame (already searched)
+            .find_map(|(idx, frame)| {
+                frame
+                    .eff_stack
+                    .iter()
+                    .rev()
+                    .find(|f| f.effect_id == effect_id)
+                    .map(|_| idx)
+            });
+
+        let h_idx = handler_idx.ok_or(VmError::NoHandler { effect_id })?;
+
+        // Find the handler fn_id from the handler frame's eff_stack.
+        let handler_fn_id = self.call_stack[h_idx]
+            .eff_stack
+            .iter()
+            .rev()
+            .find(|f| f.effect_id == effect_id)
+            .expect("handler exists")
+            .handler_fn_id;
+
+        // Capture frames above the handler as a continuation.
+        let captured: Vec<Frame> = self.call_stack.drain(h_idx + 1..).collect();
+        self.continuations.push(Continuation { frames: captured });
+
+        // Call the handler function (it will push a new frame onto call_stack).
+        self.do_call(handler_fn_id)
+    }
+
+    /// `EFF_RES`: handler-side resume. Pop resume value, restore continuation
+    /// frames, push resume value onto the restored topmost frame.
+    fn exec_eff_res(&mut self) -> Result<StepResult, VmError> {
+        // Pop resume value from handler's stack.
+        let resume_value = self
+            .call_stack
+            .last_mut()
+            .ok_or_else(|| VmError::Malformed {
+                desc: "eff.res with empty call stack".into(),
+            })?
+            .stack
+            .pop()
+            .ok_or_else(|| VmError::Malformed {
+                desc: "eff.res on empty operand stack".into(),
+            })?;
+
+        // Pop the most recent continuation.
+        let cont = self.continuations.pop().ok_or_else(|| VmError::Malformed {
+            desc: "eff.res with no captured continuation".into(),
+        })?;
+
+        // Pop the handler frame.
+        let _ = self.call_stack.pop();
+
+        // Restore continuation frames.
+        self.call_stack.extend(cont.frames);
+
+        // Push resume value onto the topmost restored frame.
+        let top = self
+            .call_stack
+            .last_mut()
+            .ok_or_else(|| VmError::Malformed {
+                desc: "eff.res: no frame after restoring continuation".into(),
+            })?;
+        top.stack.push(resume_value);
+
+        Ok(StepResult::Continue)
+    }
+
     // ── Garbage collection ──────────────────────────────────────────────────
 
     /// Run a mark-sweep garbage collection cycle.
@@ -422,12 +516,18 @@ impl Vm {
         self.heap.sweep()
     }
 
-    /// Gather all root values from the call stack and globals.
+    /// Gather all root values from the call stack, continuations, and globals.
     fn collect_roots(&self) -> Vec<Value> {
         let mut roots = Vec::new();
         for frame in &self.call_stack {
             roots.extend_from_slice(&frame.locals);
             roots.extend_from_slice(&frame.stack);
+        }
+        for cont in &self.continuations {
+            for frame in &cont.frames {
+                roots.extend_from_slice(&frame.locals);
+                roots.extend_from_slice(&frame.stack);
+            }
         }
         roots.extend_from_slice(&self.globals);
         roots

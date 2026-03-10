@@ -946,3 +946,255 @@ fn test_alc_man_allocates_object() {
     assert!(vm.heap().live_count() >= 1, "heap should have at least 1 object");
 }
 
+// ── Tier 2: EFF_DO cross-frame ───────────────────────────────────────────────
+
+/// Effect pool builder for tests.
+struct EffectDef {
+    id: u32,
+    name_const_idx: u32,
+    ops: Vec<EffectOpDef>,
+}
+
+struct EffectOpDef {
+    id: u32,
+    name_const_idx: u32,
+}
+
+/// Build a `.msbc` binary with an effect pool.
+fn make_msbc_with_effects(
+    consts: &[ConstEntry],
+    effects: &[EffectDef],
+    fns: &[FnDef],
+) -> Vec<u8> {
+    let entry_fn_id: u32 = fns.first().map_or(0, |f| f.fn_id);
+
+    // ── Const pool ────────────────────────────────────────────────────────────
+    let mut const_section: Vec<u8> = vec![];
+    let const_count = u32::try_from(consts.len()).expect("fits u32");
+    const_section.extend_from_slice(&const_count.to_le_bytes());
+    for c in consts {
+        match c {
+            ConstEntry::I32(v) => {
+                const_section.push(0x01);
+                const_section.extend_from_slice(&v.to_le_bytes());
+            }
+            ConstEntry::Str(bytes) => {
+                const_section.push(0x05);
+                let len = u32::try_from(bytes.len()).expect("fits u32");
+                const_section.extend_from_slice(&len.to_le_bytes());
+                const_section.extend_from_slice(bytes);
+            }
+        }
+    }
+
+    // ── Type pool (empty) ─────────────────────────────────────────────────────
+    let type_section: Vec<u8> = 0u32.to_le_bytes().to_vec();
+
+    // ── Effect pool ───────────────────────────────────────────────────────────
+    let mut effect_section: Vec<u8> = vec![];
+    let effect_count = u32::try_from(effects.len()).expect("fits u32");
+    effect_section.extend_from_slice(&effect_count.to_le_bytes());
+    for eff in effects {
+        effect_section.extend_from_slice(&eff.id.to_le_bytes());
+        effect_section.extend_from_slice(&eff.name_const_idx.to_le_bytes());
+        let op_count = u16::try_from(eff.ops.len()).expect("fits u16");
+        effect_section.extend_from_slice(&op_count.to_le_bytes());
+        for op in &eff.ops {
+            effect_section.extend_from_slice(&op.id.to_le_bytes());
+            effect_section.extend_from_slice(&op.name_const_idx.to_le_bytes());
+            effect_section.extend_from_slice(&0u16.to_le_bytes()); // param_count = 0
+            effect_section.extend_from_slice(&0u32.to_le_bytes()); // ret_type_id = 0
+        }
+    }
+
+    // ── Function pool ─────────────────────────────────────────────────────────
+    let mut fn_section: Vec<u8> = vec![];
+    let fn_count = u32::try_from(fns.len()).expect("fits u32");
+    fn_section.extend_from_slice(&fn_count.to_le_bytes());
+    for f in fns {
+        fn_section.extend_from_slice(&f.fn_id.to_le_bytes());
+        fn_section.extend_from_slice(&0u32.to_le_bytes());
+        fn_section.extend_from_slice(&f.local_count.to_le_bytes());
+        fn_section.extend_from_slice(&f.param_count.to_le_bytes());
+        let max_stack: u16 = 16;
+        fn_section.extend_from_slice(&max_stack.to_le_bytes());
+        fn_section.extend_from_slice(&0u16.to_le_bytes());
+        let code_len = u32::try_from(f.code.len()).expect("fits u32");
+        fn_section.extend_from_slice(&code_len.to_le_bytes());
+        fn_section.extend_from_slice(&f.code);
+        let handler_count = u16::try_from(f.handlers.len()).expect("fits u16");
+        fn_section.extend_from_slice(&handler_count.to_le_bytes());
+        for &(eid, hfn) in &f.handlers {
+            fn_section.push(eid);
+            fn_section.extend_from_slice(&hfn.to_le_bytes());
+        }
+    }
+
+    // ── Header ────────────────────────────────────────────────────────────────
+    let header_size: u32 = 36;
+    let const_off = header_size;
+    let type_off = const_off + u32::try_from(const_section.len()).expect("fits u32");
+    let effect_off = type_off + u32::try_from(type_section.len()).expect("fits u32");
+    let fn_off = effect_off + u32::try_from(effect_section.len()).expect("fits u32");
+
+    let mut header: Vec<u8> = Vec::with_capacity(36);
+    header.extend_from_slice(b"MUSI");
+    header.extend_from_slice(&1u16.to_le_bytes());
+    header.extend_from_slice(&0u16.to_le_bytes());
+    header.extend_from_slice(&4u32.to_le_bytes());
+    header.extend_from_slice(&entry_fn_id.to_le_bytes());
+    header.extend_from_slice(&const_off.to_le_bytes());
+    header.extend_from_slice(&type_off.to_le_bytes());
+    header.extend_from_slice(&effect_off.to_le_bytes());
+    header.extend_from_slice(&fn_off.to_le_bytes());
+
+    debug_assert_eq!(header.len(), 32);
+    let checksum = crc32_test(&header);
+    header.extend_from_slice(&checksum.to_le_bytes());
+    debug_assert_eq!(header.len(), 36);
+
+    let mut out = header;
+    out.extend_from_slice(&const_section);
+    out.extend_from_slice(&type_section);
+    out.extend_from_slice(&effect_section);
+    out.extend_from_slice(&fn_section);
+    out
+}
+
+#[test]
+fn test_eff_do_cross_frame_finds_handler() {
+    // fn 0: EFF_PSH (effect_id=1, handler=fn 2), call fn 1, RET
+    // fn 1: EFF_DO op_id=1, RET  (handler is in fn 0's eff_stack)
+    // fn 2 (handler): push 42, RET
+    let effect_id: u8 = 1;
+    let bytes = make_msbc_with_effects(
+        &[ConstEntry::I32(42)],
+        &[EffectDef {
+            id: 1,
+            name_const_idx: 0,
+            ops: vec![EffectOpDef { id: 1, name_const_idx: 0 }],
+        }],
+        &[
+            FnDef {
+                fn_id: 0,
+                local_count: 0,
+                param_count: 0,
+                code: vec![
+                    EFF_PSH, effect_id, // push handler for effect 1
+                    INV, 1, 0, 0, 0,    // call fn 1
+                    RET,
+                ],
+                handlers: vec![(effect_id, 2)], // effect_id=1 → handler fn_id=2
+            },
+            fn_def(1, 0, 0, vec![
+                EFF_DO, 1, 0, 0, 0,  // do effect op_id=1
+                RET,
+            ]),
+            fn_def(2, 0, 0, vec![
+                LD_CST, 0,  // push 42
+                RET,
+            ]),
+        ],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 42);
+}
+
+#[test]
+fn test_eff_res_resumes_continuation() {
+    // fn 0: EFF_PSH (effect_id=1, handler=fn 2), call fn 1, RET
+    // fn 1: EFF_DO op_id=1, RET  (the resume value should be returned)
+    // fn 2 (handler): push 99, EFF_RES, RET_U (should not reach RET_U)
+    let effect_id: u8 = 1;
+    let bytes = make_msbc_with_effects(
+        &[ConstEntry::I32(99)],
+        &[EffectDef {
+            id: 1,
+            name_const_idx: 0,
+            ops: vec![EffectOpDef { id: 1, name_const_idx: 0 }],
+        }],
+        &[
+            FnDef {
+                fn_id: 0,
+                local_count: 0,
+                param_count: 0,
+                code: vec![
+                    EFF_PSH, effect_id,
+                    INV, 1, 0, 0, 0,
+                    RET,
+                ],
+                handlers: vec![(effect_id, 2)],
+            },
+            fn_def(1, 0, 0, vec![
+                EFF_DO, 1, 0, 0, 0,
+                RET,
+            ]),
+            fn_def(2, 0, 0, vec![
+                LD_CST, 0,             // push 99
+                EFF_RES, 0, 0, 0, 0,  // resume with 99
+                RET_U,                 // should not reach
+            ]),
+        ],
+    );
+    let (_, result) = run_vm(&bytes);
+    // fn 1 does EFF_DO → handler pushes 99 and resumes → fn 1 gets 99 → returns it
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 99);
+}
+
+#[test]
+fn test_eff_abt_after_eff_do() {
+    // Handler does EFF_ABT instead of EFF_RES → EffectAborted.
+    let effect_id: u8 = 1;
+    let bytes = make_msbc_with_effects(
+        &[],
+        &[EffectDef {
+            id: 1,
+            name_const_idx: 0,
+            ops: vec![EffectOpDef { id: 1, name_const_idx: 0 }],
+        }],
+        &[
+            FnDef {
+                fn_id: 0,
+                local_count: 0,
+                param_count: 0,
+                code: vec![
+                    EFF_PSH, effect_id,
+                    INV, 1, 0, 0, 0,
+                    RET_U,
+                ],
+                handlers: vec![(effect_id, 2)],
+            },
+            fn_def(1, 0, 0, vec![
+                EFF_DO, 1, 0, 0, 0,
+                RET_U,
+            ]),
+            fn_def(2, 0, 0, vec![
+                EFF_ABT,  // abort
+                RET_U,    // unreachable, but needed for verifier boundary
+            ]),
+        ],
+    );
+    let (_, result) = run_vm(&bytes);
+    let err = result.unwrap_err();
+    match &err {
+        VmError::Runtime { source, .. } => {
+            assert!(
+                matches!(**source, VmError::EffectAborted),
+                "expected EffectAborted, got {source:?}"
+            );
+        }
+        _ => panic!("expected Runtime error, got {err:?}"),
+    }
+}
+
+#[test]
+fn test_eff_res_c_is_noop() {
+    // EFF_RES_C should be a no-op (continue execution without popping stack).
+    let bytes = make_msbc(
+        &[ConstEntry::I32(77)],
+        &[fn_def(0, 0, 0, vec![LD_CST, 0, EFF_RES_C, 0, RET])],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 77);
+}
+
