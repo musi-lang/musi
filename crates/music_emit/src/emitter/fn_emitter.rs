@@ -61,8 +61,6 @@ impl FnEmitter {
         }
     }
 
-    // ── Stack tracking ──────────────────────────────────────────────────
-
     pub fn push_n(&mut self, n: i32) {
         self.stack_depth += n;
         if self.stack_depth > 0 {
@@ -76,8 +74,6 @@ impl FnEmitter {
     pub const fn pop_n(&mut self, n: i32) {
         self.stack_depth -= n;
     }
-
-    // ── Local slot helpers ──────────────────────────────────────────────
 
     /// Emit `ld.loc` or `ld.loc.w` depending on slot index.
     pub fn emit_ld_loc(&mut self, local: IrLocal) {
@@ -113,8 +109,6 @@ impl FnEmitter {
         self.push_n(1);
     }
 
-    // ── No-operand instructions ─────────────────────────────────────────
-
     pub fn emit_dup(&mut self) {
         encode_no_operand(&mut self.code, Opcode::DUP);
         self.push_n(1);
@@ -129,27 +123,22 @@ impl FnEmitter {
         encode_no_operand(&mut self.code, Opcode::RET_U);
     }
 
-    // ── Arithmetic / comparison ─────────────────────────────────────────
-
     /// Emit a binary op instruction (pops 2, pushes 1).
     pub fn emit_binop(&mut self, op: Opcode) {
         encode_no_operand(&mut self.code, op);
-        self.pop_n(1); // net: -2 + 1 = -1
+        self.pop_n(1);
     }
 
-    /// Emit a unary op (pops 1, pushes 1 — net 0).
+    /// Emit a unary op.
     pub fn emit_unop(&mut self, op: Opcode) {
         encode_no_operand(&mut self.code, op);
     }
-
-    // ── Field / variant access ──────────────────────────────────────────
 
     pub fn emit_ld_fld(&mut self, index: u32) -> Result<(), EmitError> {
         let i = u8::try_from(index).map_err(|_| EmitError::OperandOverflow {
             desc: "field index exceeds 255".into(),
         })?;
         encode_u8(&mut self.code, Opcode::LD_FLD, i);
-        // net 0: pops obj, pushes val
         Ok(())
     }
 
@@ -158,7 +147,6 @@ impl FnEmitter {
             desc: "product field count exceeds 255".into(),
         })?;
         encode_u8(&mut self.code, Opcode::MK_PRD, n);
-        // Pops field_count values, pushes 1 product
         self.pop_n(stack_pop - 1);
         Ok(())
     }
@@ -170,15 +158,11 @@ impl FnEmitter {
             let t = u16::try_from(tag).expect("variant tag fits in u16");
             encode_u16(&mut self.code, Opcode::MK_VAR_W, t);
         }
-        // mk.var consumes payload already on stack, pushes variant
     }
 
     pub fn emit_ld_tag(&mut self) {
         encode_no_operand(&mut self.code, Opcode::LD_TAG);
-        // net 0: pops val, pushes tag
     }
-
-    // ── Invocation ──────────────────────────────────────────────────────
 
     /// Emit a direct call to `fn_id`.
     pub fn emit_inv(&mut self, fn_id: u32, effectful: bool, arg_count: i32) {
@@ -188,7 +172,6 @@ impl FnEmitter {
             Opcode::INV
         };
         encode_u32(&mut self.code, op, fn_id);
-        // Pops args, pushes return value
         self.pop_n(arg_count);
         self.push_n(1);
     }
@@ -201,7 +184,6 @@ impl FnEmitter {
             Opcode::INV_TAL
         };
         encode_u32(&mut self.code, op, fn_id);
-        // Tail call: frame reused, no stack adjustment needed here
     }
 
     /// Emit an indirect (dynamic) call through a closure or fn value.
@@ -211,11 +193,9 @@ impl FnEmitter {
     pub fn emit_inv_dyn(&mut self, arg_count: i32) {
         let n = u8::try_from(arg_count).unwrap_or(u8::MAX);
         encode_u8(&mut self.code, Opcode::INV_DYN, n);
-        self.pop_n(arg_count + 1); // args + callee
+        self.pop_n(arg_count + 1);
         self.push_n(1);
     }
-
-    // ── Allocation ─────────────────────────────────────────────────────
 
     pub fn emit_alc_ref(&mut self, type_id: u32) {
         encode_u32(&mut self.code, Opcode::ALC_REF, type_id);
@@ -226,8 +206,6 @@ impl FnEmitter {
         encode_u32(&mut self.code, Opcode::ALC_ARN, type_id);
         self.push_n(1);
     }
-
-    // ── Effects ─────────────────────────────────────────────────────────
 
     pub fn emit_eff_psh(&mut self, effect_id: u32, handler_fn_id: u32) -> Result<(), EmitError> {
         let id = u8::try_from(effect_id).map_err(|_| EmitError::OperandOverflow {
@@ -260,8 +238,6 @@ impl FnEmitter {
         encode_no_operand(&mut self.code, Opcode::EFF_RES_C);
         self.pop_n(1);
     }
-
-    // ── Control flow ────────────────────────────────────────────────────
 
     /// Emit an unconditional wide jump to `label` (5 bytes, i32 offset).
     pub fn emit_jmp(&mut self, label: IrLabel) {

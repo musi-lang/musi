@@ -41,7 +41,6 @@ pub fn assemble(params: AssembleParams<'_>) -> Result<Vec<u8>, EmitError> {
         interner,
         entry_fn_id,
     } = params;
-    // ── Build section buffers ───────────────────────────────────────────
     let mut const_section: Vec<u8> = vec![];
     cp.write_into(&mut const_section)?;
 
@@ -64,7 +63,6 @@ pub fn assemble(params: AssembleParams<'_>) -> Result<Vec<u8>, EmitError> {
     let mut fn_section: Vec<u8> = vec![];
     write_function_pool(&mut fn_section, functions)?;
 
-    // ── Compute offsets ─────────────────────────────────────────────────
     let header_size: u32 = 40;
     let const_section_len =
         u32::try_from(const_section.len()).map_err(|_| EmitError::TooManyConsts)?;
@@ -89,7 +87,6 @@ pub fn assemble(params: AssembleParams<'_>) -> Result<Vec<u8>, EmitError> {
         .checked_add(foreign_section_len)
         .ok_or(EmitError::FunctionTooLarge)?;
 
-    // ── Build the 40-byte header ────────────────────────────────────────
     let mut header: Vec<u8> = Vec::with_capacity(40);
     header.extend_from_slice(b"MUSI");
     // version_maj u16 LE
@@ -118,7 +115,6 @@ pub fn assemble(params: AssembleParams<'_>) -> Result<Vec<u8>, EmitError> {
 
     debug_assert_eq!(header.len(), 40, "header must be exactly 40 bytes");
 
-    // ── Assemble final output ───────────────────────────────────────────
     let total_len = 40
         + const_section.len()
         + type_section.len()
