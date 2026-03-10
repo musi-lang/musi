@@ -15,7 +15,13 @@ All contributors are expected to follow [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/image?repos=musi-lang/musi&type=timeline&legend=bottom-right)](https://www.star-history.com/?repos=musi-lang%2Fmusi&type=timeline&legend=top-left)
+<a href="https://www.star-history.com/?repos=musi-lang%2Fmusi&type=date&logscale=&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/image?repos=musi-lang/musi&type=date&theme=dark&logscale&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/image?repos=musi-lang/musi&type=date&logscale&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/image?repos=musi-lang/musi&type=date&logscale&legend=top-left" />
+ </picture>
+</a>
 
 ## License
 
