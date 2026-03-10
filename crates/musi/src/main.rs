@@ -38,12 +38,9 @@ fn main() {
         }
     };
 
-    match verify(&module) {
-        Ok(()) => {}
-        Err(e) => {
-            eprintln!("error: {e}");
-            process::exit(1);
-        }
+    if let Err(e) = verify(&module) {
+        eprintln!("error: {e}");
+        process::exit(1);
     }
 
     let host = match musi_std::StdHost::new(&module.foreign_fns) {

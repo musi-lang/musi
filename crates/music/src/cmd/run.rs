@@ -19,12 +19,9 @@ pub fn run(path: &Path) -> ! {
             process::exit(1);
         }
     };
-    match musi_vm::verify(&module) {
-        Ok(()) => {}
-        Err(e) => {
-            eprintln!("error: {e}");
-            process::exit(1);
-        }
+    if let Err(e) = musi_vm::verify(&module) {
+        eprintln!("error: {e}");
+        process::exit(1);
     }
     match musi_vm::Vm::new(module).run() {
         Ok(_) => process::exit(0),
