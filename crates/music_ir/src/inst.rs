@@ -195,6 +195,9 @@ pub enum IrRvalue {
 
     /// Await a task result.
     Await { task: IrOperand },
+
+    /// Call a foreign (FFI) function by index.
+    ForeignCall { fn_idx: u32, args: Vec<IrOperand> },
 }
 
 /// An operand — either a local variable or a constant.

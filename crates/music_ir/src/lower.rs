@@ -20,3 +20,29 @@ pub mod inout;
 pub mod mono;
 pub mod pat;
 pub mod tail;
+pub mod ty;
+
+use music_ast::ParsedModule;
+use music_sema::SemaResult;
+use music_shared::Interner;
+
+use crate::IrModule;
+use crate::error::IrError;
+
+/// Lowers a parsed module + sema result into MSIR.
+///
+/// This is the main entry point for the IR lowering pipeline.
+/// Only a subset of the language is supported in the initial pass;
+/// unsupported constructs return [`IrError::UnsupportedExpr`].
+///
+/// # Errors
+///
+/// Returns an [`IrError`] if lowering fails due to unsupported constructs,
+/// unresolved type variables, or unknown effects.
+pub fn lower(
+    parsed: &ParsedModule,
+    sema: &SemaResult,
+    interner: &Interner,
+) -> Result<IrModule, IrError> {
+    decl::lower_module(parsed, sema, interner)
+}

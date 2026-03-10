@@ -12,6 +12,8 @@ pub enum IrError {
     UnsupportedExpr,
     #[error("effect `{name}` not found in well-known registry")]
     UnknownEffect { name: Box<str> },
+    #[error("duplicate #[entrypoint] attribute")]
+    DuplicateEntryPoint,
 }
 
 impl IntoDiagnostic for IrError {

@@ -352,6 +352,16 @@ fn write_rvalue(
             write!(w, "await ")?;
             write_operand(w, task)
         }
+        IrRvalue::ForeignCall { fn_idx, args } => {
+            write!(w, "ffi.call #{fn_idx}(")?;
+            for (i, arg) in args.iter().enumerate() {
+                if i > 0 {
+                    write!(w, ", ")?;
+                }
+                write_operand(w, arg)?;
+            }
+            write!(w, ")")
+        }
     }
 }
 
@@ -536,6 +546,7 @@ fn write_type(
             write_type(w, *env_ty, types)?;
             write!(w, ")")
         }
+        IrType::Opaque { .. } => write!(w, "opaque"),
         IrType::TypeParam { index } => write!(w, "T{index}"),
         IrType::WitnessTable { class_def } => write!(w, "witness<class#{}>", class_def.0),
     }
