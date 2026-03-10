@@ -3,7 +3,7 @@
 //! Tests construct AST manually to test the resolve module in isolation,
 //! without depending on the lexer or parser.
 
-use music_ast::expr::{Arrow, BindKind, Expr, LetFields, Param, ParamMode};
+use music_ast::expr::{BindKind, Expr, LetFields, Param, ParamMode};
 use music_ast::pat::Pat;
 use music_ast::{AstArenas, ExprIdx, Lit, ParsedModule, Stmt};
 use music_shared::{DiagnosticBag, FileId, Interner, Span, Symbol};
@@ -107,8 +107,10 @@ fn test_resolve_let_binding_registers_pat_def() {
         kind: BindKind::Immut,
         heap: false,
         pat,
+        params: vec![],
+        constraints: vec![],
         ty: None,
-        value,
+        value: Some(value),
         span: Span::DUMMY,
     };
     let binding = arenas.exprs.alloc(Expr::Binding {
@@ -137,8 +139,10 @@ fn test_resolve_name_reference_creates_expr_def() {
         kind: BindKind::Immut,
         heap: false,
         pat,
+        params: vec![],
+        constraints: vec![],
         ty: None,
-        value,
+        value: Some(value),
         span: Span::DUMMY,
     };
     let binding = arenas.exprs.alloc(Expr::Binding {
@@ -186,8 +190,10 @@ fn test_resolve_duplicate_top_level_binding_emits_error() {
         kind: BindKind::Immut,
         heap: false,
         pat: pat1,
+        params: vec![],
+        constraints: vec![],
         ty: None,
-        value: value1,
+        value: Some(value1),
         span: Span::DUMMY,
     };
     let binding1 = arenas.exprs.alloc(Expr::Binding {
@@ -203,8 +209,10 @@ fn test_resolve_duplicate_top_level_binding_emits_error() {
         kind: BindKind::Immut,
         heap: false,
         pat: pat2,
+        params: vec![],
+        constraints: vec![],
         ty: None,
-        value: value2,
+        value: Some(value2),
         span: Span::DUMMY,
     };
     let binding2 = arenas.exprs.alloc(Expr::Binding {
@@ -239,7 +247,6 @@ fn test_resolve_fn_param_creates_def_in_body() {
     };
     let lambda = arenas.exprs.alloc(Expr::Fn {
         params: vec![param],
-        arrow: Arrow::Pure,
         ret_ty: None,
         body: param_ref,
         span: Span::DUMMY,
@@ -251,8 +258,10 @@ fn test_resolve_fn_param_creates_def_in_body() {
         kind: BindKind::Immut,
         heap: false,
         pat: pat_f,
+        params: vec![],
+        constraints: vec![],
         ty: None,
-        value: lambda,
+        value: Some(lambda),
         span: Span::DUMMY,
     };
     let binding = arenas.exprs.alloc(Expr::Binding {

@@ -12,10 +12,11 @@ pub mod ty;
 use std::collections::HashMap;
 use std::mem;
 
+use music_ast::ty::TyParam;
 use music_ast::{AstArenas, ExprIdx};
 use music_shared::{Arena, DiagnosticBag, FileId, Interner, Span, Symbol};
 
-use crate::def::{DefId, DefTable};
+use crate::def::{DefId, DefKind, DefTable};
 use crate::error::SemaError;
 use crate::scope::{ScopeId, ScopeTree};
 use crate::types::{EffectRow, InstanceInfo, Obligation, Type, TypeIdx, fmt_type};
@@ -135,6 +136,16 @@ impl<'a> Checker<'a> {
     /// Resolves a type through any chain of unification bindings.
     pub(crate) fn resolve_ty(&self, ty: TypeIdx) -> TypeIdx {
         self.store.unify.resolve(ty, &self.store.types)
+    }
+
+    pub(crate) fn enter_ty_param_scope(&mut self, params: &[TyParam]) -> ScopeId {
+        let parent = self.current_scope;
+        self.current_scope = self.scopes.push_child(parent);
+        for param in params {
+            let id = self.defs.alloc(param.name, DefKind::Type, param.span);
+            let _prev = self.scopes.define(self.current_scope, param.name, id);
+        }
+        parent
     }
 
     pub fn resolve_obligations(&mut self) {

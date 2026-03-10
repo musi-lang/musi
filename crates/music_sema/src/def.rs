@@ -3,6 +3,7 @@
 #[cfg(test)]
 mod tests;
 
+use music_ast::expr::ParamMode;
 use music_shared::{Span, Symbol};
 
 use crate::types::{Obligation, TyVarId, TypeIdx};
@@ -69,6 +70,10 @@ pub struct DefInfo {
     pub ty_info: DefTyInfo,
     /// How many times this definition is referenced (for unused warnings).
     pub use_count: u32,
+    /// Whether this definition is exported from the module.
+    pub exported: bool,
+    /// For parameters: the calling-convention mode (`var`, `inout`, `ref`).
+    pub param_mode: Option<ParamMode>,
 }
 
 /// Registry of all definitions encountered during analysis.
@@ -96,6 +101,8 @@ impl DefTable {
             parent: None,
             ty_info: DefTyInfo::default(),
             use_count: 0,
+            exported: false,
+            param_mode: None,
         });
         id
     }

@@ -91,7 +91,7 @@ fn test_resolve_duplicate_top_level_binding_emits_error() {
 
 #[test]
 fn test_resolve_fn_param_creates_def_in_body() {
-    let (output, diags) = resolve_src("let f := (p) -> p;");
+    let (output, diags) = resolve_src("let f := (p) => p;");
 
     // At least one pat_def: f
     assert!(!output.pat_defs.is_empty());

@@ -57,7 +57,12 @@ impl Resolver<'_> {
                 self.resolve_ty(body);
                 self.current_scope = parent;
             }
-            Ty::Var { .. } | Ty::Error { .. } => {}
+            Ty::Var { name, span } => {
+                if self.scopes.lookup(self.current_scope, name).is_none() {
+                    self.report_undefined(name, span);
+                }
+            }
+            Ty::Error { .. } => {}
         }
     }
 

@@ -167,6 +167,7 @@ fn analyze_emit_unused_warnings(
     for def in defs.iter() {
         if def.use_count == 0
             && def.span != Span::DUMMY
+            && !def.exported
             && matches!(def.kind, DefKind::Let | DefKind::Var | DefKind::Param)
         {
             let name_str = interner.resolve(def.name);

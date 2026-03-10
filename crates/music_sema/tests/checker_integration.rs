@@ -63,7 +63,7 @@ fn test_check_let_binding_type_mismatch_emits_error() {
 
 #[test]
 fn test_check_fn_call_correct_arity_no_error() {
-    let (_result, diags) = analyze_src("let f := (x) -> x;\nf(1);");
+    let (_result, diags) = analyze_src("let f := (x) => x;\nf(1);");
 
     assert!(!diags.has_errors());
 }

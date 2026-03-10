@@ -4,7 +4,7 @@
 //! These unit tests verify type inference and checking behavior without
 //! relying on the lexer and parser.
 
-use music_ast::expr::{Arrow, BindKind, Expr, LetFields, Param, ParamMode};
+use music_ast::expr::{BindKind, Expr, LetFields, Param, ParamMode};
 use music_ast::pat::Pat;
 use music_ast::{AstArenas, ExprIdx, Lit, ParsedModule, Stmt};
 use std::collections::HashMap;
@@ -122,8 +122,10 @@ fn test_check_underscore_binding_suppresses_unused_warning() {
         kind: BindKind::Immut,
         heap: false,
         pat,
+        params: vec![],
+        constraints: vec![],
         ty: None,
-        value,
+        value: Some(value),
         span: Span::DUMMY,
     };
     let binding = arenas.exprs.alloc(Expr::Binding {
@@ -160,7 +162,6 @@ fn test_check_fn_parameter_scope_in_body() {
     };
     let lambda = arenas.exprs.alloc(Expr::Fn {
         params: vec![param],
-        arrow: Arrow::Pure,
         ret_ty: None,
         body: param_ref,
         span: Span::DUMMY,
@@ -172,8 +173,10 @@ fn test_check_fn_parameter_scope_in_body() {
         kind: BindKind::Immut,
         heap: false,
         pat: pat_f,
+        params: vec![],
+        constraints: vec![],
         ty: None,
-        value: lambda,
+        value: Some(lambda),
         span: Span::DUMMY,
     };
     let binding = arenas.exprs.alloc(Expr::Binding {
@@ -219,8 +222,10 @@ fn test_check_binding_then_reference() {
         kind: BindKind::Immut,
         heap: false,
         pat,
+        params: vec![],
+        constraints: vec![],
         ty: None,
-        value,
+        value: Some(value),
         span: Span::DUMMY,
     };
     let binding = arenas.exprs.alloc(Expr::Binding {
