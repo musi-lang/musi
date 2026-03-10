@@ -12,6 +12,7 @@ pub enum TokenKind {
     KwAnd,
     KwAs,
     KwAwait,
+    KwChoice,
     KwClass,
     KwDefer,
     KwEffect,
@@ -120,6 +121,7 @@ impl TokenKind {
             Self::KwAnd
                 | Self::KwAs
                 | Self::KwAwait
+                | Self::KwChoice
                 | Self::KwClass
                 | Self::KwDefer
                 | Self::KwEffect
@@ -158,6 +160,7 @@ impl TokenKind {
             Self::KwAnd => Some("and"),
             Self::KwAs => Some("as"),
             Self::KwAwait => Some("await"),
+            Self::KwChoice => Some("choice"),
             Self::KwClass => Some("class"),
             Self::KwDefer => Some("defer"),
             Self::KwEffect => Some("effect"),
@@ -276,6 +279,7 @@ pub fn keyword_from_str(s: &str) -> Option<TokenKind> {
         "and" => Some(TokenKind::KwAnd),
         "as" => Some(TokenKind::KwAs),
         "await" => Some(TokenKind::KwAwait),
+        "choice" => Some(TokenKind::KwChoice),
         "class" => Some(TokenKind::KwClass),
         "defer" => Some(TokenKind::KwDefer),
         "effect" => Some(TokenKind::KwEffect),

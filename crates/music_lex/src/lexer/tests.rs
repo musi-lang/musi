@@ -27,6 +27,7 @@ fn test_all_keywords_recognized() {
     let keywords = [
         ("and", TokenKind::KwAnd),
         ("await", TokenKind::KwAwait),
+        ("choice", TokenKind::KwChoice),
         ("class", TokenKind::KwClass),
         ("defer", TokenKind::KwDefer),
         ("exists", TokenKind::KwExists),

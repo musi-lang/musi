@@ -7,6 +7,7 @@ fn test_keyword_from_str_returns_some_for_every_keyword() {
         ("and", TokenKind::KwAnd),
         ("as", TokenKind::KwAs),
         ("await", TokenKind::KwAwait),
+        ("choice", TokenKind::KwChoice),
         ("class", TokenKind::KwClass),
         ("defer", TokenKind::KwDefer),
         ("effect", TokenKind::KwEffect),
