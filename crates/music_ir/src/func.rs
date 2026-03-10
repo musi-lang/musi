@@ -8,7 +8,10 @@ use music_sema::DefId;
 use music_shared::{Idx, Span, Symbol};
 
 use crate::inst::IrInst;
-use crate::types::{IrEffectMask, IrType};
+use crate::types::{IrEffectMask, IrTypeIdx};
+
+/// Index into the function arena.
+pub type IrFnIdx = Idx<IrFunction>;
 
 /// Unique identifier for a function in the IR module (stable across passes).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -29,7 +32,7 @@ pub struct IrFunction {
     /// Formal parameters.
     pub params: Vec<IrParam>,
     /// Return type.
-    pub ret_ty: Idx<IrType>,
+    pub ret_ty: IrTypeIdx,
     /// Effect mask for this function.
     pub effects: IrEffectMask,
     /// The flat instruction sequence (ANF bindings + control flow).
@@ -47,7 +50,7 @@ pub struct IrParam {
     /// The local slot this parameter occupies.
     pub local: IrLocal,
     /// The type of the parameter.
-    pub ty: Idx<IrType>,
+    pub ty: IrTypeIdx,
     /// Passing mode (by value or by pointer for `inout`).
     pub mode: IrParamMode,
     /// Source span for diagnostics.
@@ -68,7 +71,7 @@ pub struct IrLocalDecl {
     /// The local slot.
     pub local: IrLocal,
     /// The type of the local.
-    pub ty: Idx<IrType>,
+    pub ty: IrTypeIdx,
     /// Whether this local is mutable.
     pub mutable: bool,
     /// Source span for diagnostics.
@@ -85,9 +88,9 @@ pub struct IrForeignFn {
     /// Library to link against (`None` = libc/default).
     pub library: Option<Symbol>,
     /// Parameter types.
-    pub param_tys: Vec<Idx<IrType>>,
+    pub param_tys: Vec<IrTypeIdx>,
     /// Return type.
-    pub ret_ty: Idx<IrType>,
+    pub ret_ty: IrTypeIdx,
     /// Whether this function is variadic.
     pub variadic: bool,
 }

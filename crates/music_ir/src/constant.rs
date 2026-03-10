@@ -1,14 +1,14 @@
 //! IR constant values.
 
-use music_shared::{Idx, Symbol};
+use music_shared::Symbol;
 
-use crate::types::IrType;
+use crate::types::IrTypeIdx;
 
 /// A top-level constant in the IR module.
 #[derive(Debug, Clone)]
 pub struct IrConst {
     pub value: IrConstValue,
-    pub ty: Idx<IrType>,
+    pub ty: IrTypeIdx,
 }
 
 /// A concrete compile-time value.

@@ -28,13 +28,17 @@ pub mod types;
 pub use constant::{IrConst, IrConstValue};
 pub use effect::{IrEffectDef, IrEffectId, IrEffectOpDef, IrEffectOpId};
 pub use error::IrError;
-pub use func::{IrFnId, IrForeignFn, IrFunction, IrLocal, IrLocalDecl, IrParam, IrParamMode};
+pub use func::{
+    IrFnId, IrFnIdx, IrForeignFn, IrFunction, IrLocal, IrLocalDecl, IrParam, IrParamMode,
+};
 pub use inst::{
     IrBinOp, IrCallee, IrInst, IrLabel, IrOperand, IrPlace, IrRvalue, IrSwitchArm, IrUnaryOp,
 };
-pub use types::{GenericStrategy, IrEffectMask, IrSumVariant, IrType, TypeMetadata, WitnessEntry};
+pub use types::{
+    GenericStrategy, IrEffectMask, IrSumVariant, IrType, IrTypeIdx, TypeMetadata, WitnessEntry,
+};
 
-use music_shared::{Arena, Idx};
+use music_shared::Arena;
 
 /// The top-level IR module produced by lowering.
 pub struct IrModule {
@@ -45,7 +49,7 @@ pub struct IrModule {
     /// Top-level constants.
     pub constants: Vec<IrConst>,
     /// The module entry point, if any.
-    pub entry: Option<Idx<IrFunction>>,
+    pub entry: Option<IrFnIdx>,
     /// Effect definitions.
     pub effects: Vec<IrEffectDef>,
     /// Foreign (FFI) function declarations.

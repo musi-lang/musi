@@ -7,14 +7,16 @@ use music_ast::decl::ForeignDecl;
 use music_ast::expr::{Expr, LetFields, Param};
 use music_ast::lit::Lit;
 use music_ast::pat::Pat;
-use music_ast::{AstArenas, ParsedModule};
+use music_ast::{AstArenas, ExprIdx, ParsedModule, TyIdx};
 use music_sema::types::Type;
-use music_sema::{DefId, SemaResult};
-use music_shared::{Arena, Idx, Interner, Symbol};
+use music_sema::{DefId, SemaResult, TypeIdx};
+use music_shared::{Arena, Interner, Span, Symbol};
 
 use crate::IrModule;
 use crate::error::IrError;
-use crate::func::{IrFnId, IrForeignFn, IrFunction, IrLocal, IrLocalDecl, IrParam, IrParamMode};
+use crate::func::{
+    IrFnId, IrFnIdx, IrForeignFn, IrFunction, IrLocal, IrLocalDecl, IrParam, IrParamMode,
+};
 use crate::inst::{IrInst, IrOperand};
 use crate::types::{IrEffectMask, IrType};
 
@@ -26,17 +28,17 @@ pub(super) struct LowerCtx<'src> {
     pub interner: &'src Interner,
     pub ir: IrModule,
     /// Maps sema `DefId` for a function binding to its allocated slot.
-    pub fn_map: HashMap<DefId, Idx<IrFunction>>,
+    pub fn_map: HashMap<DefId, IrFnIdx>,
     /// Maps sema `DefId` for a foreign function to its index in `ir.foreign_fns`.
     pub foreign_fn_map: HashMap<DefId, u32>,
     pub next_fn_id: u32,
     fn_entries: Vec<FnEntry>,
-    entry_candidate: Option<Idx<IrFunction>>,
+    entry_candidate: Option<IrFnIdx>,
 }
 
 struct FnEntry {
-    fn_idx: Idx<IrFunction>,
-    binding_expr: Idx<Expr>,
+    fn_idx: IrFnIdx,
+    binding_expr: ExprIdx,
 }
 
 pub(super) fn lower_module(
@@ -69,7 +71,7 @@ pub(super) fn lower_module(
     Ok(cx.ir)
 }
 
-fn register_fn_stub(cx: &mut LowerCtx<'_>, expr_idx: Idx<Expr>) -> Result<(), IrError> {
+fn register_fn_stub(cx: &mut LowerCtx<'_>, expr_idx: ExprIdx) -> Result<(), IrError> {
     let expr = cx.ast.exprs[expr_idx].clone();
 
     // Handle foreign declarations (possibly wrapped in Annotated).
@@ -150,7 +152,7 @@ fn register_fn_stub(cx: &mut LowerCtx<'_>, expr_idx: Idx<Expr>) -> Result<(), Ir
 
 fn build_param_locals(
     params: &[Param],
-    param_sema_tys: &[Idx<Type>],
+    param_sema_tys: &[TypeIdx],
     sema: &SemaResult,
     ir_types: &mut Arena<IrType>,
 ) -> Result<(Vec<IrParam>, Vec<IrLocalDecl>), IrError> {
@@ -177,8 +179,8 @@ fn build_param_locals(
 
 fn lower_fn_body(
     cx: &mut LowerCtx<'_>,
-    fn_idx: Idx<IrFunction>,
-    binding_expr: Idx<Expr>,
+    fn_idx: IrFnIdx,
+    binding_expr: ExprIdx,
 ) -> Result<(), IrError> {
     let binding = cx.ast.exprs[binding_expr].clone();
     let Some((fields, _, _)) = extract_fn_fields(binding, cx.ast) else {
@@ -285,11 +287,11 @@ fn register_foreign_fns(cx: &mut LowerCtx<'_>, expr: &Expr, attrs: &[Attr]) -> R
 
 fn register_foreign_fn_by_name(
     cx: &mut LowerCtx<'_>,
-    name: music_shared::Symbol,
-    ext_name: music_shared::Symbol,
-    ty: Idx<music_ast::Ty>,
-    library: Option<music_shared::Symbol>,
-    span: music_shared::Span,
+    name: Symbol,
+    ext_name: Symbol,
+    ty: TyIdx,
+    library: Option<Symbol>,
+    span: Span,
 ) -> Result<(), IrError> {
     // Find the DefId by looking through all defs for a matching name and span
     let def_id = cx
@@ -309,10 +311,10 @@ fn register_foreign_fn_by_name(
 fn register_foreign_fn_with_def(
     cx: &mut LowerCtx<'_>,
     def_id: DefId,
-    ext_name: music_shared::Symbol,
-    _ty: Idx<music_ast::Ty>,
-    library: Option<music_shared::Symbol>,
-    _span: music_shared::Span,
+    ext_name: Symbol,
+    _ty: TyIdx,
+    library: Option<Symbol>,
+    _span: Span,
 ) -> Result<(), IrError> {
     // Lower the type annotation to get param and return types
     let Some(&_ty_idx) = cx.sema.expr_types.values().next() else {
@@ -387,10 +389,7 @@ fn extract_link_attr(attrs: &[Attr], interner: &Interner) -> Option<Symbol> {
 /// or `Expr::Annotated` wrapping either of those.
 ///
 /// `Expr::Annotated` is unwrapped recursively, accumulating attributes.
-fn extract_fn_fields(
-    expr: Expr,
-    ast: &AstArenas,
-) -> Option<(LetFields, music_shared::Span, Vec<Attr>)> {
+fn extract_fn_fields(expr: Expr, ast: &AstArenas) -> Option<(LetFields, Span, Vec<Attr>)> {
     match expr {
         Expr::Binding { fields, span, .. }
         | Expr::Let {

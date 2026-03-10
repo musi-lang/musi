@@ -1,8 +1,8 @@
 //! IR effect definitions and identifiers.
 
-use music_shared::{Idx, Symbol};
+use music_shared::Symbol;
 
-use crate::types::IrType;
+use crate::types::IrTypeIdx;
 
 /// Unique identifier for an effect definition in the IR.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -31,7 +31,7 @@ pub struct IrEffectOpDef {
     /// Name of the operation.
     pub name: Symbol,
     /// Parameter types.
-    pub param_tys: Vec<Idx<IrType>>,
+    pub param_tys: Vec<IrTypeIdx>,
     /// Return type.
-    pub ret_ty: Idx<IrType>,
+    pub ret_ty: IrTypeIdx,
 }

@@ -1,11 +1,11 @@
 //! Type lowering: sema `Type` -> `IrType`.
 
-use music_sema::SemaResult;
 use music_sema::types::Type;
-use music_shared::{Arena, Idx};
+use music_sema::{DefId, SemaResult, TypeIdx};
+use music_shared::Arena;
 
 use crate::error::IrError;
-use crate::types::{IrEffectMask, IrType};
+use crate::types::{IrEffectMask, IrType, IrTypeIdx};
 
 /// Lowers a sema type to an IR type, interning it into `ir_types`.
 ///
@@ -18,10 +18,10 @@ use crate::types::{IrEffectMask, IrType};
 /// unsolved unification variable, or [`IrError::UnsupportedExpr`] if the
 /// type is not representable in the IR MVP subset.
 pub fn lower_ty(
-    ty: Idx<Type>,
+    ty: TypeIdx,
     sema: &SemaResult,
     ir_types: &mut Arena<IrType>,
-) -> Result<Idx<IrType>, IrError> {
+) -> Result<IrTypeIdx, IrError> {
     // Resolve through unification variable chains first.
     let ty = sema.unify.resolve(ty, &sema.types);
     // Clone to avoid holding a borrow on `sema` during recursive calls.
@@ -30,16 +30,17 @@ pub fn lower_ty(
         Type::Named { def, .. } => lower_named(def, sema, ir_types),
         Type::Tuple { elems } => lower_tuple(&elems, sema, ir_types),
         Type::Fn { params, ret, .. } => lower_fn(&params, ret, sema, ir_types),
-        Type::Var(_) | Type::Rigid(_) => Err(IrError::UnresolvedTypeVariable),
+        Type::Var(_) => Ok(ir_types.alloc(IrType::Any)),
+        Type::Rigid(_) => Err(IrError::UnresolvedTypeVariable),
         _ => Err(IrError::UnsupportedExpr),
     }
 }
 
 fn lower_named(
-    def: music_sema::DefId,
+    def: DefId,
     sema: &SemaResult,
     ir_types: &mut Arena<IrType>,
-) -> Result<Idx<IrType>, IrError> {
+) -> Result<IrTypeIdx, IrError> {
     let wk = &sema.well_known;
     let primitives = [
         (wk.ints.int, IrType::Int64),
@@ -56,6 +57,7 @@ fn lower_named(
         (wk.bool, IrType::Bool),
         (wk.unit, IrType::Unit),
         (wk.rune, IrType::Rune),
+        (wk.any, IrType::Any),
         // Strings are NaN-boxed opaque handles in the VM
         (wk.string, IrType::UInt64),
         // Never is unreachable; use Unit as a placeholder
@@ -70,10 +72,10 @@ fn lower_named(
 }
 
 fn lower_tuple(
-    elems: &[Idx<Type>],
+    elems: &[TypeIdx],
     sema: &SemaResult,
     ir_types: &mut Arena<IrType>,
-) -> Result<Idx<IrType>, IrError> {
+) -> Result<IrTypeIdx, IrError> {
     let mut fields = Vec::with_capacity(elems.len());
     for &elem in elems {
         fields.push(lower_ty(elem, sema, ir_types)?);
@@ -82,11 +84,11 @@ fn lower_tuple(
 }
 
 fn lower_fn(
-    params: &[Idx<Type>],
-    ret: Idx<Type>,
+    params: &[TypeIdx],
+    ret: TypeIdx,
     sema: &SemaResult,
     ir_types: &mut Arena<IrType>,
-) -> Result<Idx<IrType>, IrError> {
+) -> Result<IrTypeIdx, IrError> {
     let mut ir_params = Vec::with_capacity(params.len());
     for &p in params {
         ir_params.push(lower_ty(p, sema, ir_types)?);

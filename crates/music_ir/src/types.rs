@@ -2,12 +2,15 @@
 //!
 //! IR types are monomorphized (or existentialized) — no unification variables
 //! remain after lowering from semantic types.  Types are arena-allocated via
-//! `Arena<IrType>` and addressed by `Idx<IrType>`.
+//! `Arena<IrType>` and addressed by `IrTypeIdx`.
 
 use music_sema::DefId;
 use music_shared::{Idx, Symbol};
 
-use crate::func::IrFunction;
+use crate::func::IrFnIdx;
+
+/// Index into the IR type arena.
+pub type IrTypeIdx = Idx<IrType>;
 
 /// A lowered, fully resolved type in the IR.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -31,6 +34,8 @@ pub enum IrType {
     Float64,
     /// A Unicode scalar value.
     Rune,
+    /// The top type — unifies with everything.
+    Any,
     /// A product type (tuple or struct — fields accessed by index).
     Product {
         fields: Vec<Idx<Self>>,
@@ -84,7 +89,7 @@ pub struct IrSumVariant {
     /// Name of the variant (for diagnostics and debugging).
     pub name: Symbol,
     /// Payload field types.
-    pub fields: Vec<Idx<IrType>>,
+    pub fields: Vec<IrTypeIdx>,
 }
 
 /// Bit-mask encoding which effects a function may perform.
@@ -133,7 +138,7 @@ pub struct WitnessEntry {
     /// The method name in the typeclass.
     pub method: Symbol,
     /// The IR function implementing this method for the concrete type.
-    pub fn_id: Idx<IrFunction>,
+    pub fn_id: IrFnIdx,
 }
 
 /// Runtime type metadata for existentialized generics.

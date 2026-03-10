@@ -33,7 +33,7 @@ use crate::constant::IrConstValue;
 use crate::effect::IrEffectDef;
 use crate::func::IrFunction;
 use crate::inst::{IrBinOp, IrCallee, IrInst, IrOperand, IrPlace, IrRvalue, IrUnaryOp};
-use crate::types::{IrEffectMask, IrSumVariant, IrType};
+use crate::types::{IrEffectMask, IrSumVariant, IrType, IrTypeIdx};
 
 /// Write a complete [`IrModule`] in `.msir` text format.
 ///
@@ -495,11 +495,7 @@ fn write_callee(
     }
 }
 
-fn write_type(
-    w: &mut impl Write,
-    idx: Idx<IrType>,
-    types: &Arena<IrType>,
-) -> Result<(), fmt::Error> {
+fn write_type(w: &mut impl Write, idx: IrTypeIdx, types: &Arena<IrType>) -> Result<(), fmt::Error> {
     let ty = &types[idx];
     match ty {
         IrType::Unit => write!(w, "Unit"),
@@ -515,6 +511,7 @@ fn write_type(
         IrType::Float32 => write!(w, "Float32"),
         IrType::Float64 => write!(w, "Float64"),
         IrType::Rune => write!(w, "Rune"),
+        IrType::Any => write!(w, "Any"),
         IrType::Product { fields } => write_type_product(w, fields, types),
         IrType::Sum { variants } => write_type_sum(w, variants, types),
         IrType::Array { elem } => {
@@ -550,7 +547,7 @@ fn write_type(
 
 fn write_type_product(
     w: &mut impl Write,
-    fields: &[Idx<IrType>],
+    fields: &[IrTypeIdx],
     types: &Arena<IrType>,
 ) -> Result<(), fmt::Error> {
     write!(w, "(")?;
@@ -589,8 +586,8 @@ fn write_type_sum(
 
 fn write_type_fn(
     w: &mut impl Write,
-    params: &[Idx<IrType>],
-    ret: Idx<IrType>,
+    params: &[IrTypeIdx],
+    ret: IrTypeIdx,
     effect_mask: IrEffectMask,
     types: &Arena<IrType>,
 ) -> Result<(), fmt::Error> {

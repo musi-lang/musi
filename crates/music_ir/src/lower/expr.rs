@@ -5,17 +5,18 @@ use std::collections::HashMap;
 use music_ast::expr::{Arg, BinOp, Expr, LetFields, PwArm, PwGuard, UnaryOp};
 use music_ast::lit::Lit;
 use music_ast::pat::Pat;
-use music_sema::DefId;
+use music_ast::{ExprIdx, PatIdx};
 use music_sema::types::Type;
-use music_shared::{Idx, Span, Symbol};
+use music_sema::{DefId, SemaResult, TypeIdx};
+use music_shared::{Span, Symbol};
 
 use crate::constant::IrConstValue;
 use crate::error::IrError;
 use crate::func::{IrLocal, IrLocalDecl};
 use crate::inst::{IrBinOp, IrCallee, IrInst, IrLabel, IrOperand, IrPlace, IrRvalue, IrUnaryOp};
-use crate::types::IrType;
+use crate::types::{IrType, IrTypeIdx};
 
-use super::decl::LowerCtx;
+use super::stmt::LowerCtx;
 use super::ty::lower_ty;
 
 pub(super) struct FnLowerCtx<'cx, 'src: 'cx> {
@@ -28,7 +29,7 @@ pub(super) struct FnLowerCtx<'cx, 'src: 'cx> {
 }
 
 impl FnLowerCtx<'_, '_> {
-    pub(super) fn fresh_local(&mut self, ty: Idx<IrType>, mutable: bool, span: Span) -> IrLocal {
+    pub(super) fn fresh_local(&mut self, ty: IrTypeIdx, mutable: bool, span: Span) -> IrLocal {
         let local = IrLocal(self.next_local);
         self.next_local += 1;
         self.locals.push(IrLocalDecl {
@@ -50,7 +51,7 @@ impl FnLowerCtx<'_, '_> {
         self.body.push(inst);
     }
 
-    pub(super) fn emit_assign(&mut self, ty: Idx<IrType>, rvalue: IrRvalue, span: Span) -> IrLocal {
+    pub(super) fn emit_assign(&mut self, ty: IrTypeIdx, rvalue: IrRvalue, span: Span) -> IrLocal {
         let local = self.fresh_local(ty, false, span);
         self.body.push(IrInst::Assign {
             dst: local,
@@ -63,7 +64,7 @@ impl FnLowerCtx<'_, '_> {
 
 pub(super) fn lower_expr(
     fn_cx: &mut FnLowerCtx<'_, '_>,
-    expr_idx: Idx<Expr>,
+    expr_idx: ExprIdx,
 ) -> Result<IrLocal, IrError> {
     let expr = fn_cx.cx.ast.exprs[expr_idx].clone();
     match expr {
@@ -82,6 +83,11 @@ pub(super) fn lower_expr(
         Expr::UnaryOp { op, operand, span } => lower_unaryop(fn_cx, op, operand, span),
         Expr::Call { callee, args, span } => lower_call(fn_cx, expr_idx, callee, &args, span),
         Expr::Piecewise { arms, span } => lower_piecewise(fn_cx, expr_idx, &arms, span),
+        Expr::Match {
+            scrutinee,
+            arms,
+            span,
+        } => super::pat::lower_match(fn_cx, expr_idx, scrutinee, &arms, span),
         Expr::Return { value, span } => lower_return(fn_cx, value, span),
         Expr::Tuple { elems, span } => lower_tuple(fn_cx, expr_idx, &elems, span),
         _ => Err(IrError::UnsupportedExpr),
@@ -90,7 +96,7 @@ pub(super) fn lower_expr(
 
 fn lower_lit(
     fn_cx: &mut FnLowerCtx<'_, '_>,
-    expr_idx: Idx<Expr>,
+    expr_idx: ExprIdx,
     lit: &Lit,
     span: Span,
 ) -> Result<IrLocal, IrError> {
@@ -115,7 +121,7 @@ fn lower_lit(
 
 fn lower_name(
     fn_cx: &mut FnLowerCtx<'_, '_>,
-    expr_idx: Idx<Expr>,
+    expr_idx: ExprIdx,
     name: Symbol,
     span: Span,
 ) -> Result<IrLocal, IrError> {
@@ -158,8 +164,8 @@ fn lower_name(
 
 fn lower_block(
     fn_cx: &mut FnLowerCtx<'_, '_>,
-    stmts: &[Idx<Expr>],
-    tail: Option<Idx<Expr>>,
+    stmts: &[ExprIdx],
+    tail: Option<ExprIdx>,
     span: Span,
 ) -> Result<IrLocal, IrError> {
     for &stmt in stmts {
@@ -176,11 +182,11 @@ fn lower_block(
 fn lower_let(
     fn_cx: &mut FnLowerCtx<'_, '_>,
     fields: &LetFields,
-    body: Option<Idx<Expr>>,
+    body: Option<ExprIdx>,
     span: Span,
 ) -> Result<IrLocal, IrError> {
     let value_local = lower_expr(fn_cx, fields.value)?;
-    bind_pat(fn_cx, fields.pat, value_local)?;
+    bind_let_pat(fn_cx, fields.pat, value_local)?;
     if let Some(body_expr) = body {
         lower_expr(fn_cx, body_expr)
     } else {
@@ -195,24 +201,24 @@ fn lower_binding_expr(
     span: Span,
 ) -> Result<IrLocal, IrError> {
     let value_local = lower_expr(fn_cx, fields.value)?;
-    bind_pat(fn_cx, fields.pat, value_local)?;
+    bind_let_pat(fn_cx, fields.pat, value_local)?;
     let unit_ty = fn_cx.cx.ir.types.alloc(IrType::Unit);
     Ok(fn_cx.emit_assign(unit_ty, IrRvalue::Const(IrConstValue::Unit), span))
 }
 
 fn lower_binop(
     fn_cx: &mut FnLowerCtx<'_, '_>,
-    expr_idx: Idx<Expr>,
+    expr_idx: ExprIdx,
     op: BinOp,
-    left: Idx<Expr>,
-    right: Idx<Expr>,
+    left: ExprIdx,
+    right: ExprIdx,
     span: Span,
 ) -> Result<IrLocal, IrError> {
     match op {
-        BinOp::And
-        | BinOp::Or
-        | BinOp::Pipe
-        | BinOp::Assign
+        BinOp::And => return super::desugar::lower_and(fn_cx, left, right, span),
+        BinOp::Or => return super::desugar::lower_or(fn_cx, left, right, span),
+        BinOp::Assign => return super::desugar::lower_assign(fn_cx, left, right, span),
+        BinOp::Pipe
         | BinOp::In
         | BinOp::Cons
         | BinOp::NilCoal
@@ -231,7 +237,7 @@ fn lower_binop(
         .get(&left)
         .copied()
         .ok_or(IrError::UnsupportedExpr)?;
-    let family = type_family(left_ty, fn_cx.cx.sema).ok_or(IrError::UnsupportedExpr)?;
+    let family = classify_type_family(left_ty, fn_cx.cx.sema).ok_or(IrError::UnsupportedExpr)?;
     let ir_op = map_binop(op, family)?;
 
     let result_ty_sema = fn_cx
@@ -257,7 +263,7 @@ fn lower_binop(
 fn lower_unaryop(
     fn_cx: &mut FnLowerCtx<'_, '_>,
     op: UnaryOp,
-    operand: Idx<Expr>,
+    operand: ExprIdx,
     span: Span,
 ) -> Result<IrLocal, IrError> {
     match op {
@@ -270,7 +276,8 @@ fn lower_unaryop(
                 .get(&operand)
                 .copied()
                 .ok_or(IrError::UnsupportedExpr)?;
-            let family = type_family(op_ty, fn_cx.cx.sema).ok_or(IrError::UnsupportedExpr)?;
+            let family =
+                classify_type_family(op_ty, fn_cx.cx.sema).ok_or(IrError::UnsupportedExpr)?;
             let ir_op = match family {
                 TypeFamily::Signed => IrUnaryOp::INeg,
                 TypeFamily::Float => IrUnaryOp::FNeg,
@@ -311,8 +318,8 @@ fn lower_unaryop(
 
 fn lower_call(
     fn_cx: &mut FnLowerCtx<'_, '_>,
-    expr_idx: Idx<Expr>,
-    callee: Idx<Expr>,
+    expr_idx: ExprIdx,
+    callee: ExprIdx,
     args: &[Arg],
     span: Span,
 ) -> Result<IrLocal, IrError> {
@@ -367,7 +374,7 @@ fn lower_call(
 
 fn lower_foreign_call(
     fn_cx: &mut FnLowerCtx<'_, '_>,
-    expr_idx: Idx<Expr>,
+    expr_idx: ExprIdx,
     ffi_idx: u32,
     args: &[Arg],
     span: Span,
@@ -404,7 +411,7 @@ fn lower_foreign_call(
 
 fn lower_piecewise(
     fn_cx: &mut FnLowerCtx<'_, '_>,
-    expr_idx: Idx<Expr>,
+    expr_idx: ExprIdx,
     arms: &[PwArm],
     span: Span,
 ) -> Result<IrLocal, IrError> {
@@ -427,13 +434,13 @@ fn lower_piecewise(
     for (i, arm) in arms.iter().enumerate() {
         let is_last = i == n - 1;
         if is_last || matches!(arm.guard, PwGuard::Any { .. }) {
-            emit_arm_store(fn_cx, arm.result, result_local, arm.span, merge_lbl)?;
+            emit_piecewise_arm(fn_cx, arm.result, result_local, arm.span, merge_lbl)?;
         } else if let PwGuard::When {
             expr: guard_expr,
             span: guard_span,
         } = arm.guard
         {
-            emit_conditional_arm(
+            emit_piecewise_conditional_arm(
                 fn_cx,
                 guard_expr,
                 guard_span,
@@ -443,7 +450,7 @@ fn lower_piecewise(
                 merge_lbl,
             )?;
         } else {
-            emit_arm_store(fn_cx, arm.result, result_local, arm.span, merge_lbl)?;
+            emit_piecewise_arm(fn_cx, arm.result, result_local, arm.span, merge_lbl)?;
         }
     }
 
@@ -451,9 +458,9 @@ fn lower_piecewise(
     Ok(result_local)
 }
 
-fn emit_arm_store(
+fn emit_piecewise_arm(
     fn_cx: &mut FnLowerCtx<'_, '_>,
-    result_expr: Idx<Expr>,
+    result_expr: ExprIdx,
     result_local: IrLocal,
     arm_span: Span,
     merge_lbl: IrLabel,
@@ -468,11 +475,11 @@ fn emit_arm_store(
     Ok(())
 }
 
-fn emit_conditional_arm(
+fn emit_piecewise_conditional_arm(
     fn_cx: &mut FnLowerCtx<'_, '_>,
-    guard_expr: Idx<Expr>,
+    guard_expr: ExprIdx,
     guard_span: Span,
-    result_expr: Idx<Expr>,
+    result_expr: ExprIdx,
     result_local: IrLocal,
     arm_span: Span,
     merge_lbl: IrLabel,
@@ -500,7 +507,7 @@ fn emit_conditional_arm(
 
 fn lower_return(
     fn_cx: &mut FnLowerCtx<'_, '_>,
-    value: Option<Idx<Expr>>,
+    value: Option<ExprIdx>,
     span: Span,
 ) -> Result<IrLocal, IrError> {
     let ret_local = if let Some(val_expr) = value {
@@ -520,8 +527,8 @@ fn lower_return(
 
 fn lower_tuple(
     fn_cx: &mut FnLowerCtx<'_, '_>,
-    expr_idx: Idx<Expr>,
-    elems: &[Idx<Expr>],
+    expr_idx: ExprIdx,
+    elems: &[ExprIdx],
     span: Span,
 ) -> Result<IrLocal, IrError> {
     let result_ty_sema = fn_cx
@@ -547,9 +554,9 @@ fn lower_tuple(
     ))
 }
 
-fn bind_pat(
+fn bind_let_pat(
     fn_cx: &mut FnLowerCtx<'_, '_>,
-    pat_idx: Idx<music_ast::Pat>,
+    pat_idx: PatIdx,
     local: IrLocal,
 ) -> Result<(), IrError> {
     match fn_cx.cx.ast.pats[pat_idx].clone() {
@@ -574,7 +581,7 @@ enum TypeFamily {
     Bool,
 }
 
-fn type_family(ty_idx: Idx<Type>, sema: &music_sema::SemaResult) -> Option<TypeFamily> {
+fn classify_type_family(ty_idx: TypeIdx, sema: &SemaResult) -> Option<TypeFamily> {
     let ty = sema.unify.resolve(ty_idx, &sema.types);
     let Type::Named { def, .. } = &sema.types[ty] else {
         return None;

@@ -5,12 +5,12 @@
 //! structured `Branch`/`Switch`/`Label`/`Goto` instead of a full CFG.
 
 use music_sema::DefId;
-use music_shared::{Idx, Span, Symbol};
+use music_shared::{Span, Symbol};
 
 use crate::constant::IrConstValue;
 use crate::effect::{IrEffectId, IrEffectOpId};
-use crate::func::{IrFunction, IrLocal};
-use crate::types::IrType;
+use crate::func::{IrFnIdx, IrLocal};
+use crate::types::IrTypeIdx;
 
 /// A label for control-flow targets within a function body.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -66,7 +66,7 @@ pub enum IrInst {
     /// Push an effect handler onto the handler stack.
     EffectPush {
         effect: IrEffectId,
-        handler_fn: Idx<IrFunction>,
+        handler_fn: IrFnIdx,
         span: Span,
     },
 
@@ -125,26 +125,26 @@ pub enum IrRvalue {
     // ── Construction ────────────────────────────────────────────────────
     /// Construct a product value (tuple or record).
     MakeProduct {
-        ty: Idx<IrType>,
+        ty: IrTypeIdx,
         fields: Vec<IrOperand>,
     },
 
     /// Construct a tagged variant.
     MakeVariant {
-        ty: Idx<IrType>,
+        ty: IrTypeIdx,
         tag: u32,
         payload: Vec<IrOperand>,
     },
 
     /// Construct an array from elements.
     MakeArray {
-        elem_ty: Idx<IrType>,
+        elem_ty: IrTypeIdx,
         elems: Vec<IrOperand>,
     },
 
     /// Construct a closure (function + captured environment).
     MakeClosure {
-        fn_id: Idx<IrFunction>,
+        fn_id: IrFnIdx,
         captures: Vec<IrOperand>,
     },
 
@@ -167,10 +167,10 @@ pub enum IrRvalue {
 
     // ── Memory ──────────────────────────────────────────────────────────
     /// Allocate a heap reference.
-    AllocRef { ty: Idx<IrType> },
+    AllocRef { ty: IrTypeIdx },
 
     /// Allocate in an arena.
-    AllocArena { ty: Idx<IrType> },
+    AllocArena { ty: IrTypeIdx },
 
     /// Dereference a pointer/reference.
     Deref { ptr: IrOperand },
@@ -179,8 +179,8 @@ pub enum IrRvalue {
     /// Type cast.
     Cast {
         operand: IrOperand,
-        from: Idx<IrType>,
-        to: Idx<IrType>,
+        from: IrTypeIdx,
+        to: IrTypeIdx,
     },
 
     /// Inline constant value (including unit via `IrConstValue::Unit`).
@@ -228,7 +228,7 @@ pub enum IrPlace {
 #[derive(Debug, Clone)]
 pub enum IrCallee {
     /// A statically known function.
-    Direct(Idx<IrFunction>),
+    Direct(IrFnIdx),
     /// An indirect call through a closure or function value.
     Indirect(IrLocal),
     /// A typeclass instance method call.
@@ -238,7 +238,7 @@ pub enum IrCallee {
     Instance {
         class_def: DefId,
         method: Symbol,
-        instance_fn: Idx<IrFunction>,
+        instance_fn: IrFnIdx,
     },
 }
 
