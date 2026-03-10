@@ -4,6 +4,8 @@ use crate::value::Value;
 use crate::vm::Frame;
 
 /// A concurrent task with its own call stack.
+// Used by TSK_SPN/AWT opcodes when scheduler is wired.
+#[allow(dead_code)]
 pub struct Task {
     /// Unique task identifier.
     pub task_id: u32,
@@ -16,6 +18,8 @@ pub struct Task {
 }
 
 /// The execution status of a task.
+// Used by TSK_SPN/AWT opcodes when scheduler is wired.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TaskStatus {
     /// Ready to run.
@@ -29,6 +33,8 @@ pub enum TaskStatus {
 }
 
 /// Why a task is suspended.
+// Used by TSK_SPN/AWT opcodes when scheduler is wired.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SuspendReason {
     /// Waiting for the given task to complete.

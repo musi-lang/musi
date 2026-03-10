@@ -6,10 +6,10 @@
 
 use std::iter;
 
+use musi_bytecode::{Opcode, crc32_slice};
+
 use crate::error::VmError;
 use crate::loader::load;
-#[allow(unused_imports)]
-use crate::opcode::*;
 use crate::value::Value;
 use crate::verifier::verify;
 use crate::vm::{StepResult, Vm};
@@ -94,14 +94,18 @@ fn make_msbc(consts: &[ConstEntry], fns: &[FnDef]) -> Vec<u8> {
         }
     }
 
+    // ── Foreign pool (empty for tests) ──────────────────────────────────────
+    let foreign_section: Vec<u8> = 0u32.to_le_bytes().to_vec(); // count = 0
+
     // ── Header ────────────────────────────────────────────────────────────────
-    let header_size: u32 = 36;
+    let header_size: u32 = 40;
     let const_off = header_size;
     let type_off = const_off + u32::try_from(const_section.len()).expect("fits u32");
     let effect_off = type_off + u32::try_from(type_section.len()).expect("fits u32");
-    let fn_off = effect_off + u32::try_from(effect_section.len()).expect("fits u32");
+    let foreign_off = effect_off + u32::try_from(effect_section.len()).expect("fits u32");
+    let fn_off = foreign_off + u32::try_from(foreign_section.len()).expect("fits u32");
 
-    let mut header: Vec<u8> = Vec::with_capacity(36);
+    let mut header: Vec<u8> = Vec::with_capacity(40);
     header.extend_from_slice(b"MUSI");
     header.extend_from_slice(&1u16.to_le_bytes());
     header.extend_from_slice(&0u16.to_le_bytes());
@@ -110,17 +114,19 @@ fn make_msbc(consts: &[ConstEntry], fns: &[FnDef]) -> Vec<u8> {
     header.extend_from_slice(&const_off.to_le_bytes());
     header.extend_from_slice(&type_off.to_le_bytes());
     header.extend_from_slice(&effect_off.to_le_bytes());
+    header.extend_from_slice(&foreign_off.to_le_bytes());
     header.extend_from_slice(&fn_off.to_le_bytes());
 
-    debug_assert_eq!(header.len(), 32);
-    let checksum = crc32_test(&header);
-    header.extend_from_slice(&checksum.to_le_bytes());
     debug_assert_eq!(header.len(), 36);
+    let checksum = crc32_slice(&header);
+    header.extend_from_slice(&checksum.to_le_bytes());
+    debug_assert_eq!(header.len(), 40);
 
     let mut out = header;
     out.extend_from_slice(&const_section);
     out.extend_from_slice(&type_section);
     out.extend_from_slice(&effect_section);
+    out.extend_from_slice(&foreign_section);
     out.extend_from_slice(&fn_section);
     out
 }
@@ -143,39 +149,18 @@ fn run_vm_call(bytes: &[u8], fn_id: u32, args: &[Value]) -> (Vm, Result<Value, V
     (vm, result)
 }
 
-fn crc32_test(data: &[u8]) -> u32 {
-    const POLY: u32 = 0xEDB8_8320;
-    let mut crc: u32 = 0xFFFF_FFFF;
-    for &byte in data {
-        let low = crc.to_le_bytes()[0];
-        let xored = low ^ byte;
-        let mut entry = u32::from(xored);
-        let mut j = 0;
-        while j < 8 {
-            if entry & 1 != 0 {
-                entry = (entry >> 1) ^ POLY;
-            } else {
-                entry >>= 1;
-            }
-            j += 1;
-        }
-        crc = entry ^ (crc >> 8);
-    }
-    crc ^ 0xFFFF_FFFF
-}
-
 // ── Loader tests ──────────────────────────────────────────────────────────────
 
 #[test]
 fn test_load_valid_header_succeeds() {
-    let bytes = make_msbc(&[], &[fn_def(0, 0, 0, vec![RET_U])]);
+    let bytes = make_msbc(&[], &[fn_def(0, 0, 0, vec![Opcode::RET_U.0])]);
     let result = load(&bytes);
     assert!(result.is_ok(), "expected Ok, got {result:?}");
 }
 
 #[test]
 fn test_load_bad_magic_returns_error() {
-    let mut bytes = make_msbc(&[], &[fn_def(0, 0, 0, vec![RET_U])]);
+    let mut bytes = make_msbc(&[], &[fn_def(0, 0, 0, vec![Opcode::RET_U.0])]);
     bytes[0] = b'X';
     let result = load(&bytes);
     assert!(
@@ -186,7 +171,7 @@ fn test_load_bad_magic_returns_error() {
 
 #[test]
 fn test_load_bad_checksum_returns_error() {
-    let mut bytes = make_msbc(&[], &[fn_def(0, 0, 0, vec![RET_U])]);
+    let mut bytes = make_msbc(&[], &[fn_def(0, 0, 0, vec![Opcode::RET_U.0])]);
     bytes[8] ^= 0xFF;
     let result = load(&bytes);
     assert!(
@@ -199,7 +184,10 @@ fn test_load_bad_checksum_returns_error() {
 
 #[test]
 fn test_verifier_rejects_oob_const() {
-    let bytes = make_msbc(&[], &[fn_def(0, 0, 0, vec![LD_CST, 5, RET])]);
+    let bytes = make_msbc(
+        &[],
+        &[fn_def(0, 0, 0, vec![Opcode::LD_CST.0, 5, Opcode::RET.0])],
+    );
     let module = load(&bytes).expect("loads ok");
     let result = verify(&module);
     assert!(result.is_err(), "expected Verify error, got Ok");
@@ -207,9 +195,9 @@ fn test_verifier_rejects_oob_const() {
 
 #[test]
 fn test_verifier_rejects_stack_overflow() {
-    let mut code = vec![LD_CST, 0u8];
-    code.extend(iter::repeat_n(DUP, 20));
-    code.push(RET);
+    let mut code = vec![Opcode::LD_CST.0, 0u8];
+    code.extend(iter::repeat_n(Opcode::DUP.0, 20));
+    code.push(Opcode::RET.0);
     let bytes = make_msbc(&[ConstEntry::I32(42)], &[fn_def(0, 0, 0, code)]);
     let module = load(&bytes).expect("loads ok");
     let result = verify(&module);
@@ -222,7 +210,7 @@ fn test_verifier_rejects_stack_overflow() {
 fn test_run_constant_return_i32() {
     let bytes = make_msbc(
         &[ConstEntry::I32(99)],
-        &[fn_def(0, 0, 0, vec![LD_CST, 0, RET])],
+        &[fn_def(0, 0, 0, vec![Opcode::LD_CST.0, 0, Opcode::RET.0])],
     );
     let (_, result) = run_vm(&bytes);
     assert_eq!(result.expect("runs").as_int().expect("is int"), 99);
@@ -232,7 +220,19 @@ fn test_run_constant_return_i32() {
 fn test_run_add_two_ints() {
     let bytes = make_msbc(
         &[],
-        &[fn_def(0, 2, 2, vec![LD_LOC, 0, LD_LOC, 1, I_ADD, RET])],
+        &[fn_def(
+            0,
+            2,
+            2,
+            vec![
+                Opcode::LD_LOC.0,
+                0,
+                Opcode::LD_LOC.0,
+                1,
+                Opcode::I_ADD.0,
+                Opcode::RET.0,
+            ],
+        )],
     );
     let (_, result) = run_vm_call(&bytes, 0, &[Value::from_int(3), Value::from_int(4)]);
     assert_eq!(result.expect("runs").as_int().expect("is int"), 7);
@@ -247,7 +247,20 @@ fn test_run_conditional_jump() {
             0,
             0,
             vec![
-                LD_CST, 0, LD_CST, 1, CMP_LT, 0, JMP_F, 2, 0, LD_CST, 0, LD_CST, 1, RET,
+                Opcode::LD_CST.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::CMP_LT.0,
+                0,
+                Opcode::JMP_F.0,
+                2,
+                0,
+                Opcode::LD_CST.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::RET.0,
             ],
         )],
     );
@@ -262,8 +275,27 @@ fn test_run_conditional_jump() {
 #[test]
 fn test_run_tail_call_countdown() {
     let code = vec![
-        LD_LOC, 0, LD_CST, 0, CMP_EQ, JMP_F, 3, 0, LD_CST, 0, RET, LD_LOC, 0, LD_CST, 1, I_SUB,
-        INV_TAL, 0, 0, 0, 0,
+        Opcode::LD_LOC.0,
+        0,
+        Opcode::LD_CST.0,
+        0,
+        Opcode::CMP_EQ.0,
+        Opcode::JMP_F.0,
+        3,
+        0,
+        Opcode::LD_CST.0,
+        0,
+        Opcode::RET.0,
+        Opcode::LD_LOC.0,
+        0,
+        Opcode::LD_CST.0,
+        1,
+        Opcode::I_SUB.0,
+        Opcode::INV_TAL.0,
+        0,
+        0,
+        0,
+        0,
     ];
     let bytes = make_msbc(
         &[ConstEntry::I32(0), ConstEntry::I32(1)],
@@ -281,7 +313,17 @@ fn test_run_make_product_and_load_field() {
             0,
             0,
             0,
-            vec![LD_CST, 0, LD_CST, 1, MK_PRD, 2, LD_FLD, 1, RET],
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::MK_PRD.0,
+                2,
+                Opcode::LD_FLD.0,
+                1,
+                Opcode::RET.0,
+            ],
         )],
     );
     let (_, result) = run_vm(&bytes);
@@ -292,7 +334,20 @@ fn test_run_make_product_and_load_field() {
 fn test_run_make_variant_and_check_tag() {
     let bytes = make_msbc(
         &[ConstEntry::I32(42)],
-        &[fn_def(0, 0, 0, vec![LD_CST, 0, MK_VAR, 7, CMP_TAG, 7, RET])],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::MK_VAR.0,
+                7,
+                Opcode::CMP_TAG.0,
+                7,
+                Opcode::RET.0,
+            ],
+        )],
     );
     let (_, result) = run_vm(&bytes);
     assert!(result.expect("runs").as_bool().expect("is bool"));
@@ -344,14 +399,12 @@ fn test_value_int_sign_extension() {
 
 #[test]
 fn test_string_const_returns_heap_ref() {
-    // ld.cst 0 (a string) ; ret — should return a ref, not unit.
     let bytes = make_msbc(
         &[ConstEntry::Str(b"hello".to_vec())],
-        &[fn_def(0, 0, 0, vec![LD_CST, 0, RET])],
+        &[fn_def(0, 0, 0, vec![Opcode::LD_CST.0, 0, Opcode::RET.0])],
     );
     let (vm, result) = run_vm(&bytes);
     let result = result.expect("runs");
-    // Result should be a ref (heap-allocated string), not unit.
     let ptr = result.as_ref().expect("should be a ref");
     let obj = vm.heap().get(ptr).expect("heap lookup");
     assert_eq!(
@@ -363,8 +416,6 @@ fn test_string_const_returns_heap_ref() {
 
 #[test]
 fn test_string_const_two_distinct_loads_produce_separate_objects() {
-    // ld.cst 0 ; st.loc 0 ; ld.cst 0 ; st.loc 1 ; ld.loc 0 ; ret
-    // Loading the same string const twice should produce two separate heap refs.
     let bytes = make_msbc(
         &[ConstEntry::Str(b"hi".to_vec())],
         &[fn_def(
@@ -372,9 +423,17 @@ fn test_string_const_two_distinct_loads_produce_separate_objects() {
             2,
             0,
             vec![
-                LD_CST, 0, ST_LOC, 0, // first load
-                LD_CST, 0, ST_LOC, 1, // second load
-                LD_LOC, 0, RET,
+                Opcode::LD_CST.0,
+                0,
+                Opcode::ST_LOC.0,
+                0, // first load
+                Opcode::LD_CST.0,
+                0,
+                Opcode::ST_LOC.0,
+                1, // second load
+                Opcode::LD_LOC.0,
+                0,
+                Opcode::RET.0,
             ],
         )],
     );
@@ -386,8 +445,6 @@ fn test_string_const_two_distinct_loads_produce_separate_objects() {
 
 #[test]
 fn test_globals_store_and_load() {
-    // const[0] = 42
-    // st.glb 5 (store 42 into global[5]) ; ld.glb 5 ; ret
     let bytes = make_msbc(
         &[ConstEntry::I32(42)],
         &[fn_def(
@@ -395,10 +452,19 @@ fn test_globals_store_and_load() {
             0,
             0,
             vec![
-                LD_CST, 0, // push 42
-                ST_GLB, 5, 0, 0, 0, // store to global[5]
-                LD_GLB, 5, 0, 0, 0, // load global[5]
-                RET,
+                Opcode::LD_CST.0,
+                0, // push 42
+                Opcode::ST_GLB.0,
+                5,
+                0,
+                0,
+                0, // store to global[5]
+                Opcode::LD_GLB.0,
+                5,
+                0,
+                0,
+                0, // load global[5]
+                Opcode::RET.0,
             ],
         )],
     );
@@ -413,8 +479,15 @@ fn test_globals_store_and_load() {
 
 #[test]
 fn test_globals_uninitialized_returns_unit() {
-    // ld.glb 0 ; ret — uninitialized global should return unit.
-    let bytes = make_msbc(&[], &[fn_def(0, 0, 0, vec![LD_GLB, 0, 0, 0, 0, RET])]);
+    let bytes = make_msbc(
+        &[],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![Opcode::LD_GLB.0, 0, 0, 0, 0, Opcode::RET.0],
+        )],
+    );
     let (_, result) = run_vm(&bytes);
     assert!(
         result.expect("runs").is_unit(),
@@ -428,10 +501,21 @@ fn test_globals_uninitialized_returns_unit() {
 fn test_division_by_zero_returns_error() {
     let bytes = make_msbc(
         &[ConstEntry::I32(10), ConstEntry::I32(0)],
-        &[fn_def(0, 0, 0, vec![LD_CST, 0, LD_CST, 1, I_DIV, RET])],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::I_DIV.0,
+                Opcode::RET.0,
+            ],
+        )],
     );
     let (_, result) = run_vm(&bytes);
-    // Should produce a Runtime error wrapping DivideByZero.
     let err = result.unwrap_err();
     match &err {
         VmError::Runtime { source, .. } => {
@@ -445,15 +529,24 @@ fn test_division_by_zero_returns_error() {
 
 #[test]
 fn test_float_add_and_multiply() {
-    // push int 3, convert to float, push int 2, convert to float, add, ret
-    // CNV_ITF (0x5E) is a 2-byte instruction; needs a dummy operand byte.
     let bytes = make_msbc(
         &[ConstEntry::I32(3), ConstEntry::I32(2)],
         &[fn_def(
             0,
             0,
             0,
-            vec![LD_CST, 0, CNV_ITF, 0, LD_CST, 1, CNV_ITF, 0, F_ADD, RET],
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::CNV_ITF.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::CNV_ITF.0,
+                0,
+                Opcode::F_ADD.0,
+                Opcode::RET.0,
+            ],
         )],
     );
     let (_, result) = run_vm(&bytes);
@@ -465,7 +558,6 @@ fn test_float_add_and_multiply() {
 
 #[test]
 fn test_bitwise_and_and_shift() {
-    // (0xFF & 0x0F) << 4 = 0xF0 = 240
     let bytes = make_msbc(
         &[
             ConstEntry::I32(0xFF),
@@ -476,7 +568,17 @@ fn test_bitwise_and_and_shift() {
             0,
             0,
             0,
-            vec![LD_CST, 0, LD_CST, 1, B_AND, LD_CST, 2, B_SHL, RET],
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::B_AND.0,
+                Opcode::LD_CST.0,
+                2,
+                Opcode::B_SHL.0,
+                Opcode::RET.0,
+            ],
         )],
     );
     let (_, result) = run_vm(&bytes);
@@ -487,15 +589,21 @@ fn test_bitwise_and_and_shift() {
 
 #[test]
 fn test_int_to_float_to_int_roundtrip() {
-    // int(7) → float → int
-    // CNV_ITF (0x5E) and CNV_FTI (0x5F) are both 2-byte instructions.
     let bytes = make_msbc(
         &[ConstEntry::I32(7)],
         &[fn_def(
             0,
             0,
             0,
-            vec![LD_CST, 0, CNV_ITF, 0, CNV_FTI, 0, RET],
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::CNV_ITF.0,
+                0,
+                Opcode::CNV_FTI.0,
+                0,
+                Opcode::RET.0,
+            ],
         )],
     );
     let (_, result) = run_vm(&bytes);
@@ -506,8 +614,6 @@ fn test_int_to_float_to_int_roundtrip() {
 
 #[test]
 fn test_array_create_store_load() {
-    // mk.arr (len=3, type_id=0) ; st.idx [1] = 99 ; ld.idx [1] ; ret
-    // ST_IDX (0x64) and LD_IDX (0x63) are 2-byte instructions.
     let bytes = make_msbc(
         &[ConstEntry::I32(3), ConstEntry::I32(99), ConstEntry::I32(1)],
         &[fn_def(
@@ -515,17 +621,30 @@ fn test_array_create_store_load() {
             1,
             0,
             vec![
-                LD_CST, 0, // push 3 (length)
-                MK_ARR, 0, 0, 0, 0, // mk.arr type_id=0 → ref on stack
-                ST_LOC, 0, // save ref
-                LD_LOC, 0, // push ref
-                LD_CST, 2, // push index 1
-                LD_CST, 1, // push value 99
-                ST_IDX, 0, // arr[1] = 99 (2-byte instr)
-                LD_LOC, 0, // push ref
-                LD_CST, 2, // push index 1
-                LD_IDX, 0, // load arr[1] (2-byte instr)
-                RET,
+                Opcode::LD_CST.0,
+                0, // push 3 (length)
+                Opcode::MK_ARR.0,
+                0,
+                0,
+                0,
+                0, // mk.arr type_id=0 → ref on stack
+                Opcode::ST_LOC.0,
+                0, // save ref
+                Opcode::LD_LOC.0,
+                0, // push ref
+                Opcode::LD_CST.0,
+                2, // push index 1
+                Opcode::LD_CST.0,
+                1, // push value 99
+                Opcode::ST_IDX.0,
+                0, // arr[1] = 99 (2-byte instr)
+                Opcode::LD_LOC.0,
+                0, // push ref
+                Opcode::LD_CST.0,
+                2, // push index 1
+                Opcode::LD_IDX.0,
+                0, // load arr[1] (2-byte instr)
+                Opcode::RET.0,
             ],
         )],
     );
@@ -535,7 +654,6 @@ fn test_array_create_store_load() {
 
 #[test]
 fn test_array_length() {
-    // LD_LEN (0x62) is a 2-byte instruction.
     let bytes = make_msbc(
         &[ConstEntry::I32(5)],
         &[fn_def(
@@ -543,10 +661,16 @@ fn test_array_length() {
             0,
             0,
             vec![
-                LD_CST, 0, // push 5 (length)
-                MK_ARR, 0, 0, 0, 0, // mk.arr → ref
-                LD_LEN, 0, // push length (2-byte instr)
-                RET,
+                Opcode::LD_CST.0,
+                0, // push 5 (length)
+                Opcode::MK_ARR.0,
+                0,
+                0,
+                0,
+                0, // mk.arr → ref
+                Opcode::LD_LEN.0,
+                0, // push length (2-byte instr)
+                Opcode::RET.0,
             ],
         )],
     );
@@ -558,8 +682,10 @@ fn test_array_length() {
 
 #[test]
 fn test_stack_underflow_returns_error() {
-    // I_ADD on empty stack should error.
-    let bytes = make_msbc(&[], &[fn_def(0, 0, 0, vec![I_ADD, RET])]);
+    let bytes = make_msbc(
+        &[],
+        &[fn_def(0, 0, 0, vec![Opcode::I_ADD.0, Opcode::RET.0])],
+    );
     let (_, result) = run_vm(&bytes);
     assert!(result.is_err(), "i.add on empty stack should error");
 }
@@ -568,7 +694,7 @@ fn test_stack_underflow_returns_error() {
 
 #[test]
 fn test_hlt_returns_halted_error() {
-    let bytes = make_msbc(&[], &[fn_def(0, 0, 0, vec![HLT])]);
+    let bytes = make_msbc(&[], &[fn_def(0, 0, 0, vec![Opcode::HLT.0])]);
     let (_, result) = run_vm(&bytes);
     let err = result.unwrap_err();
     match &err {
@@ -583,8 +709,6 @@ fn test_hlt_returns_halted_error() {
 
 #[test]
 fn test_instruction_limit_exceeded() {
-    // Infinite loop: jmp -5 (back to itself). With limit, should stop.
-    // jmp.w is 5 bytes; offset = -5 loops back to the jmp.w itself.
     let bytes = make_msbc(
         &[],
         &[fn_def(
@@ -592,7 +716,11 @@ fn test_instruction_limit_exceeded() {
             0,
             0,
             vec![
-                JMP_W, 0xFB, 0xFF, 0xFF, 0xFF, // i32 = -5 (little-endian)
+                Opcode::JMP_W.0,
+                0xFB,
+                0xFF,
+                0xFF,
+                0xFF, // i32 = -5 (little-endian)
             ],
         )],
     );
@@ -602,7 +730,6 @@ fn test_instruction_limit_exceeded() {
     let result = vm.run();
     assert!(result.is_err());
     let err = result.unwrap_err();
-    // InstructionLimitExceeded is returned directly (not wrapped in Runtime).
     assert!(
         matches!(err, VmError::InstructionLimitExceeded { limit: 100 }),
         "expected InstructionLimitExceeded, got {err:?}"
@@ -614,17 +741,27 @@ fn test_instruction_limit_exceeded() {
 
 #[test]
 fn test_error_context_contains_fn_id_and_ip() {
-    // Division by zero at known position.
     let bytes = make_msbc(
         &[ConstEntry::I32(1), ConstEntry::I32(0)],
-        &[fn_def(0, 0, 0, vec![LD_CST, 0, LD_CST, 1, I_DIV, RET])],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::I_DIV.0,
+                Opcode::RET.0,
+            ],
+        )],
     );
     let (_, result) = run_vm(&bytes);
     let err = result.unwrap_err();
     match &err {
         VmError::Runtime { fn_id, ip, .. } => {
             assert_eq!(*fn_id, 0, "fn_id should be 0");
-            // I_DIV is at byte offset 4 (after two ld.cst instructions of 2 bytes each).
             assert_eq!(*ip, 4, "ip should point to i.div at offset 4");
         }
         _ => panic!("expected Runtime error, got {err:?}"),
@@ -635,10 +772,9 @@ fn test_error_context_contains_fn_id_and_ip() {
 
 #[test]
 fn test_step_api_single_stepping() {
-    // ld.cst 0 ; ret
     let bytes = make_msbc(
         &[ConstEntry::I32(77)],
-        &[fn_def(0, 0, 0, vec![LD_CST, 0, RET])],
+        &[fn_def(0, 0, 0, vec![Opcode::LD_CST.0, 0, Opcode::RET.0])],
     );
     let module = load(&bytes).expect("loads");
     let mut vm = Vm::new(module);
@@ -646,13 +782,11 @@ fn test_step_api_single_stepping() {
 
     assert!(vm.is_running());
 
-    // Step 1: ld.cst 0
     match vm.step().expect("step 1") {
         StepResult::Continue => {}
         StepResult::Returned(_) => panic!("expected Continue after ld.cst"),
     }
 
-    // Step 2: ret
     match vm.step().expect("step 2") {
         StepResult::Continue => panic!("expected Returned after ret"),
         StepResult::Returned(v) => {
@@ -665,16 +799,18 @@ fn test_step_api_single_stepping() {
 
 #[test]
 fn test_introspection_frames_and_heap() {
-    // Create a product, inspect the heap.
     let bytes = make_msbc(
         &[ConstEntry::I32(10)],
-        &[fn_def(0, 0, 0, vec![LD_CST, 0, MK_PRD, 1, RET])],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![Opcode::LD_CST.0, 0, Opcode::MK_PRD.0, 1, Opcode::RET.0],
+        )],
     );
     let (vm, result) = run_vm(&bytes);
     let _ = result.expect("runs");
-    // After run, call stack is empty.
     assert!(vm.frames().is_empty());
-    // Heap should have at least one object (the product).
     assert!(vm.heap().live_count() >= 1);
 }
 
@@ -682,7 +818,6 @@ fn test_introspection_frames_and_heap() {
 
 #[test]
 fn test_gc_collects_unreachable_objects() {
-    // Allocate a product, then pop the ref (making it unreachable), then GC.
     let bytes = make_msbc(
         &[ConstEntry::I32(1)],
         &[fn_def(
@@ -690,24 +825,23 @@ fn test_gc_collects_unreachable_objects() {
             0,
             0,
             vec![
-                LD_CST, 0, // push 1
-                MK_PRD, 1,   // mk.prd 1 → ref (heap object)
-                POP, // discard the ref — object is now unreachable
-                LD_CST, 0, // push 1 (keep something reachable)
-                MK_PRD, 1, // mk.prd 1 → ref (heap object, reachable)
-                RET,
+                Opcode::LD_CST.0,
+                0, // push 1
+                Opcode::MK_PRD.0,
+                1,             // mk.prd 1 → ref (heap object)
+                Opcode::POP.0, // discard the ref — object is now unreachable
+                Opcode::LD_CST.0,
+                0, // push 1 (keep something reachable)
+                Opcode::MK_PRD.0,
+                1, // mk.prd 1 → ref (heap object, reachable)
+                Opcode::RET.0,
             ],
         )],
     );
     let (mut vm, result) = run_vm(&bytes);
     let _ = result.expect("runs");
-    // Before GC: 2 objects on heap.
     assert_eq!(vm.heap().live_count(), 2);
     let freed = vm.collect_garbage();
-    // The popped ref is unreachable (not in call stack or globals anymore),
-    // and the returned value is no longer on any frame either (run completed).
-    // Both objects become unreachable after run completes (empty call stack).
-    // Actually, the returned value is not on any frame. So both get collected.
     assert!(
         freed >= 1,
         "GC should free at least 1 object, freed {freed}"
@@ -716,7 +850,6 @@ fn test_gc_collects_unreachable_objects() {
 
 #[test]
 fn test_gc_preserves_reachable_globals() {
-    // Store a product in a global, GC, then load it back.
     let bytes = make_msbc(
         &[ConstEntry::I32(99)],
         &[fn_def(
@@ -724,17 +857,22 @@ fn test_gc_preserves_reachable_globals() {
             0,
             0,
             vec![
-                LD_CST, 0, // push 99
-                MK_PRD, 1, // mk.prd 1 → ref
-                ST_GLB, 0, 0, 0, 0, // store to global[0]
-                RET_U,
+                Opcode::LD_CST.0,
+                0, // push 99
+                Opcode::MK_PRD.0,
+                1, // mk.prd 1 → ref
+                Opcode::ST_GLB.0,
+                0,
+                0,
+                0,
+                0, // store to global[0]
+                Opcode::RET_U.0,
             ],
         )],
     );
     let (mut vm, result) = run_vm(&bytes);
     let _ = result.expect("runs");
     assert_eq!(vm.heap().live_count(), 1);
-    // GC should NOT free the object because it's referenced from globals.
     let freed = vm.collect_garbage();
     assert_eq!(freed, 0, "GC should not free globally-reachable objects");
     assert_eq!(vm.heap().live_count(), 1);
@@ -744,13 +882,37 @@ fn test_gc_preserves_reachable_globals() {
 
 #[test]
 fn test_direct_call_with_inv() {
-    // fn 0: call fn 1 with arg 10, return result
-    // fn 1: return param + 5
     let bytes = make_msbc(
         &[ConstEntry::I32(10), ConstEntry::I32(5)],
         &[
-            fn_def(0, 0, 0, vec![LD_CST, 0, INV, 1, 0, 0, 0, RET]),
-            fn_def(1, 1, 1, vec![LD_LOC, 0, LD_CST, 1, I_ADD, RET]),
+            fn_def(
+                0,
+                0,
+                0,
+                vec![
+                    Opcode::LD_CST.0,
+                    0,
+                    Opcode::INV.0,
+                    1,
+                    0,
+                    0,
+                    0,
+                    Opcode::RET.0,
+                ],
+            ),
+            fn_def(
+                1,
+                1,
+                1,
+                vec![
+                    Opcode::LD_LOC.0,
+                    0,
+                    Opcode::LD_CST.0,
+                    1,
+                    Opcode::I_ADD.0,
+                    Opcode::RET.0,
+                ],
+            ),
         ],
     );
     let (_, result) = run_vm(&bytes);
@@ -761,12 +923,6 @@ fn test_direct_call_with_inv() {
 
 #[test]
 fn test_wide_jump() {
-    // jmp.w +2 ; hlt ; ld.cst 0 ; ret
-    // jmp.w is 5 bytes. Target = 5 + 2 = 7.
-    // hlt at offset 5 (1 byte).
-    // NOP at offset 6 (1 byte).
-    // ld.cst at offset 7 (2 bytes).
-    // ret at offset 9 (1 byte).
     let bytes = make_msbc(
         &[ConstEntry::I32(42)],
         &[fn_def(
@@ -774,11 +930,16 @@ fn test_wide_jump() {
             0,
             0,
             vec![
-                JMP_W, 2, 0, 0, 0,    // jmp.w +2, target = 7
-                HLT,  // offset 5, skipped
-                0x00, // NOP at offset 6, skipped
-                LD_CST, 0,   // offset 7, push 42
-                RET, // offset 9
+                Opcode::JMP_W.0,
+                2,
+                0,
+                0,
+                0,             // jmp.w +2, target = 7
+                Opcode::HLT.0, // offset 5, skipped
+                Opcode::NOP.0, // NOP at offset 6, skipped
+                Opcode::LD_CST.0,
+                0,             // offset 7, push 42
+                Opcode::RET.0, // offset 9
             ],
         )],
     );
@@ -792,7 +953,12 @@ fn test_wide_jump() {
 fn test_int_negation() {
     let bytes = make_msbc(
         &[ConstEntry::I32(42)],
-        &[fn_def(0, 0, 0, vec![LD_CST, 0, I_NEG, RET])],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![Opcode::LD_CST.0, 0, Opcode::I_NEG.0, Opcode::RET.0],
+        )],
     );
     let (_, result) = run_vm(&bytes);
     assert_eq!(result.expect("runs").as_int().expect("is int"), -42);
@@ -802,14 +968,24 @@ fn test_int_negation() {
 
 #[test]
 fn test_float_multiply() {
-    // 3 * 4 = 12 via float
     let bytes = make_msbc(
         &[ConstEntry::I32(3), ConstEntry::I32(4)],
         &[fn_def(
             0,
             0,
             0,
-            vec![LD_CST, 0, CNV_ITF, 0, LD_CST, 1, CNV_ITF, 0, F_MUL, RET],
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::CNV_ITF.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::CNV_ITF.0,
+                0,
+                Opcode::F_MUL.0,
+                Opcode::RET.0,
+            ],
         )],
     );
     let (_, result) = run_vm(&bytes);
@@ -823,7 +999,19 @@ fn test_float_multiply() {
 fn test_cmp_eq_equal_values() {
     let bytes = make_msbc(
         &[ConstEntry::I32(5)],
-        &[fn_def(0, 0, 0, vec![LD_CST, 0, LD_CST, 0, CMP_EQ, RET])],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::LD_CST.0,
+                0,
+                Opcode::CMP_EQ.0,
+                Opcode::RET.0,
+            ],
+        )],
     );
     let (_, result) = run_vm(&bytes);
     assert!(
@@ -846,11 +1034,14 @@ fn test_value_try_as_ref() {
 
 #[test]
 fn test_cnv_trm_passthrough_preserves_bits() {
-    // Push int 42, CNV_TRM, verify result is int 42.
-    // CNV_TRM (0x60) is a 2-byte instruction.
     let bytes = make_msbc(
         &[ConstEntry::I32(42)],
-        &[fn_def(0, 0, 0, vec![LD_CST, 0, CNV_TRM, 0, RET])],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![Opcode::LD_CST.0, 0, Opcode::CNV_TRM.0, 0, Opcode::RET.0],
+        )],
     );
     let (_, result) = run_vm(&bytes);
     assert_eq!(result.expect("runs").as_int().expect("is int"), 42);
@@ -860,7 +1051,6 @@ fn test_cnv_trm_passthrough_preserves_bits() {
 
 #[test]
 fn test_fre_frees_heap_object() {
-    // Alloc a product, dup the ref, save one copy, free the other, verify freed.
     let bytes = make_msbc(
         &[ConstEntry::I32(1)],
         &[fn_def(
@@ -868,20 +1058,24 @@ fn test_fre_frees_heap_object() {
             1,
             0,
             vec![
-                LD_CST, 0,   // push 1
-                MK_PRD, 1,   // mk.prd 1 → ref
-                DUP,         // dup ref
-                ST_LOC, 0,   // save copy to local[0]
-                FRE, 0,      // free the ref on stack (2-byte instr)
-                LD_LOC, 0,   // load the saved ref
-                RET,
+                Opcode::LD_CST.0,
+                0, // push 1
+                Opcode::MK_PRD.0,
+                1,             // mk.prd 1 → ref
+                Opcode::DUP.0, // dup ref
+                Opcode::ST_LOC.0,
+                0, // save copy to local[0]
+                Opcode::FRE.0,
+                0, // free the ref on stack (2-byte instr)
+                Opcode::LD_LOC.0,
+                0, // load the saved ref
+                Opcode::RET.0,
             ],
         )],
     );
     let (vm, result) = run_vm(&bytes);
     let result = result.expect("runs");
     let ptr = result.as_ref().expect("is ref");
-    // The object was freed — accessing it should fail.
     assert!(
         matches!(vm.heap().get(ptr), Err(VmError::FreedObject { .. })),
         "object should be freed"
@@ -890,7 +1084,6 @@ fn test_fre_frees_heap_object() {
 
 #[test]
 fn test_fre_double_free_returns_error() {
-    // Alloc, dup, save ref, free twice — second free should error.
     let bytes = make_msbc(
         &[ConstEntry::I32(1)],
         &[fn_def(
@@ -898,15 +1091,21 @@ fn test_fre_double_free_returns_error() {
             1,
             0,
             vec![
-                LD_CST, 0,   // push 1
-                MK_PRD, 1,   // mk.prd 1 → ref
-                DUP,         // dup ref
-                ST_LOC, 0,   // save copy
-                DUP,         // dup again for second free
-                FRE, 0,      // first free
-                FRE, 0,      // second free — should error
-                LD_LOC, 0,
-                RET,
+                Opcode::LD_CST.0,
+                0, // push 1
+                Opcode::MK_PRD.0,
+                1,             // mk.prd 1 → ref
+                Opcode::DUP.0, // dup ref
+                Opcode::ST_LOC.0,
+                0,             // save copy
+                Opcode::DUP.0, // dup again for second free
+                Opcode::FRE.0,
+                0, // first free
+                Opcode::FRE.0,
+                0, // second free — should error
+                Opcode::LD_LOC.0,
+                0,
+                Opcode::RET.0,
             ],
         )],
     );
@@ -927,7 +1126,6 @@ fn test_fre_double_free_returns_error() {
 
 #[test]
 fn test_alc_man_allocates_object() {
-    // ALC_MAN allocates like ALC_REF.
     let bytes = make_msbc(
         &[],
         &[fn_def(
@@ -935,15 +1133,22 @@ fn test_alc_man_allocates_object() {
             0,
             0,
             vec![
-                ALC_MAN, 0, 0, 0, 0, // alc.man type_id=0
-                RET,
+                Opcode::ALC_MAN.0,
+                0,
+                0,
+                0,
+                0, // alc.man type_id=0
+                Opcode::RET.0,
             ],
         )],
     );
     let (vm, result) = run_vm(&bytes);
     let result = result.expect("runs");
     assert!(result.as_ref().is_ok(), "should be a ref");
-    assert!(vm.heap().live_count() >= 1, "heap should have at least 1 object");
+    assert!(
+        vm.heap().live_count() >= 1,
+        "heap should have at least 1 object"
+    );
 }
 
 // ── Tier 2: EFF_DO cross-frame ───────────────────────────────────────────────
@@ -961,11 +1166,7 @@ struct EffectOpDef {
 }
 
 /// Build a `.msbc` binary with an effect pool.
-fn make_msbc_with_effects(
-    consts: &[ConstEntry],
-    effects: &[EffectDef],
-    fns: &[FnDef],
-) -> Vec<u8> {
+fn make_msbc_with_effects(consts: &[ConstEntry], effects: &[EffectDef], fns: &[FnDef]) -> Vec<u8> {
     let entry_fn_id: u32 = fns.first().map_or(0, |f| f.fn_id);
 
     // ── Const pool ────────────────────────────────────────────────────────────
@@ -1030,14 +1231,18 @@ fn make_msbc_with_effects(
         }
     }
 
+    // ── Foreign pool (empty for tests) ──────────────────────────────────────
+    let foreign_section: Vec<u8> = 0u32.to_le_bytes().to_vec(); // count = 0
+
     // ── Header ────────────────────────────────────────────────────────────────
-    let header_size: u32 = 36;
+    let header_size: u32 = 40;
     let const_off = header_size;
     let type_off = const_off + u32::try_from(const_section.len()).expect("fits u32");
     let effect_off = type_off + u32::try_from(type_section.len()).expect("fits u32");
-    let fn_off = effect_off + u32::try_from(effect_section.len()).expect("fits u32");
+    let foreign_off = effect_off + u32::try_from(effect_section.len()).expect("fits u32");
+    let fn_off = foreign_off + u32::try_from(foreign_section.len()).expect("fits u32");
 
-    let mut header: Vec<u8> = Vec::with_capacity(36);
+    let mut header: Vec<u8> = Vec::with_capacity(40);
     header.extend_from_slice(b"MUSI");
     header.extend_from_slice(&1u16.to_le_bytes());
     header.extend_from_slice(&0u16.to_le_bytes());
@@ -1046,33 +1251,35 @@ fn make_msbc_with_effects(
     header.extend_from_slice(&const_off.to_le_bytes());
     header.extend_from_slice(&type_off.to_le_bytes());
     header.extend_from_slice(&effect_off.to_le_bytes());
+    header.extend_from_slice(&foreign_off.to_le_bytes());
     header.extend_from_slice(&fn_off.to_le_bytes());
 
-    debug_assert_eq!(header.len(), 32);
-    let checksum = crc32_test(&header);
-    header.extend_from_slice(&checksum.to_le_bytes());
     debug_assert_eq!(header.len(), 36);
+    let checksum = crc32_slice(&header);
+    header.extend_from_slice(&checksum.to_le_bytes());
+    debug_assert_eq!(header.len(), 40);
 
     let mut out = header;
     out.extend_from_slice(&const_section);
     out.extend_from_slice(&type_section);
     out.extend_from_slice(&effect_section);
+    out.extend_from_slice(&foreign_section);
     out.extend_from_slice(&fn_section);
     out
 }
 
 #[test]
 fn test_eff_do_cross_frame_finds_handler() {
-    // fn 0: EFF_PSH (effect_id=1, handler=fn 2), call fn 1, RET
-    // fn 1: EFF_DO op_id=1, RET  (handler is in fn 0's eff_stack)
-    // fn 2 (handler): push 42, RET
     let effect_id: u8 = 1;
     let bytes = make_msbc_with_effects(
         &[ConstEntry::I32(42)],
         &[EffectDef {
             id: 1,
             name_const_idx: 0,
-            ops: vec![EffectOpDef { id: 1, name_const_idx: 0 }],
+            ops: vec![EffectOpDef {
+                id: 1,
+                name_const_idx: 0,
+            }],
         }],
         &[
             FnDef {
@@ -1080,20 +1287,40 @@ fn test_eff_do_cross_frame_finds_handler() {
                 local_count: 0,
                 param_count: 0,
                 code: vec![
-                    EFF_PSH, effect_id, // push handler for effect 1
-                    INV, 1, 0, 0, 0,    // call fn 1
-                    RET,
+                    Opcode::EFF_PSH.0,
+                    effect_id, // push handler for effect 1
+                    Opcode::INV.0,
+                    1,
+                    0,
+                    0,
+                    0, // call fn 1
+                    Opcode::RET.0,
                 ],
-                handlers: vec![(effect_id, 2)], // effect_id=1 → handler fn_id=2
+                handlers: vec![(effect_id, 2)],
             },
-            fn_def(1, 0, 0, vec![
-                EFF_DO, 1, 0, 0, 0,  // do effect op_id=1
-                RET,
-            ]),
-            fn_def(2, 0, 0, vec![
-                LD_CST, 0,  // push 42
-                RET,
-            ]),
+            fn_def(
+                1,
+                0,
+                0,
+                vec![
+                    Opcode::EFF_DO.0,
+                    1,
+                    0,
+                    0,
+                    0, // do effect op_id=1
+                    Opcode::RET.0,
+                ],
+            ),
+            fn_def(
+                2,
+                0,
+                0,
+                vec![
+                    Opcode::LD_CST.0,
+                    0, // push 42
+                    Opcode::RET.0,
+                ],
+            ),
         ],
     );
     let (_, result) = run_vm(&bytes);
@@ -1102,16 +1329,16 @@ fn test_eff_do_cross_frame_finds_handler() {
 
 #[test]
 fn test_eff_res_resumes_continuation() {
-    // fn 0: EFF_PSH (effect_id=1, handler=fn 2), call fn 1, RET
-    // fn 1: EFF_DO op_id=1, RET  (the resume value should be returned)
-    // fn 2 (handler): push 99, EFF_RES, RET_U (should not reach RET_U)
     let effect_id: u8 = 1;
     let bytes = make_msbc_with_effects(
         &[ConstEntry::I32(99)],
         &[EffectDef {
             id: 1,
             name_const_idx: 0,
-            ops: vec![EffectOpDef { id: 1, name_const_idx: 0 }],
+            ops: vec![EffectOpDef {
+                id: 1,
+                name_const_idx: 0,
+            }],
         }],
         &[
             FnDef {
@@ -1119,38 +1346,51 @@ fn test_eff_res_resumes_continuation() {
                 local_count: 0,
                 param_count: 0,
                 code: vec![
-                    EFF_PSH, effect_id,
-                    INV, 1, 0, 0, 0,
-                    RET,
+                    Opcode::EFF_PSH.0,
+                    effect_id,
+                    Opcode::INV.0,
+                    1,
+                    0,
+                    0,
+                    0,
+                    Opcode::RET.0,
                 ],
                 handlers: vec![(effect_id, 2)],
             },
-            fn_def(1, 0, 0, vec![
-                EFF_DO, 1, 0, 0, 0,
-                RET,
-            ]),
-            fn_def(2, 0, 0, vec![
-                LD_CST, 0,             // push 99
-                EFF_RES, 0, 0, 0, 0,  // resume with 99
-                RET_U,                 // should not reach
-            ]),
+            fn_def(1, 0, 0, vec![Opcode::EFF_DO.0, 1, 0, 0, 0, Opcode::RET.0]),
+            fn_def(
+                2,
+                0,
+                0,
+                vec![
+                    Opcode::LD_CST.0,
+                    0, // push 99
+                    Opcode::EFF_RES.0,
+                    0,
+                    0,
+                    0,
+                    0,               // resume with 99
+                    Opcode::RET_U.0, // should not reach
+                ],
+            ),
         ],
     );
     let (_, result) = run_vm(&bytes);
-    // fn 1 does EFF_DO → handler pushes 99 and resumes → fn 1 gets 99 → returns it
     assert_eq!(result.expect("runs").as_int().expect("is int"), 99);
 }
 
 #[test]
 fn test_eff_abt_after_eff_do() {
-    // Handler does EFF_ABT instead of EFF_RES → EffectAborted.
     let effect_id: u8 = 1;
     let bytes = make_msbc_with_effects(
         &[],
         &[EffectDef {
             id: 1,
             name_const_idx: 0,
-            ops: vec![EffectOpDef { id: 1, name_const_idx: 0 }],
+            ops: vec![EffectOpDef {
+                id: 1,
+                name_const_idx: 0,
+            }],
         }],
         &[
             FnDef {
@@ -1158,20 +1398,27 @@ fn test_eff_abt_after_eff_do() {
                 local_count: 0,
                 param_count: 0,
                 code: vec![
-                    EFF_PSH, effect_id,
-                    INV, 1, 0, 0, 0,
-                    RET_U,
+                    Opcode::EFF_PSH.0,
+                    effect_id,
+                    Opcode::INV.0,
+                    1,
+                    0,
+                    0,
+                    0,
+                    Opcode::RET_U.0,
                 ],
                 handlers: vec![(effect_id, 2)],
             },
-            fn_def(1, 0, 0, vec![
-                EFF_DO, 1, 0, 0, 0,
-                RET_U,
-            ]),
-            fn_def(2, 0, 0, vec![
-                EFF_ABT,  // abort
-                RET_U,    // unreachable, but needed for verifier boundary
-            ]),
+            fn_def(1, 0, 0, vec![Opcode::EFF_DO.0, 1, 0, 0, 0, Opcode::RET_U.0]),
+            fn_def(
+                2,
+                0,
+                0,
+                vec![
+                    Opcode::EFF_ABT.0, // abort
+                    Opcode::RET_U.0,   // unreachable, but needed for verifier boundary
+                ],
+            ),
         ],
     );
     let (_, result) = run_vm(&bytes);
@@ -1189,10 +1436,14 @@ fn test_eff_abt_after_eff_do() {
 
 #[test]
 fn test_eff_res_c_is_noop() {
-    // EFF_RES_C should be a no-op (continue execution without popping stack).
     let bytes = make_msbc(
         &[ConstEntry::I32(77)],
-        &[fn_def(0, 0, 0, vec![LD_CST, 0, EFF_RES_C, 0, RET])],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![Opcode::LD_CST.0, 0, Opcode::EFF_RES_C.0, 0, Opcode::RET.0],
+        )],
     );
     let (_, result) = run_vm(&bytes);
     assert_eq!(result.expect("runs").as_int().expect("is int"), 77);

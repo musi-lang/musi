@@ -5,6 +5,8 @@ use std::collections::VecDeque;
 use crate::value::Value;
 
 /// A buffered channel for passing values between tasks.
+// Used by CMK/CHS/CHR opcodes when scheduler is wired.
+#[allow(dead_code)]
 pub struct Channel {
     /// Unique channel identifier.
     pub channel_id: u32,
@@ -16,6 +18,7 @@ pub struct Channel {
 
 impl Channel {
     /// Create a new empty channel.
+    #[allow(dead_code)] // Used by CMK opcode when scheduler is wired.
     #[must_use]
     pub const fn new(channel_id: u32) -> Self {
         Self {
