@@ -1,22 +1,22 @@
 //! §13 effect push/pop/do/resume/abort dispatch.
 
+use musi_bytecode::Opcode;
+
 use crate::error::VmError;
 use crate::loader::{HandlerEntry, LoadedEffect};
-#[allow(clippy::wildcard_imports)]
-use crate::opcode::*;
 use crate::vm::{EffFrame, Frame};
 
 /// Dispatch §13 effect opcodes.
 pub fn exec(
-    op: u8,
+    op: Opcode,
     operand: u32,
     frame: &mut Frame,
     effects: &[LoadedEffect],
     handlers: &[HandlerEntry],
 ) -> Result<EffectAction, VmError> {
     match op {
-        EFF_PSH => exec_eff_psh(operand, frame, handlers),
-        EFF_POP => {
+        Opcode::EFF_PSH => exec_eff_psh(operand, frame, handlers),
+        Opcode::EFF_POP => {
             let effect_id = u8::try_from(operand).map_err(|_| VmError::Malformed {
                 desc: "eff.pop effect_id overflow".into(),
             })?;
@@ -29,10 +29,10 @@ pub fn exec(
             }
             Ok(EffectAction::Continue)
         }
-        EFF_DO => Ok(exec_eff_do(operand, frame, effects)),
-        EFF_RES => Ok(EffectAction::Resume),
-        EFF_RES_C => Ok(EffectAction::Continue),
-        EFF_ABT => {
+        Opcode::EFF_DO => Ok(exec_eff_do(operand, frame, effects)),
+        Opcode::EFF_RES => Ok(EffectAction::Resume),
+        Opcode::EFF_RES_C => Ok(EffectAction::Continue),
+        Opcode::EFF_ABT => {
             frame.eff_stack.clear();
             Ok(EffectAction::Abort)
         }
@@ -64,11 +64,7 @@ fn exec_eff_psh(
 /// Handle `EFF_DO`: look up which effect owns the given `op_id`, then find
 /// the handler in the current frame's effect stack. If not found, returns
 /// `CrossFrameSearch` so the VM can search the entire call stack.
-fn exec_eff_do(
-    op_id: u32,
-    frame: &Frame,
-    effects: &[LoadedEffect],
-) -> EffectAction {
+fn exec_eff_do(op_id: u32, frame: &Frame, effects: &[LoadedEffect]) -> EffectAction {
     let search_id = resolve_effect_id(op_id, effects);
     let search_id_u8 = u8::try_from(search_id & 0xFF).unwrap_or(u8::MAX);
 

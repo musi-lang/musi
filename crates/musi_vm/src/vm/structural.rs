@@ -1,10 +1,10 @@
 //! §5/§9 locals, constants, struct/array, stack manipulation, and globals dispatch.
 
+use musi_bytecode::Opcode;
+
 use crate::error::VmError;
 use crate::heap::Heap;
 use crate::loader::LoadedConst;
-#[allow(clippy::wildcard_imports)]
-use crate::opcode::*;
 use crate::value::Value;
 use crate::vm::Frame;
 
@@ -12,7 +12,7 @@ use crate::vm::Frame;
 ///
 /// Returns `true` if the opcode was handled, `false` if not in this group.
 pub fn exec(
-    op: u8,
+    op: Opcode,
     operand: u32,
     frame: &mut Frame,
     consts: &[LoadedConst],
@@ -34,10 +34,10 @@ pub fn exec(
 /// §0 Control/Stack: NOP, HLT, DUP, POP, SWP.
 ///
 /// Returns `Some(true)` if handled, `None` if the opcode is not in this group.
-fn exec_stack(op: u8, frame: &mut Frame) -> Result<Option<bool>, VmError> {
+fn exec_stack(op: Opcode, frame: &mut Frame) -> Result<Option<bool>, VmError> {
     match op {
-        NOP => {}
-        DUP => {
+        Opcode::NOP => {}
+        Opcode::DUP => {
             let top = frame
                 .stack
                 .last()
@@ -47,10 +47,10 @@ fn exec_stack(op: u8, frame: &mut Frame) -> Result<Option<bool>, VmError> {
                 })?;
             frame.stack.push(top);
         }
-        POP => {
+        Opcode::POP => {
             let _ = frame.stack.pop();
         }
-        SWP => {
+        Opcode::SWP => {
             let len = frame.stack.len();
             if len < 2 {
                 return Err(VmError::Malformed {
@@ -68,42 +68,42 @@ fn exec_stack(op: u8, frame: &mut Frame) -> Result<Option<bool>, VmError> {
 ///
 /// Returns `Some(true)` if handled, `None` if the opcode is not in this group.
 fn exec_locals_consts(
-    op: u8,
+    op: Opcode,
     operand: u32,
     frame: &mut Frame,
     consts: &[LoadedConst],
     heap: &mut Heap,
 ) -> Result<Option<bool>, VmError> {
     match op {
-        LD_LOC => {
+        Opcode::LD_LOC => {
             let slot = usize::from(u8::try_from(operand).map_err(|_| VmError::Malformed {
                 desc: "ld.loc operand overflow".into(),
             })?);
             let v = get_local(frame, slot)?;
             frame.stack.push(v);
         }
-        ST_LOC => {
+        Opcode::ST_LOC => {
             let slot = usize::from(u8::try_from(operand).map_err(|_| VmError::Malformed {
                 desc: "st.loc operand overflow".into(),
             })?);
             let v = pop(frame)?;
             set_local(frame, slot, v)?;
         }
-        LD_LOC_W => {
+        Opcode::LD_LOC_W => {
             let slot = usize::try_from(operand).map_err(|_| VmError::Malformed {
                 desc: "ld.loc.w operand overflow".into(),
             })?;
             let v = get_local(frame, slot)?;
             frame.stack.push(v);
         }
-        ST_LOC_W => {
+        Opcode::ST_LOC_W => {
             let slot = usize::try_from(operand).map_err(|_| VmError::Malformed {
                 desc: "st.loc.w operand overflow".into(),
             })?;
             let v = pop(frame)?;
             set_local(frame, slot, v)?;
         }
-        LD_CST | LD_CST_W => {
+        Opcode::LD_CST | Opcode::LD_CST_W => {
             let idx = usize::try_from(operand).map_err(|_| VmError::Malformed {
                 desc: "ld.cst index overflow".into(),
             })?;
@@ -122,13 +122,13 @@ fn exec_locals_consts(
 ///
 /// Returns `Some(true)` if handled, `None` if the opcode is not in this group.
 fn exec_struct(
-    op: u8,
+    op: Opcode,
     operand: u32,
     frame: &mut Frame,
     heap: &mut Heap,
 ) -> Result<Option<bool>, VmError> {
     match op {
-        MK_PRD => {
+        Opcode::MK_PRD => {
             let n = usize::try_from(operand).map_err(|_| VmError::Malformed {
                 desc: "mk.prd field count overflow".into(),
             })?;
@@ -140,7 +140,7 @@ fn exec_struct(
             let ptr = heap.alloc(0, fields);
             frame.stack.push(Value::from_ref(ptr));
         }
-        LD_FLD => {
+        Opcode::LD_FLD => {
             let idx = usize::try_from(operand).map_err(|_| VmError::Malformed {
                 desc: "ld.fld index overflow".into(),
             })?;
@@ -153,7 +153,7 @@ fn exec_struct(
             })?;
             frame.stack.push(v);
         }
-        ST_FLD | ST_FLD_W => {
+        Opcode::ST_FLD | Opcode::ST_FLD_W => {
             let idx = usize::try_from(operand).map_err(|_| VmError::Malformed {
                 desc: "st.fld index overflow".into(),
             })?;
@@ -168,7 +168,7 @@ fn exec_struct(
             })?;
             *field = val;
         }
-        MK_VAR | MK_VAR_W => {
+        Opcode::MK_VAR | Opcode::MK_VAR_W => {
             let tag = operand;
             let payload = pop(frame)?;
             let ptr = heap.alloc(0, vec![payload]);
@@ -179,14 +179,14 @@ fn exec_struct(
             obj.tag = Some(tag);
             frame.stack.push(Value::from_ref(ptr));
         }
-        LD_PAY => {
+        Opcode::LD_PAY => {
             let obj_val = pop(frame)?;
             let ptr = obj_val.as_ref()?;
             let obj = heap.get(ptr)?;
             let payload = obj.fields.first().copied().unwrap_or(Value::UNIT);
             frame.stack.push(payload);
         }
-        CMP_TAG | CMP_TAG_W => {
+        Opcode::CMP_TAG | Opcode::CMP_TAG_W => {
             let expected_tag = operand;
             let obj_val = pop(frame)?;
             let ptr = obj_val.as_ref()?;
@@ -203,31 +203,31 @@ fn exec_struct(
 ///
 /// Returns `true` if handled, `false` if the opcode is not in this group.
 fn exec_array_alloc_globals(
-    op: u8,
+    op: Opcode,
     operand: u32,
     frame: &mut Frame,
     heap: &mut Heap,
     globals: &mut Vec<Value>,
 ) -> Result<bool, VmError> {
     match op {
-        LD_TAG => exec_ld_tag(frame, heap),
-        LD_LEN => exec_ld_len(frame, heap),
-        LD_IDX => exec_ld_idx(frame, heap),
-        ST_IDX => exec_st_idx(frame, heap),
-        FRE => {
+        Opcode::LD_TAG => exec_ld_tag(frame, heap),
+        Opcode::LD_LEN => exec_ld_len(frame, heap),
+        Opcode::LD_IDX => exec_ld_idx(frame, heap),
+        Opcode::ST_IDX => exec_st_idx(frame, heap),
+        Opcode::FRE => {
             let obj_val = pop(frame)?;
             let ptr = obj_val.as_ref()?;
             heap.free(ptr)?;
             Ok(true)
         }
-        MK_ARR => exec_mk_arr(operand, frame, heap),
-        ALC_REF | ALC_MAN | ALC_ARN => {
+        Opcode::MK_ARR => exec_mk_arr(operand, frame, heap),
+        Opcode::ALC_REF | Opcode::ALC_MAN | Opcode::ALC_ARN => {
             let ptr = heap.alloc(operand, vec![]);
             frame.stack.push(Value::from_ref(ptr));
             Ok(true)
         }
-        LD_GLB => exec_ld_glb(operand, frame, globals),
-        ST_GLB => exec_st_glb(operand, frame, globals),
+        Opcode::LD_GLB => exec_ld_glb(operand, frame, globals),
+        Opcode::ST_GLB => exec_st_glb(operand, frame, globals),
         _ => Ok(false),
     }
 }

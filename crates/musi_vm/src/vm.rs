@@ -8,8 +8,11 @@ mod control;
 mod effects;
 mod structural;
 
+use musi_bytecode::Opcode;
+
 use crate::error::VmError;
 use crate::heap::Heap;
+use crate::host::HostFunctions;
 use crate::loader::LoadedModule;
 use crate::value::Value;
 
@@ -59,6 +62,7 @@ pub struct Vm {
     instruction_count: u64,
     instruction_limit: Option<u64>,
     continuations: Vec<Continuation>,
+    host: Option<Box<dyn HostFunctions>>,
 }
 
 impl Vm {
@@ -73,6 +77,7 @@ impl Vm {
             instruction_count: 0,
             instruction_limit: None,
             continuations: vec![],
+            host: None,
         }
     }
 
@@ -82,6 +87,11 @@ impl Vm {
     /// returning `InstructionLimitExceeded`. Pass `None` to disable.
     pub const fn set_instruction_limit(&mut self, limit: Option<u64>) {
         self.instruction_limit = limit;
+    }
+
+    /// Attach a host function provider for `INV_FFI` dispatch.
+    pub fn set_host(&mut self, host: Box<dyn HostFunctions>) {
+        self.host = Some(host);
     }
 
     /// Number of instructions executed since the VM was created.
@@ -253,7 +263,8 @@ impl Vm {
             });
         }
 
-        let op = self.module.functions[fn_idx].code[ip];
+        let raw_op = self.module.functions[fn_idx].code[ip];
+        let op = Opcode(raw_op);
         let (operand, instr_len) = control::decode_operand(&self.module.functions[fn_idx].code, ip);
 
         // Advance ip past the instruction before dispatch (jumps overwrite it).
@@ -294,6 +305,11 @@ impl Vm {
             effects::EffectAction::Resume => {
                 return self.exec_eff_res();
             }
+        }
+
+        // Foreign function invocation.
+        if op == Opcode::INV_FFI {
+            return self.exec_inv_ffi(operand);
         }
 
         // Control flow (jumps, calls, returns).
@@ -500,6 +516,52 @@ impl Vm {
                 desc: "eff.res: no frame after restoring continuation".into(),
             })?;
         top.stack.push(resume_value);
+
+        Ok(StepResult::Continue)
+    }
+
+    // ── Foreign function invocation ──────────────────────────────────────────
+
+    /// Dispatch an `INV_FFI` opcode: pop args, call the host, push result.
+    fn exec_inv_ffi(&mut self, operand: u32) -> Result<StepResult, VmError> {
+        let foreign_idx = usize::try_from(operand).map_err(|_| VmError::Malformed {
+            desc: "foreign fn index overflows usize".into(),
+        })?;
+        let foreign_fn =
+            self.module
+                .foreign_fns
+                .get(foreign_idx)
+                .ok_or_else(|| VmError::Malformed {
+                    desc: format!("foreign fn index {operand} out of bounds").into_boxed_str(),
+                })?;
+        let param_count = usize::from(foreign_fn.param_count);
+
+        let frame = self
+            .call_stack
+            .last_mut()
+            .ok_or_else(|| VmError::Malformed {
+                desc: "inv.ffi with empty call stack".into(),
+            })?;
+
+        if frame.stack.len() < param_count {
+            return Err(VmError::Malformed {
+                desc: format!(
+                    "inv.ffi: need {param_count} args, stack has {}",
+                    frame.stack.len()
+                )
+                .into_boxed_str(),
+            });
+        }
+        let start = frame.stack.len() - param_count;
+        let args: Vec<Value> = frame.stack.drain(start..).collect();
+
+        let host = self.host.as_mut().ok_or_else(|| VmError::Malformed {
+            desc: "inv.ffi without a host attached".into(),
+        })?;
+        let result = host.call_foreign(operand, &args, &self.heap)?;
+
+        let frame = self.call_stack.last_mut().expect("frame exists");
+        frame.stack.push(result);
 
         Ok(StepResult::Continue)
     }
