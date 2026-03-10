@@ -1,1 +1,1 @@
-export let benchmark : (() -> ()) -> ()
+export let benchmark : (() -> ()) -> ();
