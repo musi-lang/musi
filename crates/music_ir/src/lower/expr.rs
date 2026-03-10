@@ -18,8 +18,6 @@ use crate::types::IrType;
 use super::decl::LowerCtx;
 use super::ty::lower_ty;
 
-// ── FnLowerCtx ───────────────────────────────────────────────────────────────
-
 pub(super) struct FnLowerCtx<'cx, 'src: 'cx> {
     pub cx: &'cx mut LowerCtx<'src>,
     pub local_map: HashMap<DefId, IrLocal>,
@@ -63,8 +61,6 @@ impl FnLowerCtx<'_, '_> {
     }
 }
 
-// ── Main dispatch ─────────────────────────────────────────────────────────────
-
 pub(super) fn lower_expr(
     fn_cx: &mut FnLowerCtx<'_, '_>,
     expr_idx: Idx<Expr>,
@@ -92,8 +88,6 @@ pub(super) fn lower_expr(
     }
 }
 
-// ── Literal lowering ──────────────────────────────────────────────────────────
-
 fn lower_lit(
     fn_cx: &mut FnLowerCtx<'_, '_>,
     expr_idx: Idx<Expr>,
@@ -118,8 +112,6 @@ fn lower_lit(
     };
     Ok(fn_cx.emit_assign(ir_ty, IrRvalue::Const(const_val), span))
 }
-
-// ── Name lowering ─────────────────────────────────────────────────────────────
 
 fn lower_name(
     fn_cx: &mut FnLowerCtx<'_, '_>,
@@ -164,8 +156,6 @@ fn lower_name(
     Err(IrError::UnsupportedExpr)
 }
 
-// ── Block lowering ────────────────────────────────────────────────────────────
-
 fn lower_block(
     fn_cx: &mut FnLowerCtx<'_, '_>,
     stmts: &[Idx<Expr>],
@@ -182,8 +172,6 @@ fn lower_block(
         Ok(fn_cx.emit_assign(unit_ty, IrRvalue::Const(IrConstValue::Unit), span))
     }
 }
-
-// ── Let / Binding lowering ────────────────────────────────────────────────────
 
 fn lower_let(
     fn_cx: &mut FnLowerCtx<'_, '_>,
@@ -211,8 +199,6 @@ fn lower_binding_expr(
     let unit_ty = fn_cx.cx.ir.types.alloc(IrType::Unit);
     Ok(fn_cx.emit_assign(unit_ty, IrRvalue::Const(IrConstValue::Unit), span))
 }
-
-// ── Binary operator lowering ──────────────────────────────────────────────────
 
 fn lower_binop(
     fn_cx: &mut FnLowerCtx<'_, '_>,
@@ -268,8 +254,6 @@ fn lower_binop(
     ))
 }
 
-// ── Unary operator lowering ───────────────────────────────────────────────────
-
 fn lower_unaryop(
     fn_cx: &mut FnLowerCtx<'_, '_>,
     op: UnaryOp,
@@ -324,8 +308,6 @@ fn lower_unaryop(
         _ => Err(IrError::UnsupportedExpr),
     }
 }
-
-// ── Call lowering ─────────────────────────────────────────────────────────────
 
 fn lower_call(
     fn_cx: &mut FnLowerCtx<'_, '_>,
@@ -383,8 +365,6 @@ fn lower_call(
     ))
 }
 
-// ── Foreign call lowering ─────────────────────────────────────────────────
-
 fn lower_foreign_call(
     fn_cx: &mut FnLowerCtx<'_, '_>,
     expr_idx: Idx<Expr>,
@@ -421,8 +401,6 @@ fn lower_foreign_call(
         span,
     ))
 }
-
-// ── Piecewise lowering ────────────────────────────────────────────────────────
 
 fn lower_piecewise(
     fn_cx: &mut FnLowerCtx<'_, '_>,
@@ -520,8 +498,6 @@ fn emit_conditional_arm(
     Ok(())
 }
 
-// ── Return lowering ───────────────────────────────────────────────────────────
-
 fn lower_return(
     fn_cx: &mut FnLowerCtx<'_, '_>,
     value: Option<Idx<Expr>>,
@@ -541,8 +517,6 @@ fn lower_return(
     let unit_ty = fn_cx.cx.ir.types.alloc(IrType::Unit);
     Ok(fn_cx.fresh_local(unit_ty, false, span))
 }
-
-// ── Tuple lowering ────────────────────────────────────────────────────────────
 
 fn lower_tuple(
     fn_cx: &mut FnLowerCtx<'_, '_>,
@@ -573,8 +547,6 @@ fn lower_tuple(
     ))
 }
 
-// ── Pattern binding ───────────────────────────────────────────────────────────
-
 fn bind_pat(
     fn_cx: &mut FnLowerCtx<'_, '_>,
     pat_idx: Idx<music_ast::Pat>,
@@ -594,8 +566,6 @@ fn bind_pat(
         _ => Err(IrError::UnsupportedExpr),
     }
 }
-
-// ── Type family helpers ───────────────────────────────────────────────────────
 
 enum TypeFamily {
     Signed,

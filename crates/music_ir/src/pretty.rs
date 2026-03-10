@@ -35,8 +35,6 @@ use crate::func::IrFunction;
 use crate::inst::{IrBinOp, IrCallee, IrInst, IrOperand, IrPlace, IrRvalue, IrUnaryOp};
 use crate::types::{IrEffectMask, IrSumVariant, IrType};
 
-// ── Public entry points ─────────────────────────────────────────────────────
-
 /// Write a complete [`IrModule`] in `.msir` text format.
 ///
 /// # Errors
@@ -93,8 +91,6 @@ pub fn module_to_string(m: &IrModule, interner: &Interner) -> String {
     write_module(&mut s, m, interner).expect("writing to String never fails");
     s
 }
-
-// ── Private helpers ─────────────────────────────────────────────────────────
 
 fn write_effect_def(
     w: &mut impl Write,

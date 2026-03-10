@@ -20,8 +20,6 @@ use crate::types::{IrEffectMask, IrType};
 
 use super::ty::lower_ty;
 
-// ── Context ──────────────────────────────────────────────────────────────────
-
 pub(super) struct LowerCtx<'src> {
     pub sema: &'src SemaResult,
     pub ast: &'src AstArenas,
@@ -40,8 +38,6 @@ struct FnEntry {
     fn_idx: Idx<IrFunction>,
     binding_expr: Idx<Expr>,
 }
-
-// ── Entry point ──────────────────────────────────────────────────────────────
 
 pub(super) fn lower_module(
     parsed: &ParsedModule,
@@ -72,8 +68,6 @@ pub(super) fn lower_module(
     set_entry_point(&mut cx);
     Ok(cx.ir)
 }
-
-// ── Pass 1: stub registration ─────────────────────────────────────────────────
 
 fn register_fn_stub(cx: &mut LowerCtx<'_>, expr_idx: Idx<Expr>) -> Result<(), IrError> {
     let expr = cx.ast.exprs[expr_idx].clone();
@@ -181,8 +175,6 @@ fn build_param_locals(
     Ok((ir_params, ir_locals))
 }
 
-// ── Pass 2: body lowering ─────────────────────────────────────────────────────
-
 fn lower_fn_body(
     cx: &mut LowerCtx<'_>,
     fn_idx: Idx<IrFunction>,
@@ -241,8 +233,6 @@ fn build_param_local_map(params: &[Param], sema: &SemaResult) -> HashMap<DefId, 
     }
     map
 }
-
-// ── Foreign function registration ────────────────────────────────────────────
 
 /// Extracts a `Foreign` expr, possibly unwrapping `Annotated` wrappers.
 fn extract_foreign(expr: Expr, ast: &AstArenas) -> Option<(Expr, Vec<Attr>)> {
@@ -393,8 +383,6 @@ fn extract_link_attr(attrs: &[Attr], interner: &Interner) -> Option<Symbol> {
     })
 }
 
-// ── Helper: extract LetFields from Binding, Let, or Annotated ────────────────
-
 /// Returns `(fields, span, attrs)` from `Expr::Binding`, `Expr::Let { body: None }`,
 /// or `Expr::Annotated` wrapping either of those.
 ///
@@ -421,15 +409,11 @@ fn extract_fn_fields(
     }
 }
 
-// ── Attribute helpers ────────────────────────────────────────────────────────
-
 fn has_entrypoint_attr(attrs: &[Attr], interner: &Interner) -> bool {
     attrs
         .iter()
         .any(|a| interner.resolve(a.name) == "entrypoint")
 }
-
-// ── Entry point detection ─────────────────────────────────────────────────────
 
 const fn set_entry_point(cx: &mut LowerCtx<'_>) {
     cx.ir.entry = cx.entry_candidate;
