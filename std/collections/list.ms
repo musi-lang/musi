@@ -1,35 +1,35 @@
 /// A singly-linked immutable list.
-export let List := forall 'T -> Nil + Cons of ('T, List of 'T);
+export let List ['T] := choice { Nil + Cons of ('T, List of 'T) };
 
 /// Return the first element, or `None` if empty.
-export let head : forall 'T -> (List of 'T) -> ?'T :=
-    forall 'T -> (xs) -> match xs (.Cons(x, _) => .Some(x) | .Nil => .None);
+export let head ['T] : (List of 'T) -> ?'T :=
+    (xs) => match xs (.Cons(x, _) => .Some(x) | .Nil => .None);
 
 /// Return all elements after the first, or `Nil` if empty.
-export let tail : forall 'T -> (List of 'T) -> List of 'T :=
-    forall 'T -> (xs) -> match xs (.Cons(_, rest) => rest | .Nil => .Nil);
+export let tail ['T] : (List of 'T) -> List of 'T :=
+    (xs) => match xs (.Cons(_, rest) => rest | .Nil => .Nil);
 
 /// True if the list is empty.
-export let is_empty : forall 'T -> (List of 'T) -> Bool :=
-    forall 'T -> (xs) -> match xs (.Nil => .True | _ => .False);
+export let is_empty ['T] : (List of 'T) -> Bool :=
+    (xs) => match xs (.Nil => .True | _ => .False);
 
 /// Return the number of elements.
-export let length : forall 'T -> (List of 'T) -> Int :=
-    forall 'T -> (xs) -> (
+export let length ['T] : (List of 'T) -> Int :=
+    (xs) => (
         let go(acc, ys) := match ys (.Cons(_, rest) => go(acc + 1, rest) | .Nil => acc);
         go(0, xs)
     );
 
 /// Apply a function to each element.
-export let map : forall 'T, 'U -> (List of 'T, ('T) -> 'U) -> List of 'U :=
-    forall 'T, 'U -> (xs, f) -> match xs (
+export let map ['T, 'U] : (List of 'T, ('T) -> 'U) -> List of 'U :=
+    (xs, f) => match xs (
         .Cons(x, rest) => .Cons(f(x), map(rest, f))
       | .Nil => .Nil
     );
 
 /// Keep only elements satisfying the predicate.
-export let filter : forall 'T -> (List of 'T, ('T) -> Bool) -> List of 'T :=
-    forall 'T -> (xs, p) -> match xs (
+export let filter ['T] : (List of 'T, ('T) -> Bool) -> List of 'T :=
+    (xs, p) => match xs (
         .Cons(x, rest) => (
             .Cons(x, filter(rest, p)) if p(x)
           | filter(rest, p) if _
@@ -38,51 +38,51 @@ export let filter : forall 'T -> (List of 'T, ('T) -> Bool) -> List of 'T :=
     );
 
 /// Left fold.
-export let fold_left : forall 'T, 'U -> (List of 'T, 'U, ('U, 'T) -> 'U) -> 'U :=
-    forall 'T, 'U -> (xs, acc, f) -> match xs (
+export let fold_left ['T, 'U] : (List of 'T, 'U, ('U, 'T) -> 'U) -> 'U :=
+    (xs, acc, f) => match xs (
         .Cons(x, rest) => fold_left(rest, f(acc, x), f)
       | .Nil => acc
     );
 
 /// Right fold.
-export let fold_right : forall 'T, 'U -> (List of 'T, 'U, ('T, 'U) -> 'U) -> 'U :=
-    forall 'T, 'U -> (xs, acc, f) -> match xs (
+export let fold_right ['T, 'U] : (List of 'T, 'U, ('T, 'U) -> 'U) -> 'U :=
+    (xs, acc, f) => match xs (
         .Cons(x, rest) => f(x, fold_right(rest, acc, f))
       | .Nil => acc
     );
 
 /// Reverse a list.
-export let reverse : forall 'T -> (List of 'T) -> List of 'T :=
-    forall 'T -> (xs) -> fold_left(xs, .Nil, (acc, x) -> .Cons(x, acc));
+export let reverse ['T] : (List of 'T) -> List of 'T :=
+    (xs) => fold_left(xs, .Nil, (acc, x) => .Cons(x, acc));
 
 /// Concatenate two lists.
-export let append : forall 'T -> (List of 'T, List of 'T) -> List of 'T :=
-    forall 'T -> (xs, ys) -> match xs (
+export let append ['T] : (List of 'T, List of 'T) -> List of 'T :=
+    (xs, ys) => match xs (
         .Cons(x, rest) => .Cons(x, append(rest, ys))
       | .Nil => ys
     );
 
 /// Flatten a list of lists.
-export let flatten : forall 'T -> (List of (List of 'T)) -> List of 'T :=
-    forall 'T -> (xss) -> fold_right(xss, .Nil, (xs, acc) -> append(xs, acc));
+export let flatten ['T] : (List of (List of 'T)) -> List of 'T :=
+    (xss) => fold_right(xss, .Nil, (xs, acc) => append(xs, acc));
 
 /// Return the element at index `n`, or `None` if out of bounds.
-export let nth : forall 'T -> (List of 'T, Int) -> ?'T :=
-    forall 'T -> (xs, n) -> match xs (
+export let nth ['T] : (List of 'T, Int) -> ?'T :=
+    (xs, n) => match xs (
         .Cons(x, rest) => (.Some(x) if n = 0 | nth(rest, n - 1) if _)
       | .Nil => .None
     );
 
 /// Zip two lists into a list of pairs, truncating to the shorter.
-export let zip : forall 'T, 'U -> (List of 'T, List of 'U) -> List of ('T, 'U) :=
-    forall 'T, 'U -> (xs, ys) -> match (xs, ys) (
+export let zip ['T, 'U] : (List of 'T, List of 'U) -> List of ('T, 'U) :=
+    (xs, ys) => match (xs, ys) (
         (.Cons(x, xr), .Cons(y, yr)) => .Cons((x, y), zip(xr, yr))
       | _ => .Nil
     );
 
 /// Take the first `n` elements.
-export let take : forall 'T -> (List of 'T, Int) -> List of 'T :=
-    forall 'T -> (xs, n) -> (
+export let take ['T] : (List of 'T, Int) -> List of 'T :=
+    (xs, n) => (
         .Nil if n <= 0
       | match xs (
             .Cons(x, rest) => .Cons(x, take(rest, n - 1))
@@ -91,8 +91,8 @@ export let take : forall 'T -> (List of 'T, Int) -> List of 'T :=
     );
 
 /// Drop the first `n` elements.
-export let drop : forall 'T -> (List of 'T, Int) -> List of 'T :=
-    forall 'T -> (xs, n) -> (
+export let drop ['T] : (List of 'T, Int) -> List of 'T :=
+    (xs, n) => (
         xs if n <= 0
       | match xs (
             .Cons(_, rest) => drop(rest, n - 1)
@@ -101,8 +101,8 @@ export let drop : forall 'T -> (List of 'T, Int) -> List of 'T :=
     );
 
 /// True if the list contains the given element.
-export let contains : forall 'T where 'T <: Eq -> (List of 'T, 'T) -> Bool :=
-    forall 'T where 'T <: Eq -> (xs, value) -> match xs (
+export let contains ['T] where 'T <: Eq : (List of 'T, 'T) -> Bool :=
+    (xs, value) => match xs (
         .Cons(x, rest) => (.True if x = value | contains(rest, value) if _)
       | .Nil => .False
     );
@@ -113,7 +113,7 @@ given Eq of (List of 'T) where 'T <: Eq {
             (.Nil, .Nil) => .True
           | (.Cons(x, xr), .Cons(y, yr)) => (x = y) and (xr = yr)
           | _ => .False
-        )
+        );
 };
 
 given Show of (List of 'T) where 'T <: Show {
@@ -124,5 +124,5 @@ given Show of (List of 'T) where 'T <: Show {
           | .Nil => acc
         );
         "[" + go(value, "") + "]"
-    )
+    );
 };

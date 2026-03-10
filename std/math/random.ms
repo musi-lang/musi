@@ -8,4 +8,4 @@ export let random_int : (Int, Int) ~> Int under { State };
 export let random_bool : () ~> Bool under { State };
 
 /// Choose a random element from a non-empty list, or `None` if empty.
-export let choose : forall 'T -> (List of 'T) ~> ?'T under { State };
+export let choose ['T] : (List of 'T) ~> ?'T under { State };

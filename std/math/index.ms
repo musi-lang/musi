@@ -54,8 +54,8 @@ export let atan2 : (Float64, Float64) -> Float64;
 
 /// Clamp a value to the range [lo, hi].
 export let clamp : (Float64, Float64, Float64) -> Float64 :=
-    (x, lo, hi) -> (lo if x < lo | hi if x > hi | x if _);
+    (x, lo, hi) => (lo if x < lo | hi if x > hi | x if _);
 
 /// Return -1, 0, or 1 indicating the sign of the value.
 export let sign : Float64 -> Float64 :=
-    (x) -> (-1.0 if x < 0.0 | 1.0 if x > 0.0 | 0.0 if _);
+    (x) => (-1.0 if x < 0.0 | 1.0 if x > 0.0 | 0.0 if _);

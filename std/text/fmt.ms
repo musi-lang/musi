@@ -1,6 +1,6 @@
 /// Join a list of strings with a separator.
-export let join : forall 'T where 'T <: Show -> (List of 'T, String) -> String :=
-    forall 'T where 'T <: Show -> (xs, sep) -> (
+export let join ['T] where 'T <: Show : (List of 'T, String) -> String :=
+    (xs, sep) => (
         let go(ys) := match ys (
             .Cons(x, .Nil) => show(x)
           | .Cons(x, rest) => show(x) + sep + go(rest)
@@ -17,7 +17,7 @@ export let pad_right : (String, Int, Rune) -> String;
 
 /// Repeat a string `n` times.
 export let repeat : (String, Int) -> String :=
-    (s, n) -> (
+    (s, n) => (
         let go(acc, i) := (acc if i <= 0 | go(acc + s, i - 1) if _);
         go("", n)
     );
