@@ -29,8 +29,6 @@ pub struct UnifyTable {
     vars: Vec<TyVarEntry>,
 }
 
-// ── Variable management ──────────────────────────────────────────────────────
-
 impl UnifyTable {
     #[must_use]
     pub const fn new() -> Self {
@@ -94,8 +92,6 @@ impl UnifyTable {
     }
 }
 
-// ── Resolution ───────────────────────────────────────────────────────────────
-
 impl UnifyTable {
     /// Resolves a type through any chain of bindings.
     ///
@@ -142,8 +138,6 @@ impl UnifyTable {
         }
     }
 }
-
-// ── Unification ──────────────────────────────────────────────────────────────
 
 impl UnifyTable {
     /// Unifies two types, returning `true` on success.
@@ -330,8 +324,6 @@ impl UnifyTable {
         })
     }
 }
-
-// ── Freezing ─────────────────────────────────────────────────────────────────
 
 impl UnifyTable {
     /// Recursively replaces all solved `Var` with their bindings.
