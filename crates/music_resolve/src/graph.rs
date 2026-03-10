@@ -266,13 +266,17 @@ fn collect_imports_from_expr(expr_idx: ExprIdx, arenas: &AstArenas, out: &mut Ve
             out.push((*path, *span));
         }
         Expr::Let { fields, body, .. } => {
-            collect_imports_from_expr(fields.value, arenas, out);
+            if let Some(v) = fields.value {
+                collect_imports_from_expr(v, arenas, out);
+            }
             if let Some(b) = body {
                 collect_imports_from_expr(*b, arenas, out);
             }
         }
         Expr::Binding { fields, .. } => {
-            collect_imports_from_expr(fields.value, arenas, out);
+            if let Some(v) = fields.value {
+                collect_imports_from_expr(v, arenas, out);
+            }
         }
         Expr::Block { stmts, tail, .. } => {
             for &stmt_expr in stmts {
