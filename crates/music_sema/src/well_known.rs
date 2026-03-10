@@ -40,13 +40,39 @@ pub struct WellKnownFloats {
 /// Well-known FFI C-compatible types.
 #[derive(Debug, Clone)]
 pub struct WellKnownFfi {
-    pub c_int: DefId,
-    pub c_uint: DefId,
-    pub c_char: DefId,
-    pub c_size: DefId,
-    pub c_double: DefId,
     pub c_string: DefId,
     pub ptr: DefId,
+}
+
+/// Well-known typeclass definitions.
+#[derive(Debug, Clone)]
+pub struct WellKnownClasses {
+    pub eq: DefId,
+    pub ord: DefId,
+    pub show: DefId,
+    pub add: DefId,
+    pub into: DefId,
+    pub iterable: DefId,
+    pub propagate: DefId,
+}
+
+/// Well-known effect definitions.
+#[derive(Debug, Clone)]
+pub struct WellKnownEffects {
+    pub io: DefId,
+    pub async_eff: DefId,
+    pub state: DefId,
+    pub throw: DefId,
+}
+
+/// Well-known container/ADT types.
+#[derive(Debug, Clone)]
+pub struct WellKnownContainers {
+    pub result: DefId,
+    pub ordering: DefId,
+    pub list: DefId,
+    pub map: DefId,
+    pub set: DefId,
 }
 
 /// `DefId` handles for all well-known (prelude) types.
@@ -58,6 +84,9 @@ pub struct WellKnown {
     pub uints: WellKnownUInts,
     pub floats: WellKnownFloats,
     pub ffi: WellKnownFfi,
+    pub classes: WellKnownClasses,
+    pub effects: WellKnownEffects,
+    pub containers: WellKnownContainers,
     // Text
     pub string: DefId,
     pub rune: DefId,
@@ -82,46 +111,82 @@ pub fn init_well_known(
     scope: ScopeId,
     scopes: &mut ScopeTree,
 ) -> WellKnown {
-    let mut register = |name: &str| -> DefId {
+    let mut register = |name: &str, kind: DefKind| -> DefId {
         let sym = interner.intern(name);
-        let id = defs.alloc(sym, DefKind::Type, Span::DUMMY);
+        let id = defs.alloc(sym, kind, Span::DUMMY);
         let _prev = scopes.define(scope, sym, id);
         id
     };
 
+    let ints = WellKnownInts {
+        int: register("Int", DefKind::Type),
+        int8: register("Int8", DefKind::Type),
+        int16: register("Int16", DefKind::Type),
+        int32: register("Int32", DefKind::Type),
+        int64: register("Int64", DefKind::Type),
+    };
+    let uints = WellKnownUInts {
+        uint8: register("UInt8", DefKind::Type),
+        uint16: register("UInt16", DefKind::Type),
+        uint32: register("UInt32", DefKind::Type),
+        uint64: register("UInt64", DefKind::Type),
+    };
+    let floats = WellKnownFloats {
+        float32: register("Float32", DefKind::Type),
+        float64: register("Float64", DefKind::Type),
+    };
+    let ffi = WellKnownFfi {
+        c_string: register("CString", DefKind::Type),
+        ptr: register("Ptr", DefKind::Type),
+    };
+
+    let classes = WellKnownClasses {
+        eq: register("Eq", DefKind::Class),
+        ord: register("Ord", DefKind::Class),
+        show: register("Show", DefKind::Class),
+        add: register("Add", DefKind::Class),
+        into: register("Into", DefKind::Class),
+        iterable: register("Iterable", DefKind::Class),
+        propagate: register("Propagate", DefKind::Class),
+    };
+
+    let effects = WellKnownEffects {
+        io: register("IO", DefKind::Effect),
+        async_eff: register("Async", DefKind::Effect),
+        state: register("State", DefKind::Effect),
+        throw: register("Throw", DefKind::Effect),
+    };
+
+    let containers = WellKnownContainers {
+        result: register("Result", DefKind::Type),
+        ordering: register("Ordering", DefKind::Type),
+        list: register("List", DefKind::Type),
+        map: register("Map", DefKind::Type),
+        set: register("Set", DefKind::Type),
+    };
+
+    let string = register("String", DefKind::Type);
+    let rune = register("Rune", DefKind::Type);
+    let bool = register("Bool", DefKind::Type);
+    let unit = register("Unit", DefKind::Type);
+    let any = register("Any", DefKind::Type);
+    let never = register("Never", DefKind::Type);
+    let option = register("Option", DefKind::Type);
+
     WellKnown {
-        ints: WellKnownInts {
-            int: register("Int"),
-            int8: register("Int8"),
-            int16: register("Int16"),
-            int32: register("Int32"),
-            int64: register("Int64"),
-        },
-        uints: WellKnownUInts {
-            uint8: register("UInt8"),
-            uint16: register("UInt16"),
-            uint32: register("UInt32"),
-            uint64: register("UInt64"),
-        },
-        floats: WellKnownFloats {
-            float32: register("Float32"),
-            float64: register("Float64"),
-        },
-        ffi: WellKnownFfi {
-            c_int: register("CInt"),
-            c_uint: register("CUInt"),
-            c_char: register("CChar"),
-            c_size: register("CSize"),
-            c_double: register("CDouble"),
-            c_string: register("CString"),
-            ptr: register("Ptr"),
-        },
-        string: register("String"),
-        rune: register("Rune"),
-        bool: register("Bool"),
-        unit: register("Unit"),
-        any: register("Any"),
-        never: register("Never"),
-        option: register("Option"),
+        ints,
+        uints,
+        floats,
+        ffi,
+        classes,
+        effects,
+        containers,
+        string,
+        rune,
+        bool,
+        unit,
+        any,
+        never,
+        option,
     }
 }

@@ -18,8 +18,8 @@ use music_ast::decl::{ClassMember, EffectOp, ForeignDecl};
 use music_ast::expr::{
     Arg, ArrayElem, BindKind, Expr, LetFields, MatchArm, Param, PwGuard, RecField,
 };
-use music_ast::ty::{Constraint, TyNamedRef, TyParam};
-use music_ast::{AstArenas, ExprIdx, ParsedModule, TyIdx};
+use music_ast::ty::{Constraint, Ty, TyNamedRef, TyParam};
+use music_ast::{AstArenas, ExprIdx, ParsedModule, PatIdx, TyIdx};
 use music_shared::{DiagnosticBag, FileId, Interner, Span, Symbol};
 
 use crate::def::{DefId, DefKind, DefTable};
@@ -81,8 +81,14 @@ pub(super) struct Resolver<'a> {
 impl Resolver<'_> {
     fn collect_top_level(&mut self, expr_idx: ExprIdx) {
         match &self.ast.exprs[expr_idx] {
-            Expr::Binding { fields, .. } => {
+            Expr::Binding {
+                exported, fields, ..
+            } => {
+                self.define_fn_name(fields.pat, binding_def_kind(fields.kind));
                 self.define_pat(fields.pat, binding_def_kind(fields.kind));
+                if *exported {
+                    self.mark_pat_exported(fields.pat);
+                }
             }
             Expr::Class { name, .. } => {
                 let id = self
@@ -110,6 +116,11 @@ impl Resolver<'_> {
                     }
                 }
             }
+            Expr::Given { target, .. } => {
+                let _id = self
+                    .defs
+                    .alloc(target.name, DefKind::Given, self.span_of_expr(expr_idx));
+            }
             Expr::Annotated { inner, .. } => {
                 self.collect_top_level(*inner);
             }
@@ -123,6 +134,7 @@ impl Resolver<'_> {
             Expr::Name { name, span } => self.resolve_name(expr_idx, name, span),
             Expr::Lit { .. } | Expr::Error { .. } | Expr::Import { .. } | Expr::Export { .. } => {}
             Expr::Paren { inner, .. } | Expr::Annotated { inner, .. } => self.resolve_expr(inner),
+            Expr::Choice { body, .. } => self.resolve_expr_choice(body),
             Expr::Tuple { elems, .. } | Expr::Variant { args: elems, .. } => {
                 for &e in &elems {
                     self.resolve_expr(e);
@@ -246,6 +258,26 @@ impl Resolver<'_> {
         }
     }
 
+    /// If `pat` is a function-like pattern (`Pat::Variant` with args),
+    /// enters a child scope and defines all arg bindings as params.
+    /// Returns `Some(parent_scope)` if a scope was entered, `None` otherwise.
+    fn enter_fn_pat_scope(&mut self, pat: PatIdx) -> Option<ScopeId> {
+        use music_ast::pat::Pat;
+        if let Pat::Variant { args, .. } = &self.ast.pats[pat] {
+            if args.is_empty() {
+                return None;
+            }
+            let parent = self.current_scope;
+            self.current_scope = self.scopes.push_child(parent);
+            for &arg in args {
+                self.define_pat(arg, DefKind::Param);
+            }
+            Some(parent)
+        } else {
+            None
+        }
+    }
+
     fn enter_ty_param_scope(&mut self, params: &[TyParam], constraints: &[Constraint]) -> ScopeId {
         let parent = self.current_scope;
         self.current_scope = self.scopes.push_child(parent);
@@ -259,36 +291,66 @@ impl Resolver<'_> {
         parent
     }
 
-    fn resolve_class_members(&mut self, members: &[ClassMember], parent_def: Option<DefId>) {
+    fn resolve_class_members(
+        &mut self,
+        members: &[ClassMember],
+        parent_def: Option<DefId>,
+    ) -> Vec<(Symbol, DefId)> {
+        let mut member_defs = Vec::new();
+
+        // Pass 1: allocate all member DefIds and define them in the current scope
+        // so sibling methods can reference each other.
+        for member in members {
+            if let ClassMember::Fn { sig, .. } = member {
+                let fn_id = self.defs.alloc(sig.name, DefKind::Fn, sig.span);
+                if let Some(pd) = parent_def {
+                    self.defs.get_mut(fn_id).parent = Some(pd);
+                }
+                self.define_in_scope(sig.name, fn_id, sig.span);
+                member_defs.push((sig.name, fn_id));
+            }
+        }
+
+        // Pass 2: resolve member bodies.
         for member in members {
             match member {
                 ClassMember::Fn { sig, default, .. } => {
-                    let fn_id = self.defs.alloc(sig.name, DefKind::Fn, sig.span);
-                    if let Some(pd) = parent_def {
-                        self.defs.get_mut(fn_id).parent = Some(pd);
-                    }
                     if let Some(body) = default {
+                        let parent = self.current_scope;
+                        self.current_scope = self.scopes.push_child(parent);
+                        for param in &sig.params {
+                            let id = self.defs.alloc(param.name, DefKind::Param, param.span);
+                            self.defs.get_mut(id).param_mode = Some(param.mode);
+                            self.define_in_scope(param.name, id, param.span);
+                            let _inserted = self.output.pat_defs.insert(param.span, id);
+                            if let Some(ty) = param.ty {
+                                self.resolve_ty(ty);
+                            }
+                        }
+                        if let Some(ret) = sig.ret {
+                            self.resolve_ty(ret);
+                        }
                         self.resolve_expr(*body);
+                        self.current_scope = parent;
                     }
                 }
-                ClassMember::Law { body, .. } => {
-                    self.resolve_expr(*body);
-                }
+                ClassMember::Law { .. } => {}
             }
         }
+
+        member_defs
     }
 
     fn resolve_expr_block(&mut self, stmts: &[ExprIdx], tail: Option<ExprIdx>) {
         let parent = self.current_scope;
         self.current_scope = self.scopes.push_child(parent);
         for &stmt in stmts {
-            // Handle block-local bindings: resolve value/type, then define in block scope.
-            if let Expr::Binding { fields, .. } = &self.ast.exprs[stmt] {
-                self.resolve_expr(fields.value);
-                if let Some(ty) = fields.ty {
-                    self.resolve_ty(ty);
-                }
-                self.define_pat(fields.pat, binding_def_kind(fields.kind));
+            let fields = match &self.ast.exprs[stmt] {
+                Expr::Binding { fields, .. } | Expr::Let { fields, .. } => Some(fields.clone()),
+                _ => None,
+            };
+            if let Some(fields) = fields {
+                self.resolve_block_binding(&fields);
             } else {
                 self.resolve_expr(stmt);
             }
@@ -297,6 +359,40 @@ impl Resolver<'_> {
             self.resolve_expr(t);
         }
         self.current_scope = parent;
+    }
+
+    /// Resolves a block-local binding: pre-defines function names for recursion,
+    /// resolves the value/type, then defines non-function patterns in scope.
+    fn resolve_block_binding(&mut self, fields: &LetFields) {
+        use music_ast::pat::Pat;
+        let is_fn_pat = matches!(&self.ast.pats[fields.pat], Pat::Variant { .. });
+
+        // For function-like patterns, pre-define the name to enable recursion.
+        if is_fn_pat {
+            self.define_fn_name(fields.pat, binding_def_kind(fields.kind));
+        }
+
+        let parent_ty_scope = if fields.params.is_empty() {
+            None
+        } else {
+            Some(self.enter_ty_param_scope(&fields.params, &fields.constraints))
+        };
+        let fn_pat_parent = self.enter_fn_pat_scope(fields.pat);
+        if let Some(v) = fields.value {
+            self.resolve_expr(v);
+        }
+        if let Some(ty) = fields.ty {
+            self.resolve_ty(ty);
+        }
+        if let Some(p) = fn_pat_parent {
+            self.current_scope = p;
+        }
+        if let Some(p) = parent_ty_scope {
+            self.current_scope = p;
+        }
+        if !is_fn_pat {
+            self.define_pat(fields.pat, binding_def_kind(fields.kind));
+        }
     }
 
     fn resolve_expr_call(&mut self, callee: ExprIdx, args: &[Arg]) {
@@ -309,26 +405,72 @@ impl Resolver<'_> {
     }
 
     fn resolve_expr_let(&mut self, fields: &LetFields, body: Option<ExprIdx>) {
-        self.resolve_expr(fields.value);
+        use music_ast::pat::Pat;
+        let is_fn_pat = matches!(&self.ast.pats[fields.pat], Pat::Variant { .. });
+
+        let parent_ty_scope = if fields.params.is_empty() {
+            None
+        } else {
+            Some(self.enter_ty_param_scope(&fields.params, &fields.constraints))
+        };
+
+        // For function-like patterns, pre-define the name for recursion.
+        if is_fn_pat {
+            self.define_fn_name(fields.pat, binding_def_kind(fields.kind));
+        }
+
+        let fn_pat_parent = self.enter_fn_pat_scope(fields.pat);
+
+        if let Some(v) = fields.value {
+            self.resolve_expr(v);
+        }
         if let Some(ty) = fields.ty {
             self.resolve_ty(ty);
+        }
+
+        if let Some(p) = fn_pat_parent {
+            self.current_scope = p;
         }
 
         if let Some(body) = body {
             let parent = self.current_scope;
             self.current_scope = self.scopes.push_child(parent);
-            self.define_pat(fields.pat, binding_def_kind(fields.kind));
+            if !is_fn_pat {
+                self.define_pat(fields.pat, binding_def_kind(fields.kind));
+            }
             self.resolve_expr(body);
             self.current_scope = parent;
-        } else {
+        } else if !is_fn_pat {
             self.define_pat(fields.pat, binding_def_kind(fields.kind));
+        }
+
+        if let Some(p) = parent_ty_scope {
+            self.current_scope = p;
         }
     }
 
     fn resolve_expr_binding(&mut self, fields: &LetFields) {
-        self.resolve_expr(fields.value);
+        let parent_ty_scope = if fields.params.is_empty() {
+            None
+        } else {
+            Some(self.enter_ty_param_scope(&fields.params, &fields.constraints))
+        };
+
+        let fn_pat_parent = self.enter_fn_pat_scope(fields.pat);
+
+        if let Some(v) = fields.value {
+            self.resolve_expr(v);
+        }
         if let Some(ty) = fields.ty {
             self.resolve_ty(ty);
+        }
+
+        if let Some(p) = fn_pat_parent {
+            self.current_scope = p;
+        }
+
+        if let Some(p) = parent_ty_scope {
+            self.current_scope = p;
         }
     }
 
@@ -337,6 +479,7 @@ impl Resolver<'_> {
         self.current_scope = self.scopes.push_child(parent);
         for param in params {
             let id = self.defs.alloc(param.name, DefKind::Param, param.span);
+            self.defs.get_mut(id).param_mode = Some(param.mode);
             self.define_in_scope(param.name, id, param.span);
             let _inserted = self.output.pat_defs.insert(param.span, id);
             if let Some(ty) = param.ty {
@@ -385,8 +528,18 @@ impl Resolver<'_> {
         let outer = self.current_scope;
         let parent = self.enter_ty_param_scope(params, constraints);
         let class_def = self.scopes.lookup(outer, name);
-        self.resolve_class_members(members, class_def);
+        let member_defs = self.resolve_class_members(members, class_def);
         self.current_scope = parent;
+
+        // Export class members to the enclosing scope (Haskell-style).
+        // Skip operator identifiers (sentinel Symbol) — they're resolved via dispatch.
+        for (member_name, def_id) in member_defs {
+            if member_name == Symbol(u32::MAX) {
+                continue;
+            }
+            let span = self.defs.get(def_id).span;
+            self.define_in_scope(member_name, def_id, span);
+        }
     }
 
     fn resolve_expr_given(
@@ -396,9 +549,66 @@ impl Resolver<'_> {
         constraints: &[Constraint],
         members: &[ClassMember],
     ) {
+        let mut all_params: Vec<TyParam> = params.to_vec();
+        for &arg in &target.args {
+            self.collect_ty_var_nodes(arg, &mut all_params);
+        }
+        let parent = self.enter_ty_param_scope(&all_params, constraints);
         self.resolve_ty_named_ref(target);
-        let parent = self.enter_ty_param_scope(params, constraints);
-        self.resolve_class_members(members, None);
+        let _member_defs = self.resolve_class_members(members, None);
+        self.current_scope = parent;
+    }
+
+    fn collect_ty_var_nodes(&self, ty_idx: TyIdx, out: &mut Vec<TyParam>) {
+        match &self.ast.tys[ty_idx] {
+            Ty::Var { name, span } => {
+                if !out.iter().any(|p| p.name == *name) {
+                    out.push(TyParam {
+                        name: *name,
+                        span: *span,
+                    });
+                }
+            }
+            Ty::Named { args, .. } => {
+                for &arg in args {
+                    self.collect_ty_var_nodes(arg, out);
+                }
+            }
+            Ty::Option { inner, .. } | Ty::Ref { inner, .. } | Ty::Array { elem: inner, .. } => {
+                self.collect_ty_var_nodes(*inner, out);
+            }
+            Ty::Fn { params, ret, .. } => {
+                for &p in params {
+                    self.collect_ty_var_nodes(p, out);
+                }
+                self.collect_ty_var_nodes(*ret, out);
+            }
+            Ty::Product { fields, .. }
+            | Ty::Sum {
+                variants: fields, ..
+            } => {
+                for &f in fields {
+                    self.collect_ty_var_nodes(f, out);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn resolve_expr_choice(&mut self, body: TyIdx) {
+        let parent = self.current_scope;
+        self.current_scope = self.scopes.push_child(parent);
+
+        if let Ty::Sum { variants, .. } = &self.ast.tys[body] {
+            for &variant_ty in variants {
+                if let Ty::Named { name, .. } = &self.ast.tys[variant_ty] {
+                    let id = self.defs.alloc(*name, DefKind::Type, Span::DUMMY);
+                    self.define_in_scope(*name, id, Span::DUMMY);
+                }
+            }
+        }
+
+        self.resolve_ty(body);
         self.current_scope = parent;
     }
 
@@ -426,8 +636,16 @@ impl Resolver<'_> {
 
     fn define_in_scope(&mut self, name: Symbol, def_id: DefId, span: Span) {
         if let Some(prev) = self.scopes.define(self.current_scope, name, def_id) {
-            let name_str = self.interner.resolve(name);
             let prev_span = self.defs.get(prev).span;
+            // Well-known placeholder (Span::DUMMY) being redefined by real user code — allow.
+            if prev_span == Span::DUMMY && span != Span::DUMMY {
+                return;
+            }
+            // Skip operator-sentinel symbols that the interner cannot resolve.
+            if name == Symbol(u32::MAX) {
+                return;
+            }
+            let name_str = self.interner.resolve(name);
             let d = self.diags.report(
                 &SemaError::DuplicateDefinition {
                     name: Box::from(name_str),
@@ -435,9 +653,7 @@ impl Resolver<'_> {
                 span,
                 self.file_id,
             );
-            if prev_span != Span::DUMMY {
-                let _s = d.add_secondary(prev_span, self.file_id, "previous definition here");
-            }
+            let _s = d.add_secondary(prev_span, self.file_id, "previous definition here");
         }
     }
 
@@ -469,6 +685,7 @@ pub(crate) const fn expr_span(expr: &Expr) -> Span {
         | Expr::Record { span, .. }
         | Expr::Array { span, .. }
         | Expr::Variant { span, .. }
+        | Expr::Choice { span, .. }
         | Expr::BinOp { span, .. }
         | Expr::UnaryOp { span, .. }
         | Expr::Piecewise { span, .. }

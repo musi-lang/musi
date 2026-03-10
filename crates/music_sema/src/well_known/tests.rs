@@ -28,6 +28,24 @@ fn test_init_well_known_registers_all_types() {
         wk.uints.uint64,
         wk.floats.float32,
         wk.floats.float64,
+        wk.ffi.c_string,
+        wk.ffi.ptr,
+        wk.classes.eq,
+        wk.classes.ord,
+        wk.classes.show,
+        wk.classes.add,
+        wk.classes.into,
+        wk.classes.iterable,
+        wk.classes.propagate,
+        wk.effects.io,
+        wk.effects.async_eff,
+        wk.effects.state,
+        wk.effects.throw,
+        wk.containers.result,
+        wk.containers.ordering,
+        wk.containers.list,
+        wk.containers.map,
+        wk.containers.set,
         wk.string,
         wk.rune,
         wk.bool,
@@ -56,6 +74,9 @@ fn test_init_well_known_types_are_def_kind_type() {
     assert_eq!(defs.get(wk.bool).kind, DefKind::Type);
     assert_eq!(defs.get(wk.string).kind, DefKind::Type);
     assert_eq!(defs.get(wk.never).kind, DefKind::Type);
+    assert_eq!(defs.get(wk.classes.eq).kind, DefKind::Class);
+    assert_eq!(defs.get(wk.effects.io).kind, DefKind::Effect);
+    assert_eq!(defs.get(wk.containers.list).kind, DefKind::Type);
 }
 
 #[test]
