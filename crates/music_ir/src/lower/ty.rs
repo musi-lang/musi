@@ -41,41 +41,31 @@ fn lower_named(
     ir_types: &mut Arena<IrType>,
 ) -> Result<Idx<IrType>, IrError> {
     let wk = &sema.well_known;
-    let ir_ty = if def == wk.ints.int || def == wk.ints.int64 {
-        IrType::Int64
-    } else if def == wk.ints.int32 {
-        IrType::Int32
-    } else if def == wk.ints.int16 {
-        IrType::Int16
-    } else if def == wk.ints.int8 {
-        IrType::Int8
-    } else if def == wk.uints.uint64 {
-        IrType::UInt64
-    } else if def == wk.uints.uint32 {
-        IrType::UInt32
-    } else if def == wk.uints.uint16 {
-        IrType::UInt16
-    } else if def == wk.uints.uint8 {
-        IrType::UInt8
-    } else if def == wk.floats.float64 {
-        IrType::Float64
-    } else if def == wk.floats.float32 {
-        IrType::Float32
-    } else if def == wk.bool {
-        IrType::Bool
-    } else if def == wk.unit {
-        IrType::Unit
-    } else if def == wk.rune {
-        IrType::Rune
-    } else if def == wk.string {
-        // Strings are NaN-boxed opaque handles in the VM.
-        IrType::UInt64
-    } else if def == wk.never {
-        // Never is unreachable; use Unit as a placeholder.
-        IrType::Unit
-    } else {
-        return Err(IrError::UnsupportedExpr);
-    };
+    let primitives = [
+        (wk.ints.int, IrType::Int64),
+        (wk.ints.int64, IrType::Int64),
+        (wk.ints.int32, IrType::Int32),
+        (wk.ints.int16, IrType::Int16),
+        (wk.ints.int8, IrType::Int8),
+        (wk.uints.uint64, IrType::UInt64),
+        (wk.uints.uint32, IrType::UInt32),
+        (wk.uints.uint16, IrType::UInt16),
+        (wk.uints.uint8, IrType::UInt8),
+        (wk.floats.float64, IrType::Float64),
+        (wk.floats.float32, IrType::Float32),
+        (wk.bool, IrType::Bool),
+        (wk.unit, IrType::Unit),
+        (wk.rune, IrType::Rune),
+        // Strings are NaN-boxed opaque handles in the VM
+        (wk.string, IrType::UInt64),
+        // Never is unreachable; use Unit as a placeholder
+        (wk.never, IrType::Unit),
+    ];
+    let ir_ty = primitives
+        .iter()
+        .find(|(d, _)| *d == def)
+        .map(|(_, ty)| ty.clone())
+        .ok_or(IrError::UnsupportedExpr)?;
     Ok(ir_types.alloc(ir_ty))
 }
 
