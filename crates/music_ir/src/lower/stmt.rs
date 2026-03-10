@@ -83,7 +83,10 @@ fn register_fn_stub(cx: &mut LowerCtx<'_>, expr_idx: ExprIdx) -> Result<(), IrEr
         return Ok(());
     };
 
-    let fn_expr = cx.ast.exprs[fields.value].clone();
+    let Some(value_idx) = fields.value else {
+        return Ok(());
+    };
+    let fn_expr = cx.ast.exprs[value_idx].clone();
     let Expr::Fn { params, .. } = &fn_expr else {
         return Ok(());
     };
@@ -100,7 +103,7 @@ fn register_fn_stub(cx: &mut LowerCtx<'_>, expr_idx: ExprIdx) -> Result<(), IrEr
     let def_idx = usize::try_from(def_id.0).map_err(|_| IrError::UnsupportedExpr)?;
     let fn_name = cx.sema.defs[def_idx].name;
 
-    let Some(&fn_ty_sema) = cx.sema.expr_types.get(&fields.value) else {
+    let Some(&fn_ty_sema) = cx.sema.expr_types.get(&value_idx) else {
         return Err(IrError::UnsupportedExpr);
     };
     let fn_type = cx.sema.types[fn_ty_sema].clone();
@@ -186,7 +189,10 @@ fn lower_fn_body(
     let Some((fields, _, _)) = extract_fn_fields(binding, cx.ast) else {
         return Err(IrError::UnsupportedExpr);
     };
-    let fn_expr = cx.ast.exprs[fields.value].clone();
+    let Some(value_idx) = fields.value else {
+        return Err(IrError::UnsupportedExpr);
+    };
+    let fn_expr = cx.ast.exprs[value_idx].clone();
     let Expr::Fn {
         params,
         body: body_expr,

@@ -185,8 +185,10 @@ fn lower_let(
     body: Option<ExprIdx>,
     span: Span,
 ) -> Result<IrLocal, IrError> {
-    let value_local = lower_expr(fn_cx, fields.value)?;
-    bind_let_pat(fn_cx, fields.pat, value_local)?;
+    if let Some(val) = fields.value {
+        let value_local = lower_expr(fn_cx, val)?;
+        bind_let_pat(fn_cx, fields.pat, value_local)?;
+    }
     if let Some(body_expr) = body {
         lower_expr(fn_cx, body_expr)
     } else {
@@ -200,8 +202,10 @@ fn lower_binding_expr(
     fields: &LetFields,
     span: Span,
 ) -> Result<IrLocal, IrError> {
-    let value_local = lower_expr(fn_cx, fields.value)?;
-    bind_let_pat(fn_cx, fields.pat, value_local)?;
+    if let Some(val) = fields.value {
+        let value_local = lower_expr(fn_cx, val)?;
+        bind_let_pat(fn_cx, fields.pat, value_local)?;
+    }
     let unit_ty = fn_cx.cx.ir.types.alloc(IrType::Unit);
     Ok(fn_cx.emit_assign(unit_ty, IrRvalue::Const(IrConstValue::Unit), span))
 }
