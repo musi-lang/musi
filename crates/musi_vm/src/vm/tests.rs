@@ -395,7 +395,7 @@ fn test_value_int_sign_extension() {
     assert_eq!(v2.as_int().expect("is int"), -42);
 }
 
-// ── NEW: String values ───────────────────────────────────────────────────────
+// ── String values ───────────────────────────────────────────────────────
 
 #[test]
 fn test_string_const_returns_heap_ref() {
@@ -441,7 +441,7 @@ fn test_string_const_two_distinct_loads_produce_separate_objects() {
     assert!(result.expect("runs").as_ref().is_ok(), "should be a ref");
 }
 
-// ── NEW: Global variables ────────────────────────────────────────────────────
+// ── Global variables ────────────────────────────────────────────────────
 
 #[test]
 fn test_globals_store_and_load() {
@@ -495,7 +495,7 @@ fn test_globals_uninitialized_returns_unit() {
     );
 }
 
-// ── NEW: Division by zero ────────────────────────────────────────────────────
+// ── Division by zero ────────────────────────────────────────────────────
 
 #[test]
 fn test_division_by_zero_returns_error() {
@@ -525,7 +525,7 @@ fn test_division_by_zero_returns_error() {
     }
 }
 
-// ── NEW: Float arithmetic ────────────────────────────────────────────────────
+// ── Float arithmetic ────────────────────────────────────────────────────
 
 #[test]
 fn test_float_add_and_multiply() {
@@ -554,7 +554,7 @@ fn test_float_add_and_multiply() {
     assert!((f - 5.0).abs() < f64::EPSILON);
 }
 
-// ── NEW: Bitwise operations ──────────────────────────────────────────────────
+// ── Bitwise operations ──────────────────────────────────────────────────
 
 #[test]
 fn test_bitwise_and_and_shift() {
@@ -585,7 +585,7 @@ fn test_bitwise_and_and_shift() {
     assert_eq!(result.expect("runs").as_int().expect("is int"), 240);
 }
 
-// ── NEW: Type conversions ────────────────────────────────────────────────────
+// ── Type conversions ────────────────────────────────────────────────────
 
 #[test]
 fn test_int_to_float_to_int_roundtrip() {
@@ -610,7 +610,7 @@ fn test_int_to_float_to_int_roundtrip() {
     assert_eq!(result.expect("runs").as_int().expect("is int"), 7);
 }
 
-// ── NEW: Array operations ────────────────────────────────────────────────────
+// ── Array operations ────────────────────────────────────────────────────
 
 #[test]
 fn test_array_create_store_load() {
@@ -678,7 +678,7 @@ fn test_array_length() {
     assert_eq!(result.expect("runs").as_uint().expect("is uint"), 5);
 }
 
-// ── NEW: Stack underflow ─────────────────────────────────────────────────────
+// ── Stack underflow ─────────────────────────────────────────────────────
 
 #[test]
 fn test_stack_underflow_returns_error() {
@@ -690,7 +690,7 @@ fn test_stack_underflow_returns_error() {
     assert!(result.is_err(), "i.add on empty stack should error");
 }
 
-// ── NEW: HLT instruction ────────────────────────────────────────────────────
+// ── HLT instruction ────────────────────────────────────────────────────
 
 #[test]
 fn test_hlt_returns_halted_error() {
@@ -705,7 +705,7 @@ fn test_hlt_returns_halted_error() {
     }
 }
 
-// ── NEW: Instruction limit ──────────────────────────────────────────────────
+// ── Instruction limit ──────────────────────────────────────────────────
 
 #[test]
 fn test_instruction_limit_exceeded() {
@@ -737,7 +737,7 @@ fn test_instruction_limit_exceeded() {
     assert_eq!(vm.instruction_count(), 100);
 }
 
-// ── NEW: Error context ───────────────────────────────────────────────────────
+// ── Error context ───────────────────────────────────────────────────────
 
 #[test]
 fn test_error_context_contains_fn_id_and_ip() {
@@ -768,7 +768,7 @@ fn test_error_context_contains_fn_id_and_ip() {
     }
 }
 
-// ── NEW: Public stepping API ─────────────────────────────────────────────────
+// ── Public stepping API ─────────────────────────────────────────────────
 
 #[test]
 fn test_step_api_single_stepping() {
@@ -814,7 +814,7 @@ fn test_introspection_frames_and_heap() {
     assert!(vm.heap().live_count() >= 1);
 }
 
-// ── NEW: Garbage collection ──────────────────────────────────────────────────
+// ── Garbage collection ──────────────────────────────────────────────────
 
 #[test]
 fn test_gc_collects_unreachable_objects() {
@@ -878,7 +878,7 @@ fn test_gc_preserves_reachable_globals() {
     assert_eq!(vm.heap().live_count(), 1);
 }
 
-// ── NEW: Dynamic invocation ──────────────────────────────────────────────────
+// ── Dynamic invocation ──────────────────────────────────────────────────
 
 #[test]
 fn test_direct_call_with_inv() {
@@ -919,7 +919,7 @@ fn test_direct_call_with_inv() {
     assert_eq!(result.expect("runs").as_int().expect("is int"), 15);
 }
 
-// ── NEW: Wide jump ───────────────────────────────────────────────────────────
+// ── Wide jump ───────────────────────────────────────────────────────────
 
 #[test]
 fn test_wide_jump() {
@@ -947,7 +947,7 @@ fn test_wide_jump() {
     assert_eq!(result.expect("runs").as_int().expect("is int"), 42);
 }
 
-// ── NEW: Integer negation ────────────────────────────────────────────────────
+// ── Integer negation ────────────────────────────────────────────────────
 
 #[test]
 fn test_int_negation() {
@@ -964,7 +964,7 @@ fn test_int_negation() {
     assert_eq!(result.expect("runs").as_int().expect("is int"), -42);
 }
 
-// ── NEW: Float multiplication ────────────────────────────────────────────────
+// ── Float multiplication ────────────────────────────────────────────────
 
 #[test]
 fn test_float_multiply() {
@@ -993,7 +993,7 @@ fn test_float_multiply() {
     assert!((f - 12.0).abs() < f64::EPSILON);
 }
 
-// ── NEW: CMP_EQ ──────────────────────────────────────────────────────────────
+// ── CMP_EQ ──────────────────────────────────────────────────────────────
 
 #[test]
 fn test_cmp_eq_equal_values() {
@@ -1020,7 +1020,7 @@ fn test_cmp_eq_equal_values() {
     );
 }
 
-// ── NEW: Value try_as_ref ────────────────────────────────────────────────────
+// ── Value try_as_ref ────────────────────────────────────────────────────
 
 #[test]
 fn test_value_try_as_ref() {
