@@ -60,6 +60,8 @@ pub struct SemaResult {
     pub unify: UnifyTable,
     /// Typeclass instances discovered during analysis.
     pub instances: Vec<InstanceInfo>,
+    /// Well-known prelude type definitions (needed by IR lowering).
+    pub well_known: WellKnown,
 }
 
 /// Prelude data passed into analysis.
@@ -110,6 +112,7 @@ pub fn analyze(
         types: result.types,
         unify: result.unify,
         instances: result.instances,
+        well_known,
     }
 }
 

@@ -124,7 +124,7 @@ fn synth_inner(ck: &mut Checker<'_>, expr_idx: Idx<Expr>) -> Idx<Type> {
             base_ty
         }
         Expr::Quantified { body, .. } => synth(ck, body),
-        Expr::Class { .. } | Expr::Given { .. } | Expr::Effect { .. } => {
+        Expr::Class { .. } | Expr::Given { .. } | Expr::Effect { .. } | Expr::Foreign { .. } => {
             check_decl(ck, expr_idx);
             ck.named_ty(ck.ctx.well_known.unit)
         }

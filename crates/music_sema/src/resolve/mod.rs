@@ -14,7 +14,7 @@ mod ty;
 
 use std::collections::HashMap;
 
-use music_ast::decl::{ClassMember, EffectOp};
+use music_ast::decl::{ClassMember, EffectOp, ForeignDecl};
 use music_ast::expr::{
     Arg, ArrayElem, BindKind, Expr, LetFields, MatchArm, Param, PwGuard, RecField,
 };
@@ -95,6 +95,20 @@ impl Resolver<'_> {
                     .defs
                     .alloc(*name, DefKind::Effect, self.span_of_expr(expr_idx));
                 self.define_in_scope(*name, id, self.span_of_expr(expr_idx));
+            }
+            Expr::Foreign { decls, .. } => {
+                for decl in decls {
+                    match decl {
+                        ForeignDecl::Fn { name, span, .. } => {
+                            let id = self.defs.alloc(*name, DefKind::ForeignFn, *span);
+                            self.define_in_scope(*name, id, *span);
+                        }
+                        ForeignDecl::OpaqueType { name, span } => {
+                            let id = self.defs.alloc(*name, DefKind::OpaqueType, *span);
+                            self.define_in_scope(*name, id, *span);
+                        }
+                    }
+                }
             }
             Expr::Annotated { inner, .. } => {
                 self.collect_top_level(*inner);
@@ -193,6 +207,7 @@ impl Resolver<'_> {
             Expr::Effect {
                 name, params, ops, ..
             } => self.resolve_expr_effect(name, &params, &ops),
+            Expr::Foreign { decls, .. } => self.resolve_expr_foreign(&decls),
         }
     }
 
@@ -401,6 +416,14 @@ impl Resolver<'_> {
         self.current_scope = parent;
     }
 
+    fn resolve_expr_foreign(&mut self, decls: &[ForeignDecl]) {
+        for decl in decls {
+            if let ForeignDecl::Fn { ty, .. } = decl {
+                self.resolve_ty(*ty);
+            }
+        }
+    }
+
     fn define_in_scope(&mut self, name: Symbol, def_id: DefId, span: Span) {
         if let Some(prev) = self.scopes.define(self.current_scope, name, def_id) {
             let name_str = self.interner.resolve(name);
@@ -459,6 +482,7 @@ pub(crate) const fn expr_span(expr: &Expr) -> Span {
         | Expr::Class { span, .. }
         | Expr::Given { span, .. }
         | Expr::Effect { span, .. }
+        | Expr::Foreign { span, .. }
         | Expr::Error { span, .. } => *span,
     }
 }

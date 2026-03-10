@@ -37,6 +37,18 @@ pub struct WellKnownFloats {
     pub float64: DefId,
 }
 
+/// Well-known FFI C-compatible types.
+#[derive(Debug, Clone)]
+pub struct WellKnownFfi {
+    pub c_int: DefId,
+    pub c_uint: DefId,
+    pub c_char: DefId,
+    pub c_size: DefId,
+    pub c_double: DefId,
+    pub c_string: DefId,
+    pub ptr: DefId,
+}
+
 /// `DefId` handles for all well-known (prelude) types.
 ///
 /// Populated once by [`init_well_known`] at the start of analysis.
@@ -45,6 +57,7 @@ pub struct WellKnown {
     pub ints: WellKnownInts,
     pub uints: WellKnownUInts,
     pub floats: WellKnownFloats,
+    pub ffi: WellKnownFfi,
     // Text
     pub string: DefId,
     pub rune: DefId,
@@ -93,6 +106,15 @@ pub fn init_well_known(
         floats: WellKnownFloats {
             float32: register("Float32"),
             float64: register("Float64"),
+        },
+        ffi: WellKnownFfi {
+            c_int: register("CInt"),
+            c_uint: register("CUInt"),
+            c_char: register("CChar"),
+            c_size: register("CSize"),
+            c_double: register("CDouble"),
+            c_string: register("CString"),
+            ptr: register("Ptr"),
         },
         string: register("String"),
         rune: register("Rune"),

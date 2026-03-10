@@ -39,6 +39,10 @@ pub enum DefKind {
     EffectOp,
     /// Import binding.
     Import,
+    /// Foreign function binding.
+    ForeignFn,
+    /// Opaque foreign type.
+    OpaqueType,
 }
 
 /// Type-checker annotations for a definition, filled during type checking.
