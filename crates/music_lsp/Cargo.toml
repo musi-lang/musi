@@ -1,0 +1,34 @@
+[package]
+name = "music_lsp"
+description = "Musi language server"
+keywords = ["lsp", "musi", "language-server"]
+categories = ["development-tools"]
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+readme.workspace = true
+
+[[bin]]
+name = "music_lsp"
+path = "src/main.rs"
+
+[dependencies]
+music_ast = { path = "../music_ast" }
+music_lex = { path = "../music_lex" }
+music_parse = { path = "../music_parse" }
+music_sema = { path = "../music_sema" }
+music_shared = { path = "../music_shared" }
+tower-lsp-server = { workspace = true }
+tokio = { workspace = true }
+serde_json = { workspace = true }
+
+# Workspace lints are too strict for async/tower-lsp-server generated code.
+# Key safety properties are replicated below.
+[lints.rust]
+unsafe_code = "deny"
+missing_unsafe_on_extern = "forbid"
+
+[lints.clippy]
+dbg_macro = "deny"
+todo = "deny"
