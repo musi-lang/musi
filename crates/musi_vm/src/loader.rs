@@ -9,12 +9,8 @@ use musi_bytecode::crc32_slice;
 
 use crate::error::VmError;
 
-// ── Magic / header constants ────────────────────────────────────────────────
-
 const MAGIC: &[u8; 4] = b"MUSI";
 const HEADER_SIZE: usize = 40;
-
-// ── Constant pool tags (§11.2) ──────────────────────────────────────────────
 
 const TAG_CONST_I32: u8 = 0x01;
 const TAG_CONST_I64: u8 = 0x02;
@@ -22,8 +18,6 @@ const TAG_CONST_F64: u8 = 0x04;
 const TAG_CONST_STR: u8 = 0x05;
 const TAG_CONST_RUNE: u8 = 0x06;
 const TAG_CONST_FN: u8 = 0x08;
-
-// ── Public types ────────────────────────────────────────────────────────────
 
 /// A decoded constant pool entry.
 #[derive(Debug, Clone)]
@@ -123,8 +117,6 @@ impl LoadedModule {
     }
 }
 
-// ── Loader entry point ──────────────────────────────────────────────────────
-
 /// Parse raw `.msbc` bytes into a `LoadedModule`.
 ///
 /// Validates the magic bytes and header CRC32 before decoding pool sections.
@@ -197,8 +189,6 @@ pub fn load(bytes: &[u8]) -> Result<LoadedModule, VmError> {
     })
 }
 
-// ── Const pool parser ───────────────────────────────────────────────────────
-
 fn parse_const_pool(bytes: &[u8], off: usize) -> Result<Vec<LoadedConst>, VmError> {
     let mut cur = off;
     let count = usize::try_from(read_u32_at(bytes, &mut cur)?).map_err(|_| VmError::Malformed {
@@ -255,8 +245,6 @@ fn parse_const_pool(bytes: &[u8], off: usize) -> Result<Vec<LoadedConst>, VmErro
     }
     Ok(consts)
 }
-
-// ── Type pool parser ────────────────────────────────────────────────────────
 
 // Type tags from §11.3.
 const TAG_TY_UNIT: u8 = 0x01;
@@ -357,8 +345,6 @@ fn parse_type_pool(bytes: &[u8], off: usize) -> Result<Vec<LoadedType>, VmError>
     Ok(types)
 }
 
-// ── Effect pool parser ──────────────────────────────────────────────────────
-
 fn parse_effect_pool(bytes: &[u8], off: usize) -> Result<Vec<LoadedEffect>, VmError> {
     let mut cur = off;
     let count = usize::try_from(read_u32_at(bytes, &mut cur)?).map_err(|_| VmError::Malformed {
@@ -394,8 +380,6 @@ fn parse_effect_pool(bytes: &[u8], off: usize) -> Result<Vec<LoadedEffect>, VmEr
     }
     Ok(effects)
 }
-
-// ── Function pool parser ────────────────────────────────────────────────────
 
 fn parse_fn_pool(bytes: &[u8], off: usize) -> Result<Vec<LoadedFn>, VmError> {
     let mut cur = off;
@@ -438,8 +422,6 @@ fn parse_fn_pool(bytes: &[u8], off: usize) -> Result<Vec<LoadedFn>, VmError> {
     }
     Ok(functions)
 }
-
-// ── Foreign pool parser ──────────────────────────────────────────────────────
 
 fn parse_foreign_pool(
     bytes: &[u8],
@@ -501,8 +483,6 @@ fn resolve_string_const(consts: &[LoadedConst], idx: usize) -> Result<Box<str>, 
         }),
     }
 }
-
-// ── Cursor helpers ──────────────────────────────────────────────────────────
 
 fn read_u8_at(bytes: &[u8], cur: &mut usize) -> Result<u8, VmError> {
     let b = bytes.get(*cur).copied().ok_or_else(|| VmError::Malformed {

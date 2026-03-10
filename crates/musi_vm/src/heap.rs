@@ -154,8 +154,6 @@ impl Heap {
         Ok(())
     }
 
-    // ── GC ──────────────────────────────────────────────────────────────────
-
     /// Mark all objects reachable from `roots`, clearing previous marks first.
     ///
     /// After calling this, call [`sweep`](Self::sweep) to free unreachable
@@ -213,8 +211,6 @@ impl Heap {
         }
         freed
     }
-
-    // ── Internal ────────────────────────────────────────────────────────────
 
     /// Insert an object, reusing a free slot if available.
     fn insert(&mut self, obj: HeapObject) -> usize {

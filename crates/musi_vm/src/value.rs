@@ -67,8 +67,6 @@ impl Value {
     /// False boolean.
     pub const FALSE: Self = Self::from_bool(false);
 
-    // ── Constructors ────────────────────────────────────────────────────
-
     /// Wrap a signed integer (only the low 48 bits are stored).
     #[must_use]
     pub const fn from_int(n: i64) -> Self {
@@ -131,8 +129,6 @@ impl Value {
         Self((u16_as_u64(TAG_CHAN) << 48) | payload)
     }
 
-    // ── Tag / type checks ───────────────────────────────────────────────
-
     /// Extract the top 16 bits as a tag.
     #[must_use]
     pub const fn tag(self) -> u16 {
@@ -153,8 +149,6 @@ impl Value {
     pub const fn is_unit(self) -> bool {
         self.tag() == TAG_UNIT
     }
-
-    // ── Accessors ───────────────────────────────────────────────────────
 
     /// Sign-extend the 48-bit payload to a full `i64`.
     ///
