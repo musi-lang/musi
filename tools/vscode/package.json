@@ -1,6 +1,5 @@
 {
 	"name": "vscode-musi",
-	"type": "module",
 	"displayName": "Musi",
 	"description": "Musi language support",
 	"version": "0.1.0",
@@ -276,7 +275,7 @@
 						"null"
 					],
 					"default": null,
-					"markdownDescription": "Path to `musi_lsp` binary. If not set, searches in `target/debug`, `target/release`, and `PATH`."
+					"markdownDescription": "Path to `music_lsp` binary. If not set, searches in `target/debug`, `target/release`, and `PATH`."
 				},
 				"musi.runtime.path": {
 					"type": [
@@ -415,9 +414,12 @@
 		}
 	},
 	"scripts": {
-		"build": "bun build ./client/src/main.ts --outfile=./dist/extension.js --external vscode --target=node",
+		"build": "bun build ./client/src/main.ts --outfile=./dist/extension.js --external vscode --external vscode-languageclient --target=node --format=cjs",
 		"package": "bun run build && vsce package",
 		"vscode:prepublish": "bun run build"
+	},
+	"dependencies": {
+		"vscode-languageclient": "^9.0.1"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "latest",
@@ -425,8 +427,7 @@
 		"@types/node": "latest",
 		"@types/vscode": "^1.75.0",
 		"@vscode/vsce": "latest",
-		"typescript": "latest",
-		"vscode-languageclient": "latest"
+		"typescript": "latest"
 	},
 	"trustedDependencies": [
 		"@biomejs/biome",
