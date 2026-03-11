@@ -7,9 +7,9 @@
 /// # Examples
 ///
 /// ```musi
-/// let order := compare(1, 2);   -- .Lt
-/// let small := min(3, 7);       -- 3
-/// let big := max(3, 7);         -- 7
+/// let order := compare(1, 2);  // .Lt
+/// let small := min(3, 7);      // 3
+/// let big := max(3, 7);        // 7
 /// ```
 export class Ord over 'T where 'T <: Eq {
     let compare(a: 'T, b: 'T) : Ordering;

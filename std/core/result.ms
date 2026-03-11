@@ -8,8 +8,8 @@
 ///
 /// ```musi
 /// let x := .Ok(42);
-/// let y := map(x, (n) -> n + 1);  -- .Ok(43)
-/// let z := unwrap_or(x, 0);        -- 42
+/// let y := map(x, (n) -> n + 1);  // .Ok(43)
+/// let z := unwrap_or(x, 0);       // 42
 /// ```
 #[lang := "result"]
 export let Result ['T, 'E] := choice { Ok of 'T + Err of 'E };
@@ -19,8 +19,8 @@ export let Result ['T, 'E] := choice { Ok of 'T + Err of 'E };
 /// # Examples
 ///
 /// ```musi
-/// let x := map(.Ok(3), (n) -> n * 2);      -- .Ok(6)
-/// let y := map(.Err("fail"), (n) -> n * 2); -- .Err("fail")
+/// let x := map(.Ok(3), (n) -> n * 2);        // .Ok(6)
+/// let y := map(.Err("fail"), (n) -> n * 2);  // .Err("fail")
 /// ```
 export let map ['T, 'U, 'E] : (Result of ('T, 'E), ('T) -> 'U) -> Result of ('U, 'E) :=
     (res, f) => match res (.Ok(x) => .Ok(f(x)) | .Err(e) => .Err(e));
@@ -30,8 +30,8 @@ export let map ['T, 'U, 'E] : (Result of ('T, 'E), ('T) -> 'U) -> Result of ('U,
 /// # Examples
 ///
 /// ```musi
-/// let x := map_err(.Err(3), (e) -> e + 1);  -- .Err(4)
-/// let y := map_err(.Ok(42), (e) -> e + 1);   -- .Ok(42)
+/// let x := map_err(.Err(3), (e) -> e + 1);  // .Err(4)
+/// let y := map_err(.Ok(42), (e) -> e + 1);  // .Ok(42)
 /// ```
 export let map_err ['T, 'E, 'F] : (Result of ('T, 'E), ('E) -> 'F) -> Result of ('T, 'F) :=
     (res, f) => match res (.Ok(x) => .Ok(x) | .Err(e) => .Err(f(e)));
@@ -42,8 +42,8 @@ export let map_err ['T, 'E, 'F] : (Result of ('T, 'E), ('E) -> 'F) -> Result of 
 ///
 /// ```musi
 /// let half := (n) -> (.Ok(n / 2) if n mod 2 = 0 | .Err("odd") if _);
-/// let x := flat_map(.Ok(4), half);  -- .Ok(2)
-/// let y := flat_map(.Ok(3), half);  -- .Err("odd")
+/// let x := flat_map(.Ok(4), half);  // .Ok(2)
+/// let y := flat_map(.Ok(3), half);  // .Err("odd")
 /// ```
 export let flat_map ['T, 'U, 'E] : (Result of ('T, 'E), ('T) -> Result of ('U, 'E)) -> Result of ('U, 'E) :=
     (res, f) => match res (.Ok(x) => f(x) | .Err(e) => .Err(e));
@@ -53,8 +53,8 @@ export let flat_map ['T, 'U, 'E] : (Result of ('T, 'E), ('T) -> Result of ('U, '
 /// # Examples
 ///
 /// ```musi
-/// let x := unwrap_or(.Ok(7), 0);       -- 7
-/// let y := unwrap_or(.Err("fail"), 0); -- 0
+/// let x := unwrap_or(.Ok(7), 0);        // 7
+/// let y := unwrap_or(.Err("fail"), 0);  // 0
 /// ```
 export let unwrap_or ['T, 'E] : (Result of ('T, 'E), 'T) -> 'T :=
     (res, default) => match res (.Ok(x) => x | .Err(_) => default);
@@ -72,8 +72,8 @@ export let is_err ['T, 'E] : (Result of ('T, 'E)) -> Bool :=
 /// # Examples
 ///
 /// ```musi
-/// let x := ok(.Ok(42));       -- .Some(42)
-/// let y := ok(.Err("fail"));  -- .None
+/// let x := ok(.Ok(42));       // .Some(42)
+/// let y := ok(.Err("fail"));  // .None
 /// ```
 export let ok ['T, 'E] : (Result of ('T, 'E)) -> ?'T :=
     (res) => match res (.Ok(x) => .Some(x) | .Err(_) => .None);
@@ -83,8 +83,8 @@ export let ok ['T, 'E] : (Result of ('T, 'E)) -> ?'T :=
 /// # Examples
 ///
 /// ```musi
-/// let x := err(.Err("fail"));  -- .Some("fail")
-/// let y := err(.Ok(42));        -- .None
+/// let x := err(.Err("fail"));  // .Some("fail")
+/// let y := err(.Ok(42));       // .None
 /// ```
 export let err ['T, 'E] : (Result of ('T, 'E)) -> ?'E :=
     (res) => match res (.Ok(_) => .None | .Err(e) => .Some(e));

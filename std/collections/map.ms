@@ -8,7 +8,7 @@
 /// ```musi
 /// let m := insert(.Empty, "x", 1);
 /// let m := insert(m, "y", 2);
-/// get(m, "x")  -- .Some(1)
+/// get(m, "x")  // .Some(1)
 /// ```
 export let Map ['K, 'V] := choice { Empty + Node of ('K, 'V, Map of ('K, 'V), Map of ('K, 'V)) };
 

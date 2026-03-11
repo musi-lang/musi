@@ -6,8 +6,8 @@
 /// # Examples
 ///
 /// ```musi
-/// let s := show(42);       -- "42"
-/// let b := show(.True);    -- "True"
+/// let s := show(42);       // "42"
+/// let b := show(.True);    // "True"
 /// ```
 export class Show over 'T {
     let show(value: 'T) : String;

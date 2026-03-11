@@ -3,7 +3,7 @@
 /// # Examples
 ///
 /// ```musi
-/// let p := join("/usr", "bin");  -- "/usr/bin"
+/// join("/usr", "bin");  // "/usr/bin"
 /// ```
 export let join : (String, String) -> String;
 
@@ -12,7 +12,7 @@ export let join : (String, String) -> String;
 /// # Examples
 ///
 /// ```musi
-/// dirname("/usr/bin/env")  -- "/usr/bin"
+/// dirname("/usr/bin/env");  // "/usr/bin"
 /// ```
 export let dirname : String -> String;
 
@@ -21,7 +21,7 @@ export let dirname : String -> String;
 /// # Examples
 ///
 /// ```musi
-/// basename("/usr/bin/env")  -- "env"
+/// basename("/usr/bin/env");  // "env"
 /// ```
 export let basename : String -> String;
 
@@ -30,8 +30,8 @@ export let basename : String -> String;
 /// # Examples
 ///
 /// ```musi
-/// extension("main.ms")  -- .Some("ms")
-/// extension("Makefile")  -- .None
+/// extension("main.ms");   // .Some("ms")
+/// extension("Makefile");  // .None
 /// ```
 export let extension : String -> ?String;
 

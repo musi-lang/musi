@@ -28,7 +28,7 @@ export let round : Float64 -> Float64;
 /// # Examples
 ///
 /// ```musi
-/// pow(2.0, 10.0)  -- 1024.0
+/// pow(2.0, 10.0)  // 1024.0
 /// ```
 export let pow : (Float64, Float64) -> Float64;
 
@@ -69,7 +69,7 @@ export let atan2 : (Float64, Float64) -> Float64;
 /// # Examples
 ///
 /// ```musi
-/// clamp(15.0, 0.0, 10.0)  -- 10.0
+/// clamp(15.0, 0.0, 10.0)  // 10.0
 /// ```
 export let clamp : (Float64, Float64, Float64) -> Float64 :=
     (x, lo, hi) => (lo if x < lo | hi if x > hi | x if _);

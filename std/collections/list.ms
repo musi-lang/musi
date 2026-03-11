@@ -7,7 +7,7 @@
 ///
 /// ```musi
 /// let xs := .Cons(1, .Cons(2, .Cons(3, .Nil)));
-/// let ys := map(xs, (n) -> n * 2);  -- [2, 4, 6]
+/// let ys := map(xs, (n) -> n * 2);  // [2, 4, 6]
 /// ```
 export let List ['T] := choice { Nil + Cons of ('T, List of 'T) };
 
@@ -53,7 +53,7 @@ export let filter ['T] : (List of 'T, ('T) -> Bool) -> List of 'T :=
 ///
 /// ```musi
 /// let xs := .Cons(1, .Cons(2, .Cons(3, .Nil)));
-/// let sum := fold_left(xs, 0, (acc, x) -> acc + x);  -- 6
+/// let sum := fold_left(xs, 0, (acc, x) -> acc + x);  // 6
 /// ```
 export let fold_left ['T, 'U] : (List of 'T, 'U, ('U, 'T) -> 'U) -> 'U :=
     (xs, acc, f) => match xs (
@@ -70,7 +70,7 @@ export let fold_left ['T, 'U] : (List of 'T, 'U, ('U, 'T) -> 'U) -> 'U :=
 ///
 /// ```musi
 /// let xs := .Cons(1, .Cons(2, .Cons(3, .Nil)));
-/// let result := fold_right(xs, .Nil, (x, acc) -> .Cons(x, acc));  -- [1, 2, 3]
+/// let result := fold_right(xs, .Nil, (x, acc) -> .Cons(x, acc));  // [1, 2, 3]
 /// ```
 export let fold_right ['T, 'U] : (List of 'T, 'U, ('T, 'U) -> 'U) -> 'U :=
     (xs, acc, f) => match xs (
@@ -99,8 +99,8 @@ export let flatten ['T] : (List of (List of 'T)) -> List of 'T :=
 ///
 /// ```musi
 /// let xs := .Cons(10, .Cons(20, .Cons(30, .Nil)));
-/// nth(xs, 1)  -- .Some(20)
-/// nth(xs, 5)  -- .None
+/// nth(xs, 1)  // .Some(20)
+/// nth(xs, 5)  // .None
 /// ```
 export let nth ['T] : (List of 'T, Int) -> ?'T :=
     (xs, n) => match xs (
@@ -115,7 +115,7 @@ export let nth ['T] : (List of 'T, Int) -> ?'T :=
 /// ```musi
 /// let names := .Cons("a", .Cons("b", .Nil));
 /// let nums  := .Cons(1, .Cons(2, .Cons(3, .Nil)));
-/// zip(names, nums)  -- [("a", 1), ("b", 2)]
+/// zip(names, nums)  // [("a", 1), ("b", 2)]
 /// ```
 export let zip ['T, 'U] : (List of 'T, List of 'U) -> List of ('T, 'U) :=
     (xs, ys) => match (xs, ys) (

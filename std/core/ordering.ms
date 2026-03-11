@@ -6,8 +6,8 @@
 /// # Examples
 ///
 /// ```musi
-/// let ord := compare(1, 2);        -- .Lt
-/// let rev := reverse(compare(1, 2)); -- .Gt
+/// let ord := compare(1, 2);           // .Lt
+/// let rev := reverse(compare(1, 2));  // .Gt
 /// ```
 export let Ordering := choice { Lt + Eq + Gt };
 

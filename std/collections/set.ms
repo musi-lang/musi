@@ -8,7 +8,7 @@
 /// ```musi
 /// let s := insert(.Empty, 3);
 /// let s := insert(s, 1);
-/// contains(s, 3)  -- .True
+/// contains(s, 3)  // .True
 /// ```
 export let Set ['T] := choice { Empty + Node of ('T, Set of 'T, Set of 'T) };
 
@@ -52,7 +52,7 @@ export let is_empty ['T] : (Set of 'T) -> Bool :=
 /// ```musi
 /// let a := insert(insert(.Empty, 1), 2);
 /// let b := insert(insert(.Empty, 2), 3);
-/// to_list(union(a, b))  -- [1, 2, 3]
+/// to_list(union(a, b))  // [1, 2, 3]
 /// ```
 export let union ['T] where 'T <: Ord : (Set of 'T, Set of 'T) -> Set of 'T :=
     (a, b) => match b (

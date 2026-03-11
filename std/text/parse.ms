@@ -3,8 +3,8 @@
 /// # Examples
 ///
 /// ```musi
-/// parse_int("42")     -- .Some(42)
-/// parse_int("hello")  -- .None
+/// parse_int("42")     // .Some(42)
+/// parse_int("hello")  // .None
 /// ```
 export let parse_int : String -> ?Int;
 
@@ -18,8 +18,8 @@ export let parse_float : String -> ?Float64;
 /// # Examples
 ///
 /// ```musi
-/// parse_bool("True")   -- .Some(.True)
-/// parse_bool("yes")    -- .None
+/// parse_bool("True")   // .Some(.True)
+/// parse_bool("yes")    // .None
 /// ```
 export let parse_bool : String -> ?Bool :=
     (s) => (.Some(.True) if s = "True" | .Some(.False) if s = "False" | .None if _);
@@ -29,6 +29,6 @@ export let parse_bool : String -> ?Bool :=
 /// # Examples
 ///
 /// ```musi
-/// parse_int_radix("ff", 16)  -- .Some(255)
+/// parse_int_radix("ff", 16)  // .Some(255)
 /// ```
 export let parse_int_radix : (String, Int) -> ?Int;

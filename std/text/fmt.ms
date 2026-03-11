@@ -5,7 +5,7 @@
 /// # Examples
 ///
 /// ```musi
-/// join([1, 2, 3], ", ")  -- "1, 2, 3"
+/// join([1, 2, 3], ", ")  // "1, 2, 3"
 /// ```
 export let join ['T] where 'T <: Show : (List of 'T, String) -> String :=
     (xs, sep) => (
@@ -22,7 +22,7 @@ export let join ['T] where 'T <: Show : (List of 'T, String) -> String :=
 /// # Examples
 ///
 /// ```musi
-/// pad_left("42", 5, ' ')  -- "   42"
+/// pad_left("42", 5, ' ')  // "   42"
 /// ```
 export let pad_left : (String, Int, Rune) -> String;
 
@@ -34,7 +34,7 @@ export let pad_right : (String, Int, Rune) -> String;
 /// # Examples
 ///
 /// ```musi
-/// repeat("ab", 3)  -- "ababab"
+/// repeat("ab", 3)  // "ababab"
 /// ```
 export let repeat : (String, Int) -> String :=
     (s, n) => (

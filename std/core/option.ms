@@ -8,8 +8,8 @@
 ///
 /// ```musi
 /// let x := .Some(42);
-/// let y := map(x, (n) -> n + 1);  -- .Some(43)
-/// let z := unwrap_or(x, 0);        -- 42
+/// let y := map(x, (n) -> n + 1);  // .Some(43)
+/// let z := unwrap_or(x, 0);       // 42
 /// ```
 #[lang := "option"]
 export let Option ['T] := choice { Some of 'T + None };
@@ -19,8 +19,8 @@ export let Option ['T] := choice { Some of 'T + None };
 /// # Examples
 ///
 /// ```musi
-/// let x := map(.Some(3), (n) -> n * 2);  -- .Some(6)
-/// let y := map(.None, (n) -> n * 2);      -- .None
+/// let x := map(.Some(3), (n) -> n * 2);  // .Some(6)
+/// let y := map(.None, (n) -> n * 2);     // .None
 /// ```
 export let map ['T, 'U] : (?'T, ('T) -> 'U) -> ?'U :=
     (opt, f) => match opt (.Some(x) => .Some(f(x)) | .None => .None);
@@ -31,8 +31,8 @@ export let map ['T, 'U] : (?'T, ('T) -> 'U) -> ?'U :=
 ///
 /// ```musi
 /// let parse := (s) -> (.Some(42) if s = "42" | .None if _);
-/// let x := flat_map(.Some("42"), parse);  -- .Some(42)
-/// let y := flat_map(.None, parse);         -- .None
+/// let x := flat_map(.Some("42"), parse);  // .Some(42)
+/// let y := flat_map(.None, parse);        // .None
 /// ```
 export let flat_map ['T, 'U] : (?'T, ('T) -> ?'U) -> ?'U :=
     (opt, f) => match opt (.Some(x) => f(x) | .None => .None);
@@ -42,8 +42,8 @@ export let flat_map ['T, 'U] : (?'T, ('T) -> ?'U) -> ?'U :=
 /// # Examples
 ///
 /// ```musi
-/// let x := unwrap_or(.Some(7), 0);  -- 7
-/// let y := unwrap_or(.None, 0);     -- 0
+/// let x := unwrap_or(.Some(7), 0);  // 7
+/// let y := unwrap_or(.None, 0);     // 0
 /// ```
 export let unwrap_or ['T] : (?'T, 'T) -> 'T :=
     (opt, default) => match opt (.Some(x) => x | .None => default);
@@ -53,8 +53,8 @@ export let unwrap_or ['T] : (?'T, 'T) -> 'T :=
 /// # Examples
 ///
 /// ```musi
-/// let x := unwrap_or_else(.Some(7), () -> 0);  -- 7
-/// let y := unwrap_or_else(.None, () -> 0);      -- 0
+/// let x := unwrap_or_else(.Some(7), () -> 0);  // 7
+/// let y := unwrap_or_else(.None, () -> 0);     // 0
 /// ```
 export let unwrap_or_else ['T] : (?'T, () -> 'T) -> 'T :=
     (opt, f) => match opt (.Some(x) => x | .None => f());
@@ -72,8 +72,8 @@ export let is_none ['T] : (?'T) -> Bool :=
 /// # Examples
 ///
 /// ```musi
-/// let x := and(.Some(1), .Some("hi"));  -- .Some("hi")
-/// let y := and(.None, .Some("hi"));     -- .None
+/// let x := and(.Some(1), .Some("hi"));  // .Some("hi")
+/// let y := and(.None, .Some("hi"));     // .None
 /// ```
 export let `and` ['T, 'U] : (?'T, ?'U) -> ?'U :=
     (a, b) => match a (.Some(_) => b | .None => .None);
@@ -83,8 +83,8 @@ export let `and` ['T, 'U] : (?'T, ?'U) -> ?'U :=
 /// # Examples
 ///
 /// ```musi
-/// let x := or(.Some(1), .Some(2));  -- .Some(1)
-/// let y := or(.None, .Some(2));     -- .Some(2)
+/// let x := or(.Some(1), .Some(2));  // .Some(1)
+/// let y := or(.None, .Some(2));     // .Some(2)
 /// ```
 export let `or` ['T] : (?'T, ?'T) -> ?'T :=
     (a, b) => match a (.Some(_) => a | .None => b);
@@ -94,8 +94,8 @@ export let `or` ['T] : (?'T, ?'T) -> ?'T :=
 /// # Examples
 ///
 /// ```musi
-/// let x := filter(.Some(4), (n) -> n > 3);  -- .Some(4)
-/// let y := filter(.Some(2), (n) -> n > 3);  -- .None
+/// let x := filter(.Some(4), (n) -> n > 3);  // .Some(4)
+/// let y := filter(.Some(2), (n) -> n > 3);  // .None
 /// ```
 export let filter ['T] : (?'T, ('T) -> Bool) -> ?'T :=
     (opt, p) => match opt (
@@ -108,8 +108,8 @@ export let filter ['T] : (?'T, ('T) -> Bool) -> ?'T :=
 /// # Examples
 ///
 /// ```musi
-/// let x := flatten(.Some(.Some(42)));  -- .Some(42)
-/// let y := flatten(.Some(.None));       -- .None
+/// let x := flatten(.Some(.Some(42)));  // .Some(42)
+/// let y := flatten(.Some(.None));      // .None
 /// ```
 export let flatten ['T] : (?(?'T)) -> ?'T :=
     (opt) => match opt (.Some(inner) => inner | .None => .None);
@@ -119,8 +119,8 @@ export let flatten ['T] : (?(?'T)) -> ?'T :=
 /// # Examples
 ///
 /// ```musi
-/// let x := zip(.Some(1), .Some("a"));  -- .Some((1, "a"))
-/// let y := zip(.Some(1), .None);        -- .None
+/// let x := zip(.Some(1), .Some("a"));  // .Some((1, "a"))
+/// let y := zip(.Some(1), .None);       // .None
 /// ```
 export let zip ['T, 'U] : (?'T, ?'U) -> ?(('T, 'U)) :=
     (a, b) => match (a, b) (
