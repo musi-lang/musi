@@ -28,12 +28,25 @@ pub enum SemaError {
     UnusedVariable { name: Box<str> },
     #[error("unused parameter `{name}`")]
     UnusedParameter { name: Box<str> },
+    #[error("unused type `{name}`")]
+    UnusedType { name: Box<str> },
+    #[error("unused class `{name}`")]
+    UnusedClass { name: Box<str> },
+    #[error("unused effect `{name}`")]
+    UnusedEffect { name: Box<str> },
+    #[error("unused import `{name}`")]
+    UnusedImport { name: Box<str> },
 }
 
 impl IntoDiagnostic for SemaError {
     fn severity(&self) -> Severity {
         match self {
-            Self::UnusedVariable { .. } | Self::UnusedParameter { .. } => Severity::Warning,
+            Self::UnusedVariable { .. }
+            | Self::UnusedParameter { .. }
+            | Self::UnusedType { .. }
+            | Self::UnusedClass { .. }
+            | Self::UnusedEffect { .. }
+            | Self::UnusedImport { .. } => Severity::Warning,
             _ => Severity::Error,
         }
     }
