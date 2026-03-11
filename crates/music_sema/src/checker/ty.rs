@@ -70,6 +70,9 @@ pub(crate) fn lower_ty(ck: &mut Checker<'_>, ty_idx: TyIdx) -> TypeIdx {
             ..
         } => lower_ty_fn(ck, &params, ret, arrow, effects.as_ref()),
         Ty::Product { fields, .. } => {
+            if fields.is_empty() {
+                return ck.named_ty(ck.ctx.well_known.unit);
+            }
             let elems: Vec<_> = fields.iter().map(|&f| lower_ty(ck, f)).collect();
             ck.alloc_ty(Type::Tuple { elems })
         }
