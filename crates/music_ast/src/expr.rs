@@ -159,6 +159,7 @@ pub enum Expr {
         span: Span,
     },
     Class {
+        exported: bool,
         name: Symbol,
         params: Vec<TyParam>,
         constraints: Vec<Constraint>,
@@ -166,6 +167,7 @@ pub enum Expr {
         span: Span,
     },
     Given {
+        exported: bool,
         target: TyNamedRef,
         params: Vec<TyParam>,
         constraints: Vec<Constraint>,
@@ -173,6 +175,7 @@ pub enum Expr {
         span: Span,
     },
     Effect {
+        exported: bool,
         name: Symbol,
         params: Vec<TyParam>,
         ops: Vec<EffectOp>,
