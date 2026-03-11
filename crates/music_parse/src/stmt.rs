@@ -214,24 +214,62 @@ impl Parser<'_> {
                 inner
             }
             TokenKind::KwClass => {
-                let inner = self.parse_expr_class();
-                let inner_idx = self.alloc_expr(inner);
-                Expr::Annotated {
-                    attrs,
-                    inner: inner_idx,
-                    span: self.finish_span(start),
+                let mut inner = self.parse_expr_class();
+                if let Expr::Class {
+                    ref mut exported, ..
+                } = inner
+                {
+                    *exported = true;
+                }
+                if attrs.is_empty() {
+                    inner
+                } else {
+                    let inner_idx = self.alloc_expr(inner);
+                    Expr::Annotated {
+                        attrs,
+                        inner: inner_idx,
+                        span: self.finish_span(start),
+                    }
                 }
             }
             TokenKind::KwGiven => {
-                let inner = self.parse_expr_given();
-                let inner_idx = self.alloc_expr(inner);
-                Expr::Annotated {
-                    attrs,
-                    inner: inner_idx,
-                    span: self.finish_span(start),
+                let mut inner = self.parse_expr_given();
+                if let Expr::Given {
+                    ref mut exported, ..
+                } = inner
+                {
+                    *exported = true;
+                }
+                if attrs.is_empty() {
+                    inner
+                } else {
+                    let inner_idx = self.alloc_expr(inner);
+                    Expr::Annotated {
+                        attrs,
+                        inner: inner_idx,
+                        span: self.finish_span(start),
+                    }
                 }
             }
-            TokenKind::KwEffect => self.parse_expr_effect(),
+            TokenKind::KwEffect => {
+                let mut inner = self.parse_expr_effect();
+                if let Expr::Effect {
+                    ref mut exported, ..
+                } = inner
+                {
+                    *exported = true;
+                }
+                if attrs.is_empty() {
+                    inner
+                } else {
+                    let inner_idx = self.alloc_expr(inner);
+                    Expr::Annotated {
+                        attrs,
+                        inner: inner_idx,
+                        span: self.finish_span(start),
+                    }
+                }
+            }
             TokenKind::KwForeign => {
                 let inner = self.parse_expr_foreign_exported();
                 let inner_idx = self.alloc_expr(inner);
@@ -358,9 +396,36 @@ impl Parser<'_> {
         match self.peek_kind() {
             TokenKind::KwLet => self.parse_export_binding(start, true),
             TokenKind::KwVar => self.parse_export_binding(start, false),
-            TokenKind::KwClass => self.parse_expr_class(),
-            TokenKind::KwGiven => self.parse_expr_given(),
-            TokenKind::KwEffect => self.parse_expr_effect(),
+            TokenKind::KwClass => {
+                let mut inner = self.parse_expr_class();
+                if let Expr::Class {
+                    ref mut exported, ..
+                } = inner
+                {
+                    *exported = true;
+                }
+                inner
+            }
+            TokenKind::KwGiven => {
+                let mut inner = self.parse_expr_given();
+                if let Expr::Given {
+                    ref mut exported, ..
+                } = inner
+                {
+                    *exported = true;
+                }
+                inner
+            }
+            TokenKind::KwEffect => {
+                let mut inner = self.parse_expr_effect();
+                if let Expr::Effect {
+                    ref mut exported, ..
+                } = inner
+                {
+                    *exported = true;
+                }
+                inner
+            }
             TokenKind::KwForeign => self.parse_expr_foreign_exported(),
             _ => self.error_expr(&ParseError::ExpectedAfterExport),
         }
@@ -401,6 +466,7 @@ impl Parser<'_> {
         let members = self.parse_class_body();
         let _rb = self.expect(TokenKind::RBrace);
         Expr::Class {
+            exported: false,
             name,
             params,
             constraints,
@@ -435,6 +501,7 @@ impl Parser<'_> {
         let members = self.parse_class_body();
         let _rb = self.expect(TokenKind::RBrace);
         Expr::Given {
+            exported: false,
             target,
             params,
             constraints,
@@ -457,6 +524,7 @@ impl Parser<'_> {
         let ops = self.parse_effect_op();
         let _rb = self.expect(TokenKind::RBrace);
         Expr::Effect {
+            exported: false,
             name,
             params,
             ops,
