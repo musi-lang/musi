@@ -78,10 +78,20 @@ pub fn hover(doc: &AnalyzedDoc, position: Position) -> Option<Hover> {
         name.to_owned()
     };
 
-    let signature = if kind_kw.is_empty() {
-        format!("{display_name}: {ty_str}")
+    let show_type = ty_str != "?" && !ty_str.starts_with('?') && ty_str != "<error>";
+
+    let signature = if show_type {
+        if kind_kw.is_empty() {
+            format!("{display_name}: {ty_str}")
+        } else {
+            format!("{kind_kw} {display_name}: {ty_str}")
+        }
+    } else if let Some(src_sig) = extract_source_signature(&doc.source, def.span.start) {
+        src_sig
+    } else if kind_kw.is_empty() {
+        display_name.clone()
     } else {
-        format!("{kind_kw} {display_name}: {ty_str}")
+        format!("{kind_kw} {display_name}")
     };
 
     let local_doc = extract_doc_comments_from_source(
@@ -127,6 +137,32 @@ pub fn hover(doc: &AnalyzedDoc, position: Position) -> Option<Hover> {
         }),
         range: Some(range),
     })
+}
+
+/// Extract the declaration signature from source text at a definition site.
+///
+/// Scans from the start of the line containing `start` forward to the first
+/// `:=` or `;`, stripping the `export` keyword if present.
+fn extract_source_signature(source: &str, start: u32) -> Option<String> {
+    let start = usize::try_from(start).ok()?;
+    if start > source.len() {
+        return None;
+    }
+    let line_start = source.get(..start)?.rfind('\n').map_or(0, |i| i + 1);
+    let rest = source.get(line_start..)?;
+    let sig_end = rest
+        .find(":=")
+        .or_else(|| rest.find(';'))
+        .unwrap_or(rest.len());
+    let sig = rest.get(..sig_end)?.trim();
+    if sig.is_empty() {
+        return None;
+    }
+    let sig = sig
+        .strip_prefix("export")
+        .map(str::trim_start)
+        .unwrap_or(sig);
+    Some(sig.to_owned())
 }
 
 /// Format a type for LSP display (hover, inlay hints, etc.).
