@@ -18,7 +18,7 @@ use crate::def::DefKind;
 use crate::error::SemaError;
 use crate::resolve;
 use crate::scope::ScopeId;
-use crate::types::{EffectRow, RecordField, Type, TypeIdx, fmt_type};
+use crate::types::{EffectRow, RecordField, TyVarId, Type, TypeIdx, fmt_type};
 
 /// Synthesises a type for `expr` (inference mode, direction ↑).
 pub(crate) fn synth(ck: &mut Checker<'_>, expr_idx: ExprIdx) -> TypeIdx {
@@ -171,10 +171,11 @@ fn synth_block(ck: &mut Checker<'_>, stmts: &[ExprIdx], tail: Option<ExprIdx>) -
 }
 
 fn synth_let(ck: &mut Checker<'_>, fields: &LetFields, body: Option<ExprIdx>) -> TypeIdx {
-    let parent_scope = if fields.params.is_empty() {
-        None
+    let (parent_scope, ty_var_ids) = if fields.params.is_empty() {
+        (None, vec![])
     } else {
-        Some(ck.enter_ty_param_scope(&fields.params))
+        let (parent, ids) = ck.enter_ty_param_scope(&fields.params);
+        (Some(parent), ids)
     };
 
     let fn_pat_parent = enter_fn_pat_scope(ck, fields.pat);
@@ -194,6 +195,7 @@ fn synth_let(ck: &mut Checker<'_>, fields: &LetFields, body: Option<ExprIdx>) ->
         ck.current_scope = p;
     }
 
+    store_pat_ty_info(ck, fields, &ty_var_ids);
     check_pat(ck, fields.pat, value_ty);
 
     let result = if let Some(body) = body {
@@ -209,10 +211,11 @@ fn synth_let(ck: &mut Checker<'_>, fields: &LetFields, body: Option<ExprIdx>) ->
 }
 
 fn synth_binding(ck: &mut Checker<'_>, fields: &LetFields) -> TypeIdx {
-    let parent_scope = if fields.params.is_empty() {
-        None
+    let (parent_scope, ty_var_ids) = if fields.params.is_empty() {
+        (None, vec![])
     } else {
-        Some(ck.enter_ty_param_scope(&fields.params))
+        let (parent, ids) = ck.enter_ty_param_scope(&fields.params);
+        (Some(parent), ids)
     };
 
     let fn_pat_parent = enter_fn_pat_scope(ck, fields.pat);
@@ -232,12 +235,29 @@ fn synth_binding(ck: &mut Checker<'_>, fields: &LetFields) -> TypeIdx {
         ck.current_scope = p;
     }
 
+    store_pat_ty_info(ck, fields, &ty_var_ids);
     check_pat(ck, fields.pat, value_ty);
 
     if let Some(p) = parent_scope {
         ck.current_scope = p;
     }
     ck.named_ty(ck.ctx.well_known.unit)
+}
+
+/// Stores type info on the def for a let/binding pattern:
+/// - For `Pat::Variant` (fn-like patterns), stores `ty_params` from bracket params.
+/// - Type is stored later by `check_pat` on `Pat::Bind`.
+fn store_pat_ty_info(ck: &mut Checker<'_>, fields: &LetFields, ty_var_ids: &[TyVarId]) {
+    if !ty_var_ids.is_empty() {
+        let pat = &ck.ctx.ast.pats[fields.pat];
+        let pat_span = match pat {
+            Pat::Variant { span, .. } | Pat::Bind { span, .. } => *span,
+            _ => return,
+        };
+        if let Some(&def_id) = ck.ctx.pat_defs.get(&pat_span) {
+            ck.defs.get_mut(def_id).ty_info.ty_params = ty_var_ids.to_vec();
+        }
+    }
 }
 
 fn synth_fn(
@@ -257,6 +277,12 @@ fn synth_fn(
             }
         })
         .collect();
+
+    for (p, &param_ty) in params.iter().zip(param_tys.iter()) {
+        if let Some(&def_id) = ck.ctx.pat_defs.get(&p.span) {
+            ck.defs.get_mut(def_id).ty_info.ty = Some(param_ty);
+        }
+    }
 
     let ret = if let Some(ret_ann) = ret_ty {
         let ann = lower_ty(ck, ret_ann);

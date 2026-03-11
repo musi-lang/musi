@@ -12,8 +12,12 @@ impl Resolver<'_> {
     /// without defining the argument patterns. Used to make the name visible
     /// before its body is resolved, enabling recursion and module-level visibility.
     pub(super) fn define_fn_name(&mut self, pat_idx: PatIdx, kind: DefKind) {
-        if let Pat::Variant { name, span, .. } = &self.ast.pats[pat_idx] {
-            let id = self.defs.alloc(*name, kind, *span);
+        if let Pat::Variant {
+            name, span, args, ..
+        } = &self.ast.pats[pat_idx]
+        {
+            let effective_kind = if args.is_empty() { kind } else { DefKind::Fn };
+            let id = self.defs.alloc(*name, effective_kind, *span);
             self.define_in_scope(*name, id, *span);
             let _inserted = self.output.pat_defs.insert(*span, id);
         }

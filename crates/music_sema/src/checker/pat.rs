@@ -21,7 +21,10 @@ pub(crate) fn check_pat(ck: &mut Checker<'_>, pat_idx: PatIdx, expected: TypeIdx
             };
             ck.unify_or_report(expected, lit_ty, span);
         }
-        Pat::Bind { inner, .. } => {
+        Pat::Bind { span, inner, .. } => {
+            if let Some(&def_id) = ck.ctx.pat_defs.get(&span) {
+                ck.defs.get_mut(def_id).ty_info.ty = Some(expected);
+            }
             // If there's an inner pattern (`x @ pat`), check it too.
             if let Some(inner) = inner {
                 check_pat(ck, inner, expected);
@@ -78,7 +81,10 @@ pub(crate) fn check_pat(ck: &mut Checker<'_>, pat_idx: PatIdx, expected: TypeIdx
                 }
             }
         }
-        Pat::Variant { args, .. } => {
+        Pat::Variant { span, args, .. } => {
+            if let Some(&def_id) = ck.ctx.pat_defs.get(&span) {
+                ck.defs.get_mut(def_id).ty_info.ty = Some(expected);
+            }
             for &arg in &args {
                 let fresh = ck.fresh_var(Span::DUMMY);
                 check_pat(ck, arg, fresh);

@@ -72,6 +72,7 @@ fn check_module(interner: &mut Interner, module: &ParsedModule) -> DiagnosticBag
         file_id: FileId(0),
         well_known: &well_known,
         expr_defs: &resolved.expr_defs,
+        pat_defs: &resolved.pat_defs,
         import_types: &empty_imports,
     };
     let mut diags = DiagnosticBag::new();

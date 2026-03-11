@@ -106,6 +106,7 @@ pub fn analyze_with_imports(
         file_id,
         well_known: &well_known,
         expr_defs: &resolved.expr_defs,
+        pat_defs: &resolved.pat_defs,
         import_types,
     };
     let mut checker = Checker::new(ctx, diags, &mut defs, &mut scopes, module_scope);
@@ -168,7 +169,11 @@ fn analyze_emit_unused_warnings(
         if def.use_count == 0
             && def.span != Span::DUMMY
             && !def.exported
-            && matches!(def.kind, DefKind::Let | DefKind::Var | DefKind::Param)
+            && def.name != Symbol(u32::MAX)
+            && matches!(
+                def.kind,
+                DefKind::Let | DefKind::Fn | DefKind::Var | DefKind::Param
+            )
         {
             let name_str = interner.resolve(def.name);
             if name_str == "_" || name_str.starts_with('_') {

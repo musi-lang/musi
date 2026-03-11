@@ -93,7 +93,8 @@ pub(crate) fn check_stmt(ck: &mut Checker<'_>, expr_idx: Idx<music_ast::Expr>) {
             let parent = if params.is_empty() {
                 None
             } else {
-                Some(ck.enter_ty_param_scope(&params))
+                let (p, _ids) = ck.enter_ty_param_scope(&params);
+                Some(p)
             };
             for member in &members {
                 check_member_fn(ck, member);
@@ -115,7 +116,8 @@ pub(crate) fn check_stmt(ck: &mut Checker<'_>, expr_idx: Idx<music_ast::Expr>) {
             let parent = if all_params.is_empty() {
                 None
             } else {
-                Some(ck.enter_ty_param_scope(&all_params))
+                let (p, _ids) = ck.enter_ty_param_scope(&all_params);
+                Some(p)
             };
             for member in &members {
                 check_member_fn(ck, member);
