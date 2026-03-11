@@ -88,6 +88,12 @@
 			{
 				"language": "musi",
 				"scopes": {
+					"variable": [
+						"variable.other.musi"
+					],
+					"variable.declaration": [
+						"variable.other.musi"
+					],
 					"variable.readonly": [
 						"variable.other.constant.musi"
 					],
