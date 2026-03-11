@@ -23,60 +23,67 @@
             "patterns": [
                 {
                     "comment": "let SCREAMING_SNAKE -- constant definition (2+ all-uppercase chars)",
-                    "match": "\\b(let)\\b\\s+([A-Z][A-Z0-9_]+)\\b",
+                    "match": "(\\bexport\\b\\s+)?\\b(let)\\b\\s+([A-Z][A-Z0-9_]+)\\b",
                     "captures": {
-                        "1": { "name": "storage.type.musi" },
-                        "2": { "name": "variable.other.constant.musi" }
+                        "1": { "name": "keyword.control.export.musi" },
+                        "2": { "name": "storage.type.musi" },
+                        "3": { "name": "variable.other.constant.musi" }
                     }
                 },
                 {
                     "comment": "let PascalCase -- type definition",
-                    "match": "\\b(let)\\b\\s+([A-Z][a-zA-Z0-9_]*)",
+                    "match": "(\\bexport\\b\\s+)?\\b(let)\\b\\s+([A-Z][a-zA-Z0-9_]*)",
                     "captures": {
-                        "1": { "name": "storage.type.musi" },
-                        "2": { "name": "entity.name.type.musi" }
+                        "1": { "name": "keyword.control.export.musi" },
+                        "2": { "name": "storage.type.musi" },
+                        "3": { "name": "entity.name.type.musi" }
                     }
                 },
                 {
                     "comment": "let (op) -- operator definition",
-                    "match": "\\b(let)\\b\\s+(\\([^)]+\\))",
+                    "match": "(\\bexport\\b\\s+)?\\b(let)\\b\\s+(\\([^)]+\\))",
                     "captures": {
-                        "1": { "name": "storage.type.musi" },
-                        "2": { "name": "entity.name.function.musi" }
+                        "1": { "name": "keyword.control.export.musi" },
+                        "2": { "name": "storage.type.musi" },
+                        "3": { "name": "entity.name.function.musi" }
                     }
                 },
                 {
                     "comment": "let lowercase -- function/value definition",
-                    "match": "\\b(let)\\b\\s+([a-z_`][a-zA-Z0-9_]*`?)",
+                    "match": "(\\bexport\\b\\s+)?\\b(let)\\b\\s+([a-z_`][a-zA-Z0-9_]*`?)",
                     "captures": {
-                        "1": { "name": "storage.type.musi" },
-                        "2": { "name": "entity.name.function.musi" }
+                        "1": { "name": "keyword.control.export.musi" },
+                        "2": { "name": "storage.type.musi" },
+                        "3": { "name": "entity.name.function.musi" }
                     }
                 }
             ]
         },
         "class-definition": {
             "comment": "class Name -- type class definition",
-            "match": "\\b(class)\\b\\s+([A-Z][a-zA-Z0-9_]*)",
+            "match": "(\\bexport\\b\\s+)?\\b(class)\\b\\s+([A-Z][a-zA-Z0-9_]*)",
             "captures": {
-                "1": { "name": "storage.type.musi" },
-                "2": { "name": "entity.name.type.musi" }
+                "1": { "name": "keyword.control.export.musi" },
+                "2": { "name": "storage.type.musi" },
+                "3": { "name": "entity.name.type.musi" }
             }
         },
         "given-definition": {
             "comment": "given Name -- type class instance",
-            "match": "\\b(given)\\b\\s+([A-Z][a-zA-Z0-9_]*)",
+            "match": "(\\bexport\\b\\s+)?\\b(given)\\b\\s+([A-Z][a-zA-Z0-9_]*)",
             "captures": {
-                "1": { "name": "storage.type.musi" },
-                "2": { "name": "entity.name.type.musi" }
+                "1": { "name": "keyword.control.export.musi" },
+                "2": { "name": "storage.type.musi" },
+                "3": { "name": "entity.name.type.musi" }
             }
         },
         "effect-definition": {
             "comment": "effect Name -- effect definition",
-            "match": "\\b(effect)\\b\\s+([A-Z][a-zA-Z0-9_]*)",
+            "match": "(\\bexport\\b\\s+)?\\b(effect)\\b\\s+([A-Z][a-zA-Z0-9_]*)",
             "captures": {
-                "1": { "name": "storage.type.musi" },
-                "2": { "name": "entity.name.type.musi" }
+                "1": { "name": "keyword.control.export.musi" },
+                "2": { "name": "storage.type.musi" },
+                "3": { "name": "entity.name.type.musi" }
             }
         },
         "binding-definition": {
