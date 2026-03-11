@@ -28,7 +28,11 @@ fn check_member_fn(ck: &mut Checker<'_>, member: &ClassMember) {
         } else {
             ck.fresh_var(param.span)
         };
-        let id = ck.defs.alloc(param.name, DefKind::Param, param.span);
+        let id = if let Some(&existing) = ck.ctx.pat_defs.get(&param.span) {
+            existing
+        } else {
+            ck.defs.alloc(param.name, DefKind::Param, param.span)
+        };
         let _prev = ck.scopes.define(ck.current_scope, param.name, id);
         ck.defs.get_mut(id).ty_info.ty = Some(param_ty);
     }
