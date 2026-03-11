@@ -94,23 +94,13 @@ pub fn hover(doc: &AnalyzedDoc, position: Position) -> Option<Hover> {
         format!("{kind_kw} {display_name}")
     };
 
-    let local_doc = extract_doc_comments_from_source(
-        def.span.start,
-        &doc.source,
-        &doc.lexed.tokens,
-        &doc.lexed.trivia,
-    );
+    let local_doc = extract_doc_comments_from_source(def.span.start, &doc.source);
     let doc_text = if local_doc.is_empty() {
         doc.dep_sources
             .values()
             .find_map(|dep| {
                 dep.def_spans.get(&def.name).and_then(|&span| {
-                    let text = extract_doc_comments_from_source(
-                        span.start,
-                        &dep.source,
-                        &dep.tokens,
-                        &dep.trivia,
-                    );
+                    let text = extract_doc_comments_from_source(span.start, &dep.source);
                     if text.is_empty() { None } else { Some(text) }
                 })
             })
@@ -150,10 +140,12 @@ fn extract_source_signature(source: &str, start: u32) -> Option<String> {
     }
     let line_start = source.get(..start)?.rfind('\n').map_or(0, |i| i + 1);
     let rest = source.get(line_start..)?;
+    let line_end = rest.find('\n').unwrap_or(rest.len());
     let sig_end = rest
+        .get(..line_end)?
         .find(":=")
-        .or_else(|| rest.find(';'))
-        .unwrap_or(rest.len());
+        .or_else(|| rest.get(..line_end)?.find(';'))
+        .unwrap_or(line_end);
     let sig = rest.get(..sig_end)?.trim();
     if sig.is_empty() {
         return None;

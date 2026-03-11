@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 
 use music_ast::{ExprIdx, ParsedModule};
-use music_lex::{LexedSource, Token, TokenKind, Trivia, TriviaKind, lex};
+use music_lex::{LexedSource, Token, TokenKind, lex};
 use music_parse::parse;
 use music_sema::{DefInfo, SemaResult, analyze};
 use music_shared::{DiagnosticBag, FileId, Interner, Severity, SourceDb, Span, Symbol};
@@ -16,8 +16,6 @@ use tower_lsp_server::ls_types::{Diagnostic, DiagnosticSeverity, DiagnosticTag, 
 /// Lexed artifacts for a single imported stdlib module, stored for doc-comment lookup.
 pub struct DepSource {
     pub source: String,
-    pub tokens: Vec<Token>,
-    pub trivia: Vec<Trivia>,
     /// Top-level named definitions: interned name -> def span.
     pub def_spans: HashMap<Symbol, Span>,
 }
@@ -156,73 +154,40 @@ pub fn span_to_range(file_id: FileId, span: Span, source_db: &SourceDb) -> Range
     }
 }
 
-/// Check if a token has doc comments in its leading trivia.
-fn has_doc_comments(tok: &Token, trivia: &[Trivia]) -> bool {
-    let tr_start = tok.leading_trivia.start as usize;
-    let tr_end = tr_start + tok.leading_trivia.len as usize;
-    let leading = trivia.get(tr_start..tr_end).unwrap_or(&[]);
-    leading
-        .iter()
-        .any(|t| matches!(t.kind, TriviaKind::LineComment { doc_style: true }))
-}
+/// Extract doc-comment text for the definition at `def_start` by scanning
+/// source lines directly. Walks backward from the line containing `def_start`,
+/// collecting consecutive `///` lines.
+pub fn extract_doc_comments_from_source(def_start: u32, source: &str) -> String {
+    let prefix = source.get(..def_start as usize).unwrap_or("");
+    let def_line_start = prefix.rfind('\n').map_or(0, |i| i + 1);
 
-/// Extract doc-comment text for the definition at `def_start` from `source`.
-pub fn extract_doc_comments_from_source(
-    def_start: u32,
-    source: &str,
-    tokens: &[Token],
-    trivia: &[Trivia],
-) -> String {
-    let tok_at_def = tokens.iter().find(|t| t.span.start == def_start);
+    let mut doc_lines: Vec<&str> = Vec::new();
+    let mut pos = def_line_start;
 
-    let tok = tok_at_def
-        .filter(|t| has_doc_comments(t, trivia))
-        .or_else(|| {
-            // Only check the immediately preceding keyword (e.g. `export` before `let`).
-            tokens.iter().rfind(|t| {
-                t.span.end() <= def_start
-                    && def_start - t.span.end() <= 1
-                    && t.kind == TokenKind::KwExport
-                    && has_doc_comments(t, trivia)
-            })
-        });
+    loop {
+        if pos == 0 {
+            break;
+        }
+        let prev_end = pos - 1;
+        let before = source.get(..prev_end).unwrap_or("");
+        let prev_start = before.rfind('\n').map_or(0, |i| i + 1);
+        let line = source.get(prev_start..prev_end).unwrap_or("");
+        let trimmed = line.trim_start();
 
-    let Some(tok) = tok else {
-        return String::new();
-    };
-
-    let tr_start = tok.leading_trivia.start as usize;
-    let tr_end = tr_start + tok.leading_trivia.len as usize;
-    let leading = trivia.get(tr_start..tr_end).unwrap_or(&[]);
-
-    let mut spans: Vec<(u32, u32)> = Vec::new();
-    for tr in leading.iter().rev() {
-        match &tr.kind {
-            TriviaKind::LineComment { doc_style: true } => {
-                spans.push((tr.span.start, tr.span.end()));
-            }
-            TriviaKind::Whitespace | TriviaKind::Newline => continue,
-            _ => break,
+        if let Some(rest) = trimmed.strip_prefix("///") {
+            let content = rest.strip_prefix(' ').unwrap_or(rest);
+            doc_lines.push(content);
+            pos = prev_start;
+        } else if trimmed.starts_with("#[") || trimmed.is_empty() {
+            // Skip attribute lines and blank lines between doc comments and the definition.
+            pos = prev_start;
+        } else {
+            break;
         }
     }
-    spans.reverse();
 
-    if spans.is_empty() {
-        return String::new();
-    }
-
-    spans
-        .iter()
-        .filter_map(|&(s, e)| {
-            let text = source.get(s as usize..e as usize)?;
-            let stripped = text
-                .strip_prefix("/// ")
-                .or_else(|| text.strip_prefix("///"))
-                .unwrap_or(text);
-            Some(stripped)
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
+    doc_lines.reverse();
+    doc_lines.join("\n")
 }
 
 pub(crate) fn to_lsp_diags<'a>(
@@ -328,15 +293,13 @@ pub fn def_at_cursor(offset: u32, doc: &AnalyzedDoc) -> Option<&DefInfo> {
     })
 }
 
-fn _build_dep_source(source: &str, lexed: LexedSource, sema: &SemaResult) -> DepSource {
+fn _build_dep_source(source: &str, _lexed: LexedSource, sema: &SemaResult) -> DepSource {
     let mut def_spans: HashMap<Symbol, Span> = HashMap::new();
     for def in &sema.defs {
         let _prev = def_spans.entry(def.name).or_insert(def.span);
     }
     DepSource {
         source: source.to_owned(),
-        tokens: lexed.tokens,
-        trivia: lexed.trivia,
         def_spans,
     }
 }
