@@ -170,23 +170,20 @@ fn analyze_emit_unused_warnings(
             && def.span != Span::DUMMY
             && !def.exported
             && def.name != Symbol(u32::MAX)
-            && matches!(
-                def.kind,
-                DefKind::Let | DefKind::Fn | DefKind::Var | DefKind::Param
-            )
+            && !matches!(def.kind, DefKind::Given | DefKind::Variant | DefKind::Type)
         {
             let name_str = interner.resolve(def.name);
             if name_str == "_" || name_str.starts_with('_') {
                 continue;
             }
-            let err = if def.kind == DefKind::Param {
-                SemaError::UnusedParameter {
-                    name: Box::from(name_str),
-                }
-            } else {
-                SemaError::UnusedVariable {
-                    name: Box::from(name_str),
-                }
+            let name = Box::from(name_str);
+            let err = match def.kind {
+                DefKind::Param => SemaError::UnusedParameter { name },
+                DefKind::OpaqueType => SemaError::UnusedType { name },
+                DefKind::Class => SemaError::UnusedClass { name },
+                DefKind::Effect | DefKind::EffectOp => SemaError::UnusedEffect { name },
+                DefKind::Import => SemaError::UnusedImport { name },
+                _ => SemaError::UnusedVariable { name },
             };
             let _d = diags.report(&err, def.span, file_id);
         }
