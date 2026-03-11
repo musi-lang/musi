@@ -75,6 +75,18 @@ pub struct WellKnownContainers {
     pub set: DefId,
 }
 
+/// Well-known prelude functions (typeclass methods and utilities).
+#[derive(Debug, Clone)]
+pub struct WellKnownFns {
+    pub compare: DefId,
+    pub show: DefId,
+    pub reverse: DefId,
+    pub append: DefId,
+    pub is_some: DefId,
+    pub is_none: DefId,
+    pub next: DefId,
+}
+
 /// `DefId` handles for all well-known (prelude) types.
 ///
 /// Populated once by [`init_well_known`] at the start of analysis.
@@ -87,6 +99,7 @@ pub struct WellKnown {
     pub classes: WellKnownClasses,
     pub effects: WellKnownEffects,
     pub containers: WellKnownContainers,
+    pub fns: WellKnownFns,
     // Text
     pub string: DefId,
     pub rune: DefId,
@@ -165,6 +178,16 @@ pub fn init_well_known(
         set: register("Set", DefKind::Type),
     };
 
+    let fns = WellKnownFns {
+        compare: register("compare", DefKind::Fn),
+        show: register("show", DefKind::Fn),
+        reverse: register("reverse", DefKind::Fn),
+        append: register("append", DefKind::Fn),
+        is_some: register("is_some", DefKind::Fn),
+        is_none: register("is_none", DefKind::Fn),
+        next: register("next", DefKind::Fn),
+    };
+
     let string = register("String", DefKind::Type);
     let rune = register("Rune", DefKind::Type);
     let bool = register("Bool", DefKind::Type);
@@ -181,6 +204,7 @@ pub fn init_well_known(
         classes,
         effects,
         containers,
+        fns,
         string,
         rune,
         bool,
