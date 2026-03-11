@@ -602,7 +602,7 @@ impl Resolver<'_> {
         if let Ty::Sum { variants, .. } = &self.ast.tys[body] {
             for &variant_ty in variants {
                 if let Ty::Named { name, .. } = &self.ast.tys[variant_ty] {
-                    let id = self.defs.alloc(*name, DefKind::Type, Span::DUMMY);
+                    let id = self.defs.alloc(*name, DefKind::Variant, Span::DUMMY);
                     self.define_in_scope(*name, id, Span::DUMMY);
                 }
             }
