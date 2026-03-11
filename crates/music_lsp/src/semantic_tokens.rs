@@ -2,7 +2,7 @@
 
 use music_ast::expr::ParamMode;
 use music_lex::TokenKind;
-use music_sema::{DefKind, Type};
+use music_sema::{DefKind, SemaResult, Type, TypeIdx};
 use music_shared::{FileId, SourceDb, Span};
 use tower_lsp_server::ls_types::{
     SemanticToken, SemanticTokenModifier, SemanticTokenType, SemanticTokens,
@@ -79,7 +79,15 @@ pub fn compute(doc: &AnalyzedDoc) -> SemanticTokensResult {
                 });
             let (tt, tm, prio) = classify_def(def, sema, &doc.interner, true);
             if let Some(tt) = tt {
-                push_raw(&mut raw, name_span, tt, tm, doc.file_id, &doc.source_db, prio);
+                push_raw(
+                    &mut raw,
+                    name_span,
+                    tt,
+                    tm,
+                    doc.file_id,
+                    &doc.source_db,
+                    prio,
+                );
             }
         }
 
@@ -124,7 +132,15 @@ pub fn compute(doc: &AnalyzedDoc) -> SemanticTokensResult {
 fn emit_ty_ident_tokens(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
     for tok in &doc.lexed.tokens {
         if tok.kind == TokenKind::TyIdent {
-            push_raw(raw, tok.span, TT_TYPE_PARAM, 0, doc.file_id, &doc.source_db, 1);
+            push_raw(
+                raw,
+                tok.span,
+                TT_TYPE_PARAM,
+                0,
+                doc.file_id,
+                &doc.source_db,
+                1,
+            );
         }
     }
 }
@@ -156,28 +172,20 @@ fn emit_decl_names(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
                     let text = doc
                         .source
                         .get(tok.span.start as usize..(tok.span.start + tok.span.length) as usize);
-                    let is_type = text.is_some_and(|t| t.starts_with(|c: char| c.is_uppercase()));
-                    if is_type {
-                        push_raw(
-                            raw,
-                            tok.span,
-                            TT_TYPE,
-                            TM_DECLARATION,
-                            doc.file_id,
-                            &doc.source_db,
-                            1,
-                        );
+                    let modifier = if text.is_some_and(is_constant_name) {
+                        TM_DECLARATION | TM_READONLY
                     } else {
-                        push_raw(
-                            raw,
-                            tok.span,
-                            TT_FUNCTION,
-                            TM_DECLARATION,
-                            doc.file_id,
-                            &doc.source_db,
-                            1,
-                        );
-                    }
+                        TM_DECLARATION
+                    };
+                    push_raw(
+                        raw,
+                        tok.span,
+                        TT_VARIABLE,
+                        modifier,
+                        doc.file_id,
+                        &doc.source_db,
+                        1,
+                    );
                     DeclState::Default
                 }
                 TokenKind::LParen => DeclState::AfterLetLParen,
@@ -297,6 +305,11 @@ fn starts_with_uppercase(name: &str) -> bool {
     name.chars().next().is_some_and(|c| c.is_uppercase())
 }
 
+fn is_fn_type(ty: TypeIdx, sema: &SemaResult) -> bool {
+    let resolved = sema.unify.resolve(ty, &sema.types);
+    matches!(&sema.types[resolved], Type::Fn { .. })
+}
+
 fn classify_def(
     def: &music_sema::DefInfo,
     sema: &music_sema::SemaResult,
@@ -308,32 +321,21 @@ fn classify_def(
     match def.kind {
         DefKind::Fn | DefKind::ForeignFn | DefKind::EffectOp => (Some(TT_FUNCTION), decl, 0),
         DefKind::Let => {
-            let is_fn = def
-                .ty_info
-                .ty
-                .map(|t| matches!(&sema.types[t], Type::Fn { .. }))
-                .unwrap_or(false);
+            let is_fn = def.ty_info.ty.is_some_and(|t| is_fn_type(t, sema));
             let has_ty_params = !def.ty_info.ty_params.is_empty();
-            if is_fn || has_ty_params {
+            if is_fn {
                 (Some(TT_FUNCTION), decl, 0)
+            } else if has_ty_params || starts_with_uppercase(def_name) {
+                (Some(TT_TYPE), decl, 0)
             } else if is_constant_name(def_name) {
                 (Some(TT_VARIABLE), decl | TM_READONLY, 0)
-            } else if def.ty_info.ty.is_none() && starts_with_uppercase(def_name) {
-                (Some(TT_TYPE), decl, 0)
-            } else if def.ty_info.ty.is_none() {
-                // No resolved type, lowercase — uncertain, let lex heuristic override.
-                (Some(TT_VARIABLE), decl, 2)
             } else {
                 (Some(TT_VARIABLE), decl, 0)
             }
         }
         DefKind::Var => (Some(TT_VARIABLE), decl | TM_MUTABLE, 0),
         DefKind::Param => {
-            let is_fn = def
-                .ty_info
-                .ty
-                .map(|t| matches!(&sema.types[t], Type::Fn { .. }))
-                .unwrap_or(false);
+            let is_fn = def.ty_info.ty.is_some_and(|t| is_fn_type(t, sema));
             let is_mutable = def
                 .param_mode
                 .is_some_and(|m| matches!(m, ParamMode::Var | ParamMode::Inout));
@@ -367,7 +369,15 @@ fn lex_fallback(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
         let kind = tok.kind;
 
         if kind == TokenKind::TyIdent {
-            push_raw(raw, tok.span, TT_TYPE_PARAM, 0, doc.file_id, &doc.source_db, 1);
+            push_raw(
+                raw,
+                tok.span,
+                TT_TYPE_PARAM,
+                0,
+                doc.file_id,
+                &doc.source_db,
+                1,
+            );
         }
 
         state = match state {
