@@ -16,7 +16,7 @@ pub(crate) fn check_effects_subset(
     current_effects: &EffectRow,
     span: Span,
 ) {
-    if callee_effects.is_pure() {
+    if callee_effects.effects.is_empty() {
         return;
     }
 
