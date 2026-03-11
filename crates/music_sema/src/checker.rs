@@ -19,7 +19,7 @@ use music_shared::{Arena, DiagnosticBag, FileId, Interner, Span, Symbol};
 use crate::def::{DefId, DefKind, DefTable};
 use crate::error::SemaError;
 use crate::scope::{ScopeId, ScopeTree};
-use crate::types::{EffectRow, InstanceInfo, Obligation, TyVarId, Type, TypeIdx, fmt_type};
+use crate::types::{EffectRow, InstanceInfo, Obligation, Type, TypeIdx, fmt_type};
 use crate::unify::UnifyTable;
 use crate::well_known::WellKnown;
 
@@ -139,20 +139,16 @@ impl<'a> Checker<'a> {
         self.store.unify.resolve(ty, &self.store.types)
     }
 
-    pub(crate) fn enter_ty_param_scope(&mut self, params: &[TyParam]) -> (ScopeId, Vec<TyVarId>) {
+    pub(crate) fn enter_ty_param_scope(&mut self, params: &[TyParam]) -> (ScopeId, Vec<DefId>) {
         let parent = self.current_scope;
         self.current_scope = self.scopes.push_child(parent);
-        let mut ty_var_ids = Vec::with_capacity(params.len());
+        let mut def_ids = Vec::with_capacity(params.len());
         for param in params {
             let id = self.defs.alloc(param.name, DefKind::Type, param.span);
             let _prev = self.scopes.define(self.current_scope, param.name, id);
-            let (var_id, _idx) = self
-                .store
-                .unify
-                .fresh_rigid(param.span, &mut self.store.types);
-            ty_var_ids.push(var_id);
+            def_ids.push(id);
         }
-        (parent, ty_var_ids)
+        (parent, def_ids)
     }
 
     pub fn resolve_obligations(&mut self) {
