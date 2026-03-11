@@ -85,9 +85,14 @@ pub(crate) fn check_pat(ck: &mut Checker<'_>, pat_idx: PatIdx, expected: TypeIdx
             if let Some(&def_id) = ck.ctx.pat_defs.get(&span) {
                 ck.defs.get_mut(def_id).ty_info.ty = Some(expected);
             }
-            for &arg in &args {
-                let fresh = ck.fresh_var(Span::DUMMY);
-                check_pat(ck, arg, fresh);
+            let resolved = ck.resolve_ty(expected);
+            let param_tys: Vec<_> = if let Type::Fn { params, .. } = &ck.store.types[resolved] {
+                params.clone()
+            } else {
+                args.iter().map(|_| ck.fresh_var(Span::DUMMY)).collect()
+            };
+            for (&arg, param_ty) in args.iter().zip(param_tys) {
+                check_pat(ck, arg, param_ty);
             }
         }
         Pat::Or { left, right, .. } => {
