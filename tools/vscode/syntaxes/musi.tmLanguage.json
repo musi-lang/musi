@@ -147,15 +147,12 @@
             "beginCaptures": { "0": { "name": "punctuation.definition.attribute.begin.musi" } },
             "endCaptures": { "0": { "name": "punctuation.definition.attribute.end.musi" } },
             "patterns": [
+                { "include": "#comments" },
+                { "include": "#literals" },
                 {
                     "comment": "well-known attribute names",
                     "match": "\\b(entrypoint|test|lang|inline)\\b",
                     "name": "support.function.attribute.musi"
-                },
-                {
-                    "comment": "attribute name before (, , or ]",
-                    "match": "([a-zA-Z_][a-zA-Z0-9_]*|`[^`]+`)(?=\\s*[,\\]\\(])",
-                    "name": "entity.name.attribute.musi"
                 },
                 {
                     "comment": "named attribute arg: key := value",
@@ -165,8 +162,11 @@
                         "2": { "name": "keyword.operator.assignment.musi" }
                     }
                 },
-                { "include": "#literals" },
-                { "include": "#comments" }
+                {
+                    "comment": "attribute name before (, , or ]",
+                    "match": "([a-zA-Z_][a-zA-Z0-9_]*|`[^`]+`)(?=\\s*[,\\]\\(])",
+                    "name": "entity.name.attribute.musi"
+                }
             ]
         },
         "keywords": {
