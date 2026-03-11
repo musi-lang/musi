@@ -77,9 +77,9 @@ pub fn compute(doc: &AnalyzedDoc) -> SemanticTokensResult {
                     start: span.start,
                     length: u32::try_from(def_name.len()).unwrap_or(0),
                 });
-            let (tt, tm) = classify_def(def, sema, &doc.interner, true);
+            let (tt, tm, prio) = classify_def(def, sema, &doc.interner, true);
             if let Some(tt) = tt {
-                push_raw(&mut raw, name_span, tt, tm, doc.file_id, &doc.source_db, 0);
+                push_raw(&mut raw, name_span, tt, tm, doc.file_id, &doc.source_db, prio);
             }
         }
 
@@ -97,9 +97,9 @@ pub fn compute(doc: &AnalyzedDoc) -> SemanticTokensResult {
             if span.length == 0 {
                 continue;
             }
-            let (tt, tm) = classify_def(def, sema, &doc.interner, false);
+            let (tt, tm, prio) = classify_def(def, sema, &doc.interner, false);
             if let Some(tt) = tt {
-                push_raw(&mut raw, span, tt, tm, doc.file_id, &doc.source_db, 0);
+                push_raw(&mut raw, span, tt, tm, doc.file_id, &doc.source_db, prio);
             }
         }
 
@@ -293,16 +293,20 @@ fn is_constant_name(name: &str) -> bool {
             .all(|c| c.is_uppercase() || c.is_ascii_digit() || c == '_')
 }
 
+fn starts_with_uppercase(name: &str) -> bool {
+    name.chars().next().is_some_and(|c| c.is_uppercase())
+}
+
 fn classify_def(
     def: &music_sema::DefInfo,
     sema: &music_sema::SemaResult,
     interner: &music_shared::Interner,
     is_decl: bool,
-) -> (Option<u32>, u32) {
+) -> (Option<u32>, u32, u8) {
     let decl = if is_decl { TM_DECLARATION } else { 0 };
     let def_name = interner.try_resolve(def.name).unwrap_or("");
     match def.kind {
-        DefKind::Fn | DefKind::ForeignFn | DefKind::EffectOp => (Some(TT_FUNCTION), decl),
+        DefKind::Fn | DefKind::ForeignFn | DefKind::EffectOp => (Some(TT_FUNCTION), decl, 0),
         DefKind::Let => {
             let is_fn = def
                 .ty_info
@@ -311,17 +315,19 @@ fn classify_def(
                 .unwrap_or(false);
             let has_ty_params = !def.ty_info.ty_params.is_empty();
             if is_fn || has_ty_params {
-                (Some(TT_FUNCTION), decl)
+                (Some(TT_FUNCTION), decl, 0)
             } else if is_constant_name(def_name) {
-                (Some(TT_VARIABLE), decl | TM_READONLY)
+                (Some(TT_VARIABLE), decl | TM_READONLY, 0)
+            } else if def.ty_info.ty.is_none() && starts_with_uppercase(def_name) {
+                (Some(TT_TYPE), decl, 0)
             } else if def.ty_info.ty.is_none() {
-                // No resolved type — assume function for lowercase names.
-                (Some(TT_FUNCTION), decl)
+                // No resolved type, lowercase — uncertain, let lex heuristic override.
+                (Some(TT_VARIABLE), decl, 2)
             } else {
-                (Some(TT_VARIABLE), decl)
+                (Some(TT_VARIABLE), decl, 0)
             }
         }
-        DefKind::Var => (Some(TT_VARIABLE), decl | TM_MUTABLE),
+        DefKind::Var => (Some(TT_VARIABLE), decl | TM_MUTABLE, 0),
         DefKind::Param => {
             let is_fn = def
                 .ty_info
@@ -333,15 +339,15 @@ fn classify_def(
                 .is_some_and(|m| matches!(m, ParamMode::Var | ParamMode::Inout));
             let mut_mod = if is_mutable { TM_MUTABLE } else { 0 };
             if is_fn {
-                (Some(TT_FUNCTION), decl | mut_mod)
+                (Some(TT_FUNCTION), decl | mut_mod, 0)
             } else {
-                (Some(TT_VARIABLE), decl | mut_mod)
+                (Some(TT_VARIABLE), decl | mut_mod, 0)
             }
         }
-        DefKind::Type | DefKind::OpaqueType => (Some(TT_TYPE), decl),
-        DefKind::Variant => (Some(TT_ENUM_MEMBER), decl),
-        DefKind::Import => (None, 0),
-        DefKind::Class | DefKind::Given | DefKind::Effect => (Some(TT_TYPE), decl),
+        DefKind::Type | DefKind::OpaqueType => (Some(TT_TYPE), decl, 0),
+        DefKind::Variant => (Some(TT_ENUM_MEMBER), decl, 0),
+        DefKind::Import => (None, 0, 0),
+        DefKind::Class | DefKind::Given | DefKind::Effect => (Some(TT_TYPE), decl, 0),
     }
 }
 
