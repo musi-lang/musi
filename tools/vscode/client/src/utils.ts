@@ -1,11 +1,11 @@
 import * as os from "node:os";
 
 /**
- * Get platform-appropriate binary name for `musi_lsp`.
- * Returns `musi_lsp.exe` on Windows, `musi_lsp` otherwise.
+ * Get platform-appropriate binary name for `music_lsp`.
+ * Returns `music_lsp.exe` on Windows, `music_lsp` otherwise.
  */
 export function getServerBinaryName(): string {
-	return os.platform() === "win32" ? "musi_lsp.exe" : "musi_lsp";
+	return os.platform() === "win32" ? "music_lsp.exe" : "music_lsp";
 }
 
 /**
