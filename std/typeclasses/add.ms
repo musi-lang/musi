@@ -24,7 +24,7 @@ export class Div over 'T {
     let (/)(a: 'T, b: 'T) : 'T;
 };
 
-/// Remainder (modulo).
+/// Remainder.
 export class Rem over 'T {
     let (%)(a: 'T, b: 'T) : 'T;
 };
