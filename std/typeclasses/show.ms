@@ -21,4 +21,4 @@ given Show of Bool {
         match value (.True => "True" | .False => "False");
 };
 given Show of String { let show(value: String) : String := value; };
-given Show of () { let show(value: ()) : String := "()"; };
+given Show of () { let show(_value: ()) : String := "()"; };

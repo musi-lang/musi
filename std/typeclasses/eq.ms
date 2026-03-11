@@ -23,4 +23,4 @@ given Eq of Bool { let (=)(a: Bool, b: Bool) : Bool; };
 given Eq of String { let (=)(a: String, b: String) : Bool; };
 given Eq of Rune { let (=)(a: Rune, b: Rune) : Bool; };
 given Eq of Float64 { let (=)(a: Float64, b: Float64) : Bool; };
-given Eq of () { let (=)(a: (), b: ()) : Bool := .True; };
+given Eq of () { let (=)(_a: (), _b: ()) : Bool := .True; };
