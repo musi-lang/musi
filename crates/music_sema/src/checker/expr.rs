@@ -1,5 +1,7 @@
 //! Per-expression synthesis and checking.
 
+use std::collections::HashMap;
+
 use music_ast::expr::{
     Arg, ArrayElem, BinOp, Expr, FieldKey, LetFields, MatchArm, Param, RecField, UnaryOp,
 };
@@ -14,11 +16,11 @@ use crate::checker::effects::check_effects_subset;
 use crate::checker::pat::check_pat;
 use crate::checker::stmt::check_stmt;
 use crate::checker::ty::lower_ty;
-use crate::def::DefKind;
+use crate::def::{DefId, DefKind};
 use crate::error::SemaError;
 use crate::resolve;
 use crate::scope::ScopeId;
-use crate::types::{EffectRow, RecordField, TyVarId, Type, TypeIdx, fmt_type};
+use crate::types::{EffectRow, RecordField, SumVariant, Type, TypeIdx, fmt_type};
 
 /// Synthesises a type for `expr` (inference mode, direction ↑).
 pub(crate) fn synth(ck: &mut Checker<'_>, expr_idx: ExprIdx) -> TypeIdx {
@@ -142,18 +144,19 @@ fn synth_inner(ck: &mut Checker<'_>, expr_idx: ExprIdx) -> TypeIdx {
 /// child scope and checks each arg pattern with a fresh type variable so the
 /// param names are in scope when the value expression is checked.
 /// Returns `Some(parent_scope)` if a scope was entered, `None` otherwise.
-fn enter_fn_pat_scope(ck: &mut Checker<'_>, pat: PatIdx) -> Option<ScopeId> {
+fn enter_fn_pat_scope(ck: &mut Checker<'_>, pat: PatIdx) -> Option<(ScopeId, Vec<TypeIdx>)> {
     if let Pat::Variant { args, .. } = &ck.ctx.ast.pats[pat] {
-        if args.is_empty() {
-            return None;
-        }
         let parent = ck.current_scope;
-        ck.current_scope = ck.scopes.push_child(parent);
+        if !args.is_empty() {
+            ck.current_scope = ck.scopes.push_child(parent);
+        }
+        let mut param_tys = Vec::with_capacity(args.len());
         for &arg in args {
             let fresh = ck.fresh_var(Span::DUMMY);
+            param_tys.push(fresh);
             check_pat(ck, arg, fresh);
         }
-        Some(parent)
+        Some((parent, param_tys))
     } else {
         None
     }
@@ -178,7 +181,7 @@ fn synth_let(ck: &mut Checker<'_>, fields: &LetFields, body: Option<ExprIdx>) ->
         (Some(parent), ids)
     };
 
-    let fn_pat_parent = enter_fn_pat_scope(ck, fields.pat);
+    let fn_pat_info = enter_fn_pat_scope(ck, fields.pat);
 
     let value_ty = match (fields.ty, fields.value) {
         (Some(ty_ann), Some(val)) => {
@@ -191,12 +194,13 @@ fn synth_let(ck: &mut Checker<'_>, fields: &LetFields, body: Option<ExprIdx>) ->
         (None, None) => ck.named_ty(ck.ctx.well_known.unit),
     };
 
-    if let Some(p) = fn_pat_parent {
-        ck.current_scope = p;
+    if let Some((p, _)) = &fn_pat_info {
+        ck.current_scope = *p;
     }
 
+    let pat_ty = wrap_fn_pat_ty(ck, value_ty, fn_pat_info.as_ref());
     store_pat_ty_info(ck, fields, &ty_var_ids);
-    check_pat(ck, fields.pat, value_ty);
+    check_pat(ck, fields.pat, pat_ty);
 
     let result = if let Some(body) = body {
         synth(ck, body)
@@ -218,7 +222,7 @@ fn synth_binding(ck: &mut Checker<'_>, fields: &LetFields) -> TypeIdx {
         (Some(parent), ids)
     };
 
-    let fn_pat_parent = enter_fn_pat_scope(ck, fields.pat);
+    let fn_pat_info = enter_fn_pat_scope(ck, fields.pat);
 
     let value_ty = match (fields.ty, fields.value) {
         (Some(ty_ann), Some(val)) => {
@@ -231,12 +235,13 @@ fn synth_binding(ck: &mut Checker<'_>, fields: &LetFields) -> TypeIdx {
         (None, None) => ck.named_ty(ck.ctx.well_known.unit),
     };
 
-    if let Some(p) = fn_pat_parent {
-        ck.current_scope = p;
+    if let Some((p, _)) = &fn_pat_info {
+        ck.current_scope = *p;
     }
 
+    let pat_ty = wrap_fn_pat_ty(ck, value_ty, fn_pat_info.as_ref());
     store_pat_ty_info(ck, fields, &ty_var_ids);
-    check_pat(ck, fields.pat, value_ty);
+    check_pat(ck, fields.pat, pat_ty);
 
     if let Some(p) = parent_scope {
         ck.current_scope = p;
@@ -244,18 +249,37 @@ fn synth_binding(ck: &mut Checker<'_>, fields: &LetFields) -> TypeIdx {
     ck.named_ty(ck.ctx.well_known.unit)
 }
 
+/// If the binding has a function-like pattern (`go(acc, ys) := body`), wraps
+/// the body's return type in a `Type::Fn` using the param types from
+/// `enter_fn_pat_scope`. Otherwise returns `value_ty` unchanged.
+fn wrap_fn_pat_ty(
+    ck: &mut Checker<'_>,
+    value_ty: TypeIdx,
+    fn_pat_info: Option<&(ScopeId, Vec<TypeIdx>)>,
+) -> TypeIdx {
+    if let Some((_, param_tys)) = fn_pat_info {
+        ck.alloc_ty(Type::Fn {
+            params: param_tys.clone(),
+            ret: value_ty,
+            effects: EffectRow::PURE,
+        })
+    } else {
+        value_ty
+    }
+}
+
 /// Stores type info on the def for a let/binding pattern:
 /// - For `Pat::Variant` (fn-like patterns), stores `ty_params` from bracket params.
 /// - Type is stored later by `check_pat` on `Pat::Bind`.
-fn store_pat_ty_info(ck: &mut Checker<'_>, fields: &LetFields, ty_var_ids: &[TyVarId]) {
-    if !ty_var_ids.is_empty() {
+fn store_pat_ty_info(ck: &mut Checker<'_>, fields: &LetFields, ty_param_defs: &[DefId]) {
+    if !ty_param_defs.is_empty() {
         let pat = &ck.ctx.ast.pats[fields.pat];
         let pat_span = match pat {
             Pat::Variant { span, .. } | Pat::Bind { span, .. } => *span,
             _ => return,
         };
         if let Some(&def_id) = ck.ctx.pat_defs.get(&pat_span) {
-            ck.defs.get_mut(def_id).ty_info.ty_params = ty_var_ids.to_vec();
+            ck.defs.get_mut(def_id).ty_info.ty_params = ty_param_defs.to_vec();
         }
     }
 }
@@ -410,14 +434,135 @@ fn synth_lit(ck: &mut Checker<'_>, lit: &Lit, _span: Span) -> TypeIdx {
 
 fn synth_name(ck: &mut Checker<'_>, expr_idx: ExprIdx, span: Span) -> TypeIdx {
     if let Some(&def_id) = ck.ctx.expr_defs.get(&expr_idx) {
-        ck.defs
-            .get(def_id)
-            .ty_info
-            .ty
-            .unwrap_or_else(|| ck.fresh_var(span))
+        let def = ck.defs.get(def_id);
+        let ty_params = def.ty_info.ty_params.clone();
+        let raw_ty = def.ty_info.ty.unwrap_or_else(|| ck.fresh_var(span));
+        if ty_params.is_empty() {
+            raw_ty
+        } else {
+            instantiate_ty_params(ck, raw_ty, &ty_params, span)
+        }
     } else {
         ck.error_ty()
     }
+}
+
+/// Replaces each type-parameter `Type::Named` (identified by `DefId`) with a
+/// fresh unification variable, returning a new type with substitutions applied.
+fn instantiate_ty_params(
+    ck: &mut Checker<'_>,
+    ty: TypeIdx,
+    ty_param_defs: &[DefId],
+    span: Span,
+) -> TypeIdx {
+    let mut subst: HashMap<DefId, TypeIdx> = HashMap::with_capacity(ty_param_defs.len());
+    for &def_id in ty_param_defs {
+        let fresh = ck.fresh_var(span);
+        let _prev = subst.insert(def_id, fresh);
+    }
+    substitute_ty(ck, ty, &subst)
+}
+
+fn substitute_ty(ck: &mut Checker<'_>, ty: TypeIdx, subst: &HashMap<DefId, TypeIdx>) -> TypeIdx {
+    let ty = ck.resolve_ty(ty);
+    match ck.store.types[ty].clone() {
+        Type::Named { def, args } if args.is_empty() && subst.contains_key(&def) => subst[&def],
+        Type::Named { def, args } => {
+            let new_args = substitute_list(ck, &args, subst);
+            ck.alloc_ty(Type::Named {
+                def,
+                args: new_args,
+            })
+        }
+        Type::Fn {
+            params,
+            ret,
+            effects,
+        } => {
+            let params = substitute_list(ck, &params, subst);
+            let ret = substitute_ty(ck, ret, subst);
+            ck.alloc_ty(Type::Fn {
+                params,
+                ret,
+                effects,
+            })
+        }
+        Type::Tuple { elems } => {
+            let elems = substitute_list(ck, &elems, subst);
+            ck.alloc_ty(Type::Tuple { elems })
+        }
+        Type::AnonSum { variants } => {
+            let variants = substitute_list(ck, &variants, subst);
+            ck.alloc_ty(Type::AnonSum { variants })
+        }
+        Type::Record { fields, open } => {
+            let fields = substitute_record_fields(ck, &fields, subst);
+            ck.alloc_ty(Type::Record { fields, open })
+        }
+        Type::Sum { variants } => {
+            let variants = substitute_sum_variants(ck, &variants, subst);
+            ck.alloc_ty(Type::Sum { variants })
+        }
+        Type::Array { elem, len } => {
+            let elem = substitute_ty(ck, elem, subst);
+            ck.alloc_ty(Type::Array { elem, len })
+        }
+        Type::Ref { inner } => {
+            let inner = substitute_ty(ck, inner, subst);
+            ck.alloc_ty(Type::Ref { inner })
+        }
+        Type::Quantified {
+            kind,
+            params,
+            constraints,
+            body,
+        } => {
+            let body = substitute_ty(ck, body, subst);
+            ck.alloc_ty(Type::Quantified {
+                kind,
+                params,
+                constraints,
+                body,
+            })
+        }
+        Type::Var(_) | Type::Rigid(_) | Type::Error => ty,
+    }
+}
+
+fn substitute_list(
+    ck: &mut Checker<'_>,
+    tys: &[TypeIdx],
+    subst: &HashMap<DefId, TypeIdx>,
+) -> Vec<TypeIdx> {
+    tys.iter().map(|&t| substitute_ty(ck, t, subst)).collect()
+}
+
+fn substitute_record_fields(
+    ck: &mut Checker<'_>,
+    fields: &[RecordField],
+    subst: &HashMap<DefId, TypeIdx>,
+) -> Vec<RecordField> {
+    fields
+        .iter()
+        .map(|f| RecordField {
+            name: f.name,
+            ty: substitute_ty(ck, f.ty, subst),
+        })
+        .collect()
+}
+
+fn substitute_sum_variants(
+    ck: &mut Checker<'_>,
+    variants: &[SumVariant],
+    subst: &HashMap<DefId, TypeIdx>,
+) -> Vec<SumVariant> {
+    variants
+        .iter()
+        .map(|v| SumVariant {
+            name: v.name,
+            fields: substitute_list(ck, &v.fields, subst),
+        })
+        .collect()
 }
 
 fn synth_call(ck: &mut Checker<'_>, callee: ExprIdx, args: &[Arg], span: Span) -> TypeIdx {
