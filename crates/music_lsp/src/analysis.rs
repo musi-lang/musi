@@ -178,18 +178,11 @@ pub fn extract_doc_comments_from_source(
     let tok = tok_at_def
         .filter(|t| has_doc_comments(t, trivia))
         .or_else(|| {
+            // Only check the immediately preceding keyword (e.g. `export` before `let`).
             tokens.iter().rfind(|t| {
-                t.span.start < def_start
-                    && matches!(
-                        t.kind,
-                        TokenKind::KwExport
-                            | TokenKind::KwLet
-                            | TokenKind::KwVar
-                            | TokenKind::KwClass
-                            | TokenKind::KwGiven
-                            | TokenKind::KwEffect
-                            | TokenKind::KwForeign
-                    )
+                t.span.end() <= def_start
+                    && def_start - t.span.end() <= 1
+                    && t.kind == TokenKind::KwExport
                     && has_doc_comments(t, trivia)
             })
         });
