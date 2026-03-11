@@ -1,4 +1,14 @@
 /// Convert a value to its human-readable string representation.
+///
+/// Every type that can be displayed to the user should have a `Show`
+/// instance. Used by string interpolation and debugging output.
+///
+/// # Examples
+///
+/// ```musi
+/// let s := show(42);       -- "42"
+/// let b := show(.True);    -- "True"
+/// ```
 export class Show over 'T {
     let show(value: 'T) : String;
 };

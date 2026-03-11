@@ -1,5 +1,16 @@
-/// Total ordering. Instances must satisfy antisymmetry, transitivity,
-/// and totality. Requires `Eq` as a superclass.
+/// Total ordering.
+///
+/// Instances must satisfy antisymmetry, transitivity, and totality.
+/// Requires `Eq` as a superclass. All comparison operators (`<`, `<=`,
+/// `>`, `>=`) and `min`/`max` are derived from `compare`.
+///
+/// # Examples
+///
+/// ```musi
+/// let order := compare(1, 2);   -- .Lt
+/// let small := min(3, 7);       -- 3
+/// let big := max(3, 7);         -- 7
+/// ```
 export class Ord over 'T where 'T <: Eq {
     let compare(a: 'T, b: 'T) : Ordering;
     let (<)(a: 'T, b: 'T) : Bool := match (compare(a, b)) (.Lt => .True | _ => .False);

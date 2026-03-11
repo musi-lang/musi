@@ -1,5 +1,14 @@
-/// Structural equality. Instances must satisfy reflexivity, symmetry,
-/// and transitivity.
+/// Structural equality.
+///
+/// Instances must satisfy reflexivity, symmetry, and transitivity.
+/// The default `/=` (inequality) is derived from `=`.
+///
+/// # Examples
+///
+/// ```musi
+/// let same := 1 = 1;    -- .True
+/// let diff := 1 /= 2;   -- .True
+/// ```
 export class Eq over 'T {
     let (=)(a: 'T, b: 'T) : Bool;
     let (/=)(a: 'T, b: 'T) : Bool := not (a = b);

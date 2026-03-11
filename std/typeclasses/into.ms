@@ -1,7 +1,15 @@
-/// Conversion from one type to another. Use `into(x)` to convert a value.
+/// Conversion from one type to another.
 ///
-/// Example:
-///   let x : Float64 := into(42)
+/// Provides a single `into` function that converts a value of type `'A`
+/// into a value of type `'B`. The target type is typically inferred from
+/// context.
+///
+/// # Examples
+///
+/// ```musi
+/// let x : Float64 := into(42);
+/// let s : String := into(3.14);
+/// ```
 export class Into over ('A, 'B) {
     let into(value: 'A) : 'B;
 };

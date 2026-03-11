@@ -1,4 +1,6 @@
-/// Addition. Instances should satisfy commutativity and associativity.
+/// Numeric addition.
+///
+/// Instances should satisfy commutativity and associativity.
 export class Add over 'T {
     let (+)(a: 'T, b: 'T) : 'T;
 
@@ -6,12 +8,16 @@ export class Add over 'T {
     law associativity := ((a + b) + c) = (a + (b + c));
 };
 
-/// Subtraction.
+/// Numeric subtraction.
+///
+/// Provides the binary `-` operator.
 export class Sub over 'T {
     let (-)(a: 'T, b: 'T) : 'T;
 };
 
-/// Multiplication. Instances should satisfy commutativity and associativity.
+/// Numeric multiplication.
+///
+/// Instances should satisfy commutativity and associativity.
 export class Mul over 'T {
     let (*)(a: 'T, b: 'T) : 'T;
 
@@ -19,17 +25,23 @@ export class Mul over 'T {
     law associativity := ((a * b) * c) = (a * (b * c));
 };
 
-/// Division.
+/// Numeric division.
+///
+/// Provides the binary `/` operator.
 export class Div over 'T {
     let (/)(a: 'T, b: 'T) : 'T;
 };
 
-/// Remainder.
+/// Remainder after division.
+///
+/// Provides the binary `%` operator.
 export class Rem over 'T {
     let (%)(a: 'T, b: 'T) : 'T;
 };
 
 /// Unary negation.
+///
+/// Provides the `negate` function for computing the additive inverse.
 export class Neg over 'T {
     let negate(value: 'T) : 'T;
 };
