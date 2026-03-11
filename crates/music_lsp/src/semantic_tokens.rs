@@ -55,6 +55,7 @@ struct RawToken {
     length: u32,
     token_type: u32,
     token_modifiers: u32,
+    priority: u8,
 }
 
 /// Compute semantic tokens for a document.
@@ -78,7 +79,7 @@ pub fn compute(doc: &AnalyzedDoc) -> SemanticTokensResult {
                 });
             let (tt, tm) = classify_def(def, sema, &doc.interner, true);
             if let Some(tt) = tt {
-                push_raw(&mut raw, name_span, tt, tm, doc.file_id, &doc.source_db);
+                push_raw(&mut raw, name_span, tt, tm, doc.file_id, &doc.source_db, 0);
             }
         }
 
@@ -98,7 +99,7 @@ pub fn compute(doc: &AnalyzedDoc) -> SemanticTokensResult {
             }
             let (tt, tm) = classify_def(def, sema, &doc.interner, false);
             if let Some(tt) = tt {
-                push_raw(&mut raw, span, tt, tm, doc.file_id, &doc.source_db);
+                push_raw(&mut raw, span, tt, tm, doc.file_id, &doc.source_db, 0);
             }
         }
 
@@ -108,7 +109,7 @@ pub fn compute(doc: &AnalyzedDoc) -> SemanticTokensResult {
         // 5. TyIdent tokens as type parameters.
         emit_ty_ident_tokens(doc, &mut raw);
 
-        raw.sort_unstable_by_key(|t| (t.line, t.start_char));
+        raw.sort_by_key(|t| (t.line, t.start_char, t.priority));
         raw.dedup_by_key(|t| (t.line, t.start_char));
     } else {
         lex_fallback(doc, &mut raw);
@@ -123,7 +124,7 @@ pub fn compute(doc: &AnalyzedDoc) -> SemanticTokensResult {
 fn emit_ty_ident_tokens(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
     for tok in &doc.lexed.tokens {
         if tok.kind == TokenKind::TyIdent {
-            push_raw(raw, tok.span, TT_TYPE_PARAM, 0, doc.file_id, &doc.source_db);
+            push_raw(raw, tok.span, TT_TYPE_PARAM, 0, doc.file_id, &doc.source_db, 1);
         }
     }
 }
@@ -164,6 +165,7 @@ fn emit_decl_names(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
                             TM_DECLARATION,
                             doc.file_id,
                             &doc.source_db,
+                            1,
                         );
                     } else {
                         push_raw(
@@ -173,6 +175,7 @@ fn emit_decl_names(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
                             TM_DECLARATION,
                             doc.file_id,
                             &doc.source_db,
+                            1,
                         );
                     }
                     DeclState::Default
@@ -199,6 +202,7 @@ fn emit_decl_names(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
                         TM_DECLARATION,
                         doc.file_id,
                         &doc.source_db,
+                        1,
                     );
                 }
                 op_span = None;
@@ -213,6 +217,7 @@ fn emit_decl_names(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
                         TM_DECLARATION,
                         doc.file_id,
                         &doc.source_db,
+                        1,
                     );
                     DeclState::Default
                 }
@@ -264,6 +269,7 @@ fn emit_dot_constructors(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
                 0,
                 doc.file_id,
                 &doc.source_db,
+                1,
             );
             after_dot = false;
         } else if kind == TokenKind::Dot {
@@ -308,6 +314,9 @@ fn classify_def(
                 (Some(TT_FUNCTION), decl)
             } else if is_constant_name(def_name) {
                 (Some(TT_VARIABLE), decl | TM_READONLY)
+            } else if def.ty_info.ty.is_none() {
+                // No resolved type — assume function for lowercase names.
+                (Some(TT_FUNCTION), decl)
             } else {
                 (Some(TT_VARIABLE), decl)
             }
@@ -352,7 +361,7 @@ fn lex_fallback(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
         let kind = tok.kind;
 
         if kind == TokenKind::TyIdent {
-            push_raw(raw, tok.span, TT_TYPE_PARAM, 0, doc.file_id, &doc.source_db);
+            push_raw(raw, tok.span, TT_TYPE_PARAM, 0, doc.file_id, &doc.source_db, 1);
         }
 
         state = match state {
@@ -374,6 +383,7 @@ fn lex_fallback(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
                         TM_DECLARATION | TM_READONLY,
                         doc.file_id,
                         &doc.source_db,
+                        1,
                     );
                     ScanState::Default
                 }
@@ -389,6 +399,7 @@ fn lex_fallback(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
                         TM_DECLARATION | TM_MUTABLE,
                         doc.file_id,
                         &doc.source_db,
+                        1,
                     );
                     ScanState::Default
                 }
@@ -404,6 +415,7 @@ fn lex_fallback(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
                         TM_DECLARATION,
                         doc.file_id,
                         &doc.source_db,
+                        1,
                     );
                     ScanState::Default
                 }
@@ -412,7 +424,7 @@ fn lex_fallback(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
 
             ScanState::AfterGiven => match kind {
                 TokenKind::Ident => {
-                    push_raw(raw, tok.span, TT_TYPE, 0, doc.file_id, &doc.source_db);
+                    push_raw(raw, tok.span, TT_TYPE, 0, doc.file_id, &doc.source_db, 1);
                     ScanState::Default
                 }
                 _ => ScanState::Default,
@@ -428,6 +440,7 @@ fn push_raw(
     token_modifiers: u32,
     file_id: FileId,
     source_db: &SourceDb,
+    priority: u8,
 ) {
     let pos = offset_to_position(file_id, span.start, source_db);
     out.push(RawToken {
@@ -436,6 +449,7 @@ fn push_raw(
         length: span.length,
         token_type,
         token_modifiers,
+        priority,
     });
 }
 
