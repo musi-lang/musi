@@ -73,8 +73,20 @@ impl Parser<'_> {
         ret
     }
 
-    /// `ty_eff = ty_sum [ 'under' effect_set ]`.
+    /// `ty_eff = ty_sum [ 'under' effect_set ] | 'under' effect_set`.
+    ///
+    /// The second form (`~> under { IO }`) is sugar for `~> () under { IO }`.
     fn parse_ty_eff(&mut self) -> (Ty, Option<EffectSet>) {
+        if self.at(TokenKind::KwUnder) {
+            let start = self.start_span();
+            let _under = self.bump();
+            let effects = Some(self.parse_effect_set());
+            let unit = Ty::Product {
+                fields: vec![],
+                span: self.finish_span(start),
+            };
+            return (unit, effects);
+        }
         let ty = self.parse_ty_sum();
         let effects = if self.eat(TokenKind::KwUnder) {
             Some(self.parse_effect_set())
@@ -337,7 +349,8 @@ impl Parser<'_> {
     }
 
     fn parse_ty_arg_list(&mut self) -> Vec<TyIdx> {
-        vec![self.parse_alloc_ty()]
+        let t = self.parse_ty_base();
+        vec![self.alloc_ty(t)]
     }
 
     /// Parses a named type reference: `Name [ 'of' type_args ]`.
