@@ -90,36 +90,55 @@ impl Resolver<'_> {
                     self.mark_pat_exported(fields.pat);
                 }
             }
-            Expr::Class { name, .. } => {
+            Expr::Class { name, exported, .. } => {
                 let id = self
                     .defs
                     .alloc(*name, DefKind::Class, self.span_of_expr(expr_idx));
+                if *exported {
+                    self.defs.get_mut(id).exported = true;
+                }
                 self.define_in_scope(*name, id, self.span_of_expr(expr_idx));
             }
-            Expr::Effect { name, .. } => {
+            Expr::Effect { name, exported, .. } => {
                 let id = self
                     .defs
                     .alloc(*name, DefKind::Effect, self.span_of_expr(expr_idx));
+                if *exported {
+                    self.defs.get_mut(id).exported = true;
+                }
                 self.define_in_scope(*name, id, self.span_of_expr(expr_idx));
             }
-            Expr::Foreign { decls, .. } => {
+            Expr::Foreign {
+                exported, decls, ..
+            } => {
                 for decl in decls {
                     match decl {
                         ForeignDecl::Fn { name, span, .. } => {
                             let id = self.defs.alloc(*name, DefKind::ForeignFn, *span);
+                            if *exported {
+                                self.defs.get_mut(id).exported = true;
+                            }
                             self.define_in_scope(*name, id, *span);
                         }
                         ForeignDecl::OpaqueType { name, span } => {
                             let id = self.defs.alloc(*name, DefKind::OpaqueType, *span);
+                            if *exported {
+                                self.defs.get_mut(id).exported = true;
+                            }
                             self.define_in_scope(*name, id, *span);
                         }
                     }
                 }
             }
-            Expr::Given { target, .. } => {
-                let _id = self
+            Expr::Given {
+                target, exported, ..
+            } => {
+                let id = self
                     .defs
                     .alloc(target.name, DefKind::Given, self.span_of_expr(expr_idx));
+                if *exported {
+                    self.defs.get_mut(id).exported = true;
+                }
             }
             Expr::Annotated { inner, .. } => {
                 self.collect_top_level(*inner);
@@ -217,8 +236,12 @@ impl Resolver<'_> {
                 self.resolve_expr_given(&target, &params, &constraints, &members);
             }
             Expr::Effect {
-                name, params, ops, ..
-            } => self.resolve_expr_effect(name, &params, &ops),
+                name,
+                params,
+                ops,
+                exported,
+                ..
+            } => self.resolve_expr_effect(name, &params, &ops, exported),
             Expr::Foreign { decls, .. } => self.resolve_expr_foreign(&decls),
         }
     }
@@ -303,6 +326,7 @@ impl Resolver<'_> {
         for member in members {
             if let ClassMember::Fn { sig, .. } = member {
                 let fn_id = self.defs.alloc(sig.name, DefKind::Fn, sig.span);
+                self.defs.get_mut(fn_id).exported = true;
                 if let Some(pd) = parent_def {
                     self.defs.get_mut(fn_id).parent = Some(pd);
                 }
@@ -612,7 +636,13 @@ impl Resolver<'_> {
         self.current_scope = parent;
     }
 
-    fn resolve_expr_effect(&mut self, name: Symbol, params: &[TyParam], ops: &[EffectOp]) {
+    fn resolve_expr_effect(
+        &mut self,
+        name: Symbol,
+        params: &[TyParam],
+        ops: &[EffectOp],
+        exported: bool,
+    ) {
         let outer = self.current_scope;
         let parent = self.enter_ty_param_scope(params, &[]);
         let effect_def = self.scopes.lookup(outer, name);
@@ -620,6 +650,9 @@ impl Resolver<'_> {
             let op_id = self.defs.alloc(op.name, DefKind::EffectOp, op.span);
             if let Some(eff) = effect_def {
                 self.defs.get_mut(op_id).parent = Some(eff);
+            }
+            if exported {
+                self.defs.get_mut(op_id).exported = true;
             }
             self.resolve_ty(op.ty);
         }
