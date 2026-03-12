@@ -13,7 +13,7 @@ pub fn run(
     manifest: Option<&MusiManifest>,
     project_root: Option<&Path>,
 ) -> ! {
-    let out = if manifest.is_some() {
+    let mut out = if manifest.is_some() {
         match pipeline::run_frontend_multi(path, manifest, project_root) {
             Ok(o) => o,
             Err(()) => process::exit(1),
@@ -24,7 +24,7 @@ pub fn run(
             Err(()) => process::exit(1),
         }
     };
-    let Ok(bytes) = pipeline::run_backend(&out) else {
+    let Ok(bytes) = pipeline::run_backend(&mut out) else {
         process::exit(1)
     };
     let out_path = output.map_or_else(|| path.with_extension("msbc"), Path::to_path_buf);

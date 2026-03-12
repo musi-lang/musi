@@ -23,6 +23,7 @@ music_ir      = { path = "../music_ir" }
 music_emit    = { path = "../music_emit" }
 music_resolve = { path = "../music_resolve" }
 musi_vm       = { path = "../musi_vm" }
+musi_std      = { path = "../musi_std" }
 musi_manifest = { path = "../musi_manifest" }
 clap          = { workspace = true }
 toml_edit     = { workspace = true }

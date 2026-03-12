@@ -16,7 +16,7 @@ use music_resolve::{ModuleGraph, ModuleNode, build_module_graph};
 use music_sema::{
     ExportBinding, ImportNames, SemaResult, SharedAnalysisState, analyze, collect_exports,
 };
-use music_shared::{DiagnosticBag, Interner, SourceDb};
+use music_shared::{DiagnosticBag, FileId, Interner, SourceDb};
 
 use crate::resolve_config;
 
@@ -28,6 +28,10 @@ pub struct FrontendOutput {
     pub parsed: ParsedModule,
     /// The symbol interner (needed for IR lowering and emit).
     pub interner: Interner,
+    /// The source database (needed for diagnostic rendering in backend).
+    pub source_db: SourceDb,
+    /// The file ID of the entry module.
+    pub file_id: FileId,
 }
 
 /// Runs lex → parse → sema on `path`.
@@ -60,6 +64,8 @@ pub fn run_frontend(path: &Path) -> Result<FrontendOutput, ()> {
             sema,
             parsed,
             interner,
+            source_db,
+            file_id,
         })
     }
 }
@@ -132,10 +138,13 @@ pub fn run_frontend_multi(
     }
 
     let (sema, parsed) = result.ok_or(())?;
+    let file_id = graph.get(ModuleId(0)).file_id;
     Ok(FrontendOutput {
         sema,
         parsed,
         interner,
+        source_db,
+        file_id,
     })
 }
 
@@ -202,11 +211,13 @@ fn build_import_names(
 ///
 /// Returns the raw `.msbc` bytes on success, or `Err(())` after printing
 /// the error to stderr.
-pub fn run_backend(out: &FrontendOutput) -> Result<Vec<u8>, ()> {
-    let ir = match lower_ir(&out.parsed, &out.sema, &out.interner) {
+pub fn run_backend(out: &mut FrontendOutput) -> Result<Vec<u8>, ()> {
+    let ir = match lower_ir(&out.parsed, &out.sema, &mut out.interner) {
         Ok(m) => m,
         Err(e) => {
-            eprintln!("error: {e}");
+            let mut bag = DiagnosticBag::new();
+            let _ = bag.report(&e.error, e.span, out.file_id);
+            render_diagnostics(&bag, &out.source_db);
             return Err(());
         }
     };
