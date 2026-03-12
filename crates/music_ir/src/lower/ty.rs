@@ -1,11 +1,11 @@
 //! Type lowering: sema `Type` -> `IrType`.
 
-use music_sema::types::{EffectRow, Type};
+use music_sema::types::{EffectRow, RecordField, SumVariant, Type};
 use music_sema::{DefId, SemaResult, TypeIdx};
-use music_shared::Arena;
+use music_shared::{Arena, Symbol};
 
 use crate::error::IrError;
-use crate::types::{IrType, IrTypeIdx};
+use crate::types::{IrSumVariant, IrType, IrTypeIdx};
 
 /// Lowers a sema type to an IR type, interning it into `ir_types`.
 ///
@@ -34,9 +34,18 @@ pub fn lower_ty(
             ret,
             effects,
         } => lower_fn(&params, ret, &effects, sema, ir_types),
-        Type::Var(_) => Ok(ir_types.alloc(IrType::Any)),
+        Type::Var(_) | Type::Error => Ok(ir_types.alloc(IrType::Any)),
         Type::Rigid(_) => Err(IrError::UnresolvedTypeVariable),
-        _ => Err(IrError::UnsupportedType),
+        Type::Record { fields, .. } => lower_record(&fields, sema, ir_types),
+        Type::Array { elem, .. } => {
+            let ir_elem = lower_ty(elem, sema, ir_types)?;
+            Ok(ir_types.alloc(IrType::Array { elem: ir_elem }))
+        }
+        Type::Sum { variants } => lower_sum(&variants, sema, ir_types),
+        Type::AnonSum { variants } => lower_anon_sum(&variants, sema, ir_types),
+        Type::Ref { inner } | Type::Quantified { body: inner, .. } => {
+            lower_ty(inner, sema, ir_types)
+        }
     }
 }
 
@@ -67,12 +76,19 @@ fn lower_named(
         // Never is unreachable; use Unit as a placeholder
         (wk.never, IrType::Unit),
     ];
-    let ir_ty = primitives
-        .iter()
-        .find(|(d, _)| *d == def)
-        .map(|(_, ty)| ty.clone())
-        .ok_or(IrError::UnsupportedType)?;
-    Ok(ir_types.alloc(ir_ty))
+    if let Some((_, ir_ty)) = primitives.iter().find(|(d, _)| *d == def) {
+        return Ok(ir_types.alloc(ir_ty.clone()));
+    }
+
+    // User-defined named type: resolve through the def's type info.
+    let def_idx = usize::try_from(def.0).map_err(|_| IrError::IndexOverflow)?;
+    if let Some(d) = sema.defs.get(def_idx)
+        && let Some(ty) = d.ty_info.ty
+    {
+        return lower_ty(ty, sema, ir_types);
+    }
+
+    Err(IrError::UnsupportedType)
 }
 
 fn lower_tuple(
@@ -85,6 +101,57 @@ fn lower_tuple(
         fields.push(lower_ty(elem, sema, ir_types)?);
     }
     Ok(ir_types.alloc(IrType::Product { fields }))
+}
+
+fn lower_record(
+    fields: &[RecordField],
+    sema: &SemaResult,
+    ir_types: &mut Arena<IrType>,
+) -> Result<IrTypeIdx, IrError> {
+    let mut ir_fields = Vec::with_capacity(fields.len());
+    for field in fields {
+        ir_fields.push(lower_ty(field.ty, sema, ir_types)?);
+    }
+    Ok(ir_types.alloc(IrType::Product { fields: ir_fields }))
+}
+
+fn lower_sum(
+    variants: &[SumVariant],
+    sema: &SemaResult,
+    ir_types: &mut Arena<IrType>,
+) -> Result<IrTypeIdx, IrError> {
+    let mut ir_variants = Vec::with_capacity(variants.len());
+    for v in variants {
+        let mut ir_fields = Vec::with_capacity(v.fields.len());
+        for &f in &v.fields {
+            ir_fields.push(lower_ty(f, sema, ir_types)?);
+        }
+        ir_variants.push(IrSumVariant {
+            name: v.name,
+            fields: ir_fields,
+        });
+    }
+    Ok(ir_types.alloc(IrType::Sum {
+        variants: ir_variants,
+    }))
+}
+
+fn lower_anon_sum(
+    variants: &[TypeIdx],
+    sema: &SemaResult,
+    ir_types: &mut Arena<IrType>,
+) -> Result<IrTypeIdx, IrError> {
+    let mut ir_variants = Vec::with_capacity(variants.len());
+    for &v in variants {
+        let ir_field = lower_ty(v, sema, ir_types)?;
+        ir_variants.push(IrSumVariant {
+            name: Symbol(0),
+            fields: vec![ir_field],
+        });
+    }
+    Ok(ir_types.alloc(IrType::Sum {
+        variants: ir_variants,
+    }))
 }
 
 fn lower_fn(

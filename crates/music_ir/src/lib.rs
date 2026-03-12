@@ -38,7 +38,23 @@ pub use types::{
     GenericStrategy, IrEffectMask, IrSumVariant, IrType, IrTypeIdx, TypeMetadata, WitnessEntry,
 };
 
-use music_shared::Arena;
+use std::collections::HashMap;
+
+use music_ast::{ExprIdx, ParsedModule};
+use music_sema::{ResolutionMap, TypeIdx};
+use music_shared::{Arena, FileId};
+
+/// Per-dependency module data needed for cross-module IR lowering.
+pub struct DepModuleIr {
+    /// The parsed AST of the dependency module.
+    pub parsed: ParsedModule,
+    /// Name resolution maps for the dependency module.
+    pub resolution: ResolutionMap,
+    /// Expression type assignments for the dependency module.
+    pub expr_types: HashMap<ExprIdx, TypeIdx>,
+    /// Source file for this dependency (used for error reporting).
+    pub file_id: FileId,
+}
 
 /// The top-level IR module produced by lowering.
 pub struct IrModule {

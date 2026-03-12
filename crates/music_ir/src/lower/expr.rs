@@ -2,7 +2,9 @@
 
 use std::collections::HashMap;
 
-use music_ast::expr::{Arg, BinOp, Expr, LetFields, PwArm, PwGuard, UnaryOp};
+use music_ast::expr::{
+    Arg, ArrayElem, BinOp, Expr, FieldKey, LetFields, Param, PwArm, PwGuard, RecField, UnaryOp,
+};
 use music_ast::lit::Lit;
 use music_ast::pat::Pat;
 use music_ast::{ExprIdx, PatIdx};
@@ -12,7 +14,7 @@ use music_shared::{Span, Symbol};
 
 use crate::constant::IrConstValue;
 use crate::error::{IrError, SpannedIrError};
-use crate::func::{IrLocal, IrLocalDecl};
+use crate::func::{IrFnId, IrFunction, IrLocal, IrLocalDecl, IrParam, IrParamMode};
 use crate::inst::{IrBinOp, IrCallee, IrInst, IrLabel, IrOperand, IrPlace, IrRvalue, IrUnaryOp};
 use crate::types::{IrType, IrTypeIdx};
 
@@ -126,34 +128,30 @@ pub(super) fn lower_expr(
         } => super::pat::lower_match(fn_cx, expr_idx, scrutinee, &arms, span),
         Expr::Return { value, span } => lower_return(fn_cx, value, span),
         Expr::Tuple { elems, span } => lower_tuple(fn_cx, expr_idx, &elems, span),
-        Expr::Field { .. } => Err(IrError::UnsupportedExpr {
-            kind: "field access",
-        }
-        .at(span)),
-        Expr::Index { .. } => Err(IrError::UnsupportedExpr {
-            kind: "index access",
-        }
-        .at(span)),
-        Expr::Record { .. } => Err(IrError::UnsupportedExpr {
-            kind: "record literal",
-        }
-        .at(span)),
-        Expr::Array { .. } => Err(IrError::UnsupportedExpr {
-            kind: "array literal",
-        }
-        .at(span)),
-        Expr::Variant { .. } => Err(IrError::UnsupportedExpr {
-            kind: "variant constructor",
-        }
-        .at(span)),
+        Expr::Field {
+            object,
+            field,
+            span,
+            ..
+        } => lower_field(fn_cx, expr_idx, object, &field, span),
+        Expr::Index {
+            object,
+            index,
+            span,
+        } => lower_index(fn_cx, expr_idx, object, index, span),
+        Expr::Record { fields, span, .. } => lower_record(fn_cx, expr_idx, &fields, span),
+        Expr::Array { elems, span } => lower_array(fn_cx, expr_idx, &elems, span),
+        Expr::Variant { name, args, span } => lower_variant(fn_cx, expr_idx, name, &args, span),
         Expr::Choice { .. } => Err(IrError::UnsupportedExpr {
             kind: "choice expression",
         }
         .at(span)),
-        Expr::Fn { .. } => Err(IrError::UnsupportedExpr {
-            kind: "function literal",
-        }
-        .at(span)),
+        Expr::Fn {
+            params,
+            body: fn_body,
+            span,
+            ..
+        } => lower_fn_literal(fn_cx, expr_idx, &params, fn_body, span),
         Expr::Quantified { .. } => Err(IrError::UnsupportedExpr {
             kind: "generic expression",
         }
@@ -201,8 +199,7 @@ fn lower_lit(
 ) -> Result<IrLocal, SpannedIrError> {
     let ty_sema = fn_cx
         .cx
-        .sema
-        .expr_types
+        .module_expr_types
         .get(&expr_idx)
         .copied()
         .ok_or_else(|| IrError::MissingExprType.at(span))?;
@@ -213,11 +210,8 @@ fn lower_lit(
         Lit::Rune { codepoint, .. } => IrConstValue::Rune(*codepoint),
         Lit::Unit { .. } => IrConstValue::Unit,
         Lit::Str { value, .. } => IrConstValue::Str(*value),
-        Lit::FStr { .. } => {
-            return Err(IrError::UnsupportedExpr {
-                kind: "interpolated string literal",
-            }
-            .at(span));
+        Lit::FStr { parts, .. } => {
+            return super::desugar::lower_fstr(fn_cx, parts, span);
         }
     };
     Ok(fn_cx.emit_assign(ir_ty, IrRvalue::Const(const_val), span))
@@ -240,7 +234,7 @@ fn lower_name(
         return Ok(fn_cx.emit_assign(ir_ty, IrRvalue::Const(IrConstValue::Bool(false)), span));
     }
 
-    let Some(&def_id) = fn_cx.cx.sema.resolution.expr_defs.get(&expr_idx) else {
+    let Some(&def_id) = fn_cx.cx.expr_defs.get(&expr_idx) else {
         return Err(IrError::UnresolvedName.at(span));
     };
 
@@ -248,8 +242,7 @@ fn lower_name(
     if let Some(&ir_fn_idx) = fn_cx.cx.fn_map.get(&def_id) {
         let ty_sema = fn_cx
             .cx
-            .sema
-            .expr_types
+            .module_expr_types
             .get(&expr_idx)
             .copied()
             .ok_or_else(|| IrError::MissingExprType.at(span))?;
@@ -327,7 +320,7 @@ fn lower_binop(
         BinOp::And => return super::desugar::lower_and(fn_cx, left, right, span),
         BinOp::Or => return super::desugar::lower_or(fn_cx, left, right, span),
         BinOp::Assign => return super::desugar::lower_assign(fn_cx, left, right, span),
-        BinOp::Pipe => return Err(IrError::UnsupportedOp { op: "|>" }.at(span)),
+        BinOp::Pipe => return super::desugar::lower_pipe(fn_cx, expr_idx, left, right, span),
         BinOp::In => return Err(IrError::UnsupportedOp { op: "in" }.at(span)),
         BinOp::Cons => return Err(IrError::UnsupportedOp { op: "::" }.at(span)),
         BinOp::NilCoal => return Err(IrError::UnsupportedOp { op: "??" }.at(span)),
@@ -341,8 +334,7 @@ fn lower_binop(
 
     let left_ty = fn_cx
         .cx
-        .sema
-        .expr_types
+        .module_expr_types
         .get(&left)
         .copied()
         .ok_or_else(|| IrError::MissingExprType.at(span))?;
@@ -352,8 +344,7 @@ fn lower_binop(
 
     let result_ty_sema = fn_cx
         .cx
-        .sema
-        .expr_types
+        .module_expr_types
         .get(&expr_idx)
         .copied()
         .ok_or_else(|| IrError::MissingExprType.at(span))?;
@@ -382,8 +373,7 @@ fn lower_unaryop(
             let operand_local = lower_expr(fn_cx, operand)?;
             let op_ty = fn_cx
                 .cx
-                .sema
-                .expr_types
+                .module_expr_types
                 .get(&operand)
                 .copied()
                 .ok_or_else(|| IrError::MissingExprType.at(span))?;
@@ -414,8 +404,7 @@ fn lower_unaryop(
             let operand_local = lower_expr(fn_cx, operand)?;
             let op_ty = fn_cx
                 .cx
-                .sema
-                .expr_types
+                .module_expr_types
                 .get(&operand)
                 .copied()
                 .ok_or_else(|| IrError::MissingExprType.at(span))?;
@@ -452,7 +441,7 @@ fn lower_call(
         .at(span));
     }
 
-    let Some(&callee_def_id) = fn_cx.cx.sema.resolution.expr_defs.get(&callee) else {
+    let Some(&callee_def_id) = fn_cx.cx.expr_defs.get(&callee) else {
         return Err(IrError::UnresolvedName.at(span));
     };
 
@@ -483,8 +472,7 @@ fn lower_call(
 
     let ret_ty_sema = fn_cx
         .cx
-        .sema
-        .expr_types
+        .module_expr_types
         .get(&expr_idx)
         .copied()
         .ok_or_else(|| IrError::MissingExprType.at(span))?;
@@ -527,8 +515,7 @@ fn lower_foreign_call(
 
     let ret_ty_sema = fn_cx
         .cx
-        .sema
-        .expr_types
+        .module_expr_types
         .get(&expr_idx)
         .copied()
         .ok_or_else(|| IrError::MissingExprType.at(span))?;
@@ -560,8 +547,7 @@ fn lower_piecewise(
 
     let result_ty_sema = fn_cx
         .cx
-        .sema
-        .expr_types
+        .module_expr_types
         .get(&expr_idx)
         .copied()
         .ok_or_else(|| IrError::MissingExprType.at(span))?;
@@ -673,8 +659,7 @@ fn lower_tuple(
 ) -> Result<IrLocal, SpannedIrError> {
     let result_ty_sema = fn_cx
         .cx
-        .sema
-        .expr_types
+        .module_expr_types
         .get(&expr_idx)
         .copied()
         .ok_or_else(|| IrError::MissingExprType.at(span))?;
@@ -705,17 +690,29 @@ fn bind_let_pat(
         Pat::Bind {
             span, inner: None, ..
         } => {
-            let Some(&def_id) = fn_cx.cx.sema.resolution.pat_defs.get(&span) else {
+            let Some(&def_id) = fn_cx.cx.pat_defs.get(&span) else {
                 return Err(IrError::UnresolvedName.at(span));
             };
             let _ = fn_cx.local_map.insert(def_id, local);
             Ok(())
         }
         Pat::Wild { .. } => Ok(()),
-        Pat::Tuple { span, .. } => Err(IrError::UnsupportedPattern {
-            kind: "tuple destructuring in let",
+        Pat::Tuple { elems, span } => {
+            for (i, &elem_pat) in elems.iter().enumerate() {
+                let idx = u32::try_from(i).map_err(|_| IrError::IndexOverflow.at(span))?;
+                let elem_ty = super::pat::infer_pat_ir_type(fn_cx, elem_pat)?;
+                let elem_local = fn_cx.emit_assign(
+                    elem_ty,
+                    IrRvalue::FieldGet {
+                        object: IrOperand::Local(local),
+                        index: idx,
+                    },
+                    span,
+                );
+                bind_let_pat(fn_cx, elem_pat, elem_local, span)?;
+            }
+            Ok(())
         }
-        .at(span)),
         Pat::Variant { span, .. } => Err(IrError::UnsupportedPattern { kind: "variant" }.at(span)),
         Pat::Record { span, .. } => Err(IrError::UnsupportedPattern { kind: "record" }.at(span)),
         Pat::Array { span, .. } => Err(IrError::UnsupportedPattern { kind: "array" }.at(span)),
@@ -819,4 +816,366 @@ const fn map_binop(op: BinOp, family: TypeFamily) -> Result<IrBinOp, IrError> {
             op: "unknown binary operator for type",
         }),
     }
+}
+
+fn lower_field(
+    fn_cx: &mut FnLowerCtx<'_, '_>,
+    expr_idx: ExprIdx,
+    object: ExprIdx,
+    field: &FieldKey,
+    span: Span,
+) -> Result<IrLocal, SpannedIrError> {
+    let obj_local = lower_expr(fn_cx, object)?;
+    let result_ty_sema = fn_cx
+        .cx
+        .module_expr_types
+        .get(&expr_idx)
+        .copied()
+        .ok_or_else(|| IrError::MissingExprType.at(span))?;
+    let ir_result_ty =
+        lower_ty(result_ty_sema, fn_cx.cx.sema, &mut fn_cx.cx.ir.types).map_err(|e| e.at(span))?;
+
+    let index = match field {
+        FieldKey::Pos { index, .. } => *index,
+        FieldKey::Name { name, .. } => resolve_field_index(fn_cx, object, *name, span)?,
+    };
+
+    Ok(fn_cx.emit_assign(
+        ir_result_ty,
+        IrRvalue::FieldGet {
+            object: IrOperand::Local(obj_local),
+            index,
+        },
+        span,
+    ))
+}
+
+fn resolve_field_index(
+    fn_cx: &FnLowerCtx<'_, '_>,
+    object: ExprIdx,
+    name: Symbol,
+    span: Span,
+) -> Result<u32, SpannedIrError> {
+    let obj_ty_sema = fn_cx
+        .cx
+        .module_expr_types
+        .get(&object)
+        .copied()
+        .ok_or_else(|| IrError::MissingExprType.at(span))?;
+    let resolved = fn_cx
+        .cx
+        .sema
+        .unify
+        .resolve(obj_ty_sema, &fn_cx.cx.sema.types);
+    let obj_ty = fn_cx.cx.sema.types[resolved].clone();
+    if let Type::Record { fields, .. } = obj_ty {
+        for (i, f) in fields.iter().enumerate() {
+            if f.name == name {
+                return u32::try_from(i).map_err(|_| IrError::IndexOverflow.at(span));
+            }
+        }
+    }
+    Err(IrError::UnresolvedName.at(span))
+}
+
+fn lower_index(
+    fn_cx: &mut FnLowerCtx<'_, '_>,
+    expr_idx: ExprIdx,
+    object: ExprIdx,
+    index: ExprIdx,
+    span: Span,
+) -> Result<IrLocal, SpannedIrError> {
+    let obj_local = lower_expr(fn_cx, object)?;
+    let idx_local = lower_expr(fn_cx, index)?;
+    let result_ty_sema = fn_cx
+        .cx
+        .module_expr_types
+        .get(&expr_idx)
+        .copied()
+        .ok_or_else(|| IrError::MissingExprType.at(span))?;
+    let ir_result_ty =
+        lower_ty(result_ty_sema, fn_cx.cx.sema, &mut fn_cx.cx.ir.types).map_err(|e| e.at(span))?;
+
+    Ok(fn_cx.emit_assign(
+        ir_result_ty,
+        IrRvalue::IndexGet {
+            array: IrOperand::Local(obj_local),
+            index: IrOperand::Local(idx_local),
+        },
+        span,
+    ))
+}
+
+fn lower_record(
+    fn_cx: &mut FnLowerCtx<'_, '_>,
+    expr_idx: ExprIdx,
+    fields: &[RecField],
+    span: Span,
+) -> Result<IrLocal, SpannedIrError> {
+    let result_ty_sema = fn_cx
+        .cx
+        .module_expr_types
+        .get(&expr_idx)
+        .copied()
+        .ok_or_else(|| IrError::MissingExprType.at(span))?;
+    let ir_result_ty =
+        lower_ty(result_ty_sema, fn_cx.cx.sema, &mut fn_cx.cx.ir.types).map_err(|e| e.at(span))?;
+
+    let mut ir_fields = Vec::with_capacity(fields.len());
+    for field in fields {
+        match field {
+            RecField::Named {
+                name,
+                value: Some(v),
+                ..
+            } => {
+                let _ = name;
+                let field_local = lower_expr(fn_cx, *v)?;
+                ir_fields.push(IrOperand::Local(field_local));
+            }
+            RecField::Named {
+                name,
+                value: None,
+                span: field_span,
+            } => {
+                // Punning: look up the name as a variable
+                let pun_expr_idx = find_pun_expr(fn_cx, *name, *field_span)?;
+                let field_local = lower_name(fn_cx, pun_expr_idx, *name, *field_span)?;
+                ir_fields.push(IrOperand::Local(field_local));
+            }
+            RecField::Spread { span: s, .. } => {
+                return Err(IrError::UnsupportedExpr {
+                    kind: "record spread",
+                }
+                .at(*s));
+            }
+        }
+    }
+
+    Ok(fn_cx.emit_assign(
+        ir_result_ty,
+        IrRvalue::MakeProduct {
+            ty: ir_result_ty,
+            fields: ir_fields,
+        },
+        span,
+    ))
+}
+
+fn find_pun_expr(
+    fn_cx: &FnLowerCtx<'_, '_>,
+    name: Symbol,
+    span: Span,
+) -> Result<ExprIdx, SpannedIrError> {
+    // For record punning, we need to find the ExprIdx for this name.
+    // Search expr_defs for any entry whose def has matching name.
+    for (&eidx, &did) in fn_cx.cx.expr_defs {
+        let def_idx = usize::try_from(did.0).map_err(|_| IrError::IndexOverflow.at(span))?;
+        if fn_cx.cx.sema.defs[def_idx].name == name {
+            return Ok(eidx);
+        }
+    }
+    Err(IrError::UnresolvedName.at(span))
+}
+
+fn lower_array(
+    fn_cx: &mut FnLowerCtx<'_, '_>,
+    expr_idx: ExprIdx,
+    elems: &[ArrayElem],
+    span: Span,
+) -> Result<IrLocal, SpannedIrError> {
+    let result_ty_sema = fn_cx
+        .cx
+        .module_expr_types
+        .get(&expr_idx)
+        .copied()
+        .ok_or_else(|| IrError::MissingExprType.at(span))?;
+    let ir_result_ty =
+        lower_ty(result_ty_sema, fn_cx.cx.sema, &mut fn_cx.cx.ir.types).map_err(|e| e.at(span))?;
+
+    let elem_ty = match &fn_cx.cx.ir.types[ir_result_ty] {
+        IrType::Array { elem } => *elem,
+        _ => fn_cx.cx.ir.types.alloc(IrType::Any),
+    };
+
+    let mut ir_elems = Vec::with_capacity(elems.len());
+    for elem in elems {
+        match elem {
+            ArrayElem::Elem { expr, .. } => {
+                let elem_local = lower_expr(fn_cx, *expr)?;
+                ir_elems.push(IrOperand::Local(elem_local));
+            }
+            ArrayElem::Spread { span: s, .. } => {
+                return Err(IrError::UnsupportedExpr {
+                    kind: "array spread",
+                }
+                .at(*s));
+            }
+        }
+    }
+
+    Ok(fn_cx.emit_assign(
+        ir_result_ty,
+        IrRvalue::MakeArray {
+            elem_ty,
+            elems: ir_elems,
+        },
+        span,
+    ))
+}
+
+fn lower_variant(
+    fn_cx: &mut FnLowerCtx<'_, '_>,
+    expr_idx: ExprIdx,
+    name: Symbol,
+    args: &[ExprIdx],
+    span: Span,
+) -> Result<IrLocal, SpannedIrError> {
+    let result_ty_sema = fn_cx
+        .cx
+        .module_expr_types
+        .get(&expr_idx)
+        .copied()
+        .ok_or_else(|| IrError::MissingExprType.at(span))?;
+    let ir_result_ty =
+        lower_ty(result_ty_sema, fn_cx.cx.sema, &mut fn_cx.cx.ir.types).map_err(|e| e.at(span))?;
+
+    let tag = resolve_variant_tag_from_ir(fn_cx, ir_result_ty, name, span)?;
+
+    let mut payload = Vec::with_capacity(args.len());
+    for &arg_expr in args {
+        let arg_local = lower_expr(fn_cx, arg_expr)?;
+        payload.push(IrOperand::Local(arg_local));
+    }
+
+    Ok(fn_cx.emit_assign(
+        ir_result_ty,
+        IrRvalue::MakeVariant {
+            ty: ir_result_ty,
+            tag,
+            payload,
+        },
+        span,
+    ))
+}
+
+fn resolve_variant_tag_from_ir(
+    fn_cx: &FnLowerCtx<'_, '_>,
+    ir_ty: IrTypeIdx,
+    name: Symbol,
+    span: Span,
+) -> Result<u32, SpannedIrError> {
+    let ty = fn_cx.cx.ir.types[ir_ty].clone();
+    if let IrType::Sum { variants } = ty {
+        let target = fn_cx.cx.interner.resolve(name);
+        for (i, v) in variants.iter().enumerate() {
+            if fn_cx.cx.interner.resolve(v.name) == target {
+                return u32::try_from(i).map_err(|_| IrError::IndexOverflow.at(span));
+            }
+        }
+    }
+    Err(IrError::UnresolvedName.at(span))
+}
+
+fn lower_fn_literal(
+    fn_cx: &mut FnLowerCtx<'_, '_>,
+    expr_idx: ExprIdx,
+    params: &[Param],
+    body_expr: ExprIdx,
+    span: Span,
+) -> Result<IrLocal, SpannedIrError> {
+    let fn_ty_sema = fn_cx
+        .cx
+        .module_expr_types
+        .get(&expr_idx)
+        .copied()
+        .ok_or_else(|| IrError::MissingExprType.at(span))?;
+    let ir_fn_ty =
+        lower_ty(fn_ty_sema, fn_cx.cx.sema, &mut fn_cx.cx.ir.types).map_err(|e| e.at(span))?;
+
+    let resolved = fn_cx
+        .cx
+        .sema
+        .unify
+        .resolve(fn_ty_sema, &fn_cx.cx.sema.types);
+    let sema_fn_ty = fn_cx.cx.sema.types[resolved].clone();
+    let Type::Fn {
+        params: param_sema_tys,
+        ret: ret_sema_ty,
+        effects: effect_row,
+    } = sema_fn_ty
+    else {
+        return Err(IrError::UnsupportedType.at(span));
+    };
+
+    let ir_ret_ty =
+        lower_ty(ret_sema_ty, fn_cx.cx.sema, &mut fn_cx.cx.ir.types).map_err(|e| e.at(span))?;
+    let ir_effects =
+        super::effect::lower_effect_row(&effect_row, &fn_cx.cx.sema.well_known.effects);
+
+    let mut ir_params = Vec::with_capacity(params.len());
+    let mut ir_locals = Vec::with_capacity(params.len());
+    for (i, (param, &sema_ty)) in params.iter().zip(param_sema_tys.iter()).enumerate() {
+        let local = IrLocal(u32::try_from(i).map_err(|_| IrError::IndexOverflow.at(span))?);
+        let ir_ty =
+            lower_ty(sema_ty, fn_cx.cx.sema, &mut fn_cx.cx.ir.types).map_err(|e| e.at(span))?;
+        ir_params.push(IrParam {
+            local,
+            ty: ir_ty,
+            mode: IrParamMode::Value,
+            span: param.span,
+        });
+        ir_locals.push(IrLocalDecl {
+            local,
+            ty: ir_ty,
+            mutable: false,
+            span: param.span,
+        });
+    }
+
+    let fn_id = IrFnId(fn_cx.cx.next_fn_id);
+    fn_cx.cx.next_fn_id += 1;
+
+    let lambda_name = fn_cx.cx.interner.intern("<lambda>");
+    let stub = IrFunction {
+        id: fn_id,
+        source_def: None,
+        name: lambda_name,
+        params: ir_params,
+        ret_ty: ir_ret_ty,
+        effects: ir_effects,
+        body: vec![],
+        locals: ir_locals.clone(),
+        is_closure: false,
+        span,
+    };
+
+    let fn_idx = fn_cx.cx.ir.functions.alloc(stub);
+
+    let n_params = u32::try_from(ir_locals.len()).map_err(|_| IrError::IndexOverflow.at(span))?;
+
+    let local_map = super::stmt::build_param_local_map(params, fn_cx.cx.pat_defs);
+
+    let mut inner_fn_cx = FnLowerCtx {
+        cx: fn_cx.cx,
+        local_map,
+        locals: ir_locals,
+        body: vec![],
+        next_local: n_params,
+        next_label: 0,
+    };
+
+    let result_local = lower_expr(&mut inner_fn_cx, body_expr)?;
+    inner_fn_cx.emit(IrInst::Return {
+        value: Some(IrOperand::Local(result_local)),
+        span,
+    });
+
+    let new_body = inner_fn_cx.body;
+    let new_locals = inner_fn_cx.locals;
+    fn_cx.cx.ir.functions[fn_idx].body = new_body;
+    fn_cx.cx.ir.functions[fn_idx].locals = new_locals;
+
+    let fn_ref = IrConstValue::FnRef(fn_idx.raw());
+    Ok(fn_cx.emit_assign(ir_fn_ty, IrRvalue::Const(fn_ref), span))
 }

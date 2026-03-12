@@ -12,13 +12,13 @@ use music_sema::types::Type;
 use music_sema::{DefId, SemaResult, TypeIdx};
 use music_shared::{Arena, Interner, Span, Symbol};
 
-use crate::IrModule;
 use crate::error::{IrError, SpannedIrError};
 use crate::func::{
     IrFnId, IrFnIdx, IrForeignFn, IrFunction, IrLocal, IrLocalDecl, IrParam, IrParamMode,
 };
 use crate::inst::{IrInst, IrOperand};
 use crate::types::IrType;
+use crate::{DepModuleIr, IrModule};
 
 use super::expr::expr_span;
 use super::ty::lower_ty;
@@ -26,6 +26,9 @@ use super::ty::lower_ty;
 pub(super) struct LowerCtx<'src> {
     pub sema: &'src SemaResult,
     pub ast: &'src AstArenas,
+    pub pat_defs: &'src HashMap<Span, DefId>,
+    pub expr_defs: &'src HashMap<ExprIdx, DefId>,
+    pub module_expr_types: &'src HashMap<ExprIdx, TypeIdx>,
     pub interner: &'src mut Interner,
     pub ir: IrModule,
     /// Maps sema `DefId` for a function binding to its allocated slot.
@@ -50,6 +53,9 @@ pub(super) fn lower_module(
     let mut cx = LowerCtx {
         sema,
         ast: &parsed.arenas,
+        pat_defs: &sema.resolution.pat_defs,
+        expr_defs: &sema.resolution.expr_defs,
+        module_expr_types: &sema.expr_types,
         interner,
         ir: IrModule::new(),
         fn_map: HashMap::new(),
@@ -67,6 +73,80 @@ pub(super) fn lower_module(
 
     let entries: Vec<FnEntry> = cx.fn_entries.drain(..).collect();
     for entry in entries {
+        lower_fn_body(&mut cx, entry.fn_idx, entry.binding_expr)?;
+    }
+
+    set_entry_point(&mut cx);
+    Ok(cx.ir)
+}
+
+pub(super) fn lower_module_multi(
+    parsed: &ParsedModule,
+    sema: &SemaResult,
+    dep_modules: &[DepModuleIr],
+    interner: &mut Interner,
+) -> Result<IrModule, SpannedIrError> {
+    let mut cx = LowerCtx {
+        sema,
+        ast: &parsed.arenas,
+        pat_defs: &sema.resolution.pat_defs,
+        expr_defs: &sema.resolution.expr_defs,
+        module_expr_types: &sema.expr_types,
+        interner,
+        ir: IrModule::new(),
+        fn_map: HashMap::new(),
+        foreign_fn_map: HashMap::new(),
+        next_fn_id: 0,
+        fn_entries: vec![],
+        entry_candidate: None,
+    };
+
+    register_well_known_fns(&mut cx)?;
+
+    // Phase 1: register fn stubs from all dependency modules, collecting
+    // per-module fn entries so we can lower bodies with the correct context.
+    let mut dep_entries: Vec<Vec<FnEntry>> = Vec::with_capacity(dep_modules.len());
+    for dep in dep_modules {
+        cx.ast = &dep.parsed.arenas;
+        cx.pat_defs = &dep.resolution.pat_defs;
+        cx.expr_defs = &dep.resolution.expr_defs;
+        cx.module_expr_types = &dep.expr_types;
+        for stmt in &dep.parsed.stmts {
+            register_fn_stub(&mut cx, stmt.expr)?;
+        }
+        dep_entries.push(cx.fn_entries.drain(..).collect());
+    }
+
+    // Phase 2: register fn stubs from the entry module.
+    cx.ast = &parsed.arenas;
+    cx.pat_defs = &sema.resolution.pat_defs;
+    cx.expr_defs = &sema.resolution.expr_defs;
+    cx.module_expr_types = &sema.expr_types;
+    for stmt in &parsed.stmts {
+        register_fn_stub(&mut cx, stmt.expr)?;
+    }
+    let entry_entries: Vec<FnEntry> = cx.fn_entries.drain(..).collect();
+
+    // Phase 3: lower fn bodies from dependency modules.
+    for (dep, entries) in dep_modules.iter().zip(dep_entries) {
+        cx.ast = &dep.parsed.arenas;
+        cx.pat_defs = &dep.resolution.pat_defs;
+        cx.expr_defs = &dep.resolution.expr_defs;
+        cx.module_expr_types = &dep.expr_types;
+        for entry in entries {
+            lower_fn_body(&mut cx, entry.fn_idx, entry.binding_expr).map_err(|mut e| {
+                e.file_id = Some(dep.file_id);
+                e
+            })?;
+        }
+    }
+
+    // Phase 4: lower fn bodies from the entry module.
+    cx.ast = &parsed.arenas;
+    cx.pat_defs = &sema.resolution.pat_defs;
+    cx.expr_defs = &sema.resolution.expr_defs;
+    cx.module_expr_types = &sema.expr_types;
+    for entry in entry_entries {
         lower_fn_body(&mut cx, entry.fn_idx, entry.binding_expr)?;
     }
 
@@ -98,7 +178,57 @@ fn register_well_known_fns(cx: &mut LowerCtx<'_>) -> Result<(), SpannedIrError> 
     });
     let _ = cx.foreign_fn_map.insert(writeln_def, idx);
 
+    // Register `show` as a foreign fn (musi_show).
+    let show_def = cx.sema.well_known.fns.show;
+    let show_ext = cx.interner.intern("musi_show");
+    let show_def_idx = usize::try_from(show_def.0).map_err(|_| IrError::IndexOverflow.at(span))?;
+    let show_name = cx.sema.defs[show_def_idx].name;
+    let show_idx =
+        u32::try_from(cx.ir.foreign_fns.len()).map_err(|_| IrError::IndexOverflow.at(span))?;
+    cx.ir.foreign_fns.push(IrForeignFn {
+        name: show_name,
+        ext_name: show_ext,
+        library: None,
+        param_tys: vec![any_ty],
+        ret_ty: any_ty,
+        variadic: false,
+    });
+    let _ = cx.foreign_fn_map.insert(show_def, show_idx);
+
+    // Register `str_cat` as a foreign fn (musi_str_cat).
+    let str_cat_sym = cx.interner.intern("str_cat");
+    let str_cat_ext = cx.interner.intern("musi_str_cat");
+    let str_cat_def_id = cx
+        .sema
+        .defs
+        .iter()
+        .find(|d| d.name == str_cat_sym)
+        .map_or(music_sema::DefId(u32::MAX - 1), |d| d.id);
+    let str_cat_idx =
+        u32::try_from(cx.ir.foreign_fns.len()).map_err(|_| IrError::IndexOverflow.at(span))?;
+    cx.ir.foreign_fns.push(IrForeignFn {
+        name: str_cat_sym,
+        ext_name: str_cat_ext,
+        library: None,
+        param_tys: vec![any_ty, any_ty],
+        ret_ty: any_ty,
+        variadic: false,
+    });
+    let _ = cx.foreign_fn_map.insert(str_cat_def_id, str_cat_idx);
+
     Ok(())
+}
+
+/// Returns the foreign fn index for `musi_show`.
+pub(super) fn show_ffi_idx(cx: &LowerCtx<'_>) -> Option<u32> {
+    cx.foreign_fn_map.get(&cx.sema.well_known.fns.show).copied()
+}
+
+/// Returns the foreign fn index for `musi_str_cat`.
+pub(super) fn str_cat_ffi_idx(cx: &LowerCtx<'_>) -> Option<u32> {
+    cx.foreign_fn_map
+        .get(&music_sema::DefId(u32::MAX - 1))
+        .copied()
 }
 
 fn register_fn_stub(cx: &mut LowerCtx<'_>, expr_idx: ExprIdx) -> Result<(), SpannedIrError> {
@@ -127,14 +257,14 @@ fn register_fn_stub(cx: &mut LowerCtx<'_>, expr_idx: ExprIdx) -> Result<(), Span
     let Pat::Bind { span: pat_span, .. } = pat else {
         return Ok(());
     };
-    let Some(&def_id) = cx.sema.resolution.pat_defs.get(&pat_span) else {
+    let Some(&def_id) = cx.pat_defs.get(&pat_span) else {
         return Ok(());
     };
 
     let def_idx = usize::try_from(def_id.0).map_err(|_| IrError::IndexOverflow.at(binding_span))?;
     let fn_name = cx.sema.defs[def_idx].name;
 
-    let Some(&fn_ty_sema) = cx.sema.expr_types.get(&value_idx) else {
+    let Some(&fn_ty_sema) = cx.module_expr_types.get(&value_idx) else {
         return Err(IrError::MissingExprType.at(binding_span));
     };
     let fn_type = cx.sema.types[fn_ty_sema].clone();
@@ -251,7 +381,7 @@ fn lower_fn_body(
     let n_params =
         u32::try_from(param_locals.len()).map_err(|_| IrError::IndexOverflow.at(fn_span))?;
 
-    let local_map = build_param_local_map(&params, cx.sema);
+    let local_map = build_param_local_map(&params, cx.pat_defs);
 
     let mut fn_cx = super::expr::FnLowerCtx {
         cx,
@@ -275,10 +405,13 @@ fn lower_fn_body(
     Ok(())
 }
 
-fn build_param_local_map(params: &[Param], sema: &SemaResult) -> HashMap<DefId, IrLocal> {
+pub(super) fn build_param_local_map(
+    params: &[Param],
+    pat_defs: &HashMap<Span, DefId>,
+) -> HashMap<DefId, IrLocal> {
     let mut map = HashMap::new();
     for (i, param) in params.iter().enumerate() {
-        let Some(&def_id) = sema.resolution.pat_defs.get(&param.span) else {
+        let Some(&def_id) = pat_defs.get(&param.span) else {
             continue;
         };
         let Ok(idx) = u32::try_from(i) else { continue };
@@ -325,7 +458,7 @@ fn register_foreign_fns(
                 let ext_sym = ext_name.unwrap_or(*name);
 
                 // Look up the DefId for this foreign fn
-                let Some(&def_id) = cx.sema.resolution.pat_defs.get(decl_span) else {
+                let Some(&def_id) = cx.pat_defs.get(decl_span) else {
                     // Foreign fns are defined at the name span, not pat span.
                     // Try to find by iterating defs.
                     register_foreign_fn_by_name(cx, *name, ext_sym, *ty, library, *decl_span)?;
@@ -374,7 +507,7 @@ fn register_foreign_fn_with_def(
     span: Span,
 ) -> Result<(), SpannedIrError> {
     // Lower the type annotation to get param and return types
-    let Some(&_ty_idx) = cx.sema.expr_types.values().next() else {
+    let Some(&_ty_idx) = cx.module_expr_types.values().next() else {
         // Fall back: just create a simple foreign fn entry
         let idx =
             u32::try_from(cx.ir.foreign_fns.len()).map_err(|_| IrError::IndexOverflow.at(span))?;

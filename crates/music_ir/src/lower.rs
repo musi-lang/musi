@@ -26,8 +26,8 @@ use music_ast::ParsedModule;
 use music_sema::SemaResult;
 use music_shared::Interner;
 
-use crate::IrModule;
 use crate::error::SpannedIrError;
+use crate::{DepModuleIr, IrModule};
 
 /// Lowers a parsed module + sema result into MSIR.
 ///
@@ -45,4 +45,21 @@ pub fn lower(
     interner: &mut Interner,
 ) -> Result<IrModule, SpannedIrError> {
     stmt::lower_module(parsed, sema, interner)
+}
+
+/// Lowers a parsed module plus its dependencies into a single MSIR module.
+///
+/// Dependency modules are lowered first so their functions are available
+/// when the entry module references them.
+///
+/// # Errors
+///
+/// Returns a [`SpannedIrError`] if lowering fails.
+pub fn lower_multi(
+    parsed: &ParsedModule,
+    sema: &SemaResult,
+    dep_modules: &[DepModuleIr],
+    interner: &mut Interner,
+) -> Result<IrModule, SpannedIrError> {
+    stmt::lower_module_multi(parsed, sema, dep_modules, interner)
 }

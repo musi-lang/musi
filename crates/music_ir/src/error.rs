@@ -1,11 +1,15 @@
 //! Structured IR lowering errors.
 
-use music_shared::{IntoDiagnostic, Severity, Span};
+use music_shared::{FileId, IntoDiagnostic, Severity, Span};
 
 /// A spanned IR error, pairing a diagnostic with its source location.
 pub struct SpannedIrError {
     pub error: IrError,
     pub span: Span,
+    /// When set, overrides the default file used for diagnostic rendering.
+    /// Populated by multi-module lowering when the error originates from a
+    /// dependency module rather than the entry module.
+    pub file_id: Option<FileId>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -37,7 +41,11 @@ pub enum IrError {
 impl IrError {
     #[must_use]
     pub const fn at(self, span: Span) -> SpannedIrError {
-        SpannedIrError { error: self, span }
+        SpannedIrError {
+            error: self,
+            span,
+            file_id: None,
+        }
     }
 }
 

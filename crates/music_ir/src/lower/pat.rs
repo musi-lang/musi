@@ -17,6 +17,8 @@ use music_ast::pat::Pat;
 use music_ast::{ExprIdx, PatIdx};
 use music_shared::Span;
 
+use music_shared::Symbol;
+
 use crate::constant::IrConstValue;
 use crate::error::{IrError, SpannedIrError};
 use crate::func::IrLocal;
@@ -49,8 +51,7 @@ pub(super) fn lower_match(
 
     let result_ty_sema = fn_cx
         .cx
-        .sema
-        .expr_types
+        .module_expr_types
         .get(&expr_idx)
         .copied()
         .ok_or_else(|| IrError::MissingExprType.at(span))?;
@@ -160,8 +161,49 @@ fn emit_pat_test(
 
             fn_cx.emit(IrInst::Label(ok_lbl));
         }
-        Pat::Variant { span, .. } => {
-            return Err(IrError::UnsupportedPattern { kind: "variant" }.at(span));
+        Pat::Variant { name, args, span } => {
+            let tag = resolve_variant_tag(fn_cx, scrut, name, span)?;
+            let tag_ty = fn_cx.cx.ir.types.alloc(IrType::UInt32);
+            let tag_local = fn_cx.emit_assign(
+                tag_ty,
+                IrRvalue::GetTag {
+                    value: IrOperand::Local(scrut),
+                },
+                span,
+            );
+            let bool_ty = fn_cx.cx.ir.types.alloc(IrType::Bool);
+            let eq_local = fn_cx.emit_assign(
+                bool_ty,
+                IrRvalue::BinOp {
+                    op: IrBinOp::IEq,
+                    left: IrOperand::Local(tag_local),
+                    right: IrOperand::Const(IrConstValue::Int(i64::from(tag))),
+                },
+                span,
+            );
+            let then_lbl = fn_cx.fresh_label();
+            fn_cx.emit(IrInst::Branch {
+                cond: IrOperand::Local(eq_local),
+                then_label: then_lbl,
+                else_label: fail_lbl,
+                span,
+            });
+            fn_cx.emit(IrInst::Label(then_lbl));
+
+            for (i, &arg_pat) in args.iter().enumerate() {
+                let field = u32::try_from(i).map_err(|_| IrError::IndexOverflow.at(span))?;
+                let elem_ty = infer_pat_ir_type(fn_cx, arg_pat)?;
+                let payload_local = fn_cx.emit_assign(
+                    elem_ty,
+                    IrRvalue::GetPayload {
+                        value: IrOperand::Local(scrut),
+                        tag,
+                        field,
+                    },
+                    span,
+                );
+                emit_pat_test(fn_cx, arg_pat, payload_local, fail_lbl)?;
+            }
         }
         Pat::Record { span, .. } => {
             return Err(IrError::UnsupportedPattern { kind: "record" }.at(span));
@@ -190,7 +232,7 @@ fn emit_pat_bind(
     match pat {
         Pat::Wild { .. } | Pat::Lit { .. } => {}
         Pat::Bind { span, inner, .. } => {
-            if let Some(&def_id) = fn_cx.cx.sema.resolution.pat_defs.get(&span) {
+            if let Some(&def_id) = fn_cx.cx.pat_defs.get(&span) {
                 let _ = fn_cx.local_map.insert(def_id, scrut);
             }
             if let Some(inner) = inner {
@@ -215,8 +257,22 @@ fn emit_pat_bind(
         Pat::Or { left, .. } => {
             emit_pat_bind(fn_cx, left, scrut)?;
         }
-        Pat::Variant { span, .. } => {
-            return Err(IrError::UnsupportedPattern { kind: "variant" }.at(span));
+        Pat::Variant { name, args, span } => {
+            let tag = resolve_variant_tag(fn_cx, scrut, name, span)?;
+            for (i, &arg_pat) in args.iter().enumerate() {
+                let field = u32::try_from(i).map_err(|_| IrError::IndexOverflow.at(span))?;
+                let elem_ty = infer_pat_ir_type(fn_cx, arg_pat)?;
+                let payload_local = fn_cx.emit_assign(
+                    elem_ty,
+                    IrRvalue::GetPayload {
+                        value: IrOperand::Local(scrut),
+                        tag,
+                        field,
+                    },
+                    span,
+                );
+                emit_pat_bind(fn_cx, arg_pat, payload_local)?;
+            }
         }
         Pat::Record { span, .. } => {
             return Err(IrError::UnsupportedPattern { kind: "record" }.at(span));
@@ -287,14 +343,14 @@ fn emit_lit_test(
 ///
 /// Uses the scrutinee's type context to determine element types for
 /// destructuring patterns.
-fn infer_pat_ir_type(
+pub(super) fn infer_pat_ir_type(
     fn_cx: &mut FnLowerCtx<'_, '_>,
     pat_idx: PatIdx,
 ) -> Result<IrTypeIdx, SpannedIrError> {
     let pat = fn_cx.cx.ast.pats[pat_idx].clone();
     match pat {
         Pat::Bind { span, .. } => {
-            if let Some(&def_id) = fn_cx.cx.sema.resolution.pat_defs.get(&span) {
+            if let Some(&def_id) = fn_cx.cx.pat_defs.get(&span) {
                 let def_idx =
                     usize::try_from(def_id.0).map_err(|_| IrError::IndexOverflow.at(span))?;
                 if let Some(ty) = fn_cx.cx.sema.defs[def_idx].ty_info.ty {
@@ -320,17 +376,44 @@ fn infer_pat_ir_type(
             let _ = span;
             Ok(fn_cx.cx.ir.types.alloc(ir_ty))
         }
-        Pat::Tuple { span, .. } => Err(IrError::UnsupportedPattern {
-            kind: "nested tuple",
+        Pat::Tuple { elems, .. } => {
+            let mut fields = Vec::with_capacity(elems.len());
+            for &elem_pat in &elems {
+                fields.push(infer_pat_ir_type(fn_cx, elem_pat)?);
+            }
+            Ok(fn_cx.cx.ir.types.alloc(IrType::Product { fields }))
         }
-        .at(span)),
-        Pat::Variant { span, .. } => Err(IrError::UnsupportedPattern { kind: "variant" }.at(span)),
+        Pat::Variant { .. } => Ok(fn_cx.cx.ir.types.alloc(IrType::Any)),
         Pat::Record { span, .. } => Err(IrError::UnsupportedPattern { kind: "record" }.at(span)),
         Pat::Array { span, .. } => Err(IrError::UnsupportedPattern { kind: "array" }.at(span)),
-        Pat::Or { span, .. } => Err(IrError::UnsupportedPattern { kind: "or" }.at(span)),
+        Pat::Or { left, .. } => infer_pat_ir_type(fn_cx, left),
         Pat::Error { span, .. } => Err(IrError::UnsupportedPattern {
             kind: "error recovery",
         }
         .at(span)),
     }
+}
+
+/// Resolves a variant name to its tag index within the scrutinee's sum type.
+fn resolve_variant_tag(
+    fn_cx: &FnLowerCtx<'_, '_>,
+    scrut: IrLocal,
+    name: Symbol,
+    span: Span,
+) -> Result<u32, SpannedIrError> {
+    // Try the IR type on the scrutinee's local decl first.
+    let scrut_decl = fn_cx.locals.iter().find(|d| d.local == scrut);
+    if let Some(decl) = scrut_decl {
+        let ir_ty = fn_cx.cx.ir.types[decl.ty].clone();
+        if let IrType::Sum { variants } = ir_ty {
+            let target = fn_cx.cx.interner.resolve(name);
+            for (i, v) in variants.iter().enumerate() {
+                if fn_cx.cx.interner.resolve(v.name) == target {
+                    return u32::try_from(i).map_err(|_| IrError::IndexOverflow.at(span));
+                }
+            }
+        }
+    }
+
+    Err(IrError::UnresolvedName.at(span))
 }
