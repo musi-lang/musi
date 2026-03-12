@@ -68,7 +68,8 @@ impl FfiTable {
             desc: format!("foreign fn index {idx} out of bounds").into_boxed_str(),
         })?;
 
-        let (final_args, _keep_alive) = marshal_args(args, heap)?;
+        let storage = marshal_args(args.to_vec(), heap)?;
+        let final_args = build_args(&storage);
 
         // SAFETY: bytecode-declared signature
         let result: i64 = unsafe { entry.cif.call(entry.fn_ptr, &final_args) };
@@ -128,7 +129,7 @@ enum MarshaledArg {
     Ptr { _cstr: CString, raw: *const i8 },
 }
 
-fn marshal_args(args: &[Value], heap: &Heap) -> Result<(Vec<Arg>, Vec<MarshaledArg>), VmError> {
+fn marshal_args(args: Vec<Value>, heap: &Heap) -> Result<Vec<MarshaledArg>, VmError> {
     let mut storage: Vec<MarshaledArg> = Vec::with_capacity(args.len());
 
     for val in args {
@@ -156,14 +157,16 @@ fn marshal_args(args: &[Value], heap: &Heap) -> Result<(Vec<Arg>, Vec<MarshaledA
         }
     }
 
-    let final_args: Vec<Arg> = storage
+    Ok(storage)
+}
+
+fn build_args(storage: &[MarshaledArg]) -> Vec<Arg<'_>> {
+    storage
         .iter()
         .map(|m| match m {
             MarshaledArg::Int(n) => arg(n),
             MarshaledArg::Float(f) => arg(f),
             MarshaledArg::Ptr { raw, .. } => arg(raw),
         })
-        .collect();
-
-    Ok((final_args, storage))
+        .collect()
 }
