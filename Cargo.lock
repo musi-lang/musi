@@ -504,7 +504,7 @@ checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 
 [[package]]
 name = "musi"
-version = "0.1.0-alpha1"
+version = "0.1.0-rc1"
 dependencies = [
  "clap",
  "musi_std",
@@ -513,11 +513,11 @@ dependencies = [
 
 [[package]]
 name = "musi_bc"
-version = "0.1.0-alpha1"
+version = "0.1.0-rc1"
 
 [[package]]
 name = "musi_manifest"
-version = "0.1.0-alpha1"
+version = "0.1.0-rc1"
 dependencies = [
  "serde",
  "thiserror",
@@ -526,7 +526,7 @@ dependencies = [
 
 [[package]]
 name = "musi_std"
-version = "0.1.0-alpha1"
+version = "0.1.0-rc1"
 dependencies = [
  "libc",
  "libffi",
@@ -536,7 +536,7 @@ dependencies = [
 
 [[package]]
 name = "musi_vm"
-version = "0.1.0-alpha1"
+version = "0.1.0-rc1"
 dependencies = [
  "musi_bc",
  "thiserror",
@@ -544,7 +544,7 @@ dependencies = [
 
 [[package]]
 name = "music"
-version = "0.1.0-alpha1"
+version = "0.1.0-rc1"
 dependencies = [
  "clap",
  "musi_manifest",
@@ -561,14 +561,14 @@ dependencies = [
 
 [[package]]
 name = "music_ast"
-version = "0.1.0-alpha1"
+version = "0.1.0-rc1"
 dependencies = [
  "music_shared",
 ]
 
 [[package]]
 name = "music_emit"
-version = "0.1.0-alpha1"
+version = "0.1.0-rc1"
 dependencies = [
  "byteorder",
  "musi_bc",
@@ -579,7 +579,7 @@ dependencies = [
 
 [[package]]
 name = "music_ir"
-version = "0.1.0-alpha1"
+version = "0.1.0-rc1"
 dependencies = [
  "music_ast",
  "music_lex",
@@ -591,7 +591,7 @@ dependencies = [
 
 [[package]]
 name = "music_lex"
-version = "0.1.0-alpha1"
+version = "0.1.0-rc1"
 dependencies = [
  "music_shared",
  "thiserror",
@@ -599,7 +599,7 @@ dependencies = [
 
 [[package]]
 name = "music_lsp"
-version = "0.1.0-alpha1"
+version = "0.1.0-rc1"
 dependencies = [
  "music_ast",
  "music_lex",
@@ -613,7 +613,7 @@ dependencies = [
 
 [[package]]
 name = "music_parse"
-version = "0.1.0-alpha1"
+version = "0.1.0-rc1"
 dependencies = [
  "music_ast",
  "music_lex",
@@ -623,7 +623,7 @@ dependencies = [
 
 [[package]]
 name = "music_resolve"
-version = "0.1.0-alpha1"
+version = "0.1.0-rc1"
 dependencies = [
  "hex",
  "musi_manifest",
@@ -638,7 +638,7 @@ dependencies = [
 
 [[package]]
 name = "music_sema"
-version = "0.1.0-alpha1"
+version = "0.1.0-rc1"
 dependencies = [
  "music_ast",
  "music_lex",
@@ -649,7 +649,7 @@ dependencies = [
 
 [[package]]
 name = "music_shared"
-version = "0.1.0-alpha1"
+version = "0.1.0-rc1"
 dependencies = [
  "intaglio",
  "memchr",
