@@ -1,16 +1,15 @@
-//! `music_emit` — MSIR → `.msbc` bytecode emitter.
+//! `music_emit` — AST+sema → `.msbc` bytecode emitter.
 //!
-//! The entry point is [`emit`], which takes an [`IrModule`] and an [`Interner`]
-//! and returns the complete binary contents of a `.msbc` file.
+//! The entry point is [`emit`], which takes a parsed module, sema result,
+//! and interner, then returns the complete binary contents of a `.msbc` file.
 //!
 //! # Module layout
 //!
 //! - [`error`]      — [`EmitError`] enum
-//! - [`opcode`]     — [`Opcode`] enum (75 opcodes), encoding helpers
 //! - [`const_pool`] — constant pool builder
-//! - [`type_pool`]  — type pool builder (`IrTypeIdx` → `type_id`)
-//! - [`module`]     — `.msbc` binary assembler (header + 4 sections)
-//! - [`emitter`]    — orchestrator; calls [`emitter::fn_emitter`] per function
+//! - [`type_pool`]  — type pool builder (sema `TypeIdx` → `type_id`)
+//! - [`module`]     — `.msbc` binary assembler (header + 5 sections)
+//! - [`emitter`]    — orchestrator; tree-walks AST+sema per function
 
 mod const_pool;
 mod emitter;
@@ -21,7 +20,8 @@ pub mod error;
 
 pub use error::EmitError;
 
-use music_ir::IrModule;
+use music_ast::ParsedModule;
+use music_sema::SemaResult;
 use music_shared::Interner;
 
 /// Output of a successful [`emit`] call.
@@ -31,32 +31,32 @@ pub struct EmitOutput {
     pub bytes: Vec<u8>,
 }
 
-/// Emit an [`IrModule`] to `.msbc` bytecode.
+/// Emit bytecode from a parsed+typechecked module.
 ///
 /// # Errors
 ///
 /// Returns [`EmitError`] if:
 /// - Any constant or type pool exceeds its size limit (65535 entries).
 /// - A function body exceeds the maximum code length.
-/// - A jump offset cannot be encoded as an i16.
+/// - A jump offset cannot be encoded as an i32.
 /// - A label referenced by a jump cannot be resolved.
-/// - An IR type cannot be lowered (e.g. unresolved type parameter).
 #[must_use = "check for errors; the caller must handle EmitError"]
-pub fn emit(module: &IrModule, interner: &Interner) -> Result<EmitOutput, EmitError> {
-    let mut emitter = emitter::Emitter::new(module, interner);
-    let functions = emitter.emit_functions()?;
-
-    let entry_fn_id = module.entry.map(|idx| module.functions[idx].id.0);
+pub fn emit(
+    parsed: &ParsedModule,
+    sema: &SemaResult,
+    interner: &mut Interner,
+) -> Result<EmitOutput, EmitError> {
+    let mut emitter = emitter::Emitter::new(parsed, sema, interner);
+    let functions = emitter.emit_all()?;
 
     let bytes = module::assemble(module::AssembleParams {
         cp: &mut emitter.cp,
         tp: &mut emitter.tp,
         functions: &functions,
-        effects: &module.effects,
-        foreign_fns: &module.foreign_fns,
-        type_arena: &module.types,
-        interner,
-        entry_fn_id,
+        effects: &emitter.effects,
+        foreign_fns: &emitter.foreign_fns,
+        interner: emitter.interner,
+        entry_fn_id: emitter.entry_fn_id,
     })?;
     Ok(EmitOutput { bytes })
 }

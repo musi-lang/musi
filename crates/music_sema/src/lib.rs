@@ -67,7 +67,7 @@ pub struct SemaResult {
     pub unify: UnifyTable,
     /// Typeclass instances discovered during analysis.
     pub instances: Vec<InstanceInfo>,
-    /// Well-known prelude type definitions (needed by IR lowering).
+    /// Well-known prelude type definitions (needed by bytecode emission).
     pub well_known: WellKnown,
 }
 

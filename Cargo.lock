@@ -80,12 +80,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc0b364ead1874514c8c2855ab558056ebfeb775653e7ae45ff72f28f8f3166c"
 
 [[package]]
-name = "byteorder"
-version = "1.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
-
-[[package]]
 name = "bytes"
 version = "1.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -552,7 +546,6 @@ dependencies = [
  "musi_vm",
  "music_ast",
  "music_emit",
- "music_ir",
  "music_lex",
  "music_parse",
  "music_resolve",
@@ -572,18 +565,8 @@ dependencies = [
 name = "music_emit"
 version = "0.1.0-rc1"
 dependencies = [
- "byteorder",
  "musi_bc",
  "musi_vm",
- "music_ir",
- "music_shared",
- "thiserror",
-]
-
-[[package]]
-name = "music_ir"
-version = "0.1.0-rc1"
-dependencies = [
  "music_ast",
  "music_lex",
  "music_parse",

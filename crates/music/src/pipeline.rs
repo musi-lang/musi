@@ -220,7 +220,7 @@ fn build_import_names(
     import_names
 }
 
-/// Runs IR lowering and bytecode emission.
+/// Runs bytecode emission.
 ///
 /// Returns the raw `.msbc` bytes on success, or `Err(())` after printing
 /// the error to stderr.

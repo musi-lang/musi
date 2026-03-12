@@ -1,6 +1,6 @@
 [package]
 name = "music_emit"
-description = "Bytecode emitter: MSIR -> .msbc"
+description = "Bytecode emitter: AST+sema -> .msbc"
 keywords = ["compiler", "bytecode", "musi"]
 categories = ["compilers"]
 version.workspace = true
@@ -11,13 +11,15 @@ readme.workspace = true
 
 [dependencies]
 musi_bc = { path = "../musi_bc" }
-music_ir      = { path = "../music_ir" }
+music_ast     = { path = "../music_ast" }
+music_sema    = { path = "../music_sema" }
 music_shared  = { path = "../music_shared" }
-byteorder     = { workspace = true }
 thiserror     = { workspace = true }
 
 [dev-dependencies]
-musi_vm = { path = "../musi_vm" }
+musi_vm       = { path = "../musi_vm" }
+music_lex     = { path = "../music_lex" }
+music_parse   = { path = "../music_parse" }
 
 [lints]
 workspace = true

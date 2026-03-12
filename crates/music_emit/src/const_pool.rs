@@ -5,7 +5,6 @@
 
 use std::collections::HashMap;
 
-use music_ir::IrConstValue;
 use music_shared::{Interner, Symbol};
 
 use crate::error::EmitError;
@@ -17,6 +16,18 @@ const TAG_F64: u8 = 0x04;
 const TAG_STR: u8 = 0x05;
 const TAG_RUNE: u8 = 0x06;
 const TAG_FN: u8 = 0x08;
+
+/// A compile-time constant value for the constant pool.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ConstValue {
+    Int(i64),
+    Float(f64),
+    Bool(bool),
+    Rune(u32),
+    Str(Symbol),
+    Unit,
+    FnRef(u32),
+}
 
 /// Key for deduplication in the constant pool.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -30,15 +41,15 @@ enum ConstKey {
 }
 
 impl ConstKey {
-    const fn from_value(v: &IrConstValue) -> Option<Self> {
+    const fn from_value(v: &ConstValue) -> Option<Self> {
         match v {
-            IrConstValue::Int(n) => Some(Self::Int(*n)),
-            IrConstValue::Float(f) => Some(Self::Float(f.to_bits())),
-            IrConstValue::Bool(b) => Some(Self::Bool(*b)),
-            IrConstValue::Rune(r) => Some(Self::Rune(*r)),
-            IrConstValue::Str(s) => Some(Self::Str(*s)),
-            IrConstValue::Unit => None,
-            IrConstValue::FnRef(id) => Some(Self::Fn(*id)),
+            ConstValue::Int(n) => Some(Self::Int(*n)),
+            ConstValue::Float(f) => Some(Self::Float(f.to_bits())),
+            ConstValue::Bool(b) => Some(Self::Bool(*b)),
+            ConstValue::Rune(r) => Some(Self::Rune(*r)),
+            ConstValue::Str(s) => Some(Self::Str(*s)),
+            ConstValue::Unit => None,
+            ConstValue::FnRef(id) => Some(Self::Fn(*id)),
         }
     }
 }
@@ -65,10 +76,10 @@ impl ConstPool {
 
     /// Intern `value`, returning its pool index.
     ///
-    /// Returns `None` for `IrConstValue::Unit` (unit is encoded inline, not via const pool).
+    /// Returns `None` for `ConstValue::Unit` (unit is encoded inline, not via const pool).
     pub fn intern(
         &mut self,
-        value: &IrConstValue,
+        value: &ConstValue,
         interner: &Interner,
     ) -> Result<Option<u16>, EmitError> {
         let Some(key) = ConstKey::from_value(value) else {
@@ -96,33 +107,30 @@ impl ConstPool {
     }
 }
 
-fn encode_const(value: &IrConstValue, interner: &Interner) -> ConstEntry {
+fn encode_const(value: &ConstValue, interner: &Interner) -> ConstEntry {
     match value {
-        IrConstValue::Int(n) => encode_int(*n),
-        IrConstValue::Float(f) => ConstEntry {
+        ConstValue::Int(n) => encode_int(*n),
+        ConstValue::Float(f) => ConstEntry {
             tag: TAG_F64,
             data: f.to_bits().to_le_bytes().to_vec(),
         },
-        IrConstValue::Bool(b) => {
+        ConstValue::Bool(b) => {
             let v = i32::from(*b);
             ConstEntry {
                 tag: TAG_I32,
                 data: v.to_le_bytes().to_vec(),
             }
         }
-        IrConstValue::Rune(r) => ConstEntry {
+        ConstValue::Rune(r) => ConstEntry {
             tag: TAG_RUNE,
             data: r.to_le_bytes().to_vec(),
         },
-        IrConstValue::Str(sym) => encode_str(*sym, interner),
-        IrConstValue::Unit => {
-            // Unit should not reach here — filtered before calling encode_const
-            ConstEntry {
-                tag: TAG_I32,
-                data: 0i32.to_le_bytes().to_vec(),
-            }
-        }
-        IrConstValue::FnRef(id) => ConstEntry {
+        ConstValue::Str(sym) => encode_str(*sym, interner),
+        ConstValue::Unit => ConstEntry {
+            tag: TAG_I32,
+            data: 0i32.to_le_bytes().to_vec(),
+        },
+        ConstValue::FnRef(id) => ConstEntry {
             tag: TAG_FN,
             data: id.to_le_bytes().to_vec(),
         },

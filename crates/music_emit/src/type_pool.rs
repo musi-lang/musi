@@ -1,11 +1,13 @@
-//! Type pool: maps `IrTypeIdx` to a bytecode `type_id` (u32).
+//! Type pool: maps sema `TypeIdx` to a bytecode `type_id` (u32).
 //!
 //! Primitive types have fixed IDs matching §11.3 of the spec.
 //! Compound types are interned by structure.
 
 use std::collections::HashMap;
 
-use music_ir::{IrSumVariant, IrType, IrTypeIdx};
+use music_sema::types::{EffectRow, SumVariant, Type};
+use music_sema::well_known::WellKnown;
+use music_sema::{DefId, TypeIdx, UnifyTable};
 use music_shared::Arena;
 
 use crate::error::EmitError;
@@ -40,12 +42,9 @@ struct TypeEntry {
 
 /// Type pool builder.
 ///
-/// Maps arena `IrTypeIdx` to bytecode `type_id` (u32).
-/// Primitive types are resolved directly from their variant; compound types are
-/// interned to avoid duplication.
+/// Maps sema `TypeIdx` to bytecode `type_id` (u32).
 pub struct TypePool {
     entries: Vec<TypeEntry>,
-    /// Cache: arena index → `type_id`
     cache: HashMap<u32, u32>,
 }
 
@@ -57,122 +56,180 @@ impl TypePool {
         }
     }
 
-    /// Lower an IR type index to a bytecode `type_id`.
-    pub fn lower_ir_type(
+    /// Lower a sema type index to a bytecode `type_id`.
+    pub fn lower_sema_type(
         &mut self,
-        idx: IrTypeIdx,
-        arena: &Arena<IrType>,
+        idx: TypeIdx,
+        types: &Arena<Type>,
+        unify: &UnifyTable,
+        wk: &WellKnown,
     ) -> Result<u32, EmitError> {
-        if let Some(&cached) = self.cache.get(&idx.raw()) {
+        let resolved = unify.resolve(idx, types);
+        if let Some(&cached) = self.cache.get(&resolved.raw()) {
             return Ok(cached);
         }
-        let ty = arena[idx].clone();
-        let type_id = self.intern_type(&ty, arena)?;
-        let _ = self.cache.insert(idx.raw(), type_id);
+        let ty = types[resolved].clone();
+        let type_id = self.intern_sema_type(&ty, types, unify, wk)?;
+        let _ = self.cache.insert(resolved.raw(), type_id);
         Ok(type_id)
     }
 
-    fn intern_type(&mut self, ty: &IrType, arena: &Arena<IrType>) -> Result<u32, EmitError> {
+    /// Lower a well-known `DefId` directly to a bytecode `type_id`.
+    ///
+    /// Returns `None` if `def` is not a recognized well-known type.
+    pub fn lower_well_known_def(&mut self, def: DefId, wk: &WellKnown) -> Option<u32> {
+        self.lower_named_def(def, wk)
+    }
+
+    fn lower_named_def(&mut self, def: DefId, wk: &WellKnown) -> Option<u32> {
+        if def == wk.unit {
+            return Some(self.push_tag_only(TAG_UNIT));
+        }
+        if def == wk.bool {
+            return Some(self.push_tag_only(TAG_BOOL));
+        }
+        if def == wk.ints.int8 {
+            return Some(self.push_tag_only(TAG_I8));
+        }
+        if def == wk.ints.int16 {
+            return Some(self.push_tag_only(TAG_I16));
+        }
+        if def == wk.ints.int32 {
+            return Some(self.push_tag_only(TAG_I32));
+        }
+        if def == wk.ints.int || def == wk.ints.int64 {
+            return Some(self.push_tag_only(TAG_I64));
+        }
+        if def == wk.uints.uint8 {
+            return Some(self.push_tag_only(TAG_U8));
+        }
+        if def == wk.uints.uint16 {
+            return Some(self.push_tag_only(TAG_U16));
+        }
+        if def == wk.uints.uint32 {
+            return Some(self.push_tag_only(TAG_U32));
+        }
+        if def == wk.uints.uint64 {
+            return Some(self.push_tag_only(TAG_U64));
+        }
+        if def == wk.floats.float32 {
+            return Some(self.push_tag_only(TAG_F32));
+        }
+        if def == wk.floats.float64 {
+            return Some(self.push_tag_only(TAG_F64));
+        }
+        if def == wk.rune {
+            return Some(self.push_tag_only(TAG_RUNE));
+        }
+        if def == wk.any || def == wk.never {
+            return Some(self.push_tag_only(TAG_ANY));
+        }
+        if def == wk.string {
+            return Some(self.push_tag_only(TAG_U64));
+        }
+        if def == wk.ffi.ptr {
+            let unit_id = self.push_tag_only(TAG_UNIT);
+            return Some(self.push_entry(TAG_PTR, unit_id.to_le_bytes().to_vec()));
+        }
+        None
+    }
+
+    fn intern_sema_type(
+        &mut self,
+        ty: &Type,
+        types: &Arena<Type>,
+        unify: &UnifyTable,
+        wk: &WellKnown,
+    ) -> Result<u32, EmitError> {
         match ty {
-            IrType::Unit => Ok(self.push_tag_only(TAG_UNIT)),
-            IrType::Bool => Ok(self.push_tag_only(TAG_BOOL)),
-            IrType::Int8 => Ok(self.push_tag_only(TAG_I8)),
-            IrType::Int16 => Ok(self.push_tag_only(TAG_I16)),
-            IrType::Int32 => Ok(self.push_tag_only(TAG_I32)),
-            IrType::Int64 => Ok(self.push_tag_only(TAG_I64)),
-            IrType::UInt8 => Ok(self.push_tag_only(TAG_U8)),
-            IrType::UInt16 => Ok(self.push_tag_only(TAG_U16)),
-            IrType::UInt32 => Ok(self.push_tag_only(TAG_U32)),
-            IrType::UInt64 => Ok(self.push_tag_only(TAG_U64)),
-            IrType::Float32 => Ok(self.push_tag_only(TAG_F32)),
-            IrType::Float64 => Ok(self.push_tag_only(TAG_F64)),
-            IrType::Rune => Ok(self.push_tag_only(TAG_RUNE)),
-            IrType::Any => Ok(self.push_tag_only(TAG_ANY)),
-            IrType::Ptr { inner } => {
-                let inner_id = self.lower_ir_type(*inner, arena)?;
-                Ok(self.push_entry(TAG_PTR, inner_id.to_le_bytes().to_vec()))
+            Type::Named { def, args } => {
+                if let Some(id) = self.lower_named_def(*def, wk) {
+                    return Ok(id);
+                }
+                if args.is_empty() {
+                    Ok(self.push_tag_only(TAG_ANY))
+                } else {
+                    Ok(self.push_tag_only(TAG_ANY))
+                }
             }
-            IrType::Ref { inner } => {
-                let inner_id = self.lower_ir_type(*inner, arena)?;
-                Ok(self.push_entry(TAG_REF, inner_id.to_le_bytes().to_vec()))
+            Type::Tuple { elems } => {
+                let field_ids: Vec<u32> = elems
+                    .iter()
+                    .map(|&e| self.lower_sema_type(e, types, unify, wk))
+                    .collect::<Result<_, _>>()?;
+                self.encode_product_from_ids(&field_ids)
             }
-            IrType::Array { elem } => {
-                let elem_id = self.lower_ir_type(*elem, arena)?;
-                Ok(self.push_entry(TAG_ARR, elem_id.to_le_bytes().to_vec()))
+            Type::Record { fields, .. } => {
+                let field_ids: Vec<u32> = fields
+                    .iter()
+                    .map(|f| self.lower_sema_type(f.ty, types, unify, wk))
+                    .collect::<Result<_, _>>()?;
+                self.encode_product_from_ids(&field_ids)
             }
-            IrType::Product { fields } => self.encode_product(fields, arena),
-            IrType::Sum { variants } => self.encode_sum(variants, arena),
-            IrType::Fn {
+            Type::Fn {
                 params,
                 ret,
-                effect_mask,
-            } => self.encode_fn_type(params, *ret, effect_mask.0, arena),
-            // Closures are lowered as product of (fn_ty, env_ty)
-            IrType::Closure { fn_ty, env_ty } => {
-                let fn_id = self.lower_ir_type(*fn_ty, arena)?;
-                let env_id = self.lower_ir_type(*env_ty, arena)?;
-                let mut data = Vec::with_capacity(12);
-                data.extend_from_slice(&2u32.to_le_bytes());
-                data.extend_from_slice(&fn_id.to_le_bytes());
-                data.extend_from_slice(&env_id.to_le_bytes());
-                Ok(self.push_entry(TAG_PRODUCT, data))
+                effects,
+            } => {
+                let param_ids: Vec<u32> = params
+                    .iter()
+                    .map(|&p| self.lower_sema_type(p, types, unify, wk))
+                    .collect::<Result<_, _>>()?;
+                let ret_id = self.lower_sema_type(*ret, types, unify, wk)?;
+                let effect_mask = lower_effect_row_mask(effects, wk);
+                self.encode_fn_type_from_ids(&param_ids, ret_id, effect_mask)
             }
-            // Opaque foreign types are pointers at runtime — emit as *Unit
-            IrType::Opaque { .. } => {
-                let unit_id = self.push_tag_only(TAG_UNIT);
-                Ok(self.push_entry(TAG_PTR, unit_id.to_le_bytes().to_vec()))
+            Type::Array { elem, .. } => {
+                let elem_id = self.lower_sema_type(*elem, types, unify, wk)?;
+                Ok(self.push_entry(TAG_ARR, elem_id.to_le_bytes().to_vec()))
             }
-            IrType::TypeParam { index } => Err(EmitError::UnresolvableType {
-                desc: format!("opaque type param {index} in monomorphized IR").into_boxed_str(),
-            }),
-            IrType::WitnessTable { .. } => {
-                // Witness tables are pointers at runtime — emit as *Unit
-                let unit_id = self.push_tag_only(TAG_UNIT);
-                Ok(self.push_entry(TAG_PTR, unit_id.to_le_bytes().to_vec()))
+            Type::Ref { inner } => {
+                let inner_id = self.lower_sema_type(*inner, types, unify, wk)?;
+                Ok(self.push_entry(TAG_REF, inner_id.to_le_bytes().to_vec()))
             }
+            Type::Sum { variants } => self.encode_sum_from_sema(variants, types, unify, wk),
+            Type::AnonSum { variants } => {
+                let sema_variants: Vec<SumVariant> = variants
+                    .iter()
+                    .enumerate()
+                    .map(|(i, &v)| SumVariant {
+                        name: music_shared::Symbol(u32::try_from(i).unwrap_or(0)),
+                        fields: vec![v],
+                    })
+                    .collect();
+                self.encode_sum_from_sema(&sema_variants, types, unify, wk)
+            }
+            Type::Quantified { body, .. } => self.lower_sema_type(*body, types, unify, wk),
+            Type::Var(_) | Type::Rigid(_) | Type::Error => Ok(self.push_tag_only(TAG_ANY)),
         }
     }
 
-    fn encode_product(
-        &mut self,
-        fields: &[IrTypeIdx],
-        arena: &Arena<IrType>,
-    ) -> Result<u32, EmitError> {
-        let field_ids: Vec<u32> = fields
-            .iter()
-            .map(|f| self.lower_ir_type(*f, arena))
-            .collect::<Result<_, _>>()?;
+    fn encode_product_from_ids(&mut self, field_ids: &[u32]) -> Result<u32, EmitError> {
         let field_count =
             u32::try_from(field_ids.len()).map_err(|_| EmitError::UnresolvableType {
                 desc: "product field count overflow".into(),
             })?;
         let mut data = Vec::with_capacity(4 + 4 * field_ids.len());
         data.extend_from_slice(&field_count.to_le_bytes());
-        for id in &field_ids {
+        for id in field_ids {
             data.extend_from_slice(&id.to_le_bytes());
         }
         Ok(self.push_entry(TAG_PRODUCT, data))
     }
 
-    fn encode_fn_type(
+    fn encode_fn_type_from_ids(
         &mut self,
-        params: &[IrTypeIdx],
-        ret: IrTypeIdx,
+        param_ids: &[u32],
+        ret_id: u32,
         effect_mask: u16,
-        arena: &Arena<IrType>,
     ) -> Result<u32, EmitError> {
-        let param_ids: Vec<u32> = params
-            .iter()
-            .map(|p| self.lower_ir_type(*p, arena))
-            .collect::<Result<_, _>>()?;
-        let ret_id = self.lower_ir_type(ret, arena)?;
         let param_count =
             u32::try_from(param_ids.len()).map_err(|_| EmitError::UnresolvableType {
                 desc: "fn param count overflow".into(),
             })?;
         let mut data = Vec::with_capacity(4 + 4 * param_ids.len() + 4 + 2);
         data.extend_from_slice(&param_count.to_le_bytes());
-        for id in &param_ids {
+        for id in param_ids {
             data.extend_from_slice(&id.to_le_bytes());
         }
         data.extend_from_slice(&ret_id.to_le_bytes());
@@ -180,12 +237,13 @@ impl TypePool {
         Ok(self.push_entry(TAG_FN, data))
     }
 
-    fn encode_sum(
+    fn encode_sum_from_sema(
         &mut self,
-        variants: &[IrSumVariant],
-        arena: &Arena<IrType>,
+        variants: &[SumVariant],
+        types: &Arena<Type>,
+        unify: &UnifyTable,
+        wk: &WellKnown,
     ) -> Result<u32, EmitError> {
-        // Allocate a slot first to handle recursive types.
         let slot = u32::try_from(self.entries.len()).map_err(|_| EmitError::TooManyTypes)?;
         self.entries.push(TypeEntry {
             tag: TAG_SUM,
@@ -205,25 +263,24 @@ impl TypePool {
                 desc: "variant tag overflow".into(),
             })?;
             data.extend_from_slice(&tag_u32.to_le_bytes());
-            let payload_id = self.encode_variant_payload(variant, arena)?;
+            let payload_id = match variant.fields.as_slice() {
+                [] => 0xFFFF_FFFFu32,
+                [single] => self.lower_sema_type(*single, types, unify, wk)?,
+                _ => {
+                    let field_ids: Vec<u32> = variant
+                        .fields
+                        .iter()
+                        .map(|&f| self.lower_sema_type(f, types, unify, wk))
+                        .collect::<Result<_, _>>()?;
+                    self.encode_product_from_ids(&field_ids)?
+                }
+            };
             data.extend_from_slice(&payload_id.to_le_bytes());
         }
 
         let idx = usize::try_from(slot).map_err(|_| EmitError::TooManyTypes)?;
         self.entries[idx].data = data;
         Ok(slot)
-    }
-
-    fn encode_variant_payload(
-        &mut self,
-        variant: &IrSumVariant,
-        arena: &Arena<IrType>,
-    ) -> Result<u32, EmitError> {
-        match variant.fields.as_slice() {
-            [] => Ok(0xFFFF_FFFFu32),
-            [single] => self.lower_ir_type(*single, arena),
-            _ => self.encode_product(&variant.fields, arena),
-        }
     }
 
     fn push_tag_only(&mut self, tag: u8) -> u32 {
@@ -246,4 +303,20 @@ impl TypePool {
         }
         Ok(())
     }
+}
+
+fn lower_effect_row_mask(row: &EffectRow, wk: &WellKnown) -> u16 {
+    let mut mask: u16 = 0;
+    for entry in &row.effects {
+        if entry.def == wk.effects.io {
+            mask |= 1;
+        } else if entry.def == wk.effects.async_eff {
+            mask |= 2;
+        } else if entry.def == wk.effects.state {
+            mask |= 4;
+        } else if entry.def == wk.effects.throw {
+            mask |= 8;
+        }
+    }
+    mask
 }
