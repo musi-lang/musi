@@ -211,7 +211,7 @@ effectOp      = ident , ":" , astTy ;
 classMember   = ( fnDecl | lawDecl ) , [ ";" ] ;
 fnDecl        = "let" , opOrIdent , params , [ tyAnnot ] ,
                 [ ":=" , astExpr ] ;
-lawDecl       = "law" , ident , ":=" , astExpr ;
+lawDecl       = "law" , ident , [ params ] , ":=" , astExpr ;
 opOrIdent     = ident | opIdent ;
 params        = "(" , [ paramList ] , ")" ;
 paramList     = param , { "," , param } ;
