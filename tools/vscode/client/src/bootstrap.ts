@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { getConfig } from "./config";
+import { CONFIG_DEFAULTS, getConfig } from "./config";
 import {
 	getCargoBinDir,
 	getCliBinaryName,
@@ -13,29 +13,28 @@ function _exists(filePath: string): boolean {
 	return fs.existsSync(filePath);
 }
 
-function _getWorkspaceCandidates(workspacePath: string): string[] {
-	const binary = getServerBinaryName();
+function _getWorkspaceCandidatesFor(binaryName: string): string[] {
+	const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+	if (!ws) return [];
 	return [
-		path.join(workspacePath, "target", "debug", binary),
-		path.join(workspacePath, "target", "release", binary),
+		path.join(ws, "target", "debug", binaryName),
+		path.join(ws, "target", "release", binaryName),
 	];
 }
 
-function _getGlobalCandidates(): string[] {
-	const binary = getServerBinaryName();
-	const candidates = [path.join(getCargoBinDir(), binary)];
-
+function _getGlobalCandidatesFor(binaryName: string): string[] {
+	const candidates = [path.join(getCargoBinDir(), binaryName)];
 	if (!isWindows()) {
-		candidates.push(`/usr/local/bin/${binary}`, `/usr/bin/${binary}`);
+		candidates.push(
+			`/usr/local/bin/${binaryName}`,
+			`/usr/bin/${binaryName}`,
+		);
 	}
-
 	return candidates;
 }
 
-function _showConfiguredPathWarning(configuredPath: string) {
-	vscode.window.showWarningMessage(
-		`Musi: Configured server path does not exist: ${configuredPath}`,
-	);
+function _findFirst(candidates: string[]): string | undefined {
+	return candidates.find((c) => _exists(c));
 }
 
 /**
@@ -48,63 +47,27 @@ function _showConfiguredPathWarning(configuredPath: string) {
  *
  * @returns Absolute path to server binary, or `undefined` if not found.
  */
-function _getUserConfiguredPath(): string | undefined {
+export async function findServerPath(): Promise<string | undefined> {
 	const config = getConfig();
 
 	// Check musi.lspPath first (new setting), then fall back to musi.server.path
-	const lspPath = config.lspPath !== "musi-lsp" ? config.lspPath : null;
+	const lspPath = config.lspPath !== CONFIG_DEFAULTS.lspPath ? config.lspPath : null;
 	const candidatePath = lspPath ?? config.serverPath;
 
 	if (candidatePath) {
 		if (_exists(candidatePath)) {
 			return candidatePath;
 		}
-		_showConfiguredPathWarning(candidatePath);
+		vscode.window.showWarningMessage(
+			`Musi: Configured server path does not exist: ${candidatePath}`,
+		);
 	}
 
-	return undefined;
-}
-
-function _getWorkspacePath(): string | undefined {
-	const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-	if (workspacePath) {
-		for (const candidate of _getWorkspaceCandidates(workspacePath)) {
-			if (_exists(candidate)) {
-				return candidate;
-			}
-		}
-	}
-
-	return undefined;
-}
-
-function _getGlobalPath(): string | undefined {
-	for (const candidate of _getGlobalCandidates()) {
-		if (_exists(candidate)) {
-			return candidate;
-		}
-	}
-
-	return undefined;
-}
-
-export async function findServerPath(): Promise<string | undefined> {
-	const userPath = _getUserConfiguredPath();
-	if (userPath) {
-		return userPath;
-	}
-
-	const workspacePath = _getWorkspacePath();
-	if (workspacePath) {
-		return workspacePath;
-	}
-
-	const globalPath = _getGlobalPath();
-	if (globalPath) {
-		return globalPath;
-	}
-
-	return undefined;
+	const binary = getServerBinaryName();
+	return (
+		_findFirst(_getWorkspaceCandidatesFor(binary)) ??
+		_findFirst(_getGlobalCandidatesFor(binary))
+	);
 }
 
 /**
@@ -129,65 +92,6 @@ export async function showServerNotFoundUI() {
 	}
 }
 
-// -- CLI Binary (musi) ---
-
-function _getCliWorkspaceCandidates(workspacePath: string): string[] {
-	const binary = getCliBinaryName();
-	return [
-		path.join(workspacePath, "target", "debug", binary),
-		path.join(workspacePath, "target", "release", binary),
-	];
-}
-
-function _getCliGlobalCandidates(): string[] {
-	const binary = getCliBinaryName();
-	const candidates = [path.join(getCargoBinDir(), binary)];
-
-	if (!isWindows()) {
-		candidates.push(`/usr/local/bin/${binary}`, `/usr/bin/${binary}`);
-	}
-
-	return candidates;
-}
-
-function _getCliUserConfiguredPath(): string | undefined {
-	const config = getConfig();
-
-	if (config.cliPath && config.cliPath !== "musi") {
-		if (_exists(config.cliPath)) {
-			return config.cliPath;
-		}
-		vscode.window.showWarningMessage(
-			`Musi: Configured CLI path does not exist: ${config.cliPath}`,
-		);
-	}
-
-	return undefined;
-}
-
-function _getCliWorkspacePath(): string | undefined {
-	const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-	if (workspacePath) {
-		for (const candidate of _getCliWorkspaceCandidates(workspacePath)) {
-			if (_exists(candidate)) {
-				return candidate;
-			}
-		}
-	}
-
-	return undefined;
-}
-
-function _getCliGlobalPath(): string | undefined {
-	for (const candidate of _getCliGlobalCandidates()) {
-		if (_exists(candidate)) {
-			return candidate;
-		}
-	}
-
-	return undefined;
-}
-
 /**
  * Locate `musi` CLI binary.
  *
@@ -199,22 +103,22 @@ function _getCliGlobalPath(): string | undefined {
  * @returns Absolute path to CLI binary, or `undefined` if not found.
  */
 export async function findCliPath(): Promise<string | undefined> {
-	const userPath = _getCliUserConfiguredPath();
-	if (userPath) {
-		return userPath;
+	const config = getConfig();
+
+	if (config.cliPath && config.cliPath !== CONFIG_DEFAULTS.cliPath) {
+		if (_exists(config.cliPath)) {
+			return config.cliPath;
+		}
+		vscode.window.showWarningMessage(
+			`Musi: Configured CLI path does not exist: ${config.cliPath}`,
+		);
 	}
 
-	const workspacePath = _getCliWorkspacePath();
-	if (workspacePath) {
-		return workspacePath;
-	}
-
-	const globalPath = _getCliGlobalPath();
-	if (globalPath) {
-		return globalPath;
-	}
-
-	return undefined;
+	const binary = getCliBinaryName();
+	return (
+		_findFirst(_getWorkspaceCandidatesFor(binary)) ??
+		_findFirst(_getGlobalCandidatesFor(binary))
+	);
 }
 
 /**
