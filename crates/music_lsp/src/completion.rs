@@ -50,6 +50,8 @@ pub fn complete(doc: &AnalyzedDoc, _trigger: Option<char>) -> Vec<CompletionItem
                 DefKind::Given => CompletionItemKind::MODULE,
                 DefKind::Effect => CompletionItemKind::INTERFACE,
                 DefKind::EffectOp | DefKind::ForeignFn => CompletionItemKind::FUNCTION,
+                DefKind::Law => CompletionItemKind::PROPERTY,
+                DefKind::LawVar => CompletionItemKind::VARIABLE,
                 DefKind::Import => unreachable!(),
             };
 
