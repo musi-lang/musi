@@ -76,37 +76,37 @@ impl Opcode {
     pub const EFF_POP: Self = Self(0x4D);
 
     // §6  Ordered Comparison (no operand)
-    pub const CMP_LT: Self = Self(0x50);
-    pub const CMP_LT_UN: Self = Self(0x51);
-    pub const CMP_LE: Self = Self(0x52);
-    pub const CMP_LE_UN: Self = Self(0x53);
-    pub const CMP_GT: Self = Self(0x54);
-    pub const CMP_GT_UN: Self = Self(0x55);
-    pub const CMP_GE: Self = Self(0x56);
-    pub const CMP_GE_UN: Self = Self(0x57);
+    pub const CMP_LT: Self = Self(0x09);
+    pub const CMP_LT_UN: Self = Self(0x0A);
+    pub const CMP_LE: Self = Self(0x0B);
+    pub const CMP_LE_UN: Self = Self(0x0C);
+    pub const CMP_GT: Self = Self(0x0D);
+    pub const CMP_GT_UN: Self = Self(0x0E);
+    pub const CMP_GE: Self = Self(0x0F);
+    pub const CMP_GE_UN: Self = Self(0x1B);
 
     // §7  Float Comparison
-    pub const CMP_F_EQ: Self = Self(0x58);
-    pub const CMP_F_NE: Self = Self(0x59);
-    pub const CMP_F_LT: Self = Self(0x5A);
-    pub const CMP_F_LE: Self = Self(0x5B);
-    pub const CMP_F_GT: Self = Self(0x5C);
-    pub const CMP_F_GE: Self = Self(0x5D);
+    pub const CMP_F_EQ: Self = Self(0x1C);
+    pub const CMP_F_NE: Self = Self(0x1D);
+    pub const CMP_F_LT: Self = Self(0x1E);
+    pub const CMP_F_LE: Self = Self(0x1F);
+    pub const CMP_F_GT: Self = Self(0x26);
+    pub const CMP_F_GE: Self = Self(0x27);
 
     // §8  Conversion
-    pub const CNV_ITF: Self = Self(0x5E);
-    pub const CNV_FTI: Self = Self(0x5F);
-    pub const CNV_TRM: Self = Self(0x60);
+    pub const CNV_ITF: Self = Self(0x28);
+    pub const CNV_FTI: Self = Self(0x29);
+    pub const CNV_TRM: Self = Self(0x2A);
 
     // §9  Structural / Array / Effects
-    pub const LD_TAG: Self = Self(0x61);
-    pub const LD_LEN: Self = Self(0x62);
-    pub const LD_IDX: Self = Self(0x63);
-    pub const ST_IDX: Self = Self(0x64);
-    pub const FRE: Self = Self(0x65);
-    pub const EFF_RES_C: Self = Self(0x66);
-    pub const EFF_ABT: Self = Self(0x67);
-    pub const TSK_AWT: Self = Self(0x68);
+    pub const LD_TAG: Self = Self(0x2B);
+    pub const LD_LEN: Self = Self(0x2C);
+    pub const LD_IDX: Self = Self(0x2D);
+    pub const ST_IDX: Self = Self(0x2E);
+    pub const FRE: Self = Self(0x2F);
+    pub const EFF_RES_C: Self = Self(0x35);
+    pub const EFF_ABT: Self = Self(0x38);
+    pub const TSK_AWT: Self = Self(0x39);
     /// Indirect (dynamic) call through a closure or fn value. u8 = arg count.
     pub const INV_DYN: Self = Self(0x69);
 
@@ -196,3 +196,6 @@ pub fn encode_i32(buf: &mut Vec<u8>, op: Opcode, operand: i32) {
     buf.push(op.0);
     buf.extend_from_slice(&operand.to_le_bytes());
 }
+
+#[cfg(test)]
+mod tests;
