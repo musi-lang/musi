@@ -44,8 +44,8 @@ pub fn code_lens(doc: &AnalyzedDoc, uri: &Uri) -> Vec<CodeLens> {
                     _ => None,
                 });
                 let title = match label {
-                    Some(ref l) => format!("Run test: {l}"),
-                    None => "Run test".to_owned(),
+                    Some(ref l) => format!("▶ Run test: {l}"),
+                    None => "▶ Run test".to_owned(),
                 };
                 lenses.push(CodeLens {
                     range,
@@ -63,8 +63,17 @@ pub fn code_lens(doc: &AnalyzedDoc, uri: &Uri) -> Vec<CodeLens> {
                 lenses.push(CodeLens {
                     range,
                     command: Some(Command {
-                        title: "Run".to_owned(),
+                        title: "▶ Run".to_owned(),
                         command: "musi.runFile".to_owned(),
+                        arguments: Some(vec![serde_json::Value::String(uri_str.clone())]),
+                    }),
+                    data: None,
+                });
+                lenses.push(CodeLens {
+                    range,
+                    command: Some(Command {
+                        title: "⚙ Debug".to_owned(),
+                        command: "musi.debugFile".to_owned(),
                         arguments: Some(vec![serde_json::Value::String(uri_str.clone())]),
                     }),
                     data: None,
