@@ -35,8 +35,10 @@ pub use unify::UnifyTable;
 pub use well_known::WellKnown;
 
 pub use exports::{ExportBinding, ModuleExports, collect_exports, exports_to_record_type};
+pub use resolve::ImportNames;
 
 use std::collections::HashMap;
+use std::mem;
 
 use music_ast::{ExprIdx, ParsedModule};
 use music_shared::{Arena, DiagnosticBag, FileId, Interner, Span, Symbol};
@@ -74,6 +76,129 @@ pub struct Prelude {
     pub well_known: WellKnown,
     pub defs: Vec<DefInfo>,
     pub instances: Vec<InstanceInfo>,
+}
+
+/// Shared mutable state for multi-module analysis.
+///
+/// Owns the type arena, unification table, definition table, scope tree,
+/// and well-known prelude — all shared across modules.
+pub struct SharedAnalysisState {
+    pub types: Arena<Type>,
+    pub unify: UnifyTable,
+    pub defs: DefTable,
+    pub scopes: ScopeTree,
+    pub well_known: WellKnown,
+    pub prelude_scope: ScopeId,
+}
+
+/// Per-module analysis output (does not own shared state).
+pub struct ModuleSemaOutput {
+    pub module_scope: ScopeId,
+    pub resolution: ResolutionMap,
+    pub expr_types: HashMap<ExprIdx, TypeIdx>,
+    pub instances: Vec<InstanceInfo>,
+}
+
+impl SharedAnalysisState {
+    /// Creates a new shared state with prelude scope and well-known definitions.
+    #[must_use]
+    pub fn new(interner: &mut Interner) -> Self {
+        let mut defs = DefTable::new();
+        let mut scopes = ScopeTree::new();
+        let prelude_scope = scopes.push_root();
+        let well_known =
+            well_known::init_well_known(interner, &mut defs, prelude_scope, &mut scopes);
+        Self {
+            types: Arena::new(),
+            unify: UnifyTable::new(),
+            defs,
+            scopes,
+            well_known,
+            prelude_scope,
+        }
+    }
+
+    /// Converts the shared state and a per-module output into a [`SemaResult`].
+    #[must_use]
+    pub fn into_sema_result(self, output: ModuleSemaOutput) -> SemaResult {
+        SemaResult {
+            defs: self.defs.into_vec(),
+            resolution: output.resolution,
+            expr_types: output.expr_types,
+            types: self.types,
+            unify: self.unify,
+            instances: output.instances,
+            well_known: self.well_known,
+        }
+    }
+}
+
+/// Runs analysis for a single module using shared cross-module state.
+#[allow(clippy::implicit_hasher)]
+pub fn analyze_shared(
+    module: &ParsedModule,
+    state: &mut SharedAnalysisState,
+    interner: &mut Interner,
+    file_id: FileId,
+    diags: &mut DiagnosticBag,
+    import_names: &ImportNames,
+) -> ModuleSemaOutput {
+    let module_scope = state.scopes.push_child(state.prelude_scope);
+
+    let resolved = resolve::resolve_with_imports(
+        module,
+        interner,
+        file_id,
+        diags,
+        &mut state.defs,
+        &mut state.scopes,
+        module_scope,
+        import_names,
+    );
+
+    let ctx = CheckContext {
+        ast: &module.arenas,
+        interner,
+        file_id,
+        well_known: &state.well_known,
+        expr_defs: &resolved.expr_defs,
+        pat_defs: &resolved.pat_defs,
+        import_types: &HashMap::new(),
+        law_inferred_vars: &resolved.law_inferred_vars,
+    };
+
+    let mut checker = Checker::new_with_state(
+        ctx,
+        diags,
+        &mut state.defs,
+        &mut state.scopes,
+        module_scope,
+        mem::take(&mut state.types),
+        mem::take(&mut state.unify),
+    );
+
+    for stmt in &module.stmts {
+        let _ty = checker.synth(stmt.expr);
+    }
+
+    checker.resolve_obligations();
+    let result = checker.finish();
+
+    state.types = result.types;
+    state.unify = result.unify;
+
+    analyze_emit_unused_warnings(&state.defs, interner, file_id, diags);
+
+    ModuleSemaOutput {
+        module_scope,
+        resolution: ResolutionMap {
+            expr_defs: resolved.expr_defs,
+            pat_defs: resolved.pat_defs,
+            law_inferred_vars: resolved.law_inferred_vars,
+        },
+        expr_types: result.expr_types,
+        instances: result.instances,
+    }
 }
 
 /// Runs name resolution and type checking on `module`.
@@ -173,6 +298,7 @@ fn analyze_emit_unused_warnings(
         if def.use_count == 0
             && def.span != Span::DUMMY
             && !def.exported
+            && !def.is_entry_point
             && def.name != Symbol(u32::MAX)
             && !matches!(
                 def.kind,
