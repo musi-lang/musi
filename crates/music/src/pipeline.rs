@@ -170,9 +170,7 @@ fn build_import_types_for_module(
     _node: &ModuleNode,
     _module_sema: &HashMap<ModuleId, SemaResult>,
 ) -> HashMap<Symbol, TypeIdx> {
-    // Cross-module type sharing requires a shared type arena. For now, return
-    // an empty map — imports type as Unit (existing behavior). The module
-    // graph, resolution, and cycle detection are fully operational.
+    // Cross-module type sharing blocked on shared type arena (imports type as Unit).
     HashMap::new()
 }
 
