@@ -8,9 +8,9 @@ use musi_vm::{Vm, load, verify};
 use crate::pipeline;
 
 /// Compiles `path` and immediately runs it in the VM.
-pub fn run(path: &Path, manifest: Option<&MusiManifest>) -> ! {
+pub fn run(path: &Path, manifest: Option<&MusiManifest>, project_root: Option<&Path>) -> ! {
     let out = if manifest.is_some() {
-        match pipeline::run_frontend_multi(path, manifest) {
+        match pipeline::run_frontend_multi(path, manifest, project_root) {
             Ok(o) => o,
             Err(()) => process::exit(1),
         }

@@ -13,8 +13,10 @@ use music_lex::lex;
 use music_parse::parse;
 use music_resolve::graph::ModuleId;
 use music_resolve::{ModuleGraph, ModuleNode, build_module_graph};
-use music_sema::{SemaResult, TypeIdx, analyze, analyze_with_imports};
-use music_shared::{DiagnosticBag, Interner, SourceDb, Symbol};
+use music_sema::{
+    ExportBinding, ImportNames, SemaResult, SharedAnalysisState, analyze, collect_exports,
+};
+use music_shared::{DiagnosticBag, Interner, SourceDb};
 
 use crate::resolve_config;
 
@@ -72,15 +74,20 @@ pub fn run_frontend(path: &Path) -> Result<FrontendOutput, ()> {
 pub fn run_frontend_multi(
     path: &Path,
     manifest: Option<&MusiManifest>,
+    project_root_hint: Option<&Path>,
 ) -> Result<FrontendOutput, ()> {
     let mut interner = Interner::new();
     let mut source_db = SourceDb::new();
     let mut diags = DiagnosticBag::new();
 
-    let project_root = path
-        .parent()
-        .unwrap_or_else(|| Path::new("."))
-        .to_path_buf();
+    let project_root = project_root_hint.map_or_else(
+        || {
+            path.parent()
+                .unwrap_or_else(|| Path::new("."))
+                .to_path_buf()
+        },
+        Path::to_path_buf,
+    );
 
     let config = resolve_config::build(&project_root, manifest);
     let mut parsed_modules: HashMap<ModuleId, ParsedModule> = HashMap::new();
@@ -139,39 +146,56 @@ fn run_sema_in_order(
     interner: &mut Interner,
     diags: &mut DiagnosticBag,
 ) -> Option<(SemaResult, ParsedModule)> {
-    let mut module_sema: HashMap<ModuleId, SemaResult> = HashMap::new();
+    let mut state = SharedAnalysisState::new(interner);
+    let mut module_exports: HashMap<ModuleId, Vec<ExportBinding>> = HashMap::new();
 
     let entry_id = ModuleId(0);
-    let mut entry_result: Option<(SemaResult, ParsedModule)> = None;
+    let mut entry_output: Option<(music_sema::ModuleSemaOutput, ParsedModule)> = None;
 
     for &module_id in order {
         let node = graph.get(module_id);
         let file_id = node.file_id;
 
-        let import_types = build_import_types_for_module(node, &module_sema);
+        let import_names = build_import_names(node, &module_exports);
 
         let Some(parsed) = parsed_modules.remove(&module_id) else {
             continue;
         };
 
-        let sema = analyze_with_imports(&parsed, interner, file_id, diags, &import_types);
+        let output = music_sema::analyze_shared(
+            &parsed,
+            &mut state,
+            interner,
+            file_id,
+            diags,
+            &import_names,
+        );
 
         if module_id == entry_id {
-            entry_result = Some((sema, parsed));
+            entry_output = Some((output, parsed));
         } else {
-            let _prev = module_sema.insert(module_id, sema);
+            let defs_vec: Vec<_> = state.defs.iter().cloned().collect();
+            let exports = collect_exports(&parsed, &defs_vec, &output.resolution.pat_defs);
+            let _prev = module_exports.insert(module_id, exports.bindings);
         }
     }
 
-    entry_result
+    let (output, parsed) = entry_output?;
+    Some((state.into_sema_result(output), parsed))
 }
 
-fn build_import_types_for_module(
-    _node: &ModuleNode,
-    _module_sema: &HashMap<ModuleId, SemaResult>,
-) -> HashMap<Symbol, TypeIdx> {
-    // Cross-module type sharing blocked on shared type arena (imports type as Unit).
-    HashMap::new()
+fn build_import_names(
+    node: &ModuleNode,
+    module_exports: &HashMap<ModuleId, Vec<ExportBinding>>,
+) -> ImportNames {
+    let mut import_names = ImportNames::new();
+    for &(dep_id, import_sym) in &node.imports {
+        if let Some(exports) = module_exports.get(&dep_id) {
+            let names: Vec<_> = exports.iter().map(|eb| (eb.name, eb.def_id)).collect();
+            let _prev = import_names.insert(import_sym, names);
+        }
+    }
+    import_names
 }
 
 /// Runs IR lowering and bytecode emission.
