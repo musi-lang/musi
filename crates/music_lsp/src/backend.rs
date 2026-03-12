@@ -8,7 +8,9 @@ use tower_lsp_server::jsonrpc;
 use tower_lsp_server::ls_types::*;
 use tower_lsp_server::{Client, LanguageServer};
 
-use crate::analysis::{AnalyzedDoc, analyze_doc};
+use std::path::PathBuf;
+
+use crate::analysis::{AnalyzedDoc, analyze_doc, analyze_doc_multi};
 use crate::{
     code_actions, code_lens, completion, document_links, document_symbols, goto_def, hover,
     inlay_hints, references, semantic_tokens, signature_help,
@@ -30,12 +32,32 @@ impl MusiBackend {
     }
 
     async fn analyze_and_publish(&self, uri: Uri, text: &str) {
-        let (diags, doc) = analyze_doc(text, uri.as_str());
+        let (diags, doc) = if text.contains("import \"") {
+            self.try_multi_file_analysis(&uri, text).await
+        } else {
+            analyze_doc(text, uri.as_str())
+        };
         {
             let mut docs = self.documents.write().await;
             let _prev = docs.insert(uri.clone(), doc);
         }
         self.client.publish_diagnostics(uri, diags, None).await;
+    }
+
+    async fn try_multi_file_analysis(
+        &self,
+        uri: &Uri,
+        text: &str,
+    ) -> (Vec<tower_lsp_server::ls_types::Diagnostic>, AnalyzedDoc) {
+        let root_uri = self.root_uri.read().await;
+        let file_path = uri_to_path(uri.as_str());
+        let project_root = root_uri.as_ref().and_then(|u| uri_to_path(u.as_str()));
+
+        if let (Some(fp), Some(pr)) = (file_path, project_root) {
+            analyze_doc_multi(text, &fp, &pr)
+        } else {
+            analyze_doc(text, uri.as_str())
+        }
     }
 }
 
@@ -285,4 +307,8 @@ impl LanguageServer for MusiBackend {
             .unwrap_or_default();
         Ok(Some(lenses))
     }
+}
+
+fn uri_to_path(uri: &str) -> Option<PathBuf> {
+    uri.strip_prefix("file://").map(PathBuf::from)
 }

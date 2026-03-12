@@ -5,11 +5,17 @@
 //! handlers can reuse the same sema pass without re-running it.
 
 use std::collections::HashMap;
+use std::path::Path;
 
 use music_ast::{ExprIdx, ParsedModule};
 use music_lex::{LexedSource, Token, TokenKind, lex};
 use music_parse::parse;
-use music_sema::{DefInfo, SemaResult, analyze};
+use music_resolve::graph::ModuleId;
+use music_resolve::{ModuleGraph, ModuleNode, ResolverConfig, build_module_graph};
+use music_sema::{
+    DefInfo, ExportBinding, ImportNames, ModuleSemaOutput, SemaResult, SharedAnalysisState,
+    analyze, collect_exports,
+};
 use music_shared::{DiagnosticBag, FileId, Interner, Severity, SourceDb, Span, Symbol};
 use tower_lsp_server::ls_types::{Diagnostic, DiagnosticSeverity, DiagnosticTag, Position, Range};
 
@@ -76,6 +82,136 @@ pub fn analyze_doc(source: &str, _uri: &str) -> (Vec<Diagnostic>, AnalyzedDoc) {
         dep_sources: HashMap::new(),
     };
     (lsp_diags, doc)
+}
+
+/// Run the multi-file pipeline: build module graph, toposort, run sema in
+/// dependency order. Falls back to single-file `analyze_doc()` on failure.
+pub fn analyze_doc_multi(
+    source: &str,
+    file_path: &Path,
+    project_root: &Path,
+) -> (Vec<Diagnostic>, AnalyzedDoc) {
+    let mut interner = Interner::new();
+    let mut source_db = SourceDb::new();
+    let mut diags = DiagnosticBag::new();
+    let mut parsed_modules: HashMap<ModuleId, ParsedModule> = HashMap::new();
+
+    let config = ResolverConfig::from_project(project_root, None);
+
+    let graph = match build_module_graph(
+        file_path,
+        &config,
+        &mut interner,
+        &mut source_db,
+        &mut diags,
+        &mut parsed_modules,
+        Some(source),
+    ) {
+        Ok(g) => g,
+        Err(_) => return analyze_doc(source, "<document>"),
+    };
+
+    let order = match graph.toposort() {
+        Ok(o) => o,
+        Err(_) => return analyze_doc(source, "<document>"),
+    };
+
+    let (sema, entry_parsed, entry_file_id, lexed) = match run_lsp_sema_in_order(
+        &graph,
+        &order,
+        &mut parsed_modules,
+        &mut interner,
+        &mut diags,
+        source,
+    ) {
+        Some(result) => result,
+        None => return analyze_doc(source, "<document>"),
+    };
+
+    let lsp_diags = to_lsp_diags(
+        diags.iter().filter(|d| d.primary.file_id == entry_file_id),
+        &source_db,
+    );
+
+    let doc = AnalyzedDoc {
+        source: source.to_owned(),
+        module: entry_parsed,
+        interner,
+        source_db,
+        file_id: entry_file_id,
+        lexed,
+        sema: Some(sema),
+        dep_sources: HashMap::new(),
+    };
+    (lsp_diags, doc)
+}
+
+fn run_lsp_sema_in_order(
+    graph: &ModuleGraph,
+    order: &[ModuleId],
+    parsed_modules: &mut HashMap<ModuleId, ParsedModule>,
+    interner: &mut Interner,
+    diags: &mut DiagnosticBag,
+    entry_source: &str,
+) -> Option<(SemaResult, ParsedModule, FileId, LexedSource)> {
+    let mut state = SharedAnalysisState::new(interner);
+    let mut module_exports: HashMap<ModuleId, Vec<ExportBinding>> = HashMap::new();
+
+    let entry_id = ModuleId(0);
+    let entry_file_id = graph.get(entry_id).file_id;
+    let mut entry_output: Option<(ModuleSemaOutput, ParsedModule)> = None;
+
+    for &module_id in order {
+        let node = graph.get(module_id);
+        let file_id = node.file_id;
+
+        let import_names = build_import_names(node, &module_exports);
+
+        let Some(parsed) = parsed_modules.remove(&module_id) else {
+            continue;
+        };
+
+        let output = music_sema::analyze_shared(
+            &parsed,
+            &mut state,
+            interner,
+            file_id,
+            diags,
+            &import_names,
+        );
+
+        if module_id == entry_id {
+            entry_output = Some((output, parsed));
+        } else {
+            let defs_vec: Vec<_> = state.defs.iter().cloned().collect();
+            let exports = collect_exports(&parsed, &defs_vec, &output.resolution.pat_defs);
+            let _prev = module_exports.insert(module_id, exports.bindings);
+        }
+    }
+
+    let (output, parsed) = entry_output?;
+    let sema = state.into_sema_result(output);
+
+    // Re-lex the entry file for token data used by LSP features (semantic
+    // tokens, find-name, etc.). The interner already has all symbols from
+    // the graph-build phase, so this is cheap.
+    let lexed = lex(entry_source, entry_file_id, interner, diags);
+
+    Some((sema, parsed, entry_file_id, lexed))
+}
+
+fn build_import_names(
+    node: &ModuleNode,
+    module_exports: &HashMap<ModuleId, Vec<ExportBinding>>,
+) -> ImportNames {
+    let mut import_names = ImportNames::new();
+    for &(dep_id, import_sym) in &node.imports {
+        if let Some(exports) = module_exports.get(&dep_id) {
+            let names: Vec<_> = exports.iter().map(|eb| (eb.name, eb.def_id)).collect();
+            let _prev = import_names.insert(import_sym, names);
+        }
+    }
+    import_names
 }
 
 /// Returns the span of any expression node, or `None` if the index is out of bounds.

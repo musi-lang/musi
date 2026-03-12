@@ -54,6 +54,13 @@ pub fn document_symbols(doc: &AnalyzedDoc) -> DocumentSymbolResponse {
             let range = span_to_range(doc.file_id, def.span, &doc.source_db);
             let selection_range = span_to_range(doc.file_id, name_span, &doc.source_db);
 
+            // In multi-file mode, defs from imported modules have spans from
+            // other files. Skip any def whose selection_range falls outside
+            // its full range (LSP protocol requires containment).
+            if selection_range.start < range.start || selection_range.end > range.end {
+                return None;
+            }
+
             #[allow(deprecated)]
             Some(DocumentSymbol {
                 name,
