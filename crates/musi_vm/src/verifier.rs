@@ -159,10 +159,8 @@ const fn fixed_stack_delta(op: Opcode) -> Option<i32> {
         | Opcode::CNV_ITF
         | Opcode::CNV_FTI
         | Opcode::CNV_TRM
-        | Opcode::ST_FLD
-        | Opcode::ST_FLD_W
         | Opcode::LD_FLD
-        | Opcode::MK_PRD
+        | Opcode::MK_ARR
         | Opcode::MK_VAR
         | Opcode::MK_VAR_W
         | Opcode::LD_PAY
@@ -170,33 +168,28 @@ const fn fixed_stack_delta(op: Opcode) -> Option<i32> {
         | Opcode::CMP_TAG
         | Opcode::CMP_TAG_W
         | Opcode::LD_LEN
-        | Opcode::LD_IDX
-        | Opcode::ST_IDX
         | Opcode::EFF_PSH
         | Opcode::EFF_POP
         | Opcode::EFF_RES_C
         | Opcode::EFF_ABT
-        | Opcode::EFF_DO
         | Opcode::EFF_RES
-        | Opcode::INV_DYN
-        | Opcode::TSK_SPN
-        | Opcode::TSK_CHS
         | Opcode::TSK_CHR
-        | Opcode::TSK_CMK
         | Opcode::TSK_AWT => Some(0),
 
-        // Push 1: dup, load global, alloc
+        // Push 1: dup, load global, alloc, channel make
         Opcode::DUP
         | Opcode::LD_GLB
-        | Opcode::MK_ARR
         | Opcode::ALC_REF
         | Opcode::ALC_MAN
-        | Opcode::ALC_ARN => Some(1),
+        | Opcode::ALC_ARN
+        | Opcode::TSK_CMK => Some(1),
 
-        // Net -1: pop, store global, free, binary ops
+        // Net -1: pop, store global, free, index load, channel send, binary ops
         Opcode::POP
         | Opcode::ST_GLB
         | Opcode::FRE
+        | Opcode::LD_IDX
+        | Opcode::TSK_CHS
         | Opcode::I_ADD
         | Opcode::I_ADD_UN
         | Opcode::I_SUB
@@ -234,6 +227,9 @@ const fn fixed_stack_delta(op: Opcode) -> Option<i32> {
         | Opcode::CMP_F_LE
         | Opcode::CMP_F_GT
         | Opcode::CMP_F_GE => Some(-1),
+
+        // Net -3: store index (pops value+base+index)
+        Opcode::ST_IDX => Some(-3),
 
         _ => None,
     }
@@ -291,12 +287,42 @@ fn verify_operand_op(
             Ok(-1)
         }
         Opcode::INV | Opcode::INV_EFF => {
-            check_fn_id(ops.u32_op(), module, "inv")?;
-            Ok(1)
+            let fn_id = ops.u32_op();
+            check_fn_id(fn_id, module, "inv")?;
+            let param_count = module
+                .fn_by_id(fn_id)
+                .map_or(0, |(_, f)| i32::from(f.param_count));
+            Ok(1 - param_count)
         }
         Opcode::INV_TAL | Opcode::INV_TAL_EFF => {
-            check_fn_id(ops.u32_op(), module, "inv.tal")?;
-            Ok(0)
+            let fn_id = ops.u32_op();
+            check_fn_id(fn_id, module, "inv.tal")?;
+            let param_count = module
+                .fn_by_id(fn_id)
+                .map_or(0, |(_, f)| i32::from(f.param_count));
+            Ok(-param_count)
+        }
+        Opcode::MK_PRD => {
+            let field_count = i32::try_from(ops.u8_op()).unwrap_or(i32::MAX);
+            Ok(1 - field_count)
+        }
+        Opcode::ST_FLD | Opcode::ST_FLD_W => Ok(-2),
+        Opcode::INV_DYN => {
+            let arg_count = i32::try_from(ops.u8_op()).unwrap_or(i32::MAX);
+            Ok(-arg_count)
+        }
+        Opcode::EFF_DO => {
+            let op_id = ops.u32_op();
+            let param_count = lookup_effect_op_param_count(module, op_id);
+            Ok(1 - param_count)
+        }
+        Opcode::TSK_SPN => {
+            let fn_id = ops.u32_op();
+            check_fn_id(fn_id, module, "tsk.spn")?;
+            let param_count = module
+                .fn_by_id(fn_id)
+                .map_or(0, |(_, f)| i32::from(f.param_count));
+            Ok(1 - param_count)
         }
         Opcode::INV_FFI => {
             let idx = usize::try_from(ops.u32_op()).unwrap_or(usize::MAX);
@@ -305,12 +331,27 @@ fn verify_operand_op(
                     desc: format!("inv.ffi index {idx} out of bounds").into_boxed_str(),
                 });
             }
-            Ok(0)
+            let param_count = i32::from(module.foreign_fns[idx].param_count);
+            Ok(1 - param_count)
         }
         _ => Err(VmError::Verify {
             desc: format!("unknown opcode {:#04x}", op.0).into_boxed_str(),
         }),
     }
+}
+
+/// Look up the parameter count for an effect operation by its flat index.
+fn lookup_effect_op_param_count(module: &LoadedModule, op_id: u32) -> i32 {
+    let mut idx = 0u32;
+    for effect in &module.effects {
+        for op in &effect.ops {
+            if idx == op_id {
+                return i32::try_from(op.param_type_ids.len()).unwrap_or(0);
+            }
+            idx += 1;
+        }
+    }
+    0
 }
 
 /// Compute the stack depth delta for an opcode and verify its operands.
@@ -357,6 +398,12 @@ fn verify_fn(func: &LoadedFn, module: &LoadedModule) -> Result<(), VmError> {
                         .into_boxed_str(),
                 });
             }
+        }
+
+        let is_terminator = matches!(op, Opcode::RET | Opcode::RET_U | Opcode::UNR | Opcode::HLT);
+        let is_unconditional_jump = matches!(op, Opcode::JMP | Opcode::JMP_W);
+        if is_terminator || is_unconditional_jump {
+            depth = 0;
         }
 
         ip += len;

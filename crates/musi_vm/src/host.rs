@@ -14,5 +14,6 @@ pub trait HostFunctions {
     /// # Errors
     ///
     /// Returns `VmError` if the call fails.
-    fn call_foreign(&mut self, idx: u32, args: &[Value], heap: &Heap) -> Result<Value, VmError>;
+    fn call_foreign(&mut self, idx: u32, args: &[Value], heap: &mut Heap)
+    -> Result<Value, VmError>;
 }

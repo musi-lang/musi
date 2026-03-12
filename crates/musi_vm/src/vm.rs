@@ -550,7 +550,7 @@ impl Vm {
         let host = self.host.as_mut().ok_or_else(|| VmError::Malformed {
             desc: "inv.ffi without a host attached".into(),
         })?;
-        let result = host.call_foreign(operand, &args, &self.heap)?;
+        let result = host.call_foreign(operand, &args, &mut self.heap)?;
 
         let frame = self.call_stack.last_mut().expect("frame exists");
         frame.stack.push(result);
