@@ -1,6 +1,7 @@
 //! Pass 2: expression resolution.
 
 use music_ast::expr::{Arg, ArrayElem, Expr, LetFields, MatchArm, Param, PwGuard, RecField};
+use music_ast::lit::{FStrPart, Lit};
 use music_ast::ty::{Constraint, TyParam};
 use music_ast::{ExprIdx, TyIdx};
 use music_shared::{Span, Symbol};
@@ -15,7 +16,8 @@ impl Resolver<'_> {
     pub(super) fn resolve_expr(&mut self, expr_idx: ExprIdx) {
         match self.ast.exprs[expr_idx].clone() {
             Expr::Name { name, span } => self.resolve_name(expr_idx, name, span),
-            Expr::Lit { .. } | Expr::Error { .. } | Expr::Import { .. } | Expr::Export { .. } => {}
+            Expr::Lit { ref lit, .. } => self.resolve_lit(lit),
+            Expr::Error { .. } | Expr::Import { .. } | Expr::Export { .. } => {}
             Expr::Paren { inner, .. } | Expr::Annotated { inner, .. } => self.resolve_expr(inner),
             Expr::Choice { body, .. } => self.resolve_expr_choice(body),
             Expr::Tuple { elems, .. } | Expr::Variant { args: elems, .. } => {
@@ -107,6 +109,16 @@ impl Resolver<'_> {
                 ..
             } => self.resolve_expr_effect(name, &params, &ops, exported),
             Expr::Foreign { decls, .. } => self.resolve_expr_foreign(&decls),
+        }
+    }
+
+    fn resolve_lit(&mut self, lit: &Lit) {
+        if let Lit::FStr { parts, .. } = lit {
+            for part in parts {
+                if let FStrPart::Interpolated { expr, .. } = part {
+                    self.resolve_expr(*expr);
+                }
+            }
         }
     }
 
@@ -218,8 +230,9 @@ impl Resolver<'_> {
             Some(self.enter_ty_param_scope(&fields.params, &fields.constraints))
         };
 
-        // For function-like patterns, pre-define the name for recursion.
-        if is_fn_pat {
+        // For let-in expressions, pre-define function names for recursion.
+        // Top-level `let` (body: None) is pre-defined in collect_top_level.
+        if is_fn_pat && body.is_some() {
             self.define_fn_name(fields.pat, binding_def_kind(fields.kind));
         }
 
@@ -244,9 +257,8 @@ impl Resolver<'_> {
             }
             self.resolve_expr(body);
             self.current_scope = parent;
-        } else if !is_fn_pat {
-            self.define_pat(fields.pat, binding_def_kind(fields.kind));
         }
+        // Top-level `let` (body: None) — names already defined in collect_top_level.
 
         if let Some(p) = parent_ty_scope {
             self.current_scope = p;

@@ -76,6 +76,8 @@ pub struct DefInfo {
     pub use_count: u32,
     /// Whether this definition is exported from the module.
     pub exported: bool,
+    /// Whether this definition is marked `#[entrypoint]`.
+    pub is_entry_point: bool,
     /// For parameters: the calling-convention mode (`var`, `inout`, `ref`).
     pub param_mode: Option<ParamMode>,
 }
@@ -106,6 +108,7 @@ impl DefTable {
             ty_info: DefTyInfo::default(),
             use_count: 0,
             exported: false,
+            is_entry_point: false,
             param_mode: None,
         });
         id

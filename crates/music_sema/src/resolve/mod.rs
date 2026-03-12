@@ -26,6 +26,10 @@ use crate::def::{DefId, DefKind, DefTable};
 use crate::error::SemaError;
 use crate::scope::{ScopeId, ScopeTree};
 
+/// Imported names from dependency modules, keyed by import path symbol.
+/// Each entry is a list of `(name, DefId)` pairs from the dependency's exports.
+pub type ImportNames = HashMap<Symbol, Vec<(Symbol, DefId)>>;
+
 /// Output accumulators from the resolution pass.
 pub struct ResolveOutput {
     pub expr_defs: HashMap<ExprIdx, DefId>,
@@ -45,6 +49,32 @@ pub fn resolve(
     scopes: &mut ScopeTree,
     module_scope: ScopeId,
 ) -> ResolveOutput {
+    let empty = HashMap::new();
+    resolve_with_imports(
+        module,
+        interner,
+        file_id,
+        diags,
+        defs,
+        scopes,
+        module_scope,
+        &empty,
+    )
+}
+
+/// Like [`resolve`], but with pre-computed import names for cross-module resolution.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn resolve_with_imports(
+    module: &ParsedModule,
+    interner: &mut Interner,
+    file_id: FileId,
+    diags: &mut DiagnosticBag,
+    defs: &mut DefTable,
+    scopes: &mut ScopeTree,
+    module_scope: ScopeId,
+    import_names: &ImportNames,
+) -> ResolveOutput {
     let mut resolver = Resolver {
         ast: &module.arenas,
         interner,
@@ -58,6 +88,7 @@ pub fn resolve(
             law_inferred_vars: HashMap::new(),
         },
         current_scope: module_scope,
+        import_names,
     };
 
     for stmt in &module.stmts {
@@ -79,6 +110,7 @@ pub(super) struct Resolver<'a> {
     pub(super) scopes: &'a mut ScopeTree,
     pub(super) output: ResolveOutput,
     pub(super) current_scope: ScopeId,
+    pub(super) import_names: &'a ImportNames,
 }
 
 impl Resolver<'_> {

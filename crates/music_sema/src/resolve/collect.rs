@@ -1,6 +1,7 @@
 //! Pass 1: top-level definition collection.
 
 use music_ast::ExprIdx;
+use music_ast::attr::Attr;
 use music_ast::decl::ForeignDecl;
 use music_ast::expr::Expr;
 
@@ -10,6 +11,10 @@ use super::{Resolver, binding_def_kind};
 
 impl Resolver<'_> {
     pub(super) fn collect_top_level(&mut self, expr_idx: ExprIdx) {
+        self.collect_top_level_with_attrs(expr_idx, &[]);
+    }
+
+    fn collect_top_level_with_attrs(&mut self, expr_idx: ExprIdx, attrs: &[Attr]) {
         match &self.ast.exprs[expr_idx] {
             Expr::Binding {
                 exported, fields, ..
@@ -19,6 +24,22 @@ impl Resolver<'_> {
                 if *exported {
                     self.mark_pat_exported(fields.pat);
                 }
+                self.maybe_mark_entrypoint(fields.pat, attrs);
+            }
+            Expr::Let {
+                fields, body: None, ..
+            } => {
+                let kind = if fields
+                    .value
+                    .is_some_and(|v| matches!(self.ast.exprs[v], Expr::Choice { .. }))
+                {
+                    DefKind::Type
+                } else {
+                    binding_def_kind(fields.kind)
+                };
+                self.define_fn_name(fields.pat, kind);
+                self.define_pat(fields.pat, kind);
+                self.maybe_mark_entrypoint(fields.pat, attrs);
             }
             Expr::Class { name, exported, .. } => {
                 let id = self
@@ -70,10 +91,35 @@ impl Resolver<'_> {
                     self.defs.get_mut(id).exported = true;
                 }
             }
-            Expr::Annotated { inner, .. } => {
-                self.collect_top_level(*inner);
+            Expr::Import { path, .. } => {
+                if let Some(names) = self.import_names.get(path) {
+                    for &(name, def_id) in names {
+                        let _prev = self.scopes.define(self.current_scope, name, def_id);
+                        self.defs.get_mut(def_id).use_count += 1;
+                    }
+                }
+            }
+            Expr::Annotated { inner, attrs, .. } => {
+                self.collect_top_level_with_attrs(*inner, attrs);
             }
             _ => {}
+        }
+    }
+
+    fn maybe_mark_entrypoint(&mut self, pat: music_ast::PatIdx, attrs: &[Attr]) {
+        use music_ast::pat::Pat;
+        let has_ep = attrs
+            .iter()
+            .any(|a| self.interner.resolve(a.name) == "entrypoint");
+        if !has_ep {
+            return;
+        }
+        let span = match &self.ast.pats[pat] {
+            Pat::Variant { span, .. } | Pat::Bind { span, .. } => *span,
+            _ => return,
+        };
+        if let Some(&def_id) = self.output.pat_defs.get(&span) {
+            self.defs.get_mut(def_id).is_entry_point = true;
         }
     }
 }
