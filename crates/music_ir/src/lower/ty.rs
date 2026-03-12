@@ -1,11 +1,11 @@
 //! Type lowering: sema `Type` -> `IrType`.
 
-use music_sema::types::Type;
+use music_sema::types::{EffectRow, Type};
 use music_sema::{DefId, SemaResult, TypeIdx};
 use music_shared::Arena;
 
 use crate::error::IrError;
-use crate::types::{IrEffectMask, IrType, IrTypeIdx};
+use crate::types::{IrType, IrTypeIdx};
 
 /// Lowers a sema type to an IR type, interning it into `ir_types`.
 ///
@@ -29,7 +29,11 @@ pub fn lower_ty(
     match ty_data {
         Type::Named { def, .. } => lower_named(def, sema, ir_types),
         Type::Tuple { elems } => lower_tuple(&elems, sema, ir_types),
-        Type::Fn { params, ret, .. } => lower_fn(&params, ret, sema, ir_types),
+        Type::Fn {
+            params,
+            ret,
+            effects,
+        } => lower_fn(&params, ret, &effects, sema, ir_types),
         Type::Var(_) => Ok(ir_types.alloc(IrType::Any)),
         Type::Rigid(_) => Err(IrError::UnresolvedTypeVariable),
         _ => Err(IrError::UnsupportedExpr),
@@ -86,6 +90,7 @@ fn lower_tuple(
 fn lower_fn(
     params: &[TypeIdx],
     ret: TypeIdx,
+    effects: &EffectRow,
     sema: &SemaResult,
     ir_types: &mut Arena<IrType>,
 ) -> Result<IrTypeIdx, IrError> {
@@ -94,9 +99,10 @@ fn lower_fn(
         ir_params.push(lower_ty(p, sema, ir_types)?);
     }
     let ir_ret = lower_ty(ret, sema, ir_types)?;
+    let effect_mask = super::effect::lower_effect_row(effects, &sema.well_known.effects);
     Ok(ir_types.alloc(IrType::Fn {
         params: ir_params,
         ret: ir_ret,
-        effect_mask: IrEffectMask::PURE,
+        effect_mask,
     }))
 }

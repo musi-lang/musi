@@ -18,7 +18,7 @@ use crate::func::{
     IrFnId, IrFnIdx, IrForeignFn, IrFunction, IrLocal, IrLocalDecl, IrParam, IrParamMode,
 };
 use crate::inst::{IrInst, IrOperand};
-use crate::types::{IrEffectMask, IrType};
+use crate::types::IrType;
 
 use super::ty::lower_ty;
 
@@ -110,7 +110,7 @@ fn register_fn_stub(cx: &mut LowerCtx<'_>, expr_idx: ExprIdx) -> Result<(), IrEr
     let Type::Fn {
         params: param_sema_tys,
         ret: ret_sema_ty,
-        ..
+        effects: effect_row,
     } = fn_type
     else {
         return Err(IrError::UnsupportedExpr);
@@ -119,6 +119,7 @@ fn register_fn_stub(cx: &mut LowerCtx<'_>, expr_idx: ExprIdx) -> Result<(), IrEr
     let ir_ret_ty = lower_ty(ret_sema_ty, cx.sema, &mut cx.ir.types)?;
     let (ir_params, ir_locals) =
         build_param_locals(&params, &param_sema_tys, cx.sema, &mut cx.ir.types)?;
+    let ir_effects = super::effect::lower_effect_row(&effect_row, &cx.sema.well_known.effects);
 
     let fn_id = IrFnId(cx.next_fn_id);
     cx.next_fn_id += 1;
@@ -129,7 +130,7 @@ fn register_fn_stub(cx: &mut LowerCtx<'_>, expr_idx: ExprIdx) -> Result<(), IrEr
         name: fn_name,
         params: ir_params,
         ret_ty: ir_ret_ty,
-        effects: IrEffectMask::PURE,
+        effects: ir_effects,
         body: vec![],
         locals: ir_locals,
         is_closure: false,
