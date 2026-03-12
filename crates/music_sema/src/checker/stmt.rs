@@ -2,7 +2,8 @@
 
 use music_ast::decl::{ClassMember, ForeignDecl};
 use music_ast::expr::{Expr, Param};
-use music_ast::ty::{Ty, TyParam};
+use music_ast::ty::TyParam;
+use music_ast::util::collect_ty_var_nodes;
 use music_shared::{Idx, Span};
 
 use crate::checker::Checker;
@@ -96,47 +97,6 @@ fn check_member_law(
     check(ck, body, bool_ty);
 
     ck.current_scope = parent;
-}
-
-/// Collects type variables from `Ty::Var` nodes in a type tree.
-fn collect_ty_var_nodes(
-    ty_idx: Idx<music_ast::Ty>,
-    ast: &music_ast::AstArenas,
-    out: &mut Vec<TyParam>,
-) {
-    match &ast.tys[ty_idx] {
-        Ty::Var { name, span } => {
-            if !out.iter().any(|p| p.name == *name) {
-                out.push(TyParam {
-                    name: *name,
-                    span: *span,
-                });
-            }
-        }
-        Ty::Named { args, .. } => {
-            for &arg in args {
-                collect_ty_var_nodes(arg, ast, out);
-            }
-        }
-        Ty::Option { inner, .. } | Ty::Ref { inner, .. } | Ty::Array { elem: inner, .. } => {
-            collect_ty_var_nodes(*inner, ast, out);
-        }
-        Ty::Fn { params, ret, .. } => {
-            for &p in params {
-                collect_ty_var_nodes(p, ast, out);
-            }
-            collect_ty_var_nodes(*ret, ast, out);
-        }
-        Ty::Product { fields, .. }
-        | Ty::Sum {
-            variants: fields, ..
-        } => {
-            for &f in fields {
-                collect_ty_var_nodes(f, ast, out);
-            }
-        }
-        _ => {}
-    }
 }
 
 fn check_class_members(ck: &mut Checker<'_>, members: &[ClassMember], ty_params: &[TyParam]) {

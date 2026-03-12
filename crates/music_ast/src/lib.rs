@@ -9,6 +9,7 @@ pub mod expr;
 pub mod lit;
 pub mod pat;
 pub mod ty;
+pub mod util;
 pub mod visitor;
 
 pub use expr::Expr;
