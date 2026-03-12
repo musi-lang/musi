@@ -58,7 +58,12 @@ pub fn hover(doc: &AnalyzedDoc, position: Position) -> Option<Hover> {
         DefKind::Class => "class",
         DefKind::Given => "given",
         DefKind::Effect => "effect",
-        DefKind::EffectOp | DefKind::Import | DefKind::ForeignFn | DefKind::OpaqueType => "",
+        DefKind::EffectOp
+        | DefKind::Import
+        | DefKind::ForeignFn
+        | DefKind::OpaqueType
+        | DefKind::Law
+        | DefKind::LawVar => "",
     };
 
     let name = doc.interner.try_resolve(def.name).unwrap_or("<error>");
