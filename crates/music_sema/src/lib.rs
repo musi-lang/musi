@@ -47,6 +47,8 @@ pub struct ResolutionMap {
     pub expr_defs: HashMap<ExprIdx, DefId>,
     /// Maps each binding-site span to its [`DefId`].
     pub pat_defs: HashMap<Span, DefId>,
+    /// Maps law span → inferred (implicit) law variables, for LSP inlay hints.
+    pub law_inferred_vars: HashMap<Span, Vec<(Symbol, DefId)>>,
 }
 
 /// The complete result of semantic analysis of a single module.
@@ -108,6 +110,7 @@ pub fn analyze_with_imports(
         expr_defs: &resolved.expr_defs,
         pat_defs: &resolved.pat_defs,
         import_types,
+        law_inferred_vars: &resolved.law_inferred_vars,
     };
     let mut checker = Checker::new(ctx, diags, &mut defs, &mut scopes, module_scope);
 
@@ -125,6 +128,7 @@ pub fn analyze_with_imports(
         resolution: ResolutionMap {
             expr_defs: resolved.expr_defs,
             pat_defs: resolved.pat_defs,
+            law_inferred_vars: resolved.law_inferred_vars,
         },
         expr_types: result.expr_types,
         types: result.types,
@@ -170,7 +174,10 @@ fn analyze_emit_unused_warnings(
             && def.span != Span::DUMMY
             && !def.exported
             && def.name != Symbol(u32::MAX)
-            && !matches!(def.kind, DefKind::Given | DefKind::Variant | DefKind::Type)
+            && !matches!(
+                def.kind,
+                DefKind::Given | DefKind::Variant | DefKind::Type | DefKind::Law
+            )
         {
             let name_str = interner.resolve(def.name);
             if name_str == "_" || name_str.starts_with('_') {
@@ -178,7 +185,7 @@ fn analyze_emit_unused_warnings(
             }
             let name = Box::from(name_str);
             let err = match def.kind {
-                DefKind::Param => SemaError::UnusedParameter { name },
+                DefKind::Param | DefKind::LawVar => SemaError::UnusedParameter { name },
                 DefKind::OpaqueType => SemaError::UnusedType { name },
                 DefKind::Class => SemaError::UnusedClass { name },
                 DefKind::Effect | DefKind::EffectOp => SemaError::UnusedEffect { name },
