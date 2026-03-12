@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import { findServerPath, showServerNotFoundUI } from "./bootstrap";
 import { createAndStartClient, getClient, stopClient } from "./client";
 import { MsPackageCodeLensProvider } from "./codelens";
-import { registerCommands } from "./commands";
+import { clearCliCache, registerCommands } from "./commands";
 import { onConfigChange } from "./config";
 import { StatusBar } from "./status";
 
@@ -10,7 +10,10 @@ let _statusBar: StatusBar;
 
 function _setupConfigChangeHandler(context: vscode.ExtensionContext) {
 	context.subscriptions.push(
-		onConfigChange(async () => {
+		onConfigChange(async (event) => {
+			if (event.affectsConfiguration("musi.cliPath")) {
+				clearCliCache();
+			}
 			const client = getClient();
 			if (client) {
 				await client.sendNotification("workspace/didChangeConfiguration", {
@@ -33,6 +36,7 @@ async function _startServer() {
 	await createAndStartClient(serverPath);
 	_statusBar.update("Ready", "ready");
 
+	// Delay avoids notification flicker on fast server starts
 	setTimeout(() => {
 		vscode.window.showInformationMessage(
 			"Musi language features ready.",
