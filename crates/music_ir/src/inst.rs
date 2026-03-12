@@ -196,6 +196,15 @@ pub enum IrRvalue {
     /// Await a task result.
     Await { task: IrOperand },
 
+    /// Create a new channel.
+    ChannelMake,
+
+    /// Send a value into a channel.
+    ChannelSend { chan: IrOperand, value: IrOperand },
+
+    /// Receive a value from a channel (blocking).
+    ChannelRecv { chan: IrOperand },
+
     /// Call a foreign (FFI) function by index.
     ForeignCall { fn_idx: u32, args: Vec<IrOperand> },
 }

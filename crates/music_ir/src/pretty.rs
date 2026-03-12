@@ -348,6 +348,17 @@ fn write_rvalue(
             write!(w, "await ")?;
             write_operand(w, task)
         }
+        IrRvalue::ChannelMake => write!(w, "chan.make"),
+        IrRvalue::ChannelSend { chan, value } => {
+            write!(w, "chan.send ")?;
+            write_operand(w, chan)?;
+            write!(w, ", ")?;
+            write_operand(w, value)
+        }
+        IrRvalue::ChannelRecv { chan } => {
+            write!(w, "chan.recv ")?;
+            write_operand(w, chan)
+        }
         IrRvalue::ForeignCall { fn_idx, args } => {
             write!(w, "ffi.call #{fn_idx}(")?;
             for (i, arg) in args.iter().enumerate() {
