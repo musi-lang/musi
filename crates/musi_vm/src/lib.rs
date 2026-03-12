@@ -16,10 +16,12 @@
 //! let result = vm.run()?;
 //! ```
 
+mod channel;
 mod error;
 mod heap;
 mod host;
 mod loader;
+mod task;
 mod value;
 mod verifier;
 mod vm;
