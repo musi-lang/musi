@@ -591,10 +591,19 @@ impl Parser<'_> {
         let start = self.start_span();
         let _law = self.bump();
         let name = self.expect_symbol();
+        let params = if self.at(TokenKind::LParen) {
+            let _lp = self.bump();
+            let ps = self.comma_sep(TokenKind::RParen, Self::parse_param);
+            let _rp = self.expect(TokenKind::RParen);
+            ps
+        } else {
+            vec![]
+        };
         let _ceq = self.expect(TokenKind::ColonEq);
         let body = self.parse_alloc_expr();
         ClassMember::Law {
             name,
+            params,
             body,
             span: self.finish_span(start),
         }
