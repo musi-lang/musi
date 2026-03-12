@@ -63,7 +63,12 @@
 			{
 				"language": "musi",
 				"scopeName": "source.musi",
-				"path": "syntaxes/musi.tmLanguage.json"
+				"path": "syntaxes/musi.tmLanguage.json",
+				"balancedBracketScopes": [
+					"punctuation.section",
+					"punctuation.definition.type-params"
+				],
+				"unbalancedBracketScopes": []
 			},
 			{
 				"language": "musi-injection",
