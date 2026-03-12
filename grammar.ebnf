@@ -1,7 +1,6 @@
 (* ===================================================================== *)
-(* Musi Language — Formal Grammar                                        *)
+(* Musi Language — Formal Grammar (LL(1))                                *)
 (* ISO/IEC 14977 EBNF. Maximal munch throughout.                         *)
-(* Source of truth: docs/02-lexical.md, docs/08-grammar.md               *)
 (* ===================================================================== *)
 
 
@@ -14,280 +13,320 @@ newline = ? U+000A LINE FEED ? ;
 
 
 (* --------------------------------------------------------------------- *)
-(* §1  Lexical Grammar                                                   *)
+(* §1  Lexical grammar                                                   *)
 (* --------------------------------------------------------------------- *)
 
 (* 1.1  Character classes *)
-letter    = "A".."Z" | "a".."z" ;
-digit     = "0".."9" ;
-xdigit    = digit | "A".."F" | "a".."f" ;
+letter = "A".."Z" | "a".."z" ;
+digit  = "0".."9" ;
+xdigit = digit | "A".."F" | "a".."f" ;
 
 (* 1.2  Identifiers *)
-ident         = plainIdent | escapedIdent ;
-plainIdent    = letter , { letter | digit | "_" } ;
-escapedIdent  = "`" , { any - "`" } , "`" ;
-tyIdent       = "'" , letter , { letter | digit | "_" } ;
-opIdent       = "(" , opChars , ")" ;
-opChars       = "+" | "-" | "*" | "/" | "%" | "=" | "/="
-              | "<" | ">" | "<=" | ">=" | "<<" | ">>"
-              | "::" | "|>" ;
+ident        = plainIdent | escapedIdent ;
+plainIdent   = letter , { letter | digit | "_" } ;
+escapedIdent = "`" , { any - "`" } , "`" ;
+tyIdent      = "'" , letter , { letter | digit | "_" } ;
+opIdent      = "(" , opChars , ")" ;
+opChars      = "+" | "-" | "*" | "/" | "%" | "=" | "/="
+             | "<" | ">" | "<=" | ">=" | "<<" | ">>"
+             | "::" | "|>" ;
 
 (* 1.3  Literals *)
-lit        = litInt | litFloat | litString | litFstring | litRune ;
-litInt     = decInt | hexInt | octInt | binInt ;
-decInt     = digit , { digit | "_" } ;
-hexInt     = "0x" , xdigit , { xdigit | "_" } ;
-octInt     = "0o" , ("0".."7") , { ( "0".."7" ) | "_" } ;
-binInt     = "0b" , ("0"|"1") , { ("0"|"1") | "_" } ;
-litFloat   = digit , { digit } , "." , digit , { digit } ,
-             [ ("e"|"E") , ["+"|"-"] , digit , { digit } ] ;
-litString  = '"' , { strChar } , '"' ;
+lit       = litInt | litFloat | litString | litFstring | litRune ;
+litInt    = decInt | hexInt | octInt | binInt ;
+decInt    = digit , { digit | "_" } ;
+hexInt    = "0x" , xdigit , { xdigit | "_" } ;
+octInt    = "0o" , ( "0".."7" ) , { ( "0".."7" ) | "_" } ;
+binInt    = "0b" , ( "0" | "1" ) , { ( "0" | "1" ) | "_" } ;
+litFloat  = digit , { digit } , "." , digit , { digit } ,
+            [ ( "e" | "E" ) , [ "+" | "-" ] , digit , { digit } ] ;
+litString = '"' , { strChar } , '"' ;
 litFstring = 'f"' , { fstrPart } , '"' ;
-litRune    = "'" , runeChar , "'" ;
-fstrPart   = "{" , astExpr , "}" | strChar ;
-strChar    = "\\" , any | any - '"' ;
-runeChar   = "\\" , any | any - "'" ;
+litRune   = "'" , runeChar , "'" ;
+fstrPart  = "{" , astExpr , "}" | strChar ;
+strChar   = "\\" , any | any - '"' ;
+runeChar  = "\\" , any | any - "'" ;
 
 (* 1.4  Comments *)
-comment = "//" , { any - newline }
-        | "///" , { any - newline }
-        | "/*" , { any } , "*/" ;   (* block comments do not nest *)
+comment = "//" , { any - newline }      (* line *)
+        | "///" , { any - newline }     (* doc — documents next item *)
+        | "//!" , { any - newline }     (* module doc — documents enclosing module *)
+        | "/*" , { any } , "*/" ;       (* block — does not nest *)
 
-(* 1.5  Keywords (30)
-   and as or not xor let var ref inout if match defer effect return try
-   spawn await forall exists where of over under in class given law
-   import export foreign *)
+(* 1.5  Keywords (28, alphabetical)
+   and as choice class defer do effect export fatal foreign handle if
+   import in instance law let match mut not of or record resume
+   return try where with xor *)
 
 (* 1.6  Compound tokens — maximal munch
    :=  <-  ->  ~>  <:  :>  ?.  ??  ..  ..<  ...
-   <<  >>  /=  <=  >=  |>  ::  =>  #[                *)
+   <<  >>  /=  <=  >=  |>  ::  =>  #[
+   !.  !!  :?  :?>                               *)
 
 
 (* --------------------------------------------------------------------- *)
-(* §2  Parser Grammar                                                    *)
+(* §2  Parser grammar                                                    *)
 (* --------------------------------------------------------------------- *)
 
 (* 2.1  Top level *)
-astRoot  = { astStmt } ;
-astStmt  = astExpr , ";" ;
+astRoot = { astStmt } ;
+astStmt = astExpr , ";" ;
 
-(* 2.2  Expressions — precedence (lowest to highest)
-   Precedence: lower rule = tighter binding.
-   Boolean-algebra model: not > and > xor > or > comparisons.
-   This differs from C — do not apply C precedence. *)
+(* 2.2  Expressions — precedence ladder (lowest → highest)
 
-astExpr         = astExprNilCoal , [ "<-" , astExpr ] ;
-astExprNilCoal  = astExprPipe , [ "??" , astExprNilCoal ] ;
-astExprPipe     = astExprCmp , { "|>" , astExprCmp } ;
-astExprCmp      = astExprDisj ,
-                  [ ( "=" | "/=" | "<" | ">" | "<=" | ">=" | "in" ) ,
-                    astExprDisj ] ;
-astExprDisj     = astExprXor , { "or" , astExprXor } ;
-astExprXor      = astExprConj , { "xor" , astExprConj } ;
-astExprConj     = astExprRange , { "and" , astExprRange } ;
-astExprRange    = astExprCons , [ ( ".." | "..<" ) , astExprCons ] ;
-astExprCons     = astExprSft , [ "::" , astExprCons ] ;
-astExprSft      = astExprAdd , { ( "<<" | ">>" ) , astExprAdd } ;
-astExprAdd      = astExprMul , { ( "+" | "-" ) , astExprMul } ;
-astExprMul      = astExprPre , { ( "*" | "/" | "%" ) , astExprPre } ;
-astExprPre      = ( "-" | "not" ) , astExprPre | astExprPost ;
-astExprPost     = astExprAtom , { postfixOp } ;
+   Assignment          <-              right
+   Nil-coalescing      ?? !!           right
+   Pipeline            |>              left
+   Comparison          = /= < > <= >= in   non-assoc
+   Disjunction         or              left
+   Exclusive-or        xor             left
+   Conjunction         and             left
+   Range               .. ..<          non-assoc
+   Cons                ::              right
+   Shift               << >>           left
+   Additive            + -             left
+   Multiplicative      * / %           left
+   Prefix              - not           unary
+   Postfix             () .[] .{} . ? ! :? :?>
 
-(* No separate bitwise layers — and/or/xor/not are type-directed.
-   No & | ^ ~ operators exist. *)
+   and/or/xor/not are type-directed: boolean on Bool, bitwise on integers.
+   No separate & | ^ ~ operators exist. *)
+
+astExpr     = astExprCoal , [ "<-" , astExpr ] ;
+astExprCoal = astExprPipe , [ ( "??" | "!!" ) , astExprCoal ] ;
+astExprPipe = astExprCmp , { "|>" , astExprCmp } ;
+astExprCmp  = astExprDisj ,
+              [ ( "=" | "/=" | "<" | ">" | "<=" | ">=" | "in" ) ,
+                astExprDisj ] ;
+astExprDisj = astExprXor , { "or" , astExprXor } ;
+astExprXor  = astExprConj , { "xor" , astExprConj } ;
+astExprConj = astExprRange , { "and" , astExprRange } ;
+astExprRange = astExprCons , [ ( ".." | "..<" ) , astExprCons ] ;
+astExprCons = astExprSft , [ "::" , astExprCons ] ;
+astExprSft  = astExprAdd , { ( "<<" | ">>" ) , astExprAdd } ;
+astExprAdd  = astExprMul , { ( "+" | "-" ) , astExprMul } ;
+astExprMul  = astExprPre , { ( "*" | "/" | "%" ) , astExprPre } ;
+astExprPre  = ( "-" | "not" ) , astExprPre | astExprPost ;
+astExprPost = astExprAtom , { postfixOp } ;
 
 (* 2.3  Postfix operations *)
-postfixOp = "(" , [ argList ] , ")"
-          | ".[" , [ exprList ] , "]"
-          | ".{" , recLitFields , "}"
-          | "." , ( ident | litInt )
-          | "?." , ( ident | litInt ) ;
+postfixOp =
+    "(" , [ argList ] , ")"                 (* call *)
+  | ".[" , [ exprList ] , "]"              (* index *)
+  | ".{" , recLitFields , "}"             (* record literal *)
+  | "." , ( ident | litInt )              (* field access *)
+  | "?." , ( ident | litInt )             (* optional chaining *)
+  | "!." , ( ident | litInt )             (* forced unwrap access *)
+  | "?"                                    (* try / propagate *)
+  | "!"                                    (* force unwrap *)
+  | ":?" , astTyNamed , [ "as" , ident ]  (* type test *)
+  | ":?>" , astTyNamed ;                  (* type cast *)
 
-(* 2.4  Atoms *)
+(* 2.4  Atoms — each alternative has a unique FIRST token *)
 astExprAtom =
-    lit | ident
-  | astParen | astArray | astRecLit
-  | astDotPfx | astPiecewise | astMatch
-  | astLet | astVar | astReturn | astDefer
-  | astSpawn | astAwait | astTry | astImport
-  | astChoice | astForall | astExists
-  | astWithAttrs ;
+    lit
+  | ident
+  | astParen                               (* "(" *)
+  | astArray                               (* "[" *)
+  | astRecLit                              (* ".{" *)
+  | astDotPfx                              (* "." *)
+  | astMatch                               (* "match" *)
+  | astLet                                 (* "let" *)
+  | astReturn                              (* "return" *)
+  | astDefer                               (* "defer" *)
+  | astTry                                 (* "try" *)
+  | astImport                              (* "import" *)
+  | astChoice                              (* "choice" *)
+  | astRecord                              (* "record" *)
+  | astDo                                  (* "do" *)
+  | astHandle                              (* "with" *)
+  | astWithAttrs ;                         (* "#[" *)
 
-(* 2.5  Parenthesised forms — delimiter determines kind.
-   ()   = unit
-   (,)  = empty tuple
-   (;)  = empty sequence, evaluates to ()
-   (a)  = parenthesised expr
-   (a,) = single-element tuple
-   (a, b) = tuple
-   (a; b) = sequence, returns b
-   (a; b;) = sequence, trailing ; discards, returns () *)
+(* 2.5  Parenthesised forms
+
+   ()       unit
+   (,)      empty tuple
+   (;)      empty sequence, evaluates to ()
+   (a)      parenthesised expr
+   (a,)     single-element tuple
+   (a, b)   tuple
+   (a; b)   sequence, returns b
+   (a; b;)  sequence, trailing ;, returns ()
+   (e if g | e if g)   piecewise
+
+   When fnTail is present, paren contents are reinterpreted as lambda
+   parameters.  "=>" is the sole value-level arrow.  "->" and "~>" are
+   type-only arrows. *)
+
 astParen  = "(" , parenBody , ")" , [ fnTail ] ;
 fnTail    = [ ":" , astTy ] , "=>" , astExpr ;
 
-(* When fnTail is present, paren contents are reinterpreted as parameters.
-   ":" before the arrow is the return type annotation.
-   "=>" is the sole value-level arrow (lambdas and match arms).
-   "->" and "~>" are type-only arrows.
-   The parser validates parameter syntax after disambiguation. *)
 parenBody =
-    (* empty *)                                       (* unit: () *)
-  | ","                                               (* empty tuple: (,) *)
-  | ";"                                               (* empty sequence: (;) *)
+    (* empty *)                             (* unit: () *)
+  | ","                                     (* empty tuple: (,) *)
+  | ";"                                     (* empty sequence: (;) *)
   | astExpr , parenCont ;
-parenCont =
-    (* empty *)                                       (* parenthesised expr: (a) *)
-  | "," , [ exprList ] , [ "," ]                     (* tuple *)
-  | ";" , { astStmt } , astExpr                      (* sequence, returns last expr *)
-  | ";" , { astStmt } , ";" ;                        (* sequence, trailing ;, returns () *)
 
-(* 2.6  Arrays *)
+parenCont =
+    (* empty *)                             (* parenthesised expr *)
+  | "," , [ exprList ] , [ "," ]           (* tuple *)
+  | ";" , [ seqTail ]                      (* sequence *)
+  | "if" , pwGuard , { "|" , pwArm } ;    (* piecewise *)
+
+seqTail =
+    (* empty *)                             (* trailing ;, returns () *)
+  | astExpr , seqCont ;
+
+seqCont =
+    (* empty *)                             (* returns last expr *)
+  | ";" , [ seqTail ] ;                    (* continue sequence *)
+
+(* 2.6  Piecewise — sole conditional form. No if/else. No ternary.
+   Parsed inside parenCont after initial expr. *)
+pwArm   = astExpr , "if" , pwGuard ;
+pwGuard = "_" | astExpr ;
+
+(* 2.7  Match *)
+astMatch = "match" , astExpr ,
+           "(" , matchArm , { "|" , matchArm } , ")" ;
+matchArm = [ attrs ] , astPat , [ "if" , astExpr ] , "=>" , astExpr ;
+
+(* 2.8  Arrays *)
 astArray   = "[" , [ arrayItems ] , "]" ;
 arrayItems = arrayItem , { "," , arrayItem } ;
 arrayItem  = "..." , astExpr | astExpr ;
 
-(* 2.7  Record literals: leading dot, comma-separated, := initialisers.
-   Named: Point.{ x := 1, y := 2 }   Anonymous: .{ x := 1, y := 2 } *)
-astRecLit      = [ ident ] , ".{" , [ recLitFields ] , "}" ;
-recLitFields   = recLitField , { "," , recLitField } ;
-recLitField    = ident , [ ":=" , astExpr ] | "..." , astExpr ;
-
-(* 2.8  Piecewise — sole conditional form. No if/else. No ternary. *)
-astPiecewise = "(" , pwArm , { "|" , pwArm } , ")" ;
-pwArm        = astExpr , "if" , pwGuard ;
-pwGuard      = "_" | astExpr ;
-
-(* 2.9  Match *)
-astMatch  = "match" , astExpr ,
-            "(" , matchArm , { "|" , matchArm } , ")" ;
-matchArm  = [ attrs ] , astPat , [ "if" , astExpr ] , "=>" , astExpr ;
+(* 2.9  Record literals
+   Anonymous: .{ x := 1, y := 2 }
+   Named: Point.{ x := 1, y := 2 } — parsed as ident atom + postfix .{ *)
+astRecLit    = ".{" , [ recLitFields ] , "}" ;
+recLitFields = recLitField , { "," , recLitField } ;
+recLitField  = ident , [ ":=" , astExpr ] | "..." , astExpr ;
 
 (* 2.10  Bindings
-   Bracket params introduce type variables: let f [T, U] : sig := body
-   where clause constrains bracket params: let f [T] where T <: Eq : sig *)
-astLet = "let" , [ "ref" ] , astPat , [ bracketParams ] ,
-         [ whereClause ] , [ tyAnnot ] ,
+   Bracket params introduce type variables: let f ['T, 'U] : sig := body
+   where clause constrains params: let f ['T] where 'T <: Eq : sig
+   with clause annotates effects: let f ['T] where 'T <: Show with Async : sig *)
+astLet = "let" , [ "mut" ] , astPat , [ bracketParams ] ,
+         [ whereClause ] , [ withClause ] , [ tyAnnot ] ,
          ( ":=" , astExpr , [ "in" , "(" , astExpr , ")" ] | (* stub *) ) ;
 
-(* Mutable binding. var appears here and only here — never in astTy. *)
-astVar = "var" , [ "ref" ] , astPat , [ bracketParams ] ,
-         [ whereClause ] , [ tyAnnot ] , ":=" , astExpr ;
-
 bracketParams = "[" , tyIdent , { "," , tyIdent } , "]" ;
+withClause    = "with" , effectSet ;
 
-(* 2.11  Other atom forms *)
-astDotPfx  = "." , ident , [ "(" , [ exprList ] , ")" ] ;
-astReturn  = "return" , [ astExpr ] ;
-astDefer   = "defer" , astExpr ;   (* astParen handles block form *)
-astSpawn   = "spawn" , astExpr ;
-astAwait   = "await" , astExpr ;
-astTry     = "try" , astExpr ;
-astImport  = "import" , litString ;
-astChoice  = "choice" , "{" , astTy , "}" ;
-astForall  = "forall" , tyParamList , [ whereClause ] , "->" , astExpr ;
-astExists  = "exists" , tyParamList , [ whereClause ] , "->" , astExpr ;
+(* 2.11  Type definitions *)
+astChoice    = "choice" , "{" , astTy , "}" ;
+astRecord    = "record" , "{" , recDefFields , "}" ;
+recDefFields = recDefField , { "," , recDefField } ;
+recDefField  = ident , ":" , astTy , [ ":=" , astExpr ] ;
 
-(* 2.12  Declarations *)
+(* 2.12  Other atom forms *)
+astDotPfx = "." , ident , [ "(" , [ exprList ] , ")" ] ;
+astReturn = "return" , [ astExpr ] ;
+astDefer  = "defer" , astExpr ;
+astTry    = "try" , astExpr ;
+astImport = "import" , litString ;
+astDo     = "do" , astExprPost ;
+astHandle = "with" , astTyNamed , "{" , { handlerOp , [ ";" ] } , "}"
+            , "handle" , astExpr ;
+
+handlerOp = ident , ":" , params , "=>" , astExpr ;
+
+(* 2.13  Declarations *)
 astWithAttrs = attrs , astDecl ;
+
 astDecl =
-    [ "export" ] , ( astLet | astVar )
-  | "export" , "{" , exportList , "}" , [ ":=" , astImport ]
+    "export" , exportTail
+  | astLet
   | astClassDecl
-  | astGivenDecl
+  | astInstanceDecl
   | astEffectDecl
   | astForeignDecl ;
 
-astClassDecl  = "class" , ident , [ "over" , tyParamList ] ,
-                [ whereClause ] , "{" , { classMember } , "}" ;
-astGivenDecl  = "given" , astTyNamed , [ "over" , tyParamList ] ,
-                [ whereClause ] , "{" , { classMember } , "}" ;
-astEffectDecl = "effect" , ident , [ "of" , tyParamList ] ,
-                "{" , { effectOp , [ ";" ] } , "}" ;
-astForeignDecl = "foreign" , litString ,
-                 ( "let" , foreignBinding
-                 | "(" , { "let" , foreignBinding , ";" } , ")" ) ;
-foreignBinding = ident , [ "as" , litString ] , [ ":" , astTy ] ;
-effectOp      = ident , ":" , astTy ;
-classMember   = ( fnDecl | lawDecl ) , [ ";" ] ;
-fnDecl        = "let" , opOrIdent , params , [ tyAnnot ] ,
-                [ ":=" , astExpr ] ;
-lawDecl       = "law" , ident , [ params ] , ":=" , astExpr ;
-opOrIdent     = ident | opIdent ;
-params        = "(" , [ paramList ] , ")" ;
-paramList     = param , { "," , param } ;
-
-(* Parameter modes — inout precedes name, not type.
-   No modifier  = immutable copy
-   var          = mutable local copy
-   inout        = copy-in copy-out, Ada-style, clean call site *)
-param      = [ "inout" | "var" | "ref" ] , ident , [ tyAnnot ] , [ ":=" , astExpr ] ;
+exportTail =
+    astLet
+  | "{" , exportList , "}" , [ ":=" , astImport ] ;
 
 exportList = exportItem , { "," , exportItem } ;
 exportItem = ident , [ "as" , ident ] ;
 
-(* 2.13  Types. var never appears here. inout never appears here.
-   Record type fields: semicolons.
-   ref T = heap-allocated reference type. *)
+astClassDecl = "class" , ident , [ bracketParams ] ,
+               [ whereClause ] , "{" , { classMember } , "}" ;
+
+astInstanceDecl = "instance" , astTyNamed , [ bracketParams ] ,
+                  [ whereClause ] , "{" , { classMember } , "}" ;
+
+astEffectDecl = "effect" , ident , [ bracketParams ] ,
+                "{" , { effectOp , [ ";" ] } , "}" ;
+
+astForeignDecl = "foreign" , litString ,
+                 ( "let" , foreignBinding
+                 | "(" , { "let" , foreignBinding , ";" } , ")" ) ;
+
+classMember    = ( fnDecl | lawDecl ) , [ ";" ] ;
+fnDecl         = "let" , opOrIdent , params , [ tyAnnot ] ,
+                 [ ":=" , astExpr ] ;
+lawDecl        = "law" , ident , [ params ] , ":=" , astExpr ;
+opOrIdent      = ident | opIdent ;
+foreignBinding = ident , [ "as" , litString ] , [ ":" , astTy ] ;
+effectOp       = [ "fatal" ] , ident , ":" , astTy ;
+
+(* 2.14  Types *)
 astTy      = astTyArrow ;
-astTyArrow = astTyEff , { ( "->" | "~>" ) , astTyEff } ;
-astTyEff   = astTySum , [ "under" , effectSet ] ;
+astTyArrow = astTySum , [ ( "->" | "~>" ) , astTyArrow ] ;
 astTySum   = astTyProd , { "+" , astTyProd } ;
 astTyProd  = astTyBase , { "*" , astTyBase } ;
-astTyBase  =
-    tyIdent
-  | "?" , astTyBase
-  | "ref" , astTyBase
-  | ident , [ "of" , tyArgList ]
-  | "(" , [ tyList ] , ")"
-  | "[" , [ litInt ] , "]" , astTy
-  | "{" , recTyFields , [ ";" , "..." ] , "}"
-  | "{" , astTy , "|" , astExpr , "}"
-  | "forall" , tyParamList , [ whereClause ] , "->" , astTy
-  | "exists" , tyParamList , [ whereClause ] , "->" , astTy ;
 
-(* Record type fields: semicolons as separators.
-   Fields may have default values. *)
-recTyFields = recTyField , { ";" , recTyField } ;
-recTyField  = ident , ":" , astTy , [ ":=" , astExpr ] ;
+astTyBase =
+    tyIdent                                 (* 'T *)
+  | "?" , astTyBase                        (* ?T — option sugar *)
+  | ident , [ "of" , tyArgList ]           (* Named, Named of T *)
+  | "(" , [ tyList ] , ")"                 (* grouped / tuple type *)
+  | "[" , [ litInt ] , "]" , astTy ;       (* array type *)
 
-tyList       = astTy , { "," , astTy } ;
-tyArgList    = astTy , { "," , astTy } ;
-tyParamList  = tyIdent , { "," , tyIdent } ;
-tyAnnot      = ":" , astTy ;
-tyNamedList  = astTyNamed , { "," , astTyNamed } ;
-astTyNamed   = ident , [ "of" , tyArgList ] ;
-effectSet    = "{" , effectList , "}" ;
-effectList   = effectItem , { "," , effectItem } ;
-effectItem   = ident , [ "of" , astTy ] | tyIdent ;
-whereClause  = "where" , constraint , { "," , constraint } ;
-constraint   = tyIdent , ( "<:" | ":>" ) , astTyNamed ;
+tyList     = astTy , { "," , astTy } ;
+tyArgList  = astTy , { "," , astTy } ;
+tyAnnot    = ":" , astTy ;
+astTyNamed = ident , [ "of" , tyArgList ] ;
 
-(* 2.14  Patterns. var in pattern = mutable bind. . prefix = UDN destructor. *)
-astPat        = astPatPrimary ,
-                [ "or" , astPatPrimary , { "or" , astPatPrimary } ] ;
+effectSet  = "{" , effectList , "}" ;
+effectList = effectItem , { "," , effectItem } ;
+effectItem = ident , [ "of" , astTy ] | tyIdent ;
+
+whereClause = "where" , constraint , { "," , constraint } ;
+constraint  = tyIdent , ( "<:" | ":>" ) , astTyNamed ;
+
+(* 2.15  Patterns *)
+astPat = astPatPrimary ,
+         [ "or" , astPatPrimary , { "or" , astPatPrimary } ] ;
+
 astPatPrimary =
-    "_" | lit
-  | [ "var" ] , ident , [ patSuffix ]
-  | "." , ident , [ "(" , [ patList ] , ")" ]
-  | "{" , [ recPatFields ] , "}"
-  | "(" , [ patList ] , ")"
-  | "[" , [ patList ] , "]" ;
-patSuffix     = "(" , [ patList ] , ")" | "{" , [ recPatFields ] , "}" ;
-recPatFields  = recPatField , { "," , recPatField } ;
-recPatField   = [ "var" ] , ident , [ ":" , astPat ] ;
-patList       = astPat , { "," , astPat } ;
+    "_"                                     (* wildcard *)
+  | lit                                     (* literal *)
+  | [ "mut" ] , ident , [ patSuffix ]      (* bind, destructor, or named record *)
+  | "." , ident , [ "(" , [ patList ] , ")" ]   (* UDN variant *)
+  | "{" , [ recPatFields ] , "}"           (* record pattern *)
+  | "(" , [ patList ] , ")"                (* tuple / grouped pattern *)
+  | "[" , [ patList ] , "]" ;              (* array pattern *)
 
-(* 2.15  Attributes *)
-attrs     = attr , { attr } ;
-attr      = "#[" , attrBody , "]" ;
-attrBody  = ident
-           | ident , ":=" , attrValue
-           | ident , "(" , attrNamedFields , ")" ;
-attrValue = lit | "(" , lit , { "," , lit } , ")" ;
+patSuffix    = "(" , [ patList ] , ")" | "{" , [ recPatFields ] , "}" ;
+recPatFields = recPatField , { "," , recPatField } ;
+recPatField  = [ "mut" ] , ident , [ ":" , astPat ] ;
+patList      = astPat , { "," , astPat } ;
+
+(* 2.16  Attributes *)
+attrs    = attr , { attr } ;
+attr     = "#[" , attrBody , "]" ;
+attrBody = ident , [ ":=" , attrValue | "(" , attrNamedFields , ")" ] ;
+
+attrValue       = lit | "(" , lit , { "," , lit } , ")" ;
 attrNamedFields = attrNamedField , { "," , attrNamedField } ;
 attrNamedField  = ident , ":=" , lit ;
 
-(* 2.16  Shared *)
+(* 2.17  Shared helpers *)
 exprList = astExpr , { "," , astExpr } ;
 argList  = arg , { "," , arg } ;
 arg      = "..." | astExpr ;
+params   = "(" , [ paramList ] , ")" ;
+paramList = param , { "," , param } ;
+param    = [ "mut" ] , ident , [ tyAnnot ] , [ ":=" , astExpr ] ;
