@@ -1,9 +1,9 @@
 //! Declaration type checking (class, given, effect, foreign).
 
 use music_ast::decl::{ClassMember, ForeignDecl};
-use music_ast::expr::Expr;
+use music_ast::expr::{Expr, Param};
 use music_ast::ty::{Ty, TyParam};
-use music_shared::Idx;
+use music_shared::{Idx, Span};
 
 use crate::checker::Checker;
 use crate::checker::expr::{check, synth};
@@ -43,6 +43,57 @@ fn check_member_fn(ck: &mut Checker<'_>, member: &ClassMember) {
     } else {
         let _ty = synth(ck, *body);
     }
+
+    ck.current_scope = parent;
+}
+
+fn check_member_law(
+    ck: &mut Checker<'_>,
+    params: &[Param],
+    body: Idx<music_ast::Expr>,
+    span: Span,
+    class_ty_params: &[TyParam],
+) {
+    let parent = ck.current_scope;
+    ck.current_scope = ck.scopes.push_child(parent);
+
+    if params.is_empty() {
+        // Implicit: law vars get the first class `over` type param as their type.
+        let class_ty = match class_ty_params
+            .first()
+            .and_then(|p| ck.scopes.lookup(ck.current_scope, p.name))
+        {
+            Some(def_id) => ck.named_ty(def_id),
+            None => ck.fresh_var(span),
+        };
+
+        if let Some(law_vars) = ck.ctx.law_inferred_vars.get(&span) {
+            for &(sym, def_id) in law_vars {
+                let _prev = ck.scopes.define(ck.current_scope, sym, def_id);
+                ck.defs.get_mut(def_id).ty_info.ty = Some(class_ty);
+            }
+        }
+    } else {
+        // Explicit: lower type annotations for each param.
+        for param in params {
+            let param_ty = if let Some(ty) = param.ty {
+                lower_ty(ck, ty)
+            } else {
+                ck.fresh_var(param.span)
+            };
+            let id = if let Some(&existing) = ck.ctx.pat_defs.get(&param.span) {
+                existing
+            } else {
+                ck.defs.alloc(param.name, DefKind::LawVar, param.span)
+            };
+            let _prev = ck.scopes.define(ck.current_scope, param.name, id);
+            ck.defs.get_mut(id).ty_info.ty = Some(param_ty);
+        }
+    }
+
+    // Law bodies are propositions — check as Bool.
+    let bool_ty = ck.named_ty(ck.ctx.well_known.bool);
+    check(ck, body, bool_ty);
 
     ck.current_scope = parent;
 }
@@ -88,6 +139,17 @@ fn collect_ty_var_nodes(
     }
 }
 
+fn check_class_members(ck: &mut Checker<'_>, members: &[ClassMember], ty_params: &[TyParam]) {
+    for member in members {
+        match member {
+            ClassMember::Fn { .. } => check_member_fn(ck, member),
+            ClassMember::Law {
+                params, body, span, ..
+            } => check_member_law(ck, params, *body, *span, ty_params),
+        }
+    }
+}
+
 /// Checks a declaration expression (class, given, effect, foreign).
 pub(crate) fn check_stmt(ck: &mut Checker<'_>, expr_idx: Idx<music_ast::Expr>) {
     match ck.ctx.ast.exprs[expr_idx].clone() {
@@ -100,9 +162,7 @@ pub(crate) fn check_stmt(ck: &mut Checker<'_>, expr_idx: Idx<music_ast::Expr>) {
                 let (p, _ids) = ck.enter_ty_param_scope(&params);
                 Some(p)
             };
-            for member in &members {
-                check_member_fn(ck, member);
-            }
+            check_class_members(ck, &members, &params);
             if let Some(p) = parent {
                 ck.current_scope = p;
             }
@@ -123,9 +183,7 @@ pub(crate) fn check_stmt(ck: &mut Checker<'_>, expr_idx: Idx<music_ast::Expr>) {
                 let (p, _ids) = ck.enter_ty_param_scope(&all_params);
                 Some(p)
             };
-            for member in &members {
-                check_member_fn(ck, member);
-            }
+            check_class_members(ck, &members, &all_params);
             if let Some(p) = parent {
                 ck.current_scope = p;
             }
