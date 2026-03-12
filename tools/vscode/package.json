@@ -226,6 +226,28 @@
 				"command": "musi.runMain",
 				"title": "▷ Run",
 				"category": "Musi"
+			},
+			{
+				"command": "musi.selectRunConfiguration",
+				"title": "Select Run Configuration",
+				"category": "Musi"
+			},
+			{
+				"command": "musi.runWithArgs",
+				"title": "Run with Arguments",
+				"category": "Musi",
+				"description": "Prompt for runtime arguments, then run current file."
+			},
+			{
+				"command": "musi.buildFile",
+				"title": "Build File",
+				"category": "Musi",
+				"description": "Compile current .ms file to .msbc bytecode."
+			},
+			{
+				"command": "musi.editRunConfigurations",
+				"title": "Edit Run Configurations",
+				"category": "Musi"
 			}
 		],
 		"keybindings": [
@@ -284,6 +306,99 @@
 					],
 					"default": null,
 					"markdownDescription": "Path to Musi runtime environment. Required for code execution and some diagnostics."
+				},
+				"musi.runtime.args": {
+					"type": "array",
+					"items": { "type": "string" },
+					"default": [],
+					"description": "Extra arguments passed to the musi runtime binary."
+				},
+				"musi.runtime.env": {
+					"type": "object",
+					"additionalProperties": { "type": "string" },
+					"default": {},
+					"description": "Environment variables for program execution."
+				},
+				"musi.runtime.inheritEnv": {
+					"type": "boolean",
+					"default": true,
+					"description": "Inherit system environment variables when running programs."
+				},
+				"musi.runtime.envFile": {
+					"type": "string",
+					"default": "",
+					"markdownDescription": "Path to `.env` file for runtime environment variables."
+				},
+				"musi.runtime.cwd": {
+					"type": "string",
+					"default": "",
+					"description": "Working directory for program execution."
+				},
+				"musi.compiler.path": {
+					"type": ["string", "null"],
+					"default": null,
+					"markdownDescription": "Path to `music` compiler binary. If not set, searches in `target/debug`, `target/release`, `~/.cargo/bin`, and system PATH."
+				},
+				"musi.compiler.args": {
+					"type": "array",
+					"items": { "type": "string" },
+					"default": [],
+					"description": "Extra arguments passed to the music compiler."
+				},
+				"musi.compiler.target": {
+					"type": "string",
+					"enum": ["MS2025", "native", "wasm", "embedded"],
+					"default": "MS2025",
+					"description": "Compilation target."
+				},
+				"musi.compiler.strict": {
+					"type": "boolean",
+					"default": false,
+					"description": "Enable strict mode compilation."
+				},
+				"musi.compiler.noEmitOnError": {
+					"type": "boolean",
+					"default": true,
+					"description": "Do not emit output files if there are compilation errors."
+				},
+				"musi.compiler.buildBeforeRun": {
+					"type": "boolean",
+					"default": true,
+					"description": "Automatically build before running a file."
+				},
+				"musi.terminal.clearBeforeRun": {
+					"type": "boolean",
+					"default": false,
+					"description": "Clear the terminal before running a command."
+				},
+				"musi.terminal.focusOnRun": {
+					"type": "boolean",
+					"default": true,
+					"description": "Focus the terminal panel when running a command."
+				},
+				"musi.terminal.reuseTerminal": {
+					"type": "boolean",
+					"default": true,
+					"description": "Reuse existing terminal instead of creating a new one."
+				},
+				"musi.runConfigurations": {
+					"type": "array",
+					"default": [],
+					"items": {
+						"type": "object",
+						"required": ["name"],
+						"properties": {
+							"name": { "type": "string", "description": "Configuration name." },
+							"file": { "type": "string", "description": "Source file to run." },
+							"compilerArgs": { "type": "array", "items": { "type": "string" }, "description": "Extra compiler arguments." },
+							"runtimeArgs": { "type": "array", "items": { "type": "string" }, "description": "Extra runtime arguments." },
+							"env": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Environment variables." },
+							"envFile": { "type": "string", "description": "Path to .env file." },
+							"cwd": { "type": "string", "description": "Working directory." },
+							"preLaunchTask": { "type": "string", "description": "Task to run before launch." }
+						}
+					},
+					"markdownDescription": "Named run configurations for quick switching."
 				},
 				"musi.trace.server": {
 					"type": "string",
@@ -411,7 +526,53 @@
 					"markdownDescription": "Show 'Test' lens above `#[test]` functions."
 				}
 			}
-		}
+		},
+		"debuggers": [
+			{
+				"type": "musi",
+				"label": "Musi",
+				"configurationAttributes": {
+					"launch": {
+						"properties": {
+							"file": { "type": "string", "description": "Source file to run." },
+							"compilerArgs": { "type": "array", "items": { "type": "string" }, "default": [] },
+							"runtimeArgs": { "type": "array", "items": { "type": "string" }, "default": [] },
+							"env": { "type": "object", "additionalProperties": { "type": "string" }, "default": {} },
+							"envFile": { "type": "string", "default": "" },
+							"cwd": { "type": "string", "default": "" },
+							"preLaunchTask": { "type": "string", "default": "" },
+							"buildBeforeRun": { "type": "boolean", "default": true },
+							"console": { "type": "string", "enum": ["integratedTerminal", "externalTerminal"], "default": "integratedTerminal" }
+						}
+					}
+				},
+				"configurationSnippets": [
+					{
+						"label": "Musi: Run File",
+						"description": "Run a Musi source file",
+						"body": {
+							"type": "musi",
+							"request": "launch",
+							"name": "Run ${1:file}",
+							"file": "${2:${workspaceFolder}/index.ms}",
+							"buildBeforeRun": true
+						}
+					},
+					{
+						"label": "Musi: Run with Env",
+						"description": "Run a Musi source file with environment variables",
+						"body": {
+							"type": "musi",
+							"request": "launch",
+							"name": "Run with Env",
+							"file": "${1:${workspaceFolder}/index.ms}",
+							"env": { "${2:KEY}": "${3:value}" },
+							"buildBeforeRun": true
+						}
+					}
+				]
+			}
+		]
 	},
 	"scripts": {
 		"build": "bun build ./client/src/main.ts --outfile=./dist/extension.js --external vscode --external vscode-languageclient --target=node --format=cjs",

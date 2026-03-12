@@ -4,6 +4,8 @@ import { createAndStartClient, getClient, stopClient } from "./client";
 import { MsPackageCodeLensProvider } from "./codelens";
 import { clearCliCache, registerCommands } from "./commands";
 import { onConfigChange } from "./config";
+import { MusiConfigurationProvider } from "./launch";
+import { clearCompilerPathCache } from "./runner";
 import { StatusBar } from "./status";
 
 let _statusBar: StatusBar;
@@ -13,6 +15,9 @@ function _setupConfigChangeHandler(context: vscode.ExtensionContext) {
 		onConfigChange(async (event) => {
 			if (event.affectsConfiguration("musi.cliPath")) {
 				clearCliCache();
+			}
+			if (event.affectsConfiguration("musi.compiler.path")) {
+				clearCompilerPathCache();
 			}
 			const client = getClient();
 			if (client) {
@@ -80,6 +85,13 @@ export async function activate(context: vscode.ExtensionContext) {
 		vscode.languages.registerCodeLensProvider(
 			{ language: "json", pattern: "**/mspackage.json" },
 			new MsPackageCodeLensProvider(),
+		),
+	);
+
+	context.subscriptions.push(
+		vscode.debug.registerDebugConfigurationProvider(
+			"musi",
+			new MusiConfigurationProvider(),
 		),
 	);
 

@@ -7,6 +7,8 @@ import {
 	showServerNotFoundUI,
 } from "./bootstrap";
 import { getClient, restartClient, stopClient } from "./client";
+import { getConfig } from "./config";
+import { buildExecutionRequest, executeInTerminal } from "./runner";
 import type { StatusBar } from "./status";
 import type { MsPackage, MsPackageTask } from "./types";
 
@@ -26,6 +28,10 @@ interface Commands {
 	runTaskCommand: CommandHandler;
 	runTest: CommandHandler;
 	runMain: CommandHandler;
+	selectRunConfiguration: CommandHandler;
+	runWithArgs: CommandHandler;
+	buildFile: CommandHandler;
+	editRunConfigurations: CommandHandler;
 }
 
 export function clearCliCache() {
@@ -195,7 +201,6 @@ function _createCommands(statusBar: StatusBar): Commands {
 			const cmd = typeof args[0] === "string" ? args[0] : "";
 			const dir = typeof args[1] === "string" ? args[1] : ".";
 
-			// Warn if task uses `musi` but CLI not found
 			if (cmd.includes("musi") && !_cachedCliPath) {
 				const cliPath = await findCliPath();
 				if (!cliPath) {
@@ -216,6 +221,74 @@ function _createCommands(statusBar: StatusBar): Commands {
 
 		async runMain(...args: unknown[]) {
 			await _runCliOnFile("run", args);
+		},
+
+		async selectRunConfiguration(..._args: unknown[]) {
+			const config = getConfig();
+			const configs = config.runConfigurations;
+			if (!configs.length) {
+				vscode.window.showWarningMessage(
+					"No run configurations defined. Add them in settings under musi.runConfigurations.",
+				);
+				return;
+			}
+			const items = configs.map((c) => ({
+				label: c.name,
+				description: c.file ?? "",
+			}));
+			const pick = await vscode.window.showQuickPick(items, {
+				placeHolder: "Select run configuration",
+			});
+			if (!pick) return;
+			const selected = configs.find((c) => c.name === pick.label);
+			if (!selected) return;
+			const editor = vscode.window.activeTextEditor;
+			const file = selected.file ?? editor?.document.uri.fsPath ?? "";
+			const request = buildExecutionRequest(file, selected);
+			await executeInTerminal(request, "run");
+		},
+
+		async runWithArgs(..._args: unknown[]) {
+			const editor = vscode.window.activeTextEditor;
+			if (!editor) {
+				vscode.window.showWarningMessage("No active editor.");
+				return;
+			}
+			const argsInput = await vscode.window.showInputBox({
+				prompt: "Enter runtime arguments",
+				placeHolder: "arg1 arg2 ...",
+			});
+			if (argsInput === undefined) return;
+			const runtimeArgs = argsInput.split(/\s+/).filter(Boolean);
+			const request = buildExecutionRequest(editor.document.uri.fsPath, {
+				name: "Run with Args",
+				runtimeArgs,
+			});
+			await executeInTerminal(request, "run");
+		},
+
+		async buildFile(...args: unknown[]) {
+			let file: string | undefined;
+			if (typeof args[0] === "string") {
+				file = args[0];
+			}
+			if (!file) {
+				const editor = vscode.window.activeTextEditor;
+				if (!editor) {
+					vscode.window.showWarningMessage("No active editor.");
+					return;
+				}
+				file = editor.document.uri.fsPath;
+			}
+			const request = buildExecutionRequest(file);
+			await executeInTerminal(request, "build");
+		},
+
+		editRunConfigurations(..._args: unknown[]) {
+			vscode.commands.executeCommand(
+				"workbench.action.openSettings",
+				"musi.runConfigurations",
+			);
 		},
 	};
 }
@@ -247,5 +320,18 @@ export function registerCommands(
 		),
 		vscode.commands.registerCommand("musi.runTest", commands.runTest),
 		vscode.commands.registerCommand("musi.runMain", commands.runMain),
+		vscode.commands.registerCommand(
+			"musi.selectRunConfiguration",
+			commands.selectRunConfiguration,
+		),
+		vscode.commands.registerCommand(
+			"musi.runWithArgs",
+			commands.runWithArgs,
+		),
+		vscode.commands.registerCommand("musi.buildFile", commands.buildFile),
+		vscode.commands.registerCommand(
+			"musi.editRunConfigurations",
+			commands.editRunConfigurations,
+		),
 	);
 }
