@@ -1,17 +1,13 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
-
-interface MsPackageTask {
-	command: string;
-	description?: string;
-}
+import type { MsPackage } from "./types";
 
 /**
  * Provides CodeLens "▶ <task>" buttons above each task entry in mspackage.json.
  */
 export class MsPackageCodeLensProvider implements vscode.CodeLensProvider {
 	provideCodeLenses(document: vscode.TextDocument): vscode.CodeLens[] {
-		let pkg: { tasks?: Record<string, string | MsPackageTask> };
+		let pkg: MsPackage;
 		try {
 			pkg = JSON.parse(document.getText()) as typeof pkg;
 		} catch {
@@ -26,7 +22,8 @@ export class MsPackageCodeLensProvider implements vscode.CodeLensProvider {
 		for (const [name, entry] of Object.entries(pkg.tasks)) {
 			const cmd =
 				typeof entry === "string" ? entry : entry.command;
-			const keyRegex = new RegExp(`"${name}"\\s*:`);
+			const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+			const keyRegex = new RegExp(`"${escaped}"\\s*:`);
 
 			for (let i = 0; i < document.lineCount; i++) {
 				if (keyRegex.test(document.lineAt(i).text)) {
