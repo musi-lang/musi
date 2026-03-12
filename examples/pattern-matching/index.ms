@@ -15,7 +15,7 @@ let describe : (Shape) -> String :=
     (shape) => match shape (
         .Circle(r)  => f"circle with radius {r}"
       | .Rect(w, h) => f"rectangle {w} x {h}"
-      | .Point       => "a point"
+      | .Point      => "a point"
     );
 
 #[entrypoint]
