@@ -131,6 +131,24 @@ pub fn emit_rvalue(
             encode_no_operand(&mut fe.code, Opcode::TSK_AWT);
             Ok(())
         }
+        IrRvalue::ChannelMake => {
+            encode_u32(&mut fe.code, Opcode::TSK_CMK, 0);
+            fe.push_n(1);
+            Ok(())
+        }
+        IrRvalue::ChannelSend { chan, value } => {
+            emit_operand(fe, cp, chan, interner)?;
+            emit_operand(fe, cp, value, interner)?;
+            encode_u32(&mut fe.code, Opcode::TSK_CHS, 0);
+            fe.pop_n(1); // pops chan + value, pushes unit → net -1
+            Ok(())
+        }
+        IrRvalue::ChannelRecv { chan } => {
+            emit_operand(fe, cp, chan, interner)?;
+            encode_u32(&mut fe.code, Opcode::TSK_CHR, 0);
+            // pops chan, pushes value → net 0
+            Ok(())
+        }
         IrRvalue::ForeignCall { fn_idx, args } => {
             emit_rvalue_foreign_call(fe, cp, *fn_idx, args, interner)
         }
