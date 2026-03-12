@@ -108,8 +108,10 @@ impl SharedAnalysisState {
         let prelude_scope = scopes.push_root();
         let well_known =
             well_known::init_well_known(interner, &mut defs, prelude_scope, &mut scopes);
+        let mut types = Arena::new();
+        well_known::assign_well_known_types(&mut defs, &well_known, &mut types);
         Self {
-            types: Arena::new(),
+            types,
             unify: UnifyTable::new(),
             defs,
             scopes,
@@ -224,7 +226,7 @@ pub fn analyze_with_imports(
     diags: &mut DiagnosticBag,
     import_types: &HashMap<Symbol, TypeIdx>,
 ) -> SemaResult {
-    let (mut defs, well_known, mut scopes, module_scope, resolved) =
+    let (mut defs, well_known, mut scopes, module_scope, resolved, types) =
         analyze_setup(module, interner, file_id, diags);
 
     let ctx = CheckContext {
@@ -237,7 +239,15 @@ pub fn analyze_with_imports(
         import_types,
         law_inferred_vars: &resolved.law_inferred_vars,
     };
-    let mut checker = Checker::new(ctx, diags, &mut defs, &mut scopes, module_scope);
+    let mut checker = Checker::new_with_state(
+        ctx,
+        diags,
+        &mut defs,
+        &mut scopes,
+        module_scope,
+        types,
+        UnifyTable::new(),
+    );
 
     for stmt in &module.stmts {
         let _ty = checker.synth(stmt.expr);
@@ -268,12 +278,21 @@ fn analyze_setup<'a>(
     interner: &'a mut Interner,
     file_id: FileId,
     diags: &'a mut DiagnosticBag,
-) -> (DefTable, WellKnown, ScopeTree, ScopeId, ResolveOutput) {
+) -> (
+    DefTable,
+    WellKnown,
+    ScopeTree,
+    ScopeId,
+    ResolveOutput,
+    Arena<Type>,
+) {
     let mut defs = DefTable::new();
     let mut scopes = ScopeTree::new();
     let module_scope = scopes.push_root();
 
     let well_known = well_known::init_well_known(interner, &mut defs, module_scope, &mut scopes);
+    let mut types = Arena::new();
+    well_known::assign_well_known_types(&mut defs, &well_known, &mut types);
 
     let resolved = resolve::resolve(
         module,
@@ -285,7 +304,7 @@ fn analyze_setup<'a>(
         module_scope,
     );
 
-    (defs, well_known, scopes, module_scope, resolved)
+    (defs, well_known, scopes, module_scope, resolved, types)
 }
 
 fn analyze_emit_unused_warnings(

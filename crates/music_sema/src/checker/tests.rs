@@ -62,7 +62,7 @@ fn bind_pat(sym: Symbol) -> Pat {
 /// Check an AST module and return diagnostics.
 fn check_module(interner: &mut Interner, module: &ParsedModule) -> DiagnosticBag {
     let mut diags_setup = DiagnosticBag::new();
-    let (mut defs, well_known, mut scopes, module_scope, resolved) =
+    let (mut defs, well_known, mut scopes, module_scope, resolved, types) =
         analyze_setup(module, interner, FileId(0), &mut diags_setup);
 
     let empty_imports = HashMap::new();
@@ -77,7 +77,15 @@ fn check_module(interner: &mut Interner, module: &ParsedModule) -> DiagnosticBag
         law_inferred_vars: &resolved.law_inferred_vars,
     };
     let mut diags = DiagnosticBag::new();
-    let mut checker = Checker::new(ctx, &mut diags, &mut defs, &mut scopes, module_scope);
+    let mut checker = Checker::new_with_state(
+        ctx,
+        &mut diags,
+        &mut defs,
+        &mut scopes,
+        module_scope,
+        types,
+        crate::UnifyTable::new(),
+    );
 
     for st in &module.stmts {
         let _ty = checker.synth(st.expr);

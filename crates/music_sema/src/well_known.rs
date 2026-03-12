@@ -6,10 +6,11 @@
 #[cfg(test)]
 mod tests;
 
-use music_shared::{Interner, Span};
+use music_shared::{Arena, Interner, Span};
 
 use crate::def::{DefId, DefKind, DefTable};
 use crate::scope::{ScopeId, ScopeTree};
+use crate::types::{EffectEntry, EffectRow, Type};
 
 /// Well-known signed integer types.
 #[derive(Debug, Clone)]
@@ -217,4 +218,85 @@ pub fn init_well_known(
         never,
         option,
     }
+}
+
+/// Assigns proper `Type::Fn` signatures to well-known prelude functions.
+///
+/// Must be called after `init_well_known` and after the type arena is available.
+/// This ensures that calls to `writeln`, `write`, etc. get real types instead
+/// of fresh unification variables.
+pub fn assign_well_known_types(defs: &mut DefTable, wk: &WellKnown, types: &mut Arena<Type>) {
+    let string_ty = types.alloc(Type::Named {
+        def: wk.string,
+        args: vec![],
+    });
+    let bool_ty = types.alloc(Type::Named {
+        def: wk.bool,
+        args: vec![],
+    });
+    let unit_ty = types.alloc(Type::Named {
+        def: wk.unit,
+        args: vec![],
+    });
+    let any_ty = types.alloc(Type::Named {
+        def: wk.any,
+        args: vec![],
+    });
+    let ordering_ty = types.alloc(Type::Named {
+        def: wk.containers.ordering,
+        args: vec![],
+    });
+
+    let io_effect = EffectRow {
+        effects: vec![EffectEntry {
+            def: wk.effects.io,
+            args: vec![],
+        }],
+        row_var: None,
+    };
+
+    assign_fn_type(
+        defs,
+        types,
+        wk.fns.write,
+        &[string_ty],
+        unit_ty,
+        Some(io_effect.clone()),
+    );
+    assign_fn_type(
+        defs,
+        types,
+        wk.fns.writeln,
+        &[string_ty],
+        unit_ty,
+        Some(io_effect),
+    );
+
+    assign_fn_type(defs, types, wk.fns.show, &[any_ty], string_ty, None);
+    assign_fn_type(
+        defs,
+        types,
+        wk.fns.compare,
+        &[any_ty, any_ty],
+        ordering_ty,
+        None,
+    );
+    assign_fn_type(defs, types, wk.fns.is_some, &[any_ty], bool_ty, None);
+    assign_fn_type(defs, types, wk.fns.is_none, &[any_ty], bool_ty, None);
+}
+
+fn assign_fn_type(
+    defs: &mut DefTable,
+    types: &mut Arena<Type>,
+    def_id: DefId,
+    params: &[crate::TypeIdx],
+    ret: crate::TypeIdx,
+    effect: Option<EffectRow>,
+) {
+    let fn_ty = types.alloc(Type::Fn {
+        params: params.to_vec(),
+        ret,
+        effects: effect.unwrap_or(EffectRow::PURE),
+    });
+    defs.get_mut(def_id).ty_info.ty = Some(fn_ty);
 }

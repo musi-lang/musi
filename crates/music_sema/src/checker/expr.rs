@@ -3,7 +3,8 @@
 use std::collections::HashMap;
 
 use music_ast::expr::{
-    Arg, ArrayElem, BinOp, Expr, FieldKey, LetFields, MatchArm, Param, RecField, UnaryOp,
+    Arg, ArrayElem, BinOp, Expr, FieldKey, LetFields, MatchArm, Param, PwArm, PwGuard, RecField,
+    UnaryOp,
 };
 use music_ast::lit::{FStrPart, Lit};
 use music_ast::pat::Pat;
@@ -87,14 +88,7 @@ fn synth_inner(ck: &mut Checker<'_>, expr_idx: ExprIdx) -> TypeIdx {
         }
         Expr::Record { fields, .. } => synth_record(ck, &fields),
         Expr::Array { elems, span } => synth_array(ck, &elems, span),
-        Expr::Piecewise { arms, span } => {
-            let result_ty = ck.fresh_var(span);
-            for arm in &arms {
-                let arm_ty = synth(ck, arm.result);
-                ck.unify_or_report(result_ty, arm_ty, span);
-            }
-            result_ty
-        }
+        Expr::Piecewise { arms, span } => synth_piecewise(ck, &arms, span),
         Expr::Match {
             scrutinee,
             arms,
@@ -421,6 +415,20 @@ fn synth_array(ck: &mut Checker<'_>, elems: &[ArrayElem], span: Span) -> TypeIdx
     })
 }
 
+fn synth_piecewise(ck: &mut Checker<'_>, arms: &[PwArm], span: Span) -> TypeIdx {
+    let result_ty = ck.fresh_var(span);
+    for arm in arms {
+        if let PwGuard::When { expr, .. } = arm.guard {
+            let guard_ty = synth(ck, expr);
+            let bool_ty = ck.named_ty(ck.ctx.well_known.bool);
+            ck.unify_or_report(bool_ty, guard_ty, span);
+        }
+        let arm_ty = synth(ck, arm.result);
+        ck.unify_or_report(result_ty, arm_ty, span);
+    }
+    result_ty
+}
+
 fn synth_match(ck: &mut Checker<'_>, scrutinee: ExprIdx, arms: &[MatchArm], span: Span) -> TypeIdx {
     let scrut_ty = synth(ck, scrutinee);
     let result_ty = ck.fresh_var(span);
@@ -731,12 +739,37 @@ fn synth_choice(ck: &mut Checker<'_>, body: TyIdx) -> TypeIdx {
     ck.current_scope = ck.scopes.push_child(parent);
 
     if let Ty::Sum { variants, .. } = &ck.ctx.ast.tys[body] {
-        for &variant_ty in variants {
+        let variants_clone = variants.clone();
+
+        for &variant_ty in &variants_clone {
             if let Ty::Named { name, .. } = &ck.ctx.ast.tys[variant_ty] {
                 let id = ck.defs.alloc(*name, DefKind::Type, Span::DUMMY);
                 let _prev = ck.scopes.define(ck.current_scope, *name, id);
             }
         }
+
+        let mut sum_variants = Vec::with_capacity(variants_clone.len());
+        for &variant_ty in &variants_clone {
+            let ast_ty = ck.ctx.ast.tys[variant_ty].clone();
+            if let Ty::Named { name, args, .. } = &ast_ty {
+                let fields: Vec<TypeIdx> = args.iter().map(|&a| lower_ty(ck, a)).collect();
+                sum_variants.push(SumVariant {
+                    name: *name,
+                    fields,
+                });
+            } else {
+                let ty = lower_ty(ck, variant_ty);
+                sum_variants.push(SumVariant {
+                    name: Symbol(0),
+                    fields: vec![ty],
+                });
+            }
+        }
+
+        ck.current_scope = parent;
+        return ck.alloc_ty(Type::Sum {
+            variants: sum_variants,
+        });
     }
 
     let ty = lower_ty(ck, body);
