@@ -34,6 +34,8 @@ pub struct CheckContext<'a> {
     /// Pre-computed types for import expressions, keyed by the import path symbol.
     /// Populated by the multi-file pipeline before sema runs.
     pub(crate) import_types: &'a HashMap<Symbol, TypeIdx>,
+    /// Inferred law variables from the resolver, keyed by law span.
+    pub(crate) law_inferred_vars: &'a HashMap<Span, Vec<(Symbol, DefId)>>,
 }
 
 /// Mutable type-checking state built up during checking.
