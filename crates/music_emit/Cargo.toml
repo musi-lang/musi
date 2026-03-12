@@ -16,5 +16,8 @@ music_shared  = { path = "../music_shared" }
 byteorder     = { workspace = true }
 thiserror     = { workspace = true }
 
+[dev-dependencies]
+musi_vm = { path = "../musi_vm" }
+
 [lints]
 workspace = true

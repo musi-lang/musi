@@ -29,6 +29,7 @@ struct FnDef {
     param_count: u16,
     code: Vec<u8>,
     handlers: Vec<(u8, u32)>,
+    max_stack: Option<u16>,
 }
 
 /// Convenience: function def without handlers.
@@ -39,6 +40,25 @@ fn fn_def(fn_id: u32, local_count: u16, param_count: u16, code: Vec<u8>) -> FnDe
         param_count,
         code,
         handlers: vec![],
+        max_stack: None,
+    }
+}
+
+/// Convenience: function def with an explicit `max_stack` limit.
+fn fn_def_with_max_stack(
+    fn_id: u32,
+    local_count: u16,
+    param_count: u16,
+    max_stack: u16,
+    code: Vec<u8>,
+) -> FnDef {
+    FnDef {
+        fn_id,
+        local_count,
+        param_count,
+        code,
+        handlers: vec![],
+        max_stack: Some(max_stack),
     }
 }
 
@@ -80,7 +100,7 @@ fn make_msbc(consts: &[ConstEntry], fns: &[FnDef]) -> Vec<u8> {
         fn_section.extend_from_slice(&0u32.to_le_bytes()); // type_id
         fn_section.extend_from_slice(&f.local_count.to_le_bytes());
         fn_section.extend_from_slice(&f.param_count.to_le_bytes());
-        let max_stack: u16 = 16;
+        let max_stack: u16 = f.max_stack.unwrap_or(16);
         fn_section.extend_from_slice(&max_stack.to_le_bytes());
         fn_section.extend_from_slice(&0u16.to_le_bytes()); // effect_mask
         let code_len = u32::try_from(f.code.len()).expect("fits u32");
@@ -1217,7 +1237,7 @@ fn make_msbc_with_effects(consts: &[ConstEntry], effects: &[EffectDef], fns: &[F
         fn_section.extend_from_slice(&0u32.to_le_bytes());
         fn_section.extend_from_slice(&f.local_count.to_le_bytes());
         fn_section.extend_from_slice(&f.param_count.to_le_bytes());
-        let max_stack: u16 = 16;
+        let max_stack: u16 = f.max_stack.unwrap_or(16);
         fn_section.extend_from_slice(&max_stack.to_le_bytes());
         fn_section.extend_from_slice(&0u16.to_le_bytes());
         let code_len = u32::try_from(f.code.len()).expect("fits u32");
@@ -1297,6 +1317,7 @@ fn test_eff_do_cross_frame_finds_handler() {
                     Opcode::RET.0,
                 ],
                 handlers: vec![(effect_id, 2)],
+                max_stack: None,
             },
             fn_def(
                 1,
@@ -1356,6 +1377,7 @@ fn test_eff_res_resumes_continuation() {
                     Opcode::RET.0,
                 ],
                 handlers: vec![(effect_id, 2)],
+                max_stack: None,
             },
             fn_def(1, 0, 0, vec![Opcode::EFF_DO.0, 1, 0, 0, 0, Opcode::RET.0]),
             fn_def(
@@ -1408,6 +1430,7 @@ fn test_eff_abt_after_eff_do() {
                     Opcode::RET_U.0,
                 ],
                 handlers: vec![(effect_id, 2)],
+                max_stack: None,
             },
             fn_def(1, 0, 0, vec![Opcode::EFF_DO.0, 1, 0, 0, 0, Opcode::RET_U.0]),
             fn_def(
@@ -1562,6 +1585,7 @@ fn test_channel_send_recv_fifo() {
                 param_count: 1,
                 code: sender_code,
                 handlers: vec![],
+                max_stack: None,
             },
         ],
     );
@@ -1599,6 +1623,7 @@ fn test_channel_recv_empty_suspends_and_resumes() {
                 param_count: 1,
                 code: recv_code,
                 handlers: vec![],
+                max_stack: None,
             },
         ],
     );
@@ -1663,6 +1688,7 @@ fn test_deadlock_two_tasks_mutual_await() {
                 param_count: 1,
                 code: child_code,
                 handlers: vec![],
+                max_stack: None,
             },
         ],
     );
@@ -1707,4 +1733,537 @@ fn test_sync_program_no_scheduler_overhead() {
     );
     let (_, result) = run_vm(&bytes);
     assert_eq!(result.expect("runs").as_int().expect("is int"), 7);
+}
+
+// ── Comparison opcodes ──────────────────────────────────────────────────────
+
+#[test]
+fn test_cmp_le_true_when_equal() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(5), ConstEntry::I32(5)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::CMP_LE.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert!(result.expect("runs").as_bool().expect("is bool"));
+}
+
+#[test]
+fn test_cmp_lt_true() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(3), ConstEntry::I32(5)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::CMP_LT.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert!(result.expect("runs").as_bool().expect("is bool"));
+}
+
+#[test]
+fn test_cmp_gt_true() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(7), ConstEntry::I32(3)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::CMP_GT.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert!(result.expect("runs").as_bool().expect("is bool"));
+}
+
+// ── Float comparison ────────────────────────────────────────────────────────
+
+#[test]
+fn test_cmp_f_eq_true() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(5), ConstEntry::I32(5)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::CNV_ITF.0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::CNV_ITF.0,
+                Opcode::CMP_F_EQ.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert!(result.expect("runs").as_bool().expect("is bool"));
+}
+
+// ── Variant construction edge cases ─────────────────────────────────────────
+
+#[test]
+fn test_make_variant_multi_field_via_mk_prd_field_0() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(10), ConstEntry::I32(20)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::MK_PRD.0,
+                2,
+                Opcode::MK_VAR.0,
+                1,
+                Opcode::LD_PAY.0,
+                0,
+                Opcode::LD_FLD.0,
+                0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 10);
+}
+
+#[test]
+fn test_make_variant_multi_field_via_mk_prd_field_1() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(10), ConstEntry::I32(20)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::MK_PRD.0,
+                2,
+                Opcode::MK_VAR.0,
+                1,
+                Opcode::LD_PAY.0,
+                0,
+                Opcode::LD_FLD.0,
+                1,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 20);
+}
+
+// ── Verifier boundary conditions ────────────────────────────────────────────
+
+#[test]
+fn test_verifier_accepts_max_stack_exact_match() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(1), ConstEntry::I32(2)],
+        &[fn_def_with_max_stack(
+            0,
+            0,
+            0,
+            2,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::I_ADD.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let module = load(&bytes).expect("loads");
+    let result = verify(&module);
+    assert!(
+        result.is_ok(),
+        "max_stack=2 should pass when peak is 2, got {result:?}"
+    );
+}
+
+#[test]
+fn test_verifier_rejects_max_stack_exceeded_by_one() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(1), ConstEntry::I32(2)],
+        &[fn_def_with_max_stack(
+            0,
+            0,
+            0,
+            1,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::I_ADD.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let module = load(&bytes).expect("loads");
+    let result = verify(&module);
+    assert!(result.is_err(), "max_stack=1 should fail when peak is 2");
+}
+
+#[test]
+fn test_verifier_resets_depth_after_unconditional_jump() {
+    // offset 0: LD_CST 0  (2)  depth → 1
+    // offset 2: JMP_W +0  (5)  jumps to offset 7; depth resets to 0
+    // offset 7: RET_U     (1)  depth 0
+    // max_stack=1 matches peak reachable depth of 1.
+    let code = vec![
+        Opcode::LD_CST.0,
+        0,
+        Opcode::JMP_W.0,
+        0,
+        0,
+        0,
+        0,
+        Opcode::RET_U.0,
+    ];
+    let bytes = make_msbc(
+        &[ConstEntry::I32(42)],
+        &[fn_def_with_max_stack(0, 0, 0, 1, code)],
+    );
+    let module = load(&bytes).expect("loads");
+    let result = verify(&module);
+    assert!(
+        result.is_ok(),
+        "depth must reset after JMP_W, got {result:?}"
+    );
+}
+
+#[test]
+fn test_verifier_depth_resets_to_zero_after_terminator() {
+    let code = vec![
+        Opcode::LD_CST.0,
+        0,
+        Opcode::RET.0,
+        Opcode::LD_CST.0,
+        0,
+        Opcode::RET.0,
+    ];
+    let bytes = make_msbc(
+        &[ConstEntry::I32(1)],
+        &[fn_def_with_max_stack(0, 0, 0, 1, code)],
+    );
+    let module = load(&bytes).expect("loads");
+    let result = verify(&module);
+    assert!(result.is_ok(), "depth must reset after RET, got {result:?}");
+}
+
+// ── Wide instruction variants ───────────────────────────────────────────────
+
+#[test]
+fn test_ld_loc_w_loads_high_slot() {
+    let code = vec![
+        Opcode::LD_CST.0,
+        0,
+        Opcode::ST_LOC_W.0,
+        0x00,
+        0x01,
+        Opcode::LD_LOC_W.0,
+        0x00,
+        0x01,
+        Opcode::RET.0,
+    ];
+    let bytes = make_msbc(&[ConstEntry::I32(99)], &[fn_def(0, 300, 0, code)]);
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 99);
+}
+
+#[test]
+fn test_st_loc_w_stores_high_slot() {
+    let code = vec![
+        Opcode::LD_CST.0,
+        0,
+        Opcode::ST_LOC_W.0,
+        0x10,
+        0x01,
+        Opcode::LD_LOC_W.0,
+        0x10,
+        0x01,
+        Opcode::RET.0,
+    ];
+    let bytes = make_msbc(&[ConstEntry::I32(77)], &[fn_def(0, 300, 0, code)]);
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 77);
+}
+
+#[test]
+fn test_cmp_tag_w_matches_large_tag() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(0)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::MK_VAR.0,
+                7,
+                Opcode::CMP_TAG_W.0,
+                7,
+                0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert!(result.expect("runs").as_bool().expect("is bool"));
+}
+
+// ── Arithmetic / bitwise opcodes ────────────────────────────────────────────
+
+#[test]
+fn test_f_sub() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(10), ConstEntry::I32(3)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::CNV_ITF.0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::CNV_ITF.0,
+                Opcode::F_SUB.0,
+                Opcode::CNV_FTI.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 7);
+}
+
+#[test]
+fn test_f_neg() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(7)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::CNV_ITF.0,
+                Opcode::F_NEG.0,
+                Opcode::CNV_FTI.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), -7);
+}
+
+#[test]
+fn test_b_or() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(0b1010), ConstEntry::I32(0b0110)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::B_OR.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 0b1110);
+}
+
+#[test]
+fn test_b_xor() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(0b1010), ConstEntry::I32(0b0110)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::B_XOR.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 0b1100);
+}
+
+#[test]
+fn test_b_not() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(0)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![Opcode::LD_CST.0, 0, Opcode::B_NOT.0, Opcode::RET.0],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), -1);
+}
+
+#[test]
+fn test_b_shr() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(16), ConstEntry::I32(2)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::B_SHR.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 4);
+}
+
+// ── Structural opcodes ─────────────────────────────────────────────────────
+
+#[test]
+fn test_ld_tag_returns_tag_value() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(0)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::MK_VAR.0,
+                3,
+                Opcode::LD_TAG.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_uint().expect("is uint"), 3);
+}
+
+#[test]
+fn test_ld_pay_extracts_variant_payload() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(42)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::MK_VAR.0,
+                0,
+                Opcode::LD_PAY.0,
+                0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 42);
+}
+
+#[test]
+fn test_st_fld_updates_field() {
+    let bytes = make_msbc(
+        &[
+            ConstEntry::I32(10),
+            ConstEntry::I32(20),
+            ConstEntry::I32(99),
+        ],
+        &[fn_def(
+            0,
+            1,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::MK_PRD.0,
+                2,
+                Opcode::ST_LOC.0,
+                0,
+                // ST_FLD pops val then obj: push obj first, then val
+                Opcode::LD_LOC.0,
+                0,
+                Opcode::LD_CST.0,
+                2,
+                Opcode::ST_FLD.0,
+                0,
+                Opcode::LD_LOC.0,
+                0,
+                Opcode::LD_FLD.0,
+                0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 99);
 }

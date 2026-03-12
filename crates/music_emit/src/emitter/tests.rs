@@ -1,7 +1,7 @@
 use music_ir::{
     IrBinOp, IrCallee, IrConstValue, IrEffectDef, IrEffectId, IrEffectMask, IrEffectOpDef,
     IrEffectOpId, IrFnId, IrFnIdx, IrFunction, IrInst, IrLabel, IrLocal, IrLocalDecl, IrModule,
-    IrOperand, IrParam, IrParamMode, IrRvalue, IrType, IrTypeIdx,
+    IrOperand, IrParam, IrParamMode, IrRvalue, IrSwitchArm, IrType, IrTypeIdx,
 };
 use music_shared::{Interner, Span, Symbol};
 
@@ -668,5 +668,307 @@ mod error {
             err.to_string().contains("unsupported feature"),
             "error must be UnsupportedFeature, got: {err}"
         );
+    }
+}
+
+mod unit_handling {
+    use super::*;
+
+    #[test]
+    fn test_emit_assign_unit_const_skips_st_loc() {
+        let mut tm = TestModule::new();
+        let int32 = tm.int32();
+        let unit = tm.unit();
+
+        let body = vec![
+            IrInst::Assign {
+                dst: IrLocal(1),
+                rvalue: IrRvalue::Const(IrConstValue::Unit),
+                span: make_span(),
+            },
+            IrInst::Return {
+                value: Some(IrOperand::Local(IrLocal(0))),
+                span: make_span(),
+            },
+        ];
+        let locals = vec![
+            make_local(IrLocal(0), int32, false),
+            make_local(IrLocal(1), unit, false),
+        ];
+        let params = vec![make_param(IrLocal(0), int32)];
+        let fn_idx = tm.add_fn("unit_assign", params, int32, body, locals);
+        tm.set_entry(fn_idx);
+
+        let EmitOutput { bytes } = tm.emit().expect("emit succeeded");
+        // ST_LOC should not appear for the unit assignment
+        assert!(
+            find_opcode(&bytes, Opcode::ST_LOC).is_none(),
+            "unit const assignment must not emit ST_LOC"
+        );
+    }
+
+    #[test]
+    fn test_emit_assign_use_unit_const_skips_st_loc() {
+        let mut tm = TestModule::new();
+        let int32 = tm.int32();
+        let unit = tm.unit();
+
+        let body = vec![
+            IrInst::Assign {
+                dst: IrLocal(1),
+                rvalue: IrRvalue::Use(IrOperand::Const(IrConstValue::Unit)),
+                span: make_span(),
+            },
+            IrInst::Return {
+                value: Some(IrOperand::Local(IrLocal(0))),
+                span: make_span(),
+            },
+        ];
+        let locals = vec![
+            make_local(IrLocal(0), int32, false),
+            make_local(IrLocal(1), unit, false),
+        ];
+        let params = vec![make_param(IrLocal(0), int32)];
+        let fn_idx = tm.add_fn("unit_use", params, int32, body, locals);
+        tm.set_entry(fn_idx);
+
+        let EmitOutput { bytes } = tm.emit().expect("emit succeeded");
+        assert!(
+            find_opcode(&bytes, Opcode::ST_LOC).is_none(),
+            "Use(Const(Unit)) assignment must not emit ST_LOC"
+        );
+    }
+}
+
+mod make_variant {
+    use super::*;
+
+    #[test]
+    fn test_emit_make_variant_zero_payload_pushes_placeholder() {
+        let mut tm = TestModule::new();
+        let int32 = tm.int32();
+
+        let body = vec![
+            IrInst::Assign {
+                dst: IrLocal(0),
+                rvalue: IrRvalue::MakeVariant {
+                    tag: 0,
+                    payload: vec![],
+                    ty: int32,
+                },
+                span: make_span(),
+            },
+            IrInst::Return {
+                value: Some(IrOperand::Local(IrLocal(0))),
+                span: make_span(),
+            },
+        ];
+        let locals = vec![make_local(IrLocal(0), int32, false)];
+        let fn_idx = tm.add_fn("mk_var_zero", vec![], int32, body, locals);
+        tm.set_entry(fn_idx);
+
+        let EmitOutput { bytes } = tm.emit().expect("emit succeeded");
+        // Must have LD_CST (placeholder) followed by MK_VAR
+        assert!(
+            find_opcode(&bytes, Opcode::LD_CST).is_some(),
+            "zero-payload variant must emit LD_CST for placeholder"
+        );
+        assert!(
+            find_opcode(&bytes, Opcode::MK_VAR).is_some(),
+            "must emit MK_VAR"
+        );
+    }
+
+    #[test]
+    fn test_emit_make_variant_single_payload() {
+        let mut tm = TestModule::new();
+        let int32 = tm.int32();
+
+        let body = vec![
+            IrInst::Assign {
+                dst: IrLocal(1),
+                rvalue: IrRvalue::MakeVariant {
+                    tag: 1,
+                    payload: vec![IrOperand::Local(IrLocal(0))],
+                    ty: int32,
+                },
+                span: make_span(),
+            },
+            IrInst::Return {
+                value: Some(IrOperand::Local(IrLocal(1))),
+                span: make_span(),
+            },
+        ];
+        let locals = vec![
+            make_local(IrLocal(0), int32, false),
+            make_local(IrLocal(1), int32, false),
+        ];
+        let params = vec![make_param(IrLocal(0), int32)];
+        let fn_idx = tm.add_fn("mk_var_one", params, int32, body, locals);
+        tm.set_entry(fn_idx);
+
+        let EmitOutput { bytes } = tm.emit().expect("emit succeeded");
+        assert!(
+            find_opcode(&bytes, Opcode::LD_LOC).is_some(),
+            "single-payload variant must load the payload"
+        );
+        assert!(
+            find_opcode(&bytes, Opcode::MK_VAR).is_some(),
+            "must emit MK_VAR"
+        );
+        // Single payload should NOT use MK_PRD
+        assert!(
+            find_opcode(&bytes, Opcode::MK_PRD).is_none(),
+            "single-payload variant must not emit MK_PRD"
+        );
+    }
+
+    #[test]
+    fn test_emit_make_variant_multi_payload_packs_product() {
+        let mut tm = TestModule::new();
+        let int32 = tm.int32();
+
+        let body = vec![
+            IrInst::Assign {
+                dst: IrLocal(2),
+                rvalue: IrRvalue::MakeVariant {
+                    tag: 2,
+                    payload: vec![IrOperand::Local(IrLocal(0)), IrOperand::Local(IrLocal(1))],
+                    ty: int32,
+                },
+                span: make_span(),
+            },
+            IrInst::Return {
+                value: Some(IrOperand::Local(IrLocal(2))),
+                span: make_span(),
+            },
+        ];
+        let locals = vec![
+            make_local(IrLocal(0), int32, false),
+            make_local(IrLocal(1), int32, false),
+            make_local(IrLocal(2), int32, false),
+        ];
+        let params = vec![make_param(IrLocal(0), int32), make_param(IrLocal(1), int32)];
+        let fn_idx = tm.add_fn("mk_var_multi", params, int32, body, locals);
+        tm.set_entry(fn_idx);
+
+        let EmitOutput { bytes } = tm.emit().expect("emit succeeded");
+        // Multi-payload must pack into product first
+        assert!(
+            find_opcode(&bytes, Opcode::MK_PRD).is_some(),
+            "multi-payload variant must emit MK_PRD before MK_VAR"
+        );
+        assert!(
+            find_opcode(&bytes, Opcode::MK_VAR).is_some(),
+            "must emit MK_VAR"
+        );
+    }
+}
+
+mod stack_tracking {
+    use super::*;
+    use musi_vm::{load, verify};
+
+    #[test]
+    fn test_emit_branch_max_stack_accounts_for_both_paths() {
+        let mut tm = TestModule::new();
+        let int32 = tm.int32();
+        let bool_ty = tm.bool_ty();
+
+        // Branch on _0 (bool):
+        //   then-path (L0): return Const(10)
+        //   else-path (L1): _1 = Const(20); _2 = Add(_1, Const(30)); return _2
+        let body = vec![
+            IrInst::Branch {
+                cond: IrOperand::Local(IrLocal(0)),
+                then_label: IrLabel(0),
+                else_label: IrLabel(1),
+                span: make_span(),
+            },
+            IrInst::Label(IrLabel(0)),
+            IrInst::Return {
+                value: Some(IrOperand::Const(IrConstValue::Int(10))),
+                span: make_span(),
+            },
+            IrInst::Label(IrLabel(1)),
+            IrInst::Assign {
+                dst: IrLocal(1),
+                rvalue: IrRvalue::Const(IrConstValue::Int(20)),
+                span: make_span(),
+            },
+            IrInst::Assign {
+                dst: IrLocal(2),
+                rvalue: IrRvalue::BinOp {
+                    op: IrBinOp::IAdd,
+                    left: IrOperand::Local(IrLocal(1)),
+                    right: IrOperand::Const(IrConstValue::Int(30)),
+                },
+                span: make_span(),
+            },
+            IrInst::Return {
+                value: Some(IrOperand::Local(IrLocal(2))),
+                span: make_span(),
+            },
+        ];
+        let locals = vec![
+            make_local(IrLocal(0), bool_ty, false),
+            make_local(IrLocal(1), int32, false),
+            make_local(IrLocal(2), int32, false),
+        ];
+        let params = vec![make_param(IrLocal(0), bool_ty)];
+        let fn_idx = tm.add_fn("branching", params, int32, body, locals);
+        tm.set_entry(fn_idx);
+
+        let output = tm.emit().expect("emit must succeed with correct max_stack");
+        let module = load(&output.bytes).expect("load must succeed");
+        verify(&module).expect("verifier must accept computed max_stack");
+    }
+
+    #[test]
+    fn test_emit_switch_max_stack_correct_for_multi_arm() {
+        let mut tm = TestModule::new();
+        let int32 = tm.int32();
+
+        // Switch on _0: arm 0 → return 100, arm 1 → return 200, default → return 0
+        let body = vec![
+            IrInst::Switch {
+                scrutinee: IrOperand::Local(IrLocal(0)),
+                arms: vec![
+                    IrSwitchArm {
+                        value: IrConstValue::Int(0),
+                        label: IrLabel(0),
+                    },
+                    IrSwitchArm {
+                        value: IrConstValue::Int(1),
+                        label: IrLabel(1),
+                    },
+                ],
+                default: IrLabel(2),
+                span: make_span(),
+            },
+            IrInst::Label(IrLabel(0)),
+            IrInst::Return {
+                value: Some(IrOperand::Const(IrConstValue::Int(100))),
+                span: make_span(),
+            },
+            IrInst::Label(IrLabel(1)),
+            IrInst::Return {
+                value: Some(IrOperand::Const(IrConstValue::Int(200))),
+                span: make_span(),
+            },
+            IrInst::Label(IrLabel(2)),
+            IrInst::Return {
+                value: Some(IrOperand::Const(IrConstValue::Int(0))),
+                span: make_span(),
+            },
+        ];
+        let locals = vec![make_local(IrLocal(0), int32, false)];
+        let params = vec![make_param(IrLocal(0), int32)];
+        let fn_idx = tm.add_fn("switching", params, int32, body, locals);
+        tm.set_entry(fn_idx);
+
+        let output = tm.emit().expect("emit must succeed with correct max_stack");
+        let module = load(&output.bytes).expect("load must succeed");
+        verify(&module).expect("verifier must accept computed max_stack");
     }
 }
