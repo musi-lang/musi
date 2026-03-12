@@ -377,7 +377,8 @@ fn walk_class_members<V: AstVisitor + ?Sized>(
                     v.visit_expr(def, ctx)?;
                 }
             }
-            ClassMember::Law { body, .. } => {
+            ClassMember::Law { params, body, .. } => {
+                walk_params(v, params, ctx)?;
                 v.visit_expr(*body, ctx)?;
             }
         }
