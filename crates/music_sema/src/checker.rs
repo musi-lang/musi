@@ -83,6 +83,34 @@ impl<'a> Checker<'a> {
         }
     }
 
+    /// Creates a checker with pre-populated type arena and unification table.
+    #[must_use]
+    pub fn new_with_state(
+        ctx: CheckContext<'a>,
+        diags: &'a mut DiagnosticBag,
+        defs: &'a mut DefTable,
+        scopes: &'a mut ScopeTree,
+        scope: ScopeId,
+        types: Arena<Type>,
+        unify: UnifyTable,
+    ) -> Self {
+        Self {
+            ctx,
+            store: TypeStore {
+                unify,
+                types,
+                obligations: vec![],
+                instances: vec![],
+                expr_types: HashMap::new(),
+            },
+            diags,
+            defs,
+            scopes,
+            current_scope: scope,
+            current_effects: EffectRow::PURE,
+        }
+    }
+
     /// Synthesises a type for `expr` (inference mode, direction ↑).
     pub fn synth(&mut self, expr: ExprIdx) -> TypeIdx {
         self::expr::synth(self, expr)

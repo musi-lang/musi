@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use music_ast::expr::{
     Arg, ArrayElem, BinOp, Expr, FieldKey, LetFields, MatchArm, Param, RecField, UnaryOp,
 };
-use music_ast::lit::Lit;
+use music_ast::lit::{FStrPart, Lit};
 use music_ast::pat::Pat;
 use music_ast::ty::Ty;
 use music_ast::{ExprIdx, PatIdx, TyIdx};
@@ -186,7 +186,14 @@ fn synth_let(ck: &mut Checker<'_>, fields: &LetFields, body: Option<ExprIdx>) ->
     let value_ty = match (fields.ty, fields.value) {
         (Some(ty_ann), Some(val)) => {
             let ann = lower_ty(ck, ty_ann);
+            let prev_effects = ck.current_effects.clone();
+            if let Type::Fn { ref effects, .. } = ck.store.types[ann]
+                && !effects.is_pure()
+            {
+                ck.current_effects = effects.clone();
+            }
             check(ck, val, ann);
+            ck.current_effects = prev_effects;
             ann
         }
         (Some(ty_ann), None) => lower_ty(ck, ty_ann),
@@ -227,7 +234,14 @@ fn synth_binding(ck: &mut Checker<'_>, fields: &LetFields) -> TypeIdx {
     let value_ty = match (fields.ty, fields.value) {
         (Some(ty_ann), Some(val)) => {
             let ann = lower_ty(ck, ty_ann);
+            let prev_effects = ck.current_effects.clone();
+            if let Type::Fn { ref effects, .. } = ck.store.types[ann]
+                && !effects.is_pure()
+            {
+                ck.current_effects = effects.clone();
+            }
             check(ck, val, ann);
+            ck.current_effects = prev_effects;
             ann
         }
         (Some(ty_ann), None) => lower_ty(ck, ty_ann),
@@ -426,7 +440,15 @@ fn synth_lit(ck: &mut Checker<'_>, lit: &Lit, _span: Span) -> TypeIdx {
     match lit {
         Lit::Int { .. } => ck.named_ty(ck.ctx.well_known.ints.int),
         Lit::Float { .. } => ck.named_ty(ck.ctx.well_known.floats.float64),
-        Lit::Str { .. } | Lit::FStr { .. } => ck.named_ty(ck.ctx.well_known.string),
+        Lit::Str { .. } => ck.named_ty(ck.ctx.well_known.string),
+        Lit::FStr { parts, .. } => {
+            for part in parts {
+                if let FStrPart::Interpolated { expr, .. } = part {
+                    let _ty = synth(ck, *expr);
+                }
+            }
+            ck.named_ty(ck.ctx.well_known.string)
+        }
         Lit::Rune { .. } => ck.named_ty(ck.ctx.well_known.rune),
         Lit::Unit { .. } => ck.named_ty(ck.ctx.well_known.unit),
     }
