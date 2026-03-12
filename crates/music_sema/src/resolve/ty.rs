@@ -35,15 +35,6 @@ impl Resolver<'_> {
                     self.resolve_ty(v);
                 }
             }
-            Ty::Record { fields, .. } => {
-                for f in &fields {
-                    self.resolve_ty(f.ty);
-                }
-            }
-            Ty::Refine { base, pred, .. } => {
-                self.resolve_ty(base);
-                self.resolve_expr(pred);
-            }
             Ty::Array { elem, .. } => {
                 self.resolve_ty(elem);
             }

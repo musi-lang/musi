@@ -3,8 +3,8 @@
 use std::collections::HashMap;
 
 use music_ast::expr::{
-    Arg, ArrayElem, BinOp, Expr, FieldKey, LetFields, MatchArm, Param, PwArm, PwGuard, RecField,
-    UnaryOp,
+    Arg, ArrayElem, BinOp, Expr, FieldKey, LetFields, MatchArm, Param, PwArm, PwGuard, RecDefField,
+    RecField, UnaryOp,
 };
 use music_ast::lit::{FStrPart, Lit};
 use music_ast::pat::Pat;
@@ -123,6 +123,7 @@ fn synth_inner(ck: &mut Checker<'_>, expr_idx: ExprIdx) -> TypeIdx {
             base_ty
         }
         Expr::Choice { body, .. } => synth_choice(ck, body),
+        Expr::RecordDef { fields, .. } => synth_record_def(ck, &fields),
         Expr::Quantified { body, .. } => synth(ck, body),
         Expr::Class { .. } | Expr::Given { .. } | Expr::Effect { .. } | Expr::Foreign { .. } => {
             check_stmt(ck, expr_idx);
@@ -775,6 +776,20 @@ fn synth_choice(ck: &mut Checker<'_>, body: TyIdx) -> TypeIdx {
     let ty = lower_ty(ck, body);
     ck.current_scope = parent;
     ty
+}
+
+fn synth_record_def(ck: &mut Checker<'_>, fields: &[RecDefField]) -> TypeIdx {
+    let rec_fields: Vec<_> = fields
+        .iter()
+        .map(|f| RecordField {
+            name: f.name,
+            ty: lower_ty(ck, f.ty),
+        })
+        .collect();
+    ck.alloc_ty(Type::Record {
+        fields: rec_fields,
+        open: false,
+    })
 }
 
 fn synth_import(ck: &mut Checker<'_>, path: Symbol) -> TypeIdx {

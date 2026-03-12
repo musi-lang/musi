@@ -154,29 +154,30 @@ fn test_walk_expr_crosses_into_ty() {
 }
 
 #[test]
-fn test_walk_ty_crosses_into_expr() {
+fn test_walk_expr_visits_record_def_fields() {
     let mut arenas = AstArenas::new();
-    let base = arenas.tys.alloc(Ty::Named {
+    use crate::expr::RecDefField;
+    let ty = arenas.tys.alloc(Ty::Named {
         name: Symbol(0),
         args: vec![],
-        span: Span::new(0, 3),
+        span: Span::new(10, 3),
     });
-    let pred = arenas.exprs.alloc(Expr::Name {
-        name: Symbol(1),
-        span: Span::new(6, 4),
-    });
-    let refine_ty = arenas.tys.alloc(Ty::Refine {
-        base,
-        pred,
-        span: Span::new(0, 10),
+    let root = arenas.exprs.alloc(Expr::RecordDef {
+        fields: vec![RecDefField {
+            name: Symbol(1),
+            ty,
+            default: None,
+            span: Span::new(0, 10),
+        }],
+        span: Span::new(0, 20),
     });
 
     let mut visitor = CountingVisitor::new();
-    let _ = visitor.visit_ty(refine_ty, &arenas);
-    // tys: refine + base = 2
-    assert_eq!(visitor.ty_count, 2);
-    // exprs: the predicate = 1
+    let _ = visitor.visit_expr(root, &arenas);
+    // exprs: root = 1
     assert_eq!(visitor.expr_count, 1);
+    // tys: the field type = 1
+    assert_eq!(visitor.ty_count, 1);
 }
 
 #[test]

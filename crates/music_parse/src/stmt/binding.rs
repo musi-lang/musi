@@ -1,6 +1,6 @@
 //! Let/var binding parsing.
 
-use music_ast::expr::{BindKind, Expr, LetFields};
+use music_ast::expr::{BindKind, Expr, LetFields, RecDefField};
 use music_ast::ty::TyParam;
 use music_lex::token::TokenKind;
 
@@ -31,6 +31,37 @@ impl Parser<'_> {
         let _rb = self.expect(TokenKind::RBrace);
         Expr::Choice {
             body,
+            span: self.finish_span(start),
+        }
+    }
+
+    /// Parses `'record' '{' field { ',' field } '}'` where field is `ident ':' ty [':=' expr]`.
+    pub(crate) fn parse_expr_record_def(&mut self) -> Expr {
+        let start = self.start_span();
+        let _record = self.bump();
+        let _lb = self.expect(TokenKind::LBrace);
+        let fields = self.comma_sep(TokenKind::RBrace, Self::parse_rec_def_field);
+        let _rb = self.expect(TokenKind::RBrace);
+        Expr::RecordDef {
+            fields,
+            span: self.finish_span(start),
+        }
+    }
+
+    fn parse_rec_def_field(&mut self) -> RecDefField {
+        let start = self.start_span();
+        let name = self.expect_symbol();
+        let _colon = self.expect(TokenKind::Colon);
+        let ty = self.parse_alloc_ty();
+        let default = if self.eat(TokenKind::ColonEq) {
+            Some(self.parse_alloc_expr())
+        } else {
+            None
+        };
+        RecDefField {
+            name,
+            ty,
+            default,
             span: self.finish_span(start),
         }
     }

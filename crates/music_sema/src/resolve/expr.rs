@@ -1,6 +1,8 @@
 //! Pass 2: expression resolution.
 
-use music_ast::expr::{Arg, ArrayElem, Expr, LetFields, MatchArm, Param, PwGuard, RecField};
+use music_ast::expr::{
+    Arg, ArrayElem, Expr, LetFields, MatchArm, Param, PwGuard, RecDefField, RecField,
+};
 use music_ast::lit::{FStrPart, Lit};
 use music_ast::ty::{Constraint, TyParam};
 use music_ast::{ExprIdx, TyIdx};
@@ -42,6 +44,7 @@ impl Resolver<'_> {
                 self.resolve_rec_fields(&fields);
             }
             Expr::Record { fields, .. } => self.resolve_rec_fields(&fields),
+            Expr::RecordDef { fields, .. } => self.resolve_rec_def_fields(&fields),
             Expr::Array { elems, .. } => {
                 for elem in &elems {
                     match elem {
@@ -140,6 +143,12 @@ impl Resolver<'_> {
             span,
             self.file_id,
         );
+    }
+
+    fn resolve_rec_def_fields(&mut self, fields: &[RecDefField]) {
+        for f in fields {
+            self.resolve_ty(f.ty);
+        }
     }
 
     fn resolve_rec_fields(&mut self, fields: &[RecField]) {

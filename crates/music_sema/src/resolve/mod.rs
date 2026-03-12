@@ -199,6 +199,7 @@ pub(crate) const fn expr_span(expr: &Expr) -> Span {
         | Expr::Array { span, .. }
         | Expr::Variant { span, .. }
         | Expr::Choice { span, .. }
+        | Expr::RecordDef { span, .. }
         | Expr::BinOp { span, .. }
         | Expr::UnaryOp { span, .. }
         | Expr::Piecewise { span, .. }

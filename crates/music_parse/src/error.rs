@@ -26,8 +26,6 @@ pub enum ParseError {
     ExpectedAfterExport,
     #[error("expected declaration after attributes")]
     ExpectedDeclAfterAttrs,
-    #[error("expected record fields or refinement type")]
-    ExpectedRecordOrRefinement,
     #[error("unexpected {kind} `{text}`")]
     UnexpectedKind { kind: TokenKind, text: Box<str> },
     #[error("unterminated interpolated string literal")]

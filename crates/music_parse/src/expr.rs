@@ -170,8 +170,9 @@ impl Parser<'_> {
             // Export
             TokenKind::KwExport => self.parse_expr_export(),
 
-            // Choice type
+            // Choice / Record type definitions
             TokenKind::KwChoice => self.parse_expr_choice(),
+            TokenKind::KwRecord => self.parse_expr_record_def(),
 
             // Class / Given / Effect / Foreign
             TokenKind::KwClass => self.parse_expr_class(),

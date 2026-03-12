@@ -26,6 +26,7 @@ fn test_keyword_from_str_returns_some_for_every_keyword() {
         ("of", TokenKind::KwOf),
         ("or", TokenKind::KwOr),
         ("over", TokenKind::KwOver),
+        ("record", TokenKind::KwRecord),
         ("ref", TokenKind::KwRef),
         ("return", TokenKind::KwReturn),
         ("spawn", TokenKind::KwSpawn),

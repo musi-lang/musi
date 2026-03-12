@@ -3,7 +3,7 @@
 use music_shared::{Span, Symbol};
 
 use crate::AstArenas;
-use crate::expr::{Arrow, Expr};
+use crate::expr::Arrow;
 use crate::ty::Ty;
 
 #[test]
@@ -54,31 +54,4 @@ fn test_option_sugar_wraps_inner() {
         panic!("expected Option");
     };
     assert_eq!(*stored, inner);
-}
-
-#[test]
-fn test_refine_type_holds_expr_predicate() {
-    let mut arenas = AstArenas::new();
-    let base = arenas.tys.alloc(Ty::Named {
-        name: Symbol(0),
-        args: vec![],
-        span: Span::new(0, 3),
-    });
-    let pred = arenas.exprs.alloc(Expr::Name {
-        name: Symbol(1),
-        span: Span::new(6, 4),
-    });
-    let idx = arenas.tys.alloc(Ty::Refine {
-        base,
-        pred,
-        span: Span::new(0, 10),
-    });
-    let Ty::Refine {
-        base: b, pred: p, ..
-    } = &arenas.tys[idx]
-    else {
-        panic!("expected Refine");
-    };
-    assert_eq!(*b, base);
-    assert_eq!(*p, pred);
 }

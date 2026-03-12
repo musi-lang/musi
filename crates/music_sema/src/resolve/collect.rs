@@ -29,10 +29,12 @@ impl Resolver<'_> {
             Expr::Let {
                 fields, body: None, ..
             } => {
-                let kind = if fields
-                    .value
-                    .is_some_and(|v| matches!(self.ast.exprs[v], Expr::Choice { .. }))
-                {
+                let kind = if fields.value.is_some_and(|v| {
+                    matches!(
+                        self.ast.exprs[v],
+                        Expr::Choice { .. } | Expr::RecordDef { .. }
+                    )
+                }) {
                     DefKind::Type
                 } else {
                     binding_def_kind(fields.kind)

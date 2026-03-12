@@ -246,14 +246,6 @@ impl<'a> Parser<'a> {
         self.sep_by(TokenKind::Comma, close, f)
     }
 
-    pub(crate) fn semi_sep<T>(
-        &mut self,
-        close: TokenKind,
-        f: impl FnMut(&mut Self) -> T,
-    ) -> Vec<T> {
-        self.sep_by(TokenKind::Semi, close, f)
-    }
-
     pub(crate) fn pipe_sep<T>(
         &mut self,
         close: TokenKind,

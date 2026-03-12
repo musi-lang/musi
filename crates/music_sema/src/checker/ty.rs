@@ -8,7 +8,7 @@ use music_shared::{Span, Symbol};
 use crate::checker::Checker;
 use crate::def::DefId;
 use crate::error::SemaError;
-use crate::types::{EffectEntry, EffectRow, Quantifier, RecordField, Type, TypeIdx};
+use crate::types::{EffectEntry, EffectRow, Quantifier, Type, TypeIdx};
 
 /// Looks up `name` in scope, reporting `UndefinedName` if missing.
 fn lookup_name_or_error(ck: &mut Checker<'_>, name: Symbol, span: Span) -> Option<DefId> {
@@ -81,25 +81,6 @@ pub(crate) fn lower_ty(ck: &mut Checker<'_>, ty_idx: TyIdx) -> TypeIdx {
             ck.alloc_ty(Type::AnonSum {
                 variants: variant_tys,
             })
-        }
-        Ty::Record { fields, open, .. } => {
-            let rec_fields: Vec<_> = fields
-                .iter()
-                .map(|f| RecordField {
-                    name: f.name,
-                    ty: lower_ty(ck, f.ty),
-                })
-                .collect();
-            ck.alloc_ty(Type::Record {
-                fields: rec_fields,
-                open,
-            })
-        }
-        Ty::Refine { base, .. } => {
-            // Refinement type predicates are intentionally not checked.
-            // Full refinement checking requires constraint solving (SMT)
-            // and is deferred to a future milestone.
-            lower_ty(ck, base)
         }
         Ty::Array { elem, len, .. } => {
             let elem_ty = lower_ty(ck, elem);

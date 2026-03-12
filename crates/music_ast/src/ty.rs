@@ -6,7 +6,7 @@ mod tests;
 use music_shared::{Span, Symbol};
 
 use crate::expr::Arrow;
-use crate::{ExprIdx, TyIdx, TyList};
+use crate::{TyIdx, TyList};
 
 /// A type node. Recursive children use arena indices.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -43,16 +43,6 @@ pub enum Ty {
         variants: TyList,
         span: Span,
     },
-    Record {
-        fields: Vec<TyRecField>,
-        open: bool,
-        span: Span,
-    },
-    Refine {
-        base: TyIdx,
-        pred: ExprIdx,
-        span: Span,
-    },
     Array {
         len: Option<u32>,
         elem: TyIdx,
@@ -68,15 +58,6 @@ pub enum Ty {
     Error {
         span: Span,
     },
-}
-
-/// A field in a record type.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TyRecField {
-    pub name: Symbol,
-    pub ty: TyIdx,
-    pub default: Option<ExprIdx>,
-    pub span: Span,
 }
 
 /// A set of effects on a function type.

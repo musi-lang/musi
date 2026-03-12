@@ -7,7 +7,9 @@ use std::ops::ControlFlow;
 
 use crate::attr::{Attr, AttrValue};
 use crate::decl::{ClassMember, EffectOp, ForeignDecl};
-use crate::expr::{Arg, ArrayElem, Expr, LetFields, MatchArm, Param, PwGuard, RecField};
+use crate::expr::{
+    Arg, ArrayElem, Expr, LetFields, MatchArm, Param, PwGuard, RecDefField, RecField,
+};
 use crate::lit::{FStrPart, Lit};
 use crate::pat::Pat;
 use crate::ty::{Constraint, EffectItem, Ty};
@@ -117,6 +119,7 @@ pub fn walk_expr<V: AstVisitor + ?Sized>(
             ControlFlow::Continue(())
         }
         Expr::Choice { body, .. } => v.visit_ty(*body, ctx),
+        Expr::RecordDef { fields, .. } => walk_rec_def_fields(v, fields, ctx),
 
         // -- operators -------------------------------------------------------
         Expr::BinOp { left, right, .. } => v.visit_expr_list(&[*left, *right], ctx),
@@ -223,19 +226,6 @@ pub fn walk_ty<V: AstVisitor + ?Sized>(
                 v.visit_ty(f, ctx)?;
             }
             ControlFlow::Continue(())
-        }
-        Ty::Record { fields, .. } => {
-            for field in fields {
-                v.visit_ty(field.ty, ctx)?;
-                if let Some(def) = field.default {
-                    v.visit_expr(def, ctx)?;
-                }
-            }
-            ControlFlow::Continue(())
-        }
-        Ty::Refine { base, pred, .. } => {
-            v.visit_ty(*base, ctx)?;
-            v.visit_expr(*pred, ctx)
         }
         Ty::Array { elem, .. } => v.visit_ty(*elem, ctx),
 
@@ -484,6 +474,20 @@ fn walk_foreign_decls<V: AstVisitor + ?Sized>(
     for decl in decls {
         if let ForeignDecl::Fn { ty, .. } = decl {
             v.visit_ty(*ty, ctx)?;
+        }
+    }
+    ControlFlow::Continue(())
+}
+
+fn walk_rec_def_fields<V: AstVisitor + ?Sized>(
+    v: &mut V,
+    fields: &[RecDefField],
+    ctx: &AstArenas,
+) -> ControlFlow<V::Break> {
+    for field in fields {
+        v.visit_ty(field.ty, ctx)?;
+        if let Some(def) = field.default {
+            v.visit_expr(def, ctx)?;
         }
     }
     ControlFlow::Continue(())

@@ -3,12 +3,9 @@
 #[cfg(test)]
 mod tests;
 
-use music_ast::ExprIdx;
 use music_ast::TyIdx;
 use music_ast::expr::Arrow;
-use music_ast::ty::{
-    Constraint, EffectItem, EffectSet, Quantifier, Rel, Ty, TyNamedRef, TyParam, TyRecField,
-};
+use music_ast::ty::{Constraint, EffectItem, EffectSet, Quantifier, Rel, Ty, TyNamedRef, TyParam};
 use music_lex::token::TokenKind;
 use music_shared::Symbol;
 
@@ -141,7 +138,6 @@ impl Parser<'_> {
             TokenKind::Ident => self.parse_ty_named(),
             TokenKind::LParen => self.parse_ty_paren_or_tuple(),
             TokenKind::LBracket => self.parse_ty_array(),
-            TokenKind::LBrace => self.parse_ty_brace(),
             TokenKind::KwForall => self.parse_ty_quantified(Quantifier::Forall),
             TokenKind::KwExists => self.parse_ty_quantified(Quantifier::Exists),
             _ => self.error_ty(&ParseError::ExpectedType),
@@ -241,72 +237,6 @@ impl Parser<'_> {
         Ty::Array {
             len,
             elem: elem_idx,
-            span: self.finish_span(start),
-        }
-    }
-
-    /// Disambiguates `{ fields ; ... }` (record) vs `{ T | pred }` (refinement).
-    fn parse_ty_brace(&mut self) -> Ty {
-        let start = self.start_span();
-        let _lb = self.bump();
-
-        if self.eat(TokenKind::RBrace) {
-            return Ty::Record {
-                fields: vec![],
-                open: false,
-                span: self.finish_span(start),
-            };
-        }
-        if self.at(TokenKind::Ident) && self.peek2() == TokenKind::Colon {
-            return self.parse_ty_record_body(start);
-        }
-
-        let ty = self.parse_ty();
-        if self.eat(TokenKind::Pipe) {
-            let pred = self.parse_expr();
-            let pred_idx = self.alloc_expr(pred);
-            let _rb = self.expect(TokenKind::RBrace);
-            let base_idx = self.alloc_ty(ty);
-            return Ty::Refine {
-                base: base_idx,
-                pred: pred_idx,
-                span: self.finish_span(start),
-            };
-        }
-
-        let _rb = self.expect(TokenKind::RBrace);
-        self.error_ty(&ParseError::ExpectedRecordOrRefinement)
-    }
-
-    fn parse_ty_record_body(&mut self, start: u32) -> Ty {
-        let fields = self.semi_sep(TokenKind::RBrace, Self::parse_ty_rec_field);
-        let open = if self.eat(TokenKind::Semi) {
-            self.eat(TokenKind::DotDotDot)
-        } else {
-            false
-        };
-        let _rb = self.expect(TokenKind::RBrace);
-        Ty::Record {
-            fields,
-            open,
-            span: self.finish_span(start),
-        }
-    }
-
-    fn parse_ty_rec_field(&mut self) -> TyRecField {
-        let start = self.start_span();
-        let name = self.expect_symbol();
-        let _colon = self.expect(TokenKind::Colon);
-        let ty = self.parse_alloc_ty();
-        let default: Option<ExprIdx> = if self.eat(TokenKind::ColonEq) {
-            Some(self.parse_alloc_expr())
-        } else {
-            None
-        };
-        TyRecField {
-            name,
-            ty,
-            default,
             span: self.finish_span(start),
         }
     }

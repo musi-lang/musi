@@ -96,6 +96,10 @@ pub enum Expr {
         body: TyIdx,
         span: Span,
     },
+    RecordDef {
+        fields: Vec<RecDefField>,
+        span: Span,
+    },
 
     // -- operators -----------------------------------------------------------
     BinOp {
@@ -260,6 +264,15 @@ pub enum RecField {
         expr: ExprIdx,
         span: Span,
     },
+}
+
+/// A field in a record type definition (`record { name: Ty }`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecDefField {
+    pub name: Symbol,
+    pub ty: TyIdx,
+    pub default: Option<ExprIdx>,
+    pub span: Span,
 }
 
 /// An element in an array literal.

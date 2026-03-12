@@ -236,6 +236,7 @@ pub fn expr_span(idx: ExprIdx, module: &ParsedModule) -> Option<Span> {
         | Expr::Array { span, .. }
         | Expr::Variant { span, .. }
         | Expr::Choice { span, .. }
+        | Expr::RecordDef { span, .. }
         | Expr::BinOp { span, .. }
         | Expr::UnaryOp { span, .. }
         | Expr::Piecewise { span, .. }

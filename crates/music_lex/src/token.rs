@@ -32,6 +32,7 @@ pub enum TokenKind {
     KwOf,
     KwOr,
     KwOver,
+    KwRecord,
     KwRef,
     KwReturn,
     KwSpawn,
@@ -141,6 +142,7 @@ impl TokenKind {
                 | Self::KwOf
                 | Self::KwOr
                 | Self::KwOver
+                | Self::KwRecord
                 | Self::KwRef
                 | Self::KwReturn
                 | Self::KwSpawn
@@ -180,6 +182,7 @@ impl TokenKind {
             Self::KwOf => Some("of"),
             Self::KwOr => Some("or"),
             Self::KwOver => Some("over"),
+            Self::KwRecord => Some("record"),
             Self::KwRef => Some("ref"),
             Self::KwReturn => Some("return"),
             Self::KwSpawn => Some("spawn"),
@@ -299,6 +302,7 @@ pub fn keyword_from_str(s: &str) -> Option<TokenKind> {
         "of" => Some(TokenKind::KwOf),
         "or" => Some(TokenKind::KwOr),
         "over" => Some(TokenKind::KwOver),
+        "record" => Some(TokenKind::KwRecord),
         "ref" => Some(TokenKind::KwRef),
         "return" => Some(TokenKind::KwReturn),
         "spawn" => Some(TokenKind::KwSpawn),
