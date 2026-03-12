@@ -15,6 +15,7 @@ pub enum ClassMember {
     },
     Law {
         name: Symbol,
+        params: Vec<Param>,
         body: ExprIdx,
         span: Span,
     },
