@@ -44,6 +44,10 @@ pub enum DefKind {
     ForeignFn,
     /// Opaque foreign type.
     OpaqueType,
+    /// Typeclass law (named property).
+    Law,
+    /// Universally quantified law variable (value witness of class type param).
+    LawVar,
 }
 
 /// Type-checker annotations for a definition, filled during type checking.
