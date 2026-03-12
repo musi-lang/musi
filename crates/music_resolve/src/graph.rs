@@ -309,11 +309,15 @@ pub fn build_module_graph<S: BuildHasher>(
     source_db: &mut SourceDb,
     diags: &mut DiagnosticBag,
     parsed_modules: &mut HashMap<ModuleId, ParsedModule, S>,
+    source_override: Option<&str>,
 ) -> Result<ModuleGraph, ResolveError> {
     let mut graph = ModuleGraph::new();
 
     let canonical_root = canonicalize_path(root)?;
-    let root_source = read_source(&canonical_root)?;
+    let root_source = match source_override {
+        Some(src) => src.to_owned(),
+        None => read_source(&canonical_root)?,
+    };
     let root_file_id = source_db.add(canonical_root.display().to_string(), &root_source);
     let root_id = graph.add_module(canonical_root, root_source, root_file_id);
 

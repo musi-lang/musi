@@ -7,6 +7,8 @@ use std::collections::HashMap;
 use std::env;
 use std::path::{self, Path, PathBuf};
 
+use musi_manifest::MusiManifest;
+
 use crate::error::ResolveError;
 use crate::git::fetch_git_package;
 use crate::specifier::{ImportScheme, ImportSpecifier, parse_git_source, parse_specifier};
@@ -23,6 +25,33 @@ pub struct ResolverConfig {
     pub manifest_imports: HashMap<String, String>,
     /// The `[dependencies]` table from `mspackage.toml`.
     pub manifest_deps: HashMap<String, String>,
+}
+
+impl ResolverConfig {
+    /// Builds a resolver configuration from a project root and optional manifest.
+    #[must_use]
+    pub fn from_project(project_root: &Path, manifest: Option<&MusiManifest>) -> Self {
+        let std_root = discover_std_root(project_root).unwrap_or_else(|_| project_root.join("std"));
+        let cache_dir = cache_directory().join("musi/packages");
+        let (manifest_imports, manifest_deps) = manifest.map_or_else(
+            || (HashMap::new(), HashMap::new()),
+            |m| (m.imports.clone(), m.dependencies.clone()),
+        );
+        Self {
+            std_root,
+            cache_dir,
+            project_root: project_root.to_path_buf(),
+            manifest_imports,
+            manifest_deps,
+        }
+    }
+}
+
+fn cache_directory() -> PathBuf {
+    env::var("HOME").map_or_else(
+        |_| PathBuf::from("/tmp"),
+        |home| PathBuf::from(home).join(".cache"),
+    )
 }
 
 /// Discovers the standard library root.
