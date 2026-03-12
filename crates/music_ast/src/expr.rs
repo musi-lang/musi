@@ -139,6 +139,7 @@ pub enum Expr {
     // -- module --------------------------------------------------------------
     Import {
         path: Symbol,
+        alias: Option<Symbol>,
         span: Span,
     },
     Export {
