@@ -8,7 +8,11 @@ import {
 } from "./bootstrap";
 import { getClient, restartClient, stopClient } from "./client";
 import { getConfig } from "./config";
-import { buildExecutionRequest, executeInTerminal } from "./runner";
+import {
+	buildExecutionRequest,
+	executeInTerminal,
+	findCompilerPath,
+} from "./runner";
 import type { StatusBar } from "./status";
 import type { MsPackage, MsPackageTask } from "./types";
 
@@ -57,7 +61,9 @@ async function _runCliOnFile(
 ): Promise<void> {
 	let file: string | undefined;
 	if (typeof args[0] === "string") {
-		file = args[0];
+		file = args[0].startsWith("file://")
+			? vscode.Uri.parse(args[0]).fsPath
+			: args[0];
 	}
 	if (!file) {
 		const editor = vscode.window.activeTextEditor;
@@ -67,16 +73,15 @@ async function _runCliOnFile(
 		}
 		file = editor.document.uri.fsPath;
 	}
-	const cliPath = _cachedCliPath ?? (await findCliPath());
-	if (!cliPath) {
+	const compilerPath = await findCompilerPath();
+	if (!compilerPath) {
 		await showCliNotFoundUI();
 		return;
 	}
-	_cachedCliPath = cliPath;
 	const terminal = _getOrCreateTerminal();
 	terminal.show();
 	terminal.sendText(
-		`${JSON.stringify(cliPath)} ${subcommand} ${JSON.stringify(file)}`,
+		`${JSON.stringify(compilerPath)} ${subcommand} ${JSON.stringify(file)}`,
 	);
 }
 

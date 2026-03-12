@@ -575,8 +575,8 @@
 		]
 	},
 	"scripts": {
-		"build": "bun build ./client/src/main.ts --outfile=./dist/extension.js --external vscode --external vscode-languageclient --target=node --format=cjs",
-		"package": "bun run build && vsce package",
+		"build": "bun build ./client/src/main.ts --outfile=./dist/extension.js --external vscode --target=node --format=cjs",
+		"package": "bun run build && vsce package --no-dependencies",
 		"vscode:prepublish": "bun run build"
 	},
 	"dependencies": {
