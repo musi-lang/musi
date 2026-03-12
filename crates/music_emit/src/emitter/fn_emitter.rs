@@ -5,45 +5,30 @@
 
 use std::collections::HashMap;
 
-use music_ir::{IrLabel, IrLocal};
-
 use crate::error::EmitError;
 use musi_bc::{Opcode, encode_i32, encode_no_operand, encode_u8, encode_u16, encode_u32};
 
 /// Fixup record: a forward jump that needs patching once we know the label target.
 struct Fixup {
-    /// Byte offset of the jump instruction's opcode in `code`.
     instr_offset: usize,
-    /// Total length of the jump instruction in bytes.
     instr_len: usize,
-    /// The label this jump targets.
-    label: IrLabel,
+    label: u32,
 }
 
 /// Handler table entry for effect push instructions.
 pub struct HandlerEntry {
-    /// The effect id for this handler.
     pub effect_id: u8,
-    /// The function id of the handler.
     pub handler_fn_id: u32,
 }
 
 pub struct FnEmitter {
-    /// Emitted bytecode for this function.
     pub code: Vec<u8>,
-    /// Resolved label → byte offset.
     label_targets: HashMap<u32, usize>,
-    /// Unresolved forward jumps.
     fixups: Vec<Fixup>,
-    /// Current stack depth (for `max_stack` tracking).
     stack_depth: i32,
-    /// Maximum stack depth seen so far.
     pub max_stack: u16,
-    /// Number of local slots (params + additional locals).
     pub local_count: u16,
-    /// Number of parameters.
     pub param_count: u16,
-    /// Collected handler entries for this function.
     pub handlers: Vec<HandlerEntry>,
 }
 
@@ -75,9 +60,15 @@ impl FnEmitter {
         self.stack_depth -= n;
     }
 
+    /// Allocate a new local slot and return its index.
+    pub fn alloc_local(&mut self) -> u32 {
+        let slot = u32::from(self.local_count);
+        self.local_count += 1;
+        slot
+    }
+
     /// Emit `ld.loc` or `ld.loc.w` depending on slot index.
-    pub fn emit_ld_loc(&mut self, local: IrLocal) {
-        let slot = local.0;
+    pub fn emit_ld_loc(&mut self, slot: u32) {
         if let Ok(s) = u8::try_from(slot) {
             encode_u8(&mut self.code, Opcode::LD_LOC, s);
         } else {
@@ -88,8 +79,7 @@ impl FnEmitter {
     }
 
     /// Emit `st.loc` or `st.loc.w` depending on slot index.
-    pub fn emit_st_loc(&mut self, local: IrLocal) {
-        let slot = local.0;
+    pub fn emit_st_loc(&mut self, slot: u32) {
         if let Ok(s) = u8::try_from(slot) {
             encode_u8(&mut self.code, Opcode::ST_LOC, s);
         } else {
@@ -112,6 +102,11 @@ impl FnEmitter {
     pub fn emit_dup(&mut self) {
         encode_no_operand(&mut self.code, Opcode::DUP);
         self.push_n(1);
+    }
+
+    pub fn emit_pop(&mut self) {
+        encode_no_operand(&mut self.code, Opcode::POP);
+        self.pop_n(1);
     }
 
     pub fn emit_ret(&mut self) {
@@ -152,13 +147,16 @@ impl FnEmitter {
         Ok(())
     }
 
-    pub fn emit_mk_var(&mut self, tag: u32) {
+    pub fn emit_mk_var(&mut self, tag: u32) -> Result<(), EmitError> {
         if let Ok(t) = u8::try_from(tag) {
             encode_u8(&mut self.code, Opcode::MK_VAR, t);
         } else {
-            let t = u16::try_from(tag).expect("variant tag fits in u16");
+            let t = u16::try_from(tag).map_err(|_| EmitError::OperandOverflow {
+                desc: "variant tag exceeds 65535".into(),
+            })?;
             encode_u16(&mut self.code, Opcode::MK_VAR_W, t);
         }
+        Ok(())
     }
 
     pub fn emit_ld_tag(&mut self) {
@@ -188,14 +186,76 @@ impl FnEmitter {
     }
 
     /// Emit an indirect (dynamic) call through a closure or fn value.
-    ///
-    /// Emits `inv.dyn u8` (opcode `0x69`). The callee must already be on the stack
-    /// below the arguments. u8 operand = argument count.
-    pub fn emit_inv_dyn(&mut self, arg_count: i32) {
-        let n = u8::try_from(arg_count).unwrap_or(u8::MAX);
+    pub fn emit_inv_dyn(&mut self, arg_count: i32) -> Result<(), EmitError> {
+        let n = u8::try_from(arg_count).map_err(|_| EmitError::OperandOverflow {
+            desc: "dynamic call arg count exceeds 255".into(),
+        })?;
         encode_u8(&mut self.code, Opcode::INV_DYN, n);
         self.pop_n(arg_count + 1);
         self.push_n(1);
+        Ok(())
+    }
+
+    /// Emit `cmp.eq` (pops 2, pushes 1 → net pop 1).
+    pub fn emit_cmp_eq(&mut self) {
+        encode_no_operand(&mut self.code, Opcode::CMP_EQ);
+        self.pop_n(1);
+    }
+
+    /// Emit `ld.pay` with field index (pops ref, pushes payload → net 0).
+    pub fn emit_ld_pay(&mut self, field_idx: u8) {
+        encode_u8(&mut self.code, Opcode::LD_PAY, field_idx);
+    }
+
+    /// Emit `inv.ffi` (pops args, pushes 1 result).
+    pub fn emit_inv_ffi(&mut self, ffi_idx: u32, arg_count: i32) {
+        encode_u32(&mut self.code, Opcode::INV_FFI, ffi_idx);
+        self.pop_n(arg_count);
+        self.push_n(1);
+    }
+
+    /// Emit `ld.idx` (pops array+index, pushes value → net pop 1).
+    pub fn emit_ld_idx(&mut self) {
+        encode_no_operand(&mut self.code, Opcode::LD_IDX);
+        self.pop_n(1);
+    }
+
+    /// Emit `st.idx` (pops array+index+value → net pop 3).
+    pub fn emit_st_idx(&mut self) {
+        encode_no_operand(&mut self.code, Opcode::ST_IDX);
+        self.pop_n(3);
+    }
+
+    /// Emit `mk.arr` with type id (pops length — actually takes count operand, pushes array ref).
+    pub fn emit_mk_arr(&mut self, type_id: u32) {
+        encode_u32(&mut self.code, Opcode::MK_ARR, type_id);
+        self.push_n(1);
+    }
+
+    /// Emit `cmp.tag` or `cmp.tag.w` — compare object tag inline (pop obj, push bool → net 0).
+    pub fn emit_cmp_tag(&mut self, tag: u32) -> Result<(), EmitError> {
+        if let Ok(t) = u8::try_from(tag) {
+            encode_u8(&mut self.code, Opcode::CMP_TAG, t);
+        } else {
+            let t = u16::try_from(tag).map_err(|_| EmitError::OperandOverflow {
+                desc: "variant tag exceeds 65535".into(),
+            })?;
+            encode_u16(&mut self.code, Opcode::CMP_TAG_W, t);
+        }
+        Ok(())
+    }
+
+    /// Emit a conditional wide jump-if-false to `label` (5 bytes, i32 offset, pops condition).
+    pub fn emit_jmp_f(&mut self, label: u32) {
+        let instr_offset = self.code.len();
+        encode_i32(&mut self.code, Opcode::JMP_F_W, 0);
+        let instr_len = 5;
+        self.pop_n(1);
+        self.fixups.push(Fixup {
+            instr_offset,
+            instr_len,
+            label,
+        });
     }
 
     pub fn emit_alc_ref(&mut self, type_id: u32) {
@@ -235,13 +295,12 @@ impl FnEmitter {
     }
 
     pub fn emit_eff_res(&mut self) {
-        // eff.res.c — callee side resume
         encode_no_operand(&mut self.code, Opcode::EFF_RES_C);
         self.pop_n(1);
     }
 
     /// Emit an unconditional wide jump to `label` (5 bytes, i32 offset).
-    pub fn emit_jmp(&mut self, label: IrLabel) {
+    pub fn emit_jmp(&mut self, label: u32) {
         let instr_offset = self.code.len();
         encode_i32(&mut self.code, Opcode::JMP_W, 0);
         let instr_len = 5;
@@ -254,7 +313,7 @@ impl FnEmitter {
     }
 
     /// Emit a conditional wide jump-if-true to `label` (5 bytes, i32 offset, pops condition).
-    pub fn emit_jmp_t(&mut self, label: IrLabel) {
+    pub fn emit_jmp_t(&mut self, label: u32) {
         let instr_offset = self.code.len();
         encode_i32(&mut self.code, Opcode::JMP_T_W, 0);
         let instr_len = 5;
@@ -267,18 +326,16 @@ impl FnEmitter {
     }
 
     /// Record a label target at the current code position.
-    pub fn emit_label(&mut self, label: IrLabel) {
-        let _ = self.label_targets.insert(label.0, self.code.len());
+    pub fn emit_label(&mut self, label: u32) {
+        let _ = self.label_targets.insert(label, self.code.len());
     }
 
     /// Resolve all forward-jump fixups.
-    ///
-    /// Must be called after all instructions for the function have been emitted.
     pub fn resolve_fixups(&mut self, fn_name: &str) -> Result<(), EmitError> {
         for fixup in &self.fixups {
             let target = self
                 .label_targets
-                .get(&fixup.label.0)
+                .get(&fixup.label)
                 .copied()
                 .ok_or_else(|| EmitError::UnresolvableLabel {
                     name: fn_name.into(),

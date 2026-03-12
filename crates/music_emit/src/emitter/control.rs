@@ -1,208 +1,269 @@
-//! Control-flow instruction emission.
+//! Control-flow instruction emission: piecewise and match expressions.
 
-use music_ir::{
-    IrConstValue, IrEffectOpId, IrInst, IrLabel, IrLocal, IrOperand, IrPlace, IrRvalue, IrSwitchArm,
-};
-use music_shared::{Arena, Interner};
+use music_ast::Pat;
+use music_ast::PatIdx;
+use music_ast::expr::{MatchArm, PwArm, PwGuard};
+use music_ast::lit::Lit;
 
-use music_ir::IrType;
-
-use crate::const_pool::ConstPool;
+use crate::const_pool::ConstValue;
 use crate::error::EmitError;
-use crate::type_pool::TypePool;
-use musi_bc::{Opcode, encode_no_operand, encode_u8, encode_u16};
+use music_ast::ExprIdx;
 
-use super::fn_emitter::FnEmitter;
-use super::rvalue::{emit_operand, emit_rvalue};
+use super::super::emitter::Emitter;
+use super::FnCtx;
+use super::expr::{emit_expr, resolve_variant_tag_by_name};
 
-/// Emit a single `IrInst` into `fe`.
-///
-/// Returns `true` if this instruction terminates the basic block (ret / tail call).
-pub fn emit_inst(
-    fe: &mut FnEmitter,
-    cp: &mut ConstPool,
-    tp: &mut TypePool,
-    type_arena: &Arena<IrType>,
-    inst: &IrInst,
-    interner: &Interner,
-) -> Result<bool, EmitError> {
-    match inst {
-        IrInst::Assign { dst, rvalue, .. } => {
-            emit_rvalue(fe, cp, tp, type_arena, rvalue, interner)?;
-            let is_tail = matches!(rvalue, IrRvalue::Call { tail: true, .. });
-            let is_unit = rvalue_is_unit(rvalue);
-            if !is_tail && !is_unit {
-                fe.emit_st_loc(*dst);
-            }
-        }
-        IrInst::Store { dst, value, .. } => {
-            emit_inst_store(fe, cp, dst, value, interner)?;
-        }
-        IrInst::Goto(label) => {
-            fe.emit_jmp(*label);
-        }
-        IrInst::Branch {
-            cond,
-            then_label,
-            else_label,
-            ..
-        } => {
-            emit_operand(fe, cp, cond, interner)?;
-            fe.emit_jmp_t(*then_label);
-            fe.emit_jmp(*else_label);
-        }
-        IrInst::Switch {
-            scrutinee,
-            arms,
-            default,
-            ..
-        } => {
-            emit_inst_switch(fe, cp, scrutinee, arms, *default, interner)?;
-        }
-        IrInst::Label(label) => {
-            fe.emit_label(*label);
-        }
-        IrInst::Return { value, .. } => {
-            emit_inst_return(fe, cp, value.as_ref(), interner)?;
-            return Ok(true);
-        }
-        IrInst::EffectPush {
-            effect, handler_fn, ..
-        } => {
-            fe.emit_eff_psh(effect.0, handler_fn.raw())?;
-        }
-        IrInst::EffectPop { effect, .. } => {
-            fe.emit_eff_pop(effect.0)?;
-        }
-        IrInst::EffectDo { op, args, dst, .. } => {
-            emit_inst_effect_do(fe, cp, *op, args, *dst, interner)?;
-        }
-        IrInst::EffectResume { value, .. } => {
-            emit_operand(fe, cp, value, interner)?;
-            fe.emit_eff_res();
-        }
-        IrInst::Nop => {}
+/// Emit a piecewise expression. Leaves result on stack.
+pub(crate) fn emit_piecewise(
+    em: &mut Emitter<'_>,
+    fc: &mut FnCtx,
+    arms: &[PwArm],
+) -> Result<(), EmitError> {
+    if arms.is_empty() {
+        return Err(EmitError::UnsupportedFeature {
+            desc: "empty piecewise expression".into(),
+        });
     }
-    Ok(false)
+
+    let result_slot = fc.alloc_local();
+    let merge_label = fc.fresh_label();
+
+    let n = arms.len();
+    for (i, arm) in arms.iter().enumerate() {
+        let is_last = i == n - 1;
+        if is_last || matches!(arm.guard, PwGuard::Any { .. }) {
+            let produced = emit_expr(em, fc, arm.result)?;
+            if produced {
+                fc.fe.emit_st_loc(result_slot);
+            }
+            fc.fe.emit_jmp(merge_label);
+        } else if let PwGuard::When {
+            expr: guard_expr, ..
+        } = arm.guard
+        {
+            let then_label = fc.fresh_label();
+            let next_label = fc.fresh_label();
+            let produced_guard = emit_expr(em, fc, guard_expr)?;
+            if produced_guard {
+                fc.fe.emit_jmp_t(then_label);
+            }
+            fc.fe.emit_jmp(next_label);
+            fc.fe.emit_label(then_label);
+            let produced = emit_expr(em, fc, arm.result)?;
+            if produced {
+                fc.fe.emit_st_loc(result_slot);
+            }
+            fc.fe.emit_jmp(merge_label);
+            fc.fe.emit_label(next_label);
+        }
+    }
+
+    fc.fe.emit_label(merge_label);
+    fc.fe.emit_ld_loc(result_slot);
+    Ok(())
 }
 
-fn emit_inst_store(
-    fe: &mut FnEmitter,
-    cp: &mut ConstPool,
-    dst: &IrPlace,
-    value: &IrOperand,
-    interner: &Interner,
+/// Emit a match expression. Leaves result on stack.
+pub(crate) fn emit_match(
+    em: &mut Emitter<'_>,
+    fc: &mut FnCtx,
+    scrutinee: ExprIdx,
+    arms: &[MatchArm],
 ) -> Result<(), EmitError> {
-    emit_operand(fe, cp, value, interner)?;
-    match dst {
-        IrPlace::Local(local) => {
-            fe.emit_st_loc(*local);
+    let produced_scrutinee = emit_expr(em, fc, scrutinee)?;
+    let scrutinee_slot = fc.alloc_local();
+    if produced_scrutinee {
+        fc.fe.emit_st_loc(scrutinee_slot);
+    }
+
+    let result_slot = fc.alloc_local();
+    let merge_label = fc.fresh_label();
+
+    let n = arms.len();
+    for (i, arm) in arms.iter().enumerate() {
+        let is_last = i == n - 1;
+        let next_label = if is_last {
+            None
+        } else {
+            Some(fc.fresh_label())
+        };
+
+        if let Some(fail_label) = next_label {
+            emit_pat_test(em, fc, arm.pat, scrutinee_slot, fail_label)?;
         }
-        IrPlace::Field { base, index } => {
-            fe.emit_ld_loc(*base);
-            if let Ok(i) = u8::try_from(*index) {
-                encode_u8(&mut fe.code, Opcode::ST_FLD, i);
+
+        emit_pat_bind(em, fc, arm.pat, scrutinee_slot)?;
+
+        if let Some(guard_expr) = arm.guard {
+            if let Some(fail_label) = next_label {
+                let produced_guard = emit_expr(em, fc, guard_expr)?;
+                if produced_guard {
+                    fc.fe.emit_jmp_f(fail_label);
+                }
             } else {
-                let i = u16::try_from(*index).map_err(|_| EmitError::OperandOverflow {
-                    desc: "store field index exceeds 65535".into(),
+                let produced_guard = emit_expr(em, fc, guard_expr)?;
+                if produced_guard {
+                    fc.fe.emit_pop();
+                }
+            }
+        }
+
+        let produced = emit_expr(em, fc, arm.result)?;
+        if produced {
+            fc.fe.emit_st_loc(result_slot);
+        }
+        fc.fe.emit_jmp(merge_label);
+
+        if let Some(fail_label) = next_label {
+            fc.fe.emit_label(fail_label);
+        }
+    }
+
+    fc.fe.emit_label(merge_label);
+    fc.fe.emit_ld_loc(result_slot);
+    Ok(())
+}
+
+/// Test whether scrutinee at `scrutinee_slot` matches `pat`.
+/// Jumps to `fail_label` if not matched.
+fn emit_pat_test(
+    em: &mut Emitter<'_>,
+    fc: &mut FnCtx,
+    pat_idx: PatIdx,
+    scrutinee_slot: u32,
+    fail_label: u32,
+) -> Result<(), EmitError> {
+    let pat = em.ast.pats[pat_idx].clone();
+    match pat {
+        Pat::Wild { .. } | Pat::Bind { inner: None, .. } => Ok(()),
+        Pat::Bind {
+            inner: Some(inner_pat),
+            ..
+        } => emit_pat_test(em, fc, inner_pat, scrutinee_slot, fail_label),
+        Pat::Lit { lit, .. } => emit_lit_pat_test(em, fc, scrutinee_slot, &lit, fail_label),
+        Pat::Tuple { .. } | Pat::Record { .. } => Ok(()),
+        Pat::Variant { name, .. } => {
+            let tag = resolve_variant_tag_by_name(em, name);
+            fc.fe.emit_ld_loc(scrutinee_slot);
+            fc.fe.emit_cmp_tag(tag)?;
+            fc.fe.emit_jmp_f(fail_label);
+            Ok(())
+        }
+        Pat::Or { left, right, .. } => {
+            let try_right = fc.fresh_label();
+            let pass_label = fc.fresh_label();
+            emit_pat_test(em, fc, left, scrutinee_slot, try_right)?;
+            fc.fe.emit_jmp(pass_label);
+            fc.fe.emit_label(try_right);
+            emit_pat_test(em, fc, right, scrutinee_slot, fail_label)?;
+            fc.fe.emit_label(pass_label);
+            Ok(())
+        }
+        Pat::Array { .. } | Pat::Error { .. } => Ok(()),
+    }
+}
+
+fn emit_lit_pat_test(
+    em: &mut Emitter<'_>,
+    fc: &mut FnCtx,
+    scrutinee_slot: u32,
+    lit: &Lit,
+    fail_label: u32,
+) -> Result<(), EmitError> {
+    let cv = match lit {
+        Lit::Int { value, .. } => ConstValue::Int(*value),
+        Lit::Rune { codepoint, .. } => ConstValue::Rune(*codepoint),
+        Lit::Str { value, .. } => ConstValue::Str(*value),
+        Lit::Float { value, .. } => ConstValue::Float(*value),
+        Lit::Unit { .. } | Lit::FStr { .. } => return Ok(()),
+    };
+
+    fc.fe.emit_ld_loc(scrutinee_slot);
+    if let Some(ci) = em.cp.intern(&cv, em.interner)? {
+        fc.fe.emit_ld_cst(ci);
+    }
+    fc.fe.emit_cmp_eq();
+    fc.fe.emit_jmp_f(fail_label);
+    Ok(())
+}
+
+/// Bind pattern variables by loading from `value_slot`.
+fn emit_pat_bind(
+    em: &mut Emitter<'_>,
+    fc: &mut FnCtx,
+    pat_idx: PatIdx,
+    value_slot: u32,
+) -> Result<(), EmitError> {
+    let pat = em.ast.pats[pat_idx].clone();
+    match pat {
+        Pat::Wild { .. } => Ok(()),
+        Pat::Bind { span, inner, .. } => {
+            let slot = fc.alloc_local();
+            fc.fe.emit_ld_loc(value_slot);
+            fc.fe.emit_st_loc(slot);
+            if let Some(&did) = em.sema.resolution.pat_defs.get(&span) {
+                let _ = fc.local_map.insert(did, slot);
+            }
+            if let Some(inner_pat) = inner {
+                emit_pat_bind(em, fc, inner_pat, slot)?;
+            }
+            Ok(())
+        }
+        Pat::Tuple { elems, .. } => {
+            for (i, &elem) in elems.iter().enumerate() {
+                let idx = u32::try_from(i).map_err(|_| EmitError::OperandOverflow {
+                    desc: "tuple pattern index".into(),
                 })?;
-                encode_u16(&mut fe.code, Opcode::ST_FLD_W, i);
+                let field_slot = fc.alloc_local();
+                fc.fe.emit_ld_loc(value_slot);
+                fc.fe.emit_ld_fld(idx)?;
+                fc.fe.emit_st_loc(field_slot);
+                emit_pat_bind(em, fc, elem, field_slot)?;
             }
-            fe.pop_n(2);
+            Ok(())
         }
-        IrPlace::Index { base, index } => {
-            fe.emit_ld_loc(*base);
-            emit_operand(fe, cp, index, interner)?;
-            encode_no_operand(&mut fe.code, Opcode::ST_IDX);
-            fe.pop_n(3);
-        }
-        IrPlace::Deref { ptr } => {
-            fe.emit_ld_loc(*ptr);
-            let zero = IrConstValue::Int(0);
-            if let Some(i) = cp.intern(&zero, interner)? {
-                fe.emit_ld_cst(i);
+        Pat::Variant { args, .. } => {
+            if args.is_empty() {
+                return Ok(());
             }
-            encode_no_operand(&mut fe.code, Opcode::ST_IDX);
-            fe.pop_n(3);
-        }
-    }
-    Ok(())
-}
-
-fn emit_inst_switch(
-    fe: &mut FnEmitter,
-    cp: &mut ConstPool,
-    scrutinee: &IrOperand,
-    arms: &[IrSwitchArm],
-    default: IrLabel,
-    interner: &Interner,
-) -> Result<(), EmitError> {
-    for arm in arms {
-        emit_operand(fe, cp, scrutinee, interner)?;
-        fe.emit_ld_tag();
-        let arm_const = arm.value.clone();
-        if let Some(i) = cp.intern(&arm_const, interner)? {
-            fe.emit_ld_cst(i);
-        }
-        encode_no_operand(&mut fe.code, Opcode::CMP_EQ);
-        fe.pop_n(1);
-        fe.emit_jmp_t(arm.label);
-    }
-    fe.emit_jmp(default);
-    Ok(())
-}
-
-fn emit_inst_return(
-    fe: &mut FnEmitter,
-    cp: &mut ConstPool,
-    value: Option<&IrOperand>,
-    interner: &Interner,
-) -> Result<(), EmitError> {
-    match value {
-        Some(IrOperand::Local(local)) => {
-            fe.emit_ld_loc(*local);
-            fe.emit_ret();
-        }
-        Some(IrOperand::Const(cv)) => {
-            if matches!(cv, IrConstValue::Unit) {
-                fe.emit_ret_u();
-            } else if let Some(i) = cp.intern(cv, interner)? {
-                fe.emit_ld_cst(i);
-                fe.emit_ret();
+            let payload_slot = fc.alloc_local();
+            fc.fe.emit_ld_loc(value_slot);
+            fc.fe.emit_ld_pay(0);
+            fc.fe.emit_st_loc(payload_slot);
+            if args.len() == 1 {
+                emit_pat_bind(em, fc, args[0], payload_slot)?;
             } else {
-                fe.emit_ret_u();
+                for (i, &elem) in args.iter().enumerate() {
+                    let idx = u32::try_from(i).map_err(|_| EmitError::OperandOverflow {
+                        desc: "variant payload index".into(),
+                    })?;
+                    let field_slot = fc.alloc_local();
+                    fc.fe.emit_ld_loc(payload_slot);
+                    fc.fe.emit_ld_fld(idx)?;
+                    fc.fe.emit_st_loc(field_slot);
+                    emit_pat_bind(em, fc, elem, field_slot)?;
+                }
             }
+            Ok(())
         }
-        None => {
-            fe.emit_ret_u();
+        Pat::Record { fields, .. } => {
+            for (i, field) in fields.iter().enumerate() {
+                let idx = u32::try_from(i).map_err(|_| EmitError::OperandOverflow {
+                    desc: "record pattern field index".into(),
+                })?;
+                let field_slot = fc.alloc_local();
+                fc.fe.emit_ld_loc(value_slot);
+                fc.fe.emit_ld_fld(idx)?;
+                fc.fe.emit_st_loc(field_slot);
+                if let Some(sub_pat) = field.pat {
+                    emit_pat_bind(em, fc, sub_pat, field_slot)?;
+                } else if let Some(&did) = em.sema.resolution.pat_defs.get(&field.span) {
+                    let _ = fc.local_map.insert(did, field_slot);
+                }
+            }
+            Ok(())
         }
+        Pat::Or { left, .. } => emit_pat_bind(em, fc, left, value_slot),
+        Pat::Lit { .. } | Pat::Array { .. } | Pat::Error { .. } => Ok(()),
     }
-    Ok(())
-}
-
-fn emit_inst_effect_do(
-    fe: &mut FnEmitter,
-    cp: &mut ConstPool,
-    op: IrEffectOpId,
-    args: &[IrOperand],
-    dst: IrLocal,
-    interner: &Interner,
-) -> Result<(), EmitError> {
-    for arg in args {
-        emit_operand(fe, cp, arg, interner)?;
-    }
-    let arg_count = i32::try_from(args.len()).map_err(|_| EmitError::UnresolvableType {
-        desc: "too many effect args".into(),
-    })?;
-    fe.emit_eff_do(op.0, arg_count);
-    fe.emit_st_loc(dst);
-    Ok(())
-}
-
-/// Returns `true` if the rvalue produces no stack value (unit).
-const fn rvalue_is_unit(rvalue: &IrRvalue) -> bool {
-    matches!(
-        rvalue,
-        IrRvalue::Const(IrConstValue::Unit) | IrRvalue::Use(IrOperand::Const(IrConstValue::Unit))
-    )
 }
