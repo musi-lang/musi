@@ -46,11 +46,8 @@ pub fn exec(op: Opcode, operand: u32, frame: &mut Frame) -> Result<ControlFlow, 
         Opcode::INV | Opcode::INV_EFF => Ok(ControlFlow::Call { fn_id: operand }),
         Opcode::INV_TAL | Opcode::INV_TAL_EFF => Ok(ControlFlow::TailCall { fn_id: operand }),
         Opcode::INV_DYN => exec_inv_dyn(operand, frame),
-        Opcode::TSK_SPN | Opcode::TSK_CHS | Opcode::TSK_CHR | Opcode::TSK_CMK | Opcode::TSK_AWT => {
-            Err(VmError::Unimplemented {
-                desc: "concurrency opcodes not yet implemented",
-            })
-        }
+        // Concurrency opcodes (TSK_SPN, TSK_AWT, TSK_CMK, TSK_CHS, TSK_CHR)
+        // are dispatched in Vm::step_inner() before reaching this function.
         _ => Err(VmError::Malformed {
             desc: "unrecognized opcode in control dispatcher".into(),
         }),

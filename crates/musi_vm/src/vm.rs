@@ -8,12 +8,16 @@ mod control;
 mod effects;
 mod structural;
 
+use std::mem;
+
 use musi_bc::Opcode;
 
+use crate::channel::ChannelTable;
 use crate::error::VmError;
 use crate::heap::Heap;
 use crate::host::HostFunctions;
 use crate::loader::LoadedModule;
+use crate::task::{TaskScheduler, TaskStatus};
 use crate::value::Value;
 
 const MAX_CALL_DEPTH: usize = 1024;
@@ -41,8 +45,8 @@ pub struct EffFrame {
 }
 
 /// A captured one-shot continuation (frames between handler and `EFF_DO` site).
-struct Continuation {
-    frames: Vec<Frame>,
+pub struct Continuation {
+    pub frames: Vec<Frame>,
 }
 
 /// The result of executing a single instruction.
@@ -63,6 +67,8 @@ pub struct Vm {
     instruction_limit: Option<u64>,
     continuations: Vec<Continuation>,
     host: Option<Box<dyn HostFunctions>>,
+    scheduler: Option<TaskScheduler>,
+    channels: Option<ChannelTable>,
 }
 
 impl Vm {
@@ -78,6 +84,8 @@ impl Vm {
             instruction_limit: None,
             continuations: vec![],
             host: None,
+            scheduler: None,
+            channels: None,
         }
     }
 
@@ -296,6 +304,13 @@ impl Vm {
             return self.exec_inv_ffi(operand);
         }
 
+        if matches!(
+            op,
+            Opcode::TSK_SPN | Opcode::TSK_AWT | Opcode::TSK_CMK | Opcode::TSK_CHS | Opcode::TSK_CHR
+        ) {
+            return self.exec_concurrency(op, operand);
+        }
+
         let cf = control::exec(
             op,
             operand,
@@ -317,6 +332,8 @@ impl Vm {
                 if let Some(caller) = self.call_stack.last_mut() {
                     caller.stack.push(value);
                     Ok(StepResult::Continue)
+                } else if self.scheduler.is_some() {
+                    self.complete_current_task(value)
                 } else {
                     Ok(StepResult::Returned(value))
                 }
@@ -541,6 +558,261 @@ impl Vm {
         Ok(StepResult::Continue)
     }
 
+    /// Lazily initialize the scheduler, registering the main context as task 0.
+    /// The main task's call stack stays in `self.call_stack` (it's the running
+    /// task); the scheduler just tracks it as current.
+    fn ensure_scheduler(&mut self) {
+        if self.scheduler.is_none() {
+            let mut sched = TaskScheduler::new();
+            let _ = sched.init_main_task(Vec::new(), Vec::new());
+            self.scheduler = Some(sched);
+        }
+        if self.channels.is_none() {
+            self.channels = Some(ChannelTable::new());
+        }
+    }
+
+    /// Save the current VM call stack into the current task.
+    fn save_current_task(&mut self) {
+        if let Some(sched) = &mut self.scheduler
+            && let Some(cur_id) = sched.current_task_id()
+            && let Some(task) = sched.get_mut(cur_id)
+        {
+            task.call_stack = mem::take(&mut self.call_stack);
+            task.continuations = mem::take(&mut self.continuations);
+        }
+    }
+
+    /// Load a task's call stack into the VM.
+    fn load_task(&mut self, task_id: u32) {
+        if let Some(sched) = &mut self.scheduler
+            && let Some(task) = sched.get_mut(task_id)
+        {
+            self.call_stack = mem::take(&mut task.call_stack);
+            self.continuations = mem::take(&mut task.continuations);
+        }
+    }
+
+    /// Dispatch a concurrency opcode.
+    fn exec_concurrency(&mut self, op: Opcode, operand: u32) -> Result<StepResult, VmError> {
+        match op {
+            Opcode::TSK_SPN => self.exec_tsk_spn(operand),
+            Opcode::TSK_AWT => self.exec_tsk_awt(),
+            Opcode::TSK_CMK => self.exec_tsk_cmk(),
+            Opcode::TSK_CHS => self.exec_tsk_chs(),
+            Opcode::TSK_CHR => self.exec_tsk_chr(),
+            _ => Err(VmError::Malformed {
+                desc: "unexpected concurrency opcode".into(),
+            }),
+        }
+    }
+
+    /// `TSK_SPN`: spawn a new task running `fn_id` with args from the stack.
+    fn exec_tsk_spn(&mut self, fn_id: u32) -> Result<StepResult, VmError> {
+        self.ensure_scheduler();
+
+        let (fn_idx, func) = self
+            .module
+            .fn_by_id(fn_id)
+            .ok_or_else(|| VmError::Malformed {
+                desc: format!("tsk.spn: unknown fn_id {fn_id}").into_boxed_str(),
+            })?;
+        let param_count = usize::from(func.param_count);
+        let local_count = usize::from(func.local_count);
+        let max_stack = usize::from(func.max_stack);
+
+        let frame = self
+            .call_stack
+            .last_mut()
+            .ok_or_else(|| VmError::Malformed {
+                desc: "tsk.spn with empty call stack".into(),
+            })?;
+
+        if frame.stack.len() < param_count {
+            return Err(VmError::Malformed {
+                desc: format!(
+                    "tsk.spn fn {fn_id}: need {param_count} args, stack has {}",
+                    frame.stack.len()
+                )
+                .into_boxed_str(),
+            });
+        }
+        let start = frame.stack.len() - param_count;
+        let args: Vec<Value> = frame.stack.drain(start..).collect();
+
+        let mut locals = vec![Value::UNIT; local_count];
+        for (i, v) in args.into_iter().enumerate() {
+            locals[i] = v;
+        }
+
+        let new_frame = Frame {
+            fn_idx,
+            ip: 0,
+            locals,
+            stack: Vec::with_capacity(max_stack.max(4)),
+            eff_stack: vec![],
+        };
+
+        let sched = self.scheduler.as_mut().expect("scheduler initialized");
+        let task_id = sched.spawn(new_frame);
+
+        let frame = self.call_stack.last_mut().expect("frame exists");
+        frame.stack.push(Value::from_task(task_id));
+        Ok(StepResult::Continue)
+    }
+
+    /// `TSK_AWT`: await a task's completion. Suspends if not yet done.
+    fn exec_tsk_awt(&mut self) -> Result<StepResult, VmError> {
+        let frame = self
+            .call_stack
+            .last_mut()
+            .ok_or_else(|| VmError::Malformed {
+                desc: "tsk.awt with empty call stack".into(),
+            })?;
+        let task_handle = frame.stack.pop().ok_or_else(|| VmError::Malformed {
+            desc: "tsk.awt: stack underflow".into(),
+        })?;
+        let task_id = task_handle.as_task_id()?;
+
+        let sched = self.scheduler.as_mut().ok_or_else(|| VmError::Malformed {
+            desc: "tsk.awt without scheduler".into(),
+        })?;
+        let task = sched.get(task_id).ok_or(VmError::UnknownTask { task_id })?;
+
+        if let TaskStatus::Completed(v) = task.status {
+            let frame = self.call_stack.last_mut().expect("frame exists");
+            frame.stack.push(v);
+            return Ok(StepResult::Continue);
+        }
+
+        // Suspend current task, switch to next ready task.
+        sched.suspend_awaiting_task(task_id);
+        self.save_current_task();
+        self.switch_to_next_task()
+    }
+
+    /// `TSK_CMK`: create a new channel.
+    fn exec_tsk_cmk(&mut self) -> Result<StepResult, VmError> {
+        self.ensure_scheduler();
+
+        let channels = self.channels.as_mut().expect("channels initialized");
+        let chan_id = channels.create();
+
+        let frame = self
+            .call_stack
+            .last_mut()
+            .ok_or_else(|| VmError::Malformed {
+                desc: "tsk.cmk with empty call stack".into(),
+            })?;
+        frame.stack.push(Value::from_chan(chan_id));
+        Ok(StepResult::Continue)
+    }
+
+    /// `TSK_CHS`: send a value into a channel.
+    fn exec_tsk_chs(&mut self) -> Result<StepResult, VmError> {
+        let frame = self
+            .call_stack
+            .last_mut()
+            .ok_or_else(|| VmError::Malformed {
+                desc: "tsk.chs with empty call stack".into(),
+            })?;
+        let value = frame.stack.pop().ok_or_else(|| VmError::Malformed {
+            desc: "tsk.chs: stack underflow (value)".into(),
+        })?;
+        let chan_handle = frame.stack.pop().ok_or_else(|| VmError::Malformed {
+            desc: "tsk.chs: stack underflow (chan)".into(),
+        })?;
+        let chan_id = chan_handle.as_chan_id()?;
+
+        let channels = self.channels.as_mut().ok_or_else(|| VmError::Malformed {
+            desc: "tsk.chs without channel table".into(),
+        })?;
+
+        // Check if any task is blocked on recv for this channel.
+        // If so, wake it directly with the value instead of buffering.
+        let sched = self.scheduler.as_mut().ok_or_else(|| VmError::Malformed {
+            desc: "tsk.chs without scheduler".into(),
+        })?;
+        if !sched.wake_one_receiver(chan_id, value) {
+            channels.send(chan_id, value)?;
+        }
+
+        let frame = self.call_stack.last_mut().expect("frame exists");
+        frame.stack.push(Value::UNIT);
+        Ok(StepResult::Continue)
+    }
+
+    /// `TSK_CHR`: receive a value from a channel. Suspends if buffer is empty.
+    fn exec_tsk_chr(&mut self) -> Result<StepResult, VmError> {
+        let frame = self
+            .call_stack
+            .last_mut()
+            .ok_or_else(|| VmError::Malformed {
+                desc: "tsk.chr with empty call stack".into(),
+            })?;
+        let chan_handle = frame.stack.pop().ok_or_else(|| VmError::Malformed {
+            desc: "tsk.chr: stack underflow".into(),
+        })?;
+        let chan_id = chan_handle.as_chan_id()?;
+
+        let channels = self.channels.as_mut().ok_or_else(|| VmError::Malformed {
+            desc: "tsk.chr without channel table".into(),
+        })?;
+
+        if let Some(value) = channels.try_recv(chan_id)? {
+            let frame = self.call_stack.last_mut().expect("frame exists");
+            frame.stack.push(value);
+            return Ok(StepResult::Continue);
+        }
+
+        // Buffer empty — suspend and switch.
+        let sched = self.scheduler.as_mut().ok_or_else(|| VmError::Malformed {
+            desc: "tsk.chr without scheduler".into(),
+        })?;
+        sched.suspend_awaiting_recv(chan_id);
+        self.save_current_task();
+        self.switch_to_next_task()
+    }
+
+    /// Handle current task completing and returning a value.
+    fn complete_current_task(&mut self, value: Value) -> Result<StepResult, VmError> {
+        let sched = self.scheduler.as_mut().expect("scheduler initialized");
+        let next_id = sched.complete_current(value);
+        let has_live = sched.has_live_tasks();
+        let main_result = sched
+            .get(0)
+            .and_then(|t| match t.status {
+                TaskStatus::Completed(v) => Some(v),
+                _ => None,
+            })
+            .unwrap_or(value);
+
+        match next_id {
+            Some(id) => {
+                self.load_task(id);
+                Ok(StepResult::Continue)
+            }
+            None if has_live => Err(VmError::Deadlock),
+            None => Ok(StepResult::Returned(main_result)),
+        }
+    }
+
+    /// Switch to the next ready task, or detect deadlock.
+    fn switch_to_next_task(&mut self) -> Result<StepResult, VmError> {
+        let sched = self.scheduler.as_mut().expect("scheduler initialized");
+        let next_id = sched.schedule_next();
+        let has_live = sched.has_live_tasks();
+
+        match next_id {
+            Some(id) => {
+                self.load_task(id);
+                Ok(StepResult::Continue)
+            }
+            None if has_live => Err(VmError::Deadlock),
+            None => Ok(StepResult::Returned(Value::UNIT)),
+        }
+    }
+
     /// Run a mark-sweep garbage collection cycle.
     ///
     /// Marks all objects reachable from the call stack and global table,
@@ -551,7 +823,8 @@ impl Vm {
         self.heap.sweep()
     }
 
-    /// Gather all root values from the call stack, continuations, and globals.
+    /// Gather all root values from the call stack, continuations, globals,
+    /// suspended task stacks, and channel buffers.
     fn collect_roots(&self) -> Vec<Value> {
         let mut roots = Vec::new();
         for frame in &self.call_stack {
@@ -565,6 +838,31 @@ impl Vm {
             }
         }
         roots.extend_from_slice(&self.globals);
+
+        if let Some(sched) = &self.scheduler {
+            for task in sched.tasks() {
+                for frame in &task.call_stack {
+                    roots.extend_from_slice(&frame.locals);
+                    roots.extend_from_slice(&frame.stack);
+                }
+                for cont in &task.continuations {
+                    for frame in &cont.frames {
+                        roots.extend_from_slice(&frame.locals);
+                        roots.extend_from_slice(&frame.stack);
+                    }
+                }
+                if let TaskStatus::Completed(v) = task.status {
+                    roots.push(v);
+                }
+            }
+        }
+        if let Some(chans) = &self.channels {
+            for chan in chans.channels() {
+                for val in &chan.buffer {
+                    roots.push(*val);
+                }
+            }
+        }
         roots
     }
 }
