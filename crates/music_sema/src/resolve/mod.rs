@@ -12,7 +12,7 @@ mod tests;
 mod pat;
 mod ty;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use music_ast::decl::{ClassMember, EffectOp, ForeignDecl};
 use music_ast::expr::{
@@ -30,6 +30,8 @@ use crate::scope::{ScopeId, ScopeTree};
 pub struct ResolveOutput {
     pub expr_defs: HashMap<ExprIdx, DefId>,
     pub pat_defs: HashMap<Span, DefId>,
+    /// Maps law span → inferred (implicit) law variables, for LSP inlay hints.
+    pub law_inferred_vars: HashMap<Span, Vec<(Symbol, DefId)>>,
 }
 
 /// Runs two-pass name resolution over a parsed module.
@@ -53,6 +55,7 @@ pub fn resolve(
         output: ResolveOutput {
             expr_defs: HashMap::new(),
             pat_defs: HashMap::new(),
+            law_inferred_vars: HashMap::new(),
         },
         current_scope: module_scope,
     };
@@ -331,7 +334,15 @@ impl Resolver<'_> {
                     self.defs.get_mut(fn_id).parent = Some(pd);
                 }
                 self.define_in_scope(sig.name, fn_id, sig.span);
+                let _inserted = self.output.pat_defs.insert(sig.span, fn_id);
                 member_defs.push((sig.name, fn_id));
+            }
+            if let ClassMember::Law { name, span, .. } = member {
+                let law_id = self.defs.alloc(*name, DefKind::Law, *span);
+                if let Some(pd) = parent_def {
+                    self.defs.get_mut(law_id).parent = Some(pd);
+                }
+                let _inserted = self.output.pat_defs.insert(*span, law_id);
             }
         }
 
@@ -358,11 +369,99 @@ impl Resolver<'_> {
                         self.current_scope = parent;
                     }
                 }
-                ClassMember::Law { .. } => {}
+                ClassMember::Law {
+                    params, body, span, ..
+                } => {
+                    self.resolve_law_body(params, *body, *span);
+                }
             }
         }
 
         member_defs
+    }
+
+    fn resolve_law_body(&mut self, params: &[Param], body: ExprIdx, law_span: Span) {
+        let parent = self.current_scope;
+        self.current_scope = self.scopes.push_child(parent);
+
+        if params.is_empty() {
+            let free = self.collect_free_names(body);
+            let mut free_defs = Vec::with_capacity(free.len());
+            for (sym, span) in &free {
+                let id = self.defs.alloc(*sym, DefKind::LawVar, *span);
+                self.define_in_scope(*sym, id, *span);
+                free_defs.push((*sym, id));
+            }
+            if !free_defs.is_empty() {
+                let _prev = self.output.law_inferred_vars.insert(law_span, free_defs);
+            }
+        } else {
+            for param in params {
+                let id = self.defs.alloc(param.name, DefKind::LawVar, param.span);
+                self.define_in_scope(param.name, id, param.span);
+                let _inserted = self.output.pat_defs.insert(param.span, id);
+                if let Some(ty) = param.ty {
+                    self.resolve_ty(ty);
+                }
+            }
+        }
+
+        self.resolve_expr(body);
+        self.current_scope = parent;
+    }
+
+    fn collect_free_names(&self, expr_idx: ExprIdx) -> Vec<(Symbol, Span)> {
+        let mut free = Vec::new();
+        let mut seen = HashSet::new();
+        self.collect_free_names_inner(expr_idx, &mut free, &mut seen);
+        free
+    }
+
+    fn collect_free_names_inner(
+        &self,
+        expr_idx: ExprIdx,
+        free: &mut Vec<(Symbol, Span)>,
+        seen: &mut HashSet<Symbol>,
+    ) {
+        match &self.ast.exprs[expr_idx] {
+            Expr::Name { name, span } => {
+                if self.scopes.lookup(self.current_scope, *name).is_none() && seen.insert(*name) {
+                    free.push((*name, *span));
+                }
+            }
+            Expr::BinOp { left, right, .. } => {
+                self.collect_free_names_inner(*left, free, seen);
+                self.collect_free_names_inner(*right, free, seen);
+            }
+            Expr::UnaryOp { operand, .. } => {
+                self.collect_free_names_inner(*operand, free, seen);
+            }
+            Expr::Paren { inner, .. } => {
+                self.collect_free_names_inner(*inner, free, seen);
+            }
+            Expr::Call { callee, args, .. } => {
+                self.collect_free_names_inner(*callee, free, seen);
+                for arg in args {
+                    if let Arg::Pos { expr, .. } = arg {
+                        self.collect_free_names_inner(*expr, free, seen);
+                    }
+                }
+            }
+            Expr::Tuple { elems, .. } => {
+                for &e in elems {
+                    self.collect_free_names_inner(e, free, seen);
+                }
+            }
+            Expr::Block { stmts, tail, .. } => {
+                for &s in stmts {
+                    self.collect_free_names_inner(s, free, seen);
+                }
+                if let Some(t) = tail {
+                    self.collect_free_names_inner(*t, free, seen);
+                }
+            }
+            _ => {}
+        }
     }
 
     fn resolve_expr_block(&mut self, stmts: &[ExprIdx], tail: Option<ExprIdx>) {
