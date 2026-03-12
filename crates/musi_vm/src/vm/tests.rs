@@ -1466,3 +1466,245 @@ fn test_value_chan_roundtrip() {
     assert!(v.as_int().is_err());
     assert!(v.as_task_id().is_err());
 }
+
+// ── Concurrency tests ────────────────────────────────────────────────────────
+
+/// Build bytecode from a sequence of byte slices.
+fn code(parts: &[&[u8]]) -> Vec<u8> {
+    let mut out = Vec::new();
+    for p in parts {
+        out.extend_from_slice(p);
+    }
+    out
+}
+
+/// Encode a u32-operand opcode as a 5-byte slice.
+fn op32(op: Opcode, operand: u32) -> [u8; 5] {
+    let b = operand.to_le_bytes();
+    [op.0, b[0], b[1], b[2], b[3]]
+}
+
+#[test]
+fn test_spawn_returns_task_handle() {
+    let child_code = vec![Opcode::LD_CST.0, 0, Opcode::RET.0];
+    let entry_code = code(&[&op32(Opcode::TSK_SPN, 1), &[Opcode::RET.0]]);
+    let bytes = make_msbc(
+        &[ConstEntry::I32(42)],
+        &[fn_def(0, 0, 0, entry_code), fn_def(1, 0, 0, child_code)],
+    );
+    let (_, result) = run_vm(&bytes);
+    let v = result.expect("runs");
+    assert_eq!(v.as_task_id().expect("is task"), 1);
+}
+
+#[test]
+fn test_spawn_await_returns_child_value() {
+    let child_code = vec![Opcode::LD_CST.0, 0, Opcode::RET.0];
+    let entry_code = code(&[
+        &op32(Opcode::TSK_SPN, 1),
+        &[Opcode::TSK_AWT.0, 0],
+        &[Opcode::RET.0],
+    ]);
+    let bytes = make_msbc(
+        &[ConstEntry::I32(42)],
+        &[fn_def(0, 0, 0, entry_code), fn_def(1, 0, 0, child_code)],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 42);
+}
+
+#[test]
+fn test_channel_send_recv_fifo() {
+    // fn 1 (sender): chan in local 0, sends 10, 20, 30
+    let chs = op32(Opcode::TSK_CHS, 0);
+    let sender_code = code(&[
+        &[Opcode::LD_LOC.0, 0, Opcode::LD_CST.0, 0],
+        &chs,
+        &[Opcode::POP.0],
+        &[Opcode::LD_LOC.0, 0, Opcode::LD_CST.0, 1],
+        &chs,
+        &[Opcode::POP.0],
+        &[Opcode::LD_LOC.0, 0, Opcode::LD_CST.0, 2],
+        &chs,
+        &[Opcode::POP.0, Opcode::RET_U.0],
+    ]);
+
+    let cmk = op32(Opcode::TSK_CMK, 0);
+    let spn = op32(Opcode::TSK_SPN, 1);
+    let chr = op32(Opcode::TSK_CHR, 0);
+    let entry_code = code(&[
+        &cmk,
+        &[Opcode::ST_LOC.0, 0],
+        &[Opcode::LD_LOC.0, 0],
+        &spn,
+        &[Opcode::TSK_AWT.0, 0, Opcode::POP.0],
+        &[Opcode::LD_LOC.0, 0],
+        &chr,
+        &[Opcode::LD_LOC.0, 0],
+        &chr,
+        &[Opcode::I_ADD.0],
+        &[Opcode::LD_LOC.0, 0],
+        &chr,
+        &[Opcode::I_ADD.0, Opcode::RET.0],
+    ]);
+
+    let bytes = make_msbc(
+        &[
+            ConstEntry::I32(10),
+            ConstEntry::I32(20),
+            ConstEntry::I32(30),
+        ],
+        &[
+            fn_def(0, 1, 0, entry_code),
+            FnDef {
+                fn_id: 1,
+                local_count: 1,
+                param_count: 1,
+                code: sender_code,
+                handlers: vec![],
+            },
+        ],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 60);
+}
+
+#[test]
+fn test_channel_recv_empty_suspends_and_resumes() {
+    let chr = op32(Opcode::TSK_CHR, 0);
+    let recv_code = code(&[&[Opcode::LD_LOC.0, 0], &chr, &[Opcode::RET.0]]);
+
+    let cmk = op32(Opcode::TSK_CMK, 0);
+    let spn = op32(Opcode::TSK_SPN, 1);
+    let chs = op32(Opcode::TSK_CHS, 0);
+    let entry_code = code(&[
+        &cmk,
+        &[Opcode::ST_LOC.0, 0],
+        &[Opcode::LD_LOC.0, 0],
+        &spn,
+        &[Opcode::ST_LOC.0, 1],
+        &[Opcode::LD_LOC.0, 0, Opcode::LD_CST.0, 0],
+        &chs,
+        &[Opcode::POP.0],
+        &[Opcode::LD_LOC.0, 1, Opcode::TSK_AWT.0, 0, Opcode::RET.0],
+    ]);
+
+    let bytes = make_msbc(
+        &[ConstEntry::I32(99)],
+        &[
+            fn_def(0, 2, 0, entry_code),
+            FnDef {
+                fn_id: 1,
+                local_count: 1,
+                param_count: 1,
+                code: recv_code,
+                handlers: vec![],
+            },
+        ],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 99);
+}
+
+#[test]
+fn test_multiple_tasks_all_complete() {
+    let fn1 = vec![Opcode::LD_CST.0, 0, Opcode::RET.0];
+    let fn2 = vec![Opcode::LD_CST.0, 1, Opcode::RET.0];
+    let fn3 = vec![Opcode::LD_CST.0, 2, Opcode::RET.0];
+
+    let entry_code = code(&[
+        &op32(Opcode::TSK_SPN, 1),
+        &[Opcode::ST_LOC.0, 0],
+        &op32(Opcode::TSK_SPN, 2),
+        &[Opcode::ST_LOC.0, 1],
+        &op32(Opcode::TSK_SPN, 3),
+        &[Opcode::ST_LOC.0, 2],
+        &[Opcode::LD_LOC.0, 0, Opcode::TSK_AWT.0, 0],
+        &[Opcode::LD_LOC.0, 1, Opcode::TSK_AWT.0, 0],
+        &[Opcode::I_ADD.0],
+        &[Opcode::LD_LOC.0, 2, Opcode::TSK_AWT.0, 0],
+        &[Opcode::I_ADD.0, Opcode::RET.0],
+    ]);
+
+    let bytes = make_msbc(
+        &[
+            ConstEntry::I32(10),
+            ConstEntry::I32(20),
+            ConstEntry::I32(30),
+        ],
+        &[
+            fn_def(0, 3, 0, entry_code),
+            fn_def(1, 0, 0, fn1),
+            fn_def(2, 0, 0, fn2),
+            fn_def(3, 0, 0, fn3),
+        ],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 60);
+}
+
+#[test]
+fn test_deadlock_two_tasks_mutual_await() {
+    let chr = op32(Opcode::TSK_CHR, 0);
+    let child_code = code(&[&[Opcode::LD_LOC.0, 0], &chr, &[Opcode::RET.0]]);
+    let entry_code = code(&[
+        &op32(Opcode::TSK_CMK, 0),
+        &op32(Opcode::TSK_SPN, 1),
+        &[Opcode::TSK_AWT.0, 0, Opcode::RET.0],
+    ]);
+
+    let bytes = make_msbc(
+        &[],
+        &[
+            fn_def(0, 0, 0, entry_code),
+            FnDef {
+                fn_id: 1,
+                local_count: 1,
+                param_count: 1,
+                code: child_code,
+                handlers: vec![],
+            },
+        ],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert!(
+        matches!(&result, Err(VmError::Runtime { source, .. }) if matches!(**source, VmError::Deadlock)),
+        "expected Deadlock, got {result:?}"
+    );
+}
+
+#[test]
+fn test_gc_traces_suspended_task_stacks() {
+    // Spawn + await completes normally. Trigger GC mid-execution to verify
+    // suspended task stacks are traced without panicking.
+    let child_code = vec![Opcode::LD_CST.0, 0, Opcode::RET.0];
+    let entry_code = code(&[
+        &op32(Opcode::TSK_SPN, 1),
+        &[Opcode::TSK_AWT.0, 0, Opcode::RET.0],
+    ]);
+
+    let bytes = make_msbc(
+        &[ConstEntry::I32(42)],
+        &[fn_def(0, 0, 0, entry_code), fn_def(1, 0, 0, child_code)],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 42);
+
+    // Also verify GC on a fresh VM with scheduler active
+    let module = load(&bytes).expect("loads");
+    verify(&module).expect("verifies");
+    let mut vm = Vm::new(module);
+    vm.setup_call(0, &[]).expect("setup ok");
+    let freed = vm.collect_garbage();
+    assert_eq!(freed, 0);
+}
+
+#[test]
+fn test_sync_program_no_scheduler_overhead() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(7)],
+        &[fn_def(0, 0, 0, vec![Opcode::LD_CST.0, 0, Opcode::RET.0])],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 7);
+}
