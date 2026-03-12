@@ -8,7 +8,9 @@ use music_shared::{IntoDiagnostic, Severity};
 pub enum ResolveError {
     #[error("empty import path")]
     EmptyPath,
-    #[error("registry imports not yet supported: `{specifier}`")]
+    #[error(
+        "registry imports not yet supported: `{specifier}` (registry support is planned — see https://msr.musi-lang.org)"
+    )]
     RegistryNotSupported { specifier: Box<str> },
     #[error("invalid git specifier: `{raw}`")]
     InvalidGitSpecifier { raw: Box<str> },

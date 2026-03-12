@@ -262,7 +262,7 @@ fn collect_import_paths(module: &ParsedModule) -> Vec<(Symbol, Span)> {
 
 fn collect_imports_from_expr(expr_idx: ExprIdx, arenas: &AstArenas, out: &mut Vec<(Symbol, Span)>) {
     match &arenas.exprs[expr_idx] {
-        Expr::Import { path, span } => {
+        Expr::Import { path, span, .. } => {
             out.push((*path, *span));
         }
         Expr::Let { fields, body, .. } => {
@@ -378,7 +378,11 @@ fn process_import(
     file_id: FileId,
     current_path: &Path,
 ) {
-    let raw = ctx.interner.resolve(sym);
+    let full = ctx.interner.resolve(sym);
+    let raw = full
+        .strip_prefix('"')
+        .and_then(|s| s.strip_suffix('"'))
+        .unwrap_or(full);
     let specifier = match parse_specifier(raw) {
         Ok(s) => s,
         Err(e) => {
