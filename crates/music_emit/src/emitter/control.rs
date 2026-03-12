@@ -30,7 +30,8 @@ pub fn emit_inst(
         IrInst::Assign { dst, rvalue, .. } => {
             emit_rvalue(fe, cp, tp, type_arena, rvalue, interner)?;
             let is_tail = matches!(rvalue, IrRvalue::Call { tail: true, .. });
-            if !is_tail {
+            let is_unit = rvalue_is_unit(rvalue);
+            if !is_tail && !is_unit {
                 fe.emit_st_loc(*dst);
             }
         }
@@ -196,4 +197,12 @@ fn emit_inst_effect_do(
     fe.emit_eff_do(op.0, arg_count);
     fe.emit_st_loc(dst);
     Ok(())
+}
+
+/// Returns `true` if the rvalue produces no stack value (unit).
+const fn rvalue_is_unit(rvalue: &IrRvalue) -> bool {
+    matches!(
+        rvalue,
+        IrRvalue::Const(IrConstValue::Unit) | IrRvalue::Use(IrOperand::Const(IrConstValue::Unit))
+    )
 }

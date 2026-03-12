@@ -199,17 +199,36 @@ fn emit_rvalue_make_variant(
     payload: &[IrOperand],
     interner: &Interner,
 ) -> Result<(), EmitError> {
-    for p in payload {
-        emit_operand(fe, cp, p, interner)?;
-    }
-    let payload_count = i32::try_from(payload.len()).map_err(|_| EmitError::UnresolvableType {
-        desc: "too many variant payload fields".into(),
-    })?;
-    fe.emit_mk_var(tag);
-    if payload_count > 0 {
-        fe.pop_n(payload_count - 1); // N values → 1 variant = -(N-1)
-    } else {
-        fe.push_n(1); // 0 values → 1 variant = +1
+    match payload.len() {
+        0 => {
+            // Zero-payload variant: push a unit placeholder (MK_VAR always pops 1).
+            let unit_const = IrConstValue::Int(0);
+            if let Some(i) = cp.intern(&unit_const, interner)? {
+                fe.emit_ld_cst(i);
+            }
+            fe.emit_mk_var(tag);
+            // Pops placeholder, pushes variant → net 0; but we pushed 1 above → net +1.
+        }
+        1 => {
+            emit_operand(fe, cp, &payload[0], interner)?;
+            fe.emit_mk_var(tag);
+            // Pops 1 payload, pushes 1 variant → net 0.
+        }
+        n => {
+            // Multi-field payload: pack into a product first, then wrap in variant.
+            for p in payload {
+                emit_operand(fe, cp, p, interner)?;
+            }
+            let field_count = u32::try_from(n).map_err(|_| EmitError::UnresolvableType {
+                desc: "too many variant payload fields".into(),
+            })?;
+            let pop_count = i32::try_from(n).map_err(|_| EmitError::UnresolvableType {
+                desc: "too many variant payload fields".into(),
+            })?;
+            fe.emit_mk_prd(field_count, pop_count)?;
+            fe.emit_mk_var(tag);
+            // MK_PRD: pops N, pushes 1. MK_VAR: pops 1, pushes 1. Net: -(N-1).
+        }
     }
     Ok(())
 }

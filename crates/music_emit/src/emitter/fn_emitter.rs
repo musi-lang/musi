@@ -116,11 +116,12 @@ impl FnEmitter {
 
     pub fn emit_ret(&mut self) {
         encode_no_operand(&mut self.code, Opcode::RET);
-        self.pop_n(1);
+        self.stack_depth = 0;
     }
 
     pub fn emit_ret_u(&mut self) {
         encode_no_operand(&mut self.code, Opcode::RET_U);
+        self.stack_depth = 0;
     }
 
     /// Emit a binary op instruction (pops 2, pushes 1).
@@ -249,6 +250,7 @@ impl FnEmitter {
             instr_len,
             label,
         });
+        self.stack_depth = 0;
     }
 
     /// Emit a conditional wide jump-if-true to `label` (5 bytes, i32 offset, pops condition).
