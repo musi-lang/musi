@@ -306,7 +306,7 @@ fn exec_cmp(op: Opcode, frame: &mut Frame) -> Result<bool, VmError> {
     Ok(true)
 }
 
-/// §8 Conversion: `CNV_ITF`..`CNV_NRW`.
+/// §8 Conversion: `CNV_ITF`, `CNV_FTI`, `CNV_TRM`.
 fn exec_conv(op: Opcode, frame: &mut Frame) -> Result<bool, VmError> {
     match op {
         Opcode::CNV_ITF => {
@@ -327,15 +327,6 @@ fn exec_conv(op: Opcode, frame: &mut Frame) -> Result<bool, VmError> {
             let a = pop1(frame)?;
             frame.stack.push(a);
         }
-        Opcode::CNV_WDN | Opcode::CNV_NRW => {
-            let a = pop1(frame)?;
-            frame.stack.push(Value::from_int(a.as_int()?));
-        }
-        Opcode::CNV_WDN_UN => {
-            let a = pop1(frame)?;
-            frame.stack.push(Value::from_uint(a.as_uint()?));
-        }
-
         _ => return Ok(false),
     }
     Ok(true)

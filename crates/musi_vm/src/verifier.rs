@@ -116,13 +116,6 @@ impl Operands<'_> {
         u32::from_le_bytes(b)
     }
 
-    fn i16_jump(&self) -> isize {
-        let lo = self.code[self.ip + 1];
-        let hi = self.code[self.ip + 2];
-        let raw = i16::from_le_bytes([lo, hi]);
-        isize::from(raw)
-    }
-
     fn i32_jump(&self) -> Result<isize, VmError> {
         let b = [
             self.code[self.ip + 1],
@@ -153,9 +146,6 @@ const fn fixed_stack_delta(op: Opcode) -> Option<i32> {
         | Opcode::I_NEG
         | Opcode::F_NEG
         | Opcode::B_NOT
-        | Opcode::CNV_WDN
-        | Opcode::CNV_WDN_UN
-        | Opcode::CNV_NRW
         | Opcode::CNV_ITF
         | Opcode::CNV_FTI
         | Opcode::CNV_TRM
@@ -177,12 +167,9 @@ const fn fixed_stack_delta(op: Opcode) -> Option<i32> {
         | Opcode::TSK_AWT => Some(0),
 
         // Push 1: dup, load global, alloc, channel make
-        Opcode::DUP
-        | Opcode::LD_GLB
-        | Opcode::ALC_REF
-        | Opcode::ALC_MAN
-        | Opcode::ALC_ARN
-        | Opcode::TSK_CMK => Some(1),
+        Opcode::DUP | Opcode::LD_GLB | Opcode::ALC_REF | Opcode::ALC_ARN | Opcode::TSK_CMK => {
+            Some(1)
+        }
 
         // Net -1: pop, store global, free, index load, channel send, binary ops
         Opcode::POP
@@ -270,14 +257,6 @@ fn verify_operand_op(
             check_const(ops.u16_op(), const_len, "ld.cst.w")?;
             Ok(1)
         }
-        Opcode::JMP => {
-            check_jump_target(ops.ip, len, ops.i16_jump(), boundaries)?;
-            Ok(0)
-        }
-        Opcode::JMP_T | Opcode::JMP_F => {
-            check_jump_target(ops.ip, len, ops.i16_jump(), boundaries)?;
-            Ok(-1)
-        }
         Opcode::JMP_W => {
             check_jump_target(ops.ip, len, ops.i32_jump()?, boundaries)?;
             Ok(0)
@@ -306,7 +285,6 @@ fn verify_operand_op(
             let field_count = i32::try_from(ops.u8_op()).unwrap_or(i32::MAX);
             Ok(1 - field_count)
         }
-        Opcode::ST_FLD | Opcode::ST_FLD_W => Ok(-2),
         Opcode::INV_DYN => {
             let arg_count = i32::try_from(ops.u8_op()).unwrap_or(i32::MAX);
             Ok(-arg_count)
@@ -401,7 +379,7 @@ fn verify_fn(func: &LoadedFn, module: &LoadedModule) -> Result<(), VmError> {
         }
 
         let is_terminator = matches!(op, Opcode::RET | Opcode::RET_U | Opcode::UNR | Opcode::HLT);
-        let is_unconditional_jump = matches!(op, Opcode::JMP | Opcode::JMP_W);
+        let is_unconditional_jump = matches!(op, Opcode::JMP_W);
         if is_terminator || is_unconditional_jump {
             depth = 0;
         }

@@ -37,9 +37,6 @@ pub fn exec(op: Opcode, operand: u32, frame: &mut Frame) -> Result<ControlFlow, 
             desc: "unr (unreachable) reached at runtime".into(),
         }),
         Opcode::BRK => Ok(ControlFlow::Continue), // breakpoint — no-op in MVP
-        Opcode::JMP => exec_jmp(base, operand),
-        Opcode::JMP_T => exec_jmp_cond(frame, base, operand, true),
-        Opcode::JMP_F => exec_jmp_cond(frame, base, operand, false),
         Opcode::JMP_W => exec_jmp_wide(base, operand),
         Opcode::JMP_T_W => exec_jmp_cond_wide(frame, base, operand, true),
         Opcode::JMP_F_W => exec_jmp_cond_wide(frame, base, operand, false),
@@ -51,28 +48,6 @@ pub fn exec(op: Opcode, operand: u32, frame: &mut Frame) -> Result<ControlFlow, 
         _ => Err(VmError::Malformed {
             desc: "unrecognized opcode in control dispatcher".into(),
         }),
-    }
-}
-
-fn exec_jmp(base: usize, operand: u32) -> Result<ControlFlow, VmError> {
-    let offset = read_i16_operand(operand);
-    let target = jump_target(base, offset)?;
-    Ok(ControlFlow::Jump { ip: target })
-}
-
-fn exec_jmp_cond(
-    frame: &mut Frame,
-    base: usize,
-    operand: u32,
-    jump_when: bool,
-) -> Result<ControlFlow, VmError> {
-    let cond = pop(frame)?;
-    let offset = read_i16_operand(operand);
-    if cond.as_bool()? == jump_when {
-        let target = jump_target(base, offset)?;
-        Ok(ControlFlow::Jump { ip: target })
-    } else {
-        Ok(ControlFlow::Continue)
     }
 }
 
@@ -122,14 +97,6 @@ fn pop(frame: &mut Frame) -> Result<Value, VmError> {
     frame.stack.pop().ok_or_else(|| VmError::Malformed {
         desc: "operand stack underflow".into(),
     })
-}
-
-/// The `operand` field for u8/u16 instructions is widened to u32.
-/// For `jmp` (u16 i16 operand): reinterpret low 16 bits as i16.
-fn read_i16_operand(operand: u32) -> isize {
-    let raw = u16::try_from(operand & 0xFFFF).unwrap_or(0);
-    let signed = i16::from_le_bytes(raw.to_le_bytes());
-    isize::from(signed)
 }
 
 /// For wide jumps (u32 i32 operand): reinterpret as i32.

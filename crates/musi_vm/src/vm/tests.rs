@@ -272,9 +272,10 @@ fn test_run_conditional_jump() {
                 Opcode::LD_CST.0,
                 1,
                 Opcode::CMP_LT.0,
-                0,
-                Opcode::JMP_F.0,
+                Opcode::JMP_F_W.0,
                 2,
+                0,
+                0,
                 0,
                 Opcode::LD_CST.0,
                 0,
@@ -300,8 +301,10 @@ fn test_run_tail_call_countdown() {
         Opcode::LD_CST.0,
         0,
         Opcode::CMP_EQ.0,
-        Opcode::JMP_F.0,
+        Opcode::JMP_F_W.0,
         3,
+        0,
+        0,
         0,
         Opcode::LD_CST.0,
         0,
@@ -1142,35 +1145,6 @@ fn test_fre_double_free_returns_error() {
     }
 }
 
-// ── Tier 1: ALC_MAN ──────────────────────────────────────────────────────────
-
-#[test]
-fn test_alc_man_allocates_object() {
-    let bytes = make_msbc(
-        &[],
-        &[fn_def(
-            0,
-            0,
-            0,
-            vec![
-                Opcode::ALC_MAN.0,
-                0,
-                0,
-                0,
-                0, // alc.man type_id=0
-                Opcode::RET.0,
-            ],
-        )],
-    );
-    let (vm, result) = run_vm(&bytes);
-    let result = result.expect("runs");
-    assert!(result.as_ref().is_ok(), "should be a ref");
-    assert!(
-        vm.heap().live_count() >= 1,
-        "heap should have at least 1 object"
-    );
-}
-
 // ── Tier 2: EFF_DO cross-frame ───────────────────────────────────────────────
 
 /// Effect pool builder for tests.
@@ -1850,8 +1824,6 @@ fn test_make_variant_multi_field_via_mk_prd_field_0() {
                 1,
                 Opcode::LD_PAY.0,
                 0,
-                Opcode::LD_FLD.0,
-                0,
                 Opcode::RET.0,
             ],
         )],
@@ -1878,8 +1850,6 @@ fn test_make_variant_multi_field_via_mk_prd_field_1() {
                 Opcode::MK_VAR.0,
                 1,
                 Opcode::LD_PAY.0,
-                0,
-                Opcode::LD_FLD.0,
                 1,
                 Opcode::RET.0,
             ],
@@ -2202,7 +2172,7 @@ fn test_ld_tag_returns_tag_value() {
         )],
     );
     let (_, result) = run_vm(&bytes);
-    assert_eq!(result.expect("runs").as_uint().expect("is uint"), 3);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 3);
 }
 
 #[test]
@@ -2226,44 +2196,4 @@ fn test_ld_pay_extracts_variant_payload() {
     );
     let (_, result) = run_vm(&bytes);
     assert_eq!(result.expect("runs").as_int().expect("is int"), 42);
-}
-
-#[test]
-fn test_st_fld_updates_field() {
-    let bytes = make_msbc(
-        &[
-            ConstEntry::I32(10),
-            ConstEntry::I32(20),
-            ConstEntry::I32(99),
-        ],
-        &[fn_def(
-            0,
-            1,
-            0,
-            vec![
-                Opcode::LD_CST.0,
-                0,
-                Opcode::LD_CST.0,
-                1,
-                Opcode::MK_PRD.0,
-                2,
-                Opcode::ST_LOC.0,
-                0,
-                // ST_FLD pops val then obj: push obj first, then val
-                Opcode::LD_LOC.0,
-                0,
-                Opcode::LD_CST.0,
-                2,
-                Opcode::ST_FLD.0,
-                0,
-                Opcode::LD_LOC.0,
-                0,
-                Opcode::LD_FLD.0,
-                0,
-                Opcode::RET.0,
-            ],
-        )],
-    );
-    let (_, result) = run_vm(&bytes);
-    assert_eq!(result.expect("runs").as_int().expect("is int"), 99);
 }

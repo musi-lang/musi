@@ -118,7 +118,7 @@ fn exec_locals_consts(
     Ok(Some(true))
 }
 
-/// §5 Struct/variant: `MK_PRD`, `LD_FLD`, `ST_FLD`/W, `MK_VAR`/W, `LD_PAY`, `CMP_TAG`/W.
+/// §5 Struct/variant: `MK_PRD`, `LD_FLD`, `MK_VAR`/W, `LD_PAY`, `CMP_TAG`/W.
 ///
 /// Returns `Some(true)` if handled, `None` if the opcode is not in this group.
 fn exec_struct(
@@ -153,21 +153,6 @@ fn exec_struct(
             })?;
             frame.stack.push(v);
         }
-        Opcode::ST_FLD | Opcode::ST_FLD_W => {
-            let idx = usize::try_from(operand).map_err(|_| VmError::Malformed {
-                desc: "st.fld index overflow".into(),
-            })?;
-            let val = pop(frame)?;
-            let obj_val = pop(frame)?;
-            let ptr = obj_val.as_ref()?;
-            let obj = heap.get_mut(ptr)?;
-            let field_len = obj.fields.len();
-            let field = obj.fields.get_mut(idx).ok_or(VmError::OutOfBounds {
-                index: idx,
-                len: field_len,
-            })?;
-            *field = val;
-        }
         Opcode::MK_VAR | Opcode::MK_VAR_W => {
             let tag = operand;
             let payload = pop(frame)?;
@@ -180,10 +165,25 @@ fn exec_struct(
             frame.stack.push(Value::from_ref(ptr));
         }
         Opcode::LD_PAY => {
+            let field_idx = usize::try_from(operand).map_err(|_| VmError::Malformed {
+                desc: "ld.pay field index overflow".into(),
+            })?;
             let obj_val = pop(frame)?;
             let ptr = obj_val.as_ref()?;
             let obj = heap.get(ptr)?;
-            let payload = obj.fields.first().copied().unwrap_or(Value::UNIT);
+            let raw_payload = obj.fields.first().copied().unwrap_or(Value::UNIT);
+            // Multi-field payloads are stored as a nested product.
+            // If the payload is a heap ref with multiple fields, index into it.
+            let payload = if let Ok(inner_ptr) = raw_payload.as_ref()
+                && let Ok(inner) = heap.get(inner_ptr)
+                && inner.fields.len() > 1
+            {
+                inner.fields.get(field_idx).copied().unwrap_or(Value::UNIT)
+            } else if field_idx == 0 {
+                raw_payload
+            } else {
+                Value::UNIT
+            };
             frame.stack.push(payload);
         }
         Opcode::CMP_TAG | Opcode::CMP_TAG_W => {
@@ -221,7 +221,7 @@ fn exec_array_alloc_globals(
             Ok(true)
         }
         Opcode::MK_ARR => exec_mk_arr(operand, frame, heap),
-        Opcode::ALC_REF | Opcode::ALC_MAN | Opcode::ALC_ARN => {
+        Opcode::ALC_REF | Opcode::ALC_ARN => {
             let ptr = heap.alloc(operand, vec![]);
             frame.stack.push(Value::from_ref(ptr));
             Ok(true)
@@ -237,7 +237,7 @@ fn exec_ld_tag(frame: &mut Frame, heap: &Heap) -> Result<bool, VmError> {
     let ptr = obj_val.as_ref()?;
     let obj = heap.get(ptr)?;
     let tag = obj.tag.unwrap_or(0);
-    frame.stack.push(Value::from_uint(u64::from(tag)));
+    frame.stack.push(Value::from_int(i64::from(tag)));
     Ok(true)
 }
 
