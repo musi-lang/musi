@@ -41,9 +41,6 @@ pub fn assemble(params: AssembleParams<'_>) -> Result<Vec<u8>, EmitError> {
         interner,
         entry_fn_id,
     } = params;
-    let mut const_section: Vec<u8> = vec![];
-    cp.write_into(&mut const_section)?;
-
     let mut type_section: Vec<u8> = vec![];
     tp.write_into(&mut type_section)?;
 
@@ -59,6 +56,11 @@ pub fn assemble(params: AssembleParams<'_>) -> Result<Vec<u8>, EmitError> {
         type_arena,
         interner,
     )?;
+
+    // Serialize const pool AFTER effect/foreign pools, since those intern
+    // new strings (effect names, foreign fn ext_name/lib_name) into `cp`.
+    let mut const_section: Vec<u8> = vec![];
+    cp.write_into(&mut const_section)?;
 
     let mut fn_section: Vec<u8> = vec![];
     write_function_pool(&mut fn_section, functions)?;
