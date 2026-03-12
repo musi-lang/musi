@@ -17,8 +17,8 @@ export interface Config {
 	readonly formattingIndentSize: number;
 }
 
-const _DEFAULTS: Config = {
-	lspPath: "musi-lsp",
+export const CONFIG_DEFAULTS: Config = {
+	lspPath: "music_lsp",
 	cliPath: "musi",
 	checkOnSave: true,
 	serverPath: null,
@@ -31,14 +31,6 @@ const _DEFAULTS: Config = {
 	formattingIndentSize: 2,
 };
 
-function _get<T>(
-	cfg: vscode.WorkspaceConfiguration,
-	key: string,
-	fallback: T,
-): T {
-	return cfg.get<T>(key, fallback);
-}
-
 /**
  * Retrieve current Musi extension configuration from VS Code settings.
  * Falls back to defaults for any unset values.
@@ -47,36 +39,31 @@ export function getConfig(): Config {
 	const cfg = vscode.workspace.getConfiguration("musi");
 
 	return {
-		lspPath: _get(cfg, "lspPath", _DEFAULTS.lspPath),
-		cliPath: _get(cfg, "cliPath", _DEFAULTS.cliPath),
-		checkOnSave: _get(cfg, "checkOnSave", _DEFAULTS.checkOnSave),
-		serverPath: _get(cfg, "server.path", _DEFAULTS.serverPath),
-		runtimePath: _get(cfg, "runtime.path", _DEFAULTS.runtimePath),
-		traceServer: _get(cfg, "trace.server", _DEFAULTS.traceServer),
-		diagnosticsEnabled: _get(
-			cfg,
+		lspPath: cfg.get("lspPath", CONFIG_DEFAULTS.lspPath),
+		cliPath: cfg.get("cliPath", CONFIG_DEFAULTS.cliPath),
+		checkOnSave: cfg.get("checkOnSave", CONFIG_DEFAULTS.checkOnSave),
+		serverPath: cfg.get("server.path", CONFIG_DEFAULTS.serverPath),
+		runtimePath: cfg.get("runtime.path", CONFIG_DEFAULTS.runtimePath),
+		traceServer: cfg.get("trace.server", CONFIG_DEFAULTS.traceServer),
+		diagnosticsEnabled: cfg.get(
 			"diagnostics.enable",
-			_DEFAULTS.diagnosticsEnabled,
+			CONFIG_DEFAULTS.diagnosticsEnabled,
 		),
-		inlayHintsEnabled: _get(
-			cfg,
+		inlayHintsEnabled: cfg.get(
 			"inlayHints.enable",
-			_DEFAULTS.inlayHintsEnabled,
+			CONFIG_DEFAULTS.inlayHintsEnabled,
 		),
-		completionEnabled: _get(
-			cfg,
+		completionEnabled: cfg.get(
 			"completion.enable",
-			_DEFAULTS.completionEnabled,
+			CONFIG_DEFAULTS.completionEnabled,
 		),
-		formattingEnabled: _get(
-			cfg,
+		formattingEnabled: cfg.get(
 			"formatting.enable",
-			_DEFAULTS.formattingEnabled,
+			CONFIG_DEFAULTS.formattingEnabled,
 		),
-		formattingIndentSize: _get(
-			cfg,
+		formattingIndentSize: cfg.get(
 			"formatting.indentSize",
-			_DEFAULTS.formattingIndentSize,
+			CONFIG_DEFAULTS.formattingIndentSize,
 		),
 	};
 }
@@ -86,10 +73,12 @@ export function getConfig(): Config {
  * @param callback Function to invoke when any `musi.*` setting changes.
  * @returns Disposable to unsubscribe from changes.
  */
-export function onConfigChange(callback: () => void): vscode.Disposable {
+export function onConfigChange(
+	callback: (event: vscode.ConfigurationChangeEvent) => void,
+): vscode.Disposable {
 	return vscode.workspace.onDidChangeConfiguration((event) => {
 		if (event.affectsConfiguration("musi")) {
-			callback();
+			callback(event);
 		}
 	});
 }
