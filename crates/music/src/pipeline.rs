@@ -8,7 +8,9 @@ use std::path::Path;
 use musi_manifest::MusiManifest;
 use music_ast::ParsedModule;
 use music_emit::emit;
+use music_ir::DepModuleIr;
 use music_ir::lower::lower as lower_ir;
+use music_ir::lower::lower_multi as lower_ir_multi;
 use music_lex::lex;
 use music_parse::parse;
 use music_resolve::graph::ModuleId;
@@ -26,6 +28,8 @@ pub struct FrontendOutput {
     pub sema: SemaResult,
     /// The parsed module (needed for IR lowering).
     pub parsed: ParsedModule,
+    /// Dependency modules (needed for cross-module IR lowering).
+    pub dep_modules: Vec<DepModuleIr>,
     /// The symbol interner (needed for IR lowering and emit).
     pub interner: Interner,
     /// The source database (needed for diagnostic rendering in backend).
@@ -63,6 +67,7 @@ pub fn run_frontend(path: &Path) -> Result<FrontendOutput, ()> {
         Ok(FrontendOutput {
             sema,
             parsed,
+            dep_modules: vec![],
             interner,
             source_db,
             file_id,
@@ -105,6 +110,7 @@ pub fn run_frontend_multi(
         &mut source_db,
         &mut diags,
         &mut parsed_modules,
+        None,
     ) {
         Ok(g) => g,
         Err(e) => {
@@ -137,11 +143,12 @@ pub fn run_frontend_multi(
         return Err(());
     }
 
-    let (sema, parsed) = result.ok_or(())?;
+    let (sema, parsed, dep_modules) = result.ok_or(())?;
     let file_id = graph.get(ModuleId(0)).file_id;
     Ok(FrontendOutput {
         sema,
         parsed,
+        dep_modules,
         interner,
         source_db,
         file_id,
@@ -154,9 +161,10 @@ fn run_sema_in_order(
     parsed_modules: &mut HashMap<ModuleId, ParsedModule>,
     interner: &mut Interner,
     diags: &mut DiagnosticBag,
-) -> Option<(SemaResult, ParsedModule)> {
+) -> Option<(SemaResult, ParsedModule, Vec<DepModuleIr>)> {
     let mut state = SharedAnalysisState::new(interner);
     let mut module_exports: HashMap<ModuleId, Vec<ExportBinding>> = HashMap::new();
+    let mut dep_modules: Vec<DepModuleIr> = Vec::new();
 
     let entry_id = ModuleId(0);
     let mut entry_output: Option<(music_sema::ModuleSemaOutput, ParsedModule)> = None;
@@ -186,11 +194,17 @@ fn run_sema_in_order(
             let defs_vec: Vec<_> = state.defs.iter().cloned().collect();
             let exports = collect_exports(&parsed, &defs_vec, &output.resolution.pat_defs);
             let _prev = module_exports.insert(module_id, exports.bindings);
+            dep_modules.push(DepModuleIr {
+                parsed,
+                resolution: output.resolution,
+                expr_types: output.expr_types,
+                file_id,
+            });
         }
     }
 
     let (output, parsed) = entry_output?;
-    Some((state.into_sema_result(output), parsed))
+    Some((state.into_sema_result(output), parsed, dep_modules))
 }
 
 fn build_import_names(
@@ -212,11 +226,17 @@ fn build_import_names(
 /// Returns the raw `.msbc` bytes on success, or `Err(())` after printing
 /// the error to stderr.
 pub fn run_backend(out: &mut FrontendOutput) -> Result<Vec<u8>, ()> {
-    let ir = match lower_ir(&out.parsed, &out.sema, &mut out.interner) {
+    let ir = if out.dep_modules.is_empty() {
+        lower_ir(&out.parsed, &out.sema, &mut out.interner)
+    } else {
+        lower_ir_multi(&out.parsed, &out.sema, &out.dep_modules, &mut out.interner)
+    };
+    let ir = match ir {
         Ok(m) => m,
         Err(e) => {
             let mut bag = DiagnosticBag::new();
-            let _ = bag.report(&e.error, e.span, out.file_id);
+            let fid = e.file_id.unwrap_or(out.file_id);
+            let _ = bag.report(&e.error, e.span, fid);
             render_diagnostics(&bag, &out.source_db);
             return Err(());
         }
