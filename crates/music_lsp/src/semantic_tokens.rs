@@ -350,6 +350,8 @@ fn classify_def(
         DefKind::Variant => (Some(TT_ENUM_MEMBER), decl, 0),
         DefKind::Import => (None, 0, 0),
         DefKind::Class | DefKind::Given | DefKind::Effect => (Some(TT_TYPE), decl, 0),
+        DefKind::Law => (Some(TT_VARIABLE), decl | TM_READONLY, 0),
+        DefKind::LawVar => (Some(TT_VARIABLE), decl, 0),
     }
 }
 
