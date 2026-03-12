@@ -7,28 +7,28 @@ pub enum VmError {
     BadMagic,
     #[error("checksum mismatch — file may be corrupted")]
     BadChecksum,
-    #[error("malformed bytecode: {desc}")]
+    #[error("malformed bytecode, {desc}")]
     Malformed { desc: Box<str> },
-    #[error("verification failed: {desc}")]
+    #[error("verification failed, {desc}")]
     Verify { desc: Box<str> },
     #[error("division by zero")]
     DivideByZero,
     #[error("call stack overflow")]
     StackOverflow,
-    #[error("type error: expected {expected}, found {found}")]
+    #[error("expected {expected} but found {found}")]
     TypeError {
         expected: &'static str,
         found: &'static str,
     },
-    #[error("index {index} out of bounds (len {len})")]
+    #[error("index `{index}` out of bounds, length `{len}`")]
     OutOfBounds { index: usize, len: usize },
-    #[error("no handler for effect id {effect_id}")]
+    #[error("no handler for effect `{effect_id}`")]
     NoHandler { effect_id: u8 },
     #[error("effect aborted")]
     EffectAborted,
-    #[error("unimplemented: {desc}")]
+    #[error("unimplemented {desc}")]
     Unimplemented { desc: &'static str },
-    #[error("in fn {fn_id} at offset {ip}: {source}")]
+    #[error("in fn `{fn_id}` at offset `{ip}`, {source}")]
     Runtime {
         fn_id: u32,
         ip: usize,
@@ -36,14 +36,14 @@ pub enum VmError {
     },
     #[error("halted")]
     Halted,
-    #[error("instruction limit exceeded ({limit})")]
+    #[error("instruction limit exceeded, `{limit}`")]
     InstructionLimitExceeded { limit: u64 },
-    #[error("freed heap object at index {index}")]
+    #[error("freed heap object at index `{index}`")]
     FreedObject { index: usize },
-    #[error("deadlock: no runnable tasks remain")]
+    #[error("deadlock, no runnable tasks remain")]
     Deadlock,
-    #[error("unknown task id {task_id}")]
+    #[error("unknown task id `{task_id}`")]
     UnknownTask { task_id: u32 },
-    #[error("unknown channel id {channel_id}")]
+    #[error("unknown channel id `{channel_id}`")]
     UnknownChannel { channel_id: u32 },
 }
