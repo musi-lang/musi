@@ -8,11 +8,11 @@ pub enum SemaError {
     UndefinedName { name: Box<str> },
     #[error("duplicate definition of `{name}`")]
     DuplicateDefinition { name: Box<str> },
-    #[error("type mismatch: expected `{expected}`, found `{found}`")]
+    #[error("expected `{expected}` but found `{found}`")]
     TypeMismatch { expected: Box<str>, found: Box<str> },
     #[error("infinite type (occurs check failed)")]
     InfiniteType,
-    #[error("function expects {expected} argument(s), found {found}")]
+    #[error("expected {expected} argument(s) but found {found}")]
     ArityMismatch { expected: usize, found: usize },
     #[error("cannot call value of type `{ty}`")]
     NotCallable { ty: Box<str> },
