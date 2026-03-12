@@ -85,6 +85,8 @@ pub struct WellKnownFns {
     pub is_some: DefId,
     pub is_none: DefId,
     pub next: DefId,
+    pub write: DefId,
+    pub writeln: DefId,
 }
 
 /// `DefId` handles for all well-known (prelude) types.
@@ -186,6 +188,8 @@ pub fn init_well_known(
         is_some: register("is_some", DefKind::Fn),
         is_none: register("is_none", DefKind::Fn),
         next: register("next", DefKind::Fn),
+        write: register("write", DefKind::Fn),
+        writeln: register("writeln", DefKind::Fn),
     };
 
     let string = register("String", DefKind::Type);
