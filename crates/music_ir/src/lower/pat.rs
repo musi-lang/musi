@@ -18,7 +18,7 @@ use music_ast::{ExprIdx, PatIdx};
 use music_shared::Span;
 
 use crate::constant::IrConstValue;
-use crate::error::IrError;
+use crate::error::{IrError, SpannedIrError};
 use crate::func::IrLocal;
 use crate::inst::{IrBinOp, IrInst, IrLabel, IrOperand, IrPlace, IrRvalue};
 use crate::types::{IrType, IrTypeIdx};
@@ -37,9 +37,12 @@ pub(super) fn lower_match(
     scrutinee: ExprIdx,
     arms: &[MatchArm],
     span: Span,
-) -> Result<IrLocal, IrError> {
+) -> Result<IrLocal, SpannedIrError> {
     if arms.is_empty() {
-        return Err(IrError::UnsupportedExpr);
+        return Err(IrError::UnsupportedExpr {
+            kind: "empty match expression",
+        }
+        .at(span));
     }
 
     let scrut_local = lower_expr(fn_cx, scrutinee)?;
@@ -50,8 +53,9 @@ pub(super) fn lower_match(
         .expr_types
         .get(&expr_idx)
         .copied()
-        .ok_or(IrError::UnsupportedExpr)?;
-    let ir_result_ty = lower_ty(result_ty_sema, fn_cx.cx.sema, &mut fn_cx.cx.ir.types)?;
+        .ok_or_else(|| IrError::MissingExprType.at(span))?;
+    let ir_result_ty =
+        lower_ty(result_ty_sema, fn_cx.cx.sema, &mut fn_cx.cx.ir.types).map_err(|e| e.at(span))?;
     let result_local = fn_cx.fresh_local(ir_result_ty, true, span);
     let merge_lbl = fn_cx.fresh_label();
 
@@ -84,7 +88,7 @@ fn emit_match_arm(
     result_local: IrLocal,
     merge_lbl: IrLabel,
     fail_lbl: IrLabel,
-) -> Result<(), IrError> {
+) -> Result<(), SpannedIrError> {
     emit_pat_test(fn_cx, arm.pat, scrut_local, fail_lbl)?;
     emit_pat_bind(fn_cx, arm.pat, scrut_local)?;
 
@@ -117,7 +121,7 @@ fn emit_pat_test(
     pat_idx: PatIdx,
     scrut: IrLocal,
     fail_lbl: IrLabel,
-) -> Result<(), IrError> {
+) -> Result<(), SpannedIrError> {
     let pat = fn_cx.cx.ast.pats[pat_idx].clone();
     match pat {
         Pat::Wild { .. } | Pat::Bind { inner: None, .. } => {}
@@ -131,7 +135,7 @@ fn emit_pat_test(
         }
         Pat::Tuple { elems, span } => {
             for (i, &elem_pat) in elems.iter().enumerate() {
-                let idx = u32::try_from(i).map_err(|_| IrError::UnsupportedExpr)?;
+                let idx = u32::try_from(i).map_err(|_| IrError::IndexOverflow.at(span))?;
                 let elem_ty = infer_pat_ir_type(fn_cx, elem_pat)?;
                 let elem_local = fn_cx.emit_assign(
                     elem_ty,
@@ -156,7 +160,21 @@ fn emit_pat_test(
 
             fn_cx.emit(IrInst::Label(ok_lbl));
         }
-        _ => return Err(IrError::UnsupportedExpr),
+        Pat::Variant { span, .. } => {
+            return Err(IrError::UnsupportedPattern { kind: "variant" }.at(span));
+        }
+        Pat::Record { span, .. } => {
+            return Err(IrError::UnsupportedPattern { kind: "record" }.at(span));
+        }
+        Pat::Array { span, .. } => {
+            return Err(IrError::UnsupportedPattern { kind: "array" }.at(span));
+        }
+        Pat::Error { span, .. } => {
+            return Err(IrError::UnsupportedPattern {
+                kind: "error recovery",
+            }
+            .at(span));
+        }
     }
     Ok(())
 }
@@ -167,7 +185,7 @@ fn emit_pat_bind(
     fn_cx: &mut FnLowerCtx<'_, '_>,
     pat_idx: PatIdx,
     scrut: IrLocal,
-) -> Result<(), IrError> {
+) -> Result<(), SpannedIrError> {
     let pat = fn_cx.cx.ast.pats[pat_idx].clone();
     match pat {
         Pat::Wild { .. } | Pat::Lit { .. } => {}
@@ -181,7 +199,7 @@ fn emit_pat_bind(
         }
         Pat::Tuple { elems, span } => {
             for (i, &elem_pat) in elems.iter().enumerate() {
-                let idx = u32::try_from(i).map_err(|_| IrError::UnsupportedExpr)?;
+                let idx = u32::try_from(i).map_err(|_| IrError::IndexOverflow.at(span))?;
                 let elem_ty = infer_pat_ir_type(fn_cx, elem_pat)?;
                 let elem_local = fn_cx.emit_assign(
                     elem_ty,
@@ -197,7 +215,21 @@ fn emit_pat_bind(
         Pat::Or { left, .. } => {
             emit_pat_bind(fn_cx, left, scrut)?;
         }
-        _ => return Err(IrError::UnsupportedExpr),
+        Pat::Variant { span, .. } => {
+            return Err(IrError::UnsupportedPattern { kind: "variant" }.at(span));
+        }
+        Pat::Record { span, .. } => {
+            return Err(IrError::UnsupportedPattern { kind: "record" }.at(span));
+        }
+        Pat::Array { span, .. } => {
+            return Err(IrError::UnsupportedPattern { kind: "array" }.at(span));
+        }
+        Pat::Error { span, .. } => {
+            return Err(IrError::UnsupportedPattern {
+                kind: "error recovery",
+            }
+            .at(span));
+        }
     }
     Ok(())
 }
@@ -209,13 +241,24 @@ fn emit_lit_test(
     scrut: IrLocal,
     fail_lbl: IrLabel,
     span: Span,
-) -> Result<(), IrError> {
+) -> Result<(), SpannedIrError> {
     let (const_val, cmp_op) = match lit {
         Lit::Int { value, .. } => (IrConstValue::Int(*value), IrBinOp::IEq),
         Lit::Float { value, .. } => (IrConstValue::Float(*value), IrBinOp::FEq),
         Lit::Rune { codepoint, .. } => (IrConstValue::Rune(*codepoint), IrBinOp::IEq),
         Lit::Unit { .. } => return Ok(()),
-        Lit::Str { .. } | Lit::FStr { .. } => return Err(IrError::UnsupportedExpr),
+        Lit::Str { .. } => {
+            return Err(IrError::UnsupportedPattern {
+                kind: "string literal",
+            }
+            .at(span));
+        }
+        Lit::FStr { .. } => {
+            return Err(IrError::UnsupportedPattern {
+                kind: "interpolated string literal",
+            }
+            .at(span));
+        }
     };
 
     let bool_ty = fn_cx.cx.ir.types.alloc(IrType::Bool);
@@ -247,23 +290,26 @@ fn emit_lit_test(
 fn infer_pat_ir_type(
     fn_cx: &mut FnLowerCtx<'_, '_>,
     pat_idx: PatIdx,
-) -> Result<IrTypeIdx, IrError> {
+) -> Result<IrTypeIdx, SpannedIrError> {
     let pat = fn_cx.cx.ast.pats[pat_idx].clone();
     match pat {
         Pat::Bind { span, .. } => {
             if let Some(&def_id) = fn_cx.cx.sema.resolution.pat_defs.get(&span) {
-                let def_idx = usize::try_from(def_id.0).map_err(|_| IrError::UnsupportedExpr)?;
+                let def_idx =
+                    usize::try_from(def_id.0).map_err(|_| IrError::IndexOverflow.at(span))?;
                 if let Some(ty) = fn_cx.cx.sema.defs[def_idx].ty_info.ty {
-                    return lower_ty(ty, fn_cx.cx.sema, &mut fn_cx.cx.ir.types);
+                    return lower_ty(ty, fn_cx.cx.sema, &mut fn_cx.cx.ir.types)
+                        .map_err(|e| e.at(span));
                 }
             }
-            Err(IrError::UnsupportedExpr)
+            Err(IrError::MissingExprType.at(span))
         }
-        Pat::Wild { .. } => {
+        Pat::Wild { span, .. } => {
             let unit_ty = fn_cx.cx.ir.types.alloc(IrType::Unit);
+            let _ = span;
             Ok(unit_ty)
         }
-        Pat::Lit { lit, .. } => {
+        Pat::Lit { lit, span } => {
             let ir_ty = match &lit {
                 Lit::Int { .. } => IrType::Int64,
                 Lit::Float { .. } => IrType::Float64,
@@ -271,8 +317,20 @@ fn infer_pat_ir_type(
                 Lit::Unit { .. } => IrType::Unit,
                 Lit::Str { .. } | Lit::FStr { .. } => IrType::UInt64,
             };
+            let _ = span;
             Ok(fn_cx.cx.ir.types.alloc(ir_ty))
         }
-        _ => Err(IrError::UnsupportedExpr),
+        Pat::Tuple { span, .. } => Err(IrError::UnsupportedPattern {
+            kind: "nested tuple",
+        }
+        .at(span)),
+        Pat::Variant { span, .. } => Err(IrError::UnsupportedPattern { kind: "variant" }.at(span)),
+        Pat::Record { span, .. } => Err(IrError::UnsupportedPattern { kind: "record" }.at(span)),
+        Pat::Array { span, .. } => Err(IrError::UnsupportedPattern { kind: "array" }.at(span)),
+        Pat::Or { span, .. } => Err(IrError::UnsupportedPattern { kind: "or" }.at(span)),
+        Pat::Error { span, .. } => Err(IrError::UnsupportedPattern {
+            kind: "error recovery",
+        }
+        .at(span)),
     }
 }

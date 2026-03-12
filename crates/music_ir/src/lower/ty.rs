@@ -15,7 +15,7 @@ use crate::types::{IrType, IrTypeIdx};
 /// # Errors
 ///
 /// Returns [`IrError::UnresolvedTypeVariable`] if the type contains an
-/// unsolved unification variable, or [`IrError::UnsupportedExpr`] if the
+/// unsolved unification variable, or [`IrError::UnsupportedType`] if the
 /// type is not representable in the IR MVP subset.
 pub fn lower_ty(
     ty: TypeIdx,
@@ -36,7 +36,7 @@ pub fn lower_ty(
         } => lower_fn(&params, ret, &effects, sema, ir_types),
         Type::Var(_) => Ok(ir_types.alloc(IrType::Any)),
         Type::Rigid(_) => Err(IrError::UnresolvedTypeVariable),
-        _ => Err(IrError::UnsupportedExpr),
+        _ => Err(IrError::UnsupportedType),
     }
 }
 
@@ -71,7 +71,7 @@ fn lower_named(
         .iter()
         .find(|(d, _)| *d == def)
         .map(|(_, ty)| ty.clone())
-        .ok_or(IrError::UnsupportedExpr)?;
+        .ok_or(IrError::UnsupportedType)?;
     Ok(ir_types.alloc(ir_ty))
 }
 

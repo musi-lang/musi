@@ -13,19 +13,20 @@ use music_sema::{DefId, SemaResult, TypeIdx};
 use music_shared::{Arena, Interner, Span, Symbol};
 
 use crate::IrModule;
-use crate::error::IrError;
+use crate::error::{IrError, SpannedIrError};
 use crate::func::{
     IrFnId, IrFnIdx, IrForeignFn, IrFunction, IrLocal, IrLocalDecl, IrParam, IrParamMode,
 };
 use crate::inst::{IrInst, IrOperand};
 use crate::types::IrType;
 
+use super::expr::expr_span;
 use super::ty::lower_ty;
 
 pub(super) struct LowerCtx<'src> {
     pub sema: &'src SemaResult,
     pub ast: &'src AstArenas,
-    pub interner: &'src Interner,
+    pub interner: &'src mut Interner,
     pub ir: IrModule,
     /// Maps sema `DefId` for a function binding to its allocated slot.
     pub fn_map: HashMap<DefId, IrFnIdx>,
@@ -44,8 +45,8 @@ struct FnEntry {
 pub(super) fn lower_module(
     parsed: &ParsedModule,
     sema: &SemaResult,
-    interner: &Interner,
-) -> Result<IrModule, IrError> {
+    interner: &mut Interner,
+) -> Result<IrModule, SpannedIrError> {
     let mut cx = LowerCtx {
         sema,
         ast: &parsed.arenas,
@@ -57,6 +58,8 @@ pub(super) fn lower_module(
         fn_entries: vec![],
         entry_candidate: None,
     };
+
+    register_well_known_fns(&mut cx)?;
 
     for stmt in &parsed.stmts {
         register_fn_stub(&mut cx, stmt.expr)?;
@@ -71,12 +74,40 @@ pub(super) fn lower_module(
     Ok(cx.ir)
 }
 
-fn register_fn_stub(cx: &mut LowerCtx<'_>, expr_idx: ExprIdx) -> Result<(), IrError> {
+/// Registers well-known prelude functions (e.g. `writeln`) as foreign fns so
+/// that `lower_call` can find them without an explicit `foreign` declaration.
+fn register_well_known_fns(cx: &mut LowerCtx<'_>) -> Result<(), SpannedIrError> {
+    let writeln_def = cx.sema.well_known.fns.writeln;
+    let puts_sym = cx.interner.intern("puts");
+    let any_ty = cx.ir.types.alloc(IrType::Any);
+    let unit_ty = cx.ir.types.alloc(IrType::Unit);
+    let span = Span::new(0, 0);
+
+    let def_idx = usize::try_from(writeln_def.0).map_err(|_| IrError::IndexOverflow.at(span))?;
+    let name = cx.sema.defs[def_idx].name;
+
+    let idx =
+        u32::try_from(cx.ir.foreign_fns.len()).map_err(|_| IrError::IndexOverflow.at(span))?;
+    cx.ir.foreign_fns.push(IrForeignFn {
+        name,
+        ext_name: puts_sym,
+        library: None,
+        param_tys: vec![any_ty],
+        ret_ty: unit_ty,
+        variadic: false,
+    });
+    let _ = cx.foreign_fn_map.insert(writeln_def, idx);
+
+    Ok(())
+}
+
+fn register_fn_stub(cx: &mut LowerCtx<'_>, expr_idx: ExprIdx) -> Result<(), SpannedIrError> {
     let expr = cx.ast.exprs[expr_idx].clone();
+    let span = expr_span(&expr);
 
     // Handle foreign declarations (possibly wrapped in Annotated).
     if let Some((foreign_expr, attrs)) = extract_foreign(expr.clone(), cx.ast) {
-        return register_foreign_fns(cx, &foreign_expr, &attrs);
+        return register_foreign_fns(cx, &foreign_expr, &attrs, span);
     }
 
     let Some((fields, binding_span, attrs)) = extract_fn_fields(expr, cx.ast) else {
@@ -100,11 +131,11 @@ fn register_fn_stub(cx: &mut LowerCtx<'_>, expr_idx: ExprIdx) -> Result<(), IrEr
         return Ok(());
     };
 
-    let def_idx = usize::try_from(def_id.0).map_err(|_| IrError::UnsupportedExpr)?;
+    let def_idx = usize::try_from(def_id.0).map_err(|_| IrError::IndexOverflow.at(binding_span))?;
     let fn_name = cx.sema.defs[def_idx].name;
 
     let Some(&fn_ty_sema) = cx.sema.expr_types.get(&value_idx) else {
-        return Err(IrError::UnsupportedExpr);
+        return Err(IrError::MissingExprType.at(binding_span));
     };
     let fn_type = cx.sema.types[fn_ty_sema].clone();
     let Type::Fn {
@@ -113,12 +144,14 @@ fn register_fn_stub(cx: &mut LowerCtx<'_>, expr_idx: ExprIdx) -> Result<(), IrEr
         effects: effect_row,
     } = fn_type
     else {
-        return Err(IrError::UnsupportedExpr);
+        return Err(IrError::UnsupportedType.at(binding_span));
     };
 
-    let ir_ret_ty = lower_ty(ret_sema_ty, cx.sema, &mut cx.ir.types)?;
+    let ir_ret_ty =
+        lower_ty(ret_sema_ty, cx.sema, &mut cx.ir.types).map_err(|e| e.at(binding_span))?;
     let (ir_params, ir_locals) =
-        build_param_locals(&params, &param_sema_tys, cx.sema, &mut cx.ir.types)?;
+        build_param_locals(&params, &param_sema_tys, cx.sema, &mut cx.ir.types)
+            .map_err(|e| e.at(binding_span))?;
     let ir_effects = super::effect::lower_effect_row(&effect_row, &cx.sema.well_known.effects);
 
     let fn_id = IrFnId(cx.next_fn_id);
@@ -146,7 +179,7 @@ fn register_fn_stub(cx: &mut LowerCtx<'_>, expr_idx: ExprIdx) -> Result<(), IrEr
 
     if has_entrypoint_attr(&attrs, cx.interner) {
         if cx.entry_candidate.is_some() {
-            return Err(IrError::DuplicateEntryPoint);
+            return Err(IrError::DuplicateEntryPoint.at(binding_span));
         }
         cx.entry_candidate = Some(fn_idx);
     }
@@ -163,7 +196,7 @@ fn build_param_locals(
     let mut ir_params = Vec::with_capacity(params.len());
     let mut ir_locals = Vec::with_capacity(params.len());
     for (i, (param, &sema_ty)) in params.iter().zip(param_sema_tys.iter()).enumerate() {
-        let local = IrLocal(u32::try_from(i).map_err(|_| IrError::UnsupportedExpr)?);
+        let local = IrLocal(u32::try_from(i).map_err(|_| IrError::IndexOverflow)?);
         let ir_ty = lower_ty(sema_ty, sema, ir_types)?;
         ir_params.push(IrParam {
             local,
@@ -185,13 +218,20 @@ fn lower_fn_body(
     cx: &mut LowerCtx<'_>,
     fn_idx: IrFnIdx,
     binding_expr: ExprIdx,
-) -> Result<(), IrError> {
+) -> Result<(), SpannedIrError> {
     let binding = cx.ast.exprs[binding_expr].clone();
+    let binding_span = expr_span(&binding);
     let Some((fields, _, _)) = extract_fn_fields(binding, cx.ast) else {
-        return Err(IrError::UnsupportedExpr);
+        return Err(IrError::UnsupportedExpr {
+            kind: "non-function binding",
+        }
+        .at(binding_span));
     };
     let Some(value_idx) = fields.value else {
-        return Err(IrError::UnsupportedExpr);
+        return Err(IrError::UnsupportedExpr {
+            kind: "binding without value",
+        }
+        .at(binding_span));
     };
     let fn_expr = cx.ast.exprs[value_idx].clone();
     let Expr::Fn {
@@ -200,12 +240,16 @@ fn lower_fn_body(
         ..
     } = fn_expr
     else {
-        return Err(IrError::UnsupportedExpr);
+        return Err(IrError::UnsupportedExpr {
+            kind: "non-function value in binding",
+        }
+        .at(binding_span));
     };
 
     let fn_span = cx.ir.functions[fn_idx].span;
     let param_locals = cx.ir.functions[fn_idx].locals.clone();
-    let n_params = u32::try_from(param_locals.len()).map_err(|_| IrError::UnsupportedExpr)?;
+    let n_params =
+        u32::try_from(param_locals.len()).map_err(|_| IrError::IndexOverflow.at(fn_span))?;
 
     let local_map = build_param_local_map(&params, cx.sema);
 
@@ -258,7 +302,12 @@ fn extract_foreign(expr: Expr, ast: &AstArenas) -> Option<(Expr, Vec<Attr>)> {
     }
 }
 
-fn register_foreign_fns(cx: &mut LowerCtx<'_>, expr: &Expr, attrs: &[Attr]) -> Result<(), IrError> {
+fn register_foreign_fns(
+    cx: &mut LowerCtx<'_>,
+    expr: &Expr,
+    attrs: &[Attr],
+    span: Span,
+) -> Result<(), SpannedIrError> {
     let Expr::Foreign { decls, .. } = expr else {
         return Ok(());
     };
@@ -271,24 +320,25 @@ fn register_foreign_fns(cx: &mut LowerCtx<'_>, expr: &Expr, attrs: &[Attr]) -> R
                 name,
                 ext_name,
                 ty,
-                span,
+                span: decl_span,
             } => {
                 let ext_sym = ext_name.unwrap_or(*name);
 
                 // Look up the DefId for this foreign fn
-                let Some(&def_id) = cx.sema.resolution.pat_defs.get(span) else {
+                let Some(&def_id) = cx.sema.resolution.pat_defs.get(decl_span) else {
                     // Foreign fns are defined at the name span, not pat span.
                     // Try to find by iterating defs.
-                    register_foreign_fn_by_name(cx, *name, ext_sym, *ty, library, *span)?;
+                    register_foreign_fn_by_name(cx, *name, ext_sym, *ty, library, *decl_span)?;
                     continue;
                 };
-                register_foreign_fn_with_def(cx, def_id, ext_sym, *ty, library, *span)?;
+                register_foreign_fn_with_def(cx, def_id, ext_sym, *ty, library, *decl_span)?;
             }
             ForeignDecl::OpaqueType { .. } => {
                 // Opaque types don't generate IR — they're just names
             }
         }
     }
+    let _ = span;
     Ok(())
 }
 
@@ -299,7 +349,7 @@ fn register_foreign_fn_by_name(
     ty: TyIdx,
     library: Option<Symbol>,
     span: Span,
-) -> Result<(), IrError> {
+) -> Result<(), SpannedIrError> {
     // Find the DefId by looking through all defs for a matching name and span
     let def_id = cx
         .sema
@@ -321,14 +371,16 @@ fn register_foreign_fn_with_def(
     ext_name: Symbol,
     _ty: TyIdx,
     library: Option<Symbol>,
-    _span: Span,
-) -> Result<(), IrError> {
+    span: Span,
+) -> Result<(), SpannedIrError> {
     // Lower the type annotation to get param and return types
     let Some(&_ty_idx) = cx.sema.expr_types.values().next() else {
         // Fall back: just create a simple foreign fn entry
-        let idx = u32::try_from(cx.ir.foreign_fns.len()).map_err(|_| IrError::UnsupportedExpr)?;
-        let name =
-            cx.sema.defs[usize::try_from(def_id.0).map_err(|_| IrError::UnsupportedExpr)?].name;
+        let idx =
+            u32::try_from(cx.ir.foreign_fns.len()).map_err(|_| IrError::IndexOverflow.at(span))?;
+        let name = cx.sema.defs
+            [usize::try_from(def_id.0).map_err(|_| IrError::IndexOverflow.at(span))?]
+        .name;
         let unit_ty = cx.ir.types.alloc(IrType::Unit);
         cx.ir.foreign_fns.push(IrForeignFn {
             name,
@@ -343,7 +395,7 @@ fn register_foreign_fn_with_def(
     };
 
     // Try to resolve the sema type for the type annotation
-    let def_idx = usize::try_from(def_id.0).map_err(|_| IrError::UnsupportedExpr)?;
+    let def_idx = usize::try_from(def_id.0).map_err(|_| IrError::IndexOverflow.at(span))?;
     let name = cx.sema.defs[def_idx].name;
     let def_ty_info = &cx.sema.defs[def_idx].ty_info;
 
@@ -352,9 +404,9 @@ fn register_foreign_fn_with_def(
         if let Type::Fn { params, ret, .. } = &cx.sema.types[resolved] {
             let mut ptys = Vec::with_capacity(params.len());
             for &p in params {
-                ptys.push(lower_ty(p, cx.sema, &mut cx.ir.types)?);
+                ptys.push(lower_ty(p, cx.sema, &mut cx.ir.types).map_err(|e| e.at(span))?);
             }
-            let rty = lower_ty(*ret, cx.sema, &mut cx.ir.types)?;
+            let rty = lower_ty(*ret, cx.sema, &mut cx.ir.types).map_err(|e| e.at(span))?;
             (ptys, rty, false)
         } else {
             let unit_ty = cx.ir.types.alloc(IrType::Unit);
@@ -365,7 +417,8 @@ fn register_foreign_fn_with_def(
         (vec![], unit_ty, false)
     };
 
-    let idx = u32::try_from(cx.ir.foreign_fns.len()).map_err(|_| IrError::UnsupportedExpr)?;
+    let idx =
+        u32::try_from(cx.ir.foreign_fns.len()).map_err(|_| IrError::IndexOverflow.at(span))?;
     cx.ir.foreign_fns.push(IrForeignFn {
         name,
         ext_name,

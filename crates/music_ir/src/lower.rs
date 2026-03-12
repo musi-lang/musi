@@ -27,22 +27,22 @@ use music_sema::SemaResult;
 use music_shared::Interner;
 
 use crate::IrModule;
-use crate::error::IrError;
+use crate::error::SpannedIrError;
 
 /// Lowers a parsed module + sema result into MSIR.
 ///
 /// This is the main entry point for the IR lowering pipeline.
 /// Only a subset of the language is supported in the initial pass;
-/// unsupported constructs return [`IrError::UnsupportedExpr`].
+/// unsupported constructs return an error with a source span.
 ///
 /// # Errors
 ///
-/// Returns an [`IrError`] if lowering fails due to unsupported constructs,
+/// Returns a [`SpannedIrError`] if lowering fails due to unsupported constructs,
 /// unresolved type variables, or unknown effects.
 pub fn lower(
     parsed: &ParsedModule,
     sema: &SemaResult,
-    interner: &Interner,
-) -> Result<IrModule, IrError> {
+    interner: &mut Interner,
+) -> Result<IrModule, SpannedIrError> {
     stmt::lower_module(parsed, sema, interner)
 }

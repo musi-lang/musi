@@ -9,12 +9,12 @@ use music_ast::ExprIdx;
 use music_shared::Span;
 
 use crate::constant::IrConstValue;
-use crate::error::IrError;
+use crate::error::{IrError, SpannedIrError};
 use crate::func::IrLocal;
 use crate::inst::{IrInst, IrOperand, IrPlace, IrRvalue};
 use crate::types::IrType;
 
-use super::expr::{FnLowerCtx, lower_expr};
+use super::expr::{FnLowerCtx, expr_span, lower_expr};
 
 /// Lowers `a and b` as `(let t := a; if t then b else false)`.
 pub(super) fn lower_and(
@@ -22,7 +22,7 @@ pub(super) fn lower_and(
     left: ExprIdx,
     right: ExprIdx,
     span: Span,
-) -> Result<IrLocal, IrError> {
+) -> Result<IrLocal, SpannedIrError> {
     let bool_ty = fn_cx.cx.ir.types.alloc(IrType::Bool);
     let result = fn_cx.fresh_local(bool_ty, true, span);
 
@@ -67,7 +67,7 @@ pub(super) fn lower_or(
     left: ExprIdx,
     right: ExprIdx,
     span: Span,
-) -> Result<IrLocal, IrError> {
+) -> Result<IrLocal, SpannedIrError> {
     let bool_ty = fn_cx.cx.ir.types.alloc(IrType::Bool);
     let result = fn_cx.fresh_local(bool_ty, true, span);
 
@@ -112,7 +112,7 @@ pub(super) fn lower_assign(
     target: ExprIdx,
     value: ExprIdx,
     span: Span,
-) -> Result<IrLocal, IrError> {
+) -> Result<IrLocal, SpannedIrError> {
     let value_local = lower_expr(fn_cx, value)?;
     let place = lower_place(fn_cx, target)?;
 
@@ -127,20 +127,26 @@ pub(super) fn lower_assign(
 }
 
 /// Resolves an expression into an `IrPlace` for mutation.
-fn lower_place(fn_cx: &mut FnLowerCtx<'_, '_>, expr_idx: ExprIdx) -> Result<IrPlace, IrError> {
+fn lower_place(
+    fn_cx: &mut FnLowerCtx<'_, '_>,
+    expr_idx: ExprIdx,
+) -> Result<IrPlace, SpannedIrError> {
     let expr = fn_cx.cx.ast.exprs[expr_idx].clone();
+    let span = expr_span(&expr);
     match expr {
-        Expr::Name { span, .. } => {
+        Expr::Name { .. } => {
             let Some(&def_id) = fn_cx.cx.sema.resolution.expr_defs.get(&expr_idx) else {
-                return Err(IrError::UnsupportedExpr);
+                return Err(IrError::UnresolvedName.at(span));
             };
             let Some(&local) = fn_cx.local_map.get(&def_id) else {
-                return Err(IrError::UnsupportedExpr);
+                return Err(IrError::UnresolvedName.at(span));
             };
-            let _ = span;
             Ok(IrPlace::Local(local))
         }
         Expr::Paren { inner, .. } | Expr::Annotated { inner, .. } => lower_place(fn_cx, inner),
-        _ => Err(IrError::UnsupportedExpr),
+        _ => Err(IrError::UnsupportedExpr {
+            kind: "non-name assignment target",
+        }
+        .at(span)),
     }
 }
