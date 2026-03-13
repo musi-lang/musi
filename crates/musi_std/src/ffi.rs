@@ -187,8 +187,28 @@ fn lookup_builtin(ext_name: &str) -> Option<BuiltinFn> {
     match ext_name {
         "musi_show" => Some(builtin_show),
         "musi_str_cat" => Some(builtin_str_cat),
+        "musi_writeln" => Some(builtin_writeln),
+        "musi_write" => Some(builtin_write),
         _ => None,
     }
+}
+
+fn builtin_writeln(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+    let val = args.first().copied().ok_or_else(|| VmError::Malformed {
+        desc: "musi_writeln: expected 1 argument".into(),
+    })?;
+    let s = value_to_string(val, heap);
+    println!("{s}");
+    Ok(Value::UNIT)
+}
+
+fn builtin_write(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+    let val = args.first().copied().ok_or_else(|| VmError::Malformed {
+        desc: "musi_write: expected 1 argument".into(),
+    })?;
+    let s = value_to_string(val, heap);
+    print!("{s}");
+    Ok(Value::UNIT)
 }
 
 fn builtin_show(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
