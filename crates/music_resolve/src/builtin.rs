@@ -7,6 +7,7 @@
 ///
 /// Built-in modules are intercepted before filesystem resolution so they
 /// do not need a corresponding `.ms` file in the standard library root.
+#[must_use]
 pub fn is_builtin_module(name: &str) -> bool {
     matches!(name, "ffi")
 }

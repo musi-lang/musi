@@ -13,9 +13,10 @@ use music_lex::lex;
 use music_parse::parse;
 use music_shared::{DiagnosticBag, FileId, Interner, SourceDb, Span, Symbol};
 
+use crate::builtin::is_builtin_module;
 use crate::error::ResolveError;
 use crate::resolver::{ResolverConfig, resolve_import};
-use crate::specifier::parse_specifier;
+use crate::specifier::{ImportScheme, parse_specifier};
 
 /// Opaque module identifier.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -70,6 +71,10 @@ impl ModuleGraph {
     }
 
     /// Adds a built-in module (no source file) or returns its existing ID.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the number of modules exceeds `u32::MAX`.
     pub fn add_builtin_module(&mut self, path: PathBuf, file_id: FileId) -> ModuleId {
         if let Some(&existing) = self.path_to_id.get(&path) {
             return existing;
@@ -417,8 +422,8 @@ fn process_import(
     };
 
     // Built-in modules (e.g. musi:ffi) skip filesystem resolution.
-    if specifier.scheme == crate::specifier::ImportScheme::Musi
-        && crate::builtin::is_builtin_module(&specifier.module_path)
+    if specifier.scheme == ImportScheme::Musi
+        && is_builtin_module(&specifier.module_path)
     {
         let sentinel = PathBuf::from(format!("<musi:{}>", specifier.module_path));
         let target_id = if let Some(existing) = graph.lookup(&sentinel) {
