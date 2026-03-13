@@ -103,11 +103,11 @@ pub fn emit_expr_tail(
         Expr::Update {
             base, fields, ..
         } => emit_update(em, fc, base, &fields),
-        Expr::TypeCheck { kind, operand, .. } => {
+        Expr::TypeCheck { kind, operand, ty, .. } => {
             use music_ast::expr::TypeCheckKind;
             match kind {
-                TypeCheckKind::Test => emit_type_test(em, fc, operand),
-                TypeCheckKind::Cast => emit_expr_tail(em, fc, operand, is_tail),
+                TypeCheckKind::Test => emit_type_test(em, fc, operand, ty),
+                TypeCheckKind::Cast => emit_type_cast(em, fc, operand, ty, is_tail),
             }
         }
         Expr::Handle {
@@ -360,18 +360,100 @@ fn emit_return(
     Ok(false)
 }
 
+/// Resolve an AST type annotation (`TyIdx`) to a bytecode `type_id`.
+///
+/// First checks well-known types by name. If not found, walks sema defs to
+/// find a matching named type and lowers its sema type. Returns `None` if
+/// the type cannot be resolved (e.g. type variable, unresolved name).
+fn lower_ast_ty_to_type_id(em: &mut Emitter<'_>, ty: TyIdx) -> Option<u32> {
+    let name = match &em.ast.tys[ty] {
+        music_ast::ty::Ty::Named { name, .. } | music_ast::ty::Ty::Var { name, .. } => *name,
+        _ => return None,
+    };
+    let wk = &em.sema.well_known;
+    let name_str = em.interner.resolve(name);
+    // Well-known primitive types — match by name so they work even without sema ty_info.
+    match name_str {
+        "Bool" => return em.tp.lower_well_known_def(wk.bool, wk),
+        "Int" | "Int64" => return em.tp.lower_well_known_def(wk.ints.int, wk),
+        "Int8" => return em.tp.lower_well_known_def(wk.ints.int8, wk),
+        "Int16" => return em.tp.lower_well_known_def(wk.ints.int16, wk),
+        "Int32" => return em.tp.lower_well_known_def(wk.ints.int32, wk),
+        "UInt8" => return em.tp.lower_well_known_def(wk.uints.uint8, wk),
+        "UInt16" => return em.tp.lower_well_known_def(wk.uints.uint16, wk),
+        "UInt32" => return em.tp.lower_well_known_def(wk.uints.uint32, wk),
+        "UInt64" => return em.tp.lower_well_known_def(wk.uints.uint64, wk),
+        "Float32" => return em.tp.lower_well_known_def(wk.floats.float32, wk),
+        "Float" | "Float64" => return em.tp.lower_well_known_def(wk.floats.float64, wk),
+        "Rune" => return em.tp.lower_well_known_def(wk.rune, wk),
+        "String" => return em.tp.lower_well_known_def(wk.string, wk),
+        "Unit" => return em.tp.lower_well_known_def(wk.unit, wk),
+        _ => {}
+    }
+    // User-defined named type: find by name in sema defs.
+    let def = em
+        .sema
+        .defs
+        .iter()
+        .find(|d| d.name == name && matches!(d.kind, DefKind::Type | DefKind::Effect))?;
+    let ty_idx = def.ty_info.ty?;
+    em.tp
+        .lower_sema_type(ty_idx, &em.sema.types, &em.sema.unify, &em.sema.well_known)
+        .ok()
+}
+
 fn emit_type_test(
     em: &mut Emitter<'_>,
     fc: &mut FnCtx,
     operand: ExprIdx,
+    ty: TyIdx,
 ) -> Result<bool, EmitError> {
     let produced = emit_expr(em, fc, operand)?;
-    if produced {
-        fc.fe.emit_pop();
+    if !produced {
+        let cv = ConstValue::Bool(true);
+        let i = em.cp.intern(&cv, em.interner)?;
+        fc.fe.emit_ld_cst(i);
+        return Ok(true);
     }
-    let cv = ConstValue::Bool(true);
-    let i = em.cp.intern(&cv, em.interner)?;
-    fc.fe.emit_ld_cst(i);
+    match lower_ast_ty_to_type_id(em, ty) {
+        Some(type_id) => {
+            fc.fe.emit_type_chk(type_id);
+        }
+        None => {
+            // Type couldn't be resolved — fall back to always-true.
+            fc.fe.emit_pop();
+            let cv = ConstValue::Bool(true);
+            let i = em.cp.intern(&cv, em.interner)?;
+            fc.fe.emit_ld_cst(i);
+        }
+    }
+    Ok(true)
+}
+
+/// Emit `:?>` (type cast): evaluate operand, check type, UNR on mismatch.
+fn emit_type_cast(
+    em: &mut Emitter<'_>,
+    fc: &mut FnCtx,
+    operand: ExprIdx,
+    ty: TyIdx,
+    is_tail: bool,
+) -> Result<bool, EmitError> {
+    let produced = emit_expr_tail(em, fc, operand, is_tail)?;
+    if !produced {
+        return Ok(false);
+    }
+    let Some(type_id) = lower_ast_ty_to_type_id(em, ty) else {
+        // Can't resolve type — leave value on stack, assume caller knows what they're doing.
+        return Ok(true);
+    };
+    // Duplicate so we still have the value after the check.
+    fc.fe.emit_dup();
+    fc.fe.emit_type_chk(type_id);
+    // Jump past UNR if check passed.
+    let ok_label = fc.fresh_label();
+    fc.fe.emit_jmp_t(ok_label);
+    fc.fe.emit_unop(musi_bc::Opcode::UNR);
+    fc.fe.emit_label(ok_label);
     Ok(true)
 }
 
@@ -987,13 +1069,34 @@ fn emit_force_unwrap(
 
 /// Emit a `handle` expression: compile each handler op as a nested function,
 /// push the effect handler, emit the body, then pop the handler.
+/// Resolve the numeric effect ID for a `handle` expression's effect type.
+///
+/// Walks the AST `TyIdx` to find the effect name, then looks up `effect_id_map`.
+/// Falls back to 0 for well-known effects not yet in the pool.
+fn resolve_handle_effect_id(em: &Emitter<'_>, effect_ty: TyIdx) -> u8 {
+    let effect_name = match &em.ast.tys[effect_ty] {
+        music_ast::ty::Ty::Named { name, .. } | music_ast::ty::Ty::Var { name, .. } => *name,
+        _ => return 0,
+    };
+    em.sema
+        .defs
+        .iter()
+        .find(|d| d.kind == music_sema::def::DefKind::Effect && d.name == effect_name)
+        .and_then(|d| em.effect_id_map.get(&d.id).copied())
+        .unwrap_or(0)
+}
+
+/// Emit a `handle` expression: compile each handler op as a nested function,
+/// push the effect handler, emit the body, then pop the handler.
 fn emit_handle(
     em: &mut Emitter<'_>,
     fc: &mut FnCtx,
-    _effect_ty: TyIdx,
+    effect_ty: TyIdx,
     ops: &[HandlerOp],
     body: ExprIdx,
 ) -> Result<bool, EmitError> {
+    let effect_id = resolve_handle_effect_id(em, effect_ty);
+
     // For each handler op, compile as a nested fn that takes op params and evaluates body.
     for op in ops {
         let handler_fn_id = em.alloc_fn_id();
@@ -1043,13 +1146,13 @@ fn emit_handle(
             handlers: handler_fc.fe.handlers,
         };
         em.nested_fns.push(fn_bytecode);
-        fc.fe.emit_eff_psh(0, handler_fn_id)?;
+        fc.fe.emit_eff_psh(u32::from(effect_id), handler_fn_id)?;
     }
 
     let produced = emit_expr(em, fc, body)?;
 
     for _ in ops {
-        fc.fe.emit_eff_pop(0)?;
+        fc.fe.emit_eff_pop(u32::from(effect_id))?;
     }
 
     Ok(produced)
@@ -1073,6 +1176,18 @@ fn emit_do(
             .iter()
             .any(|d| d.id == def_id && d.kind == DefKind::EffectOp);
         if is_effect_op {
+            let op_def = em.sema.defs.iter().find(|d| d.id == def_id);
+            let is_async = op_def
+                .and_then(|d| d.parent)
+                .map_or(false, |parent| parent == em.sema.well_known.effects.async_eff);
+
+            if is_async {
+                let op_name = op_def
+                    .map(|d| em.interner.resolve(d.name).to_owned())
+                    .unwrap_or_default();
+                return emit_async_op(em, fc, &op_name, &args);
+            }
+
             let op_index = resolve_effect_op_index(em, def_id);
             let arg_count = emit_call_args(em, fc, &args)?;
             let ac = i32::try_from(arg_count).map_err(|_| EmitError::OperandOverflow {
@@ -1101,6 +1216,78 @@ fn resolve_effect_op_index(em: &Emitter<'_>, op_def_id: DefId) -> u32 {
         .collect();
     siblings.sort_unstable();
     u32::try_from(siblings.iter().position(|&x| x == op_def_id.0).unwrap_or(0)).unwrap_or(0)
+}
+
+/// Emit the TSK_* opcode for an `Async` effect operation.
+///
+/// Called from `emit_do` when the resolved op's parent effect is the well-known `Async` effect.
+/// Each arm handles argument layout for the corresponding VM instruction.
+fn emit_async_op(
+    em: &mut Emitter<'_>,
+    fc: &mut FnCtx,
+    op_name: &str,
+    args: &[Arg],
+) -> Result<bool, EmitError> {
+    match op_name {
+        "spawn" => {
+            // `spawn(f)` or `spawn(f, arg1, arg2, ...)`:
+            // The first argument is a static function reference whose fn_id becomes the TSK_SPN
+            // operand. Any remaining arguments are the spawned function's call arguments, which
+            // TSK_SPN pops from the caller's stack.
+            let fn_expr = match args.first() {
+                Some(Arg::Pos { expr, .. }) => *expr,
+                _ => {
+                    return Err(EmitError::UnsupportedFeature {
+                        desc: "spawn requires a function argument".into(),
+                    });
+                }
+            };
+            let fn_def_id =
+                em.sema.resolution.expr_defs.get(&fn_expr).copied().ok_or_else(|| {
+                    EmitError::UnsupportedFeature {
+                        desc: "spawn argument is not a resolved name".into(),
+                    }
+                })?;
+            let fn_id = em.fn_map.get(&fn_def_id).copied().ok_or_else(|| {
+                EmitError::UnsupportedFeature {
+                    desc: "spawn argument must be a statically known function".into(),
+                }
+            })?;
+            let extra_args = args.get(1..).unwrap_or(&[]);
+            let extra_count = emit_call_args(em, fc, extra_args)?;
+            let ac = i32::try_from(extra_count).map_err(|_| EmitError::OperandOverflow {
+                desc: "spawn extra arg count".into(),
+            })?;
+            fc.fe.emit_tsk_spn(fn_id, ac);
+            Ok(true)
+        }
+        "await" => {
+            // `await(task)`: push the task handle then await it.
+            let _arg_count = emit_call_args(em, fc, args)?;
+            fc.fe.emit_tsk_awt();
+            Ok(true)
+        }
+        "channel_make" | "make_channel" => {
+            // No arguments; TSK_CMK creates the channel and pushes its handle.
+            fc.fe.emit_tsk_cmk();
+            Ok(true)
+        }
+        "send" => {
+            // `send(chan, value)`: push chan then value, then TSK_CHS.
+            let _arg_count = emit_call_args(em, fc, args)?;
+            fc.fe.emit_tsk_chs();
+            Ok(true)
+        }
+        "recv" => {
+            // `recv(chan)`: push chan then TSK_CHR.
+            let _arg_count = emit_call_args(em, fc, args)?;
+            fc.fe.emit_tsk_chr();
+            Ok(true)
+        }
+        _ => Err(EmitError::UnsupportedFeature {
+            desc: format!("unknown Async effect op `{op_name}`").into(),
+        }),
+    }
 }
 
 /// Emit deferred expressions (in reverse order) for cleanup before function exit.

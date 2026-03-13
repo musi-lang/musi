@@ -13,15 +13,17 @@ use std::mem;
 
 use music_ast::Pat;
 use music_ast::attr::Attr;
+use music_ast::decl::{ClassMember, EffectOp, ForeignDecl};
 use music_ast::expr::{Expr, LetFields, Param};
 use music_ast::{AstArenas, ExprIdx, ParsedModule, PatIdx, Stmt};
 use music_sema::SemaResult;
+use music_sema::Type;
 use music_sema::def::{DefId, DefKind};
 use music_shared::{FileId, Interner, Span, Symbol};
 
 use crate::const_pool::ConstPool;
 use crate::error::EmitError;
-use crate::module::{EffectDef, ForeignFn};
+use crate::module::{EffectDef, EffectOpDef, ForeignFn};
 use crate::type_pool::TypePool;
 
 pub use fn_emitter::{FnEmitter, HandlerEntry};
@@ -62,6 +64,10 @@ pub struct Emitter<'a> {
     pub(crate) foreign_map: HashMap<DefId, u32>,
     pub foreign_fns: Vec<ForeignFn>,
     pub effects: Vec<EffectDef>,
+    /// `DefId` → numeric effect ID (index into `effects`) for user-defined effects.
+    pub(crate) effect_id_map: HashMap<DefId, u8>,
+    /// `DefId` → `op.id` for user-defined effect operations.
+    pub(crate) op_id_map: HashMap<DefId, u32>,
     /// Index into `foreign_fns` for the `str_cat` helper (used by f-string desugar).
     pub(crate) str_cat_ffi_idx: Option<u32>,
     /// Variant tag for `Some` (resolved at init, fallback 0).
@@ -124,6 +130,8 @@ impl<'a> Emitter<'a> {
             foreign_map: HashMap::new(),
             foreign_fns: vec![],
             effects: vec![],
+            effect_id_map: HashMap::new(),
+            op_id_map: HashMap::new(),
             str_cat_ffi_idx: None,
             some_tag: 0,
             ok_tag: 0,
@@ -236,6 +244,15 @@ impl<'a> Emitter<'a> {
             Expr::Binding { fields, .. } => {
                 self.scan_binding(&fields, false);
             }
+            Expr::Effect { name, ops, .. } => {
+                self.scan_effect(name, &ops)?;
+            }
+            Expr::Foreign { abi, decls, .. } => {
+                self.scan_foreign(abi, &decls)?;
+            }
+            Expr::Instance { members, .. } => {
+                self.scan_instance_members(&members);
+            }
             Expr::Lit { .. }
             | Expr::Name { .. }
             | Expr::Paren { .. }
@@ -260,9 +277,6 @@ impl<'a> Emitter<'a> {
             | Expr::Import { .. }
             | Expr::Export { .. }
             | Expr::Class { .. }
-            | Expr::Instance { .. }
-            | Expr::Effect { .. }
-            | Expr::Foreign { .. }
             | Expr::TypeCheck { .. }
             | Expr::Handle { .. }
             | Expr::Error { .. } => {}
@@ -286,6 +300,15 @@ impl<'a> Emitter<'a> {
                 combined.extend_from_slice(&inner_attrs);
                 self.scan_annotated(&combined, inner2)?;
             }
+            Expr::Effect { name, ops, .. } => {
+                self.scan_effect(name, &ops)?;
+            }
+            Expr::Foreign { abi, decls, .. } => {
+                self.scan_foreign(abi, &decls)?;
+            }
+            Expr::Instance { members, .. } => {
+                self.scan_instance_members(&members);
+            }
             Expr::Lit { .. }
             | Expr::Name { .. }
             | Expr::Paren { .. }
@@ -310,14 +333,219 @@ impl<'a> Emitter<'a> {
             | Expr::Import { .. }
             | Expr::Export { .. }
             | Expr::Class { .. }
-            | Expr::Instance { .. }
-            | Expr::Effect { .. }
-            | Expr::Foreign { .. }
             | Expr::TypeCheck { .. }
             | Expr::Handle { .. }
             | Expr::Error { .. } => {}
         }
         Ok(())
+    }
+
+    fn scan_foreign(&mut self, abi: Symbol, decls: &[ForeignDecl]) -> Result<(), EmitError> {
+        let abi_str = self.interner.resolve(abi).to_owned();
+        let any_type_id = self
+            .tp
+            .lower_well_known_def(self.sema.well_known.any, &self.sema.well_known)
+            .ok_or_else(|| EmitError::UnresolvableType {
+                desc: "Any type".into(),
+            })?;
+        let unit_type_id = self
+            .tp
+            .lower_well_known_def(self.sema.well_known.unit, &self.sema.well_known)
+            .ok_or_else(|| EmitError::UnresolvableType {
+                desc: "Unit type".into(),
+            })?;
+
+        for decl in decls {
+            let ForeignDecl::Fn { name, ext_name, span, .. } = decl else {
+                continue;
+            };
+
+            let def_id = self.sema.defs.iter().find(|d| {
+                d.kind == DefKind::ForeignFn && d.name == *name && d.span == *span
+            }).map(|d| d.id);
+
+            let Some(def_id) = def_id else {
+                continue;
+            };
+
+            // Skip if already registered (e.g., a well-known fn).
+            if self.foreign_map.contains_key(&def_id) {
+                continue;
+            }
+
+            let (param_type_ids, ret_type_id) = self.lower_foreign_fn_type(def_id, any_type_id, unit_type_id);
+
+            let ext_sym = ext_name.unwrap_or(*name);
+            let library = if abi_str == "C" {
+                None
+            } else {
+                Some(abi)
+            };
+
+            let idx = u32::try_from(self.foreign_fns.len()).map_err(|_| {
+                EmitError::UnresolvableType {
+                    desc: "foreign fn index overflow".into(),
+                }
+            })?;
+            self.foreign_fns.push(ForeignFn {
+                ext_name: ext_sym,
+                library,
+                param_type_ids,
+                ret_type_id,
+                variadic: false,
+            });
+            let _ = self.foreign_map.insert(def_id, idx);
+        }
+        Ok(())
+    }
+
+    fn lower_foreign_fn_type(
+        &mut self,
+        def_id: DefId,
+        any_type_id: u32,
+        unit_type_id: u32,
+    ) -> (Vec<u32>, u32) {
+        let ty_idx = self
+            .sema
+            .defs
+            .iter()
+            .find(|d| d.id == def_id)
+            .and_then(|d| d.ty_info.ty);
+
+        let Some(ty_idx) = ty_idx else {
+            return (vec![], unit_type_id);
+        };
+
+        let resolved = self.sema.unify.resolve(ty_idx, &self.sema.types);
+        let (params, ret) = match &self.sema.types[resolved] {
+            Type::Fn { params, ret, .. } => (params.clone(), *ret),
+            _ => return (vec![], unit_type_id),
+        };
+
+        let param_type_ids: Vec<u32> = params
+            .iter()
+            .map(|&p| {
+                self.tp
+                    .lower_sema_type(p, &self.sema.types, &self.sema.unify, &self.sema.well_known)
+                    .unwrap_or(any_type_id)
+            })
+            .collect();
+
+        let ret_type_id = self
+            .tp
+            .lower_sema_type(ret, &self.sema.types, &self.sema.unify, &self.sema.well_known)
+            .unwrap_or(unit_type_id);
+
+        (param_type_ids, ret_type_id)
+    }
+
+    fn scan_effect(&mut self, effect_name: Symbol, ops: &[EffectOp]) -> Result<(), EmitError> {
+        let effect_def_id = self
+            .sema
+            .defs
+            .iter()
+            .find(|d| d.kind == DefKind::Effect && d.name == effect_name)
+            .map(|d| d.id);
+
+        let Some(effect_def_id) = effect_def_id else {
+            return Ok(());
+        };
+
+        if self.effect_id_map.contains_key(&effect_def_id) {
+            return Ok(());
+        }
+
+        let raw_effect_id = self.effects.len();
+        let effect_id = u8::try_from(raw_effect_id).map_err(|_| EmitError::OperandOverflow {
+            desc: "too many effects".into(),
+        })?;
+
+        let unit_type_id = self
+            .tp
+            .lower_well_known_def(self.sema.well_known.unit, &self.sema.well_known)
+            .ok_or_else(|| EmitError::UnresolvableType {
+                desc: "Unit type".into(),
+            })?;
+
+        let mut op_defs = Vec::with_capacity(ops.len());
+        for (op_idx, op) in ops.iter().enumerate() {
+            let op_def_id = self
+                .sema
+                .defs
+                .iter()
+                .find(|d| {
+                    d.kind == DefKind::EffectOp
+                        && d.name == op.name
+                        && d.parent == Some(effect_def_id)
+                })
+                .map(|d| d.id);
+
+            let op_id = u32::try_from(op_idx).map_err(|_| EmitError::OperandOverflow {
+                desc: "effect op index overflow".into(),
+            })?;
+
+            let (param_type_ids, ret_type_id) = if let Some(did) = op_def_id {
+                self.resolve_effect_op_types(did, unit_type_id)
+            } else {
+                (vec![], unit_type_id)
+            };
+
+            if let Some(did) = op_def_id {
+                let _ = self.op_id_map.insert(did, op_id);
+            }
+
+            op_defs.push(EffectOpDef {
+                id: op_id,
+                name: op.name,
+                param_type_ids,
+                ret_type_id,
+                fatal: op.fatal,
+            });
+        }
+
+        let effect_id_u32 = u32::from(effect_id);
+        self.effects.push(EffectDef {
+            id: effect_id_u32,
+            name: effect_name,
+            ops: op_defs,
+        });
+        let _ = self.effect_id_map.insert(effect_def_id, effect_id);
+        Ok(())
+    }
+
+    fn resolve_effect_op_types(&mut self, op_def_id: DefId, unit_type_id: u32) -> (Vec<u32>, u32) {
+        let ty_idx = self
+            .sema
+            .defs
+            .iter()
+            .find(|d| d.id == op_def_id)
+            .and_then(|d| d.ty_info.ty);
+
+        let Some(ty_idx) = ty_idx else {
+            return (vec![], unit_type_id);
+        };
+
+        let resolved = self.sema.unify.resolve(ty_idx, &self.sema.types);
+        let (params, ret) = match &self.sema.types[resolved] {
+            Type::Fn { params, ret, .. } => (params.clone(), *ret),
+            _ => return (vec![], unit_type_id),
+        };
+
+        let param_type_ids: Vec<u32> = params
+            .iter()
+            .map(|&p| {
+                self.tp
+                    .lower_sema_type(p, &self.sema.types, &self.sema.unify, &self.sema.well_known)
+                    .unwrap_or(unit_type_id)
+            })
+            .collect();
+
+        let ret_type_id = self
+            .tp
+            .lower_sema_type(ret, &self.sema.types, &self.sema.unify, &self.sema.well_known)
+            .unwrap_or(unit_type_id);
+
+        (param_type_ids, ret_type_id)
     }
 
     fn scan_binding(&mut self, fields: &LetFields, is_entry: bool) {
@@ -350,6 +578,36 @@ impl<'a> Emitter<'a> {
             body: fn_body,
             effect_mask: 0,
         });
+    }
+
+    /// Register instance method bodies as top-level functions so `emit_functions`
+    /// can compile them. Laws are skipped — they are not emitted.
+    fn scan_instance_members(&mut self, members: &[ClassMember]) {
+        for member in members {
+            let ClassMember::Fn { sig, default: Some(body), .. } = member else {
+                continue;
+            };
+            // Find the sema DefId for this instance method by matching name+span.
+            let def_id = self.sema.defs.iter().find(|d| {
+                d.kind == DefKind::Fn && d.name == sig.name && d.span == sig.span
+            }).map(|d| d.id);
+
+            let fn_id = self.alloc_fn_id();
+
+            if let Some(did) = def_id {
+                let _ = self.fn_map.insert(did, fn_id);
+            }
+
+            let fn_name = self.interner.resolve(sig.name).to_owned();
+            self.fn_entries.push(FnEntry {
+                fn_id,
+                def_id,
+                name: fn_name,
+                params: sig.params.clone(),
+                body: *body,
+                effect_mask: 0,
+            });
+        }
     }
 
     fn emit_functions(&mut self) -> Result<Vec<FnBytecode>, EmitError> {

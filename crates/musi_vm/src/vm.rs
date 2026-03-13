@@ -47,6 +47,8 @@ pub struct EffFrame {
 /// A captured one-shot continuation (frames between handler and `EFF_DO` site).
 pub struct Continuation {
     pub frames: Vec<Frame>,
+    /// The effect op id that triggered this continuation (for fatality checks on resume).
+    pub op_id: u32,
 }
 
 /// The result of executing a single instruction.
@@ -275,6 +277,7 @@ impl Vm {
             operand,
             frame,
             &self.module.consts,
+            &self.module.types,
             &mut self.heap,
             &mut self.globals,
         )? {
@@ -289,11 +292,11 @@ impl Vm {
             effects::EffectAction::Abort => {
                 return Err(VmError::EffectAborted);
             }
-            effects::EffectAction::DoEffect { handler_fn_id } => {
+            effects::EffectAction::DoEffect { handler_fn_id, op_id: _ } => {
                 return self.do_call_with_stack_args(handler_fn_id);
             }
-            effects::EffectAction::CrossFrameSearch { effect_id } => {
-                return self.exec_eff_do_cross_frame(effect_id);
+            effects::EffectAction::CrossFrameSearch { effect_id, op_id } => {
+                return self.exec_eff_do_cross_frame(effect_id, op_id);
             }
             effects::EffectAction::Resume => {
                 return self.exec_eff_res();
@@ -439,7 +442,7 @@ impl Vm {
     /// Cross-frame `EFF_DO`: search the entire call stack top-to-bottom for a
     /// handler matching `effect_id`. Captures frames between handler and
     /// current frame as a continuation, then calls the handler function.
-    fn exec_eff_do_cross_frame(&mut self, effect_id: u8) -> Result<StepResult, VmError> {
+    fn exec_eff_do_cross_frame(&mut self, effect_id: u8, op_id: u32) -> Result<StepResult, VmError> {
         // Search call stack from top-1 to bottom for a frame with matching handler.
         let handler_idx = self
             .call_stack
@@ -469,7 +472,7 @@ impl Vm {
 
         // Capture frames above the handler as a continuation.
         let captured: Vec<Frame> = self.call_stack.drain(h_idx + 1..).collect();
-        self.continuations.push(Continuation { frames: captured });
+        self.continuations.push(Continuation { frames: captured, op_id });
 
         // Call the handler function (it will push a new frame onto call_stack).
         self.do_call_with_stack_args(handler_fn_id)
@@ -495,6 +498,17 @@ impl Vm {
         let cont = self.continuations.pop().ok_or_else(|| VmError::Malformed {
             desc: "eff.res with no captured continuation".into(),
         })?;
+
+        // Fatal ops may not resume — resuming one is a hard error.
+        let op_is_fatal = self
+            .module
+            .effects
+            .iter()
+            .flat_map(|eff| eff.ops.iter())
+            .any(|op| op.id == cont.op_id && op.fatal);
+        if op_is_fatal {
+            return Err(VmError::FatalEffectResumed { op_id: cont.op_id });
+        }
 
         // Pop the handler frame.
         let _ = self.call_stack.pop();

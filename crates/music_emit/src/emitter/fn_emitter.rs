@@ -248,6 +248,12 @@ impl FnEmitter {
         Ok(())
     }
 
+    /// Emit `type.chk type_id` — pops value, pushes bool. Net stack: 0.
+    pub fn emit_type_chk(&mut self, type_id: u32) {
+        encode_u32(&mut self.code, Opcode::TYPE_CHK, type_id);
+        // pops 1, pushes 1 → net 0
+    }
+
     pub fn emit_eff_psh(&mut self, effect_id: u32, handler_fn_id: u32) -> Result<(), EmitError> {
         let id = u8::try_from(effect_id).map_err(|_| EmitError::OperandOverflow {
             desc: "effect id exceeds 255".into(),
@@ -277,6 +283,37 @@ impl FnEmitter {
     pub fn emit_eff_res(&mut self) {
         encode_no_operand(&mut self.code, Opcode::EFF_RES_C);
         self.pop_n(1);
+    }
+
+    /// Emit `tsk.spn fn_id` — spawn a task running `fn_id`, popping `arg_count` args from the
+    /// caller's stack and pushing a task handle.
+    pub fn emit_tsk_spn(&mut self, fn_id: u32, arg_count: i32) {
+        encode_u32(&mut self.code, Opcode::TSK_SPN, fn_id);
+        self.pop_n(arg_count);
+        self.push_n(1);
+    }
+
+    /// Emit `tsk.awt` — pop task handle, push its result. Net stack: 0.
+    pub fn emit_tsk_awt(&mut self) {
+        encode_no_operand(&mut self.code, Opcode::TSK_AWT);
+    }
+
+    /// Emit `tsk.cmk` — create a channel, pushing its handle. Net stack: +1.
+    pub fn emit_tsk_cmk(&mut self) {
+        encode_u32(&mut self.code, Opcode::TSK_CMK, 0);
+        self.push_n(1);
+    }
+
+    /// Emit `tsk.chs` — pop [chan, value], push unit. Net stack: -1.
+    pub fn emit_tsk_chs(&mut self) {
+        encode_u32(&mut self.code, Opcode::TSK_CHS, 0);
+        self.pop_n(2);
+        self.push_n(1);
+    }
+
+    /// Emit `tsk.chr` — pop chan, push received value. Net stack: 0.
+    pub fn emit_tsk_chr(&mut self) {
+        encode_u32(&mut self.code, Opcode::TSK_CHR, 0);
     }
 
     /// Emit `cmp.tag` or `cmp.tag.w` — compare object tag inline (pop obj, push bool → net 0).
