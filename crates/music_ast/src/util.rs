@@ -36,6 +36,6 @@ pub fn collect_ty_var_nodes(ty_idx: TyIdx, arenas: &AstArenas, out: &mut Vec<TyP
                 collect_ty_var_nodes(f, arenas, out);
             }
         }
-        _ => {}
+        Ty::Error { .. } => {}
     }
 }

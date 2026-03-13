@@ -24,3 +24,13 @@ pub enum EmitError {
     #[error("missing type info for {desc}")]
     NoTypeInfo { desc: Box<str> },
 }
+
+impl EmitError {
+    pub fn unresolvable(desc: impl Into<Box<str>>) -> Self {
+        Self::UnresolvableType { desc: desc.into() }
+    }
+
+    pub fn overflow(desc: impl Into<Box<str>>) -> Self {
+        Self::OperandOverflow { desc: desc.into() }
+    }
+}

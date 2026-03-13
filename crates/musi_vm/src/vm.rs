@@ -35,6 +35,8 @@ pub struct Frame {
     pub stack: Vec<Value>,
     /// Active effect frames (innermost last).
     pub eff_stack: Vec<EffFrame>,
+    /// If this frame was entered via a closure call, the heap ref to the closure object.
+    pub closure_ref: Option<Value>,
 }
 
 /// An active effect handler frame.
@@ -191,6 +193,7 @@ impl Vm {
             locals,
             stack: Vec::with_capacity(max_stack.max(4)),
             eff_stack: vec![],
+            closure_ref: None,
         });
         Ok(())
     }
@@ -276,8 +279,7 @@ impl Vm {
             op,
             operand,
             frame,
-            &self.module.consts,
-            &self.module.types,
+            &self.module,
             &mut self.heap,
             &mut self.globals,
         )? {
@@ -317,7 +319,10 @@ impl Vm {
         let cf = control::exec(
             op,
             operand,
-            self.call_stack.last_mut().expect("frame exists"),
+            self.call_stack.last_mut().ok_or_else(|| VmError::Malformed {
+                desc: "empty call stack".into(),
+            })?,
+            &self.heap,
         )?;
         self.handle_control(cf)
     }
@@ -326,7 +331,7 @@ impl Vm {
         match cf {
             control::ControlFlow::Continue => Ok(StepResult::Continue),
             control::ControlFlow::Jump { ip } => {
-                let frame = self.call_stack.last_mut().expect("frame exists");
+                let frame = self.current_frame()?;
                 frame.ip = ip;
                 Ok(StepResult::Continue)
             }
@@ -342,6 +347,14 @@ impl Vm {
                 }
             }
             control::ControlFlow::Call { fn_id } => self.do_call_with_stack_args(fn_id),
+            control::ControlFlow::CallClosure { fn_id, closure_ref } => {
+                let result = self.do_call_with_stack_args(fn_id)?;
+                // Set closure_ref on the newly pushed frame.
+                if let Some(frame) = self.call_stack.last_mut() {
+                    frame.closure_ref = Some(closure_ref);
+                }
+                Ok(result)
+            }
             control::ControlFlow::TailCall { fn_id } => self.do_tail_call(fn_id),
             control::ControlFlow::Halt => Err(VmError::Halted),
         }
@@ -376,7 +389,9 @@ impl Vm {
         let args: Vec<Value> = self
             .call_stack
             .last_mut()
-            .expect("caller frame exists")
+            .ok_or_else(|| VmError::Malformed {
+                desc: "empty call stack".into(),
+            })?
             .stack
             .drain(start..)
             .collect();
@@ -392,6 +407,7 @@ impl Vm {
             locals,
             stack: Vec::with_capacity(max_stack.max(4)),
             eff_stack: vec![],
+            closure_ref: None,
         });
         Ok(StepResult::Continue)
     }
@@ -407,7 +423,7 @@ impl Vm {
         let local_count = usize::from(func.local_count);
 
         // Pop args from current frame's stack.
-        let frame = self.call_stack.last_mut().expect("frame exists");
+        let frame = self.current_frame()?;
         let stack_len = frame.stack.len();
         if stack_len < param_count {
             return Err(VmError::Malformed {
@@ -425,6 +441,7 @@ impl Vm {
         frame.ip = 0;
         frame.stack.clear();
         frame.eff_stack.clear();
+        frame.closure_ref = None;
 
         // Resize locals if needed.
         frame.locals.resize(local_count, Value::UNIT);
@@ -467,7 +484,9 @@ impl Vm {
             .iter()
             .rev()
             .find(|f| f.effect_id == effect_id)
-            .expect("handler exists")
+            .ok_or_else(|| VmError::Malformed {
+                desc: "handler not found".into(),
+            })?
             .handler_fn_id;
 
         // Capture frames above the handler as a continuation.
@@ -566,7 +585,7 @@ impl Vm {
         })?;
         let result = host.call_foreign(operand, &args, &mut self.heap)?;
 
-        let frame = self.call_stack.last_mut().expect("frame exists");
+        let frame = self.current_frame()?;
         frame.stack.push(result);
 
         Ok(StepResult::Continue)
@@ -665,12 +684,12 @@ impl Vm {
             locals,
             stack: Vec::with_capacity(max_stack.max(4)),
             eff_stack: vec![],
+            closure_ref: None,
         };
 
-        let sched = self.scheduler.as_mut().expect("scheduler initialized");
-        let task_id = sched.spawn(new_frame);
+        let task_id = self.scheduler_mut()?.spawn(new_frame);
 
-        let frame = self.call_stack.last_mut().expect("frame exists");
+        let frame = self.current_frame()?;
         frame.stack.push(Value::from_task(task_id));
         Ok(StepResult::Continue)
     }
@@ -694,7 +713,7 @@ impl Vm {
         let task = sched.get(task_id).ok_or(VmError::UnknownTask { task_id })?;
 
         if let TaskStatus::Completed(v) = task.status {
-            let frame = self.call_stack.last_mut().expect("frame exists");
+            let frame = self.current_frame()?;
             frame.stack.push(v);
             return Ok(StepResult::Continue);
         }
@@ -709,8 +728,13 @@ impl Vm {
     fn exec_tsk_cmk(&mut self) -> Result<StepResult, VmError> {
         self.ensure_scheduler();
 
-        let channels = self.channels.as_mut().expect("channels initialized");
-        let chan_id = channels.create();
+        let chan_id = self
+            .channels
+            .as_mut()
+            .ok_or_else(|| VmError::Malformed {
+                desc: "channels not initialized".into(),
+            })?
+            .create();
 
         let frame = self
             .call_stack
@@ -751,7 +775,7 @@ impl Vm {
             channels.send(chan_id, value)?;
         }
 
-        let frame = self.call_stack.last_mut().expect("frame exists");
+        let frame = self.current_frame()?;
         frame.stack.push(Value::UNIT);
         Ok(StepResult::Continue)
     }
@@ -774,7 +798,7 @@ impl Vm {
         })?;
 
         if let Some(value) = channels.try_recv(chan_id)? {
-            let frame = self.call_stack.last_mut().expect("frame exists");
+            let frame = self.current_frame()?;
             frame.stack.push(value);
             return Ok(StepResult::Continue);
         }
@@ -790,7 +814,7 @@ impl Vm {
 
     /// Handle current task completing and returning a value.
     fn complete_current_task(&mut self, value: Value) -> Result<StepResult, VmError> {
-        let sched = self.scheduler.as_mut().expect("scheduler initialized");
+        let sched = self.scheduler_mut()?;
         let next_id = sched.complete_current(value);
         let has_live = sched.has_live_tasks();
         let main_result = sched
@@ -813,7 +837,7 @@ impl Vm {
 
     /// Switch to the next ready task, or detect deadlock.
     fn switch_to_next_task(&mut self) -> Result<StepResult, VmError> {
-        let sched = self.scheduler.as_mut().expect("scheduler initialized");
+        let sched = self.scheduler_mut()?;
         let next_id = sched.schedule_next();
         let has_live = sched.has_live_tasks();
 
@@ -825,6 +849,18 @@ impl Vm {
             None if has_live => Err(VmError::Deadlock),
             None => Ok(StepResult::Returned(Value::UNIT)),
         }
+    }
+
+    fn current_frame(&mut self) -> Result<&mut Frame, VmError> {
+        self.call_stack.last_mut().ok_or_else(|| VmError::Malformed {
+            desc: "empty call stack".into(),
+        })
+    }
+
+    fn scheduler_mut(&mut self) -> Result<&mut TaskScheduler, VmError> {
+        self.scheduler.as_mut().ok_or_else(|| VmError::Malformed {
+            desc: "scheduler not initialized".into(),
+        })
     }
 
     /// Run a mark-sweep garbage collection cycle.
@@ -844,11 +880,17 @@ impl Vm {
         for frame in &self.call_stack {
             roots.extend_from_slice(&frame.locals);
             roots.extend_from_slice(&frame.stack);
+            if let Some(cr) = frame.closure_ref {
+                roots.push(cr);
+            }
         }
         for cont in &self.continuations {
             for frame in &cont.frames {
                 roots.extend_from_slice(&frame.locals);
                 roots.extend_from_slice(&frame.stack);
+                if let Some(cr) = frame.closure_ref {
+                    roots.push(cr);
+                }
             }
         }
         roots.extend_from_slice(&self.globals);
@@ -858,11 +900,17 @@ impl Vm {
                 for frame in &task.call_stack {
                     roots.extend_from_slice(&frame.locals);
                     roots.extend_from_slice(&frame.stack);
+                    if let Some(cr) = frame.closure_ref {
+                        roots.push(cr);
+                    }
                 }
                 for cont in &task.continuations {
                     for frame in &cont.frames {
                         roots.extend_from_slice(&frame.locals);
                         roots.extend_from_slice(&frame.stack);
+                        if let Some(cr) = frame.closure_ref {
+                            roots.push(cr);
+                        }
                     }
                 }
                 if let TaskStatus::Completed(v) = task.status {

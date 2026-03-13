@@ -169,6 +169,39 @@ pub enum BinConfig {
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+pub struct DiagnosticOptions {
+    #[serde(default)]
+    pub no_unused_locals: bool,
+    #[serde(default)]
+    pub no_unused_parameters: bool,
+    #[serde(default)]
+    pub no_missing_cases_in_match: bool,
+    #[serde(default)]
+    pub allow_unreachable_code: bool,
+    #[serde(default)]
+    pub allow_unused_labels: bool,
+    #[serde(default)]
+    pub no_implicit_returns: bool,
+    #[serde(default)]
+    pub strict_optional_checks: bool,
+    #[serde(default)]
+    pub exact_optional_property_types: bool,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct EmitOptions {
+    #[serde(default)]
+    pub no_emit: bool,
+    #[serde(default = "true_default")]
+    pub no_emit_on_error: bool,
+    #[serde(default = "true_default")]
+    pub remove_comments: bool,
+}
+
+#[allow(clippy::struct_excessive_bools)]
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct StrictChecks {
     #[serde(default)]
     pub strict: bool,
@@ -181,6 +214,19 @@ pub struct StrictChecks {
 }
 
 #[allow(clippy::struct_excessive_bools)]
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct BuildOptions {
+    #[serde(default)]
+    pub composite: bool,
+    #[serde(default)]
+    pub incremental: bool,
+    #[serde(default = "true_default")]
+    pub force_consistent_casing_in_file_names: bool,
+    #[serde(default = "true_default")]
+    pub skip_lib_check: bool,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct CompilerOptions {
@@ -196,36 +242,12 @@ pub struct CompilerOptions {
     pub base_url: String,
     #[serde(flatten)]
     pub strict_checks: StrictChecks,
-    #[serde(default)]
-    pub strict_optional_checks: bool,
-    #[serde(default)]
-    pub no_missing_cases_in_match: bool,
-    #[serde(default)]
-    pub exact_optional_property_types: bool,
-    #[serde(default)]
-    pub no_unused_locals: bool,
-    #[serde(default)]
-    pub no_unused_parameters: bool,
-    #[serde(default)]
-    pub no_implicit_returns: bool,
-    #[serde(default)]
-    pub allow_unreachable_code: bool,
-    #[serde(default)]
-    pub allow_unused_labels: bool,
-    #[serde(default = "true_default")]
-    pub force_consistent_casing_in_file_names: bool,
-    #[serde(default = "true_default")]
-    pub skip_lib_check: bool,
-    #[serde(default)]
-    pub no_emit: bool,
-    #[serde(default = "true_default")]
-    pub no_emit_on_error: bool,
-    #[serde(default = "true_default")]
-    pub remove_comments: bool,
-    #[serde(default)]
-    pub composite: bool,
-    #[serde(default)]
-    pub incremental: bool,
+    #[serde(flatten)]
+    pub diagnostics: DiagnosticOptions,
+    #[serde(flatten)]
+    pub emit: EmitOptions,
+    #[serde(flatten)]
+    pub build: BuildOptions,
     #[serde(default = "default_build_info_file")]
     pub build_info_file: String,
     #[serde(default)]
@@ -260,21 +282,18 @@ impl Default for CompilerOptions {
             root_dir: default_root_dir(),
             base_url: default_base_url(),
             strict_checks: StrictChecks::default(),
-            strict_optional_checks: false,
-            no_missing_cases_in_match: false,
-            exact_optional_property_types: false,
-            no_unused_locals: false,
-            no_unused_parameters: false,
-            no_implicit_returns: false,
-            allow_unreachable_code: false,
-            allow_unused_labels: false,
-            force_consistent_casing_in_file_names: true,
-            skip_lib_check: true,
-            no_emit: false,
-            no_emit_on_error: true,
-            remove_comments: true,
-            composite: false,
-            incremental: false,
+            diagnostics: DiagnosticOptions::default(),
+            emit: EmitOptions {
+                no_emit: false,
+                no_emit_on_error: true,
+                remove_comments: true,
+            },
+            build: BuildOptions {
+                composite: false,
+                incremental: false,
+                force_consistent_casing_in_file_names: true,
+                skip_lib_check: true,
+            },
             build_info_file: default_build_info_file(),
             paths: HashMap::new(),
         }

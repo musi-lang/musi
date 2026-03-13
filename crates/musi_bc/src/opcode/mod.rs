@@ -147,113 +147,151 @@ impl Opcode {
     pub const JMP_F_W: Self = Self(0xD2);
 
     // §16  Type operations (u32 operand)
-    /// Pop value, push bool: true iff value's runtime type matches the given type_id.
+    /// Pop value, push bool: true iff value's runtime type matches the given `type_id`.
     pub const TYP_CHK: Self = Self(0xD3);
+
+    // §17  Closures
+    /// Allocate a closure object. u32 = `fn_id`. Pops N upvalues (N = fn's `upvalue_count`), pushes REF.
+    pub const MK_CLO: Self = Self(0xD4);
+    /// Load an upvalue from the current closure. u8 = upvalue index.
+    pub const LD_UPV: Self = Self(0x4C);
+
+    /// Human-readable name for this opcode, if known.
+    #[must_use]
+    pub const fn name(self) -> Option<&'static str> {
+        #[allow(clippy::as_conversions)] // u8->usize is lossless
+        OPCODE_NAMES[self.0 as usize]
+    }
 }
+
+const OPCODE_NAMES: [Option<&str>; 256] = {
+    let mut t: [Option<&str>; 256] = [None; 256];
+    // §0 Control / Stack
+    t[0x00] = Some("nop");
+    t[0x01] = Some("hlt");
+    t[0x02] = Some("ret");
+    t[0x03] = Some("ret.u");
+    t[0x04] = Some("unr");
+    t[0x05] = Some("brk");
+    t[0x06] = Some("dup");
+    t[0x07] = Some("pop");
+    t[0x08] = Some("swp");
+    // §1 Structural (no operand)
+    t[0x09] = Some("ld.tag");
+    t[0x0A] = Some("ld.len");
+    t[0x0B] = Some("ld.idx");
+    t[0x0C] = Some("st.idx");
+    t[0x0D] = Some("fre");
+    t[0x0E] = Some("eff.res.c");
+    t[0x0F] = Some("eff.abt");
+    // §2 Integer Arithmetic
+    t[0x10] = Some("i.add");
+    t[0x11] = Some("i.add.un");
+    t[0x12] = Some("i.sub");
+    t[0x13] = Some("i.sub.un");
+    t[0x14] = Some("i.mul");
+    t[0x15] = Some("i.mul.un");
+    t[0x16] = Some("i.div");
+    t[0x17] = Some("i.div.un");
+    t[0x18] = Some("i.rem");
+    t[0x19] = Some("i.rem.un");
+    t[0x1A] = Some("i.neg");
+    t[0x1B] = Some("tsk.awt");
+    // §3 Float Arithmetic
+    t[0x20] = Some("f.add");
+    t[0x21] = Some("f.sub");
+    t[0x22] = Some("f.mul");
+    t[0x23] = Some("f.div");
+    t[0x24] = Some("f.rem");
+    t[0x25] = Some("f.neg");
+    // §4 Bitwise / Logical
+    t[0x26] = Some("b.and");
+    t[0x27] = Some("b.or");
+    t[0x28] = Some("b.xor");
+    t[0x29] = Some("b.not");
+    t[0x2A] = Some("b.shl");
+    t[0x2B] = Some("b.shr");
+    t[0x2C] = Some("b.shr.un");
+    // §5 Comparison
+    t[0x2D] = Some("cmp.eq");
+    t[0x2E] = Some("cmp.ne");
+    t[0x2F] = Some("cmp.lt");
+    t[0x30] = Some("cmp.lt.un");
+    t[0x31] = Some("cmp.le");
+    t[0x32] = Some("cmp.le.un");
+    t[0x33] = Some("cmp.gt");
+    t[0x34] = Some("cmp.gt.un");
+    t[0x35] = Some("cmp.ge");
+    t[0x36] = Some("cmp.ge.un");
+    // §6 Float Comparison
+    t[0x37] = Some("cmp.f.eq");
+    t[0x38] = Some("cmp.f.ne");
+    t[0x39] = Some("cmp.f.lt");
+    t[0x3A] = Some("cmp.f.le");
+    t[0x3B] = Some("cmp.f.gt");
+    t[0x3C] = Some("cmp.f.ge");
+    // §7 Conversion
+    t[0x3D] = Some("cnv.itf");
+    t[0x3E] = Some("cnv.fti");
+    t[0x3F] = Some("cnv.trm");
+    // §8 Locals / Constants / Structures (u8 operand)
+    t[0x40] = Some("ld.loc");
+    t[0x41] = Some("st.loc");
+    t[0x42] = Some("ld.cst");
+    t[0x43] = Some("mk.prd");
+    t[0x44] = Some("ld.fld");
+    t[0x45] = Some("mk.var");
+    t[0x46] = Some("ld.pay");
+    t[0x47] = Some("cmp.tag");
+    t[0x48] = Some("eff.psh");
+    t[0x49] = Some("eff.pop");
+    t[0x4A] = Some("inv.dyn");
+    t[0x4B] = Some("st.fld");
+    t[0x4C] = Some("ld.upv");
+    // §9 Wide locals (u16 operand)
+    t[0x80] = Some("ld.loc.w");
+    t[0x81] = Some("st.loc.w");
+    t[0x82] = Some("ld.cst.w");
+    t[0x83] = Some("mk.var.w");
+    t[0x84] = Some("cmp.tag.w");
+    // §10 Invocation (u32 operand)
+    t[0xC0] = Some("inv");
+    t[0xC1] = Some("inv.eff");
+    t[0xC2] = Some("inv.tal");
+    t[0xC3] = Some("inv.tal.eff");
+    // §11 Globals / Allocation (u32 operand)
+    t[0xC4] = Some("ld.glb");
+    t[0xC5] = Some("st.glb");
+    t[0xC6] = Some("mk.arr");
+    t[0xC7] = Some("alc.ref");
+    t[0xC8] = Some("alc.arn");
+    // §12 Effects (u32 operand)
+    t[0xC9] = Some("eff.do");
+    t[0xCA] = Some("eff.res");
+    // §13 Concurrency (u32 operand)
+    t[0xCB] = Some("tsk.spn");
+    t[0xCC] = Some("tsk.chs");
+    t[0xCD] = Some("tsk.chr");
+    t[0xCE] = Some("tsk.cmk");
+    // §14 FFI (u32 operand)
+    t[0xCF] = Some("inv.ffi");
+    // §15 Wide Jumps (u32 operand)
+    t[0xD0] = Some("jmp.w");
+    t[0xD1] = Some("jmp.t.w");
+    t[0xD2] = Some("jmp.f.w");
+    // §16 Type operations (u32 operand)
+    t[0xD3] = Some("type.chk");
+    // §17 Closures (u32 operand)
+    t[0xD4] = Some("mk.clo");
+    t
+};
 
 impl fmt::Display for Opcode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let name = match *self {
-            Self::NOP => "nop",
-            Self::HLT => "hlt",
-            Self::RET => "ret",
-            Self::RET_U => "ret.u",
-            Self::UNR => "unr",
-            Self::BRK => "brk",
-            Self::DUP => "dup",
-            Self::POP => "pop",
-            Self::SWP => "swp",
-            Self::LD_TAG => "ld.tag",
-            Self::LD_LEN => "ld.len",
-            Self::LD_IDX => "ld.idx",
-            Self::ST_IDX => "st.idx",
-            Self::FRE => "fre",
-            Self::EFF_RES_C => "eff.res.c",
-            Self::EFF_ABT => "eff.abt",
-            Self::I_ADD => "i.add",
-            Self::I_ADD_UN => "i.add.un",
-            Self::I_SUB => "i.sub",
-            Self::I_SUB_UN => "i.sub.un",
-            Self::I_MUL => "i.mul",
-            Self::I_MUL_UN => "i.mul.un",
-            Self::I_DIV => "i.div",
-            Self::I_DIV_UN => "i.div.un",
-            Self::I_REM => "i.rem",
-            Self::I_REM_UN => "i.rem.un",
-            Self::I_NEG => "i.neg",
-            Self::TSK_AWT => "tsk.awt",
-            Self::F_ADD => "f.add",
-            Self::F_SUB => "f.sub",
-            Self::F_MUL => "f.mul",
-            Self::F_DIV => "f.div",
-            Self::F_REM => "f.rem",
-            Self::F_NEG => "f.neg",
-            Self::B_AND => "b.and",
-            Self::B_OR => "b.or",
-            Self::B_XOR => "b.xor",
-            Self::B_NOT => "b.not",
-            Self::B_SHL => "b.shl",
-            Self::B_SHR => "b.shr",
-            Self::B_SHR_UN => "b.shr.un",
-            Self::CMP_EQ => "cmp.eq",
-            Self::CMP_NE => "cmp.ne",
-            Self::CMP_LT => "cmp.lt",
-            Self::CMP_LT_UN => "cmp.lt.un",
-            Self::CMP_LE => "cmp.le",
-            Self::CMP_LE_UN => "cmp.le.un",
-            Self::CMP_GT => "cmp.gt",
-            Self::CMP_GT_UN => "cmp.gt.un",
-            Self::CMP_GE => "cmp.ge",
-            Self::CMP_GE_UN => "cmp.ge.un",
-            Self::CMP_F_EQ => "cmp.f.eq",
-            Self::CMP_F_NE => "cmp.f.ne",
-            Self::CMP_F_LT => "cmp.f.lt",
-            Self::CMP_F_LE => "cmp.f.le",
-            Self::CMP_F_GT => "cmp.f.gt",
-            Self::CMP_F_GE => "cmp.f.ge",
-            Self::CNV_ITF => "cnv.itf",
-            Self::CNV_FTI => "cnv.fti",
-            Self::CNV_TRM => "cnv.trm",
-            Self::LD_LOC => "ld.loc",
-            Self::ST_LOC => "st.loc",
-            Self::LD_CST => "ld.cst",
-            Self::MK_PRD => "mk.prd",
-            Self::LD_FLD => "ld.fld",
-            Self::MK_VAR => "mk.var",
-            Self::LD_PAY => "ld.pay",
-            Self::CMP_TAG => "cmp.tag",
-            Self::EFF_PSH => "eff.psh",
-            Self::EFF_POP => "eff.pop",
-            Self::INV_DYN => "inv.dyn",
-            Self::ST_FLD => "st.fld",
-            Self::LD_LOC_W => "ld.loc.w",
-            Self::ST_LOC_W => "st.loc.w",
-            Self::LD_CST_W => "ld.cst.w",
-            Self::MK_VAR_W => "mk.var.w",
-            Self::CMP_TAG_W => "cmp.tag.w",
-            Self::INV => "inv",
-            Self::INV_EFF => "inv.eff",
-            Self::INV_TAL => "inv.tal",
-            Self::INV_TAL_EFF => "inv.tal.eff",
-            Self::LD_GLB => "ld.glb",
-            Self::ST_GLB => "st.glb",
-            Self::MK_ARR => "mk.arr",
-            Self::ALC_REF => "alc.ref",
-            Self::ALC_ARN => "alc.arn",
-            Self::EFF_DO => "eff.do",
-            Self::EFF_RES => "eff.res",
-            Self::TSK_SPN => "tsk.spn",
-            Self::TSK_CHS => "tsk.chs",
-            Self::TSK_CHR => "tsk.chr",
-            Self::TSK_CMK => "tsk.cmk",
-            Self::INV_FFI => "inv.ffi",
-            Self::JMP_W => "jmp.w",
-            Self::JMP_T_W => "jmp.t.w",
-            Self::JMP_F_W => "jmp.f.w",
-            Self::TYP_CHK => "type.chk",
-            _ => return write!(f, "0x{:02X}", self.0),
-        };
-        f.write_str(name)
+        match self.name() {
+            Some(n) => f.write_str(n),
+            None => write!(f, "0x{:02X}", self.0),
+        }
     }
 }
 

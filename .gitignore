@@ -185,3 +185,4 @@ target
 #.idea/
 .opencode/plan/RUST/musi_lsp/plan.md
 .claude/worktrees/
+.claude/session-handoff.md

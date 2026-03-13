@@ -103,6 +103,7 @@ fn make_msbc(consts: &[ConstEntry], fns: &[FnDef]) -> Vec<u8> {
         let max_stack: u16 = f.max_stack.unwrap_or(16);
         fn_section.extend_from_slice(&max_stack.to_le_bytes());
         fn_section.extend_from_slice(&0u16.to_le_bytes()); // effect_mask
+        fn_section.extend_from_slice(&0u16.to_le_bytes()); // upvalue_count
         let code_len = u32::try_from(f.code.len()).expect("fits u32");
         fn_section.extend_from_slice(&code_len.to_le_bytes());
         fn_section.extend_from_slice(&f.code);
@@ -1213,7 +1214,8 @@ fn make_msbc_with_effects(consts: &[ConstEntry], effects: &[EffectDef], fns: &[F
         fn_section.extend_from_slice(&f.param_count.to_le_bytes());
         let max_stack: u16 = f.max_stack.unwrap_or(16);
         fn_section.extend_from_slice(&max_stack.to_le_bytes());
-        fn_section.extend_from_slice(&0u16.to_le_bytes());
+        fn_section.extend_from_slice(&0u16.to_le_bytes()); // effect_mask
+        fn_section.extend_from_slice(&0u16.to_le_bytes()); // upvalue_count
         let code_len = u32::try_from(f.code.len()).expect("fits u32");
         fn_section.extend_from_slice(&code_len.to_le_bytes());
         fn_section.extend_from_slice(&f.code);

@@ -83,6 +83,7 @@ pub struct LoadedFn {
     pub param_count: u16,
     pub max_stack: u16,
     pub effect_mask: u16,
+    pub upvalue_count: u16,
     pub code: Box<[u8]>,
     pub handlers: Vec<HandlerEntry>,
 }
@@ -399,6 +400,7 @@ fn parse_fn_pool(bytes: &[u8], off: usize) -> Result<Vec<LoadedFn>, VmError> {
         let param_count = read_u16_at(bytes, &mut cur)?;
         let max_stack = read_u16_at(bytes, &mut cur)?;
         let effect_mask = read_u16_at(bytes, &mut cur)?;
+        let upvalue_count = read_u16_at(bytes, &mut cur)?;
         let code_len =
             usize::try_from(read_u32_at(bytes, &mut cur)?).map_err(|_| VmError::Malformed {
                 desc: "code length overflows usize".into(),
@@ -421,6 +423,7 @@ fn parse_fn_pool(bytes: &[u8], off: usize) -> Result<Vec<LoadedFn>, VmError> {
             param_count,
             max_stack,
             effect_mask,
+            upvalue_count,
             code,
             handlers,
         });

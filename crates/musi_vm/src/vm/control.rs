@@ -3,6 +3,7 @@
 use musi_bc::{Opcode, instr_len};
 
 use crate::error::VmError;
+use crate::heap::Heap;
 use crate::value::Value;
 use crate::vm::Frame;
 
@@ -15,6 +16,8 @@ pub enum ControlFlow {
     Jump { ip: usize },
     /// Push a new call frame for the given function.
     Call { fn_id: u32 },
+    /// Push a new call frame for a closure (heap-allocated fn + captured upvalues).
+    CallClosure { fn_id: u32, closure_ref: Value },
     /// Tail-call: reuse current frame, reset `ip = 0`.
     TailCall { fn_id: u32 },
     /// Pop the current frame, return `value` to the caller.
@@ -24,7 +27,7 @@ pub enum ControlFlow {
 }
 
 /// Dispatch §11/§15 control-flow opcodes.
-pub fn exec(op: Opcode, operand: u32, frame: &mut Frame) -> Result<ControlFlow, VmError> {
+pub fn exec(op: Opcode, operand: u32, frame: &mut Frame, heap: &Heap) -> Result<ControlFlow, VmError> {
     let base = frame.ip;
     match op {
         Opcode::HLT => Ok(ControlFlow::Halt),
@@ -42,7 +45,7 @@ pub fn exec(op: Opcode, operand: u32, frame: &mut Frame) -> Result<ControlFlow, 
         Opcode::JMP_F_W => exec_jmp_cond_wide(frame, base, operand, false),
         Opcode::INV | Opcode::INV_EFF => Ok(ControlFlow::Call { fn_id: operand }),
         Opcode::INV_TAL | Opcode::INV_TAL_EFF => Ok(ControlFlow::TailCall { fn_id: operand }),
-        Opcode::INV_DYN => exec_inv_dyn(operand, frame),
+        Opcode::INV_DYN => exec_inv_dyn(operand, frame, heap),
         // Concurrency opcodes (TSK_SPN, TSK_AWT, TSK_CMK, TSK_CHS, TSK_CHR)
         // are dispatched in Vm::step_inner() before reaching this function.
         _ => Err(VmError::Malformed {
@@ -73,7 +76,7 @@ fn exec_jmp_cond_wide(
     }
 }
 
-fn exec_inv_dyn(operand: u32, frame: &mut Frame) -> Result<ControlFlow, VmError> {
+fn exec_inv_dyn(operand: u32, frame: &mut Frame, heap: &Heap) -> Result<ControlFlow, VmError> {
     let arg_count = usize::from(u8::try_from(operand).map_err(|_| VmError::Malformed {
         desc: "inv.dyn operand overflow".into(),
     })?);
@@ -86,12 +89,36 @@ fn exec_inv_dyn(operand: u32, frame: &mut Frame) -> Result<ControlFlow, VmError>
         .collect::<Result<Vec<_>, _>>()?;
     args.reverse();
     let callee = pop(frame)?;
-    let fn_id = callee.as_fn_id()?;
-    for a in args {
-        frame.stack.push(a);
+
+    // Try plain fn value first.
+    if let Ok(fn_id) = callee.as_fn_id() {
+        for a in args {
+            frame.stack.push(a);
+        }
+        return Ok(ControlFlow::Call { fn_id });
     }
-    Ok(ControlFlow::Call { fn_id })
+
+    // Try closure (heap ref with sentinel type_id).
+    if let Ok(ptr) = callee.as_ref() {
+        let obj = heap.get(ptr)?;
+        if obj.type_id == CLOSURE_TYPE_ID {
+            let fn_id = obj.tag.ok_or_else(|| VmError::Malformed {
+                desc: "closure object missing fn_id tag".into(),
+            })?;
+            for a in args {
+                frame.stack.push(a);
+            }
+            return Ok(ControlFlow::CallClosure { fn_id, closure_ref: callee });
+        }
+    }
+
+    Err(VmError::Malformed {
+        desc: "inv.dyn: callee is neither fn nor closure".into(),
+    })
 }
+
+/// Sentinel `type_id` for closure heap objects.
+pub const CLOSURE_TYPE_ID: u32 = 0xFFFF_FFFE;
 
 fn pop(frame: &mut Frame) -> Result<Value, VmError> {
     frame.stack.pop().ok_or_else(|| VmError::Malformed {

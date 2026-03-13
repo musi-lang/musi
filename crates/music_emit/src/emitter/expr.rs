@@ -3,15 +3,18 @@
 use musi_bc::Opcode;
 use music_ast::Pat;
 use music_ast::TyIdx;
+use music_ast::ty::Ty;
 use music_ast::expr::{
-    Arg, ArrayElem, BinOp, BindKind, Expr, FieldKey, HandlerOp, LetFields, Param, RecField,
-    UnaryOp,
+    Arg, ArrayElem, BinOp, BindKind, Expr, FieldKey, HandlerOp, LetFields, MatchArm, Param,
+    PwArm, PwGuard, RecField, TypeCheckKind, UnaryOp,
 };
 use music_ast::lit::Lit;
 use music_sema::DefId;
 use music_sema::def::DefKind;
 use music_sema::types::Type;
 use music_shared::Symbol;
+
+use std::collections::{HashMap, HashSet};
 
 use crate::const_pool::ConstValue;
 use crate::error::EmitError;
@@ -20,6 +23,189 @@ use music_ast::ExprIdx;
 use super::super::emitter::{Emitter, FnBytecode, FnEntry};
 use super::FnCtx;
 use super::desugar;
+
+/// Where a captured variable lives in the parent scope.
+#[derive(Clone, Copy)]
+enum CaptureSource {
+    /// Parent has it as a local at the given slot.
+    Local(u32),
+    /// Parent captured it as an upvalue at the given index.
+    Upvalue(u16),
+}
+
+/// Walk the AST body and collect free variables — names that reference
+/// definitions in an enclosing scope rather than local params/bindings.
+fn collect_free_vars(
+    em: &Emitter<'_>,
+    body: ExprIdx,
+    local_defs: &HashSet<DefId>,
+    parent_locals: &HashMap<DefId, u32>,
+    parent_upvalues: &HashMap<DefId, u16>,
+) -> Vec<(DefId, CaptureSource)> {
+    let mut found = Vec::new();
+    let mut seen = HashSet::new();
+    collect_free_vars_walk(em, body, local_defs, parent_locals, parent_upvalues, &mut found, &mut seen);
+    found
+}
+
+fn cfv_walk_rec_fields(
+    em: &Emitter<'_>,
+    fields: &[RecField],
+    local_defs: &HashSet<DefId>,
+    parent_locals: &HashMap<DefId, u32>,
+    parent_upvalues: &HashMap<DefId, u16>,
+    found: &mut Vec<(DefId, CaptureSource)>,
+    seen: &mut HashSet<DefId>,
+) {
+    for f in fields {
+        match f {
+            RecField::Named { value: Some(v), .. } => {
+                collect_free_vars_walk(em, *v, local_defs, parent_locals, parent_upvalues, found, seen);
+            }
+            RecField::Spread { expr, .. } => {
+                collect_free_vars_walk(em, *expr, local_defs, parent_locals, parent_upvalues, found, seen);
+            }
+            RecField::Named { value: None, .. } => {}
+        }
+    }
+}
+
+fn cfv_walk_piecewise(
+    em: &Emitter<'_>,
+    arms: &[PwArm],
+    local_defs: &HashSet<DefId>,
+    parent_locals: &HashMap<DefId, u32>,
+    parent_upvalues: &HashMap<DefId, u16>,
+    found: &mut Vec<(DefId, CaptureSource)>,
+    seen: &mut HashSet<DefId>,
+) {
+    for arm in arms {
+        if let PwGuard::When { expr, .. } = arm.guard {
+            collect_free_vars_walk(em, expr, local_defs, parent_locals, parent_upvalues, found, seen);
+        }
+        collect_free_vars_walk(em, arm.result, local_defs, parent_locals, parent_upvalues, found, seen);
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn cfv_walk_match(
+    em: &Emitter<'_>,
+    scrutinee: ExprIdx,
+    arms: &[MatchArm],
+    local_defs: &HashSet<DefId>,
+    parent_locals: &HashMap<DefId, u32>,
+    parent_upvalues: &HashMap<DefId, u16>,
+    found: &mut Vec<(DefId, CaptureSource)>,
+    seen: &mut HashSet<DefId>,
+) {
+    collect_free_vars_walk(em, scrutinee, local_defs, parent_locals, parent_upvalues, found, seen);
+    for arm in arms {
+        if let Some(g) = arm.guard {
+            collect_free_vars_walk(em, g, local_defs, parent_locals, parent_upvalues, found, seen);
+        }
+        collect_free_vars_walk(em, arm.result, local_defs, parent_locals, parent_upvalues, found, seen);
+    }
+}
+
+fn collect_free_vars_walk(
+    em: &Emitter<'_>,
+    expr_idx: ExprIdx,
+    local_defs: &HashSet<DefId>,
+    parent_locals: &HashMap<DefId, u32>,
+    parent_upvalues: &HashMap<DefId, u16>,
+    found: &mut Vec<(DefId, CaptureSource)>,
+    seen: &mut HashSet<DefId>,
+) {
+    macro_rules! recurse {
+        ($e:expr) => {
+            collect_free_vars_walk(em, $e, local_defs, parent_locals, parent_upvalues, found, seen)
+        };
+    }
+    match &em.ast.exprs[expr_idx] {
+        Expr::Name { .. } => {
+            let Some(&def_id) = em.sema.resolution.expr_defs.get(&expr_idx) else { return };
+            if local_defs.contains(&def_id)
+                || em.fn_map.contains_key(&def_id)
+                || em.foreign_map.contains_key(&def_id)
+                || seen.contains(&def_id)
+            {
+                return;
+            }
+            if let Some(&slot) = parent_locals.get(&def_id) {
+                let _ = seen.insert(def_id);
+                found.push((def_id, CaptureSource::Local(slot)));
+            } else if let Some(&idx) = parent_upvalues.get(&def_id) {
+                let _ = seen.insert(def_id);
+                found.push((def_id, CaptureSource::Upvalue(idx)));
+            }
+        }
+        Expr::Lit { .. }
+        | Expr::Error { .. }
+        | Expr::Import { .. }
+        | Expr::Export { .. }
+        | Expr::Choice { .. }
+        | Expr::RecordDef { .. }
+        | Expr::Class { .. }
+        | Expr::Effect { .. }
+        | Expr::Foreign { .. }
+        | Expr::Instance { .. }
+        | Expr::Return { value: None, .. } => {}
+        Expr::Paren { inner, .. }
+        | Expr::Annotated { inner, .. }
+        | Expr::Return { value: Some(inner), .. }
+        | Expr::Field { object: inner, .. }
+        | Expr::UnaryOp { operand: inner, .. }
+        | Expr::Fn { body: inner, .. }
+        | Expr::TypeCheck { operand: inner, .. } => recurse!(*inner),
+        Expr::BinOp { left, right, .. } | Expr::Index { object: left, index: right, .. } => {
+            recurse!(*left);
+            recurse!(*right);
+        }
+        Expr::Block { stmts, tail, .. } => {
+            for &s in stmts { recurse!(s); }
+            if let Some(t) = *tail { recurse!(t); }
+        }
+        Expr::Let { fields, body, .. } => {
+            if let Some(v) = fields.value { recurse!(v); }
+            if let Some(b) = *body { recurse!(b); }
+        }
+        Expr::Binding { fields, .. } => {
+            if let Some(v) = fields.value { recurse!(v); }
+        }
+        Expr::Call { callee, args, .. } => {
+            recurse!(*callee);
+            for arg in args {
+                let e = match arg { Arg::Pos { expr, .. } | Arg::Spread { expr, .. } => *expr };
+                recurse!(e);
+            }
+        }
+        Expr::Tuple { elems, .. } => { for &e in elems { recurse!(e); } }
+        Expr::Variant { args, .. } => { for &a in args { recurse!(a); } }
+        Expr::Array { elems, .. } => {
+            for e in elems {
+                let idx = match e { ArrayElem::Elem { expr, .. } | ArrayElem::Spread { expr, .. } => *expr };
+                recurse!(idx);
+            }
+        }
+        Expr::Record { fields, .. } => {
+            cfv_walk_rec_fields(em, fields, local_defs, parent_locals, parent_upvalues, found, seen);
+        }
+        Expr::Update { base, fields, .. } => {
+            recurse!(*base);
+            cfv_walk_rec_fields(em, fields, local_defs, parent_locals, parent_upvalues, found, seen);
+        }
+        Expr::Piecewise { arms, .. } => {
+            cfv_walk_piecewise(em, arms, local_defs, parent_locals, parent_upvalues, found, seen);
+        }
+        Expr::Match { scrutinee, arms, .. } => {
+            cfv_walk_match(em, *scrutinee, arms, local_defs, parent_locals, parent_upvalues, found, seen);
+        }
+        Expr::Handle { body, ops, .. } => {
+            recurse!(*body);
+            for op in ops { recurse!(op.body); }
+        }
+    }
+}
 
 /// Type family used to select the right arithmetic/comparison opcodes.
 #[derive(Clone, Copy)]
@@ -42,6 +228,20 @@ pub fn emit_expr(
     emit_expr_tail(em, fc, expr_idx, false)
 }
 
+fn emit_type_check(
+    em: &mut Emitter<'_>,
+    fc: &mut FnCtx,
+    kind: TypeCheckKind,
+    operand: ExprIdx,
+    ty: TyIdx,
+    is_tail: bool,
+) -> Result<bool, EmitError> {
+    match kind {
+        TypeCheckKind::Test => emit_type_test(em, fc, operand, ty),
+        TypeCheckKind::Cast => emit_type_cast(em, fc, operand, ty, is_tail),
+    }
+}
+
 /// Emit bytecode for `expr_idx` in explicit tail position.
 pub fn emit_expr_tail(
     em: &mut Emitter<'_>,
@@ -49,48 +249,54 @@ pub fn emit_expr_tail(
     expr_idx: ExprIdx,
     is_tail: bool,
 ) -> Result<bool, EmitError> {
-    let expr = em.ast.exprs[expr_idx].clone();
-    match expr {
-        Expr::Lit { lit, .. } => emit_lit(em, fc, &lit),
-        Expr::Name { name, span } => emit_name(em, fc, expr_idx, name, span),
+    match &em.ast.exprs[expr_idx] {
+        Expr::Lit { lit, .. } => emit_lit(em, fc, lit),
+        Expr::Name { name, span } => {
+            let (name, span) = (*name, *span);
+            emit_name(em, fc, expr_idx, name, span)
+        }
         Expr::Paren { inner, .. } | Expr::Annotated { inner, .. } => {
+            let inner = *inner;
             emit_expr_tail(em, fc, inner, is_tail)
         }
-        Expr::Block { stmts, tail, .. } => emit_block(em, fc, &stmts, tail, is_tail),
-        Expr::Let { fields, body, .. } => emit_let(em, fc, &fields, body, is_tail),
-        Expr::Binding { fields, .. } => emit_binding(em, fc, &fields),
-        Expr::BinOp {
-            op, left, right, ..
-        } => emit_binop_expr(em, fc, expr_idx, op, left, right),
+        Expr::Block { stmts, tail, .. } => {
+            let (stmts, tail) = (stmts.clone(), *tail);
+            emit_block(em, fc, &stmts, tail, is_tail)
+        }
+        Expr::Let { fields, body, .. } => {
+            let (fields, body) = (fields.clone(), *body);
+            emit_let(em, fc, &fields, body, is_tail)
+        }
+        Expr::Binding { fields, .. } => emit_binding(em, fc, &fields.clone()),
+        Expr::BinOp { op, left, right, .. } => {
+            let (op, left, right) = (*op, *left, *right);
+            emit_binop_expr(em, fc, expr_idx, op, left, right)
+        }
         Expr::UnaryOp { op, operand, span } => {
-            if op == UnaryOp::Do {
-                emit_do(em, fc, operand, is_tail)
-            } else {
-                emit_unary(em, fc, op, operand, span)
-            }
+            let (op, operand, span) = (*op, *operand, *span);
+            if op == UnaryOp::Do { emit_do(em, fc, operand, is_tail) } else { emit_unary(em, fc, op, operand, span) }
         }
-        Expr::Call { callee, args, .. } => emit_call(em, fc, callee, &args, is_tail),
-        Expr::Tuple { elems, .. } => emit_tuple(em, fc, &elems),
-        Expr::Record { fields, .. } => emit_record_lit(em, fc, &fields),
-        Expr::Array { elems, .. } => {
-            emit_array(em, fc, &elems)?;
-            Ok(true)
+        Expr::Call { callee, args, .. } => {
+            let (callee, args) = (*callee, args.clone());
+            emit_call(em, fc, callee, &args, is_tail)
         }
-        Expr::Variant { name, args, .. } => emit_variant(em, fc, name, &args),
-        Expr::Field { object, field, .. } => emit_field(em, fc, object, field),
-        Expr::Index { object, index, .. } => emit_index(em, fc, object, index),
-        Expr::Return { value, .. } => emit_return(em, fc, value),
+        Expr::Tuple { elems, .. } => emit_tuple(em, fc, &elems.clone()),
+        Expr::Record { fields, .. } => emit_record_lit(em, fc, &fields.clone()),
+        Expr::Array { elems, .. } => { emit_array(em, fc, &elems.clone())?; Ok(true) }
+        Expr::Variant { name, args, .. } => emit_variant(em, fc, *name, &args.clone()),
+        Expr::Field { object, field, .. } => emit_field(em, fc, *object, *field),
+        Expr::Index { object, index, .. } => emit_index(em, fc, *object, *index),
+        Expr::Return { value, .. } => emit_return(em, fc, *value),
         Expr::Piecewise { arms, .. } => {
-            super::control::emit_piecewise(em, fc, &arms, is_tail)?;
+            super::control::emit_piecewise(em, fc, &arms.clone(), is_tail)?;
             Ok(true)
         }
-        Expr::Match {
-            scrutinee, arms, ..
-        } => {
+        Expr::Match { scrutinee, arms, .. } => {
+            let (scrutinee, arms) = (*scrutinee, arms.clone());
             super::control::emit_match(em, fc, scrutinee, &arms, is_tail)?;
             Ok(true)
         }
-        Expr::Fn { params, body, .. } => emit_fn(em, fc, &params, body),
+        Expr::Fn { params, body, .. } => emit_fn(em, fc, &params.clone(), *body),
         Expr::Import { .. }
         | Expr::Export { .. }
         | Expr::Choice { .. }
@@ -100,22 +306,14 @@ pub fn emit_expr_tail(
         | Expr::Effect { .. }
         | Expr::Foreign { .. }
         | Expr::Error { .. } => Ok(false),
-        Expr::Update {
-            base, fields, ..
-        } => emit_update(em, fc, base, &fields),
+        Expr::Update { base, fields, .. } => emit_update(em, fc, *base, &fields.clone()),
         Expr::TypeCheck { kind, operand, ty, .. } => {
-            use music_ast::expr::TypeCheckKind;
-            match kind {
-                TypeCheckKind::Test => emit_type_test(em, fc, operand, ty),
-                TypeCheckKind::Cast => emit_type_cast(em, fc, operand, ty, is_tail),
-            }
+            emit_type_check(em, fc, *kind, *operand, *ty, is_tail)
         }
-        Expr::Handle {
-            effect_ty,
-            ops,
-            body,
-            ..
-        } => emit_handle(em, fc, effect_ty, &ops, body),
+        Expr::Handle { effect_ty, ops, body, .. } => {
+            let (effect_ty, ops, body) = (*effect_ty, ops.clone(), *body);
+            emit_handle(em, fc, effect_ty, &ops, body)
+        }
     }
 }
 
@@ -161,6 +359,11 @@ fn emit_name(
         if fc.ref_locals.contains(&def_id) {
             fc.fe.emit_ld_fld(0)?;
         }
+        return Ok(true);
+    }
+    if let Some(&upv_idx) = fc.upvalue_map.get(&def_id) {
+        let idx = u8::try_from(upv_idx).map_err(|_| EmitError::overflow("upvalue index exceeds 255"))?;
+        fc.fe.emit_ld_upv(idx);
         return Ok(true);
     }
     Err(EmitError::UnsupportedFeature {
@@ -268,7 +471,11 @@ fn emit_unary(
             Ok(true)
         }
         UnaryOp::Defer => emit_defer(em, fc, operand),
-        UnaryOp::Do => unreachable!("handled before emit_unary is called"),
+        UnaryOp::Do => {
+            // emit_expr_tail routes Do before calling emit_unary; reaching here is a bug.
+            #[allow(clippy::unreachable)]
+            { unreachable!("UnaryOp::Do is handled before emit_unary is called") }
+        }
     }
 }
 
@@ -282,12 +489,8 @@ fn emit_tuple(em: &mut Emitter<'_>, fc: &mut FnCtx, elems: &[ExprIdx]) -> Result
             });
         }
     }
-    let field_count = u32::try_from(n).map_err(|_| EmitError::OperandOverflow {
-        desc: "tuple element count".into(),
-    })?;
-    let stack_pop = i32::try_from(n).map_err(|_| EmitError::OperandOverflow {
-        desc: "tuple element count".into(),
-    })?;
+    let field_count = u32::try_from(n).map_err(|_| EmitError::overflow("tuple element count"))?;
+    let stack_pop = i32::try_from(n).map_err(|_| EmitError::overflow("tuple element count"))?;
     fc.fe.emit_mk_prd(field_count, stack_pop)?;
     Ok(true)
 }
@@ -367,7 +570,7 @@ fn emit_return(
 /// the type cannot be resolved (e.g. type variable, unresolved name).
 fn lower_ast_ty_to_type_id(em: &mut Emitter<'_>, ty: TyIdx) -> Option<u32> {
     let name = match &em.ast.tys[ty] {
-        music_ast::ty::Ty::Named { name, .. } | music_ast::ty::Ty::Var { name, .. } => *name,
+        Ty::Named { name, .. } | Ty::Var { name, .. } => *name,
         _ => return None,
     };
     let wk = &em.sema.well_known;
@@ -415,17 +618,14 @@ fn emit_type_test(
         fc.fe.emit_ld_cst(i);
         return Ok(true);
     }
-    match lower_ast_ty_to_type_id(em, ty) {
-        Some(type_id) => {
-            fc.fe.emit_type_chk(type_id);
-        }
-        None => {
-            // Type couldn't be resolved — fall back to always-true.
-            fc.fe.emit_pop();
-            let cv = ConstValue::Bool(true);
-            let i = em.cp.intern(&cv, em.interner)?;
-            fc.fe.emit_ld_cst(i);
-        }
+    if let Some(type_id) = lower_ast_ty_to_type_id(em, ty) {
+        fc.fe.emit_type_chk(type_id);
+    } else {
+        // Type couldn't be resolved — fall back to always-true.
+        fc.fe.emit_pop();
+        let cv = ConstValue::Bool(true);
+        let i = em.cp.intern(&cv, em.interner)?;
+        fc.fe.emit_ld_cst(i);
     }
     Ok(true)
 }
@@ -530,13 +730,10 @@ fn emit_call(
     is_tail: bool,
 ) -> Result<bool, EmitError> {
     let arg_count = emit_call_args(em, fc, args)?;
-    let callee_expr = em.ast.exprs[callee].clone();
-    if let Expr::Name { .. } = callee_expr {
+    if let Expr::Name { .. } = &em.ast.exprs[callee] {
         if let Some(&def_id) = em.sema.resolution.expr_defs.get(&callee) {
             if let Some(&ffi_idx) = em.foreign_map.get(&def_id) {
-                let ac = i32::try_from(arg_count).map_err(|_| EmitError::UnresolvableType {
-                    desc: "arg count".into(),
-                })?;
+                let ac = i32::try_from(arg_count).map_err(|_| EmitError::overflow("arg count"))?;
                 fc.fe.emit_inv_ffi(ffi_idx, ac);
                 return Ok(true);
             }
@@ -545,17 +742,13 @@ fn emit_call(
                     fc.fe.emit_inv_tail(fn_id, false);
                     return Ok(true);
                 }
-                let ac = i32::try_from(arg_count).map_err(|_| EmitError::UnresolvableType {
-                    desc: "arg count".into(),
-                })?;
+                let ac = i32::try_from(arg_count).map_err(|_| EmitError::overflow("arg count"))?;
                 fc.fe.emit_inv(fn_id, false, ac);
                 return Ok(true);
             }
             if let Some(&slot) = fc.local_map.get(&def_id) {
                 fc.fe.emit_ld_loc(slot);
-                let ac_i = i32::try_from(arg_count).map_err(|_| EmitError::UnresolvableType {
-                    desc: "arg count".into(),
-                })?;
+                let ac_i = i32::try_from(arg_count).map_err(|_| EmitError::overflow("arg count"))?;
                 fc.fe.emit_inv_dyn(ac_i)?;
                 return Ok(true);
             }
@@ -570,9 +763,7 @@ fn emit_call(
                 desc: "callee produced no value".into(),
             });
         }
-        let ac_i = i32::try_from(arg_count).map_err(|_| EmitError::UnresolvableType {
-            desc: "arg count".into(),
-        })?;
+        let ac_i = i32::try_from(arg_count).map_err(|_| EmitError::overflow("arg count"))?;
         fc.fe.emit_inv_dyn(ac_i)?;
         Ok(true)
     }
@@ -605,12 +796,8 @@ fn emit_record_lit(
             });
         }
     }
-    let field_count = u32::try_from(n).map_err(|_| EmitError::OperandOverflow {
-        desc: "record field count".into(),
-    })?;
-    let stack_pop = i32::try_from(n).map_err(|_| EmitError::OperandOverflow {
-        desc: "record field count".into(),
-    })?;
+    let field_count = u32::try_from(n).map_err(|_| EmitError::overflow("record field count"))?;
+    let stack_pop = i32::try_from(n).map_err(|_| EmitError::overflow("record field count"))?;
     fc.fe.emit_mk_prd(field_count, stack_pop)?;
     Ok(true)
 }
@@ -642,9 +829,7 @@ fn emit_fn(
 ) -> Result<bool, EmitError> {
     let nested_fn_id = em.alloc_fn_id();
     let nested_param_count =
-        u16::try_from(params.len()).map_err(|_| EmitError::UnresolvableType {
-            desc: "nested fn param count".into(),
-        })?;
+        u16::try_from(params.len()).map_err(|_| EmitError::overflow("nested fn param count"))?;
     let nested_entry = FnEntry {
         fn_id: nested_fn_id,
         def_id: None,
@@ -655,23 +840,38 @@ fn emit_fn(
     };
 
     let mut nested_fc = FnCtx::new(nested_param_count);
+
+    // Build the set of locally-defined DefIds (params).
+    let mut local_defs = HashSet::new();
     for (i, param) in params.iter().enumerate() {
-        let slot = u32::try_from(i).map_err(|_| EmitError::UnresolvableType {
-            desc: "nested fn param index".into(),
-        })?;
+        let slot = u32::try_from(i).map_err(|_| EmitError::overflow("nested fn param index"))?;
         if let Some(&did) = em.sema.resolution.pat_defs.get(&param.span) {
             let prev = nested_fc.local_map.insert(did, slot);
             debug_assert!(prev.is_none(), "duplicate local slot for def");
+            let _ = local_defs.insert(did);
         } else {
             for def in &em.sema.defs {
                 if def.kind == DefKind::Param && def.name == param.name && def.span == param.span {
                     let prev = nested_fc.local_map.insert(def.id, slot);
                     debug_assert!(prev.is_none(), "duplicate local slot for def");
+                    let _ = local_defs.insert(def.id);
                     break;
                 }
             }
         }
     }
+
+    // Collect free variables from body that reference the parent scope.
+    let captures = collect_free_vars(em, body, &local_defs, &fc.local_map, &fc.upvalue_map);
+    let upvalue_count = u16::try_from(captures.len()).map_err(|_| EmitError::overflow("too many captured variables"))?;
+
+    // Populate the nested function's upvalue_map.
+    for (upv_idx, &(def_id, _)) in captures.iter().enumerate() {
+        let idx = u16::try_from(upv_idx)
+            .map_err(|_| EmitError::overflow("upvalue index in populate loop"))?;
+        let _ = nested_fc.upvalue_map.insert(def_id, idx);
+    }
+
     let had_value = emit_expr_tail(em, &mut nested_fc, body, true)?;
     if had_value {
         if !nested_fc.deferred.is_empty() {
@@ -694,9 +894,7 @@ fn emit_fn(
     } else {
         em.tp
             .lower_well_known_def(em.sema.well_known.unit, &em.sema.well_known)
-            .ok_or_else(|| EmitError::UnresolvableType {
-                desc: "Unit type".into(),
-            })?
+            .ok_or_else(|| EmitError::unresolvable("Unit type"))?
     };
     let fn_bytecode = FnBytecode {
         fn_id: nested_fn_id,
@@ -705,14 +903,30 @@ fn emit_fn(
         param_count: nested_fc.fe.param_count,
         max_stack: nested_fc.fe.max_stack,
         effect_mask: 0,
+        upvalue_count,
         code: nested_fc.fe.code,
         handlers: nested_fc.fe.handlers,
     };
     em.nested_fns.push(fn_bytecode);
 
-    let cv = ConstValue::FnRef(nested_fn_id);
-    let i = em.cp.intern(&cv, em.interner)?;
-    fc.fe.emit_ld_cst(i);
+    if upvalue_count == 0 {
+        // Non-capturing lambda: use existing LD_CST FnRef path.
+        let cv = ConstValue::FnRef(nested_fn_id);
+        let i = em.cp.intern(&cv, em.interner)?;
+        fc.fe.emit_ld_cst(i);
+    } else {
+        // Capturing closure: push each captured value, then MK_CLO.
+        for &(_, source) in &captures {
+            match source {
+                CaptureSource::Local(slot) => fc.fe.emit_ld_loc(slot),
+                CaptureSource::Upvalue(idx) => {
+                    let u8_idx = u8::try_from(idx).map_err(|_| EmitError::overflow("upvalue index exceeds 255"))?;
+                    fc.fe.emit_ld_upv(u8_idx);
+                }
+            }
+        }
+        fc.fe.emit_mk_clo(nested_fn_id, upvalue_count);
+    }
     Ok(true)
 }
 
@@ -756,13 +970,13 @@ pub fn bind_pat(
     fc: &mut FnCtx,
     pat_idx: music_ast::PatIdx,
 ) -> Result<(), EmitError> {
-    let pat = em.ast.pats[pat_idx].clone();
-    match pat {
+    match &em.ast.pats[pat_idx] {
         Pat::Wild { .. } => {
             fc.fe.emit_pop();
             Ok(())
         }
         Pat::Bind { span, .. } => {
+            let span = *span;
             let slot = fc.alloc_local();
             fc.fe.emit_st_loc(slot);
             if let Some(&did) = em.sema.resolution.pat_defs.get(&span) {
@@ -772,16 +986,15 @@ pub fn bind_pat(
             Ok(())
         }
         Pat::Tuple { elems, .. } => {
+            let elems = elems.clone();
             // Store product into a temp slot, then extract each field.
             let tmp = fc.alloc_local();
             fc.fe.emit_st_loc(tmp);
-            for (i, &elem) in elems.iter().enumerate() {
-                let idx = u32::try_from(i).map_err(|_| EmitError::OperandOverflow {
-                    desc: "tuple destructure index".into(),
-                })?;
+            for (i, elem) in elems.iter().enumerate() {
+                let idx = u32::try_from(i).map_err(|_| EmitError::overflow("tuple destructure index"))?;
                 fc.fe.emit_ld_loc(tmp);
                 fc.fe.emit_ld_fld(idx)?;
-                bind_pat(em, fc, elem)?;
+                bind_pat(em, fc, *elem)?;
             }
             Ok(())
         }
@@ -801,9 +1014,9 @@ fn bind_pat_ref(
     fc: &mut FnCtx,
     pat_idx: music_ast::PatIdx,
 ) -> Result<(), EmitError> {
-    let pat = em.ast.pats[pat_idx].clone();
-    match pat {
+    match &em.ast.pats[pat_idx] {
         Pat::Bind { span, .. } => {
+            let span = *span;
             let wk = &em.sema.well_known;
             let type_id = em.tp.lower_well_known_def(wk.any, wk).unwrap_or(0);
             fc.fe.emit_alc_ref(type_id);
@@ -845,9 +1058,7 @@ fn emit_call_args(em: &mut Emitter<'_>, fc: &mut FnCtx, args: &[Arg]) -> Result<
 }
 
 fn emit_array(em: &mut Emitter<'_>, fc: &mut FnCtx, elems: &[ArrayElem]) -> Result<(), EmitError> {
-    let count = u32::try_from(elems.len()).map_err(|_| EmitError::OperandOverflow {
-        desc: "array element count".into(),
-    })?;
+    let count = u32::try_from(elems.len()).map_err(|_| EmitError::overflow("array element count"))?;
     fc.fe.emit_mk_arr(count);
 
     for (i, &elem) in elems.iter().enumerate() {
@@ -859,9 +1070,7 @@ fn emit_array(em: &mut Emitter<'_>, fc: &mut FnCtx, elems: &[ArrayElem]) -> Resu
                 });
             }
         };
-        let idx_u32 = u32::try_from(i).map_err(|_| EmitError::OperandOverflow {
-            desc: "array index".into(),
-        })?;
+        let idx_u32 = u32::try_from(i).map_err(|_| EmitError::overflow("array index"))?;
         // dup array ref, push index, push value, ST_IDX
         fc.fe.emit_dup();
         let idx_cv = ConstValue::Int(i64::from(idx_u32));
@@ -906,9 +1115,7 @@ fn resolve_variant_tag(em: &Emitter<'_>, name: Symbol) -> Result<u32, EmitError>
                 .ok_or_else(|| EmitError::FieldNotFound {
                     desc: format!("variant `{name_str}` not found among its siblings").into(),
                 })?;
-            return u32::try_from(pos).map_err(|_| EmitError::OperandOverflow {
-                desc: format!("variant tag index for `{name_str}`").into(),
-            });
+            return u32::try_from(pos).map_err(|_| EmitError::overflow(format!("variant tag index for `{name_str}`")));
         }
     }
     Err(EmitError::FieldNotFound {
@@ -932,10 +1139,7 @@ fn resolve_field_name(
         Type::Record { fields, .. } => {
             for (i, f) in fields.iter().enumerate() {
                 if f.name == name {
-                    return u32::try_from(i).map_err(|_| EmitError::OperandOverflow {
-                        desc: format!("record field index for `{}`", em.interner.resolve(name))
-                            .into(),
-                    });
+                    return u32::try_from(i).map_err(|_| EmitError::overflow(format!("record field index for `{}`", em.interner.resolve(name))));
                 }
             }
             Err(EmitError::FieldNotFound {
@@ -950,9 +1154,7 @@ fn resolve_field_name(
                     desc: format!("tuple index `{name_str}`").into(),
                 })?;
             let _ = elems;
-            u32::try_from(n).map_err(|_| EmitError::OperandOverflow {
-                desc: format!("tuple field index `{name_str}`").into(),
-            })
+            u32::try_from(n).map_err(|_| EmitError::overflow(format!("tuple field index `{name_str}`")))
         }
         _ => Err(EmitError::FieldNotFound {
             desc: format!("field `{}` on non-record type", em.interner.resolve(name)).into(),
@@ -1075,13 +1277,13 @@ fn emit_force_unwrap(
 /// Falls back to 0 for well-known effects not yet in the pool.
 fn resolve_handle_effect_id(em: &Emitter<'_>, effect_ty: TyIdx) -> u8 {
     let effect_name = match &em.ast.tys[effect_ty] {
-        music_ast::ty::Ty::Named { name, .. } | music_ast::ty::Ty::Var { name, .. } => *name,
+        Ty::Named { name, .. } | Ty::Var { name, .. } => *name,
         _ => return 0,
     };
     em.sema
         .defs
         .iter()
-        .find(|d| d.kind == music_sema::def::DefKind::Effect && d.name == effect_name)
+        .find(|d| d.kind == DefKind::Effect && d.name == effect_name)
         .and_then(|d| em.effect_id_map.get(&d.id).copied())
         .unwrap_or(0)
 }
@@ -1101,14 +1303,10 @@ fn emit_handle(
     for op in ops {
         let handler_fn_id = em.alloc_fn_id();
         let param_count =
-            u16::try_from(op.params.len()).map_err(|_| EmitError::UnresolvableType {
-                desc: "handler op param count".into(),
-            })?;
+            u16::try_from(op.params.len()).map_err(|_| EmitError::overflow("handler op param count"))?;
         let mut handler_fc = FnCtx::new(param_count);
         for (i, param) in op.params.iter().enumerate() {
-            let slot = u32::try_from(i).map_err(|_| EmitError::UnresolvableType {
-                desc: "handler param index".into(),
-            })?;
+            let slot = u32::try_from(i).map_err(|_| EmitError::overflow("handler param index"))?;
             if let Some(&did) = em.sema.resolution.pat_defs.get(&param.span) {
                 let prev = handler_fc.local_map.insert(did, slot);
                 debug_assert!(prev.is_none(), "duplicate local slot for def");
@@ -1131,9 +1329,7 @@ fn emit_handle(
         } else {
             em.tp
                 .lower_well_known_def(em.sema.well_known.unit, &em.sema.well_known)
-                .ok_or_else(|| EmitError::UnresolvableType {
-                    desc: "Unit type".into(),
-                })?
+                .ok_or_else(|| EmitError::unresolvable("Unit type"))?
         };
         let fn_bytecode = FnBytecode {
             fn_id: handler_fn_id,
@@ -1142,6 +1338,7 @@ fn emit_handle(
             param_count: handler_fc.fe.param_count,
             max_stack: handler_fc.fe.max_stack,
             effect_mask: 0,
+            upvalue_count: 0,
             code: handler_fc.fe.code,
             handlers: handler_fc.fe.handlers,
         };
@@ -1166,35 +1363,33 @@ fn emit_do(
     body: ExprIdx,
     is_tail: bool,
 ) -> Result<bool, EmitError> {
-    let body_expr = em.ast.exprs[body].clone();
-    if let Expr::Call { callee, args, .. } = body_expr
-        && let Some(&def_id) = em.sema.resolution.expr_defs.get(&callee)
-    {
-        let is_effect_op = em
-            .sema
-            .defs
-            .iter()
-            .any(|d| d.id == def_id && d.kind == DefKind::EffectOp);
-        if is_effect_op {
-            let op_def = em.sema.defs.iter().find(|d| d.id == def_id);
-            let is_async = op_def
-                .and_then(|d| d.parent)
-                .map_or(false, |parent| parent == em.sema.well_known.effects.async_eff);
+    if let Expr::Call { callee, args, .. } = &em.ast.exprs[body] {
+        let callee = *callee;
+        let args: Vec<_> = args.clone();
+        if let Some(&def_id) = em.sema.resolution.expr_defs.get(&callee) {
+            let is_effect_op = em
+                .sema
+                .defs
+                .iter()
+                .any(|d| d.id == def_id && d.kind == DefKind::EffectOp);
+            if is_effect_op {
+                let op_def = em.sema.defs.iter().find(|d| d.id == def_id);
+                let is_async = op_def.and_then(|d| d.parent)
+                    == Some(em.sema.well_known.effects.async_eff);
 
-            if is_async {
-                let op_name = op_def
-                    .map(|d| em.interner.resolve(d.name).to_owned())
-                    .unwrap_or_default();
-                return emit_async_op(em, fc, &op_name, &args);
+                if is_async {
+                    let op_name = op_def
+                        .map(|d| em.interner.resolve(d.name).to_owned())
+                        .unwrap_or_default();
+                    return emit_async_op(em, fc, &op_name, &args);
+                }
+
+                let op_index = resolve_effect_op_index(em, def_id);
+                let arg_count = emit_call_args(em, fc, &args)?;
+                let ac = i32::try_from(arg_count).map_err(|_| EmitError::overflow("effect op arg count"))?;
+                fc.fe.emit_eff_do(op_index, ac);
+                return Ok(true);
             }
-
-            let op_index = resolve_effect_op_index(em, def_id);
-            let arg_count = emit_call_args(em, fc, &args)?;
-            let ac = i32::try_from(arg_count).map_err(|_| EmitError::OperandOverflow {
-                desc: "effect op arg count".into(),
-            })?;
-            fc.fe.emit_eff_do(op_index, ac);
-            return Ok(true);
         }
     }
     emit_expr_tail(em, fc, body, is_tail)
@@ -1255,9 +1450,7 @@ fn emit_async_op(
             })?;
             let extra_args = args.get(1..).unwrap_or(&[]);
             let extra_count = emit_call_args(em, fc, extra_args)?;
-            let ac = i32::try_from(extra_count).map_err(|_| EmitError::OperandOverflow {
-                desc: "spawn extra arg count".into(),
-            })?;
+            let ac = i32::try_from(extra_count).map_err(|_| EmitError::overflow("spawn extra arg count"))?;
             fc.fe.emit_tsk_spn(fn_id, ac);
             Ok(true)
         }
@@ -1295,6 +1488,8 @@ pub fn emit_deferred_cleanup(
     em: &mut Emitter<'_>,
     fc: &mut FnCtx,
 ) -> Result<(), EmitError> {
+    // Snapshot needed: emit_expr may push to fc.deferred (via nested defer), so we can't
+    // iterate the vec while fc is mutably borrowed inside the loop.
     let deferred = fc.deferred.clone();
     for &def_expr in deferred.iter().rev() {
         let produced = emit_expr(em, fc, def_expr)?;
@@ -1307,6 +1502,7 @@ pub fn emit_deferred_cleanup(
 
 /// Emit `defer operand`: record the operand expression for deferred execution
 /// at function exit. Produces no stack value.
+#[allow(clippy::unnecessary_wraps)]
 fn emit_defer(
     _em: &mut Emitter<'_>,
     fc: &mut FnCtx,
@@ -1341,6 +1537,7 @@ fn emit_update(
         });
     };
     let resolved = em.sema.unify.resolve(ty_idx, &em.sema.types);
+    // Clone needed: the borrow of em.sema.types must end before emit_expr borrows em mutably.
     let type_fields = match &em.sema.types[resolved] {
         Type::Record { fields, .. } => fields.clone(),
         _ => {
@@ -1355,15 +1552,10 @@ fn emit_update(
     for (i, type_field) in type_fields.iter().enumerate() {
         // Check if this field is being updated.
         let update_val = fields.iter().find_map(|f| {
-            if let RecField::Named {
-                name,
-                value: Some(val_idx),
-                ..
-            } = f
+            if let RecField::Named { name, value: Some(val_idx), .. } = f
+                && *name == type_field.name
             {
-                if *name == type_field.name {
-                    return Some(*val_idx);
-                }
+                return Some(*val_idx);
             }
             None
         });
@@ -1376,20 +1568,14 @@ fn emit_update(
                 });
             }
         } else {
-            let idx = u32::try_from(i).map_err(|_| EmitError::OperandOverflow {
-                desc: "record field index".into(),
-            })?;
+            let idx = u32::try_from(i).map_err(|_| EmitError::overflow("record field index"))?;
             fc.fe.emit_ld_loc(base_slot);
             fc.fe.emit_ld_fld(idx)?;
         }
     }
 
-    let field_count = u32::try_from(n).map_err(|_| EmitError::OperandOverflow {
-        desc: "record field count".into(),
-    })?;
-    let stack_pop = i32::try_from(n).map_err(|_| EmitError::OperandOverflow {
-        desc: "record field count".into(),
-    })?;
+    let field_count = u32::try_from(n).map_err(|_| EmitError::overflow("record field count"))?;
+    let stack_pop = i32::try_from(n).map_err(|_| EmitError::overflow("record field count"))?;
     fc.fe.emit_mk_prd(field_count, stack_pop)?;
     Ok(true)
 }

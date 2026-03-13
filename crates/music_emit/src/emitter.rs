@@ -36,6 +36,7 @@ pub struct FnBytecode {
     pub param_count: u16,
     pub max_stack: u16,
     pub effect_mask: u16,
+    pub upvalue_count: u16,
     pub code: Vec<u8>,
     pub handlers: Vec<HandlerEntry>,
 }
@@ -86,6 +87,8 @@ pub struct FnCtx {
     pub fe: FnEmitter,
     pub local_map: HashMap<DefId, u32>,
     pub ref_locals: HashSet<DefId>,
+    /// Maps captured `DefId`s to upvalue indices within the closure object.
+    pub upvalue_map: HashMap<DefId, u16>,
     pub deferred: Vec<ExprIdx>,
     next_label: u32,
 }
@@ -96,6 +99,7 @@ impl FnCtx {
             fe: FnEmitter::new(param_count, param_count),
             local_map: HashMap::new(),
             ref_locals: HashSet::new(),
+            upvalue_map: HashMap::new(),
             deferred: Vec::new(),
             next_label: 0,
         }
@@ -166,19 +170,13 @@ impl<'a> Emitter<'a> {
         let wk = &self.sema.well_known;
 
         let str_type_id = self.tp.lower_well_known_def(wk.string, wk).ok_or_else(|| {
-            EmitError::UnresolvableType {
-                desc: "String type".into(),
-            }
+            EmitError::unresolvable("String type")
         })?;
         let unit_type_id = self.tp.lower_well_known_def(wk.unit, wk).ok_or_else(|| {
-            EmitError::UnresolvableType {
-                desc: "Unit type".into(),
-            }
+            EmitError::unresolvable("Unit type")
         })?;
         let any_type_id = self.tp.lower_well_known_def(wk.any, wk).ok_or_else(|| {
-            EmitError::UnresolvableType {
-                desc: "Any type".into(),
-            }
+            EmitError::unresolvable("Any type")
         })?;
 
         // writeln: (String) ~> Unit with { IO }
@@ -345,15 +343,11 @@ impl<'a> Emitter<'a> {
         let any_type_id = self
             .tp
             .lower_well_known_def(self.sema.well_known.any, &self.sema.well_known)
-            .ok_or_else(|| EmitError::UnresolvableType {
-                desc: "Any type".into(),
-            })?;
+            .ok_or_else(|| EmitError::unresolvable("Any type"))?;
         let unit_type_id = self
             .tp
             .lower_well_known_def(self.sema.well_known.unit, &self.sema.well_known)
-            .ok_or_else(|| EmitError::UnresolvableType {
-                desc: "Unit type".into(),
-            })?;
+            .ok_or_else(|| EmitError::unresolvable("Unit type"))?;
 
         for decl in decls {
             let ForeignDecl::Fn { name, ext_name, span, .. } = decl else {
@@ -383,9 +377,7 @@ impl<'a> Emitter<'a> {
             };
 
             let idx = u32::try_from(self.foreign_fns.len()).map_err(|_| {
-                EmitError::UnresolvableType {
-                    desc: "foreign fn index overflow".into(),
-                }
+                EmitError::overflow("foreign fn index overflow")
             })?;
             self.foreign_fns.push(ForeignFn {
                 ext_name: ext_sym,
@@ -456,16 +448,12 @@ impl<'a> Emitter<'a> {
         }
 
         let raw_effect_id = self.effects.len();
-        let effect_id = u8::try_from(raw_effect_id).map_err(|_| EmitError::OperandOverflow {
-            desc: "too many effects".into(),
-        })?;
+        let effect_id = u8::try_from(raw_effect_id).map_err(|_| EmitError::overflow("too many effects"))?;
 
         let unit_type_id = self
             .tp
             .lower_well_known_def(self.sema.well_known.unit, &self.sema.well_known)
-            .ok_or_else(|| EmitError::UnresolvableType {
-                desc: "Unit type".into(),
-            })?;
+            .ok_or_else(|| EmitError::unresolvable("Unit type"))?;
 
         let mut op_defs = Vec::with_capacity(ops.len());
         for (op_idx, op) in ops.iter().enumerate() {
@@ -480,15 +468,10 @@ impl<'a> Emitter<'a> {
                 })
                 .map(|d| d.id);
 
-            let op_id = u32::try_from(op_idx).map_err(|_| EmitError::OperandOverflow {
-                desc: "effect op index overflow".into(),
-            })?;
+            let op_id = u32::try_from(op_idx).map_err(|_| EmitError::overflow("effect op index overflow"))?;
 
-            let (param_type_ids, ret_type_id) = if let Some(did) = op_def_id {
-                self.resolve_effect_op_types(did, unit_type_id)
-            } else {
-                (vec![], unit_type_id)
-            };
+            let (param_type_ids, ret_type_id) = op_def_id
+                .map_or_else(|| (vec![], unit_type_id), |did| self.resolve_effect_op_types(did, unit_type_id));
 
             if let Some(did) = op_def_id {
                 let _ = self.op_id_map.insert(did, op_id);
@@ -637,23 +620,17 @@ impl<'a> Emitter<'a> {
         }
         self.tp
             .lower_well_known_def(self.sema.well_known.unit, &self.sema.well_known)
-            .ok_or_else(|| EmitError::UnresolvableType {
-                desc: "Unit type".into(),
-            })
+            .ok_or_else(|| EmitError::unresolvable("Unit type"))
     }
 
     fn emit_one_function(&mut self, entry: &FnEntry) -> Result<FnBytecode, EmitError> {
         let param_count =
-            u16::try_from(entry.params.len()).map_err(|_| EmitError::UnresolvableType {
-                desc: "too many params".into(),
-            })?;
+            u16::try_from(entry.params.len()).map_err(|_| EmitError::overflow("too many params"))?;
 
         let mut fc = FnCtx::new(param_count);
 
         for (i, param) in entry.params.iter().enumerate() {
-            let slot = u32::try_from(i).map_err(|_| EmitError::UnresolvableType {
-                desc: "param index overflow".into(),
-            })?;
+            let slot = u32::try_from(i).map_err(|_| EmitError::overflow("param index overflow"))?;
             if let Some(&did) = self.sema.resolution.pat_defs.get(&param.span) {
                 let _ = fc.local_map.insert(did, slot);
             } else {
@@ -695,6 +672,7 @@ impl<'a> Emitter<'a> {
             param_count: fc.fe.param_count,
             max_stack: fc.fe.max_stack,
             effect_mask: entry.effect_mask,
+            upvalue_count: 0,
             code: fc.fe.code,
             handlers: fc.fe.handlers,
         })
@@ -703,9 +681,7 @@ impl<'a> Emitter<'a> {
 
 /// Serialize the function pool section into `buf`.
 pub fn write_function_pool(buf: &mut Vec<u8>, functions: &[FnBytecode]) -> Result<(), EmitError> {
-    let count = u32::try_from(functions.len()).map_err(|_| EmitError::UnresolvableType {
-        desc: "too many functions".into(),
-    })?;
+    let count = u32::try_from(functions.len()).map_err(|_| EmitError::overflow("too many functions"))?;
     buf.extend_from_slice(&count.to_le_bytes());
     for fn_bc in functions {
         buf.extend_from_slice(&fn_bc.fn_id.to_le_bytes());
@@ -714,13 +690,12 @@ pub fn write_function_pool(buf: &mut Vec<u8>, functions: &[FnBytecode]) -> Resul
         buf.extend_from_slice(&fn_bc.param_count.to_le_bytes());
         buf.extend_from_slice(&fn_bc.max_stack.to_le_bytes());
         buf.extend_from_slice(&fn_bc.effect_mask.to_le_bytes());
+        buf.extend_from_slice(&fn_bc.upvalue_count.to_le_bytes());
         let code_len = u32::try_from(fn_bc.code.len()).map_err(|_| EmitError::FunctionTooLarge)?;
         buf.extend_from_slice(&code_len.to_le_bytes());
         buf.extend_from_slice(&fn_bc.code);
         let handler_count =
-            u16::try_from(fn_bc.handlers.len()).map_err(|_| EmitError::OperandOverflow {
-                desc: "too many handler entries".into(),
-            })?;
+            u16::try_from(fn_bc.handlers.len()).map_err(|_| EmitError::overflow("too many handler entries"))?;
         buf.extend_from_slice(&handler_count.to_le_bytes());
         for h in &fn_bc.handlers {
             buf.push(h.effect_id);
@@ -745,9 +720,7 @@ fn push_foreign_fn(
         ret_type_id,
         variadic: false,
     });
-    u32::try_from(fns.len() - 1).map_err(|_| EmitError::UnresolvableType {
-        desc: "foreign fn index overflow".into(),
-    })
+    u32::try_from(fns.len() - 1).map_err(|_| EmitError::overflow("foreign fn index overflow"))
 }
 
 /// Recursively unwrap Annotated/Paren to find an inner Fn.

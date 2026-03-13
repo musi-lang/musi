@@ -329,6 +329,20 @@ impl FnEmitter {
         Ok(())
     }
 
+    /// Emit `ld.upv idx` — load upvalue from current closure. Net stack: +1.
+    pub fn emit_ld_upv(&mut self, idx: u8) {
+        encode_u8(&mut self.code, Opcode::LD_UPV, idx);
+        self.push_n(1);
+    }
+
+    /// Emit `mk.clo fn_id` — pop N upvalues, allocate closure, push ref.
+    /// `upvalue_count` is the number of values to pop.
+    pub fn emit_mk_clo(&mut self, fn_id: u32, upvalue_count: u16) {
+        encode_u32(&mut self.code, Opcode::MK_CLO, fn_id);
+        self.pop_n(i32::from(upvalue_count));
+        self.push_n(1);
+    }
+
     /// Emit a conditional wide jump-if-false to `label` (5 bytes, i32 offset, pops condition).
     pub fn emit_jmp_f(&mut self, label: u32) {
         let instr_offset = self.code.len();

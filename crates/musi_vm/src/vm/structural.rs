@@ -4,9 +4,10 @@ use musi_bc::Opcode;
 
 use crate::error::VmError;
 use crate::heap::Heap;
-use crate::loader::{LoadedConst, LoadedType};
+use crate::loader::{LoadedConst, LoadedFn, LoadedModule, LoadedType};
 use crate::value::Value;
 use crate::vm::Frame;
+use super::control::CLOSURE_TYPE_ID;
 
 // Type pool tags (§11.3 of spec) — used for runtime type matching.
 const TYPE_TAG_UNIT: u8 = 0x01;
@@ -25,29 +26,34 @@ const TYPE_TAG_RUNE: u8 = 0x0D;
 const TYPE_TAG_FN: u8 = 0x12;
 const TYPE_TAG_ANY: u8 = 0x14;
 
-/// Dispatch §0/§5/§9/§12/§16 structural opcodes.
+/// Dispatch §0/§5/§9/§12/§16/§17 structural opcodes.
 ///
 /// Returns `true` if the opcode was handled, `false` if not in this group.
 pub fn exec(
     op: Opcode,
     operand: u32,
     frame: &mut Frame,
-    consts: &[LoadedConst],
-    types: &[LoadedType],
+    module: &LoadedModule,
     heap: &mut Heap,
     globals: &mut Vec<Value>,
 ) -> Result<bool, VmError> {
     if let Some(result) = exec_stack(op, frame)? {
         return Ok(result);
     }
-    if let Some(result) = exec_locals_consts(op, operand, frame, consts, heap)? {
+    if let Some(result) = exec_locals_consts(op, operand, frame, &module.consts, heap)? {
         return Ok(result);
     }
     if let Some(result) = exec_struct(op, operand, frame, heap)? {
         return Ok(result);
     }
     if op == Opcode::TYP_CHK {
-        return exec_type_chk(operand, frame, types, heap);
+        return exec_type_chk(operand, frame, &module.types, heap);
+    }
+    if op == Opcode::MK_CLO {
+        return exec_mk_clo(operand, frame, &module.functions, heap);
+    }
+    if op == Opcode::LD_UPV {
+        return exec_ld_upv(operand, frame, heap);
     }
     exec_array_alloc_globals(op, operand, frame, heap, globals)
 }
@@ -269,14 +275,13 @@ fn exec_type_chk(
     type_id: u32,
     frame: &mut Frame,
     types: &[LoadedType],
-    heap: &mut Heap,
+    heap: &Heap,
 ) -> Result<bool, VmError> {
     let val = pop(frame)?;
 
     let type_tag = types
         .get(usize::try_from(type_id).unwrap_or(usize::MAX))
-        .map(|t| t.tag)
-        .unwrap_or(TYPE_TAG_ANY);
+        .map_or(TYPE_TAG_ANY, |t| t.tag);
 
     let matches = if type_tag == TYPE_TAG_ANY {
         // Any type matches everything.
@@ -458,6 +463,59 @@ fn set_local(frame: &mut Frame, slot: usize, v: Value) -> Result<(), VmError> {
         .ok_or(VmError::OutOfBounds { index: slot, len })?;
     *dest = v;
     Ok(())
+}
+
+/// `MK_CLO fn_id` — pop N upvalues (N from function's `upvalue_count`),
+/// allocate a closure object on the heap, push its ref.
+fn exec_mk_clo(
+    fn_id: u32,
+    frame: &mut Frame,
+    functions: &[LoadedFn],
+    heap: &mut Heap,
+) -> Result<bool, VmError> {
+    let func = functions.iter().find(|f| f.fn_id == fn_id).ok_or_else(|| VmError::Malformed {
+        desc: format!("mk.clo: unknown fn_id {fn_id}").into_boxed_str(),
+    })?;
+    let n = usize::from(func.upvalue_count);
+    if frame.stack.len() < n {
+        return Err(VmError::Malformed {
+            desc: format!("mk.clo: need {n} upvalues, stack has {}", frame.stack.len()).into_boxed_str(),
+        });
+    }
+    let start = frame.stack.len() - n;
+    let upvalues: Vec<Value> = frame.stack.drain(start..).collect();
+
+    let ptr = heap.alloc(CLOSURE_TYPE_ID, upvalues);
+    // Store fn_id in the tag field.
+    let ptr_usize = usize::try_from(ptr).map_err(|_| VmError::Malformed {
+        desc: "closure heap pointer overflows usize".into(),
+    })?;
+    heap.get_mut(ptr_usize)?.tag = Some(fn_id);
+
+    frame.stack.push(Value::from_ref(ptr));
+    Ok(true)
+}
+
+/// `LD_UPV idx` — load upvalue from the current frame's closure object.
+fn exec_ld_upv(
+    operand: u32,
+    frame: &mut Frame,
+    heap: &Heap,
+) -> Result<bool, VmError> {
+    let idx = usize::try_from(operand).map_err(|_| VmError::Malformed {
+        desc: "ld.upv index overflow".into(),
+    })?;
+    let closure_val = frame.closure_ref.ok_or_else(|| VmError::Malformed {
+        desc: "ld.upv: frame has no closure_ref".into(),
+    })?;
+    let ptr = closure_val.as_ref()?;
+    let obj = heap.get(ptr)?;
+    let val = obj.fields.get(idx).copied().ok_or(VmError::OutOfBounds {
+        index: idx,
+        len: obj.fields.len(),
+    })?;
+    frame.stack.push(val);
+    Ok(true)
 }
 
 fn const_to_value(c: &LoadedConst, heap: &mut Heap) -> Value {
