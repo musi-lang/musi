@@ -1,4 +1,5 @@
-//! Desugaring: short-circuit operators, assignment, pipe, and f-string emission.
+//! Desugaring: short-circuit operators, assignment, pipe, f-string, and
+//! operator desugarings (nil-coalesce, err-coal, propagate, try, range, cons).
 
 use music_ast::expr::Expr;
 use music_ast::lit::FStrPart;
@@ -199,3 +200,190 @@ pub fn emit_fstr(
     }
     Ok(())
 }
+
+/// Emit `left ?? right` (nil-coalescing). If left is Some, extract payload;
+/// otherwise evaluate right as fallback.
+pub fn emit_nil_coal(
+    em: &mut Emitter<'_>,
+    fc: &mut FnCtx,
+    left: ExprIdx,
+    right: ExprIdx,
+) -> Result<(), EmitError> {
+    let produced = emit_expr(em, fc, left)?;
+    if !produced {
+        return Err(EmitError::UnsupportedFeature {
+            desc: "nil-coalesce left operand produced no value".into(),
+        });
+    }
+    let tmp = fc.alloc_local();
+    fc.fe.emit_st_loc(tmp);
+
+    let some_label = fc.fresh_label();
+    let end_label = fc.fresh_label();
+
+    fc.fe.emit_ld_loc(tmp);
+    fc.fe.emit_cmp_tag(em.some_tag)?;
+    fc.fe.emit_jmp_t(some_label);
+
+    // None path: evaluate fallback
+    let produced_right = emit_expr(em, fc, right)?;
+    if !produced_right {
+        return Err(EmitError::UnsupportedFeature {
+            desc: "nil-coalesce right operand produced no value".into(),
+        });
+    }
+    fc.fe.emit_jmp(end_label);
+
+    // Some path: extract payload
+    fc.fe.emit_label(some_label);
+    fc.fe.emit_ld_loc(tmp);
+    fc.fe.emit_ld_pay(0);
+
+    fc.fe.emit_label(end_label);
+    Ok(())
+}
+
+/// Emit `operand?` (propagate). If operand is Some, extract payload;
+/// if None, early-return None from the current function.
+pub fn emit_propagate(
+    em: &mut Emitter<'_>,
+    fc: &mut FnCtx,
+    operand: ExprIdx,
+) -> Result<(), EmitError> {
+    let produced = emit_expr(em, fc, operand)?;
+    if !produced {
+        return Err(EmitError::UnsupportedFeature {
+            desc: "propagate operand produced no value".into(),
+        });
+    }
+    let tmp = fc.alloc_local();
+    fc.fe.emit_st_loc(tmp);
+
+    let some_label = fc.fresh_label();
+
+    fc.fe.emit_ld_loc(tmp);
+    fc.fe.emit_cmp_tag(em.some_tag)?;
+    fc.fe.emit_jmp_t(some_label);
+
+    // None path: run deferred cleanup and early-return None
+    let deferred = fc.deferred.clone();
+    for &def_expr in deferred.iter().rev() {
+        let produced = emit_expr(em, fc, def_expr)?;
+        if produced {
+            fc.fe.emit_pop();
+        }
+    }
+    fc.fe.emit_ld_loc(tmp);
+    fc.fe.emit_ret();
+
+    // Some path: extract payload
+    fc.fe.emit_label(some_label);
+    fc.fe.emit_ld_loc(tmp);
+    fc.fe.emit_ld_pay(0);
+    Ok(())
+}
+
+/// Emit `try operand`. Evaluates operand and wraps result in Some(value).
+pub fn emit_try(
+    em: &mut Emitter<'_>,
+    fc: &mut FnCtx,
+    operand: ExprIdx,
+) -> Result<(), EmitError> {
+    let produced = emit_expr(em, fc, operand)?;
+    if !produced {
+        return Err(EmitError::UnsupportedFeature {
+            desc: "try operand produced no value".into(),
+        });
+    }
+    fc.fe.emit_mk_var(em.some_tag)?;
+    Ok(())
+}
+
+/// Emit `left..right` or `left..<right` (range construction as a 2-tuple).
+pub fn emit_range(
+    em: &mut Emitter<'_>,
+    fc: &mut FnCtx,
+    left: ExprIdx,
+    right: ExprIdx,
+) -> Result<(), EmitError> {
+    let produced_left = emit_expr(em, fc, left)?;
+    if !produced_left {
+        return Err(EmitError::UnsupportedFeature {
+            desc: "range start produced no value".into(),
+        });
+    }
+    let produced_right = emit_expr(em, fc, right)?;
+    if !produced_right {
+        return Err(EmitError::UnsupportedFeature {
+            desc: "range end produced no value".into(),
+        });
+    }
+    fc.fe.emit_mk_prd(2, 1)?; // (start, end) product, pops 2 pushes 1 → net pop 1
+    Ok(())
+}
+
+/// Emit `left !! right` (error coalescing). If left is Ok, extract payload;
+/// otherwise evaluate right as fallback.
+pub fn emit_err_coal(
+    em: &mut Emitter<'_>,
+    fc: &mut FnCtx,
+    left: ExprIdx,
+    right: ExprIdx,
+) -> Result<(), EmitError> {
+    let produced = emit_expr(em, fc, left)?;
+    if !produced {
+        return Err(EmitError::UnsupportedFeature {
+            desc: "err-coalesce left operand produced no value".into(),
+        });
+    }
+    let tmp = fc.alloc_local();
+    fc.fe.emit_st_loc(tmp);
+
+    let ok_label = fc.fresh_label();
+    let end_label = fc.fresh_label();
+
+    fc.fe.emit_ld_loc(tmp);
+    fc.fe.emit_cmp_tag(em.ok_tag)?;
+    fc.fe.emit_jmp_t(ok_label);
+
+    // Err path: evaluate fallback
+    let produced_right = emit_expr(em, fc, right)?;
+    if !produced_right {
+        return Err(EmitError::UnsupportedFeature {
+            desc: "err-coalesce right operand produced no value".into(),
+        });
+    }
+    fc.fe.emit_jmp(end_label);
+
+    // Ok path: extract payload
+    fc.fe.emit_label(ok_label);
+    fc.fe.emit_ld_loc(tmp);
+    fc.fe.emit_ld_pay(0);
+
+    fc.fe.emit_label(end_label);
+    Ok(())
+}
+
+/// Emit `x :: xs` (cons). Constructs a (head, tail) product.
+pub fn emit_cons(
+    em: &mut Emitter<'_>,
+    fc: &mut FnCtx,
+    left: ExprIdx,
+    right: ExprIdx,
+) -> Result<(), EmitError> {
+    let produced_left = emit_expr(em, fc, left)?;
+    if !produced_left {
+        return Err(EmitError::UnsupportedFeature {
+            desc: "cons head produced no value".into(),
+        });
+    }
+    let produced_right = emit_expr(em, fc, right)?;
+    if !produced_right {
+        return Err(EmitError::UnsupportedFeature {
+            desc: "cons tail produced no value".into(),
+        });
+    }
+    fc.fe.emit_mk_prd(2, 1)?; // (head, tail)
+    Ok(())
+}
+

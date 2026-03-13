@@ -64,6 +64,10 @@ pub struct Emitter<'a> {
     pub effects: Vec<EffectDef>,
     /// Index into `foreign_fns` for the `str_cat` helper (used by f-string desugar).
     pub(crate) str_cat_ffi_idx: Option<u32>,
+    /// Variant tag for `Some` (resolved at init, fallback 0).
+    pub(crate) some_tag: u32,
+    /// Variant tag for `Ok` (resolved at init, fallback 0).
+    pub(crate) ok_tag: u32,
     next_fn_id: u32,
     pub entry_fn_id: Option<u32>,
     fn_entries: Vec<FnEntry>,
@@ -76,6 +80,7 @@ pub struct FnCtx {
     pub fe: FnEmitter,
     pub local_map: HashMap<DefId, u32>,
     pub ref_locals: HashSet<DefId>,
+    pub deferred: Vec<ExprIdx>,
     next_label: u32,
 }
 
@@ -85,6 +90,7 @@ impl FnCtx {
             fe: FnEmitter::new(param_count, param_count),
             local_map: HashMap::new(),
             ref_locals: HashSet::new(),
+            deferred: Vec::new(),
             next_label: 0,
         }
     }
@@ -119,6 +125,8 @@ impl<'a> Emitter<'a> {
             foreign_fns: vec![],
             effects: vec![],
             str_cat_ffi_idx: None,
+            some_tag: 0,
+            ok_tag: 0,
             next_fn_id: 0,
             entry_fn_id: None,
             fn_entries: vec![],
@@ -129,6 +137,7 @@ impl<'a> Emitter<'a> {
 
     pub fn emit_all(&mut self) -> Result<Vec<FnBytecode>, EmitError> {
         self.register_well_known_fns()?;
+        self.resolve_well_known_tags();
         self.scan_top_level()?;
         let functions = self.emit_functions()?;
         if functions.is_empty() && self.entry_fn_id.is_some() {
@@ -203,6 +212,13 @@ impl<'a> Emitter<'a> {
         Ok(())
     }
 
+    fn resolve_well_known_tags(&mut self) {
+        let some_sym = self.interner.intern("Some");
+        let ok_sym = self.interner.intern("Ok");
+        self.some_tag = expr::resolve_variant_tag_by_name(self, some_sym).unwrap_or(0);
+        self.ok_tag = expr::resolve_variant_tag_by_name(self, ok_sym).unwrap_or(0);
+    }
+
     fn scan_top_level(&mut self) -> Result<(), EmitError> {
         let stmts = self.stmts.clone();
         for stmt in &stmts {
@@ -241,17 +257,13 @@ impl<'a> Emitter<'a> {
             | Expr::Piecewise { .. }
             | Expr::Match { .. }
             | Expr::Return { .. }
-            | Expr::Quantified { .. }
             | Expr::Import { .. }
             | Expr::Export { .. }
             | Expr::Class { .. }
-            | Expr::Given { .. }
+            | Expr::Instance { .. }
             | Expr::Effect { .. }
             | Expr::Foreign { .. }
-            | Expr::ForceUnwrap { .. }
-            | Expr::TypeTest { .. }
-            | Expr::TypeCast { .. }
-            | Expr::Do { .. }
+            | Expr::TypeCheck { .. }
             | Expr::Handle { .. }
             | Expr::Error { .. } => {}
         }
@@ -295,17 +307,13 @@ impl<'a> Emitter<'a> {
             | Expr::Piecewise { .. }
             | Expr::Match { .. }
             | Expr::Return { .. }
-            | Expr::Quantified { .. }
             | Expr::Import { .. }
             | Expr::Export { .. }
             | Expr::Class { .. }
-            | Expr::Given { .. }
+            | Expr::Instance { .. }
             | Expr::Effect { .. }
             | Expr::Foreign { .. }
-            | Expr::ForceUnwrap { .. }
-            | Expr::TypeTest { .. }
-            | Expr::TypeCast { .. }
-            | Expr::Do { .. }
+            | Expr::TypeCheck { .. }
             | Expr::Handle { .. }
             | Expr::Error { .. } => {}
         }
@@ -405,8 +413,15 @@ impl<'a> Emitter<'a> {
 
         let had_value = expr::emit_expr_tail(self, &mut fc, entry.body, true)?;
         if had_value {
+            if !fc.deferred.is_empty() {
+                let tmp = fc.alloc_local();
+                fc.fe.emit_st_loc(tmp);
+                expr::emit_deferred_cleanup(self, &mut fc)?;
+                fc.fe.emit_ld_loc(tmp);
+            }
             fc.fe.emit_ret();
         } else {
+            expr::emit_deferred_cleanup(self, &mut fc)?;
             fc.fe.emit_ret_u();
         }
 
@@ -477,12 +492,11 @@ fn push_foreign_fn(
     })
 }
 
-/// Recursively unwrap Annotated/Quantified/Paren to find an inner Fn.
+/// Recursively unwrap Annotated/Paren to find an inner Fn.
 fn extract_fn(expr_idx: ExprIdx, ast: &AstArenas) -> Option<(Vec<Param>, ExprIdx)> {
     match &ast.exprs[expr_idx] {
         Expr::Fn { params, body, .. } => Some((params.clone(), *body)),
         Expr::Annotated { inner, .. } | Expr::Paren { inner, .. } => extract_fn(*inner, ast),
-        Expr::Quantified { body, .. } => extract_fn(*body, ast),
         _ => None,
     }
 }
