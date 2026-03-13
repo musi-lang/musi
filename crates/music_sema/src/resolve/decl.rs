@@ -212,12 +212,8 @@ impl Resolver<'_> {
             | Expr::Field {
                 object: operand, ..
             }
-            | Expr::ForceUnwrap { operand, .. }
-            | Expr::Do { body: operand, .. }
-            | Expr::TypeCast { operand, .. }
-            | Expr::TypeTest { operand, .. }
+            | Expr::TypeCheck { operand, .. }
             | Expr::Annotated { inner: operand, .. }
-            | Expr::Quantified { body: operand, .. }
             | Expr::Fn { body: operand, .. } => {
                 self.collect_free_names_inner(*operand, free, seen);
             }
@@ -289,7 +285,7 @@ impl Resolver<'_> {
             } => {
                 self.collect_free_match_arms(*scrutinee, arms, free, seen);
             }
-            Expr::Class { members, .. } | Expr::Given { members, .. } => {
+            Expr::Class { members, .. } | Expr::Instance { members, .. } => {
                 self.collect_free_class_members(members, free, seen);
             }
             Expr::Handle { body, ops, .. } => {

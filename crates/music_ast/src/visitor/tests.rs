@@ -131,12 +131,12 @@ fn test_walk_expr_crosses_into_ty() {
     let root = arenas.exprs.alloc(Expr::Let {
         fields: LetFields {
             kind: BindKind::Immut,
-            heap: false,
             pat,
             params: vec![],
             constraints: vec![],
             ty: Some(ty),
             value: Some(value),
+            with_effects: None,
             span: Span::new(0, 13),
         },
         body: None,

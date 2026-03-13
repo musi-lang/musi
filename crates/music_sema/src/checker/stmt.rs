@@ -127,7 +127,7 @@ pub(crate) fn check_stmt(ck: &mut Checker<'_>, expr_idx: Idx<music_ast::Expr>) {
                 ck.current_scope = p;
             }
         }
-        Expr::Given {
+        Expr::Instance {
             target,
             params,
             members,

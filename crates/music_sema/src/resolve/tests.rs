@@ -105,12 +105,12 @@ fn test_resolve_let_binding_registers_pat_def() {
 
     let fields = LetFields {
         kind: BindKind::Immut,
-        heap: false,
         pat,
         params: vec![],
         constraints: vec![],
         ty: None,
         value: Some(value),
+        with_effects: None,
         span: Span::DUMMY,
     };
     let binding = arenas.exprs.alloc(Expr::Binding {
@@ -137,12 +137,12 @@ fn test_resolve_name_reference_creates_expr_def() {
     let value = arenas.exprs.alloc(lit_int(42));
     let fields = LetFields {
         kind: BindKind::Immut,
-        heap: false,
         pat,
         params: vec![],
         constraints: vec![],
         ty: None,
         value: Some(value),
+        with_effects: None,
         span: Span::DUMMY,
     };
     let binding = arenas.exprs.alloc(Expr::Binding {
@@ -188,12 +188,12 @@ fn test_resolve_duplicate_top_level_binding_emits_error() {
     let value1 = arenas.exprs.alloc(lit_int(1));
     let fields1 = LetFields {
         kind: BindKind::Immut,
-        heap: false,
         pat: pat1,
         params: vec![],
         constraints: vec![],
         ty: None,
         value: Some(value1),
+        with_effects: None,
         span: Span::DUMMY,
     };
     let binding1 = arenas.exprs.alloc(Expr::Binding {
@@ -207,12 +207,12 @@ fn test_resolve_duplicate_top_level_binding_emits_error() {
     let value2 = arenas.exprs.alloc(lit_int(2));
     let fields2 = LetFields {
         kind: BindKind::Immut,
-        heap: false,
         pat: pat2,
         params: vec![],
         constraints: vec![],
         ty: None,
         value: Some(value2),
+        with_effects: None,
         span: Span::DUMMY,
     };
     let binding2 = arenas.exprs.alloc(Expr::Binding {
@@ -256,12 +256,12 @@ fn test_resolve_fn_param_creates_def_in_body() {
     let pat_f = arenas.pats.alloc(bind_pat(sym_f));
     let fields = LetFields {
         kind: BindKind::Immut,
-        heap: false,
         pat: pat_f,
         params: vec![],
         constraints: vec![],
         ty: None,
         value: Some(lambda),
+        with_effects: None,
         span: Span::DUMMY,
     };
     let binding = arenas.exprs.alloc(Expr::Binding {

@@ -5,7 +5,6 @@ use music_ast::expr::{
     RecField,
 };
 use music_ast::lit::{FStrPart, Lit};
-use music_ast::ty::{Constraint, TyParam};
 use music_ast::{ExprIdx, TyIdx};
 use music_shared::{Span, Symbol};
 
@@ -33,7 +32,7 @@ impl Resolver<'_> {
                 self.resolve_expr(left);
                 self.resolve_expr(right);
             }
-            Expr::UnaryOp { operand, .. } | Expr::ForceUnwrap { operand, .. } => {
+            Expr::UnaryOp { operand, .. } => {
                 self.resolve_expr(operand);
             }
             Expr::Field { object, .. } => self.resolve_expr(object),
@@ -66,14 +65,6 @@ impl Resolver<'_> {
             Expr::Match {
                 scrutinee, arms, ..
             } => self.resolve_expr_match(scrutinee, &arms),
-            Expr::Quantified {
-                body,
-                params,
-                constraints,
-                ..
-            } => {
-                self.resolve_expr_quantified(body, &params, &constraints);
-            }
             Expr::Class {
                 name,
                 params,
@@ -83,7 +74,7 @@ impl Resolver<'_> {
             } => {
                 self.resolve_expr_class(name, &params, &constraints, &members);
             }
-            Expr::Given {
+            Expr::Instance {
                 target,
                 params,
                 constraints,
@@ -100,11 +91,10 @@ impl Resolver<'_> {
                 ..
             } => self.resolve_expr_effect(name, &params, &ops, exported),
             Expr::Foreign { decls, .. } => self.resolve_expr_foreign(&decls),
-            Expr::TypeTest { operand, ty, .. } | Expr::TypeCast { operand, ty, .. } => {
+            Expr::TypeCheck { operand, ty, .. } => {
                 self.resolve_expr(operand);
                 self.resolve_ty(ty);
             }
-            Expr::Do { body, .. } => self.resolve_expr(body),
             Expr::Handle {
                 effect_ty,
                 ops,
@@ -222,8 +212,8 @@ impl Resolver<'_> {
     fn resolve_expr_call(&mut self, callee: ExprIdx, args: &[Arg]) {
         self.resolve_expr(callee);
         for arg in args {
-            if let Arg::Pos { expr, .. } = arg {
-                self.resolve_expr(*expr);
+            match arg {
+                Arg::Pos { expr, .. } | Arg::Spread { expr, .. } => self.resolve_expr(*expr),
             }
         }
     }
@@ -329,17 +319,6 @@ impl Resolver<'_> {
             self.resolve_expr(arm.result);
             self.current_scope = parent;
         }
-    }
-
-    fn resolve_expr_quantified(
-        &mut self,
-        body: ExprIdx,
-        params: &[TyParam],
-        constraints: &[Constraint],
-    ) {
-        let parent = self.enter_ty_param_scope(params, constraints);
-        self.resolve_expr(body);
-        self.current_scope = parent;
     }
 
     fn resolve_expr_choice(&mut self, body: TyIdx) {

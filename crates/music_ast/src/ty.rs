@@ -24,10 +24,6 @@ pub enum Ty {
         inner: TyIdx,
         span: Span,
     },
-    Ref {
-        inner: TyIdx,
-        span: Span,
-    },
     Fn {
         params: TyList,
         ret: TyIdx,
@@ -46,13 +42,6 @@ pub enum Ty {
     Array {
         len: Option<u32>,
         elem: TyIdx,
-        span: Span,
-    },
-    Quantified {
-        kind: Quantifier,
-        params: Vec<TyParam>,
-        constraints: Vec<Constraint>,
-        body: TyIdx,
         span: Span,
     },
     Error {
@@ -110,11 +99,4 @@ pub struct Constraint {
 pub enum Rel {
     Sub,
     Super,
-}
-
-/// Universal (`forall`) or existential (`exists`) quantification.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Quantifier {
-    Forall,
-    Exists,
 }

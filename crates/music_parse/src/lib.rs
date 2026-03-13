@@ -51,9 +51,7 @@ pub const fn can_start_expr(kind: TokenKind) -> bool {
             | TokenKind::KwDefer
             | TokenKind::KwEffect
             | TokenKind::KwExport
-            | TokenKind::KwExists
-            | TokenKind::KwForall
-            | TokenKind::KwGiven
+            | TokenKind::KwInstance
             | TokenKind::KwImport
             | TokenKind::KwLet
             | TokenKind::KwMatch
@@ -61,7 +59,6 @@ pub const fn can_start_expr(kind: TokenKind) -> bool {
             | TokenKind::KwRecord
             | TokenKind::KwReturn
             | TokenKind::KwTry
-            | TokenKind::KwVar
             | TokenKind::KwDo
             | TokenKind::KwWith
     )

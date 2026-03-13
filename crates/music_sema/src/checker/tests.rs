@@ -130,12 +130,12 @@ fn test_check_underscore_binding_suppresses_unused_warning() {
     let value = arenas.exprs.alloc(lit_int(42));
     let fields = LetFields {
         kind: BindKind::Immut,
-        heap: false,
         pat,
         params: vec![],
         constraints: vec![],
         ty: None,
         value: Some(value),
+        with_effects: None,
         span: Span::DUMMY,
     };
     let binding = arenas.exprs.alloc(Expr::Binding {
@@ -181,12 +181,12 @@ fn test_check_fn_parameter_scope_in_body() {
     let pat_f = arenas.pats.alloc(bind_pat(sym_f));
     let fields = LetFields {
         kind: BindKind::Immut,
-        heap: false,
         pat: pat_f,
         params: vec![],
         constraints: vec![],
         ty: None,
         value: Some(lambda),
+        with_effects: None,
         span: Span::DUMMY,
     };
     let binding = arenas.exprs.alloc(Expr::Binding {
@@ -230,12 +230,12 @@ fn test_check_binding_then_reference() {
     let value = arenas.exprs.alloc(lit_int(42));
     let fields = LetFields {
         kind: BindKind::Immut,
-        heap: false,
         pat,
         params: vec![],
         constraints: vec![],
         ty: None,
         value: Some(value),
+        with_effects: None,
         span: Span::DUMMY,
     };
     let binding = arenas.exprs.alloc(Expr::Binding {

@@ -15,9 +15,9 @@ impl Parser<'_> {
         let attrs = self.parse_attrs();
         match self.peek_kind() {
             TokenKind::KwExport => self.parse_expr_annotated_export(start, attrs),
-            TokenKind::KwLet | TokenKind::KwVar => self.parse_expr_annotated_binding(start, attrs),
+            TokenKind::KwLet => self.parse_expr_annotated_binding(start, attrs),
             TokenKind::KwClass => self.parse_expr_annotated_class(start, attrs),
-            TokenKind::KwGiven => self.parse_expr_annotated_given(start, attrs),
+            TokenKind::KwInstance => self.parse_expr_annotated_given(start, attrs),
             TokenKind::KwEffect => self.parse_expr_annotated_effect(start, attrs),
             TokenKind::KwForeign => self.parse_expr_annotated_foreign(start, attrs),
             _ => self.error_expr(&ParseError::ExpectedDeclAfterAttrs),
@@ -36,17 +36,6 @@ impl Parser<'_> {
         match self.peek_kind() {
             TokenKind::KwLet => {
                 let inner = self.parse_expr_let();
-                if let Expr::Let { fields, .. } = inner {
-                    return Expr::Binding {
-                        exported,
-                        fields,
-                        span: self.finish_span(start),
-                    };
-                }
-                inner
-            }
-            TokenKind::KwVar => {
-                let inner = self.parse_expr_binding_mut();
                 if let Expr::Let { fields, .. } = inner {
                     return Expr::Binding {
                         exported,
@@ -75,9 +64,9 @@ impl Parser<'_> {
                     }
                 }
             }
-            TokenKind::KwGiven => {
-                let mut inner = self.parse_expr_given();
-                if let Expr::Given {
+            TokenKind::KwInstance => {
+                let mut inner = self.parse_expr_instance();
+                if let Expr::Instance {
                     ref mut exported, ..
                 } = inner
                 {
@@ -127,11 +116,7 @@ impl Parser<'_> {
     }
 
     fn parse_expr_annotated_binding(&mut self, start: u32, attrs: Vec<Attr>) -> Expr {
-        let inner = if self.at(TokenKind::KwLet) {
-            self.parse_expr_let()
-        } else {
-            self.parse_expr_binding_mut()
-        };
+        let inner = self.parse_expr_let();
         if let Expr::Let { fields, .. } = inner {
             let binding = Expr::Binding {
                 exported: false,
@@ -160,7 +145,7 @@ impl Parser<'_> {
     }
 
     fn parse_expr_annotated_given(&mut self, start: u32, attrs: Vec<Attr>) -> Expr {
-        let inner = self.parse_expr_given();
+        let inner = self.parse_expr_instance();
         let inner_idx = self.alloc_expr(inner);
         Expr::Annotated {
             attrs,
@@ -237,8 +222,7 @@ impl Parser<'_> {
 
     fn parse_expr_export_rest(&mut self, start: u32) -> Expr {
         match self.peek_kind() {
-            TokenKind::KwLet => self.parse_export_binding(start, true),
-            TokenKind::KwVar => self.parse_export_binding(start, false),
+            TokenKind::KwLet => self.parse_export_binding(start),
             TokenKind::KwClass => {
                 let mut inner = self.parse_expr_class();
                 if let Expr::Class {
@@ -249,9 +233,9 @@ impl Parser<'_> {
                 }
                 inner
             }
-            TokenKind::KwGiven => {
-                let mut inner = self.parse_expr_given();
-                if let Expr::Given {
+            TokenKind::KwInstance => {
+                let mut inner = self.parse_expr_instance();
+                if let Expr::Instance {
                     ref mut exported, ..
                 } = inner
                 {
@@ -274,12 +258,8 @@ impl Parser<'_> {
         }
     }
 
-    fn parse_export_binding(&mut self, start: u32, immut: bool) -> Expr {
-        let inner = if immut {
-            self.parse_expr_let()
-        } else {
-            self.parse_expr_binding_mut()
-        };
+    fn parse_export_binding(&mut self, start: u32) -> Expr {
+        let inner = self.parse_expr_let();
         if let Expr::Let { fields, .. } = inner {
             Expr::Binding {
                 exported: true,

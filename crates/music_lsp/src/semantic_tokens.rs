@@ -160,8 +160,8 @@ fn emit_decl_names(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
         let kind = tok.kind;
         state = match state {
             DeclState::Default => match kind {
-                TokenKind::KwLet | TokenKind::KwVar => DeclState::AfterLet,
-                TokenKind::KwClass | TokenKind::KwEffect | TokenKind::KwGiven => {
+                TokenKind::KwLet => DeclState::AfterLet,
+                TokenKind::KwClass | TokenKind::KwEffect | TokenKind::KwInstance => {
                     DeclState::AfterTypeDef
                 }
                 TokenKind::KwExport => DeclState::Default,
@@ -338,7 +338,7 @@ fn classify_def(
             let is_fn = def.ty_info.ty.is_some_and(|t| is_fn_type(t, sema));
             let is_mutable = def
                 .param_mode
-                .is_some_and(|m| matches!(m, ParamMode::Var | ParamMode::Inout));
+                .is_some_and(|m| matches!(m, ParamMode::Mut));
             let mut_mod = if is_mutable { TM_MUTABLE } else { 0 };
             if is_fn {
                 (Some(TT_FUNCTION), decl | mut_mod, 0)
@@ -360,9 +360,9 @@ fn lex_fallback(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
     enum ScanState {
         Default,
         AfterLet,
-        AfterVar,
+        AfterMut,
         AfterTypeDef,
-        AfterGiven,
+        AfterInstance,
     }
 
     let mut state = ScanState::Default;
@@ -385,14 +385,14 @@ fn lex_fallback(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
         state = match state {
             ScanState::Default => match kind {
                 TokenKind::KwLet => ScanState::AfterLet,
-                TokenKind::KwVar => ScanState::AfterVar,
                 TokenKind::KwClass | TokenKind::KwEffect => ScanState::AfterTypeDef,
-                TokenKind::KwGiven => ScanState::AfterGiven,
+                TokenKind::KwInstance => ScanState::AfterInstance,
                 TokenKind::KwExport => ScanState::Default,
                 _ => ScanState::Default,
             },
 
             ScanState::AfterLet => match kind {
+                TokenKind::KwMut => ScanState::AfterMut,
                 TokenKind::Ident => {
                     push_raw(
                         raw,
@@ -408,7 +408,7 @@ fn lex_fallback(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
                 _ => ScanState::Default,
             },
 
-            ScanState::AfterVar => match kind {
+            ScanState::AfterMut => match kind {
                 TokenKind::Ident => {
                     push_raw(
                         raw,
@@ -440,7 +440,7 @@ fn lex_fallback(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
                 _ => ScanState::Default,
             },
 
-            ScanState::AfterGiven => match kind {
+            ScanState::AfterInstance => match kind {
                 TokenKind::Ident => {
                     push_raw(raw, tok.span, TT_TYPE, 0, doc.file_id, &doc.source_db, 1);
                     ScanState::Default

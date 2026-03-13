@@ -8,7 +8,7 @@ use music_shared::{Span, Symbol};
 use crate::attr::Attr;
 use crate::decl::{ClassMember, EffectOp, ExportItem, ForeignDecl};
 use crate::lit::Lit;
-use crate::ty::{Constraint, Quantifier, TyNamedRef, TyParam};
+use crate::ty::{Constraint, EffectSet, TyNamedRef, TyParam};
 use crate::{ExprIdx, ExprList, PatIdx, TyIdx};
 
 /// Expression node. All recursive children use arena indices.
@@ -131,19 +131,9 @@ pub enum Expr {
         span: Span,
     },
 
-    // -- quantification ------------------------------------------------------
-    Quantified {
-        kind: Quantifier,
-        params: Vec<TyParam>,
-        constraints: Vec<Constraint>,
-        body: ExprIdx,
-        span: Span,
-    },
-
     // -- module --------------------------------------------------------------
     Import {
         path: Symbol,
-        alias: Option<Symbol>,
         span: Span,
     },
     Export {
@@ -171,7 +161,7 @@ pub enum Expr {
         members: Vec<ClassMember>,
         span: Span,
     },
-    Given {
+    Instance {
         exported: bool,
         target: TyNamedRef,
         params: Vec<TyParam>,
@@ -193,30 +183,16 @@ pub enum Expr {
         span: Span,
     },
 
-    // -- force unwrap --------------------------------------------------------
-    ForceUnwrap {
-        operand: ExprIdx,
-        span: Span,
-    },
-
     // -- type test / cast ----------------------------------------------------
-    TypeTest {
+    TypeCheck {
+        kind: TypeCheckKind,
         operand: ExprIdx,
         ty: TyIdx,
         binding: Option<Symbol>,
         span: Span,
     },
-    TypeCast {
-        operand: ExprIdx,
-        ty: TyIdx,
-        span: Span,
-    },
 
     // -- effects -------------------------------------------------------------
-    Do {
-        body: ExprIdx,
-        span: Span,
-    },
     Handle {
         effect_ty: TyIdx,
         ops: Vec<HandlerOp>,
@@ -243,12 +219,12 @@ pub struct HandlerOp {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LetFields {
     pub kind: BindKind,
-    pub heap: bool,
     pub pat: PatIdx,
     pub params: Vec<TyParam>,
     pub constraints: Vec<Constraint>,
     pub ty: Option<TyIdx>,
     pub value: Option<ExprIdx>,
+    pub with_effects: Option<EffectSet>,
     pub span: Span,
 }
 
@@ -263,9 +239,7 @@ pub enum BindKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ParamMode {
     Plain,
-    Var,
-    Inout,
-    Ref,
+    Mut,
 }
 
 /// Function arrow kind.
@@ -289,7 +263,7 @@ pub struct Param {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Arg {
     Pos { expr: ExprIdx, span: Span },
-    Hole { span: Span },
+    Spread { expr: ExprIdx, span: Span },
 }
 
 /// A field in a record expression or update.
@@ -376,7 +350,6 @@ pub enum BinOp {
     Xor,
     Shl,
     Shr,
-    ShrUn,
     // membership
     In,
     // special infix
@@ -396,5 +369,14 @@ pub enum UnaryOp {
     Not,
     Defer,
     Try,
+    Do,
+    Propagate,
     ForceUnwrap,
+}
+
+/// Discriminator for type-check operations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TypeCheckKind {
+    Test,
+    Cast,
 }

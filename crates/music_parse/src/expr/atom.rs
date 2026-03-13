@@ -192,14 +192,8 @@ impl Parser<'_> {
                 .report(&ParseError::ExpectedImportPath, span, self.file_id);
             Symbol(u32::MAX)
         });
-        let alias = if self.eat(TokenKind::KwAs) {
-            Some(self.expect_symbol())
-        } else {
-            None
-        };
         Expr::Import {
             path,
-            alias,
             span: self.finish_span(start),
         }
     }

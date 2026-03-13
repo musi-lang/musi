@@ -19,7 +19,7 @@ pub fn collect_ty_var_nodes(ty_idx: TyIdx, arenas: &AstArenas, out: &mut Vec<TyP
                 collect_ty_var_nodes(arg, arenas, out);
             }
         }
-        Ty::Option { inner, .. } | Ty::Ref { inner, .. } | Ty::Array { elem: inner, .. } => {
+        Ty::Option { inner, .. } | Ty::Array { elem: inner, .. } => {
             collect_ty_var_nodes(*inner, arenas, out);
         }
         Ty::Fn { params, ret, .. } => {

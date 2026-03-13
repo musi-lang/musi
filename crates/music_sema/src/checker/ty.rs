@@ -2,13 +2,13 @@
 
 use music_ast::TyIdx;
 use music_ast::expr::Arrow;
-use music_ast::ty::{EffectItem, EffectSet, Quantifier as AstQuantifier, Ty, TyParam};
+use music_ast::ty::{EffectItem, EffectSet, Ty};
 use music_shared::{Span, Symbol};
 
 use crate::checker::Checker;
 use crate::def::DefId;
 use crate::error::SemaError;
-use crate::types::{EffectEntry, EffectRow, Quantifier, Type, TypeIdx};
+use crate::types::{EffectEntry, EffectRow, Type, TypeIdx};
 
 /// Looks up `name` in scope, reporting `UndefinedName` if missing.
 fn lookup_name_or_error(ck: &mut Checker<'_>, name: Symbol, span: Span) -> Option<DefId> {
@@ -58,10 +58,6 @@ pub(crate) fn lower_ty(ck: &mut Checker<'_>, ty_idx: TyIdx) -> TypeIdx {
                 args: vec![inner_ty],
             })
         }
-        Ty::Ref { inner, .. } => {
-            let inner_ty = lower_ty(ck, inner);
-            ck.alloc_ty(Type::Ref { inner: inner_ty })
-        }
         Ty::Fn {
             params,
             ret,
@@ -86,9 +82,6 @@ pub(crate) fn lower_ty(ck: &mut Checker<'_>, ty_idx: TyIdx) -> TypeIdx {
             let elem_ty = lower_ty(ck, elem);
             ck.alloc_ty(Type::Array { elem: elem_ty, len })
         }
-        Ty::Quantified {
-            kind, params, body, ..
-        } => lower_ty_quantified(ck, kind, &params, body),
         Ty::Error { .. } => ck.error_ty(),
     }
 }
@@ -137,28 +130,3 @@ fn lower_effect_set(ck: &mut Checker<'_>, eff_set: &EffectSet) -> EffectRow {
     EffectRow { effects, row_var }
 }
 
-fn lower_ty_quantified(
-    ck: &mut Checker<'_>,
-    kind: AstQuantifier,
-    params: &[TyParam],
-    body: TyIdx,
-) -> TypeIdx {
-    let q = match kind {
-        AstQuantifier::Forall => Quantifier::Forall,
-        AstQuantifier::Exists => Quantifier::Exists,
-    };
-    let ty_vars: Vec<_> = params
-        .iter()
-        .map(|p| {
-            let (var_id, _idx) = ck.store.unify.fresh_rigid(p.span, &mut ck.store.types);
-            var_id
-        })
-        .collect();
-    let body_ty = lower_ty(ck, body);
-    ck.alloc_ty(Type::Quantified {
-        kind: q,
-        params: ty_vars,
-        constraints: vec![],
-        body: body_ty,
-    })
-}

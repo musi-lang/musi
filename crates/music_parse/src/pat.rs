@@ -51,8 +51,8 @@ impl Parser<'_> {
                 }
             }
 
-            TokenKind::KwVar => {
-                let _var = self.bump();
+            TokenKind::KwMut => {
+                let _mut = self.bump();
                 self.parse_pat_ident(BindKind::Mut)
             }
             TokenKind::Ident => self.parse_pat_ident(BindKind::Immut),
@@ -150,7 +150,7 @@ impl Parser<'_> {
 
     fn parse_pat_rec_field(&mut self) -> PatRecField {
         let start = self.start_span();
-        let kind = if self.eat(TokenKind::KwVar) {
+        let kind = if self.eat(TokenKind::KwMut) {
             BindKind::Mut
         } else {
             BindKind::Immut

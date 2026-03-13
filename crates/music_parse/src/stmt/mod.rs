@@ -10,7 +10,6 @@ mod foreign;
 mod tests;
 
 use music_ast::expr::{Expr, Param, ParamMode};
-use music_ast::ty::Quantifier;
 use music_lex::token::TokenKind;
 use music_shared::{Span, Symbol};
 
@@ -20,12 +19,8 @@ use crate::parser::Parser;
 impl Parser<'_> {
     pub(crate) fn parse_param(&mut self) -> Param {
         let start = self.start_span();
-        let mode = if self.eat(TokenKind::KwInout) {
-            ParamMode::Inout
-        } else if self.eat(TokenKind::KwVar) {
-            ParamMode::Var
-        } else if self.eat(TokenKind::KwRef) {
-            ParamMode::Ref
+        let mode = if self.eat(TokenKind::KwMut) {
+            ParamMode::Mut
         } else {
             ParamMode::Plain
         };
@@ -41,22 +36,6 @@ impl Parser<'_> {
             name,
             ty,
             default,
-            span: self.finish_span(start),
-        }
-    }
-
-    pub(crate) fn parse_expr_quantified(&mut self, kind: Quantifier) -> Expr {
-        let start = self.start_span();
-        let _kw = self.bump();
-        let params = self.parse_ty_param_list();
-        let constraints = self.parse_opt_where_clause();
-        let _arrow = self.expect(TokenKind::DashGt);
-        let body = self.parse_alloc_expr();
-        Expr::Quantified {
-            kind,
-            params,
-            constraints,
-            body,
             span: self.finish_span(start),
         }
     }

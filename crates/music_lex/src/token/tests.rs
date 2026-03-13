@@ -10,26 +10,21 @@ fn test_keyword_from_str_returns_some_for_every_keyword() {
         ("class", TokenKind::KwClass),
         ("defer", TokenKind::KwDefer),
         ("effect", TokenKind::KwEffect),
-        ("exists", TokenKind::KwExists),
         ("export", TokenKind::KwExport),
-        ("forall", TokenKind::KwForall),
-        ("given", TokenKind::KwGiven),
         ("if", TokenKind::KwIf),
         ("import", TokenKind::KwImport),
         ("in", TokenKind::KwIn),
-        ("inout", TokenKind::KwInout),
+        ("instance", TokenKind::KwInstance),
         ("law", TokenKind::KwLaw),
         ("let", TokenKind::KwLet),
         ("match", TokenKind::KwMatch),
+        ("mut", TokenKind::KwMut),
         ("not", TokenKind::KwNot),
         ("of", TokenKind::KwOf),
         ("or", TokenKind::KwOr),
-        ("over", TokenKind::KwOver),
         ("record", TokenKind::KwRecord),
-        ("ref", TokenKind::KwRef),
         ("return", TokenKind::KwReturn),
         ("try", TokenKind::KwTry),
-        ("var", TokenKind::KwVar),
         ("where", TokenKind::KwWhere),
         ("xor", TokenKind::KwXor),
     ];
@@ -60,8 +55,9 @@ fn test_is_keyword_true_for_keywords() {
     assert!(TokenKind::KwAnd.is_keyword());
     assert!(TokenKind::KwClass.is_keyword());
     assert!(TokenKind::KwExport.is_keyword());
-    assert!(TokenKind::KwGiven.is_keyword());
+    assert!(TokenKind::KwInstance.is_keyword());
     assert!(TokenKind::KwLaw.is_keyword());
+    assert!(TokenKind::KwMut.is_keyword());
     assert!(TokenKind::KwLet.is_keyword());
     assert!(TokenKind::KwMatch.is_keyword());
     assert!(TokenKind::KwDo.is_keyword());

@@ -1,6 +1,6 @@
 //! Postfix chain parsing: calls, indexing, field access, update.
 
-use music_ast::expr::{Arg, Expr, FieldKey};
+use music_ast::expr::{Arg, Expr, FieldKey, TypeCheckKind, UnaryOp};
 use music_lex::token::TokenKind;
 use music_shared::Symbol;
 
@@ -18,6 +18,7 @@ impl Parser<'_> {
                 TokenKind::QuestionDot => self.parse_expr_field(lhs, start, true),
                 TokenKind::BangDot => self.parse_expr_force_field(lhs, start),
                 TokenKind::Bang => self.parse_expr_force_unwrap(lhs, start),
+                TokenKind::Question => self.parse_expr_propagate(lhs, start),
                 TokenKind::ColonQuestion => self.parse_expr_type_test(lhs, start),
                 TokenKind::ColonQuestionGt => self.parse_expr_type_cast(lhs, start),
                 _ => break,
@@ -101,9 +102,11 @@ impl Parser<'_> {
 
     fn parse_arg(&mut self) -> Arg {
         let start = self.start_span();
-        // Hole: ...
+        // Spread: ...expr
         if self.eat(TokenKind::DotDotDot) {
-            return Arg::Hole {
+            let expr = self.parse_alloc_expr();
+            return Arg::Spread {
+                expr,
                 span: self.finish_span(start),
             };
         }
@@ -118,7 +121,19 @@ impl Parser<'_> {
     fn parse_expr_force_unwrap(&mut self, lhs: Expr, start: u32) -> Expr {
         let _bang = self.bump();
         let operand = self.alloc_expr(lhs);
-        Expr::ForceUnwrap {
+        Expr::UnaryOp {
+            op: UnaryOp::ForceUnwrap,
+            operand,
+            span: self.finish_span(start),
+        }
+    }
+
+    /// Parses `expr?` — error propagation.
+    fn parse_expr_propagate(&mut self, lhs: Expr, start: u32) -> Expr {
+        let _q = self.bump();
+        let operand = self.alloc_expr(lhs);
+        Expr::UnaryOp {
+            op: UnaryOp::Propagate,
             operand,
             span: self.finish_span(start),
         }
@@ -131,7 +146,8 @@ impl Parser<'_> {
         let _bang_dot = self.bump();
         let field = self.parse_field_key();
         let operand = self.alloc_expr(lhs);
-        let unwrapped = Expr::ForceUnwrap {
+        let unwrapped = Expr::UnaryOp {
+            op: UnaryOp::ForceUnwrap,
             operand,
             span: self.finish_span(start),
         };
@@ -154,7 +170,8 @@ impl Parser<'_> {
             None
         };
         let operand = self.alloc_expr(lhs);
-        Expr::TypeTest {
+        Expr::TypeCheck {
+            kind: TypeCheckKind::Test,
             operand,
             ty,
             binding,
@@ -167,9 +184,11 @@ impl Parser<'_> {
         let _cqg = self.bump();
         let ty = self.parse_alloc_ty();
         let operand = self.alloc_expr(lhs);
-        Expr::TypeCast {
+        Expr::TypeCheck {
+            kind: TypeCheckKind::Cast,
             operand,
             ty,
+            binding: None,
             span: self.finish_span(start),
         }
     }

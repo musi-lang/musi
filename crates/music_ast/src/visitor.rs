@@ -112,9 +112,7 @@ pub fn walk_expr<V: AstVisitor + ?Sized>(
 
         // -- operators -------------------------------------------------------
         Expr::BinOp { left, right, .. } => v.visit_expr_list(&[*left, *right], ctx),
-        Expr::UnaryOp { operand, .. } | Expr::ForceUnwrap { operand, .. } => {
-            v.visit_expr(*operand, ctx)
-        }
+        Expr::UnaryOp { operand, .. } => v.visit_expr(*operand, ctx),
 
         // -- conditionals ----------------------------------------------------
         Expr::Piecewise { arms, .. } => walk_expr_piecewise(v, arms, ctx),
@@ -130,14 +128,6 @@ pub fn walk_expr<V: AstVisitor + ?Sized>(
             ControlFlow::Continue(())
         }
 
-        // -- quantification --------------------------------------------------
-        Expr::Quantified {
-            constraints, body, ..
-        } => {
-            walk_constraints(v, constraints, ctx)?;
-            v.visit_expr(*body, ctx)
-        }
-
         // -- module ----------------------------------------------------------
         Expr::Annotated { attrs, inner, .. } => {
             walk_attrs_values(v, attrs, ctx)?;
@@ -150,7 +140,7 @@ pub fn walk_expr<V: AstVisitor + ?Sized>(
             members,
             ..
         }
-        | Expr::Given {
+        | Expr::Instance {
             constraints,
             members,
             ..
@@ -164,13 +154,12 @@ pub fn walk_expr<V: AstVisitor + ?Sized>(
         Expr::Foreign { decls, .. } => walk_foreign_decls(v, decls, ctx),
 
         // -- type test / cast ------------------------------------------------
-        Expr::TypeTest { operand, ty, .. } | Expr::TypeCast { operand, ty, .. } => {
+        Expr::TypeCheck { operand, ty, .. } => {
             v.visit_expr(*operand, ctx)?;
             v.visit_ty(*ty, ctx)
         }
 
         // -- effects ---------------------------------------------------------
-        Expr::Do { body, .. } => v.visit_expr(*body, ctx),
         Expr::Handle {
             effect_ty,
             ops,
@@ -195,7 +184,7 @@ pub fn walk_ty<V: AstVisitor + ?Sized>(
             }
             ControlFlow::Continue(())
         }
-        Ty::Option { inner, .. } | Ty::Ref { inner, .. } => v.visit_ty(*inner, ctx),
+        Ty::Option { inner, .. } => v.visit_ty(*inner, ctx),
 
         Ty::Fn {
             params,
@@ -226,13 +215,6 @@ pub fn walk_ty<V: AstVisitor + ?Sized>(
             ControlFlow::Continue(())
         }
         Ty::Array { elem, .. } => v.visit_ty(*elem, ctx),
-
-        Ty::Quantified {
-            constraints, body, ..
-        } => {
-            walk_constraints(v, constraints, ctx)?;
-            v.visit_ty(*body, ctx)
-        }
     }
 }
 
@@ -424,8 +406,7 @@ fn walk_expr_call<V: AstVisitor + ?Sized>(
     v.visit_expr(callee, ctx)?;
     for arg in args {
         match *arg {
-            Arg::Pos { expr, .. } => v.visit_expr(expr, ctx)?,
-            Arg::Hole { .. } => {}
+            Arg::Pos { expr, .. } | Arg::Spread { expr, .. } => v.visit_expr(expr, ctx)?,
         }
     }
     ControlFlow::Continue(())

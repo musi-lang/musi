@@ -2,7 +2,6 @@
 
 use music_ast::decl::{ClassMember, EffectOp, FnSig};
 use music_ast::expr::Expr;
-use music_ast::ty::TyParam;
 use music_lex::token::TokenKind;
 use music_shared::Symbol;
 
@@ -13,11 +12,7 @@ impl Parser<'_> {
         let start = self.start_span();
         let _class = self.expect(TokenKind::KwClass);
         let name = self.expect_symbol();
-        let params = if self.eat(TokenKind::KwOver) {
-            self.parse_ty_param_list_maybe_parens()
-        } else {
-            vec![]
-        };
+        let params = self.parse_optional_bracket_params();
         let constraints = if self.at(TokenKind::KwWhere) {
             self.parse_opt_where_clause()
         } else {
@@ -36,32 +31,16 @@ impl Parser<'_> {
         }
     }
 
-    /// Parses a type parameter list that may optionally be wrapped in parentheses.
-    /// Used after `over` in class/given declarations: `over T` or `over (A, B)`.
-    fn parse_ty_param_list_maybe_parens(&mut self) -> Vec<TyParam> {
-        if self.eat(TokenKind::LParen) {
-            let params = self.parse_ty_param_list();
-            let _rp = self.expect(TokenKind::RParen);
-            params
-        } else {
-            self.parse_ty_param_list()
-        }
-    }
-
-    pub(crate) fn parse_expr_given(&mut self) -> Expr {
+    pub(crate) fn parse_expr_instance(&mut self) -> Expr {
         let start = self.start_span();
-        let _given = self.expect(TokenKind::KwGiven);
+        let _instance = self.expect(TokenKind::KwInstance);
         let target = self.parse_ty_named_ref();
-        let params = if self.eat(TokenKind::KwOver) {
-            self.parse_ty_param_list_maybe_parens()
-        } else {
-            vec![]
-        };
+        let params = self.parse_optional_bracket_params();
         let constraints = self.parse_opt_where_clause();
         let _lb = self.expect(TokenKind::LBrace);
         let members = self.parse_class_body();
         let _rb = self.expect(TokenKind::RBrace);
-        Expr::Given {
+        Expr::Instance {
             exported: false,
             target,
             params,
@@ -76,11 +55,7 @@ impl Parser<'_> {
         let start = self.start_span();
         let _effect = self.expect(TokenKind::KwEffect);
         let name = self.expect_symbol();
-        let params = if self.eat(TokenKind::KwOf) {
-            self.parse_ty_param_list()
-        } else {
-            vec![]
-        };
+        let params = self.parse_optional_bracket_params();
         let _lb = self.expect(TokenKind::LBrace);
         let ops = self.parse_effect_ops();
         let _rb = self.expect(TokenKind::RBrace);

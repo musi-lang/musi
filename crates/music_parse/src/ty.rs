@@ -5,7 +5,7 @@ mod tests;
 
 use music_ast::TyIdx;
 use music_ast::expr::Arrow;
-use music_ast::ty::{Constraint, EffectItem, EffectSet, Quantifier, Rel, Ty, TyNamedRef, TyParam};
+use music_ast::ty::{Constraint, EffectItem, EffectSet, Rel, Ty, TyNamedRef};
 use music_lex::token::TokenKind;
 use music_shared::Symbol;
 
@@ -129,17 +129,14 @@ impl Parser<'_> {
         }
     }
 
-    /// Base types: var, option, ref, named, paren, array, record, refinement, quantified.
+    /// Base types: var, option, named, paren, array.
     fn parse_ty_base(&mut self) -> Ty {
         match self.peek_kind() {
             TokenKind::TyIdent => self.parse_ty_var(),
             TokenKind::Question => self.parse_ty_option(),
-            TokenKind::KwRef => self.parse_ty_ref(),
             TokenKind::Ident => self.parse_ty_named(),
             TokenKind::LParen => self.parse_ty_paren_or_tuple(),
             TokenKind::LBracket => self.parse_ty_array(),
-            TokenKind::KwForall => self.parse_ty_quantified(Quantifier::Forall),
-            TokenKind::KwExists => self.parse_ty_quantified(Quantifier::Exists),
             _ => self.error_ty(&ParseError::ExpectedType),
         }
     }
@@ -159,17 +156,6 @@ impl Parser<'_> {
         let inner = self.parse_ty_base();
         let inner_idx = self.alloc_ty(inner);
         Ty::Option {
-            inner: inner_idx,
-            span: self.finish_span(start),
-        }
-    }
-
-    fn parse_ty_ref(&mut self) -> Ty {
-        let start = self.start_span();
-        let _ref = self.bump();
-        let inner = self.parse_ty_base();
-        let inner_idx = self.alloc_ty(inner);
-        Ty::Ref {
             inner: inner_idx,
             span: self.finish_span(start),
         }
@@ -239,43 +225,6 @@ impl Parser<'_> {
             elem: elem_idx,
             span: self.finish_span(start),
         }
-    }
-
-    fn parse_ty_quantified(&mut self, kind: Quantifier) -> Ty {
-        let start = self.start_span();
-        let _kw = self.bump();
-        let params = self.parse_ty_param_list();
-        let constraints = self.parse_opt_where_clause();
-        let _arrow = self.expect(TokenKind::DashGt);
-        let body = self.parse_ty();
-        let body_idx = self.alloc_ty(body);
-        Ty::Quantified {
-            kind,
-            params,
-            constraints,
-            body: body_idx,
-            span: self.finish_span(start),
-        }
-    }
-
-    /// Parses `ty_ident { ',' ty_ident }`.
-    pub(crate) fn parse_ty_param_list(&mut self) -> Vec<TyParam> {
-        let mut params = vec![];
-        loop {
-            if !self.at(TokenKind::TyIdent) {
-                break;
-            }
-            let start = self.start_span();
-            let name = self.expect_symbol();
-            params.push(TyParam {
-                name,
-                span: self.finish_span(start),
-            });
-            if !self.eat(TokenKind::Comma) {
-                break;
-            }
-        }
-        params
     }
 
     fn parse_ty_arg_list(&mut self) -> Vec<TyIdx> {

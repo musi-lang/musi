@@ -206,19 +206,15 @@ pub(crate) const fn expr_span(expr: &Expr) -> Span {
         | Expr::Piecewise { span, .. }
         | Expr::Match { span, .. }
         | Expr::Return { span, .. }
-        | Expr::Quantified { span, .. }
         | Expr::Import { span, .. }
         | Expr::Export { span, .. }
         | Expr::Annotated { span, .. }
         | Expr::Binding { span, .. }
         | Expr::Class { span, .. }
-        | Expr::Given { span, .. }
+        | Expr::Instance { span, .. }
         | Expr::Effect { span, .. }
         | Expr::Foreign { span, .. }
-        | Expr::ForceUnwrap { span, .. }
-        | Expr::TypeTest { span, .. }
-        | Expr::TypeCast { span, .. }
-        | Expr::Do { span, .. }
+        | Expr::TypeCheck { span, .. }
         | Expr::Handle { span, .. }
         | Expr::Error { span, .. } => *span,
     }

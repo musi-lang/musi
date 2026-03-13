@@ -16,7 +16,7 @@ impl Resolver<'_> {
                     self.resolve_ty(arg);
                 }
             }
-            Ty::Option { inner, .. } | Ty::Ref { inner, .. } => {
+            Ty::Option { inner, .. } => {
                 self.resolve_ty(inner);
             }
             Ty::Fn { params, ret, .. } => {
@@ -37,16 +37,6 @@ impl Resolver<'_> {
             }
             Ty::Array { elem, .. } => {
                 self.resolve_ty(elem);
-            }
-            Ty::Quantified {
-                params,
-                constraints,
-                body,
-                ..
-            } => {
-                let parent = self.enter_ty_param_scope(&params, &constraints);
-                self.resolve_ty(body);
-                self.current_scope = parent;
             }
             Ty::Var { name, span } => {
                 if self.scopes.lookup(self.current_scope, name).is_none() {

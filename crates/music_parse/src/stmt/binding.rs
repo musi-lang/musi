@@ -8,18 +8,16 @@ use crate::error::ParseError;
 use crate::parser::Parser;
 
 impl Parser<'_> {
-    /// Parses `'let' ['ref'] pat [ty_annot] ':=' expr ['in' '(' expr ')']`.
+    /// Parses `'let' ['mut'] pat [ty_annot] ':=' expr ['in' '(' expr ')']`.
     pub(crate) fn parse_expr_let(&mut self) -> Expr {
         let start = self.start_span();
         let _let = self.bump();
-        self.parse_expr_binding_immut_body(BindKind::Immut, start)
-    }
-
-    /// Parses `'var' ['ref'] pat [ty_annot] ':=' expr`.
-    pub(crate) fn parse_expr_binding_mut(&mut self) -> Expr {
-        let start = self.start_span();
-        let _var = self.bump();
-        self.parse_expr_binding_immut_body(BindKind::Mut, start)
+        let kind = if self.eat(TokenKind::KwMut) {
+            BindKind::Mut
+        } else {
+            BindKind::Immut
+        };
+        self.parse_expr_binding_immut_body(kind, start)
     }
 
     /// Parses `'choice' '{' type '}'`.
@@ -66,7 +64,7 @@ impl Parser<'_> {
         }
     }
 
-    fn parse_optional_bracket_params(&mut self) -> Vec<TyParam> {
+    pub(crate) fn parse_optional_bracket_params(&mut self) -> Vec<TyParam> {
         if self.eat(TokenKind::LBracket) {
             let params = self.comma_sep(TokenKind::RBracket, Self::parse_single_bracket_param);
             let _rb = self.expect(TokenKind::RBracket);
@@ -92,7 +90,6 @@ impl Parser<'_> {
     }
 
     fn parse_expr_binding_immut_body(&mut self, kind: BindKind, start: u32) -> Expr {
-        let heap = self.eat(TokenKind::KwRef);
         let pat = self.parse_alloc_pat();
         let params = self.parse_optional_bracket_params();
         let constraints = if params.is_empty() {
@@ -121,12 +118,12 @@ impl Parser<'_> {
 
         let fields = LetFields {
             kind,
-            heap,
             pat,
             params,
             constraints,
             ty,
             value,
+            with_effects: None,
             span: self.finish_span(start),
         };
 

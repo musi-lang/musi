@@ -7,7 +7,6 @@ mod postfix;
 mod tests;
 
 use music_ast::expr::{BinOp, Expr, UnaryOp};
-use music_ast::ty::Quantifier;
 use music_lex::token::TokenKind;
 
 use crate::error::ParseError;
@@ -151,17 +150,12 @@ impl Parser<'_> {
 
             // Bindings
             TokenKind::KwLet => self.parse_expr_let(),
-            TokenKind::KwVar => self.parse_expr_binding_mut(),
 
             // Return
             TokenKind::KwReturn => self.parse_expr_return(),
 
             // Match
             TokenKind::KwMatch => self.parse_expr_match(),
-
-            // Quantified expressions
-            TokenKind::KwForall => self.parse_expr_quantified(Quantifier::Forall),
-            TokenKind::KwExists => self.parse_expr_quantified(Quantifier::Exists),
 
             // Import
             TokenKind::KwImport => self.parse_expr_import(),
@@ -173,14 +167,14 @@ impl Parser<'_> {
             TokenKind::KwChoice => self.parse_expr_choice(),
             TokenKind::KwRecord => self.parse_expr_record_def(),
 
-            // Class / Given / Effect / Foreign
+            // Class / Instance / Effect / Foreign
             TokenKind::KwClass => self.parse_expr_class(),
-            TokenKind::KwGiven => self.parse_expr_given(),
+            TokenKind::KwInstance => self.parse_expr_instance(),
             TokenKind::KwEffect => self.parse_expr_effect(),
             TokenKind::KwForeign => self.parse_expr_foreign(),
 
             // Do / Handle
-            TokenKind::KwDo => self.parse_expr_do(),
+            TokenKind::KwDo => self.parse_expr_unary_op(UnaryOp::Do, 0),
             TokenKind::KwWith => self.parse_expr_handle(),
 
             // Annotated: #[...] decl
@@ -201,21 +195,6 @@ impl Parser<'_> {
         Expr::UnaryOp {
             op,
             operand,
-            span: self.finish_span(start),
-        }
-    }
-
-    /// Parses `do postfix_expr` — the body is a single postfix chain, not a full expression.
-    fn parse_expr_do(&mut self) -> Expr {
-        use music_ast::expr::Expr as E;
-        let start = self.start_span();
-        let _kw = self.bump();
-        let nud_start = self.start_span();
-        let nud = self.parse_expr_nud_chain();
-        let body_expr = self.parse_expr_postfix_chain(nud, nud_start);
-        let body = self.alloc_expr(body_expr);
-        E::Do {
-            body,
             span: self.finish_span(start),
         }
     }

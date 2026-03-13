@@ -61,7 +61,7 @@ fn test_parse_let_in_scoped() {
 
 #[test]
 fn test_parse_class_declaration() {
-    let src = "class Eq over 'T { let (=)(a, b) : Bool; };";
+    let src = "class Eq ['T] { let (=)(a, b) : Bool; };";
     let (expr, diags) = parse_single(src);
     assert!(!diags.has_errors(), "diags: {diags:?}");
     assert!(
@@ -76,10 +76,10 @@ fn test_parse_class_declaration() {
 
 #[test]
 fn test_parse_given_declaration() {
-    let src = "given Eq of Int { let (=)(a, b) : Bool := a; };";
+    let src = "instance Eq of Int { let (=)(a, b) : Bool := a; };";
     let (expr, diags) = parse_single(src);
     assert!(!diags.has_errors(), "diags: {diags:?}");
-    assert!(matches!(expr, Expr::Given { .. }));
+    assert!(matches!(expr, Expr::Instance { .. }));
 }
 
 #[test]
@@ -115,7 +115,7 @@ fn test_parse_effect_no_params_single_op() {
 
 #[test]
 fn test_parse_effect_with_params_multiple_ops() {
-    let src = "effect State of 'S { get : () -> 'S; put : 'S -> (); };";
+    let src = "effect State ['S] { get : () -> 'S; put : 'S -> (); };";
     let (expr, diags) = parse_single(src);
     assert!(!diags.has_errors(), "diags: {diags:?}");
     assert!(
@@ -131,7 +131,7 @@ fn test_parse_effect_with_params_multiple_ops() {
 
 #[test]
 fn test_parse_effect_throw_parameterized() {
-    let src = "effect Throw of 'E { raise : 'E -> 'E; };";
+    let src = "effect Throw ['E] { raise : 'E -> 'E; };";
     let (expr, diags) = parse_single(src);
     assert!(!diags.has_errors(), "diags: {diags:?}");
     let Expr::Effect { params, ops, .. } = expr else {
@@ -142,15 +142,15 @@ fn test_parse_effect_throw_parameterized() {
 }
 
 #[test]
-fn test_parse_given_generic_with_over() {
-    let src = "given Eq of List over 'T where 'T <: Eq { let (=)(xs, ys) : Bool; };";
+fn test_parse_instance_generic_with_bracket_params() {
+    let src = "instance Eq of List ['T] where 'T <: Eq { let (=)(xs, ys) : Bool; };";
     let (expr, diags) = parse_single(src);
     assert!(!diags.has_errors(), "diags: {diags:?}");
     assert!(
-        matches!(expr, Expr::Given { .. }),
-        "expected Given, got {expr:?}"
+        matches!(expr, Expr::Instance { .. }),
+        "expected Instance, got {expr:?}"
     );
-    let Expr::Given {
+    let Expr::Instance {
         params,
         constraints,
         ..

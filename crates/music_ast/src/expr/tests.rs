@@ -21,7 +21,7 @@ fn test_let_fields_round_trip_through_arena() {
     });
     let fields = LetFields {
         kind: BindKind::Immut,
-        heap: false,
+        with_effects: None,
         pat,
         params: vec![],
         constraints: vec![],
@@ -38,7 +38,7 @@ fn test_let_fields_round_trip_through_arena() {
         panic!("expected Let");
     };
     assert_eq!(stored.kind, BindKind::Immut);
-    assert!(!stored.heap);
+    assert!(stored.with_effects.is_none());
     assert_eq!(stored.pat, pat);
     assert_eq!(stored.value, Some(value));
 }
@@ -112,7 +112,7 @@ fn test_binding_embeds_let_fields() {
     });
     let fields = LetFields {
         kind: BindKind::Mut,
-        heap: true,
+        with_effects: None,
         pat,
         params: vec![],
         constraints: vec![],
@@ -133,7 +133,7 @@ fn test_binding_embeds_let_fields() {
     };
     assert!(*exported);
     assert_eq!(fields.kind, BindKind::Mut);
-    assert!(fields.heap);
+    assert!(fields.with_effects.is_none());
 }
 
 #[test]

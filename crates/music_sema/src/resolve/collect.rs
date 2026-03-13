@@ -42,7 +42,7 @@ impl Resolver<'_> {
             } => {
                 self.collect_foreign_decls(*exported, decls);
             }
-            Expr::Given {
+            Expr::Instance {
                 target, exported, ..
             } => {
                 let id = self

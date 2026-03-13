@@ -16,30 +16,25 @@ pub enum TokenKind {
     KwDefer,
     KwDo,
     KwEffect,
-    KwExists,
     KwExport,
     KwFatal,
-    KwForall,
     KwForeign,
-    KwGiven,
     KwHandle,
     KwIf,
     KwImport,
     KwIn,
-    KwInout,
+    KwInstance,
     KwLaw,
     KwLet,
     KwMatch,
+    KwMut,
     KwNot,
     KwOf,
     KwOr,
-    KwOver,
     KwRecord,
-    KwRef,
     KwResume,
     KwReturn,
     KwTry,
-    KwVar,
     KwWhere,
     KwWith,
     KwXor,
@@ -139,30 +134,25 @@ impl TokenKind {
                 | Self::KwDefer
                 | Self::KwDo
                 | Self::KwEffect
-                | Self::KwExists
                 | Self::KwExport
                 | Self::KwFatal
-                | Self::KwForall
                 | Self::KwForeign
-                | Self::KwGiven
                 | Self::KwHandle
                 | Self::KwIf
                 | Self::KwImport
                 | Self::KwIn
-                | Self::KwInout
+                | Self::KwInstance
                 | Self::KwLaw
                 | Self::KwLet
                 | Self::KwMatch
+                | Self::KwMut
                 | Self::KwNot
                 | Self::KwOf
                 | Self::KwOr
-                | Self::KwOver
                 | Self::KwRecord
-                | Self::KwRef
                 | Self::KwResume
                 | Self::KwReturn
                 | Self::KwTry
-                | Self::KwVar
                 | Self::KwWhere
                 | Self::KwWith
                 | Self::KwXor
@@ -181,30 +171,25 @@ impl TokenKind {
             Self::KwDefer => Some("defer"),
             Self::KwDo => Some("do"),
             Self::KwEffect => Some("effect"),
-            Self::KwExists => Some("exists"),
             Self::KwExport => Some("export"),
             Self::KwFatal => Some("fatal"),
-            Self::KwForall => Some("forall"),
             Self::KwForeign => Some("foreign"),
-            Self::KwGiven => Some("given"),
             Self::KwHandle => Some("handle"),
             Self::KwIf => Some("if"),
             Self::KwImport => Some("import"),
             Self::KwIn => Some("in"),
-            Self::KwInout => Some("inout"),
+            Self::KwInstance => Some("instance"),
             Self::KwLaw => Some("law"),
             Self::KwLet => Some("let"),
             Self::KwMatch => Some("match"),
+            Self::KwMut => Some("mut"),
             Self::KwNot => Some("not"),
             Self::KwOf => Some("of"),
             Self::KwOr => Some("or"),
-            Self::KwOver => Some("over"),
             Self::KwRecord => Some("record"),
-            Self::KwRef => Some("ref"),
             Self::KwResume => Some("resume"),
             Self::KwReturn => Some("return"),
             Self::KwTry => Some("try"),
-            Self::KwVar => Some("var"),
             Self::KwWhere => Some("where"),
             Self::KwWith => Some("with"),
             Self::KwXor => Some("xor"),
@@ -308,30 +293,25 @@ pub fn keyword_from_str(s: &str) -> Option<TokenKind> {
         "defer" => Some(TokenKind::KwDefer),
         "do" => Some(TokenKind::KwDo),
         "effect" => Some(TokenKind::KwEffect),
-        "exists" => Some(TokenKind::KwExists),
         "export" => Some(TokenKind::KwExport),
         "fatal" => Some(TokenKind::KwFatal),
-        "forall" => Some(TokenKind::KwForall),
         "foreign" => Some(TokenKind::KwForeign),
-        "given" => Some(TokenKind::KwGiven),
         "handle" => Some(TokenKind::KwHandle),
         "if" => Some(TokenKind::KwIf),
         "import" => Some(TokenKind::KwImport),
         "in" => Some(TokenKind::KwIn),
-        "inout" => Some(TokenKind::KwInout),
+        "instance" => Some(TokenKind::KwInstance),
         "law" => Some(TokenKind::KwLaw),
         "let" => Some(TokenKind::KwLet),
         "match" => Some(TokenKind::KwMatch),
+        "mut" => Some(TokenKind::KwMut),
         "not" => Some(TokenKind::KwNot),
         "of" => Some(TokenKind::KwOf),
         "or" => Some(TokenKind::KwOr),
-        "over" => Some(TokenKind::KwOver),
         "record" => Some(TokenKind::KwRecord),
-        "ref" => Some(TokenKind::KwRef),
         "resume" => Some(TokenKind::KwResume),
         "return" => Some(TokenKind::KwReturn),
         "try" => Some(TokenKind::KwTry),
-        "var" => Some(TokenKind::KwVar),
         "where" => Some(TokenKind::KwWhere),
         "with" => Some(TokenKind::KwWith),
         "xor" => Some(TokenKind::KwXor),
