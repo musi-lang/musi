@@ -4,13 +4,15 @@ use music_ast::decl::{ClassMember, ForeignDecl};
 use music_ast::expr::{Expr, Param};
 use music_ast::ty::TyParam;
 use music_ast::util::collect_ty_var_nodes;
-use music_shared::{Idx, Span};
+use std::collections::HashSet;
+use music_shared::{Idx, Span, Symbol};
 use std::hash::BuildHasher;
 
 use crate::checker::Checker;
 use crate::checker::expr::{check, synth};
 use crate::checker::ty::lower_ty;
 use crate::def::DefKind;
+use crate::error::SemaError;
 
 /// Checks a class/given member's default body with sig params in scope.
 fn check_member_fn<S: BuildHasher>(ck: &mut Checker<'_, S>, member: &ClassMember) {
@@ -111,6 +113,63 @@ fn check_class_members<S: BuildHasher>(ck: &mut Checker<'_, S>, members: &[Class
     }
 }
 
+fn check_instance_method_coverage<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
+    class_name: Symbol,
+    instance_members: &[ClassMember],
+    span: Span,
+) {
+    let class_name_str = ck.ctx.interner.resolve(class_name).to_owned();
+
+    let required_methods: Vec<String> = find_class_required_methods(ck, class_name);
+
+    let provided: HashSet<String> = instance_members
+        .iter()
+        .filter_map(|m| {
+            if let ClassMember::Fn { sig, .. } = m {
+                Some(ck.ctx.interner.resolve(sig.name).to_owned())
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    for method in &required_methods {
+        if !provided.contains(method.as_str()) {
+            let _d = ck.diags.report(
+                &SemaError::MissingInstanceMethod {
+                    class: Box::from(class_name_str.as_str()),
+                    method: Box::from(method.as_str()),
+                },
+                span,
+                ck.ctx.file_id,
+            );
+        }
+    }
+}
+
+fn find_class_required_methods<S: BuildHasher>(ck: &Checker<'_, S>, class_name: Symbol) -> Vec<String> {
+    let n = ck.ctx.ast.exprs.len();
+    for i in 0..n {
+        let idx = music_shared::Idx::from_raw(u32::try_from(i).expect("expr index in range"));
+        if let Expr::Class { name, members, .. } = &ck.ctx.ast.exprs[idx]
+            && *name == class_name
+        {
+            return members
+                .iter()
+                .filter_map(|m| {
+                    if let ClassMember::Fn { sig, default: None, .. } = m {
+                        Some(ck.ctx.interner.resolve(sig.name).to_owned())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+        }
+    }
+    vec![]
+}
+
 /// Checks a declaration expression (class, given, effect, foreign).
 pub fn check_stmt<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: Idx<music_ast::Expr>) {
     match ck.ctx.ast.exprs[expr_idx].clone() {
@@ -132,6 +191,7 @@ pub fn check_stmt<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: Idx<music_a
             target,
             params,
             members,
+            span,
             ..
         } => {
             let mut all_params: Vec<TyParam> = params;
@@ -145,6 +205,7 @@ pub fn check_stmt<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: Idx<music_a
                 Some(p)
             };
             check_class_members(ck, &members, &all_params);
+            check_instance_method_coverage(ck, target.name, &members, span);
             if let Some(p) = parent {
                 ck.current_scope = p;
             }

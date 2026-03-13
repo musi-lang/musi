@@ -1,6 +1,6 @@
 //! Per-expression synthesis and checking.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::hash::BuildHasher;
 
 use music_ast::expr::{
@@ -99,10 +99,10 @@ fn synth_inner<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) -> Ty
             if let Some(v) = *value { let _ty = synth(ck, v); }
             ck.named_ty(ck.ctx.well_known.never)
         }
-        Expr::Variant { args, span, .. } => {
-            let (args, span) = (args.clone(), *span);
+        Expr::Variant { name, args, span, .. } => {
+            let (name, args, span) = (*name, args.clone(), *span);
             for &a in &args { let _ty = synth(ck, a); }
-            ck.fresh_var(span)
+            synth_variant(ck, name, span)
         }
         Expr::Update { base, fields, .. } => {
             let (base, fields) = (*base, fields.clone());
@@ -118,7 +118,21 @@ fn synth_inner<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) -> Ty
             ck.named_ty(ck.ctx.well_known.unit)
         }
         Expr::Import { path, .. } => synth_import(ck, *path),
-        Expr::Export { .. } => ck.named_ty(ck.ctx.well_known.unit),
+        Expr::Export { items, span, .. } => {
+            let (items, span) = (items.clone(), *span);
+            for item in &items {
+                if ck.scopes.lookup(ck.current_scope, item.name).is_none() {
+                    let name_str = ck.ctx.interner.resolve(item.name);
+                    let _d = ck.diags.report(
+                        &SemaError::UndefinedName { name: Box::from(name_str) },
+                        item.span,
+                        ck.ctx.file_id,
+                    );
+                }
+            }
+            let _ = span;
+            ck.named_ty(ck.ctx.well_known.unit)
+        }
         Expr::Error { .. } => ck.error_ty(),
         Expr::TypeCheck { kind, operand, ty, binding, span } =>
             synth_type_check(ck, *kind, *operand, *ty, *binding, *span),
@@ -463,7 +477,87 @@ fn synth_match<S: BuildHasher>(ck: &mut Checker<'_, S>, scrutinee: ExprIdx, arms
         let arm_ty = synth(ck, arm.result);
         ck.unify_or_report(result_ty, arm_ty, span);
     }
+    check_match_exhaustiveness(ck, scrut_ty, arms, span);
     result_ty
+}
+
+fn check_match_exhaustiveness<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
+    scrut_ty: TypeIdx,
+    arms: &[MatchArm],
+    span: Span,
+) {
+    use music_ast::pat::Pat;
+
+    let has_wildcard = arms.iter().any(|arm| {
+        matches!(
+            &ck.ctx.ast.pats[arm.pat],
+            Pat::Wild { .. } | Pat::Bind { inner: None, .. }
+        )
+    });
+    if has_wildcard {
+        return;
+    }
+
+    let resolved = ck.resolve_ty(scrut_ty);
+    match ck.store.types[resolved].clone() {
+        Type::Sum { variants } => {
+            let covered: HashSet<Symbol> = arms
+                .iter()
+                .filter_map(|arm| {
+                    if let Pat::Variant { name, .. } = &ck.ctx.ast.pats[arm.pat] {
+                        Some(*name)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            for variant in &variants {
+                if !covered.contains(&variant.name) {
+                    let name_str = ck.ctx.interner.resolve(variant.name);
+                    let _d = ck.diags.report(
+                        &SemaError::NonExhaustiveMatch {
+                            missing: Box::from(name_str),
+                        },
+                        span,
+                        ck.ctx.file_id,
+                    );
+                }
+            }
+        }
+        Type::Named { def, .. } if def == ck.ctx.well_known.bool => {
+            let covered: HashSet<String> = arms
+                .iter()
+                .filter_map(|arm| {
+                    if let Pat::Variant { name, .. } = &ck.ctx.ast.pats[arm.pat] {
+                        Some(ck.ctx.interner.resolve(*name).to_owned())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            for case in &["true", "false"] {
+                if !covered.contains(*case) {
+                    let _d = ck.diags.report(
+                        &SemaError::NonExhaustiveMatch {
+                            missing: Box::from(*case),
+                        },
+                        span,
+                        ck.ctx.file_id,
+                    );
+                }
+            }
+        }
+        _ => {
+            let _d = ck.diags.report(
+                &SemaError::NonExhaustiveMatch {
+                    missing: Box::from("_"),
+                },
+                span,
+                ck.ctx.file_id,
+            );
+        }
+    }
 }
 
 fn synth_lit<S: BuildHasher>(ck: &mut Checker<'_, S>, lit: &Lit, _span: Span) -> TypeIdx {
@@ -846,6 +940,43 @@ fn unwrap_result_ty<S: BuildHasher>(ck: &mut Checker<'_, S>, operand_ty: TypeIdx
     ok_inner
 }
 
+fn synth_variant<S: BuildHasher>(ck: &mut Checker<'_, S>, name: Symbol, span: Span) -> TypeIdx {
+    if let Some(def_id) = ck.scopes.lookup(ck.current_scope, name)
+        && ck.defs.get(def_id).kind == DefKind::Variant
+        && let Some(parent_id) = ck.defs.get(def_id).parent
+    {
+        let parent_ty = ck.defs.get(parent_id).ty_info.ty;
+        if let Some(ty) = parent_ty {
+            return ty;
+        }
+        return ck.named_ty(parent_id);
+    }
+    ck.fresh_var(span)
+}
+
+fn check_cast_safety<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
+    from_ty: TypeIdx,
+    to_ty: TypeIdx,
+    span: Span,
+) {
+    let from_resolved = ck.resolve_ty(from_ty);
+    let to_resolved = ck.resolve_ty(to_ty);
+    if let (Type::Named { def: from_def, .. }, Type::Named { def: to_def, .. }) =
+        (&ck.store.types[from_resolved].clone(), &ck.store.types[to_resolved].clone())
+        && from_def != to_def
+    {
+        let defs_vec: Vec<_> = ck.defs.iter().cloned().collect();
+        let from_str = fmt_type(from_resolved, &ck.store.types, &defs_vec, ck.ctx.interner);
+        let to_str = fmt_type(to_resolved, &ck.store.types, &defs_vec, ck.ctx.interner);
+        let _d = ck.diags.report(
+            &SemaError::UnsafeCast { from: from_str, to: to_str },
+            span,
+            ck.ctx.file_id,
+        );
+    }
+}
+
 fn synth_type_check<S: BuildHasher>(
     ck: &mut Checker<'_, S>,
     kind: TypeCheckKind,
@@ -857,8 +988,10 @@ fn synth_type_check<S: BuildHasher>(
     match kind {
         TypeCheckKind::Test => synth_type_test(ck, operand, ty, binding, span),
         TypeCheckKind::Cast => {
-            let _operand_ty = synth(ck, operand);
-            lower_ty(ck, ty)
+            let operand_ty = synth(ck, operand);
+            let target_ty = lower_ty(ck, ty);
+            check_cast_safety(ck, operand_ty, target_ty, span);
+            target_ty
         }
     }
 }
@@ -903,5 +1036,58 @@ fn synth_handle<S: BuildHasher>(
         let _op_ty = synth(ck, op.body);
         ck.current_scope = parent;
     }
+    check_handler_op_coverage(ck, effect_ty, ops);
     synth(ck, body)
+}
+
+fn check_handler_op_coverage<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
+    effect_ty_idx: TyIdx,
+    ops: &[HandlerOp],
+) {
+    use music_ast::ty::Ty;
+
+    let effect_name = match &ck.ctx.ast.tys[effect_ty_idx] {
+        Ty::Named { name, .. } => *name,
+        _ => return,
+    };
+
+    let required_ops = find_effect_required_ops(ck, effect_name);
+    if required_ops.is_empty() {
+        return;
+    }
+
+    let effect_name_str = ck.ctx.interner.resolve(effect_name).to_owned();
+    let handled: HashSet<Symbol> =
+        ops.iter().map(|op| op.name).collect();
+
+    for (op_sym, op_span) in &required_ops {
+        if !handled.contains(op_sym) {
+            let op_name_str = ck.ctx.interner.resolve(*op_sym);
+            let _d = ck.diags.report(
+                &SemaError::MissingHandlerOp {
+                    effect: Box::from(effect_name_str.as_str()),
+                    op: Box::from(op_name_str),
+                },
+                *op_span,
+                ck.ctx.file_id,
+            );
+        }
+    }
+}
+
+fn find_effect_required_ops<S: BuildHasher>(
+    ck: &Checker<'_, S>,
+    effect_name: Symbol,
+) -> Vec<(Symbol, Span)> {
+    let n = ck.ctx.ast.exprs.len();
+    for i in 0..n {
+        let idx = music_shared::Idx::from_raw(u32::try_from(i).expect("expr index in range"));
+        if let Expr::Effect { name, ops, .. } = &ck.ctx.ast.exprs[idx]
+            && *name == effect_name
+        {
+            return ops.iter().map(|op| (op.name, op.span)).collect();
+        }
+    }
+    vec![]
 }
