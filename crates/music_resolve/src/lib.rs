@@ -4,6 +4,7 @@
 //! relative `./`, and bare names), resolves them to filesystem paths, and
 //! builds a module dependency graph with cycle detection and topological sorting.
 
+pub mod builtin;
 pub mod error;
 pub mod git;
 pub mod graph;

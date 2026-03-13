@@ -14,7 +14,7 @@ use music_resolve::graph::ModuleId;
 use music_resolve::{ModuleGraph, ModuleNode, ResolverConfig, build_module_graph};
 use music_sema::{
     DefInfo, ExportBinding, ImportNames, ModuleSemaOutput, SemaResult, SharedAnalysisState,
-    analyze, collect_exports,
+    TypeIdx, analyze, collect_exports,
 };
 use music_shared::{DiagnosticBag, FileId, Interner, Severity, SourceDb, Span, Symbol};
 use tower_lsp_server::ls_types::{Diagnostic, DiagnosticSeverity, DiagnosticTag, Position, Range};
@@ -165,6 +165,13 @@ fn run_lsp_sema_in_order(
         let node = graph.get(module_id);
         let file_id = node.file_id;
 
+        // Built-in modules have no source; inject their exports directly.
+        if node.builtin {
+            let exports = builtin_module_exports(node, &state);
+            let _prev = module_exports.insert(module_id, exports);
+            continue;
+        }
+
         let import_names = build_import_names(node, &module_exports);
 
         let Some(parsed) = parsed_modules.remove(&module_id) else {
@@ -198,6 +205,32 @@ fn run_lsp_sema_in_order(
     let lexed = lex(entry_source, entry_file_id, interner, diags);
 
     Some((sema, parsed, entry_file_id, lexed))
+}
+
+fn builtin_module_exports(
+    node: &ModuleNode,
+    state: &SharedAnalysisState,
+) -> Vec<ExportBinding> {
+    let path_str = node.path.to_string_lossy();
+    if path_str == "<musi:ffi>" {
+        let wk = &state.well_known;
+        let c_string_def = state.defs.get(wk.ffi.c_string);
+        let ptr_def = state.defs.get(wk.ffi.ptr);
+        vec![
+            ExportBinding {
+                name: c_string_def.name,
+                ty: TypeIdx::from_raw(0),
+                def_id: wk.ffi.c_string,
+            },
+            ExportBinding {
+                name: ptr_def.name,
+                ty: TypeIdx::from_raw(0),
+                def_id: wk.ffi.ptr,
+            },
+        ]
+    } else {
+        vec![]
+    }
 }
 
 fn build_import_names(
@@ -247,14 +280,10 @@ pub fn expr_span(idx: ExprIdx, module: &ParsedModule) -> Option<Span> {
         | Expr::Annotated { span, .. }
         | Expr::Binding { span, .. }
         | Expr::Class { span, .. }
-        | Expr::Given { span, .. }
+        | Expr::Instance { span, .. }
         | Expr::Effect { span, .. }
         | Expr::Foreign { span, .. }
-        | Expr::Quantified { span, .. }
-        | Expr::ForceUnwrap { span, .. }
-        | Expr::TypeTest { span, .. }
-        | Expr::TypeCast { span, .. }
-        | Expr::Do { span, .. }
+        | Expr::TypeCheck { span, .. }
         | Expr::Handle { span, .. }
         | Expr::Error { span, .. } => *span,
     };

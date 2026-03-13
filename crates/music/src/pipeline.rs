@@ -13,7 +13,7 @@ use music_parse::parse;
 use music_resolve::graph::ModuleId;
 use music_resolve::{ModuleGraph, ModuleNode, build_module_graph};
 use music_sema::{
-    ExportBinding, ImportNames, SemaResult, SharedAnalysisState, analyze, collect_exports,
+    ExportBinding, ImportNames, SemaResult, SharedAnalysisState, TypeIdx, analyze, collect_exports,
 };
 use music_shared::{DiagnosticBag, FileId, Interner, SourceDb};
 
@@ -172,6 +172,13 @@ fn run_sema_in_order(
         let node = graph.get(module_id);
         let file_id = node.file_id;
 
+        // Built-in modules have no source; inject their exports directly.
+        if node.builtin {
+            let exports = builtin_module_exports(node, &state);
+            let _prev = module_exports.insert(module_id, exports);
+            continue;
+        }
+
         let import_names = build_import_names(node, &module_exports);
 
         let Some(parsed) = parsed_modules.remove(&module_id) else {
@@ -244,6 +251,32 @@ pub fn run_backend(out: &mut FrontendOutput) -> Result<Vec<u8>, ()> {
             eprintln!("error: {e}");
             Err(())
         }
+    }
+}
+
+fn builtin_module_exports(
+    node: &ModuleNode,
+    state: &SharedAnalysisState,
+) -> Vec<ExportBinding> {
+    let path_str = node.path.to_string_lossy();
+    if path_str == "<musi:ffi>" {
+        let wk = &state.well_known;
+        let c_string_def = state.defs.get(wk.ffi.c_string);
+        let ptr_def = state.defs.get(wk.ffi.ptr);
+        vec![
+            ExportBinding {
+                name: c_string_def.name,
+                ty: TypeIdx::from_raw(0),
+                def_id: wk.ffi.c_string,
+            },
+            ExportBinding {
+                name: ptr_def.name,
+                ty: TypeIdx::from_raw(0),
+                def_id: wk.ffi.ptr,
+            },
+        ]
+    } else {
+        vec![]
     }
 }
 

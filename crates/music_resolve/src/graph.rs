@@ -28,6 +28,8 @@ pub struct ModuleNode {
     pub source: String,
     pub file_id: FileId,
     pub imports: Vec<(ModuleId, Symbol)>,
+    /// `true` for `musi:*` built-in modules whose exports are injected by the pipeline.
+    pub builtin: bool,
 }
 
 /// A directed acyclic graph of modules.
@@ -62,6 +64,25 @@ impl ModuleGraph {
             source,
             file_id,
             imports: Vec::new(),
+            builtin: false,
+        });
+        id
+    }
+
+    /// Adds a built-in module (no source file) or returns its existing ID.
+    pub fn add_builtin_module(&mut self, path: PathBuf, file_id: FileId) -> ModuleId {
+        if let Some(&existing) = self.path_to_id.get(&path) {
+            return existing;
+        }
+        let id = ModuleId(u32::try_from(self.nodes.len()).expect("too many modules"));
+        let _prev = self.path_to_id.insert(path.clone(), id);
+        self.nodes.push(ModuleNode {
+            id,
+            path,
+            source: String::new(),
+            file_id,
+            imports: Vec::new(),
+            builtin: true,
         });
         id
     }
@@ -394,6 +415,23 @@ fn process_import(
             return;
         }
     };
+
+    // Built-in modules (e.g. musi:ffi) skip filesystem resolution.
+    if specifier.scheme == crate::specifier::ImportScheme::Musi
+        && crate::builtin::is_builtin_module(&specifier.module_path)
+    {
+        let sentinel = PathBuf::from(format!("<musi:{}>", specifier.module_path));
+        let target_id = if let Some(existing) = graph.lookup(&sentinel) {
+            existing
+        } else {
+            let builtin_file_id = ctx
+                .source_db
+                .add(sentinel.display().to_string(), "");
+            graph.add_builtin_module(sentinel, builtin_file_id)
+        };
+        graph.add_edge(current_id, target_id, sym);
+        return;
+    }
 
     let resolved_path = match resolve_import(&specifier, current_path, ctx.config) {
         Ok(p) => p,
