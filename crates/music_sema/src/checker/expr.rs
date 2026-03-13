@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use music_ast::expr::{
     Arg, ArrayElem, BinOp, Expr, FieldKey, HandlerOp, LetFields, MatchArm, Param, PwArm, PwGuard,
-    RecDefField, RecField, UnaryOp,
+    RecDefField, RecField, TypeCheckKind, UnaryOp,
 };
 use music_ast::lit::{FStrPart, Lit};
 use music_ast::pat::Pat;
@@ -101,25 +101,20 @@ fn synth_inner(ck: &mut Checker<'_>, expr_idx: ExprIdx) -> TypeIdx {
         Expr::Update { base, fields, .. } => synth_update(ck, base, &fields),
         Expr::Choice { body, .. } => synth_choice(ck, body),
         Expr::RecordDef { fields, .. } => synth_record_def(ck, &fields),
-        Expr::Quantified { body, .. } | Expr::Do { body, .. } => synth(ck, body),
-        Expr::Class { .. } | Expr::Given { .. } | Expr::Effect { .. } | Expr::Foreign { .. } => {
+        Expr::Class { .. } | Expr::Instance { .. } | Expr::Effect { .. } | Expr::Foreign { .. } => {
             check_stmt(ck, expr_idx);
             ck.named_ty(ck.ctx.well_known.unit)
         }
         Expr::Import { path, .. } => synth_import(ck, path),
         Expr::Export { .. } => ck.named_ty(ck.ctx.well_known.unit),
         Expr::Error { .. } => ck.error_ty(),
-        Expr::ForceUnwrap { operand, span } => synth_force_unwrap(ck, operand, span),
-        Expr::TypeTest {
+        Expr::TypeCheck {
+            kind,
             operand,
             ty,
             binding,
             span,
-        } => synth_type_test(ck, operand, ty, binding, span),
-        Expr::TypeCast { operand, ty, .. } => {
-            let _operand_ty = synth(ck, operand);
-            lower_ty(ck, ty)
-        }
+        } => synth_type_check(ck, kind, operand, ty, binding, span),
         Expr::Handle {
             effect_ty,
             ops,
@@ -658,7 +653,7 @@ fn synth_call(ck: &mut Checker<'_>, callee: ExprIdx, args: &[Arg], span: Span) -
                 .iter()
                 .map(|arg| match arg {
                     Arg::Pos { expr, .. } => synth(ck, *expr),
-                    Arg::Hole { span, .. } => ck.fresh_var(*span),
+                    Arg::Spread { expr, .. } => synth(ck, *expr),
                 })
                 .collect();
             let ret = ck.fresh_var(span);
@@ -710,14 +705,17 @@ fn synth_binop(
         | BinOp::Xor
         | BinOp::Shl
         | BinOp::Shr
-        | BinOp::ShrUn
         | BinOp::RangeInc
         | BinOp::RangeExc
         | BinOp::NilCoal => {
             ck.unify_or_report(left_ty, right_ty, span);
             left_ty
         }
-        BinOp::ForceCoal => unwrap_option_ty(ck, left_ty, span),
+        BinOp::ForceCoal => {
+            let inner = unwrap_result_ty(ck, left_ty, span);
+            ck.unify_or_report(inner, right_ty, span);
+            inner
+        }
         BinOp::Pipe => {
             let ret = ck.fresh_var(span);
             let fn_ty = ck.alloc_ty(Type::Fn {
@@ -751,8 +749,8 @@ fn synth_unaryop(ck: &mut Checker<'_>, op: UnaryOp, operand: ExprIdx, span: Span
             ck.unify_or_report(bool_ty, operand_ty, span);
             bool_ty
         }
-        UnaryOp::Neg | UnaryOp::Defer | UnaryOp::Try => operand_ty,
-        UnaryOp::ForceUnwrap => unwrap_option_ty(ck, operand_ty, span),
+        UnaryOp::Neg | UnaryOp::Defer | UnaryOp::Try | UnaryOp::Do => operand_ty,
+        UnaryOp::ForceUnwrap | UnaryOp::Propagate => unwrap_option_ty(ck, operand_ty, span),
     }
 }
 
@@ -833,9 +831,34 @@ fn unwrap_option_ty(ck: &mut Checker<'_>, operand_ty: TypeIdx, span: Span) -> Ty
     inner
 }
 
-fn synth_force_unwrap(ck: &mut Checker<'_>, operand: ExprIdx, span: Span) -> TypeIdx {
-    let operand_ty = synth(ck, operand);
-    unwrap_option_ty(ck, operand_ty, span)
+/// Expects `operand_ty` to be `Result<T, E>`, returning `T`.
+/// Introduces fresh `T` and `E`, unifies `operand_ty` with `Result<T, E>`, and returns `T`.
+fn unwrap_result_ty(ck: &mut Checker<'_>, operand_ty: TypeIdx, span: Span) -> TypeIdx {
+    let ok_inner = ck.fresh_var(span);
+    let err_inner = ck.fresh_var(span);
+    let result_ty = ck.alloc_ty(Type::Named {
+        def: ck.ctx.well_known.containers.result,
+        args: vec![ok_inner, err_inner],
+    });
+    ck.unify_or_report(result_ty, operand_ty, span);
+    ok_inner
+}
+
+fn synth_type_check(
+    ck: &mut Checker<'_>,
+    kind: TypeCheckKind,
+    operand: ExprIdx,
+    ty: TyIdx,
+    binding: Option<Symbol>,
+    span: Span,
+) -> TypeIdx {
+    match kind {
+        TypeCheckKind::Test => synth_type_test(ck, operand, ty, binding, span),
+        TypeCheckKind::Cast => {
+            let _operand_ty = synth(ck, operand);
+            lower_ty(ck, ty)
+        }
+    }
 }
 
 fn synth_type_test(

@@ -25,6 +25,18 @@ fn compile(source: &str) -> Result<EmitOutput, String> {
     emit(&parsed, &sema, &mut interner, file_id).map_err(|e| e.to_string())
 }
 
+/// Like `compile` but ignores type errors so we can test emission of
+/// constructs whose types require stdlib definitions (e.g. Result).
+fn compile_lenient(source: &str) -> Result<EmitOutput, String> {
+    let mut interner = Interner::new();
+    let mut diags = DiagnosticBag::new();
+    let file_id = FileId(0);
+    let lexed = lex(source, file_id, &mut interner, &mut diags);
+    let parsed = parse(&lexed.tokens, file_id, &mut diags, &interner);
+    let sema = analyze(&parsed, &mut interner, file_id, &mut diags);
+    emit(&parsed, &sema, &mut interner, file_id).map_err(|e| e.to_string())
+}
+
 /// Scan the function pool section (past the header) for the first occurrence of `op`.
 fn find_opcode(bytes: &[u8], op: Opcode) -> Option<usize> {
     assert!(bytes.len() > 35, "bytes too short for header");
@@ -95,4 +107,76 @@ fn test_emit_no_entrypoint_is_library() {
     // Flags at offset 8..12; FLAG_IS_LIB = 1 << 2 = 4.
     let flags = u32::from_le_bytes([out.bytes[8], out.bytes[9], out.bytes[10], out.bytes[11]]);
     assert_eq!(flags & 4, 4, "no entrypoint => FLAG_IS_LIB");
+}
+
+#[test]
+fn test_emit_range_inc() {
+    let source = "#[entrypoint]\nlet f : (Int, Int) -> Int := (a, b) => a..b;";
+    let out = compile(source);
+    assert!(out.is_ok(), "range-inc should compile: {}", out.unwrap_err());
+    let out = out.unwrap();
+    let found = find_opcode(&out.bytes, Opcode::MK_PRD);
+    assert!(found.is_some(), "expected MK_PRD for range construction");
+}
+
+#[test]
+fn test_emit_range_exc() {
+    let source = "#[entrypoint]\nlet f : (Int, Int) -> Int := (a, b) => a..<b;";
+    let out = compile(source);
+    assert!(out.is_ok(), "range-exc should compile: {}", out.unwrap_err());
+    let out = out.unwrap();
+    let found = find_opcode(&out.bytes, Opcode::MK_PRD);
+    assert!(found.is_some(), "expected MK_PRD for range construction");
+}
+
+#[test]
+fn test_emit_nil_coal() {
+    let source = "#[entrypoint]\nlet f : (Int, Int) -> Int := (a, b) => a ?? b;";
+    let out = compile(source);
+    assert!(out.is_ok(), "nil-coalesce should compile: {}", out.unwrap_err());
+    let out = out.unwrap();
+    let found = find_opcode(&out.bytes, Opcode::CMP_TAG)
+        .or_else(|| find_opcode(&out.bytes, Opcode::CMP_TAG_W));
+    assert!(found.is_some(), "expected CMP_TAG for nil-coalesce");
+}
+
+#[test]
+fn test_emit_cons() {
+    let source = "#[entrypoint]\nlet f : (Int, [] Int) -> [] Int := (x, xs) => x :: xs;";
+    let out = compile(source);
+    assert!(out.is_ok(), "cons should compile: {}", out.unwrap_err());
+    let out = out.unwrap();
+    let found = find_opcode(&out.bytes, Opcode::MK_PRD);
+    assert!(found.is_some(), "expected MK_PRD for cons cell");
+}
+
+#[test]
+fn test_emit_try_expr() {
+    let source = "#[entrypoint]\nlet f : (Int) -> Int := (x) => try x;";
+    let out = compile(source);
+    assert!(out.is_ok(), "try should compile: {}", out.unwrap_err());
+    let out = out.unwrap();
+    let found = find_opcode(&out.bytes, Opcode::MK_VAR)
+        .or_else(|| find_opcode(&out.bytes, Opcode::MK_VAR_W));
+    assert!(found.is_some(), "expected MK_VAR for try wrapping in Some");
+}
+
+#[test]
+fn test_emit_err_coal() {
+    // !! requires Result-typed left operand (unavailable without stdlib),
+    // so use compile_lenient to skip type errors and verify emission.
+    let source = "#[entrypoint]\nlet f : (Int, Int) -> Int := (a, b) => a !! b;";
+    let out = compile_lenient(source);
+    assert!(out.is_ok(), "err-coalesce should compile: {}", out.unwrap_err());
+    let out = out.unwrap();
+    let found = find_opcode(&out.bytes, Opcode::CMP_TAG)
+        .or_else(|| find_opcode(&out.bytes, Opcode::CMP_TAG_W));
+    assert!(found.is_some(), "expected CMP_TAG for err-coalesce");
+}
+
+#[test]
+fn test_emit_defer() {
+    let source = "#[entrypoint]\nlet f : () -> Int := () => (defer 1; 42);";
+    let out = compile(source);
+    assert!(out.is_ok(), "defer should compile: {}", out.unwrap_err());
 }
