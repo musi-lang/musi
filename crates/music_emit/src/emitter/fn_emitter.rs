@@ -250,7 +250,7 @@ impl FnEmitter {
 
     /// Emit `type.chk type_id` — pops value, pushes bool. Net stack: 0.
     pub fn emit_type_chk(&mut self, type_id: u32) {
-        encode_u32(&mut self.code, Opcode::TYPE_CHK, type_id);
+        encode_u32(&mut self.code, Opcode::TYP_CHK, type_id);
         // pops 1, pushes 1 → net 0
     }
 

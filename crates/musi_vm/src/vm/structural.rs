@@ -46,7 +46,7 @@ pub fn exec(
     if let Some(result) = exec_struct(op, operand, frame, heap)? {
         return Ok(result);
     }
-    if op == Opcode::TYPE_CHK {
+    if op == Opcode::TYP_CHK {
         return exec_type_chk(operand, frame, types, heap);
     }
     exec_array_alloc_globals(op, operand, frame, heap, globals)
@@ -260,7 +260,7 @@ fn exec_array_alloc_globals(
     }
 }
 
-/// `TYPE_CHK type_id` — pop value, push bool indicating runtime type match.
+/// `TYP_CHK type_id` — pop value, push bool indicating runtime type match.
 ///
 /// Scalar values (int, uint, bool, rune, float, fn, unit) are matched by
 /// comparing the value's NaN-box tag against the expected type pool tag.
