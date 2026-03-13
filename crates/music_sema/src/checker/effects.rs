@@ -1,6 +1,7 @@
 //! Effect row subset checking.
 
 use music_shared::Span;
+use std::hash::BuildHasher;
 
 use crate::checker::Checker;
 use crate::error::SemaError;
@@ -10,8 +11,8 @@ use crate::types::EffectRow;
 ///
 /// Reports diagnostics for any effect in the callee that is not declared
 /// in the current context.
-pub(crate) fn check_effects_subset(
-    ck: &mut Checker<'_>,
+pub fn check_effects_subset<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
     callee_effects: &EffectRow,
     current_effects: &EffectRow,
     span: Span,

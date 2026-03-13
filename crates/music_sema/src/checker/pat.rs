@@ -4,12 +4,13 @@ use music_ast::PatIdx;
 use music_ast::lit::Lit;
 use music_ast::pat::Pat;
 use music_shared::Span;
+use std::hash::BuildHasher;
 
 use crate::checker::Checker;
 use crate::types::{Type, TypeIdx};
 
 /// Checks a pattern against an expected type.
-pub(crate) fn check_pat(ck: &mut Checker<'_>, pat_idx: PatIdx, expected: TypeIdx) {
+pub fn check_pat<S: BuildHasher>(ck: &mut Checker<'_, S>, pat_idx: PatIdx, expected: TypeIdx) {
     match ck.ctx.ast.pats[pat_idx].clone() {
         Pat::Lit { lit, span } => {
             let lit_ty = match &lit {

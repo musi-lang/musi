@@ -5,6 +5,7 @@ use music_ast::expr::{Expr, Param};
 use music_ast::ty::TyParam;
 use music_ast::util::collect_ty_var_nodes;
 use music_shared::{Idx, Span};
+use std::hash::BuildHasher;
 
 use crate::checker::Checker;
 use crate::checker::expr::{check, synth};
@@ -12,7 +13,7 @@ use crate::checker::ty::lower_ty;
 use crate::def::DefKind;
 
 /// Checks a class/given member's default body with sig params in scope.
-fn check_member_fn(ck: &mut Checker<'_>, member: &ClassMember) {
+fn check_member_fn<S: BuildHasher>(ck: &mut Checker<'_, S>, member: &ClassMember) {
     let ClassMember::Fn { sig, default, .. } = member else {
         return;
     };
@@ -48,8 +49,8 @@ fn check_member_fn(ck: &mut Checker<'_>, member: &ClassMember) {
     ck.current_scope = parent;
 }
 
-fn check_member_law(
-    ck: &mut Checker<'_>,
+fn check_member_law<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
     params: &[Param],
     body: Idx<music_ast::Expr>,
     span: Span,
@@ -99,7 +100,7 @@ fn check_member_law(
     ck.current_scope = parent;
 }
 
-fn check_class_members(ck: &mut Checker<'_>, members: &[ClassMember], ty_params: &[TyParam]) {
+fn check_class_members<S: BuildHasher>(ck: &mut Checker<'_, S>, members: &[ClassMember], ty_params: &[TyParam]) {
     for member in members {
         match member {
             ClassMember::Fn { .. } => check_member_fn(ck, member),
@@ -111,7 +112,7 @@ fn check_class_members(ck: &mut Checker<'_>, members: &[ClassMember], ty_params:
 }
 
 /// Checks a declaration expression (class, given, effect, foreign).
-pub(crate) fn check_stmt(ck: &mut Checker<'_>, expr_idx: Idx<music_ast::Expr>) {
+pub fn check_stmt<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: Idx<music_ast::Expr>) {
     match ck.ctx.ast.exprs[expr_idx].clone() {
         Expr::Class {
             params, members, ..

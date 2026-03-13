@@ -1,6 +1,7 @@
 //! Per-expression synthesis and checking.
 
 use std::collections::HashMap;
+use std::hash::BuildHasher;
 
 use music_ast::expr::{
     Arg, ArrayElem, BinOp, Expr, FieldKey, HandlerOp, LetFields, MatchArm, Param, PwArm, PwGuard,
@@ -24,14 +25,14 @@ use crate::scope::ScopeId;
 use crate::types::{EffectRow, RecordField, SumVariant, Type, TypeIdx, fmt_type};
 
 /// Synthesises a type for `expr` (inference mode, direction ↑).
-pub(crate) fn synth(ck: &mut Checker<'_>, expr_idx: ExprIdx) -> TypeIdx {
+pub fn synth<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) -> TypeIdx {
     let ty = synth_inner(ck, expr_idx);
     ck.record_type(expr_idx, ty);
     ty
 }
 
 /// Checks `expr` against `expected` (checking mode, direction ↓).
-pub(crate) fn check(ck: &mut Checker<'_>, expr_idx: ExprIdx, expected: TypeIdx) {
+pub fn check<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx, expected: TypeIdx) {
     let found = synth_inner(ck, expr_idx);
     ck.record_type(expr_idx, expected);
     ck.unify_or_report(
@@ -41,90 +42,94 @@ pub(crate) fn check(ck: &mut Checker<'_>, expr_idx: ExprIdx, expected: TypeIdx) 
     );
 }
 
-fn synth_inner(ck: &mut Checker<'_>, expr_idx: ExprIdx) -> TypeIdx {
-    match ck.ctx.ast.exprs[expr_idx].clone() {
-        Expr::Lit { lit, span } => synth_lit(ck, &lit, span),
-        Expr::Name { span, .. } => synth_name(ck, expr_idx, span),
-        Expr::Paren { inner, .. } | Expr::Annotated { inner, .. } => synth(ck, inner),
+fn synth_inner<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) -> TypeIdx {
+    match &ck.ctx.ast.exprs[expr_idx] {
+        Expr::Lit { lit, span } => {
+            let (lit, span) = (lit.clone(), *span);
+            synth_lit(ck, &lit, span)
+        }
+        Expr::Name { span, .. } => synth_name(ck, expr_idx, *span),
+        Expr::Paren { inner, .. } | Expr::Annotated { inner, .. } => synth(ck, *inner),
         Expr::Tuple { elems, .. } => {
+            let elems: Vec<ExprIdx> = elems.clone();
             let elem_tys: Vec<_> = elems.iter().map(|&e| synth(ck, e)).collect();
             ck.alloc_ty(Type::Tuple { elems: elem_tys })
         }
-        Expr::Block { stmts, tail, .. } => synth_block(ck, &stmts, tail),
-        Expr::Let { fields, body, .. } => synth_let(ck, &fields, body),
-        Expr::Binding { fields, .. } => synth_binding(ck, &fields),
-        Expr::Fn {
-            params,
-            ret_ty,
-            body,
-            span,
-        } => synth_fn(ck, &params, ret_ty, body, span),
-        Expr::Call {
-            callee, args, span, ..
-        } => synth_call(ck, callee, &args, span),
-        Expr::BinOp {
-            op,
-            left,
-            right,
-            span,
-        } => synth_binop(ck, op, left, right, span),
-        Expr::UnaryOp {
-            op, operand, span, ..
-        } => synth_unaryop(ck, op, operand, span),
-        Expr::Field {
-            object,
-            field,
-            span,
-            ..
-        } => synth_field(ck, object, field, span),
-        Expr::Index { object, index, .. } => synth_index(ck, object, index),
-        Expr::Record { fields, .. } => synth_record(ck, &fields),
-        Expr::Array { elems, span } => synth_array(ck, &elems, span),
-        Expr::Piecewise { arms, span } => synth_piecewise(ck, &arms, span),
-        Expr::Match {
-            scrutinee,
-            arms,
-            span,
-        } => synth_match(ck, scrutinee, &arms, span),
+        Expr::Block { stmts, tail, .. } => {
+            let (stmts, tail) = (stmts.clone(), *tail);
+            synth_block(ck, &stmts, tail)
+        }
+        Expr::Let { fields, body, .. } => {
+            let (fields, body) = (fields.clone(), *body);
+            synth_let(ck, &fields, body)
+        }
+        Expr::Binding { fields, .. } => {
+            let fields = fields.clone();
+            synth_binding(ck, &fields)
+        }
+        Expr::Fn { params, ret_ty, body, span } => {
+            let (params, ret_ty, body, span) = (params.clone(), *ret_ty, *body, *span);
+            synth_fn(ck, &params, ret_ty, body, span)
+        }
+        Expr::Call { callee, args, span, .. } => {
+            let (callee, args, span) = (*callee, args.clone(), *span);
+            synth_call(ck, callee, &args, span)
+        }
+        Expr::BinOp { op, left, right, span } => synth_binop(ck, *op, *left, *right, *span),
+        Expr::UnaryOp { op, operand, span, .. } => synth_unaryop(ck, *op, *operand, *span),
+        Expr::Field { object, field, span, .. } => synth_field(ck, *object, *field, *span),
+        Expr::Index { object, index, .. } => synth_index(ck, *object, *index),
+        Expr::Record { fields, .. } => {
+            let fields = fields.clone();
+            synth_record(ck, &fields)
+        }
+        Expr::Array { elems, span } => {
+            let (elems, span) = (elems.clone(), *span);
+            synth_array(ck, &elems, span)
+        }
+        Expr::Piecewise { arms, span } => {
+            let (arms, span) = (arms.clone(), *span);
+            synth_piecewise(ck, &arms, span)
+        }
+        Expr::Match { scrutinee, arms, span } => {
+            let (scrutinee, arms, span) = (*scrutinee, arms.clone(), *span);
+            synth_match(ck, scrutinee, &arms, span)
+        }
         Expr::Return { value, .. } => {
-            if let Some(v) = value {
-                let _ty = synth(ck, v);
-            }
+            if let Some(v) = *value { let _ty = synth(ck, v); }
             ck.named_ty(ck.ctx.well_known.never)
         }
         Expr::Variant { args, span, .. } => {
-            for &a in &args {
-                let _ty = synth(ck, a);
-            }
+            let (args, span) = (args.clone(), *span);
+            for &a in &args { let _ty = synth(ck, a); }
             ck.fresh_var(span)
         }
-        Expr::Update { base, fields, .. } => synth_update(ck, base, &fields),
-        Expr::Choice { body, .. } => synth_choice(ck, body),
-        Expr::RecordDef { fields, .. } => synth_record_def(ck, &fields),
+        Expr::Update { base, fields, .. } => {
+            let (base, fields) = (*base, fields.clone());
+            synth_update(ck, base, &fields)
+        }
+        Expr::Choice { body, .. } => synth_choice(ck, *body),
+        Expr::RecordDef { fields, .. } => {
+            let fields = fields.clone();
+            synth_record_def(ck, &fields)
+        }
         Expr::Class { .. } | Expr::Instance { .. } | Expr::Effect { .. } | Expr::Foreign { .. } => {
             check_stmt(ck, expr_idx);
             ck.named_ty(ck.ctx.well_known.unit)
         }
-        Expr::Import { path, .. } => synth_import(ck, path),
+        Expr::Import { path, .. } => synth_import(ck, *path),
         Expr::Export { .. } => ck.named_ty(ck.ctx.well_known.unit),
         Expr::Error { .. } => ck.error_ty(),
-        Expr::TypeCheck {
-            kind,
-            operand,
-            ty,
-            binding,
-            span,
-        } => synth_type_check(ck, kind, operand, ty, binding, span),
-        Expr::Handle {
-            effect_ty,
-            ops,
-            body,
-            ..
-        } => synth_handle(ck, effect_ty, &ops, body),
+        Expr::TypeCheck { kind, operand, ty, binding, span } =>
+            synth_type_check(ck, *kind, *operand, *ty, *binding, *span),
+        Expr::Handle { effect_ty, ops, body, .. } => {
+            let (effect_ty, ops, body) = (*effect_ty, ops.clone(), *body);
+            synth_handle(ck, effect_ty, &ops, body)
+        }
     }
 }
 
-fn synth_index(ck: &mut Checker<'_>, object: ExprIdx, index: ExprIdx) -> TypeIdx {
+fn synth_index<S: BuildHasher>(ck: &mut Checker<'_, S>, object: ExprIdx, index: ExprIdx) -> TypeIdx {
     let obj_ty = synth(ck, object);
     let _idx_ty = synth(ck, index);
     let obj_ty = ck.resolve_ty(obj_ty);
@@ -134,7 +139,7 @@ fn synth_index(ck: &mut Checker<'_>, object: ExprIdx, index: ExprIdx) -> TypeIdx
     }
 }
 
-fn synth_update(ck: &mut Checker<'_>, base: ExprIdx, fields: &[RecField]) -> TypeIdx {
+fn synth_update<S: BuildHasher>(ck: &mut Checker<'_, S>, base: ExprIdx, fields: &[RecField]) -> TypeIdx {
     let base_ty = synth(ck, base);
     for field in fields {
         match field {
@@ -155,7 +160,7 @@ fn synth_update(ck: &mut Checker<'_>, base: ExprIdx, fields: &[RecField]) -> Typ
 /// child scope and checks each arg pattern with a fresh type variable so the
 /// param names are in scope when the value expression is checked.
 /// Returns `Some(parent_scope)` if a scope was entered, `None` otherwise.
-fn enter_fn_pat_scope(ck: &mut Checker<'_>, pat: PatIdx) -> Option<(ScopeId, Vec<TypeIdx>)> {
+fn enter_fn_pat_scope<S: BuildHasher>(ck: &mut Checker<'_, S>, pat: PatIdx) -> Option<(ScopeId, Vec<TypeIdx>)> {
     if let Pat::Variant { args, .. } = &ck.ctx.ast.pats[pat] {
         let parent = ck.current_scope;
         if !args.is_empty() {
@@ -173,7 +178,7 @@ fn enter_fn_pat_scope(ck: &mut Checker<'_>, pat: PatIdx) -> Option<(ScopeId, Vec
     }
 }
 
-fn synth_block(ck: &mut Checker<'_>, stmts: &[ExprIdx], tail: Option<ExprIdx>) -> TypeIdx {
+fn synth_block<S: BuildHasher>(ck: &mut Checker<'_, S>, stmts: &[ExprIdx], tail: Option<ExprIdx>) -> TypeIdx {
     for &stmt in stmts {
         let _ty = synth(ck, stmt);
     }
@@ -184,7 +189,7 @@ fn synth_block(ck: &mut Checker<'_>, stmts: &[ExprIdx], tail: Option<ExprIdx>) -
     }
 }
 
-fn synth_let(ck: &mut Checker<'_>, fields: &LetFields, body: Option<ExprIdx>) -> TypeIdx {
+fn synth_let<S: BuildHasher>(ck: &mut Checker<'_, S>, fields: &LetFields, body: Option<ExprIdx>) -> TypeIdx {
     let (parent_scope, ty_var_ids) = if fields.params.is_empty() {
         (None, vec![])
     } else {
@@ -232,7 +237,7 @@ fn synth_let(ck: &mut Checker<'_>, fields: &LetFields, body: Option<ExprIdx>) ->
     result
 }
 
-fn synth_binding(ck: &mut Checker<'_>, fields: &LetFields) -> TypeIdx {
+fn synth_binding<S: BuildHasher>(ck: &mut Checker<'_, S>, fields: &LetFields) -> TypeIdx {
     let (parent_scope, ty_var_ids) = if fields.params.is_empty() {
         (None, vec![])
     } else {
@@ -277,8 +282,8 @@ fn synth_binding(ck: &mut Checker<'_>, fields: &LetFields) -> TypeIdx {
 /// If the binding has a function-like pattern (`go(acc, ys) := body`), wraps
 /// the body's return type in a `Type::Fn` using the param types from
 /// `enter_fn_pat_scope`. Otherwise returns `value_ty` unchanged.
-fn wrap_fn_pat_ty(
-    ck: &mut Checker<'_>,
+fn wrap_fn_pat_ty<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
     value_ty: TypeIdx,
     fn_pat_info: Option<&(ScopeId, Vec<TypeIdx>)>,
 ) -> TypeIdx {
@@ -296,7 +301,7 @@ fn wrap_fn_pat_ty(
 /// Stores type info on the def for a let/binding pattern:
 /// - For `Pat::Variant` (fn-like patterns), stores `ty_params` from bracket params.
 /// - Type is stored later by `check_pat` on `Pat::Bind`.
-fn store_pat_ty_info(ck: &mut Checker<'_>, fields: &LetFields, ty_param_defs: &[DefId]) {
+fn store_pat_ty_info<S: BuildHasher>(ck: &mut Checker<'_, S>, fields: &LetFields, ty_param_defs: &[DefId]) {
     if !ty_param_defs.is_empty() {
         let pat = &ck.ctx.ast.pats[fields.pat];
         let pat_span = match pat {
@@ -309,8 +314,8 @@ fn store_pat_ty_info(ck: &mut Checker<'_>, fields: &LetFields, ty_param_defs: &[
     }
 }
 
-fn synth_fn(
-    ck: &mut Checker<'_>,
+fn synth_fn<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
     params: &[Param],
     ret_ty: Option<TyIdx>,
     body: ExprIdx,
@@ -353,7 +358,7 @@ fn synth_fn(
     })
 }
 
-fn synth_field(ck: &mut Checker<'_>, object: ExprIdx, field: FieldKey, span: Span) -> TypeIdx {
+fn synth_field<S: BuildHasher>(ck: &mut Checker<'_, S>, object: ExprIdx, field: FieldKey, span: Span) -> TypeIdx {
     let obj_ty = synth(ck, object);
     let obj_ty = ck.resolve_ty(obj_ty);
     match &ck.store.types[obj_ty] {
@@ -395,7 +400,7 @@ fn synth_field(ck: &mut Checker<'_>, object: ExprIdx, field: FieldKey, span: Spa
     }
 }
 
-fn synth_record(ck: &mut Checker<'_>, fields: &[RecField]) -> TypeIdx {
+fn synth_record<S: BuildHasher>(ck: &mut Checker<'_, S>, fields: &[RecField]) -> TypeIdx {
     let rec_fields: Vec<_> = fields
         .iter()
         .filter_map(|f| match f {
@@ -417,7 +422,7 @@ fn synth_record(ck: &mut Checker<'_>, fields: &[RecField]) -> TypeIdx {
     })
 }
 
-fn synth_array(ck: &mut Checker<'_>, elems: &[ArrayElem], span: Span) -> TypeIdx {
+fn synth_array<S: BuildHasher>(ck: &mut Checker<'_, S>, elems: &[ArrayElem], span: Span) -> TypeIdx {
     let elem_ty = ck.fresh_var(span);
     for elem in elems {
         match elem {
@@ -432,7 +437,7 @@ fn synth_array(ck: &mut Checker<'_>, elems: &[ArrayElem], span: Span) -> TypeIdx
     })
 }
 
-fn synth_piecewise(ck: &mut Checker<'_>, arms: &[PwArm], span: Span) -> TypeIdx {
+fn synth_piecewise<S: BuildHasher>(ck: &mut Checker<'_, S>, arms: &[PwArm], span: Span) -> TypeIdx {
     let result_ty = ck.fresh_var(span);
     for arm in arms {
         if let PwGuard::When { expr, .. } = arm.guard {
@@ -446,7 +451,7 @@ fn synth_piecewise(ck: &mut Checker<'_>, arms: &[PwArm], span: Span) -> TypeIdx 
     result_ty
 }
 
-fn synth_match(ck: &mut Checker<'_>, scrutinee: ExprIdx, arms: &[MatchArm], span: Span) -> TypeIdx {
+fn synth_match<S: BuildHasher>(ck: &mut Checker<'_, S>, scrutinee: ExprIdx, arms: &[MatchArm], span: Span) -> TypeIdx {
     let scrut_ty = synth(ck, scrutinee);
     let result_ty = ck.fresh_var(span);
     for arm in arms {
@@ -461,7 +466,7 @@ fn synth_match(ck: &mut Checker<'_>, scrutinee: ExprIdx, arms: &[MatchArm], span
     result_ty
 }
 
-fn synth_lit(ck: &mut Checker<'_>, lit: &Lit, _span: Span) -> TypeIdx {
+fn synth_lit<S: BuildHasher>(ck: &mut Checker<'_, S>, lit: &Lit, _span: Span) -> TypeIdx {
     match lit {
         Lit::Int { .. } => ck.named_ty(ck.ctx.well_known.ints.int),
         Lit::Float { .. } => ck.named_ty(ck.ctx.well_known.floats.float64),
@@ -479,7 +484,7 @@ fn synth_lit(ck: &mut Checker<'_>, lit: &Lit, _span: Span) -> TypeIdx {
     }
 }
 
-fn synth_name(ck: &mut Checker<'_>, expr_idx: ExprIdx, span: Span) -> TypeIdx {
+fn synth_name<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx, span: Span) -> TypeIdx {
     if let Some(&def_id) = ck.ctx.expr_defs.get(&expr_idx) {
         let def = ck.defs.get(def_id);
         let ty_params = def.ty_info.ty_params.clone();
@@ -496,8 +501,8 @@ fn synth_name(ck: &mut Checker<'_>, expr_idx: ExprIdx, span: Span) -> TypeIdx {
 
 /// Replaces each type-parameter `Type::Named` (identified by `DefId`) with a
 /// fresh unification variable, returning a new type with substitutions applied.
-fn instantiate_ty_params(
-    ck: &mut Checker<'_>,
+fn instantiate_ty_params<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
     ty: TypeIdx,
     ty_param_defs: &[DefId],
     span: Span,
@@ -510,82 +515,70 @@ fn instantiate_ty_params(
     substitute_ty(ck, ty, &subst)
 }
 
-fn substitute_ty(ck: &mut Checker<'_>, ty: TypeIdx, subst: &HashMap<DefId, TypeIdx>) -> TypeIdx {
+fn substitute_ty<S: BuildHasher>(ck: &mut Checker<'_, S>, ty: TypeIdx, subst: &HashMap<DefId, TypeIdx>) -> TypeIdx {
     let ty = ck.resolve_ty(ty);
-    match ck.store.types[ty].clone() {
-        Type::Named { def, args } if args.is_empty() && subst.contains_key(&def) => subst[&def],
+    match &ck.store.types[ty] {
+        Type::Named { def, args } if args.is_empty() && subst.contains_key(def) => subst[def],
         Type::Named { def, args } => {
+            let (def, args) = (*def, args.clone());
             let new_args = substitute_list(ck, &args, subst);
-            ck.alloc_ty(Type::Named {
-                def,
-                args: new_args,
-            })
+            ck.alloc_ty(Type::Named { def, args: new_args })
         }
-        Type::Fn {
-            params,
-            ret,
-            effects,
-        } => {
+        Type::Fn { params, ret, effects } => {
+            let (params, ret, effects) = (params.clone(), *ret, effects.clone());
             let params = substitute_list(ck, &params, subst);
             let ret = substitute_ty(ck, ret, subst);
-            ck.alloc_ty(Type::Fn {
-                params,
-                ret,
-                effects,
-            })
+            ck.alloc_ty(Type::Fn { params, ret, effects })
         }
         Type::Tuple { elems } => {
+            let elems = elems.clone();
             let elems = substitute_list(ck, &elems, subst);
             ck.alloc_ty(Type::Tuple { elems })
         }
         Type::AnonSum { variants } => {
+            let variants = variants.clone();
             let variants = substitute_list(ck, &variants, subst);
             ck.alloc_ty(Type::AnonSum { variants })
         }
         Type::Record { fields, open } => {
+            let (fields, open) = (fields.clone(), *open);
             let fields = substitute_record_fields(ck, &fields, subst);
             ck.alloc_ty(Type::Record { fields, open })
         }
         Type::Sum { variants } => {
+            let variants = variants.clone();
             let variants = substitute_sum_variants(ck, &variants, subst);
             ck.alloc_ty(Type::Sum { variants })
         }
         Type::Array { elem, len } => {
+            let (elem, len) = (*elem, *len);
             let elem = substitute_ty(ck, elem, subst);
             ck.alloc_ty(Type::Array { elem, len })
         }
         Type::Ref { inner } => {
+            let inner = *inner;
             let inner = substitute_ty(ck, inner, subst);
             ck.alloc_ty(Type::Ref { inner })
         }
-        Type::Quantified {
-            kind,
-            params,
-            constraints,
-            body,
-        } => {
+        Type::Quantified { kind, params, constraints, body } => {
+            let (kind, params, constraints, body) = (*kind, params.clone(), constraints.clone(), *body);
             let body = substitute_ty(ck, body, subst);
-            ck.alloc_ty(Type::Quantified {
-                kind,
-                params,
-                constraints,
-                body,
-            })
+            ck.alloc_ty(Type::Quantified { kind, params, constraints, body })
         }
         Type::Var(_) | Type::Rigid(_) | Type::Error => ty,
     }
 }
 
-fn substitute_list(
-    ck: &mut Checker<'_>,
+fn substitute_list<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
     tys: &[TypeIdx],
     subst: &HashMap<DefId, TypeIdx>,
 ) -> Vec<TypeIdx> {
     tys.iter().map(|&t| substitute_ty(ck, t, subst)).collect()
 }
 
-fn substitute_record_fields(
-    ck: &mut Checker<'_>,
+fn substitute_record_fields<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
     fields: &[RecordField],
     subst: &HashMap<DefId, TypeIdx>,
 ) -> Vec<RecordField> {
@@ -598,8 +591,8 @@ fn substitute_record_fields(
         .collect()
 }
 
-fn substitute_sum_variants(
-    ck: &mut Checker<'_>,
+fn substitute_sum_variants<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
     variants: &[SumVariant],
     subst: &HashMap<DefId, TypeIdx>,
 ) -> Vec<SumVariant> {
@@ -612,16 +605,19 @@ fn substitute_sum_variants(
         .collect()
 }
 
-fn synth_call(ck: &mut Checker<'_>, callee: ExprIdx, args: &[Arg], span: Span) -> TypeIdx {
+fn synth_call<S: BuildHasher>(ck: &mut Checker<'_, S>, callee: ExprIdx, args: &[Arg], span: Span) -> TypeIdx {
     let callee_ty = synth(ck, callee);
     let callee_ty = ck.resolve_ty(callee_ty);
 
-    match ck.store.types[callee_ty].clone() {
-        Type::Fn {
-            params,
-            ret,
-            effects,
-        } => {
+    let (fn_params, fn_ret, fn_effects) = match &ck.store.types[callee_ty] {
+        Type::Fn { params, ret, effects } => (Some((params.clone(), *ret, effects.clone())), None, false),
+        Type::Error => (None, Some(false), false),
+        Type::Var(_) => (None, None, true),
+        _ => (None, Some(true), false),
+    };
+
+    if let Some((params, ret, effects)) = fn_params {
+        {
             let arg_count = args.len();
             if arg_count != params.len() {
                 let _d = ck.diags.report(
@@ -644,16 +640,18 @@ fn synth_call(ck: &mut Checker<'_>, callee: ExprIdx, args: &[Arg], span: Span) -
             let current = ck.current_effects.clone();
             check_effects_subset(ck, &effects, &current, span);
 
-            ret
+            return ret;
         }
-        Type::Error => ck.error_ty(),
-        Type::Var(_) => {
+    }
+
+    match (fn_ret, fn_effects) {
+        (Some(false), _) => ck.error_ty(),
+        (_, true) => {
             // Unknown callee type — create fresh return and set up function constraint.
             let arg_tys: Vec<_> = args
                 .iter()
                 .map(|arg| match arg {
-                    Arg::Pos { expr, .. } => synth(ck, *expr),
-                    Arg::Spread { expr, .. } => synth(ck, *expr),
+                    Arg::Pos { expr, .. } | Arg::Spread { expr, .. } => synth(ck, *expr),
                 })
                 .collect();
             let ret = ck.fresh_var(span);
@@ -676,8 +674,8 @@ fn synth_call(ck: &mut Checker<'_>, callee: ExprIdx, args: &[Arg], span: Span) -
     }
 }
 
-fn synth_binop(
-    ck: &mut Checker<'_>,
+fn synth_binop<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
     op: BinOp,
     left: ExprIdx,
     right: ExprIdx,
@@ -741,7 +739,7 @@ fn synth_binop(
     }
 }
 
-fn synth_unaryop(ck: &mut Checker<'_>, op: UnaryOp, operand: ExprIdx, span: Span) -> TypeIdx {
+fn synth_unaryop<S: BuildHasher>(ck: &mut Checker<'_, S>, op: UnaryOp, operand: ExprIdx, span: Span) -> TypeIdx {
     let operand_ty = synth(ck, operand);
     match op {
         UnaryOp::Not => {
@@ -754,13 +752,17 @@ fn synth_unaryop(ck: &mut Checker<'_>, op: UnaryOp, operand: ExprIdx, span: Span
     }
 }
 
-fn synth_choice(ck: &mut Checker<'_>, body: TyIdx) -> TypeIdx {
+fn synth_choice<S: BuildHasher>(ck: &mut Checker<'_, S>, body: TyIdx) -> TypeIdx {
     let parent = ck.current_scope;
     ck.current_scope = ck.scopes.push_child(parent);
 
-    if let Ty::Sum { variants, .. } = &ck.ctx.ast.tys[body] {
-        let variants_clone = variants.clone();
+    let sum_variant_indices = if let Ty::Sum { variants, .. } = &ck.ctx.ast.tys[body] {
+        Some(variants.clone())
+    } else {
+        None
+    };
 
+    if let Some(variants_clone) = sum_variant_indices {
         for &variant_ty in &variants_clone {
             if let Ty::Named { name, .. } = &ck.ctx.ast.tys[variant_ty] {
                 let id = ck.defs.alloc(*name, DefKind::Type, Span::DUMMY);
@@ -770,13 +772,13 @@ fn synth_choice(ck: &mut Checker<'_>, body: TyIdx) -> TypeIdx {
 
         let mut sum_variants = Vec::with_capacity(variants_clone.len());
         for &variant_ty in &variants_clone {
-            let ast_ty = ck.ctx.ast.tys[variant_ty].clone();
-            if let Ty::Named { name, args, .. } = &ast_ty {
+            let (name, args) = match &ck.ctx.ast.tys[variant_ty] {
+                Ty::Named { name, args, .. } => (Some(*name), Some(args.clone())),
+                _ => (None, None),
+            };
+            if let (Some(name), Some(args)) = (name, args) {
                 let fields: Vec<TypeIdx> = args.iter().map(|&a| lower_ty(ck, a)).collect();
-                sum_variants.push(SumVariant {
-                    name: *name,
-                    fields,
-                });
+                sum_variants.push(SumVariant { name, fields });
             } else {
                 let ty = lower_ty(ck, variant_ty);
                 sum_variants.push(SumVariant {
@@ -797,7 +799,7 @@ fn synth_choice(ck: &mut Checker<'_>, body: TyIdx) -> TypeIdx {
     ty
 }
 
-fn synth_record_def(ck: &mut Checker<'_>, fields: &[RecDefField]) -> TypeIdx {
+fn synth_record_def<S: BuildHasher>(ck: &mut Checker<'_, S>, fields: &[RecDefField]) -> TypeIdx {
     let rec_fields: Vec<_> = fields
         .iter()
         .map(|f| RecordField {
@@ -811,7 +813,7 @@ fn synth_record_def(ck: &mut Checker<'_>, fields: &[RecDefField]) -> TypeIdx {
     })
 }
 
-fn synth_import(ck: &mut Checker<'_>, path: Symbol) -> TypeIdx {
+fn synth_import<S: BuildHasher>(ck: &mut Checker<'_, S>, path: Symbol) -> TypeIdx {
     if let Some(&record_ty) = ck.ctx.import_types.get(&path) {
         record_ty
     } else {
@@ -821,7 +823,7 @@ fn synth_import(ck: &mut Checker<'_>, path: Symbol) -> TypeIdx {
 
 /// Expects `operand_ty` to be `Option<T>`, returning `T`.
 /// Introduces a fresh `T`, unifies `operand_ty` with `Option<T>`, and returns `T`.
-fn unwrap_option_ty(ck: &mut Checker<'_>, operand_ty: TypeIdx, span: Span) -> TypeIdx {
+fn unwrap_option_ty<S: BuildHasher>(ck: &mut Checker<'_, S>, operand_ty: TypeIdx, span: Span) -> TypeIdx {
     let inner = ck.fresh_var(span);
     let option_ty = ck.alloc_ty(Type::Named {
         def: ck.ctx.well_known.option,
@@ -833,7 +835,7 @@ fn unwrap_option_ty(ck: &mut Checker<'_>, operand_ty: TypeIdx, span: Span) -> Ty
 
 /// Expects `operand_ty` to be `Result<T, E>`, returning `T`.
 /// Introduces fresh `T` and `E`, unifies `operand_ty` with `Result<T, E>`, and returns `T`.
-fn unwrap_result_ty(ck: &mut Checker<'_>, operand_ty: TypeIdx, span: Span) -> TypeIdx {
+fn unwrap_result_ty<S: BuildHasher>(ck: &mut Checker<'_, S>, operand_ty: TypeIdx, span: Span) -> TypeIdx {
     let ok_inner = ck.fresh_var(span);
     let err_inner = ck.fresh_var(span);
     let result_ty = ck.alloc_ty(Type::Named {
@@ -844,8 +846,8 @@ fn unwrap_result_ty(ck: &mut Checker<'_>, operand_ty: TypeIdx, span: Span) -> Ty
     ok_inner
 }
 
-fn synth_type_check(
-    ck: &mut Checker<'_>,
+fn synth_type_check<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
     kind: TypeCheckKind,
     operand: ExprIdx,
     ty: TyIdx,
@@ -861,8 +863,8 @@ fn synth_type_check(
     }
 }
 
-fn synth_type_test(
-    ck: &mut Checker<'_>,
+fn synth_type_test<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
     operand: ExprIdx,
     ty: TyIdx,
     binding: Option<Symbol>,
@@ -878,8 +880,8 @@ fn synth_type_test(
     ck.named_ty(ck.ctx.well_known.bool)
 }
 
-fn synth_handle(
-    ck: &mut Checker<'_>,
+fn synth_handle<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
     effect_ty: TyIdx,
     ops: &[HandlerOp],
     body: ExprIdx,

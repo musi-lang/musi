@@ -4,6 +4,7 @@ use music_ast::TyIdx;
 use music_ast::expr::Arrow;
 use music_ast::ty::{EffectItem, EffectSet, Ty};
 use music_shared::{Span, Symbol};
+use std::hash::BuildHasher;
 
 use crate::checker::Checker;
 use crate::def::DefId;
@@ -11,7 +12,7 @@ use crate::error::SemaError;
 use crate::types::{EffectEntry, EffectRow, Type, TypeIdx};
 
 /// Looks up `name` in scope, reporting `UndefinedName` if missing.
-fn lookup_name_or_error(ck: &mut Checker<'_>, name: Symbol, span: Span) -> Option<DefId> {
+fn lookup_name_or_error<S: BuildHasher>(ck: &mut Checker<'_, S>, name: Symbol, span: Span) -> Option<DefId> {
     if let Some(def_id) = ck.scopes.lookup(ck.current_scope, name) {
         Some(def_id)
     } else {
@@ -28,7 +29,7 @@ fn lookup_name_or_error(ck: &mut Checker<'_>, name: Symbol, span: Span) -> Optio
 }
 
 /// Lowers an AST `Ty` node to a semantic `Type` in the checker's arena.
-pub(crate) fn lower_ty(ck: &mut Checker<'_>, ty_idx: TyIdx) -> TypeIdx {
+pub fn lower_ty<S: BuildHasher>(ck: &mut Checker<'_, S>, ty_idx: TyIdx) -> TypeIdx {
     match ck.ctx.ast.tys[ty_idx].clone() {
         Ty::Var { name, span } => {
             if let Some(def_id) = lookup_name_or_error(ck, name, span) {
@@ -86,8 +87,8 @@ pub(crate) fn lower_ty(ck: &mut Checker<'_>, ty_idx: TyIdx) -> TypeIdx {
     }
 }
 
-fn lower_ty_fn(
-    ck: &mut Checker<'_>,
+fn lower_ty_fn<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
     params: &[TyIdx],
     ret: TyIdx,
     arrow: Arrow,
@@ -110,7 +111,7 @@ fn lower_ty_fn(
     })
 }
 
-fn lower_effect_set(ck: &mut Checker<'_>, eff_set: &EffectSet) -> EffectRow {
+fn lower_effect_set<S: BuildHasher>(ck: &mut Checker<'_, S>, eff_set: &EffectSet) -> EffectRow {
     let mut effects = vec![];
     let mut row_var = None;
     for item in &eff_set.effects {

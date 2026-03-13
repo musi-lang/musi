@@ -11,7 +11,8 @@ use std::collections::HashMap;
 
 use music_shared::{DiagnosticBag, FileId, Interner, Severity, Span, Symbol};
 
-use crate::{CheckContext, Checker, analyze_setup};
+use crate::checker::{CheckContext, Checker};
+use crate::analyze_setup;
 
 /// Helper to construct a Stmt.
 fn stmt(expr_idx: ExprIdx) -> Stmt {

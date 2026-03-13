@@ -15,7 +15,7 @@
 //! let result = music_sema::analyze(&module, &mut interner, file_id, &mut diags);
 //! ```
 
-pub mod checker;
+pub(crate) mod checker;
 pub mod def;
 pub mod error;
 pub mod exports;
@@ -25,23 +25,26 @@ pub mod types;
 pub mod unify;
 pub mod well_known;
 
-pub use checker::{CheckContext, Checker, CheckerResult};
-pub use def::{DefId, DefInfo, DefKind, DefTable, DefTyInfo};
+pub use def::{DefId, DefInfo, DefKind, DefTable};
 pub use error::SemaError;
 pub use resolve::ResolveOutput;
-pub use scope::{ScopeId, ScopeTree};
+pub use scope::ScopeTree;
 pub use types::{EffectRow, InstanceInfo, Obligation, TyVarId, Type, TypeIdx};
 pub use unify::UnifyTable;
 pub use well_known::WellKnown;
 
-pub use exports::{ExportBinding, ModuleExports, collect_exports, exports_to_record_type};
+pub use exports::{ExportBinding, ModuleExports, collect_exports};
 pub use resolve::ImportNames;
 
 use std::collections::HashMap;
+use std::hash::BuildHasher;
 use std::mem;
 
 use music_ast::{ExprIdx, ParsedModule};
 use music_shared::{Arena, DiagnosticBag, FileId, Interner, Span, Symbol};
+
+use crate::checker::{CheckContext, Checker};
+use crate::scope::ScopeId;
 
 /// Maps from AST nodes to their resolved definitions.
 pub struct ResolutionMap {
@@ -220,13 +223,12 @@ pub fn analyze(
 }
 
 /// Like [`analyze`], but with pre-computed import types for cross-module resolution.
-#[allow(clippy::implicit_hasher)]
-pub fn analyze_with_imports(
+pub fn analyze_with_imports<S: BuildHasher>(
     module: &ParsedModule,
     interner: &mut Interner,
     file_id: FileId,
     diags: &mut DiagnosticBag,
-    import_types: &HashMap<Symbol, TypeIdx>,
+    import_types: &HashMap<Symbol, TypeIdx, S>,
 ) -> SemaResult {
     let (mut defs, well_known, mut scopes, module_scope, resolved, types) =
         analyze_setup(module, interner, file_id, diags);

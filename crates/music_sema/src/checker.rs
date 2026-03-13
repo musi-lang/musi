@@ -10,6 +10,8 @@ pub mod stmt;
 pub mod ty;
 
 use std::collections::HashMap;
+use std::collections::hash_map::RandomState;
+use std::hash::BuildHasher;
 use std::mem;
 
 use music_ast::ty::TyParam;
@@ -24,7 +26,7 @@ use crate::unify::UnifyTable;
 use crate::well_known::WellKnown;
 
 /// Read-only environment for the type checker.
-pub struct CheckContext<'a> {
+pub struct CheckContext<'a, S: BuildHasher = RandomState> {
     pub(crate) ast: &'a AstArenas,
     pub(crate) interner: &'a Interner,
     pub(crate) file_id: FileId,
@@ -33,7 +35,7 @@ pub struct CheckContext<'a> {
     pub(crate) pat_defs: &'a HashMap<Span, DefId>,
     /// Pre-computed types for import expressions, keyed by the import path symbol.
     /// Populated by the multi-file pipeline before sema runs.
-    pub(crate) import_types: &'a HashMap<Symbol, TypeIdx>,
+    pub(crate) import_types: &'a HashMap<Symbol, TypeIdx, S>,
     /// Inferred law variables from the resolver, keyed by law span.
     pub(crate) law_inferred_vars: &'a HashMap<Span, Vec<(Symbol, DefId)>>,
 }
@@ -47,8 +49,8 @@ pub struct TypeStore {
     pub(crate) expr_types: HashMap<ExprIdx, TypeIdx>,
 }
 
-pub struct Checker<'a> {
-    pub(crate) ctx: CheckContext<'a>,
+pub struct Checker<'a, S: BuildHasher = RandomState> {
+    pub(crate) ctx: CheckContext<'a, S>,
     pub(crate) store: TypeStore,
     pub(crate) diags: &'a mut DiagnosticBag,
     pub(crate) defs: &'a mut DefTable,
@@ -57,36 +59,11 @@ pub struct Checker<'a> {
     pub(crate) current_effects: EffectRow,
 }
 
-impl<'a> Checker<'a> {
-    #[must_use]
-    pub fn new(
-        ctx: CheckContext<'a>,
-        diags: &'a mut DiagnosticBag,
-        defs: &'a mut DefTable,
-        scopes: &'a mut ScopeTree,
-        scope: ScopeId,
-    ) -> Self {
-        Self {
-            ctx,
-            store: TypeStore {
-                unify: UnifyTable::new(),
-                types: Arena::new(),
-                obligations: vec![],
-                instances: vec![],
-                expr_types: HashMap::new(),
-            },
-            diags,
-            defs,
-            scopes,
-            current_scope: scope,
-            current_effects: EffectRow::PURE,
-        }
-    }
-
+impl<'a, S: BuildHasher> Checker<'a, S> {
     /// Creates a checker with pre-populated type arena and unification table.
     #[must_use]
     pub fn new_with_state(
-        ctx: CheckContext<'a>,
+        ctx: CheckContext<'a, S>,
         diags: &'a mut DiagnosticBag,
         defs: &'a mut DefTable,
         scopes: &'a mut ScopeTree,
@@ -114,11 +91,6 @@ impl<'a> Checker<'a> {
     /// Synthesises a type for `expr` (inference mode, direction ↑).
     pub fn synth(&mut self, expr: ExprIdx) -> TypeIdx {
         self::expr::synth(self, expr)
-    }
-
-    /// Checks `expr` against `expected` (checking mode, direction ↓).
-    pub fn check(&mut self, expr: ExprIdx, expected: TypeIdx) {
-        self::expr::check(self, expr, expected);
     }
 
     pub(crate) fn fresh_var(&mut self, span: Span) -> TypeIdx {
