@@ -177,18 +177,39 @@ impl Parser<'_> {
         match tok.kind {
             TokenKind::IntLit => {
                 let text = self.resolve(sym);
-                let value = parse_int_lit(text);
+                let value = parse_int_lit(text).unwrap_or_else(|| {
+                    let _diag = self.diags.error(
+                        ParseError::InvalidIntLiteral.to_string(),
+                        span,
+                        self.file_id,
+                    );
+                    0
+                });
                 Lit::Int { value, span }
             }
             TokenKind::FloatLit => {
                 let text = self.resolve(sym);
-                let value = text.replace('_', "").parse::<f64>().unwrap_or(0.0);
+                let value = text.replace('_', "").parse::<f64>().unwrap_or_else(|_| {
+                    let _diag = self.diags.error(
+                        ParseError::InvalidFloatLiteral.to_string(),
+                        span,
+                        self.file_id,
+                    );
+                    0.0
+                });
                 Lit::Float { value, span }
             }
             TokenKind::StringLit => Lit::Str { value: sym, span },
             TokenKind::RuneLit => {
                 let text = self.resolve(sym);
-                let codepoint = parse_rune_lit(text);
+                let codepoint = parse_rune_lit(text).unwrap_or_else(|| {
+                    let _diag = self.diags.error(
+                        ParseError::InvalidRuneEscape.to_string(),
+                        span,
+                        self.file_id,
+                    );
+                    0
+                });
                 Lit::Rune { codepoint, span }
             }
             _ => {
@@ -202,7 +223,7 @@ impl Parser<'_> {
 }
 
 /// Parses integer literal text (decimal, hex, octal, binary) into `i64`.
-fn parse_int_lit(text: &str) -> i64 {
+fn parse_int_lit(text: &str) -> Option<i64> {
     let clean = text.replace('_', "");
     let (digits, radix) = clean
         .strip_prefix("0x")
@@ -224,26 +245,23 @@ fn parse_int_lit(text: &str) -> i64 {
             },
             |h| (h, 16),
         );
-    i64::from_str_radix(digits, radix).unwrap_or(0)
+    i64::from_str_radix(digits, radix).ok()
 }
 
 /// Parses a rune literal (`'x'` or `'\n'`) into a `u32` codepoint.
-fn parse_rune_lit(text: &str) -> u32 {
-    let inner = text
-        .strip_prefix('\'')
-        .and_then(|s| s.strip_suffix('\''))
-        .unwrap_or(text);
+fn parse_rune_lit(text: &str) -> Option<u32> {
+    let inner = text.strip_prefix('\'').and_then(|s| s.strip_suffix('\''))?;
     let ch = inner.strip_prefix('\\').map_or_else(
-        || inner.chars().next().unwrap_or('\0'),
+        || inner.chars().next(),
         |esc| match esc.as_bytes().first().copied() {
-            Some(b'n') => '\n',
-            Some(b't') => '\t',
-            Some(b'r') => '\r',
-            Some(b'0') => '\0',
-            Some(b'\\') => '\\',
-            Some(b'\'') => '\'',
-            _ => inner.chars().next().unwrap_or('\0'),
+            Some(b'n') => Some('\n'),
+            Some(b't') => Some('\t'),
+            Some(b'r') => Some('\r'),
+            Some(b'0') => Some('\0'),
+            Some(b'\\') => Some('\\'),
+            Some(b'\'') => Some('\''),
+            _ => None,
         },
-    );
-    u32::from(ch)
+    )?;
+    Some(u32::from(ch))
 }

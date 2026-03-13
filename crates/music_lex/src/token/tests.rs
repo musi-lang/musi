@@ -6,7 +6,6 @@ fn test_keyword_from_str_returns_some_for_every_keyword() {
     let keywords = [
         ("and", TokenKind::KwAnd),
         ("as", TokenKind::KwAs),
-        ("await", TokenKind::KwAwait),
         ("choice", TokenKind::KwChoice),
         ("class", TokenKind::KwClass),
         ("defer", TokenKind::KwDefer),
@@ -29,9 +28,7 @@ fn test_keyword_from_str_returns_some_for_every_keyword() {
         ("record", TokenKind::KwRecord),
         ("ref", TokenKind::KwRef),
         ("return", TokenKind::KwReturn),
-        ("spawn", TokenKind::KwSpawn),
         ("try", TokenKind::KwTry),
-        ("under", TokenKind::KwUnder),
         ("var", TokenKind::KwVar),
         ("where", TokenKind::KwWhere),
         ("xor", TokenKind::KwXor),
@@ -39,6 +36,15 @@ fn test_keyword_from_str_returns_some_for_every_keyword() {
     for (text, expected) in keywords {
         assert_eq!(keyword_from_str(text), Some(expected), "keyword: {text}");
     }
+}
+
+#[test]
+fn test_keyword_from_str_new_keywords() {
+    assert_eq!(keyword_from_str("do"), Some(TokenKind::KwDo));
+    assert_eq!(keyword_from_str("fatal"), Some(TokenKind::KwFatal));
+    assert_eq!(keyword_from_str("handle"), Some(TokenKind::KwHandle));
+    assert_eq!(keyword_from_str("resume"), Some(TokenKind::KwResume));
+    assert_eq!(keyword_from_str("with"), Some(TokenKind::KwWith));
 }
 
 #[test]
@@ -58,6 +64,11 @@ fn test_is_keyword_true_for_keywords() {
     assert!(TokenKind::KwLaw.is_keyword());
     assert!(TokenKind::KwLet.is_keyword());
     assert!(TokenKind::KwMatch.is_keyword());
+    assert!(TokenKind::KwDo.is_keyword());
+    assert!(TokenKind::KwFatal.is_keyword());
+    assert!(TokenKind::KwHandle.is_keyword());
+    assert!(TokenKind::KwResume.is_keyword());
+    assert!(TokenKind::KwWith.is_keyword());
 }
 
 #[test]
@@ -88,6 +99,16 @@ fn test_fixed_text_returns_correct_strings() {
     assert_eq!(TokenKind::ColonGt.fixed_text(), Some(":>"));
     assert_eq!(TokenKind::LtLt.fixed_text(), Some("<<"));
     assert_eq!(TokenKind::GtGt.fixed_text(), Some(">>"));
+    assert_eq!(TokenKind::Bang.fixed_text(), Some("!"));
+    assert_eq!(TokenKind::BangBang.fixed_text(), Some("!!"));
+    assert_eq!(TokenKind::BangDot.fixed_text(), Some("!."));
+    assert_eq!(TokenKind::ColonQuestion.fixed_text(), Some(":?"));
+    assert_eq!(TokenKind::ColonQuestionGt.fixed_text(), Some(":?>"));
+    assert_eq!(TokenKind::KwDo.fixed_text(), Some("do"));
+    assert_eq!(TokenKind::KwFatal.fixed_text(), Some("fatal"));
+    assert_eq!(TokenKind::KwHandle.fixed_text(), Some("handle"));
+    assert_eq!(TokenKind::KwResume.fixed_text(), Some("resume"));
+    assert_eq!(TokenKind::KwWith.fixed_text(), Some("with"));
 }
 
 #[test]

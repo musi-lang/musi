@@ -221,11 +221,18 @@ fn exec_array_alloc_globals(
             Ok(true)
         }
         Opcode::MK_ARR => exec_mk_arr(operand, frame, heap),
-        Opcode::ALC_REF | Opcode::ALC_ARN => {
+        Opcode::ALC_REF => {
+            let initial = pop(frame)?;
+            let ptr = heap.alloc(operand, vec![initial]);
+            frame.stack.push(Value::from_ref(ptr));
+            Ok(true)
+        }
+        Opcode::ALC_ARN => {
             let ptr = heap.alloc(operand, vec![]);
             frame.stack.push(Value::from_ref(ptr));
             Ok(true)
         }
+        Opcode::ST_FLD => exec_st_fld(operand, frame, heap),
         Opcode::LD_GLB => exec_ld_glb(operand, frame, globals),
         Opcode::ST_GLB => exec_st_glb(operand, frame, globals),
         _ => Ok(false),
@@ -277,6 +284,23 @@ fn exec_st_idx(frame: &mut Frame, heap: &mut Heap) -> Result<bool, VmError> {
         .get_mut(idx)
         .ok_or(VmError::OutOfBounds { index: idx, len })?;
     *elem = val;
+    Ok(true)
+}
+
+fn exec_st_fld(operand: u32, frame: &mut Frame, heap: &mut Heap) -> Result<bool, VmError> {
+    let field_idx = usize::try_from(operand).map_err(|_| VmError::Malformed {
+        desc: "st.fld index overflow".into(),
+    })?;
+    let val = pop(frame)?;
+    let obj_val = pop(frame)?;
+    let ptr = obj_val.as_ref()?;
+    let obj = heap.get_mut(ptr)?;
+    let len = obj.fields.len();
+    let field = obj.fields.get_mut(field_idx).ok_or(VmError::OutOfBounds {
+        index: field_idx,
+        len,
+    })?;
+    *field = val;
     Ok(true)
 }
 

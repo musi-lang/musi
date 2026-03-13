@@ -164,12 +164,11 @@ const fn fixed_stack_delta(op: Opcode) -> Option<i32> {
         | Opcode::EFF_ABT
         | Opcode::EFF_RES
         | Opcode::TSK_CHR
-        | Opcode::TSK_AWT => Some(0),
+        | Opcode::TSK_AWT
+        | Opcode::ALC_REF => Some(0),
 
         // Push 1: dup, load global, alloc, channel make
-        Opcode::DUP | Opcode::LD_GLB | Opcode::ALC_REF | Opcode::ALC_ARN | Opcode::TSK_CMK => {
-            Some(1)
-        }
+        Opcode::DUP | Opcode::LD_GLB | Opcode::ALC_ARN | Opcode::TSK_CMK => Some(1),
 
         // Net -1: pop, store global, free, index load, channel send, binary ops
         Opcode::POP
@@ -214,6 +213,9 @@ const fn fixed_stack_delta(op: Opcode) -> Option<i32> {
         | Opcode::CMP_F_LE
         | Opcode::CMP_F_GT
         | Opcode::CMP_F_GE => Some(-1),
+
+        // Net -2: store field (pops obj+value)
+        Opcode::ST_FLD => Some(-2),
 
         // Net -3: store index (pops value+base+index)
         Opcode::ST_IDX => Some(-3),

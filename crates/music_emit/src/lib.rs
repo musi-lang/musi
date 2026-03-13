@@ -22,7 +22,7 @@ pub use error::EmitError;
 
 use music_ast::ParsedModule;
 use music_sema::SemaResult;
-use music_shared::Interner;
+use music_shared::{FileId, Interner};
 
 /// Output of a successful [`emit`] call.
 #[derive(Debug)]
@@ -45,8 +45,9 @@ pub fn emit(
     parsed: &ParsedModule,
     sema: &SemaResult,
     interner: &mut Interner,
+    file_id: FileId,
 ) -> Result<EmitOutput, EmitError> {
-    let mut emitter = emitter::Emitter::new(parsed, sema, interner);
+    let mut emitter = emitter::Emitter::new(parsed, sema, interner, file_id);
     let functions = emitter.emit_all()?;
 
     let bytes = module::assemble(module::AssembleParams {

@@ -25,7 +25,6 @@ pub enum ConstValue {
     Bool(bool),
     Rune(u32),
     Str(Symbol),
-    Unit,
     FnRef(u32),
 }
 
@@ -41,15 +40,14 @@ enum ConstKey {
 }
 
 impl ConstKey {
-    const fn from_value(v: &ConstValue) -> Option<Self> {
+    const fn from_value(v: &ConstValue) -> Self {
         match v {
-            ConstValue::Int(n) => Some(Self::Int(*n)),
-            ConstValue::Float(f) => Some(Self::Float(f.to_bits())),
-            ConstValue::Bool(b) => Some(Self::Bool(*b)),
-            ConstValue::Rune(r) => Some(Self::Rune(*r)),
-            ConstValue::Str(s) => Some(Self::Str(*s)),
-            ConstValue::Unit => None,
-            ConstValue::FnRef(id) => Some(Self::Fn(*id)),
+            ConstValue::Int(n) => Self::Int(*n),
+            ConstValue::Float(f) => Self::Float(f.to_bits()),
+            ConstValue::Bool(b) => Self::Bool(*b),
+            ConstValue::Rune(r) => Self::Rune(*r),
+            ConstValue::Str(s) => Self::Str(*s),
+            ConstValue::FnRef(id) => Self::Fn(*id),
         }
     }
 }
@@ -75,24 +73,16 @@ impl ConstPool {
     }
 
     /// Intern `value`, returning its pool index.
-    ///
-    /// Returns `None` for `ConstValue::Unit` (unit is encoded inline, not via const pool).
-    pub fn intern(
-        &mut self,
-        value: &ConstValue,
-        interner: &Interner,
-    ) -> Result<Option<u16>, EmitError> {
-        let Some(key) = ConstKey::from_value(value) else {
-            return Ok(None);
-        };
+    pub fn intern(&mut self, value: &ConstValue, interner: &Interner) -> Result<u16, EmitError> {
+        let key = ConstKey::from_value(value);
         if let Some(&idx) = self.index.get(&key) {
-            return Ok(Some(idx));
+            return Ok(idx);
         }
         let idx = u16::try_from(self.entries.len()).map_err(|_| EmitError::TooManyConsts)?;
         let entry = encode_const(value, interner);
         self.entries.push(entry);
         let _ = self.index.insert(key, idx);
-        Ok(Some(idx))
+        Ok(idx)
     }
 
     /// Serialize the constant pool into `buf`.
@@ -126,10 +116,6 @@ fn encode_const(value: &ConstValue, interner: &Interner) -> ConstEntry {
             data: r.to_le_bytes().to_vec(),
         },
         ConstValue::Str(sym) => encode_str(*sym, interner),
-        ConstValue::Unit => ConstEntry {
-            tag: TAG_I32,
-            data: 0i32.to_le_bytes().to_vec(),
-        },
         ConstValue::FnRef(id) => ConstEntry {
             tag: TAG_FN,
             data: id.to_le_bytes().to_vec(),

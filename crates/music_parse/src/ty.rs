@@ -70,13 +70,13 @@ impl Parser<'_> {
         ret
     }
 
-    /// `ty_eff = ty_sum [ 'under' effect_set ] | 'under' effect_set`.
+    /// `ty_eff = ty_sum [ 'with' effect_set ] | 'with' effect_set`.
     ///
-    /// The second form (`~> under { IO }`) is sugar for `~> () under { IO }`.
+    /// The second form (`~> with { IO }`) is sugar for `~> () with { IO }`.
     fn parse_ty_eff(&mut self) -> (Ty, Option<EffectSet>) {
-        if self.at(TokenKind::KwUnder) {
+        if self.at(TokenKind::KwWith) {
             let start = self.start_span();
-            let _under = self.bump();
+            let _with = self.bump();
             let effects = Some(self.parse_effect_set());
             let unit = Ty::Product {
                 fields: vec![],
@@ -85,7 +85,7 @@ impl Parser<'_> {
             return (unit, effects);
         }
         let ty = self.parse_ty_sum();
-        let effects = if self.eat(TokenKind::KwUnder) {
+        let effects = if self.eat(TokenKind::KwWith) {
             Some(self.parse_effect_set())
         } else {
             None

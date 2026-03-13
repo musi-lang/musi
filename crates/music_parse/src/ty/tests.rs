@@ -106,8 +106,8 @@ fn test_parse_fn_type_pure() {
 }
 
 #[test]
-fn test_parse_ty_fn_effectful_under_populates_effects() {
-    let (ty, diags) = parse_ty_from_let("Int ~> String under { IO }");
+fn test_parse_ty_fn_effectful_with_populates_effects() {
+    let (ty, diags) = parse_ty_from_let("Int ~> String with { IO }");
     assert!(!diags.has_errors());
     assert!(
         matches!(
@@ -140,7 +140,7 @@ fn test_parse_ty_fn_pure_arrow_has_no_effects() {
 fn test_parse_ty_fn_chain_effects_attach_to_inner() {
     // `A -> B ~> C under { IO }` should produce:
     // Fn { params: [A], ret: Fn { params: [B], ret: C, effects: Some({IO}) }, effects: None }
-    let src = "let x : Int -> Bool ~> String under { IO } := 0;";
+    let src = "let x : Int -> Bool ~> String with { IO } := 0;";
     let (tokens, interner, file_id) = lex(src);
     let mut diags = DiagnosticBag::new();
     let module = parse(&tokens, file_id, &mut diags, &interner);

@@ -136,7 +136,6 @@ impl SharedAnalysisState {
 }
 
 /// Runs analysis for a single module using shared cross-module state.
-#[allow(clippy::implicit_hasher)]
 pub fn analyze_shared(
     module: &ParsedModule,
     state: &mut SharedAnalysisState,
@@ -147,14 +146,17 @@ pub fn analyze_shared(
 ) -> ModuleSemaOutput {
     let module_scope = state.scopes.push_child(state.prelude_scope);
 
+    let mut resolve_state = resolve::ResolveState {
+        defs: &mut state.defs,
+        scopes: &mut state.scopes,
+        module_scope,
+    };
     let resolved = resolve::resolve_with_imports(
         module,
         interner,
         file_id,
         diags,
-        &mut state.defs,
-        &mut state.scopes,
-        module_scope,
+        &mut resolve_state,
         import_names,
     );
 

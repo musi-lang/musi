@@ -4,6 +4,7 @@ use music_ast::expr::{Arg, Expr, FieldKey};
 use music_lex::token::TokenKind;
 use music_shared::Symbol;
 
+use crate::error::ParseError;
 use crate::parser::Parser;
 
 impl Parser<'_> {
@@ -15,6 +16,10 @@ impl Parser<'_> {
                 TokenKind::DotLBrace => self.parse_expr_update(lhs, start),
                 TokenKind::Dot => self.parse_expr_field(lhs, start, false),
                 TokenKind::QuestionDot => self.parse_expr_field(lhs, start, true),
+                TokenKind::BangDot => self.parse_expr_force_field(lhs, start),
+                TokenKind::Bang => self.parse_expr_force_unwrap(lhs, start),
+                TokenKind::ColonQuestion => self.parse_expr_type_test(lhs, start),
+                TokenKind::ColonQuestionGt => self.parse_expr_type_cast(lhs, start),
                 _ => break,
             };
         }
@@ -75,11 +80,16 @@ impl Parser<'_> {
             let tok = self.bump();
             let sym = tok.symbol.unwrap_or(Symbol(u32::MAX));
             let text = self.resolve(sym);
-            let index = text.parse::<u32>().unwrap_or(0);
-            FieldKey::Pos {
-                index,
-                span: self.finish_span(start),
-            }
+            let span = self.finish_span(start);
+            let index = text.parse::<u32>().unwrap_or_else(|_| {
+                let _diag = self.diags.error(
+                    ParseError::InvalidIntLiteral.to_string(),
+                    span,
+                    self.file_id,
+                );
+                0
+            });
+            FieldKey::Pos { index, span }
         } else {
             let name = self.expect_symbol();
             FieldKey::Name {
@@ -100,6 +110,66 @@ impl Parser<'_> {
         let expr = self.parse_alloc_expr();
         Arg::Pos {
             expr,
+            span: self.finish_span(start),
+        }
+    }
+
+    /// Parses `expr!` — force unwrap.
+    fn parse_expr_force_unwrap(&mut self, lhs: Expr, start: u32) -> Expr {
+        let _bang = self.bump();
+        let operand = self.alloc_expr(lhs);
+        Expr::ForceUnwrap {
+            operand,
+            span: self.finish_span(start),
+        }
+    }
+
+    /// Parses `expr!.field` — forced unwrap field access.
+    ///
+    /// Desugared to a force-unwrap followed by a field access.
+    fn parse_expr_force_field(&mut self, lhs: Expr, start: u32) -> Expr {
+        let _bang_dot = self.bump();
+        let field = self.parse_field_key();
+        let operand = self.alloc_expr(lhs);
+        let unwrapped = Expr::ForceUnwrap {
+            operand,
+            span: self.finish_span(start),
+        };
+        let unwrapped_idx = self.alloc_expr(unwrapped);
+        Expr::Field {
+            object: unwrapped_idx,
+            field,
+            safe: false,
+            span: self.finish_span(start),
+        }
+    }
+
+    /// Parses `expr :? Type` or `expr :? Type as ident` — type test.
+    fn parse_expr_type_test(&mut self, lhs: Expr, start: u32) -> Expr {
+        let _cq = self.bump();
+        let ty = self.parse_alloc_ty();
+        let binding = if self.eat(TokenKind::KwAs) {
+            Some(self.expect_symbol())
+        } else {
+            None
+        };
+        let operand = self.alloc_expr(lhs);
+        Expr::TypeTest {
+            operand,
+            ty,
+            binding,
+            span: self.finish_span(start),
+        }
+    }
+
+    /// Parses `expr :?> Type` — type cast.
+    fn parse_expr_type_cast(&mut self, lhs: Expr, start: u32) -> Expr {
+        let _cqg = self.bump();
+        let ty = self.parse_alloc_ty();
+        let operand = self.alloc_expr(lhs);
+        Expr::TypeCast {
+            operand,
+            ty,
             span: self.finish_span(start),
         }
     }

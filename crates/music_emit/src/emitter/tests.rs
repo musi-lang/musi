@@ -22,7 +22,7 @@ fn compile(source: &str) -> Result<EmitOutput, String> {
             .collect();
         return Err(format!("errors:\n{}", msgs.join("\n")));
     }
-    emit(&parsed, &sema, &mut interner).map_err(|e| e.to_string())
+    emit(&parsed, &sema, &mut interner, file_id).map_err(|e| e.to_string())
 }
 
 /// Scan the function pool section (past the header) for the first occurrence of `op`.

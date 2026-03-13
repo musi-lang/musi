@@ -23,7 +23,7 @@ use crate::resolve_config;
 pub struct DepModule {
     pub parsed: ParsedModule,
     pub resolution: music_sema::ResolutionMap,
-    pub expr_types: std::collections::HashMap<music_ast::ExprIdx, music_sema::TypeIdx>,
+    pub expr_types: HashMap<music_ast::ExprIdx, music_sema::TypeIdx>,
     pub file_id: FileId,
 }
 
@@ -225,9 +225,22 @@ fn build_import_names(
 /// Returns the raw `.msbc` bytes on success, or `Err(())` after printing
 /// the error to stderr.
 pub fn run_backend(out: &mut FrontendOutput) -> Result<Vec<u8>, ()> {
-    match emit(&out.parsed, &out.sema, &mut out.interner) {
+    if !out.dep_modules.is_empty() {
+        for dep in &out.dep_modules {
+            let dep_src = out.source_db.source(dep.file_id);
+            eprintln!(
+                "note: dependency module ({} bytes, {} stmts, {} names resolved, {} types)",
+                dep_src.len(),
+                dep.parsed.stmts.len(),
+                dep.resolution.pat_defs.len(),
+                dep.expr_types.len(),
+            );
+        }
+    }
+    match emit(&out.parsed, &out.sema, &mut out.interner, out.file_id) {
         Ok(emit_out) => Ok(emit_out.bytes),
         Err(e) => {
+            render_diagnostics(&DiagnosticBag::new(), &out.source_db);
             eprintln!("error: {e}");
             Err(())
         }

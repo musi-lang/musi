@@ -155,7 +155,7 @@ fn write_effect_pool(
     for eff in effects {
         buf.extend_from_slice(&eff.id.to_le_bytes());
         let name_val = ConstValue::Str(eff.name);
-        let name_idx = cp.intern(&name_val, interner)?.unwrap_or(0);
+        let name_idx = cp.intern(&name_val, interner)?;
         let name_const_idx = u32::from(name_idx);
         buf.extend_from_slice(&name_const_idx.to_le_bytes());
         let op_count = u16::try_from(eff.ops.len()).map_err(|_| EmitError::OperandOverflow {
@@ -165,7 +165,7 @@ fn write_effect_pool(
         for op in &eff.ops {
             buf.extend_from_slice(&op.id.to_le_bytes());
             let op_name_val = ConstValue::Str(op.name);
-            let op_name_idx = cp.intern(&op_name_val, interner)?.unwrap_or(0);
+            let op_name_idx = cp.intern(&op_name_val, interner)?;
             let op_name_const_idx = u32::from(op_name_idx);
             buf.extend_from_slice(&op_name_const_idx.to_le_bytes());
             let param_count =
@@ -195,12 +195,12 @@ fn write_foreign_pool(
     buf.extend_from_slice(&count.to_le_bytes());
     for ff in foreign_fns {
         let ext_name_val = ConstValue::Str(ff.ext_name);
-        let ext_name_idx = cp.intern(&ext_name_val, interner)?.unwrap_or(0);
+        let ext_name_idx = cp.intern(&ext_name_val, interner)?;
         buf.extend_from_slice(&u32::from(ext_name_idx).to_le_bytes());
 
         if let Some(lib) = ff.library {
             let lib_name_val = ConstValue::Str(lib);
-            let lib_name_idx = cp.intern(&lib_name_val, interner)?.unwrap_or(0);
+            let lib_name_idx = cp.intern(&lib_name_val, interner)?;
             buf.extend_from_slice(&u32::from(lib_name_idx).to_le_bytes());
         } else {
             buf.extend_from_slice(&0xFFFF_FFFFu32.to_le_bytes());

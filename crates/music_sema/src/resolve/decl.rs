@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use music_ast::ExprIdx;
 use music_ast::decl::{ClassMember, EffectOp, ForeignDecl};
-use music_ast::expr::{Arg, Expr, Param};
+use music_ast::expr::{Arg, ArrayElem, Expr, MatchArm, Param, PwArm, PwGuard, RecField};
 use music_ast::ty::{Constraint, TyNamedRef, TyParam};
 use music_ast::util::collect_ty_var_nodes;
 use music_shared::{Span, Symbol};
@@ -198,15 +198,28 @@ impl Resolver<'_> {
                     free.push((*name, *span));
                 }
             }
-            Expr::BinOp { left, right, .. } => {
+            Expr::BinOp { left, right, .. }
+            | Expr::Index {
+                object: left,
+                index: right,
+                ..
+            } => {
                 self.collect_free_names_inner(*left, free, seen);
                 self.collect_free_names_inner(*right, free, seen);
             }
-            Expr::UnaryOp { operand, .. } => {
-                self.collect_free_names_inner(*operand, free, seen);
+            Expr::UnaryOp { operand, .. }
+            | Expr::Paren { inner: operand, .. }
+            | Expr::Field {
+                object: operand, ..
             }
-            Expr::Paren { inner, .. } => {
-                self.collect_free_names_inner(*inner, free, seen);
+            | Expr::ForceUnwrap { operand, .. }
+            | Expr::Do { body: operand, .. }
+            | Expr::TypeCast { operand, .. }
+            | Expr::TypeTest { operand, .. }
+            | Expr::Annotated { inner: operand, .. }
+            | Expr::Quantified { body: operand, .. }
+            | Expr::Fn { body: operand, .. } => {
+                self.collect_free_names_inner(*operand, free, seen);
             }
             Expr::Call { callee, args, .. } => {
                 self.collect_free_names_inner(*callee, free, seen);
@@ -216,7 +229,7 @@ impl Resolver<'_> {
                     }
                 }
             }
-            Expr::Tuple { elems, .. } => {
+            Expr::Tuple { elems, .. } | Expr::Variant { args: elems, .. } => {
                 for &e in elems {
                     self.collect_free_names_inner(e, free, seen);
                 }
@@ -229,7 +242,146 @@ impl Resolver<'_> {
                     self.collect_free_names_inner(*t, free, seen);
                 }
             }
+            Expr::Return { value, .. } => {
+                if let Some(v) = value {
+                    self.collect_free_names_inner(*v, free, seen);
+                }
+            }
+            expr => self.collect_free_names_compound(expr, free, seen),
+        }
+    }
+
+    fn collect_free_names_compound(
+        &self,
+        expr: &Expr,
+        free: &mut Vec<(Symbol, Span)>,
+        seen: &mut HashSet<Symbol>,
+    ) {
+        match expr {
+            Expr::Let { fields, body, .. } => {
+                if let Some(v) = fields.value {
+                    self.collect_free_names_inner(v, free, seen);
+                }
+                if let Some(b) = body {
+                    self.collect_free_names_inner(*b, free, seen);
+                }
+            }
+            Expr::Binding { fields, .. } => {
+                if let Some(v) = fields.value {
+                    self.collect_free_names_inner(v, free, seen);
+                }
+            }
+            Expr::Update { base, fields, .. } => {
+                self.collect_free_names_inner(*base, free, seen);
+                self.collect_free_rec_fields(fields, free, seen);
+            }
+            Expr::Record { fields, .. } => {
+                self.collect_free_rec_fields(fields, free, seen);
+            }
+            Expr::Array { elems, .. } => {
+                self.collect_free_array_elems(elems, free, seen);
+            }
+            Expr::Piecewise { arms, .. } => {
+                self.collect_free_pw_arms(arms, free, seen);
+            }
+            Expr::Match {
+                scrutinee, arms, ..
+            } => {
+                self.collect_free_match_arms(*scrutinee, arms, free, seen);
+            }
+            Expr::Class { members, .. } | Expr::Given { members, .. } => {
+                self.collect_free_class_members(members, free, seen);
+            }
+            Expr::Handle { body, ops, .. } => {
+                self.collect_free_names_inner(*body, free, seen);
+                for op in ops {
+                    self.collect_free_names_inner(op.body, free, seen);
+                }
+            }
             _ => {}
+        }
+    }
+
+    fn collect_free_array_elems(
+        &self,
+        elems: &[ArrayElem],
+        free: &mut Vec<(Symbol, Span)>,
+        seen: &mut HashSet<Symbol>,
+    ) {
+        for elem in elems {
+            let e = match elem {
+                ArrayElem::Elem { expr, .. } | ArrayElem::Spread { expr, .. } => *expr,
+            };
+            self.collect_free_names_inner(e, free, seen);
+        }
+    }
+
+    fn collect_free_pw_arms(
+        &self,
+        arms: &[PwArm],
+        free: &mut Vec<(Symbol, Span)>,
+        seen: &mut HashSet<Symbol>,
+    ) {
+        for arm in arms {
+            if let PwGuard::When { expr, .. } = arm.guard {
+                self.collect_free_names_inner(expr, free, seen);
+            }
+            self.collect_free_names_inner(arm.result, free, seen);
+        }
+    }
+
+    fn collect_free_match_arms(
+        &self,
+        scrutinee: ExprIdx,
+        arms: &[MatchArm],
+        free: &mut Vec<(Symbol, Span)>,
+        seen: &mut HashSet<Symbol>,
+    ) {
+        self.collect_free_names_inner(scrutinee, free, seen);
+        for arm in arms {
+            if let Some(guard) = arm.guard {
+                self.collect_free_names_inner(guard, free, seen);
+            }
+            self.collect_free_names_inner(arm.result, free, seen);
+        }
+    }
+
+    fn collect_free_rec_fields(
+        &self,
+        fields: &[RecField],
+        free: &mut Vec<(Symbol, Span)>,
+        seen: &mut HashSet<Symbol>,
+    ) {
+        for field in fields {
+            match field {
+                RecField::Named { value: Some(v), .. } => {
+                    self.collect_free_names_inner(*v, free, seen);
+                }
+                RecField::Named { value: None, .. } => {}
+                RecField::Spread { expr, .. } => {
+                    self.collect_free_names_inner(*expr, free, seen);
+                }
+            }
+        }
+    }
+
+    fn collect_free_class_members(
+        &self,
+        members: &[ClassMember],
+        free: &mut Vec<(Symbol, Span)>,
+        seen: &mut HashSet<Symbol>,
+    ) {
+        for member in members {
+            match member {
+                ClassMember::Fn {
+                    default: Some(body),
+                    ..
+                }
+                | ClassMember::Law { body, .. } => {
+                    self.collect_free_names_inner(*body, free, seen);
+                }
+                ClassMember::Fn { default: None, .. } => {}
+            }
         }
     }
 }

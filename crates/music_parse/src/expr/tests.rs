@@ -351,14 +351,8 @@ fn test_parse_defer() {
 }
 
 #[test]
-fn test_parse_await() {
-    let (expr, diags) = parse_single_expr("await task");
+fn test_parse_await_is_identifier() {
+    let (expr, diags) = parse_single_expr("await");
     assert!(!diags.has_errors());
-    assert!(matches!(
-        expr,
-        Expr::UnaryOp {
-            op: UnaryOp::Await,
-            ..
-        }
-    ));
+    assert!(matches!(expr, Expr::Name { .. }));
 }

@@ -3,8 +3,8 @@
 use std::collections::HashMap;
 
 use music_ast::expr::{
-    Arg, ArrayElem, BinOp, Expr, FieldKey, LetFields, MatchArm, Param, PwArm, PwGuard, RecDefField,
-    RecField, UnaryOp,
+    Arg, ArrayElem, BinOp, Expr, FieldKey, HandlerOp, LetFields, MatchArm, Param, PwArm, PwGuard,
+    RecDefField, RecField, UnaryOp,
 };
 use music_ast::lit::{FStrPart, Lit};
 use music_ast::pat::Pat;
@@ -77,15 +77,7 @@ fn synth_inner(ck: &mut Checker<'_>, expr_idx: ExprIdx) -> TypeIdx {
             span,
             ..
         } => synth_field(ck, object, field, span),
-        Expr::Index { object, index, .. } => {
-            let obj_ty = synth(ck, object);
-            let _idx_ty = synth(ck, index);
-            let obj_ty = ck.resolve_ty(obj_ty);
-            match &ck.store.types[obj_ty] {
-                Type::Array { elem, .. } => *elem,
-                _ => ck.error_ty(),
-            }
-        }
+        Expr::Index { object, index, .. } => synth_index(ck, object, index),
         Expr::Record { fields, .. } => synth_record(ck, &fields),
         Expr::Array { elems, span } => synth_array(ck, &elems, span),
         Expr::Piecewise { arms, span } => synth_piecewise(ck, &arms, span),
@@ -106,25 +98,10 @@ fn synth_inner(ck: &mut Checker<'_>, expr_idx: ExprIdx) -> TypeIdx {
             }
             ck.fresh_var(span)
         }
-        Expr::Update { base, fields, .. } => {
-            let base_ty = synth(ck, base);
-            for field in &fields {
-                match field {
-                    RecField::Named { value, .. } => {
-                        if let Some(v) = value {
-                            let _ty = synth(ck, *v);
-                        }
-                    }
-                    RecField::Spread { expr, .. } => {
-                        let _ty = synth(ck, *expr);
-                    }
-                }
-            }
-            base_ty
-        }
+        Expr::Update { base, fields, .. } => synth_update(ck, base, &fields),
         Expr::Choice { body, .. } => synth_choice(ck, body),
         Expr::RecordDef { fields, .. } => synth_record_def(ck, &fields),
-        Expr::Quantified { body, .. } => synth(ck, body),
+        Expr::Quantified { body, .. } | Expr::Do { body, .. } => synth(ck, body),
         Expr::Class { .. } | Expr::Given { .. } | Expr::Effect { .. } | Expr::Foreign { .. } => {
             check_stmt(ck, expr_idx);
             ck.named_ty(ck.ctx.well_known.unit)
@@ -132,7 +109,51 @@ fn synth_inner(ck: &mut Checker<'_>, expr_idx: ExprIdx) -> TypeIdx {
         Expr::Import { path, .. } => synth_import(ck, path),
         Expr::Export { .. } => ck.named_ty(ck.ctx.well_known.unit),
         Expr::Error { .. } => ck.error_ty(),
+        Expr::ForceUnwrap { operand, span } => synth_force_unwrap(ck, operand, span),
+        Expr::TypeTest {
+            operand,
+            ty,
+            binding,
+            span,
+        } => synth_type_test(ck, operand, ty, binding, span),
+        Expr::TypeCast { operand, ty, .. } => {
+            let _operand_ty = synth(ck, operand);
+            lower_ty(ck, ty)
+        }
+        Expr::Handle {
+            effect_ty,
+            ops,
+            body,
+            ..
+        } => synth_handle(ck, effect_ty, &ops, body),
     }
+}
+
+fn synth_index(ck: &mut Checker<'_>, object: ExprIdx, index: ExprIdx) -> TypeIdx {
+    let obj_ty = synth(ck, object);
+    let _idx_ty = synth(ck, index);
+    let obj_ty = ck.resolve_ty(obj_ty);
+    match &ck.store.types[obj_ty] {
+        Type::Array { elem, .. } => *elem,
+        _ => ck.error_ty(),
+    }
+}
+
+fn synth_update(ck: &mut Checker<'_>, base: ExprIdx, fields: &[RecField]) -> TypeIdx {
+    let base_ty = synth(ck, base);
+    for field in fields {
+        match field {
+            RecField::Named { value, .. } => {
+                if let Some(v) = value {
+                    let _ty = synth(ck, *v);
+                }
+            }
+            RecField::Spread { expr, .. } => {
+                let _ty = synth(ck, *expr);
+            }
+        }
+    }
+    base_ty
 }
 
 /// If `pat` is a function-like pattern (`Pat::Variant` with args), enters a
@@ -696,6 +717,7 @@ fn synth_binop(
             ck.unify_or_report(left_ty, right_ty, span);
             left_ty
         }
+        BinOp::ForceCoal => unwrap_option_ty(ck, left_ty, span),
         BinOp::Pipe => {
             let ret = ck.fresh_var(span);
             let fn_ty = ck.alloc_ty(Type::Fn {
@@ -729,9 +751,8 @@ fn synth_unaryop(ck: &mut Checker<'_>, op: UnaryOp, operand: ExprIdx, span: Span
             ck.unify_or_report(bool_ty, operand_ty, span);
             bool_ty
         }
-        UnaryOp::Neg | UnaryOp::Defer | UnaryOp::Spawn | UnaryOp::Await | UnaryOp::Try => {
-            operand_ty
-        }
+        UnaryOp::Neg | UnaryOp::Defer | UnaryOp::Try => operand_ty,
+        UnaryOp::ForceUnwrap => unwrap_option_ty(ck, operand_ty, span),
     }
 }
 
@@ -798,4 +819,64 @@ fn synth_import(ck: &mut Checker<'_>, path: Symbol) -> TypeIdx {
     } else {
         ck.named_ty(ck.ctx.well_known.unit)
     }
+}
+
+/// Expects `operand_ty` to be `Option<T>`, returning `T`.
+/// Introduces a fresh `T`, unifies `operand_ty` with `Option<T>`, and returns `T`.
+fn unwrap_option_ty(ck: &mut Checker<'_>, operand_ty: TypeIdx, span: Span) -> TypeIdx {
+    let inner = ck.fresh_var(span);
+    let option_ty = ck.alloc_ty(Type::Named {
+        def: ck.ctx.well_known.option,
+        args: vec![inner],
+    });
+    ck.unify_or_report(option_ty, operand_ty, span);
+    inner
+}
+
+fn synth_force_unwrap(ck: &mut Checker<'_>, operand: ExprIdx, span: Span) -> TypeIdx {
+    let operand_ty = synth(ck, operand);
+    unwrap_option_ty(ck, operand_ty, span)
+}
+
+fn synth_type_test(
+    ck: &mut Checker<'_>,
+    operand: ExprIdx,
+    ty: TyIdx,
+    binding: Option<Symbol>,
+    span: Span,
+) -> TypeIdx {
+    let _operand_ty = synth(ck, operand);
+    let test_ty = lower_ty(ck, ty);
+    if let Some(name) = binding {
+        let id = ck.defs.alloc(name, DefKind::Let, span);
+        ck.defs.get_mut(id).ty_info.ty = Some(test_ty);
+        let _prev = ck.scopes.define(ck.current_scope, name, id);
+    }
+    ck.named_ty(ck.ctx.well_known.bool)
+}
+
+fn synth_handle(
+    ck: &mut Checker<'_>,
+    effect_ty: TyIdx,
+    ops: &[HandlerOp],
+    body: ExprIdx,
+) -> TypeIdx {
+    let _eff_ty = lower_ty(ck, effect_ty);
+    for op in ops {
+        let parent = ck.current_scope;
+        ck.current_scope = ck.scopes.push_child(parent);
+        for param in &op.params {
+            let param_ty = if let Some(ty) = param.ty {
+                lower_ty(ck, ty)
+            } else {
+                ck.fresh_var(param.span)
+            };
+            let id = ck.defs.alloc(param.name, DefKind::Param, param.span);
+            ck.defs.get_mut(id).ty_info.ty = Some(param_ty);
+            let _prev = ck.scopes.define(ck.current_scope, param.name, id);
+        }
+        let _op_ty = synth(ck, op.body);
+        ck.current_scope = parent;
+    }
+    synth(ck, body)
 }

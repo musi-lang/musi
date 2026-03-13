@@ -41,6 +41,7 @@ pub struct ExportItem {
 /// An operation in an effect definition.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EffectOp {
+    pub fatal: bool,
     pub name: Symbol,
     pub ty: TyIdx,
     pub span: Span,

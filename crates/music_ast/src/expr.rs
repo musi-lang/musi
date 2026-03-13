@@ -193,10 +193,50 @@ pub enum Expr {
         span: Span,
     },
 
+    // -- force unwrap --------------------------------------------------------
+    ForceUnwrap {
+        operand: ExprIdx,
+        span: Span,
+    },
+
+    // -- type test / cast ----------------------------------------------------
+    TypeTest {
+        operand: ExprIdx,
+        ty: TyIdx,
+        binding: Option<Symbol>,
+        span: Span,
+    },
+    TypeCast {
+        operand: ExprIdx,
+        ty: TyIdx,
+        span: Span,
+    },
+
+    // -- effects -------------------------------------------------------------
+    Do {
+        body: ExprIdx,
+        span: Span,
+    },
+    Handle {
+        effect_ty: TyIdx,
+        ops: Vec<HandlerOp>,
+        body: ExprIdx,
+        span: Span,
+    },
+
     // -- error recovery ------------------------------------------------------
     Error {
         span: Span,
     },
+}
+
+/// A single operation handler inside a `handle` expression.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HandlerOp {
+    pub name: Symbol,
+    pub params: Vec<Param>,
+    pub body: ExprIdx,
+    pub span: Span,
 }
 
 /// Shared fields for let-bindings (`Let`, `Binding`).
@@ -346,6 +386,7 @@ pub enum BinOp {
     RangeExc,
     Cons,
     NilCoal,
+    ForceCoal,
 }
 
 /// Unary operator.
@@ -354,7 +395,6 @@ pub enum UnaryOp {
     Neg,
     Not,
     Defer,
-    Spawn,
-    Await,
     Try,
+    ForceUnwrap,
 }

@@ -1,7 +1,8 @@
 //! Pass 2: expression resolution.
 
 use music_ast::expr::{
-    Arg, ArrayElem, Expr, LetFields, MatchArm, Param, PwGuard, RecDefField, RecField,
+    Arg, ArrayElem, Expr, HandlerOp, LetFields, MatchArm, Param, PwArm, PwGuard, RecDefField,
+    RecField,
 };
 use music_ast::lit::{FStrPart, Lit};
 use music_ast::ty::{Constraint, TyParam};
@@ -32,7 +33,9 @@ impl Resolver<'_> {
                 self.resolve_expr(left);
                 self.resolve_expr(right);
             }
-            Expr::UnaryOp { operand, .. } => self.resolve_expr(operand),
+            Expr::UnaryOp { operand, .. } | Expr::ForceUnwrap { operand, .. } => {
+                self.resolve_expr(operand);
+            }
             Expr::Field { object, .. } => self.resolve_expr(object),
             Expr::Index { object, index, .. } => {
                 self.resolve_expr(object);
@@ -45,23 +48,8 @@ impl Resolver<'_> {
             }
             Expr::Record { fields, .. } => self.resolve_rec_fields(&fields),
             Expr::RecordDef { fields, .. } => self.resolve_rec_def_fields(&fields),
-            Expr::Array { elems, .. } => {
-                for elem in &elems {
-                    match elem {
-                        ArrayElem::Elem { expr, .. } | ArrayElem::Spread { expr, .. } => {
-                            self.resolve_expr(*expr);
-                        }
-                    }
-                }
-            }
-            Expr::Piecewise { arms, .. } => {
-                for arm in &arms {
-                    if let PwGuard::When { expr, .. } = arm.guard {
-                        self.resolve_expr(expr);
-                    }
-                    self.resolve_expr(arm.result);
-                }
-            }
+            Expr::Array { elems, .. } => self.resolve_expr_array(&elems),
+            Expr::Piecewise { arms, .. } => self.resolve_expr_piecewise(&arms),
             Expr::Return { value, .. } => {
                 if let Some(v) = value {
                     self.resolve_expr(v);
@@ -112,6 +100,17 @@ impl Resolver<'_> {
                 ..
             } => self.resolve_expr_effect(name, &params, &ops, exported),
             Expr::Foreign { decls, .. } => self.resolve_expr_foreign(&decls),
+            Expr::TypeTest { operand, ty, .. } | Expr::TypeCast { operand, ty, .. } => {
+                self.resolve_expr(operand);
+                self.resolve_ty(ty);
+            }
+            Expr::Do { body, .. } => self.resolve_expr(body),
+            Expr::Handle {
+                effect_ty,
+                ops,
+                body,
+                ..
+            } => self.resolve_expr_handle(effect_ty, &ops, body),
         }
     }
 
@@ -359,5 +358,43 @@ impl Resolver<'_> {
 
         self.resolve_ty(body);
         self.current_scope = parent;
+    }
+
+    fn resolve_expr_array(&mut self, elems: &[ArrayElem]) {
+        for elem in elems {
+            match elem {
+                ArrayElem::Elem { expr, .. } | ArrayElem::Spread { expr, .. } => {
+                    self.resolve_expr(*expr);
+                }
+            }
+        }
+    }
+
+    fn resolve_expr_piecewise(&mut self, arms: &[PwArm]) {
+        for arm in arms {
+            if let PwGuard::When { expr, .. } = arm.guard {
+                self.resolve_expr(expr);
+            }
+            self.resolve_expr(arm.result);
+        }
+    }
+
+    fn resolve_expr_handle(&mut self, effect_ty: TyIdx, ops: &[HandlerOp], body: ExprIdx) {
+        self.resolve_ty(effect_ty);
+        for op in ops {
+            let parent = self.current_scope;
+            self.current_scope = self.scopes.push_child(parent);
+            for param in &op.params {
+                let id = self.defs.alloc(param.name, DefKind::Param, param.span);
+                self.define_in_scope(param.name, id, param.span);
+                let _inserted = self.output.pat_defs.insert(param.span, id);
+                if let Some(ty) = param.ty {
+                    self.resolve_ty(ty);
+                }
+            }
+            self.resolve_expr(op.body);
+            self.current_scope = parent;
+        }
+        self.resolve_expr(body);
     }
 }

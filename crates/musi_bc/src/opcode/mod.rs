@@ -105,6 +105,8 @@ impl Opcode {
     pub const EFF_POP: Self = Self(0x49);
     /// Indirect (dynamic) call through a closure or fn value. u8 = arg count.
     pub const INV_DYN: Self = Self(0x4A);
+    /// Store into an object field. u8 = field index. Pops [obj, value].
+    pub const ST_FLD: Self = Self(0x4B);
 
     // §9  Wide locals (u16 operand)
     pub const LD_LOC_W: Self = Self(0x80);
@@ -219,6 +221,7 @@ impl fmt::Display for Opcode {
             Self::EFF_PSH => "eff.psh",
             Self::EFF_POP => "eff.pop",
             Self::INV_DYN => "inv.dyn",
+            Self::ST_FLD => "st.fld",
             Self::LD_LOC_W => "ld.loc.w",
             Self::ST_LOC_W => "st.loc.w",
             Self::LD_CST_W => "ld.cst.w",
@@ -243,7 +246,7 @@ impl fmt::Display for Opcode {
             Self::JMP_W => "jmp.w",
             Self::JMP_T_W => "jmp.t.w",
             Self::JMP_F_W => "jmp.f.w",
-            _ => "???",
+            _ => return write!(f, "0x{:02X}", self.0),
         };
         f.write_str(name)
     }

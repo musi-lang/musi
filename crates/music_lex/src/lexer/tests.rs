@@ -26,7 +26,6 @@ fn lex_with_interner(source: &str) -> (Vec<Token>, Interner, DiagnosticBag) {
 fn test_all_keywords_recognized() {
     let keywords = [
         ("and", TokenKind::KwAnd),
-        ("await", TokenKind::KwAwait),
         ("choice", TokenKind::KwChoice),
         ("class", TokenKind::KwClass),
         ("defer", TokenKind::KwDefer),
@@ -47,7 +46,6 @@ fn test_all_keywords_recognized() {
         ("over", TokenKind::KwOver),
         ("ref", TokenKind::KwRef),
         ("return", TokenKind::KwReturn),
-        ("spawn", TokenKind::KwSpawn),
         ("try", TokenKind::KwTry),
         ("var", TokenKind::KwVar),
         ("where", TokenKind::KwWhere),
@@ -560,4 +558,99 @@ fn test_lex_hello_world() {
             TokenKind::Eof,
         ]
     );
+}
+
+#[test]
+fn test_new_keywords_recognized() {
+    let keywords = [
+        ("do", TokenKind::KwDo),
+        ("fatal", TokenKind::KwFatal),
+        ("handle", TokenKind::KwHandle),
+        ("resume", TokenKind::KwResume),
+        ("with", TokenKind::KwWith),
+    ];
+    for (text, expected) in keywords {
+        let kinds = lex_kinds(text);
+        assert_eq!(kinds[0], expected, "keyword: {text}");
+    }
+}
+
+#[test]
+fn test_bang_single_token() {
+    assert_eq!(lex_kinds("!")[0], TokenKind::Bang);
+}
+
+#[test]
+fn test_bang_bang_token() {
+    assert_eq!(lex_kinds("!!")[0], TokenKind::BangBang);
+}
+
+#[test]
+fn test_bang_dot_token() {
+    assert_eq!(lex_kinds("!.")[0], TokenKind::BangDot);
+}
+
+#[test]
+fn test_colon_question_token() {
+    assert_eq!(lex_kinds(":?")[0], TokenKind::ColonQuestion);
+}
+
+#[test]
+fn test_colon_question_gt_token() {
+    assert_eq!(lex_kinds(":?>")[0], TokenKind::ColonQuestionGt);
+}
+
+#[test]
+fn test_bang_maximal_munch_bang_bang_over_two_bangs() {
+    assert_eq!(lex_kinds("!!")[0], TokenKind::BangBang);
+    let two_bangs = lex_kinds("! !");
+    assert_eq!(two_bangs[0], TokenKind::Bang);
+    assert_eq!(two_bangs[1], TokenKind::Bang);
+}
+
+#[test]
+fn test_bang_maximal_munch_bang_dot_over_bang_then_dot() {
+    assert_eq!(lex_kinds("!.")[0], TokenKind::BangDot);
+    let bang_then_dot = lex_kinds("! .");
+    assert_eq!(bang_then_dot[0], TokenKind::Bang);
+    assert_eq!(bang_then_dot[1], TokenKind::Dot);
+}
+
+#[test]
+fn test_colon_question_maximal_munch_three_char_over_two() {
+    assert_eq!(lex_kinds(":?>")[0], TokenKind::ColonQuestionGt);
+    let two_then_gt = lex_kinds(":? >");
+    assert_eq!(two_then_gt[0], TokenKind::ColonQuestion);
+    assert_eq!(two_then_gt[1], TokenKind::Gt);
+}
+
+#[test]
+fn test_bang_in_expression_context() {
+    let kinds = lex_kinds("x!! y!.field");
+    assert_eq!(kinds[0], TokenKind::Ident);
+    assert_eq!(kinds[1], TokenKind::BangBang);
+    assert_eq!(kinds[2], TokenKind::Ident);
+    assert_eq!(kinds[3], TokenKind::BangDot);
+    assert_eq!(kinds[4], TokenKind::Ident);
+    assert_eq!(kinds[5], TokenKind::Eof);
+}
+
+#[test]
+fn test_colon_question_in_expression_context() {
+    let kinds = lex_kinds("x :? T y :?> U");
+    assert_eq!(kinds[0], TokenKind::Ident);
+    assert_eq!(kinds[1], TokenKind::ColonQuestion);
+    assert_eq!(kinds[2], TokenKind::Ident);
+    assert_eq!(kinds[3], TokenKind::Ident);
+    assert_eq!(kinds[4], TokenKind::ColonQuestionGt);
+    assert_eq!(kinds[5], TokenKind::Ident);
+    assert_eq!(kinds[6], TokenKind::Eof);
+}
+
+#[test]
+fn test_new_keywords_not_consumed_as_idents() {
+    for kw in ["do", "fatal", "handle", "resume", "with"] {
+        let kinds = lex_kinds(kw);
+        assert_ne!(kinds[0], TokenKind::Ident, "'{kw}' should not be an ident");
+    }
 }

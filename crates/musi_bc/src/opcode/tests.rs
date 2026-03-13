@@ -201,5 +201,5 @@ fn test_display_known_opcodes() {
 
 #[test]
 fn test_display_unknown_opcode() {
-    assert_eq!(format!("{}", Opcode(0xFF)), "???");
+    assert_eq!(format!("{}", Opcode(0xFF)), "0xFF");
 }

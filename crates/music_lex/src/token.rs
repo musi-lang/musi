@@ -11,16 +11,18 @@ pub enum TokenKind {
     // -- keywords ------------------------------------------------------------
     KwAnd,
     KwAs,
-    KwAwait,
     KwChoice,
     KwClass,
     KwDefer,
+    KwDo,
     KwEffect,
     KwExists,
     KwExport,
+    KwFatal,
     KwForall,
     KwForeign,
     KwGiven,
+    KwHandle,
     KwIf,
     KwImport,
     KwIn,
@@ -34,12 +36,12 @@ pub enum TokenKind {
     KwOver,
     KwRecord,
     KwRef,
+    KwResume,
     KwReturn,
-    KwSpawn,
     KwTry,
-    KwUnder,
     KwVar,
     KwWhere,
+    KwWith,
     KwXor,
 
     // -- delimiters ----------------------------------------------------------
@@ -71,6 +73,17 @@ pub enum TokenKind {
     // 3-char
     DotDotDot, // ...  spread/splat
     DotDotLt,  // ..<  exclusive range
+
+    // 2-char (bang)
+    BangBang, // !!   force null coalesce
+    BangDot,  // !.   forced unwrap field access
+
+    // 1-char (bang)
+    Bang, // !    force unwrap postfix
+
+    // 2-char (colon-question)
+    ColonQuestionGt, // :?>  type cast
+    ColonQuestion,   // :?   type test
 
     // 2-char
     ColonColon,       // ::   cons
@@ -121,16 +134,18 @@ impl TokenKind {
             self,
             Self::KwAnd
                 | Self::KwAs
-                | Self::KwAwait
                 | Self::KwChoice
                 | Self::KwClass
                 | Self::KwDefer
+                | Self::KwDo
                 | Self::KwEffect
                 | Self::KwExists
                 | Self::KwExport
+                | Self::KwFatal
                 | Self::KwForall
                 | Self::KwForeign
                 | Self::KwGiven
+                | Self::KwHandle
                 | Self::KwIf
                 | Self::KwImport
                 | Self::KwIn
@@ -144,12 +159,12 @@ impl TokenKind {
                 | Self::KwOver
                 | Self::KwRecord
                 | Self::KwRef
+                | Self::KwResume
                 | Self::KwReturn
-                | Self::KwSpawn
                 | Self::KwTry
-                | Self::KwUnder
                 | Self::KwVar
                 | Self::KwWhere
+                | Self::KwWith
                 | Self::KwXor
         )
     }
@@ -161,16 +176,18 @@ impl TokenKind {
         match self {
             Self::KwAnd => Some("and"),
             Self::KwAs => Some("as"),
-            Self::KwAwait => Some("await"),
             Self::KwChoice => Some("choice"),
             Self::KwClass => Some("class"),
             Self::KwDefer => Some("defer"),
+            Self::KwDo => Some("do"),
             Self::KwEffect => Some("effect"),
             Self::KwExists => Some("exists"),
             Self::KwExport => Some("export"),
+            Self::KwFatal => Some("fatal"),
             Self::KwForall => Some("forall"),
             Self::KwForeign => Some("foreign"),
             Self::KwGiven => Some("given"),
+            Self::KwHandle => Some("handle"),
             Self::KwIf => Some("if"),
             Self::KwImport => Some("import"),
             Self::KwIn => Some("in"),
@@ -184,13 +201,18 @@ impl TokenKind {
             Self::KwOver => Some("over"),
             Self::KwRecord => Some("record"),
             Self::KwRef => Some("ref"),
+            Self::KwResume => Some("resume"),
             Self::KwReturn => Some("return"),
-            Self::KwSpawn => Some("spawn"),
             Self::KwTry => Some("try"),
-            Self::KwUnder => Some("under"),
             Self::KwVar => Some("var"),
             Self::KwWhere => Some("where"),
+            Self::KwWith => Some("with"),
             Self::KwXor => Some("xor"),
+            Self::Bang => Some("!"),
+            Self::BangBang => Some("!!"),
+            Self::BangDot => Some("!."),
+            Self::ColonQuestion => Some(":?"),
+            Self::ColonQuestionGt => Some(":?>"),
 
             Self::LParen => Some("("),
             Self::RParen => Some(")"),
@@ -281,16 +303,18 @@ pub fn keyword_from_str(s: &str) -> Option<TokenKind> {
     match s {
         "and" => Some(TokenKind::KwAnd),
         "as" => Some(TokenKind::KwAs),
-        "await" => Some(TokenKind::KwAwait),
         "choice" => Some(TokenKind::KwChoice),
         "class" => Some(TokenKind::KwClass),
         "defer" => Some(TokenKind::KwDefer),
+        "do" => Some(TokenKind::KwDo),
         "effect" => Some(TokenKind::KwEffect),
         "exists" => Some(TokenKind::KwExists),
         "export" => Some(TokenKind::KwExport),
+        "fatal" => Some(TokenKind::KwFatal),
         "forall" => Some(TokenKind::KwForall),
         "foreign" => Some(TokenKind::KwForeign),
         "given" => Some(TokenKind::KwGiven),
+        "handle" => Some(TokenKind::KwHandle),
         "if" => Some(TokenKind::KwIf),
         "import" => Some(TokenKind::KwImport),
         "in" => Some(TokenKind::KwIn),
@@ -304,12 +328,12 @@ pub fn keyword_from_str(s: &str) -> Option<TokenKind> {
         "over" => Some(TokenKind::KwOver),
         "record" => Some(TokenKind::KwRecord),
         "ref" => Some(TokenKind::KwRef),
+        "resume" => Some(TokenKind::KwResume),
         "return" => Some(TokenKind::KwReturn),
-        "spawn" => Some(TokenKind::KwSpawn),
         "try" => Some(TokenKind::KwTry),
-        "under" => Some(TokenKind::KwUnder),
         "var" => Some(TokenKind::KwVar),
         "where" => Some(TokenKind::KwWhere),
+        "with" => Some(TokenKind::KwWith),
         "xor" => Some(TokenKind::KwXor),
         _ => None,
     }

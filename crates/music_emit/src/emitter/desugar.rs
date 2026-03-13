@@ -14,7 +14,7 @@ use super::expr::emit_expr;
 /// Emit `left and right` with short-circuit evaluation. Leaves bool on stack.
 ///
 /// If left is false, result is false without evaluating right.
-pub(crate) fn emit_and(
+pub fn emit_and(
     em: &mut Emitter<'_>,
     fc: &mut FnCtx,
     left: ExprIdx,
@@ -30,7 +30,11 @@ pub(crate) fn emit_and(
         // Left was true — discard it and evaluate right
         fc.fe.emit_pop();
         let produced_right = emit_expr(em, fc, right)?;
-        let _ = produced_right;
+        if !produced_right {
+            return Err(EmitError::UnsupportedFeature {
+                desc: "short-circuit `and` right operand produced no value".into(),
+            });
+        }
         fc.fe.emit_jmp(end_label);
         fc.fe.emit_label(false_label);
         fc.fe.emit_label(end_label);
@@ -41,7 +45,7 @@ pub(crate) fn emit_and(
 /// Emit `left or right` with short-circuit evaluation. Leaves bool on stack.
 ///
 /// If left is true, result is true without evaluating right.
-pub(crate) fn emit_or(
+pub fn emit_or(
     em: &mut Emitter<'_>,
     fc: &mut FnCtx,
     left: ExprIdx,
@@ -57,7 +61,11 @@ pub(crate) fn emit_or(
         // Left was false — discard it and evaluate right
         fc.fe.emit_pop();
         let produced_right = emit_expr(em, fc, right)?;
-        let _ = produced_right;
+        if !produced_right {
+            return Err(EmitError::UnsupportedFeature {
+                desc: "short-circuit `or` right operand produced no value".into(),
+            });
+        }
         fc.fe.emit_label(end_label);
     }
     Ok(())
@@ -65,7 +73,7 @@ pub(crate) fn emit_or(
 
 /// Emit `left <- right` (assignment). Stores the right value to the left's local slot.
 /// Assignment produces no stack value.
-pub(crate) fn emit_assign(
+pub fn emit_assign(
     em: &mut Emitter<'_>,
     fc: &mut FnCtx,
     left: ExprIdx,
@@ -77,27 +85,28 @@ pub(crate) fn emit_assign(
     }
 
     let left_expr = em.ast.exprs[left].clone();
-    match left_expr {
-        Expr::Name { .. } => {
-            if let Some(&def_id) = em.sema.resolution.expr_defs.get(&left) {
-                if let Some(&slot) = fc.local_map.get(&def_id) {
-                    fc.fe.emit_st_loc(slot);
-                    return Ok(());
-                }
-            }
-            // Discard if we can't resolve the target.
-            fc.fe.emit_pop();
-            Ok(())
+    if let Expr::Name { .. } = left_expr
+        && let Some(&def_id) = em.sema.resolution.expr_defs.get(&left)
+        && let Some(&slot) = fc.local_map.get(&def_id)
+    {
+        if fc.ref_locals.contains(&def_id) {
+            let val_slot = fc.alloc_local();
+            fc.fe.emit_st_loc(val_slot);
+            fc.fe.emit_ld_loc(slot);
+            fc.fe.emit_ld_loc(val_slot);
+            fc.fe.emit_st_fld(0)?;
+        } else {
+            fc.fe.emit_st_loc(slot);
         }
-        _ => {
-            fc.fe.emit_pop();
-            Ok(())
-        }
+        return Ok(());
     }
+    // Discard if we can't resolve the target or it's not a name.
+    fc.fe.emit_pop();
+    Ok(())
 }
 
 /// Emit `left |> right` (pipe). Calls right with left as first argument.
-pub(crate) fn emit_pipe(
+pub fn emit_pipe(
     em: &mut Emitter<'_>,
     fc: &mut FnCtx,
     _pipe_expr_idx: ExprIdx,
@@ -140,7 +149,7 @@ pub(crate) fn emit_pipe(
 }
 
 /// Emit an f-string by concatenating each part. Leaves the result string on stack.
-pub(crate) fn emit_fstr(
+pub fn emit_fstr(
     em: &mut Emitter<'_>,
     fc: &mut FnCtx,
     parts: &[FStrPart],
@@ -148,9 +157,8 @@ pub(crate) fn emit_fstr(
     if parts.is_empty() {
         let empty_sym = em.interner.intern("");
         let cv = ConstValue::Str(empty_sym);
-        if let Some(i) = em.cp.intern(&cv, em.interner)? {
-            fc.fe.emit_ld_cst(i);
-        }
+        let i = em.cp.intern(&cv, em.interner)?;
+        fc.fe.emit_ld_cst(i);
         return Ok(());
     }
 
@@ -167,9 +175,8 @@ pub(crate) fn emit_fstr(
         match part {
             FStrPart::Text { raw, .. } => {
                 let cv = ConstValue::Str(*raw);
-                if let Some(i) = em.cp.intern(&cv, em.interner)? {
-                    fc.fe.emit_ld_cst(i);
-                }
+                let i = em.cp.intern(&cv, em.interner)?;
+                fc.fe.emit_ld_cst(i);
             }
             FStrPart::Interpolated { expr, .. } => {
                 let produced = emit_expr(em, fc, *expr)?;
@@ -180,9 +187,8 @@ pub(crate) fn emit_fstr(
                 } else {
                     let empty_sym = em.interner.intern("");
                     let cv = ConstValue::Str(empty_sym);
-                    if let Some(i) = em.cp.intern(&cv, em.interner)? {
-                        fc.fe.emit_ld_cst(i);
-                    }
+                    let i = em.cp.intern(&cv, em.interner)?;
+                    fc.fe.emit_ld_cst(i);
                 }
             }
         }

@@ -8,7 +8,8 @@ use std::ops::ControlFlow;
 use crate::attr::{Attr, AttrValue};
 use crate::decl::{ClassMember, EffectOp, ForeignDecl};
 use crate::expr::{
-    Arg, ArrayElem, Expr, LetFields, MatchArm, Param, PwGuard, RecDefField, RecField,
+    Arg, ArrayElem, Expr, HandlerOp, LetFields, MatchArm, Param, PwArm, PwGuard, RecDefField,
+    RecField,
 };
 use crate::lit::{FStrPart, Lit};
 use crate::pat::Pat;
@@ -78,13 +79,7 @@ pub fn walk_expr<V: AstVisitor + ?Sized>(
         Expr::Block { stmts, tail, .. } => walk_expr_block(v, stmts, *tail, ctx),
 
         // -- bindings --------------------------------------------------------
-        Expr::Let { fields, body, .. } => {
-            walk_let_fields(v, fields, ctx)?;
-            if let Some(b) = *body {
-                v.visit_expr(b, ctx)?;
-            }
-            ControlFlow::Continue(())
-        }
+        Expr::Let { fields, body, .. } => walk_expr_let(v, fields, *body, ctx),
         Expr::Binding { fields, .. } => walk_let_fields(v, fields, ctx),
 
         // -- functions -------------------------------------------------------
@@ -93,13 +88,7 @@ pub fn walk_expr<V: AstVisitor + ?Sized>(
             ret_ty,
             body,
             ..
-        } => {
-            walk_params(v, params, ctx)?;
-            if let Some(ty) = *ret_ty {
-                v.visit_ty(ty, ctx)?;
-            }
-            v.visit_expr(*body, ctx)
-        }
+        } => walk_expr_fn(v, params, *ret_ty, *body, ctx),
         Expr::Call { callee, args, .. } => walk_expr_call(v, *callee, args, ctx),
 
         // -- access & update -------------------------------------------------
@@ -123,18 +112,12 @@ pub fn walk_expr<V: AstVisitor + ?Sized>(
 
         // -- operators -------------------------------------------------------
         Expr::BinOp { left, right, .. } => v.visit_expr_list(&[*left, *right], ctx),
-        Expr::UnaryOp { operand, .. } => v.visit_expr(*operand, ctx),
+        Expr::UnaryOp { operand, .. } | Expr::ForceUnwrap { operand, .. } => {
+            v.visit_expr(*operand, ctx)
+        }
 
         // -- conditionals ----------------------------------------------------
-        Expr::Piecewise { arms, .. } => {
-            for arm in arms {
-                if let PwGuard::When { expr, .. } = arm.guard {
-                    v.visit_expr(expr, ctx)?;
-                }
-                v.visit_expr(arm.result, ctx)?;
-            }
-            ControlFlow::Continue(())
-        }
+        Expr::Piecewise { arms, .. } => walk_expr_piecewise(v, arms, ctx),
         Expr::Match {
             scrutinee, arms, ..
         } => walk_expr_match(v, *scrutinee, arms, ctx),
@@ -179,6 +162,21 @@ pub fn walk_expr<V: AstVisitor + ?Sized>(
         Expr::Effect { ops, .. } => walk_effect_ops(v, ops, ctx),
 
         Expr::Foreign { decls, .. } => walk_foreign_decls(v, decls, ctx),
+
+        // -- type test / cast ------------------------------------------------
+        Expr::TypeTest { operand, ty, .. } | Expr::TypeCast { operand, ty, .. } => {
+            v.visit_expr(*operand, ctx)?;
+            v.visit_ty(*ty, ctx)
+        }
+
+        // -- effects ---------------------------------------------------------
+        Expr::Do { body, .. } => v.visit_expr(*body, ctx),
+        Expr::Handle {
+            effect_ty,
+            ops,
+            body,
+            ..
+        } => walk_expr_handle(v, *effect_ty, ops, *body, ctx),
     }
 }
 
@@ -504,4 +502,60 @@ fn walk_attrs_values<V: AstVisitor + ?Sized>(
         }
     }
     ControlFlow::Continue(())
+}
+
+fn walk_expr_let<V: AstVisitor + ?Sized>(
+    v: &mut V,
+    fields: &LetFields,
+    body: Option<ExprIdx>,
+    ctx: &AstArenas,
+) -> ControlFlow<V::Break> {
+    walk_let_fields(v, fields, ctx)?;
+    if let Some(b) = body {
+        v.visit_expr(b, ctx)?;
+    }
+    ControlFlow::Continue(())
+}
+
+fn walk_expr_fn<V: AstVisitor + ?Sized>(
+    v: &mut V,
+    params: &[Param],
+    ret_ty: Option<TyIdx>,
+    body: ExprIdx,
+    ctx: &AstArenas,
+) -> ControlFlow<V::Break> {
+    walk_params(v, params, ctx)?;
+    if let Some(ty) = ret_ty {
+        v.visit_ty(ty, ctx)?;
+    }
+    v.visit_expr(body, ctx)
+}
+
+fn walk_expr_piecewise<V: AstVisitor + ?Sized>(
+    v: &mut V,
+    arms: &[PwArm],
+    ctx: &AstArenas,
+) -> ControlFlow<V::Break> {
+    for arm in arms {
+        if let PwGuard::When { expr, .. } = arm.guard {
+            v.visit_expr(expr, ctx)?;
+        }
+        v.visit_expr(arm.result, ctx)?;
+    }
+    ControlFlow::Continue(())
+}
+
+fn walk_expr_handle<V: AstVisitor + ?Sized>(
+    v: &mut V,
+    effect_ty: TyIdx,
+    ops: &[HandlerOp],
+    body: ExprIdx,
+    ctx: &AstArenas,
+) -> ControlFlow<V::Break> {
+    v.visit_ty(effect_ty, ctx)?;
+    for op in ops {
+        walk_params(v, &op.params, ctx)?;
+        v.visit_expr(op.body, ctx)?;
+    }
+    v.visit_expr(body, ctx)
 }

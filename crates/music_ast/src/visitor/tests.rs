@@ -155,8 +155,8 @@ fn test_walk_expr_crosses_into_ty() {
 
 #[test]
 fn test_walk_expr_visits_record_def_fields() {
-    let mut arenas = AstArenas::new();
     use crate::expr::RecDefField;
+    let mut arenas = AstArenas::new();
     let ty = arenas.tys.alloc(Ty::Named {
         name: Symbol(0),
         args: vec![],

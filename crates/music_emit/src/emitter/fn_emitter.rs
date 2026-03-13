@@ -232,40 +232,20 @@ impl FnEmitter {
         self.push_n(1);
     }
 
-    /// Emit `cmp.tag` or `cmp.tag.w` — compare object tag inline (pop obj, push bool → net 0).
-    pub fn emit_cmp_tag(&mut self, tag: u32) -> Result<(), EmitError> {
-        if let Ok(t) = u8::try_from(tag) {
-            encode_u8(&mut self.code, Opcode::CMP_TAG, t);
-        } else {
-            let t = u16::try_from(tag).map_err(|_| EmitError::OperandOverflow {
-                desc: "variant tag exceeds 65535".into(),
-            })?;
-            encode_u16(&mut self.code, Opcode::CMP_TAG_W, t);
-        }
-        Ok(())
-    }
-
-    /// Emit a conditional wide jump-if-false to `label` (5 bytes, i32 offset, pops condition).
-    pub fn emit_jmp_f(&mut self, label: u32) {
-        let instr_offset = self.code.len();
-        encode_i32(&mut self.code, Opcode::JMP_F_W, 0);
-        let instr_len = 5;
-        self.pop_n(1);
-        self.fixups.push(Fixup {
-            instr_offset,
-            instr_len,
-            label,
-        });
-    }
-
+    /// Emit `alc.ref` — pops initial value, pushes ref. Net stack: 0.
     pub fn emit_alc_ref(&mut self, type_id: u32) {
         encode_u32(&mut self.code, Opcode::ALC_REF, type_id);
-        self.push_n(1);
+        // pops initial value, pushes ref → net 0
     }
 
-    pub fn emit_alc_arn(&mut self, type_id: u32) {
-        encode_u32(&mut self.code, Opcode::ALC_ARN, type_id);
-        self.push_n(1);
+    /// Emit `st.fld` — pops [obj, value]. Net stack: -2.
+    pub fn emit_st_fld(&mut self, index: u32) -> Result<(), EmitError> {
+        let i = u8::try_from(index).map_err(|_| EmitError::OperandOverflow {
+            desc: "field index exceeds 255".into(),
+        })?;
+        encode_u8(&mut self.code, Opcode::ST_FLD, i);
+        self.pop_n(2);
+        Ok(())
     }
 
     pub fn emit_eff_psh(&mut self, effect_id: u32, handler_fn_id: u32) -> Result<(), EmitError> {
@@ -299,6 +279,32 @@ impl FnEmitter {
         self.pop_n(1);
     }
 
+    /// Emit `cmp.tag` or `cmp.tag.w` — compare object tag inline (pop obj, push bool → net 0).
+    pub fn emit_cmp_tag(&mut self, tag: u32) -> Result<(), EmitError> {
+        if let Ok(t) = u8::try_from(tag) {
+            encode_u8(&mut self.code, Opcode::CMP_TAG, t);
+        } else {
+            let t = u16::try_from(tag).map_err(|_| EmitError::OperandOverflow {
+                desc: "variant tag exceeds 65535".into(),
+            })?;
+            encode_u16(&mut self.code, Opcode::CMP_TAG_W, t);
+        }
+        Ok(())
+    }
+
+    /// Emit a conditional wide jump-if-false to `label` (5 bytes, i32 offset, pops condition).
+    pub fn emit_jmp_f(&mut self, label: u32) {
+        let instr_offset = self.code.len();
+        encode_i32(&mut self.code, Opcode::JMP_F_W, 0);
+        let instr_len = 5;
+        self.pop_n(1);
+        self.fixups.push(Fixup {
+            instr_offset,
+            instr_len,
+            label,
+        });
+    }
+
     /// Emit an unconditional wide jump to `label` (5 bytes, i32 offset).
     pub fn emit_jmp(&mut self, label: u32) {
         let instr_offset = self.code.len();
@@ -327,7 +333,8 @@ impl FnEmitter {
 
     /// Record a label target at the current code position.
     pub fn emit_label(&mut self, label: u32) {
-        let _ = self.label_targets.insert(label, self.code.len());
+        let prev = self.label_targets.insert(label, self.code.len());
+        debug_assert!(prev.is_none(), "duplicate label target {label}");
     }
 
     /// Resolve all forward-jump fixups.

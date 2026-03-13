@@ -5,10 +5,11 @@ mod tests;
 
 mod control;
 mod desugar;
-pub(crate) mod expr;
+pub mod expr;
 mod fn_emitter;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::mem;
 
 use music_ast::Pat;
 use music_ast::attr::Attr;
@@ -16,14 +17,14 @@ use music_ast::expr::{Expr, LetFields, Param};
 use music_ast::{AstArenas, ExprIdx, ParsedModule, PatIdx, Stmt};
 use music_sema::SemaResult;
 use music_sema::def::{DefId, DefKind};
-use music_shared::{Interner, Span, Symbol};
+use music_shared::{FileId, Interner, Span, Symbol};
 
 use crate::const_pool::ConstPool;
 use crate::error::EmitError;
 use crate::module::{EffectDef, ForeignFn};
 use crate::type_pool::TypePool;
 
-pub(crate) use fn_emitter::{FnEmitter, HandlerEntry};
+pub use fn_emitter::{FnEmitter, HandlerEntry};
 
 /// Per-function bytecode output.
 pub struct FnBytecode {
@@ -38,8 +39,9 @@ pub struct FnBytecode {
 }
 
 /// A pending top-level function to emit.
-pub(crate) struct FnEntry {
+pub struct FnEntry {
     pub fn_id: u32,
+    pub def_id: Option<DefId>,
     pub name: String,
     pub params: Vec<Param>,
     pub body: ExprIdx,
@@ -54,24 +56,26 @@ pub struct Emitter<'a> {
     stmts: Vec<Stmt>,
     pub cp: ConstPool,
     pub tp: TypePool,
-    /// DefId → bytecode fn_id for user-defined functions.
+    /// `DefId` → bytecode `fn_id` for user-defined functions.
     pub(crate) fn_map: HashMap<DefId, u32>,
-    /// DefId → index into foreign_fns for FFI functions.
+    /// `DefId` → index into `foreign_fns` for FFI functions.
     pub(crate) foreign_map: HashMap<DefId, u32>,
     pub foreign_fns: Vec<ForeignFn>,
     pub effects: Vec<EffectDef>,
-    /// Index into foreign_fns for the str_cat helper (used by f-string desugar).
+    /// Index into `foreign_fns` for the `str_cat` helper (used by f-string desugar).
     pub(crate) str_cat_ffi_idx: Option<u32>,
     next_fn_id: u32,
     pub entry_fn_id: Option<u32>,
     fn_entries: Vec<FnEntry>,
     pub(crate) nested_fns: Vec<FnBytecode>,
+    pub file_id: FileId,
 }
 
 /// Per-function emission context.
-pub(crate) struct FnCtx {
+pub struct FnCtx {
     pub fe: FnEmitter,
     pub local_map: HashMap<DefId, u32>,
+    pub ref_locals: HashSet<DefId>,
     next_label: u32,
 }
 
@@ -80,11 +84,12 @@ impl FnCtx {
         Self {
             fe: FnEmitter::new(param_count, param_count),
             local_map: HashMap::new(),
+            ref_locals: HashSet::new(),
             next_label: 0,
         }
     }
 
-    pub fn fresh_label(&mut self) -> u32 {
+    pub const fn fresh_label(&mut self) -> u32 {
         let l = self.next_label;
         self.next_label += 1;
         l
@@ -96,7 +101,12 @@ impl FnCtx {
 }
 
 impl<'a> Emitter<'a> {
-    pub fn new(parsed: &'a ParsedModule, sema: &'a SemaResult, interner: &'a mut Interner) -> Self {
+    pub fn new(
+        parsed: &'a ParsedModule,
+        sema: &'a SemaResult,
+        interner: &'a mut Interner,
+        file_id: FileId,
+    ) -> Self {
         Self {
             ast: &parsed.arenas,
             sema,
@@ -113,16 +123,23 @@ impl<'a> Emitter<'a> {
             entry_fn_id: None,
             fn_entries: vec![],
             nested_fns: vec![],
+            file_id,
         }
     }
 
     pub fn emit_all(&mut self) -> Result<Vec<FnBytecode>, EmitError> {
         self.register_well_known_fns()?;
         self.scan_top_level()?;
-        self.emit_functions()
+        let functions = self.emit_functions()?;
+        if functions.is_empty() && self.entry_fn_id.is_some() {
+            return Err(EmitError::UnsupportedFeature {
+                desc: format!("file {} has entry point but no functions", self.file_id.0).into(),
+            });
+        }
+        Ok(functions)
     }
 
-    pub(crate) fn alloc_fn_id(&mut self) -> u32 {
+    pub const fn alloc_fn_id(&mut self) -> u32 {
         let id = self.next_fn_id;
         self.next_fn_id += 1;
         id
@@ -147,7 +164,7 @@ impl<'a> Emitter<'a> {
             }
         })?;
 
-        // writeln: (String) ~> Unit under { IO }
+        // writeln: (String) ~> Unit with { IO }
         let writeln_sym = self.interner.intern("musi_writeln");
         let writeln_idx = push_foreign_fn(
             &mut self.foreign_fns,
@@ -157,7 +174,7 @@ impl<'a> Emitter<'a> {
         )?;
         let _ = self.foreign_map.insert(wk.fns.writeln, writeln_idx);
 
-        // write: (String) ~> Unit under { IO }
+        // write: (String) ~> Unit with { IO }
         let write_sym = self.interner.intern("musi_write");
         let write_idx = push_foreign_fn(
             &mut self.foreign_fns,
@@ -201,9 +218,42 @@ impl<'a> Emitter<'a> {
                 self.scan_annotated(&attrs, inner)?;
             }
             Expr::Binding { fields, .. } => {
-                self.scan_binding(&fields, false)?;
+                self.scan_binding(&fields, false);
             }
-            _ => {}
+            Expr::Lit { .. }
+            | Expr::Name { .. }
+            | Expr::Paren { .. }
+            | Expr::Tuple { .. }
+            | Expr::Block { .. }
+            | Expr::Let { .. }
+            | Expr::Fn { .. }
+            | Expr::Call { .. }
+            | Expr::Field { .. }
+            | Expr::Index { .. }
+            | Expr::Update { .. }
+            | Expr::Record { .. }
+            | Expr::Array { .. }
+            | Expr::Variant { .. }
+            | Expr::Choice { .. }
+            | Expr::RecordDef { .. }
+            | Expr::BinOp { .. }
+            | Expr::UnaryOp { .. }
+            | Expr::Piecewise { .. }
+            | Expr::Match { .. }
+            | Expr::Return { .. }
+            | Expr::Quantified { .. }
+            | Expr::Import { .. }
+            | Expr::Export { .. }
+            | Expr::Class { .. }
+            | Expr::Given { .. }
+            | Expr::Effect { .. }
+            | Expr::Foreign { .. }
+            | Expr::ForceUnwrap { .. }
+            | Expr::TypeTest { .. }
+            | Expr::TypeCast { .. }
+            | Expr::Do { .. }
+            | Expr::Handle { .. }
+            | Expr::Error { .. } => {}
         }
         Ok(())
     }
@@ -213,7 +263,7 @@ impl<'a> Emitter<'a> {
         let inner_expr = self.ast.exprs[inner].clone();
         match inner_expr {
             Expr::Binding { fields, .. } => {
-                self.scan_binding(&fields, is_entry)?;
+                self.scan_binding(&fields, is_entry);
             }
             Expr::Annotated {
                 attrs: inner_attrs,
@@ -224,26 +274,60 @@ impl<'a> Emitter<'a> {
                 combined.extend_from_slice(&inner_attrs);
                 self.scan_annotated(&combined, inner2)?;
             }
-            _ => {}
+            Expr::Lit { .. }
+            | Expr::Name { .. }
+            | Expr::Paren { .. }
+            | Expr::Tuple { .. }
+            | Expr::Block { .. }
+            | Expr::Let { .. }
+            | Expr::Fn { .. }
+            | Expr::Call { .. }
+            | Expr::Field { .. }
+            | Expr::Index { .. }
+            | Expr::Update { .. }
+            | Expr::Record { .. }
+            | Expr::Array { .. }
+            | Expr::Variant { .. }
+            | Expr::Choice { .. }
+            | Expr::RecordDef { .. }
+            | Expr::BinOp { .. }
+            | Expr::UnaryOp { .. }
+            | Expr::Piecewise { .. }
+            | Expr::Match { .. }
+            | Expr::Return { .. }
+            | Expr::Quantified { .. }
+            | Expr::Import { .. }
+            | Expr::Export { .. }
+            | Expr::Class { .. }
+            | Expr::Given { .. }
+            | Expr::Effect { .. }
+            | Expr::Foreign { .. }
+            | Expr::ForceUnwrap { .. }
+            | Expr::TypeTest { .. }
+            | Expr::TypeCast { .. }
+            | Expr::Do { .. }
+            | Expr::Handle { .. }
+            | Expr::Error { .. } => {}
         }
         Ok(())
     }
 
-    fn scan_binding(&mut self, fields: &LetFields, is_entry: bool) -> Result<(), EmitError> {
+    fn scan_binding(&mut self, fields: &LetFields, is_entry: bool) {
         let Some(value_idx) = fields.value else {
-            return Ok(());
+            return;
         };
 
-        let (fn_params, fn_body) = match extract_fn(value_idx, self.ast) {
-            Some(p) => p,
-            None => return Ok(()),
+        let Some((fn_params, fn_body)) = extract_fn(value_idx, self.ast) else {
+            return;
         };
 
         let fn_id = self.alloc_fn_id();
 
         let binding_span = pat_span(fields.pat, self.ast);
+        let mut binding_def_id = None;
         if let Some(&did) = self.sema.resolution.pat_defs.get(&binding_span) {
             let _ = self.fn_map.insert(did, fn_id);
+            binding_def_id = Some(did);
             if is_entry {
                 self.entry_fn_id = Some(fn_id);
             }
@@ -252,25 +336,44 @@ impl<'a> Emitter<'a> {
         let fn_name = pat_name_str(fields.pat, self.ast, self.interner);
         self.fn_entries.push(FnEntry {
             fn_id,
+            def_id: binding_def_id,
             name: fn_name,
             params: fn_params,
             body: fn_body,
             effect_mask: 0,
         });
-        Ok(())
     }
 
     fn emit_functions(&mut self) -> Result<Vec<FnBytecode>, EmitError> {
-        let entries: Vec<FnEntry> = std::mem::take(&mut self.fn_entries);
+        let entries: Vec<FnEntry> = mem::take(&mut self.fn_entries);
         let mut results = Vec::with_capacity(entries.len());
         for entry in entries {
             let bc = self.emit_one_function(&entry)?;
             results.push(bc);
         }
-        let mut nested = std::mem::take(&mut self.nested_fns);
+        let mut nested = mem::take(&mut self.nested_fns);
         results.append(&mut nested);
         results.sort_by_key(|b| b.fn_id);
         Ok(results)
+    }
+
+    fn resolve_fn_type_id(&mut self, def_id: Option<DefId>) -> Result<u32, EmitError> {
+        if let Some(did) = def_id
+            && let Some(def_info) = self.sema.defs.iter().find(|d| d.id == did)
+            && let Some(ty_idx) = def_info.ty_info.ty
+        {
+            return self.tp.lower_sema_type(
+                ty_idx,
+                &self.sema.types,
+                &self.sema.unify,
+                &self.sema.well_known,
+            );
+        }
+        self.tp
+            .lower_well_known_def(self.sema.well_known.unit, &self.sema.well_known)
+            .ok_or_else(|| EmitError::UnresolvableType {
+                desc: "Unit type".into(),
+            })
     }
 
     fn emit_one_function(&mut self, entry: &FnEntry) -> Result<FnBytecode, EmitError> {
@@ -300,7 +403,7 @@ impl<'a> Emitter<'a> {
             }
         }
 
-        let had_value = expr::emit_expr(self, &mut fc, entry.body)?;
+        let had_value = expr::emit_expr_tail(self, &mut fc, entry.body, true)?;
         if had_value {
             fc.fe.emit_ret();
         } else {
@@ -310,12 +413,7 @@ impl<'a> Emitter<'a> {
         fc.fe.resolve_fixups(&entry.name)?;
         let _code_len = fc.fe.validate_code_len()?;
 
-        let type_id = self
-            .tp
-            .lower_well_known_def(self.sema.well_known.unit, &self.sema.well_known)
-            .ok_or_else(|| EmitError::UnresolvableType {
-                desc: "Unit type".into(),
-            })?;
+        let type_id = self.resolve_fn_type_id(entry.def_id)?;
 
         Ok(FnBytecode {
             fn_id: entry.fn_id,
@@ -383,9 +481,8 @@ fn push_foreign_fn(
 fn extract_fn(expr_idx: ExprIdx, ast: &AstArenas) -> Option<(Vec<Param>, ExprIdx)> {
     match &ast.exprs[expr_idx] {
         Expr::Fn { params, body, .. } => Some((params.clone(), *body)),
-        Expr::Annotated { inner, .. } => extract_fn(*inner, ast),
+        Expr::Annotated { inner, .. } | Expr::Paren { inner, .. } => extract_fn(*inner, ast),
         Expr::Quantified { body, .. } => extract_fn(*body, ast),
-        Expr::Paren { inner, .. } => extract_fn(*inner, ast),
         _ => None,
     }
 }

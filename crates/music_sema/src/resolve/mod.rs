@@ -38,6 +38,14 @@ pub struct ResolveOutput {
     pub law_inferred_vars: HashMap<Span, Vec<(Symbol, DefId)>>,
 }
 
+/// Mutable resolution state bundling the definition table, scope tree, and
+/// current module scope. Passed together to avoid exceeding argument limits.
+pub struct ResolveState<'a> {
+    pub defs: &'a mut DefTable,
+    pub scopes: &'a mut ScopeTree,
+    pub module_scope: ScopeId,
+}
+
 /// Runs two-pass name resolution over a parsed module.
 #[must_use]
 pub fn resolve(
@@ -50,29 +58,22 @@ pub fn resolve(
     module_scope: ScopeId,
 ) -> ResolveOutput {
     let empty = HashMap::new();
-    resolve_with_imports(
-        module,
-        interner,
-        file_id,
-        diags,
+    let mut state = ResolveState {
         defs,
         scopes,
         module_scope,
-        &empty,
-    )
+    };
+    resolve_with_imports(module, interner, file_id, diags, &mut state, &empty)
 }
 
 /// Like [`resolve`], but with pre-computed import names for cross-module resolution.
 #[must_use]
-#[allow(clippy::too_many_arguments)]
 pub fn resolve_with_imports(
     module: &ParsedModule,
     interner: &mut Interner,
     file_id: FileId,
     diags: &mut DiagnosticBag,
-    defs: &mut DefTable,
-    scopes: &mut ScopeTree,
-    module_scope: ScopeId,
+    state: &mut ResolveState<'_>,
     import_names: &ImportNames,
 ) -> ResolveOutput {
     let mut resolver = Resolver {
@@ -80,14 +81,14 @@ pub fn resolve_with_imports(
         interner,
         file_id,
         diags,
-        defs,
-        scopes,
+        defs: state.defs,
+        scopes: state.scopes,
         output: ResolveOutput {
             expr_defs: HashMap::new(),
             pat_defs: HashMap::new(),
             law_inferred_vars: HashMap::new(),
         },
-        current_scope: module_scope,
+        current_scope: state.module_scope,
         import_names,
     };
 
@@ -214,6 +215,11 @@ pub(crate) const fn expr_span(expr: &Expr) -> Span {
         | Expr::Given { span, .. }
         | Expr::Effect { span, .. }
         | Expr::Foreign { span, .. }
+        | Expr::ForceUnwrap { span, .. }
+        | Expr::TypeTest { span, .. }
+        | Expr::TypeCast { span, .. }
+        | Expr::Do { span, .. }
+        | Expr::Handle { span, .. }
         | Expr::Error { span, .. } => *span,
     }
 }

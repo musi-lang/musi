@@ -32,6 +32,12 @@ pub enum ParseError {
     UnterminatedFString,
     #[error("expected type variable (e.g. 'T)")]
     ExpectedTypeVariable,
+    #[error("invalid integer literal")]
+    InvalidIntLiteral,
+    #[error("invalid float literal")]
+    InvalidFloatLiteral,
+    #[error("invalid rune escape sequence")]
+    InvalidRuneEscape,
 }
 
 impl ParseError {

@@ -167,6 +167,20 @@ pub enum BinConfig {
 }
 
 #[allow(clippy::struct_excessive_bools)]
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct StrictChecks {
+    #[serde(default)]
+    pub strict: bool,
+    #[serde(default)]
+    pub no_implicit_any: bool,
+    #[serde(default)]
+    pub no_implicit_unit: bool,
+    #[serde(default)]
+    pub strict_function_types: bool,
+}
+
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct CompilerOptions {
@@ -180,14 +194,8 @@ pub struct CompilerOptions {
     pub root_dir: String,
     #[serde(default = "default_base_url")]
     pub base_url: String,
-    #[serde(default)]
-    pub strict: bool,
-    #[serde(default)]
-    pub no_implicit_any: bool,
-    #[serde(default)]
-    pub no_implicit_unit: bool,
-    #[serde(default)]
-    pub strict_function_types: bool,
+    #[serde(flatten)]
+    pub strict_checks: StrictChecks,
     #[serde(default)]
     pub strict_optional_checks: bool,
     #[serde(default)]
@@ -251,10 +259,7 @@ impl Default for CompilerOptions {
             out_dir: default_out_dir(),
             root_dir: default_root_dir(),
             base_url: default_base_url(),
-            strict: false,
-            no_implicit_any: false,
-            no_implicit_unit: false,
-            strict_function_types: false,
+            strict_checks: StrictChecks::default(),
             strict_optional_checks: false,
             no_missing_cases_in_match: false,
             exact_optional_property_types: false,

@@ -251,6 +251,11 @@ pub fn expr_span(idx: ExprIdx, module: &ParsedModule) -> Option<Span> {
         | Expr::Effect { span, .. }
         | Expr::Foreign { span, .. }
         | Expr::Quantified { span, .. }
+        | Expr::ForceUnwrap { span, .. }
+        | Expr::TypeTest { span, .. }
+        | Expr::TypeCast { span, .. }
+        | Expr::Do { span, .. }
+        | Expr::Handle { span, .. }
         | Expr::Error { span, .. } => *span,
     };
     Some(span)

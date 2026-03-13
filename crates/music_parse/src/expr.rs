@@ -79,6 +79,7 @@ impl Parser<'_> {
             T::LtDash => (10, 9, B::Assign),
             // BP 15 — nil coalescing (right-assoc)
             T::QuestionQuestion => (15, 14, B::NilCoal),
+            T::BangBang => (15, 14, B::ForceCoal),
             // BP 20 — pipe (left-assoc)
             T::PipeGt => (20, 21, B::Pipe),
             // BP 30 — comparison (non-assoc)
@@ -121,10 +122,8 @@ impl Parser<'_> {
             TokenKind::Minus => self.parse_expr_unary_op(UnaryOp::Neg, 110),
             TokenKind::KwNot => self.parse_expr_unary_op(UnaryOp::Not, 110),
 
-            // Keyword prefix: defer/spawn/await/try expr (BP 0)
+            // Keyword prefix: defer/try expr (BP 0)
             TokenKind::KwDefer => self.parse_expr_unary_op(UnaryOp::Defer, 0),
-            TokenKind::KwSpawn => self.parse_expr_unary_op(UnaryOp::Spawn, 0),
-            TokenKind::KwAwait => self.parse_expr_unary_op(UnaryOp::Await, 0),
             TokenKind::KwTry => self.parse_expr_unary_op(UnaryOp::Try, 0),
 
             // Literals
@@ -180,6 +179,10 @@ impl Parser<'_> {
             TokenKind::KwEffect => self.parse_expr_effect(),
             TokenKind::KwForeign => self.parse_expr_foreign(),
 
+            // Do / Handle
+            TokenKind::KwDo => self.parse_expr_do(),
+            TokenKind::KwWith => self.parse_expr_handle(),
+
             // Annotated: #[...] decl
             TokenKind::HashLBracket => self.parse_expr_annotated_chain(),
 
@@ -198,6 +201,61 @@ impl Parser<'_> {
         Expr::UnaryOp {
             op,
             operand,
+            span: self.finish_span(start),
+        }
+    }
+
+    /// Parses `do postfix_expr` — the body is a single postfix chain, not a full expression.
+    fn parse_expr_do(&mut self) -> Expr {
+        use music_ast::expr::Expr as E;
+        let start = self.start_span();
+        let _kw = self.bump();
+        let nud_start = self.start_span();
+        let nud = self.parse_expr_nud_chain();
+        let body_expr = self.parse_expr_postfix_chain(nud, nud_start);
+        let body = self.alloc_expr(body_expr);
+        E::Do {
+            body,
+            span: self.finish_span(start),
+        }
+    }
+
+    /// Parses `with EffectType { op(params) => body ... } handle body`.
+    ///
+    /// Syntax:
+    /// ```text
+    /// with EffectType {
+    ///     op_name(params) => body
+    ///     | op_name(params) => body
+    /// } handle expr
+    /// ```
+    fn parse_expr_handle(&mut self) -> Expr {
+        use music_ast::expr::{Expr as E, HandlerOp};
+        let start = self.start_span();
+        let _kw = self.bump();
+        let effect_ty = self.parse_alloc_ty();
+        let _lb = self.expect(TokenKind::LBrace);
+        let ops = self.pipe_sep(TokenKind::RBrace, |p| {
+            let op_start = p.start_span();
+            let name = p.expect_symbol();
+            let _colon = p.expect(TokenKind::Colon);
+            let params = p.delimited(TokenKind::LParen, TokenKind::RParen, Self::parse_param);
+            let _arrow = p.expect(TokenKind::EqGt);
+            let body = p.parse_alloc_expr();
+            HandlerOp {
+                name,
+                params,
+                body,
+                span: p.finish_span(op_start),
+            }
+        });
+        let _rb = self.expect(TokenKind::RBrace);
+        let _handle = self.expect(TokenKind::KwHandle);
+        let body = self.parse_alloc_expr();
+        E::Handle {
+            effect_ty,
+            ops,
+            body,
             span: self.finish_span(start),
         }
     }

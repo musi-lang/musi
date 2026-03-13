@@ -97,10 +97,12 @@ impl Parser<'_> {
         let mut ops = vec![];
         while !self.at(TokenKind::RBrace) && !self.at(TokenKind::Eof) {
             let op_start = self.start_span();
+            let fatal = self.eat(TokenKind::KwFatal);
             let name = self.expect_symbol();
             let _colon = self.expect(TokenKind::Colon);
             let ty = self.parse_alloc_ty();
             ops.push(EffectOp {
+                fatal,
                 name,
                 ty,
                 span: self.finish_span(op_start),
