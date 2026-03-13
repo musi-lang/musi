@@ -145,6 +145,10 @@ impl Opcode {
     pub const JMP_W: Self = Self(0xD0);
     pub const JMP_T_W: Self = Self(0xD1);
     pub const JMP_F_W: Self = Self(0xD2);
+
+    // §16  Type operations (u32 operand)
+    /// Pop value, push bool: true iff value's runtime type matches the given type_id.
+    pub const TYPE_CHK: Self = Self(0xD3);
 }
 
 impl fmt::Display for Opcode {
@@ -246,6 +250,7 @@ impl fmt::Display for Opcode {
             Self::JMP_W => "jmp.w",
             Self::JMP_T_W => "jmp.t.w",
             Self::JMP_F_W => "jmp.f.w",
+            Self::TYPE_CHK => "type.chk",
             _ => return write!(f, "0x{:02X}", self.0),
         };
         f.write_str(name)

@@ -165,7 +165,8 @@ const fn fixed_stack_delta(op: Opcode) -> Option<i32> {
         | Opcode::EFF_RES
         | Opcode::TSK_CHR
         | Opcode::TSK_AWT
-        | Opcode::ALC_REF => Some(0),
+        | Opcode::ALC_REF
+        | Opcode::TYPE_CHK => Some(0),
 
         // Push 1: dup, load global, alloc, channel make
         Opcode::DUP | Opcode::LD_GLB | Opcode::ALC_ARN | Opcode::TSK_CMK => Some(1),

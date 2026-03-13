@@ -4,11 +4,28 @@ use musi_bc::Opcode;
 
 use crate::error::VmError;
 use crate::heap::Heap;
-use crate::loader::LoadedConst;
+use crate::loader::{LoadedConst, LoadedType};
 use crate::value::Value;
 use crate::vm::Frame;
 
-/// Dispatch §0/§5/§9/§12 structural opcodes.
+// Type pool tags (§11.3 of spec) — used for runtime type matching.
+const TYPE_TAG_UNIT: u8 = 0x01;
+const TYPE_TAG_BOOL: u8 = 0x02;
+const TYPE_TAG_I8: u8 = 0x03;
+const TYPE_TAG_I16: u8 = 0x04;
+const TYPE_TAG_I32: u8 = 0x05;
+const TYPE_TAG_I64: u8 = 0x06;
+const TYPE_TAG_U8: u8 = 0x07;
+const TYPE_TAG_U16: u8 = 0x08;
+const TYPE_TAG_U32: u8 = 0x09;
+const TYPE_TAG_U64: u8 = 0x0A;
+const TYPE_TAG_F32: u8 = 0x0B;
+const TYPE_TAG_F64: u8 = 0x0C;
+const TYPE_TAG_RUNE: u8 = 0x0D;
+const TYPE_TAG_FN: u8 = 0x12;
+const TYPE_TAG_ANY: u8 = 0x14;
+
+/// Dispatch §0/§5/§9/§12/§16 structural opcodes.
 ///
 /// Returns `true` if the opcode was handled, `false` if not in this group.
 pub fn exec(
@@ -16,6 +33,7 @@ pub fn exec(
     operand: u32,
     frame: &mut Frame,
     consts: &[LoadedConst],
+    types: &[LoadedType],
     heap: &mut Heap,
     globals: &mut Vec<Value>,
 ) -> Result<bool, VmError> {
@@ -27,6 +45,9 @@ pub fn exec(
     }
     if let Some(result) = exec_struct(op, operand, frame, heap)? {
         return Ok(result);
+    }
+    if op == Opcode::TYPE_CHK {
+        return exec_type_chk(operand, frame, types, heap);
     }
     exec_array_alloc_globals(op, operand, frame, heap, globals)
 }
@@ -237,6 +258,70 @@ fn exec_array_alloc_globals(
         Opcode::ST_GLB => exec_st_glb(operand, frame, globals),
         _ => Ok(false),
     }
+}
+
+/// `TYPE_CHK type_id` — pop value, push bool indicating runtime type match.
+///
+/// Scalar values (int, uint, bool, rune, float, fn, unit) are matched by
+/// comparing the value's NaN-box tag against the expected type pool tag.
+/// Heap references are matched by checking the object's stored `type_id`.
+fn exec_type_chk(
+    type_id: u32,
+    frame: &mut Frame,
+    types: &[LoadedType],
+    heap: &mut Heap,
+) -> Result<bool, VmError> {
+    let val = pop(frame)?;
+
+    let type_tag = types
+        .get(usize::try_from(type_id).unwrap_or(usize::MAX))
+        .map(|t| t.tag)
+        .unwrap_or(TYPE_TAG_ANY);
+
+    let matches = if type_tag == TYPE_TAG_ANY {
+        // Any type matches everything.
+        true
+    } else if val.is_unit() {
+        type_tag == TYPE_TAG_UNIT
+    } else if val.is_float() {
+        type_tag == TYPE_TAG_F32 || type_tag == TYPE_TAG_F64
+    } else {
+        // Check the NaN-box tag against the expected type pool tag.
+        let vtag = val.tag();
+        // Value NaN-box tags (from value.rs constants):
+        // 0x7FF1 = int, 0x7FF2 = uint, 0x7FF3 = bool, 0x7FF4 = rune
+        // 0x7FF5 = ref, 0x7FF7 = fn
+        // Value NaN-box tags (from value.rs):
+        // 0x7FF1 = int, 0x7FF2 = uint, 0x7FF3 = bool, 0x7FF4 = rune
+        // 0x7FF5 = ref, 0x7FF7 = fn
+        match vtag {
+            0x7FF1 => matches!(
+                type_tag,
+                TYPE_TAG_I8 | TYPE_TAG_I16 | TYPE_TAG_I32 | TYPE_TAG_I64
+            ),
+            0x7FF2 => matches!(
+                type_tag,
+                TYPE_TAG_U8 | TYPE_TAG_U16 | TYPE_TAG_U32 | TYPE_TAG_U64
+            ),
+            0x7FF3 => type_tag == TYPE_TAG_BOOL,
+            0x7FF4 => type_tag == TYPE_TAG_RUNE,
+            0x7FF7 => type_tag == TYPE_TAG_FN,
+            0x7FF5 => {
+                // Heap ref — check the object's stored type_id.
+                if let Ok(ptr) = val.as_ref()
+                    && let Ok(obj) = heap.get(ptr)
+                {
+                    obj.type_id == type_id
+                } else {
+                    false
+                }
+            }
+            _ => false,
+        }
+    };
+
+    frame.stack.push(Value::from_bool(matches));
+    Ok(true)
 }
 
 fn exec_ld_tag(frame: &mut Frame, heap: &Heap) -> Result<bool, VmError> {
