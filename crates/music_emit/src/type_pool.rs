@@ -144,10 +144,20 @@ impl TypePool {
         match ty {
             Type::Named { def, args } => {
                 if let Some(id) = self.lower_named_def(*def, wk) {
-                    return Ok(id);
-                }
-                if args.is_empty() {
-                    Ok(self.push_tag_only(TAG_ANY))
+                    if args.is_empty() {
+                        return Ok(id);
+                    }
+                    let mut payload = id.to_le_bytes().to_vec();
+                    let arg_count =
+                        u32::try_from(args.len()).map_err(|_| EmitError::UnresolvableType {
+                            desc: "generic arg count overflow".into(),
+                        })?;
+                    payload.extend_from_slice(&arg_count.to_le_bytes());
+                    for &arg in args {
+                        let arg_id = self.lower_sema_type(arg, types, unify, wk)?;
+                        payload.extend_from_slice(&arg_id.to_le_bytes());
+                    }
+                    Ok(self.push_entry(TAG_ANY, payload))
                 } else {
                     Ok(self.push_tag_only(TAG_ANY))
                 }
@@ -192,15 +202,26 @@ impl TypePool {
                 let sema_variants: Vec<SumVariant> = variants
                     .iter()
                     .enumerate()
-                    .map(|(i, &v)| SumVariant {
-                        name: music_shared::Symbol(u32::try_from(i).unwrap_or(0)),
-                        fields: vec![v],
+                    .map(|(i, &v)| -> Result<SumVariant, EmitError> {
+                        Ok(SumVariant {
+                            name: music_shared::Symbol(u32::try_from(i).map_err(|_| {
+                                EmitError::UnresolvableType {
+                                    desc: "anonymous sum variant index overflow".into(),
+                                }
+                            })?),
+                            fields: vec![v],
+                        })
                     })
-                    .collect();
+                    .collect::<Result<Vec<_>, _>>()?;
                 self.encode_sum_from_sema(&sema_variants, types, unify, wk)
             }
             Type::Quantified { body, .. } => self.lower_sema_type(*body, types, unify, wk),
-            Type::Var(_) | Type::Rigid(_) | Type::Error => Ok(self.push_tag_only(TAG_ANY)),
+            Type::Var(_) | Type::Rigid(_) => Err(EmitError::UnresolvableType {
+                desc: "unresolved type variable reached emit".into(),
+            }),
+            Type::Error => Err(EmitError::UnresolvableType {
+                desc: "error type propagated to emit".into(),
+            }),
         }
     }
 
