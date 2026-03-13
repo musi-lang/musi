@@ -54,6 +54,7 @@ pub struct LoadedEffectOp {
     pub name_const_idx: u32,
     pub param_type_ids: Vec<u32>,
     pub ret_type_id: u32,
+    pub fatal: bool,
 }
 
 /// A decoded foreign (FFI) function entry.
@@ -366,11 +367,14 @@ fn parse_effect_pool(bytes: &[u8], off: usize) -> Result<Vec<LoadedEffect>, VmEr
                 param_type_ids.push(read_u32_at(bytes, &mut cur)?);
             }
             let ret_type_id = read_u32_at(bytes, &mut cur)?;
+            let op_flags = read_u8_at(bytes, &mut cur)?;
+            let fatal = op_flags & 1 != 0;
             ops.push(LoadedEffectOp {
                 id: op_id,
                 name_const_idx: op_name_idx,
                 param_type_ids,
                 ret_type_id,
+                fatal,
             });
         }
         effects.push(LoadedEffect {

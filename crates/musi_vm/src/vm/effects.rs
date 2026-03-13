@@ -72,12 +72,14 @@ fn exec_eff_do(op_id: u32, frame: &Frame, effects: &[LoadedEffect]) -> EffectAct
     {
         return EffectAction::DoEffect {
             handler_fn_id: eff_frame.handler_fn_id,
+            op_id,
         };
     }
 
     // Not found in current frame — request cross-frame search.
     EffectAction::CrossFrameSearch {
         effect_id: search_id_u8,
+        op_id,
     }
 }
 
@@ -98,9 +100,9 @@ pub enum EffectAction {
     /// Normal execution continues.
     Continue,
     /// Call handler function with the operand stack arguments.
-    DoEffect { handler_fn_id: u32 },
+    DoEffect { handler_fn_id: u32, op_id: u32 },
     /// Handler not found in current frame — search entire call stack.
-    CrossFrameSearch { effect_id: u8 },
+    CrossFrameSearch { effect_id: u8, op_id: u32 },
     /// Effect aborted — unwind to nearest handler.
     Abort,
     /// Resume a captured continuation (`EFF_RES`).

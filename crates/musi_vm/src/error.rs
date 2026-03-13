@@ -26,6 +26,8 @@ pub enum VmError {
     NoHandler { effect_id: u8 },
     #[error("effect aborted")]
     EffectAborted,
+    #[error("attempted to resume fatal effect op `{op_id}`")]
+    FatalEffectResumed { op_id: u32 },
     #[error("unimplemented {desc}")]
     Unimplemented { desc: &'static str },
     #[error("in fn `{fn_id}` at offset `{ip}`, {source}")]

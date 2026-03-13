@@ -38,6 +38,7 @@ pub struct EffectOpDef {
     pub name: Symbol,
     pub param_type_ids: Vec<u32>,
     pub ret_type_id: u32,
+    pub fatal: bool,
 }
 
 /// Parameters for assembling a `.msbc` binary.
@@ -177,6 +178,8 @@ fn write_effect_pool(
                 buf.extend_from_slice(&type_id.to_le_bytes());
             }
             buf.extend_from_slice(&op.ret_type_id.to_le_bytes());
+            let flags: u8 = u8::from(op.fatal);
+            buf.push(flags);
         }
     }
     Ok(())
