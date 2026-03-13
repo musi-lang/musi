@@ -284,7 +284,7 @@ pub fn emit_expr_tail(
         Expr::Record { fields, .. } => emit_record_lit(em, fc, &fields.clone()),
         Expr::Array { elems, .. } => { emit_array(em, fc, &elems.clone())?; Ok(true) }
         Expr::Variant { name, args, .. } => emit_variant(em, fc, *name, &args.clone()),
-        Expr::Field { object, field, .. } => emit_field(em, fc, *object, *field),
+        Expr::Field { object, field, safe, .. } => emit_field(em, fc, *object, *field, *safe),
         Expr::Index { object, index, .. } => emit_index(em, fc, *object, *index),
         Expr::Return { value, .. } => emit_return(em, fc, *value),
         Expr::Piecewise { arms, .. } => {
@@ -500,6 +500,7 @@ fn emit_field(
     fc: &mut FnCtx,
     object: ExprIdx,
     field: FieldKey,
+    safe: bool,
 ) -> Result<bool, EmitError> {
     let produced = emit_expr(em, fc, object)?;
     if !produced {
@@ -507,11 +508,42 @@ fn emit_field(
             desc: "field object produced no value".into(),
         });
     }
-    let index = match field {
-        FieldKey::Pos { index, .. } => index,
-        FieldKey::Name { name, .. } => resolve_field_name(em, object, name)?,
-    };
-    fc.fe.emit_ld_fld(index)?;
+
+    if safe {
+        let tmp = fc.alloc_local();
+        fc.fe.emit_st_loc(tmp);
+
+        let none_label = fc.fresh_label();
+        let end_label = fc.fresh_label();
+
+        fc.fe.emit_ld_loc(tmp);
+        fc.fe.emit_cmp_tag(em.some_tag)?;
+        fc.fe.emit_jmp_f(none_label);
+
+        // Some path: extract payload, load field, wrap in Some
+        fc.fe.emit_ld_loc(tmp);
+        fc.fe.emit_ld_pay(0);
+        let index = match field {
+            FieldKey::Pos { index, .. } => index,
+            FieldKey::Name { name, .. } => resolve_field_name(em, object, name)?,
+        };
+        fc.fe.emit_ld_fld(index)?;
+        fc.fe.emit_mk_var(em.some_tag)?;
+        fc.fe.emit_jmp(end_label);
+
+        // None path: receiver was not Some — produce a zero-payload variant as None
+        fc.fe.emit_label(none_label);
+        fc.fe.emit_ld_loc(tmp);
+
+        fc.fe.emit_label(end_label);
+    } else {
+        let index = match field {
+            FieldKey::Pos { index, .. } => index,
+            FieldKey::Name { name, .. } => resolve_field_name(em, object, name)?,
+        };
+        fc.fe.emit_ld_fld(index)?;
+    }
+
     Ok(true)
 }
 
@@ -690,9 +722,10 @@ fn emit_binop_expr(
             desugar::emit_nil_coal(em, fc, left, right)?;
             Ok(true)
         }
-        BinOp::In => Err(EmitError::UnsupportedFeature {
-            desc: "binary operator `In`".into(),
-        }),
+        BinOp::In => {
+            desugar::emit_in_op(em, fc, left, right)?;
+            Ok(true)
+        }
         BinOp::RangeInc | BinOp::RangeExc => {
             desugar::emit_range(em, fc, left, right)?;
             Ok(true)
@@ -774,6 +807,20 @@ fn emit_record_lit(
     fc: &mut FnCtx,
     fields: &[RecField],
 ) -> Result<bool, EmitError> {
+    let has_spread = fields.iter().any(|f| matches!(f, RecField::Spread { .. }));
+
+    if has_spread {
+        emit_record_lit_with_spread(em, fc, fields)
+    } else {
+        emit_record_lit_fixed(em, fc, fields)
+    }
+}
+
+fn emit_record_lit_fixed(
+    em: &mut Emitter<'_>,
+    fc: &mut FnCtx,
+    fields: &[RecField],
+) -> Result<bool, EmitError> {
     let named_fields: Vec<_> = fields
         .iter()
         .filter_map(|f| match f {
@@ -800,6 +847,104 @@ fn emit_record_lit(
     let stack_pop = i32::try_from(n).map_err(|_| EmitError::overflow("record field count"))?;
     fc.fe.emit_mk_prd(field_count, stack_pop)?;
     Ok(true)
+}
+
+/// Emit a record literal that contains a spread (`{...base, name: val}`).
+///
+/// Records are heap-allocated products. The spread provides the base object;
+/// named fields override specific positions in that object via `ST_FLD`.
+/// Only a single leading spread followed by named overrides is supported
+/// (the common `{...base, key: val}` pattern). Multiple spreads or spreads
+/// mixed with overrides in arbitrary order would require full type-layout
+/// knowledge that isn't available here.
+fn emit_record_lit_with_spread(
+    em: &mut Emitter<'_>,
+    fc: &mut FnCtx,
+    fields: &[RecField],
+) -> Result<bool, EmitError> {
+    // Collect and validate: exactly one spread (the base), rest are Named overrides.
+    let mut spread_expr: Option<ExprIdx> = None;
+    for f in fields {
+        if let RecField::Spread { expr, .. } = f {
+            if spread_expr.is_some() {
+                return Err(EmitError::UnsupportedFeature {
+                    desc: "multiple spread elements in record literal".into(),
+                });
+            }
+            spread_expr = Some(*expr);
+        }
+    }
+    let base_expr = spread_expr.ok_or_else(|| EmitError::UnsupportedFeature {
+        desc: "record spread without base expression".into(),
+    })?;
+
+    let produced = emit_expr(em, fc, base_expr)?;
+    if !produced {
+        return Err(EmitError::UnsupportedFeature {
+            desc: "record spread base produced no value".into(),
+        });
+    }
+    let rec_slot = fc.alloc_local();
+    fc.fe.emit_st_loc(rec_slot);
+
+    for f in fields {
+        if let RecField::Named { name, value, .. } = f {
+            let val_idx = value.ok_or_else(|| EmitError::UnsupportedFeature {
+                desc: "record spread override field has no value".into(),
+            })?;
+
+            let field_idx = resolve_field_name_by_symbol(em, base_expr, *name)?;
+
+            fc.fe.emit_ld_loc(rec_slot);
+            let produced_val = emit_expr(em, fc, val_idx)?;
+            if !produced_val {
+                return Err(EmitError::UnsupportedFeature {
+                    desc: "record spread override field produced no value".into(),
+                });
+            }
+            fc.fe.emit_st_fld(field_idx)?;
+        }
+    }
+
+    fc.fe.emit_ld_loc(rec_slot);
+    Ok(true)
+}
+
+fn resolve_field_name_by_symbol(
+    em: &Emitter<'_>,
+    object_expr: ExprIdx,
+    name: Symbol,
+) -> Result<u32, EmitError> {
+    let Some(&ty_idx) = em.sema.expr_types.get(&object_expr) else {
+        return Err(EmitError::NoTypeInfo {
+            desc: "record spread base".into(),
+        });
+    };
+    let resolved = em.sema.unify.resolve(ty_idx, &em.sema.types);
+    match &em.sema.types[resolved] {
+        Type::Record { fields, .. } => {
+            for (i, f) in fields.iter().enumerate() {
+                if f.name == name {
+                    return u32::try_from(i).map_err(|_| {
+                        EmitError::overflow(format!(
+                            "record field index for `{}`",
+                            em.interner.resolve(name)
+                        ))
+                    });
+                }
+            }
+            Err(EmitError::FieldNotFound {
+                desc: format!("record field `{}`", em.interner.resolve(name)).into(),
+            })
+        }
+        _ => Err(EmitError::FieldNotFound {
+            desc: format!(
+                "spread base is not a record type (field `{}`)",
+                em.interner.resolve(name)
+            )
+            .into(),
+        }),
+    }
 }
 
 fn emit_variant(
@@ -998,6 +1143,19 @@ pub fn bind_pat(
             }
             Ok(())
         }
+        Pat::Array { elems, .. } => {
+            let tmp = fc.alloc_local();
+            fc.fe.emit_st_loc(tmp);
+            for (i, elem) in elems.iter().enumerate() {
+                let elem_idx = i64::try_from(i).map_err(|_| EmitError::overflow("array destructure index"))?;
+                let elem_cst_idx = em.cp.intern(&ConstValue::Int(elem_idx), em.interner)?;
+                fc.fe.emit_ld_loc(tmp);
+                fc.fe.emit_ld_cst(elem_cst_idx);
+                fc.fe.emit_ld_idx();
+                bind_pat(em, fc, *elem)?;
+            }
+            Ok(())
+        }
         _ => {
             // For other patterns (Lit, Variant, etc.) in binding position,
             // just store to a scratch slot and discard.
@@ -1048,8 +1206,13 @@ fn emit_call_args(em: &mut Emitter<'_>, fc: &mut FnCtx, args: &[Arg]) -> Result<
                 count += 1;
             }
             Arg::Spread { .. } => {
+                // Spread in call args requires knowing the argument count at the call
+                // site to emit INV/INV_DYN with the correct count. Since array length
+                // is only known at runtime, this would require rewriting the entire
+                // call emission to use INV_DYN with a dynamically-computed arg count.
+                // That restructuring is out of scope for the emitter today.
                 return Err(EmitError::UnsupportedFeature {
-                    desc: "spread argument".into(),
+                    desc: "spread in call arguments is not yet supported".into(),
                 });
             }
         }
@@ -1058,21 +1221,40 @@ fn emit_call_args(em: &mut Emitter<'_>, fc: &mut FnCtx, args: &[Arg]) -> Result<
 }
 
 fn emit_array(em: &mut Emitter<'_>, fc: &mut FnCtx, elems: &[ArrayElem]) -> Result<(), EmitError> {
+    let has_spread = elems.iter().any(|e| matches!(e, ArrayElem::Spread { .. }));
+
+    if has_spread {
+        emit_array_with_spread(em, fc, elems)
+    } else {
+        emit_array_fixed(em, fc, elems)
+    }
+}
+
+fn emit_array_fixed(
+    em: &mut Emitter<'_>,
+    fc: &mut FnCtx,
+    elems: &[ArrayElem],
+) -> Result<(), EmitError> {
     let count = u32::try_from(elems.len()).map_err(|_| EmitError::overflow("array element count"))?;
-    fc.fe.emit_mk_arr(count);
+    let len_cv = ConstValue::Int(i64::from(count));
+    let li = em.cp.intern(&len_cv, em.interner)?;
+    fc.fe.emit_ld_cst(li);
+    fc.fe.emit_mk_arr(0);
+
+    let arr_slot = fc.alloc_local();
+    fc.fe.emit_st_loc(arr_slot);
 
     for (i, &elem) in elems.iter().enumerate() {
         let expr_idx = match elem {
             ArrayElem::Elem { expr, .. } => expr,
             ArrayElem::Spread { .. } => {
                 return Err(EmitError::UnsupportedFeature {
-                    desc: "spread array element".into(),
-                });
+                    desc: "spread element in fixed-size array path".into(),
+                })
             }
         };
         let idx_u32 = u32::try_from(i).map_err(|_| EmitError::overflow("array index"))?;
-        // dup array ref, push index, push value, ST_IDX
-        fc.fe.emit_dup();
+        fc.fe.emit_ld_loc(arr_slot);
         let idx_cv = ConstValue::Int(i64::from(idx_u32));
         let ci = em.cp.intern(&idx_cv, em.interner)?;
         fc.fe.emit_ld_cst(ci);
@@ -1084,6 +1266,139 @@ fn emit_array(em: &mut Emitter<'_>, fc: &mut FnCtx, elems: &[ArrayElem]) -> Resu
         }
         fc.fe.emit_st_idx();
     }
+
+    fc.fe.emit_ld_loc(arr_slot);
+    Ok(())
+}
+
+/// Emit an array literal that contains at least one spread element.
+///
+/// Strategy:
+/// 1. Compute total size: fixed element count + `LD_LEN` for each spread.
+/// 2. Push total size, `MK_ARR` to allocate.
+/// 3. Walk elements: for fixed, write at current index; for spread, loop over it.
+fn emit_array_with_spread(
+    em: &mut Emitter<'_>,
+    fc: &mut FnCtx,
+    elems: &[ArrayElem],
+) -> Result<(), EmitError> {
+    // Count the fixed elements (non-spread) to use as the base in the size sum.
+    let fixed_count = elems.iter().filter(|e| matches!(e, ArrayElem::Elem { .. })).count();
+    let fixed_count_i64 = i64::try_from(fixed_count).map_err(|_| EmitError::overflow("array fixed element count"))?;
+
+    // Compute total length: start with the fixed count constant, then add LD_LEN for each spread.
+    let base_cv = ConstValue::Int(fixed_count_i64);
+    let bi = em.cp.intern(&base_cv, em.interner)?;
+    fc.fe.emit_ld_cst(bi);
+
+    // Store spread arrays in locals so we can re-read them after computing the size.
+    let mut spread_slots: Vec<u32> = Vec::new();
+    for &elem in elems {
+        if let ArrayElem::Spread { expr, .. } = elem {
+            let produced = emit_expr(em, fc, expr)?;
+            if !produced {
+                return Err(EmitError::UnsupportedFeature {
+                    desc: "spread expression produced no value".into(),
+                });
+            }
+            let slot = fc.alloc_local();
+            fc.fe.emit_st_loc(slot);
+            spread_slots.push(slot);
+            // Add this spread's length to the running total.
+            fc.fe.emit_ld_loc(slot);
+            fc.fe.emit_ld_len();
+            fc.fe.emit_i_add();
+        }
+    }
+
+    // Stack: [total_length]. MK_ARR pops it, pushes array ref.
+    fc.fe.emit_mk_arr(0);
+    let arr_slot = fc.alloc_local();
+    fc.fe.emit_st_loc(arr_slot);
+
+    // Write index local, starts at 0.
+    let widx_slot = fc.alloc_local();
+    let zero_cv = ConstValue::Int(0);
+    let zi = em.cp.intern(&zero_cv, em.interner)?;
+    fc.fe.emit_ld_cst(zi);
+    fc.fe.emit_st_loc(widx_slot);
+
+    let one_cv = ConstValue::Int(1);
+    let one_i = em.cp.intern(&one_cv, em.interner)?;
+
+    let mut spread_iter = spread_slots.iter().copied();
+
+    for &elem in elems {
+        match elem {
+            ArrayElem::Elem { expr, .. } => {
+                fc.fe.emit_ld_loc(arr_slot);
+                fc.fe.emit_ld_loc(widx_slot);
+                let produced = emit_expr(em, fc, expr)?;
+                if !produced {
+                    return Err(EmitError::UnsupportedFeature {
+                        desc: "array element produced no value".into(),
+                    });
+                }
+                fc.fe.emit_st_idx();
+                // widx += 1
+                fc.fe.emit_ld_loc(widx_slot);
+                fc.fe.emit_ld_cst(one_i);
+                fc.fe.emit_i_add();
+                fc.fe.emit_st_loc(widx_slot);
+            }
+            ArrayElem::Spread { .. } => {
+                let spread_slot = spread_iter.next().expect("spread_slots exhausted");
+
+                // Loop index for reading from spread array.
+                let ridx_slot = fc.alloc_local();
+                fc.fe.emit_ld_cst(zi);
+                fc.fe.emit_st_loc(ridx_slot);
+
+                // Get spread length into a local.
+                let slen_slot = fc.alloc_local();
+                fc.fe.emit_ld_loc(spread_slot);
+                fc.fe.emit_ld_len();
+                fc.fe.emit_st_loc(slen_slot);
+
+                // loop_start: if ridx >= slen, jump to loop_end
+                let loop_start = fc.fresh_label();
+                let loop_end = fc.fresh_label();
+
+                fc.fe.emit_label(loop_start);
+                // ridx < slen?
+                fc.fe.emit_ld_loc(ridx_slot);
+                fc.fe.emit_ld_loc(slen_slot);
+                // CMP_LT: pops two, pushes bool. We need to jump if ridx >= slen, i.e. NOT (ridx < slen).
+                fc.fe.emit_binop(Opcode::CMP_LT);
+                fc.fe.emit_jmp_f(loop_end);
+
+                // arr[widx] = spread[ridx]
+                fc.fe.emit_ld_loc(arr_slot);
+                fc.fe.emit_ld_loc(widx_slot);
+                fc.fe.emit_ld_loc(spread_slot);
+                fc.fe.emit_ld_loc(ridx_slot);
+                fc.fe.emit_ld_idx();
+                fc.fe.emit_st_idx();
+
+                // widx += 1
+                fc.fe.emit_ld_loc(widx_slot);
+                fc.fe.emit_ld_cst(one_i);
+                fc.fe.emit_i_add();
+                fc.fe.emit_st_loc(widx_slot);
+
+                // ridx += 1
+                fc.fe.emit_ld_loc(ridx_slot);
+                fc.fe.emit_ld_cst(one_i);
+                fc.fe.emit_i_add();
+                fc.fe.emit_st_loc(ridx_slot);
+
+                fc.fe.emit_jmp(loop_start);
+                fc.fe.emit_label(loop_end);
+            }
+        }
+    }
+
+    fc.fe.emit_ld_loc(arr_slot);
     Ok(())
 }
 

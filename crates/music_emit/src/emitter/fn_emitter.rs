@@ -214,6 +214,11 @@ impl FnEmitter {
         self.push_n(1);
     }
 
+    /// Emit `ld.len` (pops array ref, pushes length as uint → net 0).
+    pub fn emit_ld_len(&mut self) {
+        encode_no_operand(&mut self.code, Opcode::LD_LEN);
+    }
+
     /// Emit `ld.idx` (pops array+index, pushes value → net pop 1).
     pub fn emit_ld_idx(&mut self) {
         encode_no_operand(&mut self.code, Opcode::LD_IDX);
@@ -226,10 +231,17 @@ impl FnEmitter {
         self.pop_n(3);
     }
 
-    /// Emit `mk.arr` with type id (pops length — actually takes count operand, pushes array ref).
+    /// Emit `mk.arr type_id` — pops a length value from the stack, allocates array, pushes ref.
+    /// Net stack effect: 0 (pop length, push ref). Caller must push the length first.
     pub fn emit_mk_arr(&mut self, type_id: u32) {
         encode_u32(&mut self.code, Opcode::MK_ARR, type_id);
-        self.push_n(1);
+        // pops 1 (length), pushes 1 (ref) → net 0
+    }
+
+    /// Emit `i.add` — pops two integers, pushes their sum. Net stack: -1.
+    pub fn emit_i_add(&mut self) {
+        encode_no_operand(&mut self.code, Opcode::I_ADD);
+        self.pop_n(1);
     }
 
     /// Emit `alc.ref` — pops initial value, pushes ref. Net stack: 0.

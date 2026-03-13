@@ -177,11 +177,23 @@ fn emit_pat_test(
             fc.fe.emit_label(pass_label);
             Ok(())
         }
+        Pat::Array { elems, .. } => {
+            let expected_len = i64::try_from(elems.len()).map_err(|_| EmitError::OperandOverflow {
+                desc: "array pattern element count".into(),
+            })?;
+            let len_const = ConstValue::Int(expected_len);
+            let len_cst_idx = em.cp.intern(&len_const, em.interner)?;
+            fc.fe.emit_ld_loc(scrutinee_slot);
+            fc.fe.emit_ld_len();
+            fc.fe.emit_ld_cst(len_cst_idx);
+            fc.fe.emit_cmp_eq();
+            fc.fe.emit_jmp_f(fail_label);
+            Ok(())
+        }
         Pat::Wild { .. }
         | Pat::Bind { inner: None, .. }
         | Pat::Tuple { .. }
         | Pat::Record { .. }
-        | Pat::Array { .. }
         | Pat::Error { .. } => Ok(()),
     }
 }
@@ -286,8 +298,23 @@ fn emit_pat_bind(
             }
             Ok(())
         }
+        Pat::Array { elems, .. } => {
+            for (i, &elem) in elems.iter().enumerate() {
+                let elem_idx = i64::try_from(i).map_err(|_| EmitError::OperandOverflow {
+                    desc: "array pattern element index".into(),
+                })?;
+                let elem_cst_idx = em.cp.intern(&ConstValue::Int(elem_idx), em.interner)?;
+                let elem_slot = fc.alloc_local();
+                fc.fe.emit_ld_loc(value_slot);
+                fc.fe.emit_ld_cst(elem_cst_idx);
+                fc.fe.emit_ld_idx();
+                fc.fe.emit_st_loc(elem_slot);
+                emit_pat_bind(em, fc, elem, elem_slot)?;
+            }
+            Ok(())
+        }
         Pat::Or { left, .. } => emit_pat_bind(em, fc, left, value_slot),
-        Pat::Wild { .. } | Pat::Lit { .. } | Pat::Array { .. } | Pat::Error { .. } => Ok(()),
+        Pat::Wild { .. } | Pat::Lit { .. } | Pat::Error { .. } => Ok(()),
     }
 }
 
