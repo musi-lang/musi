@@ -53,15 +53,26 @@ comment = "//" , { any - newline }      (* line *)
         | "//!" , { any - newline }     (* module doc — documents enclosing module *)
         | "/*" , { any } , "*/" ;       (* block — does not nest *)
 
-(* 1.5  Keywords (28, alphabetical)
-   and as choice class defer do effect export fatal foreign handle if
-   import in instance law let match mut not of or record resume
-   return try where with xor *)
+(* 1.5  Keywords (alphabetical)
+
+   Bindings & control    let mut return defer try match if
+   Type definitions      choice record class instance effect law
+   Logical operators     and or xor not
+   Type-level            of as in where with
+   Module system         import export foreign
+   Effects               do handle resume fatal *)
 
 (* 1.6  Compound tokens — maximal munch
-   :=  <-  ->  ~>  <:  :>  ?.  ??  ..  ..<  ...
-   <<  >>  /=  <=  >=  |>  ::  =>  #[
-   !.  !!  :?  :?>                               *)
+
+   Binding & arrow       :=  <-  ->  ~>  =>
+   Comparison            /=  <=  >=
+   Dot compounds         ?.  !.  .[  .{
+   Nil/force coalescing  ??  !!
+   Range & spread        ..  ..<  ...
+   Shift & cons          <<  >>  ::
+   Subtyping             <:  :>
+   Type test/cast        :?  :?>
+   Other                 |>  #[                  *)
 
 
 (* --------------------------------------------------------------------- *)
@@ -87,7 +98,7 @@ astStmt = astExpr , ";" ;
    Additive            + -             left
    Multiplicative      * / %           left
    Prefix              - not           unary
-   Postfix             () .[] .{} . ? ! :? :?>
+   Postfix             () .[] .{} . ?. !. ? ! :? :?>
 
    and/or/xor/not are type-directed: boolean on Bool, bitwise on integers.
    No separate & | ^ ~ operators exist. *)
@@ -191,7 +202,8 @@ astMatch = "match" , astExpr ,
            "(" , matchArm , { "|" , matchArm } , ")" ;
 matchArm = [ attrs ] , astPat , [ "if" , astExpr ] , "=>" , astExpr ;
 
-(* 2.8  Arrays *)
+(* 2.8  Arrays
+   Spread "..." always requires an operand: [...xs] not [...]. *)
 astArray   = "[" , [ arrayItems ] , "]" ;
 arrayItems = arrayItem , { "," , arrayItem } ;
 arrayItem  = "..." , astExpr | astExpr ;
@@ -214,10 +226,12 @@ astLet = "let" , [ "mut" ] , astPat , [ bracketParams ] ,
 bracketParams = "[" , tyIdent , { "," , tyIdent } , "]" ;
 withClause    = "with" , effectSet ;
 
-(* 2.11  Type definitions *)
+(* 2.11  Type definitions
+   Record defs use ";" — they are declaration-level (like struct fields).
+   Record literals (§2.9) use "," — they are value-level (like arguments). *)
 astChoice    = "choice" , "{" , astTy , "}" ;
 astRecord    = "record" , "{" , recDefFields , "}" ;
-recDefFields = recDefField , { "," , recDefField } ;
+recDefFields = recDefField , { ";" , recDefField } ;
 recDefField  = ident , ":" , astTy , [ ":=" , astExpr ] ;
 
 (* 2.12  Other atom forms *)
@@ -271,7 +285,10 @@ opOrIdent      = ident | opIdent ;
 foreignBinding = ident , [ "as" , litString ] , [ ":" , astTy ] ;
 effectOp       = [ "fatal" ] , ident , ":" , astTy ;
 
-(* 2.14  Types *)
+(* 2.14  Types
+   Unnamed products use "*" only: A * B * C.  No (A, B) tuple type form.
+   Parens in types are for grouping only: (A + B) * C.
+   Sum types use "+": A + B.  Arrow is right-associative: A -> B -> C. *)
 astTy      = astTyArrow ;
 astTyArrow = astTySum , [ ( "->" | "~>" ) , astTyArrow ] ;
 astTySum   = astTyProd , { "+" , astTyProd } ;
@@ -281,10 +298,9 @@ astTyBase =
     tyIdent                                 (* 'T *)
   | "?" , astTyBase                        (* ?T — option sugar *)
   | ident , [ "of" , tyArgList ]           (* Named, Named of T *)
-  | "(" , [ tyList ] , ")"                 (* grouped / tuple type *)
+  | "(" , [ astTy ] , ")"                  (* grouped type *)
   | "[" , [ litInt ] , "]" , astTy ;       (* array type *)
 
-tyList     = astTy , { "," , astTy } ;
 tyArgList  = astTy , { "," , astTy } ;
 tyAnnot    = ":" , astTy ;
 astTyNamed = ident , [ "of" , tyArgList ] ;
@@ -326,7 +342,7 @@ attrNamedField  = ident , ":=" , lit ;
 (* 2.17  Shared helpers *)
 exprList = astExpr , { "," , astExpr } ;
 argList  = arg , { "," , arg } ;
-arg      = "..." | astExpr ;
+arg      = "..." , astExpr | astExpr ;
 params   = "(" , [ paramList ] , ")" ;
 paramList = param , { "," , param } ;
 param    = [ "mut" ] , ident , [ tyAnnot ] , [ ":=" , astExpr ] ;
