@@ -17,7 +17,8 @@ pub const TT_TYPE_PARAM: u32 = 1;
 pub const TT_ENUM_MEMBER: u32 = 2;
 pub const TT_FUNCTION: u32 = 3;
 pub const TT_VARIABLE: u32 = 4;
-pub const TT_OPERATOR: u32 = 5;
+pub const TT_PARAMETER: u32 = 5;
+pub const TT_OPERATOR: u32 = 6;
 
 pub const TM_DECLARATION: u32 = 1 << 0;
 pub const TM_READONLY: u32 = 1 << 1;
@@ -31,6 +32,7 @@ pub fn legend() -> SemanticTokensLegend {
             SemanticTokenType::ENUM_MEMBER,
             SemanticTokenType::FUNCTION,
             SemanticTokenType::VARIABLE,
+            SemanticTokenType::PARAMETER,
             SemanticTokenType::new("operator"),
         ],
         token_modifiers: vec![
@@ -150,9 +152,11 @@ fn emit_decl_names(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
     enum DeclState {
         Default,
         AfterLet,
+        AfterMut,
         AfterTypeDef,
         AfterLetLParen,
         AfterLetOp,
+        AfterLaw,
     }
     let mut state = DeclState::Default;
     let mut op_span: Option<Span> = None;
@@ -161,13 +165,16 @@ fn emit_decl_names(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
         state = match state {
             DeclState::Default => match kind {
                 TokenKind::KwLet => DeclState::AfterLet,
-                TokenKind::KwClass | TokenKind::KwEffect | TokenKind::KwInstance => {
-                    DeclState::AfterTypeDef
-                }
-                TokenKind::KwExport => DeclState::Default,
+                TokenKind::KwClass
+                | TokenKind::KwEffect
+                | TokenKind::KwInstance
+                | TokenKind::KwRecord => DeclState::AfterTypeDef,
+                TokenKind::KwExport | TokenKind::KwForeign => DeclState::Default,
+                TokenKind::KwLaw => DeclState::AfterLaw,
                 _ => DeclState::Default,
             },
             DeclState::AfterLet => match kind {
+                TokenKind::KwMut => DeclState::AfterMut,
                 TokenKind::Ident => {
                     let text = doc
                         .source
@@ -189,6 +196,21 @@ fn emit_decl_names(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
                     DeclState::Default
                 }
                 TokenKind::LParen => DeclState::AfterLetLParen,
+                _ => DeclState::Default,
+            },
+            DeclState::AfterMut => match kind {
+                TokenKind::Ident => {
+                    push_raw(
+                        raw,
+                        tok.span,
+                        TT_VARIABLE,
+                        TM_DECLARATION | TM_MUTABLE,
+                        doc.file_id,
+                        &doc.source_db,
+                        1,
+                    );
+                    DeclState::Default
+                }
                 _ => DeclState::Default,
             },
             DeclState::AfterLetLParen => {
@@ -231,6 +253,21 @@ fn emit_decl_names(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
                 }
                 _ => DeclState::Default,
             },
+            DeclState::AfterLaw => match kind {
+                TokenKind::Ident => {
+                    push_raw(
+                        raw,
+                        tok.span,
+                        TT_VARIABLE,
+                        TM_DECLARATION | TM_READONLY,
+                        doc.file_id,
+                        &doc.source_db,
+                        1,
+                    );
+                    DeclState::Default
+                }
+                _ => DeclState::Default,
+            },
         };
     }
 }
@@ -261,6 +298,17 @@ fn is_operator_token(kind: TokenKind) -> bool {
             | TokenKind::KwOr
             | TokenKind::KwXor
             | TokenKind::KwNot
+            | TokenKind::BangBang
+            | TokenKind::BangDot
+            | TokenKind::Bang
+            | TokenKind::LtLt
+            | TokenKind::GtGt
+            | TokenKind::ColonQuestion
+            | TokenKind::ColonQuestionGt
+            | TokenKind::QuestionDot
+            | TokenKind::DotDotDot
+            | TokenKind::EqGt
+            | TokenKind::Pipe
     )
 }
 
@@ -335,16 +383,11 @@ fn classify_def(
         }
         DefKind::Var => (Some(TT_VARIABLE), decl | TM_MUTABLE, 0),
         DefKind::Param => {
-            let is_fn = def.ty_info.ty.is_some_and(|t| is_fn_type(t, sema));
             let is_mutable = def
                 .param_mode
                 .is_some_and(|m| matches!(m, ParamMode::Mut));
             let mut_mod = if is_mutable { TM_MUTABLE } else { 0 };
-            if is_fn {
-                (Some(TT_FUNCTION), decl | mut_mod, 0)
-            } else {
-                (Some(TT_VARIABLE), decl | mut_mod, 0)
-            }
+            (Some(TT_PARAMETER), decl | mut_mod, 0)
         }
         DefKind::Type | DefKind::OpaqueType => (Some(TT_TYPE), decl, 0),
         DefKind::Variant => (Some(TT_ENUM_MEMBER), decl, 0),
@@ -363,6 +406,7 @@ fn lex_fallback(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
         AfterMut,
         AfterTypeDef,
         AfterInstance,
+        AfterLaw,
     }
 
     let mut state = ScanState::Default;
@@ -385,9 +429,12 @@ fn lex_fallback(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
         state = match state {
             ScanState::Default => match kind {
                 TokenKind::KwLet => ScanState::AfterLet,
-                TokenKind::KwClass | TokenKind::KwEffect => ScanState::AfterTypeDef,
+                TokenKind::KwClass | TokenKind::KwEffect | TokenKind::KwRecord => {
+                    ScanState::AfterTypeDef
+                }
                 TokenKind::KwInstance => ScanState::AfterInstance,
-                TokenKind::KwExport => ScanState::Default,
+                TokenKind::KwExport | TokenKind::KwForeign => ScanState::Default,
+                TokenKind::KwLaw => ScanState::AfterLaw,
                 _ => ScanState::Default,
             },
 
@@ -443,6 +490,22 @@ fn lex_fallback(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
             ScanState::AfterInstance => match kind {
                 TokenKind::Ident => {
                     push_raw(raw, tok.span, TT_TYPE, 0, doc.file_id, &doc.source_db, 1);
+                    ScanState::Default
+                }
+                _ => ScanState::Default,
+            },
+
+            ScanState::AfterLaw => match kind {
+                TokenKind::Ident => {
+                    push_raw(
+                        raw,
+                        tok.span,
+                        TT_VARIABLE,
+                        TM_DECLARATION | TM_READONLY,
+                        doc.file_id,
+                        &doc.source_db,
+                        1,
+                    );
                     ScanState::Default
                 }
                 _ => ScanState::Default,
