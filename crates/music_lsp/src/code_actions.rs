@@ -5,9 +5,9 @@
 
 use music_ast::Expr;
 use music_sema::Type;
-use tower_lsp_server::ls_types::{
-    CodeAction, CodeActionKind, CodeActionOrCommand, CodeActionParams, Range, TextEdit, Uri,
-    WorkspaceEdit,
+use lsp_types::{
+    CodeAction, CodeActionKind, CodeActionOrCommand, CodeActionParams, Range, TextEdit,
+    Url, WorkspaceEdit,
 };
 
 use crate::analysis::{AnalyzedDoc, find_name_token, offset_to_position, position_to_offset};
@@ -17,7 +17,7 @@ use crate::hover::fmt_type_lsp;
 pub fn code_actions(
     doc: &AnalyzedDoc,
     params: &CodeActionParams,
-    uri: &Uri,
+    uri: &Url,
 ) -> Vec<CodeActionOrCommand> {
     let Some(sema) = &doc.sema else {
         return vec![];

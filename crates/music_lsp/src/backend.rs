@@ -1,12 +1,12 @@
 //! LSP backend: `MusiBackend` struct + `LanguageServer` impl.
 
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::ops::ControlFlow;
 
-use tokio::sync::RwLock;
-use tower_lsp_server::jsonrpc;
-use tower_lsp_server::ls_types::*;
-use tower_lsp_server::{Client, LanguageServer};
+use async_lsp::{ClientSocket, LanguageServer, ResponseError};
+use futures::future::BoxFuture;
+use lsp_types::notification;
+use lsp_types::*;
 
 use std::path::PathBuf;
 
@@ -17,41 +17,39 @@ use crate::{
 };
 
 pub struct MusiBackend {
-    client: Client,
-    documents: Arc<RwLock<HashMap<Uri, AnalyzedDoc>>>,
-    root_uri: Arc<RwLock<Option<Uri>>>,
+    client: ClientSocket,
+    documents: HashMap<Url, AnalyzedDoc>,
+    root_uri: Option<Url>,
 }
 
 impl MusiBackend {
-    pub fn new(client: Client) -> Self {
+    pub fn new(client: ClientSocket) -> Self {
         Self {
             client,
-            documents: Arc::new(RwLock::new(HashMap::new())),
-            root_uri: Arc::new(RwLock::new(None)),
+            documents: HashMap::new(),
+            root_uri: None,
         }
     }
 
-    async fn analyze_and_publish(&self, uri: Uri, text: &str) {
+    fn analyze_and_publish(&mut self, uri: Url, text: &str) {
         let (diags, doc) = if text.contains("import \"") {
-            self.try_multi_file_analysis(&uri, text).await
+            self.try_multi_file_analysis(&uri, text)
         } else {
             analyze_doc(text, uri.as_str())
         };
-        {
-            let mut docs = self.documents.write().await;
-            let _prev = docs.insert(uri.clone(), doc);
-        }
-        self.client.publish_diagnostics(uri, diags, None).await;
+        let _prev = self.documents.insert(uri.clone(), doc);
+        let _: Result<(), _> =
+            self.client
+                .notify::<notification::PublishDiagnostics>(PublishDiagnosticsParams {
+                    uri,
+                    diagnostics: diags,
+                    version: None,
+                });
     }
 
-    async fn try_multi_file_analysis(
-        &self,
-        uri: &Uri,
-        text: &str,
-    ) -> (Vec<tower_lsp_server::ls_types::Diagnostic>, AnalyzedDoc) {
-        let root_uri = self.root_uri.read().await;
+    fn try_multi_file_analysis(&self, uri: &Url, text: &str) -> (Vec<Diagnostic>, AnalyzedDoc) {
         let file_path = uri_to_path(uri.as_str());
-        let project_root = root_uri.as_ref().and_then(|u| uri_to_path(u.as_str()));
+        let project_root = self.root_uri.as_ref().and_then(|u| uri_to_path(u.as_str()));
 
         if let (Some(fp), Some(pr)) = (file_path, project_root) {
             analyze_doc_multi(text, &fp, &pr)
@@ -62,7 +60,13 @@ impl MusiBackend {
 }
 
 impl LanguageServer for MusiBackend {
-    async fn initialize(&self, params: InitializeParams) -> jsonrpc::Result<InitializeResult> {
+    type Error = ResponseError;
+    type NotifyResult = ControlFlow<async_lsp::Result<()>>;
+
+    fn initialize(
+        &mut self,
+        params: InitializeParams,
+    ) -> BoxFuture<'static, Result<InitializeResult, Self::Error>> {
         #[allow(deprecated)]
         let resolved_root = params
             .workspace_folders
@@ -71,10 +75,9 @@ impl LanguageServer for MusiBackend {
             .map(|f| f.uri.clone())
             .or(params.root_uri);
         if let Some(uri) = resolved_root {
-            let mut root = self.root_uri.write().await;
-            *root = Some(uri);
+            self.root_uri = Some(uri);
         }
-        Ok(InitializeResult {
+        let result = InitializeResult {
             server_info: Some(ServerInfo {
                 name: "music-lsp".to_owned(),
                 version: Some(env!("CARGO_PKG_VERSION").to_owned()),
@@ -112,200 +115,224 @@ impl LanguageServer for MusiBackend {
                 }),
                 ..ServerCapabilities::default()
             },
-            offset_encoding: None,
-        })
+        };
+        Box::pin(async move { Ok(result) })
     }
 
-    async fn initialized(&self, _params: InitializedParams) {
-        self.client
-            .log_message(MessageType::INFO, "music-lsp ready")
-            .await;
+    fn shutdown(&mut self, _: ()) -> BoxFuture<'static, Result<(), Self::Error>> {
+        Box::pin(async { Ok(()) })
     }
 
-    async fn shutdown(&self) -> jsonrpc::Result<()> {
-        Ok(())
+    fn initialized(&mut self, _params: InitializedParams) -> Self::NotifyResult {
+        let _: Result<(), _> = self
+            .client
+            .notify::<notification::LogMessage>(LogMessageParams {
+                typ: MessageType::INFO,
+                message: "music-lsp ready".to_owned(),
+            });
+        ControlFlow::Continue(())
     }
 
-    async fn did_open(&self, params: DidOpenTextDocumentParams) {
+    fn did_open(&mut self, params: DidOpenTextDocumentParams) -> Self::NotifyResult {
         let uri = params.text_document.uri;
         let text = params.text_document.text;
-        self.analyze_and_publish(uri, &text).await;
+        self.analyze_and_publish(uri, &text);
+        ControlFlow::Continue(())
     }
 
-    async fn did_change(&self, params: DidChangeTextDocumentParams) {
+    fn did_change(&mut self, params: DidChangeTextDocumentParams) -> Self::NotifyResult {
         let uri = params.text_document.uri;
         if let Some(change) = params.content_changes.into_iter().last() {
-            self.analyze_and_publish(uri, &change.text).await;
+            self.analyze_and_publish(uri, &change.text);
         }
+        ControlFlow::Continue(())
     }
 
-    async fn did_save(&self, params: DidSaveTextDocumentParams) {
+    fn did_save(&mut self, params: DidSaveTextDocumentParams) -> Self::NotifyResult {
         let uri = params.text_document.uri;
-        let text = {
-            let docs = self.documents.read().await;
-            docs.get(&uri).map(|d| d.source.clone())
-        };
+        let text = self.documents.get(&uri).map(|d| d.source.clone());
         if let Some(text) = text {
-            self.analyze_and_publish(uri, &text).await;
+            self.analyze_and_publish(uri, &text);
         }
+        ControlFlow::Continue(())
     }
 
-    async fn did_close(&self, params: DidCloseTextDocumentParams) {
-        let mut docs = self.documents.write().await;
-        let _removed = docs.remove(&params.text_document.uri);
-        drop(docs);
-        self.client
-            .publish_diagnostics(params.text_document.uri, vec![], None)
-            .await;
+    fn did_close(&mut self, params: DidCloseTextDocumentParams) -> Self::NotifyResult {
+        let _removed = self.documents.remove(&params.text_document.uri);
+        let _: Result<(), _> =
+            self.client
+                .notify::<notification::PublishDiagnostics>(PublishDiagnosticsParams {
+                    uri: params.text_document.uri,
+                    diagnostics: vec![],
+                    version: None,
+                });
+        ControlFlow::Continue(())
     }
 
-    async fn completion(
-        &self,
+    fn completion(
+        &mut self,
         params: CompletionParams,
-    ) -> jsonrpc::Result<Option<CompletionResponse>> {
+    ) -> BoxFuture<'static, Result<Option<CompletionResponse>, Self::Error>> {
         let uri = params.text_document_position.text_document.uri;
         let trigger = params
             .context
             .and_then(|ctx| ctx.trigger_character)
             .and_then(|s| s.chars().next());
-        let docs = self.documents.read().await;
-        let items = docs
+        let items = self
+            .documents
             .get(&uri)
             .map(|doc| completion::complete(doc, trigger))
             .unwrap_or_default();
-        Ok(Some(CompletionResponse::Array(items)))
+        Box::pin(async move { Ok(Some(CompletionResponse::Array(items))) })
     }
 
-    async fn semantic_tokens_full(
-        &self,
+    fn semantic_tokens_full(
+        &mut self,
         params: SemanticTokensParams,
-    ) -> jsonrpc::Result<Option<SemanticTokensResult>> {
+    ) -> BoxFuture<'static, Result<Option<SemanticTokensResult>, Self::Error>> {
         let uri = params.text_document.uri;
-        let docs = self.documents.read().await;
-        let result = docs.get(&uri).map(semantic_tokens::compute);
-        Ok(result)
+        let result = self.documents.get(&uri).map(semantic_tokens::compute);
+        Box::pin(async move { Ok(result) })
     }
 
-    async fn hover(&self, params: HoverParams) -> jsonrpc::Result<Option<Hover>> {
+    fn hover(
+        &mut self,
+        params: HoverParams,
+    ) -> BoxFuture<'static, Result<Option<Hover>, Self::Error>> {
         let uri = params.text_document_position_params.text_document.uri;
         let position = params.text_document_position_params.position;
-        let docs = self.documents.read().await;
-        let result = docs.get(&uri).and_then(|doc| hover::hover(doc, position));
-        Ok(result)
+        let result = self
+            .documents
+            .get(&uri)
+            .and_then(|doc| hover::hover(doc, position));
+        Box::pin(async move { Ok(result) })
     }
 
-    async fn signature_help(
-        &self,
+    fn signature_help(
+        &mut self,
         params: SignatureHelpParams,
-    ) -> jsonrpc::Result<Option<SignatureHelp>> {
+    ) -> BoxFuture<'static, Result<Option<SignatureHelp>, Self::Error>> {
         let uri = params
             .text_document_position_params
             .text_document
             .uri
             .clone();
         let position = params.text_document_position_params.position;
-        let docs = self.documents.read().await;
-        let result = docs
+        let result = self
+            .documents
             .get(&uri)
             .and_then(|doc| signature_help::signature_help(doc, position));
-        Ok(result)
+        Box::pin(async move { Ok(result) })
     }
 
-    async fn goto_definition(
-        &self,
+    fn definition(
+        &mut self,
         params: GotoDefinitionParams,
-    ) -> jsonrpc::Result<Option<GotoDefinitionResponse>> {
+    ) -> BoxFuture<'static, Result<Option<GotoDefinitionResponse>, Self::Error>> {
         let uri = params.text_document_position_params.text_document.uri;
         let position = params.text_document_position_params.position;
-        let docs = self.documents.read().await;
-        let root_uri = self.root_uri.read().await;
-        let result = docs
+        let result = self
+            .documents
             .get(&uri)
-            .and_then(|doc| goto_def::goto_definition(doc, position, &uri, root_uri.as_ref()));
-        Ok(result)
+            .and_then(|doc| goto_def::goto_definition(doc, position, &uri, self.root_uri.as_ref()));
+        Box::pin(async move { Ok(result) })
     }
 
-    async fn references(&self, params: ReferenceParams) -> jsonrpc::Result<Option<Vec<Location>>> {
+    fn references(
+        &mut self,
+        params: ReferenceParams,
+    ) -> BoxFuture<'static, Result<Option<Vec<Location>>, Self::Error>> {
         let uri = params.text_document_position.text_document.uri;
         let position = params.text_document_position.position;
         let context = params.context;
-        let docs = self.documents.read().await;
-        let result = docs
+        let result = self
+            .documents
             .get(&uri)
             .and_then(|doc| references::find_references(doc, position, &context, &uri));
-        Ok(result)
+        Box::pin(async move { Ok(result) })
     }
 
-    async fn rename(&self, params: RenameParams) -> jsonrpc::Result<Option<WorkspaceEdit>> {
+    fn rename(
+        &mut self,
+        params: RenameParams,
+    ) -> BoxFuture<'static, Result<Option<WorkspaceEdit>, Self::Error>> {
         let uri = params.text_document_position.text_document.uri;
         let position = params.text_document_position.position;
         let new_name = params.new_name;
-        let docs = self.documents.read().await;
-        let result = docs
+        let result = self
+            .documents
             .get(&uri)
             .and_then(|doc| references::rename(doc, position, new_name, &uri));
-        Ok(result)
+        Box::pin(async move { Ok(result) })
     }
 
-    async fn inlay_hint(&self, params: InlayHintParams) -> jsonrpc::Result<Option<Vec<InlayHint>>> {
+    fn inlay_hint(
+        &mut self,
+        params: InlayHintParams,
+    ) -> BoxFuture<'static, Result<Option<Vec<InlayHint>>, Self::Error>> {
         let uri = params.text_document.uri;
-        let docs = self.documents.read().await;
-        let hints = docs
+        let hints = self
+            .documents
             .get(&uri)
             .map(inlay_hints::inlay_hints)
             .unwrap_or_default();
-        Ok(Some(hints))
+        Box::pin(async move { Ok(Some(hints)) })
     }
 
-    async fn document_symbol(
-        &self,
+    fn document_symbol(
+        &mut self,
         params: DocumentSymbolParams,
-    ) -> jsonrpc::Result<Option<DocumentSymbolResponse>> {
+    ) -> BoxFuture<'static, Result<Option<DocumentSymbolResponse>, Self::Error>> {
         let uri = params.text_document.uri;
-        let docs = self.documents.read().await;
-        let result = docs.get(&uri).map(document_symbols::document_symbols);
-        Ok(result)
-    }
-
-    async fn document_link(
-        &self,
-        params: DocumentLinkParams,
-    ) -> jsonrpc::Result<Option<Vec<DocumentLink>>> {
-        let uri = params.text_document.uri;
-        let docs = self.documents.read().await;
-        let root_uri = self.root_uri.read().await;
-        let links = docs
+        let result = self
+            .documents
             .get(&uri)
-            .map(|doc| document_links::document_links(doc, &uri, root_uri.as_ref()))
-            .unwrap_or_default();
-        Ok(Some(links))
+            .map(document_symbols::document_symbols);
+        Box::pin(async move { Ok(result) })
     }
 
-    async fn code_action(
-        &self,
+    fn document_link(
+        &mut self,
+        params: DocumentLinkParams,
+    ) -> BoxFuture<'static, Result<Option<Vec<DocumentLink>>, Self::Error>> {
+        let uri = params.text_document.uri;
+        let links = self
+            .documents
+            .get(&uri)
+            .map(|doc| document_links::document_links(doc, &uri, self.root_uri.as_ref()))
+            .unwrap_or_default();
+        Box::pin(async move { Ok(Some(links)) })
+    }
+
+    fn code_action(
+        &mut self,
         params: CodeActionParams,
-    ) -> jsonrpc::Result<Option<CodeActionResponse>> {
+    ) -> BoxFuture<'static, Result<Option<CodeActionResponse>, Self::Error>> {
         let uri = params.text_document.uri.clone();
-        let docs = self.documents.read().await;
-        let actions = docs
+        let actions = self
+            .documents
             .get(&uri)
             .map(|doc| code_actions::code_actions(doc, &params, &uri))
             .unwrap_or_default();
-        if actions.is_empty() {
-            Ok(None)
+        let result = if actions.is_empty() {
+            None
         } else {
-            Ok(Some(actions))
-        }
+            Some(actions)
+        };
+        Box::pin(async move { Ok(result) })
     }
 
-    async fn code_lens(&self, params: CodeLensParams) -> jsonrpc::Result<Option<Vec<CodeLens>>> {
+    fn code_lens(
+        &mut self,
+        params: CodeLensParams,
+    ) -> BoxFuture<'static, Result<Option<Vec<CodeLens>>, Self::Error>> {
         let uri = params.text_document.uri;
-        let docs = self.documents.read().await;
-        let lenses = docs
+        let lenses = self
+            .documents
             .get(&uri)
             .map(|doc| code_lens::code_lens(doc, &uri))
             .unwrap_or_default();
-        Ok(Some(lenses))
+        Box::pin(async move { Ok(Some(lenses)) })
     }
 }
 

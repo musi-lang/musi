@@ -4,15 +4,15 @@ use std::str::FromStr;
 
 use music_ast::Expr;
 use music_lex::TokenKind;
-use tower_lsp_server::ls_types::{DocumentLink, Range, Uri};
+use lsp_types::{DocumentLink, Range, Url};
 
 use crate::analysis::{AnalyzedDoc, span_to_range};
 
 /// Compute document links for all import/export path strings in `doc`.
 pub fn document_links(
     doc: &AnalyzedDoc,
-    doc_uri: &Uri,
-    root_uri: Option<&Uri>,
+    doc_uri: &Url,
+    root_uri: Option<&Url>,
 ) -> Vec<DocumentLink> {
     let root_base: String = root_uri.map_or_else(String::new, |root| {
         let s = root.as_str();
@@ -64,7 +64,7 @@ pub fn document_links(
         }
 
         let target_str = format!("{base}{module_key}.ms");
-        let Ok(target) = Uri::from_str(&target_str) else {
+        let Ok(target) = Url::from_str(&target_str) else {
             continue;
         };
 

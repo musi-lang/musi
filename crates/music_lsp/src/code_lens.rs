@@ -1,12 +1,12 @@
 //! CodeLens provider: emits "Run test" / "Run" lenses above annotated fns.
 
 use music_ast::Expr;
-use tower_lsp_server::ls_types::{CodeLens, Command, Uri};
+use lsp_types::{CodeLens, Command, Url};
 
 use crate::analysis::{AnalyzedDoc, span_to_range};
 
 /// Produce CodeLens items for `#[test]` and `#[entrypoint]` top-level bindings.
-pub fn code_lens(doc: &AnalyzedDoc, uri: &Uri) -> Vec<CodeLens> {
+pub fn code_lens(doc: &AnalyzedDoc, uri: &Url) -> Vec<CodeLens> {
     let mut lenses = Vec::new();
     let uri_str = uri.to_string();
 

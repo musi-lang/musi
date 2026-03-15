@@ -17,7 +17,7 @@ use music_sema::{
     TypeIdx, analyze, collect_exports,
 };
 use music_shared::{DiagnosticBag, FileId, Interner, Severity, SourceDb, Span, Symbol};
-use tower_lsp_server::ls_types::{Diagnostic, DiagnosticSeverity, DiagnosticTag, Position, Range};
+use lsp_types::{Diagnostic, DiagnosticSeverity, DiagnosticTag, Position, Range};
 
 /// Lexed artifacts for a single imported stdlib module, stored for doc-comment lookup.
 pub struct DepSource {

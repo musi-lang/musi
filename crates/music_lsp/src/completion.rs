@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 
 use music_sema::{DefKind, Type};
-use tower_lsp_server::ls_types::{CompletionItem, CompletionItemKind};
+use lsp_types::{CompletionItem, CompletionItemKind};
 
 use crate::analysis::AnalyzedDoc;
 use crate::hover;

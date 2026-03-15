@@ -1,8 +1,6 @@
 //! Find-references and rename providers (single-file).
 
-use tower_lsp_server::ls_types::{
-    Location, Position, ReferenceContext, TextEdit, Uri, WorkspaceEdit,
-};
+use lsp_types::{Location, Position, ReferenceContext, TextEdit, Url, WorkspaceEdit};
 
 use crate::analysis::{AnalyzedDoc, expr_span, position_to_offset, span_to_range};
 
@@ -11,7 +9,7 @@ pub fn find_references(
     doc: &AnalyzedDoc,
     position: Position,
     context: &ReferenceContext,
-    uri: &Uri,
+    uri: &Url,
 ) -> Option<Vec<Location>> {
     let sema = doc.sema.as_ref()?;
 
@@ -98,7 +96,7 @@ pub fn rename(
     doc: &AnalyzedDoc,
     position: Position,
     new_name: String,
-    uri: &Uri,
+    uri: &Url,
 ) -> Option<WorkspaceEdit> {
     let ctx = ReferenceContext {
         include_declaration: true,

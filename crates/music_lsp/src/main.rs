@@ -12,13 +12,29 @@ mod references;
 mod semantic_tokens;
 mod signature_help;
 
+use async_lsp::router::Router;
+use async_lsp::server::LifecycleLayer;
+use async_lsp::concurrency::ConcurrencyLayer;
+use async_lsp::panic::CatchUnwindLayer;
+use async_lsp::MainLoop;
+use tower::ServiceBuilder;
+
 use backend::MusiBackend;
-use tower_lsp_server::{LspService, Server};
 
 #[tokio::main]
 async fn main() {
-    let stdin = tokio::io::stdin();
-    let stdout = tokio::io::stdout();
-    let (service, socket) = LspService::new(MusiBackend::new);
-    Server::new(stdin, stdout, socket).serve(service).await;
+    let (mainloop, _) = MainLoop::new_server(|client| {
+        let state = MusiBackend::new(client);
+        ServiceBuilder::new()
+            .layer(LifecycleLayer::default())
+            .layer(CatchUnwindLayer::default())
+            .layer(ConcurrencyLayer::default())
+            .service(Router::from_language_server(state))
+    });
+    let stdin = async_lsp::stdio::PipeStdin::lock_tokio()
+        .expect("failed to lock stdin");
+    let stdout = async_lsp::stdio::PipeStdout::lock_tokio()
+        .expect("failed to lock stdout");
+    mainloop.run_buffered(stdin, stdout).await
+        .expect("main loop failed");
 }

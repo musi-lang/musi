@@ -2,7 +2,7 @@
 
 use music_sema::{DefKind, Type};
 use music_shared::Span;
-use tower_lsp_server::ls_types::{DocumentSymbol, DocumentSymbolResponse, SymbolKind};
+use lsp_types::{DocumentSymbol, DocumentSymbolResponse, SymbolKind};
 
 use crate::analysis::{AnalyzedDoc, def_name_span, span_to_range};
 use crate::hover::fmt_type_lsp;

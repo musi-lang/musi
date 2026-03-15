@@ -3,7 +3,7 @@
 
 use music_ast::Expr;
 use music_sema::{DefKind, Type};
-use tower_lsp_server::ls_types::{InlayHint, InlayHintKind, InlayHintLabel};
+use lsp_types::{InlayHint, InlayHintKind, InlayHintLabel};
 
 use crate::analysis::{AnalyzedDoc, find_name_token, offset_to_position};
 use crate::hover::fmt_type_lsp;

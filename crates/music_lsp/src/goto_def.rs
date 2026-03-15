@@ -1,6 +1,6 @@
 //! Go-to-definition provider (single-file + stdlib).
 
-use tower_lsp_server::ls_types::{GotoDefinitionResponse, Location, Position, Range, Uri};
+use lsp_types::{GotoDefinitionResponse, Location, Position, Range, Url};
 
 use crate::analysis::{AnalyzedDoc, expr_span, position_to_offset, span_to_range};
 
@@ -8,8 +8,8 @@ use crate::analysis::{AnalyzedDoc, expr_span, position_to_offset, span_to_range}
 pub fn goto_definition(
     doc: &AnalyzedDoc,
     position: Position,
-    uri: &Uri,
-    root_uri: Option<&Uri>,
+    uri: &Url,
+    root_uri: Option<&Url>,
 ) -> Option<GotoDefinitionResponse> {
     let sema = doc.sema.as_ref()?;
 
@@ -46,7 +46,7 @@ pub fn goto_definition(
 fn resolve_stdlib_def(
     doc: &AnalyzedDoc,
     name: music_shared::Symbol,
-    root_uri: Option<&Uri>,
+    root_uri: Option<&Url>,
 ) -> Option<GotoDefinitionResponse> {
     let root_uri = root_uri?;
 
@@ -65,7 +65,7 @@ fn resolve_stdlib_def(
         };
 
         let root_str = root_uri.as_str().trim_end_matches('/');
-        let Ok(file_uri) = format!("{root_str}/{rel_path}").parse::<Uri>() else {
+        let Ok(file_uri) = format!("{root_str}/{rel_path}").parse::<Url>() else {
             continue;
         };
 

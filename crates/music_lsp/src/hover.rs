@@ -2,7 +2,7 @@
 
 use music_sema::DefKind;
 use music_sema::types::TypeIdx;
-use tower_lsp_server::ls_types::{Hover, HoverContents, MarkupContent, MarkupKind, Position};
+use lsp_types::{Hover, HoverContents, MarkupContent, MarkupKind, Position};
 
 use crate::analysis::{
     AnalyzedDoc, def_at_cursor, def_name_span, expr_span, extract_doc_comments_from_source,

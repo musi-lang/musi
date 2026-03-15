@@ -4,7 +4,7 @@ use music_ast::expr::ParamMode;
 use music_lex::TokenKind;
 use music_sema::{DefKind, SemaResult, Type, TypeIdx};
 use music_shared::{FileId, SourceDb, Span};
-use tower_lsp_server::ls_types::{
+use lsp_types::{
     SemanticToken, SemanticTokenModifier, SemanticTokenType, SemanticTokens,
     SemanticTokensFullOptions, SemanticTokensLegend, SemanticTokensOptions, SemanticTokensResult,
     SemanticTokensServerCapabilities,

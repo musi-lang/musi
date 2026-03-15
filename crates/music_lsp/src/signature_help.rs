@@ -2,9 +2,7 @@
 
 use music_ast::{Expr, ExprIdx};
 use music_sema::Type;
-use tower_lsp_server::ls_types::{
-    ParameterInformation, ParameterLabel, Position, SignatureHelp, SignatureInformation,
-};
+use lsp_types::{ParameterInformation, ParameterLabel, Position, SignatureHelp, SignatureInformation};
 
 use crate::analysis::{AnalyzedDoc, expr_span, position_to_offset};
 use crate::hover::fmt_type_lsp;
