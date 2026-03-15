@@ -106,6 +106,7 @@ impl Resolver<'_> {
                         self.defs.get_mut(id).exported = true;
                     }
                     self.define_in_scope(*name, id, *span);
+                    let _inserted = self.output.pat_defs.insert(*span, id);
                 }
                 ForeignDecl::OpaqueType { name, span } => {
                     let id = self.defs.alloc(*name, DefKind::OpaqueType, *span);
@@ -113,6 +114,7 @@ impl Resolver<'_> {
                         self.defs.get_mut(id).exported = true;
                     }
                     self.define_in_scope(*name, id, *span);
+                    let _inserted = self.output.pat_defs.insert(*span, id);
                 }
             }
         }
