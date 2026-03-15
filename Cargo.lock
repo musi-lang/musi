@@ -614,7 +614,7 @@ name = "musi"
 version = "0.1.0-rc1"
 dependencies = [
  "clap",
- "musi_std",
+ "musi_builtins",
  "musi_vm",
 ]
 
@@ -632,7 +632,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "musi_std"
+name = "musi_builtins"
 version = "0.1.0-rc1"
 dependencies = [
  "libc",
@@ -655,7 +655,7 @@ version = "0.1.0-rc1"
 dependencies = [
  "clap",
  "musi_manifest",
- "musi_std",
+ "musi_builtins",
  "musi_vm",
  "music_ast",
  "music_emit",

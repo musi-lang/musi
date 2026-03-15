@@ -10,7 +10,7 @@
 use std::{fs, path::PathBuf, process};
 
 use clap::Parser;
-use musi_std::StdHost;
+use musi_builtins::StdHost;
 use musi_vm::{Vm, load, verify};
 
 #[derive(Parser)]

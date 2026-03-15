@@ -57,7 +57,7 @@ fn cache_directory() -> PathBuf {
 /// Discovers the standard library root.
 ///
 /// Searches in order:
-/// 1. `MUSI_STD_ROOT` environment variable
+/// 1. `musi_builtins_ROOT` environment variable
 /// 2. Relative to the current executable (`../std/`)
 /// 3. Sibling of `project_root` (i.e. `project_root/std/`)
 ///
@@ -65,7 +65,7 @@ fn cache_directory() -> PathBuf {
 ///
 /// Returns [`ResolveError::ModuleNotFound`] if no valid std root is found.
 pub fn discover_std_root(project_root: &Path) -> Result<PathBuf, ResolveError> {
-    if let Ok(env_root) = env::var("MUSI_STD_ROOT") {
+    if let Ok(env_root) = env::var("musi_builtins_ROOT") {
         let p = PathBuf::from(env_root);
         if p.is_dir() {
             return Ok(p);

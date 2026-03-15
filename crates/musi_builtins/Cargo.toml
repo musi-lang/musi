@@ -1,5 +1,5 @@
 [package]
-name = "musi_std"
+name = "musi_builtins"
 description = "Musi standard library and FFI runtime"
 version.workspace = true
 edition.workspace = true

@@ -2,8 +2,8 @@
 
 use std::{path::Path, process};
 
+use musi_builtins::StdHost;
 use musi_manifest::MusiManifest;
-use musi_std::StdHost;
 use musi_vm::{Vm, load, verify};
 
 use crate::pipeline;
