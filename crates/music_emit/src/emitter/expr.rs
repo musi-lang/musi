@@ -1720,7 +1720,7 @@ fn emit_handle(
         }
         let had_value = emit_expr(em, &mut handler_fc, op.body)?;
         if had_value {
-            handler_fc.fe.emit_eff_res();
+            handler_fc.fe.emit_cont_resume();
         } else {
             handler_fc.fe.emit_ret_u();
         }
@@ -1749,20 +1749,20 @@ fn emit_handle(
             handlers: handler_fc.fe.handlers,
         };
         em.nested_fns.push(fn_bytecode);
-        fc.fe.emit_eff_psh(u32::from(effect_id), handler_fn_id)?;
+        fc.fe.emit_cont_mark(u32::from(effect_id), handler_fn_id)?;
     }
 
     let produced = emit_expr(em, fc, body)?;
 
     for _ in ops {
-        fc.fe.emit_eff_pop(u32::from(effect_id))?;
+        fc.fe.emit_cont_unmark(u32::from(effect_id))?;
     }
 
     Ok(produced)
 }
 
 /// Emit a `do expr` expression. When the body is a call to an effect operation,
-/// emit `EFF_DO` instead of a regular call.
+/// emit `CONT_SAVE` instead of a regular call.
 fn emit_do(
     em: &mut Emitter<'_>,
     fc: &mut FnCtx,
@@ -1794,7 +1794,7 @@ fn emit_do(
                 let arg_count = emit_call_args(em, fc, &args)?;
                 let ac = i32::try_from(arg_count)
                     .map_err(|_| EmitError::overflow("effect op arg count"))?;
-                fc.fe.emit_eff_do(op_index, ac);
+                fc.fe.emit_cont_save(op_index, ac);
                 return Ok(true);
             }
         }

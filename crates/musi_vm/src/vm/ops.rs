@@ -163,17 +163,7 @@ pub fn exec_ld_pay(operand: u32, frame: &mut Frame, heap: &Heap) -> Result<(), V
     let obj_val = frame.pop()?;
     let ptr = obj_val.as_ref()?;
     let obj = heap.get(ptr)?;
-    let raw_payload = obj.fields.first().copied().unwrap_or(Value::UNIT);
-    let payload = if let Ok(inner_ptr) = raw_payload.as_ref()
-        && let Ok(inner) = heap.get(inner_ptr)
-        && inner.fields.len() > 1
-    {
-        inner.fields.get(field_idx).copied().unwrap_or(Value::UNIT)
-    } else if field_idx == 0 {
-        raw_payload
-    } else {
-        Value::UNIT
-    };
+    let payload = obj.fields.get(field_idx).copied().unwrap_or(Value::UNIT);
     frame.stack.push(payload);
     Ok(())
 }

@@ -14,20 +14,20 @@ pub struct Frame {
     pub locals: Vec<Value>,
     /// Operand stack.
     pub stack: Vec<Value>,
-    /// Active effect frames (innermost last).
-    pub eff_stack: Vec<EffFrame>,
+    /// Active continuation markers (innermost last).
+    pub marker_stack: Vec<ContMarker>,
     /// If this frame was entered via a closure call, the heap ref to the closure object.
     pub closure_ref: Option<Value>,
 }
 
-/// An active effect handler frame.
+/// An active continuation marker binding a marker id to its handler function.
 #[derive(Clone, Copy, Debug)]
-pub struct EffFrame {
+pub struct ContMarker {
     pub effect_id: u8,
     pub handler_fn_id: u32,
 }
 
-/// A captured one-shot continuation (frames between handler and `EFF_DO` site).
+/// A captured one-shot continuation (frames between handler and `CONT_SAVE` site).
 pub struct Continuation {
     pub frames: Vec<Frame>,
     /// The effect op id that triggered this continuation (for fatality checks on resume).

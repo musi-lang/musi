@@ -1,4 +1,4 @@
-//! Typecheck all `std/` stub files and report diagnostics.
+//! Typecheck all `stdlib/` stub files and report diagnostics.
 //!
 //! Run with: `cargo test -p music_sema --test std_typecheck -- --nocapture`
 #![allow(clippy::tests_outside_test_module)]
@@ -34,12 +34,12 @@ fn collect_ms_files(dir: &Path) -> Vec<PathBuf> {
 #[test]
 fn typecheck_all_std_files() {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let std_dir = manifest_dir.join("../../std");
-    let std_dir = std_dir.canonicalize().expect("std/ directory should exist");
+    let std_dir = manifest_dir.join("../../stdlib");
+    let std_dir = std_dir.canonicalize().expect("stdlib/ directory should exist");
 
     let files = collect_ms_files(&std_dir);
     if files.is_empty() {
-        eprintln!("no .ms files found under std/ — skipping");
+        eprintln!("no .ms files found under stdlib/ — skipping");
         return;
     }
 
@@ -57,7 +57,7 @@ fn typecheck_all_std_files() {
 
         let mut interner = Interner::new();
         let mut source_db = SourceDb::new();
-        let file_id = source_db.add(format!("std/{rel_path}"), &source);
+        let file_id = source_db.add(format!("stdlib/{rel_path}"), &source);
 
         // Lex
         let mut lex_diags = DiagnosticBag::new();
@@ -88,7 +88,7 @@ fn typecheck_all_std_files() {
             .count();
 
         if !all_diags.is_empty() {
-            eprintln!("\n=== std/{rel_path} ===");
+            eprintln!("\n=== stdlib/{rel_path} ===");
             for d in &all_diags {
                 let rendered = d.render_simple(&source_db);
                 eprintln!("  {rendered}");
@@ -108,5 +108,5 @@ fn typecheck_all_std_files() {
     eprintln!("========================================");
 
     // This test intentionally does NOT assert zero errors.
-    // It catalogues the current state of std/ file compatibility.
+    // It catalogues the current state of stdlib/ file compatibility.
 }

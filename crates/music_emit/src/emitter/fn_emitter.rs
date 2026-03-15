@@ -164,25 +164,15 @@ impl FnEmitter {
     }
 
     /// Emit a direct call to `fn_id`.
-    pub fn emit_inv(&mut self, fn_id: u32, effectful: bool, arg_count: i32) {
-        let op = if effectful {
-            Opcode::INV_EFF
-        } else {
-            Opcode::INV
-        };
-        encode_u32(&mut self.code, op, fn_id);
+    pub fn emit_inv(&mut self, fn_id: u32, _effectful: bool, arg_count: i32) {
+        encode_u32(&mut self.code, Opcode::INV, fn_id);
         self.pop_n(arg_count);
         self.push_n(1);
     }
 
     /// Emit a tail call to `fn_id`.
-    pub fn emit_inv_tail(&mut self, fn_id: u32, effectful: bool) {
-        let op = if effectful {
-            Opcode::INV_TAL_EFF
-        } else {
-            Opcode::INV_TAL
-        };
-        encode_u32(&mut self.code, op, fn_id);
+    pub fn emit_inv_tail(&mut self, fn_id: u32, _effectful: bool) {
+        encode_u32(&mut self.code, Opcode::INV_TAL, fn_id);
     }
 
     /// Emit an indirect (dynamic) call through a closure or fn value.
@@ -266,11 +256,11 @@ impl FnEmitter {
         // pops 1, pushes 1 → net 0
     }
 
-    pub fn emit_eff_psh(&mut self, effect_id: u32, handler_fn_id: u32) -> Result<(), EmitError> {
+    pub fn emit_cont_mark(&mut self, effect_id: u32, handler_fn_id: u32) -> Result<(), EmitError> {
         let id = u8::try_from(effect_id).map_err(|_| EmitError::OperandOverflow {
             desc: "effect id exceeds 255".into(),
         })?;
-        encode_u8(&mut self.code, Opcode::EFF_PSH, id);
+        encode_u8(&mut self.code, Opcode::CONT_MARK, id);
         self.handlers.push(HandlerEntry {
             effect_id: id,
             handler_fn_id,
@@ -278,22 +268,21 @@ impl FnEmitter {
         Ok(())
     }
 
-    pub fn emit_eff_pop(&mut self, effect_id: u32) -> Result<(), EmitError> {
+    pub fn emit_cont_unmark(&mut self, effect_id: u32) -> Result<(), EmitError> {
         let id = u8::try_from(effect_id).map_err(|_| EmitError::OperandOverflow {
             desc: "effect id exceeds 255".into(),
         })?;
-        encode_u8(&mut self.code, Opcode::EFF_POP, id);
+        encode_u8(&mut self.code, Opcode::CONT_UNMARK, id);
         Ok(())
     }
 
-    pub fn emit_eff_do(&mut self, op_id: u32, arg_count: i32) {
-        encode_u32(&mut self.code, Opcode::EFF_DO, op_id);
+    pub fn emit_cont_save(&mut self, op_id: u32, arg_count: i32) {
+        encode_u32(&mut self.code, Opcode::CONT_SAVE, op_id);
         self.pop_n(arg_count);
         self.push_n(1);
     }
 
-    pub fn emit_eff_res(&mut self) {
-        encode_no_operand(&mut self.code, Opcode::EFF_RES_C);
+    pub fn emit_cont_resume(&mut self) {
         self.pop_n(1);
     }
 

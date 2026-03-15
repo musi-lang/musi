@@ -148,7 +148,6 @@ const fn fixed_stack_delta(op: Opcode) -> Option<i32> {
         | Opcode::B_NOT
         | Opcode::CNV_ITF
         | Opcode::CNV_FTI
-        | Opcode::CNV_TRM
         | Opcode::LD_FLD
         | Opcode::MK_ARR
         | Opcode::MK_VAR
@@ -158,11 +157,9 @@ const fn fixed_stack_delta(op: Opcode) -> Option<i32> {
         | Opcode::CMP_TAG
         | Opcode::CMP_TAG_W
         | Opcode::LD_LEN
-        | Opcode::EFF_PSH
-        | Opcode::EFF_POP
-        | Opcode::EFF_RES_C
-        | Opcode::EFF_ABT
-        | Opcode::EFF_RES
+        | Opcode::CONT_MARK
+        | Opcode::CONT_UNMARK
+        | Opcode::CONT_RESUME
         | Opcode::TSK_CHR
         | Opcode::TSK_AWT
         | Opcode::ALC_REF
@@ -174,7 +171,6 @@ const fn fixed_stack_delta(op: Opcode) -> Option<i32> {
         // Net -1: pop, store global, free, index load, channel send, binary ops
         Opcode::POP
         | Opcode::ST_GLB
-        | Opcode::FRE
         | Opcode::LD_IDX
         | Opcode::TSK_CHS
         | Opcode::I_ADD
@@ -268,7 +264,7 @@ fn verify_operand_op(
             check_jump_target(ops.ip, len, ops.i32_jump()?, boundaries)?;
             Ok(-1)
         }
-        Opcode::INV | Opcode::INV_EFF => {
+        Opcode::INV => {
             let fn_id = ops.u32_op();
             check_fn_id(fn_id, module, "inv")?;
             let param_count = module
@@ -276,7 +272,7 @@ fn verify_operand_op(
                 .map_or(0, |(_, f)| i32::from(f.param_count));
             Ok(1 - param_count)
         }
-        Opcode::INV_TAL | Opcode::INV_TAL_EFF => {
+        Opcode::INV_TAL => {
             let fn_id = ops.u32_op();
             check_fn_id(fn_id, module, "inv.tal")?;
             let param_count = module
@@ -292,7 +288,7 @@ fn verify_operand_op(
             let arg_count = i32::try_from(ops.u8_op()).unwrap_or(i32::MAX);
             Ok(-arg_count)
         }
-        Opcode::EFF_DO => {
+        Opcode::CONT_SAVE => {
             let op_id = ops.u32_op();
             let param_count = lookup_effect_op_param_count(module, op_id);
             Ok(1 - param_count)

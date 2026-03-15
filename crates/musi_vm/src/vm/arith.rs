@@ -147,11 +147,6 @@ pub fn exec(op: Opcode, frame: &mut Frame) -> Result<bool, VmError> {
             let n = a.as_float()? as i64;
             frame.stack.push(Value::from_int(n));
         }
-        Opcode::CNV_TRM => {
-            let a = frame.pop()?;
-            frame.stack.push(a);
-        }
-
         _ => return Ok(false),
     }
     Ok(true)

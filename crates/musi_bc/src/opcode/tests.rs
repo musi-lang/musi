@@ -17,9 +17,6 @@ const NO_OPERAND_OPCODES: &[Opcode] = &[
     Opcode::LD_LEN,
     Opcode::LD_IDX,
     Opcode::ST_IDX,
-    Opcode::FRE,
-    Opcode::EFF_RES_C,
-    Opcode::EFF_ABT,
     Opcode::I_ADD,
     Opcode::I_ADD_UN,
     Opcode::I_SUB,
@@ -63,7 +60,6 @@ const NO_OPERAND_OPCODES: &[Opcode] = &[
     Opcode::CMP_F_GE,
     Opcode::CNV_ITF,
     Opcode::CNV_FTI,
-    Opcode::CNV_TRM,
 ];
 
 /// All u8-operand opcodes (range 0x40–0x7F).
@@ -76,9 +72,11 @@ const U8_OPERAND_OPCODES: &[Opcode] = &[
     Opcode::MK_VAR,
     Opcode::LD_PAY,
     Opcode::CMP_TAG,
-    Opcode::EFF_PSH,
-    Opcode::EFF_POP,
+    Opcode::CONT_MARK,
+    Opcode::CONT_UNMARK,
     Opcode::INV_DYN,
+    Opcode::ST_FLD,
+    Opcode::LD_UPV,
 ];
 
 /// All u16-operand opcodes (range 0x80–0xBF).
@@ -93,16 +91,14 @@ const U16_OPERAND_OPCODES: &[Opcode] = &[
 /// All u32-operand opcodes (range 0xC0–0xFF).
 const U32_OPERAND_OPCODES: &[Opcode] = &[
     Opcode::INV,
-    Opcode::INV_EFF,
     Opcode::INV_TAL,
-    Opcode::INV_TAL_EFF,
     Opcode::LD_GLB,
     Opcode::ST_GLB,
     Opcode::MK_ARR,
     Opcode::ALC_REF,
     Opcode::ALC_ARN,
-    Opcode::EFF_DO,
-    Opcode::EFF_RES,
+    Opcode::CONT_SAVE,
+    Opcode::CONT_RESUME,
     Opcode::TSK_SPN,
     Opcode::TSK_CHS,
     Opcode::TSK_CHR,
@@ -111,6 +107,8 @@ const U32_OPERAND_OPCODES: &[Opcode] = &[
     Opcode::JMP_W,
     Opcode::JMP_T_W,
     Opcode::JMP_F_W,
+    Opcode::TYP_CHK,
+    Opcode::MK_CLO,
 ];
 
 #[test]

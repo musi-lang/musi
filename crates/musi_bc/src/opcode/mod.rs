@@ -32,9 +32,7 @@ impl Opcode {
     pub const LD_LEN: Self = Self(0x0A);
     pub const LD_IDX: Self = Self(0x0B);
     pub const ST_IDX: Self = Self(0x0C);
-    pub const FRE: Self = Self(0x0D);
-    pub const EFF_RES_C: Self = Self(0x0E);
-    pub const EFF_ABT: Self = Self(0x0F);
+    // 0x0D–0x0F: reserved (formerly FRE, EFF_RES_C, EFF_ABT)
 
     // §2  Integer Arithmetic (no operand, overflow wraps)
     pub const I_ADD: Self = Self(0x10);
@@ -48,6 +46,8 @@ impl Opcode {
     pub const I_REM: Self = Self(0x18);
     pub const I_REM_UN: Self = Self(0x19);
     pub const I_NEG: Self = Self(0x1A);
+    /// Task await. Lives in the no-operand range (0x00–0x3F) for encoding
+    /// reasons; logically belongs with §13 Concurrency.
     pub const TSK_AWT: Self = Self(0x1B);
 
     // §3  Float Arithmetic (no operand, IEEE 754)
@@ -90,7 +90,7 @@ impl Opcode {
     // §7  Conversion (no operand)
     pub const CNV_ITF: Self = Self(0x3D);
     pub const CNV_FTI: Self = Self(0x3E);
-    pub const CNV_TRM: Self = Self(0x3F);
+    // 0x3F: reserved (formerly CNV_TRM)
 
     // §8  Locals / Constants / Structures (u8 operand)
     pub const LD_LOC: Self = Self(0x40);
@@ -101,8 +101,8 @@ impl Opcode {
     pub const MK_VAR: Self = Self(0x45);
     pub const LD_PAY: Self = Self(0x46);
     pub const CMP_TAG: Self = Self(0x47);
-    pub const EFF_PSH: Self = Self(0x48);
-    pub const EFF_POP: Self = Self(0x49);
+    pub const CONT_MARK: Self = Self(0x48);
+    pub const CONT_UNMARK: Self = Self(0x49);
     /// Indirect (dynamic) call through a closure or fn value. u8 = arg count.
     pub const INV_DYN: Self = Self(0x4A);
     /// Store into an object field. u8 = field index. Pops [obj, value].
@@ -117,9 +117,9 @@ impl Opcode {
 
     // §10  Invocation (u32 operand)
     pub const INV: Self = Self(0xC0);
-    pub const INV_EFF: Self = Self(0xC1);
+    // 0xC1: reserved (formerly INV_EFF)
     pub const INV_TAL: Self = Self(0xC2);
-    pub const INV_TAL_EFF: Self = Self(0xC3);
+    // 0xC3: reserved (formerly INV_TAL_EFF)
 
     // §11  Globals / Allocation (u32 operand)
     pub const LD_GLB: Self = Self(0xC4);
@@ -128,9 +128,9 @@ impl Opcode {
     pub const ALC_REF: Self = Self(0xC7);
     pub const ALC_ARN: Self = Self(0xC8);
 
-    // §12  Effects (u32 operand)
-    pub const EFF_DO: Self = Self(0xC9);
-    pub const EFF_RES: Self = Self(0xCA);
+    // §12  Continuations (u32 operand)
+    pub const CONT_SAVE: Self = Self(0xC9);
+    pub const CONT_RESUME: Self = Self(0xCA);
 
     // §13  Concurrency (u32 operand)
     pub const TSK_SPN: Self = Self(0xCB);
@@ -180,9 +180,6 @@ const OPCODE_NAMES: [Option<&str>; 256] = {
     t[0x0A] = Some("ld.len");
     t[0x0B] = Some("ld.idx");
     t[0x0C] = Some("st.idx");
-    t[0x0D] = Some("fre");
-    t[0x0E] = Some("eff.res.c");
-    t[0x0F] = Some("eff.abt");
     // §2 Integer Arithmetic
     t[0x10] = Some("i.add");
     t[0x11] = Some("i.add.un");
@@ -232,7 +229,6 @@ const OPCODE_NAMES: [Option<&str>; 256] = {
     // §7 Conversion
     t[0x3D] = Some("cnv.itf");
     t[0x3E] = Some("cnv.fti");
-    t[0x3F] = Some("cnv.trm");
     // §8 Locals / Constants / Structures (u8 operand)
     t[0x40] = Some("ld.loc");
     t[0x41] = Some("st.loc");
@@ -242,8 +238,8 @@ const OPCODE_NAMES: [Option<&str>; 256] = {
     t[0x45] = Some("mk.var");
     t[0x46] = Some("ld.pay");
     t[0x47] = Some("cmp.tag");
-    t[0x48] = Some("eff.psh");
-    t[0x49] = Some("eff.pop");
+    t[0x48] = Some("cont.mark");
+    t[0x49] = Some("cont.unmark");
     t[0x4A] = Some("inv.dyn");
     t[0x4B] = Some("st.fld");
     t[0x4C] = Some("ld.upv");
@@ -255,18 +251,16 @@ const OPCODE_NAMES: [Option<&str>; 256] = {
     t[0x84] = Some("cmp.tag.w");
     // §10 Invocation (u32 operand)
     t[0xC0] = Some("inv");
-    t[0xC1] = Some("inv.eff");
     t[0xC2] = Some("inv.tal");
-    t[0xC3] = Some("inv.tal.eff");
     // §11 Globals / Allocation (u32 operand)
     t[0xC4] = Some("ld.glb");
     t[0xC5] = Some("st.glb");
     t[0xC6] = Some("mk.arr");
     t[0xC7] = Some("alc.ref");
     t[0xC8] = Some("alc.arn");
-    // §12 Effects (u32 operand)
-    t[0xC9] = Some("eff.do");
-    t[0xCA] = Some("eff.res");
+    // §12 Continuations (u32 operand)
+    t[0xC9] = Some("cont.save");
+    t[0xCA] = Some("cont.resume");
     // §13 Concurrency (u32 operand)
     t[0xCB] = Some("tsk.spn");
     t[0xCC] = Some("tsk.chs");

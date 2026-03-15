@@ -623,15 +623,6 @@ name = "musi_bc"
 version = "0.1.0-rc1"
 
 [[package]]
-name = "musi_manifest"
-version = "0.1.0-rc1"
-dependencies = [
- "serde",
- "thiserror",
- "toml",
-]
-
-[[package]]
 name = "musi_builtins"
 version = "0.1.0-rc1"
 dependencies = [
@@ -639,6 +630,15 @@ dependencies = [
  "libffi",
  "libloading",
  "musi_vm",
+]
+
+[[package]]
+name = "musi_manifest"
+version = "0.1.0-rc1"
+dependencies = [
+ "serde",
+ "thiserror",
+ "toml",
 ]
 
 [[package]]
@@ -654,8 +654,8 @@ name = "music"
 version = "0.1.0-rc1"
 dependencies = [
  "clap",
- "musi_manifest",
  "musi_builtins",
+ "musi_manifest",
  "musi_vm",
  "music_ast",
  "music_emit",

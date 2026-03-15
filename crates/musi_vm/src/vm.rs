@@ -4,11 +4,11 @@
 mod tests;
 
 mod arith;
-mod effects;
+mod continuations;
 mod frame;
 mod ops;
 
-pub use frame::{Continuation, EffFrame, Frame};
+pub use frame::{ContMarker, Continuation, Frame};
 
 use std::mem;
 
@@ -158,7 +158,7 @@ impl Vm {
             ip: 0,
             locals,
             stack: Vec::with_capacity(max_stack.max(4)),
-            eff_stack: vec![],
+            marker_stack: vec![],
             closure_ref: None,
         });
         Ok(())
@@ -262,7 +262,6 @@ impl Vm {
             | Opcode::LD_LEN
             | Opcode::LD_IDX
             | Opcode::ST_IDX
-            | Opcode::FRE
             | Opcode::MK_ARR
             | Opcode::ALC_REF
             | Opcode::ALC_ARN
@@ -281,18 +280,14 @@ impl Vm {
             | Opcode::RET
             | Opcode::RET_U
             | Opcode::INV
-            | Opcode::INV_EFF
             | Opcode::INV_TAL
-            | Opcode::INV_TAL_EFF
             | Opcode::INV_DYN
             | Opcode::INV_FFI => self.step_control(op, operand),
 
-            Opcode::EFF_PSH
-            | Opcode::EFF_POP
-            | Opcode::EFF_DO
-            | Opcode::EFF_RES
-            | Opcode::EFF_RES_C
-            | Opcode::EFF_ABT => self.step_effects(op, operand, fn_idx),
+            Opcode::CONT_MARK
+            | Opcode::CONT_UNMARK
+            | Opcode::CONT_SAVE
+            | Opcode::CONT_RESUME => self.step_continuations(op, operand, fn_idx),
 
             Opcode::TSK_SPN
             | Opcode::TSK_AWT
@@ -436,11 +431,6 @@ impl Vm {
                 ops::exec_st_idx(frame, &mut self.heap)?;
                 Ok(StepResult::Continue)
             }
-            Opcode::FRE => {
-                let ptr = self.current_frame()?.pop()?.as_ref()?;
-                self.heap.free(ptr)?;
-                Ok(StepResult::Continue)
-            }
             Opcode::MK_ARR => {
                 let frame = self
                     .call_stack
@@ -563,8 +553,8 @@ impl Vm {
                 self.do_return(v)
             }
             Opcode::RET_U => self.do_return(Value::UNIT),
-            Opcode::INV | Opcode::INV_EFF => self.do_call_with_stack_args(operand),
-            Opcode::INV_TAL | Opcode::INV_TAL_EFF => self.do_tail_call(operand),
+            Opcode::INV => self.do_call_with_stack_args(operand),
+            Opcode::INV_TAL => self.do_tail_call(operand),
             Opcode::INV_DYN => {
                 let dyn_call = {
                     let frame = self
@@ -590,32 +580,31 @@ impl Vm {
         }
     }
 
-    fn step_effects(
+    fn step_continuations(
         &mut self,
         op: Opcode,
         operand: u32,
         fn_idx: usize,
     ) -> Result<StepResult, VmError> {
-        let eff_action = {
+        let cont_action = {
             let frame = self
                 .call_stack
                 .last_mut()
                 .ok_or_else(|| malformed!("empty call stack"))?;
             let handlers = &self.module.functions[fn_idx].handlers;
-            effects::exec(op, operand, frame, &self.module.effects, handlers)?
+            continuations::exec(op, operand, frame, &self.module.effects, handlers)?
         };
-        match eff_action {
-            effects::EffectAction::NotHandled | effects::EffectAction::Continue => {
+        match cont_action {
+            continuations::ContAction::NotHandled | continuations::ContAction::Continue => {
                 Ok(StepResult::Continue)
             }
-            effects::EffectAction::Abort => Err(VmError::EffectAborted),
-            effects::EffectAction::DoEffect { handler_fn_id } => {
+            continuations::ContAction::Dispatch { handler_fn_id } => {
                 self.do_call_with_stack_args(handler_fn_id)
             }
-            effects::EffectAction::CrossFrameSearch { effect_id, op_id } => {
-                self.exec_eff_do_cross_frame(effect_id, op_id)
+            continuations::ContAction::CrossFrameSearch { effect_id, op_id } => {
+                self.exec_cont_save_cross_frame(effect_id, op_id)
             }
-            effects::EffectAction::Resume => self.exec_eff_res(),
+            continuations::ContAction::Resume => self.exec_cont_resume(),
         }
     }
 
@@ -685,7 +674,7 @@ impl Vm {
             ip: 0,
             locals,
             stack: Vec::with_capacity(max_stack.max(4)),
-            eff_stack: vec![],
+            marker_stack: vec![],
             closure_ref: None,
         });
         Ok(StepResult::Continue)
@@ -715,7 +704,7 @@ impl Vm {
         frame.fn_idx = fn_idx;
         frame.ip = 0;
         frame.stack.clear();
-        frame.eff_stack.clear();
+        frame.marker_stack.clear();
         frame.closure_ref = None;
 
         frame.locals.resize(local_count, Value::UNIT);
@@ -729,9 +718,9 @@ impl Vm {
         Ok(StepResult::Continue)
     }
 
-    // ── Effects ──────────────────────────────────────────────────────
+    // ── Continuations ─────────────────────────────────────────────────
 
-    fn exec_eff_do_cross_frame(
+    fn exec_cont_save_cross_frame(
         &mut self,
         effect_id: u8,
         op_id: u32,
@@ -744,7 +733,7 @@ impl Vm {
             .skip(1)
             .find_map(|(idx, frame)| {
                 frame
-                    .eff_stack
+                    .marker_stack
                     .iter()
                     .rev()
                     .find(|f| f.effect_id == effect_id)
@@ -754,7 +743,7 @@ impl Vm {
         let h_idx = handler_idx.ok_or(VmError::NoHandler { effect_id })?;
 
         let handler_fn_id = self.call_stack[h_idx]
-            .eff_stack
+            .marker_stack
             .iter()
             .rev()
             .find(|f| f.effect_id == effect_id)
@@ -768,19 +757,19 @@ impl Vm {
         self.do_call_with_stack_args(handler_fn_id)
     }
 
-    fn exec_eff_res(&mut self) -> Result<StepResult, VmError> {
+    fn exec_cont_resume(&mut self) -> Result<StepResult, VmError> {
         let resume_value = self
             .call_stack
             .last_mut()
-            .ok_or_else(|| malformed!("eff.res with empty call stack"))?
+            .ok_or_else(|| malformed!("cont.resume with empty call stack"))?
             .stack
             .pop()
-            .ok_or_else(|| malformed!("eff.res on empty operand stack"))?;
+            .ok_or_else(|| malformed!("cont.resume on empty operand stack"))?;
 
         let cont = self
             .continuations
             .pop()
-            .ok_or_else(|| malformed!("eff.res with no captured continuation"))?;
+            .ok_or_else(|| malformed!("cont.resume with no captured continuation"))?;
 
         let op_is_fatal = self
             .module
@@ -798,7 +787,7 @@ impl Vm {
         let top = self
             .call_stack
             .last_mut()
-            .ok_or_else(|| malformed!("eff.res: no frame after restoring continuation"))?;
+            .ok_or_else(|| malformed!("cont.resume: no frame after restoring continuation"))?;
         top.stack.push(resume_value);
 
         Ok(StepResult::Continue)
@@ -910,7 +899,7 @@ impl Vm {
             ip: 0,
             locals,
             stack: Vec::with_capacity(max_stack.max(4)),
-            eff_stack: vec![],
+            marker_stack: vec![],
             closure_ref: None,
         };
 

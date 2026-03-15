@@ -1054,98 +1054,6 @@ fn test_value_try_as_ref() {
     assert!(Value::UNIT.try_as_ref().is_none());
 }
 
-// ── Tier 1: CNV_TRM ──────────────────────────────────────────────────────────
-
-#[test]
-fn test_cnv_trm_passthrough_preserves_bits() {
-    let bytes = make_msbc(
-        &[ConstEntry::I32(42)],
-        &[fn_def(
-            0,
-            0,
-            0,
-            vec![Opcode::LD_CST.0, 0, Opcode::CNV_TRM.0, 0, Opcode::RET.0],
-        )],
-    );
-    let (_, result) = run_vm(&bytes);
-    assert_eq!(result.expect("runs").as_int().expect("is int"), 42);
-}
-
-// ── Tier 1: FRE ──────────────────────────────────────────────────────────────
-
-#[test]
-fn test_fre_frees_heap_object() {
-    let bytes = make_msbc(
-        &[ConstEntry::I32(1)],
-        &[fn_def(
-            0,
-            1,
-            0,
-            vec![
-                Opcode::LD_CST.0,
-                0, // push 1
-                Opcode::MK_PRD.0,
-                1,             // mk.prd 1 → ref
-                Opcode::DUP.0, // dup ref
-                Opcode::ST_LOC.0,
-                0, // save copy to local[0]
-                Opcode::FRE.0,
-                0, // free the ref on stack (2-byte instr)
-                Opcode::LD_LOC.0,
-                0, // load the saved ref
-                Opcode::RET.0,
-            ],
-        )],
-    );
-    let (vm, result) = run_vm(&bytes);
-    let result = result.expect("runs");
-    let ptr = result.as_ref().expect("is ref");
-    assert!(
-        matches!(vm.heap().get(ptr), Err(VmError::FreedObject { .. })),
-        "object should be freed"
-    );
-}
-
-#[test]
-fn test_fre_double_free_returns_error() {
-    let bytes = make_msbc(
-        &[ConstEntry::I32(1)],
-        &[fn_def(
-            0,
-            1,
-            0,
-            vec![
-                Opcode::LD_CST.0,
-                0, // push 1
-                Opcode::MK_PRD.0,
-                1,             // mk.prd 1 → ref
-                Opcode::DUP.0, // dup ref
-                Opcode::ST_LOC.0,
-                0,             // save copy
-                Opcode::DUP.0, // dup again for second free
-                Opcode::FRE.0,
-                0, // first free
-                Opcode::FRE.0,
-                0, // second free — should error
-                Opcode::LD_LOC.0,
-                0,
-                Opcode::RET.0,
-            ],
-        )],
-    );
-    let (_, result) = run_vm(&bytes);
-    let err = result.unwrap_err();
-    match &err {
-        VmError::Runtime { source, .. } => {
-            assert!(
-                matches!(**source, VmError::FreedObject { .. }),
-                "expected FreedObject, got {source:?}"
-            );
-        }
-        _ => panic!("expected Runtime error, got {err:?}"),
-    }
-}
-
 // ── Tier 2: EFF_DO cross-frame ───────────────────────────────────────────────
 
 /// Effect pool builder for tests.
@@ -1283,7 +1191,7 @@ fn test_eff_do_cross_frame_finds_handler() {
                 local_count: 0,
                 param_count: 0,
                 code: vec![
-                    Opcode::EFF_PSH.0,
+                    Opcode::CONT_MARK.0,
                     effect_id, // push handler for effect 1
                     Opcode::INV.0,
                     1,
@@ -1300,7 +1208,7 @@ fn test_eff_do_cross_frame_finds_handler() {
                 0,
                 0,
                 vec![
-                    Opcode::EFF_DO.0,
+                    Opcode::CONT_SAVE.0,
                     1,
                     0,
                     0,
@@ -1343,7 +1251,7 @@ fn test_eff_res_resumes_continuation() {
                 local_count: 0,
                 param_count: 0,
                 code: vec![
-                    Opcode::EFF_PSH.0,
+                    Opcode::CONT_MARK.0,
                     effect_id,
                     Opcode::INV.0,
                     1,
@@ -1355,7 +1263,7 @@ fn test_eff_res_resumes_continuation() {
                 handlers: vec![(effect_id, 2)],
                 max_stack: None,
             },
-            fn_def(1, 0, 0, vec![Opcode::EFF_DO.0, 1, 0, 0, 0, Opcode::RET.0]),
+            fn_def(1, 0, 0, vec![Opcode::CONT_SAVE.0, 1, 0, 0, 0, Opcode::RET.0]),
             fn_def(
                 2,
                 0,
@@ -1363,7 +1271,7 @@ fn test_eff_res_resumes_continuation() {
                 vec![
                     Opcode::LD_CST.0,
                     0, // push 99
-                    Opcode::EFF_RES.0,
+                    Opcode::CONT_RESUME.0,
                     0,
                     0,
                     0,
@@ -1375,77 +1283,6 @@ fn test_eff_res_resumes_continuation() {
     );
     let (_, result) = run_vm(&bytes);
     assert_eq!(result.expect("runs").as_int().expect("is int"), 99);
-}
-
-#[test]
-fn test_eff_abt_after_eff_do() {
-    let effect_id: u8 = 1;
-    let bytes = make_msbc_with_effects(
-        &[],
-        &[EffectDef {
-            id: 1,
-            name_const_idx: 0,
-            ops: vec![EffectOpDef {
-                id: 1,
-                name_const_idx: 0,
-            }],
-        }],
-        &[
-            FnDef {
-                fn_id: 0,
-                local_count: 0,
-                param_count: 0,
-                code: vec![
-                    Opcode::EFF_PSH.0,
-                    effect_id,
-                    Opcode::INV.0,
-                    1,
-                    0,
-                    0,
-                    0,
-                    Opcode::RET_U.0,
-                ],
-                handlers: vec![(effect_id, 2)],
-                max_stack: None,
-            },
-            fn_def(1, 0, 0, vec![Opcode::EFF_DO.0, 1, 0, 0, 0, Opcode::RET_U.0]),
-            fn_def(
-                2,
-                0,
-                0,
-                vec![
-                    Opcode::EFF_ABT.0, // abort
-                    Opcode::RET_U.0,   // unreachable, but needed for verifier boundary
-                ],
-            ),
-        ],
-    );
-    let (_, result) = run_vm(&bytes);
-    let err = result.unwrap_err();
-    match &err {
-        VmError::Runtime { source, .. } => {
-            assert!(
-                matches!(**source, VmError::EffectAborted),
-                "expected EffectAborted, got {source:?}"
-            );
-        }
-        _ => panic!("expected Runtime error, got {err:?}"),
-    }
-}
-
-#[test]
-fn test_eff_res_c_is_noop() {
-    let bytes = make_msbc(
-        &[ConstEntry::I32(77)],
-        &[fn_def(
-            0,
-            0,
-            0,
-            vec![Opcode::LD_CST.0, 0, Opcode::EFF_RES_C.0, 0, Opcode::RET.0],
-        )],
-    );
-    let (_, result) = run_vm(&bytes);
-    assert_eq!(result.expect("runs").as_int().expect("is int"), 77);
 }
 
 // ── Tier 3: Value task/chan tags ──────────────────────────────────────────────
@@ -1809,6 +1646,9 @@ fn test_cmp_f_eq_true() {
 
 #[test]
 fn test_make_variant_multi_field_via_mk_prd_field_0() {
+    // MK_PRD wraps two values into a product. MK_VAR stores the product ref
+    // as the variant's payload (fields[0]). LD_PAY 0 extracts the product ref,
+    // then LD_FLD 0 reads field 0 of the product.
     let bytes = make_msbc(
         &[ConstEntry::I32(10), ConstEntry::I32(20)],
         &[fn_def(
@@ -1825,7 +1665,9 @@ fn test_make_variant_multi_field_via_mk_prd_field_0() {
                 Opcode::MK_VAR.0,
                 1,
                 Opcode::LD_PAY.0,
-                0,
+                0, // extract payload (product ref)
+                Opcode::LD_FLD.0,
+                0, // field 0 of the product
                 Opcode::RET.0,
             ],
         )],
@@ -1852,7 +1694,9 @@ fn test_make_variant_multi_field_via_mk_prd_field_1() {
                 Opcode::MK_VAR.0,
                 1,
                 Opcode::LD_PAY.0,
-                1,
+                0, // extract payload (product ref)
+                Opcode::LD_FLD.0,
+                1, // field 1 of the product
                 Opcode::RET.0,
             ],
         )],
