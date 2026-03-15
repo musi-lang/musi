@@ -164,5 +164,6 @@ fn extract_source_signature(source: &str, start: u32) -> Option<String> {
 
 /// Format a type for LSP display (hover, inlay hints, etc.).
 pub fn fmt_type_lsp(ty: TypeIdx, doc: &AnalyzedDoc, sema: &music_sema::SemaResult) -> String {
-    music_sema::types::fmt_type(ty, &sema.types, &sema.defs, &doc.interner).to_string()
+    music_sema::types::fmt_type(ty, &sema.types, &sema.defs, &doc.interner, Some(&sema.unify))
+        .to_string()
 }

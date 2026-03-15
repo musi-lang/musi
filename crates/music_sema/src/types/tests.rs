@@ -140,7 +140,7 @@ fn test_fmt_type_anon_sum() {
     });
 
     let defs_vec: Vec<_> = defs.iter().cloned().collect();
-    let result = fmt_type(sum, &arena, &defs_vec, &interner);
+    let result = fmt_type(sum, &arena, &defs_vec, &interner, None);
     assert_eq!(&*result, "Int + String");
 }
 
@@ -158,6 +158,6 @@ fn test_fmt_type_named() {
     });
 
     let defs_vec: Vec<_> = defs.iter().cloned().collect();
-    let result = fmt_type(ty, &arena, &defs_vec, &interner);
+    let result = fmt_type(ty, &arena, &defs_vec, &interner, None);
     assert_eq!(&*result, "Int");
 }

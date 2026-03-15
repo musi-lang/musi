@@ -128,8 +128,8 @@ impl<'a, S: BuildHasher> Checker<'a, S> {
             .unify(expected, found, &mut self.store.types, self.ctx.well_known)
         {
             let defs_vec: Vec<_> = self.defs.iter().cloned().collect();
-            let exp_str = fmt_type(expected, &self.store.types, &defs_vec, self.ctx.interner);
-            let found_str = fmt_type(found, &self.store.types, &defs_vec, self.ctx.interner);
+            let exp_str = fmt_type(expected, &self.store.types, &defs_vec, self.ctx.interner, Some(&self.store.unify));
+            let found_str = fmt_type(found, &self.store.types, &defs_vec, self.ctx.interner, Some(&self.store.unify));
             let _d = self.diags.report(
                 &SemaError::TypeMismatch {
                     expected: exp_str,
@@ -192,7 +192,7 @@ impl<'a, S: BuildHasher> Checker<'a, S> {
                 let ty_str = obligation.args.first().map_or_else(
                     || Box::from("_"),
                     |&first_arg| {
-                        fmt_type(first_arg, &self.store.types, &defs_vec, self.ctx.interner)
+                        fmt_type(first_arg, &self.store.types, &defs_vec, self.ctx.interner, Some(&self.store.unify))
                     },
                 );
                 let _d = self.diags.report(

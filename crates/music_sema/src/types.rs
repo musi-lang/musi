@@ -7,11 +7,14 @@
 #[cfg(test)]
 mod tests;
 
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::fmt;
 
 use music_shared::{Arena, Idx, Interner, Span, Symbol};
 
 use crate::def::{DefId, DefInfo};
+use crate::unify::UnifyTable;
 
 /// Index into the semantic type arena.
 pub type TypeIdx = Idx<Type>;
@@ -146,17 +149,45 @@ pub struct TypeDisplay<'a> {
     pub arena: &'a Arena<Type>,
     pub defs: &'a [DefInfo],
     pub interner: &'a Interner,
+    pub unify: Option<&'a UnifyTable>,
+    pub var_names: &'a RefCell<(HashMap<TyVarId, usize>, usize)>,
 }
 
 impl TypeDisplay<'_> {
     fn write_ty(&self, f: &mut fmt::Formatter<'_>, ty: TypeIdx) -> fmt::Result {
+        let ty = self
+            .unify
+            .map_or(ty, |u| u.resolve(ty, self.arena));
         let d = TypeDisplay {
             ty,
             arena: self.arena,
             defs: self.defs,
             interner: self.interner,
+            unify: self.unify,
+            var_names: self.var_names,
         };
         write!(f, "{d}")
+    }
+
+    fn var_letter(idx: usize) -> String {
+        let letter = (b'a' + (idx % 26) as u8) as char;
+        let suffix = idx / 26;
+        if suffix == 0 {
+            format!("'{letter}")
+        } else {
+            format!("'{letter}{suffix}")
+        }
+    }
+
+    fn name_for_var(&self, v: TyVarId) -> String {
+        let mut state = self.var_names.borrow_mut();
+        let (map, next) = &mut *state;
+        let idx = *map.entry(v).or_insert_with(|| {
+            let n = *next;
+            *next += 1;
+            n
+        });
+        Self::var_letter(idx)
     }
 
     fn resolve_def_name(&self, def: DefId) -> Result<&str, fmt::Error> {
@@ -279,8 +310,14 @@ impl fmt::Display for TypeDisplay<'_> {
                 write!(f, "&")?;
                 self.write_ty(f, *inner)
             }
-            Type::Var(v) => write!(f, "?{}", v.0),
-            Type::Rigid(v) => write!(f, "'{}", v.0),
+            Type::Var(v) => {
+                let name = self.name_for_var(*v);
+                write!(f, "{name}")
+            }
+            Type::Rigid(v) => {
+                let name = self.name_for_var(*v);
+                write!(f, "{name}")
+            }
             Type::Quantified {
                 kind,
                 params,
@@ -314,12 +351,17 @@ pub fn fmt_type(
     arena: &Arena<Type>,
     defs: &[DefInfo],
     interner: &Interner,
+    unify: Option<&UnifyTable>,
 ) -> Box<str> {
+    let var_names = RefCell::new((HashMap::new(), 0usize));
+    let ty = unify.map_or(ty, |u| u.resolve(ty, arena));
     let d = TypeDisplay {
         ty,
         arena,
         defs,
         interner,
+        unify,
+        var_names: &var_names,
     };
     Box::from(d.to_string())
 }
