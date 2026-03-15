@@ -383,24 +383,18 @@ fn synth_fn<S: BuildHasher>(
 fn synth_field<S: BuildHasher>(ck: &mut Checker<'_, S>, object: ExprIdx, field: FieldKey, span: Span) -> TypeIdx {
     let obj_ty = synth(ck, object);
     let obj_ty = ck.resolve_ty(obj_ty);
-    match &ck.store.types[obj_ty] {
+    lookup_field(ck, obj_ty, field, span)
+}
+
+fn lookup_field<S: BuildHasher>(ck: &mut Checker<'_, S>, ty: TypeIdx, field: FieldKey, span: Span) -> TypeIdx {
+    match &ck.store.types[ty] {
         Type::Record { fields, .. } => {
             if let FieldKey::Name { name, .. } = field {
+                let fields = fields.clone();
                 if let Some(f) = fields.iter().find(|f| f.name == name) {
                     f.ty
                 } else {
-                    let defs_vec: Vec<_> = ck.defs.iter().cloned().collect();
-                    let field_str = ck.ctx.interner.resolve(name);
-                    let ty_str = fmt_type(obj_ty, &ck.store.types, &defs_vec, ck.ctx.interner);
-                    let _d = ck.diags.report(
-                        &SemaError::NoSuchField {
-                            field: Box::from(field_str),
-                            ty: ty_str,
-                        },
-                        span,
-                        ck.ctx.file_id,
-                    );
-                    ck.error_ty()
+                    report_no_such_field(ck, name, ty, span)
                 }
             } else {
                 ck.error_ty()
@@ -408,6 +402,7 @@ fn synth_field<S: BuildHasher>(ck: &mut Checker<'_, S>, object: ExprIdx, field: 
         }
         Type::Tuple { elems } => {
             if let FieldKey::Pos { index, .. } = field {
+                let elems = elems.clone();
                 let idx = usize::try_from(index).expect("field index in range");
                 if idx < elems.len() {
                     elems[idx]
@@ -418,8 +413,44 @@ fn synth_field<S: BuildHasher>(ck: &mut Checker<'_, S>, object: ExprIdx, field: 
                 ck.error_ty()
             }
         }
+        Type::Named { def, args } => {
+            let (def, args) = (*def, args.clone());
+            if let Some(underlying) = ck.defs.get(def).ty_info.ty {
+                let ty_params = ck.defs.get(def).ty_info.ty_params.clone();
+                let expanded = if !ty_params.is_empty() && ty_params.len() == args.len() {
+                    let mut subst = HashMap::with_capacity(ty_params.len());
+                    for (param_def, &arg_ty) in ty_params.iter().zip(&args) {
+                        let _ = subst.insert(*param_def, arg_ty);
+                    }
+                    substitute_ty(ck, underlying, &subst)
+                } else {
+                    underlying
+                };
+                let expanded = ck.resolve_ty(expanded);
+                lookup_field(ck, expanded, field, span)
+            } else if let FieldKey::Name { name, .. } = field {
+                report_no_such_field(ck, name, ty, span)
+            } else {
+                ck.error_ty()
+            }
+        }
         _ => ck.error_ty(),
     }
+}
+
+fn report_no_such_field<S: BuildHasher>(ck: &mut Checker<'_, S>, name: Symbol, ty: TypeIdx, span: Span) -> TypeIdx {
+    let defs_vec: Vec<_> = ck.defs.iter().cloned().collect();
+    let field_str = ck.ctx.interner.resolve(name);
+    let ty_str = fmt_type(ty, &ck.store.types, &defs_vec, ck.ctx.interner, Some(&ck.store.unify));
+    let _d = ck.diags.report(
+        &SemaError::NoSuchField {
+            field: Box::from(field_str),
+            ty: ty_str,
+        },
+        span,
+        ck.ctx.file_id,
+    );
+    ck.error_ty()
 }
 
 fn synth_record<S: BuildHasher>(ck: &mut Checker<'_, S>, fields: &[RecField]) -> TypeIdx {
@@ -508,6 +539,9 @@ fn check_match_exhaustiveness<S: BuildHasher>(
     }
 
     let resolved = ck.resolve_ty(scrut_ty);
+    if matches!(ck.store.types[resolved], Type::Error | Type::Var(_)) {
+        return;
+    }
     match ck.store.types[resolved].clone() {
         Type::Sum { variants } => {
             let covered: HashSet<Symbol> = arms
@@ -533,7 +567,7 @@ fn check_match_exhaustiveness<S: BuildHasher>(
                 }
             }
         }
-        Type::Named { def, .. } if def == ck.ctx.well_known.bool => {
+        Type::Named { def, .. } => {
             let covered: HashSet<String> = arms
                 .iter()
                 .filter_map(|arm| {
@@ -544,28 +578,65 @@ fn check_match_exhaustiveness<S: BuildHasher>(
                     }
                 })
                 .collect();
-            for case in &["true", "false"] {
-                if !covered.contains(*case) {
-                    let _d = ck.diags.report(
-                        &SemaError::NonExhaustiveMatch {
-                            missing: Box::from(*case),
-                        },
-                        span,
-                        ck.ctx.file_id,
-                    );
+
+            // Well-known types with known variant sets.
+            let well_known_variants: Option<&[&str]> =
+                if def == ck.ctx.well_known.option {
+                    Some(&["Some", "None"])
+                } else if def == ck.ctx.well_known.bool {
+                    Some(&["True", "False"])
+                } else {
+                    None
+                };
+
+            if let Some(expected) = well_known_variants {
+                for case in expected {
+                    if !covered.contains(*case) {
+                        let _d = ck.diags.report(
+                            &SemaError::NonExhaustiveMatch {
+                                missing: Box::from(*case),
+                            },
+                            span,
+                            ck.ctx.file_id,
+                        );
+                    }
                 }
+            } else if let Some(dt) = ck.defs.get(def).ty_info.ty {
+                let resolved_def = ck.resolve_ty(dt);
+                if let Type::Sum { variants } = ck.store.types[resolved_def].clone() {
+                    for variant in &variants {
+                        let name_str = ck.ctx.interner.resolve(variant.name);
+                        if !covered.contains(name_str) {
+                            let _d = ck.diags.report(
+                                &SemaError::NonExhaustiveMatch {
+                                    missing: Box::from(name_str),
+                                },
+                                span,
+                                ck.ctx.file_id,
+                            );
+                        }
+                    }
+                } else {
+                    report_missing_wildcard(ck, span);
+                }
+            } else {
+                report_missing_wildcard(ck, span);
             }
         }
         _ => {
-            let _d = ck.diags.report(
-                &SemaError::NonExhaustiveMatch {
-                    missing: Box::from("_"),
-                },
-                span,
-                ck.ctx.file_id,
-            );
+            report_missing_wildcard(ck, span);
         }
     }
+}
+
+fn report_missing_wildcard<S: BuildHasher>(ck: &mut Checker<'_, S>, span: Span) {
+    let _d = ck.diags.report(
+        &SemaError::NonExhaustiveMatch {
+            missing: Box::from("_"),
+        },
+        span,
+        ck.ctx.file_id,
+    );
 }
 
 fn synth_lit<S: BuildHasher>(ck: &mut Checker<'_, S>, lit: &Lit, _span: Span) -> TypeIdx {
@@ -767,7 +838,7 @@ fn synth_call<S: BuildHasher>(ck: &mut Checker<'_, S>, callee: ExprIdx, args: &[
         }
         _ => {
             let defs_vec: Vec<_> = ck.defs.iter().cloned().collect();
-            let ty_str = fmt_type(callee_ty, &ck.store.types, &defs_vec, ck.ctx.interner);
+            let ty_str = fmt_type(callee_ty, &ck.store.types, &defs_vec, ck.ctx.interner, Some(&ck.store.unify));
             let _d = ck
                 .diags
                 .report(&SemaError::NotCallable { ty: ty_str }, span, ck.ctx.file_id);
@@ -999,8 +1070,8 @@ fn check_cast_safety<S: BuildHasher>(
         && from_def != to_def
     {
         let defs_vec: Vec<_> = ck.defs.iter().cloned().collect();
-        let from_str = fmt_type(from_resolved, &ck.store.types, &defs_vec, ck.ctx.interner);
-        let to_str = fmt_type(to_resolved, &ck.store.types, &defs_vec, ck.ctx.interner);
+        let from_str = fmt_type(from_resolved, &ck.store.types, &defs_vec, ck.ctx.interner, Some(&ck.store.unify));
+        let to_str = fmt_type(to_resolved, &ck.store.types, &defs_vec, ck.ctx.interner, Some(&ck.store.unify));
         let _d = ck.diags.report(
             &SemaError::UnsafeCast { from: from_str, to: to_str },
             span,
