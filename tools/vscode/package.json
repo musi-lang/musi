@@ -296,22 +296,6 @@
 					"default": true,
 					"description": "Run musi check when saving a .ms file."
 				},
-				"musi.server.path": {
-					"type": [
-						"string",
-						"null"
-					],
-					"default": null,
-					"markdownDescription": "Path to `music_lsp` binary. If not set, searches in `target/debug`, `target/release`, and `PATH`."
-				},
-				"musi.runtime.path": {
-					"type": [
-						"string",
-						"null"
-					],
-					"default": null,
-					"markdownDescription": "Path to Musi runtime environment. Required for code execution and some diagnostics."
-				},
 				"musi.runtime.args": {
 					"type": "array",
 					"items": { "type": "string" },
@@ -414,121 +398,6 @@
 					],
 					"default": "off",
 					"description": "Traces communication between VS Code and language server."
-				},
-				"musi.diagnostics.enable": {
-					"type": "boolean",
-					"default": true,
-					"description": "Enable/disable diagnostics from language server."
-				},
-				"musi.inlayHints.enable": {
-					"type": "boolean",
-					"default": true,
-					"description": "Enable/disable all inlay hints."
-				},
-				"musi.inlayHints.typeAnnotations.enable": {
-					"type": "boolean",
-					"default": true,
-					"markdownDescription": "Show inferred type annotations for bindings (e.g., `val x := 42` shows `: Int`)."
-				},
-				"musi.inlayHints.parameterNames.enable": {
-					"type": "boolean",
-					"default": true,
-					"markdownDescription": "Show parameter names in function calls (e.g., `foo(x:` before argument)."
-				},
-				"musi.inlayHints.parameterNames.suppressWhenArgumentMatchesName": {
-					"type": "boolean",
-					"default": true,
-					"description": "Suppress parameter name hints when argument name matches parameter."
-				},
-				"musi.inlayHints.returnTypes.enable": {
-					"type": "boolean",
-					"default": true,
-					"description": "Show return type hints for function definitions without explicit return types."
-				},
-				"musi.inlayHints.chainingHints.enable": {
-					"type": "boolean",
-					"default": true,
-					"markdownDescription": "Show type hints for intermediate values in method chains (e.g., after `|>`)."
-				},
-				"musi.semanticHighlighting.enable": {
-					"type": "boolean",
-					"default": true,
-					"description": "Enable semantic highlighting from language server."
-				},
-				"musi.semanticHighlighting.distinguishMutability": {
-					"type": "boolean",
-					"default": true,
-					"markdownDescription": "Distinguish between `val` and `var` bindings with different colors."
-				},
-				"musi.completion.enable": {
-					"type": "boolean",
-					"default": true,
-					"description": "Enable/disable code completion."
-				},
-				"musi.completion.autoImport": {
-					"type": "boolean",
-					"default": true,
-					"description": "Automatically add imports when completing symbols from other modules."
-				},
-				"musi.completion.snippets.enable": {
-					"type": "boolean",
-					"default": true,
-					"description": "Include snippet completions (e.g., `fn`, `if`, `match`)."
-				},
-				"musi.hover.enable": {
-					"type": "boolean",
-					"default": true,
-					"description": "Show hover information for symbols."
-				},
-				"musi.hover.showDocumentation": {
-					"type": "boolean",
-					"default": true,
-					"description": "Include documentation comments in hover tooltips."
-				},
-				"musi.hover.showSignature": {
-					"type": "boolean",
-					"default": true,
-					"description": "Show type signature in hover tooltips."
-				},
-				"musi.rename.enablePreview": {
-					"type": "boolean",
-					"default": true,
-					"description": "Show preview of all changes before applying rename."
-				},
-				"musi.references.excludeImports": {
-					"type": "boolean",
-					"default": false,
-					"description": "Exclude imports from find references results."
-				},
-				"musi.formatting.enable": {
-					"type": "boolean",
-					"default": true,
-					"description": "Enable/disable code formatting."
-				},
-				"musi.formatting.indentSize": {
-					"type": "number",
-					"default": 2,
-					"description": "Number of spaces for indentation."
-				},
-				"musi.formatting.maxLineWidth": {
-					"type": "number",
-					"default": 100,
-					"description": "Maximum line width before wrapping."
-				},
-				"musi.codeLens.enable": {
-					"type": "boolean",
-					"default": true,
-					"description": "Enable/disable code lens annotations."
-				},
-				"musi.codeLens.showReferences": {
-					"type": "boolean",
-					"default": true,
-					"description": "Show reference count above functions and types."
-				},
-				"musi.codeLens.showTest": {
-					"type": "boolean",
-					"default": true,
-					"markdownDescription": "Show 'Test' lens above `#[test]` functions."
 				}
 			}
 		},
@@ -580,7 +449,7 @@
 		]
 	},
 	"scripts": {
-		"build": "bun build ./client/src/main.ts --outfile=./dist/extension.js --external vscode --target=node --format=cjs",
+		"build": "bun build ./client/src/main.ts --outfile=./dist/extension.js --external vscode --target=node --format=cjs --minify",
 		"package": "bun run build && vsce package --no-dependencies",
 		"vscode:prepublish": "bun run build"
 	},
@@ -588,12 +457,12 @@
 		"vscode-languageclient": "^9.0.1"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "latest",
-		"@types/bun": "latest",
-		"@types/node": "latest",
+		"@biomejs/biome": "2.4.6",
+		"@types/bun": "1.3.10",
+		"@types/node": "25.4.0",
 		"@types/vscode": "^1.75.0",
-		"@vscode/vsce": "latest",
-		"typescript": "latest"
+		"@vscode/vsce": "3.7.1",
+		"typescript": "5.9.3"
 	},
 	"trustedDependencies": [
 		"@biomejs/biome",

@@ -27,16 +27,6 @@ function _buildClientOptions(): LanguageClientOptions {
 			fileEvents: vscode.workspace.createFileSystemWatcher("**/*.ms"),
 		},
 		outputChannel: vscode.window.createOutputChannel("Musi Language Server"),
-		initializationOptions: {
-			diagnostics: { enable: config.diagnosticsEnabled },
-			completion: { enable: config.completionEnabled },
-			formatting: {
-				enable: config.formattingEnabled,
-				indentSize: config.formattingIndentSize,
-			},
-			inlayHints: { enable: config.inlayHintsEnabled },
-			runtime: { path: config.runtimePath },
-		},
 	};
 
 	if (config.traceServer !== "off") {

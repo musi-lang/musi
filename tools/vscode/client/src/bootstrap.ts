@@ -41,7 +41,7 @@ function _findFirst(candidates: string[]): string | undefined {
  * Locate `music_lsp` server binary.
  *
  * Search order:
- * 1. User-configured `musi.server.path` setting
+ * 1. User-configured `musi.lspPath` setting
  * 2. Workspace `target/debug/music_lsp` or `target/release/music_lsp`
  * 3. Global paths: `~/.cargo/bin`, `/usr/local/bin`, `/usr/bin`
  *
@@ -50,16 +50,12 @@ function _findFirst(candidates: string[]): string | undefined {
 export async function findServerPath(): Promise<string | undefined> {
 	const config = getConfig();
 
-	// Check musi.lspPath first (new setting), then fall back to musi.server.path
-	const lspPath = config.lspPath !== CONFIG_DEFAULTS.lspPath ? config.lspPath : null;
-	const candidatePath = lspPath ?? config.serverPath;
-
-	if (candidatePath) {
-		if (_exists(candidatePath)) {
-			return candidatePath;
+	if (config.lspPath !== CONFIG_DEFAULTS.lspPath) {
+		if (_exists(config.lspPath)) {
+			return config.lspPath;
 		}
 		vscode.window.showWarningMessage(
-			`Musi: Configured server path does not exist: ${candidatePath}`,
+			`Musi: Configured server path does not exist: ${config.lspPath}`,
 		);
 	}
 

@@ -36,7 +36,7 @@ export class StatusBar {
 	 */
 	update(message: string, state: StatusState) {
 		const style = _STATE_STYLE[state];
-		this.#item.text = `${style.icon} Musi LSP`;
+		this.#item.text = `${style.icon} ${message}`;
 		this.#item.backgroundColor = style.bg
 			? new vscode.ThemeColor(style.bg)
 			: undefined;

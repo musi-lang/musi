@@ -24,6 +24,7 @@
         "outDir": "dist",
         "rootDir": "client/src",
         "sourceMap": true,
+        "skipLibCheck": true,
         "strict": true,
         "target": "ES2022",
         "types": [

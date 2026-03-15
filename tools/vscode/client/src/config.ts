@@ -41,14 +41,7 @@ export interface Config {
 	readonly lspPath: string;
 	readonly cliPath: string;
 	readonly checkOnSave: boolean;
-	readonly serverPath: string | null;
-	readonly runtimePath: string | null;
 	readonly traceServer: "off" | "messages" | "verbose";
-	readonly diagnosticsEnabled: boolean;
-	readonly inlayHintsEnabled: boolean;
-	readonly completionEnabled: boolean;
-	readonly formattingEnabled: boolean;
-	readonly formattingIndentSize: number;
 	readonly runtime: RuntimeConfig;
 	readonly compiler: CompilerConfig;
 	readonly terminal: TerminalConfig;
@@ -82,14 +75,7 @@ export const CONFIG_DEFAULTS: Config = {
 	lspPath: "music_lsp",
 	cliPath: "musi",
 	checkOnSave: true,
-	serverPath: null,
-	runtimePath: null,
 	traceServer: "off",
-	diagnosticsEnabled: true,
-	inlayHintsEnabled: true,
-	completionEnabled: true,
-	formattingEnabled: true,
-	formattingIndentSize: 2,
 	runtime: RUNTIME_DEFAULTS,
 	compiler: COMPILER_DEFAULTS,
 	terminal: TERMINAL_DEFAULTS,
@@ -107,29 +93,7 @@ export function getConfig(): Config {
 		lspPath: cfg.get("lspPath", CONFIG_DEFAULTS.lspPath),
 		cliPath: cfg.get("cliPath", CONFIG_DEFAULTS.cliPath),
 		checkOnSave: cfg.get("checkOnSave", CONFIG_DEFAULTS.checkOnSave),
-		serverPath: cfg.get("server.path", CONFIG_DEFAULTS.serverPath),
-		runtimePath: cfg.get("runtime.path", CONFIG_DEFAULTS.runtimePath),
 		traceServer: cfg.get("trace.server", CONFIG_DEFAULTS.traceServer),
-		diagnosticsEnabled: cfg.get(
-			"diagnostics.enable",
-			CONFIG_DEFAULTS.diagnosticsEnabled,
-		),
-		inlayHintsEnabled: cfg.get(
-			"inlayHints.enable",
-			CONFIG_DEFAULTS.inlayHintsEnabled,
-		),
-		completionEnabled: cfg.get(
-			"completion.enable",
-			CONFIG_DEFAULTS.completionEnabled,
-		),
-		formattingEnabled: cfg.get(
-			"formatting.enable",
-			CONFIG_DEFAULTS.formattingEnabled,
-		),
-		formattingIndentSize: cfg.get(
-			"formatting.indentSize",
-			CONFIG_DEFAULTS.formattingIndentSize,
-		),
 		runtime: {
 			args: cfg.get("runtime.args", RUNTIME_DEFAULTS.args),
 			env: cfg.get("runtime.env", RUNTIME_DEFAULTS.env),

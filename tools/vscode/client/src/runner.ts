@@ -94,8 +94,8 @@ export async function executeInTerminal(
 
 	const terminalOptions: vscode.TerminalOptions = {
 		name: "Musi",
-		env: Object.keys(request.env).length > 0 ? request.env : undefined,
-		cwd: request.cwd || undefined,
+		...(Object.keys(request.env).length > 0 ? { env: request.env } : {}),
+		...(request.cwd ? { cwd: request.cwd } : {}),
 	};
 
 	let terminal: vscode.Terminal;

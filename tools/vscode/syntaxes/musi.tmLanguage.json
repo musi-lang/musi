@@ -8,6 +8,8 @@
         { "include": "#let-definition" },
         { "include": "#class-definition" },
         { "include": "#given-definition" },
+        { "include": "#instance-definition" },
+        { "include": "#record-definition" },
         { "include": "#effect-definition" },
         { "include": "#binding-definition" },
         { "include": "#choice-body" },
@@ -71,6 +73,24 @@
         "given-definition": {
             "comment": "given Name -- type class instance",
             "match": "(\\bexport\\b\\s+)?\\b(given)\\b\\s+([A-Z][a-zA-Z0-9_]*)",
+            "captures": {
+                "1": { "name": "keyword.control.export.musi" },
+                "2": { "name": "storage.type.musi" },
+                "3": { "name": "entity.name.type.musi" }
+            }
+        },
+        "instance-definition": {
+            "comment": "instance Name -- type class instance",
+            "match": "(\\bexport\\b\\s+)?\\b(instance)\\b\\s+([A-Z][a-zA-Z0-9_]*)",
+            "captures": {
+                "1": { "name": "keyword.control.export.musi" },
+                "2": { "name": "storage.type.musi" },
+                "3": { "name": "entity.name.type.musi" }
+            }
+        },
+        "record-definition": {
+            "comment": "record Name -- record type definition",
+            "match": "(\\bexport\\b\\s+)?\\b(record)\\b\\s+([A-Z][a-zA-Z0-9_]*)",
             "captures": {
                 "1": { "name": "keyword.control.export.musi" },
                 "2": { "name": "storage.type.musi" },
@@ -173,7 +193,7 @@
             "patterns": [
                 {
                     "name": "keyword.control.musi",
-                    "match": "\\b(if|match|in|return|defer|where|try|await|spawn)\\b"
+                    "match": "\\b(if|match|in|return|defer|where|try|do|handle|resume|fatal)\\b"
                 },
                 {
                     "name": "keyword.control.import.musi",
@@ -185,11 +205,15 @@
                 },
                 {
                     "name": "storage.type.musi",
-                    "match": "\\b(let|var|class|given|effect|choice|foreign|law)\\b"
+                    "match": "\\b(let|var|class|given|instance|record|effect|choice|foreign|law)\\b"
                 },
                 {
                     "name": "keyword.other.musi",
-                    "match": "\\b(of|over|under|forall|exists|ref|inout)\\b"
+                    "match": "\\b(of|with)\\b"
+                },
+                {
+                    "name": "storage.modifier.musi",
+                    "match": "\\bmut\\b"
                 },
                 {
                     "name": "keyword.operator.logical.musi",
@@ -347,14 +371,14 @@
                     "match": "->|=>"
                 },
                 {
+                    "comment": "spread/splat: ...expr",
+                    "name": "keyword.operator.spread.musi",
+                    "match": "\\.\\.\\."
+                },
+                {
                     "comment": "range operators: .. and ..<",
                     "name": "keyword.operator.range.musi",
                     "match": "\\.\\.<|\\.\\.(?=[^\\.])"
-                },
-                {
-                    "comment": "functional record spread: <.. base",
-                    "name": "keyword.operator.spread.musi",
-                    "match": "<\\.\\."
                 },
                 {
                     "comment": "UDN: optional chaining ?. and nil coalescing ??",
@@ -379,14 +403,19 @@
                     "match": "\\.\\["
                 },
                 {
-                    "comment": "field access dot -- must not match .. range or .[ index",
+                    "comment": "field access dot -- must not match .. range, .[ index, or .{ record",
                     "name": "keyword.operator.access.musi",
-                    "match": "\\.(?![.\\[])"
+                    "match": "\\.(?![.\\[{])"
                 },
                 {
-                    "comment": "pipe @, bang !, and bar | outside choice bodies",
+                    "comment": "pipe operator |>",
+                    "name": "keyword.operator.pipe.musi",
+                    "match": "\\|>"
+                },
+                {
+                    "comment": "bang ! and bar | outside choice bodies",
                     "name": "keyword.operator.other.musi",
-                    "match": "[@!|]"
+                    "match": "[!|]"
                 }
             ]
         },
