@@ -11,8 +11,8 @@ use std::collections::HashMap;
 
 use music_shared::{DiagnosticBag, FileId, Interner, Severity, Span, Symbol};
 
-use crate::checker::{CheckContext, Checker};
 use crate::analyze_setup;
+use crate::checker::{CheckContext, Checker};
 
 /// Helper to construct a Stmt.
 fn stmt(expr_idx: ExprIdx) -> Stmt {
@@ -150,7 +150,7 @@ fn test_check_underscore_binding_suppresses_unused_warning() {
     let diags = check_module(&mut interner, &module);
 
     assert!(!diags.has_errors());
-    // Underscore prefix should suppress the unused variable warning
+    // Underscore prefix should suppress the unused binding warning
     assert!(diags.iter().all(|d| d.severity != Severity::Warning));
 }
 

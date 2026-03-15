@@ -3,10 +3,7 @@
 //! Each combinator wraps an inner iterator and transforms `next` calls.
 //! All combinators are pure Musi — no builtins needed beyond array access.
 
-foreign "musi:core" (
-  let arr_len : [] 'a -> Int;
-  let arr_push : [] 'a -> 'a -> Unit;
-);
+import "musi:core" as core;
 
 // ── Core iterator type ───────────────────────────────────────
 
@@ -16,7 +13,7 @@ export let Iter ['a] := record { next : () -> ?'a };
 
 export let from_array ['a] := (arr) => (
   let mut i := 0;
-  let len := arr_len(arr);
+  let len := core.arr_len(arr);
   .{ next := () => (
     (let idx := i; i <- i + 1; .Some(arr.[idx])) if i < len
     | .None if _
@@ -186,7 +183,7 @@ export let collect_array ['a] := (iter) => (
   let step := () => (
     let v := iter.next();
     match v (
-      .Some(x) => (arr_push(result, x); step())
+      .Some(x) => (core.arr_push(result, x); step())
       | .None => result
     )
   );

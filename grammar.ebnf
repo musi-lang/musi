@@ -218,7 +218,7 @@ astDotPfx = "." , ident , [ "(" , [ exprList ] , ")" ] ;
 astReturn = "return" , [ astExpr ] ;
 astDefer  = "defer" , astExpr ;
 astTry    = "try" , astExpr ;
-astImport = "import" , litString ;
+astImport = "import" , litString , [ "as" , ident ] ;
 astDo     = "do" , astExprPost ;
 astHandle = "with" , astTyNamed , "{" , { handlerOp , [ ";" ] } , "}"
             , "handle" , astExpr ;
@@ -252,7 +252,7 @@ astInstanceDecl = "instance" , astTyNamed , [ tyParams ] ,
 astEffectDecl = "effect" , ident , [ bracketParams ] ,
                 "{" , { effectOp , [ ";" ] } , "}" ;
 
-astForeignDecl = "foreign" , litString ,
+astForeignDecl = "foreign" , [ litString ] ,
                  ( "let" , foreignBinding
                  | "(" , { "let" , foreignBinding , ";" } , ")" ) ;
 

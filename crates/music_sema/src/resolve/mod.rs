@@ -93,6 +93,7 @@ pub fn resolve_with_imports(
         },
         current_scope: state.module_scope,
         import_names,
+        import_alias_defs: HashMap::new(),
     };
 
     for stmt in &module.stmts {
@@ -115,6 +116,7 @@ pub(super) struct Resolver<'a> {
     pub(super) output: ResolveOutput,
     pub(super) current_scope: ScopeId,
     pub(super) import_names: &'a ImportNames,
+    pub(super) import_alias_defs: HashMap<DefId, Symbol>,
 }
 
 impl Resolver<'_> {

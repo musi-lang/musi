@@ -24,8 +24,8 @@ pub enum SemaError {
     EffectInPureContext,
     #[error("undeclared effect `{effect}`")]
     UndeclaredEffect { effect: Box<str> },
-    #[error("unused variable `{name}`")]
-    UnusedVariable { name: Box<str> },
+    #[error("unused binding `{name}`")]
+    UnusedBinding { name: Box<str> },
     #[error("unused parameter `{name}`")]
     UnusedParameter { name: Box<str> },
     #[error("unused type `{name}`")]
@@ -49,7 +49,7 @@ pub enum SemaError {
 impl IntoDiagnostic for SemaError {
     fn severity(&self) -> Severity {
         match self {
-            Self::UnusedVariable { .. }
+            Self::UnusedBinding { .. }
             | Self::UnusedParameter { .. }
             | Self::UnusedType { .. }
             | Self::UnusedClass { .. }

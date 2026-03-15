@@ -37,23 +37,6 @@ export let Ordering := choice { Less + Equal + Greater };
 export let Option ['a] := choice { None + Some of 'a };
 export let Result ['a, 'e] := choice { Ok of 'a + Err of 'e };
 
-// ── Foreign builtin declarations ─────────────────────────────
-
-foreign "musi:core" (
-  let int_abs : Int -> Int;
-  let int_min : Int -> Int -> Int;
-  let int_max : Int -> Int -> Int;
-  let int_clamp : Int -> Int -> Int -> Int;
-  let int_pow : Int -> Int -> Int;
-  let str_len : String -> Int;
-  let str_contains : String -> String -> Bool;
-  let str_starts_with : String -> String -> Bool;
-  let str_ends_with : String -> String -> Bool;
-  let arr_len : [] 'a -> Int;
-  let arr_push : [] 'a -> 'a -> Unit;
-  let arr_pop : [] 'a -> ?'a;
-);
-
 // ── Instances: Eq ────────────────────────────────────────────
 
 instance Eq of Int {

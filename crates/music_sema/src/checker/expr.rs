@@ -77,7 +77,13 @@ fn synth_inner<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) -> Ty
         }
         Expr::BinOp { op, left, right, span } => synth_binop(ck, expr_idx, *op, *left, *right, *span),
         Expr::UnaryOp { op, operand, span, .. } => synth_unaryop(ck, *op, *operand, *span),
-        Expr::Field { object, field, span, .. } => synth_field(ck, *object, *field, *span),
+        Expr::Field { object, field, span, .. } => {
+            if ck.ctx.expr_defs.contains_key(&expr_idx) {
+                let _obj_ty = synth(ck, *object);
+                return synth_name(ck, expr_idx, *span);
+            }
+            synth_field(ck, *object, *field, *span)
+        }
         Expr::Index { object, index, .. } => synth_index(ck, *object, *index),
         Expr::Record { fields, .. } => {
             let fields = fields.clone();
@@ -117,7 +123,7 @@ fn synth_inner<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) -> Ty
             check_stmt(ck, expr_idx);
             ck.named_ty(ck.ctx.well_known.unit)
         }
-        Expr::Import { path, .. } => synth_import(ck, *path),
+        Expr::Import { path, alias, .. } => synth_import(ck, *path, *alias),
         Expr::Export { items, span, .. } => {
             let (items, span) = (items.clone(), *span);
             for item in &items {
@@ -1010,12 +1016,18 @@ fn synth_record_def<S: BuildHasher>(ck: &mut Checker<'_, S>, fields: &[RecDefFie
     })
 }
 
-fn synth_import<S: BuildHasher>(ck: &mut Checker<'_, S>, path: Symbol) -> TypeIdx {
-    if let Some(&record_ty) = ck.ctx.import_types.get(&path) {
-        record_ty
+fn synth_import<S: BuildHasher>(ck: &mut Checker<'_, S>, path: Symbol, alias: Option<Symbol>) -> TypeIdx {
+    let record_ty = if let Some(&ty) = ck.ctx.import_types.get(&path) {
+        ty
     } else {
         ck.named_ty(ck.ctx.well_known.unit)
+    };
+    if let Some(alias_name) = alias {
+        if let Some(def_id) = ck.scopes.lookup(ck.current_scope, alias_name) {
+            ck.defs.get_mut(def_id).ty_info.ty = Some(record_ty);
+        }
     }
+    record_ty
 }
 
 /// Expects `operand_ty` to be `Option<T>`, returning `T`.

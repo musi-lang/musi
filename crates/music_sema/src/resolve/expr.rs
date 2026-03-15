@@ -19,7 +19,7 @@ impl Resolver<'_> {
         match self.ast.exprs[expr_idx].clone() {
             Expr::Name { name, span } => self.resolve_name(expr_idx, name, span),
             Expr::Lit { ref lit, .. } => self.resolve_lit(lit),
-            Expr::Error { .. } | Expr::Import { .. } | Expr::Export { .. } => {}
+            Expr::Error { .. } | Expr::Import { .. } | Expr::Export { .. } => {},
             Expr::Paren { inner, .. } | Expr::Annotated { inner, .. } => self.resolve_expr(inner),
             Expr::Choice { body, .. } => self.resolve_expr_choice(body),
             Expr::Tuple { elems, .. } | Expr::Variant { args: elems, .. } => {
@@ -35,7 +35,21 @@ impl Resolver<'_> {
             Expr::UnaryOp { operand, .. } => {
                 self.resolve_expr(operand);
             }
-            Expr::Field { object, .. } => self.resolve_expr(object),
+            Expr::Field { object, field, .. } => {
+                self.resolve_expr(object);
+                if let music_ast::expr::FieldKey::Name { name, .. } = field {
+                    if let Some(&alias_def_id) = self.output.expr_defs.get(&object) {
+                        if let Some(&import_path) = self.import_alias_defs.get(&alias_def_id) {
+                            if let Some(names) = self.import_names.get(&import_path) {
+                                if let Some(&(_, exported_def_id)) = names.iter().find(|(n, _)| *n == name) {
+                                    let _prev = self.output.expr_defs.insert(expr_idx, exported_def_id);
+                                    self.defs.get_mut(exported_def_id).use_count += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             Expr::Index { object, index, .. } => {
                 self.resolve_expr(object);
                 self.resolve_expr(index);

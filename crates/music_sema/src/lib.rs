@@ -163,6 +163,7 @@ pub fn analyze_shared(
     file_id: FileId,
     diags: &mut DiagnosticBag,
     import_names: &ImportNames,
+    import_types: &HashMap<Symbol, TypeIdx>,
 ) -> ModuleSemaOutput {
     let module_scope = state.scopes.push_child(state.prelude_scope);
 
@@ -187,7 +188,7 @@ pub fn analyze_shared(
         well_known: &state.well_known,
         expr_defs: &resolved.expr_defs,
         pat_defs: &resolved.pat_defs,
-        import_types: &HashMap::new(),
+        import_types,
         law_inferred_vars: &resolved.law_inferred_vars,
         class_op_members: &resolved.class_op_members,
     };
@@ -352,7 +353,12 @@ fn analyze_emit_unused_warnings(
             && def.name != Symbol(u32::MAX)
             && !matches!(
                 def.kind,
-                DefKind::Given | DefKind::Variant | DefKind::Type | DefKind::Law
+                DefKind::Given
+                    | DefKind::Variant
+                    | DefKind::Type
+                    | DefKind::Law
+                    | DefKind::Class
+                    | DefKind::ForeignFn
             )
         {
             let name_str = interner.resolve(def.name);
@@ -366,7 +372,7 @@ fn analyze_emit_unused_warnings(
                 DefKind::Class => SemaError::UnusedClass { name },
                 DefKind::Effect | DefKind::EffectOp => SemaError::UnusedEffect { name },
                 DefKind::Import => SemaError::UnusedImport { name },
-                _ => SemaError::UnusedVariable { name },
+                _ => SemaError::UnusedBinding { name },
             };
             let _d = diags.report(&err, def.span, file_id);
         }

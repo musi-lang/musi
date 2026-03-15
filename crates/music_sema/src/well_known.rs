@@ -90,6 +90,24 @@ pub struct WellKnownFns {
     pub writeln: DefId,
 }
 
+/// Well-known `musi:core` builtin functions.
+#[derive(Debug, Clone)]
+pub struct WellKnownCore {
+    pub int_abs: DefId,
+    pub int_min: DefId,
+    pub int_max: DefId,
+    pub int_clamp: DefId,
+    pub int_pow: DefId,
+    pub str_len: DefId,
+    pub str_contains: DefId,
+    pub str_starts_with: DefId,
+    pub str_ends_with: DefId,
+    pub arr_len: DefId,
+    pub arr_push: DefId,
+    pub arr_pop: DefId,
+    pub arr_reverse: DefId,
+}
+
 /// `DefId` handles for all well-known (prelude) types.
 ///
 /// Populated once by [`init_well_known`] at the start of analysis.
@@ -103,6 +121,7 @@ pub struct WellKnown {
     pub effects: WellKnownEffects,
     pub containers: WellKnownContainers,
     pub fns: WellKnownFns,
+    pub core: WellKnownCore,
     // Text
     pub string: DefId,
     pub rune: DefId,
@@ -193,6 +212,22 @@ pub fn init_well_known(
         writeln: register("writeln", DefKind::Fn),
     };
 
+    let core = WellKnownCore {
+        int_abs: register("int_abs", DefKind::ForeignFn),
+        int_min: register("int_min", DefKind::ForeignFn),
+        int_max: register("int_max", DefKind::ForeignFn),
+        int_clamp: register("int_clamp", DefKind::ForeignFn),
+        int_pow: register("int_pow", DefKind::ForeignFn),
+        str_len: register("str_len", DefKind::ForeignFn),
+        str_contains: register("str_contains", DefKind::ForeignFn),
+        str_starts_with: register("str_starts_with", DefKind::ForeignFn),
+        str_ends_with: register("str_ends_with", DefKind::ForeignFn),
+        arr_len: register("arr_len", DefKind::ForeignFn),
+        arr_push: register("arr_push", DefKind::ForeignFn),
+        arr_pop: register("arr_pop", DefKind::ForeignFn),
+        arr_reverse: register("arr_reverse", DefKind::ForeignFn),
+    };
+
     let string = register("String", DefKind::Type);
     let rune = register("Rune", DefKind::Type);
     let bool = register("Bool", DefKind::Type);
@@ -210,6 +245,7 @@ pub fn init_well_known(
         effects,
         containers,
         fns,
+        core,
         string,
         rune,
         bool,
@@ -283,6 +319,39 @@ pub fn assign_well_known_types(defs: &mut DefTable, wk: &WellKnown, types: &mut 
     );
     assign_fn_type(defs, types, wk.fns.is_some, &[any_ty], bool_ty, None);
     assign_fn_type(defs, types, wk.fns.is_none, &[any_ty], bool_ty, None);
+
+    // Core builtins
+    let int_ty = types.alloc(Type::Named {
+        def: wk.ints.int,
+        args: vec![],
+    });
+
+    // int_abs: Int -> Int
+    assign_fn_type(defs, types, wk.core.int_abs, &[int_ty], int_ty, None);
+    // int_min: Int -> Int -> Int
+    assign_fn_type(defs, types, wk.core.int_min, &[int_ty, int_ty], int_ty, None);
+    // int_max: Int -> Int -> Int
+    assign_fn_type(defs, types, wk.core.int_max, &[int_ty, int_ty], int_ty, None);
+    // int_clamp: Int -> Int -> Int -> Int
+    assign_fn_type(defs, types, wk.core.int_clamp, &[int_ty, int_ty, int_ty], int_ty, None);
+    // int_pow: Int -> Int -> Int
+    assign_fn_type(defs, types, wk.core.int_pow, &[int_ty, int_ty], int_ty, None);
+    // str_len: String -> Int
+    assign_fn_type(defs, types, wk.core.str_len, &[string_ty], int_ty, None);
+    // str_contains: String -> String -> Bool
+    assign_fn_type(defs, types, wk.core.str_contains, &[string_ty, string_ty], bool_ty, None);
+    // str_starts_with: String -> String -> Bool
+    assign_fn_type(defs, types, wk.core.str_starts_with, &[string_ty, string_ty], bool_ty, None);
+    // str_ends_with: String -> String -> Bool
+    assign_fn_type(defs, types, wk.core.str_ends_with, &[string_ty, string_ty], bool_ty, None);
+    // arr_len: [Any] -> Int (polymorphic, use any_ty)
+    assign_fn_type(defs, types, wk.core.arr_len, &[any_ty], int_ty, None);
+    // arr_push: [Any] -> Any -> Unit
+    assign_fn_type(defs, types, wk.core.arr_push, &[any_ty, any_ty], unit_ty, None);
+    // arr_pop: [Any] -> Any (polymorphic)
+    assign_fn_type(defs, types, wk.core.arr_pop, &[any_ty], any_ty, None);
+    // arr_reverse: [Any] -> [Any] (polymorphic)
+    assign_fn_type(defs, types, wk.core.arr_reverse, &[any_ty], any_ty, None);
 }
 
 fn assign_fn_type(

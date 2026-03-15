@@ -157,6 +157,17 @@ impl LanguageServer for MusiBackend {
         ControlFlow::Continue(())
     }
 
+    fn did_change_watched_files(&mut self, _params: DidChangeWatchedFilesParams) -> Self::NotifyResult {
+        let open_docs: Vec<(Url, String)> = self.documents
+            .iter()
+            .map(|(uri, doc)| (uri.clone(), doc.source.clone()))
+            .collect();
+        for (uri, text) in open_docs {
+            self.analyze_and_publish(uri, &text);
+        }
+        ControlFlow::Continue(())
+    }
+
     fn did_close(&mut self, params: DidCloseTextDocumentParams) -> Self::NotifyResult {
         let _removed = self.documents.remove(&params.text_document.uri);
         let _: Result<(), _> =

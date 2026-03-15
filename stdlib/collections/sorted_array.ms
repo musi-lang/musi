@@ -3,11 +3,7 @@
 //! Elements are kept in ascending order. Lookup, insertion, and removal
 //! use binary search (O(log n) comparisons, O(n) shifts).
 
-foreign "musi:core" (
-  let arr_len : [] 'a -> Int;
-  let arr_push : [] 'a -> 'a -> Unit;
-  let arr_pop : [] 'a -> ?'a;
-);
+import "musi:core" as core;
 
 export let SortedArray ['a] := record { data : [] 'a };
 
@@ -16,7 +12,7 @@ export let new ['a] := () => .{ data := [] };
 /// Binary search: returns the index where `val` is or should be inserted.
 let binary_search ['a] := (arr, val) => (
   let mut lo := 0;
-  let mut hi := arr_len(arr);
+  let mut hi := core.arr_len(arr);
   let step := () => (
     (
       let mid := lo + (hi - lo) / 2;
@@ -35,8 +31,8 @@ let binary_search ['a] := (arr, val) => (
 export let insert ['a] := (sa, val) => (
   let arr := sa.data;
   let pos := binary_search(arr, val);
-  let len := arr_len(arr);
-  arr_push(arr, val);
+  let len := core.arr_len(arr);
+  core.arr_push(arr, val);
   let shift := (i) => (
     (arr.[i] <- arr.[i - 1]; shift(i - 1)) if i > pos
     | () if _
@@ -47,14 +43,14 @@ export let insert ['a] := (sa, val) => (
 
 export let contains ['a] := (sa, val) => (
   let arr := sa.data;
-  let len := arr_len(arr);
+  let len := core.arr_len(arr);
   let pos := binary_search(arr, val);
   pos < len and arr.[pos] = val
 );
 
 export let remove ['a] := (sa, val) => (
   let arr := sa.data;
-  let len := arr_len(arr);
+  let len := core.arr_len(arr);
   let pos := binary_search(arr, val);
   (
     (
@@ -63,13 +59,13 @@ export let remove ['a] := (sa, val) => (
         | () if _
       );
       shift(pos);
-      arr_pop(arr);
+      core.arr_pop(arr);
       .True
     ) if pos < len and arr.[pos] = val
     | .False if _
   )
 );
 
-export let len ['a] := (sa) => arr_len(sa.data);
+export let len ['a] := (sa) => core.arr_len(sa.data);
 
 export let to_array ['a] := (sa) => sa.data;

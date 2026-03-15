@@ -13,13 +13,12 @@ impl Parser<'_> {
         let start = self.start_span();
         let _foreign = self.bump();
 
-        // Expect ABI string literal
+        // ABI string literal is optional; defaults to "C".
         let abi = if self.at(TokenKind::StringLit) {
             let tok = self.bump();
             tok.symbol.unwrap_or(Symbol(u32::MAX))
         } else {
-            let _span = self.expect(TokenKind::StringLit);
-            Symbol(u32::MAX)
+            self.interner.intern("C")
         };
 
         if self.at(TokenKind::LParen) {

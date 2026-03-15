@@ -218,6 +218,36 @@ impl<'a> Emitter<'a> {
         )?;
         self.str_cat_ffi_idx = Some(str_cat_idx);
 
+        // Core builtins (musi:core)
+        let int_type_id = self.tp.lower_well_known_def(wk.ints.int, wk).ok_or_else(|| {
+            EmitError::unresolvable("Int type")
+        })?;
+        let bool_type_id = self.tp.lower_well_known_def(wk.bool, wk).ok_or_else(|| {
+            EmitError::unresolvable("Bool type")
+        })?;
+
+        let core = &wk.core;
+        let mut register_core = |def_id, ext_name: &str, params: &[u32], ret| -> Result<(), EmitError> {
+            let sym = self.interner.intern(ext_name);
+            let idx = push_foreign_fn(&mut self.foreign_fns, sym, params, ret)?;
+            let _ = self.foreign_map.insert(def_id, idx);
+            Ok(())
+        };
+
+        register_core(core.int_abs, "musi_int_abs", &[int_type_id], int_type_id)?;
+        register_core(core.int_min, "musi_int_min", &[int_type_id, int_type_id], int_type_id)?;
+        register_core(core.int_max, "musi_int_max", &[int_type_id, int_type_id], int_type_id)?;
+        register_core(core.int_clamp, "musi_int_clamp", &[int_type_id, int_type_id, int_type_id], int_type_id)?;
+        register_core(core.int_pow, "musi_int_pow", &[int_type_id, int_type_id], int_type_id)?;
+        register_core(core.str_len, "musi_str_len", &[str_type_id], int_type_id)?;
+        register_core(core.str_contains, "musi_str_contains", &[str_type_id, str_type_id], bool_type_id)?;
+        register_core(core.str_starts_with, "musi_str_starts_with", &[str_type_id, str_type_id], bool_type_id)?;
+        register_core(core.str_ends_with, "musi_str_ends_with", &[str_type_id, str_type_id], bool_type_id)?;
+        register_core(core.arr_len, "musi_arr_len", &[any_type_id], int_type_id)?;
+        register_core(core.arr_push, "musi_arr_push", &[any_type_id, any_type_id], unit_type_id)?;
+        register_core(core.arr_pop, "musi_arr_pop", &[any_type_id], any_type_id)?;
+        register_core(core.arr_reverse, "musi_arr_reverse", &[any_type_id], any_type_id)?;
+
         Ok(())
     }
 
