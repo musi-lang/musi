@@ -36,13 +36,13 @@ pub enum SemaError {
     UnusedEffect { name: Box<str> },
     #[error("unused import `{name}`")]
     UnusedImport { name: Box<str> },
-    #[error("non-exhaustive match: missing case `{missing}`")]
+    #[error("non-exhaustive match; missing case `{missing}`")]
     NonExhaustiveMatch { missing: Box<str> },
     #[error("instance of `{class}` is missing method `{method}`")]
     MissingInstanceMethod { class: Box<str>, method: Box<str> },
     #[error("handler for `{effect}` is missing operation `{op}`")]
     MissingHandlerOp { effect: Box<str>, op: Box<str> },
-    #[error("unsafe cast from `{from}` to `{to}`: types are incompatible")]
+    #[error("unsafe cast from `{from}` to `{to}`; types are incompatible")]
     UnsafeCast { from: Box<str>, to: Box<str> },
 }
 

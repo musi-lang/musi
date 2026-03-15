@@ -19,7 +19,7 @@ pub enum EmitError {
     OperandOverflow { desc: Box<str> },
     #[error("unsupported feature `{desc}`")]
     UnsupportedFeature { desc: Box<str> },
-    #[error("field not found: {desc}")]
+    #[error("field not found; {desc}")]
     FieldNotFound { desc: Box<str> },
     #[error("missing type info for {desc}")]
     NoTypeInfo { desc: Box<str> },
