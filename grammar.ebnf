@@ -75,10 +75,10 @@ astStmt = astExpr , ";" ;
    Assignment          <-              right
    Nil-coalescing      ?? !!           right
    Pipeline            |>              left
-   Comparison          = /= < > <= >= in   non-assoc
    Disjunction         or              left
    Exclusive-or        xor             left
    Conjunction         and             left
+   Comparison          = /= < > <= >= in   non-assoc
    Range               .. ..<          non-assoc
    Cons                ::              right
    Shift               << >>           left
