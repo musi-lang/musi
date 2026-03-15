@@ -75,7 +75,7 @@ fn synth_inner<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) -> Ty
             let (callee, args, span) = (*callee, args.clone(), *span);
             synth_call(ck, callee, &args, span)
         }
-        Expr::BinOp { op, left, right, span } => synth_binop(ck, *op, *left, *right, *span),
+        Expr::BinOp { op, left, right, span } => synth_binop(ck, expr_idx, *op, *left, *right, *span),
         Expr::UnaryOp { op, operand, span, .. } => synth_unaryop(ck, *op, *operand, *span),
         Expr::Field { object, field, span, .. } => synth_field(ck, *object, *field, *span),
         Expr::Index { object, index, .. } => synth_index(ck, *object, *index),
@@ -768,8 +768,23 @@ fn synth_call<S: BuildHasher>(ck: &mut Checker<'_, S>, callee: ExprIdx, args: &[
     }
 }
 
+fn find_instance_method<S: BuildHasher>(ck: &Checker<'_, S>, target_ty: TypeIdx, op_name: &str) -> Option<DefId> {
+    let op_sym = ck.ctx.interner.get(op_name)?;
+    let resolved = ck.store.unify.resolve(target_ty, &ck.store.types);
+    for inst in &ck.store.instances {
+        let inst_target = ck.store.unify.resolve(inst.target, &ck.store.types);
+        if inst_target == resolved {
+            if let Some(&def_id) = inst.members.iter().find(|(s, _)| *s == op_sym).map(|(_, id)| id) {
+                return Some(def_id);
+            }
+        }
+    }
+    None
+}
+
 fn synth_binop<S: BuildHasher>(
     ck: &mut Checker<'_, S>,
+    expr_idx: ExprIdx,
     op: BinOp,
     left: ExprIdx,
     right: ExprIdx,
@@ -777,6 +792,13 @@ fn synth_binop<S: BuildHasher>(
 ) -> TypeIdx {
     let left_ty = synth(ck, left);
     let right_ty = synth(ck, right);
+
+    // Try operator dispatch through typeclass instances before built-in rules.
+    if let Some(op_name) = op.operator_name() {
+        if let Some(method_def) = find_instance_method(ck, left_ty, op_name) {
+            let _prev = ck.store.binop_dispatch.insert(expr_idx, method_def);
+        }
+    }
 
     match op {
         BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge | BinOp::In => {

@@ -20,7 +20,7 @@ pub struct Parser<'a> {
     pos: usize,
     pub(crate) file_id: FileId,
     pub(crate) diags: &'a mut DiagnosticBag,
-    interner: &'a Interner,
+    pub(crate) interner: &'a mut Interner,
     pub(crate) arenas: AstArenas,
 }
 
@@ -29,7 +29,7 @@ impl<'a> Parser<'a> {
         tokens: &'a [Token],
         file_id: FileId,
         diags: &'a mut DiagnosticBag,
-        interner: &'a Interner,
+        interner: &'a mut Interner,
     ) -> Self {
         Self {
             tokens,

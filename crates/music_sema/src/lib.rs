@@ -54,6 +54,8 @@ pub struct ResolutionMap {
     pub pat_defs: HashMap<Span, DefId>,
     /// Maps law span → inferred (implicit) law variables, for LSP inlay hints.
     pub law_inferred_vars: HashMap<Span, Vec<(Symbol, DefId)>>,
+    /// Maps (class DefId, operator Symbol) → member DefId for operator dispatch.
+    pub class_op_members: HashMap<(DefId, Symbol), DefId>,
 }
 
 /// The complete result of semantic analysis of a single module.
@@ -70,6 +72,8 @@ pub struct SemaResult {
     pub unify: UnifyTable,
     /// Typeclass instances discovered during analysis.
     pub instances: Vec<InstanceInfo>,
+    /// Maps BinOp expression index → instance method DefId for operator dispatch.
+    pub binop_dispatch: HashMap<ExprIdx, DefId>,
     /// Well-known prelude type definitions (needed by bytecode emission).
     pub well_known: WellKnown,
 }
@@ -100,6 +104,8 @@ pub struct ModuleSemaOutput {
     pub resolution: ResolutionMap,
     pub expr_types: HashMap<ExprIdx, TypeIdx>,
     pub instances: Vec<InstanceInfo>,
+    /// Maps BinOp expression index → instance method DefId for operator dispatch.
+    pub binop_dispatch: HashMap<ExprIdx, DefId>,
 }
 
 impl SharedAnalysisState {
@@ -133,6 +139,7 @@ impl SharedAnalysisState {
             types: self.types,
             unify: self.unify,
             instances: output.instances,
+            binop_dispatch: output.binop_dispatch,
             well_known: self.well_known,
         }
     }
@@ -202,9 +209,11 @@ pub fn analyze_shared(
             expr_defs: resolved.expr_defs,
             pat_defs: resolved.pat_defs,
             law_inferred_vars: resolved.law_inferred_vars,
+            class_op_members: resolved.class_op_members,
         },
         expr_types: result.expr_types,
         instances: result.instances,
+        binop_dispatch: result.binop_dispatch,
     }
 }
 
@@ -268,11 +277,13 @@ pub fn analyze_with_imports<S: BuildHasher>(
             expr_defs: resolved.expr_defs,
             pat_defs: resolved.pat_defs,
             law_inferred_vars: resolved.law_inferred_vars,
+            class_op_members: resolved.class_op_members,
         },
         expr_types: result.expr_types,
         types: result.types,
         unify: result.unify,
         instances: result.instances,
+        binop_dispatch: result.binop_dispatch,
         well_known,
     }
 }

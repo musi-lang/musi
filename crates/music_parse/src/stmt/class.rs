@@ -167,9 +167,17 @@ impl Parser<'_> {
     fn parse_op_or_ident(&mut self) -> Symbol {
         if self.at(TokenKind::LParen) {
             let _lp = self.bump();
-            // try symbol first, fall back to fixed_text sentinel
             let tok = self.bump();
-            let sym = tok.symbol.unwrap_or(Symbol(u32::MAX));
+            let sym = if let Some(s) = tok.symbol {
+                s
+            } else if let Some(text) = tok.kind.fixed_text() {
+                self.interner.intern(text)
+            } else {
+                let span = tok.span;
+                let err = crate::error::ParseError::ExpectedIdent;
+                let _diag = self.diags.report(&err, span, self.file_id);
+                Symbol(u32::MAX)
+            };
             let _rp = self.expect(TokenKind::RParen);
             sym
         } else {

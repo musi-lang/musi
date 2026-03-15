@@ -19,9 +19,9 @@ fn lex(src: &str) -> (Vec<Token>, Interner, FileId) {
 
 fn parse_single_expr(src: &str) -> (Expr, DiagnosticBag) {
     let full = format!("{src};");
-    let (tokens, interner, file_id) = lex(&full);
+    let (tokens, mut interner, file_id) = lex(&full);
     let mut diags = DiagnosticBag::new();
-    let module = parse(&tokens, file_id, &mut diags, &interner);
+    let module = parse(&tokens, file_id, &mut diags, &mut interner);
     assert_eq!(module.stmts.len(), 1, "expected exactly one statement");
     let expr = module.arenas.exprs[module.stmts[0].expr].clone();
     (expr, diags)
@@ -84,9 +84,9 @@ fn test_parse_addition() {
 fn test_parse_precedence_mul_over_add() {
     // 1 + 2 * 3 should parse as 1 + (2 * 3)
     let full = "1 + 2 * 3;";
-    let (tokens, interner, file_id) = lex(full);
+    let (tokens, mut interner, file_id) = lex(full);
     let mut diags = DiagnosticBag::new();
-    let module = parse(&tokens, file_id, &mut diags, &interner);
+    let module = parse(&tokens, file_id, &mut diags, &mut interner);
     assert!(!diags.has_errors());
     let top = &module.arenas.exprs[module.stmts[0].expr];
     assert!(
@@ -104,9 +104,9 @@ fn test_parse_precedence_mul_over_add() {
 fn test_parse_left_associativity() {
     // 1 - 2 - 3 should parse as (1 - 2) - 3
     let full = "1 - 2 - 3;";
-    let (tokens, interner, file_id) = lex(full);
+    let (tokens, mut interner, file_id) = lex(full);
     let mut diags = DiagnosticBag::new();
-    let module = parse(&tokens, file_id, &mut diags, &interner);
+    let module = parse(&tokens, file_id, &mut diags, &mut interner);
     assert!(!diags.has_errors());
     let top = &module.arenas.exprs[module.stmts[0].expr];
     assert!(
@@ -124,9 +124,9 @@ fn test_parse_left_associativity() {
 fn test_parse_cons_right_associativity() {
     // 1 :: 2 :: 3 should parse as 1 :: (2 :: 3)
     let full = "1 :: 2 :: 3;";
-    let (tokens, interner, file_id) = lex(full);
+    let (tokens, mut interner, file_id) = lex(full);
     let mut diags = DiagnosticBag::new();
-    let module = parse(&tokens, file_id, &mut diags, &interner);
+    let module = parse(&tokens, file_id, &mut diags, &mut interner);
     assert!(!diags.has_errors());
     let top = &module.arenas.exprs[module.stmts[0].expr];
     assert!(

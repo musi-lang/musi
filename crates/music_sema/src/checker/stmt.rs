@@ -11,8 +11,9 @@ use std::hash::BuildHasher;
 use crate::checker::Checker;
 use crate::checker::expr::{check, synth};
 use crate::checker::ty::lower_ty;
-use crate::def::DefKind;
+use crate::def::{DefId, DefKind};
 use crate::error::SemaError;
+use crate::types::InstanceInfo;
 
 /// Checks a class/given member's default body with sig params in scope.
 fn check_member_fn<S: BuildHasher>(ck: &mut Checker<'_, S>, member: &ClassMember) {
@@ -206,6 +207,34 @@ pub fn check_stmt<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: Idx<music_a
             };
             check_class_members(ck, &members, &all_params);
             check_instance_method_coverage(ck, target.name, &members, span);
+
+            // Build InstanceInfo so the checker can resolve operator dispatch.
+            if let Some(class_def) = ck.scopes.lookup(ck.current_scope, target.name) {
+                let target_ty = if let Some(&first_arg) = target.args.first() {
+                    lower_ty(ck, first_arg)
+                } else {
+                    ck.fresh_var(span)
+                };
+                let member_defs: Vec<(Symbol, DefId)> = members
+                    .iter()
+                    .filter_map(|m| {
+                        if let ClassMember::Fn { sig, .. } = m {
+                            ck.ctx.pat_defs.get(&sig.span).map(|&id| (sig.name, id))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                ck.store.instances.push(InstanceInfo {
+                    class: class_def,
+                    target: target_ty,
+                    params: vec![],
+                    constraints: vec![],
+                    members: member_defs,
+                    span,
+                });
+            }
+
             if let Some(p) = parent {
                 ck.current_scope = p;
             }

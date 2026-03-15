@@ -55,7 +55,7 @@ pub fn run_frontend(path: &Path) -> Result<FrontendOutput, ()> {
 
     let file_id = source_db.add(path.display().to_string(), source.as_str());
     let lexed = lex(&source, file_id, &mut interner, &mut diags);
-    let parsed = parse(&lexed.tokens, file_id, &mut diags, &interner);
+    let parsed = parse(&lexed.tokens, file_id, &mut diags, &mut interner);
     let sema = analyze(&parsed, &mut interner, file_id, &mut diags);
 
     render_diagnostics(&diags, &source_db);

@@ -22,7 +22,7 @@ fn analyze_src(src: &str) -> (SemaResult, DiagnosticBag) {
 
     // Parse
     let mut parse_diags = DiagnosticBag::new();
-    let module = parse(&lexed.tokens, file_id, &mut parse_diags, &interner);
+    let module = parse(&lexed.tokens, file_id, &mut parse_diags, &mut interner);
     assert!(!parse_diags.has_errors(), "parse error");
 
     // Analyze

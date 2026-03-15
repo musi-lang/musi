@@ -65,7 +65,7 @@ fn typecheck_all_std_files() {
 
         // Parse
         let mut parse_diags = DiagnosticBag::new();
-        let module = parse(&lexed.tokens, file_id, &mut parse_diags, &interner);
+        let module = parse(&lexed.tokens, file_id, &mut parse_diags, &mut interner);
 
         // Analyze
         let mut sema_diags = DiagnosticBag::new();

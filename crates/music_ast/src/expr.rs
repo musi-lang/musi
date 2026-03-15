@@ -362,6 +362,31 @@ pub enum BinOp {
     ForceCoal,
 }
 
+impl BinOp {
+    /// Returns the operator text for this binary op if it's an overloadable operator.
+    #[must_use]
+    pub const fn operator_name(self) -> Option<&'static str> {
+        match self {
+            Self::Add => Some("+"),
+            Self::Sub => Some("-"),
+            Self::Mul => Some("*"),
+            Self::Div => Some("/"),
+            Self::Rem => Some("%"),
+            Self::Eq => Some("="),
+            Self::Ne => Some("/="),
+            Self::Lt => Some("<"),
+            Self::Gt => Some(">"),
+            Self::Le => Some("<="),
+            Self::Ge => Some(">="),
+            Self::Shl => Some("<<"),
+            Self::Shr => Some(">>"),
+            Self::Cons => Some("::"),
+            Self::Pipe => Some("|>"),
+            _ => None,
+        }
+    }
+}
+
 /// Unary operator.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum UnaryOp {

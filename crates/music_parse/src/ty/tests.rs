@@ -20,9 +20,9 @@ fn lex(src: &str) -> (Vec<Token>, Interner, FileId) {
 /// Parse `let x : <type> := 0;` and extract the type from the binding.
 fn parse_ty_from_let(ty_src: &str) -> (Ty, DiagnosticBag) {
     let src = format!("let x : {ty_src} := 0;");
-    let (tokens, interner, file_id) = lex(&src);
+    let (tokens, mut interner, file_id) = lex(&src);
     let mut diags = DiagnosticBag::new();
-    let module = parse(&tokens, file_id, &mut diags, &interner);
+    let module = parse(&tokens, file_id, &mut diags, &mut interner);
     assert_eq!(module.stmts.len(), 1);
     let expr = &module.arenas.exprs[module.stmts[0].expr];
     assert!(matches!(expr, Expr::Let { .. }), "expected Let");
@@ -141,9 +141,9 @@ fn test_parse_ty_fn_chain_effects_attach_to_inner() {
     // `A -> B ~> C under { IO }` should produce:
     // Fn { params: [A], ret: Fn { params: [B], ret: C, effects: Some({IO}) }, effects: None }
     let src = "let x : Int -> Bool ~> String with { IO } := 0;";
-    let (tokens, interner, file_id) = lex(src);
+    let (tokens, mut interner, file_id) = lex(src);
     let mut diags = DiagnosticBag::new();
-    let module = parse(&tokens, file_id, &mut diags, &interner);
+    let module = parse(&tokens, file_id, &mut diags, &mut interner);
     assert!(!diags.has_errors());
 
     let expr = &module.arenas.exprs[module.stmts[0].expr];

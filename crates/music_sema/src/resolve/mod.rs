@@ -36,6 +36,8 @@ pub struct ResolveOutput {
     pub pat_defs: HashMap<Span, DefId>,
     /// Maps law span → inferred (implicit) law variables, for LSP inlay hints.
     pub law_inferred_vars: HashMap<Span, Vec<(Symbol, DefId)>>,
+    /// Maps (class DefId, operator Symbol) → member DefId for operator dispatch.
+    pub class_op_members: HashMap<(DefId, Symbol), DefId>,
 }
 
 /// Mutable resolution state bundling the definition table, scope tree, and
@@ -87,6 +89,7 @@ pub fn resolve_with_imports(
             expr_defs: HashMap::new(),
             pat_defs: HashMap::new(),
             law_inferred_vars: HashMap::new(),
+            class_op_members: HashMap::new(),
         },
         current_scope: state.module_scope,
         import_names,

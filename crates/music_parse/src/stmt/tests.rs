@@ -17,9 +17,9 @@ fn lex(src: &str) -> (Vec<Token>, Interner, FileId) {
 }
 
 fn parse_single(src: &str) -> (Expr, DiagnosticBag) {
-    let (tokens, interner, file_id) = lex(src);
+    let (tokens, mut interner, file_id) = lex(src);
     let mut diags = DiagnosticBag::new();
-    let module = parse(&tokens, file_id, &mut diags, &interner);
+    let module = parse(&tokens, file_id, &mut diags, &mut interner);
     assert_eq!(module.stmts.len(), 1, "expected one stmt for: {src}");
     let expr = module.arenas.exprs[module.stmts[0].expr].clone();
     (expr, diags)

@@ -697,6 +697,24 @@ fn emit_binop_expr(
     left: ExprIdx,
     right: ExprIdx,
 ) -> Result<bool, EmitError> {
+    if let Some(&def_id) = em.sema.binop_dispatch.get(&expr_idx) {
+        if let Some(&fn_id) = em.fn_map.get(&def_id) {
+            let produced_left = emit_expr(em, fc, left)?;
+            if !produced_left {
+                return Err(EmitError::UnsupportedFeature {
+                    desc: "dispatched binop left operand produced no value".into(),
+                });
+            }
+            let produced_right = emit_expr(em, fc, right)?;
+            if !produced_right {
+                return Err(EmitError::UnsupportedFeature {
+                    desc: "dispatched binop right operand produced no value".into(),
+                });
+            }
+            fc.fe.emit_inv(fn_id, false, 2);
+            return Ok(true);
+        }
+    }
     match op {
         BinOp::And => {
             desugar::emit_and(em, fc, left, right)?;

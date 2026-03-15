@@ -28,10 +28,19 @@ impl Resolver<'_> {
         self.current_scope = parent;
 
         // Export class members to the enclosing scope (Haskell-style).
-        // Skip operator identifiers (sentinel Symbol) — they're resolved via dispatch.
+        // Operator members (sentinel Symbol(u32::MAX)) are registered in class_op_members
+        // instead of the name scope — they're resolved via operator dispatch.
         for (member_name, def_id) in member_defs {
             if member_name == Symbol(u32::MAX) {
+                if let Some(class_def) = class_def {
+                    let _prev = self.output.class_op_members.insert((class_def, member_name), def_id);
+                }
                 continue;
+            }
+            // Register non-sentinel members in class_op_members too, keyed by their symbol,
+            // so the checker can find operator methods that have real interned names.
+            if let Some(class_def) = class_def {
+                let _prev = self.output.class_op_members.insert((class_def, member_name), def_id);
             }
             let span = self.defs.get(def_id).span;
             self.define_in_scope(member_name, def_id, span);

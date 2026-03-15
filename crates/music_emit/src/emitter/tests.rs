@@ -13,7 +13,7 @@ fn compile(source: &str) -> Result<EmitOutput, String> {
     let mut diags = DiagnosticBag::new();
     let file_id = FileId(0);
     let lexed = lex(source, file_id, &mut interner, &mut diags);
-    let parsed = parse(&lexed.tokens, file_id, &mut diags, &interner);
+    let parsed = parse(&lexed.tokens, file_id, &mut diags, &mut interner);
     let sema = analyze(&parsed, &mut interner, file_id, &mut diags);
     if diags.has_errors() {
         let msgs: Vec<String> = diags
@@ -32,7 +32,7 @@ fn compile_lenient(source: &str) -> Result<EmitOutput, String> {
     let mut diags = DiagnosticBag::new();
     let file_id = FileId(0);
     let lexed = lex(source, file_id, &mut interner, &mut diags);
-    let parsed = parse(&lexed.tokens, file_id, &mut diags, &interner);
+    let parsed = parse(&lexed.tokens, file_id, &mut diags, &mut interner);
     let sema = analyze(&parsed, &mut interner, file_id, &mut diags);
     emit(&parsed, &sema, &mut interner, file_id).map_err(|e| e.to_string())
 }

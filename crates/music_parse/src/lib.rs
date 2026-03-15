@@ -24,7 +24,7 @@ pub fn parse(
     tokens: &[Token],
     file_id: FileId,
     diags: &mut DiagnosticBag,
-    interner: &Interner,
+    interner: &mut Interner,
 ) -> ParsedModule {
     let mut parser = Parser::new(tokens, file_id, diags, interner);
     parser.parse_program()

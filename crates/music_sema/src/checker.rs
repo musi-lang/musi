@@ -47,6 +47,8 @@ pub struct TypeStore {
     pub(crate) obligations: Vec<Obligation>,
     pub(crate) instances: Vec<InstanceInfo>,
     pub(crate) expr_types: HashMap<ExprIdx, TypeIdx>,
+    /// Maps BinOp expression index → the instance method DefId that handles it.
+    pub(crate) binop_dispatch: HashMap<ExprIdx, DefId>,
 }
 
 pub struct Checker<'a, S: BuildHasher = RandomState> {
@@ -79,6 +81,7 @@ impl<'a, S: BuildHasher> Checker<'a, S> {
                 obligations: vec![],
                 instances: vec![],
                 expr_types: HashMap::new(),
+                binop_dispatch: HashMap::new(),
             },
             diags,
             defs,
@@ -200,6 +203,7 @@ impl<'a, S: BuildHasher> Checker<'a, S> {
             unify: self.store.unify,
             expr_types: self.store.expr_types,
             instances: self.store.instances,
+            binop_dispatch: self.store.binop_dispatch,
         }
     }
 }
@@ -209,4 +213,5 @@ pub struct CheckerResult {
     pub unify: UnifyTable,
     pub expr_types: HashMap<ExprIdx, TypeIdx>,
     pub instances: Vec<InstanceInfo>,
+    pub binop_dispatch: HashMap<ExprIdx, DefId>,
 }

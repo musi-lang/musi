@@ -20,9 +20,9 @@ fn lex(src: &str) -> (Vec<Token>, Interner, FileId) {
 /// Parse `let <pat> := 0;` and extract the pattern.
 fn parse_pat_from_let(pat_src: &str) -> (Pat, DiagnosticBag) {
     let src = format!("let {pat_src} := 0;");
-    let (tokens, interner, file_id) = lex(&src);
+    let (tokens, mut interner, file_id) = lex(&src);
     let mut diags = DiagnosticBag::new();
-    let module = parse(&tokens, file_id, &mut diags, &interner);
+    let module = parse(&tokens, file_id, &mut diags, &mut interner);
     assert_eq!(module.stmts.len(), 1);
     let expr = &module.arenas.exprs[module.stmts[0].expr];
     assert!(matches!(expr, Expr::Let { .. }), "expected Let");
