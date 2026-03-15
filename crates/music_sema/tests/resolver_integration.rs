@@ -1,7 +1,7 @@
 //! Integration tests for name resolution.
 #![allow(clippy::tests_outside_test_module)]
 //!
-//! These tests verify the resolver by running the full lex → parse → resolve
+//! These tests verify the resolver by running the full lex -> parse -> resolve
 //! pipeline on source code strings.
 
 use music_lex::lex as lex_source;

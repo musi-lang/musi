@@ -78,7 +78,7 @@ impl Parser<'_> {
         };
 
         if self.eat(TokenKind::Colon) {
-            // Has type annotation → foreign function
+            // Has type annotation -> foreign function
             let ty = self.parse_alloc_ty();
             ForeignDecl::Fn {
                 name,
@@ -87,7 +87,7 @@ impl Parser<'_> {
                 span: self.finish_span(start),
             }
         } else {
-            // No type annotation → opaque type
+            // No type annotation -> opaque type
             ForeignDecl::OpaqueType {
                 name,
                 span: self.finish_span(start),

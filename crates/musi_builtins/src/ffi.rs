@@ -184,13 +184,19 @@ fn marshal_args(args: Vec<Value>, heap: &Heap) -> Result<Vec<MarshaledArg>, VmEr
 }
 
 fn lookup_builtin(ext_name: &str) -> Option<BuiltinFn> {
+    // Legacy unqualified names (existing builtins).
     match ext_name {
-        "musi_show" => Some(builtin_show),
-        "musi_str_cat" => Some(builtin_str_cat),
-        "musi_writeln" => Some(builtin_writeln),
-        "musi_write" => Some(builtin_write),
-        _ => None,
+        "musi_show" => return Some(builtin_show),
+        "musi_str_cat" => return Some(builtin_str_cat),
+        "musi_writeln" => return Some(builtin_writeln),
+        "musi_write" => return Some(builtin_write),
+        _ => {}
     }
+    // Module-qualified: "core::str_len", "core::arr_push", etc.
+    if let Some(name) = ext_name.strip_prefix("core::") {
+        return crate::core::lookup(name);
+    }
+    None
 }
 
 fn builtin_writeln(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {

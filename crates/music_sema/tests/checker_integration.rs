@@ -1,7 +1,7 @@
 //! Integration tests for the type checker.
 #![allow(clippy::tests_outside_test_module)]
 //!
-//! These tests verify the type checker by running the full lex → parse → analyze
+//! These tests verify the type checker by running the full lex -> parse -> analyze
 //! pipeline on source code strings.
 
 use music_lex::lex as lex_source;

@@ -319,7 +319,7 @@ pub fn emit_range(
             desc: "range end produced no value".into(),
         });
     }
-    fc.fe.emit_mk_prd(2, 1)?; // (start, end) product, pops 2 pushes 1 → net pop 1
+    fc.fe.emit_mk_prd(2, 1)?; // (start, end) product, pops 2 pushes 1 -> net pop 1
     Ok(())
 }
 

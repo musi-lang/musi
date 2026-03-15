@@ -59,15 +59,15 @@ pub struct Emitter<'a> {
     stmts: Vec<Stmt>,
     pub cp: ConstPool,
     pub tp: TypePool,
-    /// `DefId` → bytecode `fn_id` for user-defined functions.
+    /// `DefId` -> bytecode `fn_id` for user-defined functions.
     pub(crate) fn_map: HashMap<DefId, u32>,
-    /// `DefId` → index into `foreign_fns` for FFI functions.
+    /// `DefId` -> index into `foreign_fns` for FFI functions.
     pub(crate) foreign_map: HashMap<DefId, u32>,
     pub foreign_fns: Vec<ForeignFn>,
     pub effects: Vec<EffectDef>,
-    /// `DefId` → numeric effect ID (index into `effects`) for user-defined effects.
+    /// `DefId` -> numeric effect ID (index into `effects`) for user-defined effects.
     pub(crate) effect_id_map: HashMap<DefId, u8>,
-    /// `DefId` → `op.id` for user-defined effect operations.
+    /// `DefId` -> `op.id` for user-defined effect operations.
     pub(crate) op_id_map: HashMap<DefId, u32>,
     /// Index into `foreign_fns` for the `str_cat` helper (used by f-string desugar).
     pub(crate) str_cat_ffi_idx: Option<u32>,
@@ -91,7 +91,7 @@ pub struct FnCtx {
     pub upvalue_map: HashMap<DefId, u16>,
     pub deferred: Vec<ExprIdx>,
     next_label: u32,
-    /// Maps constraint class `DefId` → local slot holding the dictionary.
+    /// Maps constraint class `DefId` -> local slot holding the dictionary.
     pub dict_slots: HashMap<DefId, u32>,
 }
 

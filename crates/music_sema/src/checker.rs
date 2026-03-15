@@ -38,7 +38,7 @@ pub struct CheckContext<'a, S: BuildHasher = RandomState> {
     pub(crate) import_types: &'a HashMap<Symbol, TypeIdx, S>,
     /// Inferred law variables from the resolver, keyed by law span.
     pub(crate) law_inferred_vars: &'a HashMap<Span, Vec<(Symbol, DefId)>>,
-    /// Maps (class `DefId`, operator `Symbol`) → member `DefId` for operator dispatch.
+    /// Maps (class `DefId`, operator `Symbol`) -> member `DefId` for operator dispatch.
     pub(crate) class_op_members: &'a HashMap<(DefId, Symbol), DefId>,
 }
 
@@ -49,11 +49,11 @@ pub struct TypeStore {
     pub(crate) obligations: Vec<Obligation>,
     pub(crate) instances: Vec<InstanceInfo>,
     pub(crate) expr_types: HashMap<ExprIdx, TypeIdx>,
-    /// Maps `BinOp` expression index → the instance method `DefId` that handles it.
+    /// Maps `BinOp` expression index -> the instance method `DefId` that handles it.
     pub(crate) binop_dispatch: HashMap<ExprIdx, DefId>,
-    /// Maps `BinOp` expression → dictionary lookup info for polymorphic dispatch.
+    /// Maps `BinOp` expression -> dictionary lookup info for polymorphic dispatch.
     pub(crate) binop_dict_dispatch: HashMap<ExprIdx, DictLookup>,
-    /// Maps function `DefId` → ordered list of class constraints (for dict params).
+    /// Maps function `DefId` -> ordered list of class constraints (for dict params).
     pub(crate) fn_constraints: HashMap<DefId, Vec<Obligation>>,
     /// In-scope class obligations for the current generic function.
     pub(crate) active_obligations: Vec<Obligation>,

@@ -10,7 +10,7 @@ use crate::error::VmError;
 
 // Non-float tag sentinels (top 16 bits).
 const TAG_INT: u16 = 0x7FF1; // signed 48-bit integer (sign-extended)
-const TAG_UINT: u16 = 0x7FF2; // unsigned 48-bit integer
+const TAG_NAT: u16 = 0x7FF2; // unsigned 48-bit integer
 const TAG_BOOL: u16 = 0x7FF3;
 const TAG_RUNE: u16 = 0x7FF4; // Unicode scalar value (char)
 const TAG_REF: u16 = 0x7FF5; // GC heap index (48-bit)
@@ -28,24 +28,29 @@ const MUSI_TAG_HI: u16 = 0x7FFA;
 /// 48-bit mask for the payload portion of a `Value`.
 const PAYLOAD_MASK: u64 = 0x0000_FFFF_FFFF_FFFF;
 
-/// u16 → u64 widening (const-safe, no `as`).
+/// Canonical NaN — tag `0x7FF0` (below `MUSI_TAG_LO`), payload bit 0 set.
+/// All NaN variants collapse to this value in `from_float` so they are never
+/// mistaken for a tagged MUSI value (Lua-style NaN canonicalization).
+const CANONICAL_NAN_BITS: u64 = 0x7FF0_0000_0000_0001;
+
+/// u16 -> u64 widening (const-safe, no `as`).
 const fn u16_as_u64(v: u16) -> u64 {
     let bytes = v.to_le_bytes();
     u64::from_le_bytes([bytes[0], bytes[1], 0, 0, 0, 0, 0, 0])
 }
 
-/// i64 → u64 bit reinterpretation (const-safe, no `as`).
+/// i64 -> u64 bit reinterpretation (const-safe, no `as`).
 const fn i64_to_bits(n: i64) -> u64 {
     u64::from_le_bytes(n.to_le_bytes())
 }
 
-/// u32 → u64 widening (const-safe, no `as`).
+/// u32 -> u64 widening (const-safe, no `as`).
 const fn u32_as_u64(v: u32) -> u64 {
     let bytes = v.to_le_bytes();
     u64::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3], 0, 0, 0, 0])
 }
 
-/// char → u64 (const-safe). char → u32 requires `as`; isolated here.
+/// char -> u64 (const-safe). char -> u32 requires `as`; isolated here.
 #[allow(clippy::as_conversions)]
 const fn char_as_u64(c: char) -> u64 {
     c as u64
@@ -62,6 +67,9 @@ impl Value {
     /// The unit value.
     pub const UNIT: Self = Self(u16_as_u64(TAG_UNIT) << 48);
 
+    /// Canonical NaN value, safe for NaN-boxed representation.
+    pub const NAN: Self = Self(CANONICAL_NAN_BITS);
+
     /// True boolean.
     pub const TRUE: Self = Self::from_bool(true);
     /// False boolean.
@@ -76,15 +84,24 @@ impl Value {
 
     /// Wrap an unsigned integer (only the low 48 bits are stored).
     #[must_use]
-    pub const fn from_uint(n: u64) -> Self {
+    pub const fn from_nat(n: u64) -> Self {
         let payload = n & PAYLOAD_MASK;
-        Self((u16_as_u64(TAG_UINT) << 48) | payload)
+        Self((u16_as_u64(TAG_NAT) << 48) | payload)
     }
 
-    /// Wrap an `f64`.
+    /// Wrap an `f64`, canonicalizing NaN variants whose bit pattern would
+    /// collide with the tagged value range (`0x7FF1`–`0x7FFA`).
     #[must_use]
     pub const fn from_float(f: f64) -> Self {
-        Self(f.to_bits())
+        let bits = f.to_bits();
+        // IEEE 754 NaN: exponent all-1s (bits 62..52) AND mantissa non-zero.
+        if bits & 0x7FF0_0000_0000_0000 == 0x7FF0_0000_0000_0000
+            && bits & 0x000F_FFFF_FFFF_FFFF != 0
+        {
+            Self(CANONICAL_NAN_BITS)
+        } else {
+            Self(bits)
+        }
     }
 
     /// Wrap a boolean.
@@ -176,11 +193,11 @@ impl Value {
     ///
     /// # Errors
     ///
-    /// Returns `TypeError` if this value is not a tagged uint.
-    pub const fn as_uint(self) -> Result<u64, VmError> {
-        if self.tag() != TAG_UINT {
+    /// Returns `TypeError` if this value is not a tagged nat.
+    pub const fn as_nat(self) -> Result<u64, VmError> {
+        if self.tag() != TAG_NAT {
             return Err(VmError::TypeError {
-                expected: "uint",
+                expected: "nat",
                 found: tag_name(self.tag()),
             });
         }
@@ -311,7 +328,7 @@ impl fmt::Debug for Value {
         } else {
             match self.tag() {
                 TAG_INT => write!(f, "int({})", self.as_int().unwrap_or(0)),
-                TAG_UINT => write!(f, "uint({})", self.0 & PAYLOAD_MASK),
+                TAG_NAT => write!(f, "nat({})", self.0 & PAYLOAD_MASK),
                 TAG_BOOL => write!(f, "bool({})", self.0 & 1 != 0),
                 TAG_RUNE => write!(
                     f,
@@ -337,7 +354,7 @@ impl fmt::Debug for Value {
 const fn tag_name(tag: u16) -> &'static str {
     match tag {
         TAG_INT => "int",
-        TAG_UINT => "uint",
+        TAG_NAT => "nat",
         TAG_BOOL => "bool",
         TAG_RUNE => "rune",
         TAG_REF => "ref",

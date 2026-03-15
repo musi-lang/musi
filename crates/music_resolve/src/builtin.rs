@@ -9,5 +9,5 @@
 /// do not need a corresponding `.ms` file in the standard library root.
 #[must_use]
 pub fn is_builtin_module(name: &str) -> bool {
-    matches!(name, "ffi")
+    matches!(name, "ffi" | "core")
 }

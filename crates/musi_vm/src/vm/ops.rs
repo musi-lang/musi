@@ -73,9 +73,9 @@ pub fn jump_target(after_instr: usize, offset: isize) -> Result<usize, VmError> 
         .ok_or_else(|| malformed!("jump target out of range"))
 }
 
-/// Extract a `usize` from either an int or uint value.
+/// Extract a `usize` from either an int or nat value.
 pub fn as_usize(v: Value) -> Result<usize, VmError> {
-    if let Ok(u) = v.as_uint() {
+    if let Ok(u) = v.as_nat() {
         usize::try_from(u).map_err(|_| VmError::OutOfBounds {
             index: usize::MAX,
             len: 0,
@@ -151,7 +151,8 @@ pub fn exec_mk_var(operand: u32, frame: &mut Frame, heap: &mut Heap) -> Result<(
     let tag = operand;
     let payload = frame.pop()?;
     let ptr = heap.alloc(0, vec![payload]);
-    let ptr_usize = usize::try_from(ptr).map_err(|_| malformed!("variant heap pointer overflows usize"))?;
+    let ptr_usize =
+        usize::try_from(ptr).map_err(|_| malformed!("variant heap pointer overflows usize"))?;
     let obj = heap.get_mut(ptr_usize)?;
     obj.tag = Some(tag);
     frame.stack.push(Value::from_ref(ptr));
@@ -159,7 +160,8 @@ pub fn exec_mk_var(operand: u32, frame: &mut Frame, heap: &mut Heap) -> Result<(
 }
 
 pub fn exec_ld_pay(operand: u32, frame: &mut Frame, heap: &Heap) -> Result<(), VmError> {
-    let field_idx = usize::try_from(operand).map_err(|_| malformed!("ld.pay field index overflow"))?;
+    let field_idx =
+        usize::try_from(operand).map_err(|_| malformed!("ld.pay field index overflow"))?;
     let obj_val = frame.pop()?;
     let ptr = obj_val.as_ref()?;
     let obj = heap.get(ptr)?;
@@ -182,7 +184,9 @@ pub fn exec_ld_tag(frame: &mut Frame, heap: &Heap) -> Result<(), VmError> {
     let obj_val = frame.pop()?;
     let ptr = obj_val.as_ref()?;
     let obj = heap.get(ptr)?;
-    frame.stack.push(Value::from_int(i64::from(obj.tag.unwrap_or(0))));
+    frame
+        .stack
+        .push(Value::from_int(i64::from(obj.tag.unwrap_or(0))));
     Ok(())
 }
 
@@ -191,7 +195,7 @@ pub fn exec_ld_len(frame: &mut Frame, heap: &Heap) -> Result<(), VmError> {
     let ptr = obj_val.as_ref()?;
     let obj = heap.get(ptr)?;
     let len = u64::try_from(obj.elems.len()).unwrap_or(u64::MAX);
-    frame.stack.push(Value::from_uint(len));
+    frame.stack.push(Value::from_nat(len));
     Ok(())
 }
 
@@ -217,7 +221,10 @@ pub fn exec_st_idx(frame: &mut Frame, heap: &mut Heap) -> Result<(), VmError> {
     let ptr = arr_val.as_ref()?;
     let obj = heap.get_mut(ptr)?;
     let len = obj.elems.len();
-    let elem = obj.elems.get_mut(idx).ok_or(VmError::OutOfBounds { index: idx, len })?;
+    let elem = obj
+        .elems
+        .get_mut(idx)
+        .ok_or(VmError::OutOfBounds { index: idx, len })?;
     *elem = val;
     Ok(())
 }
@@ -248,7 +255,11 @@ pub fn exec_st_fld(operand: u32, frame: &mut Frame, heap: &mut Heap) -> Result<(
 
 // ── §12 Globals ──────────────────────────────────────────────────────
 
-pub fn exec_ld_glb(operand: u32, frame: &mut Frame, globals: &mut Vec<Value>) -> Result<(), VmError> {
+pub fn exec_ld_glb(
+    operand: u32,
+    frame: &mut Frame,
+    globals: &mut Vec<Value>,
+) -> Result<(), VmError> {
     let idx = usize::try_from(operand).map_err(|_| malformed!("ld.glb index overflow"))?;
     if idx >= globals.len() {
         globals.resize(idx + 1, Value::UNIT);
@@ -257,7 +268,11 @@ pub fn exec_ld_glb(operand: u32, frame: &mut Frame, globals: &mut Vec<Value>) ->
     Ok(())
 }
 
-pub fn exec_st_glb(operand: u32, frame: &mut Frame, globals: &mut Vec<Value>) -> Result<(), VmError> {
+pub fn exec_st_glb(
+    operand: u32,
+    frame: &mut Frame,
+    globals: &mut Vec<Value>,
+) -> Result<(), VmError> {
     let idx = usize::try_from(operand).map_err(|_| malformed!("st.glb index overflow"))?;
     let val = frame.pop()?;
     if idx >= globals.len() {
@@ -290,8 +305,14 @@ pub fn exec_type_chk(
     } else {
         let vtag = val.tag();
         match vtag {
-            0x7FF1 => matches!(type_tag, TYPE_TAG_I8 | TYPE_TAG_I16 | TYPE_TAG_I32 | TYPE_TAG_I64),
-            0x7FF2 => matches!(type_tag, TYPE_TAG_U8 | TYPE_TAG_U16 | TYPE_TAG_U32 | TYPE_TAG_U64),
+            0x7FF1 => matches!(
+                type_tag,
+                TYPE_TAG_I8 | TYPE_TAG_I16 | TYPE_TAG_I32 | TYPE_TAG_I64
+            ),
+            0x7FF2 => matches!(
+                type_tag,
+                TYPE_TAG_U8 | TYPE_TAG_U16 | TYPE_TAG_U32 | TYPE_TAG_U64
+            ),
             0x7FF3 => type_tag == TYPE_TAG_BOOL,
             0x7FF4 => type_tag == TYPE_TAG_RUNE,
             0x7FF7 => type_tag == TYPE_TAG_FN,
@@ -368,9 +389,8 @@ pub enum DynCall {
 }
 
 pub fn resolve_inv_dyn(operand: u32, frame: &mut Frame, heap: &Heap) -> Result<DynCall, VmError> {
-    let arg_count = usize::from(
-        u8::try_from(operand).map_err(|_| malformed!("inv.dyn operand overflow"))?,
-    );
+    let arg_count =
+        usize::from(u8::try_from(operand).map_err(|_| malformed!("inv.dyn operand overflow"))?);
     let mut args: Vec<Value> = (0..arg_count)
         .map(|_| frame.pop())
         .collect::<Result<Vec<_>, _>>()?;

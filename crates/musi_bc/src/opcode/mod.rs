@@ -290,15 +290,15 @@ impl fmt::Display for Opcode {
 
 /// Instruction length from top-2-bits encoding.
 ///
-/// `0x00..=0x3F` → 1 byte, `0x40..=0x7F` → 2 bytes,
-/// `0x80..=0xBF` → 3 bytes, `0xC0..=0xFF` → 5 bytes.
+/// `0x00..=0x3F` -> 1 byte, `0x40..=0x7F` -> 2 bytes,
+/// `0x80..=0xBF` -> 3 bytes, `0xC0..=0xFF` -> 5 bytes.
 #[must_use]
 pub const fn instr_len(op: u8) -> usize {
     match op >> 6 {
         0 => 1,
         1 => 2,
         2 => 3,
-        _ => 5, // 3 → 5
+        _ => 5, // 3 -> 5
     }
 }
 

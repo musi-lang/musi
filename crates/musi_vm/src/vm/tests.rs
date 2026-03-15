@@ -385,7 +385,7 @@ fn test_value_nan_boxing_roundtrip() {
     let cases: &[Case] = &[
         (Value::from_int(-1), |v| v.as_int().is_ok()),
         (Value::from_int(i64::MAX >> 16), |v| v.as_int().is_ok()),
-        (Value::from_uint(0xDEAD_BEEF), |v| v.as_uint().is_ok()),
+        (Value::from_nat(0xDEAD_BEEF), |v| v.as_nat().is_ok()),
         (Value::from_float(1.5), |v| v.as_float().is_ok()),
         (Value::from_bool(true), |v| v.as_bool().is_ok()),
         (Value::from_bool(false), |v| v.as_bool().is_ok()),
@@ -409,6 +409,33 @@ fn test_value_float_is_not_tagged_int() {
     let i = Value::from_int(42);
     assert!(!i.is_float());
     assert!(i.as_float().is_err());
+}
+
+#[test]
+fn test_nan_canonicalization() {
+    // Standard quiet NaN (tag 0x7FF8 collides with TAG_TASK without canonicalization).
+    let v = Value::from_float(f64::NAN);
+    assert!(v.is_float());
+    assert!(v.as_float().unwrap().is_nan());
+    assert_eq!(v, Value::NAN);
+
+    // Negative NaN collapses to canonical.
+    let neg_nan = Value::from_float(f64::from_bits(0xFFF8_0000_0000_0000));
+    assert_eq!(neg_nan, Value::NAN);
+
+    // Signaling NaN collapses to canonical.
+    let snan = Value::from_float(f64::from_bits(0x7FF0_0000_0000_0002));
+    assert_eq!(snan, Value::NAN);
+
+    // Non-NaN floats are untouched.
+    let normal = Value::from_float(1.5);
+    assert!(normal.is_float());
+    assert_ne!(normal, Value::NAN);
+
+    // Infinity is NOT NaN.
+    let inf = Value::from_float(f64::INFINITY);
+    assert!(inf.is_float());
+    assert!(!inf.as_float().unwrap().is_nan());
 }
 
 #[test]
@@ -651,7 +678,7 @@ fn test_array_create_store_load() {
                 0,
                 0,
                 0,
-                0, // mk.arr type_id=0 → ref on stack
+                0, // mk.arr type_id=0 -> ref on stack
                 Opcode::ST_LOC.0,
                 0, // save ref
                 Opcode::LD_LOC.0,
@@ -691,7 +718,7 @@ fn test_array_length() {
                 0,
                 0,
                 0,
-                0, // mk.arr → ref
+                0, // mk.arr -> ref
                 Opcode::LD_LEN.0,
                 0, // push length (2-byte instr)
                 Opcode::RET.0,
@@ -699,7 +726,7 @@ fn test_array_length() {
         )],
     );
     let (_, result) = run_vm(&bytes);
-    assert_eq!(result.expect("runs").as_uint().expect("is uint"), 5);
+    assert_eq!(result.expect("runs").as_nat().expect("is nat"), 5);
 }
 
 // ── Stack underflow ─────────────────────────────────────────────────────
@@ -852,12 +879,12 @@ fn test_gc_collects_unreachable_objects() {
                 Opcode::LD_CST.0,
                 0, // push 1
                 Opcode::MK_PRD.0,
-                1,             // mk.prd 1 → ref (heap object)
+                1,             // mk.prd 1 -> ref (heap object)
                 Opcode::POP.0, // discard the ref — object is now unreachable
                 Opcode::LD_CST.0,
                 0, // push 1 (keep something reachable)
                 Opcode::MK_PRD.0,
-                1, // mk.prd 1 → ref (heap object, reachable)
+                1, // mk.prd 1 -> ref (heap object, reachable)
                 Opcode::RET.0,
             ],
         )],
@@ -884,7 +911,7 @@ fn test_gc_preserves_reachable_globals() {
                 Opcode::LD_CST.0,
                 0, // push 99
                 Opcode::MK_PRD.0,
-                1, // mk.prd 1 → ref
+                1, // mk.prd 1 -> ref
                 Opcode::ST_GLB.0,
                 0,
                 0,
@@ -1263,7 +1290,12 @@ fn test_eff_res_resumes_continuation() {
                 handlers: vec![(effect_id, 2)],
                 max_stack: None,
             },
-            fn_def(1, 0, 0, vec![Opcode::CONT_SAVE.0, 1, 0, 0, 0, Opcode::RET.0]),
+            fn_def(
+                1,
+                0,
+                0,
+                vec![Opcode::CONT_SAVE.0, 1, 0, 0, 0, Opcode::RET.0],
+            ),
             fn_def(
                 2,
                 0,
@@ -1760,7 +1792,7 @@ fn test_verifier_rejects_max_stack_exceeded_by_one() {
 
 #[test]
 fn test_verifier_resets_depth_after_unconditional_jump() {
-    // offset 0: LD_CST 0  (2)  depth → 1
+    // offset 0: LD_CST 0  (2)  depth -> 1
     // offset 2: JMP_W +0  (5)  jumps to offset 7; depth resets to 0
     // offset 7: RET_U     (1)  depth 0
     // max_stack=1 matches peak reachable depth of 1.

@@ -186,13 +186,13 @@ impl FnEmitter {
         Ok(())
     }
 
-    /// Emit `cmp.eq` (pops 2, pushes 1 → net pop 1).
+    /// Emit `cmp.eq` (pops 2, pushes 1 -> net pop 1).
     pub fn emit_cmp_eq(&mut self) {
         encode_no_operand(&mut self.code, Opcode::CMP_EQ);
         self.pop_n(1);
     }
 
-    /// Emit `ld.pay` with field index (pops ref, pushes payload → net 0).
+    /// Emit `ld.pay` with field index (pops ref, pushes payload -> net 0).
     pub fn emit_ld_pay(&mut self, field_idx: u8) {
         encode_u8(&mut self.code, Opcode::LD_PAY, field_idx);
     }
@@ -204,18 +204,18 @@ impl FnEmitter {
         self.push_n(1);
     }
 
-    /// Emit `ld.len` (pops array ref, pushes length as uint → net 0).
+    /// Emit `ld.len` (pops array ref, pushes length as nat -> net 0).
     pub fn emit_ld_len(&mut self) {
         encode_no_operand(&mut self.code, Opcode::LD_LEN);
     }
 
-    /// Emit `ld.idx` (pops array+index, pushes value → net pop 1).
+    /// Emit `ld.idx` (pops array+index, pushes value -> net pop 1).
     pub fn emit_ld_idx(&mut self) {
         encode_no_operand(&mut self.code, Opcode::LD_IDX);
         self.pop_n(1);
     }
 
-    /// Emit `st.idx` (pops array+index+value → net pop 3).
+    /// Emit `st.idx` (pops array+index+value -> net pop 3).
     pub fn emit_st_idx(&mut self) {
         encode_no_operand(&mut self.code, Opcode::ST_IDX);
         self.pop_n(3);
@@ -225,7 +225,7 @@ impl FnEmitter {
     /// Net stack effect: 0 (pop length, push ref). Caller must push the length first.
     pub fn emit_mk_arr(&mut self, type_id: u32) {
         encode_u32(&mut self.code, Opcode::MK_ARR, type_id);
-        // pops 1 (length), pushes 1 (ref) → net 0
+        // pops 1 (length), pushes 1 (ref) -> net 0
     }
 
     /// Emit `i.add` — pops two integers, pushes their sum. Net stack: -1.
@@ -237,7 +237,7 @@ impl FnEmitter {
     /// Emit `alc.ref` — pops initial value, pushes ref. Net stack: 0.
     pub fn emit_alc_ref(&mut self, type_id: u32) {
         encode_u32(&mut self.code, Opcode::ALC_REF, type_id);
-        // pops initial value, pushes ref → net 0
+        // pops initial value, pushes ref -> net 0
     }
 
     /// Emit `st.fld` — pops [obj, value]. Net stack: -2.
@@ -253,7 +253,7 @@ impl FnEmitter {
     /// Emit `type.chk type_id` — pops value, pushes bool. Net stack: 0.
     pub fn emit_type_chk(&mut self, type_id: u32) {
         encode_u32(&mut self.code, Opcode::TYP_CHK, type_id);
-        // pops 1, pushes 1 → net 0
+        // pops 1, pushes 1 -> net 0
     }
 
     pub fn emit_cont_mark(&mut self, effect_id: u32, handler_fn_id: u32) -> Result<(), EmitError> {
@@ -317,7 +317,7 @@ impl FnEmitter {
         encode_u32(&mut self.code, Opcode::TSK_CHR, 0);
     }
 
-    /// Emit `cmp.tag` or `cmp.tag.w` — compare object tag inline (pop obj, push bool → net 0).
+    /// Emit `cmp.tag` or `cmp.tag.w` — compare object tag inline (pop obj, push bool -> net 0).
     pub fn emit_cmp_tag(&mut self, tag: u32) -> Result<(), EmitError> {
         if let Ok(t) = u8::try_from(tag) {
             encode_u8(&mut self.code, Opcode::CMP_TAG, t);

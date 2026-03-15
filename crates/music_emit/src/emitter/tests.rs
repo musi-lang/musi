@@ -1,4 +1,4 @@
-//! Integration tests: lex → parse → sema → emit → verify binary structure.
+//! Integration tests: lex -> parse -> sema -> emit -> verify binary structure.
 
 use musi_bc::Opcode;
 use music_lex::lex;
@@ -113,7 +113,11 @@ fn test_emit_no_entrypoint_is_library() {
 fn test_emit_range_inc() {
     let source = "#[entrypoint]\nlet f : (Int, Int) -> Int := (a, b) => a..b;";
     let out = compile(source);
-    assert!(out.is_ok(), "range-inc should compile: {}", out.unwrap_err());
+    assert!(
+        out.is_ok(),
+        "range-inc should compile: {}",
+        out.unwrap_err()
+    );
     let out = out.unwrap();
     let found = find_opcode(&out.bytes, Opcode::MK_PRD);
     assert!(found.is_some(), "expected MK_PRD for range construction");
@@ -123,7 +127,11 @@ fn test_emit_range_inc() {
 fn test_emit_range_exc() {
     let source = "#[entrypoint]\nlet f : (Int, Int) -> Int := (a, b) => a..<b;";
     let out = compile(source);
-    assert!(out.is_ok(), "range-exc should compile: {}", out.unwrap_err());
+    assert!(
+        out.is_ok(),
+        "range-exc should compile: {}",
+        out.unwrap_err()
+    );
     let out = out.unwrap();
     let found = find_opcode(&out.bytes, Opcode::MK_PRD);
     assert!(found.is_some(), "expected MK_PRD for range construction");
@@ -133,7 +141,11 @@ fn test_emit_range_exc() {
 fn test_emit_nil_coal() {
     let source = "#[entrypoint]\nlet f : (Int, Int) -> Int := (a, b) => a ?? b;";
     let out = compile(source);
-    assert!(out.is_ok(), "nil-coalesce should compile: {}", out.unwrap_err());
+    assert!(
+        out.is_ok(),
+        "nil-coalesce should compile: {}",
+        out.unwrap_err()
+    );
     let out = out.unwrap();
     let found = find_opcode(&out.bytes, Opcode::CMP_TAG)
         .or_else(|| find_opcode(&out.bytes, Opcode::CMP_TAG_W));
@@ -167,7 +179,11 @@ fn test_emit_err_coal() {
     // so use compile_lenient to skip type errors and verify emission.
     let source = "#[entrypoint]\nlet f : (Int, Int) -> Int := (a, b) => a !! b;";
     let out = compile_lenient(source);
-    assert!(out.is_ok(), "err-coalesce should compile: {}", out.unwrap_err());
+    assert!(
+        out.is_ok(),
+        "err-coalesce should compile: {}",
+        out.unwrap_err()
+    );
     let out = out.unwrap();
     let found = find_opcode(&out.bytes, Opcode::CMP_TAG)
         .or_else(|| find_opcode(&out.bytes, Opcode::CMP_TAG_W));

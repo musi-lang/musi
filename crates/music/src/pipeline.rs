@@ -1,4 +1,4 @@
-//! Frontend pipeline: lex → parse → type-check.
+//! Frontend pipeline: lex -> parse -> type-check.
 
 use std::collections::HashMap;
 use std::fs;
@@ -37,7 +37,7 @@ pub struct FrontendOutput {
     pub file_id: FileId,
 }
 
-/// Runs lex → parse → sema on `path`.
+/// Runs lex -> parse -> sema on `path`.
 ///
 /// Prints diagnostics to stderr. Returns `Err(())` if any errors occurred.
 pub fn run_frontend(path: &Path) -> Result<FrontendOutput, ()> {
@@ -275,6 +275,9 @@ fn builtin_module_exports(
                 def_id: wk.ffi.ptr,
             },
         ]
+    } else if path_str == "<musi:core>" {
+        // musi:core builtins are called via FFI indices, not module exports.
+        vec![]
     } else {
         vec![]
     }

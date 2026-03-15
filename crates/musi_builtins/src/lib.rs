@@ -6,6 +6,7 @@
 
 #![allow(unsafe_code)]
 
+mod core;
 mod ffi;
 
 pub use ffi::StdHost;

@@ -52,9 +52,9 @@ pub struct ResolutionMap {
     pub expr_defs: HashMap<ExprIdx, DefId>,
     /// Maps each binding-site span to its [`DefId`].
     pub pat_defs: HashMap<Span, DefId>,
-    /// Maps law span → inferred (implicit) law variables, for LSP inlay hints.
+    /// Maps law span -> inferred (implicit) law variables, for LSP inlay hints.
     pub law_inferred_vars: HashMap<Span, Vec<(Symbol, DefId)>>,
-    /// Maps (class `DefId`, operator `Symbol`) → member `DefId` for operator dispatch.
+    /// Maps (class `DefId`, operator `Symbol`) -> member `DefId` for operator dispatch.
     pub class_op_members: HashMap<(DefId, Symbol), DefId>,
 }
 
@@ -72,11 +72,11 @@ pub struct SemaResult {
     pub unify: UnifyTable,
     /// Typeclass instances discovered during analysis.
     pub instances: Vec<InstanceInfo>,
-    /// Maps `BinOp` expression index → instance method `DefId` for operator dispatch.
+    /// Maps `BinOp` expression index -> instance method `DefId` for operator dispatch.
     pub binop_dispatch: HashMap<ExprIdx, DefId>,
-    /// Maps `BinOp` expression → dictionary lookup for polymorphic dispatch.
+    /// Maps `BinOp` expression -> dictionary lookup for polymorphic dispatch.
     pub binop_dict_dispatch: HashMap<ExprIdx, DictLookup>,
-    /// Maps function `DefId` → ordered class constraints (for dictionary passing).
+    /// Maps function `DefId` -> ordered class constraints (for dictionary passing).
     pub fn_constraints: HashMap<DefId, Vec<Obligation>>,
     /// Well-known prelude type definitions (needed by bytecode emission).
     pub well_known: WellKnown,
@@ -108,11 +108,11 @@ pub struct ModuleSemaOutput {
     pub resolution: ResolutionMap,
     pub expr_types: HashMap<ExprIdx, TypeIdx>,
     pub instances: Vec<InstanceInfo>,
-    /// Maps `BinOp` expression index → instance method `DefId` for operator dispatch.
+    /// Maps `BinOp` expression index -> instance method `DefId` for operator dispatch.
     pub binop_dispatch: HashMap<ExprIdx, DefId>,
-    /// Maps `BinOp` expression → dictionary lookup for polymorphic dispatch.
+    /// Maps `BinOp` expression -> dictionary lookup for polymorphic dispatch.
     pub binop_dict_dispatch: HashMap<ExprIdx, DictLookup>,
-    /// Maps function `DefId` → ordered class constraints (for dictionary passing).
+    /// Maps function `DefId` -> ordered class constraints (for dictionary passing).
     pub fn_constraints: HashMap<DefId, Vec<Obligation>>,
 }
 

@@ -1,4 +1,4 @@
-//! `music_emit` — AST+sema → `.msbc` bytecode emitter.
+//! `music_emit` — AST+sema -> `.msbc` bytecode emitter.
 //!
 //! The entry point is [`emit`], which takes a parsed module, sema result,
 //! and interner, then returns the complete binary contents of a `.msbc` file.
@@ -7,7 +7,7 @@
 //!
 //! - [`error`]      — [`EmitError`] enum
 //! - [`const_pool`] — constant pool builder
-//! - [`type_pool`]  — type pool builder (sema `TypeIdx` → `type_id`)
+//! - [`type_pool`]  — type pool builder (sema `TypeIdx` -> `type_id`)
 //! - [`module`]     — `.msbc` binary assembler (header + 5 sections)
 //! - [`emitter`]    — orchestrator; tree-walks AST+sema per function
 
