@@ -30,6 +30,8 @@ pub struct HeapObject {
 pub struct Heap {
     objects: Vec<Option<HeapObject>>,
     free_list: Vec<usize>,
+    allocs_since_gc: usize,
+    gc_threshold: usize,
 }
 
 impl Heap {
@@ -39,7 +41,21 @@ impl Heap {
         Self {
             objects: vec![],
             free_list: vec![],
+            allocs_since_gc: 0,
+            gc_threshold: 256,
         }
+    }
+
+    /// Returns `true` if the allocation count since the last GC has reached
+    /// the threshold. The VM should call `collect_garbage` when this is true.
+    #[must_use]
+    pub const fn needs_gc(&self) -> bool {
+        self.allocs_since_gc >= self.gc_threshold
+    }
+
+    /// Reset the allocation counter (called after a GC cycle).
+    pub const fn reset_gc_counter(&mut self) {
+        self.allocs_since_gc = 0;
     }
 
     /// Number of live (non-freed) objects on the heap.
@@ -214,6 +230,7 @@ impl Heap {
 
     /// Insert an object, reusing a free slot if available.
     fn insert(&mut self, obj: HeapObject) -> usize {
+        self.allocs_since_gc += 1;
         if let Some(idx) = self.free_list.pop() {
             self.objects[idx] = Some(obj);
             idx

@@ -4,16 +4,18 @@
 mod tests;
 
 mod arith;
-mod control;
 mod effects;
-mod structural;
+mod frame;
+mod ops;
+
+pub use frame::{Continuation, EffFrame, Frame};
 
 use std::mem;
 
 use musi_bc::Opcode;
 
 use crate::channel::ChannelTable;
-use crate::error::VmError;
+use crate::error::{VmError, malformed};
 use crate::heap::Heap;
 use crate::host::HostFunctions;
 use crate::loader::LoadedModule;
@@ -21,37 +23,6 @@ use crate::task::{TaskScheduler, TaskStatus};
 use crate::value::Value;
 
 const MAX_CALL_DEPTH: usize = 1024;
-
-/// An activation record for a single function invocation.
-#[derive(Clone)]
-pub struct Frame {
-    /// Index into `module.functions`.
-    pub fn_idx: usize,
-    /// Byte offset of the *next* instruction to execute.
-    pub ip: usize,
-    /// Local variable slots (pre-zeroed, size = `local_count`).
-    pub locals: Vec<Value>,
-    /// Operand stack.
-    pub stack: Vec<Value>,
-    /// Active effect frames (innermost last).
-    pub eff_stack: Vec<EffFrame>,
-    /// If this frame was entered via a closure call, the heap ref to the closure object.
-    pub closure_ref: Option<Value>,
-}
-
-/// An active effect handler frame.
-#[derive(Clone, Copy, Debug)]
-pub struct EffFrame {
-    pub effect_id: u8,
-    pub handler_fn_id: u32,
-}
-
-/// A captured one-shot continuation (frames between handler and `EFF_DO` site).
-pub struct Continuation {
-    pub frames: Vec<Frame>,
-    /// The effect op id that triggered this continuation (for fatality checks on resume).
-    pub op_id: u32,
-}
 
 /// The result of executing a single instruction.
 pub enum StepResult {
@@ -142,9 +113,10 @@ impl Vm {
     /// Returns `VmError` on type errors, stack overflows, malformed bytecode,
     /// or unimplemented features.
     pub fn run(&mut self) -> Result<Value, VmError> {
-        let entry = self.module.entry_point.ok_or_else(|| VmError::Malformed {
-            desc: "module has no entry point".into(),
-        })?;
+        let entry = self
+            .module
+            .entry_point
+            .ok_or_else(|| malformed!("module has no entry point"))?;
         self.call_fn(entry, &[])
     }
 
@@ -161,10 +133,6 @@ impl Vm {
 
     /// Push a call frame for the given function without executing it.
     ///
-    /// Use [`step`](Self::step) to advance execution one instruction at a time,
-    /// or [`run_to_completion`](Self::run_to_completion) to run until the
-    /// call stack returns to the current depth.
-    ///
     /// # Errors
     ///
     /// Returns `VmError` if `fn_id` is not found or the call stack overflows.
@@ -175,9 +143,7 @@ impl Vm {
         let (fn_idx, func) = self
             .module
             .fn_by_id(fn_id)
-            .ok_or_else(|| VmError::Malformed {
-                desc: format!("fn_id {fn_id} not found in module").into_boxed_str(),
-            })?;
+            .ok_or_else(|| malformed!("fn_id {} not found in module", fn_id))?;
         let local_count = usize::from(func.local_count);
         let max_stack = usize::from(func.max_stack);
         let param_count = usize::from(func.param_count);
@@ -214,16 +180,10 @@ impl Vm {
 
     /// Execute a single instruction and return the result.
     ///
-    /// Returns `StepResult::Continue` if execution should continue, or
-    /// `StepResult::Returned(value)` if the call stack is empty and the
-    /// VM has produced a final result.
-    ///
     /// # Errors
     ///
-    /// Returns `VmError` on any runtime error. Errors include context
-    /// (`fn_id` and bytecode offset) via `VmError::Runtime`.
+    /// Returns `VmError` on any runtime error.
     pub fn step(&mut self) -> Result<StepResult, VmError> {
-        // Check instruction limit.
         if let Some(limit) = self.instruction_limit
             && self.instruction_count >= limit
         {
@@ -231,13 +191,12 @@ impl Vm {
         }
         self.instruction_count += 1;
 
-        // Capture context for error wrapping.
         let (fn_id, instr_ip) = {
-            let frame = self.call_stack.last().ok_or_else(|| VmError::Malformed {
-                desc: "empty call stack".into(),
-            })?;
-            let fn_idx = frame.fn_idx;
-            (self.module.functions[fn_idx].fn_id, frame.ip)
+            let frame = self
+                .call_stack
+                .last()
+                .ok_or_else(|| malformed!("empty call stack"))?;
+            (self.module.functions[frame.fn_idx].fn_id, frame.ip)
         };
 
         self.step_inner().map_err(|e| VmError::Runtime {
@@ -248,115 +207,287 @@ impl Vm {
     }
 
     fn step_inner(&mut self) -> Result<StepResult, VmError> {
-        let frame = self
-            .call_stack
-            .last_mut()
-            .ok_or_else(|| VmError::Malformed {
-                desc: "empty call stack".into(),
-            })?;
+        self.maybe_gc();
 
-        let fn_idx = frame.fn_idx;
-        let ip = frame.ip;
-        let code_len = self.module.functions[fn_idx].code.len();
-
-        if ip >= code_len {
-            return Err(VmError::Malformed {
-                desc: "ip past end of bytecode".into(),
-            });
-        }
-
-        let raw_op = self.module.functions[fn_idx].code[ip];
-        let op = Opcode(raw_op);
-        let (operand, instr_len) = control::decode_operand(&self.module.functions[fn_idx].code, ip);
-
-        frame.ip = ip + instr_len;
-
-        if arith::exec(op, frame)? {
-            return Ok(StepResult::Continue);
-        }
-
-        if structural::exec(
-            op,
-            operand,
-            frame,
-            &self.module,
-            &mut self.heap,
-            &mut self.globals,
-        )? {
-            return Ok(StepResult::Continue);
-        }
-
-        let handlers = &self.module.functions[fn_idx].handlers;
-        let eff_action = effects::exec(op, operand, frame, &self.module.effects, handlers)?;
-        match eff_action {
-            effects::EffectAction::NotHandled => {}
-            effects::EffectAction::Continue => return Ok(StepResult::Continue),
-            effects::EffectAction::Abort => {
-                return Err(VmError::EffectAborted);
+        // Phase 1: Read opcode, decode operand, advance IP.
+        let (fn_idx, op, operand) = {
+            let frame = self
+                .call_stack
+                .last_mut()
+                .ok_or_else(|| malformed!("empty call stack"))?;
+            let fn_idx = frame.fn_idx;
+            let ip = frame.ip;
+            let code = &self.module.functions[fn_idx].code;
+            if ip >= code.len() {
+                return Err(malformed!("ip past end of bytecode"));
             }
-            effects::EffectAction::DoEffect { handler_fn_id, op_id: _ } => {
-                return self.do_call_with_stack_args(handler_fn_id);
-            }
-            effects::EffectAction::CrossFrameSearch { effect_id, op_id } => {
-                return self.exec_eff_do_cross_frame(effect_id, op_id);
-            }
-            effects::EffectAction::Resume => {
-                return self.exec_eff_res();
+            let raw_op = code[ip];
+            let (operand, ilen) = ops::decode_operand(code, ip);
+            frame.ip = ip + ilen;
+            (fn_idx, Opcode(raw_op), operand)
+        };
+
+        // Phase 2: Try arithmetic (most frequent in hot loops).
+        {
+            let frame = self
+                .call_stack
+                .last_mut()
+                .ok_or_else(|| malformed!("empty call stack"))?;
+            if arith::exec(op, frame)? {
+                return Ok(StepResult::Continue);
             }
         }
 
-        if op == Opcode::INV_FFI {
-            return self.exec_inv_ffi(operand);
-        }
-
-        if matches!(
-            op,
-            Opcode::TSK_SPN | Opcode::TSK_AWT | Opcode::TSK_CMK | Opcode::TSK_CHS | Opcode::TSK_CHR
-        ) {
-            return self.exec_concurrency(op, operand);
-        }
-
-        let cf = control::exec(
-            op,
-            operand,
-            self.call_stack.last_mut().ok_or_else(|| VmError::Malformed {
-                desc: "empty call stack".into(),
-            })?,
-            &self.heap,
-        )?;
-        self.handle_control(cf)
-    }
-
-    fn handle_control(&mut self, cf: control::ControlFlow) -> Result<StepResult, VmError> {
-        match cf {
-            control::ControlFlow::Continue => Ok(StepResult::Continue),
-            control::ControlFlow::Jump { ip } => {
-                let frame = self.current_frame()?;
-                frame.ip = ip;
+        // Phase 3: Flat dispatch.
+        match op {
+            // §0 Stack manipulation
+            Opcode::NOP | Opcode::BRK => Ok(StepResult::Continue),
+            Opcode::DUP => {
+                self.current_frame()?.dup()?;
                 Ok(StepResult::Continue)
             }
-            control::ControlFlow::Return { value } => {
-                let _ = self.call_stack.pop();
-                if let Some(caller) = self.call_stack.last_mut() {
-                    caller.stack.push(value);
-                    Ok(StepResult::Continue)
-                } else if self.scheduler.is_some() {
-                    self.complete_current_task(value)
-                } else {
-                    Ok(StepResult::Returned(value))
+            Opcode::POP => {
+                let _ = self.current_frame()?.stack.pop();
+                Ok(StepResult::Continue)
+            }
+            Opcode::SWP => {
+                self.current_frame()?.swp()?;
+                Ok(StepResult::Continue)
+            }
+
+            // §5 Locals
+            Opcode::LD_LOC | Opcode::LD_LOC_W => {
+                let frame = self.current_frame()?;
+                let slot = usize::try_from(operand)
+                    .map_err(|_| malformed!("ld.loc operand overflow"))?;
+                let v = frame.get_local(slot)?;
+                frame.stack.push(v);
+                Ok(StepResult::Continue)
+            }
+            Opcode::ST_LOC | Opcode::ST_LOC_W => {
+                let frame = self.current_frame()?;
+                let slot = usize::try_from(operand)
+                    .map_err(|_| malformed!("st.loc operand overflow"))?;
+                let v = frame.pop()?;
+                frame.set_local(slot, v)?;
+                Ok(StepResult::Continue)
+            }
+
+            // §5 Constants
+            Opcode::LD_CST | Opcode::LD_CST_W => {
+                let frame = self.call_stack.last_mut().ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_ld_cst(operand, frame, &self.module.consts, &mut self.heap)?;
+                Ok(StepResult::Continue)
+            }
+
+            // §5 Struct / variant
+            Opcode::MK_PRD => {
+                let frame = self.call_stack.last_mut().ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_mk_prd(operand, frame, &mut self.heap)?;
+                Ok(StepResult::Continue)
+            }
+            Opcode::LD_FLD => {
+                let frame = self.call_stack.last_mut().ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_ld_fld(operand, frame, &self.heap)?;
+                Ok(StepResult::Continue)
+            }
+            Opcode::MK_VAR | Opcode::MK_VAR_W => {
+                let frame = self.call_stack.last_mut().ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_mk_var(operand, frame, &mut self.heap)?;
+                Ok(StepResult::Continue)
+            }
+            Opcode::LD_PAY => {
+                let frame = self.call_stack.last_mut().ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_ld_pay(operand, frame, &self.heap)?;
+                Ok(StepResult::Continue)
+            }
+            Opcode::CMP_TAG | Opcode::CMP_TAG_W => {
+                let frame = self.call_stack.last_mut().ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_cmp_tag(operand, frame, &self.heap)?;
+                Ok(StepResult::Continue)
+            }
+
+            // §9 Array / heap
+            Opcode::LD_TAG => {
+                let frame = self.call_stack.last_mut().ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_ld_tag(frame, &self.heap)?;
+                Ok(StepResult::Continue)
+            }
+            Opcode::LD_LEN => {
+                let frame = self.call_stack.last_mut().ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_ld_len(frame, &self.heap)?;
+                Ok(StepResult::Continue)
+            }
+            Opcode::LD_IDX => {
+                let frame = self.call_stack.last_mut().ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_ld_idx(frame, &self.heap)?;
+                Ok(StepResult::Continue)
+            }
+            Opcode::ST_IDX => {
+                let frame = self.call_stack.last_mut().ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_st_idx(frame, &mut self.heap)?;
+                Ok(StepResult::Continue)
+            }
+            Opcode::FRE => {
+                let ptr = self.current_frame()?.pop()?.as_ref()?;
+                self.heap.free(ptr)?;
+                Ok(StepResult::Continue)
+            }
+            Opcode::MK_ARR => {
+                let frame = self.call_stack.last_mut().ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_mk_arr(operand, frame, &mut self.heap)?;
+                Ok(StepResult::Continue)
+            }
+            Opcode::ALC_REF => {
+                let frame = self.call_stack.last_mut().ok_or_else(|| malformed!("empty call stack"))?;
+                let initial = frame.pop()?;
+                let ptr = self.heap.alloc(operand, vec![initial]);
+                frame.stack.push(Value::from_ref(ptr));
+                Ok(StepResult::Continue)
+            }
+            Opcode::ALC_ARN => {
+                let ptr = self.heap.alloc(operand, vec![]);
+                self.current_frame()?.stack.push(Value::from_ref(ptr));
+                Ok(StepResult::Continue)
+            }
+            Opcode::ST_FLD => {
+                let frame = self.call_stack.last_mut().ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_st_fld(operand, frame, &mut self.heap)?;
+                Ok(StepResult::Continue)
+            }
+
+            // §12 Globals
+            Opcode::LD_GLB => {
+                let frame = self.call_stack.last_mut().ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_ld_glb(operand, frame, &mut self.globals)?;
+                Ok(StepResult::Continue)
+            }
+            Opcode::ST_GLB => {
+                let frame = self.call_stack.last_mut().ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_st_glb(operand, frame, &mut self.globals)?;
+                Ok(StepResult::Continue)
+            }
+
+            // §16 Type check
+            Opcode::TYP_CHK => {
+                let frame = self.call_stack.last_mut().ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_type_chk(operand, frame, &self.module.types, &self.heap)?;
+                Ok(StepResult::Continue)
+            }
+
+            // §17 Closures
+            Opcode::MK_CLO => {
+                let frame = self.call_stack.last_mut().ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_mk_clo(operand, frame, &self.module.functions, &mut self.heap)?;
+                Ok(StepResult::Continue)
+            }
+            Opcode::LD_UPV => {
+                let frame = self.call_stack.last_mut().ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_ld_upv(operand, frame, &self.heap)?;
+                Ok(StepResult::Continue)
+            }
+
+            // §11 Control — jumps (only need frame)
+            Opcode::JMP_W => {
+                let frame = self.current_frame()?;
+                let target = ops::jump_target(frame.ip, ops::read_i32_operand(operand))?;
+                frame.ip = target;
+                Ok(StepResult::Continue)
+            }
+            Opcode::JMP_T_W => {
+                let frame = self.current_frame()?;
+                let cond = frame.pop()?;
+                if cond.as_bool()? {
+                    frame.ip = ops::jump_target(frame.ip, ops::read_i32_operand(operand))?;
+                }
+                Ok(StepResult::Continue)
+            }
+            Opcode::JMP_F_W => {
+                let frame = self.current_frame()?;
+                let cond = frame.pop()?;
+                if !cond.as_bool()? {
+                    frame.ip = ops::jump_target(frame.ip, ops::read_i32_operand(operand))?;
+                }
+                Ok(StepResult::Continue)
+            }
+
+            // §11 Control — call / return / halt
+            Opcode::HLT => Err(VmError::Halted),
+            Opcode::UNR => Err(malformed!("unr (unreachable) reached at runtime")),
+            Opcode::RET => {
+                let v = self.current_frame()?.pop()?;
+                self.do_return(v)
+            }
+            Opcode::RET_U => self.do_return(Value::UNIT),
+            Opcode::INV | Opcode::INV_EFF => self.do_call_with_stack_args(operand),
+            Opcode::INV_TAL | Opcode::INV_TAL_EFF => self.do_tail_call(operand),
+            Opcode::INV_DYN => {
+                let dyn_call = {
+                    let frame = self.call_stack.last_mut().ok_or_else(|| malformed!("empty call stack"))?;
+                    ops::resolve_inv_dyn(operand, frame, &self.heap)?
+                };
+                match dyn_call {
+                    ops::DynCall::Fn(fn_id) => self.do_call_with_stack_args(fn_id),
+                    ops::DynCall::Closure { fn_id, closure_ref } => {
+                        let result = self.do_call_with_stack_args(fn_id)?;
+                        if let Some(frame) = self.call_stack.last_mut() {
+                            frame.closure_ref = Some(closure_ref);
+                        }
+                        Ok(result)
+                    }
                 }
             }
-            control::ControlFlow::Call { fn_id } => self.do_call_with_stack_args(fn_id),
-            control::ControlFlow::CallClosure { fn_id, closure_ref } => {
-                let result = self.do_call_with_stack_args(fn_id)?;
-                // Set closure_ref on the newly pushed frame.
-                if let Some(frame) = self.call_stack.last_mut() {
-                    frame.closure_ref = Some(closure_ref);
+            Opcode::INV_FFI => self.exec_inv_ffi(operand),
+
+            // §13 Effects
+            Opcode::EFF_PSH | Opcode::EFF_POP | Opcode::EFF_DO | Opcode::EFF_RES
+            | Opcode::EFF_RES_C | Opcode::EFF_ABT => {
+                let eff_action = {
+                    let frame = self
+                        .call_stack
+                        .last_mut()
+                        .ok_or_else(|| malformed!("empty call stack"))?;
+                    let handlers = &self.module.functions[fn_idx].handlers;
+                    effects::exec(op, operand, frame, &self.module.effects, handlers)?
+                };
+                match eff_action {
+                    effects::EffectAction::NotHandled | effects::EffectAction::Continue => {
+                        Ok(StepResult::Continue)
+                    }
+                    effects::EffectAction::Abort => Err(VmError::EffectAborted),
+                    effects::EffectAction::DoEffect {
+                        handler_fn_id,
+                        op_id: _,
+                    } => self.do_call_with_stack_args(handler_fn_id),
+                    effects::EffectAction::CrossFrameSearch { effect_id, op_id } => {
+                        self.exec_eff_do_cross_frame(effect_id, op_id)
+                    }
+                    effects::EffectAction::Resume => self.exec_eff_res(),
                 }
-                Ok(result)
             }
-            control::ControlFlow::TailCall { fn_id } => self.do_tail_call(fn_id),
-            control::ControlFlow::Halt => Err(VmError::Halted),
+
+            // §14 Concurrency
+            Opcode::TSK_SPN => self.exec_tsk_spn(operand),
+            Opcode::TSK_AWT => self.exec_tsk_awt(),
+            Opcode::TSK_CMK => self.exec_tsk_cmk(),
+            Opcode::TSK_CHS => self.exec_tsk_chs(),
+            Opcode::TSK_CHR => self.exec_tsk_chr(),
+
+            _ => Err(malformed!("unknown opcode {:#04x}", op.0)),
+        }
+    }
+
+    // ── Call / return / tail-call ─────────────────────────────────────
+
+    fn do_return(&mut self, value: Value) -> Result<StepResult, VmError> {
+        let _ = self.call_stack.pop();
+        if let Some(caller) = self.call_stack.last_mut() {
+            caller.stack.push(value);
+            Ok(StepResult::Continue)
+        } else if self.scheduler.is_some() {
+            self.complete_current_task(value)
+        } else {
+            Ok(StepResult::Returned(value))
         }
     }
 
@@ -368,30 +499,25 @@ impl Vm {
         let (fn_idx, func) = self
             .module
             .fn_by_id(fn_id)
-            .ok_or_else(|| VmError::Malformed {
-                desc: format!("call to unknown fn_id {fn_id}").into_boxed_str(),
-            })?;
+            .ok_or_else(|| malformed!("call to unknown fn_id {}", fn_id))?;
         let param_count = usize::from(func.param_count);
         let local_count = usize::from(func.local_count);
         let max_stack = usize::from(func.max_stack);
 
-        // Pop args off caller's stack (first arg deepest).
         let caller_stack_len = self.call_stack.last().map_or(0, |f| f.stack.len());
         if caller_stack_len < param_count {
-            return Err(VmError::Malformed {
-                desc: format!(
-                    "call to fn {fn_id}: need {param_count} args, stack has {caller_stack_len}"
-                )
-                .into_boxed_str(),
-            });
+            return Err(malformed!(
+                "call to fn {}: need {} args, stack has {}",
+                fn_id,
+                param_count,
+                caller_stack_len
+            ));
         }
         let start = caller_stack_len - param_count;
         let args: Vec<Value> = self
             .call_stack
             .last_mut()
-            .ok_or_else(|| VmError::Malformed {
-                desc: "empty call stack".into(),
-            })?
+            .ok_or_else(|| malformed!("empty call stack"))?
             .stack
             .drain(start..)
             .collect();
@@ -416,36 +542,30 @@ impl Vm {
         let (fn_idx, func) = self
             .module
             .fn_by_id(fn_id)
-            .ok_or_else(|| VmError::Malformed {
-                desc: format!("tail call to unknown fn_id {fn_id}").into_boxed_str(),
-            })?;
+            .ok_or_else(|| malformed!("tail call to unknown fn_id {}", fn_id))?;
         let param_count = usize::from(func.param_count);
         let local_count = usize::from(func.local_count);
 
-        // Pop args from current frame's stack.
         let frame = self.current_frame()?;
         let stack_len = frame.stack.len();
         if stack_len < param_count {
-            return Err(VmError::Malformed {
-                desc: format!(
-                    "tail call to fn {fn_id}: need {param_count} args, stack has {stack_len}"
-                )
-                .into_boxed_str(),
-            });
+            return Err(malformed!(
+                "tail call to fn {}: need {} args, stack has {}",
+                fn_id,
+                param_count,
+                stack_len
+            ));
         }
         let start = stack_len - param_count;
         let args: Vec<Value> = frame.stack.drain(start..).collect();
 
-        // Reuse the current frame.
         frame.fn_idx = fn_idx;
         frame.ip = 0;
         frame.stack.clear();
         frame.eff_stack.clear();
         frame.closure_ref = None;
 
-        // Resize locals if needed.
         frame.locals.resize(local_count, Value::UNIT);
-        // Zero all locals then fill params.
         for v in &mut frame.locals {
             *v = Value::UNIT;
         }
@@ -456,17 +576,19 @@ impl Vm {
         Ok(StepResult::Continue)
     }
 
-    /// Cross-frame `EFF_DO`: search the entire call stack top-to-bottom for a
-    /// handler matching `effect_id`. Captures frames between handler and
-    /// current frame as a continuation, then calls the handler function.
-    fn exec_eff_do_cross_frame(&mut self, effect_id: u8, op_id: u32) -> Result<StepResult, VmError> {
-        // Search call stack from top-1 to bottom for a frame with matching handler.
+    // ── Effects ──────────────────────────────────────────────────────
+
+    fn exec_eff_do_cross_frame(
+        &mut self,
+        effect_id: u8,
+        op_id: u32,
+    ) -> Result<StepResult, VmError> {
         let handler_idx = self
             .call_stack
             .iter()
             .enumerate()
             .rev()
-            .skip(1) // skip current frame (already searched)
+            .skip(1)
             .find_map(|(idx, frame)| {
                 frame
                     .eff_stack
@@ -478,47 +600,35 @@ impl Vm {
 
         let h_idx = handler_idx.ok_or(VmError::NoHandler { effect_id })?;
 
-        // Find the handler fn_id from the handler frame's eff_stack.
         let handler_fn_id = self.call_stack[h_idx]
             .eff_stack
             .iter()
             .rev()
             .find(|f| f.effect_id == effect_id)
-            .ok_or_else(|| VmError::Malformed {
-                desc: "handler not found".into(),
-            })?
+            .ok_or_else(|| malformed!("handler not found"))?
             .handler_fn_id;
 
-        // Capture frames above the handler as a continuation.
         let captured: Vec<Frame> = self.call_stack.drain(h_idx + 1..).collect();
-        self.continuations.push(Continuation { frames: captured, op_id });
+        self.continuations
+            .push(Continuation { frames: captured, op_id });
 
-        // Call the handler function (it will push a new frame onto call_stack).
         self.do_call_with_stack_args(handler_fn_id)
     }
 
-    /// `EFF_RES`: handler-side resume. Pop resume value, restore continuation
-    /// frames, push resume value onto the restored topmost frame.
     fn exec_eff_res(&mut self) -> Result<StepResult, VmError> {
-        // Pop resume value from handler's stack.
         let resume_value = self
             .call_stack
             .last_mut()
-            .ok_or_else(|| VmError::Malformed {
-                desc: "eff.res with empty call stack".into(),
-            })?
+            .ok_or_else(|| malformed!("eff.res with empty call stack"))?
             .stack
             .pop()
-            .ok_or_else(|| VmError::Malformed {
-                desc: "eff.res on empty operand stack".into(),
-            })?;
+            .ok_or_else(|| malformed!("eff.res on empty operand stack"))?;
 
-        // Pop the most recent continuation.
-        let cont = self.continuations.pop().ok_or_else(|| VmError::Malformed {
-            desc: "eff.res with no captured continuation".into(),
-        })?;
+        let cont = self
+            .continuations
+            .pop()
+            .ok_or_else(|| malformed!("eff.res with no captured continuation"))?;
 
-        // Fatal ops may not resume — resuming one is a hard error.
         let op_is_fatal = self
             .module
             .effects
@@ -529,71 +639,57 @@ impl Vm {
             return Err(VmError::FatalEffectResumed { op_id: cont.op_id });
         }
 
-        // Pop the handler frame.
         let _ = self.call_stack.pop();
-
-        // Restore continuation frames.
         self.call_stack.extend(cont.frames);
 
-        // Push resume value onto the topmost restored frame.
         let top = self
             .call_stack
             .last_mut()
-            .ok_or_else(|| VmError::Malformed {
-                desc: "eff.res: no frame after restoring continuation".into(),
-            })?;
+            .ok_or_else(|| malformed!("eff.res: no frame after restoring continuation"))?;
         top.stack.push(resume_value);
 
         Ok(StepResult::Continue)
     }
 
-    /// Dispatch an `INV_FFI` opcode: pop args, call the host, push result.
+    // ── FFI ──────────────────────────────────────────────────────────
+
     fn exec_inv_ffi(&mut self, operand: u32) -> Result<StepResult, VmError> {
-        let foreign_idx = usize::try_from(operand).map_err(|_| VmError::Malformed {
-            desc: "foreign fn index overflows usize".into(),
-        })?;
-        let foreign_fn =
-            self.module
-                .foreign_fns
-                .get(foreign_idx)
-                .ok_or_else(|| VmError::Malformed {
-                    desc: format!("foreign fn index {operand} out of bounds").into_boxed_str(),
-                })?;
+        let foreign_idx =
+            usize::try_from(operand).map_err(|_| malformed!("foreign fn index overflows usize"))?;
+        let foreign_fn = self
+            .module
+            .foreign_fns
+            .get(foreign_idx)
+            .ok_or_else(|| malformed!("foreign fn index {} out of bounds", operand))?;
         let param_count = usize::from(foreign_fn.param_count);
 
         let frame = self
             .call_stack
             .last_mut()
-            .ok_or_else(|| VmError::Malformed {
-                desc: "inv.ffi with empty call stack".into(),
-            })?;
+            .ok_or_else(|| malformed!("inv.ffi with empty call stack"))?;
 
         if frame.stack.len() < param_count {
-            return Err(VmError::Malformed {
-                desc: format!(
-                    "inv.ffi: need {param_count} args, stack has {}",
-                    frame.stack.len()
-                )
-                .into_boxed_str(),
-            });
+            return Err(malformed!(
+                "inv.ffi: need {} args, stack has {}",
+                param_count,
+                frame.stack.len()
+            ));
         }
         let start = frame.stack.len() - param_count;
         let args: Vec<Value> = frame.stack.drain(start..).collect();
 
-        let host = self.host.as_mut().ok_or_else(|| VmError::Malformed {
-            desc: "inv.ffi without a host attached".into(),
-        })?;
+        let host = self
+            .host
+            .as_mut()
+            .ok_or_else(|| malformed!("inv.ffi without a host attached"))?;
         let result = host.call_foreign(operand, &args, &mut self.heap)?;
 
-        let frame = self.current_frame()?;
-        frame.stack.push(result);
-
+        self.current_frame()?.stack.push(result);
         Ok(StepResult::Continue)
     }
 
-    /// Lazily initialize the scheduler, registering the main context as task 0.
-    /// The main task's call stack stays in `self.call_stack` (it's the running
-    /// task); the scheduler just tracks it as current.
+    // ── Concurrency ──────────────────────────────────────────────────
+
     fn ensure_scheduler(&mut self) {
         if self.scheduler.is_none() {
             let mut sched = TaskScheduler::new();
@@ -605,7 +701,6 @@ impl Vm {
         }
     }
 
-    /// Save the current VM call stack into the current task.
     fn save_current_task(&mut self) {
         if let Some(sched) = &mut self.scheduler
             && let Some(cur_id) = sched.current_task_id()
@@ -616,7 +711,6 @@ impl Vm {
         }
     }
 
-    /// Load a task's call stack into the VM.
     fn load_task(&mut self, task_id: u32) {
         if let Some(sched) = &mut self.scheduler
             && let Some(task) = sched.get_mut(task_id)
@@ -626,30 +720,13 @@ impl Vm {
         }
     }
 
-    /// Dispatch a concurrency opcode.
-    fn exec_concurrency(&mut self, op: Opcode, operand: u32) -> Result<StepResult, VmError> {
-        match op {
-            Opcode::TSK_SPN => self.exec_tsk_spn(operand),
-            Opcode::TSK_AWT => self.exec_tsk_awt(),
-            Opcode::TSK_CMK => self.exec_tsk_cmk(),
-            Opcode::TSK_CHS => self.exec_tsk_chs(),
-            Opcode::TSK_CHR => self.exec_tsk_chr(),
-            _ => Err(VmError::Malformed {
-                desc: "unexpected concurrency opcode".into(),
-            }),
-        }
-    }
-
-    /// `TSK_SPN`: spawn a new task running `fn_id` with args from the stack.
     fn exec_tsk_spn(&mut self, fn_id: u32) -> Result<StepResult, VmError> {
         self.ensure_scheduler();
 
         let (fn_idx, func) = self
             .module
             .fn_by_id(fn_id)
-            .ok_or_else(|| VmError::Malformed {
-                desc: format!("tsk.spn: unknown fn_id {fn_id}").into_boxed_str(),
-            })?;
+            .ok_or_else(|| malformed!("tsk.spn: unknown fn_id {}", fn_id))?;
         let param_count = usize::from(func.param_count);
         let local_count = usize::from(func.local_count);
         let max_stack = usize::from(func.max_stack);
@@ -657,18 +734,15 @@ impl Vm {
         let frame = self
             .call_stack
             .last_mut()
-            .ok_or_else(|| VmError::Malformed {
-                desc: "tsk.spn with empty call stack".into(),
-            })?;
+            .ok_or_else(|| malformed!("tsk.spn with empty call stack"))?;
 
         if frame.stack.len() < param_count {
-            return Err(VmError::Malformed {
-                desc: format!(
-                    "tsk.spn fn {fn_id}: need {param_count} args, stack has {}",
-                    frame.stack.len()
-                )
-                .into_boxed_str(),
-            });
+            return Err(malformed!(
+                "tsk.spn fn {}: need {} args, stack has {}",
+                fn_id,
+                param_count,
+                frame.stack.len()
+            ));
         }
         let start = frame.stack.len() - param_count;
         let args: Vec<Value> = frame.stack.drain(start..).collect();
@@ -688,131 +762,111 @@ impl Vm {
         };
 
         let task_id = self.scheduler_mut()?.spawn(new_frame);
-
-        let frame = self.current_frame()?;
-        frame.stack.push(Value::from_task(task_id));
+        self.current_frame()?.stack.push(Value::from_task(task_id));
         Ok(StepResult::Continue)
     }
 
-    /// `TSK_AWT`: await a task's completion. Suspends if not yet done.
     fn exec_tsk_awt(&mut self) -> Result<StepResult, VmError> {
         let frame = self
             .call_stack
             .last_mut()
-            .ok_or_else(|| VmError::Malformed {
-                desc: "tsk.awt with empty call stack".into(),
-            })?;
-        let task_handle = frame.stack.pop().ok_or_else(|| VmError::Malformed {
-            desc: "tsk.awt: stack underflow".into(),
-        })?;
+            .ok_or_else(|| malformed!("tsk.awt with empty call stack"))?;
+        let task_handle = frame
+            .stack
+            .pop()
+            .ok_or_else(|| malformed!("tsk.awt: stack underflow"))?;
         let task_id = task_handle.as_task_id()?;
 
-        let sched = self.scheduler.as_mut().ok_or_else(|| VmError::Malformed {
-            desc: "tsk.awt without scheduler".into(),
-        })?;
+        let sched = self
+            .scheduler
+            .as_mut()
+            .ok_or_else(|| malformed!("tsk.awt without scheduler"))?;
         let task = sched.get(task_id).ok_or(VmError::UnknownTask { task_id })?;
 
         if let TaskStatus::Completed(v) = task.status {
-            let frame = self.current_frame()?;
-            frame.stack.push(v);
+            self.current_frame()?.stack.push(v);
             return Ok(StepResult::Continue);
         }
 
-        // Suspend current task, switch to next ready task.
         sched.suspend_awaiting_task(task_id);
         self.save_current_task();
         self.switch_to_next_task()
     }
 
-    /// `TSK_CMK`: create a new channel.
     fn exec_tsk_cmk(&mut self) -> Result<StepResult, VmError> {
         self.ensure_scheduler();
 
         let chan_id = self
             .channels
             .as_mut()
-            .ok_or_else(|| VmError::Malformed {
-                desc: "channels not initialized".into(),
-            })?
+            .ok_or_else(|| malformed!("channels not initialized"))?
             .create();
 
-        let frame = self
-            .call_stack
-            .last_mut()
-            .ok_or_else(|| VmError::Malformed {
-                desc: "tsk.cmk with empty call stack".into(),
-            })?;
-        frame.stack.push(Value::from_chan(chan_id));
+        self.current_frame()?.stack.push(Value::from_chan(chan_id));
         Ok(StepResult::Continue)
     }
 
-    /// `TSK_CHS`: send a value into a channel.
     fn exec_tsk_chs(&mut self) -> Result<StepResult, VmError> {
         let frame = self
             .call_stack
             .last_mut()
-            .ok_or_else(|| VmError::Malformed {
-                desc: "tsk.chs with empty call stack".into(),
-            })?;
-        let value = frame.stack.pop().ok_or_else(|| VmError::Malformed {
-            desc: "tsk.chs: stack underflow (value)".into(),
-        })?;
-        let chan_handle = frame.stack.pop().ok_or_else(|| VmError::Malformed {
-            desc: "tsk.chs: stack underflow (chan)".into(),
-        })?;
+            .ok_or_else(|| malformed!("tsk.chs with empty call stack"))?;
+        let value = frame
+            .stack
+            .pop()
+            .ok_or_else(|| malformed!("tsk.chs: stack underflow (value)"))?;
+        let chan_handle = frame
+            .stack
+            .pop()
+            .ok_or_else(|| malformed!("tsk.chs: stack underflow (chan)"))?;
         let chan_id = chan_handle.as_chan_id()?;
 
-        let channels = self.channels.as_mut().ok_or_else(|| VmError::Malformed {
-            desc: "tsk.chs without channel table".into(),
-        })?;
-
-        // Check if any task is blocked on recv for this channel.
-        // If so, wake it directly with the value instead of buffering.
-        let sched = self.scheduler.as_mut().ok_or_else(|| VmError::Malformed {
-            desc: "tsk.chs without scheduler".into(),
-        })?;
+        let channels = self
+            .channels
+            .as_mut()
+            .ok_or_else(|| malformed!("tsk.chs without channel table"))?;
+        let sched = self
+            .scheduler
+            .as_mut()
+            .ok_or_else(|| malformed!("tsk.chs without scheduler"))?;
         if !sched.wake_one_receiver(chan_id, value) {
             channels.send(chan_id, value)?;
         }
 
-        let frame = self.current_frame()?;
-        frame.stack.push(Value::UNIT);
+        self.current_frame()?.stack.push(Value::UNIT);
         Ok(StepResult::Continue)
     }
 
-    /// `TSK_CHR`: receive a value from a channel. Suspends if buffer is empty.
     fn exec_tsk_chr(&mut self) -> Result<StepResult, VmError> {
         let frame = self
             .call_stack
             .last_mut()
-            .ok_or_else(|| VmError::Malformed {
-                desc: "tsk.chr with empty call stack".into(),
-            })?;
-        let chan_handle = frame.stack.pop().ok_or_else(|| VmError::Malformed {
-            desc: "tsk.chr: stack underflow".into(),
-        })?;
+            .ok_or_else(|| malformed!("tsk.chr with empty call stack"))?;
+        let chan_handle = frame
+            .stack
+            .pop()
+            .ok_or_else(|| malformed!("tsk.chr: stack underflow"))?;
         let chan_id = chan_handle.as_chan_id()?;
 
-        let channels = self.channels.as_mut().ok_or_else(|| VmError::Malformed {
-            desc: "tsk.chr without channel table".into(),
-        })?;
+        let channels = self
+            .channels
+            .as_mut()
+            .ok_or_else(|| malformed!("tsk.chr without channel table"))?;
 
         if let Some(value) = channels.try_recv(chan_id)? {
-            let frame = self.current_frame()?;
-            frame.stack.push(value);
+            self.current_frame()?.stack.push(value);
             return Ok(StepResult::Continue);
         }
 
-        // Buffer empty — suspend and switch.
-        let sched = self.scheduler.as_mut().ok_or_else(|| VmError::Malformed {
-            desc: "tsk.chr without scheduler".into(),
-        })?;
+        let sched = self
+            .scheduler
+            .as_mut()
+            .ok_or_else(|| malformed!("tsk.chr without scheduler"))?;
         sched.suspend_awaiting_recv(chan_id);
         self.save_current_task();
         self.switch_to_next_task()
     }
 
-    /// Handle current task completing and returning a value.
     fn complete_current_task(&mut self, value: Value) -> Result<StepResult, VmError> {
         let sched = self.scheduler_mut()?;
         let next_id = sched.complete_current(value);
@@ -835,7 +889,6 @@ impl Vm {
         }
     }
 
-    /// Switch to the next ready task, or detect deadlock.
     fn switch_to_next_task(&mut self) -> Result<StepResult, VmError> {
         let sched = self.scheduler_mut()?;
         let next_id = sched.schedule_next();
@@ -852,29 +905,35 @@ impl Vm {
     }
 
     fn current_frame(&mut self) -> Result<&mut Frame, VmError> {
-        self.call_stack.last_mut().ok_or_else(|| VmError::Malformed {
-            desc: "empty call stack".into(),
-        })
+        self.call_stack
+            .last_mut()
+            .ok_or_else(|| malformed!("empty call stack"))
     }
 
     fn scheduler_mut(&mut self) -> Result<&mut TaskScheduler, VmError> {
-        self.scheduler.as_mut().ok_or_else(|| VmError::Malformed {
-            desc: "scheduler not initialized".into(),
-        })
+        self.scheduler
+            .as_mut()
+            .ok_or_else(|| malformed!("scheduler not initialized"))
     }
 
+    // ── Garbage collection ───────────────────────────────────────────
+
     /// Run a mark-sweep garbage collection cycle.
-    ///
-    /// Marks all objects reachable from the call stack and global table,
-    /// then sweeps unreachable objects. Returns the number of objects freed.
     pub fn collect_garbage(&mut self) -> usize {
         let roots = self.collect_roots();
         self.heap.mark_reachable(&roots);
-        self.heap.sweep()
+        let freed = self.heap.sweep();
+        self.heap.reset_gc_counter();
+        freed
     }
 
-    /// Gather all root values from the call stack, continuations, globals,
-    /// suspended task stacks, and channel buffers.
+    /// Run GC if the heap's allocation counter has reached its threshold.
+    fn maybe_gc(&mut self) {
+        if self.heap.needs_gc() {
+            let _ = self.collect_garbage();
+        }
+    }
+
     fn collect_roots(&self) -> Vec<Value> {
         let mut roots = Vec::new();
         for frame in &self.call_stack {

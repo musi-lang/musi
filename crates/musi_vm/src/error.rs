@@ -49,3 +49,14 @@ pub enum VmError {
     #[error("unknown channel id `{channel_id}`")]
     UnknownChannel { channel_id: u32 },
 }
+
+macro_rules! malformed {
+    ($lit:literal) => {
+        $crate::error::VmError::Malformed { desc: $lit.into() }
+    };
+    ($fmt:literal, $($arg:tt)*) => {
+        $crate::error::VmError::Malformed { desc: format!($fmt, $($arg)*).into_boxed_str() }
+    };
+}
+pub(crate) use malformed;
+

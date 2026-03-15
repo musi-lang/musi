@@ -1,0 +1,99 @@
+//! Frame types and stack helpers.
+
+use crate::error::{VmError, malformed};
+use crate::value::Value;
+
+/// An activation record for a single function invocation.
+#[derive(Clone)]
+pub struct Frame {
+    /// Index into `module.functions`.
+    pub fn_idx: usize,
+    /// Byte offset of the *next* instruction to execute.
+    pub ip: usize,
+    /// Local variable slots (pre-zeroed, size = `local_count`).
+    pub locals: Vec<Value>,
+    /// Operand stack.
+    pub stack: Vec<Value>,
+    /// Active effect frames (innermost last).
+    pub eff_stack: Vec<EffFrame>,
+    /// If this frame was entered via a closure call, the heap ref to the closure object.
+    pub closure_ref: Option<Value>,
+}
+
+/// An active effect handler frame.
+#[derive(Clone, Copy, Debug)]
+pub struct EffFrame {
+    pub effect_id: u8,
+    pub handler_fn_id: u32,
+}
+
+/// A captured one-shot continuation (frames between handler and `EFF_DO` site).
+pub struct Continuation {
+    pub frames: Vec<Frame>,
+    /// The effect op id that triggered this continuation (for fatality checks on resume).
+    pub op_id: u32,
+}
+
+#[allow(clippy::missing_errors_doc)]
+impl Frame {
+    /// Pop one value from the operand stack.
+    pub fn pop(&mut self) -> Result<Value, VmError> {
+        self.stack
+            .pop()
+            .ok_or_else(|| malformed!("operand stack underflow"))
+    }
+
+    /// Pop two values: returns `(top, second)` i.e. `(b, a)` where `a` was pushed first.
+    pub fn pop2(&mut self) -> Result<(Value, Value), VmError> {
+        let b = self.pop()?;
+        let a = self.pop()?;
+        Ok((b, a))
+    }
+
+    /// Copy the top of the operand stack without removing it.
+    pub fn peek(&self) -> Result<Value, VmError> {
+        self.stack
+            .last()
+            .copied()
+            .ok_or_else(|| malformed!("peek on empty stack"))
+    }
+
+    /// Duplicate the top stack value.
+    pub fn dup(&mut self) -> Result<(), VmError> {
+        let top = self.peek()?;
+        self.stack.push(top);
+        Ok(())
+    }
+
+    /// Swap the top two stack values.
+    pub fn swp(&mut self) -> Result<(), VmError> {
+        let len = self.stack.len();
+        if len < 2 {
+            return Err(malformed!("swp requires at least 2 stack values"));
+        }
+        self.stack.swap(len - 1, len - 2);
+        Ok(())
+    }
+
+    /// Read a local variable by slot index.
+    pub fn get_local(&self, slot: usize) -> Result<Value, VmError> {
+        self.locals
+            .get(slot)
+            .copied()
+            .ok_or(VmError::OutOfBounds {
+                index: slot,
+                len: self.locals.len(),
+            })
+    }
+
+    /// Write a local variable by slot index.
+    pub fn set_local(&mut self, slot: usize, v: Value) -> Result<(), VmError> {
+        let len = self.locals.len();
+        let dest = self
+            .locals
+            .get_mut(slot)
+            .ok_or(VmError::OutOfBounds { index: slot, len })?;
+        *dest = v;
+        Ok(())
+    }
+}

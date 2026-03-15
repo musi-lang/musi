@@ -100,6 +100,7 @@ pub enum EffectAction {
     /// Normal execution continues.
     Continue,
     /// Call handler function with the operand stack arguments.
+    #[allow(dead_code)]
     DoEffect { handler_fn_id: u32, op_id: u32 },
     /// Handler not found in current frame — search entire call stack.
     CrossFrameSearch { effect_id: u8, op_id: u32 },

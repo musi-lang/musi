@@ -142,7 +142,7 @@ pub fn load(bytes: &[u8]) -> Result<LoadedModule, VmError> {
     }
 
     // CRC32 over first 36 bytes, stored at offset 36.
-    let stored_crc = read_u32(bytes, 36)?;
+    let stored_crc = Cursor::new(bytes, 36).read_u32()?;
     let computed = crc32_slice(bytes.get(..36).ok_or_else(|| VmError::Malformed {
         desc: "header truncated before checksum field".into(),
     })?);
@@ -150,27 +150,28 @@ pub fn load(bytes: &[u8]) -> Result<LoadedModule, VmError> {
         return Err(VmError::BadChecksum);
     }
 
-    let flags = read_u32(bytes, 8)?;
-    let raw_entry = read_u32(bytes, 12)?;
+    let mut hdr = Cursor::new(bytes, 8);
+    let flags = hdr.read_u32()?;
+    let raw_entry = hdr.read_u32()?;
     let entry_point = if raw_entry == 0xFFFF_FFFF {
         None
     } else {
         Some(raw_entry)
     };
 
-    let const_off = usize::try_from(read_u32(bytes, 16)?).map_err(|_| VmError::Malformed {
+    let const_off = usize::try_from(hdr.read_u32()?).map_err(|_| VmError::Malformed {
         desc: "const_off overflows usize".into(),
     })?;
-    let type_off = usize::try_from(read_u32(bytes, 20)?).map_err(|_| VmError::Malformed {
+    let type_off = usize::try_from(hdr.read_u32()?).map_err(|_| VmError::Malformed {
         desc: "type_off overflows usize".into(),
     })?;
-    let effect_off = usize::try_from(read_u32(bytes, 24)?).map_err(|_| VmError::Malformed {
+    let effect_off = usize::try_from(hdr.read_u32()?).map_err(|_| VmError::Malformed {
         desc: "effect_off overflows usize".into(),
     })?;
-    let foreign_off = usize::try_from(read_u32(bytes, 28)?).map_err(|_| VmError::Malformed {
+    let foreign_off = usize::try_from(hdr.read_u32()?).map_err(|_| VmError::Malformed {
         desc: "foreign_off overflows usize".into(),
     })?;
-    let fn_off = usize::try_from(read_u32(bytes, 32)?).map_err(|_| VmError::Malformed {
+    let fn_off = usize::try_from(hdr.read_u32()?).map_err(|_| VmError::Malformed {
         desc: "fn_off overflows usize".into(),
     })?;
 
@@ -192,33 +193,31 @@ pub fn load(bytes: &[u8]) -> Result<LoadedModule, VmError> {
 }
 
 fn parse_const_pool(bytes: &[u8], off: usize) -> Result<Vec<LoadedConst>, VmError> {
-    let mut cur = off;
-    let count = usize::try_from(read_u32_at(bytes, &mut cur)?).map_err(|_| VmError::Malformed {
+    let mut cur = Cursor::new(bytes, off);
+    let count = usize::try_from(cur.read_u32()?).map_err(|_| VmError::Malformed {
         desc: "const count overflows usize".into(),
     })?;
     let mut consts = Vec::with_capacity(count);
     for _ in 0..count {
-        let tag = read_u8_at(bytes, &mut cur)?;
+        let tag = cur.read_u8()?;
         let c = match tag {
             TAG_CONST_I32 => {
-                let v = read_i32_at(bytes, &mut cur)?;
+                let v = cur.read_i32()?;
                 LoadedConst::I32(v)
             }
             TAG_CONST_I64 => {
-                let v = read_i64_at(bytes, &mut cur)?;
+                let v = cur.read_i64()?;
                 LoadedConst::I64(v)
             }
             TAG_CONST_F64 => {
-                let bits = read_u64_at(bytes, &mut cur)?;
+                let bits = cur.read_u64()?;
                 LoadedConst::F64(f64::from_bits(bits))
             }
             TAG_CONST_STR => {
-                let len = usize::try_from(read_u32_at(bytes, &mut cur)?).map_err(|_| {
-                    VmError::Malformed {
-                        desc: "string length overflows usize".into(),
-                    }
+                let len = usize::try_from(cur.read_u32()?).map_err(|_| VmError::Malformed {
+                    desc: "string length overflows usize".into(),
                 })?;
-                let s = read_bytes_at(bytes, &mut cur, len)?;
+                let s = cur.read_bytes(len)?;
                 let text = str::from_utf8(s)
                     .map_err(|_| VmError::Malformed {
                         desc: "string constant is not valid UTF-8".into(),
@@ -227,14 +226,14 @@ fn parse_const_pool(bytes: &[u8], off: usize) -> Result<Vec<LoadedConst>, VmErro
                 LoadedConst::Str(text)
             }
             TAG_CONST_RUNE => {
-                let code = read_u32_at(bytes, &mut cur)?;
+                let code = cur.read_u32()?;
                 let c = char::from_u32(code).ok_or_else(|| VmError::Malformed {
                     desc: "rune constant is not a valid Unicode scalar".into(),
                 })?;
                 LoadedConst::Rune(c)
             }
             TAG_CONST_FN => {
-                let id = read_u32_at(bytes, &mut cur)?;
+                let id = cur.read_u32()?;
                 LoadedConst::Fn(id)
             }
             _ => {
@@ -271,23 +270,23 @@ const TAG_TY_REF: u8 = 0x13;
 const TAG_TY_ANY: u8 = 0x14;
 
 fn parse_type_pool(bytes: &[u8], off: usize) -> Result<Vec<LoadedType>, VmError> {
-    let mut cur = off;
-    let count = usize::try_from(read_u32_at(bytes, &mut cur)?).map_err(|_| VmError::Malformed {
+    let mut cur = Cursor::new(bytes, off);
+    let count = usize::try_from(cur.read_u32()?).map_err(|_| VmError::Malformed {
         desc: "type count overflows usize".into(),
     })?;
     let mut types = Vec::with_capacity(count);
     for _ in 0..count {
-        let tag = read_u8_at(bytes, &mut cur)?;
+        let tag = cur.read_u8()?;
         let data = match tag {
             // No-payload primitive types.
             TAG_TY_UNIT | TAG_TY_BOOL | TAG_TY_I8 | TAG_TY_I16 | TAG_TY_I32 | TAG_TY_I64
             | TAG_TY_U8 | TAG_TY_U16 | TAG_TY_U32 | TAG_TY_U64 | TAG_TY_F32 | TAG_TY_F64
             | TAG_TY_RUNE | TAG_TY_ANY => vec![],
             // 4-byte inner type_id.
-            TAG_TY_PTR | TAG_TY_ARR | TAG_TY_REF => read_bytes_at(bytes, &mut cur, 4)?.to_vec(),
+            TAG_TY_PTR | TAG_TY_ARR | TAG_TY_REF => cur.read_bytes(4)?.to_vec(),
             // product: count:u32 + count * type_id:u32
             TAG_TY_PRODUCT => {
-                let field_count = usize::try_from(read_u32_at(bytes, &mut cur)?).map_err(|_| {
+                let field_count = usize::try_from(cur.read_u32()?).map_err(|_| {
                     VmError::Malformed {
                         desc: "product field count overflows usize".into(),
                     }
@@ -298,31 +297,30 @@ fn parse_type_pool(bytes: &[u8], off: usize) -> Result<Vec<LoadedType>, VmError>
                     desc: "product field count overflows u32".into(),
                 })?;
                 data.extend_from_slice(&fc_u32.to_le_bytes());
-                let fields = read_bytes_at(bytes, &mut cur, field_count * 4)?;
+                let fields = cur.read_bytes(field_count * 4)?;
                 data.extend_from_slice(fields);
                 data
             }
             // sum: variant_count:u32 + variant_count * (tag:u32 + payload_id:u32)
             TAG_TY_SUM => {
-                let variant_count =
-                    usize::try_from(read_u32_at(bytes, &mut cur)?).map_err(|_| {
-                        VmError::Malformed {
-                            desc: "sum variant count overflows usize".into(),
-                        }
-                    })?;
+                let variant_count = usize::try_from(cur.read_u32()?).map_err(|_| {
+                    VmError::Malformed {
+                        desc: "sum variant count overflows usize".into(),
+                    }
+                })?;
                 let byte_count = 4 + variant_count * 8;
                 let mut data = Vec::with_capacity(byte_count);
                 let vc_u32 = u32::try_from(variant_count).map_err(|_| VmError::Malformed {
                     desc: "sum variant count overflows u32".into(),
                 })?;
                 data.extend_from_slice(&vc_u32.to_le_bytes());
-                let variants = read_bytes_at(bytes, &mut cur, variant_count * 8)?;
+                let variants = cur.read_bytes(variant_count * 8)?;
                 data.extend_from_slice(variants);
                 data
             }
             // fn: param_count:u32 + params:u32[] + ret_id:u32 + effect_mask:u16
             TAG_TY_FN => {
-                let param_count = usize::try_from(read_u32_at(bytes, &mut cur)?).map_err(|_| {
+                let param_count = usize::try_from(cur.read_u32()?).map_err(|_| {
                     VmError::Malformed {
                         desc: "fn param count overflows usize".into(),
                     }
@@ -333,7 +331,7 @@ fn parse_type_pool(bytes: &[u8], off: usize) -> Result<Vec<LoadedType>, VmError>
                     desc: "fn param count overflows u32".into(),
                 })?;
                 data.extend_from_slice(&pc_u32.to_le_bytes());
-                let rest = read_bytes_at(bytes, &mut cur, param_count * 4 + 4 + 2)?;
+                let rest = cur.read_bytes(param_count * 4 + 4 + 2)?;
                 data.extend_from_slice(rest);
                 data
             }
@@ -349,26 +347,26 @@ fn parse_type_pool(bytes: &[u8], off: usize) -> Result<Vec<LoadedType>, VmError>
 }
 
 fn parse_effect_pool(bytes: &[u8], off: usize) -> Result<Vec<LoadedEffect>, VmError> {
-    let mut cur = off;
-    let count = usize::try_from(read_u32_at(bytes, &mut cur)?).map_err(|_| VmError::Malformed {
+    let mut cur = Cursor::new(bytes, off);
+    let count = usize::try_from(cur.read_u32()?).map_err(|_| VmError::Malformed {
         desc: "effect count overflows usize".into(),
     })?;
     let mut effects = Vec::with_capacity(count);
     for _ in 0..count {
-        let id = read_u32_at(bytes, &mut cur)?;
-        let name_const_idx = read_u32_at(bytes, &mut cur)?;
-        let op_count = usize::from(read_u16_at(bytes, &mut cur)?);
+        let id = cur.read_u32()?;
+        let name_const_idx = cur.read_u32()?;
+        let op_count = usize::from(cur.read_u16()?);
         let mut ops = Vec::with_capacity(op_count);
         for _ in 0..op_count {
-            let op_id = read_u32_at(bytes, &mut cur)?;
-            let op_name_idx = read_u32_at(bytes, &mut cur)?;
-            let param_count = usize::from(read_u16_at(bytes, &mut cur)?);
+            let op_id = cur.read_u32()?;
+            let op_name_idx = cur.read_u32()?;
+            let param_count = usize::from(cur.read_u16()?);
             let mut param_type_ids = Vec::with_capacity(param_count);
             for _ in 0..param_count {
-                param_type_ids.push(read_u32_at(bytes, &mut cur)?);
+                param_type_ids.push(cur.read_u32()?);
             }
-            let ret_type_id = read_u32_at(bytes, &mut cur)?;
-            let op_flags = read_u8_at(bytes, &mut cur)?;
+            let ret_type_id = cur.read_u32()?;
+            let op_flags = cur.read_u8()?;
             let fatal = op_flags & 1 != 0;
             ops.push(LoadedEffectOp {
                 id: op_id,
@@ -388,29 +386,28 @@ fn parse_effect_pool(bytes: &[u8], off: usize) -> Result<Vec<LoadedEffect>, VmEr
 }
 
 fn parse_fn_pool(bytes: &[u8], off: usize) -> Result<Vec<LoadedFn>, VmError> {
-    let mut cur = off;
-    let count = usize::try_from(read_u32_at(bytes, &mut cur)?).map_err(|_| VmError::Malformed {
+    let mut cur = Cursor::new(bytes, off);
+    let count = usize::try_from(cur.read_u32()?).map_err(|_| VmError::Malformed {
         desc: "function count overflows usize".into(),
     })?;
     let mut functions = Vec::with_capacity(count);
     for _ in 0..count {
-        let fn_id = read_u32_at(bytes, &mut cur)?;
-        let type_id = read_u32_at(bytes, &mut cur)?;
-        let local_count = read_u16_at(bytes, &mut cur)?;
-        let param_count = read_u16_at(bytes, &mut cur)?;
-        let max_stack = read_u16_at(bytes, &mut cur)?;
-        let effect_mask = read_u16_at(bytes, &mut cur)?;
-        let upvalue_count = read_u16_at(bytes, &mut cur)?;
-        let code_len =
-            usize::try_from(read_u32_at(bytes, &mut cur)?).map_err(|_| VmError::Malformed {
-                desc: "code length overflows usize".into(),
-            })?;
-        let code = read_bytes_at(bytes, &mut cur, code_len)?.into();
-        let handler_count = usize::from(read_u16_at(bytes, &mut cur)?);
+        let fn_id = cur.read_u32()?;
+        let type_id = cur.read_u32()?;
+        let local_count = cur.read_u16()?;
+        let param_count = cur.read_u16()?;
+        let max_stack = cur.read_u16()?;
+        let effect_mask = cur.read_u16()?;
+        let upvalue_count = cur.read_u16()?;
+        let code_len = usize::try_from(cur.read_u32()?).map_err(|_| VmError::Malformed {
+            desc: "code length overflows usize".into(),
+        })?;
+        let code = cur.read_bytes(code_len)?.into();
+        let handler_count = usize::from(cur.read_u16()?);
         let mut handlers = Vec::with_capacity(handler_count);
         for _ in 0..handler_count {
-            let effect_id = read_u8_at(bytes, &mut cur)?;
-            let handler_fn_id = read_u32_at(bytes, &mut cur)?;
+            let effect_id = cur.read_u8()?;
+            let handler_fn_id = cur.read_u32()?;
             handlers.push(HandlerEntry {
                 effect_id,
                 handler_fn_id,
@@ -436,28 +433,28 @@ fn parse_foreign_pool(
     off: usize,
     consts: &[LoadedConst],
 ) -> Result<Vec<LoadedForeignFn>, VmError> {
-    let mut cur = off;
-    let count = usize::try_from(read_u32_at(bytes, &mut cur)?).map_err(|_| VmError::Malformed {
+    let mut cur = Cursor::new(bytes, off);
+    let count = usize::try_from(cur.read_u32()?).map_err(|_| VmError::Malformed {
         desc: "foreign fn count overflows usize".into(),
     })?;
     let mut fns = Vec::with_capacity(count);
     for _ in 0..count {
         let ext_name_idx =
-            usize::try_from(read_u32_at(bytes, &mut cur)?).map_err(|_| VmError::Malformed {
+            usize::try_from(cur.read_u32()?).map_err(|_| VmError::Malformed {
                 desc: "ext_name const index overflows usize".into(),
             })?;
         let lib_name_idx =
-            usize::try_from(read_u32_at(bytes, &mut cur)?).map_err(|_| VmError::Malformed {
+            usize::try_from(cur.read_u32()?).map_err(|_| VmError::Malformed {
                 desc: "lib_name const index overflows usize".into(),
             })?;
-        let param_count = read_u16_at(bytes, &mut cur)?;
+        let param_count = cur.read_u16()?;
         let pc = usize::from(param_count);
         let mut param_type_ids = Vec::with_capacity(pc);
         for _ in 0..pc {
-            param_type_ids.push(read_u32_at(bytes, &mut cur)?);
+            param_type_ids.push(cur.read_u32()?);
         }
-        let ret_type_id = read_u32_at(bytes, &mut cur)?;
-        let flags = read_u8_at(bytes, &mut cur)?;
+        let ret_type_id = cur.read_u32()?;
+        let flags = cur.read_u8()?;
         let variadic = flags & 1 != 0;
 
         let ext_name = resolve_string_const(consts, ext_name_idx)?;
@@ -492,95 +489,56 @@ fn resolve_string_const(consts: &[LoadedConst], idx: usize) -> Result<Box<str>, 
     }
 }
 
-fn read_u8_at(bytes: &[u8], cur: &mut usize) -> Result<u8, VmError> {
-    let b = bytes.get(*cur).copied().ok_or_else(|| VmError::Malformed {
-        desc: "unexpected end of file reading u8".into(),
-    })?;
-    *cur += 1;
-    Ok(b)
+struct Cursor<'a> {
+    bytes: &'a [u8],
+    pos: usize,
 }
 
-fn read_u16_at(bytes: &[u8], cur: &mut usize) -> Result<u16, VmError> {
-    let slice = bytes
-        .get(*cur..*cur + 2)
-        .ok_or_else(|| VmError::Malformed {
-            desc: "unexpected end of file reading u16".into(),
+impl<'a> Cursor<'a> {
+    const fn new(bytes: &'a [u8], pos: usize) -> Self {
+        Self { bytes, pos }
+    }
+
+    fn read_array<const N: usize>(&mut self) -> Result<[u8; N], VmError> {
+        let slice = self.bytes.get(self.pos..self.pos + N).ok_or_else(|| VmError::Malformed {
+            desc: "unexpected end of file".into(),
         })?;
-    let arr = <[u8; 2]>::try_from(slice).map_err(|_| VmError::Malformed {
-        desc: "unexpected end of file reading u16".into(),
-    })?;
-    let v = u16::from_le_bytes(arr);
-    *cur += 2;
-    Ok(v)
-}
-
-fn read_u32_at(bytes: &[u8], cur: &mut usize) -> Result<u32, VmError> {
-    let slice = bytes
-        .get(*cur..*cur + 4)
-        .ok_or_else(|| VmError::Malformed {
-            desc: "unexpected end of file reading u32".into(),
+        let arr = <[u8; N]>::try_from(slice).map_err(|_| VmError::Malformed {
+            desc: "unexpected end of file".into(),
         })?;
-    let arr = <[u8; 4]>::try_from(slice).map_err(|_| VmError::Malformed {
-        desc: "unexpected end of file reading u32".into(),
-    })?;
-    let v = u32::from_le_bytes(arr);
-    *cur += 4;
-    Ok(v)
-}
+        self.pos += N;
+        Ok(arr)
+    }
 
-fn read_i32_at(bytes: &[u8], cur: &mut usize) -> Result<i32, VmError> {
-    let slice = bytes
-        .get(*cur..*cur + 4)
-        .ok_or_else(|| VmError::Malformed {
-            desc: "unexpected end of file reading i32".into(),
+    fn read_u8(&mut self) -> Result<u8, VmError> {
+        Ok(self.read_array::<1>()?[0])
+    }
+
+    fn read_u16(&mut self) -> Result<u16, VmError> {
+        Ok(u16::from_le_bytes(self.read_array()?))
+    }
+
+    fn read_u32(&mut self) -> Result<u32, VmError> {
+        Ok(u32::from_le_bytes(self.read_array()?))
+    }
+
+    fn read_i32(&mut self) -> Result<i32, VmError> {
+        Ok(i32::from_le_bytes(self.read_array()?))
+    }
+
+    fn read_i64(&mut self) -> Result<i64, VmError> {
+        Ok(i64::from_le_bytes(self.read_array()?))
+    }
+
+    fn read_u64(&mut self) -> Result<u64, VmError> {
+        Ok(u64::from_le_bytes(self.read_array()?))
+    }
+
+    fn read_bytes(&mut self, len: usize) -> Result<&'a [u8], VmError> {
+        let slice = self.bytes.get(self.pos..self.pos + len).ok_or_else(|| VmError::Malformed {
+            desc: "unexpected end of file".into(),
         })?;
-    let arr = <[u8; 4]>::try_from(slice).map_err(|_| VmError::Malformed {
-        desc: "unexpected end of file reading i32".into(),
-    })?;
-    let v = i32::from_le_bytes(arr);
-    *cur += 4;
-    Ok(v)
-}
-
-fn read_i64_at(bytes: &[u8], cur: &mut usize) -> Result<i64, VmError> {
-    let slice = bytes
-        .get(*cur..*cur + 8)
-        .ok_or_else(|| VmError::Malformed {
-            desc: "unexpected end of file reading i64".into(),
-        })?;
-    let arr = <[u8; 8]>::try_from(slice).map_err(|_| VmError::Malformed {
-        desc: "unexpected end of file reading i64".into(),
-    })?;
-    let v = i64::from_le_bytes(arr);
-    *cur += 8;
-    Ok(v)
-}
-
-fn read_u64_at(bytes: &[u8], cur: &mut usize) -> Result<u64, VmError> {
-    let slice = bytes
-        .get(*cur..*cur + 8)
-        .ok_or_else(|| VmError::Malformed {
-            desc: "unexpected end of file reading u64".into(),
-        })?;
-    let arr = <[u8; 8]>::try_from(slice).map_err(|_| VmError::Malformed {
-        desc: "unexpected end of file reading u64".into(),
-    })?;
-    let v = u64::from_le_bytes(arr);
-    *cur += 8;
-    Ok(v)
-}
-
-fn read_bytes_at<'b>(bytes: &'b [u8], cur: &mut usize, len: usize) -> Result<&'b [u8], VmError> {
-    let slice = bytes
-        .get(*cur..*cur + len)
-        .ok_or_else(|| VmError::Malformed {
-            desc: "unexpected end of file reading byte slice".into(),
-        })?;
-    *cur += len;
-    Ok(slice)
-}
-
-fn read_u32(bytes: &[u8], off: usize) -> Result<u32, VmError> {
-    let mut cur = off;
-    read_u32_at(bytes, &mut cur)
+        self.pos += len;
+        Ok(slice)
+    }
 }
