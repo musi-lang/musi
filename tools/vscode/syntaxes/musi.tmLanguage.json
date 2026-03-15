@@ -11,6 +11,7 @@
         { "include": "#record-definition" },
         { "include": "#effect-definition" },
         { "include": "#choice-body" },
+        { "include": "#record-literal" },
         { "include": "#keywords" },
         { "include": "#literals" },
         { "include": "#types" },
@@ -129,6 +130,25 @@
                 { "include": "#types" },
                 { "include": "#operators" },
                 { "include": "#punctuation" }
+            ]
+        },
+        "record-literal": {
+            "comment": "record literal .{ x := 1, y := 2 }",
+            "name": "meta.record-literal.musi",
+            "begin": "\\.\\{",
+            "end": "\\}",
+            "beginCaptures": { "0": { "name": "keyword.operator.record-literal.musi" } },
+            "endCaptures": { "0": { "name": "punctuation.section.block.end.musi" } },
+            "patterns": [
+                { "include": "#comments" },
+                { "include": "#record-literal" },
+                { "include": "#let-definition" },
+                { "include": "#keywords" },
+                { "include": "#literals" },
+                { "include": "#types" },
+                { "include": "#operators" },
+                { "include": "#punctuation" },
+                { "include": "#identifiers" }
             ]
         },
         "comments": {
@@ -408,11 +428,6 @@
                     "comment": "array index compound token: .[ as in arr.[0]",
                     "name": "keyword.operator.index.musi",
                     "match": "\\.\\["
-                },
-                {
-                    "comment": "record literal .{ as in Point.{ x := 1, y := 2 }",
-                    "name": "keyword.operator.record-literal.musi",
-                    "match": "\\.\\{"
                 },
                 {
                     "comment": "field access dot -- must not match .. range, .[ index, or .{ record",
