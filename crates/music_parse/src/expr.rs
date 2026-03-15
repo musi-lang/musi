@@ -81,20 +81,20 @@ impl Parser<'_> {
             T::BangBang => (15, 14, B::ForceCoal),
             // BP 20 — pipe (left-assoc)
             T::PipeGt => (20, 21, B::Pipe),
-            // BP 30 — comparison (non-assoc)
-            T::Eq => (30, 31, B::Eq),
-            T::SlashEq => (30, 31, B::Ne),
-            T::Lt => (30, 31, B::Lt),
-            T::Gt => (30, 31, B::Gt),
-            T::LtEq => (30, 31, B::Le),
-            T::GtEq => (30, 31, B::Ge),
-            T::KwIn => (30, 31, B::In),
-            // BP 40 — or (left-assoc)
-            T::KwOr => (40, 41, B::Or),
-            // BP 45 — xor (left-assoc)
-            T::KwXor => (45, 46, B::Xor),
-            // BP 50 — and (left-assoc)
-            T::KwAnd => (50, 51, B::And),
+            // BP 30 — or (left-assoc)
+            T::KwOr => (30, 31, B::Or),
+            // BP 35 — xor (left-assoc)
+            T::KwXor => (35, 36, B::Xor),
+            // BP 40 — and (left-assoc)
+            T::KwAnd => (40, 41, B::And),
+            // BP 50 — comparison (non-assoc)
+            T::Eq => (50, 51, B::Eq),
+            T::SlashEq => (50, 51, B::Ne),
+            T::Lt => (50, 51, B::Lt),
+            T::Gt => (50, 51, B::Gt),
+            T::LtEq => (50, 51, B::Le),
+            T::GtEq => (50, 51, B::Ge),
+            T::KwIn => (50, 51, B::In),
             // BP 60 — range (non-assoc)
             T::DotDot => (60, 61, B::RangeInc),
             T::DotDotLt => (60, 61, B::RangeExc),

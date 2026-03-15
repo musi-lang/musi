@@ -180,10 +180,14 @@ impl Resolver<'_> {
     fn resolve_block_binding(&mut self, fields: &LetFields) {
         use music_ast::pat::Pat;
         let is_fn_pat = matches!(&self.ast.pats[fields.pat], Pat::Variant { .. });
+        let is_lambda_bind = !is_fn_pat
+            && fields.value.map_or(false, |v| matches!(&self.ast.exprs[v], Expr::Fn { .. }));
 
         // For function-like patterns, pre-define the name to enable recursion.
         if is_fn_pat {
             self.define_fn_name(fields.pat, binding_def_kind(fields.kind));
+        } else if is_lambda_bind {
+            self.define_pat(fields.pat, binding_def_kind(fields.kind));
         }
 
         let parent_ty_scope = if fields.params.is_empty() {
@@ -204,7 +208,7 @@ impl Resolver<'_> {
         if let Some(p) = parent_ty_scope {
             self.current_scope = p;
         }
-        if !is_fn_pat {
+        if !is_fn_pat && !is_lambda_bind {
             self.define_pat(fields.pat, binding_def_kind(fields.kind));
         }
     }
@@ -221,6 +225,8 @@ impl Resolver<'_> {
     fn resolve_expr_let(&mut self, fields: &LetFields, body: Option<ExprIdx>) {
         use music_ast::pat::Pat;
         let is_fn_pat = matches!(&self.ast.pats[fields.pat], Pat::Variant { .. });
+        let is_lambda_bind = !is_fn_pat
+            && fields.value.map_or(false, |v| matches!(&self.ast.exprs[v], Expr::Fn { .. }));
 
         let parent_ty_scope = if fields.params.is_empty() {
             None
@@ -232,6 +238,8 @@ impl Resolver<'_> {
         // Top-level `let` (body: None) is pre-defined in collect_top_level.
         if is_fn_pat && body.is_some() {
             self.define_fn_name(fields.pat, binding_def_kind(fields.kind));
+        } else if is_lambda_bind && body.is_some() {
+            self.define_pat(fields.pat, binding_def_kind(fields.kind));
         }
 
         let fn_pat_parent = self.enter_fn_pat_scope(fields.pat);
@@ -250,7 +258,7 @@ impl Resolver<'_> {
         if let Some(body) = body {
             let parent = self.current_scope;
             self.current_scope = self.scopes.push_child(parent);
-            if !is_fn_pat {
+            if !is_fn_pat && !is_lambda_bind {
                 self.define_pat(fields.pat, binding_def_kind(fields.kind));
             }
             self.resolve_expr(body);

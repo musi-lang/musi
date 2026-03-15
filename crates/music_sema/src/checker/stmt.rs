@@ -245,10 +245,25 @@ pub fn check_stmt<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: Idx<music_a
             }
         }
         Expr::Foreign { decls, .. } => {
+            let mut ty_params = Vec::new();
+            for decl in &decls {
+                if let ForeignDecl::Fn { ty, .. } = decl {
+                    collect_ty_var_nodes(*ty, ck.ctx.ast, &mut ty_params);
+                }
+            }
+            let parent = if ty_params.is_empty() {
+                None
+            } else {
+                let (p, _ids) = ck.enter_ty_param_scope(&ty_params);
+                Some(p)
+            };
             for decl in &decls {
                 if let ForeignDecl::Fn { ty, .. } = decl {
                     let _fn_ty = lower_ty(ck, *ty);
                 }
+            }
+            if let Some(p) = parent {
+                ck.current_scope = p;
             }
         }
         _ => {}
