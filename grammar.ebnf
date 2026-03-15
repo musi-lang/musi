@@ -88,17 +88,18 @@ astStmt = astExpr , ";" ;
    Postfix             () .[] .{} . ?. !. ? ! :? :?>
 
    and/or/xor/not are type-directed: boolean on Bool, bitwise on integers.
-   No separate & | ^ ~ operators exist. *)
+   No separate & | ^ ~ operators exist.
+*)
 
 astExpr     = astExprCoal , [ "<-" , astExpr ] ;
 astExprCoal = astExprPipe , [ ( "??" | "!!" ) , astExprCoal ] ;
-astExprPipe = astExprCmp , { "|>" , astExprCmp } ;
-astExprCmp  = astExprDisj ,
-              [ ( "=" | "/=" | "<" | ">" | "<=" | ">=" | "in" ) ,
-                astExprDisj ] ;
+astExprPipe = astExprDisj , { "|>" , astExprDisj } ;
 astExprDisj = astExprXor , { "or" , astExprXor } ;
 astExprXor  = astExprConj , { "xor" , astExprConj } ;
-astExprConj = astExprRange , { "and" , astExprRange } ;
+astExprConj = astExprCmp , { "and" , astExprCmp } ;
+astExprCmp  = astExprRange ,
+              [ ( "=" | "/=" | "<" | ">" | "<=" | ">=" | "in" ) ,
+                astExprRange ] ;
 astExprRange = astExprCons , [ ( ".." | "..<" ) , astExprCons ] ;
 astExprCons = astExprSft , [ "::" , astExprCons ] ;
 astExprSft  = astExprAdd , { ( "<<" | ">>" ) , astExprAdd } ;
