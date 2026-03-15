@@ -61,12 +61,9 @@ pub fn decode_operand(code: &[u8], base_ip: usize) -> (u32, usize) {
 }
 
 /// Reinterpret a u32 operand as a signed i32 jump offset.
-#[must_use]
-pub const fn read_i32_operand(operand: u32) -> isize {
+pub fn read_i32_operand(operand: u32) -> Result<isize, VmError> {
     let signed = i32::from_le_bytes(operand.to_le_bytes());
-    #[allow(clippy::as_conversions)]
-    let result = signed as isize;
-    result
+    isize::try_from(signed).map_err(|_| malformed!("jump offset overflows isize"))
 }
 
 /// Compute absolute jump target from the address after the instruction + signed offset.

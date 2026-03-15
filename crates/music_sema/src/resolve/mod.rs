@@ -36,7 +36,7 @@ pub struct ResolveOutput {
     pub pat_defs: HashMap<Span, DefId>,
     /// Maps law span → inferred (implicit) law variables, for LSP inlay hints.
     pub law_inferred_vars: HashMap<Span, Vec<(Symbol, DefId)>>,
-    /// Maps (class DefId, operator Symbol) → member DefId for operator dispatch.
+    /// Maps (class `DefId`, operator `Symbol`) → member `DefId` for operator dispatch.
     pub class_op_members: HashMap<(DefId, Symbol), DefId>,
 }
 

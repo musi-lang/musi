@@ -5,6 +5,7 @@ use music_ast::expr::Expr;
 use music_lex::token::TokenKind;
 use music_shared::Symbol;
 
+use crate::error::ParseError;
 use crate::parser::Parser;
 
 impl Parser<'_> {
@@ -174,7 +175,7 @@ impl Parser<'_> {
                 self.interner.intern(text)
             } else {
                 let span = tok.span;
-                let err = crate::error::ParseError::ExpectedIdent;
+                let err = ParseError::ExpectedIdent;
                 let _diag = self.diags.report(&err, span, self.file_id);
                 Symbol(u32::MAX)
             };

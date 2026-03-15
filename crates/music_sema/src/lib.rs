@@ -29,7 +29,7 @@ pub use def::{DefId, DefInfo, DefKind, DefTable};
 pub use error::SemaError;
 pub use resolve::ResolveOutput;
 pub use scope::ScopeTree;
-pub use types::{EffectRow, InstanceInfo, Obligation, TyVarId, Type, TypeIdx};
+pub use types::{DictLookup, EffectRow, InstanceInfo, Obligation, TyVarId, Type, TypeIdx};
 pub use unify::UnifyTable;
 pub use well_known::WellKnown;
 
@@ -54,7 +54,7 @@ pub struct ResolutionMap {
     pub pat_defs: HashMap<Span, DefId>,
     /// Maps law span → inferred (implicit) law variables, for LSP inlay hints.
     pub law_inferred_vars: HashMap<Span, Vec<(Symbol, DefId)>>,
-    /// Maps (class DefId, operator Symbol) → member DefId for operator dispatch.
+    /// Maps (class `DefId`, operator `Symbol`) → member `DefId` for operator dispatch.
     pub class_op_members: HashMap<(DefId, Symbol), DefId>,
 }
 
@@ -72,8 +72,12 @@ pub struct SemaResult {
     pub unify: UnifyTable,
     /// Typeclass instances discovered during analysis.
     pub instances: Vec<InstanceInfo>,
-    /// Maps BinOp expression index → instance method DefId for operator dispatch.
+    /// Maps `BinOp` expression index → instance method `DefId` for operator dispatch.
     pub binop_dispatch: HashMap<ExprIdx, DefId>,
+    /// Maps `BinOp` expression → dictionary lookup for polymorphic dispatch.
+    pub binop_dict_dispatch: HashMap<ExprIdx, DictLookup>,
+    /// Maps function `DefId` → ordered class constraints (for dictionary passing).
+    pub fn_constraints: HashMap<DefId, Vec<Obligation>>,
     /// Well-known prelude type definitions (needed by bytecode emission).
     pub well_known: WellKnown,
 }
@@ -104,8 +108,12 @@ pub struct ModuleSemaOutput {
     pub resolution: ResolutionMap,
     pub expr_types: HashMap<ExprIdx, TypeIdx>,
     pub instances: Vec<InstanceInfo>,
-    /// Maps BinOp expression index → instance method DefId for operator dispatch.
+    /// Maps `BinOp` expression index → instance method `DefId` for operator dispatch.
     pub binop_dispatch: HashMap<ExprIdx, DefId>,
+    /// Maps `BinOp` expression → dictionary lookup for polymorphic dispatch.
+    pub binop_dict_dispatch: HashMap<ExprIdx, DictLookup>,
+    /// Maps function `DefId` → ordered class constraints (for dictionary passing).
+    pub fn_constraints: HashMap<DefId, Vec<Obligation>>,
 }
 
 impl SharedAnalysisState {
@@ -140,6 +148,8 @@ impl SharedAnalysisState {
             unify: self.unify,
             instances: output.instances,
             binop_dispatch: output.binop_dispatch,
+            binop_dict_dispatch: output.binop_dict_dispatch,
+            fn_constraints: output.fn_constraints,
             well_known: self.well_known,
         }
     }
@@ -179,6 +189,7 @@ pub fn analyze_shared(
         pat_defs: &resolved.pat_defs,
         import_types: &HashMap::new(),
         law_inferred_vars: &resolved.law_inferred_vars,
+        class_op_members: &resolved.class_op_members,
     };
 
     let mut checker = Checker::new_with_state(
@@ -214,6 +225,8 @@ pub fn analyze_shared(
         expr_types: result.expr_types,
         instances: result.instances,
         binop_dispatch: result.binop_dispatch,
+        binop_dict_dispatch: result.binop_dict_dispatch,
+        fn_constraints: result.fn_constraints,
     }
 }
 
@@ -251,6 +264,7 @@ pub fn analyze_with_imports<S: BuildHasher>(
         pat_defs: &resolved.pat_defs,
         import_types,
         law_inferred_vars: &resolved.law_inferred_vars,
+        class_op_members: &resolved.class_op_members,
     };
     let mut checker = Checker::new_with_state(
         ctx,
@@ -284,6 +298,8 @@ pub fn analyze_with_imports<S: BuildHasher>(
         unify: result.unify,
         instances: result.instances,
         binop_dispatch: result.binop_dispatch,
+        binop_dict_dispatch: result.binop_dict_dispatch,
+        fn_constraints: result.fn_constraints,
         well_known,
     }
 }

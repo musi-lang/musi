@@ -121,6 +121,14 @@ pub struct Obligation {
     pub span: Span,
 }
 
+/// Polymorphic binop dispatch: records which class constraint and method
+/// should be looked up from a dictionary at runtime.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DictLookup {
+    pub class: DefId,
+    pub method_sym: Symbol,
+}
+
 /// A typeclass instance.
 #[derive(Debug, Clone)]
 pub struct InstanceInfo {

@@ -91,6 +91,8 @@ pub struct FnCtx {
     pub upvalue_map: HashMap<DefId, u16>,
     pub deferred: Vec<ExprIdx>,
     next_label: u32,
+    /// Maps constraint class `DefId` → local slot holding the dictionary.
+    pub dict_slots: HashMap<DefId, u32>,
 }
 
 impl FnCtx {
@@ -102,6 +104,7 @@ impl FnCtx {
             upvalue_map: HashMap::new(),
             deferred: Vec::new(),
             next_label: 0,
+            dict_slots: HashMap::new(),
         }
     }
 
@@ -624,13 +627,26 @@ impl<'a> Emitter<'a> {
     }
 
     fn emit_one_function(&mut self, entry: &FnEntry) -> Result<FnBytecode, EmitError> {
+        // Determine implicit dictionary parameter count from constraints
+        let constraints = entry.def_id.and_then(|did| self.sema.fn_constraints.get(&did));
+        let dict_count = constraints.map_or(0, Vec::len);
+        let total_params = entry.params.len() + dict_count;
         let param_count =
-            u16::try_from(entry.params.len()).map_err(|_| EmitError::overflow("too many params"))?;
+            u16::try_from(total_params).map_err(|_| EmitError::overflow("too many params"))?;
 
         let mut fc = FnCtx::new(param_count);
 
+        // Slots 0..dict_count are implicit dictionary parameters
+        if let Some(constraints) = constraints {
+            for (i, ob) in constraints.iter().enumerate() {
+                let slot = u32::try_from(i).map_err(|_| EmitError::overflow("dict slot overflow"))?;
+                let _ = fc.dict_slots.insert(ob.class, slot);
+            }
+        }
+
+        // Slots dict_count..total are explicit parameters (shifted by dict_count)
         for (i, param) in entry.params.iter().enumerate() {
-            let slot = u32::try_from(i).map_err(|_| EmitError::overflow("param index overflow"))?;
+            let slot = u32::try_from(i + dict_count).map_err(|_| EmitError::overflow("param index overflow"))?;
             if let Some(&did) = self.sema.resolution.pat_defs.get(&param.span) {
                 let _ = fc.local_map.insert(did, slot);
             } else {

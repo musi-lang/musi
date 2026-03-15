@@ -21,7 +21,7 @@ use music_shared::{Arena, DiagnosticBag, FileId, Interner, Span, Symbol};
 use crate::def::{DefId, DefKind, DefTable};
 use crate::error::SemaError;
 use crate::scope::{ScopeId, ScopeTree};
-use crate::types::{EffectRow, InstanceInfo, Obligation, Type, TypeIdx, fmt_type};
+use crate::types::{DictLookup, EffectRow, InstanceInfo, Obligation, Type, TypeIdx, fmt_type};
 use crate::unify::UnifyTable;
 use crate::well_known::WellKnown;
 
@@ -38,6 +38,8 @@ pub struct CheckContext<'a, S: BuildHasher = RandomState> {
     pub(crate) import_types: &'a HashMap<Symbol, TypeIdx, S>,
     /// Inferred law variables from the resolver, keyed by law span.
     pub(crate) law_inferred_vars: &'a HashMap<Span, Vec<(Symbol, DefId)>>,
+    /// Maps (class `DefId`, operator `Symbol`) → member `DefId` for operator dispatch.
+    pub(crate) class_op_members: &'a HashMap<(DefId, Symbol), DefId>,
 }
 
 /// Mutable type-checking state built up during checking.
@@ -47,8 +49,14 @@ pub struct TypeStore {
     pub(crate) obligations: Vec<Obligation>,
     pub(crate) instances: Vec<InstanceInfo>,
     pub(crate) expr_types: HashMap<ExprIdx, TypeIdx>,
-    /// Maps BinOp expression index → the instance method DefId that handles it.
+    /// Maps `BinOp` expression index → the instance method `DefId` that handles it.
     pub(crate) binop_dispatch: HashMap<ExprIdx, DefId>,
+    /// Maps `BinOp` expression → dictionary lookup info for polymorphic dispatch.
+    pub(crate) binop_dict_dispatch: HashMap<ExprIdx, DictLookup>,
+    /// Maps function `DefId` → ordered list of class constraints (for dict params).
+    pub(crate) fn_constraints: HashMap<DefId, Vec<Obligation>>,
+    /// In-scope class obligations for the current generic function.
+    pub(crate) active_obligations: Vec<Obligation>,
 }
 
 pub struct Checker<'a, S: BuildHasher = RandomState> {
@@ -82,6 +90,9 @@ impl<'a, S: BuildHasher> Checker<'a, S> {
                 instances: vec![],
                 expr_types: HashMap::new(),
                 binop_dispatch: HashMap::new(),
+                binop_dict_dispatch: HashMap::new(),
+                fn_constraints: HashMap::new(),
+                active_obligations: vec![],
             },
             diags,
             defs,
@@ -204,6 +215,8 @@ impl<'a, S: BuildHasher> Checker<'a, S> {
             expr_types: self.store.expr_types,
             instances: self.store.instances,
             binop_dispatch: self.store.binop_dispatch,
+            binop_dict_dispatch: self.store.binop_dict_dispatch,
+            fn_constraints: self.store.fn_constraints,
         }
     }
 }
@@ -214,4 +227,6 @@ pub struct CheckerResult {
     pub expr_types: HashMap<ExprIdx, TypeIdx>,
     pub instances: Vec<InstanceInfo>,
     pub binop_dispatch: HashMap<ExprIdx, DefId>,
+    pub binop_dict_dispatch: HashMap<ExprIdx, DictLookup>,
+    pub fn_constraints: HashMap<DefId, Vec<Obligation>>,
 }

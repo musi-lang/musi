@@ -158,9 +158,8 @@ impl Opcode {
 
     /// Human-readable name for this opcode, if known.
     #[must_use]
-    pub const fn name(self) -> Option<&'static str> {
-        #[allow(clippy::as_conversions)] // u8->usize is lossless
-        OPCODE_NAMES[self.0 as usize]
+    pub fn name(self) -> Option<&'static str> {
+        OPCODE_NAMES[usize::from(self.0)]
     }
 }
 

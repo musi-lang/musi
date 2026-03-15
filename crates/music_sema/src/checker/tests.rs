@@ -76,6 +76,7 @@ fn check_module(interner: &mut Interner, module: &ParsedModule) -> DiagnosticBag
         pat_defs: &resolved.pat_defs,
         import_types: &empty_imports,
         law_inferred_vars: &resolved.law_inferred_vars,
+        class_op_members: &resolved.class_op_members,
     };
     let mut diags = DiagnosticBag::new();
     let mut checker = Checker::new_with_state(

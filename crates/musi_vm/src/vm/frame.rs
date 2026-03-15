@@ -34,9 +34,12 @@ pub struct Continuation {
     pub op_id: u32,
 }
 
-#[allow(clippy::missing_errors_doc)]
 impl Frame {
     /// Pop one value from the operand stack.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the stack is empty.
     pub fn pop(&mut self) -> Result<Value, VmError> {
         self.stack
             .pop()
@@ -44,6 +47,10 @@ impl Frame {
     }
 
     /// Pop two values: returns `(top, second)` i.e. `(b, a)` where `a` was pushed first.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the stack has fewer than two values.
     pub fn pop2(&mut self) -> Result<(Value, Value), VmError> {
         let b = self.pop()?;
         let a = self.pop()?;
@@ -51,6 +58,10 @@ impl Frame {
     }
 
     /// Copy the top of the operand stack without removing it.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the stack is empty.
     pub fn peek(&self) -> Result<Value, VmError> {
         self.stack
             .last()
@@ -59,6 +70,10 @@ impl Frame {
     }
 
     /// Duplicate the top stack value.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the stack is empty.
     pub fn dup(&mut self) -> Result<(), VmError> {
         let top = self.peek()?;
         self.stack.push(top);
@@ -66,6 +81,10 @@ impl Frame {
     }
 
     /// Swap the top two stack values.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the stack has fewer than two values.
     pub fn swp(&mut self) -> Result<(), VmError> {
         let len = self.stack.len();
         if len < 2 {
@@ -76,17 +95,22 @@ impl Frame {
     }
 
     /// Read a local variable by slot index.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `slot` is out of bounds for this frame's locals.
     pub fn get_local(&self, slot: usize) -> Result<Value, VmError> {
-        self.locals
-            .get(slot)
-            .copied()
-            .ok_or(VmError::OutOfBounds {
-                index: slot,
-                len: self.locals.len(),
-            })
+        self.locals.get(slot).copied().ok_or(VmError::OutOfBounds {
+            index: slot,
+            len: self.locals.len(),
+        })
     }
 
     /// Write a local variable by slot index.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `slot` is out of bounds for this frame's locals.
     pub fn set_local(&mut self, slot: usize, v: Value) -> Result<(), VmError> {
         let len = self.locals.len();
         let dest = self
