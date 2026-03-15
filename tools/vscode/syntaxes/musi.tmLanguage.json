@@ -7,11 +7,9 @@
         { "include": "#attributes" },
         { "include": "#let-definition" },
         { "include": "#class-definition" },
-        { "include": "#given-definition" },
         { "include": "#instance-definition" },
         { "include": "#record-definition" },
         { "include": "#effect-definition" },
-        { "include": "#binding-definition" },
         { "include": "#choice-body" },
         { "include": "#keywords" },
         { "include": "#literals" },
@@ -23,6 +21,16 @@
     "repository": {
         "let-definition": {
             "patterns": [
+                {
+                    "comment": "let mut name -- mutable binding",
+                    "match": "(\\bexport\\b\\s+)?\\b(let)\\b\\s+(mut)\\s+([a-z_][a-zA-Z0-9_]*)",
+                    "captures": {
+                        "1": { "name": "keyword.control.export.musi" },
+                        "2": { "name": "storage.type.musi" },
+                        "3": { "name": "storage.modifier.musi" },
+                        "4": { "name": "variable.other.musi" }
+                    }
+                },
                 {
                     "comment": "let SCREAMING_SNAKE -- constant definition (2+ all-uppercase chars)",
                     "match": "(\\bexport\\b\\s+)?\\b(let)\\b\\s+([A-Z][A-Z0-9_]+)\\b",
@@ -70,15 +78,6 @@
                 "3": { "name": "entity.name.type.musi" }
             }
         },
-        "given-definition": {
-            "comment": "given Name -- type class instance",
-            "match": "(\\bexport\\b\\s+)?\\b(given)\\b\\s+([A-Z][a-zA-Z0-9_]*)",
-            "captures": {
-                "1": { "name": "keyword.control.export.musi" },
-                "2": { "name": "storage.type.musi" },
-                "3": { "name": "entity.name.type.musi" }
-            }
-        },
         "instance-definition": {
             "comment": "instance Name -- type class instance",
             "match": "(\\bexport\\b\\s+)?\\b(instance)\\b\\s+([A-Z][a-zA-Z0-9_]*)",
@@ -106,22 +105,12 @@
                 "3": { "name": "entity.name.type.musi" }
             }
         },
-        "binding-definition": {
-            "comment": "var <name> -- mutable binding",
-            "match": "\\b(var)\\b\\s+([a-z_][a-zA-Z0-9_]*)",
-            "captures": {
-                "1": { "name": "storage.type.musi" },
-                "2": { "name": "variable.other.musi" }
-            }
-        },
         "choice-body": {
             "comment": "choice { Variant + Variant of 'T } -- inline choice type",
             "name": "meta.type.choice.musi",
             "begin": "\\b(choice)\\b\\s*\\{",
             "end": "\\}",
-            "beginCaptures": {
-                "1": { "name": "storage.type.musi" }
-            },
+            "beginCaptures": { "1": { "name": "storage.type.musi" } },
             "endCaptures": { "0": { "name": "punctuation.section.block.end.musi" } },
             "patterns": [
                 { "include": "#comments" },
@@ -144,6 +133,10 @@
         },
         "comments": {
             "patterns": [
+                {
+                    "name": "comment.line.documentation.module.musi",
+                    "match": "//!.*$"
+                },
                 {
                     "name": "comment.line.documentation.musi",
                     "match": "///.*$"
@@ -205,7 +198,7 @@
                 },
                 {
                     "name": "storage.type.musi",
-                    "match": "\\b(let|var|class|given|instance|record|effect|choice|foreign|law)\\b"
+                    "match": "\\b(let|class|instance|record|effect|choice|foreign|law)\\b"
                 },
                 {
                     "name": "keyword.other.musi",
@@ -381,9 +374,19 @@
                     "match": "\\.\\.<|\\.\\.(?=[^\\.])"
                 },
                 {
-                    "comment": "UDN: optional chaining ?. and nil coalescing ??",
+                    "comment": "force unwrap !! and forced unwrap field access !.",
+                    "name": "keyword.operator.force.musi",
+                    "match": "\\!\\!|\\!\\."
+                },
+                {
+                    "comment": "optional chaining ?. and nil coalescing ??",
                     "name": "keyword.operator.optional.musi",
                     "match": "\\?\\.|\\?\\?"
+                },
+                {
+                    "comment": "type cast :?> must precede type test :?",
+                    "name": "keyword.operator.typecheck.musi",
+                    "match": ":\\?>|:\\?"
                 },
                 {
                     "name": "keyword.operator.cons.musi",
@@ -394,6 +397,10 @@
                     "match": "\\b(and|or|xor|not)\\b"
                 },
                 {
+                    "name": "keyword.operator.bitwise.musi",
+                    "match": "<<|>>"
+                },
+                {
                     "name": "keyword.operator.arithmetic.musi",
                     "match": "[+\\-*/%]"
                 },
@@ -401,6 +408,11 @@
                     "comment": "array index compound token: .[ as in arr.[0]",
                     "name": "keyword.operator.index.musi",
                     "match": "\\.\\["
+                },
+                {
+                    "comment": "record literal .{ as in Point.{ x := 1, y := 2 }",
+                    "name": "keyword.operator.record-literal.musi",
+                    "match": "\\.\\{"
                 },
                 {
                     "comment": "field access dot -- must not match .. range, .[ index, or .{ record",
@@ -413,9 +425,9 @@
                     "match": "\\|>"
                 },
                 {
-                    "comment": "bang ! and bar | outside choice bodies",
+                    "comment": "bang ! (not !! or !.) and bar |",
                     "name": "keyword.operator.other.musi",
-                    "match": "[!|]"
+                    "match": "!(?![!.])|\\|"
                 }
             ]
         },
