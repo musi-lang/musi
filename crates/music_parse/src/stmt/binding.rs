@@ -33,12 +33,12 @@ impl Parser<'_> {
         }
     }
 
-    /// Parses `'record' '{' field { ',' field } '}'` where field is `ident ':' ty [':=' expr]`.
+    /// Parses `'record' '{' field { ';' field } '}'` where field is `ident ':' ty [':=' expr]`.
     pub(crate) fn parse_expr_record_def(&mut self) -> Expr {
         let start = self.start_span();
         let _record = self.bump();
         let _lb = self.expect(TokenKind::LBrace);
-        let fields = self.comma_sep(TokenKind::RBrace, Self::parse_rec_def_field);
+        let fields = self.sep_by(TokenKind::Semi, TokenKind::RBrace, Self::parse_rec_def_field);
         let _rb = self.expect(TokenKind::RBrace);
         Expr::RecordDef {
             fields,

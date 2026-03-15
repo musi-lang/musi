@@ -15,7 +15,7 @@ use crate::specifier::{ImportScheme, ImportSpecifier, parse_git_source, parse_sp
 
 /// Configuration for import resolution.
 pub struct ResolverConfig {
-    /// Path to the `std/` directory (for `musi:` imports).
+    /// Path to the `stdlib/` directory (for `musi:` imports).
     pub std_root: PathBuf,
     /// Cache directory for fetched packages (`~/.cache/musi/packages/`).
     pub cache_dir: PathBuf,
@@ -31,7 +31,7 @@ impl ResolverConfig {
     /// Builds a resolver configuration from a project root and optional manifest.
     #[must_use]
     pub fn from_project(project_root: &Path, manifest: Option<&MusiManifest>) -> Self {
-        let std_root = discover_std_root(project_root).unwrap_or_else(|_| project_root.join("std"));
+        let std_root = discover_std_root(project_root).unwrap_or_else(|_| project_root.join("stdlib"));
         let cache_dir = cache_directory().join("musi/packages");
         let (manifest_imports, manifest_deps) = manifest.map_or_else(
             || (HashMap::new(), HashMap::new()),
@@ -58,8 +58,8 @@ fn cache_directory() -> PathBuf {
 ///
 /// Searches in order:
 /// 1. `musi_builtins_ROOT` environment variable
-/// 2. Relative to the current executable (`../std/`)
-/// 3. Sibling of `project_root` (i.e. `project_root/std/`)
+/// 2. Relative to the current executable (`../stdlib/`)
+/// 3. Sibling of `project_root` (i.e. `project_root/stdlib/`)
 ///
 /// # Errors
 ///
@@ -75,19 +75,19 @@ pub fn discover_std_root(project_root: &Path) -> Result<PathBuf, ResolveError> {
     if let Ok(exe) = env::current_exe()
         && let Some(parent) = exe.parent()
     {
-        let candidate = parent.join("../std");
+        let candidate = parent.join("../stdlib");
         if candidate.is_dir() {
             return Ok(candidate);
         }
     }
 
-    let sibling = project_root.join("std");
+    let sibling = project_root.join("stdlib");
     if sibling.is_dir() {
         return Ok(sibling);
     }
 
     Err(ResolveError::ModuleNotFound {
-        path: Box::from("std/ (standard library root)"),
+        path: Box::from("stdlib/ (standard library root)"),
     })
 }
 

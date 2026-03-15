@@ -23,7 +23,7 @@ fn make_config(std_root: PathBuf, project_root: PathBuf) -> ResolverConfig {
 #[test]
 fn test_resolve_musi_core_as_directory_index() {
     let dir = temp_dir();
-    let std_root = dir.path().join("std");
+    let std_root = dir.path().join("stdlib");
     let core_dir = std_root.join("core");
     fs::create_dir_all(&core_dir).unwrap();
     fs::write(core_dir.join("index.ms"), "-- core module").unwrap();
@@ -37,7 +37,7 @@ fn test_resolve_musi_core_as_directory_index() {
 #[test]
 fn test_resolve_musi_nested_path_as_file() {
     let dir = temp_dir();
-    let std_root = dir.path().join("std");
+    let std_root = dir.path().join("stdlib");
     let io_dir = std_root.join("io");
     fs::create_dir_all(&io_dir).unwrap();
     fs::write(io_dir.join("print.ms"), "-- print module").unwrap();
@@ -53,7 +53,7 @@ fn test_resolve_relative_with_extension() {
     let dir = temp_dir();
     fs::write(dir.path().join("lib.ms"), "-- lib").unwrap();
 
-    let config = make_config(dir.path().join("std"), dir.path().to_path_buf());
+    let config = make_config(dir.path().join("stdlib"), dir.path().to_path_buf());
     let spec = parse_specifier("./lib").unwrap();
     let importing = dir.path().join("main.ms");
     let result = resolve_import(&spec, &importing, &config).unwrap();
@@ -65,7 +65,7 @@ fn test_resolve_relative_already_has_extension() {
     let dir = temp_dir();
     fs::write(dir.path().join("lib.ms"), "-- lib").unwrap();
 
-    let config = make_config(dir.path().join("std"), dir.path().to_path_buf());
+    let config = make_config(dir.path().join("stdlib"), dir.path().to_path_buf());
     let spec = parse_specifier("./lib.ms").unwrap();
     let importing = dir.path().join("main.ms");
     let result = resolve_import(&spec, &importing, &config).unwrap();
@@ -75,7 +75,7 @@ fn test_resolve_relative_already_has_extension() {
 #[test]
 fn test_resolve_relative_missing_returns_error() {
     let dir = temp_dir();
-    let config = make_config(dir.path().join("std"), dir.path().to_path_buf());
+    let config = make_config(dir.path().join("stdlib"), dir.path().to_path_buf());
     let spec = parse_specifier("./nonexistent").unwrap();
     let importing = dir.path().join("main.ms");
     let err = resolve_import(&spec, &importing, &config).unwrap_err();
@@ -85,7 +85,7 @@ fn test_resolve_relative_missing_returns_error() {
 #[test]
 fn test_resolve_bare_from_manifest_imports() {
     let dir = temp_dir();
-    let std_root = dir.path().join("std");
+    let std_root = dir.path().join("stdlib");
     let core_dir = std_root.join("core");
     fs::create_dir_all(&core_dir).unwrap();
     fs::write(core_dir.join("index.ms"), "-- core").unwrap();
@@ -104,7 +104,7 @@ fn test_resolve_bare_from_manifest_imports() {
 #[test]
 fn test_resolve_bare_not_in_manifest_returns_error() {
     let dir = temp_dir();
-    let config = make_config(dir.path().join("std"), dir.path().to_path_buf());
+    let config = make_config(dir.path().join("stdlib"), dir.path().to_path_buf());
     let spec = parse_specifier("unknown-lib").unwrap();
     let importing = dir.path().join("main.ms");
     let err = resolve_import(&spec, &importing, &config).unwrap_err();
@@ -120,7 +120,7 @@ fn test_resolve_msr_returns_error() {
 #[test]
 fn test_resolve_musi_not_found() {
     let dir = temp_dir();
-    let std_root = dir.path().join("std");
+    let std_root = dir.path().join("stdlib");
     fs::create_dir_all(&std_root).unwrap();
 
     let config = make_config(std_root, dir.path().to_path_buf());
