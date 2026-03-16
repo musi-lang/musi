@@ -10,7 +10,7 @@ import "@std/rt" as rt;
 
 export let Deque ['a] := record { front : [] 'a; back : [] 'a };
 
-export let new ['a] := () => .{ front := []; back := [] };
+export let new ['a] := () => .{ front := [], back := [] };
 
 export let push_front ['a] := (d, val) => rt.arr_push(d.front, val);
 
@@ -22,7 +22,8 @@ export let pop_front ['a] := (d) => (
   (
     .Some(rt.arr_pop(d.front)) if flen > 0
     | (
-        d.front <- rt.arr_reverse(d.back);
+        rt.arr_reverse(d.back);
+        d.front <- d.back;
         d.back <- [];
         .Some(rt.arr_pop(d.front))
       ) if blen > 0
@@ -36,7 +37,8 @@ export let pop_back ['a] := (d) => (
   (
     .Some(rt.arr_pop(d.back)) if blen > 0
     | (
-        d.back <- rt.arr_reverse(d.front);
+        rt.arr_reverse(d.front);
+        d.back <- d.front;
         d.front <- [];
         .Some(rt.arr_pop(d.back))
       ) if flen > 0

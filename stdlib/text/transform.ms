@@ -3,7 +3,9 @@
 import "@std/rt" as rt;
 
 export let reverse_str := (s) => (
-  rt.str_from_chars(rt.arr_reverse(rt.str_chars(s)))
+  let chars := rt.str_chars(s);
+  rt.arr_reverse(chars);
+  rt.str_from_chars(chars)
 );
 
 export let truncate := (s, max_len) => (

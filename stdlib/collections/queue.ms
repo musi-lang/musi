@@ -17,8 +17,8 @@ export let dequeue ['a] := (q) => (
   (
     rt.arr_pop(q.front) if flen > 0
     | (
-      let reversed := rt.arr_reverse(q.back);
-      q.front <- reversed;
+      rt.arr_reverse(q.back);
+      q.front <- q.back;
       q.back <- [];
       rt.arr_pop(q.front)
     ) if blen > 0
