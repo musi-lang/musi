@@ -440,7 +440,7 @@ fn analyze_emit_unused_warnings(
             && def.name != Symbol(u32::MAX)
             && !matches!(
                 def.kind,
-                DefKind::Given
+                DefKind::Instance
                     | DefKind::Variant
                     | DefKind::Type
                     | DefKind::Law

@@ -510,7 +510,7 @@ fn classify_def(
         DefKind::Type | DefKind::OpaqueType | DefKind::Primitive => (Some(TT_TYPE), decl, 0),
         DefKind::Variant => (Some(TT_ENUM_MEMBER), decl, 0),
         DefKind::Import => (Some(TT_VARIABLE), decl, 0),
-        DefKind::Class | DefKind::Given | DefKind::Effect => (Some(TT_TYPE), decl, 0),
+        DefKind::Class | DefKind::Instance | DefKind::Effect => (Some(TT_TYPE), decl, 0),
         DefKind::Law => (Some(TT_VARIABLE), decl | TM_READONLY, 0),
         DefKind::LawVar => (Some(TT_VARIABLE), decl, 0),
     }

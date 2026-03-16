@@ -48,9 +48,9 @@ impl Resolver<'_> {
             Expr::Instance {
                 target, exported, ..
             } => {
-                let id = self
-                    .defs
-                    .alloc(target.name, DefKind::Given, self.span_of_expr(expr_idx));
+                let id =
+                    self.defs
+                        .alloc(target.name, DefKind::Instance, self.span_of_expr(expr_idx));
                 if *exported {
                     self.defs.get_mut(id).exported = true;
                 }

@@ -33,7 +33,7 @@ pub enum DefKind {
     /// Type class definition.
     Class,
     /// Type class instance.
-    Given,
+    Instance,
     /// Effect definition.
     Effect,
     /// Effect operation.
