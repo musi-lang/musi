@@ -204,6 +204,10 @@ fn run_sema_in_order(
             let defs_vec: Vec<_> = state.defs.iter().cloned().collect();
             let exports = collect_exports(&parsed, &defs_vec, &output.resolution.pat_defs);
             let _prev = module_exports.insert(module_id, exports.bindings);
+
+            state.collect_lang_items(interner);
+            state.inject_lang_items_into_prelude();
+
             dep_modules.push(DepModule {
                 parsed,
                 resolution: output.resolution,

@@ -1,7 +1,10 @@
 //! Ord type class and primitive instances.
 
+import "./eq";
+import "./ordering";
+
 #[lang := "Ord"]
-class Ord ['a] where 'a <: Eq {
+export class Ord ['a] where 'a <: Eq {
   let compare(a, b) : Ordering;
 };
 

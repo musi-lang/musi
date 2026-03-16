@@ -38,7 +38,7 @@ pub use well_known::WellKnown;
 pub use exports::{ExportBinding, ModuleExports, collect_exports};
 pub use resolve::ImportNames;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::hash::BuildHasher;
 use std::mem;
 
@@ -105,6 +105,7 @@ pub struct SharedAnalysisState {
     pub well_known: WellKnown,
     pub prelude_scope: ScopeId,
     pub lang_items: LangItemRegistry,
+    injected_lang_items: HashSet<DefId>,
 }
 
 /// Per-module analysis output (does not own shared state).
@@ -140,6 +141,7 @@ impl SharedAnalysisState {
             well_known,
             prelude_scope,
             lang_items: LangItemRegistry::new(),
+            injected_lang_items: HashSet::new(),
         }
     }
 
@@ -148,6 +150,22 @@ impl SharedAnalysisState {
             if let Some(sym) = def.lang_item {
                 let name = interner.resolve(sym);
                 let _prev = self.lang_items.register(name, def.id);
+            }
+        }
+    }
+
+    /// Injects lang-item definitions into the prelude scope so all modules can
+    /// reference them without explicit imports.
+    pub fn inject_lang_items_into_prelude(&mut self) {
+        for def in self.defs.iter() {
+            if def.lang_item.is_some() && !self.injected_lang_items.contains(&def.id) {
+                let _prev = self.scopes.define(self.prelude_scope, def.name, def.id);
+            }
+        }
+        // Re-scan to mark newly injected ids (separate pass to avoid borrow conflict).
+        for def in self.defs.iter() {
+            if def.lang_item.is_some() {
+                let _new = self.injected_lang_items.insert(def.id);
             }
         }
     }

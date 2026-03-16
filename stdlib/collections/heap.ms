@@ -5,10 +5,11 @@
 //! sits at index 0 and is returned by `peek`/`pop`.
 
 import "@std/rt" as rt;
+import "@std/cmp/ordering";
 
 export let Heap ['a] := record { data : [] 'a; cmp : ('a, 'a) -> Ordering };
 
-export let new ['a] := (cmp) => .{ data := []; cmp := cmp };
+export let new ['a] := (cmp) => .{ data := [], cmp := cmp };
 
 let swap ['a] := (data, i, j) => (
   let tmp := data.[i];

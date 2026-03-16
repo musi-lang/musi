@@ -1,5 +1,7 @@
 //! Comparison utilities for Ordering values and comparator functions.
 
+import "./ord";
+
 export let is_less := (ord) =>
   match ord (
     .Less => .True
@@ -52,6 +54,6 @@ export let clamp_by ['a] := (val, lo, hi, cmp) =>
       )
   );
 
-export let comparing ['a, 'b] := (key) => (a, b) => compare(key(a), key(b));
+export let comparing ['a, 'b] := (key, cmp) => (a, b) => cmp(key(a), key(b));
 
 export let reverse_cmp ['a] := (cmp) => (a, b) => reverse_order(cmp(a, b));
