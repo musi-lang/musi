@@ -2,6 +2,8 @@
 
 import "@std/rt" as rt;
 
+export let contains := (s, sub) => rt.str_contains(s, sub);
+
 export let count_occurrences := (s, sub) => (
   let sub_len := rt.str_len(sub);
   0 if sub_len = 0

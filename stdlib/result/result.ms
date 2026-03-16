@@ -27,7 +27,7 @@ export let map_err ['a, 'e, 'f] := (res, f) =>
     | .Err(e) => .Err(f(e))
   );
 
-export let unwrap_ok ['a, 'e] := (res, default) =>
+export let unwrap_or ['a, 'e] := (res, default) =>
   match res (
     .Ok(v) => v
     | .Err(_) => default
@@ -49,6 +49,12 @@ export let or_else ['a, 'e, 'f] := (res, f) =>
   match res (
     .Ok(v) => .Ok(v)
     | .Err(e) => f(e)
+  );
+
+export let flat_map ['a, 'b, 'e] := (res, f) =>
+  match res (
+    .Ok(v) => f(v)
+    | .Err(e) => .Err(e)
   );
 
 export let flatten ['a, 'e] := (res) =>

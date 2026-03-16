@@ -29,7 +29,7 @@ export let int_to_bin := (n) => (
     let mut chars := [];
     let step := (v) => (
       (
-        let bit := (rt.rune_from_int(rt.rune_to_int('1')) if (v and 1) = 1 | rt.rune_from_int(rt.rune_to_int('0')) if _);
+        let bit := ('1' if (v and 1) = 1 | '0' if _);
         rt.arr_push(chars, bit);
         step(v / 2)
       ) if v > 0

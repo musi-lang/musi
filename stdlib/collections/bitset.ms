@@ -88,7 +88,7 @@ export let difference := (a, b) => (
 let popcount_word := (n) => (
   let step := (v, acc) => (
     acc if v = 0
-    | step(v / 2, acc + (v and 1)) if _
+    | step(v and (v - 1), acc + 1) if _
   );
   step(n, 0)
 );

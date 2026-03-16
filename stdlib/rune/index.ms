@@ -12,8 +12,6 @@ let HEX_a := 97;
 let HEX_f := 102;
 let OCT_0 := 48;
 let OCT_7 := 55;
-let OCT_8 := 56;
-let OCT_9 := 57;
 let BIN_0 := 48;
 let BIN_1 := 49;
 
@@ -50,6 +48,5 @@ export let is_bin_digit := (r) => (
 
 export let is_oct_digit := (r) => (
   let cp := rt.rune_to_int(r);
-  (cp >= OCT_0 and cp <= OCT_7)
-    or (cp >= OCT_8 and cp <= OCT_9)
+  cp >= OCT_0 and cp <= OCT_7
 );

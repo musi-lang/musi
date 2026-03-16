@@ -4,8 +4,9 @@ import "@std/rt" as rt;
 
 let parse_quoted_field := (s, start) => (
   let len := rt.str_len(s);
-  let step := (i, acc_chars) => (
-    acc_chars if i >= len
+  let mut acc_chars := [];
+  let step := (i) => (
+    (acc_chars, i) if i >= len
     | (
       let c := rt.str_at(s, i);
       let c_int := rt.rune_to_int(c);
@@ -13,32 +14,12 @@ let parse_quoted_field := (s, start) => (
         (
           let next_int := (rt.rune_to_int(rt.str_at(s, i + 1)) if i + 1 < len | -1 if _);
           (
-            step(i + 2, (rt.arr_push(acc_chars, c); acc_chars)) if next_int = 34
-            | acc_chars if _
+            (rt.arr_push(acc_chars, c); step(i + 2)) if next_int = 34
+            | (acc_chars, i + 1) if _
           )
         ) if c_int = 34
-        | step(i + 1, (rt.arr_push(acc_chars, c); acc_chars)) if _
+        | (rt.arr_push(acc_chars, c); step(i + 1)) if _
       )
-    ) if _
-  );
-  let chars := [];
-  step(start + 1, chars)
-);
-
-let quoted_field_end := (s, start) => (
-  let len := rt.str_len(s);
-  let step := (i) => (
-    i if i >= len
-    | (
-      let c_int := rt.rune_to_int(rt.str_at(s, i));
-      (
-        let next_int := (rt.rune_to_int(rt.str_at(s, i + 1)) if i + 1 < len | -1 if _);
-        (
-          step(i + 2) if next_int = 34
-          | i + 1 if _
-        )
-      ) if c_int = 34
-      | step(i + 1) if _
     ) if _
   );
   step(start + 1)
@@ -52,8 +33,7 @@ export let parse_row := (line) => (
     | (
       let c_int := (rt.rune_to_int(rt.str_at(line, i)) if i < len | -1 if _);
       (
-        let field_chars := parse_quoted_field(line, i);
-        let end_pos := quoted_field_end(line, i);
+        let (field_chars, end_pos) := parse_quoted_field(line, i);
         rt.arr_push(fields, rt.str_from_chars(field_chars));
         step(end_pos + 1)
       ) if c_int = 34

@@ -48,7 +48,9 @@ export let merge_sort ['a] := (arr, cmp) => (
   ) if _
 );
 
-export let sort_by ['a] := (arr, cmp) => (
+export let sort_by ['a] := (arr, cmp) => merge_sort(arr, cmp);
+
+export let insertion_sort ['a] := (arr, cmp) => (
   let len := rt.arr_len(arr);
   let sorted := rt.arr_slice(arr, 0, len);
   let outer := (i) => (

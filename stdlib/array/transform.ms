@@ -2,7 +2,7 @@
 
 import "@std/rt" as rt;
 
-export let distinct ['a] := (arr) => (
+export let dedup ['a] := (arr) => (
   let len := rt.arr_len(arr);
   let mut result := [];
   let step := (i) => (
@@ -85,28 +85,6 @@ export let reverse_copy ['a] := (arr) => (
     | result if _
   );
   (step(len - 1) if len > 0 | result if _)
-);
-
-export let sort_by ['a] := (arr, cmp) => (
-  let len := rt.arr_len(arr);
-  let sorted := rt.arr_slice(arr, 0, len);
-  let outer := (i) => (
-    (
-      let key := sorted.[i];
-      let inner := (j) => (
-        (
-          sorted.[j + 1] <- sorted.[j];
-          sorted.[j] <- key;
-          inner(j - 1)
-        ) if j >= 0 and cmp(key, sorted.[j]) < 0
-        | () if _
-      );
-      inner(i - 1);
-      outer(i + 1)
-    ) if i < len
-    | sorted if _
-  );
-  outer(1)
 );
 
 export let intersperse ['a] := (arr, sep) => (

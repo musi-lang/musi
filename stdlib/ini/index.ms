@@ -21,13 +21,6 @@ let parse_section_name := (line) => (
   | "" if _
 );
 
-let parse_entry := (line) => (
-  let trimmed := rt.str_trim(line);
-  let eq_idx := rt.str_index_of(trimmed, "=");
-  eq_idx >= 0 if eq_idx >= 0
-  | .False if _
-);
-
 let split_entry := (line) => (
   let trimmed := rt.str_trim(line);
   let eq_idx := rt.str_index_of(trimmed, "=");

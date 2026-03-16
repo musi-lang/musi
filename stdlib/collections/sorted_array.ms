@@ -68,4 +68,4 @@ export let remove ['a] := (sa, val) => (
 
 export let len ['a] := (sa) => rt.arr_len(sa.data);
 
-export let to_array ['a] := (sa) => sa.data;
+export let to_array ['a] := (sa) => rt.arr_slice(sa.data, 0, rt.arr_len(sa.data));

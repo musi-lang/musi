@@ -76,19 +76,24 @@ export let len ['a] := (h) => rt.arr_len(h.data);
 export let is_empty ['a] := (h) => rt.arr_len(h.data) = 0;
 
 export let from_array ['a] := (arr, cmp) => (
-  let h := new(cmp);
-  let step := (i) => (
-    (push(h, arr.[i]); step(i + 1)) if i < rt.arr_len(arr)
+  let data := rt.arr_slice(arr, 0, rt.arr_len(arr));
+  let h := .{ data := data, cmp := cmp };
+  let n := rt.arr_len(data);
+  let heapify := (i) => (
+    (sift_down(data, i, n, cmp); heapify(i - 1)) if i >= 0
     | () if _
   );
-  step(0);
+  heapify((n / 2) - 1);
   h
 );
 
+export let to_array ['a] := (h) => rt.arr_slice(h.data, 0, rt.arr_len(h.data));
+
 export let to_sorted_array ['a] := (h) => (
+  let copy := from_array(h.data, h.cmp);
   let out := [];
   let step := () =>
-    match pop(h) (
+    match pop(copy) (
       .Some(v) => (rt.arr_push(out, v); step())
       | .None => ()
     );

@@ -15,12 +15,12 @@ export let dequeue ['a] := (q) => (
   let flen := rt.arr_len(q.front);
   let blen := rt.arr_len(q.back);
   (
-    rt.arr_pop(q.front) if flen > 0
+    .Some(rt.arr_pop(q.front)) if flen > 0
     | (
       rt.arr_reverse(q.back);
       q.front <- q.back;
       q.back <- [];
-      rt.arr_pop(q.front)
+      .Some(rt.arr_pop(q.front))
     ) if blen > 0
     | .None if _
   )

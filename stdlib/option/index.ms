@@ -45,12 +45,6 @@ export let map ['a, 'b] := (opt, f) =>
     | .None => .None
   );
 
-export let flat_map ['a, 'b] := (opt, f) =>
-  match opt (
-    .Some(v) => f(v)
-    | .None => .None
-  );
-
 export let and_then ['a, 'b] := (opt, f) =>
   match opt (
     .Some(v) => f(v)
