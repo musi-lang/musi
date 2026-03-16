@@ -12,8 +12,8 @@ use std::path::PathBuf;
 
 use crate::analysis::{AnalyzedDoc, analyze_doc, analyze_doc_multi, position_to_offset};
 use crate::{
-    code_actions, code_lens, completion, document_symbols, folding_ranges, goto_def,
-    goto_type_def, hover, inlay_hints, references, semantic_tokens, signature_help,
+    code_actions, code_lens, completion, document_symbols, folding_ranges, goto_def, goto_type_def,
+    hover, inlay_hints, references, semantic_tokens, signature_help,
 };
 
 pub struct MusiBackend {
