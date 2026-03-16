@@ -100,11 +100,13 @@ impl Resolver<'_> {
         exported: bool,
         expr_idx: ExprIdx,
     ) {
-        let id = self.defs.alloc(name, kind, self.span_of_expr(expr_idx));
+        let span = self.span_of_expr(expr_idx);
+        let id = self.defs.alloc(name, kind, span);
         if exported {
             self.defs.get_mut(id).exported = true;
         }
-        self.define_in_scope(name, id, self.span_of_expr(expr_idx));
+        self.define_in_scope(name, id, span);
+        let _inserted = self.output.pat_defs.insert(span, id);
     }
 
     fn collect_foreign_decls(&mut self, exported: bool, decls: &[ForeignDecl], attrs: &[Attr]) {

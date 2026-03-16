@@ -83,6 +83,30 @@ fn collect_exports_from_expr<S: BuildHasher>(
                 }
             }
         }
+        Expr::Class {
+            exported: true,
+            name,
+            span,
+            ..
+        }
+        | Expr::Effect {
+            exported: true,
+            name,
+            span,
+            ..
+        } => {
+            if let Some(&def_id) = pat_defs.get(span) {
+                let idx = usize::try_from(def_id.0).expect("def id fits in usize");
+                if let Some(def) = defs.get(idx) {
+                    let ty = def.ty_info.ty.unwrap_or(TypeIdx::from_raw(0));
+                    out.push(ExportBinding {
+                        name: *name,
+                        ty,
+                        def_id,
+                    });
+                }
+            }
+        }
         Expr::Annotated { inner, .. } => {
             collect_exports_from_expr(*inner, arenas, defs, pat_defs, out);
         }
