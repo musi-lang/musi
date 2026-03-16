@@ -3,17 +3,13 @@
 //! Each combinator wraps an inner iterator and transforms `next` calls.
 //! All combinators are pure Musi — no builtins needed beyond array access.
 
-import "musi:core" as core;
-
-// ── Core iterator type ───────────────────────────────────────
+import "./rt" as rt;
 
 export let Iter ['a] := record { next : () -> ?'a };
 
-// ── Constructors ─────────────────────────────────────────────
-
 export let from_array ['a] := (arr) => (
   let mut i := 0;
-  let len := core.arr_len(arr);
+  let len := rt.arr_len(arr);
   .{ next := () => (
     (let idx := i; i <- i + 1; .Some(arr.[idx])) if i < len
     | .None if _
@@ -33,8 +29,6 @@ export let repeat ['a] := (value) =>
 
 export let empty ['a] := () =>
   .{ next := () => .None };
-
-// ── Transformers ─────────────────────────────────────────────
 
 export let map ['a, 'b] := (iter, f) =>
   .{ next := () => (
@@ -164,8 +158,6 @@ export let skip_while ['a] := (iter, pred) => (
   .{ next := step }
 );
 
-// ── Consumers ────────────────────────────────────────────────
-
 export let fold ['a, 'b] := (iter, init, f) => (
   let mut acc := init;
   let step := () => (
@@ -183,7 +175,7 @@ export let collect_array ['a] := (iter) => (
   let step := () => (
     let v := iter.next();
     match v (
-      .Some(x) => (core.arr_push(result, x); step())
+      .Some(x) => (rt.arr_push(result, x); step())
       | .None => result
     )
   );
