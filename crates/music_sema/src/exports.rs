@@ -12,7 +12,7 @@ use music_ast::pat::Pat;
 use music_ast::{AstArenas, Expr, ExprIdx, ParsedModule, PatIdx};
 use music_shared::{Arena, Span, Symbol};
 
-use crate::def::{DefId, DefInfo};
+use crate::def::{DefId, DefInfo, DefKind};
 use crate::types::{RecordField, Type, TypeIdx};
 
 /// A single exported binding.
@@ -104,6 +104,20 @@ fn collect_exports_from_expr<S: BuildHasher>(
                         ty,
                         def_id,
                     });
+                }
+                // Also export child methods of the class/effect.
+                for d in defs {
+                    if d.parent == Some(def_id)
+                        && d.kind == DefKind::Fn
+                        && d.name != Symbol(u32::MAX)
+                    {
+                        let method_ty = d.ty_info.ty.unwrap_or(TypeIdx::from_raw(0));
+                        out.push(ExportBinding {
+                            name: d.name,
+                            ty: method_ty,
+                            def_id: d.id,
+                        });
+                    }
                 }
             }
         }
