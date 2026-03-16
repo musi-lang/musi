@@ -48,6 +48,8 @@ pub enum DefKind {
     Law,
     /// Universally quantified law variable (value witness of class type param).
     LawVar,
+    /// Compiler-internal primitive type (not user-visible).
+    Primitive,
 }
 
 /// Type-checker annotations for a definition, filled during type checking.
@@ -80,6 +82,8 @@ pub struct DefInfo {
     pub is_entry_point: bool,
     /// For parameters: the calling-convention mode (`var`, `inout`, `ref`).
     pub param_mode: Option<ParamMode>,
+    /// If this definition carries `#[lang("...")]`, the interned name.
+    pub lang_item: Option<Symbol>,
 }
 
 /// Registry of all definitions encountered during analysis.
@@ -110,6 +114,7 @@ impl DefTable {
             exported: false,
             is_entry_point: false,
             param_mode: None,
+            lang_item: None,
         });
         id
     }

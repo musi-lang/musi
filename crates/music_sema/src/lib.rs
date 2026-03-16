@@ -19,6 +19,7 @@ pub(crate) mod checker;
 pub mod def;
 pub mod error;
 pub mod exports;
+pub mod lang_items;
 pub mod resolve;
 pub mod scope;
 pub mod types;
@@ -27,6 +28,7 @@ pub mod well_known;
 
 pub use def::{DefId, DefInfo, DefKind, DefTable};
 pub use error::SemaError;
+pub use lang_items::LangItemRegistry;
 pub use resolve::ResolveOutput;
 pub use scope::ScopeTree;
 pub use types::{DictLookup, EffectRow, InstanceInfo, Obligation, TyVarId, Type, TypeIdx};
@@ -80,6 +82,8 @@ pub struct SemaResult {
     pub fn_constraints: HashMap<DefId, Vec<Obligation>>,
     /// Well-known prelude type definitions (needed by bytecode emission).
     pub well_known: WellKnown,
+    /// Registry of definitions carrying `#[lang("...")]` annotations.
+    pub lang_items: LangItemRegistry,
 }
 
 /// Prelude data passed into analysis.
@@ -100,6 +104,7 @@ pub struct SharedAnalysisState {
     pub scopes: ScopeTree,
     pub well_known: WellKnown,
     pub prelude_scope: ScopeId,
+    pub lang_items: LangItemRegistry,
 }
 
 /// Per-module analysis output (does not own shared state).
@@ -134,6 +139,16 @@ impl SharedAnalysisState {
             scopes,
             well_known,
             prelude_scope,
+            lang_items: LangItemRegistry::new(),
+        }
+    }
+
+    pub fn collect_lang_items(&mut self, interner: &Interner) {
+        for def in self.defs.iter() {
+            if let Some(sym) = def.lang_item {
+                let name = interner.resolve(sym);
+                let _prev = self.lang_items.register(name, def.id);
+            }
         }
     }
 
@@ -151,6 +166,7 @@ impl SharedAnalysisState {
             binop_dict_dispatch: output.binop_dict_dispatch,
             fn_constraints: output.fn_constraints,
             well_known: self.well_known,
+            lang_items: self.lang_items,
         }
     }
 }
@@ -286,6 +302,14 @@ pub fn analyze_with_imports<S: BuildHasher>(
 
     analyze_emit_unused_warnings(&defs, interner, file_id, diags);
 
+    let mut lang_items = LangItemRegistry::new();
+    for def in defs.iter() {
+        if let Some(sym) = def.lang_item {
+            let name = interner.resolve(sym);
+            let _prev = lang_items.register(name, def.id);
+        }
+    }
+
     SemaResult {
         defs: defs.into_vec(),
         resolution: ResolutionMap {
@@ -302,6 +326,7 @@ pub fn analyze_with_imports<S: BuildHasher>(
         binop_dict_dispatch: result.binop_dict_dispatch,
         fn_constraints: result.fn_constraints,
         well_known,
+        lang_items,
     }
 }
 

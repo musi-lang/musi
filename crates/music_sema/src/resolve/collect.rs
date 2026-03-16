@@ -1,8 +1,9 @@
 //! Pass 1: top-level definition collection.
 
-use music_ast::attr::Attr;
+use music_ast::attr::{Attr, AttrValue};
 use music_ast::decl::ForeignDecl;
 use music_ast::expr::{Expr, LetFields};
+use music_ast::lit::Lit;
 use music_ast::{ExprIdx, Pat, PatIdx};
 use music_shared::Symbol;
 
@@ -26,6 +27,7 @@ impl Resolver<'_> {
                     self.mark_pat_exported(fields.pat);
                 }
                 self.maybe_mark_entrypoint(fields.pat, attrs);
+                self.maybe_mark_lang_item_pat(fields.pat, attrs);
             }
             Expr::Let {
                 fields, body: None, ..
@@ -41,7 +43,7 @@ impl Resolver<'_> {
             Expr::Foreign {
                 exported, decls, ..
             } => {
-                self.collect_foreign_decls(*exported, decls);
+                self.collect_foreign_decls(*exported, decls, attrs);
             }
             Expr::Instance {
                 target, exported, ..
@@ -88,6 +90,7 @@ impl Resolver<'_> {
         self.define_fn_name(fields.pat, kind);
         self.define_pat(fields.pat, kind);
         self.maybe_mark_entrypoint(fields.pat, attrs);
+        self.maybe_mark_lang_item_pat(fields.pat, attrs);
     }
 
     fn collect_named_def(
@@ -104,7 +107,9 @@ impl Resolver<'_> {
         self.define_in_scope(name, id, self.span_of_expr(expr_idx));
     }
 
-    fn collect_foreign_decls(&mut self, exported: bool, decls: &[ForeignDecl]) {
+    fn collect_foreign_decls(&mut self, exported: bool, decls: &[ForeignDecl], attrs: &[Attr]) {
+        // When there is exactly one decl, the outer attrs (including #[lang]) apply to it.
+        let single_decl_attrs = if decls.len() == 1 { attrs } else { &[] };
         for decl in decls {
             match decl {
                 ForeignDecl::Fn { name, span, .. } => {
@@ -114,6 +119,9 @@ impl Resolver<'_> {
                     }
                     self.define_in_scope(*name, id, *span);
                     let _inserted = self.output.pat_defs.insert(*span, id);
+                    if let Some(lang_sym) = self.lang_item_from_attrs(single_decl_attrs) {
+                        self.defs.get_mut(id).lang_item = Some(lang_sym);
+                    }
                 }
                 ForeignDecl::OpaqueType { name, span } => {
                     let id = self.defs.alloc(*name, DefKind::OpaqueType, *span);
@@ -140,6 +148,36 @@ impl Resolver<'_> {
         };
         if let Some(&def_id) = self.output.pat_defs.get(&span) {
             self.defs.get_mut(def_id).is_entry_point = true;
+        }
+    }
+
+    fn lang_item_from_attrs(&self, attrs: &[Attr]) -> Option<Symbol> {
+        for attr in attrs {
+            if self.interner.resolve(attr.name) != "lang" {
+                continue;
+            }
+            if let Some(AttrValue::Lit {
+                lit: Lit::Str { value, .. },
+                ..
+            }) = &attr.value
+            {
+                return Some(*value);
+            }
+        }
+        None
+    }
+
+    fn maybe_mark_lang_item_pat(&mut self, pat: PatIdx, attrs: &[Attr]) {
+        let sym = match self.lang_item_from_attrs(attrs) {
+            Some(s) => s,
+            None => return,
+        };
+        let span = match &self.ast.pats[pat] {
+            Pat::Variant { span, .. } | Pat::Bind { span, .. } => *span,
+            _ => return,
+        };
+        if let Some(&def_id) = self.output.pat_defs.get(&span) {
+            self.defs.get_mut(def_id).lang_item = Some(sym);
         }
     }
 }
