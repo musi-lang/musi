@@ -1,1027 +1,1132 @@
-use std::cell::RefCell;
-use std::rc::Rc;
-
-use musi_codegen::intrinsics::Intrinsic;
-use musi_codegen::{ConstEntry, Module, Opcode};
-
-use crate::ffi::FfiState;
-use crate::native;
-use crate::native_registry::NativeRegistry;
-
-use crate::error::VmError;
-use crate::value::Value;
-
-pub struct CallFrame {
-    pub function_idx: u16,
-    pub pc: usize,
-    pub locals: Vec<Value>,
-    pub stack_base: usize,
-}
-
-enum Signal {
-    Continue,
-    Return(Value),
-}
-
-pub struct TestResult {
-    pub label: Box<str>,
-    pub passed: bool,
-    pub error: Option<Box<str>>,
-}
-
-pub struct Vm {
-    pub(crate) stack: Vec<Value>,
-    pub(crate) frames: Vec<CallFrame>,
-    pub(crate) module: Module,
-    pub(crate) ffi: FfiState,
-    pub(crate) registry: NativeRegistry,
-    test_mode: bool,
-    pub test_results: Vec<TestResult>,
-}
-
-impl Vm {
-    #[must_use]
-    pub fn new(module: Module, registry: NativeRegistry) -> Self {
-        Self {
-            stack: Vec::new(),
-            frames: Vec::new(),
-            ffi: FfiState::new(),
-            module,
-            registry,
-            test_mode: false,
-            test_results: Vec::new(),
-        }
-    }
-
-    /// Run the module in test mode: intercepts `test(name, f)` calls, runs each
-    /// test function, catches `AssertionFailed`, and collects results.
-    ///
-    /// # Errors
-    ///
-    /// Returns `VmError` on any non-assertion runtime error.
-    pub fn run_tests(&mut self, entry_fn: u16) -> Result<(), VmError> {
-        self.test_mode = true;
-        let _ = self.run(entry_fn)?;
-        Ok(())
-    }
-
-    /// Run the VM starting at the given function table index.
-    ///
-    /// # Errors
-    ///
-    /// Returns `VmError` on any runtime error (type mismatch, stack underflow, etc.).
-    pub fn run(&mut self, entry_fn: u16) -> Result<Value, VmError> {
-        self.push_entry_frame(entry_fn)?;
-        loop {
-            let op = self.fetch_and_advance()?;
-            match self.step(op)? {
-                Signal::Continue => {}
-                Signal::Return(v) => return Ok(v),
-            }
-        }
-    }
-
-    fn run_until_depth(&mut self, depth: usize) -> Result<(), VmError> {
-        while self.frames.len() > depth {
-            let op = self.fetch_and_advance()?;
-            match self.step(op)? {
-                Signal::Continue => {}
-                Signal::Return(_) => break,
-            }
-        }
-        Ok(())
-    }
-
-    fn push_entry_frame(&mut self, entry_fn: u16) -> Result<(), VmError> {
-        let local_count = self
-            .module
-            .function_table
-            .get(usize::from(entry_fn))
-            .ok_or(VmError::FunctionOutOfBounds(entry_fn))?
-            .local_count;
-        self.frames.push(CallFrame {
-            function_idx: entry_fn,
-            pc: 0,
-            locals: vec![Value::Unit; usize::from(local_count)],
-            stack_base: 0,
-        });
-        Ok(())
-    }
-
-    fn fetch_and_advance(&mut self) -> Result<Opcode, VmError> {
-        let (fn_idx, pc) = {
-            let frame = self.frames.last().ok_or(VmError::NoFrames)?;
-            (frame.function_idx, frame.pc)
-        };
-        let (op, size) = {
-            let func = self
-                .module
-                .function_table
-                .get(usize::from(fn_idx))
-                .ok_or(VmError::FunctionOutOfBounds(fn_idx))?;
-            let code_start =
-                usize::try_from(func.code_offset).map_err(|_| VmError::CodeOutOfBounds)?;
-            let code_len =
-                usize::try_from(func.code_length).map_err(|_| VmError::CodeOutOfBounds)?;
-            let code_end = code_start
-                .checked_add(code_len)
-                .ok_or(VmError::CodeOutOfBounds)?;
-            let code = self
-                .module
-                .code
-                .get(code_start..code_end)
-                .ok_or(VmError::CodeOutOfBounds)?;
-            Opcode::decode(code, pc)?
-        };
-        self.frames.last_mut().ok_or(VmError::NoFrames)?.pc = pc + size;
-        Ok(op)
-    }
-
-    fn step(&mut self, op: Opcode) -> Result<Signal, VmError> {
-        match op {
-            Opcode::Nop => Ok(Signal::Continue),
-            Opcode::Halt => Ok(self.exec_halt()),
-            Opcode::Ret => self.exec_ret(),
-            Opcode::Drop => self.exec_drop(),
-            Opcode::LdImmI64(v) => Ok(self.exec_ld_imm_i64(v)),
-            Opcode::LdImmF64(v) => Ok(self.exec_ld_imm_f64(v)),
-            Opcode::LdImmUnit => Ok(self.exec_ld_imm_unit()),
-            Opcode::LdConst(idx) => self.exec_ld_const(idx),
-            Opcode::LdLoc(idx) => self.exec_ld_loc(idx),
-            Opcode::StLoc(idx) => self.exec_st_loc(idx),
-            Opcode::Call(fn_idx) => self.exec_call_and_continue(fn_idx),
-            Opcode::LdFnIdx(idx) => Ok(self.exec_ld_fn_idx(idx)),
-            Opcode::CallDynamic => self.exec_call_dynamic(),
-            Opcode::Dup => self.exec_dup(),
-            Opcode::HaltError => Err(VmError::MatchFailure),
-            Opcode::NewObj {
-                type_tag,
-                field_count,
-            } => self.exec_new_obj(type_tag, field_count),
-            Opcode::LdFld(idx) => self.exec_ld_fld(idx),
-            Opcode::LdTag => self.exec_ld_tag(),
-            Opcode::AddI64
-            | Opcode::SubI64
-            | Opcode::MulI64
-            | Opcode::DivI64
-            | Opcode::RemI64
-            | Opcode::NegI64
-            | Opcode::AddF64
-            | Opcode::SubF64
-            | Opcode::MulF64
-            | Opcode::DivF64
-            | Opcode::RemF64
-            | Opcode::NegF64 => self.exec_arith(&op),
-            Opcode::EqI64
-            | Opcode::NeqI64
-            | Opcode::LtI64
-            | Opcode::GtI64
-            | Opcode::LeqI64
-            | Opcode::GeqI64
-            | Opcode::EqF64
-            | Opcode::NeqF64
-            | Opcode::LtF64
-            | Opcode::GtF64
-            | Opcode::LeqF64
-            | Opcode::GeqF64
-            | Opcode::EqBool
-            | Opcode::NeqBool
-            | Opcode::EqStr
-            | Opcode::NeqStr => self.exec_cmp(&op),
-            Opcode::Not
-            | Opcode::BitAnd
-            | Opcode::BitOr
-            | Opcode::BitXor
-            | Opcode::BitNot
-            | Opcode::Shl
-            | Opcode::Shr => self.exec_bitwise(&op),
-            Opcode::Br(offset) => self.exec_br(offset),
-            Opcode::BrTrue(offset) => self.exec_br_cond(offset, true),
-            Opcode::BrFalse(offset) => self.exec_br_cond(offset, false),
-            Opcode::ConcatStr => self.exec_concat_str(),
-            Opcode::NilCoalesce => self.exec_nil_coalesce(),
-            Opcode::OptField(field_idx) => self.exec_opt_field(field_idx),
-            Opcode::CallMethod {
-                method_idx,
-                arg_count,
-            } => self.exec_call_method_and_continue(method_idx, arg_count),
-            Opcode::NewArr(n) => self.exec_new_arr(n),
-            Opcode::ArrGet => self.exec_arr_get(),
-            Opcode::ArrSet => self.exec_arr_set(),
-            Opcode::ArrLen => self.exec_arr_len(),
-            Opcode::ArrPush => self.exec_arr_push(),
-            Opcode::ArrSlice => self.exec_arr_slice(),
-            Opcode::ArrPush1 => self.exec_arr_push1(),
-            Opcode::ArrConcat => self.exec_arr_concat(),
-        }
-    }
-
-    fn exec_halt(&self) -> Signal {
-        Signal::Return(self.stack.last().map_or(Value::Unit, Clone::clone))
-    }
-
-    fn exec_drop(&mut self) -> Result<Signal, VmError> {
-        let _ = self.stack.pop().ok_or(VmError::StackUnderflow)?;
-        Ok(Signal::Continue)
-    }
-
-    fn exec_ld_imm_i64(&mut self, v: i64) -> Signal {
-        self.stack.push(Value::Int(v));
-        Signal::Continue
-    }
-
-    fn exec_ld_imm_f64(&mut self, v: f64) -> Signal {
-        self.stack.push(Value::Float(v));
-        Signal::Continue
-    }
-
-    fn exec_ld_imm_unit(&mut self) -> Signal {
-        self.stack.push(Value::Unit);
-        Signal::Continue
-    }
-
-    fn exec_call_and_continue(&mut self, fn_idx: u16) -> Result<Signal, VmError> {
-        self.exec_call(fn_idx)?;
-        Ok(Signal::Continue)
-    }
-
-    fn exec_ld_fn_idx(&mut self, idx: u16) -> Signal {
-        self.stack.push(Value::Function(idx));
-        Signal::Continue
-    }
-
-    fn exec_dup(&mut self) -> Result<Signal, VmError> {
-        let top = self.stack.last().ok_or(VmError::StackUnderflow)?.clone();
-        self.stack.push(top);
-        Ok(Signal::Continue)
-    }
-
-    fn exec_br(&mut self, offset: i32) -> Result<Signal, VmError> {
-        let frame = self.frames.last_mut().ok_or(VmError::NoFrames)?;
-        frame.pc = apply_branch_offset(frame.pc, offset)?;
-        Ok(Signal::Continue)
-    }
-
-    fn exec_call_method_and_continue(
-        &mut self,
-        method_idx: u16,
-        arg_count: u16,
-    ) -> Result<Signal, VmError> {
-        self.exec_call_method(method_idx, arg_count)?;
-        Ok(Signal::Continue)
-    }
-
-    fn exec_new_obj(&mut self, type_tag: u16, field_count: u16) -> Result<Signal, VmError> {
-        let n = usize::from(field_count);
-        let stack_len = self.stack.len();
-        if stack_len < n {
-            return Err(VmError::StackUnderflow);
-        }
-        let fields: Vec<Value> = self.stack.drain(stack_len - n..).collect();
-        self.stack.push(Value::Object {
-            type_tag,
-            fields: Rc::new(fields),
-        });
-        Ok(Signal::Continue)
-    }
-
-    fn exec_ld_fld(&mut self, idx: u16) -> Result<Signal, VmError> {
-        let obj = self.stack.pop().ok_or(VmError::StackUnderflow)?;
-        let Value::Object { fields, .. } = obj else {
-            return Err(VmError::TypeMismatch);
-        };
-        let field = fields
-            .get(usize::from(idx))
-            .ok_or(VmError::FieldOutOfBounds(idx))?
-            .clone();
-        self.stack.push(field);
-        Ok(Signal::Continue)
-    }
-
-    fn exec_ld_tag(&mut self) -> Result<Signal, VmError> {
-        let obj = self.stack.pop().ok_or(VmError::StackUnderflow)?;
-        let Value::Object { fields, .. } = obj else {
-            return Err(VmError::TypeMismatch);
-        };
-        let tag = fields.first().ok_or(VmError::FieldOutOfBounds(0))?.clone();
-        self.stack.push(tag);
-        Ok(Signal::Continue)
-    }
-
-    fn exec_intrinsic_test(&mut self, args: &[Value]) -> Result<(), VmError> {
-        let name: Box<str> = args
-            .first()
-            .and_then(|v| {
-                if let Value::String(s) = v {
-                    Some(Box::from(s.as_ref()))
-                } else {
-                    None
-                }
-            })
-            .unwrap_or_else(|| Box::from("<unnamed>"));
-        let test_fn_idx = args.get(1).and_then(|v| {
-            if let Value::Function(idx) = v {
-                Some(*idx)
-            } else {
-                None
-            }
-        });
-        if let Some(test_fn_idx) = test_fn_idx {
-            let depth = self.frames.len();
-            self.exec_call(test_fn_idx)?;
-            if self.test_mode {
-                let run_result = self.run_until_depth(depth);
-                let _ = self.stack.pop();
-                match run_result {
-                    Ok(()) => self.test_results.push(TestResult {
-                        label: name,
-                        passed: true,
-                        error: None,
-                    }),
-                    Err(VmError::AssertionFailed(msg)) => {
-                        self.frames.truncate(depth);
-                        self.test_results.push(TestResult {
-                            label: name,
-                            passed: false,
-                            error: Some(msg),
-                        });
-                    }
-                    Err(e) => return Err(e),
-                }
-            } else {
-                self.run_until_depth(depth)?;
-                let _ = self.stack.pop();
-            }
-        }
-        self.stack.push(Value::Unit);
-        Ok(())
-    }
-
-    fn exec_call_dynamic(&mut self) -> Result<Signal, VmError> {
-        let v = self.stack.pop().ok_or(VmError::StackUnderflow)?;
-        let Value::Function(fn_idx) = v else {
-            return Err(VmError::NotAFunction);
-        };
-        self.exec_call(fn_idx)?;
-        Ok(Signal::Continue)
-    }
-
-    fn exec_ret(&mut self) -> Result<Signal, VmError> {
-        let result = self.stack.pop().ok_or(VmError::StackUnderflow)?;
-        let frame = self.frames.pop().ok_or(VmError::NoFrames)?;
-        self.stack.truncate(frame.stack_base);
-        if self.frames.is_empty() {
-            return Ok(Signal::Return(result));
-        }
-        self.stack.push(result);
-        Ok(Signal::Continue)
-    }
-
-    fn exec_ld_const(&mut self, idx: u16) -> Result<Signal, VmError> {
-        let value = {
-            let entry = self
-                .module
-                .const_pool
-                .get(usize::from(idx))
-                .ok_or(VmError::ConstOutOfBounds(idx))?;
-            const_entry_to_value(entry)
-        };
-        self.stack.push(value);
-        Ok(Signal::Continue)
-    }
-
-    fn exec_ld_loc(&mut self, idx: u16) -> Result<Signal, VmError> {
-        let local = {
-            let frame = self.frames.last().ok_or(VmError::NoFrames)?;
-            frame
-                .locals
-                .get(usize::from(idx))
-                .ok_or(VmError::LocalOutOfBounds(idx))?
-                .clone()
-        };
-        self.stack.push(local);
-        Ok(Signal::Continue)
-    }
-
-    fn exec_st_loc(&mut self, idx: u16) -> Result<Signal, VmError> {
-        let value = self.stack.pop().ok_or(VmError::StackUnderflow)?;
-        let slot = self
-            .frames
-            .last_mut()
-            .ok_or(VmError::NoFrames)?
-            .locals
-            .get_mut(usize::from(idx))
-            .ok_or(VmError::LocalOutOfBounds(idx))?;
-        *slot = value;
-        Ok(Signal::Continue)
-    }
-
-    fn exec_br_cond(&mut self, offset: i32, when: bool) -> Result<Signal, VmError> {
-        let cond = pop_bool_obj(&mut self.stack)?;
-        if cond == when {
-            let frame = self.frames.last_mut().ok_or(VmError::NoFrames)?;
-            frame.pc = apply_branch_offset(frame.pc, offset)?;
-        }
-        Ok(Signal::Continue)
-    }
-
-    fn exec_concat_str(&mut self) -> Result<Signal, VmError> {
-        let rhs = pop_str(&mut self.stack)?;
-        let lhs = pop_str(&mut self.stack)?;
-        let mut s = String::with_capacity(lhs.len() + rhs.len());
-        s.push_str(&lhs);
-        s.push_str(&rhs);
-        self.stack.push(Value::String(Rc::from(s.as_str())));
-        Ok(Signal::Continue)
-    }
-
-    fn top_two_are_float(&self) -> bool {
-        let len = self.stack.len();
-        len >= 2
-            && matches!(self.stack[len - 1], Value::Float(_))
-            && matches!(self.stack[len - 2], Value::Float(_))
-    }
-
-    fn push_i64_bin<F: FnOnce(i64, i64) -> i64>(&mut self, f: F) -> Result<Signal, VmError> {
-        let rhs = pop_i64(&mut self.stack)?;
-        let lhs = pop_i64(&mut self.stack)?;
-        self.stack.push(Value::Int(f(lhs, rhs)));
-        Ok(Signal::Continue)
-    }
-
-    fn push_i64_cmp<F: FnOnce(i64, i64) -> bool>(&mut self, f: F) -> Result<Signal, VmError> {
-        let rhs = pop_i64(&mut self.stack)?;
-        let lhs = pop_i64(&mut self.stack)?;
-        self.stack.push(bool_obj(f(lhs, rhs)));
-        Ok(Signal::Continue)
-    }
-
-    fn dispatch_or_i64_bin(
-        &mut self,
-        method: &str,
-        op: fn(i64, i64) -> i64,
-    ) -> Result<Signal, VmError> {
-        if let Some(r) = self.try_dispatch_binop(method) {
-            return r;
-        }
-        self.push_i64_bin(op)
-    }
-
-    fn dispatch_or_i64_cmp(
-        &mut self,
-        method: &str,
-        op: fn(i64, i64) -> bool,
-    ) -> Result<Signal, VmError> {
-        if let Some(r) = self.try_dispatch_binop(method) {
-            return r;
-        }
-        self.push_i64_cmp(op)
-    }
-
-    fn push_bool_cmp(&mut self, op: fn(bool, bool) -> bool) -> Result<Signal, VmError> {
-        let rhs = pop_bool_obj(&mut self.stack)?;
-        let lhs = pop_bool_obj(&mut self.stack)?;
-        self.stack.push(bool_obj(op(lhs, rhs)));
-        Ok(Signal::Continue)
-    }
-
-    fn push_str_cmp(&mut self, op: fn(&str, &str) -> bool) -> Result<Signal, VmError> {
-        let rhs = pop_str(&mut self.stack)?;
-        let lhs = pop_str(&mut self.stack)?;
-        self.stack.push(bool_obj(op(&lhs, &rhs)));
-        Ok(Signal::Continue)
-    }
-
-    fn push_f64_bin<F: FnOnce(f64, f64) -> f64>(&mut self, f: F) -> Result<Signal, VmError> {
-        let rhs = pop_f64(&mut self.stack)?;
-        let lhs = pop_f64(&mut self.stack)?;
-        self.stack.push(Value::Float(f(lhs, rhs)));
-        Ok(Signal::Continue)
-    }
-
-    fn push_f64_cmp<F: FnOnce(f64, f64) -> bool>(&mut self, f: F) -> Result<Signal, VmError> {
-        let rhs = pop_f64(&mut self.stack)?;
-        let lhs = pop_f64(&mut self.stack)?;
-        self.stack.push(bool_obj(f(lhs, rhs)));
-        Ok(Signal::Continue)
-    }
-
-    fn try_dispatch_binop(&mut self, method: &str) -> Option<Result<Signal, VmError>> {
-        let len = self.stack.len();
-        if len < 2 {
-            return None;
-        }
-        let type_tag = match &self.stack[len - 2] {
-            Value::Object { type_tag, .. } if *type_tag != 0 => *type_tag,
-            _ => return None,
-        };
-        let fn_idx = self
-            .module
-            .method_table
-            .iter()
-            .find(|e| e.name.as_ref() == method && e.type_tag == type_tag)
-            .map(|e| e.fn_idx)?;
-        Some(self.exec_call(fn_idx).map(|()| Signal::Continue))
-    }
-
-    fn exec_arith(&mut self, op: &Opcode) -> Result<Signal, VmError> {
-        match op {
-            Opcode::AddI64 => {
-                if self.top_two_are_float() {
-                    return self.push_f64_bin(|a, b| a + b);
-                }
-                self.dispatch_or_i64_bin("add", i64::wrapping_add)
-            }
-            Opcode::SubI64 => {
-                if self.top_two_are_float() {
-                    return self.push_f64_bin(|a, b| a - b);
-                }
-                self.dispatch_or_i64_bin("sub", i64::wrapping_sub)
-            }
-            Opcode::MulI64 => {
-                if self.top_two_are_float() {
-                    return self.push_f64_bin(|a, b| a * b);
-                }
-                self.dispatch_or_i64_bin("mul", i64::wrapping_mul)
-            }
-            Opcode::DivI64 => {
-                if self.top_two_are_float() {
-                    return self.push_f64_bin(|a, b| a / b);
-                }
-                if let Some(r) = self.try_dispatch_binop("div") {
-                    return r;
-                }
-                let rhs = pop_i64(&mut self.stack)?;
-                let lhs = pop_i64(&mut self.stack)?;
-                if rhs == 0 {
-                    return Err(VmError::DivisionByZero);
-                }
-                self.stack.push(Value::Int(lhs.wrapping_div(rhs)));
-                Ok(Signal::Continue)
-            }
-            Opcode::RemI64 => {
-                if self.top_two_are_float() {
-                    return self.push_f64_bin(|a, b| a % b);
-                }
-                if let Some(r) = self.try_dispatch_binop("rem") {
-                    return r;
-                }
-                let rhs = pop_i64(&mut self.stack)?;
-                let lhs = pop_i64(&mut self.stack)?;
-                if rhs == 0 {
-                    return Err(VmError::DivisionByZero);
-                }
-                self.stack.push(Value::Int(lhs.wrapping_rem(rhs)));
-                Ok(Signal::Continue)
-            }
-            Opcode::NegI64 => {
-                if matches!(self.stack.last(), Some(Value::Float(_))) {
-                    let v = pop_f64(&mut self.stack)?;
-                    self.stack.push(Value::Float(-v));
-                    return Ok(Signal::Continue);
-                }
-                let v = pop_i64(&mut self.stack)?;
-                self.stack.push(Value::Int(v.wrapping_neg()));
-                Ok(Signal::Continue)
-            }
-            Opcode::AddF64 => self.push_f64_bin(|a, b| a + b),
-            Opcode::SubF64 => self.push_f64_bin(|a, b| a - b),
-            Opcode::MulF64 => self.push_f64_bin(|a, b| a * b),
-            Opcode::DivF64 => self.push_f64_bin(|a, b| a / b),
-            Opcode::RemF64 => self.push_f64_bin(|a, b| a % b),
-            Opcode::NegF64 => {
-                let v = pop_f64(&mut self.stack)?;
-                self.stack.push(Value::Float(-v));
-                Ok(Signal::Continue)
-            }
-            _ => Err(VmError::TypeMismatch),
-        }
-    }
-
-    fn exec_nil_coalesce(&mut self) -> Result<Signal, VmError> {
-        let rhs = self.stack.pop().ok_or(VmError::StackUnderflow)?;
-        let lhs = self.stack.pop().ok_or(VmError::StackUnderflow)?;
-        match lhs {
-            Value::Object { ref fields, .. } => {
-                if matches!(fields.first(), Some(Value::Int(0))) {
-                    self.stack.push(rhs);
-                } else {
-                    let inner = fields.get(1).ok_or(VmError::FieldOutOfBounds(1))?.clone();
-                    self.stack.push(inner);
-                }
-            }
-            _ => return Err(VmError::TypeMismatch),
-        }
-        Ok(Signal::Continue)
-    }
-
-    fn exec_opt_field(&mut self, field_idx: u16) -> Result<Signal, VmError> {
-        let obj = self.stack.pop().ok_or(VmError::StackUnderflow)?;
-        match obj {
-            Value::Object {
-                ref fields,
-                type_tag,
-            } => {
-                if matches!(fields.first(), Some(Value::Int(0))) {
-                    // None → push None (same structure)
-                    self.stack.push(Value::Object {
-                        type_tag,
-                        fields: Rc::new(vec![Value::Int(0)]),
-                    });
-                } else {
-                    // Some(inner) → access field[field_idx] on inner, wrap in Some
-                    let inner = fields.get(1).ok_or(VmError::FieldOutOfBounds(1))?.clone();
-                    let Value::Object {
-                        fields: inner_fields,
-                        ..
-                    } = inner
-                    else {
-                        return Err(VmError::TypeMismatch);
-                    };
-                    let field_val = inner_fields
-                        .get(usize::from(field_idx))
-                        .ok_or(VmError::FieldOutOfBounds(field_idx))?
-                        .clone();
-                    // Wrap in Some: [discriminant=1, field_val]
-                    self.stack.push(Value::Object {
-                        type_tag,
-                        fields: Rc::new(vec![Value::Int(1), field_val]),
-                    });
-                }
-            }
-            _ => return Err(VmError::TypeMismatch),
-        }
-        Ok(Signal::Continue)
-    }
-
-    #[allow(clippy::float_cmp)]
-    fn exec_cmp(&mut self, op: &Opcode) -> Result<Signal, VmError> {
-        match op {
-            Opcode::EqI64 => {
-                if self.top_two_are_float() {
-                    return self.push_f64_cmp(|a, b| a == b);
-                }
-                self.dispatch_or_i64_cmp("eq", |a, b| a == b)
-            }
-            Opcode::NeqI64 => {
-                if self.top_two_are_float() {
-                    return self.push_f64_cmp(|a, b| a != b);
-                }
-                self.dispatch_or_i64_cmp("neq", |a, b| a != b)
-            }
-            Opcode::LtI64 => {
-                if self.top_two_are_float() {
-                    return self.push_f64_cmp(|a, b| a < b);
-                }
-                self.dispatch_or_i64_cmp("lt", |a, b| a < b)
-            }
-            Opcode::GtI64 => {
-                if self.top_two_are_float() {
-                    return self.push_f64_cmp(|a, b| a > b);
-                }
-                self.dispatch_or_i64_cmp("gt", |a, b| a > b)
-            }
-            Opcode::LeqI64 => {
-                if self.top_two_are_float() {
-                    return self.push_f64_cmp(|a, b| a <= b);
-                }
-                self.dispatch_or_i64_cmp("leq", |a, b| a <= b)
-            }
-            Opcode::GeqI64 => {
-                if self.top_two_are_float() {
-                    return self.push_f64_cmp(|a, b| a >= b);
-                }
-                self.dispatch_or_i64_cmp("geq", |a, b| a >= b)
-            }
-            Opcode::EqF64 => self.push_f64_cmp(|a, b| a == b),
-            Opcode::NeqF64 => self.push_f64_cmp(|a, b| a != b),
-            Opcode::LtF64 => self.push_f64_cmp(|a, b| a < b),
-            Opcode::GtF64 => self.push_f64_cmp(|a, b| a > b),
-            Opcode::LeqF64 => self.push_f64_cmp(|a, b| a <= b),
-            Opcode::GeqF64 => self.push_f64_cmp(|a, b| a >= b),
-            Opcode::EqBool => self.push_bool_cmp(|a, b| a == b),
-            Opcode::NeqBool => self.push_bool_cmp(|a, b| a != b),
-            Opcode::EqStr => self.push_str_cmp(|a, b| a == b),
-            Opcode::NeqStr => self.push_str_cmp(|a, b| a != b),
-            _ => Err(VmError::TypeMismatch),
-        }
-    }
-
-    fn exec_bitwise(&mut self, op: &Opcode) -> Result<Signal, VmError> {
-        match op {
-            Opcode::Not => {
-                let v = pop_bool_obj(&mut self.stack)?;
-                self.stack.push(bool_obj(!v));
-                Ok(Signal::Continue)
-            }
-            Opcode::BitAnd => self.push_i64_bin(|a, b| a & b),
-            Opcode::BitOr => self.push_i64_bin(|a, b| a | b),
-            Opcode::BitXor => self.push_i64_bin(|a, b| a ^ b),
-            Opcode::BitNot => {
-                let v = pop_i64(&mut self.stack)?;
-                self.stack.push(Value::Int(!v));
-                Ok(Signal::Continue)
-            }
-            Opcode::Shl => {
-                self.push_i64_bin(|a, b| a.wrapping_shl(u32::try_from(b).unwrap_or(u32::MAX)))
-            }
-            Opcode::Shr => {
-                self.push_i64_bin(|a, b| a.wrapping_shr(u32::try_from(b).unwrap_or(u32::MAX)))
-            }
-            _ => Err(VmError::TypeMismatch),
-        }
-    }
-
-    fn exec_call_method(&mut self, method_idx: u16, arg_count: u16) -> Result<(), VmError> {
-        let stack_len = self.stack.len();
-        let receiver_pos = stack_len
-            .checked_sub(usize::from(arg_count))
-            .ok_or(VmError::StackUnderflow)?;
-        let recv_tag: u16 = type_tag_of(&self.stack[receiver_pos]);
-
-        let method_name: Box<str> = match self.module.const_pool.get(usize::from(method_idx)) {
-            Some(ConstEntry::String(s)) => s.clone(),
-            _ => return Err(VmError::MethodNotFound),
-        };
-
-        let fn_idx = self
-            .module
-            .method_table
-            .iter()
-            .find(|e| e.name.as_ref() == method_name.as_ref() && e.type_tag == recv_tag)
-            .map(|e| e.fn_idx)
-            .ok_or(VmError::MethodNotFound)?;
-
-        self.exec_call(fn_idx)
-    }
-
-    fn exec_new_arr(&mut self, n: u16) -> Result<Signal, VmError> {
-        let count = usize::from(n);
-        let stack_len = self.stack.len();
-        if stack_len < count {
-            return Err(VmError::StackUnderflow);
-        }
-        let items: Vec<Value> = self.stack.drain(stack_len - count..).collect();
-        self.stack.push(Value::Array(Rc::new(RefCell::new(items))));
-        Ok(Signal::Continue)
-    }
-
-    fn exec_arr_get(&mut self) -> Result<Signal, VmError> {
-        let idx = pop_i64(&mut self.stack)?;
-        let a = pop_array(&mut self.stack)?;
-        let borrowed = a.borrow();
-        let len = borrowed.len();
-        let i = usize::try_from(idx).map_err(|_| VmError::IndexOutOfBounds { index: idx, len })?;
-        let val = borrowed
-            .get(i)
-            .ok_or(VmError::IndexOutOfBounds { index: idx, len })?
-            .clone();
-        drop(borrowed);
-        self.stack.push(val);
-        Ok(Signal::Continue)
-    }
-
-    fn exec_arr_set(&mut self) -> Result<Signal, VmError> {
-        let val = self.stack.pop().ok_or(VmError::StackUnderflow)?;
-        let idx = pop_i64(&mut self.stack)?;
-        let a = pop_array(&mut self.stack)?;
-        let mut borrowed = a.borrow_mut();
-        let len = borrowed.len();
-        let i = usize::try_from(idx).map_err(|_| VmError::IndexOutOfBounds { index: idx, len })?;
-        let slot = borrowed
-            .get_mut(i)
-            .ok_or(VmError::IndexOutOfBounds { index: idx, len })?;
-        *slot = val;
-        drop(borrowed);
-        self.stack.push(Value::Unit);
-        Ok(Signal::Continue)
-    }
-
-    fn exec_arr_len(&mut self) -> Result<Signal, VmError> {
-        let a = pop_array(&mut self.stack)?;
-        let len = i64::try_from(a.borrow().len()).unwrap_or(i64::MAX);
-        self.stack.push(Value::Int(len));
-        Ok(Signal::Continue)
-    }
-
-    fn exec_arr_push(&mut self) -> Result<Signal, VmError> {
-        let val = self.stack.pop().ok_or(VmError::StackUnderflow)?;
-        let a = pop_array(&mut self.stack)?;
-        a.borrow_mut().push(val);
-        self.stack.push(Value::Unit);
-        Ok(Signal::Continue)
-    }
-
-    fn exec_arr_push1(&mut self) -> Result<Signal, VmError> {
-        let val = self.stack.pop().ok_or(VmError::StackUnderflow)?;
-        match self.stack.last() {
-            Some(Value::Array(a)) => {
-                a.borrow_mut().push(val);
-                Ok(Signal::Continue)
-            }
-            _ => Err(VmError::TypeMismatch),
-        }
-    }
-
-    fn exec_arr_concat(&mut self) -> Result<Signal, VmError> {
-        let b = pop_array(&mut self.stack)?;
-        let a = pop_array(&mut self.stack)?;
-        let mut result = a.borrow().clone();
-        result.extend(b.borrow().iter().cloned());
-        self.stack.push(Value::Array(Rc::new(RefCell::new(result))));
-        Ok(Signal::Continue)
-    }
-
-    fn exec_arr_slice(&mut self) -> Result<Signal, VmError> {
-        let end = pop_i64(&mut self.stack)?;
-        let start = pop_i64(&mut self.stack)?;
-        let a = pop_array(&mut self.stack)?;
-        let borrowed = a.borrow();
-        let len = i64::try_from(borrowed.len()).unwrap_or(i64::MAX);
-        let lo = usize::try_from(start.clamp(0, len)).unwrap_or(0);
-        let hi = usize::try_from(end.clamp(0, len)).unwrap_or(0);
-        let slice: Vec<Value> = borrowed[lo..hi.max(lo)].to_vec();
-        drop(borrowed);
-        self.stack.push(Value::Array(Rc::new(RefCell::new(slice))));
-        Ok(Signal::Continue)
-    }
-
-    fn exec_call(&mut self, fn_idx: u16) -> Result<(), VmError> {
-        let (param_count, local_count, symbol_idx, return_kind) = {
-            let func = self
-                .module
-                .function_table
-                .get(usize::from(fn_idx))
-                .ok_or(VmError::FunctionOutOfBounds(fn_idx))?;
-            (
-                usize::from(func.param_count),
-                usize::from(func.local_count),
-                func.symbol_idx,
-                func.return_kind,
-            )
-        };
-
-        let (is_native, intrinsic_id) = {
-            let sym = self
-                .module
-                .symbol_table
-                .get(usize::from(symbol_idx))
-                .ok_or(VmError::SymbolOutOfBounds(symbol_idx))?;
-            (sym.flags.is_native(), sym.intrinsic_id)
-        };
-
-        let stack_len = self.stack.len();
-        if stack_len < param_count {
-            return Err(VmError::StackUnderflow);
-        }
-        let args: Vec<Value> = self.stack.drain(stack_len - param_count..).collect();
-
-        if is_native {
-            if intrinsic_id == u16::MAX {
-                // extrin fn — dispatch via dlopen/dlsym
-                let result = self.ffi.call(fn_idx, &args, &self.module, return_kind)?;
-                self.stack.push(result);
-            } else {
-                let intrinsic = Intrinsic::from_id(intrinsic_id)
-                    .ok_or(VmError::UnknownIntrinsic(intrinsic_id))?;
-                match intrinsic {
-                    Intrinsic::Assert => {
-                        let cond = args.first().cloned().unwrap_or(Value::Unit);
-                        if !is_truthy(&cond) {
-                            return Err(VmError::AssertionFailed("assertion failed".into()));
-                        }
-                        self.stack.push(Value::Unit);
-                    }
-                    Intrinsic::AssertMsg => {
-                        let cond = args.first().cloned().unwrap_or(Value::Unit);
-                        let msg: Box<str> = args
-                            .get(1)
-                            .and_then(|v| {
-                                if let Value::String(s) = v {
-                                    Some(Box::from(s.as_ref()))
-                                } else {
-                                    None
-                                }
-                            })
-                            .unwrap_or_else(|| Box::from("assertion failed"));
-                        if !is_truthy(&cond) {
-                            return Err(VmError::AssertionFailed(msg));
-                        }
-                        self.stack.push(Value::Unit);
-                    }
-                    Intrinsic::Test => self.exec_intrinsic_test(&args)?,
-                    _ => {
-                        let result = self
-                            .registry
-                            .lookup_id(intrinsic_id)
-                            .map_or_else(|| native::dispatch(self, intrinsic, &args), |f| f(&args));
-                        self.stack.push(result);
-                    }
-                }
-            }
-        } else {
-            let stack_base = self.stack.len();
-            let mut locals: Vec<Value> = args;
-            while locals.len() < local_count {
-                locals.push(Value::Unit);
-            }
-            self.frames.push(CallFrame {
-                function_idx: fn_idx,
-                pc: 0,
-                locals,
-                stack_base,
-            });
-        }
-        Ok(())
-    }
-}
-
-fn is_truthy(v: &Value) -> bool {
-    match v {
-        Value::Object { fields, .. } => fields
-            .first()
-            .is_some_and(|f| matches!(f, Value::Int(n) if *n != 0)),
-        _ => false,
-    }
-}
-
-const fn type_tag_of(v: &Value) -> u16 {
-    match v {
-        Value::Int(_) => 1,
-        Value::Float(_) => 2,
-        Value::String(_) => 4,
-        Value::Unit => 5,
-        Value::Function(_) => 6,
-        Value::Object { type_tag, .. } => *type_tag,
-        Value::Array(_) => 7,
-        Value::Map(_) => 8,
-    }
-}
-
-fn apply_branch_offset(pc: usize, offset: i32) -> Result<usize, VmError> {
-    if offset >= 0 {
-        pc.checked_add(usize::try_from(offset).map_err(|_| VmError::CodeOutOfBounds)?)
-            .ok_or(VmError::CodeOutOfBounds)
-    } else {
-        let back = usize::try_from(offset.unsigned_abs()).map_err(|_| VmError::CodeOutOfBounds)?;
-        pc.checked_sub(back).ok_or(VmError::CodeOutOfBounds)
-    }
-}
-
-fn pop_array(stack: &mut Vec<Value>) -> Result<Rc<RefCell<Vec<Value>>>, VmError> {
-    match stack.pop().ok_or(VmError::StackUnderflow)? {
-        Value::Array(a) => Ok(a),
-        _ => Err(VmError::TypeMismatch),
-    }
-}
-
-fn pop_i64(stack: &mut Vec<Value>) -> Result<i64, VmError> {
-    match stack.pop().ok_or(VmError::StackUnderflow)? {
-        Value::Int(v) => Ok(v),
-        _ => Err(VmError::TypeMismatch),
-    }
-}
-
-fn pop_f64(stack: &mut Vec<Value>) -> Result<f64, VmError> {
-    match stack.pop().ok_or(VmError::StackUnderflow)? {
-        Value::Float(v) => Ok(v),
-        _ => Err(VmError::TypeMismatch),
-    }
-}
-
-fn pop_bool_obj(stack: &mut Vec<Value>) -> Result<bool, VmError> {
-    match stack.pop().ok_or(VmError::StackUnderflow)? {
-        Value::Object { ref fields, .. } => {
-            match fields.first().ok_or(VmError::FieldOutOfBounds(0))? {
-                Value::Int(n) => Ok(*n != 0),
-                _ => Err(VmError::TypeMismatch),
-            }
-        }
-        _ => Err(VmError::TypeMismatch),
-    }
-}
-
-fn bool_obj(b: bool) -> Value {
-    Value::Object {
-        type_tag: 0,
-        fields: Rc::new(vec![Value::Int(i64::from(b))]),
-    }
-}
-
-fn pop_str(stack: &mut Vec<Value>) -> Result<Rc<str>, VmError> {
-    match stack.pop().ok_or(VmError::StackUnderflow)? {
-        Value::String(s) => Ok(s),
-        _ => Err(VmError::TypeMismatch),
-    }
-}
-
-fn const_entry_to_value(entry: &ConstEntry) -> Value {
-    match entry {
-        ConstEntry::Int(v) => Value::Int(*v),
-        ConstEntry::Float(v) => Value::Float(*v),
-        ConstEntry::String(s) => Value::String(Rc::from(s.as_ref())),
-    }
-}
+//! Interpreter core: `Vm` struct and the main run loop.
 
 #[cfg(test)]
 mod tests;
+
+mod arith;
+mod continuations;
+mod frame;
+mod ops;
+
+pub use frame::{ContMarker, Continuation, Frame};
+
+use std::mem;
+
+use musi_bc::Opcode;
+
+use crate::channel::ChannelTable;
+use crate::error::{VmError, malformed};
+use crate::heap::Heap;
+use crate::host::HostFunctions;
+use crate::loader::LoadedModule;
+use crate::task::{TaskScheduler, TaskStatus};
+use crate::value::Value;
+
+const MAX_CALL_DEPTH: usize = 1024;
+
+/// The result of executing a single instruction.
+pub enum StepResult {
+    /// Execution continues normally.
+    Continue,
+    /// The VM has returned a final value (call stack is empty).
+    Returned(Value),
+}
+
+/// The Musi bytecode interpreter.
+pub struct Vm {
+    module: LoadedModule,
+    heap: Heap,
+    globals: Vec<Value>,
+    call_stack: Vec<Frame>,
+    instruction_count: u64,
+    instruction_limit: Option<u64>,
+    continuations: Vec<Continuation>,
+    host: Option<Box<dyn HostFunctions>>,
+    scheduler: Option<TaskScheduler>,
+    channels: Option<ChannelTable>,
+}
+
+impl Vm {
+    /// Create a new VM owning the loaded module.
+    #[must_use]
+    pub const fn new(module: LoadedModule) -> Self {
+        Self {
+            module,
+            heap: Heap::new(),
+            globals: vec![],
+            call_stack: vec![],
+            instruction_count: 0,
+            instruction_limit: None,
+            continuations: vec![],
+            host: None,
+            scheduler: None,
+            channels: None,
+        }
+    }
+
+    /// Set the maximum number of instructions the VM will execute before
+    /// returning `InstructionLimitExceeded`. Pass `None` to disable.
+    pub const fn set_instruction_limit(&mut self, limit: Option<u64>) {
+        self.instruction_limit = limit;
+    }
+
+    /// Attach a host function provider for `INV_FFI` dispatch.
+    pub fn set_host(&mut self, host: Box<dyn HostFunctions>) {
+        self.host = Some(host);
+    }
+
+    /// Number of instructions executed since the VM was created.
+    #[must_use]
+    pub const fn instruction_count(&self) -> u64 {
+        self.instruction_count
+    }
+
+    #[must_use]
+    pub fn frames(&self) -> &[Frame] {
+        &self.call_stack
+    }
+
+    #[must_use]
+    pub const fn heap(&self) -> &Heap {
+        &self.heap
+    }
+
+    #[must_use]
+    pub fn globals(&self) -> &[Value] {
+        &self.globals
+    }
+
+    #[must_use]
+    pub const fn module(&self) -> &LoadedModule {
+        &self.module
+    }
+
+    #[must_use]
+    pub const fn is_running(&self) -> bool {
+        !self.call_stack.is_empty()
+    }
+
+    /// Run the module's entry point and return the result value.
+    ///
+    /// # Errors
+    ///
+    /// Returns `VmError` on type errors, stack overflows, malformed bytecode,
+    /// or unimplemented features.
+    pub fn run(&mut self) -> Result<Value, VmError> {
+        let entry = self
+            .module
+            .entry_point
+            .ok_or_else(|| malformed!("module has no entry point"))?;
+        self.call_fn(entry, &[])
+    }
+
+    /// Call a function by `fn_id`, passing `args`, and return its result.
+    ///
+    /// # Errors
+    ///
+    /// Returns `VmError` on type errors, stack overflows, malformed bytecode,
+    /// or unimplemented features.
+    pub fn call_fn(&mut self, fn_id: u32, args: &[Value]) -> Result<Value, VmError> {
+        self.setup_call(fn_id, args)?;
+        self.run_to_completion()
+    }
+
+    /// Push a call frame for the given function without executing it.
+    ///
+    /// # Errors
+    ///
+    /// Returns `VmError` if `fn_id` is not found or the call stack overflows.
+    pub fn setup_call(&mut self, fn_id: u32, args: &[Value]) -> Result<(), VmError> {
+        if self.call_stack.len() >= MAX_CALL_DEPTH {
+            return Err(VmError::StackOverflow);
+        }
+        let (fn_idx, func) = self
+            .module
+            .fn_by_id(fn_id)
+            .ok_or_else(|| malformed!("fn_id {} not found in module", fn_id))?;
+        let local_count = usize::from(func.local_count);
+        let max_stack = usize::from(func.max_stack);
+        let param_count = usize::from(func.param_count);
+
+        let mut locals = vec![Value::UNIT; local_count];
+        for (i, &arg) in args.iter().enumerate().take(param_count) {
+            locals[i] = arg;
+        }
+
+        self.call_stack.push(Frame {
+            fn_idx,
+            ip: 0,
+            locals,
+            stack: Vec::with_capacity(max_stack.max(4)),
+            marker_stack: vec![],
+            closure_ref: None,
+        });
+        Ok(())
+    }
+
+    /// Run until the call stack returns below its current depth.
+    ///
+    /// # Errors
+    ///
+    /// Returns `VmError` on any runtime error.
+    pub fn run_to_completion(&mut self) -> Result<Value, VmError> {
+        loop {
+            match self.step()? {
+                StepResult::Continue => {}
+                StepResult::Returned(v) => return Ok(v),
+            }
+        }
+    }
+
+    /// Execute a single instruction and return the result.
+    ///
+    /// # Errors
+    ///
+    /// Returns `VmError` on any runtime error.
+    pub fn step(&mut self) -> Result<StepResult, VmError> {
+        if let Some(limit) = self.instruction_limit
+            && self.instruction_count >= limit
+        {
+            return Err(VmError::InstructionLimitExceeded { limit });
+        }
+        self.instruction_count += 1;
+
+        let (fn_id, instr_ip) = {
+            let frame = self
+                .call_stack
+                .last()
+                .ok_or_else(|| malformed!("empty call stack"))?;
+            (self.module.functions[frame.fn_idx].fn_id, frame.ip)
+        };
+
+        self.step_inner().map_err(|e| VmError::Runtime {
+            fn_id,
+            ip: instr_ip,
+            source: Box::new(e),
+        })
+    }
+
+    fn step_inner(&mut self) -> Result<StepResult, VmError> {
+        self.maybe_gc();
+
+        // Phase 1: Read opcode, decode operand, advance IP.
+        let (fn_idx, op, operand) = {
+            let frame = self
+                .call_stack
+                .last_mut()
+                .ok_or_else(|| malformed!("empty call stack"))?;
+            let fn_idx = frame.fn_idx;
+            let ip = frame.ip;
+            let code = &self.module.functions[fn_idx].code;
+            if ip >= code.len() {
+                return Err(malformed!("ip past end of bytecode"));
+            }
+            let raw_op = code[ip];
+            let (operand, ilen) = ops::decode_operand(code, ip);
+            frame.ip = ip + ilen;
+            (fn_idx, Opcode(raw_op), operand)
+        };
+
+        // Phase 2: Try arithmetic (most frequent in hot loops).
+        {
+            let frame = self
+                .call_stack
+                .last_mut()
+                .ok_or_else(|| malformed!("empty call stack"))?;
+            if arith::exec(op, frame)? {
+                return Ok(StepResult::Continue);
+            }
+        }
+
+        // Phase 3: Grouped dispatch.
+        match op {
+            Opcode::NOP
+            | Opcode::BRK
+            | Opcode::DUP
+            | Opcode::POP
+            | Opcode::SWP
+            | Opcode::LD_LOC
+            | Opcode::LD_LOC_W
+            | Opcode::ST_LOC
+            | Opcode::ST_LOC_W
+            | Opcode::LD_CST
+            | Opcode::LD_CST_W
+            | Opcode::MK_PRD
+            | Opcode::LD_FLD
+            | Opcode::MK_VAR
+            | Opcode::MK_VAR_W
+            | Opcode::LD_PAY
+            | Opcode::CMP_TAG
+            | Opcode::CMP_TAG_W
+            | Opcode::LD_TAG
+            | Opcode::LD_LEN
+            | Opcode::LD_IDX
+            | Opcode::ST_IDX
+            | Opcode::MK_ARR
+            | Opcode::ALC_REF
+            | Opcode::ALC_ARN
+            | Opcode::ST_FLD
+            | Opcode::LD_GLB
+            | Opcode::ST_GLB
+            | Opcode::TYP_CHK
+            | Opcode::MK_CLO
+            | Opcode::LD_UPV => self.step_data(op, operand),
+
+            Opcode::JMP_W
+            | Opcode::JMP_T_W
+            | Opcode::JMP_F_W
+            | Opcode::HLT
+            | Opcode::UNR
+            | Opcode::RET
+            | Opcode::RET_U
+            | Opcode::INV
+            | Opcode::INV_TAL
+            | Opcode::INV_DYN
+            | Opcode::INV_FFI => self.step_control(op, operand),
+
+            Opcode::CONT_MARK | Opcode::CONT_UNMARK | Opcode::CONT_SAVE | Opcode::CONT_RESUME => {
+                self.step_continuations(op, operand, fn_idx)
+            }
+
+            Opcode::TSK_SPN
+            | Opcode::TSK_AWT
+            | Opcode::TSK_CMK
+            | Opcode::TSK_CHS
+            | Opcode::TSK_CHR => self.step_concurrency(op, operand),
+
+            _ => Err(malformed!("unknown opcode {:#04x}", op.0)),
+        }
+    }
+
+    fn step_data(&mut self, op: Opcode, operand: u32) -> Result<StepResult, VmError> {
+        match op {
+            // §0 Stack manipulation
+            Opcode::NOP | Opcode::BRK => Ok(StepResult::Continue),
+            Opcode::DUP => {
+                self.current_frame()?.dup()?;
+                Ok(StepResult::Continue)
+            }
+            Opcode::POP => {
+                let _ = self.current_frame()?.stack.pop();
+                Ok(StepResult::Continue)
+            }
+            Opcode::SWP => {
+                self.current_frame()?.swp()?;
+                Ok(StepResult::Continue)
+            }
+
+            // §5 Locals
+            Opcode::LD_LOC | Opcode::LD_LOC_W => {
+                let frame = self.current_frame()?;
+                let slot =
+                    usize::try_from(operand).map_err(|_| malformed!("ld.loc operand overflow"))?;
+                let v = frame.get_local(slot)?;
+                frame.stack.push(v);
+                Ok(StepResult::Continue)
+            }
+            Opcode::ST_LOC | Opcode::ST_LOC_W => {
+                let frame = self.current_frame()?;
+                let slot =
+                    usize::try_from(operand).map_err(|_| malformed!("st.loc operand overflow"))?;
+                let v = frame.pop()?;
+                frame.set_local(slot, v)?;
+                Ok(StepResult::Continue)
+            }
+
+            _ => self.step_heap(op, operand),
+        }
+    }
+
+    fn step_heap(&mut self, op: Opcode, operand: u32) -> Result<StepResult, VmError> {
+        match op {
+            // §5 Constants
+            Opcode::LD_CST | Opcode::LD_CST_W => {
+                let frame = self
+                    .call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_ld_cst(operand, frame, &self.module.consts, &mut self.heap)?;
+                Ok(StepResult::Continue)
+            }
+
+            // §5 Struct / variant
+            Opcode::MK_PRD => {
+                let frame = self
+                    .call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_mk_prd(operand, frame, &mut self.heap)?;
+                Ok(StepResult::Continue)
+            }
+            Opcode::LD_FLD => {
+                let frame = self
+                    .call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_ld_fld(operand, frame, &self.heap)?;
+                Ok(StepResult::Continue)
+            }
+            Opcode::MK_VAR | Opcode::MK_VAR_W => {
+                let frame = self
+                    .call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_mk_var(operand, frame, &mut self.heap)?;
+                Ok(StepResult::Continue)
+            }
+            Opcode::LD_PAY => {
+                let frame = self
+                    .call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_ld_pay(operand, frame, &self.heap)?;
+                Ok(StepResult::Continue)
+            }
+            Opcode::CMP_TAG | Opcode::CMP_TAG_W => {
+                let frame = self
+                    .call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_cmp_tag(operand, frame, &self.heap)?;
+                Ok(StepResult::Continue)
+            }
+
+            _ => self.step_array(op, operand),
+        }
+    }
+
+    fn step_array(&mut self, op: Opcode, operand: u32) -> Result<StepResult, VmError> {
+        match op {
+            // §9 Array / heap allocation
+            Opcode::LD_TAG => {
+                let frame = self
+                    .call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_ld_tag(frame, &self.heap)?;
+                Ok(StepResult::Continue)
+            }
+            Opcode::LD_LEN => {
+                let frame = self
+                    .call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_ld_len(frame, &self.heap)?;
+                Ok(StepResult::Continue)
+            }
+            Opcode::LD_IDX => {
+                let frame = self
+                    .call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_ld_idx(frame, &self.heap)?;
+                Ok(StepResult::Continue)
+            }
+            Opcode::ST_IDX => {
+                let frame = self
+                    .call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_st_idx(frame, &mut self.heap)?;
+                Ok(StepResult::Continue)
+            }
+            Opcode::MK_ARR => {
+                let frame = self
+                    .call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_mk_arr(operand, frame, &mut self.heap)?;
+                Ok(StepResult::Continue)
+            }
+            Opcode::ALC_REF => {
+                let frame = self
+                    .call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?;
+                let initial = frame.pop()?;
+                let ptr = self.heap.alloc(operand, vec![initial]);
+                frame.stack.push(Value::from_ref(ptr));
+                Ok(StepResult::Continue)
+            }
+            Opcode::ALC_ARN => {
+                let ptr = self.heap.alloc(operand, vec![]);
+                self.current_frame()?.stack.push(Value::from_ref(ptr));
+                Ok(StepResult::Continue)
+            }
+            Opcode::ST_FLD => {
+                let frame = self
+                    .call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_st_fld(operand, frame, &mut self.heap)?;
+                Ok(StepResult::Continue)
+            }
+
+            _ => self.step_globals_closures(op, operand),
+        }
+    }
+
+    fn step_globals_closures(&mut self, op: Opcode, operand: u32) -> Result<StepResult, VmError> {
+        match op {
+            // §12 Globals
+            Opcode::LD_GLB => {
+                let frame = self
+                    .call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_ld_glb(operand, frame, &mut self.globals)?;
+                Ok(StepResult::Continue)
+            }
+            Opcode::ST_GLB => {
+                let frame = self
+                    .call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_st_glb(operand, frame, &mut self.globals)?;
+                Ok(StepResult::Continue)
+            }
+
+            // §16 Type check
+            Opcode::TYP_CHK => {
+                let frame = self
+                    .call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_type_chk(operand, frame, &self.module.types, &self.heap)?;
+                Ok(StepResult::Continue)
+            }
+
+            // §17 Closures
+            Opcode::MK_CLO => {
+                let frame = self
+                    .call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_mk_clo(operand, frame, &self.module.functions, &mut self.heap)?;
+                Ok(StepResult::Continue)
+            }
+            Opcode::LD_UPV => {
+                let frame = self
+                    .call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_ld_upv(operand, frame, &self.heap)?;
+                Ok(StepResult::Continue)
+            }
+
+            _ => Err(malformed!("unknown globals/closures opcode {:#04x}", op.0)),
+        }
+    }
+
+    fn step_control(&mut self, op: Opcode, operand: u32) -> Result<StepResult, VmError> {
+        match op {
+            // §11 Control — jumps
+            Opcode::JMP_W => {
+                let frame = self.current_frame()?;
+                let target = ops::jump_target(frame.ip, ops::read_i32_operand(operand)?)?;
+                frame.ip = target;
+                Ok(StepResult::Continue)
+            }
+            Opcode::JMP_T_W => {
+                let frame = self.current_frame()?;
+                let cond = frame.pop()?;
+                if cond.as_bool()? {
+                    frame.ip = ops::jump_target(frame.ip, ops::read_i32_operand(operand)?)?;
+                }
+                Ok(StepResult::Continue)
+            }
+            Opcode::JMP_F_W => {
+                let frame = self.current_frame()?;
+                let cond = frame.pop()?;
+                if !cond.as_bool()? {
+                    frame.ip = ops::jump_target(frame.ip, ops::read_i32_operand(operand)?)?;
+                }
+                Ok(StepResult::Continue)
+            }
+
+            // §11 Control — call / return / halt
+            Opcode::HLT => Err(VmError::Halted),
+            Opcode::UNR => Err(malformed!("unr (unreachable) reached at runtime")),
+            Opcode::RET => {
+                let v = self.current_frame()?.pop()?;
+                self.do_return(v)
+            }
+            Opcode::RET_U => self.do_return(Value::UNIT),
+            Opcode::INV => self.do_call_with_stack_args(operand),
+            Opcode::INV_TAL => self.do_tail_call(operand),
+            Opcode::INV_DYN => {
+                let dyn_call = {
+                    let frame = self
+                        .call_stack
+                        .last_mut()
+                        .ok_or_else(|| malformed!("empty call stack"))?;
+                    ops::resolve_inv_dyn(operand, frame, &self.heap)?
+                };
+                match dyn_call {
+                    ops::DynCall::Fn(fn_id) => self.do_call_with_stack_args(fn_id),
+                    ops::DynCall::Closure { fn_id, closure_ref } => {
+                        let result = self.do_call_with_stack_args(fn_id)?;
+                        if let Some(frame) = self.call_stack.last_mut() {
+                            frame.closure_ref = Some(closure_ref);
+                        }
+                        Ok(result)
+                    }
+                }
+            }
+            Opcode::INV_FFI => self.exec_inv_ffi(operand),
+
+            _ => Err(malformed!("unknown control opcode {:#04x}", op.0)),
+        }
+    }
+
+    fn step_continuations(
+        &mut self,
+        op: Opcode,
+        operand: u32,
+        fn_idx: usize,
+    ) -> Result<StepResult, VmError> {
+        let cont_action = {
+            let frame = self
+                .call_stack
+                .last_mut()
+                .ok_or_else(|| malformed!("empty call stack"))?;
+            let handlers = &self.module.functions[fn_idx].handlers;
+            continuations::exec(op, operand, frame, &self.module.effects, handlers)?
+        };
+        match cont_action {
+            continuations::ContAction::NotHandled | continuations::ContAction::Continue => {
+                Ok(StepResult::Continue)
+            }
+            continuations::ContAction::Dispatch { handler_fn_id } => {
+                self.do_call_with_stack_args(handler_fn_id)
+            }
+            continuations::ContAction::CrossFrameSearch { effect_id, op_id } => {
+                self.exec_cont_save_cross_frame(effect_id, op_id)
+            }
+            continuations::ContAction::Resume => self.exec_cont_resume(),
+        }
+    }
+
+    fn step_concurrency(&mut self, op: Opcode, operand: u32) -> Result<StepResult, VmError> {
+        match op {
+            Opcode::TSK_SPN => self.exec_tsk_spn(operand),
+            Opcode::TSK_AWT => self.exec_tsk_awt(),
+            Opcode::TSK_CMK => self.exec_tsk_cmk(),
+            Opcode::TSK_CHS => self.exec_tsk_chs(),
+            Opcode::TSK_CHR => self.exec_tsk_chr(),
+            _ => Err(malformed!("unknown concurrency opcode {:#04x}", op.0)),
+        }
+    }
+
+    // ── Call / return / tail-call ─────────────────────────────────────
+
+    fn do_return(&mut self, value: Value) -> Result<StepResult, VmError> {
+        let _ = self.call_stack.pop();
+        if let Some(caller) = self.call_stack.last_mut() {
+            caller.stack.push(value);
+            Ok(StepResult::Continue)
+        } else if self.scheduler.is_some() {
+            self.complete_current_task(value)
+        } else {
+            Ok(StepResult::Returned(value))
+        }
+    }
+
+    fn do_call_with_stack_args(&mut self, fn_id: u32) -> Result<StepResult, VmError> {
+        if self.call_stack.len() >= MAX_CALL_DEPTH {
+            return Err(VmError::StackOverflow);
+        }
+
+        let (fn_idx, func) = self
+            .module
+            .fn_by_id(fn_id)
+            .ok_or_else(|| malformed!("call to unknown fn_id {}", fn_id))?;
+        let param_count = usize::from(func.param_count);
+        let local_count = usize::from(func.local_count);
+        let max_stack = usize::from(func.max_stack);
+
+        let caller_stack_len = self.call_stack.last().map_or(0, |f| f.stack.len());
+        if caller_stack_len < param_count {
+            return Err(malformed!(
+                "call to fn {}: need {} args, stack has {}",
+                fn_id,
+                param_count,
+                caller_stack_len
+            ));
+        }
+        let start = caller_stack_len - param_count;
+        let args: Vec<Value> = self
+            .call_stack
+            .last_mut()
+            .ok_or_else(|| malformed!("empty call stack"))?
+            .stack
+            .drain(start..)
+            .collect();
+
+        let mut locals = vec![Value::UNIT; local_count];
+        for (i, v) in args.into_iter().enumerate() {
+            locals[i] = v;
+        }
+
+        self.call_stack.push(Frame {
+            fn_idx,
+            ip: 0,
+            locals,
+            stack: Vec::with_capacity(max_stack.max(4)),
+            marker_stack: vec![],
+            closure_ref: None,
+        });
+        Ok(StepResult::Continue)
+    }
+
+    fn do_tail_call(&mut self, fn_id: u32) -> Result<StepResult, VmError> {
+        let (fn_idx, func) = self
+            .module
+            .fn_by_id(fn_id)
+            .ok_or_else(|| malformed!("tail call to unknown fn_id {}", fn_id))?;
+        let param_count = usize::from(func.param_count);
+        let local_count = usize::from(func.local_count);
+
+        let frame = self.current_frame()?;
+        let stack_len = frame.stack.len();
+        if stack_len < param_count {
+            return Err(malformed!(
+                "tail call to fn {}: need {} args, stack has {}",
+                fn_id,
+                param_count,
+                stack_len
+            ));
+        }
+        let start = stack_len - param_count;
+        let args: Vec<Value> = frame.stack.drain(start..).collect();
+
+        frame.fn_idx = fn_idx;
+        frame.ip = 0;
+        frame.stack.clear();
+        frame.marker_stack.clear();
+        frame.closure_ref = None;
+
+        frame.locals.resize(local_count, Value::UNIT);
+        for v in &mut frame.locals {
+            *v = Value::UNIT;
+        }
+        for (i, v) in args.into_iter().enumerate() {
+            frame.locals[i] = v;
+        }
+
+        Ok(StepResult::Continue)
+    }
+
+    // ── Continuations ─────────────────────────────────────────────────
+
+    fn exec_cont_save_cross_frame(
+        &mut self,
+        effect_id: u8,
+        op_id: u32,
+    ) -> Result<StepResult, VmError> {
+        let handler_idx =
+            self.call_stack
+                .iter()
+                .enumerate()
+                .rev()
+                .skip(1)
+                .find_map(|(idx, frame)| {
+                    frame
+                        .marker_stack
+                        .iter()
+                        .rev()
+                        .find(|f| f.effect_id == effect_id)
+                        .map(|_| idx)
+                });
+
+        let h_idx = handler_idx.ok_or(VmError::NoHandler { effect_id })?;
+
+        let handler_fn_id = self.call_stack[h_idx]
+            .marker_stack
+            .iter()
+            .rev()
+            .find(|f| f.effect_id == effect_id)
+            .ok_or_else(|| malformed!("handler not found"))?
+            .handler_fn_id;
+
+        let captured: Vec<Frame> = self.call_stack.drain(h_idx + 1..).collect();
+        self.continuations.push(Continuation {
+            frames: captured,
+            op_id,
+        });
+
+        self.do_call_with_stack_args(handler_fn_id)
+    }
+
+    fn exec_cont_resume(&mut self) -> Result<StepResult, VmError> {
+        let resume_value = self
+            .call_stack
+            .last_mut()
+            .ok_or_else(|| malformed!("cont.resume with empty call stack"))?
+            .stack
+            .pop()
+            .ok_or_else(|| malformed!("cont.resume on empty operand stack"))?;
+
+        let cont = self
+            .continuations
+            .pop()
+            .ok_or_else(|| malformed!("cont.resume with no captured continuation"))?;
+
+        let op_is_fatal = self
+            .module
+            .effects
+            .iter()
+            .flat_map(|eff| eff.ops.iter())
+            .any(|op| op.id == cont.op_id && op.fatal);
+        if op_is_fatal {
+            return Err(VmError::FatalEffectResumed { op_id: cont.op_id });
+        }
+
+        let _ = self.call_stack.pop();
+        self.call_stack.extend(cont.frames);
+
+        let top = self
+            .call_stack
+            .last_mut()
+            .ok_or_else(|| malformed!("cont.resume: no frame after restoring continuation"))?;
+        top.stack.push(resume_value);
+
+        Ok(StepResult::Continue)
+    }
+
+    // ── FFI ──────────────────────────────────────────────────────────
+
+    fn exec_inv_ffi(&mut self, operand: u32) -> Result<StepResult, VmError> {
+        let foreign_idx =
+            usize::try_from(operand).map_err(|_| malformed!("foreign fn index overflows usize"))?;
+        let foreign_fn = self
+            .module
+            .foreign_fns
+            .get(foreign_idx)
+            .ok_or_else(|| malformed!("foreign fn index {} out of bounds", operand))?;
+        let param_count = usize::from(foreign_fn.param_count);
+
+        let frame = self
+            .call_stack
+            .last_mut()
+            .ok_or_else(|| malformed!("inv.ffi with empty call stack"))?;
+
+        if frame.stack.len() < param_count {
+            return Err(malformed!(
+                "inv.ffi: need {} args, stack has {}",
+                param_count,
+                frame.stack.len()
+            ));
+        }
+        let start = frame.stack.len() - param_count;
+        let args: Vec<Value> = frame.stack.drain(start..).collect();
+
+        let host = self
+            .host
+            .as_mut()
+            .ok_or_else(|| malformed!("inv.ffi without a host attached"))?;
+        let result = host.call_foreign(operand, &args, &mut self.heap)?;
+
+        self.current_frame()?.stack.push(result);
+        Ok(StepResult::Continue)
+    }
+
+    // ── Concurrency ──────────────────────────────────────────────────
+
+    fn ensure_scheduler(&mut self) {
+        if self.scheduler.is_none() {
+            let mut sched = TaskScheduler::new();
+            let _ = sched.init_main_task(vec![], vec![]);
+            self.scheduler = Some(sched);
+        }
+        if self.channels.is_none() {
+            self.channels = Some(ChannelTable::new());
+        }
+    }
+
+    fn save_current_task(&mut self) {
+        if let Some(sched) = &mut self.scheduler
+            && let Some(cur_id) = sched.current_task_id()
+            && let Some(task) = sched.get_mut(cur_id)
+        {
+            task.call_stack = mem::take(&mut self.call_stack);
+            task.continuations = mem::take(&mut self.continuations);
+        }
+    }
+
+    fn load_task(&mut self, task_id: u32) {
+        if let Some(sched) = &mut self.scheduler
+            && let Some(task) = sched.get_mut(task_id)
+        {
+            self.call_stack = mem::take(&mut task.call_stack);
+            self.continuations = mem::take(&mut task.continuations);
+        }
+    }
+
+    fn exec_tsk_spn(&mut self, fn_id: u32) -> Result<StepResult, VmError> {
+        self.ensure_scheduler();
+
+        let (fn_idx, func) = self
+            .module
+            .fn_by_id(fn_id)
+            .ok_or_else(|| malformed!("tsk.spn: unknown fn_id {}", fn_id))?;
+        let param_count = usize::from(func.param_count);
+        let local_count = usize::from(func.local_count);
+        let max_stack = usize::from(func.max_stack);
+
+        let frame = self
+            .call_stack
+            .last_mut()
+            .ok_or_else(|| malformed!("tsk.spn with empty call stack"))?;
+
+        if frame.stack.len() < param_count {
+            return Err(malformed!(
+                "tsk.spn fn {}: need {} args, stack has {}",
+                fn_id,
+                param_count,
+                frame.stack.len()
+            ));
+        }
+        let start = frame.stack.len() - param_count;
+        let args: Vec<Value> = frame.stack.drain(start..).collect();
+
+        let mut locals = vec![Value::UNIT; local_count];
+        for (i, v) in args.into_iter().enumerate() {
+            locals[i] = v;
+        }
+
+        let new_frame = Frame {
+            fn_idx,
+            ip: 0,
+            locals,
+            stack: Vec::with_capacity(max_stack.max(4)),
+            marker_stack: vec![],
+            closure_ref: None,
+        };
+
+        let task_id = self.scheduler_mut()?.spawn(new_frame);
+        self.current_frame()?.stack.push(Value::from_task(task_id));
+        Ok(StepResult::Continue)
+    }
+
+    fn exec_tsk_awt(&mut self) -> Result<StepResult, VmError> {
+        let frame = self
+            .call_stack
+            .last_mut()
+            .ok_or_else(|| malformed!("tsk.awt with empty call stack"))?;
+        let task_handle = frame
+            .stack
+            .pop()
+            .ok_or_else(|| malformed!("tsk.awt: stack underflow"))?;
+        let task_id = task_handle.as_task_id()?;
+
+        let sched = self
+            .scheduler
+            .as_mut()
+            .ok_or_else(|| malformed!("tsk.awt without scheduler"))?;
+        let task = sched.get(task_id).ok_or(VmError::UnknownTask { task_id })?;
+
+        if let TaskStatus::Completed(v) = task.status {
+            self.current_frame()?.stack.push(v);
+            return Ok(StepResult::Continue);
+        }
+
+        sched.suspend_awaiting_task(task_id);
+        self.save_current_task();
+        self.switch_to_next_task()
+    }
+
+    fn exec_tsk_cmk(&mut self) -> Result<StepResult, VmError> {
+        self.ensure_scheduler();
+
+        let chan_id = self
+            .channels
+            .as_mut()
+            .ok_or_else(|| malformed!("channels not initialized"))?
+            .create();
+
+        self.current_frame()?.stack.push(Value::from_chan(chan_id));
+        Ok(StepResult::Continue)
+    }
+
+    fn exec_tsk_chs(&mut self) -> Result<StepResult, VmError> {
+        let frame = self
+            .call_stack
+            .last_mut()
+            .ok_or_else(|| malformed!("tsk.chs with empty call stack"))?;
+        let value = frame
+            .stack
+            .pop()
+            .ok_or_else(|| malformed!("tsk.chs: stack underflow (value)"))?;
+        let chan_handle = frame
+            .stack
+            .pop()
+            .ok_or_else(|| malformed!("tsk.chs: stack underflow (chan)"))?;
+        let chan_id = chan_handle.as_chan_id()?;
+
+        let channels = self
+            .channels
+            .as_mut()
+            .ok_or_else(|| malformed!("tsk.chs without channel table"))?;
+        let sched = self
+            .scheduler
+            .as_mut()
+            .ok_or_else(|| malformed!("tsk.chs without scheduler"))?;
+        if !sched.wake_one_receiver(chan_id, value) {
+            channels.send(chan_id, value)?;
+        }
+
+        self.current_frame()?.stack.push(Value::UNIT);
+        Ok(StepResult::Continue)
+    }
+
+    fn exec_tsk_chr(&mut self) -> Result<StepResult, VmError> {
+        let frame = self
+            .call_stack
+            .last_mut()
+            .ok_or_else(|| malformed!("tsk.chr with empty call stack"))?;
+        let chan_handle = frame
+            .stack
+            .pop()
+            .ok_or_else(|| malformed!("tsk.chr: stack underflow"))?;
+        let chan_id = chan_handle.as_chan_id()?;
+
+        let channels = self
+            .channels
+            .as_mut()
+            .ok_or_else(|| malformed!("tsk.chr without channel table"))?;
+
+        if let Some(value) = channels.try_recv(chan_id)? {
+            self.current_frame()?.stack.push(value);
+            return Ok(StepResult::Continue);
+        }
+
+        let sched = self
+            .scheduler
+            .as_mut()
+            .ok_or_else(|| malformed!("tsk.chr without scheduler"))?;
+        sched.suspend_awaiting_recv(chan_id);
+        self.save_current_task();
+        self.switch_to_next_task()
+    }
+
+    fn complete_current_task(&mut self, value: Value) -> Result<StepResult, VmError> {
+        let sched = self.scheduler_mut()?;
+        let next_id = sched.complete_current(value);
+        let has_live = sched.has_live_tasks();
+        let main_result = sched
+            .get(0)
+            .and_then(|t| match t.status {
+                TaskStatus::Completed(v) => Some(v),
+                _ => None,
+            })
+            .unwrap_or(value);
+
+        match next_id {
+            Some(id) => {
+                self.load_task(id);
+                Ok(StepResult::Continue)
+            }
+            None if has_live => Err(VmError::Deadlock),
+            None => Ok(StepResult::Returned(main_result)),
+        }
+    }
+
+    fn switch_to_next_task(&mut self) -> Result<StepResult, VmError> {
+        let sched = self.scheduler_mut()?;
+        let next_id = sched.schedule_next();
+        let has_live = sched.has_live_tasks();
+
+        match next_id {
+            Some(id) => {
+                self.load_task(id);
+                Ok(StepResult::Continue)
+            }
+            None if has_live => Err(VmError::Deadlock),
+            None => Ok(StepResult::Returned(Value::UNIT)),
+        }
+    }
+
+    fn current_frame(&mut self) -> Result<&mut Frame, VmError> {
+        self.call_stack
+            .last_mut()
+            .ok_or_else(|| malformed!("empty call stack"))
+    }
+
+    fn scheduler_mut(&mut self) -> Result<&mut TaskScheduler, VmError> {
+        self.scheduler
+            .as_mut()
+            .ok_or_else(|| malformed!("scheduler not initialized"))
+    }
+
+    // ── Garbage collection ───────────────────────────────────────────
+
+    /// Run a mark-sweep garbage collection cycle.
+    pub fn collect_garbage(&mut self) -> usize {
+        let roots = self.collect_roots();
+        self.heap.mark_reachable(&roots);
+        let freed = self.heap.sweep();
+        self.heap.reset_gc_counter();
+        freed
+    }
+
+    /// Run GC if the heap's allocation counter has reached its threshold.
+    fn maybe_gc(&mut self) {
+        if self.heap.needs_gc() {
+            let _ = self.collect_garbage();
+        }
+    }
+
+    fn collect_roots(&self) -> Vec<Value> {
+        let mut roots = vec![];
+        for frame in &self.call_stack {
+            roots.extend_from_slice(&frame.locals);
+            roots.extend_from_slice(&frame.stack);
+            if let Some(cr) = frame.closure_ref {
+                roots.push(cr);
+            }
+        }
+        for cont in &self.continuations {
+            for frame in &cont.frames {
+                roots.extend_from_slice(&frame.locals);
+                roots.extend_from_slice(&frame.stack);
+                if let Some(cr) = frame.closure_ref {
+                    roots.push(cr);
+                }
+            }
+        }
+        roots.extend_from_slice(&self.globals);
+
+        if let Some(sched) = &self.scheduler {
+            for task in sched.tasks() {
+                for frame in &task.call_stack {
+                    roots.extend_from_slice(&frame.locals);
+                    roots.extend_from_slice(&frame.stack);
+                    if let Some(cr) = frame.closure_ref {
+                        roots.push(cr);
+                    }
+                }
+                for cont in &task.continuations {
+                    for frame in &cont.frames {
+                        roots.extend_from_slice(&frame.locals);
+                        roots.extend_from_slice(&frame.stack);
+                        if let Some(cr) = frame.closure_ref {
+                            roots.push(cr);
+                        }
+                    }
+                }
+                if let TaskStatus::Completed(v) = task.status {
+                    roots.push(v);
+                }
+            }
+        }
+        if let Some(chans) = &self.channels {
+            for chan in chans.channels() {
+                for val in &chan.buffer {
+                    roots.push(*val);
+                }
+            }
+        }
+        roots
+    }
+}

@@ -1,0 +1,17 @@
+[package]
+name = "music_lex"
+description = "Lexer (tokenizer) for the Musi compiler"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+readme.workspace = true
+keywords = ["compiler", "musi", "lexer"]
+categories = ["development-tools"]
+
+[dependencies]
+thiserror = { workspace = true }
+music_shared = { path = "../music_shared" }
+
+[lints]
+workspace = true

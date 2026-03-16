@@ -1,0 +1,22 @@
+[package]
+name = "music_sema"
+description = "Semantic analysis for the Musi compiler"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+readme.workspace = true
+keywords = ["compiler", "musi", "type-checker"]
+categories = ["development-tools"]
+
+[dependencies]
+music_ast = { path = "../music_ast" }
+music_shared = { path = "../music_shared" }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+music_lex = { path = "../music_lex" }
+music_parse = { path = "../music_parse" }
+
+[lints]
+workspace = true

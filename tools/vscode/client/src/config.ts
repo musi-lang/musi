@@ -1,5 +1,39 @@
 import * as vscode from "vscode";
 
+export interface RuntimeConfig {
+	readonly args: string[];
+	readonly env: Record<string, string>;
+	readonly inheritEnv: boolean;
+	readonly envFile: string;
+	readonly cwd: string;
+}
+
+export interface CompilerConfig {
+	readonly path: string | null;
+	readonly args: string[];
+	readonly target: string;
+	readonly strict: boolean;
+	readonly noEmitOnError: boolean;
+	readonly buildBeforeRun: boolean;
+}
+
+export interface TerminalConfig {
+	readonly clearBeforeRun: boolean;
+	readonly focusOnRun: boolean;
+	readonly reuseTerminal: boolean;
+}
+
+export interface RunConfiguration {
+	readonly name: string;
+	readonly file?: string;
+	readonly compilerArgs?: string[];
+	readonly runtimeArgs?: string[];
+	readonly env?: Record<string, string>;
+	readonly envFile?: string;
+	readonly cwd?: string;
+	readonly preLaunchTask?: string;
+}
+
 /**
  * Extension configuration values from VS Code settings.
  */
@@ -7,37 +41,46 @@ export interface Config {
 	readonly lspPath: string;
 	readonly cliPath: string;
 	readonly checkOnSave: boolean;
-	readonly serverPath: string | null;
-	readonly runtimePath: string | null;
 	readonly traceServer: "off" | "messages" | "verbose";
-	readonly diagnosticsEnabled: boolean;
-	readonly inlayHintsEnabled: boolean;
-	readonly completionEnabled: boolean;
-	readonly formattingEnabled: boolean;
-	readonly formattingIndentSize: number;
+	readonly runtime: RuntimeConfig;
+	readonly compiler: CompilerConfig;
+	readonly terminal: TerminalConfig;
+	readonly runConfigurations: RunConfiguration[];
 }
 
-const _DEFAULTS: Config = {
-	lspPath: "musi-lsp",
-	cliPath: "musi",
-	checkOnSave: true,
-	serverPath: null,
-	runtimePath: null,
-	traceServer: "off",
-	diagnosticsEnabled: true,
-	inlayHintsEnabled: true,
-	completionEnabled: true,
-	formattingEnabled: true,
-	formattingIndentSize: 2,
+const RUNTIME_DEFAULTS: RuntimeConfig = {
+	args: [],
+	env: {},
+	inheritEnv: true,
+	envFile: "",
+	cwd: "",
 };
 
-function _get<T>(
-	cfg: vscode.WorkspaceConfiguration,
-	key: string,
-	fallback: T,
-): T {
-	return cfg.get<T>(key, fallback);
-}
+const COMPILER_DEFAULTS: CompilerConfig = {
+	path: null,
+	args: [],
+	target: "MS2025",
+	strict: false,
+	noEmitOnError: true,
+	buildBeforeRun: true,
+};
+
+const TERMINAL_DEFAULTS: TerminalConfig = {
+	clearBeforeRun: false,
+	focusOnRun: true,
+	reuseTerminal: true,
+};
+
+export const CONFIG_DEFAULTS: Config = {
+	lspPath: "music_lsp",
+	cliPath: "musi",
+	checkOnSave: true,
+	traceServer: "off",
+	runtime: RUNTIME_DEFAULTS,
+	compiler: COMPILER_DEFAULTS,
+	terminal: TERMINAL_DEFAULTS,
+	runConfigurations: [],
+};
 
 /**
  * Retrieve current Musi extension configuration from VS Code settings.
@@ -47,36 +90,45 @@ export function getConfig(): Config {
 	const cfg = vscode.workspace.getConfiguration("musi");
 
 	return {
-		lspPath: _get(cfg, "lspPath", _DEFAULTS.lspPath),
-		cliPath: _get(cfg, "cliPath", _DEFAULTS.cliPath),
-		checkOnSave: _get(cfg, "checkOnSave", _DEFAULTS.checkOnSave),
-		serverPath: _get(cfg, "server.path", _DEFAULTS.serverPath),
-		runtimePath: _get(cfg, "runtime.path", _DEFAULTS.runtimePath),
-		traceServer: _get(cfg, "trace.server", _DEFAULTS.traceServer),
-		diagnosticsEnabled: _get(
-			cfg,
-			"diagnostics.enable",
-			_DEFAULTS.diagnosticsEnabled,
-		),
-		inlayHintsEnabled: _get(
-			cfg,
-			"inlayHints.enable",
-			_DEFAULTS.inlayHintsEnabled,
-		),
-		completionEnabled: _get(
-			cfg,
-			"completion.enable",
-			_DEFAULTS.completionEnabled,
-		),
-		formattingEnabled: _get(
-			cfg,
-			"formatting.enable",
-			_DEFAULTS.formattingEnabled,
-		),
-		formattingIndentSize: _get(
-			cfg,
-			"formatting.indentSize",
-			_DEFAULTS.formattingIndentSize,
+		lspPath: cfg.get("lspPath", CONFIG_DEFAULTS.lspPath),
+		cliPath: cfg.get("cliPath", CONFIG_DEFAULTS.cliPath),
+		checkOnSave: cfg.get("checkOnSave", CONFIG_DEFAULTS.checkOnSave),
+		traceServer: cfg.get("trace.server", CONFIG_DEFAULTS.traceServer),
+		runtime: {
+			args: cfg.get("runtime.args", RUNTIME_DEFAULTS.args),
+			env: cfg.get("runtime.env", RUNTIME_DEFAULTS.env),
+			inheritEnv: cfg.get("runtime.inheritEnv", RUNTIME_DEFAULTS.inheritEnv),
+			envFile: cfg.get("runtime.envFile", RUNTIME_DEFAULTS.envFile),
+			cwd: cfg.get("runtime.cwd", RUNTIME_DEFAULTS.cwd),
+		},
+		compiler: {
+			path: cfg.get("compiler.path", COMPILER_DEFAULTS.path),
+			args: cfg.get("compiler.args", COMPILER_DEFAULTS.args),
+			target: cfg.get("compiler.target", COMPILER_DEFAULTS.target),
+			strict: cfg.get("compiler.strict", COMPILER_DEFAULTS.strict),
+			noEmitOnError: cfg.get(
+				"compiler.noEmitOnError",
+				COMPILER_DEFAULTS.noEmitOnError,
+			),
+			buildBeforeRun: cfg.get(
+				"compiler.buildBeforeRun",
+				COMPILER_DEFAULTS.buildBeforeRun,
+			),
+		},
+		terminal: {
+			clearBeforeRun: cfg.get(
+				"terminal.clearBeforeRun",
+				TERMINAL_DEFAULTS.clearBeforeRun,
+			),
+			focusOnRun: cfg.get("terminal.focusOnRun", TERMINAL_DEFAULTS.focusOnRun),
+			reuseTerminal: cfg.get(
+				"terminal.reuseTerminal",
+				TERMINAL_DEFAULTS.reuseTerminal,
+			),
+		},
+		runConfigurations: cfg.get(
+			"runConfigurations",
+			CONFIG_DEFAULTS.runConfigurations,
 		),
 	};
 }
@@ -86,10 +138,12 @@ export function getConfig(): Config {
  * @param callback Function to invoke when any `musi.*` setting changes.
  * @returns Disposable to unsubscribe from changes.
  */
-export function onConfigChange(callback: () => void): vscode.Disposable {
+export function onConfigChange(
+	callback: (event: vscode.ConfigurationChangeEvent) => void,
+): vscode.Disposable {
 	return vscode.workspace.onDidChangeConfiguration((event) => {
 		if (event.affectsConfiguration("musi")) {
-			callback();
+			callback(event);
 		}
 	});
 }

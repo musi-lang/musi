@@ -5,10 +5,13 @@
     "patterns": [
         { "include": "#comments" },
         { "include": "#attributes" },
-        { "include": "#fn-definition" },
-        { "include": "#binding-definition" },
-        { "include": "#record-body" },
+        { "include": "#let-definition" },
+        { "include": "#class-definition" },
+        { "include": "#instance-definition" },
+        { "include": "#record-definition" },
+        { "include": "#effect-definition" },
         { "include": "#choice-body" },
+        { "include": "#record-literal" },
         { "include": "#keywords" },
         { "include": "#literals" },
         { "include": "#types" },
@@ -17,90 +20,111 @@
         { "include": "#identifiers" }
     ],
     "repository": {
-        "fn-definition": {
-            "comment": "fn <name> -- gives the function name entity.name.function scope before keywords can swallow 'fn'",
-            "match": "\\b(fn)\\b\\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+        "let-definition": {
+            "patterns": [
+                {
+                    "comment": "let mut name -- mutable binding",
+                    "match": "(\\bexport\\b\\s+)?\\b(let)\\b\\s+(mut)\\s+([a-z_][a-zA-Z0-9_]*)",
+                    "captures": {
+                        "1": { "name": "keyword.control.export.musi" },
+                        "2": { "name": "storage.type.musi" },
+                        "3": { "name": "storage.modifier.musi" },
+                        "4": { "name": "variable.other.musi" }
+                    }
+                },
+                {
+                    "comment": "let SCREAMING_SNAKE -- constant definition (2+ all-uppercase chars)",
+                    "match": "(\\bexport\\b\\s+)?\\b(let)\\b\\s+([A-Z][A-Z0-9_]+)\\b",
+                    "captures": {
+                        "1": { "name": "keyword.control.export.musi" },
+                        "2": { "name": "storage.type.musi" },
+                        "3": { "name": "variable.other.constant.musi" }
+                    }
+                },
+                {
+                    "comment": "let PascalCase -- type definition",
+                    "match": "(\\bexport\\b\\s+)?\\b(let)\\b\\s+([A-Z][a-zA-Z0-9_]*)",
+                    "captures": {
+                        "1": { "name": "keyword.control.export.musi" },
+                        "2": { "name": "storage.type.musi" },
+                        "3": { "name": "entity.name.type.musi" }
+                    }
+                },
+                {
+                    "comment": "let (op) -- operator definition",
+                    "match": "(\\bexport\\b\\s+)?\\b(let)\\b\\s+(\\()([^)]+)(\\))",
+                    "captures": {
+                        "1": { "name": "keyword.control.export.musi" },
+                        "2": { "name": "storage.type.musi" },
+                        "3": { "name": "entity.name.function.operator.musi" },
+                        "4": { "name": "entity.name.function.operator.musi" },
+                        "5": { "name": "entity.name.function.operator.musi" }
+                    }
+                },
+                {
+                    "comment": "let lowercase -- function/value definition",
+                    "match": "(\\bexport\\b\\s+)?\\b(let)\\b\\s+([a-z_`][a-zA-Z0-9_]*`?)",
+                    "captures": {
+                        "1": { "name": "keyword.control.export.musi" },
+                        "2": { "name": "storage.type.musi" },
+                        "3": { "name": "entity.name.function.musi" }
+                    }
+                }
+            ]
+        },
+        "class-definition": {
+            "comment": "class Name -- type class definition",
+            "match": "(\\bexport\\b\\s+)?\\b(class)\\b\\s+([A-Z][a-zA-Z0-9_]*)",
             "captures": {
-                "1": { "name": "storage.type.musi" },
-                "2": { "name": "entity.name.function.musi" }
+                "1": { "name": "keyword.control.export.musi" },
+                "2": { "name": "storage.type.musi" },
+                "3": { "name": "entity.name.type.musi" }
             }
         },
-        "binding-definition": {
-            "comment": "var/const <name> -- UpperCase = type-level constant, lowercase = value binding",
-            "patterns": [
-                {
-                    "match": "\\b(var|const)\\b\\s+([A-Z][a-zA-Z0-9_]*)",
-                    "captures": {
-                        "1": { "name": "storage.type.musi" },
-                        "2": { "name": "entity.name.type.musi" }
-                    }
-                },
-                {
-                    "match": "\\b(var|const)\\b\\s+([a-z_][a-zA-Z0-9_]*)",
-                    "captures": {
-                        "1": { "name": "storage.type.musi" },
-                        "2": { "name": "variable.other.musi" }
-                    }
-                }
-            ]
+        "instance-definition": {
+            "comment": "instance Name -- type class instance",
+            "match": "(\\bexport\\b\\s+)?\\b(instance)\\b\\s+([A-Z][a-zA-Z0-9_]*)",
+            "captures": {
+                "1": { "name": "keyword.control.export.musi" },
+                "2": { "name": "storage.type.musi" },
+                "3": { "name": "entity.name.type.musi" }
+            }
         },
-        "record-body": {
-            "comment": "record Foo['T] { field: Type, ... } -- scopes name, type params, and field names",
-            "name": "meta.type.record.musi",
-            "begin": "\\b(record)\\b\\s*(?:([A-Z][a-zA-Z0-9_]*)(\\[[^\\]]*\\])?\\s*)?\\{",
-            "end": "\\}",
-            "beginCaptures": {
-                "1": { "name": "storage.type.musi" },
-                "2": { "name": "entity.name.type.musi" },
-                "3": {
-                    "name": "meta.type.parameters.musi",
-                    "patterns": [
-                        { "include": "#types" },
-                        { "include": "#punctuation" }
-                    ]
-                }
-            },
-            "endCaptures": { "0": { "name": "punctuation.section.block.end.musi" } },
-            "patterns": [
-                { "include": "#comments" },
-                { "include": "#attributes" },
-                {
-                    "comment": "field name followed by colon: x: Float",
-                    "match": "\\b[a-z_][a-zA-Z0-9_]*\\b(?=\\s*:)",
-                    "name": "variable.other.member.musi"
-                },
-                { "include": "#literals" },
-                { "include": "#types" },
-                { "include": "#operators" },
-                { "include": "#punctuation" }
-            ]
+        "record-definition": {
+            "comment": "record Name -- record type definition",
+            "match": "(\\bexport\\b\\s+)?\\b(record)\\b\\s+([A-Z][a-zA-Z0-9_]*)",
+            "captures": {
+                "1": { "name": "keyword.control.export.musi" },
+                "2": { "name": "storage.type.musi" },
+                "3": { "name": "entity.name.type.musi" }
+            }
+        },
+        "effect-definition": {
+            "comment": "effect Name -- effect definition",
+            "match": "(\\bexport\\b\\s+)?\\b(effect)\\b\\s+([A-Z][a-zA-Z0-9_]*)",
+            "captures": {
+                "1": { "name": "keyword.control.export.musi" },
+                "2": { "name": "storage.type.musi" },
+                "3": { "name": "entity.name.type.musi" }
+            }
         },
         "choice-body": {
-            "comment": "choice Option['T] { None | Some('T) } -- scopes name, type params, and variant constructors",
+            "comment": "choice { Variant + Variant of 'T } -- inline choice type",
             "name": "meta.type.choice.musi",
-            "begin": "\\b(choice)\\b\\s*(?:([A-Z][a-zA-Z0-9_]*)(\\[[^\\]]*\\])?\\s*)?\\{",
+            "begin": "\\b(choice)\\b\\s*\\{",
             "end": "\\}",
-            "beginCaptures": {
-                "1": { "name": "storage.type.musi" },
-                "2": { "name": "entity.name.type.musi" },
-                "3": {
-                    "name": "meta.type.parameters.musi",
-                    "patterns": [
-                        { "include": "#types" },
-                        { "include": "#punctuation" }
-                    ]
-                }
-            },
+            "beginCaptures": { "1": { "name": "storage.type.musi" } },
             "endCaptures": { "0": { "name": "punctuation.section.block.end.musi" } },
             "patterns": [
                 { "include": "#comments" },
                 { "include": "#attributes" },
+                { "include": "#keywords" },
                 {
-                    "match": "\\|",
+                    "match": "\\+",
                     "name": "keyword.operator.choice-separator.musi"
                 },
                 {
-                    "comment": "variant constructor: None, Some, False, True, ...",
+                    "comment": "variant constructor: None, Some, Cons, ...",
                     "match": "\\b[A-Z][a-zA-Z0-9_]*\\b",
                     "name": "variable.other.enummember.musi"
                 },
@@ -110,8 +134,31 @@
                 { "include": "#punctuation" }
             ]
         },
+        "record-literal": {
+            "comment": "record literal .{ x := 1, y := 2 }",
+            "name": "meta.record-literal.musi",
+            "begin": "\\.\\{",
+            "end": "\\}",
+            "beginCaptures": { "0": { "name": "punctuation.section.record.begin.musi" } },
+            "endCaptures": { "0": { "name": "punctuation.section.record.end.musi" } },
+            "patterns": [
+                { "include": "#comments" },
+                { "include": "#record-literal" },
+                { "include": "#let-definition" },
+                { "include": "#keywords" },
+                { "include": "#literals" },
+                { "include": "#types" },
+                { "include": "#operators" },
+                { "include": "#punctuation" },
+                { "include": "#identifiers" }
+            ]
+        },
         "comments": {
             "patterns": [
+                {
+                    "name": "comment.line.documentation.module.musi",
+                    "match": "//!.*$"
+                },
                 {
                     "name": "comment.line.documentation.musi",
                     "match": "///.*$"
@@ -135,10 +182,12 @@
             "beginCaptures": { "0": { "name": "punctuation.definition.attribute.begin.musi" } },
             "endCaptures": { "0": { "name": "punctuation.definition.attribute.end.musi" } },
             "patterns": [
+                { "include": "#comments" },
+                { "include": "#literals" },
                 {
-                    "comment": "attribute name before (, , or ]",
-                    "match": "([a-zA-Z_][a-zA-Z0-9_]*|`[^`]+`)(?=\\s*[,\\]\\(])",
-                    "name": "entity.name.attribute.musi"
+                    "comment": "well-known attribute names",
+                    "match": "\\b(entrypoint|test|lang|inline)\\b",
+                    "name": "support.function.attribute.musi"
                 },
                 {
                     "comment": "named attribute arg: key := value",
@@ -148,34 +197,42 @@
                         "2": { "name": "keyword.operator.assignment.musi" }
                     }
                 },
-                { "include": "#literals" },
-                { "include": "#comments" }
+                {
+                    "comment": "attribute name before (, , or ]",
+                    "match": "([a-zA-Z_][a-zA-Z0-9_]*|`[^`]+`)(?=\\s*[,\\]\\(])",
+                    "name": "entity.name.attribute.musi"
+                }
             ]
         },
         "keywords": {
             "patterns": [
                 {
                     "name": "keyword.control.musi",
-                    "match": "\\b(if|then|elif|else|while|loop|for|in|match|case|with|return|break|cycle|defer|using|satisfies|where)\\b"
+                    "match": "\\b(if|match|in|return|defer|where|try|do|handle|resume|fatal)\\b"
                 },
                 {
-                    "comment": "module-level import keywords (export is a modifier, not an import keyword)",
                     "name": "keyword.control.import.musi",
-                    "match": "\\b(import|from|as)\\b"
+                    "match": "\\b(import|as)\\b"
                 },
                 {
-                    "comment": "module-level export keyword (export is a modifier, but in control context)",
                     "name": "keyword.control.export.musi",
                     "match": "\\b(export)\\b"
                 },
                 {
-                    "comment": "storage type keywords -- fn/record/choice have richer dedicated rules above",
                     "name": "storage.type.musi",
-                    "match": "\\b(fn|var|const|record|choice|class|given)\\b"
+                    "match": "\\b(let|class|instance|record|effect|choice|foreign|law)\\b"
+                },
+                {
+                    "name": "keyword.other.musi",
+                    "match": "\\b(of|with)\\b"
                 },
                 {
                     "name": "storage.modifier.musi",
-                    "match": "\\b(opaque|extrin)\\b"
+                    "match": "\\bmut\\b"
+                },
+                {
+                    "name": "keyword.operator.logical.musi",
+                    "match": "\\b(and|or|xor|not)\\b"
                 }
             ]
         },
@@ -192,9 +249,9 @@
             ]
         },
         "template-string": {
-            "comment": "$\"hello {name}!\" -- interpolated string with scoped { } delimiters",
+            "comment": "f\"hello {name}!\" -- interpolated string with scoped { } delimiters",
             "name": "string.template.musi",
-            "begin": "(\\$)(\")",
+            "begin": "(f)(\")",
             "end": "\"",
             "beginCaptures": {
                 "1": { "name": "punctuation.definition.string.template.musi" },
@@ -312,12 +369,26 @@
                     "match": ":=|<-"
                 },
                 {
+                    "name": "keyword.operator.subtype.musi",
+                    "match": "<:|:>"
+                },
+                {
                     "name": "keyword.operator.comparison.musi",
                     "match": "<=|>=|/=|<|>|="
                 },
                 {
+                    "comment": "effectful arrow ~> must precede -> for maximal munch",
+                    "name": "keyword.operator.arrow.effectful.musi",
+                    "match": "~>"
+                },
+                {
                     "name": "keyword.operator.arrow.musi",
                     "match": "->|=>"
+                },
+                {
+                    "comment": "spread/splat: ...expr",
+                    "name": "keyword.operator.spread.musi",
+                    "match": "\\.\\.\\."
                 },
                 {
                     "comment": "range operators: .. and ..<",
@@ -325,14 +396,19 @@
                     "match": "\\.\\.<|\\.\\.(?=[^\\.])"
                 },
                 {
-                    "comment": "functional record spread: <.. base",
-                    "name": "keyword.operator.spread.musi",
-                    "match": "<\\.\\."
+                    "comment": "force unwrap !! and forced unwrap field access !.",
+                    "name": "keyword.operator.force.musi",
+                    "match": "\\!\\!|\\!\\."
                 },
                 {
-                    "comment": "UDN: optional chaining ?. and nil coalescing ??",
+                    "comment": "optional chaining ?. and nil coalescing ??",
                     "name": "keyword.operator.optional.musi",
                     "match": "\\?\\.|\\?\\?"
+                },
+                {
+                    "comment": "type cast :?> must precede type test :?",
+                    "name": "keyword.operator.typecheck.musi",
+                    "match": ":\\?>|:\\?"
                 },
                 {
                     "name": "keyword.operator.cons.musi",
@@ -344,7 +420,7 @@
                 },
                 {
                     "name": "keyword.operator.bitwise.musi",
-                    "match": "\\b(shl|shr)\\b"
+                    "match": "<<|>>"
                 },
                 {
                     "name": "keyword.operator.arithmetic.musi",
@@ -352,18 +428,36 @@
                 },
                 {
                     "comment": "array index compound token: .[ as in arr.[0]",
-                    "name": "keyword.operator.index.musi",
-                    "match": "\\.\\["
+                    "name": "meta.index.musi",
+                    "begin": "\\.\\[",
+                    "end": "\\]",
+                    "beginCaptures": { "0": { "name": "punctuation.section.index.begin.musi" } },
+                    "endCaptures": { "0": { "name": "punctuation.section.index.end.musi" } },
+                    "patterns": [
+                        { "include": "#comments" },
+                        { "include": "#record-literal" },
+                        { "include": "#keywords" },
+                        { "include": "#literals" },
+                        { "include": "#types" },
+                        { "include": "#operators" },
+                        { "include": "#punctuation" },
+                        { "include": "#identifiers" }
+                    ]
                 },
                 {
-                    "comment": "field access dot -- must not match .. range or .[ index",
+                    "comment": "field access dot -- must not match .. range, .[ index, or .{ record",
                     "name": "keyword.operator.access.musi",
-                    "match": "\\.(?![.\\[])"
+                    "match": "\\.(?![.\\[{])"
                 },
                 {
-                    "comment": "pipe @, bang !, and bar | outside choice bodies",
+                    "comment": "pipe operator |>",
+                    "name": "keyword.operator.pipe.musi",
+                    "match": "\\|>"
+                },
+                {
+                    "comment": "bang ! (not !! or !.) and bar |",
                     "name": "keyword.operator.other.musi",
-                    "match": "[@!|]"
+                    "match": "!(?![!.])|\\|"
                 }
             ]
         },
@@ -418,8 +512,8 @@
                     "name": "variable.other.escaped.musi"
                 },
                 {
-                    "comment": "function/method call site -- lowercase identifier immediately before (; UpperCamelCase before ( is a variant constructor or type application",
-                    "match": "([a-z_][a-zA-Z0-9_]*)\\s*(?=\\()",
+                    "comment": "function/method call site -- lowercase identifier directly before ( (no space); UpperCamelCase before ( is a variant constructor or type application",
+                    "match": "([a-z_][a-zA-Z0-9_]*)(?=\\()",
                     "name": "entity.name.function.call.musi"
                 },
                 {

@@ -1,10 +1,10 @@
 [package]
 name = "musi"
+description.workspace = true
 version.workspace = true
 edition.workspace = true
-description.workspace = true
-license.workspace = true
 repository.workspace = true
+license.workspace = true
 readme.workspace = true
 keywords.workspace = true
 categories.workspace = true
@@ -14,24 +14,9 @@ name = "musi"
 path = "src/main.rs"
 
 [dependencies]
-musi_shared = { path = "../musi_shared" }
-musi_lex = { path = "../musi_lex" }
-musi_parse = { path = "../musi_parse" }
-musi_codegen = { path = "../musi_codegen" }
+musi_builtins = { path = "../musi_builtins" }
 musi_vm = { path = "../musi_vm" }
-musi_native = { path = "../musi_native" }
-musi_sema = { path = "../musi_sema" }
 clap = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
-ureq = { workspace = true }
-flate2 = { workspace = true }
-tar = { workspace = true }
-semver = { workspace = true }
-dirs = { workspace = true }
-sha2 = { workspace = true }
-hex = { workspace = true }
-thiserror = { workspace = true }
 
 [lints]
 workspace = true

@@ -2,32 +2,30 @@
 	"Function Definition": {
 		"prefix": "fn",
 		"body": [
-			"fn ${1:name}(${2:param}: ${3:Int}): ${4:Unit} {",
+			"let ${1:name} := (${2:param}: ${3:Int}) => (",
 			"\t$0",
-			"}"
+			");"
 		],
 		"description": "Named function definition"
 	},
 	"Generic Function": {
 		"prefix": "fn-generic",
 		"body": [
-			"fn ${1:name}['${2:T}](${3:x}: '${2:T}): ${4:'${2:T}} {",
-			"\t$0",
-			"}"
+			"let ${1:name} ['${2:T}] : ('${2:T}) -> '${2:T} := (${3:x}) => ${0:x};"
 		],
 		"description": "Generic function with type parameters"
 	},
 	"Lambda": {
 		"prefix": "lambda",
 		"body": [
-			"fn(${1:x}: ${2:Int}): ${3:Int} => ${0:body}"
+			"(${1:x}: ${2:Int}) => ${0:body}"
 		],
 		"description": "Anonymous lambda expression"
 	},
-	"Const Binding": {
-		"prefix": "const",
+	"Let Binding": {
+		"prefix": "let",
 		"body": [
-			"const ${1:name} := ${0:value};"
+			"let ${1:name} := ${0:value};"
 		],
 		"description": "Immutable binding"
 	},
@@ -38,153 +36,92 @@
 		],
 		"description": "Mutable binding"
 	},
-	"Record": {
-		"prefix": "record",
-		"body": [
-			"record ${1:Name} {",
-			"\t${2:field}: ${3:Int},",
-			"\t$0",
-			"}"
-		],
-		"description": "Record type definition"
-	},
-	"Record (generic)": {
-		"prefix": "record-generic",
-		"body": [
-			"record ${1:Name}['${2:T}] {",
-			"\t${3:field}: '${2:T},",
-			"\t$0",
-			"}"
-		],
-		"description": "Generic record type definition"
-	},
 	"Choice": {
 		"prefix": "choice",
 		"body": [
-			"choice ${1:Name} {",
-			"\t${2:VariantA}(${3:Int})",
-			"\t| ${4:VariantB}",
-			"}"
+			"let ${1:Name} := choice { ${2:VariantA} + ${3:VariantB} };"
 		],
 		"description": "Choice (sum) type definition"
 	},
 	"Choice (generic)": {
 		"prefix": "choice-generic",
 		"body": [
-			"choice ${1:Name}['${2:T}] {",
-			"\t${3:Left}('${2:T})",
-			"\t| ${4:Right}",
-			"}"
+			"let ${1:Name} ['${2:T}] := choice { ${3:Some} of '${2:T} + ${4:None} };"
 		],
 		"description": "Generic choice type definition"
 	},
-	"If Then Else": {
+	"Piecewise (if)": {
 		"prefix": "if",
 		"body": [
-			"if ${1:condition} then",
-			"\t${2:value}",
-			"else",
-			"\t${0:other}"
+			"(${1:value} if ${2:condition}",
+			"| ${0:other} if _)"
 		],
-		"description": "If/then/else expression"
+		"description": "Piecewise expression (conditional)"
 	},
-	"If Then Else (block)": {
+	"Piecewise (block)": {
 		"prefix": "if-block",
 		"body": [
-			"if ${1:condition} then (",
-			"\t${2:body}",
-			") else (",
-			"\t${0:other}",
+			"(",
+			"\t${1:value} if ${2:condition}",
+			"\t| ${0:other} if _",
 			")"
 		],
-		"description": "If/then/else with block bodies"
-	},
-	"If Case": {
-		"prefix": "if-case",
-		"body": [
-			"if case .${1:Some}(${2:v}) := ${3:expr} then",
-			"\t${0:body}",
-			"else",
-			"\t${4:fallback}"
-		],
-		"description": "If-case destructuring pattern match"
+		"description": "Piecewise expression with block layout"
 	},
 	"Match": {
 		"prefix": "match",
 		"body": [
-			"match ${1:expr} with",
-			"| .${2:Some}(${3:v}) => ${4:v}",
-			"| .${5:None} => ${0:default}"
+			"match ${1:expr} (",
+			"\t.${2:Some}(${3:v}) => ${4:v}",
+			"\t| .${5:None} => ${0:default}",
+			")"
 		],
 		"description": "Match expression with two arms"
 	},
 	"Match (multi-arm)": {
 		"prefix": "match-multi",
 		"body": [
-			"match ${1:expr} with",
-			"| .${2:First}(${3:v}) => ${4:body}",
-			"| .${5:Second}(${6:v}) => ${7:body}",
-			"| .${8:Third} => ${0:body}"
+			"match ${1:expr} (",
+			"\t.${2:First}(${3:v}) => ${4:body}",
+			"\t| .${5:Second}(${6:v}) => ${7:body}",
+			"\t| .${8:Third} => ${0:body}",
+			")"
 		],
 		"description": "Match expression with three arms"
-	},
-	"For Loop": {
-		"prefix": "for",
-		"body": [
-			"for ${1:x} in ${2:collection} loop",
-			"\t$0"
-		],
-		"description": "For-in loop"
-	},
-	"While Loop": {
-		"prefix": "while",
-		"body": [
-			"while ${1:condition} loop",
-			"\t$0"
-		],
-		"description": "While loop"
-	},
-	"While Case": {
-		"prefix": "while-case",
-		"body": [
-			"while case .${1:Some}(${2:v}) := ${3:expr} loop",
-			"\t$0"
-		],
-		"description": "While-case destructuring loop"
 	},
 	"Import": {
 		"prefix": "import",
 		"body": [
-			"import { ${1:name} } from \"${2:std/${3:module}}\";"
+			"import { ${1:name} } from \"${2:musi:${3:module}}\";"
 		],
 		"description": "Import statement"
 	},
 	"Export Function": {
 		"prefix": "export-fn",
 		"body": [
-			"export fn ${1:name}(${2:param}: ${3:Int}): ${4:Unit} {",
+			"export let ${1:name} := (${2:param}: ${3:Int}) => (",
 			"\t$0",
-			"}"
+			");"
 		],
 		"description": "Exported function definition"
 	},
 	"Type Class": {
 		"prefix": "class",
 		"body": [
-			"class ${1:Name}['${2:T}] {",
-			"\tfn ${3:method}(${4:a}: '${2:T}): ${5:Bool};",
-			"}"
+			"class ${1:Name} over '${2:T} {",
+			"\tlet ${3:method}(a: '${2:T}) : ${4:Bool};",
+			"};"
 		],
 		"description": "Type class definition"
 	},
 	"Given (type class instance)": {
 		"prefix": "given",
 		"body": [
-			"given ${1:ClassName}[${2:Type}] {",
-			"\tfn ${3:method}(${4:a}: ${2:Type}): ${5:Bool} {",
+			"given ${1:ClassName} of ${2:Type} {",
+			"\tlet ${3:method}(a: ${2:Type}) : ${4:Bool} := (",
 			"\t\t$0",
-			"\t}",
-			"}"
+			"\t);",
+			"};"
 		],
 		"description": "Type class instance"
 	},
@@ -241,9 +178,9 @@
 		"prefix": "test",
 		"body": [
 			"#[test]",
-			"fn ${1:test_name}(): Unit {",
+			"let ${1:test_name} := () => (",
 			"\t$0",
-			"}"
+			");"
 		],
 		"description": "Test function with #[test] attribute"
 	},
@@ -274,13 +211,5 @@
 			"${1:expr}?.${0:field}"
 		],
 		"description": "Optional chaining (?.) for Option"
-	},
-	"Extrin Function": {
-		"prefix": "extrin-fn",
-		"body": [
-			"#[intrinsic(\"${1:name}\")]",
-			"extrin fn ${2:name}(${3:param}: ${4:Int}): ${5:Int};"
-		],
-		"description": "Extrinsic (intrinsic-linked) function"
 	}
 }

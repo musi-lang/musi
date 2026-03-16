@@ -1,0 +1,31 @@
+[package]
+name = "music"
+description.workspace = true
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[[bin]]
+name = "music"
+path = "src/main.rs"
+
+[dependencies]
+music_shared = { path = "../music_shared" }
+music_ast = { path = "../music_ast" }
+music_lex = { path = "../music_lex" }
+music_parse = { path = "../music_parse" }
+music_sema = { path = "../music_sema" }
+music_emit = { path = "../music_emit" }
+music_resolve = { path = "../music_resolve" }
+musi_vm = { path = "../musi_vm" }
+musi_builtins = { path = "../musi_builtins" }
+musi_manifest = { path = "../musi_manifest" }
+clap = { workspace = true }
+toml_edit = { workspace = true }
+
+[lints]
+workspace = true

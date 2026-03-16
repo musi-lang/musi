@@ -1,16 +1,26 @@
 import * as vscode from "vscode";
-import { findServerPath, showServerNotFoundUI } from "./bootstrap";
-import { createAndStartClient, getClient, stopClient } from "./client";
-import { MsPackageCodeLensProvider } from "./codelens";
-import { registerCommands } from "./commands";
-import { onConfigChange } from "./config";
-import { StatusBar } from "./status";
+import { findServerPath, showServerNotFoundUI } from "./bootstrap.ts";
+import { createAndStartClient, getClient, stopClient } from "./client.ts";
+import { MsPackageCodeLensProvider } from "./codelens.ts";
+import { clearCliCache, registerCommands } from "./commands.ts";
+import { onConfigChange } from "./config.ts";
+import { MusiConfigurationProvider } from "./launch.ts";
+import { clearCompilerPathCache } from "./runner.ts";
+import { StatusBar } from "./status.ts";
+
+const NOTIFICATION_DELAY_MS = 500;
 
 let _statusBar: StatusBar;
 
 function _setupConfigChangeHandler(context: vscode.ExtensionContext) {
 	context.subscriptions.push(
-		onConfigChange(async () => {
+		onConfigChange(async (event) => {
+			if (event.affectsConfiguration("musi.cliPath")) {
+				clearCliCache();
+			}
+			if (event.affectsConfiguration("musi.compiler.path")) {
+				clearCompilerPathCache();
+			}
 			const client = getClient();
 			if (client) {
 				await client.sendNotification("workspace/didChangeConfiguration", {
@@ -33,12 +43,13 @@ async function _startServer() {
 	await createAndStartClient(serverPath);
 	_statusBar.update("Ready", "ready");
 
+	// Delay avoids notification flicker on fast server starts
 	setTimeout(() => {
 		vscode.window.showInformationMessage(
 			"Musi language features ready.",
 			"Dismiss",
 		);
-	}, 500);
+	}, NOTIFICATION_DELAY_MS);
 }
 
 async function _handleActivationError(error: unknown) {
@@ -76,6 +87,13 @@ export async function activate(context: vscode.ExtensionContext) {
 		vscode.languages.registerCodeLensProvider(
 			{ language: "json", pattern: "**/mspackage.json" },
 			new MsPackageCodeLensProvider(),
+		),
+	);
+
+	context.subscriptions.push(
+		vscode.debug.registerDebugConfigurationProvider(
+			"musi",
+			new MusiConfigurationProvider(),
 		),
 	);
 

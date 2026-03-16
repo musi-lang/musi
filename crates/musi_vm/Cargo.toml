@@ -1,23 +1,17 @@
 [package]
 name = "musi_vm"
-description = "Stack-based virtual machine for the Musi language"
+description = "Musi bytecode interpreter"
 version.workspace = true
 edition.workspace = true
-repository.workspace = true
-readme = "README.md"
 license.workspace = true
-keywords = ["compiler", "musi", "vm", "interpreter"]
-categories = ["development-tools"]
+readme.workspace = true
+repository.workspace = true
+keywords = ["virtual-machine", "interpreter", "bytecode", "musi"]
+categories = ["interpreters"]
 
 [dependencies]
-libloading = "0.9.0"
-musi_codegen = { path = "../musi_codegen" }
-thiserror = { workspace = true }
-
-[dev-dependencies]
-musi_lex = { path = "../musi_lex" }
-musi_parse = { path = "../musi_parse" }
-musi_shared = { path = "../musi_shared" }
+musi_bc = { path = "../musi_bc" }
+thiserror     = { workspace = true }
 
 [lints]
 workspace = true

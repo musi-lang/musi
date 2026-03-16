@@ -1,22 +1,37 @@
-//! Stack-based virtual machine for the Musi language.
+//! `musi_vm` — Musi bytecode interpreter.
 //!
-//! Executes `.mso` modules produced by `musi_codegen`.  The VM uses a
-//! call-stack of [`vm::CallFrame`]s and a shared operand stack of [`Value`]s.
-//! Built-in functions are dispatched via [`NativeRegistry`] (new system
-//! modules) and the legacy `native::dispatch` match (VM primitives 0–23).
+//! Loads and executes `.msbc` binaries produced by the `music_emit` compiler
+//! crate. Has no dependency on any `music_*` compiler crate; operates solely
+//! on raw bytes per §11 of the Musi bytecode spec.
+//!
+//! # Quick start
+//!
+//! ```ignore
+//! use musi_vm::{load, verify, Vm};
+//!
+//! let bytes: &[u8] = /* read your .msbc file */;
+//! let module = load(bytes)?;
+//! verify(&module)?;
+//! let mut vm = Vm::new(module);
+//! let result = vm.run()?;
+//! ```
 
-#![allow(clippy::module_name_repetitions)]
-#![allow(clippy::exhaustive_structs)]
-#![allow(clippy::exhaustive_enums)]
-
-pub mod error;
-pub mod ffi;
-pub mod native;
-pub mod native_registry;
-pub mod value;
-pub mod vm;
+mod channel;
+mod error;
+mod heap;
+mod host;
+mod loader;
+mod task;
+mod value;
+mod verifier;
+mod vm;
 
 pub use error::VmError;
-pub use native_registry::{NativeFn, NativeModuleEntry, NativeRegistry};
+pub use heap::Heap;
+pub use host::HostFunctions;
+pub use loader::{
+    HandlerEntry, LoadedConst, LoadedEffect, LoadedFn, LoadedForeignFn, LoadedModule, load,
+};
 pub use value::Value;
-pub use vm::{TestResult, Vm};
+pub use verifier::verify;
+pub use vm::{Frame, StepResult, Vm};

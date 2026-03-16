@@ -4,7 +4,7 @@ resolver = "2"
 
 [workspace.package]
 description = "A systems programming language designed for clarity, safety, and performance."
-version = "0.1.0-alpha1"
+version = "0.1.0-rc1"
 edition = "2024"
 repository = "https://github.com/musi-lang/musi"
 readme = "README.md"
@@ -14,7 +14,7 @@ categories = ["compilers", "interpreters", "development-tools"]
 
 [workspace.dependencies]
 byteorder = "1.5.0"
-clap = { version = "4.5.60", features = ["derive"] }
+clap = { version = "4.6.0", features = ["derive"] }
 proc-macro2 = "1.0.106"
 quote = "1.0.45"
 syn = { version = "2.0.117", features = ["full"] }
@@ -22,7 +22,7 @@ intaglio = "1.13.1"
 memchr = "2.8.0"
 thiserror = "2.0.18"
 tracing = "0.1.44"
-tracing-subscriber = "0.3.22"
+tracing-subscriber = "0.3.23"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 criterion = "0.8.2"
@@ -32,8 +32,14 @@ tar = "0.4.44"
 semver = { version = "1.0.27", features = ["serde"] }
 dirs = "6.0"
 sha2 = "0.10.9"
+toml = "1.0.6"
+toml_edit = "0.22"
 hex = "0.4.3"
-tower-lsp-server = "0.23"
+libc = "0.2.183"
+libffi = { version = "5.1.0", features = ["system"] }
+libloading = "0.9.0"
+async-lsp = { version = "0.2.3", features = ["tokio", "omni-trait"] }
+lsp-types = "0.95.1"
 tokio = { version = "1.50.0", features = [
     "rt-multi-thread",
     "io-std",
@@ -61,6 +67,8 @@ cast_sign_loss = "deny"
 clone_on_ref_ptr = "deny"
 dbg_macro = "deny"
 empty_drop = "deny"
+exhaustive_structs = "allow" # intentionally exhaustive for pattern matching
+exhaustive_enums = "allow" # intentionally exhaustive for pattern matching
 # exit = "deny"  # CLI tools need exit codes
 filetype_is_file = "deny"
 fn_to_numeric_cast_any = "deny"
@@ -70,6 +78,8 @@ infinite_loop = "deny"
 let_underscore_must_use = "deny"
 mem_forget = "deny"
 missing_asserts_for_indexing = "deny"
+module_name_repetitions = "allow" # intentionally named after their module
+multiple_crate_versions = "allow"  # transitive deps (e.g., windows-sys) bring multiple versions
 multiple_unsafe_ops_per_block = "deny"
 mutex_atomic = "deny"
 panic = "deny"
@@ -77,10 +87,10 @@ rc_buffer = "deny"
 rc_mutex = "deny"
 str_to_string = "deny"
 string_slice = "deny"
+struct_field_names = "allow"
 tests_outside_test_module = "deny"
 todo = "deny"
 try_err = "deny"
-# undocumented_unsafe_blocks = "deny"  # annoying fucking shit
 unimplemented = "deny"
 unnecessary_safety_comment = "deny"
 unnecessary_safety_doc = "deny"
@@ -88,7 +98,6 @@ unreachable = "deny"
 unwrap_in_result = "deny"
 # unwrap_used = "deny"  # use `.expect()` in prod, but allow `.unwrap()` in tests
 
-multiple_crate_versions = "allow"  # transitive deps (e.g., windows-sys) bring multiple versions
 cargo = { level = "deny", priority = -1 }
 complexity = { level = "deny", priority = -1 }
 correctness = { level = "deny", priority = -1 }

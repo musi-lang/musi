@@ -3,11 +3,18 @@ import * as vscode from "vscode";
 /** Visual state of status bar indicator. */
 export type StatusState = "loading" | "ready" | "error" | "stopped";
 
-const _STATE_COLORS: Record<StatusState, { bg?: string; fg: string }> = {
-	loading: { fg: "statusBarItem.warningForeground" },
-	ready: { fg: "statusBarItem.prominentForeground" },
-	error: { bg: "statusBarItem.errorBackground", fg: "errorForeground" },
-	stopped: { fg: "disabledForeground" },
+const _STATE_STYLE: Record<
+	StatusState,
+	{ bg?: string; fg: string; icon: string }
+> = {
+	loading: { fg: "statusBarItem.warningForeground", icon: "$(sync~spin)" },
+	ready: { fg: "statusBarItem.prominentForeground", icon: "$(check)" },
+	error: {
+		bg: "statusBarItem.errorBackground",
+		fg: "errorForeground",
+		icon: "$(error)",
+	},
+	stopped: { fg: "disabledForeground", icon: "$(play)" },
 };
 
 /**
@@ -35,21 +42,12 @@ export class StatusBar {
 	 * @param state Visual state determining colors.
 	 */
 	update(message: string, state: StatusState) {
-		const icon =
-			state === "ready"
-				? "$(check)"
-				: state === "loading"
-					? "$(sync~spin)"
-					: state === "error"
-						? "$(error)"
-						: "$(play)";
-		this.#item.text = `${icon} Musi LSP`;
-
-		const colors = _STATE_COLORS[state];
-		this.#item.backgroundColor = colors.bg
-			? new vscode.ThemeColor(colors.bg)
+		const style = _STATE_STYLE[state];
+		this.#item.text = `${style.icon} ${message}`;
+		this.#item.backgroundColor = style.bg
+			? new vscode.ThemeColor(style.bg)
 			: undefined;
-		this.#item.color = new vscode.ThemeColor(colors.fg);
+		this.#item.color = new vscode.ThemeColor(style.fg);
 
 		this.#item.show();
 	}

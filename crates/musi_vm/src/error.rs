@@ -1,84 +1,61 @@
-//! Runtime errors for the Musi VM.
+//! VM runtime errors.
 
-use musi_codegen::DeserError;
-use thiserror::Error;
-
-/// Errors that can occur during VM execution.
-#[derive(Debug, Error)]
+/// All errors that can occur during loading, verification, or execution.
+#[derive(Debug, thiserror::Error)]
 pub enum VmError {
-    /// The operand stack was empty when a value was expected.
-    #[error("stack underflow")]
-    StackUnderflow,
-
-    /// The call stack was empty when a frame was expected.
-    #[error("no active call frame")]
-    NoFrames,
-
-    /// A function index exceeded the function table.
-    #[error("function index {0} out of bounds")]
-    FunctionOutOfBounds(u16),
-
-    /// A symbol index exceeded the symbol table.
-    #[error("symbol index {0} out of bounds")]
-    SymbolOutOfBounds(u16),
-
-    /// A const-pool index exceeded the const pool.
-    #[error("const-pool index {0} out of bounds")]
-    ConstOutOfBounds(u16),
-
-    /// A local-variable slot index exceeded the locals array.
-    #[error("local variable index {0} out of bounds")]
-    LocalOutOfBounds(u16),
-
-    /// The function's code slice fell outside the code section.
-    #[error("function code region is outside the code section")]
-    CodeOutOfBounds,
-
-    /// An intrinsic ID had no registered handler.
-    #[error("no handler registered for intrinsic {0}")]
-    UnknownIntrinsic(u16),
-
-    /// An opcode could not be decoded.
-    #[error("decode error: {0}")]
-    Decode(#[from] DeserError),
-
-    /// Division or remainder by zero.
+    #[error("bad magic bytes — not a .msbc file")]
+    BadMagic,
+    #[error("checksum mismatch — file may be corrupted")]
+    BadChecksum,
+    #[error("malformed bytecode, {desc}")]
+    Malformed { desc: Box<str> },
+    #[error("verification failed, {desc}")]
+    Verify { desc: Box<str> },
     #[error("division by zero")]
-    DivisionByZero,
-
-    /// An operand on the stack had an unexpected type.
-    #[error("type mismatch")]
-    TypeMismatch,
-
-    /// A match expression had no matching arm.
-    #[error("non-exhaustive match")]
-    MatchFailure,
-
-    /// `CallDynamic` was given a non-Function value.
-    #[error("value is not a function")]
-    NotAFunction,
-
-    /// A field index exceeded the object's field count.
-    #[error("field index {0} out of bounds")]
-    FieldOutOfBounds(u16),
-
-    /// No method implementation found for the given name and receiver type.
-    #[error("no method implementation found")]
-    MethodNotFound,
-
-    /// An extrin function call (FFI) failed.
-    #[error("FFI error: {0}")]
-    FfiFailed(Box<str>),
-
-    /// Array index was out of bounds.
-    #[error("index {index} out of bounds for array of length {len}")]
-    IndexOutOfBounds { index: i64, len: usize },
-
-    /// An `assert` or `assert_msg` call failed.
-    #[error("assertion failed: {0}")]
-    AssertionFailed(Box<str>),
-
-    /// A value that cannot be used as a `HashMap` key.
-    #[error("value is not hashable (only Int, String can be map keys)")]
-    UnhashableKey,
+    DivideByZero,
+    #[error("call stack overflow")]
+    StackOverflow,
+    #[error("expected {expected} but found {found}")]
+    TypeError {
+        expected: &'static str,
+        found: &'static str,
+    },
+    #[error("index `{index}` out of bounds, length `{len}`")]
+    OutOfBounds { index: usize, len: usize },
+    #[error("no handler for effect `{effect_id}`")]
+    NoHandler { effect_id: u8 },
+    #[error("effect aborted")]
+    EffectAborted,
+    #[error("attempted to resume fatal effect op `{op_id}`")]
+    FatalEffectResumed { op_id: u32 },
+    #[error("unimplemented {desc}")]
+    Unimplemented { desc: &'static str },
+    #[error("in fn `{fn_id}` at offset `{ip}`, {source}")]
+    Runtime {
+        fn_id: u32,
+        ip: usize,
+        source: Box<Self>,
+    },
+    #[error("halted")]
+    Halted,
+    #[error("instruction limit exceeded, `{limit}`")]
+    InstructionLimitExceeded { limit: u64 },
+    #[error("freed heap object at index `{index}`")]
+    FreedObject { index: usize },
+    #[error("deadlock, no runnable tasks remain")]
+    Deadlock,
+    #[error("unknown task id `{task_id}`")]
+    UnknownTask { task_id: u32 },
+    #[error("unknown channel id `{channel_id}`")]
+    UnknownChannel { channel_id: u32 },
 }
+
+macro_rules! malformed {
+    ($lit:literal) => {
+        $crate::error::VmError::Malformed { desc: $lit.into() }
+    };
+    ($fmt:literal, $($arg:tt)*) => {
+        $crate::error::VmError::Malformed { desc: format!($fmt, $($arg)*).into_boxed_str() }
+    };
+}
+pub(crate) use malformed;

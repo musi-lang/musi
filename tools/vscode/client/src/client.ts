@@ -5,7 +5,7 @@ import {
 	type ServerOptions,
 	TransportKind,
 } from "vscode-languageclient/node";
-import { getConfig } from "./config";
+import { getConfig } from "./config.ts";
 
 const _TIMEOUT_MS = 30_000;
 
@@ -27,16 +27,6 @@ function _buildClientOptions(): LanguageClientOptions {
 			fileEvents: vscode.workspace.createFileSystemWatcher("**/*.ms"),
 		},
 		outputChannel: vscode.window.createOutputChannel("Musi Language Server"),
-		initializationOptions: {
-			diagnostics: { enable: config.diagnosticsEnabled },
-			completion: { enable: config.completionEnabled },
-			formatting: {
-				enable: config.formattingEnabled,
-				indentSize: config.formattingIndentSize,
-			},
-			inlayHints: { enable: config.inlayHintsEnabled },
-			runtime: { path: config.runtimePath },
-		},
 	};
 
 	if (config.traceServer !== "off") {
@@ -82,7 +72,7 @@ export function isClientRunning(): boolean {
 
 /**
  * Create and start new language client connected to given server.
- * @param serverPath Absolute path to musi_lsp binary.
+ * @param serverPath Absolute path to music_lsp binary.
  * @returns started LanguageClient instance.
  * @throws Error if server fails to start within timeout period.
  */
@@ -121,7 +111,7 @@ export async function stopClient() {
 
 /**
  * Restart language client with new server instance.
- * @param serverPath Absolute path to `musi_lsp` binary.
+ * @param serverPath Absolute path to `music_lsp` binary.
  */
 export async function restartClient(serverPath: string) {
 	await createAndStartClient(serverPath);

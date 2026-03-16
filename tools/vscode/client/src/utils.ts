@@ -1,31 +1,19 @@
 import * as os from "node:os";
 
-/**
- * Get platform-appropriate binary name for `musi_lsp`.
- * Returns `musi_lsp.exe` on Windows, `musi_lsp` otherwise.
- */
+export const TERMINAL_NAME = "Musi";
+
 export function getServerBinaryName(): string {
-	return os.platform() === "win32" ? "musi_lsp.exe" : "musi_lsp";
+	return isWindows() ? "music_lsp.exe" : "music_lsp";
 }
 
-/**
- * Get platform-appropriate binary name for `musi` CLI.
- * Returns `musi.exe` on Windows, `musi` otherwise.
- */
 export function getCliBinaryName(): string {
-	return os.platform() === "win32" ? "musi.exe" : "musi";
+	return isWindows() ? "musi.exe" : "musi";
 }
 
-/**
- * Check if current platform is Windows.
- */
 export function isWindows(): boolean {
 	return os.platform() === "win32";
 }
 
-/**
- * Get user's home directory in cross-platform manner.
- */
 export function getHomeDir(): string {
 	return os.homedir();
 }

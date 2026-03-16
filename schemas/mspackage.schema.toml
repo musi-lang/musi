@@ -1,0 +1,163 @@
+# mspackage.toml schema (v1)
+
+[package]
+name = { type = "string", pattern = "^(@[a-z0-9-~][a-z0-9-._~]*/)?[a-z0-9-~][a-z0-9-._~]*$" }
+version = { type = "string", pattern = "^[0-9]+\\.[0-9]+\\.[0-9]+(-[a-zA-Z0-9-]+)?(\\+[a-zA-Z0-9-]+)?$" }
+description = { type = "string" }
+main = { type = "string", pattern = "^\\./.+\\.ms$", default = "./index.ms" }
+license = { type = "string" }
+homepage = { type = "string" }
+keywords = { type = "array of string" }
+files = { type = "array of string" }
+private = { type = "boolean", default = false }
+publish-registry = { type = "string", default = "https://msr.musi-lang.org" }
+exclude = { type = "array of string" }
+include = { type = "array of string" }
+compile-files = { type = "array of string" }
+deps-dir = { type = "string | boolean", enum = [
+    "auto",
+    "manual",
+    "none",
+], default = "auto" }
+vendor = { type = "boolean", default = false }
+
+[package.author]
+name = { type = "string" }
+email = { type = "string" }
+url = { type = "string" }
+
+[package.repository]
+type = { type = "string", default = "git" }
+url = { type = "string" }
+directory = { type = "string" }
+
+[package.bugs]
+url = { type = "string" }
+email = { type = "string" }
+
+[package.exports]
+# string or map of string -> "^\./.+\.ms$"
+_type = "string | table of string"
+
+[package.bin]
+# string or map of command -> path
+_type = "string | table of string"
+
+[imports]
+# specifier -> path remapping
+_type = "table of string"
+
+[dependencies]
+_type = "table of string"
+
+[dev-dependencies]
+_type = "table of string"
+
+[peer-dependencies]
+_type = "table of string"
+
+[optional-dependencies]
+_type = "table of string"
+
+[workspaces]
+packages = { type = "array of string" }
+
+[lock]
+path = { type = "string", default = "musi.lock" }
+frozen = { type = "boolean", default = false }
+# lock can also be a boolean or string shorthand
+
+[compiler-options]
+target = { type = "string", enum = [
+    "MS2025",
+    "native",
+    "wasm",
+    "embedded",
+], default = "MS2025" }
+lib = { type = "array of string", default = ["MS2025"] }
+out-dir = { type = "string", default = "./dist" }
+root-dir = { type = "string", default = "./src" }
+base-url = { type = "string", default = "./" }
+strict = { type = "boolean", default = false }
+no-implicit-any = { type = "boolean", default = false }
+no-implicit-unit = { type = "boolean", default = false }
+strict-function-types = { type = "boolean", default = false }
+strict-optional-checks = { type = "boolean", default = false }
+no-missing-cases-in-match = { type = "boolean", default = false }
+exact-optional-property-types = { type = "boolean", default = false }
+no-unused-locals = { type = "boolean", default = false }
+no-unused-parameters = { type = "boolean", default = false }
+no-implicit-returns = { type = "boolean", default = false }
+allow-unreachable-code = { type = "boolean", default = false }
+allow-unused-labels = { type = "boolean", default = false }
+force-consistent-casing-in-file-names = { type = "boolean", default = true }
+skip-lib-check = { type = "boolean", default = true }
+no-emit = { type = "boolean", default = false }
+no-emit-on-error = { type = "boolean", default = true }
+remove-comments = { type = "boolean", default = true }
+composite = { type = "boolean", default = false }
+incremental = { type = "boolean", default = false }
+build-info-file = { type = "string", default = ".msbuildinfo" }
+
+[compiler-options.paths]
+# alias -> array of string paths
+_type = "table of array of string"
+
+[watch-options]
+watch-file = { type = "string", enum = [
+    "fixedPollingInterval",
+    "priorityPollingInterval",
+    "dynamicPriorityPolling",
+    "useFsEvents",
+] }
+watch-directory = { type = "string", enum = [
+    "useFsEvents",
+    "fixedPollingInterval",
+    "dynamicPriorityPolling",
+] }
+exclude-files = { type = "array of string" }
+exclude-directories = { type = "array of string" }
+
+[tasks]
+# Each task is either a string (shorthand command) or a table:
+# [tasks.build]
+# description = "..."
+# command = "..."
+# dependencies = ["other-task"]
+_type = "table of (string | task-object)"
+
+[fmt]
+include = { type = "array of string" }
+exclude = { type = "array of string" }
+use-tabs = { type = "boolean", default = false }
+line-width = { type = "number", default = 80 }
+indent-width = { type = "number", default = 2 }
+prose-wrap = { type = "string", enum = [
+    "always",
+    "never",
+    "preserve",
+], default = "preserve" }
+
+[lint]
+include = { type = "array of string" }
+exclude = { type = "array of string" }
+
+[lint.rules]
+tags = { type = "array of string" }
+include = { type = "array of string" }
+exclude = { type = "array of string" }
+
+[test]
+include = { type = "array of string" }
+exclude = { type = "array of string" }
+
+[bench]
+include = { type = "array of string" }
+exclude = { type = "array of string" }
+
+[publish]
+include = { type = "array of string" }
+exclude = { type = "array of string" }
+
+[[references]]
+path = { type = "string" }

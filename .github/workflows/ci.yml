@@ -59,30 +59,5 @@ jobs:
           key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-test-
 
-      - name: Build test binaries
-        run: cargo build --tests -p musi_shared -p musi_lex -p musi_parse -p musi_codegen -p musi_vm
-
-      - name: Run tests (musi_shared)
-        run: |
-          bin=$(ls target/debug/deps/musi_shared-* | grep -v '\.d$' | head -1)
-          timeout 30s "$bin"
-
-      - name: Run tests (musi_lex)
-        run: |
-          bin=$(ls target/debug/deps/musi_lex-* | grep -v '\.d$' | head -1)
-          timeout 30s "$bin"
-
-      - name: Run tests (musi_parse)
-        run: |
-          bin=$(ls target/debug/deps/musi_parse-* | grep -v '\.d$' | head -1)
-          timeout 30s "$bin"
-
-      - name: Run tests (musi_codegen)
-        run: |
-          bin=$(ls target/debug/deps/musi_codegen-* | grep -v '\.d$' | head -1)
-          timeout 30s "$bin"
-
-      - name: Run tests (musi_vm)
-        run: |
-          bin=$(ls target/debug/deps/musi_vm-* | grep -v '\.d$' | head -1)
-          timeout 30s "$bin"
+      - name: Run tests
+        run: cargo test --workspace

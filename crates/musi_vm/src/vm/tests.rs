@@ -1,812 +1,2077 @@
-use super::*;
-use crate::native_registry::NativeRegistry;
-use musi_codegen::{ConstEntry, FunctionEntry, Module, Opcode, SymbolEntry, SymbolFlags};
+//! VM integration tests.
+//!
+//! All tests build minimal `.msbc` binaries from raw bytes — no compiler
+//! crate dependency.
+#![allow(clippy::panic)]
+
+use std::iter;
+
+use musi_bc::{Opcode, crc32_slice};
 
 use crate::error::VmError;
+use crate::loader::load;
 use crate::value::Value;
+use crate::verifier::verify;
+use crate::vm::{StepResult, Vm};
 
-use musi_codegen::emit;
-use musi_lex::lex;
-use musi_parse::parse;
-use musi_shared::{DiagnosticBag, Interner, SourceDb};
+// ── Binary builder helpers ────────────────────────────────────────────────────
 
-fn run_src(src: &str) -> Value {
-    let prelude_src = include_str!("../../../../std/prelude.ms");
-    let mut interner = Interner::new();
-    let mut source_db = SourceDb::new();
-    let mut diags = DiagnosticBag::new();
-
-    let prelude_id = source_db.add("<prelude>", prelude_src);
-    let prelude_lexed = lex(prelude_src, prelude_id, &mut interner, &mut diags);
-    let prelude_module = parse(&prelude_lexed.tokens, prelude_id, &mut diags, &interner);
-
-    let user_id = source_db.add("test.ms", src);
-    let user_lexed = lex(src, user_id, &mut interner, &mut diags);
-    let user_module = parse(&user_lexed.tokens, user_id, &mut diags, &interner);
-
-    assert!(!diags.has_errors(), "parse errors");
-
-    let module = emit(&prelude_module, &[], &[], &user_module, &interner).expect("emit failed");
-    let main_fn_idx = u16::try_from(module.function_table.len() - 1).expect("fits");
-    let mut vm = Vm::new(module, NativeRegistry::new(&[]));
-    vm.run(main_fn_idx).expect("vm run failed")
+/// Constant pool entry for the test builder.
+enum ConstEntry {
+    I32(i32),
+    Str(Vec<u8>),
 }
 
-/// Builds the "Hello, world!" module:
-/// - fn 0: writeln  (native, param_count=1)
-/// - fn 1: main     (LdConst 0, Call 0, Halt)
-fn hello_module() -> Module {
-    let mut code = Vec::new();
-    Opcode::LdConst(0).encode_into(&mut code);
-    Opcode::Call(0).encode_into(&mut code);
-    Opcode::Halt.encode_into(&mut code);
-    let code_len = u32::try_from(code.len()).expect("fits");
+/// Function definition for the test builder.
+struct FnDef {
+    fn_id: u32,
+    local_count: u16,
+    param_count: u16,
+    code: Vec<u8>,
+    handlers: Vec<(u8, u32)>,
+    max_stack: Option<u16>,
+}
 
-    Module {
-        const_pool: vec![ConstEntry::String("Hello, world!".into())],
-        symbol_table: vec![
-            SymbolEntry {
-                name: "writeln".into(),
-                flags: SymbolFlags::new(SymbolFlags::NATIVE | SymbolFlags::EXPORT),
-                intrinsic_id: 0,
-                abi: Box::from(""),
-                link_lib: None,
-                link_name: None,
-            },
-            SymbolEntry {
-                name: "main".into(),
-                flags: SymbolFlags::new(SymbolFlags::EXPORT),
-                intrinsic_id: 0xFFFF,
-                abi: Box::from(""),
-                link_lib: None,
-                link_name: None,
-            },
+/// Convenience: function def without handlers.
+fn fn_def(fn_id: u32, local_count: u16, param_count: u16, code: Vec<u8>) -> FnDef {
+    FnDef {
+        fn_id,
+        local_count,
+        param_count,
+        code,
+        handlers: vec![],
+        max_stack: None,
+    }
+}
+
+/// Convenience: function def with an explicit `max_stack` limit.
+fn fn_def_with_max_stack(
+    fn_id: u32,
+    local_count: u16,
+    param_count: u16,
+    max_stack: u16,
+    code: Vec<u8>,
+) -> FnDef {
+    FnDef {
+        fn_id,
+        local_count,
+        param_count,
+        code,
+        handlers: vec![],
+        max_stack: Some(max_stack),
+    }
+}
+
+/// Build a minimal valid `.msbc` binary.
+fn make_msbc(consts: &[ConstEntry], fns: &[FnDef]) -> Vec<u8> {
+    let entry_fn_id: u32 = fns.first().map_or(0, |f| f.fn_id);
+
+    // ── Const pool ────────────────────────────────────────────────────────────
+    let mut const_section: Vec<u8> = vec![];
+    let const_count = u32::try_from(consts.len()).expect("fits u32");
+    const_section.extend_from_slice(&const_count.to_le_bytes());
+    for c in consts {
+        match c {
+            ConstEntry::I32(v) => {
+                const_section.push(0x01); // TAG_I32
+                const_section.extend_from_slice(&v.to_le_bytes());
+            }
+            ConstEntry::Str(bytes) => {
+                const_section.push(0x05); // TAG_STR
+                let len = u32::try_from(bytes.len()).expect("fits u32");
+                const_section.extend_from_slice(&len.to_le_bytes());
+                const_section.extend_from_slice(bytes);
+            }
+        }
+    }
+
+    // ── Type pool (empty) ─────────────────────────────────────────────────────
+    let type_section: Vec<u8> = 0u32.to_le_bytes().to_vec();
+
+    // ── Effect pool (empty) ───────────────────────────────────────────────────
+    let effect_section: Vec<u8> = 0u32.to_le_bytes().to_vec();
+
+    // ── Function pool ─────────────────────────────────────────────────────────
+    let mut fn_section: Vec<u8> = vec![];
+    let fn_count = u32::try_from(fns.len()).expect("fits u32");
+    fn_section.extend_from_slice(&fn_count.to_le_bytes());
+    for f in fns {
+        fn_section.extend_from_slice(&f.fn_id.to_le_bytes());
+        fn_section.extend_from_slice(&0u32.to_le_bytes()); // type_id
+        fn_section.extend_from_slice(&f.local_count.to_le_bytes());
+        fn_section.extend_from_slice(&f.param_count.to_le_bytes());
+        let max_stack: u16 = f.max_stack.unwrap_or(16);
+        fn_section.extend_from_slice(&max_stack.to_le_bytes());
+        fn_section.extend_from_slice(&0u16.to_le_bytes()); // effect_mask
+        fn_section.extend_from_slice(&0u16.to_le_bytes()); // upvalue_count
+        let code_len = u32::try_from(f.code.len()).expect("fits u32");
+        fn_section.extend_from_slice(&code_len.to_le_bytes());
+        fn_section.extend_from_slice(&f.code);
+        let handler_count = u16::try_from(f.handlers.len()).expect("fits u16");
+        fn_section.extend_from_slice(&handler_count.to_le_bytes());
+        for &(eid, hfn) in &f.handlers {
+            fn_section.push(eid);
+            fn_section.extend_from_slice(&hfn.to_le_bytes());
+        }
+    }
+
+    // ── Foreign pool (empty for tests) ──────────────────────────────────────
+    let foreign_section: Vec<u8> = 0u32.to_le_bytes().to_vec(); // count = 0
+
+    // ── Header ────────────────────────────────────────────────────────────────
+    let header_size: u32 = 40;
+    let const_off = header_size;
+    let type_off = const_off + u32::try_from(const_section.len()).expect("fits u32");
+    let effect_off = type_off + u32::try_from(type_section.len()).expect("fits u32");
+    let foreign_off = effect_off + u32::try_from(effect_section.len()).expect("fits u32");
+    let fn_off = foreign_off + u32::try_from(foreign_section.len()).expect("fits u32");
+
+    let mut header: Vec<u8> = Vec::with_capacity(40);
+    header.extend_from_slice(b"MUSI");
+    header.extend_from_slice(&1u16.to_le_bytes());
+    header.extend_from_slice(&0u16.to_le_bytes());
+    header.extend_from_slice(&4u32.to_le_bytes()); // flags (IS_SCRIPT)
+    header.extend_from_slice(&entry_fn_id.to_le_bytes());
+    header.extend_from_slice(&const_off.to_le_bytes());
+    header.extend_from_slice(&type_off.to_le_bytes());
+    header.extend_from_slice(&effect_off.to_le_bytes());
+    header.extend_from_slice(&foreign_off.to_le_bytes());
+    header.extend_from_slice(&fn_off.to_le_bytes());
+
+    debug_assert_eq!(header.len(), 36);
+    let checksum = crc32_slice(&header);
+    header.extend_from_slice(&checksum.to_le_bytes());
+    debug_assert_eq!(header.len(), 40);
+
+    let mut out = header;
+    out.extend_from_slice(&const_section);
+    out.extend_from_slice(&type_section);
+    out.extend_from_slice(&effect_section);
+    out.extend_from_slice(&foreign_section);
+    out.extend_from_slice(&fn_section);
+    out
+}
+
+/// Load, verify, and run the entry function of a `.msbc` binary.
+fn run_vm(bytes: &[u8]) -> (Vm, Result<Value, VmError>) {
+    let module = load(bytes).expect("loads");
+    verify(&module).expect("verifies");
+    let mut vm = Vm::new(module);
+    let result = vm.run();
+    (vm, result)
+}
+
+/// Load, verify, and call a specific function with arguments.
+fn run_vm_call(bytes: &[u8], fn_id: u32, args: &[Value]) -> (Vm, Result<Value, VmError>) {
+    let module = load(bytes).expect("loads");
+    verify(&module).expect("verifies");
+    let mut vm = Vm::new(module);
+    let result = vm.call_fn(fn_id, args);
+    (vm, result)
+}
+
+// ── Loader tests ──────────────────────────────────────────────────────────────
+
+#[test]
+fn test_load_valid_header_succeeds() {
+    let bytes = make_msbc(&[], &[fn_def(0, 0, 0, vec![Opcode::RET_U.0])]);
+    let result = load(&bytes);
+    assert!(result.is_ok(), "expected Ok, got {result:?}");
+}
+
+#[test]
+fn test_load_bad_magic_returns_error() {
+    let mut bytes = make_msbc(&[], &[fn_def(0, 0, 0, vec![Opcode::RET_U.0])]);
+    bytes[0] = b'X';
+    let result = load(&bytes);
+    assert!(
+        matches!(result, Err(VmError::BadMagic)),
+        "expected BadMagic, got {result:?}"
+    );
+}
+
+#[test]
+fn test_load_bad_checksum_returns_error() {
+    let mut bytes = make_msbc(&[], &[fn_def(0, 0, 0, vec![Opcode::RET_U.0])]);
+    bytes[8] ^= 0xFF;
+    let result = load(&bytes);
+    assert!(
+        matches!(result, Err(VmError::BadChecksum)),
+        "expected BadChecksum, got {result:?}"
+    );
+}
+
+// ── Verifier tests ────────────────────────────────────────────────────────────
+
+#[test]
+fn test_verifier_rejects_oob_const() {
+    let bytes = make_msbc(
+        &[],
+        &[fn_def(0, 0, 0, vec![Opcode::LD_CST.0, 5, Opcode::RET.0])],
+    );
+    let module = load(&bytes).expect("loads ok");
+    let result = verify(&module);
+    assert!(result.is_err(), "expected Verify error, got Ok");
+}
+
+#[test]
+fn test_verifier_rejects_stack_overflow() {
+    let mut code = vec![Opcode::LD_CST.0, 0u8];
+    code.extend(iter::repeat_n(Opcode::DUP.0, 20));
+    code.push(Opcode::RET.0);
+    let bytes = make_msbc(&[ConstEntry::I32(42)], &[fn_def(0, 0, 0, code)]);
+    let module = load(&bytes).expect("loads ok");
+    let result = verify(&module);
+    assert!(result.is_err(), "expected Verify error for stack overflow");
+}
+
+// ── Execution tests (original) ───────────────────────────────────────────────
+
+#[test]
+fn test_run_constant_return_i32() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(99)],
+        &[fn_def(0, 0, 0, vec![Opcode::LD_CST.0, 0, Opcode::RET.0])],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 99);
+}
+
+#[test]
+fn test_run_add_two_ints() {
+    let bytes = make_msbc(
+        &[],
+        &[fn_def(
+            0,
+            2,
+            2,
+            vec![
+                Opcode::LD_LOC.0,
+                0,
+                Opcode::LD_LOC.0,
+                1,
+                Opcode::I_ADD.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm_call(&bytes, 0, &[Value::from_int(3), Value::from_int(4)]);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 7);
+}
+
+#[test]
+fn test_run_conditional_jump() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(5), ConstEntry::I32(3)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::CMP_LT.0,
+                Opcode::JMP_F_W.0,
+                2,
+                0,
+                0,
+                0,
+                Opcode::LD_CST.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(
+        result.expect("runs").as_int().expect("is int"),
+        3,
+        "jmp.f taken: should return 3"
+    );
+}
+
+#[test]
+fn test_run_tail_call_countdown() {
+    let code = vec![
+        Opcode::LD_LOC.0,
+        0,
+        Opcode::LD_CST.0,
+        0,
+        Opcode::CMP_EQ.0,
+        Opcode::JMP_F_W.0,
+        3,
+        0,
+        0,
+        0,
+        Opcode::LD_CST.0,
+        0,
+        Opcode::RET.0,
+        Opcode::LD_LOC.0,
+        0,
+        Opcode::LD_CST.0,
+        1,
+        Opcode::I_SUB.0,
+        Opcode::INV_TAL.0,
+        0,
+        0,
+        0,
+        0,
+    ];
+    let bytes = make_msbc(
+        &[ConstEntry::I32(0), ConstEntry::I32(1)],
+        &[fn_def(0, 1, 1, code)],
+    );
+    let (_, result) = run_vm_call(&bytes, 0, &[Value::from_int(10)]);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 0);
+}
+
+#[test]
+fn test_run_make_product_and_load_field() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(10), ConstEntry::I32(20)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::MK_PRD.0,
+                2,
+                Opcode::LD_FLD.0,
+                1,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 20);
+}
+
+#[test]
+fn test_run_make_variant_and_check_tag() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(42)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::MK_VAR.0,
+                7,
+                Opcode::CMP_TAG.0,
+                7,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert!(result.expect("runs").as_bool().expect("is bool"));
+}
+
+// ── Value NaN-boxing tests ────────────────────────────────────────────────────
+
+#[test]
+fn test_value_nan_boxing_roundtrip() {
+    type Case = (Value, fn(Value) -> bool);
+    let cases: &[Case] = &[
+        (Value::from_int(-1), |v| v.as_int().is_ok()),
+        (Value::from_int(i64::MAX >> 16), |v| v.as_int().is_ok()),
+        (Value::from_nat(0xDEAD_BEEF), |v| v.as_nat().is_ok()),
+        (Value::from_float(1.5), |v| v.as_float().is_ok()),
+        (Value::from_bool(true), |v| v.as_bool().is_ok()),
+        (Value::from_bool(false), |v| v.as_bool().is_ok()),
+        (Value::from_rune('A'), |v| {
+            v.as_int().is_err() && !v.is_float()
+        }),
+        (Value::from_fn_id(42), |v| v.as_fn_id().is_ok()),
+        (Value::UNIT, |v| v.is_unit()),
+    ];
+    for (val, check) in cases {
+        assert!(check(*val), "roundtrip failed for {val:?}");
+    }
+}
+
+#[test]
+fn test_value_float_is_not_tagged_int() {
+    let f = Value::from_float(1.0);
+    assert!(f.is_float());
+    assert!(f.as_int().is_err());
+
+    let i = Value::from_int(42);
+    assert!(!i.is_float());
+    assert!(i.as_float().is_err());
+}
+
+#[test]
+fn test_nan_canonicalization() {
+    // Standard quiet NaN (tag 0x7FF8 collides with TAG_TASK without canonicalization).
+    let v = Value::from_float(f64::NAN);
+    assert!(v.is_float());
+    assert!(v.as_float().unwrap().is_nan());
+    assert_eq!(v, Value::NAN);
+
+    // Negative NaN collapses to canonical.
+    let neg_nan = Value::from_float(f64::from_bits(0xFFF8_0000_0000_0000));
+    assert_eq!(neg_nan, Value::NAN);
+
+    // Signaling NaN collapses to canonical.
+    let snan = Value::from_float(f64::from_bits(0x7FF0_0000_0000_0002));
+    assert_eq!(snan, Value::NAN);
+
+    // Non-NaN floats are untouched.
+    let normal = Value::from_float(1.5);
+    assert!(normal.is_float());
+    assert_ne!(normal, Value::NAN);
+
+    // Infinity is NOT NaN.
+    let inf = Value::from_float(f64::INFINITY);
+    assert!(inf.is_float());
+    assert!(!inf.as_float().unwrap().is_nan());
+}
+
+#[test]
+fn test_value_int_sign_extension() {
+    let v = Value::from_int(-1);
+    assert_eq!(v.as_int().expect("is int"), -1);
+    let v2 = Value::from_int(-42);
+    assert_eq!(v2.as_int().expect("is int"), -42);
+}
+
+// ── String values ───────────────────────────────────────────────────────
+
+#[test]
+fn test_string_const_returns_heap_ref() {
+    let bytes = make_msbc(
+        &[ConstEntry::Str(b"hello".to_vec())],
+        &[fn_def(0, 0, 0, vec![Opcode::LD_CST.0, 0, Opcode::RET.0])],
+    );
+    let (vm, result) = run_vm(&bytes);
+    let result = result.expect("runs");
+    let ptr = result.as_ref().expect("should be a ref");
+    let obj = vm.heap().get(ptr).expect("heap lookup");
+    assert_eq!(
+        obj.string.as_deref(),
+        Some("hello"),
+        "heap object should contain the string"
+    );
+}
+
+#[test]
+fn test_string_const_two_distinct_loads_produce_separate_objects() {
+    let bytes = make_msbc(
+        &[ConstEntry::Str(b"hi".to_vec())],
+        &[fn_def(
+            0,
+            2,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::ST_LOC.0,
+                0, // first load
+                Opcode::LD_CST.0,
+                0,
+                Opcode::ST_LOC.0,
+                1, // second load
+                Opcode::LD_LOC.0,
+                0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert!(result.expect("runs").as_ref().is_ok(), "should be a ref");
+}
+
+// ── Global variables ────────────────────────────────────────────────────
+
+#[test]
+fn test_globals_store_and_load() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(42)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0, // push 42
+                Opcode::ST_GLB.0,
+                5,
+                0,
+                0,
+                0, // store to global[5]
+                Opcode::LD_GLB.0,
+                5,
+                0,
+                0,
+                0, // load global[5]
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (vm, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 42);
+    assert_eq!(
+        vm.globals().len(),
+        6,
+        "globals should have grown to index 5+1"
+    );
+}
+
+#[test]
+fn test_globals_uninitialized_returns_unit() {
+    let bytes = make_msbc(
+        &[],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![Opcode::LD_GLB.0, 0, 0, 0, 0, Opcode::RET.0],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert!(
+        result.expect("runs").is_unit(),
+        "uninitialized global should be unit"
+    );
+}
+
+// ── Division by zero ────────────────────────────────────────────────────
+
+#[test]
+fn test_division_by_zero_returns_error() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(10), ConstEntry::I32(0)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::I_DIV.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    let err = result.unwrap_err();
+    match &err {
+        VmError::Runtime { source, .. } => {
+            assert!(matches!(**source, VmError::DivideByZero));
+        }
+        _ => panic!("expected Runtime error, got {err:?}"),
+    }
+}
+
+// ── Float arithmetic ────────────────────────────────────────────────────
+
+#[test]
+fn test_float_add_and_multiply() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(3), ConstEntry::I32(2)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::CNV_ITF.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::CNV_ITF.0,
+                0,
+                Opcode::F_ADD.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    let f = result.expect("runs").as_float().expect("is float");
+    assert!((f - 5.0).abs() < f64::EPSILON);
+}
+
+// ── Bitwise operations ──────────────────────────────────────────────────
+
+#[test]
+fn test_bitwise_and_and_shift() {
+    let bytes = make_msbc(
+        &[
+            ConstEntry::I32(0xFF),
+            ConstEntry::I32(0x0F),
+            ConstEntry::I32(4),
         ],
-        function_table: vec![
-            FunctionEntry {
-                symbol_idx: 0,
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::B_AND.0,
+                Opcode::LD_CST.0,
+                2,
+                Opcode::B_SHL.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 240);
+}
+
+// ── Type conversions ────────────────────────────────────────────────────
+
+#[test]
+fn test_int_to_float_to_int_roundtrip() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(7)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::CNV_ITF.0,
+                0,
+                Opcode::CNV_FTI.0,
+                0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 7);
+}
+
+// ── Array operations ────────────────────────────────────────────────────
+
+#[test]
+fn test_array_create_store_load() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(3), ConstEntry::I32(99), ConstEntry::I32(1)],
+        &[fn_def(
+            0,
+            1,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0, // push 3 (length)
+                Opcode::MK_ARR.0,
+                0,
+                0,
+                0,
+                0, // mk.arr type_id=0 -> ref on stack
+                Opcode::ST_LOC.0,
+                0, // save ref
+                Opcode::LD_LOC.0,
+                0, // push ref
+                Opcode::LD_CST.0,
+                2, // push index 1
+                Opcode::LD_CST.0,
+                1, // push value 99
+                Opcode::ST_IDX.0,
+                0, // arr[1] = 99 (2-byte instr)
+                Opcode::LD_LOC.0,
+                0, // push ref
+                Opcode::LD_CST.0,
+                2, // push index 1
+                Opcode::LD_IDX.0,
+                0, // load arr[1] (2-byte instr)
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 99);
+}
+
+#[test]
+fn test_array_length() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(5)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0, // push 5 (length)
+                Opcode::MK_ARR.0,
+                0,
+                0,
+                0,
+                0, // mk.arr -> ref
+                Opcode::LD_LEN.0,
+                0, // push length (2-byte instr)
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_nat().expect("is nat"), 5);
+}
+
+// ── Stack underflow ─────────────────────────────────────────────────────
+
+#[test]
+fn test_stack_underflow_returns_error() {
+    let bytes = make_msbc(
+        &[],
+        &[fn_def(0, 0, 0, vec![Opcode::I_ADD.0, Opcode::RET.0])],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert!(result.is_err(), "i.add on empty stack should error");
+}
+
+// ── HLT instruction ────────────────────────────────────────────────────
+
+#[test]
+fn test_hlt_returns_halted_error() {
+    let bytes = make_msbc(&[], &[fn_def(0, 0, 0, vec![Opcode::HLT.0])]);
+    let (_, result) = run_vm(&bytes);
+    let err = result.unwrap_err();
+    match &err {
+        VmError::Runtime { source, .. } => {
+            assert!(matches!(**source, VmError::Halted));
+        }
+        _ => panic!("expected Runtime wrapping Halted, got {err:?}"),
+    }
+}
+
+// ── Instruction limit ──────────────────────────────────────────────────
+
+#[test]
+fn test_instruction_limit_exceeded() {
+    let bytes = make_msbc(
+        &[],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::JMP_W.0,
+                0xFB,
+                0xFF,
+                0xFF,
+                0xFF, // i32 = -5 (little-endian)
+            ],
+        )],
+    );
+    let module = load(&bytes).expect("loads");
+    let mut vm = Vm::new(module);
+    vm.set_instruction_limit(Some(100));
+    let result = vm.run();
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(
+        matches!(err, VmError::InstructionLimitExceeded { limit: 100 }),
+        "expected InstructionLimitExceeded, got {err:?}"
+    );
+    assert_eq!(vm.instruction_count(), 100);
+}
+
+// ── Error context ───────────────────────────────────────────────────────
+
+#[test]
+fn test_error_context_contains_fn_id_and_ip() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(1), ConstEntry::I32(0)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::I_DIV.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    let err = result.unwrap_err();
+    match &err {
+        VmError::Runtime { fn_id, ip, .. } => {
+            assert_eq!(*fn_id, 0, "fn_id should be 0");
+            assert_eq!(*ip, 4, "ip should point to i.div at offset 4");
+        }
+        _ => panic!("expected Runtime error, got {err:?}"),
+    }
+}
+
+// ── Public stepping API ─────────────────────────────────────────────────
+
+#[test]
+fn test_step_api_single_stepping() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(77)],
+        &[fn_def(0, 0, 0, vec![Opcode::LD_CST.0, 0, Opcode::RET.0])],
+    );
+    let module = load(&bytes).expect("loads");
+    let mut vm = Vm::new(module);
+    vm.setup_call(0, &[]).expect("setup ok");
+
+    assert!(vm.is_running());
+
+    match vm.step().expect("step 1") {
+        StepResult::Continue => {}
+        StepResult::Returned(_) => panic!("expected Continue after ld.cst"),
+    }
+
+    match vm.step().expect("step 2") {
+        StepResult::Continue => panic!("expected Returned after ret"),
+        StepResult::Returned(v) => {
+            assert_eq!(v.as_int().expect("is int"), 77);
+        }
+    }
+
+    assert!(!vm.is_running());
+}
+
+#[test]
+fn test_introspection_frames_and_heap() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(10)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![Opcode::LD_CST.0, 0, Opcode::MK_PRD.0, 1, Opcode::RET.0],
+        )],
+    );
+    let (vm, result) = run_vm(&bytes);
+    let _ = result.expect("runs");
+    assert!(vm.frames().is_empty());
+    assert!(vm.heap().live_count() >= 1);
+}
+
+// ── Garbage collection ──────────────────────────────────────────────────
+
+#[test]
+fn test_gc_collects_unreachable_objects() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(1)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0, // push 1
+                Opcode::MK_PRD.0,
+                1,             // mk.prd 1 -> ref (heap object)
+                Opcode::POP.0, // discard the ref — object is now unreachable
+                Opcode::LD_CST.0,
+                0, // push 1 (keep something reachable)
+                Opcode::MK_PRD.0,
+                1, // mk.prd 1 -> ref (heap object, reachable)
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (mut vm, result) = run_vm(&bytes);
+    let _ = result.expect("runs");
+    assert_eq!(vm.heap().live_count(), 2);
+    let freed = vm.collect_garbage();
+    assert!(
+        freed >= 1,
+        "GC should free at least 1 object, freed {freed}"
+    );
+}
+
+#[test]
+fn test_gc_preserves_reachable_globals() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(99)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0, // push 99
+                Opcode::MK_PRD.0,
+                1, // mk.prd 1 -> ref
+                Opcode::ST_GLB.0,
+                0,
+                0,
+                0,
+                0, // store to global[0]
+                Opcode::RET_U.0,
+            ],
+        )],
+    );
+    let (mut vm, result) = run_vm(&bytes);
+    let _ = result.expect("runs");
+    assert_eq!(vm.heap().live_count(), 1);
+    let freed = vm.collect_garbage();
+    assert_eq!(freed, 0, "GC should not free globally-reachable objects");
+    assert_eq!(vm.heap().live_count(), 1);
+}
+
+// ── Dynamic invocation ──────────────────────────────────────────────────
+
+#[test]
+fn test_direct_call_with_inv() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(10), ConstEntry::I32(5)],
+        &[
+            fn_def(
+                0,
+                0,
+                0,
+                vec![
+                    Opcode::LD_CST.0,
+                    0,
+                    Opcode::INV.0,
+                    1,
+                    0,
+                    0,
+                    0,
+                    Opcode::RET.0,
+                ],
+            ),
+            fn_def(
+                1,
+                1,
+                1,
+                vec![
+                    Opcode::LD_LOC.0,
+                    0,
+                    Opcode::LD_CST.0,
+                    1,
+                    Opcode::I_ADD.0,
+                    Opcode::RET.0,
+                ],
+            ),
+        ],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 15);
+}
+
+// ── Wide jump ───────────────────────────────────────────────────────────
+
+#[test]
+fn test_wide_jump() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(42)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::JMP_W.0,
+                2,
+                0,
+                0,
+                0,             // jmp.w +2, target = 7
+                Opcode::HLT.0, // offset 5, skipped
+                Opcode::NOP.0, // NOP at offset 6, skipped
+                Opcode::LD_CST.0,
+                0,             // offset 7, push 42
+                Opcode::RET.0, // offset 9
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 42);
+}
+
+// ── Integer negation ────────────────────────────────────────────────────
+
+#[test]
+fn test_int_negation() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(42)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![Opcode::LD_CST.0, 0, Opcode::I_NEG.0, Opcode::RET.0],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), -42);
+}
+
+// ── Float multiplication ────────────────────────────────────────────────
+
+#[test]
+fn test_float_multiply() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(3), ConstEntry::I32(4)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::CNV_ITF.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::CNV_ITF.0,
+                0,
+                Opcode::F_MUL.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    let f = result.expect("runs").as_float().expect("is float");
+    assert!((f - 12.0).abs() < f64::EPSILON);
+}
+
+// ── CMP_EQ ──────────────────────────────────────────────────────────────
+
+#[test]
+fn test_cmp_eq_equal_values() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(5)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::LD_CST.0,
+                0,
+                Opcode::CMP_EQ.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert!(
+        result.expect("runs").as_bool().expect("is bool"),
+        "5 == 5 should be true"
+    );
+}
+
+// ── Value try_as_ref ────────────────────────────────────────────────────
+
+#[test]
+fn test_value_try_as_ref() {
+    assert!(Value::from_ref(42).try_as_ref().is_some());
+    assert_eq!(Value::from_ref(42).try_as_ref(), Some(42));
+    assert!(Value::from_int(42).try_as_ref().is_none());
+    assert!(Value::UNIT.try_as_ref().is_none());
+}
+
+// ── Tier 2: EFF_DO cross-frame ───────────────────────────────────────────────
+
+/// Effect pool builder for tests.
+struct EffectDef {
+    id: u32,
+    name_const_idx: u32,
+    ops: Vec<EffectOpDef>,
+}
+
+struct EffectOpDef {
+    id: u32,
+    name_const_idx: u32,
+}
+
+/// Build a `.msbc` binary with an effect pool.
+fn make_msbc_with_effects(consts: &[ConstEntry], effects: &[EffectDef], fns: &[FnDef]) -> Vec<u8> {
+    let entry_fn_id: u32 = fns.first().map_or(0, |f| f.fn_id);
+
+    // ── Const pool ────────────────────────────────────────────────────────────
+    let mut const_section: Vec<u8> = vec![];
+    let const_count = u32::try_from(consts.len()).expect("fits u32");
+    const_section.extend_from_slice(&const_count.to_le_bytes());
+    for c in consts {
+        match c {
+            ConstEntry::I32(v) => {
+                const_section.push(0x01);
+                const_section.extend_from_slice(&v.to_le_bytes());
+            }
+            ConstEntry::Str(bytes) => {
+                const_section.push(0x05);
+                let len = u32::try_from(bytes.len()).expect("fits u32");
+                const_section.extend_from_slice(&len.to_le_bytes());
+                const_section.extend_from_slice(bytes);
+            }
+        }
+    }
+
+    // ── Type pool (empty) ─────────────────────────────────────────────────────
+    let type_section: Vec<u8> = 0u32.to_le_bytes().to_vec();
+
+    // ── Effect pool ───────────────────────────────────────────────────────────
+    let mut effect_section: Vec<u8> = vec![];
+    let effect_count = u32::try_from(effects.len()).expect("fits u32");
+    effect_section.extend_from_slice(&effect_count.to_le_bytes());
+    for eff in effects {
+        effect_section.extend_from_slice(&eff.id.to_le_bytes());
+        effect_section.extend_from_slice(&eff.name_const_idx.to_le_bytes());
+        let op_count = u16::try_from(eff.ops.len()).expect("fits u16");
+        effect_section.extend_from_slice(&op_count.to_le_bytes());
+        for op in &eff.ops {
+            effect_section.extend_from_slice(&op.id.to_le_bytes());
+            effect_section.extend_from_slice(&op.name_const_idx.to_le_bytes());
+            effect_section.extend_from_slice(&0u16.to_le_bytes()); // param_count = 0
+            effect_section.extend_from_slice(&0u32.to_le_bytes()); // ret_type_id = 0
+        }
+    }
+
+    // ── Function pool ─────────────────────────────────────────────────────────
+    let mut fn_section: Vec<u8> = vec![];
+    let fn_count = u32::try_from(fns.len()).expect("fits u32");
+    fn_section.extend_from_slice(&fn_count.to_le_bytes());
+    for f in fns {
+        fn_section.extend_from_slice(&f.fn_id.to_le_bytes());
+        fn_section.extend_from_slice(&0u32.to_le_bytes());
+        fn_section.extend_from_slice(&f.local_count.to_le_bytes());
+        fn_section.extend_from_slice(&f.param_count.to_le_bytes());
+        let max_stack: u16 = f.max_stack.unwrap_or(16);
+        fn_section.extend_from_slice(&max_stack.to_le_bytes());
+        fn_section.extend_from_slice(&0u16.to_le_bytes()); // effect_mask
+        fn_section.extend_from_slice(&0u16.to_le_bytes()); // upvalue_count
+        let code_len = u32::try_from(f.code.len()).expect("fits u32");
+        fn_section.extend_from_slice(&code_len.to_le_bytes());
+        fn_section.extend_from_slice(&f.code);
+        let handler_count = u16::try_from(f.handlers.len()).expect("fits u16");
+        fn_section.extend_from_slice(&handler_count.to_le_bytes());
+        for &(eid, hfn) in &f.handlers {
+            fn_section.push(eid);
+            fn_section.extend_from_slice(&hfn.to_le_bytes());
+        }
+    }
+
+    // ── Foreign pool (empty for tests) ──────────────────────────────────────
+    let foreign_section: Vec<u8> = 0u32.to_le_bytes().to_vec(); // count = 0
+
+    // ── Header ────────────────────────────────────────────────────────────────
+    let header_size: u32 = 40;
+    let const_off = header_size;
+    let type_off = const_off + u32::try_from(const_section.len()).expect("fits u32");
+    let effect_off = type_off + u32::try_from(type_section.len()).expect("fits u32");
+    let foreign_off = effect_off + u32::try_from(effect_section.len()).expect("fits u32");
+    let fn_off = foreign_off + u32::try_from(foreign_section.len()).expect("fits u32");
+
+    let mut header: Vec<u8> = Vec::with_capacity(40);
+    header.extend_from_slice(b"MUSI");
+    header.extend_from_slice(&1u16.to_le_bytes());
+    header.extend_from_slice(&0u16.to_le_bytes());
+    header.extend_from_slice(&4u32.to_le_bytes());
+    header.extend_from_slice(&entry_fn_id.to_le_bytes());
+    header.extend_from_slice(&const_off.to_le_bytes());
+    header.extend_from_slice(&type_off.to_le_bytes());
+    header.extend_from_slice(&effect_off.to_le_bytes());
+    header.extend_from_slice(&foreign_off.to_le_bytes());
+    header.extend_from_slice(&fn_off.to_le_bytes());
+
+    debug_assert_eq!(header.len(), 36);
+    let checksum = crc32_slice(&header);
+    header.extend_from_slice(&checksum.to_le_bytes());
+    debug_assert_eq!(header.len(), 40);
+
+    let mut out = header;
+    out.extend_from_slice(&const_section);
+    out.extend_from_slice(&type_section);
+    out.extend_from_slice(&effect_section);
+    out.extend_from_slice(&foreign_section);
+    out.extend_from_slice(&fn_section);
+    out
+}
+
+#[test]
+fn test_eff_do_cross_frame_finds_handler() {
+    let effect_id: u8 = 1;
+    let bytes = make_msbc_with_effects(
+        &[ConstEntry::I32(42)],
+        &[EffectDef {
+            id: 1,
+            name_const_idx: 0,
+            ops: vec![EffectOpDef {
+                id: 1,
+                name_const_idx: 0,
+            }],
+        }],
+        &[
+            FnDef {
+                fn_id: 0,
+                local_count: 0,
+                param_count: 0,
+                code: vec![
+                    Opcode::CONT_MARK.0,
+                    effect_id, // push handler for effect 1
+                    Opcode::INV.0,
+                    1,
+                    0,
+                    0,
+                    0, // call fn 1
+                    Opcode::RET.0,
+                ],
+                handlers: vec![(effect_id, 2)],
+                max_stack: None,
+            },
+            fn_def(
+                1,
+                0,
+                0,
+                vec![
+                    Opcode::CONT_SAVE.0,
+                    1,
+                    0,
+                    0,
+                    0, // do effect op_id=1
+                    Opcode::RET.0,
+                ],
+            ),
+            fn_def(
+                2,
+                0,
+                0,
+                vec![
+                    Opcode::LD_CST.0,
+                    0, // push 42
+                    Opcode::RET.0,
+                ],
+            ),
+        ],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 42);
+}
+
+#[test]
+fn test_eff_res_resumes_continuation() {
+    let effect_id: u8 = 1;
+    let bytes = make_msbc_with_effects(
+        &[ConstEntry::I32(99)],
+        &[EffectDef {
+            id: 1,
+            name_const_idx: 0,
+            ops: vec![EffectOpDef {
+                id: 1,
+                name_const_idx: 0,
+            }],
+        }],
+        &[
+            FnDef {
+                fn_id: 0,
+                local_count: 0,
+                param_count: 0,
+                code: vec![
+                    Opcode::CONT_MARK.0,
+                    effect_id,
+                    Opcode::INV.0,
+                    1,
+                    0,
+                    0,
+                    0,
+                    Opcode::RET.0,
+                ],
+                handlers: vec![(effect_id, 2)],
+                max_stack: None,
+            },
+            fn_def(
+                1,
+                0,
+                0,
+                vec![Opcode::CONT_SAVE.0, 1, 0, 0, 0, Opcode::RET.0],
+            ),
+            fn_def(
+                2,
+                0,
+                0,
+                vec![
+                    Opcode::LD_CST.0,
+                    0, // push 99
+                    Opcode::CONT_RESUME.0,
+                    0,
+                    0,
+                    0,
+                    0,               // resume with 99
+                    Opcode::RET_U.0, // should not reach
+                ],
+            ),
+        ],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 99);
+}
+
+// ── Tier 3: Value task/chan tags ──────────────────────────────────────────────
+
+#[test]
+fn test_value_task_roundtrip() {
+    let v = Value::from_task(42);
+    assert_eq!(v.as_task_id().expect("is task"), 42);
+    assert!(v.as_int().is_err());
+    assert!(v.as_chan_id().is_err());
+}
+
+#[test]
+fn test_value_chan_roundtrip() {
+    let v = Value::from_chan(7);
+    assert_eq!(v.as_chan_id().expect("is chan"), 7);
+    assert!(v.as_int().is_err());
+    assert!(v.as_task_id().is_err());
+}
+
+// ── Concurrency tests ────────────────────────────────────────────────────────
+
+/// Build bytecode from a sequence of byte slices.
+fn code(parts: &[&[u8]]) -> Vec<u8> {
+    let mut out = vec![];
+    for p in parts {
+        out.extend_from_slice(p);
+    }
+    out
+}
+
+/// Encode a u32-operand opcode as a 5-byte slice.
+fn op32(op: Opcode, operand: u32) -> [u8; 5] {
+    let b = operand.to_le_bytes();
+    [op.0, b[0], b[1], b[2], b[3]]
+}
+
+#[test]
+fn test_spawn_returns_task_handle() {
+    let child_code = vec![Opcode::LD_CST.0, 0, Opcode::RET.0];
+    let entry_code = code(&[&op32(Opcode::TSK_SPN, 1), &[Opcode::RET.0]]);
+    let bytes = make_msbc(
+        &[ConstEntry::I32(42)],
+        &[fn_def(0, 0, 0, entry_code), fn_def(1, 0, 0, child_code)],
+    );
+    let (_, result) = run_vm(&bytes);
+    let v = result.expect("runs");
+    assert_eq!(v.as_task_id().expect("is task"), 1);
+}
+
+#[test]
+fn test_spawn_await_returns_child_value() {
+    let child_code = vec![Opcode::LD_CST.0, 0, Opcode::RET.0];
+    let entry_code = code(&[
+        &op32(Opcode::TSK_SPN, 1),
+        &[Opcode::TSK_AWT.0, 0],
+        &[Opcode::RET.0],
+    ]);
+    let bytes = make_msbc(
+        &[ConstEntry::I32(42)],
+        &[fn_def(0, 0, 0, entry_code), fn_def(1, 0, 0, child_code)],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 42);
+}
+
+#[test]
+fn test_channel_send_recv_fifo() {
+    // fn 1 (sender): chan in local 0, sends 10, 20, 30
+    let chs = op32(Opcode::TSK_CHS, 0);
+    let sender_code = code(&[
+        &[Opcode::LD_LOC.0, 0, Opcode::LD_CST.0, 0],
+        &chs,
+        &[Opcode::POP.0],
+        &[Opcode::LD_LOC.0, 0, Opcode::LD_CST.0, 1],
+        &chs,
+        &[Opcode::POP.0],
+        &[Opcode::LD_LOC.0, 0, Opcode::LD_CST.0, 2],
+        &chs,
+        &[Opcode::POP.0, Opcode::RET_U.0],
+    ]);
+
+    let cmk = op32(Opcode::TSK_CMK, 0);
+    let spn = op32(Opcode::TSK_SPN, 1);
+    let chr = op32(Opcode::TSK_CHR, 0);
+    let entry_code = code(&[
+        &cmk,
+        &[Opcode::ST_LOC.0, 0],
+        &[Opcode::LD_LOC.0, 0],
+        &spn,
+        &[Opcode::TSK_AWT.0, 0, Opcode::POP.0],
+        &[Opcode::LD_LOC.0, 0],
+        &chr,
+        &[Opcode::LD_LOC.0, 0],
+        &chr,
+        &[Opcode::I_ADD.0],
+        &[Opcode::LD_LOC.0, 0],
+        &chr,
+        &[Opcode::I_ADD.0, Opcode::RET.0],
+    ]);
+
+    let bytes = make_msbc(
+        &[
+            ConstEntry::I32(10),
+            ConstEntry::I32(20),
+            ConstEntry::I32(30),
+        ],
+        &[
+            fn_def(0, 1, 0, entry_code),
+            FnDef {
+                fn_id: 1,
+                local_count: 1,
                 param_count: 1,
-                local_count: 0,
-                code_offset: 0,
-                code_length: 0,
-                return_kind: musi_codegen::module::ReturnKind::Unknown,
-            },
-            FunctionEntry {
-                symbol_idx: 1,
-                param_count: 0,
-                local_count: 0,
-                code_offset: 0,
-                code_length: code_len,
-                return_kind: musi_codegen::module::ReturnKind::Unknown,
+                code: sender_code,
+                handlers: vec![],
+                max_stack: None,
             },
         ],
-        code,
-        method_table: Vec::new(),
-    }
-}
-
-#[test]
-fn hello_world_executes_without_error() {
-    let module = hello_module();
-    let mut vm = Vm::new(module, NativeRegistry::new(&[]));
-    // entry point = fn 1 (main)
-    let result = vm.run(1).expect("vm run");
-    assert_eq!(result, Value::Unit);
-}
-
-#[test]
-fn halt_returns_top_of_stack() {
-    // Module: fn 0 = main: LdImmI64(99), Halt
-    let mut code = Vec::new();
-    Opcode::LdImmI64(99).encode_into(&mut code);
-    Opcode::Halt.encode_into(&mut code);
-    let code_len = u32::try_from(code.len()).expect("fits");
-
-    let module = Module {
-        const_pool: vec![],
-        symbol_table: vec![SymbolEntry {
-            name: "main".into(),
-            flags: SymbolFlags::new(SymbolFlags::EXPORT),
-            intrinsic_id: 0xFFFF,
-            abi: Box::from(""),
-            link_lib: None,
-            link_name: None,
-        }],
-        function_table: vec![FunctionEntry {
-            symbol_idx: 0,
-            param_count: 0,
-            local_count: 0,
-            code_offset: 0,
-            code_length: code_len,
-            return_kind: musi_codegen::module::ReturnKind::Unknown,
-        }],
-        code,
-        method_table: Vec::new(),
-    };
-
-    let mut vm = Vm::new(module, NativeRegistry::new(&[]));
-    let result = vm.run(0).expect("vm run");
-    assert_eq!(result, Value::Int(99));
-}
-
-#[test]
-fn local_store_and_load() {
-    // main: LdImmI64(7), StLoc(0), LdLoc(0), Halt  (local_count=1)
-    let mut code = Vec::new();
-    Opcode::LdImmI64(7).encode_into(&mut code);
-    Opcode::StLoc(0).encode_into(&mut code);
-    Opcode::LdLoc(0).encode_into(&mut code);
-    Opcode::Halt.encode_into(&mut code);
-    let code_len = u32::try_from(code.len()).expect("fits");
-
-    let module = Module {
-        const_pool: vec![],
-        symbol_table: vec![SymbolEntry {
-            name: "main".into(),
-            flags: SymbolFlags::new(SymbolFlags::EXPORT),
-            intrinsic_id: 0xFFFF,
-            abi: Box::from(""),
-            link_lib: None,
-            link_name: None,
-        }],
-        function_table: vec![FunctionEntry {
-            symbol_idx: 0,
-            param_count: 0,
-            local_count: 1,
-            code_offset: 0,
-            code_length: code_len,
-            return_kind: musi_codegen::module::ReturnKind::Unknown,
-        }],
-        code,
-        method_table: Vec::new(),
-    };
-
-    let mut vm = Vm::new(module, NativeRegistry::new(&[]));
-    let result = vm.run(0).expect("vm run");
-    assert_eq!(result, Value::Int(7));
-}
-
-#[test]
-fn ret_returns_to_caller() {
-    // fn 0 (callee): LdImmI64(42), Ret
-    // fn 1 (main):   Call(0), Halt
-    let mut callee_code = Vec::new();
-    Opcode::LdImmI64(42).encode_into(&mut callee_code);
-    Opcode::Ret.encode_into(&mut callee_code);
-
-    let mut main_code = Vec::new();
-    Opcode::Call(0).encode_into(&mut main_code);
-    Opcode::Halt.encode_into(&mut main_code);
-
-    let callee_len = u32::try_from(callee_code.len()).expect("fits");
-    let callee_offset = 0u32;
-    let main_offset = callee_len;
-    let main_len = u32::try_from(main_code.len()).expect("fits");
-
-    let mut code = callee_code;
-    code.extend_from_slice(&main_code);
-
-    let module = Module {
-        const_pool: vec![],
-        symbol_table: vec![
-            SymbolEntry {
-                name: "callee".into(),
-                flags: SymbolFlags::new(0),
-                intrinsic_id: 0xFFFF,
-                abi: Box::from(""),
-                link_lib: None,
-                link_name: None,
-            },
-            SymbolEntry {
-                name: "main".into(),
-                flags: SymbolFlags::new(SymbolFlags::EXPORT),
-                intrinsic_id: 0xFFFF,
-                abi: Box::from(""),
-                link_lib: None,
-                link_name: None,
-            },
-        ],
-        function_table: vec![
-            FunctionEntry {
-                symbol_idx: 0,
-                param_count: 0,
-                local_count: 0,
-                code_offset: callee_offset,
-                code_length: callee_len,
-                return_kind: musi_codegen::module::ReturnKind::Unknown,
-            },
-            FunctionEntry {
-                symbol_idx: 1,
-                param_count: 0,
-                local_count: 0,
-                code_offset: main_offset,
-                code_length: main_len,
-                return_kind: musi_codegen::module::ReturnKind::Unknown,
-            },
-        ],
-        code,
-        method_table: Vec::new(),
-    };
-
-    let mut vm = Vm::new(module, NativeRegistry::new(&[]));
-    let result = vm.run(1).expect("vm run");
-    assert_eq!(result, Value::Int(42));
-}
-
-#[test]
-fn unknown_function_index_is_error() {
-    let module = Module::new();
-    let mut vm = Vm::new(module, NativeRegistry::new(&[]));
-    let err = vm.run(0).expect_err("should fail");
-    assert!(matches!(err, VmError::FunctionOutOfBounds(0)));
-}
-
-/// Tests that a while loop counting y from 0 to 10 terminates correctly.
-///
-/// Equivalent to:
-///   const x := 10;  (slot 0)
-///   var y := 0;     (slot 1)
-///   while y < x loop ( y <- y + 1; );
-///   // result: y == 10
-#[test]
-fn while_loop_counts_to_10() {
-    let mut code: Vec<u8> = Vec::new();
-
-    // const x := 10  (slot 0)
-    Opcode::LdImmI64(10).encode_into(&mut code); // 9 bytes  [0..9)
-    Opcode::StLoc(0).encode_into(&mut code); // 3 bytes  [9..12)
-    Opcode::LdImmUnit.encode_into(&mut code); // 1 byte   [12)
-    Opcode::Drop.encode_into(&mut code); // 1 byte   [13)
-
-    // var y := 0  (slot 1)
-    Opcode::LdImmI64(0).encode_into(&mut code); // 9 bytes  [14..23)
-    Opcode::StLoc(1).encode_into(&mut code); // 3 bytes  [23..26)
-    Opcode::LdImmUnit.encode_into(&mut code); // 1 byte   [26)
-    Opcode::Drop.encode_into(&mut code); // 1 byte   [27)
-
-    // while y < x -- loop start at byte 28
-    let loop_start: usize = 28;
-    assert_eq!(code.len(), loop_start, "loop_start mismatch");
-
-    Opcode::LdLoc(1).encode_into(&mut code); // 3 bytes  [28..31)  load y
-    Opcode::LdLoc(0).encode_into(&mut code); // 3 bytes  [31..34)  load x
-    Opcode::LtI64.encode_into(&mut code); // 1 byte   [34)      y < x
-
-    // BrFalse placeholder -- will be patched
-    let brfalse_pos = code.len(); // 35
-    code.push(0x62); // BR_FALSE tag
-    code.extend_from_slice(&i32::MAX.to_le_bytes()); // placeholder
-    // code.len() == 40
-
-    // loop body: y <- y + 1
-    Opcode::LdLoc(1).encode_into(&mut code); // 3 bytes  [40..43)
-    Opcode::LdImmI64(1).encode_into(&mut code); // 9 bytes  [43..52)
-    Opcode::AddI64.encode_into(&mut code); // 1 byte   [52)
-    Opcode::StLoc(1).encode_into(&mut code); // 3 bytes  [53..56)
-    Opcode::LdImmUnit.encode_into(&mut code); // 1 byte   [56)  assign → Unit
-    Opcode::Drop.encode_into(&mut code); // 1 byte   [57)  drop stmt
-    Opcode::LdImmUnit.encode_into(&mut code); // 1 byte   [58)  block tail
-    Opcode::Drop.encode_into(&mut code); // 1 byte   [59)  drop body
-
-    // Br back to loop_start=28
-    // after_instr = code.len() + 5 = 65; offset = 28 - 65 = -37
-    let br_back_after = code.len() + 5; // 65
-    let br_offset =
-        i32::try_from(loop_start as isize - br_back_after as isize).expect("offset fits i32");
-    assert_eq!(br_offset, -37, "br_back offset");
-    Opcode::Br(br_offset).encode_into(&mut code); // 5 bytes  [60..65)
-
-    // patch BrFalse: target = code.len() = 65
-    let exit_pos = code.len(); // 65
-    let brfalse_after = brfalse_pos + 5; // 40
-    let brfalse_offset =
-        i32::try_from(exit_pos as isize - brfalse_after as isize).expect("brfalse offset fits i32");
-    assert_eq!(brfalse_offset, 25, "brfalse offset");
-    code[brfalse_pos + 1..brfalse_pos + 5].copy_from_slice(&brfalse_offset.to_le_bytes());
-
-    // while result = Unit
-    Opcode::LdImmUnit.encode_into(&mut code); // 1 byte   [65)
-    Opcode::Drop.encode_into(&mut code); // 1 byte   [66)
-
-    // load y and halt to inspect value
-    Opcode::LdLoc(1).encode_into(&mut code); // 3 bytes  [67..70)
-    Opcode::Halt.encode_into(&mut code); // 1 byte   [70)
-
-    let code_len = u32::try_from(code.len()).expect("fits");
-
-    let module = Module {
-        const_pool: vec![],
-        symbol_table: vec![SymbolEntry {
-            name: "main".into(),
-            flags: SymbolFlags::new(SymbolFlags::EXPORT),
-            intrinsic_id: 0xFFFF,
-            abi: Box::from(""),
-            link_lib: None,
-            link_name: None,
-        }],
-        function_table: vec![FunctionEntry {
-            symbol_idx: 0,
-            param_count: 0,
-            local_count: 2,
-            code_offset: 0,
-            code_length: code_len,
-            return_kind: musi_codegen::module::ReturnKind::Unknown,
-        }],
-        code,
-        method_table: Vec::new(),
-    };
-
-    let mut vm = Vm::new(module, NativeRegistry::new(&[]));
-    let result = vm.run(0).expect("while loop should terminate");
-    assert_eq!(result, Value::Int(10), "y should equal 10 after loop");
-}
-
-#[test]
-fn factorial_compiles_and_runs() {
-    let result = run_src(
-        r#"
-fn factorial(n: Int): Int => if n <= 1 then 1 else n * factorial(n - 1);
-factorial(10);
-"#,
     );
-    assert_eq!(result, Value::Unit);
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 60);
 }
 
 #[test]
-fn lambda_double_compiles_and_runs() {
-    let result = run_src(
-        r#"
-const f := fn(x: Int): Int => x * 2;
-f(21);
-"#,
-    );
-    assert_eq!(result, Value::Unit);
-}
+fn test_channel_recv_empty_suspends_and_resumes() {
+    let chr = op32(Opcode::TSK_CHR, 0);
+    let recv_code = code(&[&[Opcode::LD_LOC.0, 0], &chr, &[Opcode::RET.0]]);
 
-#[test]
-fn choice_match_compiles_and_runs() {
-    let _result = run_src(
-        r#"
-choice Option { Some(Int) | None };
-const x := .Some(42);
-match x with (
-    .Some(v) => v
-  | .None    => 0
-);
-"#,
-    );
-}
+    let cmk = op32(Opcode::TSK_CMK, 0);
+    let spn = op32(Opcode::TSK_SPN, 1);
+    let chs = op32(Opcode::TSK_CHS, 0);
+    let entry_code = code(&[
+        &cmk,
+        &[Opcode::ST_LOC.0, 0],
+        &[Opcode::LD_LOC.0, 0],
+        &spn,
+        &[Opcode::ST_LOC.0, 1],
+        &[Opcode::LD_LOC.0, 0, Opcode::LD_CST.0, 0],
+        &chs,
+        &[Opcode::POP.0],
+        &[Opcode::LD_LOC.0, 1, Opcode::TSK_AWT.0, 0, Opcode::RET.0],
+    ]);
 
-#[test]
-fn record_construction_compiles_and_runs() {
-    let _result = run_src(
-        r#"
-record Point { x: Int, y: Int };
-const p := Point.{ x := 1, y := 2 };
-p.x;
-"#,
-    );
-}
-
-#[test]
-fn new_obj_and_ld_fld() {
-    let mut code = Vec::new();
-    Opcode::LdImmI64(10).encode_into(&mut code);
-    Opcode::LdImmI64(20).encode_into(&mut code);
-    Opcode::NewObj {
-        type_tag: 0,
-        field_count: 2,
-    }
-    .encode_into(&mut code);
-    Opcode::LdFld(1).encode_into(&mut code);
-    Opcode::Halt.encode_into(&mut code);
-    let code_len = u32::try_from(code.len()).expect("fits");
-
-    let module = Module {
-        const_pool: vec![],
-        symbol_table: vec![SymbolEntry {
-            name: "main".into(),
-            flags: SymbolFlags::new(0),
-            intrinsic_id: 0xFFFF,
-            abi: Box::from(""),
-            link_lib: None,
-            link_name: None,
-        }],
-        function_table: vec![FunctionEntry {
-            symbol_idx: 0,
-            param_count: 0,
-            local_count: 0,
-            code_offset: 0,
-            code_length: code_len,
-            return_kind: musi_codegen::module::ReturnKind::Unknown,
-        }],
-        code,
-        method_table: Vec::new(),
-    };
-    let mut vm = Vm::new(module, NativeRegistry::new(&[]));
-    let result = vm.run(0).expect("vm run");
-    assert_eq!(result, Value::Int(20));
-}
-
-#[test]
-fn ld_tag_reads_discriminant() {
-    let mut code = Vec::new();
-    Opcode::LdImmI64(42).encode_into(&mut code);
-    Opcode::LdImmUnit.encode_into(&mut code);
-    Opcode::NewObj {
-        type_tag: 0,
-        field_count: 2,
-    }
-    .encode_into(&mut code);
-    Opcode::LdTag.encode_into(&mut code);
-    Opcode::Halt.encode_into(&mut code);
-    let code_len = u32::try_from(code.len()).expect("fits");
-
-    let module = Module {
-        const_pool: vec![],
-        symbol_table: vec![SymbolEntry {
-            name: "main".into(),
-            flags: SymbolFlags::new(0),
-            intrinsic_id: 0xFFFF,
-            abi: Box::from(""),
-            link_lib: None,
-            link_name: None,
-        }],
-        function_table: vec![FunctionEntry {
-            symbol_idx: 0,
-            param_count: 0,
-            local_count: 0,
-            code_offset: 0,
-            code_length: code_len,
-            return_kind: musi_codegen::module::ReturnKind::Unknown,
-        }],
-        code,
-        method_table: Vec::new(),
-    };
-    let mut vm = Vm::new(module, NativeRegistry::new(&[]));
-    let result = vm.run(0).expect("vm run");
-    assert_eq!(result, Value::Int(42));
-}
-
-#[test]
-fn ld_fn_idx_and_call_dynamic() {
-    // fn 0 (double): LdLoc(0), LdImmI64(2), MulI64, Ret
-    let mut fn0_code = Vec::new();
-    Opcode::LdLoc(0).encode_into(&mut fn0_code);
-    Opcode::LdImmI64(2).encode_into(&mut fn0_code);
-    Opcode::MulI64.encode_into(&mut fn0_code);
-    Opcode::Ret.encode_into(&mut fn0_code);
-    let fn0_len = u32::try_from(fn0_code.len()).expect("fits");
-
-    // fn 1 (main): LdImmI64(21), LdFnIdx(0), CallDynamic, Halt
-    let mut fn1_code = Vec::new();
-    Opcode::LdImmI64(21).encode_into(&mut fn1_code);
-    Opcode::LdFnIdx(0).encode_into(&mut fn1_code);
-    Opcode::CallDynamic.encode_into(&mut fn1_code);
-    Opcode::Halt.encode_into(&mut fn1_code);
-    let fn1_offset = fn0_len;
-    let fn1_len = u32::try_from(fn1_code.len()).expect("fits");
-
-    let mut code = fn0_code;
-    code.extend_from_slice(&fn1_code);
-
-    let module = Module {
-        const_pool: vec![],
-        symbol_table: vec![
-            SymbolEntry {
-                name: "double".into(),
-                flags: SymbolFlags::new(0),
-                intrinsic_id: 0xFFFF,
-                abi: Box::from(""),
-                link_lib: None,
-                link_name: None,
-            },
-            SymbolEntry {
-                name: "main".into(),
-                flags: SymbolFlags::new(0),
-                intrinsic_id: 0xFFFF,
-                abi: Box::from(""),
-                link_lib: None,
-                link_name: None,
-            },
-        ],
-        function_table: vec![
-            FunctionEntry {
-                symbol_idx: 0,
+    let bytes = make_msbc(
+        &[ConstEntry::I32(99)],
+        &[
+            fn_def(0, 2, 0, entry_code),
+            FnDef {
+                fn_id: 1,
+                local_count: 1,
                 param_count: 1,
-                local_count: 0,
-                code_offset: 0,
-                code_length: fn0_len,
-                return_kind: musi_codegen::module::ReturnKind::Unknown,
-            },
-            FunctionEntry {
-                symbol_idx: 1,
-                param_count: 0,
-                local_count: 0,
-                code_offset: fn1_offset,
-                code_length: fn1_len,
-                return_kind: musi_codegen::module::ReturnKind::Unknown,
+                code: recv_code,
+                handlers: vec![],
+                max_stack: None,
             },
         ],
-        code,
-        method_table: Vec::new(),
-    };
-    let mut vm = Vm::new(module, NativeRegistry::new(&[]));
-    let result = vm.run(1).expect("vm run");
-    assert_eq!(result, Value::Int(42));
-}
-
-#[test]
-fn dup_clones_top_of_stack() {
-    let mut code = Vec::new();
-    Opcode::LdImmI64(7).encode_into(&mut code);
-    Opcode::Dup.encode_into(&mut code);
-    Opcode::AddI64.encode_into(&mut code);
-    Opcode::Halt.encode_into(&mut code);
-    let code_len = u32::try_from(code.len()).expect("fits");
-
-    let module = Module {
-        const_pool: vec![],
-        symbol_table: vec![SymbolEntry {
-            name: "main".into(),
-            flags: SymbolFlags::new(0),
-            intrinsic_id: 0xFFFF,
-            abi: Box::from(""),
-            link_lib: None,
-            link_name: None,
-        }],
-        function_table: vec![FunctionEntry {
-            symbol_idx: 0,
-            param_count: 0,
-            local_count: 0,
-            code_offset: 0,
-            code_length: code_len,
-            return_kind: musi_codegen::module::ReturnKind::Unknown,
-        }],
-        code,
-        method_table: Vec::new(),
-    };
-    let mut vm = Vm::new(module, NativeRegistry::new(&[]));
-    let result = vm.run(0).expect("vm run");
-    assert_eq!(result, Value::Int(14));
-}
-
-#[test]
-fn ufcs_single_arg() {
-    let result = run_src(
-        r#"
-fn double(n: Int): Int => n * 2;
-const x := 5.double();
-x;
-"#,
     );
-    assert_eq!(result, Value::Unit);
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 99);
 }
 
 #[test]
-fn ufcs_two_arg() {
-    let result = run_src(
-        r#"
-fn my_add(a: Int, b: Int): Int => a + b;
-const r := 3.my_add(4);
-r;
-"#,
+fn test_multiple_tasks_all_complete() {
+    let fn1 = vec![Opcode::LD_CST.0, 0, Opcode::RET.0];
+    let fn2 = vec![Opcode::LD_CST.0, 1, Opcode::RET.0];
+    let fn3 = vec![Opcode::LD_CST.0, 2, Opcode::RET.0];
+
+    let entry_code = code(&[
+        &op32(Opcode::TSK_SPN, 1),
+        &[Opcode::ST_LOC.0, 0],
+        &op32(Opcode::TSK_SPN, 2),
+        &[Opcode::ST_LOC.0, 1],
+        &op32(Opcode::TSK_SPN, 3),
+        &[Opcode::ST_LOC.0, 2],
+        &[Opcode::LD_LOC.0, 0, Opcode::TSK_AWT.0, 0],
+        &[Opcode::LD_LOC.0, 1, Opcode::TSK_AWT.0, 0],
+        &[Opcode::I_ADD.0],
+        &[Opcode::LD_LOC.0, 2, Opcode::TSK_AWT.0, 0],
+        &[Opcode::I_ADD.0, Opcode::RET.0],
+    ]);
+
+    let bytes = make_msbc(
+        &[
+            ConstEntry::I32(10),
+            ConstEntry::I32(20),
+            ConstEntry::I32(30),
+        ],
+        &[
+            fn_def(0, 3, 0, entry_code),
+            fn_def(1, 0, 0, fn1),
+            fn_def(2, 0, 0, fn2),
+            fn_def(3, 0, 0, fn3),
+        ],
     );
-    assert_eq!(result, Value::Unit);
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 60);
 }
 
 #[test]
-fn class_given_dispatch() {
-    let result = run_src(
-        r#"
-class Eq['T] {
-    fn eq(a: 'T, b: 'T): Bool;
-};
+fn test_deadlock_two_tasks_mutual_await() {
+    let chr = op32(Opcode::TSK_CHR, 0);
+    let child_code = code(&[&[Opcode::LD_LOC.0, 0], &chr, &[Opcode::RET.0]]);
+    let entry_code = code(&[
+        &op32(Opcode::TSK_CMK, 0),
+        &op32(Opcode::TSK_SPN, 1),
+        &[Opcode::TSK_AWT.0, 0, Opcode::RET.0],
+    ]);
 
-given Eq[Int] {
-    fn eq(a: Int, b: Int): Bool => a = b;
-};
-
-const x := 5;
-const y := 5;
-const same := x.eq(y);
-same;
-"#,
+    let bytes = make_msbc(
+        &[],
+        &[
+            fn_def(0, 0, 0, entry_code),
+            FnDef {
+                fn_id: 1,
+                local_count: 1,
+                param_count: 1,
+                code: child_code,
+                handlers: vec![],
+                max_stack: None,
+            },
+        ],
     );
-    assert_eq!(result, Value::Unit);
-}
-
-#[test]
-fn user_type_operator_dispatch_via_given() {
-    // given Add[Vec2] lets v1.add(v2) dispatch to user-defined method without panic
-    let _result = run_src(
-        r#"
-record Vec2 { x: Int, y: Int };
-
-given Add[Vec2] {
-    fn add(a: Vec2, b: Vec2): Vec2 => Vec2.{ x := a.x + b.x, y := a.y + b.y };
-};
-
-const v1 := Vec2.{ x := 1, y := 2 };
-const v2 := Vec2.{ x := 3, y := 4 };
-const v3 := v1.add(v2);
-writeln(int_to_string(v3.x));
-"#,
+    let (_, result) = run_vm(&bytes);
+    assert!(
+        matches!(&result, Err(VmError::Runtime { source, .. }) if matches!(**source, VmError::Deadlock)),
+        "expected Deadlock, got {result:?}"
     );
 }
 
 #[test]
-fn match_arm_guard_filters_correctly() {
-    let _r = run_src(
-        r#"
-choice Num { Small(Int) | Large(Int) };
-const x := .Small(3);
-const y := .Large(10);
-const r1 := match x with (
-    .Small(v) if v > 5 => 1
-  | .Small(v) => 2
-  | .Large(_) => 3
-);
-const r2 := match y with (
-    .Small(v) if v > 5 => 1
-  | .Small(v) => 2
-  | .Large(_) => 3
-);
-writeln(int_to_string(r1));
-writeln(int_to_string(r2));
-"#,
+fn test_gc_traces_suspended_task_stacks() {
+    // Spawn + await completes normally. Trigger GC mid-execution to verify
+    // suspended task stacks are traced without panicking.
+    let child_code = vec![Opcode::LD_CST.0, 0, Opcode::RET.0];
+    let entry_code = code(&[
+        &op32(Opcode::TSK_SPN, 1),
+        &[Opcode::TSK_AWT.0, 0, Opcode::RET.0],
+    ]);
+
+    let bytes = make_msbc(
+        &[ConstEntry::I32(42)],
+        &[fn_def(0, 0, 0, entry_code), fn_def(1, 0, 0, child_code)],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 42);
+
+    // Also verify GC on a fresh VM with scheduler active
+    let module = load(&bytes).expect("loads");
+    verify(&module).expect("verifies");
+    let mut vm = Vm::new(module);
+    vm.setup_call(0, &[]).expect("setup ok");
+    let freed = vm.collect_garbage();
+    assert_eq!(freed, 0);
+}
+
+#[test]
+fn test_sync_program_no_scheduler_overhead() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(7)],
+        &[fn_def(0, 0, 0, vec![Opcode::LD_CST.0, 0, Opcode::RET.0])],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 7);
+}
+
+// ── Comparison opcodes ──────────────────────────────────────────────────────
+
+#[test]
+fn test_cmp_le_true_when_equal() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(5), ConstEntry::I32(5)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::CMP_LE.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert!(result.expect("runs").as_bool().expect("is bool"));
+}
+
+#[test]
+fn test_cmp_lt_true() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(3), ConstEntry::I32(5)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::CMP_LT.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert!(result.expect("runs").as_bool().expect("is bool"));
+}
+
+#[test]
+fn test_cmp_gt_true() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(7), ConstEntry::I32(3)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::CMP_GT.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert!(result.expect("runs").as_bool().expect("is bool"));
+}
+
+// ── Float comparison ────────────────────────────────────────────────────────
+
+#[test]
+fn test_cmp_f_eq_true() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(5), ConstEntry::I32(5)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::CNV_ITF.0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::CNV_ITF.0,
+                Opcode::CMP_F_EQ.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert!(result.expect("runs").as_bool().expect("is bool"));
+}
+
+// ── Variant construction edge cases ─────────────────────────────────────────
+
+#[test]
+fn test_make_variant_multi_field_via_mk_prd_field_0() {
+    // MK_PRD wraps two values into a product. MK_VAR stores the product ref
+    // as the variant's payload (fields[0]). LD_PAY 0 extracts the product ref,
+    // then LD_FLD 0 reads field 0 of the product.
+    let bytes = make_msbc(
+        &[ConstEntry::I32(10), ConstEntry::I32(20)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::MK_PRD.0,
+                2,
+                Opcode::MK_VAR.0,
+                1,
+                Opcode::LD_PAY.0,
+                0, // extract payload (product ref)
+                Opcode::LD_FLD.0,
+                0, // field 0 of the product
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 10);
+}
+
+#[test]
+fn test_make_variant_multi_field_via_mk_prd_field_1() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(10), ConstEntry::I32(20)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::MK_PRD.0,
+                2,
+                Opcode::MK_VAR.0,
+                1,
+                Opcode::LD_PAY.0,
+                0, // extract payload (product ref)
+                Opcode::LD_FLD.0,
+                1, // field 1 of the product
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 20);
+}
+
+// ── Verifier boundary conditions ────────────────────────────────────────────
+
+#[test]
+fn test_verifier_accepts_max_stack_exact_match() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(1), ConstEntry::I32(2)],
+        &[fn_def_with_max_stack(
+            0,
+            0,
+            0,
+            2,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::I_ADD.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let module = load(&bytes).expect("loads");
+    let result = verify(&module);
+    assert!(
+        result.is_ok(),
+        "max_stack=2 should pass when peak is 2, got {result:?}"
     );
 }
 
 #[test]
-fn dot_prefix_pattern_in_match() {
-    let _r = run_src(
-        r#"
-const x := .Some(42);
-const result := match x with (
-    .Some(v) => v
-  | .None => 0
-);
-writeln(int_to_string(result));
-"#,
+fn test_verifier_rejects_max_stack_exceeded_by_one() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(1), ConstEntry::I32(2)],
+        &[fn_def_with_max_stack(
+            0,
+            0,
+            0,
+            1,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::I_ADD.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let module = load(&bytes).expect("loads");
+    let result = verify(&module);
+    assert!(result.is_err(), "max_stack=1 should fail when peak is 2");
+}
+
+#[test]
+fn test_verifier_resets_depth_after_unconditional_jump() {
+    // offset 0: LD_CST 0  (2)  depth -> 1
+    // offset 2: JMP_W +0  (5)  jumps to offset 7; depth resets to 0
+    // offset 7: RET_U     (1)  depth 0
+    // max_stack=1 matches peak reachable depth of 1.
+    let code = vec![
+        Opcode::LD_CST.0,
+        0,
+        Opcode::JMP_W.0,
+        0,
+        0,
+        0,
+        0,
+        Opcode::RET_U.0,
+    ];
+    let bytes = make_msbc(
+        &[ConstEntry::I32(42)],
+        &[fn_def_with_max_stack(0, 0, 0, 1, code)],
+    );
+    let module = load(&bytes).expect("loads");
+    let result = verify(&module);
+    assert!(
+        result.is_ok(),
+        "depth must reset after JMP_W, got {result:?}"
     );
 }
 
 #[test]
-fn if_case_pattern_binding() {
-    let _r = run_src(
-        r#"
-const x := .Some(7);
-if case .Some(v) := x then
-    writeln(int_to_string(v));
-"#,
+fn test_verifier_depth_resets_to_zero_after_terminator() {
+    let code = vec![
+        Opcode::LD_CST.0,
+        0,
+        Opcode::RET.0,
+        Opcode::LD_CST.0,
+        0,
+        Opcode::RET.0,
+    ];
+    let bytes = make_msbc(
+        &[ConstEntry::I32(1)],
+        &[fn_def_with_max_stack(0, 0, 0, 1, code)],
     );
+    let module = load(&bytes).expect("loads");
+    let result = verify(&module);
+    assert!(result.is_ok(), "depth must reset after RET, got {result:?}");
+}
+
+// ── Wide instruction variants ───────────────────────────────────────────────
+
+#[test]
+fn test_ld_loc_w_loads_high_slot() {
+    let code = vec![
+        Opcode::LD_CST.0,
+        0,
+        Opcode::ST_LOC_W.0,
+        0x00,
+        0x01,
+        Opcode::LD_LOC_W.0,
+        0x00,
+        0x01,
+        Opcode::RET.0,
+    ];
+    let bytes = make_msbc(&[ConstEntry::I32(99)], &[fn_def(0, 300, 0, code)]);
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 99);
 }
 
 #[test]
-fn tuple_value_constructs() {
-    let _r = run_src(
-        r#"
-const t := (10, 20);
-writeln(int_to_string(10));
-"#,
-    );
+fn test_st_loc_w_stores_high_slot() {
+    let code = vec![
+        Opcode::LD_CST.0,
+        0,
+        Opcode::ST_LOC_W.0,
+        0x10,
+        0x01,
+        Opcode::LD_LOC_W.0,
+        0x10,
+        0x01,
+        Opcode::RET.0,
+    ];
+    let bytes = make_msbc(&[ConstEntry::I32(77)], &[fn_def(0, 300, 0, code)]);
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 77);
 }
 
 #[test]
-fn tuple_in_match() {
-    let _r = run_src(
-        r#"
-const t := (3, 4);
-const result := match t with (
-    (a, b) => a + b
-);
-writeln(int_to_string(result));
-"#,
+fn test_cmp_tag_w_matches_large_tag() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(0)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::MK_VAR.0,
+                7,
+                Opcode::CMP_TAG_W.0,
+                7,
+                0,
+                Opcode::RET.0,
+            ],
+        )],
     );
+    let (_, result) = run_vm(&bytes);
+    assert!(result.expect("runs").as_bool().expect("is bool"));
+}
+
+// ── Arithmetic / bitwise opcodes ────────────────────────────────────────────
+
+#[test]
+fn test_f_sub() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(10), ConstEntry::I32(3)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::CNV_ITF.0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::CNV_ITF.0,
+                Opcode::F_SUB.0,
+                Opcode::CNV_FTI.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 7);
 }
 
 #[test]
-fn bind_tuple_destructure() {
-    let _r = run_src(
-        r#"
-const t := (10, 20);
-const (a, b) := t;
-writeln(int_to_string(a + b));
-"#,
+fn test_f_neg() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(7)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::CNV_ITF.0,
+                Opcode::F_NEG.0,
+                Opcode::CNV_FTI.0,
+                Opcode::RET.0,
+            ],
+        )],
     );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), -7);
 }
 
 #[test]
-fn bind_record_destructure() {
-    let _r = run_src(
-        r#"
-record Point { x: Int, y: Int };
-const p := Point.{ x := 3, y := 4 };
-const { x, y } := p;
-writeln(int_to_string(x + y));
-"#,
+fn test_b_or() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(0b1010), ConstEntry::I32(0b0110)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::B_OR.0,
+                Opcode::RET.0,
+            ],
+        )],
     );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 0b1110);
 }
 
 #[test]
-fn while_with_guard_skips() {
-    // guard false exits the loop early: i reaches 5 (not 10) because guard i < 5 fails
-    let _r = run_src(
-        r#"
-var i := 0;
-while i < 10 if i < 5 loop (
-    i <- i + 1;
-);
-writeln(int_to_string(i));
-"#,
+fn test_b_xor() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(0b1010), ConstEntry::I32(0b0110)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::B_XOR.0,
+                Opcode::RET.0,
+            ],
+        )],
     );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 0b1100);
 }
 
 #[test]
-fn for_with_guard() {
-    let _r = run_src(
-        r#"
-var evens := 0;
-for x in [1, 2, 3, 4, 5, 6] if x % 2 = 0 loop (
-    evens <- evens + x;
-);
-writeln(int_to_string(evens));
-"#,
+fn test_b_not() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(0)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![Opcode::LD_CST.0, 0, Opcode::B_NOT.0, Opcode::RET.0],
+        )],
     );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), -1);
 }
 
 #[test]
-fn for_tuple_destructure() {
-    let _r = run_src(
-        r#"
-const pairs := [(1, 2), (3, 4), (5, 6)];
-var s := 0;
-for (a, b) in pairs loop (
-    s <- s + a + b;
-);
-writeln(int_to_string(s));
-"#,
+fn test_b_shr() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(16), ConstEntry::I32(2)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::B_SHR.0,
+                Opcode::RET.0,
+            ],
+        )],
     );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 4);
+}
+
+// ── Structural opcodes ─────────────────────────────────────────────────────
+
+#[test]
+fn test_ld_tag_returns_tag_value() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(0)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::MK_VAR.0,
+                3,
+                Opcode::LD_TAG.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 3);
 }
 
 #[test]
-fn named_record_pattern_in_match() {
-    let _r = run_src(
-        r#"
-record Point { x: Int, y: Int };
-const p := Point.{ x := 3, y := 7 };
-const result := match p with (
-    Point { x, y } => x + y
-);
-writeln(int_to_string(result));
-"#,
+fn test_ld_pay_extracts_variant_payload() {
+    let bytes = make_msbc(
+        &[ConstEntry::I32(42)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::MK_VAR.0,
+                0,
+                Opcode::LD_PAY.0,
+                0,
+                Opcode::RET.0,
+            ],
+        )],
     );
-}
-
-#[test]
-fn do_while_loop() {
-    let _r = run_src(
-        r#"
-var i := 0;
-loop (i <- i + 1) while i < 5;
-writeln(int_to_string(i));
-"#,
-    );
-}
-
-#[test]
-fn cycle_guard() {
-    let _r = run_src(
-        r#"
-var i := 0;
-var s := 0;
-while i < 10 loop (
-    i <- i + 1;
-    cycle if i % 2 = 0;
-    s <- s + i;
-);
-writeln(int_to_string(s));
-"#,
-    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 42);
 }
