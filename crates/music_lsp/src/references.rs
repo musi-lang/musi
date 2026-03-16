@@ -78,7 +78,7 @@ pub fn find_references(
 
     if context.include_declaration
         && let Some(def) = sema.defs.get(target_def_id.0 as usize)
-        && def.span != music_shared::Span::DUMMY
+        && def.span != Span::DUMMY
     {
         let range = span_to_range(doc.file_id, def.span, &doc.source_db);
         let loc = Location {

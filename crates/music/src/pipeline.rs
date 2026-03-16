@@ -6,7 +6,7 @@ use std::io::{IsTerminal, stderr};
 use std::path::Path;
 
 use musi_manifest::MusiManifest;
-use music_ast::ParsedModule;
+use music_ast::{ExprIdx, ParsedModule};
 use music_emit::emit;
 use music_lex::lex;
 use music_parse::parse;
@@ -14,18 +14,18 @@ use music_resolve::graph::ModuleId;
 use music_resolve::{ModuleGraph, ModuleNode, build_module_graph};
 use music_sema::types::RecordField;
 use music_sema::{
-    ExportBinding, ImportNames, SemaResult, SharedAnalysisState, Type, TypeIdx, analyze,
-    collect_exports,
+    ExportBinding, ImportNames, ModuleSemaOutput, ResolutionMap, SemaResult, SharedAnalysisState,
+    Type, TypeIdx, analyze, collect_exports,
 };
-use music_shared::{DiagnosticBag, FileId, Interner, SourceDb};
+use music_shared::{Arena, DiagnosticBag, FileId, Interner, SourceDb, Symbol};
 
 use crate::resolve_config;
 
 /// A dependency module processed during multi-file compilation.
 pub struct DepModule {
     pub parsed: ParsedModule,
-    pub resolution: music_sema::ResolutionMap,
-    pub expr_types: HashMap<music_ast::ExprIdx, music_sema::TypeIdx>,
+    pub resolution: ResolutionMap,
+    pub expr_types: HashMap<ExprIdx, TypeIdx>,
     pub file_id: FileId,
 }
 
@@ -168,7 +168,7 @@ fn run_sema_in_order(
     let mut dep_modules: Vec<DepModule> = vec![];
 
     let entry_id = ModuleId(0);
-    let mut entry_output: Option<(music_sema::ModuleSemaOutput, ParsedModule)> = None;
+    let mut entry_output: Option<(ModuleSemaOutput, ParsedModule)> = None;
 
     for &module_id in order {
         let node = graph.get(module_id);
@@ -234,8 +234,8 @@ fn build_import_names(
 fn build_import_types(
     node: &ModuleNode,
     module_exports: &HashMap<ModuleId, Vec<ExportBinding>>,
-    types: &mut music_shared::Arena<Type>,
-) -> HashMap<music_shared::Symbol, TypeIdx> {
+    types: &mut Arena<Type>,
+) -> HashMap<Symbol, TypeIdx> {
     let mut map = HashMap::new();
     for &(dep_id, import_sym) in &node.imports {
         if let Some(exports) = module_exports.get(&dep_id) {

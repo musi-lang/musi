@@ -7,8 +7,9 @@ use lsp_types::{
     CodeAction, CodeActionKind, CodeActionOrCommand, CodeActionParams, Range, TextEdit, Url,
     WorkspaceEdit,
 };
-use music_ast::Expr;
+use music_ast::{Expr, Pat};
 use music_sema::Type;
+use music_shared::{Idx, Span};
 
 use crate::analysis::{AnalyzedDoc, find_name_token, offset_to_position, position_to_offset};
 use crate::hover::fmt_type_lsp;
@@ -32,7 +33,7 @@ pub fn code_actions(
     let mut actions = vec![];
 
     for idx in 0..doc.module.arenas.exprs.len() {
-        let idx = music_shared::Idx::from_raw(u32::try_from(idx).unwrap_or(0));
+        let idx = Idx::from_raw(u32::try_from(idx).unwrap_or(0));
         let Expr::Binding { fields, span, .. } = &doc.module.arenas.exprs[idx] else {
             continue;
         };
@@ -100,12 +101,11 @@ pub fn code_actions(
 
 /// Extension trait to extract a span from a `Pat`.
 trait PatSpanExt {
-    fn span(&self) -> music_shared::Span;
+    fn span(&self) -> Span;
 }
 
-impl PatSpanExt for music_ast::Pat {
-    fn span(&self) -> music_shared::Span {
-        use music_ast::Pat;
+impl PatSpanExt for Pat {
+    fn span(&self) -> Span {
         match self {
             Pat::Wild { span, .. }
             | Pat::Lit { span, .. }

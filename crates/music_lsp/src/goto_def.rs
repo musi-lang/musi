@@ -1,6 +1,7 @@
 //! Go-to-definition provider (single-file + stdlib).
 
 use lsp_types::{GotoDefinitionResponse, Location, Position, Range, Url};
+use music_shared::{Span, Symbol};
 
 use crate::analysis::{AnalyzedDoc, expr_span, position_to_offset, span_to_range};
 
@@ -32,7 +33,7 @@ pub fn goto_definition(
 
     let def = sema.defs.get(def_id.0 as usize)?;
 
-    if def.span != music_shared::Span::DUMMY {
+    if def.span != Span::DUMMY {
         let range = span_to_range(doc.file_id, def.span, &doc.source_db);
         return Some(GotoDefinitionResponse::Scalar(Location {
             uri: uri.clone(),
@@ -45,7 +46,7 @@ pub fn goto_definition(
 
 fn resolve_stdlib_def(
     doc: &AnalyzedDoc,
-    name: music_shared::Symbol,
+    name: Symbol,
     root_uri: Option<&Url>,
 ) -> Option<GotoDefinitionResponse> {
     let root_uri = root_uri?;
@@ -54,7 +55,7 @@ fn resolve_stdlib_def(
         let Some(&def_span) = dep_src.def_spans.get(&name) else {
             continue;
         };
-        if def_span == music_shared::Span::DUMMY {
+        if def_span == Span::DUMMY {
             continue;
         }
 
@@ -80,7 +81,7 @@ fn resolve_stdlib_def(
     None
 }
 
-fn dep_source_span_to_range(span: music_shared::Span, source: &str) -> Range {
+fn dep_source_span_to_range(span: Span, source: &str) -> Range {
     let start = byte_offset_to_position(span.start, source);
     let end = byte_offset_to_position(span.end(), source);
     Range { start, end }

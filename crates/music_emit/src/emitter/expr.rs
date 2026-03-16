@@ -2,6 +2,7 @@
 
 use musi_bc::Opcode;
 use music_ast::Pat;
+use music_ast::PatIdx;
 use music_ast::TyIdx;
 use music_ast::expr::{
     Arg, ArrayElem, BinOp, BindKind, Expr, FieldKey, HandlerOp, LetFields, MatchArm, Param, PwArm,
@@ -12,6 +13,7 @@ use music_ast::ty::Ty;
 use music_sema::DefId;
 use music_sema::def::DefKind;
 use music_sema::types::Type;
+use music_shared::Span;
 use music_shared::Symbol;
 
 use std::collections::{HashMap, HashSet};
@@ -347,8 +349,8 @@ fn emit_name(
     em: &mut Emitter<'_>,
     fc: &mut FnCtx,
     expr_idx: ExprIdx,
-    name: music_shared::Symbol,
-    _span: music_shared::Span,
+    name: Symbol,
+    _span: Span,
 ) -> Result<bool, EmitError> {
     let name_str = em.interner.resolve(name);
     if name_str == "true" {
@@ -466,7 +468,7 @@ fn emit_unary(
     fc: &mut FnCtx,
     op: UnaryOp,
     operand: ExprIdx,
-    _span: music_shared::Span,
+    _span: Span,
 ) -> Result<bool, EmitError> {
     let produced = emit_expr(em, fc, operand)?;
     if !produced {
@@ -1194,11 +1196,7 @@ fn emit_lit(em: &mut Emitter<'_>, fc: &mut FnCtx, lit: &Lit) -> Result<bool, Emi
 }
 
 /// Consume the top-of-stack value and bind it to `pat_idx`.
-pub fn bind_pat(
-    em: &mut Emitter<'_>,
-    fc: &mut FnCtx,
-    pat_idx: music_ast::PatIdx,
-) -> Result<(), EmitError> {
+pub fn bind_pat(em: &mut Emitter<'_>, fc: &mut FnCtx, pat_idx: PatIdx) -> Result<(), EmitError> {
     match &em.ast.pats[pat_idx] {
         Pat::Wild { .. } => {
             fc.fe.emit_pop();
@@ -1253,11 +1251,7 @@ pub fn bind_pat(
 }
 
 /// Bind a pattern as a ref cell: wraps the top-of-stack value in `ALC_REF`.
-fn bind_pat_ref(
-    em: &mut Emitter<'_>,
-    fc: &mut FnCtx,
-    pat_idx: music_ast::PatIdx,
-) -> Result<(), EmitError> {
+fn bind_pat_ref(em: &mut Emitter<'_>, fc: &mut FnCtx, pat_idx: PatIdx) -> Result<(), EmitError> {
     match &em.ast.pats[pat_idx] {
         Pat::Bind { span, .. } => {
             let span = *span;

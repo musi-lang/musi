@@ -5,6 +5,7 @@ use lsp_types::{
 };
 use music_ast::{Expr, ExprIdx};
 use music_sema::Type;
+use music_shared::Idx;
 
 use crate::analysis::{AnalyzedDoc, expr_span, position_to_offset};
 use crate::hover::fmt_type_lsp;
@@ -16,7 +17,7 @@ pub fn signature_help(doc: &AnalyzedDoc, position: Position) -> Option<Signature
     // Find the innermost Call expression whose span contains the cursor.
     let mut best: Option<(ExprIdx, ExprIdx, u32)> = None;
     for idx in 0..doc.module.arenas.exprs.len() {
-        let idx = music_shared::Idx::from_raw(u32::try_from(idx).unwrap_or(0));
+        let idx = Idx::from_raw(u32::try_from(idx).unwrap_or(0));
         if let Expr::Call { callee, span, .. } = &doc.module.arenas.exprs[idx]
             && span.start <= offset
             && offset <= span.end()

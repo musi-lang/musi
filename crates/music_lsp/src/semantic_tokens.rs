@@ -7,8 +7,8 @@ use lsp_types::{
 };
 use music_ast::expr::ParamMode;
 use music_lex::TokenKind;
-use music_sema::{DefKind, SemaResult, Type, TypeIdx};
-use music_shared::{FileId, SourceDb, Span};
+use music_sema::{DefInfo, DefKind, SemaResult, Type, TypeIdx};
+use music_shared::{FileId, Interner, SourceDb, Span};
 
 use crate::analysis::{AnalyzedDoc, expr_span, find_name_token, offset_to_position};
 
@@ -363,9 +363,9 @@ fn is_fn_type(ty: TypeIdx, sema: &SemaResult) -> bool {
 }
 
 fn classify_def(
-    def: &music_sema::DefInfo,
-    sema: &music_sema::SemaResult,
-    interner: &music_shared::Interner,
+    def: &DefInfo,
+    sema: &SemaResult,
+    interner: &Interner,
     is_decl: bool,
 ) -> (Option<u32>, u32, u8) {
     let decl = if is_decl { TM_DECLARATION } else { 0 };

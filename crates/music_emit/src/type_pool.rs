@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use music_sema::types::{EffectRow, SumVariant, Type};
 use music_sema::well_known::WellKnown;
 use music_sema::{DefId, TypeIdx, UnifyTable};
-use music_shared::Arena;
+use music_shared::{Arena, Symbol};
 
 use crate::error::EmitError;
 
@@ -204,7 +204,7 @@ impl TypePool {
                     .enumerate()
                     .map(|(i, &v)| -> Result<SumVariant, EmitError> {
                         Ok(SumVariant {
-                            name: music_shared::Symbol(u32::try_from(i).map_err(|_| {
+                            name: Symbol(u32::try_from(i).map_err(|_| {
                                 EmitError::UnresolvableType {
                                     desc: "anonymous sum variant index overflow".into(),
                                 }

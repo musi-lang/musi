@@ -1,5 +1,6 @@
 //! Declaration type checking (class, given, effect, foreign).
 
+use music_ast::ExprIdx;
 use music_ast::decl::{ClassMember, ForeignDecl};
 use music_ast::expr::{Expr, Param};
 use music_ast::ty::TyParam;
@@ -55,7 +56,7 @@ fn check_member_fn<S: BuildHasher>(ck: &mut Checker<'_, S>, member: &ClassMember
 fn check_member_law<S: BuildHasher>(
     ck: &mut Checker<'_, S>,
     params: &[Param],
-    body: Idx<music_ast::Expr>,
+    body: ExprIdx,
     span: Span,
     class_ty_params: &[TyParam],
 ) {
@@ -159,7 +160,7 @@ fn find_class_required_methods<S: BuildHasher>(
 ) -> Vec<String> {
     let n = ck.ctx.ast.exprs.len();
     for i in 0..n {
-        let idx = music_shared::Idx::from_raw(u32::try_from(i).expect("expr index in range"));
+        let idx = Idx::from_raw(u32::try_from(i).expect("expr index in range"));
         if let Expr::Class { name, members, .. } = &ck.ctx.ast.exprs[idx]
             && *name == class_name
         {
@@ -182,7 +183,7 @@ fn find_class_required_methods<S: BuildHasher>(
 }
 
 /// Checks a declaration expression (class, given, effect, foreign).
-pub fn check_stmt<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: Idx<music_ast::Expr>) {
+pub fn check_stmt<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) {
     match ck.ctx.ast.exprs[expr_idx].clone() {
         Expr::Class {
             params, members, ..

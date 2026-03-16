@@ -1,8 +1,8 @@
 //! Pass 2: expression resolution.
 
 use music_ast::expr::{
-    Arg, ArrayElem, Expr, HandlerOp, LetFields, MatchArm, Param, PwArm, PwGuard, RecDefField,
-    RecField,
+    Arg, ArrayElem, Expr, FieldKey, HandlerOp, LetFields, MatchArm, Param, PwArm, PwGuard,
+    RecDefField, RecField,
 };
 use music_ast::lit::{FStrPart, Lit};
 use music_ast::{ExprIdx, TyIdx};
@@ -37,7 +37,7 @@ impl Resolver<'_> {
             }
             Expr::Field { object, field, .. } => {
                 self.resolve_expr(object);
-                if let music_ast::expr::FieldKey::Name { name, .. } = field {
+                if let FieldKey::Name { name, .. } = field {
                     if let Some(&alias_def_id) = self.output.expr_defs.get(&object) {
                         if let Some(&import_path) = self.import_alias_defs.get(&alias_def_id) {
                             if let Some(names) = self.import_names.get(&import_path) {

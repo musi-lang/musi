@@ -11,7 +11,7 @@ use music_ast::lit::{FStrPart, Lit};
 use music_ast::pat::Pat;
 use music_ast::ty::{Constraint, Rel, Ty, TyParam};
 use music_ast::{ExprIdx, PatIdx, TyIdx};
-use music_shared::{Span, Symbol};
+use music_shared::{Idx, Span, Symbol};
 
 use crate::checker::Checker;
 use crate::checker::effects::check_effects_subset;
@@ -1502,7 +1502,7 @@ fn find_effect_required_ops<S: BuildHasher>(
 ) -> Vec<(Symbol, Span)> {
     let n = ck.ctx.ast.exprs.len();
     for i in 0..n {
-        let idx = music_shared::Idx::from_raw(u32::try_from(i).expect("expr index in range"));
+        let idx = Idx::from_raw(u32::try_from(i).expect("expr index in range"));
         if let Expr::Effect { name, ops, .. } = &ck.ctx.ast.exprs[idx]
             && *name == effect_name
         {

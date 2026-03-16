@@ -5,6 +5,7 @@ use std::str::FromStr;
 use lsp_types::{DocumentLink, Range, Url};
 use music_ast::Expr;
 use music_lex::TokenKind;
+use music_shared::Symbol;
 
 use crate::analysis::{AnalyzedDoc, span_to_range};
 
@@ -83,7 +84,7 @@ pub fn document_links(
     links
 }
 
-fn find_string_token_range(doc: &AnalyzedDoc, path_sym: music_shared::Symbol) -> Option<Range> {
+fn find_string_token_range(doc: &AnalyzedDoc, path_sym: Symbol) -> Option<Range> {
     let expected = doc.interner.try_resolve(path_sym)?;
     for tok in &doc.lexed.tokens {
         if tok.kind == TokenKind::StringLit {

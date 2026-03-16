@@ -1,7 +1,7 @@
 //! CodeLens provider: emits "Run test" / "Run" lenses above annotated fns.
 
 use lsp_types::{CodeLens, Command, Url};
-use music_ast::Expr;
+use music_ast::{Expr, Lit, attr::AttrValue};
 
 use crate::analysis::{AnalyzedDoc, span_to_range};
 
@@ -34,8 +34,8 @@ pub fn code_lens(doc: &AnalyzedDoc, uri: &Url) -> Vec<CodeLens> {
 
             if attr_name == "test" {
                 let label = attr.value.as_ref().and_then(|v| match v {
-                    music_ast::attr::AttrValue::Lit {
-                        lit: music_ast::Lit::Str { value, .. },
+                    AttrValue::Lit {
+                        lit: Lit::Str { value, .. },
                         ..
                     } => doc
                         .interner

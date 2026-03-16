@@ -18,7 +18,7 @@ use music_sema::{
     DefInfo, ExportBinding, ImportNames, ModuleSemaOutput, SemaResult, SharedAnalysisState, Type,
     TypeIdx, analyze, collect_exports,
 };
-use music_shared::{DiagnosticBag, FileId, Interner, Severity, SourceDb, Span, Symbol};
+use music_shared::{Arena, DiagnosticBag, FileId, Interner, Severity, SourceDb, Span, Symbol};
 
 /// Lexed artifacts for a single imported stdlib module, stored for doc-comment lookup.
 pub struct DepSource {
@@ -307,7 +307,7 @@ fn build_import_names(
 fn build_import_types(
     node: &ModuleNode,
     module_exports: &HashMap<ModuleId, Vec<ExportBinding>>,
-    types: &mut music_shared::Arena<Type>,
+    types: &mut Arena<Type>,
 ) -> HashMap<Symbol, TypeIdx> {
     let mut map = HashMap::new();
     for &(dep_id, import_sym) in &node.imports {

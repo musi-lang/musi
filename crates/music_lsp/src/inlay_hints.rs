@@ -6,8 +6,8 @@ use std::collections::HashSet;
 use lsp_types::{InlayHint, InlayHintKind, InlayHintLabel};
 use music_ast::Expr;
 use music_lex::TokenKind;
-use music_sema::{DefKind, Type};
-use music_shared::Span;
+use music_sema::{DefKind, SemaResult, Type};
+use music_shared::{Idx, Span};
 
 use crate::analysis::{AnalyzedDoc, find_name_token, offset_to_position};
 use crate::hover::fmt_type_lsp;
@@ -101,7 +101,7 @@ pub fn inlay_hints(doc: &AnalyzedDoc, config: &InlayHintConfig) -> Vec<InlayHint
 fn collect_unannotated_param_spans(doc: &AnalyzedDoc) -> HashSet<Span> {
     let mut spans = HashSet::new();
     for idx in 0..doc.module.arenas.exprs.len() {
-        let idx = music_shared::Idx::from_raw(u32::try_from(idx).unwrap_or(0));
+        let idx = Idx::from_raw(u32::try_from(idx).unwrap_or(0));
         if let Expr::Fn { params, .. } = &doc.module.arenas.exprs[idx] {
             for param in params {
                 if param.ty.is_none() {
@@ -118,7 +118,7 @@ fn collect_unannotated_param_spans(doc: &AnalyzedDoc) -> HashSet<Span> {
 fn collect_annotated_binding_spans(doc: &AnalyzedDoc) -> Vec<Span> {
     let mut spans = vec![];
     for idx in 0..doc.module.arenas.exprs.len() {
-        let idx = music_shared::Idx::from_raw(u32::try_from(idx).unwrap_or(0));
+        let idx = Idx::from_raw(u32::try_from(idx).unwrap_or(0));
         match &doc.module.arenas.exprs[idx] {
             Expr::Binding { fields, .. } | Expr::Let { fields, .. } => {
                 if fields.ty.is_some() {
@@ -133,14 +133,9 @@ fn collect_annotated_binding_spans(doc: &AnalyzedDoc) -> Vec<Span> {
 
 /// Walk all `Expr::Fn` nodes and emit ` -> RetTy` hints for those without an
 /// explicit return type annotation.
-fn collect_return_type_hints(
-    doc: &AnalyzedDoc,
-    sema: &music_sema::SemaResult,
-    hints: &mut Vec<InlayHint>,
-) {
+fn collect_return_type_hints(doc: &AnalyzedDoc, sema: &SemaResult, hints: &mut Vec<InlayHint>) {
     for raw_idx in 0..doc.module.arenas.exprs.len() {
-        let idx: music_shared::Idx<Expr> =
-            music_shared::Idx::from_raw(u32::try_from(raw_idx).unwrap_or(0));
+        let idx = Idx::from_raw(u32::try_from(raw_idx).unwrap_or(0));
 
         let Expr::Fn { params, ret_ty, .. } = &doc.module.arenas.exprs[idx] else {
             continue;

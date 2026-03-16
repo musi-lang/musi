@@ -2,6 +2,7 @@
 
 use lsp_types::{GotoDefinitionResponse, Location, Position, Url};
 use music_sema::Type;
+use music_shared::Span;
 
 use crate::analysis::{AnalyzedDoc, def_at_cursor, position_to_offset, span_to_range};
 
@@ -29,7 +30,7 @@ pub fn goto_type_definition(
     }?;
 
     let type_def = sema.defs.get(type_def_id.0 as usize)?;
-    if type_def.span == music_shared::Span::DUMMY {
+    if type_def.span == Span::DUMMY {
         return None;
     }
 

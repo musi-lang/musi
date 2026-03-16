@@ -1,9 +1,10 @@
 //! Pass 1: top-level definition collection.
 
-use music_ast::ExprIdx;
 use music_ast::attr::Attr;
 use music_ast::decl::ForeignDecl;
 use music_ast::expr::{Expr, LetFields};
+use music_ast::{ExprIdx, Pat, PatIdx};
+use music_shared::Symbol;
 
 use crate::def::DefKind;
 
@@ -91,7 +92,7 @@ impl Resolver<'_> {
 
     fn collect_named_def(
         &mut self,
-        name: music_shared::Symbol,
+        name: Symbol,
         kind: DefKind,
         exported: bool,
         expr_idx: ExprIdx,
@@ -126,8 +127,7 @@ impl Resolver<'_> {
         }
     }
 
-    fn maybe_mark_entrypoint(&mut self, pat: music_ast::PatIdx, attrs: &[Attr]) {
-        use music_ast::pat::Pat;
+    fn maybe_mark_entrypoint(&mut self, pat: PatIdx, attrs: &[Attr]) {
         let has_ep = attrs
             .iter()
             .any(|a| self.interner.resolve(a.name) == "entrypoint");

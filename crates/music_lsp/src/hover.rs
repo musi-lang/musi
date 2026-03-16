@@ -1,13 +1,13 @@
 //! Hover provider: shows the type and doc-comment of the symbol under the cursor.
 
 use lsp_types::{Hover, HoverContents, MarkupContent, MarkupKind, Position};
-use music_ast::Expr;
 use music_ast::decl::ClassMember;
-use music_ast::expr::{LetFields, ParamMode};
+use music_ast::expr::{BindKind, LetFields, Param, ParamMode};
 use music_ast::pat::Pat;
-use music_sema::DefKind;
+use music_ast::{AstArenas, Expr, PatIdx};
 use music_sema::def::DefInfo;
-use music_sema::types::{Type, TypeIdx};
+use music_sema::types::{self, Type, TypeIdx};
+use music_sema::{DefKind, SemaResult};
 use music_shared::Idx;
 
 use crate::analysis::{
@@ -146,7 +146,7 @@ pub fn hover(doc: &AnalyzedDoc, position: Position) -> Option<Hover> {
 /// Returns `None` for non-function definitions, falling back to the default format.
 fn build_fn_signature(
     doc: &AnalyzedDoc,
-    sema: &music_sema::SemaResult,
+    sema: &SemaResult,
     def: &DefInfo,
     kind_kw: &str,
     display_name: &str,
@@ -188,11 +188,7 @@ fn build_fn_signature(
 }
 
 /// Format return type as `: T` suffix, omitting unit `()`.
-fn format_ret_type(
-    ret_ty: Option<TypeIdx>,
-    doc: &AnalyzedDoc,
-    sema: &music_sema::SemaResult,
-) -> String {
+fn format_ret_type(ret_ty: Option<TypeIdx>, doc: &AnalyzedDoc, sema: &SemaResult) -> String {
     let Some(ret) = ret_ty else {
         return String::new();
     };
@@ -205,7 +201,7 @@ fn format_ret_type(
 /// Search the AST for parameter names matching a definition site.
 fn find_ast_params(
     doc: &AnalyzedDoc,
-    sema: &music_sema::SemaResult,
+    sema: &SemaResult,
     def: &DefInfo,
     param_tys: &[TypeIdx],
 ) -> Option<String> {
@@ -266,10 +262,10 @@ fn find_ast_params(
 /// Check if a `LetFields` contains a `Pat::Variant` matching the def.
 fn check_let_fields(
     doc: &AnalyzedDoc,
-    sema: &music_sema::SemaResult,
+    sema: &SemaResult,
     def: &DefInfo,
     fields: &LetFields,
-    arenas: &music_ast::AstArenas,
+    arenas: &AstArenas,
     param_tys: &[TypeIdx],
 ) -> Option<String> {
     let pat = &arenas.pats[fields.pat];
@@ -284,8 +280,8 @@ fn check_let_fields(
 /// Format params from `Pat::Variant` args (binding patterns).
 fn format_pat_params(
     doc: &AnalyzedDoc,
-    sema: &music_sema::SemaResult,
-    args: &[Idx<Pat>],
+    sema: &SemaResult,
+    args: &[PatIdx],
     param_tys: &[TypeIdx],
 ) -> String {
     args.iter()
@@ -297,7 +293,7 @@ fn format_pat_params(
                 _ => "_",
             };
             let mut_prefix = match pat {
-                Pat::Bind { kind, .. } if *kind == music_ast::expr::BindKind::Mut => "mut ",
+                Pat::Bind { kind, .. } if *kind == BindKind::Mut => "mut ",
                 _ => "",
             };
             let ty_str = param_tys
@@ -313,8 +309,8 @@ fn format_pat_params(
 /// Format params from `Param` list (Expr::Fn / ClassMember::Fn).
 fn format_expr_params(
     doc: &AnalyzedDoc,
-    sema: &music_sema::SemaResult,
-    params: &[music_ast::expr::Param],
+    sema: &SemaResult,
+    params: &[Param],
     param_tys: &[TypeIdx],
 ) -> String {
     params
@@ -362,8 +358,8 @@ fn extract_source_signature(source: &str, start: u32) -> Option<String> {
 }
 
 /// Format a type for LSP display (hover, inlay hints, etc.).
-pub fn fmt_type_lsp(ty: TypeIdx, doc: &AnalyzedDoc, sema: &music_sema::SemaResult) -> String {
-    music_sema::types::fmt_type(
+pub fn fmt_type_lsp(ty: TypeIdx, doc: &AnalyzedDoc, sema: &SemaResult) -> String {
+    types::fmt_type(
         ty,
         &sema.types,
         &sema.defs,
