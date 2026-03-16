@@ -5,11 +5,74 @@ use std::collections::HashSet;
 use music_sema::{DefKind, Type};
 use lsp_types::{CompletionItem, CompletionItemKind};
 
-use crate::analysis::AnalyzedDoc;
+use crate::analysis::{AnalyzedDoc, expr_span};
 use crate::hover;
 
-/// Produce completion items for the given document and optional trigger character.
-pub fn complete(doc: &AnalyzedDoc, _trigger: Option<char>) -> Vec<CompletionItem> {
+/// Produce completion items for the given document, optional trigger character, and cursor offset.
+///
+/// When triggered by `.`, attempts record-field completion for the expression
+/// immediately before the dot. Falls back to global completions if the type cannot
+/// be determined or is not a record.
+pub fn complete(doc: &AnalyzedDoc, trigger: Option<char>, offset: u32) -> Vec<CompletionItem> {
+    if trigger == Some('.') {
+        if let Some(items) = dot_completions(doc, offset) {
+            return items;
+        }
+    }
+
+    global_completions(doc)
+}
+
+/// Attempt to produce field completions for the record-typed expression before `offset`.
+///
+/// Returns `None` if the expression type cannot be resolved to a record.
+fn dot_completions(doc: &AnalyzedDoc, offset: u32) -> Option<Vec<CompletionItem>> {
+    let sema = doc.sema.as_ref()?;
+
+    // The dot was just typed at `offset - 1`; we want the expr that ends there.
+    let dot_pos = offset.saturating_sub(1);
+
+    // Find the smallest expr whose span contains `dot_pos` (end-exclusive).
+    let expr_idx = sema
+        .resolution
+        .expr_defs
+        .keys()
+        .filter_map(|&idx| {
+            let span = expr_span(idx, &doc.module)?;
+            if span.start < dot_pos && dot_pos <= span.end() {
+                Some((idx, span.length))
+            } else {
+                None
+            }
+        })
+        .min_by_key(|&(_, len)| len)
+        .map(|(idx, _)| idx)?;
+
+    let raw_ty = *sema.expr_types.get(&expr_idx)?;
+    let resolved_ty = sema.unify.resolve(raw_ty, &sema.types);
+
+    match &sema.types[resolved_ty] {
+        Type::Record { fields, .. } => {
+            let items = fields
+                .iter()
+                .filter_map(|field| {
+                    let name = doc.interner.try_resolve(field.name)?;
+                    let detail = hover::fmt_type_lsp(field.ty, doc, sema);
+                    Some(CompletionItem {
+                        label: name.to_owned(),
+                        kind: Some(CompletionItemKind::FIELD),
+                        detail: Some(detail),
+                        ..CompletionItem::default()
+                    })
+                })
+                .collect();
+            Some(items)
+        }
+        _ => None,
+    }
+}
+
+fn global_completions(doc: &AnalyzedDoc) -> Vec<CompletionItem> {
     let mut items = keyword_completions();
 
     let mut seen: HashSet<String> = items.iter().map(|i| i.label.clone()).collect();

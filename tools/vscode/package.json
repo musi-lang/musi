@@ -68,7 +68,9 @@
 					"punctuation.section",
 					"punctuation.definition.type-params"
 				],
-				"unbalancedBracketScopes": []
+				"unbalancedBracketScopes": [
+					"entity.name.function.operator"
+				]
 			},
 			{
 				"language": "musi-injection",
@@ -165,10 +167,10 @@
 						"storage.type.parameter.musi"
 					],
 					"operator": [
-						"entity.name.function.musi"
+						"entity.name.function.operator.musi"
 					],
 					"operator.declaration": [
-						"entity.name.function.musi"
+						"entity.name.function.operator.musi"
 					]
 				}
 			}
@@ -437,6 +439,21 @@
 						}
 					},
 					"markdownDescription": "Named run configurations for quick switching."
+				},
+				"musi.inlayHints.bindingTypes": {
+					"type": "boolean",
+					"default": true,
+					"description": "Show type hints for let/var bindings"
+				},
+				"musi.inlayHints.returnTypes": {
+					"type": "boolean",
+					"default": true,
+					"description": "Show return type hints for functions"
+				},
+				"musi.inlayHints.parameterTypes": {
+					"type": "boolean",
+					"default": true,
+					"description": "Show type hints for unannotated parameters"
 				},
 				"musi.trace.server": {
 					"type": "string",

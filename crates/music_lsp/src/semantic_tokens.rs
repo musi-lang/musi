@@ -19,7 +19,6 @@ pub const TT_FUNCTION: u32 = 3;
 pub const TT_VARIABLE: u32 = 4;
 pub const TT_PARAMETER: u32 = 5;
 pub const TT_OPERATOR: u32 = 6;
-
 pub const TM_DECLARATION: u32 = 1 << 0;
 pub const TM_READONLY: u32 = 1 << 1;
 pub const TM_MUTABLE: u32 = 1 << 2;
@@ -74,6 +73,11 @@ pub fn compute(doc: &AnalyzedDoc) -> SemanticTokensResult {
                 Some(n) => n,
                 None => continue,
             };
+            // Operator-named defs (e.g. `(=)`) are handled by emit_decl_names;
+            // pat_defs would emit a wrong-length fallback span.
+            if !def_name.starts_with(|c: char| c.is_alphabetic() || c == '_') {
+                continue;
+            }
             let name_span =
                 find_name_token(&doc.lexed.tokens, span.start, def.name).unwrap_or(Span {
                     start: span.start,
@@ -222,18 +226,18 @@ fn emit_decl_names(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
                 }
             }
             DeclState::AfterLetOp => {
-                if kind == TokenKind::RParen
-                    && let Some(sp) = op_span
-                {
-                    push_raw(
-                        raw,
-                        sp,
-                        TT_OPERATOR,
-                        TM_DECLARATION,
-                        doc.file_id,
-                        &doc.source_db,
-                        1,
-                    );
+                if kind == TokenKind::RParen {
+                    if let Some(os) = op_span {
+                        push_raw(
+                            raw,
+                            os,
+                            TT_OPERATOR,
+                            TM_DECLARATION,
+                            doc.file_id,
+                            &doc.source_db,
+                            1,
+                        );
+                    }
                 }
                 op_span = None;
                 DeclState::Default
@@ -419,6 +423,8 @@ fn lex_fallback(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
         AfterTypeDef,
         AfterInstance,
         AfterLaw,
+        AfterLetLParen(u32),
+        AfterLetOp(u32),
     }
 
     let mut state = ScanState::Default;
@@ -464,6 +470,7 @@ fn lex_fallback(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
                     );
                     ScanState::Default
                 }
+                TokenKind::LParen => ScanState::AfterLetLParen(tok.span.start),
                 _ => ScanState::Default,
             },
 
@@ -522,6 +529,33 @@ fn lex_fallback(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
                 }
                 _ => ScanState::Default,
             },
+
+            ScanState::AfterLetLParen(lp_start) => {
+                if is_operator_token(kind) {
+                    ScanState::AfterLetOp(lp_start)
+                } else {
+                    ScanState::Default
+                }
+            }
+
+            ScanState::AfterLetOp(lp_start) => {
+                if kind == TokenKind::RParen {
+                    let combined = Span {
+                        start: lp_start,
+                        length: tok.span.end() - lp_start,
+                    };
+                    push_raw(
+                        raw,
+                        combined,
+                        TT_FUNCTION,
+                        TM_DECLARATION,
+                        doc.file_id,
+                        &doc.source_db,
+                        1,
+                    );
+                }
+                ScanState::Default
+            }
         };
     }
 }

@@ -52,11 +52,13 @@
                 },
                 {
                     "comment": "let (op) -- operator definition",
-                    "match": "(\\bexport\\b\\s+)?\\b(let)\\b\\s+(\\([^)]+\\))",
+                    "match": "(\\bexport\\b\\s+)?\\b(let)\\b\\s+(\\()([^)]+)(\\))",
                     "captures": {
                         "1": { "name": "keyword.control.export.musi" },
                         "2": { "name": "storage.type.musi" },
-                        "3": { "name": "entity.name.function.musi" }
+                        "3": { "name": "entity.name.function.operator.musi" },
+                        "4": { "name": "entity.name.function.operator.musi" },
+                        "5": { "name": "entity.name.function.operator.musi" }
                     }
                 },
                 {
@@ -137,8 +139,8 @@
             "name": "meta.record-literal.musi",
             "begin": "\\.\\{",
             "end": "\\}",
-            "beginCaptures": { "0": { "name": "keyword.operator.record-literal.musi" } },
-            "endCaptures": { "0": { "name": "punctuation.section.block.end.musi" } },
+            "beginCaptures": { "0": { "name": "punctuation.section.record.begin.musi" } },
+            "endCaptures": { "0": { "name": "punctuation.section.record.end.musi" } },
             "patterns": [
                 { "include": "#comments" },
                 { "include": "#record-literal" },
@@ -426,8 +428,21 @@
                 },
                 {
                     "comment": "array index compound token: .[ as in arr.[0]",
-                    "name": "keyword.operator.index.musi",
-                    "match": "\\.\\["
+                    "name": "meta.index.musi",
+                    "begin": "\\.\\[",
+                    "end": "\\]",
+                    "beginCaptures": { "0": { "name": "punctuation.section.index.begin.musi" } },
+                    "endCaptures": { "0": { "name": "punctuation.section.index.end.musi" } },
+                    "patterns": [
+                        { "include": "#comments" },
+                        { "include": "#record-literal" },
+                        { "include": "#keywords" },
+                        { "include": "#literals" },
+                        { "include": "#types" },
+                        { "include": "#operators" },
+                        { "include": "#punctuation" },
+                        { "include": "#identifiers" }
+                    ]
                 },
                 {
                     "comment": "field access dot -- must not match .. range, .[ index, or .{ record",

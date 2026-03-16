@@ -117,13 +117,14 @@ pub fn analyze_doc_multi(
         Err(_) => return analyze_doc(source, "<document>"),
     };
 
-    let (sema, entry_parsed, entry_file_id, lexed) = match run_lsp_sema_in_order(
+    let (sema, entry_parsed, entry_file_id, lexed, dep_sources) = match run_lsp_sema_in_order(
         &graph,
         &order,
         &mut parsed_modules,
         &mut interner,
         &mut diags,
         source,
+        project_root,
     ) {
         Some(result) => result,
         None => return analyze_doc(source, "<document>"),
@@ -142,7 +143,7 @@ pub fn analyze_doc_multi(
         file_id: entry_file_id,
         lexed,
         sema: Some(sema),
-        dep_sources: HashMap::new(),
+        dep_sources,
     };
     (lsp_diags, doc)
 }
@@ -154,9 +155,11 @@ fn run_lsp_sema_in_order(
     interner: &mut Interner,
     diags: &mut DiagnosticBag,
     entry_source: &str,
-) -> Option<(SemaResult, ParsedModule, FileId, LexedSource)> {
+    project_root: &Path,
+) -> Option<(SemaResult, ParsedModule, FileId, LexedSource, HashMap<String, DepSource>)> {
     let mut state = SharedAnalysisState::new(interner);
     let mut module_exports: HashMap<ModuleId, Vec<ExportBinding>> = HashMap::new();
+    let mut dep_sources: HashMap<String, DepSource> = HashMap::new();
 
     let entry_id = ModuleId(0);
     let entry_file_id = graph.get(entry_id).file_id;
@@ -196,6 +199,11 @@ fn run_lsp_sema_in_order(
             let defs_vec: Vec<_> = state.defs.iter().cloned().collect();
             let exports = collect_exports(&parsed, &defs_vec, &output.resolution.pat_defs);
             let _prev = module_exports.insert(module_id, exports.bindings);
+
+            let mod_key = module_key(&node.path, project_root);
+            let dep_lexed = lex(&node.source, file_id, interner, diags);
+            let dep_src = build_dep_source(&node.source, dep_lexed, &defs_vec);
+            let _prev2 = dep_sources.insert(mod_key, dep_src);
         }
     }
 
@@ -207,7 +215,25 @@ fn run_lsp_sema_in_order(
     // the graph-build phase, so this is cheap.
     let lexed = lex(entry_source, entry_file_id, interner, diags);
 
-    Some((sema, parsed, entry_file_id, lexed))
+    Some((sema, parsed, entry_file_id, lexed, dep_sources))
+}
+
+/// Compute a stable string key for a dep module path relative to the project root.
+///
+/// For paths under the project root, produces e.g. `"lib/utils"` (no `.ms`).
+/// For stdlib paths containing `std/`, strips everything before `std/`.
+/// Falls back to the full path string for paths outside the project.
+fn module_key(path: &Path, project_root: &Path) -> String {
+    if let Ok(rel) = path.strip_prefix(project_root) {
+        let s = rel.to_string_lossy();
+        return s.trim_end_matches(".ms").to_owned();
+    }
+    // stdlib: extract from `std/` onwards
+    let path_str = path.to_string_lossy();
+    if let Some(idx) = path_str.find("std/") {
+        return path_str[idx..].trim_end_matches(".ms").to_owned();
+    }
+    path_str.trim_end_matches(".ms").to_owned()
 }
 
 fn builtin_module_exports(
@@ -517,9 +543,9 @@ pub fn def_at_cursor(offset: u32, doc: &AnalyzedDoc) -> Option<&DefInfo> {
     })
 }
 
-fn _build_dep_source(source: &str, _lexed: LexedSource, sema: &SemaResult) -> DepSource {
+fn build_dep_source(source: &str, _lexed: LexedSource, defs: &[DefInfo]) -> DepSource {
     let mut def_spans: HashMap<Symbol, Span> = HashMap::new();
-    for def in &sema.defs {
+    for def in defs {
         let _prev = def_spans.entry(def.name).or_insert(def.span);
     }
     DepSource {

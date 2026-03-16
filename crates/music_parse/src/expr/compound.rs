@@ -38,6 +38,11 @@ impl Parser<'_> {
             };
         }
 
+        // (mut ...) can only be a lambda — parse as param list directly
+        if self.at(TokenKind::KwMut) {
+            return self.parse_forced_fn_literal(start);
+        }
+
         let first = self.parse_expr();
 
         match self.peek_kind() {
@@ -69,6 +74,26 @@ impl Parser<'_> {
         let mut raw_elems = vec![first];
         if !self.at(TokenKind::RParen) {
             loop {
+                if self.at(TokenKind::KwMut) {
+                    let mut params = self.reinterpret_as_params(&raw_elems);
+                    params.push(self.parse_param());
+                    while self.eat(TokenKind::Comma) {
+                        if self.at(TokenKind::RParen) {
+                            break;
+                        }
+                        params.push(self.parse_param());
+                    }
+                    let _rp = self.expect(TokenKind::RParen);
+                    let ret_ty = self.parse_opt_ty_annot();
+                    let _arrow = self.expect(TokenKind::EqGt);
+                    let body = self.parse_alloc_expr();
+                    return Expr::Fn {
+                        params,
+                        ret_ty,
+                        body,
+                        span: self.finish_span(start),
+                    };
+                }
                 raw_elems.push(self.parse_expr());
                 if !self.eat(TokenKind::Comma) {
                     break;
@@ -115,6 +140,27 @@ impl Parser<'_> {
             lit: Lit::Unit {
                 span: self.finish_span(start),
             },
+            span: self.finish_span(start),
+        }
+    }
+
+    /// Parse `(mut param, ...) => body` — called when `(` was consumed and `mut` is next.
+    fn parse_forced_fn_literal(&mut self, start: u32) -> Expr {
+        let mut params = vec![self.parse_param()];
+        while self.eat(TokenKind::Comma) {
+            if self.at(TokenKind::RParen) {
+                break;
+            }
+            params.push(self.parse_param());
+        }
+        let _rp = self.expect(TokenKind::RParen);
+        let ret_ty = self.parse_opt_ty_annot();
+        let _arrow = self.expect(TokenKind::EqGt);
+        let body = self.parse_alloc_expr();
+        Expr::Fn {
+            params,
+            ret_ty,
+            body,
             span: self.finish_span(start),
         }
     }

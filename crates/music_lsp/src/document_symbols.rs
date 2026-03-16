@@ -1,6 +1,8 @@
 //! Document symbols provider: returns all top-level definitions for outline / go-to-symbol.
 
-use music_sema::{DefKind, Type};
+use std::collections::HashMap;
+
+use music_sema::{DefId, DefKind, Type};
 use music_shared::Span;
 use lsp_types::{DocumentSymbol, DocumentSymbolResponse, SymbolKind};
 
@@ -13,7 +15,7 @@ pub fn document_symbols(doc: &AnalyzedDoc) -> DocumentSymbolResponse {
         return DocumentSymbolResponse::Nested(vec![]);
     };
 
-    let mut symbols: Vec<DocumentSymbol> = sema
+    let symbols_with_id: Vec<(DefId, Option<DefId>, DocumentSymbol)> = sema
         .defs
         .iter()
         .filter(|def| {
@@ -62,7 +64,7 @@ pub fn document_symbols(doc: &AnalyzedDoc) -> DocumentSymbolResponse {
             }
 
             #[allow(deprecated)]
-            Some(DocumentSymbol {
+            let sym = DocumentSymbol {
                 name,
                 detail,
                 kind,
@@ -71,11 +73,30 @@ pub fn document_symbols(doc: &AnalyzedDoc) -> DocumentSymbolResponse {
                 range,
                 selection_range,
                 children: None,
-            })
+            };
+            Some((def.id, def.parent, sym))
         })
         .collect();
 
-    symbols.sort_by_key(|s| (s.range.start.line, s.range.start.character));
+    let mut children_map: HashMap<DefId, Vec<DocumentSymbol>> = HashMap::new();
+    let mut top_level: Vec<(DefId, DocumentSymbol)> = Vec::new();
 
-    DocumentSymbolResponse::Nested(symbols)
+    for (id, parent, sym) in symbols_with_id {
+        if let Some(pid) = parent {
+            children_map.entry(pid).or_default().push(sym);
+        } else {
+            top_level.push((id, sym));
+        }
+    }
+
+    for (id, sym) in &mut top_level {
+        if let Some(mut children) = children_map.remove(id) {
+            children.sort_by_key(|s| (s.range.start.line, s.range.start.character));
+            sym.children = Some(children);
+        }
+    }
+
+    top_level.sort_by_key(|(_, s)| (s.range.start.line, s.range.start.character));
+
+    DocumentSymbolResponse::Nested(top_level.into_iter().map(|(_, s)| s).collect())
 }

@@ -10,16 +10,17 @@ use lsp_types::*;
 
 use std::path::PathBuf;
 
-use crate::analysis::{AnalyzedDoc, analyze_doc, analyze_doc_multi};
+use crate::analysis::{AnalyzedDoc, analyze_doc, analyze_doc_multi, position_to_offset};
 use crate::{
-    code_actions, code_lens, completion, document_links, document_symbols, goto_def, hover,
-    inlay_hints, references, semantic_tokens, signature_help,
+    code_actions, code_lens, completion, document_links, document_symbols, folding_ranges,
+    goto_def, goto_type_def, hover, inlay_hints, references, semantic_tokens, signature_help,
 };
 
 pub struct MusiBackend {
     client: ClientSocket,
     documents: HashMap<Url, AnalyzedDoc>,
     root_uri: Option<Url>,
+    inlay_config: inlay_hints::InlayHintConfig,
 }
 
 impl MusiBackend {
@@ -28,6 +29,7 @@ impl MusiBackend {
             client,
             documents: HashMap::new(),
             root_uri: None,
+            inlay_config: inlay_hints::InlayHintConfig::default(),
         }
     }
 
@@ -77,6 +79,22 @@ impl LanguageServer for MusiBackend {
         if let Some(uri) = resolved_root {
             self.root_uri = Some(uri);
         }
+
+        if let Some(opts) = params.initialization_options {
+            if let Some(hints) = opts.get("musi").and_then(|m| m.get("inlayHints")) {
+                let bool_field = |name: &str, default: bool| -> bool {
+                    hints
+                        .get(name)
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(default)
+                };
+                self.inlay_config = inlay_hints::InlayHintConfig {
+                    binding_types: bool_field("bindingTypes", true),
+                    return_types: bool_field("returnTypes", true),
+                    parameter_types: bool_field("parameterTypes", true),
+                };
+            }
+        }
         let result = InitializeResult {
             server_info: Some(ServerInfo {
                 name: "music-lsp".to_owned(),
@@ -94,7 +112,7 @@ impl LanguageServer for MusiBackend {
                 definition_provider: Some(OneOf::Left(true)),
                 references_provider: Some(OneOf::Left(true)),
                 rename_provider: Some(OneOf::Right(RenameOptions {
-                    prepare_provider: None,
+                    prepare_provider: Some(true),
                     work_done_progress_options: WorkDoneProgressOptions::default(),
                 })),
                 document_symbol_provider: Some(OneOf::Left(true)),
@@ -113,6 +131,8 @@ impl LanguageServer for MusiBackend {
                     resolve_provider: Some(false),
                     work_done_progress_options: WorkDoneProgressOptions::default(),
                 }),
+                folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
+                type_definition_provider: Some(TypeDefinitionProviderCapability::Simple(true)),
                 ..ServerCapabilities::default()
             },
         };
@@ -185,6 +205,7 @@ impl LanguageServer for MusiBackend {
         params: CompletionParams,
     ) -> BoxFuture<'static, Result<Option<CompletionResponse>, Self::Error>> {
         let uri = params.text_document_position.text_document.uri;
+        let position = params.text_document_position.position;
         let trigger = params
             .context
             .and_then(|ctx| ctx.trigger_character)
@@ -192,7 +213,10 @@ impl LanguageServer for MusiBackend {
         let items = self
             .documents
             .get(&uri)
-            .map(|doc| completion::complete(doc, trigger))
+            .map(|doc| {
+                let offset = position_to_offset(&doc.source, position.line, position.character);
+                completion::complete(doc, trigger, offset)
+            })
             .unwrap_or_default();
         Box::pin(async move { Ok(Some(CompletionResponse::Array(items))) })
     }
@@ -277,6 +301,45 @@ impl LanguageServer for MusiBackend {
         Box::pin(async move { Ok(result) })
     }
 
+    fn prepare_rename(
+        &mut self,
+        params: TextDocumentPositionParams,
+    ) -> BoxFuture<'static, Result<Option<PrepareRenameResponse>, Self::Error>> {
+        let uri = params.text_document.uri;
+        let position = params.position;
+        let result = self
+            .documents
+            .get(&uri)
+            .and_then(|doc| references::prepare_rename(doc, position, &uri));
+        Box::pin(async move { Ok(result) })
+    }
+
+    fn folding_range(
+        &mut self,
+        params: FoldingRangeParams,
+    ) -> BoxFuture<'static, Result<Option<Vec<FoldingRange>>, Self::Error>> {
+        let uri = params.text_document.uri;
+        let ranges = self
+            .documents
+            .get(&uri)
+            .map(folding_ranges::folding_ranges)
+            .unwrap_or_default();
+        Box::pin(async move { Ok(Some(ranges)) })
+    }
+
+    fn type_definition(
+        &mut self,
+        params: GotoDefinitionParams,
+    ) -> BoxFuture<'static, Result<Option<GotoDefinitionResponse>, Self::Error>> {
+        let uri = params.text_document_position_params.text_document.uri;
+        let position = params.text_document_position_params.position;
+        let result = self
+            .documents
+            .get(&uri)
+            .and_then(|doc| goto_type_def::goto_type_definition(doc, position, &uri));
+        Box::pin(async move { Ok(result) })
+    }
+
     fn inlay_hint(
         &mut self,
         params: InlayHintParams,
@@ -285,7 +348,7 @@ impl LanguageServer for MusiBackend {
         let hints = self
             .documents
             .get(&uri)
-            .map(inlay_hints::inlay_hints)
+            .map(|doc| inlay_hints::inlay_hints(doc, &self.inlay_config))
             .unwrap_or_default();
         Box::pin(async move { Ok(Some(hints)) })
     }
