@@ -35,10 +35,10 @@ impl Resolver<'_> {
                 self.collect_top_level_let(fields, attrs);
             }
             Expr::Class { name, exported, .. } => {
-                self.collect_named_def(*name, DefKind::Class, *exported, expr_idx);
+                self.collect_named_def(*name, DefKind::Class, *exported, expr_idx, attrs);
             }
             Expr::Effect { name, exported, .. } => {
-                self.collect_named_def(*name, DefKind::Effect, *exported, expr_idx);
+                self.collect_named_def(*name, DefKind::Effect, *exported, expr_idx, attrs);
             }
             Expr::Foreign {
                 exported, decls, ..
@@ -99,6 +99,7 @@ impl Resolver<'_> {
         kind: DefKind,
         exported: bool,
         expr_idx: ExprIdx,
+        attrs: &[Attr],
     ) {
         let span = self.span_of_expr(expr_idx);
         let id = self.defs.alloc(name, kind, span);
@@ -107,6 +108,9 @@ impl Resolver<'_> {
         }
         self.define_in_scope(name, id, span);
         let _inserted = self.output.pat_defs.insert(span, id);
+        if let Some(lang_sym) = self.lang_item_from_attrs(attrs) {
+            self.defs.get_mut(id).lang_item = Some(lang_sym);
+        }
     }
 
     fn collect_foreign_decls(&mut self, exported: bool, decls: &[ForeignDecl], attrs: &[Attr]) {
