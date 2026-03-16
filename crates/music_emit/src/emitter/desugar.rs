@@ -169,8 +169,8 @@ pub fn emit_fstr(
         .ok_or_else(|| EmitError::UnsupportedFeature {
             desc: "str_cat FFI not registered".into(),
         })?;
-    let show_def = em.sema.well_known.fns.show;
-    let show_ffi_idx = em.foreign_map.get(&show_def).copied();
+    let show_ffi_idx = em.sema.lang_items.get("show")
+        .and_then(|def| em.foreign_map.get(&def).copied());
 
     let mut first = true;
     for part in parts {

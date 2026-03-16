@@ -214,12 +214,21 @@ fn cfv_walk(cx: &mut CfvCtx<'_, '_>, expr_idx: ExprIdx) {
     }
 }
 
+/// Bit-width of a numeric type, used for narrow-type truncation after arithmetic.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Width {
+    W8,
+    W16,
+    W32,
+    W64,
+}
+
 /// Type family used to select the right arithmetic/comparison opcodes.
 #[derive(Clone, Copy)]
 pub enum TypeFamily {
-    Signed,
-    Unsigned,
-    Float,
+    Signed(Width),
+    Unsigned(Width),
+    Float(Width),
     Bool,
 }
 
@@ -480,7 +489,7 @@ fn emit_unary(
         UnaryOp::Neg => {
             let family = classify_type_family(em, operand);
             let opcode = match family {
-                Some(TypeFamily::Float) => Opcode::F_NEG,
+                Some(TypeFamily::Float(_)) => Opcode::F_NEG,
                 _ => Opcode::I_NEG,
             };
             fc.fe.emit_unop(opcode);
@@ -645,12 +654,13 @@ fn lower_ast_ty_to_type_id(em: &mut Emitter<'_>, ty: TyIdx) -> Option<u32> {
         "Int8" => return em.tp.lower_well_known_def(wk.ints.int8, wk),
         "Int16" => return em.tp.lower_well_known_def(wk.ints.int16, wk),
         "Int32" => return em.tp.lower_well_known_def(wk.ints.int32, wk),
-        "UInt8" => return em.tp.lower_well_known_def(wk.uints.uint8, wk),
-        "UInt16" => return em.tp.lower_well_known_def(wk.uints.uint16, wk),
-        "UInt32" => return em.tp.lower_well_known_def(wk.uints.uint32, wk),
-        "UInt64" => return em.tp.lower_well_known_def(wk.uints.uint64, wk),
+        "Nat" | "Nat64" => return em.tp.lower_well_known_def(wk.nats.nat, wk),
+        "Nat8" => return em.tp.lower_well_known_def(wk.nats.nat8, wk),
+        "Nat16" => return em.tp.lower_well_known_def(wk.nats.nat16, wk),
+        "Nat32" => return em.tp.lower_well_known_def(wk.nats.nat32, wk),
+        "Float" => return em.tp.lower_well_known_def(wk.float, wk),
         "Float32" => return em.tp.lower_well_known_def(wk.floats.float32, wk),
-        "Float" | "Float64" => return em.tp.lower_well_known_def(wk.floats.float64, wk),
+        "Float64" => return em.tp.lower_well_known_def(wk.floats.float64, wk),
         "Rune" => return em.tp.lower_well_known_def(wk.rune, wk),
         "String" => return em.tp.lower_well_known_def(wk.string, wk),
         "Unit" => return em.tp.lower_well_known_def(wk.unit, wk),
@@ -775,11 +785,45 @@ fn emit_binop_expr(
     }
     match op {
         BinOp::And => {
-            desugar::emit_and(em, fc, left, right)?;
+            let family = classify_type_family(em, left);
+            if matches!(family, Some(TypeFamily::Bool) | None) {
+                desugar::emit_and(em, fc, left, right)?;
+            } else {
+                let produced_left = emit_expr(em, fc, left)?;
+                if !produced_left {
+                    return Err(EmitError::UnsupportedFeature {
+                        desc: "binop left operand produced no value".into(),
+                    });
+                }
+                let produced_right = emit_expr(em, fc, right)?;
+                if !produced_right {
+                    return Err(EmitError::UnsupportedFeature {
+                        desc: "binop right operand produced no value".into(),
+                    });
+                }
+                fc.fe.emit_binop(Opcode::B_AND);
+            }
             Ok(true)
         }
         BinOp::Or => {
-            desugar::emit_or(em, fc, left, right)?;
+            let family = classify_type_family(em, left);
+            if matches!(family, Some(TypeFamily::Bool) | None) {
+                desugar::emit_or(em, fc, left, right)?;
+            } else {
+                let produced_left = emit_expr(em, fc, left)?;
+                if !produced_left {
+                    return Err(EmitError::UnsupportedFeature {
+                        desc: "binop left operand produced no value".into(),
+                    });
+                }
+                let produced_right = emit_expr(em, fc, right)?;
+                if !produced_right {
+                    return Err(EmitError::UnsupportedFeature {
+                        desc: "binop right operand produced no value".into(),
+                    });
+                }
+                fc.fe.emit_binop(Opcode::B_OR);
+            }
             Ok(true)
         }
         BinOp::Assign => {
@@ -826,9 +870,46 @@ fn emit_binop_expr(
             let family = classify_type_family(em, left);
             let opcode = map_binop(op, family)?;
             fc.fe.emit_binop(opcode);
+            emit_narrow_truncation(em, fc, family)?;
             Ok(true)
         }
     }
+}
+
+/// Emit masking/sign-extension instructions for narrow integer types after arithmetic.
+///
+/// For signed narrow types: shift left by (64-width), then arithmetic shift right by the same amount.
+/// For unsigned narrow types: AND with the width's bitmask.
+/// 64-bit and float types need no truncation.
+fn emit_narrow_truncation(
+    em: &mut Emitter<'_>,
+    fc: &mut FnCtx,
+    family: Option<TypeFamily>,
+) -> Result<(), EmitError> {
+    let (signed, shift_amount, mask) = match family {
+        Some(TypeFamily::Signed(Width::W8)) => (true, 56i64, 0u64),
+        Some(TypeFamily::Signed(Width::W16)) => (true, 48, 0),
+        Some(TypeFamily::Signed(Width::W32)) => (true, 32, 0),
+        Some(TypeFamily::Unsigned(Width::W8)) => (false, 0, 0xFF),
+        Some(TypeFamily::Unsigned(Width::W16)) => (false, 0, 0xFFFF),
+        Some(TypeFamily::Unsigned(Width::W32)) => (false, 0, 0xFFFF_FFFF),
+        _ => return Ok(()),
+    };
+    if signed {
+        let cv = ConstValue::Int(shift_amount);
+        let idx = em.cp.intern(&cv, em.interner)?;
+        fc.fe.emit_ld_cst(idx);
+        fc.fe.emit_binop(Opcode::B_SHL);
+        let idx2 = em.cp.intern(&cv, em.interner)?;
+        fc.fe.emit_ld_cst(idx2);
+        fc.fe.emit_binop(Opcode::B_SHR);
+    } else {
+        let cv = ConstValue::Int(mask as i64);
+        let idx = em.cp.intern(&cv, em.interner)?;
+        fc.fe.emit_ld_cst(idx);
+        fc.fe.emit_binop(Opcode::B_AND);
+    }
+    Ok(())
 }
 
 fn emit_call(
@@ -1578,23 +1659,35 @@ pub fn classify_type_family(em: &Emitter<'_>, expr_idx: ExprIdx) -> Option<TypeF
     match ty {
         Type::Named { def, .. } => {
             let d = *def;
-            if d == wk.ints.int
-                || d == wk.ints.int8
-                || d == wk.ints.int16
-                || d == wk.ints.int32
-                || d == wk.ints.int64
-            {
-                return Some(TypeFamily::Signed);
+            if d == wk.ints.int || d == wk.ints.int64 {
+                return Some(TypeFamily::Signed(Width::W64));
             }
-            if d == wk.uints.uint8
-                || d == wk.uints.uint16
-                || d == wk.uints.uint32
-                || d == wk.uints.uint64
-            {
-                return Some(TypeFamily::Unsigned);
+            if d == wk.ints.int32 {
+                return Some(TypeFamily::Signed(Width::W32));
             }
-            if d == wk.floats.float32 || d == wk.floats.float64 {
-                return Some(TypeFamily::Float);
+            if d == wk.ints.int16 {
+                return Some(TypeFamily::Signed(Width::W16));
+            }
+            if d == wk.ints.int8 {
+                return Some(TypeFamily::Signed(Width::W8));
+            }
+            if d == wk.nats.nat || d == wk.nats.nat64 {
+                return Some(TypeFamily::Unsigned(Width::W64));
+            }
+            if d == wk.nats.nat32 {
+                return Some(TypeFamily::Unsigned(Width::W32));
+            }
+            if d == wk.nats.nat16 {
+                return Some(TypeFamily::Unsigned(Width::W16));
+            }
+            if d == wk.nats.nat8 {
+                return Some(TypeFamily::Unsigned(Width::W8));
+            }
+            if d == wk.float || d == wk.floats.float64 {
+                return Some(TypeFamily::Float(Width::W64));
+            }
+            if d == wk.floats.float32 {
+                return Some(TypeFamily::Float(Width::W32));
             }
             if d == wk.bool {
                 return Some(TypeFamily::Bool);
@@ -1608,34 +1701,36 @@ pub fn classify_type_family(em: &Emitter<'_>, expr_idx: ExprIdx) -> Option<TypeF
 /// Map an AST `BinOp` + `TypeFamily` to the corresponding bytecode `Opcode`.
 pub fn map_binop(op: BinOp, family: Option<TypeFamily>) -> Result<Opcode, EmitError> {
     let opcode = match (op, family) {
-        (BinOp::Add, Some(TypeFamily::Float)) => Opcode::F_ADD,
+        (BinOp::Add, Some(TypeFamily::Float(_))) => Opcode::F_ADD,
         (BinOp::Add, _) => Opcode::I_ADD,
-        (BinOp::Sub, Some(TypeFamily::Float)) => Opcode::F_SUB,
+        (BinOp::Sub, Some(TypeFamily::Float(_))) => Opcode::F_SUB,
         (BinOp::Sub, _) => Opcode::I_SUB,
-        (BinOp::Mul, Some(TypeFamily::Float)) => Opcode::F_MUL,
+        (BinOp::Mul, Some(TypeFamily::Float(_))) => Opcode::F_MUL,
         (BinOp::Mul, _) => Opcode::I_MUL,
-        (BinOp::Div, Some(TypeFamily::Float)) => Opcode::F_DIV,
-        (BinOp::Div, Some(TypeFamily::Unsigned)) => Opcode::I_DIV_UN,
+        (BinOp::Div, Some(TypeFamily::Float(_))) => Opcode::F_DIV,
+        (BinOp::Div, Some(TypeFamily::Unsigned(_))) => Opcode::I_DIV_UN,
         (BinOp::Div, _) => Opcode::I_DIV,
-        (BinOp::Rem, Some(TypeFamily::Float)) => Opcode::F_REM,
-        (BinOp::Rem, Some(TypeFamily::Unsigned)) => Opcode::I_REM_UN,
+        (BinOp::Rem, Some(TypeFamily::Float(_))) => Opcode::F_REM,
+        (BinOp::Rem, Some(TypeFamily::Unsigned(_))) => Opcode::I_REM_UN,
         (BinOp::Rem, _) => Opcode::I_REM,
-        (BinOp::Eq, Some(TypeFamily::Float)) => Opcode::CMP_F_EQ,
+        (BinOp::Eq, Some(TypeFamily::Float(_))) => Opcode::CMP_F_EQ,
         (BinOp::Eq, _) => Opcode::CMP_EQ,
-        (BinOp::Ne, Some(TypeFamily::Float)) => Opcode::CMP_F_NE,
+        (BinOp::Ne, Some(TypeFamily::Float(_))) => Opcode::CMP_F_NE,
         (BinOp::Ne, _) => Opcode::CMP_NE,
-        (BinOp::Lt, Some(TypeFamily::Float)) => Opcode::CMP_F_LT,
-        (BinOp::Lt, Some(TypeFamily::Unsigned)) => Opcode::CMP_LT_UN,
+        (BinOp::Lt, Some(TypeFamily::Float(_))) => Opcode::CMP_F_LT,
+        (BinOp::Lt, Some(TypeFamily::Unsigned(_))) => Opcode::CMP_LT_UN,
         (BinOp::Lt, _) => Opcode::CMP_LT,
-        (BinOp::Le, Some(TypeFamily::Float)) => Opcode::CMP_F_LE,
-        (BinOp::Le, Some(TypeFamily::Unsigned)) => Opcode::CMP_LE_UN,
+        (BinOp::Le, Some(TypeFamily::Float(_))) => Opcode::CMP_F_LE,
+        (BinOp::Le, Some(TypeFamily::Unsigned(_))) => Opcode::CMP_LE_UN,
         (BinOp::Le, _) => Opcode::CMP_LE,
-        (BinOp::Gt, Some(TypeFamily::Float)) => Opcode::CMP_F_GT,
-        (BinOp::Gt, Some(TypeFamily::Unsigned)) => Opcode::CMP_GT_UN,
+        (BinOp::Gt, Some(TypeFamily::Float(_))) => Opcode::CMP_F_GT,
+        (BinOp::Gt, Some(TypeFamily::Unsigned(_))) => Opcode::CMP_GT_UN,
         (BinOp::Gt, _) => Opcode::CMP_GT,
-        (BinOp::Ge, Some(TypeFamily::Float)) => Opcode::CMP_F_GE,
-        (BinOp::Ge, Some(TypeFamily::Unsigned)) => Opcode::CMP_GE_UN,
+        (BinOp::Ge, Some(TypeFamily::Float(_))) => Opcode::CMP_F_GE,
+        (BinOp::Ge, Some(TypeFamily::Unsigned(_))) => Opcode::CMP_GE_UN,
         (BinOp::Ge, _) => Opcode::CMP_GE,
+        (BinOp::And, _) => Opcode::B_AND,
+        (BinOp::Or, _) => Opcode::B_OR,
         (BinOp::Xor, _) => Opcode::B_XOR,
         (BinOp::Shl, _) => Opcode::B_SHL,
         (BinOp::Shr, _) => Opcode::B_SHR,

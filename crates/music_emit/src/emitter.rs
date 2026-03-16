@@ -12,9 +12,10 @@ use std::collections::{HashMap, HashSet};
 use std::mem;
 
 use music_ast::Pat;
-use music_ast::attr::Attr;
+use music_ast::attr::{Attr, AttrValue};
 use music_ast::decl::{ClassMember, EffectOp, ForeignDecl};
 use music_ast::expr::{Expr, LetFields, Param};
+use music_ast::lit::Lit;
 use music_ast::{AstArenas, ExprIdx, ParsedModule, PatIdx, Stmt};
 use music_sema::SemaResult;
 use music_sema::Type;
@@ -151,9 +152,14 @@ impl<'a> Emitter<'a> {
     }
 
     pub fn emit_all(&mut self) -> Result<Vec<FnBytecode>, EmitError> {
-        self.register_well_known_fns()?;
         self.resolve_well_known_tags();
         self.scan_top_level()?;
+        // Update str_cat index from lang items if rt.ms was imported
+        if let Some(str_cat_def) = self.sema.lang_items.get("str_cat") {
+            if let Some(&idx) = self.foreign_map.get(&str_cat_def) {
+                self.str_cat_ffi_idx = Some(idx);
+            }
+        }
         let functions = self.emit_functions()?;
         if functions.is_empty() && self.entry_fn_id.is_some() {
             return Err(EmitError::UnsupportedFeature {
@@ -167,140 +173,6 @@ impl<'a> Emitter<'a> {
         let id = self.next_fn_id;
         self.next_fn_id += 1;
         id
-    }
-
-    #[allow(clippy::too_many_lines)]
-    fn register_well_known_fns(&mut self) -> Result<(), EmitError> {
-        let wk = &self.sema.well_known;
-
-        let str_type_id = self
-            .tp
-            .lower_well_known_def(wk.string, wk)
-            .ok_or_else(|| EmitError::unresolvable("String type"))?;
-        let unit_type_id = self
-            .tp
-            .lower_well_known_def(wk.unit, wk)
-            .ok_or_else(|| EmitError::unresolvable("Unit type"))?;
-        let any_type_id = self
-            .tp
-            .lower_well_known_def(wk.any, wk)
-            .ok_or_else(|| EmitError::unresolvable("Any type"))?;
-
-        // writeln: (String) ~> Unit with { IO }
-        let writeln_sym = self.interner.intern("musi_writeln");
-        let writeln_idx = push_foreign_fn(
-            &mut self.foreign_fns,
-            writeln_sym,
-            &[str_type_id],
-            unit_type_id,
-        )?;
-        let _ = self.foreign_map.insert(wk.fns.writeln, writeln_idx);
-
-        // write: (String) ~> Unit with { IO }
-        let write_sym = self.interner.intern("musi_write");
-        let write_idx = push_foreign_fn(
-            &mut self.foreign_fns,
-            write_sym,
-            &[str_type_id],
-            unit_type_id,
-        )?;
-        let _ = self.foreign_map.insert(wk.fns.write, write_idx);
-
-        // show: (Any) -> String
-        let show_sym = self.interner.intern("musi_show");
-        let show_idx =
-            push_foreign_fn(&mut self.foreign_fns, show_sym, &[any_type_id], str_type_id)?;
-        let _ = self.foreign_map.insert(wk.fns.show, show_idx);
-
-        // str_cat: (String, String) -> String  [internal helper for f-string desugar]
-        let str_cat_sym = self.interner.intern("musi_str_cat");
-        let str_cat_idx = push_foreign_fn(
-            &mut self.foreign_fns,
-            str_cat_sym,
-            &[str_type_id, str_type_id],
-            str_type_id,
-        )?;
-        self.str_cat_ffi_idx = Some(str_cat_idx);
-
-        // Core builtins (musi:core)
-        let int_type_id = self
-            .tp
-            .lower_well_known_def(wk.ints.int, wk)
-            .ok_or_else(|| EmitError::unresolvable("Int type"))?;
-        let bool_type_id = self
-            .tp
-            .lower_well_known_def(wk.bool, wk)
-            .ok_or_else(|| EmitError::unresolvable("Bool type"))?;
-
-        let core = &wk.core;
-        let mut register_core =
-            |def_id, ext_name: &str, params: &[u32], ret| -> Result<(), EmitError> {
-                let sym = self.interner.intern(ext_name);
-                let idx = push_foreign_fn(&mut self.foreign_fns, sym, params, ret)?;
-                let _ = self.foreign_map.insert(def_id, idx);
-                Ok(())
-            };
-
-        register_core(core.int_abs, "musi_int_abs", &[int_type_id], int_type_id)?;
-        register_core(
-            core.int_min,
-            "musi_int_min",
-            &[int_type_id, int_type_id],
-            int_type_id,
-        )?;
-        register_core(
-            core.int_max,
-            "musi_int_max",
-            &[int_type_id, int_type_id],
-            int_type_id,
-        )?;
-        register_core(
-            core.int_clamp,
-            "musi_int_clamp",
-            &[int_type_id, int_type_id, int_type_id],
-            int_type_id,
-        )?;
-        register_core(
-            core.int_pow,
-            "musi_int_pow",
-            &[int_type_id, int_type_id],
-            int_type_id,
-        )?;
-        register_core(core.str_len, "musi_str_len", &[str_type_id], int_type_id)?;
-        register_core(
-            core.str_contains,
-            "musi_str_contains",
-            &[str_type_id, str_type_id],
-            bool_type_id,
-        )?;
-        register_core(
-            core.str_starts_with,
-            "musi_str_starts_with",
-            &[str_type_id, str_type_id],
-            bool_type_id,
-        )?;
-        register_core(
-            core.str_ends_with,
-            "musi_str_ends_with",
-            &[str_type_id, str_type_id],
-            bool_type_id,
-        )?;
-        register_core(core.arr_len, "musi_arr_len", &[any_type_id], int_type_id)?;
-        register_core(
-            core.arr_push,
-            "musi_arr_push",
-            &[any_type_id, any_type_id],
-            unit_type_id,
-        )?;
-        register_core(core.arr_pop, "musi_arr_pop", &[any_type_id], any_type_id)?;
-        register_core(
-            core.arr_reverse,
-            "musi_arr_reverse",
-            &[any_type_id],
-            any_type_id,
-        )?;
-
-        Ok(())
     }
 
     fn resolve_well_known_tags(&mut self) {
@@ -331,7 +203,7 @@ impl<'a> Emitter<'a> {
                 self.scan_effect(name, &ops)?;
             }
             Expr::Foreign { abi, decls, .. } => {
-                self.scan_foreign(abi, &decls)?;
+                self.scan_foreign_with_attrs(abi, &decls, &[])?;
             }
             Expr::Instance { members, .. } => {
                 self.scan_instance_members(&members);
@@ -387,7 +259,7 @@ impl<'a> Emitter<'a> {
                 self.scan_effect(name, &ops)?;
             }
             Expr::Foreign { abi, decls, .. } => {
-                self.scan_foreign(abi, &decls)?;
+                self.scan_foreign_with_attrs(abi, &decls, attrs)?;
             }
             Expr::Instance { members, .. } => {
                 self.scan_instance_members(&members);
@@ -423,8 +295,14 @@ impl<'a> Emitter<'a> {
         Ok(())
     }
 
-    fn scan_foreign(&mut self, abi: Symbol, decls: &[ForeignDecl]) -> Result<(), EmitError> {
+    fn scan_foreign_with_attrs(
+        &mut self,
+        abi: Symbol,
+        decls: &[ForeignDecl],
+        attrs: &[Attr],
+    ) -> Result<(), EmitError> {
         let abi_str = self.interner.resolve(abi).to_owned();
+        let link_library = extract_link_library(attrs, self.interner);
         let any_type_id = self
             .tp
             .lower_well_known_def(self.sema.well_known.any, &self.sema.well_known)
@@ -465,7 +343,12 @@ impl<'a> Emitter<'a> {
                 self.lower_foreign_fn_type(def_id, any_type_id, unit_type_id);
 
             let ext_sym = ext_name.unwrap_or(*name);
-            let library = if abi_str == "C" { None } else { Some(abi) };
+            if abi_str != "C" {
+                return Err(EmitError::UnsupportedFeature {
+                    desc: format!("unknown calling convention \"{abi_str}\"; use #[link(name := \"...\")]  to specify a library").into(),
+                });
+            }
+            let library = link_library;
 
             let idx = u32::try_from(self.foreign_fns.len())
                 .map_err(|_| EmitError::overflow("foreign fn index overflow"))?;
@@ -835,24 +718,6 @@ pub fn write_function_pool(buf: &mut Vec<u8>, functions: &[FnBytecode]) -> Resul
     Ok(())
 }
 
-// ── private helpers ───────────────────────────────────────────────────────────
-
-fn push_foreign_fn(
-    fns: &mut Vec<ForeignFn>,
-    ext_name: Symbol,
-    param_type_ids: &[u32],
-    ret_type_id: u32,
-) -> Result<u32, EmitError> {
-    fns.push(ForeignFn {
-        ext_name,
-        library: None,
-        param_type_ids: param_type_ids.to_vec(),
-        ret_type_id,
-        variadic: false,
-    });
-    u32::try_from(fns.len() - 1).map_err(|_| EmitError::overflow("foreign fn index overflow"))
-}
-
 /// Recursively unwrap Annotated/Paren to find an inner Fn.
 fn extract_fn(expr_idx: ExprIdx, ast: &AstArenas) -> Option<(Vec<Param>, ExprIdx)> {
     match &ast.exprs[expr_idx] {
@@ -866,6 +731,24 @@ fn has_entrypoint_attr(attrs: &[Attr], interner: &Interner) -> bool {
     attrs
         .iter()
         .any(|a| interner.resolve(a.name) == "entrypoint")
+}
+
+fn extract_link_library(attrs: &[Attr], interner: &Interner) -> Option<Symbol> {
+    for attr in attrs {
+        if interner.resolve(attr.name) != "link" {
+            continue;
+        }
+        if let Some(AttrValue::Named { fields, .. }) = &attr.value {
+            for field in fields {
+                if interner.resolve(field.name) == "name" {
+                    if let Lit::Str { value, .. } = &field.value {
+                        return Some(*value);
+                    }
+                }
+            }
+        }
+    }
+    None
 }
 
 fn pat_span(pat_idx: PatIdx, ast: &AstArenas) -> Span {
