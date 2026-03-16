@@ -62,13 +62,11 @@ pub fn walk_expr<V: AstVisitor + ?Sized>(
     ctx: &AstArenas,
 ) -> ControlFlow<V::Break> {
     match &ctx.exprs[idx] {
-        // -- literals & names ------------------------------------------------
         Expr::Lit { lit, .. } => walk_expr_lit(v, lit, ctx),
         Expr::Name { .. } | Expr::Error { .. } | Expr::Import { .. } | Expr::Export { .. } => {
             ControlFlow::Continue(())
         }
 
-        // -- grouping --------------------------------------------------------
         Expr::Paren { inner: e, .. } | Expr::Field { object: e, .. } => v.visit_expr(*e, ctx),
         Expr::Tuple { elems, .. } => {
             for &e in elems {
@@ -78,11 +76,9 @@ pub fn walk_expr<V: AstVisitor + ?Sized>(
         }
         Expr::Block { stmts, tail, .. } => walk_expr_block(v, stmts, *tail, ctx),
 
-        // -- bindings --------------------------------------------------------
         Expr::Let { fields, body, .. } => walk_expr_let(v, fields, *body, ctx),
         Expr::Binding { fields, .. } => walk_let_fields(v, fields, ctx),
 
-        // -- functions -------------------------------------------------------
         Expr::Fn {
             params,
             ret_ty,
@@ -91,14 +87,12 @@ pub fn walk_expr<V: AstVisitor + ?Sized>(
         } => walk_expr_fn(v, params, *ret_ty, *body, ctx),
         Expr::Call { callee, args, .. } => walk_expr_call(v, *callee, args, ctx),
 
-        // -- access & update -------------------------------------------------
         Expr::Index { object, index, .. } => v.visit_expr_list(&[*object, *index], ctx),
         Expr::Update { base, fields, .. } => {
             v.visit_expr(*base, ctx)?;
             walk_rec_fields(v, fields, ctx)
         }
 
-        // -- constructors ----------------------------------------------------
         Expr::Record { fields, .. } => walk_rec_fields(v, fields, ctx),
         Expr::Array { elems, .. } => walk_expr_array(v, elems, ctx),
         Expr::Variant { args, .. } => {
@@ -110,17 +104,14 @@ pub fn walk_expr<V: AstVisitor + ?Sized>(
         Expr::Choice { body, .. } => v.visit_ty(*body, ctx),
         Expr::RecordDef { fields, .. } => walk_rec_def_fields(v, fields, ctx),
 
-        // -- operators -------------------------------------------------------
         Expr::BinOp { left, right, .. } => v.visit_expr_list(&[*left, *right], ctx),
         Expr::UnaryOp { operand, .. } => v.visit_expr(*operand, ctx),
 
-        // -- conditionals ----------------------------------------------------
         Expr::Piecewise { arms, .. } => walk_expr_piecewise(v, arms, ctx),
         Expr::Match {
             scrutinee, arms, ..
         } => walk_expr_match(v, *scrutinee, arms, ctx),
 
-        // -- control flow ----------------------------------------------------
         Expr::Return { value, .. } => {
             if let Some(val) = *value {
                 v.visit_expr(val, ctx)?;
@@ -128,13 +119,11 @@ pub fn walk_expr<V: AstVisitor + ?Sized>(
             ControlFlow::Continue(())
         }
 
-        // -- module ----------------------------------------------------------
         Expr::Annotated { attrs, inner, .. } => {
             walk_attrs_values(v, attrs, ctx)?;
             v.visit_expr(*inner, ctx)
         }
 
-        // -- declarations ----------------------------------------------------
         Expr::Class {
             constraints,
             members,
@@ -148,18 +137,14 @@ pub fn walk_expr<V: AstVisitor + ?Sized>(
             walk_constraints(v, constraints, ctx)?;
             walk_class_members(v, members, ctx)
         }
-
         Expr::Effect { ops, .. } => walk_effect_ops(v, ops, ctx),
-
         Expr::Foreign { decls, .. } => walk_foreign_decls(v, decls, ctx),
 
-        // -- type test / cast ------------------------------------------------
         Expr::TypeCheck { operand, ty, .. } => {
             v.visit_expr(*operand, ctx)?;
             v.visit_ty(*ty, ctx)
         }
 
-        // -- effects ---------------------------------------------------------
         Expr::Handle {
             effect_ty,
             ops,

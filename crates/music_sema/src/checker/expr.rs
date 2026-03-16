@@ -1035,10 +1035,33 @@ fn synth_binop<S: BuildHasher>(
             ck.named_ty(ck.ctx.well_known.bool)
         }
         BinOp::And | BinOp::Or => {
-            let bool_ty = ck.named_ty(ck.ctx.well_known.bool);
-            ck.unify_or_report(bool_ty, left_ty, span);
-            ck.unify_or_report(bool_ty, right_ty, span);
-            bool_ty
+            ck.unify_or_report(left_ty, right_ty, span);
+            let resolved = ck.store.unify.resolve(left_ty, &ck.store.types);
+            match &ck.store.types[resolved] {
+                Type::Named { def, .. } => {
+                    let d = *def;
+                    let wk = &ck.ctx.well_known;
+                    if d == wk.bool
+                        || d == wk.ints.int
+                        || d == wk.ints.int8
+                        || d == wk.ints.int16
+                        || d == wk.ints.int32
+                        || d == wk.ints.int64
+                        || d == wk.nats.nat
+                        || d == wk.nats.nat8
+                        || d == wk.nats.nat16
+                        || d == wk.nats.nat32
+                        || d == wk.nats.nat64
+                    {
+                        left_ty
+                    } else {
+                        let bool_ty = ck.named_ty(wk.bool);
+                        ck.unify_or_report(bool_ty, left_ty, span);
+                        bool_ty
+                    }
+                }
+                _ => left_ty,
+            }
         }
         BinOp::Add
         | BinOp::Sub

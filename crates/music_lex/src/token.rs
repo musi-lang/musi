@@ -8,7 +8,7 @@ use crate::trivia::TriviaRange;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TokenKind {
-    // -- keywords ------------------------------------------------------------
+    // Keywords (alphabetically)
     KwAnd,
     KwAs,
     KwChoice,
@@ -39,7 +39,7 @@ pub enum TokenKind {
     KwWith,
     KwXor,
 
-    // -- delimiters ----------------------------------------------------------
+    // Delimiters
     LParen,   // (
     RParen,   // )
     LBrace,   // {
@@ -47,7 +47,7 @@ pub enum TokenKind {
     LBracket, // [
     RBracket, // ]
 
-    // -- single-char punctuation ---------------------------------------------
+    // Single-char punctuation
     Plus,       // +
     Minus,      // -
     Star,       // *
@@ -64,22 +64,18 @@ pub enum TokenKind {
     Question,   // ?
     Underscore, // _
 
-    // -- multi-char punctuation ----------------------------------------------
+    // Multi-char punctuation
     // 3-char
     DotDotDot, // ...  spread/splat
     DotDotLt,  // ..<  exclusive range
-
     // 2-char (bang)
     BangBang, // !!   force null coalesce
     BangDot,  // !.   forced unwrap field access
-
     // 1-char (bang)
     Bang, // !    force unwrap postfix
-
     // 2-char (colon-question)
     ColonQuestionGt, // :?>  type cast
     ColonQuestion,   // :?   type test
-
     // 2-char
     ColonColon,       // ::   cons
     ColonEq,          // :=   binding
@@ -102,22 +98,22 @@ pub enum TokenKind {
     EqGt,             // =>   fat arrow (match arms)
     HashLBracket,     // #[   attribute start
 
-    // -- literals ------------------------------------------------------------
+    // Literals
     IntLit,
     FloatLit,
     StringLit,
     RuneLit, // 'x'
 
-    // -- f-string tokens -----------------------------------------------------
+    // F-string tokens
     FStringHead,   // f"...text...{
     FStringMiddle, // }...text...{
     FStringTail,   // }...text..."
 
-    // -- identifiers ---------------------------------------------------------
+    // Identifiers
     Ident,   // regular identifier
     TyIdent, // 'T, 'a — type variable
 
-    // -- sentinel ------------------------------------------------------------
+    // Sentinel
     Eof,
     Error,
 }
