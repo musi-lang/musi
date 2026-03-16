@@ -536,8 +536,11 @@ pub fn def_at_cursor(offset: u32, doc: &AnalyzedDoc) -> Option<&DefInfo> {
         if def.span == Span::DUMMY {
             return false;
         }
-        let name_span =
-            find_name_token(&doc.lexed.tokens, def.span.start, def.name).unwrap_or(def.span);
+        let Some(name_span) =
+            find_name_token(&doc.lexed.tokens, def.span.start, def.name)
+        else {
+            return false;
+        };
         name_span.start <= offset && offset <= name_span.end()
     })
 }
