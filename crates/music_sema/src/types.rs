@@ -279,7 +279,7 @@ impl fmt::Display for TypeDisplay<'_> {
                     self.write_ty(f, field.ty)?;
                 }
                 if *open {
-                    write!(f, ", ..")?;
+                    write!(f, ", ...")?;
                 }
                 write!(f, " }}")
             }
