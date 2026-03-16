@@ -1,5 +1,6 @@
 //! Musi standard prelude — type classes, core types, primitive instances.
 
+#[lang("Eq")]
 class Eq ['a] {
   let (=)(a, b) : Bool;
 
@@ -7,43 +8,56 @@ class Eq ['a] {
   law symmetry(x, y) := (x = y) = (y = x);
 };
 
+#[lang("Ord")]
 class Ord ['a] where 'a <: Eq {
   let compare(a, b) : Ordering;
 };
 
+#[lang("Show")]
 class Show ['a] {
   let show(a) : String;
 };
 
+#[lang("Add")]
 class Add ['a] {
   let (+)(a, b) : 'a;
 };
 
+#[lang("Into")]
 class Into ['a, 'b] {
   let into(a) : 'b;
 };
 
+#[lang("Iterable")]
 class Iterable ['a, 'elem] {
   let next(iter) : ?'elem;
 };
 
+#[lang("Propagate")]
 class Propagate ['e] {
   let propagate(e) : Never;
 };
 
-// ── Core choice types ────────────────────────────────────────
-
+#[lang("Ordering")]
 export let Ordering := choice { Less + Equal + Greater };
+#[lang("Option")]
 export let Option ['a] := choice { None + Some of 'a };
+#[lang("Result")]
 export let Result ['a, 'e] := choice { Ok of 'a + Err of 'e };
-
-// ── Instances: Eq ────────────────────────────────────────────
 
 instance Eq of Int {
   let (=)(a, b) : Bool := a = b;
 };
 
+instance Eq of Nat {
+  let (=)(a, b) : Bool := a = b;
+};
+
 instance Eq of Float64 {
+  let (=)(a, b) : Bool := a = b;
+};
+
+instance Eq of Float {
   let (=)(a, b) : Bool := a = b;
 };
 
@@ -59,9 +73,15 @@ instance Eq of Rune {
   let (=)(a, b) : Bool := a = b;
 };
 
-// ── Instances: Ord ───────────────────────────────────────────
-
 instance Ord of Int {
+  let compare(a, b) : Ordering := (
+    .Less if a < b
+    | .Greater if a > b
+    | .Equal if _
+  );
+};
+
+instance Ord of Nat {
   let compare(a, b) : Ordering := (
     .Less if a < b
     | .Greater if a > b
@@ -85,13 +105,19 @@ instance Ord of Rune {
   );
 };
 
-// ── Instances: Show ──────────────────────────────────────────
-
 instance Show of Int {
   let show(a) : String := show(a);
 };
 
+instance Show of Nat {
+  let show(a) : String := show(a);
+};
+
 instance Show of Float64 {
+  let show(a) : String := show(a);
+};
+
+instance Show of Float {
   let show(a) : String := show(a);
 };
 
@@ -107,21 +133,25 @@ instance Show of Rune {
   let show(a) : String := show(a);
 };
 
-// ── Instances: Add ───────────────────────────────────────────
-
 instance Add of Int {
   let (+)(a, b) : Int := a + b;
+};
+
+instance Add of Nat {
+  let (+)(a, b) : Nat := a + b;
 };
 
 instance Add of Float64 {
   let (+)(a, b) : Float64 := a + b;
 };
 
+instance Add of Float {
+  let (+)(a, b) : Float := a + b;
+};
+
 instance Add of String {
   let (+)(a, b) : String := a + b;
 };
-
-// ── Option helpers ───────────────────────────────────────────
 
 export let unwrap_or ['a] := (opt, default) =>
   match opt (
@@ -140,8 +170,6 @@ export let and_then ['a, 'b] := (opt, f) =>
     .Some(v) => f(v)
     | .None => .None
   );
-
-// ── Result helpers ───────────────────────────────────────────
 
 export let map_ok ['a, 'b, 'e] := (res, f) =>
   match res (
