@@ -5,7 +5,7 @@ import "@std/rt" as rt;
 foreign "C" (
   let getchar : () ~> Int;
   let putchar : (Int) ~> Int;
-)
+);
 
 export let put_char := (r) => putchar(rt.rune_to_int(r));
 

@@ -79,28 +79,28 @@ export foreign "C" (
   // Conversion
   let int_to_float : (Int) ~> Float64;
   let float_to_int : (Float64) ~> Int;
-)
+);
 
-#[lang("write")]
+#[lang := "write" ]
 #[link(name := "musi_rt")]
 export foreign "C" (
   let write : (String) ~> Unit;
-)
+);
 
-#[lang("writeln")]
+#[lang := "writeln" ]
 #[link(name := "musi_rt")]
 export foreign "C" (
   let writeln : (String) ~> Unit;
-)
+);
 
-#[lang("show")]
+#[lang := "show" ]
 #[link(name := "musi_rt")]
 export foreign "C" (
   let show : (Any) ~> String;
-)
+);
 
-#[lang("str_cat")]
+#[lang := "str_cat" ]
 #[link(name := "musi_rt")]
 export foreign "C" (
   let str_cat : (String, String) ~> String;
-)
+);
