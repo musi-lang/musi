@@ -82,7 +82,7 @@ pub struct DefInfo {
     pub is_entry_point: bool,
     /// For parameters: the calling-convention mode (`var`, `inout`, `ref`).
     pub param_mode: Option<ParamMode>,
-    /// If this definition carries `#[lang("...")]`, the interned name.
+    /// If this definition carries `#[lang := "..."]`, the interned name.
     pub lang_item: Option<Symbol>,
 }
 

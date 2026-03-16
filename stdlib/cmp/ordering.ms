@@ -1,4 +1,4 @@
 //! Ordering choice type.
 
-#[lang("Ordering")]
+#[lang := "Ordering"]
 export let Ordering := choice { Less + Equal + Greater };

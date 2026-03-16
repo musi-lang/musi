@@ -82,7 +82,7 @@ pub struct SemaResult {
     pub fn_constraints: HashMap<DefId, Vec<Obligation>>,
     /// Well-known prelude type definitions (needed by bytecode emission).
     pub well_known: WellKnown,
-    /// Registry of definitions carrying `#[lang("...")]` annotations.
+    /// Registry of definitions carrying `#[lang := "..."]` annotations.
     pub lang_items: LangItemRegistry,
 }
 

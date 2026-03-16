@@ -1,6 +1,6 @@
 //! Result type and combinators.
 
-#[lang("Result")]
+#[lang := "Result"]
 export let Result ['a, 'e] := choice { Ok of 'a + Err of 'e };
 
 export let is_ok ['a, 'e] := (res) =>

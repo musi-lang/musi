@@ -1,6 +1,6 @@
 //! Add type class and primitive instances.
 
-#[lang("Add")]
+#[lang := "Add"]
 class Add ['a] {
   let (+)(a, b) : 'a;
 };

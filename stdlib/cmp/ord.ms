@@ -1,6 +1,6 @@
 //! Ord type class and primitive instances.
 
-#[lang("Ord")]
+#[lang := "Ord"]
 class Ord ['a] where 'a <: Eq {
   let compare(a, b) : Ordering;
 };

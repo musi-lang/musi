@@ -1,6 +1,6 @@
 //! Into type class.
 
-#[lang("Into")]
+#[lang := "Into"]
 class Into ['a, 'b] {
   let into(a) : 'b;
 };

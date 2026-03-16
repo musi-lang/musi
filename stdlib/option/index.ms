@@ -1,6 +1,6 @@
 //! Option type and combinators.
 
-#[lang("Option")]
+#[lang := "Option"]
 export let Option ['a] := choice { None + Some of 'a };
 
 export let is_some ['a] := (opt) =>

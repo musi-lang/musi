@@ -108,7 +108,7 @@ impl Resolver<'_> {
     }
 
     fn collect_foreign_decls(&mut self, exported: bool, decls: &[ForeignDecl], attrs: &[Attr]) {
-        // When there is exactly one decl, the outer attrs (including #[lang]) apply to it.
+        // When there is exactly one decl, the outer attrs (including #[lang := "..."]) apply to it.
         let single_decl_attrs = if decls.len() == 1 { attrs } else { &[] };
         for decl in decls {
             match decl {

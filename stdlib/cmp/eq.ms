@@ -1,6 +1,6 @@
 //! Eq type class and primitive instances.
 
-#[lang("Eq")]
+#[lang := "Eq"]
 class Eq ['a] {
   let (=)(a, b) : Bool;
 
