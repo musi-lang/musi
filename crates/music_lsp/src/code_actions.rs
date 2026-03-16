@@ -3,12 +3,12 @@
 //! Currently implements:
 //! - "Add type annotation" for `let`/`var` bindings that lack an explicit `: Type`.
 
+use lsp_types::{
+    CodeAction, CodeActionKind, CodeActionOrCommand, CodeActionParams, Range, TextEdit, Url,
+    WorkspaceEdit,
+};
 use music_ast::Expr;
 use music_sema::Type;
-use lsp_types::{
-    CodeAction, CodeActionKind, CodeActionOrCommand, CodeActionParams, Range, TextEdit,
-    Url, WorkspaceEdit,
-};
 
 use crate::analysis::{AnalyzedDoc, find_name_token, offset_to_position, position_to_offset};
 use crate::hover::fmt_type_lsp;
@@ -29,7 +29,7 @@ pub fn code_actions(
         params.range.start.character,
     );
 
-    let mut actions = Vec::new();
+    let mut actions = vec![];
 
     for idx in 0..doc.module.arenas.exprs.len() {
         let idx = music_shared::Idx::from_raw(u32::try_from(idx).unwrap_or(0));

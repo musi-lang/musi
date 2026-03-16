@@ -43,7 +43,7 @@ impl ModuleGraph {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            nodes: Vec::new(),
+            nodes: vec![],
             path_to_id: HashMap::new(),
         }
     }
@@ -64,7 +64,7 @@ impl ModuleGraph {
             path,
             source,
             file_id,
-            imports: Vec::new(),
+            imports: vec![],
             builtin: false,
         });
         id
@@ -86,7 +86,7 @@ impl ModuleGraph {
             path,
             source: String::new(),
             file_id,
-            imports: Vec::new(),
+            imports: vec![],
             builtin: true,
         });
         id
@@ -158,7 +158,7 @@ impl ModuleGraph {
         // many modules each module *imports* (out-degree in original graph),
         // then start from modules that import nothing (leaves).
         let mut import_count = vec![0usize; n];
-        let mut reverse_edges: Vec<Vec<ModuleId>> = vec![Vec::new(); n];
+        let mut reverse_edges: Vec<Vec<ModuleId>> = vec![vec![]; n];
         for node in &self.nodes {
             import_count[module_idx(node.id)] = node.imports.len();
             for &(target, _) in &node.imports {
@@ -279,7 +279,7 @@ fn format_cycle_path(
 }
 
 fn collect_import_paths(module: &ParsedModule) -> Vec<(Symbol, Span)> {
-    let mut imports = Vec::new();
+    let mut imports = vec![];
     for stmt in &module.stmts {
         collect_imports_from_expr(stmt.expr, &module.arenas, &mut imports);
     }
@@ -422,16 +422,12 @@ fn process_import(
     };
 
     // Built-in modules (e.g. musi:ffi) skip filesystem resolution.
-    if specifier.scheme == ImportScheme::Musi
-        && is_builtin_module(&specifier.module_path)
-    {
+    if specifier.scheme == ImportScheme::Musi && is_builtin_module(&specifier.module_path) {
         let sentinel = PathBuf::from(format!("<musi:{}>", specifier.module_path));
         let target_id = if let Some(existing) = graph.lookup(&sentinel) {
             existing
         } else {
-            let builtin_file_id = ctx
-                .source_db
-                .add(sentinel.display().to_string(), "");
+            let builtin_file_id = ctx.source_db.add(sentinel.display().to_string(), "");
             graph.add_builtin_module(sentinel, builtin_file_id)
         };
         graph.add_edge(current_id, target_id, sym);

@@ -2,9 +2,9 @@
 
 use std::collections::HashMap;
 
+use lsp_types::{DocumentSymbol, DocumentSymbolResponse, SymbolKind};
 use music_sema::{DefId, DefKind, Type};
 use music_shared::Span;
-use lsp_types::{DocumentSymbol, DocumentSymbolResponse, SymbolKind};
 
 use crate::analysis::{AnalyzedDoc, def_name_span, span_to_range};
 use crate::hover::fmt_type_lsp;
@@ -79,7 +79,7 @@ pub fn document_symbols(doc: &AnalyzedDoc) -> DocumentSymbolResponse {
         .collect();
 
     let mut children_map: HashMap<DefId, Vec<DocumentSymbol>> = HashMap::new();
-    let mut top_level: Vec<(DefId, DocumentSymbol)> = Vec::new();
+    let mut top_level: Vec<(DefId, DocumentSymbol)> = vec![];
 
     for (id, parent, sym) in symbols_with_id {
         if let Some(pid) = parent {

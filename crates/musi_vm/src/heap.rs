@@ -181,7 +181,7 @@ impl Heap {
         }
 
         // Iterative worklist traversal.
-        let mut worklist: Vec<usize> = Vec::new();
+        let mut worklist: Vec<usize> = vec![];
         for root in roots {
             if let Some(idx) = root.try_as_ref() {
                 worklist.push(idx);

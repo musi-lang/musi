@@ -12,11 +12,11 @@ use music_lex::lex;
 use music_parse::parse;
 use music_resolve::graph::ModuleId;
 use music_resolve::{ModuleGraph, ModuleNode, build_module_graph};
+use music_sema::types::RecordField;
 use music_sema::{
     ExportBinding, ImportNames, SemaResult, SharedAnalysisState, Type, TypeIdx, analyze,
     collect_exports,
 };
-use music_sema::types::RecordField;
 use music_shared::{DiagnosticBag, FileId, Interner, SourceDb};
 
 use crate::resolve_config;
@@ -165,7 +165,7 @@ fn run_sema_in_order(
 ) -> Option<(SemaResult, ParsedModule, Vec<DepModule>)> {
     let mut state = SharedAnalysisState::new(interner);
     let mut module_exports: HashMap<ModuleId, Vec<ExportBinding>> = HashMap::new();
-    let mut dep_modules: Vec<DepModule> = Vec::new();
+    let mut dep_modules: Vec<DepModule> = vec![];
 
     let entry_id = ModuleId(0);
     let mut entry_output: Option<(music_sema::ModuleSemaOutput, ParsedModule)> = None;
@@ -283,10 +283,7 @@ pub fn run_backend(out: &mut FrontendOutput) -> Result<Vec<u8>, ()> {
     }
 }
 
-fn builtin_module_exports(
-    node: &ModuleNode,
-    state: &SharedAnalysisState,
-) -> Vec<ExportBinding> {
+fn builtin_module_exports(node: &ModuleNode, state: &SharedAnalysisState) -> Vec<ExportBinding> {
     let path_str = node.path.to_string_lossy();
     if path_str == "<musi:ffi>" {
         let wk = &state.well_known;

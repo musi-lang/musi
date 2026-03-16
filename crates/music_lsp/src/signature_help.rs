@@ -1,8 +1,10 @@
 //! Signature help: show function parameter types when inside a call.
 
+use lsp_types::{
+    ParameterInformation, ParameterLabel, Position, SignatureHelp, SignatureInformation,
+};
 use music_ast::{Expr, ExprIdx};
 use music_sema::Type;
-use lsp_types::{ParameterInformation, ParameterLabel, Position, SignatureHelp, SignatureInformation};
 
 use crate::analysis::{AnalyzedDoc, expr_span, position_to_offset};
 use crate::hover::fmt_type_lsp;
@@ -60,7 +62,7 @@ pub fn signature_help(doc: &AnalyzedDoc, position: Position) -> Option<Signature
     };
 
     let params_start = label.find('(').unwrap_or(0) + 1;
-    let mut param_infos = Vec::new();
+    let mut param_infos = vec![];
     let mut cursor = params_start;
     for (i, ps) in param_strs.iter().enumerate() {
         let start = cursor;

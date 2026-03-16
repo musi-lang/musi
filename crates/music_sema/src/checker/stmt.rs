@@ -4,8 +4,8 @@ use music_ast::decl::{ClassMember, ForeignDecl};
 use music_ast::expr::{Expr, Param};
 use music_ast::ty::TyParam;
 use music_ast::util::collect_ty_var_nodes;
-use std::collections::HashSet;
 use music_shared::{Idx, Span, Symbol};
+use std::collections::HashSet;
 use std::hash::BuildHasher;
 
 use crate::checker::Checker;
@@ -103,7 +103,11 @@ fn check_member_law<S: BuildHasher>(
     ck.current_scope = parent;
 }
 
-fn check_class_members<S: BuildHasher>(ck: &mut Checker<'_, S>, members: &[ClassMember], ty_params: &[TyParam]) {
+fn check_class_members<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
+    members: &[ClassMember],
+    ty_params: &[TyParam],
+) {
     for member in members {
         match member {
             ClassMember::Fn { .. } => check_member_fn(ck, member),
@@ -149,7 +153,10 @@ fn check_instance_method_coverage<S: BuildHasher>(
     }
 }
 
-fn find_class_required_methods<S: BuildHasher>(ck: &Checker<'_, S>, class_name: Symbol) -> Vec<String> {
+fn find_class_required_methods<S: BuildHasher>(
+    ck: &Checker<'_, S>,
+    class_name: Symbol,
+) -> Vec<String> {
     let n = ck.ctx.ast.exprs.len();
     for i in 0..n {
         let idx = music_shared::Idx::from_raw(u32::try_from(i).expect("expr index in range"));
@@ -159,7 +166,10 @@ fn find_class_required_methods<S: BuildHasher>(ck: &Checker<'_, S>, class_name: 
             return members
                 .iter()
                 .filter_map(|m| {
-                    if let ClassMember::Fn { sig, default: None, .. } = m {
+                    if let ClassMember::Fn {
+                        sig, default: None, ..
+                    } = m
+                    {
                         Some(ck.ctx.interner.resolve(sig.name).to_owned())
                     } else {
                         None
@@ -245,7 +255,7 @@ pub fn check_stmt<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: Idx<music_a
             }
         }
         Expr::Foreign { decls, .. } => {
-            let mut ty_params = Vec::new();
+            let mut ty_params = vec![];
             for decl in &decls {
                 if let ForeignDecl::Fn { ty, .. } = decl {
                     collect_ty_var_nodes(*ty, ck.ctx.ast, &mut ty_params);

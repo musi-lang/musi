@@ -284,10 +284,9 @@ impl Vm {
             | Opcode::INV_DYN
             | Opcode::INV_FFI => self.step_control(op, operand),
 
-            Opcode::CONT_MARK
-            | Opcode::CONT_UNMARK
-            | Opcode::CONT_SAVE
-            | Opcode::CONT_RESUME => self.step_continuations(op, operand, fn_idx),
+            Opcode::CONT_MARK | Opcode::CONT_UNMARK | Opcode::CONT_SAVE | Opcode::CONT_RESUME => {
+                self.step_continuations(op, operand, fn_idx)
+            }
 
             Opcode::TSK_SPN
             | Opcode::TSK_AWT
@@ -319,16 +318,16 @@ impl Vm {
             // §5 Locals
             Opcode::LD_LOC | Opcode::LD_LOC_W => {
                 let frame = self.current_frame()?;
-                let slot = usize::try_from(operand)
-                    .map_err(|_| malformed!("ld.loc operand overflow"))?;
+                let slot =
+                    usize::try_from(operand).map_err(|_| malformed!("ld.loc operand overflow"))?;
                 let v = frame.get_local(slot)?;
                 frame.stack.push(v);
                 Ok(StepResult::Continue)
             }
             Opcode::ST_LOC | Opcode::ST_LOC_W => {
                 let frame = self.current_frame()?;
-                let slot = usize::try_from(operand)
-                    .map_err(|_| malformed!("st.loc operand overflow"))?;
+                let slot =
+                    usize::try_from(operand).map_err(|_| malformed!("st.loc operand overflow"))?;
                 let v = frame.pop()?;
                 frame.set_local(slot, v)?;
                 Ok(StepResult::Continue)
@@ -725,20 +724,20 @@ impl Vm {
         effect_id: u8,
         op_id: u32,
     ) -> Result<StepResult, VmError> {
-        let handler_idx = self
-            .call_stack
-            .iter()
-            .enumerate()
-            .rev()
-            .skip(1)
-            .find_map(|(idx, frame)| {
-                frame
-                    .marker_stack
-                    .iter()
-                    .rev()
-                    .find(|f| f.effect_id == effect_id)
-                    .map(|_| idx)
-            });
+        let handler_idx =
+            self.call_stack
+                .iter()
+                .enumerate()
+                .rev()
+                .skip(1)
+                .find_map(|(idx, frame)| {
+                    frame
+                        .marker_stack
+                        .iter()
+                        .rev()
+                        .find(|f| f.effect_id == effect_id)
+                        .map(|_| idx)
+                });
 
         let h_idx = handler_idx.ok_or(VmError::NoHandler { effect_id })?;
 
@@ -751,8 +750,10 @@ impl Vm {
             .handler_fn_id;
 
         let captured: Vec<Frame> = self.call_stack.drain(h_idx + 1..).collect();
-        self.continuations
-            .push(Continuation { frames: captured, op_id });
+        self.continuations.push(Continuation {
+            frames: captured,
+            op_id,
+        });
 
         self.do_call_with_stack_args(handler_fn_id)
     }
@@ -835,7 +836,7 @@ impl Vm {
     fn ensure_scheduler(&mut self) {
         if self.scheduler.is_none() {
             let mut sched = TaskScheduler::new();
-            let _ = sched.init_main_task(Vec::new(), Vec::new());
+            let _ = sched.init_main_task(vec![], vec![]);
             self.scheduler = Some(sched);
         }
         if self.channels.is_none() {
@@ -1077,7 +1078,7 @@ impl Vm {
     }
 
     fn collect_roots(&self) -> Vec<Value> {
-        let mut roots = Vec::new();
+        let mut roots = vec![];
         for frame in &self.call_stack {
             roots.extend_from_slice(&frame.locals);
             roots.extend_from_slice(&frame.stack);

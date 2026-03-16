@@ -1339,7 +1339,7 @@ fn test_value_chan_roundtrip() {
 
 /// Build bytecode from a sequence of byte slices.
 fn code(parts: &[&[u8]]) -> Vec<u8> {
-    let mut out = Vec::new();
+    let mut out = vec![];
     for p in parts {
         out.extend_from_slice(p);
     }

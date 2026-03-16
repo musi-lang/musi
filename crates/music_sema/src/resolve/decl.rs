@@ -33,14 +33,20 @@ impl Resolver<'_> {
         for (member_name, def_id) in member_defs {
             if member_name == Symbol(u32::MAX) {
                 if let Some(class_def) = class_def {
-                    let _prev = self.output.class_op_members.insert((class_def, member_name), def_id);
+                    let _prev = self
+                        .output
+                        .class_op_members
+                        .insert((class_def, member_name), def_id);
                 }
                 continue;
             }
             // Register non-sentinel members in class_op_members too, keyed by their symbol,
             // so the checker can find operator methods that have real interned names.
             if let Some(class_def) = class_def {
-                let _prev = self.output.class_op_members.insert((class_def, member_name), def_id);
+                let _prev = self
+                    .output
+                    .class_op_members
+                    .insert((class_def, member_name), def_id);
             }
             let span = self.defs.get(def_id).span;
             self.define_in_scope(member_name, def_id, span);
@@ -88,7 +94,7 @@ impl Resolver<'_> {
     }
 
     pub(super) fn resolve_expr_foreign(&mut self, decls: &[ForeignDecl]) {
-        let mut ty_params = Vec::new();
+        let mut ty_params = vec![];
         for decl in decls {
             if let ForeignDecl::Fn { ty, .. } = decl {
                 collect_ty_var_nodes(*ty, self.ast, &mut ty_params);
@@ -114,7 +120,7 @@ impl Resolver<'_> {
         members: &[ClassMember],
         parent_def: Option<DefId>,
     ) -> Vec<(Symbol, DefId)> {
-        let mut member_defs = Vec::new();
+        let mut member_defs = vec![];
 
         // Pass 1: allocate all member DefIds and define them in the current scope
         // so sibling methods can reference each other.
@@ -203,7 +209,7 @@ impl Resolver<'_> {
     }
 
     fn collect_free_names(&self, expr_idx: ExprIdx) -> Vec<(Symbol, Span)> {
-        let mut free = Vec::new();
+        let mut free = vec![];
         let mut seen = HashSet::new();
         self.collect_free_names_inner(expr_idx, &mut free, &mut seen);
         free

@@ -1,14 +1,14 @@
 //! Semantic token highlighting for Musi source files.
 
-use music_ast::expr::ParamMode;
-use music_lex::TokenKind;
-use music_sema::{DefKind, SemaResult, Type, TypeIdx};
-use music_shared::{FileId, SourceDb, Span};
 use lsp_types::{
     SemanticToken, SemanticTokenModifier, SemanticTokenType, SemanticTokens,
     SemanticTokensFullOptions, SemanticTokensLegend, SemanticTokensOptions, SemanticTokensResult,
     SemanticTokensServerCapabilities,
 };
+use music_ast::expr::ParamMode;
+use music_lex::TokenKind;
+use music_sema::{DefKind, SemaResult, Type, TypeIdx};
+use music_shared::{FileId, SourceDb, Span};
 
 use crate::analysis::{AnalyzedDoc, expr_span, find_name_token, offset_to_position};
 
@@ -61,7 +61,7 @@ struct RawToken {
 
 /// Compute semantic tokens for a document.
 pub fn compute(doc: &AnalyzedDoc) -> SemanticTokensResult {
-    let mut raw: Vec<RawToken> = Vec::new();
+    let mut raw: Vec<RawToken> = vec![];
 
     if let Some(sema) = &doc.sema {
         // 1. Declarations from pat_defs.
@@ -395,9 +395,7 @@ fn classify_def(
         }
         DefKind::Param => {
             let is_fn = def.ty_info.ty.is_some_and(|t| is_fn_type(t, sema));
-            let is_mutable = def
-                .param_mode
-                .is_some_and(|m| matches!(m, ParamMode::Mut));
+            let is_mutable = def.param_mode.is_some_and(|m| matches!(m, ParamMode::Mut));
             let mut_mod = if is_mutable { TM_MUTABLE } else { 0 };
             if is_fn {
                 (Some(TT_FUNCTION), decl | mut_mod, 0)

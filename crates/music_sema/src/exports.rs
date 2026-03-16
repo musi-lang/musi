@@ -37,7 +37,7 @@ pub fn collect_exports<S: BuildHasher>(
     defs: &[DefInfo],
     pat_defs: &HashMap<Span, DefId, S>,
 ) -> ModuleExports {
-    let mut bindings = Vec::new();
+    let mut bindings = vec![];
 
     for stmt in &parsed.stmts {
         collect_exports_from_expr(stmt.expr, &parsed.arenas, defs, pat_defs, &mut bindings);

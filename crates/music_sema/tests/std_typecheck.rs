@@ -12,7 +12,7 @@ use music_sema::analyze;
 use music_shared::{DiagnosticBag, Interner, Severity, SourceDb};
 
 fn collect_ms_files(dir: &Path) -> Vec<PathBuf> {
-    let mut files = Vec::new();
+    let mut files = vec![];
     let mut stack = vec![dir.to_path_buf()];
     while let Some(current) = stack.pop() {
         let Ok(entries) = fs::read_dir(&current) else {
@@ -35,7 +35,9 @@ fn collect_ms_files(dir: &Path) -> Vec<PathBuf> {
 fn typecheck_all_std_files() {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let std_dir = manifest_dir.join("../../stdlib");
-    let std_dir = std_dir.canonicalize().expect("stdlib/ directory should exist");
+    let std_dir = std_dir
+        .canonicalize()
+        .expect("stdlib/ directory should exist");
 
     let files = collect_ms_files(&std_dir);
     if files.is_empty() {

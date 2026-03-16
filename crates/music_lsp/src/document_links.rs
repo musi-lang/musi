@@ -2,9 +2,9 @@
 
 use std::str::FromStr;
 
+use lsp_types::{DocumentLink, Range, Url};
 use music_ast::Expr;
 use music_lex::TokenKind;
-use lsp_types::{DocumentLink, Range, Url};
 
 use crate::analysis::{AnalyzedDoc, span_to_range};
 
@@ -32,7 +32,7 @@ pub fn document_links(
         }
     };
 
-    let mut links = Vec::new();
+    let mut links = vec![];
 
     for stmt in &doc.module.stmts {
         let path_sym = match &doc.module.arenas.exprs[stmt.expr] {

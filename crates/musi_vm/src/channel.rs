@@ -21,7 +21,7 @@ impl ChannelTable {
     #[must_use]
     pub const fn new() -> Self {
         Self {
-            channels: Vec::new(),
+            channels: vec![],
             next_id: 0,
         }
     }

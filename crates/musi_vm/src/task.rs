@@ -35,7 +35,7 @@ impl TaskScheduler {
     #[must_use]
     pub const fn new() -> Self {
         Self {
-            tasks: Vec::new(),
+            tasks: vec![],
             ready_queue: VecDeque::new(),
             current_task_id: None,
             next_task_id: 0,
@@ -65,7 +65,7 @@ impl TaskScheduler {
         self.tasks.push(Task {
             id,
             call_stack: vec![frame],
-            continuations: Vec::new(),
+            continuations: vec![],
             status: TaskStatus::Ready,
         });
         self.ready_queue.push_back(id);

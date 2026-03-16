@@ -51,9 +51,16 @@ fn collect_free_vars(
     parent_locals: &HashMap<DefId, u32>,
     parent_upvalues: &HashMap<DefId, u16>,
 ) -> Vec<(DefId, CaptureSource)> {
-    let mut found = Vec::new();
+    let mut found = vec![];
     let mut seen = HashSet::new();
-    let mut cx = CfvCtx { em, local_defs, parent_locals, parent_upvalues, found: &mut found, seen: &mut seen };
+    let mut cx = CfvCtx {
+        em,
+        local_defs,
+        parent_locals,
+        parent_upvalues,
+        found: &mut found,
+        seen: &mut seen,
+    };
     cfv_walk(&mut cx, body);
     found
 }
@@ -1376,7 +1383,7 @@ fn emit_array_with_spread(
     fc.fe.emit_ld_cst(bi);
 
     // Store spread arrays in locals so we can re-read them after computing the size.
-    let mut spread_slots: Vec<u32> = Vec::new();
+    let mut spread_slots: Vec<u32> = vec![];
     for &elem in elems {
         if let ArrayElem::Spread { expr, .. } = elem {
             let produced = emit_expr(em, fc, expr)?;
@@ -2029,16 +2036,13 @@ fn emit_dict_for_call(
     let mut dict_count = 0;
     for constraint in &constraints {
         // Resolve the concrete type at the call site.
-        let concrete_ty = constraint
-            .args
-            .first()
-            .and_then(|&arg| {
-                let resolved = em.sema.unify.resolve(arg, &em.sema.types);
-                match &em.sema.types[resolved] {
-                    Type::Var(_) | Type::Rigid(_) => None,
-                    _ => Some(resolved),
-                }
-            });
+        let concrete_ty = constraint.args.first().and_then(|&arg| {
+            let resolved = em.sema.unify.resolve(arg, &em.sema.types);
+            match &em.sema.types[resolved] {
+                Type::Var(_) | Type::Rigid(_) => None,
+                _ => Some(resolved),
+            }
+        });
 
         if let Some(concrete_ty) = concrete_ty {
             // Find the instance that satisfies this constraint for the concrete type

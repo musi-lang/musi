@@ -3,11 +3,11 @@
 
 use std::collections::HashSet;
 
+use lsp_types::{InlayHint, InlayHintKind, InlayHintLabel};
 use music_ast::Expr;
 use music_lex::TokenKind;
 use music_sema::{DefKind, Type};
 use music_shared::Span;
-use lsp_types::{InlayHint, InlayHintKind, InlayHintLabel};
 
 use crate::analysis::{AnalyzedDoc, find_name_token, offset_to_position};
 use crate::hover::fmt_type_lsp;
@@ -34,7 +34,7 @@ pub fn inlay_hints(doc: &AnalyzedDoc, config: &InlayHintConfig) -> Vec<InlayHint
         return vec![];
     };
 
-    let mut hints = Vec::new();
+    let mut hints = vec![];
 
     let unannotated_param_spans = collect_unannotated_param_spans(doc);
     let annotated_binding_spans = collect_annotated_binding_spans(doc);
@@ -116,7 +116,7 @@ fn collect_unannotated_param_spans(doc: &AnalyzedDoc) -> HashSet<Span> {
 /// Walk all `Expr::Binding` and `Expr::Let` nodes and collect the `LetFields`
 /// span for bindings that already carry an explicit type annotation.
 fn collect_annotated_binding_spans(doc: &AnalyzedDoc) -> Vec<Span> {
-    let mut spans = Vec::new();
+    let mut spans = vec![];
     for idx in 0..doc.module.arenas.exprs.len() {
         let idx = music_shared::Idx::from_raw(u32::try_from(idx).unwrap_or(0));
         match &doc.module.arenas.exprs[idx] {
@@ -155,9 +155,11 @@ fn collect_return_type_hints(
             None => continue,
         };
 
-        let rparen = doc.lexed.tokens.iter().find(|t| {
-            t.kind == TokenKind::RParen && t.span.start >= last_param.span.end()
-        });
+        let rparen = doc
+            .lexed
+            .tokens
+            .iter()
+            .find(|t| t.kind == TokenKind::RParen && t.span.start >= last_param.span.end());
         let rparen_end = match rparen {
             Some(t) => t.span.end(),
             None => continue,

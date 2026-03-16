@@ -102,7 +102,7 @@ impl FnCtx {
             local_map: HashMap::new(),
             ref_locals: HashSet::new(),
             upvalue_map: HashMap::new(),
-            deferred: Vec::new(),
+            deferred: vec![],
             next_label: 0,
             dict_slots: HashMap::new(),
         }
@@ -172,15 +172,18 @@ impl<'a> Emitter<'a> {
     fn register_well_known_fns(&mut self) -> Result<(), EmitError> {
         let wk = &self.sema.well_known;
 
-        let str_type_id = self.tp.lower_well_known_def(wk.string, wk).ok_or_else(|| {
-            EmitError::unresolvable("String type")
-        })?;
-        let unit_type_id = self.tp.lower_well_known_def(wk.unit, wk).ok_or_else(|| {
-            EmitError::unresolvable("Unit type")
-        })?;
-        let any_type_id = self.tp.lower_well_known_def(wk.any, wk).ok_or_else(|| {
-            EmitError::unresolvable("Any type")
-        })?;
+        let str_type_id = self
+            .tp
+            .lower_well_known_def(wk.string, wk)
+            .ok_or_else(|| EmitError::unresolvable("String type"))?;
+        let unit_type_id = self
+            .tp
+            .lower_well_known_def(wk.unit, wk)
+            .ok_or_else(|| EmitError::unresolvable("Unit type"))?;
+        let any_type_id = self
+            .tp
+            .lower_well_known_def(wk.any, wk)
+            .ok_or_else(|| EmitError::unresolvable("Any type"))?;
 
         // writeln: (String) ~> Unit with { IO }
         let writeln_sym = self.interner.intern("musi_writeln");
@@ -219,34 +222,82 @@ impl<'a> Emitter<'a> {
         self.str_cat_ffi_idx = Some(str_cat_idx);
 
         // Core builtins (musi:core)
-        let int_type_id = self.tp.lower_well_known_def(wk.ints.int, wk).ok_or_else(|| {
-            EmitError::unresolvable("Int type")
-        })?;
-        let bool_type_id = self.tp.lower_well_known_def(wk.bool, wk).ok_or_else(|| {
-            EmitError::unresolvable("Bool type")
-        })?;
+        let int_type_id = self
+            .tp
+            .lower_well_known_def(wk.ints.int, wk)
+            .ok_or_else(|| EmitError::unresolvable("Int type"))?;
+        let bool_type_id = self
+            .tp
+            .lower_well_known_def(wk.bool, wk)
+            .ok_or_else(|| EmitError::unresolvable("Bool type"))?;
 
         let core = &wk.core;
-        let mut register_core = |def_id, ext_name: &str, params: &[u32], ret| -> Result<(), EmitError> {
-            let sym = self.interner.intern(ext_name);
-            let idx = push_foreign_fn(&mut self.foreign_fns, sym, params, ret)?;
-            let _ = self.foreign_map.insert(def_id, idx);
-            Ok(())
-        };
+        let mut register_core =
+            |def_id, ext_name: &str, params: &[u32], ret| -> Result<(), EmitError> {
+                let sym = self.interner.intern(ext_name);
+                let idx = push_foreign_fn(&mut self.foreign_fns, sym, params, ret)?;
+                let _ = self.foreign_map.insert(def_id, idx);
+                Ok(())
+            };
 
         register_core(core.int_abs, "musi_int_abs", &[int_type_id], int_type_id)?;
-        register_core(core.int_min, "musi_int_min", &[int_type_id, int_type_id], int_type_id)?;
-        register_core(core.int_max, "musi_int_max", &[int_type_id, int_type_id], int_type_id)?;
-        register_core(core.int_clamp, "musi_int_clamp", &[int_type_id, int_type_id, int_type_id], int_type_id)?;
-        register_core(core.int_pow, "musi_int_pow", &[int_type_id, int_type_id], int_type_id)?;
+        register_core(
+            core.int_min,
+            "musi_int_min",
+            &[int_type_id, int_type_id],
+            int_type_id,
+        )?;
+        register_core(
+            core.int_max,
+            "musi_int_max",
+            &[int_type_id, int_type_id],
+            int_type_id,
+        )?;
+        register_core(
+            core.int_clamp,
+            "musi_int_clamp",
+            &[int_type_id, int_type_id, int_type_id],
+            int_type_id,
+        )?;
+        register_core(
+            core.int_pow,
+            "musi_int_pow",
+            &[int_type_id, int_type_id],
+            int_type_id,
+        )?;
         register_core(core.str_len, "musi_str_len", &[str_type_id], int_type_id)?;
-        register_core(core.str_contains, "musi_str_contains", &[str_type_id, str_type_id], bool_type_id)?;
-        register_core(core.str_starts_with, "musi_str_starts_with", &[str_type_id, str_type_id], bool_type_id)?;
-        register_core(core.str_ends_with, "musi_str_ends_with", &[str_type_id, str_type_id], bool_type_id)?;
+        register_core(
+            core.str_contains,
+            "musi_str_contains",
+            &[str_type_id, str_type_id],
+            bool_type_id,
+        )?;
+        register_core(
+            core.str_starts_with,
+            "musi_str_starts_with",
+            &[str_type_id, str_type_id],
+            bool_type_id,
+        )?;
+        register_core(
+            core.str_ends_with,
+            "musi_str_ends_with",
+            &[str_type_id, str_type_id],
+            bool_type_id,
+        )?;
         register_core(core.arr_len, "musi_arr_len", &[any_type_id], int_type_id)?;
-        register_core(core.arr_push, "musi_arr_push", &[any_type_id, any_type_id], unit_type_id)?;
+        register_core(
+            core.arr_push,
+            "musi_arr_push",
+            &[any_type_id, any_type_id],
+            unit_type_id,
+        )?;
         register_core(core.arr_pop, "musi_arr_pop", &[any_type_id], any_type_id)?;
-        register_core(core.arr_reverse, "musi_arr_reverse", &[any_type_id], any_type_id)?;
+        register_core(
+            core.arr_reverse,
+            "musi_arr_reverse",
+            &[any_type_id],
+            any_type_id,
+        )?;
 
         Ok(())
     }
@@ -383,13 +434,22 @@ impl<'a> Emitter<'a> {
             .ok_or_else(|| EmitError::unresolvable("Unit type"))?;
 
         for decl in decls {
-            let ForeignDecl::Fn { name, ext_name, span, .. } = decl else {
+            let ForeignDecl::Fn {
+                name,
+                ext_name,
+                span,
+                ..
+            } = decl
+            else {
                 continue;
             };
 
-            let def_id = self.sema.defs.iter().find(|d| {
-                d.kind == DefKind::ForeignFn && d.name == *name && d.span == *span
-            }).map(|d| d.id);
+            let def_id = self
+                .sema
+                .defs
+                .iter()
+                .find(|d| d.kind == DefKind::ForeignFn && d.name == *name && d.span == *span)
+                .map(|d| d.id);
 
             let Some(def_id) = def_id else {
                 continue;
@@ -400,18 +460,14 @@ impl<'a> Emitter<'a> {
                 continue;
             }
 
-            let (param_type_ids, ret_type_id) = self.lower_foreign_fn_type(def_id, any_type_id, unit_type_id);
+            let (param_type_ids, ret_type_id) =
+                self.lower_foreign_fn_type(def_id, any_type_id, unit_type_id);
 
             let ext_sym = ext_name.unwrap_or(*name);
-            let library = if abi_str == "C" {
-                None
-            } else {
-                Some(abi)
-            };
+            let library = if abi_str == "C" { None } else { Some(abi) };
 
-            let idx = u32::try_from(self.foreign_fns.len()).map_err(|_| {
-                EmitError::overflow("foreign fn index overflow")
-            })?;
+            let idx = u32::try_from(self.foreign_fns.len())
+                .map_err(|_| EmitError::overflow("foreign fn index overflow"))?;
             self.foreign_fns.push(ForeignFn {
                 ext_name: ext_sym,
                 library,
@@ -458,7 +514,12 @@ impl<'a> Emitter<'a> {
 
         let ret_type_id = self
             .tp
-            .lower_sema_type(ret, &self.sema.types, &self.sema.unify, &self.sema.well_known)
+            .lower_sema_type(
+                ret,
+                &self.sema.types,
+                &self.sema.unify,
+                &self.sema.well_known,
+            )
             .unwrap_or(unit_type_id);
 
         (param_type_ids, ret_type_id)
@@ -481,7 +542,8 @@ impl<'a> Emitter<'a> {
         }
 
         let raw_effect_id = self.effects.len();
-        let effect_id = u8::try_from(raw_effect_id).map_err(|_| EmitError::overflow("too many effects"))?;
+        let effect_id =
+            u8::try_from(raw_effect_id).map_err(|_| EmitError::overflow("too many effects"))?;
 
         let unit_type_id = self
             .tp
@@ -501,10 +563,13 @@ impl<'a> Emitter<'a> {
                 })
                 .map(|d| d.id);
 
-            let op_id = u32::try_from(op_idx).map_err(|_| EmitError::overflow("effect op index overflow"))?;
+            let op_id = u32::try_from(op_idx)
+                .map_err(|_| EmitError::overflow("effect op index overflow"))?;
 
-            let (param_type_ids, ret_type_id) = op_def_id
-                .map_or_else(|| (vec![], unit_type_id), |did| self.resolve_effect_op_types(did, unit_type_id));
+            let (param_type_ids, ret_type_id) = op_def_id.map_or_else(
+                || (vec![], unit_type_id),
+                |did| self.resolve_effect_op_types(did, unit_type_id),
+            );
 
             if let Some(did) = op_def_id {
                 let _ = self.op_id_map.insert(did, op_id);
@@ -558,7 +623,12 @@ impl<'a> Emitter<'a> {
 
         let ret_type_id = self
             .tp
-            .lower_sema_type(ret, &self.sema.types, &self.sema.unify, &self.sema.well_known)
+            .lower_sema_type(
+                ret,
+                &self.sema.types,
+                &self.sema.unify,
+                &self.sema.well_known,
+            )
             .unwrap_or(unit_type_id);
 
         (param_type_ids, ret_type_id)
@@ -600,13 +670,21 @@ impl<'a> Emitter<'a> {
     /// can compile them. Laws are skipped — they are not emitted.
     fn scan_instance_members(&mut self, members: &[ClassMember]) {
         for member in members {
-            let ClassMember::Fn { sig, default: Some(body), .. } = member else {
+            let ClassMember::Fn {
+                sig,
+                default: Some(body),
+                ..
+            } = member
+            else {
                 continue;
             };
             // Find the sema DefId for this instance method by matching name+span.
-            let def_id = self.sema.defs.iter().find(|d| {
-                d.kind == DefKind::Fn && d.name == sig.name && d.span == sig.span
-            }).map(|d| d.id);
+            let def_id = self
+                .sema
+                .defs
+                .iter()
+                .find(|d| d.kind == DefKind::Fn && d.name == sig.name && d.span == sig.span)
+                .map(|d| d.id);
 
             let fn_id = self.alloc_fn_id();
 
@@ -658,7 +736,9 @@ impl<'a> Emitter<'a> {
 
     fn emit_one_function(&mut self, entry: &FnEntry) -> Result<FnBytecode, EmitError> {
         // Determine implicit dictionary parameter count from constraints
-        let constraints = entry.def_id.and_then(|did| self.sema.fn_constraints.get(&did));
+        let constraints = entry
+            .def_id
+            .and_then(|did| self.sema.fn_constraints.get(&did));
         let dict_count = constraints.map_or(0, Vec::len);
         let total_params = entry.params.len() + dict_count;
         let param_count =
@@ -669,14 +749,16 @@ impl<'a> Emitter<'a> {
         // Slots 0..dict_count are implicit dictionary parameters
         if let Some(constraints) = constraints {
             for (i, ob) in constraints.iter().enumerate() {
-                let slot = u32::try_from(i).map_err(|_| EmitError::overflow("dict slot overflow"))?;
+                let slot =
+                    u32::try_from(i).map_err(|_| EmitError::overflow("dict slot overflow"))?;
                 let _ = fc.dict_slots.insert(ob.class, slot);
             }
         }
 
         // Slots dict_count..total are explicit parameters (shifted by dict_count)
         for (i, param) in entry.params.iter().enumerate() {
-            let slot = u32::try_from(i + dict_count).map_err(|_| EmitError::overflow("param index overflow"))?;
+            let slot = u32::try_from(i + dict_count)
+                .map_err(|_| EmitError::overflow("param index overflow"))?;
             if let Some(&did) = self.sema.resolution.pat_defs.get(&param.span) {
                 let _ = fc.local_map.insert(did, slot);
             } else {
@@ -727,7 +809,8 @@ impl<'a> Emitter<'a> {
 
 /// Serialize the function pool section into `buf`.
 pub fn write_function_pool(buf: &mut Vec<u8>, functions: &[FnBytecode]) -> Result<(), EmitError> {
-    let count = u32::try_from(functions.len()).map_err(|_| EmitError::overflow("too many functions"))?;
+    let count =
+        u32::try_from(functions.len()).map_err(|_| EmitError::overflow("too many functions"))?;
     buf.extend_from_slice(&count.to_le_bytes());
     for fn_bc in functions {
         buf.extend_from_slice(&fn_bc.fn_id.to_le_bytes());
@@ -740,8 +823,8 @@ pub fn write_function_pool(buf: &mut Vec<u8>, functions: &[FnBytecode]) -> Resul
         let code_len = u32::try_from(fn_bc.code.len()).map_err(|_| EmitError::FunctionTooLarge)?;
         buf.extend_from_slice(&code_len.to_le_bytes());
         buf.extend_from_slice(&fn_bc.code);
-        let handler_count =
-            u16::try_from(fn_bc.handlers.len()).map_err(|_| EmitError::overflow("too many handler entries"))?;
+        let handler_count = u16::try_from(fn_bc.handlers.len())
+            .map_err(|_| EmitError::overflow("too many handler entries"))?;
         buf.extend_from_slice(&handler_count.to_le_bytes());
         for h in &fn_bc.handlers {
             buf.push(h.effect_id);

@@ -7,18 +7,18 @@
 use std::collections::HashMap;
 use std::path::Path;
 
+use lsp_types::{Diagnostic, DiagnosticSeverity, DiagnosticTag, Position, Range};
 use music_ast::{ExprIdx, ParsedModule};
 use music_lex::{LexedSource, Token, TokenKind, lex};
 use music_parse::parse;
 use music_resolve::graph::ModuleId;
 use music_resolve::{ModuleGraph, ModuleNode, ResolverConfig, build_module_graph};
+use music_sema::types::RecordField;
 use music_sema::{
     DefInfo, ExportBinding, ImportNames, ModuleSemaOutput, SemaResult, SharedAnalysisState, Type,
     TypeIdx, analyze, collect_exports,
 };
-use music_sema::types::RecordField;
 use music_shared::{DiagnosticBag, FileId, Interner, Severity, SourceDb, Span, Symbol};
-use lsp_types::{Diagnostic, DiagnosticSeverity, DiagnosticTag, Position, Range};
 
 /// Lexed artifacts for a single imported stdlib module, stored for doc-comment lookup.
 pub struct DepSource {
@@ -156,7 +156,13 @@ fn run_lsp_sema_in_order(
     diags: &mut DiagnosticBag,
     entry_source: &str,
     project_root: &Path,
-) -> Option<(SemaResult, ParsedModule, FileId, LexedSource, HashMap<String, DepSource>)> {
+) -> Option<(
+    SemaResult,
+    ParsedModule,
+    FileId,
+    LexedSource,
+    HashMap<String, DepSource>,
+)> {
     let mut state = SharedAnalysisState::new(interner);
     let mut module_exports: HashMap<ModuleId, Vec<ExportBinding>> = HashMap::new();
     let mut dep_sources: HashMap<String, DepSource> = HashMap::new();
@@ -236,10 +242,7 @@ fn module_key(path: &Path, project_root: &Path) -> String {
     path_str.trim_end_matches(".ms").to_owned()
 }
 
-fn builtin_module_exports(
-    node: &ModuleNode,
-    state: &SharedAnalysisState,
-) -> Vec<ExportBinding> {
+fn builtin_module_exports(node: &ModuleNode, state: &SharedAnalysisState) -> Vec<ExportBinding> {
     let path_str = node.path.to_string_lossy();
     if path_str == "<musi:ffi>" {
         let wk = &state.well_known;
@@ -411,7 +414,7 @@ pub fn extract_doc_comments_from_source(def_start: u32, source: &str) -> String 
     let prefix = source.get(..def_start as usize).unwrap_or("");
     let def_line_start = prefix.rfind('\n').map_or(0, |i| i + 1);
 
-    let mut doc_lines: Vec<&str> = Vec::new();
+    let mut doc_lines: Vec<&str> = vec![];
     let mut pos = def_line_start;
 
     loop {

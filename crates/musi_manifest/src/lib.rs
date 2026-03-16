@@ -277,7 +277,7 @@ impl Default for CompilerOptions {
     fn default() -> Self {
         Self {
             target: default_target(),
-            lib: Vec::new(),
+            lib: vec![],
             out_dir: default_out_dir(),
             root_dir: default_root_dir(),
             base_url: default_base_url(),
@@ -368,8 +368,8 @@ fn default_prose_wrap() -> String {
 impl Default for FmtConfig {
     fn default() -> Self {
         Self {
-            include: Vec::new(),
-            exclude: Vec::new(),
+            include: vec![],
+            exclude: vec![],
             use_tabs: false,
             line_width: default_line_width(),
             indent_width: default_indent_width(),

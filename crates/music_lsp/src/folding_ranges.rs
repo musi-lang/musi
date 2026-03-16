@@ -1,14 +1,14 @@
 //! Folding ranges: code folding for multi-line constructs.
 
+use lsp_types::{FoldingRange, FoldingRangeKind};
 use music_ast::Expr;
 use music_lex::TriviaKind;
 use music_shared::Idx;
-use lsp_types::{FoldingRange, FoldingRangeKind};
 
 use crate::analysis::{AnalyzedDoc, offset_to_position};
 
 pub fn folding_ranges(doc: &AnalyzedDoc) -> Vec<FoldingRange> {
-    let mut ranges = Vec::new();
+    let mut ranges = vec![];
 
     for idx in 0..doc.module.arenas.exprs.len() {
         let idx = Idx::from_raw(u32::try_from(idx).unwrap_or(0));
