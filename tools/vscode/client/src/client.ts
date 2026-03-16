@@ -5,7 +5,7 @@ import {
 	type ServerOptions,
 	TransportKind,
 } from "vscode-languageclient/node";
-import { getConfig } from "./config";
+import { getConfig } from "./config.ts";
 
 const _TIMEOUT_MS = 30_000;
 

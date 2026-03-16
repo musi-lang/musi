@@ -1,11 +1,11 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { findCliPath, showCliNotFoundUI } from "./bootstrap";
-import { getConfig } from "./config";
-import type { RunConfiguration } from "./config";
-import { mergeEnv, parseEnvFile, resolveEnvFile } from "./env";
-import { TERMINAL_NAME } from "./utils";
+import { findCliPath, showCliNotFoundUI } from "./bootstrap.ts";
+import type { RunConfiguration } from "./config.ts";
+import { getConfig } from "./config.ts";
+import { mergeEnv, parseEnvFile, resolveEnvFile } from "./env.ts";
+import { TERMINAL_NAME } from "./utils.ts";
 
 let _cachedCompilerPath: string | undefined;
 
@@ -42,7 +42,9 @@ export function buildExecutionRequest(
 }
 
 export async function findCompilerPath(): Promise<string | undefined> {
-	if (_cachedCompilerPath) return _cachedCompilerPath;
+	if (_cachedCompilerPath) {
+		return _cachedCompilerPath;
+	}
 
 	const config = getConfig();
 	if (config.compiler.path) {

@@ -1,17 +1,19 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { CONFIG_DEFAULTS, getConfig } from "./config";
+import { CONFIG_DEFAULTS, getConfig } from "./config.ts";
 import {
 	getCargoBinDir,
 	getCliBinaryName,
 	getServerBinaryName,
 	isWindows,
-} from "./utils";
+} from "./utils.ts";
 
 function _getWorkspaceCandidatesFor(binaryName: string): string[] {
 	const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-	if (!ws) return [];
+	if (!ws) {
+		return [];
+	}
 	return [
 		path.join(ws, "target", "debug", binaryName),
 		path.join(ws, "target", "release", binaryName),
@@ -30,11 +32,11 @@ function _findFirst(candidates: string[]): string | undefined {
 	return candidates.find((c) => fs.existsSync(c));
 }
 
-async function _findBinary(
+function _findBinary(
 	configuredPath: string | undefined,
 	defaultConfigValue: string,
 	binaryName: string,
-): Promise<string | undefined> {
+): string | undefined {
 	if (configuredPath && configuredPath !== defaultConfigValue) {
 		if (fs.existsSync(configuredPath)) {
 			return configuredPath;
@@ -81,7 +83,7 @@ async function _showBinaryNotFoundUI(opts: {
  *
  * @returns Absolute path to server binary, or `undefined` if not found.
  */
-export async function findServerPath(): Promise<string | undefined> {
+export function findServerPath(): string | undefined {
 	const config = getConfig();
 	return _findBinary(
 		config.lspPath,
@@ -94,7 +96,7 @@ export async function findServerPath(): Promise<string | undefined> {
  * Display error dialog when server binary cannot be found.
  * Offers options to open terminal for building or view documentation.
  */
-export async function showServerNotFoundUI() {
+export function showServerNotFoundUI() {
 	return _showBinaryNotFoundUI({
 		message:
 			"Musi LSP server binary not found. Build with 'cargo build -p music_lsp'.",
@@ -117,7 +119,7 @@ export async function showServerNotFoundUI() {
  *
  * @returns Absolute path to CLI binary, or `undefined` if not found.
  */
-export async function findCliPath(): Promise<string | undefined> {
+export function findCliPath(): string | undefined {
 	const config = getConfig();
 	return _findBinary(
 		config.cliPath,
@@ -130,7 +132,7 @@ export async function findCliPath(): Promise<string | undefined> {
  * Display error dialog when CLI binary cannot be found.
  * Offers options to open terminal for building or configure path.
  */
-export async function showCliNotFoundUI() {
+export function showCliNotFoundUI() {
 	return _showBinaryNotFoundUI({
 		message:
 			"Musi CLI binary not found. Build with 'cargo build -p musi' or configure musi.cliPath.",

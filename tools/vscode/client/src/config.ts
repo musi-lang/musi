@@ -106,15 +106,30 @@ export function getConfig(): Config {
 			args: cfg.get("compiler.args", COMPILER_DEFAULTS.args),
 			target: cfg.get("compiler.target", COMPILER_DEFAULTS.target),
 			strict: cfg.get("compiler.strict", COMPILER_DEFAULTS.strict),
-			noEmitOnError: cfg.get("compiler.noEmitOnError", COMPILER_DEFAULTS.noEmitOnError),
-			buildBeforeRun: cfg.get("compiler.buildBeforeRun", COMPILER_DEFAULTS.buildBeforeRun),
+			noEmitOnError: cfg.get(
+				"compiler.noEmitOnError",
+				COMPILER_DEFAULTS.noEmitOnError,
+			),
+			buildBeforeRun: cfg.get(
+				"compiler.buildBeforeRun",
+				COMPILER_DEFAULTS.buildBeforeRun,
+			),
 		},
 		terminal: {
-			clearBeforeRun: cfg.get("terminal.clearBeforeRun", TERMINAL_DEFAULTS.clearBeforeRun),
+			clearBeforeRun: cfg.get(
+				"terminal.clearBeforeRun",
+				TERMINAL_DEFAULTS.clearBeforeRun,
+			),
 			focusOnRun: cfg.get("terminal.focusOnRun", TERMINAL_DEFAULTS.focusOnRun),
-			reuseTerminal: cfg.get("terminal.reuseTerminal", TERMINAL_DEFAULTS.reuseTerminal),
+			reuseTerminal: cfg.get(
+				"terminal.reuseTerminal",
+				TERMINAL_DEFAULTS.reuseTerminal,
+			),
 		},
-		runConfigurations: cfg.get("runConfigurations", CONFIG_DEFAULTS.runConfigurations),
+		runConfigurations: cfg.get(
+			"runConfigurations",
+			CONFIG_DEFAULTS.runConfigurations,
+		),
 	};
 }
 

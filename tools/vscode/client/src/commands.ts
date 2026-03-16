@@ -1,12 +1,18 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { findCliPath, findServerPath, showServerNotFoundUI } from "./bootstrap";
-import { getClient, restartClient, stopClient } from "./client";
-import { getConfig } from "./config";
-import { buildExecutionRequest, executeInTerminal } from "./runner";
-import type { StatusBar } from "./status";
-import type { MsPackage, MsPackageTask } from "./types";
-import { TERMINAL_NAME } from "./utils";
+import {
+	findCliPath,
+	findServerPath,
+	showServerNotFoundUI,
+} from "./bootstrap.ts";
+import { getClient, restartClient, stopClient } from "./client.ts";
+import { getConfig } from "./config.ts";
+import { buildExecutionRequest, executeInTerminal } from "./runner.ts";
+import type { StatusBar } from "./status.ts";
+import type { MsPackage, MsPackageTask } from "./types.ts";
+import { TERMINAL_NAME } from "./utils.ts";
+
+const _WHITESPACE_RE = /\s+/;
 
 let _cachedCliPath: string | undefined;
 
@@ -86,7 +92,7 @@ async function _loadPackageTasks(): Promise<
 		vscode.window.showErrorMessage("Failed to parse mspackage.json.");
 		return undefined;
 	}
-	if (!pkg.tasks || !Object.keys(pkg.tasks).length) {
+	if (!(pkg.tasks && Object.keys(pkg.tasks).length > 0)) {
 		vscode.window.showWarningMessage("No tasks defined in mspackage.json.");
 		return undefined;
 	}
@@ -146,13 +152,17 @@ function _createCommands(statusBar: StatusBar): Commands {
 
 		async runTask(...args: unknown[]) {
 			const loaded = await _loadPackageTasks();
-			if (!loaded) return;
+			if (!loaded) {
+				return;
+			}
 			const { tasks, pkgDir } = loaded;
 
 			const quickName = typeof args[0] === "string" ? args[0] : undefined;
 			if (quickName && quickName in tasks) {
 				const entry = tasks[quickName];
-				if (entry) _runInDir(_getTaskCommand(entry), pkgDir);
+				if (entry) {
+					_runInDir(_getTaskCommand(entry), pkgDir);
+				}
 				return;
 			}
 
@@ -168,7 +178,9 @@ function _createCommands(statusBar: StatusBar): Commands {
 			});
 			if (pick) {
 				const entry = tasks[pick.label];
-				if (entry) _runInDir(_getTaskCommand(entry), pkgDir);
+				if (entry) {
+					_runInDir(_getTaskCommand(entry), pkgDir);
+				}
 			}
 		},
 
@@ -178,12 +190,12 @@ function _createCommands(statusBar: StatusBar): Commands {
 
 			if (cmd.includes("musi") && !_cachedCliPath) {
 				const cliPath = await findCliPath();
-				if (!cliPath) {
+				if (cliPath) {
+					_cachedCliPath = cliPath;
+				} else {
 					vscode.window.showWarningMessage(
 						"Musi CLI not found in PATH. Task may fail if it uses 'musi' command.",
 					);
-				} else {
-					_cachedCliPath = cliPath;
 				}
 			}
 
@@ -197,7 +209,7 @@ function _createCommands(statusBar: StatusBar): Commands {
 		async selectRunConfiguration(..._args: unknown[]) {
 			const config = getConfig();
 			const configs = config.runConfigurations;
-			if (!configs.length) {
+			if (configs.length === 0) {
 				vscode.window.showWarningMessage(
 					"No run configurations defined. Add them in settings under musi.runConfigurations.",
 				);
@@ -210,9 +222,13 @@ function _createCommands(statusBar: StatusBar): Commands {
 			const pick = await vscode.window.showQuickPick(items, {
 				placeHolder: "Select run configuration",
 			});
-			if (!pick) return;
+			if (!pick) {
+				return;
+			}
 			const selected = configs.find((c) => c.name === pick.label);
-			if (!selected) return;
+			if (!selected) {
+				return;
+			}
 			const editor = vscode.window.activeTextEditor;
 			const file = selected.file ?? editor?.document.uri.fsPath ?? "";
 			const request = buildExecutionRequest(file, selected);
@@ -229,8 +245,10 @@ function _createCommands(statusBar: StatusBar): Commands {
 				prompt: "Enter runtime arguments",
 				placeHolder: "arg1 arg2 ...",
 			});
-			if (argsInput === undefined) return;
-			const runtimeArgs = argsInput.split(/\s+/).filter(Boolean);
+			if (argsInput === undefined) {
+				return;
+			}
+			const runtimeArgs = argsInput.split(_WHITESPACE_RE).filter(Boolean);
 			const request = buildExecutionRequest(editor.document.uri.fsPath, {
 				name: "Run with Args",
 				runtimeArgs,

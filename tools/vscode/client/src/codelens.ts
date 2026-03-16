@@ -1,6 +1,6 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
-import type { MsPackage } from "./types";
+import type { MsPackage } from "./types.ts";
 
 /**
  * Provides CodeLens "▶ <task>" buttons above each task entry in mspackage.json.
@@ -14,14 +14,15 @@ export class MsPackageCodeLensProvider implements vscode.CodeLensProvider {
 			return [];
 		}
 
-		if (!pkg.tasks) return [];
+		if (!pkg.tasks) {
+			return [];
+		}
 
 		const pkgDir = path.dirname(document.uri.fsPath);
 		const lenses: vscode.CodeLens[] = [];
 
 		for (const [name, entry] of Object.entries(pkg.tasks)) {
-			const cmd =
-				typeof entry === "string" ? entry : entry.command;
+			const cmd = typeof entry === "string" ? entry : entry.command;
 			const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 			const keyRegex = new RegExp(`"${escaped}"\\s*:`);
 

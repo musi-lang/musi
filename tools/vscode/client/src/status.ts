@@ -3,10 +3,17 @@ import * as vscode from "vscode";
 /** Visual state of status bar indicator. */
 export type StatusState = "loading" | "ready" | "error" | "stopped";
 
-const _STATE_STYLE: Record<StatusState, { bg?: string; fg: string; icon: string }> = {
+const _STATE_STYLE: Record<
+	StatusState,
+	{ bg?: string; fg: string; icon: string }
+> = {
 	loading: { fg: "statusBarItem.warningForeground", icon: "$(sync~spin)" },
 	ready: { fg: "statusBarItem.prominentForeground", icon: "$(check)" },
-	error: { bg: "statusBarItem.errorBackground", fg: "errorForeground", icon: "$(error)" },
+	error: {
+		bg: "statusBarItem.errorBackground",
+		fg: "errorForeground",
+		icon: "$(error)",
+	},
 	stopped: { fg: "disabledForeground", icon: "$(play)" },
 };
 
