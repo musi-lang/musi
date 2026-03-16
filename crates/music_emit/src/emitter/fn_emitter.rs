@@ -282,6 +282,7 @@ impl FnEmitter {
         self.push_n(1);
     }
 
+    #[allow(clippy::missing_const_for_fn)]
     pub fn emit_cont_resume(&mut self) {
         self.pop_n(1);
     }

@@ -261,6 +261,7 @@ pub fn init_well_known(
 /// Must be called after `init_well_known` and after the type arena is available.
 /// This ensures that calls to `writeln`, `write`, etc. get real types instead
 /// of fresh unification variables.
+#[allow(clippy::too_many_lines)]
 pub fn assign_well_known_types(defs: &mut DefTable, wk: &WellKnown, types: &mut Arena<Type>) {
     let string_ty = types.alloc(Type::Named {
         def: wk.string,

@@ -156,14 +156,14 @@ impl SharedAnalysisState {
 }
 
 /// Runs analysis for a single module using shared cross-module state.
-pub fn analyze_shared(
+pub fn analyze_shared<S: BuildHasher>(
     module: &ParsedModule,
     state: &mut SharedAnalysisState,
     interner: &mut Interner,
     file_id: FileId,
     diags: &mut DiagnosticBag,
     import_names: &ImportNames,
-    import_types: &HashMap<Symbol, TypeIdx>,
+    import_types: &HashMap<Symbol, TypeIdx, S>,
 ) -> ModuleSemaOutput {
     let module_scope = state.scopes.push_child(state.prelude_scope);
 

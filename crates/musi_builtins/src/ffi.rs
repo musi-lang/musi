@@ -16,6 +16,8 @@ use libffi::middle::{Arg, Cif, CodePtr, Type, arg};
 use libloading::Library;
 use musi_vm::{Heap, HostFunctions, LoadedForeignFn, Value, VmError};
 
+use crate::core;
+
 struct ResolvedForeignFn {
     fn_ptr: CodePtr,
     cif: Cif,
@@ -194,7 +196,7 @@ fn lookup_builtin(ext_name: &str) -> Option<BuiltinFn> {
     }
     // Module-qualified: "core::str_len", "core::arr_push", etc.
     if let Some(name) = ext_name.strip_prefix("core::") {
-        return crate::core::lookup(name);
+        return core::lookup(name);
     }
     None
 }

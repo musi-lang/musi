@@ -44,6 +44,7 @@ pub fn check<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx, expecte
     );
 }
 
+#[allow(clippy::too_many_lines)]
 fn synth_inner<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) -> TypeIdx {
     match &ck.ctx.ast.exprs[expr_idx] {
         Expr::Lit { lit, span } => {
@@ -473,11 +474,8 @@ fn lookup_field<S: BuildHasher>(
         Type::Record { fields, .. } => {
             if let FieldKey::Name { name, .. } = field {
                 let fields = fields.clone();
-                if let Some(f) = fields.iter().find(|f| f.name == name) {
-                    f.ty
-                } else {
-                    report_no_such_field(ck, name, ty, span)
-                }
+                fields.iter().find(|f| f.name == name)
+                    .map_or_else(|| report_no_such_field(ck, name, ty, span), |f| f.ty)
             } else {
                 ck.error_ty()
             }
@@ -1175,10 +1173,10 @@ fn synth_import<S: BuildHasher>(
     } else {
         ck.named_ty(ck.ctx.well_known.unit)
     };
-    if let Some(alias_name) = alias {
-        if let Some(def_id) = ck.scopes.lookup(ck.current_scope, alias_name) {
-            ck.defs.get_mut(def_id).ty_info.ty = Some(record_ty);
-        }
+    if let Some(alias_name) = alias
+        && let Some(def_id) = ck.scopes.lookup(ck.current_scope, alias_name)
+    {
+        ck.defs.get_mut(def_id).ty_info.ty = Some(record_ty);
     }
     record_ty
 }
