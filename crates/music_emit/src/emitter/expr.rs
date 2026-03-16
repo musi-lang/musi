@@ -1027,7 +1027,6 @@ fn emit_record_lit_with_spread(
     fc: &mut FnCtx,
     fields: &[RecField],
 ) -> Result<bool, EmitError> {
-    // Collect and validate: exactly one spread (the base), rest are Named overrides.
     let mut spread_expr: Option<ExprIdx> = None;
     for f in fields {
         if let RecField::Spread { expr, .. } = f {

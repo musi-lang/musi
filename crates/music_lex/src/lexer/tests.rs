@@ -398,8 +398,8 @@ fn test_unterminated_string() {
 #[test]
 fn test_fstring_no_interpolation() {
     let kinds = lex_kinds(r#"f"hello""#);
-    // f"hello" with no braces: FStringHead with full content
-    assert_eq!(kinds[0], TokenKind::FStringHead);
+    // f"hello" with no braces: emitted as StringLit for parser compatibility
+    assert_eq!(kinds[0], TokenKind::StringLit);
     assert_eq!(kinds[1], TokenKind::Eof);
 }
 

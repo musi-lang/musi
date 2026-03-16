@@ -183,6 +183,16 @@ impl Parser<'_> {
             let e = self.parse_expr();
             if self.eat(TokenKind::Semi) {
                 stmts.push(self.alloc_expr(e));
+            } else if self.at(TokenKind::KwIf) {
+                let first_idx = self.alloc_expr(e);
+                let pw = self.parse_piecewise_arms(first_idx, start);
+                let tail = self.alloc_expr(pw);
+                let _rp = self.expect(TokenKind::RParen);
+                return Expr::Block {
+                    stmts,
+                    tail: Some(tail),
+                    span: self.finish_span(start),
+                };
             } else {
                 let tail = self.alloc_expr(e);
                 let _rp = self.expect(TokenKind::RParen);
@@ -201,8 +211,7 @@ impl Parser<'_> {
         }
     }
 
-    fn parse_expr_piecewise_tail(&mut self, first_result: ExprIdx, start: u32) -> Expr {
-        // first_result if guard | ...
+    pub(crate) fn parse_piecewise_arms(&mut self, first_result: ExprIdx, start: u32) -> Expr {
         let _if = self.expect(TokenKind::KwIf);
         let first_guard = self.parse_pw_guard();
         let first_span = self.finish_span(start);
@@ -224,11 +233,16 @@ impl Parser<'_> {
             });
         }
 
-        let _rp = self.expect(TokenKind::RParen);
         Expr::Piecewise {
             arms,
             span: self.finish_span(start),
         }
+    }
+
+    fn parse_expr_piecewise_tail(&mut self, first_result: ExprIdx, start: u32) -> Expr {
+        let pw = self.parse_piecewise_arms(first_result, start);
+        let _rp = self.expect(TokenKind::RParen);
+        pw
     }
 
     fn parse_pw_guard(&mut self) -> PwGuard {
@@ -250,9 +264,9 @@ impl Parser<'_> {
     pub(super) fn parse_expr_match(&mut self) -> Expr {
         let start = self.start_span();
         let _match = self.bump();
-        // scrutinee is parsed without postfix to avoid `match x (...)` being
-        // interpreted as `match (x(...))`. `(` after scrutinee starts match arms
+        let scrut_start = self.start_span();
         let scrut_expr = self.parse_expr_nud_chain();
+        let scrut_expr = self.parse_expr_postfix_chain_match(scrut_expr, scrut_start);
         let scrutinee = self.alloc_expr(scrut_expr);
         let _lp = self.expect(TokenKind::LParen);
         let arms = self.pipe_sep(TokenKind::RParen, Self::parse_match_arm);

@@ -27,6 +27,26 @@ impl Parser<'_> {
         lhs
     }
 
+    pub(super) fn parse_expr_postfix_chain_match(&mut self, mut lhs: Expr, start: u32) -> Expr {
+        loop {
+            lhs = match self.peek_kind() {
+                TokenKind::LParen if self.lookahead_has_arrow_in_parens() => break,
+                TokenKind::LParen => self.parse_expr_call(lhs, start),
+                TokenKind::DotLBracket => self.parse_expr_index(lhs, start),
+                TokenKind::DotLBrace => self.parse_expr_update(lhs, start),
+                TokenKind::Dot => self.parse_expr_field(lhs, start, false),
+                TokenKind::QuestionDot => self.parse_expr_field(lhs, start, true),
+                TokenKind::BangDot => self.parse_expr_force_field(lhs, start),
+                TokenKind::Bang => self.parse_expr_force_unwrap(lhs, start),
+                TokenKind::Question => self.parse_expr_propagate(lhs, start),
+                TokenKind::ColonQuestion => self.parse_expr_type_test(lhs, start),
+                TokenKind::ColonQuestionGt => self.parse_expr_type_cast(lhs, start),
+                _ => break,
+            };
+        }
+        lhs
+    }
+
     fn parse_expr_call(&mut self, lhs: Expr, start: u32) -> Expr {
         let _lp = self.bump();
         let args = self.comma_sep(TokenKind::RParen, Self::parse_arg);
@@ -110,7 +130,17 @@ impl Parser<'_> {
                 span: self.finish_span(start),
             };
         }
-        let expr = self.parse_alloc_expr();
+        let first = self.parse_expr();
+        if self.at(TokenKind::KwIf) {
+            let first_idx = self.alloc_expr(first);
+            let pw = self.parse_piecewise_arms(first_idx, start);
+            let expr = self.alloc_expr(pw);
+            return Arg::Pos {
+                expr,
+                span: self.finish_span(start),
+            };
+        }
+        let expr = self.alloc_expr(first);
         Arg::Pos {
             expr,
             span: self.finish_span(start),

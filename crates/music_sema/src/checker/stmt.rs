@@ -269,8 +269,11 @@ pub fn check_stmt<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) {
                 Some(p)
             };
             for decl in &decls {
-                if let ForeignDecl::Fn { ty, .. } = decl {
-                    let _fn_ty = lower_ty(ck, *ty);
+                if let ForeignDecl::Fn { ty, span, .. } = decl {
+                    let fn_ty = lower_ty(ck, *ty);
+                    if let Some(&def_id) = ck.ctx.pat_defs.get(span) {
+                        ck.defs.get_mut(def_id).ty_info.ty = Some(fn_ty);
+                    }
                 }
             }
             if let Some(p) = parent {

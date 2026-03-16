@@ -92,6 +92,7 @@ pub struct WellKnown {
     pub rune: DefId,
     pub bool: DefId,
     pub unit: DefId,
+    pub option: DefId,
     pub any: DefId,
     pub never: DefId,
 }
@@ -163,6 +164,7 @@ pub fn init_well_known(
         throw: register("Throw", DefKind::Effect),
     };
 
+    let option = register("Option", DefKind::Type);
     let float = register("Float", DefKind::Type);
     let string = register("String", DefKind::Type);
     let rune = register("Rune", DefKind::Type);
@@ -178,6 +180,7 @@ pub fn init_well_known(
         ffi,
         effects,
         primitives,
+        option,
         float,
         string,
         rune,

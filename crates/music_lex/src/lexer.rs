@@ -517,7 +517,7 @@ impl Lexer<'_> {
     fn lex_fstring_head(&mut self, start: usize) -> Token {
         let _ = self.advance();
         self.fstring_depths.push(0);
-        self.scan_fstring_text(start, TokenKind::FStringHead, TokenKind::FStringHead)
+        self.scan_fstring_text(start, TokenKind::FStringHead, TokenKind::StringLit)
     }
 
     /// Scan f-string text content until `{` (interpolation) or `"` (end).

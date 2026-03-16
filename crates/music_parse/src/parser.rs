@@ -60,6 +60,40 @@ impl<'a> Parser<'a> {
         }
     }
 
+    #[must_use]
+    pub(crate) fn peek_at(&self, offset: usize) -> &Token {
+        let idx = self.pos + offset;
+        if idx < self.tokens.len() {
+            &self.tokens[idx]
+        } else {
+            self.tokens.last().expect("token stream has EOF")
+        }
+    }
+
+    pub(crate) fn lookahead_has_arrow_in_parens(&self) -> bool {
+        let mut depth = 0u32;
+        let mut offset = 0usize;
+        loop {
+            let kind = self.peek_at(offset).kind;
+            match kind {
+                TokenKind::LParen | TokenKind::LBracket | TokenKind::LBrace => depth += 1,
+                TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace => {
+                    if depth == 0 {
+                        return false;
+                    }
+                    depth -= 1;
+                    if depth == 0 {
+                        return false;
+                    }
+                }
+                TokenKind::EqGt if depth == 1 => return true,
+                TokenKind::Eof => return false,
+                _ => {}
+            }
+            offset += 1;
+        }
+    }
+
     pub(crate) fn at(&self, kind: TokenKind) -> bool {
         self.peek_kind() == kind
     }
