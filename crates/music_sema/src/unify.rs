@@ -161,16 +161,25 @@ impl UnifyTable {
         match (&arena[a], &arena[b]) {
             (Type::Error, _) | (_, Type::Error) => true,
 
-            (Type::Var(v), _) => self.try_bind_var(*v, b, arena),
-            (_, Type::Var(v)) => self.try_bind_var(*v, a, arena),
-
-            (Type::Rigid(_), _) | (_, Type::Rigid(_)) => false,
-
+            // Any/Never checked before Var to prevent variable erasure.
             (Type::Named { def, args }, _) if *def == well_known.any && args.is_empty() => true,
             (_, Type::Named { def, args }) if *def == well_known.any && args.is_empty() => true,
 
             (Type::Named { def, args }, _) if *def == well_known.never && args.is_empty() => true,
             (_, Type::Named { def, args }) if *def == well_known.never && args.is_empty() => true,
+
+            (Type::Var(v), _) => {
+                let v = *v;
+                let b = self.freshen_any(b, arena, well_known.any);
+                self.try_bind_var(v, b, arena)
+            }
+            (_, Type::Var(v)) => {
+                let v = *v;
+                let a = self.freshen_any(a, arena, well_known.any);
+                self.try_bind_var(v, a, arena)
+            }
+
+            (Type::Rigid(_), _) | (_, Type::Rigid(_)) => false,
 
             (Type::Named { def: d1, args: a1 }, Type::Named { def: d2, args: a2 }) => {
                 if d1 != d2 || a1.len() != a2.len() {
@@ -253,6 +262,81 @@ impl UnifyTable {
         }
         self.bind(var, target);
         true
+    }
+
+    /// Replaces `Any` positions in `ty` with fresh unification variables.
+    /// Returns the original type unchanged if it contains no `Any`.
+    fn freshen_any(
+        &mut self,
+        ty: TypeIdx,
+        arena: &mut Arena<Type>,
+        any_def: crate::DefId,
+    ) -> TypeIdx {
+        match arena[ty].clone() {
+            Type::Named { def, args } if def == any_def && args.is_empty() => {
+                self.fresh(Span::DUMMY, arena)
+            }
+            Type::Array { elem, len } => {
+                let new_elem = self.freshen_any(elem, arena, any_def);
+                if new_elem == elem {
+                    ty
+                } else {
+                    arena.alloc(Type::Array {
+                        elem: new_elem,
+                        len,
+                    })
+                }
+            }
+            Type::Fn {
+                params,
+                ret,
+                effects,
+            } => {
+                let new_params: Vec<_> = params
+                    .iter()
+                    .map(|&p| self.freshen_any(p, arena, any_def))
+                    .collect();
+                let new_ret = self.freshen_any(ret, arena, any_def);
+                if new_params == params && new_ret == ret {
+                    ty
+                } else {
+                    arena.alloc(Type::Fn {
+                        params: new_params,
+                        ret: new_ret,
+                        effects,
+                    })
+                }
+            }
+            Type::Tuple { elems } => {
+                let new_elems: Vec<_> = elems
+                    .iter()
+                    .map(|&e| self.freshen_any(e, arena, any_def))
+                    .collect();
+                if new_elems == elems {
+                    ty
+                } else {
+                    arena.alloc(Type::Tuple { elems: new_elems })
+                }
+            }
+            Type::Record { fields, open } => {
+                let new_fields: Vec<_> = fields
+                    .iter()
+                    .map(|f| RecordField {
+                        name: f.name,
+                        ty: self.freshen_any(f.ty, arena, any_def),
+                    })
+                    .collect();
+                if new_fields.iter().zip(fields.iter()).all(|(a, b)| a.ty == b.ty) {
+                    ty
+                } else {
+                    arena.alloc(Type::Record {
+                        fields: new_fields,
+                        open,
+                    })
+                }
+            }
+            _ => ty,
+        }
     }
 
     fn unify_fn(
