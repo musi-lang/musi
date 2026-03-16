@@ -1,0 +1,5 @@
+[[rule]]
+keys = ["mspackage.toml"]
+
+[rule.options]
+schema = { path = "./schemas/mspackage.schema.json" }

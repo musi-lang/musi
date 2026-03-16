@@ -1,0 +1,359 @@
+{
+	"$schema": "http://json-schema.org/draft-07/schema#",
+	"title": "mspackage.toml",
+	"description": "Musi package manifest",
+	"type": "object",
+	"properties": {
+		"package": {
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": "string",
+					"pattern": "^(@[a-z0-9-~][a-z0-9-._~]*/)?[a-z0-9-~][a-z0-9-._~]*$"
+				},
+				"version": {
+					"type": "string",
+					"pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[a-zA-Z0-9-]+)?(\\+[a-zA-Z0-9-]+)?$"
+				},
+				"description": { "type": "string" },
+				"main": {
+					"type": "string",
+					"pattern": "^\\./.+\\.ms$",
+					"default": "./index.ms"
+				},
+				"license": { "type": "string" },
+				"homepage": { "type": "string" },
+				"keywords": {
+					"type": "array",
+					"items": { "type": "string" }
+				},
+				"files": {
+					"type": "array",
+					"items": { "type": "string" }
+				},
+				"private": { "type": "boolean", "default": false },
+				"publish-registry": {
+					"type": "string",
+					"default": "https://msr.musi-lang.org"
+				},
+				"exclude": {
+					"type": "array",
+					"items": { "type": "string" }
+				},
+				"include": {
+					"type": "array",
+					"items": { "type": "string" }
+				},
+				"compile-files": {
+					"type": "array",
+					"items": { "type": "string" }
+				},
+				"deps-dir": {
+					"type": "string",
+					"enum": ["auto", "manual", "none"],
+					"default": "auto"
+				},
+				"vendor": { "type": "boolean", "default": false },
+				"author": {
+					"type": "object",
+					"properties": {
+						"name": { "type": "string" },
+						"email": { "type": "string" },
+						"url": { "type": "string" }
+					},
+					"additionalProperties": false
+				},
+				"repository": {
+					"type": "object",
+					"properties": {
+						"type": { "type": "string", "default": "git" },
+						"url": { "type": "string" },
+						"directory": { "type": "string" }
+					},
+					"additionalProperties": false
+				},
+				"bugs": {
+					"type": "object",
+					"properties": {
+						"url": { "type": "string" },
+						"email": { "type": "string" }
+					},
+					"additionalProperties": false
+				},
+				"exports": {
+					"oneOf": [
+						{ "type": "string" },
+						{
+							"type": "object",
+							"additionalProperties": { "type": "string" }
+						}
+					]
+				},
+				"bin": {
+					"oneOf": [
+						{ "type": "string" },
+						{
+							"type": "object",
+							"additionalProperties": { "type": "string" }
+						}
+					]
+				}
+			},
+			"additionalProperties": false
+		},
+		"imports": {
+			"type": "object",
+			"additionalProperties": { "type": "string" }
+		},
+		"dependencies": {
+			"type": "object",
+			"additionalProperties": { "type": "string" }
+		},
+		"dev-dependencies": {
+			"type": "object",
+			"additionalProperties": { "type": "string" }
+		},
+		"peer-dependencies": {
+			"type": "object",
+			"additionalProperties": { "type": "string" }
+		},
+		"optional-dependencies": {
+			"type": "object",
+			"additionalProperties": { "type": "string" }
+		},
+		"workspaces": {
+			"type": "object",
+			"properties": {
+				"packages": {
+					"type": "array",
+					"items": { "type": "string" }
+				}
+			},
+			"additionalProperties": false
+		},
+		"lock": {
+			"oneOf": [
+				{ "type": "boolean" },
+				{ "type": "string" },
+				{
+					"type": "object",
+					"properties": {
+						"path": { "type": "string", "default": "musi.lock" },
+						"frozen": { "type": "boolean", "default": false }
+					},
+					"additionalProperties": false
+				}
+			]
+		},
+		"compiler-options": {
+			"type": "object",
+			"properties": {
+				"target": {
+					"type": "string",
+					"enum": ["MS2025", "native", "wasm", "embedded"],
+					"default": "MS2025"
+				},
+				"lib": {
+					"type": "array",
+					"items": { "type": "string" },
+					"default": ["MS2025"]
+				},
+				"out-dir": { "type": "string", "default": "./dist" },
+				"root-dir": { "type": "string", "default": "./src" },
+				"base-url": { "type": "string", "default": "./" },
+				"strict": { "type": "boolean", "default": false },
+				"no-implicit-any": { "type": "boolean", "default": false },
+				"no-implicit-unit": { "type": "boolean", "default": false },
+				"strict-function-types": { "type": "boolean", "default": false },
+				"strict-optional-checks": { "type": "boolean", "default": false },
+				"no-missing-cases-in-match": { "type": "boolean", "default": false },
+				"exact-optional-property-types": {
+					"type": "boolean",
+					"default": false
+				},
+				"no-unused-locals": { "type": "boolean", "default": false },
+				"no-unused-parameters": { "type": "boolean", "default": false },
+				"no-implicit-returns": { "type": "boolean", "default": false },
+				"allow-unreachable-code": { "type": "boolean", "default": false },
+				"allow-unused-labels": { "type": "boolean", "default": false },
+				"force-consistent-casing-in-file-names": {
+					"type": "boolean",
+					"default": true
+				},
+				"skip-lib-check": { "type": "boolean", "default": true },
+				"no-emit": { "type": "boolean", "default": false },
+				"no-emit-on-error": { "type": "boolean", "default": true },
+				"remove-comments": { "type": "boolean", "default": true },
+				"composite": { "type": "boolean", "default": false },
+				"incremental": { "type": "boolean", "default": false },
+				"build-info-file": { "type": "string", "default": ".msbuildinfo" },
+				"paths": {
+					"type": "object",
+					"additionalProperties": {
+						"type": "array",
+						"items": { "type": "string" }
+					}
+				}
+			},
+			"additionalProperties": false
+		},
+		"watch-options": {
+			"type": "object",
+			"properties": {
+				"watch-file": {
+					"type": "string",
+					"enum": [
+						"fixedPollingInterval",
+						"priorityPollingInterval",
+						"dynamicPriorityPolling",
+						"useFsEvents"
+					]
+				},
+				"watch-directory": {
+					"type": "string",
+					"enum": [
+						"useFsEvents",
+						"fixedPollingInterval",
+						"dynamicPriorityPolling"
+					]
+				},
+				"exclude-files": {
+					"type": "array",
+					"items": { "type": "string" }
+				},
+				"exclude-directories": {
+					"type": "array",
+					"items": { "type": "string" }
+				}
+			},
+			"additionalProperties": false
+		},
+		"tasks": {
+			"type": "object",
+			"additionalProperties": {
+				"oneOf": [
+					{ "type": "string" },
+					{
+						"type": "object",
+						"properties": {
+							"description": { "type": "string" },
+							"command": { "type": "string" },
+							"dependencies": {
+								"type": "array",
+								"items": { "type": "string" }
+							}
+						},
+						"additionalProperties": false
+					}
+				]
+			}
+		},
+		"fmt": {
+			"type": "object",
+			"properties": {
+				"include": {
+					"type": "array",
+					"items": { "type": "string" }
+				},
+				"exclude": {
+					"type": "array",
+					"items": { "type": "string" }
+				},
+				"use-tabs": { "type": "boolean", "default": false },
+				"line-width": { "type": "integer", "default": 80 },
+				"indent-width": { "type": "integer", "default": 2 },
+				"prose-wrap": {
+					"type": "string",
+					"enum": ["always", "never", "preserve"],
+					"default": "preserve"
+				}
+			},
+			"additionalProperties": false
+		},
+		"lint": {
+			"type": "object",
+			"properties": {
+				"include": {
+					"type": "array",
+					"items": { "type": "string" }
+				},
+				"exclude": {
+					"type": "array",
+					"items": { "type": "string" }
+				},
+				"rules": {
+					"type": "object",
+					"properties": {
+						"tags": {
+							"type": "array",
+							"items": { "type": "string" }
+						},
+						"include": {
+							"type": "array",
+							"items": { "type": "string" }
+						},
+						"exclude": {
+							"type": "array",
+							"items": { "type": "string" }
+						}
+					},
+					"additionalProperties": false
+				}
+			},
+			"additionalProperties": false
+		},
+		"test": {
+			"type": "object",
+			"properties": {
+				"include": {
+					"type": "array",
+					"items": { "type": "string" }
+				},
+				"exclude": {
+					"type": "array",
+					"items": { "type": "string" }
+				}
+			},
+			"additionalProperties": false
+		},
+		"bench": {
+			"type": "object",
+			"properties": {
+				"include": {
+					"type": "array",
+					"items": { "type": "string" }
+				},
+				"exclude": {
+					"type": "array",
+					"items": { "type": "string" }
+				}
+			},
+			"additionalProperties": false
+		},
+		"publish": {
+			"type": "object",
+			"properties": {
+				"include": {
+					"type": "array",
+					"items": { "type": "string" }
+				},
+				"exclude": {
+					"type": "array",
+					"items": { "type": "string" }
+				}
+			},
+			"additionalProperties": false
+		},
+		"references": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"properties": {
+					"path": { "type": "string" }
+				},
+				"additionalProperties": false
+			}
+		}
+	},
+	"additionalProperties": false
+}
