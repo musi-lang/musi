@@ -5,7 +5,8 @@ use lsp_types::{
     SemanticTokensFullOptions, SemanticTokensLegend, SemanticTokensOptions, SemanticTokensResult,
     SemanticTokensServerCapabilities,
 };
-use music_ast::expr::ParamMode;
+use music_ast::expr::{FieldKey, ParamMode};
+use music_ast::Expr;
 use music_lex::TokenKind;
 use music_sema::{DefInfo, DefKind, SemaResult, Type, TypeIdx};
 use music_shared::{FileId, Interner, SourceDb, Span};
@@ -19,6 +20,7 @@ pub const TT_FUNCTION: u32 = 3;
 pub const TT_VARIABLE: u32 = 4;
 pub const TT_PARAMETER: u32 = 5;
 pub const TT_OPERATOR: u32 = 6;
+pub const TT_DECORATOR: u32 = 7;
 pub const TM_DECLARATION: u32 = 1 << 0;
 pub const TM_READONLY: u32 = 1 << 1;
 pub const TM_MUTABLE: u32 = 1 << 2;
@@ -33,6 +35,7 @@ pub fn legend() -> SemanticTokensLegend {
             SemanticTokenType::VARIABLE,
             SemanticTokenType::PARAMETER,
             SemanticTokenType::new("operator"),
+            SemanticTokenType::DECORATOR,
         ],
         token_modifiers: vec![
             SemanticTokenModifier::DECLARATION,
@@ -105,6 +108,21 @@ pub fn compute(doc: &AnalyzedDoc) -> SemanticTokensResult {
             let Some(def) = sema.defs.get(def_id.0 as usize) else {
                 continue;
             };
+            let expr = &doc.module.arenas.exprs[idx];
+            if let Expr::Field {
+                field: FieldKey::Name { span, .. },
+                ..
+            } = expr
+            {
+                let (tt, tm, prio) = classify_def(def, sema, &doc.interner, false);
+                if let Some(tt) = tt {
+                    push_raw(&mut raw, *span, tt, tm, doc.file_id, &doc.source_db, prio);
+                }
+                continue;
+            }
+            if matches!(expr, Expr::Field { field: FieldKey::Pos { .. }, .. }) {
+                continue;
+            }
             let Some(span) = expr_span(idx, &doc.module) else {
                 continue;
             };
@@ -122,6 +140,9 @@ pub fn compute(doc: &AnalyzedDoc) -> SemanticTokensResult {
 
         // 5. TyIdent tokens as type parameters.
         emit_ty_ident_tokens(doc, &mut raw);
+
+        // 6. Attribute tokens.
+        emit_attribute_tokens(doc, &mut raw);
 
         raw.sort_by_key(|t| (t.line, t.start_char, t.priority));
         raw.dedup_by_key(|t| (t.line, t.start_char));
@@ -345,6 +366,89 @@ fn emit_dot_constructors(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
     }
 }
 
+fn emit_attribute_tokens(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
+    #[derive(Clone, Copy)]
+    enum AttrState {
+        Default,
+        AttrName,
+        AttrBody,
+        AttrParam,
+        AttrParamValue,
+    }
+    let mut state = AttrState::Default;
+    for tok in &doc.lexed.tokens {
+        let kind = tok.kind;
+        state = match state {
+            AttrState::Default => {
+                if kind == TokenKind::HashLBracket {
+                    push_raw(
+                        raw,
+                        tok.span,
+                        TT_DECORATOR,
+                        0,
+                        doc.file_id,
+                        &doc.source_db,
+                        2,
+                    );
+                    AttrState::AttrName
+                } else {
+                    AttrState::Default
+                }
+            }
+            AttrState::AttrName => {
+                if kind == TokenKind::Ident {
+                    push_raw(
+                        raw,
+                        tok.span,
+                        TT_DECORATOR,
+                        0,
+                        doc.file_id,
+                        &doc.source_db,
+                        2,
+                    );
+                    AttrState::AttrBody
+                } else {
+                    AttrState::Default
+                }
+            }
+            AttrState::AttrBody => {
+                if kind == TokenKind::LParen {
+                    AttrState::AttrParam
+                } else {
+                    AttrState::Default
+                }
+            }
+            AttrState::AttrParam => {
+                if kind == TokenKind::Ident {
+                    push_raw(
+                        raw,
+                        tok.span,
+                        TT_DECORATOR,
+                        0,
+                        doc.file_id,
+                        &doc.source_db,
+                        2,
+                    );
+                    AttrState::AttrParamValue
+                } else {
+                    AttrState::Default
+                }
+            }
+            AttrState::AttrParamValue => {
+                if kind == TokenKind::ColonEq {
+                    AttrState::AttrParamValue
+                } else if kind == TokenKind::Comma {
+                    AttrState::AttrParam
+                } else if kind == TokenKind::RParen {
+                    AttrState::Default
+                } else {
+                    AttrState::AttrParamValue
+                }
+            }
+        };
+    }
+}
+
 fn is_constant_name(name: &str) -> bool {
     !name.is_empty()
         && name.chars().next().is_some_and(|c| c.is_uppercase())
@@ -354,7 +458,7 @@ fn is_constant_name(name: &str) -> bool {
 }
 
 fn starts_with_uppercase(name: &str) -> bool {
-    name.chars().next().is_some_and(|c| c.is_uppercase())
+    name.starts_with(|c: char| c.is_uppercase()) && !name.contains('_')
 }
 
 fn is_fn_type(ty: TypeIdx, sema: &SemaResult) -> bool {
@@ -377,10 +481,10 @@ fn classify_def(
             let has_ty_params = !def.ty_info.ty_params.is_empty();
             if is_fn {
                 (Some(TT_FUNCTION), decl, 0)
-            } else if has_ty_params || starts_with_uppercase(def_name) {
-                (Some(TT_TYPE), decl, 0)
             } else if is_constant_name(def_name) {
                 (Some(TT_VARIABLE), decl | TM_READONLY, 0)
+            } else if has_ty_params || starts_with_uppercase(def_name) {
+                (Some(TT_TYPE), decl, 0)
             } else {
                 (Some(TT_VARIABLE), decl, 0)
             }
@@ -405,7 +509,7 @@ fn classify_def(
         }
         DefKind::Type | DefKind::OpaqueType | DefKind::Primitive => (Some(TT_TYPE), decl, 0),
         DefKind::Variant => (Some(TT_ENUM_MEMBER), decl, 0),
-        DefKind::Import => (None, 0, 0),
+        DefKind::Import => (Some(TT_VARIABLE), decl, 0),
         DefKind::Class | DefKind::Given | DefKind::Effect => (Some(TT_TYPE), decl, 0),
         DefKind::Law => (Some(TT_VARIABLE), decl | TM_READONLY, 0),
         DefKind::LawVar => (Some(TT_VARIABLE), decl, 0),
