@@ -39,6 +39,16 @@
 		"languages": [
 			{
 				"id": "musi",
+				"filenamePatterns": [
+					"*.test.ms"
+				],
+				"icon": {
+					"light": "logo_test.png",
+					"dark": "logo_test.png"
+				}
+			},
+			{
+				"id": "musi",
 				"aliases": [
 					"Musi",
 					"musi"
@@ -222,11 +232,16 @@
 				"command": "musi.runTask",
 				"title": "Run Task",
 				"category": "Musi",
-				"description": "Pick and run a task from mspackage.json."
+				"description": "Pick and run a task from mspackage.toml."
 			},
 			{
 				"command": "musi.runTest",
 				"title": "▷ Run test",
+				"category": "Musi"
+			},
+			{
+				"command": "musi.debugTest",
+				"title": "Debug Test",
 				"category": "Musi"
 			},
 			{
@@ -552,11 +567,13 @@
 		]
 	},
 	"scripts": {
+		"prebuild": "mkdir -p ./schemas && cp ../../schemas/mspackage.schema.toml ./schemas/",
 		"build": "bun build ./client/src/main.ts --outfile=./dist/extension.js --external vscode --target=node --format=cjs --minify",
 		"package": "bun run build && vsce package --no-dependencies",
 		"vscode:prepublish": "bun run build"
 	},
 	"dependencies": {
+		"smol-toml": "^1.6.0",
 		"vscode-languageclient": "^9.0.1"
 	},
 	"devDependencies": {
