@@ -22,10 +22,11 @@ fn test_init_well_known_registers_all_types() {
         wk.ints.int16,
         wk.ints.int32,
         wk.ints.int64,
-        wk.uints.uint8,
-        wk.uints.uint16,
-        wk.uints.uint32,
-        wk.uints.uint64,
+        wk.nats.nat,
+        wk.nats.nat8,
+        wk.nats.nat16,
+        wk.nats.nat32,
+        wk.nats.nat64,
         wk.floats.float32,
         wk.floats.float64,
         wk.ffi.c_string,
@@ -46,13 +47,23 @@ fn test_init_well_known_registers_all_types() {
         wk.containers.list,
         wk.containers.map,
         wk.containers.set,
-        wk.fns.compare,
-        wk.fns.show,
-        wk.fns.reverse,
-        wk.fns.append,
-        wk.fns.is_some,
-        wk.fns.is_none,
-        wk.fns.next,
+        wk.primitives.isize_,
+        wk.primitives.i8_,
+        wk.primitives.i16_,
+        wk.primitives.i32_,
+        wk.primitives.i64_,
+        wk.primitives.usize_,
+        wk.primitives.u8_,
+        wk.primitives.u16_,
+        wk.primitives.u32_,
+        wk.primitives.u64_,
+        wk.primitives.fsize_,
+        wk.primitives.f32_,
+        wk.primitives.f64_,
+        wk.primitives.bool_,
+        wk.primitives.char_,
+        wk.primitives.str_,
+        wk.float,
         wk.string,
         wk.rune,
         wk.bool,
@@ -84,6 +95,12 @@ fn test_init_well_known_types_are_def_kind_type() {
     assert_eq!(defs.get(wk.classes.eq).kind, DefKind::Class);
     assert_eq!(defs.get(wk.effects.io).kind, DefKind::Effect);
     assert_eq!(defs.get(wk.containers.list).kind, DefKind::Type);
+    assert_eq!(defs.get(wk.nats.nat).kind, DefKind::Type);
+    assert_eq!(defs.get(wk.float).kind, DefKind::Type);
+    assert_eq!(defs.get(wk.primitives.i32_).kind, DefKind::Primitive);
+    assert_eq!(defs.get(wk.primitives.u64_).kind, DefKind::Primitive);
+    assert_eq!(defs.get(wk.primitives.bool_).kind, DefKind::Primitive);
+    assert_eq!(defs.get(wk.primitives.str_).kind, DefKind::Primitive);
 }
 
 #[test]
@@ -101,4 +118,7 @@ fn test_init_well_known_names_resolve_in_scope() {
 
     let sym_bool = interner.get("Bool").expect("Bool should be interned");
     assert_eq!(scopes.lookup(root, sym_bool), Some(wk.bool));
+
+    let sym_nat = interner.get("Nat").expect("Nat should be interned");
+    assert_eq!(scopes.lookup(root, sym_nat), Some(wk.nats.nat));
 }
