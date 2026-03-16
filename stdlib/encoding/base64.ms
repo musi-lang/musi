@@ -124,8 +124,10 @@ let decode_with := (s, is_url_safe) => (
             | (
               let v2 := char_to_value(r2, is_url_safe);
               (has_error <- .True; error <- .Some(.Err(.InvalidChar(r2)))) if v2 = -1
-              | rt.arr_push(out, v0 * 4 + v1 / 16);
-                rt.arr_push(out, (v1 - (v1 / 16) * 16) * 16 + v2 / 4) if _
+              | (
+                rt.arr_push(out, v0 * 4 + v1 / 16);
+                rt.arr_push(out, (v1 - (v1 / 16) * 16) * 16 + v2 / 4)
+              ) if _
             ) if pad1
             // Non-padding group: produce 3 bytes
             | (

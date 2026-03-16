@@ -20,9 +20,9 @@ let level_str := (lvl) => match lvl (
   | .Error => "ERROR"
 );
 
-export let new := (min_level) => .{ min_level := min_level; prefix := "" };
+export let new := (min_level) => .{ min_level := min_level, prefix := "" };
 
-export let with_prefix := (logger, prefix) => .{ min_level := logger.min_level; prefix := prefix };
+export let with_prefix := (logger, prefix) => .{ min_level := logger.min_level, prefix := prefix };
 
 export let log := (logger, level, msg) => (
   (

@@ -44,7 +44,7 @@ export let parse := (input) => (
   let mut current_entries := [];
   let flush_section := () => (
     (
-      rt.arr_push(sections, .{ name := current_name; entries := current_entries });
+      rt.arr_push(sections, .{ name := current_name, entries := current_entries });
       current_entries <- []
     ) if rt.str_len(current_name) > 0 or rt.arr_len(current_entries) > 0
     | () if _

@@ -17,10 +17,10 @@ export let new := (size) => (
     | (rt.arr_push(arr, 0); fill(i + 1)) if _
   );
   fill(0);
-  .{ words := arr; bit_count := size }
+  .{ words := arr, bit_count := size }
 );
 
-let bit_mask := (bit_idx) => rt.int_pow(2, bit_idx mod word_size);
+let bit_mask := (bit_idx) => rt.int_pow(2, bit_idx % word_size);
 
 export let set := (bs, idx) => (
   let w := idx / word_size;

@@ -34,21 +34,21 @@ export let parse := (s) => (
   let parts := rt.str_split(core_str, ".");
   let part_count := rt.arr_len(parts);
   (
-    .Err(.InvalidFormat(f"expected major.minor.patch, got '{core_str}'")) if part_count /= 3
+    .Err(.InvalidFormat(f"expected major.minor.patch, got `{core_str}`")) if part_count /= 3
     | (
       let major_str := parts.[0];
       let minor_str := parts.[1];
       let patch_str := parts.[2];
       (
-        .Err(.InvalidFormat(f"major component is empty")) if rt.str_len(major_str) = 0
-        | .Err(.InvalidFormat(f"minor component is empty")) if rt.str_len(minor_str) = 0
-        | .Err(.InvalidFormat(f"patch component is empty")) if rt.str_len(patch_str) = 0
+        .Err(.InvalidFormat("major component is empty")) if rt.str_len(major_str) = 0
+        | .Err(.InvalidFormat("minor component is empty")) if rt.str_len(minor_str) = 0
+        | .Err(.InvalidFormat("patch component is empty")) if rt.str_len(patch_str) = 0
         | .Ok(.{
-            major := rt.str_parse_int(major_str);
-            minor := rt.str_parse_int(minor_str);
-            patch := rt.str_parse_int(patch_str);
-            pre   := pre;
-            build := build;
+            major := rt.str_parse_int(major_str),
+            minor := rt.str_parse_int(minor_str),
+            patch := rt.str_parse_int(patch_str),
+            pre   := pre,
+            build := build,
           }) if _
       )
     ) if _
@@ -106,25 +106,25 @@ export let is_compatible := (a, b) => (
 );
 
 export let inc_major := (v) => .{
-  major := v.major + 1;
-  minor := 0;
-  patch := 0;
-  pre   := "";
-  build := "";
+  major := v.major + 1,
+  minor := 0,
+  patch := 0,
+  pre   := "",
+  build := "",
 };
 
 export let inc_minor := (v) => .{
-  major := v.major;
-  minor := v.minor + 1;
-  patch := 0;
-  pre   := "";
-  build := "";
+  major := v.major,
+  minor := v.minor + 1,
+  patch := 0,
+  pre   := "",
+  build := "",
 };
 
 export let inc_patch := (v) => .{
-  major := v.major;
-  minor := v.minor;
-  patch := v.patch + 1;
-  pre   := "";
-  build := "";
+  major := v.major,
+  minor := v.minor,
+  patch := v.patch + 1,
+  pre   := "",
+  build := "",
 };

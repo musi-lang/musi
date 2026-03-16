@@ -18,9 +18,9 @@ export let SuiteResult := record {
 export let run_test := (name, test_fn) => (
   let passed := test_fn();
   .{
-    name   := name;
-    passed := passed;
-    msg    := ("PASS" if passed | "FAIL" if _);
+    name   := name,
+    passed := passed,
+    msg    := ("PASS" if passed | "FAIL" if _),
   }
 );
 
@@ -40,10 +40,10 @@ export let run_suite := (suite) => (
   );
   step(0);
   .{
-    total   := total;
-    passed  := passed_count;
-    failed  := total - passed_count;
-    results := results;
+    total   := total,
+    passed  := passed_count,
+    failed  := total - passed_count,
+    results := results,
   }
 );
 

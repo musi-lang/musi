@@ -11,7 +11,7 @@ export let new ['a] := (capacity) => (
     | (rt.arr_push(arr, 0); fill(i + 1)) if _
   );
   fill(0);
-  .{ data := arr; head := 0; count := 0; cap := capacity }
+  .{ data := arr, head := 0, count := 0, cap := capacity }
 );
 
 let wrap := (idx, cap) => idx - (cap if idx >= cap | 0 if _);

@@ -10,9 +10,9 @@ export let is_whitespace := (r) => rt.rune_is_whitespace(r);
 
 export let is_alphanumeric := (r) => rt.rune_is_alpha(r) or rt.rune_is_digit(r);
 
-export let is_upper := (r) => rt.rune_is_alpha(r) and rt.rune_to_upper(r) = r and not rt.rune_to_lower(r) = r;
+export let is_upper := (r) => rt.rune_is_alpha(r) and rt.rune_to_upper(r) = r and not (rt.rune_to_lower(r) = r);
 
-export let is_lower := (r) => rt.rune_is_alpha(r) and rt.rune_to_lower(r) = r and not rt.rune_to_upper(r) = r;
+export let is_lower := (r) => rt.rune_is_alpha(r) and rt.rune_to_lower(r) = r and not (rt.rune_to_upper(r) = r);
 
 export let to_upper := (r) => rt.rune_to_upper(r);
 
