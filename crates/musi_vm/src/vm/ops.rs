@@ -30,8 +30,8 @@ const TYPE_TAG_RUNE: u8 = 0x0D;
 const TYPE_TAG_FN: u8 = 0x12;
 const TYPE_TAG_ANY: u8 = 0x14;
 
-// ── Operand / jump helpers ───────────────────────────────────────────
-
+/// Operand decoding and jump-target helpers.
+///
 /// Decode the operand from raw bytecode starting at `base_ip` (the opcode byte).
 ///
 /// Returns `(operand_value, bytes_consumed_including_opcode)`.
@@ -103,8 +103,7 @@ pub fn const_to_value(c: &LoadedConst, heap: &mut Heap) -> Value {
     }
 }
 
-// ── §5 Locals / constants ────────────────────────────────────────────
-
+/// §5 — Load/store locals and constants.
 pub fn exec_ld_cst(
     operand: u32,
     frame: &mut Frame,
@@ -120,8 +119,7 @@ pub fn exec_ld_cst(
     Ok(())
 }
 
-// ── §5 Struct / variant ──────────────────────────────────────────────
-
+/// §5 — Struct and variant construction/access.
 pub fn exec_mk_prd(operand: u32, frame: &mut Frame, heap: &mut Heap) -> Result<(), VmError> {
     let n = usize::try_from(operand).map_err(|_| malformed!("mk.prd field count overflow"))?;
     let mut fields: Vec<Value> = Vec::with_capacity(n);
@@ -136,13 +134,17 @@ pub fn exec_mk_prd(operand: u32, frame: &mut Frame, heap: &mut Heap) -> Result<(
 
 pub fn exec_ld_fld(operand: u32, frame: &mut Frame, heap: &Heap) -> Result<(), VmError> {
     let idx = usize::try_from(operand).map_err(|_| malformed!("ld.fld index overflow"))?;
-    let obj_val = frame.pop()?;
-    let ptr = obj_val.as_ref()?;
-    let obj = heap.get(ptr)?;
-    let v = obj.fields.get(idx).copied().ok_or(VmError::OutOfBounds {
-        index: idx,
-        len: obj.fields.len(),
-    })?;
+    let product_val = frame.pop()?;
+    let ptr = product_val.as_ref()?;
+    let product = heap.get(ptr)?;
+    let v = product
+        .fields
+        .get(idx)
+        .copied()
+        .ok_or(VmError::OutOfBounds {
+            index: idx,
+            len: product.fields.len(),
+        })?;
     frame.stack.push(v);
     Ok(())
 }
@@ -153,8 +155,8 @@ pub fn exec_mk_var(operand: u32, frame: &mut Frame, heap: &mut Heap) -> Result<(
     let ptr = heap.alloc(0, vec![payload]);
     let ptr_usize =
         usize::try_from(ptr).map_err(|_| malformed!("variant heap pointer overflows usize"))?;
-    let obj = heap.get_mut(ptr_usize)?;
-    obj.tag = Some(tag);
+    let variant = heap.get_mut(ptr_usize)?;
+    variant.tag = Some(tag);
     frame.stack.push(Value::from_ref(ptr));
     Ok(())
 }
@@ -162,39 +164,44 @@ pub fn exec_mk_var(operand: u32, frame: &mut Frame, heap: &mut Heap) -> Result<(
 pub fn exec_ld_pay(operand: u32, frame: &mut Frame, heap: &Heap) -> Result<(), VmError> {
     let field_idx =
         usize::try_from(operand).map_err(|_| malformed!("ld.pay field index overflow"))?;
-    let obj_val = frame.pop()?;
-    let ptr = obj_val.as_ref()?;
-    let obj = heap.get(ptr)?;
-    let payload = obj.fields.get(field_idx).copied().unwrap_or(Value::UNIT);
+    let variant_val = frame.pop()?;
+    let ptr = variant_val.as_ref()?;
+    let variant = heap.get(ptr)?;
+    let payload = variant
+        .fields
+        .get(field_idx)
+        .copied()
+        .unwrap_or(Value::UNIT);
     frame.stack.push(payload);
     Ok(())
 }
 
 pub fn exec_cmp_tag(operand: u32, frame: &mut Frame, heap: &Heap) -> Result<(), VmError> {
-    let obj_val = frame.pop()?;
-    let ptr = obj_val.as_ref()?;
-    let obj = heap.get(ptr)?;
-    frame.stack.push(Value::from_bool(obj.tag == Some(operand)));
+    let variant_val = frame.pop()?;
+    let ptr = variant_val.as_ref()?;
+    let variant = heap.get(ptr)?;
+    frame
+        .stack
+        .push(Value::from_bool(variant.tag == Some(operand)));
     Ok(())
 }
 
-// ── §9 Array / heap ──────────────────────────────────────────────────
-
+/// §9 — Array and heap operations.
 pub fn exec_ld_tag(frame: &mut Frame, heap: &Heap) -> Result<(), VmError> {
-    let obj_val = frame.pop()?;
-    let ptr = obj_val.as_ref()?;
-    let obj = heap.get(ptr)?;
+    let variant_val = frame.pop()?;
+    let ptr = variant_val.as_ref()?;
+    let variant = heap.get(ptr)?;
     frame
         .stack
-        .push(Value::from_int(i64::from(obj.tag.unwrap_or(0))));
+        .push(Value::from_int(i64::from(variant.tag.unwrap_or(0))));
     Ok(())
 }
 
 pub fn exec_ld_len(frame: &mut Frame, heap: &Heap) -> Result<(), VmError> {
-    let obj_val = frame.pop()?;
-    let ptr = obj_val.as_ref()?;
-    let obj = heap.get(ptr)?;
-    let len = u64::try_from(obj.elems.len()).unwrap_or(u64::MAX);
+    let arr_val = frame.pop()?;
+    let ptr = arr_val.as_ref()?;
+    let arr = heap.get(ptr)?;
+    let len = u64::try_from(arr.elems.len()).unwrap_or(u64::MAX);
     frame.stack.push(Value::from_nat(len));
     Ok(())
 }
@@ -204,10 +211,10 @@ pub fn exec_ld_idx(frame: &mut Frame, heap: &Heap) -> Result<(), VmError> {
     let arr_val = frame.pop()?;
     let idx = as_usize(idx_val)?;
     let ptr = arr_val.as_ref()?;
-    let obj = heap.get(ptr)?;
-    let v = obj.elems.get(idx).copied().ok_or(VmError::OutOfBounds {
+    let arr = heap.get(ptr)?;
+    let v = arr.elems.get(idx).copied().ok_or(VmError::OutOfBounds {
         index: idx,
-        len: obj.elems.len(),
+        len: arr.elems.len(),
     })?;
     frame.stack.push(v);
     Ok(())
@@ -219,9 +226,9 @@ pub fn exec_st_idx(frame: &mut Frame, heap: &mut Heap) -> Result<(), VmError> {
     let arr_val = frame.pop()?;
     let idx = as_usize(idx_val)?;
     let ptr = arr_val.as_ref()?;
-    let obj = heap.get_mut(ptr)?;
-    let len = obj.elems.len();
-    let elem = obj
+    let arr = heap.get_mut(ptr)?;
+    let len = arr.elems.len();
+    let elem = arr
         .elems
         .get_mut(idx)
         .ok_or(VmError::OutOfBounds { index: idx, len })?;
@@ -241,20 +248,22 @@ pub fn exec_mk_arr(operand: u32, frame: &mut Frame, heap: &mut Heap) -> Result<(
 pub fn exec_st_fld(operand: u32, frame: &mut Frame, heap: &mut Heap) -> Result<(), VmError> {
     let field_idx = usize::try_from(operand).map_err(|_| malformed!("st.fld index overflow"))?;
     let val = frame.pop()?;
-    let obj_val = frame.pop()?;
-    let ptr = obj_val.as_ref()?;
-    let obj = heap.get_mut(ptr)?;
-    let len = obj.fields.len();
-    let field = obj.fields.get_mut(field_idx).ok_or(VmError::OutOfBounds {
-        index: field_idx,
-        len,
-    })?;
+    let product_val = frame.pop()?;
+    let ptr = product_val.as_ref()?;
+    let product = heap.get_mut(ptr)?;
+    let len = product.fields.len();
+    let field = product
+        .fields
+        .get_mut(field_idx)
+        .ok_or(VmError::OutOfBounds {
+            index: field_idx,
+            len,
+        })?;
     *field = val;
     Ok(())
 }
 
-// ── §12 Globals ──────────────────────────────────────────────────────
-
+/// §12 — Global variable load/store.
 pub fn exec_ld_glb(
     operand: u32,
     frame: &mut Frame,
@@ -282,8 +291,7 @@ pub fn exec_st_glb(
     Ok(())
 }
 
-// ── §16 Type check ──────────────────────────────────────────────────
-
+/// §16 — Runtime type checking.
 pub fn exec_type_chk(
     type_id: u32,
     frame: &mut Frame,
@@ -333,8 +341,7 @@ pub fn exec_type_chk(
     Ok(())
 }
 
-// ── §17 Closures ─────────────────────────────────────────────────────
-
+/// §17 — Closure operations.
 pub fn exec_mk_clo(
     fn_id: u32,
     frame: &mut Frame,
@@ -371,17 +378,21 @@ pub fn exec_ld_upv(operand: u32, frame: &mut Frame, heap: &Heap) -> Result<(), V
         .closure_ref
         .ok_or_else(|| malformed!("ld.upv: frame has no closure_ref"))?;
     let ptr = closure_val.as_ref()?;
-    let obj = heap.get(ptr)?;
-    let val = obj.fields.get(idx).copied().ok_or(VmError::OutOfBounds {
-        index: idx,
-        len: obj.fields.len(),
-    })?;
+    let closure = heap.get(ptr)?;
+    let val = closure
+        .fields
+        .get(idx)
+        .copied()
+        .ok_or(VmError::OutOfBounds {
+            index: idx,
+            len: closure.fields.len(),
+        })?;
     frame.stack.push(val);
     Ok(())
 }
 
-// ── §11 INV_DYN resolution ──────────────────────────────────────────
-
+/// §11 — Dynamic dispatch resolution.
+///
 /// Result of resolving an `INV_DYN` callee.
 pub enum DynCall {
     Fn(u32),
@@ -407,9 +418,9 @@ pub fn resolve_inv_dyn(operand: u32, frame: &mut Frame, heap: &Heap) -> Result<D
     }
 
     if let Ok(ptr) = callee.as_ref() {
-        let obj = heap.get(ptr)?;
-        if obj.type_id == CLOSURE_TYPE_ID {
-            let fn_id = obj
+        let callee_obj = heap.get(ptr)?;
+        if callee_obj.type_id == CLOSURE_TYPE_ID {
+            let fn_id = callee_obj
                 .tag
                 .ok_or_else(|| malformed!("closure object missing fn_id tag"))?;
             return Ok(DynCall::Closure {

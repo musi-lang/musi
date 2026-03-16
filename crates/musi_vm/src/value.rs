@@ -28,6 +28,15 @@ const MUSI_TAG_HI: u16 = 0x7FFA;
 /// 48-bit mask for the payload portion of a `Value`.
 const PAYLOAD_MASK: u64 = 0x0000_FFFF_FFFF_FFFF;
 
+/// 32-bit mask for fn/task/channel id payloads.
+const PAYLOAD_32: u64 = 0xFFFF_FFFF;
+
+/// IEEE 754 exponent mask (bits 62..52, all ones for NaN/infinity).
+const EXPONENT_MASK: u64 = 0x7FF0_0000_0000_0000;
+
+/// IEEE 754 mantissa mask (bits 51..0, non-zero means NaN when exponent is all ones).
+const MANTISSA_MASK: u64 = 0x000F_FFFF_FFFF_FFFF;
+
 /// Canonical NaN — tag `0x7FF0` (below `MUSI_TAG_LO`), payload bit 0 set.
 /// All NaN variants collapse to this value in `from_float` so they are never
 /// mistaken for a tagged MUSI value (Lua-style NaN canonicalization).
@@ -95,9 +104,7 @@ impl Value {
     pub const fn from_float(f: f64) -> Self {
         let bits = f.to_bits();
         // IEEE 754 NaN: exponent all-1s (bits 62..52) AND mantissa non-zero.
-        if bits & 0x7FF0_0000_0000_0000 == 0x7FF0_0000_0000_0000
-            && bits & 0x000F_FFFF_FFFF_FFFF != 0
-        {
+        if bits & EXPONENT_MASK == EXPONENT_MASK && bits & MANTISSA_MASK != 0 {
             Self(CANONICAL_NAN_BITS)
         } else {
             Self(bits)
@@ -276,7 +283,7 @@ impl Value {
                 found: tag_name(self.tag()),
             });
         }
-        let payload = self.0 & 0xFFFF_FFFF;
+        let payload = self.0 & PAYLOAD_32;
         u32::try_from(payload).map_err(|_| VmError::Malformed {
             desc: "task_id overflow".into(),
         })
@@ -294,7 +301,7 @@ impl Value {
                 found: tag_name(self.tag()),
             });
         }
-        let payload = self.0 & 0xFFFF_FFFF;
+        let payload = self.0 & PAYLOAD_32;
         u32::try_from(payload).map_err(|_| VmError::Malformed {
             desc: "chan_id overflow".into(),
         })
@@ -312,7 +319,7 @@ impl Value {
                 found: tag_name(self.tag()),
             });
         }
-        let payload = self.0 & 0xFFFF_FFFF;
+        let payload = self.0 & PAYLOAD_32;
         u32::try_from(payload).map_err(|_| VmError::Malformed {
             desc: "fn_id overflow".into(),
         })
@@ -337,9 +344,9 @@ impl fmt::Debug for Value {
                         .unwrap_or('\0')
                 ),
                 TAG_REF => write!(f, "ref({})", self.0 & PAYLOAD_MASK),
-                TAG_FN => write!(f, "fn({})", self.0 & 0xFFFF_FFFF),
-                TAG_TASK => write!(f, "task({})", self.0 & 0xFFFF_FFFF),
-                TAG_CHAN => write!(f, "chan({})", self.0 & 0xFFFF_FFFF),
+                TAG_FN => write!(f, "fn({})", self.0 & PAYLOAD_32),
+                TAG_TASK => write!(f, "task({})", self.0 & PAYLOAD_32),
+                TAG_CHAN => write!(f, "chan({})", self.0 & PAYLOAD_32),
                 TAG_PTR => write!(f, "ptr({})", self.0 & PAYLOAD_MASK),
                 t => write!(
                     f,
