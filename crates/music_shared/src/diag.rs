@@ -192,6 +192,8 @@ const MAX_ERRORS: usize = 200;
 #[derive(Debug, Default)]
 pub struct DiagnosticBag {
     diagnostics: Vec<Diagnostic>,
+    /// Number of `Severity::Error` diagnostics pushed so far.
+    error_count: usize,
     /// Throwaway sink for diagnostics pushed after `MAX_ERRORS`.
     /// Callers that chain `.add_secondary()` on the returned `&mut Diagnostic`
     /// mutate this instead of corrupting the suppression sentinel.
@@ -216,14 +218,19 @@ impl DiagnosticBag {
     pub const fn new() -> Self {
         Self {
             diagnostics: vec![],
+            error_count: 0,
             overflow: None,
         }
     }
 
     pub fn push(&mut self, diagnostic: Diagnostic) {
-        if self.diagnostics.len() < MAX_ERRORS {
-            self.diagnostics.push(diagnostic);
+        if diagnostic.severity == Severity::Error {
+            if self.error_count >= MAX_ERRORS {
+                return;
+            }
+            self.error_count += 1;
         }
+        self.diagnostics.push(diagnostic);
     }
 
     severity_builder!(error, Severity::Error);
@@ -257,7 +264,9 @@ impl DiagnosticBag {
         span: Span,
         file_id: FileId,
     ) -> &mut Diagnostic {
-        if self.diagnostics.len() >= MAX_ERRORS {
+        let is_error = severity == Severity::Error;
+
+        if is_error && self.error_count >= MAX_ERRORS {
             if self.overflow.is_none() {
                 self.overflow = Some(Diagnostic {
                     severity: Severity::Note,
@@ -268,7 +277,7 @@ impl DiagnosticBag {
             }
             return self.overflow.as_mut().expect("just assigned");
         }
-        let diagnostic = if self.diagnostics.len() == MAX_ERRORS - 1 {
+        let diagnostic = if is_error && self.error_count == MAX_ERRORS - 1 {
             let text: Box<str> = Box::from("too many errors; further diagnostics suppressed");
             Diagnostic {
                 severity: Severity::Error,
@@ -285,6 +294,9 @@ impl DiagnosticBag {
                 secondary: vec![],
             }
         };
+        if is_error {
+            self.error_count += 1;
+        }
         self.diagnostics.push(diagnostic);
         self.diagnostics.last_mut().expect("just pushed")
     }
