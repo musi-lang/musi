@@ -1,3 +1,5 @@
+use std::f64::consts;
+
 use musi_vm::{Heap, Value};
 
 use crate::core::*;
@@ -12,7 +14,7 @@ fn make_array(heap: &mut Heap, elems: Vec<Value>) -> Value {
     Value::from_ref(ptr)
 }
 
-fn extract_str<'a>(val: Value, heap: &'a Heap) -> &'a str {
+fn extract_str(val: Value, heap: &Heap) -> &str {
     let ptr = val.as_ref().unwrap();
     heap.get(ptr).unwrap().string.as_deref().unwrap()
 }
@@ -71,7 +73,7 @@ fn test_str_contains() {
     let s = make_string(&mut heap, "hello world");
     let needle = make_string(&mut heap, "world");
     let result = str_contains(&[s, needle], &mut heap).unwrap();
-    assert_eq!(result.as_bool().unwrap(), true);
+    assert!(result.as_bool().unwrap());
 }
 
 #[test]
@@ -80,7 +82,7 @@ fn test_str_contains_false() {
     let s = make_string(&mut heap, "hello");
     let needle = make_string(&mut heap, "xyz");
     let result = str_contains(&[s, needle], &mut heap).unwrap();
-    assert_eq!(result.as_bool().unwrap(), false);
+    assert!(!result.as_bool().unwrap());
 }
 
 #[test]
@@ -89,7 +91,7 @@ fn test_str_starts_with() {
     let s = make_string(&mut heap, "hello world");
     let prefix = make_string(&mut heap, "hello");
     let result = str_starts_with(&[s, prefix], &mut heap).unwrap();
-    assert_eq!(result.as_bool().unwrap(), true);
+    assert!(result.as_bool().unwrap());
 }
 
 #[test]
@@ -98,7 +100,7 @@ fn test_str_ends_with() {
     let s = make_string(&mut heap, "hello world");
     let suffix = make_string(&mut heap, "world");
     let result = str_ends_with(&[s, suffix], &mut heap).unwrap();
-    assert_eq!(result.as_bool().unwrap(), true);
+    assert!(result.as_bool().unwrap());
 }
 
 #[test]
@@ -228,12 +230,13 @@ fn test_str_parse_int_invalid() {
 }
 
 #[test]
+#[allow(clippy::approx_constant)]
 fn test_str_parse_float() {
     let mut heap = Heap::new();
     let s = make_string(&mut heap, "3.14");
     let result = str_parse_float(&[s], &mut heap).unwrap();
     let f = result.as_float().unwrap();
-    assert!((f - 3.14).abs() < 1e-10);
+    assert!((f - 3.14_f64).abs() < 1e-10);
 }
 
 #[test]
@@ -317,9 +320,9 @@ fn test_arr_contains() {
     let mut heap = Heap::new();
     let arr = make_array(&mut heap, vec![Value::from_int(10), Value::from_int(20)]);
     let found = arr_contains(&[arr, Value::from_int(10)], &mut heap).unwrap();
-    assert_eq!(found.as_bool().unwrap(), true);
+    assert!(found.as_bool().unwrap());
     let not_found = arr_contains(&[arr, Value::from_int(99)], &mut heap).unwrap();
-    assert_eq!(not_found.as_bool().unwrap(), false);
+    assert!(!not_found.as_bool().unwrap());
 }
 
 #[test]
@@ -410,25 +413,25 @@ fn test_float_trig() {
 fn test_float_is_nan() {
     let mut heap = Heap::new();
     let result = float_is_nan(&[Value::from_float(f64::NAN)], &mut heap).unwrap();
-    assert_eq!(result.as_bool().unwrap(), true);
+    assert!(result.as_bool().unwrap());
     let result = float_is_nan(&[Value::from_float(1.0)], &mut heap).unwrap();
-    assert_eq!(result.as_bool().unwrap(), false);
+    assert!(!result.as_bool().unwrap());
 }
 
 #[test]
 fn test_float_is_infinite() {
     let mut heap = Heap::new();
     let result = float_is_infinite(&[Value::from_float(f64::INFINITY)], &mut heap).unwrap();
-    assert_eq!(result.as_bool().unwrap(), true);
+    assert!(result.as_bool().unwrap());
 }
 
 #[test]
 fn test_float_constants() {
     let mut heap = Heap::new();
     let pi = float_pi(&[], &mut heap).unwrap().as_float().unwrap();
-    assert!((pi - std::f64::consts::PI).abs() < 1e-15);
+    assert!((pi - consts::PI).abs() < 1e-15);
     let e = float_e(&[], &mut heap).unwrap().as_float().unwrap();
-    assert!((e - std::f64::consts::E).abs() < 1e-15);
+    assert!((e - consts::E).abs() < 1e-15);
 }
 
 #[test]
@@ -446,27 +449,27 @@ fn test_int_bounds() {
 fn test_rune_is_alpha() {
     let mut heap = Heap::new();
     let result = rune_is_alpha(&[Value::from_rune('A')], &mut heap).unwrap();
-    assert_eq!(result.as_bool().unwrap(), true);
+    assert!(result.as_bool().unwrap());
     let result = rune_is_alpha(&[Value::from_rune('3')], &mut heap).unwrap();
-    assert_eq!(result.as_bool().unwrap(), false);
+    assert!(!result.as_bool().unwrap());
 }
 
 #[test]
 fn test_rune_is_digit() {
     let mut heap = Heap::new();
     let result = rune_is_digit(&[Value::from_rune('9')], &mut heap).unwrap();
-    assert_eq!(result.as_bool().unwrap(), true);
+    assert!(result.as_bool().unwrap());
     let result = rune_is_digit(&[Value::from_rune('a')], &mut heap).unwrap();
-    assert_eq!(result.as_bool().unwrap(), false);
+    assert!(!result.as_bool().unwrap());
 }
 
 #[test]
 fn test_rune_is_whitespace() {
     let mut heap = Heap::new();
     let result = rune_is_whitespace(&[Value::from_rune(' ')], &mut heap).unwrap();
-    assert_eq!(result.as_bool().unwrap(), true);
+    assert!(result.as_bool().unwrap());
     let result = rune_is_whitespace(&[Value::from_rune('a')], &mut heap).unwrap();
-    assert_eq!(result.as_bool().unwrap(), false);
+    assert!(!result.as_bool().unwrap());
 }
 
 #[test]

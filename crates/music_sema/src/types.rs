@@ -168,7 +168,7 @@ impl TypeDisplay<'_> {
     }
 
     fn var_letter(idx: usize) -> String {
-        let letter = (b'a' + (idx % 26) as u8) as char;
+        let letter = char::from(b'a' + u8::try_from(idx % 26).unwrap_or(25));
         let suffix = idx / 26;
         if suffix == 0 {
             format!("'{letter}")
@@ -308,11 +308,7 @@ impl fmt::Display for TypeDisplay<'_> {
                 write!(f, "&")?;
                 self.write_ty(f, *inner)
             }
-            Type::Var(v) => {
-                let name = self.name_for_var(*v);
-                write!(f, "{name}")
-            }
-            Type::Rigid(v) => {
+            Type::Var(v) | Type::Rigid(v) => {
                 let name = self.name_for_var(*v);
                 write!(f, "{name}")
             }

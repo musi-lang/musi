@@ -169,6 +169,7 @@ impl<'a> Emitter<'a> {
         id
     }
 
+    #[allow(clippy::too_many_lines)]
     fn register_well_known_fns(&mut self) -> Result<(), EmitError> {
         let wk = &self.sema.well_known;
 

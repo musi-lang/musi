@@ -15,6 +15,7 @@ use super::{Resolver, binding_def_kind};
 
 impl Resolver<'_> {
     /// Pass 2: resolve all name references in an expression.
+    #[allow(clippy::too_many_lines)]
     pub(super) fn resolve_expr(&mut self, expr_idx: ExprIdx) {
         match self.ast.exprs[expr_idx].clone() {
             Expr::Name { name, span } => self.resolve_name(expr_idx, name, span),
@@ -37,20 +38,16 @@ impl Resolver<'_> {
             }
             Expr::Field { object, field, .. } => {
                 self.resolve_expr(object);
-                if let FieldKey::Name { name, .. } = field {
-                    if let Some(&alias_def_id) = self.output.expr_defs.get(&object) {
-                        if let Some(&import_path) = self.import_alias_defs.get(&alias_def_id) {
-                            if let Some(names) = self.import_names.get(&import_path) {
-                                if let Some(&(_, exported_def_id)) =
-                                    names.iter().find(|(n, _)| *n == name)
-                                {
-                                    let _prev =
-                                        self.output.expr_defs.insert(expr_idx, exported_def_id);
-                                    self.defs.get_mut(exported_def_id).use_count += 1;
-                                }
-                            }
-                        }
-                    }
+                if let FieldKey::Name { name, .. } = field
+                    && let Some(&alias_def_id) = self.output.expr_defs.get(&object)
+                    && let Some(&import_path) = self.import_alias_defs.get(&alias_def_id)
+                    && let Some(names) = self.import_names.get(&import_path)
+                    && let Some(&(_, exported_def_id)) =
+                        names.iter().find(|(n, _)| *n == name)
+                {
+                    let _prev =
+                        self.output.expr_defs.insert(expr_idx, exported_def_id);
+                    self.defs.get_mut(exported_def_id).use_count += 1;
                 }
             }
             Expr::Index { object, index, .. } => {
@@ -200,7 +197,7 @@ impl Resolver<'_> {
         let is_lambda_bind = !is_fn_pat
             && fields
                 .value
-                .map_or(false, |v| matches!(&self.ast.exprs[v], Expr::Fn { .. }));
+                .is_some_and(|v| matches!(&self.ast.exprs[v], Expr::Fn { .. }));
 
         // For function-like patterns, pre-define the name to enable recursion.
         if is_fn_pat {
@@ -247,7 +244,7 @@ impl Resolver<'_> {
         let is_lambda_bind = !is_fn_pat
             && fields
                 .value
-                .map_or(false, |v| matches!(&self.ast.exprs[v], Expr::Fn { .. }));
+                .is_some_and(|v| matches!(&self.ast.exprs[v], Expr::Fn { .. }));
 
         let parent_ty_scope = if fields.params.is_empty() {
             None

@@ -1,5 +1,8 @@
 //! `musi:core` builtins — string, array, numeric, and rune operations.
 
+use std::cmp::Ordering;
+use std::f64::consts;
+
 use musi_vm::{Heap, Value, VmError};
 
 type BuiltinFn = fn(&[Value], &mut Heap) -> Result<Value, VmError>;
@@ -79,7 +82,7 @@ pub fn lookup(name: &str) -> Option<BuiltinFn> {
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
-fn get_str<'a>(val: Value, heap: &'a Heap) -> Result<&'a str, VmError> {
+fn get_str(val: Value, heap: &Heap) -> Result<&str, VmError> {
     let ptr = val.as_ref()?;
     let node = heap.get(ptr)?;
     node.string.as_deref().ok_or(VmError::TypeError {
@@ -114,22 +117,30 @@ fn arg(args: &[Value], idx: usize) -> Result<Value, VmError> {
     })
 }
 
+fn i64_to_usize(v: i64) -> Result<usize, VmError> {
+    usize::try_from(v).map_err(|_| VmError::OutOfBounds { index: 0, len: 0 })
+}
+
+fn usize_to_i64(v: usize) -> Result<i64, VmError> {
+    i64::try_from(v).map_err(|_| VmError::Malformed { desc: "integer overflow".into() })
+}
+
 // ── String builtins ──────────────────────────────────────────────────
 
 fn str_len(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     let s = get_str(arg(args, 0)?, heap)?;
-    Ok(Value::from_int(s.chars().count() as i64))
+    Ok(Value::from_int(usize_to_i64(s.chars().count())?))
 }
 
 fn str_byte_len(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     let s = get_str(arg(args, 0)?, heap)?;
-    Ok(Value::from_int(s.len() as i64))
+    Ok(Value::from_int(usize_to_i64(s.len())?))
 }
 
 fn str_at(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     let s = get_str(arg(args, 0)?, heap)?;
-    let idx = arg(args, 1)?.as_int()? as usize;
-    let c = s.chars().nth(idx).ok_or(VmError::OutOfBounds {
+    let idx = i64_to_usize(arg(args, 1)?.as_int()?)?;
+    let c = s.chars().nth(idx).ok_or_else(|| VmError::OutOfBounds {
         index: idx,
         len: s.chars().count(),
     })?;
@@ -138,8 +149,8 @@ fn str_at(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
 
 fn str_slice(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     let s = get_str(arg(args, 0)?, heap)?;
-    let start = arg(args, 1)?.as_int()? as usize;
-    let end = arg(args, 2)?.as_int()? as usize;
+    let start = i64_to_usize(arg(args, 1)?.as_int()?)?;
+    let end = i64_to_usize(arg(args, 2)?.as_int()?)?;
     let sliced: String = s
         .chars()
         .skip(start)
@@ -167,12 +178,13 @@ fn str_ends_with(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     Ok(Value::from_bool(s.ends_with(suffix)))
 }
 
+#[allow(clippy::string_slice)]
 fn str_index_of(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     let haystack = get_str(arg(args, 0)?, heap)?;
     let needle = get_str(arg(args, 1)?, heap)?;
-    let idx = haystack.find(needle).map_or(-1i64, |byte_idx| {
-        haystack[..byte_idx].chars().count() as i64
-    });
+    let idx = haystack.find(needle).map_or(Ok(-1i64), |byte_idx| {
+        usize_to_i64(haystack[..byte_idx].chars().count())
+    })?;
     Ok(Value::from_int(idx))
 }
 
@@ -211,16 +223,16 @@ fn str_trim_end(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     Ok(Value::from_ref(ptr))
 }
 
+#[allow(clippy::needless_collect)]
 fn str_split(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     let s = get_str(arg(args, 0)?, heap)?;
     let delim = get_str(arg(args, 1)?, heap)?;
-    let owned_parts: Vec<Box<str>> = s.split(delim).map(Box::from).collect();
-    let parts: Vec<Value> = owned_parts
+    // Collect into owned strings first to release the shared borrow on `heap`
+    // before the mutable borrow in the second map.
+    let owned: Vec<Box<str>> = s.split(delim).map(Box::from).collect();
+    let parts: Vec<Value> = owned
         .into_iter()
-        .map(|part| {
-            let ptr = heap.alloc_string(0, part);
-            Value::from_ref(ptr)
-        })
+        .map(|part| Value::from_ref(heap.alloc_string(0, part)))
         .collect();
     let arr_ptr = heap.alloc_array(0, parts);
     Ok(Value::from_ref(arr_ptr))
@@ -237,7 +249,7 @@ fn str_replace(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
 
 fn str_repeat(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     let s = get_str(arg(args, 0)?, heap)?;
-    let n = arg(args, 1)?.as_int()? as usize;
+    let n = i64_to_usize(arg(args, 1)?.as_int()?)?;
     let repeated = s.repeat(n);
     let ptr = heap.alloc_string(0, repeated.into_boxed_str());
     Ok(Value::from_ref(ptr))
@@ -270,10 +282,7 @@ fn str_parse_int(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
 
 fn str_parse_float(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     let s = get_str(arg(args, 0)?, heap)?;
-    match s.parse::<f64>() {
-        Ok(f) => Ok(Value::from_float(f)),
-        Err(_) => Ok(Value::NAN),
-    }
+    Ok(s.parse::<f64>().map_or(Value::NAN, Value::from_float))
 }
 
 // ── Array builtins ───────────────────────────────────────────────────
@@ -281,7 +290,7 @@ fn str_parse_float(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
 fn arr_len(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     let ptr = arg(args, 0)?.as_ref()?;
     let arr = heap.get(ptr)?;
-    Ok(Value::from_int(arr.elems.len() as i64))
+    Ok(Value::from_int(usize_to_i64(arr.elems.len())?))
 }
 
 fn arr_push(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
@@ -304,8 +313,8 @@ fn arr_pop(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
 
 fn arr_slice(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     let ptr = arg(args, 0)?.as_ref()?;
-    let start = arg(args, 1)?.as_int()? as usize;
-    let end = arg(args, 2)?.as_int()? as usize;
+    let start = i64_to_usize(arg(args, 1)?.as_int()?)?;
+    let end = i64_to_usize(arg(args, 2)?.as_int()?)?;
     let arr = heap.get(ptr)?;
     let len = arr.elems.len();
     let s = start.min(len);
@@ -349,7 +358,7 @@ fn arr_index_of(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
         .elems
         .iter()
         .position(|v| v.0 == needle.0)
-        .map_or(-1i64, |i| i as i64);
+        .map_or(-1i64, |i| i64::try_from(i).unwrap_or(-1));
     Ok(Value::from_int(idx))
 }
 
@@ -362,7 +371,7 @@ fn arr_sort(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
             return ai.cmp(&bi);
         }
         if let (Ok(af), Ok(bf)) = (a.as_float(), b.as_float()) {
-            return af.partial_cmp(&bf).unwrap_or(std::cmp::Ordering::Equal);
+            return af.partial_cmp(&bf).unwrap_or(Ordering::Equal);
         }
         // Fallback: raw bit comparison for stable ordering.
         a.0.cmp(&b.0)
@@ -469,26 +478,32 @@ fn float_is_infinite(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError>
 
 // ── Numeric constants ────────────────────────────────────────────────
 
+#[allow(clippy::unnecessary_wraps, clippy::missing_const_for_fn)]
 fn float_pi(_args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
-    Ok(Value::from_float(std::f64::consts::PI))
+    Ok(Value::from_float(consts::PI))
 }
 
+#[allow(clippy::unnecessary_wraps, clippy::missing_const_for_fn)]
 fn float_e(_args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
-    Ok(Value::from_float(std::f64::consts::E))
+    Ok(Value::from_float(consts::E))
 }
 
+#[allow(clippy::unnecessary_wraps, clippy::missing_const_for_fn)]
 fn float_infinity(_args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
     Ok(Value::from_float(f64::INFINITY))
 }
 
+#[allow(clippy::unnecessary_wraps, clippy::missing_const_for_fn)]
 fn float_nan(_args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
     Ok(Value::NAN)
 }
 
+#[allow(clippy::unnecessary_wraps, clippy::missing_const_for_fn)]
 fn int_min_val(_args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
     Ok(Value::from_int(-(1i64 << 47)))
 }
 
+#[allow(clippy::unnecessary_wraps, clippy::missing_const_for_fn)]
 fn int_max_val(_args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
     Ok(Value::from_int((1i64 << 47) - 1))
 }
@@ -524,7 +539,7 @@ fn rune_to_lower(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
 
 fn rune_to_int(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
     let c = get_rune(arg(args, 0)?)?;
-    Ok(Value::from_int(c as i64))
+    Ok(Value::from_int(i64::from(u32::from(c))))
 }
 
 fn rune_from_int(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
