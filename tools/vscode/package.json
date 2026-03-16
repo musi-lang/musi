@@ -39,16 +39,6 @@
 		"languages": [
 			{
 				"id": "musi",
-				"filenamePatterns": [
-					"*.test.ms"
-				],
-				"icon": {
-					"light": "logo_test.png",
-					"dark": "logo_test.png"
-				}
-			},
-			{
-				"id": "musi",
 				"aliases": [
 					"Musi",
 					"musi"
@@ -563,6 +553,13 @@
 						}
 					}
 				]
+			}
+		],
+		"iconThemes": [
+			{
+				"id": "musi-icons",
+				"label": "Musi File Icons",
+				"path": "./icons/musi-icon-theme.json"
 			}
 		]
 	},
