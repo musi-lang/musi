@@ -1,7 +1,7 @@
 //! Show type class and primitive instances.
 
 #[lang := "Show"]
-class Show ['a] {
+export class Show ['a] {
   let show(a) : String;
 };
 

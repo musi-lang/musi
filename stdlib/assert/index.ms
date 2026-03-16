@@ -4,6 +4,10 @@
 //! `Propagate` instance.  Import this module in test files and wire up
 //! a `Propagate AssertError` instance that terminates the test runner.
 
+import "@std/result/propagate";
+import "@std/text/show";
+import "@std/cmp/ord";
+
 export let AssertError := choice { Failed of String };
 
 export let assert := (cond, msg) => (
