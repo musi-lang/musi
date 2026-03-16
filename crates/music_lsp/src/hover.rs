@@ -221,10 +221,10 @@ fn find_ast_params(
     // Path 2: `fn(x, y) => ...` — Expr::Fn where a param span matches
     for raw_idx in 0..arenas.exprs.len() {
         let idx = Idx::from_raw(u32::try_from(raw_idx).ok()?);
-        if let Expr::Fn { params, span, .. } = &arenas.exprs[idx] {
-            if *span == def.span {
-                return Some(format_expr_params(doc, sema, params, param_tys));
-            }
+        if let Expr::Fn { params, span, .. } = &arenas.exprs[idx]
+            && *span == def.span
+        {
+            return Some(format_expr_params(doc, sema, params, param_tys));
         }
     }
 
@@ -248,10 +248,10 @@ fn find_ast_params(
             _ => continue,
         };
         for member in members {
-            if let ClassMember::Fn { sig, .. } = member {
-                if sig.span == def.span {
-                    return Some(format_expr_params(doc, sema, &sig.params, param_tys));
-                }
+            if let ClassMember::Fn { sig, .. } = member
+                && sig.span == def.span
+            {
+                return Some(format_expr_params(doc, sema, &sig.params, param_tys));
             }
         }
     }
@@ -269,10 +269,10 @@ fn check_let_fields(
     param_tys: &[TypeIdx],
 ) -> Option<String> {
     let pat = &arenas.pats[fields.pat];
-    if let Pat::Variant { args, span, .. } = pat {
-        if *span == def.span {
-            return Some(format_pat_params(doc, sema, args, param_tys));
-        }
+    if let Pat::Variant { args, span, .. } = pat
+        && *span == def.span
+    {
+        return Some(format_pat_params(doc, sema, args, param_tys));
     }
     None
 }

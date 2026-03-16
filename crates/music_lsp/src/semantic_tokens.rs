@@ -226,18 +226,18 @@ fn emit_decl_names(doc: &AnalyzedDoc, raw: &mut Vec<RawToken>) {
                 }
             }
             DeclState::AfterLetOp => {
-                if kind == TokenKind::RParen {
-                    if let Some(os) = op_span {
-                        push_raw(
-                            raw,
-                            os,
-                            TT_OPERATOR,
-                            TM_DECLARATION,
-                            doc.file_id,
-                            &doc.source_db,
-                            1,
-                        );
-                    }
+                if kind == TokenKind::RParen
+                    && let Some(os) = op_span
+                {
+                    push_raw(
+                        raw,
+                        os,
+                        TT_OPERATOR,
+                        TM_DECLARATION,
+                        doc.file_id,
+                        &doc.source_db,
+                        1,
+                    );
                 }
                 op_span = None;
                 DeclState::Default

@@ -20,6 +20,14 @@ use music_sema::{
 };
 use music_shared::{Arena, DiagnosticBag, FileId, Interner, Severity, SourceDb, Span, Symbol};
 
+type LspSemaOutput = (
+    SemaResult,
+    ParsedModule,
+    FileId,
+    LexedSource,
+    HashMap<String, DepSource>,
+);
+
 /// Lexed artifacts for a single imported stdlib module, stored for doc-comment lookup.
 pub struct DepSource {
     pub source: String,
@@ -156,13 +164,7 @@ fn run_lsp_sema_in_order(
     diags: &mut DiagnosticBag,
     entry_source: &str,
     project_root: &Path,
-) -> Option<(
-    SemaResult,
-    ParsedModule,
-    FileId,
-    LexedSource,
-    HashMap<String, DepSource>,
-)> {
+) -> Option<LspSemaOutput> {
     let mut state = SharedAnalysisState::new(interner);
     let mut module_exports: HashMap<ModuleId, Vec<ExportBinding>> = HashMap::new();
     let mut dep_sources: HashMap<String, DepSource> = HashMap::new();

@@ -52,34 +52,34 @@ pub fn folding_ranges(doc: &AnalyzedDoc) -> Vec<FoldingRange> {
             }
             comment_end = Some(end_pos.line);
         } else {
-            if let (Some(start_line), Some(end_line)) = (comment_start, comment_end) {
-                if end_line > start_line {
-                    ranges.push(FoldingRange {
-                        start_line,
-                        start_character: None,
-                        end_line,
-                        end_character: None,
-                        kind: Some(FoldingRangeKind::Comment),
-                        collapsed_text: None,
-                    });
-                }
+            if let (Some(start_line), Some(end_line)) = (comment_start, comment_end)
+                && end_line > start_line
+            {
+                ranges.push(FoldingRange {
+                    start_line,
+                    start_character: None,
+                    end_line,
+                    end_character: None,
+                    kind: Some(FoldingRangeKind::Comment),
+                    collapsed_text: None,
+                });
             }
             comment_start = None;
             comment_end = None;
         }
     }
 
-    if let (Some(start_line), Some(end_line)) = (comment_start, comment_end) {
-        if end_line > start_line {
-            ranges.push(FoldingRange {
-                start_line,
-                start_character: None,
-                end_line,
-                end_character: None,
-                kind: Some(FoldingRangeKind::Comment),
-                collapsed_text: None,
-            });
-        }
+    if let (Some(start_line), Some(end_line)) = (comment_start, comment_end)
+        && end_line > start_line
+    {
+        ranges.push(FoldingRange {
+            start_line,
+            start_character: None,
+            end_line,
+            end_character: None,
+            kind: Some(FoldingRangeKind::Comment),
+            collapsed_text: None,
+        });
     }
 
     ranges

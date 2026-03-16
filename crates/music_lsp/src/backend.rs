@@ -80,17 +80,17 @@ impl LanguageServer for MusiBackend {
             self.root_uri = Some(uri);
         }
 
-        if let Some(opts) = params.initialization_options {
-            if let Some(hints) = opts.get("musi").and_then(|m| m.get("inlayHints")) {
-                let bool_field = |name: &str, default: bool| -> bool {
-                    hints.get(name).and_then(|v| v.as_bool()).unwrap_or(default)
-                };
-                self.inlay_config = inlay_hints::InlayHintConfig {
-                    binding_types: bool_field("bindingTypes", true),
-                    return_types: bool_field("returnTypes", true),
-                    parameter_types: bool_field("parameterTypes", true),
-                };
-            }
+        if let Some(opts) = params.initialization_options
+            && let Some(hints) = opts.get("musi").and_then(|m| m.get("inlayHints"))
+        {
+            let bool_field = |name: &str, default: bool| -> bool {
+                hints.get(name).and_then(|v| v.as_bool()).unwrap_or(default)
+            };
+            self.inlay_config = inlay_hints::InlayHintConfig {
+                binding_types: bool_field("bindingTypes", true),
+                return_types: bool_field("returnTypes", true),
+                parameter_types: bool_field("parameterTypes", true),
+            };
         }
         let result = InitializeResult {
             server_info: Some(ServerInfo {

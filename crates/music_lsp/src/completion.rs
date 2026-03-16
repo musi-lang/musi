@@ -14,10 +14,10 @@ use crate::hover;
 /// immediately before the dot. Falls back to global completions if the type cannot
 /// be determined or is not a record.
 pub fn complete(doc: &AnalyzedDoc, trigger: Option<char>, offset: u32) -> Vec<CompletionItem> {
-    if trigger == Some('.') {
-        if let Some(items) = dot_completions(doc, offset) {
-            return items;
-        }
+    if trigger == Some('.')
+        && let Some(items) = dot_completions(doc, offset)
+    {
+        return items;
     }
 
     global_completions(doc)
