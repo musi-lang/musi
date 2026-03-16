@@ -159,7 +159,7 @@ impl Heap {
             tag: None,
             elems: vec![],
             string: None,
-            wide_int: Some(n as i64),
+            wide_int: Some(n.cast_signed()),
         };
         u64::try_from(self.insert(obj)).expect("heap index fits u64")
     }

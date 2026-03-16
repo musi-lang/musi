@@ -179,6 +179,8 @@ impl UnifyTable {
                 self.try_bind_var(v, a, arena)
             }
 
+            // Rigid type variables are intentionally non-unifiable with anything.
+            #[allow(clippy::match_same_arms)]
             (Type::Rigid(_), _) | (_, Type::Rigid(_)) => false,
 
             (Type::Named { def: d1, args: a1 }, Type::Named { def: d2, args: a2 }) => {
@@ -326,7 +328,11 @@ impl UnifyTable {
                         ty: self.freshen_any(f.ty, arena, any_def),
                     })
                     .collect();
-                if new_fields.iter().zip(fields.iter()).all(|(a, b)| a.ty == b.ty) {
+                if new_fields
+                    .iter()
+                    .zip(fields.iter())
+                    .all(|(a, b)| a.ty == b.ty)
+                {
                     ty
                 } else {
                     arena.alloc(Type::Record {

@@ -166,7 +166,7 @@ pub enum BinConfig {
     Map(HashMap<String, String>),
 }
 
-#[allow(clippy::struct_excessive_bools)]
+#[allow(clippy::struct_excessive_bools)] // TOML config struct; bools map 1:1 to user config keys
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct DiagnosticOptions {

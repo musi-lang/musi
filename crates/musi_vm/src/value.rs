@@ -30,12 +30,28 @@ pub const BOXED_NAT_TYPE_ID: u32 = 0xFFFF_FFFC;
 const INT_48_MIN: i64 = -(1i64 << 47);
 const INT_48_MAX: i64 = (1i64 << 47) - 1;
 
+// Lossless widening helpers for const context where `u64::from()` is unavailable.
+#[allow(clippy::as_conversions)]
+const fn widen(n: u32) -> u64 {
+    n as u64
+}
+
+#[allow(clippy::as_conversions)]
+const fn bool_to_u64(b: bool) -> u64 {
+    b as u64
+}
+
+#[allow(clippy::as_conversions)]
+const fn char_to_u64(c: char) -> u64 {
+    c as u64
+}
+
 /// NaN-boxed runtime value (8 bytes, cache-friendly).
 ///
 /// - Floats: stored as raw IEEE 754 bits (NaN canonicalized)
 /// - Tagged values: top 16 bits = type tag, bottom 48 bits = payload
 /// - Wide integers (>48-bit): heap-boxed behind a `Ref` with sentinel `type_id`
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
 pub struct Value(pub u64);
 
@@ -49,7 +65,7 @@ impl Value {
     /// Use `from_int_wide` for values outside [-2^47, 2^47-1].
     #[must_use]
     pub const fn from_int(n: i64) -> Self {
-        Self(TAG_INT | ((n as u64) & PAYLOAD_MASK))
+        Self(TAG_INT | (n.cast_unsigned() & PAYLOAD_MASK))
     }
 
     /// Create a nat. Truncates to 48 bits.
@@ -71,17 +87,17 @@ impl Value {
 
     #[must_use]
     pub const fn from_bool(b: bool) -> Self {
-        Self(TAG_BOOL | (b as u64))
+        Self(TAG_BOOL | bool_to_u64(b))
     }
 
     #[must_use]
     pub const fn from_rune(c: char) -> Self {
-        Self(TAG_RUNE | (c as u64))
+        Self(TAG_RUNE | char_to_u64(c))
     }
 
     #[must_use]
     pub const fn from_fn_id(id: u32) -> Self {
-        Self(TAG_FN | (id as u64))
+        Self(TAG_FN | widen(id))
     }
 
     #[must_use]
@@ -91,17 +107,17 @@ impl Value {
 
     #[must_use]
     pub const fn from_task(id: u32) -> Self {
-        Self(TAG_TACH | (id as u64))
+        Self(TAG_TACH | widen(id))
     }
 
     #[must_use]
     pub const fn from_chan(id: u32) -> Self {
-        Self(TAG_TACH | CHAN_BIT | (id as u64))
+        Self(TAG_TACH | CHAN_BIT | widen(id))
     }
 
     #[must_use]
     pub fn from_int_wide(n: i64, heap: &mut Heap) -> Self {
-        if n >= INT_48_MIN && n <= INT_48_MAX {
+        if (INT_48_MIN..=INT_48_MAX).contains(&n) {
             Self::from_int(n)
         } else {
             let ptr = heap.alloc_wide_int(n);
@@ -161,15 +177,50 @@ impl Value {
 
     /// Top 16 bits — type discriminator for NaN-boxed dispatch.
     #[must_use]
+    #[allow(clippy::cast_possible_truncation, clippy::as_conversions)] // u64 >> 48 always fits u16
     pub const fn tag(self) -> u16 {
         (self.0 >> 48) as u16
     }
 
+    /// Extracts the lower 32 bits of the NaN-boxed payload.
+    ///
+    /// # Panics
+    ///
+    /// Panics in debug mode if the payload exceeds `u32::MAX`.
+    #[allow(clippy::cast_possible_truncation, clippy::as_conversions)]
+    const fn payload_u32(self) -> u32 {
+        let p = self.0 & PAYLOAD_MASK;
+        debug_assert!(p <= 0xFFFF_FFFF, "payload exceeds u32");
+        p as u32
+    }
+
+    /// Extracts the lower 32 bits of the payload after applying a custom mask.
+    ///
+    /// # Panics
+    ///
+    /// Panics in debug mode if the masked payload exceeds `u32::MAX`.
+    #[allow(clippy::cast_possible_truncation, clippy::as_conversions)]
+    const fn payload_u32_masked(self, mask: u64) -> u32 {
+        let p = self.0 & mask;
+        debug_assert!(p <= 0xFFFF_FFFF, "payload exceeds u32");
+        p as u32
+    }
+
+    /// Sign-extends a 48-bit payload to i64 via arithmetic right-shift.
+    #[allow(clippy::cast_possible_wrap, clippy::as_conversions)]
+    const fn sign_extend_48(raw: u64) -> i64 {
+        ((raw << 16) as i64) >> 16
+    }
+
     /// Extract 48-bit sign-extended int.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VmError::TypeError`] if the value is not an int.
     pub const fn as_int(self) -> Result<i64, VmError> {
         if (self.0 & TAG_MASK) == TAG_INT {
             let raw = self.0 & PAYLOAD_MASK;
-            Ok(((raw << 16) as i64) >> 16)
+            Ok(Self::sign_extend_48(raw))
         } else {
             Err(VmError::TypeError {
                 expected: "int",
@@ -178,6 +229,9 @@ impl Value {
         }
     }
 
+    /// # Errors
+    ///
+    /// Returns [`VmError::TypeError`] if the value is not a nat.
     pub const fn as_nat(self) -> Result<u64, VmError> {
         if (self.0 & TAG_MASK) == TAG_NAT {
             Ok(self.0 & PAYLOAD_MASK)
@@ -189,6 +243,9 @@ impl Value {
         }
     }
 
+    /// # Errors
+    ///
+    /// Returns [`VmError::TypeError`] if the value is not a float.
     pub const fn as_float(self) -> Result<f64, VmError> {
         if self.is_float() {
             Ok(f64::from_bits(self.0))
@@ -200,6 +257,9 @@ impl Value {
         }
     }
 
+    /// # Errors
+    ///
+    /// Returns [`VmError::TypeError`] if the value is not a bool.
     pub const fn as_bool(self) -> Result<bool, VmError> {
         if (self.0 & TAG_MASK) == TAG_BOOL {
             Ok((self.0 & 1) != 0)
@@ -211,10 +271,14 @@ impl Value {
         }
     }
 
+    /// # Errors
+    ///
+    /// Returns [`VmError::TypeError`] if the value is not a rune, or
+    /// [`VmError::Malformed`] if the codepoint is invalid.
     pub fn as_rune(self) -> Result<char, VmError> {
         if (self.0 & TAG_MASK) == TAG_RUNE {
-            let code = (self.0 & PAYLOAD_MASK) as u32;
-            char::from_u32(code).ok_or(VmError::Malformed {
+            let code = self.payload_u32();
+            char::from_u32(code).ok_or_else(|| VmError::Malformed {
                 desc: "invalid rune codepoint".into(),
             })
         } else {
@@ -225,9 +289,13 @@ impl Value {
         }
     }
 
+    /// # Errors
+    ///
+    /// Returns [`VmError::TypeError`] if the value is not a ref, or
+    /// [`VmError::Malformed`] if the heap index overflows usize.
     pub fn as_ref(self) -> Result<usize, VmError> {
         if (self.0 & TAG_MASK) == TAG_REF {
-            let idx = (self.0 & PAYLOAD_MASK) as u32;
+            let idx = self.payload_u32();
             usize::try_from(idx).map_err(|_| VmError::Malformed {
                 desc: "heap index overflows usize".into(),
             })
@@ -242,15 +310,18 @@ impl Value {
     #[must_use]
     pub fn try_as_ref(self) -> Option<usize> {
         if (self.0 & TAG_MASK) == TAG_REF {
-            usize::try_from((self.0 & PAYLOAD_MASK) as u32).ok()
+            usize::try_from(self.payload_u32()).ok()
         } else {
             None
         }
     }
 
-    pub fn as_fn_id(self) -> Result<u32, VmError> {
+    /// # Errors
+    ///
+    /// Returns [`VmError::TypeError`] if the value is not a function.
+    pub const fn as_fn_id(self) -> Result<u32, VmError> {
         if (self.0 & TAG_MASK) == TAG_FN {
-            Ok((self.0 & PAYLOAD_MASK) as u32)
+            Ok(self.payload_u32())
         } else {
             Err(VmError::TypeError {
                 expected: "fn",
@@ -259,9 +330,12 @@ impl Value {
         }
     }
 
-    pub fn as_task_id(self) -> Result<u32, VmError> {
+    /// # Errors
+    ///
+    /// Returns [`VmError::TypeError`] if the value is not a task.
+    pub const fn as_task_id(self) -> Result<u32, VmError> {
         if (self.0 & TAG_MASK) == TAG_TACH && (self.0 & CHAN_BIT) == 0 {
-            Ok((self.0 & PAYLOAD_MASK) as u32)
+            Ok(self.payload_u32())
         } else {
             Err(VmError::TypeError {
                 expected: "task",
@@ -270,9 +344,12 @@ impl Value {
         }
     }
 
-    pub fn as_chan_id(self) -> Result<u32, VmError> {
+    /// # Errors
+    ///
+    /// Returns [`VmError::TypeError`] if the value is not a channel.
+    pub const fn as_chan_id(self) -> Result<u32, VmError> {
         if (self.0 & TAG_MASK) == TAG_TACH && (self.0 & CHAN_BIT) != 0 {
-            Ok((self.0 & (PAYLOAD_MASK & !CHAN_BIT)) as u32)
+            Ok(self.payload_u32_masked(PAYLOAD_MASK & !CHAN_BIT))
         } else {
             Err(VmError::TypeError {
                 expected: "chan",
@@ -282,6 +359,11 @@ impl Value {
     }
 
     /// Extract int: inline 48-bit or heap-boxed wide int.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VmError::TypeError`] if the value is not an int, or
+    /// [`VmError::Malformed`] if the boxed int is missing its payload.
     pub fn as_int_wide(self, heap: &Heap) -> Result<i64, VmError> {
         if let Ok(n) = self.as_int() {
             return Ok(n);
@@ -289,7 +371,7 @@ impl Value {
         if let Ok(ptr) = self.as_ref() {
             let obj = heap.get(ptr)?;
             if obj.type_id == BOXED_INT_TYPE_ID {
-                return obj.wide_int.ok_or(VmError::Malformed {
+                return obj.wide_int.ok_or_else(|| VmError::Malformed {
                     desc: "boxed int missing wide_int field".into(),
                 });
             }
@@ -301,6 +383,11 @@ impl Value {
     }
 
     /// Extract nat: inline 48-bit or heap-boxed wide nat.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VmError::TypeError`] if the value is not a nat, or
+    /// [`VmError::Malformed`] if the boxed nat is missing its payload.
     pub fn as_nat_wide(self, heap: &Heap) -> Result<u64, VmError> {
         if let Ok(n) = self.as_nat() {
             return Ok(n);
@@ -308,9 +395,12 @@ impl Value {
         if let Ok(ptr) = self.as_ref() {
             let obj = heap.get(ptr)?;
             if obj.type_id == BOXED_NAT_TYPE_ID {
-                return obj.wide_int.map(|n| n as u64).ok_or(VmError::Malformed {
-                    desc: "boxed nat missing wide_int field".into(),
-                });
+                return obj
+                    .wide_int
+                    .map(i64::cast_unsigned)
+                    .ok_or_else(|| VmError::Malformed {
+                        desc: "boxed nat missing wide_int field".into(),
+                    });
             }
         }
         Err(VmError::TypeError {
@@ -319,6 +409,7 @@ impl Value {
         })
     }
 
+    #[must_use]
     pub const fn type_name(self) -> &'static str {
         if self.is_float() {
             return "float";
@@ -351,16 +442,16 @@ impl fmt::Debug for Value {
         match self.0 & TAG_MASK {
             TAG_INT => {
                 let raw = self.0 & PAYLOAD_MASK;
-                let n = ((raw << 16) as i64) >> 16;
+                let n = Self::sign_extend_48(raw);
                 write!(f, "int({n})")
             }
             TAG_NAT => write!(f, "nat({})", self.0 & PAYLOAD_MASK),
             TAG_BOOL => write!(f, "bool({})", (self.0 & 1) != 0),
             TAG_UNIT => write!(f, "unit"),
-            TAG_REF => write!(f, "ref({})", (self.0 & PAYLOAD_MASK) as u32),
-            TAG_FN => write!(f, "fn({})", (self.0 & PAYLOAD_MASK) as u32),
+            TAG_REF => write!(f, "ref({})", self.payload_u32()),
+            TAG_FN => write!(f, "fn({})", self.payload_u32()),
             TAG_RUNE => {
-                let code = (self.0 & PAYLOAD_MASK) as u32;
+                let code = self.payload_u32();
                 match char::from_u32(code) {
                     Some(c) => write!(f, "rune({c})"),
                     None => write!(f, "rune(<invalid:{code}>)"),
@@ -368,9 +459,13 @@ impl fmt::Debug for Value {
             }
             TAG_TACH => {
                 if (self.0 & CHAN_BIT) != 0 {
-                    write!(f, "chan({})", (self.0 & (PAYLOAD_MASK & !CHAN_BIT)) as u32)
+                    write!(
+                        f,
+                        "chan({})",
+                        self.payload_u32_masked(PAYLOAD_MASK & !CHAN_BIT)
+                    )
                 } else {
-                    write!(f, "task({})", (self.0 & PAYLOAD_MASK) as u32)
+                    write!(f, "task({})", self.payload_u32())
                 }
             }
             _ => write!(f, "unknown({:#018x})", self.0),
