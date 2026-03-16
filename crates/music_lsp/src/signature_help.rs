@@ -57,9 +57,9 @@ pub fn signature_help(doc: &AnalyzedDoc, position: Position) -> Option<Signature
 
     let ret_s = fmt_type_lsp(ret_ty, doc, sema);
     let label = if let Some(ref name) = callee_name {
-        format!("let {}({}): {}", name, param_strs.join(", "), ret_s)
+        format!("let {name}({}): {ret_s}", param_strs.join(", "))
     } else {
-        format!("({}) -> {}", param_strs.join(", "), ret_s)
+        format!("({}) -> {ret_s}", param_strs.join(", "))
     };
 
     let params_start = label.find('(').unwrap_or(0) + 1;

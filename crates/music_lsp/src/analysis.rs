@@ -262,31 +262,6 @@ fn builtin_module_exports(node: &ModuleNode, state: &SharedAnalysisState) -> Vec
                 def_id: wk.ffi.ptr,
             },
         ]
-    } else if path_str == "<musi:core>" {
-        let core = &state.well_known.core;
-        let make = |did| {
-            let def = state.defs.get(did);
-            ExportBinding {
-                name: def.name,
-                ty: TypeIdx::from_raw(0),
-                def_id: did,
-            }
-        };
-        vec![
-            make(core.int_abs),
-            make(core.int_min),
-            make(core.int_max),
-            make(core.int_clamp),
-            make(core.int_pow),
-            make(core.str_len),
-            make(core.str_contains),
-            make(core.str_starts_with),
-            make(core.str_ends_with),
-            make(core.arr_len),
-            make(core.arr_push),
-            make(core.arr_pop),
-            make(core.arr_reverse),
-        ]
     } else {
         vec![]
     }

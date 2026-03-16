@@ -403,7 +403,7 @@ fn classify_def(
                 (Some(TT_PARAMETER), decl | mut_mod, 0)
             }
         }
-        DefKind::Type | DefKind::OpaqueType => (Some(TT_TYPE), decl, 0),
+        DefKind::Type | DefKind::OpaqueType | DefKind::Primitive => (Some(TT_TYPE), decl, 0),
         DefKind::Variant => (Some(TT_ENUM_MEMBER), decl, 0),
         DefKind::Import => (None, 0, 0),
         DefKind::Class | DefKind::Given | DefKind::Effect => (Some(TT_TYPE), decl, 0),

@@ -107,7 +107,7 @@ fn global_completions(doc: &AnalyzedDoc) -> Vec<CompletionItem> {
                 }
                 DefKind::Var => CompletionItemKind::VARIABLE,
                 DefKind::Param => CompletionItemKind::VARIABLE,
-                DefKind::Type | DefKind::OpaqueType => CompletionItemKind::CLASS,
+                DefKind::Type | DefKind::OpaqueType | DefKind::Primitive => CompletionItemKind::CLASS,
                 DefKind::Variant => CompletionItemKind::ENUM_MEMBER,
                 DefKind::Class => CompletionItemKind::INTERFACE,
                 DefKind::Given => CompletionItemKind::MODULE,

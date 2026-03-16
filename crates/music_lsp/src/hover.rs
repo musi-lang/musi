@@ -67,7 +67,7 @@ pub fn hover(doc: &AnalyzedDoc, position: Position) -> Option<Hover> {
         DefKind::ForeignFn => "foreign let",
         DefKind::EffectOp => "let",
         DefKind::Law => "law",
-        DefKind::Import | DefKind::OpaqueType | DefKind::LawVar => "",
+        DefKind::Import | DefKind::OpaqueType | DefKind::LawVar | DefKind::Primitive => "",
     };
 
     let name = doc.interner.try_resolve(def.name).unwrap_or("<error>");
