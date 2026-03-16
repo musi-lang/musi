@@ -381,13 +381,25 @@ fn classify_def(
                 (Some(TT_VARIABLE), decl, 0)
             }
         }
-        DefKind::Var => (Some(TT_VARIABLE), decl | TM_MUTABLE, 0),
+        DefKind::Var => {
+            let is_fn = def.ty_info.ty.is_some_and(|t| is_fn_type(t, sema));
+            if is_fn {
+                (Some(TT_FUNCTION), decl | TM_MUTABLE, 0)
+            } else {
+                (Some(TT_VARIABLE), decl | TM_MUTABLE, 0)
+            }
+        }
         DefKind::Param => {
+            let is_fn = def.ty_info.ty.is_some_and(|t| is_fn_type(t, sema));
             let is_mutable = def
                 .param_mode
                 .is_some_and(|m| matches!(m, ParamMode::Mut));
             let mut_mod = if is_mutable { TM_MUTABLE } else { 0 };
-            (Some(TT_PARAMETER), decl | mut_mod, 0)
+            if is_fn {
+                (Some(TT_FUNCTION), decl | mut_mod, 0)
+            } else {
+                (Some(TT_PARAMETER), decl | mut_mod, 0)
+            }
         }
         DefKind::Type | DefKind::OpaqueType => (Some(TT_TYPE), decl, 0),
         DefKind::Variant => (Some(TT_ENUM_MEMBER), decl, 0),

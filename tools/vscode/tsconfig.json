@@ -1,41 +1,31 @@
 {
-    "compilerOptions": {
-        "allowArbitraryExtensions": true,
-        "allowUmdGlobalAccess": true,
-        "allowUnreachableCode": false,
-        "allowUnusedLabels": false,
-        "checkJs": true,
-        "composite": true,
-        "exactOptionalPropertyTypes": true,
-        "lib": [
-            "ES2022"
-        ],
-        "module": "commonjs",
-        "moduleDetection": "force",
-        "moduleResolution": "node",
-        "noFallthroughCasesInSwitch": true,
-        "noImplicitOverride": true,
-        "noImplicitReturns": true,
-        "noPropertyAccessFromIndexSignature": true,
-        "noUncheckedIndexedAccess": true,
-        "noUnusedLocals": true,
-        "noUnusedParameters": true,
-        "noUncheckedSideEffectImports": true,
-        "outDir": "dist",
-        "rootDir": "client/src",
-        "sourceMap": true,
-        "skipLibCheck": true,
-        "strict": true,
-        "target": "ES2022",
-        "types": [
-            "node",
-            "vscode",
-            "vscode-languageclient"
-        ]
-    },
-    "exclude": [
-        "node_modules",
-        ".vscode-test",
-        "dist"
-    ]
+	"compilerOptions": {
+		"allowArbitraryExtensions": true,
+		"allowUmdGlobalAccess": true,
+		"allowUnreachableCode": false,
+		"allowUnusedLabels": false,
+		"checkJs": true,
+		"composite": true,
+		"exactOptionalPropertyTypes": true,
+		"lib": ["ES2022"],
+		"module": "commonjs",
+		"moduleDetection": "force",
+		"moduleResolution": "node",
+		"noFallthroughCasesInSwitch": true,
+		"noImplicitOverride": true,
+		"noImplicitReturns": true,
+		"noPropertyAccessFromIndexSignature": true,
+		"noUncheckedIndexedAccess": true,
+		"noUnusedLocals": true,
+		"noUnusedParameters": true,
+		"noUncheckedSideEffectImports": true,
+		"outDir": "dist",
+		"rootDir": "client/src",
+		"sourceMap": true,
+		"skipLibCheck": true,
+		"strict": true,
+		"target": "ES2022",
+		"types": ["node", "vscode", "vscode-languageclient"]
+	},
+	"exclude": ["node_modules", ".vscode-test", "dist"]
 }

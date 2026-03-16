@@ -2,7 +2,7 @@
 	"name": "vscode-musi",
 	"displayName": "Musi",
 	"description": "Musi language support",
-	"version": "0.1.0",
+	"version": "0.1.0-rc1",
 	"author": {
 		"name": "xsyetopz"
 	},
@@ -298,13 +298,17 @@
 				},
 				"musi.runtime.args": {
 					"type": "array",
-					"items": { "type": "string" },
+					"items": {
+						"type": "string"
+					},
 					"default": [],
 					"description": "Extra arguments passed to the musi runtime binary."
 				},
 				"musi.runtime.env": {
 					"type": "object",
-					"additionalProperties": { "type": "string" },
+					"additionalProperties": {
+						"type": "string"
+					},
 					"default": {},
 					"description": "Environment variables for program execution."
 				},
@@ -324,19 +328,29 @@
 					"description": "Working directory for program execution."
 				},
 				"musi.compiler.path": {
-					"type": ["string", "null"],
+					"type": [
+						"string",
+						"null"
+					],
 					"default": null,
 					"markdownDescription": "Path to `music` compiler binary. If not set, searches in `target/debug`, `target/release`, `~/.cargo/bin`, and system PATH."
 				},
 				"musi.compiler.args": {
 					"type": "array",
-					"items": { "type": "string" },
+					"items": {
+						"type": "string"
+					},
 					"default": [],
 					"description": "Extra arguments passed to the music compiler."
 				},
 				"musi.compiler.target": {
 					"type": "string",
-					"enum": ["MS2025", "native", "wasm", "embedded"],
+					"enum": [
+						"MS2025",
+						"native",
+						"wasm",
+						"embedded"
+					],
 					"default": "MS2025",
 					"description": "Compilation target."
 				},
@@ -375,16 +389,51 @@
 					"default": [],
 					"items": {
 						"type": "object",
-						"required": ["name"],
+						"required": [
+							"name"
+						],
 						"properties": {
-							"name": { "type": "string", "description": "Configuration name." },
-							"file": { "type": "string", "description": "Source file to run." },
-							"compilerArgs": { "type": "array", "items": { "type": "string" }, "description": "Extra compiler arguments." },
-							"runtimeArgs": { "type": "array", "items": { "type": "string" }, "description": "Extra runtime arguments." },
-							"env": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Environment variables." },
-							"envFile": { "type": "string", "description": "Path to .env file." },
-							"cwd": { "type": "string", "description": "Working directory." },
-							"preLaunchTask": { "type": "string", "description": "Task to run before launch." }
+							"name": {
+								"type": "string",
+								"description": "Configuration name."
+							},
+							"file": {
+								"type": "string",
+								"description": "Source file to run."
+							},
+							"compilerArgs": {
+								"type": "array",
+								"items": {
+									"type": "string"
+								},
+								"description": "Extra compiler arguments."
+							},
+							"runtimeArgs": {
+								"type": "array",
+								"items": {
+									"type": "string"
+								},
+								"description": "Extra runtime arguments."
+							},
+							"env": {
+								"type": "object",
+								"additionalProperties": {
+									"type": "string"
+								},
+								"description": "Environment variables."
+							},
+							"envFile": {
+								"type": "string",
+								"description": "Path to .env file."
+							},
+							"cwd": {
+								"type": "string",
+								"description": "Working directory."
+							},
+							"preLaunchTask": {
+								"type": "string",
+								"description": "Task to run before launch."
+							}
 						}
 					},
 					"markdownDescription": "Named run configurations for quick switching."
@@ -408,15 +457,55 @@
 				"configurationAttributes": {
 					"launch": {
 						"properties": {
-							"file": { "type": "string", "description": "Source file to run." },
-							"compilerArgs": { "type": "array", "items": { "type": "string" }, "default": [] },
-							"runtimeArgs": { "type": "array", "items": { "type": "string" }, "default": [] },
-							"env": { "type": "object", "additionalProperties": { "type": "string" }, "default": {} },
-							"envFile": { "type": "string", "default": "" },
-							"cwd": { "type": "string", "default": "" },
-							"preLaunchTask": { "type": "string", "default": "" },
-							"buildBeforeRun": { "type": "boolean", "default": true },
-							"console": { "type": "string", "enum": ["integratedTerminal", "externalTerminal"], "default": "integratedTerminal" }
+							"file": {
+								"type": "string",
+								"description": "Source file to run."
+							},
+							"compilerArgs": {
+								"type": "array",
+								"items": {
+									"type": "string"
+								},
+								"default": []
+							},
+							"runtimeArgs": {
+								"type": "array",
+								"items": {
+									"type": "string"
+								},
+								"default": []
+							},
+							"env": {
+								"type": "object",
+								"additionalProperties": {
+									"type": "string"
+								},
+								"default": {}
+							},
+							"envFile": {
+								"type": "string",
+								"default": ""
+							},
+							"cwd": {
+								"type": "string",
+								"default": ""
+							},
+							"preLaunchTask": {
+								"type": "string",
+								"default": ""
+							},
+							"buildBeforeRun": {
+								"type": "boolean",
+								"default": true
+							},
+							"console": {
+								"type": "string",
+								"enum": [
+									"integratedTerminal",
+									"externalTerminal"
+								],
+								"default": "integratedTerminal"
+							}
 						}
 					}
 				},
@@ -440,7 +529,9 @@
 							"request": "launch",
 							"name": "Run with Env",
 							"file": "${1:${workspaceFolder}/index.ms}",
-							"env": { "${2:KEY}": "${3:value}" },
+							"env": {
+								"${2:KEY}": "${3:value}"
+							},
 							"buildBeforeRun": true
 						}
 					}
@@ -457,9 +548,9 @@
 		"vscode-languageclient": "^9.0.1"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "2.4.6",
+		"@biomejs/biome": "2.4.7",
 		"@types/bun": "1.3.10",
-		"@types/node": "25.4.0",
+		"@types/node": "25.5.0",
 		"@types/vscode": "^1.75.0",
 		"@vscode/vsce": "3.7.1",
 		"typescript": "5.9.3"
