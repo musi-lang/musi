@@ -14,5 +14,5 @@ pub mod specifier;
 
 pub use error::ResolveError;
 pub use graph::{ModuleGraph, ModuleId, ModuleNode, build_module_graph};
-pub use resolver::{ResolverConfig, discover_std_root, resolve_import};
+pub use resolver::{ResolverConfig, discover_std_root, resolve_import, resolve_relative};
 pub use specifier::{GitSource, ImportScheme, ImportSpecifier, parse_git_source, parse_specifier};

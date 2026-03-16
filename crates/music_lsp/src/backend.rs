@@ -374,7 +374,7 @@ impl LanguageServer for MusiBackend {
         let links = self
             .documents
             .get(&uri)
-            .map(|doc| document_links::document_links(doc, &uri, self.root_uri.as_ref()))
+            .map(|doc| document_links::document_links(doc, &uri))
             .unwrap_or_default();
         Box::pin(async move { Ok(Some(links)) })
     }

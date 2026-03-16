@@ -5,7 +5,7 @@
 //! handlers can reuse the same sema pass without re-running it.
 
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use lsp_types::{Diagnostic, DiagnosticSeverity, DiagnosticTag, Position, Range};
 use music_ast::{ExprIdx, ParsedModule};
@@ -45,6 +45,8 @@ pub struct AnalyzedDoc {
     pub lexed: LexedSource,
     pub sema: Option<SemaResult>,
     pub dep_sources: HashMap<String, DepSource>,
+    /// Maps import path `Symbol` → resolved filesystem `PathBuf`.
+    pub resolved_imports: HashMap<Symbol, PathBuf>,
 }
 
 fn parse_src(
@@ -89,6 +91,7 @@ pub fn analyze_doc(source: &str, _uri: &str) -> (Vec<Diagnostic>, AnalyzedDoc) {
         lexed,
         sema: Some(sema),
         dep_sources: HashMap::new(),
+        resolved_imports: HashMap::new(),
     };
     (lsp_diags, doc)
 }
@@ -125,6 +128,8 @@ pub fn analyze_doc_multi(
         Err(_) => return analyze_doc(source, "<document>"),
     };
 
+    let resolved_imports = build_resolved_imports(&graph);
+
     let (sema, entry_parsed, entry_file_id, lexed, dep_sources) = match run_lsp_sema_in_order(
         &graph,
         &order,
@@ -152,8 +157,22 @@ pub fn analyze_doc_multi(
         lexed,
         sema: Some(sema),
         dep_sources,
+        resolved_imports,
     };
     (lsp_diags, doc)
+}
+
+/// Build a `Symbol → PathBuf` map from the entry module's imports in the graph.
+fn build_resolved_imports(graph: &ModuleGraph) -> HashMap<Symbol, PathBuf> {
+    let entry = graph.get(ModuleId(0));
+    let mut resolved = HashMap::new();
+    for &(dep_id, import_sym) in &entry.imports {
+        let dep = graph.get(dep_id);
+        if !dep.builtin {
+            resolved.insert(import_sym, dep.path.clone());
+        }
+    }
+    resolved
 }
 
 fn run_lsp_sema_in_order(

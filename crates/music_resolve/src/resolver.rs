@@ -146,7 +146,13 @@ fn resolve_at_std(module_path: &str, config: &ResolverConfig) -> Result<PathBuf,
     })
 }
 
-fn resolve_relative(module_path: &str, importing_file: &Path) -> Result<PathBuf, ResolveError> {
+/// Resolves a relative import path (`./foo`, `../bar`) against the importing file.
+///
+/// # Errors
+///
+/// Returns [`ResolveError::ModuleNotFound`] if no matching `.ms` file or
+/// `index.ms` directory module exists.
+pub fn resolve_relative(module_path: &str, importing_file: &Path) -> Result<PathBuf, ResolveError> {
     let base_dir = importing_file.parent().unwrap_or_else(|| Path::new("."));
 
     let candidate = base_dir.join(module_path);
