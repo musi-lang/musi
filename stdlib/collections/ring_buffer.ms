@@ -1,6 +1,6 @@
 //! Fixed-capacity ring buffer (circular queue).
 
-import "../rt" as rt;
+import "@std/rt" as rt;
 
 export let RingBuffer ['a] := record { data : [] 'a; head : Int; count : Int; cap : Int };
 

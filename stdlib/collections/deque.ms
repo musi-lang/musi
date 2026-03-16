@@ -6,7 +6,7 @@
 //!
 //! When one side is exhausted, the other is reversed into it (amortised O(1)).
 
-import "../rt" as rt;
+import "@std/rt" as rt;
 
 export let Deque ['a] := record { front : [] 'a; back : [] 'a };
 

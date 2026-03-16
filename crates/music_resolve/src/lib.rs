@@ -1,8 +1,9 @@
 //! Module resolution for the Musi compiler.
 //!
-//! Parses import specifiers (URI-based schemes like `musi:`, `git:`, `msr:`,
-//! relative `./`, and bare names), resolves them to filesystem paths, and
-//! builds a module dependency graph with cycle detection and topological sorting.
+//! Parses import specifiers (URI-based schemes like `musi:` (builtins only),
+//! `@std/` (standard library), `git:`, `msr:`, relative `./`, and bare names),
+//! resolves them to filesystem paths, and builds a module dependency graph with
+//! cycle detection and topological sorting.
 
 pub mod builtin;
 pub mod error;

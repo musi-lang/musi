@@ -1,6 +1,6 @@
 //! Hex encoding and decoding for byte arrays.
 
-import "../rt" as rt;
+import "@std/rt" as rt;
 
 export let DecodeError := choice { InvalidChar of Int + OddLength };
 

@@ -3,7 +3,7 @@
 //! Enqueue appends to `back`. Dequeue pops from `front`; when `front` is
 //! empty, `back` is reversed into `front`.
 
-import "../rt" as rt;
+import "@std/rt" as rt;
 
 export let Queue ['a] := record { front : [] 'a; back : [] 'a };
 

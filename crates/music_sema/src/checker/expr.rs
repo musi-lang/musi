@@ -680,7 +680,12 @@ fn check_match_exhaustiveness<S: BuildHasher>(
                 .collect();
 
             // Well-known types with known variant sets.
-            let well_known_variants: Option<&[&str]> = if def == ck.ctx.well_known.option {
+            let option_def = ck
+                .ctx
+                .interner
+                .get("Option")
+                .and_then(|sym| ck.scopes.lookup(ck.current_scope, sym));
+            let well_known_variants: Option<&[&str]> = if option_def == Some(def) {
                 Some(&["Some", "None"])
             } else if def == ck.ctx.well_known.bool {
                 Some(&["True", "False"])
@@ -1212,11 +1217,18 @@ fn unwrap_option_ty<S: BuildHasher>(
     span: Span,
 ) -> TypeIdx {
     let inner = ck.fresh_var(span);
-    let option_ty = ck.alloc_ty(Type::Named {
-        def: ck.ctx.well_known.option,
-        args: vec![inner],
-    });
-    ck.unify_or_report(option_ty, operand_ty, span);
+    if let Some(def) = ck
+        .ctx
+        .interner
+        .get("Option")
+        .and_then(|sym| ck.scopes.lookup(ck.current_scope, sym))
+    {
+        let option_ty = ck.alloc_ty(Type::Named {
+            def,
+            args: vec![inner],
+        });
+        ck.unify_or_report(option_ty, operand_ty, span);
+    }
     inner
 }
 
@@ -1229,11 +1241,18 @@ fn unwrap_result_ty<S: BuildHasher>(
 ) -> TypeIdx {
     let ok_inner = ck.fresh_var(span);
     let err_inner = ck.fresh_var(span);
-    let result_ty = ck.alloc_ty(Type::Named {
-        def: ck.ctx.well_known.containers.result,
-        args: vec![ok_inner, err_inner],
-    });
-    ck.unify_or_report(result_ty, operand_ty, span);
+    if let Some(def) = ck
+        .ctx
+        .interner
+        .get("Result")
+        .and_then(|sym| ck.scopes.lookup(ck.current_scope, sym))
+    {
+        let result_ty = ck.alloc_ty(Type::Named {
+            def,
+            args: vec![ok_inner, err_inner],
+        });
+        ck.unify_or_report(result_ty, operand_ty, span);
+    }
     ok_inner
 }
 

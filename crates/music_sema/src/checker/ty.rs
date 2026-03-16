@@ -56,12 +56,28 @@ pub fn lower_ty<S: BuildHasher>(ck: &mut Checker<'_, S>, ty_idx: TyIdx) -> TypeI
                 ck.error_ty()
             }
         }
-        Ty::Option { inner, .. } => {
+        Ty::Option { inner, span } => {
             let inner_ty = lower_ty(ck, inner);
-            ck.alloc_ty(Type::Named {
-                def: ck.ctx.well_known.option,
-                args: vec![inner_ty],
-            })
+            if let Some(def) = ck
+                .ctx
+                .interner
+                .get("Option")
+                .and_then(|sym| ck.scopes.lookup(ck.current_scope, sym))
+            {
+                ck.alloc_ty(Type::Named {
+                    def,
+                    args: vec![inner_ty],
+                })
+            } else {
+                let _d = ck.diags.report(
+                    &SemaError::UndefinedName {
+                        name: Box::from("Option"),
+                    },
+                    span,
+                    ck.ctx.file_id,
+                );
+                ck.error_ty()
+            }
         }
         Ty::Fn {
             params,

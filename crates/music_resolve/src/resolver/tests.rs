@@ -29,7 +29,7 @@ fn test_resolve_musi_core_as_directory_index() {
     fs::write(core_dir.join("index.ms"), "-- core module").unwrap();
 
     let config = make_config(std_root, dir.path().to_path_buf());
-    let spec = parse_specifier("musi:core").unwrap();
+    let spec = parse_specifier("@std/core").unwrap();
     let result = resolve_import(&spec, dir.path().join("main.ms").as_ref(), &config).unwrap();
     assert!(result.ends_with("core/index.ms"));
 }
@@ -43,7 +43,7 @@ fn test_resolve_musi_nested_path_as_file() {
     fs::write(io_dir.join("print.ms"), "-- print module").unwrap();
 
     let config = make_config(std_root, dir.path().to_path_buf());
-    let spec = parse_specifier("musi:io/print").unwrap();
+    let spec = parse_specifier("@std/io/print").unwrap();
     let result = resolve_import(&spec, dir.path().join("main.ms").as_ref(), &config).unwrap();
     assert!(result.ends_with("io/print.ms"));
 }
@@ -93,7 +93,7 @@ fn test_resolve_bare_from_manifest_imports() {
     let mut config = make_config(std_root, dir.path().to_path_buf());
     let _prev = config
         .manifest_imports
-        .insert("core".to_owned(), "musi:core".to_owned());
+        .insert("core".to_owned(), "@std/core".to_owned());
 
     let spec = parse_specifier("core").unwrap();
     let importing = dir.path().join("main.ms");
@@ -120,11 +120,66 @@ fn test_resolve_msr_returns_error() {
 #[test]
 fn test_resolve_musi_not_found() {
     let dir = temp_dir();
+    let config = make_config(dir.path().join("stdlib"), dir.path().to_path_buf());
+    let spec = parse_specifier("musi:nonexistent").unwrap();
+    let importing = dir.path().join("main.ms");
+    let err = resolve_import(&spec, &importing, &config).unwrap_err();
+    assert!(matches!(err, ResolveError::ModuleNotFound { .. }));
+}
+
+#[test]
+fn test_resolve_musi_builtin_returns_sentinel_path() {
+    let dir = temp_dir();
+    let config = make_config(dir.path().join("stdlib"), dir.path().to_path_buf());
+    let spec = parse_specifier("musi:ffi").unwrap();
+    let result = resolve_import(&spec, dir.path().join("main.ms").as_ref(), &config).unwrap();
+    assert_eq!(result, PathBuf::from("<musi:ffi>"));
+}
+
+#[test]
+fn test_resolve_musi_non_builtin_returns_error() {
+    let dir = temp_dir();
+    let config = make_config(dir.path().join("stdlib"), dir.path().to_path_buf());
+    let spec = parse_specifier("musi:rt").unwrap();
+    let err = resolve_import(&spec, dir.path().join("main.ms").as_ref(), &config).unwrap_err();
+    assert!(matches!(err, ResolveError::ModuleNotFound { .. }));
+}
+
+#[test]
+fn test_resolve_at_std_file() {
+    let dir = temp_dir();
+    let std_root = dir.path().join("stdlib");
+    fs::create_dir_all(&std_root).unwrap();
+    fs::write(std_root.join("rt.ms"), "-- rt module").unwrap();
+
+    let config = make_config(std_root, dir.path().to_path_buf());
+    let spec = parse_specifier("@std/rt").unwrap();
+    let result = resolve_import(&spec, dir.path().join("main.ms").as_ref(), &config).unwrap();
+    assert!(result.ends_with("rt.ms"));
+}
+
+#[test]
+fn test_resolve_at_std_directory_index() {
+    let dir = temp_dir();
+    let std_root = dir.path().join("stdlib");
+    let text_dir = std_root.join("text");
+    fs::create_dir_all(&text_dir).unwrap();
+    fs::write(text_dir.join("index.ms"), "-- text module").unwrap();
+
+    let config = make_config(std_root, dir.path().to_path_buf());
+    let spec = parse_specifier("@std/text").unwrap();
+    let result = resolve_import(&spec, dir.path().join("main.ms").as_ref(), &config).unwrap();
+    assert!(result.ends_with("text/index.ms"));
+}
+
+#[test]
+fn test_resolve_at_std_not_found() {
+    let dir = temp_dir();
     let std_root = dir.path().join("stdlib");
     fs::create_dir_all(&std_root).unwrap();
 
     let config = make_config(std_root, dir.path().to_path_buf());
-    let spec = parse_specifier("musi:nonexistent").unwrap();
+    let spec = parse_specifier("@std/nonexistent").unwrap();
     let importing = dir.path().join("main.ms");
     let err = resolve_import(&spec, &importing, &config).unwrap_err();
     assert!(matches!(err, ResolveError::ModuleNotFound { .. }));

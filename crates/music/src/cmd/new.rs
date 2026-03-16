@@ -47,7 +47,7 @@ main = "./{main_file}"
         r#"export let greet : (String) -> String := (name) => f"hello, {name}!";
 "#
     } else {
-        r#"import "musi:rt" as rt;
+        r#"import "@std/rt" as rt;
 
 #[entrypoint]
 let main : () ~> () := () => rt.writeln("hello, world!");

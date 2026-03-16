@@ -1,6 +1,6 @@
 //! Base64 encoding and decoding (RFC 4648).
 
-import "../rt" as rt;
+import "@std/rt" as rt;
 
 let STANDARD_ALPHABET := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 let URL_SAFE_ALPHABET  := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";

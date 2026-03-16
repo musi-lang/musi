@@ -1,6 +1,6 @@
 //! LIFO stack backed by an array.
 
-import "../rt" as rt;
+import "@std/rt" as rt;
 
 export let Stack ['a] := record { data : [] 'a };
 

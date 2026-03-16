@@ -3,7 +3,7 @@
 //! Elements are kept in ascending order. Lookup, insertion, and removal
 //! use binary search (O(log n) comparisons, O(n) shifts).
 
-import "../rt" as rt;
+import "@std/rt" as rt;
 
 export let SortedArray ['a] := record { data : [] 'a };
 

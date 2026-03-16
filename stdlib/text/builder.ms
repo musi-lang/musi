@@ -1,6 +1,6 @@
 //! String builder: accumulate string parts and join them in a single pass.
 
-import "../rt" as rt;
+import "@std/rt" as rt;
 
 export let Builder := record { parts : [] String };
 

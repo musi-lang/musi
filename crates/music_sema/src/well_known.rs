@@ -67,18 +67,6 @@ pub struct WellKnownFfi {
     pub ptr: DefId,
 }
 
-/// Well-known typeclass definitions.
-#[derive(Debug, Clone)]
-pub struct WellKnownClasses {
-    pub eq: DefId,
-    pub ord: DefId,
-    pub show: DefId,
-    pub add: DefId,
-    pub into: DefId,
-    pub iterable: DefId,
-    pub propagate: DefId,
-}
-
 /// Well-known effect definitions.
 #[derive(Debug, Clone)]
 pub struct WellKnownEffects {
@@ -87,17 +75,6 @@ pub struct WellKnownEffects {
     pub state: DefId,
     pub throw: DefId,
 }
-
-/// Well-known container/ADT types.
-#[derive(Debug, Clone)]
-pub struct WellKnownContainers {
-    pub result: DefId,
-    pub ordering: DefId,
-    pub list: DefId,
-    pub map: DefId,
-    pub set: DefId,
-}
-
 
 /// `DefId` handles for all well-known (prelude) types.
 ///
@@ -108,21 +85,15 @@ pub struct WellKnown {
     pub nats: WellKnownNats,
     pub floats: WellKnownFloats,
     pub ffi: WellKnownFfi,
-    pub classes: WellKnownClasses,
     pub effects: WellKnownEffects,
-    pub containers: WellKnownContainers,
     pub primitives: WellKnownPrimitives,
     pub float: DefId,
-    // Text
     pub string: DefId,
     pub rune: DefId,
-    // Core
     pub bool: DefId,
     pub unit: DefId,
-    // Special
     pub any: DefId,
     pub never: DefId,
-    pub option: DefId,
 }
 
 /// Registers all well-known types in the def table and scope, returning
@@ -185,29 +156,11 @@ pub fn init_well_known(
         ptr: register("Ptr", DefKind::Type),
     };
 
-    let classes = WellKnownClasses {
-        eq: register("Eq", DefKind::Class),
-        ord: register("Ord", DefKind::Class),
-        show: register("Show", DefKind::Class),
-        add: register("Add", DefKind::Class),
-        into: register("Into", DefKind::Class),
-        iterable: register("Iterable", DefKind::Class),
-        propagate: register("Propagate", DefKind::Class),
-    };
-
     let effects = WellKnownEffects {
         io: register("IO", DefKind::Effect),
         async_eff: register("Async", DefKind::Effect),
         state: register("State", DefKind::Effect),
         throw: register("Throw", DefKind::Effect),
-    };
-
-    let containers = WellKnownContainers {
-        result: register("Result", DefKind::Type),
-        ordering: register("Ordering", DefKind::Type),
-        list: register("List", DefKind::Type),
-        map: register("Map", DefKind::Type),
-        set: register("Set", DefKind::Type),
     };
 
     let float = register("Float", DefKind::Type);
@@ -217,16 +170,13 @@ pub fn init_well_known(
     let unit = register("Unit", DefKind::Type);
     let any = register("Any", DefKind::Type);
     let never = register("Never", DefKind::Type);
-    let option = register("Option", DefKind::Type);
 
     WellKnown {
         ints,
         nats,
         floats,
         ffi,
-        classes,
         effects,
-        containers,
         primitives,
         float,
         string,
@@ -235,7 +185,6 @@ pub fn init_well_known(
         unit,
         any,
         never,
-        option,
     }
 }
 

@@ -3,7 +3,7 @@
 //! Each word holds 63 usable bits (Int is 64-bit signed; bit 63 is avoided
 //! to stay within safe positive range). `bit_count` is the logical size.
 
-import "../rt" as rt;
+import "@std/rt" as rt;
 
 export let Bitset := record { words : []Int; bit_count : Int };
 

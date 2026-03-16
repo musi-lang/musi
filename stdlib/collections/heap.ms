@@ -4,7 +4,7 @@
 //! means `a` has higher priority than `b`. The element with highest priority
 //! sits at index 0 and is returned by `peek`/`pop`.
 
-import "../rt" as rt;
+import "@std/rt" as rt;
 
 export let Heap ['a] := record { data : [] 'a; cmp : ('a, 'a) -> Ordering };
 

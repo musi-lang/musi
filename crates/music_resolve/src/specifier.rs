@@ -13,6 +13,8 @@ use crate::error::ResolveError;
 pub enum ImportScheme {
     /// `musi:core`, `musi:io/print`
     Musi,
+    /// `@std/text`, `@std/rt`
+    AtStd,
     /// `git:github.com/user/repo[@tag]`
     Git,
     /// `msr:package-name` (reserved, always errors)
@@ -63,6 +65,19 @@ pub fn parse_specifier(raw: &str) -> Result<ImportSpecifier, ResolveError> {
         }
         return Ok(ImportSpecifier {
             scheme: ImportScheme::Musi,
+            raw: Box::from(raw),
+            module_path: Box::from(rest),
+        });
+    }
+
+    if let Some(rest) = raw.strip_prefix("@std/") {
+        if rest.is_empty() {
+            return Err(ResolveError::ModuleNotFound {
+                path: Box::from(raw),
+            });
+        }
+        return Ok(ImportSpecifier {
+            scheme: ImportScheme::AtStd,
             raw: Box::from(raw),
             module_path: Box::from(rest),
         });
