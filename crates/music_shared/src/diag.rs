@@ -110,12 +110,11 @@ impl Diagnostic {
         let file = source_db.name(self.primary.file_id);
         let severity = self.severity.label();
 
-        writeln!(
+        _ = writeln!(
             out,
             "{file}:{line}:{col}: {sev_start}{severity}{reset}: {}",
             self.message
-        )
-        .expect("write to String");
+        );
     }
 
     fn render_primary_context(
@@ -132,17 +131,16 @@ impl Diagnostic {
         let gutter_width = line_str.len();
 
         let source_line = source_db.get_line(self.primary.file_id, line);
-        writeln!(out, " {line_str} | {source_line}").expect("write to String");
+        _ = writeln!(out, " {line_str} | {source_line}");
         let underline_col = usize::try_from(col).unwrap_or(0).saturating_sub(1);
         let caret_len = usize::try_from(self.primary.span.length)
             .unwrap_or(1)
             .max(1);
-        write!(
+        _ = write!(
             out,
             " {:gutter_width$} | {:underline_col$}{sev_start}{:^>caret_len$}{reset}",
             "", "", ""
-        )
-        .expect("write to String");
+        );
     }
 
     fn render_secondary_labels(&self, source_db: &SourceDb, out: &mut String, use_color: bool) {
@@ -167,19 +165,17 @@ impl Diagnostic {
             let s_underline_col = usize::try_from(s_col).unwrap_or(0).saturating_sub(1);
             let s_caret_len = usize::try_from(label.span.length).unwrap_or(1).max(1);
 
-            write!(
+            _ = write!(
                 out,
                 "\n{s_file}:{s_line}:{s_col}: {note_start}note{note_reset}: {}",
                 label.message
-            )
-            .expect("write to String");
-            write!(out, "\n {s_line_str:>s_gutter$} | {s_source}").expect("write to String");
-            write!(
+            );
+            _ = write!(out, "\n {s_line_str:>s_gutter$} | {s_source}");
+            _ = write!(
                 out,
                 "\n {:s_gutter$} | {:s_underline_col$}{note_start}{:^>s_caret_len$}{note_reset}",
                 " ", "", ""
-            )
-            .expect("write to String");
+            );
         }
     }
 }
@@ -196,6 +192,10 @@ const MAX_ERRORS: usize = 200;
 #[derive(Debug, Default)]
 pub struct DiagnosticBag {
     diagnostics: Vec<Diagnostic>,
+    /// Throwaway sink for diagnostics pushed after `MAX_ERRORS`.
+    /// Callers that chain `.add_secondary()` on the returned `&mut Diagnostic`
+    /// mutate this instead of corrupting the suppression sentinel.
+    overflow: Option<Diagnostic>,
 }
 
 macro_rules! severity_builder {
@@ -216,6 +216,7 @@ impl DiagnosticBag {
     pub const fn new() -> Self {
         Self {
             diagnostics: vec![],
+            overflow: None,
         }
     }
 
@@ -257,7 +258,15 @@ impl DiagnosticBag {
         file_id: FileId,
     ) -> &mut Diagnostic {
         if self.diagnostics.len() >= MAX_ERRORS {
-            return self.diagnostics.last_mut().expect("at capacity");
+            if self.overflow.is_none() {
+                self.overflow = Some(Diagnostic {
+                    severity: Severity::Note,
+                    message: Box::from("(overflow sink)"),
+                    primary: Label::new(span, file_id, "(overflow sink)"),
+                    secondary: vec![],
+                });
+            }
+            return self.overflow.as_mut().expect("just assigned");
         }
         let diagnostic = if self.diagnostics.len() == MAX_ERRORS - 1 {
             let text: Box<str> = Box::from("too many errors; further diagnostics suppressed");

@@ -1,9 +1,13 @@
 //! Find-references and rename providers (single-file).
 
-use lsp_types::{Location, Position, PrepareRenameResponse, ReferenceContext, TextEdit, Url, WorkspaceEdit};
+use lsp_types::{
+    Location, Position, PrepareRenameResponse, ReferenceContext, TextEdit, Url, WorkspaceEdit,
+};
 use music_shared::Span;
 
-use crate::analysis::{AnalyzedDoc, def_at_cursor, expr_span, find_name_token, position_to_offset, span_to_range};
+use crate::analysis::{
+    AnalyzedDoc, def_at_cursor, expr_span, find_name_token, position_to_offset, span_to_range,
+};
 
 /// Find all references to the symbol under the cursor (single-file).
 pub fn find_references(
@@ -103,8 +107,8 @@ pub fn prepare_rename(
     if def.span == Span::DUMMY {
         return None;
     }
-    let name_span = find_name_token(&doc.lexed.tokens, def.span.start, def.name)
-        .unwrap_or(def.span);
+    let name_span =
+        find_name_token(&doc.lexed.tokens, def.span.start, def.name).unwrap_or(def.span);
     let range = span_to_range(doc.file_id, name_span, &doc.source_db);
     Some(PrepareRenameResponse::Range(range))
 }

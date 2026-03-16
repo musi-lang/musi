@@ -12,7 +12,11 @@ use crate::error::SemaError;
 use crate::types::{EffectEntry, EffectRow, Type, TypeIdx};
 
 /// Looks up `name` in scope, reporting `UndefinedName` if missing.
-fn lookup_name_or_error<S: BuildHasher>(ck: &mut Checker<'_, S>, name: Symbol, span: Span) -> Option<DefId> {
+fn lookup_name_or_error<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
+    name: Symbol,
+    span: Span,
+) -> Option<DefId> {
     if let Some(def_id) = ck.scopes.lookup(ck.current_scope, name) {
         Some(def_id)
     } else {
@@ -130,4 +134,3 @@ fn lower_effect_set<S: BuildHasher>(ck: &mut Checker<'_, S>, eff_set: &EffectSet
     }
     EffectRow { effects, row_var }
 }
-

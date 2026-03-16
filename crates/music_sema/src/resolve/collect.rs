@@ -54,7 +54,9 @@ impl Resolver<'_> {
             }
             Expr::Import { path, alias, .. } => {
                 if let Some(alias_name) = alias {
-                    let id = self.defs.alloc(*alias_name, DefKind::Import, self.span_of_expr(expr_idx));
+                    let id =
+                        self.defs
+                            .alloc(*alias_name, DefKind::Import, self.span_of_expr(expr_idx));
                     self.define_in_scope(*alias_name, id, self.span_of_expr(expr_idx));
                     let _prev = self.import_alias_defs.insert(id, *path);
                 } else if let Some(names) = self.import_names.get(path) {

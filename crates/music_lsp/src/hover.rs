@@ -1,5 +1,6 @@
 //! Hover provider: shows the type and doc-comment of the symbol under the cursor.
 
+use lsp_types::{Hover, HoverContents, MarkupContent, MarkupKind, Position};
 use music_ast::Expr;
 use music_ast::decl::ClassMember;
 use music_ast::expr::{LetFields, ParamMode};
@@ -8,7 +9,6 @@ use music_sema::DefKind;
 use music_sema::def::DefInfo;
 use music_sema::types::{Type, TypeIdx};
 use music_shared::Idx;
-use lsp_types::{Hover, HoverContents, MarkupContent, MarkupKind, Position};
 
 use crate::analysis::{
     AnalyzedDoc, def_at_cursor, def_name_span, expr_span, extract_doc_comments_from_source,
@@ -89,7 +89,8 @@ pub fn hover(doc: &AnalyzedDoc, position: Position) -> Option<Hover> {
 
     let show_type = ty_str != "?" && !ty_str.starts_with('?') && ty_str != "<error>";
 
-    let signature = if let Some(fn_sig) = build_fn_signature(doc, sema, def, kind_kw, &display_name) {
+    let signature = if let Some(fn_sig) = build_fn_signature(doc, sema, def, kind_kw, &display_name)
+    {
         fn_sig
     } else if show_type {
         if kind_kw.is_empty() {
@@ -192,7 +193,9 @@ fn format_ret_type(
     doc: &AnalyzedDoc,
     sema: &music_sema::SemaResult,
 ) -> String {
-    let Some(ret) = ret_ty else { return String::new() };
+    let Some(ret) = ret_ty else {
+        return String::new();
+    };
     match &sema.types[ret] {
         Type::Tuple { elems } if elems.is_empty() => String::new(),
         _ => format!(": {}", fmt_type_lsp(ret, doc, sema)),
@@ -319,11 +322,7 @@ fn format_expr_params(
         .enumerate()
         .map(|(i, p)| {
             let name = doc.interner.try_resolve(p.name).unwrap_or("_");
-            let mut_prefix = if p.mode == ParamMode::Mut {
-                "mut "
-            } else {
-                ""
-            };
+            let mut_prefix = if p.mode == ParamMode::Mut { "mut " } else { "" };
             let ty_str = param_tys
                 .get(i)
                 .map(|&t| fmt_type_lsp(t, doc, sema))
@@ -364,6 +363,12 @@ fn extract_source_signature(source: &str, start: u32) -> Option<String> {
 
 /// Format a type for LSP display (hover, inlay hints, etc.).
 pub fn fmt_type_lsp(ty: TypeIdx, doc: &AnalyzedDoc, sema: &music_sema::SemaResult) -> String {
-    music_sema::types::fmt_type(ty, &sema.types, &sema.defs, &doc.interner, Some(&sema.unify))
-        .to_string()
+    music_sema::types::fmt_type(
+        ty,
+        &sema.types,
+        &sema.defs,
+        &doc.interner,
+        Some(&sema.unify),
+    )
+    .to_string()
 }

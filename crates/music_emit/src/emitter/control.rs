@@ -178,9 +178,10 @@ fn emit_pat_test(
             Ok(())
         }
         Pat::Array { elems, .. } => {
-            let expected_len = i64::try_from(elems.len()).map_err(|_| EmitError::OperandOverflow {
-                desc: "array pattern element count".into(),
-            })?;
+            let expected_len =
+                i64::try_from(elems.len()).map_err(|_| EmitError::OperandOverflow {
+                    desc: "array pattern element count".into(),
+                })?;
             let len_const = ConstValue::Int(expected_len);
             let len_cst_idx = em.cp.intern(&len_const, em.interner)?;
             fc.fe.emit_ld_loc(scrutinee_slot);

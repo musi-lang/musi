@@ -31,7 +31,8 @@ impl ResolverConfig {
     /// Builds a resolver configuration from a project root and optional manifest.
     #[must_use]
     pub fn from_project(project_root: &Path, manifest: Option<&MusiManifest>) -> Self {
-        let std_root = discover_std_root(project_root).unwrap_or_else(|_| project_root.join("stdlib"));
+        let std_root =
+            discover_std_root(project_root).unwrap_or_else(|_| project_root.join("stdlib"));
         let cache_dir = cache_directory().join("musi/packages");
         let (manifest_imports, manifest_deps) = manifest.map_or_else(
             || (HashMap::new(), HashMap::new()),

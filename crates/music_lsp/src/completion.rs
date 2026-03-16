@@ -2,8 +2,8 @@
 
 use std::collections::HashSet;
 
-use music_sema::{DefKind, Type};
 use lsp_types::{CompletionItem, CompletionItemKind};
+use music_sema::{DefKind, Type};
 
 use crate::analysis::{AnalyzedDoc, expr_span};
 use crate::hover;

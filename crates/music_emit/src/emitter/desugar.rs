@@ -5,8 +5,8 @@ use music_ast::expr::Expr;
 use music_ast::lit::FStrPart;
 
 use crate::const_pool::ConstValue;
-use musi_bc::Opcode;
 use crate::error::EmitError;
+use musi_bc::Opcode;
 use music_ast::ExprIdx;
 
 use super::super::emitter::Emitter;
@@ -285,11 +285,7 @@ pub fn emit_propagate(
 }
 
 /// Emit `try operand`. Evaluates operand and wraps result in Some(value).
-pub fn emit_try(
-    em: &mut Emitter<'_>,
-    fc: &mut FnCtx,
-    operand: ExprIdx,
-) -> Result<(), EmitError> {
+pub fn emit_try(em: &mut Emitter<'_>, fc: &mut FnCtx, operand: ExprIdx) -> Result<(), EmitError> {
     let produced = emit_expr(em, fc, operand)?;
     if !produced {
         return Err(EmitError::UnsupportedFeature {
@@ -476,4 +472,3 @@ pub fn emit_cons(
     fc.fe.emit_mk_prd(2, 1)?; // (head, tail)
     Ok(())
 }
-

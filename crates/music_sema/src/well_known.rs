@@ -329,25 +329,81 @@ pub fn assign_well_known_types(defs: &mut DefTable, wk: &WellKnown, types: &mut 
     // int_abs: Int -> Int
     assign_fn_type(defs, types, wk.core.int_abs, &[int_ty], int_ty, None);
     // int_min: Int -> Int -> Int
-    assign_fn_type(defs, types, wk.core.int_min, &[int_ty, int_ty], int_ty, None);
+    assign_fn_type(
+        defs,
+        types,
+        wk.core.int_min,
+        &[int_ty, int_ty],
+        int_ty,
+        None,
+    );
     // int_max: Int -> Int -> Int
-    assign_fn_type(defs, types, wk.core.int_max, &[int_ty, int_ty], int_ty, None);
+    assign_fn_type(
+        defs,
+        types,
+        wk.core.int_max,
+        &[int_ty, int_ty],
+        int_ty,
+        None,
+    );
     // int_clamp: Int -> Int -> Int -> Int
-    assign_fn_type(defs, types, wk.core.int_clamp, &[int_ty, int_ty, int_ty], int_ty, None);
+    assign_fn_type(
+        defs,
+        types,
+        wk.core.int_clamp,
+        &[int_ty, int_ty, int_ty],
+        int_ty,
+        None,
+    );
     // int_pow: Int -> Int -> Int
-    assign_fn_type(defs, types, wk.core.int_pow, &[int_ty, int_ty], int_ty, None);
+    assign_fn_type(
+        defs,
+        types,
+        wk.core.int_pow,
+        &[int_ty, int_ty],
+        int_ty,
+        None,
+    );
     // str_len: String -> Int
     assign_fn_type(defs, types, wk.core.str_len, &[string_ty], int_ty, None);
     // str_contains: String -> String -> Bool
-    assign_fn_type(defs, types, wk.core.str_contains, &[string_ty, string_ty], bool_ty, None);
+    assign_fn_type(
+        defs,
+        types,
+        wk.core.str_contains,
+        &[string_ty, string_ty],
+        bool_ty,
+        None,
+    );
     // str_starts_with: String -> String -> Bool
-    assign_fn_type(defs, types, wk.core.str_starts_with, &[string_ty, string_ty], bool_ty, None);
+    assign_fn_type(
+        defs,
+        types,
+        wk.core.str_starts_with,
+        &[string_ty, string_ty],
+        bool_ty,
+        None,
+    );
     // str_ends_with: String -> String -> Bool
-    assign_fn_type(defs, types, wk.core.str_ends_with, &[string_ty, string_ty], bool_ty, None);
+    assign_fn_type(
+        defs,
+        types,
+        wk.core.str_ends_with,
+        &[string_ty, string_ty],
+        bool_ty,
+        None,
+    );
     // arr_len: [Any] -> Int (polymorphic, use any_ty)
     assign_fn_type(defs, types, wk.core.arr_len, &[any_ty], int_ty, None);
     // arr_push: [Any] -> Any -> Unit
-    assign_fn_type(defs, types, wk.core.arr_push, &[any_ty, any_ty], unit_ty, None);
+    assign_fn_type(
+        defs,
+        types,
+        wk.core.arr_push,
+        &[any_ty, any_ty],
+        unit_ty,
+        None,
+    );
     // arr_pop: [Any] -> Any (polymorphic)
     assign_fn_type(defs, types, wk.core.arr_pop, &[any_ty], any_ty, None);
     // arr_reverse: [Any] -> [Any] (polymorphic)

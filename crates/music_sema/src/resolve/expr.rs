@@ -19,7 +19,7 @@ impl Resolver<'_> {
         match self.ast.exprs[expr_idx].clone() {
             Expr::Name { name, span } => self.resolve_name(expr_idx, name, span),
             Expr::Lit { ref lit, .. } => self.resolve_lit(lit),
-            Expr::Error { .. } | Expr::Import { .. } | Expr::Export { .. } => {},
+            Expr::Error { .. } | Expr::Import { .. } | Expr::Export { .. } => {}
             Expr::Paren { inner, .. } | Expr::Annotated { inner, .. } => self.resolve_expr(inner),
             Expr::Choice { body, .. } => self.resolve_expr_choice(body),
             Expr::Tuple { elems, .. } | Expr::Variant { args: elems, .. } => {
@@ -41,8 +41,11 @@ impl Resolver<'_> {
                     if let Some(&alias_def_id) = self.output.expr_defs.get(&object) {
                         if let Some(&import_path) = self.import_alias_defs.get(&alias_def_id) {
                             if let Some(names) = self.import_names.get(&import_path) {
-                                if let Some(&(_, exported_def_id)) = names.iter().find(|(n, _)| *n == name) {
-                                    let _prev = self.output.expr_defs.insert(expr_idx, exported_def_id);
+                                if let Some(&(_, exported_def_id)) =
+                                    names.iter().find(|(n, _)| *n == name)
+                                {
+                                    let _prev =
+                                        self.output.expr_defs.insert(expr_idx, exported_def_id);
                                     self.defs.get_mut(exported_def_id).use_count += 1;
                                 }
                             }
@@ -195,7 +198,9 @@ impl Resolver<'_> {
         use music_ast::pat::Pat;
         let is_fn_pat = matches!(&self.ast.pats[fields.pat], Pat::Variant { .. });
         let is_lambda_bind = !is_fn_pat
-            && fields.value.map_or(false, |v| matches!(&self.ast.exprs[v], Expr::Fn { .. }));
+            && fields
+                .value
+                .map_or(false, |v| matches!(&self.ast.exprs[v], Expr::Fn { .. }));
 
         // For function-like patterns, pre-define the name to enable recursion.
         if is_fn_pat {
@@ -240,7 +245,9 @@ impl Resolver<'_> {
         use music_ast::pat::Pat;
         let is_fn_pat = matches!(&self.ast.pats[fields.pat], Pat::Variant { .. });
         let is_lambda_bind = !is_fn_pat
-            && fields.value.map_or(false, |v| matches!(&self.ast.exprs[v], Expr::Fn { .. }));
+            && fields
+                .value
+                .map_or(false, |v| matches!(&self.ast.exprs[v], Expr::Fn { .. }));
 
         let parent_ty_scope = if fields.params.is_empty() {
             None

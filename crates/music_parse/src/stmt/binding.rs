@@ -38,7 +38,11 @@ impl Parser<'_> {
         let start = self.start_span();
         let _record = self.bump();
         let _lb = self.expect(TokenKind::LBrace);
-        let fields = self.sep_by(TokenKind::Semi, TokenKind::RBrace, Self::parse_rec_def_field);
+        let fields = self.sep_by(
+            TokenKind::Semi,
+            TokenKind::RBrace,
+            Self::parse_rec_def_field,
+        );
         let _rb = self.expect(TokenKind::RBrace);
         Expr::RecordDef {
             fields,

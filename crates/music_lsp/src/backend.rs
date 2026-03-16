@@ -83,10 +83,7 @@ impl LanguageServer for MusiBackend {
         if let Some(opts) = params.initialization_options {
             if let Some(hints) = opts.get("musi").and_then(|m| m.get("inlayHints")) {
                 let bool_field = |name: &str, default: bool| -> bool {
-                    hints
-                        .get(name)
-                        .and_then(|v| v.as_bool())
-                        .unwrap_or(default)
+                    hints.get(name).and_then(|v| v.as_bool()).unwrap_or(default)
                 };
                 self.inlay_config = inlay_hints::InlayHintConfig {
                     binding_types: bool_field("bindingTypes", true),
@@ -177,8 +174,12 @@ impl LanguageServer for MusiBackend {
         ControlFlow::Continue(())
     }
 
-    fn did_change_watched_files(&mut self, _params: DidChangeWatchedFilesParams) -> Self::NotifyResult {
-        let open_docs: Vec<(Url, String)> = self.documents
+    fn did_change_watched_files(
+        &mut self,
+        _params: DidChangeWatchedFilesParams,
+    ) -> Self::NotifyResult {
+        let open_docs: Vec<(Url, String)> = self
+            .documents
             .iter()
             .map(|(uri, doc)| (uri.clone(), doc.source.clone()))
             .collect();

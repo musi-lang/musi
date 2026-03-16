@@ -155,9 +155,7 @@ pub struct TypeDisplay<'a> {
 
 impl TypeDisplay<'_> {
     fn write_ty(&self, f: &mut fmt::Formatter<'_>, ty: TypeIdx) -> fmt::Result {
-        let ty = self
-            .unify
-            .map_or(ty, |u| u.resolve(ty, self.arena));
+        let ty = self.unify.map_or(ty, |u| u.resolve(ty, self.arena));
         let d = TypeDisplay {
             ty,
             arena: self.arena,
