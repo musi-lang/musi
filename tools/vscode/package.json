@@ -230,11 +230,6 @@
 				"category": "Musi"
 			},
 			{
-				"command": "musi.runMain",
-				"title": "▷ Run",
-				"category": "Musi"
-			},
-			{
 				"command": "musi.selectRunConfiguration",
 				"title": "Select Run Configuration",
 				"category": "Musi"

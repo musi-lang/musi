@@ -1,24 +1,14 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
-import {
-	findCliPath,
-	findServerPath,
-	showCliNotFoundUI,
-	showServerNotFoundUI,
-} from "./bootstrap";
+import { findCliPath, findServerPath, showServerNotFoundUI } from "./bootstrap";
 import { getClient, restartClient, stopClient } from "./client";
 import { getConfig } from "./config";
-import {
-	buildExecutionRequest,
-	executeInTerminal,
-	findCompilerPath,
-} from "./runner";
+import { buildExecutionRequest, executeInTerminal } from "./runner";
 import type { StatusBar } from "./status";
 import type { MsPackage, MsPackageTask } from "./types";
+import { TERMINAL_NAME } from "./utils";
 
 let _cachedCliPath: string | undefined;
-
-const TERMINAL_NAME = "Musi";
 
 type CommandHandler = (...args: unknown[]) => Promise<void> | void;
 
@@ -31,7 +21,6 @@ interface Commands {
 	runTask: CommandHandler;
 	runTaskCommand: CommandHandler;
 	runTest: CommandHandler;
-	runMain: CommandHandler;
 	selectRunConfiguration: CommandHandler;
 	runWithArgs: CommandHandler;
 	buildFile: CommandHandler;
@@ -42,21 +31,16 @@ export function clearCliCache() {
 	_cachedCliPath = undefined;
 }
 
-function _getOrCreateTerminal(): vscode.Terminal {
-	return (
-		vscode.window.terminals.find((t) => t.name === TERMINAL_NAME) ??
-		vscode.window.createTerminal(TERMINAL_NAME)
-	);
-}
-
 function _runInDir(cmd: string, dir: string) {
-	const terminal = _getOrCreateTerminal();
+	const terminal =
+		vscode.window.terminals.find((t) => t.name === TERMINAL_NAME) ??
+		vscode.window.createTerminal(TERMINAL_NAME);
 	terminal.show();
 	terminal.sendText(`cd ${JSON.stringify(dir)} && ${cmd}`);
 }
 
 async function _runCliOnFile(
-	subcommand: string,
+	subcommand: "run" | "build" | "check" | "test",
 	args: unknown[],
 ): Promise<void> {
 	let file: string | undefined;
@@ -73,16 +57,8 @@ async function _runCliOnFile(
 		}
 		file = editor.document.uri.fsPath;
 	}
-	const compilerPath = await findCompilerPath();
-	if (!compilerPath) {
-		await showCliNotFoundUI();
-		return;
-	}
-	const terminal = _getOrCreateTerminal();
-	terminal.show();
-	terminal.sendText(
-		`${JSON.stringify(compilerPath)} ${subcommand} ${JSON.stringify(file)}`,
-	);
+	const request = buildExecutionRequest(file);
+	await executeInTerminal(request, subcommand);
 }
 
 function _getTaskCommand(entry: string | MsPackageTask): string {
@@ -99,9 +75,7 @@ async function _loadPackageTasks(): Promise<
 	);
 	const pkgFile = pkgFiles[0];
 	if (!pkgFile) {
-		vscode.window.showWarningMessage(
-			"No mspackage.json found in workspace.",
-		);
+		vscode.window.showWarningMessage("No mspackage.json found in workspace.");
 		return undefined;
 	}
 	let pkg: MsPackage;
@@ -113,9 +87,7 @@ async function _loadPackageTasks(): Promise<
 		return undefined;
 	}
 	if (!pkg.tasks || !Object.keys(pkg.tasks).length) {
-		vscode.window.showWarningMessage(
-			"No tasks defined in mspackage.json.",
-		);
+		vscode.window.showWarningMessage("No tasks defined in mspackage.json.");
 		return undefined;
 	}
 	return { tasks: pkg.tasks, pkgDir: path.dirname(pkgFile.fsPath) };
@@ -140,8 +112,7 @@ function _createCommands(statusBar: StatusBar): Commands {
 					"Musi Language Server restarted successfully.",
 				);
 			} catch (error) {
-				const message =
-					error instanceof Error ? error.message : String(error);
+				const message = error instanceof Error ? error.message : String(error);
 				statusBar.update("Restart failed", "error");
 				vscode.window.showErrorMessage(
 					`Failed to restart Musi LSP: ${message}`,
@@ -178,8 +149,7 @@ function _createCommands(statusBar: StatusBar): Commands {
 			if (!loaded) return;
 			const { tasks, pkgDir } = loaded;
 
-			const quickName =
-				typeof args[0] === "string" ? args[0] : undefined;
+			const quickName = typeof args[0] === "string" ? args[0] : undefined;
 			if (quickName && quickName in tasks) {
 				const entry = tasks[quickName];
 				if (entry) _runInDir(_getTaskCommand(entry), pkgDir);
@@ -222,10 +192,6 @@ function _createCommands(statusBar: StatusBar): Commands {
 
 		async runTest(...args: unknown[]) {
 			await _runCliOnFile("test", args);
-		},
-
-		async runMain(...args: unknown[]) {
-			await _runCliOnFile("run", args);
 		},
 
 		async selectRunConfiguration(..._args: unknown[]) {
@@ -324,15 +290,11 @@ export function registerCommands(
 			commands.runTaskCommand,
 		),
 		vscode.commands.registerCommand("musi.runTest", commands.runTest),
-		vscode.commands.registerCommand("musi.runMain", commands.runMain),
 		vscode.commands.registerCommand(
 			"musi.selectRunConfiguration",
 			commands.selectRunConfiguration,
 		),
-		vscode.commands.registerCommand(
-			"musi.runWithArgs",
-			commands.runWithArgs,
-		),
+		vscode.commands.registerCommand("musi.runWithArgs", commands.runWithArgs),
 		vscode.commands.registerCommand("musi.buildFile", commands.buildFile),
 		vscode.commands.registerCommand(
 			"musi.editRunConfigurations",

@@ -5,6 +5,7 @@ import { findCliPath, showCliNotFoundUI } from "./bootstrap";
 import { getConfig } from "./config";
 import type { RunConfiguration } from "./config";
 import { mergeEnv, parseEnvFile, resolveEnvFile } from "./env";
+import { TERMINAL_NAME } from "./utils";
 
 let _cachedCompilerPath: string | undefined;
 
@@ -35,7 +36,7 @@ export function buildExecutionRequest(
 		compilerArgs: [...cc.args, ...(runConfig?.compilerArgs ?? [])],
 		runtimeArgs: [...rt.args, ...(runConfig?.runtimeArgs ?? [])],
 		env,
-		cwd: runConfig?.cwd ?? rt.cwd ?? "",
+		cwd: runConfig?.cwd ?? rt.cwd,
 		buildBeforeRun: cc.buildBeforeRun,
 	};
 }
@@ -53,6 +54,7 @@ export async function findCompilerPath(): Promise<string | undefined> {
 
 	const cliPath = await findCliPath();
 	if (cliPath) {
+		// music compiler is co-located with the musi CLI — both built from the same cargo workspace
 		const dir = path.dirname(cliPath);
 		const musicPath = path.join(dir, "music");
 		if (fs.existsSync(musicPath)) {
@@ -70,7 +72,7 @@ export function clearCompilerPathCache() {
 
 export async function executeInTerminal(
 	request: ExecutionRequest,
-	subcommand: "run" | "build" | "check",
+	subcommand: "run" | "build" | "check" | "test",
 ): Promise<void> {
 	const config = getConfig();
 	const tc = config.terminal;
@@ -93,7 +95,7 @@ export async function executeInTerminal(
 	const cmd = `${JSON.stringify(compilerPath)} ${args.join(" ")}`;
 
 	const terminalOptions: vscode.TerminalOptions = {
-		name: "Musi",
+		name: TERMINAL_NAME,
 		...(Object.keys(request.env).length > 0 ? { env: request.env } : {}),
 		...(request.cwd ? { cwd: request.cwd } : {}),
 	};
@@ -101,7 +103,7 @@ export async function executeInTerminal(
 	let terminal: vscode.Terminal;
 	if (tc.reuseTerminal) {
 		terminal =
-			vscode.window.terminals.find((t) => t.name === "Musi") ??
+			vscode.window.terminals.find((t) => t.name === TERMINAL_NAME) ??
 			vscode.window.createTerminal(terminalOptions);
 	} else {
 		terminal = vscode.window.createTerminal(terminalOptions);

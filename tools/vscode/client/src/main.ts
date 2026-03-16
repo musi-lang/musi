@@ -8,6 +8,8 @@ import { MusiConfigurationProvider } from "./launch";
 import { clearCompilerPathCache } from "./runner";
 import { StatusBar } from "./status";
 
+const NOTIFICATION_DELAY_MS = 500;
+
 let _statusBar: StatusBar;
 
 function _setupConfigChangeHandler(context: vscode.ExtensionContext) {
@@ -47,7 +49,7 @@ async function _startServer() {
 			"Musi language features ready.",
 			"Dismiss",
 		);
-	}, 500);
+	}, NOTIFICATION_DELAY_MS);
 }
 
 async function _handleActivationError(error: unknown) {

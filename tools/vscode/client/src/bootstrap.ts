@@ -9,10 +9,6 @@ import {
 	isWindows,
 } from "./utils";
 
-function _exists(filePath: string): boolean {
-	return fs.existsSync(filePath);
-}
-
 function _getWorkspaceCandidatesFor(binaryName: string): string[] {
 	const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 	if (!ws) return [];
@@ -25,16 +21,54 @@ function _getWorkspaceCandidatesFor(binaryName: string): string[] {
 function _getGlobalCandidatesFor(binaryName: string): string[] {
 	const candidates = [path.join(getCargoBinDir(), binaryName)];
 	if (!isWindows()) {
-		candidates.push(
-			`/usr/local/bin/${binaryName}`,
-			`/usr/bin/${binaryName}`,
-		);
+		candidates.push(`/usr/local/bin/${binaryName}`, `/usr/bin/${binaryName}`);
 	}
 	return candidates;
 }
 
 function _findFirst(candidates: string[]): string | undefined {
-	return candidates.find((c) => _exists(c));
+	return candidates.find((c) => fs.existsSync(c));
+}
+
+async function _findBinary(
+	configuredPath: string | undefined,
+	defaultConfigValue: string,
+	binaryName: string,
+): Promise<string | undefined> {
+	if (configuredPath && configuredPath !== defaultConfigValue) {
+		if (fs.existsSync(configuredPath)) {
+			return configuredPath;
+		}
+		vscode.window.showWarningMessage(
+			`Musi: Configured ${binaryName} path does not exist: ${configuredPath}`,
+		);
+	}
+
+	return (
+		_findFirst(_getWorkspaceCandidatesFor(binaryName)) ??
+		_findFirst(_getGlobalCandidatesFor(binaryName))
+	);
+}
+
+async function _showBinaryNotFoundUI(opts: {
+	message: string;
+	cargoPackage: string;
+	secondActionLabel: string;
+	secondActionHandler: () => void;
+}): Promise<void> {
+	const action = await vscode.window.showErrorMessage(
+		opts.message,
+		"Open Terminal",
+		opts.secondActionLabel,
+	);
+
+	if (action === "Open Terminal") {
+		const terminal = vscode.window.createTerminal("Musi Build");
+		terminal.sendText(`cargo build -p ${opts.cargoPackage}`);
+		terminal.show();
+	} else if (action === opts.secondActionLabel) {
+		opts.secondActionHandler();
+	}
 }
 
 /**
@@ -49,20 +83,10 @@ function _findFirst(candidates: string[]): string | undefined {
  */
 export async function findServerPath(): Promise<string | undefined> {
 	const config = getConfig();
-
-	if (config.lspPath !== CONFIG_DEFAULTS.lspPath) {
-		if (_exists(config.lspPath)) {
-			return config.lspPath;
-		}
-		vscode.window.showWarningMessage(
-			`Musi: Configured server path does not exist: ${config.lspPath}`,
-		);
-	}
-
-	const binary = getServerBinaryName();
-	return (
-		_findFirst(_getWorkspaceCandidatesFor(binary)) ??
-		_findFirst(_getGlobalCandidatesFor(binary))
+	return _findBinary(
+		config.lspPath,
+		CONFIG_DEFAULTS.lspPath,
+		getServerBinaryName(),
 	);
 }
 
@@ -71,21 +95,16 @@ export async function findServerPath(): Promise<string | undefined> {
  * Offers options to open terminal for building or view documentation.
  */
 export async function showServerNotFoundUI() {
-	const action = await vscode.window.showErrorMessage(
-		"Musi LSP server binary not found. Build with 'cargo build -p music_lsp'.",
-		"Open Terminal",
-		"Show Build Instructions",
-	);
-
-	if (action === "Open Terminal") {
-		const terminal = vscode.window.createTerminal("Musi Build");
-		terminal.sendText("cargo build -p music_lsp");
-		terminal.show();
-	} else if (action === "Show Build Instructions") {
-		vscode.env.openExternal(
-			vscode.Uri.parse("https://github.com/musi-lang/musi#Installation"),
-		);
-	}
+	return _showBinaryNotFoundUI({
+		message:
+			"Musi LSP server binary not found. Build with 'cargo build -p music_lsp'.",
+		cargoPackage: "music_lsp",
+		secondActionLabel: "Show Build Instructions",
+		secondActionHandler: () =>
+			vscode.env.openExternal(
+				vscode.Uri.parse("https://github.com/musi-lang/musi#Installation"),
+			),
+	});
 }
 
 /**
@@ -100,20 +119,10 @@ export async function showServerNotFoundUI() {
  */
 export async function findCliPath(): Promise<string | undefined> {
 	const config = getConfig();
-
-	if (config.cliPath && config.cliPath !== CONFIG_DEFAULTS.cliPath) {
-		if (_exists(config.cliPath)) {
-			return config.cliPath;
-		}
-		vscode.window.showWarningMessage(
-			`Musi: Configured CLI path does not exist: ${config.cliPath}`,
-		);
-	}
-
-	const binary = getCliBinaryName();
-	return (
-		_findFirst(_getWorkspaceCandidatesFor(binary)) ??
-		_findFirst(_getGlobalCandidatesFor(binary))
+	return _findBinary(
+		config.cliPath,
+		CONFIG_DEFAULTS.cliPath,
+		getCliBinaryName(),
 	);
 }
 
@@ -122,20 +131,15 @@ export async function findCliPath(): Promise<string | undefined> {
  * Offers options to open terminal for building or configure path.
  */
 export async function showCliNotFoundUI() {
-	const action = await vscode.window.showErrorMessage(
-		"Musi CLI binary not found. Build with 'cargo build -p musi' or configure musi.cliPath.",
-		"Open Terminal",
-		"Open Settings",
-	);
-
-	if (action === "Open Terminal") {
-		const terminal = vscode.window.createTerminal("Musi Build");
-		terminal.sendText("cargo build -p musi");
-		terminal.show();
-	} else if (action === "Open Settings") {
-		vscode.commands.executeCommand(
-			"workbench.action.openSettings",
-			"musi.cliPath",
-		);
-	}
+	return _showBinaryNotFoundUI({
+		message:
+			"Musi CLI binary not found. Build with 'cargo build -p musi' or configure musi.cliPath.",
+		cargoPackage: "musi",
+		secondActionLabel: "Open Settings",
+		secondActionHandler: () =>
+			vscode.commands.executeCommand(
+				"workbench.action.openSettings",
+				"musi.cliPath",
+			),
+	});
 }
