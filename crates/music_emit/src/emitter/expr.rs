@@ -228,7 +228,7 @@ pub enum Width {
 pub enum TypeFamily {
     Signed(Width),
     Unsigned(Width),
-    Float(Width),
+    Float,
     Bool,
 }
 
@@ -489,7 +489,7 @@ fn emit_unary(
         UnaryOp::Neg => {
             let family = classify_type_family(em, operand);
             let opcode = match family {
-                Some(TypeFamily::Float(_)) => Opcode::F_NEG,
+                Some(TypeFamily::Float) => Opcode::F_NEG,
                 _ => Opcode::I_NEG,
             };
             fc.fe.emit_unop(opcode);
@@ -783,6 +783,17 @@ fn emit_binop_expr(
         fc.fe.emit_inv_dyn(2)?; // call through fn value with 2 args
         return Ok(true);
     }
+    emit_primitive_binop(em, fc, expr_idx, op, left, right)
+}
+
+fn emit_primitive_binop(
+    em: &mut Emitter<'_>,
+    fc: &mut FnCtx,
+    expr_idx: ExprIdx,
+    op: BinOp,
+    left: ExprIdx,
+    right: ExprIdx,
+) -> Result<bool, EmitError> {
     match op {
         BinOp::And => {
             let family = classify_type_family(em, left);
@@ -904,7 +915,7 @@ fn emit_narrow_truncation(
         fc.fe.emit_ld_cst(idx2);
         fc.fe.emit_binop(Opcode::B_SHR);
     } else {
-        let cv = ConstValue::Int(mask as i64);
+        let cv = ConstValue::Int(mask.cast_signed());
         let idx = em.cp.intern(&cv, em.interner)?;
         fc.fe.emit_ld_cst(idx);
         fc.fe.emit_binop(Opcode::B_AND);
@@ -1683,10 +1694,10 @@ pub fn classify_type_family(em: &Emitter<'_>, expr_idx: ExprIdx) -> Option<TypeF
                 return Some(TypeFamily::Unsigned(Width::W8));
             }
             if d == wk.float || d == wk.floats.float64 {
-                return Some(TypeFamily::Float(Width::W64));
+                return Some(TypeFamily::Float);
             }
             if d == wk.floats.float32 {
-                return Some(TypeFamily::Float(Width::W32));
+                return Some(TypeFamily::Float);
             }
             if d == wk.bool {
                 return Some(TypeFamily::Bool);
@@ -1700,32 +1711,32 @@ pub fn classify_type_family(em: &Emitter<'_>, expr_idx: ExprIdx) -> Option<TypeF
 /// Map an AST `BinOp` + `TypeFamily` to the corresponding bytecode `Opcode`.
 pub fn map_binop(op: BinOp, family: Option<TypeFamily>) -> Result<Opcode, EmitError> {
     let opcode = match (op, family) {
-        (BinOp::Add, Some(TypeFamily::Float(_))) => Opcode::F_ADD,
+        (BinOp::Add, Some(TypeFamily::Float)) => Opcode::F_ADD,
         (BinOp::Add, _) => Opcode::I_ADD,
-        (BinOp::Sub, Some(TypeFamily::Float(_))) => Opcode::F_SUB,
+        (BinOp::Sub, Some(TypeFamily::Float)) => Opcode::F_SUB,
         (BinOp::Sub, _) => Opcode::I_SUB,
-        (BinOp::Mul, Some(TypeFamily::Float(_))) => Opcode::F_MUL,
+        (BinOp::Mul, Some(TypeFamily::Float)) => Opcode::F_MUL,
         (BinOp::Mul, _) => Opcode::I_MUL,
-        (BinOp::Div, Some(TypeFamily::Float(_))) => Opcode::F_DIV,
+        (BinOp::Div, Some(TypeFamily::Float)) => Opcode::F_DIV,
         (BinOp::Div, Some(TypeFamily::Unsigned(_))) => Opcode::I_DIV_UN,
         (BinOp::Div, _) => Opcode::I_DIV,
-        (BinOp::Rem, Some(TypeFamily::Float(_))) => Opcode::F_REM,
+        (BinOp::Rem, Some(TypeFamily::Float)) => Opcode::F_REM,
         (BinOp::Rem, Some(TypeFamily::Unsigned(_))) => Opcode::I_REM_UN,
         (BinOp::Rem, _) => Opcode::I_REM,
-        (BinOp::Eq, Some(TypeFamily::Float(_))) => Opcode::CMP_F_EQ,
+        (BinOp::Eq, Some(TypeFamily::Float)) => Opcode::CMP_F_EQ,
         (BinOp::Eq, _) => Opcode::CMP_EQ,
-        (BinOp::Ne, Some(TypeFamily::Float(_))) => Opcode::CMP_F_NE,
+        (BinOp::Ne, Some(TypeFamily::Float)) => Opcode::CMP_F_NE,
         (BinOp::Ne, _) => Opcode::CMP_NE,
-        (BinOp::Lt, Some(TypeFamily::Float(_))) => Opcode::CMP_F_LT,
+        (BinOp::Lt, Some(TypeFamily::Float)) => Opcode::CMP_F_LT,
         (BinOp::Lt, Some(TypeFamily::Unsigned(_))) => Opcode::CMP_LT_UN,
         (BinOp::Lt, _) => Opcode::CMP_LT,
-        (BinOp::Le, Some(TypeFamily::Float(_))) => Opcode::CMP_F_LE,
+        (BinOp::Le, Some(TypeFamily::Float)) => Opcode::CMP_F_LE,
         (BinOp::Le, Some(TypeFamily::Unsigned(_))) => Opcode::CMP_LE_UN,
         (BinOp::Le, _) => Opcode::CMP_LE,
-        (BinOp::Gt, Some(TypeFamily::Float(_))) => Opcode::CMP_F_GT,
+        (BinOp::Gt, Some(TypeFamily::Float)) => Opcode::CMP_F_GT,
         (BinOp::Gt, Some(TypeFamily::Unsigned(_))) => Opcode::CMP_GT_UN,
         (BinOp::Gt, _) => Opcode::CMP_GT,
-        (BinOp::Ge, Some(TypeFamily::Float(_))) => Opcode::CMP_F_GE,
+        (BinOp::Ge, Some(TypeFamily::Float)) => Opcode::CMP_F_GE,
         (BinOp::Ge, Some(TypeFamily::Unsigned(_))) => Opcode::CMP_GE_UN,
         (BinOp::Ge, _) => Opcode::CMP_GE,
         (BinOp::And, _) => Opcode::B_AND,

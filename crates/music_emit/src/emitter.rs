@@ -155,10 +155,10 @@ impl<'a> Emitter<'a> {
         self.resolve_well_known_tags();
         self.scan_top_level()?;
         // Update str_cat index from lang items if rt.ms was imported
-        if let Some(str_cat_def) = self.sema.lang_items.get("str_cat") {
-            if let Some(&idx) = self.foreign_map.get(&str_cat_def) {
-                self.str_cat_ffi_idx = Some(idx);
-            }
+        if let Some(str_cat_def) = self.sema.lang_items.get("str_cat")
+            && let Some(&idx) = self.foreign_map.get(&str_cat_def)
+        {
+            self.str_cat_ffi_idx = Some(idx);
         }
         let functions = self.emit_functions()?;
         if functions.is_empty() && self.entry_fn_id.is_some() {
@@ -740,10 +740,10 @@ fn extract_link_library(attrs: &[Attr], interner: &Interner) -> Option<Symbol> {
         }
         if let Some(AttrValue::Named { fields, .. }) = &attr.value {
             for field in fields {
-                if interner.resolve(field.name) == "name" {
-                    if let Lit::Str { value, .. } = &field.value {
-                        return Some(*value);
-                    }
+                if interner.resolve(field.name) == "name"
+                    && let Lit::Str { value, .. } = &field.value
+                {
+                    return Some(*value);
                 }
             }
         }
