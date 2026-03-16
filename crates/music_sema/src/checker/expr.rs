@@ -471,11 +471,31 @@ fn lookup_field<S: BuildHasher>(
     span: Span,
 ) -> TypeIdx {
     match &ck.store.types[ty] {
-        Type::Record { fields, .. } => {
+        Type::Record { fields, open } => {
+            let (fields, open) = (fields.clone(), *open);
             if let FieldKey::Name { name, .. } = field {
-                let fields = fields.clone();
-                fields.iter().find(|f| f.name == name)
-                    .map_or_else(|| report_no_such_field(ck, name, ty, span), |f| f.ty)
+                if let Some(f) = fields.iter().find(|f| f.name == name) {
+                    f.ty
+                } else if open {
+                    // Open record — extend it with the new field.
+                    let field_ty = ck.fresh_var(span);
+                    let mut new_fields = fields;
+                    new_fields.push(RecordField { name, ty: field_ty });
+                    let extended = ck.alloc_ty(Type::Record {
+                        fields: new_fields,
+                        open: true,
+                    });
+                    // Re-bind the original type to the extended record.
+                    let _ok = ck.store.unify.unify(
+                        ty,
+                        extended,
+                        &mut ck.store.types,
+                        ck.ctx.well_known,
+                    );
+                    field_ty
+                } else {
+                    report_no_such_field(ck, name, ty, span)
+                }
             } else {
                 ck.error_ty()
             }
@@ -510,6 +530,26 @@ fn lookup_field<S: BuildHasher>(
                 lookup_field(ck, expanded, field, span)
             } else if let FieldKey::Name { name, .. } = field {
                 report_no_such_field(ck, name, ty, span)
+            } else {
+                ck.error_ty()
+            }
+        }
+        Type::Var(_) => {
+            // Unresolved type variable — create an open record constraint so
+            // that field access propagates structural type information.
+            if let FieldKey::Name { name, .. } = field {
+                let field_ty = ck.fresh_var(span);
+                let open_rec = ck.alloc_ty(Type::Record {
+                    fields: vec![RecordField { name, ty: field_ty }],
+                    open: true,
+                });
+                let _ok = ck.store.unify.unify(
+                    ty,
+                    open_rec,
+                    &mut ck.store.types,
+                    ck.ctx.well_known,
+                );
+                field_ty
             } else {
                 ck.error_ty()
             }
@@ -1134,47 +1174,57 @@ fn synth_choice<S: BuildHasher>(ck: &mut Checker<'_, S>, body: TyIdx) -> TypeIdx
     let parent = ck.current_scope;
     ck.current_scope = ck.scopes.push_child(parent);
 
-    let sum_variant_indices = if let Ty::Sum { variants, .. } = &ck.ctx.ast.tys[body] {
-        Some(variants.clone())
-    } else {
-        None
-    };
-
-    if let Some(variants_clone) = sum_variant_indices {
-        for &variant_ty in &variants_clone {
-            if let Ty::Named { name, .. } = &ck.ctx.ast.tys[variant_ty] {
-                let id = ck.defs.alloc(*name, DefKind::Type, Span::DUMMY);
-                let _prev = ck.scopes.define(ck.current_scope, *name, id);
+    match &ck.ctx.ast.tys[body] {
+        Ty::Sum { variants, .. } => {
+            let variants_clone = variants.clone();
+            for &variant_ty in &variants_clone {
+                if let Ty::Named { name, .. } = &ck.ctx.ast.tys[variant_ty] {
+                    let id = ck.defs.alloc(*name, DefKind::Type, Span::DUMMY);
+                    let _prev = ck.scopes.define(ck.current_scope, *name, id);
+                }
             }
-        }
 
-        let mut sum_variants = Vec::with_capacity(variants_clone.len());
-        for &variant_ty in &variants_clone {
-            let (name, args) = match &ck.ctx.ast.tys[variant_ty] {
-                Ty::Named { name, args, .. } => (Some(*name), Some(args.clone())),
-                _ => (None, None),
-            };
-            if let (Some(name), Some(args)) = (name, args) {
-                let fields: Vec<TypeIdx> = args.iter().map(|&a| lower_ty(ck, a)).collect();
-                sum_variants.push(SumVariant { name, fields });
-            } else {
-                let ty = lower_ty(ck, variant_ty);
-                sum_variants.push(SumVariant {
-                    name: Symbol(0),
-                    fields: vec![ty],
-                });
+            let mut sum_variants = Vec::with_capacity(variants_clone.len());
+            for &variant_ty in &variants_clone {
+                let (name, args) = match &ck.ctx.ast.tys[variant_ty] {
+                    Ty::Named { name, args, .. } => (Some(*name), Some(args.clone())),
+                    _ => (None, None),
+                };
+                if let (Some(name), Some(args)) = (name, args) {
+                    let fields: Vec<TypeIdx> = args.iter().map(|&a| lower_ty(ck, a)).collect();
+                    sum_variants.push(SumVariant { name, fields });
+                } else {
+                    let ty = lower_ty(ck, variant_ty);
+                    sum_variants.push(SumVariant {
+                        name: Symbol(0),
+                        fields: vec![ty],
+                    });
+                }
             }
-        }
 
-        ck.current_scope = parent;
-        return ck.alloc_ty(Type::Sum {
-            variants: sum_variants,
-        });
+            ck.current_scope = parent;
+            ck.alloc_ty(Type::Sum {
+                variants: sum_variants,
+            })
+        }
+        Ty::Named { name, args, .. } => {
+            let name = *name;
+            let args = args.clone();
+            let id = ck.defs.alloc(name, DefKind::Type, Span::DUMMY);
+            let _prev = ck.scopes.define(ck.current_scope, name, id);
+
+            let fields: Vec<TypeIdx> = args.iter().map(|&a| lower_ty(ck, a)).collect();
+            ck.current_scope = parent;
+            ck.alloc_ty(Type::Sum {
+                variants: vec![SumVariant { name, fields }],
+            })
+        }
+        _ => {
+            let ty = lower_ty(ck, body);
+            ck.current_scope = parent;
+            ty
+        }
     }
-
-    let ty = lower_ty(ck, body);
-    ck.current_scope = parent;
-    ty
 }
 
 fn synth_record_def<S: BuildHasher>(ck: &mut Checker<'_, S>, fields: &[RecDefField]) -> TypeIdx {

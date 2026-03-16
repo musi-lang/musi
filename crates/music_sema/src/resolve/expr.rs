@@ -352,13 +352,20 @@ impl Resolver<'_> {
         let parent = self.current_scope;
         self.current_scope = self.scopes.push_child(parent);
 
-        if let Ty::Sum { variants, .. } = &self.ast.tys[body] {
-            for &variant_ty in variants {
-                if let Ty::Named { name, .. } = &self.ast.tys[variant_ty] {
-                    let id = self.defs.alloc(*name, DefKind::Variant, Span::DUMMY);
-                    self.define_in_scope(*name, id, Span::DUMMY);
+        match &self.ast.tys[body] {
+            Ty::Sum { variants, .. } => {
+                for &variant_ty in variants {
+                    if let Ty::Named { name, .. } = &self.ast.tys[variant_ty] {
+                        let id = self.defs.alloc(*name, DefKind::Variant, Span::DUMMY);
+                        self.define_in_scope(*name, id, Span::DUMMY);
+                    }
                 }
             }
+            Ty::Named { name, .. } => {
+                let id = self.defs.alloc(*name, DefKind::Variant, Span::DUMMY);
+                self.define_in_scope(*name, id, Span::DUMMY);
+            }
+            _ => {}
         }
 
         self.resolve_ty(body);
