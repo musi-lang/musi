@@ -160,9 +160,15 @@ impl SharedAnalysisState {
     /// For lang-item classes, also injects their child methods (Haskell-style),
     /// skipping names already present in prelude (e.g. runtime foreign fns).
     pub fn inject_lang_items_into_prelude(&mut self) {
-        // Collect lang-item class DefIds first.
-        let lang_class_ids: Vec<DefId> = self
-            .defs
+        let lang_class_ids = self.collect_lang_class_ids();
+        self.inject_lang_item_defs();
+        self.inject_lang_class_methods(&lang_class_ids);
+        self.mark_injected_lang_items();
+    }
+
+    /// Returns `DefIds` of lang-item classes not yet injected.
+    fn collect_lang_class_ids(&self) -> Vec<DefId> {
+        self.defs
             .iter()
             .filter(|d| {
                 d.lang_item.is_some()
@@ -170,36 +176,40 @@ impl SharedAnalysisState {
                     && !self.injected_lang_items.contains(&d.id)
             })
             .map(|d| d.id)
-            .collect();
+            .collect()
+    }
 
-        // Inject lang-item defs themselves.
+    /// Injects lang-item definitions into the prelude scope if not already injected.
+    fn inject_lang_item_defs(&mut self) {
         for def in self.defs.iter() {
             if def.lang_item.is_some() && !self.injected_lang_items.contains(&def.id) {
-                let _prev = self.scopes.define(self.prelude_scope, def.name, def.id);
+                let _ = self.scopes.define(self.prelude_scope, def.name, def.id);
             }
         }
+    }
 
-        // Inject child methods of lang-item classes.
-        // Skip if the name already exists in prelude (e.g., runtime `show` foreign fn).
+    /// Injects child methods of lang-item classes into the prelude, except names already defined.
+    fn inject_lang_class_methods(&mut self, lang_class_ids: &[DefId]) {
         for def in self.defs.iter() {
-            if let Some(parent) = def.parent {
-                if lang_class_ids.contains(&parent)
-                    && def.kind == DefKind::Fn
-                    && def.name != Symbol(u32::MAX)
-                    && self
-                        .scopes
-                        .lookup_local(self.prelude_scope, def.name)
-                        .is_none()
-                {
-                    let _prev = self.scopes.define(self.prelude_scope, def.name, def.id);
-                }
+            if def.parent.is_some()
+                && lang_class_ids.contains(&def.parent.unwrap())
+                && def.kind == DefKind::Fn
+                && def.name != Symbol(u32::MAX)
+                && self
+                    .scopes
+                    .lookup_local(self.prelude_scope, def.name)
+                    .is_none()
+            {
+                let _ = self.scopes.define(self.prelude_scope, def.name, def.id);
             }
         }
+    }
 
-        // Re-scan to mark newly injected ids (separate pass to avoid borrow conflict).
+    /// Marks all lang-item definitions as injected.
+    fn mark_injected_lang_items(&mut self) {
         for def in self.defs.iter() {
             if def.lang_item.is_some() {
-                let _new = self.injected_lang_items.insert(def.id);
+                let _ = self.injected_lang_items.insert(def.id);
             }
         }
     }

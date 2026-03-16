@@ -180,15 +180,20 @@ pub fn init_well_known(
         ffi,
         effects,
         primitives,
-        option,
         float,
         string,
         rune,
         bool,
         unit,
+        option,
         any,
         never,
     }
 }
 
-pub fn assign_well_known_types(_defs: &mut DefTable, _wk: &WellKnown, _types: &mut Arena<Type>) {}
+pub const fn assign_well_known_types(
+    _defs: &mut DefTable,
+    _wk: &WellKnown,
+    _types: &mut Arena<Type>,
+) {
+}

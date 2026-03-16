@@ -169,14 +169,13 @@ fn marshal_args(args: Vec<Value>, heap: &Heap) -> Result<Vec<MarshaledArg>, VmEr
     let mut storage = Vec::with_capacity(args.len());
     for val in args {
         if val.is_float() {
-            storage.push(MarshaledArg::Float(val.as_float().unwrap()));
+            storage.push(MarshaledArg::Float(val.as_float()?));
         } else if val.is_unit() {
             storage.push(MarshaledArg::Int(0));
         } else if let Ok(n) = val.as_int() {
             storage.push(MarshaledArg::Int(n));
         } else if let Ok(n) = val.as_nat() {
-            #[allow(clippy::as_conversions)]
-            storage.push(MarshaledArg::Int(n as i64));
+            storage.push(MarshaledArg::Int(n.cast_signed()));
         } else if let Ok(b) = val.as_bool() {
             storage.push(MarshaledArg::Int(i64::from(i32::from(b))));
         } else if let Ok(c) = val.as_rune() {
@@ -228,6 +227,8 @@ fn int_to_float(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
             desc: "int_to_float: expected 1 argument".into(),
         })?
         .as_int()?;
+    // i64 -> f64 loses precision for large values; intentional for FFI conversion.
+    #[allow(clippy::cast_precision_loss, clippy::as_conversions)]
     Ok(Value::from_float(n as f64))
 }
 
@@ -239,6 +240,8 @@ fn float_to_int(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
             desc: "float_to_int: expected 1 argument".into(),
         })?
         .as_float()?;
+    // f64 -> i64 truncates fractional part; intentional for FFI float-to-int conversion.
+    #[allow(clippy::cast_possible_truncation, clippy::as_conversions)]
     Ok(Value::from_int(f as i64))
 }
 
@@ -320,18 +323,19 @@ fn value_to_string(val: Value, heap: &Heap) -> String {
         (_, Ok(n), _, _, _, _, _, _) => format!("{n}"),
         (_, _, Ok(n), _, _, _, _, _) => format!("{n}"),
         (_, _, _, Ok(c), _, _, _, _) => format!("{c}"),
-        (_, _, _, _, Ok(ptr), _, _, _) => match heap.get(ptr) {
-            Ok(obj) => {
-                if let Some(n) = obj.wide_int {
-                    format!("{n}")
-                } else if let Some(s) = &obj.string {
-                    s.to_string()
-                } else {
-                    format!("<ref:{ptr}>")
-                }
-            }
-            Err(_) => format!("<ref:{ptr}>"),
-        },
+        (_, _, _, _, Ok(ptr), _, _, _) => heap.get(ptr).map_or_else(
+            |_| format!("<ref:{ptr}>"),
+            |obj| {
+                obj.wide_int.map_or_else(
+                    || {
+                        obj.string
+                            .as_deref()
+                            .map_or_else(|| format!("<ref:{ptr}>"), str::to_owned)
+                    },
+                    |n| format!("{n}"),
+                )
+            },
+        ),
         (_, _, _, _, _, Ok(id), _, _) => format!("<fn:{id}>"),
         (_, _, _, _, _, _, Ok(id), _) => format!("<task:{id}>"),
         (_, _, _, _, _, _, _, Ok(id)) => format!("<chan:{id}>"),

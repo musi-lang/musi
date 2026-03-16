@@ -174,9 +174,8 @@ impl Resolver<'_> {
     }
 
     fn maybe_mark_lang_item_pat(&mut self, pat: PatIdx, attrs: &[Attr]) {
-        let sym = match self.lang_item_from_attrs(attrs) {
-            Some(s) => s,
-            None => return,
+        let Some(sym) = self.lang_item_from_attrs(attrs) else {
+            return;
         };
         let span = match &self.ast.pats[pat] {
             Pat::Variant { span, .. } | Pat::Bind { span, .. } => *span,

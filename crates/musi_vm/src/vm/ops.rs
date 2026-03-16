@@ -305,24 +305,23 @@ pub fn exec_type_chk(
         .map_or(TYPE_TAG_ANY, |t| t.tag);
 
     let matches = match () {
-        _ if type_tag == TYPE_TAG_ANY => true,
-        _ if val.is_float() => type_tag == TYPE_TAG_F32 || type_tag == TYPE_TAG_F64,
-        _ if val.is_unit() => type_tag == TYPE_TAG_UNIT,
-        _ if val.is_int() => matches!(
+        () if type_tag == TYPE_TAG_ANY => true,
+        () if val.is_float() => type_tag == TYPE_TAG_F32 || type_tag == TYPE_TAG_F64,
+        () if val.is_unit() => type_tag == TYPE_TAG_UNIT,
+        () if val.is_int() => matches!(
             type_tag,
             TYPE_TAG_I8 | TYPE_TAG_I16 | TYPE_TAG_I32 | TYPE_TAG_I64
         ),
-        _ if val.is_nat() => matches!(
+        () if val.is_nat() => matches!(
             type_tag,
             TYPE_TAG_U8 | TYPE_TAG_U16 | TYPE_TAG_U32 | TYPE_TAG_U64
         ),
-        _ if val.is_bool() => type_tag == TYPE_TAG_BOOL,
-        _ if val.is_rune() => type_tag == TYPE_TAG_RUNE,
-        _ if val.is_fn() => type_tag == TYPE_TAG_FN,
-        _ => match val.as_ref() {
-            Ok(ptr) => heap.get(ptr).is_ok_and(|obj| obj.type_id == type_id),
-            Err(_) => false,
-        },
+        () if val.is_bool() => type_tag == TYPE_TAG_BOOL,
+        () if val.is_rune() => type_tag == TYPE_TAG_RUNE,
+        () if val.is_fn() => type_tag == TYPE_TAG_FN,
+        () => val
+            .as_ref()
+            .is_ok_and(|ptr| heap.get(ptr).is_ok_and(|obj| obj.type_id == type_id)),
     };
 
     frame.stack.push(Value::from_bool(matches));

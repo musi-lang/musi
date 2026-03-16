@@ -42,11 +42,9 @@ impl Resolver<'_> {
                     && let Some(&alias_def_id) = self.output.expr_defs.get(&object)
                     && let Some(&import_path) = self.import_alias_defs.get(&alias_def_id)
                     && let Some(names) = self.import_names.get(&import_path)
-                    && let Some(&(_, exported_def_id)) =
-                        names.iter().find(|(n, _)| *n == name)
+                    && let Some(&(_, exported_def_id)) = names.iter().find(|(n, _)| *n == name)
                 {
-                    let _prev =
-                        self.output.expr_defs.insert(expr_idx, exported_def_id);
+                    let _prev = self.output.expr_defs.insert(expr_idx, exported_def_id);
                     self.defs.get_mut(exported_def_id).use_count += 1;
                 }
             }

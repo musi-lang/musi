@@ -158,12 +158,11 @@ fn str_ends_with(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     Ok(Value::from_bool(s.ends_with(suffix)))
 }
 
-#[allow(clippy::string_slice)]
 fn str_index_of(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     let haystack = get_str(arg(args, 0)?, heap)?;
     let needle = get_str(arg(args, 1)?, heap)?;
     let idx = haystack.find(needle).map_or(Ok(-1i64), |byte_idx| {
-        usize_to_i64(haystack[..byte_idx].chars().count())
+        usize_to_i64(haystack.get(..byte_idx).unwrap_or("").chars().count())
     })?;
     Ok(Value::from_int(idx))
 }
@@ -203,14 +202,12 @@ fn str_trim_end(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     Ok(Value::from_ref(ptr))
 }
 
-#[allow(clippy::needless_collect)]
+#[allow(clippy::needless_collect)] // need to collect into owned strings to release shared borrow on `heap`
 fn str_split(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     let s = get_str(arg(args, 0)?, heap)?;
     let delim = get_str(arg(args, 1)?, heap)?;
-    // Collect into owned strings first to release the shared borrow on `heap`
-    // before the mutable borrow in the second map.
     let owned: Vec<Box<str>> = s.split(delim).map(Box::from).collect();
-    let parts: Vec<Value> = owned
+    let parts = owned
         .into_iter()
         .map(|part| Value::from_ref(heap.alloc_string(0, part)))
         .collect();
@@ -324,7 +321,7 @@ fn arr_contains(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     let ptr = arg(args, 0)?.as_ref()?;
     let needle = arg(args, 1)?;
     let arr = heap.get(ptr)?;
-    let found = arr.elems.iter().any(|v| *v == needle);
+    let found = arr.elems.contains(&needle);
     Ok(Value::from_bool(found))
 }
 
@@ -449,23 +446,23 @@ fn float_is_infinite(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError>
     Ok(Value::from_bool(f.is_infinite()))
 }
 
-#[allow(clippy::unnecessary_wraps, clippy::missing_const_for_fn)]
-fn float_pi(_args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
+#[allow(clippy::unnecessary_wraps)]
+const fn float_pi(_args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
     Ok(Value::from_float(consts::PI))
 }
 
-#[allow(clippy::unnecessary_wraps, clippy::missing_const_for_fn)]
-fn float_e(_args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
+#[allow(clippy::unnecessary_wraps)]
+const fn float_e(_args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
     Ok(Value::from_float(consts::E))
 }
 
-#[allow(clippy::unnecessary_wraps, clippy::missing_const_for_fn)]
-fn float_infinity(_args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
+#[allow(clippy::unnecessary_wraps)]
+const fn float_infinity(_args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
     Ok(Value::from_float(f64::INFINITY))
 }
 
-#[allow(clippy::unnecessary_wraps, clippy::missing_const_for_fn)]
-fn float_nan(_args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
+#[allow(clippy::unnecessary_wraps)]
+const fn float_nan(_args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
     Ok(Value::NAN)
 }
 

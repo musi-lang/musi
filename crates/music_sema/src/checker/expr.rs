@@ -486,12 +486,10 @@ fn lookup_field<S: BuildHasher>(
                         open: true,
                     });
                     // Re-bind the original type to the extended record.
-                    let _ok = ck.store.unify.unify(
-                        ty,
-                        extended,
-                        &mut ck.store.types,
-                        ck.ctx.well_known,
-                    );
+                    let _ok =
+                        ck.store
+                            .unify
+                            .unify(ty, extended, &mut ck.store.types, ck.ctx.well_known);
                     field_ty
                 } else {
                     report_no_such_field(ck, name, ty, span)
@@ -543,12 +541,10 @@ fn lookup_field<S: BuildHasher>(
                     fields: vec![RecordField { name, ty: field_ty }],
                     open: true,
                 });
-                let _ok = ck.store.unify.unify(
-                    ty,
-                    open_rec,
-                    &mut ck.store.types,
-                    ck.ctx.well_known,
-                );
+                let _ok =
+                    ck.store
+                        .unify
+                        .unify(ty, open_rec, &mut ck.store.types, ck.ctx.well_known);
                 field_ty
             } else {
                 ck.error_ty()
