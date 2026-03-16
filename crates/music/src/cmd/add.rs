@@ -64,7 +64,7 @@ pub fn run(specifier: &str, name_override: Option<&str>, dev: bool) -> ! {
     } else {
         "dependencies"
     };
-    eprintln!("added `{dep_name}` = \"{specifier}\" to [{section}]");
+    eprintln!(r#"added `{dep_name}` = "{specifier}" to [{section}]"#);
     process::exit(0)
 }
 
