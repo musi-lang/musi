@@ -7,8 +7,6 @@ use musi_vm::{Heap, Value, VmError};
 
 type BuiltinFn = fn(&[Value], &mut Heap) -> Result<Value, VmError>;
 
-// ── Dispatch ─────────────────────────────────────────────────────────
-
 pub fn lookup(name: &str) -> Option<BuiltinFn> {
     match name {
         // String
@@ -80,8 +78,6 @@ pub fn lookup(name: &str) -> Option<BuiltinFn> {
     }
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────
-
 fn get_str(val: Value, heap: &Heap) -> Result<&str, VmError> {
     let ptr = val.as_ref()?;
     let node = heap.get(ptr)?;
@@ -92,23 +88,7 @@ fn get_str(val: Value, heap: &Heap) -> Result<&str, VmError> {
 }
 
 fn get_rune(val: Value) -> Result<char, VmError> {
-    // Rune tag = 0x7FF4, payload is a u32 Unicode scalar.
-    const TAG_RUNE: u16 = 0x7FF4;
-    if val.tag() != TAG_RUNE {
-        return Err(VmError::TypeError {
-            expected: "rune",
-            found: "non-rune",
-        });
-    }
-    let payload = val.0 & 0x0000_FFFF_FFFF_FFFF;
-    let scalar = u32::try_from(payload).map_err(|_| VmError::TypeError {
-        expected: "rune",
-        found: "invalid rune payload",
-    })?;
-    char::from_u32(scalar).ok_or(VmError::TypeError {
-        expected: "rune",
-        found: "invalid Unicode scalar",
-    })
+    val.as_rune()
 }
 
 fn arg(args: &[Value], idx: usize) -> Result<Value, VmError> {
@@ -122,10 +102,10 @@ fn i64_to_usize(v: i64) -> Result<usize, VmError> {
 }
 
 fn usize_to_i64(v: usize) -> Result<i64, VmError> {
-    i64::try_from(v).map_err(|_| VmError::Malformed { desc: "integer overflow".into() })
+    i64::try_from(v).map_err(|_| VmError::Malformed {
+        desc: "integer overflow".into(),
+    })
 }
-
-// ── String builtins ──────────────────────────────────────────────────
 
 fn str_len(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     let s = get_str(arg(args, 0)?, heap)?;
@@ -285,8 +265,6 @@ fn str_parse_float(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     Ok(s.parse::<f64>().map_or(Value::NAN, Value::from_float))
 }
 
-// ── Array builtins ───────────────────────────────────────────────────
-
 fn arr_len(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     let ptr = arg(args, 0)?.as_ref()?;
     let arr = heap.get(ptr)?;
@@ -346,7 +324,7 @@ fn arr_contains(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     let ptr = arg(args, 0)?.as_ref()?;
     let needle = arg(args, 1)?;
     let arr = heap.get(ptr)?;
-    let found = arr.elems.iter().any(|v| v.0 == needle.0);
+    let found = arr.elems.iter().any(|v| *v == needle);
     Ok(Value::from_bool(found))
 }
 
@@ -357,7 +335,7 @@ fn arr_index_of(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     let idx = arr
         .elems
         .iter()
-        .position(|v| v.0 == needle.0)
+        .position(|v| *v == needle)
         .map_or(-1i64, |i| i64::try_from(i).unwrap_or(-1));
     Ok(Value::from_int(idx))
 }
@@ -373,13 +351,10 @@ fn arr_sort(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
         if let (Ok(af), Ok(bf)) = (a.as_float(), b.as_float()) {
             return af.partial_cmp(&bf).unwrap_or(Ordering::Equal);
         }
-        // Fallback: raw bit comparison for stable ordering.
-        a.0.cmp(&b.0)
+        Ordering::Equal
     });
     Ok(Value::UNIT)
 }
-
-// ── Numeric builtins — int ───────────────────────────────────────────
 
 fn int_abs(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
     let n = arg(args, 0)?.as_int()?;
@@ -413,8 +388,6 @@ fn int_pow(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
     })?;
     Ok(Value::from_int(base.wrapping_pow(exp_u32)))
 }
-
-// ── Numeric builtins — float ─────────────────────────────────────────
 
 fn float_abs(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
     let f = arg(args, 0)?.as_float()?;
@@ -476,8 +449,6 @@ fn float_is_infinite(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError>
     Ok(Value::from_bool(f.is_infinite()))
 }
 
-// ── Numeric constants ────────────────────────────────────────────────
-
 #[allow(clippy::unnecessary_wraps, clippy::missing_const_for_fn)]
 fn float_pi(_args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
     Ok(Value::from_float(consts::PI))
@@ -498,17 +469,15 @@ fn float_nan(_args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
     Ok(Value::NAN)
 }
 
-#[allow(clippy::unnecessary_wraps, clippy::missing_const_for_fn)]
-fn int_min_val(_args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
-    Ok(Value::from_int(-(1i64 << 47)))
+#[allow(clippy::unnecessary_wraps)]
+fn int_min_val(_args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+    Ok(Value::from_int_wide(i64::MIN, heap))
 }
 
-#[allow(clippy::unnecessary_wraps, clippy::missing_const_for_fn)]
-fn int_max_val(_args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
-    Ok(Value::from_int((1i64 << 47) - 1))
+#[allow(clippy::unnecessary_wraps)]
+fn int_max_val(_args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+    Ok(Value::from_int_wide(i64::MAX, heap))
 }
-
-// ── Rune builtins ────────────────────────────────────────────────────
 
 fn rune_is_alpha(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
     let c = get_rune(arg(args, 0)?)?;

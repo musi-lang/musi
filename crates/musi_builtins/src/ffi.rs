@@ -43,6 +43,17 @@ impl FfiTable {
         let mut resolved: Vec<FfiEntry> = Vec::with_capacity(entries.len());
 
         for entry in entries {
+            // Route musi_rt builtins via dedicated lookup.
+            if entry.lib_name.as_ref() == "musi_rt" {
+                if let Some(builtin) = lookup_musi_rt(&entry.ext_name) {
+                    resolved.push(FfiEntry::Builtin(builtin));
+                    continue;
+                }
+                return Err(VmError::Malformed {
+                    desc: format!("unknown musi_rt builtin: {}", entry.ext_name).into_boxed_str(),
+                });
+            }
+
             // Check for built-in functions first.
             if let Some(builtin) = lookup_builtin(&entry.ext_name) {
                 resolved.push(FfiEntry::Builtin(builtin));
@@ -155,20 +166,27 @@ enum MarshaledArg {
 }
 
 fn marshal_args(args: Vec<Value>, heap: &Heap) -> Result<Vec<MarshaledArg>, VmError> {
-    let mut storage: Vec<MarshaledArg> = Vec::with_capacity(args.len());
-
+    let mut storage = Vec::with_capacity(args.len());
     for val in args {
         if val.is_float() {
-            storage.push(MarshaledArg::Float(val.as_float()?));
+            storage.push(MarshaledArg::Float(val.as_float().unwrap()));
         } else if val.is_unit() {
             storage.push(MarshaledArg::Int(0));
         } else if let Ok(n) = val.as_int() {
             storage.push(MarshaledArg::Int(n));
+        } else if let Ok(n) = val.as_nat() {
+            #[allow(clippy::as_conversions)]
+            storage.push(MarshaledArg::Int(n as i64));
         } else if let Ok(b) = val.as_bool() {
             storage.push(MarshaledArg::Int(i64::from(i32::from(b))));
+        } else if let Ok(c) = val.as_rune() {
+            storage.push(MarshaledArg::Int(i64::from(u32::from(c))));
         } else if let Ok(ptr) = val.as_ref() {
             let obj = heap.get(ptr)?;
-            if let Some(s) = &obj.string {
+            // Wide int refs marshal as their i64 value.
+            if let Some(n) = obj.wide_int {
+                storage.push(MarshaledArg::Int(n));
+            } else if let Some(s) = &obj.string {
                 let cstr = CString::new(s.as_bytes()).map_err(|_| VmError::Malformed {
                     desc: "string contains interior null byte for FFI".into(),
                 })?;
@@ -177,12 +195,51 @@ fn marshal_args(args: Vec<Value>, heap: &Heap) -> Result<Vec<MarshaledArg>, VmEr
             } else {
                 storage.push(MarshaledArg::Int(0));
             }
+        } else if let Ok(id) = val.as_fn_id() {
+            storage.push(MarshaledArg::Int(i64::from(id)));
+        } else if let Ok(id) = val.as_task_id() {
+            storage.push(MarshaledArg::Int(i64::from(id)));
+        } else if let Ok(id) = val.as_chan_id() {
+            storage.push(MarshaledArg::Int(i64::from(id)));
         } else {
-            storage.push(MarshaledArg::Int(i64::from_le_bytes(val.0.to_le_bytes())));
+            storage.push(MarshaledArg::Int(0));
         }
     }
-
     Ok(storage)
+}
+
+fn lookup_musi_rt(ext_name: &str) -> Option<BuiltinFn> {
+    match ext_name {
+        "show" => Some(builtin_show),
+        "str_cat" => Some(builtin_str_cat),
+        "write" => Some(builtin_write),
+        "writeln" => Some(builtin_writeln),
+        "int_to_float" => Some(int_to_float),
+        "float_to_int" => Some(float_to_int),
+        _ => core::lookup(ext_name),
+    }
+}
+
+fn int_to_float(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
+    let n = args
+        .first()
+        .copied()
+        .ok_or_else(|| VmError::Malformed {
+            desc: "int_to_float: expected 1 argument".into(),
+        })?
+        .as_int()?;
+    Ok(Value::from_float(n as f64))
+}
+
+fn float_to_int(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
+    let f = args
+        .first()
+        .copied()
+        .ok_or_else(|| VmError::Malformed {
+            desc: "float_to_int: expected 1 argument".into(),
+        })?
+        .as_float()?;
+    Ok(Value::from_int(f as i64))
 }
 
 fn lookup_builtin(ext_name: &str) -> Option<BuiltinFn> {
@@ -243,27 +300,43 @@ fn builtin_str_cat(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
 }
 
 fn value_to_string(val: Value, heap: &Heap) -> String {
-    if val.is_float()
-        && let Ok(f) = val.as_float()
-    {
-        return format!("{f}");
+    if val.is_float() {
+        return format!("{}", val.as_float().unwrap());
     }
     if val.is_unit() {
         return "()".to_owned();
     }
-    if let Ok(b) = val.as_bool() {
-        return format!("{b}");
+    match (
+        val.as_bool(),
+        val.as_int(),
+        val.as_nat(),
+        val.as_rune(),
+        val.as_ref(),
+        val.as_fn_id(),
+        val.as_task_id(),
+        val.as_chan_id(),
+    ) {
+        (Ok(b), _, _, _, _, _, _, _) => format!("{b}"),
+        (_, Ok(n), _, _, _, _, _, _) => format!("{n}"),
+        (_, _, Ok(n), _, _, _, _, _) => format!("{n}"),
+        (_, _, _, Ok(c), _, _, _, _) => format!("{c}"),
+        (_, _, _, _, Ok(ptr), _, _, _) => match heap.get(ptr) {
+            Ok(obj) => {
+                if let Some(n) = obj.wide_int {
+                    format!("{n}")
+                } else if let Some(s) = &obj.string {
+                    s.to_string()
+                } else {
+                    format!("<ref:{ptr}>")
+                }
+            }
+            Err(_) => format!("<ref:{ptr}>"),
+        },
+        (_, _, _, _, _, Ok(id), _, _) => format!("<fn:{id}>"),
+        (_, _, _, _, _, _, Ok(id), _) => format!("<task:{id}>"),
+        (_, _, _, _, _, _, _, Ok(id)) => format!("<chan:{id}>"),
+        _ => format!("<unknown:{:#018x}>", val.0),
     }
-    if let Ok(n) = val.as_int() {
-        return format!("{n}");
-    }
-    if let Ok(ptr) = val.as_ref()
-        && let Ok(obj) = heap.get(ptr)
-        && let Some(s) = &obj.string
-    {
-        return s.to_string();
-    }
-    format!("<value:{}>", val.0)
 }
 
 fn build_args(storage: &[MarshaledArg]) -> Vec<Arg<'_>> {

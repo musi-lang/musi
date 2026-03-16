@@ -24,8 +24,6 @@ fn extract_elems(val: Value, heap: &Heap) -> Vec<Value> {
     heap.get(ptr).unwrap().elems.clone()
 }
 
-// ── String tests ─────────────────────────────────────────────────
-
 #[test]
 fn test_str_len() {
     let mut heap = Heap::new();
@@ -247,8 +245,6 @@ fn test_str_parse_float_invalid() {
     assert!(result.as_float().unwrap().is_nan());
 }
 
-// ── Array tests ──────────────────────────────────────────────────
-
 #[test]
 fn test_arr_len() {
     let mut heap = Heap::new();
@@ -356,8 +352,6 @@ fn test_arr_sort() {
     assert_eq!(elems[2].as_int().unwrap(), 3);
 }
 
-// ── Numeric tests ────────────────────────────────────────────────
-
 #[test]
 fn test_int_abs() {
     let mut heap = Heap::new();
@@ -437,13 +431,11 @@ fn test_float_constants() {
 #[test]
 fn test_int_bounds() {
     let mut heap = Heap::new();
-    let min = int_min_val(&[], &mut heap).unwrap().as_int().unwrap();
-    let max = int_max_val(&[], &mut heap).unwrap().as_int().unwrap();
-    assert_eq!(min, -(1i64 << 47));
-    assert_eq!(max, (1i64 << 47) - 1);
+    let min_val = int_min_val(&[], &mut heap).unwrap();
+    let max_val = int_max_val(&[], &mut heap).unwrap();
+    assert_eq!(min_val.as_int_wide(&heap).unwrap(), i64::MIN);
+    assert_eq!(max_val.as_int_wide(&heap).unwrap(), i64::MAX);
 }
-
-// ── Rune tests ───────────────────────────────────────────────────
 
 #[test]
 fn test_rune_is_alpha() {
