@@ -7,7 +7,7 @@
 //! reclaim unreachable objects.
 
 use crate::error::VmError;
-use crate::value::Value;
+use crate::value::{BOXED_INT_TYPE_ID, BOXED_NAT_TYPE_ID, Value};
 
 /// A heap-allocated object: a product, sum variant, array, or string.
 pub struct HeapObject {
@@ -23,6 +23,8 @@ pub struct HeapObject {
     pub elems: Vec<Value>,
     /// String data (non-`None` only for string objects).
     pub string: Option<Box<str>>,
+    /// Wide integer storage for heap-boxed ints/nats exceeding 48-bit inline range.
+    pub wide_int: Option<i64>,
 }
 
 /// The VM heap — a vector of objects indexed by their allocation address.
@@ -83,6 +85,7 @@ impl Heap {
             tag: None,
             elems: vec![],
             string: None,
+            wide_int: None,
         };
         u64::try_from(self.insert(obj)).expect("heap index fits u64")
     }
@@ -100,6 +103,7 @@ impl Heap {
             tag: None,
             elems,
             string: None,
+            wide_int: None,
         };
         u64::try_from(self.insert(obj)).expect("heap index fits u64")
     }
@@ -117,6 +121,45 @@ impl Heap {
             tag: None,
             elems: vec![],
             string: Some(s),
+            wide_int: None,
+        };
+        u64::try_from(self.insert(obj)).expect("heap index fits u64")
+    }
+
+    /// Allocate a heap-boxed wide signed integer. Returns the heap index.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the heap index exceeds `u64::MAX`.
+    pub fn alloc_wide_int(&mut self, n: i64) -> u64 {
+        let obj = HeapObject {
+            type_id: BOXED_INT_TYPE_ID,
+            gc_flags: 0,
+            fields: vec![],
+            tag: None,
+            elems: vec![],
+            string: None,
+            wide_int: Some(n),
+        };
+        u64::try_from(self.insert(obj)).expect("heap index fits u64")
+    }
+
+    /// Allocate a heap-boxed wide unsigned integer. Returns the heap index.
+    ///
+    /// The u64 value is stored as i64 via bit reinterpretation.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the heap index exceeds `u64::MAX`.
+    pub fn alloc_wide_nat(&mut self, n: u64) -> u64 {
+        let obj = HeapObject {
+            type_id: BOXED_NAT_TYPE_ID,
+            gc_flags: 0,
+            fields: vec![],
+            tag: None,
+            elems: vec![],
+            string: None,
+            wide_int: Some(n as i64),
         };
         u64::try_from(self.insert(obj)).expect("heap index fits u64")
     }

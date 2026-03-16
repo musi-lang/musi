@@ -14,8 +14,6 @@ use crate::value::Value;
 use crate::verifier::verify;
 use crate::vm::{StepResult, Vm};
 
-// ── Binary builder helpers ────────────────────────────────────────────────────
-
 /// Constant pool entry for the test builder.
 enum ConstEntry {
     I32(i32),
@@ -66,7 +64,6 @@ fn fn_def_with_max_stack(
 fn make_msbc(consts: &[ConstEntry], fns: &[FnDef]) -> Vec<u8> {
     let entry_fn_id: u32 = fns.first().map_or(0, |f| f.fn_id);
 
-    // ── Const pool ────────────────────────────────────────────────────────────
     let mut const_section: Vec<u8> = vec![];
     let const_count = u32::try_from(consts.len()).expect("fits u32");
     const_section.extend_from_slice(&const_count.to_le_bytes());
@@ -85,13 +82,9 @@ fn make_msbc(consts: &[ConstEntry], fns: &[FnDef]) -> Vec<u8> {
         }
     }
 
-    // ── Type pool (empty) ─────────────────────────────────────────────────────
     let type_section: Vec<u8> = 0u32.to_le_bytes().to_vec();
-
-    // ── Effect pool (empty) ───────────────────────────────────────────────────
     let effect_section: Vec<u8> = 0u32.to_le_bytes().to_vec();
 
-    // ── Function pool ─────────────────────────────────────────────────────────
     let mut fn_section: Vec<u8> = vec![];
     let fn_count = u32::try_from(fns.len()).expect("fits u32");
     fn_section.extend_from_slice(&fn_count.to_le_bytes());
@@ -115,10 +108,8 @@ fn make_msbc(consts: &[ConstEntry], fns: &[FnDef]) -> Vec<u8> {
         }
     }
 
-    // ── Foreign pool (empty for tests) ──────────────────────────────────────
     let foreign_section: Vec<u8> = 0u32.to_le_bytes().to_vec(); // count = 0
 
-    // ── Header ────────────────────────────────────────────────────────────────
     let header_size: u32 = 40;
     let const_off = header_size;
     let type_off = const_off + u32::try_from(const_section.len()).expect("fits u32");
@@ -170,8 +161,6 @@ fn run_vm_call(bytes: &[u8], fn_id: u32, args: &[Value]) -> (Vm, Result<Value, V
     (vm, result)
 }
 
-// ── Loader tests ──────────────────────────────────────────────────────────────
-
 #[test]
 fn test_load_valid_header_succeeds() {
     let bytes = make_msbc(&[], &[fn_def(0, 0, 0, vec![Opcode::RET_U.0])]);
@@ -201,8 +190,6 @@ fn test_load_bad_checksum_returns_error() {
     );
 }
 
-// ── Verifier tests ────────────────────────────────────────────────────────────
-
 #[test]
 fn test_verifier_rejects_oob_const() {
     let bytes = make_msbc(
@@ -224,8 +211,6 @@ fn test_verifier_rejects_stack_overflow() {
     let result = verify(&module);
     assert!(result.is_err(), "expected Verify error for stack overflow");
 }
-
-// ── Execution tests (original) ───────────────────────────────────────────────
 
 #[test]
 fn test_run_constant_return_i32() {
@@ -377,8 +362,6 @@ fn test_run_make_variant_and_check_tag() {
     assert!(result.expect("runs").as_bool().expect("is bool"));
 }
 
-// ── Value NaN-boxing tests ────────────────────────────────────────────────────
-
 #[test]
 fn test_value_nan_boxing_roundtrip() {
     type Case = (Value, fn(Value) -> bool);
@@ -412,25 +395,22 @@ fn test_value_float_is_not_tagged_int() {
 }
 
 #[test]
-fn test_nan_canonicalization() {
-    // Standard quiet NaN (tag 0x7FF8 collides with TAG_TASK without canonicalization).
+fn test_nan_handling() {
     let v = Value::from_float(f64::NAN);
     assert!(v.is_float());
     assert!(v.as_float().unwrap().is_nan());
-    assert_eq!(v, Value::NAN);
 
-    // Negative NaN collapses to canonical.
+    // All NaN variants are Float.
     let neg_nan = Value::from_float(f64::from_bits(0xFFF8_0000_0000_0000));
-    assert_eq!(neg_nan, Value::NAN);
+    assert!(neg_nan.as_float().unwrap().is_nan());
 
-    // Signaling NaN collapses to canonical.
     let snan = Value::from_float(f64::from_bits(0x7FF0_0000_0000_0002));
-    assert_eq!(snan, Value::NAN);
+    assert!(snan.as_float().unwrap().is_nan());
 
     // Non-NaN floats are untouched.
     let normal = Value::from_float(1.5);
     assert!(normal.is_float());
-    assert_ne!(normal, Value::NAN);
+    assert!(!normal.as_float().unwrap().is_nan());
 
     // Infinity is NOT NaN.
     let inf = Value::from_float(f64::INFINITY);
@@ -445,8 +425,6 @@ fn test_value_int_sign_extension() {
     let v2 = Value::from_int(-42);
     assert_eq!(v2.as_int().expect("is int"), -42);
 }
-
-// ── String values ───────────────────────────────────────────────────────
 
 #[test]
 fn test_string_const_returns_heap_ref() {
@@ -491,8 +469,6 @@ fn test_string_const_two_distinct_loads_produce_separate_objects() {
     let (_, result) = run_vm(&bytes);
     assert!(result.expect("runs").as_ref().is_ok(), "should be a ref");
 }
-
-// ── Global variables ────────────────────────────────────────────────────
 
 #[test]
 fn test_globals_store_and_load() {
@@ -546,8 +522,6 @@ fn test_globals_uninitialized_returns_unit() {
     );
 }
 
-// ── Division by zero ────────────────────────────────────────────────────
-
 #[test]
 fn test_division_by_zero_returns_error() {
     let bytes = make_msbc(
@@ -576,8 +550,6 @@ fn test_division_by_zero_returns_error() {
     }
 }
 
-// ── Float arithmetic ────────────────────────────────────────────────────
-
 #[test]
 fn test_float_add_and_multiply() {
     let bytes = make_msbc(
@@ -604,8 +576,6 @@ fn test_float_add_and_multiply() {
     let f = result.expect("runs").as_float().expect("is float");
     assert!((f - 5.0).abs() < f64::EPSILON);
 }
-
-// ── Bitwise operations ──────────────────────────────────────────────────
 
 #[test]
 fn test_bitwise_and_and_shift() {
@@ -636,8 +606,6 @@ fn test_bitwise_and_and_shift() {
     assert_eq!(result.expect("runs").as_int().expect("is int"), 240);
 }
 
-// ── Type conversions ────────────────────────────────────────────────────
-
 #[test]
 fn test_int_to_float_to_int_roundtrip() {
     let bytes = make_msbc(
@@ -660,8 +628,6 @@ fn test_int_to_float_to_int_roundtrip() {
     let (_, result) = run_vm(&bytes);
     assert_eq!(result.expect("runs").as_int().expect("is int"), 7);
 }
-
-// ── Array operations ────────────────────────────────────────────────────
 
 #[test]
 fn test_array_create_store_load() {
@@ -729,8 +695,6 @@ fn test_array_length() {
     assert_eq!(result.expect("runs").as_nat().expect("is nat"), 5);
 }
 
-// ── Stack underflow ─────────────────────────────────────────────────────
-
 #[test]
 fn test_stack_underflow_returns_error() {
     let bytes = make_msbc(
@@ -740,8 +704,6 @@ fn test_stack_underflow_returns_error() {
     let (_, result) = run_vm(&bytes);
     assert!(result.is_err(), "i.add on empty stack should error");
 }
-
-// ── HLT instruction ────────────────────────────────────────────────────
 
 #[test]
 fn test_hlt_returns_halted_error() {
@@ -755,8 +717,6 @@ fn test_hlt_returns_halted_error() {
         _ => panic!("expected Runtime wrapping Halted, got {err:?}"),
     }
 }
-
-// ── Instruction limit ──────────────────────────────────────────────────
 
 #[test]
 fn test_instruction_limit_exceeded() {
@@ -788,8 +748,6 @@ fn test_instruction_limit_exceeded() {
     assert_eq!(vm.instruction_count(), 100);
 }
 
-// ── Error context ───────────────────────────────────────────────────────
-
 #[test]
 fn test_error_context_contains_fn_id_and_ip() {
     let bytes = make_msbc(
@@ -818,8 +776,6 @@ fn test_error_context_contains_fn_id_and_ip() {
         _ => panic!("expected Runtime error, got {err:?}"),
     }
 }
-
-// ── Public stepping API ─────────────────────────────────────────────────
 
 #[test]
 fn test_step_api_single_stepping() {
@@ -864,8 +820,6 @@ fn test_introspection_frames_and_heap() {
     assert!(vm.frames().is_empty());
     assert!(vm.heap().live_count() >= 1);
 }
-
-// ── Garbage collection ──────────────────────────────────────────────────
 
 #[test]
 fn test_gc_collects_unreachable_objects() {
@@ -929,8 +883,6 @@ fn test_gc_preserves_reachable_globals() {
     assert_eq!(vm.heap().live_count(), 1);
 }
 
-// ── Dynamic invocation ──────────────────────────────────────────────────
-
 #[test]
 fn test_direct_call_with_inv() {
     let bytes = make_msbc(
@@ -970,8 +922,6 @@ fn test_direct_call_with_inv() {
     assert_eq!(result.expect("runs").as_int().expect("is int"), 15);
 }
 
-// ── Wide jump ───────────────────────────────────────────────────────────
-
 #[test]
 fn test_wide_jump() {
     let bytes = make_msbc(
@@ -998,8 +948,6 @@ fn test_wide_jump() {
     assert_eq!(result.expect("runs").as_int().expect("is int"), 42);
 }
 
-// ── Integer negation ────────────────────────────────────────────────────
-
 #[test]
 fn test_int_negation() {
     let bytes = make_msbc(
@@ -1014,8 +962,6 @@ fn test_int_negation() {
     let (_, result) = run_vm(&bytes);
     assert_eq!(result.expect("runs").as_int().expect("is int"), -42);
 }
-
-// ── Float multiplication ────────────────────────────────────────────────
 
 #[test]
 fn test_float_multiply() {
@@ -1044,8 +990,6 @@ fn test_float_multiply() {
     assert!((f - 12.0).abs() < f64::EPSILON);
 }
 
-// ── CMP_EQ ──────────────────────────────────────────────────────────────
-
 #[test]
 fn test_cmp_eq_equal_values() {
     let bytes = make_msbc(
@@ -1071,8 +1015,6 @@ fn test_cmp_eq_equal_values() {
     );
 }
 
-// ── Value try_as_ref ────────────────────────────────────────────────────
-
 #[test]
 fn test_value_try_as_ref() {
     assert!(Value::from_ref(42).try_as_ref().is_some());
@@ -1080,8 +1022,6 @@ fn test_value_try_as_ref() {
     assert!(Value::from_int(42).try_as_ref().is_none());
     assert!(Value::UNIT.try_as_ref().is_none());
 }
-
-// ── Tier 2: EFF_DO cross-frame ───────────────────────────────────────────────
 
 /// Effect pool builder for tests.
 struct EffectDef {
@@ -1099,7 +1039,6 @@ struct EffectOpDef {
 fn make_msbc_with_effects(consts: &[ConstEntry], effects: &[EffectDef], fns: &[FnDef]) -> Vec<u8> {
     let entry_fn_id: u32 = fns.first().map_or(0, |f| f.fn_id);
 
-    // ── Const pool ────────────────────────────────────────────────────────────
     let mut const_section: Vec<u8> = vec![];
     let const_count = u32::try_from(consts.len()).expect("fits u32");
     const_section.extend_from_slice(&const_count.to_le_bytes());
@@ -1118,10 +1057,8 @@ fn make_msbc_with_effects(consts: &[ConstEntry], effects: &[EffectDef], fns: &[F
         }
     }
 
-    // ── Type pool (empty) ─────────────────────────────────────────────────────
     let type_section: Vec<u8> = 0u32.to_le_bytes().to_vec();
 
-    // ── Effect pool ───────────────────────────────────────────────────────────
     let mut effect_section: Vec<u8> = vec![];
     let effect_count = u32::try_from(effects.len()).expect("fits u32");
     effect_section.extend_from_slice(&effect_count.to_le_bytes());
@@ -1138,7 +1075,6 @@ fn make_msbc_with_effects(consts: &[ConstEntry], effects: &[EffectDef], fns: &[F
         }
     }
 
-    // ── Function pool ─────────────────────────────────────────────────────────
     let mut fn_section: Vec<u8> = vec![];
     let fn_count = u32::try_from(fns.len()).expect("fits u32");
     fn_section.extend_from_slice(&fn_count.to_le_bytes());
@@ -1162,10 +1098,8 @@ fn make_msbc_with_effects(consts: &[ConstEntry], effects: &[EffectDef], fns: &[F
         }
     }
 
-    // ── Foreign pool (empty for tests) ──────────────────────────────────────
     let foreign_section: Vec<u8> = 0u32.to_le_bytes().to_vec(); // count = 0
 
-    // ── Header ────────────────────────────────────────────────────────────────
     let header_size: u32 = 40;
     let const_off = header_size;
     let type_off = const_off + u32::try_from(const_section.len()).expect("fits u32");
@@ -1317,8 +1251,6 @@ fn test_eff_res_resumes_continuation() {
     assert_eq!(result.expect("runs").as_int().expect("is int"), 99);
 }
 
-// ── Tier 3: Value task/chan tags ──────────────────────────────────────────────
-
 #[test]
 fn test_value_task_roundtrip() {
     let v = Value::from_task(42);
@@ -1334,8 +1266,6 @@ fn test_value_chan_roundtrip() {
     assert!(v.as_int().is_err());
     assert!(v.as_task_id().is_err());
 }
-
-// ── Concurrency tests ────────────────────────────────────────────────────────
 
 /// Build bytecode from a sequence of byte slices.
 fn code(parts: &[&[u8]]) -> Vec<u8> {
@@ -1580,8 +1510,6 @@ fn test_sync_program_no_scheduler_overhead() {
     assert_eq!(result.expect("runs").as_int().expect("is int"), 7);
 }
 
-// ── Comparison opcodes ──────────────────────────────────────────────────────
-
 #[test]
 fn test_cmp_le_true_when_equal() {
     let bytes = make_msbc(
@@ -1648,8 +1576,6 @@ fn test_cmp_gt_true() {
     assert!(result.expect("runs").as_bool().expect("is bool"));
 }
 
-// ── Float comparison ────────────────────────────────────────────────────────
-
 #[test]
 fn test_cmp_f_eq_true() {
     let bytes = make_msbc(
@@ -1673,8 +1599,6 @@ fn test_cmp_f_eq_true() {
     let (_, result) = run_vm(&bytes);
     assert!(result.expect("runs").as_bool().expect("is bool"));
 }
-
-// ── Variant construction edge cases ─────────────────────────────────────────
 
 #[test]
 fn test_make_variant_multi_field_via_mk_prd_field_0() {
@@ -1736,8 +1660,6 @@ fn test_make_variant_multi_field_via_mk_prd_field_1() {
     let (_, result) = run_vm(&bytes);
     assert_eq!(result.expect("runs").as_int().expect("is int"), 20);
 }
-
-// ── Verifier boundary conditions ────────────────────────────────────────────
 
 #[test]
 fn test_verifier_accepts_max_stack_exact_match() {
@@ -1837,8 +1759,6 @@ fn test_verifier_depth_resets_to_zero_after_terminator() {
     assert!(result.is_ok(), "depth must reset after RET, got {result:?}");
 }
 
-// ── Wide instruction variants ───────────────────────────────────────────────
-
 #[test]
 fn test_ld_loc_w_loads_high_slot() {
     let code = vec![
@@ -1898,8 +1818,6 @@ fn test_cmp_tag_w_matches_large_tag() {
     let (_, result) = run_vm(&bytes);
     assert!(result.expect("runs").as_bool().expect("is bool"));
 }
-
-// ── Arithmetic / bitwise opcodes ────────────────────────────────────────────
 
 #[test]
 fn test_f_sub() {
@@ -2028,8 +1946,6 @@ fn test_b_shr() {
     let (_, result) = run_vm(&bytes);
     assert_eq!(result.expect("runs").as_int().expect("is int"), 4);
 }
-
-// ── Structural opcodes ─────────────────────────────────────────────────────
 
 #[test]
 fn test_ld_tag_returns_tag_value() {

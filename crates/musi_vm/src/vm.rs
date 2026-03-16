@@ -233,7 +233,7 @@ impl Vm {
                 .call_stack
                 .last_mut()
                 .ok_or_else(|| malformed!("empty call stack"))?;
-            if arith::exec(op, frame)? {
+            if arith::exec(op, frame, &mut self.heap)? {
                 return Ok(StepResult::Continue);
             }
         }
@@ -618,8 +618,6 @@ impl Vm {
         }
     }
 
-    // ── Call / return / tail-call ─────────────────────────────────────
-
     fn do_return(&mut self, value: Value) -> Result<StepResult, VmError> {
         let _ = self.call_stack.pop();
         if let Some(caller) = self.call_stack.last_mut() {
@@ -717,8 +715,6 @@ impl Vm {
         Ok(StepResult::Continue)
     }
 
-    // ── Continuations ─────────────────────────────────────────────────
-
     fn exec_cont_save_cross_frame(
         &mut self,
         effect_id: u8,
@@ -794,8 +790,6 @@ impl Vm {
         Ok(StepResult::Continue)
     }
 
-    // ── FFI ──────────────────────────────────────────────────────────
-
     fn exec_inv_ffi(&mut self, operand: u32) -> Result<StepResult, VmError> {
         let foreign_idx =
             usize::try_from(operand).map_err(|_| malformed!("foreign fn index overflows usize"))?;
@@ -830,8 +824,6 @@ impl Vm {
         self.current_frame()?.stack.push(result);
         Ok(StepResult::Continue)
     }
-
-    // ── Concurrency ──────────────────────────────────────────────────
 
     fn ensure_scheduler(&mut self) {
         if self.scheduler.is_none() {
@@ -1058,8 +1050,6 @@ impl Vm {
             .as_mut()
             .ok_or_else(|| malformed!("scheduler not initialized"))
     }
-
-    // ── Garbage collection ───────────────────────────────────────────
 
     /// Run a mark-sweep garbage collection cycle.
     pub fn collect_garbage(&mut self) -> usize {

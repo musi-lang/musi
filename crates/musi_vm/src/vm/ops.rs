@@ -92,7 +92,7 @@ pub fn as_usize(v: Value) -> Result<usize, VmError> {
 pub fn const_to_value(c: &LoadedConst, heap: &mut Heap) -> Value {
     match c {
         LoadedConst::I32(n) => Value::from_int(i64::from(*n)),
-        LoadedConst::I64(n) => Value::from_int(*n),
+        LoadedConst::I64(n) => Value::from_int_wide(*n, heap),
         LoadedConst::F64(f) => Value::from_float(*f),
         LoadedConst::Str(s) => {
             let ptr = heap.alloc_string(0, s.clone());
@@ -304,37 +304,25 @@ pub fn exec_type_chk(
         .get(usize::try_from(type_id).unwrap_or(usize::MAX))
         .map_or(TYPE_TAG_ANY, |t| t.tag);
 
-    let matches = if type_tag == TYPE_TAG_ANY {
-        true
-    } else if val.is_unit() {
-        type_tag == TYPE_TAG_UNIT
-    } else if val.is_float() {
-        type_tag == TYPE_TAG_F32 || type_tag == TYPE_TAG_F64
-    } else {
-        let vtag = val.tag();
-        match vtag {
-            0x7FF1 => matches!(
-                type_tag,
-                TYPE_TAG_I8 | TYPE_TAG_I16 | TYPE_TAG_I32 | TYPE_TAG_I64
-            ),
-            0x7FF2 => matches!(
-                type_tag,
-                TYPE_TAG_U8 | TYPE_TAG_U16 | TYPE_TAG_U32 | TYPE_TAG_U64
-            ),
-            0x7FF3 => type_tag == TYPE_TAG_BOOL,
-            0x7FF4 => type_tag == TYPE_TAG_RUNE,
-            0x7FF7 => type_tag == TYPE_TAG_FN,
-            0x7FF5 => {
-                if let Ok(ptr) = val.as_ref()
-                    && let Ok(obj) = heap.get(ptr)
-                {
-                    obj.type_id == type_id
-                } else {
-                    false
-                }
-            }
-            _ => false,
-        }
+    let matches = match () {
+        _ if type_tag == TYPE_TAG_ANY => true,
+        _ if val.is_float() => type_tag == TYPE_TAG_F32 || type_tag == TYPE_TAG_F64,
+        _ if val.is_unit() => type_tag == TYPE_TAG_UNIT,
+        _ if val.is_int() => matches!(
+            type_tag,
+            TYPE_TAG_I8 | TYPE_TAG_I16 | TYPE_TAG_I32 | TYPE_TAG_I64
+        ),
+        _ if val.is_nat() => matches!(
+            type_tag,
+            TYPE_TAG_U8 | TYPE_TAG_U16 | TYPE_TAG_U32 | TYPE_TAG_U64
+        ),
+        _ if val.is_bool() => type_tag == TYPE_TAG_BOOL,
+        _ if val.is_rune() => type_tag == TYPE_TAG_RUNE,
+        _ if val.is_fn() => type_tag == TYPE_TAG_FN,
+        _ => match val.as_ref() {
+            Ok(ptr) => heap.get(ptr).is_ok_and(|obj| obj.type_id == type_id),
+            Err(_) => false,
+        },
     };
 
     frame.stack.push(Value::from_bool(matches));
@@ -355,13 +343,12 @@ pub fn exec_mk_clo(
     let n = usize::from(func.upvalue_count);
     if frame.stack.len() < n {
         return Err(malformed!(
-            "mk.clo: need {} upvalues, stack has {}",
-            n,
+            "mk.clo: need {n} upvalues, stack has {}",
             frame.stack.len()
         ));
     }
     let start = frame.stack.len() - n;
-    let upvalues: Vec<Value> = frame.stack.drain(start..).collect();
+    let upvalues = frame.stack.drain(start..).collect();
 
     let ptr = heap.alloc(CLOSURE_TYPE_ID, upvalues);
     let ptr_usize =
@@ -402,7 +389,7 @@ pub enum DynCall {
 pub fn resolve_inv_dyn(operand: u32, frame: &mut Frame, heap: &Heap) -> Result<DynCall, VmError> {
     let arg_count =
         usize::from(u8::try_from(operand).map_err(|_| malformed!("inv.dyn operand overflow"))?);
-    let mut args: Vec<Value> = (0..arg_count)
+    let mut args = (0..arg_count)
         .map(|_| frame.pop())
         .collect::<Result<Vec<_>, _>>()?;
     args.reverse();
