@@ -34,13 +34,18 @@ fn check_member_fn<S: BuildHasher>(ck: &mut Checker<'_, S>, member: &ClassMember
             ck.fresh_var(param.span)
         };
         param_tys.push(param_ty);
-        let id = if let Some(&existing) = ck.ctx.pat_defs.get(&param.span) {
-            existing
-        } else {
-            ck.defs.alloc(param.name, DefKind::Param, param.span)
-        };
-        let _prev = ck.scopes.define(ck.current_scope, param.name, id);
-        ck.defs.get_mut(id).ty_info.ty = Some(param_ty);
+        // Only allocate param defs when a body exists. Abstract signatures
+        // (default == None) have no body to reference params, so allocating
+        // defs would produce false "unused parameter" warnings.
+        if default.is_some() {
+            let id = if let Some(&existing) = ck.ctx.pat_defs.get(&param.span) {
+                existing
+            } else {
+                ck.defs.alloc(param.name, DefKind::Param, param.span)
+            };
+            let _prev = ck.scopes.define(ck.current_scope, param.name, id);
+            ck.defs.get_mut(id).ty_info.ty = Some(param_ty);
+        }
     }
 
     let ret_ty = if let Some(ret) = sig.ret {
