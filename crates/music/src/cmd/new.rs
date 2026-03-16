@@ -41,7 +41,7 @@ pub fn create_project(dir: &Path, name: &str, template: &str) -> Result<(), Stri
     let source = if template == "lib" {
         "export let greet : (String) -> String := (name) => f\"hello, {name}!\";\n"
     } else {
-        "#[entrypoint]\nlet main : () ~> () under { IO } :=\n    () => writeln(\"hello, world!\");\n"
+        "import \"musi:rt\" as rt;\n\n#[entrypoint]\nlet main : () ~> () := () => rt.writeln(\"hello, world!\");\n"
     };
     let source_file = if template == "lib" {
         "lib.ms"
