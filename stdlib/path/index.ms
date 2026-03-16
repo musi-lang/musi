@@ -131,14 +131,7 @@ export let normalize := (p) => (
   );
   step(0);
   let slen := rt.arr_len(stack);
-  let joined := (
-    let build := (acc, i) => (
-      acc if i >= slen
-      | build(acc + "/" + stack.[i], i + 1) if _
-    );
-    build(stack.[0], 1) if slen > 0
-    | "" if _
-  );
+  let joined := (rt.str_join(stack, "/") if slen > 0 | "" if _);
   (
     "/" + joined if is_abs
     | "." if rt.str_len(joined) = 0

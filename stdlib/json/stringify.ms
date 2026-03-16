@@ -2,22 +2,30 @@
 
 import "@std/rt" as rt;
 
+let CH_QUOTE := 34;
+let CH_BACKSLASH := 92;
+let CH_LF := 10;
+let CH_CR := 13;
+let CH_TAB := 9;
+
 let escape_str := (s) => (
   let chars := rt.str_chars(s);
   let len := rt.arr_len(chars);
-  let step := (i, acc) => (
-    acc if i >= len
+  let mut buf := [];
+  let step := (i) => (
+    () if i >= len
     | (
       let c := rt.rune_to_int(chars.[i]);
-      step(i + 1, acc + "\\\"") if c = 34
-      | step(i + 1, acc + "\\\\") if c = 92
-      | step(i + 1, acc + "\\n")  if c = 10
-      | step(i + 1, acc + "\\r")  if c = 13
-      | step(i + 1, acc + "\\t")  if c = 9
-      | step(i + 1, acc + rt.str_from_chars([chars.[i]])) if _
+      (rt.arr_push(buf, '\\'); rt.arr_push(buf, '"');  step(i + 1)) if c = CH_QUOTE
+      | (rt.arr_push(buf, '\\'); rt.arr_push(buf, '\\'); step(i + 1)) if c = CH_BACKSLASH
+      | (rt.arr_push(buf, '\\'); rt.arr_push(buf, 'n');  step(i + 1)) if c = CH_LF
+      | (rt.arr_push(buf, '\\'); rt.arr_push(buf, 'r');  step(i + 1)) if c = CH_CR
+      | (rt.arr_push(buf, '\\'); rt.arr_push(buf, 't');  step(i + 1)) if c = CH_TAB
+      | (rt.arr_push(buf, chars.[i]); step(i + 1)) if _
     ) if _
   );
-  step(0, "")
+  step(0);
+  rt.str_from_chars(buf)
 );
 
 export let stringify := (value) => (
@@ -28,23 +36,27 @@ export let stringify := (value) => (
     | .Str(s)    => "\"" + escape_str(s) + "\""
     | .Array(arr) => (
       let len := rt.arr_len(arr);
-      let step := (i, acc) => (
-        acc if i >= len
-        | step(i + 1, acc + (", " if i > 0 | "" if _) + stringify(arr.[i])) if _
+      let mut parts := [];
+      let step := (i) => (
+        () if i >= len
+        | (rt.arr_push(parts, stringify(arr.[i])); step(i + 1)) if _
       );
-      "[" + step(0, "") + "]"
+      step(0);
+      "[" + rt.str_join(parts, ", ") + "]"
     )
     | .Object(pairs) => (
       let len := rt.arr_len(pairs);
-      let step := (i, acc) => (
-        acc if i >= len
+      let mut parts := [];
+      let step := (i) => (
+        () if i >= len
         | (
           let pair := pairs.[i];
-          let entry := "\"" + escape_str(pair.0) + "\": " + stringify(pair.1);
-          step(i + 1, acc + (", " if i > 0 | "" if _) + entry)
+          rt.arr_push(parts, "\"" + escape_str(pair.0) + "\": " + stringify(pair.1));
+          step(i + 1)
         ) if _
       );
-      "{" + step(0, "") + "}"
+      step(0);
+      "{" + rt.str_join(parts, ", ") + "}"
     )
   )
 );

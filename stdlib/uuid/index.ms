@@ -31,7 +31,12 @@ export let v4 := (rng) => (
   let p3 := "4" + rand_hex_segment(rng, 3);
   // Variant nibble: must be 8, 9, a, or b (top two bits = 10).
   let variant_n := (rand_nibble(rng) and 3) + 8;
-  let p4 := rt.str_from_chars([nibble_char(variant_n)]) + rand_hex_segment(rng, 3);
+  let mut p4_chars := [nibble_char(variant_n)];
+  let p4_step := (i) => (
+    (rt.arr_push(p4_chars, rand_hex_char(rng)); p4_step(i + 1)) if i < 3
+    | rt.str_from_chars(p4_chars) if _
+  );
+  let p4 := p4_step(0);
   let p5 := rand_hex_segment(rng, 12);
   p1 + "-" + p2 + "-" + p3 + "-" + p4 + "-" + p5
 );

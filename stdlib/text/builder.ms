@@ -10,13 +10,6 @@ export let append := (b, s) => rt.arr_push(b.parts, s);
 
 export let append_line := (b, s) => rt.arr_push(b.parts, s + "\n");
 
-export let build := (b) => (
-  let len := rt.arr_len(b.parts);
-  let step := (acc, i) => (
-    acc if i >= len
-    | step(acc + b.parts.[i], i + 1) if _
-  );
-  step("", 0)
-);
+export let build := (b) => rt.str_join(b.parts, "");
 
 export let len := (b) => rt.arr_len(b.parts);
