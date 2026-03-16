@@ -24,6 +24,7 @@ export foreign "C" (
   let str_from_chars : ([]Rune) ~> String;
   let str_parse_int : (String) ~> Int;
   let str_parse_float : (String) ~> Float64;
+  let str_join : ([]String, String) ~> String;
 
   // Array
   let arr_len : ([]Any) ~> Int;

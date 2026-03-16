@@ -173,6 +173,27 @@ fn test_str_split() {
 }
 
 #[test]
+fn test_str_join() {
+    let mut heap = Heap::new();
+    let a = make_string(&mut heap, "a");
+    let b = make_string(&mut heap, "b");
+    let c = make_string(&mut heap, "c");
+    let arr = make_array(&mut heap, vec![a, b, c]);
+    let sep = make_string(&mut heap, ",");
+    let result = str_join(&[arr, sep], &mut heap).unwrap();
+    assert_eq!(extract_str(result, &heap), "a,b,c");
+}
+
+#[test]
+fn test_str_join_empty() {
+    let mut heap = Heap::new();
+    let arr = make_array(&mut heap, vec![]);
+    let sep = make_string(&mut heap, ",");
+    let result = str_join(&[arr, sep], &mut heap).unwrap();
+    assert_eq!(extract_str(result, &heap), "");
+}
+
+#[test]
 fn test_str_replace() {
     let mut heap = Heap::new();
     let s = make_string(&mut heap, "hello world");

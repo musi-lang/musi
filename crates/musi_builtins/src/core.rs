@@ -30,6 +30,7 @@ pub fn lookup(name: &str) -> Option<BuiltinFn> {
         "str_from_chars" => Some(str_from_chars),
         "str_parse_int" => Some(str_parse_int),
         "str_parse_float" => Some(str_parse_float),
+        "str_join" => Some(str_join),
         // Array
         "arr_len" => Some(arr_len),
         "arr_push" => Some(arr_push),
@@ -260,6 +261,26 @@ fn str_parse_int(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
 fn str_parse_float(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     let s = get_str(arg(args, 0)?, heap)?;
     Ok(s.parse::<f64>().map_or(Value::NAN, Value::from_float))
+}
+
+#[allow(clippy::needless_collect)]
+fn str_join(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+    let arr_ptr = arg(args, 0)?.as_ref()?;
+    let sep = get_str(arg(args, 1)?, heap)?.to_owned();
+    let elems = heap.get(arr_ptr)?.elems.clone();
+    let parts: Vec<String> = elems
+        .iter()
+        .map(|v| {
+            let ptr = v.as_ref().unwrap_or_default();
+            heap.get(ptr)
+                .ok()
+                .and_then(|node| node.string.as_deref().map(String::from))
+                .unwrap_or_default()
+        })
+        .collect();
+    let result = parts.join(&sep);
+    let ptr = heap.alloc_string(0, result.into_boxed_str());
+    Ok(Value::from_ref(ptr))
 }
 
 fn arr_len(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
