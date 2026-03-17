@@ -1,7 +1,7 @@
 //! Per-expression synthesis and checking.
 
 use std::collections::{HashMap, HashSet};
-use std::hash::BuildHasher;
+use std::hash::{BuildHasher, Hash};
 
 use music_ast::expr::{
     Arg, ArrayElem, BinOp, Expr, FieldKey, HandlerOp, LetFields, MatchArm, Param, PwArm, PwGuard,
@@ -937,6 +937,35 @@ fn freshen_poly<S: BuildHasher>(
     freshen_walk(ck, ty, span, &param_set, &mut var_map, &mut def_map)
 }
 
+/// Get or create a fresh type variable for a key, caching in `map`.
+fn freshen_key<S: BuildHasher, K: Eq + Hash + Copy>(
+    ck: &mut Checker<'_, S>,
+    span: Span,
+    map: &mut HashMap<K, TypeIdx>,
+    key: K,
+) -> TypeIdx {
+    if let Some(&fresh) = map.get(&key) {
+        return fresh;
+    }
+    let fresh = ck.fresh_var(span);
+    let _prev = map.insert(key, fresh);
+    fresh
+}
+
+/// Freshen each type in a list.
+fn freshen_list<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
+    tys: &[TypeIdx],
+    span: Span,
+    param_set: &HashSet<DefId>,
+    var_map: &mut HashMap<TyVarId, TypeIdx>,
+    def_map: &mut HashMap<DefId, TypeIdx>,
+) -> Vec<TypeIdx> {
+    tys.iter()
+        .map(|&t| freshen_walk(ck, t, span, param_set, var_map, def_map))
+        .collect()
+}
+
 fn freshen_walk<S: BuildHasher>(
     ck: &mut Checker<'_, S>,
     ty: TypeIdx,
@@ -947,32 +976,13 @@ fn freshen_walk<S: BuildHasher>(
 ) -> TypeIdx {
     let resolved = ck.resolve_ty(ty);
     match &ck.store.types[resolved] {
-        Type::Var(v) => {
-            let v = *v;
-            if let Some(&fresh) = var_map.get(&v) {
-                fresh
-            } else {
-                let fresh = ck.fresh_var(span);
-                let _prev = var_map.insert(v, fresh);
-                fresh
-            }
-        }
+        Type::Var(v) => freshen_key(ck, span, var_map, *v),
         Type::Named { def, args } if args.is_empty() && param_set.contains(def) => {
-            let def = *def;
-            if let Some(&fresh) = def_map.get(&def) {
-                fresh
-            } else {
-                let fresh = ck.fresh_var(span);
-                let _prev = def_map.insert(def, fresh);
-                fresh
-            }
+            freshen_key(ck, span, def_map, *def)
         }
         Type::Named { def, args } => {
             let (def, args) = (*def, args.clone());
-            let new_args: Vec<_> = args
-                .iter()
-                .map(|&a| freshen_walk(ck, a, span, param_set, var_map, def_map))
-                .collect();
+            let new_args = freshen_list(ck, &args, span, param_set, var_map, def_map);
             ck.alloc_ty(Type::Named {
                 def,
                 args: new_args,
@@ -984,10 +994,7 @@ fn freshen_walk<S: BuildHasher>(
             effects,
         } => {
             let (params, ret, effects) = (params.clone(), *ret, effects.clone());
-            let new_params: Vec<_> = params
-                .iter()
-                .map(|&p| freshen_walk(ck, p, span, param_set, var_map, def_map))
-                .collect();
+            let new_params = freshen_list(ck, &params, span, param_set, var_map, def_map);
             let new_ret = freshen_walk(ck, ret, span, param_set, var_map, def_map);
             ck.alloc_ty(Type::Fn {
                 params: new_params,
@@ -997,10 +1004,7 @@ fn freshen_walk<S: BuildHasher>(
         }
         Type::Tuple { elems } => {
             let elems = elems.clone();
-            let new_elems: Vec<_> = elems
-                .iter()
-                .map(|&e| freshen_walk(ck, e, span, param_set, var_map, def_map))
-                .collect();
+            let new_elems = freshen_list(ck, &elems, span, param_set, var_map, def_map);
             ck.alloc_ty(Type::Tuple { elems: new_elems })
         }
         Type::Array { elem, len } => {
@@ -1031,16 +1035,9 @@ fn freshen_walk<S: BuildHasher>(
             let variants = variants.clone();
             let new_variants: Vec<_> = variants
                 .iter()
-                .map(|v| {
-                    let new_fields: Vec<_> = v
-                        .fields
-                        .iter()
-                        .map(|&f| freshen_walk(ck, f, span, param_set, var_map, def_map))
-                        .collect();
-                    SumVariant {
-                        name: v.name,
-                        fields: new_fields,
-                    }
+                .map(|v| SumVariant {
+                    name: v.name,
+                    fields: freshen_list(ck, &v.fields, span, param_set, var_map, def_map),
                 })
                 .collect();
             ck.alloc_ty(Type::Sum {
@@ -1054,10 +1051,7 @@ fn freshen_walk<S: BuildHasher>(
         }
         Type::AnonSum { variants } => {
             let variants = variants.clone();
-            let new_variants: Vec<_> = variants
-                .iter()
-                .map(|&v| freshen_walk(ck, v, span, param_set, var_map, def_map))
-                .collect();
+            let new_variants = freshen_list(ck, &variants, span, param_set, var_map, def_map);
             ck.alloc_ty(Type::AnonSum {
                 variants: new_variants,
             })
