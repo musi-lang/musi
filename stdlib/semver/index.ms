@@ -1,4 +1,4 @@
-//! Semantic versioning — parse, format, compare, and bump version strings.
+//! Semantic versioning - parse, format, compare, and bump version strings.
 
 import "@std/rt" as rt;
 

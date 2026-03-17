@@ -13,7 +13,7 @@ let MASK := 140737488355327;
 let fnv_mix := (h, byte) => (
   let xored := h xor byte;
   let product := xored * FNV_PRIME;
-  (product - ((product / (MASK + 1)) * (MASK + 1)))
+  product and MASK
 );
 
 export let hash_int := (n) => (

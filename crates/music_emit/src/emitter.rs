@@ -14,7 +14,7 @@ use std::mem;
 use music_ast::Pat;
 use music_ast::attr::{Attr, AttrValue};
 use music_ast::decl::{ClassMember, EffectOp, ForeignDecl};
-use music_ast::expr::{Expr, LetFields, Param};
+use music_ast::expr::{BindKind, BinOp, Expr, LetFields, Param};
 use music_ast::lit::Lit;
 use music_ast::{AstArenas, ExprIdx, ParsedModule, PatIdx, Stmt};
 use music_sema::{DictLookup, Obligation, ResolutionMap, SemaResult, TypeIdx};
@@ -101,6 +101,8 @@ pub struct Emitter<'a> {
     next_global: u32,
     /// Non-function dep bindings: (value_expr, dep_idx, def_id, global_slot).
     dep_global_inits: Vec<(ExprIdx, usize, DefId, u32)>,
+    /// Top-level side-effect statements from dep modules (e.g., assignments).
+    dep_side_effects: Vec<(ExprIdx, usize)>,
 }
 
 /// Per-function emission context.
@@ -191,6 +193,7 @@ impl<'a> Emitter<'a> {
             global_map: HashMap::new(),
             next_global: 0,
             dep_global_inits: vec![],
+            dep_side_effects: vec![],
         }
     }
 
@@ -732,6 +735,11 @@ impl<'a> Emitter<'a> {
                 self.scan_dep_instance_members(&members, dep_idx);
             }
             Expr::Export { .. } => {}
+            // Top-level side-effect statements (e.g., `parse_value_ref <- parse_value`)
+            // must execute when the module is loaded.
+            Expr::BinOp { op: BinOp::Assign, .. } => {
+                self.dep_side_effects.push((expr_idx, dep_idx));
+            }
             _ => {}
         }
         Ok(())
@@ -773,9 +781,31 @@ impl<'a> Emitter<'a> {
             return;
         };
 
+        // Mutable bindings are always globals, even if the initial value is a
+        // function literal. They can be reassigned at runtime via `<-`, so they
+        // need LD_GLB/ST_GLB instead of a static fn_map entry.
+        if fields.kind == BindKind::Mut {
+            let binding_span = pat_span(fields.pat, self.ast);
+            if let Some(&did) = self.pat_defs().get(&binding_span) {
+                let slot = self.next_global;
+                self.next_global += 1;
+                let _ = self.global_map.insert(did, slot);
+                self.dep_global_inits.push((value_idx, dep_idx, did, slot));
+            }
+            return;
+        }
+
         let Some((fn_params, fn_body)) = extract_fn(value_idx, self.ast) else {
             // Non-function binding: register as a global so dep functions can
             // reference it at runtime via LD_GLB.
+            // Skip imports and record defs — they don't produce runtime values
+            // and are handled via sub-module record construction instead.
+            if matches!(
+                self.ast.exprs[value_idx],
+                Expr::Import { .. } | Expr::RecordDef { .. }
+            ) {
+                return;
+            }
             let binding_span = pat_span(fields.pat, self.ast);
             if let Some(&did) = self.pat_defs().get(&binding_span) {
                 let slot = self.next_global;
@@ -881,6 +911,22 @@ impl<'a> Emitter<'a> {
             self.active_dep = saved_dep;
             if produced {
                 fc.fe.emit_st_glb(slot);
+            }
+        }
+
+        // Emit top-level side-effect statements from dep modules
+        // (e.g., mutable global reassignment like `parse_value_ref <- parse_value`).
+        let side_effects = mem::take(&mut self.dep_side_effects);
+        for &(expr_idx, dep_idx) in &side_effects {
+            let saved_ast = self.ast;
+            let saved_dep = self.active_dep;
+            self.ast = self.dep_contexts[dep_idx].ast;
+            self.active_dep = Some(dep_idx);
+            let produced = expr::emit_expr(self, &mut fc, expr_idx)?;
+            self.ast = saved_ast;
+            self.active_dep = saved_dep;
+            if produced {
+                fc.fe.emit_pop();
             }
         }
 

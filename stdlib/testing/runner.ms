@@ -1,4 +1,4 @@
-//! Test runner — executes suites and reports results.
+//! Test runner - executes suites and reports results.
 
 import "@std/rt" as rt;
 

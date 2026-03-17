@@ -6,55 +6,55 @@ import "@std/ini/index" as ini;
 let simple_ini := "[server]\nhost = localhost\nport = 8080\n\n[db]\nname = mydb\n";
 
 t.runner.report(t.runner.run_suite([
-  ("parse — empty string returns empty sections", () => (
+  ("parse - empty string returns empty sections", () => (
     let sections := ini.parse("");
     t.assertions.assert_eq(sections, [])
   )),
-  ("parse — single section with entries", () => (
+  ("parse - single section with entries", () => (
     let sections := ini.parse(simple_ini);
     t.assertions.assert_eq(sections.[0].name, "server")
   )),
-  ("parse — multiple sections", () => (
+  ("parse - multiple sections", () => (
     let sections := ini.parse(simple_ini);
     t.assertions.assert_eq(sections.[1].name, "db")
   )),
-  ("get — finds value in section", () => (
+  ("get - finds value in section", () => (
     let sections := ini.parse(simple_ini);
     t.assertions.assert_eq(ini.get(sections, "server", "host"), .Some("localhost"))
   )),
-  ("get — finds numeric value", () => (
+  ("get - finds numeric value", () => (
     let sections := ini.parse(simple_ini);
     t.assertions.assert_eq(ini.get(sections, "server", "port"), .Some("8080"))
   )),
-  ("get — returns None for missing key", () => (
+  ("get - returns None for missing key", () => (
     let sections := ini.parse(simple_ini);
     t.assertions.assert_eq(ini.get(sections, "server", "password"), .None)
   )),
-  ("get — returns None for missing section", () => (
+  ("get - returns None for missing section", () => (
     let sections := ini.parse(simple_ini);
     t.assertions.assert_eq(ini.get(sections, "cache", "host"), .None)
   )),
-  ("parse — semicolon comment lines ignored", () => (
+  ("parse - semicolon comment lines ignored", () => (
     let input := "; this is a comment\n[app]\nkey = value\n";
     let sections := ini.parse(input);
     t.assertions.assert_eq(sections.[0].name, "app")
   )),
-  ("parse — hash comment lines ignored", () => (
+  ("parse - hash comment lines ignored", () => (
     let input := "# another comment\n[app]\nkey = value\n";
     let sections := ini.parse(input);
     t.assertions.assert_eq(ini.get(sections, "app", "key"), .Some("value"))
   )),
-  ("parse — keys with spaces around equals", () => (
+  ("parse - keys with spaces around equals", () => (
     let input := "[s]\nfoo = bar\n";
     let sections := ini.parse(input);
     t.assertions.assert_eq(ini.get(sections, "s", "foo"), .Some("bar"))
   )),
-  ("parse — global entries before any section", () => (
+  ("parse - global entries before any section", () => (
     let input := "key = value\n[s]\nother = x\n";
     let sections := ini.parse(input);
     t.assertions.assert_eq(ini.get(sections, "", "key"), .Some("value"))
   )),
-  ("parse — section with multiple entries", () => (
+  ("parse - section with multiple entries", () => (
     let input := "[s]\na = 1\nb = 2\nc = 3\n";
     let sections := ini.parse(input);
     t.assertions.assert_true(

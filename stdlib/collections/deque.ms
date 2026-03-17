@@ -1,4 +1,4 @@
-//! Double-ended queue — two-array implementation.
+//! Double-ended queue - two-array implementation.
 //!
 //! `front` stores elements in reverse order: the logical front element is at
 //! the end of the array, so `arr_pop` is O(1). `back` stores elements in

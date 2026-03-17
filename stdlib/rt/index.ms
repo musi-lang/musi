@@ -1,4 +1,4 @@
-//! Runtime FFI bindings — the Musi runtime interface.
+//! Runtime FFI bindings - the Musi runtime interface.
 //! All functions are implemented in Rust and dispatched via the musi_rt virtual library.
 
 #[link(name := "musi_rt")]

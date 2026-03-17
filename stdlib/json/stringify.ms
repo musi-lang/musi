@@ -1,6 +1,7 @@
 //! JSON serializer.
 
 import "@std/rt" as rt;
+import "./types" as _;
 
 let CH_QUOTE := 34;
 let CH_BACKSLASH := 92;
@@ -33,7 +34,7 @@ export let stringify := (value) => (
     .Null        => "null"
     | .Bool(b)   => ("true" if b | "false" if _)
     | .Number(n) => rt.show(n)
-    | .Str(s)    => "\"" + escape_str(s) + "\""
+    | .Str(s)    => f"\"{escape_str(s)}\""
     | .Array(arr) => (
       let len := rt.arr_len(arr);
       let mut parts := [];
@@ -42,7 +43,7 @@ export let stringify := (value) => (
         | (rt.arr_push(parts, stringify(arr.[i])); step(i + 1)) if _
       );
       step(0);
-      "[" + rt.str_join(parts, ", ") + "]"
+      f"[{rt.str_join(parts, ", ")}]"
     )
     | .Object(pairs) => (
       let len := rt.arr_len(pairs);
@@ -51,11 +52,12 @@ export let stringify := (value) => (
         () if i >= len
         | (
           let pair := pairs.[i];
-          rt.arr_push(parts, "\"" + escape_str(pair.0) + "\": " + stringify(pair.1));
+          rt.arr_push(parts, f"\"{escape_str(pair.0)}\": {stringify(pair.1)}");
           step(i + 1)
         ) if _
       );
       step(0);
+      // TODO: cannot use "{{ }}" in f-strings; need to support escaping braces in f-strings first
       "{" + rt.str_join(parts, ", ") + "}"
     )
   )

@@ -1,4 +1,4 @@
-//! Binary min-heap (priority queue) — array-backed.
+//! Binary min-heap (priority queue) - array-backed.
 //!
 //! The comparator `cmp` determines priority: `cmp(a, b)` returning `.Less`
 //! means `a` has higher priority than `b`. The element with highest priority

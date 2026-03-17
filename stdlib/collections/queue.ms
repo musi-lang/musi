@@ -1,4 +1,4 @@
-//! FIFO queue — two-stack (front/back array) implementation.
+//! FIFO queue - two-stack (front/back array) implementation.
 //!
 //! Enqueue appends to `back`. Dequeue pops from `front`; when `front` is
 //! empty, `back` is reversed into `front`.

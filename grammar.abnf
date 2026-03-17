@@ -79,9 +79,8 @@ rune-char     = "\" any  ; §1.4  Comments
                 / <any except single-quote>
 
 comment       = "//" *(<any except newline>)  ; line
-; doc - documents next item
-; module doc
-any "*/"                     ; block - does not nest
+                / "///" *(<any except newline>)  ; doc - documents next item
+                / "/*" *(<any except "*/">) "*/"  ; block - does not nest
 ; §1.5  Keywords
 keyword        = "and"  ; §1.6  Compound tokens - maximal munch
                  / "as"
@@ -191,33 +190,33 @@ ast-expr-pre   = ("-" / "not") ast-expr-pre
 ast-expr-post  = ast-expr-atom *(postfix-op)  ; §2.3  Postfix operations
 
 postfix-op     = "(" [arg-list] ")"  ; call
-expr-list] "]"                 ; index
-rec-lit-fields "}"              ; record literal
-field-target                     ; field access
-field-target                    ; optional chaining
-field-target                    ; forced unwrap access
-; try / propagate
-; force unwrap
-ast-ty-named ["as" ident]       ; type test
-ast-ty-named                   ; type cast
+                 / "." "[" [expr-list] "]"  ; index
+                 / "." "{" [rec-lit-fields] "}"  ; record literal
+                 / "." field-target  ; field access
+                 / "?." field-target  ; optional chaining
+                 / "!." field-target  ; forced unwrap access
+                 / "?"  ; try / propagate
+                 / "!"  ; force unwrap
+                 / ":?" ast-ty-named ["as" ident]  ; type test
+                 / ":?>" ast-ty-named  ; type cast
 ; §2.4  Atoms - each alternative has a unique FIRST token
 ast-expr-atom = lit  ; "("
                 / ident
                 / ast-paren
-ast-array                             ; "["
-ast-rec-lit                           ; ".{"
-ast-dot-pfx                           ; "."
-ast-match                             ; "match"
-ast-let                               ; "let"
-ast-return                            ; "return"
-ast-defer                             ; "defer"
-ast-try                               ; "try"
-ast-import                            ; "import"
-ast-choice                            ; "choice"
-ast-record                            ; "record"
-ast-do                                ; "do"
-ast-handle                            ; "with"
-ast-with-attrs                        ; "#["
+                / ast-array  ; "["
+                / ast-rec-lit  ; ".{"
+                / ast-dot-pfx  ; "."
+                / ast-match  ; "match"
+                / ast-let  ; "let"
+                / ast-return  ; "return"
+                / ast-defer  ; "defer"
+                / ast-try  ; "try"
+                / ast-import  ; "import"
+                / ast-choice  ; "choice"
+                / ast-record  ; "record"
+                / ast-do  ; "do"
+                / ast-handle  ; "with"
+                / ast-with-attrs  ; "#["
 ; §2.5  Parenthesised forms
 ;
 ;   ()       unit
@@ -238,17 +237,20 @@ ast-paren  = "(" paren-body ")" [fn-tail]
 fn-tail    = [":" ast-ty] "=>" ast-expr
 
 paren-body = <empty>  ; unit: ()
-; empty tuple: (,)
-; empty sequence: (;)
-ast-expr paren-cont
+             / ","  ; empty tuple: (,)
+             / ";"  ; empty sequence: (;)
+             / ast-expr paren-cont
+
 paren-cont = <empty>  ; parenthesised expr
-expr-list] [","]                  ; tuple
-seq-tail]                         ; sequence
-pw-guard *("|" pw-arm)            ; piecewise
-seq-tail = <empty>  ; trailing ;, returns ()
-ast-expr seq-cont
-seq-cont = <empty>  ; returns last expr
-seq-tail]                         ; continue sequence
+             / "," [expr-list] [","]  ; tuple
+             / ";" [seq-tail]  ; sequence
+             / "if" pw-guard *("|" pw-arm)  ; piecewise
+
+seq-tail   = <empty>  ; trailing ;, returns ()
+             / ast-expr seq-cont
+
+seq-cont   = <empty>  ; returns last expr
+             / ";" [seq-tail]  ; continue sequence
 ; §2.6  Piecewise - sole conditional form. No if/else. No ternary.
 pw-arm            = ast-expr "if" pw-guard
 
@@ -349,36 +351,38 @@ ast-ty-sum        = ast-ty-prod *("+" ast-ty-prod)
 ast-ty-prod       = ast-ty-base *("*" ast-ty-base)
 
 ast-ty-base       = ty-ident  ; 'T
-ast-ty-base                        ; ?T - option sugar
-ident ["of" ty-arg-list]               ; Named, Named of T
-ast-ty] ")"                       ; grouped type
-lit-int] "]" ast-ty               ; array type
-ty-arg-list     = ast-ty *("," ast-ty)
+                    / "?" ast-ty-base  ; ?T - option sugar
+                    / ident ["of" ty-arg-list]  ; Named, Named of T
+                    / "(" ast-ty ")"  ; grouped type
+                    / "[" [lit-int] "]" ast-ty  ; array type
 
-ty-annot        = ":" ast-ty
+ty-arg-list       = ast-ty *("," ast-ty)
 
-ast-ty-named    = ident ["of" ty-arg-list]
+ty-annot          = ":" ast-ty
 
-effect-set      = "{" effect-list "}"
+ast-ty-named      = ident ["of" ty-arg-list]
 
-effect-list     = effect-item *("," effect-item)
+effect-set        = "{" effect-list "}"
 
-effect-item     = ident ["of" ast-ty]
-                  / ty-ident
+effect-list       = effect-item *("," effect-item)
 
-where-clause    = "where" constraint *("," constraint)
+effect-item       = ident ["of" ast-ty]
+                    / ty-ident
 
-constraint      = ty-ident ("<:" / ":>") ast-ty-named  ; §2.15  Patterns
+where-clause      = "where" constraint *("," constraint)
 
-ast-pat         = ast-pat-primary ["or" ast-pat-primary *("or" ast-pat-primary)]
+constraint        = ty-ident ("<:" / ":>") ast-ty-named  ; §2.15  Patterns
 
-ast-pat-primary = "_"  ; wildcard
-lit                                     ; literal
-ident [pat-suffix]              ; bind, destructor, or named record
-ident ["(" [pat-list] ")"]          ; UDN variant
-rec-pat-fields] "}"               ; record pattern
-pat-list] ")"                      ; tuple / grouped pattern
-pat-list] "]"                      ; array pattern
+ast-pat           = ast-pat-primary ["or" ast-pat-primary *("or" ast-pat-primary)]
+
+ast-pat-primary   = "_"  ; wildcard
+                    / lit  ; literal
+                    / ident [pat-suffix]  ; bind, destructor, or named record
+                    / "." ident ["(" [pat-list] ")"]  ; UDN variant
+                    / ".{" [rec-pat-fields] "}"  ; record pattern
+                    / "(" [pat-list] ")"  ; tuple / grouped pattern
+                    / "[" [pat-list] "]"  ; array pattern
+
 pat-suffix        = "(" [pat-list] ")"
                     / "{" [rec-pat-fields] "}"
 

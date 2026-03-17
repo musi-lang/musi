@@ -1,7 +1,7 @@
 //! Desugaring: short-circuit operators, assignment, pipe, f-string, and
 //! operator desugarings (nil-coalesce, err-coal, propagate, try, range, cons).
 
-use music_ast::expr::Expr;
+use music_ast::expr::{Expr, FieldKey};
 use music_ast::lit::FStrPart;
 
 use crate::const_pool::ConstValue;
@@ -11,7 +11,7 @@ use music_ast::ExprIdx;
 
 use super::super::emitter::Emitter;
 use super::FnCtx;
-use super::expr::emit_expr;
+use super::expr::{emit_expr, resolve_field_name};
 
 /// Emit `left and right` with short-circuit evaluation. Leaves bool on stack.
 ///
@@ -114,8 +114,52 @@ pub fn emit_assign(
                 return Ok(());
             }
         }
+        if let Some(&slot) = em.global_map.get(&def_id) {
+            fc.fe.emit_st_glb(slot);
+            return Ok(());
+        }
     }
-    // Discard if we can't resolve the target or it's not a name.
+    // Array element assignment: arr.[idx] <- value
+    // ST_IDX expects [array, index, value] on stack.
+    if let Expr::Index { object, index, .. } = left_expr {
+        let val_slot = fc.alloc_local();
+        fc.fe.emit_st_loc(val_slot);
+        let produced_obj = emit_expr(em, fc, object)?;
+        if !produced_obj {
+            return Err(EmitError::UnsupportedFeature {
+                desc: "index assign: object produced no value".into(),
+            });
+        }
+        let produced_idx = emit_expr(em, fc, index)?;
+        if !produced_idx {
+            return Err(EmitError::UnsupportedFeature {
+                desc: "index assign: index produced no value".into(),
+            });
+        }
+        fc.fe.emit_ld_loc(val_slot);
+        fc.fe.emit_st_idx();
+        return Ok(());
+    }
+    // Record field assignment: obj.field <- value
+    // ST_FLD expects [obj, value] on stack.
+    if let Expr::Field { object, field, .. } = left_expr {
+        let val_slot = fc.alloc_local();
+        fc.fe.emit_st_loc(val_slot);
+        let produced_obj = emit_expr(em, fc, object)?;
+        if !produced_obj {
+            return Err(EmitError::UnsupportedFeature {
+                desc: "field assign: object produced no value".into(),
+            });
+        }
+        fc.fe.emit_ld_loc(val_slot);
+        let field_idx = match field {
+            FieldKey::Pos { index, .. } => index,
+            FieldKey::Name { name, .. } => resolve_field_name(em, object, name)?,
+        };
+        fc.fe.emit_st_fld(field_idx)?;
+        return Ok(());
+    }
+    // Discard if we can't resolve the target.
     fc.fe.emit_pop();
     Ok(())
 }

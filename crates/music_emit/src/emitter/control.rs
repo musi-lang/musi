@@ -302,7 +302,12 @@ fn emit_pat_bind(
             Ok(())
         }
         Pat::Record { fields, .. } => {
-            for (i, field) in fields.iter().enumerate() {
+            // Sort fields by name to match the alphabetical record layout.
+            let mut sorted: Vec<_> = fields.iter().collect();
+            sorted.sort_by(|a, b| {
+                em.interner.resolve(a.name).cmp(em.interner.resolve(b.name))
+            });
+            for (i, field) in sorted.iter().enumerate() {
                 let idx = u32::try_from(i).map_err(|_| EmitError::OperandOverflow {
                     desc: "record pattern field index".into(),
                 })?;

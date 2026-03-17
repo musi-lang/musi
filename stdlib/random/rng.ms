@@ -1,4 +1,4 @@
-//! Xorshift PRNG — core RNG type and basic operations.
+//! Xorshift PRNG - core RNG type and basic operations.
 
 import "@std/rt" as rt;
 

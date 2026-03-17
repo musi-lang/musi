@@ -30,7 +30,6 @@ let CH_t := 116;
 let CH_u := 117;
 let CH_LBRACE := 123;
 let CH_RBRACE := 125;
-
 let ParseResult := choice {
     Ok of (types.JsonValue, Int)
   + Err of String
@@ -210,10 +209,10 @@ let parse_value := (chars, pos) => (
   | (
     let ch := chars.[p];
     let c  := rt.rune_to_int(ch);
-    parse_string(chars, p) |> (r) => match r (
+    (match parse_string(chars, p) (
       .Ok((s, np)) => .Ok((.Str(s), np))
       | .Err(e)    => .Err(e)
-    ) if c = CH_QUOTE
+    )) if c = CH_QUOTE
     | parse_array(chars, p)  if c = CH_LBRACKET
     | parse_object(chars, p) if c = CH_LBRACE
     | parse_number(chars, p) if c = CH_MINUS or is_digit_char(ch)

@@ -1,4 +1,4 @@
-//! Musi standard prelude — re-exports from @std/ modules.
+//! Musi standard prelude - re-exports from @std/ modules.
 
 export let cmp := import "@std/cmp";
 export let ops := import "@std/ops";

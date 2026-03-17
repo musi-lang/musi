@@ -468,10 +468,9 @@ fn emit_module_record(
     let fields = fields.clone();
     let n = fields.len();
     for field in &fields {
-        // Try to find a DefId for this field's name that's a function or FFI.
+        // Try to find a DefId for this field's name that's a function, FFI, or global.
         let field_name = field.name;
         let mut emitted = false;
-        // Search for a def with this name that's in fn_map or foreign_map.
         for def in &em.sema.defs {
             if def.name == field_name && def.exported {
                 if let Some(&fn_id) = em.fn_map.get(&def.id) {
@@ -487,6 +486,14 @@ fn emit_module_record(
                     fc.fe.emit_ld_cst(i);
                     emitted = true;
                     break;
+                }
+                // Value bindings from dep modules stored as globals.
+                if matches!(def.kind, DefKind::Let | DefKind::Var) {
+                    if let Some(&slot) = em.global_map.get(&def.id) {
+                        fc.fe.emit_ld_glb(slot);
+                        emitted = true;
+                        break;
+                    }
                 }
             }
         }
@@ -967,8 +974,9 @@ fn emit_primitive_binop(
 ) -> Result<bool, EmitError> {
     match op {
         BinOp::And => {
-            let family = classify_type_family(em, left);
-            if matches!(family, Some(TypeFamily::Bool) | None) {
+            let family = classify_type_family(em, left)
+                .or_else(|| classify_type_family(em, right));
+            if is_logical_family(family) {
                 desugar::emit_and(em, fc, left, right)?;
             } else {
                 let produced_left = emit_expr(em, fc, left)?;
@@ -988,8 +996,9 @@ fn emit_primitive_binop(
             Ok(true)
         }
         BinOp::Or => {
-            let family = classify_type_family(em, left);
-            if matches!(family, Some(TypeFamily::Bool) | None) {
+            let family = classify_type_family(em, left)
+                .or_else(|| classify_type_family(em, right));
+            if is_logical_family(family) {
                 desugar::emit_or(em, fc, left, right)?;
             } else {
                 let produced_left = emit_expr(em, fc, left)?;
@@ -1155,10 +1164,13 @@ fn emit_call(
             fc.fe.emit_inv(fn_id, false, ac);
             return Ok(true);
         }
-        // Dynamic dispatch via local or upvalue requires callee below args.
+        // Dynamic dispatch via local, upvalue, or global requires callee below args.
         // Args were already emitted above; save them to temp slots, push callee,
         // then restore args on top.
-        if fc.local_map.contains_key(&def_id) || fc.upvalue_map.contains_key(&def_id) {
+        if fc.local_map.contains_key(&def_id)
+            || fc.upvalue_map.contains_key(&def_id)
+            || em.global_map.contains_key(&def_id)
+        {
             // Spill args to temp slots.
             let mut arg_temps = Vec::with_capacity(total_count);
             for _ in 0..total_count {
@@ -1179,6 +1191,8 @@ fn emit_call(
                 if fc.ref_upvalues.contains(&def_id) {
                     fc.fe.emit_ld_fld(0)?;
                 }
+            } else if let Some(&slot) = em.global_map.get(&def_id) {
+                fc.fe.emit_ld_glb(slot);
             }
             // Restore args on top (reverse order — first spilled is last restored).
             for &t in arg_temps.iter().rev() {
@@ -1341,7 +1355,11 @@ fn resolve_field_name_by_symbol(
     let resolved = em.sema.unify.resolve(ty_idx, &em.sema.types);
     match &em.sema.types[resolved] {
         Type::Record { fields, .. } => {
-            for (i, f) in fields.iter().enumerate() {
+            let mut sorted: Vec<_> = fields.clone();
+            sorted.sort_by(|a, b| {
+                em.interner.resolve(a.name).cmp(em.interner.resolve(b.name))
+            });
+            for (i, f) in sorted.iter().enumerate() {
                 if f.name == name {
                     return u32::try_from(i).map_err(|_| {
                         EmitError::overflow(format!(
@@ -1906,7 +1924,7 @@ fn resolve_variant_tag(em: &mut Emitter<'_>, name: Symbol) -> Result<u32, EmitEr
 }
 
 /// Resolve a named field to its positional index by inspecting the object's type.
-fn resolve_field_name(
+pub(super) fn resolve_field_name(
     em: &Emitter<'_>,
     object_expr: ExprIdx,
     name: Symbol,
@@ -1965,29 +1983,40 @@ fn find_complete_record_type(
     em: &Emitter<'_>,
     partial_fields: &[RecordField],
 ) -> Option<Vec<RecordField>> {
-    let type_defs: Vec<_> = em.sema.defs.iter().filter(|d| d.kind == DefKind::Type).collect();
-    eprintln!("[DBG find_complete] total defs={} type_defs={}", em.sema.defs.len(), type_defs.len());
-    for def in &type_defs {
-        eprintln!("[DBG find_complete] type def: {:?} name={} has_ty={}", def.id, em.interner.resolve(def.name), def.ty_info.ty.is_some());
-    }
     for def in em.sema.defs.iter() {
-        if def.kind != DefKind::Type {
+        // Look at type defs and let bindings that define record types.
+        if !matches!(def.kind, DefKind::Type | DefKind::Let) {
             continue;
         }
         let Some(ty_idx) = def.ty_info.ty else { continue };
         let resolved = em.sema.unify.resolve(ty_idx, &em.sema.types);
         let ty = &em.sema.types[resolved];
-        match ty {
+
+        // Unwrap Type::Named to its underlying type (e.g., Deque['a] → Record).
+        let record_resolved = match ty {
+            Type::Record { .. } => resolved,
+            Type::Named { def: named_def, .. } => {
+                let inner_def = em.sema.defs.iter().find(|d| d.id == *named_def);
+                if let Some(d) = inner_def {
+                    if let Some(inner_ty) = d.ty_info.ty {
+                        em.sema.unify.resolve(inner_ty, &em.sema.types)
+                    } else {
+                        continue;
+                    }
+                } else {
+                    continue;
+                }
+            }
+            _ => continue,
+        };
+
+        match &em.sema.types[record_resolved] {
             Type::Record { rest, .. } => {
-                // Only consider closed records (rest=None) as canonical sources.
                 if rest.is_some() {
                     continue;
                 }
                 let mut full_fields = vec![];
-                let _ = collect_record_fields(em, resolved, &mut full_fields);
-                let full_names: Vec<_> = full_fields.iter().map(|f| em.interner.resolve(f.name).to_string()).collect();
-                eprintln!("[DBG find_complete] def={:?} name={} type=Record fields={full_names:?}", def.id, em.interner.resolve(def.name));
-                // Check that every partial field appears in the full record.
+                let _ = collect_record_fields(em, record_resolved, &mut full_fields);
                 let is_superset = partial_fields.iter().all(|pf| {
                     full_fields.iter().any(|ff| ff.name == pf.name)
                 });
@@ -1995,9 +2024,7 @@ fn find_complete_record_type(
                     return Some(full_fields);
                 }
             }
-            other => {
-                eprintln!("[DBG find_complete] def={:?} name={} type={:?}", def.id, em.interner.resolve(def.name), std::mem::discriminant(other));
-            }
+            _ => continue,
         }
     }
     None
@@ -2013,18 +2040,10 @@ fn resolve_field_in_type(
         Type::Record { .. } => {
             let mut all_fields: Vec<RecordField> = vec![];
             let complete = collect_record_fields(em, resolved, &mut all_fields);
-            let target = em.interner.resolve(name);
             if !complete {
-                let pre_sort: Vec<_> = all_fields.iter().map(|f| em.interner.resolve(f.name).to_string()).collect();
-                // Sort now
                 all_fields.sort_by(|a, b| {
                     em.interner.resolve(a.name).cmp(em.interner.resolve(b.name))
                 });
-                let post_sort: Vec<_> = all_fields.iter().map(|f| em.interner.resolve(f.name).to_string()).collect();
-                let idx = all_fields.iter().position(|f| f.name == name);
-                eprintln!("[DBG] target={target} pre={pre_sort:?} post={post_sort:?} idx={idx:?}");
-                // Undo sort — it will be done again below
-                // Actually, let's not undo. The sort below will be idempotent.
             }
             // If the record is open (incomplete from dep module inference),
             // find the canonical closed record type definition.
@@ -2065,6 +2084,15 @@ fn resolve_field_in_type(
         _ => Err(EmitError::FieldNotFound {
             desc: format!("field `{}` on non-record type", em.interner.resolve(name)).into(),
         }),
+    }
+}
+
+/// Returns true if the family indicates logical (short-circuit) semantics.
+/// Bool → logical; known numeric → bitwise; None → logical (safe default).
+fn is_logical_family(family: Option<TypeFamily>) -> bool {
+    match family {
+        Some(TypeFamily::Bool) | None => true,
+        Some(_) => false,
     }
 }
 

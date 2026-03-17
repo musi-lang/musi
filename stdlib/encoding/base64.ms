@@ -112,7 +112,7 @@ let decode_with := (s, is_url_safe) => (
         let v1 := char_to_value(r1, is_url_safe);
 
         (
-          // Validate v0 and v1 — always required
+          // Validate v0 and v1 - always required
           (has_error <- .True; error <- .Some(.Err(.InvalidChar(r0)))) if v0 = -1
           | (has_error <- .True; error <- .Some(.Err(.InvalidChar(r1)))) if v1 = -1
           | (
