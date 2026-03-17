@@ -244,7 +244,14 @@ pub fn emit_fstr(
     for part in parts {
         match part {
             FStrPart::Text { raw, .. } => {
-                let cv = ConstValue::Str(*raw);
+                let text = em.interner.resolve(*raw);
+                let sym = if text.contains('\\') {
+                    let unescaped = unescape_str(text);
+                    em.interner.intern(&unescaped)
+                } else {
+                    *raw
+                };
+                let cv = ConstValue::Str(sym);
                 let i = em.cp.intern(&cv, em.interner)?;
                 fc.fe.emit_ld_cst(i);
             }
@@ -539,4 +546,30 @@ pub fn emit_cons(
     }
     fc.fe.emit_mk_prd(2, 1)?; // (head, tail)
     Ok(())
+}
+
+/// Process backslash escape sequences in a string literal.
+fn unescape_str(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len());
+    let mut chars = raw.chars();
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            match chars.next() {
+                Some('n') => out.push('\n'),
+                Some('t') => out.push('\t'),
+                Some('r') => out.push('\r'),
+                Some('0') => out.push('\0'),
+                Some('\\') => out.push('\\'),
+                Some('"') => out.push('"'),
+                Some(other) => {
+                    out.push('\\');
+                    out.push(other);
+                }
+                None => out.push('\\'),
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
 }

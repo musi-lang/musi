@@ -36,7 +36,7 @@ t.runner.report(t.runner.run_suite([
     )
   )),
   ("v4 - two calls produce different values", () => (
-    let r := rng.new(1);
+    let r := rng.new(42);
     let u1 := m.v4(r);
     let u2 := m.v4(r);
     t.assertions.assert_ne(u1, u2)

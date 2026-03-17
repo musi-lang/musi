@@ -283,10 +283,19 @@ pub fn exec_ld_idx(frame: &mut Frame, heap: &Heap) -> Result<(), VmError> {
     let arr_val = frame.pop()?;
     let idx = as_usize(idx_val)?;
     let ptr = arr_val.as_ref()?;
-    let arr = heap.get(ptr)?;
-    let v = arr.elems.get(idx).copied().ok_or(VmError::OutOfBounds {
+    let obj = heap.get(ptr)?;
+    // String indexing: return the character at position `idx` as a rune.
+    if let Some(s) = &obj.string {
+        let ch = s.chars().nth(idx).ok_or(VmError::OutOfBounds {
+            index: idx,
+            len: s.chars().count(),
+        })?;
+        frame.stack.push(Value::from_rune(ch));
+        return Ok(());
+    }
+    let v = obj.elems.get(idx).copied().ok_or(VmError::OutOfBounds {
         index: idx,
-        len: arr.elems.len(),
+        len: obj.elems.len(),
     })?;
     frame.stack.push(v);
     Ok(())
