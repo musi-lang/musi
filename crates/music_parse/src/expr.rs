@@ -74,20 +74,20 @@ impl Parser<'_> {
         use TokenKind as T;
 
         let (l, r, op) = match self.peek_kind() {
-            // BP 10 — assign (right-assoc)
+            // BP 10 - assign (right-assoc)
             T::LtDash => (10, 9, B::Assign),
-            // BP 15 — nil coalescing (right-assoc)
+            // BP 15 - nil coalescing (right-assoc)
             T::QuestionQuestion => (15, 14, B::NilCoal),
             T::BangBang => (15, 14, B::ForceCoal),
-            // BP 20 — pipe (left-assoc)
+            // BP 20 - pipe (left-assoc)
             T::PipeGt => (20, 21, B::Pipe),
-            // BP 30 — or (left-assoc)
+            // BP 30 - or (left-assoc)
             T::KwOr => (30, 31, B::Or),
-            // BP 35 — xor (left-assoc)
+            // BP 35 - xor (left-assoc)
             T::KwXor => (35, 36, B::Xor),
-            // BP 40 — and (left-assoc)
+            // BP 40 - and (left-assoc)
             T::KwAnd => (40, 41, B::And),
-            // BP 50 — comparison (non-assoc)
+            // BP 50 - comparison (non-assoc)
             T::Eq => (50, 51, B::Eq),
             T::SlashEq => (50, 51, B::Ne),
             T::Lt => (50, 51, B::Lt),
@@ -95,18 +95,18 @@ impl Parser<'_> {
             T::LtEq => (50, 51, B::Le),
             T::GtEq => (50, 51, B::Ge),
             T::KwIn => (50, 51, B::In),
-            // BP 60 — range (non-assoc)
+            // BP 60 - range (non-assoc)
             T::DotDot => (60, 61, B::RangeInc),
             T::DotDotLt => (60, 61, B::RangeExc),
-            // BP 70 — cons (right-assoc)
+            // BP 70 - cons (right-assoc)
             T::ColonColon => (70, 69, B::Cons),
-            // BP 80 — shift (left-assoc)
+            // BP 80 - shift (left-assoc)
             T::LtLt => (80, 81, B::Shl),
             T::GtGt => (80, 81, B::Shr),
-            // BP 90 — additive (left-assoc)
+            // BP 90 - additive (left-assoc)
             T::Plus => (90, 91, B::Add),
             T::Minus => (90, 91, B::Sub),
-            // BP 100 — multiplicative (left-assoc)
+            // BP 100 - multiplicative (left-assoc)
             T::Star => (100, 101, B::Mul),
             T::Slash => (100, 101, B::Div),
             T::Percent => (100, 101, B::Rem),

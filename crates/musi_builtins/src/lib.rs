@@ -1,4 +1,4 @@
-//! `musi_builtins` — Musi standard library and FFI runtime.
+//! `musi_builtins` - Musi standard library and FFI runtime.
 //!
 //! Provides the [`StdHost`] implementation of [`HostFunctions`] that
 //! bridges `INV_FFI` opcodes to native C functions via `libffi` and

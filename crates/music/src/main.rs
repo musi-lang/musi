@@ -1,4 +1,4 @@
-//! `music` — Musi compiler.
+//! `music` - Musi compiler.
 
 use std::env;
 use std::path::{Path, PathBuf};

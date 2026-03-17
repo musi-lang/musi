@@ -341,7 +341,7 @@ impl Vm {
                 Ok(StepResult::Continue)
             }
 
-            // §5 Locals (WID handled by decode_instruction — operand is already widened)
+            // §5 Locals (WID handled by decode_instruction - operand is already widened)
             Opcode::LD_LOC => {
                 let frame = self.current_frame()?;
                 let slot =
@@ -514,7 +514,7 @@ impl Vm {
                 Ok(StepResult::Continue)
             }
 
-            // §17 Closures — MK_CLO uses packed operand (fn_id_u24 << 8 | upval_count_u8)
+            // §17 Closures - MK_CLO uses packed operand (fn_id_u24 << 8 | upval_count_u8)
             Opcode::MK_CLO => {
                 let (fn_id, upval_count) = musi_bc::unpack_id_arity(operand);
                 let frame = self
@@ -593,7 +593,7 @@ impl Vm {
                 Ok(StepResult::Continue)
             }
 
-            // Control — call / return / halt
+            // Control - call / return / halt
             Opcode::HLT => Err(VmError::Halted),
             Opcode::UNR => Err(malformed!("unr (unreachable) reached at runtime")),
             Opcode::RET => {

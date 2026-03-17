@@ -432,7 +432,7 @@ fn verify_fn(func: &LoadedFn, module: &LoadedModule) -> Result<(), VmError> {
     while ip < code.len() {
         let raw = code[ip];
 
-        // Handle WID prefix — decode inner opcode and verify with widened operand
+        // Handle WID prefix - decode inner opcode and verify with widened operand
         if raw == Opcode::WID {
             let inner_op_byte = code[ip + 1];
             let inner_op = Opcode(inner_op_byte);

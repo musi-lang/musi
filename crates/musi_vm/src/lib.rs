@@ -1,4 +1,4 @@
-//! `musi_vm` — Musi bytecode interpreter.
+//! `musi_vm` - Musi bytecode interpreter.
 //!
 //! Loads and executes `.msbc` binaries produced by the `music_emit` compiler
 //! crate. Has no dependency on any `music_*` compiler crate; operates solely

@@ -288,7 +288,7 @@ impl Resolver<'_> {
             self.resolve_expr(body);
             self.current_scope = parent;
         }
-        // Top-level `let` (body: None) — names already defined in collect_top_level.
+        // Top-level `let` (body: None) - names already defined in collect_top_level.
 
         if let Some(p) = parent_ty_scope {
             self.current_scope = p;

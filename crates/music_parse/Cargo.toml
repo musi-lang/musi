@@ -1,13 +1,16 @@
 [package]
 name = "music_parse"
-description = "Parser for the Musi compiler"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
+description = "Parser for the Musi compiler"
+readme.workspace = true
+homepage.workspace = true
 repository.workspace = true
 license.workspace = true
-readme.workspace = true
 keywords = ["compiler", "musi", "parser"]
 categories = ["development-tools"]
+publish.workspace = true
 
 [dependencies]
 music_ast = { path = "../music_ast" }

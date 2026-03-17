@@ -175,7 +175,7 @@ impl Value {
         (self.0 & TAG_MASK) == TAG_FN
     }
 
-    /// Top 16 bits — type discriminator for NaN-boxed dispatch.
+    /// Top 16 bits - type discriminator for NaN-boxed dispatch.
     #[must_use]
     #[allow(clippy::cast_possible_truncation, clippy::as_conversions)] // u64 >> 48 always fits u16
     pub const fn tag(self) -> u16 {

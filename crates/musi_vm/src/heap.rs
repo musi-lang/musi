@@ -17,7 +17,7 @@ pub struct HeapObject {
     pub gc_flags: u8,
     /// Product fields or variant payload fields.
     pub fields: Vec<Value>,
-    /// Variant tag — `Some(t)` for sum variants, `None` for products.
+    /// Variant tag - `Some(t)` for sum variants, `None` for products.
     pub tag: Option<u32>,
     /// Array elements (non-empty only for array objects).
     pub elems: Vec<Value>,
@@ -27,7 +27,7 @@ pub struct HeapObject {
     pub wide_int: Option<i64>,
 }
 
-/// The VM heap — a vector of objects indexed by their allocation address.
+/// The VM heap - a vector of objects indexed by their allocation address.
 #[derive(Default)]
 pub struct Heap {
     objects: Vec<Option<HeapObject>>,

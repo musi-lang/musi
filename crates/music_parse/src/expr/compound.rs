@@ -38,7 +38,7 @@ impl Parser<'_> {
             };
         }
 
-        // (mut ...) can only be a lambda — parse as param list directly
+        // (mut ...) can only be a lambda - parse as param list directly
         if self.at(TokenKind::KwMut) {
             return self.parse_forced_fn_literal(start);
         }
@@ -144,7 +144,7 @@ impl Parser<'_> {
         }
     }
 
-    /// Parse `(mut param, ...) => body` — called when `(` was consumed and `mut` is next.
+    /// Parse `(mut param, ...) => body` - called when `(` was consumed and `mut` is next.
     fn parse_forced_fn_literal(&mut self, start: u32) -> Expr {
         let mut params = vec![self.parse_param()];
         while self.eat(TokenKind::Comma) {

@@ -1,4 +1,4 @@
-//! `musi` — Musi bytecode interpreter.
+//! `musi` - Musi bytecode interpreter.
 //!
 //! Loads and executes `.msbc` binaries produced by the `music` compiler.
 //!

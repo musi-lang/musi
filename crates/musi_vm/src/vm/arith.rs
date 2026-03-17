@@ -73,7 +73,7 @@ macro_rules! cmp_wide {
 #[allow(clippy::float_cmp, clippy::too_many_lines)]
 pub fn exec(op: Opcode, frame: &mut Frame, heap: &mut Heap) -> Result<bool, VmError> {
     match op {
-        // §INT — Signed integer arithmetic (wide)
+        // §INT - Signed integer arithmetic (wide)
         Opcode::INT_ADD => binary_op_wide!(frame, heap, int wrapping_add),
         Opcode::INT_SUB => binary_op_wide!(frame, heap, int wrapping_sub),
         Opcode::INT_MUL => binary_op_wide!(frame, heap, int wrapping_mul),
@@ -87,14 +87,14 @@ pub fn exec(op: Opcode, frame: &mut Frame, heap: &mut Heap) -> Result<bool, VmEr
                 .push(Value::from_int_wide(n.wrapping_neg(), heap));
         }
 
-        // §NAT — Unsigned integer arithmetic (wide)
+        // §NAT - Unsigned integer arithmetic (wide)
         Opcode::NAT_ADD => binary_op_wide!(frame, heap, nat wrapping_add),
         Opcode::NAT_SUB => binary_op_wide!(frame, heap, nat wrapping_sub),
         Opcode::NAT_MUL => binary_op_wide!(frame, heap, nat wrapping_mul),
         Opcode::NAT_DIV => div_op_wide!(frame, heap, nat /),
         Opcode::NAT_REM => div_op_wide!(frame, heap, nat %),
 
-        // §FLT — Float arithmetic
+        // §FLT - Float arithmetic
         Opcode::FLT_ADD => binary_op!(frame, float_op+),
         Opcode::FLT_SUB => binary_op!(frame, float_op -),
         Opcode::FLT_MUL => binary_op!(frame, float_op *),
@@ -105,7 +105,7 @@ pub fn exec(op: Opcode, frame: &mut Frame, heap: &mut Heap) -> Result<bool, VmEr
             frame.stack.push(Value::from_float(-a.as_float()?));
         }
 
-        // §BIT — Bitwise / logical (wide)
+        // §BIT - Bitwise / logical (wide)
         Opcode::BIT_AND => {
             let (b, a) = frame.pop2()?;
             let ai = a.as_int_wide(heap)?;
@@ -152,7 +152,7 @@ pub fn exec(op: Opcode, frame: &mut Frame, heap: &mut Heap) -> Result<bool, VmEr
             frame.stack.push(Value::from_nat_wide(result, heap));
         }
 
-        // §CMP — Comparison — equality uses fast bit-path + wide fallback
+        // §CMP - Comparison - equality uses fast bit-path + wide fallback
         Opcode::CMP_EQ => {
             let (b, a) = frame.pop2()?;
             let eq = a.0 == b.0 || wide_values_equal(a, b, heap);
@@ -176,7 +176,7 @@ pub fn exec(op: Opcode, frame: &mut Frame, heap: &mut Heap) -> Result<bool, VmEr
         Opcode::CMP_FGT => binary_op!(frame, cmp_float >),
         Opcode::CMP_FGE => binary_op!(frame, cmp_float >=),
 
-        // §CNV — Conversion (wide)
+        // §CNV - Conversion (wide)
         Opcode::CNV_ITF => {
             let a = frame.pop()?;
             #[allow(clippy::as_conversions, clippy::cast_precision_loss)]

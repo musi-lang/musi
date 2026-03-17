@@ -1,4 +1,4 @@
-//! `music run` — compile and run a `.ms` source file.
+//! `music run` - compile and run a `.ms` source file.
 
 use std::{path::Path, process};
 

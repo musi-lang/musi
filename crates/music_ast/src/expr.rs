@@ -1,4 +1,4 @@
-//! Expression nodes — the core of the AST.
+//! Expression nodes - the core of the AST.
 
 #[cfg(test)]
 mod tests;

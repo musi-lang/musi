@@ -111,7 +111,7 @@ pub enum TokenKind {
 
     // Identifiers
     Ident,   // regular identifier
-    TyIdent, // 'T, 'a — type variable
+    TyIdent, // 'T, 'a - type variable
 
     // Sentinel
     Eof,

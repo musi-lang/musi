@@ -13,7 +13,7 @@ use crate::vm::Frame;
 /// Sentinel `type_id` for closure heap objects.
 pub const CLOSURE_TYPE_ID: u32 = 0xFFFF_FFFE;
 
-// Type pool tags (§11.3 of spec) — used for runtime type matching.
+// Type pool tags (§11.3 of spec) - used for runtime type matching.
 const TYPE_TAG_UNIT: u8 = 0x01;
 const TYPE_TAG_BOOL: u8 = 0x02;
 const TYPE_TAG_I8: u8 = 0x03;
@@ -153,7 +153,7 @@ pub fn const_to_value(c: &LoadedConst, heap: &mut Heap) -> Value {
     }
 }
 
-/// §5 — Load/store locals and constants.
+/// §5 - Load/store locals and constants.
 pub fn exec_ld_cst(
     operand: u32,
     frame: &mut Frame,
@@ -169,7 +169,7 @@ pub fn exec_ld_cst(
     Ok(())
 }
 
-/// §5 — Struct and variant construction/access.
+/// §5 - Struct and variant construction/access.
 pub fn exec_mk_prd(operand: u32, frame: &mut Frame, heap: &mut Heap) -> Result<(), VmError> {
     let n = usize::try_from(operand).map_err(|_| malformed!("mk.prd field count overflow"))?;
     let mut fields: Vec<Value> = Vec::with_capacity(n);
@@ -247,7 +247,7 @@ pub fn exec_cmp_tag(operand: u32, frame: &mut Frame, heap: &Heap) -> Result<(), 
     Ok(())
 }
 
-/// §9 — Array and heap operations.
+/// §9 - Array and heap operations.
 pub fn exec_ld_tag(frame: &mut Frame, heap: &Heap) -> Result<(), VmError> {
     let variant_val = frame.pop()?;
     let ptr = variant_val.as_ref()?;
@@ -333,7 +333,7 @@ pub fn exec_st_fld(operand: u32, frame: &mut Frame, heap: &mut Heap) -> Result<(
     Ok(())
 }
 
-/// §12 — Global variable load/store.
+/// §12 - Global variable load/store.
 pub fn exec_ld_glb(
     operand: u32,
     frame: &mut Frame,
@@ -361,7 +361,7 @@ pub fn exec_st_glb(
     Ok(())
 }
 
-/// §16 — Runtime type checking.
+/// §16 - Runtime type checking.
 pub fn exec_type_chk(
     type_id: u32,
     frame: &mut Frame,
@@ -398,7 +398,7 @@ pub fn exec_type_chk(
     Ok(())
 }
 
-/// §17 — Closure operations.
+/// §17 - Closure operations.
 ///
 /// For v2, `MK_CLO` uses packed operand `(fn_id_u24 << 8) | upval_count_u8`.
 /// The `fn_id` and `upval_count` are passed already unpacked from the caller.
@@ -451,7 +451,7 @@ pub fn exec_ld_upv(operand: u32, frame: &mut Frame, heap: &Heap) -> Result<(), V
     Ok(())
 }
 
-/// §11 — Dynamic dispatch resolution.
+/// §11 - Dynamic dispatch resolution.
 ///
 /// Result of resolving an `INV_DYN` callee.
 pub enum DynCall {

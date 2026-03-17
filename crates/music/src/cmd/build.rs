@@ -1,4 +1,4 @@
-//! `music build` — compile a `.ms` source file to `.msbc` bytecode.
+//! `music build` - compile a `.ms` source file to `.msbc` bytecode.
 
 use std::{fs, path::Path, process};
 

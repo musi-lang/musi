@@ -153,7 +153,7 @@ impl ModuleGraph {
 
         // Build reverse adjacency: for each module, count how many modules
         // depend on it (i.e. import it). We want leaves (modules with no
-        // dependents importing them... actually no) — we want to process
+        // dependents importing them... actually no) - we want to process
         // importees before importers. Use reverse-edge Kahn's: count how
         // many modules each module *imports* (out-degree in original graph),
         // then start from modules that import nothing (leaves).

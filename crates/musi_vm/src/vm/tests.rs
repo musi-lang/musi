@@ -1,6 +1,6 @@
 //! VM integration tests.
 //!
-//! All tests build minimal `.msbc` binaries from raw bytes — no compiler
+//! All tests build minimal `.msbc` binaries from raw bytes - no compiler
 //! crate dependency.
 #![allow(clippy::panic)]
 
@@ -831,7 +831,7 @@ fn test_gc_collects_unreachable_objects() {
                 0, // push 1
                 Opcode::MK_PRD.0,
                 1,             // mk.prd 1 -> ref (heap object)
-                Opcode::POP.0, // discard the ref — object is now unreachable
+                Opcode::POP.0, // discard the ref - object is now unreachable
                 Opcode::LD_CST.0,
                 0, // push 1 (keep something reachable)
                 Opcode::MK_PRD.0,
@@ -1996,7 +1996,7 @@ fn test_ld_pay_extracts_variant_payload() {
 
 #[test]
 fn test_int_rem() {
-    // 7 % 3 = 1 — INT_REM is zone 0 (0x14), no operand
+    // 7 % 3 = 1 - INT_REM is zone 0 (0x14), no operand
     let bytes = make_msbc(
         &[],
         &[fn_def(
@@ -2019,7 +2019,7 @@ fn test_int_rem() {
 
 #[test]
 fn test_nat_add() {
-    // 3 + 4 = 7 — NAT_ADD is zone 0 (0x18), no operand
+    // 3 + 4 = 7 - NAT_ADD is zone 0 (0x18), no operand
     let bytes = make_msbc(
         &[],
         &[fn_def(
@@ -2134,7 +2134,7 @@ fn test_nat_rem() {
 
 #[test]
 fn test_bit_sru() {
-    // Unsigned shift right: 16 >> 2 = 4 — BIT_SRU requires nat operands
+    // Unsigned shift right: 16 >> 2 = 4 - BIT_SRU requires nat operands
     let bytes = make_msbc(
         &[],
         &[fn_def(
@@ -2295,7 +2295,7 @@ fn test_cmp_geu() {
 
 #[test]
 fn test_cmp_flt() {
-    // 1.0 < 2.0 = true — load int constants, convert to float, compare
+    // 1.0 < 2.0 = true - load int constants, convert to float, compare
     let bytes = make_msbc(
         &[ConstEntry::I32(1), ConstEntry::I32(2)],
         &[fn_def(
@@ -2395,7 +2395,7 @@ fn test_cmp_fge() {
 
 #[test]
 fn test_flt_div() {
-    // 10.0 / 2.0 = 5.0 — convert back to int via CNV_FTI
+    // 10.0 / 2.0 = 5.0 - convert back to int via CNV_FTI
     let bytes = make_msbc(
         &[ConstEntry::I32(10), ConstEntry::I32(2)],
         &[fn_def(
@@ -2421,7 +2421,7 @@ fn test_flt_div() {
 
 #[test]
 fn test_flt_rem() {
-    // 7.0 % 3.0 = 1.0 — convert back to int via CNV_FTI
+    // 7.0 % 3.0 = 1.0 - convert back to int via CNV_FTI
     let bytes = make_msbc(
         &[ConstEntry::I32(7), ConstEntry::I32(3)],
         &[fn_def(
@@ -2447,7 +2447,7 @@ fn test_flt_rem() {
 
 #[test]
 fn test_swp() {
-    // Push 10, push 20, SWP — stack becomes [20(bottom), 10(top)]. RET returns 10.
+    // Push 10, push 20, SWP - stack becomes [20(bottom), 10(top)]. RET returns 10.
     let bytes = make_msbc(
         &[ConstEntry::I32(10), ConstEntry::I32(20)],
         &[fn_def(
@@ -2483,10 +2483,10 @@ fn test_ld_ut() {
 fn test_jif_long() {
     // JIF (long, zone 3 = 5 bytes) forward past a HLT, then load 42 and return.
     // Layout:
-    //   offset 0: ld.cst 0       (2 bytes) — push 1 (truthy)
-    //   offset 2: jif +1,0,0,0   (5 bytes) — ip after = 7, target = 7+1 = 8
-    //   offset 7: hlt             (1 byte)  — skipped
-    //   offset 8: ld.cst 1       (2 bytes) — push 42
+    //   offset 0: ld.cst 0       (2 bytes) - push 1 (truthy)
+    //   offset 2: jif +1,0,0,0   (5 bytes) - ip after = 7, target = 7+1 = 8
+    //   offset 7: hlt             (1 byte)  - skipped
+    //   offset 8: ld.cst 1       (2 bytes) - push 42
     //   offset 10: ret            (1 byte)
     let bytes = make_msbc(
         &[ConstEntry::I32(1), ConstEntry::I32(42)],
@@ -2520,14 +2520,14 @@ fn test_jmp_sh_backward() {
     //
     // Layout (LOOP starts at offset 0):
     //   offset  0: ld.loc 0        (2 bytes)
-    //   offset  2: ld.cst 0        (2 bytes) — push 0
-    //   offset  4: cmp.eq          (1 byte)  — counter == 0?
-    //   offset  5: jif +9,0,0,0    (5 bytes) — ip after = 10, target = 10+9 = 19 (EXIT)
+    //   offset  2: ld.cst 0        (2 bytes) - push 0
+    //   offset  4: cmp.eq          (1 byte)  - counter == 0?
+    //   offset  5: jif +9,0,0,0    (5 bytes) - ip after = 10, target = 10+9 = 19 (EXIT)
     //   offset 10: ld.loc 0        (2 bytes)
-    //   offset 12: ld.cst 1        (2 bytes) — push 1
+    //   offset 12: ld.cst 1        (2 bytes) - push 1
     //   offset 14: int.sub         (1 byte)
     //   offset 15: st.loc 0        (2 bytes)
-    //   offset 17: jmp.sh -19      (2 bytes) — ip after = 19, target = 19 + (-19) = 0
+    //   offset 17: jmp.sh -19      (2 bytes) - ip after = 19, target = 19 + (-19) = 0
     // EXIT:
     //   offset 19: ld.loc 0        (2 bytes)
     //   offset 21: ret             (1 byte)
@@ -2575,10 +2575,10 @@ fn test_jif_sh_forward() {
     // consts: 0 = I32(1), 1 = I32(42)
     //
     // Layout:
-    //   offset 0: ld.cst 0    (2 bytes) — push 1 (truthy)
-    //   offset 2: jif.sh +1   (2 bytes) — ip after = 4, target = 4+1 = 5
-    //   offset 4: hlt         (1 byte)  — skipped
-    //   offset 5: ld.cst 1    (2 bytes) — push 42
+    //   offset 0: ld.cst 0    (2 bytes) - push 1 (truthy)
+    //   offset 2: jif.sh +1   (2 bytes) - ip after = 4, target = 4+1 = 5
+    //   offset 4: hlt         (1 byte)  - skipped
+    //   offset 5: ld.cst 1    (2 bytes) - push 42
     //   offset 7: ret         (1 byte)
     let bytes = make_msbc(
         &[ConstEntry::I32(1), ConstEntry::I32(42)],
@@ -2609,13 +2609,13 @@ fn test_jnf_sh_backward() {
     //
     // Layout (LOOP starts at offset 0):
     //   offset  0: ld.loc 0    (2 bytes)
-    //   offset  2: ld.cst 1    (2 bytes) — push 1
-    //   offset  4: int.sub     (1 byte)  — counter - 1
+    //   offset  2: ld.cst 1    (2 bytes) - push 1
+    //   offset  4: int.sub     (1 byte)  - counter - 1
     //   offset  5: st.loc 0    (2 bytes)
     //   offset  7: ld.loc 0    (2 bytes)
-    //   offset  9: ld.cst 0    (2 bytes) — push 0
-    //   offset 11: cmp.eq      (1 byte)  — counter == 0?
-    //   offset 12: jnf.sh -14  (2 bytes) — ip after = 14, not-zero → target = 14+(-14) = 0
+    //   offset  9: ld.cst 0    (2 bytes) - push 0
+    //   offset 11: cmp.eq      (1 byte)  - counter == 0?
+    //   offset 12: jnf.sh -14  (2 bytes) - ip after = 14, not-zero → target = 14+(-14) = 0
     // EXIT:
     //   offset 14: ld.loc 0    (2 bytes)
     //   offset 16: ret         (1 byte)

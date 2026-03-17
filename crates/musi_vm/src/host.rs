@@ -1,6 +1,6 @@
 //! Host function trait for FFI dispatch.
 //!
-//! The VM itself is pure — it delegates foreign calls to an external
+//! The VM itself is pure - it delegates foreign calls to an external
 //! `HostFunctions` implementation provided by the embedder.
 
 use crate::error::VmError;

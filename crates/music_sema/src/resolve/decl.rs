@@ -29,7 +29,7 @@ impl Resolver<'_> {
 
         // Export class members to the enclosing scope (Haskell-style).
         // Operator members (sentinel Symbol(u32::MAX)) are registered in class_op_members
-        // instead of the name scope — they're resolved via operator dispatch.
+        // instead of the name scope - they're resolved via operator dispatch.
         for (member_name, def_id) in member_defs {
             if member_name == Symbol(u32::MAX) {
                 if let Some(class_def) = class_def {

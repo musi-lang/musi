@@ -1,7 +1,7 @@
 //! Semantic type representation.
 //!
 //! Types are arena-allocated via `Arena<Type>`, so recursive positions use
-//! `TypeIdx` (which is `Copy`).  There is no `PrimTy` enum — all types
+//! `TypeIdx` (which is `Copy`).  There is no `PrimTy` enum - all types
 //! including `Int`, `Bool`, `String` are represented as `Type::Named`.
 
 #[cfg(test)]
@@ -291,7 +291,7 @@ impl fmt::Display for TypeDisplay<'_> {
                     match &self.arena[rest_resolved] {
                         Type::Var(_) | Type::Rigid(_) => write!(f, ", ...")?,
                         Type::Record { .. } => {
-                            // rest is a concrete record — display its fields inline
+                            // rest is a concrete record - display its fields inline
                             write!(f, ", ")?;
                             self.write_ty(f, rest_resolved)?;
                         }

@@ -147,7 +147,7 @@ impl Parser<'_> {
         }
     }
 
-    /// Parses `expr!` — force unwrap.
+    /// Parses `expr!` - force unwrap.
     fn parse_expr_force_unwrap(&mut self, lhs: Expr, start: u32) -> Expr {
         let _bang = self.bump();
         let operand = self.alloc_expr(lhs);
@@ -158,7 +158,7 @@ impl Parser<'_> {
         }
     }
 
-    /// Parses `expr?` — error propagation.
+    /// Parses `expr?` - error propagation.
     fn parse_expr_propagate(&mut self, lhs: Expr, start: u32) -> Expr {
         let _q = self.bump();
         let operand = self.alloc_expr(lhs);
@@ -169,7 +169,7 @@ impl Parser<'_> {
         }
     }
 
-    /// Parses `expr!.field` — forced unwrap field access.
+    /// Parses `expr!.field` - forced unwrap field access.
     ///
     /// Desugared to a force-unwrap followed by a field access.
     fn parse_expr_force_field(&mut self, lhs: Expr, start: u32) -> Expr {
@@ -190,7 +190,7 @@ impl Parser<'_> {
         }
     }
 
-    /// Parses `expr :? Type` or `expr :? Type as ident` — type test.
+    /// Parses `expr :? Type` or `expr :? Type as ident` - type test.
     fn parse_expr_type_test(&mut self, lhs: Expr, start: u32) -> Expr {
         let _cq = self.bump();
         let ty = self.parse_alloc_ty();
@@ -209,7 +209,7 @@ impl Parser<'_> {
         }
     }
 
-    /// Parses `expr :?> Type` — type cast.
+    /// Parses `expr :?> Type` - type cast.
     fn parse_expr_type_cast(&mut self, lhs: Expr, start: u32) -> Expr {
         let _cqg = self.bump();
         let ty = self.parse_alloc_ty();

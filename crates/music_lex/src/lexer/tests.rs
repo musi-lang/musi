@@ -425,7 +425,7 @@ fn test_fstring_multiple_interpolations() {
 
 #[test]
 fn test_fstring_nested_braces() {
-    // f"{ {1, 2} }" — the inner { } should be tracked by brace_depth
+    // f"{ {1, 2} }" - the inner { } should be tracked by brace_depth
     let kinds = lex_kinds(r#"f"{ {1, 2} }""#);
     assert_eq!(kinds[0], TokenKind::FStringHead); // f"{
     assert_eq!(kinds[1], TokenKind::LBrace); // {

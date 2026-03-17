@@ -46,7 +46,7 @@ struct CfvCtx<'a, 'b> {
     seen: &'a mut HashSet<DefId>,
 }
 
-/// Walk the AST body and collect free variables — names that reference
+/// Walk the AST body and collect free variables - names that reference
 /// definitions in an enclosing scope rather than local params/bindings.
 fn collect_free_vars(
     em: &Emitter<'_>,
@@ -70,7 +70,7 @@ fn collect_free_vars(
 }
 
 /// Check whether `body` contains a free reference to `target` (i.e. the
-/// binding being defined references itself — a recursive closure).
+/// binding being defined references itself - a recursive closure).
 fn body_references_def(em: &Emitter<'_>, body: ExprIdx, target: DefId) -> bool {
     let local_defs = HashSet::new();
     let mut parent_locals = HashMap::new();
@@ -347,7 +347,7 @@ pub fn emit_expr_tail(
         } => {
             // If the sema resolved this field expression directly to a DefId
             // (e.g. import field chains like `t.runner.report`), emit it as a
-            // direct name reference — no runtime field access needed.
+            // direct name reference - no runtime field access needed.
             if let Some(&def_id) = em.expr_defs().get(&expr_idx) {
                 if let Some(&fn_id) = em.fn_map.get(&def_id) {
                     let cv = ConstValue::FnRef(fn_id);
@@ -570,7 +570,7 @@ fn emit_let(
             if let Pat::Bind { span, .. } = &em.ast.pats[fields.pat] {
                 let span = *span;
                 if let Some(&def_id) = em.pat_defs().get(&span) {
-                    // Already registered by scan phase — compiled as top-level fn.
+                    // Already registered by scan phase - compiled as top-level fn.
                     if em.fn_map.contains_key(&def_id) {
                         return body.map_or(Ok(false), |body_idx| {
                             emit_expr_tail(em, fc, body_idx, is_tail)
@@ -627,7 +627,7 @@ fn emit_letrec_fn(
     debug_assert!(prev.is_none(), "duplicate local slot for letrec def");
     let _ = fc.ref_locals.insert(def_id);
 
-    // 2. Emit the closure (standard path — now finds self in parent_locals).
+    // 2. Emit the closure (standard path - now finds self in parent_locals).
     let produced = emit_fn(em, fc, params, fn_body)?;
     if !produced {
         return Ok(());
@@ -700,7 +700,7 @@ fn emit_unary(
         UnaryOp::Do => {
             // emit_expr_tail routes Do before calling emit_unary; reaching here is a bug.
             Err(EmitError::UnsupportedFeature {
-                desc: "UnaryOp::Do reached emit_unary — caller must handle Do before dispatch"
+                desc: "UnaryOp::Do reached emit_unary - caller must handle Do before dispatch"
                     .into(),
             })
         }
@@ -749,7 +749,7 @@ fn emit_field(
         fc.fe.emit_mk_var(em.some_tag, 1);
         fc.fe.emit_jmp(end_label);
 
-        // None path: receiver was not Some — produce a zero-payload variant as None
+        // None path: receiver was not Some - produce a zero-payload variant as None
         fc.fe.emit_label(none_label);
         fc.fe.emit_ld_loc(tmp);
 
@@ -815,7 +815,7 @@ fn lower_ast_ty_to_type_id(em: &mut Emitter<'_>, ty: TyIdx) -> Option<u32> {
     };
     let wk = &em.sema.well_known;
     let name_str = em.interner.resolve(name);
-    // Well-known primitive types — match by name so they work even without sema ty_info.
+    // Well-known primitive types - match by name so they work even without sema ty_info.
     match name_str {
         "Bool" => return em.tp.lower_well_known_def(wk.bool, wk),
         "Int" | "Int64" => return em.tp.lower_well_known_def(wk.ints.int, wk),
@@ -862,7 +862,7 @@ fn emit_type_test(
     if let Some(type_id) = lower_ast_ty_to_type_id(em, ty) {
         fc.fe.emit_type_chk(type_id);
     } else {
-        // Type couldn't be resolved — fall back to always-true.
+        // Type couldn't be resolved - fall back to always-true.
         fc.fe.emit_pop();
         let cv = ConstValue::Bool(true);
         let i = em.cp.intern(&cv, em.interner)?;
@@ -884,7 +884,7 @@ fn emit_type_cast(
         return Ok(false);
     }
     let Some(type_id) = lower_ast_ty_to_type_id(em, ty) else {
-        // Can't resolve type — leave value on stack, assume caller knows what they're doing.
+        // Can't resolve type - leave value on stack, assume caller knows what they're doing.
         return Ok(true);
     };
     // Duplicate so we still have the value after the check.
@@ -1014,7 +1014,7 @@ fn emit_primitive_binop(
             let family = classify_type_family(em, left);
             let opcode = map_binop(op, family)?;
             fc.fe.emit_binop(opcode);
-            // Comparison operators produce bool, not int — skip narrow truncation.
+            // Comparison operators produce bool, not int - skip narrow truncation.
             if !matches!(
                 op,
                 BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge
@@ -1122,7 +1122,7 @@ fn emit_call(
             } else if let Some(&slot) = em.global_map.get(&def_id) {
                 fc.fe.emit_ld_glb(slot);
             }
-            // Restore args on top (reverse order — first spilled is last restored).
+            // Restore args on top (reverse order - first spilled is last restored).
             for &t in arg_temps.iter().rev() {
                 fc.fe.emit_ld_loc(t);
             }
@@ -1838,7 +1838,7 @@ fn collect_record_fields(em: &Emitter<'_>, ty_idx: TypeIdx, out: &mut Vec<Record
         }
         rest.is_none_or(|rest_idx| collect_record_fields(em, rest_idx, out))
     } else {
-        false // rest resolved to non-record (unbound var) — incomplete
+        false // rest resolved to non-record (unbound var) - incomplete
     }
 }
 
@@ -1913,7 +1913,7 @@ fn resolve_field_in_type(
             if !complete && let Some(full) = find_complete_record_type(em, &all_fields) {
                 all_fields = full;
             }
-            // Sort by name string for canonical ordering — matches emit_record_lit_fixed.
+            // Sort by name string for canonical ordering - matches emit_record_lit_fixed.
             all_fields.sort_by(|a, b| em.interner.resolve(a.name).cmp(em.interner.resolve(b.name)));
             for (i, f) in all_fields.iter().enumerate() {
                 if f.name == name {
@@ -2471,7 +2471,7 @@ fn emit_dict_for_call(
                 });
             }
         } else {
-            // Type is still a variable — forward our own dictionary
+            // Type is still a variable - forward our own dictionary
             if let Some(&dict_slot) = fc.dict_slots.get(&constraint.class) {
                 fc.fe.emit_ld_loc(dict_slot);
             } else {

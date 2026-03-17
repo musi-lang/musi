@@ -195,7 +195,7 @@ impl FnEmitter {
 
     /// Emit a tail call with packed operand: `(fn_id_u24 << 8) | arity_u8`.
     pub fn emit_inv_tail(&mut self, fn_id: u32, _effectful: bool) {
-        // Arity 0 as default — the VM reads param_count from the function anyway
+        // Arity 0 as default - the VM reads param_count from the function anyway
         let packed = pack_id_arity(fn_id, 0);
         encode_u32(&mut self.code, Opcode::INV_TAL, packed);
     }
@@ -248,26 +248,26 @@ impl FnEmitter {
         self.pop_n(3);
     }
 
-    /// Emit `mk.arr type_id` — pops a length value from the stack, allocates array, pushes ref.
+    /// Emit `mk.arr type_id` - pops a length value from the stack, allocates array, pushes ref.
     /// Net stack effect: 0 (pop length, push ref). Caller must push the length first.
     pub fn emit_mk_arr(&mut self, type_id: u32) {
         encode_u32(&mut self.code, Opcode::MK_ARR, type_id);
         // pops 1 (length), pushes 1 (ref) -> net 0
     }
 
-    /// Emit `int.add` — pops two integers, pushes their sum. Net stack: -1.
+    /// Emit `int.add` - pops two integers, pushes their sum. Net stack: -1.
     pub fn emit_i_add(&mut self) {
         encode_no_operand(&mut self.code, Opcode::INT_ADD);
         self.pop_n(1);
     }
 
-    /// Emit `alc.ref` — pops initial value, pushes ref. Net stack: 0.
+    /// Emit `alc.ref` - pops initial value, pushes ref. Net stack: 0.
     pub fn emit_alc_ref(&mut self, type_id: u32) {
         encode_u32(&mut self.code, Opcode::ALC_REF, type_id);
         // pops initial value, pushes ref -> net 0
     }
 
-    /// Emit `st.fld` — pops [obj, value]. Net stack: -2.
+    /// Emit `st.fld` - pops [obj, value]. Net stack: -2.
     pub fn emit_st_fld(&mut self, index: u32) -> Result<(), EmitError> {
         let i = u8::try_from(index).map_err(|_| EmitError::OperandOverflow {
             desc: "field index exceeds 255".into(),
@@ -277,7 +277,7 @@ impl FnEmitter {
         Ok(())
     }
 
-    /// Emit `typ.chk type_id` — pops value, pushes bool. Net stack: 0.
+    /// Emit `typ.chk type_id` - pops value, pushes bool. Net stack: 0.
     pub fn emit_type_chk(&mut self, type_id: u32) {
         encode_u32(&mut self.code, Opcode::TYP_CHK, type_id);
         // pops 1, pushes 1 -> net 0
@@ -314,7 +314,7 @@ impl FnEmitter {
         self.pop_n(1);
     }
 
-    /// Emit `tsk.spn fn_id` — spawn a task running `fn_id`, popping `arg_count` args from the
+    /// Emit `tsk.spn fn_id` - spawn a task running `fn_id`, popping `arg_count` args from the
     /// caller's stack and pushing a task handle.
     pub fn emit_tsk_spn(&mut self, fn_id: u32, arg_count: i32) {
         encode_u32(&mut self.code, Opcode::TSK_SPN, fn_id);
@@ -322,25 +322,25 @@ impl FnEmitter {
         self.push_n(1);
     }
 
-    /// Emit `tsk.awt` — pop task handle, push its result. Net stack: 0.
+    /// Emit `tsk.awt` - pop task handle, push its result. Net stack: 0.
     pub fn emit_tsk_awt(&mut self) {
         encode_no_operand(&mut self.code, Opcode::TSK_AWT);
     }
 
-    /// Emit `tsk.cmk` — create a channel, pushing its handle. Net stack: +1.
+    /// Emit `tsk.cmk` - create a channel, pushing its handle. Net stack: +1.
     pub fn emit_tsk_cmk(&mut self) {
         encode_u32(&mut self.code, Opcode::TSK_CMK, 0);
         self.push_n(1);
     }
 
-    /// Emit `tsk.chs` — pop [chan, value], push unit. Net stack: -1.
+    /// Emit `tsk.chs` - pop [chan, value], push unit. Net stack: -1.
     pub fn emit_tsk_chs(&mut self) {
         encode_u32(&mut self.code, Opcode::TSK_CHS, 0);
         self.pop_n(2);
         self.push_n(1);
     }
 
-    /// Emit `tsk.chr` — pop chan, push received value. Net stack: 0.
+    /// Emit `tsk.chr` - pop chan, push received value. Net stack: 0.
     pub fn emit_tsk_chr(&mut self) {
         encode_u32(&mut self.code, Opcode::TSK_CHR, 0);
     }
@@ -358,7 +358,7 @@ impl FnEmitter {
         Ok(())
     }
 
-    /// Emit `ld.upv idx` — load upvalue from current closure. Net stack: +1.
+    /// Emit `ld.upv idx` - load upvalue from current closure. Net stack: +1.
     pub fn emit_ld_upv(&mut self, idx: u8) {
         encode_u8(&mut self.code, Opcode::LD_UPV, idx);
         self.push_n(1);

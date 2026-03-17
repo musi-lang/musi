@@ -24,7 +24,7 @@ impl Parser<'_> {
         let (first, first_eff) = self.parse_ty_eff();
 
         if !self.at(TokenKind::DashGt) && !self.at(TokenKind::TildeGt) {
-            // No arrow follows — discard any effect set (it only applies to fn types).
+            // No arrow follows - discard any effect set (it only applies to fn types).
             return first;
         }
 
@@ -234,7 +234,7 @@ impl Parser<'_> {
         };
         let _rb = self.expect(TokenKind::RBracket);
         // Use parse_ty_base (not parse_ty) so that `+` and `->` are not
-        // consumed greedily — they belong to the enclosing context.
+        // consumed greedily - they belong to the enclosing context.
         // Complex element types need parentheses: `[](Int -> Bool)`.
         let elem = self.parse_ty_base();
         let elem_idx = self.alloc_ty(elem);

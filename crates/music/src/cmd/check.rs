@@ -1,4 +1,4 @@
-//! `music check` — lex, parse, and type-check a `.ms` source file.
+//! `music check` - lex, parse, and type-check a `.ms` source file.
 
 use std::{path::Path, process};
 

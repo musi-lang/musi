@@ -164,7 +164,7 @@ impl Parser<'_> {
     }
 
     /// Parses `ident | op_ident`.
-    /// `op_ident = '(' op_chars ')'` — e.g. `(+)`, `(::)`.
+    /// `op_ident = '(' op_chars ')'` - e.g. `(+)`, `(::)`.
     fn parse_op_or_ident(&mut self) -> Symbol {
         if self.at(TokenKind::LParen) {
             let _lp = self.bump();

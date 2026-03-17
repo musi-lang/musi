@@ -70,7 +70,7 @@ fn exec_cont_save(op_id: u32, frame: &Frame, effects: &[LoadedEffect]) -> ContAc
         };
     }
 
-    // Not found in current frame — request cross-frame search.
+    // Not found in current frame - request cross-frame search.
     ContAction::CrossFrameSearch {
         effect_id: search_id_u8,
         op_id,
@@ -89,13 +89,13 @@ pub fn resolve_marker_id(op_id: u32, effects: &[LoadedEffect]) -> u32 {
 /// What the continuation dispatcher wants the main loop to do after handling an opcode.
 #[derive(Debug)]
 pub enum ContAction {
-    /// Opcode not in this group — try the next dispatcher.
+    /// Opcode not in this group - try the next dispatcher.
     NotHandled,
     /// Normal execution continues.
     Continue,
     /// Call handler function with the operand stack arguments.
     Dispatch { handler_fn_id: u32 },
-    /// Handler not found in current frame — search entire call stack.
+    /// Handler not found in current frame - search entire call stack.
     CrossFrameSearch { effect_id: u8, op_id: u32 },
     /// Resume a captured continuation (`CONT_RESUME`).
     Resume,

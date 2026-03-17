@@ -482,7 +482,7 @@ fn lookup_field<S: BuildHasher>(
                         freshen_poly(ck, f.ty, &f.ty_params.clone(), span)
                     }
                 } else if let Some(rest_idx) = rest {
-                    // Open record — unify the rest with a new single-field record
+                    // Open record - unify the rest with a new single-field record
                     // so the row chain grows naturally through the binding.
                     let field_ty = ck.fresh_var(span);
                     let new_rest = ck.fresh_var(span);
@@ -543,7 +543,7 @@ fn lookup_field<S: BuildHasher>(
             }
         }
         Type::Var(_) => {
-            // Unresolved type variable — create an open record constraint with
+            // Unresolved type variable - create an open record constraint with
             // a row variable so that subsequent field accesses extend the chain.
             if let FieldKey::Name { name, .. } = field {
                 let field_ty = ck.fresh_var(span);
@@ -1164,7 +1164,7 @@ fn synth_call<S: BuildHasher>(
     match (fn_ret, fn_effects) {
         (Some(false), _) => ck.error_ty(),
         (_, true) => {
-            // Unknown callee type — create fresh return and set up function constraint.
+            // Unknown callee type - create fresh return and set up function constraint.
             let arg_tys: Vec<_> = args
                 .iter()
                 .map(|arg| match arg {

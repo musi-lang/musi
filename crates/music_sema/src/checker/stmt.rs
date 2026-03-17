@@ -117,7 +117,7 @@ fn check_member_law<S: BuildHasher>(
         }
     }
 
-    // Law bodies are propositions — check as Bool.
+    // Law bodies are propositions - check as Bool.
     let bool_ty = ck.named_ty(ck.ctx.well_known.bool);
     check(ck, body, bool_ty);
 

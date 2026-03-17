@@ -29,7 +29,7 @@ pub fn emit_and(
     if produced {
         fc.fe.emit_dup();
         fc.fe.emit_jmp_f(false_label);
-        // Left was true — discard it and evaluate right
+        // Left was true - discard it and evaluate right
         fc.fe.emit_pop();
         emit_require(em, fc, right, "short-circuit `and` right operand")?;
         fc.fe.emit_jmp(end_label);
@@ -55,7 +55,7 @@ pub fn emit_or(
         fc.fe.emit_dup();
         // If left is true, jump to end (result is already on stack via dup)
         fc.fe.emit_jmp_t(end_label);
-        // Left was false — discard it and evaluate right
+        // Left was false - discard it and evaluate right
         fc.fe.emit_pop();
         emit_require(em, fc, right, "short-circuit `or` right operand")?;
         fc.fe.emit_label(end_label);

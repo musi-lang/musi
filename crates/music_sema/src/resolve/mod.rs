@@ -174,7 +174,7 @@ impl Resolver<'_> {
     fn define_in_scope(&mut self, name: Symbol, def_id: DefId, span: Span) {
         if let Some(prev) = self.scopes.define(self.current_scope, name, def_id) {
             let prev_span = self.defs.get(prev).span;
-            // Well-known placeholder (Span::DUMMY) being redefined by real user code — allow.
+            // Well-known placeholder (Span::DUMMY) being redefined by real user code - allow.
             if prev_span == Span::DUMMY && span != Span::DUMMY {
                 return;
             }

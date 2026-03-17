@@ -2,10 +2,10 @@
 //!
 //! This crate performs two passes over a parsed module:
 //!
-//! 1. **Name resolution** — binds every identifier to a [`DefId`], reports
+//! 1. **Name resolution** - binds every identifier to a [`DefId`], reports
 //!    undefined names and duplicate definitions.
 //!
-//! 2. **Type checking** — bidirectional inference with unification variables.
+//! 2. **Type checking** - bidirectional inference with unification variables.
 //!    Synthesises types bottom-up and checks them top-down; emits diagnostics
 //!    for type mismatches, arity errors, and effect violations.
 //!
@@ -96,7 +96,7 @@ pub struct Prelude {
 /// Shared mutable state for multi-module analysis.
 ///
 /// Owns the type arena, unification table, definition table, scope tree,
-/// and well-known prelude — all shared across modules.
+/// and well-known prelude - all shared across modules.
 pub struct SharedAnalysisState {
     pub types: Arena<Type>,
     pub unify: UnifyTable,

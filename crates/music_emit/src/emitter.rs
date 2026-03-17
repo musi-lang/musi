@@ -595,7 +595,7 @@ impl<'a> Emitter<'a> {
     }
 
     /// Register instance method bodies as top-level functions so `emit_functions`
-    /// can compile them. Laws are skipped — they are not emitted.
+    /// can compile them. Laws are skipped - they are not emitted.
     fn scan_instance_members(&mut self, members: &[ClassMember], dep_idx: Option<usize>) {
         for member in members {
             let ClassMember::Fn {
@@ -699,7 +699,7 @@ impl<'a> Emitter<'a> {
         let Some((fn_params, fn_body)) = extract_fn(value_idx, self.ast) else {
             // Non-function binding: register as a global so dep functions can
             // reference it at runtime via LD_GLB.
-            // Skip imports and record defs — they don't produce runtime values
+            // Skip imports and record defs - they don't produce runtime values
             // and are handled via sub-module record construction instead.
             if matches!(
                 self.ast.exprs[value_idx],
@@ -840,7 +840,7 @@ impl<'a> Emitter<'a> {
             && let Some(def_info) = self.sema.defs.iter().find(|d| d.id == did)
             && let Some(ty_idx) = def_info.ty_info.ty
         {
-            // polymorphic / unresolved — fall through to unit on error
+            // polymorphic / unresolved - fall through to unit on error
             if let Ok(id) = self.tp.lower_sema_type(
                 ty_idx,
                 &self.sema.types,

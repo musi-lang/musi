@@ -41,7 +41,7 @@ fn typecheck_all_std_files() {
 
     let files = collect_ms_files(&std_dir);
     if files.is_empty() {
-        eprintln!("no .ms files found under stdlib/ — skipping");
+        eprintln!("no .ms files found under stdlib/ - skipping");
         return;
     }
 

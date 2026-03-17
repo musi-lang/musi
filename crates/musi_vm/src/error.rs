@@ -3,9 +3,9 @@
 /// All errors that can occur during loading, verification, or execution.
 #[derive(Debug, thiserror::Error)]
 pub enum VmError {
-    #[error("bad magic bytes — not a .msbc file")]
+    #[error("bad magic bytes - not a .msbc file")]
     BadMagic,
-    #[error("checksum mismatch — file may be corrupted")]
+    #[error("checksum mismatch - file may be corrupted")]
     BadChecksum,
     #[error("malformed bytecode, {desc}")]
     Malformed { desc: Box<str> },

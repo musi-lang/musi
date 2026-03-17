@@ -1,4 +1,4 @@
-//! `musi:core` builtins — string, array, numeric, and rune operations.
+//! `musi:core` builtins - string, array, numeric, and rune operations.
 
 use std::cmp::Ordering;
 use std::f64::consts;
@@ -41,13 +41,13 @@ pub fn lookup(name: &str) -> Option<BuiltinFn> {
         "arr_contains" => Some(arr_contains),
         "arr_index_of" => Some(arr_index_of),
         "arr_sort" => Some(arr_sort),
-        // Numeric — int
+        // Numeric - int
         "int_abs" => Some(int_abs),
         "int_min" => Some(int_min),
         "int_max" => Some(int_max),
         "int_clamp" => Some(int_clamp),
         "int_pow" => Some(int_pow),
-        // Numeric — float
+        // Numeric - float
         "float_abs" => Some(float_abs),
         "float_floor" => Some(float_floor),
         "float_ceil" => Some(float_ceil),
@@ -60,7 +60,7 @@ pub fn lookup(name: &str) -> Option<BuiltinFn> {
         "float_exp" => Some(float_exp),
         "float_is_nan" => Some(float_is_nan),
         "float_is_infinite" => Some(float_is_infinite),
-        // Numeric — constants
+        // Numeric - constants
         "float_pi" => Some(float_pi),
         "float_e" => Some(float_e),
         "float_infinity" => Some(float_infinity),

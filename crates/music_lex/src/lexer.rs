@@ -421,7 +421,7 @@ impl Lexer<'_> {
     }
 
     /// Advance past a backslash and the character following it.
-    /// Per spec, `str_char = "\\" , any` — all escapes are valid at the lexer level.
+    /// Per spec, `str_char = "\\" , any` - all escapes are valid at the lexer level.
     fn skip_escape(&mut self) {
         let _ = self.advance();
         if self.peek().is_some() {

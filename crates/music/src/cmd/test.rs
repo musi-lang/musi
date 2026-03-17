@@ -1,4 +1,4 @@
-//! `music test` — discover and run `*.test.ms` files.
+//! `music test` - discover and run `*.test.ms` files.
 
 use std::fmt::Write as FmtWrite;
 use std::path::{Path, PathBuf};
@@ -23,7 +23,7 @@ pub fn run(
     project_root: Option<&Path>,
 ) -> ! {
     let Some(project_root) = project_root else {
-        eprintln!("error: no mspackage.toml found — `music test` requires a project");
+        eprintln!("error: no mspackage.toml found - `music test` requires a project");
         process::exit(1);
     };
 
@@ -63,7 +63,7 @@ pub fn run(
                 failed += 1;
             }
             TestOutcome::Error(msg) => {
-                println!("[ERR ] {display} — {msg}");
+                println!("[ERR ] {display} - {msg}");
                 errors += 1;
             }
         }

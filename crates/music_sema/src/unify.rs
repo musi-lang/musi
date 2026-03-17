@@ -435,10 +435,10 @@ impl UnifyTable {
             }
             (true, true, Some(r1), Some(r2)) => self.unify(r1, r2, arena, well_known),
 
-            // Excess only in f1, f2 is closed — fail; or excess only in f2, f1 is closed — fail.
+            // Excess only in f1, f2 is closed - fail; or excess only in f2, f1 is closed - fail.
             (false, _, _, None) | (_, false, None, _) => false,
 
-            // Excess only in f1, rest2 is open — push only1 into rest2.
+            // Excess only in f1, rest2 is open - push only1 into rest2.
             (false, true, _, Some(r2)) => {
                 let new_rec = arena.alloc(Type::Record {
                     fields: only1,
@@ -447,7 +447,7 @@ impl UnifyTable {
                 self.unify(r2, new_rec, arena, well_known)
             }
 
-            // Excess only in f2, rest1 is open — push only2 into rest1.
+            // Excess only in f2, rest1 is open - push only2 into rest1.
             (true, false, Some(r1), _) => {
                 let new_rec = arena.alloc(Type::Record {
                     fields: only2,
@@ -456,7 +456,7 @@ impl UnifyTable {
                 self.unify(r1, new_rec, arena, well_known)
             }
 
-            // Excess on both sides, both open — introduce shared tail variable.
+            // Excess on both sides, both open - introduce shared tail variable.
             (false, false, Some(r1), Some(r2)) => {
                 let rho = self.fresh(Span::DUMMY, arena);
                 let rec1 = arena.alloc(Type::Record {
@@ -629,7 +629,7 @@ impl UnifyTable {
                     }
                     cur_rest = rr;
                 }
-                // Unsolved row variable — close the record.
+                // Unsolved row variable - close the record.
                 _ => break,
             }
         }

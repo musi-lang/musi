@@ -207,7 +207,7 @@ fn find_ast_params(
 ) -> Option<String> {
     let arenas = &doc.module.arenas;
 
-    // Path 1: `let f(x, y) := ...` — Pat::Variant in a binding
+    // Path 1: `let f(x, y) := ...` - Pat::Variant in a binding
     for raw_idx in 0..arenas.pats.len() {
         let idx = Idx::from_raw(u32::try_from(raw_idx).ok()?);
         if let Pat::Variant { name, args, span } = &arenas.pats[idx] {
@@ -218,7 +218,7 @@ fn find_ast_params(
         }
     }
 
-    // Path 2: `fn(x, y) => ...` — Expr::Fn where a param span matches
+    // Path 2: `fn(x, y) => ...` - Expr::Fn where a param span matches
     for raw_idx in 0..arenas.exprs.len() {
         let idx = Idx::from_raw(u32::try_from(raw_idx).ok()?);
         if let Expr::Fn { params, span, .. } = &arenas.exprs[idx]
