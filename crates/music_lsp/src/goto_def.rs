@@ -3,9 +3,10 @@
 use lsp_types::{GotoDefinitionResponse, Location, LocationLink, Position, Range, Url};
 use music_ast::Expr;
 use music_lex::TokenKind;
+use music_sema::SemaResult;
 use music_shared::{Idx, Span, Symbol};
 
-use crate::analysis::{AnalyzedDoc, expr_span, position_to_offset, span_to_range};
+use crate::analysis::{AnalyzedDoc, expr_span, field_at_cursor, position_to_offset, span_to_range};
 
 /// Return the definition location for the symbol under the cursor.
 pub fn goto_definition(
@@ -35,7 +36,16 @@ pub fn goto_definition(
             }
         })
         .min_by_key(|&(_, len)| len)
-        .map(|(def_id, _)| def_id)?;
+        .map(|(def_id, _)| def_id);
+
+    let def_id = match def_id {
+        Some(id) => id,
+        None => {
+            // No expr_def — try field access fallback for go-to on record
+            // fields that have no DefId (plain record field access).
+            return goto_field(doc, sema, offset, uri, root_uri);
+        }
+    };
 
     let def = sema.defs.get(def_id.0 as usize)?;
 
@@ -104,6 +114,53 @@ fn resolve_stdlib_def(
     None
 }
 
+fn goto_field(
+    doc: &AnalyzedDoc,
+    sema: &SemaResult,
+    offset: u32,
+    uri: &Url,
+    root_uri: Option<&Url>,
+) -> Option<GotoDefinitionResponse> {
+    let (expr_idx, field_name, _field_span) = field_at_cursor(offset, doc)?;
+
+    let object_idx = match &doc.module.arenas.exprs[expr_idx] {
+        Expr::Field { object, .. } => *object,
+        _ => return None,
+    };
+
+    if let Some(&alias_def_id) = sema.resolution.expr_defs.get(&object_idx) {
+        if let Some(resp) = resolve_stdlib_def(doc, field_name, Span::DUMMY, root_uri) {
+            return Some(resp);
+        }
+        let alias_def = sema.defs.get(alias_def_id.0 as usize)?;
+        if alias_def.file_id == doc.file_id && alias_def.span != Span::DUMMY {
+            let range = span_to_range(doc.file_id, alias_def.span, &doc.source_db);
+            return Some(GotoDefinitionResponse::Scalar(Location {
+                uri: uri.clone(),
+                range,
+            }));
+        }
+    }
+
+    let obj_ty = sema.expr_types.get(&object_idx).copied()?;
+    let resolved = sema.unify.resolve(obj_ty, &sema.types);
+    if let music_sema::Type::Named { def, .. } = &sema.types[resolved] {
+        let type_def = sema.defs.get(def.0 as usize)?;
+        if type_def.span != Span::DUMMY {
+            if type_def.file_id != doc.file_id {
+                return resolve_stdlib_def(doc, type_def.name, type_def.span, root_uri);
+            }
+            let range = span_to_range(doc.file_id, type_def.span, &doc.source_db);
+            return Some(GotoDefinitionResponse::Scalar(Location {
+                uri: uri.clone(),
+                range,
+            }));
+        }
+    }
+
+    None
+}
+
 fn dep_source_span_to_range(span: Span, source: &str) -> Range {
     let start = byte_offset_to_position(span.start, source);
     let end = byte_offset_to_position(span.end(), source);
@@ -139,10 +196,15 @@ fn import_at_offset(doc: &AnalyzedDoc, offset: u32) -> Option<GotoDefinitionResp
     if let Some(tok) = doc.lexed.tokens.iter().find(|t| {
         t.kind == TokenKind::StringLit && t.span.start <= offset && offset <= t.span.end()
     }) {
-        let src = doc
+        let raw = doc
             .source
             .get(tok.span.start as usize..tok.span.end() as usize)?;
-        if let Some(resp) = resolve_import_path(doc, src, tok.span) {
+        // Strip surrounding quotes — the interner stores content only.
+        let content = raw
+            .strip_prefix('"')
+            .and_then(|s| s.strip_suffix('"'))
+            .unwrap_or(raw);
+        if let Some(resp) = resolve_import_path(doc, content, tok.span) {
             return Some(resp);
         }
     }
@@ -160,15 +222,28 @@ fn import_at_offset(doc: &AnalyzedDoc, offset: u32) -> Option<GotoDefinitionResp
         if let Expr::Import { path, span, .. } = &arenas.exprs[idx] {
             if span.start <= offset && offset <= span.end() {
                 let path_str = doc.interner.try_resolve(*path)?;
-                return resolve_import_path(doc, path_str, *span);
+                // Find the StringLit token within the import expression for a
+                // tight origin_selection_range (not the entire import statement).
+                let string_span = doc
+                    .lexed
+                    .tokens
+                    .iter()
+                    .find(|t| {
+                        t.kind == TokenKind::StringLit
+                            && t.span.start >= span.start
+                            && t.span.end() <= span.end()
+                    })
+                    .map(|t| t.span)
+                    .unwrap_or(*span);
+                return resolve_import_path(doc, path_str, string_span);
             }
         }
     }
     None
 }
 
-/// Look up `path_str` (with quotes, e.g. `"@std/testing"`) in `resolved_imports`
-/// and return a `LocationLink` if found.
+/// Look up `path_str` (e.g. `@std/testing`) in `resolved_imports` and return a
+/// `LocationLink` if found.
 fn resolve_import_path(
     doc: &AnalyzedDoc,
     path_str: &str,

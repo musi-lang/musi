@@ -102,27 +102,56 @@ pub fn hover(doc: &AnalyzedDoc, position: Position) -> Option<Hover> {
         } else {
             format!("{kind_kw} {display_name}: {ty_str}")
         }
-    } else if let Some(src_sig) = extract_source_signature(&doc.source, def.span.start) {
-        src_sig
+    } else if def.file_id == doc.file_id {
+        if let Some(src_sig) = extract_source_signature(&doc.source, def.span.start) {
+            src_sig
+        } else if kind_kw.is_empty() {
+            display_name.clone()
+        } else {
+            format!("{kind_kw} {display_name}")
+        }
+    } else if let Some(dep_sig) = doc.dep_sources.values().find_map(|dep| {
+        if dep.def_spans.contains_key(&def.name) {
+            extract_source_signature(&dep.source, def.span.start)
+        } else {
+            None
+        }
+    }) {
+        dep_sig
     } else if kind_kw.is_empty() {
         display_name.clone()
     } else {
         format!("{kind_kw} {display_name}")
     };
 
-    let local_doc = extract_doc_comments_from_source(def.span.start, &doc.source);
-    let doc_text = if local_doc.is_empty() {
+    let doc_text = if def.file_id == doc.file_id {
+        let local = extract_doc_comments_from_source(def.span.start, &doc.source);
+        if local.is_empty() {
+            doc.dep_sources
+                .values()
+                .find_map(|dep| {
+                    dep.def_spans.get(&def.name).and_then(|&span| {
+                        let text = extract_doc_comments_from_source(span.start, &dep.source);
+                        if text.is_empty() { None } else { Some(text) }
+                    })
+                })
+                .unwrap_or_default()
+        } else {
+            local
+        }
+    } else {
+        // Def is from a dependency — use the dep source directly.
         doc.dep_sources
             .values()
             .find_map(|dep| {
-                dep.def_spans.get(&def.name).and_then(|&span| {
-                    let text = extract_doc_comments_from_source(span.start, &dep.source);
+                if dep.def_spans.contains_key(&def.name) {
+                    let text = extract_doc_comments_from_source(def.span.start, &dep.source);
                     if text.is_empty() { None } else { Some(text) }
-                })
+                } else {
+                    None
+                }
             })
             .unwrap_or_default()
-    } else {
-        local_doc
     };
 
     let mut md = format!("```musi\n{signature}\n```");
