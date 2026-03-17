@@ -398,13 +398,13 @@ fn int_clamp(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
     Ok(Value::from_int(val.clamp(lo, hi)))
 }
 
-fn int_pow(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
-    let base = arg(args, 0)?.as_int()?;
-    let exp = arg(args, 1)?.as_int()?;
+fn int_pow(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+    let base = arg(args, 0)?.as_int_wide(heap)?;
+    let exp = arg(args, 1)?.as_int_wide(heap)?;
     let exp_u32 = u32::try_from(exp).map_err(|_| VmError::Malformed {
         desc: "int_pow: exponent must be non-negative and fit in u32".into(),
     })?;
-    Ok(Value::from_int(base.wrapping_pow(exp_u32)))
+    Ok(Value::from_int_wide(base.wrapping_pow(exp_u32), heap))
 }
 
 fn float_abs(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {

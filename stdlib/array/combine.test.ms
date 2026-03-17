@@ -34,7 +34,7 @@ t.runner.report(t.runner.run_suite([
   )),
   ("zip_arr then unzip — roundtrip", () => (
     let zipped := comb.zip_arr([1, 2, 3], [4, 5, 6]);
-    let (lefts, rights) := comb.unzip(zipped);
+    let (lefts, _) := comb.unzip(zipped);
     t.assertions.assert_eq(lefts, [1, 2, 3])
   )),
 ]));

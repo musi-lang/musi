@@ -29,7 +29,6 @@ pub struct DepModule {
     pub binop_dispatch: HashMap<ExprIdx, DefId>,
     pub binop_dict_dispatch: HashMap<ExprIdx, DictLookup>,
     pub fn_constraints: HashMap<DefId, Vec<Obligation>>,
-    pub file_id: FileId,
 }
 
 /// Output of a successful frontend run.
@@ -236,7 +235,6 @@ fn run_sema_in_order(
                 binop_dispatch: output.binop_dispatch,
                 binop_dict_dispatch: output.binop_dict_dispatch,
                 fn_constraints: output.fn_constraints,
-                file_id,
             });
         }
     }
@@ -277,10 +275,7 @@ fn build_import_types(
                 })
                 .collect();
             fields.sort_by(|a, b| interner.resolve(a.name).cmp(interner.resolve(b.name)));
-            let ty = types.alloc(Type::Record {
-                fields,
-                rest: None,
-            });
+            let ty = types.alloc(Type::Record { fields, rest: None });
             let _prev = map.insert(import_sym, ty);
         }
     }

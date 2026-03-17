@@ -4,7 +4,7 @@ Thanks for helping Musi grow. This guide keeps expectations clear and simple so 
 
 ## Before Starting
 
-- Read `grammar.ebnf` to understand the canonical language syntax.
+- Read `grammar.abnf` to understand the canonical language syntax.
 - Read `CLAUDE.md` for the two non-negotiable design constraints (LL(1), mathematical purity).
 - Check open issues to avoid duplicating work.
 
@@ -75,7 +75,7 @@ Avoid `cargo test --workspace` -- it may OOM on machines with less than 16 GB fr
 - [ ] Relevant crates build cleanly with no warnings.
 - [ ] `cargo clippy -p <crate>` passes for each changed crate.
 - [ ] Tests pass for changed crates.
-- [ ] Grammar changes verified LL(1) and documented in `grammar.ebnf`.
+- [ ] Grammar changes verified LL(1) and documented in `grammar.abnf`.
 - [ ] Commit messages explain intent (the *why*, not the *what*).
 - [ ] PR description covers motivation, approach, and how it was tested.
 

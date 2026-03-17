@@ -15,8 +15,8 @@ pub fn exec(
     handlers: &[HandlerEntry],
 ) -> Result<ContAction, VmError> {
     match op {
-        Opcode::CONT_MARK => exec_cont_mark(operand, frame, handlers),
-        Opcode::CONT_UNMARK => {
+        Opcode::CNT_MRK => exec_cont_mark(operand, frame, handlers),
+        Opcode::CNT_UMK => {
             let effect_id = u8::try_from(operand).map_err(|_| VmError::Malformed {
                 desc: "cont.unmark effect_id overflow".into(),
             })?;
@@ -29,8 +29,8 @@ pub fn exec(
             }
             Ok(ContAction::Continue)
         }
-        Opcode::CONT_SAVE => Ok(exec_cont_save(operand, frame, effects)),
-        Opcode::CONT_RESUME => Ok(ContAction::Resume),
+        Opcode::CNT_SAV => Ok(exec_cont_save(operand, frame, effects)),
+        Opcode::CNT_RSM => Ok(ContAction::Resume),
         _ => Ok(ContAction::NotHandled),
     }
 }

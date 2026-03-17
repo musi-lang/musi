@@ -660,14 +660,14 @@ fn emit_unary(
         UnaryOp::Neg => {
             let family = classify_type_family(em, operand);
             let opcode = match family {
-                Some(TypeFamily::Float) => Opcode::F_NEG,
-                _ => Opcode::I_NEG,
+                Some(TypeFamily::Float) => Opcode::FLT_NEG,
+                _ => Opcode::INT_NEG,
             };
             fc.fe.emit_unop(opcode);
             Ok(true)
         }
         UnaryOp::Not => {
-            fc.fe.emit_unop(Opcode::B_NOT);
+            fc.fe.emit_unop(Opcode::BIT_NOT);
             Ok(true)
         }
         UnaryOp::ForceUnwrap => emit_force_unwrap(em, fc, operand),
@@ -739,7 +739,7 @@ fn emit_field(
             FieldKey::Name { name, .. } => resolve_field_name(em, object, name)?,
         };
         fc.fe.emit_ld_fld(index)?;
-        fc.fe.emit_mk_var(em.some_tag)?;
+        fc.fe.emit_mk_var(em.some_tag, 1)?;
         fc.fe.emit_jmp(end_label);
 
         // None path: receiver was not Some — produce a zero-payload variant as None
@@ -983,7 +983,7 @@ fn emit_primitive_binop(
                         desc: "binop right operand produced no value".into(),
                     });
                 }
-                fc.fe.emit_binop(Opcode::B_AND);
+                fc.fe.emit_binop(Opcode::BIT_AND);
             }
             Ok(true)
         }
@@ -1004,7 +1004,7 @@ fn emit_primitive_binop(
                         desc: "binop right operand produced no value".into(),
                     });
                 }
-                fc.fe.emit_binop(Opcode::B_OR);
+                fc.fe.emit_binop(Opcode::BIT_OR);
             }
             Ok(true)
         }
@@ -1110,15 +1110,15 @@ fn emit_narrow_truncation(
         let cv = ConstValue::Int(shift_amount);
         let idx = em.cp.intern(&cv, em.interner)?;
         fc.fe.emit_ld_cst(idx);
-        fc.fe.emit_binop(Opcode::B_SHL);
+        fc.fe.emit_binop(Opcode::BIT_SHL);
         let idx2 = em.cp.intern(&cv, em.interner)?;
         fc.fe.emit_ld_cst(idx2);
-        fc.fe.emit_binop(Opcode::B_SHR);
+        fc.fe.emit_binop(Opcode::BIT_SHR);
     } else {
         let cv = ConstValue::Int(mask.cast_signed());
         let idx = em.cp.intern(&cv, em.interner)?;
         fc.fe.emit_ld_cst(idx);
-        fc.fe.emit_binop(Opcode::B_AND);
+        fc.fe.emit_binop(Opcode::BIT_AND);
     }
     Ok(())
 }
@@ -1148,7 +1148,7 @@ fn emit_call(
         if let Some(&fn_id) = em.fn_map.get(&def_id) {
             if is_tail {
                 fc.fe.emit_inv_tail(fn_id, false);
-                return Ok(true);
+                return Ok(false);
             }
             let ac =
                 i32::try_from(total_count).map_err(|_| EmitError::overflow("arg count"))?;
@@ -1387,21 +1387,19 @@ fn emit_variant(
         }
     }
 
-    if args.is_empty() {
-        // Nullary variants still need a payload for MK_VAR — push unit.
-        fc.fe.emit_ld_unit();
-    } else {
-        for &arg_idx in args {
-            let produced = emit_expr(em, fc, arg_idx)?;
-            if !produced {
-                return Err(EmitError::UnsupportedFeature {
-                    desc: "variant arg produced no value".into(),
-                });
-            }
+    for &arg_idx in args {
+        let produced = emit_expr(em, fc, arg_idx)?;
+        if !produced {
+            return Err(EmitError::UnsupportedFeature {
+                desc: "variant arg produced no value".into(),
+            });
         }
     }
     let tag = resolve_variant_tag(em, name)?;
-    fc.fe.emit_mk_var(tag)?;
+    let arity = u8::try_from(args.len()).map_err(|_| EmitError::OperandOverflow {
+        desc: "variant arity exceeds 255".into(),
+    })?;
+    fc.fe.emit_mk_var(tag, arity)?;
     Ok(true)
 }
 
@@ -1944,7 +1942,7 @@ fn collect_record_fields(
     em: &Emitter<'_>,
     ty_idx: TypeIdx,
     out: &mut Vec<RecordField>,
-) {
+) -> bool {
     let resolved = em.sema.unify.resolve(ty_idx, &em.sema.types);
     if let Type::Record { fields, rest } = &em.sema.types[resolved] {
         for f in fields {
@@ -1952,10 +1950,57 @@ fn collect_record_fields(
                 out.push(f.clone());
             }
         }
-        if let Some(rest_idx) = *rest {
-            collect_record_fields(em, rest_idx, out);
+        match *rest {
+            Some(rest_idx) => collect_record_fields(em, rest_idx, out),
+            None => true, // closed record — complete
+        }
+    } else {
+        false // rest resolved to non-record (unbound var) — incomplete
+    }
+}
+
+/// Search for a closed record type definition whose fields are a superset
+/// of `partial_fields`. Returns the full field list if found.
+fn find_complete_record_type(
+    em: &Emitter<'_>,
+    partial_fields: &[RecordField],
+) -> Option<Vec<RecordField>> {
+    let type_defs: Vec<_> = em.sema.defs.iter().filter(|d| d.kind == DefKind::Type).collect();
+    eprintln!("[DBG find_complete] total defs={} type_defs={}", em.sema.defs.len(), type_defs.len());
+    for def in &type_defs {
+        eprintln!("[DBG find_complete] type def: {:?} name={} has_ty={}", def.id, em.interner.resolve(def.name), def.ty_info.ty.is_some());
+    }
+    for def in em.sema.defs.iter() {
+        if def.kind != DefKind::Type {
+            continue;
+        }
+        let Some(ty_idx) = def.ty_info.ty else { continue };
+        let resolved = em.sema.unify.resolve(ty_idx, &em.sema.types);
+        let ty = &em.sema.types[resolved];
+        match ty {
+            Type::Record { rest, .. } => {
+                // Only consider closed records (rest=None) as canonical sources.
+                if rest.is_some() {
+                    continue;
+                }
+                let mut full_fields = vec![];
+                let _ = collect_record_fields(em, resolved, &mut full_fields);
+                let full_names: Vec<_> = full_fields.iter().map(|f| em.interner.resolve(f.name).to_string()).collect();
+                eprintln!("[DBG find_complete] def={:?} name={} type=Record fields={full_names:?}", def.id, em.interner.resolve(def.name));
+                // Check that every partial field appears in the full record.
+                let is_superset = partial_fields.iter().all(|pf| {
+                    full_fields.iter().any(|ff| ff.name == pf.name)
+                });
+                if is_superset && full_fields.len() >= partial_fields.len() {
+                    return Some(full_fields);
+                }
+            }
+            other => {
+                eprintln!("[DBG find_complete] def={:?} name={} type={:?}", def.id, em.interner.resolve(def.name), std::mem::discriminant(other));
+            }
         }
     }
+    None
 }
 
 fn resolve_field_in_type(
@@ -1967,7 +2012,27 @@ fn resolve_field_in_type(
     match &em.sema.types[resolved] {
         Type::Record { .. } => {
             let mut all_fields: Vec<RecordField> = vec![];
-            collect_record_fields(em, resolved, &mut all_fields);
+            let complete = collect_record_fields(em, resolved, &mut all_fields);
+            let target = em.interner.resolve(name);
+            if !complete {
+                let pre_sort: Vec<_> = all_fields.iter().map(|f| em.interner.resolve(f.name).to_string()).collect();
+                // Sort now
+                all_fields.sort_by(|a, b| {
+                    em.interner.resolve(a.name).cmp(em.interner.resolve(b.name))
+                });
+                let post_sort: Vec<_> = all_fields.iter().map(|f| em.interner.resolve(f.name).to_string()).collect();
+                let idx = all_fields.iter().position(|f| f.name == name);
+                eprintln!("[DBG] target={target} pre={pre_sort:?} post={post_sort:?} idx={idx:?}");
+                // Undo sort — it will be done again below
+                // Actually, let's not undo. The sort below will be idempotent.
+            }
+            // If the record is open (incomplete from dep module inference),
+            // find the canonical closed record type definition.
+            if !complete {
+                if let Some(full) = find_complete_record_type(em, &all_fields) {
+                    all_fields = full;
+                }
+            }
             // Sort by name string for canonical ordering — matches emit_record_lit_fixed.
             all_fields.sort_by(|a, b| {
                 em.interner.resolve(a.name).cmp(em.interner.resolve(b.name))
@@ -2054,39 +2119,43 @@ pub fn classify_type_family(em: &Emitter<'_>, expr_idx: ExprIdx) -> Option<TypeF
 /// Map an AST `BinOp` + `TypeFamily` to the corresponding bytecode `Opcode`.
 pub fn map_binop(op: BinOp, family: Option<TypeFamily>) -> Result<Opcode, EmitError> {
     let opcode = match (op, family) {
-        (BinOp::Add, Some(TypeFamily::Float)) => Opcode::F_ADD,
-        (BinOp::Add, _) => Opcode::I_ADD,
-        (BinOp::Sub, Some(TypeFamily::Float)) => Opcode::F_SUB,
-        (BinOp::Sub, _) => Opcode::I_SUB,
-        (BinOp::Mul, Some(TypeFamily::Float)) => Opcode::F_MUL,
-        (BinOp::Mul, _) => Opcode::I_MUL,
-        (BinOp::Div, Some(TypeFamily::Float)) => Opcode::F_DIV,
-        (BinOp::Div, Some(TypeFamily::Unsigned(_))) => Opcode::I_DIV_UN,
-        (BinOp::Div, _) => Opcode::I_DIV,
-        (BinOp::Rem, Some(TypeFamily::Float)) => Opcode::F_REM,
-        (BinOp::Rem, Some(TypeFamily::Unsigned(_))) => Opcode::I_REM_UN,
-        (BinOp::Rem, _) => Opcode::I_REM,
-        (BinOp::Eq, Some(TypeFamily::Float)) => Opcode::CMP_F_EQ,
+        (BinOp::Add, Some(TypeFamily::Unsigned(_))) => Opcode::NAT_ADD,
+        (BinOp::Add, Some(TypeFamily::Float)) => Opcode::FLT_ADD,
+        (BinOp::Add, _) => Opcode::INT_ADD,
+        (BinOp::Sub, Some(TypeFamily::Unsigned(_))) => Opcode::NAT_SUB,
+        (BinOp::Sub, Some(TypeFamily::Float)) => Opcode::FLT_SUB,
+        (BinOp::Sub, _) => Opcode::INT_SUB,
+        (BinOp::Mul, Some(TypeFamily::Unsigned(_))) => Opcode::NAT_MUL,
+        (BinOp::Mul, Some(TypeFamily::Float)) => Opcode::FLT_MUL,
+        (BinOp::Mul, _) => Opcode::INT_MUL,
+        (BinOp::Div, Some(TypeFamily::Float)) => Opcode::FLT_DIV,
+        (BinOp::Div, Some(TypeFamily::Unsigned(_))) => Opcode::NAT_DIV,
+        (BinOp::Div, _) => Opcode::INT_DIV,
+        (BinOp::Rem, Some(TypeFamily::Float)) => Opcode::FLT_REM,
+        (BinOp::Rem, Some(TypeFamily::Unsigned(_))) => Opcode::NAT_REM,
+        (BinOp::Rem, _) => Opcode::INT_REM,
+        (BinOp::Eq, Some(TypeFamily::Float)) => Opcode::CMP_EQ,
         (BinOp::Eq, _) => Opcode::CMP_EQ,
-        (BinOp::Ne, Some(TypeFamily::Float)) => Opcode::CMP_F_NE,
+        (BinOp::Ne, Some(TypeFamily::Float)) => Opcode::CMP_NE,
         (BinOp::Ne, _) => Opcode::CMP_NE,
-        (BinOp::Lt, Some(TypeFamily::Float)) => Opcode::CMP_F_LT,
-        (BinOp::Lt, Some(TypeFamily::Unsigned(_))) => Opcode::CMP_LT_UN,
+        (BinOp::Lt, Some(TypeFamily::Float)) => Opcode::CMP_FLT,
+        (BinOp::Lt, Some(TypeFamily::Unsigned(_))) => Opcode::CMP_LTU,
         (BinOp::Lt, _) => Opcode::CMP_LT,
-        (BinOp::Le, Some(TypeFamily::Float)) => Opcode::CMP_F_LE,
-        (BinOp::Le, Some(TypeFamily::Unsigned(_))) => Opcode::CMP_LE_UN,
+        (BinOp::Le, Some(TypeFamily::Float)) => Opcode::CMP_FLE,
+        (BinOp::Le, Some(TypeFamily::Unsigned(_))) => Opcode::CMP_LEU,
         (BinOp::Le, _) => Opcode::CMP_LE,
-        (BinOp::Gt, Some(TypeFamily::Float)) => Opcode::CMP_F_GT,
-        (BinOp::Gt, Some(TypeFamily::Unsigned(_))) => Opcode::CMP_GT_UN,
+        (BinOp::Gt, Some(TypeFamily::Float)) => Opcode::CMP_FGT,
+        (BinOp::Gt, Some(TypeFamily::Unsigned(_))) => Opcode::CMP_GTU,
         (BinOp::Gt, _) => Opcode::CMP_GT,
-        (BinOp::Ge, Some(TypeFamily::Float)) => Opcode::CMP_F_GE,
-        (BinOp::Ge, Some(TypeFamily::Unsigned(_))) => Opcode::CMP_GE_UN,
+        (BinOp::Ge, Some(TypeFamily::Float)) => Opcode::CMP_FGE,
+        (BinOp::Ge, Some(TypeFamily::Unsigned(_))) => Opcode::CMP_GEU,
         (BinOp::Ge, _) => Opcode::CMP_GE,
-        (BinOp::And, _) => Opcode::B_AND,
-        (BinOp::Or, _) => Opcode::B_OR,
-        (BinOp::Xor, _) => Opcode::B_XOR,
-        (BinOp::Shl, _) => Opcode::B_SHL,
-        (BinOp::Shr, _) => Opcode::B_SHR,
+        (BinOp::And, _) => Opcode::BIT_AND,
+        (BinOp::Or, _) => Opcode::BIT_OR,
+        (BinOp::Xor, _) => Opcode::BIT_XOR,
+        (BinOp::Shl, _) => Opcode::BIT_SHL,
+        (BinOp::Shr, Some(TypeFamily::Unsigned(_))) => Opcode::BIT_SRU,
+        (BinOp::Shr, _) => Opcode::BIT_SHR,
         (op, _) => {
             return Err(EmitError::UnsupportedFeature {
                 desc: format!("binary operator `{op:?}`").into(),

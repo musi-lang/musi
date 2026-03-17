@@ -157,9 +157,20 @@ pub fn emit_pipe(
                 desc: "unresolved pipe callee".into(),
             })
         }
-        _ => Err(EmitError::UnsupportedFeature {
-            desc: "complex pipe callee".into(),
-        }),
+        _ => {
+            // General case: spill piped value, emit callee expr, restore arg, INV_DYN.
+            let tmp = fc.alloc_local();
+            fc.fe.emit_st_loc(tmp);
+            let callee_produced = emit_expr(em, fc, right)?;
+            if !callee_produced {
+                return Err(EmitError::UnsupportedFeature {
+                    desc: "pipe callee produced no value".into(),
+                });
+            }
+            fc.fe.emit_ld_loc(tmp);
+            fc.fe.emit_inv_dyn(1)?;
+            Ok(())
+        }
     }
 }
 
@@ -305,7 +316,7 @@ pub fn emit_try(em: &mut Emitter<'_>, fc: &mut FnCtx, operand: ExprIdx) -> Resul
             desc: "try operand produced no value".into(),
         });
     }
-    fc.fe.emit_mk_var(em.some_tag)?;
+    fc.fe.emit_mk_var(em.some_tag, 1)?;
     Ok(())
 }
 
@@ -440,7 +451,7 @@ pub fn emit_in_op(
     let one_cv = ConstValue::Int(1);
     let one_idx = em.cp.intern(&one_cv, em.interner)?;
     fc.fe.emit_ld_cst(one_idx);
-    fc.fe.emit_binop(Opcode::I_ADD);
+    fc.fe.emit_binop(Opcode::INT_ADD);
     fc.fe.emit_st_loc(i_slot);
 
     fc.fe.emit_jmp(loop_start);
