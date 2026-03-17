@@ -172,6 +172,6 @@ pub fn exports_to_record_type(exports: &ModuleExports, types: &mut Arena<Type>) 
         .collect();
     types.alloc(Type::Record {
         fields,
-        open: false,
+        rest: None,
     })
 }

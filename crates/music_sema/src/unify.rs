@@ -128,7 +128,10 @@ impl UnifyTable {
             Type::Tuple { elems } | Type::AnonSum { variants: elems } => {
                 elems.iter().any(|&e| self.occurs(var, e, arena))
             }
-            Type::Record { fields, .. } => fields.iter().any(|f| self.occurs(var, f.ty, arena)),
+            Type::Record { fields, rest } => {
+                fields.iter().any(|f| self.occurs(var, f.ty, arena))
+                    || rest.is_some_and(|r| self.occurs(var, r, arena))
+            }
             Type::Sum { variants } => variants
                 .iter()
                 .any(|v| v.fields.iter().any(|&f| self.occurs(var, f, arena))),
@@ -218,13 +221,16 @@ impl UnifyTable {
             (
                 Type::Record {
                     fields: f1,
-                    open: o1,
+                    rest: r1,
                 },
                 Type::Record {
                     fields: f2,
-                    open: o2,
+                    rest: r2,
                 },
-            ) => self.unify_record(&f1.clone(), *o1, &f2.clone(), *o2, arena, well_known),
+            ) => {
+                let (f1, r1, f2, r2) = (f1.clone(), *r1, f2.clone(), *r2);
+                self.unify_record(&f1, r1, &f2, r2, arena, well_known)
+            }
 
             (Type::Array { elem: e1, len: l1 }, Type::Array { elem: e2, len: l2 }) => {
                 if l1 != l2 {
@@ -320,7 +326,7 @@ impl UnifyTable {
                     arena.alloc(Type::Tuple { elems: new_elems })
                 }
             }
-            Type::Record { fields, open } => {
+            Type::Record { fields, rest } => {
                 let new_fields: Vec<_> = fields
                     .iter()
                     .map(|f| RecordField {
@@ -328,16 +334,18 @@ impl UnifyTable {
                         ty: self.freshen_any(f.ty, arena, any_def),
                     })
                     .collect();
+                let new_rest = rest.map(|r| self.freshen_any(r, arena, any_def));
                 if new_fields
                     .iter()
                     .zip(fields.iter())
                     .all(|(a, b)| a.ty == b.ty)
+                    && new_rest == rest
                 {
                     ty
                 } else {
                     arena.alloc(Type::Record {
                         fields: new_fields,
-                        open,
+                        rest: new_rest,
                     })
                 }
             }
@@ -375,20 +383,94 @@ impl UnifyTable {
     fn unify_record(
         &mut self,
         f1: &[RecordField],
-        o1: bool,
+        rest1: Option<TypeIdx>,
         f2: &[RecordField],
-        o2: bool,
+        rest2: Option<TypeIdx>,
         arena: &mut Arena<Type>,
         well_known: &WellKnown,
     ) -> bool {
-        if !o1 && !o2 && f1.len() != f2.len() {
-            return false;
+        // Partition into common fields, only-in-1, only-in-2.
+        let mut common: Vec<(TypeIdx, TypeIdx)> = vec![];
+        let mut only1: Vec<RecordField> = vec![];
+        let mut only2: Vec<RecordField> = vec![];
+
+        for field in f1 {
+            if let Some(f2_field) = f2.iter().find(|f| f.name == field.name) {
+                common.push((field.ty, f2_field.ty));
+            } else {
+                only1.push(field.clone());
+            }
         }
-        f1.iter().all(|field1| {
-            f2.iter()
-                .find(|field2| field2.name == field1.name)
-                .is_some_and(|field2| self.unify(field1.ty, field2.ty, arena, well_known))
-        })
+        for field in f2 {
+            if !f1.iter().any(|f| f.name == field.name) {
+                only2.push(field.clone());
+            }
+        }
+
+        // Unify common field types.
+        for (t1, t2) in common {
+            if !self.unify(t1, t2, arena, well_known) {
+                return false;
+            }
+        }
+
+        // Handle excess fields.
+        match (only1.is_empty(), only2.is_empty(), rest1, rest2) {
+            // No excess on either side.
+            (true, true, None, None) => true,
+            (true, true, Some(r1), None) => {
+                let empty = arena.alloc(Type::Record {
+                    fields: vec![],
+                    rest: None,
+                });
+                self.unify(r1, empty, arena, well_known)
+            }
+            (true, true, None, Some(r2)) => {
+                let empty = arena.alloc(Type::Record {
+                    fields: vec![],
+                    rest: None,
+                });
+                self.unify(r2, empty, arena, well_known)
+            }
+            (true, true, Some(r1), Some(r2)) => self.unify(r1, r2, arena, well_known),
+
+            // Excess only in f1, f2 is closed — fail.
+            (false, _, _, None) => false,
+            // Excess only in f2, f1 is closed — fail.
+            (_, false, None, _) => false,
+
+            // Excess only in f1, rest2 is open — push only1 into rest2.
+            (false, true, _, Some(r2)) => {
+                let new_rec = arena.alloc(Type::Record {
+                    fields: only1,
+                    rest: rest1,
+                });
+                self.unify(r2, new_rec, arena, well_known)
+            }
+
+            // Excess only in f2, rest1 is open — push only2 into rest1.
+            (true, false, Some(r1), _) => {
+                let new_rec = arena.alloc(Type::Record {
+                    fields: only2,
+                    rest: rest2,
+                });
+                self.unify(r1, new_rec, arena, well_known)
+            }
+
+            // Excess on both sides, both open — introduce shared tail variable.
+            (false, false, Some(r1), Some(r2)) => {
+                let rho = self.fresh(Span::DUMMY, arena);
+                let rec1 = arena.alloc(Type::Record {
+                    fields: only2,
+                    rest: Some(rho),
+                });
+                let rec2 = arena.alloc(Type::Record {
+                    fields: only1,
+                    rest: Some(rho),
+                });
+                self.unify(r1, rec1, arena, well_known) && self.unify(r2, rec2, arena, well_known)
+            }
+        }
     }
 
     fn unify_sum(
@@ -463,15 +545,46 @@ impl UnifyTable {
                     .collect();
                 arena.alloc(Type::Tuple { elems })
             }
-            Type::Record { fields, open } => {
-                let fields = fields
+            Type::Record { fields, rest } => {
+                // Flatten the row chain: collect all fields from this record
+                // and any linked rest records.
+                let mut all_fields: Vec<RecordField> = fields
                     .iter()
                     .map(|f| RecordField {
                         name: f.name,
                         ty: self.freeze(f.ty, arena, any_def),
                     })
                     .collect();
-                arena.alloc(Type::Record { fields, open })
+                // Walk the rest chain.
+                let mut cur_rest = rest;
+                loop {
+                    let Some(rest_idx) = cur_rest else { break };
+                    let resolved = self.resolve(rest_idx, arena);
+                    match arena[resolved].clone() {
+                        Type::Record { fields: rf, rest: rr } => {
+                            for f in &rf {
+                                if !all_fields.iter().any(|ef| ef.name == f.name) {
+                                    all_fields.push(RecordField {
+                                        name: f.name,
+                                        ty: self.freeze(f.ty, arena, any_def),
+                                    });
+                                }
+                            }
+                            cur_rest = rr;
+                        }
+                        // Unsolved row variable — close the record.
+                        _ => break,
+                    }
+                }
+                // Sort by name index for canonical ordering. Full string sort
+                // requires interner access which freeze doesn't have; sort by
+                // Symbol (interning order) as a stable tie-breaker. The
+                // canonical sort-by-string is enforced at construction sites.
+                all_fields.sort_by_key(|f| f.name.0);
+                arena.alloc(Type::Record {
+                    fields: all_fields,
+                    rest: None,
+                })
             }
             Type::Array { elem, len } => {
                 let elem = self.freeze(elem, arena, any_def);
@@ -524,5 +637,28 @@ impl UnifyTable {
 impl Default for UnifyTable {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Structural type equality after resolving unification variables.
+///
+/// Unlike raw `TypeIdx` comparison, this follows `Named { def, args }` structure
+/// so that two independently-allocated slots for the same type match.
+pub fn types_match(types: &Arena<Type>, unify: &UnifyTable, a: TypeIdx, b: TypeIdx) -> bool {
+    let a = unify.resolve(a, types);
+    let b = unify.resolve(b, types);
+    if a == b {
+        return true;
+    }
+    match (&types[a], &types[b]) {
+        (Type::Named { def: da, args: aa }, Type::Named { def: db, args: ab }) => {
+            da == db
+                && aa.len() == ab.len()
+                && aa
+                    .iter()
+                    .zip(ab)
+                    .all(|(x, y)| types_match(types, unify, *x, *y))
+        }
+        _ => false,
     }
 }

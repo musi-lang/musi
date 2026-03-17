@@ -24,7 +24,7 @@ pub fn run(
             Err(()) => process::exit(1),
         }
     };
-    let Ok(bytes) = pipeline::run_backend(&mut out) else {
+    let Ok(bytes) = pipeline::run_backend(&mut out, true) else {
         process::exit(1)
     };
     let out_path = output.map_or_else(|| path.with_extension("msbc"), Path::to_path_buf);

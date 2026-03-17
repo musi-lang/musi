@@ -62,5 +62,6 @@ export let report := (suite_result) => (
   rt.writeln(
     rt.show(suite_result.passed) + "/" + rt.show(suite_result.total) + " passed"
     + (", " + rt.show(suite_result.failed) + " failed" if suite_result.failed > 0 | "" if _)
-  )
+  );
+  suite_result.failed
 );

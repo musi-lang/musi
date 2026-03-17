@@ -32,11 +32,11 @@ pub use lang_items::LangItemRegistry;
 pub use resolve::ResolveOutput;
 pub use scope::ScopeTree;
 pub use types::{DictLookup, EffectRow, InstanceInfo, Obligation, TyVarId, Type, TypeIdx};
-pub use unify::UnifyTable;
+pub use unify::{UnifyTable, types_match};
 pub use well_known::WellKnown;
 
 pub use exports::{ExportBinding, ModuleExports, collect_exports};
-pub use resolve::ImportNames;
+pub use resolve::{ImportNames, SubModuleExports};
 
 use std::collections::{HashMap, HashSet};
 use std::hash::BuildHasher;
@@ -106,6 +106,7 @@ pub struct SharedAnalysisState {
     pub prelude_scope: ScopeId,
     pub lang_items: LangItemRegistry,
     injected_lang_items: HashSet<DefId>,
+    pub instances: Vec<InstanceInfo>,
 }
 
 /// Per-module analysis output (does not own shared state).
@@ -142,13 +143,16 @@ impl SharedAnalysisState {
             prelude_scope,
             lang_items: LangItemRegistry::new(),
             injected_lang_items: HashSet::new(),
+            instances: vec![],
         }
     }
 
     pub fn collect_lang_items(&mut self, interner: &Interner) {
         for def in self.defs.iter() {
             if let Some(sym) = def.lang_item {
-                let name = interner.resolve(sym);
+                let raw = interner.resolve(sym);
+                let name = raw.strip_prefix('"').unwrap_or(raw);
+                let name = name.strip_suffix('"').unwrap_or(name);
                 let _prev = self.lang_items.register(name, def.id);
             }
         }
@@ -216,14 +220,15 @@ impl SharedAnalysisState {
 
     /// Converts the shared state and a per-module output into a [`SemaResult`].
     #[must_use]
-    pub fn into_sema_result(self, output: ModuleSemaOutput) -> SemaResult {
+    pub fn into_sema_result(mut self, output: ModuleSemaOutput) -> SemaResult {
+        self.instances.extend(output.instances);
         SemaResult {
             defs: self.defs.into_vec(),
             resolution: output.resolution,
             expr_types: output.expr_types,
             types: self.types,
             unify: self.unify,
-            instances: output.instances,
+            instances: self.instances,
             binop_dispatch: output.binop_dispatch,
             binop_dict_dispatch: output.binop_dict_dispatch,
             fn_constraints: output.fn_constraints,
@@ -242,6 +247,7 @@ pub fn analyze_shared<S: BuildHasher>(
     diags: &mut DiagnosticBag,
     import_names: &ImportNames,
     import_types: &HashMap<Symbol, TypeIdx, S>,
+    sub_module_exports: &SubModuleExports,
 ) -> ModuleSemaOutput {
     let module_scope = state.scopes.push_child(state.prelude_scope);
 
@@ -257,6 +263,7 @@ pub fn analyze_shared<S: BuildHasher>(
         diags,
         &mut resolve_state,
         import_names,
+        sub_module_exports,
     );
 
     let ctx = CheckContext {
@@ -281,6 +288,9 @@ pub fn analyze_shared<S: BuildHasher>(
         mem::take(&mut state.unify),
     );
 
+    let inherited_count = state.instances.len();
+    checker.store.instances.extend(state.instances.iter().cloned());
+
     for stmt in &module.stmts {
         let _ty = checker.synth(stmt.expr);
     }
@@ -290,6 +300,9 @@ pub fn analyze_shared<S: BuildHasher>(
 
     state.types = result.types;
     state.unify = result.unify;
+
+    // Accumulate only instances declared in THIS module (skip inherited).
+    state.instances.extend(result.instances[inherited_count..].iter().cloned());
 
     analyze_emit_unused_warnings(&state.defs, interner, file_id, diags);
 
@@ -302,7 +315,7 @@ pub fn analyze_shared<S: BuildHasher>(
             class_op_members: resolved.class_op_members,
         },
         expr_types: result.expr_types,
-        instances: result.instances,
+        instances: result.instances[inherited_count..].to_vec(),
         binop_dispatch: result.binop_dispatch,
         binop_dict_dispatch: result.binop_dict_dispatch,
         fn_constraints: result.fn_constraints,
@@ -367,7 +380,9 @@ pub fn analyze_with_imports<S: BuildHasher>(
     let mut lang_items = LangItemRegistry::new();
     for def in defs.iter() {
         if let Some(sym) = def.lang_item {
-            let name = interner.resolve(sym);
+            let raw = interner.resolve(sym);
+            let name = raw.strip_prefix('"').unwrap_or(raw);
+            let name = name.strip_suffix('"').unwrap_or(name);
             let _prev = lang_items.register(name, def.id);
         }
     }

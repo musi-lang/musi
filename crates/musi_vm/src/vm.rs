@@ -270,7 +270,8 @@ impl Vm {
             | Opcode::ST_GLB
             | Opcode::TYP_CHK
             | Opcode::MK_CLO
-            | Opcode::LD_UPV => self.step_data(op, operand),
+            | Opcode::LD_UPV
+            | Opcode::LD_UNIT => self.step_data(op, operand),
 
             Opcode::JMP_W
             | Opcode::JMP_T_W
@@ -308,6 +309,10 @@ impl Vm {
             }
             Opcode::POP => {
                 let _ = self.current_frame()?.stack.pop();
+                Ok(StepResult::Continue)
+            }
+            Opcode::LD_UNIT => {
+                self.current_frame()?.stack.push(Value::UNIT);
                 Ok(StepResult::Continue)
             }
             Opcode::SWP => {

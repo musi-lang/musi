@@ -88,19 +88,32 @@ pub fn emit_assign(
 
     let left_expr = em.ast.exprs[left].clone();
     if let Expr::Name { .. } = left_expr
-        && let Some(&def_id) = em.sema.resolution.expr_defs.get(&left)
-        && let Some(&slot) = fc.local_map.get(&def_id)
+        && let Some(&def_id) = em.expr_defs().get(&left)
     {
-        if fc.ref_locals.contains(&def_id) {
-            let val_slot = fc.alloc_local();
-            fc.fe.emit_st_loc(val_slot);
-            fc.fe.emit_ld_loc(slot);
-            fc.fe.emit_ld_loc(val_slot);
-            fc.fe.emit_st_fld(0)?;
-        } else {
-            fc.fe.emit_st_loc(slot);
+        if let Some(&slot) = fc.local_map.get(&def_id) {
+            if fc.ref_locals.contains(&def_id) {
+                let val_slot = fc.alloc_local();
+                fc.fe.emit_st_loc(val_slot);
+                fc.fe.emit_ld_loc(slot);
+                fc.fe.emit_ld_loc(val_slot);
+                fc.fe.emit_st_fld(0)?;
+            } else {
+                fc.fe.emit_st_loc(slot);
+            }
+            return Ok(());
         }
-        return Ok(());
+        if let Some(&upv_idx) = fc.upvalue_map.get(&def_id) {
+            if fc.ref_upvalues.contains(&def_id) {
+                let idx = u8::try_from(upv_idx)
+                    .map_err(|_| EmitError::overflow("upvalue index exceeds 255"))?;
+                let val_slot = fc.alloc_local();
+                fc.fe.emit_st_loc(val_slot);
+                fc.fe.emit_ld_upv(idx);
+                fc.fe.emit_ld_loc(val_slot);
+                fc.fe.emit_st_fld(0)?;
+                return Ok(());
+            }
+        }
     }
     // Discard if we can't resolve the target or it's not a name.
     fc.fe.emit_pop();
@@ -125,7 +138,7 @@ pub fn emit_pipe(
     let right_expr = em.ast.exprs[right].clone();
     match right_expr {
         Expr::Name { .. } => {
-            if let Some(&def_id) = em.sema.resolution.expr_defs.get(&right) {
+            if let Some(&def_id) = em.expr_defs().get(&right) {
                 if let Some(&ffi_idx) = em.foreign_map.get(&def_id) {
                     fc.fe.emit_inv_ffi(ffi_idx, 1);
                     return Ok(());

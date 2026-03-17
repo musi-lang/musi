@@ -17,7 +17,7 @@ use music_ast::decl::{ClassMember, EffectOp, ForeignDecl};
 use music_ast::expr::{Expr, LetFields, Param};
 use music_ast::lit::Lit;
 use music_ast::{AstArenas, ExprIdx, ParsedModule, PatIdx, Stmt};
-use music_sema::SemaResult;
+use music_sema::{DictLookup, Obligation, ResolutionMap, SemaResult, TypeIdx};
 use music_sema::Type;
 use music_sema::def::{DefId, DefKind};
 use music_shared::{FileId, Interner, Span, Symbol};
@@ -42,6 +42,17 @@ pub struct FnBytecode {
     pub handlers: Vec<HandlerEntry>,
 }
 
+/// Per-dependency-module context for multi-module emission.
+pub(crate) struct DepEmitCtx<'a> {
+    pub ast: &'a AstArenas,
+    pub stmts: Vec<Stmt>,
+    pub resolution: &'a ResolutionMap,
+    pub expr_types: &'a HashMap<ExprIdx, TypeIdx>,
+    pub binop_dispatch: &'a HashMap<ExprIdx, DefId>,
+    pub binop_dict_dispatch: &'a HashMap<ExprIdx, DictLookup>,
+    pub fn_constraints: &'a HashMap<DefId, Vec<Obligation>>,
+}
+
 /// A pending top-level function to emit.
 pub struct FnEntry {
     pub fn_id: u32,
@@ -50,6 +61,7 @@ pub struct FnEntry {
     pub params: Vec<Param>,
     pub body: ExprIdx,
     pub effect_mask: u16,
+    pub dep_idx: Option<usize>,
 }
 
 /// Orchestrates full module emission directly from AST+sema.
@@ -81,6 +93,9 @@ pub struct Emitter<'a> {
     fn_entries: Vec<FnEntry>,
     pub(crate) nested_fns: Vec<FnBytecode>,
     pub file_id: FileId,
+    script: bool,
+    dep_contexts: Vec<DepEmitCtx<'a>>,
+    active_dep: Option<usize>,
 }
 
 /// Per-function emission context.
@@ -90,6 +105,8 @@ pub struct FnCtx {
     pub ref_locals: HashSet<DefId>,
     /// Maps captured `DefId`s to upvalue indices within the closure object.
     pub upvalue_map: HashMap<DefId, u16>,
+    /// Captured upvalues that are ref cells (need auto-deref via `LD_FLD 0`).
+    pub ref_upvalues: HashSet<DefId>,
     pub deferred: Vec<ExprIdx>,
     next_label: u32,
     /// Maps constraint class `DefId` -> local slot holding the dictionary.
@@ -103,6 +120,7 @@ impl FnCtx {
             local_map: HashMap::new(),
             ref_locals: HashSet::new(),
             upvalue_map: HashMap::new(),
+            ref_upvalues: HashSet::new(),
             deferred: vec![],
             next_label: 0,
             dict_slots: HashMap::new(),
@@ -126,7 +144,21 @@ impl<'a> Emitter<'a> {
         sema: &'a SemaResult,
         interner: &'a mut Interner,
         file_id: FileId,
+        script: bool,
+        deps: &[crate::DepEmitInput<'a>],
     ) -> Self {
+        let dep_contexts = deps
+            .iter()
+            .map(|d| DepEmitCtx {
+                ast: &d.parsed.arenas,
+                stmts: d.parsed.stmts.clone(),
+                resolution: d.resolution,
+                expr_types: d.expr_types,
+                binop_dispatch: d.binop_dispatch,
+                binop_dict_dispatch: d.binop_dict_dispatch,
+                fn_constraints: d.fn_constraints,
+            })
+            .collect();
         Self {
             ast: &parsed.arenas,
             sema,
@@ -148,12 +180,58 @@ impl<'a> Emitter<'a> {
             fn_entries: vec![],
             nested_fns: vec![],
             file_id,
+            script,
+            dep_contexts,
+            active_dep: None,
+        }
+    }
+
+    pub(crate) fn expr_defs(&self) -> &HashMap<ExprIdx, DefId> {
+        match self.active_dep {
+            Some(i) => &self.dep_contexts[i].resolution.expr_defs,
+            None => &self.sema.resolution.expr_defs,
+        }
+    }
+
+    pub(crate) fn pat_defs(&self) -> &HashMap<Span, DefId> {
+        match self.active_dep {
+            Some(i) => &self.dep_contexts[i].resolution.pat_defs,
+            None => &self.sema.resolution.pat_defs,
+        }
+    }
+
+    pub(crate) fn active_binop_dispatch(&self) -> &HashMap<ExprIdx, DefId> {
+        match self.active_dep {
+            Some(i) => self.dep_contexts[i].binop_dispatch,
+            None => &self.sema.binop_dispatch,
+        }
+    }
+
+    pub(crate) fn active_binop_dict_dispatch(&self) -> &HashMap<ExprIdx, DictLookup> {
+        match self.active_dep {
+            Some(i) => self.dep_contexts[i].binop_dict_dispatch,
+            None => &self.sema.binop_dict_dispatch,
+        }
+    }
+
+    pub(crate) fn active_fn_constraints(&self) -> &HashMap<DefId, Vec<Obligation>> {
+        match self.active_dep {
+            Some(i) => self.dep_contexts[i].fn_constraints,
+            None => &self.sema.fn_constraints,
+        }
+    }
+
+    pub(crate) fn expr_types(&self) -> &HashMap<ExprIdx, TypeIdx> {
+        match self.active_dep {
+            Some(i) => self.dep_contexts[i].expr_types,
+            None => &self.sema.expr_types,
         }
     }
 
     pub fn emit_all(&mut self) -> Result<Vec<FnBytecode>, EmitError> {
         self.resolve_well_known_tags();
         self.scan_top_level()?;
+        self.scan_dep_modules()?;
         // Update str_cat index from lang items if rt.ms was imported
         if let Some(str_cat_def) = self.sema.lang_items.get("str_cat")
             && let Some(&idx) = self.foreign_map.get(&str_cat_def)
@@ -187,6 +265,12 @@ impl<'a> Emitter<'a> {
         for stmt in &stmts {
             self.scan_stmt(stmt.expr)?;
         }
+        // Script mode: synthesize an entry function from top-level statements
+        // when no explicit #[entrypoint] was declared.
+        if self.script && self.entry_fn_id.is_none() {
+            let fn_id = self.alloc_fn_id();
+            self.entry_fn_id = Some(fn_id);
+        }
         Ok(())
     }
 
@@ -208,12 +292,17 @@ impl<'a> Emitter<'a> {
             Expr::Instance { members, .. } => {
                 self.scan_instance_members(&members);
             }
+            Expr::Let { fields, body, .. } => {
+                self.scan_binding(&fields, false);
+                if let Some(body_idx) = body {
+                    self.scan_stmt(body_idx)?;
+                }
+            }
             Expr::Lit { .. }
             | Expr::Name { .. }
             | Expr::Paren { .. }
             | Expr::Tuple { .. }
             | Expr::Block { .. }
-            | Expr::Let { .. }
             | Expr::Fn { .. }
             | Expr::Call { .. }
             | Expr::Field { .. }
@@ -301,7 +390,7 @@ impl<'a> Emitter<'a> {
         decls: &[ForeignDecl],
         attrs: &[Attr],
     ) -> Result<(), EmitError> {
-        let abi_str = self.interner.resolve(abi).to_owned();
+        let abi_str = self.interner.resolve(abi).trim_matches('"').to_owned();
         let link_library = extract_link_library(attrs, self.interner);
         let any_type_id = self
             .tp
@@ -342,13 +431,22 @@ impl<'a> Emitter<'a> {
             let (param_type_ids, ret_type_id) =
                 self.lower_foreign_fn_type(def_id, any_type_id, unit_type_id);
 
-            let ext_sym = ext_name.unwrap_or(*name);
+            let ext_sym = match *ext_name {
+                Some(s) => {
+                    let trimmed = self.interner.resolve(s).trim_matches('"').to_owned();
+                    self.interner.intern(&trimmed)
+                }
+                None => *name,
+            };
             if abi_str != "C" {
                 return Err(EmitError::UnsupportedFeature {
                     desc: format!("unknown calling convention \"{abi_str}\"; use #[link(name := \"...\")]  to specify a library").into(),
                 });
             }
-            let library = link_library;
+            let library = link_library.map(|s| {
+                let trimmed = self.interner.resolve(s).trim_matches('"').to_owned();
+                self.interner.intern(&trimmed)
+            });
 
             let idx = u32::try_from(self.foreign_fns.len())
                 .map_err(|_| EmitError::overflow("foreign fn index overflow"))?;
@@ -531,7 +629,7 @@ impl<'a> Emitter<'a> {
 
         let binding_span = pat_span(fields.pat, self.ast);
         let mut binding_def_id = None;
-        if let Some(&did) = self.sema.resolution.pat_defs.get(&binding_span) {
+        if let Some(&did) = self.pat_defs().get(&binding_span) {
             let _ = self.fn_map.insert(did, fn_id);
             binding_def_id = Some(did);
             if is_entry {
@@ -547,6 +645,7 @@ impl<'a> Emitter<'a> {
             params: fn_params,
             body: fn_body,
             effect_mask: 0,
+            dep_idx: None,
         });
     }
 
@@ -584,6 +683,142 @@ impl<'a> Emitter<'a> {
                 params: sig.params.clone(),
                 body: *body,
                 effect_mask: 0,
+                dep_idx: None,
+            });
+        }
+    }
+
+    fn scan_dep_modules(&mut self) -> Result<(), EmitError> {
+        for dep_idx in 0..self.dep_contexts.len() {
+            let stmts = self.dep_contexts[dep_idx].stmts.clone();
+            let saved_ast = self.ast;
+            self.ast = self.dep_contexts[dep_idx].ast;
+            self.active_dep = Some(dep_idx);
+
+            for stmt in &stmts {
+                self.scan_dep_stmt(stmt.expr, dep_idx)?;
+            }
+
+            self.ast = saved_ast;
+            self.active_dep = None;
+        }
+        Ok(())
+    }
+
+    fn scan_dep_stmt(&mut self, expr_idx: ExprIdx, dep_idx: usize) -> Result<(), EmitError> {
+        let expr = self.ast.exprs[expr_idx].clone();
+        match expr {
+            Expr::Annotated { attrs, inner, .. } => {
+                self.scan_dep_annotated(&attrs, inner, dep_idx)?;
+            }
+            Expr::Binding { fields, .. } => {
+                self.scan_dep_binding(&fields, dep_idx);
+            }
+            Expr::Foreign { abi, decls, .. } => {
+                self.scan_foreign_with_attrs(abi, &decls, &[])?;
+            }
+            Expr::Instance { members, .. } => {
+                self.scan_dep_instance_members(&members, dep_idx);
+            }
+            Expr::Export { .. } => {}
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn scan_dep_annotated(
+        &mut self,
+        attrs: &[Attr],
+        inner: ExprIdx,
+        dep_idx: usize,
+    ) -> Result<(), EmitError> {
+        let inner_expr = self.ast.exprs[inner].clone();
+        match inner_expr {
+            Expr::Binding { fields, .. } => {
+                self.scan_dep_binding(&fields, dep_idx);
+            }
+            Expr::Annotated {
+                attrs: inner_attrs,
+                inner: inner2,
+                ..
+            } => {
+                let mut combined = attrs.to_vec();
+                combined.extend_from_slice(&inner_attrs);
+                self.scan_dep_annotated(&combined, inner2, dep_idx)?;
+            }
+            Expr::Foreign { abi, decls, .. } => {
+                self.scan_foreign_with_attrs(abi, &decls, attrs)?;
+            }
+            Expr::Instance { members, .. } => {
+                self.scan_dep_instance_members(&members, dep_idx);
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn scan_dep_binding(&mut self, fields: &LetFields, dep_idx: usize) {
+        let Some(value_idx) = fields.value else {
+            return;
+        };
+
+        let Some((fn_params, fn_body)) = extract_fn(value_idx, self.ast) else {
+            return;
+        };
+
+        let fn_id = self.alloc_fn_id();
+
+        let binding_span = pat_span(fields.pat, self.ast);
+        let mut binding_def_id = None;
+        if let Some(&did) = self.pat_defs().get(&binding_span) {
+            let _ = self.fn_map.insert(did, fn_id);
+            binding_def_id = Some(did);
+        }
+
+        let fn_name = pat_name_str(fields.pat, self.ast, self.interner);
+        self.fn_entries.push(FnEntry {
+            fn_id,
+            def_id: binding_def_id,
+            name: fn_name,
+            params: fn_params,
+            body: fn_body,
+            effect_mask: 0,
+            dep_idx: Some(dep_idx),
+        });
+    }
+
+    fn scan_dep_instance_members(&mut self, members: &[ClassMember], dep_idx: usize) {
+        for member in members {
+            let ClassMember::Fn {
+                sig,
+                default: Some(body),
+                ..
+            } = member
+            else {
+                continue;
+            };
+            let def_id = self
+                .sema
+                .defs
+                .iter()
+                .find(|d| d.kind == DefKind::Fn && d.name == sig.name && d.span == sig.span)
+                .map(|d| d.id);
+
+            let fn_id = self.alloc_fn_id();
+
+            if let Some(did) = def_id {
+                let _ = self.fn_map.insert(did, fn_id);
+            }
+
+            let fn_name = self.interner.resolve(sig.name).to_owned();
+            self.fn_entries.push(FnEntry {
+                fn_id,
+                def_id,
+                name: fn_name,
+                params: sig.params.clone(),
+                body: *body,
+                effect_mask: 0,
+                dep_idx: Some(dep_idx),
             });
         }
     }
@@ -595,10 +830,62 @@ impl<'a> Emitter<'a> {
             let bc = self.emit_one_function(&entry)?;
             results.push(bc);
         }
+        // Script mode: emit a synthetic entry function from top-level statements.
+        if let Some(entry_id) = self.entry_fn_id {
+            if !results.iter().any(|f| f.fn_id == entry_id) {
+                let bc = self.emit_script_entry(entry_id)?;
+                results.push(bc);
+            }
+        }
         let mut nested = mem::take(&mut self.nested_fns);
         results.append(&mut nested);
         results.sort_by_key(|b| b.fn_id);
         Ok(results)
+    }
+
+    /// Emit a synthetic entry function that executes all top-level statements
+    /// top-to-bottom. The last statement's value is the return value.
+    fn emit_script_entry(&mut self, fn_id: u32) -> Result<FnBytecode, EmitError> {
+        let stmts: Vec<ExprIdx> = self.stmts.iter().map(|s| s.expr).collect();
+        let mut fc = FnCtx::new(0);
+
+        let last_idx = stmts.len().saturating_sub(1);
+        let mut last_produced = false;
+        for (i, &expr_idx) in stmts.iter().enumerate() {
+            let is_last = i == last_idx;
+            let produced = expr::emit_expr_tail(self, &mut fc, expr_idx, is_last)?;
+            if produced && !is_last {
+                fc.fe.emit_pop();
+            }
+            if is_last {
+                last_produced = produced;
+            }
+        }
+
+        if last_produced {
+            fc.fe.emit_ret();
+        } else {
+            fc.fe.emit_ret_u();
+        }
+
+        fc.fe.resolve_fixups("__script__")?;
+
+        let unit_type_id = self
+            .tp
+            .lower_well_known_def(self.sema.well_known.unit, &self.sema.well_known)
+            .unwrap_or(0);
+
+        Ok(FnBytecode {
+            fn_id,
+            type_id: unit_type_id,
+            local_count: fc.fe.local_count,
+            param_count: 0,
+            max_stack: fc.fe.max_stack,
+            effect_mask: 0,
+            upvalue_count: 0,
+            code: fc.fe.code,
+            handlers: fc.fe.handlers,
+        })
     }
 
     fn resolve_fn_type_id(&mut self, def_id: Option<DefId>) -> Result<u32, EmitError> {
@@ -606,12 +893,15 @@ impl<'a> Emitter<'a> {
             && let Some(def_info) = self.sema.defs.iter().find(|d| d.id == did)
             && let Some(ty_idx) = def_info.ty_info.ty
         {
-            return self.tp.lower_sema_type(
+            match self.tp.lower_sema_type(
                 ty_idx,
                 &self.sema.types,
                 &self.sema.unify,
                 &self.sema.well_known,
-            );
+            ) {
+                Ok(id) => return Ok(id),
+                Err(_) => {} // polymorphic / unresolved — fall through to unit
+            }
         }
         self.tp
             .lower_well_known_def(self.sema.well_known.unit, &self.sema.well_known)
@@ -619,10 +909,17 @@ impl<'a> Emitter<'a> {
     }
 
     fn emit_one_function(&mut self, entry: &FnEntry) -> Result<FnBytecode, EmitError> {
+        let saved = entry.dep_idx.map(|dep_idx| {
+            let saved_ast = self.ast;
+            self.ast = self.dep_contexts[dep_idx].ast;
+            self.active_dep = Some(dep_idx);
+            saved_ast
+        });
+
         // Determine implicit dictionary parameter count from constraints
         let constraints = entry
             .def_id
-            .and_then(|did| self.sema.fn_constraints.get(&did));
+            .and_then(|did| self.active_fn_constraints().get(&did));
         let dict_count = constraints.map_or(0, Vec::len);
         let total_params = entry.params.len() + dict_count;
         let param_count =
@@ -643,7 +940,7 @@ impl<'a> Emitter<'a> {
         for (i, param) in entry.params.iter().enumerate() {
             let slot = u32::try_from(i + dict_count)
                 .map_err(|_| EmitError::overflow("param index overflow"))?;
-            if let Some(&did) = self.sema.resolution.pat_defs.get(&param.span) {
+            if let Some(&did) = self.pat_defs().get(&param.span) {
                 let _ = fc.local_map.insert(did, slot);
             } else {
                 for def in &self.sema.defs {
@@ -676,6 +973,11 @@ impl<'a> Emitter<'a> {
         let _code_len = fc.fe.validate_code_len()?;
 
         let type_id = self.resolve_fn_type_id(entry.def_id)?;
+
+        if let Some(saved_ast) = saved {
+            self.ast = saved_ast;
+            self.active_dep = None;
+        }
 
         Ok(FnBytecode {
             fn_id: entry.fn_id,

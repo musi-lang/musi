@@ -384,7 +384,7 @@ fn test_string_with_escapes() {
     assert_eq!(tokens[0].kind, TokenKind::StringLit);
     assert_eq!(
         interner.resolve(tokens[0].symbol.expect("has symbol")),
-        r#""hello\nworld""#
+        r#"hello\nworld"#
     );
 }
 

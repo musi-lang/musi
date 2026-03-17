@@ -62,10 +62,10 @@ fn test_type_record_fields() {
             name: sym_x,
             ty: int_ty,
         }],
-        open: false,
+        rest: None,
     });
     assert!(
-        matches!(&arena[rec], Type::Record { fields, open } if fields.len() == 1 && fields[0].name == sym_x && !open)
+        matches!(&arena[rec], Type::Record { fields, rest } if fields.len() == 1 && fields[0].name == sym_x && rest.is_none())
     );
 }
 

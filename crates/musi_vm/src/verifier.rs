@@ -165,8 +165,8 @@ const fn fixed_stack_delta(op: Opcode) -> Option<i32> {
         | Opcode::ALC_REF
         | Opcode::TYP_CHK => Some(0),
 
-        // Push 1: dup, load global, alloc, channel make, load upvalue
-        Opcode::DUP | Opcode::LD_GLB | Opcode::ALC_ARN | Opcode::TSK_CMK | Opcode::LD_UPV => {
+        // Push 1: dup, load global, alloc, channel make, load upvalue, load unit
+        Opcode::DUP | Opcode::LD_GLB | Opcode::ALC_ARN | Opcode::TSK_CMK | Opcode::LD_UPV | Opcode::LD_UNIT => {
             Some(1)
         }
 

@@ -15,8 +15,8 @@ use music_resolve::graph::ModuleId;
 use music_resolve::{ModuleGraph, ModuleNode, ResolverConfig, build_module_graph};
 use music_sema::types::RecordField;
 use music_sema::{
-    DefInfo, ExportBinding, ImportNames, ModuleSemaOutput, SemaResult, SharedAnalysisState, Type,
-    TypeIdx, analyze, collect_exports,
+    DefInfo, ExportBinding, ImportNames, ModuleSemaOutput, SemaResult, SharedAnalysisState,
+    SubModuleExports, Type, TypeIdx, analyze, collect_exports,
 };
 use music_shared::{Arena, DiagnosticBag, FileId, Interner, Severity, SourceDb, Span, Symbol};
 
@@ -186,6 +186,7 @@ fn run_lsp_sema_in_order(
 ) -> Option<LspSemaOutput> {
     let mut state = SharedAnalysisState::new(interner);
     let mut module_exports: HashMap<ModuleId, Vec<ExportBinding>> = HashMap::new();
+    let mut sub_module_exports: SubModuleExports = HashMap::new();
     let mut dep_sources: HashMap<String, DepSource> = HashMap::new();
 
     let entry_id = ModuleId(0);
@@ -204,7 +205,7 @@ fn run_lsp_sema_in_order(
         }
 
         let import_names = build_import_names(node, &module_exports);
-        let import_types = build_import_types(node, &module_exports, &mut state.types);
+        let import_types = build_import_types(node, &module_exports, &mut state.types, interner);
 
         let Some(parsed) = parsed_modules.remove(&module_id) else {
             continue;
@@ -218,6 +219,7 @@ fn run_lsp_sema_in_order(
             diags,
             &import_names,
             &import_types,
+            &sub_module_exports,
         );
 
         if module_id == entry_id {
@@ -225,6 +227,19 @@ fn run_lsp_sema_in_order(
         } else {
             let defs_vec: Vec<_> = state.defs.iter().cloned().collect();
             let exports = collect_exports(&parsed, &defs_vec, &output.resolution.pat_defs);
+
+            for &(dep_id, import_sym) in &node.imports {
+                for export in &exports.bindings {
+                    if export.name == import_sym {
+                        if let Some(sub_exports) = module_exports.get(&dep_id) {
+                            let names: Vec<_> =
+                                sub_exports.iter().map(|eb| (eb.name, eb.def_id)).collect();
+                            let _prev = sub_module_exports.insert(export.def_id, names);
+                        }
+                    }
+                }
+            }
+
             let _prev = module_exports.insert(module_id, exports.bindings);
 
             let mod_key = module_key(&node.path, project_root);
@@ -304,20 +319,22 @@ fn build_import_types(
     node: &ModuleNode,
     module_exports: &HashMap<ModuleId, Vec<ExportBinding>>,
     types: &mut Arena<Type>,
+    interner: &Interner,
 ) -> HashMap<Symbol, TypeIdx> {
     let mut map = HashMap::new();
     for &(dep_id, import_sym) in &node.imports {
         if let Some(exports) = module_exports.get(&dep_id) {
-            let fields: Vec<_> = exports
+            let mut fields: Vec<_> = exports
                 .iter()
                 .map(|b| RecordField {
                     name: b.name,
                     ty: b.ty,
                 })
                 .collect();
+            fields.sort_by(|a, b| interner.resolve(a.name).cmp(interner.resolve(b.name)));
             let ty = types.alloc(Type::Record {
                 fields,
-                open: false,
+                rest: None,
             });
             let _prev = map.insert(import_sym, ty);
         }

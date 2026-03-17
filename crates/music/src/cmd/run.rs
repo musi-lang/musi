@@ -21,7 +21,7 @@ pub fn run(path: &Path, manifest: Option<&MusiManifest>, project_root: Option<&P
             Err(()) => process::exit(1),
         }
     };
-    let Ok(bytes) = pipeline::run_backend(&mut out) else {
+    let Ok(bytes) = pipeline::run_backend(&mut out, true) else {
         process::exit(1)
     };
     let module = match load(&bytes) {

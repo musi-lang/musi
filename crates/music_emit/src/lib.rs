@@ -20,9 +20,22 @@ pub mod error;
 
 pub use error::EmitError;
 
-use music_ast::ParsedModule;
-use music_sema::SemaResult;
+use std::collections::HashMap;
+
+use music_ast::{ExprIdx, ParsedModule};
+use music_sema::{DictLookup, Obligation, ResolutionMap, SemaResult, TypeIdx};
+use music_sema::def::DefId;
 use music_shared::{FileId, Interner};
+
+/// Dependency module data needed by the emitter.
+pub struct DepEmitInput<'a> {
+    pub parsed: &'a ParsedModule,
+    pub resolution: &'a ResolutionMap,
+    pub expr_types: &'a HashMap<ExprIdx, TypeIdx>,
+    pub binop_dispatch: &'a HashMap<ExprIdx, DefId>,
+    pub binop_dict_dispatch: &'a HashMap<ExprIdx, DictLookup>,
+    pub fn_constraints: &'a HashMap<DefId, Vec<Obligation>>,
+}
 
 /// Output of a successful [`emit`] call.
 #[derive(Debug)]
@@ -46,8 +59,10 @@ pub fn emit(
     sema: &SemaResult,
     interner: &mut Interner,
     file_id: FileId,
+    script: bool,
+    deps: &[DepEmitInput<'_>],
 ) -> Result<EmitOutput, EmitError> {
-    let mut emitter = emitter::Emitter::new(parsed, sema, interner, file_id);
+    let mut emitter = emitter::Emitter::new(parsed, sema, interner, file_id, script, deps);
     let functions = emitter.emit_all()?;
 
     let bytes = module::assemble(module::AssembleParams {

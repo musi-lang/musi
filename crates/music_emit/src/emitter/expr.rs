@@ -11,8 +11,10 @@ use music_ast::expr::{
 use music_ast::lit::Lit;
 use music_ast::ty::Ty;
 use music_sema::DefId;
+use music_sema::TypeIdx;
 use music_sema::def::DefKind;
-use music_sema::types::Type;
+use music_sema::types::{RecordField, Type};
+use music_sema::unify::types_match;
 use music_shared::Span;
 use music_shared::Symbol;
 
@@ -67,6 +69,17 @@ fn collect_free_vars(
     found
 }
 
+/// Check whether `body` contains a free reference to `target` (i.e. the
+/// binding being defined references itself — a recursive closure).
+fn body_references_def(em: &Emitter<'_>, body: ExprIdx, target: DefId) -> bool {
+    let local_defs = HashSet::new();
+    let mut parent_locals = HashMap::new();
+    let _ = parent_locals.insert(target, 0);
+    let parent_upvalues = HashMap::new();
+    let captures = collect_free_vars(em, body, &local_defs, &parent_locals, &parent_upvalues);
+    captures.iter().any(|(did, _)| *did == target)
+}
+
 fn cfv_walk_rec_fields(cx: &mut CfvCtx<'_, '_>, fields: &[RecField]) {
     for f in fields {
         match f {
@@ -97,7 +110,7 @@ fn cfv_walk_match(cx: &mut CfvCtx<'_, '_>, scrutinee: ExprIdx, arms: &[MatchArm]
 }
 
 fn cfv_check_name(cx: &mut CfvCtx<'_, '_>, expr_idx: ExprIdx) {
-    let Some(&def_id) = cx.em.sema.resolution.expr_defs.get(&expr_idx) else {
+    let Some(&def_id) = cx.em.expr_defs().get(&expr_idx) else {
         return;
     };
     if cx.local_defs.contains(&def_id)
@@ -314,7 +327,33 @@ pub fn emit_expr_tail(
             field,
             safe,
             ..
-        } => emit_field(em, fc, *object, *field, *safe),
+        } => {
+            // If the sema resolved this field expression directly to a DefId
+            // (e.g. import field chains like `t.runner.report`), emit it as a
+            // direct name reference — no runtime field access needed.
+            if let Some(&def_id) = em.expr_defs().get(&expr_idx) {
+                if let Some(&fn_id) = em.fn_map.get(&def_id) {
+                    let cv = ConstValue::FnRef(fn_id);
+                    let i = em.cp.intern(&cv, em.interner)?;
+                    fc.fe.emit_ld_cst(i);
+                    return Ok(true);
+                }
+                if let Some(&ffi_idx) = em.foreign_map.get(&def_id) {
+                    let cv = ConstValue::FnRef(ffi_idx);
+                    let i = em.cp.intern(&cv, em.interner)?;
+                    fc.fe.emit_ld_cst(i);
+                    return Ok(true);
+                }
+                if let Some(&slot) = fc.local_map.get(&def_id) {
+                    fc.fe.emit_ld_loc(slot);
+                    if fc.ref_locals.contains(&def_id) {
+                        fc.fe.emit_ld_fld(0)?;
+                    }
+                    return Ok(true);
+                }
+            }
+            emit_field(em, fc, *object, *field, *safe)
+        }
         Expr::Index { object, index, .. } => emit_index(em, fc, *object, *index),
         Expr::Return { value, .. } => emit_return(em, fc, *value),
         Expr::Piecewise { arms, .. } => {
@@ -374,7 +413,7 @@ fn emit_name(
         fc.fe.emit_ld_cst(i);
         return Ok(true);
     }
-    let Some(&def_id) = em.sema.resolution.expr_defs.get(&expr_idx) else {
+    let Some(&def_id) = em.expr_defs().get(&expr_idx) else {
         return Err(EmitError::UnsupportedFeature {
             desc: format!("unresolved name `{}`", em.interner.resolve(name)).into(),
         });
@@ -402,11 +441,80 @@ fn emit_name(
         let idx =
             u8::try_from(upv_idx).map_err(|_| EmitError::overflow("upvalue index exceeds 255"))?;
         fc.fe.emit_ld_upv(idx);
+        if fc.ref_upvalues.contains(&def_id) {
+            fc.fe.emit_ld_fld(0)?;
+        }
         return Ok(true);
+    }
+    // Import aliases: construct a module record from the module's exports.
+    let def_info = em.sema.defs.iter().find(|d| d.id == def_id);
+    if let Some(info) = def_info {
+        if info.kind == DefKind::Import {
+            if let Some(ty_idx) = info.ty_info.ty {
+                return emit_module_record(em, fc, ty_idx);
+            }
+        }
     }
     Err(EmitError::UnsupportedFeature {
         desc: format!("unresolved local `{}`", em.interner.resolve(name)).into(),
     })
+}
+
+/// Construct a module record at runtime from its type's fields.
+/// Each field that maps to a known function or FFI binding becomes a FnRef;
+/// fields whose types are themselves records (sub-modules) are constructed
+/// recursively.
+fn emit_module_record(
+    em: &mut Emitter<'_>,
+    fc: &mut FnCtx,
+    ty_idx: music_sema::TypeIdx,
+) -> Result<bool, EmitError> {
+    let resolved = em.sema.unify.resolve(ty_idx, &em.sema.types);
+    let Type::Record { fields, .. } = &em.sema.types[resolved] else {
+        return Ok(false);
+    };
+    let fields = fields.clone();
+    let n = fields.len();
+    for field in &fields {
+        // Try to find a DefId for this field's name that's a function or FFI.
+        let field_name = field.name;
+        let mut emitted = false;
+        // Search for a def with this name that's in fn_map or foreign_map.
+        for def in &em.sema.defs {
+            if def.name == field_name && def.exported {
+                if let Some(&fn_id) = em.fn_map.get(&def.id) {
+                    let cv = ConstValue::FnRef(fn_id);
+                    let i = em.cp.intern(&cv, em.interner)?;
+                    fc.fe.emit_ld_cst(i);
+                    emitted = true;
+                    break;
+                }
+                if let Some(&ffi_idx) = em.foreign_map.get(&def.id) {
+                    let cv = ConstValue::FnRef(ffi_idx);
+                    let i = em.cp.intern(&cv, em.interner)?;
+                    fc.fe.emit_ld_cst(i);
+                    emitted = true;
+                    break;
+                }
+            }
+        }
+        if !emitted {
+            // Try constructing a sub-module record from the field's type.
+            let field_resolved = em.sema.unify.resolve(field.ty, &em.sema.types);
+            if matches!(&em.sema.types[field_resolved], Type::Record { .. }) {
+                let sub = emit_module_record(em, fc, field.ty)?;
+                if !sub {
+                    fc.fe.emit_ld_unit();
+                }
+            } else {
+                fc.fe.emit_ld_unit();
+            }
+        }
+    }
+    let field_count = u32::try_from(n).map_err(|_| EmitError::overflow("module record fields"))?;
+    let stack_pop = i32::try_from(n).map_err(|_| EmitError::overflow("module record fields"))?;
+    fc.fe.emit_mk_prd(field_count, stack_pop)?;
+    Ok(true)
 }
 
 fn emit_block(
@@ -435,6 +543,35 @@ fn emit_let(
     is_tail: bool,
 ) -> Result<bool, EmitError> {
     if let Some(val_idx) = fields.value {
+        if fields.kind != BindKind::Mut {
+            if let Expr::Fn {
+                body: fn_body,
+                params,
+                ..
+            } = &em.ast.exprs[val_idx]
+            {
+                let fn_body = *fn_body;
+                let params = params.clone();
+                if let Pat::Bind { span, .. } = &em.ast.pats[fields.pat] {
+                    let span = *span;
+                    if let Some(&def_id) = em.pat_defs().get(&span) {
+                        // Already registered by scan phase — compiled as top-level fn.
+                        if em.fn_map.contains_key(&def_id) {
+                            return body.map_or(Ok(false), |body_idx| {
+                                emit_expr_tail(em, fc, body_idx, is_tail)
+                            });
+                        }
+                        // Recursive lambda: use ref-cell letrec pattern.
+                        if body_references_def(em, fn_body, def_id) {
+                            emit_letrec_fn(em, fc, def_id, fields.pat, val_idx, &params, fn_body)?;
+                            return body.map_or(Ok(false), |body_idx| {
+                                emit_expr_tail(em, fc, body_idx, is_tail)
+                            });
+                        }
+                    }
+                }
+            }
+        }
         let produced = emit_expr(em, fc, val_idx)?;
         if produced {
             if fields.kind == BindKind::Mut {
@@ -447,6 +584,48 @@ fn emit_let(
     body.map_or(Ok(false), |body_idx| {
         emit_expr_tail(em, fc, body_idx, is_tail)
     })
+}
+
+/// Emit a recursive local closure via the ref-cell letrec pattern:
+/// 1. Pre-allocate a ref cell with a placeholder value
+/// 2. Emit the closure (which captures the ref cell as an upvalue)
+/// 3. Patch the ref cell with the actual closure value
+fn emit_letrec_fn(
+    em: &mut Emitter<'_>,
+    fc: &mut FnCtx,
+    def_id: DefId,
+    _pat_idx: PatIdx,
+    _val_idx: ExprIdx,
+    params: &[Param],
+    fn_body: ExprIdx,
+) -> Result<(), EmitError> {
+    // 1. Pre-allocate ref cell: LD_UNIT → ALC_REF → ST_LOC
+    let wk = &em.sema.well_known;
+    let type_id = em.tp.lower_well_known_def(wk.any, wk).unwrap_or(0);
+    fc.fe.emit_ld_unit();
+    fc.fe.emit_alc_ref(type_id);
+    let slot = fc.alloc_local();
+    fc.fe.emit_st_loc(slot);
+
+    // Register the binding before emitting the closure so collect_free_vars
+    // finds it in fc.local_map and captures the ref cell.
+    let prev = fc.local_map.insert(def_id, slot);
+    debug_assert!(prev.is_none(), "duplicate local slot for letrec def");
+    let _ = fc.ref_locals.insert(def_id);
+
+    // 2. Emit the closure (standard path — now finds self in parent_locals).
+    let produced = emit_fn(em, fc, params, fn_body)?;
+    if !produced {
+        return Ok(());
+    }
+
+    // 3. Patch: store closure into the ref cell's field 0.
+    let tmp = fc.alloc_local();
+    fc.fe.emit_st_loc(tmp);
+    fc.fe.emit_ld_loc(slot);
+    fc.fe.emit_ld_loc(tmp);
+    fc.fe.emit_st_fld(0)?;
+    Ok(())
 }
 
 fn emit_binding(
@@ -738,7 +917,7 @@ fn emit_binop_expr(
     left: ExprIdx,
     right: ExprIdx,
 ) -> Result<bool, EmitError> {
-    if let Some(&def_id) = em.sema.binop_dispatch.get(&expr_idx)
+    if let Some(&def_id) = em.active_binop_dispatch().get(&expr_idx)
         && let Some(&fn_id) = em.fn_map.get(&def_id)
     {
         let produced_left = emit_expr(em, fc, left)?;
@@ -757,7 +936,7 @@ fn emit_binop_expr(
         return Ok(true);
     }
     // Polymorphic dispatch: load method from dictionary, call via INV_DYN
-    if let Some(dict_lookup) = em.sema.binop_dict_dispatch.get(&expr_idx) {
+    if let Some(dict_lookup) = em.active_binop_dict_dispatch().get(&expr_idx) {
         let dict_slot = fc
             .dict_slots
             .get(&dict_lookup.class)
@@ -866,6 +1045,32 @@ fn emit_primitive_binop(
             Ok(true)
         }
         _ => {
+            // String `+` → call str_cat FFI instead of I_ADD.
+            if op == BinOp::Add {
+                if let Some(ty_idx) = em.expr_types().get(&left).copied() {
+                    let resolved = em.sema.unify.resolve(ty_idx, &em.sema.types);
+                    if let Type::Named { def, .. } = &em.sema.types[resolved] {
+                        if *def == em.sema.well_known.string {
+                            if let Some(ffi_idx) = em.str_cat_ffi_idx {
+                                let produced_left = emit_expr(em, fc, left)?;
+                                if !produced_left {
+                                    return Err(EmitError::UnsupportedFeature {
+                                        desc: "binop left operand produced no value".into(),
+                                    });
+                                }
+                                let produced_right = emit_expr(em, fc, right)?;
+                                if !produced_right {
+                                    return Err(EmitError::UnsupportedFeature {
+                                        desc: "binop right operand produced no value".into(),
+                                    });
+                                }
+                                fc.fe.emit_inv_ffi(ffi_idx, 2);
+                                return Ok(true);
+                            }
+                        }
+                    }
+                }
+            }
             let produced_left = emit_expr(em, fc, left)?;
             if !produced_left {
                 return Err(EmitError::UnsupportedFeature {
@@ -930,48 +1135,85 @@ fn emit_call(
     args: &[Arg],
     is_tail: bool,
 ) -> Result<bool, EmitError> {
-    if let Expr::Name { .. } = &em.ast.exprs[callee] {
-        if let Some(&def_id) = em.sema.resolution.expr_defs.get(&callee) {
-            // Emit implicit dictionary arguments before explicit args
-            let dict_count = emit_dict_for_call(em, fc, def_id, callee)?;
-            let explicit_count = emit_call_args(em, fc, args)?;
-            let total_count = dict_count + explicit_count;
+    // Direct dispatch: if the callee resolves to a known function, emit a
+    // static call (INV / INV_FFI) instead of dynamic dispatch (INV_DYN).
+    // This handles both simple names (`foo(...)`) and resolved import field
+    // chains (`rt.writeln(...)`, `t.assertions.assert_eq(...)`).
+    if let Some(&def_id) = em.expr_defs().get(&callee) {
+        let dict_count = emit_dict_for_call(em, fc, def_id, callee)?;
+        let explicit_count = emit_call_args(em, fc, args)?;
+        let total_count = dict_count + explicit_count;
 
-            if let Some(&ffi_idx) = em.foreign_map.get(&def_id) {
-                let ac =
-                    i32::try_from(total_count).map_err(|_| EmitError::overflow("arg count"))?;
-                fc.fe.emit_inv_ffi(ffi_idx, ac);
+        if let Some(&ffi_idx) = em.foreign_map.get(&def_id) {
+            let ac =
+                i32::try_from(total_count).map_err(|_| EmitError::overflow("arg count"))?;
+            fc.fe.emit_inv_ffi(ffi_idx, ac);
+            return Ok(true);
+        }
+        if let Some(&fn_id) = em.fn_map.get(&def_id) {
+            if is_tail {
+                fc.fe.emit_inv_tail(fn_id, false);
                 return Ok(true);
             }
-            if let Some(&fn_id) = em.fn_map.get(&def_id) {
-                if is_tail {
-                    fc.fe.emit_inv_tail(fn_id, false);
-                    return Ok(true);
-                }
-                let ac =
-                    i32::try_from(total_count).map_err(|_| EmitError::overflow("arg count"))?;
-                fc.fe.emit_inv(fn_id, false, ac);
-                return Ok(true);
+            let ac =
+                i32::try_from(total_count).map_err(|_| EmitError::overflow("arg count"))?;
+            fc.fe.emit_inv(fn_id, false, ac);
+            return Ok(true);
+        }
+        // Dynamic dispatch via local or upvalue requires callee below args.
+        // Args were already emitted above; save them to temp slots, push callee,
+        // then restore args on top.
+        if fc.local_map.contains_key(&def_id) || fc.upvalue_map.contains_key(&def_id) {
+            // Spill args to temp slots.
+            let mut arg_temps = Vec::with_capacity(total_count);
+            for _ in 0..total_count {
+                let t = fc.alloc_local();
+                fc.fe.emit_st_loc(t);
+                arg_temps.push(t);
             }
+            // Push callee.
             if let Some(&slot) = fc.local_map.get(&def_id) {
                 fc.fe.emit_ld_loc(slot);
-                let ac_i =
-                    i32::try_from(total_count).map_err(|_| EmitError::overflow("arg count"))?;
-                fc.fe.emit_inv_dyn(ac_i)?;
-                return Ok(true);
+                if fc.ref_locals.contains(&def_id) {
+                    fc.fe.emit_ld_fld(0)?;
+                }
+            } else if let Some(&upv_idx) = fc.upvalue_map.get(&def_id) {
+                let idx = u8::try_from(upv_idx)
+                    .map_err(|_| EmitError::overflow("upvalue index exceeds 255"))?;
+                fc.fe.emit_ld_upv(idx);
+                if fc.ref_upvalues.contains(&def_id) {
+                    fc.fe.emit_ld_fld(0)?;
+                }
             }
+            // Restore args on top (reverse order — first spilled is last restored).
+            for &t in arg_temps.iter().rev() {
+                fc.fe.emit_ld_loc(t);
+            }
+            let ac_i =
+                i32::try_from(total_count).map_err(|_| EmitError::overflow("arg count"))?;
+            fc.fe.emit_inv_dyn(ac_i)?;
+            return Ok(true);
         }
-        Err(EmitError::UnsupportedFeature {
+        // Name callees that don't resolve are an error.
+        if matches!(&em.ast.exprs[callee], Expr::Name { .. }) {
+            return Err(EmitError::UnsupportedFeature {
+                desc: "unresolved callee".into(),
+            });
+        }
+    } else if matches!(&em.ast.exprs[callee], Expr::Name { .. }) {
+        return Err(EmitError::UnsupportedFeature {
             desc: "unresolved callee".into(),
-        })
-    } else {
-        let arg_count = emit_call_args(em, fc, args)?;
+        });
+    }
+    {
+        // Callee must be below args on the stack for resolve_inv_dyn.
         let produced = emit_expr(em, fc, callee)?;
         if !produced {
             return Err(EmitError::UnsupportedFeature {
                 desc: "callee produced no value".into(),
             });
         }
+        let arg_count = emit_call_args(em, fc, args)?;
         let ac_i = i32::try_from(arg_count).map_err(|_| EmitError::overflow("arg count"))?;
         fc.fe.emit_inv_dyn(ac_i)?;
         Ok(true)
@@ -997,15 +1239,21 @@ fn emit_record_lit_fixed(
     fc: &mut FnCtx,
     fields: &[RecField],
 ) -> Result<bool, EmitError> {
-    let named_fields: Vec<_> = fields
+    // Collect (name, value) pairs and sort by name for canonical field ordering.
+    // This ordering must match `resolve_field_in_type` and the type checker's
+    // canonical sort so that field indices are consistent across modules.
+    let mut named_fields: Vec<(music_shared::Symbol, Option<music_ast::ExprIdx>)> = fields
         .iter()
         .filter_map(|f| match f {
-            RecField::Named { value, .. } => Some(*value),
+            RecField::Named { name, value, .. } => Some((*name, *value)),
             RecField::Spread { .. } => None,
         })
         .collect();
+    named_fields.sort_by(|(a, _), (b, _)| {
+        em.interner.resolve(*a).cmp(em.interner.resolve(*b))
+    });
     let n = named_fields.len();
-    for val_opt in named_fields {
+    for (_, val_opt) in named_fields {
         if let Some(val_idx) = val_opt {
             let produced = emit_expr(em, fc, val_idx)?;
             if !produced {
@@ -1090,7 +1338,7 @@ fn resolve_field_name_by_symbol(
     object_expr: ExprIdx,
     name: Symbol,
 ) -> Result<u32, EmitError> {
-    let Some(&ty_idx) = em.sema.expr_types.get(&object_expr) else {
+    let Some(&ty_idx) = em.expr_types().get(&object_expr) else {
         return Err(EmitError::NoTypeInfo {
             desc: "record spread base".into(),
         });
@@ -1157,6 +1405,7 @@ fn emit_fn(
         params: params.to_vec(),
         body,
         effect_mask: 0,
+        dep_idx: em.active_dep,
     };
 
     let mut nested_fc = FnCtx::new(nested_param_count);
@@ -1165,7 +1414,7 @@ fn emit_fn(
     let mut local_defs = HashSet::new();
     for (i, param) in params.iter().enumerate() {
         let slot = u32::try_from(i).map_err(|_| EmitError::overflow("nested fn param index"))?;
-        if let Some(&did) = em.sema.resolution.pat_defs.get(&param.span) {
+        if let Some(&did) = em.pat_defs().get(&param.span) {
             let prev = nested_fc.local_map.insert(did, slot);
             debug_assert!(prev.is_none(), "duplicate local slot for def");
             let _ = local_defs.insert(did);
@@ -1186,11 +1435,14 @@ fn emit_fn(
     let upvalue_count = u16::try_from(captures.len())
         .map_err(|_| EmitError::overflow("too many captured variables"))?;
 
-    // Populate the nested function's upvalue_map.
+    // Populate the nested function's upvalue_map and propagate ref info.
     for (upv_idx, &(def_id, _)) in captures.iter().enumerate() {
         let idx = u16::try_from(upv_idx)
             .map_err(|_| EmitError::overflow("upvalue index in populate loop"))?;
         let _ = nested_fc.upvalue_map.insert(def_id, idx);
+        if fc.ref_locals.contains(&def_id) || fc.ref_upvalues.contains(&def_id) {
+            let _ = nested_fc.ref_upvalues.insert(def_id);
+        }
     }
 
     let had_value = emit_expr_tail(em, &mut nested_fc, body, true)?;
@@ -1208,7 +1460,7 @@ fn emit_fn(
     }
     nested_fc.fe.resolve_fixups(&nested_entry.name)?;
     let _code_len = nested_fc.fe.validate_code_len()?;
-    let type_id = if let Some(&ty_idx) = em.sema.expr_types.get(&body) {
+    let type_id = if let Some(&ty_idx) = em.expr_types().get(&body) {
         em.tp
             .lower_sema_type(ty_idx, &em.sema.types, &em.sema.unify, &em.sema.well_known)
             .unwrap_or(0)
@@ -1297,7 +1549,7 @@ pub fn bind_pat(em: &mut Emitter<'_>, fc: &mut FnCtx, pat_idx: PatIdx) -> Result
             let span = *span;
             let slot = fc.alloc_local();
             fc.fe.emit_st_loc(slot);
-            if let Some(&did) = em.sema.resolution.pat_defs.get(&span) {
+            if let Some(&did) = em.pat_defs().get(&span) {
                 let prev = fc.local_map.insert(did, slot);
                 debug_assert!(prev.is_none(), "duplicate local slot for def");
             }
@@ -1351,7 +1603,7 @@ fn bind_pat_ref(em: &mut Emitter<'_>, fc: &mut FnCtx, pat_idx: PatIdx) -> Result
             fc.fe.emit_alc_ref(type_id);
             let slot = fc.alloc_local();
             fc.fe.emit_st_loc(slot);
-            if let Some(&did) = em.sema.resolution.pat_defs.get(&span) {
+            if let Some(&did) = em.pat_defs().get(&span) {
                 let prev = fc.local_map.insert(did, slot);
                 debug_assert!(prev.is_none(), "duplicate local slot for def");
                 let is_new = fc.ref_locals.insert(did);
@@ -1579,11 +1831,11 @@ fn emit_array_with_spread(
 }
 
 /// Resolve a variant's tag by scanning the def table for sibling variants.
-pub fn resolve_variant_tag_by_name(em: &Emitter<'_>, name: Symbol) -> Result<u32, EmitError> {
+pub fn resolve_variant_tag_by_name(em: &mut Emitter<'_>, name: Symbol) -> Result<u32, EmitError> {
     resolve_variant_tag(em, name)
 }
 
-fn resolve_variant_tag(em: &Emitter<'_>, name: Symbol) -> Result<u32, EmitError> {
+fn resolve_variant_tag(em: &mut Emitter<'_>, name: Symbol) -> Result<u32, EmitError> {
     let name_str = em.interner.resolve(name);
     for def in &em.sema.defs {
         if def.kind == DefKind::Variant && em.interner.resolve(def.name) == name_str {
@@ -1610,6 +1862,20 @@ fn resolve_variant_tag(em: &Emitter<'_>, name: Symbol) -> Result<u32, EmitError>
                 .map_err(|_| EmitError::overflow(format!("variant tag index for `{name_str}`")));
         }
     }
+    // Fall back to well-known tags for open variants not in the def table.
+    let name_str_owned = em.interner.resolve(name).to_owned();
+    if name_str_owned == "Some" {
+        return Ok(em.some_tag);
+    }
+    if name_str_owned == "None" {
+        return Ok(if em.some_tag == 0 { 1 } else { 0 });
+    }
+    if name_str_owned == "Ok" {
+        return Ok(em.ok_tag);
+    }
+    if name_str_owned == "Err" {
+        return Ok(if em.ok_tag == 0 { 1 } else { 0 });
+    }
     Err(EmitError::FieldNotFound {
         desc: format!("variant `{name_str}` not found in any choice type").into(),
     })
@@ -1621,15 +1887,66 @@ fn resolve_field_name(
     object_expr: ExprIdx,
     name: Symbol,
 ) -> Result<u32, EmitError> {
-    let Some(&ty_idx) = em.sema.expr_types.get(&object_expr) else {
+    let Some(&ty_idx) = em.expr_types().get(&object_expr) else {
         return Err(EmitError::NoTypeInfo {
             desc: "field access object".into(),
         });
     };
+    // Try the expression type first, then fall back to resolving through the
+    // object's definition type if the field isn't found (handles partially
+    // unified row types in cross-module emission).
+    if let Ok(idx) = resolve_field_in_type(em, ty_idx, name) {
+        return Ok(idx);
+    }
+    // Fallback: look up the object's definition type (the declared type of
+    // the variable, which may be fully concrete).
+    if let Some(&def_id) = em.expr_defs().get(&object_expr) {
+        if let Some(def_info) = em.sema.defs.iter().find(|d| d.id == def_id) {
+            if let Some(def_ty) = def_info.ty_info.ty {
+                if let Ok(idx) = resolve_field_in_type(em, def_ty, name) {
+                    return Ok(idx);
+                }
+            }
+        }
+    }
+    Err(EmitError::FieldNotFound {
+        desc: format!("record field `{}`", em.interner.resolve(name)).into(),
+    })
+}
+
+fn collect_record_fields(
+    em: &Emitter<'_>,
+    ty_idx: TypeIdx,
+    out: &mut Vec<RecordField>,
+) {
+    let resolved = em.sema.unify.resolve(ty_idx, &em.sema.types);
+    if let Type::Record { fields, rest } = &em.sema.types[resolved] {
+        for f in fields {
+            if !out.iter().any(|ef| ef.name == f.name) {
+                out.push(f.clone());
+            }
+        }
+        if let Some(rest_idx) = *rest {
+            collect_record_fields(em, rest_idx, out);
+        }
+    }
+}
+
+fn resolve_field_in_type(
+    em: &Emitter<'_>,
+    ty_idx: TypeIdx,
+    name: Symbol,
+) -> Result<u32, EmitError> {
     let resolved = em.sema.unify.resolve(ty_idx, &em.sema.types);
     match &em.sema.types[resolved] {
-        Type::Record { fields, .. } => {
-            for (i, f) in fields.iter().enumerate() {
+        Type::Record { .. } => {
+            let mut all_fields: Vec<RecordField> = vec![];
+            collect_record_fields(em, resolved, &mut all_fields);
+            // Sort by name string for canonical ordering — matches emit_record_lit_fixed.
+            all_fields.sort_by(|a, b| {
+                em.interner.resolve(a.name).cmp(em.interner.resolve(b.name))
+            });
+            for (i, f) in all_fields.iter().enumerate() {
                 if f.name == name {
                     return u32::try_from(i).map_err(|_| {
                         EmitError::overflow(format!(
@@ -1662,7 +1979,7 @@ fn resolve_field_name(
 
 /// Classify the type family of an expression for opcode selection.
 pub fn classify_type_family(em: &Emitter<'_>, expr_idx: ExprIdx) -> Option<TypeFamily> {
-    let ty_idx = em.sema.expr_types.get(&expr_idx).copied()?;
+    let ty_idx = em.expr_types().get(&expr_idx).copied()?;
     let resolved = em.sema.unify.resolve(ty_idx, &em.sema.types);
     let ty = &em.sema.types[resolved];
     let wk = &em.sema.well_known;
@@ -1819,7 +2136,7 @@ fn emit_handle(
         let mut handler_fc = FnCtx::new(param_count);
         for (i, param) in op.params.iter().enumerate() {
             let slot = u32::try_from(i).map_err(|_| EmitError::overflow("handler param index"))?;
-            if let Some(&did) = em.sema.resolution.pat_defs.get(&param.span) {
+            if let Some(&did) = em.pat_defs().get(&param.span) {
                 let prev = handler_fc.local_map.insert(did, slot);
                 debug_assert!(prev.is_none(), "duplicate local slot for def");
             }
@@ -1834,7 +2151,7 @@ fn emit_handle(
             .fe
             .resolve_fixups(&format!("<handler@{handler_fn_id}>"))?;
         let _code_len = handler_fc.fe.validate_code_len()?;
-        let type_id = if let Some(&ty_idx) = em.sema.expr_types.get(&op.body) {
+        let type_id = if let Some(&ty_idx) = em.expr_types().get(&op.body) {
             em.tp
                 .lower_sema_type(ty_idx, &em.sema.types, &em.sema.unify, &em.sema.well_known)
                 .unwrap_or(0)
@@ -1878,7 +2195,7 @@ fn emit_do(
     if let Expr::Call { callee, args, .. } = &em.ast.exprs[body] {
         let callee = *callee;
         let args: Vec<_> = args.clone();
-        if let Some(&def_id) = em.sema.resolution.expr_defs.get(&callee) {
+        if let Some(&def_id) = em.expr_defs().get(&callee) {
             let is_effect_op = em
                 .sema
                 .defs
@@ -2040,7 +2357,7 @@ fn emit_update(
     fc.fe.emit_st_loc(base_slot);
 
     // Look up the record type to determine field layout.
-    let Some(&ty_idx) = em.sema.expr_types.get(&base) else {
+    let Some(&ty_idx) = em.expr_types().get(&base) else {
         return Err(EmitError::NoTypeInfo {
             desc: "update base".into(),
         });
@@ -2127,7 +2444,7 @@ fn emit_dict_for_call(
     callee_def: DefId,
     callee_expr: ExprIdx,
 ) -> Result<usize, EmitError> {
-    let constraints = match em.sema.fn_constraints.get(&callee_def) {
+    let constraints = match em.active_fn_constraints().get(&callee_def) {
         Some(c) => c.clone(),
         None => return Ok(0),
     };
@@ -2146,10 +2463,8 @@ fn emit_dict_for_call(
         if let Some(concrete_ty) = concrete_ty {
             // Find the instance that satisfies this constraint for the concrete type
             let instance = em.sema.instances.iter().find(|inst| {
-                inst.class == constraint.class && {
-                    let inst_target = em.sema.unify.resolve(inst.target, &em.sema.types);
-                    inst_target == concrete_ty
-                }
+                inst.class == constraint.class
+                    && types_match(&em.sema.types, &em.sema.unify, inst.target, concrete_ty)
             });
 
             if let Some(inst) = instance {

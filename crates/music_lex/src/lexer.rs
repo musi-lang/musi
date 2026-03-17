@@ -406,8 +406,10 @@ impl Lexer<'_> {
         loop {
             match self.peek() {
                 Some(b'"') => {
+                    let content_end = self.pos;
                     let _ = self.advance();
-                    return self.emit_interned(TokenKind::StringLit, start);
+                    let sym = self.intern_range(start + 1, content_end);
+                    return self.emit_sym(TokenKind::StringLit, start, sym);
                 }
                 Some(b'\\') => self.skip_escape(),
                 Some(_) => {

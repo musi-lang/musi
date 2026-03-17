@@ -32,7 +32,9 @@ impl Opcode {
     pub const LD_LEN: Self = Self(0x0A);
     pub const LD_IDX: Self = Self(0x0B);
     pub const ST_IDX: Self = Self(0x0C);
-    // 0x0D–0x0F: reserved (formerly FRE, EFF_RES_C, EFF_ABT)
+    /// Push the Unit value onto the stack.
+    pub const LD_UNIT: Self = Self(0x0D);
+    // 0x0E–0x0F: reserved
 
     // §2  Integer Arithmetic (no operand, overflow wraps)
     pub const I_ADD: Self = Self(0x10);
@@ -180,6 +182,7 @@ const OPCODE_NAMES: [Option<&str>; 256] = {
     t[0x0A] = Some("ld.len");
     t[0x0B] = Some("ld.idx");
     t[0x0C] = Some("st.idx");
+    t[0x0D] = Some("ld.unit");
     // §2 Integer Arithmetic
     t[0x10] = Some("i.add");
     t[0x11] = Some("i.add.un");

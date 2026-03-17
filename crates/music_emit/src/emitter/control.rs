@@ -235,7 +235,7 @@ fn emit_pat_bind(
             let slot = fc.alloc_local();
             fc.fe.emit_ld_loc(value_slot);
             fc.fe.emit_st_loc(slot);
-            if let Some(&did) = em.sema.resolution.pat_defs.get(&span) {
+            if let Some(&did) = em.pat_defs().get(&span) {
                 let prev = fc.local_map.insert(did, slot);
                 debug_assert!(prev.is_none(), "duplicate local slot for def");
             }
@@ -292,7 +292,7 @@ fn emit_pat_bind(
                 fc.fe.emit_st_loc(field_slot);
                 if let Some(sub_pat) = field.pat {
                     emit_pat_bind(em, fc, sub_pat, field_slot)?;
-                } else if let Some(&did) = em.sema.resolution.pat_defs.get(&field.span) {
+                } else if let Some(&did) = em.pat_defs().get(&field.span) {
                     let prev = fc.local_map.insert(did, field_slot);
                     debug_assert!(prev.is_none(), "duplicate local slot for def");
                 }

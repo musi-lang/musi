@@ -25,6 +25,7 @@ use crate::scope::ScopeId;
 use crate::types::{
     DictLookup, EffectRow, Obligation, RecordField, SumVariant, Type, TypeIdx, fmt_type,
 };
+use crate::unify::types_match;
 
 /// Synthesises a type for `expr` (inference mode, direction ↑).
 pub fn synth<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) -> TypeIdx {
@@ -471,25 +472,26 @@ fn lookup_field<S: BuildHasher>(
     span: Span,
 ) -> TypeIdx {
     match &ck.store.types[ty] {
-        Type::Record { fields, open } => {
-            let (fields, open) = (fields.clone(), *open);
+        Type::Record { fields, rest } => {
+            let (fields, rest) = (fields.clone(), *rest);
             if let FieldKey::Name { name, .. } = field {
                 if let Some(f) = fields.iter().find(|f| f.name == name) {
                     f.ty
-                } else if open {
-                    // Open record — extend it with the new field.
+                } else if let Some(rest_idx) = rest {
+                    // Open record — unify the rest with a new single-field record
+                    // so the row chain grows naturally through the binding.
                     let field_ty = ck.fresh_var(span);
-                    let mut new_fields = fields;
-                    new_fields.push(RecordField { name, ty: field_ty });
-                    let extended = ck.alloc_ty(Type::Record {
-                        fields: new_fields,
-                        open: true,
+                    let new_rest = ck.fresh_var(span);
+                    let constraint = ck.alloc_ty(Type::Record {
+                        fields: vec![RecordField { name, ty: field_ty }],
+                        rest: Some(new_rest),
                     });
-                    // Re-bind the original type to the extended record.
-                    let _ok =
-                        ck.store
-                            .unify
-                            .unify(ty, extended, &mut ck.store.types, ck.ctx.well_known);
+                    let _ok = ck.store.unify.unify(
+                        rest_idx,
+                        constraint,
+                        &mut ck.store.types,
+                        ck.ctx.well_known,
+                    );
                     field_ty
                 } else {
                     report_no_such_field(ck, name, ty, span)
@@ -533,13 +535,14 @@ fn lookup_field<S: BuildHasher>(
             }
         }
         Type::Var(_) => {
-            // Unresolved type variable — create an open record constraint so
-            // that field access propagates structural type information.
+            // Unresolved type variable — create an open record constraint with
+            // a row variable so that subsequent field accesses extend the chain.
             if let FieldKey::Name { name, .. } = field {
                 let field_ty = ck.fresh_var(span);
+                let row_var = ck.fresh_var(span);
                 let open_rec = ck.alloc_ty(Type::Record {
                     fields: vec![RecordField { name, ty: field_ty }],
-                    open: true,
+                    rest: Some(row_var),
                 });
                 let _ok =
                     ck.store
@@ -581,7 +584,7 @@ fn report_no_such_field<S: BuildHasher>(
 }
 
 fn synth_record<S: BuildHasher>(ck: &mut Checker<'_, S>, fields: &[RecField]) -> TypeIdx {
-    let rec_fields: Vec<_> = fields
+    let mut rec_fields: Vec<_> = fields
         .iter()
         .filter_map(|f| match f {
             RecField::Named { name, value, .. } => {
@@ -596,9 +599,14 @@ fn synth_record<S: BuildHasher>(ck: &mut Checker<'_, S>, fields: &[RecField]) ->
             RecField::Spread { .. } => None,
         })
         .collect();
+    // Canonical field ordering: sort by name string so field indices are
+    // consistent between construction and access across module boundaries.
+    rec_fields.sort_by(|a, b| {
+        ck.ctx.interner.resolve(a.name).cmp(ck.ctx.interner.resolve(b.name))
+    });
     ck.alloc_ty(Type::Record {
         fields: rec_fields,
-        open: false,
+        rest: None,
     })
 }
 
@@ -868,10 +876,10 @@ fn substitute_ty<S: BuildHasher>(
             let variants = substitute_list(ck, &variants, subst);
             ck.alloc_ty(Type::AnonSum { variants })
         }
-        Type::Record { fields, open } => {
-            let (fields, open) = (fields.clone(), *open);
+        Type::Record { fields, rest } => {
+            let (fields, rest) = (fields.clone(), *rest);
             let fields = substitute_record_fields(ck, &fields, subst);
-            ck.alloc_ty(Type::Record { fields, open })
+            ck.alloc_ty(Type::Record { fields, rest })
         }
         Type::Sum { variants } => {
             let variants = variants.clone();
@@ -1034,10 +1042,8 @@ fn find_instance_method<S: BuildHasher>(
     op_name: &str,
 ) -> Option<DefId> {
     let op_sym = ck.ctx.interner.get(op_name)?;
-    let resolved = ck.store.unify.resolve(target_ty, &ck.store.types);
     for inst in &ck.store.instances {
-        let inst_target = ck.store.unify.resolve(inst.target, &ck.store.types);
-        if inst_target == resolved
+        if types_match(&ck.store.types, &ck.store.unify, inst.target, target_ty)
             && let Some(&def_id) = inst
                 .members
                 .iter()
@@ -1224,16 +1230,19 @@ fn synth_choice<S: BuildHasher>(ck: &mut Checker<'_, S>, body: TyIdx) -> TypeIdx
 }
 
 fn synth_record_def<S: BuildHasher>(ck: &mut Checker<'_, S>, fields: &[RecDefField]) -> TypeIdx {
-    let rec_fields: Vec<_> = fields
+    let mut rec_fields: Vec<_> = fields
         .iter()
         .map(|f| RecordField {
             name: f.name,
             ty: lower_ty(ck, f.ty),
         })
         .collect();
+    rec_fields.sort_by(|a, b| {
+        ck.ctx.interner.resolve(a.name).cmp(ck.ctx.interner.resolve(b.name))
+    });
     ck.alloc_ty(Type::Record {
         fields: rec_fields,
-        open: false,
+        rest: None,
     })
 }
 

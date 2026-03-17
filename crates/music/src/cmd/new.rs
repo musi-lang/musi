@@ -49,8 +49,7 @@ main = "./{main_file}"
     } else {
         r#"import "@std/rt" as rt;
 
-#[entrypoint]
-let main : () ~> () := () => rt.writeln("hello, world!");
+rt.writeln("hello, world!");
 "#
     };
     let source_file = if template == "lib" {

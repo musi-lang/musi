@@ -22,7 +22,7 @@ fn compile(source: &str) -> Result<EmitOutput, String> {
             .collect();
         return Err(format!("errors:\n{}", msgs.join("\n")));
     }
-    emit(&parsed, &sema, &mut interner, file_id).map_err(|e| e.to_string())
+    emit(&parsed, &sema, &mut interner, file_id, false, &[]).map_err(|e| e.to_string())
 }
 
 /// Like `compile` but ignores type errors so we can test emission of
@@ -34,7 +34,7 @@ fn compile_lenient(source: &str) -> Result<EmitOutput, String> {
     let lexed = lex(source, file_id, &mut interner, &mut diags);
     let parsed = parse(&lexed.tokens, file_id, &mut diags, &mut interner);
     let sema = analyze(&parsed, &mut interner, file_id, &mut diags);
-    emit(&parsed, &sema, &mut interner, file_id).map_err(|e| e.to_string())
+    emit(&parsed, &sema, &mut interner, file_id, false, &[]).map_err(|e| e.to_string())
 }
 
 /// Scan the function pool section (past the header) for the first occurrence of `op`.

@@ -119,6 +119,11 @@ impl FnEmitter {
         self.stack_depth = 0;
     }
 
+    pub fn emit_ld_unit(&mut self) {
+        encode_no_operand(&mut self.code, Opcode::LD_UNIT);
+        self.push_n(1);
+    }
+
     /// Emit a binary op instruction (pops 2, pushes 1).
     pub fn emit_binop(&mut self, op: Opcode) {
         encode_no_operand(&mut self.code, op);
