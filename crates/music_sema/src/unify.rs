@@ -508,20 +508,40 @@ impl UnifyTable {
                 if let Some(bound) = self.probe(v) {
                     self.freeze(bound, arena, any_def)
                 } else {
-                    arena.alloc(Type::Named { def: any_def, args: vec![] })
+                    arena.alloc(Type::Named {
+                        def: any_def,
+                        args: vec![],
+                    })
                 }
             }
             Type::Named { def, args } => {
-                let args: Vec<_> = args.iter().map(|&a| self.freeze(a, arena, any_def)).collect();
+                let args: Vec<_> = args
+                    .iter()
+                    .map(|&a| self.freeze(a, arena, any_def))
+                    .collect();
                 arena.alloc(Type::Named { def, args })
             }
-            Type::Fn { params, ret, effects } => {
-                let params: Vec<_> = params.iter().map(|&p| self.freeze(p, arena, any_def)).collect();
+            Type::Fn {
+                params,
+                ret,
+                effects,
+            } => {
+                let params: Vec<_> = params
+                    .iter()
+                    .map(|&p| self.freeze(p, arena, any_def))
+                    .collect();
                 let ret = self.freeze(ret, arena, any_def);
-                arena.alloc(Type::Fn { params, ret, effects })
+                arena.alloc(Type::Fn {
+                    params,
+                    ret,
+                    effects,
+                })
             }
             Type::Tuple { elems } => {
-                let elems: Vec<_> = elems.iter().map(|&e| self.freeze(e, arena, any_def)).collect();
+                let elems: Vec<_> = elems
+                    .iter()
+                    .map(|&e| self.freeze(e, arena, any_def))
+                    .collect();
                 arena.alloc(Type::Tuple { elems })
             }
             Type::Record { fields, rest } => self.freeze_record(&fields, rest, arena, any_def),
@@ -533,12 +553,25 @@ impl UnifyTable {
                 let inner = self.freeze(inner, arena, any_def);
                 arena.alloc(Type::Ref { inner })
             }
-            Type::Quantified { kind, params, constraints, body } => {
+            Type::Quantified {
+                kind,
+                params,
+                constraints,
+                body,
+            } => {
                 let body = self.freeze(body, arena, any_def);
-                arena.alloc(Type::Quantified { kind, params, constraints, body })
+                arena.alloc(Type::Quantified {
+                    kind,
+                    params,
+                    constraints,
+                    body,
+                })
             }
             Type::AnonSum { variants } => {
-                let variants: Vec<_> = variants.iter().map(|&v| self.freeze(v, arena, any_def)).collect();
+                let variants: Vec<_> = variants
+                    .iter()
+                    .map(|&v| self.freeze(v, arena, any_def))
+                    .collect();
                 arena.alloc(Type::AnonSum { variants })
             }
             Type::Sum { variants } => {
@@ -546,7 +579,11 @@ impl UnifyTable {
                     .iter()
                     .map(|v| SumVariant {
                         name: v.name,
-                        fields: v.fields.iter().map(|&f| self.freeze(f, arena, any_def)).collect(),
+                        fields: v
+                            .fields
+                            .iter()
+                            .map(|&f| self.freeze(f, arena, any_def))
+                            .collect(),
                     })
                     .collect();
                 arena.alloc(Type::Sum { variants })
@@ -577,7 +614,10 @@ impl UnifyTable {
         while let Some(rest_idx) = cur_rest {
             let resolved = self.resolve(rest_idx, arena);
             match arena[resolved].clone() {
-                Type::Record { fields: rf, rest: rr } => {
+                Type::Record {
+                    fields: rf,
+                    rest: rr,
+                } => {
                     for f in &rf {
                         if !all_fields.iter().any(|ef| ef.name == f.name) {
                             all_fields.push(RecordField {
@@ -598,7 +638,10 @@ impl UnifyTable {
         // Symbol (interning order) as a stable tie-breaker. The
         // canonical sort-by-string is enforced at construction sites.
         all_fields.sort_by_key(|f| f.name.0);
-        arena.alloc(Type::Record { fields: all_fields, rest: None })
+        arena.alloc(Type::Record {
+            fields: all_fields,
+            rest: None,
+        })
     }
 }
 

@@ -1,6 +1,9 @@
 use std::collections::HashSet;
 
-use super::{Opcode, encode_i32, encode_i8, pack_id_arity, pack_tag_arity_u16, unpack_id_arity, unpack_tag_arity_u16};
+use super::{
+    Opcode, encode_i8, encode_i32, pack_id_arity, pack_tag_arity_u16, unpack_id_arity,
+    unpack_tag_arity_u16,
+};
 
 /// All no-operand opcodes (range 0x00–0x3F).
 const NO_OPERAND_OPCODES: &[Opcode] = &[
@@ -90,9 +93,7 @@ const U8_OPERAND_OPCODES: &[Opcode] = &[
 ];
 
 /// All u16-operand opcodes (range 0x80–0xBF).
-const U16_OPERAND_OPCODES: &[Opcode] = &[
-    Opcode::MK_VAR,
-];
+const U16_OPERAND_OPCODES: &[Opcode] = &[Opcode::MK_VAR];
 
 /// All u32-operand opcodes (range 0xC0–0xFD).
 const U32_OPERAND_OPCODES: &[Opcode] = &[

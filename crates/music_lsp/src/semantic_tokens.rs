@@ -5,8 +5,8 @@ use lsp_types::{
     SemanticTokensFullOptions, SemanticTokensLegend, SemanticTokensOptions, SemanticTokensResult,
     SemanticTokensServerCapabilities,
 };
-use music_ast::expr::{FieldKey, ParamMode};
 use music_ast::Expr;
+use music_ast::expr::{FieldKey, ParamMode};
 use music_lex::TokenKind;
 use music_sema::{DefInfo, DefKind, SemaResult, Type, TypeIdx};
 use music_shared::{FileId, Interner, SourceDb, Span};
@@ -120,7 +120,13 @@ pub fn compute(doc: &AnalyzedDoc) -> SemanticTokensResult {
                 }
                 continue;
             }
-            if matches!(expr, Expr::Field { field: FieldKey::Pos { .. }, .. }) {
+            if matches!(
+                expr,
+                Expr::Field {
+                    field: FieldKey::Pos { .. },
+                    ..
+                }
+            ) {
                 continue;
             }
             let Some(span) = expr_span(idx, &doc.module) else {

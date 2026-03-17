@@ -487,7 +487,11 @@ fn lookup_field<S: BuildHasher>(
                     let field_ty = ck.fresh_var(span);
                     let new_rest = ck.fresh_var(span);
                     let constraint = ck.alloc_ty(Type::Record {
-                        fields: vec![RecordField { name, ty: field_ty, ty_params: vec![] }],
+                        fields: vec![RecordField {
+                            name,
+                            ty: field_ty,
+                            ty_params: vec![],
+                        }],
                         rest: Some(new_rest),
                     });
                     let _ok = ck.store.unify.unify(
@@ -545,7 +549,11 @@ fn lookup_field<S: BuildHasher>(
                 let field_ty = ck.fresh_var(span);
                 let row_var = ck.fresh_var(span);
                 let open_rec = ck.alloc_ty(Type::Record {
-                    fields: vec![RecordField { name, ty: field_ty, ty_params: vec![] }],
+                    fields: vec![RecordField {
+                        name,
+                        ty: field_ty,
+                        ty_params: vec![],
+                    }],
                     rest: Some(row_var),
                 });
                 let _ok =
@@ -598,7 +606,11 @@ fn synth_record<S: BuildHasher>(ck: &mut Checker<'_, S>, fields: &[RecField]) ->
                     // Punning: `{ x }` means `{ x: x }`
                     ck.fresh_var(Span::DUMMY)
                 };
-                Some(RecordField { name: *name, ty, ty_params: vec![] })
+                Some(RecordField {
+                    name: *name,
+                    ty,
+                    ty_params: vec![],
+                })
             }
             RecField::Spread { .. } => None,
         })
@@ -606,7 +618,10 @@ fn synth_record<S: BuildHasher>(ck: &mut Checker<'_, S>, fields: &[RecField]) ->
     // Canonical field ordering: sort by name string so field indices are
     // consistent between construction and access across module boundaries.
     rec_fields.sort_by(|a, b| {
-        ck.ctx.interner.resolve(a.name).cmp(ck.ctx.interner.resolve(b.name))
+        ck.ctx
+            .interner
+            .resolve(a.name)
+            .cmp(ck.ctx.interner.resolve(b.name))
     });
     ck.alloc_ty(Type::Record {
         fields: rec_fields,
@@ -954,42 +969,83 @@ fn freshen_walk<S: BuildHasher>(
         }
         Type::Named { def, args } => {
             let (def, args) = (*def, args.clone());
-            let new_args: Vec<_> = args.iter().map(|&a| freshen_walk(ck, a, span, param_set, var_map, def_map)).collect();
-            ck.alloc_ty(Type::Named { def, args: new_args })
+            let new_args: Vec<_> = args
+                .iter()
+                .map(|&a| freshen_walk(ck, a, span, param_set, var_map, def_map))
+                .collect();
+            ck.alloc_ty(Type::Named {
+                def,
+                args: new_args,
+            })
         }
-        Type::Fn { params, ret, effects } => {
+        Type::Fn {
+            params,
+            ret,
+            effects,
+        } => {
             let (params, ret, effects) = (params.clone(), *ret, effects.clone());
-            let new_params: Vec<_> = params.iter().map(|&p| freshen_walk(ck, p, span, param_set, var_map, def_map)).collect();
+            let new_params: Vec<_> = params
+                .iter()
+                .map(|&p| freshen_walk(ck, p, span, param_set, var_map, def_map))
+                .collect();
             let new_ret = freshen_walk(ck, ret, span, param_set, var_map, def_map);
-            ck.alloc_ty(Type::Fn { params: new_params, ret: new_ret, effects })
+            ck.alloc_ty(Type::Fn {
+                params: new_params,
+                ret: new_ret,
+                effects,
+            })
         }
         Type::Tuple { elems } => {
             let elems = elems.clone();
-            let new_elems: Vec<_> = elems.iter().map(|&e| freshen_walk(ck, e, span, param_set, var_map, def_map)).collect();
+            let new_elems: Vec<_> = elems
+                .iter()
+                .map(|&e| freshen_walk(ck, e, span, param_set, var_map, def_map))
+                .collect();
             ck.alloc_ty(Type::Tuple { elems: new_elems })
         }
         Type::Array { elem, len } => {
             let (elem, len) = (*elem, *len);
             let new_elem = freshen_walk(ck, elem, span, param_set, var_map, def_map);
-            ck.alloc_ty(Type::Array { elem: new_elem, len })
+            ck.alloc_ty(Type::Array {
+                elem: new_elem,
+                len,
+            })
         }
         Type::Record { fields, rest } => {
             let (fields, rest) = (fields.clone(), *rest);
-            let new_fields: Vec<_> = fields.iter().map(|f| RecordField {
-                name: f.name,
-                ty: freshen_walk(ck, f.ty, span, param_set, var_map, def_map),
-                ty_params: f.ty_params.clone(),
-            }).collect();
+            let new_fields: Vec<_> = fields
+                .iter()
+                .map(|f| RecordField {
+                    name: f.name,
+                    ty: freshen_walk(ck, f.ty, span, param_set, var_map, def_map),
+                    ty_params: f.ty_params.clone(),
+                })
+                .collect();
             let new_rest = rest.map(|r| freshen_walk(ck, r, span, param_set, var_map, def_map));
-            ck.alloc_ty(Type::Record { fields: new_fields, rest: new_rest })
+            ck.alloc_ty(Type::Record {
+                fields: new_fields,
+                rest: new_rest,
+            })
         }
         Type::Sum { variants } => {
             let variants = variants.clone();
-            let new_variants: Vec<_> = variants.iter().map(|v| {
-                let new_fields: Vec<_> = v.fields.iter().map(|&f| freshen_walk(ck, f, span, param_set, var_map, def_map)).collect();
-                SumVariant { name: v.name, fields: new_fields }
-            }).collect();
-            ck.alloc_ty(Type::Sum { variants: new_variants })
+            let new_variants: Vec<_> = variants
+                .iter()
+                .map(|v| {
+                    let new_fields: Vec<_> = v
+                        .fields
+                        .iter()
+                        .map(|&f| freshen_walk(ck, f, span, param_set, var_map, def_map))
+                        .collect();
+                    SumVariant {
+                        name: v.name,
+                        fields: new_fields,
+                    }
+                })
+                .collect();
+            ck.alloc_ty(Type::Sum {
+                variants: new_variants,
+            })
         }
         Type::Ref { inner } => {
             let inner = *inner;
@@ -998,13 +1054,29 @@ fn freshen_walk<S: BuildHasher>(
         }
         Type::AnonSum { variants } => {
             let variants = variants.clone();
-            let new_variants: Vec<_> = variants.iter().map(|&v| freshen_walk(ck, v, span, param_set, var_map, def_map)).collect();
-            ck.alloc_ty(Type::AnonSum { variants: new_variants })
+            let new_variants: Vec<_> = variants
+                .iter()
+                .map(|&v| freshen_walk(ck, v, span, param_set, var_map, def_map))
+                .collect();
+            ck.alloc_ty(Type::AnonSum {
+                variants: new_variants,
+            })
         }
-        Type::Quantified { kind, params, constraints, body } => {
-            let (kind, params, constraints, body) = (*kind, params.clone(), constraints.clone(), *body);
+        Type::Quantified {
+            kind,
+            params,
+            constraints,
+            body,
+        } => {
+            let (kind, params, constraints, body) =
+                (*kind, params.clone(), constraints.clone(), *body);
             let new_body = freshen_walk(ck, body, span, param_set, var_map, def_map);
-            ck.alloc_ty(Type::Quantified { kind, params, constraints, body: new_body })
+            ck.alloc_ty(Type::Quantified {
+                kind,
+                params,
+                constraints,
+                body: new_body,
+            })
         }
         Type::Rigid(_) | Type::Error => resolved,
     }
@@ -1334,7 +1406,10 @@ fn synth_record_def<S: BuildHasher>(ck: &mut Checker<'_, S>, fields: &[RecDefFie
         })
         .collect();
     rec_fields.sort_by(|a, b| {
-        ck.ctx.interner.resolve(a.name).cmp(ck.ctx.interner.resolve(b.name))
+        ck.ctx
+            .interner
+            .resolve(a.name)
+            .cmp(ck.ctx.interner.resolve(b.name))
     });
     ck.alloc_ty(Type::Record {
         fields: rec_fields,

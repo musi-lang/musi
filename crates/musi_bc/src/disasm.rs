@@ -2,7 +2,10 @@
 
 use core::fmt::{self, Write};
 
-use crate::{Opcode, instr_len, unpack_id_arity, unpack_tag_arity_u16, unpack_tag_arity_u32, widened_operand_size};
+use crate::{
+    Opcode, instr_len, unpack_id_arity, unpack_tag_arity_u16, unpack_tag_arity_u32,
+    widened_operand_size,
+};
 
 /// Disassemble a bytecode slice into a human-readable string.
 ///
@@ -16,7 +19,10 @@ pub fn disassemble(code: &[u8]) -> String {
 
 /// Opcodes whose u32 operand is a packed `(id_u24 << 8) | arity_u8`.
 const fn is_packed_id_arity(op: Opcode) -> bool {
-    matches!(op, Opcode::INV | Opcode::INV_TAL | Opcode::INV_FFI | Opcode::MK_CLO)
+    matches!(
+        op,
+        Opcode::INV | Opcode::INV_TAL | Opcode::INV_FFI | Opcode::MK_CLO
+    )
 }
 
 /// Opcodes that use i32 jump offsets.
@@ -64,7 +70,10 @@ fn write_disassembly(out: &mut String, code: &[u8]) -> fmt::Result {
             // MK_VAR with WID: operand is u32 packed (tag_u24 << 8 | arity_u8)
             if inner_op == Opcode::MK_VAR {
                 let (tag, arity) = unpack_tag_arity_u32(operand);
-                writeln!(out, "{start_ip:04x}: wid {inner_op} tag={tag} arity={arity}")?;
+                writeln!(
+                    out,
+                    "{start_ip:04x}: wid {inner_op} tag={tag} arity={arity}"
+                )?;
             } else {
                 writeln!(out, "{start_ip:04x}: wid {inner_op} {operand}")?;
             }

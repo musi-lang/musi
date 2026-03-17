@@ -203,7 +203,10 @@ impl Vm {
             if let Some(frame) = self.call_stack.last() {
                 let code = &self.module.functions[frame.fn_idx].code;
                 let disasm = musi_bc::disassemble(code);
-                eprintln!("[VM ERR] fn_id={fn_id} ip={instr_ip} fn_idx={}\n{disasm}", frame.fn_idx);
+                eprintln!(
+                    "[VM ERR] fn_id={fn_id} ip={instr_ip} fn_idx={}\n{disasm}",
+                    frame.fn_idx
+                );
             }
             VmError::Runtime {
                 fn_id,
@@ -518,7 +521,13 @@ impl Vm {
                     .call_stack
                     .last_mut()
                     .ok_or_else(|| malformed!("empty call stack"))?;
-                ops::exec_mk_clo(fn_id, upval_count, frame, &self.module.functions, &mut self.heap)?;
+                ops::exec_mk_clo(
+                    fn_id,
+                    upval_count,
+                    frame,
+                    &self.module.functions,
+                    &mut self.heap,
+                )?;
                 Ok(StepResult::Continue)
             }
             Opcode::LD_UPV => {

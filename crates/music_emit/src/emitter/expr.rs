@@ -258,7 +258,12 @@ pub fn emit_expr(
 }
 
 /// Emit an expression, returning an error if it produces no stack value.
-pub(super) fn emit_require(em: &mut Emitter<'_>, fc: &mut FnCtx, idx: ExprIdx, ctx: &str) -> Result<(), EmitError> {
+pub(super) fn emit_require(
+    em: &mut Emitter<'_>,
+    fc: &mut FnCtx,
+    idx: ExprIdx,
+    ctx: &str,
+) -> Result<(), EmitError> {
     let produced = emit_expr(em, fc, idx)?;
     if !produced {
         return Err(EmitError::UnsupportedFeature {
@@ -939,8 +944,7 @@ fn emit_primitive_binop(
 ) -> Result<bool, EmitError> {
     match op {
         BinOp::And => {
-            let family = classify_type_family(em, left)
-                .or_else(|| classify_type_family(em, right));
+            let family = classify_type_family(em, left).or_else(|| classify_type_family(em, right));
             if is_logical_family(family) {
                 desugar::emit_and(em, fc, left, right)?;
             } else {
@@ -951,8 +955,7 @@ fn emit_primitive_binop(
             Ok(true)
         }
         BinOp::Or => {
-            let family = classify_type_family(em, left)
-                .or_else(|| classify_type_family(em, right));
+            let family = classify_type_family(em, left).or_else(|| classify_type_family(em, right));
             if is_logical_family(family) {
                 desugar::emit_or(em, fc, left, right)?;
             } else {
@@ -1012,7 +1015,10 @@ fn emit_primitive_binop(
             let opcode = map_binop(op, family)?;
             fc.fe.emit_binop(opcode);
             // Comparison operators produce bool, not int — skip narrow truncation.
-            if !matches!(op, BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge) {
+            if !matches!(
+                op,
+                BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge
+            ) {
                 emit_narrow_truncation(em, fc, family)?;
             }
             Ok(true)
@@ -1073,8 +1079,7 @@ fn emit_call(
         let total_count = dict_count + explicit_count;
 
         if let Some(&ffi_idx) = em.foreign_map.get(&def_id) {
-            let ac =
-                i32::try_from(total_count).map_err(|_| EmitError::overflow("arg count"))?;
+            let ac = i32::try_from(total_count).map_err(|_| EmitError::overflow("arg count"))?;
             fc.fe.emit_inv_ffi(ffi_idx, ac);
             return Ok(true);
         }
@@ -1083,8 +1088,7 @@ fn emit_call(
                 fc.fe.emit_inv_tail(fn_id, false);
                 return Ok(false);
             }
-            let ac =
-                i32::try_from(total_count).map_err(|_| EmitError::overflow("arg count"))?;
+            let ac = i32::try_from(total_count).map_err(|_| EmitError::overflow("arg count"))?;
             fc.fe.emit_inv(fn_id, false, ac);
             return Ok(true);
         }
@@ -1122,8 +1126,7 @@ fn emit_call(
             for &t in arg_temps.iter().rev() {
                 fc.fe.emit_ld_loc(t);
             }
-            let ac_i =
-                i32::try_from(total_count).map_err(|_| EmitError::overflow("arg count"))?;
+            let ac_i = i32::try_from(total_count).map_err(|_| EmitError::overflow("arg count"))?;
             fc.fe.emit_inv_dyn(ac_i)?;
             return Ok(true);
         }
@@ -1177,9 +1180,7 @@ fn emit_record_lit_fixed(
             RecField::Spread { .. } => None,
         })
         .collect();
-    named_fields.sort_by(|(a, _), (b, _)| {
-        em.interner.resolve(*a).cmp(em.interner.resolve(*b))
-    });
+    named_fields.sort_by(|(a, _), (b, _)| em.interner.resolve(*a).cmp(em.interner.resolve(*b)));
     let n = named_fields.len();
     for (_, val_opt) in named_fields {
         if let Some(val_idx) = val_opt {
@@ -1260,9 +1261,7 @@ fn resolve_field_name_by_symbol(
     match &em.sema.types[resolved] {
         Type::Record { fields, .. } => {
             let mut sorted: Vec<_> = fields.clone();
-            sorted.sort_by(|a, b| {
-                em.interner.resolve(a.name).cmp(em.interner.resolve(b.name))
-            });
+            sorted.sort_by(|a, b| em.interner.resolve(a.name).cmp(em.interner.resolve(b.name)));
             for (i, f) in sorted.iter().enumerate() {
                 if f.name == name {
                     return u32::try_from(i).map_err(|_| {
@@ -1829,11 +1828,7 @@ pub(super) fn resolve_field_name(
     })
 }
 
-fn collect_record_fields(
-    em: &Emitter<'_>,
-    ty_idx: TypeIdx,
-    out: &mut Vec<RecordField>,
-) -> bool {
+fn collect_record_fields(em: &Emitter<'_>, ty_idx: TypeIdx, out: &mut Vec<RecordField>) -> bool {
     let resolved = em.sema.unify.resolve(ty_idx, &em.sema.types);
     if let Type::Record { fields, rest } = &em.sema.types[resolved] {
         for f in fields {
@@ -1858,7 +1853,9 @@ fn find_complete_record_type(
         if !matches!(def.kind, DefKind::Type | DefKind::Let) {
             continue;
         }
-        let Some(ty_idx) = def.ty_info.ty else { continue };
+        let Some(ty_idx) = def.ty_info.ty else {
+            continue;
+        };
         let resolved = em.sema.unify.resolve(ty_idx, &em.sema.types);
         let ty = &em.sema.types[resolved];
 
@@ -1886,9 +1883,9 @@ fn find_complete_record_type(
             }
             let mut full_fields = vec![];
             let _ = collect_record_fields(em, record_resolved, &mut full_fields);
-            let is_superset = partial_fields.iter().all(|pf| {
-                full_fields.iter().any(|ff| ff.name == pf.name)
-            });
+            let is_superset = partial_fields
+                .iter()
+                .all(|pf| full_fields.iter().any(|ff| ff.name == pf.name));
             if is_superset && full_fields.len() >= partial_fields.len() {
                 return Some(full_fields);
             }
@@ -1908,9 +1905,8 @@ fn resolve_field_in_type(
             let mut all_fields: Vec<RecordField> = vec![];
             let complete = collect_record_fields(em, resolved, &mut all_fields);
             if !complete {
-                all_fields.sort_by(|a, b| {
-                    em.interner.resolve(a.name).cmp(em.interner.resolve(b.name))
-                });
+                all_fields
+                    .sort_by(|a, b| em.interner.resolve(a.name).cmp(em.interner.resolve(b.name)));
             }
             // If the record is open (incomplete from dep module inference),
             // find the canonical closed record type definition.
@@ -1918,9 +1914,7 @@ fn resolve_field_in_type(
                 all_fields = full;
             }
             // Sort by name string for canonical ordering — matches emit_record_lit_fixed.
-            all_fields.sort_by(|a, b| {
-                em.interner.resolve(a.name).cmp(em.interner.resolve(b.name))
-            });
+            all_fields.sort_by(|a, b| em.interner.resolve(a.name).cmp(em.interner.resolve(b.name)));
             for (i, f) in all_fields.iter().enumerate() {
                 if f.name == name {
                     return u32::try_from(i).map_err(|_| {

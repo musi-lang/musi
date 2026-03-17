@@ -199,7 +199,10 @@ pub fn emit_fstr(
         .ok_or_else(|| EmitError::UnsupportedFeature {
             desc: "str_cat FFI not registered".into(),
         })?;
-    let show_ffi_idx = em.sema.lang_items.get("show")
+    let show_ffi_idx = em
+        .sema
+        .lang_items
+        .get("show")
         .and_then(|def| em.foreign_map.get(&def).copied());
 
     let mut first = true;

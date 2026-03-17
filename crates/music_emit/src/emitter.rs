@@ -14,12 +14,12 @@ use std::mem;
 use music_ast::Pat;
 use music_ast::attr::{Attr, AttrValue};
 use music_ast::decl::{ClassMember, EffectOp, ForeignDecl};
-use music_ast::expr::{BindKind, BinOp, Expr, LetFields, Param};
+use music_ast::expr::{BinOp, BindKind, Expr, LetFields, Param};
 use music_ast::lit::Lit;
 use music_ast::{AstArenas, ExprIdx, ParsedModule, PatIdx, Stmt};
-use music_sema::{DictLookup, Obligation, ResolutionMap, SemaResult, TypeIdx};
 use music_sema::Type;
 use music_sema::def::{DefId, DefKind};
+use music_sema::{DictLookup, Obligation, ResolutionMap, SemaResult, TypeIdx};
 use music_shared::{FileId, Interner, Span, Symbol};
 
 use crate::const_pool::ConstPool;
@@ -198,9 +198,10 @@ impl<'a> Emitter<'a> {
     }
 
     pub(crate) fn expr_defs(&self) -> &HashMap<ExprIdx, DefId> {
-        self.active_dep.map_or(&self.sema.resolution.expr_defs, |i| {
-            &self.dep_contexts[i].resolution.expr_defs
-        })
+        self.active_dep
+            .map_or(&self.sema.resolution.expr_defs, |i| {
+                &self.dep_contexts[i].resolution.expr_defs
+            })
     }
 
     pub(crate) fn pat_defs(&self) -> &HashMap<Span, DefId> {
@@ -210,18 +211,21 @@ impl<'a> Emitter<'a> {
     }
 
     pub(crate) fn active_binop_dispatch(&self) -> &HashMap<ExprIdx, DefId> {
-        self.active_dep
-            .map_or(&self.sema.binop_dispatch, |i| self.dep_contexts[i].binop_dispatch)
+        self.active_dep.map_or(&self.sema.binop_dispatch, |i| {
+            self.dep_contexts[i].binop_dispatch
+        })
     }
 
     pub(crate) fn active_binop_dict_dispatch(&self) -> &HashMap<ExprIdx, DictLookup> {
-        self.active_dep
-            .map_or(&self.sema.binop_dict_dispatch, |i| self.dep_contexts[i].binop_dict_dispatch)
+        self.active_dep.map_or(&self.sema.binop_dict_dispatch, |i| {
+            self.dep_contexts[i].binop_dict_dispatch
+        })
     }
 
     pub(crate) fn active_fn_constraints(&self) -> &HashMap<DefId, Vec<Obligation>> {
-        self.active_dep
-            .map_or(&self.sema.fn_constraints, |i| self.dep_contexts[i].fn_constraints)
+        self.active_dep.map_or(&self.sema.fn_constraints, |i| {
+            self.dep_contexts[i].fn_constraints
+        })
     }
 
     pub(crate) fn expr_types(&self) -> &HashMap<ExprIdx, TypeIdx> {
@@ -663,7 +667,9 @@ impl<'a> Emitter<'a> {
             }
             // Top-level side-effect statements (e.g., `parse_value_ref <- parse_value`)
             // must execute when the module is loaded.
-            Expr::BinOp { op: BinOp::Assign, .. } => {
+            Expr::BinOp {
+                op: BinOp::Assign, ..
+            } => {
                 self.dep_side_effects.push((expr_idx, dep_idx));
             }
             _ => {}

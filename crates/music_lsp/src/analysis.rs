@@ -335,10 +335,7 @@ fn build_import_types(
                 })
                 .collect();
             fields.sort_by(|a, b| interner.resolve(a.name).cmp(interner.resolve(b.name)));
-            let ty = types.alloc(Type::Record {
-                fields,
-                rest: None,
-            });
+            let ty = types.alloc(Type::Record { fields, rest: None });
             let _prev = map.insert(import_sym, ty);
         }
     }
@@ -556,9 +553,7 @@ pub fn def_at_cursor(offset: u32, doc: &AnalyzedDoc) -> Option<&DefInfo> {
         if def.span == Span::DUMMY {
             return false;
         }
-        let Some(name_span) =
-            find_name_token(&doc.lexed.tokens, def.span.start, def.name)
-        else {
+        let Some(name_span) = find_name_token(&doc.lexed.tokens, def.span.start, def.name) else {
             return false;
         };
         name_span.start <= offset && offset <= name_span.end()

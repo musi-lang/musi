@@ -290,7 +290,10 @@ pub fn analyze_shared<S: BuildHasher>(
     );
 
     let inherited_count = state.instances.len();
-    checker.store.instances.extend(state.instances.iter().cloned());
+    checker
+        .store
+        .instances
+        .extend(state.instances.iter().cloned());
 
     for stmt in &module.stmts {
         let _ty = checker.synth(stmt.expr);
@@ -303,7 +306,9 @@ pub fn analyze_shared<S: BuildHasher>(
     state.unify = result.unify;
 
     // Accumulate only instances declared in THIS module (skip inherited).
-    state.instances.extend(result.instances[inherited_count..].iter().cloned());
+    state
+        .instances
+        .extend(result.instances[inherited_count..].iter().cloned());
 
     analyze_emit_unused_warnings(&state.defs, interner, file_id, diags);
 

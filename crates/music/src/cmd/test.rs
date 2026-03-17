@@ -17,7 +17,11 @@ enum TestOutcome {
     Error(String),
 }
 
-pub fn run(filter: Option<&str>, manifest: Option<&MusiManifest>, project_root: Option<&Path>) -> ! {
+pub fn run(
+    filter: Option<&str>,
+    manifest: Option<&MusiManifest>,
+    project_root: Option<&Path>,
+) -> ! {
     let Some(project_root) = project_root else {
         eprintln!("error: no mspackage.toml found — `music test` requires a project");
         process::exit(1);
@@ -47,10 +51,7 @@ pub fn run(filter: Option<&str>, manifest: Option<&MusiManifest>, project_root: 
     let start = Instant::now();
 
     for path in &test_files {
-        let display = path
-            .strip_prefix(project_root)
-            .unwrap_or(path)
-            .display();
+        let display = path.strip_prefix(project_root).unwrap_or(path).display();
 
         match run_test_file(path, manifest, project_root) {
             TestOutcome::Passed => {
@@ -76,7 +77,12 @@ pub fn run(filter: Option<&str>, manifest: Option<&MusiManifest>, project_root: 
         write!(summary, ", {failed} failed").unwrap();
     }
     if errors > 0 {
-        write!(summary, ", {errors} error{}", if errors == 1 { "" } else { "s" }).unwrap();
+        write!(
+            summary,
+            ", {errors} error{}",
+            if errors == 1 { "" } else { "s" }
+        )
+        .unwrap();
     }
     write!(summary, " ({:.2}s)", elapsed.as_secs_f64()).unwrap();
     println!("{summary}");
@@ -88,8 +94,7 @@ pub fn run(filter: Option<&str>, manifest: Option<&MusiManifest>, project_root: 
 }
 
 fn run_test_file(path: &Path, manifest: &MusiManifest, project_root: &Path) -> TestOutcome {
-    let Ok(mut out) = pipeline::run_frontend_multi(path, Some(manifest), Some(project_root))
-    else {
+    let Ok(mut out) = pipeline::run_frontend_multi(path, Some(manifest), Some(project_root)) else {
         return TestOutcome::Error("compilation error".into());
     };
 
@@ -136,12 +141,17 @@ fn collect_test_files(dir: &Path, out: &mut Vec<PathBuf>) {
         let path = entry.path();
         if path.is_dir() {
             collect_test_files(&path, out);
-        } else if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("ms"))
-            && path.file_stem().and_then(|s| s.to_str()).is_some_and(|stem| {
-                Path::new(stem)
-                    .extension()
-                    .is_some_and(|ext| ext.eq_ignore_ascii_case("test"))
-            })
+        } else if path
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("ms"))
+            && path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .is_some_and(|stem| {
+                    Path::new(stem)
+                        .extension()
+                        .is_some_and(|ext| ext.eq_ignore_ascii_case("test"))
+                })
         {
             out.push(path);
         }

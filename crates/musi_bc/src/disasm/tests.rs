@@ -1,6 +1,8 @@
 use super::*;
-use crate::{encode_i32, encode_i8, encode_no_operand, encode_u8, encode_u16, encode_u32,
-            encode_wid_u16, encode_wid_u32, pack_id_arity, pack_tag_arity_u16};
+use crate::{
+    encode_i8, encode_i32, encode_no_operand, encode_u8, encode_u16, encode_u32, encode_wid_u16,
+    encode_wid_u32, pack_id_arity, pack_tag_arity_u16,
+};
 
 #[test]
 fn test_disassemble_simple_sequence() {
@@ -65,7 +67,10 @@ fn test_disassemble_wid_mk_var() {
     let packed = (1000u32 << 8) | 4;
     encode_wid_u32(&mut code, Opcode::MK_VAR, packed);
     let output = disassemble(&code);
-    assert!(output.contains("wid mk.var tag=1000 arity=4"), "got: {output}");
+    assert!(
+        output.contains("wid mk.var tag=1000 arity=4"),
+        "got: {output}"
+    );
 }
 
 #[test]

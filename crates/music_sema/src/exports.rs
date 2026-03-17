@@ -176,8 +176,5 @@ pub fn exports_to_record_type(exports: &ModuleExports, types: &mut Arena<Type>) 
             ty_params: b.ty_params.clone(),
         })
         .collect();
-    types.alloc(Type::Record {
-        fields,
-        rest: None,
-    })
+    types.alloc(Type::Record { fields, rest: None })
 }

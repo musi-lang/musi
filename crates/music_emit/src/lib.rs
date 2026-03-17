@@ -23,8 +23,8 @@ pub use error::EmitError;
 use std::collections::HashMap;
 
 use music_ast::{ExprIdx, ParsedModule};
-use music_sema::{DictLookup, Obligation, ResolutionMap, SemaResult, TypeIdx};
 use music_sema::def::DefId;
+use music_sema::{DictLookup, Obligation, ResolutionMap, SemaResult, TypeIdx};
 use music_shared::{FileId, Interner};
 
 /// Dependency module data needed by the emitter.
