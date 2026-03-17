@@ -332,6 +332,7 @@ impl UnifyTable {
                     .map(|f| RecordField {
                         name: f.name,
                         ty: self.freshen_any(f.ty, arena, any_def),
+                        ty_params: f.ty_params.clone(),
                     })
                     .collect();
                 let new_rest = rest.map(|r| self.freshen_any(r, arena, any_def));
@@ -553,6 +554,7 @@ impl UnifyTable {
                     .map(|f| RecordField {
                         name: f.name,
                         ty: self.freeze(f.ty, arena, any_def),
+                        ty_params: f.ty_params.clone(),
                     })
                     .collect();
                 // Walk the rest chain.
@@ -567,6 +569,7 @@ impl UnifyTable {
                                     all_fields.push(RecordField {
                                         name: f.name,
                                         ty: self.freeze(f.ty, arena, any_def),
+                                        ty_params: f.ty_params.clone(),
                                     });
                                 }
                             }

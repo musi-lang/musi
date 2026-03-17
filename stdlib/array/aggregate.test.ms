@@ -45,7 +45,7 @@ t.runner.report(t.runner.run_suite([
     t.assertions.assert_true(result)
   )),
   ("all_arr — one fails returns false", () => (
-    let result := agg.all_arr([2, 4, 5], (x) => x mod 2 = 0);
+    let result := agg.all_arr([2, 4, 5], (x) => x % 2 = 0);
     t.assertions.assert_false(result)
   )),
   ("all_arr — empty array returns true", () => (
@@ -53,11 +53,11 @@ t.runner.report(t.runner.run_suite([
     t.assertions.assert_true(result)
   )),
   ("any_arr — one matches returns true", () => (
-    let result := agg.any_arr([1, 3, 5, 6], (x) => x mod 2 = 0);
+    let result := agg.any_arr([1, 3, 5, 6], (x) => x % 2 = 0);
     t.assertions.assert_true(result)
   )),
   ("any_arr — none match returns false", () => (
-    let result := agg.any_arr([1, 3, 5], (x) => x mod 2 = 0);
+    let result := agg.any_arr([1, 3, 5], (x) => x % 2 = 0);
     t.assertions.assert_false(result)
   )),
   ("any_arr — empty array returns false", () => (

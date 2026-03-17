@@ -46,7 +46,7 @@ t.runner.report(t.runner.run_suite([
   ("next_bool — is boolean", () => (
     let r := m.new(1);
     let v := m.next_bool(r);
-    t.assertions.assert_true(v = true or v = false)
+    t.assertions.assert_true(v = .True or v = .False)
   )),
   ("seed_from — resets sequence", () => (
     let r := m.new(1);

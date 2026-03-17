@@ -128,7 +128,11 @@ pub fn exec(op: Opcode, frame: &mut Frame, heap: &mut Heap) -> Result<bool, VmEr
         Opcode::B_XOR => binary_op!(frame, int_op ^),
         Opcode::B_NOT => {
             let a = frame.pop()?;
-            frame.stack.push(Value::from_int(!a.as_int()?));
+            if let Ok(b) = a.as_bool() {
+                frame.stack.push(Value::from_bool(!b));
+            } else {
+                frame.stack.push(Value::from_int(!a.as_int()?));
+            }
         }
         Opcode::B_SHL => shift_op!(frame, int wrapping_shl),
         Opcode::B_SHR => shift_op!(frame, int wrapping_shr),

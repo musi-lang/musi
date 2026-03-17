@@ -535,7 +535,7 @@ impl Vm {
             Opcode::JMP_T_W => {
                 let frame = self.current_frame()?;
                 let cond = frame.pop()?;
-                if cond.as_bool()? {
+                if cond.as_truthy()? {
                     frame.ip = ops::jump_target(frame.ip, ops::read_i32_operand(operand)?)?;
                 }
                 Ok(StepResult::Continue)
@@ -543,7 +543,7 @@ impl Vm {
             Opcode::JMP_F_W => {
                 let frame = self.current_frame()?;
                 let cond = frame.pop()?;
-                if !cond.as_bool()? {
+                if !cond.as_truthy()? {
                     frame.ip = ops::jump_target(frame.ip, ops::read_i32_operand(operand)?)?;
                 }
                 Ok(StepResult::Continue)

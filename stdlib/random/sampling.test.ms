@@ -23,12 +23,12 @@ t.runner.report(t.runner.run_suite([
     let arr := [1, 2, 3, 4, 5];
     let shuffled := m.shuffle(r, arr);
     let len := (shuffled.[0]; 5);
-    t.assertions.assert_true(true)
+    t.assertions.assert_true(.True)
   )),
   ("shuffle — empty array stays empty", () => (
     let r := rng.new(1);
     let result := m.shuffle(r, []);
-    t.assertions.assert_true(true)
+    t.assertions.assert_true(.True)
   )),
   ("shuffle — single element unchanged", () => (
     let r := rng.new(1);
@@ -38,12 +38,12 @@ t.runner.report(t.runner.run_suite([
   ("sample — returns at most n elements", () => (
     let r := rng.new(1);
     let result := m.sample(r, [1, 2, 3, 4, 5], 3);
-    t.assertions.assert_true(true)
+    t.assertions.assert_true(.True)
   )),
   ("sample — n larger than array returns all", () => (
     let r := rng.new(1);
     let result := m.sample(r, [1, 2, 3], 10);
-    t.assertions.assert_true(true)
+    t.assertions.assert_true(.True)
   )),
   ("next_gaussian — is a float", () => (
     let r := rng.new(1);

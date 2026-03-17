@@ -5,15 +5,15 @@ import "@std/array/partition" as part;
 
 t.runner.report(t.runner.run_suite([
   ("partition — splits into matching and rest", () => (
-    let result := part.partition([1, 2, 3, 4, 5], (x) => x mod 2 = 0);
+    let result := part.partition([1, 2, 3, 4, 5], (x) => x % 2 = 0);
     t.assertions.assert_eq(result, ([2, 4], [1, 3, 5]))
   )),
   ("partition — all match", () => (
-    let result := part.partition([2, 4, 6], (x) => x mod 2 = 0);
+    let result := part.partition([2, 4, 6], (x) => x % 2 = 0);
     t.assertions.assert_eq(result, ([2, 4, 6], []))
   )),
   ("partition — none match", () => (
-    let result := part.partition([1, 3, 5], (x) => x mod 2 = 0);
+    let result := part.partition([1, 3, 5], (x) => x % 2 = 0);
     t.assertions.assert_eq(result, ([], [1, 3, 5]))
   )),
   ("partition — empty array", () => (

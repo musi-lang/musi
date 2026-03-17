@@ -96,6 +96,11 @@ pub struct Emitter<'a> {
     script: bool,
     dep_contexts: Vec<DepEmitCtx<'a>>,
     active_dep: Option<usize>,
+    /// `DefId` -> global slot index for module-level non-function bindings.
+    pub(crate) global_map: HashMap<DefId, u32>,
+    next_global: u32,
+    /// Non-function dep bindings: (value_expr, dep_idx, def_id, global_slot).
+    dep_global_inits: Vec<(ExprIdx, usize, DefId, u32)>,
 }
 
 /// Per-function emission context.
@@ -183,6 +188,9 @@ impl<'a> Emitter<'a> {
             script,
             dep_contexts,
             active_dep: None,
+            global_map: HashMap::new(),
+            next_global: 0,
+            dep_global_inits: vec![],
         }
     }
 
@@ -714,6 +722,9 @@ impl<'a> Emitter<'a> {
             Expr::Binding { fields, .. } => {
                 self.scan_dep_binding(&fields, dep_idx);
             }
+            Expr::Let { fields, .. } => {
+                self.scan_dep_binding(&fields, dep_idx);
+            }
             Expr::Foreign { abi, decls, .. } => {
                 self.scan_foreign_with_attrs(abi, &decls, &[])?;
             }
@@ -763,6 +774,15 @@ impl<'a> Emitter<'a> {
         };
 
         let Some((fn_params, fn_body)) = extract_fn(value_idx, self.ast) else {
+            // Non-function binding: register as a global so dep functions can
+            // reference it at runtime via LD_GLB.
+            let binding_span = pat_span(fields.pat, self.ast);
+            if let Some(&did) = self.pat_defs().get(&binding_span) {
+                let slot = self.next_global;
+                self.next_global += 1;
+                let _ = self.global_map.insert(did, slot);
+                self.dep_global_inits.push((value_idx, dep_idx, did, slot));
+            }
             return;
         };
 
@@ -848,6 +868,21 @@ impl<'a> Emitter<'a> {
     fn emit_script_entry(&mut self, fn_id: u32) -> Result<FnBytecode, EmitError> {
         let stmts: Vec<ExprIdx> = self.stmts.iter().map(|s| s.expr).collect();
         let mut fc = FnCtx::new(0);
+
+        // Emit global initializers from dependency modules first.
+        let inits = mem::take(&mut self.dep_global_inits);
+        for &(value_idx, dep_idx, _def_id, slot) in &inits {
+            let saved_ast = self.ast;
+            let saved_dep = self.active_dep;
+            self.ast = self.dep_contexts[dep_idx].ast;
+            self.active_dep = Some(dep_idx);
+            let produced = expr::emit_expr(self, &mut fc, value_idx)?;
+            self.ast = saved_ast;
+            self.active_dep = saved_dep;
+            if produced {
+                fc.fe.emit_st_glb(slot);
+            }
+        }
 
         let last_idx = stmts.len().saturating_sub(1);
         let mut last_produced = false;

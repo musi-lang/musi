@@ -33,8 +33,8 @@ t.runner.report(t.runner.run_suite([
   )),
   ("decode — invalid char returns InvalidChar error", () => (
     match hex.decode("zz") (
-      .Err(.InvalidChar(_)) => t.assertions.assert_true(true)
-      | _ => t.assertions.assert_false(true)
+      .Err(.InvalidChar(_)) => t.assertions.assert_true(.True)
+      | _ => t.assertions.assert_false(.True)
     )
   )),
   ("decode — single byte zero", () => (

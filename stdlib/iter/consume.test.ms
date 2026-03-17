@@ -18,7 +18,7 @@ t.runner.report(t.runner.run_suite([
   )),
   ("collect_array — empty produces empty array", () => (
     let result := m.collect_array(src.empty());
-    t.assertions.assert_true(true)
+    t.assertions.assert_true(.True)
   )),
   ("count — counts all elements", () => (
     t.assertions.assert_eq(m.count(src.range(0, 7)), 7)
@@ -33,7 +33,7 @@ t.runner.report(t.runner.run_suite([
     t.assertions.assert_false(m.any(src.range(0, 5), (x) => x > 100))
   )),
   ("any — false on empty", () => (
-    t.assertions.assert_false(m.any(src.empty(), (x) => true))
+    t.assertions.assert_false(m.any(src.empty(), (x) => .True))
   )),
   ("all — true when all match", () => (
     t.assertions.assert_true(m.all(src.range(0, 5), (x) => x < 10))
@@ -42,7 +42,7 @@ t.runner.report(t.runner.run_suite([
     t.assertions.assert_false(m.all(src.range(0, 5), (x) => x < 3))
   )),
   ("all — true on empty", () => (
-    t.assertions.assert_true(m.all(src.empty(), (x) => false))
+    t.assertions.assert_true(m.all(src.empty(), (x) => .False))
   )),
   ("find — returns first match", () => (
     t.assertions.assert_eq(m.find(src.range(0, 5), (x) => x > 2), .Some(3))

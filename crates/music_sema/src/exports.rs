@@ -20,6 +20,7 @@ pub struct ExportBinding {
     pub name: Symbol,
     pub ty: TypeIdx,
     pub def_id: DefId,
+    pub ty_params: Vec<DefId>,
 }
 
 /// All exports from a module.
@@ -78,6 +79,7 @@ fn collect_exports_from_expr<S: BuildHasher>(
                             name: *name,
                             ty,
                             def_id,
+                            ty_params: def.ty_info.ty_params.clone(),
                         });
                     }
                 }
@@ -103,6 +105,7 @@ fn collect_exports_from_expr<S: BuildHasher>(
                         name: *name,
                         ty,
                         def_id,
+                        ty_params: def.ty_info.ty_params.clone(),
                     });
                 }
                 // Also export child methods of the class/effect.
@@ -116,6 +119,7 @@ fn collect_exports_from_expr<S: BuildHasher>(
                             name: d.name,
                             ty: method_ty,
                             def_id: d.id,
+                            ty_params: d.ty_info.ty_params.clone(),
                         });
                     }
                 }
@@ -146,6 +150,7 @@ fn collect_pat_exports<S: BuildHasher>(
                         name: def.name,
                         ty,
                         def_id,
+                        ty_params: def.ty_info.ty_params.clone(),
                     });
                 }
             }
@@ -168,6 +173,7 @@ pub fn exports_to_record_type(exports: &ModuleExports, types: &mut Arena<Type>) 
         .map(|b| RecordField {
             name: b.name,
             ty: b.ty,
+            ty_params: b.ty_params.clone(),
         })
         .collect();
     types.alloc(Type::Record {

@@ -400,19 +400,6 @@ fn emit_name(
     name: Symbol,
     _span: Span,
 ) -> Result<bool, EmitError> {
-    let name_str = em.interner.resolve(name);
-    if name_str == "true" {
-        let cv = ConstValue::Bool(true);
-        let i = em.cp.intern(&cv, em.interner)?;
-        fc.fe.emit_ld_cst(i);
-        return Ok(true);
-    }
-    if name_str == "false" {
-        let cv = ConstValue::Bool(false);
-        let i = em.cp.intern(&cv, em.interner)?;
-        fc.fe.emit_ld_cst(i);
-        return Ok(true);
-    }
     let Some(&def_id) = em.expr_defs().get(&expr_idx) else {
         return Err(EmitError::UnsupportedFeature {
             desc: format!("unresolved name `{}`", em.interner.resolve(name)).into(),
@@ -444,6 +431,11 @@ fn emit_name(
         if fc.ref_upvalues.contains(&def_id) {
             fc.fe.emit_ld_fld(0)?;
         }
+        return Ok(true);
+    }
+    // Global bindings from dependency modules (non-function module-level lets).
+    if let Some(&slot) = em.global_map.get(&def_id) {
+        fc.fe.emit_ld_glb(slot);
         return Ok(true);
     }
     // Import aliases: construct a module record from the module's exports.
@@ -1086,7 +1078,10 @@ fn emit_primitive_binop(
             let family = classify_type_family(em, left);
             let opcode = map_binop(op, family)?;
             fc.fe.emit_binop(opcode);
-            emit_narrow_truncation(em, fc, family)?;
+            // Comparison operators produce bool, not int — skip narrow truncation.
+            if !matches!(op, BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge) {
+                emit_narrow_truncation(em, fc, family)?;
+            }
             Ok(true)
         }
     }
@@ -1376,12 +1371,33 @@ fn emit_variant(
     name: Symbol,
     args: &[ExprIdx],
 ) -> Result<bool, EmitError> {
-    for &arg_idx in args {
-        let produced = emit_expr(em, fc, arg_idx)?;
-        if !produced {
-            return Err(EmitError::UnsupportedFeature {
-                desc: "variant arg produced no value".into(),
-            });
+    let name_str = em.interner.resolve(name);
+    if args.is_empty() {
+        if name_str == "True" {
+            let cv = ConstValue::Bool(true);
+            let i = em.cp.intern(&cv, em.interner)?;
+            fc.fe.emit_ld_cst(i);
+            return Ok(true);
+        }
+        if name_str == "False" {
+            let cv = ConstValue::Bool(false);
+            let i = em.cp.intern(&cv, em.interner)?;
+            fc.fe.emit_ld_cst(i);
+            return Ok(true);
+        }
+    }
+
+    if args.is_empty() {
+        // Nullary variants still need a payload for MK_VAR — push unit.
+        fc.fe.emit_ld_unit();
+    } else {
+        for &arg_idx in args {
+            let produced = emit_expr(em, fc, arg_idx)?;
+            if !produced {
+                return Err(EmitError::UnsupportedFeature {
+                    desc: "variant arg produced no value".into(),
+                });
+            }
         }
     }
     let tag = resolve_variant_tag(em, name)?;
@@ -1875,6 +1891,16 @@ fn resolve_variant_tag(em: &mut Emitter<'_>, name: Symbol) -> Result<u32, EmitEr
     }
     if name_str_owned == "Err" {
         return Ok(if em.ok_tag == 0 { 1 } else { 0 });
+    }
+    // Ordering variants: Less + Equal + Greater (defined in @std/cmp/ordering)
+    if name_str_owned == "Less" {
+        return Ok(0);
+    }
+    if name_str_owned == "Equal" {
+        return Ok(1);
+    }
+    if name_str_owned == "Greater" {
+        return Ok(2);
     }
     Err(EmitError::FieldNotFound {
         desc: format!("variant `{name_str}` not found in any choice type").into(),

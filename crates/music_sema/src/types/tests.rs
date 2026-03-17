@@ -61,6 +61,7 @@ fn test_type_record_fields() {
         fields: vec![RecordField {
             name: sym_x,
             ty: int_ty,
+            ty_params: vec![],
         }],
         rest: None,
     });

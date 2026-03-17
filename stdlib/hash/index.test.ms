@@ -32,10 +32,10 @@ t.runner.report(t.runner.run_suite([
     t.assertions.assert_ne(m.hash_str("abc"), m.hash_str("xyz"))
   )),
   ("hash_bool — true and false differ", () => (
-    t.assertions.assert_ne(m.hash_bool(true), m.hash_bool(false))
+    t.assertions.assert_ne(m.hash_bool(.True), m.hash_bool(.False))
   )),
   ("hash_bool — stable for true", () => (
-    t.assertions.assert_eq(m.hash_bool(true), m.hash_bool(true))
+    t.assertions.assert_eq(m.hash_bool(.True), m.hash_bool(.True))
   )),
   ("combine — returns non-negative", () => (
     t.assertions.assert_true(m.combine(m.hash_int(1), m.hash_int(2)) >= 0)

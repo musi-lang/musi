@@ -38,7 +38,7 @@ t.runner.report(t.runner.run_suite([
     let bytes := [0, 1, 127, 128, 255];
     match base64.decode(base64.encode(bytes)) (
       .Ok(result) => t.assertions.assert_eq(result, bytes)
-      | .Err(_) => t.assertions.assert_false(true)
+      | .Err(_) => t.assertions.assert_false(.True)
     )
   )),
   ("encode_url_safe — uses - and _ instead of + and /", () => (
@@ -54,7 +54,7 @@ t.runner.report(t.runner.run_suite([
     let bytes := [100, 200, 150];
     match base64.decode_url_safe(base64.encode_url_safe(bytes)) (
       .Ok(result) => t.assertions.assert_eq(result, bytes)
-      | .Err(_) => t.assertions.assert_false(true)
+      | .Err(_) => t.assertions.assert_false(.True)
     )
   )),
 ]));

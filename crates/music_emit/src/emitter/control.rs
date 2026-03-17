@@ -36,6 +36,9 @@ pub fn emit_piecewise(
             let produced = emit_expr_tail(em, fc, arm.result, is_tail)?;
             if produced {
                 fc.fe.emit_st_loc(result_slot);
+            } else {
+                fc.fe.emit_ld_unit();
+                fc.fe.emit_st_loc(result_slot);
             }
             fc.fe.emit_jmp(merge_label);
         } else if let PwGuard::When {
@@ -52,6 +55,9 @@ pub fn emit_piecewise(
             fc.fe.emit_label(then_label);
             let produced = emit_expr_tail(em, fc, arm.result, is_tail)?;
             if produced {
+                fc.fe.emit_st_loc(result_slot);
+            } else {
+                fc.fe.emit_ld_unit();
                 fc.fe.emit_st_loc(result_slot);
             }
             fc.fe.emit_jmp(merge_label);
@@ -121,6 +127,9 @@ pub fn emit_match(
         let produced = emit_expr_tail(em, fc, arm.result, is_tail)?;
         if produced {
             fc.fe.emit_st_loc(result_slot);
+        } else {
+            fc.fe.emit_ld_unit();
+            fc.fe.emit_st_loc(result_slot);
         }
         fc.fe.emit_jmp(merge_label);
 
@@ -153,6 +162,17 @@ fn emit_pat_test(
         } => emit_pat_test(em, fc, inner_pat, scrutinee_slot, tag_slot, fail_label),
         Pat::Lit { lit, .. } => emit_lit_pat_test(em, fc, scrutinee_slot, &lit, fail_label),
         Pat::Variant { name, .. } => {
+            let name_str = em.interner.resolve(name);
+            if name_str == "True" || name_str == "False" {
+                let expected = name_str == "True";
+                let cv = ConstValue::Bool(expected);
+                let ci = em.cp.intern(&cv, em.interner)?;
+                fc.fe.emit_ld_loc(scrutinee_slot);
+                fc.fe.emit_ld_cst(ci);
+                fc.fe.emit_cmp_eq();
+                fc.fe.emit_jmp_f(fail_label);
+                return Ok(());
+            }
             let tag = resolve_variant_tag_by_name(em, name)?;
             if let Some(ts) = tag_slot {
                 let tag_cv = ConstValue::Int(i64::from(tag));

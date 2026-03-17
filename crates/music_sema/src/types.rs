@@ -81,6 +81,9 @@ pub enum Quantifier {
 pub struct RecordField {
     pub name: Symbol,
     pub ty: TypeIdx,
+    /// Type parameters for polymorphic fields (e.g. re-exported generic functions).
+    /// Empty for monomorphic fields.
+    pub ty_params: Vec<DefId>,
 }
 
 /// A variant in a structural sum type.

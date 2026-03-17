@@ -271,6 +271,21 @@ impl Value {
         }
     }
 
+    /// Interprets the value as a boolean condition, accepting both bools and
+    /// ints (non-zero = true). Used by conditional jumps.
+    pub fn as_truthy(self) -> Result<bool, VmError> {
+        if (self.0 & TAG_MASK) == TAG_BOOL {
+            Ok((self.0 & 1) != 0)
+        } else if let Ok(n) = self.as_int() {
+            Ok(n != 0)
+        } else {
+            Err(VmError::TypeError {
+                expected: "bool",
+                found: self.type_name(),
+            })
+        }
+    }
+
     /// # Errors
     ///
     /// Returns [`VmError::TypeError`] if the value is not a rune, or
@@ -473,13 +488,41 @@ impl fmt::Debug for Value {
     }
 }
 
-/// Check if two values represent the same integer (inline or heap-boxed).
+/// Check if two values are equal when their raw bits differ.
+///
+/// Handles heap-boxed wide integers and heap-allocated strings.
 pub fn wide_values_equal(a: Value, b: Value, heap: &Heap) -> bool {
     if let (Ok(ai), Ok(bi)) = (a.as_int_wide(heap), b.as_int_wide(heap)) {
         return ai == bi;
     }
     if let (Ok(an), Ok(bn)) = (a.as_nat_wide(heap), b.as_nat_wide(heap)) {
         return an == bn;
+    }
+    if let (Ok(ai), Ok(bi)) = (a.as_ref(), b.as_ref()) {
+        if let (Ok(oa), Ok(ob)) = (heap.get(ai), heap.get(bi)) {
+            if let (Some(sa), Some(sb)) = (&oa.string, &ob.string) {
+                return sa == sb;
+            }
+            // Array equality: compare element-wise.
+            if !oa.elems.is_empty() || !ob.elems.is_empty() {
+                if oa.elems.len() != ob.elems.len() {
+                    return false;
+                }
+                return oa
+                    .elems
+                    .iter()
+                    .zip(ob.elems.iter())
+                    .all(|(&ea, &eb)| ea.0 == eb.0 || wide_values_equal(ea, eb, heap));
+            }
+            // Product/variant equality: same tag and same fields.
+            if oa.tag == ob.tag && oa.fields.len() == ob.fields.len() {
+                return oa
+                    .fields
+                    .iter()
+                    .zip(ob.fields.iter())
+                    .all(|(&fa, &fb)| fa.0 == fb.0 || wide_values_equal(fa, fb, heap));
+            }
+        }
     }
     false
 }

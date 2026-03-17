@@ -5,10 +5,11 @@ use music_ast::expr::{
     RecDefField, RecField,
 };
 use music_ast::lit::{FStrPart, Lit};
+use music_ast::pat::Pat;
 use music_ast::{ExprIdx, TyIdx};
 use music_shared::{Span, Symbol};
 
-use crate::def::DefKind;
+use crate::def::{DefId, DefKind};
 use crate::error::SemaError;
 
 use super::{Resolver, binding_def_kind};
@@ -22,7 +23,7 @@ impl Resolver<'_> {
             Expr::Lit { ref lit, .. } => self.resolve_lit(lit),
             Expr::Error { .. } | Expr::Import { .. } | Expr::Export { .. } => {}
             Expr::Paren { inner, .. } | Expr::Annotated { inner, .. } => self.resolve_expr(inner),
-            Expr::Choice { body, .. } => self.resolve_expr_choice(body),
+            Expr::Choice { body, .. } => self.resolve_expr_choice(body, None),
             Expr::Tuple { elems, .. } | Expr::Variant { args: elems, .. } => {
                 for &e in &elems {
                     self.resolve_expr(e);
@@ -245,7 +246,6 @@ impl Resolver<'_> {
     }
 
     fn resolve_expr_let(&mut self, fields: &LetFields, body: Option<ExprIdx>) {
-        use music_ast::pat::Pat;
         let is_fn_pat = matches!(&self.ast.pats[fields.pat], Pat::Variant { .. });
         let is_lambda_bind = !is_fn_pat
             && fields
@@ -305,7 +305,19 @@ impl Resolver<'_> {
         let fn_pat_parent = self.enter_fn_pat_scope(fields.pat);
 
         if let Some(v) = fields.value {
-            self.resolve_expr(v);
+            if matches!(&self.ast.exprs[v], Expr::Choice { .. }) {
+                let pat_span = match &self.ast.pats[fields.pat] {
+                    Pat::Variant { span, .. } => Some(*span),
+                    Pat::Bind { span, .. } => Some(*span),
+                    _ => None,
+                };
+                let parent_def = pat_span.and_then(|s| self.output.pat_defs.get(&s).copied());
+                if let Expr::Choice { body, .. } = &self.ast.exprs[v] {
+                    self.resolve_expr_choice(*body, parent_def);
+                }
+            } else {
+                self.resolve_expr(v);
+            }
         }
         if let Some(ty) = fields.ty {
             self.resolve_ty(ty);
@@ -353,7 +365,7 @@ impl Resolver<'_> {
         }
     }
 
-    fn resolve_expr_choice(&mut self, body: TyIdx) {
+    fn resolve_expr_choice(&mut self, body: TyIdx, choice_parent: Option<DefId>) {
         use music_ast::ty::Ty;
         let parent = self.current_scope;
         self.current_scope = self.scopes.push_child(parent);
@@ -363,12 +375,18 @@ impl Resolver<'_> {
                 for &variant_ty in variants {
                     if let Ty::Named { name, .. } = &self.ast.tys[variant_ty] {
                         let id = self.defs.alloc(*name, DefKind::Variant, Span::DUMMY);
+                        if let Some(p) = choice_parent {
+                            self.defs.get_mut(id).parent = Some(p);
+                        }
                         self.define_in_scope(*name, id, Span::DUMMY);
                     }
                 }
             }
             Ty::Named { name, .. } => {
                 let id = self.defs.alloc(*name, DefKind::Variant, Span::DUMMY);
+                if let Some(p) = choice_parent {
+                    self.defs.get_mut(id).parent = Some(p);
+                }
                 self.define_in_scope(*name, id, Span::DUMMY);
             }
             _ => {}

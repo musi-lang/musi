@@ -51,7 +51,7 @@ t.runner.report(t.runner.run_suite([
     t.assertions.assert_true(is_not_positive(-1))
   )),
   ("negate — true becomes false", () => (
-    let always_true := (x) => true;
+    let always_true := (x) => .True;
     let always_false := m.negate(always_true);
     t.assertions.assert_false(always_false(0))
   )),

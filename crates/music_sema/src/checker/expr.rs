@@ -23,7 +23,7 @@ use crate::error::SemaError;
 use crate::resolve;
 use crate::scope::ScopeId;
 use crate::types::{
-    DictLookup, EffectRow, Obligation, RecordField, SumVariant, Type, TypeIdx, fmt_type,
+    DictLookup, EffectRow, Obligation, RecordField, SumVariant, TyVarId, Type, TypeIdx, fmt_type,
 };
 use crate::unify::types_match;
 
@@ -476,14 +476,18 @@ fn lookup_field<S: BuildHasher>(
             let (fields, rest) = (fields.clone(), *rest);
             if let FieldKey::Name { name, .. } = field {
                 if let Some(f) = fields.iter().find(|f| f.name == name) {
-                    f.ty
+                    if f.ty_params.is_empty() {
+                        f.ty
+                    } else {
+                        freshen_poly(ck, f.ty, &f.ty_params.clone(), span)
+                    }
                 } else if let Some(rest_idx) = rest {
                     // Open record — unify the rest with a new single-field record
                     // so the row chain grows naturally through the binding.
                     let field_ty = ck.fresh_var(span);
                     let new_rest = ck.fresh_var(span);
                     let constraint = ck.alloc_ty(Type::Record {
-                        fields: vec![RecordField { name, ty: field_ty }],
+                        fields: vec![RecordField { name, ty: field_ty, ty_params: vec![] }],
                         rest: Some(new_rest),
                     });
                     let _ok = ck.store.unify.unify(
@@ -541,7 +545,7 @@ fn lookup_field<S: BuildHasher>(
                 let field_ty = ck.fresh_var(span);
                 let row_var = ck.fresh_var(span);
                 let open_rec = ck.alloc_ty(Type::Record {
-                    fields: vec![RecordField { name, ty: field_ty }],
+                    fields: vec![RecordField { name, ty: field_ty, ty_params: vec![] }],
                     rest: Some(row_var),
                 });
                 let _ok =
@@ -594,7 +598,7 @@ fn synth_record<S: BuildHasher>(ck: &mut Checker<'_, S>, fields: &[RecField]) ->
                     // Punning: `{ x }` means `{ x: x }`
                     ck.fresh_var(Span::DUMMY)
                 };
-                Some(RecordField { name: *name, ty })
+                Some(RecordField { name: *name, ty, ty_params: vec![] })
             }
             RecField::Spread { .. } => None,
         })
@@ -813,27 +817,11 @@ fn synth_name<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx, span: 
         if ty_params.is_empty() {
             raw_ty
         } else {
-            instantiate_ty_params(ck, raw_ty, &ty_params, span)
+            freshen_poly(ck, raw_ty, &ty_params, span)
         }
     } else {
         ck.error_ty()
     }
-}
-
-/// Replaces each type-parameter `Type::Named` (identified by `DefId`) with a
-/// fresh unification variable, returning a new type with substitutions applied.
-fn instantiate_ty_params<S: BuildHasher>(
-    ck: &mut Checker<'_, S>,
-    ty: TypeIdx,
-    ty_param_defs: &[DefId],
-    span: Span,
-) -> TypeIdx {
-    let mut subst: HashMap<DefId, TypeIdx> = HashMap::with_capacity(ty_param_defs.len());
-    for &def_id in ty_param_defs {
-        let fresh = ck.fresh_var(span);
-        let _prev = subst.insert(def_id, fresh);
-    }
-    substitute_ty(ck, ty, &subst)
 }
 
 fn substitute_ty<S: BuildHasher>(
@@ -916,6 +904,110 @@ fn substitute_ty<S: BuildHasher>(
     }
 }
 
+/// Deep-copies a type, replacing both:
+/// 1. `Named(DefId)` nodes matching type parameter defs (explicit annotations)
+/// 2. Unbound unification variables (inferred polymorphic types)
+/// with fresh unification variables. Co-occurring nodes get the same fresh var.
+fn freshen_poly<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
+    ty: TypeIdx,
+    ty_param_defs: &[DefId],
+    span: Span,
+) -> TypeIdx {
+    let param_set: HashSet<DefId> = ty_param_defs.iter().copied().collect();
+    let mut var_map: HashMap<TyVarId, TypeIdx> = HashMap::new();
+    let mut def_map: HashMap<DefId, TypeIdx> = HashMap::new();
+    freshen_walk(ck, ty, span, &param_set, &mut var_map, &mut def_map)
+}
+
+fn freshen_walk<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
+    ty: TypeIdx,
+    span: Span,
+    param_set: &HashSet<DefId>,
+    var_map: &mut HashMap<TyVarId, TypeIdx>,
+    def_map: &mut HashMap<DefId, TypeIdx>,
+) -> TypeIdx {
+    let resolved = ck.resolve_ty(ty);
+    match &ck.store.types[resolved] {
+        Type::Var(v) => {
+            let v = *v;
+            if let Some(&fresh) = var_map.get(&v) {
+                fresh
+            } else {
+                let fresh = ck.fresh_var(span);
+                let _prev = var_map.insert(v, fresh);
+                fresh
+            }
+        }
+        Type::Named { def, args } if args.is_empty() && param_set.contains(def) => {
+            let def = *def;
+            if let Some(&fresh) = def_map.get(&def) {
+                fresh
+            } else {
+                let fresh = ck.fresh_var(span);
+                let _prev = def_map.insert(def, fresh);
+                fresh
+            }
+        }
+        Type::Named { def, args } => {
+            let (def, args) = (*def, args.clone());
+            let new_args: Vec<_> = args.iter().map(|&a| freshen_walk(ck, a, span, param_set, var_map, def_map)).collect();
+            ck.alloc_ty(Type::Named { def, args: new_args })
+        }
+        Type::Fn { params, ret, effects } => {
+            let (params, ret, effects) = (params.clone(), *ret, effects.clone());
+            let new_params: Vec<_> = params.iter().map(|&p| freshen_walk(ck, p, span, param_set, var_map, def_map)).collect();
+            let new_ret = freshen_walk(ck, ret, span, param_set, var_map, def_map);
+            ck.alloc_ty(Type::Fn { params: new_params, ret: new_ret, effects })
+        }
+        Type::Tuple { elems } => {
+            let elems = elems.clone();
+            let new_elems: Vec<_> = elems.iter().map(|&e| freshen_walk(ck, e, span, param_set, var_map, def_map)).collect();
+            ck.alloc_ty(Type::Tuple { elems: new_elems })
+        }
+        Type::Array { elem, len } => {
+            let (elem, len) = (*elem, *len);
+            let new_elem = freshen_walk(ck, elem, span, param_set, var_map, def_map);
+            ck.alloc_ty(Type::Array { elem: new_elem, len })
+        }
+        Type::Record { fields, rest } => {
+            let (fields, rest) = (fields.clone(), *rest);
+            let new_fields: Vec<_> = fields.iter().map(|f| RecordField {
+                name: f.name,
+                ty: freshen_walk(ck, f.ty, span, param_set, var_map, def_map),
+                ty_params: f.ty_params.clone(),
+            }).collect();
+            let new_rest = rest.map(|r| freshen_walk(ck, r, span, param_set, var_map, def_map));
+            ck.alloc_ty(Type::Record { fields: new_fields, rest: new_rest })
+        }
+        Type::Sum { variants } => {
+            let variants = variants.clone();
+            let new_variants: Vec<_> = variants.iter().map(|v| {
+                let new_fields: Vec<_> = v.fields.iter().map(|&f| freshen_walk(ck, f, span, param_set, var_map, def_map)).collect();
+                SumVariant { name: v.name, fields: new_fields }
+            }).collect();
+            ck.alloc_ty(Type::Sum { variants: new_variants })
+        }
+        Type::Ref { inner } => {
+            let inner = *inner;
+            let new_inner = freshen_walk(ck, inner, span, param_set, var_map, def_map);
+            ck.alloc_ty(Type::Ref { inner: new_inner })
+        }
+        Type::AnonSum { variants } => {
+            let variants = variants.clone();
+            let new_variants: Vec<_> = variants.iter().map(|&v| freshen_walk(ck, v, span, param_set, var_map, def_map)).collect();
+            ck.alloc_ty(Type::AnonSum { variants: new_variants })
+        }
+        Type::Quantified { kind, params, constraints, body } => {
+            let (kind, params, constraints, body) = (*kind, params.clone(), constraints.clone(), *body);
+            let new_body = freshen_walk(ck, body, span, param_set, var_map, def_map);
+            ck.alloc_ty(Type::Quantified { kind, params, constraints, body: new_body })
+        }
+        Type::Rigid(_) | Type::Error => resolved,
+    }
+}
+
 fn substitute_list<S: BuildHasher>(
     ck: &mut Checker<'_, S>,
     tys: &[TypeIdx],
@@ -934,6 +1026,7 @@ fn substitute_record_fields<S: BuildHasher>(
         .map(|f| RecordField {
             name: f.name,
             ty: substitute_ty(ck, f.ty, subst),
+            ty_params: f.ty_params.clone(),
         })
         .collect()
 }
@@ -1235,6 +1328,7 @@ fn synth_record_def<S: BuildHasher>(ck: &mut Checker<'_, S>, fields: &[RecDefFie
         .map(|f| RecordField {
             name: f.name,
             ty: lower_ty(ck, f.ty),
+            ty_params: vec![],
         })
         .collect();
     rec_fields.sort_by(|a, b| {

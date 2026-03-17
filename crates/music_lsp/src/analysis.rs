@@ -289,11 +289,13 @@ fn builtin_module_exports(node: &ModuleNode, state: &SharedAnalysisState) -> Vec
                 name: c_string_def.name,
                 ty: TypeIdx::from_raw(0),
                 def_id: wk.ffi.c_string,
+                ty_params: vec![],
             },
             ExportBinding {
                 name: ptr_def.name,
                 ty: TypeIdx::from_raw(0),
                 def_id: wk.ffi.ptr,
+                ty_params: vec![],
             },
         ]
     } else {
@@ -329,6 +331,7 @@ fn build_import_types(
                 .map(|b| RecordField {
                     name: b.name,
                     ty: b.ty,
+                    ty_params: b.ty_params.clone(),
                 })
                 .collect();
             fields.sort_by(|a, b| interner.resolve(a.name).cmp(interner.resolve(b.name)));

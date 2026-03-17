@@ -89,6 +89,16 @@ impl FnEmitter {
         self.pop_n(1);
     }
 
+    pub fn emit_ld_glb(&mut self, slot: u32) {
+        encode_u32(&mut self.code, Opcode::LD_GLB, slot);
+        self.push_n(1);
+    }
+
+    pub fn emit_st_glb(&mut self, slot: u32) {
+        encode_u32(&mut self.code, Opcode::ST_GLB, slot);
+        self.pop_n(1);
+    }
+
     /// Emit `ld.cst` or `ld.cst.w` depending on const pool index.
     pub fn emit_ld_cst(&mut self, idx: u16) {
         if let Ok(i) = u8::try_from(idx) {
