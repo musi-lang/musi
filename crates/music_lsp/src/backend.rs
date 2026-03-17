@@ -12,8 +12,8 @@ use std::path::PathBuf;
 
 use crate::analysis::{AnalyzedDoc, analyze_doc, analyze_doc_multi, position_to_offset};
 use crate::{
-    code_actions, code_lens, completion, document_links, document_symbols, folding_ranges,
-    goto_def, goto_type_def, hover, inlay_hints, references, semantic_tokens, signature_help,
+    code_actions, code_lens, completion, document_symbols, folding_ranges, goto_def, goto_type_def,
+    hover, inlay_hints, references, semantic_tokens, signature_help,
 };
 
 pub struct MusiBackend {
@@ -124,10 +124,6 @@ impl LanguageServer for MusiBackend {
                     resolve_provider: Some(false),
                 }),
                 code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
-                document_link_provider: Some(DocumentLinkOptions {
-                    resolve_provider: Some(false),
-                    work_done_progress_options: WorkDoneProgressOptions::default(),
-                }),
                 folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
                 type_definition_provider: Some(TypeDefinitionProviderCapability::Simple(true)),
                 ..ServerCapabilities::default()
@@ -364,19 +360,6 @@ impl LanguageServer for MusiBackend {
             .get(&uri)
             .map(document_symbols::document_symbols);
         Box::pin(async move { Ok(result) })
-    }
-
-    fn document_link(
-        &mut self,
-        params: DocumentLinkParams,
-    ) -> BoxFuture<'static, Result<Option<Vec<DocumentLink>>, Self::Error>> {
-        let uri = params.text_document.uri;
-        let links = self
-            .documents
-            .get(&uri)
-            .map(|doc| document_links::document_links(doc, &uri, self.root_uri.as_ref()))
-            .unwrap_or_default();
-        Box::pin(async move { Ok(Some(links)) })
     }
 
     fn code_action(

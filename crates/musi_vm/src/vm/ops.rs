@@ -2,7 +2,7 @@
 //!
 //! Each handler is called directly from the flat dispatch in `Vm::step_inner`.
 
-use musi_bc::instr_len;
+use musi_bc::{Opcode, instr_len, widened_operand_size};
 
 use crate::error::{VmError, malformed};
 use crate::heap::Heap;
@@ -30,15 +30,54 @@ const TYPE_TAG_RUNE: u8 = 0x0D;
 const TYPE_TAG_FN: u8 = 0x12;
 const TYPE_TAG_ANY: u8 = 0x14;
 
-/// Operand decoding and jump-target helpers.
+/// Result of operand decoding (may include WID prefix).
+pub struct DecodedInstr {
+    pub op: Opcode,
+    pub operand: u32,
+    pub total_len: usize,
+}
+
+/// Decode an instruction at `base_ip`, handling WID and EXT prefixes.
 ///
-/// Decode the operand from raw bytecode starting at `base_ip` (the opcode byte).
-///
-/// Returns `(operand_value, bytes_consumed_including_opcode)`.
+/// Returns the opcode, operand value, total bytes consumed, and whether WID was used.
 #[must_use]
-pub fn decode_operand(code: &[u8], base_ip: usize) -> (u32, usize) {
-    let op = code[base_ip];
-    let len = instr_len(op);
+pub fn decode_instruction(code: &[u8], base_ip: usize) -> DecodedInstr {
+    let raw = code[base_ip];
+
+    // Handle WID prefix
+    if raw == Opcode::WID {
+        let wid_inner_ip = base_ip + 1;
+        let inner_op = code[wid_inner_ip];
+        let zone = inner_op >> 6;
+        let wid_size = widened_operand_size(zone);
+        let operand_start = wid_inner_ip + 1;
+        let operand = match wid_size {
+            1 => u32::from(code[operand_start]),
+            2 => {
+                let lo = code[operand_start];
+                let hi = code[operand_start + 1];
+                u32::from(u16::from_le_bytes([lo, hi]))
+            }
+            4 => {
+                let b = [
+                    code[operand_start],
+                    code[operand_start + 1],
+                    code[operand_start + 2],
+                    code[operand_start + 3],
+                ];
+                u32::from_le_bytes(b)
+            }
+            _ => 0,
+        };
+        return DecodedInstr {
+            op: Opcode(inner_op),
+            operand,
+            total_len: 1 + 1 + wid_size, // WID byte + inner opcode byte + widened operand
+        };
+    }
+
+    // Normal instruction
+    let len = instr_len(raw);
     let operand = match len {
         1 => 0u32,
         2 => u32::from(code[base_ip + 1]),
@@ -57,13 +96,24 @@ pub fn decode_operand(code: &[u8], base_ip: usize) -> (u32, usize) {
             u32::from_le_bytes(b)
         }
     };
-    (operand, len)
+    DecodedInstr {
+        op: Opcode(raw),
+        operand,
+        total_len: len,
+    }
 }
 
 /// Reinterpret a u32 operand as a signed i32 jump offset.
 pub fn read_i32_operand(operand: u32) -> Result<isize, VmError> {
     let signed = i32::from_le_bytes(operand.to_le_bytes());
     isize::try_from(signed).map_err(|_| malformed!("jump offset overflows isize"))
+}
+
+/// Reinterpret a u8 operand as a signed i8 short jump offset.
+pub fn read_i8_operand(operand: u32) -> isize {
+    #[allow(clippy::cast_possible_truncation, clippy::as_conversions)]
+    let byte = (operand & 0xFF) as u8;
+    isize::from(byte.cast_signed())
 }
 
 /// Compute absolute jump target from the address after the instruction + signed offset.
@@ -92,7 +142,7 @@ pub fn as_usize(v: Value) -> Result<usize, VmError> {
 pub fn const_to_value(c: &LoadedConst, heap: &mut Heap) -> Value {
     match c {
         LoadedConst::I32(n) => Value::from_int(i64::from(*n)),
-        LoadedConst::I64(n) => Value::from_int(*n),
+        LoadedConst::I64(n) => Value::from_int_wide(*n, heap),
         LoadedConst::F64(f) => Value::from_float(*f),
         LoadedConst::Str(s) => {
             let ptr = heap.alloc_string(0, s.clone());
@@ -149,10 +199,21 @@ pub fn exec_ld_fld(operand: u32, frame: &mut Frame, heap: &Heap) -> Result<(), V
     Ok(())
 }
 
-pub fn exec_mk_var(operand: u32, frame: &mut Frame, heap: &mut Heap) -> Result<(), VmError> {
-    let tag = operand;
-    let payload = frame.pop()?;
-    let ptr = heap.alloc(0, vec![payload]);
+/// `MK_VAR` with packed operand: tag and arity from a single u16/u32.
+pub fn exec_mk_var(
+    tag: u32,
+    arity: u32,
+    frame: &mut Frame,
+    heap: &mut Heap,
+) -> Result<(), VmError> {
+    let arity_usize =
+        usize::try_from(arity).map_err(|_| malformed!("mk.var arity overflows usize"))?;
+    let mut fields = Vec::with_capacity(arity_usize);
+    for _ in 0..arity_usize {
+        fields.push(frame.pop()?);
+    }
+    fields.reverse();
+    let ptr = heap.alloc(0, fields);
     let ptr_usize =
         usize::try_from(ptr).map_err(|_| malformed!("variant heap pointer overflows usize"))?;
     let variant = heap.get_mut(ptr_usize)?;
@@ -211,10 +272,19 @@ pub fn exec_ld_idx(frame: &mut Frame, heap: &Heap) -> Result<(), VmError> {
     let arr_val = frame.pop()?;
     let idx = as_usize(idx_val)?;
     let ptr = arr_val.as_ref()?;
-    let arr = heap.get(ptr)?;
-    let v = arr.elems.get(idx).copied().ok_or(VmError::OutOfBounds {
+    let obj = heap.get(ptr)?;
+    // String indexing: return the character at position `idx` as a rune.
+    if let Some(s) = &obj.string {
+        let ch = s.chars().nth(idx).ok_or_else(|| VmError::OutOfBounds {
+            index: idx,
+            len: s.chars().count(),
+        })?;
+        frame.stack.push(Value::from_rune(ch));
+        return Ok(());
+    }
+    let v = obj.elems.get(idx).copied().ok_or(VmError::OutOfBounds {
         index: idx,
-        len: arr.elems.len(),
+        len: obj.elems.len(),
     })?;
     frame.stack.push(v);
     Ok(())
@@ -304,37 +374,24 @@ pub fn exec_type_chk(
         .get(usize::try_from(type_id).unwrap_or(usize::MAX))
         .map_or(TYPE_TAG_ANY, |t| t.tag);
 
-    let matches = if type_tag == TYPE_TAG_ANY {
-        true
-    } else if val.is_unit() {
-        type_tag == TYPE_TAG_UNIT
-    } else if val.is_float() {
-        type_tag == TYPE_TAG_F32 || type_tag == TYPE_TAG_F64
-    } else {
-        let vtag = val.tag();
-        match vtag {
-            0x7FF1 => matches!(
-                type_tag,
-                TYPE_TAG_I8 | TYPE_TAG_I16 | TYPE_TAG_I32 | TYPE_TAG_I64
-            ),
-            0x7FF2 => matches!(
-                type_tag,
-                TYPE_TAG_U8 | TYPE_TAG_U16 | TYPE_TAG_U32 | TYPE_TAG_U64
-            ),
-            0x7FF3 => type_tag == TYPE_TAG_BOOL,
-            0x7FF4 => type_tag == TYPE_TAG_RUNE,
-            0x7FF7 => type_tag == TYPE_TAG_FN,
-            0x7FF5 => {
-                if let Ok(ptr) = val.as_ref()
-                    && let Ok(obj) = heap.get(ptr)
-                {
-                    obj.type_id == type_id
-                } else {
-                    false
-                }
-            }
-            _ => false,
-        }
+    let matches = match () {
+        () if type_tag == TYPE_TAG_ANY => true,
+        () if val.is_float() => type_tag == TYPE_TAG_F32 || type_tag == TYPE_TAG_F64,
+        () if val.is_unit() => type_tag == TYPE_TAG_UNIT,
+        () if val.is_int() => matches!(
+            type_tag,
+            TYPE_TAG_I8 | TYPE_TAG_I16 | TYPE_TAG_I32 | TYPE_TAG_I64
+        ),
+        () if val.is_nat() => matches!(
+            type_tag,
+            TYPE_TAG_U8 | TYPE_TAG_U16 | TYPE_TAG_U32 | TYPE_TAG_U64
+        ),
+        () if val.is_bool() => type_tag == TYPE_TAG_BOOL,
+        () if val.is_rune() => type_tag == TYPE_TAG_RUNE,
+        () if val.is_fn() => type_tag == TYPE_TAG_FN,
+        () => val
+            .as_ref()
+            .is_ok_and(|ptr| heap.get(ptr).is_ok_and(|obj| obj.type_id == type_id)),
     };
 
     frame.stack.push(Value::from_bool(matches));
@@ -342,26 +399,29 @@ pub fn exec_type_chk(
 }
 
 /// §17 — Closure operations.
+///
+/// For v2, `MK_CLO` uses packed operand `(fn_id_u24 << 8) | upval_count_u8`.
+/// The `fn_id` and `upval_count` are passed already unpacked from the caller.
 pub fn exec_mk_clo(
     fn_id: u32,
+    upval_count: u8,
     frame: &mut Frame,
     functions: &[LoadedFn],
     heap: &mut Heap,
 ) -> Result<(), VmError> {
-    let func = functions
+    let _func = functions
         .iter()
         .find(|f| f.fn_id == fn_id)
         .ok_or_else(|| malformed!("mk.clo: unknown fn_id {fn_id}", fn_id = fn_id))?;
-    let n = usize::from(func.upvalue_count);
+    let n = usize::from(upval_count);
     if frame.stack.len() < n {
         return Err(malformed!(
-            "mk.clo: need {} upvalues, stack has {}",
-            n,
+            "mk.clo: need {n} upvalues, stack has {}",
             frame.stack.len()
         ));
     }
     let start = frame.stack.len() - n;
-    let upvalues: Vec<Value> = frame.stack.drain(start..).collect();
+    let upvalues = frame.stack.drain(start..).collect();
 
     let ptr = heap.alloc(CLOSURE_TYPE_ID, upvalues);
     let ptr_usize =
@@ -402,7 +462,7 @@ pub enum DynCall {
 pub fn resolve_inv_dyn(operand: u32, frame: &mut Frame, heap: &Heap) -> Result<DynCall, VmError> {
     let arg_count =
         usize::from(u8::try_from(operand).map_err(|_| malformed!("inv.dyn operand overflow"))?);
-    let mut args: Vec<Value> = (0..arg_count)
+    let mut args = (0..arg_count)
         .map(|_| frame.pop())
         .collect::<Result<Vec<_>, _>>()?;
     args.reverse();

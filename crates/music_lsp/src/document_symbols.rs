@@ -44,7 +44,7 @@ pub fn document_symbols(doc: &AnalyzedDoc) -> DocumentSymbolResponse {
                 DefKind::Type | DefKind::OpaqueType => SymbolKind::CLASS,
                 DefKind::Variant => SymbolKind::ENUM_MEMBER,
                 DefKind::Class | DefKind::Effect => SymbolKind::INTERFACE,
-                DefKind::Given => SymbolKind::MODULE,
+                DefKind::Instance => SymbolKind::MODULE,
                 DefKind::Law => SymbolKind::PROPERTY,
                 _ => return None,
             };

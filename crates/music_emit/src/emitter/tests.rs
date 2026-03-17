@@ -22,7 +22,7 @@ fn compile(source: &str) -> Result<EmitOutput, String> {
             .collect();
         return Err(format!("errors:\n{}", msgs.join("\n")));
     }
-    emit(&parsed, &sema, &mut interner, file_id).map_err(|e| e.to_string())
+    emit(&parsed, &sema, &mut interner, file_id, false, &[]).map_err(|e| e.to_string())
 }
 
 /// Like `compile` but ignores type errors so we can test emission of
@@ -34,7 +34,7 @@ fn compile_lenient(source: &str) -> Result<EmitOutput, String> {
     let lexed = lex(source, file_id, &mut interner, &mut diags);
     let parsed = parse(&lexed.tokens, file_id, &mut diags, &mut interner);
     let sema = analyze(&parsed, &mut interner, file_id, &mut diags);
-    emit(&parsed, &sema, &mut interner, file_id).map_err(|e| e.to_string())
+    emit(&parsed, &sema, &mut interner, file_id, false, &[]).map_err(|e| e.to_string())
 }
 
 /// Scan the function pool section (past the header) for the first occurrence of `op`.
@@ -61,8 +61,7 @@ fn test_emit_header_valid() {
 fn test_emit_simple_return_int() {
     let source = "#[entrypoint]\nlet main : () -> Int := () => 42;";
     let out = compile(source).expect("compile ok");
-    let found = find_opcode(&out.bytes, Opcode::LD_CST)
-        .or_else(|| find_opcode(&out.bytes, Opcode::LD_CST_W));
+    let found = find_opcode(&out.bytes, Opcode::LD_CST);
     assert!(found.is_some(), "expected LD_CST for integer literal 42");
 }
 
@@ -70,7 +69,7 @@ fn test_emit_simple_return_int() {
 fn test_emit_binop_add() {
     let source = "#[entrypoint]\nlet add : (Int, Int) -> Int := (a, b) => a + b;";
     let out = compile(source).expect("compile ok");
-    let found = find_opcode(&out.bytes, Opcode::I_ADD);
+    let found = find_opcode(&out.bytes, Opcode::INT_ADD);
     assert!(found.is_some(), "expected I_ADD for integer addition");
 }
 
@@ -78,7 +77,7 @@ fn test_emit_binop_add() {
 fn test_emit_piecewise() {
     let source = "#[entrypoint]\nlet f : (Int) -> Int := (x) => (42 if x > 0 | 0 if _);";
     let out = compile(source).expect("compile ok");
-    let found = find_opcode(&out.bytes, Opcode::JMP_T_W);
+    let found = find_opcode(&out.bytes, Opcode::JIF);
     assert!(found.is_some(), "expected conditional jump in piecewise");
 }
 
@@ -86,8 +85,7 @@ fn test_emit_piecewise() {
 fn test_emit_let_binding() {
     let source = "#[entrypoint]\nlet main : () -> Int := () => (let x := 10; x);";
     let out = compile(source).expect("compile ok");
-    let found = find_opcode(&out.bytes, Opcode::ST_LOC)
-        .or_else(|| find_opcode(&out.bytes, Opcode::ST_LOC_W));
+    let found = find_opcode(&out.bytes, Opcode::ST_LOC);
     assert!(found.is_some(), "expected ST_LOC for let binding");
 }
 
@@ -147,8 +145,7 @@ fn test_emit_nil_coal() {
         out.unwrap_err()
     );
     let out = out.unwrap();
-    let found = find_opcode(&out.bytes, Opcode::CMP_TAG)
-        .or_else(|| find_opcode(&out.bytes, Opcode::CMP_TAG_W));
+    let found = find_opcode(&out.bytes, Opcode::CMP_TAG);
     assert!(found.is_some(), "expected CMP_TAG for nil-coalesce");
 }
 
@@ -168,8 +165,7 @@ fn test_emit_try_expr() {
     let out = compile(source);
     assert!(out.is_ok(), "try should compile: {}", out.unwrap_err());
     let out = out.unwrap();
-    let found = find_opcode(&out.bytes, Opcode::MK_VAR)
-        .or_else(|| find_opcode(&out.bytes, Opcode::MK_VAR_W));
+    let found = find_opcode(&out.bytes, Opcode::MK_VAR);
     assert!(found.is_some(), "expected MK_VAR for try wrapping in Some");
 }
 
@@ -185,8 +181,7 @@ fn test_emit_err_coal() {
         out.unwrap_err()
     );
     let out = out.unwrap();
-    let found = find_opcode(&out.bytes, Opcode::CMP_TAG)
-        .or_else(|| find_opcode(&out.bytes, Opcode::CMP_TAG_W));
+    let found = find_opcode(&out.bytes, Opcode::CMP_TAG);
     assert!(found.is_some(), "expected CMP_TAG for err-coalesce");
 }
 

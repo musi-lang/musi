@@ -164,6 +164,21 @@ impl Parser<'_> {
     fn parse_ty_named(&mut self) -> Ty {
         let start = self.start_span();
         let name = self.expect_symbol();
+        if self.at(TokenKind::Dot) && self.peek2() == TokenKind::Ident {
+            let _dot = self.bump();
+            let qualified_name = self.expect_symbol();
+            let args = if self.eat(TokenKind::KwOf) {
+                self.parse_ty_arg_list()
+            } else {
+                vec![]
+            };
+            return Ty::Qualified {
+                module: name,
+                name: qualified_name,
+                args,
+                span: self.finish_span(start),
+            };
+        }
         let args = if self.eat(TokenKind::KwOf) {
             self.parse_ty_arg_list()
         } else {
@@ -218,7 +233,10 @@ impl Parser<'_> {
             None
         };
         let _rb = self.expect(TokenKind::RBracket);
-        let elem = self.parse_ty();
+        // Use parse_ty_base (not parse_ty) so that `+` and `->` are not
+        // consumed greedily — they belong to the enclosing context.
+        // Complex element types need parentheses: `[](Int -> Bool)`.
+        let elem = self.parse_ty_base();
         let elem_idx = self.alloc_ty(elem);
         Ty::Array {
             len,

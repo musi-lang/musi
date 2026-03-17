@@ -5,7 +5,7 @@
 //! handlers can reuse the same sema pass without re-running it.
 
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use lsp_types::{Diagnostic, DiagnosticSeverity, DiagnosticTag, Position, Range};
 use music_ast::{ExprIdx, ParsedModule};
@@ -15,8 +15,8 @@ use music_resolve::graph::ModuleId;
 use music_resolve::{ModuleGraph, ModuleNode, ResolverConfig, build_module_graph};
 use music_sema::types::RecordField;
 use music_sema::{
-    DefInfo, ExportBinding, ImportNames, ModuleSemaOutput, SemaResult, SharedAnalysisState, Type,
-    TypeIdx, analyze, collect_exports,
+    DefInfo, ExportBinding, ImportNames, ModuleSemaOutput, SemaResult, SharedAnalysisState,
+    SubModuleExports, Type, TypeIdx, analyze, collect_exports,
 };
 use music_shared::{Arena, DiagnosticBag, FileId, Interner, Severity, SourceDb, Span, Symbol};
 
@@ -45,6 +45,8 @@ pub struct AnalyzedDoc {
     pub lexed: LexedSource,
     pub sema: Option<SemaResult>,
     pub dep_sources: HashMap<String, DepSource>,
+    /// Maps import path `Symbol` → resolved filesystem `PathBuf`.
+    pub resolved_imports: HashMap<Symbol, PathBuf>,
 }
 
 fn parse_src(
@@ -89,6 +91,7 @@ pub fn analyze_doc(source: &str, _uri: &str) -> (Vec<Diagnostic>, AnalyzedDoc) {
         lexed,
         sema: Some(sema),
         dep_sources: HashMap::new(),
+        resolved_imports: HashMap::new(),
     };
     (lsp_diags, doc)
 }
@@ -125,6 +128,8 @@ pub fn analyze_doc_multi(
         Err(_) => return analyze_doc(source, "<document>"),
     };
 
+    let resolved_imports = build_resolved_imports(&graph);
+
     let (sema, entry_parsed, entry_file_id, lexed, dep_sources) = match run_lsp_sema_in_order(
         &graph,
         &order,
@@ -152,8 +157,22 @@ pub fn analyze_doc_multi(
         lexed,
         sema: Some(sema),
         dep_sources,
+        resolved_imports,
     };
     (lsp_diags, doc)
+}
+
+/// Build a `Symbol → PathBuf` map from the entry module's imports in the graph.
+fn build_resolved_imports(graph: &ModuleGraph) -> HashMap<Symbol, PathBuf> {
+    let entry = graph.get(ModuleId(0));
+    let mut resolved = HashMap::new();
+    for &(dep_id, import_sym) in &entry.imports {
+        let dep = graph.get(dep_id);
+        if !dep.builtin {
+            resolved.insert(import_sym, dep.path.clone());
+        }
+    }
+    resolved
 }
 
 fn run_lsp_sema_in_order(
@@ -167,6 +186,7 @@ fn run_lsp_sema_in_order(
 ) -> Option<LspSemaOutput> {
     let mut state = SharedAnalysisState::new(interner);
     let mut module_exports: HashMap<ModuleId, Vec<ExportBinding>> = HashMap::new();
+    let mut sub_module_exports: SubModuleExports = HashMap::new();
     let mut dep_sources: HashMap<String, DepSource> = HashMap::new();
 
     let entry_id = ModuleId(0);
@@ -185,7 +205,7 @@ fn run_lsp_sema_in_order(
         }
 
         let import_names = build_import_names(node, &module_exports);
-        let import_types = build_import_types(node, &module_exports, &mut state.types);
+        let import_types = build_import_types(node, &module_exports, &mut state.types, interner);
 
         let Some(parsed) = parsed_modules.remove(&module_id) else {
             continue;
@@ -199,6 +219,7 @@ fn run_lsp_sema_in_order(
             diags,
             &import_names,
             &import_types,
+            &sub_module_exports,
         );
 
         if module_id == entry_id {
@@ -206,6 +227,19 @@ fn run_lsp_sema_in_order(
         } else {
             let defs_vec: Vec<_> = state.defs.iter().cloned().collect();
             let exports = collect_exports(&parsed, &defs_vec, &output.resolution.pat_defs);
+
+            for &(dep_id, import_sym) in &node.imports {
+                for export in &exports.bindings {
+                    if export.name == import_sym
+                        && let Some(sub_exports) = module_exports.get(&dep_id)
+                    {
+                        let names: Vec<_> =
+                            sub_exports.iter().map(|eb| (eb.name, eb.def_id)).collect();
+                        let _prev = sub_module_exports.insert(export.def_id, names);
+                    }
+                }
+            }
+
             let _prev = module_exports.insert(module_id, exports.bindings);
 
             let mod_key = module_key(&node.path, project_root);
@@ -255,37 +289,14 @@ fn builtin_module_exports(node: &ModuleNode, state: &SharedAnalysisState) -> Vec
                 name: c_string_def.name,
                 ty: TypeIdx::from_raw(0),
                 def_id: wk.ffi.c_string,
+                ty_params: vec![],
             },
             ExportBinding {
                 name: ptr_def.name,
                 ty: TypeIdx::from_raw(0),
                 def_id: wk.ffi.ptr,
+                ty_params: vec![],
             },
-        ]
-    } else if path_str == "<musi:core>" {
-        let core = &state.well_known.core;
-        let make = |did| {
-            let def = state.defs.get(did);
-            ExportBinding {
-                name: def.name,
-                ty: TypeIdx::from_raw(0),
-                def_id: did,
-            }
-        };
-        vec![
-            make(core.int_abs),
-            make(core.int_min),
-            make(core.int_max),
-            make(core.int_clamp),
-            make(core.int_pow),
-            make(core.str_len),
-            make(core.str_contains),
-            make(core.str_starts_with),
-            make(core.str_ends_with),
-            make(core.arr_len),
-            make(core.arr_push),
-            make(core.arr_pop),
-            make(core.arr_reverse),
         ]
     } else {
         vec![]
@@ -310,21 +321,21 @@ fn build_import_types(
     node: &ModuleNode,
     module_exports: &HashMap<ModuleId, Vec<ExportBinding>>,
     types: &mut Arena<Type>,
+    interner: &Interner,
 ) -> HashMap<Symbol, TypeIdx> {
     let mut map = HashMap::new();
     for &(dep_id, import_sym) in &node.imports {
         if let Some(exports) = module_exports.get(&dep_id) {
-            let fields: Vec<_> = exports
+            let mut fields: Vec<_> = exports
                 .iter()
                 .map(|b| RecordField {
                     name: b.name,
                     ty: b.ty,
+                    ty_params: b.ty_params.clone(),
                 })
                 .collect();
-            let ty = types.alloc(Type::Record {
-                fields,
-                open: false,
-            });
+            fields.sort_by(|a, b| interner.resolve(a.name).cmp(interner.resolve(b.name)));
+            let ty = types.alloc(Type::Record { fields, rest: None });
             let _prev = map.insert(import_sym, ty);
         }
     }
@@ -542,8 +553,9 @@ pub fn def_at_cursor(offset: u32, doc: &AnalyzedDoc) -> Option<&DefInfo> {
         if def.span == Span::DUMMY {
             return false;
         }
-        let name_span =
-            find_name_token(&doc.lexed.tokens, def.span.start, def.name).unwrap_or(def.span);
+        let Some(name_span) = find_name_token(&doc.lexed.tokens, def.span.start, def.name) else {
+            return false;
+        };
         name_span.start <= offset && offset <= name_span.end()
     })
 }

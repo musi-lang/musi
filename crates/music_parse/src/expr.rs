@@ -177,6 +177,17 @@ impl Parser<'_> {
             TokenKind::KwDo => self.parse_expr_unary_op(UnaryOp::Do, 0),
             TokenKind::KwWith => self.parse_expr_handle(),
 
+            // Discard: _ (treated as a name for lambda param reinterpretation)
+            TokenKind::Underscore => {
+                let start = self.start_span();
+                let _tok = self.bump();
+                let name = self.interner.intern("_");
+                Expr::Name {
+                    name,
+                    span: self.finish_span(start),
+                }
+            }
+
             // Annotated: #[...] decl
             TokenKind::HashLBracket => self.parse_expr_annotated_chain(),
 

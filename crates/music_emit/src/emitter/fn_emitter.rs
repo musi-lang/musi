@@ -6,7 +6,10 @@
 use std::collections::HashMap;
 
 use crate::error::EmitError;
-use musi_bc::{Opcode, encode_i32, encode_no_operand, encode_u8, encode_u16, encode_u32};
+use musi_bc::{
+    Opcode, encode_i8, encode_i32, encode_no_operand, encode_u8, encode_u16, encode_u32,
+    encode_wid_u16, pack_id_arity, pack_tag_arity_u16,
+};
 
 /// Fixup record: a forward jump that needs patching once we know the label target.
 struct Fixup {
@@ -67,34 +70,44 @@ impl FnEmitter {
         slot
     }
 
-    /// Emit `ld.loc` or `ld.loc.w` depending on slot index.
+    /// Emit `ld.loc` with WID prefix if slot > 255.
     pub fn emit_ld_loc(&mut self, slot: u32) {
         if let Ok(s) = u8::try_from(slot) {
             encode_u8(&mut self.code, Opcode::LD_LOC, s);
         } else {
             let s = u16::try_from(slot).expect("slot fits in u16");
-            encode_u16(&mut self.code, Opcode::LD_LOC_W, s);
+            encode_wid_u16(&mut self.code, Opcode::LD_LOC, s);
         }
         self.push_n(1);
     }
 
-    /// Emit `st.loc` or `st.loc.w` depending on slot index.
+    /// Emit `st.loc` with WID prefix if slot > 255.
     pub fn emit_st_loc(&mut self, slot: u32) {
         if let Ok(s) = u8::try_from(slot) {
             encode_u8(&mut self.code, Opcode::ST_LOC, s);
         } else {
             let s = u16::try_from(slot).expect("slot fits in u16");
-            encode_u16(&mut self.code, Opcode::ST_LOC_W, s);
+            encode_wid_u16(&mut self.code, Opcode::ST_LOC, s);
         }
         self.pop_n(1);
     }
 
-    /// Emit `ld.cst` or `ld.cst.w` depending on const pool index.
+    pub fn emit_ld_glb(&mut self, slot: u32) {
+        encode_u32(&mut self.code, Opcode::LD_GLB, slot);
+        self.push_n(1);
+    }
+
+    pub fn emit_st_glb(&mut self, slot: u32) {
+        encode_u32(&mut self.code, Opcode::ST_GLB, slot);
+        self.pop_n(1);
+    }
+
+    /// Emit `ld.cst` with WID prefix if index > 255.
     pub fn emit_ld_cst(&mut self, idx: u16) {
         if let Ok(i) = u8::try_from(idx) {
             encode_u8(&mut self.code, Opcode::LD_CST, i);
         } else {
-            encode_u16(&mut self.code, Opcode::LD_CST_W, idx);
+            encode_wid_u16(&mut self.code, Opcode::LD_CST, idx);
         }
         self.push_n(1);
     }
@@ -115,8 +128,13 @@ impl FnEmitter {
     }
 
     pub fn emit_ret_u(&mut self) {
-        encode_no_operand(&mut self.code, Opcode::RET_U);
+        encode_no_operand(&mut self.code, Opcode::RET_UT);
         self.stack_depth = 0;
+    }
+
+    pub fn emit_ld_unit(&mut self) {
+        encode_no_operand(&mut self.code, Opcode::LD_UT);
+        self.push_n(1);
     }
 
     /// Emit a binary op instruction (pops 2, pushes 1).
@@ -147,32 +165,39 @@ impl FnEmitter {
         Ok(())
     }
 
-    pub fn emit_mk_var(&mut self, tag: u32) -> Result<(), EmitError> {
+    /// Emit `mk.var` with packed (tag, arity) in a u16 operand.
+    /// If tag > 255, use WID prefix for u32 packed operand.
+    pub fn emit_mk_var(&mut self, tag: u32, arity: u8) {
         if let Ok(t) = u8::try_from(tag) {
-            encode_u8(&mut self.code, Opcode::MK_VAR, t);
+            let packed = pack_tag_arity_u16(t, arity);
+            encode_u16(&mut self.code, Opcode::MK_VAR, packed);
         } else {
-            let t = u16::try_from(tag).map_err(|_| EmitError::OperandOverflow {
-                desc: "variant tag exceeds 65535".into(),
-            })?;
-            encode_u16(&mut self.code, Opcode::MK_VAR_W, t);
+            // WID prefix: widen MK_VAR from u16 to u32
+            let packed = (tag << 8) | u32::from(arity);
+            musi_bc::encode_wid_u32(&mut self.code, Opcode::MK_VAR, packed);
         }
-        Ok(())
+        self.pop_n(i32::from(arity));
+        self.push_n(1);
     }
 
     pub fn emit_ld_tag(&mut self) {
         encode_no_operand(&mut self.code, Opcode::LD_TAG);
     }
 
-    /// Emit a direct call to `fn_id`.
+    /// Emit a direct call with packed operand: `(fn_id_u24 << 8) | arity_u8`.
     pub fn emit_inv(&mut self, fn_id: u32, _effectful: bool, arg_count: i32) {
-        encode_u32(&mut self.code, Opcode::INV, fn_id);
+        let arity = u8::try_from(arg_count).unwrap_or(u8::MAX);
+        let packed = pack_id_arity(fn_id, arity);
+        encode_u32(&mut self.code, Opcode::INV, packed);
         self.pop_n(arg_count);
         self.push_n(1);
     }
 
-    /// Emit a tail call to `fn_id`.
+    /// Emit a tail call with packed operand: `(fn_id_u24 << 8) | arity_u8`.
     pub fn emit_inv_tail(&mut self, fn_id: u32, _effectful: bool) {
-        encode_u32(&mut self.code, Opcode::INV_TAL, fn_id);
+        // Arity 0 as default — the VM reads param_count from the function anyway
+        let packed = pack_id_arity(fn_id, 0);
+        encode_u32(&mut self.code, Opcode::INV_TAL, packed);
     }
 
     /// Emit an indirect (dynamic) call through a closure or fn value.
@@ -197,9 +222,11 @@ impl FnEmitter {
         encode_u8(&mut self.code, Opcode::LD_PAY, field_idx);
     }
 
-    /// Emit `inv.ffi` (pops args, pushes 1 result).
+    /// Emit `inv.ffi` with packed operand: `(ffi_id_u24 << 8) | arity_u8`.
     pub fn emit_inv_ffi(&mut self, ffi_idx: u32, arg_count: i32) {
-        encode_u32(&mut self.code, Opcode::INV_FFI, ffi_idx);
+        let arity = u8::try_from(arg_count).unwrap_or(u8::MAX);
+        let packed = pack_id_arity(ffi_idx, arity);
+        encode_u32(&mut self.code, Opcode::INV_FFI, packed);
         self.pop_n(arg_count);
         self.push_n(1);
     }
@@ -228,9 +255,9 @@ impl FnEmitter {
         // pops 1 (length), pushes 1 (ref) -> net 0
     }
 
-    /// Emit `i.add` — pops two integers, pushes their sum. Net stack: -1.
+    /// Emit `int.add` — pops two integers, pushes their sum. Net stack: -1.
     pub fn emit_i_add(&mut self) {
-        encode_no_operand(&mut self.code, Opcode::I_ADD);
+        encode_no_operand(&mut self.code, Opcode::INT_ADD);
         self.pop_n(1);
     }
 
@@ -250,7 +277,7 @@ impl FnEmitter {
         Ok(())
     }
 
-    /// Emit `type.chk type_id` — pops value, pushes bool. Net stack: 0.
+    /// Emit `typ.chk type_id` — pops value, pushes bool. Net stack: 0.
     pub fn emit_type_chk(&mut self, type_id: u32) {
         encode_u32(&mut self.code, Opcode::TYP_CHK, type_id);
         // pops 1, pushes 1 -> net 0
@@ -260,7 +287,7 @@ impl FnEmitter {
         let id = u8::try_from(effect_id).map_err(|_| EmitError::OperandOverflow {
             desc: "effect id exceeds 255".into(),
         })?;
-        encode_u8(&mut self.code, Opcode::CONT_MARK, id);
+        encode_u8(&mut self.code, Opcode::CNT_MRK, id);
         self.handlers.push(HandlerEntry {
             effect_id: id,
             handler_fn_id,
@@ -272,18 +299,18 @@ impl FnEmitter {
         let id = u8::try_from(effect_id).map_err(|_| EmitError::OperandOverflow {
             desc: "effect id exceeds 255".into(),
         })?;
-        encode_u8(&mut self.code, Opcode::CONT_UNMARK, id);
+        encode_u8(&mut self.code, Opcode::CNT_UMK, id);
         Ok(())
     }
 
     pub fn emit_cont_save(&mut self, op_id: u32, arg_count: i32) {
-        encode_u32(&mut self.code, Opcode::CONT_SAVE, op_id);
+        encode_u32(&mut self.code, Opcode::CNT_SAV, op_id);
         self.pop_n(arg_count);
         self.push_n(1);
     }
 
-    #[allow(clippy::missing_const_for_fn)]
     pub fn emit_cont_resume(&mut self) {
+        encode_u32(&mut self.code, Opcode::CNT_RSM, 0);
         self.pop_n(1);
     }
 
@@ -318,7 +345,7 @@ impl FnEmitter {
         encode_u32(&mut self.code, Opcode::TSK_CHR, 0);
     }
 
-    /// Emit `cmp.tag` or `cmp.tag.w` — compare object tag inline (pop obj, push bool -> net 0).
+    /// Emit `cmp.tag` with WID prefix if tag > 255.
     pub fn emit_cmp_tag(&mut self, tag: u32) -> Result<(), EmitError> {
         if let Ok(t) = u8::try_from(tag) {
             encode_u8(&mut self.code, Opcode::CMP_TAG, t);
@@ -326,7 +353,7 @@ impl FnEmitter {
             let t = u16::try_from(tag).map_err(|_| EmitError::OperandOverflow {
                 desc: "variant tag exceeds 65535".into(),
             })?;
-            encode_u16(&mut self.code, Opcode::CMP_TAG_W, t);
+            encode_wid_u16(&mut self.code, Opcode::CMP_TAG, t);
         }
         Ok(())
     }
@@ -337,18 +364,29 @@ impl FnEmitter {
         self.push_n(1);
     }
 
-    /// Emit `mk.clo fn_id` — pop N upvalues, allocate closure, push ref.
-    /// `upvalue_count` is the number of values to pop.
+    /// Emit `mk.clo` with packed operand: `(fn_id_u24 << 8) | upvalue_count_u8`.
     pub fn emit_mk_clo(&mut self, fn_id: u32, upvalue_count: u16) {
-        encode_u32(&mut self.code, Opcode::MK_CLO, fn_id);
+        let upval_u8 = u8::try_from(upvalue_count).unwrap_or(u8::MAX);
+        let packed = pack_id_arity(fn_id, upval_u8);
+        encode_u32(&mut self.code, Opcode::MK_CLO, packed);
         self.pop_n(i32::from(upvalue_count));
         self.push_n(1);
     }
 
-    /// Emit a conditional wide jump-if-false to `label` (5 bytes, i32 offset, pops condition).
+    /// Emit a conditional jump-if-false to `label`.
+    /// Uses 2-byte `JNF_SH` for backward jumps that fit i8, otherwise 5-byte `JNF`.
     pub fn emit_jmp_f(&mut self, label: u32) {
+        if let Some(&target) = self.label_targets.get(&label) {
+            let after_short = self.code.len() + 2;
+            let offset = target.cast_signed() - after_short.cast_signed();
+            if let Ok(off) = i8::try_from(offset) {
+                encode_i8(&mut self.code, Opcode::JNF_SH, off);
+                self.pop_n(1);
+                return;
+            }
+        }
         let instr_offset = self.code.len();
-        encode_i32(&mut self.code, Opcode::JMP_F_W, 0);
+        encode_i32(&mut self.code, Opcode::JNF, 0);
         let instr_len = 5;
         self.pop_n(1);
         self.fixups.push(Fixup {
@@ -358,10 +396,20 @@ impl FnEmitter {
         });
     }
 
-    /// Emit an unconditional wide jump to `label` (5 bytes, i32 offset).
+    /// Emit an unconditional jump to `label`.
+    /// Uses 2-byte `JMP_SH` for backward jumps that fit i8, otherwise 5-byte `JMP`.
     pub fn emit_jmp(&mut self, label: u32) {
+        if let Some(&target) = self.label_targets.get(&label) {
+            let after_short = self.code.len() + 2;
+            let offset = target.cast_signed() - after_short.cast_signed();
+            if let Ok(off) = i8::try_from(offset) {
+                encode_i8(&mut self.code, Opcode::JMP_SH, off);
+                self.stack_depth = 0;
+                return;
+            }
+        }
         let instr_offset = self.code.len();
-        encode_i32(&mut self.code, Opcode::JMP_W, 0);
+        encode_i32(&mut self.code, Opcode::JMP, 0);
         let instr_len = 5;
         self.fixups.push(Fixup {
             instr_offset,
@@ -371,10 +419,20 @@ impl FnEmitter {
         self.stack_depth = 0;
     }
 
-    /// Emit a conditional wide jump-if-true to `label` (5 bytes, i32 offset, pops condition).
+    /// Emit a conditional jump-if-true to `label`.
+    /// Uses 2-byte `JIF_SH` for backward jumps that fit i8, otherwise 5-byte `JIF`.
     pub fn emit_jmp_t(&mut self, label: u32) {
+        if let Some(&target) = self.label_targets.get(&label) {
+            let after_short = self.code.len() + 2;
+            let offset = target.cast_signed() - after_short.cast_signed();
+            if let Ok(off) = i8::try_from(offset) {
+                encode_i8(&mut self.code, Opcode::JIF_SH, off);
+                self.pop_n(1);
+                return;
+            }
+        }
         let instr_offset = self.code.len();
-        encode_i32(&mut self.code, Opcode::JMP_T_W, 0);
+        encode_i32(&mut self.code, Opcode::JIF, 0);
         let instr_len = 5;
         self.pop_n(1);
         self.fixups.push(Fixup {

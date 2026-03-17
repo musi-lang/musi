@@ -32,16 +32,25 @@ pub fn create_project(dir: &Path, name: &str, template: &str) -> Result<(), Stri
     } else {
         "index.ms"
     };
-    let manifest =
-        format!("[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nmain = \"./{main_file}\"\n",);
+    let manifest = format!(
+        r#"[package]
+name = "{name}"
+version = "0.1.0"
+main = "./{main_file}"
+"#
+    );
     fs::write(dir.join("mspackage.toml"), manifest)
         .map_err(|e| format!("failed to write mspackage.toml: {e}"))?;
 
     #[allow(clippy::literal_string_with_formatting_args)]
     let source = if template == "lib" {
-        "export let greet : (String) -> String := (name) => f\"hello, {name}!\";\n"
+        r#"export let greet : (String) -> String := (name) => f"hello, {name}!";
+"#
     } else {
-        "#[entrypoint]\nlet main : () ~> () under { IO } :=\n    () => writeln(\"hello, world!\");\n"
+        r#"import "@std/rt" as rt;
+
+rt.writeln("hello, world!");
+"#
     };
     let source_file = if template == "lib" {
         "lib.ms"
@@ -51,7 +60,11 @@ pub fn create_project(dir: &Path, name: &str, template: &str) -> Result<(), Stri
     fs::write(dir.join(source_file), source)
         .map_err(|e| format!("failed to write {source_file}: {e}"))?;
 
-    let gitignore = "target/\ndist/\n*.msbc\n.msbuildinfo\n";
+    let gitignore = r"target/
+dist/
+*.msbc
+.msbuildinfo
+";
     fs::write(dir.join(".gitignore"), gitignore)
         .map_err(|e| format!("failed to write .gitignore: {e}"))?;
 

@@ -147,7 +147,11 @@ fn main() {
             cmd::task::run(name.as_deref(), list, manifest.as_ref());
         }
         Command::Test { filter } => {
-            cmd::test::run(filter.as_deref(), manifest.as_ref());
+            cmd::test::run(
+                filter.as_deref(),
+                manifest.as_ref(),
+                project_root.as_deref(),
+            );
         }
     }
 }

@@ -58,11 +58,18 @@ pub fn lower_ty<S: BuildHasher>(ck: &mut Checker<'_, S>, ty_idx: TyIdx) -> TypeI
         }
         Ty::Option { inner, .. } => {
             let inner_ty = lower_ty(ck, inner);
+            let def = ck.ctx.well_known.option;
             ck.alloc_ty(Type::Named {
-                def: ck.ctx.well_known.option,
+                def,
                 args: vec![inner_ty],
             })
         }
+        Ty::Qualified {
+            module,
+            name,
+            args,
+            span,
+        } => lower_ty_qualified(ck, module, name, &args, span),
         Ty::Fn {
             params,
             ret,
@@ -88,6 +95,62 @@ pub fn lower_ty<S: BuildHasher>(ck: &mut Checker<'_, S>, ty_idx: TyIdx) -> TypeI
             ck.alloc_ty(Type::Array { elem: elem_ty, len })
         }
         Ty::Error { .. } => ck.error_ty(),
+    }
+}
+
+fn lower_ty_qualified<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
+    module: Symbol,
+    name: Symbol,
+    args: &[TyIdx],
+    span: Span,
+) -> TypeIdx {
+    let Some(mod_def) = lookup_name_or_error(ck, module, span) else {
+        return ck.error_ty();
+    };
+    let Some(ty_idx) = ck.defs.get(mod_def).ty_info.ty else {
+        let name_str = ck.ctx.interner.resolve(name);
+        let _d = ck.diags.report(
+            &SemaError::UndefinedName {
+                name: Box::from(name_str),
+            },
+            span,
+            ck.ctx.file_id,
+        );
+        return ck.error_ty();
+    };
+    let Type::Record { ref fields, .. } = ck.store.types[ty_idx] else {
+        let name_str = ck.ctx.interner.resolve(name);
+        let _d = ck.diags.report(
+            &SemaError::UndefinedName {
+                name: Box::from(name_str),
+            },
+            span,
+            ck.ctx.file_id,
+        );
+        return ck.error_ty();
+    };
+    let fields = fields.clone();
+    if let Some(field) = fields.iter().find(|f| f.name == name) {
+        let lowered_args: Vec<_> = args.iter().map(|&a| lower_ty(ck, a)).collect();
+        if lowered_args.is_empty() {
+            field.ty
+        } else {
+            ck.alloc_ty(Type::Named {
+                def: mod_def,
+                args: lowered_args,
+            })
+        }
+    } else {
+        let name_str = ck.ctx.interner.resolve(name);
+        let _d = ck.diags.report(
+            &SemaError::UndefinedName {
+                name: Box::from(name_str),
+            },
+            span,
+            ck.ctx.file_id,
+        );
+        ck.error_ty()
     }
 }
 

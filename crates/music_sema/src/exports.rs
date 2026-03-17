@@ -12,7 +12,7 @@ use music_ast::pat::Pat;
 use music_ast::{AstArenas, Expr, ExprIdx, ParsedModule, PatIdx};
 use music_shared::{Arena, Span, Symbol};
 
-use crate::def::{DefId, DefInfo};
+use crate::def::{DefId, DefInfo, DefKind};
 use crate::types::{RecordField, Type, TypeIdx};
 
 /// A single exported binding.
@@ -20,6 +20,7 @@ pub struct ExportBinding {
     pub name: Symbol,
     pub ty: TypeIdx,
     pub def_id: DefId,
+    pub ty_params: Vec<DefId>,
 }
 
 /// All exports from a module.
@@ -78,6 +79,47 @@ fn collect_exports_from_expr<S: BuildHasher>(
                             name: *name,
                             ty,
                             def_id,
+                            ty_params: def.ty_info.ty_params.clone(),
+                        });
+                    }
+                }
+            }
+        }
+        Expr::Class {
+            exported: true,
+            name,
+            span,
+            ..
+        }
+        | Expr::Effect {
+            exported: true,
+            name,
+            span,
+            ..
+        } => {
+            if let Some(&def_id) = pat_defs.get(span) {
+                let idx = usize::try_from(def_id.0).expect("def id fits in usize");
+                if let Some(def) = defs.get(idx) {
+                    let ty = def.ty_info.ty.unwrap_or(TypeIdx::from_raw(0));
+                    out.push(ExportBinding {
+                        name: *name,
+                        ty,
+                        def_id,
+                        ty_params: def.ty_info.ty_params.clone(),
+                    });
+                }
+                // Also export child methods of the class/effect.
+                for d in defs {
+                    if d.parent == Some(def_id)
+                        && d.kind == DefKind::Fn
+                        && d.name != Symbol(u32::MAX)
+                    {
+                        let method_ty = d.ty_info.ty.unwrap_or(TypeIdx::from_raw(0));
+                        out.push(ExportBinding {
+                            name: d.name,
+                            ty: method_ty,
+                            def_id: d.id,
+                            ty_params: d.ty_info.ty_params.clone(),
                         });
                     }
                 }
@@ -108,6 +150,7 @@ fn collect_pat_exports<S: BuildHasher>(
                         name: def.name,
                         ty,
                         def_id,
+                        ty_params: def.ty_info.ty_params.clone(),
                     });
                 }
             }
@@ -130,10 +173,8 @@ pub fn exports_to_record_type(exports: &ModuleExports, types: &mut Arena<Type>) 
         .map(|b| RecordField {
             name: b.name,
             ty: b.ty,
+            ty_params: b.ty_params.clone(),
         })
         .collect();
-    types.alloc(Type::Record {
-        fields,
-        open: false,
-    })
+    types.alloc(Type::Record { fields, rest: None })
 }

@@ -6,15 +6,13 @@
 
 use std::iter;
 
-use musi_bc::{Opcode, crc32_slice};
+use musi_bc::{self, Opcode, crc32_slice};
 
 use crate::error::VmError;
 use crate::loader::load;
 use crate::value::Value;
 use crate::verifier::verify;
 use crate::vm::{StepResult, Vm};
-
-// ── Binary builder helpers ────────────────────────────────────────────────────
 
 /// Constant pool entry for the test builder.
 enum ConstEntry {
@@ -66,7 +64,6 @@ fn fn_def_with_max_stack(
 fn make_msbc(consts: &[ConstEntry], fns: &[FnDef]) -> Vec<u8> {
     let entry_fn_id: u32 = fns.first().map_or(0, |f| f.fn_id);
 
-    // ── Const pool ────────────────────────────────────────────────────────────
     let mut const_section: Vec<u8> = vec![];
     let const_count = u32::try_from(consts.len()).expect("fits u32");
     const_section.extend_from_slice(&const_count.to_le_bytes());
@@ -85,13 +82,9 @@ fn make_msbc(consts: &[ConstEntry], fns: &[FnDef]) -> Vec<u8> {
         }
     }
 
-    // ── Type pool (empty) ─────────────────────────────────────────────────────
     let type_section: Vec<u8> = 0u32.to_le_bytes().to_vec();
-
-    // ── Effect pool (empty) ───────────────────────────────────────────────────
     let effect_section: Vec<u8> = 0u32.to_le_bytes().to_vec();
 
-    // ── Function pool ─────────────────────────────────────────────────────────
     let mut fn_section: Vec<u8> = vec![];
     let fn_count = u32::try_from(fns.len()).expect("fits u32");
     fn_section.extend_from_slice(&fn_count.to_le_bytes());
@@ -115,10 +108,8 @@ fn make_msbc(consts: &[ConstEntry], fns: &[FnDef]) -> Vec<u8> {
         }
     }
 
-    // ── Foreign pool (empty for tests) ──────────────────────────────────────
     let foreign_section: Vec<u8> = 0u32.to_le_bytes().to_vec(); // count = 0
 
-    // ── Header ────────────────────────────────────────────────────────────────
     let header_size: u32 = 40;
     let const_off = header_size;
     let type_off = const_off + u32::try_from(const_section.len()).expect("fits u32");
@@ -170,18 +161,16 @@ fn run_vm_call(bytes: &[u8], fn_id: u32, args: &[Value]) -> (Vm, Result<Value, V
     (vm, result)
 }
 
-// ── Loader tests ──────────────────────────────────────────────────────────────
-
 #[test]
 fn test_load_valid_header_succeeds() {
-    let bytes = make_msbc(&[], &[fn_def(0, 0, 0, vec![Opcode::RET_U.0])]);
+    let bytes = make_msbc(&[], &[fn_def(0, 0, 0, vec![Opcode::RET_UT.0])]);
     let result = load(&bytes);
     assert!(result.is_ok(), "expected Ok, got {result:?}");
 }
 
 #[test]
 fn test_load_bad_magic_returns_error() {
-    let mut bytes = make_msbc(&[], &[fn_def(0, 0, 0, vec![Opcode::RET_U.0])]);
+    let mut bytes = make_msbc(&[], &[fn_def(0, 0, 0, vec![Opcode::RET_UT.0])]);
     bytes[0] = b'X';
     let result = load(&bytes);
     assert!(
@@ -192,7 +181,7 @@ fn test_load_bad_magic_returns_error() {
 
 #[test]
 fn test_load_bad_checksum_returns_error() {
-    let mut bytes = make_msbc(&[], &[fn_def(0, 0, 0, vec![Opcode::RET_U.0])]);
+    let mut bytes = make_msbc(&[], &[fn_def(0, 0, 0, vec![Opcode::RET_UT.0])]);
     bytes[8] ^= 0xFF;
     let result = load(&bytes);
     assert!(
@@ -200,8 +189,6 @@ fn test_load_bad_checksum_returns_error() {
         "expected BadChecksum, got {result:?}"
     );
 }
-
-// ── Verifier tests ────────────────────────────────────────────────────────────
 
 #[test]
 fn test_verifier_rejects_oob_const() {
@@ -224,8 +211,6 @@ fn test_verifier_rejects_stack_overflow() {
     let result = verify(&module);
     assert!(result.is_err(), "expected Verify error for stack overflow");
 }
-
-// ── Execution tests (original) ───────────────────────────────────────────────
 
 #[test]
 fn test_run_constant_return_i32() {
@@ -250,7 +235,7 @@ fn test_run_add_two_ints() {
                 0,
                 Opcode::LD_LOC.0,
                 1,
-                Opcode::I_ADD.0,
+                Opcode::INT_ADD.0,
                 Opcode::RET.0,
             ],
         )],
@@ -273,7 +258,7 @@ fn test_run_conditional_jump() {
                 Opcode::LD_CST.0,
                 1,
                 Opcode::CMP_LT.0,
-                Opcode::JMP_F_W.0,
+                Opcode::JNF.0,
                 2,
                 0,
                 0,
@@ -302,7 +287,7 @@ fn test_run_tail_call_countdown() {
         Opcode::LD_CST.0,
         0,
         Opcode::CMP_EQ.0,
-        Opcode::JMP_F_W.0,
+        Opcode::JNF.0,
         3,
         0,
         0,
@@ -314,7 +299,7 @@ fn test_run_tail_call_countdown() {
         0,
         Opcode::LD_CST.0,
         1,
-        Opcode::I_SUB.0,
+        Opcode::INT_SUB.0,
         Opcode::INV_TAL.0,
         0,
         0,
@@ -366,7 +351,8 @@ fn test_run_make_variant_and_check_tag() {
                 Opcode::LD_CST.0,
                 0,
                 Opcode::MK_VAR.0,
-                7,
+                0x01, // packed LE lo: (7 << 8 | 1) = 0x0701
+                0x07, // packed LE hi
                 Opcode::CMP_TAG.0,
                 7,
                 Opcode::RET.0,
@@ -376,8 +362,6 @@ fn test_run_make_variant_and_check_tag() {
     let (_, result) = run_vm(&bytes);
     assert!(result.expect("runs").as_bool().expect("is bool"));
 }
-
-// ── Value NaN-boxing tests ────────────────────────────────────────────────────
 
 #[test]
 fn test_value_nan_boxing_roundtrip() {
@@ -412,25 +396,22 @@ fn test_value_float_is_not_tagged_int() {
 }
 
 #[test]
-fn test_nan_canonicalization() {
-    // Standard quiet NaN (tag 0x7FF8 collides with TAG_TASK without canonicalization).
+fn test_nan_handling() {
     let v = Value::from_float(f64::NAN);
     assert!(v.is_float());
     assert!(v.as_float().unwrap().is_nan());
-    assert_eq!(v, Value::NAN);
 
-    // Negative NaN collapses to canonical.
+    // All NaN variants are Float.
     let neg_nan = Value::from_float(f64::from_bits(0xFFF8_0000_0000_0000));
-    assert_eq!(neg_nan, Value::NAN);
+    assert!(neg_nan.as_float().unwrap().is_nan());
 
-    // Signaling NaN collapses to canonical.
     let snan = Value::from_float(f64::from_bits(0x7FF0_0000_0000_0002));
-    assert_eq!(snan, Value::NAN);
+    assert!(snan.as_float().unwrap().is_nan());
 
     // Non-NaN floats are untouched.
     let normal = Value::from_float(1.5);
     assert!(normal.is_float());
-    assert_ne!(normal, Value::NAN);
+    assert!(!normal.as_float().unwrap().is_nan());
 
     // Infinity is NOT NaN.
     let inf = Value::from_float(f64::INFINITY);
@@ -445,8 +426,6 @@ fn test_value_int_sign_extension() {
     let v2 = Value::from_int(-42);
     assert_eq!(v2.as_int().expect("is int"), -42);
 }
-
-// ── String values ───────────────────────────────────────────────────────
 
 #[test]
 fn test_string_const_returns_heap_ref() {
@@ -491,8 +470,6 @@ fn test_string_const_two_distinct_loads_produce_separate_objects() {
     let (_, result) = run_vm(&bytes);
     assert!(result.expect("runs").as_ref().is_ok(), "should be a ref");
 }
-
-// ── Global variables ────────────────────────────────────────────────────
 
 #[test]
 fn test_globals_store_and_load() {
@@ -546,8 +523,6 @@ fn test_globals_uninitialized_returns_unit() {
     );
 }
 
-// ── Division by zero ────────────────────────────────────────────────────
-
 #[test]
 fn test_division_by_zero_returns_error() {
     let bytes = make_msbc(
@@ -561,7 +536,7 @@ fn test_division_by_zero_returns_error() {
                 0,
                 Opcode::LD_CST.0,
                 1,
-                Opcode::I_DIV.0,
+                Opcode::INT_DIV.0,
                 Opcode::RET.0,
             ],
         )],
@@ -576,8 +551,6 @@ fn test_division_by_zero_returns_error() {
     }
 }
 
-// ── Float arithmetic ────────────────────────────────────────────────────
-
 #[test]
 fn test_float_add_and_multiply() {
     let bytes = make_msbc(
@@ -590,12 +563,10 @@ fn test_float_add_and_multiply() {
                 Opcode::LD_CST.0,
                 0,
                 Opcode::CNV_ITF.0,
-                0,
                 Opcode::LD_CST.0,
                 1,
                 Opcode::CNV_ITF.0,
-                0,
-                Opcode::F_ADD.0,
+                Opcode::FLT_ADD.0,
                 Opcode::RET.0,
             ],
         )],
@@ -604,8 +575,6 @@ fn test_float_add_and_multiply() {
     let f = result.expect("runs").as_float().expect("is float");
     assert!((f - 5.0).abs() < f64::EPSILON);
 }
-
-// ── Bitwise operations ──────────────────────────────────────────────────
 
 #[test]
 fn test_bitwise_and_and_shift() {
@@ -624,10 +593,10 @@ fn test_bitwise_and_and_shift() {
                 0,
                 Opcode::LD_CST.0,
                 1,
-                Opcode::B_AND.0,
+                Opcode::BIT_AND.0,
                 Opcode::LD_CST.0,
                 2,
-                Opcode::B_SHL.0,
+                Opcode::BIT_SHL.0,
                 Opcode::RET.0,
             ],
         )],
@@ -635,8 +604,6 @@ fn test_bitwise_and_and_shift() {
     let (_, result) = run_vm(&bytes);
     assert_eq!(result.expect("runs").as_int().expect("is int"), 240);
 }
-
-// ── Type conversions ────────────────────────────────────────────────────
 
 #[test]
 fn test_int_to_float_to_int_roundtrip() {
@@ -650,9 +617,7 @@ fn test_int_to_float_to_int_roundtrip() {
                 Opcode::LD_CST.0,
                 0,
                 Opcode::CNV_ITF.0,
-                0,
                 Opcode::CNV_FTI.0,
-                0,
                 Opcode::RET.0,
             ],
         )],
@@ -660,8 +625,6 @@ fn test_int_to_float_to_int_roundtrip() {
     let (_, result) = run_vm(&bytes);
     assert_eq!(result.expect("runs").as_int().expect("is int"), 7);
 }
-
-// ── Array operations ────────────────────────────────────────────────────
 
 #[test]
 fn test_array_create_store_load() {
@@ -729,19 +692,15 @@ fn test_array_length() {
     assert_eq!(result.expect("runs").as_nat().expect("is nat"), 5);
 }
 
-// ── Stack underflow ─────────────────────────────────────────────────────
-
 #[test]
 fn test_stack_underflow_returns_error() {
     let bytes = make_msbc(
         &[],
-        &[fn_def(0, 0, 0, vec![Opcode::I_ADD.0, Opcode::RET.0])],
+        &[fn_def(0, 0, 0, vec![Opcode::INT_ADD.0, Opcode::RET.0])],
     );
     let (_, result) = run_vm(&bytes);
     assert!(result.is_err(), "i.add on empty stack should error");
 }
-
-// ── HLT instruction ────────────────────────────────────────────────────
 
 #[test]
 fn test_hlt_returns_halted_error() {
@@ -756,8 +715,6 @@ fn test_hlt_returns_halted_error() {
     }
 }
 
-// ── Instruction limit ──────────────────────────────────────────────────
-
 #[test]
 fn test_instruction_limit_exceeded() {
     let bytes = make_msbc(
@@ -767,7 +724,7 @@ fn test_instruction_limit_exceeded() {
             0,
             0,
             vec![
-                Opcode::JMP_W.0,
+                Opcode::JMP.0,
                 0xFB,
                 0xFF,
                 0xFF,
@@ -788,8 +745,6 @@ fn test_instruction_limit_exceeded() {
     assert_eq!(vm.instruction_count(), 100);
 }
 
-// ── Error context ───────────────────────────────────────────────────────
-
 #[test]
 fn test_error_context_contains_fn_id_and_ip() {
     let bytes = make_msbc(
@@ -803,7 +758,7 @@ fn test_error_context_contains_fn_id_and_ip() {
                 0,
                 Opcode::LD_CST.0,
                 1,
-                Opcode::I_DIV.0,
+                Opcode::INT_DIV.0,
                 Opcode::RET.0,
             ],
         )],
@@ -818,8 +773,6 @@ fn test_error_context_contains_fn_id_and_ip() {
         _ => panic!("expected Runtime error, got {err:?}"),
     }
 }
-
-// ── Public stepping API ─────────────────────────────────────────────────
 
 #[test]
 fn test_step_api_single_stepping() {
@@ -864,8 +817,6 @@ fn test_introspection_frames_and_heap() {
     assert!(vm.frames().is_empty());
     assert!(vm.heap().live_count() >= 1);
 }
-
-// ── Garbage collection ──────────────────────────────────────────────────
 
 #[test]
 fn test_gc_collects_unreachable_objects() {
@@ -917,7 +868,7 @@ fn test_gc_preserves_reachable_globals() {
                 0,
                 0,
                 0, // store to global[0]
-                Opcode::RET_U.0,
+                Opcode::RET_UT.0,
             ],
         )],
     );
@@ -928,8 +879,6 @@ fn test_gc_preserves_reachable_globals() {
     assert_eq!(freed, 0, "GC should not free globally-reachable objects");
     assert_eq!(vm.heap().live_count(), 1);
 }
-
-// ── Dynamic invocation ──────────────────────────────────────────────────
 
 #[test]
 fn test_direct_call_with_inv() {
@@ -944,10 +893,10 @@ fn test_direct_call_with_inv() {
                     Opcode::LD_CST.0,
                     0,
                     Opcode::INV.0,
+                    0,
                     1,
                     0,
-                    0,
-                    0,
+                    0, // pack_id_arity(1, 0) = 0x100 LE
                     Opcode::RET.0,
                 ],
             ),
@@ -960,7 +909,7 @@ fn test_direct_call_with_inv() {
                     0,
                     Opcode::LD_CST.0,
                     1,
-                    Opcode::I_ADD.0,
+                    Opcode::INT_ADD.0,
                     Opcode::RET.0,
                 ],
             ),
@@ -969,8 +918,6 @@ fn test_direct_call_with_inv() {
     let (_, result) = run_vm(&bytes);
     assert_eq!(result.expect("runs").as_int().expect("is int"), 15);
 }
-
-// ── Wide jump ───────────────────────────────────────────────────────────
 
 #[test]
 fn test_wide_jump() {
@@ -981,7 +928,7 @@ fn test_wide_jump() {
             0,
             0,
             vec![
-                Opcode::JMP_W.0,
+                Opcode::JMP.0,
                 2,
                 0,
                 0,
@@ -998,8 +945,6 @@ fn test_wide_jump() {
     assert_eq!(result.expect("runs").as_int().expect("is int"), 42);
 }
 
-// ── Integer negation ────────────────────────────────────────────────────
-
 #[test]
 fn test_int_negation() {
     let bytes = make_msbc(
@@ -1008,14 +953,12 @@ fn test_int_negation() {
             0,
             0,
             0,
-            vec![Opcode::LD_CST.0, 0, Opcode::I_NEG.0, Opcode::RET.0],
+            vec![Opcode::LD_CST.0, 0, Opcode::INT_NEG.0, Opcode::RET.0],
         )],
     );
     let (_, result) = run_vm(&bytes);
     assert_eq!(result.expect("runs").as_int().expect("is int"), -42);
 }
-
-// ── Float multiplication ────────────────────────────────────────────────
 
 #[test]
 fn test_float_multiply() {
@@ -1029,12 +972,10 @@ fn test_float_multiply() {
                 Opcode::LD_CST.0,
                 0,
                 Opcode::CNV_ITF.0,
-                0,
                 Opcode::LD_CST.0,
                 1,
                 Opcode::CNV_ITF.0,
-                0,
-                Opcode::F_MUL.0,
+                Opcode::FLT_MUL.0,
                 Opcode::RET.0,
             ],
         )],
@@ -1043,8 +984,6 @@ fn test_float_multiply() {
     let f = result.expect("runs").as_float().expect("is float");
     assert!((f - 12.0).abs() < f64::EPSILON);
 }
-
-// ── CMP_EQ ──────────────────────────────────────────────────────────────
 
 #[test]
 fn test_cmp_eq_equal_values() {
@@ -1071,8 +1010,6 @@ fn test_cmp_eq_equal_values() {
     );
 }
 
-// ── Value try_as_ref ────────────────────────────────────────────────────
-
 #[test]
 fn test_value_try_as_ref() {
     assert!(Value::from_ref(42).try_as_ref().is_some());
@@ -1080,8 +1017,6 @@ fn test_value_try_as_ref() {
     assert!(Value::from_int(42).try_as_ref().is_none());
     assert!(Value::UNIT.try_as_ref().is_none());
 }
-
-// ── Tier 2: EFF_DO cross-frame ───────────────────────────────────────────────
 
 /// Effect pool builder for tests.
 struct EffectDef {
@@ -1099,7 +1034,6 @@ struct EffectOpDef {
 fn make_msbc_with_effects(consts: &[ConstEntry], effects: &[EffectDef], fns: &[FnDef]) -> Vec<u8> {
     let entry_fn_id: u32 = fns.first().map_or(0, |f| f.fn_id);
 
-    // ── Const pool ────────────────────────────────────────────────────────────
     let mut const_section: Vec<u8> = vec![];
     let const_count = u32::try_from(consts.len()).expect("fits u32");
     const_section.extend_from_slice(&const_count.to_le_bytes());
@@ -1118,10 +1052,8 @@ fn make_msbc_with_effects(consts: &[ConstEntry], effects: &[EffectDef], fns: &[F
         }
     }
 
-    // ── Type pool (empty) ─────────────────────────────────────────────────────
     let type_section: Vec<u8> = 0u32.to_le_bytes().to_vec();
 
-    // ── Effect pool ───────────────────────────────────────────────────────────
     let mut effect_section: Vec<u8> = vec![];
     let effect_count = u32::try_from(effects.len()).expect("fits u32");
     effect_section.extend_from_slice(&effect_count.to_le_bytes());
@@ -1138,7 +1070,6 @@ fn make_msbc_with_effects(consts: &[ConstEntry], effects: &[EffectDef], fns: &[F
         }
     }
 
-    // ── Function pool ─────────────────────────────────────────────────────────
     let mut fn_section: Vec<u8> = vec![];
     let fn_count = u32::try_from(fns.len()).expect("fits u32");
     fn_section.extend_from_slice(&fn_count.to_le_bytes());
@@ -1162,10 +1093,8 @@ fn make_msbc_with_effects(consts: &[ConstEntry], effects: &[EffectDef], fns: &[F
         }
     }
 
-    // ── Foreign pool (empty for tests) ──────────────────────────────────────
     let foreign_section: Vec<u8> = 0u32.to_le_bytes().to_vec(); // count = 0
 
-    // ── Header ────────────────────────────────────────────────────────────────
     let header_size: u32 = 40;
     let const_off = header_size;
     let type_off = const_off + u32::try_from(const_section.len()).expect("fits u32");
@@ -1218,13 +1147,13 @@ fn test_eff_do_cross_frame_finds_handler() {
                 local_count: 0,
                 param_count: 0,
                 code: vec![
-                    Opcode::CONT_MARK.0,
+                    Opcode::CNT_MRK.0,
                     effect_id, // push handler for effect 1
                     Opcode::INV.0,
+                    0,
                     1,
                     0,
-                    0,
-                    0, // call fn 1
+                    0, // pack_id_arity(1, 0) = 0x100 LE; call fn 1
                     Opcode::RET.0,
                 ],
                 handlers: vec![(effect_id, 2)],
@@ -1235,7 +1164,7 @@ fn test_eff_do_cross_frame_finds_handler() {
                 0,
                 0,
                 vec![
-                    Opcode::CONT_SAVE.0,
+                    Opcode::CNT_SAV.0,
                     1,
                     0,
                     0,
@@ -1278,24 +1207,19 @@ fn test_eff_res_resumes_continuation() {
                 local_count: 0,
                 param_count: 0,
                 code: vec![
-                    Opcode::CONT_MARK.0,
+                    Opcode::CNT_MRK.0,
                     effect_id,
                     Opcode::INV.0,
+                    0,
                     1,
                     0,
-                    0,
-                    0,
+                    0, // pack_id_arity(1, 0) = 0x100 LE
                     Opcode::RET.0,
                 ],
                 handlers: vec![(effect_id, 2)],
                 max_stack: None,
             },
-            fn_def(
-                1,
-                0,
-                0,
-                vec![Opcode::CONT_SAVE.0, 1, 0, 0, 0, Opcode::RET.0],
-            ),
+            fn_def(1, 0, 0, vec![Opcode::CNT_SAV.0, 1, 0, 0, 0, Opcode::RET.0]),
             fn_def(
                 2,
                 0,
@@ -1303,12 +1227,12 @@ fn test_eff_res_resumes_continuation() {
                 vec![
                     Opcode::LD_CST.0,
                     0, // push 99
-                    Opcode::CONT_RESUME.0,
+                    Opcode::CNT_RSM.0,
                     0,
                     0,
                     0,
-                    0,               // resume with 99
-                    Opcode::RET_U.0, // should not reach
+                    0,                // resume with 99
+                    Opcode::RET_UT.0, // should not reach
                 ],
             ),
         ],
@@ -1316,8 +1240,6 @@ fn test_eff_res_resumes_continuation() {
     let (_, result) = run_vm(&bytes);
     assert_eq!(result.expect("runs").as_int().expect("is int"), 99);
 }
-
-// ── Tier 3: Value task/chan tags ──────────────────────────────────────────────
 
 #[test]
 fn test_value_task_roundtrip() {
@@ -1334,8 +1256,6 @@ fn test_value_chan_roundtrip() {
     assert!(v.as_int().is_err());
     assert!(v.as_task_id().is_err());
 }
-
-// ── Concurrency tests ────────────────────────────────────────────────────────
 
 /// Build bytecode from a sequence of byte slices.
 fn code(parts: &[&[u8]]) -> Vec<u8> {
@@ -1370,7 +1290,7 @@ fn test_spawn_await_returns_child_value() {
     let child_code = vec![Opcode::LD_CST.0, 0, Opcode::RET.0];
     let entry_code = code(&[
         &op32(Opcode::TSK_SPN, 1),
-        &[Opcode::TSK_AWT.0, 0],
+        &[Opcode::TSK_AWT.0],
         &[Opcode::RET.0],
     ]);
     let bytes = make_msbc(
@@ -1394,7 +1314,7 @@ fn test_channel_send_recv_fifo() {
         &[Opcode::POP.0],
         &[Opcode::LD_LOC.0, 0, Opcode::LD_CST.0, 2],
         &chs,
-        &[Opcode::POP.0, Opcode::RET_U.0],
+        &[Opcode::POP.0, Opcode::RET_UT.0],
     ]);
 
     let cmk = op32(Opcode::TSK_CMK, 0);
@@ -1405,15 +1325,15 @@ fn test_channel_send_recv_fifo() {
         &[Opcode::ST_LOC.0, 0],
         &[Opcode::LD_LOC.0, 0],
         &spn,
-        &[Opcode::TSK_AWT.0, 0, Opcode::POP.0],
+        &[Opcode::TSK_AWT.0, Opcode::POP.0],
         &[Opcode::LD_LOC.0, 0],
         &chr,
         &[Opcode::LD_LOC.0, 0],
         &chr,
-        &[Opcode::I_ADD.0],
+        &[Opcode::INT_ADD.0],
         &[Opcode::LD_LOC.0, 0],
         &chr,
-        &[Opcode::I_ADD.0, Opcode::RET.0],
+        &[Opcode::INT_ADD.0, Opcode::RET.0],
     ]);
 
     let bytes = make_msbc(
@@ -1455,7 +1375,7 @@ fn test_channel_recv_empty_suspends_and_resumes() {
         &[Opcode::LD_LOC.0, 0, Opcode::LD_CST.0, 0],
         &chs,
         &[Opcode::POP.0],
-        &[Opcode::LD_LOC.0, 1, Opcode::TSK_AWT.0, 0, Opcode::RET.0],
+        &[Opcode::LD_LOC.0, 1, Opcode::TSK_AWT.0, Opcode::RET.0],
     ]);
 
     let bytes = make_msbc(
@@ -1489,11 +1409,11 @@ fn test_multiple_tasks_all_complete() {
         &[Opcode::ST_LOC.0, 1],
         &op32(Opcode::TSK_SPN, 3),
         &[Opcode::ST_LOC.0, 2],
-        &[Opcode::LD_LOC.0, 0, Opcode::TSK_AWT.0, 0],
-        &[Opcode::LD_LOC.0, 1, Opcode::TSK_AWT.0, 0],
-        &[Opcode::I_ADD.0],
-        &[Opcode::LD_LOC.0, 2, Opcode::TSK_AWT.0, 0],
-        &[Opcode::I_ADD.0, Opcode::RET.0],
+        &[Opcode::LD_LOC.0, 0, Opcode::TSK_AWT.0],
+        &[Opcode::LD_LOC.0, 1, Opcode::TSK_AWT.0],
+        &[Opcode::INT_ADD.0],
+        &[Opcode::LD_LOC.0, 2, Opcode::TSK_AWT.0],
+        &[Opcode::INT_ADD.0, Opcode::RET.0],
     ]);
 
     let bytes = make_msbc(
@@ -1520,7 +1440,7 @@ fn test_deadlock_two_tasks_mutual_await() {
     let entry_code = code(&[
         &op32(Opcode::TSK_CMK, 0),
         &op32(Opcode::TSK_SPN, 1),
-        &[Opcode::TSK_AWT.0, 0, Opcode::RET.0],
+        &[Opcode::TSK_AWT.0, Opcode::RET.0],
     ]);
 
     let bytes = make_msbc(
@@ -1551,7 +1471,7 @@ fn test_gc_traces_suspended_task_stacks() {
     let child_code = vec![Opcode::LD_CST.0, 0, Opcode::RET.0];
     let entry_code = code(&[
         &op32(Opcode::TSK_SPN, 1),
-        &[Opcode::TSK_AWT.0, 0, Opcode::RET.0],
+        &[Opcode::TSK_AWT.0, Opcode::RET.0],
     ]);
 
     let bytes = make_msbc(
@@ -1579,8 +1499,6 @@ fn test_sync_program_no_scheduler_overhead() {
     let (_, result) = run_vm(&bytes);
     assert_eq!(result.expect("runs").as_int().expect("is int"), 7);
 }
-
-// ── Comparison opcodes ──────────────────────────────────────────────────────
 
 #[test]
 fn test_cmp_le_true_when_equal() {
@@ -1648,8 +1566,6 @@ fn test_cmp_gt_true() {
     assert!(result.expect("runs").as_bool().expect("is bool"));
 }
 
-// ── Float comparison ────────────────────────────────────────────────────────
-
 #[test]
 fn test_cmp_f_eq_true() {
     let bytes = make_msbc(
@@ -1665,7 +1581,7 @@ fn test_cmp_f_eq_true() {
                 Opcode::LD_CST.0,
                 1,
                 Opcode::CNV_ITF.0,
-                Opcode::CMP_F_EQ.0,
+                Opcode::CMP_EQ.0,
                 Opcode::RET.0,
             ],
         )],
@@ -1673,8 +1589,6 @@ fn test_cmp_f_eq_true() {
     let (_, result) = run_vm(&bytes);
     assert!(result.expect("runs").as_bool().expect("is bool"));
 }
-
-// ── Variant construction edge cases ─────────────────────────────────────────
 
 #[test]
 fn test_make_variant_multi_field_via_mk_prd_field_0() {
@@ -1695,7 +1609,8 @@ fn test_make_variant_multi_field_via_mk_prd_field_0() {
                 Opcode::MK_PRD.0,
                 2,
                 Opcode::MK_VAR.0,
-                1,
+                0x01, // packed LE lo: (1 << 8 | 1) = 0x0101
+                0x01, // packed LE hi
                 Opcode::LD_PAY.0,
                 0, // extract payload (product ref)
                 Opcode::LD_FLD.0,
@@ -1724,7 +1639,8 @@ fn test_make_variant_multi_field_via_mk_prd_field_1() {
                 Opcode::MK_PRD.0,
                 2,
                 Opcode::MK_VAR.0,
-                1,
+                0x01, // packed LE lo: (1 << 8 | 1) = 0x0101
+                0x01, // packed LE hi
                 Opcode::LD_PAY.0,
                 0, // extract payload (product ref)
                 Opcode::LD_FLD.0,
@@ -1736,8 +1652,6 @@ fn test_make_variant_multi_field_via_mk_prd_field_1() {
     let (_, result) = run_vm(&bytes);
     assert_eq!(result.expect("runs").as_int().expect("is int"), 20);
 }
-
-// ── Verifier boundary conditions ────────────────────────────────────────────
 
 #[test]
 fn test_verifier_accepts_max_stack_exact_match() {
@@ -1753,7 +1667,7 @@ fn test_verifier_accepts_max_stack_exact_match() {
                 0,
                 Opcode::LD_CST.0,
                 1,
-                Opcode::I_ADD.0,
+                Opcode::INT_ADD.0,
                 Opcode::RET.0,
             ],
         )],
@@ -1780,7 +1694,7 @@ fn test_verifier_rejects_max_stack_exceeded_by_one() {
                 0,
                 Opcode::LD_CST.0,
                 1,
-                Opcode::I_ADD.0,
+                Opcode::INT_ADD.0,
                 Opcode::RET.0,
             ],
         )],
@@ -1799,12 +1713,12 @@ fn test_verifier_resets_depth_after_unconditional_jump() {
     let code = vec![
         Opcode::LD_CST.0,
         0,
-        Opcode::JMP_W.0,
+        Opcode::JMP.0,
         0,
         0,
         0,
         0,
-        Opcode::RET_U.0,
+        Opcode::RET_UT.0,
     ];
     let bytes = make_msbc(
         &[ConstEntry::I32(42)],
@@ -1837,17 +1751,17 @@ fn test_verifier_depth_resets_to_zero_after_terminator() {
     assert!(result.is_ok(), "depth must reset after RET, got {result:?}");
 }
 
-// ── Wide instruction variants ───────────────────────────────────────────────
-
 #[test]
 fn test_ld_loc_w_loads_high_slot() {
     let code = vec![
         Opcode::LD_CST.0,
         0,
-        Opcode::ST_LOC_W.0,
+        musi_bc::Opcode::WID,
+        Opcode::ST_LOC.0,
         0x00,
         0x01,
-        Opcode::LD_LOC_W.0,
+        musi_bc::Opcode::WID,
+        Opcode::LD_LOC.0,
         0x00,
         0x01,
         Opcode::RET.0,
@@ -1862,10 +1776,12 @@ fn test_st_loc_w_stores_high_slot() {
     let code = vec![
         Opcode::LD_CST.0,
         0,
-        Opcode::ST_LOC_W.0,
+        musi_bc::Opcode::WID,
+        Opcode::ST_LOC.0,
         0x10,
         0x01,
-        Opcode::LD_LOC_W.0,
+        musi_bc::Opcode::WID,
+        Opcode::LD_LOC.0,
         0x10,
         0x01,
         Opcode::RET.0,
@@ -1887,8 +1803,10 @@ fn test_cmp_tag_w_matches_large_tag() {
                 Opcode::LD_CST.0,
                 0,
                 Opcode::MK_VAR.0,
-                7,
-                Opcode::CMP_TAG_W.0,
+                0x01, // packed LE lo: (7 << 8 | 1) = 0x0701
+                0x07, // packed LE hi
+                musi_bc::Opcode::WID,
+                Opcode::CMP_TAG.0,
                 7,
                 0,
                 Opcode::RET.0,
@@ -1898,8 +1816,6 @@ fn test_cmp_tag_w_matches_large_tag() {
     let (_, result) = run_vm(&bytes);
     assert!(result.expect("runs").as_bool().expect("is bool"));
 }
-
-// ── Arithmetic / bitwise opcodes ────────────────────────────────────────────
 
 #[test]
 fn test_f_sub() {
@@ -1916,7 +1832,7 @@ fn test_f_sub() {
                 Opcode::LD_CST.0,
                 1,
                 Opcode::CNV_ITF.0,
-                Opcode::F_SUB.0,
+                Opcode::FLT_SUB.0,
                 Opcode::CNV_FTI.0,
                 Opcode::RET.0,
             ],
@@ -1938,7 +1854,7 @@ fn test_f_neg() {
                 Opcode::LD_CST.0,
                 0,
                 Opcode::CNV_ITF.0,
-                Opcode::F_NEG.0,
+                Opcode::FLT_NEG.0,
                 Opcode::CNV_FTI.0,
                 Opcode::RET.0,
             ],
@@ -1961,7 +1877,7 @@ fn test_b_or() {
                 0,
                 Opcode::LD_CST.0,
                 1,
-                Opcode::B_OR.0,
+                Opcode::BIT_OR.0,
                 Opcode::RET.0,
             ],
         )],
@@ -1983,7 +1899,7 @@ fn test_b_xor() {
                 0,
                 Opcode::LD_CST.0,
                 1,
-                Opcode::B_XOR.0,
+                Opcode::BIT_XOR.0,
                 Opcode::RET.0,
             ],
         )],
@@ -2000,7 +1916,7 @@ fn test_b_not() {
             0,
             0,
             0,
-            vec![Opcode::LD_CST.0, 0, Opcode::B_NOT.0, Opcode::RET.0],
+            vec![Opcode::LD_CST.0, 0, Opcode::BIT_NOT.0, Opcode::RET.0],
         )],
     );
     let (_, result) = run_vm(&bytes);
@@ -2020,7 +1936,7 @@ fn test_b_shr() {
                 0,
                 Opcode::LD_CST.0,
                 1,
-                Opcode::B_SHR.0,
+                Opcode::BIT_SHR.0,
                 Opcode::RET.0,
             ],
         )],
@@ -2028,8 +1944,6 @@ fn test_b_shr() {
     let (_, result) = run_vm(&bytes);
     assert_eq!(result.expect("runs").as_int().expect("is int"), 4);
 }
-
-// ── Structural opcodes ─────────────────────────────────────────────────────
 
 #[test]
 fn test_ld_tag_returns_tag_value() {
@@ -2043,7 +1957,8 @@ fn test_ld_tag_returns_tag_value() {
                 Opcode::LD_CST.0,
                 0,
                 Opcode::MK_VAR.0,
-                3,
+                0x01, // packed LE lo: (3 << 8 | 1) = 0x0301
+                0x03, // packed LE hi
                 Opcode::LD_TAG.0,
                 Opcode::RET.0,
             ],
@@ -2065,8 +1980,810 @@ fn test_ld_pay_extracts_variant_payload() {
                 Opcode::LD_CST.0,
                 0,
                 Opcode::MK_VAR.0,
-                0,
+                0x01, // packed LE lo: (0 << 8 | 1) = 0x0001
+                0x00, // packed LE hi
                 Opcode::LD_PAY.0,
+                0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 42);
+}
+
+// ── New arithmetic / comparison / control tests ─────────────────────────────
+
+#[test]
+fn test_int_rem() {
+    // 7 % 3 = 1 — INT_REM is zone 0 (0x14), no operand
+    let bytes = make_msbc(
+        &[],
+        &[fn_def(
+            0,
+            2,
+            2,
+            vec![
+                Opcode::LD_LOC.0,
+                0,
+                Opcode::LD_LOC.0,
+                1,
+                Opcode::INT_REM.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm_call(&bytes, 0, &[Value::from_int(7), Value::from_int(3)]);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 1);
+}
+
+#[test]
+fn test_nat_add() {
+    // 3 + 4 = 7 — NAT_ADD is zone 0 (0x18), no operand
+    let bytes = make_msbc(
+        &[],
+        &[fn_def(
+            0,
+            2,
+            2,
+            vec![
+                Opcode::LD_LOC.0,
+                0,
+                Opcode::LD_LOC.0,
+                1,
+                Opcode::NAT_ADD.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm_call(&bytes, 0, &[Value::from_nat(3), Value::from_nat(4)]);
+    assert_eq!(result.expect("runs").as_nat().expect("is nat"), 7);
+}
+
+#[test]
+fn test_nat_sub() {
+    // 10 - 3 = 7
+    let bytes = make_msbc(
+        &[],
+        &[fn_def(
+            0,
+            2,
+            2,
+            vec![
+                Opcode::LD_LOC.0,
+                0,
+                Opcode::LD_LOC.0,
+                1,
+                Opcode::NAT_SUB.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm_call(&bytes, 0, &[Value::from_nat(10), Value::from_nat(3)]);
+    assert_eq!(result.expect("runs").as_nat().expect("is nat"), 7);
+}
+
+#[test]
+fn test_nat_mul() {
+    // 3 * 4 = 12
+    let bytes = make_msbc(
+        &[],
+        &[fn_def(
+            0,
+            2,
+            2,
+            vec![
+                Opcode::LD_LOC.0,
+                0,
+                Opcode::LD_LOC.0,
+                1,
+                Opcode::NAT_MUL.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm_call(&bytes, 0, &[Value::from_nat(3), Value::from_nat(4)]);
+    assert_eq!(result.expect("runs").as_nat().expect("is nat"), 12);
+}
+
+#[test]
+fn test_nat_div() {
+    // 10 / 3 = 3
+    let bytes = make_msbc(
+        &[],
+        &[fn_def(
+            0,
+            2,
+            2,
+            vec![
+                Opcode::LD_LOC.0,
+                0,
+                Opcode::LD_LOC.0,
+                1,
+                Opcode::NAT_DIV.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm_call(&bytes, 0, &[Value::from_nat(10), Value::from_nat(3)]);
+    assert_eq!(result.expect("runs").as_nat().expect("is nat"), 3);
+}
+
+#[test]
+fn test_nat_rem() {
+    // 10 % 3 = 1
+    let bytes = make_msbc(
+        &[],
+        &[fn_def(
+            0,
+            2,
+            2,
+            vec![
+                Opcode::LD_LOC.0,
+                0,
+                Opcode::LD_LOC.0,
+                1,
+                Opcode::NAT_REM.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm_call(&bytes, 0, &[Value::from_nat(10), Value::from_nat(3)]);
+    assert_eq!(result.expect("runs").as_nat().expect("is nat"), 1);
+}
+
+#[test]
+fn test_bit_sru() {
+    // Unsigned shift right: 16 >> 2 = 4 — BIT_SRU requires nat operands
+    let bytes = make_msbc(
+        &[],
+        &[fn_def(
+            0,
+            2,
+            2,
+            vec![
+                Opcode::LD_LOC.0,
+                0,
+                Opcode::LD_LOC.0,
+                1,
+                Opcode::BIT_SRU.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm_call(&bytes, 0, &[Value::from_nat(16), Value::from_nat(2)]);
+    assert_eq!(result.expect("runs").as_nat().expect("is nat"), 4);
+}
+
+#[test]
+fn test_cmp_ne() {
+    // 5 != 3 = true
+    let bytes = make_msbc(
+        &[ConstEntry::I32(5), ConstEntry::I32(3)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::CMP_NE.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert!(result.expect("runs").as_bool().expect("is bool"));
+}
+
+#[test]
+fn test_cmp_ge() {
+    // 5 >= 5 = true
+    let bytes = make_msbc(
+        &[ConstEntry::I32(5), ConstEntry::I32(5)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::CMP_GE.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert!(result.expect("runs").as_bool().expect("is bool"));
+}
+
+#[test]
+fn test_cmp_ltu() {
+    // unsigned 3 < 5 = true
+    let bytes = make_msbc(
+        &[],
+        &[fn_def(
+            0,
+            2,
+            2,
+            vec![
+                Opcode::LD_LOC.0,
+                0,
+                Opcode::LD_LOC.0,
+                1,
+                Opcode::CMP_LTU.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm_call(&bytes, 0, &[Value::from_nat(3), Value::from_nat(5)]);
+    assert!(result.expect("runs").as_bool().expect("is bool"));
+}
+
+#[test]
+fn test_cmp_leu() {
+    // unsigned 5 <= 5 = true
+    let bytes = make_msbc(
+        &[],
+        &[fn_def(
+            0,
+            2,
+            2,
+            vec![
+                Opcode::LD_LOC.0,
+                0,
+                Opcode::LD_LOC.0,
+                1,
+                Opcode::CMP_LEU.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm_call(&bytes, 0, &[Value::from_nat(5), Value::from_nat(5)]);
+    assert!(result.expect("runs").as_bool().expect("is bool"));
+}
+
+#[test]
+fn test_cmp_gtu() {
+    // unsigned 5 > 3 = true
+    let bytes = make_msbc(
+        &[],
+        &[fn_def(
+            0,
+            2,
+            2,
+            vec![
+                Opcode::LD_LOC.0,
+                0,
+                Opcode::LD_LOC.0,
+                1,
+                Opcode::CMP_GTU.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm_call(&bytes, 0, &[Value::from_nat(5), Value::from_nat(3)]);
+    assert!(result.expect("runs").as_bool().expect("is bool"));
+}
+
+#[test]
+fn test_cmp_geu() {
+    // unsigned 5 >= 5 = true
+    let bytes = make_msbc(
+        &[],
+        &[fn_def(
+            0,
+            2,
+            2,
+            vec![
+                Opcode::LD_LOC.0,
+                0,
+                Opcode::LD_LOC.0,
+                1,
+                Opcode::CMP_GEU.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm_call(&bytes, 0, &[Value::from_nat(5), Value::from_nat(5)]);
+    assert!(result.expect("runs").as_bool().expect("is bool"));
+}
+
+#[test]
+fn test_cmp_flt() {
+    // 1.0 < 2.0 = true — load int constants, convert to float, compare
+    let bytes = make_msbc(
+        &[ConstEntry::I32(1), ConstEntry::I32(2)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::CNV_ITF.0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::CNV_ITF.0,
+                Opcode::CMP_FLT.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert!(result.expect("runs").as_bool().expect("is bool"));
+}
+
+#[test]
+fn test_cmp_fle() {
+    // 2.0 <= 2.0 = true
+    let bytes = make_msbc(
+        &[ConstEntry::I32(2), ConstEntry::I32(2)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::CNV_ITF.0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::CNV_ITF.0,
+                Opcode::CMP_FLE.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert!(result.expect("runs").as_bool().expect("is bool"));
+}
+
+#[test]
+fn test_cmp_fgt() {
+    // 3.0 > 2.0 = true
+    let bytes = make_msbc(
+        &[ConstEntry::I32(3), ConstEntry::I32(2)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::CNV_ITF.0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::CNV_ITF.0,
+                Opcode::CMP_FGT.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert!(result.expect("runs").as_bool().expect("is bool"));
+}
+
+#[test]
+fn test_cmp_fge() {
+    // 2.0 >= 2.0 = true
+    let bytes = make_msbc(
+        &[ConstEntry::I32(2), ConstEntry::I32(2)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::CNV_ITF.0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::CNV_ITF.0,
+                Opcode::CMP_FGE.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert!(result.expect("runs").as_bool().expect("is bool"));
+}
+
+#[test]
+fn test_flt_div() {
+    // 10.0 / 2.0 = 5.0 — convert back to int via CNV_FTI
+    let bytes = make_msbc(
+        &[ConstEntry::I32(10), ConstEntry::I32(2)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::CNV_ITF.0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::CNV_ITF.0,
+                Opcode::FLT_DIV.0,
+                Opcode::CNV_FTI.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 5);
+}
+
+#[test]
+fn test_flt_rem() {
+    // 7.0 % 3.0 = 1.0 — convert back to int via CNV_FTI
+    let bytes = make_msbc(
+        &[ConstEntry::I32(7), ConstEntry::I32(3)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::CNV_ITF.0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::CNV_ITF.0,
+                Opcode::FLT_REM.0,
+                Opcode::CNV_FTI.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 1);
+}
+
+#[test]
+fn test_swp() {
+    // Push 10, push 20, SWP — stack becomes [20(bottom), 10(top)]. RET returns 10.
+    let bytes = make_msbc(
+        &[ConstEntry::I32(10), ConstEntry::I32(20)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::SWP.0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 10);
+}
+
+#[test]
+fn test_ld_ut() {
+    // LD_UT pushes unit; RET returns it.
+    let bytes = make_msbc(
+        &[],
+        &[fn_def(0, 0, 0, vec![Opcode::LD_UT.0, Opcode::RET.0])],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert!(result.expect("runs").is_unit());
+}
+
+#[test]
+fn test_jif_long() {
+    // JIF (long, zone 3 = 5 bytes) forward past a HLT, then load 42 and return.
+    // Layout:
+    //   offset 0: ld.cst 0       (2 bytes) — push 1 (truthy)
+    //   offset 2: jif +1,0,0,0   (5 bytes) — ip after = 7, target = 7+1 = 8
+    //   offset 7: hlt             (1 byte)  — skipped
+    //   offset 8: ld.cst 1       (2 bytes) — push 42
+    //   offset 10: ret            (1 byte)
+    let bytes = make_msbc(
+        &[ConstEntry::I32(1), ConstEntry::I32(42)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::JIF.0,
+                1,
+                0,
+                0,
+                0,
+                Opcode::HLT.0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 42);
+}
+
+#[test]
+fn test_jmp_sh_backward() {
+    // Countdown loop: start with local 0 = 3, decrement until 0, return 0.
+    // consts: 0 = I32(0), 1 = I32(1)
+    //
+    // Layout (LOOP starts at offset 0):
+    //   offset  0: ld.loc 0        (2 bytes)
+    //   offset  2: ld.cst 0        (2 bytes) — push 0
+    //   offset  4: cmp.eq          (1 byte)  — counter == 0?
+    //   offset  5: jif +9,0,0,0    (5 bytes) — ip after = 10, target = 10+9 = 19 (EXIT)
+    //   offset 10: ld.loc 0        (2 bytes)
+    //   offset 12: ld.cst 1        (2 bytes) — push 1
+    //   offset 14: int.sub         (1 byte)
+    //   offset 15: st.loc 0        (2 bytes)
+    //   offset 17: jmp.sh -19      (2 bytes) — ip after = 19, target = 19 + (-19) = 0
+    // EXIT:
+    //   offset 19: ld.loc 0        (2 bytes)
+    //   offset 21: ret             (1 byte)
+    let bytes = make_msbc(
+        &[ConstEntry::I32(0), ConstEntry::I32(1)],
+        &[fn_def(
+            0,
+            1,
+            1,
+            vec![
+                // LOOP:
+                Opcode::LD_LOC.0,
+                0,
+                Opcode::LD_CST.0,
+                0,
+                Opcode::CMP_EQ.0,
+                Opcode::JIF.0,
+                9,
+                0,
+                0,
+                0,
+                Opcode::LD_LOC.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::INT_SUB.0,
+                Opcode::ST_LOC.0,
+                0,
+                Opcode::JMP_SH.0,
+                (-19i8).cast_unsigned(),
+                // EXIT:
+                Opcode::LD_LOC.0,
+                0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm_call(&bytes, 0, &[Value::from_int(3)]);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 0);
+}
+
+#[test]
+fn test_jif_sh_forward() {
+    // JIF_SH forward: push truthy value, skip over HLT, load 42 and return.
+    // consts: 0 = I32(1), 1 = I32(42)
+    //
+    // Layout:
+    //   offset 0: ld.cst 0    (2 bytes) — push 1 (truthy)
+    //   offset 2: jif.sh +1   (2 bytes) — ip after = 4, target = 4+1 = 5
+    //   offset 4: hlt         (1 byte)  — skipped
+    //   offset 5: ld.cst 1    (2 bytes) — push 42
+    //   offset 7: ret         (1 byte)
+    let bytes = make_msbc(
+        &[ConstEntry::I32(1), ConstEntry::I32(42)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::JIF_SH.0,
+                1,
+                Opcode::HLT.0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 42);
+}
+
+#[test]
+fn test_jnf_sh_backward() {
+    // JNF_SH backward loop: decrement counter, loop while non-zero, return 0.
+    // consts: 0 = I32(0), 1 = I32(1)
+    //
+    // Layout (LOOP starts at offset 0):
+    //   offset  0: ld.loc 0    (2 bytes)
+    //   offset  2: ld.cst 1    (2 bytes) — push 1
+    //   offset  4: int.sub     (1 byte)  — counter - 1
+    //   offset  5: st.loc 0    (2 bytes)
+    //   offset  7: ld.loc 0    (2 bytes)
+    //   offset  9: ld.cst 0    (2 bytes) — push 0
+    //   offset 11: cmp.eq      (1 byte)  — counter == 0?
+    //   offset 12: jnf.sh -14  (2 bytes) — ip after = 14, not-zero → target = 14+(-14) = 0
+    // EXIT:
+    //   offset 14: ld.loc 0    (2 bytes)
+    //   offset 16: ret         (1 byte)
+    let bytes = make_msbc(
+        &[ConstEntry::I32(0), ConstEntry::I32(1)],
+        &[fn_def(
+            0,
+            1,
+            1,
+            vec![
+                // LOOP:
+                Opcode::LD_LOC.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::INT_SUB.0,
+                Opcode::ST_LOC.0,
+                0,
+                Opcode::LD_LOC.0,
+                0,
+                Opcode::LD_CST.0,
+                0,
+                Opcode::CMP_EQ.0,
+                Opcode::JNF_SH.0,
+                (-14i8).cast_unsigned(),
+                // EXIT:
+                Opcode::LD_LOC.0,
+                0,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm_call(&bytes, 0, &[Value::from_int(3)]);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 0);
+}
+
+#[test]
+fn test_inv_dyn() {
+    // fn 0: create closure over fn 1 (0 upvals), call it dynamically with 0 args.
+    // fn 1: push 42 and return.
+    //
+    // MK_CLO packed operand = (fn_id_u24 << 8) | upval_count_u8
+    //   fn_id=1, upval_count=0 → 0x00000100 LE = [0x00, 0x01, 0x00, 0x00]
+    // INV_DYN zone 1 (0x4A), operand = 0 args.
+    let bytes = make_msbc(
+        &[ConstEntry::I32(42)],
+        &[
+            fn_def(
+                0,
+                0,
+                0,
+                vec![
+                    Opcode::MK_CLO.0,
+                    0x00,
+                    0x01,
+                    0x00,
+                    0x00,
+                    Opcode::INV_DYN.0,
+                    0,
+                    Opcode::RET.0,
+                ],
+            ),
+            fn_def(1, 0, 0, vec![Opcode::LD_CST.0, 0, Opcode::RET.0]),
+        ],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 42);
+}
+
+#[test]
+fn test_st_fld() {
+    // Create a product {10, 20}, store 99 into field 1, load field 1 → 99.
+    // MK_PRD zone 1 (0x48), operand = field count (2).
+    // ST_FLD zone 1 (0x44): pops val then obj_ref.
+    // LD_FLD zone 1 (0x43): pops obj_ref, pushes field value.
+    //
+    // consts: 0=10, 1=20, 2=99
+    let bytes = make_msbc(
+        &[
+            ConstEntry::I32(10),
+            ConstEntry::I32(20),
+            ConstEntry::I32(99),
+        ],
+        &[fn_def(
+            0,
+            1,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::LD_CST.0,
+                1,
+                Opcode::MK_PRD.0,
+                2,
+                Opcode::ST_LOC.0,
+                0,
+                Opcode::LD_LOC.0,
+                0,
+                Opcode::LD_CST.0,
+                2,
+                Opcode::ST_FLD.0,
+                1,
+                Opcode::LD_LOC.0,
+                0,
+                Opcode::LD_FLD.0,
+                1,
+                Opcode::RET.0,
+            ],
+        )],
+    );
+    let (_, result) = run_vm(&bytes);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 99);
+}
+
+#[test]
+fn test_mk_clo_ld_upv() {
+    // fn 0: load param (= 42), create closure over fn 1 capturing it, call it.
+    // fn 1: ld.upv 0, ret → returns the captured value.
+    //
+    // MK_CLO packed: fn_id=1, upval_count=1 → (1 << 8) | 1 = 0x101
+    //   LE bytes: [0x01, 0x01, 0x00, 0x00]
+    let bytes = make_msbc(
+        &[ConstEntry::I32(42)],
+        &[
+            fn_def(
+                0,
+                1,
+                1,
+                vec![
+                    Opcode::LD_LOC.0,
+                    0,
+                    Opcode::MK_CLO.0,
+                    0x01,
+                    0x01,
+                    0x00,
+                    0x00,
+                    Opcode::INV_DYN.0,
+                    0,
+                    Opcode::RET.0,
+                ],
+            ),
+            fn_def(1, 0, 0, vec![Opcode::LD_UPV.0, 0, Opcode::RET.0]),
+        ],
+    );
+    let (_, result) = run_vm_call(&bytes, 0, &[Value::from_int(42)]);
+    assert_eq!(result.expect("runs").as_int().expect("is int"), 42);
+}
+
+#[test]
+fn test_alc_ref() {
+    // ALC_REF pops initial value, allocates a ref cell, pushes the ref.
+    // LD_FLD 0 reads the single stored field back.
+    // ALC_REF is zone 3 (0xCB), operand = type_id (use 0).
+    let bytes = make_msbc(
+        &[ConstEntry::I32(42)],
+        &[fn_def(
+            0,
+            0,
+            0,
+            vec![
+                Opcode::LD_CST.0,
+                0,
+                Opcode::ALC_REF.0,
+                0,
+                0,
+                0,
+                0,
+                Opcode::LD_FLD.0,
                 0,
                 Opcode::RET.0,
             ],

@@ -100,22 +100,22 @@ impl TypePool {
         if def == wk.ints.int || def == wk.ints.int64 {
             return Some(self.push_tag_only(TAG_I64));
         }
-        if def == wk.uints.uint8 {
+        if def == wk.nats.nat || def == wk.nats.nat64 {
+            return Some(self.push_tag_only(TAG_U64));
+        }
+        if def == wk.nats.nat8 {
             return Some(self.push_tag_only(TAG_U8));
         }
-        if def == wk.uints.uint16 {
+        if def == wk.nats.nat16 {
             return Some(self.push_tag_only(TAG_U16));
         }
-        if def == wk.uints.uint32 {
+        if def == wk.nats.nat32 {
             return Some(self.push_tag_only(TAG_U32));
-        }
-        if def == wk.uints.uint64 {
-            return Some(self.push_tag_only(TAG_U64));
         }
         if def == wk.floats.float32 {
             return Some(self.push_tag_only(TAG_F32));
         }
-        if def == wk.floats.float64 {
+        if def == wk.float || def == wk.floats.float64 {
             return Some(self.push_tag_only(TAG_F64));
         }
         if def == wk.rune {

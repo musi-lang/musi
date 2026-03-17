@@ -16,6 +16,16 @@ impl Resolver<'_> {
                     self.resolve_ty(arg);
                 }
             }
+            Ty::Qualified {
+                module, args, span, ..
+            } => {
+                if self.scopes.lookup(self.current_scope, module).is_none() {
+                    self.report_undefined(module, span);
+                }
+                for &arg in &args {
+                    self.resolve_ty(arg);
+                }
+            }
             Ty::Option { inner, .. } => {
                 self.resolve_ty(inner);
             }

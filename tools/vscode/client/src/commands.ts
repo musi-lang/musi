@@ -1,4 +1,5 @@
 import * as path from "node:path";
+import { parse as parseTOML } from "smol-toml";
 import * as vscode from "vscode";
 import {
 	findCliPath,
@@ -27,6 +28,7 @@ interface Commands {
 	runTask: CommandHandler;
 	runTaskCommand: CommandHandler;
 	runTest: CommandHandler;
+	debugTest: CommandHandler;
 	selectRunConfiguration: CommandHandler;
 	runWithArgs: CommandHandler;
 	buildFile: CommandHandler;
@@ -75,25 +77,25 @@ async function _loadPackageTasks(): Promise<
 	{ tasks: Record<string, string | MsPackageTask>; pkgDir: string } | undefined
 > {
 	const pkgFiles = await vscode.workspace.findFiles(
-		"mspackage.json",
+		"mspackage.toml",
 		"**/node_modules/**",
 		1,
 	);
 	const pkgFile = pkgFiles[0];
 	if (!pkgFile) {
-		vscode.window.showWarningMessage("No mspackage.json found in workspace.");
+		vscode.window.showWarningMessage("No mspackage.toml found in workspace.");
 		return undefined;
 	}
 	let pkg: MsPackage;
 	try {
 		const raw = await vscode.workspace.fs.readFile(pkgFile);
-		pkg = JSON.parse(Buffer.from(raw).toString("utf8")) as MsPackage;
+		pkg = parseTOML(Buffer.from(raw).toString("utf8")) as MsPackage;
 	} catch {
-		vscode.window.showErrorMessage("Failed to parse mspackage.json.");
+		vscode.window.showErrorMessage("Failed to parse mspackage.toml.");
 		return undefined;
 	}
 	if (!(pkg.tasks && Object.keys(pkg.tasks).length > 0)) {
-		vscode.window.showWarningMessage("No tasks defined in mspackage.json.");
+		vscode.window.showWarningMessage("No tasks defined in mspackage.toml.");
 		return undefined;
 	}
 	return { tasks: pkg.tasks, pkgDir: path.dirname(pkgFile.fsPath) };
@@ -206,6 +208,24 @@ function _createCommands(statusBar: StatusBar): Commands {
 			await _runCliOnFile("test", args);
 		},
 
+		async debugTest(...args: unknown[]) {
+			const file =
+				typeof args[0] === "string"
+					? args[0]
+					: vscode.window.activeTextEditor?.document.uri.fsPath;
+			if (!file) {
+				vscode.window.showWarningMessage("No test file specified.");
+				return;
+			}
+			await vscode.debug.startDebugging(undefined, {
+				type: "musi",
+				request: "launch",
+				name: `Debug ${path.basename(file)}`,
+				file,
+				buildBeforeRun: true,
+			});
+		},
+
 		async selectRunConfiguration(..._args: unknown[]) {
 			const config = getConfig();
 			const configs = config.runConfigurations;
@@ -308,6 +328,7 @@ export function registerCommands(
 			commands.runTaskCommand,
 		),
 		vscode.commands.registerCommand("musi.runTest", commands.runTest),
+		vscode.commands.registerCommand("musi.debugTest", commands.debugTest),
 		vscode.commands.registerCommand(
 			"musi.selectRunConfiguration",
 			commands.selectRunConfiguration,

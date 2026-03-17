@@ -1,0 +1,13 @@
+{
+	"iconDefinitions": {
+		"_ms": { "iconPath": "../logo.png" },
+		"_ms_test": { "iconPath": "../logo_test.png" }
+	},
+	"fileExtensions": {
+		"ms": "_ms",
+		"test.ms": "_ms_test"
+	},
+	"languageIds": {
+		"musi": "_ms"
+	}
+}

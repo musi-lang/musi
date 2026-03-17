@@ -1,63 +1,74 @@
 use std::collections::HashSet;
 
-use super::{Opcode, encode_i32};
+use super::{
+    Opcode, encode_i8, encode_i32, pack_id_arity, pack_tag_arity_u16, unpack_id_arity,
+    unpack_tag_arity_u16,
+};
 
 /// All no-operand opcodes (range 0x00–0x3F).
 const NO_OPERAND_OPCODES: &[Opcode] = &[
+    // §CTL
     Opcode::NOP,
     Opcode::HLT,
     Opcode::RET,
-    Opcode::RET_U,
+    Opcode::RET_UT,
     Opcode::UNR,
     Opcode::BRK,
+    // §STK
     Opcode::DUP,
     Opcode::POP,
     Opcode::SWP,
+    Opcode::LD_UT,
+    // §DAT
     Opcode::LD_TAG,
     Opcode::LD_LEN,
     Opcode::LD_IDX,
     Opcode::ST_IDX,
-    Opcode::I_ADD,
-    Opcode::I_ADD_UN,
-    Opcode::I_SUB,
-    Opcode::I_SUB_UN,
-    Opcode::I_MUL,
-    Opcode::I_MUL_UN,
-    Opcode::I_DIV,
-    Opcode::I_DIV_UN,
-    Opcode::I_REM,
-    Opcode::I_REM_UN,
-    Opcode::I_NEG,
     Opcode::TSK_AWT,
-    Opcode::F_ADD,
-    Opcode::F_SUB,
-    Opcode::F_MUL,
-    Opcode::F_DIV,
-    Opcode::F_REM,
-    Opcode::F_NEG,
-    Opcode::B_AND,
-    Opcode::B_OR,
-    Opcode::B_XOR,
-    Opcode::B_NOT,
-    Opcode::B_SHL,
-    Opcode::B_SHR,
-    Opcode::B_SHR_UN,
+    // §INT
+    Opcode::INT_ADD,
+    Opcode::INT_SUB,
+    Opcode::INT_MUL,
+    Opcode::INT_DIV,
+    Opcode::INT_REM,
+    Opcode::INT_NEG,
+    // §NAT
+    Opcode::NAT_ADD,
+    Opcode::NAT_SUB,
+    Opcode::NAT_MUL,
+    Opcode::NAT_DIV,
+    Opcode::NAT_REM,
+    // §FLT
+    Opcode::FLT_ADD,
+    Opcode::FLT_SUB,
+    Opcode::FLT_MUL,
+    Opcode::FLT_DIV,
+    Opcode::FLT_REM,
+    Opcode::FLT_NEG,
+    // §BIT
+    Opcode::BIT_AND,
+    Opcode::BIT_OR,
+    Opcode::BIT_XOR,
+    Opcode::BIT_NOT,
+    Opcode::BIT_SHL,
+    Opcode::BIT_SHR,
+    Opcode::BIT_SRU,
+    // §CMP
     Opcode::CMP_EQ,
     Opcode::CMP_NE,
     Opcode::CMP_LT,
-    Opcode::CMP_LT_UN,
     Opcode::CMP_LE,
-    Opcode::CMP_LE_UN,
     Opcode::CMP_GT,
-    Opcode::CMP_GT_UN,
     Opcode::CMP_GE,
-    Opcode::CMP_GE_UN,
-    Opcode::CMP_F_EQ,
-    Opcode::CMP_F_NE,
-    Opcode::CMP_F_LT,
-    Opcode::CMP_F_LE,
-    Opcode::CMP_F_GT,
-    Opcode::CMP_F_GE,
+    Opcode::CMP_LTU,
+    Opcode::CMP_LEU,
+    Opcode::CMP_GTU,
+    Opcode::CMP_GEU,
+    Opcode::CMP_FLT,
+    Opcode::CMP_FLE,
+    Opcode::CMP_FGT,
+    Opcode::CMP_FGE,
+    // §CNV
     Opcode::CNV_ITF,
     Opcode::CNV_FTI,
 ];
@@ -67,48 +78,44 @@ const U8_OPERAND_OPCODES: &[Opcode] = &[
     Opcode::LD_LOC,
     Opcode::ST_LOC,
     Opcode::LD_CST,
-    Opcode::MK_PRD,
     Opcode::LD_FLD,
-    Opcode::MK_VAR,
-    Opcode::LD_PAY,
-    Opcode::CMP_TAG,
-    Opcode::CONT_MARK,
-    Opcode::CONT_UNMARK,
-    Opcode::INV_DYN,
     Opcode::ST_FLD,
     Opcode::LD_UPV,
+    Opcode::LD_PAY,
+    Opcode::MK_PRD,
+    Opcode::CMP_TAG,
+    Opcode::INV_DYN,
+    Opcode::JMP_SH,
+    Opcode::JIF_SH,
+    Opcode::JNF_SH,
+    Opcode::CNT_MRK,
+    Opcode::CNT_UMK,
 ];
 
 /// All u16-operand opcodes (range 0x80–0xBF).
-const U16_OPERAND_OPCODES: &[Opcode] = &[
-    Opcode::LD_LOC_W,
-    Opcode::ST_LOC_W,
-    Opcode::LD_CST_W,
-    Opcode::MK_VAR_W,
-    Opcode::CMP_TAG_W,
-];
+const U16_OPERAND_OPCODES: &[Opcode] = &[Opcode::MK_VAR];
 
-/// All u32-operand opcodes (range 0xC0–0xFF).
+/// All u32-operand opcodes (range 0xC0–0xFD).
 const U32_OPERAND_OPCODES: &[Opcode] = &[
     Opcode::INV,
     Opcode::INV_TAL,
+    Opcode::INV_FFI,
+    Opcode::JMP,
+    Opcode::JIF,
+    Opcode::JNF,
     Opcode::LD_GLB,
     Opcode::ST_GLB,
     Opcode::MK_ARR,
     Opcode::ALC_REF,
     Opcode::ALC_ARN,
-    Opcode::CONT_SAVE,
-    Opcode::CONT_RESUME,
+    Opcode::MK_CLO,
+    Opcode::CNT_SAV,
+    Opcode::CNT_RSM,
     Opcode::TSK_SPN,
     Opcode::TSK_CHS,
     Opcode::TSK_CHR,
     Opcode::TSK_CMK,
-    Opcode::INV_FFI,
-    Opcode::JMP_W,
-    Opcode::JMP_T_W,
-    Opcode::JMP_F_W,
     Opcode::TYP_CHK,
-    Opcode::MK_CLO,
 ];
 
 #[test]
@@ -148,12 +155,11 @@ fn test_all_u16_operand_opcodes_in_range_0x80_0xbf() {
 }
 
 #[test]
-fn test_all_u32_operand_opcodes_in_range_0xc0_0xff() {
+fn test_all_u32_operand_opcodes_in_range_0xc0_0xfd() {
     for &op in U32_OPERAND_OPCODES {
-        assert_eq!(
-            op.0 >> 6,
-            3,
-            "u32-operand opcode {:#04x} must be in range 0xC0–0xFF",
+        assert!(
+            op.0 >= 0xC0 && op.0 <= 0xFD,
+            "u32-operand opcode {:#04x} must be in range 0xC0–0xFD",
             op.0
         );
     }
@@ -162,11 +168,20 @@ fn test_all_u32_operand_opcodes_in_range_0xc0_0xff() {
 #[test]
 fn test_encode_i32_produces_five_bytes_le_signed() {
     let mut buf = vec![];
-    encode_i32(&mut buf, Opcode::JMP_W, -5);
+    encode_i32(&mut buf, Opcode::JMP, -5);
     assert_eq!(buf.len(), 5);
-    assert_eq!(buf[0], Opcode::JMP_W.0);
+    assert_eq!(buf[0], Opcode::JMP.0);
     let operand = i32::from_le_bytes([buf[1], buf[2], buf[3], buf[4]]);
     assert_eq!(operand, -5);
+}
+
+#[test]
+fn test_encode_i8_produces_two_bytes() {
+    let mut buf = vec![];
+    encode_i8(&mut buf, Opcode::JMP_SH, -10);
+    assert_eq!(buf.len(), 2);
+    assert_eq!(buf[0], Opcode::JMP_SH.0);
+    assert_eq!(i8::from_ne_bytes([buf[1]]), -10);
 }
 
 #[test]
@@ -193,11 +208,44 @@ fn test_display_known_opcodes() {
     assert_eq!(format!("{}", Opcode::NOP), "nop");
     assert_eq!(format!("{}", Opcode::LD_LOC), "ld.loc");
     assert_eq!(format!("{}", Opcode::CMP_EQ), "cmp.eq");
-    assert_eq!(format!("{}", Opcode::JMP_W), "jmp.w");
+    assert_eq!(format!("{}", Opcode::JMP), "jmp");
     assert_eq!(format!("{}", Opcode::INV_FFI), "inv.ffi");
+    assert_eq!(format!("{}", Opcode::INT_ADD), "int.add");
+    assert_eq!(format!("{}", Opcode::NAT_ADD), "nat.add");
+    assert_eq!(format!("{}", Opcode::FLT_ADD), "flt.add");
+    assert_eq!(format!("{}", Opcode::BIT_AND), "bit.and");
+    assert_eq!(format!("{}", Opcode::MK_VAR), "mk.var");
+    assert_eq!(format!("{}", Opcode::JMP_SH), "jmp.sh");
+    assert_eq!(format!("{}", Opcode::LD_UT), "ld.ut");
+    assert_eq!(format!("{}", Opcode::RET_UT), "ret.ut");
 }
 
 #[test]
 fn test_display_unknown_opcode() {
-    assert_eq!(format!("{}", Opcode(0xFF)), "0xFF");
+    assert_eq!(format!("{}", Opcode(0x0F)), "0x0F");
+}
+
+#[test]
+fn test_pack_unpack_id_arity() {
+    let packed = pack_id_arity(0x0012_3456, 42);
+    let (id, arity) = unpack_id_arity(packed);
+    assert_eq!(id, 0x0012_3456);
+    assert_eq!(arity, 42);
+}
+
+#[test]
+fn test_pack_unpack_tag_arity_u16() {
+    let packed = pack_tag_arity_u16(7, 3);
+    let (tag, arity) = unpack_tag_arity_u16(packed);
+    assert_eq!(tag, 7);
+    assert_eq!(arity, 3);
+}
+
+#[test]
+fn test_opcode_count() {
+    let total = NO_OPERAND_OPCODES.len()
+        + U8_OPERAND_OPCODES.len()
+        + U16_OPERAND_OPCODES.len()
+        + U32_OPERAND_OPCODES.len();
+    assert_eq!(total, 90, "expected 90 assigned opcodes, got {total}");
 }

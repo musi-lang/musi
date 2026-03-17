@@ -20,6 +20,12 @@ pub enum Ty {
         args: TyList,
         span: Span,
     },
+    Qualified {
+        module: Symbol,
+        name: Symbol,
+        args: TyList,
+        span: Span,
+    },
     Option {
         inner: TyIdx,
         span: Span,

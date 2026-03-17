@@ -14,40 +14,60 @@ use crate::checker::expr::{check, synth};
 use crate::checker::ty::lower_ty;
 use crate::def::{DefId, DefKind};
 use crate::error::SemaError;
-use crate::types::InstanceInfo;
+use crate::types::{EffectRow, InstanceInfo, Type};
 
 /// Checks a class/given member's default body with sig params in scope.
+/// Also stores the method's function type so cross-module callers can resolve it.
 fn check_member_fn<S: BuildHasher>(ck: &mut Checker<'_, S>, member: &ClassMember) {
     let ClassMember::Fn { sig, default, .. } = member else {
-        return;
-    };
-    let Some(body) = default else {
         return;
     };
 
     let parent = ck.current_scope;
     ck.current_scope = ck.scopes.push_child(parent);
 
+    let mut param_tys = Vec::with_capacity(sig.params.len());
     for param in &sig.params {
         let param_ty = if let Some(ty) = param.ty {
             lower_ty(ck, ty)
         } else {
             ck.fresh_var(param.span)
         };
-        let id = if let Some(&existing) = ck.ctx.pat_defs.get(&param.span) {
-            existing
-        } else {
-            ck.defs.alloc(param.name, DefKind::Param, param.span)
-        };
-        let _prev = ck.scopes.define(ck.current_scope, param.name, id);
-        ck.defs.get_mut(id).ty_info.ty = Some(param_ty);
+        param_tys.push(param_ty);
+        // Only allocate param defs when a body exists. Abstract signatures
+        // (default == None) have no body to reference params, so allocating
+        // defs would produce false "unused parameter" warnings.
+        if default.is_some() {
+            let id = if let Some(&existing) = ck.ctx.pat_defs.get(&param.span) {
+                existing
+            } else {
+                ck.defs.alloc(param.name, DefKind::Param, param.span)
+            };
+            let _prev = ck.scopes.define(ck.current_scope, param.name, id);
+            ck.defs.get_mut(id).ty_info.ty = Some(param_ty);
+        }
     }
 
-    if let Some(ret) = sig.ret {
+    let ret_ty = if let Some(ret) = sig.ret {
         let expected = lower_ty(ck, ret);
-        check(ck, *body, expected);
+        if let Some(body) = default {
+            check(ck, *body, expected);
+        }
+        expected
+    } else if let Some(body) = default {
+        synth(ck, *body)
     } else {
-        let _ty = synth(ck, *body);
+        ck.fresh_var(sig.span)
+    };
+
+    // Store the method's function type for cross-module resolution.
+    if let Some(&fn_def_id) = ck.ctx.pat_defs.get(&sig.span) {
+        let fn_ty = ck.alloc_ty(Type::Fn {
+            params: param_tys,
+            ret: ret_ty,
+            effects: EffectRow::PURE,
+        });
+        ck.defs.get_mut(fn_def_id).ty_info.ty = Some(fn_ty);
     }
 
     ck.current_scope = parent;
@@ -269,8 +289,11 @@ pub fn check_stmt<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) {
                 Some(p)
             };
             for decl in &decls {
-                if let ForeignDecl::Fn { ty, .. } = decl {
-                    let _fn_ty = lower_ty(ck, *ty);
+                if let ForeignDecl::Fn { ty, span, .. } = decl {
+                    let fn_ty = lower_ty(ck, *ty);
+                    if let Some(&def_id) = ck.ctx.pat_defs.get(span) {
+                        ck.defs.get_mut(def_id).ty_info.ty = Some(fn_ty);
+                    }
                 }
             }
             if let Some(p) = parent {

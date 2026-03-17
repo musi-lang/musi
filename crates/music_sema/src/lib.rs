@@ -19,6 +19,7 @@ pub(crate) mod checker;
 pub mod def;
 pub mod error;
 pub mod exports;
+pub mod lang_items;
 pub mod resolve;
 pub mod scope;
 pub mod types;
@@ -27,16 +28,17 @@ pub mod well_known;
 
 pub use def::{DefId, DefInfo, DefKind, DefTable};
 pub use error::SemaError;
+pub use lang_items::LangItemRegistry;
 pub use resolve::ResolveOutput;
 pub use scope::ScopeTree;
 pub use types::{DictLookup, EffectRow, InstanceInfo, Obligation, TyVarId, Type, TypeIdx};
-pub use unify::UnifyTable;
+pub use unify::{UnifyTable, types_match};
 pub use well_known::WellKnown;
 
 pub use exports::{ExportBinding, ModuleExports, collect_exports};
-pub use resolve::ImportNames;
+pub use resolve::{ImportNames, SubModuleExports};
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::hash::BuildHasher;
 use std::mem;
 
@@ -80,6 +82,8 @@ pub struct SemaResult {
     pub fn_constraints: HashMap<DefId, Vec<Obligation>>,
     /// Well-known prelude type definitions (needed by bytecode emission).
     pub well_known: WellKnown,
+    /// Registry of definitions carrying `#[lang := "..."]` annotations.
+    pub lang_items: LangItemRegistry,
 }
 
 /// Prelude data passed into analysis.
@@ -100,6 +104,9 @@ pub struct SharedAnalysisState {
     pub scopes: ScopeTree,
     pub well_known: WellKnown,
     pub prelude_scope: ScopeId,
+    pub lang_items: LangItemRegistry,
+    injected_lang_items: HashSet<DefId>,
+    pub instances: Vec<InstanceInfo>,
 }
 
 /// Per-module analysis output (does not own shared state).
@@ -134,28 +141,105 @@ impl SharedAnalysisState {
             scopes,
             well_known,
             prelude_scope,
+            lang_items: LangItemRegistry::new(),
+            injected_lang_items: HashSet::new(),
+            instances: vec![],
+        }
+    }
+
+    pub fn collect_lang_items(&mut self, interner: &Interner) {
+        for def in self.defs.iter() {
+            if let Some(sym) = def.lang_item {
+                let raw = interner.resolve(sym);
+                let name = raw.strip_prefix('"').unwrap_or(raw);
+                let name = name.strip_suffix('"').unwrap_or(name);
+                let _prev = self.lang_items.register(name, def.id);
+            }
+        }
+    }
+
+    /// Injects lang-item definitions into the prelude scope so all modules can
+    /// reference them without explicit imports.
+    ///
+    /// For lang-item classes, also injects their child methods (Haskell-style),
+    /// skipping names already present in prelude (e.g. runtime foreign fns).
+    pub fn inject_lang_items_into_prelude(&mut self) {
+        let lang_class_ids = self.collect_lang_class_ids();
+        self.inject_lang_item_defs();
+        self.inject_lang_class_methods(&lang_class_ids);
+        self.mark_injected_lang_items();
+    }
+
+    /// Returns `DefIds` of lang-item classes not yet injected.
+    fn collect_lang_class_ids(&self) -> Vec<DefId> {
+        self.defs
+            .iter()
+            .filter(|d| {
+                d.lang_item.is_some()
+                    && d.kind == DefKind::Class
+                    && !self.injected_lang_items.contains(&d.id)
+            })
+            .map(|d| d.id)
+            .collect()
+    }
+
+    /// Injects lang-item definitions into the prelude scope if not already injected.
+    fn inject_lang_item_defs(&mut self) {
+        for def in self.defs.iter() {
+            if def.lang_item.is_some() && !self.injected_lang_items.contains(&def.id) {
+                let _ = self.scopes.define(self.prelude_scope, def.name, def.id);
+            }
+        }
+    }
+
+    /// Injects child methods of lang-item classes into the prelude, except names already defined.
+    fn inject_lang_class_methods(&mut self, lang_class_ids: &[DefId]) {
+        for def in self.defs.iter() {
+            if def.parent.is_some()
+                && lang_class_ids.contains(&def.parent.unwrap())
+                && def.kind == DefKind::Fn
+                && def.name != Symbol(u32::MAX)
+                && self
+                    .scopes
+                    .lookup_local(self.prelude_scope, def.name)
+                    .is_none()
+            {
+                let _ = self.scopes.define(self.prelude_scope, def.name, def.id);
+            }
+        }
+    }
+
+    /// Marks all lang-item definitions as injected.
+    fn mark_injected_lang_items(&mut self) {
+        for def in self.defs.iter() {
+            if def.lang_item.is_some() {
+                let _ = self.injected_lang_items.insert(def.id);
+            }
         }
     }
 
     /// Converts the shared state and a per-module output into a [`SemaResult`].
     #[must_use]
-    pub fn into_sema_result(self, output: ModuleSemaOutput) -> SemaResult {
+    pub fn into_sema_result(mut self, output: ModuleSemaOutput) -> SemaResult {
+        self.instances.extend(output.instances);
         SemaResult {
             defs: self.defs.into_vec(),
             resolution: output.resolution,
             expr_types: output.expr_types,
             types: self.types,
             unify: self.unify,
-            instances: output.instances,
+            instances: self.instances,
             binop_dispatch: output.binop_dispatch,
             binop_dict_dispatch: output.binop_dict_dispatch,
             fn_constraints: output.fn_constraints,
             well_known: self.well_known,
+            lang_items: self.lang_items,
         }
     }
 }
 
 /// Runs analysis for a single module using shared cross-module state.
+#[allow(clippy::too_many_arguments)]
 pub fn analyze_shared<S: BuildHasher>(
     module: &ParsedModule,
     state: &mut SharedAnalysisState,
@@ -164,6 +248,7 @@ pub fn analyze_shared<S: BuildHasher>(
     diags: &mut DiagnosticBag,
     import_names: &ImportNames,
     import_types: &HashMap<Symbol, TypeIdx, S>,
+    sub_module_exports: &SubModuleExports,
 ) -> ModuleSemaOutput {
     let module_scope = state.scopes.push_child(state.prelude_scope);
 
@@ -179,6 +264,7 @@ pub fn analyze_shared<S: BuildHasher>(
         diags,
         &mut resolve_state,
         import_names,
+        sub_module_exports,
     );
 
     let ctx = CheckContext {
@@ -203,6 +289,12 @@ pub fn analyze_shared<S: BuildHasher>(
         mem::take(&mut state.unify),
     );
 
+    let inherited_count = state.instances.len();
+    checker
+        .store
+        .instances
+        .extend(state.instances.iter().cloned());
+
     for stmt in &module.stmts {
         let _ty = checker.synth(stmt.expr);
     }
@@ -212,6 +304,11 @@ pub fn analyze_shared<S: BuildHasher>(
 
     state.types = result.types;
     state.unify = result.unify;
+
+    // Accumulate only instances declared in THIS module (skip inherited).
+    state
+        .instances
+        .extend(result.instances[inherited_count..].iter().cloned());
 
     analyze_emit_unused_warnings(&state.defs, interner, file_id, diags);
 
@@ -224,7 +321,7 @@ pub fn analyze_shared<S: BuildHasher>(
             class_op_members: resolved.class_op_members,
         },
         expr_types: result.expr_types,
-        instances: result.instances,
+        instances: result.instances[inherited_count..].to_vec(),
         binop_dispatch: result.binop_dispatch,
         binop_dict_dispatch: result.binop_dict_dispatch,
         fn_constraints: result.fn_constraints,
@@ -286,6 +383,16 @@ pub fn analyze_with_imports<S: BuildHasher>(
 
     analyze_emit_unused_warnings(&defs, interner, file_id, diags);
 
+    let mut lang_items = LangItemRegistry::new();
+    for def in defs.iter() {
+        if let Some(sym) = def.lang_item {
+            let raw = interner.resolve(sym);
+            let name = raw.strip_prefix('"').unwrap_or(raw);
+            let name = name.strip_suffix('"').unwrap_or(name);
+            let _prev = lang_items.register(name, def.id);
+        }
+    }
+
     SemaResult {
         defs: defs.into_vec(),
         resolution: ResolutionMap {
@@ -302,6 +409,7 @@ pub fn analyze_with_imports<S: BuildHasher>(
         binop_dict_dispatch: result.binop_dict_dispatch,
         fn_constraints: result.fn_constraints,
         well_known,
+        lang_items,
     }
 }
 
@@ -353,7 +461,7 @@ fn analyze_emit_unused_warnings(
             && def.name != Symbol(u32::MAX)
             && !matches!(
                 def.kind,
-                DefKind::Given
+                DefKind::Instance
                     | DefKind::Variant
                     | DefKind::Type
                     | DefKind::Law

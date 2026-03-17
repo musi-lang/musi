@@ -14,7 +14,7 @@ pub fn collect_ty_var_nodes(ty_idx: TyIdx, arenas: &AstArenas, out: &mut Vec<TyP
                 });
             }
         }
-        Ty::Named { args, .. } => {
+        Ty::Named { args, .. } | Ty::Qualified { args, .. } => {
             for &arg in args {
                 collect_ty_var_nodes(arg, arenas, out);
             }

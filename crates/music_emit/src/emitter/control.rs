@@ -11,7 +11,7 @@ use music_ast::ExprIdx;
 
 use super::super::emitter::Emitter;
 use super::FnCtx;
-use super::expr::{emit_expr, emit_expr_tail, resolve_variant_tag_by_name};
+use super::expr::{emit_expr, emit_expr_tail, resolve_variant_tag};
 
 /// Emit a piecewise expression. Leaves result on stack.
 pub fn emit_piecewise(
@@ -34,9 +34,10 @@ pub fn emit_piecewise(
         let is_last = i == n - 1;
         if is_last || matches!(arm.guard, PwGuard::Any { .. }) {
             let produced = emit_expr_tail(em, fc, arm.result, is_tail)?;
-            if produced {
-                fc.fe.emit_st_loc(result_slot);
+            if !produced {
+                fc.fe.emit_ld_unit();
             }
+            fc.fe.emit_st_loc(result_slot);
             fc.fe.emit_jmp(merge_label);
         } else if let PwGuard::When {
             expr: guard_expr, ..
@@ -51,9 +52,10 @@ pub fn emit_piecewise(
             fc.fe.emit_jmp(next_label);
             fc.fe.emit_label(then_label);
             let produced = emit_expr_tail(em, fc, arm.result, is_tail)?;
-            if produced {
-                fc.fe.emit_st_loc(result_slot);
+            if !produced {
+                fc.fe.emit_ld_unit();
             }
+            fc.fe.emit_st_loc(result_slot);
             fc.fe.emit_jmp(merge_label);
             fc.fe.emit_label(next_label);
         }
@@ -119,9 +121,10 @@ pub fn emit_match(
         }
 
         let produced = emit_expr_tail(em, fc, arm.result, is_tail)?;
-        if produced {
-            fc.fe.emit_st_loc(result_slot);
+        if !produced {
+            fc.fe.emit_ld_unit();
         }
+        fc.fe.emit_st_loc(result_slot);
         fc.fe.emit_jmp(merge_label);
 
         if let Some(fail_label) = next_label {
@@ -153,7 +156,18 @@ fn emit_pat_test(
         } => emit_pat_test(em, fc, inner_pat, scrutinee_slot, tag_slot, fail_label),
         Pat::Lit { lit, .. } => emit_lit_pat_test(em, fc, scrutinee_slot, &lit, fail_label),
         Pat::Variant { name, .. } => {
-            let tag = resolve_variant_tag_by_name(em, name)?;
+            let name_str = em.interner.resolve(name);
+            if name_str == "True" || name_str == "False" {
+                let expected = name_str == "True";
+                let cv = ConstValue::Bool(expected);
+                let ci = em.cp.intern(&cv, em.interner)?;
+                fc.fe.emit_ld_loc(scrutinee_slot);
+                fc.fe.emit_ld_cst(ci);
+                fc.fe.emit_cmp_eq();
+                fc.fe.emit_jmp_f(fail_label);
+                return Ok(());
+            }
+            let tag = resolve_variant_tag(em, name)?;
             if let Some(ts) = tag_slot {
                 let tag_cv = ConstValue::Int(i64::from(tag));
                 let ci = em.cp.intern(&tag_cv, em.interner)?;
@@ -235,7 +249,7 @@ fn emit_pat_bind(
             let slot = fc.alloc_local();
             fc.fe.emit_ld_loc(value_slot);
             fc.fe.emit_st_loc(slot);
-            if let Some(&did) = em.sema.resolution.pat_defs.get(&span) {
+            if let Some(&did) = em.pat_defs().get(&span) {
                 let prev = fc.local_map.insert(did, slot);
                 debug_assert!(prev.is_none(), "duplicate local slot for def");
             }
@@ -282,7 +296,10 @@ fn emit_pat_bind(
             Ok(())
         }
         Pat::Record { fields, .. } => {
-            for (i, field) in fields.iter().enumerate() {
+            // Sort fields by name to match the alphabetical record layout.
+            let mut sorted: Vec<_> = fields.iter().collect();
+            sorted.sort_by(|a, b| em.interner.resolve(a.name).cmp(em.interner.resolve(b.name)));
+            for (i, field) in sorted.iter().enumerate() {
                 let idx = u32::try_from(i).map_err(|_| EmitError::OperandOverflow {
                     desc: "record pattern field index".into(),
                 })?;
@@ -292,7 +309,7 @@ fn emit_pat_bind(
                 fc.fe.emit_st_loc(field_slot);
                 if let Some(sub_pat) = field.pat {
                     emit_pat_bind(em, fc, sub_pat, field_slot)?;
-                } else if let Some(&did) = em.sema.resolution.pat_defs.get(&field.span) {
+                } else if let Some(&did) = em.pat_defs().get(&field.span) {
                     let prev = fc.local_map.insert(did, field_slot);
                     debug_assert!(prev.is_none(), "duplicate local slot for def");
                 }

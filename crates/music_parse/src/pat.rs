@@ -199,7 +199,16 @@ impl Parser<'_> {
                 });
                 Lit::Float { value, span }
             }
-            TokenKind::StringLit => Lit::Str { value: sym, span },
+            TokenKind::StringLit => {
+                let raw = self.resolve(sym);
+                let value = if raw.contains('\\') {
+                    let unescaped = unescape_str(raw);
+                    self.interner.intern(&unescaped)
+                } else {
+                    sym
+                };
+                Lit::Str { value, span }
+            }
             TokenKind::RuneLit => {
                 let text = self.resolve(sym);
                 let codepoint = parse_rune_lit(text).unwrap_or_else(|| {
@@ -264,4 +273,29 @@ fn parse_rune_lit(text: &str) -> Option<u32> {
         },
     )?;
     Some(u32::from(ch))
+}
+
+/// Process backslash escape sequences in a string literal.
+fn unescape_str(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len());
+    let mut chars = raw.chars();
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            match chars.next() {
+                Some('n') => out.push('\n'),
+                Some('t') => out.push('\t'),
+                Some('r') => out.push('\r'),
+                Some('0') => out.push('\0'),
+                Some(c @ ('\\' | '"')) => out.push(c),
+                Some(other) => {
+                    out.push('\\');
+                    out.push(other);
+                }
+                None => out.push('\\'),
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
 }

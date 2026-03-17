@@ -1,6 +1,7 @@
 //! Go-to-definition provider (single-file + stdlib).
 
-use lsp_types::{GotoDefinitionResponse, Location, Position, Range, Url};
+use lsp_types::{GotoDefinitionResponse, Location, LocationLink, Position, Range, Url};
+use music_lex::TokenKind;
 use music_shared::{Span, Symbol};
 
 use crate::analysis::{AnalyzedDoc, expr_span, position_to_offset, span_to_range};
@@ -12,9 +13,13 @@ pub fn goto_definition(
     uri: &Url,
     root_uri: Option<&Url>,
 ) -> Option<GotoDefinitionResponse> {
-    let sema = doc.sema.as_ref()?;
-
     let offset = position_to_offset(&doc.source, position.line, position.character);
+
+    if let Some(resp) = import_at_offset(doc, offset) {
+        return Some(resp);
+    }
+
+    let sema = doc.sema.as_ref()?;
 
     let def_id = sema
         .resolution
@@ -106,4 +111,34 @@ fn byte_offset_to_position(offset: u32, source: &str) -> Position {
         line,
         character: col,
     }
+}
+
+/// If the cursor is on a `StringLit` token that matches a resolved import path,
+/// return a goto-definition response pointing to the resolved file.
+///
+/// Returns a `LocationLink` with `origin_selection_range` covering the full
+/// string token so VS Code highlights the entire path on CMD-hover.
+fn import_at_offset(doc: &AnalyzedDoc, offset: u32) -> Option<GotoDefinitionResponse> {
+    let tok = doc.lexed.tokens.iter().find(|t| {
+        t.kind == TokenKind::StringLit && t.span.start <= offset && offset <= t.span.end()
+    })?;
+    let src = doc
+        .source
+        .get(tok.span.start as usize..tok.span.end() as usize)?;
+
+    let resolved_path = doc
+        .resolved_imports
+        .iter()
+        .find(|(sym, _)| doc.interner.try_resolve(**sym) == Some(src))
+        .map(|(_, path)| path)?;
+
+    let origin_range = span_to_range(doc.file_id, tok.span, &doc.source_db);
+    let target_uri = Url::from_file_path(resolved_path).ok()?;
+
+    Some(GotoDefinitionResponse::Link(vec![LocationLink {
+        origin_selection_range: Some(origin_range),
+        target_uri,
+        target_range: Range::default(),
+        target_selection_range: Range::default(),
+    }]))
 }

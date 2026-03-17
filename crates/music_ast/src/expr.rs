@@ -14,7 +14,7 @@ use crate::{ExprIdx, ExprList, PatIdx, TyIdx};
 /// Expression node. All recursive children use arena indices.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
-    // -- literals & names ----------------------------------------------------
+    // Literals & names
     Lit {
         lit: Lit,
         span: Span,
@@ -24,7 +24,7 @@ pub enum Expr {
         span: Span,
     },
 
-    // -- grouping ------------------------------------------------------------
+    // Grouping
     Paren {
         inner: ExprIdx,
         span: Span,
@@ -39,14 +39,14 @@ pub enum Expr {
         span: Span,
     },
 
-    // -- bindings ------------------------------------------------------------
+    // Bindings
     Let {
         fields: LetFields,
         body: Option<ExprIdx>,
         span: Span,
     },
 
-    // -- functions -----------------------------------------------------------
+    // Functions
     Fn {
         params: Vec<Param>,
         ret_ty: Option<TyIdx>,
@@ -59,7 +59,7 @@ pub enum Expr {
         span: Span,
     },
 
-    // -- access & update -----------------------------------------------------
+    // Access & update
     Field {
         object: ExprIdx,
         field: FieldKey,
@@ -77,7 +77,7 @@ pub enum Expr {
         span: Span,
     },
 
-    // -- constructors --------------------------------------------------------
+    // Constructors
     Record {
         ty_name: Option<Symbol>,
         fields: Vec<RecField>,
@@ -101,7 +101,7 @@ pub enum Expr {
         span: Span,
     },
 
-    // -- operators -----------------------------------------------------------
+    // Operators
     BinOp {
         op: BinOp,
         left: ExprIdx,
@@ -114,7 +114,7 @@ pub enum Expr {
         span: Span,
     },
 
-    // -- conditionals --------------------------------------------------------
+    // Conditionals
     Piecewise {
         arms: Vec<PwArm>,
         span: Span,
@@ -125,13 +125,13 @@ pub enum Expr {
         span: Span,
     },
 
-    // -- control flow --------------------------------------------------------
+    // Control flow
     Return {
         value: Option<ExprIdx>,
         span: Span,
     },
 
-    // -- module --------------------------------------------------------------
+    // Module
     Import {
         path: Symbol,
         alias: Option<Symbol>,
@@ -148,7 +148,7 @@ pub enum Expr {
         span: Span,
     },
 
-    // -- declarations --------------------------------------------------------
+    // Declarations
     Binding {
         exported: bool,
         fields: LetFields,
@@ -184,7 +184,7 @@ pub enum Expr {
         span: Span,
     },
 
-    // -- type test / cast ----------------------------------------------------
+    // Type test / cast
     TypeCheck {
         kind: TypeCheckKind,
         operand: ExprIdx,
@@ -193,7 +193,7 @@ pub enum Expr {
         span: Span,
     },
 
-    // -- effects -------------------------------------------------------------
+    // Effects
     Handle {
         effect_ty: TyIdx,
         ops: Vec<HandlerOp>,
@@ -201,7 +201,7 @@ pub enum Expr {
         span: Span,
     },
 
-    // -- error recovery ------------------------------------------------------
+    // Error recovery
     Error {
         span: Span,
     },

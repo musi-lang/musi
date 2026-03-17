@@ -39,9 +39,12 @@ pub enum Type {
     /// A tuple type.
     Tuple { elems: Vec<Idx<Self>> },
     /// A record type (structural).
+    ///
+    /// `rest = None` means a closed record.
+    /// `rest = Some(Var(ρ))` means an open record with row variable `ρ`.
     Record {
         fields: Vec<RecordField>,
-        open: bool,
+        rest: Option<TypeIdx>,
     },
     /// A sum type (structural, named variants).
     Sum { variants: Vec<SumVariant> },
@@ -78,6 +81,9 @@ pub enum Quantifier {
 pub struct RecordField {
     pub name: Symbol,
     pub ty: TypeIdx,
+    /// Type parameters for polymorphic fields (e.g. re-exported generic functions).
+    /// Empty for monomorphic fields.
+    pub ty_params: Vec<DefId>,
 }
 
 /// A variant in a structural sum type.
@@ -269,7 +275,7 @@ impl fmt::Display for TypeDisplay<'_> {
                 self.write_ty(f, *ret)
             }
             Type::Tuple { elems } => self.fmt_paren_types(f, elems),
-            Type::Record { fields, open } => {
+            Type::Record { fields, rest } => {
                 write!(f, "{{ ")?;
                 for (i, field) in fields.iter().enumerate() {
                     if i > 0 {
@@ -278,8 +284,19 @@ impl fmt::Display for TypeDisplay<'_> {
                     write!(f, "{}: ", self.resolve_symbol(field.name))?;
                     self.write_ty(f, field.ty)?;
                 }
-                if *open {
-                    write!(f, ", ..")?;
+                if let Some(rest_idx) = rest {
+                    let rest_resolved = self
+                        .unify
+                        .map_or(*rest_idx, |u| u.resolve(*rest_idx, self.arena));
+                    match &self.arena[rest_resolved] {
+                        Type::Var(_) | Type::Rigid(_) => write!(f, ", ...")?,
+                        Type::Record { .. } => {
+                            // rest is a concrete record — display its fields inline
+                            write!(f, ", ")?;
+                            self.write_ty(f, rest_resolved)?;
+                        }
+                        _ => {}
+                    }
                 }
                 write!(f, " }}")
             }

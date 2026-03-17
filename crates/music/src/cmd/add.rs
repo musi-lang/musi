@@ -64,7 +64,7 @@ pub fn run(specifier: &str, name_override: Option<&str>, dev: bool) -> ! {
     } else {
         "dependencies"
     };
-    eprintln!("added `{dep_name}` = \"{specifier}\" to [{section}]");
+    eprintln!(r#"added `{dep_name}` = "{specifier}" to [{section}]"#);
     process::exit(0)
 }
 
@@ -78,7 +78,9 @@ fn derive_name_from_specifier(module_path: &str, scheme: ImportScheme) -> String
             let segment = module_path.rsplit('/').next().unwrap_or(module_path);
             segment.strip_suffix(".ms").unwrap_or(segment)
         }
-        ImportScheme::Msr | ImportScheme::Musi | ImportScheme::Bare => module_path,
+        ImportScheme::Msr | ImportScheme::Musi | ImportScheme::AtStd | ImportScheme::Bare => {
+            module_path
+        }
     };
 
     String::from(name)

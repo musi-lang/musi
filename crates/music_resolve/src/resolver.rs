@@ -9,6 +9,7 @@ use std::path::{self, Path, PathBuf};
 
 use musi_manifest::MusiManifest;
 
+use crate::builtin::is_builtin_module;
 use crate::error::ResolveError;
 use crate::git::fetch_git_package;
 use crate::specifier::{ImportScheme, ImportSpecifier, parse_git_source, parse_specifier};
@@ -105,6 +106,7 @@ pub fn resolve_import(
 ) -> Result<PathBuf, ResolveError> {
     match specifier.scheme {
         ImportScheme::Musi => resolve_musi(&specifier.module_path, config),
+        ImportScheme::AtStd => resolve_at_std(&specifier.module_path, config),
         ImportScheme::Relative => resolve_relative(&specifier.module_path, importing_file),
         ImportScheme::Bare => resolve_bare(&specifier.module_path, importing_file, config),
         ImportScheme::Git => resolve_git(&specifier.module_path, config),
@@ -114,7 +116,19 @@ pub fn resolve_import(
     }
 }
 
-fn resolve_musi(module_path: &str, config: &ResolverConfig) -> Result<PathBuf, ResolveError> {
+fn resolve_musi(module_path: &str, _config: &ResolverConfig) -> Result<PathBuf, ResolveError> {
+    if is_builtin_module(module_path) {
+        Ok(PathBuf::from(format!("<musi:{module_path}>")))
+    } else {
+        Err(ResolveError::ModuleNotFound {
+            path: Box::from(format!(
+                "musi:{module_path} (use @std/{module_path} for standard library imports)"
+            )),
+        })
+    }
+}
+
+fn resolve_at_std(module_path: &str, config: &ResolverConfig) -> Result<PathBuf, ResolveError> {
     let segments = module_path.replace('/', path::MAIN_SEPARATOR_STR);
 
     let as_file = config.std_root.join(format!("{segments}.ms"));
@@ -128,11 +142,17 @@ fn resolve_musi(module_path: &str, config: &ResolverConfig) -> Result<PathBuf, R
     }
 
     Err(ResolveError::ModuleNotFound {
-        path: Box::from(format!("musi:{module_path}")),
+        path: Box::from(format!("@std/{module_path}")),
     })
 }
 
-fn resolve_relative(module_path: &str, importing_file: &Path) -> Result<PathBuf, ResolveError> {
+/// Resolves a relative import path (`./foo`, `../bar`) against the importing file.
+///
+/// # Errors
+///
+/// Returns [`ResolveError::ModuleNotFound`] if no matching `.ms` file or
+/// `index.ms` directory module exists.
+pub fn resolve_relative(module_path: &str, importing_file: &Path) -> Result<PathBuf, ResolveError> {
     let base_dir = importing_file.parent().unwrap_or_else(|| Path::new("."));
 
     let candidate = base_dir.join(module_path);

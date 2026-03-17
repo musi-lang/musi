@@ -1,10 +1,14 @@
 import * as vscode from "vscode";
 import { findServerPath, showServerNotFoundUI } from "./bootstrap.ts";
 import { createAndStartClient, getClient, stopClient } from "./client.ts";
-import { MsPackageCodeLensProvider } from "./codelens.ts";
+import {
+	MsPackageCodeLensProvider,
+	MsTestCodeLensProvider,
+} from "./codelens.ts";
 import { clearCliCache, registerCommands } from "./commands.ts";
 import { onConfigChange } from "./config.ts";
 import { MusiConfigurationProvider } from "./launch.ts";
+import { registerMspackageValidator } from "./mspackage-validator.ts";
 import { clearCompilerPathCache } from "./runner.ts";
 import { StatusBar } from "./status.ts";
 
@@ -85,8 +89,12 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	context.subscriptions.push(
 		vscode.languages.registerCodeLensProvider(
-			{ language: "json", pattern: "**/mspackage.json" },
+			{ scheme: "file", pattern: "**/mspackage.toml" },
 			new MsPackageCodeLensProvider(),
+		),
+		vscode.languages.registerCodeLensProvider(
+			{ language: "musi", pattern: "**/*.test.ms" },
+			new MsTestCodeLensProvider(),
 		),
 	);
 
@@ -96,6 +104,8 @@ export async function activate(context: vscode.ExtensionContext) {
 			new MusiConfigurationProvider(),
 		),
 	);
+
+	registerMspackageValidator(context);
 
 	try {
 		await _startServer();

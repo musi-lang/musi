@@ -10,7 +10,7 @@ use music_shared::{Arena, Interner, Span};
 
 use crate::def::{DefId, DefKind, DefTable};
 use crate::scope::{ScopeId, ScopeTree};
-use crate::types::{EffectEntry, EffectRow, Type};
+use crate::types::Type;
 
 /// Well-known signed integer types.
 #[derive(Debug, Clone)]
@@ -22,13 +22,35 @@ pub struct WellKnownInts {
     pub int64: DefId,
 }
 
-/// Well-known unsigned integer types.
+/// Well-known natural number (unsigned integer) types.
 #[derive(Debug, Clone)]
-pub struct WellKnownUInts {
-    pub uint8: DefId,
-    pub uint16: DefId,
-    pub uint32: DefId,
-    pub uint64: DefId,
+pub struct WellKnownNats {
+    pub nat: DefId,
+    pub nat8: DefId,
+    pub nat16: DefId,
+    pub nat32: DefId,
+    pub nat64: DefId,
+}
+
+/// Compiler-internal phantom primitive types (not user-visible).
+#[derive(Debug, Clone)]
+pub struct WellKnownPrimitives {
+    pub isize_: DefId,
+    pub i8_: DefId,
+    pub i16_: DefId,
+    pub i32_: DefId,
+    pub i64_: DefId,
+    pub usize_: DefId,
+    pub u8_: DefId,
+    pub u16_: DefId,
+    pub u32_: DefId,
+    pub u64_: DefId,
+    pub fsize_: DefId,
+    pub f32_: DefId,
+    pub f64_: DefId,
+    pub bool_: DefId,
+    pub char_: DefId,
+    pub str_: DefId,
 }
 
 /// Well-known floating-point types.
@@ -45,18 +67,6 @@ pub struct WellKnownFfi {
     pub ptr: DefId,
 }
 
-/// Well-known typeclass definitions.
-#[derive(Debug, Clone)]
-pub struct WellKnownClasses {
-    pub eq: DefId,
-    pub ord: DefId,
-    pub show: DefId,
-    pub add: DefId,
-    pub into: DefId,
-    pub iterable: DefId,
-    pub propagate: DefId,
-}
-
 /// Well-known effect definitions.
 #[derive(Debug, Clone)]
 pub struct WellKnownEffects {
@@ -66,72 +76,25 @@ pub struct WellKnownEffects {
     pub throw: DefId,
 }
 
-/// Well-known container/ADT types.
-#[derive(Debug, Clone)]
-pub struct WellKnownContainers {
-    pub result: DefId,
-    pub ordering: DefId,
-    pub list: DefId,
-    pub map: DefId,
-    pub set: DefId,
-}
-
-/// Well-known prelude functions (typeclass methods and utilities).
-#[derive(Debug, Clone)]
-pub struct WellKnownFns {
-    pub compare: DefId,
-    pub show: DefId,
-    pub reverse: DefId,
-    pub append: DefId,
-    pub is_some: DefId,
-    pub is_none: DefId,
-    pub next: DefId,
-    pub write: DefId,
-    pub writeln: DefId,
-}
-
-/// Well-known `musi:core` builtin functions.
-#[derive(Debug, Clone)]
-pub struct WellKnownCore {
-    pub int_abs: DefId,
-    pub int_min: DefId,
-    pub int_max: DefId,
-    pub int_clamp: DefId,
-    pub int_pow: DefId,
-    pub str_len: DefId,
-    pub str_contains: DefId,
-    pub str_starts_with: DefId,
-    pub str_ends_with: DefId,
-    pub arr_len: DefId,
-    pub arr_push: DefId,
-    pub arr_pop: DefId,
-    pub arr_reverse: DefId,
-}
-
 /// `DefId` handles for all well-known (prelude) types.
 ///
 /// Populated once by [`init_well_known`] at the start of analysis.
 #[derive(Debug, Clone)]
 pub struct WellKnown {
     pub ints: WellKnownInts,
-    pub uints: WellKnownUInts,
+    pub nats: WellKnownNats,
     pub floats: WellKnownFloats,
     pub ffi: WellKnownFfi,
-    pub classes: WellKnownClasses,
     pub effects: WellKnownEffects,
-    pub containers: WellKnownContainers,
-    pub fns: WellKnownFns,
-    pub core: WellKnownCore,
-    // Text
+    pub primitives: WellKnownPrimitives,
+    pub float: DefId,
     pub string: DefId,
     pub rune: DefId,
-    // Core
     pub bool: DefId,
     pub unit: DefId,
-    // Special
+    pub option: DefId,
     pub any: DefId,
     pub never: DefId,
-    pub option: DefId,
 }
 
 /// Registers all well-known types in the def table and scope, returning
@@ -160,11 +123,30 @@ pub fn init_well_known(
         int32: register("Int32", DefKind::Type),
         int64: register("Int64", DefKind::Type),
     };
-    let uints = WellKnownUInts {
-        uint8: register("UInt8", DefKind::Type),
-        uint16: register("UInt16", DefKind::Type),
-        uint32: register("UInt32", DefKind::Type),
-        uint64: register("UInt64", DefKind::Type),
+    let nats = WellKnownNats {
+        nat: register("Nat", DefKind::Type),
+        nat8: register("Nat8", DefKind::Type),
+        nat16: register("Nat16", DefKind::Type),
+        nat32: register("Nat32", DefKind::Type),
+        nat64: register("Nat64", DefKind::Type),
+    };
+    let primitives = WellKnownPrimitives {
+        isize_: register("__isize", DefKind::Primitive),
+        i8_: register("__i8", DefKind::Primitive),
+        i16_: register("__i16", DefKind::Primitive),
+        i32_: register("__i32", DefKind::Primitive),
+        i64_: register("__i64", DefKind::Primitive),
+        usize_: register("__usize", DefKind::Primitive),
+        u8_: register("__u8", DefKind::Primitive),
+        u16_: register("__u16", DefKind::Primitive),
+        u32_: register("__u32", DefKind::Primitive),
+        u64_: register("__u64", DefKind::Primitive),
+        fsize_: register("__fsize", DefKind::Primitive),
+        f32_: register("__f32", DefKind::Primitive),
+        f64_: register("__f64", DefKind::Primitive),
+        bool_: register("__bool", DefKind::Primitive),
+        char_: register("__char", DefKind::Primitive),
+        str_: register("__str", DefKind::Primitive),
     };
     let floats = WellKnownFloats {
         float32: register("Float32", DefKind::Type),
@@ -175,16 +157,6 @@ pub fn init_well_known(
         ptr: register("Ptr", DefKind::Type),
     };
 
-    let classes = WellKnownClasses {
-        eq: register("Eq", DefKind::Class),
-        ord: register("Ord", DefKind::Class),
-        show: register("Show", DefKind::Class),
-        add: register("Add", DefKind::Class),
-        into: register("Into", DefKind::Class),
-        iterable: register("Iterable", DefKind::Class),
-        propagate: register("Propagate", DefKind::Class),
-    };
-
     let effects = WellKnownEffects {
         io: register("IO", DefKind::Effect),
         async_eff: register("Async", DefKind::Effect),
@@ -192,237 +164,36 @@ pub fn init_well_known(
         throw: register("Throw", DefKind::Effect),
     };
 
-    let containers = WellKnownContainers {
-        result: register("Result", DefKind::Type),
-        ordering: register("Ordering", DefKind::Type),
-        list: register("List", DefKind::Type),
-        map: register("Map", DefKind::Type),
-        set: register("Set", DefKind::Type),
-    };
-
-    let fns = WellKnownFns {
-        compare: register("compare", DefKind::Fn),
-        show: register("show", DefKind::Fn),
-        reverse: register("reverse", DefKind::Fn),
-        append: register("append", DefKind::Fn),
-        is_some: register("is_some", DefKind::Fn),
-        is_none: register("is_none", DefKind::Fn),
-        next: register("next", DefKind::Fn),
-        write: register("write", DefKind::Fn),
-        writeln: register("writeln", DefKind::Fn),
-    };
-
-    let core = WellKnownCore {
-        int_abs: register("int_abs", DefKind::ForeignFn),
-        int_min: register("int_min", DefKind::ForeignFn),
-        int_max: register("int_max", DefKind::ForeignFn),
-        int_clamp: register("int_clamp", DefKind::ForeignFn),
-        int_pow: register("int_pow", DefKind::ForeignFn),
-        str_len: register("str_len", DefKind::ForeignFn),
-        str_contains: register("str_contains", DefKind::ForeignFn),
-        str_starts_with: register("str_starts_with", DefKind::ForeignFn),
-        str_ends_with: register("str_ends_with", DefKind::ForeignFn),
-        arr_len: register("arr_len", DefKind::ForeignFn),
-        arr_push: register("arr_push", DefKind::ForeignFn),
-        arr_pop: register("arr_pop", DefKind::ForeignFn),
-        arr_reverse: register("arr_reverse", DefKind::ForeignFn),
-    };
-
+    let option = register("Option", DefKind::Type);
+    let float = register("Float", DefKind::Type);
     let string = register("String", DefKind::Type);
     let rune = register("Rune", DefKind::Type);
     let bool = register("Bool", DefKind::Type);
     let unit = register("Unit", DefKind::Type);
     let any = register("Any", DefKind::Type);
     let never = register("Never", DefKind::Type);
-    let option = register("Option", DefKind::Type);
 
     WellKnown {
         ints,
-        uints,
+        nats,
         floats,
         ffi,
-        classes,
         effects,
-        containers,
-        fns,
-        core,
+        primitives,
+        float,
         string,
         rune,
         bool,
         unit,
+        option,
         any,
         never,
-        option,
     }
 }
 
-/// Assigns proper `Type::Fn` signatures to well-known prelude functions.
-///
-/// Must be called after `init_well_known` and after the type arena is available.
-/// This ensures that calls to `writeln`, `write`, etc. get real types instead
-/// of fresh unification variables.
-#[allow(clippy::too_many_lines)]
-pub fn assign_well_known_types(defs: &mut DefTable, wk: &WellKnown, types: &mut Arena<Type>) {
-    let string_ty = types.alloc(Type::Named {
-        def: wk.string,
-        args: vec![],
-    });
-    let bool_ty = types.alloc(Type::Named {
-        def: wk.bool,
-        args: vec![],
-    });
-    let unit_ty = types.alloc(Type::Named {
-        def: wk.unit,
-        args: vec![],
-    });
-    let any_ty = types.alloc(Type::Named {
-        def: wk.any,
-        args: vec![],
-    });
-    let ordering_ty = types.alloc(Type::Named {
-        def: wk.containers.ordering,
-        args: vec![],
-    });
-
-    let io_effect = EffectRow {
-        effects: vec![EffectEntry {
-            def: wk.effects.io,
-            args: vec![],
-        }],
-        row_var: None,
-    };
-
-    assign_fn_type(
-        defs,
-        types,
-        wk.fns.write,
-        &[string_ty],
-        unit_ty,
-        Some(io_effect.clone()),
-    );
-    assign_fn_type(
-        defs,
-        types,
-        wk.fns.writeln,
-        &[string_ty],
-        unit_ty,
-        Some(io_effect),
-    );
-
-    assign_fn_type(defs, types, wk.fns.show, &[any_ty], string_ty, None);
-    assign_fn_type(
-        defs,
-        types,
-        wk.fns.compare,
-        &[any_ty, any_ty],
-        ordering_ty,
-        None,
-    );
-    assign_fn_type(defs, types, wk.fns.is_some, &[any_ty], bool_ty, None);
-    assign_fn_type(defs, types, wk.fns.is_none, &[any_ty], bool_ty, None);
-
-    // Core builtins
-    let int_ty = types.alloc(Type::Named {
-        def: wk.ints.int,
-        args: vec![],
-    });
-
-    // int_abs: Int -> Int
-    assign_fn_type(defs, types, wk.core.int_abs, &[int_ty], int_ty, None);
-    // int_min: Int -> Int -> Int
-    assign_fn_type(
-        defs,
-        types,
-        wk.core.int_min,
-        &[int_ty, int_ty],
-        int_ty,
-        None,
-    );
-    // int_max: Int -> Int -> Int
-    assign_fn_type(
-        defs,
-        types,
-        wk.core.int_max,
-        &[int_ty, int_ty],
-        int_ty,
-        None,
-    );
-    // int_clamp: Int -> Int -> Int -> Int
-    assign_fn_type(
-        defs,
-        types,
-        wk.core.int_clamp,
-        &[int_ty, int_ty, int_ty],
-        int_ty,
-        None,
-    );
-    // int_pow: Int -> Int -> Int
-    assign_fn_type(
-        defs,
-        types,
-        wk.core.int_pow,
-        &[int_ty, int_ty],
-        int_ty,
-        None,
-    );
-    // str_len: String -> Int
-    assign_fn_type(defs, types, wk.core.str_len, &[string_ty], int_ty, None);
-    // str_contains: String -> String -> Bool
-    assign_fn_type(
-        defs,
-        types,
-        wk.core.str_contains,
-        &[string_ty, string_ty],
-        bool_ty,
-        None,
-    );
-    // str_starts_with: String -> String -> Bool
-    assign_fn_type(
-        defs,
-        types,
-        wk.core.str_starts_with,
-        &[string_ty, string_ty],
-        bool_ty,
-        None,
-    );
-    // str_ends_with: String -> String -> Bool
-    assign_fn_type(
-        defs,
-        types,
-        wk.core.str_ends_with,
-        &[string_ty, string_ty],
-        bool_ty,
-        None,
-    );
-    // arr_len: [Any] -> Int (polymorphic, use any_ty)
-    assign_fn_type(defs, types, wk.core.arr_len, &[any_ty], int_ty, None);
-    // arr_push: [Any] -> Any -> Unit
-    assign_fn_type(
-        defs,
-        types,
-        wk.core.arr_push,
-        &[any_ty, any_ty],
-        unit_ty,
-        None,
-    );
-    // arr_pop: [Any] -> Any (polymorphic)
-    assign_fn_type(defs, types, wk.core.arr_pop, &[any_ty], any_ty, None);
-    // arr_reverse: [Any] -> [Any] (polymorphic)
-    assign_fn_type(defs, types, wk.core.arr_reverse, &[any_ty], any_ty, None);
-}
-
-fn assign_fn_type(
-    defs: &mut DefTable,
-    types: &mut Arena<Type>,
-    def_id: DefId,
-    params: &[crate::TypeIdx],
-    ret: crate::TypeIdx,
-    effect: Option<EffectRow>,
+pub const fn assign_well_known_types(
+    _defs: &mut DefTable,
+    _wk: &WellKnown,
+    _types: &mut Arena<Type>,
 ) {
-    let fn_ty = types.alloc(Type::Fn {
-        params: params.to_vec(),
-        ret,
-        effects: effect.unwrap_or(EffectRow::PURE),
-    });
-    defs.get_mut(def_id).ty_info.ty = Some(fn_ty);
 }

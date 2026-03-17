@@ -199,10 +199,20 @@ impl Vm {
             (self.module.functions[frame.fn_idx].fn_id, frame.ip)
         };
 
-        self.step_inner().map_err(|e| VmError::Runtime {
-            fn_id,
-            ip: instr_ip,
-            source: Box::new(e),
+        self.step_inner().map_err(|e| {
+            if let Some(frame) = self.call_stack.last() {
+                let code = &self.module.functions[frame.fn_idx].code;
+                let disasm = musi_bc::disassemble(code);
+                eprintln!(
+                    "[VM ERR] fn_id={fn_id} ip={instr_ip} fn_idx={}\n{disasm}",
+                    frame.fn_idx
+                );
+            }
+            VmError::Runtime {
+                fn_id,
+                ip: instr_ip,
+                source: Box::new(e),
+            }
         })
     }
 
@@ -221,10 +231,9 @@ impl Vm {
             if ip >= code.len() {
                 return Err(malformed!("ip past end of bytecode"));
             }
-            let raw_op = code[ip];
-            let (operand, ilen) = ops::decode_operand(code, ip);
-            frame.ip = ip + ilen;
-            (fn_idx, Opcode(raw_op), operand)
+            let decoded = ops::decode_instruction(code, ip);
+            frame.ip = ip + decoded.total_len;
+            (fn_idx, decoded.op, decoded.operand)
         };
 
         // Phase 2: Try arithmetic (most frequent in hot loops).
@@ -233,31 +242,40 @@ impl Vm {
                 .call_stack
                 .last_mut()
                 .ok_or_else(|| malformed!("empty call stack"))?;
-            if arith::exec(op, frame)? {
+            if arith::exec(op, frame, &mut self.heap)? {
                 return Ok(StepResult::Continue);
             }
         }
 
         // Phase 3: Grouped dispatch.
         match op {
+            Opcode::MK_VAR => {
+                // Packed operand: (tag << 8) | arity (u16 or u32 if widened)
+                #[allow(clippy::cast_possible_truncation, clippy::as_conversions)]
+                let operand_u16 = (operand & 0xFFFF) as u16;
+                let (tag, arity) = musi_bc::unpack_tag_arity_u16(operand_u16);
+                {
+                    let frame = self
+                        .call_stack
+                        .last_mut()
+                        .ok_or_else(|| malformed!("empty call stack"))?;
+                    ops::exec_mk_var(u32::from(tag), u32::from(arity), frame, &mut self.heap)?;
+                }
+                Ok(StepResult::Continue)
+            }
+
             Opcode::NOP
             | Opcode::BRK
             | Opcode::DUP
             | Opcode::POP
             | Opcode::SWP
             | Opcode::LD_LOC
-            | Opcode::LD_LOC_W
             | Opcode::ST_LOC
-            | Opcode::ST_LOC_W
             | Opcode::LD_CST
-            | Opcode::LD_CST_W
             | Opcode::MK_PRD
             | Opcode::LD_FLD
-            | Opcode::MK_VAR
-            | Opcode::MK_VAR_W
             | Opcode::LD_PAY
             | Opcode::CMP_TAG
-            | Opcode::CMP_TAG_W
             | Opcode::LD_TAG
             | Opcode::LD_LEN
             | Opcode::LD_IDX
@@ -270,21 +288,25 @@ impl Vm {
             | Opcode::ST_GLB
             | Opcode::TYP_CHK
             | Opcode::MK_CLO
-            | Opcode::LD_UPV => self.step_data(op, operand),
+            | Opcode::LD_UPV
+            | Opcode::LD_UT => self.step_data(op, operand),
 
-            Opcode::JMP_W
-            | Opcode::JMP_T_W
-            | Opcode::JMP_F_W
+            Opcode::JMP
+            | Opcode::JIF
+            | Opcode::JNF
+            | Opcode::JMP_SH
+            | Opcode::JIF_SH
+            | Opcode::JNF_SH
             | Opcode::HLT
             | Opcode::UNR
             | Opcode::RET
-            | Opcode::RET_U
+            | Opcode::RET_UT
             | Opcode::INV
             | Opcode::INV_TAL
             | Opcode::INV_DYN
             | Opcode::INV_FFI => self.step_control(op, operand),
 
-            Opcode::CONT_MARK | Opcode::CONT_UNMARK | Opcode::CONT_SAVE | Opcode::CONT_RESUME => {
+            Opcode::CNT_MRK | Opcode::CNT_UMK | Opcode::CNT_SAV | Opcode::CNT_RSM => {
                 self.step_continuations(op, operand, fn_idx)
             }
 
@@ -310,13 +332,17 @@ impl Vm {
                 let _ = self.current_frame()?.stack.pop();
                 Ok(StepResult::Continue)
             }
+            Opcode::LD_UT => {
+                self.current_frame()?.stack.push(Value::UNIT);
+                Ok(StepResult::Continue)
+            }
             Opcode::SWP => {
                 self.current_frame()?.swp()?;
                 Ok(StepResult::Continue)
             }
 
-            // §5 Locals
-            Opcode::LD_LOC | Opcode::LD_LOC_W => {
+            // §5 Locals (WID handled by decode_instruction — operand is already widened)
+            Opcode::LD_LOC => {
                 let frame = self.current_frame()?;
                 let slot =
                     usize::try_from(operand).map_err(|_| malformed!("ld.loc operand overflow"))?;
@@ -324,7 +350,7 @@ impl Vm {
                 frame.stack.push(v);
                 Ok(StepResult::Continue)
             }
-            Opcode::ST_LOC | Opcode::ST_LOC_W => {
+            Opcode::ST_LOC => {
                 let frame = self.current_frame()?;
                 let slot =
                     usize::try_from(operand).map_err(|_| malformed!("st.loc operand overflow"))?;
@@ -339,8 +365,8 @@ impl Vm {
 
     fn step_heap(&mut self, op: Opcode, operand: u32) -> Result<StepResult, VmError> {
         match op {
-            // §5 Constants
-            Opcode::LD_CST | Opcode::LD_CST_W => {
+            // §5 Constants (WID handled transparently)
+            Opcode::LD_CST => {
                 let frame = self
                     .call_stack
                     .last_mut()
@@ -366,14 +392,6 @@ impl Vm {
                 ops::exec_ld_fld(operand, frame, &self.heap)?;
                 Ok(StepResult::Continue)
             }
-            Opcode::MK_VAR | Opcode::MK_VAR_W => {
-                let frame = self
-                    .call_stack
-                    .last_mut()
-                    .ok_or_else(|| malformed!("empty call stack"))?;
-                ops::exec_mk_var(operand, frame, &mut self.heap)?;
-                Ok(StepResult::Continue)
-            }
             Opcode::LD_PAY => {
                 let frame = self
                     .call_stack
@@ -382,7 +400,7 @@ impl Vm {
                 ops::exec_ld_pay(operand, frame, &self.heap)?;
                 Ok(StepResult::Continue)
             }
-            Opcode::CMP_TAG | Opcode::CMP_TAG_W => {
+            Opcode::CMP_TAG => {
                 let frame = self
                     .call_stack
                     .last_mut()
@@ -496,13 +514,20 @@ impl Vm {
                 Ok(StepResult::Continue)
             }
 
-            // §17 Closures
+            // §17 Closures — MK_CLO uses packed operand (fn_id_u24 << 8 | upval_count_u8)
             Opcode::MK_CLO => {
+                let (fn_id, upval_count) = musi_bc::unpack_id_arity(operand);
                 let frame = self
                     .call_stack
                     .last_mut()
                     .ok_or_else(|| malformed!("empty call stack"))?;
-                ops::exec_mk_clo(operand, frame, &self.module.functions, &mut self.heap)?;
+                ops::exec_mk_clo(
+                    fn_id,
+                    upval_count,
+                    frame,
+                    &self.module.functions,
+                    &mut self.heap,
+                )?;
                 Ok(StepResult::Continue)
             }
             Opcode::LD_UPV => {
@@ -520,40 +545,72 @@ impl Vm {
 
     fn step_control(&mut self, op: Opcode, operand: u32) -> Result<StepResult, VmError> {
         match op {
-            // §11 Control — jumps
-            Opcode::JMP_W => {
+            // Long jumps (i32 offset)
+            Opcode::JMP => {
                 let frame = self.current_frame()?;
                 let target = ops::jump_target(frame.ip, ops::read_i32_operand(operand)?)?;
                 frame.ip = target;
                 Ok(StepResult::Continue)
             }
-            Opcode::JMP_T_W => {
+            Opcode::JIF => {
                 let frame = self.current_frame()?;
                 let cond = frame.pop()?;
-                if cond.as_bool()? {
+                if cond.as_truthy()? {
                     frame.ip = ops::jump_target(frame.ip, ops::read_i32_operand(operand)?)?;
                 }
                 Ok(StepResult::Continue)
             }
-            Opcode::JMP_F_W => {
+            Opcode::JNF => {
                 let frame = self.current_frame()?;
                 let cond = frame.pop()?;
-                if !cond.as_bool()? {
+                if !cond.as_truthy()? {
                     frame.ip = ops::jump_target(frame.ip, ops::read_i32_operand(operand)?)?;
                 }
                 Ok(StepResult::Continue)
             }
 
-            // §11 Control — call / return / halt
+            // Short jumps (i8 offset)
+            Opcode::JMP_SH => {
+                let frame = self.current_frame()?;
+                let target = ops::jump_target(frame.ip, ops::read_i8_operand(operand))?;
+                frame.ip = target;
+                Ok(StepResult::Continue)
+            }
+            Opcode::JIF_SH => {
+                let frame = self.current_frame()?;
+                let cond = frame.pop()?;
+                if cond.as_truthy()? {
+                    frame.ip = ops::jump_target(frame.ip, ops::read_i8_operand(operand))?;
+                }
+                Ok(StepResult::Continue)
+            }
+            Opcode::JNF_SH => {
+                let frame = self.current_frame()?;
+                let cond = frame.pop()?;
+                if !cond.as_truthy()? {
+                    frame.ip = ops::jump_target(frame.ip, ops::read_i8_operand(operand))?;
+                }
+                Ok(StepResult::Continue)
+            }
+
+            // Control — call / return / halt
             Opcode::HLT => Err(VmError::Halted),
             Opcode::UNR => Err(malformed!("unr (unreachable) reached at runtime")),
             Opcode::RET => {
                 let v = self.current_frame()?.pop()?;
                 self.do_return(v)
             }
-            Opcode::RET_U => self.do_return(Value::UNIT),
-            Opcode::INV => self.do_call_with_stack_args(operand),
-            Opcode::INV_TAL => self.do_tail_call(operand),
+            Opcode::RET_UT => self.do_return(Value::UNIT),
+
+            // INV/INV_TAL use packed operand: (fn_id_u24 << 8) | arity_u8
+            Opcode::INV => {
+                let (fn_id, _arity) = musi_bc::unpack_id_arity(operand);
+                self.do_call_with_stack_args(fn_id)
+            }
+            Opcode::INV_TAL => {
+                let (fn_id, _arity) = musi_bc::unpack_id_arity(operand);
+                self.do_tail_call(fn_id)
+            }
             Opcode::INV_DYN => {
                 let dyn_call = {
                     let frame = self
@@ -573,7 +630,12 @@ impl Vm {
                     }
                 }
             }
-            Opcode::INV_FFI => self.exec_inv_ffi(operand),
+
+            // INV_FFI uses packed operand: (ffi_id_u24 << 8) | arity_u8
+            Opcode::INV_FFI => {
+                let (ffi_id, _arity) = musi_bc::unpack_id_arity(operand);
+                self.exec_inv_ffi(ffi_id)
+            }
 
             _ => Err(malformed!("unknown control opcode {:#04x}", op.0)),
         }
@@ -617,8 +679,6 @@ impl Vm {
             _ => Err(malformed!("unknown concurrency opcode {:#04x}", op.0)),
         }
     }
-
-    // ── Call / return / tail-call ─────────────────────────────────────
 
     fn do_return(&mut self, value: Value) -> Result<StepResult, VmError> {
         let _ = self.call_stack.pop();
@@ -717,8 +777,6 @@ impl Vm {
         Ok(StepResult::Continue)
     }
 
-    // ── Continuations ─────────────────────────────────────────────────
-
     fn exec_cont_save_cross_frame(
         &mut self,
         effect_id: u8,
@@ -794,16 +852,14 @@ impl Vm {
         Ok(StepResult::Continue)
     }
 
-    // ── FFI ──────────────────────────────────────────────────────────
-
-    fn exec_inv_ffi(&mut self, operand: u32) -> Result<StepResult, VmError> {
+    fn exec_inv_ffi(&mut self, ffi_id: u32) -> Result<StepResult, VmError> {
         let foreign_idx =
-            usize::try_from(operand).map_err(|_| malformed!("foreign fn index overflows usize"))?;
+            usize::try_from(ffi_id).map_err(|_| malformed!("foreign fn index overflows usize"))?;
         let foreign_fn = self
             .module
             .foreign_fns
             .get(foreign_idx)
-            .ok_or_else(|| malformed!("foreign fn index {} out of bounds", operand))?;
+            .ok_or_else(|| malformed!("foreign fn index {} out of bounds", ffi_id))?;
         let param_count = usize::from(foreign_fn.param_count);
 
         let frame = self
@@ -825,13 +881,11 @@ impl Vm {
             .host
             .as_mut()
             .ok_or_else(|| malformed!("inv.ffi without a host attached"))?;
-        let result = host.call_foreign(operand, &args, &mut self.heap)?;
+        let result = host.call_foreign(ffi_id, &args, &mut self.heap)?;
 
         self.current_frame()?.stack.push(result);
         Ok(StepResult::Continue)
     }
-
-    // ── Concurrency ──────────────────────────────────────────────────
 
     fn ensure_scheduler(&mut self) {
         if self.scheduler.is_none() {
@@ -1058,8 +1112,6 @@ impl Vm {
             .as_mut()
             .ok_or_else(|| malformed!("scheduler not initialized"))
     }
-
-    // ── Garbage collection ───────────────────────────────────────────
 
     /// Run a mark-sweep garbage collection cycle.
     pub fn collect_garbage(&mut self) -> usize {

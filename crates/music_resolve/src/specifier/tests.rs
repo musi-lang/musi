@@ -76,6 +76,27 @@ fn test_parse_specifier_git_no_path_returns_error() {
 }
 
 #[test]
+fn test_parse_specifier_at_std_text() {
+    let spec = parse_specifier("@std/text").unwrap();
+    assert_eq!(spec.scheme, ImportScheme::AtStd);
+    assert_eq!(&*spec.raw, "@std/text");
+    assert_eq!(&*spec.module_path, "text");
+}
+
+#[test]
+fn test_parse_specifier_at_std_nested() {
+    let spec = parse_specifier("@std/collections/deque").unwrap();
+    assert_eq!(spec.scheme, ImportScheme::AtStd);
+    assert_eq!(&*spec.module_path, "collections/deque");
+}
+
+#[test]
+fn test_parse_specifier_at_std_empty_returns_error() {
+    let err = parse_specifier("@std/").unwrap_err();
+    assert!(matches!(err, ResolveError::ModuleNotFound { .. }));
+}
+
+#[test]
 fn test_parse_git_source_with_tag() {
     let src = parse_git_source("github.com/user/repo@v1.0").unwrap();
     assert_eq!(

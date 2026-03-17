@@ -406,8 +406,10 @@ impl Lexer<'_> {
         loop {
             match self.peek() {
                 Some(b'"') => {
+                    let content_end = self.pos;
                     let _ = self.advance();
-                    return self.emit_interned(TokenKind::StringLit, start);
+                    let sym = self.intern_range(start + 1, content_end);
+                    return self.emit_sym(TokenKind::StringLit, start, sym);
                 }
                 Some(b'\\') => self.skip_escape(),
                 Some(_) => {
@@ -517,7 +519,7 @@ impl Lexer<'_> {
     fn lex_fstring_head(&mut self, start: usize) -> Token {
         let _ = self.advance();
         self.fstring_depths.push(0);
-        self.scan_fstring_text(start, TokenKind::FStringHead, TokenKind::FStringHead)
+        self.scan_fstring_text(start, TokenKind::FStringHead, TokenKind::StringLit)
     }
 
     /// Scan f-string text content until `{` (interpolation) or `"` (end).

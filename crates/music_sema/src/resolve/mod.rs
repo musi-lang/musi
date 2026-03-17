@@ -30,6 +30,12 @@ use crate::scope::{ScopeId, ScopeTree};
 /// Each entry is a list of `(name, DefId)` pairs from the dependency's exports.
 pub type ImportNames = HashMap<Symbol, Vec<(Symbol, DefId)>>;
 
+/// Maps a re-exported module `DefId` to the sub-module's exported `(name, DefId)` pairs.
+///
+/// Used to resolve multi-level field chains like `t.runner.run_suite` where `runner`
+/// is itself a re-exported module whose `DefId` is not in the current module's `import_alias_defs`.
+pub type SubModuleExports = HashMap<DefId, Vec<(Symbol, DefId)>>;
+
 /// Output accumulators from the resolution pass.
 pub struct ResolveOutput {
     pub expr_defs: HashMap<ExprIdx, DefId>,
@@ -59,13 +65,22 @@ pub fn resolve(
     scopes: &mut ScopeTree,
     module_scope: ScopeId,
 ) -> ResolveOutput {
-    let empty = HashMap::new();
+    let empty_imports = HashMap::new();
+    let empty_sub = HashMap::new();
     let mut state = ResolveState {
         defs,
         scopes,
         module_scope,
     };
-    resolve_with_imports(module, interner, file_id, diags, &mut state, &empty)
+    resolve_with_imports(
+        module,
+        interner,
+        file_id,
+        diags,
+        &mut state,
+        &empty_imports,
+        &empty_sub,
+    )
 }
 
 /// Like [`resolve`], but with pre-computed import names for cross-module resolution.
@@ -77,6 +92,7 @@ pub fn resolve_with_imports(
     diags: &mut DiagnosticBag,
     state: &mut ResolveState<'_>,
     import_names: &ImportNames,
+    sub_module_exports: &SubModuleExports,
 ) -> ResolveOutput {
     let mut resolver = Resolver {
         ast: &module.arenas,
@@ -94,6 +110,7 @@ pub fn resolve_with_imports(
         current_scope: state.module_scope,
         import_names,
         import_alias_defs: HashMap::new(),
+        sub_module_exports,
     };
 
     for stmt in &module.stmts {
@@ -117,6 +134,7 @@ pub(super) struct Resolver<'a> {
     pub(super) current_scope: ScopeId,
     pub(super) import_names: &'a ImportNames,
     pub(super) import_alias_defs: HashMap<DefId, Symbol>,
+    pub(super) sub_module_exports: &'a SubModuleExports,
 }
 
 impl Resolver<'_> {
