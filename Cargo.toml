@@ -2,15 +2,19 @@
 members = ["crates/*"]
 resolver = "2"
 
+# https://doc.rust-lang.org/cargo/reference/manifest.html
 [workspace.package]
-description = "A systems programming language designed for clarity, safety, and performance."
 version = "0.1.0-rc1"
 edition = "2024"
-repository = "https://github.com/musi-lang/musi"
+rust-version = "1.85.0"
+description = "An interpreted systems programming language."
 readme = "README.md"
+homepage = "https://musi-lang.com"
+repository = "https://github.com/musi-lang/musi"
 license = "MIT OR Apache-2.0"
 keywords = ["compiler", "interpreter", "language", "musi"]
 categories = ["compilers", "interpreters", "development-tools"]
+publish = false
 
 [workspace.dependencies]
 byteorder = "1.5.0"

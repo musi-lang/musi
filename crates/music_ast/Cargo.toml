@@ -1,13 +1,16 @@
 [package]
 name = "music_ast"
-description = "Abstract syntax tree for the Musi compiler"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
+description = "Abstract syntax tree for the Musi compiler"
+readme.workspace = true
+homepage.workspace = true
 repository.workspace = true
 license.workspace = true
-readme.workspace = true
 keywords = ["compiler", "musi", "ast"]
 categories = ["development-tools"]
+publish.workspace = true
 
 [dependencies]
 music_shared = { path = "../music_shared" }

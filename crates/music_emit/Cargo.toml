@@ -1,13 +1,16 @@
 [package]
 name = "music_emit"
-description = "Bytecode emitter: AST+sema -> .msbc"
-keywords = ["compiler", "bytecode", "musi"]
-categories = ["compilers"]
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
+description = "Bytecode emitter: AST+sema -> .msbc"
+readme.workspace = true
+homepage.workspace = true
 repository.workspace = true
 license.workspace = true
-readme.workspace = true
+keywords = ["compiler", "bytecode", "musi"]
+categories = ["compilers"]
+publish.workspace = true
 
 [dependencies]
 musi_bc = { path = "../musi_bc" }

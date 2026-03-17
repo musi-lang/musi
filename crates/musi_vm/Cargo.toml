@@ -1,13 +1,16 @@
 [package]
 name = "musi_vm"
-description = "Musi bytecode interpreter"
 version.workspace = true
 edition.workspace = true
-license.workspace = true
+rust-version.workspace = true
+description = "Musi bytecode interpreter"
 readme.workspace = true
+homepage.workspace = true
 repository.workspace = true
+license.workspace = true
 keywords = ["virtual-machine", "interpreter", "bytecode", "musi"]
 categories = ["interpreters"]
+publish.workspace = true
 
 [dependencies]
 musi_bc = { path = "../musi_bc" }

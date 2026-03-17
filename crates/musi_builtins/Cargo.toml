@@ -1,13 +1,16 @@
 [package]
 name = "musi_builtins"
-description = "Musi standard library and FFI runtime"
 version.workspace = true
 edition.workspace = true
-license.workspace = true
+rust-version.workspace = true
+description = "Musi standard library and FFI runtime"
 readme.workspace = true
+homepage.workspace = true
 repository.workspace = true
+license.workspace = true
 keywords = ["musi", "stdlib", "ffi", "runtime"]
 categories = ["interpreters"]
+publish.workspace = true
 
 [dependencies]
 libc = { workspace = true }
