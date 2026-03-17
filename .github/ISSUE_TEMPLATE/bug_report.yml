@@ -1,0 +1,57 @@
+name: Bug Report
+description: Report a bug in the Musi compiler or runtime
+labels: [bug]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear description of the bug.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps to reproduce the behavior.
+      placeholder: |
+        1. Create a file with ...
+        2. Run `music ...`
+        3. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What you expected to happen.
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What actually happened.
+
+  - type: input
+    id: version
+    attributes:
+      label: Musi version
+      description: Output of `music --version`.
+      placeholder: "music 0.1.0"
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Linux
+        - Windows
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Any other context about the problem.

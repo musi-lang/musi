@@ -1,0 +1,45 @@
+name: Internal Compiler Error
+description: Report an internal compiler error (ICE)
+labels: [bug, ice]
+body:
+  - type: textarea
+    id: error
+    attributes:
+      label: Error message
+      description: The full error output from the compiler.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: source
+    attributes:
+      label: Musi source
+      description: The Musi code that triggered the ICE.
+      render: musi
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What you expected the compiler to do instead.
+
+  - type: input
+    id: version
+    attributes:
+      label: Musi version
+      description: Output of `music --version`.
+      placeholder: "music 0.1.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Linux
+        - Windows
