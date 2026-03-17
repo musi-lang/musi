@@ -4,7 +4,7 @@
 mod tests;
 
 use music_ast::expr::ParamMode;
-use music_shared::{Span, Symbol};
+use music_shared::{FileId, Span, Symbol};
 
 use crate::types::{Obligation, TypeIdx};
 
@@ -70,6 +70,8 @@ pub struct DefInfo {
     pub name: Symbol,
     pub kind: DefKind,
     pub span: Span,
+    /// The source file this definition was declared in.
+    pub file_id: FileId,
     /// For variants/members: the enclosing type or class.
     pub parent: Option<DefId>,
     /// Type-checking data (filled incrementally by the checker).
@@ -101,13 +103,14 @@ impl DefTable {
     ///
     /// Panics if the number of definitions exceeds `u32::MAX`.
     #[must_use]
-    pub fn alloc(&mut self, name: Symbol, kind: DefKind, span: Span) -> DefId {
+    pub fn alloc(&mut self, name: Symbol, kind: DefKind, span: Span, file_id: FileId) -> DefId {
         let id = DefId(u32::try_from(self.defs.len()).expect("def count overflow"));
         self.defs.push(DefInfo {
             id,
             name,
             kind,
             span,
+            file_id,
             parent: None,
             ty_info: DefTyInfo::default(),
             use_count: 0,

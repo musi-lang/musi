@@ -33,7 +33,10 @@ pub fn run(
     test_files.sort();
 
     if let Some(f) = filter {
-        test_files.retain(|p| p.display().to_string().contains(f));
+        let canonical_filter = Path::new(f)
+            .canonicalize()
+            .map_or_else(|_| f.to_owned(), |p| p.display().to_string());
+        test_files.retain(|p| p.display().to_string().contains(&canonical_filter));
         if test_files.is_empty() {
             eprintln!("no test files matched filter '{f}'");
             process::exit(0);
@@ -128,8 +131,9 @@ fn run_test_file(path: &Path, manifest: &MusiManifest, project_root: &Path) -> T
 }
 
 fn discover_test_files(root: &Path) -> Vec<PathBuf> {
+    let root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
     let mut files = Vec::new();
-    collect_test_files(root, &mut files);
+    collect_test_files(&root, &mut files);
     files
 }
 

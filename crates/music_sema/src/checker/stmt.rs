@@ -41,7 +41,8 @@ fn check_member_fn<S: BuildHasher>(ck: &mut Checker<'_, S>, member: &ClassMember
             let id = if let Some(&existing) = ck.ctx.pat_defs.get(&param.span) {
                 existing
             } else {
-                ck.defs.alloc(param.name, DefKind::Param, param.span)
+                ck.defs
+                    .alloc(param.name, DefKind::Param, param.span, ck.ctx.file_id)
             };
             let _prev = ck.scopes.define(ck.current_scope, param.name, id);
             ck.defs.get_mut(id).ty_info.ty = Some(param_ty);
@@ -110,7 +111,8 @@ fn check_member_law<S: BuildHasher>(
             let id = if let Some(&existing) = ck.ctx.pat_defs.get(&param.span) {
                 existing
             } else {
-                ck.defs.alloc(param.name, DefKind::LawVar, param.span)
+                ck.defs
+                    .alloc(param.name, DefKind::LawVar, param.span, ck.ctx.file_id)
             };
             let _prev = ck.scopes.define(ck.current_scope, param.name, id);
             ck.defs.get_mut(id).ty_info.ty = Some(param_ty);

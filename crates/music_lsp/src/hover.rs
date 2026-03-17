@@ -12,7 +12,7 @@ use music_shared::Idx;
 
 use crate::analysis::{
     AnalyzedDoc, def_at_cursor, def_name_span, expr_span, extract_doc_comments_from_source,
-    position_to_offset, span_to_range,
+    field_at_cursor, position_to_offset, span_to_range,
 };
 
 /// Produce a hover response for the given cursor position.
@@ -20,7 +20,11 @@ pub fn hover(doc: &AnalyzedDoc, position: Position) -> Option<Hover> {
     let sema = doc.sema.as_ref()?;
 
     let offset = position_to_offset(&doc.source, position.line, position.character);
-    let def = def_at_cursor(offset, doc)?;
+
+    let def = match def_at_cursor(offset, doc) {
+        Some(d) => d,
+        None => return hover_field(doc, sema, offset),
+    };
 
     let expr_hit = sema
         .resolution
@@ -355,6 +359,29 @@ fn extract_source_signature(source: &str, start: u32) -> Option<String> {
         .map(str::trim_start)
         .unwrap_or(sig);
     Some(sig.to_owned())
+}
+
+/// Hover fallback for record field access (`obj.field`).
+///
+/// When `def_at_cursor` finds no `DefId` (plain field access on a record value),
+/// this function checks if the cursor is on a `FieldKey::Name` and shows the
+/// field's inferred type from `expr_types`.
+fn hover_field(doc: &AnalyzedDoc, sema: &SemaResult, offset: u32) -> Option<Hover> {
+    let (expr_idx, field_name, field_span) = field_at_cursor(offset, doc)?;
+    let ty = sema.expr_types.get(&expr_idx).copied()?;
+    let ty_str = fmt_type_lsp(ty, doc, sema);
+    let name = doc.interner.try_resolve(field_name).unwrap_or("_");
+
+    let md = format!("```musi\n{name}: {ty_str}\n```");
+    let range = span_to_range(doc.file_id, field_span, &doc.source_db);
+
+    Some(Hover {
+        contents: HoverContents::Markup(MarkupContent {
+            kind: MarkupKind::Markdown,
+            value: md,
+        }),
+        range: Some(range),
+    })
 }
 
 /// Format a type for LSP display (hover, inlay hints, etc.).

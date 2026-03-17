@@ -48,18 +48,24 @@ impl Resolver<'_> {
             Expr::Instance {
                 target, exported, ..
             } => {
-                let id =
-                    self.defs
-                        .alloc(target.name, DefKind::Instance, self.span_of_expr(expr_idx));
+                let id = self.defs.alloc(
+                    target.name,
+                    DefKind::Instance,
+                    self.span_of_expr(expr_idx),
+                    self.file_id,
+                );
                 if *exported {
                     self.defs.get_mut(id).exported = true;
                 }
             }
             Expr::Import { path, alias, .. } => {
                 if let Some(alias_name) = alias {
-                    let id =
-                        self.defs
-                            .alloc(*alias_name, DefKind::Import, self.span_of_expr(expr_idx));
+                    let id = self.defs.alloc(
+                        *alias_name,
+                        DefKind::Import,
+                        self.span_of_expr(expr_idx),
+                        self.file_id,
+                    );
                     self.define_in_scope(*alias_name, id, self.span_of_expr(expr_idx));
                     let _prev = self.import_alias_defs.insert(id, *path);
                 } else if let Some(names) = self.import_names.get(path) {
@@ -102,7 +108,7 @@ impl Resolver<'_> {
         attrs: &[Attr],
     ) {
         let span = self.span_of_expr(expr_idx);
-        let id = self.defs.alloc(name, kind, span);
+        let id = self.defs.alloc(name, kind, span, self.file_id);
         if exported {
             self.defs.get_mut(id).exported = true;
         }
@@ -119,7 +125,9 @@ impl Resolver<'_> {
         for decl in decls {
             match decl {
                 ForeignDecl::Fn { name, span, .. } => {
-                    let id = self.defs.alloc(*name, DefKind::ForeignFn, *span);
+                    let id = self
+                        .defs
+                        .alloc(*name, DefKind::ForeignFn, *span, self.file_id);
                     if exported {
                         self.defs.get_mut(id).exported = true;
                     }
@@ -130,7 +138,9 @@ impl Resolver<'_> {
                     }
                 }
                 ForeignDecl::OpaqueType { name, span } => {
-                    let id = self.defs.alloc(*name, DefKind::OpaqueType, *span);
+                    let id = self
+                        .defs
+                        .alloc(*name, DefKind::OpaqueType, *span, self.file_id);
                     if exported {
                         self.defs.get_mut(id).exported = true;
                     }

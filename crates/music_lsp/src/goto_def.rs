@@ -1,8 +1,9 @@
 //! Go-to-definition provider (single-file + stdlib).
 
 use lsp_types::{GotoDefinitionResponse, Location, LocationLink, Position, Range, Url};
+use music_ast::Expr;
 use music_lex::TokenKind;
-use music_shared::{Span, Symbol};
+use music_shared::{Idx, Span, Symbol};
 
 use crate::analysis::{AnalyzedDoc, expr_span, position_to_offset, span_to_range};
 
@@ -39,6 +40,12 @@ pub fn goto_definition(
     let def = sema.defs.get(def_id.0 as usize)?;
 
     if def.span != Span::DUMMY {
+        if def.file_id != doc.file_id {
+            // Definition lives in a dependency file — try cross-file navigation.
+            if let Some(resp) = resolve_stdlib_def(doc, def.name, def.span, root_uri) {
+                return Some(resp);
+            }
+        }
         let range = span_to_range(doc.file_id, def.span, &doc.source_db);
         return Some(GotoDefinitionResponse::Scalar(Location {
             uri: uri.clone(),
@@ -46,23 +53,34 @@ pub fn goto_definition(
         }));
     }
 
-    resolve_stdlib_def(doc, def.name, root_uri)
+    resolve_stdlib_def(doc, def.name, def.span, root_uri)
 }
 
 fn resolve_stdlib_def(
     doc: &AnalyzedDoc,
     name: Symbol,
+    span_hint: Span,
     root_uri: Option<&Url>,
 ) -> Option<GotoDefinitionResponse> {
     let root_uri = root_uri?;
 
     for (mod_key, dep_src) in &doc.dep_sources {
-        let Some(&def_span) = dep_src.def_spans.get(&name) else {
-            continue;
+        let def_span = if span_hint != Span::DUMMY {
+            // Use the span from DefInfo directly when available.
+            if dep_src.def_spans.contains_key(&name) {
+                span_hint
+            } else {
+                continue;
+            }
+        } else {
+            let Some(&s) = dep_src.def_spans.get(&name) else {
+                continue;
+            };
+            if s == Span::DUMMY {
+                continue;
+            }
+            s
         };
-        if def_span == Span::DUMMY {
-            continue;
-        }
 
         let rel_path = if mod_key == "<prelude>" {
             "std/prelude.ms".to_owned()
@@ -113,26 +131,56 @@ fn byte_offset_to_position(offset: u32, source: &str) -> Position {
     }
 }
 
-/// If the cursor is on a `StringLit` token that matches a resolved import path,
-/// return a goto-definition response pointing to the resolved file.
-///
-/// Returns a `LocationLink` with `origin_selection_range` covering the full
-/// string token so VS Code highlights the entire path on CMD-hover.
+/// If the cursor is on an import expression (either the `import` keyword or the
+/// string literal path), return a goto-definition response pointing to the
+/// resolved file.
 fn import_at_offset(doc: &AnalyzedDoc, offset: u32) -> Option<GotoDefinitionResponse> {
-    let tok = doc.lexed.tokens.iter().find(|t| {
+    // Path 1: cursor directly on the StringLit token.
+    if let Some(tok) = doc.lexed.tokens.iter().find(|t| {
         t.kind == TokenKind::StringLit && t.span.start <= offset && offset <= t.span.end()
-    })?;
-    let src = doc
-        .source
-        .get(tok.span.start as usize..tok.span.end() as usize)?;
+    }) {
+        let src = doc
+            .source
+            .get(tok.span.start as usize..tok.span.end() as usize)?;
+        if let Some(resp) = resolve_import_path(doc, src, tok.span) {
+            return Some(resp);
+        }
+    }
 
+    // Path 2: cursor on the `import` keyword — find the Expr::Import node.
+    let _kw = doc.lexed.tokens.iter().find(|t| {
+        t.kind == TokenKind::KwImport && t.span.start <= offset && offset <= t.span.end()
+    })?;
+
+    let arenas = &doc.module.arenas;
+    for raw_idx in 0..arenas.exprs.len() {
+        let Some(idx) = u32::try_from(raw_idx).ok().map(Idx::from_raw) else {
+            continue;
+        };
+        if let Expr::Import { path, span, .. } = &arenas.exprs[idx] {
+            if span.start <= offset && offset <= span.end() {
+                let path_str = doc.interner.try_resolve(*path)?;
+                return resolve_import_path(doc, path_str, *span);
+            }
+        }
+    }
+    None
+}
+
+/// Look up `path_str` (with quotes, e.g. `"@std/testing"`) in `resolved_imports`
+/// and return a `LocationLink` if found.
+fn resolve_import_path(
+    doc: &AnalyzedDoc,
+    path_str: &str,
+    origin_span: Span,
+) -> Option<GotoDefinitionResponse> {
     let resolved_path = doc
         .resolved_imports
         .iter()
-        .find(|(sym, _)| doc.interner.try_resolve(**sym) == Some(src))
+        .find(|(sym, _)| doc.interner.try_resolve(**sym) == Some(path_str))
         .map(|(_, path)| path)?;
 
-    let origin_range = span_to_range(doc.file_id, tok.span, &doc.source_db);
+    let origin_range = span_to_range(doc.file_id, origin_span, &doc.source_db);
     let target_uri = Url::from_file_path(resolved_path).ok()?;
 
     Some(GotoDefinitionResponse::Link(vec![LocationLink {

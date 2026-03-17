@@ -8,7 +8,8 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use lsp_types::{Diagnostic, DiagnosticSeverity, DiagnosticTag, Position, Range};
-use music_ast::{ExprIdx, ParsedModule};
+use music_ast::expr::FieldKey;
+use music_ast::{Expr, ExprIdx, ParsedModule};
 use music_lex::{LexedSource, Token, TokenKind, lex};
 use music_parse::parse;
 use music_resolve::graph::ModuleId;
@@ -18,7 +19,7 @@ use music_sema::{
     DefInfo, ExportBinding, ImportNames, ModuleSemaOutput, SemaResult, SharedAnalysisState,
     SubModuleExports, Type, TypeIdx, analyze, collect_exports,
 };
-use music_shared::{Arena, DiagnosticBag, FileId, Interner, Severity, SourceDb, Span, Symbol};
+use music_shared::{Arena, DiagnosticBag, FileId, Idx, Interner, Severity, SourceDb, Span, Symbol};
 
 type LspSemaOutput = (
     SemaResult,
@@ -558,6 +559,40 @@ pub fn def_at_cursor(offset: u32, doc: &AnalyzedDoc) -> Option<&DefInfo> {
         };
         name_span.start <= offset && offset <= name_span.end()
     })
+}
+
+/// Find a `Expr::Field` node whose field-name span contains `offset`.
+///
+/// Returns `(expr_idx, field_name_symbol, field_name_span)` for the tightest
+/// match, allowing hover to show the field's type even when `def_at_cursor`
+/// finds nothing (plain record field access has no `DefId`).
+pub fn field_at_cursor(offset: u32, doc: &AnalyzedDoc) -> Option<(ExprIdx, Symbol, Span)> {
+    let arenas = &doc.module.arenas;
+    let mut best: Option<(ExprIdx, Symbol, Span)> = None;
+    for raw_idx in 0..arenas.exprs.len() {
+        let Some(idx) = u32::try_from(raw_idx).ok().map(Idx::from_raw) else {
+            continue;
+        };
+        if let Expr::Field {
+            field:
+                FieldKey::Name {
+                    name,
+                    span: field_span,
+                },
+            ..
+        } = &arenas.exprs[idx]
+        {
+            if field_span.start <= offset
+                && offset <= field_span.end()
+                && best
+                    .as_ref()
+                    .is_none_or(|(_, _, s)| field_span.length < s.length)
+            {
+                best = Some((idx, *name, *field_span));
+            }
+        }
+    }
+    best
 }
 
 fn build_dep_source(source: &str, _lexed: LexedSource, defs: &[DefInfo]) -> DepSource {

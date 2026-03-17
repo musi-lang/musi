@@ -1,6 +1,6 @@
 //! Tests for the type representation.
 
-use music_shared::{Arena, Interner, Span};
+use music_shared::{Arena, FileId, Interner, Span};
 
 use crate::def::{DefId, DefKind, DefTable};
 use crate::types::{EffectRow, RecordField, TyVarId, Type, fmt_type};
@@ -126,8 +126,8 @@ fn test_fmt_type_anon_sum() {
 
     let sym_int = interner.intern("Int");
     let sym_str = interner.intern("String");
-    let def_int = defs.alloc(sym_int, DefKind::Type, Span::DUMMY);
-    let def_str = defs.alloc(sym_str, DefKind::Type, Span::DUMMY);
+    let def_int = defs.alloc(sym_int, DefKind::Type, Span::DUMMY, FileId(0));
+    let def_str = defs.alloc(sym_str, DefKind::Type, Span::DUMMY, FileId(0));
     let int_ty = arena.alloc(Type::Named {
         def: def_int,
         args: vec![],
@@ -152,7 +152,7 @@ fn test_fmt_type_named() {
     let mut arena = Arena::new();
 
     let sym = interner.intern("Int");
-    let def_id = defs.alloc(sym, DefKind::Type, Span::DUMMY);
+    let def_id = defs.alloc(sym, DefKind::Type, Span::DUMMY, FileId(0));
     let ty = arena.alloc(Type::Named {
         def: def_id,
         args: vec![],

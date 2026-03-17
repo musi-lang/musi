@@ -6,7 +6,7 @@
 #[cfg(test)]
 mod tests;
 
-use music_shared::{Arena, Interner, Span};
+use music_shared::{Arena, FileId, Interner, Span};
 
 use crate::def::{DefId, DefKind, DefTable};
 use crate::scope::{ScopeId, ScopeTree};
@@ -109,9 +109,10 @@ pub fn init_well_known(
     scope: ScopeId,
     scopes: &mut ScopeTree,
 ) -> WellKnown {
+    let compiler_file = FileId(0);
     let mut register = |name: &str, kind: DefKind| -> DefId {
         let sym = interner.intern(name);
-        let id = defs.alloc(sym, kind, Span::DUMMY);
+        let id = defs.alloc(sym, kind, Span::DUMMY, compiler_file);
         let _prev = scopes.define(scope, sym, id);
         id
     };

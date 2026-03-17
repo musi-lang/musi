@@ -6,7 +6,7 @@ resolver = "2"
 [workspace.package]
 version = "0.1.0-rc1"
 edition = "2024"
-rust-version = "1.85.0"
+rust-version = "1.87.0"
 description = "An interpreted systems programming language."
 readme = "README.md"
 homepage = "https://musi-lang.com"

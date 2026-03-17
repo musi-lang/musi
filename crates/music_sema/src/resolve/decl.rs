@@ -81,7 +81,9 @@ impl Resolver<'_> {
         let parent = self.enter_ty_param_scope(params, &[]);
         let effect_def = self.scopes.lookup(outer, name);
         for op in ops {
-            let op_id = self.defs.alloc(op.name, DefKind::EffectOp, op.span);
+            let op_id = self
+                .defs
+                .alloc(op.name, DefKind::EffectOp, op.span, self.file_id);
             if let Some(eff) = effect_def {
                 self.defs.get_mut(op_id).parent = Some(eff);
             }
@@ -126,7 +128,9 @@ impl Resolver<'_> {
         // so sibling methods can reference each other.
         for member in members {
             if let ClassMember::Fn { sig, .. } = member {
-                let fn_id = self.defs.alloc(sig.name, DefKind::Fn, sig.span);
+                let fn_id = self
+                    .defs
+                    .alloc(sig.name, DefKind::Fn, sig.span, self.file_id);
                 self.defs.get_mut(fn_id).exported = true;
                 if let Some(pd) = parent_def {
                     self.defs.get_mut(fn_id).parent = Some(pd);
@@ -136,7 +140,7 @@ impl Resolver<'_> {
                 member_defs.push((sig.name, fn_id));
             }
             if let ClassMember::Law { name, span, .. } = member {
-                let law_id = self.defs.alloc(*name, DefKind::Law, *span);
+                let law_id = self.defs.alloc(*name, DefKind::Law, *span, self.file_id);
                 if let Some(pd) = parent_def {
                     self.defs.get_mut(law_id).parent = Some(pd);
                 }
@@ -152,7 +156,12 @@ impl Resolver<'_> {
                         let parent = self.current_scope;
                         self.current_scope = self.scopes.push_child(parent);
                         for param in &sig.params {
-                            let id = self.defs.alloc(param.name, DefKind::Param, param.span);
+                            let id = self.defs.alloc(
+                                param.name,
+                                DefKind::Param,
+                                param.span,
+                                self.file_id,
+                            );
                             self.defs.get_mut(id).param_mode = Some(param.mode);
                             self.define_in_scope(param.name, id, param.span);
                             let _inserted = self.output.pat_defs.insert(param.span, id);
@@ -186,7 +195,7 @@ impl Resolver<'_> {
             let free = self.collect_free_names(body);
             let mut free_defs = Vec::with_capacity(free.len());
             for (sym, span) in &free {
-                let id = self.defs.alloc(*sym, DefKind::LawVar, *span);
+                let id = self.defs.alloc(*sym, DefKind::LawVar, *span, self.file_id);
                 self.define_in_scope(*sym, id, *span);
                 free_defs.push((*sym, id));
             }
@@ -195,7 +204,9 @@ impl Resolver<'_> {
             }
         } else {
             for param in params {
-                let id = self.defs.alloc(param.name, DefKind::LawVar, param.span);
+                let id = self
+                    .defs
+                    .alloc(param.name, DefKind::LawVar, param.span, self.file_id);
                 self.define_in_scope(param.name, id, param.span);
                 let _inserted = self.output.pat_defs.insert(param.span, id);
                 if let Some(ty) = param.ty {

@@ -162,7 +162,9 @@ impl Resolver<'_> {
         let parent = self.current_scope;
         self.current_scope = self.scopes.push_child(parent);
         for param in params {
-            let id = self.defs.alloc(param.name, DefKind::Type, param.span);
+            let id = self
+                .defs
+                .alloc(param.name, DefKind::Type, param.span, self.file_id);
             self.define_in_scope(param.name, id, param.span);
         }
         for constraint in constraints {

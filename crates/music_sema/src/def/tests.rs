@@ -1,6 +1,6 @@
 //! Tests for the definition table.
 
-use music_shared::{Interner, Span};
+use music_shared::{FileId, Interner, Span};
 
 use crate::def::{DefId, DefKind, DefTable};
 
@@ -12,8 +12,8 @@ fn test_def_table_alloc_returns_sequential_ids() {
     let sym_a = interner.intern("a");
     let sym_b = interner.intern("b");
 
-    let id_a = defs.alloc(sym_a, DefKind::Let, Span::new(0, 1));
-    let id_b = defs.alloc(sym_b, DefKind::Fn, Span::new(4, 1));
+    let id_a = defs.alloc(sym_a, DefKind::Let, Span::new(0, 1), FileId(0));
+    let id_b = defs.alloc(sym_b, DefKind::Fn, Span::new(4, 1), FileId(0));
 
     assert_eq!(id_a, DefId(0));
     assert_eq!(id_b, DefId(1));
@@ -27,7 +27,7 @@ fn test_def_table_get_returns_correct_info() {
 
     let sym = interner.intern("foo");
     let span = Span::new(10, 3);
-    let id = defs.alloc(sym, DefKind::Fn, span);
+    let id = defs.alloc(sym, DefKind::Fn, span, FileId(0));
 
     let info = defs.get(id);
     assert_eq!(info.name, sym);
@@ -44,7 +44,7 @@ fn test_def_table_get_mut_allows_modification() {
     let mut defs = DefTable::new();
 
     let sym = interner.intern("x");
-    let id = defs.alloc(sym, DefKind::Let, Span::new(0, 1));
+    let id = defs.alloc(sym, DefKind::Let, Span::new(0, 1), FileId(0));
 
     defs.get_mut(id).use_count = 5;
     assert_eq!(defs.get(id).use_count, 5);

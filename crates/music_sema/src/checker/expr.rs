@@ -1342,7 +1342,9 @@ fn synth_choice<S: BuildHasher>(ck: &mut Checker<'_, S>, body: TyIdx) -> TypeIdx
             let variants_clone = variants.clone();
             for &variant_ty in &variants_clone {
                 if let Ty::Named { name, .. } = &ck.ctx.ast.tys[variant_ty] {
-                    let id = ck.defs.alloc(*name, DefKind::Type, Span::DUMMY);
+                    let id = ck
+                        .defs
+                        .alloc(*name, DefKind::Type, Span::DUMMY, ck.ctx.file_id);
                     let _prev = ck.scopes.define(ck.current_scope, *name, id);
                 }
             }
@@ -1373,7 +1375,9 @@ fn synth_choice<S: BuildHasher>(ck: &mut Checker<'_, S>, body: TyIdx) -> TypeIdx
         Ty::Named { name, args, .. } => {
             let name = *name;
             let args = args.clone();
-            let id = ck.defs.alloc(name, DefKind::Type, Span::DUMMY);
+            let id = ck
+                .defs
+                .alloc(name, DefKind::Type, Span::DUMMY, ck.ctx.file_id);
             let _prev = ck.scopes.define(ck.current_scope, name, id);
 
             let fields: Vec<TypeIdx> = args.iter().map(|&a| lower_ty(ck, a)).collect();
@@ -1558,7 +1562,7 @@ fn synth_type_test<S: BuildHasher>(
     let _operand_ty = synth(ck, operand);
     let test_ty = lower_ty(ck, ty);
     if let Some(name) = binding {
-        let id = ck.defs.alloc(name, DefKind::Let, span);
+        let id = ck.defs.alloc(name, DefKind::Let, span, ck.ctx.file_id);
         ck.defs.get_mut(id).ty_info.ty = Some(test_ty);
         let _prev = ck.scopes.define(ck.current_scope, name, id);
     }
@@ -1581,7 +1585,9 @@ fn synth_handle<S: BuildHasher>(
             } else {
                 ck.fresh_var(param.span)
             };
-            let id = ck.defs.alloc(param.name, DefKind::Param, param.span);
+            let id = ck
+                .defs
+                .alloc(param.name, DefKind::Param, param.span, ck.ctx.file_id);
             ck.defs.get_mut(id).ty_info.ty = Some(param_ty);
             let _prev = ck.scopes.define(ck.current_scope, param.name, id);
         }

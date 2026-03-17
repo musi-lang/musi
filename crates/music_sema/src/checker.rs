@@ -172,7 +172,9 @@ impl<'a, S: BuildHasher> Checker<'a, S> {
         self.current_scope = self.scopes.push_child(parent);
         let mut def_ids = Vec::with_capacity(params.len());
         for param in params {
-            let id = self.defs.alloc(param.name, DefKind::Type, param.span);
+            let id = self
+                .defs
+                .alloc(param.name, DefKind::Type, param.span, self.ctx.file_id);
             let _prev = self.scopes.define(self.current_scope, param.name, id);
             def_ids.push(id);
         }

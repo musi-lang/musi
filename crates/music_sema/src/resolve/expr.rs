@@ -335,7 +335,9 @@ impl Resolver<'_> {
         let parent = self.current_scope;
         self.current_scope = self.scopes.push_child(parent);
         for param in params {
-            let id = self.defs.alloc(param.name, DefKind::Param, param.span);
+            let id = self
+                .defs
+                .alloc(param.name, DefKind::Param, param.span, self.file_id);
             self.defs.get_mut(id).param_mode = Some(param.mode);
             self.define_in_scope(param.name, id, param.span);
             let _inserted = self.output.pat_defs.insert(param.span, id);
@@ -373,7 +375,9 @@ impl Resolver<'_> {
             Ty::Sum { variants, .. } => {
                 for &variant_ty in variants {
                     if let Ty::Named { name, .. } = &self.ast.tys[variant_ty] {
-                        let id = self.defs.alloc(*name, DefKind::Variant, Span::DUMMY);
+                        let id =
+                            self.defs
+                                .alloc(*name, DefKind::Variant, Span::DUMMY, self.file_id);
                         if let Some(p) = choice_parent {
                             self.defs.get_mut(id).parent = Some(p);
                         }
@@ -382,7 +386,9 @@ impl Resolver<'_> {
                 }
             }
             Ty::Named { name, .. } => {
-                let id = self.defs.alloc(*name, DefKind::Variant, Span::DUMMY);
+                let id = self
+                    .defs
+                    .alloc(*name, DefKind::Variant, Span::DUMMY, self.file_id);
                 if let Some(p) = choice_parent {
                     self.defs.get_mut(id).parent = Some(p);
                 }
@@ -420,7 +426,9 @@ impl Resolver<'_> {
             let parent = self.current_scope;
             self.current_scope = self.scopes.push_child(parent);
             for param in &op.params {
-                let id = self.defs.alloc(param.name, DefKind::Param, param.span);
+                let id = self
+                    .defs
+                    .alloc(param.name, DefKind::Param, param.span, self.file_id);
                 self.define_in_scope(param.name, id, param.span);
                 let _inserted = self.output.pat_defs.insert(param.span, id);
                 if let Some(ty) = param.ty {

@@ -17,7 +17,7 @@ impl Resolver<'_> {
         } = &self.ast.pats[pat_idx]
         {
             let effective_kind = if args.is_empty() { kind } else { DefKind::Fn };
-            let id = self.defs.alloc(*name, effective_kind, *span);
+            let id = self.defs.alloc(*name, effective_kind, *span, self.file_id);
             self.define_in_scope(*name, id, *span);
             let _inserted = self.output.pat_defs.insert(*span, id);
         }
@@ -29,7 +29,7 @@ impl Resolver<'_> {
             Pat::Bind {
                 name, span, inner, ..
             } => {
-                let id = self.defs.alloc(name, DefKind::Let, span);
+                let id = self.defs.alloc(name, DefKind::Let, span, self.file_id);
                 self.define_in_scope(name, id, span);
                 let _inserted = self.output.pat_defs.insert(span, id);
                 if let Some(inner) = inner {
@@ -66,7 +66,7 @@ impl Resolver<'_> {
             Pat::Bind {
                 name, span, inner, ..
             } => {
-                let id = self.defs.alloc(name, kind, span);
+                let id = self.defs.alloc(name, kind, span, self.file_id);
                 self.define_in_scope(name, id, span);
                 let _inserted = self.output.pat_defs.insert(span, id);
                 if let Some(inner) = inner {
