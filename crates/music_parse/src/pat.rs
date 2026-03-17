@@ -286,8 +286,7 @@ fn unescape_str(raw: &str) -> String {
                 Some('t') => out.push('\t'),
                 Some('r') => out.push('\r'),
                 Some('0') => out.push('\0'),
-                Some('\\') => out.push('\\'),
-                Some('"') => out.push('"'),
+                Some(c @ ('\\' | '"')) => out.push(c),
                 Some(other) => {
                     out.push('\\');
                     out.push(other);

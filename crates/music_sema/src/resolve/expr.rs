@@ -307,8 +307,7 @@ impl Resolver<'_> {
         if let Some(v) = fields.value {
             if matches!(&self.ast.exprs[v], Expr::Choice { .. }) {
                 let pat_span = match &self.ast.pats[fields.pat] {
-                    Pat::Variant { span, .. } => Some(*span),
-                    Pat::Bind { span, .. } => Some(*span),
+                    Pat::Variant { span, .. } | Pat::Bind { span, .. } => Some(*span),
                     _ => None,
                 };
                 let parent_def = pat_span.and_then(|s| self.output.pat_defs.get(&s).copied());

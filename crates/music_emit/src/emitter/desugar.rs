@@ -11,7 +11,7 @@ use music_ast::ExprIdx;
 
 use super::super::emitter::Emitter;
 use super::FnCtx;
-use super::expr::{emit_expr, resolve_field_name};
+use super::expr::{emit_expr, emit_require, resolve_field_name};
 
 /// Emit `left and right` with short-circuit evaluation. Leaves bool on stack.
 ///
@@ -31,12 +31,7 @@ pub fn emit_and(
         fc.fe.emit_jmp_f(false_label);
         // Left was true — discard it and evaluate right
         fc.fe.emit_pop();
-        let produced_right = emit_expr(em, fc, right)?;
-        if !produced_right {
-            return Err(EmitError::UnsupportedFeature {
-                desc: "short-circuit `and` right operand produced no value".into(),
-            });
-        }
+        emit_require(em, fc, right, "short-circuit `and` right operand")?;
         fc.fe.emit_jmp(end_label);
         fc.fe.emit_label(false_label);
         fc.fe.emit_label(end_label);
@@ -62,12 +57,7 @@ pub fn emit_or(
         fc.fe.emit_jmp_t(end_label);
         // Left was false — discard it and evaluate right
         fc.fe.emit_pop();
-        let produced_right = emit_expr(em, fc, right)?;
-        if !produced_right {
-            return Err(EmitError::UnsupportedFeature {
-                desc: "short-circuit `or` right operand produced no value".into(),
-            });
-        }
+        emit_require(em, fc, right, "short-circuit `or` right operand")?;
         fc.fe.emit_label(end_label);
     }
     Ok(())
@@ -102,17 +92,17 @@ pub fn emit_assign(
             }
             return Ok(());
         }
-        if let Some(&upv_idx) = fc.upvalue_map.get(&def_id) {
-            if fc.ref_upvalues.contains(&def_id) {
-                let idx = u8::try_from(upv_idx)
-                    .map_err(|_| EmitError::overflow("upvalue index exceeds 255"))?;
-                let val_slot = fc.alloc_local();
-                fc.fe.emit_st_loc(val_slot);
-                fc.fe.emit_ld_upv(idx);
-                fc.fe.emit_ld_loc(val_slot);
-                fc.fe.emit_st_fld(0)?;
-                return Ok(());
-            }
+        if let Some(&upv_idx) = fc.upvalue_map.get(&def_id)
+            && fc.ref_upvalues.contains(&def_id)
+        {
+            let idx = u8::try_from(upv_idx)
+                .map_err(|_| EmitError::overflow("upvalue index exceeds 255"))?;
+            let val_slot = fc.alloc_local();
+            fc.fe.emit_st_loc(val_slot);
+            fc.fe.emit_ld_upv(idx);
+            fc.fe.emit_ld_loc(val_slot);
+            fc.fe.emit_st_fld(0)?;
+            return Ok(());
         }
         if let Some(&slot) = em.global_map.get(&def_id) {
             fc.fe.emit_st_glb(slot);
@@ -124,18 +114,8 @@ pub fn emit_assign(
     if let Expr::Index { object, index, .. } = left_expr {
         let val_slot = fc.alloc_local();
         fc.fe.emit_st_loc(val_slot);
-        let produced_obj = emit_expr(em, fc, object)?;
-        if !produced_obj {
-            return Err(EmitError::UnsupportedFeature {
-                desc: "index assign: object produced no value".into(),
-            });
-        }
-        let produced_idx = emit_expr(em, fc, index)?;
-        if !produced_idx {
-            return Err(EmitError::UnsupportedFeature {
-                desc: "index assign: index produced no value".into(),
-            });
-        }
+        emit_require(em, fc, object, "index assign: object")?;
+        emit_require(em, fc, index, "index assign: index")?;
         fc.fe.emit_ld_loc(val_slot);
         fc.fe.emit_st_idx();
         return Ok(());
@@ -145,12 +125,7 @@ pub fn emit_assign(
     if let Expr::Field { object, field, .. } = left_expr {
         let val_slot = fc.alloc_local();
         fc.fe.emit_st_loc(val_slot);
-        let produced_obj = emit_expr(em, fc, object)?;
-        if !produced_obj {
-            return Err(EmitError::UnsupportedFeature {
-                desc: "field assign: object produced no value".into(),
-            });
-        }
+        emit_require(em, fc, object, "field assign: object")?;
         fc.fe.emit_ld_loc(val_slot);
         let field_idx = match field {
             FieldKey::Pos { index, .. } => index,
@@ -172,49 +147,36 @@ pub fn emit_pipe(
     left: ExprIdx,
     right: ExprIdx,
 ) -> Result<(), EmitError> {
-    let produced = emit_expr(em, fc, left)?;
-    if !produced {
-        return Err(EmitError::UnsupportedFeature {
-            desc: "pipe left operand produced no value".into(),
-        });
-    }
+    emit_require(em, fc, left, "pipe left operand")?;
 
     let right_expr = em.ast.exprs[right].clone();
-    match right_expr {
-        Expr::Name { .. } => {
-            if let Some(&def_id) = em.expr_defs().get(&right) {
-                if let Some(&ffi_idx) = em.foreign_map.get(&def_id) {
-                    fc.fe.emit_inv_ffi(ffi_idx, 1);
-                    return Ok(());
-                }
-                if let Some(&fn_id) = em.fn_map.get(&def_id) {
-                    fc.fe.emit_inv(fn_id, false, 1);
-                    return Ok(());
-                }
-                if let Some(&slot) = fc.local_map.get(&def_id) {
-                    fc.fe.emit_ld_loc(slot);
-                    fc.fe.emit_inv_dyn(1)?;
-                    return Ok(());
-                }
+    if let Expr::Name { .. } = right_expr {
+        if let Some(&def_id) = em.expr_defs().get(&right) {
+            if let Some(&ffi_idx) = em.foreign_map.get(&def_id) {
+                fc.fe.emit_inv_ffi(ffi_idx, 1);
+                return Ok(());
             }
-            Err(EmitError::UnsupportedFeature {
-                desc: "unresolved pipe callee".into(),
-            })
-        }
-        _ => {
-            // General case: spill piped value, emit callee expr, restore arg, INV_DYN.
-            let tmp = fc.alloc_local();
-            fc.fe.emit_st_loc(tmp);
-            let callee_produced = emit_expr(em, fc, right)?;
-            if !callee_produced {
-                return Err(EmitError::UnsupportedFeature {
-                    desc: "pipe callee produced no value".into(),
-                });
+            if let Some(&fn_id) = em.fn_map.get(&def_id) {
+                fc.fe.emit_inv(fn_id, false, 1);
+                return Ok(());
             }
-            fc.fe.emit_ld_loc(tmp);
-            fc.fe.emit_inv_dyn(1)?;
-            Ok(())
+            if let Some(&slot) = fc.local_map.get(&def_id) {
+                fc.fe.emit_ld_loc(slot);
+                fc.fe.emit_inv_dyn(1)?;
+                return Ok(());
+            }
         }
+        Err(EmitError::UnsupportedFeature {
+            desc: "unresolved pipe callee".into(),
+        })
+    } else {
+        // General case: spill piped value, emit callee expr, restore arg, INV_DYN.
+        let tmp = fc.alloc_local();
+        fc.fe.emit_st_loc(tmp);
+        emit_require(em, fc, right, "pipe callee")?;
+        fc.fe.emit_ld_loc(tmp);
+        fc.fe.emit_inv_dyn(1)?;
+        Ok(())
     }
 }
 
@@ -285,38 +247,7 @@ pub fn emit_nil_coal(
     left: ExprIdx,
     right: ExprIdx,
 ) -> Result<(), EmitError> {
-    let produced = emit_expr(em, fc, left)?;
-    if !produced {
-        return Err(EmitError::UnsupportedFeature {
-            desc: "nil-coalesce left operand produced no value".into(),
-        });
-    }
-    let tmp = fc.alloc_local();
-    fc.fe.emit_st_loc(tmp);
-
-    let some_label = fc.fresh_label();
-    let end_label = fc.fresh_label();
-
-    fc.fe.emit_ld_loc(tmp);
-    fc.fe.emit_cmp_tag(em.some_tag)?;
-    fc.fe.emit_jmp_t(some_label);
-
-    // None path: evaluate fallback
-    let produced_right = emit_expr(em, fc, right)?;
-    if !produced_right {
-        return Err(EmitError::UnsupportedFeature {
-            desc: "nil-coalesce right operand produced no value".into(),
-        });
-    }
-    fc.fe.emit_jmp(end_label);
-
-    // Some path: extract payload
-    fc.fe.emit_label(some_label);
-    fc.fe.emit_ld_loc(tmp);
-    fc.fe.emit_ld_pay(0);
-
-    fc.fe.emit_label(end_label);
-    Ok(())
+    emit_coalesce(em, fc, left, right, em.some_tag, "nil-coalesce")
 }
 
 /// Emit `operand?` (propagate). If operand is Some, extract payload;
@@ -326,12 +257,7 @@ pub fn emit_propagate(
     fc: &mut FnCtx,
     operand: ExprIdx,
 ) -> Result<(), EmitError> {
-    let produced = emit_expr(em, fc, operand)?;
-    if !produced {
-        return Err(EmitError::UnsupportedFeature {
-            desc: "propagate operand produced no value".into(),
-        });
-    }
+    emit_require(em, fc, operand, "propagate operand")?;
     let tmp = fc.alloc_local();
     fc.fe.emit_st_loc(tmp);
 
@@ -361,13 +287,8 @@ pub fn emit_propagate(
 
 /// Emit `try operand`. Evaluates operand and wraps result in Some(value).
 pub fn emit_try(em: &mut Emitter<'_>, fc: &mut FnCtx, operand: ExprIdx) -> Result<(), EmitError> {
-    let produced = emit_expr(em, fc, operand)?;
-    if !produced {
-        return Err(EmitError::UnsupportedFeature {
-            desc: "try operand produced no value".into(),
-        });
-    }
-    fc.fe.emit_mk_var(em.some_tag, 1)?;
+    emit_require(em, fc, operand, "try operand")?;
+    fc.fe.emit_mk_var(em.some_tag, 1);
     Ok(())
 }
 
@@ -378,18 +299,8 @@ pub fn emit_range(
     left: ExprIdx,
     right: ExprIdx,
 ) -> Result<(), EmitError> {
-    let produced_left = emit_expr(em, fc, left)?;
-    if !produced_left {
-        return Err(EmitError::UnsupportedFeature {
-            desc: "range start produced no value".into(),
-        });
-    }
-    let produced_right = emit_expr(em, fc, right)?;
-    if !produced_right {
-        return Err(EmitError::UnsupportedFeature {
-            desc: "range end produced no value".into(),
-        });
-    }
+    emit_require(em, fc, left, "range start")?;
+    emit_require(em, fc, right, "range end")?;
     fc.fe.emit_mk_prd(2, 1)?; // (start, end) product, pops 2 pushes 1 -> net pop 1
     Ok(())
 }
@@ -402,33 +313,38 @@ pub fn emit_err_coal(
     left: ExprIdx,
     right: ExprIdx,
 ) -> Result<(), EmitError> {
-    let produced = emit_expr(em, fc, left)?;
-    if !produced {
-        return Err(EmitError::UnsupportedFeature {
-            desc: "err-coalesce left operand produced no value".into(),
-        });
-    }
+    emit_coalesce(em, fc, left, right, em.ok_tag, "err-coalesce")
+}
+
+/// Shared implementation for nil-coalesce (`??`) and err-coalesce (`!!`).
+///
+/// Checks left against `success_tag` (Some for `??`, Ok for `!!`).
+/// If the tag matches, extracts payload; otherwise evaluates right as fallback.
+fn emit_coalesce(
+    em: &mut Emitter<'_>,
+    fc: &mut FnCtx,
+    left: ExprIdx,
+    right: ExprIdx,
+    success_tag: u32,
+    op_name: &str,
+) -> Result<(), EmitError> {
+    emit_require(em, fc, left, &format!("{op_name} left operand"))?;
     let tmp = fc.alloc_local();
     fc.fe.emit_st_loc(tmp);
 
-    let ok_label = fc.fresh_label();
+    let success_label = fc.fresh_label();
     let end_label = fc.fresh_label();
 
     fc.fe.emit_ld_loc(tmp);
-    fc.fe.emit_cmp_tag(em.ok_tag)?;
-    fc.fe.emit_jmp_t(ok_label);
+    fc.fe.emit_cmp_tag(success_tag)?;
+    fc.fe.emit_jmp_t(success_label);
 
-    // Err path: evaluate fallback
-    let produced_right = emit_expr(em, fc, right)?;
-    if !produced_right {
-        return Err(EmitError::UnsupportedFeature {
-            desc: "err-coalesce right operand produced no value".into(),
-        });
-    }
+    // Fallback path: evaluate right
+    emit_require(em, fc, right, &format!("{op_name} right operand"))?;
     fc.fe.emit_jmp(end_label);
 
-    // Ok path: extract payload
-    fc.fe.emit_label(ok_label);
+    // Success path: extract payload
+    fc.fe.emit_label(success_label);
     fc.fe.emit_ld_loc(tmp);
     fc.fe.emit_ld_pay(0);
 
@@ -445,21 +361,11 @@ pub fn emit_in_op(
     right: ExprIdx,
 ) -> Result<(), EmitError> {
     // Evaluate operands into temp slots so we can reload them inside the loop.
-    let produced_right = emit_expr(em, fc, right)?;
-    if !produced_right {
-        return Err(EmitError::UnsupportedFeature {
-            desc: "`in` right operand produced no value".into(),
-        });
-    }
+    emit_require(em, fc, right, "`in` right operand")?;
     let arr_slot = fc.alloc_local();
     fc.fe.emit_st_loc(arr_slot);
 
-    let produced_left = emit_expr(em, fc, left)?;
-    if !produced_left {
-        return Err(EmitError::UnsupportedFeature {
-            desc: "`in` left operand produced no value".into(),
-        });
-    }
+    emit_require(em, fc, left, "`in` left operand")?;
     let needle_slot = fc.alloc_local();
     fc.fe.emit_st_loc(needle_slot);
 
@@ -532,18 +438,8 @@ pub fn emit_cons(
     left: ExprIdx,
     right: ExprIdx,
 ) -> Result<(), EmitError> {
-    let produced_left = emit_expr(em, fc, left)?;
-    if !produced_left {
-        return Err(EmitError::UnsupportedFeature {
-            desc: "cons head produced no value".into(),
-        });
-    }
-    let produced_right = emit_expr(em, fc, right)?;
-    if !produced_right {
-        return Err(EmitError::UnsupportedFeature {
-            desc: "cons tail produced no value".into(),
-        });
-    }
+    emit_require(em, fc, left, "cons head")?;
+    emit_require(em, fc, right, "cons tail")?;
     fc.fe.emit_mk_prd(2, 1)?; // (head, tail)
     Ok(())
 }
@@ -559,13 +455,12 @@ fn unescape_str(raw: &str) -> String {
                 Some('t') => out.push('\t'),
                 Some('r') => out.push('\r'),
                 Some('0') => out.push('\0'),
-                Some('\\') => out.push('\\'),
+                Some('\\') | None => out.push('\\'),
                 Some('"') => out.push('"'),
                 Some(other) => {
                     out.push('\\');
                     out.push(other);
                 }
-                None => out.push('\\'),
             }
         } else {
             out.push(c);

@@ -43,7 +43,7 @@ pub struct FnBytecode {
 }
 
 /// Per-dependency-module context for multi-module emission.
-pub(crate) struct DepEmitCtx<'a> {
+pub struct DepEmitCtx<'a> {
     pub ast: &'a AstArenas,
     pub stmts: Vec<Stmt>,
     pub resolution: &'a ResolutionMap,
@@ -99,7 +99,7 @@ pub struct Emitter<'a> {
     /// `DefId` -> global slot index for module-level non-function bindings.
     pub(crate) global_map: HashMap<DefId, u32>,
     next_global: u32,
-    /// Non-function dep bindings: (value_expr, dep_idx, def_id, global_slot).
+    /// Non-function dep bindings: (`value_expr`, `dep_idx`, `def_id`, `global_slot`).
     dep_global_inits: Vec<(ExprIdx, usize, DefId, u32)>,
     /// Top-level side-effect statements from dep modules (e.g., assignments).
     dep_side_effects: Vec<(ExprIdx, usize)>,
@@ -198,45 +198,35 @@ impl<'a> Emitter<'a> {
     }
 
     pub(crate) fn expr_defs(&self) -> &HashMap<ExprIdx, DefId> {
-        match self.active_dep {
-            Some(i) => &self.dep_contexts[i].resolution.expr_defs,
-            None => &self.sema.resolution.expr_defs,
-        }
+        self.active_dep.map_or(&self.sema.resolution.expr_defs, |i| {
+            &self.dep_contexts[i].resolution.expr_defs
+        })
     }
 
     pub(crate) fn pat_defs(&self) -> &HashMap<Span, DefId> {
-        match self.active_dep {
-            Some(i) => &self.dep_contexts[i].resolution.pat_defs,
-            None => &self.sema.resolution.pat_defs,
-        }
+        self.active_dep.map_or(&self.sema.resolution.pat_defs, |i| {
+            &self.dep_contexts[i].resolution.pat_defs
+        })
     }
 
     pub(crate) fn active_binop_dispatch(&self) -> &HashMap<ExprIdx, DefId> {
-        match self.active_dep {
-            Some(i) => self.dep_contexts[i].binop_dispatch,
-            None => &self.sema.binop_dispatch,
-        }
+        self.active_dep
+            .map_or(&self.sema.binop_dispatch, |i| self.dep_contexts[i].binop_dispatch)
     }
 
     pub(crate) fn active_binop_dict_dispatch(&self) -> &HashMap<ExprIdx, DictLookup> {
-        match self.active_dep {
-            Some(i) => self.dep_contexts[i].binop_dict_dispatch,
-            None => &self.sema.binop_dict_dispatch,
-        }
+        self.active_dep
+            .map_or(&self.sema.binop_dict_dispatch, |i| self.dep_contexts[i].binop_dict_dispatch)
     }
 
     pub(crate) fn active_fn_constraints(&self) -> &HashMap<DefId, Vec<Obligation>> {
-        match self.active_dep {
-            Some(i) => self.dep_contexts[i].fn_constraints,
-            None => &self.sema.fn_constraints,
-        }
+        self.active_dep
+            .map_or(&self.sema.fn_constraints, |i| self.dep_contexts[i].fn_constraints)
     }
 
     pub(crate) fn expr_types(&self) -> &HashMap<ExprIdx, TypeIdx> {
-        match self.active_dep {
-            Some(i) => self.dep_contexts[i].expr_types,
-            None => &self.sema.expr_types,
-        }
+        self.active_dep
+            .map_or(&self.sema.expr_types, |i| self.dep_contexts[i].expr_types)
     }
 
     pub fn emit_all(&mut self) -> Result<Vec<FnBytecode>, EmitError> {
@@ -267,8 +257,8 @@ impl<'a> Emitter<'a> {
     fn resolve_well_known_tags(&mut self) {
         let some_sym = self.interner.intern("Some");
         let ok_sym = self.interner.intern("Ok");
-        self.some_tag = expr::resolve_variant_tag_by_name(self, some_sym).unwrap_or(0);
-        self.ok_tag = expr::resolve_variant_tag_by_name(self, ok_sym).unwrap_or(0);
+        self.some_tag = expr::resolve_variant_tag(self, some_sym).unwrap_or(0);
+        self.ok_tag = expr::resolve_variant_tag(self, ok_sym).unwrap_or(0);
     }
 
     fn scan_top_level(&mut self) -> Result<(), EmitError> {
@@ -289,7 +279,7 @@ impl<'a> Emitter<'a> {
         let expr = self.ast.exprs[expr_idx].clone();
         match expr {
             Expr::Annotated { attrs, inner, .. } => {
-                self.scan_annotated(&attrs, inner)?;
+                self.scan_annotated(&attrs, inner, None)?;
             }
             Expr::Binding { fields, .. } => {
                 self.scan_binding(&fields, false);
@@ -301,7 +291,7 @@ impl<'a> Emitter<'a> {
                 self.scan_foreign_with_attrs(abi, &decls, &[])?;
             }
             Expr::Instance { members, .. } => {
-                self.scan_instance_members(&members);
+                self.scan_instance_members(&members, None);
             }
             Expr::Let { fields, body, .. } => {
                 self.scan_binding(&fields, false);
@@ -339,13 +329,19 @@ impl<'a> Emitter<'a> {
         Ok(())
     }
 
-    fn scan_annotated(&mut self, attrs: &[Attr], inner: ExprIdx) -> Result<(), EmitError> {
-        let is_entry = has_entrypoint_attr(attrs, self.interner);
+    fn scan_annotated(
+        &mut self,
+        attrs: &[Attr],
+        inner: ExprIdx,
+        dep_idx: Option<usize>,
+    ) -> Result<(), EmitError> {
+        let is_entry = dep_idx.is_none() && has_entrypoint_attr(attrs, self.interner);
         let inner_expr = self.ast.exprs[inner].clone();
         match inner_expr {
-            Expr::Binding { fields, .. } => {
-                self.scan_binding(&fields, is_entry);
-            }
+            Expr::Binding { fields, .. } => match dep_idx {
+                Some(di) => self.scan_dep_binding(&fields, di),
+                None => self.scan_binding(&fields, is_entry),
+            },
             Expr::Annotated {
                 attrs: inner_attrs,
                 inner: inner2,
@@ -353,44 +349,18 @@ impl<'a> Emitter<'a> {
             } => {
                 let mut combined = attrs.to_vec();
                 combined.extend_from_slice(&inner_attrs);
-                self.scan_annotated(&combined, inner2)?;
+                self.scan_annotated(&combined, inner2, dep_idx)?;
             }
-            Expr::Effect { name, ops, .. } => {
+            Expr::Effect { name, ops, .. } if dep_idx.is_none() => {
                 self.scan_effect(name, &ops)?;
             }
             Expr::Foreign { abi, decls, .. } => {
                 self.scan_foreign_with_attrs(abi, &decls, attrs)?;
             }
             Expr::Instance { members, .. } => {
-                self.scan_instance_members(&members);
+                self.scan_instance_members(&members, dep_idx);
             }
-            Expr::Lit { .. }
-            | Expr::Name { .. }
-            | Expr::Paren { .. }
-            | Expr::Tuple { .. }
-            | Expr::Block { .. }
-            | Expr::Let { .. }
-            | Expr::Fn { .. }
-            | Expr::Call { .. }
-            | Expr::Field { .. }
-            | Expr::Index { .. }
-            | Expr::Update { .. }
-            | Expr::Record { .. }
-            | Expr::Array { .. }
-            | Expr::Variant { .. }
-            | Expr::Choice { .. }
-            | Expr::RecordDef { .. }
-            | Expr::BinOp { .. }
-            | Expr::UnaryOp { .. }
-            | Expr::Piecewise { .. }
-            | Expr::Match { .. }
-            | Expr::Return { .. }
-            | Expr::Import { .. }
-            | Expr::Export { .. }
-            | Expr::Class { .. }
-            | Expr::TypeCheck { .. }
-            | Expr::Handle { .. }
-            | Expr::Error { .. } => {}
+            _ => {}
         }
         Ok(())
     }
@@ -440,7 +410,7 @@ impl<'a> Emitter<'a> {
             }
 
             let (param_type_ids, ret_type_id) =
-                self.lower_foreign_fn_type(def_id, any_type_id, unit_type_id);
+                self.resolve_fn_type(def_id, any_type_id, unit_type_id);
 
             let ext_sym = match *ext_name {
                 Some(s) => {
@@ -473,10 +443,10 @@ impl<'a> Emitter<'a> {
         Ok(())
     }
 
-    fn lower_foreign_fn_type(
+    fn resolve_fn_type(
         &mut self,
         def_id: DefId,
-        any_type_id: u32,
+        param_fallback: u32,
         unit_type_id: u32,
     ) -> (Vec<u32>, u32) {
         let ty_idx = self
@@ -501,7 +471,7 @@ impl<'a> Emitter<'a> {
             .map(|&p| {
                 self.tp
                     .lower_sema_type(p, &self.sema.types, &self.sema.unify, &self.sema.well_known)
-                    .unwrap_or(any_type_id)
+                    .unwrap_or(param_fallback)
             })
             .collect();
 
@@ -561,7 +531,7 @@ impl<'a> Emitter<'a> {
 
             let (param_type_ids, ret_type_id) = op_def_id.map_or_else(
                 || (vec![], unit_type_id),
-                |did| self.resolve_effect_op_types(did, unit_type_id),
+                |did| self.resolve_fn_type(did, unit_type_id, unit_type_id),
             );
 
             if let Some(did) = op_def_id {
@@ -585,46 +555,6 @@ impl<'a> Emitter<'a> {
         });
         let _ = self.effect_id_map.insert(effect_def_id, effect_id);
         Ok(())
-    }
-
-    fn resolve_effect_op_types(&mut self, op_def_id: DefId, unit_type_id: u32) -> (Vec<u32>, u32) {
-        let ty_idx = self
-            .sema
-            .defs
-            .iter()
-            .find(|d| d.id == op_def_id)
-            .and_then(|d| d.ty_info.ty);
-
-        let Some(ty_idx) = ty_idx else {
-            return (vec![], unit_type_id);
-        };
-
-        let resolved = self.sema.unify.resolve(ty_idx, &self.sema.types);
-        let (params, ret) = match &self.sema.types[resolved] {
-            Type::Fn { params, ret, .. } => (params.clone(), *ret),
-            _ => return (vec![], unit_type_id),
-        };
-
-        let param_type_ids: Vec<u32> = params
-            .iter()
-            .map(|&p| {
-                self.tp
-                    .lower_sema_type(p, &self.sema.types, &self.sema.unify, &self.sema.well_known)
-                    .unwrap_or(unit_type_id)
-            })
-            .collect();
-
-        let ret_type_id = self
-            .tp
-            .lower_sema_type(
-                ret,
-                &self.sema.types,
-                &self.sema.unify,
-                &self.sema.well_known,
-            )
-            .unwrap_or(unit_type_id);
-
-        (param_type_ids, ret_type_id)
     }
 
     fn scan_binding(&mut self, fields: &LetFields, is_entry: bool) {
@@ -662,7 +592,7 @@ impl<'a> Emitter<'a> {
 
     /// Register instance method bodies as top-level functions so `emit_functions`
     /// can compile them. Laws are skipped — they are not emitted.
-    fn scan_instance_members(&mut self, members: &[ClassMember]) {
+    fn scan_instance_members(&mut self, members: &[ClassMember], dep_idx: Option<usize>) {
         for member in members {
             let ClassMember::Fn {
                 sig,
@@ -694,7 +624,7 @@ impl<'a> Emitter<'a> {
                 params: sig.params.clone(),
                 body: *body,
                 effect_mask: 0,
-                dep_idx: None,
+                dep_idx,
             });
         }
     }
@@ -720,56 +650,21 @@ impl<'a> Emitter<'a> {
         let expr = self.ast.exprs[expr_idx].clone();
         match expr {
             Expr::Annotated { attrs, inner, .. } => {
-                self.scan_dep_annotated(&attrs, inner, dep_idx)?;
+                self.scan_annotated(&attrs, inner, Some(dep_idx))?;
             }
-            Expr::Binding { fields, .. } => {
-                self.scan_dep_binding(&fields, dep_idx);
-            }
-            Expr::Let { fields, .. } => {
+            Expr::Binding { fields, .. } | Expr::Let { fields, .. } => {
                 self.scan_dep_binding(&fields, dep_idx);
             }
             Expr::Foreign { abi, decls, .. } => {
                 self.scan_foreign_with_attrs(abi, &decls, &[])?;
             }
             Expr::Instance { members, .. } => {
-                self.scan_dep_instance_members(&members, dep_idx);
+                self.scan_instance_members(&members, Some(dep_idx));
             }
-            Expr::Export { .. } => {}
             // Top-level side-effect statements (e.g., `parse_value_ref <- parse_value`)
             // must execute when the module is loaded.
             Expr::BinOp { op: BinOp::Assign, .. } => {
                 self.dep_side_effects.push((expr_idx, dep_idx));
-            }
-            _ => {}
-        }
-        Ok(())
-    }
-
-    fn scan_dep_annotated(
-        &mut self,
-        attrs: &[Attr],
-        inner: ExprIdx,
-        dep_idx: usize,
-    ) -> Result<(), EmitError> {
-        let inner_expr = self.ast.exprs[inner].clone();
-        match inner_expr {
-            Expr::Binding { fields, .. } => {
-                self.scan_dep_binding(&fields, dep_idx);
-            }
-            Expr::Annotated {
-                attrs: inner_attrs,
-                inner: inner2,
-                ..
-            } => {
-                let mut combined = attrs.to_vec();
-                combined.extend_from_slice(&inner_attrs);
-                self.scan_dep_annotated(&combined, inner2, dep_idx)?;
-            }
-            Expr::Foreign { abi, decls, .. } => {
-                self.scan_foreign_with_attrs(abi, &decls, attrs)?;
-            }
-            Expr::Instance { members, .. } => {
-                self.scan_dep_instance_members(&members, dep_idx);
             }
             _ => {}
         }
@@ -819,11 +714,12 @@ impl<'a> Emitter<'a> {
         let fn_id = self.alloc_fn_id();
 
         let binding_span = pat_span(fields.pat, self.ast);
-        let mut binding_def_id = None;
-        if let Some(&did) = self.pat_defs().get(&binding_span) {
+        let binding_def_id = if let Some(&did) = self.pat_defs().get(&binding_span) {
             let _ = self.fn_map.insert(did, fn_id);
-            binding_def_id = Some(did);
-        }
+            Some(did)
+        } else {
+            None
+        };
 
         let fn_name = pat_name_str(fields.pat, self.ast, self.interner);
         self.fn_entries.push(FnEntry {
@@ -837,42 +733,6 @@ impl<'a> Emitter<'a> {
         });
     }
 
-    fn scan_dep_instance_members(&mut self, members: &[ClassMember], dep_idx: usize) {
-        for member in members {
-            let ClassMember::Fn {
-                sig,
-                default: Some(body),
-                ..
-            } = member
-            else {
-                continue;
-            };
-            let def_id = self
-                .sema
-                .defs
-                .iter()
-                .find(|d| d.kind == DefKind::Fn && d.name == sig.name && d.span == sig.span)
-                .map(|d| d.id);
-
-            let fn_id = self.alloc_fn_id();
-
-            if let Some(did) = def_id {
-                let _ = self.fn_map.insert(did, fn_id);
-            }
-
-            let fn_name = self.interner.resolve(sig.name).to_owned();
-            self.fn_entries.push(FnEntry {
-                fn_id,
-                def_id,
-                name: fn_name,
-                params: sig.params.clone(),
-                body: *body,
-                effect_mask: 0,
-                dep_idx: Some(dep_idx),
-            });
-        }
-    }
-
     fn emit_functions(&mut self) -> Result<Vec<FnBytecode>, EmitError> {
         let entries: Vec<FnEntry> = mem::take(&mut self.fn_entries);
         let mut results = Vec::with_capacity(entries.len());
@@ -881,11 +741,11 @@ impl<'a> Emitter<'a> {
             results.push(bc);
         }
         // Script mode: emit a synthetic entry function from top-level statements.
-        if let Some(entry_id) = self.entry_fn_id {
-            if !results.iter().any(|f| f.fn_id == entry_id) {
-                let bc = self.emit_script_entry(entry_id)?;
-                results.push(bc);
-            }
+        if let Some(entry_id) = self.entry_fn_id
+            && !results.iter().any(|f| f.fn_id == entry_id)
+        {
+            let bc = self.emit_script_entry(entry_id)?;
+            results.push(bc);
         }
         let mut nested = mem::take(&mut self.nested_fns);
         results.append(&mut nested);
@@ -974,14 +834,14 @@ impl<'a> Emitter<'a> {
             && let Some(def_info) = self.sema.defs.iter().find(|d| d.id == did)
             && let Some(ty_idx) = def_info.ty_info.ty
         {
-            match self.tp.lower_sema_type(
+            // polymorphic / unresolved — fall through to unit on error
+            if let Ok(id) = self.tp.lower_sema_type(
                 ty_idx,
                 &self.sema.types,
                 &self.sema.unify,
                 &self.sema.well_known,
             ) {
-                Ok(id) => return Ok(id),
-                Err(_) => {} // polymorphic / unresolved — fall through to unit
+                return Ok(id);
             }
         }
         self.tp

@@ -2506,7 +2506,7 @@ fn test_jmp_sh_backward() {
                 Opcode::LD_CST.0, 1,
                 Opcode::INT_SUB.0,
                 Opcode::ST_LOC.0, 0,
-                Opcode::JMP_SH.0, (-19i8) as u8,
+                Opcode::JMP_SH.0, (-19i8).cast_unsigned(),
                 // EXIT:
                 Opcode::LD_LOC.0, 0,
                 Opcode::RET.0,
@@ -2579,7 +2579,7 @@ fn test_jnf_sh_backward() {
                 Opcode::LD_LOC.0, 0,
                 Opcode::LD_CST.0, 0,
                 Opcode::CMP_EQ.0,
-                Opcode::JNF_SH.0, (-14i8) as u8,
+                Opcode::JNF_SH.0, (-14i8).cast_unsigned(),
                 // EXIT:
                 Opcode::LD_LOC.0, 0,
                 Opcode::RET.0,

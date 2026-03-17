@@ -435,10 +435,8 @@ impl UnifyTable {
             }
             (true, true, Some(r1), Some(r2)) => self.unify(r1, r2, arena, well_known),
 
-            // Excess only in f1, f2 is closed — fail.
-            (false, _, _, None) => false,
-            // Excess only in f2, f1 is closed — fail.
-            (_, false, None, _) => false,
+            // Excess only in f1, f2 is closed — fail; or excess only in f2, f1 is closed — fail.
+            (false, _, _, None) | (_, false, None, _) => false,
 
             // Excess only in f1, rest2 is open — push only1 into rest2.
             (false, true, _, Some(r2)) => {
@@ -510,85 +508,23 @@ impl UnifyTable {
                 if let Some(bound) = self.probe(v) {
                     self.freeze(bound, arena, any_def)
                 } else {
-                    arena.alloc(Type::Named {
-                        def: any_def,
-                        args: vec![],
-                    })
+                    arena.alloc(Type::Named { def: any_def, args: vec![] })
                 }
             }
             Type::Named { def, args } => {
-                let args: Vec<_> = args
-                    .iter()
-                    .map(|&a| self.freeze(a, arena, any_def))
-                    .collect();
+                let args: Vec<_> = args.iter().map(|&a| self.freeze(a, arena, any_def)).collect();
                 arena.alloc(Type::Named { def, args })
             }
-            Type::Fn {
-                params,
-                ret,
-                effects,
-            } => {
-                let params: Vec<_> = params
-                    .iter()
-                    .map(|&p| self.freeze(p, arena, any_def))
-                    .collect();
+            Type::Fn { params, ret, effects } => {
+                let params: Vec<_> = params.iter().map(|&p| self.freeze(p, arena, any_def)).collect();
                 let ret = self.freeze(ret, arena, any_def);
-                arena.alloc(Type::Fn {
-                    params,
-                    ret,
-                    effects,
-                })
+                arena.alloc(Type::Fn { params, ret, effects })
             }
             Type::Tuple { elems } => {
-                let elems: Vec<_> = elems
-                    .iter()
-                    .map(|&e| self.freeze(e, arena, any_def))
-                    .collect();
+                let elems: Vec<_> = elems.iter().map(|&e| self.freeze(e, arena, any_def)).collect();
                 arena.alloc(Type::Tuple { elems })
             }
-            Type::Record { fields, rest } => {
-                // Flatten the row chain: collect all fields from this record
-                // and any linked rest records.
-                let mut all_fields: Vec<RecordField> = fields
-                    .iter()
-                    .map(|f| RecordField {
-                        name: f.name,
-                        ty: self.freeze(f.ty, arena, any_def),
-                        ty_params: f.ty_params.clone(),
-                    })
-                    .collect();
-                // Walk the rest chain.
-                let mut cur_rest = rest;
-                loop {
-                    let Some(rest_idx) = cur_rest else { break };
-                    let resolved = self.resolve(rest_idx, arena);
-                    match arena[resolved].clone() {
-                        Type::Record { fields: rf, rest: rr } => {
-                            for f in &rf {
-                                if !all_fields.iter().any(|ef| ef.name == f.name) {
-                                    all_fields.push(RecordField {
-                                        name: f.name,
-                                        ty: self.freeze(f.ty, arena, any_def),
-                                        ty_params: f.ty_params.clone(),
-                                    });
-                                }
-                            }
-                            cur_rest = rr;
-                        }
-                        // Unsolved row variable — close the record.
-                        _ => break,
-                    }
-                }
-                // Sort by name index for canonical ordering. Full string sort
-                // requires interner access which freeze doesn't have; sort by
-                // Symbol (interning order) as a stable tie-breaker. The
-                // canonical sort-by-string is enforced at construction sites.
-                all_fields.sort_by_key(|f| f.name.0);
-                arena.alloc(Type::Record {
-                    fields: all_fields,
-                    rest: None,
-                })
-            }
+            Type::Record { fields, rest } => self.freeze_record(&fields, rest, arena, any_def),
             Type::Array { elem, len } => {
                 let elem = self.freeze(elem, arena, any_def);
                 arena.alloc(Type::Array { elem, len })
@@ -597,25 +533,12 @@ impl UnifyTable {
                 let inner = self.freeze(inner, arena, any_def);
                 arena.alloc(Type::Ref { inner })
             }
-            Type::Quantified {
-                kind,
-                params,
-                constraints,
-                body,
-            } => {
+            Type::Quantified { kind, params, constraints, body } => {
                 let body = self.freeze(body, arena, any_def);
-                arena.alloc(Type::Quantified {
-                    kind,
-                    params,
-                    constraints,
-                    body,
-                })
+                arena.alloc(Type::Quantified { kind, params, constraints, body })
             }
             Type::AnonSum { variants } => {
-                let variants: Vec<_> = variants
-                    .iter()
-                    .map(|&v| self.freeze(v, arena, any_def))
-                    .collect();
+                let variants: Vec<_> = variants.iter().map(|&v| self.freeze(v, arena, any_def)).collect();
                 arena.alloc(Type::AnonSum { variants })
             }
             Type::Sum { variants } => {
@@ -623,17 +546,59 @@ impl UnifyTable {
                     .iter()
                     .map(|v| SumVariant {
                         name: v.name,
-                        fields: v
-                            .fields
-                            .iter()
-                            .map(|&f| self.freeze(f, arena, any_def))
-                            .collect(),
+                        fields: v.fields.iter().map(|&f| self.freeze(f, arena, any_def)).collect(),
                     })
                     .collect();
                 arena.alloc(Type::Sum { variants })
             }
             Type::Rigid(_) | Type::Error => ty,
         }
+    }
+
+    /// Freezes a `Record` type by flattening its row chain into a closed, sorted record.
+    fn freeze_record(
+        &self,
+        fields: &[RecordField],
+        rest: Option<TypeIdx>,
+        arena: &mut Arena<Type>,
+        any_def: DefId,
+    ) -> TypeIdx {
+        // Collect all fields from this record and any linked rest records.
+        let mut all_fields: Vec<RecordField> = fields
+            .iter()
+            .map(|f| RecordField {
+                name: f.name,
+                ty: self.freeze(f.ty, arena, any_def),
+                ty_params: f.ty_params.clone(),
+            })
+            .collect();
+        // Walk the rest chain.
+        let mut cur_rest = rest;
+        while let Some(rest_idx) = cur_rest {
+            let resolved = self.resolve(rest_idx, arena);
+            match arena[resolved].clone() {
+                Type::Record { fields: rf, rest: rr } => {
+                    for f in &rf {
+                        if !all_fields.iter().any(|ef| ef.name == f.name) {
+                            all_fields.push(RecordField {
+                                name: f.name,
+                                ty: self.freeze(f.ty, arena, any_def),
+                                ty_params: f.ty_params.clone(),
+                            });
+                        }
+                    }
+                    cur_rest = rr;
+                }
+                // Unsolved row variable — close the record.
+                _ => break,
+            }
+        }
+        // Sort by name index for canonical ordering. Full string sort
+        // requires interner access which freeze doesn't have; sort by
+        // Symbol (interning order) as a stable tie-breaker. The
+        // canonical sort-by-string is enforced at construction sites.
+        all_fields.sort_by_key(|f| f.name.0);
+        arena.alloc(Type::Record { fields: all_fields, rest: None })
     }
 }
 
@@ -647,6 +612,7 @@ impl Default for UnifyTable {
 ///
 /// Unlike raw `TypeIdx` comparison, this follows `Named { def, args }` structure
 /// so that two independently-allocated slots for the same type match.
+#[must_use]
 pub fn types_match(types: &Arena<Type>, unify: &UnifyTable, a: TypeIdx, b: TypeIdx) -> bool {
     let a = unify.resolve(a, types);
     let b = unify.resolve(b, types);

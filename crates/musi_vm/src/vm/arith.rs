@@ -70,7 +70,7 @@ macro_rules! cmp_wide {
 /// Dispatch §1–§4 arithmetic/compare/convert opcodes.
 ///
 /// Returns `true` if the opcode was handled.
-#[allow(clippy::float_cmp)]
+#[allow(clippy::float_cmp, clippy::too_many_lines)]
 pub fn exec(op: Opcode, frame: &mut Frame, heap: &mut Heap) -> Result<bool, VmError> {
     match op {
         // §INT — Signed integer arithmetic (wide)

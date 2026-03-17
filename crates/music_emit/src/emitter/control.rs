@@ -11,7 +11,7 @@ use music_ast::ExprIdx;
 
 use super::super::emitter::Emitter;
 use super::FnCtx;
-use super::expr::{emit_expr, emit_expr_tail, resolve_variant_tag_by_name};
+use super::expr::{emit_expr, emit_expr_tail, resolve_variant_tag};
 
 /// Emit a piecewise expression. Leaves result on stack.
 pub fn emit_piecewise(
@@ -34,12 +34,10 @@ pub fn emit_piecewise(
         let is_last = i == n - 1;
         if is_last || matches!(arm.guard, PwGuard::Any { .. }) {
             let produced = emit_expr_tail(em, fc, arm.result, is_tail)?;
-            if produced {
-                fc.fe.emit_st_loc(result_slot);
-            } else {
+            if !produced {
                 fc.fe.emit_ld_unit();
-                fc.fe.emit_st_loc(result_slot);
             }
+            fc.fe.emit_st_loc(result_slot);
             fc.fe.emit_jmp(merge_label);
         } else if let PwGuard::When {
             expr: guard_expr, ..
@@ -54,12 +52,10 @@ pub fn emit_piecewise(
             fc.fe.emit_jmp(next_label);
             fc.fe.emit_label(then_label);
             let produced = emit_expr_tail(em, fc, arm.result, is_tail)?;
-            if produced {
-                fc.fe.emit_st_loc(result_slot);
-            } else {
+            if !produced {
                 fc.fe.emit_ld_unit();
-                fc.fe.emit_st_loc(result_slot);
             }
+            fc.fe.emit_st_loc(result_slot);
             fc.fe.emit_jmp(merge_label);
             fc.fe.emit_label(next_label);
         }
@@ -125,12 +121,10 @@ pub fn emit_match(
         }
 
         let produced = emit_expr_tail(em, fc, arm.result, is_tail)?;
-        if produced {
-            fc.fe.emit_st_loc(result_slot);
-        } else {
+        if !produced {
             fc.fe.emit_ld_unit();
-            fc.fe.emit_st_loc(result_slot);
         }
+        fc.fe.emit_st_loc(result_slot);
         fc.fe.emit_jmp(merge_label);
 
         if let Some(fail_label) = next_label {
@@ -173,7 +167,7 @@ fn emit_pat_test(
                 fc.fe.emit_jmp_f(fail_label);
                 return Ok(());
             }
-            let tag = resolve_variant_tag_by_name(em, name)?;
+            let tag = resolve_variant_tag(em, name)?;
             if let Some(ts) = tag_slot {
                 let tag_cv = ConstValue::Int(i64::from(tag));
                 let ci = em.cp.intern(&tag_cv, em.interner)?;

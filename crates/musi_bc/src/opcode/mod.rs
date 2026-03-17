@@ -374,7 +374,6 @@ pub const fn widened_operand_size(zone: u8) -> usize {
     match zone {
         0 => 1,
         1 => 2,
-        2 => 4,
         _ => 4,
     }
 }
@@ -411,7 +410,7 @@ pub fn encode_i32(buf: &mut Vec<u8>, op: Opcode, operand: i32) {
 /// Encode an i8-operand instruction into `buf` (for short jumps).
 pub fn encode_i8(buf: &mut Vec<u8>, op: Opcode, operand: i8) {
     buf.push(op.0);
-    buf.push(operand as u8);
+    buf.push(u8::from_ne_bytes(operand.to_ne_bytes()));
 }
 
 /// Encode a WID-prefixed instruction. The operand is widened by one step.
@@ -439,29 +438,29 @@ pub fn encode_wid_u32(buf: &mut Vec<u8>, op: Opcode, operand: u32) {
 /// Layout: `(id_u24 << 8) | arity_u8`.
 #[must_use]
 pub const fn pack_id_arity(id: u32, arity: u8) -> u32 {
-    (id << 8) | (arity as u32)
+    (id << 8) | u32::from_le_bytes([arity, 0, 0, 0])
 }
 
-/// Unpack a u32 operand into (id_u24, arity_u8).
+/// Unpack a u32 operand into (`id_u24`, `arity_u8`).
 #[must_use]
 pub const fn unpack_id_arity(packed: u32) -> (u32, u8) {
-    ((packed >> 8) & 0x00FF_FFFF, (packed & 0xFF) as u8)
+    ((packed >> 8) & 0x00FF_FFFF, packed.to_le_bytes()[0])
 }
 
 /// Pack a u8 tag and a u8 arity into a u16 operand.
 /// Layout: `(tag_u8 << 8) | arity_u8`.
 #[must_use]
 pub const fn pack_tag_arity_u16(tag: u8, arity: u8) -> u16 {
-    ((tag as u16) << 8) | (arity as u16)
+    u16::from_le_bytes([arity, tag])
 }
 
-/// Unpack a u16 operand into (tag_u8, arity_u8).
+/// Unpack a u16 operand into (`tag_u8`, `arity_u8`).
 #[must_use]
 pub const fn unpack_tag_arity_u16(packed: u16) -> (u8, u8) {
-    ((packed >> 8) as u8, (packed & 0xFF) as u8)
+    (packed.to_le_bytes()[1], packed.to_le_bytes()[0])
 }
 
-/// Unpack a u32 operand as (tag_u24, arity_u8) for widened MK_VAR.
+/// Unpack a u32 operand as (`tag_u24`, `arity_u8`) for widened `MK_VAR`.
 #[must_use]
 pub const fn unpack_tag_arity_u32(packed: u32) -> (u32, u8) {
     unpack_id_arity(packed)

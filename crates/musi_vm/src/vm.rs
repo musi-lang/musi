@@ -248,7 +248,9 @@ impl Vm {
         match op {
             Opcode::MK_VAR => {
                 // Packed operand: (tag << 8) | arity (u16 or u32 if widened)
-                let (tag, arity) = musi_bc::unpack_tag_arity_u16(operand as u16);
+                #[allow(clippy::cast_possible_truncation, clippy::as_conversions)]
+                let operand_u16 = (operand & 0xFFFF) as u16;
+                let (tag, arity) = musi_bc::unpack_tag_arity_u16(operand_u16);
                 {
                     let frame = self
                         .call_stack
@@ -561,7 +563,7 @@ impl Vm {
             // Short jumps (i8 offset)
             Opcode::JMP_SH => {
                 let frame = self.current_frame()?;
-                let target = ops::jump_target(frame.ip, ops::read_i8_operand(operand)?)?;
+                let target = ops::jump_target(frame.ip, ops::read_i8_operand(operand))?;
                 frame.ip = target;
                 Ok(StepResult::Continue)
             }
@@ -569,7 +571,7 @@ impl Vm {
                 let frame = self.current_frame()?;
                 let cond = frame.pop()?;
                 if cond.as_truthy()? {
-                    frame.ip = ops::jump_target(frame.ip, ops::read_i8_operand(operand)?)?;
+                    frame.ip = ops::jump_target(frame.ip, ops::read_i8_operand(operand))?;
                 }
                 Ok(StepResult::Continue)
             }
@@ -577,7 +579,7 @@ impl Vm {
                 let frame = self.current_frame()?;
                 let cond = frame.pop()?;
                 if !cond.as_truthy()? {
-                    frame.ip = ops::jump_target(frame.ip, ops::read_i8_operand(operand)?)?;
+                    frame.ip = ops::jump_target(frame.ip, ops::read_i8_operand(operand))?;
                 }
                 Ok(StepResult::Continue)
             }

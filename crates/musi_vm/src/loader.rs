@@ -159,21 +159,11 @@ pub fn load(bytes: &[u8]) -> Result<LoadedModule, VmError> {
         Some(raw_entry)
     };
 
-    let const_off = usize::try_from(hdr.read_u32()?).map_err(|_| VmError::Malformed {
-        desc: "const_off overflows usize".into(),
-    })?;
-    let type_off = usize::try_from(hdr.read_u32()?).map_err(|_| VmError::Malformed {
-        desc: "type_off overflows usize".into(),
-    })?;
-    let effect_off = usize::try_from(hdr.read_u32()?).map_err(|_| VmError::Malformed {
-        desc: "effect_off overflows usize".into(),
-    })?;
-    let foreign_off = usize::try_from(hdr.read_u32()?).map_err(|_| VmError::Malformed {
-        desc: "foreign_off overflows usize".into(),
-    })?;
-    let fn_off = usize::try_from(hdr.read_u32()?).map_err(|_| VmError::Malformed {
-        desc: "fn_off overflows usize".into(),
-    })?;
+    let const_off = hdr.read_usize("const_off")?;
+    let type_off = hdr.read_usize("type_off")?;
+    let effect_off = hdr.read_usize("effect_off")?;
+    let foreign_off = hdr.read_usize("foreign_off")?;
+    let fn_off = hdr.read_usize("fn_off")?;
 
     let consts = parse_const_pool(bytes, const_off)?;
     let types = parse_type_pool(bytes, type_off)?;
@@ -194,9 +184,7 @@ pub fn load(bytes: &[u8]) -> Result<LoadedModule, VmError> {
 
 fn parse_const_pool(bytes: &[u8], off: usize) -> Result<Vec<LoadedConst>, VmError> {
     let mut cur = Cursor::new(bytes, off);
-    let count = usize::try_from(cur.read_u32()?).map_err(|_| VmError::Malformed {
-        desc: "const count overflows usize".into(),
-    })?;
+    let count = cur.read_usize("const count")?;
     let mut consts = Vec::with_capacity(count);
     for _ in 0..count {
         let tag = cur.read_u8()?;
@@ -214,9 +202,7 @@ fn parse_const_pool(bytes: &[u8], off: usize) -> Result<Vec<LoadedConst>, VmErro
                 LoadedConst::F64(f64::from_bits(bits))
             }
             TAG_CONST_STR => {
-                let len = usize::try_from(cur.read_u32()?).map_err(|_| VmError::Malformed {
-                    desc: "string length overflows usize".into(),
-                })?;
+                let len = cur.read_usize("string length")?;
                 let s = cur.read_bytes(len)?;
                 let text = str::from_utf8(s)
                     .map_err(|_| VmError::Malformed {
@@ -271,9 +257,7 @@ const TAG_TY_ANY: u8 = 0x14;
 
 fn parse_type_pool(bytes: &[u8], off: usize) -> Result<Vec<LoadedType>, VmError> {
     let mut cur = Cursor::new(bytes, off);
-    let count = usize::try_from(cur.read_u32()?).map_err(|_| VmError::Malformed {
-        desc: "type count overflows usize".into(),
-    })?;
+    let count = cur.read_usize("type count")?;
     let mut types = Vec::with_capacity(count);
     for _ in 0..count {
         let tag = cur.read_u8()?;
@@ -286,10 +270,7 @@ fn parse_type_pool(bytes: &[u8], off: usize) -> Result<Vec<LoadedType>, VmError>
             TAG_TY_PTR | TAG_TY_ARR | TAG_TY_REF => cur.read_bytes(4)?.to_vec(),
             // product: count:u32 + count * type_id:u32
             TAG_TY_PRODUCT => {
-                let field_count =
-                    usize::try_from(cur.read_u32()?).map_err(|_| VmError::Malformed {
-                        desc: "product field count overflows usize".into(),
-                    })?;
+                let field_count = cur.read_usize("product field count")?;
                 let byte_count = 4 + field_count * 4;
                 let mut data = Vec::with_capacity(byte_count);
                 let fc_u32 = u32::try_from(field_count).map_err(|_| VmError::Malformed {
@@ -302,10 +283,7 @@ fn parse_type_pool(bytes: &[u8], off: usize) -> Result<Vec<LoadedType>, VmError>
             }
             // sum: variant_count:u32 + variant_count * (tag:u32 + payload_id:u32)
             TAG_TY_SUM => {
-                let variant_count =
-                    usize::try_from(cur.read_u32()?).map_err(|_| VmError::Malformed {
-                        desc: "sum variant count overflows usize".into(),
-                    })?;
+                let variant_count = cur.read_usize("sum variant count")?;
                 let byte_count = 4 + variant_count * 8;
                 let mut data = Vec::with_capacity(byte_count);
                 let vc_u32 = u32::try_from(variant_count).map_err(|_| VmError::Malformed {
@@ -318,10 +296,7 @@ fn parse_type_pool(bytes: &[u8], off: usize) -> Result<Vec<LoadedType>, VmError>
             }
             // fn: param_count:u32 + params:u32[] + ret_id:u32 + effect_mask:u16
             TAG_TY_FN => {
-                let param_count =
-                    usize::try_from(cur.read_u32()?).map_err(|_| VmError::Malformed {
-                        desc: "fn param count overflows usize".into(),
-                    })?;
+                let param_count = cur.read_usize("fn param count")?;
                 let byte_count = 4 + param_count * 4 + 4 + 2;
                 let mut data = Vec::with_capacity(byte_count);
                 let pc_u32 = u32::try_from(param_count).map_err(|_| VmError::Malformed {
@@ -345,9 +320,7 @@ fn parse_type_pool(bytes: &[u8], off: usize) -> Result<Vec<LoadedType>, VmError>
 
 fn parse_effect_pool(bytes: &[u8], off: usize) -> Result<Vec<LoadedEffect>, VmError> {
     let mut cur = Cursor::new(bytes, off);
-    let count = usize::try_from(cur.read_u32()?).map_err(|_| VmError::Malformed {
-        desc: "effect count overflows usize".into(),
-    })?;
+    let count = cur.read_usize("effect count")?;
     let mut effects = Vec::with_capacity(count);
     for _ in 0..count {
         let id = cur.read_u32()?;
@@ -384,9 +357,7 @@ fn parse_effect_pool(bytes: &[u8], off: usize) -> Result<Vec<LoadedEffect>, VmEr
 
 fn parse_fn_pool(bytes: &[u8], off: usize) -> Result<Vec<LoadedFn>, VmError> {
     let mut cur = Cursor::new(bytes, off);
-    let count = usize::try_from(cur.read_u32()?).map_err(|_| VmError::Malformed {
-        desc: "function count overflows usize".into(),
-    })?;
+    let count = cur.read_usize("function count")?;
     let mut functions = Vec::with_capacity(count);
     for _ in 0..count {
         let fn_id = cur.read_u32()?;
@@ -396,9 +367,7 @@ fn parse_fn_pool(bytes: &[u8], off: usize) -> Result<Vec<LoadedFn>, VmError> {
         let max_stack = cur.read_u16()?;
         let effect_mask = cur.read_u16()?;
         let upvalue_count = cur.read_u16()?;
-        let code_len = usize::try_from(cur.read_u32()?).map_err(|_| VmError::Malformed {
-            desc: "code length overflows usize".into(),
-        })?;
+        let code_len = cur.read_usize("code length")?;
         let code = cur.read_bytes(code_len)?.into();
         let handler_count = usize::from(cur.read_u16()?);
         let mut handlers = Vec::with_capacity(handler_count);
@@ -431,17 +400,11 @@ fn parse_foreign_pool(
     consts: &[LoadedConst],
 ) -> Result<Vec<LoadedForeignFn>, VmError> {
     let mut cur = Cursor::new(bytes, off);
-    let count = usize::try_from(cur.read_u32()?).map_err(|_| VmError::Malformed {
-        desc: "foreign fn count overflows usize".into(),
-    })?;
+    let count = cur.read_usize("foreign fn count")?;
     let mut fns = Vec::with_capacity(count);
     for _ in 0..count {
-        let ext_name_idx = usize::try_from(cur.read_u32()?).map_err(|_| VmError::Malformed {
-            desc: "ext_name const index overflows usize".into(),
-        })?;
-        let lib_name_idx = usize::try_from(cur.read_u32()?).map_err(|_| VmError::Malformed {
-            desc: "lib_name const index overflows usize".into(),
-        })?;
+        let ext_name_idx = cur.read_usize("ext_name const index")?;
+        let lib_name_idx = cur.read_usize("lib_name const index")?;
         let param_count = cur.read_u16()?;
         let pc = usize::from(param_count);
         let mut param_type_ids = Vec::with_capacity(pc);
@@ -518,6 +481,12 @@ impl<'a> Cursor<'a> {
 
     fn read_u32(&mut self) -> Result<u32, VmError> {
         Ok(u32::from_le_bytes(self.read_array()?))
+    }
+
+    fn read_usize(&mut self, ctx: &str) -> Result<usize, VmError> {
+        usize::try_from(self.read_u32()?).map_err(|_| VmError::Malformed {
+            desc: format!("{ctx} overflows usize").into_boxed_str(),
+        })
     }
 
     fn read_i32(&mut self) -> Result<i32, VmError> {

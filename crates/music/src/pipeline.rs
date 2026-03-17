@@ -213,12 +213,12 @@ fn run_sema_in_order(
             // multi-level field chains (e.g. `t.runner.run_suite`).
             for &(dep_id, import_sym) in &node.imports {
                 for export in &exports.bindings {
-                    if export.name == import_sym {
-                        if let Some(sub_exports) = module_exports.get(&dep_id) {
-                            let names: Vec<_> =
-                                sub_exports.iter().map(|eb| (eb.name, eb.def_id)).collect();
-                            let _prev = sub_module_exports.insert(export.def_id, names);
-                        }
+                    if export.name == import_sym
+                        && let Some(sub_exports) = module_exports.get(&dep_id)
+                    {
+                        let names: Vec<_> =
+                            sub_exports.iter().map(|eb| (eb.name, eb.def_id)).collect();
+                        let _prev = sub_module_exports.insert(export.def_id, names);
                     }
                 }
             }

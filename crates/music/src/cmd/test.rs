@@ -1,5 +1,6 @@
 //! `music test` — discover and run `*.test.ms` files.
 
+use std::fmt::Write as FmtWrite;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use std::{fs, process};
@@ -72,12 +73,12 @@ pub fn run(filter: Option<&str>, manifest: Option<&MusiManifest>, project_root: 
 
     let mut summary = format!("{passed}/{total} passed");
     if failed > 0 {
-        summary.push_str(&format!(", {failed} failed"));
+        write!(summary, ", {failed} failed").unwrap();
     }
     if errors > 0 {
-        summary.push_str(&format!(", {errors} error{}", if errors == 1 { "" } else { "s" }));
+        write!(summary, ", {errors} error{}", if errors == 1 { "" } else { "s" }).unwrap();
     }
-    summary.push_str(&format!(" ({:.2}s)", elapsed.as_secs_f64()));
+    write!(summary, " ({:.2}s)", elapsed.as_secs_f64()).unwrap();
     println!("{summary}");
 
     if failed > 0 || errors > 0 {
@@ -87,14 +88,13 @@ pub fn run(filter: Option<&str>, manifest: Option<&MusiManifest>, project_root: 
 }
 
 fn run_test_file(path: &Path, manifest: &MusiManifest, project_root: &Path) -> TestOutcome {
-    let mut out = match pipeline::run_frontend_multi(path, Some(manifest), Some(project_root)) {
-        Ok(o) => o,
-        Err(()) => return TestOutcome::Error("compilation error".into()),
+    let Ok(mut out) = pipeline::run_frontend_multi(path, Some(manifest), Some(project_root))
+    else {
+        return TestOutcome::Error("compilation error".into());
     };
 
-    let bytes = match pipeline::run_backend(&mut out, true) {
-        Ok(b) => b,
-        Err(()) => return TestOutcome::Error("codegen error".into()),
+    let Ok(bytes) = pipeline::run_backend(&mut out, true) else {
+        return TestOutcome::Error("codegen error".into());
     };
 
     let module = match load(&bytes) {
@@ -106,9 +106,8 @@ fn run_test_file(path: &Path, manifest: &MusiManifest, project_root: &Path) -> T
         return TestOutcome::Error(format!("verify error: {e}"));
     }
 
-    let host = match StdHost::new(&module.foreign_fns) {
-        Ok(h) => h,
-        Err(e) => return TestOutcome::Error(format!("host error: {e}")),
+    let Ok(host) = StdHost::new(&module.foreign_fns) else {
+        return TestOutcome::Error("host error".into());
     };
 
     let mut vm = Vm::new(module);
@@ -116,9 +115,8 @@ fn run_test_file(path: &Path, manifest: &MusiManifest, project_root: &Path) -> T
 
     match vm.run() {
         Ok(value) => match value.as_int() {
-            Ok(0) => TestOutcome::Passed,
+            Ok(0) | Err(_) => TestOutcome::Passed,
             Ok(n) => TestOutcome::Failed(n),
-            Err(_) => TestOutcome::Passed,
         },
         Err(e) => TestOutcome::Error(format!("runtime error: {e}")),
     }
@@ -131,20 +129,21 @@ fn discover_test_files(root: &Path) -> Vec<PathBuf> {
 }
 
 fn collect_test_files(dir: &Path, out: &mut Vec<PathBuf>) {
-    let entries = match fs::read_dir(dir) {
-        Ok(e) => e,
-        Err(_) => return,
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
     };
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_dir() {
             collect_test_files(&path, out);
-        } else if path.extension().is_some_and(|e| e == "ms") {
-            if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                if stem.ends_with(".test") {
-                    out.push(path);
-                }
-            }
+        } else if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("ms"))
+            && path.file_stem().and_then(|s| s.to_str()).is_some_and(|stem| {
+                Path::new(stem)
+                    .extension()
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("test"))
+            })
+        {
+            out.push(path);
         }
     }
 }

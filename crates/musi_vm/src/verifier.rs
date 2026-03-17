@@ -131,25 +131,6 @@ impl Operands<'_> {
         }
     }
 
-    #[allow(dead_code)]
-    fn u16_op(&self) -> u16 {
-        if self.widened {
-            // Widened from u16 → u32
-            let b = [
-                self.code[self.ip + 2],
-                self.code[self.ip + 3],
-                self.code[self.ip + 4],
-                self.code[self.ip + 5],
-            ];
-            // Return as u16 truncated — for tag/arity unpacking caller handles u32
-            u32::from_le_bytes(b) as u16
-        } else {
-            let lo = self.code[self.ip + 1];
-            let hi = self.code[self.ip + 2];
-            u16::from_le_bytes([lo, hi])
-        }
-    }
-
     fn u16_op_full_u32(&self) -> u32 {
         if self.widened {
             let b = [
@@ -197,7 +178,7 @@ impl Operands<'_> {
         } else {
             self.code[self.ip + 1]
         };
-        isize::from(byte as i8)
+        isize::from(byte.cast_signed())
     }
 }
 
@@ -355,7 +336,7 @@ fn verify_operand_op(
         // MK_VAR uses packed u16 operand: (tag_u8 << 8) | arity_u8
         Opcode::MK_VAR => {
             let packed = ops.u16_op_full_u32();
-            let arity = (packed & 0xFF) as i32;
+            let arity = (packed & 0xFF).cast_signed();
             Ok(1 - arity)
         }
         Opcode::MK_PRD => {

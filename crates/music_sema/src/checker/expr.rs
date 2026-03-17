@@ -905,8 +905,10 @@ fn substitute_ty<S: BuildHasher>(
 }
 
 /// Deep-copies a type, replacing both:
+///
 /// 1. `Named(DefId)` nodes matching type parameter defs (explicit annotations)
 /// 2. Unbound unification variables (inferred polymorphic types)
+///
 /// with fresh unification variables. Co-occurring nodes get the same fresh var.
 fn freshen_poly<S: BuildHasher>(
     ck: &mut Checker<'_, S>,

@@ -273,6 +273,10 @@ impl Value {
 
     /// Interprets the value as a boolean condition, accepting both bools and
     /// ints (non-zero = true). Used by conditional jumps.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VmError::TypeError`] if the value is neither a bool nor an int.
     pub fn as_truthy(self) -> Result<bool, VmError> {
         if (self.0 & TAG_MASK) == TAG_BOOL {
             Ok((self.0 & 1) != 0)
@@ -498,30 +502,30 @@ pub fn wide_values_equal(a: Value, b: Value, heap: &Heap) -> bool {
     if let (Ok(an), Ok(bn)) = (a.as_nat_wide(heap), b.as_nat_wide(heap)) {
         return an == bn;
     }
-    if let (Ok(ai), Ok(bi)) = (a.as_ref(), b.as_ref()) {
-        if let (Ok(oa), Ok(ob)) = (heap.get(ai), heap.get(bi)) {
-            if let (Some(sa), Some(sb)) = (&oa.string, &ob.string) {
-                return sa == sb;
+    if let (Ok(ai), Ok(bi)) = (a.as_ref(), b.as_ref())
+        && let (Ok(oa), Ok(ob)) = (heap.get(ai), heap.get(bi))
+    {
+        if let (Some(sa), Some(sb)) = (&oa.string, &ob.string) {
+            return sa == sb;
+        }
+        // Array equality: compare element-wise.
+        if !oa.elems.is_empty() || !ob.elems.is_empty() {
+            if oa.elems.len() != ob.elems.len() {
+                return false;
             }
-            // Array equality: compare element-wise.
-            if !oa.elems.is_empty() || !ob.elems.is_empty() {
-                if oa.elems.len() != ob.elems.len() {
-                    return false;
-                }
-                return oa
-                    .elems
-                    .iter()
-                    .zip(ob.elems.iter())
-                    .all(|(&ea, &eb)| ea.0 == eb.0 || wide_values_equal(ea, eb, heap));
-            }
-            // Product/variant equality: same tag and same fields.
-            if oa.tag == ob.tag && oa.fields.len() == ob.fields.len() {
-                return oa
-                    .fields
-                    .iter()
-                    .zip(ob.fields.iter())
-                    .all(|(&fa, &fb)| fa.0 == fb.0 || wide_values_equal(fa, fb, heap));
-            }
+            return oa
+                .elems
+                .iter()
+                .zip(ob.elems.iter())
+                .all(|(&ea, &eb)| ea.0 == eb.0 || wide_values_equal(ea, eb, heap));
+        }
+        // Product/variant equality: same tag and same fields.
+        if oa.tag == ob.tag && oa.fields.len() == ob.fields.len() {
+            return oa
+                .fields
+                .iter()
+                .zip(ob.fields.iter())
+                .all(|(&fa, &fb)| fa.0 == fb.0 || wide_values_equal(fa, fb, heap));
         }
     }
     false

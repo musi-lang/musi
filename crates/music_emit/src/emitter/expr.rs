@@ -257,6 +257,17 @@ pub fn emit_expr(
     emit_expr_tail(em, fc, expr_idx, false)
 }
 
+/// Emit an expression, returning an error if it produces no stack value.
+pub(super) fn emit_require(em: &mut Emitter<'_>, fc: &mut FnCtx, idx: ExprIdx, ctx: &str) -> Result<(), EmitError> {
+    let produced = emit_expr(em, fc, idx)?;
+    if !produced {
+        return Err(EmitError::UnsupportedFeature {
+            desc: format!("{ctx} produced no value").into(),
+        });
+    }
+    Ok(())
+}
+
 fn emit_type_check(
     em: &mut Emitter<'_>,
     fc: &mut FnCtx,
@@ -272,6 +283,7 @@ fn emit_type_check(
 }
 
 /// Emit bytecode for `expr_idx` in explicit tail position.
+#[allow(clippy::too_many_lines)]
 pub fn emit_expr_tail(
     em: &mut Emitter<'_>,
     fc: &mut FnCtx,
@@ -440,12 +452,11 @@ fn emit_name(
     }
     // Import aliases: construct a module record from the module's exports.
     let def_info = em.sema.defs.iter().find(|d| d.id == def_id);
-    if let Some(info) = def_info {
-        if info.kind == DefKind::Import {
-            if let Some(ty_idx) = info.ty_info.ty {
-                return emit_module_record(em, fc, ty_idx);
-            }
-        }
+    if let Some(info) = def_info
+        && info.kind == DefKind::Import
+        && let Some(ty_idx) = info.ty_info.ty
+    {
+        return emit_module_record(em, fc, ty_idx);
     }
     Err(EmitError::UnsupportedFeature {
         desc: format!("unresolved local `{}`", em.interner.resolve(name)).into(),
@@ -453,7 +464,7 @@ fn emit_name(
 }
 
 /// Construct a module record at runtime from its type's fields.
-/// Each field that maps to a known function or FFI binding becomes a FnRef;
+/// Each field that maps to a known function or FFI binding becomes a `FnRef`;
 /// fields whose types are themselves records (sub-modules) are constructed
 /// recursively.
 fn emit_module_record(
@@ -488,12 +499,12 @@ fn emit_module_record(
                     break;
                 }
                 // Value bindings from dep modules stored as globals.
-                if matches!(def.kind, DefKind::Let | DefKind::Var) {
-                    if let Some(&slot) = em.global_map.get(&def.id) {
-                        fc.fe.emit_ld_glb(slot);
-                        emitted = true;
-                        break;
-                    }
+                if matches!(def.kind, DefKind::Let | DefKind::Var)
+                    && let Some(&slot) = em.global_map.get(&def.id)
+                {
+                    fc.fe.emit_ld_glb(slot);
+                    emitted = true;
+                    break;
                 }
             }
         }
@@ -542,31 +553,30 @@ fn emit_let(
     is_tail: bool,
 ) -> Result<bool, EmitError> {
     if let Some(val_idx) = fields.value {
-        if fields.kind != BindKind::Mut {
-            if let Expr::Fn {
+        if fields.kind != BindKind::Mut
+            && let Expr::Fn {
                 body: fn_body,
                 params,
                 ..
             } = &em.ast.exprs[val_idx]
-            {
-                let fn_body = *fn_body;
-                let params = params.clone();
-                if let Pat::Bind { span, .. } = &em.ast.pats[fields.pat] {
-                    let span = *span;
-                    if let Some(&def_id) = em.pat_defs().get(&span) {
-                        // Already registered by scan phase — compiled as top-level fn.
-                        if em.fn_map.contains_key(&def_id) {
-                            return body.map_or(Ok(false), |body_idx| {
-                                emit_expr_tail(em, fc, body_idx, is_tail)
-                            });
-                        }
-                        // Recursive lambda: use ref-cell letrec pattern.
-                        if body_references_def(em, fn_body, def_id) {
-                            emit_letrec_fn(em, fc, def_id, fields.pat, val_idx, &params, fn_body)?;
-                            return body.map_or(Ok(false), |body_idx| {
-                                emit_expr_tail(em, fc, body_idx, is_tail)
-                            });
-                        }
+        {
+            let fn_body = *fn_body;
+            let params = params.clone();
+            if let Pat::Bind { span, .. } = &em.ast.pats[fields.pat] {
+                let span = *span;
+                if let Some(&def_id) = em.pat_defs().get(&span) {
+                    // Already registered by scan phase — compiled as top-level fn.
+                    if em.fn_map.contains_key(&def_id) {
+                        return body.map_or(Ok(false), |body_idx| {
+                            emit_expr_tail(em, fc, body_idx, is_tail)
+                        });
+                    }
+                    // Recursive lambda: use ref-cell letrec pattern.
+                    if body_references_def(em, fn_body, def_id) {
+                        emit_letrec_fn(em, fc, def_id, fields.pat, val_idx, &params, fn_body)?;
+                        return body.map_or(Ok(false), |body_idx| {
+                            emit_expr_tail(em, fc, body_idx, is_tail)
+                        });
                     }
                 }
             }
@@ -657,12 +667,7 @@ fn emit_unary(
     operand: ExprIdx,
     _span: Span,
 ) -> Result<bool, EmitError> {
-    let produced = emit_expr(em, fc, operand)?;
-    if !produced {
-        return Err(EmitError::UnsupportedFeature {
-            desc: "unary operand produced no value".into(),
-        });
-    }
+    emit_require(em, fc, operand, "unary operand")?;
     match op {
         UnaryOp::Neg => {
             let family = classify_type_family(em, operand);
@@ -700,12 +705,7 @@ fn emit_unary(
 fn emit_tuple(em: &mut Emitter<'_>, fc: &mut FnCtx, elems: &[ExprIdx]) -> Result<bool, EmitError> {
     let n = elems.len();
     for &e in elems {
-        let produced = emit_expr(em, fc, e)?;
-        if !produced {
-            return Err(EmitError::UnsupportedFeature {
-                desc: "tuple element produced no value".into(),
-            });
-        }
+        emit_require(em, fc, e, "tuple element")?;
     }
     let field_count = u32::try_from(n).map_err(|_| EmitError::overflow("tuple element count"))?;
     let stack_pop = i32::try_from(n).map_err(|_| EmitError::overflow("tuple element count"))?;
@@ -720,12 +720,7 @@ fn emit_field(
     field: FieldKey,
     safe: bool,
 ) -> Result<bool, EmitError> {
-    let produced = emit_expr(em, fc, object)?;
-    if !produced {
-        return Err(EmitError::UnsupportedFeature {
-            desc: "field object produced no value".into(),
-        });
-    }
+    emit_require(em, fc, object, "field object")?;
 
     if safe {
         let tmp = fc.alloc_local();
@@ -746,7 +741,7 @@ fn emit_field(
             FieldKey::Name { name, .. } => resolve_field_name(em, object, name)?,
         };
         fc.fe.emit_ld_fld(index)?;
-        fc.fe.emit_mk_var(em.some_tag, 1)?;
+        fc.fe.emit_mk_var(em.some_tag, 1);
         fc.fe.emit_jmp(end_label);
 
         // None path: receiver was not Some — produce a zero-payload variant as None
@@ -771,18 +766,8 @@ fn emit_index(
     object: ExprIdx,
     index: ExprIdx,
 ) -> Result<bool, EmitError> {
-    let produced_obj = emit_expr(em, fc, object)?;
-    if !produced_obj {
-        return Err(EmitError::UnsupportedFeature {
-            desc: "index object produced no value".into(),
-        });
-    }
-    let produced_idx = emit_expr(em, fc, index)?;
-    if !produced_idx {
-        return Err(EmitError::UnsupportedFeature {
-            desc: "index value produced no value".into(),
-        });
-    }
+    emit_require(em, fc, object, "index object")?;
+    emit_require(em, fc, index, "index value")?;
     fc.fe.emit_ld_idx();
     Ok(true)
 }
@@ -919,18 +904,8 @@ fn emit_binop_expr(
     if let Some(&def_id) = em.active_binop_dispatch().get(&expr_idx)
         && let Some(&fn_id) = em.fn_map.get(&def_id)
     {
-        let produced_left = emit_expr(em, fc, left)?;
-        if !produced_left {
-            return Err(EmitError::UnsupportedFeature {
-                desc: "dispatched binop left operand produced no value".into(),
-            });
-        }
-        let produced_right = emit_expr(em, fc, right)?;
-        if !produced_right {
-            return Err(EmitError::UnsupportedFeature {
-                desc: "dispatched binop right operand produced no value".into(),
-            });
-        }
+        emit_require(em, fc, left, "dispatched binop left operand")?;
+        emit_require(em, fc, right, "dispatched binop right operand")?;
         fc.fe.emit_inv(fn_id, false, 2);
         return Ok(true);
     }
@@ -946,18 +921,8 @@ fn emit_binop_expr(
         let method_idx = class_method_index(em, dict_lookup.class, dict_lookup.method_sym)?;
         fc.fe.emit_ld_loc(dict_slot); // load dictionary product
         fc.fe.emit_ld_fld(method_idx)?; // extract method fn value
-        let produced_left = emit_expr(em, fc, left)?;
-        if !produced_left {
-            return Err(EmitError::UnsupportedFeature {
-                desc: "dict-dispatched binop left operand produced no value".into(),
-            });
-        }
-        let produced_right = emit_expr(em, fc, right)?;
-        if !produced_right {
-            return Err(EmitError::UnsupportedFeature {
-                desc: "dict-dispatched binop right operand produced no value".into(),
-            });
-        }
+        emit_require(em, fc, left, "dict-dispatched binop left operand")?;
+        emit_require(em, fc, right, "dict-dispatched binop right operand")?;
         fc.fe.emit_inv_dyn(2)?; // call through fn value with 2 args
         return Ok(true);
     }
@@ -979,18 +944,8 @@ fn emit_primitive_binop(
             if is_logical_family(family) {
                 desugar::emit_and(em, fc, left, right)?;
             } else {
-                let produced_left = emit_expr(em, fc, left)?;
-                if !produced_left {
-                    return Err(EmitError::UnsupportedFeature {
-                        desc: "binop left operand produced no value".into(),
-                    });
-                }
-                let produced_right = emit_expr(em, fc, right)?;
-                if !produced_right {
-                    return Err(EmitError::UnsupportedFeature {
-                        desc: "binop right operand produced no value".into(),
-                    });
-                }
+                emit_require(em, fc, left, "binop left operand")?;
+                emit_require(em, fc, right, "binop right operand")?;
                 fc.fe.emit_binop(Opcode::BIT_AND);
             }
             Ok(true)
@@ -1001,18 +956,8 @@ fn emit_primitive_binop(
             if is_logical_family(family) {
                 desugar::emit_or(em, fc, left, right)?;
             } else {
-                let produced_left = emit_expr(em, fc, left)?;
-                if !produced_left {
-                    return Err(EmitError::UnsupportedFeature {
-                        desc: "binop left operand produced no value".into(),
-                    });
-                }
-                let produced_right = emit_expr(em, fc, right)?;
-                if !produced_right {
-                    return Err(EmitError::UnsupportedFeature {
-                        desc: "binop right operand produced no value".into(),
-                    });
-                }
+                emit_require(em, fc, left, "binop left operand")?;
+                emit_require(em, fc, right, "binop right operand")?;
                 fc.fe.emit_binop(Opcode::BIT_OR);
             }
             Ok(true)
@@ -1047,43 +992,22 @@ fn emit_primitive_binop(
         }
         _ => {
             // String `+` → call str_cat FFI instead of I_ADD.
-            if op == BinOp::Add {
-                if let Some(ty_idx) = em.expr_types().get(&left).copied() {
-                    let resolved = em.sema.unify.resolve(ty_idx, &em.sema.types);
-                    if let Type::Named { def, .. } = &em.sema.types[resolved] {
-                        if *def == em.sema.well_known.string {
-                            if let Some(ffi_idx) = em.str_cat_ffi_idx {
-                                let produced_left = emit_expr(em, fc, left)?;
-                                if !produced_left {
-                                    return Err(EmitError::UnsupportedFeature {
-                                        desc: "binop left operand produced no value".into(),
-                                    });
-                                }
-                                let produced_right = emit_expr(em, fc, right)?;
-                                if !produced_right {
-                                    return Err(EmitError::UnsupportedFeature {
-                                        desc: "binop right operand produced no value".into(),
-                                    });
-                                }
-                                fc.fe.emit_inv_ffi(ffi_idx, 2);
-                                return Ok(true);
-                            }
-                        }
-                    }
+            if op == BinOp::Add
+                && let Some(ty_idx) = em.expr_types().get(&left).copied()
+            {
+                let resolved = em.sema.unify.resolve(ty_idx, &em.sema.types);
+                if let Type::Named { def, .. } = &em.sema.types[resolved]
+                    && *def == em.sema.well_known.string
+                    && let Some(ffi_idx) = em.str_cat_ffi_idx
+                {
+                    emit_require(em, fc, left, "binop left operand")?;
+                    emit_require(em, fc, right, "binop right operand")?;
+                    fc.fe.emit_inv_ffi(ffi_idx, 2);
+                    return Ok(true);
                 }
             }
-            let produced_left = emit_expr(em, fc, left)?;
-            if !produced_left {
-                return Err(EmitError::UnsupportedFeature {
-                    desc: "binop left operand produced no value".into(),
-                });
-            }
-            let produced_right = emit_expr(em, fc, right)?;
-            if !produced_right {
-                return Err(EmitError::UnsupportedFeature {
-                    desc: "binop right operand produced no value".into(),
-                });
-            }
+            emit_require(em, fc, left, "binop left operand")?;
+            emit_require(em, fc, right, "binop right operand")?;
             let family = classify_type_family(em, left);
             let opcode = map_binop(op, family)?;
             fc.fe.emit_binop(opcode);
@@ -1216,12 +1140,7 @@ fn emit_call(
     }
     {
         // Callee must be below args on the stack for resolve_inv_dyn.
-        let produced = emit_expr(em, fc, callee)?;
-        if !produced {
-            return Err(EmitError::UnsupportedFeature {
-                desc: "callee produced no value".into(),
-            });
-        }
+        emit_require(em, fc, callee, "callee")?;
         let arg_count = emit_call_args(em, fc, args)?;
         let ac_i = i32::try_from(arg_count).map_err(|_| EmitError::overflow("arg count"))?;
         fc.fe.emit_inv_dyn(ac_i)?;
@@ -1264,12 +1183,7 @@ fn emit_record_lit_fixed(
     let n = named_fields.len();
     for (_, val_opt) in named_fields {
         if let Some(val_idx) = val_opt {
-            let produced = emit_expr(em, fc, val_idx)?;
-            if !produced {
-                return Err(EmitError::UnsupportedFeature {
-                    desc: "record field produced no value".into(),
-                });
-            }
+            emit_require(em, fc, val_idx, "record field")?;
         } else {
             return Err(EmitError::UnsupportedFeature {
                 desc: "record field with no value".into(),
@@ -1310,12 +1224,7 @@ fn emit_record_lit_with_spread(
         desc: "record spread without base expression".into(),
     })?;
 
-    let produced = emit_expr(em, fc, base_expr)?;
-    if !produced {
-        return Err(EmitError::UnsupportedFeature {
-            desc: "record spread base produced no value".into(),
-        });
-    }
+    emit_require(em, fc, base_expr, "record spread base")?;
     let rec_slot = fc.alloc_local();
     fc.fe.emit_st_loc(rec_slot);
 
@@ -1328,12 +1237,7 @@ fn emit_record_lit_with_spread(
             let field_idx = resolve_field_name_by_symbol(em, base_expr, *name)?;
 
             fc.fe.emit_ld_loc(rec_slot);
-            let produced_val = emit_expr(em, fc, val_idx)?;
-            if !produced_val {
-                return Err(EmitError::UnsupportedFeature {
-                    desc: "record spread override field produced no value".into(),
-                });
-            }
+            emit_require(em, fc, val_idx, "record spread override field")?;
             fc.fe.emit_st_fld(field_idx)?;
         }
     }
@@ -1406,18 +1310,13 @@ fn emit_variant(
     }
 
     for &arg_idx in args {
-        let produced = emit_expr(em, fc, arg_idx)?;
-        if !produced {
-            return Err(EmitError::UnsupportedFeature {
-                desc: "variant arg produced no value".into(),
-            });
-        }
+        emit_require(em, fc, arg_idx, "variant arg")?;
     }
     let tag = resolve_variant_tag(em, name)?;
     let arity = u8::try_from(args.len()).map_err(|_| EmitError::OperandOverflow {
         desc: "variant arity exceeds 255".into(),
     })?;
-    fc.fe.emit_mk_var(tag, arity)?;
+    fc.fe.emit_mk_var(tag, arity);
     Ok(true)
 }
 
@@ -1652,12 +1551,7 @@ fn emit_call_args(em: &mut Emitter<'_>, fc: &mut FnCtx, args: &[Arg]) -> Result<
     for &arg in args {
         match arg {
             Arg::Pos { expr, .. } => {
-                let produced = emit_expr(em, fc, expr)?;
-                if !produced {
-                    return Err(EmitError::UnsupportedFeature {
-                        desc: "call arg produced no value".into(),
-                    });
-                }
+                emit_require(em, fc, expr, "call arg")?;
                 count += 1;
             }
             Arg::Spread { .. } => {
@@ -1714,12 +1608,7 @@ fn emit_array_fixed(
         let idx_cv = ConstValue::Int(i64::from(idx_u32));
         let ci = em.cp.intern(&idx_cv, em.interner)?;
         fc.fe.emit_ld_cst(ci);
-        let produced = emit_expr(em, fc, expr_idx)?;
-        if !produced {
-            return Err(EmitError::UnsupportedFeature {
-                desc: "array element produced no value".into(),
-            });
-        }
+        emit_require(em, fc, expr_idx, "array element")?;
         fc.fe.emit_st_idx();
     }
 
@@ -1755,12 +1644,7 @@ fn emit_array_with_spread(
     let mut spread_slots: Vec<u32> = vec![];
     for &elem in elems {
         if let ArrayElem::Spread { expr, .. } = elem {
-            let produced = emit_expr(em, fc, expr)?;
-            if !produced {
-                return Err(EmitError::UnsupportedFeature {
-                    desc: "spread expression produced no value".into(),
-                });
-            }
+            emit_require(em, fc, expr, "spread expression")?;
             let slot = fc.alloc_local();
             fc.fe.emit_st_loc(slot);
             spread_slots.push(slot);
@@ -1793,12 +1677,7 @@ fn emit_array_with_spread(
             ArrayElem::Elem { expr, .. } => {
                 fc.fe.emit_ld_loc(arr_slot);
                 fc.fe.emit_ld_loc(widx_slot);
-                let produced = emit_expr(em, fc, expr)?;
-                if !produced {
-                    return Err(EmitError::UnsupportedFeature {
-                        desc: "array element produced no value".into(),
-                    });
-                }
+                emit_require(em, fc, expr, "array element")?;
                 fc.fe.emit_st_idx();
                 // widx += 1
                 fc.fe.emit_ld_loc(widx_slot);
@@ -1863,11 +1742,7 @@ fn emit_array_with_spread(
 }
 
 /// Resolve a variant's tag by scanning the def table for sibling variants.
-pub fn resolve_variant_tag_by_name(em: &mut Emitter<'_>, name: Symbol) -> Result<u32, EmitError> {
-    resolve_variant_tag(em, name)
-}
-
-fn resolve_variant_tag(em: &mut Emitter<'_>, name: Symbol) -> Result<u32, EmitError> {
+pub fn resolve_variant_tag(em: &Emitter<'_>, name: Symbol) -> Result<u32, EmitError> {
     let name_str = em.interner.resolve(name);
     for def in &em.sema.defs {
         if def.kind == DefKind::Variant && em.interner.resolve(def.name) == name_str {
@@ -1900,13 +1775,13 @@ fn resolve_variant_tag(em: &mut Emitter<'_>, name: Symbol) -> Result<u32, EmitEr
         return Ok(em.some_tag);
     }
     if name_str_owned == "None" {
-        return Ok(if em.some_tag == 0 { 1 } else { 0 });
+        return Ok(u32::from(em.some_tag == 0));
     }
     if name_str_owned == "Ok" {
         return Ok(em.ok_tag);
     }
     if name_str_owned == "Err" {
-        return Ok(if em.ok_tag == 0 { 1 } else { 0 });
+        return Ok(u32::from(em.ok_tag == 0));
     }
     // Ordering variants: Less + Equal + Greater (defined in @std/cmp/ordering)
     if name_str_owned == "Less" {
@@ -1942,14 +1817,12 @@ pub(super) fn resolve_field_name(
     }
     // Fallback: look up the object's definition type (the declared type of
     // the variable, which may be fully concrete).
-    if let Some(&def_id) = em.expr_defs().get(&object_expr) {
-        if let Some(def_info) = em.sema.defs.iter().find(|d| d.id == def_id) {
-            if let Some(def_ty) = def_info.ty_info.ty {
-                if let Ok(idx) = resolve_field_in_type(em, def_ty, name) {
-                    return Ok(idx);
-                }
-            }
-        }
+    if let Some(&def_id) = em.expr_defs().get(&object_expr)
+        && let Some(def_info) = em.sema.defs.iter().find(|d| d.id == def_id)
+        && let Some(def_ty) = def_info.ty_info.ty
+        && let Ok(idx) = resolve_field_in_type(em, def_ty, name)
+    {
+        return Ok(idx);
     }
     Err(EmitError::FieldNotFound {
         desc: format!("record field `{}`", em.interner.resolve(name)).into(),
@@ -1968,10 +1841,7 @@ fn collect_record_fields(
                 out.push(f.clone());
             }
         }
-        match *rest {
-            Some(rest_idx) => collect_record_fields(em, rest_idx, out),
-            None => true, // closed record — complete
-        }
+        rest.is_none_or(|rest_idx| collect_record_fields(em, rest_idx, out))
     } else {
         false // rest resolved to non-record (unbound var) — incomplete
     }
@@ -1983,7 +1853,7 @@ fn find_complete_record_type(
     em: &Emitter<'_>,
     partial_fields: &[RecordField],
 ) -> Option<Vec<RecordField>> {
-    for def in em.sema.defs.iter() {
+    for def in &em.sema.defs {
         // Look at type defs and let bindings that define record types.
         if !matches!(def.kind, DefKind::Type | DefKind::Let) {
             continue;
@@ -2010,21 +1880,18 @@ fn find_complete_record_type(
             _ => continue,
         };
 
-        match &em.sema.types[record_resolved] {
-            Type::Record { rest, .. } => {
-                if rest.is_some() {
-                    continue;
-                }
-                let mut full_fields = vec![];
-                let _ = collect_record_fields(em, record_resolved, &mut full_fields);
-                let is_superset = partial_fields.iter().all(|pf| {
-                    full_fields.iter().any(|ff| ff.name == pf.name)
-                });
-                if is_superset && full_fields.len() >= partial_fields.len() {
-                    return Some(full_fields);
-                }
+        if let Type::Record { rest, .. } = &em.sema.types[record_resolved] {
+            if rest.is_some() {
+                continue;
             }
-            _ => continue,
+            let mut full_fields = vec![];
+            let _ = collect_record_fields(em, record_resolved, &mut full_fields);
+            let is_superset = partial_fields.iter().all(|pf| {
+                full_fields.iter().any(|ff| ff.name == pf.name)
+            });
+            if is_superset && full_fields.len() >= partial_fields.len() {
+                return Some(full_fields);
+            }
         }
     }
     None
@@ -2047,10 +1914,8 @@ fn resolve_field_in_type(
             }
             // If the record is open (incomplete from dep module inference),
             // find the canonical closed record type definition.
-            if !complete {
-                if let Some(full) = find_complete_record_type(em, &all_fields) {
-                    all_fields = full;
-                }
+            if !complete && let Some(full) = find_complete_record_type(em, &all_fields) {
+                all_fields = full;
             }
             // Sort by name string for canonical ordering — matches emit_record_lit_fixed.
             all_fields.sort_by(|a, b| {
@@ -2089,7 +1954,7 @@ fn resolve_field_in_type(
 
 /// Returns true if the family indicates logical (short-circuit) semantics.
 /// Bool → logical; known numeric → bitwise; None → logical (safe default).
-fn is_logical_family(family: Option<TypeFamily>) -> bool {
+const fn is_logical_family(family: Option<TypeFamily>) -> bool {
     match family {
         Some(TypeFamily::Bool) | None => true,
         Some(_) => false,
@@ -2162,9 +2027,7 @@ pub fn map_binop(op: BinOp, family: Option<TypeFamily>) -> Result<Opcode, EmitEr
         (BinOp::Rem, Some(TypeFamily::Float)) => Opcode::FLT_REM,
         (BinOp::Rem, Some(TypeFamily::Unsigned(_))) => Opcode::NAT_REM,
         (BinOp::Rem, _) => Opcode::INT_REM,
-        (BinOp::Eq, Some(TypeFamily::Float)) => Opcode::CMP_EQ,
         (BinOp::Eq, _) => Opcode::CMP_EQ,
-        (BinOp::Ne, Some(TypeFamily::Float)) => Opcode::CMP_NE,
         (BinOp::Ne, _) => Opcode::CMP_NE,
         (BinOp::Lt, Some(TypeFamily::Float)) => Opcode::CMP_FLT,
         (BinOp::Lt, Some(TypeFamily::Unsigned(_))) => Opcode::CMP_LTU,
@@ -2200,12 +2063,7 @@ fn emit_force_unwrap(
     fc: &mut FnCtx,
     operand: ExprIdx,
 ) -> Result<bool, EmitError> {
-    let produced = emit_expr(em, fc, operand)?;
-    if !produced {
-        return Err(EmitError::UnsupportedFeature {
-            desc: "force-unwrap operand produced no value".into(),
-        });
-    }
+    emit_require(em, fc, operand, "force-unwrap operand")?;
     let tmp = fc.alloc_local();
     fc.fe.emit_st_loc(tmp);
 
@@ -2470,12 +2328,7 @@ fn emit_update(
     base: ExprIdx,
     fields: &[RecField],
 ) -> Result<bool, EmitError> {
-    let produced = emit_expr(em, fc, base)?;
-    if !produced {
-        return Err(EmitError::UnsupportedFeature {
-            desc: "update base produced no value".into(),
-        });
-    }
+    emit_require(em, fc, base, "update base")?;
     let base_slot = fc.alloc_local();
     fc.fe.emit_st_loc(base_slot);
 
@@ -2514,12 +2367,7 @@ fn emit_update(
         });
 
         if let Some(val_idx) = update_val {
-            let produced = emit_expr(em, fc, val_idx)?;
-            if !produced {
-                return Err(EmitError::UnsupportedFeature {
-                    desc: "update field value produced no value".into(),
-                });
-            }
+            emit_require(em, fc, val_idx, "update field value")?;
         } else {
             let idx = u32::try_from(i).map_err(|_| EmitError::overflow("record field index"))?;
             fc.fe.emit_ld_loc(base_slot);

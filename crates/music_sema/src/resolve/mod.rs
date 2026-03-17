@@ -30,10 +30,10 @@ use crate::scope::{ScopeId, ScopeTree};
 /// Each entry is a list of `(name, DefId)` pairs from the dependency's exports.
 pub type ImportNames = HashMap<Symbol, Vec<(Symbol, DefId)>>;
 
-/// Maps a re-exported module DefId to the sub-module's exported `(name, DefId)` pairs.
+/// Maps a re-exported module `DefId` to the sub-module's exported `(name, DefId)` pairs.
 ///
 /// Used to resolve multi-level field chains like `t.runner.run_suite` where `runner`
-/// is itself a re-exported module whose DefId is not in the current module's `import_alias_defs`.
+/// is itself a re-exported module whose `DefId` is not in the current module's `import_alias_defs`.
 pub type SubModuleExports = HashMap<DefId, Vec<(Symbol, DefId)>>;
 
 /// Output accumulators from the resolution pass.

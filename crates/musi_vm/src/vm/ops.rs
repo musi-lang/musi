@@ -35,8 +35,6 @@ pub struct DecodedInstr {
     pub op: Opcode,
     pub operand: u32,
     pub total_len: usize,
-    #[allow(dead_code)]
-    pub widened: bool,
 }
 
 /// Decode an instruction at `base_ip`, handling WID and EXT prefixes.
@@ -48,11 +46,11 @@ pub fn decode_instruction(code: &[u8], base_ip: usize) -> DecodedInstr {
 
     // Handle WID prefix
     if raw == Opcode::WID {
-        let inner_ip = base_ip + 1;
-        let inner_op = code[inner_ip];
+        let wid_inner_ip = base_ip + 1;
+        let inner_op = code[wid_inner_ip];
         let zone = inner_op >> 6;
         let wid_size = widened_operand_size(zone);
-        let operand_start = inner_ip + 1;
+        let operand_start = wid_inner_ip + 1;
         let operand = match wid_size {
             1 => u32::from(code[operand_start]),
             2 => {
@@ -74,8 +72,7 @@ pub fn decode_instruction(code: &[u8], base_ip: usize) -> DecodedInstr {
         return DecodedInstr {
             op: Opcode(inner_op),
             operand,
-            total_len: 1 + 1 + wid_size, // WID byte + opcode byte + widened operand
-            widened: true,
+            total_len: 1 + 1 + wid_size, // WID byte + inner opcode byte + widened operand
         };
     }
 
@@ -103,16 +100,7 @@ pub fn decode_instruction(code: &[u8], base_ip: usize) -> DecodedInstr {
         op: Opcode(raw),
         operand,
         total_len: len,
-        widened: false,
     }
-}
-
-/// Legacy operand decoder (non-WID path). Used by callers that handle WID separately.
-#[must_use]
-#[allow(dead_code)]
-pub fn decode_operand(code: &[u8], base_ip: usize) -> (u32, usize) {
-    let decoded = decode_instruction(code, base_ip);
-    (decoded.operand, decoded.total_len)
 }
 
 /// Reinterpret a u32 operand as a signed i32 jump offset.
@@ -122,9 +110,10 @@ pub fn read_i32_operand(operand: u32) -> Result<isize, VmError> {
 }
 
 /// Reinterpret a u8 operand as a signed i8 short jump offset.
-pub fn read_i8_operand(operand: u32) -> Result<isize, VmError> {
+pub fn read_i8_operand(operand: u32) -> isize {
+    #[allow(clippy::cast_possible_truncation, clippy::as_conversions)]
     let byte = (operand & 0xFF) as u8;
-    Ok(isize::from(byte as i8))
+    isize::from(byte.cast_signed())
 }
 
 /// Compute absolute jump target from the address after the instruction + signed offset.
@@ -210,7 +199,7 @@ pub fn exec_ld_fld(operand: u32, frame: &mut Frame, heap: &Heap) -> Result<(), V
     Ok(())
 }
 
-/// MK_VAR with packed operand: tag and arity from a single u16/u32.
+/// `MK_VAR` with packed operand: tag and arity from a single u16/u32.
 pub fn exec_mk_var(
     tag: u32,
     arity: u32,
@@ -286,7 +275,7 @@ pub fn exec_ld_idx(frame: &mut Frame, heap: &Heap) -> Result<(), VmError> {
     let obj = heap.get(ptr)?;
     // String indexing: return the character at position `idx` as a rune.
     if let Some(s) = &obj.string {
-        let ch = s.chars().nth(idx).ok_or(VmError::OutOfBounds {
+        let ch = s.chars().nth(idx).ok_or_else(|| VmError::OutOfBounds {
             index: idx,
             len: s.chars().count(),
         })?;
@@ -411,7 +400,7 @@ pub fn exec_type_chk(
 
 /// §17 — Closure operations.
 ///
-/// For v2, MK_CLO uses packed operand `(fn_id_u24 << 8) | upval_count_u8`.
+/// For v2, `MK_CLO` uses packed operand `(fn_id_u24 << 8) | upval_count_u8`.
 /// The `fn_id` and `upval_count` are passed already unpacked from the caller.
 pub fn exec_mk_clo(
     fn_id: u32,

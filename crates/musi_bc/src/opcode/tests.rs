@@ -180,7 +180,7 @@ fn test_encode_i8_produces_two_bytes() {
     encode_i8(&mut buf, Opcode::JMP_SH, -10);
     assert_eq!(buf.len(), 2);
     assert_eq!(buf[0], Opcode::JMP_SH.0);
-    assert_eq!(buf[1] as i8, -10);
+    assert_eq!(i8::from_ne_bytes([buf[1]]), -10);
 }
 
 #[test]
@@ -226,9 +226,9 @@ fn test_display_unknown_opcode() {
 
 #[test]
 fn test_pack_unpack_id_arity() {
-    let packed = pack_id_arity(0x123456, 42);
+    let packed = pack_id_arity(0x0012_3456, 42);
     let (id, arity) = unpack_id_arity(packed);
-    assert_eq!(id, 0x123456);
+    assert_eq!(id, 0x0012_3456);
     assert_eq!(arity, 42);
 }
 

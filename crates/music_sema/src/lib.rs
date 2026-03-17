@@ -239,6 +239,7 @@ impl SharedAnalysisState {
 }
 
 /// Runs analysis for a single module using shared cross-module state.
+#[allow(clippy::too_many_arguments)]
 pub fn analyze_shared<S: BuildHasher>(
     module: &ParsedModule,
     state: &mut SharedAnalysisState,

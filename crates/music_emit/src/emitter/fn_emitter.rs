@@ -167,7 +167,7 @@ impl FnEmitter {
 
     /// Emit `mk.var` with packed (tag, arity) in a u16 operand.
     /// If tag > 255, use WID prefix for u32 packed operand.
-    pub fn emit_mk_var(&mut self, tag: u32, arity: u8) -> Result<(), EmitError> {
+    pub fn emit_mk_var(&mut self, tag: u32, arity: u8) {
         if let Ok(t) = u8::try_from(tag) {
             let packed = pack_tag_arity_u16(t, arity);
             encode_u16(&mut self.code, Opcode::MK_VAR, packed);
@@ -178,14 +178,13 @@ impl FnEmitter {
         }
         self.pop_n(i32::from(arity));
         self.push_n(1);
-        Ok(())
     }
 
     pub fn emit_ld_tag(&mut self) {
         encode_no_operand(&mut self.code, Opcode::LD_TAG);
     }
 
-    /// Emit a direct call with packed operand: (fn_id_u24 << 8) | arity_u8.
+    /// Emit a direct call with packed operand: `(fn_id_u24 << 8) | arity_u8`.
     pub fn emit_inv(&mut self, fn_id: u32, _effectful: bool, arg_count: i32) {
         let arity = u8::try_from(arg_count).unwrap_or(u8::MAX);
         let packed = pack_id_arity(fn_id, arity);
@@ -194,7 +193,7 @@ impl FnEmitter {
         self.push_n(1);
     }
 
-    /// Emit a tail call with packed operand: (fn_id_u24 << 8) | arity_u8.
+    /// Emit a tail call with packed operand: `(fn_id_u24 << 8) | arity_u8`.
     pub fn emit_inv_tail(&mut self, fn_id: u32, _effectful: bool) {
         // Arity 0 as default — the VM reads param_count from the function anyway
         let packed = pack_id_arity(fn_id, 0);
@@ -223,7 +222,7 @@ impl FnEmitter {
         encode_u8(&mut self.code, Opcode::LD_PAY, field_idx);
     }
 
-    /// Emit `inv.ffi` with packed operand: (ffi_id_u24 << 8) | arity_u8.
+    /// Emit `inv.ffi` with packed operand: `(ffi_id_u24 << 8) | arity_u8`.
     pub fn emit_inv_ffi(&mut self, ffi_idx: u32, arg_count: i32) {
         let arity = u8::try_from(arg_count).unwrap_or(u8::MAX);
         let packed = pack_id_arity(ffi_idx, arity);
@@ -365,7 +364,7 @@ impl FnEmitter {
         self.push_n(1);
     }
 
-    /// Emit `mk.clo` with packed operand: (fn_id_u24 << 8) | upvalue_count_u8.
+    /// Emit `mk.clo` with packed operand: `(fn_id_u24 << 8) | upvalue_count_u8`.
     pub fn emit_mk_clo(&mut self, fn_id: u32, upvalue_count: u16) {
         let upval_u8 = u8::try_from(upvalue_count).unwrap_or(u8::MAX);
         let packed = pack_id_arity(fn_id, upval_u8);
@@ -379,7 +378,7 @@ impl FnEmitter {
     pub fn emit_jmp_f(&mut self, label: u32) {
         if let Some(&target) = self.label_targets.get(&label) {
             let after_short = self.code.len() + 2;
-            let offset = target as isize - after_short as isize;
+            let offset = target.cast_signed() - after_short.cast_signed();
             if let Ok(off) = i8::try_from(offset) {
                 encode_i8(&mut self.code, Opcode::JNF_SH, off);
                 self.pop_n(1);
@@ -402,7 +401,7 @@ impl FnEmitter {
     pub fn emit_jmp(&mut self, label: u32) {
         if let Some(&target) = self.label_targets.get(&label) {
             let after_short = self.code.len() + 2;
-            let offset = target as isize - after_short as isize;
+            let offset = target.cast_signed() - after_short.cast_signed();
             if let Ok(off) = i8::try_from(offset) {
                 encode_i8(&mut self.code, Opcode::JMP_SH, off);
                 self.stack_depth = 0;
@@ -425,7 +424,7 @@ impl FnEmitter {
     pub fn emit_jmp_t(&mut self, label: u32) {
         if let Some(&target) = self.label_targets.get(&label) {
             let after_short = self.code.len() + 2;
-            let offset = target as isize - after_short as isize;
+            let offset = target.cast_signed() - after_short.cast_signed();
             if let Ok(off) = i8::try_from(offset) {
                 encode_i8(&mut self.code, Opcode::JIF_SH, off);
                 self.pop_n(1);

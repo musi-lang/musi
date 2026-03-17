@@ -15,17 +15,17 @@ pub fn disassemble(code: &[u8]) -> String {
 }
 
 /// Opcodes whose u32 operand is a packed `(id_u24 << 8) | arity_u8`.
-fn is_packed_id_arity(op: Opcode) -> bool {
+const fn is_packed_id_arity(op: Opcode) -> bool {
     matches!(op, Opcode::INV | Opcode::INV_TAL | Opcode::INV_FFI | Opcode::MK_CLO)
 }
 
 /// Opcodes that use i32 jump offsets.
-fn is_long_jump(op: Opcode) -> bool {
+const fn is_long_jump(op: Opcode) -> bool {
     matches!(op, Opcode::JMP | Opcode::JIF | Opcode::JNF)
 }
 
 /// Opcodes that use i8 short jump offsets.
-fn is_short_jump(op: Opcode) -> bool {
+const fn is_short_jump(op: Opcode) -> bool {
     matches!(op, Opcode::JMP_SH | Opcode::JIF_SH | Opcode::JNF_SH)
 }
 
@@ -98,7 +98,7 @@ fn write_disassembly(out: &mut String, code: &[u8]) -> fmt::Result {
             2 => {
                 let operand = code[ip + 1];
                 if is_short_jump(op) {
-                    let offset = operand as i8;
+                    let offset = i8::from_ne_bytes([operand]);
                     let target = (ip + len).wrapping_add_signed(isize::from(offset));
                     writeln!(out, "{ip:04x}: {op} {offset:+} (-> {target:04x})")?;
                 } else {
