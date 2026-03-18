@@ -7,8 +7,7 @@ use core::mem;
 
 use music_ast::expr::Expr;
 use music_ast::pat::Pat;
-use music_ast::ty::Ty;
-use music_ast::{AstArenas, ExprIdx, NameRef, NameRefIdx, ParsedModule, PatIdx, Stmt, TyIdx};
+use music_ast::{AstArenas, ExprIdx, NameRef, NameRefIdx, ParsedModule, PatIdx, Stmt};
 use music_lex::token::{Token, TokenKind};
 use music_shared::{DiagnosticBag, FileId, Interner, Span, Symbol};
 
@@ -175,10 +174,6 @@ impl<'a> Parser<'a> {
         self.arenas.exprs.alloc(e)
     }
 
-    pub(crate) fn alloc_ty(&mut self, t: Ty) -> TyIdx {
-        self.arenas.tys.alloc(t)
-    }
-
     pub(crate) fn alloc_pat(&mut self, p: Pat) -> PatIdx {
         self.arenas.pats.alloc(p)
     }
@@ -192,14 +187,6 @@ impl<'a> Parser<'a> {
         let _diag = self.diags.report(err, span, self.file_id);
         self.recover_to(&[]);
         Expr::Error {
-            span: self.finish_span(span.start),
-        }
-    }
-
-    pub(crate) fn error_ty(&mut self, err: &ParseError) -> Ty {
-        let span = self.peek().span;
-        let _diag = self.diags.report(err, span, self.file_id);
-        Ty::Error {
             span: self.finish_span(span.start),
         }
     }
@@ -223,9 +210,9 @@ impl<'a> Parser<'a> {
         self.alloc_expr(e)
     }
 
-    pub(crate) fn parse_alloc_ty(&mut self) -> TyIdx {
+    pub(crate) fn parse_alloc_ty(&mut self) -> ExprIdx {
         let t = self.parse_ty();
-        self.alloc_ty(t)
+        self.alloc_expr(t)
     }
 
     pub(crate) fn parse_alloc_pat(&mut self) -> PatIdx {

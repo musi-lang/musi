@@ -1,7 +1,7 @@
 //! Let/var binding parsing.
 
 use music_ast::expr::{BindKind, Expr, LetFields, RecDefField};
-use music_ast::ty::TyParam;
+use music_ast::ty_param::TyParam;
 use music_lex::token::TokenKind;
 
 use crate::error::ParseError;

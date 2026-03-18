@@ -3,9 +3,9 @@
 #[cfg(test)]
 mod tests;
 
-use music_ast::TyIdx;
-use music_ast::expr::Arrow;
-use music_ast::ty::{Constraint, EffectItem, EffectSet, Rel, Ty, TyNamedRef};
+use music_ast::expr::{Arrow, EffectItem, EffectSet, Expr, FieldKey};
+use music_ast::ty_param::{Constraint, Rel};
+use music_ast::ExprIdx;
 use music_lex::token::TokenKind;
 use music_shared::Symbol;
 
@@ -14,12 +14,12 @@ use crate::parser::Parser;
 
 impl Parser<'_> {
     /// Parses a full type: `ty_arrow`.
-    pub(crate) fn parse_ty(&mut self) -> Ty {
+    pub(crate) fn parse_ty(&mut self) -> Expr {
         self.parse_ty_arrow()
     }
 
     /// `ty_arrow = ty_eff { ('->' | '~>') ty_eff }`.
-    fn parse_ty_arrow(&mut self) -> Ty {
+    fn parse_ty_arrow(&mut self) -> Expr {
         let start = self.start_span();
         let (first, first_eff) = self.parse_ty_eff();
 
@@ -32,8 +32,13 @@ impl Parser<'_> {
     }
 
     /// Parses the chain of arrow types starting with `first`, at source span `start`.
-    fn parse_ty_arrow_chain(&mut self, start: u32, first: Ty, first_eff: Option<EffectSet>) -> Ty {
-        let mut parts: Vec<(Ty, Option<EffectSet>)> = vec![(first, first_eff)];
+    fn parse_ty_arrow_chain(
+        &mut self,
+        start: u32,
+        first: Expr,
+        first_eff: Option<EffectSet>,
+    ) -> Expr {
+        let mut parts: Vec<(Expr, Option<EffectSet>)> = vec![(first, first_eff)];
         let mut arrows = vec![];
         while self.at(TokenKind::DashGt) || self.at(TokenKind::TildeGt) {
             let arrow = if self.eat(TokenKind::DashGt) {
@@ -47,18 +52,18 @@ impl Parser<'_> {
         }
 
         // Fold right: the effect set from each return-type segment attaches to
-        // the `Ty::Fn` node whose return type it annotates.
+        // the `Expr::FnType` node whose return type it annotates.
         let (mut ret, mut ret_eff) = parts.pop().expect("at least two parts");
         while let Some(arrow) = arrows.pop() {
             let (param, _param_eff) = parts.pop().expect("matching param");
             let params = match param {
-                Ty::Product { fields, .. } => fields,
+                Expr::ProductType { fields, .. } => fields,
                 other => {
-                    vec![self.alloc_ty(other)]
+                    vec![self.alloc_expr(other)]
                 }
             };
-            let ret_idx = self.alloc_ty(ret);
-            ret = Ty::Fn {
+            let ret_idx = self.alloc_expr(ret);
+            ret = Expr::FnType {
                 params,
                 ret: ret_idx,
                 arrow,
@@ -73,12 +78,12 @@ impl Parser<'_> {
     /// `ty_eff = ty_sum [ 'with' effect_set ] | 'with' effect_set`.
     ///
     /// The second form (`~> with { IO }`) is sugar for `~> () with { IO }`.
-    fn parse_ty_eff(&mut self) -> (Ty, Option<EffectSet>) {
+    fn parse_ty_eff(&mut self) -> (Expr, Option<EffectSet>) {
         if self.at(TokenKind::KwWith) {
             let start = self.start_span();
             let _with = self.bump();
             let effects = Some(self.parse_effect_set());
-            let unit = Ty::Product {
+            let unit = Expr::ProductType {
                 fields: vec![],
                 span: self.finish_span(start),
             };
@@ -94,73 +99,73 @@ impl Parser<'_> {
     }
 
     /// `ty_sum = ty_prod { '+' ty_prod }`.
-    fn parse_ty_sum(&mut self) -> Ty {
+    fn parse_ty_sum(&mut self) -> Expr {
         let start = self.start_span();
         let first = self.parse_ty_prod();
         if !self.at(TokenKind::Plus) {
             return first;
         }
-        let mut variants = vec![self.alloc_ty(first)];
+        let mut variants = vec![self.alloc_expr(first)];
         while self.eat(TokenKind::Plus) {
             let t = self.parse_ty_prod();
-            variants.push(self.alloc_ty(t));
+            variants.push(self.alloc_expr(t));
         }
-        Ty::Sum {
+        Expr::SumType {
             variants,
             span: self.finish_span(start),
         }
     }
 
     /// `ty_prod = ty_base { '*' ty_base }`.
-    fn parse_ty_prod(&mut self) -> Ty {
+    fn parse_ty_prod(&mut self) -> Expr {
         let start = self.start_span();
         let first = self.parse_ty_base();
         if !self.at(TokenKind::Star) {
             return first;
         }
-        let mut fields = vec![self.alloc_ty(first)];
+        let mut fields = vec![self.alloc_expr(first)];
         while self.eat(TokenKind::Star) {
             let t = self.parse_ty_base();
-            fields.push(self.alloc_ty(t));
+            fields.push(self.alloc_expr(t));
         }
-        Ty::Product {
+        Expr::ProductType {
             fields,
             span: self.finish_span(start),
         }
     }
 
     /// Base types: var, option, named, paren, array.
-    fn parse_ty_base(&mut self) -> Ty {
+    fn parse_ty_base(&mut self) -> Expr {
         match self.peek_kind() {
             TokenKind::TyIdent => self.parse_ty_var(),
             TokenKind::Question => self.parse_ty_option(),
             TokenKind::Ident => self.parse_ty_named(),
             TokenKind::LParen => self.parse_ty_paren_or_tuple(),
             TokenKind::LBracket => self.parse_ty_array(),
-            _ => self.error_ty(&ParseError::ExpectedType),
+            _ => self.error_expr(&ParseError::ExpectedType),
         }
     }
 
-    fn parse_ty_var(&mut self) -> Ty {
+    fn parse_ty_var(&mut self) -> Expr {
         let start = self.start_span();
         let name = self.expect_symbol();
         let span = self.finish_span(start);
         let name_ref = self.alloc_name_ref(name, span);
-        Ty::Var { name_ref }
+        Expr::Name { name_ref, span }
     }
 
-    fn parse_ty_option(&mut self) -> Ty {
+    fn parse_ty_option(&mut self) -> Expr {
         let start = self.start_span();
         let _q = self.bump();
         let inner = self.parse_ty_base();
-        let inner_idx = self.alloc_ty(inner);
-        Ty::Option {
+        let inner_idx = self.alloc_expr(inner);
+        Expr::OptionType {
             inner: inner_idx,
             span: self.finish_span(start),
         }
     }
 
-    fn parse_ty_named(&mut self) -> Ty {
+    fn parse_ty_named(&mut self) -> Expr {
         let start = self.start_span();
         let name = self.expect_symbol();
         let name_span = self.finish_span(start);
@@ -173,11 +178,29 @@ impl Parser<'_> {
                 vec![]
             };
             let module_ref = self.alloc_name_ref(name, name_span);
-            return Ty::Qualified {
-                module_ref,
-                name: qualified_name,
-                args,
-                span: self.finish_span(start),
+            let qual_span = self.finish_span(start);
+            let mod_expr = self.alloc_expr(Expr::Name {
+                name_ref: module_ref,
+                span: name_span,
+            });
+            let field_expr = Expr::Field {
+                object: mod_expr,
+                field: FieldKey::Name {
+                    name: qualified_name,
+                    span: qual_span,
+                },
+                safe: false,
+                span: qual_span,
+            };
+            return if args.is_empty() {
+                field_expr
+            } else {
+                let callee = self.alloc_expr(field_expr);
+                Expr::TypeApp {
+                    callee,
+                    args,
+                    span: qual_span,
+                }
             };
         }
         let args = if self.eat(TokenKind::KwOf) {
@@ -186,18 +209,26 @@ impl Parser<'_> {
             vec![]
         };
         let name_ref = self.alloc_name_ref(name, name_span);
-        Ty::Named {
-            name_ref,
-            args,
-            span: self.finish_span(start),
+        if args.is_empty() {
+            Expr::Name {
+                name_ref,
+                span: name_span,
+            }
+        } else {
+            let callee = self.alloc_expr(Expr::Name {
+                name_ref,
+                span: name_span,
+            });
+            let span = self.finish_span(start);
+            Expr::TypeApp { callee, args, span }
         }
     }
 
-    fn parse_ty_paren_or_tuple(&mut self) -> Ty {
+    fn parse_ty_paren_or_tuple(&mut self) -> Expr {
         let start = self.start_span();
         let _lp = self.bump();
         if self.eat(TokenKind::RParen) {
-            return Ty::Product {
+            return Expr::ProductType {
                 fields: vec![],
                 span: self.finish_span(start),
             };
@@ -207,22 +238,22 @@ impl Parser<'_> {
             return first;
         }
 
-        let mut fields = vec![self.alloc_ty(first)];
+        let mut fields = vec![self.alloc_expr(first)];
         while self.eat(TokenKind::Comma) {
             if self.at(TokenKind::RParen) {
                 break;
             }
             let t = self.parse_ty();
-            fields.push(self.alloc_ty(t));
+            fields.push(self.alloc_expr(t));
         }
         let _rp = self.expect(TokenKind::RParen);
-        Ty::Product {
+        Expr::ProductType {
             fields,
             span: self.finish_span(start),
         }
     }
 
-    fn parse_ty_array(&mut self) -> Ty {
+    fn parse_ty_array(&mut self) -> Expr {
         let start = self.start_span();
         let _lb = self.bump();
         let len = if self.at(TokenKind::IntLit) {
@@ -239,34 +270,42 @@ impl Parser<'_> {
         // consumed greedily - they belong to the enclosing context.
         // Complex element types need parentheses: `[](Int -> Bool)`.
         let elem = self.parse_ty_base();
-        let elem_idx = self.alloc_ty(elem);
-        Ty::Array {
+        let elem_idx = self.alloc_expr(elem);
+        Expr::ArrayType {
             len,
             elem: elem_idx,
             span: self.finish_span(start),
         }
     }
 
-    fn parse_ty_arg_list(&mut self) -> Vec<TyIdx> {
+    fn parse_ty_arg_list(&mut self) -> Vec<ExprIdx> {
         let t = self.parse_ty_base();
-        vec![self.alloc_ty(t)]
+        vec![self.alloc_expr(t)]
     }
 
     /// Parses a named type reference: `Name [ 'of' type_args ]`.
-    pub(crate) fn parse_ty_named_ref(&mut self) -> TyNamedRef {
+    pub(crate) fn parse_ty_named_ref(&mut self) -> ExprIdx {
         let start = self.start_span();
         let name = self.expect_symbol();
         let name_span = self.finish_span(start);
+        let name_ref = self.alloc_name_ref(name, name_span);
         let args = if self.eat(TokenKind::KwOf) {
             self.parse_ty_arg_list()
         } else {
             vec![]
         };
-        let name_ref = self.alloc_name_ref(name, name_span);
-        TyNamedRef {
-            name_ref,
-            args,
-            span: self.finish_span(start),
+        if args.is_empty() {
+            self.alloc_expr(Expr::Name {
+                name_ref,
+                span: name_span,
+            })
+        } else {
+            let callee = self.alloc_expr(Expr::Name {
+                name_ref,
+                span: name_span,
+            });
+            let span = self.finish_span(start);
+            self.alloc_expr(Expr::TypeApp { callee, args, span })
         }
     }
 
@@ -309,7 +348,7 @@ impl Parser<'_> {
     }
 
     /// Optional type annotation: `:` ty.
-    pub(crate) fn parse_opt_ty_annot(&mut self) -> Option<TyIdx> {
+    pub(crate) fn parse_opt_ty_annot(&mut self) -> Option<ExprIdx> {
         if self.eat(TokenKind::Colon) {
             Some(self.parse_alloc_ty())
         } else {
@@ -340,7 +379,7 @@ impl Parser<'_> {
         let name = self.expect_symbol();
         let arg = if self.eat(TokenKind::KwOf) {
             let t = self.parse_ty();
-            Some(self.alloc_ty(t))
+            Some(self.alloc_expr(t))
         } else {
             None
         };
