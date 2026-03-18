@@ -1,184 +1,137 @@
-//! Opcode definitions and instruction encoding.
+//! Opcode definitions for the SEAM bytecode format.
 //!
-//! High two bits of opcode determine instruction length:
-//! - `0x00–0x3F`: 1 byte (no operand)
-//! - `0x40–0x7F`: 2 bytes (u8 operand)
-//! - `0x80–0xBF`: 3 bytes (u16 LE operand)
-//! - `0xC0–0xFD`: 5 bytes (u32 LE operand)
-//!
-//! Special bytes:
-//! - `0xFE` (`WID`): Wide prefix - widens next opcode's operand by one step
-//! - `0xFF` (`EXT`): Extension prefix - next byte is an extended opcode
+//! Five instruction formats with fixed widths:
+//! - `F0`   — `[op]`                        1 byte
+//! - `FI8`  — `[op] [u8]`                   2 bytes
+//! - `FI16` — `[op] [u16-hi] [u16-lo]`      3 bytes (big-endian)
+//! - `FI8x2`— `[op] [u8-a] [u8-b]`          3 bytes (two independent u8 operands)
+//! - `FI24` — `[op] [i24-hi] [i24-mid] [i24-lo]`  4 bytes (signed, big-endian)
 
 use core::fmt;
 
 /// A bytecode opcode (newtype around the raw byte value).
-///
-/// Using a tuple struct rather than a `#[repr(u8)]` enum avoids `as` casts
-/// while retaining named constants.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Opcode(pub u8);
 
 impl Opcode {
-    // ── Zone 0 - No operand (0x00–0x3F) ──
+    // §4.1 Data Movement (13)
+    pub const LD_CONST: Self = Self(0x00);
+    pub const LD_SMI: Self = Self(0x01);
+    pub const LD_TRUE: Self = Self(0x02);
+    pub const LD_FALSE: Self = Self(0x03);
+    pub const LD_UNIT: Self = Self(0x04);
+    pub const LD_NONE: Self = Self(0x05);
+    pub const LD_LOC: Self = Self(0x06);
+    pub const LD_UPV: Self = Self(0x07);
+    pub const LD_ADDR: Self = Self(0x08);
+    pub const LD_IND: Self = Self(0x09);
+    pub const ST_LOC: Self = Self(0x0A);
+    pub const ST_UPV: Self = Self(0x0B);
+    pub const ST_IND: Self = Self(0x0C);
 
-    // §CTL - Control (0x00–0x05)
-    pub const NOP: Self = Self(0x00);
-    pub const HLT: Self = Self(0x01);
-    pub const RET: Self = Self(0x02);
-    pub const RET_UT: Self = Self(0x03);
-    pub const UNR: Self = Self(0x04);
-    pub const BRK: Self = Self(0x05);
+    // §4.2 Stack (3)
+    pub const POP: Self = Self(0x0D);
+    pub const DUP: Self = Self(0x0E);
+    pub const SWAP: Self = Self(0x0F);
 
-    // §STK - Stack (0x06–0x09)
-    pub const DUP: Self = Self(0x06);
-    pub const POP: Self = Self(0x07);
-    pub const SWP: Self = Self(0x08);
-    pub const LD_UT: Self = Self(0x09);
+    // §4.3 Arithmetic (6)
+    pub const ADD: Self = Self(0x10);
+    pub const SUB: Self = Self(0x11);
+    pub const MUL: Self = Self(0x12);
+    pub const DIV: Self = Self(0x13);
+    pub const REM: Self = Self(0x14);
+    pub const NEG: Self = Self(0x15);
 
-    // §DAT - Data (0x0A–0x0F)
-    pub const LD_TAG: Self = Self(0x0A);
-    pub const LD_LEN: Self = Self(0x0B);
-    pub const LD_IDX: Self = Self(0x0C);
-    pub const ST_IDX: Self = Self(0x0D);
-    pub const TSK_AWT: Self = Self(0x0E);
-    // 0x0F: reserved
+    // §4.4 Logic/Bitwise (6)
+    pub const AND: Self = Self(0x16);
+    pub const OR: Self = Self(0x17);
+    pub const XOR: Self = Self(0x18);
+    pub const NOT: Self = Self(0x19);
+    pub const SHL: Self = Self(0x1A);
+    pub const SHR: Self = Self(0x1B);
 
-    // §INT - Signed integer arithmetic (0x10–0x17)
-    pub const INT_ADD: Self = Self(0x10);
-    pub const INT_SUB: Self = Self(0x11);
-    pub const INT_MUL: Self = Self(0x12);
-    pub const INT_DIV: Self = Self(0x13);
-    pub const INT_REM: Self = Self(0x14);
-    pub const INT_NEG: Self = Self(0x15);
-    // 0x16–0x17: reserved
+    // §4.5 Comparison (6)
+    pub const CMP_EQ: Self = Self(0x1C);
+    pub const CMP_NE: Self = Self(0x1D);
+    pub const CMP_LT: Self = Self(0x1E);
+    pub const CMP_GT: Self = Self(0x1F);
+    pub const CMP_LE: Self = Self(0x20);
+    pub const CMP_GE: Self = Self(0x21);
 
-    // §NAT - Unsigned integer arithmetic (0x18–0x1F)
-    pub const NAT_ADD: Self = Self(0x18);
-    pub const NAT_SUB: Self = Self(0x19);
-    pub const NAT_MUL: Self = Self(0x1A);
-    pub const NAT_DIV: Self = Self(0x1B);
-    pub const NAT_REM: Self = Self(0x1C);
-    // 0x1D–0x1F: reserved
+    // §4.6 Branch (4)
+    pub const BR: Self = Self(0x22);
+    pub const BR_TRUE: Self = Self(0x23);
+    pub const BR_FALSE: Self = Self(0x24);
+    pub const BR_LONG: Self = Self(0x25);
 
-    // §FLT - Float arithmetic (0x20–0x27)
-    pub const FLT_ADD: Self = Self(0x20);
-    pub const FLT_SUB: Self = Self(0x21);
-    pub const FLT_MUL: Self = Self(0x22);
-    pub const FLT_DIV: Self = Self(0x23);
-    pub const FLT_REM: Self = Self(0x24);
-    pub const FLT_NEG: Self = Self(0x25);
-    // 0x26–0x27: reserved
+    // §4.7 Call/Return (4)
+    pub const CALL: Self = Self(0x26);
+    pub const CALL_TAIL: Self = Self(0x27);
+    pub const RET: Self = Self(0x28);
+    pub const RET_UNIT: Self = Self(0x29);
 
-    // §BIT - Bitwise / logical (0x28–0x2F)
-    pub const BIT_AND: Self = Self(0x28);
-    pub const BIT_OR: Self = Self(0x29);
-    pub const BIT_XOR: Self = Self(0x2A);
-    pub const BIT_NOT: Self = Self(0x2B);
-    pub const BIT_SHL: Self = Self(0x2C);
-    pub const BIT_SHR: Self = Self(0x2D);
-    pub const BIT_SRU: Self = Self(0x2E);
-    // 0x2F: reserved
+    // §4.8 Closure (2)
+    pub const CLS_NEW: Self = Self(0x2A);
+    pub const CLS_UPV: Self = Self(0x2B);
 
-    // §CMP - Comparison (0x30–0x3D)
-    pub const CMP_EQ: Self = Self(0x30);
-    pub const CMP_NE: Self = Self(0x31);
-    pub const CMP_LT: Self = Self(0x32);
-    pub const CMP_LE: Self = Self(0x33);
-    pub const CMP_GT: Self = Self(0x34);
-    pub const CMP_GE: Self = Self(0x35);
-    pub const CMP_LTU: Self = Self(0x36);
-    pub const CMP_LEU: Self = Self(0x37);
-    pub const CMP_GTU: Self = Self(0x38);
-    pub const CMP_GEU: Self = Self(0x39);
-    pub const CMP_FLT: Self = Self(0x3A);
-    pub const CMP_FLE: Self = Self(0x3B);
-    pub const CMP_FGT: Self = Self(0x3C);
-    pub const CMP_FGE: Self = Self(0x3D);
+    // §4.9 Record (4)
+    pub const REC_NEW: Self = Self(0x2C);
+    pub const REC_GET: Self = Self(0x2D);
+    pub const REC_SET: Self = Self(0x2E);
+    pub const REC_ADDR: Self = Self(0x2F);
 
-    // §CNV - Conversion (0x3E–0x3F)
-    pub const CNV_ITF: Self = Self(0x3E);
-    pub const CNV_FTI: Self = Self(0x3F);
+    // §4.10 Array (4)
+    pub const ARR_NEW: Self = Self(0x30);
+    pub const ARR_GET: Self = Self(0x31);
+    pub const ARR_SET: Self = Self(0x32);
+    pub const ARR_LEN: Self = Self(0x33);
 
-    // ── Zone 1 - u8 operand (0x40–0x7F) ──
+    // §4.11 Tuple (2)
+    pub const TUP_NEW: Self = Self(0x34);
+    pub const TUP_GET: Self = Self(0x35);
 
-    // §LD - Load/store (0x40–0x46)
-    pub const LD_LOC: Self = Self(0x40);
-    pub const ST_LOC: Self = Self(0x41);
-    pub const LD_CST: Self = Self(0x42);
-    pub const LD_FLD: Self = Self(0x43);
-    pub const ST_FLD: Self = Self(0x44);
-    pub const LD_UPV: Self = Self(0x45);
-    pub const LD_PAY: Self = Self(0x46);
+    // §4.12 Type (5)
+    pub const TY_OF: Self = Self(0x36);
+    pub const TY_EQ: Self = Self(0x37);
+    pub const TY_TEST: Self = Self(0x38);
+    pub const TY_CAST: Self = Self(0x39);
+    pub const TY_DESC: Self = Self(0x3A);
 
-    // §MK - Construction (0x48–0x4A)
-    pub const MK_PRD: Self = Self(0x48);
-    pub const CMP_TAG: Self = Self(0x49);
-    pub const INV_DYN: Self = Self(0x4A);
+    // §4.13 Effect (4)
+    pub const EFF_NEED: Self = Self(0x3B);
+    pub const EFF_HDL: Self = Self(0x3C);
+    pub const EFF_RES: Self = Self(0x3D);
+    pub const EFF_POP: Self = Self(0x3E);
 
-    // §JMP - Short jumps (0x4C–0x4E)
-    pub const JMP_SH: Self = Self(0x4C);
-    pub const JIF_SH: Self = Self(0x4D);
-    pub const JNF_SH: Self = Self(0x4E);
+    // §4.14 Match (2)
+    pub const MAT_TAG: Self = Self(0x3F);
+    pub const MAT_DATA: Self = Self(0x40);
 
-    // §EFF - Effect marks (0x50–0x51)
-    pub const CNT_MRK: Self = Self(0x50);
-    pub const CNT_UMK: Self = Self(0x51);
+    // §4.15 Optional (4)
+    pub const OPT_SOME: Self = Self(0x41);
+    pub const OPT_NONE: Self = Self(0x42);
+    pub const OPT_GET: Self = Self(0x43);
+    pub const OPT_IS: Self = Self(0x44);
 
-    // ── Zone 2 - u16 operand (0x80–0xBF) ──
+    // §4.16 String (2)
+    pub const STR_CAT: Self = Self(0x45);
+    pub const STR_LEN: Self = Self(0x46);
 
-    // §MK - Variant construction (0x80)
-    /// Packed operand: `(tag_u8 << 8) | arity_u8`.
-    /// With WID prefix: `(tag_u24 << 8) | arity_u8`.
-    pub const MK_VAR: Self = Self(0x80);
+    // §4.17 Arena (3)
+    pub const AR_NEW: Self = Self(0x47);
+    pub const AR_ALLOC: Self = Self(0x48);
+    pub const AR_FREE: Self = Self(0x49);
 
-    // ── Zone 3 - u32 operand (0xC0–0xFD) ──
+    // §4.18 GC (2)
+    pub const GC_PIN: Self = Self(0x4A);
+    pub const GC_UNPIN: Self = Self(0x4B);
 
-    // §INV - Invocation (0xC0–0xC2)
-    /// Packed operand: `(fn_id_u24 << 8) | arity_u8`.
-    pub const INV: Self = Self(0xC0);
-    /// Packed operand: `(fn_id_u24 << 8) | arity_u8`.
-    pub const INV_TAL: Self = Self(0xC1);
-    /// Packed operand: `(ffi_id_u24 << 8) | arity_u8`.
-    pub const INV_FFI: Self = Self(0xC2);
+    // §4.19 Foreign (1)
+    pub const FFI_CALL: Self = Self(0x4C);
 
-    // §JMP - Long jumps (0xC4–0xC6)
-    pub const JMP: Self = Self(0xC4);
-    pub const JIF: Self = Self(0xC5);
-    pub const JNF: Self = Self(0xC6);
-
-    // §GLB - Globals (0xC8–0xC9)
-    pub const LD_GLB: Self = Self(0xC8);
-    pub const ST_GLB: Self = Self(0xC9);
-
-    // §ALC - Allocation (0xCA–0xCC)
-    pub const MK_ARR: Self = Self(0xCA);
-    pub const ALC_REF: Self = Self(0xCB);
-    pub const ALC_ARN: Self = Self(0xCC);
-
-    // §CLO - Closures (0xCD)
-    /// Packed operand: `(fn_id_u24 << 8) | upval_count_u8`.
-    pub const MK_CLO: Self = Self(0xCD);
-
-    // §CNT - Continuations (0xCE–0xCF)
-    pub const CNT_SAV: Self = Self(0xCE);
-    pub const CNT_RSM: Self = Self(0xCF);
-
-    // §TSK - Tasks (0xD0–0xD3)
-    pub const TSK_SPN: Self = Self(0xD0);
-    pub const TSK_CHS: Self = Self(0xD1);
-    pub const TSK_CHR: Self = Self(0xD2);
-    pub const TSK_CMK: Self = Self(0xD3);
-
-    // §TYP - Type operations (0xD4)
-    pub const TYP_CHK: Self = Self(0xD4);
-
-    // ── Prefix bytes ──
-
-    /// Wide prefix - widens next opcode's operand by one step.
-    pub const WID: u8 = 0xFE;
-    /// Extension prefix - next byte is an extended opcode.
-    pub const EXT: u8 = 0xFF;
+    // §4.20 Misc (2)
+    pub const NOP: Self = Self(0x4D);
+    pub const PANIC: Self = Self(0x4E);
 
     /// Human-readable name for this opcode, if known.
     #[must_use]
@@ -187,142 +140,266 @@ impl Opcode {
     }
 }
 
-const OPCODE_NAMES: [Option<&str>; 256] = {
+/// Instruction format tag, determining operand width and layout.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Format {
+    /// No operand — 1 byte total.
+    F0,
+    /// Single u8 operand — 2 bytes total.
+    FI8,
+    /// Single u16 operand (big-endian) — 3 bytes total.
+    FI16,
+    /// Two independent u8 operands — 3 bytes total.
+    FI8x2,
+    /// Signed 24-bit operand (big-endian) — 4 bytes total.
+    FI24,
+}
+
+/// Map every opcode byte to its instruction format.
+///
+/// Opcodes 0x4F–0xFF are unassigned and map to `F0` (1 byte) so the
+/// disassembler can always advance without panicking.
+#[must_use]
+pub const fn format(op: u8) -> Format {
+    match op {
+        // §4.1 Data Movement
+        0x00 => Format::FI16, // LD_CONST
+        0x01 => Format::FI16, // LD_SMI
+        0x02 => Format::F0,   // LD_TRUE
+        0x03 => Format::F0,   // LD_FALSE
+        0x04 => Format::F0,   // LD_UNIT
+        0x05 => Format::F0,   // LD_NONE
+        0x06 => Format::FI8,  // LD_LOC
+        0x07 => Format::FI8,  // LD_UPV
+        0x08 => Format::FI8,  // LD_ADDR
+        0x09 => Format::F0,   // LD_IND
+        0x0A => Format::FI8,  // ST_LOC
+        0x0B => Format::FI8,  // ST_UPV
+        0x0C => Format::F0,   // ST_IND
+        // §4.2 Stack
+        0x0D => Format::F0, // POP
+        0x0E => Format::F0, // DUP
+        0x0F => Format::F0, // SWAP
+        // §4.3 Arithmetic
+        0x10 => Format::F0, // ADD
+        0x11 => Format::F0, // SUB
+        0x12 => Format::F0, // MUL
+        0x13 => Format::F0, // DIV
+        0x14 => Format::F0, // REM
+        0x15 => Format::F0, // NEG
+        // §4.4 Logic/Bitwise
+        0x16 => Format::F0, // AND
+        0x17 => Format::F0, // OR
+        0x18 => Format::F0, // XOR
+        0x19 => Format::F0, // NOT
+        0x1A => Format::F0, // SHL
+        0x1B => Format::F0, // SHR
+        // §4.5 Comparison
+        0x1C => Format::F0, // CMP_EQ
+        0x1D => Format::F0, // CMP_NE
+        0x1E => Format::F0, // CMP_LT
+        0x1F => Format::F0, // CMP_GT
+        0x20 => Format::F0, // CMP_LE
+        0x21 => Format::F0, // CMP_GE
+        // §4.6 Branch
+        0x22 => Format::FI16, // BR
+        0x23 => Format::FI16, // BR_TRUE
+        0x24 => Format::FI16, // BR_FALSE
+        0x25 => Format::FI24, // BR_LONG
+        // §4.7 Call/Return
+        0x26 => Format::FI8, // CALL
+        0x27 => Format::FI8, // CALL_TAIL
+        0x28 => Format::F0,  // RET
+        0x29 => Format::F0,  // RET_UNIT
+        // §4.8 Closure
+        0x2A => Format::FI16,  // CLS_NEW
+        0x2B => Format::FI8x2, // CLS_UPV (kind:u8, idx:u8)
+        // §4.9 Record
+        0x2C => Format::FI8x2, // REC_NEW
+        0x2D => Format::FI8,   // REC_GET
+        0x2E => Format::FI8,   // REC_SET
+        0x2F => Format::FI8,   // REC_ADDR
+        // §4.10 Array
+        0x30 => Format::F0, // ARR_NEW
+        0x31 => Format::F0, // ARR_GET
+        0x32 => Format::F0, // ARR_SET
+        0x33 => Format::F0, // ARR_LEN
+        // §4.11 Tuple
+        0x34 => Format::FI8, // TUP_NEW
+        0x35 => Format::FI8, // TUP_GET
+        // §4.12 Type
+        0x36 => Format::F0,   // TY_OF
+        0x37 => Format::F0,   // TY_EQ
+        0x38 => Format::F0,   // TY_TEST
+        0x39 => Format::F0,   // TY_CAST
+        0x3A => Format::FI16, // TY_DESC
+        // §4.13 Effect
+        0x3B => Format::FI8x2, // EFF_NEED
+        0x3C => Format::FI16,  // EFF_HDL
+        0x3D => Format::F0,    // EFF_RES
+        0x3E => Format::F0,    // EFF_POP
+        // §4.14 Match
+        0x3F => Format::FI16, // MAT_TAG
+        0x40 => Format::F0,   // MAT_DATA
+        // §4.15 Optional
+        0x41 => Format::F0, // OPT_SOME
+        0x42 => Format::F0, // OPT_NONE
+        0x43 => Format::F0, // OPT_GET
+        0x44 => Format::F0, // OPT_IS
+        // §4.16 String
+        0x45 => Format::F0, // STR_CAT
+        0x46 => Format::F0, // STR_LEN
+        // §4.17 Arena
+        0x47 => Format::F0, // AR_NEW
+        0x48 => Format::F0, // AR_ALLOC
+        0x49 => Format::F0, // AR_FREE
+        // §4.18 GC
+        0x4A => Format::F0, // GC_PIN
+        0x4B => Format::F0, // GC_UNPIN
+        // §4.19 Foreign
+        0x4C => Format::FI8x2, // FFI_CALL
+        // §4.20 Misc
+        0x4D => Format::F0, // NOP
+        0x4E => Format::F0, // PANIC
+        // All unassigned opcodes — treat as 1-byte F0 so the disassembler
+        // can always advance by at least one byte.
+        _ => Format::F0,
+    }
+}
+
+/// Total instruction length in bytes (including the opcode byte itself).
+#[must_use]
+pub const fn instr_len(op: u8) -> usize {
+    match format(op) {
+        Format::F0 => 1,
+        Format::FI8 => 2,
+        Format::FI16 => 3,
+        Format::FI8x2 => 3,
+        Format::FI24 => 4,
+    }
+}
+
+pub const OPCODE_NAMES: [Option<&str>; 256] = {
     let mut t: [Option<&str>; 256] = [None; 256];
 
-    // §CTL - Control
-    t[0x00] = Some("nop");
-    t[0x01] = Some("hlt");
-    t[0x02] = Some("ret");
-    t[0x03] = Some("ret.ut");
-    t[0x04] = Some("unr");
-    t[0x05] = Some("brk");
+    // §4.1 Data Movement
+    t[0x00] = Some("ld.const");
+    t[0x01] = Some("ld.smi");
+    t[0x02] = Some("ld.true");
+    t[0x03] = Some("ld.false");
+    t[0x04] = Some("ld.unit");
+    t[0x05] = Some("ld.none");
+    t[0x06] = Some("ld.loc");
+    t[0x07] = Some("ld.upv");
+    t[0x08] = Some("ld.addr");
+    t[0x09] = Some("ld.ind");
+    t[0x0A] = Some("st.loc");
+    t[0x0B] = Some("st.upv");
+    t[0x0C] = Some("st.ind");
 
-    // §STK - Stack
-    t[0x06] = Some("dup");
-    t[0x07] = Some("pop");
-    t[0x08] = Some("swp");
-    t[0x09] = Some("ld.ut");
+    // §4.2 Stack
+    t[0x0D] = Some("pop");
+    t[0x0E] = Some("dup");
+    t[0x0F] = Some("swap");
 
-    // §DAT - Data
-    t[0x0A] = Some("ld.tag");
-    t[0x0B] = Some("ld.len");
-    t[0x0C] = Some("ld.idx");
-    t[0x0D] = Some("st.idx");
-    t[0x0E] = Some("tsk.awt");
+    // §4.3 Arithmetic
+    t[0x10] = Some("add");
+    t[0x11] = Some("sub");
+    t[0x12] = Some("mul");
+    t[0x13] = Some("div");
+    t[0x14] = Some("rem");
+    t[0x15] = Some("neg");
 
-    // §INT - Signed integer
-    t[0x10] = Some("int.add");
-    t[0x11] = Some("int.sub");
-    t[0x12] = Some("int.mul");
-    t[0x13] = Some("int.div");
-    t[0x14] = Some("int.rem");
-    t[0x15] = Some("int.neg");
+    // §4.4 Logic/Bitwise
+    t[0x16] = Some("and");
+    t[0x17] = Some("or");
+    t[0x18] = Some("xor");
+    t[0x19] = Some("not");
+    t[0x1A] = Some("shl");
+    t[0x1B] = Some("shr");
 
-    // §NAT - Unsigned integer
-    t[0x18] = Some("nat.add");
-    t[0x19] = Some("nat.sub");
-    t[0x1A] = Some("nat.mul");
-    t[0x1B] = Some("nat.div");
-    t[0x1C] = Some("nat.rem");
+    // §4.5 Comparison
+    t[0x1C] = Some("cmp.eq");
+    t[0x1D] = Some("cmp.ne");
+    t[0x1E] = Some("cmp.lt");
+    t[0x1F] = Some("cmp.gt");
+    t[0x20] = Some("cmp.le");
+    t[0x21] = Some("cmp.ge");
 
-    // §FLT - Float
-    t[0x20] = Some("flt.add");
-    t[0x21] = Some("flt.sub");
-    t[0x22] = Some("flt.mul");
-    t[0x23] = Some("flt.div");
-    t[0x24] = Some("flt.rem");
-    t[0x25] = Some("flt.neg");
+    // §4.6 Branch
+    t[0x22] = Some("br");
+    t[0x23] = Some("br.true");
+    t[0x24] = Some("br.false");
+    t[0x25] = Some("br.long");
 
-    // §BIT - Bitwise / logical
-    t[0x28] = Some("bit.and");
-    t[0x29] = Some("bit.or");
-    t[0x2A] = Some("bit.xor");
-    t[0x2B] = Some("bit.not");
-    t[0x2C] = Some("bit.shl");
-    t[0x2D] = Some("bit.shr");
-    t[0x2E] = Some("bit.sru");
+    // §4.7 Call/Return
+    t[0x26] = Some("call");
+    t[0x27] = Some("call.tail");
+    t[0x28] = Some("ret");
+    t[0x29] = Some("ret.unit");
 
-    // §CMP - Comparison
-    t[0x30] = Some("cmp.eq");
-    t[0x31] = Some("cmp.ne");
-    t[0x32] = Some("cmp.lt");
-    t[0x33] = Some("cmp.le");
-    t[0x34] = Some("cmp.gt");
-    t[0x35] = Some("cmp.ge");
-    t[0x36] = Some("cmp.lt.un");
-    t[0x37] = Some("cmp.le.un");
-    t[0x38] = Some("cmp.gt.un");
-    t[0x39] = Some("cmp.ge.un");
-    t[0x3A] = Some("cmp.fl.lt");
-    t[0x3B] = Some("cmp.fl.le");
-    t[0x3C] = Some("cmp.fl.gt");
-    t[0x3D] = Some("cmp.fl.ge");
+    // §4.8 Closure
+    t[0x2A] = Some("cls.new");
+    t[0x2B] = Some("cls.upv");
 
-    // §CNV - Conversion
-    t[0x3E] = Some("cnv.itf");
-    t[0x3F] = Some("cnv.fti");
+    // §4.9 Record
+    t[0x2C] = Some("rec.new");
+    t[0x2D] = Some("rec.get");
+    t[0x2E] = Some("rec.set");
+    t[0x2F] = Some("rec.addr");
 
-    // §LD - Load/store (u8)
-    t[0x40] = Some("ld.loc");
-    t[0x41] = Some("st.loc");
-    t[0x42] = Some("ld.cst");
-    t[0x43] = Some("ld.fld");
-    t[0x44] = Some("st.fld");
-    t[0x45] = Some("ld.upv");
-    t[0x46] = Some("ld.pay");
+    // §4.10 Array
+    t[0x30] = Some("arr.new");
+    t[0x31] = Some("arr.get");
+    t[0x32] = Some("arr.set");
+    t[0x33] = Some("arr.len");
 
-    // §MK - Construction (u8)
-    t[0x48] = Some("mk.prd");
-    t[0x49] = Some("cmp.tag");
-    t[0x4A] = Some("inv.dyn");
+    // §4.11 Tuple
+    t[0x34] = Some("tup.new");
+    t[0x35] = Some("tup.get");
 
-    // §JMP - Short jumps (u8)
-    t[0x4C] = Some("jmp.sh");
-    t[0x4D] = Some("jif.sh");
-    t[0x4E] = Some("jnf.sh");
+    // §4.12 Type
+    t[0x36] = Some("ty.of");
+    t[0x37] = Some("ty.eq");
+    t[0x38] = Some("ty.test");
+    t[0x39] = Some("ty.cast");
+    t[0x3A] = Some("ty.desc");
 
-    // §EFF - Effect marks (u8)
-    t[0x50] = Some("cnt.mrk");
-    t[0x51] = Some("cnt.umk");
+    // §4.13 Effect
+    t[0x3B] = Some("eff.need");
+    t[0x3C] = Some("eff.hdl");
+    t[0x3D] = Some("eff.res");
+    t[0x3E] = Some("eff.pop");
 
-    // §MK - Variant (u16)
-    t[0x80] = Some("mk.var");
+    // §4.14 Match
+    t[0x3F] = Some("mat.tag");
+    t[0x40] = Some("mat.data");
 
-    // §INV - Invocation (u32)
-    t[0xC0] = Some("inv");
-    t[0xC1] = Some("inv.tal");
-    t[0xC2] = Some("inv.ffi");
+    // §4.15 Optional
+    t[0x41] = Some("opt.some");
+    t[0x42] = Some("opt.none");
+    t[0x43] = Some("opt.get");
+    t[0x44] = Some("opt.is");
 
-    // §JMP - Long jumps (u32)
-    t[0xC4] = Some("jmp");
-    t[0xC5] = Some("jif");
-    t[0xC6] = Some("jnf");
+    // §4.16 String
+    t[0x45] = Some("str.cat");
+    t[0x46] = Some("str.len");
 
-    // §GLB - Globals (u32)
-    t[0xC8] = Some("ld.glb");
-    t[0xC9] = Some("st.glb");
+    // §4.17 Arena
+    t[0x47] = Some("ar.new");
+    t[0x48] = Some("ar.alloc");
+    t[0x49] = Some("ar.free");
 
-    // §ALC - Allocation (u32)
-    t[0xCA] = Some("mk.arr");
-    t[0xCB] = Some("alc.ref");
-    t[0xCC] = Some("alc.arn");
+    // §4.18 GC
+    t[0x4A] = Some("gc.pin");
+    t[0x4B] = Some("gc.unpin");
 
-    // §CLO - Closures (u32)
-    t[0xCD] = Some("mk.clo");
+    // §4.19 Foreign
+    t[0x4C] = Some("ffi.call");
 
-    // §CNT - Continuations (u32)
-    t[0xCE] = Some("cnt.sav");
-    t[0xCF] = Some("cnt.rsm");
-
-    // §TSK - Tasks (u32)
-    t[0xD0] = Some("tsk.spn");
-    t[0xD1] = Some("tsk.chs");
-    t[0xD2] = Some("tsk.chr");
-    t[0xD3] = Some("tsk.cmk");
-
-    // §TYP - Type operations (u32)
-    t[0xD4] = Some("typ.chk");
+    // §4.20 Misc
+    t[0x4D] = Some("nop");
+    t[0x4E] = Some("panic");
 
     t
 };
@@ -334,136 +411,6 @@ impl fmt::Display for Opcode {
             None => write!(f, "0x{:02X}", self.0),
         }
     }
-}
-
-/// Instruction length from top-2-bits encoding.
-///
-/// `0x00..=0x3F` -> 1 byte, `0x40..=0x7F` -> 2 bytes,
-/// `0x80..=0xBF` -> 3 bytes, `0xC0..=0xFD` -> 5 bytes.
-///
-/// For `WID` (0xFE) and `EXT` (0xFF), returns 1 (the prefix byte itself);
-/// the caller must handle the subsequent opcode.
-#[must_use]
-pub const fn instr_len(op: u8) -> usize {
-    match op {
-        0xFE | 0xFF => 1,
-        _ => match op >> 6 {
-            0 => 1,
-            1 => 2,
-            2 => 3,
-            _ => 5, // 3 -> 5
-        },
-    }
-}
-
-/// Operand size in bytes for a given zone (top-2-bits).
-/// Zone 0 = 0, Zone 1 = 1, Zone 2 = 2, Zone 3 = 4.
-#[must_use]
-pub const fn zone_operand_size(zone: u8) -> usize {
-    match zone {
-        0 => 0,
-        1 => 1,
-        2 => 2,
-        _ => 4,
-    }
-}
-
-/// Widened operand size: none→u8 (1), u8→u16 (2), u16→u32 (4), u32→u32 (4).
-#[must_use]
-pub const fn widened_operand_size(zone: u8) -> usize {
-    match zone {
-        0 => 1,
-        1 => 2,
-        _ => 4,
-    }
-}
-
-/// Encode a no-operand instruction into `buf`.
-pub fn encode_no_operand(buf: &mut Vec<u8>, op: Opcode) {
-    buf.push(op.0);
-}
-
-/// Encode a u8-operand instruction into `buf`.
-pub fn encode_u8(buf: &mut Vec<u8>, op: Opcode, operand: u8) {
-    buf.push(op.0);
-    buf.push(operand);
-}
-
-/// Encode a u16-operand instruction (LE) into `buf`.
-pub fn encode_u16(buf: &mut Vec<u8>, op: Opcode, operand: u16) {
-    buf.push(op.0);
-    buf.extend_from_slice(&operand.to_le_bytes());
-}
-
-/// Encode a u32-operand instruction (LE) into `buf`.
-pub fn encode_u32(buf: &mut Vec<u8>, op: Opcode, operand: u32) {
-    buf.push(op.0);
-    buf.extend_from_slice(&operand.to_le_bytes());
-}
-
-/// Encode an i32-operand instruction (LE) into `buf`.
-pub fn encode_i32(buf: &mut Vec<u8>, op: Opcode, operand: i32) {
-    buf.push(op.0);
-    buf.extend_from_slice(&operand.to_le_bytes());
-}
-
-/// Encode an i8-operand instruction into `buf` (for short jumps).
-pub fn encode_i8(buf: &mut Vec<u8>, op: Opcode, operand: i8) {
-    buf.push(op.0);
-    buf.push(u8::from_ne_bytes(operand.to_ne_bytes()));
-}
-
-/// Encode a WID-prefixed instruction. The operand is widened by one step.
-pub fn encode_wid(buf: &mut Vec<u8>, op: Opcode, widened_operand_bytes: &[u8]) {
-    buf.push(Opcode::WID);
-    buf.push(op.0);
-    buf.extend_from_slice(widened_operand_bytes);
-}
-
-/// Encode WID + u8-zone opcode with a u16 operand (widened from u8 to u16).
-pub fn encode_wid_u16(buf: &mut Vec<u8>, op: Opcode, operand: u16) {
-    buf.push(Opcode::WID);
-    buf.push(op.0);
-    buf.extend_from_slice(&operand.to_le_bytes());
-}
-
-/// Encode WID + u16-zone opcode with a u32 operand (widened from u16 to u32).
-pub fn encode_wid_u32(buf: &mut Vec<u8>, op: Opcode, operand: u32) {
-    buf.push(Opcode::WID);
-    buf.push(op.0);
-    buf.extend_from_slice(&operand.to_le_bytes());
-}
-
-/// Pack a u24 id and a u8 arity into a u32 operand.
-/// Layout: `(id_u24 << 8) | arity_u8`.
-#[must_use]
-pub const fn pack_id_arity(id: u32, arity: u8) -> u32 {
-    (id << 8) | u32::from_le_bytes([arity, 0, 0, 0])
-}
-
-/// Unpack a u32 operand into (`id_u24`, `arity_u8`).
-#[must_use]
-pub const fn unpack_id_arity(packed: u32) -> (u32, u8) {
-    ((packed >> 8) & 0x00FF_FFFF, packed.to_le_bytes()[0])
-}
-
-/// Pack a u8 tag and a u8 arity into a u16 operand.
-/// Layout: `(tag_u8 << 8) | arity_u8`.
-#[must_use]
-pub const fn pack_tag_arity_u16(tag: u8, arity: u8) -> u16 {
-    u16::from_le_bytes([arity, tag])
-}
-
-/// Unpack a u16 operand into (`tag_u8`, `arity_u8`).
-#[must_use]
-pub const fn unpack_tag_arity_u16(packed: u16) -> (u8, u8) {
-    (packed.to_le_bytes()[1], packed.to_le_bytes()[0])
-}
-
-/// Unpack a u32 operand as (`tag_u24`, `arity_u8`) for widened `MK_VAR`.
-#[must_use]
-pub const fn unpack_tag_arity_u32(packed: u32) -> (u32, u8) {
-    unpack_id_arity(packed)
 }
 
 #[cfg(test)]

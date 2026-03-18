@@ -1,18 +1,15 @@
 //! `msc_bc` - shared `.muse` bytecode format definitions.
 //!
-//! Defines the opcode set, instruction encoding functions, and CRC-32
+//! Defines the SEAM opcode set, instruction encoding functions, and CRC-32
 //! checksum used by both the `msc_emit` compiler crate and the
 //! `msc_vm` runtime crate.
 
 mod crc32;
 mod disasm;
+mod encoding;
 mod opcode;
 
 pub use crc32::crc32_slice;
 pub use disasm::disassemble;
-pub use opcode::{
-    Opcode, encode_i8, encode_i32, encode_no_operand, encode_u8, encode_u16, encode_u32,
-    encode_wid, encode_wid_u16, encode_wid_u32, instr_len, pack_id_arity, pack_tag_arity_u16,
-    unpack_id_arity, unpack_tag_arity_u16, unpack_tag_arity_u32, widened_operand_size,
-    zone_operand_size,
-};
+pub use encoding::{encode_f0, encode_fi16, encode_fi24, encode_fi8, encode_fi8x2};
+pub use opcode::{format, instr_len, Format, Opcode, OPCODE_NAMES};

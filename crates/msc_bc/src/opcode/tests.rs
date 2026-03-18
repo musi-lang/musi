@@ -1,251 +1,210 @@
 use std::collections::HashSet;
 
-use super::{
-    Opcode, encode_i8, encode_i32, pack_id_arity, pack_tag_arity_u16, unpack_id_arity,
-    unpack_tag_arity_u16,
-};
+use super::{format, instr_len, Format, Opcode};
 
-/// All no-operand opcodes (range 0x00–0x3F).
-const NO_OPERAND_OPCODES: &[Opcode] = &[
-    // §CTL
-    Opcode::NOP,
-    Opcode::HLT,
-    Opcode::RET,
-    Opcode::RET_UT,
-    Opcode::UNR,
-    Opcode::BRK,
-    // §STK
-    Opcode::DUP,
-    Opcode::POP,
-    Opcode::SWP,
-    Opcode::LD_UT,
-    // §DAT
-    Opcode::LD_TAG,
-    Opcode::LD_LEN,
-    Opcode::LD_IDX,
-    Opcode::ST_IDX,
-    Opcode::TSK_AWT,
-    // §INT
-    Opcode::INT_ADD,
-    Opcode::INT_SUB,
-    Opcode::INT_MUL,
-    Opcode::INT_DIV,
-    Opcode::INT_REM,
-    Opcode::INT_NEG,
-    // §NAT
-    Opcode::NAT_ADD,
-    Opcode::NAT_SUB,
-    Opcode::NAT_MUL,
-    Opcode::NAT_DIV,
-    Opcode::NAT_REM,
-    // §FLT
-    Opcode::FLT_ADD,
-    Opcode::FLT_SUB,
-    Opcode::FLT_MUL,
-    Opcode::FLT_DIV,
-    Opcode::FLT_REM,
-    Opcode::FLT_NEG,
-    // §BIT
-    Opcode::BIT_AND,
-    Opcode::BIT_OR,
-    Opcode::BIT_XOR,
-    Opcode::BIT_NOT,
-    Opcode::BIT_SHL,
-    Opcode::BIT_SHR,
-    Opcode::BIT_SRU,
-    // §CMP
-    Opcode::CMP_EQ,
-    Opcode::CMP_NE,
-    Opcode::CMP_LT,
-    Opcode::CMP_LE,
-    Opcode::CMP_GT,
-    Opcode::CMP_GE,
-    Opcode::CMP_LTU,
-    Opcode::CMP_LEU,
-    Opcode::CMP_GTU,
-    Opcode::CMP_GEU,
-    Opcode::CMP_FLT,
-    Opcode::CMP_FLE,
-    Opcode::CMP_FGT,
-    Opcode::CMP_FGE,
-    // §CNV
-    Opcode::CNV_ITF,
-    Opcode::CNV_FTI,
-];
-
-/// All u8-operand opcodes (range 0x40–0x7F).
-const U8_OPERAND_OPCODES: &[Opcode] = &[
-    Opcode::LD_LOC,
-    Opcode::ST_LOC,
-    Opcode::LD_CST,
-    Opcode::LD_FLD,
-    Opcode::ST_FLD,
-    Opcode::LD_UPV,
-    Opcode::LD_PAY,
-    Opcode::MK_PRD,
-    Opcode::CMP_TAG,
-    Opcode::INV_DYN,
-    Opcode::JMP_SH,
-    Opcode::JIF_SH,
-    Opcode::JNF_SH,
-    Opcode::CNT_MRK,
-    Opcode::CNT_UMK,
-];
-
-/// All u16-operand opcodes (range 0x80–0xBF).
-const U16_OPERAND_OPCODES: &[Opcode] = &[Opcode::MK_VAR];
-
-/// All u32-operand opcodes (range 0xC0–0xFD).
-const U32_OPERAND_OPCODES: &[Opcode] = &[
-    Opcode::INV,
-    Opcode::INV_TAL,
-    Opcode::INV_FFI,
-    Opcode::JMP,
-    Opcode::JIF,
-    Opcode::JNF,
-    Opcode::LD_GLB,
-    Opcode::ST_GLB,
-    Opcode::MK_ARR,
-    Opcode::ALC_REF,
-    Opcode::ALC_ARN,
-    Opcode::MK_CLO,
-    Opcode::CNT_SAV,
-    Opcode::CNT_RSM,
-    Opcode::TSK_SPN,
-    Opcode::TSK_CHS,
-    Opcode::TSK_CHR,
-    Opcode::TSK_CMK,
-    Opcode::TYP_CHK,
+// All 79 defined opcodes with their expected formats.
+const OPCODE_FORMAT_TABLE: &[(Opcode, Format)] = &[
+    // §4.1 Data Movement
+    (Opcode::LD_CONST, Format::FI16),
+    (Opcode::LD_SMI, Format::FI16),
+    (Opcode::LD_TRUE, Format::F0),
+    (Opcode::LD_FALSE, Format::F0),
+    (Opcode::LD_UNIT, Format::F0),
+    (Opcode::LD_NONE, Format::F0),
+    (Opcode::LD_LOC, Format::FI8),
+    (Opcode::LD_UPV, Format::FI8),
+    (Opcode::LD_ADDR, Format::FI8),
+    (Opcode::LD_IND, Format::F0),
+    (Opcode::ST_LOC, Format::FI8),
+    (Opcode::ST_UPV, Format::FI8),
+    (Opcode::ST_IND, Format::F0),
+    // §4.2 Stack
+    (Opcode::POP, Format::F0),
+    (Opcode::DUP, Format::F0),
+    (Opcode::SWAP, Format::F0),
+    // §4.3 Arithmetic
+    (Opcode::ADD, Format::F0),
+    (Opcode::SUB, Format::F0),
+    (Opcode::MUL, Format::F0),
+    (Opcode::DIV, Format::F0),
+    (Opcode::REM, Format::F0),
+    (Opcode::NEG, Format::F0),
+    // §4.4 Logic/Bitwise
+    (Opcode::AND, Format::F0),
+    (Opcode::OR, Format::F0),
+    (Opcode::XOR, Format::F0),
+    (Opcode::NOT, Format::F0),
+    (Opcode::SHL, Format::F0),
+    (Opcode::SHR, Format::F0),
+    // §4.5 Comparison
+    (Opcode::CMP_EQ, Format::F0),
+    (Opcode::CMP_NE, Format::F0),
+    (Opcode::CMP_LT, Format::F0),
+    (Opcode::CMP_GT, Format::F0),
+    (Opcode::CMP_LE, Format::F0),
+    (Opcode::CMP_GE, Format::F0),
+    // §4.6 Branch
+    (Opcode::BR, Format::FI16),
+    (Opcode::BR_TRUE, Format::FI16),
+    (Opcode::BR_FALSE, Format::FI16),
+    (Opcode::BR_LONG, Format::FI24),
+    // §4.7 Call/Return
+    (Opcode::CALL, Format::FI8),
+    (Opcode::CALL_TAIL, Format::FI8),
+    (Opcode::RET, Format::F0),
+    (Opcode::RET_UNIT, Format::F0),
+    // §4.8 Closure
+    (Opcode::CLS_NEW, Format::FI16),
+    (Opcode::CLS_UPV, Format::FI8x2),
+    // §4.9 Record
+    (Opcode::REC_NEW, Format::FI8x2),
+    (Opcode::REC_GET, Format::FI8),
+    (Opcode::REC_SET, Format::FI8),
+    (Opcode::REC_ADDR, Format::FI8),
+    // §4.10 Array
+    (Opcode::ARR_NEW, Format::F0),
+    (Opcode::ARR_GET, Format::F0),
+    (Opcode::ARR_SET, Format::F0),
+    (Opcode::ARR_LEN, Format::F0),
+    // §4.11 Tuple
+    (Opcode::TUP_NEW, Format::FI8),
+    (Opcode::TUP_GET, Format::FI8),
+    // §4.12 Type
+    (Opcode::TY_OF, Format::F0),
+    (Opcode::TY_EQ, Format::F0),
+    (Opcode::TY_TEST, Format::F0),
+    (Opcode::TY_CAST, Format::F0),
+    (Opcode::TY_DESC, Format::FI16),
+    // §4.13 Effect
+    (Opcode::EFF_NEED, Format::FI8x2),
+    (Opcode::EFF_HDL, Format::FI16),
+    (Opcode::EFF_RES, Format::F0),
+    (Opcode::EFF_POP, Format::F0),
+    // §4.14 Match
+    (Opcode::MAT_TAG, Format::FI16),
+    (Opcode::MAT_DATA, Format::F0),
+    // §4.15 Optional
+    (Opcode::OPT_SOME, Format::F0),
+    (Opcode::OPT_NONE, Format::F0),
+    (Opcode::OPT_GET, Format::F0),
+    (Opcode::OPT_IS, Format::F0),
+    // §4.16 String
+    (Opcode::STR_CAT, Format::F0),
+    (Opcode::STR_LEN, Format::F0),
+    // §4.17 Arena
+    (Opcode::AR_NEW, Format::F0),
+    (Opcode::AR_ALLOC, Format::F0),
+    (Opcode::AR_FREE, Format::F0),
+    // §4.18 GC
+    (Opcode::GC_PIN, Format::F0),
+    (Opcode::GC_UNPIN, Format::F0),
+    // §4.19 Foreign
+    (Opcode::FFI_CALL, Format::FI8x2),
+    // §4.20 Misc
+    (Opcode::NOP, Format::F0),
+    (Opcode::PANIC, Format::F0),
 ];
 
 #[test]
-fn test_all_no_operand_opcodes_in_range_0x00_0x3f() {
-    for &op in NO_OPERAND_OPCODES {
-        assert_eq!(
-            op.0 >> 6,
-            0,
-            "no-operand opcode {:#04x} must be in range 0x00–0x3F",
-            op.0
-        );
-    }
-}
-
-#[test]
-fn test_all_u8_operand_opcodes_in_range_0x40_0x7f() {
-    for &op in U8_OPERAND_OPCODES {
-        assert_eq!(
-            op.0 >> 6,
-            1,
-            "u8-operand opcode {:#04x} must be in range 0x40–0x7F",
-            op.0
-        );
-    }
-}
-
-#[test]
-fn test_all_u16_operand_opcodes_in_range_0x80_0xbf() {
-    for &op in U16_OPERAND_OPCODES {
-        assert_eq!(
-            op.0 >> 6,
-            2,
-            "u16-operand opcode {:#04x} must be in range 0x80–0xBF",
-            op.0
-        );
-    }
-}
-
-#[test]
-fn test_all_u32_operand_opcodes_in_range_0xc0_0xfd() {
-    for &op in U32_OPERAND_OPCODES {
-        assert!(
-            op.0 >= 0xC0 && op.0 <= 0xFD,
-            "u32-operand opcode {:#04x} must be in range 0xC0–0xFD",
-            op.0
-        );
-    }
-}
-
-#[test]
-fn test_encode_i32_produces_five_bytes_le_signed() {
-    let mut buf = vec![];
-    encode_i32(&mut buf, Opcode::JMP, -5);
-    assert_eq!(buf.len(), 5);
-    assert_eq!(buf[0], Opcode::JMP.0);
-    let operand = i32::from_le_bytes([buf[1], buf[2], buf[3], buf[4]]);
-    assert_eq!(operand, -5);
-}
-
-#[test]
-fn test_encode_i8_produces_two_bytes() {
-    let mut buf = vec![];
-    encode_i8(&mut buf, Opcode::JMP_SH, -10);
-    assert_eq!(buf.len(), 2);
-    assert_eq!(buf[0], Opcode::JMP_SH.0);
-    assert_eq!(i8::from_ne_bytes([buf[1]]), -10);
+fn test_opcode_count() {
+    assert_eq!(
+        OPCODE_FORMAT_TABLE.len(),
+        79,
+        "expected 79 opcodes, got {}",
+        OPCODE_FORMAT_TABLE.len()
+    );
 }
 
 #[test]
 fn test_no_duplicate_opcode_values() {
-    let all: Vec<u8> = NO_OPERAND_OPCODES
-        .iter()
-        .chain(U8_OPERAND_OPCODES)
-        .chain(U16_OPERAND_OPCODES)
-        .chain(U32_OPERAND_OPCODES)
-        .map(|op| op.0)
-        .collect();
-
-    let unique: HashSet<u8> = all.iter().copied().collect();
+    let values: Vec<u8> = OPCODE_FORMAT_TABLE.iter().map(|(op, _)| op.0).collect();
+    let unique: HashSet<u8> = values.iter().copied().collect();
     assert_eq!(
-        all.len(),
+        values.len(),
         unique.len(),
-        "duplicate opcode values found among {} opcodes",
-        all.len()
+        "duplicate opcode byte values found"
     );
+}
+
+#[test]
+fn test_format_matches_table() {
+    for (op, expected_fmt) in OPCODE_FORMAT_TABLE {
+        let actual_fmt = format(op.0);
+        assert_eq!(
+            actual_fmt, *expected_fmt,
+            "opcode {op} (0x{:02X}): expected format {expected_fmt:?}, got {actual_fmt:?}",
+            op.0
+        );
+    }
+}
+
+#[test]
+fn test_instr_len_matches_format() {
+    for (op, fmt) in OPCODE_FORMAT_TABLE {
+        let expected_len = match fmt {
+            Format::F0 => 1,
+            Format::FI8 => 2,
+            Format::FI16 => 3,
+            Format::FI8x2 => 3,
+            Format::FI24 => 4,
+        };
+        let actual_len = instr_len(op.0);
+        assert_eq!(
+            actual_len, expected_len,
+            "opcode {op} (0x{:02X}): expected len {expected_len}, got {actual_len}",
+            op.0
+        );
+    }
+}
+
+#[test]
+fn test_unassigned_opcodes_are_f0() {
+    let assigned: HashSet<u8> = OPCODE_FORMAT_TABLE.iter().map(|(op, _)| op.0).collect();
+    for byte in 0x4Fu8..=0xFFu8 {
+        if !assigned.contains(&byte) {
+            assert_eq!(
+                format(byte),
+                Format::F0,
+                "unassigned opcode 0x{byte:02X} should map to F0"
+            );
+            assert_eq!(
+                instr_len(byte),
+                1,
+                "unassigned opcode 0x{byte:02X} should have len 1"
+            );
+        }
+    }
 }
 
 #[test]
 fn test_display_known_opcodes() {
     assert_eq!(format!("{}", Opcode::NOP), "nop");
-    assert_eq!(format!("{}", Opcode::LD_LOC), "ld.loc");
+    assert_eq!(format!("{}", Opcode::ADD), "add");
     assert_eq!(format!("{}", Opcode::CMP_EQ), "cmp.eq");
-    assert_eq!(format!("{}", Opcode::JMP), "jmp");
-    assert_eq!(format!("{}", Opcode::INV_FFI), "inv.ffi");
-    assert_eq!(format!("{}", Opcode::INT_ADD), "int.add");
-    assert_eq!(format!("{}", Opcode::NAT_ADD), "nat.add");
-    assert_eq!(format!("{}", Opcode::FLT_ADD), "flt.add");
-    assert_eq!(format!("{}", Opcode::BIT_AND), "bit.and");
-    assert_eq!(format!("{}", Opcode::MK_VAR), "mk.var");
-    assert_eq!(format!("{}", Opcode::JMP_SH), "jmp.sh");
-    assert_eq!(format!("{}", Opcode::LD_UT), "ld.ut");
-    assert_eq!(format!("{}", Opcode::RET_UT), "ret.ut");
+    assert_eq!(format!("{}", Opcode::BR), "br");
+    assert_eq!(format!("{}", Opcode::BR_LONG), "br.long");
+    assert_eq!(format!("{}", Opcode::CALL), "call");
+    assert_eq!(format!("{}", Opcode::RET), "ret");
+    assert_eq!(format!("{}", Opcode::LD_CONST), "ld.const");
+    assert_eq!(format!("{}", Opcode::LD_LOC), "ld.loc");
+    assert_eq!(format!("{}", Opcode::FFI_CALL), "ffi.call");
+    assert_eq!(format!("{}", Opcode::REC_NEW), "rec.new");
+    assert_eq!(format!("{}", Opcode::EFF_NEED), "eff.need");
 }
 
 #[test]
 fn test_display_unknown_opcode() {
-    assert_eq!(format!("{}", Opcode(0x0F)), "0x0F");
+    assert_eq!(format!("{}", Opcode(0x50)), "0x50");
+    assert_eq!(format!("{}", Opcode(0xFF)), "0xFF");
 }
 
 #[test]
-fn test_pack_unpack_id_arity() {
-    let packed = pack_id_arity(0x0012_3456, 42);
-    let (id, arity) = unpack_id_arity(packed);
-    assert_eq!(id, 0x0012_3456);
-    assert_eq!(arity, 42);
-}
-
-#[test]
-fn test_pack_unpack_tag_arity_u16() {
-    let packed = pack_tag_arity_u16(7, 3);
-    let (tag, arity) = unpack_tag_arity_u16(packed);
-    assert_eq!(tag, 7);
-    assert_eq!(arity, 3);
-}
-
-#[test]
-fn test_opcode_count() {
-    let total = NO_OPERAND_OPCODES.len()
-        + U8_OPERAND_OPCODES.len()
-        + U16_OPERAND_OPCODES.len()
-        + U32_OPERAND_OPCODES.len();
-    assert_eq!(total, 90, "expected 90 assigned opcodes, got {total}");
+fn test_all_assigned_opcodes_have_names() {
+    for (op, _) in OPCODE_FORMAT_TABLE {
+        assert!(
+            op.name().is_some(),
+            "opcode {op:?} (0x{:02X}) has no name in OPCODE_NAMES",
+            op.0
+        );
+    }
 }
