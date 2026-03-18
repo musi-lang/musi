@@ -3,6 +3,7 @@
 use std::cmp::Ordering;
 use std::f64::consts;
 use std::ffi::CStr;
+use std::ptr::with_exposed_provenance;
 
 use msc_vm::{Heap, Value, VmError};
 
@@ -536,7 +537,7 @@ fn int_to_ptr<T>(n: i64) -> *const T {
     // came from a VM integer slot that originally held a C pointer; the address
     // is non-negative on all supported platforms (usize is at most 64 bits).
     let addr = usize::try_from(n).unwrap_or(0);
-    std::ptr::with_exposed_provenance(addr)
+    with_exposed_provenance(addr)
 }
 
 fn ptr_deref_i32(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
