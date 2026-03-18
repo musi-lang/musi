@@ -58,10 +58,11 @@ pub struct HeapObject {
 impl HeapObject {
     /// Returns the `type_id` if this object is a Record or Array, else 0.
     #[must_use]
-    pub fn type_id(&self) -> u32 {
+    pub const fn type_id(&self) -> u32 {
         match &self.payload {
-            HeapPayload::Record { type_id, .. } | HeapPayload::Array { type_id, .. } => *type_id,
-            HeapPayload::Str { type_id, .. } => *type_id,
+            HeapPayload::Record { type_id, .. }
+            | HeapPayload::Array { type_id, .. }
+            | HeapPayload::Str { type_id, .. } => *type_id,
             _ => 0,
         }
     }
@@ -475,8 +476,8 @@ impl Heap {
                     HeapPayload::Upvalue(UpvalueCell::Closed(v)) => {
                         v.try_as_ref().into_iter().collect()
                     }
-                    HeapPayload::Upvalue(UpvalueCell::Open { .. }) => vec![],
-                    HeapPayload::Str { .. }
+                    HeapPayload::Upvalue(UpvalueCell::Open { .. })
+                    | HeapPayload::Str { .. }
                     | HeapPayload::BoxedInt(_)
                     | HeapPayload::BoxedNat(_) => vec![],
                 };

@@ -1,4 +1,6 @@
 use super::*;
+use crate::loader::load;
+use crate::verifier::verify;
 
 #[test]
 fn test_closure_captures_upvalue() {
@@ -79,8 +81,8 @@ fn test_closure_close_on_return() {
             fn_def(0, 0, entry_code),
         ],
     );
-    let module = crate::loader::load(&bytes).expect("loads");
-    crate::verifier::verify(&module).expect("verifies");
+    let module = load(&bytes).expect("loads");
+    verify(&module).expect("verifies");
     let mut vm = Vm::new(module);
     let result = vm.call_fn(2, &[]);
     assert_eq!(result.expect("runs").as_int().expect("is int"), 7);
@@ -111,8 +113,8 @@ fn test_closure_nested_recapture() {
             fn_def(0, 0, entry_code),
         ],
     );
-    let module = crate::loader::load(&bytes).expect("loads");
-    crate::verifier::verify(&module).expect("verifies");
+    let module = load(&bytes).expect("loads");
+    verify(&module).expect("verifies");
     let mut vm = Vm::new(module);
     let result = vm.call_fn(3, &[]);
     assert_eq!(result.expect("runs").as_int().expect("is int"), 55);

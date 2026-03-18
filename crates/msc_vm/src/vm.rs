@@ -16,7 +16,7 @@ use std::collections::HashMap;
 
 use msc_bc::Opcode;
 
-use crate::error::{malformed, VmError};
+use crate::error::{VmError, malformed};
 use crate::heap::Heap;
 use crate::host::HostFunctions;
 use crate::loader::LoadedModule;
@@ -198,7 +198,7 @@ impl Vm {
     ///
     /// Returns `VmError` if `fn_id` is not found or the call stack overflows.
     pub fn setup_call(&mut self, fn_id: u32, args: &[Value]) -> Result<(), VmError> {
-        self.push_frame(fn_id as usize, args)
+        self.push_frame(usize::try_from(fn_id).unwrap_or(usize::MAX), args)
     }
 
     /// Run until the call stack returns below its current depth.
@@ -250,6 +250,10 @@ impl Vm {
         })
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "flat opcode dispatch table - splitting would obscure control flow"
+    )]
     fn step_inner(&mut self) -> Result<StepResult, VmError> {
         self.maybe_gc();
 
@@ -284,7 +288,6 @@ impl Vm {
         // Phase 3: flat dispatch.
         match op {
             // §4.20 Misc
-            Opcode::NOP => Ok(StepResult::Continue),
             Opcode::PANIC => Err(VmError::Halted),
 
             // §4.2 Stack
@@ -301,7 +304,7 @@ impl Vm {
                 Ok(StepResult::Continue)
             }
 
-            // §4.1 Data movement — immediates
+            // §4.1 Data movement - immediates
             Opcode::LD_UNIT => {
                 self.current_frame()?.stack.push(Value::UNIT);
                 Ok(StepResult::Continue)
@@ -320,19 +323,19 @@ impl Vm {
                     .call_stack
                     .last_mut()
                     .ok_or_else(|| malformed!("empty call stack"))?;
-                ops::exec_opt_none(frame, &mut self.heap)?;
+                ops::exec_opt_none(frame, &mut self.heap);
                 Ok(StepResult::Continue)
             }
             Opcode::LD_SMI => {
                 // FI16: signed 16-bit small immediate integer.
-                let signed = (operand & 0xFFFF) as i16;
+                let signed = (u16::try_from(operand & 0xFFFF).unwrap_or(u16::MAX)).cast_signed();
                 self.current_frame()?
                     .stack
                     .push(Value::from_int(i64::from(signed)));
                 Ok(StepResult::Continue)
             }
 
-            // §4.1 Data movement — locals
+            // §4.1 Data movement - locals
             Opcode::LD_LOC => {
                 let frame = self.current_frame()?;
                 let slot =
@@ -350,7 +353,7 @@ impl Vm {
                 Ok(StepResult::Continue)
             }
 
-            // §4.1 Data movement — const pool
+            // §4.1 Data movement - const pool
             Opcode::LD_CONST => {
                 let frame = self
                     .call_stack
@@ -360,11 +363,11 @@ impl Vm {
                 Ok(StepResult::Continue)
             }
 
-            // §4.1 Data movement — indirect memory
-            Opcode::LD_ADDR => {
+            // §4.1 Data movement - indirect memory
+            Opcode::LD_ADDR | Opcode::REC_ADDR => {
                 self.current_frame()?
                     .stack
-                    .push(Value::from_int(i64::try_from(operand).unwrap_or(0)));
+                    .push(Value::from_int(i64::from(operand)));
                 Ok(StepResult::Continue)
             }
             Opcode::LD_IND => {
@@ -409,13 +412,6 @@ impl Vm {
                 ops::exec_rec_set(operand, frame, &mut self.heap)?;
                 Ok(StepResult::Continue)
             }
-            Opcode::REC_ADDR => {
-                self.current_frame()?
-                    .stack
-                    .push(Value::from_int(i64::try_from(operand).unwrap_or(0)));
-                Ok(StepResult::Continue)
-            }
-
             // §4.10 Array
             Opcode::ARR_NEW => {
                 let frame = self
@@ -494,7 +490,7 @@ impl Vm {
                 Ok(StepResult::Continue)
             }
             Opcode::TY_CAST => {
-                // Identity cast at this level — the emitter already checked types.
+                // Identity cast at this level - the emitter already checked types.
                 Ok(StepResult::Continue)
             }
             Opcode::TY_DESC => {
@@ -502,7 +498,7 @@ impl Vm {
                     .call_stack
                     .last_mut()
                     .ok_or_else(|| malformed!("empty call stack"))?;
-                ops::exec_ty_desc(operand, frame, &mut self.heap, &self.module.types)?;
+                ops::exec_ty_desc(operand, frame, &mut self.heap, &self.module.types);
                 Ok(StepResult::Continue)
             }
 
@@ -538,7 +534,7 @@ impl Vm {
                     .call_stack
                     .last_mut()
                     .ok_or_else(|| malformed!("empty call stack"))?;
-                ops::exec_opt_none(frame, &mut self.heap)?;
+                ops::exec_opt_none(frame, &mut self.heap);
                 Ok(StepResult::Continue)
             }
             Opcode::OPT_IS => {
@@ -586,7 +582,7 @@ impl Vm {
                 Ok(StepResult::Continue)
             }
             Opcode::CLS_UPV => {
-                let Vm {
+                let Self {
                     call_stack,
                     heap,
                     open_upvalue_map,
@@ -610,19 +606,17 @@ impl Vm {
                     .last_mut()
                     .ok_or_else(|| malformed!("empty call stack"))?
                     .pop()?;
-                let Vm {
-                    call_stack,
-                    heap,
-                    ..
+                let Self {
+                    call_stack, heap, ..
                 } = self;
                 ops::exec_st_upv(operand, new_val, call_stack, heap)?;
                 Ok(StepResult::Continue)
             }
 
-            // §4.6 Branch — FI16 signed BE relative offsets
+            // §4.6 Branch - FI16 signed BE relative offsets
             Opcode::BR => {
                 let frame = self.current_frame()?;
-                let offset = ops::read_i16_operand(operand)?;
+                let offset = ops::read_i16_operand(operand);
                 frame.ip = ops::jump_target(frame.ip, offset)?;
                 Ok(StepResult::Continue)
             }
@@ -630,7 +624,7 @@ impl Vm {
                 let frame = self.current_frame()?;
                 let cond = frame.pop()?;
                 if cond.as_truthy()? {
-                    let offset = ops::read_i16_operand(operand)?;
+                    let offset = ops::read_i16_operand(operand);
                     frame.ip = ops::jump_target(frame.ip, offset)?;
                 }
                 Ok(StepResult::Continue)
@@ -639,7 +633,7 @@ impl Vm {
                 let frame = self.current_frame()?;
                 let cond = frame.pop()?;
                 if !cond.as_truthy()? {
-                    let offset = ops::read_i16_operand(operand)?;
+                    let offset = ops::read_i16_operand(operand);
                     frame.ip = ops::jump_target(frame.ip, offset)?;
                 }
                 Ok(StepResult::Continue)
@@ -658,9 +652,9 @@ impl Vm {
             }
             Opcode::RET_UNIT => self.do_return(Value::UNIT),
 
-            // CALL arity:u8 — callee is on the stack below the args.
+            // CALL arity:u8 - callee is on the stack below the args.
             Opcode::CALL => {
-                let arity = (operand & 0xFF) as u8;
+                let arity = u8::try_from(operand & 0xFF).unwrap_or(u8::MAX);
                 let call_target = {
                     let frame = self
                         .call_stack
@@ -676,7 +670,7 @@ impl Vm {
                 }
             }
             Opcode::CALL_TAIL => {
-                let arity = (operand & 0xFF) as u8;
+                let arity = u8::try_from(operand & 0xFF).unwrap_or(u8::MAX);
                 let call_target = {
                     let frame = self
                         .call_stack
@@ -702,8 +696,14 @@ impl Vm {
                 self.step_continuations(op, operand, fn_idx)
             }
 
-            // §4.18 GC hints — no-ops at this GC level
-            Opcode::GC_PIN | Opcode::GC_UNPIN => Ok(StepResult::Continue),
+            // §4.17 Arena - not yet implemented; error explicitly rather than
+            // falling through to the generic "unknown opcode" branch.
+            Opcode::AR_NEW => Err(VmError::Unimplemented { desc: "ar.new" }),
+            Opcode::AR_ALLOC => Err(VmError::Unimplemented { desc: "ar.alloc" }),
+            Opcode::AR_FREE => Err(VmError::Unimplemented { desc: "ar.free" }),
+
+            // §4.18 GC hints and NOP - no-ops
+            Opcode::NOP | Opcode::GC_PIN | Opcode::GC_UNPIN => Ok(StepResult::Continue),
 
             _ => Err(malformed!("unknown opcode {:#04x}", op.0)),
         }

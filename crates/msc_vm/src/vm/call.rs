@@ -1,10 +1,10 @@
 //! Call/return and upvalue-close helpers.
 
-use crate::error::{malformed, VmError};
+use crate::error::{VmError, malformed};
 use crate::heap::UpvalueCell;
 use crate::value::Value;
 use crate::vm::frame::{Continuation, Frame};
-use crate::vm::{StepResult, Vm, MAX_CALL_DEPTH};
+use crate::vm::{MAX_CALL_DEPTH, StepResult, Vm};
 
 impl Vm {
     pub(super) fn close_frame_upvalues(&mut self) {
@@ -21,6 +21,8 @@ impl Vm {
         self.open_upvalue_map.retain(|&(fd, _), _| fd != frame_idx);
     }
 
+    // Callers use `?` to propagate; keeping Result keeps the call sites uniform.
+    #[expect(clippy::unnecessary_wraps)]
     pub(super) fn do_return(&mut self, value: Value) -> Result<StepResult, VmError> {
         self.close_frame_upvalues();
         let _ = self.call_stack.pop();
@@ -41,7 +43,7 @@ impl Vm {
             return Err(VmError::StackOverflow);
         }
 
-        let fn_idx = fn_id as usize;
+        let fn_idx = usize::try_from(fn_id).unwrap_or(usize::MAX);
         let func = self
             .module
             .fn_by_index(fn_idx)
@@ -90,7 +92,7 @@ impl Vm {
         fn_id: u32,
         closure_ref: Option<Value>,
     ) -> Result<StepResult, VmError> {
-        let fn_idx = fn_id as usize;
+        let fn_idx = usize::try_from(fn_id).unwrap_or(usize::MAX);
         let func = self
             .module
             .fn_by_index(fn_idx)

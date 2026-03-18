@@ -1,6 +1,6 @@
 //! String opcode handlers.
 
-use crate::error::{malformed, VmError};
+use crate::error::{VmError, malformed};
 use crate::heap::Heap;
 use crate::value::Value;
 use crate::vm::Frame;

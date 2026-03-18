@@ -1,7 +1,7 @@
 //! Instruction decode and structural opcode handlers.
 //!
 //! The SEAM ISA uses big-endian operands with no WID/EXT prefix opcodes.
-//! Five fixed-width formats: F0 (1B), FI8 (2B), FI16 (3B), FI8x2 (3B), FI24 (4B).
+//! Five fixed-width formats: `F0` (1B), `FI8` (2B), `FI16` (3B), `FI8x2` (3B), `FI24` (4B).
 
 pub mod array;
 pub mod closure;
@@ -19,15 +19,15 @@ pub use record::{
 pub use string::{exec_str_cat, exec_str_len};
 pub use ty::{exec_ty_desc, exec_ty_of};
 
-use msc_bc::{instr_len, Opcode};
+use msc_bc::{Opcode, instr_len};
 
-use crate::error::{malformed, VmError};
+use crate::error::{VmError, malformed};
 use crate::heap::{Heap, HeapPayload};
 use crate::loader::{LoadedConst, LoadedType};
 use crate::value::Value;
 use crate::vm::Frame;
 
-// Type pool tags (§11.3 of spec) — used for runtime type matching.
+// Type pool tags (§11.3 of spec) - used for runtime type matching.
 const TYPE_TAG_UNIT: u8 = 0x01;
 const TYPE_TAG_BOOL: u8 = 0x02;
 const TYPE_TAG_I8: u8 = 0x03;
@@ -46,11 +46,11 @@ const TYPE_TAG_ANY: u8 = 0x14;
 
 /// Decoded instruction: opcode + packed u32 carrying all operand bytes.
 ///
-/// For FI8:   operand = u8 in bits 7:0.
-/// For FI16:  operand = big-endian u16 in bits 15:0.
-/// For FI8x2: operand = (a << 8) | b in bits 15:0, where byte a is bits 15:8.
-/// For FI24:  operand = sign-extended i24 as i32 reinterpreted in u32.
-/// For F0:    operand = 0.
+/// For `FI8`:   operand = u8 in bits 7:0.
+/// For `FI16`:  operand = big-endian u16 in bits 15:0.
+/// For `FI8x2`: operand = (a << 8) | b in bits 15:0, where byte a is bits 15:8.
+/// For `FI24`:  operand = sign-extended i24 as i32 reinterpreted in u32.
+/// For `F0`:    operand = 0.
 pub struct DecodedInstr {
     pub op: Opcode,
     pub operand: u32,
@@ -59,7 +59,7 @@ pub struct DecodedInstr {
 
 /// Decode one instruction at `base_ip` using the SEAM big-endian format.
 ///
-/// No WID/EXT prefix handling — the emitter never emits those.
+/// No WID/EXT prefix handling - the emitter never emits those.
 #[must_use]
 pub fn decode_instruction(code: &[u8], base_ip: usize) -> DecodedInstr {
     let raw = code[base_ip];
@@ -75,7 +75,7 @@ pub fn decode_instruction(code: &[u8], base_ip: usize) -> DecodedInstr {
             u32::from(u16::from_be_bytes([hi, lo]))
         }
         _ => {
-            // FI24: signed 24-bit big-endian — sign-extend to i32 then reinterpret.
+            // FI24: signed 24-bit big-endian - sign-extend to i32 then reinterpret.
             let b0 = code[base_ip + 1];
             let b1 = code[base_ip + 2];
             let b2 = code[base_ip + 3];
@@ -92,18 +92,19 @@ pub fn decode_instruction(code: &[u8], base_ip: usize) -> DecodedInstr {
     }
 }
 
-/// Extract the FI16 operand as a signed i16 jump offset.
-pub fn read_i16_operand(operand: u32) -> Result<isize, VmError> {
-    // The u32 carries the u16 bits — reinterpret as i16 then widen.
-    let raw = (operand & 0xFFFF) as u16;
+/// Extract the `FI16` operand as a signed i16 jump offset.
+pub fn read_i16_operand(operand: u32) -> isize {
+    // The u32 carries the u16 bits - reinterpret as i16 then widen.
+    // try_from cannot fail: value is masked to 16 bits before conversion.
+    let raw = u16::try_from(operand & 0xFFFF).unwrap_or(0);
     let signed = i16::from_ne_bytes(raw.to_ne_bytes());
-    Ok(isize::from(signed))
+    isize::from(signed)
 }
 
-/// Extract the FI24 operand as a signed isize jump offset.
+/// Extract the `FI24` operand as a signed isize jump offset.
 pub fn read_i24_operand(operand: u32) -> Result<isize, VmError> {
     // decode_instruction stored it as i32 cast to u32.
-    let signed = operand as i32;
+    let signed = operand.cast_signed();
     isize::try_from(signed).map_err(|_| malformed!("br.long offset overflows isize"))
 }
 
@@ -114,15 +115,17 @@ pub fn jump_target(after_instr: usize, offset: isize) -> Result<usize, VmError> 
         .ok_or_else(|| malformed!("jump target out of range"))
 }
 
-/// Extract the first byte (high byte) of an FI8x2 operand.
+/// Extract the first byte (high byte) of an `FI8x2` operand.
 #[must_use]
-pub fn fi8x2_a(operand: u32) -> u8 {
+#[expect(clippy::as_conversions, reason = "value is masked to 0xFF before cast")]
+pub const fn fi8x2_a(operand: u32) -> u8 {
     ((operand >> 8) & 0xFF) as u8
 }
 
-/// Extract the second byte (low byte) of an FI8x2 operand.
+/// Extract the second byte (low byte) of an `FI8x2` operand.
 #[must_use]
-pub fn fi8x2_b(operand: u32) -> u8 {
+#[expect(clippy::as_conversions, reason = "value is masked to 0xFF before cast")]
+pub const fn fi8x2_b(operand: u32) -> u8 {
     (operand & 0xFF) as u8
 }
 
@@ -154,7 +157,7 @@ pub fn const_to_value(c: &LoadedConst, heap: &mut Heap) -> Value {
 }
 
 // --------------------------------------------------------------------------
-// §4.1 Data movement — LD_CONST
+// §4.1 Data movement - LD_CONST
 // --------------------------------------------------------------------------
 
 pub fn exec_ld_const(
@@ -213,7 +216,7 @@ pub fn exec_ty_test(
 }
 
 // --------------------------------------------------------------------------
-// §4.7 Call — resolve callee from stack
+// §4.7 Call - resolve callee from stack
 // --------------------------------------------------------------------------
 
 /// Resolve a `CALL arity:u8` callee: pop the callee value, classify it.

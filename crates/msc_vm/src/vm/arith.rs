@@ -70,7 +70,10 @@ macro_rules! poly_cmp {
 ///
 /// Returns `true` if the opcode was handled, `false` if the caller should try
 /// the next dispatch group.
-#[allow(clippy::float_cmp)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "flat opcode dispatch; splitting adds no clarity"
+)]
 pub fn exec(op: Opcode, frame: &mut Frame, heap: &mut Heap) -> Result<bool, VmError> {
     match op {
         // §4.3 Polymorphic arithmetic

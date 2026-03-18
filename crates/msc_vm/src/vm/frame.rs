@@ -1,6 +1,6 @@
 //! Frame types and stack helpers.
 
-use crate::error::{malformed, VmError};
+use crate::error::{VmError, malformed};
 use crate::value::Value;
 
 /// An activation record for a single function invocation.

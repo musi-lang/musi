@@ -117,7 +117,7 @@ fn test_verifier_resets_depth_after_unconditional_jump() {
 #[test]
 fn test_verifier_depth_resets_to_zero_after_terminator() {
     // RET at offset 0 terminates; dead NOP after is accepted (depth=0).
-    // LD_CONST 0, RET, NOP — verifier sees NOP with depth=0 after RET.
+    // LD_CONST 0, RET, NOP - verifier sees NOP with depth=0 after RET.
     let bytes = make_msbc(
         &[ConstEntry::Int(1)],
         &[fn_def_with_max_stack(

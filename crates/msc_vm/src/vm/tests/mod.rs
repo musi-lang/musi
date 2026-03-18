@@ -4,26 +4,26 @@
 //! big-endian operands, no WID/EXT prefixes, new opcode names.
 //!
 //! Instruction encoding reminders:
-//!   LD_CONST  FI16 (3 bytes): op, idx_hi, idx_lo
-//!   LD_LOC    FI8  (2 bytes): op, slot
-//!   ST_LOC    FI8  (2 bytes): op, slot
-//!   BR        FI16 (3 bytes): op, off_hi, off_lo  (signed BE relative to next instr)
-//!   BR_FALSE  FI16 (3 bytes): op, off_hi, off_lo
-//!   BR_TRUE   FI16 (3 bytes): op, off_hi, off_lo
-//!   REC_NEW   FI8x2(3 bytes): op, tag, arity
-//!   REC_GET   FI8  (2 bytes): op, idx
-//!   REC_SET   FI8  (2 bytes): op, idx
-//!   MAT_TAG   FI16 (3 bytes): op, tag_hi, tag_lo
-//!   MAT_DATA  F0   (1 byte)
-//!   ARR_NEW   F0   (1 byte)  — pops len from stack, pushes ref
-//!   ARR_GET   F0   (1 byte)
-//!   ARR_SET   F0   (1 byte)
-//!   ARR_LEN   F0   (1 byte)
-//!   CALL      FI8  (2 bytes): op, arity  — callee below args on stack
-//!   CALL_TAIL FI8  (2 bytes): op, arity
-//!   CLS_NEW   FI16 (3 bytes): op, fn_hi, fn_lo
-//!   EFF_HDL   FI16 (3 bytes): op, eff_hi, eff_lo
-//!   EFF_NEED  FI8x2(3 bytes): op, op_id, arity
+//!   `LD_CONST`  FI16 (3 bytes): op, `idx_hi`, `idx_lo`
+//!   `LD_LOC`    FI8  (2 bytes): op, slot
+//!   `ST_LOC`    FI8  (2 bytes): op, slot
+//!   BR        FI16 (3 bytes): op, `off_hi`, `off_lo`  (signed BE relative to next instr)
+//!   `BR_FALSE`  FI16 (3 bytes): op, `off_hi`, `off_lo`
+//!   `BR_TRUE`   FI16 (3 bytes): op, `off_hi`, `off_lo`
+//!   `REC_NEW`   FI8x2(3 bytes): op, tag, arity
+//!   `REC_GET`   FI8  (2 bytes): op, idx
+//!   `REC_SET`   FI8  (2 bytes): op, idx
+//!   `MAT_TAG`   FI16 (3 bytes): op, `tag_hi`, `tag_lo`
+//!   `MAT_DATA`  F0   (1 byte)
+//!   `ARR_NEW`   F0   (1 byte)  - pops len from stack, pushes ref
+//!   `ARR_GET`   F0   (1 byte)
+//!   `ARR_SET`   F0   (1 byte)
+//!   `ARR_LEN`   F0   (1 byte)
+//!   `CALL`      FI8  (2 bytes): op, arity  - callee below args on stack
+//!   `CALL_TAIL` FI8  (2 bytes): op, arity
+//!   `CLS_NEW`   FI16 (3 bytes): op, `fn_hi`, `fn_lo`
+//!   `EFF_HDL`   FI16 (3 bytes): op, `eff_hi`, `eff_lo`
+//!   `EFF_NEED`  FI8x2(3 bytes): op, `op_id`, arity
 //!   All arithmetic/compare: F0 (1 byte)
 #![allow(clippy::panic)]
 
@@ -35,6 +35,7 @@ mod data;
 mod effects;
 mod gc;
 
+use std::collections::HashMap;
 use std::iter;
 
 use msc_bc::{self, Opcode, crc32_slice};
@@ -107,9 +108,13 @@ fn fn_def_with_upvalues(
     }
 }
 
-fn write_seam_section(buf: &mut Vec<u8>, tag: &[u8; 4], payload: &[u8]) {
-    buf.extend_from_slice(tag);
-    buf.extend_from_slice(&(payload.len() as u32).to_be_bytes());
+fn write_seam_section(buf: &mut Vec<u8>, tag: [u8; 4], payload: &[u8]) {
+    buf.extend_from_slice(&tag);
+    buf.extend_from_slice(
+        &u32::try_from(payload.len())
+            .unwrap_or(u32::MAX)
+            .to_be_bytes(),
+    );
     buf.extend_from_slice(payload);
 }
 
@@ -132,19 +137,23 @@ struct SeamEffectOpDef {
     name: &'static str,
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "test binary builder; splitting obscures the format"
+)]
 fn make_seam_with_effects(
     consts: &[ConstEntry],
     effects: &[SeamEffectDef],
     fns: &[FnDef],
 ) -> Vec<u8> {
     let mut string_entries: Vec<Vec<u8>> = vec![];
-    let mut str_lookup: std::collections::HashMap<Vec<u8>, u16> = std::collections::HashMap::new();
+    let mut str_lookup: HashMap<Vec<u8>, u16> = HashMap::new();
 
     let mut intern_str = |s: &[u8]| -> u16 {
         if let Some(&idx) = str_lookup.get(s) {
             return idx;
         }
-        let idx = string_entries.len() as u16;
+        let idx = u16::try_from(string_entries.len()).unwrap_or(u16::MAX);
         let _ = str_lookup.insert(s.to_vec(), idx);
         string_entries.push(s.to_vec());
         idx
@@ -173,9 +182,13 @@ fn make_seam_with_effects(
     }
 
     let mut strt: Vec<u8> = vec![];
-    strt.extend_from_slice(&(string_entries.len() as u16).to_be_bytes());
+    strt.extend_from_slice(
+        &u16::try_from(string_entries.len())
+            .unwrap_or(u16::MAX)
+            .to_be_bytes(),
+    );
     for entry in &string_entries {
-        strt.extend_from_slice(&(entry.len() as u16).to_be_bytes());
+        strt.extend_from_slice(&u16::try_from(entry.len()).unwrap_or(u16::MAX).to_be_bytes());
         strt.extend_from_slice(entry);
     }
 
@@ -183,7 +196,11 @@ fn make_seam_with_effects(
     type_payload.extend_from_slice(&0u16.to_be_bytes());
 
     let mut cnst: Vec<u8> = vec![];
-    cnst.extend_from_slice(&(consts.len() as u16).to_be_bytes());
+    cnst.extend_from_slice(
+        &u16::try_from(consts.len())
+            .unwrap_or(u16::MAX)
+            .to_be_bytes(),
+    );
     let mut str_idx_iter = const_str_idxs.iter();
     for c in consts {
         let str_idx = str_idx_iter.next().copied().unwrap_or(0);
@@ -207,7 +224,7 @@ fn make_seam_with_effects(
     let glob: Vec<u8> = 0u16.to_be_bytes().to_vec();
 
     let mut meth: Vec<u8> = vec![];
-    meth.extend_from_slice(&(fns.len() as u16).to_be_bytes());
+    meth.extend_from_slice(&u16::try_from(fns.len()).unwrap_or(u16::MAX).to_be_bytes());
     for f in fns {
         meth.extend_from_slice(&0u16.to_be_bytes()); // name_stridx
         meth.extend_from_slice(&0u16.to_be_bytes()); // type_id
@@ -216,9 +233,17 @@ fn make_seam_with_effects(
         let max_stack: u16 = f.max_stack.unwrap_or(16);
         meth.extend_from_slice(&max_stack.to_be_bytes());
         meth.extend_from_slice(&f.upvalue_count.to_be_bytes());
-        meth.extend_from_slice(&(f.code.len() as u32).to_be_bytes());
+        meth.extend_from_slice(
+            &u32::try_from(f.code.len())
+                .unwrap_or(u32::MAX)
+                .to_be_bytes(),
+        );
         meth.extend_from_slice(&f.code);
-        meth.extend_from_slice(&(f.handlers.len() as u16).to_be_bytes());
+        meth.extend_from_slice(
+            &u16::try_from(f.handlers.len())
+                .unwrap_or(u16::MAX)
+                .to_be_bytes(),
+        );
         for &(eid, hfn) in &f.handlers {
             meth.push(eid);
             meth.extend_from_slice(&hfn.to_be_bytes());
@@ -228,11 +253,19 @@ fn make_seam_with_effects(
     }
 
     let mut efct: Vec<u8> = vec![];
-    efct.extend_from_slice(&(effects.len() as u16).to_be_bytes());
+    efct.extend_from_slice(
+        &u16::try_from(effects.len())
+            .unwrap_or(u16::MAX)
+            .to_be_bytes(),
+    );
     for (eff_i, eff) in effects.iter().enumerate() {
         efct.extend_from_slice(&eff.id.to_be_bytes());
         efct.extend_from_slice(&effect_name_idxs[eff_i].to_be_bytes());
-        efct.extend_from_slice(&(eff.ops.len() as u16).to_be_bytes());
+        efct.extend_from_slice(
+            &u16::try_from(eff.ops.len())
+                .unwrap_or(u16::MAX)
+                .to_be_bytes(),
+        );
         for (op_i, op) in eff.ops.iter().enumerate() {
             efct.extend_from_slice(&op.id.to_be_bytes());
             efct.extend_from_slice(&op_name_idxs[eff_i][op_i].to_be_bytes());
@@ -247,16 +280,16 @@ fn make_seam_with_effects(
     let dbug: Vec<u8> = vec![];
 
     let mut sections: Vec<u8> = vec![];
-    write_seam_section(&mut sections, b"STRT", &strt);
-    write_seam_section(&mut sections, b"TYPE", &type_payload);
-    write_seam_section(&mut sections, b"CNST", &cnst);
-    write_seam_section(&mut sections, b"DEPS", &deps);
-    write_seam_section(&mut sections, b"GLOB", &glob);
-    write_seam_section(&mut sections, b"METH", &meth);
-    write_seam_section(&mut sections, b"EFCT", &efct);
-    write_seam_section(&mut sections, b"CLSS", &clss);
-    write_seam_section(&mut sections, b"FRGN", &frgn);
-    write_seam_section(&mut sections, b"DBUG", &dbug);
+    write_seam_section(&mut sections, *b"STRT", &strt);
+    write_seam_section(&mut sections, *b"TYPE", &type_payload);
+    write_seam_section(&mut sections, *b"CNST", &cnst);
+    write_seam_section(&mut sections, *b"DEPS", &deps);
+    write_seam_section(&mut sections, *b"GLOB", &glob);
+    write_seam_section(&mut sections, *b"METH", &meth);
+    write_seam_section(&mut sections, *b"EFCT", &efct);
+    write_seam_section(&mut sections, *b"CLSS", &clss);
+    write_seam_section(&mut sections, *b"FRGN", &frgn);
+    write_seam_section(&mut sections, *b"DBUG", &dbug);
 
     let crc = crc32_slice(&sections);
 

@@ -27,7 +27,7 @@ impl Vm {
             }
         }
         for &upv_ptr in self.open_upvalue_map.values() {
-            roots.push(Value::from_ref(upv_ptr as u64));
+            roots.push(Value::from_ref(u64::try_from(upv_ptr).unwrap_or(u64::MAX)));
         }
         for cont in &self.continuations {
             for frame in &cont.frames {

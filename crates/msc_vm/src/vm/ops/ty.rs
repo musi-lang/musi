@@ -1,7 +1,7 @@
 //! Type operation opcode handlers (§4.12).
 
 use crate::error::VmError;
-use crate::heap::Heap;
+use crate::heap::{Heap, HeapObject};
 use crate::loader::LoadedType;
 use crate::value::Value;
 use crate::vm::Frame;
@@ -23,7 +23,7 @@ pub fn exec_ty_of(frame: &mut Frame, heap: &Heap) -> Result<(), VmError> {
     } else if val.is_fn() {
         0x12 // TAG_TY_FN
     } else if let Ok(ptr) = val.as_ref() {
-        heap.get(ptr).map_or(0xFFFF_FFFF, |obj| obj.type_id())
+        heap.get(ptr).map_or(0xFFFF_FFFF, HeapObject::type_id)
     } else {
         0xFFFF_FFFF
     };
@@ -31,17 +31,11 @@ pub fn exec_ty_of(frame: &mut Frame, heap: &Heap) -> Result<(), VmError> {
     Ok(())
 }
 
-pub fn exec_ty_desc(
-    operand: u32,
-    frame: &mut Frame,
-    heap: &mut Heap,
-    types: &[LoadedType],
-) -> Result<(), VmError> {
+pub fn exec_ty_desc(operand: u32, frame: &mut Frame, heap: &mut Heap, types: &[LoadedType]) {
     let type_tag = types
         .get(usize::try_from(operand).unwrap_or(usize::MAX))
         .map_or(0u8, |t| t.tag);
     let desc: Box<str> = format!("type_id:{operand} tag:{type_tag}").into_boxed_str();
     let ptr = heap.alloc_string(0, desc);
     frame.stack.push(Value::from_ref(ptr));
-    Ok(())
 }

@@ -68,6 +68,8 @@ pub struct LoadedForeignFn {
     pub ext_name: Box<str>,
     /// Library name (empty = default C library).
     pub lib_name: Box<str>,
+    /// Library kind hint: "dylib", "framework", "raw", or empty for default.
+    pub link_kind: Box<str>,
     /// Number of fixed parameters.
     pub param_count: u16,
     /// Type pool ids for each parameter.
@@ -76,6 +78,16 @@ pub struct LoadedForeignFn {
     pub ret_type_id: u32,
     /// Whether this function is variadic.
     pub variadic: bool,
+}
+
+/// Decoded class table from the CLSS section.
+///
+/// Currently always empty - the emitter writes a zero-count stub. Stored so
+/// the data is not silently discarded when future class definitions are added.
+#[derive(Debug, Default, Clone)]
+pub struct ClassTable {
+    /// Number of class entries present (zero until class emission is implemented).
+    pub count: u16,
 }
 
 /// A decoded function entry.
@@ -102,7 +114,7 @@ pub struct HandlerEntry {
 #[derive(Debug)]
 pub struct LoadedModule {
     pub flags: u8,
-    /// `None` for library modules (FLAG_LIBRARY set, no entry point).
+    /// `None` for library modules (`FLAG_LIBRARY` set, no entry point).
     pub entry_point: Option<u32>,
     pub strings: Vec<Box<str>>,
     pub consts: Vec<LoadedConst>,
@@ -111,10 +123,12 @@ pub struct LoadedModule {
     pub effects: Vec<LoadedEffect>,
     pub foreign_fns: Vec<LoadedForeignFn>,
     pub functions: Vec<LoadedFn>,
+    /// Class table parsed from the CLSS section. Currently always empty.
+    pub classes: ClassTable,
 }
 
 impl LoadedModule {
-    /// Look up a function by index (fn_id = array index). Returns `None` if out of bounds.
+    /// Look up a function by index (`fn_id` = array index). Returns `None` if out of bounds.
     #[must_use]
     pub fn fn_by_index(&self, idx: usize) -> Option<&LoadedFn> {
         self.functions.get(idx)
@@ -122,6 +136,7 @@ impl LoadedModule {
 }
 
 // Section tags
+const FLAG_SCRIPT: u8 = 0x04;
 const TAG_STRT: &[u8; 4] = b"STRT";
 const TAG_TYPE: &[u8; 4] = b"TYPE";
 const TAG_CNST: &[u8; 4] = b"CNST";
@@ -129,6 +144,7 @@ const TAG_DEPS: &[u8; 4] = b"DEPS";
 const TAG_GLOB: &[u8; 4] = b"GLOB";
 const TAG_METH: &[u8; 4] = b"METH";
 const TAG_EFCT: &[u8; 4] = b"EFCT";
+const TAG_CLSS: &[u8; 4] = b"CLSS";
 const TAG_FRGN: &[u8; 4] = b"FRGN";
 
 /// Parse raw `.seam` bytes into a `LoadedModule`.
@@ -141,6 +157,11 @@ const TAG_FRGN: &[u8; 4] = b"FRGN";
 /// section data, or has structural inconsistencies. Returns `VmError::BadMagic`
 /// if the magic bytes do not match. Returns `VmError::BadChecksum` if the
 /// CRC-32 does not match.
+///
+/// # Panics
+///
+/// Panics if the header length check passes but the bytes slice is shorter than
+/// 12 bytes (unreachable in practice due to the prior length guard).
 pub fn load(bytes: &[u8]) -> Result<LoadedModule, VmError> {
     if bytes.len() < HEADER_SIZE {
         return Err(VmError::Malformed {
@@ -167,6 +188,7 @@ pub fn load(bytes: &[u8]) -> Result<LoadedModule, VmError> {
     }
 
     // Parse header fields.
+    assert!(bytes.len() > 11);
     let flags = bytes[7];
     let name_stridx = u16::from_be_bytes([bytes[8], bytes[9]]);
     let path_stridx = u16::from_be_bytes([bytes[10], bytes[11]]);
@@ -182,11 +204,14 @@ pub fn load(bytes: &[u8]) -> Result<LoadedModule, VmError> {
     let mut effects: Vec<LoadedEffect> = vec![];
     let mut foreign_fns: Vec<LoadedForeignFn> = vec![];
     let mut functions: Vec<LoadedFn> = vec![];
+    let mut classes = ClassTable::default();
 
     let mut cur = Cursor::new(bytes, HEADER_SIZE);
     while cur.pos < bytes.len() {
         let tag = cur.read_bytes(4)?;
-        let payload_len = cur.read_u32()? as usize;
+        let payload_len = usize::try_from(cur.read_u32()?).map_err(|_| VmError::Malformed {
+            desc: "section payload length overflow".into(),
+        })?;
         let payload_start = cur.pos;
         let payload = cur.read_bytes(payload_len)?;
 
@@ -205,16 +230,15 @@ pub fn load(bytes: &[u8]) -> Result<LoadedModule, VmError> {
             functions = parse_meth_section(&mut sc)?;
         } else if tag == TAG_EFCT {
             effects = parse_efct_section(&mut sc, &strings)?;
+        } else if tag == TAG_CLSS {
+            classes = parse_clss_section(&mut sc)?;
         } else if tag == TAG_FRGN {
             foreign_fns = parse_frgn_section(&mut sc, &strings)?;
         }
-        // CLSS and DBUG: silently skip.
+        // DBUG: silently skip.
         let _ = payload_start;
     }
 
-    // Determine entry point: script modules have FLAG_SCRIPT (0x04), library modules FLAG_LIBRARY (0x02).
-    // The entry fn is always fn_id=0 for scripts (first function in METH).
-    const FLAG_SCRIPT: u8 = 0x04;
     let entry_point = if flags & FLAG_SCRIPT != 0 && !functions.is_empty() {
         Some(0u32)
     } else {
@@ -231,6 +255,7 @@ pub fn load(bytes: &[u8]) -> Result<LoadedModule, VmError> {
         effects,
         foreign_fns,
         functions,
+        classes,
     })
 }
 
@@ -315,6 +340,7 @@ const TAG_TY_SUM: u8 = 0x11;
 const TAG_TY_FN: u8 = 0x12;
 const TAG_TY_REF: u8 = 0x13;
 const TAG_TY_ANY: u8 = 0x14;
+const TAG_TY_CSTRUCT: u8 = 0x15;
 
 fn parse_type_section(cur: &mut Cursor<'_>) -> Result<Vec<LoadedType>, VmError> {
     let count = usize::from(cur.read_u16()?);
@@ -330,30 +356,76 @@ fn parse_type_section(cur: &mut Cursor<'_>) -> Result<Vec<LoadedType>, VmError> 
             TAG_TY_PTR | TAG_TY_ARR | TAG_TY_REF => cur.read_bytes(4)?.to_vec(),
             // Product: field_count:u32 BE + field_count * type_id:u32 BE
             TAG_TY_PRODUCT => {
-                let field_count = cur.read_u32()? as usize;
+                let field_count =
+                    usize::try_from(cur.read_u32()?).map_err(|_| VmError::Malformed {
+                        desc: "product field count overflow".into(),
+                    })?;
                 let byte_count = 4 + field_count * 4;
                 let mut data = Vec::with_capacity(byte_count);
-                data.extend_from_slice(&(field_count as u32).to_be_bytes());
+                data.extend_from_slice(
+                    &u32::try_from(field_count)
+                        .map_err(|_| VmError::Malformed {
+                            desc: "product field count overflow".into(),
+                        })?
+                        .to_be_bytes(),
+                );
                 let fields = cur.read_bytes(field_count * 4)?;
                 data.extend_from_slice(fields);
                 data
             }
             // Sum: variant_count:u32 BE + variant_count * (tag:u32 BE + payload_id:u32 BE)
             TAG_TY_SUM => {
-                let variant_count = cur.read_u32()? as usize;
+                let variant_count =
+                    usize::try_from(cur.read_u32()?).map_err(|_| VmError::Malformed {
+                        desc: "sum variant count overflow".into(),
+                    })?;
                 let byte_count = 4 + variant_count * 8;
                 let mut data = Vec::with_capacity(byte_count);
-                data.extend_from_slice(&(variant_count as u32).to_be_bytes());
+                data.extend_from_slice(
+                    &u32::try_from(variant_count)
+                        .map_err(|_| VmError::Malformed {
+                            desc: "sum variant count overflow".into(),
+                        })?
+                        .to_be_bytes(),
+                );
                 let variants = cur.read_bytes(variant_count * 8)?;
                 data.extend_from_slice(variants);
                 data
             }
+            // CStruct: field_count:u16 BE + per-field(type_id:u32 + size:u16 + offset:u16) + total_size:u32 + alignment:u16
+            TAG_TY_CSTRUCT => {
+                let field_count = usize::from(cur.read_u16()?);
+                let per_field_bytes = field_count * 8; // 4 + 2 + 2 per field
+                let byte_count = 2 + per_field_bytes + 6; // header + fields + total_size(4) + alignment(2)
+                let mut data = Vec::with_capacity(byte_count);
+                data.extend_from_slice(
+                    &u16::try_from(field_count)
+                        .map_err(|_| VmError::Malformed {
+                            desc: "cstruct field count overflow".into(),
+                        })?
+                        .to_be_bytes(),
+                );
+                let fields = cur.read_bytes(per_field_bytes)?;
+                data.extend_from_slice(fields);
+                let trailer = cur.read_bytes(6)?; // total_size:u32 + alignment:u16
+                data.extend_from_slice(trailer);
+                data
+            }
             // Fn: param_count:u32 BE + params:u32[] BE + ret_id:u32 BE + effect_mask:u16 BE
             TAG_TY_FN => {
-                let param_count = cur.read_u32()? as usize;
+                let param_count =
+                    usize::try_from(cur.read_u32()?).map_err(|_| VmError::Malformed {
+                        desc: "fn param count overflow".into(),
+                    })?;
                 let byte_count = 4 + param_count * 4 + 4 + 2;
                 let mut data = Vec::with_capacity(byte_count);
-                data.extend_from_slice(&(param_count as u32).to_be_bytes());
+                data.extend_from_slice(
+                    &u32::try_from(param_count)
+                        .map_err(|_| VmError::Malformed {
+                            desc: "fn param count overflow".into(),
+                        })?
+                        .to_be_bytes(),
+                );
                 let rest = cur.read_bytes(param_count * 4 + 4 + 2)?;
                 data.extend_from_slice(rest);
                 data
@@ -405,7 +477,9 @@ fn parse_meth_section(cur: &mut Cursor<'_>) -> Result<Vec<LoadedFn>, VmError> {
         let local_count = cur.read_u16()?;
         let max_stack = cur.read_u16()?;
         let upvalue_count = cur.read_u16()?;
-        let code_len = cur.read_u32()? as usize;
+        let code_len = usize::try_from(cur.read_u32()?).map_err(|_| VmError::Malformed {
+            desc: "function code length overflow".into(),
+        })?;
         let code = cur.read_bytes(code_len)?.into();
         let handler_count = usize::from(cur.read_u16()?);
         let mut handlers = Vec::with_capacity(handler_count);
@@ -417,7 +491,7 @@ fn parse_meth_section(cur: &mut Cursor<'_>) -> Result<Vec<LoadedFn>, VmError> {
                 handler_fn_id,
             });
         }
-        // safepoint_count and effect_set_count — always 0, consume them.
+        // safepoint_count and effect_set_count - always 0, consume them.
         let _safepoint_count = cur.read_u16()?;
         let _effect_set_count = cur.read_u16()?;
         functions.push(LoadedFn {
@@ -470,6 +544,14 @@ fn parse_efct_section(
     Ok(effects)
 }
 
+fn parse_clss_section(cur: &mut Cursor<'_>) -> Result<ClassTable, VmError> {
+    let count = cur.read_u16()?;
+    // No class entries are emitted yet; consume any unexpected extra bytes
+    // by leaving the cursor at its current position (the caller uses a
+    // sub-cursor bounded to the payload length).
+    Ok(ClassTable { count })
+}
+
 fn parse_frgn_section(
     cur: &mut Cursor<'_>,
     strings: &[Box<str>],
@@ -479,6 +561,7 @@ fn parse_frgn_section(
     for _ in 0..count {
         let ext_name_stridx = cur.read_u16()?;
         let lib_stridx = cur.read_u16()?;
+        let kind_stridx = cur.read_u16()?;
         let param_count = cur.read_u16()?;
         let pc = usize::from(param_count);
         let mut param_type_ids = Vec::with_capacity(pc);
@@ -494,10 +577,16 @@ fn parse_frgn_section(
         } else {
             resolve_stridx(strings, lib_stridx, "foreign fn lib_name")?
         };
+        let link_kind = if kind_stridx == 0xFFFF {
+            Box::from("")
+        } else {
+            resolve_stridx(strings, kind_stridx, "foreign fn link_kind")?
+        };
 
         fns.push(LoadedForeignFn {
             ext_name,
             lib_name,
+            link_kind,
             param_count,
             param_type_ids,
             ret_type_id,

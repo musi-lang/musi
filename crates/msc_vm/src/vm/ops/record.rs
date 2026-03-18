@@ -1,6 +1,6 @@
 //! Record, tuple, optional, and match opcode handlers.
 
-use crate::error::{malformed, VmError};
+use crate::error::{VmError, malformed};
 use crate::heap::Heap;
 use crate::value::Value;
 use crate::vm::Frame;
@@ -9,7 +9,7 @@ use crate::vm::Frame;
 // §4.9 Record
 // --------------------------------------------------------------------------
 
-/// `REC_NEW tag:u8, arity:u8` — allocate a record/variant and push a ref.
+/// `REC_NEW tag:u8, arity:u8` - allocate a record/variant and push a ref.
 pub fn exec_rec_new(operand: u32, frame: &mut Frame, heap: &mut Heap) -> Result<(), VmError> {
     let tag = super::fi8x2_a(operand);
     let arity = super::fi8x2_b(operand);
@@ -68,7 +68,7 @@ pub fn exec_mat_data(operand: u32, frame: &mut Frame, heap: &Heap) -> Result<(),
     Ok(())
 }
 
-/// `MAT_TAG tag:u16` — pop a ref, push bool(obj.tag == tag).
+/// `MAT_TAG tag:u16` - pop a ref, push bool(obj.tag == tag).
 pub fn exec_mat_tag(operand: u32, frame: &mut Frame, heap: &Heap) -> Result<(), VmError> {
     let expected_tag = operand & 0xFFFF;
     let variant_val = frame.pop()?;
@@ -121,20 +121,17 @@ pub fn exec_opt_some(frame: &mut Frame, heap: &mut Heap) -> Result<(), VmError> 
     Ok(())
 }
 
-pub fn exec_opt_none(frame: &mut Frame, heap: &mut Heap) -> Result<(), VmError> {
+pub fn exec_opt_none(frame: &mut Frame, heap: &mut Heap) {
     // Represent None as an empty record with tag=0.
     let ptr = heap.alloc_record(0, Some(0), vec![]);
     frame.stack.push(Value::from_ref(ptr));
-    Ok(())
 }
 
 pub fn exec_opt_is(frame: &mut Frame, heap: &Heap) -> Result<(), VmError> {
     let val = frame.pop()?;
-    let is_some = if let Ok(ptr) = val.as_ref() {
-        heap.get_record_tag(ptr).is_ok_and(|tag| tag == Some(1))
-    } else {
-        false
-    };
+    let is_some = val
+        .as_ref()
+        .is_ok_and(|ptr| heap.get_record_tag(ptr).is_ok_and(|tag| tag == Some(1)));
     frame.stack.push(Value::from_bool(is_some));
     Ok(())
 }
@@ -152,7 +149,7 @@ pub fn exec_opt_get(frame: &mut Frame, heap: &Heap) -> Result<(), VmError> {
 }
 
 // --------------------------------------------------------------------------
-// §4.1 Data movement — indirect memory
+// §4.1 Data movement - indirect memory
 // --------------------------------------------------------------------------
 
 pub fn exec_ld_ind(frame: &mut Frame, heap: &Heap) -> Result<(), VmError> {

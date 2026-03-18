@@ -30,7 +30,7 @@ fn test_gc_collects_unreachable_objects() {
 
 #[test]
 fn test_gc_preserves_reachable_objects() {
-    // Allocate a record, store it in a local, run GC — it should survive.
+    // Allocate a record, store it in a local, run GC - it should survive.
     let bytes = make_msbc(
         &[ConstEntry::Int(99)],
         &[fn_def_with_max_stack(
@@ -49,7 +49,7 @@ fn test_gc_preserves_reachable_objects() {
     let _ = result.expect("runs");
     assert_eq!(vm.heap().live_count(), 1);
     let freed = vm.collect_garbage();
-    // After run completes the frame is gone; object may be freed — just verify GC ran without panic.
+    // After run completes the frame is gone; object may be freed - just verify GC ran without panic.
     let _ = freed;
 }
 
