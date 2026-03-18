@@ -122,20 +122,7 @@ musi lint               # lint source files
 
 ## A Taste of the Language
 
-```musi
-let x := 42;
-let name : String := "musi";
-
-let add := (a, b) => a + b;
-
-export let Stack ['a] := record { data : [] 'a };
-
-export let Option ['a] := choice { None + Some of 'a };
-
-export let Result ['a, 'e] := choice { Ok of 'a + Err of 'e };
-
-import "@std/rt" as rt;
-```
+TODO
 
 ## Project Structure
 
