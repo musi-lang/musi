@@ -9,10 +9,10 @@ A programming language with a type system, functional features, and a stack-base
 
 Musi source files use the `.ms` extension. The toolchain has two binaries:
 
-| Binary | What it does |
-|--------|--------------|
+| Binary | What it does                                                              |
+| ------ | ------------------------------------------------------------------------- |
 | `musi` | Universal driver — run, check, build, test, format, lint, manage projects |
-| `msc` | Standalone compiler — type-check and compile without the VM |
+| `msc`  | Standalone compiler — type-check and compile without the VM               |
 
 You will mostly use `musi`. The `msc` binary is for compiler-only workflows (CI type-checking, producing `.muse` bytecode without running it).
 
@@ -126,22 +126,22 @@ TODO
 
 ## Project Structure
 
-| Crate | Role |
-|-------|------|
-| `msc` | Compiler library + CLI |
-| `musi` | Toolchain driver CLI |
-| `msc_lsp` | LSP server |
-| `msc_shared` | Spans, source database, interner, diagnostics |
-| `msc_lex` | Lexer |
-| `msc_ast` | AST node types |
-| `msc_parse` | Parser |
-| `msc_sema` | Semantic analysis / type-checker |
-| `msc_resolve` | Module resolution |
-| `msc_emit` | Bytecode emitter |
-| `msc_bc` | Bytecode format definitions |
-| `msc_vm` | Bytecode interpreter / VM |
-| `msc_builtins` | Standard library runtime + FFI |
-| `msc_manifest` | `musi.json` parser |
+| Crate          | Role                                          |
+| -------------- | --------------------------------------------- |
+| `msc`          | Compiler library + CLI                        |
+| `musi`         | Toolchain driver CLI                          |
+| `msc_lsp`      | LSP server                                    |
+| `msc_shared`   | Spans, source database, interner, diagnostics |
+| `msc_lex`      | Lexer                                         |
+| `msc_ast`      | AST node types                                |
+| `msc_parse`    | Parser                                        |
+| `msc_sema`     | Semantic analysis / type-checker              |
+| `msc_resolve`  | Module resolution                             |
+| `msc_emit`     | Bytecode emitter                              |
+| `msc_bc`       | Bytecode format definitions                   |
+| `msc_vm`       | Bytecode interpreter / VM                     |
+| `msc_builtins` | Standard library runtime + FFI                |
+| `msc_manifest` | `musi.json` parser                            |
 
 ## Editor Support
 
