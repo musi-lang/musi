@@ -8,7 +8,7 @@ use std::{fs, process};
 use msc::pipeline;
 use msc_builtins::StdHost;
 use msc_manifest::MusiManifest;
-use msc_vm::{load, verify, Vm};
+use msc_vm::{Vm, load, verify};
 
 enum TestOutcome {
     Passed,
@@ -120,7 +120,7 @@ fn run_test_file(path: &Path, manifest: &MusiManifest, project_root: &Path) -> T
 
 fn discover_test_files(root: &Path) -> Vec<PathBuf> {
     let root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
-    let mut files = Vec::new();
+    let mut files = vec![];
     collect_test_files(&root, &mut files);
     files
 }

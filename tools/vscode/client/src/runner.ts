@@ -56,7 +56,7 @@ export async function findCompilerPath(): Promise<string | undefined> {
 
 	const cliPath = await findCliPath();
 	if (cliPath) {
-		// music compiler is co-located with the musi CLI — both built from the same cargo workspace
+		// music compiler is co-located with the musi CLI - both built from the same cargo workspace
 		const dir = path.dirname(cliPath);
 		const musicPath = path.join(dir, "music");
 		if (fs.existsSync(musicPath)) {

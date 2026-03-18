@@ -64,6 +64,7 @@ pub fn document_symbols(doc: &AnalyzedDoc) -> DocumentSymbolResponse {
             }
 
             #[allow(deprecated)]
+            // `deprecated` field is still supported by many editors, so we set it based on the presence of `@deprecated` in the doc comment.
             let sym = DocumentSymbol {
                 name,
                 detail,

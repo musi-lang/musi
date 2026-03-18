@@ -49,8 +49,7 @@ pub struct FrontendOutput {
 /// # Errors
 ///
 /// Returns `Err(())` if any errors occurred during compilation.
-// Diagnostics are printed to stderr; the unit error signals failure without duplicating them.
-#[allow(clippy::result_unit_err)]
+#[allow(clippy::result_unit_err)] // printed to stderr; unit error signals failure without duplicating them.
 pub fn run_frontend(path: &Path) -> Result<FrontendOutput, ()> {
     let source = match fs::read_to_string(path) {
         Ok(s) => s,
@@ -102,8 +101,7 @@ pub fn run_frontend(path: &Path) -> Result<FrontendOutput, ()> {
 /// # Errors
 ///
 /// Returns `Err(())` if any errors occurred during compilation.
-// Diagnostics are printed to stderr; the unit error signals failure without duplicating them.
-#[allow(clippy::result_unit_err)]
+#[allow(clippy::result_unit_err)] // printed to stderr; unit error signals failure without duplicating them.
 pub fn run_frontend_multi(
     path: &Path,
     manifest: &MusiManifest,
@@ -302,8 +300,7 @@ fn build_import_types(
 /// # Errors
 ///
 /// Returns `Err(())` after printing the error to stderr.
-// Diagnostics are printed to stderr; the unit error signals failure without duplicating them.
-#[allow(clippy::result_unit_err)]
+#[allow(clippy::result_unit_err)] // printed to stderr; unit error signals failure without duplicating them.
 pub fn run_backend(out: &mut FrontendOutput, script: bool) -> Result<Vec<u8>, ()> {
     let dep_inputs: Vec<msc_emit::DepEmitInput> = out
         .dep_modules

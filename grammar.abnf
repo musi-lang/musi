@@ -108,6 +108,7 @@ keyword = "and"
           / "resume"
           / "return"
           / "try"
+          / "via"
           / "where"
           / "with"
           / "xor"
@@ -279,7 +280,7 @@ rec-lit-fields = rec-lit-field *("," rec-lit-field)
 rec-lit-field  = ident [":=" ast-expr]
                  / spread
 ; §2.10  Bindings
-ast-let        = "let" ["mut"] ast-pat [ty-params] [with-clause] [ty-annot] (":=" ast-expr ["in" "(" ast-expr ")"] / <stub>)
+ast-let        = "let" ["mut"] ast-pat [bracket-params] [where-clause] [with-clause] [ty-annot] (":=" ast-expr ["in" "(" ast-expr ")"] / <stub>)
 
 bracket-params = "[" ty-ident *("," ty-ident) "]"
 
@@ -329,9 +330,12 @@ export-list       = export-item *("," export-item)
 
 export-item       = ident ["as" ident]
 
-ast-class-decl    = "class" ident [ty-params] "{" *(class-member) "}"
+ast-class-decl    = "class" ident [bracket-params] [where-clause] "{" *(class-member) "}"
 
-ast-instance-decl = "instance" ast-ty-named [ty-params] "{" *(class-member) "}"
+ast-instance-decl = "instance" [bracket-params] [where-clause] ast-ty-named instance-body
+
+instance-body     = "{" *(class-member) "}"
+                    / "via" ast-ty-named
 
 ast-effect-decl   = "effect" ident [bracket-params] "{" *(effect-op [";"]) "}"
 
@@ -346,7 +350,7 @@ law-decl          = "law" ident [params] ":=" ast-expr
 op-or-ident       = ident
                     / op-ident
 
-foreign-binding   = ident ["as" lit-string] [":" ast-ty]
+foreign-binding   = [attrs] ident ["as" lit-string] [":" ast-ty]
 
 effect-op         = ["fatal"] ident ":" ast-ty
 ; §2.14  Types
@@ -361,6 +365,7 @@ ast-ty-prod  = ast-ty-base *("*" ast-ty-base)
 ast-ty-base  = ty-ident  ; 'T
                / "?" ast-ty-base  ; ?T - option sugar
                / ident ["of" ty-arg-list]  ; Named, Named of T
+               / "(" ident ":" ast-ty ")" "->" ast-ty  ; pi type
                / "(" ast-ty ")"  ; grouped type
                / "[" [lit-int] "]" ast-ty  ; array type
 
@@ -380,12 +385,14 @@ effect-item  = ident ["of" ast-ty]
 where-clause = "where" constraint *("," constraint)
 
 constraint   = ty-ident ("<:" / ":>") ast-ty-named
+               / ty-ident ":" ast-ty-named
 ; §2.15  Patterns
 ast-pat         = ast-pat-primary ["or" ast-pat-primary *("or" ast-pat-primary)]
 
 ast-pat-primary = "_"  ; wildcard
                   / lit  ; literal
                   / ident [pat-suffix]  ; bind, destructor, or named record
+                  / ident "as" ast-pat-primary  ; as-pattern
                   / "." ident ["(" [pat-list] ")"]  ; UDN variant
                   / ".{" [rec-pat-fields] "}"  ; record pattern
                   / "(" [pat-list] ")"  ; tuple / grouped pattern
@@ -400,25 +407,28 @@ rec-pat-field   = ["mut"] ident [":" ast-pat]
 
 pat-list        = ast-pat *("," ast-pat)
 ; §2.16  Attributes
-attrs             = 1*attr
+attrs                  = 1*attr
 
-attr              = "#[" attr-body "]"
+attr                   = "#[" attr-body *("," attr-body) "]"
 
-attr-body         = ident [":=" attr-value / "(" attr-named-fields ")"]
+attr-body              = ident [":=" attr-value / "(" attr-params ")"]
 
-attr-value        = lit
-                    / "(" lit *("," lit) ")"
+attr-params            = attr-named-fields
+                         / attr-positional-params
 
-attr-named-fields = attr-named-field *("," attr-named-field)
+attr-positional-params = lit *("," lit)
 
-attr-named-field  = ident ":=" lit
+attr-value             = lit
+                         / "(" lit *("," lit) ")"
+
+attr-named-fields      = attr-named-field *("," attr-named-field)
+
+attr-named-field       = ident ":=" lit
 ; §2.17  Shared helpers
 spread       = "..." ast-expr
 
 field-target = ident
                / lit-int
-
-ty-params    = [bracket-params] [where-clause]
 
 expr-list    = ast-expr *("," ast-expr)
 

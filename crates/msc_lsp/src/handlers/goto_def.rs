@@ -31,7 +31,7 @@ pub fn goto_definition(
 
     if def.span != Span::DUMMY {
         if def.file_id != doc.file_id {
-            // Definition lives in a dependency file — try cross-file navigation.
+            // Definition lives in a dependency file - try cross-file navigation.
             if let Some(resp) = resolve_stdlib_def(doc, def.name, def.span, root_uri) {
                 return Some(resp);
             }
@@ -178,7 +178,7 @@ fn import_at_offset(doc: &AnalyzedDoc, offset: u32) -> Option<GotoDefinitionResp
         let raw = doc
             .source
             .get(tok.span.start as usize..tok.span.end() as usize)?;
-        // Strip surrounding quotes — the interner stores content only.
+        // Strip surrounding quotes - the interner stores content only.
         let content = raw
             .strip_prefix('"')
             .and_then(|s| s.strip_suffix('"'))
@@ -188,7 +188,7 @@ fn import_at_offset(doc: &AnalyzedDoc, offset: u32) -> Option<GotoDefinitionResp
         }
     }
 
-    // Path 2: cursor on the `import` keyword — find the Expr::Import node.
+    // Path 2: cursor on the `import` keyword - find the Expr::Import node.
     let _kw = doc.lexed.tokens.iter().find(|t| {
         t.kind == TokenKind::KwImport && t.span.start <= offset && offset <= t.span.end()
     })?;

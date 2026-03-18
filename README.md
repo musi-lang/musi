@@ -11,8 +11,8 @@ Musi source files use the `.ms` extension. The toolchain has two binaries:
 
 | Binary | What it does                                                              |
 | ------ | ------------------------------------------------------------------------- |
-| `musi` | Universal driver — run, check, build, test, format, lint, manage projects |
-| `msc`  | Standalone compiler — type-check and compile without the VM               |
+| `musi` | Universal driver - run, check, build, test, format, lint, manage projects |
+| `msc`  | Standalone compiler - type-check and compile without the VM               |
 
 You will mostly use `musi`. The `msc` binary is for compiler-only workflows (CI type-checking, producing `.seam` bytecode without running it).
 
@@ -179,4 +179,4 @@ All contributors are expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md
 
 ## License
 
-MIT OR Apache-2.0 — see [LICENSE](LICENSE) for details.
+MIT OR Apache-2.0 - see [LICENSE](LICENSE) for details.

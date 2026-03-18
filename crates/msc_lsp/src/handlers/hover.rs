@@ -2,7 +2,7 @@
 
 use lsp_types::{Hover, HoverContents, MarkupContent, MarkupKind, Position};
 use msc_ast::decl::ClassMember;
-use msc_ast::expr::{BindKind, LetFields, Param, ParamMode};
+use msc_ast::expr::{BindKind, InstanceBody, LetFields, Param, ParamMode};
 use msc_ast::pat::Pat;
 use msc_ast::{AstArenas, Expr, PatIdx};
 use msc_sema::def::DefInfo;
@@ -141,7 +141,7 @@ pub fn hover(doc: &AnalyzedDoc, position: Position) -> Option<Hover> {
             local
         }
     } else {
-        // Def is from a dependency — use the dep source directly.
+        // Def is from a dependency - use the dep source directly.
         doc.dep_sources
             .values()
             .find_map(|dep| {
@@ -277,8 +277,12 @@ fn find_ast_params(
     // Path 4: class/instance members
     for raw_idx in 0..arenas.exprs.len() {
         let idx = Idx::from_raw(u32::try_from(raw_idx).ok()?);
-        let members = match &arenas.exprs[idx] {
-            Expr::Class { members, .. } | Expr::Instance { members, .. } => members,
+        let members: &[ClassMember] = match &arenas.exprs[idx] {
+            Expr::Class { members, .. } => members,
+            Expr::Instance {
+                body: InstanceBody::Manual { members },
+                ..
+            } => members,
             _ => continue,
         };
         for member in members {

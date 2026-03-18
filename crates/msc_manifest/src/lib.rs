@@ -102,7 +102,7 @@ impl MusiManifest {
     }
 }
 
-/// Package author — either a plain string or a structured object.
+/// Package author - either a plain string or a structured object.
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum Author {
@@ -116,7 +116,7 @@ pub enum Author {
     },
 }
 
-/// Repository location — either a URI string or a structured object.
+/// Repository location - either a URI string or a structured object.
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum Repository {
@@ -129,7 +129,7 @@ pub enum Repository {
     },
 }
 
-/// Bug tracker — either a URI string or a structured object.
+/// Bug tracker - either a URI string or a structured object.
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum Bugs {
@@ -142,7 +142,7 @@ pub enum Bugs {
     },
 }
 
-/// Package exports — either a single path string or an export map.
+/// Package exports - either a single path string or an export map.
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum Exports {
@@ -150,7 +150,7 @@ pub enum Exports {
     Map(HashMap<String, String>),
 }
 
-/// Workspace members — either an array of globs or an object with a `members` field.
+/// Workspace members - either an array of globs or an object with a `members` field.
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum Workspace {
@@ -158,7 +158,7 @@ pub enum Workspace {
     Object { members: Vec<String> },
 }
 
-/// Publish configuration — either include/exclude lists or `false` to disable publishing.
+/// Publish configuration - either include/exclude lists or `false` to disable publishing.
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum PublishConfig {
@@ -166,7 +166,7 @@ pub enum PublishConfig {
     Disabled(bool),
 }
 
-/// Lock file configuration — path string, boolean, or a detailed object.
+/// Lock file configuration - path string, boolean, or a detailed object.
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum LockConfig {
@@ -186,7 +186,7 @@ impl Default for LockConfig {
     }
 }
 
-/// Task definition — either a plain command string or a structured task object.
+/// Task definition - either a plain command string or a structured task object.
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum TaskDef {

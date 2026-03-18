@@ -71,6 +71,7 @@ impl LanguageServer for MusiBackend {
         params: InitializeParams,
     ) -> BoxFuture<'static, Result<InitializeResult, Self::Error>> {
         #[allow(deprecated)]
+        // `root_uri` field is still supported by many editors, so we check it if `workspace_folders` is not provided.
         let resolved_root = params
             .workspace_folders
             .as_ref()

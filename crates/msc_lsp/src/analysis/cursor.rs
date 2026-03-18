@@ -9,7 +9,7 @@ use crate::types::SpanIndex;
 
 /// Build a sorted span index from name_ref_defs, pat_defs, and definition name tokens.
 pub fn build_span_index(sema: &SemaResult, module: &ParsedModule) -> SpanIndex {
-    let mut entries: SpanIndex = Vec::new();
+    let mut entries: SpanIndex = vec![];
 
     // 1. NameRefs with resolved DefIds
     for (raw_idx, def_id) in sema.resolution.name_ref_defs.iter().enumerate() {
