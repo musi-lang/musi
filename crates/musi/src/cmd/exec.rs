@@ -1,10 +1,10 @@
-//! `musi exec` - execute a `.muse` bytecode file directly.
+//! `musi exec` - execute a `.seam` bytecode file directly.
 
 use std::path::Path;
 use std::{fs, process};
 
 use msc_builtins::StdHost;
-use msc_vm::{Vm, load, verify};
+use msc_vm::{load, verify, Vm};
 
 pub fn run(path: &Path) -> ! {
     let bytes = match fs::read(path) {
@@ -28,7 +28,7 @@ pub fn run(path: &Path) -> ! {
         process::exit(1);
     }
 
-    let host = match StdHost::new(&module.foreign_fns) {
+    let host = match StdHost::new(&module.foreign_fns, &module.types) {
         Ok(h) => h,
         Err(e) => {
             eprintln!("error: {e}");

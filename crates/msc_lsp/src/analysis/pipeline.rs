@@ -14,8 +14,8 @@ use msc_resolve::graph::ModuleId;
 use msc_resolve::{ModuleGraph, ModuleNode, ResolverConfig, build_module_graph};
 use msc_sema::types::RecordField;
 use msc_sema::{
-    DefInfo, ExportBinding, ImportNames, ModuleSemaOutput, SharedAnalysisState, SubModuleExports,
-    Type, TypeIdx, analyze, analyze_shared, collect_exports,
+    DefInfo, ExportBinding, ImportNames, ModuleSemaOutput, SemaOptions, SharedAnalysisState,
+    SubModuleExports, Type, TypeIdx, analyze, analyze_shared, collect_exports,
 };
 use msc_shared::{Arena, DiagnosticBag, FileId, Interner, SourceDb, Span, Symbol};
 
@@ -51,7 +51,13 @@ pub fn analyze_doc(source: &str, _uri: &str) -> (Vec<Diagnostic>, AnalyzedDoc) {
         &mut diags,
     );
 
-    let sema = analyze(&module, &mut interner, file_id, &mut diags);
+    let sema = analyze(
+        &module,
+        &mut interner,
+        file_id,
+        &mut diags,
+        &SemaOptions::default(),
+    );
     let lsp_diags = to_lsp_diags(
         diags.iter().filter(|d| d.primary.file_id == file_id),
         &source_db,
@@ -199,6 +205,7 @@ fn run_lsp_sema_in_order(
             &import_names,
             &import_types,
             &sub_module_exports,
+            &SemaOptions::default(),
         );
 
         if module_id == entry_id {

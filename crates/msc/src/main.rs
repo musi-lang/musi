@@ -2,7 +2,6 @@
 
 use std::env;
 use std::path::{Path, PathBuf};
-use std::process;
 
 use clap::{Parser, Subcommand};
 use msc::cmd::{build, check};
@@ -22,7 +21,7 @@ enum Command {
         /// Source file to check (defaults to `main` from `musi.json`)
         file: Option<PathBuf>,
     },
-    /// Compile a `.ms` source file to `.muse` bytecode
+    /// Compile a `.ms` source file to `.seam` bytecode
     Build {
         /// Source file to compile (defaults to `main` from `musi.json`)
         file: Option<PathBuf>,
@@ -39,35 +38,27 @@ fn main() {
         Command::Check { file } | Command::Build { file, .. } => file.as_deref(),
     };
 
-    let (manifest, project_root) = match load_manifest(source_hint) {
-        Some((m, r)) => (Some(m), Some(r)),
-        None => (None, None),
-    };
+    let (manifest, project_root) = load_manifest(source_hint);
 
     match cli.command {
         Command::Check { file } => {
-            let path = resolve_entry(file.as_deref(), manifest.as_ref());
-            check::run(&path, manifest.as_ref(), project_root.as_deref());
+            let path = resolve_entry(file.as_deref(), &manifest);
+            check::run(&path, &manifest, &project_root);
         }
         Command::Build { file, output } => {
-            let path = resolve_entry(file.as_deref(), manifest.as_ref());
-            build::run(
-                &path,
-                output.as_deref(),
-                manifest.as_ref(),
-                project_root.as_deref(),
-            );
+            let path = resolve_entry(file.as_deref(), &manifest);
+            build::run(&path, output.as_deref(), &manifest, &project_root);
         }
     }
 }
 
-fn load_manifest(source_hint: Option<&Path>) -> Option<(MusiManifest, PathBuf)> {
+fn load_manifest(source_hint: Option<&Path>) -> (MusiManifest, PathBuf) {
     let start = source_hint
         .and_then(|p| p.parent())
         .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
 
     let mut dir = if start.is_relative() {
-        env::current_dir().ok()?.join(&start)
+        env::current_dir().map_or_else(|_| start.clone(), |cwd| cwd.join(&start))
     } else {
         start
     };
@@ -75,24 +66,25 @@ fn load_manifest(source_hint: Option<&Path>) -> Option<(MusiManifest, PathBuf)> 
     loop {
         let candidate = dir.join("musi.json");
         if candidate.exists() {
-            let manifest = msc_manifest::load(&candidate).ok()?;
-            return Some((manifest, dir));
+            if let Ok(manifest) = msc_manifest::load(&candidate) {
+                return (manifest, dir);
+            }
         }
         if !dir.pop() {
-            return None;
+            break;
         }
     }
+
+    let root = source_hint.and_then(|p| p.parent()).map_or_else(
+        || env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+        Path::to_path_buf,
+    );
+    (MusiManifest::default(), root)
 }
 
-fn resolve_entry(explicit: Option<&Path>, manifest: Option<&MusiManifest>) -> PathBuf {
+fn resolve_entry(explicit: Option<&Path>, manifest: &MusiManifest) -> PathBuf {
     if let Some(p) = explicit {
         return p.to_path_buf();
     }
-
-    if let Some(m) = manifest {
-        return PathBuf::from(m.entry_point());
-    }
-
-    eprintln!("error: no source file specified and no musi.json found");
-    process::exit(1);
+    PathBuf::from(manifest.entry_point())
 }

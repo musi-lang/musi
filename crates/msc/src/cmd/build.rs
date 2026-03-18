@@ -1,4 +1,4 @@
-//! `msc build` - compile a `.ms` source file to `.muse` bytecode.
+//! `msc build` - compile a `.ms` source file to `.seam` bytecode.
 
 use std::{fs, path::Path, process};
 
@@ -6,23 +6,10 @@ use msc_manifest::MusiManifest;
 
 use crate::pipeline;
 
-/// Compiles `path` to bytecode and writes it to `output` (or `path.muse`).
-pub fn run(
-    path: &Path,
-    output: Option<&Path>,
-    manifest: Option<&MusiManifest>,
-    project_root: Option<&Path>,
-) -> ! {
-    let mut out = if manifest.is_some() {
-        match pipeline::run_frontend_multi(path, manifest, project_root) {
-            Ok(o) => o,
-            Err(()) => process::exit(1),
-        }
-    } else {
-        match pipeline::run_frontend(path) {
-            Ok(o) => o,
-            Err(()) => process::exit(1),
-        }
+/// Compiles `path` to bytecode and writes it to `output` (or `path.seam`).
+pub fn run(path: &Path, output: Option<&Path>, manifest: &MusiManifest, project_root: &Path) -> ! {
+    let Ok(mut out) = pipeline::run_frontend_multi(path, manifest, project_root) else {
+        process::exit(1)
     };
     let Ok(bytes) = pipeline::run_backend(&mut out, true) else {
         process::exit(1)

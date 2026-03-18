@@ -5,20 +5,12 @@ use std::{path::Path, process};
 use msc::pipeline;
 use msc_builtins::StdHost;
 use msc_manifest::MusiManifest;
-use msc_vm::{Vm, load, verify};
+use msc_vm::{load, verify, Vm};
 
 /// Compiles `path` and immediately runs it in the VM.
-pub fn run(path: &Path, manifest: Option<&MusiManifest>, project_root: Option<&Path>) -> ! {
-    let mut out = if manifest.is_some() {
-        match pipeline::run_frontend_multi(path, manifest, project_root) {
-            Ok(o) => o,
-            Err(()) => process::exit(1),
-        }
-    } else {
-        match pipeline::run_frontend(path) {
-            Ok(o) => o,
-            Err(()) => process::exit(1),
-        }
+pub fn run(path: &Path, manifest: &MusiManifest, project_root: &Path) -> ! {
+    let Ok(mut out) = pipeline::run_frontend_multi(path, manifest, project_root) else {
+        process::exit(1)
     };
     let Ok(bytes) = pipeline::run_backend(&mut out, true) else {
         process::exit(1)
@@ -34,7 +26,7 @@ pub fn run(path: &Path, manifest: Option<&MusiManifest>, project_root: Option<&P
         eprintln!("error: {e}");
         process::exit(1);
     }
-    let host = match StdHost::new(&module.foreign_fns) {
+    let host = match StdHost::new(&module.foreign_fns, &module.types) {
         Ok(h) => h,
         Err(e) => {
             eprintln!("error: {e}");

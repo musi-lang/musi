@@ -8,7 +8,7 @@ use std::{fs, process};
 use msc::pipeline;
 use msc_builtins::StdHost;
 use msc_manifest::MusiManifest;
-use msc_vm::{Vm, load, verify};
+use msc_vm::{load, verify, Vm};
 
 enum TestOutcome {
     Passed,
@@ -16,18 +16,7 @@ enum TestOutcome {
     Error(String),
 }
 
-pub fn run(
-    filter: Option<&str>,
-    manifest: Option<&MusiManifest>,
-    project_root: Option<&Path>,
-) -> ! {
-    let Some(project_root) = project_root else {
-        eprintln!("error: no musi.json found - `musi test` requires a project");
-        process::exit(1);
-    };
-
-    let manifest = manifest.expect("manifest must exist when project_root exists");
-
+pub fn run(filter: Option<&str>, manifest: &MusiManifest, project_root: &Path) -> ! {
     let mut test_files = discover_test_files(project_root);
     test_files.sort();
 
@@ -96,7 +85,7 @@ pub fn run(
 }
 
 fn run_test_file(path: &Path, manifest: &MusiManifest, project_root: &Path) -> TestOutcome {
-    let Ok(mut out) = pipeline::run_frontend_multi(path, Some(manifest), Some(project_root)) else {
+    let Ok(mut out) = pipeline::run_frontend_multi(path, manifest, project_root) else {
         return TestOutcome::Error("compilation error".into());
     };
 
@@ -113,7 +102,7 @@ fn run_test_file(path: &Path, manifest: &MusiManifest, project_root: &Path) -> T
         return TestOutcome::Error(format!("verify error: {e}"));
     }
 
-    let Ok(host) = StdHost::new(&module.foreign_fns) else {
+    let Ok(host) = StdHost::new(&module.foreign_fns, &module.types) else {
         return TestOutcome::Error("host error".into());
     };
 

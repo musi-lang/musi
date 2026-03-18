@@ -8,14 +8,15 @@ use std::path::Path;
 use msc_ast::{ExprIdx, ParsedModule};
 use msc_emit::emit;
 use msc_lex::lex;
-use msc_manifest::MusiManifest;
+use msc_manifest::{CompilerOptions, MusiManifest};
 use msc_parse::parse;
 use msc_resolve::graph::ModuleId;
 use msc_resolve::{ModuleGraph, ModuleNode, build_module_graph};
 use msc_sema::types::RecordField;
 use msc_sema::{
     DefId, DictLookup, ExportBinding, ImportNames, ModuleSemaOutput, Obligation, ResolutionMap,
-    SemaResult, SharedAnalysisState, SubModuleExports, Type, TypeIdx, analyze, collect_exports,
+    SemaOptions, SemaResult, SharedAnalysisState, SubModuleExports, Type, TypeIdx, analyze,
+    collect_exports,
 };
 use msc_shared::{Arena, DiagnosticBag, FileId, Interner, SourceDb, Symbol};
 
@@ -66,7 +67,13 @@ pub fn run_frontend(path: &Path) -> Result<FrontendOutput, ()> {
     let file_id = source_db.add(path.display().to_string(), source.as_str());
     let lexed = lex(&source, file_id, &mut interner, &mut diags);
     let parsed = parse(&lexed.tokens, file_id, &mut diags, &mut interner);
-    let sema = analyze(&parsed, &mut interner, file_id, &mut diags);
+    let sema = analyze(
+        &parsed,
+        &mut interner,
+        file_id,
+        &mut diags,
+        &SemaOptions::default(),
+    );
 
     render_diagnostics(&diags, &source_db);
 
@@ -99,23 +106,14 @@ pub fn run_frontend(path: &Path) -> Result<FrontendOutput, ()> {
 #[allow(clippy::result_unit_err)]
 pub fn run_frontend_multi(
     path: &Path,
-    manifest: Option<&MusiManifest>,
-    project_root_hint: Option<&Path>,
+    manifest: &MusiManifest,
+    project_root: &Path,
 ) -> Result<FrontendOutput, ()> {
     let mut interner = Interner::new();
     let mut source_db = SourceDb::new();
     let mut diags = DiagnosticBag::new();
 
-    let project_root = project_root_hint.map_or_else(
-        || {
-            path.parent()
-                .unwrap_or_else(|| Path::new("."))
-                .to_path_buf()
-        },
-        Path::to_path_buf,
-    );
-
-    let config = resolve_config::build(&project_root, manifest);
+    let config = resolve_config::build(project_root, Some(manifest));
     let mut parsed_modules: HashMap<ModuleId, ParsedModule> = HashMap::new();
 
     let graph = match build_module_graph(
@@ -144,12 +142,14 @@ pub fn run_frontend_multi(
         }
     };
 
+    let sema_options = sema_options_from(&manifest.compiler_options);
     let result = run_sema_in_order(
         &graph,
         &order,
         &mut parsed_modules,
         &mut interner,
         &mut diags,
+        &sema_options,
     );
 
     render_diagnostics(&diags, &source_db);
@@ -176,6 +176,7 @@ fn run_sema_in_order(
     parsed_modules: &mut HashMap<ModuleId, ParsedModule>,
     interner: &mut Interner,
     diags: &mut DiagnosticBag,
+    options: &SemaOptions,
 ) -> Option<(SemaResult, ParsedModule, Vec<DepModule>)> {
     let mut state = SharedAnalysisState::new(interner);
     let mut module_exports: HashMap<ModuleId, Vec<ExportBinding>> = HashMap::new();
@@ -212,6 +213,7 @@ fn run_sema_in_order(
             &import_names,
             &import_types,
             &sub_module_exports,
+            options,
         );
 
         if module_id == entry_id {
@@ -361,5 +363,19 @@ fn render_diagnostics(diags: &DiagnosticBag, source_db: &SourceDb) {
     let use_color = stderr().is_terminal();
     for diag in diags.iter() {
         eprintln!("{}", diag.render_rich(source_db, use_color));
+    }
+}
+
+const fn sema_options_from(opts: &CompilerOptions) -> SemaOptions {
+    SemaOptions {
+        strict: opts.strict,
+        no_unused_locals: opts.no_unused_locals || opts.strict,
+        no_unused_parameters: opts.no_unused_parameters || opts.strict,
+        no_implicit_returns: opts.no_implicit_returns || opts.strict,
+        allow_unreachable_code: opts.allow_unreachable_code,
+        allow_unused_labels: opts.allow_unused_labels,
+        no_implicit_any: opts.no_implicit_any || opts.strict,
+        exact_optional_property_types: opts.exact_optional_property_types || opts.strict,
+        no_error_truncation: opts.no_error_truncation,
     }
 }

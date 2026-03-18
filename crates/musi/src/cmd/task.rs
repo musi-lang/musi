@@ -4,12 +4,7 @@ use std::process;
 use msc_manifest::MusiManifest;
 use msc_manifest::TaskDef;
 
-pub fn run(name: Option<&str>, list: bool, manifest: Option<&MusiManifest>) -> ! {
-    let manifest = manifest.unwrap_or_else(|| {
-        eprintln!("error: no musi.json found in current directory");
-        process::exit(1);
-    });
-
+pub fn run(name: Option<&str>, list: bool, manifest: &MusiManifest) -> ! {
     if manifest.tasks.is_empty() {
         eprintln!("no tasks defined in musi.json");
         process::exit(0);

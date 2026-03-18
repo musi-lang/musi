@@ -47,7 +47,9 @@ pub fn expr_span(idx: ExprIdx, module: &ParsedModule) -> Option<Span> {
         | Expr::ProductType { span, .. }
         | Expr::SumType { span, .. }
         | Expr::ArrayType { span, .. }
-        | Expr::PiType { span, .. } => *span,
+        | Expr::PiType { span, .. }
+        | Expr::Need { span, .. }
+        | Expr::Resume { span, .. } => *span,
     };
     Some(span)
 }
