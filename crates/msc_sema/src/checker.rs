@@ -74,6 +74,11 @@ pub struct Checker<'a, S: BuildHasher = RandomState> {
     pub(crate) scopes: &'a mut ScopeTree,
     pub(crate) current_scope: ScopeId,
     pub(crate) current_effects: EffectRow,
+    /// When true, the current type definition has `#[repr("C")]` - record
+    /// fields preserve declaration order instead of being sorted alphabetically.
+    pub(crate) current_repr_c: bool,
+    /// True while checking the body of a handler op - gates `resume` usage.
+    pub(crate) in_handler: bool,
 }
 
 impl<'a, S: BuildHasher> Checker<'a, S> {
@@ -107,6 +112,8 @@ impl<'a, S: BuildHasher> Checker<'a, S> {
             scopes,
             current_scope: scope,
             current_effects: EffectRow::PURE,
+            current_repr_c: false,
+            in_handler: false,
         }
     }
 
@@ -194,7 +201,7 @@ impl<'a, S: BuildHasher> Checker<'a, S> {
             &self.store.unify,
             self.ctx.well_known,
         ) {
-            // Types are consistent but not subtypes — cast will be inserted at call sites
+            // Types are consistent but not subtypes - cast will be inserted at call sites
             // via `insert_cast` when the expression index is available.
             return;
         }

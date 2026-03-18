@@ -9,10 +9,9 @@ use msc_ast::pat::Pat;
 use msc_ast::{ExprIdx, NameRefIdx};
 use msc_shared::{Span, Symbol};
 
+use super::{Resolver, binding_def_kind};
 use crate::def::{DefId, DefKind};
 use crate::error::SemaError;
-
-use super::{Resolver, binding_def_kind};
 
 impl Resolver<'_> {
     /// Pass 2: resolve all name references in an expression.
@@ -73,17 +72,12 @@ impl Resolver<'_> {
             Expr::RecordDef { fields, .. } => self.resolve_rec_def_fields(&fields),
             Expr::Array { elems, .. } => self.resolve_expr_array(&elems),
             Expr::Piecewise { arms, .. } => self.resolve_expr_piecewise(&arms),
-            Expr::Return { value, .. } => {
+            Expr::Return { value, .. } | Expr::Resume { value, .. } => {
                 if let Some(v) = value {
                     self.resolve_expr(v);
                 }
             }
             Expr::Need { operand, .. } => self.resolve_expr(operand),
-            Expr::Resume { value, .. } => {
-                if let Some(v) = value {
-                    self.resolve_expr(v);
-                }
-            }
             Expr::Let { fields, body, .. } => self.resolve_expr_let(&fields, body),
             Expr::Binding { fields, .. } => self.resolve_expr_binding(&fields),
             Expr::Fn {
@@ -108,10 +102,24 @@ impl Resolver<'_> {
                 target,
                 params,
                 constraints,
-                members,
+                body,
                 ..
             } => {
+                use msc_ast::expr::InstanceBody;
+                let via_delegate = match &body {
+                    InstanceBody::Via { delegate, .. } => Some(*delegate),
+                    InstanceBody::Manual { .. } => None,
+                };
+                let members = match &body {
+                    InstanceBody::Manual { members } => members.clone(),
+                    InstanceBody::Via { .. } => vec![],
+                };
                 self.resolve_expr_given(target, &params, &constraints, &members);
+                // Resolve the delegate type expression so name references inside it
+                // are wired up to their definitions.
+                if let Some(delegate) = via_delegate {
+                    self.resolve_type_expr(delegate);
+                }
             }
             Expr::Effect {
                 name,
@@ -163,9 +171,32 @@ impl Resolver<'_> {
             let _prev = self.output.expr_defs.insert(expr_idx, def_id);
             self.output.name_ref_defs[usize::try_from(name_ref.raw()).unwrap()] = Some(def_id);
             self.defs.get_mut(def_id).use_count += 1;
+            self.maybe_warn_deprecated(def_id, name, span);
         } else {
             self.report_undefined(name, span);
         }
+    }
+
+    fn maybe_warn_deprecated(&mut self, def_id: DefId, name: Symbol, span: Span) {
+        let Some(msg_sym) = self.defs.get(def_id).deprecated else {
+            return;
+        };
+        let name_str = self.interner.resolve(name);
+        let raw_msg = self.interner.resolve(msg_sym);
+        // Strip surrounding quotes added by the string interner when a literal
+        // value symbol is stored directly.
+        let message = raw_msg
+            .strip_prefix('"')
+            .and_then(|s| s.strip_suffix('"'))
+            .unwrap_or(raw_msg);
+        let _d = self.diags.report(
+            &SemaError::Deprecated {
+                name: Box::from(name_str),
+                message: Box::from(message),
+            },
+            span,
+            self.file_id,
+        );
     }
 
     pub(super) fn report_undefined(&mut self, name: Symbol, span: Span) {

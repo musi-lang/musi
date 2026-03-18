@@ -195,7 +195,7 @@ fn record_width_subtype() {
         args: vec![],
     });
 
-    // Use Symbol indices that are stable — we need real interned symbols.
+    // Use Symbol indices that are stable - we need real interned symbols.
     // Since we can't access the interner here, use the def symbols directly from
     // the arena. Instead we build records using manually created symbols.
     // We use msc_shared::Symbol directly.
@@ -295,9 +295,9 @@ fn ref_invariant() {
     let ref_int_b = types.alloc(Type::Ref { inner: int });
     let ref_never = types.alloc(Type::Ref { inner: never });
 
-    // Ref(Int) <: Ref(Int) — same inner after resolve.
+    // Ref(Int) <: Ref(Int) - same inner after resolve.
     assert!(is_subtype(ref_int_a, ref_int_b, &types, &unify, &wk));
-    // Ref(Never) is NOT <: Ref(Int) — Ref is invariant.
+    // Ref(Never) is NOT <: Ref(Int) - Ref is invariant.
     assert!(!is_subtype(ref_never, ref_int_a, &types, &unify, &wk));
 }
 

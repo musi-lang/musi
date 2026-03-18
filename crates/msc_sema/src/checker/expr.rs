@@ -11,7 +11,7 @@ use msc_ast::expr::{
 use msc_ast::lit::{FStrPart, Lit};
 use msc_ast::pat::Pat;
 use msc_ast::{ExprIdx, PatIdx};
-use msc_shared::{Span, Symbol};
+use msc_shared::{Idx, Span, Symbol};
 
 use crate::checker::Checker;
 use crate::checker::decl::check_decl;
@@ -24,7 +24,7 @@ use crate::checker::exhaustive::check_match_exhaustiveness;
 use crate::checker::instantiate::{freshen_poly, substitute_ty};
 use crate::checker::pat::check_pat;
 use crate::checker::ty::lower_type_expr;
-use crate::def::{DefId, DefKind};
+use crate::def::{DefFlags, DefId, DefKind};
 use crate::error::SemaError;
 use crate::resolve;
 use crate::scope::ScopeId;
@@ -111,7 +111,11 @@ fn synth_inner<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) -> Ty
             }
             synth_field(ck, *object, *field, *span)
         }
-        Expr::Index { object, index, .. } => synth_index(ck, *object, *index),
+        Expr::Index {
+            object,
+            index,
+            span,
+        } => synth_index(ck, *object, *index, *span),
         Expr::Record { fields, .. } => {
             let fields = fields.clone();
             synth_record(ck, &fields)
@@ -138,22 +142,16 @@ fn synth_inner<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) -> Ty
             }
             ck.named_ty(ck.ctx.well_known.never)
         }
-        Expr::Need { operand, .. } => synth(ck, *operand),
-        Expr::Resume { value, .. } => {
-            if let Some(v) = *value {
-                synth(ck, v)
-            } else {
-                ck.named_ty(ck.ctx.well_known.unit)
-            }
+        Expr::Need { operand, span, .. } => synth_need(ck, *operand, *span),
+        Expr::Resume { value, span, .. } => {
+            let (value, span) = (*value, *span);
+            synth_resume(ck, value, span)
         }
         Expr::Variant {
             name, args, span, ..
         } => {
             let (name, args, span) = (*name, args.clone(), *span);
-            for &a in &args {
-                let _ty = synth(ck, a);
-            }
-            synth_variant(ck, name, span)
+            synth_variant_with_args(ck, name, &args, span)
         }
         Expr::Update { base, fields, .. } => {
             let (base, fields) = (*base, fields.clone());
@@ -219,13 +217,33 @@ fn synth_index<S: BuildHasher>(
     ck: &mut Checker<'_, S>,
     object: ExprIdx,
     index: ExprIdx,
+    span: Span,
 ) -> TypeIdx {
     let obj_ty = synth(ck, object);
-    let _idx_ty = synth(ck, index);
+    let idx_ty = synth(ck, index);
+    // Index must be an Int.
+    let int_ty = ck.named_ty(ck.ctx.well_known.ints.int);
+    ck.unify_or_report(int_ty, idx_ty, span);
     let obj_ty = ck.resolve_ty(obj_ty);
     match &ck.store.types[obj_ty] {
         Type::Array { elem, .. } => *elem,
-        _ => ck.error_ty(),
+        Type::Error => ck.error_ty(),
+        _ => {
+            let defs_vec: Vec<_> = ck.defs.iter().cloned().collect();
+            let ty_str = fmt_type(
+                obj_ty,
+                &ck.store.types,
+                &defs_vec,
+                ck.ctx.interner,
+                Some(&ck.store.unify),
+            );
+            let _d = ck.diags.report(
+                &SemaError::NotIndexable { ty: ty_str },
+                span,
+                ck.ctx.file_id,
+            );
+            ck.error_ty()
+        }
     }
 }
 
@@ -235,11 +253,44 @@ fn synth_update<S: BuildHasher>(
     fields: &[RecField],
 ) -> TypeIdx {
     let base_ty = synth(ck, base);
+    let resolved_base = ck.resolve_ty(base_ty);
+
     for field in fields {
         match field {
-            RecField::Named { value, .. } => {
-                if let Some(v) = value {
-                    let _ty = synth(ck, *v);
+            RecField::Named { name, value, span } => {
+                let (name, span) = (*name, *span);
+                let value_ty = if let Some(v) = value {
+                    synth(ck, *v)
+                } else {
+                    ck.fresh_var(span)
+                };
+                // Unify value type against the declared field type in the base record.
+                if let Type::Record {
+                    fields: rec_fields, ..
+                } = ck.store.types[resolved_base].clone()
+                {
+                    if let Some(rec_field) = rec_fields.iter().find(|f| f.name == name) {
+                        let expected_ty = rec_field.ty;
+                        ck.unify_or_report(expected_ty, value_ty, span);
+                    } else {
+                        let defs_vec: Vec<_> = ck.defs.iter().cloned().collect();
+                        let field_str = ck.ctx.interner.resolve(name);
+                        let ty_str = fmt_type(
+                            resolved_base,
+                            &ck.store.types,
+                            &defs_vec,
+                            ck.ctx.interner,
+                            Some(&ck.store.unify),
+                        );
+                        let _d = ck.diags.report(
+                            &SemaError::NoSuchField {
+                                field: Box::from(field_str),
+                                ty: ty_str,
+                            },
+                            span,
+                            ck.ctx.file_id,
+                        );
+                    }
                 }
             }
             RecField::Spread { expr, .. } => {
@@ -306,9 +357,14 @@ fn synth_let<S: BuildHasher>(
 
     let fn_pat_info = enter_fn_pat_scope(ck, fields.pat);
 
+    let prev_repr_c = ck.current_repr_c;
+    ck.current_repr_c = binding_has_repr_c(ck, fields.pat);
+
     let value_ty = match (fields.ty, fields.value) {
         (Some(ty_ann), Some(val)) => {
             let ann = lower_type_expr(ck, ty_ann);
+            let val_span = resolve::expr_span(&ck.ctx.ast.exprs[val]);
+            reject_abstract_record_construction(ck, ann, val, val_span);
             let prev_effects = ck.current_effects.clone();
             if let Type::Fn { ref effects, .. } = ck.store.types[ann]
                 && !effects.is_pure()
@@ -323,6 +379,8 @@ fn synth_let<S: BuildHasher>(
         (None, Some(val)) => synth(ck, val),
         (None, None) => ck.named_ty(ck.ctx.well_known.unit),
     };
+
+    ck.current_repr_c = prev_repr_c;
 
     if let Some((p, _)) = &fn_pat_info {
         ck.current_scope = *p;
@@ -358,9 +416,14 @@ fn synth_binding<S: BuildHasher>(ck: &mut Checker<'_, S>, fields: &LetFields) ->
 
     let fn_pat_info = enter_fn_pat_scope(ck, fields.pat);
 
+    let prev_repr_c = ck.current_repr_c;
+    ck.current_repr_c = binding_has_repr_c(ck, fields.pat);
+
     let value_ty = match (fields.ty, fields.value) {
         (Some(ty_ann), Some(val)) => {
             let ann = lower_type_expr(ck, ty_ann);
+            let val_span = resolve::expr_span(&ck.ctx.ast.exprs[val]);
+            reject_abstract_record_construction(ck, ann, val, val_span);
             let prev_effects = ck.current_effects.clone();
             if let Type::Fn { ref effects, .. } = ck.store.types[ann]
                 && !effects.is_pure()
@@ -376,6 +439,8 @@ fn synth_binding<S: BuildHasher>(ck: &mut Checker<'_, S>, fields: &LetFields) ->
         (None, None) => ck.named_ty(ck.ctx.well_known.unit),
     };
 
+    ck.current_repr_c = prev_repr_c;
+
     if let Some((p, _)) = &fn_pat_info {
         ck.current_scope = *p;
     }
@@ -390,6 +455,44 @@ fn synth_binding<S: BuildHasher>(ck: &mut Checker<'_, S>, fields: &LetFields) ->
         ck.current_scope = p;
     }
     ck.named_ty(ck.ctx.well_known.unit)
+}
+
+/// Returns true if the binding identified by `pat` has `DefFlags::REPR_C`.
+fn binding_has_repr_c<S: BuildHasher>(ck: &Checker<'_, S>, pat: PatIdx) -> bool {
+    let span = match &ck.ctx.ast.pats[pat] {
+        msc_ast::Pat::Bind { span, .. } | msc_ast::Pat::Variant { span, .. } => *span,
+        _ => return false,
+    };
+    ck.ctx
+        .pat_defs
+        .get(&span)
+        .is_some_and(|&def_id| ck.defs.get(def_id).flags.has(DefFlags::REPR_C))
+}
+
+/// Emits an error when `val` is a direct record literal and `ann` resolves to
+/// a named type that carries `DefFlags::ABSTRACT`.
+fn reject_abstract_record_construction<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
+    ann: TypeIdx,
+    val: ExprIdx,
+    span: Span,
+) {
+    if !matches!(&ck.ctx.ast.exprs[val], Expr::Record { .. }) {
+        return;
+    }
+    let resolved = ck.resolve_ty(ann);
+    if let Type::Named { def, .. } = ck.store.types[resolved] {
+        if ck.defs.get(def).flags.has(DefFlags::ABSTRACT) {
+            let name_str = ck.ctx.interner.resolve(ck.defs.get(def).name);
+            let _d = ck.diags.report(
+                &SemaError::AbstractConstruct {
+                    name: Box::from(name_str),
+                },
+                span,
+                ck.ctx.file_id,
+            );
+        }
+    }
 }
 
 /// If the binding has a function-like pattern (`go(acc, ys) := body`), wraps
@@ -963,7 +1066,19 @@ fn synth_unaryop<S: BuildHasher>(
             ck.unify_or_report(bool_ty, operand_ty, span);
             bool_ty
         }
-        UnaryOp::Neg | UnaryOp::Defer | UnaryOp::Try => operand_ty,
+        UnaryOp::Neg => operand_ty,
+        UnaryOp::Defer => {
+            // `defer expr` produces a thunk: () -> T.
+            ck.alloc_ty(Type::Fn {
+                params: vec![],
+                ret: operand_ty,
+                effects: EffectRow::PURE,
+            })
+        }
+        UnaryOp::Try => {
+            // `try expr` unwraps a Result<T, E>, returning T.
+            unwrap_result_ty(ck, operand_ty, span)
+        }
         UnaryOp::ForceUnwrap | UnaryOp::Propagate => unwrap_option_ty(ck, operand_ty, span),
     }
 }
@@ -1090,12 +1205,16 @@ fn synth_record_def<S: BuildHasher>(ck: &mut Checker<'_, S>, fields: &[RecDefFie
             binding: None,
         })
         .collect();
-    rec_fields.sort_by(|a, b| {
-        ck.ctx
-            .interner
-            .resolve(a.name)
-            .cmp(ck.ctx.interner.resolve(b.name))
-    });
+    // repr(C) records preserve declaration order; normal records sort
+    // alphabetically for canonical field indices across modules.
+    if !ck.current_repr_c {
+        rec_fields.sort_by(|a, b| {
+            ck.ctx
+                .interner
+                .resolve(a.name)
+                .cmp(ck.ctx.interner.resolve(b.name))
+        });
+    }
     ck.alloc_ty(Type::Record {
         fields: rec_fields,
         rest: None,
@@ -1181,6 +1300,152 @@ fn synth_variant<S: BuildHasher>(ck: &mut Checker<'_, S>, name: Symbol, span: Sp
     ck.fresh_var(span)
 }
 
+/// Synthesizes a variant expression, checking arg types against the variant's declared fields.
+fn synth_variant_with_args<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
+    name: Symbol,
+    args: &[ExprIdx],
+    span: Span,
+) -> TypeIdx {
+    let arg_tys: Vec<TypeIdx> = args.iter().map(|&a| synth(ck, a)).collect();
+
+    if let Some(def_id) = ck.scopes.lookup(ck.current_scope, name)
+        && ck.defs.get(def_id).kind == DefKind::Variant
+    {
+        check_variant_args(ck, def_id, &arg_tys, span)
+    } else {
+        synth_variant(ck, name, span)
+    }
+}
+
+fn check_variant_args<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
+    def_id: DefId,
+    arg_tys: &[TypeIdx],
+    span: Span,
+) -> TypeIdx {
+    if let Some(variant_ty_idx) = ck.defs.get(def_id).ty_info.ty {
+        if let Some(ret) = check_variant_fn_args(ck, variant_ty_idx, arg_tys, span) {
+            return ret;
+        }
+    }
+    get_variant_parent_type(ck, def_id, span)
+}
+
+fn check_variant_fn_args<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
+    variant_ty_idx: TypeIdx,
+    arg_tys: &[TypeIdx],
+    span: Span,
+) -> Option<TypeIdx> {
+    let resolved = ck.resolve_ty(variant_ty_idx);
+    if let Type::Fn {
+        params: declared_params,
+        ret,
+        ..
+    } = ck.store.types[resolved].clone()
+    {
+        if arg_tys.len() == declared_params.len() {
+            for (&arg_ty, &param_ty) in arg_tys.iter().zip(declared_params.iter()) {
+                ck.unify_or_report(param_ty, arg_ty, span);
+            }
+        } else {
+            let _d = ck.diags.report(
+                &SemaError::ArityMismatch {
+                    expected: declared_params.len(),
+                    found: arg_tys.len(),
+                },
+                span,
+                ck.ctx.file_id,
+            );
+        }
+        return Some(ret);
+    }
+    None
+}
+
+fn get_variant_parent_type<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
+    def_id: DefId,
+    span: Span,
+) -> TypeIdx {
+    if let Some(parent_id) = ck.defs.get(def_id).parent {
+        if let Some(ty) = ck.defs.get(parent_id).ty_info.ty {
+            return ty;
+        }
+        return ck.named_ty(parent_id);
+    }
+    ck.fresh_var(span)
+}
+
+/// Checks a `need op(...)` effect operation call.
+///
+/// `need` performs an effect operation. After synthesizing the operand, we look
+/// up the callee name in the AST to find the matching effect op declaration and
+/// return its declared return type. If the effect op cannot be found, the
+/// operand type is returned as a fallback (suppresses cascading errors).
+fn synth_need<S: BuildHasher>(ck: &mut Checker<'_, S>, operand: ExprIdx, _span: Span) -> TypeIdx {
+    let operand_ty = synth(ck, operand);
+
+    let Some(op_name) = extract_need_op_name(ck, operand) else {
+        return operand_ty;
+    };
+
+    find_effect_op_return_type(ck, op_name).unwrap_or(operand_ty)
+}
+
+fn extract_need_op_name<S: BuildHasher>(ck: &Checker<'_, S>, operand: ExprIdx) -> Option<Symbol> {
+    match &ck.ctx.ast.exprs[operand] {
+        AstExpr::Call { callee, .. } => match &ck.ctx.ast.exprs[*callee] {
+            AstExpr::Name { name_ref, .. } => Some(ck.ctx.ast.name_refs[*name_ref].name),
+            _ => None,
+        },
+        AstExpr::Name { name_ref, .. } => Some(ck.ctx.ast.name_refs[*name_ref].name),
+        _ => None,
+    }
+}
+
+fn find_effect_op_return_type<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
+    op_name: Symbol,
+) -> Option<TypeIdx> {
+    let n = ck.ctx.ast.exprs.len();
+    for i in 0..n {
+        let idx = Idx::from_raw(u32::try_from(i).expect("expr index in range"));
+        if let AstExpr::Effect { ops, .. } = &ck.ctx.ast.exprs[idx] {
+            if let Some(op) = ops.iter().find(|op| op.name == op_name) {
+                let declared_ty = lower_type_expr(ck, op.ty);
+                let resolved = ck.resolve_ty(declared_ty);
+                if let Type::Fn { ret, .. } = ck.store.types[resolved].clone() {
+                    return Some(ret);
+                }
+                return Some(declared_ty);
+            }
+        }
+    }
+    None
+}
+
+/// Checks a `resume` expression.
+///
+/// `resume` is only valid inside a handler op body. Outside a handler, it is an error.
+fn synth_resume<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
+    value: Option<ExprIdx>,
+    span: Span,
+) -> TypeIdx {
+    if !ck.in_handler {
+        let _d = ck
+            .diags
+            .report(&SemaError::ResumeOutsideHandler, span, ck.ctx.file_id);
+    }
+    if let Some(v) = value {
+        synth(ck, v)
+    } else {
+        ck.named_ty(ck.ctx.well_known.unit)
+    }
+}
+
 fn check_cast_safety<S: BuildHasher>(
     ck: &mut Checker<'_, S>,
     from_ty: TypeIdx,
@@ -1263,26 +1528,105 @@ fn synth_handle<S: BuildHasher>(
     body: ExprIdx,
 ) -> TypeIdx {
     let _eff_ty = lower_type_expr(ck, effect_ty);
+    let effect_op_types = collect_effect_op_types(ck, effect_ty);
+
+    let prev_in_handler = ck.in_handler;
+    ck.in_handler = true;
+
     for op in ops {
-        let parent = ck.current_scope;
-        ck.current_scope = ck.scopes.push_child(parent);
-        for param in &op.params {
-            let param_ty = if let Some(ty) = param.ty {
-                lower_type_expr(ck, ty)
-            } else {
-                ck.fresh_var(param.span)
-            };
-            let id = ck
-                .defs
-                .alloc(param.name, DefKind::Param, param.span, ck.ctx.file_id);
-            ck.defs.get_mut(id).ty_info.ty = Some(param_ty);
-            let _prev = ck.scopes.define(ck.current_scope, param.name, id);
-        }
-        let _op_ty = synth(ck, op.body);
-        ck.current_scope = parent;
+        synth_handler_op(ck, op, &effect_op_types);
     }
+
+    ck.in_handler = prev_in_handler;
     check_handler_op_coverage(ck, effect_ty, ops);
     synth(ck, body)
+}
+
+fn synth_handler_op<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
+    op: &HandlerOp,
+    effect_op_types: &HashMap<Symbol, TypeIdx>,
+) {
+    let parent = ck.current_scope;
+    ck.current_scope = ck.scopes.push_child(parent);
+
+    let declared_params = get_handler_declared_params(ck, op.name, effect_op_types);
+    synth_handler_params(ck, op, declared_params.as_ref());
+
+    let _op_ty = synth(ck, op.body);
+    ck.current_scope = parent;
+}
+
+fn synth_handler_params<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
+    op: &HandlerOp,
+    declared_params: Option<&Vec<TypeIdx>>,
+) {
+    for (i, param) in op.params.iter().enumerate() {
+        let param_ty = if let Some(ty) = param.ty {
+            lower_type_expr(ck, ty)
+        } else {
+            ck.fresh_var(param.span)
+        };
+        if let Some(declared) = declared_params.as_ref().and_then(|v| v.get(i).copied()) {
+            ck.unify_or_report(declared, param_ty, param.span);
+        }
+        let id = ck
+            .defs
+            .alloc(param.name, DefKind::Param, param.span, ck.ctx.file_id);
+        ck.defs.get_mut(id).ty_info.ty = Some(param_ty);
+        let _prev = ck.scopes.define(ck.current_scope, param.name, id);
+    }
+}
+
+fn get_handler_declared_params<S: BuildHasher>(
+    ck: &Checker<'_, S>,
+    op_name: Symbol,
+    effect_op_types: &HashMap<Symbol, TypeIdx>,
+) -> Option<Vec<TypeIdx>> {
+    effect_op_types.get(&op_name).and_then(|&decl_ty_idx| {
+        let resolved = ck.resolve_ty(decl_ty_idx);
+        if let Type::Fn { params, .. } = ck.store.types[resolved].clone() {
+            Some(params)
+        } else {
+            None
+        }
+    })
+}
+
+/// Returns a map from effect op name to the declared type index for each op in the effect
+/// referenced by `effect_ty_expr`. Used by `synth_handle` to unify handler param types.
+fn collect_effect_op_types<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
+    effect_ty_expr: ExprIdx,
+) -> HashMap<Symbol, TypeIdx> {
+    let effect_name = match &ck.ctx.ast.exprs[effect_ty_expr] {
+        AstExpr::Name { name_ref, .. } => ck.ctx.ast.name_refs[*name_ref].name,
+        AstExpr::TypeApp { callee, .. } => match &ck.ctx.ast.exprs[*callee] {
+            AstExpr::Name { name_ref, .. } => ck.ctx.ast.name_refs[*name_ref].name,
+            _ => return HashMap::new(),
+        },
+        _ => return HashMap::new(),
+    };
+
+    let n = ck.ctx.ast.exprs.len();
+    for i in 0..n {
+        let idx = Idx::from_raw(u32::try_from(i).expect("expr index in range"));
+        if let AstExpr::Effect { name, ops, .. } = &ck.ctx.ast.exprs[idx]
+            && *name == effect_name
+        {
+            let op_types: Vec<(Symbol, TypeIdx)> = ops
+                .iter()
+                .map(|op| {
+                    let op_name = op.name;
+                    let ty_idx = lower_type_expr(ck, op.ty);
+                    (op_name, ty_idx)
+                })
+                .collect();
+            return op_types.into_iter().collect();
+        }
+    }
+    HashMap::new()
 }
 
 // check_handler_op_coverage moved to checker/dispatch.rs

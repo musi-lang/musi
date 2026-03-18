@@ -1,4 +1,4 @@
-// Each field maps 1:1 to a compiler flag — bools are the natural representation.
+// Each field maps 1:1 to a compiler flag - bools are the natural representation.
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Default)]
 pub struct SemaOptions {

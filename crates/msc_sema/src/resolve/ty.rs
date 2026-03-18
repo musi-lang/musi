@@ -25,7 +25,7 @@ impl Resolver<'_> {
                 }
             }
             Expr::Field { object, .. } => {
-                // Qualified type: M.Type — resolve the module name.
+                // Qualified type: M.Type - resolve the module name.
                 // The field name itself is not resolved here (handled by checker).
                 self.resolve_type_expr(object);
             }

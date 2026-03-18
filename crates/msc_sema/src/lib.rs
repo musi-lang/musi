@@ -15,6 +15,7 @@
 //! let result = msc_sema::analyze(&module, &mut interner, file_id, &mut diags);
 //! ```
 
+pub mod attr_util;
 pub(crate) mod checker;
 pub mod consistency;
 pub mod def;
@@ -487,7 +488,6 @@ fn analyze_emit_unused_warnings(
                     | DefKind::Variant
                     | DefKind::Type
                     | DefKind::Law
-                    | DefKind::Class
                     | DefKind::ForeignFn
             )
         {

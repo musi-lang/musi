@@ -4,7 +4,9 @@ use std::collections::HashSet;
 
 use msc_ast::ExprIdx;
 use msc_ast::decl::{ClassMember, EffectOp, ForeignDecl};
-use msc_ast::expr::{Arg, ArrayElem, Expr, MatchArm, Param, PwArm, PwGuard, RecField};
+use msc_ast::expr::{
+    Arg, ArrayElem, Expr, InstanceBody, MatchArm, Param, PwArm, PwGuard, RecField,
+};
 use msc_ast::ty_param::{Constraint, TyParam};
 use msc_ast::util::collect_ty_var_nodes;
 use msc_shared::{Span, Symbol};
@@ -324,7 +326,11 @@ impl Resolver<'_> {
             } => {
                 self.collect_free_match_arms(*scrutinee, arms, free, seen);
             }
-            Expr::Class { members, .. } | Expr::Instance { members, .. } => {
+            Expr::Class { members, .. }
+            | Expr::Instance {
+                body: InstanceBody::Manual { members },
+                ..
+            } => {
                 self.collect_free_class_members(members, free, seen);
             }
             Expr::Handle { body, ops, .. } => {

@@ -8,6 +8,37 @@ use msc_shared::{FileId, Span, Symbol};
 
 use crate::types::{LawObligation, Obligation, TypeIdx};
 
+/// Bitfield of behavioural flags for a definition.
+///
+/// Kept as a thin `u8` wrapper so adding flags is a non-breaking change.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct DefFlags(pub u8);
+
+impl DefFlags {
+    /// Function should be inlined at every call site.
+    pub const INLINE: u8 = 0x01;
+    /// Function must never be inlined.
+    pub const INLINE_NEVER: u8 = 0x02;
+    /// Type may not be constructed directly outside the defining module.
+    pub const ABSTRACT: u8 = 0x04;
+    /// Type uses C-compatible memory layout (`#[repr("C")]`).
+    pub const REPR_C: u8 = 0x08;
+    /// Type uses packed layout (`#[repr("packed")]`).
+    pub const REPR_PACKED: u8 = 0x10;
+
+    /// Returns `true` when the given flag constant is set.
+    #[must_use]
+    pub const fn has(self, flag: u8) -> bool {
+        self.0 & flag != 0
+    }
+
+    /// Returns a copy with the given flag set.
+    #[must_use]
+    pub const fn with(self, flag: u8) -> Self {
+        Self(self.0 | flag)
+    }
+}
+
 /// A unique identifier for a definition (binding, function, type, variant, ...).
 ///
 /// `DefId`s are allocated monotonically; `DefId(n)` corresponds to index `n`
@@ -88,6 +119,11 @@ pub struct DefInfo {
     pub lang_item: Option<Symbol>,
     /// Law obligations for class definitions (empty for non-class defs).
     pub law_obligations: Vec<LawObligation>,
+    /// Behavioural flags: inline, inline-never, abstract.
+    pub flags: DefFlags,
+    /// If this definition carries `#[deprecated]` or `#[deprecated := "msg"]`,
+    /// the deprecation message symbol.
+    pub deprecated: Option<Symbol>,
 }
 
 /// Registry of all definitions encountered during analysis.
@@ -121,6 +157,8 @@ impl DefTable {
             param_mode: None,
             lang_item: None,
             law_obligations: vec![],
+            flags: DefFlags(0),
+            deprecated: None,
         });
         id
     }

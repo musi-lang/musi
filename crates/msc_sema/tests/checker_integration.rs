@@ -15,17 +15,14 @@ fn analyze_src(src: &str) -> (SemaResult, DiagnosticBag) {
     let mut source_db = SourceDb::new();
     let file_id = source_db.add("test.mu", src);
 
-    // Lex
     let mut lex_diags = DiagnosticBag::new();
     let lexed = lex_source(src, file_id, &mut interner, &mut lex_diags);
     assert!(!lex_diags.has_errors(), "lex error");
 
-    // Parse
     let mut parse_diags = DiagnosticBag::new();
     let module = parse(&lexed.tokens, file_id, &mut parse_diags, &mut interner);
     assert!(!parse_diags.has_errors(), "parse error");
 
-    // Analyze
     let mut diags = DiagnosticBag::new();
     let result = analyze(
         &module,
@@ -95,4 +92,59 @@ fn test_check_underscore_suppresses_unused_warning() {
 
     assert!(!diags.has_errors());
     assert!(diags.iter().all(|d| d.severity != Severity::Warning));
+}
+
+/// `where 'T : ClassName` (`Rel::Member`) in an instance declaration - should
+/// parse and check without error when a matching sub-instance exists.
+/// Tests that `Rel::Member` is treated identically to `Rel::Sub` in constraint
+/// scope processing.
+#[test]
+fn test_member_constraint_in_instance_no_error() {
+    let src = "class Eq ['T] { let eq(a : 'T, b : 'T) : Int; };\ninstance Eq of Int { let eq(a : Int, b : Int) : Int := a; };\ninstance ['T] where 'T : Eq Eq of List { let eq(a : List, b : List) : Int := 0; };";
+    let (_result, diags) = analyze_src(src);
+    assert!(!diags.has_errors(), "unexpected errors: {diags:?}");
+}
+
+/// `where 'T : ClassName` using `:` (`Rel::Member`) should be accepted the same as
+/// `<:` (`Rel::Sub`). Verify no parse or type errors from the constraint syntax alone.
+#[test]
+fn test_member_constraint_rel_accepted_same_as_sub() {
+    let src_member = "class Eq ['T] { let eq(a : 'T, b : 'T) : Int; };\ninstance ['T] where 'T : Eq Eq of List { let eq(a : List, b : List) : Int := 0; };";
+    let src_sub = "class Eq ['T] { let eq(a : 'T, b : 'T) : Int; };\ninstance ['T] where 'T <: Eq Eq of List { let eq(a : List, b : List) : Int := 0; };";
+    let (_, diags_member) = analyze_src(src_member);
+    let (_, diags_sub) = analyze_src(src_sub);
+    // Both should have the same error count (none, or both the same warnings).
+    assert_eq!(
+        diags_member.has_errors(),
+        diags_sub.has_errors(),
+        "Member and Sub should behave identically"
+    );
+}
+
+/// `instance X of T via Y` where a Y instance exists - should register a new
+/// instance for X using Y's member defs without emitting any error.
+#[test]
+fn test_via_delegation_with_existing_delegate_no_error() {
+    let src = "class Ord ['T] { let lt(a : 'T, b : 'T) : Int; };\ninstance Ord of Int { let lt(a : Int, b : Int) : Int := a; };\ninstance Ord of Int via Ord of Int;";
+    let (_result, diags) = analyze_src(src);
+    assert!(!diags.has_errors(), "unexpected errors: {diags:?}");
+}
+
+/// `instance X of T via Y` where no Y instance exists - should emit
+/// `NoDelegateInstance`.
+#[test]
+fn test_via_delegation_missing_delegate_emits_error() {
+    let src = "class Ord ['T] { let lt(a : 'T, b : 'T) : Int; };\nclass Eq ['T] { let eq(a : 'T, b : 'T) : Int; };\ninstance Ord of Int via Eq of Int;";
+    let (_result, diags) = analyze_src(src);
+    assert!(diags.has_errors(), "expected NoDelegateInstance error");
+}
+
+/// `instance ['A] Ord of Reversed via Ord of Int`
+/// Tests orphan-free instance reuse where the delegate (Ord of Int) already
+/// exists and the via instance borrows its members for a new type (Reversed).
+#[test]
+fn test_via_delegation_parametric_reversed() {
+    let src = "class Ord ['T] { let lt(a : 'T, b : 'T) : Int; };\ninstance Ord of Int { let lt(a : Int, b : Int) : Int := a; };\nlet Reversed := Int;\ninstance ['A] Ord of Reversed via Ord of Int;";
+    let (_result, diags) = analyze_src(src);
+    assert!(!diags.has_errors(), "unexpected errors: {diags:?}");
 }

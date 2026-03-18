@@ -91,7 +91,7 @@ fn structural_consistency() {
         args: vec![],
     });
 
-    // (Any) -> Int ~ (Bool) -> Int — param positions are Any, so consistent
+    // (Any) -> Int ~ (Bool) -> Int - param positions are Any, so consistent
     let fn_any_int = types.alloc(Type::Fn {
         params: vec![any],
         ret: int,

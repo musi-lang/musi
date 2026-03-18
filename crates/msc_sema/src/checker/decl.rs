@@ -5,7 +5,7 @@ use std::hash::BuildHasher;
 
 use msc_ast::ExprIdx;
 use msc_ast::decl::{ClassMember, ForeignDecl};
-use msc_ast::expr::{Expr, Param};
+use msc_ast::expr::{Expr, InstanceBody, Param};
 use msc_ast::ty_param::TyParam;
 use msc_ast::util::collect_ty_var_nodes;
 use msc_shared::{Idx, Span, Symbol};
@@ -305,10 +305,17 @@ pub fn check_decl<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) {
         Expr::Instance {
             target,
             params,
-            members,
+            body,
             span,
             ..
-        } => check_instance(ck, target, params, &members, span),
+        } => match body {
+            InstanceBody::Manual { members } => {
+                check_instance(ck, target, params, &members, span);
+            }
+            InstanceBody::Via { delegate, .. } => {
+                check_instance_via(ck, target, params, delegate, span);
+            }
+        },
         Expr::Effect { ops, .. } => {
             for op in &ops {
                 let _op_ty = lower_type_expr(ck, op.ty);
@@ -340,6 +347,128 @@ pub fn check_decl<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) {
             }
         }
         _ => {}
+    }
+}
+
+fn extract_class_name_from_expr<S: BuildHasher>(
+    ck: &Checker<'_, S>,
+    expr: ExprIdx,
+) -> Option<Symbol> {
+    match &ck.ctx.ast.exprs[expr] {
+        Expr::Name { name_ref, .. } => Some(ck.ctx.ast.name_refs[*name_ref].name),
+        Expr::TypeApp { callee, .. } => {
+            if let Expr::Name { name_ref, .. } = &ck.ctx.ast.exprs[*callee] {
+                Some(ck.ctx.ast.name_refs[*name_ref].name)
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
+fn check_instance_via<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
+    target: ExprIdx,
+    params: Vec<TyParam>,
+    delegate: ExprIdx,
+    span: Span,
+) {
+    // Extract names BEFORE entering the ty-param scope. Both `target` and
+    // `delegate` are class-application expressions like `Ord of Int` or `Ord of 'A`.
+    // The class name is the callee; the first argument is the concrete type.
+    let (target_name_opt, first_arg_opt) = match &ck.ctx.ast.exprs[target] {
+        Expr::Name { name_ref, .. } => (Some(ck.ctx.ast.name_refs[*name_ref].name), None),
+        Expr::TypeApp { callee, args, .. } => {
+            let name = if let Expr::Name { name_ref, .. } = &ck.ctx.ast.exprs[*callee] {
+                Some(ck.ctx.ast.name_refs[*name_ref].name)
+            } else {
+                None
+            };
+            (name, args.first().copied())
+        }
+        _ => (None, None),
+    };
+
+    let delegate_name_opt = extract_class_name_from_expr(ck, delegate);
+
+    let Some(target_name) = target_name_opt else {
+        return;
+    };
+
+    let target_name_str = ck.ctx.interner.resolve(target_name).to_owned();
+    let delegate_name_str = delegate_name_opt.map(|n| ck.ctx.interner.resolve(n).to_owned());
+
+    let Some(delegate_name) = delegate_name_opt else {
+        // Delegate expression has no resolvable class name - resolver will have
+        // reported any undefined-name error; skip silently here.
+        return;
+    };
+
+    // Mirror `check_instance`: enter a ty-param scope with all names from the
+    // target expression (including concrete names like `Ord` and `Int`). This
+    // ensures `class_def` is a freshly-allocated DefId consistent with how
+    // future `find_instance_method` / `resolve_obligations` calls will look
+    // things up (they also go through the same scope machinery).
+    let mut all_params: Vec<TyParam> = params;
+    collect_ty_var_nodes(target, ck.ctx.ast, &mut all_params);
+
+    let parent = if all_params.is_empty() {
+        None
+    } else {
+        let (p, _ids) = ck.enter_ty_param_scope(&all_params);
+        Some(p)
+    };
+
+    let class_def_opt = ck.scopes.lookup(ck.current_scope, target_name);
+    // delegate_class_def_opt is only used to confirm the class is in scope;
+    // the actual instance search uses name matching (see comment below).
+    let delegate_class_def_opt = ck.scopes.lookup(ck.current_scope, delegate_name);
+
+    if let (Some(class_def), Some(_)) = (class_def_opt, delegate_class_def_opt) {
+        let target_ty = if let Some(first_arg) = first_arg_opt {
+            lower_type_expr(ck, first_arg)
+        } else {
+            ck.fresh_var(span)
+        };
+
+        // Search by class name rather than DefId: `check_instance` allocates
+        // a fresh def for the class name inside its ty-param scope, so the
+        // `class` field in each `InstanceInfo` is the name's DefId from THAT
+        // scope allocation, which changes across calls. Matching by the
+        // interned name symbol is stable.
+        let delegate_members_opt = ck
+            .store
+            .instances
+            .iter()
+            .find(|inst| ck.defs.get(inst.class).name == delegate_name)
+            .map(|inst| inst.members.clone());
+
+        if let Some(delegate_members) = delegate_members_opt {
+            ck.store.instances.push(InstanceInfo {
+                class: class_def,
+                target: target_ty,
+                params: vec![],
+                constraints: vec![],
+                members: delegate_members,
+                span,
+            });
+        } else {
+            let _d = ck.diags.report(
+                &SemaError::NoDelegateInstance {
+                    class: Box::from(target_name_str.as_str()),
+                    delegate: Box::from(delegate_name_str.as_deref().unwrap_or("<unknown>")),
+                },
+                span,
+                ck.ctx.file_id,
+            );
+        }
+    }
+    // If one or both class names couldn't be resolved, the resolver will have
+    // reported undefined-name errors; skip silently here.
+
+    if let Some(p) = parent {
+        ck.current_scope = p;
     }
 }
 

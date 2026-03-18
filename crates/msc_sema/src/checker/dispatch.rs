@@ -87,7 +87,7 @@ pub(super) fn enter_constraint_scope<S: BuildHasher>(
     let mut new_obligations = prev.clone();
 
     for constraint in constraints {
-        if constraint.rel != Rel::Sub {
+        if constraint.rel == Rel::Super {
             continue;
         }
         let bound_name = match &ck.ctx.ast.exprs[constraint.bound] {
