@@ -1,0 +1,20 @@
+[package]
+name = "msc_shared"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Shared infrastructure for the Musi compiler"
+readme.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+keywords = ["compiler", "musi", "infrastructure"]
+categories = ["development-tools"]
+publish.workspace = true
+
+[dependencies]
+intaglio = { workspace = true }
+memchr = { workspace = true }
+
+[lints]
+workspace = true
