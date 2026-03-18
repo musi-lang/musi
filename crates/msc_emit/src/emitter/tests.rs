@@ -6,7 +6,7 @@ use msc_parse::parse;
 use msc_sema::analyze;
 use msc_shared::{DiagnosticBag, FileId, Interner};
 
-use crate::{emit, EmitOutput};
+use crate::{EmitOutput, emit};
 
 fn compile(source: &str) -> Result<EmitOutput, String> {
     let mut interner = Interner::new();

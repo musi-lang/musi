@@ -2,8 +2,8 @@
 
 use std::path::Path;
 
-use msc_resolve::ResolverConfig;
 use msc_manifest::MusiManifest;
+use msc_resolve::ResolverConfig;
 
 /// Builds a resolver configuration from the project root and optional manifest.
 #[must_use]

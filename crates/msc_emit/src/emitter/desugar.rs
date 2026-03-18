@@ -6,8 +6,8 @@ use msc_ast::lit::FStrPart;
 
 use crate::const_pool::ConstValue;
 use crate::error::EmitError;
-use msc_bc::Opcode;
 use msc_ast::ExprIdx;
+use msc_bc::Opcode;
 
 use super::super::emitter::Emitter;
 use super::FnCtx;

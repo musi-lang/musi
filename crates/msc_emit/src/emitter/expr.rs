@@ -1,6 +1,5 @@
 //! Expression emission: tree-walks AST expressions, leaving results on the stack.
 
-use msc_bc::Opcode;
 use msc_ast::ExprIdx;
 use msc_ast::Pat;
 use msc_ast::PatIdx;
@@ -9,6 +8,7 @@ use msc_ast::expr::{
     PwGuard, RecField, TypeCheckKind, UnaryOp,
 };
 use msc_ast::lit::Lit;
+use msc_bc::Opcode;
 use msc_sema::DefId;
 use msc_sema::TypeIdx;
 use msc_sema::def::DefKind;

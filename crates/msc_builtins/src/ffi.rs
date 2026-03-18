@@ -10,9 +10,9 @@
 //! effect gates user-level access to FFI.
 
 use std::collections::HashMap;
-use std::ffi::{c_void, CString};
+use std::ffi::{CString, c_void};
 
-use libffi::middle::{arg, Arg, Cif, CodePtr, Type};
+use libffi::middle::{Arg, Cif, CodePtr, Type, arg};
 use libloading::Library;
 use msc_vm::{Heap, HostFunctions, LoadedForeignFn, Value, VmError};
 

@@ -8,7 +8,7 @@ use msc_shared::{Interner, Symbol};
 use msc_bc::crc32_slice;
 
 use crate::const_pool::{ConstPool, ConstValue};
-use crate::emitter::{write_function_pool, FnBytecode};
+use crate::emitter::{FnBytecode, write_function_pool};
 use crate::error::EmitError;
 use crate::type_pool::TypePool;
 

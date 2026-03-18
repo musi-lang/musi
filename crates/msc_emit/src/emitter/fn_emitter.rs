@@ -7,8 +7,8 @@ use std::collections::HashMap;
 
 use crate::error::EmitError;
 use msc_bc::{
-    encode_i32, encode_i8, encode_no_operand, encode_u16, encode_u32, encode_u8, encode_wid_u16,
-    pack_id_arity, pack_tag_arity_u16, Opcode,
+    Opcode, encode_i8, encode_i32, encode_no_operand, encode_u8, encode_u16, encode_u32,
+    encode_wid_u16, pack_id_arity, pack_tag_arity_u16,
 };
 
 /// Fixup record: a forward jump that needs patching once we know the label target.
