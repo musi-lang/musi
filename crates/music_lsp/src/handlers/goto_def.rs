@@ -6,9 +6,8 @@ use music_lex::TokenKind;
 use music_sema::{DefKind, SemaResult};
 use music_shared::{Idx, Span, Symbol};
 
-use crate::analysis::{
-    AnalyzedDoc, def_at_cursor, def_at_offset, field_at_cursor, position_to_offset, span_to_range,
-};
+use crate::analysis::{def_at_cursor, def_at_offset, field_at_cursor, AnalyzedDoc};
+use crate::to_proto::{position_to_offset, span_to_range, span_to_range_raw};
 
 /// Return the definition location for the symbol under the cursor.
 pub fn goto_definition(
@@ -84,7 +83,7 @@ fn resolve_stdlib_def(
             continue;
         };
 
-        let range = dep_source_span_to_range(def_span, &dep_src.source);
+        let range = span_to_range_raw(def_span, &dep_src.source);
 
         return Some(GotoDefinitionResponse::Scalar(Location {
             uri: file_uri,
@@ -166,33 +165,6 @@ fn goto_field(
     }
 
     None
-}
-
-fn dep_source_span_to_range(span: Span, source: &str) -> Range {
-    let start = byte_offset_to_position(span.start, source);
-    let end = byte_offset_to_position(span.end(), source);
-    Range { start, end }
-}
-
-fn byte_offset_to_position(offset: u32, source: &str) -> Position {
-    let offset = (offset as usize).min(source.len());
-    let mut line = 0u32;
-    let mut col = 0u32;
-    for (i, ch) in source.char_indices() {
-        if i >= offset {
-            break;
-        }
-        if ch == '\n' {
-            line += 1;
-            col = 0;
-        } else {
-            col += 1;
-        }
-    }
-    Position {
-        line,
-        character: col,
-    }
 }
 
 /// If the cursor is on an import expression (either the `import` keyword or the

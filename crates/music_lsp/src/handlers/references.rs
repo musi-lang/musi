@@ -5,10 +5,8 @@ use lsp_types::{
 };
 use music_shared::Span;
 
-use crate::analysis::{
-    AnalyzedDoc, def_at_cursor, def_at_offset, expr_span, find_name_token, position_to_offset,
-    span_to_range,
-};
+use crate::analysis::{AnalyzedDoc, def_at_cursor, def_at_offset, expr_span, find_name_token};
+use crate::to_proto::{position_to_offset, span_to_range};
 
 /// Find all references to the symbol under the cursor (single-file).
 pub fn find_references(

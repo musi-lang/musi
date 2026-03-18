@@ -6,8 +6,8 @@ use lsp_types::{DocumentSymbol, DocumentSymbolResponse, SymbolKind};
 use music_sema::{DefId, DefKind, Type};
 use music_shared::Span;
 
-use crate::analysis::{AnalyzedDoc, def_name_span, span_to_range};
-use crate::hover::fmt_type_lsp;
+use crate::analysis::{def_name_span, AnalyzedDoc};
+use crate::to_proto::{fmt_type_lsp, span_to_range};
 
 /// Produce the outline symbols for a document.
 pub fn document_symbols(doc: &AnalyzedDoc) -> DocumentSymbolResponse {

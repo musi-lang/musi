@@ -4,9 +4,8 @@ use lsp_types::{GotoDefinitionResponse, Location, Position, Url};
 use music_sema::Type;
 use music_shared::Span;
 
-use crate::analysis::{
-    AnalyzedDoc, def_at_cursor, def_at_offset, position_to_offset, span_to_range,
-};
+use crate::analysis::{def_at_cursor, def_at_offset, AnalyzedDoc};
+use crate::to_proto::{position_to_offset, span_to_range};
 
 pub fn goto_type_definition(
     doc: &AnalyzedDoc,

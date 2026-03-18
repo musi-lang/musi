@@ -12,6 +12,10 @@ keywords = ["lsp", "musi", "language-server"]
 categories = ["development-tools"]
 publish.workspace = true
 
+[lib]
+name = "music_lsp"
+path = "src/lib.rs"
+
 [[bin]]
 name = "music_lsp"
 path = "src/main.rs"

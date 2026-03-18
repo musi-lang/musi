@@ -5,7 +5,8 @@ use music_ast::Expr;
 use music_lex::TriviaKind;
 use music_shared::Idx;
 
-use crate::analysis::{AnalyzedDoc, offset_to_position};
+use crate::analysis::AnalyzedDoc;
+use crate::to_proto::offset_to_position;
 
 pub fn folding_ranges(doc: &AnalyzedDoc) -> Vec<FoldingRange> {
     let mut ranges = vec![];

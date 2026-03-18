@@ -7,8 +7,8 @@ use music_ast::{Expr, ExprIdx};
 use music_sema::Type;
 use music_shared::Idx;
 
-use crate::analysis::{AnalyzedDoc, expr_span, position_to_offset};
-use crate::hover::fmt_type_lsp;
+use crate::analysis::{AnalyzedDoc, expr_span};
+use crate::to_proto::{fmt_type_lsp, position_to_offset};
 
 pub fn signature_help(doc: &AnalyzedDoc, position: Position) -> Option<SignatureHelp> {
     let sema = doc.sema.as_ref()?;

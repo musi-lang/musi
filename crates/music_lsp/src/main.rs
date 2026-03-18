@@ -1,18 +1,3 @@
-mod analysis;
-mod backend;
-mod code_actions;
-mod code_lens;
-mod completion;
-mod document_symbols;
-mod folding_ranges;
-mod goto_def;
-mod goto_type_def;
-mod hover;
-mod inlay_hints;
-mod references;
-mod semantic_tokens;
-mod signature_help;
-
 use async_lsp::MainLoop;
 use async_lsp::concurrency::ConcurrencyLayer;
 use async_lsp::panic::CatchUnwindLayer;
@@ -20,7 +5,7 @@ use async_lsp::router::Router;
 use async_lsp::server::LifecycleLayer;
 use tower::ServiceBuilder;
 
-use backend::MusiBackend;
+use music_lsp::backend::MusiBackend;
 
 #[tokio::main]
 async fn main() {

@@ -6,14 +6,15 @@ use music_ast::expr::{BindKind, LetFields, Param, ParamMode};
 use music_ast::pat::Pat;
 use music_ast::{AstArenas, Expr, PatIdx};
 use music_sema::def::DefInfo;
-use music_sema::types::{self, Type, TypeIdx};
-use music_sema::{DefKind, SemaResult};
+use music_sema::types::Type;
+use music_sema::{DefKind, SemaResult, TypeIdx};
 use music_shared::Idx;
 
 use crate::analysis::{
     AnalyzedDoc, def_at_cursor, def_at_offset, def_name_span, expr_span,
-    extract_doc_comments_from_source, field_at_cursor, position_to_offset, span_to_range,
+    extract_doc_comments_from_source, field_at_cursor,
 };
+use crate::to_proto::{position_to_offset, span_to_range};
 
 /// Produce a hover response for the given cursor position.
 pub fn hover(doc: &AnalyzedDoc, position: Position) -> Option<Hover> {
@@ -413,14 +414,4 @@ fn hover_field(doc: &AnalyzedDoc, sema: &SemaResult, offset: u32) -> Option<Hove
     })
 }
 
-/// Format a type for LSP display (hover, inlay hints, etc.).
-pub fn fmt_type_lsp(ty: TypeIdx, doc: &AnalyzedDoc, sema: &SemaResult) -> String {
-    types::fmt_type(
-        ty,
-        &sema.types,
-        &sema.defs,
-        &doc.interner,
-        Some(&sema.unify),
-    )
-    .to_string()
-}
+pub use crate::to_proto::fmt_type_lsp;

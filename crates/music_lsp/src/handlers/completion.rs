@@ -6,7 +6,7 @@ use lsp_types::{CompletionItem, CompletionItemKind};
 use music_sema::{DefKind, Type};
 
 use crate::analysis::{AnalyzedDoc, expr_span};
-use crate::hover;
+use crate::to_proto::fmt_type_lsp;
 
 /// Produce completion items for the given document, optional trigger character, and cursor offset.
 ///
@@ -57,7 +57,7 @@ fn dot_completions(doc: &AnalyzedDoc, offset: u32) -> Option<Vec<CompletionItem>
                 .iter()
                 .filter_map(|field| {
                     let name = doc.interner.try_resolve(field.name)?;
-                    let detail = hover::fmt_type_lsp(field.ty, doc, sema);
+                    let detail = fmt_type_lsp(field.ty, doc, sema);
                     Some(CompletionItem {
                         label: name.to_owned(),
                         kind: Some(CompletionItemKind::FIELD),
@@ -120,7 +120,7 @@ fn global_completions(doc: &AnalyzedDoc) -> Vec<CompletionItem> {
                 DefKind::Import => unreachable!(),
             };
 
-            let detail = def.ty_info.ty.map(|ty| hover::fmt_type_lsp(ty, doc, sema));
+            let detail = def.ty_info.ty.map(|ty| fmt_type_lsp(ty, doc, sema));
 
             items.push(CompletionItem {
                 label: name.to_owned(),

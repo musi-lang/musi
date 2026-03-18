@@ -10,11 +10,12 @@ use lsp_types::*;
 
 use std::path::PathBuf;
 
-use crate::analysis::{AnalyzedDoc, analyze_doc, analyze_doc_multi, position_to_offset};
-use crate::{
+use crate::analysis::{AnalyzedDoc, analyze_doc, analyze_doc_multi};
+use crate::handlers::{
     code_actions, code_lens, completion, document_symbols, folding_ranges, goto_def, goto_type_def,
     hover, inlay_hints, references, semantic_tokens, signature_help,
 };
+use crate::to_proto::position_to_offset;
 
 pub struct MusiBackend {
     client: ClientSocket,

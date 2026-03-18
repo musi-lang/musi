@@ -11,7 +11,8 @@ use music_lex::TokenKind;
 use music_sema::{DefInfo, DefKind, SemaResult, Type, TypeIdx};
 use music_shared::{FileId, Interner, SourceDb, Span};
 
-use crate::analysis::{AnalyzedDoc, expr_span, find_name_token, offset_to_position};
+use crate::analysis::{AnalyzedDoc, expr_span, find_name_token};
+use crate::to_proto::offset_to_position;
 
 pub const TT_TYPE: u32 = 0;
 pub const TT_TYPE_PARAM: u32 = 1;
