@@ -297,8 +297,9 @@ pub fn emit_expr_tail(
 ) -> Result<bool, EmitError> {
     match &em.ast.exprs[expr_idx] {
         Expr::Lit { lit, .. } => emit_lit(em, fc, lit),
-        Expr::Name { name, span } => {
-            let (name, span) = (*name, *span);
+        Expr::Name { name_ref, span } => {
+            let name = em.ast.name_refs[*name_ref].name;
+            let span = *span;
             emit_name(em, fc, expr_idx, name, span)
         }
         Expr::Paren { inner, .. } | Expr::Annotated { inner, .. } => {
@@ -810,7 +811,7 @@ fn emit_return(
 /// the type cannot be resolved (e.g. type variable, unresolved name).
 fn lower_ast_ty_to_type_id(em: &mut Emitter<'_>, ty: TyIdx) -> Option<u32> {
     let name = match &em.ast.tys[ty] {
-        Ty::Named { name, .. } | Ty::Var { name, .. } => *name,
+        Ty::Named { name_ref, .. } | Ty::Var { name_ref } => em.ast.name_refs[*name_ref].name,
         _ => return None,
     };
     let wk = &em.sema.well_known;
@@ -2081,7 +2082,7 @@ fn emit_force_unwrap(
 /// Falls back to 0 for well-known effects not yet in the pool.
 fn resolve_handle_effect_id(em: &Emitter<'_>, effect_ty: TyIdx) -> u8 {
     let effect_name = match &em.ast.tys[effect_ty] {
-        Ty::Named { name, .. } | Ty::Var { name, .. } => *name,
+        Ty::Named { name_ref, .. } | Ty::Var { name_ref } => em.ast.name_refs[*name_ref].name,
         _ => return 0,
     };
     em.sema

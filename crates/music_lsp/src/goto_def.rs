@@ -3,10 +3,12 @@
 use lsp_types::{GotoDefinitionResponse, Location, LocationLink, Position, Range, Url};
 use music_ast::Expr;
 use music_lex::TokenKind;
-use music_sema::SemaResult;
+use music_sema::{DefKind, SemaResult};
 use music_shared::{Idx, Span, Symbol};
 
-use crate::analysis::{AnalyzedDoc, expr_span, field_at_cursor, position_to_offset, span_to_range};
+use crate::analysis::{
+    AnalyzedDoc, def_at_cursor, def_at_offset, field_at_cursor, position_to_offset, span_to_range,
+};
 
 /// Return the definition location for the symbol under the cursor.
 pub fn goto_definition(
@@ -23,31 +25,10 @@ pub fn goto_definition(
 
     let sema = doc.sema.as_ref()?;
 
-    let def_id = sema
-        .resolution
-        .expr_defs
-        .iter()
-        .filter_map(|(&idx, &def_id)| {
-            let span = expr_span(idx, &doc.module)?;
-            if span.start <= offset && offset <= span.end() {
-                Some((def_id, span.length))
-            } else {
-                None
-            }
-        })
-        .min_by_key(|&(_, len)| len)
-        .map(|(def_id, _)| def_id);
-
-    let def_id = match def_id {
-        Some(id) => id,
-        None => {
-            // No expr_def — try field access fallback for go-to on record
-            // fields that have no DefId (plain record field access).
-            return goto_field(doc, sema, offset, uri, root_uri);
-        }
+    let def = match def_at_offset(offset, doc).or_else(|| def_at_cursor(offset, doc)) {
+        Some(d) => d,
+        None => return goto_field(doc, sema, offset, uri, root_uri),
     };
-
-    let def = sema.defs.get(def_id.0 as usize)?;
 
     if def.span != Span::DUMMY {
         if def.file_id != doc.file_id {
@@ -128,6 +109,48 @@ fn goto_field(
         _ => return None,
     };
 
+    // Check variant constructors first (e.g. `.Failed()`), before the alias
+    // early-return which would otherwise short-circuit and miss the variant.
+    if let Some(obj_ty) = sema.expr_types.get(&object_idx).copied() {
+        let resolved = sema.unify.resolve(obj_ty, &sema.types);
+        if let music_sema::Type::Named { def, .. } = &sema.types[resolved] {
+            if let Some(variant_def) = sema.defs.iter().find(|d| {
+                d.kind == DefKind::Variant && d.parent == Some(*def) && d.name == field_name
+            }) {
+                if variant_def.span != Span::DUMMY {
+                    if variant_def.file_id != doc.file_id {
+                        return resolve_stdlib_def(
+                            doc,
+                            variant_def.name,
+                            variant_def.span,
+                            root_uri,
+                        );
+                    }
+                    let range = span_to_range(doc.file_id, variant_def.span, &doc.source_db);
+                    return Some(GotoDefinitionResponse::Scalar(Location {
+                        uri: uri.clone(),
+                        range,
+                    }));
+                }
+            }
+
+            let type_def = sema.defs.get(def.0 as usize);
+            if let Some(type_def) = type_def {
+                if type_def.span != Span::DUMMY {
+                    if type_def.file_id != doc.file_id {
+                        return resolve_stdlib_def(doc, type_def.name, type_def.span, root_uri);
+                    }
+                    let range = span_to_range(doc.file_id, type_def.span, &doc.source_db);
+                    return Some(GotoDefinitionResponse::Scalar(Location {
+                        uri: uri.clone(),
+                        range,
+                    }));
+                }
+            }
+        }
+    }
+
+    // Import alias field access (e.g. `t.run_suite`).
     if let Some(&alias_def_id) = sema.resolution.expr_defs.get(&object_idx) {
         if let Some(resp) = resolve_stdlib_def(doc, field_name, Span::DUMMY, root_uri) {
             return Some(resp);
@@ -135,22 +158,6 @@ fn goto_field(
         let alias_def = sema.defs.get(alias_def_id.0 as usize)?;
         if alias_def.file_id == doc.file_id && alias_def.span != Span::DUMMY {
             let range = span_to_range(doc.file_id, alias_def.span, &doc.source_db);
-            return Some(GotoDefinitionResponse::Scalar(Location {
-                uri: uri.clone(),
-                range,
-            }));
-        }
-    }
-
-    let obj_ty = sema.expr_types.get(&object_idx).copied()?;
-    let resolved = sema.unify.resolve(obj_ty, &sema.types);
-    if let music_sema::Type::Named { def, .. } = &sema.types[resolved] {
-        let type_def = sema.defs.get(def.0 as usize)?;
-        if type_def.span != Span::DUMMY {
-            if type_def.file_id != doc.file_id {
-                return resolve_stdlib_def(doc, type_def.name, type_def.span, root_uri);
-            }
-            let range = span_to_range(doc.file_id, type_def.span, &doc.source_db);
             return Some(GotoDefinitionResponse::Scalar(Location {
                 uri: uri.clone(),
                 range,

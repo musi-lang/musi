@@ -239,10 +239,10 @@ pub fn check_stmt<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) {
                 Some(p)
             };
             check_class_members(ck, &members, &all_params);
-            check_instance_method_coverage(ck, target.name, &members, span);
+            let target_name = ck.ctx.ast.name_refs[target.name_ref].name;
+            check_instance_method_coverage(ck, target_name, &members, span);
 
-            // Build InstanceInfo so the checker can resolve operator dispatch.
-            if let Some(class_def) = ck.scopes.lookup(ck.current_scope, target.name) {
+            if let Some(class_def) = ck.scopes.lookup(ck.current_scope, target_name) {
                 let target_ty = if let Some(&first_arg) = target.args.first() {
                     lower_ty(ck, first_arg)
                 } else {

@@ -48,8 +48,9 @@ impl Resolver<'_> {
             Expr::Instance {
                 target, exported, ..
             } => {
+                let target_name = self.ast.name_refs[target.name_ref].name;
                 let id = self.defs.alloc(
-                    target.name,
+                    target_name,
                     DefKind::Instance,
                     self.span_of_expr(expr_idx),
                     self.file_id,

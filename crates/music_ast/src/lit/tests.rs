@@ -4,6 +4,7 @@ use music_shared::{Arena, Span, Symbol};
 
 use crate::expr::Expr;
 use crate::lit::{FStrPart, Lit};
+use crate::{AstArenas, NameRef};
 
 use std::f64;
 
@@ -77,9 +78,13 @@ fn test_lit_unit_round_trip_through_arena() {
 
 #[test]
 fn test_lit_fstr_with_interpolation() {
-    let mut exprs: Arena<Expr> = Arena::new();
-    let expr_idx = exprs.alloc(Expr::Name {
+    let mut arenas = AstArenas::new();
+    let name_ref = arenas.name_refs.alloc(NameRef {
         name: Symbol(1),
+        span: Span::new(2, 3),
+    });
+    let expr_idx = arenas.exprs.alloc(Expr::Name {
+        name_ref,
         span: Span::new(2, 3),
     });
 

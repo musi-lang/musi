@@ -35,8 +35,9 @@ fn lookup_name_or_error<S: BuildHasher>(
 /// Lowers an AST `Ty` node to a semantic `Type` in the checker's arena.
 pub fn lower_ty<S: BuildHasher>(ck: &mut Checker<'_, S>, ty_idx: TyIdx) -> TypeIdx {
     match ck.ctx.ast.tys[ty_idx].clone() {
-        Ty::Var { name, span } => {
-            if let Some(def_id) = lookup_name_or_error(ck, name, span) {
+        Ty::Var { name_ref } => {
+            let nr = ck.ctx.ast.name_refs[name_ref];
+            if let Some(def_id) = lookup_name_or_error(ck, nr.name, nr.span) {
                 ck.alloc_ty(Type::Named {
                     def: def_id,
                     args: vec![],
@@ -45,8 +46,13 @@ pub fn lower_ty<S: BuildHasher>(ck: &mut Checker<'_, S>, ty_idx: TyIdx) -> TypeI
                 ck.error_ty()
             }
         }
-        Ty::Named { name, args, span } => {
-            if let Some(def_id) = lookup_name_or_error(ck, name, span) {
+        Ty::Named {
+            name_ref,
+            args,
+            span,
+        } => {
+            let nr = ck.ctx.ast.name_refs[name_ref];
+            if let Some(def_id) = lookup_name_or_error(ck, nr.name, span) {
                 let lowered_args: Vec<_> = args.iter().map(|&a| lower_ty(ck, a)).collect();
                 ck.alloc_ty(Type::Named {
                     def: def_id,
@@ -65,11 +71,11 @@ pub fn lower_ty<S: BuildHasher>(ck: &mut Checker<'_, S>, ty_idx: TyIdx) -> TypeI
             })
         }
         Ty::Qualified {
-            module,
+            module_ref,
             name,
             args,
             span,
-        } => lower_ty_qualified(ck, module, name, &args, span),
+        } => lower_ty_qualified(ck, module_ref, name, &args, span),
         Ty::Fn {
             params,
             ret,
@@ -100,12 +106,13 @@ pub fn lower_ty<S: BuildHasher>(ck: &mut Checker<'_, S>, ty_idx: TyIdx) -> TypeI
 
 fn lower_ty_qualified<S: BuildHasher>(
     ck: &mut Checker<'_, S>,
-    module: Symbol,
+    module_ref: music_ast::NameRefIdx,
     name: Symbol,
     args: &[TyIdx],
     span: Span,
 ) -> TypeIdx {
-    let Some(mod_def) = lookup_name_or_error(ck, module, span) else {
+    let nr = ck.ctx.ast.name_refs[module_ref];
+    let Some(mod_def) = lookup_name_or_error(ck, nr.name, span) else {
         return ck.error_ty();
     };
     let Some(ty_idx) = ck.defs.get(mod_def).ty_info.ty else {

@@ -9,7 +9,7 @@ use crate::attr::Attr;
 use crate::decl::{ClassMember, EffectOp, ExportItem, ForeignDecl};
 use crate::lit::Lit;
 use crate::ty::{Constraint, EffectSet, TyNamedRef, TyParam};
-use crate::{ExprIdx, ExprList, PatIdx, TyIdx};
+use crate::{ExprIdx, ExprList, NameRefIdx, PatIdx, TyIdx};
 
 /// Expression node. All recursive children use arena indices.
 #[derive(Debug, Clone, PartialEq)]
@@ -20,7 +20,7 @@ pub enum Expr {
         span: Span,
     },
     Name {
-        name: Symbol,
+        name_ref: NameRefIdx,
         span: Span,
     },
 

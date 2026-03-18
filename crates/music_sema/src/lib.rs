@@ -54,6 +54,8 @@ pub struct ResolutionMap {
     pub expr_defs: HashMap<ExprIdx, DefId>,
     /// Maps each binding-site span to its [`DefId`].
     pub pat_defs: HashMap<Span, DefId>,
+    /// Parallel to the `name_refs` arena: `DefId` for each resolved `NameRef`.
+    pub name_ref_defs: Vec<Option<DefId>>,
     /// Maps law span -> inferred (implicit) law variables, for LSP inlay hints.
     pub law_inferred_vars: HashMap<Span, Vec<(Symbol, DefId)>>,
     /// Maps (class `DefId`, operator `Symbol`) -> member `DefId` for operator dispatch.
@@ -317,6 +319,7 @@ pub fn analyze_shared<S: BuildHasher>(
         resolution: ResolutionMap {
             expr_defs: resolved.expr_defs,
             pat_defs: resolved.pat_defs,
+            name_ref_defs: resolved.name_ref_defs,
             law_inferred_vars: resolved.law_inferred_vars,
             class_op_members: resolved.class_op_members,
         },
@@ -398,6 +401,7 @@ pub fn analyze_with_imports<S: BuildHasher>(
         resolution: ResolutionMap {
             expr_defs: resolved.expr_defs,
             pat_defs: resolved.pat_defs,
+            name_ref_defs: resolved.name_ref_defs,
             law_inferred_vars: resolved.law_inferred_vars,
             class_op_members: resolved.class_op_members,
         },

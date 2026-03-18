@@ -182,10 +182,9 @@ impl Parser<'_> {
                 let start = self.start_span();
                 let _tok = self.bump();
                 let name = self.interner.intern("_");
-                Expr::Name {
-                    name,
-                    span: self.finish_span(start),
-                }
+                let span = self.finish_span(start);
+                let name_ref = self.alloc_name_ref(name, span);
+                Expr::Name { name_ref, span }
             }
 
             // Annotated: #[...] decl

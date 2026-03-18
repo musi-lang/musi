@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 
 use lsp_types::{Diagnostic, DiagnosticSeverity, DiagnosticTag, Position, Range};
 use music_ast::expr::FieldKey;
-use music_ast::{Expr, ExprIdx, ParsedModule};
+use music_ast::{Expr, ExprIdx, NameRef, ParsedModule};
 use music_lex::{LexedSource, Token, TokenKind, lex};
 use music_parse::parse;
 use music_resolve::graph::ModuleId;
@@ -48,6 +48,8 @@ pub struct AnalyzedDoc {
     pub dep_sources: HashMap<String, DepSource>,
     /// Maps import path `Symbol` → resolved filesystem `PathBuf`.
     pub resolved_imports: HashMap<Symbol, PathBuf>,
+    /// Sorted span index: (start, end, DefId) for O(log n) offset→DefId lookups.
+    pub span_index: Vec<(u32, u32, music_sema::DefId)>,
 }
 
 fn parse_src(
@@ -83,6 +85,7 @@ pub fn analyze_doc(source: &str, _uri: &str) -> (Vec<Diagnostic>, AnalyzedDoc) {
         &source_db,
     );
 
+    let span_index = build_span_index(&sema, &module);
     let doc = AnalyzedDoc {
         source: source.to_owned(),
         module,
@@ -93,6 +96,7 @@ pub fn analyze_doc(source: &str, _uri: &str) -> (Vec<Diagnostic>, AnalyzedDoc) {
         sema: Some(sema),
         dep_sources: HashMap::new(),
         resolved_imports: HashMap::new(),
+        span_index,
     };
     (lsp_diags, doc)
 }
@@ -149,6 +153,7 @@ pub fn analyze_doc_multi(
         &source_db,
     );
 
+    let span_index = build_span_index(&sema, &entry_parsed);
     let doc = AnalyzedDoc {
         source: source.to_owned(),
         module: entry_parsed,
@@ -159,6 +164,7 @@ pub fn analyze_doc_multi(
         sema: Some(sema),
         dep_sources,
         resolved_imports,
+        span_index,
     };
     (lsp_diags, doc)
 }
@@ -245,7 +251,7 @@ fn run_lsp_sema_in_order(
 
             let mod_key = module_key(&node.path, project_root);
             let dep_lexed = lex(&node.source, file_id, interner, diags);
-            let dep_src = build_dep_source(&node.source, dep_lexed, &defs_vec);
+            let dep_src = build_dep_source(&node.source, dep_lexed, &defs_vec, file_id);
             let _prev2 = dep_sources.insert(mod_key, dep_src);
         }
     }
@@ -508,6 +514,69 @@ pub fn def_name_span(def: &DefInfo, tokens: &[Token]) -> Span {
     find_name_token(tokens, def.span.start, def.name).unwrap_or(def.span)
 }
 
+/// Build a sorted span index from name_ref_defs, pat_defs, and definition name tokens.
+fn build_span_index(
+    sema: &SemaResult,
+    module: &ParsedModule,
+) -> Vec<(u32, u32, music_sema::DefId)> {
+    let mut entries: Vec<(u32, u32, music_sema::DefId)> = Vec::new();
+
+    // 1. NameRefs with resolved DefIds
+    for (raw_idx, def_id) in sema.resolution.name_ref_defs.iter().enumerate() {
+        if let Some(def_id) = def_id {
+            if let Some(idx) = u32::try_from(raw_idx).ok().map(Idx::from_raw) {
+                let nr: &NameRef = &module.arenas.name_refs[idx];
+                if nr.span != Span::DUMMY {
+                    entries.push((nr.span.start, nr.span.end(), *def_id));
+                }
+            }
+        }
+    }
+
+    // 2. pat_defs (binding sites)
+    for (span, &def_id) in &sema.resolution.pat_defs {
+        if *span != Span::DUMMY {
+            entries.push((span.start, span.end(), def_id));
+        }
+    }
+
+    // 3. DefInfo name tokens (definition-site hover)
+    for def in &sema.defs {
+        if def.span != Span::DUMMY {
+            entries.push((def.span.start, def.span.end(), def.id));
+        }
+    }
+
+    entries.sort_by_key(|&(start, end, _)| (start, end));
+    entries.dedup();
+    entries
+}
+
+/// Find the definition at `offset` using the span index (O(log n) binary search).
+pub fn def_at_offset(offset: u32, doc: &AnalyzedDoc) -> Option<&DefInfo> {
+    let sema = doc.sema.as_ref()?;
+    let idx = doc
+        .span_index
+        .partition_point(|&(start, _, _)| start <= offset);
+
+    let mut best: Option<(music_sema::DefId, u32)> = None;
+    // Search backward from partition point for spans that contain the offset.
+    for &(start, end, def_id) in doc.span_index[..idx].iter().rev() {
+        if end < offset {
+            break;
+        }
+        if start <= offset && offset <= end {
+            let len = end - start;
+            if best.is_none_or(|(_, best_len)| len < best_len) {
+                best = Some((def_id, len));
+            }
+        }
+    }
+
+    let (def_id, _) = best?;
+    sema.defs.get(def_id.0 as usize)
+}
+
 /// Find the definition whose reference or declaration site contains `offset`.
 pub fn def_at_cursor(offset: u32, doc: &AnalyzedDoc) -> Option<&DefInfo> {
     let sema = doc.sema.as_ref()?;
@@ -595,10 +664,17 @@ pub fn field_at_cursor(offset: u32, doc: &AnalyzedDoc) -> Option<(ExprIdx, Symbo
     best
 }
 
-fn build_dep_source(source: &str, _lexed: LexedSource, defs: &[DefInfo]) -> DepSource {
+fn build_dep_source(
+    source: &str,
+    _lexed: LexedSource,
+    defs: &[DefInfo],
+    file_id: FileId,
+) -> DepSource {
     let mut def_spans: HashMap<Symbol, Span> = HashMap::new();
     for def in defs {
-        let _prev = def_spans.entry(def.name).or_insert(def.span);
+        if def.file_id == file_id {
+            let _prev = def_spans.entry(def.name).or_insert(def.span);
+        }
     }
     DepSource {
         source: source.to_owned(),

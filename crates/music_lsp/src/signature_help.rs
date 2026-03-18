@@ -39,7 +39,10 @@ pub fn signature_help(doc: &AnalyzedDoc, position: Position) -> Option<Signature
     };
 
     let callee_name = match &doc.module.arenas.exprs[callee_idx] {
-        Expr::Name { name, .. } => doc.interner.try_resolve(*name).map(str::to_owned),
+        Expr::Name { name_ref, .. } => {
+            let name = doc.module.arenas.name_refs[*name_ref].name;
+            doc.interner.try_resolve(name).map(str::to_owned)
+        }
         Expr::Field { field, .. } => {
             use music_ast::expr::FieldKey;
             match field {

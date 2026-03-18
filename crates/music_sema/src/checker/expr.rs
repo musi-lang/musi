@@ -1341,18 +1341,22 @@ fn synth_choice<S: BuildHasher>(ck: &mut Checker<'_, S>, body: TyIdx) -> TypeIdx
         Ty::Sum { variants, .. } => {
             let variants_clone = variants.clone();
             for &variant_ty in &variants_clone {
-                if let Ty::Named { name, .. } = &ck.ctx.ast.tys[variant_ty] {
+                if let Ty::Named { name_ref, .. } = &ck.ctx.ast.tys[variant_ty] {
+                    let name = ck.ctx.ast.name_refs[*name_ref].name;
                     let id = ck
                         .defs
-                        .alloc(*name, DefKind::Type, Span::DUMMY, ck.ctx.file_id);
-                    let _prev = ck.scopes.define(ck.current_scope, *name, id);
+                        .alloc(name, DefKind::Type, Span::DUMMY, ck.ctx.file_id);
+                    let _prev = ck.scopes.define(ck.current_scope, name, id);
                 }
             }
 
             let mut sum_variants = Vec::with_capacity(variants_clone.len());
             for &variant_ty in &variants_clone {
                 let (name, args) = match &ck.ctx.ast.tys[variant_ty] {
-                    Ty::Named { name, args, .. } => (Some(*name), Some(args.clone())),
+                    Ty::Named { name_ref, args, .. } => (
+                        Some(ck.ctx.ast.name_refs[*name_ref].name),
+                        Some(args.clone()),
+                    ),
                     _ => (None, None),
                 };
                 if let (Some(name), Some(args)) = (name, args) {
@@ -1372,8 +1376,8 @@ fn synth_choice<S: BuildHasher>(ck: &mut Checker<'_, S>, body: TyIdx) -> TypeIdx
                 variants: sum_variants,
             })
         }
-        Ty::Named { name, args, .. } => {
-            let name = *name;
+        Ty::Named { name_ref, args, .. } => {
+            let name = ck.ctx.ast.name_refs[*name_ref].name;
             let args = args.clone();
             let id = ck
                 .defs
@@ -1606,7 +1610,7 @@ fn check_handler_op_coverage<S: BuildHasher>(
     use music_ast::ty::Ty;
 
     let effect_name = match &ck.ctx.ast.tys[effect_ty_idx] {
-        Ty::Named { name, .. } => *name,
+        Ty::Named { name_ref, .. } => ck.ctx.ast.name_refs[*name_ref].name,
         _ => return,
     };
 
@@ -1651,7 +1655,8 @@ fn enter_constraint_scope<S: BuildHasher>(
         if constraint.rel != Rel::Sub {
             continue;
         }
-        let class_def = ck.scopes.lookup(ck.current_scope, constraint.bound.name);
+        let bound_name = ck.ctx.ast.name_refs[constraint.bound.name_ref].name;
+        let class_def = ck.scopes.lookup(ck.current_scope, bound_name);
         let Some(class_def) = class_def else { continue };
 
         // Find the type variable for constraint.param among the ty params
@@ -1719,10 +1724,10 @@ fn record_fn_constraints<S: BuildHasher>(ck: &mut Checker<'_, S>, fields: &LetFi
         .active_obligations
         .iter()
         .filter(|ob| {
-            fields
-                .constraints
-                .iter()
-                .any(|c| ck.scopes.lookup(ck.current_scope, c.bound.name) == Some(ob.class))
+            fields.constraints.iter().any(|c| {
+                let bname = ck.ctx.ast.name_refs[c.bound.name_ref].name;
+                ck.scopes.lookup(ck.current_scope, bname) == Some(ob.class)
+            })
         })
         .cloned()
         .collect();

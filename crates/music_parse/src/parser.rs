@@ -8,7 +8,7 @@ use core::mem;
 use music_ast::expr::Expr;
 use music_ast::pat::Pat;
 use music_ast::ty::Ty;
-use music_ast::{AstArenas, ExprIdx, ParsedModule, PatIdx, Stmt, TyIdx};
+use music_ast::{AstArenas, ExprIdx, NameRef, NameRefIdx, ParsedModule, PatIdx, Stmt, TyIdx};
 use music_lex::token::{Token, TokenKind};
 use music_shared::{DiagnosticBag, FileId, Interner, Span, Symbol};
 
@@ -181,6 +181,10 @@ impl<'a> Parser<'a> {
 
     pub(crate) fn alloc_pat(&mut self, p: Pat) -> PatIdx {
         self.arenas.pats.alloc(p)
+    }
+
+    pub(crate) fn alloc_name_ref(&mut self, name: Symbol, span: Span) -> NameRefIdx {
+        self.arenas.name_refs.alloc(NameRef { name, span })
     }
 
     pub(crate) fn error_expr(&mut self, err: &ParseError) -> Expr {

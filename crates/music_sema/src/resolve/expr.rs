@@ -6,7 +6,7 @@ use music_ast::expr::{
 };
 use music_ast::lit::{FStrPart, Lit};
 use music_ast::pat::Pat;
-use music_ast::{ExprIdx, TyIdx};
+use music_ast::{ExprIdx, NameRefIdx, TyIdx};
 use music_shared::{Span, Symbol};
 
 use crate::def::{DefId, DefKind};
@@ -19,7 +19,10 @@ impl Resolver<'_> {
     #[allow(clippy::too_many_lines)]
     pub(super) fn resolve_expr(&mut self, expr_idx: ExprIdx) {
         match self.ast.exprs[expr_idx].clone() {
-            Expr::Name { name, span } => self.resolve_name(expr_idx, name, span),
+            Expr::Name { name_ref, span } => {
+                let nr = self.ast.name_refs[name_ref];
+                self.resolve_name(expr_idx, name_ref, nr.name, span);
+            }
             Expr::Lit { ref lit, .. } => self.resolve_lit(lit),
             Expr::Error { .. } | Expr::Import { .. } | Expr::Export { .. } => {}
             Expr::Paren { inner, .. } | Expr::Annotated { inner, .. } => self.resolve_expr(inner),
@@ -135,9 +138,16 @@ impl Resolver<'_> {
         }
     }
 
-    pub(super) fn resolve_name(&mut self, expr_idx: ExprIdx, name: Symbol, span: Span) {
+    pub(super) fn resolve_name(
+        &mut self,
+        expr_idx: ExprIdx,
+        name_ref: NameRefIdx,
+        name: Symbol,
+        span: Span,
+    ) {
         if let Some(def_id) = self.scopes.lookup(self.current_scope, name) {
             let _prev = self.output.expr_defs.insert(expr_idx, def_id);
+            self.output.name_ref_defs[usize::try_from(name_ref.raw()).unwrap()] = Some(def_id);
             self.defs.get_mut(def_id).use_count += 1;
         } else {
             self.report_undefined(name, span);
@@ -374,25 +384,23 @@ impl Resolver<'_> {
         match &self.ast.tys[body] {
             Ty::Sum { variants, .. } => {
                 for &variant_ty in variants {
-                    if let Ty::Named { name, .. } = &self.ast.tys[variant_ty] {
-                        let id =
-                            self.defs
-                                .alloc(*name, DefKind::Variant, Span::DUMMY, self.file_id);
+                    if let Ty::Named { name_ref, span, .. } = &self.ast.tys[variant_ty] {
+                        let name = self.ast.name_refs[*name_ref].name;
+                        let id = self.defs.alloc(name, DefKind::Variant, *span, self.file_id);
                         if let Some(p) = choice_parent {
                             self.defs.get_mut(id).parent = Some(p);
                         }
-                        self.define_in_scope(*name, id, Span::DUMMY);
+                        self.define_in_scope(name, id, *span);
                     }
                 }
             }
-            Ty::Named { name, .. } => {
-                let id = self
-                    .defs
-                    .alloc(*name, DefKind::Variant, Span::DUMMY, self.file_id);
+            Ty::Named { name_ref, span, .. } => {
+                let name = self.ast.name_refs[*name_ref].name;
+                let id = self.defs.alloc(name, DefKind::Variant, *span, self.file_id);
                 if let Some(p) = choice_parent {
                     self.defs.get_mut(id).parent = Some(p);
                 }
-                self.define_in_scope(*name, id, Span::DUMMY);
+                self.define_in_scope(name, id, *span);
             }
             _ => {}
         }

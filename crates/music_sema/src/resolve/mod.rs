@@ -40,6 +40,8 @@ pub type SubModuleExports = HashMap<DefId, Vec<(Symbol, DefId)>>;
 pub struct ResolveOutput {
     pub expr_defs: HashMap<ExprIdx, DefId>,
     pub pat_defs: HashMap<Span, DefId>,
+    /// Parallel to the `name_refs` arena: `DefId` for each resolved `NameRef`.
+    pub name_ref_defs: Vec<Option<DefId>>,
     /// Maps law span -> inferred (implicit) law variables, for LSP inlay hints.
     pub law_inferred_vars: HashMap<Span, Vec<(Symbol, DefId)>>,
     /// Maps (class `DefId`, operator `Symbol`) -> member `DefId` for operator dispatch.
@@ -94,6 +96,7 @@ pub fn resolve_with_imports(
     import_names: &ImportNames,
     sub_module_exports: &SubModuleExports,
 ) -> ResolveOutput {
+    let name_ref_count = module.arenas.name_refs.len();
     let mut resolver = Resolver {
         ast: &module.arenas,
         interner,
@@ -104,6 +107,7 @@ pub fn resolve_with_imports(
         output: ResolveOutput {
             expr_defs: HashMap::new(),
             pat_defs: HashMap::new(),
+            name_ref_defs: vec![None; name_ref_count],
             law_inferred_vars: HashMap::new(),
             class_op_members: HashMap::new(),
         },

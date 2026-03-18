@@ -6,22 +6,21 @@ mod tests;
 use music_shared::{Span, Symbol};
 
 use crate::expr::Arrow;
-use crate::{TyIdx, TyList};
+use crate::{NameRefIdx, TyIdx, TyList};
 
 /// A type node. Recursive children use arena indices.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Ty {
     Var {
-        name: Symbol,
-        span: Span,
+        name_ref: NameRefIdx,
     },
     Named {
-        name: Symbol,
+        name_ref: NameRefIdx,
         args: TyList,
         span: Span,
     },
     Qualified {
-        module: Symbol,
+        module_ref: NameRefIdx,
         name: Symbol,
         args: TyList,
         span: Span,
@@ -86,7 +85,7 @@ pub struct TyParam {
 /// A named type with optional type arguments (used in constraints).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TyNamedRef {
-    pub name: Symbol,
+    pub name_ref: NameRefIdx,
     pub args: TyList,
     pub span: Span,
 }

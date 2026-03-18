@@ -2,20 +2,28 @@
 
 use music_shared::{Span, Symbol};
 
-use crate::AstArenas;
 use crate::expr::Arrow;
 use crate::ty::Ty;
+use crate::{AstArenas, NameRef};
 
 #[test]
 fn test_fn_type_params_and_ret_accessible() {
     let mut arenas = AstArenas::new();
-    let param_ty = arenas.tys.alloc(Ty::Named {
+    let param_name_ref = arenas.name_refs.alloc(NameRef {
         name: Symbol(0),
+        span: Span::new(0, 3),
+    });
+    let param_ty = arenas.tys.alloc(Ty::Named {
+        name_ref: param_name_ref,
         args: vec![],
         span: Span::new(0, 3),
     });
-    let ret_ty = arenas.tys.alloc(Ty::Named {
+    let ret_name_ref = arenas.name_refs.alloc(NameRef {
         name: Symbol(1),
+        span: Span::new(7, 3),
+    });
+    let ret_ty = arenas.tys.alloc(Ty::Named {
+        name_ref: ret_name_ref,
         args: vec![],
         span: Span::new(7, 3),
     });
@@ -41,8 +49,12 @@ fn test_fn_type_params_and_ret_accessible() {
 #[test]
 fn test_option_sugar_wraps_inner() {
     let mut arenas = AstArenas::new();
-    let inner = arenas.tys.alloc(Ty::Named {
+    let inner_name_ref = arenas.name_refs.alloc(NameRef {
         name: Symbol(0),
+        span: Span::new(1, 3),
+    });
+    let inner = arenas.tys.alloc(Ty::Named {
+        name_ref: inner_name_ref,
         args: vec![],
         span: Span::new(1, 3),
     });

@@ -81,9 +81,11 @@ impl Parser<'_> {
             };
         }
 
+        let name_span = self.finish_span(span.start);
+        let name_ref = self.alloc_name_ref(sym, name_span);
         Expr::Name {
-            name: sym,
-            span: self.finish_span(span.start),
+            name_ref,
+            span: name_span,
         }
     }
 

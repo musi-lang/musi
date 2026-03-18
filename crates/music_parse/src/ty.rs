@@ -144,10 +144,9 @@ impl Parser<'_> {
     fn parse_ty_var(&mut self) -> Ty {
         let start = self.start_span();
         let name = self.expect_symbol();
-        Ty::Var {
-            name,
-            span: self.finish_span(start),
-        }
+        let span = self.finish_span(start);
+        let name_ref = self.alloc_name_ref(name, span);
+        Ty::Var { name_ref }
     }
 
     fn parse_ty_option(&mut self) -> Ty {
@@ -164,6 +163,7 @@ impl Parser<'_> {
     fn parse_ty_named(&mut self) -> Ty {
         let start = self.start_span();
         let name = self.expect_symbol();
+        let name_span = self.finish_span(start);
         if self.at(TokenKind::Dot) && self.peek2() == TokenKind::Ident {
             let _dot = self.bump();
             let qualified_name = self.expect_symbol();
@@ -172,8 +172,9 @@ impl Parser<'_> {
             } else {
                 vec![]
             };
+            let module_ref = self.alloc_name_ref(name, name_span);
             return Ty::Qualified {
-                module: name,
+                module_ref,
                 name: qualified_name,
                 args,
                 span: self.finish_span(start),
@@ -184,8 +185,9 @@ impl Parser<'_> {
         } else {
             vec![]
         };
+        let name_ref = self.alloc_name_ref(name, name_span);
         Ty::Named {
-            name,
+            name_ref,
             args,
             span: self.finish_span(start),
         }
@@ -254,13 +256,15 @@ impl Parser<'_> {
     pub(crate) fn parse_ty_named_ref(&mut self) -> TyNamedRef {
         let start = self.start_span();
         let name = self.expect_symbol();
+        let name_span = self.finish_span(start);
         let args = if self.eat(TokenKind::KwOf) {
             self.parse_ty_arg_list()
         } else {
             vec![]
         };
+        let name_ref = self.alloc_name_ref(name, name_span);
         TyNamedRef {
-            name,
+            name_ref,
             args,
             span: self.finish_span(start),
         }

@@ -233,9 +233,10 @@ impl Resolver<'_> {
         seen: &mut HashSet<Symbol>,
     ) {
         match &self.ast.exprs[expr_idx] {
-            Expr::Name { name, span } => {
-                if self.scopes.lookup(self.current_scope, *name).is_none() && seen.insert(*name) {
-                    free.push((*name, *span));
+            Expr::Name { name_ref, span } => {
+                let name = self.ast.name_refs[*name_ref].name;
+                if self.scopes.lookup(self.current_scope, name).is_none() && seen.insert(name) {
+                    free.push((name, *span));
                 }
             }
             Expr::BinOp { left, right, .. }

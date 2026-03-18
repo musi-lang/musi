@@ -6,7 +6,7 @@
 
 use music_ast::expr::{BindKind, Expr, LetFields, Param, ParamMode};
 use music_ast::pat::Pat;
-use music_ast::{AstArenas, ExprIdx, Lit, ParsedModule, Stmt};
+use music_ast::{AstArenas, ExprIdx, Lit, NameRef, ParsedModule, Stmt};
 use std::collections::HashMap;
 
 use music_shared::{DiagnosticBag, FileId, Interner, Severity, Span, Symbol};
@@ -42,12 +42,16 @@ fn lit_int(value: i64) -> Expr {
     }
 }
 
-/// Helper to construct a Name expression.
-fn name_expr(sym: Symbol) -> Expr {
-    Expr::Name {
+/// Helper to construct and allocate a Name expression.
+fn alloc_name_expr(arenas: &mut AstArenas, sym: Symbol) -> ExprIdx {
+    let name_ref = arenas.name_refs.alloc(NameRef {
         name: sym,
         span: Span::DUMMY,
-    }
+    });
+    arenas.exprs.alloc(Expr::Name {
+        name_ref,
+        span: Span::DUMMY,
+    })
 }
 
 /// Helper to construct a binding pattern.
@@ -162,7 +166,7 @@ fn test_check_fn_parameter_scope_in_body() {
     let sym_x = interner.intern("x");
 
     // Lambda body: x (reference to parameter)
-    let param_ref = arenas.exprs.alloc(name_expr(sym_x));
+    let param_ref = alloc_name_expr(&mut arenas, sym_x);
 
     // Lambda: (x) -> x
     let param = Param {
@@ -247,7 +251,7 @@ fn test_check_binding_then_reference() {
     });
 
     // Second stmt: x;
-    let name_ref = arenas.exprs.alloc(name_expr(sym_x));
+    let name_ref = alloc_name_expr(&mut arenas, sym_x);
 
     let module = make_module(arenas, vec![stmt(binding), stmt(name_ref)]);
     let diags = check_module(&mut interner, &module);

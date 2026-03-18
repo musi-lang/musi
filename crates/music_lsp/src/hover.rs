@@ -11,8 +11,8 @@ use music_sema::{DefKind, SemaResult};
 use music_shared::Idx;
 
 use crate::analysis::{
-    AnalyzedDoc, def_at_cursor, def_name_span, expr_span, extract_doc_comments_from_source,
-    field_at_cursor, position_to_offset, span_to_range,
+    AnalyzedDoc, def_at_cursor, def_at_offset, def_name_span, expr_span,
+    extract_doc_comments_from_source, field_at_cursor, position_to_offset, span_to_range,
 };
 
 /// Produce a hover response for the given cursor position.
@@ -21,7 +21,7 @@ pub fn hover(doc: &AnalyzedDoc, position: Position) -> Option<Hover> {
 
     let offset = position_to_offset(&doc.source, position.line, position.character);
 
-    let def = match def_at_cursor(offset, doc) {
+    let def = match def_at_offset(offset, doc).or_else(|| def_at_cursor(offset, doc)) {
         Some(d) => d,
         None => return hover_field(doc, sema, offset),
     };

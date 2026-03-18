@@ -8,7 +8,7 @@ use crate::expr::{BinOp, BindKind, Expr, LetFields, UnaryOp};
 use crate::pat::Pat;
 use crate::ty::Ty;
 use crate::visitor::AstVisitor;
-use crate::{AstArenas, ExprIdx, PatIdx, TyIdx, visitor};
+use crate::{AstArenas, ExprIdx, NameRef, PatIdx, TyIdx, visitor};
 
 /// A visitor that counts how many expr nodes it visits.
 struct CountingVisitor {
@@ -49,12 +49,20 @@ impl AstVisitor for CountingVisitor {
 #[test]
 fn test_walk_expr_visits_binop_children_in_order() {
     let mut arenas = AstArenas::new();
-    let left = arenas.exprs.alloc(Expr::Name {
+    let left_ref = arenas.name_refs.alloc(NameRef {
         name: Symbol(0),
         span: Span::new(0, 1),
     });
-    let right = arenas.exprs.alloc(Expr::Name {
+    let left = arenas.exprs.alloc(Expr::Name {
+        name_ref: left_ref,
+        span: Span::new(0, 1),
+    });
+    let right_ref = arenas.name_refs.alloc(NameRef {
         name: Symbol(1),
+        span: Span::new(4, 1),
+    });
+    let right = arenas.exprs.alloc(Expr::Name {
+        name_ref: right_ref,
         span: Span::new(4, 1),
     });
     let root = arenas.exprs.alloc(Expr::BinOp {
@@ -91,12 +99,20 @@ impl AstVisitor for BreakAfter {
 #[test]
 fn test_visitor_short_circuits_on_break() {
     let mut arenas = AstArenas::new();
-    let left = arenas.exprs.alloc(Expr::Name {
+    let left_ref = arenas.name_refs.alloc(NameRef {
         name: Symbol(0),
         span: Span::new(0, 1),
     });
-    let right = arenas.exprs.alloc(Expr::Name {
+    let left = arenas.exprs.alloc(Expr::Name {
+        name_ref: left_ref,
+        span: Span::new(0, 1),
+    });
+    let right_ref = arenas.name_refs.alloc(NameRef {
         name: Symbol(1),
+        span: Span::new(4, 1),
+    });
+    let right = arenas.exprs.alloc(Expr::Name {
+        name_ref: right_ref,
         span: Span::new(4, 1),
     });
     let root = arenas.exprs.alloc(Expr::BinOp {
@@ -119,13 +135,21 @@ fn test_walk_expr_crosses_into_ty() {
     let pat = arenas.pats.alloc(Pat::Wild {
         span: Span::new(4, 1),
     });
-    let ty = arenas.tys.alloc(Ty::Named {
+    let ty_name_ref = arenas.name_refs.alloc(NameRef {
         name: Symbol(0),
+        span: Span::new(6, 3),
+    });
+    let ty = arenas.tys.alloc(Ty::Named {
+        name_ref: ty_name_ref,
         args: vec![],
         span: Span::new(6, 3),
     });
-    let value = arenas.exprs.alloc(Expr::Name {
+    let val_name_ref = arenas.name_refs.alloc(NameRef {
         name: Symbol(1),
+        span: Span::new(12, 1),
+    });
+    let value = arenas.exprs.alloc(Expr::Name {
+        name_ref: val_name_ref,
         span: Span::new(12, 1),
     });
     let root = arenas.exprs.alloc(Expr::Let {
@@ -157,8 +181,12 @@ fn test_walk_expr_crosses_into_ty() {
 fn test_walk_expr_visits_record_def_fields() {
     use crate::expr::RecDefField;
     let mut arenas = AstArenas::new();
-    let ty = arenas.tys.alloc(Ty::Named {
+    let ty_name_ref = arenas.name_refs.alloc(NameRef {
         name: Symbol(0),
+        span: Span::new(10, 3),
+    });
+    let ty = arenas.tys.alloc(Ty::Named {
+        name_ref: ty_name_ref,
         args: vec![],
         span: Span::new(10, 3),
     });
@@ -204,8 +232,12 @@ fn test_walk_pat_visits_or_branches() {
 #[test]
 fn test_walk_expr_visits_unary_op_defer_operand() {
     let mut arenas = AstArenas::new();
-    let inner = arenas.exprs.alloc(Expr::Name {
+    let inner_ref = arenas.name_refs.alloc(NameRef {
         name: Symbol(0),
+        span: Span::new(6, 3),
+    });
+    let inner = arenas.exprs.alloc(Expr::Name {
+        name_ref: inner_ref,
         span: Span::new(6, 3),
     });
     let root = arenas.exprs.alloc(Expr::UnaryOp {

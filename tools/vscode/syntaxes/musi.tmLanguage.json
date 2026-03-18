@@ -124,6 +124,14 @@
                     "name": "keyword.operator.choice-separator.musi"
                 },
                 {
+                    "comment": "variant payload type: Failed of String",
+                    "match": "\\b(of)\\s+([A-Z][a-zA-Z0-9_]*)",
+                    "captures": {
+                        "1": { "name": "keyword.control.musi" },
+                        "2": { "name": "entity.name.type.musi" }
+                    }
+                },
+                {
                     "comment": "variant constructor: None, Some, Cons, ...",
                     "match": "\\b[A-Z][a-zA-Z0-9_]*\\b",
                     "name": "variable.other.enummember.musi"

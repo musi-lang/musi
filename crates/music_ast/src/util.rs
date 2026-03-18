@@ -6,11 +6,12 @@ use crate::{AstArenas, TyIdx};
 /// Collects type variables from `Ty::Var` nodes in a type tree.
 pub fn collect_ty_var_nodes(ty_idx: TyIdx, arenas: &AstArenas, out: &mut Vec<TyParam>) {
     match &arenas.tys[ty_idx] {
-        Ty::Var { name, span } => {
-            if !out.iter().any(|p| p.name == *name) {
+        Ty::Var { name_ref } => {
+            let nr = &arenas.name_refs[*name_ref];
+            if !out.iter().any(|p| p.name == nr.name) {
                 out.push(TyParam {
-                    name: *name,
-                    span: *span,
+                    name: nr.name,
+                    span: nr.span,
                 });
             }
         }

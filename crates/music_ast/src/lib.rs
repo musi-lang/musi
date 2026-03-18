@@ -17,7 +17,7 @@ pub use lit::Lit;
 pub use pat::Pat;
 pub use ty::Ty;
 
-use music_shared::{Arena, Idx, Span};
+use music_shared::{Arena, Idx, Span, Symbol};
 
 /// Index into the expression arena.
 pub type ExprIdx = Idx<Expr>;
@@ -25,6 +25,18 @@ pub type ExprIdx = Idx<Expr>;
 pub type TyIdx = Idx<Ty>;
 /// Index into the pattern arena.
 pub type PatIdx = Idx<Pat>;
+/// Index into the name-reference arena.
+pub type NameRefIdx = Idx<NameRef>;
+
+/// A reference to a name that will be resolved via scope lookup.
+///
+/// Definition sites keep plain `Symbol`; reference sites use `NameRefIdx`
+/// so the resolver can attach a `DefId` to every resolved name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct NameRef {
+    pub name: Symbol,
+    pub span: Span,
+}
 
 /// A list of expression indices.
 pub type ExprList = Vec<ExprIdx>;
@@ -39,6 +51,7 @@ pub struct AstArenas {
     pub exprs: Arena<Expr>,
     pub tys: Arena<Ty>,
     pub pats: Arena<Pat>,
+    pub name_refs: Arena<NameRef>,
 }
 
 impl AstArenas {

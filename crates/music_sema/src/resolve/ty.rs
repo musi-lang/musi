@@ -1,26 +1,43 @@
 //! Type resolution helpers.
 
-use music_ast::TyIdx;
 use music_ast::ty::{Ty, TyNamedRef};
+use music_ast::TyIdx;
 
 use super::Resolver;
 
 impl Resolver<'_> {
     pub(super) fn resolve_ty(&mut self, ty_idx: TyIdx) {
         match self.ast.tys[ty_idx].clone() {
-            Ty::Named { name, args, span } => {
-                if self.scopes.lookup(self.current_scope, name).is_none() {
-                    self.report_undefined(name, span);
+            Ty::Named {
+                name_ref,
+                args,
+                span,
+            } => {
+                let nr = self.ast.name_refs[name_ref];
+                if let Some(def_id) = self.scopes.lookup(self.current_scope, nr.name) {
+                    self.output.name_ref_defs[usize::try_from(name_ref.raw()).unwrap()] =
+                        Some(def_id);
+                    self.defs.get_mut(def_id).use_count += 1;
+                } else {
+                    self.report_undefined(nr.name, span);
                 }
                 for &arg in &args {
                     self.resolve_ty(arg);
                 }
             }
             Ty::Qualified {
-                module, args, span, ..
+                module_ref,
+                args,
+                span,
+                ..
             } => {
-                if self.scopes.lookup(self.current_scope, module).is_none() {
-                    self.report_undefined(module, span);
+                let nr = self.ast.name_refs[module_ref];
+                if let Some(def_id) = self.scopes.lookup(self.current_scope, nr.name) {
+                    self.output.name_ref_defs[usize::try_from(module_ref.raw()).unwrap()] =
+                        Some(def_id);
+                    self.defs.get_mut(def_id).use_count += 1;
+                } else {
+                    self.report_undefined(nr.name, span);
                 }
                 for &arg in &args {
                     self.resolve_ty(arg);
@@ -48,9 +65,14 @@ impl Resolver<'_> {
             Ty::Array { elem, .. } => {
                 self.resolve_ty(elem);
             }
-            Ty::Var { name, span } => {
-                if self.scopes.lookup(self.current_scope, name).is_none() {
-                    self.report_undefined(name, span);
+            Ty::Var { name_ref } => {
+                let nr = self.ast.name_refs[name_ref];
+                if let Some(def_id) = self.scopes.lookup(self.current_scope, nr.name) {
+                    self.output.name_ref_defs[usize::try_from(name_ref.raw()).unwrap()] =
+                        Some(def_id);
+                    self.defs.get_mut(def_id).use_count += 1;
+                } else {
+                    self.report_undefined(nr.name, nr.span);
                 }
             }
             Ty::Error { .. } => {}
@@ -58,8 +80,13 @@ impl Resolver<'_> {
     }
 
     pub(super) fn resolve_ty_named_ref(&mut self, named: &TyNamedRef) {
-        if self.scopes.lookup(self.current_scope, named.name).is_none() {
-            self.report_undefined(named.name, named.span);
+        let nr = self.ast.name_refs[named.name_ref];
+        if let Some(def_id) = self.scopes.lookup(self.current_scope, nr.name) {
+            self.output.name_ref_defs[usize::try_from(named.name_ref.raw()).unwrap()] =
+                Some(def_id);
+            self.defs.get_mut(def_id).use_count += 1;
+        } else {
+            self.report_undefined(nr.name, named.span);
         }
         for &arg in &named.args {
             self.resolve_ty(arg);

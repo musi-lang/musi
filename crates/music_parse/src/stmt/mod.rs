@@ -50,10 +50,11 @@ impl Parser<'_> {
     }
 
     fn reinterpret_single_param(&mut self, expr: &Expr) -> Param {
-        if let Expr::Name { name, span, .. } = expr {
+        if let Expr::Name { name_ref, span, .. } = expr {
+            let name = self.arenas.name_refs[*name_ref].name;
             Param {
                 mode: ParamMode::Plain,
-                name: *name,
+                name,
                 ty: None,
                 default: None,
                 span: *span,

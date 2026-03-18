@@ -4,7 +4,7 @@ use music_shared::{Span, Symbol};
 
 use crate::expr::{BinOp, BindKind, Expr, LetFields};
 use crate::pat::Pat;
-use crate::{AstArenas, Lit};
+use crate::{AstArenas, Lit, NameRef};
 
 #[test]
 fn test_let_fields_round_trip_through_arena() {
@@ -146,8 +146,12 @@ fn test_binop_cons_round_trip_through_arena() {
         },
         span: Span::new(0, 1),
     });
-    let tail = arenas.exprs.alloc(Expr::Name {
+    let tail_ref = arenas.name_refs.alloc(NameRef {
         name: Symbol(0),
+        span: Span::new(5, 2),
+    });
+    let tail = arenas.exprs.alloc(Expr::Name {
+        name_ref: tail_ref,
         span: Span::new(5, 2),
     });
     let idx = arenas.exprs.alloc(Expr::BinOp {

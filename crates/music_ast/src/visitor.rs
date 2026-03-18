@@ -162,7 +162,6 @@ pub fn walk_ty<V: AstVisitor + ?Sized>(
 ) -> ControlFlow<V::Break> {
     match &ctx.tys[idx] {
         Ty::Var { .. } | Ty::Error { .. } => ControlFlow::Continue(()),
-
         Ty::Named { args, .. } | Ty::Qualified { args, .. } => {
             for &a in args {
                 v.visit_ty(a, ctx)?;

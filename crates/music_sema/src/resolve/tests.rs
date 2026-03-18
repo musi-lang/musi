@@ -5,7 +5,7 @@
 
 use music_ast::expr::{BindKind, Expr, LetFields, Param, ParamMode};
 use music_ast::pat::Pat;
-use music_ast::{AstArenas, ExprIdx, Lit, ParsedModule, Stmt};
+use music_ast::{AstArenas, ExprIdx, Lit, NameRef, ParsedModule, Stmt};
 use music_shared::{DiagnosticBag, FileId, Interner, Span, Symbol};
 
 use crate::def::DefTable;
@@ -41,12 +41,16 @@ fn lit_int(value: i64) -> Expr {
     }
 }
 
-/// Helper to construct a Name expression.
-fn name_expr(sym: Symbol) -> Expr {
-    Expr::Name {
+/// Helper to construct and allocate a Name expression.
+fn alloc_name_expr(arenas: &mut AstArenas, sym: Symbol) -> ExprIdx {
+    let name_ref = arenas.name_refs.alloc(NameRef {
         name: sym,
         span: Span::DUMMY,
-    }
+    });
+    arenas.exprs.alloc(Expr::Name {
+        name_ref,
+        span: Span::DUMMY,
+    })
 }
 
 /// Helper to construct a binding pattern.
@@ -152,7 +156,7 @@ fn test_resolve_name_reference_creates_expr_def() {
     });
 
     // Second stmt: x;
-    let name_ref = arenas.exprs.alloc(name_expr(sym));
+    let name_ref = alloc_name_expr(&mut arenas, sym);
 
     let module = make_module(arenas, vec![stmt(binding), stmt(name_ref)]);
     let (output, diags) = resolve_module(&mut interner, &module);
@@ -169,7 +173,7 @@ fn test_resolve_undefined_name_emits_error() {
     let sym = interner.intern("z");
 
     // Stmt: z; (no prior binding)
-    let name_ref = arenas.exprs.alloc(name_expr(sym));
+    let name_ref = alloc_name_expr(&mut arenas, sym);
 
     let module = make_module(arenas, vec![stmt(name_ref)]);
     let (_output, diags) = resolve_module(&mut interner, &module);
@@ -235,7 +239,7 @@ fn test_resolve_fn_param_creates_def_in_body() {
     let sym_p = interner.intern("p");
 
     // Body: p (reference to parameter)
-    let param_ref = arenas.exprs.alloc(name_expr(sym_p));
+    let param_ref = alloc_name_expr(&mut arenas, sym_p);
 
     // Lambda: (p) -> p
     let param = Param {

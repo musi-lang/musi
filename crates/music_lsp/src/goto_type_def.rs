@@ -4,7 +4,9 @@ use lsp_types::{GotoDefinitionResponse, Location, Position, Url};
 use music_sema::Type;
 use music_shared::Span;
 
-use crate::analysis::{AnalyzedDoc, def_at_cursor, position_to_offset, span_to_range};
+use crate::analysis::{
+    AnalyzedDoc, def_at_cursor, def_at_offset, position_to_offset, span_to_range,
+};
 
 pub fn goto_type_definition(
     doc: &AnalyzedDoc,
@@ -13,7 +15,7 @@ pub fn goto_type_definition(
 ) -> Option<GotoDefinitionResponse> {
     let sema = doc.sema.as_ref()?;
     let offset = position_to_offset(&doc.source, position.line, position.character);
-    let def = def_at_cursor(offset, doc)?;
+    let def = def_at_offset(offset, doc).or_else(|| def_at_cursor(offset, doc))?;
     let ty_idx = def.ty_info.ty?;
     let resolved = sema.unify.resolve(ty_idx, &sema.types);
 

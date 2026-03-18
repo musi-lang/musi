@@ -6,7 +6,8 @@ use lsp_types::{
 use music_shared::Span;
 
 use crate::analysis::{
-    AnalyzedDoc, def_at_cursor, expr_span, find_name_token, position_to_offset, span_to_range,
+    AnalyzedDoc, def_at_cursor, def_at_offset, expr_span, find_name_token, position_to_offset,
+    span_to_range,
 };
 
 /// Find all references to the symbol under the cursor (single-file).
@@ -103,7 +104,7 @@ pub fn prepare_rename(
     _uri: &Url,
 ) -> Option<PrepareRenameResponse> {
     let offset = position_to_offset(&doc.source, position.line, position.character);
-    let def = def_at_cursor(offset, doc)?;
+    let def = def_at_offset(offset, doc).or_else(|| def_at_cursor(offset, doc))?;
     if def.span == Span::DUMMY {
         return None;
     }
