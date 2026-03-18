@@ -1,4 +1,0 @@
-[package]
-name = "@std/array"
-version = "0.1.0"
-main = "./index.ms"
