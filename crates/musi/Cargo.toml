@@ -17,8 +17,8 @@ name = "musi"
 path = "src/main.rs"
 
 [dependencies]
-musi_builtins = { path = "../musi_builtins" }
-musi_vm = { path = "../musi_vm" }
+msc_builtins = { path = "../msc_builtins" }
+msc_vm = { path = "../msc_vm" }
 clap = { workspace = true }
 
 [lints]

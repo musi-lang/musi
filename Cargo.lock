@@ -610,153 +610,153 @@ dependencies = [
 ]
 
 [[package]]
-name = "musi"
+name = "msc"
 version = "0.1.0-rc1"
 dependencies = [
  "clap",
- "musi_builtins",
- "musi_vm",
+ "msc_ast",
+ "msc_builtins",
+ "msc_emit",
+ "msc_lex",
+ "msc_manifest",
+ "msc_parse",
+ "msc_resolve",
+ "msc_sema",
+ "msc_shared",
+ "msc_vm",
+ "serde_json",
 ]
 
 [[package]]
-name = "musi_bc"
+name = "msc_ast"
+version = "0.1.0-rc1"
+dependencies = [
+ "msc_shared",
+]
+
+[[package]]
+name = "msc_bc"
 version = "0.1.0-rc1"
 
 [[package]]
-name = "musi_builtins"
+name = "msc_builtins"
 version = "0.1.0-rc1"
 dependencies = [
  "libc",
  "libffi",
  "libloading",
- "musi_vm",
+ "msc_vm",
 ]
 
 [[package]]
-name = "musi_manifest"
+name = "msc_emit"
 version = "0.1.0-rc1"
 dependencies = [
- "serde",
- "thiserror",
- "toml",
-]
-
-[[package]]
-name = "musi_vm"
-version = "0.1.0-rc1"
-dependencies = [
- "musi_bc",
+ "msc_ast",
+ "msc_bc",
+ "msc_lex",
+ "msc_parse",
+ "msc_sema",
+ "msc_shared",
+ "msc_vm",
  "thiserror",
 ]
 
 [[package]]
-name = "music"
+name = "msc_lex"
 version = "0.1.0-rc1"
 dependencies = [
- "clap",
- "musi_builtins",
- "musi_manifest",
- "musi_vm",
- "music_ast",
- "music_emit",
- "music_lex",
- "music_parse",
- "music_resolve",
- "music_sema",
- "music_shared",
- "toml_edit",
-]
-
-[[package]]
-name = "music_ast"
-version = "0.1.0-rc1"
-dependencies = [
- "music_shared",
-]
-
-[[package]]
-name = "music_emit"
-version = "0.1.0-rc1"
-dependencies = [
- "musi_bc",
- "musi_vm",
- "music_ast",
- "music_lex",
- "music_parse",
- "music_sema",
- "music_shared",
+ "msc_shared",
  "thiserror",
 ]
 
 [[package]]
-name = "music_lex"
-version = "0.1.0-rc1"
-dependencies = [
- "music_shared",
- "thiserror",
-]
-
-[[package]]
-name = "music_lsp"
+name = "msc_lsp"
 version = "0.1.0-rc1"
 dependencies = [
  "async-lsp",
  "futures",
  "lsp-types",
- "musi_manifest",
- "music_ast",
- "music_lex",
- "music_parse",
- "music_resolve",
- "music_sema",
- "music_shared",
+ "msc_ast",
+ "msc_lex",
+ "msc_manifest",
+ "msc_parse",
+ "msc_resolve",
+ "msc_sema",
+ "msc_shared",
  "serde_json",
  "tokio",
  "tower",
 ]
 
 [[package]]
-name = "music_parse"
+name = "msc_manifest"
 version = "0.1.0-rc1"
 dependencies = [
- "music_ast",
- "music_lex",
- "music_shared",
+ "serde",
+ "serde_json",
  "thiserror",
 ]
 
 [[package]]
-name = "music_resolve"
+name = "msc_parse"
+version = "0.1.0-rc1"
+dependencies = [
+ "msc_ast",
+ "msc_lex",
+ "msc_shared",
+ "thiserror",
+]
+
+[[package]]
+name = "msc_resolve"
 version = "0.1.0-rc1"
 dependencies = [
  "hex",
- "musi_manifest",
- "music_ast",
- "music_lex",
- "music_parse",
- "music_shared",
+ "msc_ast",
+ "msc_lex",
+ "msc_manifest",
+ "msc_parse",
+ "msc_shared",
  "sha2",
  "tempfile",
  "thiserror",
 ]
 
 [[package]]
-name = "music_sema"
+name = "msc_sema"
 version = "0.1.0-rc1"
 dependencies = [
- "music_ast",
- "music_lex",
- "music_parse",
- "music_shared",
+ "msc_ast",
+ "msc_lex",
+ "msc_parse",
+ "msc_shared",
  "thiserror",
 ]
 
 [[package]]
-name = "music_shared"
+name = "msc_shared"
 version = "0.1.0-rc1"
 dependencies = [
  "intaglio",
  "memchr",
+]
+
+[[package]]
+name = "msc_vm"
+version = "0.1.0-rc1"
+dependencies = [
+ "msc_bc",
+ "thiserror",
+]
+
+[[package]]
+name = "musi"
+version = "0.1.0-rc1"
+dependencies = [
+ "clap",
+ "msc_builtins",
+ "msc_vm",
 ]
 
 [[package]]
@@ -900,15 +900,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde_spanned"
-version = "1.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f8bbf91e5a4d6315eee45e704372590b30e260ee83af6639d64557f51b067776"
-dependencies = [
- "serde_core",
-]
-
-[[package]]
 name = "sha2"
 version = "0.10.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1048,58 +1039,6 @@ dependencies = [
  "quote",
  "syn",
 ]
-
-[[package]]
-name = "toml"
-version = "1.0.7+spec-1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd28d57d8a6f6e458bc0b8784f8fdcc4b99a437936056fa122cb234f18656a96"
-dependencies = [
- "indexmap",
- "serde_core",
- "serde_spanned",
- "toml_datetime",
- "toml_parser",
- "toml_writer",
- "winnow",
-]
-
-[[package]]
-name = "toml_datetime"
-version = "1.0.1+spec-1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b320e741db58cac564e26c607d3cc1fdc4a88fd36c879568c07856ed83ff3e9"
-dependencies = [
- "serde_core",
-]
-
-[[package]]
-name = "toml_edit"
-version = "0.25.5+spec-1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8ca1a40644a28bce036923f6a431df0b34236949d111cc07cb6dca830c9ef2e1"
-dependencies = [
- "indexmap",
- "toml_datetime",
- "toml_parser",
- "toml_writer",
- "winnow",
-]
-
-[[package]]
-name = "toml_parser"
-version = "1.0.10+spec-1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7df25b4befd31c4816df190124375d5a20c6b6921e2cad937316de3fccd63420"
-dependencies = [
- "winnow",
-]
-
-[[package]]
-name = "toml_writer"
-version = "1.0.7+spec-1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f17aaa1c6e3dc22b1da4b6bba97d066e354c7945cac2f7852d4e4e7ca7a6b56d"
 
 [[package]]
 name = "tower"
@@ -1358,15 +1297,6 @@ name = "windows_x86_64_msvc"
 version = "0.52.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "589f6da84c646204747d1270a2a5661ea66ed1cced2631d546fdfb155959f9ec"
-
-[[package]]
-name = "winnow"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a90e88e4667264a994d34e6d1ab2d26d398dcdca8b7f52bec8668957517fc7d8"
-dependencies = [
- "memchr",
-]
 
 [[package]]
 name = "wit-bindgen"

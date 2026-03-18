@@ -1,6 +1,6 @@
 //! `musi` - Musi bytecode interpreter.
 //!
-//! Loads and executes `.msbc` binaries produced by the `music` compiler.
+//! Loads and executes `.msbc` binaries produced by the `msc` compiler.
 //!
 //! Exit codes:
 //! - `0` success
@@ -10,8 +10,8 @@
 use std::{fs, path::PathBuf, process};
 
 use clap::Parser;
-use musi_builtins::StdHost;
-use musi_vm::{Vm, load, verify};
+use msc_builtins::StdHost;
+use msc_vm::{Vm, load, verify};
 
 #[derive(Parser)]
 #[command(name = "musi", about = "Musi bytecode interpreter")]
