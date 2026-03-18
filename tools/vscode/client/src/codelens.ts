@@ -1,16 +1,15 @@
 import * as path from "node:path";
-import { parse as parseTOML } from "smol-toml";
 import * as vscode from "vscode";
 import type { MsPackage } from "./types.ts";
 
 /**
- * Provides CodeLens "▶ <task>" buttons above each task entry in mspackage.toml.
+ * Provides CodeLens "▶ <task>" buttons above each task entry in musi.json.
  */
 export class MsPackageCodeLensProvider implements vscode.CodeLensProvider {
 	provideCodeLenses(document: vscode.TextDocument): vscode.CodeLens[] {
 		let pkg: MsPackage;
 		try {
-			pkg = parseTOML(document.getText()) as typeof pkg;
+			pkg = JSON.parse(document.getText()) as typeof pkg;
 		} catch {
 			return [];
 		}
@@ -25,12 +24,11 @@ export class MsPackageCodeLensProvider implements vscode.CodeLensProvider {
 		for (const [name, entry] of Object.entries(pkg.tasks)) {
 			const cmd = typeof entry === "string" ? entry : entry.command;
 			const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-			const tableRegex = new RegExp(`^\\[tasks\\.${escaped}\\]`);
-			const inlineRegex = new RegExp(`^${escaped}\\s*=`);
+			const keyRegex = new RegExp(`"${escaped}"\\s*:`);
 
 			for (let i = 0; i < document.lineCount; i++) {
 				const line = document.lineAt(i).text;
-				if (tableRegex.test(line) || inlineRegex.test(line)) {
+				if (keyRegex.test(line)) {
 					lenses.push(
 						new vscode.CodeLens(new vscode.Range(i, 0, i, 0), {
 							title: `▶ ${name}`,

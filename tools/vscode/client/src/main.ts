@@ -8,7 +8,6 @@ import {
 import { clearCliCache, registerCommands } from "./commands.ts";
 import { onConfigChange } from "./config.ts";
 import { MusiConfigurationProvider } from "./launch.ts";
-import { registerMspackageValidator } from "./mspackage-validator.ts";
 import { clearCompilerPathCache } from "./runner.ts";
 import { StatusBar } from "./status.ts";
 
@@ -89,7 +88,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	context.subscriptions.push(
 		vscode.languages.registerCodeLensProvider(
-			{ scheme: "file", pattern: "**/mspackage.toml" },
+			{ scheme: "file", pattern: "**/musi.json" },
 			new MsPackageCodeLensProvider(),
 		),
 		vscode.languages.registerCodeLensProvider(
@@ -104,8 +103,6 @@ export async function activate(context: vscode.ExtensionContext) {
 			new MusiConfigurationProvider(),
 		),
 	);
-
-	registerMspackageValidator(context);
 
 	try {
 		await _startServer();

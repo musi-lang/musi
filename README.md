@@ -14,7 +14,7 @@ Musi source files use the `.ms` extension. The toolchain has two binaries:
 | `musi` | Universal driver — run, check, build, test, format, lint, manage projects |
 | `msc`  | Standalone compiler — type-check and compile without the VM               |
 
-You will mostly use `musi`. The `msc` binary is for compiler-only workflows (CI type-checking, producing `.muse` bytecode without running it).
+You will mostly use `musi`. The `msc` binary is for compiler-only workflows (CI type-checking, producing `.seam` bytecode without running it).
 
 ## Prerequisites
 
@@ -113,8 +113,8 @@ Other commands:
 
 ```bash
 musi check              # type-check without running
-musi build              # compile to .muse bytecode
-musi exec index.muse    # run compiled bytecode directly
+musi build              # compile to .seam bytecode
+musi exec index.seam    # run compiled bytecode directly
 musi test               # discover and run *.test.ms files
 musi fmt                # format source files
 musi lint               # lint source files

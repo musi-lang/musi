@@ -26,7 +26,7 @@ ty-ident      = "'" letter *(letter / digit / "_")
 
 op-ident      = "(" op-chars ")"
 
-op-chars      = "+"  ; §1.3  Literals
+op-chars      = "+"
                 / "-"
                 / "*"
                 / "/"
@@ -41,78 +41,78 @@ op-chars      = "+"  ; §1.3  Literals
                 / ">>"
                 / "::"
                 / "|>"
+; §1.3  Literals
+lit         = lit-int
+              / lit-float
+              / lit-string
+              / lit-fstring
+              / lit-rune
 
-lit           = lit-int
-                / lit-float
-                / lit-string
-                / lit-fstring
-                / lit-rune
+lit-int     = dec-int
+              / hex-int
+              / oct-int
+              / bin-int
 
-lit-int       = dec-int
-                / hex-int
-                / oct-int
-                / bin-int
+dec-int     = digit *(digit / "_")
 
-dec-int       = digit *(digit / "_")
+hex-int     = "0x" xdigit *(xdigit / "_")
 
-hex-int       = "0x" xdigit *(xdigit / "_")
+oct-int     = "0o" (%x30-37) *(%x30-37 / "_")  ; 0-7
 
-oct-int       = "0o" (%x30-37) *(%x30-37 / "_")  ; 0-7
+bin-int     = "0b" ("0" / "1") *(("0" / "1") / "_")
 
-bin-int       = "0b" ("0" / "1") *(("0" / "1") / "_")
+lit-float   = *digit "." 1*digit [("e" / "E") ["+" / "-"] 1*digit]
 
-lit-float     = *digit "." 1*digit [("e" / "E") ["+" / "-"] 1*digit]
+lit-string  = DQUOTE *(str-char) DQUOTE
 
-lit-string    = DQUOTE *(str-char) DQUOTE
+lit-fstring = %s"f" DQUOTE *(fstr-part) DQUOTE
 
-lit-fstring   = %s"f" DQUOTE *(fstr-part) DQUOTE
+lit-rune    = "'" rune-char "'"
 
-lit-rune      = "'" rune-char "'"
+fstr-part   = "{" ast-expr "}"
+              / str-char
 
-fstr-part     = "{" ast-expr "}"
-                / str-char
+str-char    = "\" any
+              / <any except DQUOTE>
 
-str-char      = "\" any
-                / <any except DQUOTE>
-
-rune-char     = "\" any  ; §1.4  Comments
-                / <any except single-quote>
-
-comment       = "//" *(<any except newline>)  ; line
-                / "///" *(<any except newline>)  ; doc - documents next item
-                / "/*" *(<any except "*/">) "*/"  ; block - does not nest
+rune-char   = "\" any
+              / <any except single-quote>
+; §1.4  Comments
+comment = "//" *(<any except newline>)  ; line
+          / "///" *(<any except newline>)  ; doc - documents next item
+          / "/*" *(<any except "*/">) "*/"  ; block - does not nest
 ; §1.5  Keywords
-keyword        = "and"  ; §1.6  Compound tokens - maximal munch
-                 / "as"
-                 / "choice"
-                 / "class"
-                 / "defer"
-                 / "do"
-                 / "effect"
-                 / "export"
-                 / "fatal"
-                 / "foreign"
-                 / "handle"
-                 / "if"
-                 / "import"
-                 / "in"
-                 / "instance"
-                 / "law"
-                 / "let"
-                 / "match"
-                 / "mut"
-                 / "not"
-                 / "of"
-                 / "or"
-                 / "record"
-                 / "resume"
-                 / "return"
-                 / "try"
-                 / "where"
-                 / "with"
-                 / "xor"
-
-compound-token = ":="  ; §2  Parser grammar
+keyword = "and"
+          / "as"
+          / "choice"
+          / "class"
+          / "defer"
+          / "effect"
+          / "export"
+          / "fatal"
+          / "foreign"
+          / "handle"
+          / "if"
+          / "import"
+          / "in"
+          / "instance"
+          / "law"
+          / "let"
+          / "match"
+          / "mut"
+          / "need"
+          / "not"
+          / "of"
+          / "or"
+          / "record"
+          / "resume"
+          / "return"
+          / "try"
+          / "where"
+          / "with"
+          / "xor"
+; §1.6  Compound tokens - maximal munch
+compound-token = ":="
                  / "<-"
                  / "->"
                  / "~>"
@@ -138,10 +138,12 @@ compound-token = ":="  ; §2  Parser grammar
                  / ":?>"
                  / "|>"
                  / "#["
+; §2  Parser grammar
 ; §2.1  Top level
 ast-root = *(ast-stmt)
 
-ast-stmt = ast-expr ";"  ; §2.2  Expressions - precedence ladder (lowest -> highest)
+ast-stmt = ast-expr ";"
+; §2.2  Expressions - precedence ladder (lowest -> highest)
 ;
 ;   Assignment          <-              right
 ;   Nil-coalescing      ?? !!           right
@@ -187,20 +189,20 @@ ast-expr-mul   = ast-expr-pre *(("*" / "/" / "%") ast-expr-pre)
 ast-expr-pre   = ("-" / "not") ast-expr-pre
                  / ast-expr-post
 
-ast-expr-post  = ast-expr-atom *(postfix-op)  ; §2.3  Postfix operations
-
-postfix-op     = "(" [arg-list] ")"  ; call
-                 / "." "[" [expr-list] "]"  ; index
-                 / "." "{" [rec-lit-fields] "}"  ; record literal
-                 / "." field-target  ; field access
-                 / "?." field-target  ; optional chaining
-                 / "!." field-target  ; forced unwrap access
-                 / "?"  ; try / propagate
-                 / "!"  ; force unwrap
-                 / ":?" ast-ty-named ["as" ident]  ; type test
-                 / ":?>" ast-ty-named  ; type cast
+ast-expr-post  = ast-expr-atom *(postfix-op)
+; §2.3  Postfix operations
+postfix-op = "(" [arg-list] ")"  ; call
+             / "." "[" [expr-list] "]"  ; index
+             / "." "{" [rec-lit-fields] "}"  ; record literal
+             / "." field-target  ; field access
+             / "?." field-target  ; optional chaining
+             / "!." field-target  ; forced unwrap access
+             / "?"  ; try / propagate
+             / "!"  ; force unwrap
+             / ":?" ast-ty-named ["as" ident]  ; type test
+             / ":?>" ast-ty-named  ; type cast
 ; §2.4  Atoms - each alternative has a unique FIRST token
-ast-expr-atom = lit  ; "("
+ast-expr-atom = lit  ; literals
                 / ident
                 / ast-paren
                 / ast-array  ; "["
@@ -209,13 +211,15 @@ ast-expr-atom = lit  ; "("
                 / ast-match  ; "match"
                 / ast-let  ; "let"
                 / ast-return  ; "return"
+                / ast-resume  ; "resume"
                 / ast-defer  ; "defer"
                 / ast-try  ; "try"
                 / ast-import  ; "import"
                 / ast-choice  ; "choice"
                 / ast-record  ; "record"
-                / ast-do  ; "do"
+                / ast-need  ; "need"
                 / ast-handle  ; "with"
+                / ast-foreign-expr  ; "foreign" (expression-level foreign import)
                 / ast-with-attrs  ; "#["
 ; §2.5  Parenthesised forms
 ;
@@ -252,59 +256,63 @@ seq-tail   = <empty>  ; trailing ;, returns ()
 seq-cont   = <empty>  ; returns last expr
              / ";" [seq-tail]  ; continue sequence
 ; §2.6  Piecewise - sole conditional form. No if/else. No ternary.
-pw-arm            = ast-expr "if" pw-guard
+pw-arm   = ast-expr "if" pw-guard
 
-pw-guard          = "_"  ; §2.7  Match
-                    / ast-expr
+pw-guard = "_"
+           / ast-expr
+; §2.7  Match
+ast-match = "match" ast-expr "(" match-arm *("|" match-arm) ")"
 
-ast-match         = "match" ast-expr "(" match-arm *("|" match-arm) ")"
+match-arm = [attrs] ast-pat ["if" ast-expr] "=>" ast-expr
+; §2.8  Arrays
+ast-array   = "[" [array-items] "]"
 
-match-arm         = [attrs] ast-pat ["if" ast-expr] "=>" ast-expr  ; §2.8  Arrays
+array-items = array-item *("," array-item)
 
-ast-array         = "[" [array-items] "]"
+array-item  = spread
+              / ast-expr
+; §2.9  Record literals
+ast-rec-lit    = ".{" [rec-lit-fields] "}"
 
-array-items       = array-item *("," array-item)
+rec-lit-fields = rec-lit-field *("," rec-lit-field)
 
-array-item        = spread  ; §2.9  Record literals
-                    / ast-expr
+rec-lit-field  = ident [":=" ast-expr]
+                 / spread
+; §2.10  Bindings
+ast-let        = "let" ["mut"] ast-pat [ty-params] [with-clause] [ty-annot] (":=" ast-expr ["in" "(" ast-expr ")"] / <stub>)
 
-ast-rec-lit       = ".{" [rec-lit-fields] "}"
+bracket-params = "[" ty-ident *("," ty-ident) "]"
 
-rec-lit-fields    = rec-lit-field *("," rec-lit-field)
+with-clause    = "with" effect-set
+; §2.11  Type definitions
+ast-choice     = "choice" "{" ast-ty "}"
 
-rec-lit-field     = ident [":=" ast-expr]  ; §2.10  Bindings
-                    / spread
+ast-record     = "record" "{" rec-def-fields "}"
 
-ast-let           = "let" ["mut"] ast-pat [ty-params] [with-clause] [ty-annot] (":=" ast-expr ["in" "(" ast-expr ")"] / <stub>)
+rec-def-fields = rec-def-field *(";" rec-def-field)
 
-bracket-params    = "[" ty-ident *("," ty-ident) "]"
+rec-def-field  = ident ":" ast-ty [":=" ast-expr]
+; §2.12  Other atom forms
+ast-dot-pfx      = "." ident ["(" [expr-list] ")"]
 
-with-clause       = "with" effect-set  ; §2.11  Type definitions
+ast-return       = "return" [ast-expr]
 
-ast-choice        = "choice" "{" ast-ty "}"
+ast-resume       = "resume" [ast-expr]
 
-ast-record        = "record" "{" rec-def-fields "}"
+ast-defer        = "defer" ast-expr
 
-rec-def-fields    = rec-def-field *(";" rec-def-field)
+ast-try          = "try" ast-expr
 
-rec-def-field     = ident ":" ast-ty [":=" ast-expr]  ; §2.12  Other atom forms
+ast-import       = "import" lit-string ["as" ident]
 
-ast-dot-pfx       = "." ident ["(" [expr-list] ")"]
+ast-foreign-expr = "foreign" [lit-string] "import" lit-string
 
-ast-return        = "return" [ast-expr]
+ast-need         = "need" ast-expr-post
 
-ast-defer         = "defer" ast-expr
+ast-handle       = "with" ast-ty-named "{" *(handler-op [";"]) "}" "handle" ast-expr
 
-ast-try           = "try" ast-expr
-
-ast-import        = "import" lit-string ["as" ident]
-
-ast-do            = "do" ast-expr-post
-
-ast-handle        = "with" ast-ty-named "{" *(handler-op [";"]) "}" "handle" ast-expr
-
-handler-op        = ident ":" params "=>" ast-expr  ; §2.13  Declarations
-
+handler-op       = ident ":" params "=>" ast-expr
+; §2.13  Declarations
 ast-with-attrs    = attrs ast-decl
 
 ast-decl          = "export" export-tail
@@ -327,7 +335,7 @@ ast-instance-decl = "instance" ast-ty-named [ty-params] "{" *(class-member) "}"
 
 ast-effect-decl   = "effect" ident [bracket-params] "{" *(effect-op [";"]) "}"
 
-ast-foreign-decl  = "foreign" [lit-string] ("let" foreign-binding / "(" *("let" foreign-binding ";") ")")
+ast-foreign-decl  = "foreign" [lit-string] ("let" foreign-binding / "(" *("let" foreign-binding ";") ")" / "import" lit-string)
 
 class-member      = (fn-decl / law-decl) [";"]
 
@@ -340,58 +348,58 @@ op-or-ident       = ident
 
 foreign-binding   = ident ["as" lit-string] [":" ast-ty]
 
-effect-op         = ["fatal"] ident ":" ast-ty  ; §2.14  Types
+effect-op         = ["fatal"] ident ":" ast-ty
+; §2.14  Types
+ast-ty       = ast-ty-arrow
 
-ast-ty            = ast-ty-arrow
+ast-ty-arrow = ast-ty-sum [("->" / "~>") ast-ty-arrow]
 
-ast-ty-arrow      = ast-ty-sum [("->" / "~>") ast-ty-arrow]
+ast-ty-sum   = ast-ty-prod *("+" ast-ty-prod)
 
-ast-ty-sum        = ast-ty-prod *("+" ast-ty-prod)
+ast-ty-prod  = ast-ty-base *("*" ast-ty-base)
 
-ast-ty-prod       = ast-ty-base *("*" ast-ty-base)
+ast-ty-base  = ty-ident  ; 'T
+               / "?" ast-ty-base  ; ?T - option sugar
+               / ident ["of" ty-arg-list]  ; Named, Named of T
+               / "(" ast-ty ")"  ; grouped type
+               / "[" [lit-int] "]" ast-ty  ; array type
 
-ast-ty-base       = ty-ident  ; 'T
-                    / "?" ast-ty-base  ; ?T - option sugar
-                    / ident ["of" ty-arg-list]  ; Named, Named of T
-                    / "(" ast-ty ")"  ; grouped type
-                    / "[" [lit-int] "]" ast-ty  ; array type
+ty-arg-list  = ast-ty *("," ast-ty)
 
-ty-arg-list       = ast-ty *("," ast-ty)
+ty-annot     = ":" ast-ty
 
-ty-annot          = ":" ast-ty
+ast-ty-named = ident ["of" ty-arg-list]
 
-ast-ty-named      = ident ["of" ty-arg-list]
+effect-set   = "{" effect-list "}"
 
-effect-set        = "{" effect-list "}"
+effect-list  = effect-item *("," effect-item)
 
-effect-list       = effect-item *("," effect-item)
+effect-item  = ident ["of" ast-ty]
+               / ty-ident
 
-effect-item       = ident ["of" ast-ty]
-                    / ty-ident
+where-clause = "where" constraint *("," constraint)
 
-where-clause      = "where" constraint *("," constraint)
+constraint   = ty-ident ("<:" / ":>") ast-ty-named
+; §2.15  Patterns
+ast-pat         = ast-pat-primary ["or" ast-pat-primary *("or" ast-pat-primary)]
 
-constraint        = ty-ident ("<:" / ":>") ast-ty-named  ; §2.15  Patterns
+ast-pat-primary = "_"  ; wildcard
+                  / lit  ; literal
+                  / ident [pat-suffix]  ; bind, destructor, or named record
+                  / "." ident ["(" [pat-list] ")"]  ; UDN variant
+                  / ".{" [rec-pat-fields] "}"  ; record pattern
+                  / "(" [pat-list] ")"  ; tuple / grouped pattern
+                  / "[" [pat-list] "]"  ; array pattern
 
-ast-pat           = ast-pat-primary ["or" ast-pat-primary *("or" ast-pat-primary)]
+pat-suffix      = "(" [pat-list] ")"
+                  / "{" [rec-pat-fields] "}"
 
-ast-pat-primary   = "_"  ; wildcard
-                    / lit  ; literal
-                    / ident [pat-suffix]  ; bind, destructor, or named record
-                    / "." ident ["(" [pat-list] ")"]  ; UDN variant
-                    / ".{" [rec-pat-fields] "}"  ; record pattern
-                    / "(" [pat-list] ")"  ; tuple / grouped pattern
-                    / "[" [pat-list] "]"  ; array pattern
+rec-pat-fields  = rec-pat-field *("," rec-pat-field)
 
-pat-suffix        = "(" [pat-list] ")"
-                    / "{" [rec-pat-fields] "}"
+rec-pat-field   = ["mut"] ident [":" ast-pat]
 
-rec-pat-fields    = rec-pat-field *("," rec-pat-field)
-
-rec-pat-field     = ["mut"] ident [":" ast-pat]
-
-pat-list          = ast-pat *("," ast-pat)  ; §2.16  Attributes
-
+pat-list        = ast-pat *("," ast-pat)
+; §2.16  Attributes
 attrs             = 1*attr
 
 attr              = "#[" attr-body "]"
@@ -403,24 +411,24 @@ attr-value        = lit
 
 attr-named-fields = attr-named-field *("," attr-named-field)
 
-attr-named-field  = ident ":=" lit  ; §2.17  Shared helpers
+attr-named-field  = ident ":=" lit
+; §2.17  Shared helpers
+spread       = "..." ast-expr
 
-spread            = "..." ast-expr
+field-target = ident
+               / lit-int
 
-field-target      = ident
-                    / lit-int
+ty-params    = [bracket-params] [where-clause]
 
-ty-params         = [bracket-params] [where-clause]
+expr-list    = ast-expr *("," ast-expr)
 
-expr-list         = ast-expr *("," ast-expr)
+arg-list     = arg *("," arg)
 
-arg-list          = arg *("," arg)
+arg          = spread
+               / ast-expr
 
-arg               = spread
-                    / ast-expr
+params       = "(" [param-list] ")"
 
-params            = "(" [param-list] ")"
+param-list   = param *("," param)
 
-param-list        = param *("," param)
-
-param             = ["mut"] ident [ty-annot] [":=" ast-expr]
+param        = ["mut"] ident [ty-annot] [":=" ast-expr]
