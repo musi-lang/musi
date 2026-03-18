@@ -14,7 +14,6 @@ pub enum TokenKind {
     KwChoice,
     KwClass,
     KwDefer,
-    KwDo,
     KwEffect,
     KwExport,
     KwFatal,
@@ -28,6 +27,7 @@ pub enum TokenKind {
     KwLet,
     KwMatch,
     KwMut,
+    KwNeed,
     KwNot,
     KwOf,
     KwOr,
@@ -128,7 +128,6 @@ impl TokenKind {
                 | Self::KwChoice
                 | Self::KwClass
                 | Self::KwDefer
-                | Self::KwDo
                 | Self::KwEffect
                 | Self::KwExport
                 | Self::KwFatal
@@ -142,6 +141,7 @@ impl TokenKind {
                 | Self::KwLet
                 | Self::KwMatch
                 | Self::KwMut
+                | Self::KwNeed
                 | Self::KwNot
                 | Self::KwOf
                 | Self::KwOr
@@ -165,7 +165,6 @@ impl TokenKind {
             Self::KwChoice => Some("choice"),
             Self::KwClass => Some("class"),
             Self::KwDefer => Some("defer"),
-            Self::KwDo => Some("do"),
             Self::KwEffect => Some("effect"),
             Self::KwExport => Some("export"),
             Self::KwFatal => Some("fatal"),
@@ -179,6 +178,7 @@ impl TokenKind {
             Self::KwLet => Some("let"),
             Self::KwMatch => Some("match"),
             Self::KwMut => Some("mut"),
+            Self::KwNeed => Some("need"),
             Self::KwNot => Some("not"),
             Self::KwOf => Some("of"),
             Self::KwOr => Some("or"),
@@ -287,7 +287,6 @@ pub fn keyword_from_str(s: &str) -> Option<TokenKind> {
         "choice" => Some(TokenKind::KwChoice),
         "class" => Some(TokenKind::KwClass),
         "defer" => Some(TokenKind::KwDefer),
-        "do" => Some(TokenKind::KwDo),
         "effect" => Some(TokenKind::KwEffect),
         "export" => Some(TokenKind::KwExport),
         "fatal" => Some(TokenKind::KwFatal),
@@ -301,6 +300,7 @@ pub fn keyword_from_str(s: &str) -> Option<TokenKind> {
         "let" => Some(TokenKind::KwLet),
         "match" => Some(TokenKind::KwMatch),
         "mut" => Some(TokenKind::KwMut),
+        "need" => Some(TokenKind::KwNeed),
         "not" => Some(TokenKind::KwNot),
         "of" => Some(TokenKind::KwOf),
         "or" => Some(TokenKind::KwOr),

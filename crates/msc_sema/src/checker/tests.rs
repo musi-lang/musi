@@ -98,7 +98,13 @@ fn check_module(interner: &mut Interner, module: &ParsedModule) -> DiagnosticBag
     }
 
     checker.resolve_obligations();
-    crate::analyze_emit_unused_warnings(&defs, interner, FileId(0), &mut diags);
+    crate::analyze_emit_unused_warnings(
+        &defs,
+        interner,
+        FileId(0),
+        &mut diags,
+        &crate::SemaOptions::default(),
+    );
 
     diags
 }

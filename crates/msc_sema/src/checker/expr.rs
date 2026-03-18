@@ -138,6 +138,14 @@ fn synth_inner<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) -> Ty
             }
             ck.named_ty(ck.ctx.well_known.never)
         }
+        Expr::Need { operand, .. } => synth(ck, *operand),
+        Expr::Resume { value, .. } => {
+            if let Some(v) = *value {
+                synth(ck, v)
+            } else {
+                ck.named_ty(ck.ctx.well_known.unit)
+            }
+        }
         Expr::Variant {
             name, args, span, ..
         } => {
@@ -955,7 +963,7 @@ fn synth_unaryop<S: BuildHasher>(
             ck.unify_or_report(bool_ty, operand_ty, span);
             bool_ty
         }
-        UnaryOp::Neg | UnaryOp::Defer | UnaryOp::Try | UnaryOp::Do => operand_ty,
+        UnaryOp::Neg | UnaryOp::Defer | UnaryOp::Try => operand_ty,
         UnaryOp::ForceUnwrap | UnaryOp::Propagate => unwrap_option_ty(ck, operand_ty, span),
     }
 }

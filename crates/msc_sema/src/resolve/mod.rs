@@ -252,6 +252,8 @@ pub(crate) const fn expr_span(expr: &Expr) -> Span {
         | Expr::ProductType { span, .. }
         | Expr::SumType { span, .. }
         | Expr::ArrayType { span, .. }
-        | Expr::PiType { span, .. } => *span,
+        | Expr::PiType { span, .. }
+        | Expr::Need { span, .. }
+        | Expr::Resume { span, .. } => *span,
     }
 }

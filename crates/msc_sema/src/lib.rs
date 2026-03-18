@@ -21,6 +21,7 @@ pub mod def;
 pub mod error;
 pub mod exports;
 pub mod lang_items;
+pub mod options;
 pub mod resolve;
 pub mod scope;
 pub mod subst;
@@ -41,6 +42,7 @@ pub use unify::{UnifyTable, types_match};
 pub use well_known::WellKnown;
 
 pub use exports::{ExportBinding, ModuleExports, collect_exports};
+pub use options::SemaOptions;
 pub use resolve::{ImportNames, SubModuleExports};
 
 use std::collections::{HashMap, HashSet};
@@ -261,6 +263,7 @@ pub fn analyze_shared<S: BuildHasher>(
     import_names: &ImportNames,
     import_types: &HashMap<Symbol, TypeIdx, S>,
     sub_module_exports: &SubModuleExports,
+    options: &SemaOptions,
 ) -> ModuleSemaOutput {
     let module_scope = state.scopes.push_child(state.prelude_scope);
 
@@ -322,7 +325,7 @@ pub fn analyze_shared<S: BuildHasher>(
         .instances
         .extend(result.instances[inherited_count..].iter().cloned());
 
-    analyze_emit_unused_warnings(&state.defs, interner, file_id, diags);
+    analyze_emit_unused_warnings(&state.defs, interner, file_id, diags, options);
 
     ModuleSemaOutput {
         module_scope,
@@ -351,9 +354,10 @@ pub fn analyze(
     interner: &mut Interner,
     file_id: FileId,
     diags: &mut DiagnosticBag,
+    options: &SemaOptions,
 ) -> SemaResult {
     let empty_imports = HashMap::new();
-    analyze_with_imports(module, interner, file_id, diags, &empty_imports)
+    analyze_with_imports(module, interner, file_id, diags, &empty_imports, options)
 }
 
 /// Like [`analyze`], but with pre-computed import types for cross-module resolution.
@@ -363,6 +367,7 @@ pub fn analyze_with_imports<S: BuildHasher>(
     file_id: FileId,
     diags: &mut DiagnosticBag,
     import_types: &HashMap<Symbol, TypeIdx, S>,
+    options: &SemaOptions,
 ) -> SemaResult {
     let (mut defs, well_known, mut scopes, module_scope, resolved, types) =
         analyze_setup(module, interner, file_id, diags);
@@ -395,7 +400,7 @@ pub fn analyze_with_imports<S: BuildHasher>(
     checker.resolve_obligations();
     let result = checker.finish();
 
-    analyze_emit_unused_warnings(&defs, interner, file_id, diags);
+    analyze_emit_unused_warnings(&defs, interner, file_id, diags, options);
 
     let mut lang_items = LangItemRegistry::new();
     for def in defs.iter() {
@@ -468,6 +473,7 @@ fn analyze_emit_unused_warnings(
     interner: &Interner,
     file_id: FileId,
     diags: &mut DiagnosticBag,
+    options: &SemaOptions,
 ) {
     for def in defs.iter() {
         if def.use_count == 0
@@ -490,6 +496,13 @@ fn analyze_emit_unused_warnings(
                 continue;
             }
             let name = Box::from(name_str);
+            let is_param = matches!(def.kind, DefKind::Param | DefKind::LawVar);
+            let promote_to_error = if is_param {
+                options.no_unused_parameters
+            } else {
+                options.no_unused_locals
+            };
+
             let err = match def.kind {
                 DefKind::Param | DefKind::LawVar => SemaError::UnusedParameter { name },
                 DefKind::OpaqueType => SemaError::UnusedType { name },
@@ -498,7 +511,11 @@ fn analyze_emit_unused_warnings(
                 DefKind::Import => SemaError::UnusedImport { name },
                 _ => SemaError::UnusedBinding { name },
             };
-            let _d = diags.report(&err, def.span, file_id);
+            if promote_to_error {
+                let _d = diags.error(err.to_string(), def.span, file_id);
+            } else {
+                let _d = diags.report(&err, def.span, file_id);
+            }
         }
     }
 }

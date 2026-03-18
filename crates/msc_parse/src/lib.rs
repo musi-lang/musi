@@ -59,7 +59,9 @@ pub const fn can_start_expr(kind: TokenKind) -> bool {
             | TokenKind::KwRecord
             | TokenKind::KwReturn
             | TokenKind::KwTry
-            | TokenKind::KwDo
+            | TokenKind::KwNeed
+            | TokenKind::KwResume
+            | TokenKind::KwForeign
             | TokenKind::KwWith
     )
 }

@@ -6,7 +6,7 @@
 
 use msc_lex::lex as lex_source;
 use msc_parse::parse;
-use msc_sema::{SemaResult, analyze};
+use msc_sema::{SemaOptions, SemaResult, analyze};
 use msc_shared::{DiagnosticBag, Interner, Severity, SourceDb};
 
 /// Helper to lex, parse, and analyze a source string.
@@ -27,7 +27,13 @@ fn analyze_src(src: &str) -> (SemaResult, DiagnosticBag) {
 
     // Analyze
     let mut diags = DiagnosticBag::new();
-    let result = analyze(&module, &mut interner, file_id, &mut diags);
+    let result = analyze(
+        &module,
+        &mut interner,
+        file_id,
+        &mut diags,
+        &SemaOptions::default(),
+    );
 
     (result, diags)
 }

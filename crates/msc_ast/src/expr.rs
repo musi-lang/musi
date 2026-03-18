@@ -130,6 +130,16 @@ pub enum Expr {
         value: Option<ExprIdx>,
         span: Span,
     },
+    /// Effect operation: `need op(args)` — perform an effect operation.
+    Need {
+        operand: ExprIdx,
+        span: Span,
+    },
+    /// Resume continuation inside a handler: `resume value`.
+    Resume {
+        value: Option<ExprIdx>,
+        span: Span,
+    },
 
     // Module
     Import {
@@ -439,7 +449,6 @@ pub enum UnaryOp {
     Not,
     Defer,
     Try,
-    Do,
     Propagate,
     ForceUnwrap,
 }

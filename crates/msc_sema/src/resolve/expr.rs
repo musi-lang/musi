@@ -78,6 +78,12 @@ impl Resolver<'_> {
                     self.resolve_expr(v);
                 }
             }
+            Expr::Need { operand, .. } => self.resolve_expr(operand),
+            Expr::Resume { value, .. } => {
+                if let Some(v) = value {
+                    self.resolve_expr(v);
+                }
+            }
             Expr::Let { fields, body, .. } => self.resolve_expr_let(&fields, body),
             Expr::Binding { fields, .. } => self.resolve_expr_binding(&fields),
             Expr::Fn {

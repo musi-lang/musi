@@ -114,6 +114,13 @@ pub fn walk_expr<V: AstVisitor + ?Sized>(
             }
             ControlFlow::Continue(())
         }
+        Expr::Need { operand, .. } => v.visit_expr(*operand, ctx),
+        Expr::Resume { value, .. } => {
+            if let Some(val) = *value {
+                v.visit_expr(val, ctx)?;
+            }
+            ControlFlow::Continue(())
+        }
 
         Expr::Annotated { attrs, inner, .. } => {
             walk_attrs_values(v, attrs, ctx)?;

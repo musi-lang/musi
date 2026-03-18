@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 use msc_lex::lex as lex_source;
 use msc_parse::parse;
-use msc_sema::analyze;
+use msc_sema::{SemaOptions, analyze};
 use msc_shared::{DiagnosticBag, Interner, Severity, SourceDb};
 
 fn collect_ms_files(dir: &Path) -> Vec<PathBuf> {
@@ -71,7 +71,13 @@ fn typecheck_all_std_files() {
 
         // Analyze
         let mut sema_diags = DiagnosticBag::new();
-        let _result = analyze(&module, &mut interner, file_id, &mut sema_diags);
+        let _result = analyze(
+            &module,
+            &mut interner,
+            file_id,
+            &mut sema_diags,
+            &SemaOptions::default(),
+        );
 
         // Collect all diagnostics
         let all_diags: Vec<_> = lex_diags

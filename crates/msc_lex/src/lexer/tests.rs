@@ -558,7 +558,7 @@ fn test_lex_hello_world() {
 #[test]
 fn test_new_keywords_recognized() {
     let keywords = [
-        ("do", TokenKind::KwDo),
+        ("need", TokenKind::KwNeed),
         ("fatal", TokenKind::KwFatal),
         ("handle", TokenKind::KwHandle),
         ("resume", TokenKind::KwResume),
@@ -644,7 +644,7 @@ fn test_colon_question_in_expression_context() {
 
 #[test]
 fn test_new_keywords_not_consumed_as_idents() {
-    for kw in ["do", "fatal", "handle", "resume", "with"] {
+    for kw in ["need", "fatal", "handle", "resume", "with"] {
         let kinds = lex_kinds(kw);
         assert_ne!(kinds[0], TokenKind::Ident, "'{kw}' should not be an ident");
     }

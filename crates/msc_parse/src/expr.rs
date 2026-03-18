@@ -173,8 +173,9 @@ impl Parser<'_> {
             TokenKind::KwEffect => self.parse_expr_effect(),
             TokenKind::KwForeign => self.parse_expr_foreign(),
 
-            // Do / Handle
-            TokenKind::KwDo => self.parse_expr_unary_op(UnaryOp::Do, 0),
+            // Need / Resume / Handle
+            TokenKind::KwNeed => self.parse_expr_need(),
+            TokenKind::KwResume => self.parse_expr_resume(),
             TokenKind::KwWith => self.parse_expr_handle(),
 
             // Discard: _ (treated as a name for lambda param reinterpretation)
@@ -205,6 +206,29 @@ impl Parser<'_> {
         Expr::UnaryOp {
             op,
             operand,
+            span: self.finish_span(start),
+        }
+    }
+
+    /// Parses `need expr` — effect operation invocation.
+    fn parse_expr_need(&mut self) -> Expr {
+        let start = self.start_span();
+        let _kw = self.bump();
+        let inner = self.parse_pratt(0);
+        let operand = self.alloc_expr(inner);
+        Expr::Need {
+            operand,
+            span: self.finish_span(start),
+        }
+    }
+
+    /// Parses `resume [expr]` — resume continuation with optional value.
+    fn parse_expr_resume(&mut self) -> Expr {
+        let start = self.start_span();
+        let _kw = self.bump();
+        let value = self.parse_opt_expr();
+        Expr::Resume {
+            value,
             span: self.finish_span(start),
         }
     }
