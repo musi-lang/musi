@@ -14,14 +14,14 @@ use std::collections::hash_map::RandomState;
 use std::hash::BuildHasher;
 use std::mem;
 
-use music_ast::ty::TyParam;
+use music_ast::ty_param::TyParam;
 use music_ast::{AstArenas, ExprIdx};
 use music_shared::{Arena, DiagnosticBag, FileId, Interner, Span, Symbol};
 
 use crate::def::{DefId, DefKind, DefTable};
 use crate::error::SemaError;
 use crate::scope::{ScopeId, ScopeTree};
-use crate::types::{DictLookup, EffectRow, InstanceInfo, Obligation, Type, TypeIdx, fmt_type};
+use crate::types::{CastInfo, DictLookup, EffectRow, InstanceInfo, Obligation, Type, TypeIdx, fmt_type};
 use crate::unify::UnifyTable;
 use crate::well_known::WellKnown;
 
@@ -57,6 +57,8 @@ pub struct TypeStore {
     pub(crate) fn_constraints: HashMap<DefId, Vec<Obligation>>,
     /// In-scope class obligations for the current generic function.
     pub(crate) active_obligations: Vec<Obligation>,
+    /// Cast insertions recorded during type checking, keyed by expression.
+    pub(crate) casts: HashMap<ExprIdx, CastInfo>,
 }
 
 pub struct Checker<'a, S: BuildHasher = RandomState> {
@@ -93,6 +95,7 @@ impl<'a, S: BuildHasher> Checker<'a, S> {
                 binop_dict_dispatch: HashMap::new(),
                 fn_constraints: HashMap::new(),
                 active_obligations: vec![],
+                casts: HashMap::new(),
             },
             diags,
             defs,
@@ -151,6 +154,60 @@ impl<'a, S: BuildHasher> Checker<'a, S> {
                 self.ctx.file_id,
             );
         }
+    }
+
+    /// Checks that `found` is a subtype of `expected`, falling back to unification,
+    /// then consistency, and reporting a diagnostic on failure.
+    pub(crate) fn check_subtype_or_report(&mut self, expected: TypeIdx, found: TypeIdx, span: Span) {
+        use crate::consistency::is_consistent;
+        use crate::subtype::is_subtype;
+        if is_subtype(found, expected, &self.store.types, &self.store.unify, self.ctx.well_known) {
+            return;
+        }
+        if self.store.unify.unify(expected, found, &mut self.store.types, self.ctx.well_known) {
+            return;
+        }
+        if is_consistent(found, expected, &self.store.types, &self.store.unify, self.ctx.well_known) {
+            // Types are consistent but not subtypes — cast will be inserted at call sites
+            // via `insert_cast` when the expression index is available.
+            return;
+        }
+        let defs_vec: Vec<_> = self.defs.iter().cloned().collect();
+        let exp_str = fmt_type(expected, &self.store.types, &defs_vec, self.ctx.interner, Some(&self.store.unify));
+        let found_str = fmt_type(found, &self.store.types, &defs_vec, self.ctx.interner, Some(&self.store.unify));
+        let _d = self.diags.report(
+            &SemaError::TypeMismatch { expected: exp_str, found: found_str },
+            span,
+            self.ctx.file_id,
+        );
+    }
+
+    /// Records a runtime cast from `from` to `to` at the given expression.
+    ///
+    /// No-ops if the types are identical or not consistent (the latter should
+    /// have been caught by `check_subtype_or_report`).
+    #[allow(dead_code)] // infrastructure for future cast insertion at expression sites
+    pub fn insert_cast(&mut self, expr_idx: ExprIdx, from: TypeIdx, to: TypeIdx, span: Span) {
+        use crate::consistency::is_consistent;
+        use crate::types::{BlameLabel, Polarity};
+
+        if from == to {
+            return;
+        }
+        if !is_consistent(from, to, &self.store.types, &self.store.unify, self.ctx.well_known) {
+            return;
+        }
+        let _prev = self.store.casts.insert(
+            expr_idx,
+            CastInfo {
+                from,
+                to,
+                blame: BlameLabel {
+                    span,
+                    polarity: Polarity::Positive,
+                },
+            },
+        );
     }
 
     pub(crate) fn record_type(&mut self, expr: ExprIdx, ty: TypeIdx) {
@@ -237,6 +294,7 @@ impl<'a, S: BuildHasher> Checker<'a, S> {
             binop_dispatch: self.store.binop_dispatch,
             binop_dict_dispatch: self.store.binop_dict_dispatch,
             fn_constraints: self.store.fn_constraints,
+            casts: self.store.casts,
         }
     }
 }
@@ -249,4 +307,5 @@ pub struct CheckerResult {
     pub binop_dispatch: HashMap<ExprIdx, DefId>,
     pub binop_dict_dispatch: HashMap<ExprIdx, DictLookup>,
     pub fn_constraints: HashMap<DefId, Vec<Obligation>>,
+    pub casts: HashMap<ExprIdx, CastInfo>,
 }

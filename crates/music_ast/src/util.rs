@@ -1,12 +1,16 @@
 //! Utility functions for AST traversal.
 
-use crate::ty::{Ty, TyParam};
-use crate::{AstArenas, TyIdx};
+use crate::expr::Expr;
+use crate::ty_param::TyParam;
+use crate::{AstArenas, ExprIdx};
 
-/// Collects type variables from `Ty::Var` nodes in a type tree.
-pub fn collect_ty_var_nodes(ty_idx: TyIdx, arenas: &AstArenas, out: &mut Vec<TyParam>) {
-    match &arenas.tys[ty_idx] {
-        Ty::Var { name_ref } => {
+/// Collects type variables from type expression nodes.
+///
+/// Walks `Expr` type-expression variants looking for `Expr::Name` nodes
+/// that reference type variables (detected by the caller).
+pub fn collect_ty_var_nodes(expr_idx: ExprIdx, arenas: &AstArenas, out: &mut Vec<TyParam>) {
+    match &arenas.exprs[expr_idx] {
+        Expr::Name { name_ref, .. } => {
             let nr = &arenas.name_refs[*name_ref];
             if !out.iter().any(|p| p.name == nr.name) {
                 out.push(TyParam {
@@ -15,28 +19,37 @@ pub fn collect_ty_var_nodes(ty_idx: TyIdx, arenas: &AstArenas, out: &mut Vec<TyP
                 });
             }
         }
-        Ty::Named { args, .. } | Ty::Qualified { args, .. } => {
+        Expr::TypeApp { callee, args, .. } => {
+            collect_ty_var_nodes(*callee, arenas, out);
             for &arg in args {
                 collect_ty_var_nodes(arg, arenas, out);
             }
         }
-        Ty::Option { inner, .. } | Ty::Array { elem: inner, .. } => {
+        Expr::OptionType { inner, .. } | Expr::ArrayType { elem: inner, .. } => {
             collect_ty_var_nodes(*inner, arenas, out);
         }
-        Ty::Fn { params, ret, .. } => {
+        Expr::FnType { params, ret, .. } => {
             for &p in params {
                 collect_ty_var_nodes(p, arenas, out);
             }
             collect_ty_var_nodes(*ret, arenas, out);
         }
-        Ty::Product { fields, .. }
-        | Ty::Sum {
+        Expr::ProductType { fields, .. }
+        | Expr::SumType {
             variants: fields, ..
         } => {
             for &f in fields {
                 collect_ty_var_nodes(f, arenas, out);
             }
         }
-        Ty::Error { .. } => {}
+        // Field access for qualified types (M.Type)
+        Expr::Field { object, .. } => {
+            collect_ty_var_nodes(*object, arenas, out);
+        }
+        Expr::PiType { param_ty, body, .. } => {
+            collect_ty_var_nodes(*param_ty, arenas, out);
+            collect_ty_var_nodes(*body, arenas, out);
+        }
+        _ => {}
     }
 }

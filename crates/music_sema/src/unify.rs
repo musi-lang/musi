@@ -5,9 +5,9 @@ mod tests;
 
 use music_shared::{Arena, Span};
 
-use crate::DefId;
 use crate::types::{RecordField, SumVariant, TyVarId, Type, TypeIdx};
 use crate::well_known::WellKnown;
+use crate::DefId;
 
 /// Whether a type variable is solvable (unification) or rigid (skolem).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -138,7 +138,10 @@ impl UnifyTable {
             Type::Array { elem, .. } => self.occurs(var, *elem, arena),
             Type::Ref { inner } => self.occurs(var, *inner, arena),
             Type::Quantified { body, .. } => self.occurs(var, *body, arena),
-            Type::Error => false,
+            Type::Pi { param_ty, body, .. } => {
+                self.occurs(var, *param_ty, arena) || self.occurs(var, *body, arena)
+            }
+            Type::Universe { .. } | Type::Error => false,
         }
     }
 }
@@ -147,6 +150,7 @@ impl UnifyTable {
     /// Unifies two types, returning `true` on success.
     ///
     /// On failure, returns `false` and the caller should report a diagnostic.
+    #[allow(clippy::too_many_lines)] // exhaustive match over all type variants; extraction adds indirection without clarity
     pub fn unify(
         &mut self,
         a: TypeIdx,
@@ -164,21 +168,16 @@ impl UnifyTable {
         match (&arena[a], &arena[b]) {
             (Type::Error, _) | (_, Type::Error) => true,
 
-            // Any/Never checked before Var to prevent variable erasure.
-            (Type::Named { def, args }, _) if *def == well_known.any && args.is_empty() => true,
-            (_, Type::Named { def, args }) if *def == well_known.any && args.is_empty() => true,
-
+            // Never checked before Var to prevent variable erasure.
             (Type::Named { def, args }, _) if *def == well_known.never && args.is_empty() => true,
             (_, Type::Named { def, args }) if *def == well_known.never && args.is_empty() => true,
 
             (Type::Var(v), _) => {
                 let v = *v;
-                let b = self.freshen_any(b, arena, well_known.any);
                 self.try_bind_var(v, b, arena)
             }
             (_, Type::Var(v)) => {
                 let v = *v;
-                let a = self.freshen_any(a, arena, well_known.any);
                 self.try_bind_var(v, a, arena)
             }
 
@@ -257,6 +256,25 @@ impl UnifyTable {
                 self.unify_sum(&v1.clone(), &v2.clone(), arena, well_known)
             }
 
+            (
+                Type::Pi {
+                    param_def: d1,
+                    param_ty: pt1,
+                    body: b1,
+                    ..
+                },
+                Type::Pi {
+                    param_def: d2,
+                    param_ty: pt2,
+                    body: b2,
+                    ..
+                },
+            ) => {
+                let (pt1, b1, pt2, b2) = (*pt1, *b1, *pt2, *b2);
+                let _ = (d1, d2);
+                self.unify(pt1, pt2, arena, well_known) && self.unify(b1, b2, arena, well_known)
+            }
+
             _ => false,
         }
     }
@@ -270,88 +288,6 @@ impl UnifyTable {
         }
         self.bind(var, target);
         true
-    }
-
-    /// Replaces `Any` positions in `ty` with fresh unification variables.
-    /// Returns the original type unchanged if it contains no `Any`.
-    fn freshen_any(
-        &mut self,
-        ty: TypeIdx,
-        arena: &mut Arena<Type>,
-        any_def: crate::DefId,
-    ) -> TypeIdx {
-        match arena[ty].clone() {
-            Type::Named { def, args } if def == any_def && args.is_empty() => {
-                self.fresh(Span::DUMMY, arena)
-            }
-            Type::Array { elem, len } => {
-                let new_elem = self.freshen_any(elem, arena, any_def);
-                if new_elem == elem {
-                    ty
-                } else {
-                    arena.alloc(Type::Array {
-                        elem: new_elem,
-                        len,
-                    })
-                }
-            }
-            Type::Fn {
-                params,
-                ret,
-                effects,
-            } => {
-                let new_params: Vec<_> = params
-                    .iter()
-                    .map(|&p| self.freshen_any(p, arena, any_def))
-                    .collect();
-                let new_ret = self.freshen_any(ret, arena, any_def);
-                if new_params == params && new_ret == ret {
-                    ty
-                } else {
-                    arena.alloc(Type::Fn {
-                        params: new_params,
-                        ret: new_ret,
-                        effects,
-                    })
-                }
-            }
-            Type::Tuple { elems } => {
-                let new_elems: Vec<_> = elems
-                    .iter()
-                    .map(|&e| self.freshen_any(e, arena, any_def))
-                    .collect();
-                if new_elems == elems {
-                    ty
-                } else {
-                    arena.alloc(Type::Tuple { elems: new_elems })
-                }
-            }
-            Type::Record { fields, rest } => {
-                let new_fields: Vec<_> = fields
-                    .iter()
-                    .map(|f| RecordField {
-                        name: f.name,
-                        ty: self.freshen_any(f.ty, arena, any_def),
-                        ty_params: f.ty_params.clone(),
-                    })
-                    .collect();
-                let new_rest = rest.map(|r| self.freshen_any(r, arena, any_def));
-                if new_fields
-                    .iter()
-                    .zip(fields.iter())
-                    .all(|(a, b)| a.ty == b.ty)
-                    && new_rest == rest
-                {
-                    ty
-                } else {
-                    arena.alloc(Type::Record {
-                        fields: new_fields,
-                        rest: new_rest,
-                    })
-                }
-            }
-            _ => ty,
-        }
     }
 
     fn unify_fn(
@@ -500,16 +436,17 @@ impl UnifyTable {
 impl UnifyTable {
     /// Recursively replaces all solved `Var` with their bindings.
     ///
-    /// Unsolved `Var` defaults to `Any` (the top type). Used before exporting types.
+    /// Unsolved `Var` defaults to `Unknown`. Used before exporting types.
     #[must_use]
-    pub fn freeze(&self, ty: TypeIdx, arena: &mut Arena<Type>, any_def: DefId) -> TypeIdx {
+    #[allow(clippy::too_many_lines)] // exhaustive match over all type variants; extraction adds indirection without clarity
+    pub fn freeze(&self, ty: TypeIdx, arena: &mut Arena<Type>, unknown_def: DefId) -> TypeIdx {
         match arena[ty].clone() {
             Type::Var(v) => {
                 if let Some(bound) = self.probe(v) {
-                    self.freeze(bound, arena, any_def)
+                    self.freeze(bound, arena, unknown_def)
                 } else {
                     arena.alloc(Type::Named {
-                        def: any_def,
+                        def: unknown_def,
                         args: vec![],
                     })
                 }
@@ -517,7 +454,7 @@ impl UnifyTable {
             Type::Named { def, args } => {
                 let args: Vec<_> = args
                     .iter()
-                    .map(|&a| self.freeze(a, arena, any_def))
+                    .map(|&a| self.freeze(a, arena, unknown_def))
                     .collect();
                 arena.alloc(Type::Named { def, args })
             }
@@ -528,9 +465,9 @@ impl UnifyTable {
             } => {
                 let params: Vec<_> = params
                     .iter()
-                    .map(|&p| self.freeze(p, arena, any_def))
+                    .map(|&p| self.freeze(p, arena, unknown_def))
                     .collect();
-                let ret = self.freeze(ret, arena, any_def);
+                let ret = self.freeze(ret, arena, unknown_def);
                 arena.alloc(Type::Fn {
                     params,
                     ret,
@@ -540,17 +477,17 @@ impl UnifyTable {
             Type::Tuple { elems } => {
                 let elems: Vec<_> = elems
                     .iter()
-                    .map(|&e| self.freeze(e, arena, any_def))
+                    .map(|&e| self.freeze(e, arena, unknown_def))
                     .collect();
                 arena.alloc(Type::Tuple { elems })
             }
-            Type::Record { fields, rest } => self.freeze_record(&fields, rest, arena, any_def),
+            Type::Record { fields, rest } => self.freeze_record(&fields, rest, arena, unknown_def),
             Type::Array { elem, len } => {
-                let elem = self.freeze(elem, arena, any_def);
+                let elem = self.freeze(elem, arena, unknown_def);
                 arena.alloc(Type::Array { elem, len })
             }
             Type::Ref { inner } => {
-                let inner = self.freeze(inner, arena, any_def);
+                let inner = self.freeze(inner, arena, unknown_def);
                 arena.alloc(Type::Ref { inner })
             }
             Type::Quantified {
@@ -559,7 +496,7 @@ impl UnifyTable {
                 constraints,
                 body,
             } => {
-                let body = self.freeze(body, arena, any_def);
+                let body = self.freeze(body, arena, unknown_def);
                 arena.alloc(Type::Quantified {
                     kind,
                     params,
@@ -570,7 +507,7 @@ impl UnifyTable {
             Type::AnonSum { variants } => {
                 let variants: Vec<_> = variants
                     .iter()
-                    .map(|&v| self.freeze(v, arena, any_def))
+                    .map(|&v| self.freeze(v, arena, unknown_def))
                     .collect();
                 arena.alloc(Type::AnonSum { variants })
             }
@@ -582,13 +519,28 @@ impl UnifyTable {
                         fields: v
                             .fields
                             .iter()
-                            .map(|&f| self.freeze(f, arena, any_def))
+                            .map(|&f| self.freeze(f, arena, unknown_def))
                             .collect(),
                     })
                     .collect();
                 arena.alloc(Type::Sum { variants })
             }
-            Type::Rigid(_) | Type::Error => ty,
+            Type::Pi {
+                param_name,
+                param_def,
+                param_ty,
+                body,
+            } => {
+                let new_param_ty = self.freeze(param_ty, arena, unknown_def);
+                let new_body = self.freeze(body, arena, unknown_def);
+                arena.alloc(Type::Pi {
+                    param_name,
+                    param_def,
+                    param_ty: new_param_ty,
+                    body: new_body,
+                })
+            }
+            Type::Universe { .. } | Type::Rigid(_) | Type::Error => ty,
         }
     }
 
@@ -598,15 +550,16 @@ impl UnifyTable {
         fields: &[RecordField],
         rest: Option<TypeIdx>,
         arena: &mut Arena<Type>,
-        any_def: DefId,
+        unknown_def: DefId,
     ) -> TypeIdx {
         // Collect all fields from this record and any linked rest records.
         let mut all_fields: Vec<RecordField> = fields
             .iter()
             .map(|f| RecordField {
                 name: f.name,
-                ty: self.freeze(f.ty, arena, any_def),
+                ty: self.freeze(f.ty, arena, unknown_def),
                 ty_params: f.ty_params.clone(),
+                binding: f.binding,
             })
             .collect();
         // Walk the rest chain.
@@ -622,8 +575,9 @@ impl UnifyTable {
                         if !all_fields.iter().any(|ef| ef.name == f.name) {
                             all_fields.push(RecordField {
                                 name: f.name,
-                                ty: self.freeze(f.ty, arena, any_def),
+                                ty: self.freeze(f.ty, arena, unknown_def),
                                 ty_params: f.ty_params.clone(),
+                                binding: f.binding,
                             });
                         }
                     }

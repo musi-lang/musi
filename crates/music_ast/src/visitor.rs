@@ -8,13 +8,13 @@ use std::ops::ControlFlow;
 use crate::attr::{Attr, AttrValue};
 use crate::decl::{ClassMember, EffectOp, ForeignDecl};
 use crate::expr::{
-    Arg, ArrayElem, Expr, HandlerOp, LetFields, MatchArm, Param, PwArm, PwGuard, RecDefField,
-    RecField,
+    Arg, ArrayElem, EffectItem, Expr, HandlerOp, LetFields, MatchArm, Param, PwArm, PwGuard,
+    RecDefField, RecField,
 };
 use crate::lit::{FStrPart, Lit};
 use crate::pat::Pat;
-use crate::ty::{Constraint, EffectItem, Ty};
-use crate::{AstArenas, ExprIdx, PatIdx, Stmt, TyIdx};
+use crate::ty_param::Constraint;
+use crate::{AstArenas, ExprIdx, PatIdx, Stmt};
 
 /// Visitor trait for traversing the AST.
 ///
@@ -33,10 +33,6 @@ pub trait AstVisitor {
             self.visit_expr(*expr, ctx)?;
         }
         ControlFlow::Continue(())
-    }
-
-    fn visit_ty(&mut self, idx: TyIdx, ctx: &AstArenas) -> ControlFlow<Self::Break> {
-        walk_ty(self, idx, ctx)
     }
 
     fn visit_pat(&mut self, idx: PatIdx, ctx: &AstArenas) -> ControlFlow<Self::Break> {
@@ -101,7 +97,7 @@ pub fn walk_expr<V: AstVisitor + ?Sized>(
             }
             ControlFlow::Continue(())
         }
-        Expr::Choice { body, .. } => v.visit_ty(*body, ctx),
+        Expr::Choice { body, .. } => v.visit_expr(*body, ctx),
         Expr::RecordDef { fields, .. } => walk_rec_def_fields(v, fields, ctx),
 
         Expr::BinOp { left, right, .. } => v.visit_expr_list(&[*left, *right], ctx),
@@ -128,12 +124,17 @@ pub fn walk_expr<V: AstVisitor + ?Sized>(
             constraints,
             members,
             ..
+        } => {
+            walk_constraints(v, constraints, ctx)?;
+            walk_class_members(v, members, ctx)
         }
-        | Expr::Instance {
+        Expr::Instance {
+            target,
             constraints,
             members,
             ..
         } => {
+            v.visit_expr(*target, ctx)?;
             walk_constraints(v, constraints, ctx)?;
             walk_class_members(v, members, ctx)
         }
@@ -142,7 +143,7 @@ pub fn walk_expr<V: AstVisitor + ?Sized>(
 
         Expr::TypeCheck { operand, ty, .. } => {
             v.visit_expr(*operand, ctx)?;
-            v.visit_ty(*ty, ctx)
+            v.visit_expr(*ty, ctx)
         }
 
         Expr::Handle {
@@ -151,54 +152,56 @@ pub fn walk_expr<V: AstVisitor + ?Sized>(
             body,
             ..
         } => walk_expr_handle(v, *effect_ty, ops, *body, ctx),
+
+        Expr::TypeApp { .. }
+        | Expr::FnType { .. }
+        | Expr::OptionType { .. }
+        | Expr::ProductType { .. }
+        | Expr::SumType { .. }
+        | Expr::ArrayType { .. }
+        | Expr::PiType { .. } => walk_type_expr(v, idx, ctx),
     }
 }
 
-/// Walk a type node, visiting all children in source order.
-pub fn walk_ty<V: AstVisitor + ?Sized>(
+/// Walk a type expression node, visiting all children in source order.
+fn walk_type_expr<V: AstVisitor + ?Sized>(
     v: &mut V,
-    idx: TyIdx,
+    idx: ExprIdx,
     ctx: &AstArenas,
 ) -> ControlFlow<V::Break> {
-    match &ctx.tys[idx] {
-        Ty::Var { .. } | Ty::Error { .. } => ControlFlow::Continue(()),
-        Ty::Named { args, .. } | Ty::Qualified { args, .. } => {
-            for &a in args {
-                v.visit_ty(a, ctx)?;
-            }
-            ControlFlow::Continue(())
+    match &ctx.exprs[idx] {
+        Expr::TypeApp { callee, args, .. } => {
+            v.visit_expr(*callee, ctx)?;
+            v.visit_expr_list(args, ctx)
         }
-        Ty::Option { inner, .. } => v.visit_ty(*inner, ctx),
-
-        Ty::Fn {
+        Expr::FnType {
             params,
             ret,
             effects,
             ..
         } => {
-            for &p in params {
-                v.visit_ty(p, ctx)?;
-            }
-            v.visit_ty(*ret, ctx)?;
+            v.visit_expr_list(params, ctx)?;
+            v.visit_expr(*ret, ctx)?;
             if let Some(eff) = effects {
                 for item in &eff.effects {
                     if let EffectItem::Named { arg: Some(a), .. } = item {
-                        v.visit_ty(*a, ctx)?;
+                        v.visit_expr(*a, ctx)?;
                     }
                 }
             }
             ControlFlow::Continue(())
         }
-        Ty::Product { fields, .. }
-        | Ty::Sum {
+        Expr::OptionType { inner, .. } => v.visit_expr(*inner, ctx),
+        Expr::ProductType { fields, .. }
+        | Expr::SumType {
             variants: fields, ..
-        } => {
-            for &f in fields {
-                v.visit_ty(f, ctx)?;
-            }
-            ControlFlow::Continue(())
+        } => v.visit_expr_list(fields, ctx),
+        Expr::ArrayType { elem, .. } => v.visit_expr(*elem, ctx),
+        Expr::PiType { param_ty, body, .. } => {
+            v.visit_expr(*param_ty, ctx)?;
+            v.visit_expr(*body, ctx)
         }
-        Ty::Array { elem, .. } => v.visit_ty(*elem, ctx),
+        _ => ControlFlow::Continue(()),
     }
 }
 
@@ -258,7 +261,7 @@ fn walk_let_fields<V: AstVisitor + ?Sized>(
     v.visit_pat(fields.pat, ctx)?;
     walk_constraints(v, &fields.constraints, ctx)?;
     if let Some(ty) = fields.ty {
-        v.visit_ty(ty, ctx)?;
+        v.visit_expr(ty, ctx)?;
     }
     if let Some(val) = fields.value {
         v.visit_expr(val, ctx)?;
@@ -273,7 +276,7 @@ fn walk_params<V: AstVisitor + ?Sized>(
 ) -> ControlFlow<V::Break> {
     for param in params {
         if let Some(ty) = param.ty {
-            v.visit_ty(ty, ctx)?;
+            v.visit_expr(ty, ctx)?;
         }
         if let Some(def) = param.default {
             v.visit_expr(def, ctx)?;
@@ -308,9 +311,7 @@ fn walk_constraints<V: AstVisitor + ?Sized>(
     ctx: &AstArenas,
 ) -> ControlFlow<V::Break> {
     for c in constraints {
-        for &a in &c.bound.args {
-            v.visit_ty(a, ctx)?;
-        }
+        v.visit_expr(c.bound, ctx)?;
     }
     ControlFlow::Continue(())
 }
@@ -325,7 +326,7 @@ fn walk_class_members<V: AstVisitor + ?Sized>(
             ClassMember::Fn { sig, default, .. } => {
                 walk_params(v, &sig.params, ctx)?;
                 if let Some(ty) = sig.ret {
-                    v.visit_ty(ty, ctx)?;
+                    v.visit_expr(ty, ctx)?;
                 }
                 if let Some(def) = *default {
                     v.visit_expr(def, ctx)?;
@@ -361,7 +362,7 @@ fn walk_effect_ops<V: AstVisitor + ?Sized>(
     ctx: &AstArenas,
 ) -> ControlFlow<V::Break> {
     for op in ops {
-        v.visit_ty(op.ty, ctx)?;
+        v.visit_expr(op.ty, ctx)?;
     }
     ControlFlow::Continue(())
 }
@@ -436,7 +437,7 @@ fn walk_foreign_decls<V: AstVisitor + ?Sized>(
 ) -> ControlFlow<V::Break> {
     for decl in decls {
         if let ForeignDecl::Fn { ty, .. } = decl {
-            v.visit_ty(*ty, ctx)?;
+            v.visit_expr(*ty, ctx)?;
         }
     }
     ControlFlow::Continue(())
@@ -448,7 +449,7 @@ fn walk_rec_def_fields<V: AstVisitor + ?Sized>(
     ctx: &AstArenas,
 ) -> ControlFlow<V::Break> {
     for field in fields {
-        v.visit_ty(field.ty, ctx)?;
+        v.visit_expr(field.ty, ctx)?;
         if let Some(def) = field.default {
             v.visit_expr(def, ctx)?;
         }
@@ -485,13 +486,13 @@ fn walk_expr_let<V: AstVisitor + ?Sized>(
 fn walk_expr_fn<V: AstVisitor + ?Sized>(
     v: &mut V,
     params: &[Param],
-    ret_ty: Option<TyIdx>,
+    ret_ty: Option<ExprIdx>,
     body: ExprIdx,
     ctx: &AstArenas,
 ) -> ControlFlow<V::Break> {
     walk_params(v, params, ctx)?;
     if let Some(ty) = ret_ty {
-        v.visit_ty(ty, ctx)?;
+        v.visit_expr(ty, ctx)?;
     }
     v.visit_expr(body, ctx)
 }
@@ -512,12 +513,12 @@ fn walk_expr_piecewise<V: AstVisitor + ?Sized>(
 
 fn walk_expr_handle<V: AstVisitor + ?Sized>(
     v: &mut V,
-    effect_ty: TyIdx,
+    effect_ty: ExprIdx,
     ops: &[HandlerOp],
     body: ExprIdx,
     ctx: &AstArenas,
 ) -> ControlFlow<V::Break> {
-    v.visit_ty(effect_ty, ctx)?;
+    v.visit_expr(effect_ty, ctx)?;
     for op in ops {
         walk_params(v, &op.params, ctx)?;
         v.visit_expr(op.body, ctx)?;

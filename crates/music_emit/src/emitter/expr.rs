@@ -3,13 +3,12 @@
 use musi_bc::Opcode;
 use music_ast::Pat;
 use music_ast::PatIdx;
-use music_ast::TyIdx;
 use music_ast::expr::{
     Arg, ArrayElem, BinOp, BindKind, Expr, FieldKey, HandlerOp, LetFields, MatchArm, Param, PwArm,
     PwGuard, RecField, TypeCheckKind, UnaryOp,
 };
 use music_ast::lit::Lit;
-use music_ast::ty::Ty;
+use music_ast::ExprIdx;
 use music_sema::DefId;
 use music_sema::TypeIdx;
 use music_sema::def::DefKind;
@@ -22,7 +21,6 @@ use std::collections::{HashMap, HashSet};
 
 use crate::const_pool::ConstValue;
 use crate::error::EmitError;
-use music_ast::ExprIdx;
 
 use super::super::emitter::{Emitter, FnBytecode, FnEntry};
 use super::FnCtx;
@@ -142,7 +140,14 @@ fn cfv_walk(cx: &mut CfvCtx<'_, '_>, expr_idx: ExprIdx) {
         | Expr::Effect { .. }
         | Expr::Foreign { .. }
         | Expr::Instance { .. }
-        | Expr::Return { value: None, .. } => {}
+        | Expr::Return { value: None, .. }
+        | Expr::TypeApp { .. }
+        | Expr::FnType { .. }
+        | Expr::OptionType { .. }
+        | Expr::ProductType { .. }
+        | Expr::SumType { .. }
+        | Expr::ArrayType { .. }
+        | Expr::PiType { .. } => {}
         Expr::Paren { inner, .. }
         | Expr::Annotated { inner, .. }
         | Expr::Return {
@@ -218,12 +223,14 @@ fn cfv_walk(cx: &mut CfvCtx<'_, '_>, expr_idx: ExprIdx) {
         Expr::Match {
             scrutinee, arms, ..
         } => cfv_walk_match(cx, *scrutinee, arms),
-        Expr::Handle { body, ops, .. } => {
-            cfv_walk(cx, *body);
-            for op in ops {
-                cfv_walk(cx, op.body);
-            }
-        }
+        Expr::Handle { body, ops, .. } => cfv_walk_handle(cx, *body, ops),
+    }
+}
+
+fn cfv_walk_handle(cx: &mut CfvCtx<'_, '_>, body: ExprIdx, ops: &[HandlerOp]) {
+    cfv_walk(cx, body);
+    for op in ops {
+        cfv_walk(cx, op.body);
     }
 }
 
@@ -278,7 +285,7 @@ fn emit_type_check(
     fc: &mut FnCtx,
     kind: TypeCheckKind,
     operand: ExprIdx,
-    ty: TyIdx,
+    ty: ExprIdx,
     is_tail: bool,
 ) -> Result<bool, EmitError> {
     match kind {
@@ -394,7 +401,14 @@ pub fn emit_expr_tail(
         | Expr::Instance { .. }
         | Expr::Effect { .. }
         | Expr::Foreign { .. }
-        | Expr::Error { .. } => Ok(false),
+        | Expr::Error { .. }
+        | Expr::TypeApp { .. }
+        | Expr::FnType { .. }
+        | Expr::OptionType { .. }
+        | Expr::ProductType { .. }
+        | Expr::SumType { .. }
+        | Expr::ArrayType { .. }
+        | Expr::PiType { .. } => Ok(false),
         Expr::Update { base, fields, .. } => emit_update(em, fc, *base, &fields.clone()),
         Expr::TypeCheck {
             kind, operand, ty, ..
@@ -804,14 +818,18 @@ fn emit_return(
     Ok(false)
 }
 
-/// Resolve an AST type annotation (`TyIdx`) to a bytecode `type_id`.
+/// Resolve an AST type annotation (`ExprIdx`) to a bytecode `type_id`.
 ///
 /// First checks well-known types by name. If not found, walks sema defs to
 /// find a matching named type and lowers its sema type. Returns `None` if
 /// the type cannot be resolved (e.g. type variable, unresolved name).
-fn lower_ast_ty_to_type_id(em: &mut Emitter<'_>, ty: TyIdx) -> Option<u32> {
-    let name = match &em.ast.tys[ty] {
-        Ty::Named { name_ref, .. } | Ty::Var { name_ref } => em.ast.name_refs[*name_ref].name,
+fn lower_ast_ty_to_type_id(em: &mut Emitter<'_>, ty: ExprIdx) -> Option<u32> {
+    let name = match &em.ast.exprs[ty] {
+        Expr::Name { name_ref, .. } => em.ast.name_refs[*name_ref].name,
+        Expr::TypeApp { callee, .. } => match &em.ast.exprs[*callee] {
+            Expr::Name { name_ref, .. } => em.ast.name_refs[*name_ref].name,
+            _ => return None,
+        },
         _ => return None,
     };
     let wk = &em.sema.well_known;
@@ -851,7 +869,7 @@ fn emit_type_test(
     em: &mut Emitter<'_>,
     fc: &mut FnCtx,
     operand: ExprIdx,
-    ty: TyIdx,
+    ty: ExprIdx,
 ) -> Result<bool, EmitError> {
     let produced = emit_expr(em, fc, operand)?;
     if !produced {
@@ -877,7 +895,7 @@ fn emit_type_cast(
     em: &mut Emitter<'_>,
     fc: &mut FnCtx,
     operand: ExprIdx,
-    ty: TyIdx,
+    ty: ExprIdx,
     is_tail: bool,
 ) -> Result<bool, EmitError> {
     let produced = emit_expr_tail(em, fc, operand, is_tail)?;
@@ -2078,11 +2096,15 @@ fn emit_force_unwrap(
 /// push the effect handler, emit the body, then pop the handler.
 /// Resolve the numeric effect ID for a `handle` expression's effect type.
 ///
-/// Walks the AST `TyIdx` to find the effect name, then looks up `effect_id_map`.
+/// Walks the AST type expression to find the effect name, then looks up `effect_id_map`.
 /// Falls back to 0 for well-known effects not yet in the pool.
-fn resolve_handle_effect_id(em: &Emitter<'_>, effect_ty: TyIdx) -> u8 {
-    let effect_name = match &em.ast.tys[effect_ty] {
-        Ty::Named { name_ref, .. } | Ty::Var { name_ref } => em.ast.name_refs[*name_ref].name,
+fn resolve_handle_effect_id(em: &Emitter<'_>, effect_ty: ExprIdx) -> u8 {
+    let effect_name = match &em.ast.exprs[effect_ty] {
+        Expr::Name { name_ref, .. } => em.ast.name_refs[*name_ref].name,
+        Expr::TypeApp { callee, .. } => match &em.ast.exprs[*callee] {
+            Expr::Name { name_ref, .. } => em.ast.name_refs[*name_ref].name,
+            _ => return 0,
+        },
         _ => return 0,
     };
     em.sema
@@ -2098,7 +2120,7 @@ fn resolve_handle_effect_id(em: &Emitter<'_>, effect_ty: TyIdx) -> u8 {
 fn emit_handle(
     em: &mut Emitter<'_>,
     fc: &mut FnCtx,
-    effect_ty: TyIdx,
+    effect_ty: ExprIdx,
     ops: &[HandlerOp],
     body: ExprIdx,
 ) -> Result<bool, EmitError> {

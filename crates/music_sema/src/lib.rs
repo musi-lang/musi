@@ -22,7 +22,10 @@ pub mod exports;
 pub mod lang_items;
 pub mod resolve;
 pub mod scope;
+pub mod subst;
 pub mod types;
+pub mod consistency;
+pub mod subtype;
 pub mod unify;
 pub mod well_known;
 
@@ -31,7 +34,7 @@ pub use error::SemaError;
 pub use lang_items::LangItemRegistry;
 pub use resolve::ResolveOutput;
 pub use scope::ScopeTree;
-pub use types::{DictLookup, EffectRow, InstanceInfo, Obligation, TyVarId, Type, TypeIdx};
+pub use types::{CastInfo, DictLookup, EffectRow, InstanceInfo, Obligation, TyVarId, Type, TypeIdx};
 pub use unify::{UnifyTable, types_match};
 pub use well_known::WellKnown;
 
@@ -82,6 +85,8 @@ pub struct SemaResult {
     pub binop_dict_dispatch: HashMap<ExprIdx, DictLookup>,
     /// Maps function `DefId` -> ordered class constraints (for dictionary passing).
     pub fn_constraints: HashMap<DefId, Vec<Obligation>>,
+    /// Runtime casts inserted at `Any` boundaries, keyed by expression.
+    pub casts: HashMap<ExprIdx, CastInfo>,
     /// Well-known prelude type definitions (needed by bytecode emission).
     pub well_known: WellKnown,
     /// Registry of definitions carrying `#[lang := "..."]` annotations.
@@ -123,6 +128,8 @@ pub struct ModuleSemaOutput {
     pub binop_dict_dispatch: HashMap<ExprIdx, DictLookup>,
     /// Maps function `DefId` -> ordered class constraints (for dictionary passing).
     pub fn_constraints: HashMap<DefId, Vec<Obligation>>,
+    /// Runtime casts inserted at `Any` boundaries, keyed by expression.
+    pub casts: HashMap<ExprIdx, CastInfo>,
 }
 
 impl SharedAnalysisState {
@@ -234,6 +241,7 @@ impl SharedAnalysisState {
             binop_dispatch: output.binop_dispatch,
             binop_dict_dispatch: output.binop_dict_dispatch,
             fn_constraints: output.fn_constraints,
+            casts: output.casts,
             well_known: self.well_known,
             lang_items: self.lang_items,
         }
@@ -328,6 +336,7 @@ pub fn analyze_shared<S: BuildHasher>(
         binop_dispatch: result.binop_dispatch,
         binop_dict_dispatch: result.binop_dict_dispatch,
         fn_constraints: result.fn_constraints,
+        casts: result.casts,
     }
 }
 
@@ -412,6 +421,7 @@ pub fn analyze_with_imports<S: BuildHasher>(
         binop_dispatch: result.binop_dispatch,
         binop_dict_dispatch: result.binop_dict_dispatch,
         fn_constraints: result.fn_constraints,
+        casts: result.casts,
         well_known,
         lang_items,
     }

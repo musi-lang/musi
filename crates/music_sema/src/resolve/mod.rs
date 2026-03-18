@@ -18,7 +18,7 @@ mod ty;
 use std::collections::HashMap;
 
 use music_ast::expr::{BindKind, Expr};
-use music_ast::ty::{Constraint, TyParam};
+use music_ast::ty_param::{Constraint, TyParam};
 use music_ast::{AstArenas, ExprIdx, ParsedModule, PatIdx};
 use music_shared::{DiagnosticBag, FileId, Interner, Span, Symbol};
 
@@ -172,7 +172,7 @@ impl Resolver<'_> {
             self.define_in_scope(param.name, id, param.span);
         }
         for constraint in constraints {
-            self.resolve_ty_named_ref(&constraint.bound);
+            self.resolve_type_expr(constraint.bound);
         }
         parent
     }
@@ -245,6 +245,13 @@ pub(crate) const fn expr_span(expr: &Expr) -> Span {
         | Expr::Foreign { span, .. }
         | Expr::TypeCheck { span, .. }
         | Expr::Handle { span, .. }
-        | Expr::Error { span, .. } => *span,
+        | Expr::Error { span, .. }
+        | Expr::TypeApp { span, .. }
+        | Expr::FnType { span, .. }
+        | Expr::OptionType { span, .. }
+        | Expr::ProductType { span, .. }
+        | Expr::SumType { span, .. }
+        | Expr::ArrayType { span, .. }
+        | Expr::PiType { span, .. } => *span,
     }
 }

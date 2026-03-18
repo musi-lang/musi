@@ -328,7 +328,14 @@ impl<'a> Emitter<'a> {
             | Expr::Class { .. }
             | Expr::TypeCheck { .. }
             | Expr::Handle { .. }
-            | Expr::Error { .. } => {}
+            | Expr::Error { .. }
+            | Expr::TypeApp { .. }
+            | Expr::FnType { .. }
+            | Expr::OptionType { .. }
+            | Expr::ProductType { .. }
+            | Expr::SumType { .. }
+            | Expr::ArrayType { .. }
+            | Expr::PiType { .. } => {}
         }
         Ok(())
     }

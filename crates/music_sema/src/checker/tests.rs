@@ -258,3 +258,50 @@ fn test_check_binding_then_reference() {
 
     assert!(!diags.has_errors());
 }
+
+#[test]
+fn test_insert_cast_records_any_boundary() {
+    let mut interner = Interner::new();
+    let arenas = AstArenas::new();
+    let module = make_module(arenas, vec![]);
+
+    let mut diags_setup = DiagnosticBag::new();
+    let (mut defs, well_known, mut scopes, module_scope, resolved, types) =
+        analyze_setup(&module, &mut interner, FileId(0), &mut diags_setup);
+
+    let empty_imports = HashMap::new();
+    let ctx = CheckContext {
+        ast: &module.arenas,
+        interner: &mut interner,
+        file_id: FileId(0),
+        well_known: &well_known,
+        expr_defs: &resolved.expr_defs,
+        pat_defs: &resolved.pat_defs,
+        import_types: &empty_imports,
+        law_inferred_vars: &resolved.law_inferred_vars,
+        class_op_members: &resolved.class_op_members,
+    };
+    let mut diags = DiagnosticBag::new();
+    let mut checker = Checker::new_with_state(
+        ctx,
+        &mut diags,
+        &mut defs,
+        &mut scopes,
+        module_scope,
+        types,
+        crate::UnifyTable::new(),
+    );
+
+    let any_ty = checker.named_ty(well_known.any);
+    let int_ty = checker.named_ty(well_known.ints.int);
+    let dummy_expr_idx = music_ast::ExprIdx::from_raw(0u32);
+
+    // Any ~ Int: inserting a cast should record it.
+    checker.insert_cast(dummy_expr_idx, any_ty, int_ty, Span::DUMMY);
+    assert!(checker.store.casts.contains_key(&dummy_expr_idx));
+
+    // Identical types: no cast recorded.
+    let dummy_expr_idx2 = music_ast::ExprIdx::from_raw(1u32);
+    checker.insert_cast(dummy_expr_idx2, int_ty, int_ty, Span::DUMMY);
+    assert!(!checker.store.casts.contains_key(&dummy_expr_idx2));
+}

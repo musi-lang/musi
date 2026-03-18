@@ -215,7 +215,13 @@ impl TypePool {
                     .collect::<Result<Vec<_>, _>>()?;
                 self.encode_sum_from_sema(&sema_variants, types, unify, wk)
             }
+            Type::Pi { param_ty, body, .. } => {
+                let param_id = self.lower_sema_type(*param_ty, types, unify, wk)?;
+                let body_id = self.lower_sema_type(*body, types, unify, wk)?;
+                self.encode_fn_type_from_ids(&[param_id], body_id, 0)
+            }
             Type::Quantified { body, .. } => self.lower_sema_type(*body, types, unify, wk),
+            Type::Universe { .. } => Ok(self.push_tag_only(TAG_ANY)),
             Type::Var(_) | Type::Rigid(_) => Err(EmitError::UnresolvableType {
                 desc: "unresolved type variable reached emit".into(),
             }),

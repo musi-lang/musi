@@ -6,14 +6,12 @@ use music_shared::{Span, Symbol};
 
 use crate::expr::{BinOp, BindKind, Expr, LetFields, UnaryOp};
 use crate::pat::Pat;
-use crate::ty::Ty;
 use crate::visitor::AstVisitor;
-use crate::{AstArenas, ExprIdx, NameRef, PatIdx, TyIdx, visitor};
+use crate::{visitor, AstArenas, ExprIdx, NameRef, PatIdx};
 
 /// A visitor that counts how many expr nodes it visits.
 struct CountingVisitor {
     expr_count: usize,
-    ty_count: usize,
     pat_count: usize,
 }
 
@@ -21,7 +19,6 @@ impl CountingVisitor {
     fn new() -> Self {
         Self {
             expr_count: 0,
-            ty_count: 0,
             pat_count: 0,
         }
     }
@@ -33,11 +30,6 @@ impl AstVisitor for CountingVisitor {
     fn visit_expr(&mut self, idx: ExprIdx, ctx: &AstArenas) -> ControlFlow<()> {
         self.expr_count += 1;
         visitor::walk_expr(self, idx, ctx)
-    }
-
-    fn visit_ty(&mut self, idx: TyIdx, ctx: &AstArenas) -> ControlFlow<()> {
-        self.ty_count += 1;
-        visitor::walk_ty(self, idx, ctx)
     }
 
     fn visit_pat(&mut self, idx: PatIdx, ctx: &AstArenas) -> ControlFlow<()> {
@@ -130,7 +122,7 @@ fn test_visitor_short_circuits_on_break() {
 }
 
 #[test]
-fn test_walk_expr_crosses_into_ty() {
+fn test_walk_expr_crosses_into_ty_annotation() {
     let mut arenas = AstArenas::new();
     let pat = arenas.pats.alloc(Pat::Wild {
         span: Span::new(4, 1),
@@ -139,9 +131,9 @@ fn test_walk_expr_crosses_into_ty() {
         name: Symbol(0),
         span: Span::new(6, 3),
     });
-    let ty = arenas.tys.alloc(Ty::Named {
+    // Type annotation is now an Expr::Name in the expr arena
+    let ty_expr = arenas.exprs.alloc(Expr::Name {
         name_ref: ty_name_ref,
-        args: vec![],
         span: Span::new(6, 3),
     });
     let val_name_ref = arenas.name_refs.alloc(NameRef {
@@ -158,7 +150,7 @@ fn test_walk_expr_crosses_into_ty() {
             pat,
             params: vec![],
             constraints: vec![],
-            ty: Some(ty),
+            ty: Some(ty_expr),
             value: Some(value),
             with_effects: None,
             span: Span::new(0, 13),
@@ -169,10 +161,8 @@ fn test_walk_expr_crosses_into_ty() {
 
     let mut visitor = CountingVisitor::new();
     let _ = visitor.visit_expr(root, &arenas);
-    // exprs: root + value = 2
-    assert_eq!(visitor.expr_count, 2);
-    // tys: the annotation = 1
-    assert_eq!(visitor.ty_count, 1);
+    // exprs: root + ty_expr + value = 3
+    assert_eq!(visitor.expr_count, 3);
     // pats: the wildcard = 1
     assert_eq!(visitor.pat_count, 1);
 }
@@ -185,15 +175,14 @@ fn test_walk_expr_visits_record_def_fields() {
         name: Symbol(0),
         span: Span::new(10, 3),
     });
-    let ty = arenas.tys.alloc(Ty::Named {
+    let ty_expr = arenas.exprs.alloc(Expr::Name {
         name_ref: ty_name_ref,
-        args: vec![],
         span: Span::new(10, 3),
     });
     let root = arenas.exprs.alloc(Expr::RecordDef {
         fields: vec![RecDefField {
             name: Symbol(1),
-            ty,
+            ty: ty_expr,
             default: None,
             span: Span::new(0, 10),
         }],
@@ -202,10 +191,8 @@ fn test_walk_expr_visits_record_def_fields() {
 
     let mut visitor = CountingVisitor::new();
     let _ = visitor.visit_expr(root, &arenas);
-    // exprs: root = 1
-    assert_eq!(visitor.expr_count, 1);
-    // tys: the field type = 1
-    assert_eq!(visitor.ty_count, 1);
+    // exprs: root + ty_expr = 2
+    assert_eq!(visitor.expr_count, 2);
 }
 
 #[test]

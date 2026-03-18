@@ -11,6 +11,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
 
+use music_ast::ExprIdx;
 use music_shared::{Arena, Idx, Interner, Span, Symbol};
 
 use crate::def::{DefId, DefInfo};
@@ -65,6 +66,16 @@ pub enum Type {
         constraints: Vec<Obligation>,
         body: Idx<Self>,
     },
+    /// Dependent function type: Π(param : `param_ty`). `body`
+    /// When param does not appear in `body`, degenerates to `param_ty` → `body`.
+    Pi {
+        param_name: Symbol,
+        param_def: DefId,
+        param_ty: Idx<Self>,
+        body: Idx<Self>,
+    },
+    /// A universe type. `Universe { level: 0 }` is displayed as `Type`.
+    Universe { level: u8 },
     /// Poison type that absorbs all unification (suppresses cascading errors).
     Error,
 }
@@ -84,6 +95,9 @@ pub struct RecordField {
     /// Type parameters for polymorphic fields (e.g. re-exported generic functions).
     /// Empty for monomorphic fields.
     pub ty_params: Vec<DefId>,
+    /// If set, this field introduces a binding usable by later fields
+    /// in a dependent record type.
+    pub binding: Option<Symbol>,
 }
 
 /// A variant in a structural sum type.
@@ -130,6 +144,15 @@ pub struct Obligation {
     pub span: Span,
 }
 
+/// A law obligation stored on a class definition.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LawObligation {
+    pub name: Symbol,
+    pub params: Vec<TypeIdx>,
+    pub body_expr: ExprIdx,
+    pub span: Span,
+}
+
 /// Polymorphic binop dispatch: records which class constraint and method
 /// should be looked up from a dictionary at runtime.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -147,6 +170,28 @@ pub struct InstanceInfo {
     pub constraints: Vec<Obligation>,
     pub members: Vec<(Symbol, DefId)>,
     pub span: Span,
+}
+
+/// Polarity of a blame label.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Polarity {
+    Positive,
+    Negative,
+}
+
+/// A blame label identifying the source of a cast.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BlameLabel {
+    pub span: Span,
+    pub polarity: Polarity,
+}
+
+/// Information about a runtime cast inserted by the type checker.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CastInfo {
+    pub from: TypeIdx,
+    pub to: TypeIdx,
+    pub blame: BlameLabel,
 }
 
 /// Helper for displaying types with access to the type arena and def table.
@@ -260,6 +305,7 @@ impl TypeDisplay<'_> {
 }
 
 impl fmt::Display for TypeDisplay<'_> {
+    #[allow(clippy::too_many_lines)] // exhaustive match over all type variants; extraction adds indirection without clarity
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.arena[self.ty] {
             Type::Named { def, args } => {
@@ -349,6 +395,24 @@ impl fmt::Display for TypeDisplay<'_> {
                     write!(f, " => ")?;
                 }
                 self.write_ty(f, *body)
+            }
+            Type::Pi {
+                param_name,
+                param_ty,
+                body,
+                ..
+            } => {
+                write!(f, "Π({}: ", self.resolve_symbol(*param_name))?;
+                self.write_ty(f, *param_ty)?;
+                write!(f, "). ")?;
+                self.write_ty(f, *body)
+            }
+            Type::Universe { level } => {
+                if *level == 0 {
+                    write!(f, "Type")
+                } else {
+                    write!(f, "U{level}")
+                }
             }
             Type::Error => write!(f, "<error>"),
         }

@@ -40,7 +40,14 @@ pub fn expr_span(idx: ExprIdx, module: &ParsedModule) -> Option<Span> {
         | Expr::Foreign { span, .. }
         | Expr::TypeCheck { span, .. }
         | Expr::Handle { span, .. }
-        | Expr::Error { span, .. } => *span,
+        | Expr::Error { span, .. }
+        | Expr::TypeApp { span, .. }
+        | Expr::FnType { span, .. }
+        | Expr::OptionType { span, .. }
+        | Expr::ProductType { span, .. }
+        | Expr::SumType { span, .. }
+        | Expr::ArrayType { span, .. }
+        | Expr::PiType { span, .. } => *span,
     };
     Some(span)
 }

@@ -1,20 +1,21 @@
 //! Declaration type checking (class, given, effect, foreign).
 
-use music_ast::ExprIdx;
-use music_ast::decl::{ClassMember, ForeignDecl};
-use music_ast::expr::{Expr, Param};
-use music_ast::ty::TyParam;
-use music_ast::util::collect_ty_var_nodes;
-use music_shared::{Idx, Span, Symbol};
 use std::collections::HashSet;
 use std::hash::BuildHasher;
 
+use music_ast::ExprIdx;
+use music_ast::decl::{ClassMember, ForeignDecl};
+use music_ast::expr::{Expr, Param};
+use music_ast::ty_param::TyParam;
+use music_ast::util::collect_ty_var_nodes;
+use music_shared::{Idx, Span, Symbol};
+
 use crate::checker::Checker;
 use crate::checker::expr::{check, synth};
-use crate::checker::ty::lower_ty;
+use crate::checker::ty::lower_type_expr;
 use crate::def::{DefId, DefKind};
 use crate::error::SemaError;
-use crate::types::{EffectRow, InstanceInfo, Type};
+use crate::types::{EffectRow, InstanceInfo, LawObligation, RecordField, Type};
 
 /// Checks a class/given member's default body with sig params in scope.
 /// Also stores the method's function type so cross-module callers can resolve it.
@@ -29,7 +30,7 @@ fn check_member_fn<S: BuildHasher>(ck: &mut Checker<'_, S>, member: &ClassMember
     let mut param_tys = Vec::with_capacity(sig.params.len());
     for param in &sig.params {
         let param_ty = if let Some(ty) = param.ty {
-            lower_ty(ck, ty)
+            lower_type_expr(ck, ty)
         } else {
             ck.fresh_var(param.span)
         };
@@ -50,7 +51,7 @@ fn check_member_fn<S: BuildHasher>(ck: &mut Checker<'_, S>, member: &ClassMember
     }
 
     let ret_ty = if let Some(ret) = sig.ret {
-        let expected = lower_ty(ck, ret);
+        let expected = lower_type_expr(ck, ret);
         if let Some(body) = default {
             check(ck, *body, expected);
         }
@@ -104,7 +105,7 @@ fn check_member_law<S: BuildHasher>(
         // Explicit: lower type annotations for each param.
         for param in params {
             let param_ty = if let Some(ty) = param.ty {
-                lower_ty(ck, ty)
+                lower_type_expr(ck, ty)
             } else {
                 ck.fresh_var(param.span)
             };
@@ -205,10 +206,11 @@ fn find_class_required_methods<S: BuildHasher>(
 }
 
 /// Checks a declaration expression (class, given, effect, foreign).
+#[allow(clippy::too_many_lines)] // large match over declaration variants; extraction would add indirection without clarity
 pub fn check_stmt<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) {
     match ck.ctx.ast.exprs[expr_idx].clone() {
         Expr::Class {
-            params, members, ..
+            params, members, span, ..
         } => {
             let parent = if params.is_empty() {
                 None
@@ -217,6 +219,77 @@ pub fn check_stmt<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) {
                 Some(p)
             };
             check_class_members(ck, &members, &params);
+
+            if let Some(&class_def_id) = ck.ctx.pat_defs.get(&span) {
+                let method_fields: Vec<RecordField> = members
+                    .iter()
+                    .filter_map(|m| {
+                        if let ClassMember::Fn { sig, .. } = m {
+                            ck.ctx.pat_defs.get(&sig.span).map(|&fn_def| {
+                                let fn_ty = ck
+                                    .defs
+                                    .get(fn_def)
+                                    .ty_info
+                                    .ty
+                                    .unwrap_or_else(|| ck.error_ty());
+                                RecordField {
+                                    name: sig.name,
+                                    ty: fn_ty,
+                                    ty_params: vec![],
+                                    binding: None,
+                                }
+                            })
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+
+                let record_ty =
+                    ck.alloc_ty(Type::Record { fields: method_fields, rest: None });
+
+                let class_ty = params.first().map_or(record_ty, |first_param| {
+                    ck.scopes.lookup(ck.current_scope, first_param.name).map_or(record_ty, |param_def| {
+                        let u0 = ck.alloc_ty(Type::Universe { level: 0 });
+                        ck.alloc_ty(Type::Pi {
+                            param_name: first_param.name,
+                            param_def,
+                            param_ty: u0,
+                            body: record_ty,
+                        })
+                    })
+                });
+
+                ck.defs.get_mut(class_def_id).ty_info.ty = Some(class_ty);
+
+                let laws: Vec<LawObligation> = members
+                    .iter()
+                    .filter_map(|m| {
+                        if let ClassMember::Law {
+                            name,
+                            params: law_params,
+                            body,
+                            span: law_span,
+                        } = m
+                        {
+                            let param_tys: Vec<_> = law_params
+                                .iter()
+                                .filter_map(|p| p.ty.map(|ty| lower_type_expr(ck, ty)))
+                                .collect();
+                            Some(LawObligation {
+                                name: *name,
+                                params: param_tys,
+                                body_expr: *body,
+                                span: *law_span,
+                            })
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                ck.defs.get_mut(class_def_id).law_obligations = laws;
+            }
+
             if let Some(p) = parent {
                 ck.current_scope = p;
             }
@@ -227,54 +300,10 @@ pub fn check_stmt<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) {
             members,
             span,
             ..
-        } => {
-            let mut all_params: Vec<TyParam> = params;
-            for &arg in &target.args {
-                collect_ty_var_nodes(arg, ck.ctx.ast, &mut all_params);
-            }
-            let parent = if all_params.is_empty() {
-                None
-            } else {
-                let (p, _ids) = ck.enter_ty_param_scope(&all_params);
-                Some(p)
-            };
-            check_class_members(ck, &members, &all_params);
-            let target_name = ck.ctx.ast.name_refs[target.name_ref].name;
-            check_instance_method_coverage(ck, target_name, &members, span);
-
-            if let Some(class_def) = ck.scopes.lookup(ck.current_scope, target_name) {
-                let target_ty = if let Some(&first_arg) = target.args.first() {
-                    lower_ty(ck, first_arg)
-                } else {
-                    ck.fresh_var(span)
-                };
-                let member_defs: Vec<(Symbol, DefId)> = members
-                    .iter()
-                    .filter_map(|m| {
-                        if let ClassMember::Fn { sig, .. } = m {
-                            ck.ctx.pat_defs.get(&sig.span).map(|&id| (sig.name, id))
-                        } else {
-                            None
-                        }
-                    })
-                    .collect();
-                ck.store.instances.push(InstanceInfo {
-                    class: class_def,
-                    target: target_ty,
-                    params: vec![],
-                    constraints: vec![],
-                    members: member_defs,
-                    span,
-                });
-            }
-
-            if let Some(p) = parent {
-                ck.current_scope = p;
-            }
-        }
+        } => check_instance(ck, target, params, &members, span),
         Expr::Effect { ops, .. } => {
             for op in &ops {
-                let _op_ty = lower_ty(ck, op.ty);
+                let _op_ty = lower_type_expr(ck, op.ty);
             }
         }
         Expr::Foreign { decls, .. } => {
@@ -292,7 +321,7 @@ pub fn check_stmt<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) {
             };
             for decl in &decls {
                 if let ForeignDecl::Fn { ty, span, .. } = decl {
-                    let fn_ty = lower_ty(ck, *ty);
+                    let fn_ty = lower_type_expr(ck, *ty);
                     if let Some(&def_id) = ck.ctx.pat_defs.get(span) {
                         ck.defs.get_mut(def_id).ty_info.ty = Some(fn_ty);
                     }
@@ -303,5 +332,75 @@ pub fn check_stmt<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) {
             }
         }
         _ => {}
+    }
+}
+
+fn check_instance<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
+    target: ExprIdx,
+    params: Vec<TyParam>,
+    members: &[ClassMember],
+    span: Span,
+) {
+    let mut all_params: Vec<TyParam> = params;
+    collect_ty_var_nodes(target, ck.ctx.ast, &mut all_params);
+    let parent = if all_params.is_empty() {
+        None
+    } else {
+        let (p, _ids) = ck.enter_ty_param_scope(&all_params);
+        Some(p)
+    };
+    check_class_members(ck, members, &all_params);
+    // Extract class name and first type arg from the target expression.
+    let (target_name_opt, first_arg_opt) = match &ck.ctx.ast.exprs[target] {
+        Expr::Name { name_ref, .. } => {
+            (Some(ck.ctx.ast.name_refs[*name_ref].name), None)
+        }
+        Expr::TypeApp { callee, args, .. } => {
+            let name = if let Expr::Name { name_ref, .. } = &ck.ctx.ast.exprs[*callee] {
+                Some(ck.ctx.ast.name_refs[*name_ref].name)
+            } else {
+                None
+            };
+            (name, args.first().copied())
+        }
+        _ => (None, None),
+    };
+    let Some(target_name) = target_name_opt else {
+        if let Some(p) = parent {
+            ck.current_scope = p;
+        }
+        return;
+    };
+    check_instance_method_coverage(ck, target_name, members, span);
+
+    if let Some(class_def) = ck.scopes.lookup(ck.current_scope, target_name) {
+        let target_ty = if let Some(first_arg) = first_arg_opt {
+            lower_type_expr(ck, first_arg)
+        } else {
+            ck.fresh_var(span)
+        };
+        let member_defs: Vec<(Symbol, DefId)> = members
+            .iter()
+            .filter_map(|m| {
+                if let ClassMember::Fn { sig, .. } = m {
+                    ck.ctx.pat_defs.get(&sig.span).map(|&id| (sig.name, id))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        ck.store.instances.push(InstanceInfo {
+            class: class_def,
+            target: target_ty,
+            params: vec![],
+            constraints: vec![],
+            members: member_defs,
+            span,
+        });
+    }
+
+    if let Some(p) = parent {
+        ck.current_scope = p;
     }
 }

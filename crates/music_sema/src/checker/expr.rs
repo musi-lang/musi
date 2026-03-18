@@ -9,15 +9,16 @@ use music_ast::expr::{
 };
 use music_ast::lit::{FStrPart, Lit};
 use music_ast::pat::Pat;
-use music_ast::ty::{Constraint, Rel, Ty, TyParam};
-use music_ast::{ExprIdx, PatIdx, TyIdx};
+use music_ast::expr::Expr as AstExpr;
+use music_ast::ty_param::{Constraint, Rel, TyParam};
+use music_ast::{ExprIdx, PatIdx};
 use music_shared::{Idx, Span, Symbol};
 
 use crate::checker::Checker;
 use crate::checker::effects::check_effects_subset;
 use crate::checker::pat::check_pat;
 use crate::checker::stmt::check_stmt;
-use crate::checker::ty::lower_ty;
+use crate::checker::ty::lower_type_expr;
 use crate::def::{DefId, DefKind};
 use crate::error::SemaError;
 use crate::resolve;
@@ -25,6 +26,7 @@ use crate::scope::ScopeId;
 use crate::types::{
     DictLookup, EffectRow, Obligation, RecordField, SumVariant, TyVarId, Type, TypeIdx, fmt_type,
 };
+use crate::subst::subst_type;
 use crate::unify::types_match;
 
 /// Synthesises a type for `expr` (inference mode, direction ↑).
@@ -38,7 +40,7 @@ pub fn synth<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) -> Type
 pub fn check<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx, expected: TypeIdx) {
     let found = synth_inner(ck, expr_idx);
     ck.record_type(expr_idx, expected);
-    ck.unify_or_report(
+    ck.check_subtype_or_report(
         expected,
         found,
         resolve::expr_span(&ck.ctx.ast.exprs[expr_idx]),
@@ -191,6 +193,15 @@ fn synth_inner<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) -> Ty
             let (effect_ty, ops, body) = (*effect_ty, ops.clone(), *body);
             synth_handle(ck, effect_ty, &ops, body)
         }
+        // Type-expression variants: these appear in type annotations and are
+        // lowered via lower_type_expr, not synthesised as value expressions.
+        Expr::TypeApp { .. }
+        | Expr::FnType { .. }
+        | Expr::OptionType { .. }
+        | Expr::ProductType { .. }
+        | Expr::SumType { .. }
+        | Expr::ArrayType { .. }
+        | Expr::PiType { .. } => lower_type_expr(ck, expr_idx),
     }
 }
 
@@ -287,7 +298,7 @@ fn synth_let<S: BuildHasher>(
 
     let value_ty = match (fields.ty, fields.value) {
         (Some(ty_ann), Some(val)) => {
-            let ann = lower_ty(ck, ty_ann);
+            let ann = lower_type_expr(ck, ty_ann);
             let prev_effects = ck.current_effects.clone();
             if let Type::Fn { ref effects, .. } = ck.store.types[ann]
                 && !effects.is_pure()
@@ -298,7 +309,7 @@ fn synth_let<S: BuildHasher>(
             ck.current_effects = prev_effects;
             ann
         }
-        (Some(ty_ann), None) => lower_ty(ck, ty_ann),
+        (Some(ty_ann), None) => lower_type_expr(ck, ty_ann),
         (None, Some(val)) => synth(ck, val),
         (None, None) => ck.named_ty(ck.ctx.well_known.unit),
     };
@@ -339,7 +350,7 @@ fn synth_binding<S: BuildHasher>(ck: &mut Checker<'_, S>, fields: &LetFields) ->
 
     let value_ty = match (fields.ty, fields.value) {
         (Some(ty_ann), Some(val)) => {
-            let ann = lower_ty(ck, ty_ann);
+            let ann = lower_type_expr(ck, ty_ann);
             let prev_effects = ck.current_effects.clone();
             if let Type::Fn { ref effects, .. } = ck.store.types[ann]
                 && !effects.is_pure()
@@ -350,7 +361,7 @@ fn synth_binding<S: BuildHasher>(ck: &mut Checker<'_, S>, fields: &LetFields) ->
             ck.current_effects = prev_effects;
             ann
         }
-        (Some(ty_ann), None) => lower_ty(ck, ty_ann),
+        (Some(ty_ann), None) => lower_type_expr(ck, ty_ann),
         (None, Some(val)) => synth(ck, val),
         (None, None) => ck.named_ty(ck.ctx.well_known.unit),
     };
@@ -413,7 +424,7 @@ fn store_pat_ty_info<S: BuildHasher>(
 fn synth_fn<S: BuildHasher>(
     ck: &mut Checker<'_, S>,
     params: &[Param],
-    ret_ty: Option<TyIdx>,
+    ret_ty: Option<ExprIdx>,
     body: ExprIdx,
     span: Span,
 ) -> TypeIdx {
@@ -421,7 +432,7 @@ fn synth_fn<S: BuildHasher>(
         .iter()
         .map(|p| {
             if let Some(ty) = p.ty {
-                lower_ty(ck, ty)
+                lower_type_expr(ck, ty)
             } else {
                 ck.fresh_var(p.span)
             }
@@ -435,7 +446,7 @@ fn synth_fn<S: BuildHasher>(
     }
 
     let ret = if let Some(ret_ann) = ret_ty {
-        let ann = lower_ty(ck, ret_ann);
+        let ann = lower_type_expr(ck, ret_ann);
         check(ck, body, ann);
         ann
     } else {
@@ -491,6 +502,7 @@ fn lookup_field<S: BuildHasher>(
                             name,
                             ty: field_ty,
                             ty_params: vec![],
+                            binding: None,
                         }],
                         rest: Some(new_rest),
                     });
@@ -553,6 +565,7 @@ fn lookup_field<S: BuildHasher>(
                         name,
                         ty: field_ty,
                         ty_params: vec![],
+                        binding: None,
                     }],
                     rest: Some(row_var),
                 });
@@ -610,6 +623,7 @@ fn synth_record<S: BuildHasher>(ck: &mut Checker<'_, S>, fields: &[RecField]) ->
                     name: *name,
                     ty,
                     ty_params: vec![],
+                    binding: None,
                 })
             }
             RecField::Spread { .. } => None,
@@ -915,7 +929,29 @@ fn substitute_ty<S: BuildHasher>(
                 body,
             })
         }
-        Type::Var(_) | Type::Rigid(_) | Type::Error => ty,
+        Type::Pi {
+            param_name,
+            param_def,
+            param_ty,
+            body,
+        } => {
+            let (param_name, param_def, param_ty, body) =
+                (*param_name, *param_def, *param_ty, *body);
+            // Don't substitute in body if this Pi's own param shadows the substituted def.
+            let new_param_ty = substitute_ty(ck, param_ty, subst);
+            let new_body = if subst.contains_key(&param_def) {
+                body
+            } else {
+                substitute_ty(ck, body, subst)
+            };
+            ck.alloc_ty(Type::Pi {
+                param_name,
+                param_def,
+                param_ty: new_param_ty,
+                body: new_body,
+            })
+        }
+        Type::Universe { .. } | Type::Var(_) | Type::Rigid(_) | Type::Error => ty,
     }
 }
 
@@ -966,6 +1002,7 @@ fn freshen_list<S: BuildHasher>(
         .collect()
 }
 
+#[allow(clippy::too_many_lines)] // large match over all type variants; extraction would add indirection without clarity
 fn freshen_walk<S: BuildHasher>(
     ck: &mut Checker<'_, S>,
     ty: TypeIdx,
@@ -1023,6 +1060,7 @@ fn freshen_walk<S: BuildHasher>(
                     name: f.name,
                     ty: freshen_walk(ck, f.ty, span, param_set, var_map, def_map),
                     ty_params: f.ty_params.clone(),
+                    binding: f.binding,
                 })
                 .collect();
             let new_rest = rest.map(|r| freshen_walk(ck, r, span, param_set, var_map, def_map));
@@ -1072,7 +1110,29 @@ fn freshen_walk<S: BuildHasher>(
                 body: new_body,
             })
         }
-        Type::Rigid(_) | Type::Error => resolved,
+        Type::Pi {
+            param_name,
+            param_def,
+            param_ty,
+            body,
+        } => {
+            let (param_name, param_def, param_ty, body) =
+                (*param_name, *param_def, *param_ty, *body);
+            let new_param_ty = freshen_walk(ck, param_ty, span, param_set, var_map, def_map);
+            // Capture avoidance: if this Pi's param is in param_set, don't freshen body.
+            let new_body = if param_set.contains(&param_def) {
+                body
+            } else {
+                freshen_walk(ck, body, span, param_set, var_map, def_map)
+            };
+            ck.alloc_ty(Type::Pi {
+                param_name,
+                param_def,
+                param_ty: new_param_ty,
+                body: new_body,
+            })
+        }
+        Type::Universe { .. } | Type::Rigid(_) | Type::Error => resolved,
     }
 }
 
@@ -1095,6 +1155,7 @@ fn substitute_record_fields<S: BuildHasher>(
             name: f.name,
             ty: substitute_ty(ck, f.ty, subst),
             ty_params: f.ty_params.clone(),
+            binding: f.binding,
         })
         .collect()
 }
@@ -1121,6 +1182,34 @@ fn synth_call<S: BuildHasher>(
 ) -> TypeIdx {
     let callee_ty = synth(ck, callee);
     let callee_ty = ck.resolve_ty(callee_ty);
+
+    if let Type::Pi {
+        param_def,
+        param_ty,
+        body,
+        ..
+    } = ck.store.types[callee_ty].clone()
+    {
+        if args.len() != 1 {
+            let _d = ck.diags.report(
+                &SemaError::ArityMismatch {
+                    expected: 1,
+                    found: args.len(),
+                },
+                span,
+                ck.ctx.file_id,
+            );
+            return ck.error_ty();
+        }
+        if let Arg::Pos { expr, .. } = args[0] {
+            check(ck, expr, param_ty);
+        }
+        let arg_ty = match args[0] {
+            Arg::Pos { expr, .. } | Arg::Spread { expr, .. } => synth(ck, expr),
+        };
+        let substituted = subst_type(body, param_def, arg_ty, &mut ck.store.types);
+        return substituted;
+    }
 
     let (fn_params, fn_ret, fn_effects) = match &ck.store.types[callee_ty] {
         Type::Fn {
@@ -1333,16 +1422,26 @@ fn synth_unaryop<S: BuildHasher>(
     }
 }
 
-fn synth_choice<S: BuildHasher>(ck: &mut Checker<'_, S>, body: TyIdx) -> TypeIdx {
+fn synth_choice<S: BuildHasher>(ck: &mut Checker<'_, S>, body: ExprIdx) -> TypeIdx {
     let parent = ck.current_scope;
     ck.current_scope = ck.scopes.push_child(parent);
 
-    match &ck.ctx.ast.tys[body] {
-        Ty::Sum { variants, .. } => {
-            let variants_clone = variants.clone();
-            for &variant_ty in &variants_clone {
-                if let Ty::Named { name_ref, .. } = &ck.ctx.ast.tys[variant_ty] {
-                    let name = ck.ctx.ast.name_refs[*name_ref].name;
+    match ck.ctx.ast.exprs[body].clone() {
+        AstExpr::SumType { variants, .. } => {
+            for &variant_expr in &variants {
+                let name_ref = match &ck.ctx.ast.exprs[variant_expr] {
+                    AstExpr::Name { name_ref, .. } => Some(*name_ref),
+                    AstExpr::TypeApp { callee, .. } => {
+                        if let AstExpr::Name { name_ref, .. } = &ck.ctx.ast.exprs[*callee] {
+                            Some(*name_ref)
+                        } else {
+                            None
+                        }
+                    }
+                    _ => None,
+                };
+                if let Some(nr_idx) = name_ref {
+                    let name = ck.ctx.ast.name_refs[nr_idx].name;
                     let id = ck
                         .defs
                         .alloc(name, DefKind::Type, Span::DUMMY, ck.ctx.file_id);
@@ -1350,20 +1449,30 @@ fn synth_choice<S: BuildHasher>(ck: &mut Checker<'_, S>, body: TyIdx) -> TypeIdx
                 }
             }
 
-            let mut sum_variants = Vec::with_capacity(variants_clone.len());
-            for &variant_ty in &variants_clone {
-                let (name, args) = match &ck.ctx.ast.tys[variant_ty] {
-                    Ty::Named { name_ref, args, .. } => (
-                        Some(ck.ctx.ast.name_refs[*name_ref].name),
-                        Some(args.clone()),
-                    ),
+            let mut sum_variants = Vec::with_capacity(variants.len());
+            for &variant_expr in &variants {
+                let (name_opt, args_opt) = match &ck.ctx.ast.exprs[variant_expr] {
+                    AstExpr::Name { name_ref, .. } => {
+                        (Some(ck.ctx.ast.name_refs[*name_ref].name), Some(vec![]))
+                    }
+                    AstExpr::TypeApp { callee, args, .. } => {
+                        if let AstExpr::Name { name_ref, .. } = &ck.ctx.ast.exprs[*callee] {
+                            (
+                                Some(ck.ctx.ast.name_refs[*name_ref].name),
+                                Some(args.clone()),
+                            )
+                        } else {
+                            (None, None)
+                        }
+                    }
                     _ => (None, None),
                 };
-                if let (Some(name), Some(args)) = (name, args) {
-                    let fields: Vec<TypeIdx> = args.iter().map(|&a| lower_ty(ck, a)).collect();
+                if let (Some(name), Some(args)) = (name_opt, args_opt) {
+                    let fields: Vec<TypeIdx> =
+                        args.iter().map(|&a| lower_type_expr(ck, a)).collect();
                     sum_variants.push(SumVariant { name, fields });
                 } else {
-                    let ty = lower_ty(ck, variant_ty);
+                    let ty = lower_type_expr(ck, variant_expr);
                     sum_variants.push(SumVariant {
                         name: Symbol(0),
                         fields: vec![ty],
@@ -1376,22 +1485,41 @@ fn synth_choice<S: BuildHasher>(ck: &mut Checker<'_, S>, body: TyIdx) -> TypeIdx
                 variants: sum_variants,
             })
         }
-        Ty::Named { name_ref, args, .. } => {
-            let name = ck.ctx.ast.name_refs[*name_ref].name;
-            let args = args.clone();
+        AstExpr::Name { name_ref, .. } => {
+            let name = ck.ctx.ast.name_refs[name_ref].name;
             let id = ck
                 .defs
                 .alloc(name, DefKind::Type, Span::DUMMY, ck.ctx.file_id);
             let _prev = ck.scopes.define(ck.current_scope, name, id);
-
-            let fields: Vec<TypeIdx> = args.iter().map(|&a| lower_ty(ck, a)).collect();
             ck.current_scope = parent;
             ck.alloc_ty(Type::Sum {
-                variants: vec![SumVariant { name, fields }],
+                variants: vec![SumVariant { name, fields: vec![] }],
             })
         }
+        AstExpr::TypeApp { callee, args, .. } => {
+            let name_opt = if let AstExpr::Name { name_ref, .. } = &ck.ctx.ast.exprs[callee] {
+                Some(ck.ctx.ast.name_refs[*name_ref].name)
+            } else {
+                None
+            };
+            if let Some(name) = name_opt {
+                let id = ck
+                    .defs
+                    .alloc(name, DefKind::Type, Span::DUMMY, ck.ctx.file_id);
+                let _prev = ck.scopes.define(ck.current_scope, name, id);
+                let fields: Vec<TypeIdx> = args.iter().map(|&a| lower_type_expr(ck, a)).collect();
+                ck.current_scope = parent;
+                ck.alloc_ty(Type::Sum {
+                    variants: vec![SumVariant { name, fields }],
+                })
+            } else {
+                let ty = lower_type_expr(ck, body);
+                ck.current_scope = parent;
+                ty
+            }
+        }
         _ => {
-            let ty = lower_ty(ck, body);
+            let ty = lower_type_expr(ck, body);
             ck.current_scope = parent;
             ty
         }
@@ -1403,8 +1531,9 @@ fn synth_record_def<S: BuildHasher>(ck: &mut Checker<'_, S>, fields: &[RecDefFie
         .iter()
         .map(|f| RecordField {
             name: f.name,
-            ty: lower_ty(ck, f.ty),
+            ty: lower_type_expr(ck, f.ty),
             ty_params: vec![],
+            binding: None,
         })
         .collect();
     rec_fields.sort_by(|a, b| {
@@ -1541,7 +1670,7 @@ fn synth_type_check<S: BuildHasher>(
     ck: &mut Checker<'_, S>,
     kind: TypeCheckKind,
     operand: ExprIdx,
-    ty: TyIdx,
+    ty: ExprIdx,
     binding: Option<Symbol>,
     span: Span,
 ) -> TypeIdx {
@@ -1549,7 +1678,7 @@ fn synth_type_check<S: BuildHasher>(
         TypeCheckKind::Test => synth_type_test(ck, operand, ty, binding, span),
         TypeCheckKind::Cast => {
             let operand_ty = synth(ck, operand);
-            let target_ty = lower_ty(ck, ty);
+            let target_ty = lower_type_expr(ck, ty);
             check_cast_safety(ck, operand_ty, target_ty, span);
             target_ty
         }
@@ -1559,12 +1688,12 @@ fn synth_type_check<S: BuildHasher>(
 fn synth_type_test<S: BuildHasher>(
     ck: &mut Checker<'_, S>,
     operand: ExprIdx,
-    ty: TyIdx,
+    ty: ExprIdx,
     binding: Option<Symbol>,
     span: Span,
 ) -> TypeIdx {
     let _operand_ty = synth(ck, operand);
-    let test_ty = lower_ty(ck, ty);
+    let test_ty = lower_type_expr(ck, ty);
     if let Some(name) = binding {
         let id = ck.defs.alloc(name, DefKind::Let, span, ck.ctx.file_id);
         ck.defs.get_mut(id).ty_info.ty = Some(test_ty);
@@ -1575,17 +1704,17 @@ fn synth_type_test<S: BuildHasher>(
 
 fn synth_handle<S: BuildHasher>(
     ck: &mut Checker<'_, S>,
-    effect_ty: TyIdx,
+    effect_ty: ExprIdx,
     ops: &[HandlerOp],
     body: ExprIdx,
 ) -> TypeIdx {
-    let _eff_ty = lower_ty(ck, effect_ty);
+    let _eff_ty = lower_type_expr(ck, effect_ty);
     for op in ops {
         let parent = ck.current_scope;
         ck.current_scope = ck.scopes.push_child(parent);
         for param in &op.params {
             let param_ty = if let Some(ty) = param.ty {
-                lower_ty(ck, ty)
+                lower_type_expr(ck, ty)
             } else {
                 ck.fresh_var(param.span)
             };
@@ -1604,13 +1733,15 @@ fn synth_handle<S: BuildHasher>(
 
 fn check_handler_op_coverage<S: BuildHasher>(
     ck: &mut Checker<'_, S>,
-    effect_ty_idx: TyIdx,
+    effect_ty_idx: ExprIdx,
     ops: &[HandlerOp],
 ) {
-    use music_ast::ty::Ty;
-
-    let effect_name = match &ck.ctx.ast.tys[effect_ty_idx] {
-        Ty::Named { name_ref, .. } => ck.ctx.ast.name_refs[*name_ref].name,
+    let effect_name = match &ck.ctx.ast.exprs[effect_ty_idx] {
+        AstExpr::Name { name_ref, .. } => ck.ctx.ast.name_refs[*name_ref].name,
+        AstExpr::TypeApp { callee, .. } => match &ck.ctx.ast.exprs[*callee] {
+            AstExpr::Name { name_ref, .. } => ck.ctx.ast.name_refs[*name_ref].name,
+            _ => return,
+        },
         _ => return,
     };
 
@@ -1655,7 +1786,14 @@ fn enter_constraint_scope<S: BuildHasher>(
         if constraint.rel != Rel::Sub {
             continue;
         }
-        let bound_name = ck.ctx.ast.name_refs[constraint.bound.name_ref].name;
+        let bound_name = match &ck.ctx.ast.exprs[constraint.bound] {
+            AstExpr::Name { name_ref, .. } => ck.ctx.ast.name_refs[*name_ref].name,
+            AstExpr::TypeApp { callee, .. } => match &ck.ctx.ast.exprs[*callee] {
+                AstExpr::Name { name_ref, .. } => ck.ctx.ast.name_refs[*name_ref].name,
+                _ => continue,
+            },
+            _ => continue,
+        };
         let class_def = ck.scopes.lookup(ck.current_scope, bound_name);
         let Some(class_def) = class_def else { continue };
 
@@ -1725,7 +1863,17 @@ fn record_fn_constraints<S: BuildHasher>(ck: &mut Checker<'_, S>, fields: &LetFi
         .iter()
         .filter(|ob| {
             fields.constraints.iter().any(|c| {
-                let bname = ck.ctx.ast.name_refs[c.bound.name_ref].name;
+                let bname = match &ck.ctx.ast.exprs[c.bound] {
+                    AstExpr::Name { name_ref, .. } => ck.ctx.ast.name_refs[*name_ref].name,
+                    AstExpr::TypeApp { callee, .. } => {
+                        if let AstExpr::Name { name_ref, .. } = &ck.ctx.ast.exprs[*callee] {
+                            ck.ctx.ast.name_refs[*name_ref].name
+                        } else {
+                            return false;
+                        }
+                    }
+                    _ => return false,
+                };
                 ck.scopes.lookup(ck.current_scope, bname) == Some(ob.class)
             })
         })

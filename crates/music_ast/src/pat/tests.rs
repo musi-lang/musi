@@ -2,9 +2,9 @@
 
 use music_shared::{Span, Symbol};
 
-use crate::AstArenas;
 use crate::expr::BindKind;
 use crate::pat::{Pat, PatRecField};
+use crate::AstArenas;
 
 #[test]
 fn test_or_pattern_both_arms_accessible() {

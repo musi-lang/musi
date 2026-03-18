@@ -8,21 +8,18 @@ pub mod decl;
 pub mod expr;
 pub mod lit;
 pub mod pat;
-pub mod ty;
+pub mod ty_param;
 pub mod util;
 pub mod visitor;
 
 pub use expr::Expr;
 pub use lit::Lit;
 pub use pat::Pat;
-pub use ty::Ty;
 
 use music_shared::{Arena, Idx, Span, Symbol};
 
 /// Index into the expression arena.
 pub type ExprIdx = Idx<Expr>;
-/// Index into the type-syntax arena.
-pub type TyIdx = Idx<Ty>;
 /// Index into the pattern arena.
 pub type PatIdx = Idx<Pat>;
 /// Index into the name-reference arena.
@@ -40,8 +37,6 @@ pub struct NameRef {
 
 /// A list of expression indices.
 pub type ExprList = Vec<ExprIdx>;
-/// A list of type indices.
-pub type TyList = Vec<TyIdx>;
 /// A list of pattern indices.
 pub type PatList = Vec<PatIdx>;
 
@@ -49,7 +44,6 @@ pub type PatList = Vec<PatIdx>;
 #[derive(Default)]
 pub struct AstArenas {
     pub exprs: Arena<Expr>,
-    pub tys: Arena<Ty>,
     pub pats: Arena<Pat>,
     pub name_refs: Arena<NameRef>,
 }

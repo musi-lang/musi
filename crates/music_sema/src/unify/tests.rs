@@ -214,25 +214,27 @@ fn test_freeze_replaces_solved_vars() {
 
     assert!(table.unify(var, int_ty, &mut arena, &wk));
 
-    let frozen = table.freeze(var, &mut arena, wk.any);
+    let frozen = table.freeze(var, &mut arena, wk.unknown);
     assert!(matches!(&arena[frozen], Type::Named { def, .. } if *def == wk.ints.int));
 }
 
 #[test]
-fn test_freeze_unsolved_var_defaults_to_any() {
+fn test_freeze_unsolved_var_defaults_to_unknown() {
     let (_, _, _, wk) = make_well_known();
     let mut table = UnifyTable::new();
     let mut arena = Arena::new();
 
     let var = table.fresh(Span::DUMMY, &mut arena);
-    let frozen = table.freeze(var, &mut arena, wk.any);
+    let frozen = table.freeze(var, &mut arena, wk.unknown);
     assert!(
-        matches!(&arena[frozen], Type::Named { def, args } if *def == wk.any && args.is_empty())
+        matches!(&arena[frozen], Type::Named { def, args } if *def == wk.unknown && args.is_empty())
     );
 }
 
 #[test]
-fn test_unify_any_with_anything() {
+fn test_unify_any_does_not_unify_with_concrete() {
+    // After the Any clean break, Any no longer silently unifies with everything.
+    // Gradual typing boundaries are handled by consistency, not unification.
     let (_, _, _, wk) = make_well_known();
     let mut table = UnifyTable::new();
     let mut arena = Arena::new();
@@ -246,7 +248,7 @@ fn test_unify_any_with_anything() {
         args: vec![],
     });
 
-    assert!(table.unify(any_ty, int_ty, &mut arena, &wk));
+    assert!(!table.unify(any_ty, int_ty, &mut arena, &wk));
 }
 
 #[test]

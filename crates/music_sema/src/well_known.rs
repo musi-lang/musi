@@ -95,6 +95,8 @@ pub struct WellKnown {
     pub option: DefId,
     pub any: DefId,
     pub never: DefId,
+    pub unknown: DefId,
+    pub type_: DefId,
 }
 
 /// Registers all well-known types in the def table and scope, returning
@@ -173,6 +175,8 @@ pub fn init_well_known(
     let unit = register("Unit", DefKind::Type);
     let any = register("Any", DefKind::Type);
     let never = register("Never", DefKind::Type);
+    let unknown = register("Unknown", DefKind::Type);
+    let type_ = register("Type", DefKind::Type);
 
     WellKnown {
         ints,
@@ -189,12 +193,43 @@ pub fn init_well_known(
         option,
         any,
         never,
+        unknown,
+        type_,
     }
 }
 
-pub const fn assign_well_known_types(
-    _defs: &mut DefTable,
-    _wk: &WellKnown,
-    _types: &mut Arena<Type>,
-) {
+pub fn assign_well_known_types(defs: &mut DefTable, wk: &WellKnown, types: &mut Arena<Type>) {
+    let u0 = types.alloc(Type::Universe { level: 0 });
+    let u1 = types.alloc(Type::Universe { level: 1 });
+
+    // Type : U₁ (the type of types lives one universe up)
+    defs.get_mut(wk.type_).ty_info.ty = Some(u1);
+
+    // All concrete types inhabit U₀
+    let concrete_types = [
+        wk.unknown,
+        wk.any,
+        wk.never,
+        wk.unit,
+        wk.bool,
+        wk.string,
+        wk.rune,
+        wk.float,
+        wk.option,
+        wk.ints.int,
+        wk.ints.int8,
+        wk.ints.int16,
+        wk.ints.int32,
+        wk.ints.int64,
+        wk.nats.nat,
+        wk.nats.nat8,
+        wk.nats.nat16,
+        wk.nats.nat32,
+        wk.nats.nat64,
+        wk.floats.float32,
+        wk.floats.float64,
+    ];
+    for &def_id in &concrete_types {
+        defs.get_mut(def_id).ty_info.ty = Some(u0);
+    }
 }

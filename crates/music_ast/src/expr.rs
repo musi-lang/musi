@@ -8,8 +8,8 @@ use music_shared::{Span, Symbol};
 use crate::attr::Attr;
 use crate::decl::{ClassMember, EffectOp, ExportItem, ForeignDecl};
 use crate::lit::Lit;
-use crate::ty::{Constraint, EffectSet, TyNamedRef, TyParam};
-use crate::{ExprIdx, ExprList, NameRefIdx, PatIdx, TyIdx};
+use crate::ty_param::{Constraint, TyParam};
+use crate::{ExprIdx, ExprList, NameRefIdx, PatIdx};
 
 /// Expression node. All recursive children use arena indices.
 #[derive(Debug, Clone, PartialEq)]
@@ -49,7 +49,7 @@ pub enum Expr {
     // Functions
     Fn {
         params: Vec<Param>,
-        ret_ty: Option<TyIdx>,
+        ret_ty: Option<ExprIdx>,
         body: ExprIdx,
         span: Span,
     },
@@ -93,7 +93,7 @@ pub enum Expr {
         span: Span,
     },
     Choice {
-        body: TyIdx,
+        body: ExprIdx,
         span: Span,
     },
     RecordDef {
@@ -164,7 +164,7 @@ pub enum Expr {
     },
     Instance {
         exported: bool,
-        target: TyNamedRef,
+        target: ExprIdx,
         params: Vec<TyParam>,
         constraints: Vec<Constraint>,
         members: Vec<ClassMember>,
@@ -188,15 +188,59 @@ pub enum Expr {
     TypeCheck {
         kind: TypeCheckKind,
         operand: ExprIdx,
-        ty: TyIdx,
+        ty: ExprIdx,
         binding: Option<Symbol>,
         span: Span,
     },
 
     // Effects
     Handle {
-        effect_ty: TyIdx,
+        effect_ty: ExprIdx,
         ops: Vec<HandlerOp>,
+        body: ExprIdx,
+        span: Span,
+    },
+
+    // Type expressions
+    /// Type application: `List of Int`, `Map of (String, Int)`.
+    TypeApp {
+        callee: ExprIdx,
+        args: ExprList,
+        span: Span,
+    },
+    /// Function type: `Int -> String` or `Int ~> String with { IO }`.
+    FnType {
+        params: ExprList,
+        ret: ExprIdx,
+        arrow: Arrow,
+        effects: Option<EffectSet>,
+        span: Span,
+    },
+    /// Option type sugar: `?Int`.
+    OptionType {
+        inner: ExprIdx,
+        span: Span,
+    },
+    /// Product type: `Int * String`.
+    ProductType {
+        fields: ExprList,
+        span: Span,
+    },
+    /// Sum type: `Int + String`.
+    SumType {
+        variants: ExprList,
+        span: Span,
+    },
+    /// Array type: `[]Int` or `[3]Int`.
+    ArrayType {
+        len: Option<u32>,
+        elem: ExprIdx,
+        span: Span,
+    },
+    /// Dependent function type: `(x : A) -> B` where x may appear in B.
+    PiType {
+        param: Symbol,
+        param_ty: ExprIdx,
         body: ExprIdx,
         span: Span,
     },
@@ -223,7 +267,7 @@ pub struct LetFields {
     pub pat: PatIdx,
     pub params: Vec<TyParam>,
     pub constraints: Vec<Constraint>,
-    pub ty: Option<TyIdx>,
+    pub ty: Option<ExprIdx>,
     pub value: Option<ExprIdx>,
     pub with_effects: Option<EffectSet>,
     pub span: Span,
@@ -255,7 +299,7 @@ pub enum Arrow {
 pub struct Param {
     pub mode: ParamMode,
     pub name: Symbol,
-    pub ty: Option<TyIdx>,
+    pub ty: Option<ExprIdx>,
     pub default: Option<ExprIdx>,
     pub span: Span,
 }
@@ -285,7 +329,7 @@ pub enum RecField {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RecDefField {
     pub name: Symbol,
-    pub ty: TyIdx,
+    pub ty: ExprIdx,
     pub default: Option<ExprIdx>,
     pub span: Span,
 }
@@ -405,4 +449,25 @@ pub enum UnaryOp {
 pub enum TypeCheckKind {
     Test,
     Cast,
+}
+
+/// A set of effects on a function type.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EffectSet {
+    pub effects: Vec<EffectItem>,
+    pub span: Span,
+}
+
+/// An individual effect in an effect set.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EffectItem {
+    Named {
+        name: Symbol,
+        arg: Option<ExprIdx>,
+        span: Span,
+    },
+    Var {
+        name: Symbol,
+        span: Span,
+    },
 }

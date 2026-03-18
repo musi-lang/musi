@@ -2,11 +2,11 @@
 
 use std::collections::HashSet;
 
-use music_ast::ExprIdx;
 use music_ast::decl::{ClassMember, EffectOp, ForeignDecl};
 use music_ast::expr::{Arg, ArrayElem, Expr, MatchArm, Param, PwArm, PwGuard, RecField};
-use music_ast::ty::{Constraint, TyNamedRef, TyParam};
+use music_ast::ty_param::{Constraint, TyParam};
 use music_ast::util::collect_ty_var_nodes;
+use music_ast::ExprIdx;
 use music_shared::{Span, Symbol};
 
 use crate::def::{DefId, DefKind};
@@ -55,17 +55,15 @@ impl Resolver<'_> {
 
     pub(super) fn resolve_expr_given(
         &mut self,
-        target: &TyNamedRef,
+        target: ExprIdx,
         params: &[TyParam],
         constraints: &[Constraint],
         members: &[ClassMember],
     ) {
         let mut all_params: Vec<TyParam> = params.to_vec();
-        for &arg in &target.args {
-            collect_ty_var_nodes(arg, self.ast, &mut all_params);
-        }
+        collect_ty_var_nodes(target, self.ast, &mut all_params);
         let parent = self.enter_ty_param_scope(&all_params, constraints);
-        self.resolve_ty_named_ref(target);
+        self.resolve_type_expr(target);
         let _member_defs = self.resolve_class_members(members, None);
         self.current_scope = parent;
     }
@@ -90,7 +88,7 @@ impl Resolver<'_> {
             if exported {
                 self.defs.get_mut(op_id).exported = true;
             }
-            self.resolve_ty(op.ty);
+            self.resolve_type_expr(op.ty);
         }
         self.current_scope = parent;
     }
@@ -109,7 +107,7 @@ impl Resolver<'_> {
         };
         for decl in decls {
             if let ForeignDecl::Fn { ty, .. } = decl {
-                self.resolve_ty(*ty);
+                self.resolve_type_expr(*ty);
             }
         }
         if let Some(p) = parent {
@@ -166,11 +164,11 @@ impl Resolver<'_> {
                             self.define_in_scope(param.name, id, param.span);
                             let _inserted = self.output.pat_defs.insert(param.span, id);
                             if let Some(ty) = param.ty {
-                                self.resolve_ty(ty);
+                                self.resolve_type_expr(ty);
                             }
                         }
                         if let Some(ret) = sig.ret {
-                            self.resolve_ty(ret);
+                            self.resolve_type_expr(ret);
                         }
                         self.resolve_expr(*body);
                         self.current_scope = parent;
@@ -210,7 +208,7 @@ impl Resolver<'_> {
                 self.define_in_scope(param.name, id, param.span);
                 let _inserted = self.output.pat_defs.insert(param.span, id);
                 if let Some(ty) = param.ty {
-                    self.resolve_ty(ty);
+                    self.resolve_type_expr(ty);
                 }
             }
         }

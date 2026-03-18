@@ -9,7 +9,7 @@ use music_shared::Symbol;
 
 use crate::def::DefKind;
 
-use super::{Resolver, binding_def_kind};
+use super::{binding_def_kind, Resolver};
 
 impl Resolver<'_> {
     pub(super) fn collect_top_level(&mut self, expr_idx: ExprIdx) {
@@ -48,7 +48,15 @@ impl Resolver<'_> {
             Expr::Instance {
                 target, exported, ..
             } => {
-                let target_name = self.ast.name_refs[target.name_ref].name;
+                let target_name_ref = match &self.ast.exprs[*target] {
+                    Expr::Name { name_ref, .. } => *name_ref,
+                    Expr::TypeApp { callee, .. } => match &self.ast.exprs[*callee] {
+                        Expr::Name { name_ref, .. } => *name_ref,
+                        _ => return,
+                    },
+                    _ => return,
+                };
+                let target_name = self.ast.name_refs[target_name_ref].name;
                 let id = self.defs.alloc(
                     target_name,
                     DefKind::Instance,

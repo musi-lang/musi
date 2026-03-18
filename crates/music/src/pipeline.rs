@@ -272,6 +272,7 @@ fn build_import_types(
                     name: b.name,
                     ty: b.ty,
                     ty_params: b.ty_params.clone(),
+                    binding: None,
                 })
                 .collect();
             fields.sort_by(|a, b| interner.resolve(a.name).cmp(interner.resolve(b.name)));

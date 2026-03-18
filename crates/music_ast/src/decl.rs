@@ -3,7 +3,7 @@
 use music_shared::{Span, Symbol};
 
 use crate::expr::Param;
-use crate::{ExprIdx, TyIdx};
+use crate::ExprIdx;
 
 /// A member of a class or given declaration.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -26,7 +26,7 @@ pub enum ClassMember {
 pub struct FnSig {
     pub name: Symbol,
     pub params: Vec<Param>,
-    pub ret: Option<TyIdx>,
+    pub ret: Option<ExprIdx>,
     pub span: Span,
 }
 
@@ -43,7 +43,7 @@ pub struct ExportItem {
 pub struct EffectOp {
     pub fatal: bool,
     pub name: Symbol,
-    pub ty: TyIdx,
+    pub ty: ExprIdx,
     pub span: Span,
 }
 
@@ -54,7 +54,7 @@ pub enum ForeignDecl {
     Fn {
         name: Symbol,
         ext_name: Option<Symbol>,
-        ty: TyIdx,
+        ty: ExprIdx,
         span: Span,
     },
     /// An opaque type declaration: `let NAME;` (no type annotation).

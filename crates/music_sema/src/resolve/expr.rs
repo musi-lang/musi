@@ -6,7 +6,7 @@ use music_ast::expr::{
 };
 use music_ast::lit::{FStrPart, Lit};
 use music_ast::pat::Pat;
-use music_ast::{ExprIdx, NameRefIdx, TyIdx};
+use music_ast::{ExprIdx, NameRefIdx};
 use music_shared::{Span, Symbol};
 
 use crate::def::{DefId, DefKind};
@@ -105,7 +105,7 @@ impl Resolver<'_> {
                 members,
                 ..
             } => {
-                self.resolve_expr_given(&target, &params, &constraints, &members);
+                self.resolve_expr_given(target, &params, &constraints, &members);
             }
             Expr::Effect {
                 name,
@@ -117,7 +117,7 @@ impl Resolver<'_> {
             Expr::Foreign { decls, .. } => self.resolve_expr_foreign(&decls),
             Expr::TypeCheck { operand, ty, .. } => {
                 self.resolve_expr(operand);
-                self.resolve_ty(ty);
+                self.resolve_type_expr(ty);
             }
             Expr::Handle {
                 effect_ty,
@@ -125,6 +125,14 @@ impl Resolver<'_> {
                 body,
                 ..
             } => self.resolve_expr_handle(effect_ty, &ops, body),
+            // Type-expression variants: resolve names within them as type references.
+            Expr::TypeApp { .. }
+            | Expr::FnType { .. }
+            | Expr::OptionType { .. }
+            | Expr::ProductType { .. }
+            | Expr::SumType { .. }
+            | Expr::ArrayType { .. }
+            | Expr::PiType { .. } => self.resolve_type_expr(expr_idx),
         }
     }
 
@@ -167,7 +175,7 @@ impl Resolver<'_> {
 
     fn resolve_rec_def_fields(&mut self, fields: &[RecDefField]) {
         for f in fields {
-            self.resolve_ty(f.ty);
+            self.resolve_type_expr(f.ty);
         }
     }
 
@@ -233,7 +241,7 @@ impl Resolver<'_> {
             self.resolve_expr(v);
         }
         if let Some(ty) = fields.ty {
-            self.resolve_ty(ty);
+            self.resolve_type_expr(ty);
         }
         if let Some(p) = fn_pat_parent {
             self.current_scope = p;
@@ -282,7 +290,7 @@ impl Resolver<'_> {
             self.resolve_expr(v);
         }
         if let Some(ty) = fields.ty {
-            self.resolve_ty(ty);
+            self.resolve_type_expr(ty);
         }
 
         if let Some(p) = fn_pat_parent {
@@ -329,7 +337,7 @@ impl Resolver<'_> {
             }
         }
         if let Some(ty) = fields.ty {
-            self.resolve_ty(ty);
+            self.resolve_type_expr(ty);
         }
 
         if let Some(p) = fn_pat_parent {
@@ -341,7 +349,7 @@ impl Resolver<'_> {
         }
     }
 
-    fn resolve_expr_fn(&mut self, params: &[Param], ret_ty: Option<TyIdx>, body: ExprIdx) {
+    fn resolve_expr_fn(&mut self, params: &[Param], ret_ty: Option<ExprIdx>, body: ExprIdx) {
         let parent = self.current_scope;
         self.current_scope = self.scopes.push_child(parent);
         for param in params {
@@ -352,11 +360,11 @@ impl Resolver<'_> {
             self.define_in_scope(param.name, id, param.span);
             let _inserted = self.output.pat_defs.insert(param.span, id);
             if let Some(ty) = param.ty {
-                self.resolve_ty(ty);
+                self.resolve_type_expr(ty);
             }
         }
         if let Some(ret) = ret_ty {
-            self.resolve_ty(ret);
+            self.resolve_type_expr(ret);
         }
         self.resolve_expr(body);
         self.current_scope = parent;
@@ -376,36 +384,55 @@ impl Resolver<'_> {
         }
     }
 
-    fn resolve_expr_choice(&mut self, body: TyIdx, choice_parent: Option<DefId>) {
-        use music_ast::ty::Ty;
+    fn resolve_expr_choice(&mut self, body: ExprIdx, choice_parent: Option<DefId>) {
         let parent = self.current_scope;
         self.current_scope = self.scopes.push_child(parent);
 
-        match &self.ast.tys[body] {
-            Ty::Sum { variants, .. } => {
-                for &variant_ty in variants {
-                    if let Ty::Named { name_ref, span, .. } = &self.ast.tys[variant_ty] {
+        match self.ast.exprs[body].clone() {
+            Expr::SumType { variants, .. } => {
+                for &variant_expr in &variants {
+                    if let Expr::Name { name_ref, span } = &self.ast.exprs[variant_expr] {
                         let name = self.ast.name_refs[*name_ref].name;
                         let id = self.defs.alloc(name, DefKind::Variant, *span, self.file_id);
                         if let Some(p) = choice_parent {
                             self.defs.get_mut(id).parent = Some(p);
                         }
                         self.define_in_scope(name, id, *span);
+                    } else if let Expr::TypeApp { callee, .. } = &self.ast.exprs[variant_expr] {
+                        if let Expr::Name { name_ref, span } = &self.ast.exprs[*callee] {
+                            let name = self.ast.name_refs[*name_ref].name;
+                            let id =
+                                self.defs.alloc(name, DefKind::Variant, *span, self.file_id);
+                            if let Some(p) = choice_parent {
+                                self.defs.get_mut(id).parent = Some(p);
+                            }
+                            self.define_in_scope(name, id, *span);
+                        }
                     }
                 }
             }
-            Ty::Named { name_ref, span, .. } => {
-                let name = self.ast.name_refs[*name_ref].name;
-                let id = self.defs.alloc(name, DefKind::Variant, *span, self.file_id);
+            Expr::Name { name_ref, span } => {
+                let name = self.ast.name_refs[name_ref].name;
+                let id = self.defs.alloc(name, DefKind::Variant, span, self.file_id);
                 if let Some(p) = choice_parent {
                     self.defs.get_mut(id).parent = Some(p);
                 }
-                self.define_in_scope(name, id, *span);
+                self.define_in_scope(name, id, span);
+            }
+            Expr::TypeApp { callee, .. } => {
+                if let Expr::Name { name_ref, span } = &self.ast.exprs[callee] {
+                    let name = self.ast.name_refs[*name_ref].name;
+                    let id = self.defs.alloc(name, DefKind::Variant, *span, self.file_id);
+                    if let Some(p) = choice_parent {
+                        self.defs.get_mut(id).parent = Some(p);
+                    }
+                    self.define_in_scope(name, id, *span);
+                }
             }
             _ => {}
         }
 
-        self.resolve_ty(body);
+        self.resolve_type_expr(body);
         self.current_scope = parent;
     }
 
@@ -428,8 +455,8 @@ impl Resolver<'_> {
         }
     }
 
-    fn resolve_expr_handle(&mut self, effect_ty: TyIdx, ops: &[HandlerOp], body: ExprIdx) {
-        self.resolve_ty(effect_ty);
+    fn resolve_expr_handle(&mut self, effect_ty: ExprIdx, ops: &[HandlerOp], body: ExprIdx) {
+        self.resolve_type_expr(effect_ty);
         for op in ops {
             let parent = self.current_scope;
             self.current_scope = self.scopes.push_child(parent);
@@ -440,7 +467,7 @@ impl Resolver<'_> {
                 self.define_in_scope(param.name, id, param.span);
                 let _inserted = self.output.pat_defs.insert(param.span, id);
                 if let Some(ty) = param.ty {
-                    self.resolve_ty(ty);
+                    self.resolve_type_expr(ty);
                 }
             }
             self.resolve_expr(op.body);

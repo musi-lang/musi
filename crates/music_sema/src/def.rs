@@ -6,7 +6,7 @@ mod tests;
 use music_ast::expr::ParamMode;
 use music_shared::{FileId, Span, Symbol};
 
-use crate::types::{Obligation, TypeIdx};
+use crate::types::{LawObligation, Obligation, TypeIdx};
 
 /// A unique identifier for a definition (binding, function, type, variant, ...).
 ///
@@ -86,6 +86,8 @@ pub struct DefInfo {
     pub param_mode: Option<ParamMode>,
     /// If this definition carries `#[lang := "..."]`, the interned name.
     pub lang_item: Option<Symbol>,
+    /// Law obligations for class definitions (empty for non-class defs).
+    pub law_obligations: Vec<LawObligation>,
 }
 
 /// Registry of all definitions encountered during analysis.
@@ -118,6 +120,7 @@ impl DefTable {
             is_entry_point: false,
             param_mode: None,
             lang_item: None,
+            law_obligations: vec![],
         });
         id
     }

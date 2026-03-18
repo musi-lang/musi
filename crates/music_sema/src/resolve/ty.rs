@@ -1,18 +1,14 @@
-//! Type resolution helpers.
+//! Type expression resolution helpers.
 
-use music_ast::ty::{Ty, TyNamedRef};
-use music_ast::TyIdx;
+use music_ast::expr::{EffectItem, Expr};
+use music_ast::ExprIdx;
 
 use super::Resolver;
 
 impl Resolver<'_> {
-    pub(super) fn resolve_ty(&mut self, ty_idx: TyIdx) {
-        match self.ast.tys[ty_idx].clone() {
-            Ty::Named {
-                name_ref,
-                args,
-                span,
-            } => {
+    pub(super) fn resolve_type_expr(&mut self, expr_idx: ExprIdx) {
+        match self.ast.exprs[expr_idx].clone() {
+            Expr::Name { name_ref, span } => {
                 let nr = self.ast.name_refs[name_ref];
                 if let Some(def_id) = self.scopes.lookup(self.current_scope, nr.name) {
                     self.output.name_ref_defs[usize::try_from(name_ref.raw()).unwrap()] =
@@ -21,75 +17,62 @@ impl Resolver<'_> {
                 } else {
                     self.report_undefined(nr.name, span);
                 }
+            }
+            Expr::TypeApp { callee, args, .. } => {
+                self.resolve_type_expr(callee);
                 for &arg in &args {
-                    self.resolve_ty(arg);
+                    self.resolve_type_expr(arg);
                 }
             }
-            Ty::Qualified {
-                module_ref,
-                args,
-                span,
+            Expr::Field { object, .. } => {
+                // Qualified type: M.Type — resolve the module name.
+                // The field name itself is not resolved here (handled by checker).
+                self.resolve_type_expr(object);
+            }
+            Expr::OptionType { inner, .. } => {
+                self.resolve_type_expr(inner);
+            }
+            Expr::FnType {
+                params,
+                ret,
+                effects,
                 ..
             } => {
-                let nr = self.ast.name_refs[module_ref];
-                if let Some(def_id) = self.scopes.lookup(self.current_scope, nr.name) {
-                    self.output.name_ref_defs[usize::try_from(module_ref.raw()).unwrap()] =
-                        Some(def_id);
-                    self.defs.get_mut(def_id).use_count += 1;
-                } else {
-                    self.report_undefined(nr.name, span);
-                }
-                for &arg in &args {
-                    self.resolve_ty(arg);
-                }
-            }
-            Ty::Option { inner, .. } => {
-                self.resolve_ty(inner);
-            }
-            Ty::Fn { params, ret, .. } => {
                 for &p in &params {
-                    self.resolve_ty(p);
+                    self.resolve_type_expr(p);
                 }
-                self.resolve_ty(ret);
+                self.resolve_type_expr(ret);
+                if let Some(eff) = &effects {
+                    for item in &eff.effects {
+                        match item {
+                            EffectItem::Named { arg, .. } => {
+                                if let Some(a) = arg {
+                                    self.resolve_type_expr(*a);
+                                }
+                            }
+                            EffectItem::Var { .. } => {}
+                        }
+                    }
+                }
             }
-            Ty::Product { fields, .. } => {
+            Expr::ProductType { fields, .. } => {
                 for &f in &fields {
-                    self.resolve_ty(f);
+                    self.resolve_type_expr(f);
                 }
             }
-            Ty::Sum { variants, .. } => {
+            Expr::SumType { variants, .. } => {
                 for &v in &variants {
-                    self.resolve_ty(v);
+                    self.resolve_type_expr(v);
                 }
             }
-            Ty::Array { elem, .. } => {
-                self.resolve_ty(elem);
+            Expr::ArrayType { elem, .. } => {
+                self.resolve_type_expr(elem);
             }
-            Ty::Var { name_ref } => {
-                let nr = self.ast.name_refs[name_ref];
-                if let Some(def_id) = self.scopes.lookup(self.current_scope, nr.name) {
-                    self.output.name_ref_defs[usize::try_from(name_ref.raw()).unwrap()] =
-                        Some(def_id);
-                    self.defs.get_mut(def_id).use_count += 1;
-                } else {
-                    self.report_undefined(nr.name, nr.span);
-                }
+            Expr::PiType { param_ty, body, .. } => {
+                self.resolve_type_expr(param_ty);
+                self.resolve_type_expr(body);
             }
-            Ty::Error { .. } => {}
-        }
-    }
-
-    pub(super) fn resolve_ty_named_ref(&mut self, named: &TyNamedRef) {
-        let nr = self.ast.name_refs[named.name_ref];
-        if let Some(def_id) = self.scopes.lookup(self.current_scope, nr.name) {
-            self.output.name_ref_defs[usize::try_from(named.name_ref.raw()).unwrap()] =
-                Some(def_id);
-            self.defs.get_mut(def_id).use_count += 1;
-        } else {
-            self.report_undefined(nr.name, named.span);
-        }
-        for &arg in &named.args {
-            self.resolve_ty(arg);
+            _ => {}
         }
     }
 }
