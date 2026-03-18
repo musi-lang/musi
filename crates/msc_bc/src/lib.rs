@@ -1,4 +1,4 @@
-//! `msc_bc` - shared `.msbc` bytecode format definitions.
+//! `msc_bc` - shared `.muse` bytecode format definitions.
 //!
 //! Defines the opcode set, instruction encoding functions, and CRC-32
 //! checksum used by both the `msc_emit` compiler crate and the

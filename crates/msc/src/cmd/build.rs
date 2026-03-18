@@ -1,4 +1,4 @@
-//! `msc build` - compile a `.ms` source file to `.msbc` bytecode.
+//! `msc build` - compile a `.ms` source file to `.muse` bytecode.
 
 use std::{fs, path::Path, process};
 
@@ -6,7 +6,7 @@ use msc_manifest::MusiManifest;
 
 use crate::pipeline;
 
-/// Compiles `path` to bytecode and writes it to `output` (or `path.msbc`).
+/// Compiles `path` to bytecode and writes it to `output` (or `path.muse`).
 pub fn run(
     path: &Path,
     output: Option<&Path>,

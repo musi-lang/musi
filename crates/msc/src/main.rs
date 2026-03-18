@@ -25,7 +25,7 @@ enum Command {
         /// Source file to check (defaults to `main` from `musi.json`)
         file: Option<PathBuf>,
     },
-    /// Compile a `.ms` source file to `.msbc` bytecode
+    /// Compile a `.ms` source file to `.muse` bytecode
     Build {
         /// Source file to compile (defaults to `main` from `musi.json`)
         file: Option<PathBuf>,

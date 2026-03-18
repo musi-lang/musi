@@ -11,7 +11,7 @@ use crate::value::{BOXED_INT_TYPE_ID, BOXED_NAT_TYPE_ID, Value};
 
 /// A heap-allocated object: a product, sum variant, array, or string.
 pub struct HeapObject {
-    /// Type pool id of this object's type (`type_id` in `.msbc`).
+    /// Type pool id of this object's type (`type_id` in `.muse`).
     pub type_id: u32,
     /// GC bookkeeping flags. Bit 0 = marked.
     pub gc_flags: u8,

@@ -1,4 +1,4 @@
-//! `.msbc` binary loader.
+//! `.muse` binary loader.
 //!
 //! Parses raw bytes into a `LoadedModule` without any dependency on compiler
 //! crates. The binary format is described in §11 of the Musi bytecode spec.
@@ -95,7 +95,7 @@ pub struct HandlerEntry {
     pub handler_fn_id: u32,
 }
 
-/// The fully decoded contents of a `.msbc` module.
+/// The fully decoded contents of a `.muse` module.
 #[derive(Debug)]
 pub struct LoadedModule {
     pub flags: u32,
@@ -119,7 +119,7 @@ impl LoadedModule {
     }
 }
 
-/// Parse raw `.msbc` bytes into a `LoadedModule`.
+/// Parse raw `.muse` bytes into a `LoadedModule`.
 ///
 /// Validates the magic bytes and header CRC32 before decoding pool sections.
 ///

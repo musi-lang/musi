@@ -1,6 +1,6 @@
 //! `musi` - Musi bytecode interpreter.
 //!
-//! Loads and executes `.msbc` binaries produced by the `msc` compiler.
+//! Loads and executes `.muse` binaries produced by the `msc` compiler.
 //!
 //! Exit codes:
 //! - `0` success
@@ -16,7 +16,7 @@ use msc_vm::{Vm, load, verify};
 #[derive(Parser)]
 #[command(name = "musi", about = "Musi bytecode interpreter")]
 struct Cli {
-    /// Path to the `.msbc` bytecode file
+    /// Path to the `.muse` bytecode file
     file: PathBuf,
 }
 

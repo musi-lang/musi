@@ -1,6 +1,6 @@
 //! VM integration tests.
 //!
-//! All tests build minimal `.msbc` binaries from raw bytes - no compiler
+//! All tests build minimal `.muse` binaries from raw bytes - no compiler
 //! crate dependency.
 #![allow(clippy::panic)]
 
@@ -60,7 +60,7 @@ fn fn_def_with_max_stack(
     }
 }
 
-/// Build a minimal valid `.msbc` binary.
+/// Build a minimal valid `.muse` binary.
 fn make_msbc(consts: &[ConstEntry], fns: &[FnDef]) -> Vec<u8> {
     let entry_fn_id: u32 = fns.first().map_or(0, |f| f.fn_id);
 
@@ -143,7 +143,7 @@ fn make_msbc(consts: &[ConstEntry], fns: &[FnDef]) -> Vec<u8> {
     out
 }
 
-/// Load, verify, and run the entry function of a `.msbc` binary.
+/// Load, verify, and run the entry function of a `.muse` binary.
 fn run_vm(bytes: &[u8]) -> (Vm, Result<Value, VmError>) {
     let module = load(bytes).expect("loads");
     verify(&module).expect("verifies");
@@ -1030,7 +1030,7 @@ struct EffectOpDef {
     name_const_idx: u32,
 }
 
-/// Build a `.msbc` binary with an effect pool.
+/// Build a `.muse` binary with an effect pool.
 fn make_msbc_with_effects(consts: &[ConstEntry], effects: &[EffectDef], fns: &[FnDef]) -> Vec<u8> {
     let entry_fn_id: u32 = fns.first().map_or(0, |f| f.fn_id);
 

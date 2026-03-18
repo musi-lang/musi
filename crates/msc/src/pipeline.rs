@@ -5,10 +5,10 @@ use std::fs;
 use std::io::{IsTerminal, stderr};
 use std::path::Path;
 
-use msc_manifest::MusiManifest;
 use msc_ast::{ExprIdx, ParsedModule};
 use msc_emit::emit;
 use msc_lex::lex;
+use msc_manifest::MusiManifest;
 use msc_parse::parse;
 use msc_resolve::graph::ModuleId;
 use msc_resolve::{ModuleGraph, ModuleNode, build_module_graph};
@@ -285,7 +285,7 @@ fn build_import_types(
 
 /// Runs bytecode emission.
 ///
-/// Returns the raw `.msbc` bytes on success, or `Err(())` after printing
+/// Returns the raw `.muse` bytes on success, or `Err(())` after printing
 /// the error to stderr.
 pub fn run_backend(out: &mut FrontendOutput, script: bool) -> Result<Vec<u8>, ()> {
     let dep_inputs: Vec<msc_emit::DepEmitInput> = out

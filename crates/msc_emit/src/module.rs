@@ -1,4 +1,4 @@
-//! `.msbc` binary module serializer.
+//! `.muse` binary module serializer.
 //!
 //! Writes the 40-byte header followed by the constant pool, type pool,
 //! effect pool, foreign pool, and function pool.
@@ -41,7 +41,7 @@ pub struct EffectOpDef {
     pub fatal: bool,
 }
 
-/// Parameters for assembling a `.msbc` binary.
+/// Parameters for assembling a `.muse` binary.
 pub struct AssembleParams<'a> {
     pub cp: &'a mut ConstPool,
     pub tp: &'a mut TypePool,
@@ -52,7 +52,7 @@ pub struct AssembleParams<'a> {
     pub entry_fn_id: Option<u32>,
 }
 
-/// Assembles the complete `.msbc` binary.
+/// Assembles the complete `.muse` binary.
 pub fn assemble(params: AssembleParams<'_>) -> Result<Vec<u8>, EmitError> {
     let AssembleParams {
         cp,

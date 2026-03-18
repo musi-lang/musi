@@ -63,7 +63,7 @@ rt.writeln("hello, world!");
 
     let gitignore = r"target/
 dist/
-*.msbc
+*.muse
 .msbuildinfo
 ";
     fs::write(dir.join(".gitignore"), gitignore)
