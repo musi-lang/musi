@@ -96,10 +96,11 @@ impl Parser<'_> {
     fn parse_expr_binding_immut_body(&mut self, kind: BindKind, start: u32) -> Expr {
         let pat = self.parse_alloc_pat();
         let params = self.parse_optional_bracket_params();
-        let constraints = if params.is_empty() {
-            vec![]
+        let constraints = self.parse_opt_where_clause();
+        let with_effects = if self.eat(TokenKind::KwWith) {
+            Some(self.parse_effect_set())
         } else {
-            self.parse_opt_where_clause()
+            None
         };
         let ty = self.parse_opt_ty_annot();
         // `:= value` is required unless a type annotation is present (stub declaration)
@@ -127,7 +128,7 @@ impl Parser<'_> {
             constraints,
             ty,
             value,
-            with_effects: None,
+            with_effects,
             span: self.finish_span(start),
         };
 

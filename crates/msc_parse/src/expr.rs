@@ -210,7 +210,7 @@ impl Parser<'_> {
         }
     }
 
-    /// Parses `need expr` — effect operation invocation.
+    /// Parses `need expr` - effect operation invocation.
     fn parse_expr_need(&mut self) -> Expr {
         let start = self.start_span();
         let _kw = self.bump();
@@ -222,7 +222,7 @@ impl Parser<'_> {
         }
     }
 
-    /// Parses `resume [expr]` — resume continuation with optional value.
+    /// Parses `resume [expr]` - resume continuation with optional value.
     fn parse_expr_resume(&mut self) -> Expr {
         let start = self.start_span();
         let _kw = self.bump();

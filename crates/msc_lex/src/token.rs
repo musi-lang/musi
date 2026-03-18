@@ -35,6 +35,7 @@ pub enum TokenKind {
     KwResume,
     KwReturn,
     KwTry,
+    KwVia,
     KwWhere,
     KwWith,
     KwXor,
@@ -149,6 +150,7 @@ impl TokenKind {
                 | Self::KwResume
                 | Self::KwReturn
                 | Self::KwTry
+                | Self::KwVia
                 | Self::KwWhere
                 | Self::KwWith
                 | Self::KwXor
@@ -186,6 +188,7 @@ impl TokenKind {
             Self::KwResume => Some("resume"),
             Self::KwReturn => Some("return"),
             Self::KwTry => Some("try"),
+            Self::KwVia => Some("via"),
             Self::KwWhere => Some("where"),
             Self::KwWith => Some("with"),
             Self::KwXor => Some("xor"),
@@ -308,6 +311,7 @@ pub fn keyword_from_str(s: &str) -> Option<TokenKind> {
         "resume" => Some(TokenKind::KwResume),
         "return" => Some(TokenKind::KwReturn),
         "try" => Some(TokenKind::KwTry),
+        "via" => Some(TokenKind::KwVia),
         "where" => Some(TokenKind::KwWhere),
         "with" => Some(TokenKind::KwWith),
         "xor" => Some(TokenKind::KwXor),

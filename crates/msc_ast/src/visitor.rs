@@ -8,8 +8,8 @@ use std::ops::ControlFlow;
 use crate::attr::{Attr, AttrValue};
 use crate::decl::{ClassMember, EffectOp, ForeignDecl};
 use crate::expr::{
-    Arg, ArrayElem, EffectItem, Expr, HandlerOp, LetFields, MatchArm, Param, PwArm, PwGuard,
-    RecDefField, RecField,
+    Arg, ArrayElem, EffectItem, Expr, HandlerOp, InstanceBody, LetFields, MatchArm, Param, PwArm,
+    PwGuard, RecDefField, RecField,
 };
 use crate::lit::{FStrPart, Lit};
 use crate::pat::Pat;
@@ -101,21 +101,14 @@ pub fn walk_expr<V: AstVisitor + ?Sized>(
         Expr::RecordDef { fields, .. } => walk_rec_def_fields(v, fields, ctx),
 
         Expr::BinOp { left, right, .. } => v.visit_expr_list(&[*left, *right], ctx),
-        Expr::UnaryOp { operand, .. } => v.visit_expr(*operand, ctx),
+        Expr::UnaryOp { operand, .. } | Expr::Need { operand, .. } => v.visit_expr(*operand, ctx),
 
         Expr::Piecewise { arms, .. } => walk_expr_piecewise(v, arms, ctx),
         Expr::Match {
             scrutinee, arms, ..
         } => walk_expr_match(v, *scrutinee, arms, ctx),
 
-        Expr::Return { value, .. } => {
-            if let Some(val) = *value {
-                v.visit_expr(val, ctx)?;
-            }
-            ControlFlow::Continue(())
-        }
-        Expr::Need { operand, .. } => v.visit_expr(*operand, ctx),
-        Expr::Resume { value, .. } => {
+        Expr::Return { value, .. } | Expr::Resume { value, .. } => {
             if let Some(val) = *value {
                 v.visit_expr(val, ctx)?;
             }
@@ -138,12 +131,15 @@ pub fn walk_expr<V: AstVisitor + ?Sized>(
         Expr::Instance {
             target,
             constraints,
-            members,
+            body,
             ..
         } => {
             v.visit_expr(*target, ctx)?;
             walk_constraints(v, constraints, ctx)?;
-            walk_class_members(v, members, ctx)
+            match body {
+                InstanceBody::Manual { members } => walk_class_members(v, members, ctx),
+                InstanceBody::Via { delegate, .. } => v.visit_expr(*delegate, ctx),
+            }
         }
         Expr::Effect { ops, .. } => walk_effect_ops(v, ops, ctx),
         Expr::Foreign { decls, .. } => walk_foreign_decls(v, decls, ctx),

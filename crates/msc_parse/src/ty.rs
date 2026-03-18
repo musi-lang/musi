@@ -56,11 +56,11 @@ impl Parser<'_> {
         let (mut ret, mut ret_eff) = parts.pop().expect("at least two parts");
         while let Some(arrow) = arrows.pop() {
             let (param, _param_eff) = parts.pop().expect("matching param");
-            let params = match param {
-                Expr::ProductType { fields, .. } => fields,
-                other => {
-                    vec![self.alloc_expr(other)]
-                }
+            let (params, variadic) = match param {
+                Expr::ProductType {
+                    fields, variadic, ..
+                } => (fields, variadic),
+                other => (vec![self.alloc_expr(other)], false),
             };
             let ret_idx = self.alloc_expr(ret);
             ret = Expr::FnType {
@@ -68,6 +68,7 @@ impl Parser<'_> {
                 ret: ret_idx,
                 arrow,
                 effects: ret_eff,
+                variadic,
                 span: self.finish_span(start),
             };
             ret_eff = None;
@@ -85,6 +86,7 @@ impl Parser<'_> {
             let effects = Some(self.parse_effect_set());
             let unit = Expr::ProductType {
                 fields: vec![],
+                variadic: false,
                 span: self.finish_span(start),
             };
             return (unit, effects);
@@ -130,6 +132,7 @@ impl Parser<'_> {
         }
         Expr::ProductType {
             fields,
+            variadic: false,
             span: self.finish_span(start),
         }
     }
@@ -226,10 +229,18 @@ impl Parser<'_> {
 
     fn parse_ty_paren_or_tuple(&mut self) -> Expr {
         let start = self.start_span();
+
+        // Disambiguate pi type: `(ident : ty) -> ty` vs grouped/tuple type.
+        // peek_at(0) = LParen, peek_at(1) = possible Ident, peek_at(2) = possible Colon.
+        if self.peek_at(1).kind == TokenKind::Ident && self.peek_at(2).kind == TokenKind::Colon {
+            return self.parse_ty_pi(start);
+        }
+
         let _lp = self.bump();
         if self.eat(TokenKind::RParen) {
             return Expr::ProductType {
                 fields: vec![],
+                variadic: false,
                 span: self.finish_span(start),
             };
         }
@@ -243,12 +254,42 @@ impl Parser<'_> {
             if self.at(TokenKind::RParen) {
                 break;
             }
+            if self.at(TokenKind::DotDotDot) {
+                let _dots = self.bump();
+                let _rp = self.expect(TokenKind::RParen);
+                return Expr::ProductType {
+                    fields,
+                    variadic: true,
+                    span: self.finish_span(start),
+                };
+            }
             let t = self.parse_ty();
             fields.push(self.alloc_expr(t));
         }
         let _rp = self.expect(TokenKind::RParen);
         Expr::ProductType {
             fields,
+            variadic: false,
+            span: self.finish_span(start),
+        }
+    }
+
+    /// Parses a pi type: `(ident : ty) -> ty`.
+    ///
+    /// Called only when `peek_at(1)` is `Ident` and `peek_at(2)` is `Colon`,
+    /// so the lookahead guarantee holds on entry.
+    fn parse_ty_pi(&mut self, start: u32) -> Expr {
+        let _lp = self.bump(); // (
+        let param = self.expect_symbol(); // ident
+        let _colon = self.bump(); // :
+        let param_ty = self.parse_alloc_ty();
+        let _rp = self.expect(TokenKind::RParen);
+        let _arrow = self.expect(TokenKind::DashGt);
+        let body = self.parse_alloc_ty();
+        Expr::PiType {
+            param,
+            param_ty,
+            body,
             span: self.finish_span(start),
         }
     }
@@ -279,8 +320,13 @@ impl Parser<'_> {
     }
 
     fn parse_ty_arg_list(&mut self) -> Vec<ExprIdx> {
-        let t = self.parse_ty_base();
-        vec![self.alloc_expr(t)]
+        let first = self.parse_ty_base();
+        let mut args = vec![self.alloc_expr(first)];
+        while self.eat(TokenKind::Comma) {
+            let t = self.parse_ty_base();
+            args.push(self.alloc_expr(t));
+        }
+        args
     }
 
     /// Parses a named type reference: `Name [ 'of' type_args ]`.
@@ -329,6 +375,8 @@ impl Parser<'_> {
                 Rel::Sub
             } else if self.eat(TokenKind::ColonGt) {
                 Rel::Super
+            } else if self.eat(TokenKind::Colon) {
+                Rel::Member
             } else {
                 let _span = self.expect(TokenKind::LtColon);
                 Rel::Sub
@@ -356,7 +404,7 @@ impl Parser<'_> {
         }
     }
 
-    fn parse_effect_set(&mut self) -> EffectSet {
+    pub(crate) fn parse_effect_set(&mut self) -> EffectSet {
         let start = self.start_span();
         let _lb = self.expect(TokenKind::LBrace);
         let effects = self.comma_sep(TokenKind::RBrace, Self::parse_effect_item);

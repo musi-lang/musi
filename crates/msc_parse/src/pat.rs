@@ -139,12 +139,19 @@ impl Parser<'_> {
                     span: self.finish_span(start),
                 }
             }
-            _ => Pat::Bind {
-                kind,
-                name,
-                inner: None,
-                span: self.finish_span(start),
-            },
+            _ => {
+                let inner = if self.eat(TokenKind::KwAs) {
+                    Some(self.parse_alloc_pat())
+                } else {
+                    None
+                };
+                Pat::Bind {
+                    kind,
+                    name,
+                    inner,
+                    span: self.finish_span(start),
+                }
+            }
         }
     }
 

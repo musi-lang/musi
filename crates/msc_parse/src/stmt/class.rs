@@ -1,7 +1,7 @@
 //! Class, given, and effect declaration parsing.
 
 use msc_ast::decl::{ClassMember, EffectOp, FnSig};
-use msc_ast::expr::Expr;
+use msc_ast::expr::{Expr, InstanceBody};
 use msc_lex::token::TokenKind;
 use msc_shared::Symbol;
 
@@ -14,11 +14,7 @@ impl Parser<'_> {
         let _class = self.expect(TokenKind::KwClass);
         let name = self.expect_symbol();
         let params = self.parse_optional_bracket_params();
-        let constraints = if self.at(TokenKind::KwWhere) {
-            self.parse_opt_where_clause()
-        } else {
-            vec![]
-        };
+        let constraints = self.parse_opt_where_clause();
         let _lb = self.expect(TokenKind::LBrace);
         let members = self.parse_class_body();
         let _rb = self.expect(TokenKind::RBrace);
@@ -35,18 +31,31 @@ impl Parser<'_> {
     pub(crate) fn parse_expr_instance(&mut self) -> Expr {
         let start = self.start_span();
         let _instance = self.expect(TokenKind::KwInstance);
-        let target = self.parse_ty_named_ref();
         let params = self.parse_optional_bracket_params();
         let constraints = self.parse_opt_where_clause();
-        let _lb = self.expect(TokenKind::LBrace);
-        let members = self.parse_class_body();
-        let _rb = self.expect(TokenKind::RBrace);
+        let target = self.parse_ty_named_ref();
+        let body = if self.at(TokenKind::LBrace) {
+            let _lb = self.expect(TokenKind::LBrace);
+            let members = self.parse_class_body();
+            let _rb = self.expect(TokenKind::RBrace);
+            InstanceBody::Manual { members }
+        } else if self.eat(TokenKind::KwVia) {
+            let via_start = self.start_span();
+            let delegate = self.parse_ty_named_ref();
+            InstanceBody::Via {
+                delegate,
+                span: self.finish_span(via_start),
+            }
+        } else {
+            let _lb = self.expect(TokenKind::LBrace);
+            InstanceBody::Manual { members: vec![] }
+        };
         Expr::Instance {
             exported: false,
-            target,
             params,
             constraints,
-            members,
+            target,
+            body,
             span: self.finish_span(start),
         }
     }

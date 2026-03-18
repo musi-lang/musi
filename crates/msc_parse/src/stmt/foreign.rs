@@ -1,5 +1,6 @@
 //! Foreign declaration parsing.
 
+use msc_ast::attr::Attr;
 use msc_ast::decl::ForeignDecl;
 use msc_ast::expr::Expr;
 use msc_lex::token::TokenKind;
@@ -8,7 +9,7 @@ use msc_shared::Symbol;
 use crate::parser::Parser;
 
 impl Parser<'_> {
-    /// Parses `'foreign' string_lit ( foreign_item | '(' { 'let' foreign_binding ';' } ')' )`.
+    /// Parses `'foreign' string_lit ( foreign_item | '(' { [attrs] 'let' foreign_binding ';' } ')' )`.
     pub(crate) fn parse_expr_foreign(&mut self) -> Expr {
         let start = self.start_span();
         let _foreign = self.bump();
@@ -21,13 +22,32 @@ impl Parser<'_> {
             self.interner.intern("C")
         };
 
+        if self.eat(TokenKind::KwImport) {
+            // `foreign ["abi"] import "path"` - import a module from the host environment.
+            let tok = self.bump();
+            let span = tok.span;
+            let path = tok.symbol.unwrap_or_else(|| {
+                use crate::error::ParseError;
+                let _diag = self
+                    .diags
+                    .report(&ParseError::ExpectedImportPath, span, self.file_id);
+                Symbol(u32::MAX)
+            });
+            return Expr::Import {
+                path,
+                alias: None,
+                span: self.finish_span(start),
+            };
+        }
+
         if self.at(TokenKind::LParen) {
             // Block form: foreign "C" ( let ...; let ...; )
             let _lp = self.bump();
             let mut decls = vec![];
             while !self.at(TokenKind::RParen) && !self.at(TokenKind::Eof) {
+                let attrs = self.parse_attrs();
                 let _let = self.expect(TokenKind::KwLet);
-                decls.push(self.parse_foreign_binding());
+                decls.push(self.parse_foreign_binding(attrs));
                 let _semi = self.expect(TokenKind::Semi);
             }
             let _rp = self.expect(TokenKind::RParen);
@@ -40,7 +60,7 @@ impl Parser<'_> {
         } else {
             // Single item: foreign "C" let ...
             let _let = self.expect(TokenKind::KwLet);
-            let decl = self.parse_foreign_binding();
+            let decl = self.parse_foreign_binding(vec![]);
             Expr::Foreign {
                 exported: false,
                 abi,
@@ -61,7 +81,7 @@ impl Parser<'_> {
         expr
     }
 
-    fn parse_foreign_binding(&mut self) -> ForeignDecl {
+    fn parse_foreign_binding(&mut self, attrs: Vec<Attr>) -> ForeignDecl {
         let start = self.start_span();
         let name = self.expect_symbol();
         let ext_name = if self.eat(TokenKind::KwAs) {
@@ -80,6 +100,7 @@ impl Parser<'_> {
             // Has type annotation -> foreign function
             let ty = self.parse_alloc_ty();
             ForeignDecl::Fn {
+                attrs,
                 name,
                 ext_name,
                 ty,

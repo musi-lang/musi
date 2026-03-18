@@ -130,7 +130,7 @@ pub enum Expr {
         value: Option<ExprIdx>,
         span: Span,
     },
-    /// Effect operation: `need op(args)` — perform an effect operation.
+    /// Effect operation: `need op(args)` - perform an effect operation.
     Need {
         operand: ExprIdx,
         span: Span,
@@ -174,10 +174,10 @@ pub enum Expr {
     },
     Instance {
         exported: bool,
-        target: ExprIdx,
         params: Vec<TyParam>,
         constraints: Vec<Constraint>,
-        members: Vec<ClassMember>,
+        target: ExprIdx,
+        body: InstanceBody,
         span: Span,
     },
     Effect {
@@ -224,6 +224,8 @@ pub enum Expr {
         ret: ExprIdx,
         arrow: Arrow,
         effects: Option<EffectSet>,
+        /// Whether the function is variadic (`(T, ...) -> R`).
+        variadic: bool,
         span: Span,
     },
     /// Option type sugar: `?Int`.
@@ -234,6 +236,8 @@ pub enum Expr {
     /// Product type: `Int * String`.
     ProductType {
         fields: ExprList,
+        /// Whether the last position is a variadic spread (`(T, ...)`).
+        variadic: bool,
         span: Span,
     },
     /// Sum type: `Int + String`.
@@ -268,6 +272,13 @@ pub struct HandlerOp {
     pub params: Vec<Param>,
     pub body: ExprIdx,
     pub span: Span,
+}
+
+/// Body of an `instance` declaration.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InstanceBody {
+    Manual { members: Vec<ClassMember> },
+    Via { delegate: ExprIdx, span: Span },
 }
 
 /// Shared fields for let-bindings (`Let`, `Binding`).

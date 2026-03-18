@@ -26,4 +26,5 @@ pub struct Constraint {
 pub enum Rel {
     Sub,
     Super,
+    Member,
 }

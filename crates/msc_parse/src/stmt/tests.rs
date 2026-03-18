@@ -143,7 +143,7 @@ fn test_parse_effect_throw_parameterized() {
 
 #[test]
 fn test_parse_instance_generic_with_bracket_params() {
-    let src = "instance Eq of List ['T] where 'T <: Eq { let (=)(xs, ys) : Bool; };";
+    let src = "instance ['T] where 'T <: Eq Eq of List { let (=)(xs, ys) : Bool; };";
     let (expr, diags) = parse_single(src);
     assert!(!diags.has_errors(), "diags: {diags:?}");
     assert!(

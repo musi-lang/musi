@@ -3,6 +3,7 @@
 use msc_shared::{Span, Symbol};
 
 use crate::ExprIdx;
+use crate::attr::Attr;
 use crate::expr::Param;
 
 /// A member of a class or given declaration.
@@ -48,10 +49,11 @@ pub struct EffectOp {
 }
 
 /// A declaration inside a `foreign "C" (...)` block.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ForeignDecl {
     /// A foreign function binding: `let name [as "ext_name"] : ty`.
     Fn {
+        attrs: Vec<Attr>,
         name: Symbol,
         ext_name: Option<Symbol>,
         ty: ExprIdx,

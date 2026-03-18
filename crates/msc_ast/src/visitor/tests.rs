@@ -7,7 +7,7 @@ use msc_shared::{Span, Symbol};
 use crate::expr::{BinOp, BindKind, Expr, LetFields, UnaryOp};
 use crate::pat::Pat;
 use crate::visitor::AstVisitor;
-use crate::{visitor, AstArenas, ExprIdx, NameRef, PatIdx};
+use crate::{AstArenas, ExprIdx, NameRef, PatIdx, visitor};
 
 /// A visitor that counts how many expr nodes it visits.
 struct CountingVisitor {
