@@ -40,3 +40,5 @@ impl EmitError {
         Self::OperandOverflow { desc: desc.into() }
     }
 }
+
+pub(crate) type EmitResult<T = ()> = Result<T, EmitError>;

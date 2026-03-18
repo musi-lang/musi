@@ -127,6 +127,10 @@ fn cfv_check_name(cx: &mut CfvCtx<'_, '_>, expr_idx: ExprIdx) {
     }
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "exhaustive match on all expression kinds"
+)]
 fn cfv_walk(cx: &mut CfvCtx<'_, '_>, expr_idx: ExprIdx) {
     match &cx.em.ast.exprs[expr_idx] {
         Expr::Name { .. } => cfv_check_name(cx, expr_idx),
@@ -147,7 +151,8 @@ fn cfv_walk(cx: &mut CfvCtx<'_, '_>, expr_idx: ExprIdx) {
         | Expr::ProductType { .. }
         | Expr::SumType { .. }
         | Expr::ArrayType { .. }
-        | Expr::PiType { .. } => {}
+        | Expr::PiType { .. }
+        | Expr::Resume { value: None, .. } => {}
         Expr::Paren { inner, .. }
         | Expr::Annotated { inner, .. }
         | Expr::Return {
@@ -157,9 +162,10 @@ fn cfv_walk(cx: &mut CfvCtx<'_, '_>, expr_idx: ExprIdx) {
         | Expr::UnaryOp { operand: inner, .. }
         | Expr::Fn { body: inner, .. }
         | Expr::TypeCheck { operand: inner, .. }
-        | Expr::Need { operand: inner, .. } => cfv_walk(cx, *inner),
-        Expr::Resume { value: Some(inner), .. } => cfv_walk(cx, *inner),
-        Expr::Resume { value: None, .. } => {}
+        | Expr::Need { operand: inner, .. }
+        | Expr::Resume {
+            value: Some(inner), ..
+        } => cfv_walk(cx, *inner),
         Expr::BinOp { left, right, .. }
         | Expr::Index {
             object: left,
@@ -769,10 +775,23 @@ fn emit_field(
             FieldKey::Pos { index, .. } => index,
             FieldKey::Name { name, .. } => resolve_field_name(em, object, name)?,
         };
-        fc.fe.emit_ld_fld(index)?;
+        if object_type_is_tuple(em, object) {
+            fc.fe.emit_tup_get(index)?;
+        } else {
+            fc.fe.emit_ld_fld(index)?;
+        }
     }
 
     Ok(true)
+}
+
+/// Returns `true` when the object expression's sema type resolves to `Type::Tuple`.
+fn object_type_is_tuple(em: &Emitter<'_>, object: ExprIdx) -> bool {
+    let Some(&ty_idx) = em.expr_types().get(&object) else {
+        return false;
+    };
+    let resolved = em.sema.unify.resolve(ty_idx, &em.sema.types);
+    matches!(&em.sema.types[resolved], Type::Tuple { .. })
 }
 
 fn emit_index(
@@ -1449,9 +1468,13 @@ fn emit_lit(em: &mut Emitter<'_>, fc: &mut FnCtx, lit: &Lit) -> Result<bool, Emi
     match lit {
         Lit::Unit { .. } => Ok(false),
         Lit::Int { value, .. } => {
-            let cv = ConstValue::Int(*value);
-            let i = em.cp.intern(&cv)?;
-            fc.fe.emit_ld_cst(i);
+            if let Ok(smi) = i16::try_from(*value) {
+                fc.fe.emit_ld_smi(smi);
+            } else {
+                let cv = ConstValue::Int(*value);
+                let i = em.cp.intern(&cv)?;
+                fc.fe.emit_ld_cst(i);
+            }
             Ok(true)
         }
         Lit::Float { value, .. } => {
@@ -2150,13 +2173,13 @@ fn emit_handle(
     let produced = emit_expr(em, fc, body)?;
 
     for _ in ops {
-        fc.fe.emit_cont_unmark(u32::from(effect_id))?;
+        fc.fe.emit_cont_unmark(u32::from(effect_id));
     }
 
     Ok(produced)
 }
 
-/// Emit `need op(args)` — perform an effect operation via `eff.need`.
+/// Emit `need op(args)` - perform an effect operation via `eff.need`.
 fn emit_need(
     em: &mut Emitter<'_>,
     fc: &mut FnCtx,
@@ -2185,7 +2208,7 @@ fn emit_need(
     emit_expr_tail(em, fc, body, is_tail)
 }
 
-/// Emit `resume value` — resume continuation via `eff.res`.
+/// Emit `resume value` - resume continuation via `eff.res`.
 fn emit_resume(
     em: &mut Emitter<'_>,
     fc: &mut FnCtx,

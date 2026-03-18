@@ -1,11 +1,11 @@
 //! Opcode definitions for the SEAM bytecode format.
 //!
 //! Five instruction formats with fixed widths:
-//! - `F0`   — `[op]`                        1 byte
-//! - `FI8`  — `[op] [u8]`                   2 bytes
-//! - `FI16` — `[op] [u16-hi] [u16-lo]`      3 bytes (big-endian)
-//! - `FI8x2`— `[op] [u8-a] [u8-b]`          3 bytes (two independent u8 operands)
-//! - `FI24` — `[op] [i24-hi] [i24-mid] [i24-lo]`  4 bytes (signed, big-endian)
+//! - `F0`   - `[op]`                        1 byte
+//! - `FI8`  - `[op] [u8]`                   2 bytes
+//! - `FI16` - `[op] [u16-hi] [u16-lo]`      3 bytes (big-endian)
+//! - `FI8x2`- `[op] [u8-a] [u8-b]`          3 bytes (two independent u8 operands)
+//! - `FI24` - `[op] [i24-hi] [i24-mid] [i24-lo]`  4 bytes (signed, big-endian)
 
 use core::fmt;
 
@@ -23,15 +23,22 @@ impl Opcode {
     pub const LD_NONE: Self = Self(0x05);
     pub const LD_LOC: Self = Self(0x06);
     pub const LD_UPV: Self = Self(0x07);
+    /// Reserved: planned for loading the address of a local or global slot into
+    /// an integer register (pointer-width, for FFI interop).
     pub const LD_ADDR: Self = Self(0x08);
+    /// Reserved: planned for dereferencing a raw pointer value (unsafe FFI loads).
     pub const LD_IND: Self = Self(0x09);
     pub const ST_LOC: Self = Self(0x0A);
+    /// Reserved: planned for writing directly into an upvalue cell without closing it
+    /// (supports mutable captured variables in a future closure model).
     pub const ST_UPV: Self = Self(0x0B);
+    /// Reserved: planned for writing through a raw pointer (unsafe FFI stores).
     pub const ST_IND: Self = Self(0x0C);
 
     // §4.2 Stack (3)
     pub const POP: Self = Self(0x0D);
     pub const DUP: Self = Self(0x0E);
+    /// Reserved: planned for swapping the top two stack values (register allocation helper).
     pub const SWAP: Self = Self(0x0F);
 
     // §4.3 Arithmetic (6)
@@ -78,6 +85,7 @@ impl Opcode {
     pub const REC_NEW: Self = Self(0x2C);
     pub const REC_GET: Self = Self(0x2D);
     pub const REC_SET: Self = Self(0x2E);
+    /// Reserved: planned for taking the address of a record field (raw pointer for FFI structs).
     pub const REC_ADDR: Self = Self(0x2F);
 
     // §4.10 Array (4)
@@ -92,6 +100,7 @@ impl Opcode {
 
     // §4.12 Type (5)
     pub const TY_OF: Self = Self(0x36);
+    /// Reserved: planned for runtime type-identity comparison (pushes bool, both args are type descriptors).
     pub const TY_EQ: Self = Self(0x37);
     pub const TY_TEST: Self = Self(0x38);
     pub const TY_CAST: Self = Self(0x39);
@@ -114,7 +123,9 @@ impl Opcode {
     pub const OPT_IS: Self = Self(0x44);
 
     // §4.16 String (2)
+    /// Reserved: planned for in-VM string concatenation without an FFI call.
     pub const STR_CAT: Self = Self(0x45);
+    /// Reserved: planned for querying the byte length of a heap string in O(1).
     pub const STR_LEN: Self = Self(0x46);
 
     // §4.17 Arena (3)
@@ -130,6 +141,7 @@ impl Opcode {
     pub const FFI_CALL: Self = Self(0x4C);
 
     // §4.20 Misc (2)
+    /// Reserved: no-op placeholder; intended for patch-site alignment and debug breakpoints.
     pub const NOP: Self = Self(0x4D);
     pub const PANIC: Self = Self(0x4E);
 
@@ -143,15 +155,15 @@ impl Opcode {
 /// Instruction format tag, determining operand width and layout.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Format {
-    /// No operand — 1 byte total.
+    /// No operand - 1 byte total.
     F0,
-    /// Single u8 operand — 2 bytes total.
+    /// Single u8 operand - 2 bytes total.
     FI8,
-    /// Single u16 operand (big-endian) — 3 bytes total.
+    /// Single u16 operand (big-endian) - 3 bytes total.
     FI16,
-    /// Two independent u8 operands — 3 bytes total.
+    /// Two independent u8 operands - 3 bytes total.
     FI8x2,
-    /// Signed 24-bit operand (big-endian) — 4 bytes total.
+    /// Signed 24-bit operand (big-endian) - 4 bytes total.
     FI24,
 }
 
@@ -159,109 +171,61 @@ pub enum Format {
 ///
 /// Opcodes 0x4F–0xFF are unassigned and map to `F0` (1 byte) so the
 /// disassembler can always advance without panicking.
+///
+/// Arms are grouped by ISA section (§4.1–§4.20) for documentation; clippy
+/// sees cross-section duplicates but merging them would destroy the structure.
 #[must_use]
+#[expect(clippy::match_same_arms)]
 pub const fn format(op: u8) -> Format {
     match op {
         // §4.1 Data Movement
-        0x00 => Format::FI16, // LD_CONST
-        0x01 => Format::FI16, // LD_SMI
-        0x02 => Format::F0,   // LD_TRUE
-        0x03 => Format::F0,   // LD_FALSE
-        0x04 => Format::F0,   // LD_UNIT
-        0x05 => Format::F0,   // LD_NONE
-        0x06 => Format::FI8,  // LD_LOC
-        0x07 => Format::FI8,  // LD_UPV
-        0x08 => Format::FI8,  // LD_ADDR
-        0x09 => Format::F0,   // LD_IND
-        0x0A => Format::FI8,  // ST_LOC
-        0x0B => Format::FI8,  // ST_UPV
-        0x0C => Format::F0,   // ST_IND
-        // §4.2 Stack
-        0x0D => Format::F0, // POP
-        0x0E => Format::F0, // DUP
-        0x0F => Format::F0, // SWAP
-        // §4.3 Arithmetic
-        0x10 => Format::F0, // ADD
-        0x11 => Format::F0, // SUB
-        0x12 => Format::F0, // MUL
-        0x13 => Format::F0, // DIV
-        0x14 => Format::F0, // REM
-        0x15 => Format::F0, // NEG
-        // §4.4 Logic/Bitwise
-        0x16 => Format::F0, // AND
-        0x17 => Format::F0, // OR
-        0x18 => Format::F0, // XOR
-        0x19 => Format::F0, // NOT
-        0x1A => Format::F0, // SHL
-        0x1B => Format::F0, // SHR
-        // §4.5 Comparison
-        0x1C => Format::F0, // CMP_EQ
-        0x1D => Format::F0, // CMP_NE
-        0x1E => Format::F0, // CMP_LT
-        0x1F => Format::F0, // CMP_GT
-        0x20 => Format::F0, // CMP_LE
-        0x21 => Format::F0, // CMP_GE
+        0x00 | 0x01 => Format::FI16, // LD_CONST, LD_SMI
+        0x02..=0x05 => Format::F0,   // LD_TRUE, LD_FALSE, LD_UNIT, LD_NONE
+        0x06..=0x08 => Format::FI8,  // LD_LOC, LD_UPV, LD_ADDR
+        0x09 => Format::F0,          // LD_IND
+        0x0A | 0x0B => Format::FI8,  // ST_LOC, ST_UPV
+        0x0C => Format::F0,          // ST_IND
+        // §4.2 Stack - §4.5 Comparison (all F0)
+        0x0D..=0x21 => Format::F0, // POP..CMP_GE
         // §4.6 Branch
-        0x22 => Format::FI16, // BR
-        0x23 => Format::FI16, // BR_TRUE
-        0x24 => Format::FI16, // BR_FALSE
-        0x25 => Format::FI24, // BR_LONG
+        0x22..=0x24 => Format::FI16, // BR, BR_TRUE, BR_FALSE
+        0x25 => Format::FI24,        // BR_LONG
         // §4.7 Call/Return
-        0x26 => Format::FI8, // CALL
-        0x27 => Format::FI8, // CALL_TAIL
-        0x28 => Format::F0,  // RET
-        0x29 => Format::F0,  // RET_UNIT
+        0x26 | 0x27 => Format::FI8, // CALL, CALL_TAIL
+        0x28 | 0x29 => Format::F0,  // RET, RET_UNIT
         // §4.8 Closure
         0x2A => Format::FI16,  // CLS_NEW
         0x2B => Format::FI8x2, // CLS_UPV (kind:u8, idx:u8)
         // §4.9 Record
-        0x2C => Format::FI8x2, // REC_NEW
-        0x2D => Format::FI8,   // REC_GET
-        0x2E => Format::FI8,   // REC_SET
-        0x2F => Format::FI8,   // REC_ADDR
-        // §4.10 Array
-        0x30 => Format::F0, // ARR_NEW
-        0x31 => Format::F0, // ARR_GET
-        0x32 => Format::F0, // ARR_SET
-        0x33 => Format::F0, // ARR_LEN
+        0x2C => Format::FI8x2,      // REC_NEW
+        0x2D..=0x2F => Format::FI8, // REC_GET, REC_SET, REC_ADDR
+        // §4.10 Array (all F0)
+        0x30..=0x33 => Format::F0, // ARR_NEW..ARR_LEN
         // §4.11 Tuple
-        0x34 => Format::FI8, // TUP_NEW
-        0x35 => Format::FI8, // TUP_GET
+        0x34 | 0x35 => Format::FI8, // TUP_NEW, TUP_GET
         // §4.12 Type
-        0x36 => Format::F0,   // TY_OF
-        0x37 => Format::F0,   // TY_EQ
-        0x38 => Format::F0,   // TY_TEST
-        0x39 => Format::F0,   // TY_CAST
-        0x3A => Format::FI16, // TY_DESC
+        0x36..=0x39 => Format::F0, // TY_OF, TY_EQ, TY_TEST, TY_CAST
+        0x3A => Format::FI16,      // TY_DESC
         // §4.13 Effect
-        0x3B => Format::FI8x2, // EFF_NEED
-        0x3C => Format::FI16,  // EFF_HDL
-        0x3D => Format::F0,    // EFF_RES
-        0x3E => Format::F0,    // EFF_POP
+        0x3B => Format::FI8x2,     // EFF_NEED
+        0x3C => Format::FI16,      // EFF_HDL
+        0x3D | 0x3E => Format::F0, // EFF_RES, EFF_POP
         // §4.14 Match
         0x3F => Format::FI16, // MAT_TAG
         0x40 => Format::F0,   // MAT_DATA
-        // §4.15 Optional
-        0x41 => Format::F0, // OPT_SOME
-        0x42 => Format::F0, // OPT_NONE
-        0x43 => Format::F0, // OPT_GET
-        0x44 => Format::F0, // OPT_IS
-        // §4.16 String
-        0x45 => Format::F0, // STR_CAT
-        0x46 => Format::F0, // STR_LEN
-        // §4.17 Arena
-        0x47 => Format::F0, // AR_NEW
-        0x48 => Format::F0, // AR_ALLOC
-        0x49 => Format::F0, // AR_FREE
-        // §4.18 GC
-        0x4A => Format::F0, // GC_PIN
-        0x4B => Format::F0, // GC_UNPIN
+        // §4.15 Optional (all F0)
+        0x41..=0x44 => Format::F0, // OPT_SOME..OPT_IS
+        // §4.16 String (all F0)
+        0x45 | 0x46 => Format::F0, // STR_CAT, STR_LEN
+        // §4.17 Arena (all F0)
+        0x47..=0x49 => Format::F0, // AR_NEW..AR_FREE
+        // §4.18 GC (all F0)
+        0x4A | 0x4B => Format::F0, // GC_PIN, GC_UNPIN
         // §4.19 Foreign
         0x4C => Format::FI8x2, // FFI_CALL
-        // §4.20 Misc
-        0x4D => Format::F0, // NOP
-        0x4E => Format::F0, // PANIC
-        // All unassigned opcodes — treat as 1-byte F0 so the disassembler
+        // §4.20 Misc (all F0)
+        0x4D | 0x4E => Format::F0, // NOP, PANIC
+        // All unassigned opcodes - treat as 1-byte F0 so the disassembler
         // can always advance by at least one byte.
         _ => Format::F0,
     }
@@ -273,8 +237,7 @@ pub const fn instr_len(op: u8) -> usize {
     match format(op) {
         Format::F0 => 1,
         Format::FI8 => 2,
-        Format::FI16 => 3,
-        Format::FI8x2 => 3,
+        Format::FI16 | Format::FI8x2 => 3,
         Format::FI24 => 4,
     }
 }

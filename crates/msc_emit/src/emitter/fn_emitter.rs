@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 
 use crate::error::EmitError;
-use msc_bc::{encode_f0, encode_fi16, encode_fi8, encode_fi8x2, Opcode};
+use msc_bc::{Opcode, encode_f0, encode_fi8, encode_fi8x2, encode_fi16};
 
 /// Fixup record: a forward jump that needs patching once we know the label target.
 struct Fixup {
@@ -14,7 +14,7 @@ struct Fixup {
     instr_offset: usize,
     /// Total instruction length in bytes (opcode + operand).
     instr_len: usize,
-    /// Whether this is a BR_LONG (4-byte i24) rather than a 3-byte i16 branch.
+    /// Whether this is a `BR_LONG` (4-byte i24) rather than a 3-byte i16 branch.
     long: bool,
     label: u32,
 }
@@ -71,14 +71,14 @@ impl FnEmitter {
         slot
     }
 
-    /// Emit `ld.loc slot` — slot must fit in u8.
+    /// Emit `ld.loc slot` - slot must fit in u8.
     pub fn emit_ld_loc(&mut self, slot: u32) {
         let s = u8::try_from(slot).expect("local slot exceeds 255");
         encode_fi8(&mut self.code, Opcode::LD_LOC, s);
         self.push_n(1);
     }
 
-    /// Emit `st.loc slot` — slot must fit in u8.
+    /// Emit `st.loc slot` - slot must fit in u8.
     pub fn emit_st_loc(&mut self, slot: u32) {
         let s = u8::try_from(slot).expect("local slot exceeds 255");
         encode_fi8(&mut self.code, Opcode::ST_LOC, s);
@@ -89,6 +89,23 @@ impl FnEmitter {
     pub fn emit_ld_cst(&mut self, idx: u16) {
         encode_fi16(&mut self.code, Opcode::LD_CONST, idx);
         self.push_n(1);
+    }
+
+    /// Emit `ld.smi value` - load a small signed integer fitting in i16.
+    ///
+    /// Avoids a const pool entry for values in -32768..=32767.
+    pub fn emit_ld_smi(&mut self, value: i16) {
+        encode_fi16(&mut self.code, Opcode::LD_SMI, value.cast_unsigned());
+        self.push_n(1);
+    }
+
+    /// Emit `tup.get idx` - pops tuple, pushes element at `idx`. Net 0.
+    pub fn emit_tup_get(&mut self, index: u32) -> Result<(), EmitError> {
+        let i = u8::try_from(index).map_err(|_| EmitError::OperandOverflow {
+            desc: "tuple field index exceeds 255".into(),
+        })?;
+        encode_fi8(&mut self.code, Opcode::TUP_GET, i);
+        Ok(())
     }
 
     pub fn emit_dup(&mut self) {
@@ -127,7 +144,7 @@ impl FnEmitter {
         encode_f0(&mut self.code, op);
     }
 
-    /// Emit `rec.get field` — pops record, pushes field value. Net 0.
+    /// Emit `rec.get field` - pops record, pushes field value. Net 0.
     pub fn emit_ld_fld(&mut self, index: u32) -> Result<(), EmitError> {
         let i = u8::try_from(index).map_err(|_| EmitError::OperandOverflow {
             desc: "field index exceeds 255".into(),
@@ -136,7 +153,7 @@ impl FnEmitter {
         Ok(())
     }
 
-    /// Emit `tup.new count` — pops count items, pushes tuple. Net -(count-1).
+    /// Emit `tup.new count` - pops count items, pushes tuple. Net -(count-1).
     pub fn emit_mk_prd(&mut self, field_count: u32, stack_pop: i32) -> Result<(), EmitError> {
         let n = u8::try_from(field_count).map_err(|_| EmitError::OperandOverflow {
             desc: "product field count exceeds 255".into(),
@@ -148,17 +165,14 @@ impl FnEmitter {
 
     pub fn emit_mk_var(&mut self, tag: u32, arity: u8) {
         let tag_u8 = u8::try_from(tag).unwrap_or(u8::MAX);
-        if arity == 0 {
-            encode_fi8x2(&mut self.code, Opcode::REC_NEW, tag_u8, 0);
-            self.push_n(1);
-        } else {
-            encode_fi8x2(&mut self.code, Opcode::REC_NEW, tag_u8, arity);
+        encode_fi8x2(&mut self.code, Opcode::REC_NEW, tag_u8, arity);
+        if arity > 0 {
             self.pop_n(i32::from(arity));
-            self.push_n(1);
         }
+        self.push_n(1);
     }
 
-    /// Emit `ty.of` — leaves type tag on stack. Net 0.
+    /// Emit `ty.of` - leaves type tag on stack. Net 0.
     pub fn emit_ld_tag(&mut self) {
         encode_f0(&mut self.code, Opcode::TY_OF);
     }
@@ -198,7 +212,7 @@ impl FnEmitter {
         self.pop_n(1);
     }
 
-    /// Emit `mat.data` — pops variant, pushes its payload. Net 0.
+    /// Emit `mat.data` - pops variant, pushes its payload. Net 0.
     pub fn emit_ld_pay(&mut self, _field_idx: u8) {
         encode_f0(&mut self.code, Opcode::MAT_DATA);
     }
@@ -212,18 +226,18 @@ impl FnEmitter {
         self.push_n(1);
     }
 
-    /// Emit `arr.len` — pops array ref, pushes length. Net 0.
+    /// Emit `arr.len` - pops array ref, pushes length. Net 0.
     pub fn emit_ld_len(&mut self) {
         encode_f0(&mut self.code, Opcode::ARR_LEN);
     }
 
-    /// Emit `arr.get` — pops [array, index], pushes element. Net -1.
+    /// Emit `arr.get` - pops [array, index], pushes element. Net -1.
     pub fn emit_ld_idx(&mut self) {
         encode_f0(&mut self.code, Opcode::ARR_GET);
         self.pop_n(1);
     }
 
-    /// Emit `arr.set` — pops [array, index, value]. Net -3.
+    /// Emit `arr.set` - pops [array, index, value]. Net -3.
     pub fn emit_st_idx(&mut self) {
         encode_f0(&mut self.code, Opcode::ARR_SET);
         self.pop_n(3);
@@ -234,12 +248,12 @@ impl FnEmitter {
     }
 
     /// Allocate a ref cell: wraps value on stack into a 1-field record (tag 0).
-    /// REC_NEW(0, 1) pops 1 value, pushes 1 record. Net: 0.
+    /// `REC_NEW(0, 1)` pops 1 value, pushes 1 record. Net: 0.
     pub fn emit_alc_ref(&mut self, _type_id: u32) {
         encode_fi8x2(&mut self.code, Opcode::REC_NEW, 0, 1);
     }
 
-    /// Emit `rec.set field` — pops [record, value]. Net -2.
+    /// Emit `rec.set field` - pops [record, value]. Net -2.
     pub fn emit_st_fld(&mut self, index: u32) -> Result<(), EmitError> {
         let i = u8::try_from(index).map_err(|_| EmitError::OperandOverflow {
             desc: "field index exceeds 255".into(),
@@ -255,7 +269,7 @@ impl FnEmitter {
         encode_f0(&mut self.code, Opcode::TY_TEST);
     }
 
-    /// Emit `eff.hdl effect` — install an effect handler.
+    /// Emit `eff.hdl effect` - install an effect handler.
     pub fn emit_cont_mark(&mut self, effect_id: u32, handler_fn_id: u32) -> Result<(), EmitError> {
         let id = u16::try_from(effect_id).map_err(|_| EmitError::OperandOverflow {
             desc: "effect id exceeds 65535".into(),
@@ -269,13 +283,12 @@ impl FnEmitter {
         Ok(())
     }
 
-    /// Emit `eff.pop` — remove the innermost effect handler.
-    pub fn emit_cont_unmark(&mut self, _effect_id: u32) -> Result<(), EmitError> {
+    /// Emit `eff.pop` - remove the innermost effect handler.
+    pub fn emit_cont_unmark(&mut self, _effect_id: u32) {
         encode_f0(&mut self.code, Opcode::EFF_POP);
-        Ok(())
     }
 
-    /// Emit `eff.need op,arity` — perform an effect operation.
+    /// Emit `eff.need op,arity` - perform an effect operation.
     pub fn emit_cont_save(&mut self, op_id: u32, arg_count: i32) {
         let op = u8::try_from(op_id).unwrap_or(u8::MAX);
         let arity = u8::try_from(arg_count).unwrap_or(u8::MAX);
@@ -284,7 +297,7 @@ impl FnEmitter {
         self.push_n(1);
     }
 
-    /// Emit `eff.res` — resume from a handler.
+    /// Emit `eff.res` - resume from a handler.
     pub fn emit_cont_resume(&mut self) {
         encode_f0(&mut self.code, Opcode::EFF_RES);
         self.pop_n(1);
@@ -299,26 +312,26 @@ impl FnEmitter {
         Ok(())
     }
 
-    /// Emit `ld.upv idx` — load upvalue from current closure. Net +1.
+    /// Emit `ld.upv idx` - load upvalue from current closure. Net +1.
     pub fn emit_ld_upv(&mut self, idx: u8) {
         encode_fi8(&mut self.code, Opcode::LD_UPV, idx);
         self.push_n(1);
     }
 
-    /// Emit `cls.new fn_id` — allocate a closure shell. Net +1.
+    /// Emit `cls.new fn_id` - allocate a closure shell. Net +1.
     pub fn emit_cls_new(&mut self, fn_id: u32) {
         let proto = u16::try_from(fn_id).unwrap_or(u16::MAX);
         encode_fi16(&mut self.code, Opcode::CLS_NEW, proto);
         self.push_n(1);
     }
 
-    /// Emit `cls.upv 0, slot` — attach an open upvalue for local `slot`. Stack neutral.
+    /// Emit `cls.upv 0, slot` - attach an open upvalue for local `slot`. Stack neutral.
     pub fn emit_cls_upv_local(&mut self, slot: u32) {
         let s = u8::try_from(slot).expect("local slot exceeds 255");
         encode_fi8x2(&mut self.code, Opcode::CLS_UPV, 0, s);
     }
 
-    /// Emit `cls.upv 1, idx` — re-capture parent upvalue at `idx`. Stack neutral.
+    /// Emit `cls.upv 1, idx` - re-capture parent upvalue at `idx`. Stack neutral.
     pub fn emit_cls_upv_parent(&mut self, idx: u8) {
         encode_fi8x2(&mut self.code, Opcode::CLS_UPV, 1, idx);
     }
@@ -328,7 +341,7 @@ impl FnEmitter {
             let after_short = self.code.len() + 3;
             let offset = target.cast_signed() - after_short.cast_signed();
             if let Ok(off16) = i16::try_from(offset) {
-                encode_fi16(&mut self.code, Opcode::BR_FALSE, off16 as u16);
+                encode_fi16(&mut self.code, Opcode::BR_FALSE, off16.cast_unsigned());
                 self.pop_n(1);
                 return;
             }
@@ -350,7 +363,7 @@ impl FnEmitter {
             let after_short = self.code.len() + 3;
             let offset = target.cast_signed() - after_short.cast_signed();
             if let Ok(off16) = i16::try_from(offset) {
-                encode_fi16(&mut self.code, Opcode::BR, off16 as u16);
+                encode_fi16(&mut self.code, Opcode::BR, off16.cast_unsigned());
                 self.stack_depth = 0;
                 return;
             }
@@ -372,7 +385,7 @@ impl FnEmitter {
             let after_short = self.code.len() + 3;
             let offset = target.cast_signed() - after_short.cast_signed();
             if let Ok(off16) = i16::try_from(offset) {
-                encode_fi16(&mut self.code, Opcode::BR_TRUE, off16 as u16);
+                encode_fi16(&mut self.code, Opcode::BR_TRUE, off16.cast_unsigned());
                 self.pop_n(1);
                 return;
             }
@@ -408,13 +421,13 @@ impl FnEmitter {
             let instr_offset = fixup.instr_offset;
             let instr_len = fixup.instr_len;
             let after_instr = instr_offset + instr_len;
-            let raw_offset = i64::from(target as i64) - i64::from(after_instr as i64);
+            let raw_offset = i64::try_from(target).map_err(|_| EmitError::JumpTooFar)?
+                - i64::try_from(after_instr).map_err(|_| EmitError::JumpTooFar)?;
 
             if let Ok(off16) = i16::try_from(raw_offset) {
                 let [hi, lo] = off16.to_be_bytes();
                 self.code[instr_offset + 1] = hi;
                 self.code[instr_offset + 2] = lo;
-                i += 1;
             } else {
                 // Upgrade 3-byte BR placeholder to 4-byte BR_LONG.
                 // Conditional branches that need >i16 offsets are unsupported.
@@ -426,7 +439,8 @@ impl FnEmitter {
                 self.code[instr_offset] = Opcode::BR_LONG.0;
 
                 let new_after = instr_offset + 4;
-                let new_raw = i64::from(target as i64) - i64::from(new_after as i64);
+                let new_raw = i64::try_from(target).map_err(|_| EmitError::JumpTooFar)?
+                    - i64::try_from(new_after).map_err(|_| EmitError::JumpTooFar)?;
                 let new_off = i32::try_from(new_raw).map_err(|_| EmitError::JumpTooFar)?;
                 encode_fi24_into(&mut self.code, instr_offset + 1, new_off);
 
@@ -442,8 +456,8 @@ impl FnEmitter {
                 }
                 self.fixups[i].instr_len = 4;
                 self.fixups[i].long = true;
-                i += 1;
             }
+            i += 1;
         }
         self.fixups.clear();
         Ok(())
@@ -482,10 +496,10 @@ impl FnEmitter {
 }
 
 /// Write a signed i24 value in BE into `buf` at `offset` (bytes offset..offset+3).
-fn encode_fi24_into(buf: &mut Vec<u8>, offset: usize, value: i32) {
+fn encode_fi24_into(buf: &mut [u8], offset: usize, value: i32) {
     let clamped = value.clamp(-8_388_608, 8_388_607);
-    let bits = (clamped as u32) & 0x00FF_FFFF;
-    buf[offset] = (bits >> 16) as u8;
-    buf[offset + 1] = (bits >> 8) as u8;
-    buf[offset + 2] = bits as u8;
+    let bits = clamped.cast_unsigned() & 0x00FF_FFFF;
+    buf[offset] = u8::try_from((bits >> 16) & 0xFF).expect("masked to 8 bits");
+    buf[offset + 1] = u8::try_from((bits >> 8) & 0xFF).expect("masked to 8 bits");
+    buf[offset + 2] = u8::try_from(bits & 0xFF).expect("masked to 8 bits");
 }

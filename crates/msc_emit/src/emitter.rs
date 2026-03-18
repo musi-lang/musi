@@ -14,18 +14,18 @@ use std::mem;
 use msc_ast::Pat;
 use msc_ast::attr::{Attr, AttrValue};
 use msc_ast::decl::{ClassMember, EffectOp, ForeignDecl};
-use msc_ast::expr::{BinOp, BindKind, Expr, LetFields, Param};
+use msc_ast::expr::{BinOp, BindKind, Expr, InstanceBody, LetFields, Param};
 use msc_ast::lit::Lit;
 use msc_ast::{AstArenas, ExprIdx, ParsedModule, PatIdx, Stmt};
 use msc_sema::Type;
-use msc_sema::def::{DefId, DefKind};
+use msc_sema::def::{DefFlags, DefId, DefKind};
 use msc_sema::{DictLookup, Obligation, ResolutionMap, SemaResult, TypeIdx};
 use msc_shared::{FileId, Interner, Span, Symbol};
 
 use crate::const_pool::ConstPool;
 use crate::error::EmitError;
-use crate::global_table::GlobalTable;
 use crate::global_table;
+use crate::global_table::GlobalTable;
 use crate::module::{EffectDef, EffectOpDef, ForeignFn};
 use crate::string_table::StringTable;
 use crate::type_table::TypeTable;
@@ -241,6 +241,7 @@ impl<'a> Emitter<'a> {
 
     pub fn emit_all(&mut self) -> Result<Vec<FnBytecode>, EmitError> {
         self.resolve_well_known_tags();
+        self.mark_repr_c_types();
         self.scan_top_level()?;
         self.scan_dep_modules()?;
         // Update str_cat index from lang items if rt.ms was imported
@@ -262,6 +263,19 @@ impl<'a> Emitter<'a> {
         let id = self.next_fn_id;
         self.next_fn_id += 1;
         id
+    }
+
+    /// Pre-scan sema defs for `#[repr("C")]` types and mark their `TypeIdx`
+    /// on the type table so that `lower_sema_type` emits `TAG_CSTRUCT`.
+    fn mark_repr_c_types(&mut self) {
+        for def in &self.sema.defs {
+            if def.kind == DefKind::Type && def.flags.has(DefFlags::REPR_C) {
+                if let Some(ty_idx) = def.ty_info.ty {
+                    let resolved = self.sema.unify.resolve(ty_idx, &self.sema.types);
+                    self.tp.mark_repr_c(resolved);
+                }
+            }
+        }
     }
 
     fn resolve_well_known_tags(&mut self) {
@@ -300,8 +314,10 @@ impl<'a> Emitter<'a> {
             Expr::Foreign { abi, decls, .. } => {
                 self.scan_foreign_with_attrs(abi, &decls, &[])?;
             }
-            Expr::Instance { members, .. } => {
-                self.scan_instance_members(&members, None);
+            Expr::Instance { body, .. } => {
+                if let InstanceBody::Manual { members } = body {
+                    self.scan_instance_members(&members, None);
+                }
             }
             Expr::Let { fields, body, .. } => {
                 self.scan_binding(&fields, false);
@@ -376,7 +392,10 @@ impl<'a> Emitter<'a> {
             Expr::Foreign { abi, decls, .. } => {
                 self.scan_foreign_with_attrs(abi, &decls, attrs)?;
             }
-            Expr::Instance { members, .. } => {
+            Expr::Instance {
+                body: InstanceBody::Manual { members },
+                ..
+            } => {
                 self.scan_instance_members(&members, dep_idx);
             }
             _ => {}
@@ -391,7 +410,7 @@ impl<'a> Emitter<'a> {
         attrs: &[Attr],
     ) -> Result<(), EmitError> {
         let abi_str = self.interner.resolve(abi).trim_matches('"').to_owned();
-        let link_library = extract_link_library(attrs, self.interner);
+        let link_attrs = extract_link_attrs(attrs, self.interner);
         let any_type_id = self
             .tp
             .lower_well_known_def(self.sema.well_known.any, &self.sema.well_known)
@@ -403,10 +422,11 @@ impl<'a> Emitter<'a> {
 
         for decl in decls {
             let ForeignDecl::Fn {
+                attrs: binding_attrs,
                 name,
                 ext_name,
+                ty: decl_ty,
                 span,
-                ..
             } = decl
             else {
                 continue;
@@ -443,19 +463,33 @@ impl<'a> Emitter<'a> {
                     desc: format!("unknown calling convention \"{abi_str}\"; use #[link(name := \"...\")]  to specify a library").into(),
                 });
             }
-            let library = link_library.map(|s| {
+            let library = link_attrs.name.map(|s| {
                 let trimmed = self.interner.resolve(s).trim_matches('"').to_owned();
                 self.interner.intern(&trimmed)
             });
+            let link_kind = link_attrs.kind.map(|s| {
+                let trimmed = self.interner.resolve(s).trim_matches('"').to_owned();
+                self.interner.intern(&trimmed)
+            });
+
+            let attr_variadic = binding_attrs
+                .iter()
+                .any(|a| self.interner.resolve(a.name) == "variadic");
+            let type_variadic = matches!(
+                self.ast.exprs[*decl_ty],
+                Expr::FnType { variadic: true, .. }
+            );
+            let is_variadic = attr_variadic || type_variadic;
 
             let idx = u32::try_from(self.foreign_fns.len())
                 .map_err(|_| EmitError::overflow("foreign fn index overflow"))?;
             self.foreign_fns.push(ForeignFn {
                 ext_name: ext_sym,
                 library,
+                link_kind,
                 param_type_ids,
                 ret_type_id,
-                variadic: false,
+                variadic: is_variadic,
             });
             let _ = self.foreign_map.insert(def_id, idx);
         }
@@ -675,7 +709,10 @@ impl<'a> Emitter<'a> {
             Expr::Foreign { abi, decls, .. } => {
                 self.scan_foreign_with_attrs(abi, &decls, &[])?;
             }
-            Expr::Instance { members, .. } => {
+            Expr::Instance {
+                body: InstanceBody::Manual { members },
+                ..
+            } => {
                 self.scan_instance_members(&members, Some(dep_idx));
             }
             // Top-level side-effect statements (e.g., `parse_value_ref <- parse_value`)
@@ -765,7 +802,7 @@ impl<'a> Emitter<'a> {
             .defs
             .iter()
             .find(|d| d.id == did)
-            .map_or(false, |d| d.exported);
+            .is_some_and(|d| d.exported);
         let mut flags = 0u8;
         if is_exported {
             flags |= global_table::FLAG_EXPORTED;
@@ -859,7 +896,7 @@ impl<'a> Emitter<'a> {
             fc.fe.emit_ret_u();
         }
 
-        fc.fe.resolve_fixups("__script__")?;
+        fc.fe.resolve_fixups("__main__")?;
 
         let unit_type_id = self
             .tp
@@ -1033,22 +1070,64 @@ fn has_entrypoint_attr(attrs: &[Attr], interner: &Interner) -> bool {
         .any(|a| interner.resolve(a.name) == "entrypoint")
 }
 
-fn extract_link_library(attrs: &[Attr], interner: &Interner) -> Option<Symbol> {
+struct LinkAttrs {
+    name: Option<Symbol>,
+    kind: Option<Symbol>,
+}
+
+fn extract_link_attrs(attrs: &[Attr], interner: &Interner) -> LinkAttrs {
     for attr in attrs {
         if interner.resolve(attr.name) != "link" {
             continue;
         }
-        if let Some(AttrValue::Named { fields, .. }) = &attr.value {
-            for field in fields {
-                if interner.resolve(field.name) == "name"
-                    && let Lit::Str { value, .. } = &field.value
-                {
-                    return Some(*value);
-                }
+        match &attr.value {
+            Some(AttrValue::Lit {
+                lit: Lit::Str { value, .. },
+                ..
+            }) => {
+                return LinkAttrs {
+                    name: Some(*value),
+                    kind: None,
+                };
             }
+            Some(AttrValue::Tuple { lits, .. }) => {
+                let name = lits.first().and_then(|l| match l {
+                    Lit::Str { value, .. } => Some(*value),
+                    _ => None,
+                });
+                let kind = lits.get(1).and_then(|l| match l {
+                    Lit::Str { value, .. } => Some(*value),
+                    _ => None,
+                });
+                return LinkAttrs { name, kind };
+            }
+            Some(AttrValue::Named { fields, .. }) => {
+                let mut name = None;
+                let mut kind = None;
+                for field in fields {
+                    match interner.resolve(field.name) {
+                        "name" => {
+                            if let Lit::Str { value, .. } = &field.value {
+                                name = Some(*value);
+                            }
+                        }
+                        "kind" => {
+                            if let Lit::Str { value, .. } = &field.value {
+                                kind = Some(*value);
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                return LinkAttrs { name, kind };
+            }
+            _ => {}
         }
     }
-    None
+    LinkAttrs {
+        name: None,
+        kind: None,
+    }
 }
 
 fn pat_span(pat_idx: PatIdx, ast: &AstArenas) -> Span {

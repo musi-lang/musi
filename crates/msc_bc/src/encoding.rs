@@ -2,7 +2,7 @@
 //!
 //! All multi-byte operands are big-endian. The i24 signed offset for
 //! `BR_LONG` is stored as three bytes in two's-complement big-endian order,
-//! saturated to the [-8_388_608, 8_388_607] range.
+//! saturated to the `[-8_388_608, 8_388_607]` range.
 
 use crate::Opcode;
 
@@ -34,17 +34,18 @@ pub fn encode_fi8x2(buf: &mut Vec<u8>, op: Opcode, a: u8, b: u8) {
 
 /// Emit a format-I24 (signed 24-bit offset, big-endian) instruction.
 ///
-/// The `offset` value must fit in [-8_388_608, 8_388_607]. Values outside
-/// that range are clamped — callers are expected to stay within bounds.
+/// The `offset` value must fit in `[-8_388_608, 8_388_607]`. Values outside
+/// that range are clamped - callers are expected to stay within bounds.
 pub fn encode_fi24(buf: &mut Vec<u8>, op: Opcode, offset: i32) {
     // Clamp to i24 range so the three bytes always round-trip correctly.
     let clamped = offset.clamp(-8_388_608, 8_388_607);
     // Keep only the low 24 bits of the two's-complement representation.
-    let bits = (clamped as u32) & 0x00FF_FFFF;
+    let bits = clamped.cast_unsigned() & 0x00FF_FFFF;
+    let bytes = bits.to_be_bytes();
     buf.push(op.0);
-    buf.push((bits >> 16) as u8);
-    buf.push((bits >> 8) as u8);
-    buf.push(bits as u8);
+    buf.push(bytes[1]);
+    buf.push(bytes[2]);
+    buf.push(bytes[3]);
 }
 
 #[cfg(test)]
@@ -116,9 +117,9 @@ mod tests {
             let bits = (u32::from(buf[1]) << 16) | (u32::from(buf[2]) << 8) | u32::from(buf[3]);
             // Sign-extend from bit 23.
             let decoded = if bits & 0x80_0000 != 0 {
-                (bits | 0xFF00_0000) as i32
+                (bits | 0xFF00_0000).cast_signed()
             } else {
-                bits as i32
+                bits.cast_signed()
             };
             assert_eq!(decoded, offset, "roundtrip failed for offset {offset}");
         }

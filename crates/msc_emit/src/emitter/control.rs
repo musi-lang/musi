@@ -1,8 +1,8 @@
 //! Control-flow instruction emission: piecewise and match expressions.
 
+use msc_ast::PatIdx;
 use msc_ast::expr::{MatchArm, PwArm, PwGuard};
 use msc_ast::lit::Lit;
-use msc_ast::PatIdx;
 use msc_ast::{AstArenas, Pat};
 
 use crate::const_pool::ConstValue;
@@ -10,8 +10,8 @@ use crate::error::EmitError;
 use msc_ast::ExprIdx;
 
 use super::super::emitter::Emitter;
-use super::expr::{emit_expr, emit_expr_tail, resolve_variant_tag};
 use super::FnCtx;
+use super::expr::{emit_expr, emit_expr_tail, resolve_variant_tag};
 
 /// Emit a piecewise expression. Leaves result on stack.
 pub fn emit_piecewise(

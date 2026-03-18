@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use super::{format, instr_len, Format, Opcode};
+use super::{Format, Opcode, format, instr_len};
 
 // All 79 defined opcodes with their expected formats.
 const OPCODE_FORMAT_TABLE: &[(Opcode, Format)] = &[
@@ -144,8 +144,7 @@ fn test_instr_len_matches_format() {
         let expected_len = match fmt {
             Format::F0 => 1,
             Format::FI8 => 2,
-            Format::FI16 => 3,
-            Format::FI8x2 => 3,
+            Format::FI16 | Format::FI8x2 => 3,
             Format::FI24 => 4,
         };
         let actual_len = instr_len(op.0);

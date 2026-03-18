@@ -48,11 +48,11 @@ impl StringTable {
     }
 
     pub fn write_into(&self, buf: &mut Vec<u8>) {
-        let count = self.entries.len() as u16;
+        let count = u16::try_from(self.entries.len()).expect("string table fits in u16");
         buf.extend_from_slice(&count.to_be_bytes());
         for entry in &self.entries {
             let bytes = entry.as_bytes();
-            let len = bytes.len() as u16;
+            let len = u16::try_from(bytes.len()).expect("string entry fits in u16");
             buf.extend_from_slice(&len.to_be_bytes());
             buf.extend_from_slice(bytes);
         }

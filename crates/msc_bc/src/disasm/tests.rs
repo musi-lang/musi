@@ -1,5 +1,5 @@
 use super::*;
-use crate::{encode_f0, encode_fi16, encode_fi24, encode_fi8, encode_fi8x2, Opcode};
+use crate::{Opcode, encode_f0, encode_fi8, encode_fi8x2, encode_fi16, encode_fi24};
 
 #[test]
 fn test_disassemble_empty() {

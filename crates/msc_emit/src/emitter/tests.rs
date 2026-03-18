@@ -1,12 +1,14 @@
 //! Integration tests: lex -> parse -> sema -> emit -> verify binary structure.
 
+use std::str::from_utf8;
+
 use msc_bc::Opcode;
 use msc_lex::lex;
 use msc_parse::parse;
-use msc_sema::{analyze, SemaOptions};
+use msc_sema::{SemaOptions, analyze};
 use msc_shared::{DiagnosticBag, FileId, Interner};
 
-use crate::{emit, EmitOutput};
+use crate::{EmitOutput, emit};
 
 fn compile(source: &str) -> Result<EmitOutput, String> {
     let mut interner = Interner::new();
@@ -51,16 +53,17 @@ fn compile_lenient(source: &str) -> Result<EmitOutput, String> {
 
 /// Find the start+length of a tagged section in the binary.
 /// Sections start at offset 16 (after the header) and are: 4-byte tag + 4-byte BE length + payload.
-fn find_section(bytes: &[u8], tag: &[u8; 4]) -> Option<(usize, usize)> {
+fn find_section(bytes: &[u8], tag: [u8; 4]) -> Option<(usize, usize)> {
     let mut pos = 16; // skip header
     while pos + 8 <= bytes.len() {
         let section_tag = &bytes[pos..pos + 4];
-        let section_len = u32::from_be_bytes([
+        let section_len = usize::try_from(u32::from_be_bytes([
             bytes[pos + 4],
             bytes[pos + 5],
             bytes[pos + 6],
             bytes[pos + 7],
-        ]) as usize;
+        ]))
+        .expect("section length fits in usize");
         if section_tag == tag {
             return Some((pos + 8, section_len));
         }
@@ -71,7 +74,7 @@ fn find_section(bytes: &[u8], tag: &[u8; 4]) -> Option<(usize, usize)> {
 
 /// Scan the METH section for the first occurrence of `op`.
 fn find_opcode(bytes: &[u8], op: Opcode) -> Option<usize> {
-    let (start, len) = find_section(bytes, b"METH")?;
+    let (start, len) = find_section(bytes, *b"METH")?;
     let end = start + len;
     bytes
         .get(start..end)
@@ -98,22 +101,38 @@ fn test_emit_sections_present() {
     let source = "#[entrypoint]\nlet main : () -> Int := () => 42;";
     let out = compile(source).expect("compile ok");
     for tag in [
-        b"STRT", b"TYPE", b"CNST", b"DEPS", b"GLOB", b"METH", b"EFCT", b"CLSS", b"FRGN",
+        *b"STRT", *b"TYPE", *b"CNST", *b"DEPS", *b"GLOB", *b"METH", *b"EFCT", *b"CLSS", *b"FRGN",
     ] {
         assert!(
             find_section(&out.bytes, tag).is_some(),
             "missing section {:?}",
-            std::str::from_utf8(tag).unwrap()
+            from_utf8(&tag).unwrap()
         );
     }
 }
 
 #[test]
-fn test_emit_simple_return_int() {
+fn test_emit_small_int_uses_ld_smi() {
+    // 42 fits in i16 - the emitter should use LD_SMI for the literal.
+    // Other LD_CONST emissions (e.g. function references) may still appear
+    // in the same module, so we only assert LD_SMI is present.
     let source = "#[entrypoint]\nlet main : () -> Int := () => 42;";
     let out = compile(source).expect("compile ok");
-    let found = find_opcode(&out.bytes, Opcode::LD_CONST);
-    assert!(found.is_some(), "expected LD_CONST for integer literal 42");
+    assert!(
+        find_opcode(&out.bytes, Opcode::LD_SMI).is_some(),
+        "expected LD_SMI for small integer literal 42"
+    );
+}
+
+#[test]
+fn test_emit_large_int_uses_ld_const() {
+    // 100000 does not fit in i16 - the emitter must fall back to LD_CONST.
+    let source = "#[entrypoint]\nlet main : () -> Int := () => 100000;";
+    let out = compile(source).expect("compile ok");
+    assert!(
+        find_opcode(&out.bytes, Opcode::LD_CONST).is_some(),
+        "expected LD_CONST for integer literal 100000 that exceeds i16 range"
+    );
 }
 
 #[test]
@@ -248,11 +267,13 @@ fn test_emit_global_read_no_nop() {
     // Global reads should emit LD_LOC 0 + REC_GET, not NOP.
     let source = "#[entrypoint]\nlet main : () -> Int := () => 42;";
     let out = compile(source).expect("compile ok");
-    let (meth_start, meth_len) = find_section(&out.bytes, b"METH").expect("METH section");
+    let (meth_start, meth_len) = find_section(&out.bytes, *b"METH").expect("METH section");
     let meth = &out.bytes[meth_start..meth_start + meth_len];
     // NOP should not appear in function code (it was the old global stub).
-    let nop_count = meth.iter().filter(|&&b| b == Opcode::NOP.0).count();
-    assert_eq!(nop_count, 0, "no NOP opcodes should appear in METH section");
+    assert!(
+        !meth.contains(&Opcode::NOP.0),
+        "no NOP opcodes should appear in METH section"
+    );
 }
 
 #[test]

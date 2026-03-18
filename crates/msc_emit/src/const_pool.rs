@@ -1,6 +1,6 @@
 //! Constant pool builder.
 //!
-//! Interns constants by value. Str entries hold a u16 stridx into StringTable.
+//! Interns constants by value. Str entries hold a u16 stridx into `StringTable`.
 
 use std::collections::HashMap;
 
@@ -16,7 +16,7 @@ const TAG_STR: u8 = 0x03;
 pub enum ConstValue {
     Int(i64),
     Float(f64),
-    /// String constant, stored as a stridx (u16) into StringTable.
+    /// String constant, stored as a stridx (u16) into `StringTable`.
     Str(u16),
 }
 

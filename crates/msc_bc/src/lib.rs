@@ -11,5 +11,5 @@ mod opcode;
 
 pub use crc32::crc32_slice;
 pub use disasm::disassemble;
-pub use encoding::{encode_f0, encode_fi16, encode_fi24, encode_fi8, encode_fi8x2};
-pub use opcode::{format, instr_len, Format, Opcode, OPCODE_NAMES};
+pub use encoding::{encode_f0, encode_fi8, encode_fi8x2, encode_fi16, encode_fi24};
+pub use opcode::{Format, OPCODE_NAMES, Opcode, format, instr_len};

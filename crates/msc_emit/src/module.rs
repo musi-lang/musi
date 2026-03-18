@@ -7,7 +7,7 @@ use msc_shared::{Interner, Symbol};
 use msc_bc::crc32_slice;
 
 use crate::const_pool::ConstPool;
-use crate::emitter::{write_function_pool, FnBytecode};
+use crate::emitter::{FnBytecode, write_function_pool};
 use crate::error::EmitError;
 use crate::global_table::GlobalTable;
 use crate::section::write_section;
@@ -22,6 +22,7 @@ const FLAG_SCRIPT: u8 = 1 << 2;
 pub struct ForeignFn {
     pub ext_name: Symbol,
     pub library: Option<Symbol>,
+    pub link_kind: Option<Symbol>,
     pub param_type_ids: Vec<u32>,
     pub ret_type_id: u32,
     pub variadic: bool,
@@ -90,7 +91,7 @@ pub fn assemble(params: AssembleParams<'_>) -> Result<Vec<u8>, EmitError> {
     let mut type_payload: Vec<u8> = vec![];
     tp.write_into(&mut type_payload)?;
 
-    // DEPS — empty (no dependencies).
+    // DEPS - empty (no dependencies).
     let deps_payload: Vec<u8> = 0u16.to_be_bytes().to_vec();
 
     // GLOB section.
@@ -104,13 +105,13 @@ pub fn assemble(params: AssembleParams<'_>) -> Result<Vec<u8>, EmitError> {
     // EFCT section (effect pool).
     // Already built above in effect_payload.
 
-    // CLSS section — empty stub.
+    // CLSS section - empty stub.
     let clss_payload: Vec<u8> = 0u16.to_be_bytes().to_vec();
 
     // FRGN section (foreign pool).
     // Already built above in foreign_payload.
 
-    // DBUG section — empty.
+    // DBUG section - empty.
     let dbug_payload: Vec<u8> = vec![];
 
     // Intern module_name and source_path into StringTable before final STRT build.
@@ -123,16 +124,16 @@ pub fn assemble(params: AssembleParams<'_>) -> Result<Vec<u8>, EmitError> {
 
     // Build the 10 sections in order.
     let mut sections: Vec<u8> = vec![];
-    write_section(&mut sections, b"STRT", &strt_final);
-    write_section(&mut sections, b"TYPE", &type_payload);
-    write_section(&mut sections, b"CNST", &const_payload);
-    write_section(&mut sections, b"DEPS", &deps_payload);
-    write_section(&mut sections, b"GLOB", &glob_payload);
-    write_section(&mut sections, b"METH", &meth_payload);
-    write_section(&mut sections, b"EFCT", &effect_payload);
-    write_section(&mut sections, b"CLSS", &clss_payload);
-    write_section(&mut sections, b"FRGN", &foreign_payload);
-    write_section(&mut sections, b"DBUG", &dbug_payload);
+    write_section(&mut sections, *b"STRT", &strt_final);
+    write_section(&mut sections, *b"TYPE", &type_payload);
+    write_section(&mut sections, *b"CNST", &const_payload);
+    write_section(&mut sections, *b"DEPS", &deps_payload);
+    write_section(&mut sections, *b"GLOB", &glob_payload);
+    write_section(&mut sections, *b"METH", &meth_payload);
+    write_section(&mut sections, *b"EFCT", &effect_payload);
+    write_section(&mut sections, *b"CLSS", &clss_payload);
+    write_section(&mut sections, *b"FRGN", &foreign_payload);
+    write_section(&mut sections, *b"DBUG", &dbug_payload);
 
     // CRC-32 of all section bytes.
     let crc2 = crc32_slice(&sections);
@@ -174,7 +175,7 @@ fn write_effect_pool(
     })?;
     buf.extend_from_slice(&count.to_be_bytes());
     for eff in effects {
-        buf.extend_from_slice(&(eff.id as u16).to_be_bytes());
+        buf.extend_from_slice(&u16::try_from(eff.id).unwrap_or(u16::MAX).to_be_bytes());
         let name_stridx = st.intern(eff.name, interner)?;
         buf.extend_from_slice(&name_stridx.to_be_bytes());
         let op_count = u16::try_from(eff.ops.len()).map_err(|_| EmitError::OperandOverflow {
@@ -182,7 +183,7 @@ fn write_effect_pool(
         })?;
         buf.extend_from_slice(&op_count.to_be_bytes());
         for op in &eff.ops {
-            buf.extend_from_slice(&(op.id as u16).to_be_bytes());
+            buf.extend_from_slice(&u16::try_from(op.id).unwrap_or(u16::MAX).to_be_bytes());
             let op_name_stridx = st.intern(op.name, interner)?;
             buf.extend_from_slice(&op_name_stridx.to_be_bytes());
             let param_count =
@@ -218,6 +219,13 @@ fn write_foreign_pool(
         if let Some(lib) = ff.library {
             let lib_stridx = st.intern(lib, interner)?;
             buf.extend_from_slice(&lib_stridx.to_be_bytes());
+        } else {
+            buf.extend_from_slice(&0xFFFFu16.to_be_bytes());
+        }
+
+        if let Some(kind) = ff.link_kind {
+            let kind_stridx = st.intern(kind, interner)?;
+            buf.extend_from_slice(&kind_stridx.to_be_bytes());
         } else {
             buf.extend_from_slice(&0xFFFFu16.to_be_bytes());
         }

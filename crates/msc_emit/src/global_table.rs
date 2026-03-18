@@ -18,7 +18,7 @@ pub struct GlobalTable {
 }
 
 impl GlobalTable {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self { entries: vec![] }
     }
 
@@ -29,7 +29,7 @@ impl GlobalTable {
     }
 
     pub fn write_into(&self, buf: &mut Vec<u8>) {
-        let count = self.entries.len() as u16;
+        let count = u16::try_from(self.entries.len()).expect("global table fits in u16");
         buf.extend_from_slice(&count.to_be_bytes());
         for entry in &self.entries {
             buf.extend_from_slice(&entry.name_stridx.to_be_bytes());
