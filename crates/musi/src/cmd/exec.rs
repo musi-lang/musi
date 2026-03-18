@@ -1,29 +1,20 @@
-//! `msc run` - compile and run a `.ms` source file.
+//! `musi exec` - execute a `.muse` bytecode file directly.
 
-use std::{path::Path, process};
+use std::path::Path;
+use std::{fs, process};
 
 use msc_builtins::StdHost;
-use msc_manifest::MusiManifest;
 use msc_vm::{Vm, load, verify};
 
-use crate::pipeline;
+pub fn run(path: &Path) -> ! {
+    let bytes = match fs::read(path) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("error: {}: {e}", path.display());
+            process::exit(1);
+        }
+    };
 
-/// Compiles `path` and immediately runs it in the VM.
-pub fn run(path: &Path, manifest: Option<&MusiManifest>, project_root: Option<&Path>) -> ! {
-    let mut out = if manifest.is_some() {
-        match pipeline::run_frontend_multi(path, manifest, project_root) {
-            Ok(o) => o,
-            Err(()) => process::exit(1),
-        }
-    } else {
-        match pipeline::run_frontend(path) {
-            Ok(o) => o,
-            Err(()) => process::exit(1),
-        }
-    };
-    let Ok(bytes) = pipeline::run_backend(&mut out, true) else {
-        process::exit(1)
-    };
     let module = match load(&bytes) {
         Ok(m) => m,
         Err(e) => {
@@ -31,10 +22,12 @@ pub fn run(path: &Path, manifest: Option<&MusiManifest>, project_root: Option<&P
             process::exit(1);
         }
     };
+
     if let Err(e) = verify(&module) {
         eprintln!("error: {e}");
         process::exit(1);
     }
+
     let host = match StdHost::new(&module.foreign_fns) {
         Ok(h) => h,
         Err(e) => {
@@ -42,8 +35,10 @@ pub fn run(path: &Path, manifest: Option<&MusiManifest>, project_root: Option<&P
             process::exit(1);
         }
     };
+
     let mut vm = Vm::new(module);
     vm.set_host(Box::new(host));
+
     match vm.run() {
         Ok(_) => process::exit(0),
         Err(e) => {

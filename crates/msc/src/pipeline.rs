@@ -43,7 +43,13 @@ pub struct FrontendOutput {
 
 /// Runs lex -> parse -> sema on `path`.
 ///
-/// Prints diagnostics to stderr. Returns `Err(())` if any errors occurred.
+/// Prints diagnostics to stderr.
+///
+/// # Errors
+///
+/// Returns `Err(())` if any errors occurred during compilation.
+// Diagnostics are printed to stderr; the unit error signals failure without duplicating them.
+#[allow(clippy::result_unit_err)]
 pub fn run_frontend(path: &Path) -> Result<FrontendOutput, ()> {
     let source = match fs::read_to_string(path) {
         Ok(s) => s,
@@ -84,7 +90,13 @@ pub fn run_frontend(path: &Path) -> Result<FrontendOutput, ()> {
 /// The entry module (root file) is processed last. Other modules contribute
 /// their exported types to downstream modules via record types.
 ///
-/// Prints diagnostics to stderr. Returns `Err(())` if any errors occurred.
+/// Prints diagnostics to stderr.
+///
+/// # Errors
+///
+/// Returns `Err(())` if any errors occurred during compilation.
+// Diagnostics are printed to stderr; the unit error signals failure without duplicating them.
+#[allow(clippy::result_unit_err)]
 pub fn run_frontend_multi(
     path: &Path,
     manifest: Option<&MusiManifest>,
@@ -285,8 +297,11 @@ fn build_import_types(
 
 /// Runs bytecode emission.
 ///
-/// Returns the raw `.muse` bytes on success, or `Err(())` after printing
-/// the error to stderr.
+/// # Errors
+///
+/// Returns `Err(())` after printing the error to stderr.
+// Diagnostics are printed to stderr; the unit error signals failure without duplicating them.
+#[allow(clippy::result_unit_err)]
 pub fn run_backend(out: &mut FrontendOutput, script: bool) -> Result<Vec<u8>, ()> {
     let dep_inputs: Vec<msc_emit::DepEmitInput> = out
         .dep_modules

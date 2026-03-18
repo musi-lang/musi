@@ -9,7 +9,7 @@ pub fn run(specifier: &str, name_override: Option<&str>, dev: bool) -> ! {
 
     if !fs::exists(manifest_path).unwrap_or(false) {
         eprintln!("error: no musi.json found in current directory");
-        eprintln!("  run `msc init` to create one");
+        eprintln!("  run `musi init` to create one");
         process::exit(1);
     }
 

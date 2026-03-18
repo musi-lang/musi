@@ -12,6 +12,10 @@ keywords.workspace = true
 categories.workspace = true
 publish.workspace = true
 
+[lib]
+name = "msc"
+path = "src/lib.rs"
+
 [[bin]]
 name = "msc"
 path = "src/main.rs"

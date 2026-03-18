@@ -5,11 +5,8 @@ use std::path::{Path, PathBuf};
 use std::process;
 
 use clap::{Parser, Subcommand};
+use msc::cmd::{build, check};
 use msc_manifest::MusiManifest;
-
-mod cmd;
-mod pipeline;
-mod resolve_config;
 
 #[derive(Parser)]
 #[command(name = "msc", about = "Musi compiler")]
@@ -33,72 +30,13 @@ enum Command {
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
-    /// Compile and run a `.ms` source file
-    Run {
-        /// Source file to run (defaults to `main` from `musi.json`)
-        file: Option<PathBuf>,
-    },
-    /// Add a dependency to musi.json
-    Add {
-        /// Dependency specifier (e.g. "git:github.com/user/repo")
-        specifier: String,
-        /// Override dependency name
-        #[arg(long)]
-        name: Option<String>,
-        /// Add as dev dependency
-        #[arg(long)]
-        dev: bool,
-    },
-    /// Format source files
-    Fmt {
-        /// Files to format (defaults to project files)
-        files: Vec<PathBuf>,
-        /// Check formatting without modifying files
-        #[arg(long)]
-        check: bool,
-    },
-    /// Initialize a Musi project in the current directory
-    Init {
-        /// Project template
-        #[arg(long, default_value = "bin")]
-        template: String,
-    },
-    /// Lint source files
-    Lint {
-        /// Files to lint
-        files: Vec<PathBuf>,
-    },
-    /// Create a new Musi project
-    New {
-        /// Project name
-        name: String,
-        /// Project template
-        #[arg(long, default_value = "bin")]
-        template: String,
-    },
-    /// Run a task from musi.json
-    Task {
-        /// Task name (omit to list all tasks)
-        name: Option<String>,
-        /// List all available tasks
-        #[arg(long)]
-        list: bool,
-    },
-    /// Run tests
-    Test {
-        /// Filter test names
-        filter: Option<String>,
-    },
 }
 
 fn main() {
     let cli = Cli::parse();
 
     let source_hint = match &cli.command {
-        Command::Check { file } | Command::Build { file, .. } | Command::Run { file } => {
-            file.as_deref()
-        }
-        _ => None,
+        Command::Check { file } | Command::Build { file, .. } => file.as_deref(),
     };
 
     let (manifest, project_root) = match load_manifest(source_hint) {
@@ -109,46 +47,13 @@ fn main() {
     match cli.command {
         Command::Check { file } => {
             let path = resolve_entry(file.as_deref(), manifest.as_ref());
-            cmd::check::run(&path, manifest.as_ref(), project_root.as_deref());
+            check::run(&path, manifest.as_ref(), project_root.as_deref());
         }
         Command::Build { file, output } => {
             let path = resolve_entry(file.as_deref(), manifest.as_ref());
-            cmd::build::run(
+            build::run(
                 &path,
                 output.as_deref(),
-                manifest.as_ref(),
-                project_root.as_deref(),
-            );
-        }
-        Command::Run { file } => {
-            let path = resolve_entry(file.as_deref(), manifest.as_ref());
-            cmd::run::run(&path, manifest.as_ref(), project_root.as_deref());
-        }
-        Command::Add {
-            specifier,
-            name,
-            dev,
-        } => {
-            cmd::add::run(&specifier, name.as_deref(), dev);
-        }
-        Command::Fmt { files, check } => {
-            cmd::fmt::run(&files, check, manifest.as_ref());
-        }
-        Command::Init { template } => {
-            cmd::init::run(&template);
-        }
-        Command::Lint { files } => {
-            cmd::lint::run(&files, manifest.as_ref());
-        }
-        Command::New { name, template } => {
-            cmd::new::run(&name, &template);
-        }
-        Command::Task { name, list } => {
-            cmd::task::run(name.as_deref(), list, manifest.as_ref());
-        }
-        Command::Test { filter } => {
-            cmd::test::run(
-                filter.as_deref(),
                 manifest.as_ref(),
                 project_root.as_deref(),
             );
@@ -179,8 +84,6 @@ fn load_manifest(source_hint: Option<&Path>) -> Option<(MusiManifest, PathBuf)> 
     }
 }
 
-/// Resolves the source file path: uses the explicit argument if given,
-/// otherwise falls back to `main` from `musi.json`.
 fn resolve_entry(explicit: Option<&Path>, manifest: Option<&MusiManifest>) -> PathBuf {
     if let Some(p) = explicit {
         return p.to_path_buf();

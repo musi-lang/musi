@@ -1,15 +1,14 @@
-//! `msc test` - discover and run `*.test.ms` files.
+//! `musi test` - discover and run `*.test.ms` files.
 
 use std::fmt::Write as FmtWrite;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use std::{fs, process};
 
+use msc::pipeline;
 use msc_builtins::StdHost;
 use msc_manifest::MusiManifest;
 use msc_vm::{Vm, load, verify};
-
-use crate::pipeline;
 
 enum TestOutcome {
     Passed,
@@ -23,7 +22,7 @@ pub fn run(
     project_root: Option<&Path>,
 ) -> ! {
     let Some(project_root) = project_root else {
-        eprintln!("error: no musi.json found - `msc test` requires a project");
+        eprintln!("error: no musi.json found - `musi test` requires a project");
         process::exit(1);
     };
 

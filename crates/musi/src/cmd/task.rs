@@ -52,7 +52,7 @@ fn run_task(manifest: &MusiManifest, name: &str, visited: &mut HashSet<String>) 
 
     let Some(task) = manifest.tasks.get(name) else {
         eprintln!("error: unknown task `{name}`");
-        eprintln!("run `msc task --list` to see available tasks");
+        eprintln!("run `musi task --list` to see available tasks");
         process::exit(1);
     };
 

@@ -1,10 +1,2 @@
-pub mod add;
 pub mod build;
 pub mod check;
-pub mod fmt;
-pub mod init;
-pub mod lint;
-pub mod new;
-pub mod run;
-pub mod task;
-pub mod test;

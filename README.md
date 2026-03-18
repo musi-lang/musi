@@ -3,48 +3,37 @@
 A programming language with a type system, functional features, and a stack-based bytecode VM.
 
 > [!WARNING]
-> Musi is v0.1.0-rc1. The language, tooling, and standard library will have breaking changes. Do not use it for anything you can't afford to rewrite.
+> Musi is `v0.1.0-rc1`. The language, tooling, and standard library will have breaking changes. Do not use it for anything you can't afford to rewrite.
 
 ## What Musi Is
 
-Musi source files use the `.ms` extension. The compiler (`music`) type-checks and compiles them to `.msbc` bytecode. The interpreter (`musi`) executes the bytecode.
-
-There are two binaries:
+Musi source files use the `.ms` extension. The toolchain has two binaries:
 
 | Binary | What it does |
 |--------|--------------|
-| `music` | Compiler — type-check, build, run, format, lint, test |
-| `musi` | Standalone bytecode interpreter — runs `.msbc` files |
+| `musi` | Universal driver — run, check, build, test, format, lint, manage projects |
+| `msc` | Standalone compiler — type-check and compile without the VM |
 
-You will mostly use `music`. The `musi` binary is for running pre-compiled bytecode without the compiler.
+You will mostly use `musi`. The `msc` binary is for compiler-only workflows (CI type-checking, producing `.muse` bytecode without running it).
 
 ## Prerequisites
 
-You need three things installed before you start.
-
-### 1. Rust 1.88 or newer
-
-If you don't have Rust installed:
+### 1. Rust 1.87 or newer
 
 ```bash
+# install
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-```
 
-If you already have Rust, make sure it's up to date:
-
-```bash
+# or update
 rustup update stable
-```
 
-Check your version:
-
-```bash
-rustc --version   # must show 1.89.0 or higher
+# verify
+rustc --version
 ```
 
 ### 2. libffi
 
-Musi uses libffi for its foreign function interface. You need the system library installed.
+Musi uses libffi for its foreign function interface.
 
 **macOS:**
 
@@ -70,58 +59,43 @@ You probably already have this. If not: <https://git-scm.com/downloads>
 
 ## Install from Source
 
-There are no pre-built binaries yet. You build from source.
-
-**Step 1.** Clone the repository:
+There are no pre-built binaries yet.
 
 ```bash
 git clone https://github.com/musi-lang/musi.git
 cd musi
-```
-
-**Step 2.** Build in release mode:
-
-```bash
 cargo build --release
 ```
 
-This takes a few minutes the first time. When it finishes, the binaries are at:
+Binaries land in `./target/release/`:
 
-- `./target/release/music` (compiler)
-- `./target/release/musi` (bytecode interpreter)
-- `./target/release/music_lsp` (LSP server)
+- `musi` (toolchain driver)
+- `msc` (standalone compiler)
+- `msc_lsp` (LSP server)
 
-**Step 3.** (Optional) Add to your PATH so you can run `music` from anywhere:
+Add to your PATH:
 
 ```bash
 export PATH="/path/to/musi/target/release:$PATH"
 ```
 
-Add that line to your `~/.bashrc`, `~/.zshrc`, or equivalent.
-
-Replace `/path/to/musi` with the actual path where you cloned the repo.
-
 ## Quick Start
 
-These steps assume `music` is in your PATH. If not, replace `music` with `./target/release/music`.
-
-**Step 1.** Create a new project:
-
 ```bash
-music new hello
+musi new hello
 cd hello
 ```
 
-This creates three files:
+This creates:
 
 ```text
 hello/
-  mspackage.toml   project manifest (name, version, entry point)
-  index.ms          source file
+  musi.json     project manifest
+  index.ms      source file
   .gitignore
 ```
 
-**Step 2.** Look at the generated `index.ms`:
+Look at the generated `index.ms`:
 
 ```musi
 import "@std/rt" as rt;
@@ -129,44 +103,24 @@ import "@std/rt" as rt;
 rt.writeln("hello, world!");
 ```
 
-**Step 3.** Run it:
+Run it:
 
 ```bash
-music run
+musi run
 ```
 
-This compiles `index.ms` and immediately executes it. You should see `hello, world!` printed.
-
-**Step 4.** Other things you can do:
+Other commands:
 
 ```bash
-music check              # type-check without running
-music build              # compile to bytecode (produces index.msbc)
-musi index.msbc          # run compiled bytecode directly
-music fmt                # format source files
-music lint               # lint source files
+musi check              # type-check without running
+musi build              # compile to .muse bytecode
+musi exec index.muse    # run compiled bytecode directly
+musi test               # discover and run *.test.ms files
+musi fmt                # format source files
+musi lint               # lint source files
 ```
 
-## CLI Reference
-
-| Command | What it does |
-|---------|-------------|
-| `music run [file]` | Compile and execute. Defaults to `package.main` from `mspackage.toml`. |
-| `music check [file]` | Lex, parse, and type-check without running. |
-| `music build [file] [-o output]` | Compile `.ms` to `.msbc` bytecode. |
-| `music test [filter]` | Discover and run `*.test.ms` files. |
-| `music fmt [files...] [--check]` | Format source files. `--check` reports without modifying. |
-| `music lint [files...]` | Lint source files. |
-| `music new <name> [--template lib]` | Create a new project directory. Default template is `bin`. |
-| `music init [--template lib]` | Initialize a project in the current directory. |
-| `music add <specifier> [--name x] [--dev]` | Add a dependency to `mspackage.toml`. |
-| `music task [name] [--list]` | Run a task defined in `mspackage.toml`. |
-
-## Language Syntax at a Glance
-
-These are real examples from the codebase. This is not a complete reference.
-
-### Bindings and Functions
+## A Taste of the Language
 
 ```musi
 let x := 42;
@@ -174,130 +128,47 @@ let name : String := "musi";
 
 let add := (a, b) => a + b;
 
-export let greet : (String) -> String := (name) => f"hello, {name}!";
-```
+export let Stack ['a] := record { data : [] 'a };
 
-### Records and Choice Types
+export let Option ['a] := choice { None + Some of 'a };
 
-```musi
-record Stack ['a] {
-    items : [&'a],
-    len : Int,
-};
+export let Result ['a, 'e] := choice { Ok of 'a + Err of 'e };
 
-choice Option ['a] {
-    Some of 'a,
-    None,
-};
-
-choice Result ['a, 'e] {
-    Ok of 'a,
-    Err of 'e,
-};
-```
-
-### Pattern Matching
-
-```musi
-match result (
-    .Ok(value) => value
-  | .Err(e) => default
-);
-```
-
-### Imports and Modules
-
-```musi
 import "@std/rt" as rt;
-import "@std/math" as math;
 ```
-
-### Type Classes
-
-```musi
-class Eq ['T] {
-    let (=)(a, b) : Bool;
-};
-
-instance Eq of Int {
-    let (=)(a, b) : Bool := a;
-};
-```
-
-### Effects
-
-```musi
-effect State ['S] {
-    get : () -> 'S;
-    put : 'S -> ();
-};
-```
-
-## Editor Support
-
-### LSP Server
-
-The `music_lsp` binary is built alongside the compiler. It supports:
-
-- Code completion
-- Hover information
-- Go-to definition and type definition
-- Find references
-- Inlay hints
-- Semantic highlighting
-- Code actions and code lens
-- Document symbols and folding ranges
-- Signature help
-
-Point your editor's LSP client at the `music_lsp` binary.
-
-### VS Code
-
-A VS Code extension is in development at `tools/vscode/`. It is not published to the marketplace yet.
 
 ## Project Structure
 
-The compiler is a Cargo workspace with these crates:
-
 | Crate | Role |
 |-------|------|
-| `music` | Compiler CLI (all subcommands) |
-| `musi` | Standalone bytecode interpreter CLI |
-| `music_lsp` | LSP server |
-| `music_shared` | Spans, source database, string interner, diagnostics |
-| `music_lex` | Lexer / tokenizer |
-| `music_ast` | AST node types |
-| `music_parse` | Parser |
-| `music_sema` | Semantic analysis / type-checker |
-| `music_resolve` | Module resolution |
-| `music_emit` | Bytecode emitter (AST + sema to `.msbc`) |
-| `musi_bc` | Bytecode format definitions |
-| `musi_vm` | Bytecode interpreter / VM |
-| `musi_builtins` | Standard library runtime + FFI |
-| `musi_manifest` | `mspackage.toml` parser |
+| `msc` | Compiler library + CLI |
+| `musi` | Toolchain driver CLI |
+| `msc_lsp` | LSP server |
+| `msc_shared` | Spans, source database, interner, diagnostics |
+| `msc_lex` | Lexer |
+| `msc_ast` | AST node types |
+| `msc_parse` | Parser |
+| `msc_sema` | Semantic analysis / type-checker |
+| `msc_resolve` | Module resolution |
+| `msc_emit` | Bytecode emitter |
+| `msc_bc` | Bytecode format definitions |
+| `msc_vm` | Bytecode interpreter / VM |
+| `msc_builtins` | Standard library runtime + FFI |
+| `msc_manifest` | `musi.json` parser |
 
-## Standard Library
+## Editor Support
 
-The stdlib lives in `stdlib/` and includes: `array`, `assert`, `cmp`, `collections`, `convert`, `csv`, `encoding`, `fmt`, `func`, `hash`, `ini`, `io`, `iter`, `json`, `log`, `math`, `ops`, `option`, `path`, `random`, `result`, `rune`, `semver`, `sort`, `text`, `testing`, `uuid`.
-
-Collections include: stack, queue, deque, heap, ring buffer, bitset, sorted array.
+The `msc_lsp` binary is built alongside the compiler. Point your editor's LSP client at it. A VS Code extension is in development at `tools/vscode/`.
 
 ## Testing
 
-The full workspace can use a lot of memory. Test individual crates:
-
 ```bash
-cargo test -p music_parse       # test a specific crate
-cargo clippy -p music_parse     # lint a specific crate
+cargo test -p msc_parse        # test a specific crate
+cargo clippy -p msc_parse      # lint a specific crate
+musi test                      # run Musi stdlib tests
 ```
 
 Avoid `cargo test --workspace` on machines with less than 16 GB of free RAM.
-
-Run the Musi standard library tests:
-
-```bash
-cargo run --bin music -- test
-```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development guide.
 
