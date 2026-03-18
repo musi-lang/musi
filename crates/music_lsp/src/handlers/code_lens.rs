@@ -1,7 +1,7 @@
 //! CodeLens provider: emits "Run test" / "Run" lenses above annotated fns.
 
 use lsp_types::{CodeLens, Command, Url};
-use music_ast::{attr::AttrValue, Expr, Lit};
+use music_ast::{Expr, Lit, attr::AttrValue};
 
 use crate::analysis::AnalyzedDoc;
 use crate::to_proto::span_to_range;

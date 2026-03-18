@@ -16,6 +16,7 @@
 //! ```
 
 pub(crate) mod checker;
+pub mod consistency;
 pub mod def;
 pub mod error;
 pub mod exports;
@@ -23,9 +24,8 @@ pub mod lang_items;
 pub mod resolve;
 pub mod scope;
 pub mod subst;
-pub mod types;
-pub mod consistency;
 pub mod subtype;
+pub mod types;
 pub mod unify;
 pub mod well_known;
 
@@ -34,7 +34,9 @@ pub use error::SemaError;
 pub use lang_items::LangItemRegistry;
 pub use resolve::ResolveOutput;
 pub use scope::ScopeTree;
-pub use types::{CastInfo, DictLookup, EffectRow, InstanceInfo, Obligation, TyVarId, Type, TypeIdx};
+pub use types::{
+    CastInfo, DictLookup, EffectRow, InstanceInfo, Obligation, TyVarId, Type, TypeIdx,
+};
 pub use unify::{UnifyTable, types_match};
 pub use well_known::WellKnown;
 

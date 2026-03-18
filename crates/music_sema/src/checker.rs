@@ -3,10 +3,13 @@
 #[cfg(test)]
 mod tests;
 
+pub mod decl;
+pub mod dispatch;
 pub mod effects;
+pub mod exhaustive;
 pub mod expr;
+pub mod instantiate;
 pub mod pat;
-pub mod stmt;
 pub mod ty;
 
 use std::collections::HashMap;
@@ -21,7 +24,9 @@ use music_shared::{Arena, DiagnosticBag, FileId, Interner, Span, Symbol};
 use crate::def::{DefId, DefKind, DefTable};
 use crate::error::SemaError;
 use crate::scope::{ScopeId, ScopeTree};
-use crate::types::{CastInfo, DictLookup, EffectRow, InstanceInfo, Obligation, Type, TypeIdx, fmt_type};
+use crate::types::{
+    CastInfo, DictLookup, EffectRow, InstanceInfo, Obligation, Type, TypeIdx, fmt_type,
+};
 use crate::unify::UnifyTable;
 use crate::well_known::WellKnown;
 
@@ -158,25 +163,61 @@ impl<'a, S: BuildHasher> Checker<'a, S> {
 
     /// Checks that `found` is a subtype of `expected`, falling back to unification,
     /// then consistency, and reporting a diagnostic on failure.
-    pub(crate) fn check_subtype_or_report(&mut self, expected: TypeIdx, found: TypeIdx, span: Span) {
+    pub(crate) fn check_subtype_or_report(
+        &mut self,
+        expected: TypeIdx,
+        found: TypeIdx,
+        span: Span,
+    ) {
         use crate::consistency::is_consistent;
         use crate::subtype::is_subtype;
-        if is_subtype(found, expected, &self.store.types, &self.store.unify, self.ctx.well_known) {
+        if is_subtype(
+            found,
+            expected,
+            &self.store.types,
+            &self.store.unify,
+            self.ctx.well_known,
+        ) {
             return;
         }
-        if self.store.unify.unify(expected, found, &mut self.store.types, self.ctx.well_known) {
+        if self
+            .store
+            .unify
+            .unify(expected, found, &mut self.store.types, self.ctx.well_known)
+        {
             return;
         }
-        if is_consistent(found, expected, &self.store.types, &self.store.unify, self.ctx.well_known) {
+        if is_consistent(
+            found,
+            expected,
+            &self.store.types,
+            &self.store.unify,
+            self.ctx.well_known,
+        ) {
             // Types are consistent but not subtypes — cast will be inserted at call sites
             // via `insert_cast` when the expression index is available.
             return;
         }
         let defs_vec: Vec<_> = self.defs.iter().cloned().collect();
-        let exp_str = fmt_type(expected, &self.store.types, &defs_vec, self.ctx.interner, Some(&self.store.unify));
-        let found_str = fmt_type(found, &self.store.types, &defs_vec, self.ctx.interner, Some(&self.store.unify));
+        let exp_str = fmt_type(
+            expected,
+            &self.store.types,
+            &defs_vec,
+            self.ctx.interner,
+            Some(&self.store.unify),
+        );
+        let found_str = fmt_type(
+            found,
+            &self.store.types,
+            &defs_vec,
+            self.ctx.interner,
+            Some(&self.store.unify),
+        );
         let _d = self.diags.report(
-            &SemaError::TypeMismatch { expected: exp_str, found: found_str },
+            &SemaError::TypeMismatch {
+                expected: exp_str,
+                found: found_str,
+            },
             span,
             self.ctx.file_id,
         );
@@ -194,7 +235,13 @@ impl<'a, S: BuildHasher> Checker<'a, S> {
         if from == to {
             return;
         }
-        if !is_consistent(from, to, &self.store.types, &self.store.unify, self.ctx.well_known) {
+        if !is_consistent(
+            from,
+            to,
+            &self.store.types,
+            &self.store.unify,
+            self.ctx.well_known,
+        ) {
             return;
         }
         let _prev = self.store.casts.insert(

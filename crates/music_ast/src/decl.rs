@@ -2,8 +2,8 @@
 
 use music_shared::{Span, Symbol};
 
-use crate::expr::Param;
 use crate::ExprIdx;
+use crate::expr::Param;
 
 /// A member of a class or given declaration.
 #[derive(Debug, Clone, PartialEq, Eq)]

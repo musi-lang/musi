@@ -1,33 +1,35 @@
 //! Per-expression synthesis and checking.
 
-use std::collections::{HashMap, HashSet};
-use std::hash::{BuildHasher, Hash};
+use std::collections::HashMap;
+use std::hash::BuildHasher;
 
+use music_ast::expr::Expr as AstExpr;
 use music_ast::expr::{
     Arg, ArrayElem, BinOp, Expr, FieldKey, HandlerOp, LetFields, MatchArm, Param, PwArm, PwGuard,
     RecDefField, RecField, TypeCheckKind, UnaryOp,
 };
 use music_ast::lit::{FStrPart, Lit};
 use music_ast::pat::Pat;
-use music_ast::expr::Expr as AstExpr;
-use music_ast::ty_param::{Constraint, Rel, TyParam};
 use music_ast::{ExprIdx, PatIdx};
-use music_shared::{Idx, Span, Symbol};
+use music_shared::{Span, Symbol};
 
 use crate::checker::Checker;
+use crate::checker::decl::check_decl;
+use crate::checker::dispatch::{
+    check_handler_op_coverage, enter_constraint_scope, find_dict_method, find_instance_method,
+    record_fn_constraints,
+};
 use crate::checker::effects::check_effects_subset;
+use crate::checker::exhaustive::check_match_exhaustiveness;
+use crate::checker::instantiate::{freshen_poly, substitute_ty};
 use crate::checker::pat::check_pat;
-use crate::checker::stmt::check_stmt;
 use crate::checker::ty::lower_type_expr;
 use crate::def::{DefId, DefKind};
 use crate::error::SemaError;
 use crate::resolve;
 use crate::scope::ScopeId;
-use crate::types::{
-    DictLookup, EffectRow, Obligation, RecordField, SumVariant, TyVarId, Type, TypeIdx, fmt_type,
-};
 use crate::subst::subst_type;
-use crate::unify::types_match;
+use crate::types::{EffectRow, RecordField, SumVariant, Type, TypeIdx, fmt_type};
 
 /// Synthesises a type for `expr` (inference mode, direction ↑).
 pub fn synth<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) -> TypeIdx {
@@ -155,7 +157,7 @@ fn synth_inner<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) -> Ty
             synth_record_def(ck, &fields)
         }
         Expr::Class { .. } | Expr::Instance { .. } | Expr::Effect { .. } | Expr::Foreign { .. } => {
-            check_stmt(ck, expr_idx);
+            check_decl(ck, expr_idx);
             ck.named_ty(ck.ctx.well_known.unit)
         }
         Expr::Import { path, alias, .. } => synth_import(ck, *path, *alias),
@@ -697,129 +699,6 @@ fn synth_match<S: BuildHasher>(
     result_ty
 }
 
-fn check_match_exhaustiveness<S: BuildHasher>(
-    ck: &mut Checker<'_, S>,
-    scrut_ty: TypeIdx,
-    arms: &[MatchArm],
-    span: Span,
-) {
-    use music_ast::pat::Pat;
-
-    let has_wildcard = arms.iter().any(|arm| {
-        matches!(
-            &ck.ctx.ast.pats[arm.pat],
-            Pat::Wild { .. } | Pat::Bind { inner: None, .. }
-        )
-    });
-    if has_wildcard {
-        return;
-    }
-
-    let resolved = ck.resolve_ty(scrut_ty);
-    if matches!(ck.store.types[resolved], Type::Error | Type::Var(_)) {
-        return;
-    }
-    match ck.store.types[resolved].clone() {
-        Type::Sum { variants } => {
-            let covered: HashSet<Symbol> = arms
-                .iter()
-                .filter_map(|arm| {
-                    if let Pat::Variant { name, .. } = &ck.ctx.ast.pats[arm.pat] {
-                        Some(*name)
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            for variant in &variants {
-                if !covered.contains(&variant.name) {
-                    let name_str = ck.ctx.interner.resolve(variant.name);
-                    let _d = ck.diags.report(
-                        &SemaError::NonExhaustiveMatch {
-                            missing: Box::from(name_str),
-                        },
-                        span,
-                        ck.ctx.file_id,
-                    );
-                }
-            }
-        }
-        Type::Named { def, .. } => {
-            let covered: HashSet<String> = arms
-                .iter()
-                .filter_map(|arm| {
-                    if let Pat::Variant { name, .. } = &ck.ctx.ast.pats[arm.pat] {
-                        Some(ck.ctx.interner.resolve(*name).to_owned())
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-
-            // Well-known types with known variant sets.
-            let option_def = ck
-                .ctx
-                .interner
-                .get("Option")
-                .and_then(|sym| ck.scopes.lookup(ck.current_scope, sym));
-            let well_known_variants: Option<&[&str]> = if option_def == Some(def) {
-                Some(&["Some", "None"])
-            } else if def == ck.ctx.well_known.bool {
-                Some(&["True", "False"])
-            } else {
-                None
-            };
-
-            if let Some(expected) = well_known_variants {
-                for case in expected {
-                    if !covered.contains(*case) {
-                        let _d = ck.diags.report(
-                            &SemaError::NonExhaustiveMatch {
-                                missing: Box::from(*case),
-                            },
-                            span,
-                            ck.ctx.file_id,
-                        );
-                    }
-                }
-            } else if let Some(dt) = ck.defs.get(def).ty_info.ty {
-                let resolved_def = ck.resolve_ty(dt);
-                if let Type::Sum { variants } = ck.store.types[resolved_def].clone() {
-                    for variant in &variants {
-                        let name_str = ck.ctx.interner.resolve(variant.name);
-                        if !covered.contains(name_str) {
-                            let _d = ck.diags.report(
-                                &SemaError::NonExhaustiveMatch {
-                                    missing: Box::from(name_str),
-                                },
-                                span,
-                                ck.ctx.file_id,
-                            );
-                        }
-                    }
-                } else {
-                    report_missing_wildcard(ck, span);
-                }
-            } else {
-                report_missing_wildcard(ck, span);
-            }
-        }
-        _ => {
-            report_missing_wildcard(ck, span);
-        }
-    }
-}
-
-fn report_missing_wildcard<S: BuildHasher>(ck: &mut Checker<'_, S>, span: Span) {
-    let _d = ck.diags.report(
-        &SemaError::NonExhaustiveMatch {
-            missing: Box::from("_"),
-        },
-        span,
-        ck.ctx.file_id,
-    );
-}
-
 fn synth_lit<S: BuildHasher>(ck: &mut Checker<'_, S>, lit: &Lit, _span: Span) -> TypeIdx {
     match lit {
         Lit::Int { .. } => ck.named_ty(ck.ctx.well_known.ints.int),
@@ -851,327 +730,6 @@ fn synth_name<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx, span: 
     } else {
         ck.error_ty()
     }
-}
-
-fn substitute_ty<S: BuildHasher>(
-    ck: &mut Checker<'_, S>,
-    ty: TypeIdx,
-    subst: &HashMap<DefId, TypeIdx>,
-) -> TypeIdx {
-    let ty = ck.resolve_ty(ty);
-    match &ck.store.types[ty] {
-        Type::Named { def, args } if args.is_empty() && subst.contains_key(def) => subst[def],
-        Type::Named { def, args } => {
-            let (def, args) = (*def, args.clone());
-            let new_args = substitute_list(ck, &args, subst);
-            ck.alloc_ty(Type::Named {
-                def,
-                args: new_args,
-            })
-        }
-        Type::Fn {
-            params,
-            ret,
-            effects,
-        } => {
-            let (params, ret, effects) = (params.clone(), *ret, effects.clone());
-            let params = substitute_list(ck, &params, subst);
-            let ret = substitute_ty(ck, ret, subst);
-            ck.alloc_ty(Type::Fn {
-                params,
-                ret,
-                effects,
-            })
-        }
-        Type::Tuple { elems } => {
-            let elems = elems.clone();
-            let elems = substitute_list(ck, &elems, subst);
-            ck.alloc_ty(Type::Tuple { elems })
-        }
-        Type::AnonSum { variants } => {
-            let variants = variants.clone();
-            let variants = substitute_list(ck, &variants, subst);
-            ck.alloc_ty(Type::AnonSum { variants })
-        }
-        Type::Record { fields, rest } => {
-            let (fields, rest) = (fields.clone(), *rest);
-            let fields = substitute_record_fields(ck, &fields, subst);
-            ck.alloc_ty(Type::Record { fields, rest })
-        }
-        Type::Sum { variants } => {
-            let variants = variants.clone();
-            let variants = substitute_sum_variants(ck, &variants, subst);
-            ck.alloc_ty(Type::Sum { variants })
-        }
-        Type::Array { elem, len } => {
-            let (elem, len) = (*elem, *len);
-            let elem = substitute_ty(ck, elem, subst);
-            ck.alloc_ty(Type::Array { elem, len })
-        }
-        Type::Ref { inner } => {
-            let inner = *inner;
-            let inner = substitute_ty(ck, inner, subst);
-            ck.alloc_ty(Type::Ref { inner })
-        }
-        Type::Quantified {
-            kind,
-            params,
-            constraints,
-            body,
-        } => {
-            let (kind, params, constraints, body) =
-                (*kind, params.clone(), constraints.clone(), *body);
-            let body = substitute_ty(ck, body, subst);
-            ck.alloc_ty(Type::Quantified {
-                kind,
-                params,
-                constraints,
-                body,
-            })
-        }
-        Type::Pi {
-            param_name,
-            param_def,
-            param_ty,
-            body,
-        } => {
-            let (param_name, param_def, param_ty, body) =
-                (*param_name, *param_def, *param_ty, *body);
-            // Don't substitute in body if this Pi's own param shadows the substituted def.
-            let new_param_ty = substitute_ty(ck, param_ty, subst);
-            let new_body = if subst.contains_key(&param_def) {
-                body
-            } else {
-                substitute_ty(ck, body, subst)
-            };
-            ck.alloc_ty(Type::Pi {
-                param_name,
-                param_def,
-                param_ty: new_param_ty,
-                body: new_body,
-            })
-        }
-        Type::Universe { .. } | Type::Var(_) | Type::Rigid(_) | Type::Error => ty,
-    }
-}
-
-/// Deep-copies a type, replacing both:
-///
-/// 1. `Named(DefId)` nodes matching type parameter defs (explicit annotations)
-/// 2. Unbound unification variables (inferred polymorphic types)
-///
-/// with fresh unification variables. Co-occurring nodes get the same fresh var.
-fn freshen_poly<S: BuildHasher>(
-    ck: &mut Checker<'_, S>,
-    ty: TypeIdx,
-    ty_param_defs: &[DefId],
-    span: Span,
-) -> TypeIdx {
-    let param_set: HashSet<DefId> = ty_param_defs.iter().copied().collect();
-    let mut var_map: HashMap<TyVarId, TypeIdx> = HashMap::new();
-    let mut def_map: HashMap<DefId, TypeIdx> = HashMap::new();
-    freshen_walk(ck, ty, span, &param_set, &mut var_map, &mut def_map)
-}
-
-/// Get or create a fresh type variable for a key, caching in `map`.
-fn freshen_key<S: BuildHasher, K: Eq + Hash + Copy>(
-    ck: &mut Checker<'_, S>,
-    span: Span,
-    map: &mut HashMap<K, TypeIdx>,
-    key: K,
-) -> TypeIdx {
-    if let Some(&fresh) = map.get(&key) {
-        return fresh;
-    }
-    let fresh = ck.fresh_var(span);
-    let _prev = map.insert(key, fresh);
-    fresh
-}
-
-/// Freshen each type in a list.
-fn freshen_list<S: BuildHasher>(
-    ck: &mut Checker<'_, S>,
-    tys: &[TypeIdx],
-    span: Span,
-    param_set: &HashSet<DefId>,
-    var_map: &mut HashMap<TyVarId, TypeIdx>,
-    def_map: &mut HashMap<DefId, TypeIdx>,
-) -> Vec<TypeIdx> {
-    tys.iter()
-        .map(|&t| freshen_walk(ck, t, span, param_set, var_map, def_map))
-        .collect()
-}
-
-#[allow(clippy::too_many_lines)] // large match over all type variants; extraction would add indirection without clarity
-fn freshen_walk<S: BuildHasher>(
-    ck: &mut Checker<'_, S>,
-    ty: TypeIdx,
-    span: Span,
-    param_set: &HashSet<DefId>,
-    var_map: &mut HashMap<TyVarId, TypeIdx>,
-    def_map: &mut HashMap<DefId, TypeIdx>,
-) -> TypeIdx {
-    let resolved = ck.resolve_ty(ty);
-    match &ck.store.types[resolved] {
-        Type::Var(v) => freshen_key(ck, span, var_map, *v),
-        Type::Named { def, args } if args.is_empty() && param_set.contains(def) => {
-            freshen_key(ck, span, def_map, *def)
-        }
-        Type::Named { def, args } => {
-            let (def, args) = (*def, args.clone());
-            let new_args = freshen_list(ck, &args, span, param_set, var_map, def_map);
-            ck.alloc_ty(Type::Named {
-                def,
-                args: new_args,
-            })
-        }
-        Type::Fn {
-            params,
-            ret,
-            effects,
-        } => {
-            let (params, ret, effects) = (params.clone(), *ret, effects.clone());
-            let new_params = freshen_list(ck, &params, span, param_set, var_map, def_map);
-            let new_ret = freshen_walk(ck, ret, span, param_set, var_map, def_map);
-            ck.alloc_ty(Type::Fn {
-                params: new_params,
-                ret: new_ret,
-                effects,
-            })
-        }
-        Type::Tuple { elems } => {
-            let elems = elems.clone();
-            let new_elems = freshen_list(ck, &elems, span, param_set, var_map, def_map);
-            ck.alloc_ty(Type::Tuple { elems: new_elems })
-        }
-        Type::Array { elem, len } => {
-            let (elem, len) = (*elem, *len);
-            let new_elem = freshen_walk(ck, elem, span, param_set, var_map, def_map);
-            ck.alloc_ty(Type::Array {
-                elem: new_elem,
-                len,
-            })
-        }
-        Type::Record { fields, rest } => {
-            let (fields, rest) = (fields.clone(), *rest);
-            let new_fields: Vec<_> = fields
-                .iter()
-                .map(|f| RecordField {
-                    name: f.name,
-                    ty: freshen_walk(ck, f.ty, span, param_set, var_map, def_map),
-                    ty_params: f.ty_params.clone(),
-                    binding: f.binding,
-                })
-                .collect();
-            let new_rest = rest.map(|r| freshen_walk(ck, r, span, param_set, var_map, def_map));
-            ck.alloc_ty(Type::Record {
-                fields: new_fields,
-                rest: new_rest,
-            })
-        }
-        Type::Sum { variants } => {
-            let variants = variants.clone();
-            let new_variants: Vec<_> = variants
-                .iter()
-                .map(|v| SumVariant {
-                    name: v.name,
-                    fields: freshen_list(ck, &v.fields, span, param_set, var_map, def_map),
-                })
-                .collect();
-            ck.alloc_ty(Type::Sum {
-                variants: new_variants,
-            })
-        }
-        Type::Ref { inner } => {
-            let inner = *inner;
-            let new_inner = freshen_walk(ck, inner, span, param_set, var_map, def_map);
-            ck.alloc_ty(Type::Ref { inner: new_inner })
-        }
-        Type::AnonSum { variants } => {
-            let variants = variants.clone();
-            let new_variants = freshen_list(ck, &variants, span, param_set, var_map, def_map);
-            ck.alloc_ty(Type::AnonSum {
-                variants: new_variants,
-            })
-        }
-        Type::Quantified {
-            kind,
-            params,
-            constraints,
-            body,
-        } => {
-            let (kind, params, constraints, body) =
-                (*kind, params.clone(), constraints.clone(), *body);
-            let new_body = freshen_walk(ck, body, span, param_set, var_map, def_map);
-            ck.alloc_ty(Type::Quantified {
-                kind,
-                params,
-                constraints,
-                body: new_body,
-            })
-        }
-        Type::Pi {
-            param_name,
-            param_def,
-            param_ty,
-            body,
-        } => {
-            let (param_name, param_def, param_ty, body) =
-                (*param_name, *param_def, *param_ty, *body);
-            let new_param_ty = freshen_walk(ck, param_ty, span, param_set, var_map, def_map);
-            // Capture avoidance: if this Pi's param is in param_set, don't freshen body.
-            let new_body = if param_set.contains(&param_def) {
-                body
-            } else {
-                freshen_walk(ck, body, span, param_set, var_map, def_map)
-            };
-            ck.alloc_ty(Type::Pi {
-                param_name,
-                param_def,
-                param_ty: new_param_ty,
-                body: new_body,
-            })
-        }
-        Type::Universe { .. } | Type::Rigid(_) | Type::Error => resolved,
-    }
-}
-
-fn substitute_list<S: BuildHasher>(
-    ck: &mut Checker<'_, S>,
-    tys: &[TypeIdx],
-    subst: &HashMap<DefId, TypeIdx>,
-) -> Vec<TypeIdx> {
-    tys.iter().map(|&t| substitute_ty(ck, t, subst)).collect()
-}
-
-fn substitute_record_fields<S: BuildHasher>(
-    ck: &mut Checker<'_, S>,
-    fields: &[RecordField],
-    subst: &HashMap<DefId, TypeIdx>,
-) -> Vec<RecordField> {
-    fields
-        .iter()
-        .map(|f| RecordField {
-            name: f.name,
-            ty: substitute_ty(ck, f.ty, subst),
-            ty_params: f.ty_params.clone(),
-            binding: f.binding,
-        })
-        .collect()
-}
-
-fn substitute_sum_variants<S: BuildHasher>(
-    ck: &mut Checker<'_, S>,
-    variants: &[SumVariant],
-    subst: &HashMap<DefId, TypeIdx>,
-) -> Vec<SumVariant> {
-    variants
-        .iter()
-        .map(|v| SumVariant {
-            name: v.name,
-            fields: substitute_list(ck, &v.fields, subst),
-        })
-        .collect()
 }
 
 fn synth_call<S: BuildHasher>(
@@ -1284,26 +842,6 @@ fn synth_call<S: BuildHasher>(
             ck.error_ty()
         }
     }
-}
-
-fn find_instance_method<S: BuildHasher>(
-    ck: &Checker<'_, S>,
-    target_ty: TypeIdx,
-    op_name: &str,
-) -> Option<DefId> {
-    let op_sym = ck.ctx.interner.get(op_name)?;
-    for inst in &ck.store.instances {
-        if types_match(&ck.store.types, &ck.store.unify, inst.target, target_ty)
-            && let Some(&def_id) = inst
-                .members
-                .iter()
-                .find(|(s, _)| *s == op_sym)
-                .map(|(_, id)| id)
-        {
-            return Some(def_id);
-        }
-    }
-    None
 }
 
 fn synth_binop<S: BuildHasher>(
@@ -1422,69 +960,74 @@ fn synth_unaryop<S: BuildHasher>(
     }
 }
 
+fn synth_choice_sum<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
+    variants: &[ExprIdx],
+    parent: ScopeId,
+) -> TypeIdx {
+    for &variant_expr in variants {
+        let name_ref = match &ck.ctx.ast.exprs[variant_expr] {
+            AstExpr::Name { name_ref, .. } => Some(*name_ref),
+            AstExpr::TypeApp { callee, .. } => {
+                if let AstExpr::Name { name_ref, .. } = &ck.ctx.ast.exprs[*callee] {
+                    Some(*name_ref)
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        };
+        if let Some(nr_idx) = name_ref {
+            let name = ck.ctx.ast.name_refs[nr_idx].name;
+            let id = ck
+                .defs
+                .alloc(name, DefKind::Type, Span::DUMMY, ck.ctx.file_id);
+            let _prev = ck.scopes.define(ck.current_scope, name, id);
+        }
+    }
+
+    let mut sum_variants = Vec::with_capacity(variants.len());
+    for &variant_expr in variants {
+        let (name_opt, args_opt) = match &ck.ctx.ast.exprs[variant_expr] {
+            AstExpr::Name { name_ref, .. } => {
+                (Some(ck.ctx.ast.name_refs[*name_ref].name), Some(vec![]))
+            }
+            AstExpr::TypeApp { callee, args, .. } => {
+                if let AstExpr::Name { name_ref, .. } = &ck.ctx.ast.exprs[*callee] {
+                    (
+                        Some(ck.ctx.ast.name_refs[*name_ref].name),
+                        Some(args.clone()),
+                    )
+                } else {
+                    (None, None)
+                }
+            }
+            _ => (None, None),
+        };
+        if let (Some(name), Some(args)) = (name_opt, args_opt) {
+            let fields: Vec<TypeIdx> = args.iter().map(|&a| lower_type_expr(ck, a)).collect();
+            sum_variants.push(SumVariant { name, fields });
+        } else {
+            let ty = lower_type_expr(ck, variant_expr);
+            sum_variants.push(SumVariant {
+                name: Symbol(0),
+                fields: vec![ty],
+            });
+        }
+    }
+
+    ck.current_scope = parent;
+    ck.alloc_ty(Type::Sum {
+        variants: sum_variants,
+    })
+}
+
 fn synth_choice<S: BuildHasher>(ck: &mut Checker<'_, S>, body: ExprIdx) -> TypeIdx {
     let parent = ck.current_scope;
     ck.current_scope = ck.scopes.push_child(parent);
 
     match ck.ctx.ast.exprs[body].clone() {
-        AstExpr::SumType { variants, .. } => {
-            for &variant_expr in &variants {
-                let name_ref = match &ck.ctx.ast.exprs[variant_expr] {
-                    AstExpr::Name { name_ref, .. } => Some(*name_ref),
-                    AstExpr::TypeApp { callee, .. } => {
-                        if let AstExpr::Name { name_ref, .. } = &ck.ctx.ast.exprs[*callee] {
-                            Some(*name_ref)
-                        } else {
-                            None
-                        }
-                    }
-                    _ => None,
-                };
-                if let Some(nr_idx) = name_ref {
-                    let name = ck.ctx.ast.name_refs[nr_idx].name;
-                    let id = ck
-                        .defs
-                        .alloc(name, DefKind::Type, Span::DUMMY, ck.ctx.file_id);
-                    let _prev = ck.scopes.define(ck.current_scope, name, id);
-                }
-            }
-
-            let mut sum_variants = Vec::with_capacity(variants.len());
-            for &variant_expr in &variants {
-                let (name_opt, args_opt) = match &ck.ctx.ast.exprs[variant_expr] {
-                    AstExpr::Name { name_ref, .. } => {
-                        (Some(ck.ctx.ast.name_refs[*name_ref].name), Some(vec![]))
-                    }
-                    AstExpr::TypeApp { callee, args, .. } => {
-                        if let AstExpr::Name { name_ref, .. } = &ck.ctx.ast.exprs[*callee] {
-                            (
-                                Some(ck.ctx.ast.name_refs[*name_ref].name),
-                                Some(args.clone()),
-                            )
-                        } else {
-                            (None, None)
-                        }
-                    }
-                    _ => (None, None),
-                };
-                if let (Some(name), Some(args)) = (name_opt, args_opt) {
-                    let fields: Vec<TypeIdx> =
-                        args.iter().map(|&a| lower_type_expr(ck, a)).collect();
-                    sum_variants.push(SumVariant { name, fields });
-                } else {
-                    let ty = lower_type_expr(ck, variant_expr);
-                    sum_variants.push(SumVariant {
-                        name: Symbol(0),
-                        fields: vec![ty],
-                    });
-                }
-            }
-
-            ck.current_scope = parent;
-            ck.alloc_ty(Type::Sum {
-                variants: sum_variants,
-            })
-        }
+        AstExpr::SumType { variants, .. } => synth_choice_sum(ck, &variants, parent),
         AstExpr::Name { name_ref, .. } => {
             let name = ck.ctx.ast.name_refs[name_ref].name;
             let id = ck
@@ -1493,7 +1036,10 @@ fn synth_choice<S: BuildHasher>(ck: &mut Checker<'_, S>, body: ExprIdx) -> TypeI
             let _prev = ck.scopes.define(ck.current_scope, name, id);
             ck.current_scope = parent;
             ck.alloc_ty(Type::Sum {
-                variants: vec![SumVariant { name, fields: vec![] }],
+                variants: vec![SumVariant {
+                    name,
+                    fields: vec![],
+                }],
             })
         }
         AstExpr::TypeApp { callee, args, .. } => {
@@ -1731,202 +1277,10 @@ fn synth_handle<S: BuildHasher>(
     synth(ck, body)
 }
 
-fn check_handler_op_coverage<S: BuildHasher>(
-    ck: &mut Checker<'_, S>,
-    effect_ty_idx: ExprIdx,
-    ops: &[HandlerOp],
-) {
-    let effect_name = match &ck.ctx.ast.exprs[effect_ty_idx] {
-        AstExpr::Name { name_ref, .. } => ck.ctx.ast.name_refs[*name_ref].name,
-        AstExpr::TypeApp { callee, .. } => match &ck.ctx.ast.exprs[*callee] {
-            AstExpr::Name { name_ref, .. } => ck.ctx.ast.name_refs[*name_ref].name,
-            _ => return,
-        },
-        _ => return,
-    };
+// check_handler_op_coverage moved to checker/dispatch.rs
 
-    let required_ops = find_effect_required_ops(ck, effect_name);
-    if required_ops.is_empty() {
-        return;
-    }
+// enter_constraint_scope moved to checker/dispatch.rs
 
-    let effect_name_str = ck.ctx.interner.resolve(effect_name).to_owned();
-    let handled: HashSet<Symbol> = ops.iter().map(|op| op.name).collect();
+// record_fn_constraints moved to checker/dispatch.rs
 
-    for (op_sym, op_span) in &required_ops {
-        if !handled.contains(op_sym) {
-            let op_name_str = ck.ctx.interner.resolve(*op_sym);
-            let _d = ck.diags.report(
-                &SemaError::MissingHandlerOp {
-                    effect: Box::from(effect_name_str.as_str()),
-                    op: Box::from(op_name_str),
-                },
-                *op_span,
-                ck.ctx.file_id,
-            );
-        }
-    }
-}
-
-/// Processes AST constraints into active obligations for the current scope.
-/// Returns the previous obligations so they can be restored.
-fn enter_constraint_scope<S: BuildHasher>(
-    ck: &mut Checker<'_, S>,
-    constraints: &[Constraint],
-    params: &[TyParam],
-) -> Vec<Obligation> {
-    if constraints.is_empty() {
-        return ck.store.active_obligations.clone();
-    }
-
-    let prev = ck.store.active_obligations.clone();
-    let mut new_obligations = prev.clone();
-
-    for constraint in constraints {
-        if constraint.rel != Rel::Sub {
-            continue;
-        }
-        let bound_name = match &ck.ctx.ast.exprs[constraint.bound] {
-            AstExpr::Name { name_ref, .. } => ck.ctx.ast.name_refs[*name_ref].name,
-            AstExpr::TypeApp { callee, .. } => match &ck.ctx.ast.exprs[*callee] {
-                AstExpr::Name { name_ref, .. } => ck.ctx.ast.name_refs[*name_ref].name,
-                _ => continue,
-            },
-            _ => continue,
-        };
-        let class_def = ck.scopes.lookup(ck.current_scope, bound_name);
-        let Some(class_def) = class_def else { continue };
-
-        // Find the type variable for constraint.param among the ty params
-        let param_ty = params
-            .iter()
-            .find(|p| p.name == constraint.param)
-            .and_then(|p| {
-                ck.ctx.pat_defs.get(&p.span).or_else(|| {
-                    // Type params are defined via enter_ty_param_scope, look up in current scope
-                    ck.scopes
-                        .lookup(ck.current_scope, p.name)
-                        .as_ref()
-                        .copied()
-                        .map(|_| &p.name)
-                        .and(None)
-                })
-            })
-            .copied();
-
-        // Fall back: look up the param name in current scope to get its DefId, then get its type
-        let param_type_idx = if let Some(&def_id) = param_ty.as_ref() {
-            ck.defs
-                .get(def_id)
-                .ty_info
-                .ty
-                .unwrap_or_else(|| ck.named_ty(def_id))
-        } else if let Some(def_id) = ck.scopes.lookup(ck.current_scope, constraint.param) {
-            ck.named_ty(def_id)
-        } else {
-            continue;
-        };
-
-        let ob = Obligation {
-            class: class_def,
-            args: vec![param_type_idx],
-            span: constraint.span,
-        };
-        new_obligations.push(ob.clone());
-        ck.store.obligations.push(ob);
-    }
-
-    ck.store.active_obligations = new_obligations;
-    prev
-}
-
-/// Records `fn_constraints` for a constrained function.
-fn record_fn_constraints<S: BuildHasher>(ck: &mut Checker<'_, S>, fields: &LetFields) {
-    if fields.constraints.is_empty() {
-        return;
-    }
-
-    let pat = &ck.ctx.ast.pats[fields.pat];
-    let pat_span = match pat {
-        Pat::Variant { span, .. } | Pat::Bind { span, .. } => *span,
-        _ => return,
-    };
-
-    let Some(&def_id) = ck.ctx.pat_defs.get(&pat_span) else {
-        return;
-    };
-
-    // Collect the obligations that were added for this function's constraints
-    let fn_obs: Vec<Obligation> = ck
-        .store
-        .active_obligations
-        .iter()
-        .filter(|ob| {
-            fields.constraints.iter().any(|c| {
-                let bname = match &ck.ctx.ast.exprs[c.bound] {
-                    AstExpr::Name { name_ref, .. } => ck.ctx.ast.name_refs[*name_ref].name,
-                    AstExpr::TypeApp { callee, .. } => {
-                        if let AstExpr::Name { name_ref, .. } = &ck.ctx.ast.exprs[*callee] {
-                            ck.ctx.ast.name_refs[*name_ref].name
-                        } else {
-                            return false;
-                        }
-                    }
-                    _ => return false,
-                };
-                ck.scopes.lookup(ck.current_scope, bname) == Some(ob.class)
-            })
-        })
-        .cloned()
-        .collect();
-
-    if !fn_obs.is_empty() {
-        let _prev = ck.store.fn_constraints.insert(def_id, fn_obs);
-    }
-}
-
-/// Searches active obligations for a method that matches the operator on a type variable.
-fn find_dict_method<S: BuildHasher>(
-    ck: &Checker<'_, S>,
-    target_ty: TypeIdx,
-    op_name: &str,
-) -> Option<DictLookup> {
-    let op_sym = ck.ctx.interner.get(op_name)?;
-    let resolved = ck.store.unify.resolve(target_ty, &ck.store.types);
-    let resolved_ty = &ck.store.types[resolved];
-
-    if !matches!(resolved_ty, Type::Var(_) | Type::Rigid(_)) {
-        return None;
-    }
-
-    for ob in &ck.store.active_obligations {
-        let ob_ty = ck.store.unify.resolve(*ob.args.first()?, &ck.store.types);
-        if ob_ty != resolved {
-            continue;
-        }
-        // Check if this class has a method matching op_sym
-        if ck.ctx.class_op_members.contains_key(&(ob.class, op_sym)) {
-            return Some(DictLookup {
-                class: ob.class,
-                method_sym: op_sym,
-            });
-        }
-    }
-    None
-}
-
-fn find_effect_required_ops<S: BuildHasher>(
-    ck: &Checker<'_, S>,
-    effect_name: Symbol,
-) -> Vec<(Symbol, Span)> {
-    let n = ck.ctx.ast.exprs.len();
-    for i in 0..n {
-        let idx = Idx::from_raw(u32::try_from(i).expect("expr index in range"));
-        if let Expr::Effect { name, ops, .. } = &ck.ctx.ast.exprs[idx]
-            && *name == effect_name
-        {
-            return ops.iter().map(|op| (op.name, op.span)).collect();
-        }
-    }
-    vec![]
-}
+// find_dict_method and find_effect_required_ops moved to checker/dispatch.rs

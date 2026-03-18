@@ -207,10 +207,13 @@ fn find_class_required_methods<S: BuildHasher>(
 
 /// Checks a declaration expression (class, given, effect, foreign).
 #[allow(clippy::too_many_lines)] // large match over declaration variants; extraction would add indirection without clarity
-pub fn check_stmt<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) {
+pub fn check_decl<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) {
     match ck.ctx.ast.exprs[expr_idx].clone() {
         Expr::Class {
-            params, members, span, ..
+            params,
+            members,
+            span,
+            ..
         } => {
             let parent = if params.is_empty() {
                 None
@@ -245,19 +248,24 @@ pub fn check_stmt<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) {
                     })
                     .collect();
 
-                let record_ty =
-                    ck.alloc_ty(Type::Record { fields: method_fields, rest: None });
+                let record_ty = ck.alloc_ty(Type::Record {
+                    fields: method_fields,
+                    rest: None,
+                });
 
                 let class_ty = params.first().map_or(record_ty, |first_param| {
-                    ck.scopes.lookup(ck.current_scope, first_param.name).map_or(record_ty, |param_def| {
-                        let u0 = ck.alloc_ty(Type::Universe { level: 0 });
-                        ck.alloc_ty(Type::Pi {
-                            param_name: first_param.name,
-                            param_def,
-                            param_ty: u0,
-                            body: record_ty,
-                        })
-                    })
+                    ck.scopes.lookup(ck.current_scope, first_param.name).map_or(
+                        record_ty,
+                        |param_def| {
+                            let u0 = ck.alloc_ty(Type::Universe { level: 0 });
+                            ck.alloc_ty(Type::Pi {
+                                param_name: first_param.name,
+                                param_def,
+                                param_ty: u0,
+                                body: record_ty,
+                            })
+                        },
+                    )
                 });
 
                 ck.defs.get_mut(class_def_id).ty_info.ty = Some(class_ty);
@@ -353,9 +361,7 @@ fn check_instance<S: BuildHasher>(
     check_class_members(ck, members, &all_params);
     // Extract class name and first type arg from the target expression.
     let (target_name_opt, first_arg_opt) = match &ck.ctx.ast.exprs[target] {
-        Expr::Name { name_ref, .. } => {
-            (Some(ck.ctx.ast.name_refs[*name_ref].name), None)
-        }
+        Expr::Name { name_ref, .. } => (Some(ck.ctx.ast.name_refs[*name_ref].name), None),
         Expr::TypeApp { callee, args, .. } => {
             let name = if let Expr::Name { name_ref, .. } = &ck.ctx.ast.exprs[*callee] {
                 Some(ck.ctx.ast.name_refs[*name_ref].name)

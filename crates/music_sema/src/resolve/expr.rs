@@ -401,8 +401,7 @@ impl Resolver<'_> {
                     } else if let Expr::TypeApp { callee, .. } = &self.ast.exprs[variant_expr] {
                         if let Expr::Name { name_ref, span } = &self.ast.exprs[*callee] {
                             let name = self.ast.name_refs[*name_ref].name;
-                            let id =
-                                self.defs.alloc(name, DefKind::Variant, *span, self.file_id);
+                            let id = self.defs.alloc(name, DefKind::Variant, *span, self.file_id);
                             if let Some(p) = choice_parent {
                                 self.defs.get_mut(id).parent = Some(p);
                             }

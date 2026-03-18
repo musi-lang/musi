@@ -11,7 +11,7 @@ use music_ast::{Expr, Pat};
 use music_sema::Type;
 use music_shared::{Idx, Span};
 
-use crate::analysis::{find_name_token, AnalyzedDoc};
+use crate::analysis::{AnalyzedDoc, find_name_token};
 use crate::to_proto::{fmt_type_lsp, offset_to_position, position_to_offset};
 
 /// Compute code actions for the given cursor range.

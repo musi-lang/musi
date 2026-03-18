@@ -3,7 +3,7 @@
 use music_shared::{Arena, FileId, Interner, Span};
 
 use crate::def::{DefId, DefKind, DefTable};
-use crate::types::{fmt_type, EffectRow, RecordField, TyVarId, Type};
+use crate::types::{EffectRow, RecordField, TyVarId, Type, fmt_type};
 
 #[test]
 fn test_type_named_no_args() {

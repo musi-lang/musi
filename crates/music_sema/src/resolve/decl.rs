@@ -2,11 +2,11 @@
 
 use std::collections::HashSet;
 
+use music_ast::ExprIdx;
 use music_ast::decl::{ClassMember, EffectOp, ForeignDecl};
 use music_ast::expr::{Arg, ArrayElem, Expr, MatchArm, Param, PwArm, PwGuard, RecField};
 use music_ast::ty_param::{Constraint, TyParam};
 use music_ast::util::collect_ty_var_nodes;
-use music_ast::ExprIdx;
 use music_shared::{Span, Symbol};
 
 use crate::def::{DefId, DefKind};

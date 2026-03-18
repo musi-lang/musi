@@ -1,13 +1,13 @@
 //! Tests for the subtyping relation.
 
-use music_shared::{Arena, Interner};
+use music_shared::{Arena, Interner, Symbol};
 
 use crate::def::DefTable;
 use crate::scope::ScopeTree;
 use crate::subtype::is_subtype;
 use crate::types::{EffectRow, RecordField, Type};
 use crate::unify::UnifyTable;
-use crate::well_known::{init_well_known, WellKnown};
+use crate::well_known::{WellKnown, init_well_known};
 
 fn setup() -> (Arena<Type>, UnifyTable, WellKnown) {
     let mut interner = Interner::new();
@@ -125,18 +125,24 @@ fn fn_variance() {
     // (Unknown) -> Never <: (Int) -> String
     // Contravariant param: Int <: Unknown (holds, Unknown is top)
     // Covariant return: Never <: String (holds, Never is bottom)
-    let sub_fn = types.alloc(Type::Fn {
+    let covariant_fn = types.alloc(Type::Fn {
         params: vec![unknown],
         ret: never,
         effects: EffectRow::PURE,
     });
-    let sup_fn = types.alloc(Type::Fn {
+    let contravariant_fn = types.alloc(Type::Fn {
         params: vec![int],
         ret: string,
         effects: EffectRow::PURE,
     });
 
-    assert!(is_subtype(sub_fn, sup_fn, &types, &unify, &wk));
+    assert!(is_subtype(
+        covariant_fn,
+        contravariant_fn,
+        &types,
+        &unify,
+        &wk
+    ));
 }
 
 #[test]
@@ -193,12 +199,11 @@ fn record_width_subtype() {
     // Since we can't access the interner here, use the def symbols directly from
     // the arena. Instead we build records using manually created symbols.
     // We use music_shared::Symbol directly.
-    use music_shared::Symbol;
     let x = Symbol(0);
     let y = Symbol(1);
 
     // sub: { x: Int, y: String }
-    let sub_rec = types.alloc(Type::Record {
+    let wide_rec = types.alloc(Type::Record {
         fields: vec![
             RecordField {
                 name: x,
@@ -217,7 +222,7 @@ fn record_width_subtype() {
     });
 
     // sup: { x: Int }
-    let sup_rec = types.alloc(Type::Record {
+    let narrow_rec = types.alloc(Type::Record {
         fields: vec![RecordField {
             name: x,
             ty: int,
@@ -227,9 +232,9 @@ fn record_width_subtype() {
         rest: None,
     });
 
-    assert!(is_subtype(sub_rec, sup_rec, &types, &unify, &wk));
-    // Width subtyping is one-directional: sup is NOT a subtype of sub.
-    assert!(!is_subtype(sup_rec, sub_rec, &types, &unify, &wk));
+    assert!(is_subtype(wide_rec, narrow_rec, &types, &unify, &wk));
+    // Width subtyping is one-directional: narrow is NOT a subtype of wide.
+    assert!(!is_subtype(narrow_rec, wide_rec, &types, &unify, &wk));
 }
 
 #[test]
@@ -245,11 +250,10 @@ fn record_depth_subtype() {
         args: vec![],
     });
 
-    use music_shared::Symbol;
     let x = Symbol(0);
 
     // sub: { x: Never }
-    let sub_rec = types.alloc(Type::Record {
+    let never_rec = types.alloc(Type::Record {
         fields: vec![RecordField {
             name: x,
             ty: never,
@@ -260,7 +264,7 @@ fn record_depth_subtype() {
     });
 
     // sup: { x: Int }
-    let sup_rec = types.alloc(Type::Record {
+    let int_rec = types.alloc(Type::Record {
         fields: vec![RecordField {
             name: x,
             ty: int,
@@ -271,7 +275,7 @@ fn record_depth_subtype() {
     });
 
     // Never <: Int holds, so { x: Never } <: { x: Int }.
-    assert!(is_subtype(sub_rec, sup_rec, &types, &unify, &wk));
+    assert!(is_subtype(never_rec, int_rec, &types, &unify, &wk));
 }
 
 #[test]

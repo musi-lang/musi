@@ -1,7 +1,7 @@
 //! Lowering AST type expressions (`Expr` type variants) to semantic `Type`.
 
-use music_ast::expr::{Arrow, EffectItem, EffectSet, Expr, FieldKey};
 use music_ast::ExprIdx;
+use music_ast::expr::{Arrow, EffectItem, EffectSet, Expr, FieldKey};
 use music_shared::{Span, Symbol};
 use std::hash::BuildHasher;
 

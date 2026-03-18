@@ -6,7 +6,7 @@ use music_lex::TokenKind;
 use music_sema::{DefKind, SemaResult};
 use music_shared::{Idx, Span, Symbol};
 
-use crate::analysis::{def_at_cursor, def_at_offset, field_at_cursor, AnalyzedDoc};
+use crate::analysis::{AnalyzedDoc, def_at_cursor, def_at_offset, field_at_cursor};
 use crate::to_proto::{position_to_offset, span_to_range, span_to_range_raw};
 
 /// Return the definition location for the symbol under the cursor.

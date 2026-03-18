@@ -1,6 +1,7 @@
 //! Expression emission: tree-walks AST expressions, leaving results on the stack.
 
 use musi_bc::Opcode;
+use music_ast::ExprIdx;
 use music_ast::Pat;
 use music_ast::PatIdx;
 use music_ast::expr::{
@@ -8,7 +9,6 @@ use music_ast::expr::{
     PwGuard, RecField, TypeCheckKind, UnaryOp,
 };
 use music_ast::lit::Lit;
-use music_ast::ExprIdx;
 use music_sema::DefId;
 use music_sema::TypeIdx;
 use music_sema::def::DefKind;

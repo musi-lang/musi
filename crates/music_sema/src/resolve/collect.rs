@@ -9,7 +9,7 @@ use music_shared::Symbol;
 
 use crate::def::DefKind;
 
-use super::{binding_def_kind, Resolver};
+use super::{Resolver, binding_def_kind};
 
 impl Resolver<'_> {
     pub(super) fn collect_top_level(&mut self, expr_idx: ExprIdx) {

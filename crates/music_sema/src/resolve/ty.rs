@@ -1,7 +1,7 @@
 //! Type expression resolution helpers.
 
-use music_ast::expr::{EffectItem, Expr};
 use music_ast::ExprIdx;
+use music_ast::expr::{EffectItem, Expr};
 
 use super::Resolver;
 

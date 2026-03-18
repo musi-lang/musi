@@ -9,7 +9,7 @@ use music_lex::TokenKind;
 use music_sema::{DefKind, SemaResult, Type};
 use music_shared::{Idx, Span};
 
-use crate::analysis::{find_name_token, AnalyzedDoc};
+use crate::analysis::{AnalyzedDoc, find_name_token};
 use crate::to_proto::{fmt_type_lsp, offset_to_position};
 
 pub struct InlayHintConfig {
