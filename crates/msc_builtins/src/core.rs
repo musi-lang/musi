@@ -2,6 +2,7 @@
 
 use std::cmp::Ordering;
 use std::f64::consts;
+use std::ffi::CStr;
 
 use msc_vm::{Heap, Value, VmError};
 
@@ -75,17 +76,17 @@ pub fn lookup(name: &str) -> Option<BuiltinFn> {
         "rune_to_lower" => Some(rune_to_lower),
         "rune_to_int" => Some(rune_to_int),
         "rune_from_int" => Some(rune_from_int),
+        // Pointer operations
+        "ptr_deref_i32" => Some(ptr_deref_i32),
+        "ptr_deref_i64" => Some(ptr_deref_i64),
+        "ptr_to_string" => Some(ptr_to_string),
         _ => None,
     }
 }
 
 fn get_str(val: Value, heap: &Heap) -> Result<&str, VmError> {
     let ptr = val.as_ref()?;
-    let node = heap.get(ptr)?;
-    node.string.as_deref().ok_or(VmError::TypeError {
-        expected: "string",
-        found: "non-string ref",
-    })
+    heap.get_string(ptr)
 }
 
 fn get_rune(val: Value) -> Result<char, VmError> {
@@ -203,7 +204,8 @@ fn str_trim_end(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     Ok(Value::from_ref(ptr))
 }
 
-#[allow(clippy::needless_collect)] // need to collect into owned strings to release shared borrow on `heap`
+// Need to collect into owned strings to release shared borrow on `heap`.
+#[allow(clippy::needless_collect)]
 fn str_split(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     let s = get_str(arg(args, 0)?, heap)?;
     let delim = get_str(arg(args, 1)?, heap)?;
@@ -242,8 +244,7 @@ fn str_chars(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
 
 fn str_from_chars(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     let arr_ref = arg(args, 0)?.as_ref()?;
-    let arr = heap.get(arr_ref)?;
-    let elems = arr.elems.clone();
+    let elems = heap.get_array(arr_ref)?.to_vec();
     let mut s = String::with_capacity(elems.len());
     for v in &elems {
         s.push(get_rune(*v)?);
@@ -263,19 +264,17 @@ fn str_parse_float(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     Ok(s.parse::<f64>().map_or(Value::NAN, Value::from_float))
 }
 
-#[allow(clippy::needless_collect)]
 fn str_join(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     let arr_ptr = arg(args, 0)?.as_ref()?;
     let sep = get_str(arg(args, 1)?, heap)?.to_owned();
-    let elems = heap.get(arr_ptr)?.elems.clone();
+    // Clone element refs first to release the shared borrow on `heap` before
+    // the mutable borrow in `alloc_string`.
+    let elems: Vec<Value> = heap.get_array(arr_ptr)?.to_vec();
     let parts: Vec<String> = elems
         .iter()
         .map(|v| {
             let ptr = v.as_ref().unwrap_or_default();
-            heap.get(ptr)
-                .ok()
-                .and_then(|node| node.string.as_deref().map(String::from))
-                .unwrap_or_default()
+            heap.get_string(ptr).map(str::to_owned).unwrap_or_default()
         })
         .collect();
     let result = parts.join(&sep);
@@ -285,23 +284,20 @@ fn str_join(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
 
 fn arr_len(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     let ptr = arg(args, 0)?.as_ref()?;
-    let arr = heap.get(ptr)?;
-    Ok(Value::from_int(usize_to_i64(arr.elems.len())?))
+    Ok(Value::from_int(usize_to_i64(heap.get_array(ptr)?.len())?))
 }
 
 fn arr_push(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     let ptr = arg(args, 0)?.as_ref()?;
     let val = arg(args, 1)?;
-    let arr = heap.get_mut(ptr)?;
-    arr.elems.push(val);
+    heap.get_array_mut(ptr)?.push(val);
     Ok(Value::UNIT)
 }
 
 fn arr_pop(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     let ptr = arg(args, 0)?.as_ref()?;
-    let arr = heap.get_mut(ptr)?;
-    let val = arr
-        .elems
+    let val = heap
+        .get_array_mut(ptr)?
         .pop()
         .ok_or(VmError::OutOfBounds { index: 0, len: 0 })?;
     Ok(val)
@@ -311,11 +307,11 @@ fn arr_slice(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     let ptr = arg(args, 0)?.as_ref()?;
     let start = i64_to_usize(arg(args, 1)?.as_int()?)?;
     let end = i64_to_usize(arg(args, 2)?.as_int()?)?;
-    let arr = heap.get(ptr)?;
-    let len = arr.elems.len();
+    let elems = heap.get_array(ptr)?;
+    let len = elems.len();
     let s = start.min(len);
     let e = end.min(len);
-    let sliced = arr.elems[s..e].to_vec();
+    let sliced = elems[s..e].to_vec();
     let new_ptr = heap.alloc_array(0, sliced);
     Ok(Value::from_ref(new_ptr))
 }
@@ -323,8 +319,8 @@ fn arr_slice(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
 fn arr_concat(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     let ptr_a = arg(args, 0)?.as_ref()?;
     let ptr_b = arg(args, 1)?.as_ref()?;
-    let a = heap.get(ptr_a)?.elems.clone();
-    let b = heap.get(ptr_b)?.elems.clone();
+    let a = heap.get_array(ptr_a)?.to_vec();
+    let b = heap.get_array(ptr_b)?.to_vec();
     let mut combined = a;
     combined.extend(b);
     let new_ptr = heap.alloc_array(0, combined);
@@ -333,25 +329,22 @@ fn arr_concat(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
 
 fn arr_reverse(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     let ptr = arg(args, 0)?.as_ref()?;
-    let arr = heap.get_mut(ptr)?;
-    arr.elems.reverse();
+    heap.get_array_mut(ptr)?.reverse();
     Ok(Value::UNIT)
 }
 
 fn arr_contains(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     let ptr = arg(args, 0)?.as_ref()?;
     let needle = arg(args, 1)?;
-    let arr = heap.get(ptr)?;
-    let found = arr.elems.contains(&needle);
+    let found = heap.get_array(ptr)?.contains(&needle);
     Ok(Value::from_bool(found))
 }
 
 fn arr_index_of(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     let ptr = arg(args, 0)?.as_ref()?;
     let needle = arg(args, 1)?;
-    let arr = heap.get(ptr)?;
-    let idx = arr
-        .elems
+    let idx = heap
+        .get_array(ptr)?
         .iter()
         .position(|v| *v == needle)
         .map_or(-1i64, |i| i64::try_from(i).unwrap_or(-1));
@@ -360,8 +353,7 @@ fn arr_index_of(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
 
 fn arr_sort(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     let ptr = arg(args, 0)?.as_ref()?;
-    let arr = heap.get_mut(ptr)?;
-    arr.elems.sort_by(|a, b| {
+    heap.get_array_mut(ptr)?.sort_by(|a, b| {
         // Numeric comparison: try int first, then float.
         if let (Ok(ai), Ok(bi)) = (a.as_int(), b.as_int()) {
             return ai.cmp(&bi);
@@ -536,6 +528,59 @@ fn rune_from_int(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
         .and_then(char::from_u32)
         .unwrap_or('\0');
     Ok(Value::from_rune(scalar))
+}
+
+fn int_to_ptr<T>(n: i64) -> *const T {
+    // `with_exposed_provenance` is the safe alternative to `n as *const T` for
+    // integer-to-pointer conversion (stabilised in Rust 1.84). The i64 value
+    // came from a VM integer slot that originally held a C pointer; the address
+    // is non-negative on all supported platforms (usize is at most 64 bits).
+    let addr = usize::try_from(n).unwrap_or(0);
+    std::ptr::with_exposed_provenance(addr)
+}
+
+fn ptr_deref_i32(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
+    let n = arg(args, 0)?.as_int()?;
+    let ptr: *const i32 = int_to_ptr(n);
+    if ptr.is_null() {
+        return Err(VmError::Malformed {
+            desc: "ptr_deref_i32: null pointer dereference".into(),
+        });
+    }
+    // SAFETY: caller guarantees the pointer is valid; gated by the Unsafe effect.
+    let val = unsafe { ptr.read() };
+    Ok(Value::from_int(i64::from(val)))
+}
+
+fn ptr_deref_i64(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
+    let n = arg(args, 0)?.as_int()?;
+    let ptr: *const i64 = int_to_ptr(n);
+    if ptr.is_null() {
+        return Err(VmError::Malformed {
+            desc: "ptr_deref_i64: null pointer dereference".into(),
+        });
+    }
+    // SAFETY: caller guarantees the pointer is valid; gated by the Unsafe effect.
+    let val = unsafe { ptr.read() };
+    Ok(Value::from_int(val))
+}
+
+fn ptr_to_string(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+    let n = arg(args, 0)?.as_int()?;
+    let ptr: *const i8 = int_to_ptr(n);
+    if ptr.is_null() {
+        return Err(VmError::Malformed {
+            desc: "ptr_to_string: null pointer".into(),
+        });
+    }
+    // SAFETY: caller guarantees ptr points to a valid null-terminated C string;
+    // gated by the Unsafe effect.
+    let s = unsafe { CStr::from_ptr(ptr) }
+        .to_string_lossy()
+        .into_owned()
+        .into_boxed_str();
+    let heap_ptr = heap.alloc_string(0, s);
+    Ok(Value::from_ref(heap_ptr))
 }
 
 #[cfg(test)]

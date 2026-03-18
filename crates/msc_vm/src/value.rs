@@ -1,7 +1,7 @@
 use core::fmt;
 
 use crate::error::VmError;
-use crate::heap::Heap;
+use crate::heap::{Heap, HeapPayload};
 
 // IEEE 754 quiet NaN has exponent=0x7FF and bit 51 set. We require
 // bits 62-50 all set (QNAN mask), giving 8 tag slots via bits 63, 49, 48.
@@ -22,10 +22,6 @@ const TAG_RUNE: u64 = 0xFFFE_0000_0000_0000;
 const TAG_TACH: u64 = 0xFFFF_0000_0000_0000; // task / chan combined
 
 const CHAN_BIT: u64 = 1u64 << 47;
-
-// Sentinel type IDs for heap-boxed wide integers.
-pub const BOXED_INT_TYPE_ID: u32 = 0xFFFF_FFFD;
-pub const BOXED_NAT_TYPE_ID: u32 = 0xFFFF_FFFC;
 
 const INT_48_MIN: i64 = -(1i64 << 47);
 const INT_48_MAX: i64 = (1i64 << 47) - 1;
@@ -50,7 +46,7 @@ const fn char_to_u64(c: char) -> u64 {
 ///
 /// - Floats: stored as raw IEEE 754 bits (NaN canonicalized)
 /// - Tagged values: top 16 bits = type tag, bottom 48 bits = payload
-/// - Wide integers (>48-bit): heap-boxed behind a `Ref` with sentinel `type_id`
+/// - Wide integers (>48-bit): heap-boxed behind a `Ref` with a `BoxedInt`/`BoxedNat` payload
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
 pub struct Value(pub u64);
@@ -381,18 +377,16 @@ impl Value {
     ///
     /// # Errors
     ///
-    /// Returns [`VmError::TypeError`] if the value is not an int, or
-    /// [`VmError::Malformed`] if the boxed int is missing its payload.
+    /// Returns [`VmError::TypeError`] if the value is not an int.
     pub fn as_int_wide(self, heap: &Heap) -> Result<i64, VmError> {
         if let Ok(n) = self.as_int() {
             return Ok(n);
         }
         if let Ok(ptr) = self.as_ref() {
-            let obj = heap.get(ptr)?;
-            if obj.type_id == BOXED_INT_TYPE_ID {
-                return obj.wide_int.ok_or_else(|| VmError::Malformed {
-                    desc: "boxed int missing wide_int field".into(),
-                });
+            if let Ok(obj) = heap.get(ptr) {
+                if let HeapPayload::BoxedInt(n) = obj.payload {
+                    return Ok(n);
+                }
             }
         }
         Err(VmError::TypeError {
@@ -405,21 +399,16 @@ impl Value {
     ///
     /// # Errors
     ///
-    /// Returns [`VmError::TypeError`] if the value is not a nat, or
-    /// [`VmError::Malformed`] if the boxed nat is missing its payload.
+    /// Returns [`VmError::TypeError`] if the value is not a nat.
     pub fn as_nat_wide(self, heap: &Heap) -> Result<u64, VmError> {
         if let Ok(n) = self.as_nat() {
             return Ok(n);
         }
         if let Ok(ptr) = self.as_ref() {
-            let obj = heap.get(ptr)?;
-            if obj.type_id == BOXED_NAT_TYPE_ID {
-                return obj
-                    .wide_int
-                    .map(i64::cast_unsigned)
-                    .ok_or_else(|| VmError::Malformed {
-                        desc: "boxed nat missing wide_int field".into(),
-                    });
+            if let Ok(obj) = heap.get(ptr) {
+                if let HeapPayload::BoxedNat(n) = obj.payload {
+                    return Ok(n.cast_unsigned());
+                }
             }
         }
         Err(VmError::TypeError {
@@ -505,27 +494,40 @@ pub fn wide_values_equal(a: Value, b: Value, heap: &Heap) -> bool {
     if let (Ok(ai), Ok(bi)) = (a.as_ref(), b.as_ref())
         && let (Ok(oa), Ok(ob)) = (heap.get(ai), heap.get(bi))
     {
-        if let (Some(sa), Some(sb)) = (&oa.string, &ob.string) {
-            return sa == sb;
-        }
-        // Array equality: compare element-wise.
-        if !oa.elems.is_empty() || !ob.elems.is_empty() {
-            if oa.elems.len() != ob.elems.len() {
-                return false;
+        match (&oa.payload, &ob.payload) {
+            (HeapPayload::Str { data: da, .. }, HeapPayload::Str { data: db, .. }) => {
+                return da == db;
             }
-            return oa
-                .elems
-                .iter()
-                .zip(ob.elems.iter())
-                .all(|(&ea, &eb)| ea.0 == eb.0 || wide_values_equal(ea, eb, heap));
-        }
-        // Product/variant equality: same tag and same fields.
-        if oa.tag == ob.tag && oa.fields.len() == ob.fields.len() {
-            return oa
-                .fields
-                .iter()
-                .zip(ob.fields.iter())
-                .all(|(&fa, &fb)| fa.0 == fb.0 || wide_values_equal(fa, fb, heap));
+            (HeapPayload::Array { elems: ea, .. }, HeapPayload::Array { elems: eb, .. }) => {
+                if ea.len() != eb.len() {
+                    return false;
+                }
+                return ea
+                    .iter()
+                    .zip(eb.iter())
+                    .all(|(&va, &vb)| va.0 == vb.0 || wide_values_equal(va, vb, heap));
+            }
+            (
+                HeapPayload::Record {
+                    tag: ta,
+                    fields: fa,
+                    ..
+                },
+                HeapPayload::Record {
+                    tag: tb,
+                    fields: fb,
+                    ..
+                },
+            ) => {
+                if ta != tb || fa.len() != fb.len() {
+                    return false;
+                }
+                return fa
+                    .iter()
+                    .zip(fb.iter())
+                    .all(|(&va, &vb)| va.0 == vb.0 || wide_values_equal(va, vb, heap));
+            }
+            _ => {}
         }
     }
     false

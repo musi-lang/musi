@@ -16,12 +16,12 @@ fn make_array(heap: &mut Heap, elems: Vec<Value>) -> Value {
 
 fn extract_str(val: Value, heap: &Heap) -> &str {
     let ptr = val.as_ref().unwrap();
-    heap.get(ptr).unwrap().string.as_deref().unwrap()
+    heap.get_string(ptr).unwrap()
 }
 
 fn extract_elems(val: Value, heap: &Heap) -> Vec<Value> {
     let ptr = val.as_ref().unwrap();
-    heap.get(ptr).unwrap().elems.clone()
+    heap.get_array(ptr).unwrap().to_vec()
 }
 
 #[test]

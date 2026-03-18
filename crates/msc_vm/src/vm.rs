@@ -4,22 +4,22 @@
 mod tests;
 
 mod arith;
+mod call;
 mod continuations;
 mod frame;
+mod gc;
 mod ops;
 
 pub use frame::{ContMarker, Continuation, Frame};
 
-use std::mem;
+use std::collections::HashMap;
 
 use msc_bc::Opcode;
 
-use crate::channel::ChannelTable;
-use crate::error::{VmError, malformed};
+use crate::error::{malformed, VmError};
 use crate::heap::Heap;
 use crate::host::HostFunctions;
 use crate::loader::LoadedModule;
-use crate::task::{TaskScheduler, TaskStatus};
 use crate::value::Value;
 
 const MAX_CALL_DEPTH: usize = 1024;
@@ -42,25 +42,28 @@ pub struct Vm {
     instruction_limit: Option<u64>,
     continuations: Vec<Continuation>,
     host: Option<Box<dyn HostFunctions>>,
-    scheduler: Option<TaskScheduler>,
-    channels: Option<ChannelTable>,
+    /// Maps `(frame_depth, local_slot)` to the heap index of the open upvalue cell.
+    open_upvalue_map: HashMap<(usize, usize), usize>,
 }
 
 impl Vm {
     /// Create a new VM owning the loaded module.
+    ///
+    /// Globals are pre-allocated to `Value::UNIT`. Call `init_globals()` to
+    /// run any initializer functions declared in the GLOB section.
     #[must_use]
-    pub const fn new(module: LoadedModule) -> Self {
+    pub fn new(module: LoadedModule) -> Self {
+        let globals = vec![Value::UNIT; module.globals.len()];
         Self {
             module,
             heap: Heap::new(),
-            globals: vec![],
+            globals,
             call_stack: vec![],
             instruction_count: 0,
             instruction_limit: None,
             continuations: vec![],
             host: None,
-            scheduler: None,
-            channels: None,
+            open_upvalue_map: HashMap::new(),
         }
     }
 
@@ -70,7 +73,7 @@ impl Vm {
         self.instruction_limit = limit;
     }
 
-    /// Attach a host function provider for `INV_FFI` dispatch.
+    /// Attach a host function provider for `FFI_CALL` dispatch.
     pub fn set_host(&mut self, host: Box<dyn HostFunctions>) {
         self.host = Some(host);
     }
@@ -106,6 +109,64 @@ impl Vm {
         !self.call_stack.is_empty()
     }
 
+    /// Initialize globals that have initializer functions (flag bit 0x04).
+    ///
+    /// Must be called after `new()` and before `run()` for modules that use
+    /// global variables with initializers.
+    ///
+    /// # Errors
+    ///
+    /// Returns `VmError` if any initializer function fails.
+    pub fn init_globals(&mut self) -> Result<(), VmError> {
+        for i in 0..self.module.globals.len() {
+            let (flags, init_fn_id) = {
+                let g = &self.module.globals[i];
+                (g.flags, g.initializer)
+            };
+            if flags & 0x04 != 0 {
+                if let Some(fn_id) = init_fn_id {
+                    let fn_idx = usize::from(fn_id);
+                    self.push_frame(fn_idx, &[])?;
+                    let val = self.run_to_completion()?;
+                    self.globals[i] = val;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Push a call frame for `fn_idx` with the given arguments without executing.
+    ///
+    /// # Errors
+    ///
+    /// Returns `VmError` if `fn_idx` is out of bounds or the call stack overflows.
+    fn push_frame(&mut self, fn_idx: usize, args: &[Value]) -> Result<(), VmError> {
+        if self.call_stack.len() >= MAX_CALL_DEPTH {
+            return Err(VmError::StackOverflow);
+        }
+        let func = self
+            .module
+            .fn_by_index(fn_idx)
+            .ok_or_else(|| malformed!("fn_idx {} not found in module", fn_idx))?;
+        let local_count = usize::from(func.param_count) + usize::from(func.local_count);
+        let max_stack = usize::from(func.max_stack);
+        let param_count = usize::from(func.param_count);
+        let mut locals = vec![Value::UNIT; local_count];
+        for (i, &arg) in args.iter().enumerate().take(param_count) {
+            locals[i] = arg;
+        }
+        self.call_stack.push(Frame {
+            fn_idx,
+            ip: 0,
+            locals,
+            stack: Vec::with_capacity(max_stack.max(4)),
+            marker_stack: vec![],
+            closure_ref: None,
+            open_upvalues: vec![],
+        });
+        Ok(())
+    }
+
     /// Run the module's entry point and return the result value.
     ///
     /// # Errors
@@ -137,31 +198,7 @@ impl Vm {
     ///
     /// Returns `VmError` if `fn_id` is not found or the call stack overflows.
     pub fn setup_call(&mut self, fn_id: u32, args: &[Value]) -> Result<(), VmError> {
-        if self.call_stack.len() >= MAX_CALL_DEPTH {
-            return Err(VmError::StackOverflow);
-        }
-        let (fn_idx, func) = self
-            .module
-            .fn_by_id(fn_id)
-            .ok_or_else(|| malformed!("fn_id {} not found in module", fn_id))?;
-        let local_count = usize::from(func.local_count);
-        let max_stack = usize::from(func.max_stack);
-        let param_count = usize::from(func.param_count);
-
-        let mut locals = vec![Value::UNIT; local_count];
-        for (i, &arg) in args.iter().enumerate().take(param_count) {
-            locals[i] = arg;
-        }
-
-        self.call_stack.push(Frame {
-            fn_idx,
-            ip: 0,
-            locals,
-            stack: Vec::with_capacity(max_stack.max(4)),
-            marker_stack: vec![],
-            closure_ref: None,
-        });
-        Ok(())
+        self.push_frame(fn_id as usize, args)
     }
 
     /// Run until the call stack returns below its current depth.
@@ -191,25 +228,22 @@ impl Vm {
         }
         self.instruction_count += 1;
 
-        let (fn_id, instr_ip) = {
+        let (fn_idx, instr_ip) = {
             let frame = self
                 .call_stack
                 .last()
                 .ok_or_else(|| malformed!("empty call stack"))?;
-            (self.module.functions[frame.fn_idx].fn_id, frame.ip)
+            (frame.fn_idx, frame.ip)
         };
 
         self.step_inner().map_err(|e| {
             if let Some(frame) = self.call_stack.last() {
                 let code = &self.module.functions[frame.fn_idx].code;
                 let disasm = msc_bc::disassemble(code);
-                eprintln!(
-                    "[VM ERR] fn_id={fn_id} ip={instr_ip} fn_idx={}\n{disasm}",
-                    frame.fn_idx
-                );
+                eprintln!("[VM ERR] fn_idx={fn_idx} ip={instr_ip}\n{disasm}",);
             }
             VmError::Runtime {
-                fn_id,
+                fn_id: u32::try_from(fn_idx).unwrap_or(u32::MAX),
                 ip: instr_ip,
                 source: Box::new(e),
             }
@@ -219,7 +253,7 @@ impl Vm {
     fn step_inner(&mut self) -> Result<StepResult, VmError> {
         self.maybe_gc();
 
-        // Phase 1: Read opcode, decode operand, advance IP.
+        // Phase 1: decode instruction, advance IP.
         let (fn_idx, op, operand) = {
             let frame = self
                 .call_stack
@@ -236,7 +270,7 @@ impl Vm {
             (fn_idx, decoded.op, decoded.operand)
         };
 
-        // Phase 2: Try arithmetic (most frequent in hot loops).
+        // Phase 2: arithmetic (most frequent in hot loops).
         {
             let frame = self
                 .call_stack
@@ -247,83 +281,13 @@ impl Vm {
             }
         }
 
-        // Phase 3: Grouped dispatch.
+        // Phase 3: flat dispatch.
         match op {
-            Opcode::MK_VAR => {
-                // Packed operand: (tag << 8) | arity (u16 or u32 if widened)
-                #[allow(clippy::cast_possible_truncation, clippy::as_conversions)]
-                let operand_u16 = (operand & 0xFFFF) as u16;
-                let (tag, arity) = msc_bc::unpack_tag_arity_u16(operand_u16);
-                {
-                    let frame = self
-                        .call_stack
-                        .last_mut()
-                        .ok_or_else(|| malformed!("empty call stack"))?;
-                    ops::exec_mk_var(u32::from(tag), u32::from(arity), frame, &mut self.heap)?;
-                }
-                Ok(StepResult::Continue)
-            }
+            // §4.20 Misc
+            Opcode::NOP => Ok(StepResult::Continue),
+            Opcode::PANIC => Err(VmError::Halted),
 
-            Opcode::NOP
-            | Opcode::BRK
-            | Opcode::DUP
-            | Opcode::POP
-            | Opcode::SWP
-            | Opcode::LD_LOC
-            | Opcode::ST_LOC
-            | Opcode::LD_CST
-            | Opcode::MK_PRD
-            | Opcode::LD_FLD
-            | Opcode::LD_PAY
-            | Opcode::CMP_TAG
-            | Opcode::LD_TAG
-            | Opcode::LD_LEN
-            | Opcode::LD_IDX
-            | Opcode::ST_IDX
-            | Opcode::MK_ARR
-            | Opcode::ALC_REF
-            | Opcode::ALC_ARN
-            | Opcode::ST_FLD
-            | Opcode::LD_GLB
-            | Opcode::ST_GLB
-            | Opcode::TYP_CHK
-            | Opcode::MK_CLO
-            | Opcode::LD_UPV
-            | Opcode::LD_UT => self.step_data(op, operand),
-
-            Opcode::JMP
-            | Opcode::JIF
-            | Opcode::JNF
-            | Opcode::JMP_SH
-            | Opcode::JIF_SH
-            | Opcode::JNF_SH
-            | Opcode::HLT
-            | Opcode::UNR
-            | Opcode::RET
-            | Opcode::RET_UT
-            | Opcode::INV
-            | Opcode::INV_TAL
-            | Opcode::INV_DYN
-            | Opcode::INV_FFI => self.step_control(op, operand),
-
-            Opcode::CNT_MRK | Opcode::CNT_UMK | Opcode::CNT_SAV | Opcode::CNT_RSM => {
-                self.step_continuations(op, operand, fn_idx)
-            }
-
-            Opcode::TSK_SPN
-            | Opcode::TSK_AWT
-            | Opcode::TSK_CMK
-            | Opcode::TSK_CHS
-            | Opcode::TSK_CHR => self.step_concurrency(op, operand),
-
-            _ => Err(malformed!("unknown opcode {:#04x}", op.0)),
-        }
-    }
-
-    fn step_data(&mut self, op: Opcode, operand: u32) -> Result<StepResult, VmError> {
-        match op {
-            // §0 Stack manipulation
-            Opcode::NOP | Opcode::BRK => Ok(StepResult::Continue),
+            // §4.2 Stack
             Opcode::DUP => {
                 self.current_frame()?.dup()?;
                 Ok(StepResult::Continue)
@@ -332,16 +296,43 @@ impl Vm {
                 let _ = self.current_frame()?.stack.pop();
                 Ok(StepResult::Continue)
             }
-            Opcode::LD_UT => {
-                self.current_frame()?.stack.push(Value::UNIT);
-                Ok(StepResult::Continue)
-            }
-            Opcode::SWP => {
+            Opcode::SWAP => {
                 self.current_frame()?.swp()?;
                 Ok(StepResult::Continue)
             }
 
-            // §5 Locals (WID handled by decode_instruction - operand is already widened)
+            // §4.1 Data movement — immediates
+            Opcode::LD_UNIT => {
+                self.current_frame()?.stack.push(Value::UNIT);
+                Ok(StepResult::Continue)
+            }
+            Opcode::LD_TRUE => {
+                self.current_frame()?.stack.push(Value::TRUE);
+                Ok(StepResult::Continue)
+            }
+            Opcode::LD_FALSE => {
+                self.current_frame()?.stack.push(Value::FALSE);
+                Ok(StepResult::Continue)
+            }
+            Opcode::LD_NONE => {
+                // Push a None optional (represented as empty record tag=0).
+                let frame = self
+                    .call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_opt_none(frame, &mut self.heap)?;
+                Ok(StepResult::Continue)
+            }
+            Opcode::LD_SMI => {
+                // FI16: signed 16-bit small immediate integer.
+                let signed = (operand & 0xFFFF) as i16;
+                self.current_frame()?
+                    .stack
+                    .push(Value::from_int(i64::from(signed)));
+                Ok(StepResult::Continue)
+            }
+
+            // §4.1 Data movement — locals
             Opcode::LD_LOC => {
                 let frame = self.current_frame()?;
                 let slot =
@@ -359,285 +350,362 @@ impl Vm {
                 Ok(StepResult::Continue)
             }
 
-            _ => self.step_heap(op, operand),
-        }
-    }
-
-    fn step_heap(&mut self, op: Opcode, operand: u32) -> Result<StepResult, VmError> {
-        match op {
-            // §5 Constants (WID handled transparently)
-            Opcode::LD_CST => {
+            // §4.1 Data movement — const pool
+            Opcode::LD_CONST => {
                 let frame = self
                     .call_stack
                     .last_mut()
                     .ok_or_else(|| malformed!("empty call stack"))?;
-                ops::exec_ld_cst(operand, frame, &self.module.consts, &mut self.heap)?;
+                ops::exec_ld_const(operand, frame, &self.module.consts, &mut self.heap)?;
                 Ok(StepResult::Continue)
             }
 
-            // §5 Struct / variant
-            Opcode::MK_PRD => {
-                let frame = self
-                    .call_stack
-                    .last_mut()
-                    .ok_or_else(|| malformed!("empty call stack"))?;
-                ops::exec_mk_prd(operand, frame, &mut self.heap)?;
+            // §4.1 Data movement — indirect memory
+            Opcode::LD_ADDR => {
+                self.current_frame()?
+                    .stack
+                    .push(Value::from_int(i64::try_from(operand).unwrap_or(0)));
                 Ok(StepResult::Continue)
             }
-            Opcode::LD_FLD => {
+            Opcode::LD_IND => {
                 let frame = self
                     .call_stack
                     .last_mut()
                     .ok_or_else(|| malformed!("empty call stack"))?;
-                ops::exec_ld_fld(operand, frame, &self.heap)?;
+                ops::exec_ld_ind(frame, &self.heap)?;
                 Ok(StepResult::Continue)
             }
-            Opcode::LD_PAY => {
+            Opcode::ST_IND => {
                 let frame = self
                     .call_stack
                     .last_mut()
                     .ok_or_else(|| malformed!("empty call stack"))?;
-                ops::exec_ld_pay(operand, frame, &self.heap)?;
-                Ok(StepResult::Continue)
-            }
-            Opcode::CMP_TAG => {
-                let frame = self
-                    .call_stack
-                    .last_mut()
-                    .ok_or_else(|| malformed!("empty call stack"))?;
-                ops::exec_cmp_tag(operand, frame, &self.heap)?;
+                ops::exec_st_ind(frame, &mut self.heap)?;
                 Ok(StepResult::Continue)
             }
 
-            _ => self.step_array(op, operand),
-        }
-    }
-
-    fn step_array(&mut self, op: Opcode, operand: u32) -> Result<StepResult, VmError> {
-        match op {
-            // §9 Array / heap allocation
-            Opcode::LD_TAG => {
+            // §4.9 Record
+            Opcode::REC_NEW => {
                 let frame = self
                     .call_stack
                     .last_mut()
                     .ok_or_else(|| malformed!("empty call stack"))?;
-                ops::exec_ld_tag(frame, &self.heap)?;
+                ops::exec_rec_new(operand, frame, &mut self.heap)?;
                 Ok(StepResult::Continue)
             }
-            Opcode::LD_LEN => {
+            Opcode::REC_GET => {
                 let frame = self
                     .call_stack
                     .last_mut()
                     .ok_or_else(|| malformed!("empty call stack"))?;
-                ops::exec_ld_len(frame, &self.heap)?;
+                ops::exec_rec_get(operand, frame, &self.heap)?;
                 Ok(StepResult::Continue)
             }
-            Opcode::LD_IDX => {
+            Opcode::REC_SET => {
                 let frame = self
                     .call_stack
                     .last_mut()
                     .ok_or_else(|| malformed!("empty call stack"))?;
-                ops::exec_ld_idx(frame, &self.heap)?;
+                ops::exec_rec_set(operand, frame, &mut self.heap)?;
                 Ok(StepResult::Continue)
             }
-            Opcode::ST_IDX => {
-                let frame = self
-                    .call_stack
-                    .last_mut()
-                    .ok_or_else(|| malformed!("empty call stack"))?;
-                ops::exec_st_idx(frame, &mut self.heap)?;
-                Ok(StepResult::Continue)
-            }
-            Opcode::MK_ARR => {
-                let frame = self
-                    .call_stack
-                    .last_mut()
-                    .ok_or_else(|| malformed!("empty call stack"))?;
-                ops::exec_mk_arr(operand, frame, &mut self.heap)?;
-                Ok(StepResult::Continue)
-            }
-            Opcode::ALC_REF => {
-                let frame = self
-                    .call_stack
-                    .last_mut()
-                    .ok_or_else(|| malformed!("empty call stack"))?;
-                let initial = frame.pop()?;
-                let ptr = self.heap.alloc(operand, vec![initial]);
-                frame.stack.push(Value::from_ref(ptr));
-                Ok(StepResult::Continue)
-            }
-            Opcode::ALC_ARN => {
-                let ptr = self.heap.alloc(operand, vec![]);
-                self.current_frame()?.stack.push(Value::from_ref(ptr));
-                Ok(StepResult::Continue)
-            }
-            Opcode::ST_FLD => {
-                let frame = self
-                    .call_stack
-                    .last_mut()
-                    .ok_or_else(|| malformed!("empty call stack"))?;
-                ops::exec_st_fld(operand, frame, &mut self.heap)?;
+            Opcode::REC_ADDR => {
+                self.current_frame()?
+                    .stack
+                    .push(Value::from_int(i64::try_from(operand).unwrap_or(0)));
                 Ok(StepResult::Continue)
             }
 
-            _ => self.step_globals_closures(op, operand),
-        }
-    }
-
-    fn step_globals_closures(&mut self, op: Opcode, operand: u32) -> Result<StepResult, VmError> {
-        match op {
-            // §12 Globals
-            Opcode::LD_GLB => {
+            // §4.10 Array
+            Opcode::ARR_NEW => {
                 let frame = self
                     .call_stack
                     .last_mut()
                     .ok_or_else(|| malformed!("empty call stack"))?;
-                ops::exec_ld_glb(operand, frame, &mut self.globals)?;
+                ops::exec_arr_new(operand, frame, &mut self.heap)?;
                 Ok(StepResult::Continue)
             }
-            Opcode::ST_GLB => {
+            Opcode::ARR_GET => {
                 let frame = self
                     .call_stack
                     .last_mut()
                     .ok_or_else(|| malformed!("empty call stack"))?;
-                ops::exec_st_glb(operand, frame, &mut self.globals)?;
+                ops::exec_arr_get(frame, &self.heap)?;
+                Ok(StepResult::Continue)
+            }
+            Opcode::ARR_SET => {
+                let frame = self
+                    .call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_arr_set(frame, &mut self.heap)?;
+                Ok(StepResult::Continue)
+            }
+            Opcode::ARR_LEN => {
+                let frame = self
+                    .call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_arr_len(frame, &self.heap)?;
                 Ok(StepResult::Continue)
             }
 
-            // §16 Type check
-            Opcode::TYP_CHK => {
+            // §4.11 Tuple
+            Opcode::TUP_NEW => {
                 let frame = self
                     .call_stack
                     .last_mut()
                     .ok_or_else(|| malformed!("empty call stack"))?;
-                ops::exec_type_chk(operand, frame, &self.module.types, &self.heap)?;
+                ops::exec_tup_new(operand, frame, &mut self.heap)?;
+                Ok(StepResult::Continue)
+            }
+            Opcode::TUP_GET => {
+                let frame = self
+                    .call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_tup_get(operand, frame, &self.heap)?;
                 Ok(StepResult::Continue)
             }
 
-            // §17 Closures - MK_CLO uses packed operand (fn_id_u24 << 8 | upval_count_u8)
-            Opcode::MK_CLO => {
-                let (fn_id, upval_count) = msc_bc::unpack_id_arity(operand);
+            // §4.12 Type operations
+            Opcode::TY_TEST => {
                 let frame = self
                     .call_stack
                     .last_mut()
                     .ok_or_else(|| malformed!("empty call stack"))?;
-                ops::exec_mk_clo(
-                    fn_id,
-                    upval_count,
-                    frame,
-                    &self.module.functions,
-                    &mut self.heap,
-                )?;
+                ops::exec_ty_test(operand, frame, &self.module.types, &self.heap)?;
+                Ok(StepResult::Continue)
+            }
+            Opcode::TY_OF => {
+                let frame = self
+                    .call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_ty_of(frame, &self.heap)?;
+                Ok(StepResult::Continue)
+            }
+            Opcode::TY_EQ => {
+                // Pop two type ids (nats), push bool(a == b).
+                let frame = self.current_frame()?;
+                let (b, a) = frame.pop2()?;
+                let eq = a.0 == b.0;
+                frame.stack.push(Value::from_bool(eq));
+                Ok(StepResult::Continue)
+            }
+            Opcode::TY_CAST => {
+                // Identity cast at this level — the emitter already checked types.
+                Ok(StepResult::Continue)
+            }
+            Opcode::TY_DESC => {
+                let frame = self
+                    .call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_ty_desc(operand, frame, &mut self.heap, &self.module.types)?;
+                Ok(StepResult::Continue)
+            }
+
+            // §4.14 Match
+            Opcode::MAT_TAG => {
+                let frame = self
+                    .call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_mat_tag(operand, frame, &self.heap)?;
+                Ok(StepResult::Continue)
+            }
+            Opcode::MAT_DATA => {
+                let frame = self
+                    .call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_mat_data(operand, frame, &self.heap)?;
+                Ok(StepResult::Continue)
+            }
+
+            // §4.15 Optional
+            Opcode::OPT_SOME => {
+                let frame = self
+                    .call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_opt_some(frame, &mut self.heap)?;
+                Ok(StepResult::Continue)
+            }
+            Opcode::OPT_NONE => {
+                let frame = self
+                    .call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_opt_none(frame, &mut self.heap)?;
+                Ok(StepResult::Continue)
+            }
+            Opcode::OPT_IS => {
+                let frame = self
+                    .call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_opt_is(frame, &self.heap)?;
+                Ok(StepResult::Continue)
+            }
+            Opcode::OPT_GET => {
+                let frame = self
+                    .call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_opt_get(frame, &self.heap)?;
+                Ok(StepResult::Continue)
+            }
+
+            // §4.16 String
+            Opcode::STR_CAT => {
+                let frame = self
+                    .call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_str_cat(frame, &mut self.heap)?;
+                Ok(StepResult::Continue)
+            }
+            Opcode::STR_LEN => {
+                let frame = self
+                    .call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_str_len(frame, &self.heap)?;
+                Ok(StepResult::Continue)
+            }
+
+            // §4.8 Closure
+            Opcode::CLS_NEW => {
+                let frame = self
+                    .call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_cls_new(operand, frame, &self.module.functions, &mut self.heap)?;
+                Ok(StepResult::Continue)
+            }
+            Opcode::CLS_UPV => {
+                let Vm {
+                    call_stack,
+                    heap,
+                    open_upvalue_map,
+                    ..
+                } = self;
+                ops::exec_cls_upv(operand, call_stack, heap, open_upvalue_map)?;
                 Ok(StepResult::Continue)
             }
             Opcode::LD_UPV => {
-                let frame = self
+                let val = ops::exec_ld_upv(operand, &self.call_stack, &self.heap)?;
+                self.call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?
+                    .stack
+                    .push(val);
+                Ok(StepResult::Continue)
+            }
+            Opcode::ST_UPV => {
+                let new_val = self
                     .call_stack
                     .last_mut()
-                    .ok_or_else(|| malformed!("empty call stack"))?;
-                ops::exec_ld_upv(operand, frame, &self.heap)?;
+                    .ok_or_else(|| malformed!("empty call stack"))?
+                    .pop()?;
+                let Vm {
+                    call_stack,
+                    heap,
+                    ..
+                } = self;
+                ops::exec_st_upv(operand, new_val, call_stack, heap)?;
                 Ok(StepResult::Continue)
             }
 
-            _ => Err(malformed!("unknown globals/closures opcode {:#04x}", op.0)),
-        }
-    }
-
-    fn step_control(&mut self, op: Opcode, operand: u32) -> Result<StepResult, VmError> {
-        match op {
-            // Long jumps (i32 offset)
-            Opcode::JMP => {
+            // §4.6 Branch — FI16 signed BE relative offsets
+            Opcode::BR => {
                 let frame = self.current_frame()?;
-                let target = ops::jump_target(frame.ip, ops::read_i32_operand(operand)?)?;
-                frame.ip = target;
+                let offset = ops::read_i16_operand(operand)?;
+                frame.ip = ops::jump_target(frame.ip, offset)?;
                 Ok(StepResult::Continue)
             }
-            Opcode::JIF => {
+            Opcode::BR_TRUE => {
                 let frame = self.current_frame()?;
                 let cond = frame.pop()?;
                 if cond.as_truthy()? {
-                    frame.ip = ops::jump_target(frame.ip, ops::read_i32_operand(operand)?)?;
+                    let offset = ops::read_i16_operand(operand)?;
+                    frame.ip = ops::jump_target(frame.ip, offset)?;
                 }
                 Ok(StepResult::Continue)
             }
-            Opcode::JNF => {
+            Opcode::BR_FALSE => {
                 let frame = self.current_frame()?;
                 let cond = frame.pop()?;
                 if !cond.as_truthy()? {
-                    frame.ip = ops::jump_target(frame.ip, ops::read_i32_operand(operand)?)?;
+                    let offset = ops::read_i16_operand(operand)?;
+                    frame.ip = ops::jump_target(frame.ip, offset)?;
                 }
+                Ok(StepResult::Continue)
+            }
+            Opcode::BR_LONG => {
+                let frame = self.current_frame()?;
+                let offset = ops::read_i24_operand(operand)?;
+                frame.ip = ops::jump_target(frame.ip, offset)?;
                 Ok(StepResult::Continue)
             }
 
-            // Short jumps (i8 offset)
-            Opcode::JMP_SH => {
-                let frame = self.current_frame()?;
-                let target = ops::jump_target(frame.ip, ops::read_i8_operand(operand))?;
-                frame.ip = target;
-                Ok(StepResult::Continue)
-            }
-            Opcode::JIF_SH => {
-                let frame = self.current_frame()?;
-                let cond = frame.pop()?;
-                if cond.as_truthy()? {
-                    frame.ip = ops::jump_target(frame.ip, ops::read_i8_operand(operand))?;
-                }
-                Ok(StepResult::Continue)
-            }
-            Opcode::JNF_SH => {
-                let frame = self.current_frame()?;
-                let cond = frame.pop()?;
-                if !cond.as_truthy()? {
-                    frame.ip = ops::jump_target(frame.ip, ops::read_i8_operand(operand))?;
-                }
-                Ok(StepResult::Continue)
-            }
-
-            // Control - call / return / halt
-            Opcode::HLT => Err(VmError::Halted),
-            Opcode::UNR => Err(malformed!("unr (unreachable) reached at runtime")),
+            // §4.7 Call/Return
             Opcode::RET => {
                 let v = self.current_frame()?.pop()?;
                 self.do_return(v)
             }
-            Opcode::RET_UT => self.do_return(Value::UNIT),
+            Opcode::RET_UNIT => self.do_return(Value::UNIT),
 
-            // INV/INV_TAL use packed operand: (fn_id_u24 << 8) | arity_u8
-            Opcode::INV => {
-                let (fn_id, _arity) = msc_bc::unpack_id_arity(operand);
-                self.do_call_with_stack_args(fn_id)
-            }
-            Opcode::INV_TAL => {
-                let (fn_id, _arity) = msc_bc::unpack_id_arity(operand);
-                self.do_tail_call(fn_id)
-            }
-            Opcode::INV_DYN => {
-                let dyn_call = {
+            // CALL arity:u8 — callee is on the stack below the args.
+            Opcode::CALL => {
+                let arity = (operand & 0xFF) as u8;
+                let call_target = {
                     let frame = self
                         .call_stack
                         .last_mut()
                         .ok_or_else(|| malformed!("empty call stack"))?;
-                    ops::resolve_inv_dyn(operand, frame, &self.heap)?
+                    ops::resolve_callee(arity, frame, &self.heap)?
                 };
-                match dyn_call {
-                    ops::DynCall::Fn(fn_id) => self.do_call_with_stack_args(fn_id),
-                    ops::DynCall::Closure { fn_id, closure_ref } => {
-                        let result = self.do_call_with_stack_args(fn_id)?;
-                        if let Some(frame) = self.call_stack.last_mut() {
-                            frame.closure_ref = Some(closure_ref);
-                        }
-                        Ok(result)
+                match call_target {
+                    ops::CallTarget::Fn(fn_id) => self.do_call_with_stack_args(fn_id, None),
+                    ops::CallTarget::Closure { fn_id, closure_ref } => {
+                        self.do_call_with_stack_args(fn_id, Some(closure_ref))
                     }
                 }
             }
-
-            // INV_FFI uses packed operand: (ffi_id_u24 << 8) | arity_u8
-            Opcode::INV_FFI => {
-                let (ffi_id, _arity) = msc_bc::unpack_id_arity(operand);
-                self.exec_inv_ffi(ffi_id)
+            Opcode::CALL_TAIL => {
+                let arity = (operand & 0xFF) as u8;
+                let call_target = {
+                    let frame = self
+                        .call_stack
+                        .last_mut()
+                        .ok_or_else(|| malformed!("empty call stack"))?;
+                    ops::resolve_callee(arity, frame, &self.heap)?
+                };
+                let (fn_id, closure_ref) = match call_target {
+                    ops::CallTarget::Fn(fn_id) => (fn_id, None),
+                    ops::CallTarget::Closure { fn_id, closure_ref } => (fn_id, Some(closure_ref)),
+                };
+                self.do_tail_call(fn_id, closure_ref)
             }
 
-            _ => Err(malformed!("unknown control opcode {:#04x}", op.0)),
+            // FFI_CALL sym_idx:u8, arity:u8
+            Opcode::FFI_CALL => {
+                let ffi_id = u32::from(ops::fi8x2_a(operand));
+                self.exec_ffi_call(ffi_id)
+            }
+
+            // §4.13 Effects
+            Opcode::EFF_HDL | Opcode::EFF_POP | Opcode::EFF_NEED | Opcode::EFF_RES => {
+                self.step_continuations(op, operand, fn_idx)
+            }
+
+            // §4.18 GC hints — no-ops at this GC level
+            Opcode::GC_PIN | Opcode::GC_UNPIN => Ok(StepResult::Continue),
+
+            _ => Err(malformed!("unknown opcode {:#04x}", op.0)),
         }
     }
 
@@ -660,7 +728,7 @@ impl Vm {
                 Ok(StepResult::Continue)
             }
             continuations::ContAction::Dispatch { handler_fn_id } => {
-                self.do_call_with_stack_args(handler_fn_id)
+                self.do_call_with_stack_args(handler_fn_id, None)
             }
             continuations::ContAction::CrossFrameSearch { effect_id, op_id } => {
                 self.exec_cont_save_cross_frame(effect_id, op_id)
@@ -669,190 +737,7 @@ impl Vm {
         }
     }
 
-    fn step_concurrency(&mut self, op: Opcode, operand: u32) -> Result<StepResult, VmError> {
-        match op {
-            Opcode::TSK_SPN => self.exec_tsk_spn(operand),
-            Opcode::TSK_AWT => self.exec_tsk_awt(),
-            Opcode::TSK_CMK => self.exec_tsk_cmk(),
-            Opcode::TSK_CHS => self.exec_tsk_chs(),
-            Opcode::TSK_CHR => self.exec_tsk_chr(),
-            _ => Err(malformed!("unknown concurrency opcode {:#04x}", op.0)),
-        }
-    }
-
-    fn do_return(&mut self, value: Value) -> Result<StepResult, VmError> {
-        let _ = self.call_stack.pop();
-        if let Some(caller) = self.call_stack.last_mut() {
-            caller.stack.push(value);
-            Ok(StepResult::Continue)
-        } else if self.scheduler.is_some() {
-            self.complete_current_task(value)
-        } else {
-            Ok(StepResult::Returned(value))
-        }
-    }
-
-    fn do_call_with_stack_args(&mut self, fn_id: u32) -> Result<StepResult, VmError> {
-        if self.call_stack.len() >= MAX_CALL_DEPTH {
-            return Err(VmError::StackOverflow);
-        }
-
-        let (fn_idx, func) = self
-            .module
-            .fn_by_id(fn_id)
-            .ok_or_else(|| malformed!("call to unknown fn_id {}", fn_id))?;
-        let param_count = usize::from(func.param_count);
-        let local_count = usize::from(func.local_count);
-        let max_stack = usize::from(func.max_stack);
-
-        let caller_stack_len = self.call_stack.last().map_or(0, |f| f.stack.len());
-        if caller_stack_len < param_count {
-            return Err(malformed!(
-                "call to fn {}: need {} args, stack has {}",
-                fn_id,
-                param_count,
-                caller_stack_len
-            ));
-        }
-        let start = caller_stack_len - param_count;
-        let args: Vec<Value> = self
-            .call_stack
-            .last_mut()
-            .ok_or_else(|| malformed!("empty call stack"))?
-            .stack
-            .drain(start..)
-            .collect();
-
-        let mut locals = vec![Value::UNIT; local_count];
-        for (i, v) in args.into_iter().enumerate() {
-            locals[i] = v;
-        }
-
-        self.call_stack.push(Frame {
-            fn_idx,
-            ip: 0,
-            locals,
-            stack: Vec::with_capacity(max_stack.max(4)),
-            marker_stack: vec![],
-            closure_ref: None,
-        });
-        Ok(StepResult::Continue)
-    }
-
-    fn do_tail_call(&mut self, fn_id: u32) -> Result<StepResult, VmError> {
-        let (fn_idx, func) = self
-            .module
-            .fn_by_id(fn_id)
-            .ok_or_else(|| malformed!("tail call to unknown fn_id {}", fn_id))?;
-        let param_count = usize::from(func.param_count);
-        let local_count = usize::from(func.local_count);
-
-        let frame = self.current_frame()?;
-        let stack_len = frame.stack.len();
-        if stack_len < param_count {
-            return Err(malformed!(
-                "tail call to fn {}: need {} args, stack has {}",
-                fn_id,
-                param_count,
-                stack_len
-            ));
-        }
-        let start = stack_len - param_count;
-        let args: Vec<Value> = frame.stack.drain(start..).collect();
-
-        frame.fn_idx = fn_idx;
-        frame.ip = 0;
-        frame.stack.clear();
-        frame.marker_stack.clear();
-        frame.closure_ref = None;
-
-        frame.locals.resize(local_count, Value::UNIT);
-        for v in &mut frame.locals {
-            *v = Value::UNIT;
-        }
-        for (i, v) in args.into_iter().enumerate() {
-            frame.locals[i] = v;
-        }
-
-        Ok(StepResult::Continue)
-    }
-
-    fn exec_cont_save_cross_frame(
-        &mut self,
-        effect_id: u8,
-        op_id: u32,
-    ) -> Result<StepResult, VmError> {
-        let handler_idx =
-            self.call_stack
-                .iter()
-                .enumerate()
-                .rev()
-                .skip(1)
-                .find_map(|(idx, frame)| {
-                    frame
-                        .marker_stack
-                        .iter()
-                        .rev()
-                        .find(|f| f.effect_id == effect_id)
-                        .map(|_| idx)
-                });
-
-        let h_idx = handler_idx.ok_or(VmError::NoHandler { effect_id })?;
-
-        let handler_fn_id = self.call_stack[h_idx]
-            .marker_stack
-            .iter()
-            .rev()
-            .find(|f| f.effect_id == effect_id)
-            .ok_or_else(|| malformed!("handler not found"))?
-            .handler_fn_id;
-
-        let captured: Vec<Frame> = self.call_stack.drain(h_idx + 1..).collect();
-        self.continuations.push(Continuation {
-            frames: captured,
-            op_id,
-        });
-
-        self.do_call_with_stack_args(handler_fn_id)
-    }
-
-    fn exec_cont_resume(&mut self) -> Result<StepResult, VmError> {
-        let resume_value = self
-            .call_stack
-            .last_mut()
-            .ok_or_else(|| malformed!("cont.resume with empty call stack"))?
-            .stack
-            .pop()
-            .ok_or_else(|| malformed!("cont.resume on empty operand stack"))?;
-
-        let cont = self
-            .continuations
-            .pop()
-            .ok_or_else(|| malformed!("cont.resume with no captured continuation"))?;
-
-        let op_is_fatal = self
-            .module
-            .effects
-            .iter()
-            .flat_map(|eff| eff.ops.iter())
-            .any(|op| op.id == cont.op_id && op.fatal);
-        if op_is_fatal {
-            return Err(VmError::FatalEffectResumed { op_id: cont.op_id });
-        }
-
-        let _ = self.call_stack.pop();
-        self.call_stack.extend(cont.frames);
-
-        let top = self
-            .call_stack
-            .last_mut()
-            .ok_or_else(|| malformed!("cont.resume: no frame after restoring continuation"))?;
-        top.stack.push(resume_value);
-
-        Ok(StepResult::Continue)
-    }
-
-    fn exec_inv_ffi(&mut self, ffi_id: u32) -> Result<StepResult, VmError> {
+    fn exec_ffi_call(&mut self, ffi_id: u32) -> Result<StepResult, VmError> {
         let foreign_idx =
             usize::try_from(ffi_id).map_err(|_| malformed!("foreign fn index overflows usize"))?;
         let foreign_fn = self
@@ -865,11 +750,11 @@ impl Vm {
         let frame = self
             .call_stack
             .last_mut()
-            .ok_or_else(|| malformed!("inv.ffi with empty call stack"))?;
+            .ok_or_else(|| malformed!("ffi.call with empty call stack"))?;
 
         if frame.stack.len() < param_count {
             return Err(malformed!(
-                "inv.ffi: need {} args, stack has {}",
+                "ffi.call: need {} args, stack has {}",
                 param_count,
                 frame.stack.len()
             ));
@@ -880,305 +765,16 @@ impl Vm {
         let host = self
             .host
             .as_mut()
-            .ok_or_else(|| malformed!("inv.ffi without a host attached"))?;
+            .ok_or_else(|| malformed!("ffi.call without a host attached"))?;
         let result = host.call_foreign(ffi_id, &args, &mut self.heap)?;
 
         self.current_frame()?.stack.push(result);
         Ok(StepResult::Continue)
     }
 
-    fn ensure_scheduler(&mut self) {
-        if self.scheduler.is_none() {
-            let mut sched = TaskScheduler::new();
-            let _ = sched.init_main_task(vec![], vec![]);
-            self.scheduler = Some(sched);
-        }
-        if self.channels.is_none() {
-            self.channels = Some(ChannelTable::new());
-        }
-    }
-
-    fn save_current_task(&mut self) {
-        if let Some(sched) = &mut self.scheduler
-            && let Some(cur_id) = sched.current_task_id()
-            && let Some(task) = sched.get_mut(cur_id)
-        {
-            task.call_stack = mem::take(&mut self.call_stack);
-            task.continuations = mem::take(&mut self.continuations);
-        }
-    }
-
-    fn load_task(&mut self, task_id: u32) {
-        if let Some(sched) = &mut self.scheduler
-            && let Some(task) = sched.get_mut(task_id)
-        {
-            self.call_stack = mem::take(&mut task.call_stack);
-            self.continuations = mem::take(&mut task.continuations);
-        }
-    }
-
-    fn exec_tsk_spn(&mut self, fn_id: u32) -> Result<StepResult, VmError> {
-        self.ensure_scheduler();
-
-        let (fn_idx, func) = self
-            .module
-            .fn_by_id(fn_id)
-            .ok_or_else(|| malformed!("tsk.spn: unknown fn_id {}", fn_id))?;
-        let param_count = usize::from(func.param_count);
-        let local_count = usize::from(func.local_count);
-        let max_stack = usize::from(func.max_stack);
-
-        let frame = self
-            .call_stack
-            .last_mut()
-            .ok_or_else(|| malformed!("tsk.spn with empty call stack"))?;
-
-        if frame.stack.len() < param_count {
-            return Err(malformed!(
-                "tsk.spn fn {}: need {} args, stack has {}",
-                fn_id,
-                param_count,
-                frame.stack.len()
-            ));
-        }
-        let start = frame.stack.len() - param_count;
-        let args: Vec<Value> = frame.stack.drain(start..).collect();
-
-        let mut locals = vec![Value::UNIT; local_count];
-        for (i, v) in args.into_iter().enumerate() {
-            locals[i] = v;
-        }
-
-        let new_frame = Frame {
-            fn_idx,
-            ip: 0,
-            locals,
-            stack: Vec::with_capacity(max_stack.max(4)),
-            marker_stack: vec![],
-            closure_ref: None,
-        };
-
-        let task_id = self.scheduler_mut()?.spawn(new_frame);
-        self.current_frame()?.stack.push(Value::from_task(task_id));
-        Ok(StepResult::Continue)
-    }
-
-    fn exec_tsk_awt(&mut self) -> Result<StepResult, VmError> {
-        let frame = self
-            .call_stack
-            .last_mut()
-            .ok_or_else(|| malformed!("tsk.awt with empty call stack"))?;
-        let task_handle = frame
-            .stack
-            .pop()
-            .ok_or_else(|| malformed!("tsk.awt: stack underflow"))?;
-        let task_id = task_handle.as_task_id()?;
-
-        let sched = self
-            .scheduler
-            .as_mut()
-            .ok_or_else(|| malformed!("tsk.awt without scheduler"))?;
-        let task = sched.get(task_id).ok_or(VmError::UnknownTask { task_id })?;
-
-        if let TaskStatus::Completed(v) = task.status {
-            self.current_frame()?.stack.push(v);
-            return Ok(StepResult::Continue);
-        }
-
-        sched.suspend_awaiting_task(task_id);
-        self.save_current_task();
-        self.switch_to_next_task()
-    }
-
-    fn exec_tsk_cmk(&mut self) -> Result<StepResult, VmError> {
-        self.ensure_scheduler();
-
-        let chan_id = self
-            .channels
-            .as_mut()
-            .ok_or_else(|| malformed!("channels not initialized"))?
-            .create();
-
-        self.current_frame()?.stack.push(Value::from_chan(chan_id));
-        Ok(StepResult::Continue)
-    }
-
-    fn exec_tsk_chs(&mut self) -> Result<StepResult, VmError> {
-        let frame = self
-            .call_stack
-            .last_mut()
-            .ok_or_else(|| malformed!("tsk.chs with empty call stack"))?;
-        let value = frame
-            .stack
-            .pop()
-            .ok_or_else(|| malformed!("tsk.chs: stack underflow (value)"))?;
-        let chan_handle = frame
-            .stack
-            .pop()
-            .ok_or_else(|| malformed!("tsk.chs: stack underflow (chan)"))?;
-        let chan_id = chan_handle.as_chan_id()?;
-
-        let channels = self
-            .channels
-            .as_mut()
-            .ok_or_else(|| malformed!("tsk.chs without channel table"))?;
-        let sched = self
-            .scheduler
-            .as_mut()
-            .ok_or_else(|| malformed!("tsk.chs without scheduler"))?;
-        if !sched.wake_one_receiver(chan_id, value) {
-            channels.send(chan_id, value)?;
-        }
-
-        self.current_frame()?.stack.push(Value::UNIT);
-        Ok(StepResult::Continue)
-    }
-
-    fn exec_tsk_chr(&mut self) -> Result<StepResult, VmError> {
-        let frame = self
-            .call_stack
-            .last_mut()
-            .ok_or_else(|| malformed!("tsk.chr with empty call stack"))?;
-        let chan_handle = frame
-            .stack
-            .pop()
-            .ok_or_else(|| malformed!("tsk.chr: stack underflow"))?;
-        let chan_id = chan_handle.as_chan_id()?;
-
-        let channels = self
-            .channels
-            .as_mut()
-            .ok_or_else(|| malformed!("tsk.chr without channel table"))?;
-
-        if let Some(value) = channels.try_recv(chan_id)? {
-            self.current_frame()?.stack.push(value);
-            return Ok(StepResult::Continue);
-        }
-
-        let sched = self
-            .scheduler
-            .as_mut()
-            .ok_or_else(|| malformed!("tsk.chr without scheduler"))?;
-        sched.suspend_awaiting_recv(chan_id);
-        self.save_current_task();
-        self.switch_to_next_task()
-    }
-
-    fn complete_current_task(&mut self, value: Value) -> Result<StepResult, VmError> {
-        let sched = self.scheduler_mut()?;
-        let next_id = sched.complete_current(value);
-        let has_live = sched.has_live_tasks();
-        let main_result = sched
-            .get(0)
-            .and_then(|t| match t.status {
-                TaskStatus::Completed(v) => Some(v),
-                _ => None,
-            })
-            .unwrap_or(value);
-
-        match next_id {
-            Some(id) => {
-                self.load_task(id);
-                Ok(StepResult::Continue)
-            }
-            None if has_live => Err(VmError::Deadlock),
-            None => Ok(StepResult::Returned(main_result)),
-        }
-    }
-
-    fn switch_to_next_task(&mut self) -> Result<StepResult, VmError> {
-        let sched = self.scheduler_mut()?;
-        let next_id = sched.schedule_next();
-        let has_live = sched.has_live_tasks();
-
-        match next_id {
-            Some(id) => {
-                self.load_task(id);
-                Ok(StepResult::Continue)
-            }
-            None if has_live => Err(VmError::Deadlock),
-            None => Ok(StepResult::Returned(Value::UNIT)),
-        }
-    }
-
     fn current_frame(&mut self) -> Result<&mut Frame, VmError> {
         self.call_stack
             .last_mut()
             .ok_or_else(|| malformed!("empty call stack"))
-    }
-
-    fn scheduler_mut(&mut self) -> Result<&mut TaskScheduler, VmError> {
-        self.scheduler
-            .as_mut()
-            .ok_or_else(|| malformed!("scheduler not initialized"))
-    }
-
-    /// Run a mark-sweep garbage collection cycle.
-    pub fn collect_garbage(&mut self) -> usize {
-        let roots = self.collect_roots();
-        self.heap.mark_reachable(&roots);
-        let freed = self.heap.sweep();
-        self.heap.reset_gc_counter();
-        freed
-    }
-
-    /// Run GC if the heap's allocation counter has reached its threshold.
-    fn maybe_gc(&mut self) {
-        if self.heap.needs_gc() {
-            let _ = self.collect_garbage();
-        }
-    }
-
-    fn collect_roots(&self) -> Vec<Value> {
-        let mut roots = vec![];
-        for frame in &self.call_stack {
-            roots.extend_from_slice(&frame.locals);
-            roots.extend_from_slice(&frame.stack);
-            if let Some(cr) = frame.closure_ref {
-                roots.push(cr);
-            }
-        }
-        for cont in &self.continuations {
-            for frame in &cont.frames {
-                roots.extend_from_slice(&frame.locals);
-                roots.extend_from_slice(&frame.stack);
-                if let Some(cr) = frame.closure_ref {
-                    roots.push(cr);
-                }
-            }
-        }
-        roots.extend_from_slice(&self.globals);
-
-        if let Some(sched) = &self.scheduler {
-            for task in sched.tasks() {
-                for frame in &task.call_stack {
-                    roots.extend_from_slice(&frame.locals);
-                    roots.extend_from_slice(&frame.stack);
-                    if let Some(cr) = frame.closure_ref {
-                        roots.push(cr);
-                    }
-                }
-                for cont in &task.continuations {
-                    for frame in &cont.frames {
-                        roots.extend_from_slice(&frame.locals);
-                        roots.extend_from_slice(&frame.stack);
-                        if let Some(cr) = frame.closure_ref {
-                            roots.push(cr);
-                        }
-                    }
-                }
-                if let TaskStatus::Completed(v) = task.status {
-                    roots.push(v);
-                }
-            }
-        }
-        if let Some(chans) = &self.channels {
-            for chan in chans.channels() {
-                for val in &chan.buffer {
-                    roots.push(*val);
-                }
-            }
-        }
-        roots
     }
 }

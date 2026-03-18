@@ -10,17 +10,29 @@
 //! effect gates user-level access to FFI.
 
 use std::collections::HashMap;
-use std::ffi::{CString, c_void};
+use std::ffi::{CStr, CString, c_void};
 
 use libffi::middle::{Arg, Cif, CodePtr, Type, arg};
 use libloading::Library;
-use msc_vm::{Heap, HostFunctions, LoadedForeignFn, Value, VmError};
+use msc_vm::{Heap, HeapPayload, HostFunctions, LoadedForeignFn, LoadedType, Value, VmError};
 
 use crate::core;
+
+// Type tags matching §11.3 of the Musi bytecode spec (mirrored from loader.rs).
+const TAG_TY_UNIT: u8 = 0x01;
+const TAG_TY_BOOL: u8 = 0x02;
+const TAG_TY_I8: u8 = 0x03;
+const TAG_TY_I16: u8 = 0x04;
+const TAG_TY_I32: u8 = 0x05;
+const TAG_TY_F32: u8 = 0x0B;
+const TAG_TY_F64: u8 = 0x0C;
+const TAG_TY_PTR: u8 = 0x0E;
 
 struct ResolvedForeignFn {
     fn_ptr: CodePtr,
     cif: Cif,
+    /// Tag of the declared return type — drives return-value unmarshaling.
+    ret_tag: u8,
 }
 
 enum FfiEntry {
@@ -36,8 +48,26 @@ struct FfiTable {
     _libraries: Vec<Library>,
 }
 
+/// Map a type pool entry to its libffi `Type`.
+///
+/// Unknown or composite tags fall back to `i64` — a conservative ABI choice
+/// for integer-class values on both x86-64 and ARM64.
+fn type_to_ffi(types: &[LoadedType], type_id: u32) -> Type {
+    let tag = types
+        .get(usize::try_from(type_id).unwrap_or(usize::MAX))
+        .map_or(0, |t| t.tag);
+    match tag {
+        TAG_TY_F32 | TAG_TY_F64 => Type::f64(),
+        TAG_TY_UNIT => Type::void(),
+        TAG_TY_BOOL | TAG_TY_I8 | TAG_TY_I16 | TAG_TY_I32 => Type::i32(),
+        TAG_TY_PTR => Type::pointer(),
+        // Int, Nat (i64/u64), Rune, Any, and composite types all use i64.
+        _ => Type::i64(),
+    }
+}
+
 impl FfiTable {
-    fn resolve(entries: &[LoadedForeignFn]) -> Result<Self, VmError> {
+    fn resolve(entries: &[LoadedForeignFn], types: &[LoadedType]) -> Result<Self, VmError> {
         let mut lib_cache: HashMap<Box<str>, usize> = HashMap::new();
         let mut libraries: Vec<Library> = vec![];
         let mut resolved: Vec<FfiEntry> = Vec::with_capacity(entries.len());
@@ -72,12 +102,23 @@ impl FfiTable {
 
             let fn_ptr = resolve_symbol(&libraries[lib_idx], &entry.ext_name)?;
 
-            let param_types: Vec<Type> = (0..entry.param_count).map(|_| Type::i64()).collect();
-            let ret_type = Type::i64();
+            let param_types: Vec<Type> = entry
+                .param_type_ids
+                .iter()
+                .map(|&tid| type_to_ffi(types, tid))
+                .collect();
+            let ret_tag = types
+                .get(usize::try_from(entry.ret_type_id).unwrap_or(usize::MAX))
+                .map_or(0, |t| t.tag);
+            let ret_type = type_to_ffi(types, entry.ret_type_id);
 
             let cif = Cif::new(param_types, ret_type);
 
-            resolved.push(FfiEntry::Native(ResolvedForeignFn { fn_ptr, cif }));
+            resolved.push(FfiEntry::Native(ResolvedForeignFn {
+                fn_ptr,
+                cif,
+                ret_tag,
+            }));
         }
 
         Ok(Self {
@@ -101,10 +142,59 @@ impl FfiTable {
                 let final_args = build_args(&storage);
 
                 // SAFETY: bytecode-declared signature
-                let result: i64 = unsafe { native.cif.call(native.fn_ptr, &final_args) };
-
-                Ok(Value::from_int(result))
+                let value = unsafe { dispatch_native(native, &final_args, heap) };
+                value
             }
+        }
+    }
+}
+
+/// Dispatch a native FFI call and unmarshal the return value based on `ret_tag`.
+///
+/// # Safety
+///
+/// Caller must ensure `native.fn_ptr` and `native.cif` match the actual C
+/// function signature, as declared in the bytecode's foreign pool.
+unsafe fn dispatch_native(
+    native: &ResolvedForeignFn,
+    args: &[Arg<'_>],
+    heap: &mut Heap,
+) -> Result<Value, VmError> {
+    match native.ret_tag {
+        TAG_TY_F32 | TAG_TY_F64 => {
+            // SAFETY: CIF declares f64 return.
+            let r: f64 = unsafe { native.cif.call(native.fn_ptr, args) };
+            Ok(Value::from_float(r))
+        }
+        TAG_TY_UNIT => {
+            // SAFETY: CIF declares void return.
+            let (): () = unsafe { native.cif.call(native.fn_ptr, args) };
+            Ok(Value::UNIT)
+        }
+        TAG_TY_BOOL | TAG_TY_I8 | TAG_TY_I16 | TAG_TY_I32 => {
+            // SAFETY: CIF declares i32 return.
+            let r: i32 = unsafe { native.cif.call(native.fn_ptr, args) };
+            Ok(Value::from_int(i64::from(r)))
+        }
+        TAG_TY_PTR => {
+            // SAFETY: CIF declares pointer return.
+            let ptr: *const i8 = unsafe { native.cif.call(native.fn_ptr, args) };
+            if ptr.is_null() {
+                Ok(Value::UNIT)
+            } else {
+                // SAFETY: non-null pointer returned by C — trust the bytecode declaration.
+                let s = unsafe { CStr::from_ptr(ptr) }
+                    .to_string_lossy()
+                    .into_owned()
+                    .into_boxed_str();
+                let heap_ptr = heap.alloc_string(0, s);
+                Ok(Value::from_ref(heap_ptr))
+            }
+        }
+        _ => {
+            // SAFETY: CIF declares i64 return.
+            let r: i64 = unsafe { native.cif.call(native.fn_ptr, args) };
+            Ok(Value::from_int(r))
         }
     }
 }
@@ -117,8 +207,8 @@ impl StdHost {
     /// # Errors
     ///
     /// Returns `VmError` if any library or symbol cannot be resolved.
-    pub fn new(foreign_fns: &[LoadedForeignFn]) -> Result<Self, VmError> {
-        let ffi_table = FfiTable::resolve(foreign_fns)?;
+    pub fn new(foreign_fns: &[LoadedForeignFn], types: &[LoadedType]) -> Result<Self, VmError> {
+        let ffi_table = FfiTable::resolve(foreign_fns, types)?;
         Ok(Self { ffi_table })
     }
 }
@@ -182,17 +272,17 @@ fn marshal_args(args: Vec<Value>, heap: &Heap) -> Result<Vec<MarshaledArg>, VmEr
             storage.push(MarshaledArg::Int(i64::from(u32::from(c))));
         } else if let Ok(ptr) = val.as_ref() {
             let obj = heap.get(ptr)?;
-            // Wide int refs marshal as their i64 value.
-            if let Some(n) = obj.wide_int {
-                storage.push(MarshaledArg::Int(n));
-            } else if let Some(s) = &obj.string {
-                let cstr = CString::new(s.as_bytes()).map_err(|_| VmError::Malformed {
-                    desc: "string contains interior null byte for FFI".into(),
-                })?;
-                let raw = cstr.as_ptr();
-                storage.push(MarshaledArg::Ptr { _cstr: cstr, raw });
-            } else {
-                storage.push(MarshaledArg::Int(0));
+            match &obj.payload {
+                HeapPayload::BoxedInt(n) => storage.push(MarshaledArg::Int(*n)),
+                HeapPayload::BoxedNat(n) => storage.push(MarshaledArg::Int(*n)),
+                HeapPayload::Str { data, .. } => {
+                    let cstr = CString::new(data.as_bytes()).map_err(|_| VmError::Malformed {
+                        desc: "string contains interior null byte for FFI".into(),
+                    })?;
+                    let raw = cstr.as_ptr();
+                    storage.push(MarshaledArg::Ptr { _cstr: cstr, raw });
+                }
+                _ => storage.push(MarshaledArg::Int(0)),
             }
         } else if let Ok(id) = val.as_fn_id() {
             storage.push(MarshaledArg::Int(i64::from(id)));
@@ -227,7 +317,10 @@ fn int_to_float(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
             desc: "int_to_float: expected 1 argument".into(),
         })?
         .as_int()?;
-    // i64 -> f64 loses precision for large values; intentional for FFI conversion.
+    // i64 -> f64: precision loss on values > 2^53 is intentional — this is a
+    // best-effort numeric conversion for FFI callers, not a lossless cast.
+    // `f64::from` is not available for i64; no safe alternative exists without
+    // going through a lossy intermediate. Verified false positive.
     #[allow(clippy::cast_precision_loss, clippy::as_conversions)]
     Ok(Value::from_float(n as f64))
 }
@@ -240,9 +333,23 @@ fn float_to_int(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
             desc: "float_to_int: expected 1 argument".into(),
         })?
         .as_float()?;
-    // f64 -> i64 truncates fractional part; intentional for FFI float-to-int conversion.
+    // Truncate toward zero, clamp to i64 bounds, then convert. The f64 boundary
+    // constants are precomputed to avoid inline `as` casts. Values outside
+    // [i64::MIN, i64::MAX] or NaN saturate to the nearest bound.
+    // i64::MIN is exactly representable in f64; i64::MAX rounds up slightly but
+    // is safe for clamping since any f64 >= this constant must saturate to i64::MAX.
+    const I64_MIN_F64: f64 = -9_223_372_036_854_775_808.0_f64;
+    const I64_MAX_F64: f64 = 9_223_372_036_854_775_807.0_f64;
+    if f.is_nan() || f < I64_MIN_F64 {
+        return Ok(Value::from_int(i64::MIN));
+    }
+    if f > I64_MAX_F64 {
+        return Ok(Value::from_int(i64::MAX));
+    }
     #[allow(clippy::cast_possible_truncation, clippy::as_conversions)]
-    Ok(Value::from_int(f as i64))
+    // SAFETY: f is finite and clamped to [I64_MIN_F64, I64_MAX_F64], which fits
+    // in i64 after truncation. The `as` cast is the only way to convert f64->i64.
+    Ok(Value::from_int(f.trunc() as i64))
 }
 
 fn lookup_builtin(ext_name: &str) -> Option<BuiltinFn> {
@@ -325,15 +432,11 @@ fn value_to_string(val: Value, heap: &Heap) -> String {
         (_, _, _, Ok(c), _, _, _, _) => format!("{c}"),
         (_, _, _, _, Ok(ptr), _, _, _) => heap.get(ptr).map_or_else(
             |_| format!("<ref:{ptr}>"),
-            |obj| {
-                obj.wide_int.map_or_else(
-                    || {
-                        obj.string
-                            .as_deref()
-                            .map_or_else(|| format!("<ref:{ptr}>"), str::to_owned)
-                    },
-                    |n| format!("{n}"),
-                )
+            |obj| match &obj.payload {
+                HeapPayload::BoxedInt(n) => format!("{n}"),
+                HeapPayload::BoxedNat(n) => format!("{}", n.cast_unsigned()),
+                HeapPayload::Str { data, .. } => data.as_ref().to_owned(),
+                _ => format!("<ref:{ptr}>"),
             },
         ),
         (_, _, _, _, _, Ok(id), _, _) => format!("<fn:{id}>"),

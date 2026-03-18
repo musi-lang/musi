@@ -1,7 +1,7 @@
-//! `.muse` binary loader.
+//! `.seam` binary loader.
 //!
 //! Parses raw bytes into a `LoadedModule` without any dependency on compiler
-//! crates. The binary format is described in §11 of the Musi bytecode spec.
+//! crates. The binary format is the SEAM format described in Phase 3.
 
 use core::str;
 
@@ -9,49 +9,53 @@ use msc_bc::crc32_slice;
 
 use crate::error::VmError;
 
-const MAGIC: &[u8; 4] = b"MUSI";
-const HEADER_SIZE: usize = 40;
+const MAGIC: &[u8; 4] = b"SEAM";
+const HEADER_SIZE: usize = 16;
 
-const TAG_CONST_I32: u8 = 0x01;
-const TAG_CONST_I64: u8 = 0x02;
-const TAG_CONST_F64: u8 = 0x04;
-const TAG_CONST_STR: u8 = 0x05;
-const TAG_CONST_RUNE: u8 = 0x06;
-const TAG_CONST_FN: u8 = 0x08;
+// Constant pool entry tags (from msc_emit/src/const_pool.rs)
+const TAG_CONST_INT: u8 = 0x01;
+const TAG_CONST_FLOAT: u8 = 0x02;
+const TAG_CONST_STR: u8 = 0x03;
 
 /// A decoded constant pool entry.
 #[derive(Debug, Clone)]
 pub enum LoadedConst {
-    I32(i32),
-    I64(i64),
-    F64(f64),
+    Int(i64),
+    Float(f64),
     Str(Box<str>),
-    Rune(char),
-    Fn(u32),
 }
 
-/// A decoded type pool entry (stored as raw tag + opaque payload for the MVP).
+/// A decoded type pool entry (stored as raw tag + opaque payload).
 #[derive(Debug, Clone)]
 pub struct LoadedType {
     pub tag: u8,
     pub data: Vec<u8>,
 }
 
+/// A decoded global variable entry.
+#[derive(Debug, Clone)]
+pub struct LoadedGlobal {
+    pub name: Box<str>,
+    pub type_ref: u16,
+    pub flags: u8,
+    pub initializer: Option<u16>,
+}
+
 /// A decoded effect definition.
 #[derive(Debug, Clone)]
 pub struct LoadedEffect {
-    pub id: u32,
-    /// Index into the const pool for the effect name.
-    pub name_const_idx: u32,
+    pub id: u16,
+    /// Effect name resolved from the string table.
+    pub name: Box<str>,
     pub ops: Vec<LoadedEffectOp>,
 }
 
 /// A decoded effect operation.
 #[derive(Debug, Clone)]
 pub struct LoadedEffectOp {
-    pub id: u32,
-    /// Index into the const pool for the op name.
-    pub name_const_idx: u32,
+    pub id: u16,
+    /// Op name resolved from the string table.
+    pub name: Box<str>,
     pub param_type_ids: Vec<u32>,
     pub ret_type_id: u32,
     pub fatal: bool,
@@ -77,12 +81,11 @@ pub struct LoadedForeignFn {
 /// A decoded function entry.
 #[derive(Debug, Clone)]
 pub struct LoadedFn {
-    pub fn_id: u32,
-    pub type_id: u32,
-    pub local_count: u16,
+    pub name_stridx: u16,
+    pub type_id: u16,
     pub param_count: u16,
+    pub local_count: u16,
     pub max_stack: u16,
-    pub effect_mask: u16,
     pub upvalue_count: u16,
     pub code: Box<[u8]>,
     pub handlers: Vec<HandlerEntry>,
@@ -95,40 +98,49 @@ pub struct HandlerEntry {
     pub handler_fn_id: u32,
 }
 
-/// The fully decoded contents of a `.muse` module.
+/// The fully decoded contents of a `.seam` module.
 #[derive(Debug)]
 pub struct LoadedModule {
-    pub flags: u32,
-    /// `None` if the `entry_point` field is `0xFFFF_FFFF` (library).
+    pub flags: u8,
+    /// `None` for library modules (FLAG_LIBRARY set, no entry point).
     pub entry_point: Option<u32>,
+    pub strings: Vec<Box<str>>,
     pub consts: Vec<LoadedConst>,
     pub types: Vec<LoadedType>,
+    pub globals: Vec<LoadedGlobal>,
     pub effects: Vec<LoadedEffect>,
     pub foreign_fns: Vec<LoadedForeignFn>,
     pub functions: Vec<LoadedFn>,
 }
 
 impl LoadedModule {
-    /// Look up a function by `fn_id`. Returns `None` if not found.
+    /// Look up a function by index (fn_id = array index). Returns `None` if out of bounds.
     #[must_use]
-    pub fn fn_by_id(&self, fn_id: u32) -> Option<(usize, &LoadedFn)> {
-        self.functions
-            .iter()
-            .enumerate()
-            .find(|(_, f)| f.fn_id == fn_id)
+    pub fn fn_by_index(&self, idx: usize) -> Option<&LoadedFn> {
+        self.functions.get(idx)
     }
 }
 
-/// Parse raw `.muse` bytes into a `LoadedModule`.
+// Section tags
+const TAG_STRT: &[u8; 4] = b"STRT";
+const TAG_TYPE: &[u8; 4] = b"TYPE";
+const TAG_CNST: &[u8; 4] = b"CNST";
+const TAG_DEPS: &[u8; 4] = b"DEPS";
+const TAG_GLOB: &[u8; 4] = b"GLOB";
+const TAG_METH: &[u8; 4] = b"METH";
+const TAG_EFCT: &[u8; 4] = b"EFCT";
+const TAG_FRGN: &[u8; 4] = b"FRGN";
+
+/// Parse raw `.seam` bytes into a `LoadedModule`.
 ///
-/// Validates the magic bytes and header CRC32 before decoding pool sections.
+/// Validates the magic bytes and CRC-32 before decoding sections.
 ///
 /// # Errors
 ///
 /// Returns `VmError::Malformed` if the input is too short, contains invalid
-/// pool entries, or has structural inconsistencies. Returns `VmError::BadMagic`
+/// section data, or has structural inconsistencies. Returns `VmError::BadMagic`
 /// if the magic bytes do not match. Returns `VmError::BadChecksum` if the
-/// header CRC32 does not match.
+/// CRC-32 does not match.
 pub fn load(bytes: &[u8]) -> Result<LoadedModule, VmError> {
     if bytes.len() < HEADER_SIZE {
         return Err(VmError::Malformed {
@@ -141,86 +153,135 @@ pub fn load(bytes: &[u8]) -> Result<LoadedModule, VmError> {
         return Err(VmError::BadMagic);
     }
 
-    // CRC32 over first 36 bytes, stored at offset 36.
-    let stored_crc = Cursor::new(bytes, 36).read_u32()?;
-    let computed = crc32_slice(bytes.get(..36).ok_or_else(|| VmError::Malformed {
-        desc: "header truncated before checksum field".into(),
-    })?);
-    if stored_crc != computed {
+    // CRC-32 over all section bytes (bytes[16..]).
+    let stored_crc = {
+        let mut c = Cursor::new(bytes, 12);
+        c.read_u32()?
+    };
+    let section_bytes = bytes.get(HEADER_SIZE..).ok_or_else(|| VmError::Malformed {
+        desc: "header truncated before sections".into(),
+    })?;
+    let computed_crc = crc32_slice(section_bytes);
+    if stored_crc != computed_crc {
         return Err(VmError::BadChecksum);
     }
 
-    let mut hdr = Cursor::new(bytes, 8);
-    let flags = hdr.read_u32()?;
-    let raw_entry = hdr.read_u32()?;
-    let entry_point = if raw_entry == 0xFFFF_FFFF {
-        None
+    // Parse header fields.
+    let flags = bytes[7];
+    let name_stridx = u16::from_be_bytes([bytes[8], bytes[9]]);
+    let path_stridx = u16::from_be_bytes([bytes[10], bytes[11]]);
+    // name_stridx and path_stridx are resolved after STRT is parsed.
+    let _ = name_stridx;
+    let _ = path_stridx;
+
+    // Walk sections by tag+length in order.
+    let mut strings: Vec<Box<str>> = vec![];
+    let mut consts: Vec<LoadedConst> = vec![];
+    let mut types: Vec<LoadedType> = vec![];
+    let mut globals: Vec<LoadedGlobal> = vec![];
+    let mut effects: Vec<LoadedEffect> = vec![];
+    let mut foreign_fns: Vec<LoadedForeignFn> = vec![];
+    let mut functions: Vec<LoadedFn> = vec![];
+
+    let mut cur = Cursor::new(bytes, HEADER_SIZE);
+    while cur.pos < bytes.len() {
+        let tag = cur.read_bytes(4)?;
+        let payload_len = cur.read_u32()? as usize;
+        let payload_start = cur.pos;
+        let payload = cur.read_bytes(payload_len)?;
+
+        let mut sc = Cursor::new(payload, 0);
+        if tag == TAG_STRT {
+            strings = parse_string_table(&mut sc)?;
+        } else if tag == TAG_TYPE {
+            types = parse_type_section(&mut sc)?;
+        } else if tag == TAG_CNST {
+            consts = parse_const_section(&mut sc, &strings)?;
+        } else if tag == TAG_DEPS {
+            // Ignore: count is always 0 for now.
+        } else if tag == TAG_GLOB {
+            globals = parse_glob_section(&mut sc, &strings)?;
+        } else if tag == TAG_METH {
+            functions = parse_meth_section(&mut sc)?;
+        } else if tag == TAG_EFCT {
+            effects = parse_efct_section(&mut sc, &strings)?;
+        } else if tag == TAG_FRGN {
+            foreign_fns = parse_frgn_section(&mut sc, &strings)?;
+        }
+        // CLSS and DBUG: silently skip.
+        let _ = payload_start;
+    }
+
+    // Determine entry point: script modules have FLAG_SCRIPT (0x04), library modules FLAG_LIBRARY (0x02).
+    // The entry fn is always fn_id=0 for scripts (first function in METH).
+    const FLAG_SCRIPT: u8 = 0x04;
+    let entry_point = if flags & FLAG_SCRIPT != 0 && !functions.is_empty() {
+        Some(0u32)
     } else {
-        Some(raw_entry)
+        None
     };
-
-    let const_off = hdr.read_usize("const_off")?;
-    let type_off = hdr.read_usize("type_off")?;
-    let effect_off = hdr.read_usize("effect_off")?;
-    let foreign_off = hdr.read_usize("foreign_off")?;
-    let fn_off = hdr.read_usize("fn_off")?;
-
-    let consts = parse_const_pool(bytes, const_off)?;
-    let types = parse_type_pool(bytes, type_off)?;
-    let effects = parse_effect_pool(bytes, effect_off)?;
-    let foreign_fns = parse_foreign_pool(bytes, foreign_off, &consts)?;
-    let functions = parse_fn_pool(bytes, fn_off)?;
 
     Ok(LoadedModule {
         flags,
         entry_point,
+        strings,
         consts,
         types,
+        globals,
         effects,
         foreign_fns,
         functions,
     })
 }
 
-fn parse_const_pool(bytes: &[u8], off: usize) -> Result<Vec<LoadedConst>, VmError> {
-    let mut cur = Cursor::new(bytes, off);
-    let count = cur.read_usize("const count")?;
+fn parse_string_table(cur: &mut Cursor<'_>) -> Result<Vec<Box<str>>, VmError> {
+    let count = usize::from(cur.read_u16()?);
+    let mut strings = Vec::with_capacity(count);
+    for _ in 0..count {
+        let len = usize::from(cur.read_u16()?);
+        let bytes = cur.read_bytes(len)?;
+        let s = str::from_utf8(bytes)
+            .map_err(|_| VmError::Malformed {
+                desc: "string table entry is not valid UTF-8".into(),
+            })?
+            .into();
+        strings.push(s);
+    }
+    Ok(strings)
+}
+
+fn resolve_stridx(strings: &[Box<str>], idx: u16, ctx: &str) -> Result<Box<str>, VmError> {
+    let i = usize::from(idx);
+    strings.get(i).cloned().ok_or_else(|| VmError::Malformed {
+        desc: format!(
+            "{ctx}: string index {idx} out of bounds (table len={})",
+            strings.len()
+        )
+        .into_boxed_str(),
+    })
+}
+
+fn parse_const_section(
+    cur: &mut Cursor<'_>,
+    strings: &[Box<str>],
+) -> Result<Vec<LoadedConst>, VmError> {
+    let count = usize::from(cur.read_u16()?);
     let mut consts = Vec::with_capacity(count);
     for _ in 0..count {
         let tag = cur.read_u8()?;
         let c = match tag {
-            TAG_CONST_I32 => {
-                let v = cur.read_i32()?;
-                LoadedConst::I32(v)
-            }
-            TAG_CONST_I64 => {
+            TAG_CONST_INT => {
                 let v = cur.read_i64()?;
-                LoadedConst::I64(v)
+                LoadedConst::Int(v)
             }
-            TAG_CONST_F64 => {
+            TAG_CONST_FLOAT => {
                 let bits = cur.read_u64()?;
-                LoadedConst::F64(f64::from_bits(bits))
+                LoadedConst::Float(f64::from_bits(bits))
             }
             TAG_CONST_STR => {
-                let len = cur.read_usize("string length")?;
-                let s = cur.read_bytes(len)?;
-                let text = str::from_utf8(s)
-                    .map_err(|_| VmError::Malformed {
-                        desc: "string constant is not valid UTF-8".into(),
-                    })?
-                    .into();
-                LoadedConst::Str(text)
-            }
-            TAG_CONST_RUNE => {
-                let code = cur.read_u32()?;
-                let c = char::from_u32(code).ok_or_else(|| VmError::Malformed {
-                    desc: "rune constant is not a valid Unicode scalar".into(),
-                })?;
-                LoadedConst::Rune(c)
-            }
-            TAG_CONST_FN => {
-                let id = cur.read_u32()?;
-                LoadedConst::Fn(id)
+                let stridx = cur.read_u16()?;
+                let s = resolve_stridx(strings, stridx, "const pool STR")?;
+                LoadedConst::Str(s)
             }
             _ => {
                 return Err(VmError::Malformed {
@@ -233,7 +294,7 @@ fn parse_const_pool(bytes: &[u8], off: usize) -> Result<Vec<LoadedConst>, VmErro
     Ok(consts)
 }
 
-// Type tags from §11.3.
+// Type tags from the emitter's type_table.rs
 const TAG_TY_UNIT: u8 = 0x01;
 const TAG_TY_BOOL: u8 = 0x02;
 const TAG_TY_I8: u8 = 0x03;
@@ -255,54 +316,44 @@ const TAG_TY_FN: u8 = 0x12;
 const TAG_TY_REF: u8 = 0x13;
 const TAG_TY_ANY: u8 = 0x14;
 
-fn parse_type_pool(bytes: &[u8], off: usize) -> Result<Vec<LoadedType>, VmError> {
-    let mut cur = Cursor::new(bytes, off);
-    let count = cur.read_usize("type count")?;
+fn parse_type_section(cur: &mut Cursor<'_>) -> Result<Vec<LoadedType>, VmError> {
+    let count = usize::from(cur.read_u16()?);
     let mut types = Vec::with_capacity(count);
     for _ in 0..count {
         let tag = cur.read_u8()?;
         let data = match tag {
-            // No-payload primitive types.
+            // No-payload primitives
             TAG_TY_UNIT | TAG_TY_BOOL | TAG_TY_I8 | TAG_TY_I16 | TAG_TY_I32 | TAG_TY_I64
             | TAG_TY_U8 | TAG_TY_U16 | TAG_TY_U32 | TAG_TY_U64 | TAG_TY_F32 | TAG_TY_F64
             | TAG_TY_RUNE | TAG_TY_ANY => vec![],
-            // 4-byte inner type_id.
+            // 4-byte inner type_id
             TAG_TY_PTR | TAG_TY_ARR | TAG_TY_REF => cur.read_bytes(4)?.to_vec(),
-            // product: count:u32 + count * type_id:u32
+            // Product: field_count:u32 BE + field_count * type_id:u32 BE
             TAG_TY_PRODUCT => {
-                let field_count = cur.read_usize("product field count")?;
+                let field_count = cur.read_u32()? as usize;
                 let byte_count = 4 + field_count * 4;
                 let mut data = Vec::with_capacity(byte_count);
-                let fc_u32 = u32::try_from(field_count).map_err(|_| VmError::Malformed {
-                    desc: "product field count overflows u32".into(),
-                })?;
-                data.extend_from_slice(&fc_u32.to_le_bytes());
+                data.extend_from_slice(&(field_count as u32).to_be_bytes());
                 let fields = cur.read_bytes(field_count * 4)?;
                 data.extend_from_slice(fields);
                 data
             }
-            // sum: variant_count:u32 + variant_count * (tag:u32 + payload_id:u32)
+            // Sum: variant_count:u32 BE + variant_count * (tag:u32 BE + payload_id:u32 BE)
             TAG_TY_SUM => {
-                let variant_count = cur.read_usize("sum variant count")?;
+                let variant_count = cur.read_u32()? as usize;
                 let byte_count = 4 + variant_count * 8;
                 let mut data = Vec::with_capacity(byte_count);
-                let vc_u32 = u32::try_from(variant_count).map_err(|_| VmError::Malformed {
-                    desc: "sum variant count overflows u32".into(),
-                })?;
-                data.extend_from_slice(&vc_u32.to_le_bytes());
+                data.extend_from_slice(&(variant_count as u32).to_be_bytes());
                 let variants = cur.read_bytes(variant_count * 8)?;
                 data.extend_from_slice(variants);
                 data
             }
-            // fn: param_count:u32 + params:u32[] + ret_id:u32 + effect_mask:u16
+            // Fn: param_count:u32 BE + params:u32[] BE + ret_id:u32 BE + effect_mask:u16 BE
             TAG_TY_FN => {
-                let param_count = cur.read_usize("fn param count")?;
+                let param_count = cur.read_u32()? as usize;
                 let byte_count = 4 + param_count * 4 + 4 + 2;
                 let mut data = Vec::with_capacity(byte_count);
-                let pc_u32 = u32::try_from(param_count).map_err(|_| VmError::Malformed {
-                    desc: "fn param count overflows u32".into(),
-                })?;
-                data.extend_from_slice(&pc_u32.to_le_bytes());
+                data.extend_from_slice(&(param_count as u32).to_be_bytes());
                 let rest = cur.read_bytes(param_count * 4 + 4 + 2)?;
                 data.extend_from_slice(rest);
                 data
@@ -318,56 +369,43 @@ fn parse_type_pool(bytes: &[u8], off: usize) -> Result<Vec<LoadedType>, VmError>
     Ok(types)
 }
 
-fn parse_effect_pool(bytes: &[u8], off: usize) -> Result<Vec<LoadedEffect>, VmError> {
-    let mut cur = Cursor::new(bytes, off);
-    let count = cur.read_usize("effect count")?;
-    let mut effects = Vec::with_capacity(count);
+fn parse_glob_section(
+    cur: &mut Cursor<'_>,
+    strings: &[Box<str>],
+) -> Result<Vec<LoadedGlobal>, VmError> {
+    let count = usize::from(cur.read_u16()?);
+    let mut globals = Vec::with_capacity(count);
     for _ in 0..count {
-        let id = cur.read_u32()?;
-        let name_const_idx = cur.read_u32()?;
-        let op_count = usize::from(cur.read_u16()?);
-        let mut ops = Vec::with_capacity(op_count);
-        for _ in 0..op_count {
-            let op_id = cur.read_u32()?;
-            let op_name_idx = cur.read_u32()?;
-            let param_count = usize::from(cur.read_u16()?);
-            let mut param_type_ids = Vec::with_capacity(param_count);
-            for _ in 0..param_count {
-                param_type_ids.push(cur.read_u32()?);
-            }
-            let ret_type_id = cur.read_u32()?;
-            let op_flags = cur.read_u8()?;
-            let fatal = op_flags & 1 != 0;
-            ops.push(LoadedEffectOp {
-                id: op_id,
-                name_const_idx: op_name_idx,
-                param_type_ids,
-                ret_type_id,
-                fatal,
-            });
-        }
-        effects.push(LoadedEffect {
-            id,
-            name_const_idx,
-            ops,
+        let name_stridx = cur.read_u16()?;
+        let type_ref = cur.read_u16()?;
+        let flags = cur.read_u8()?;
+        let initializer = if flags & 0x04 != 0 {
+            Some(cur.read_u16()?)
+        } else {
+            None
+        };
+        let name = resolve_stridx(strings, name_stridx, "global name")?;
+        globals.push(LoadedGlobal {
+            name,
+            type_ref,
+            flags,
+            initializer,
         });
     }
-    Ok(effects)
+    Ok(globals)
 }
 
-fn parse_fn_pool(bytes: &[u8], off: usize) -> Result<Vec<LoadedFn>, VmError> {
-    let mut cur = Cursor::new(bytes, off);
-    let count = cur.read_usize("function count")?;
+fn parse_meth_section(cur: &mut Cursor<'_>) -> Result<Vec<LoadedFn>, VmError> {
+    let count = usize::from(cur.read_u16()?);
     let mut functions = Vec::with_capacity(count);
     for _ in 0..count {
-        let fn_id = cur.read_u32()?;
-        let type_id = cur.read_u32()?;
-        let local_count = cur.read_u16()?;
+        let name_stridx = cur.read_u16()?;
+        let type_id = cur.read_u16()?;
         let param_count = cur.read_u16()?;
+        let local_count = cur.read_u16()?;
         let max_stack = cur.read_u16()?;
-        let effect_mask = cur.read_u16()?;
         let upvalue_count = cur.read_u16()?;
-        let code_len = cur.read_usize("code length")?;
+        let code_len = cur.read_u32()? as usize;
         let code = cur.read_bytes(code_len)?.into();
         let handler_count = usize::from(cur.read_u16()?);
         let mut handlers = Vec::with_capacity(handler_count);
@@ -379,13 +417,15 @@ fn parse_fn_pool(bytes: &[u8], off: usize) -> Result<Vec<LoadedFn>, VmError> {
                 handler_fn_id,
             });
         }
+        // safepoint_count and effect_set_count — always 0, consume them.
+        let _safepoint_count = cur.read_u16()?;
+        let _effect_set_count = cur.read_u16()?;
         functions.push(LoadedFn {
-            fn_id,
+            name_stridx,
             type_id,
-            local_count,
             param_count,
+            local_count,
             max_stack,
-            effect_mask,
             upvalue_count,
             code,
             handlers,
@@ -394,17 +434,51 @@ fn parse_fn_pool(bytes: &[u8], off: usize) -> Result<Vec<LoadedFn>, VmError> {
     Ok(functions)
 }
 
-fn parse_foreign_pool(
-    bytes: &[u8],
-    off: usize,
-    consts: &[LoadedConst],
+fn parse_efct_section(
+    cur: &mut Cursor<'_>,
+    strings: &[Box<str>],
+) -> Result<Vec<LoadedEffect>, VmError> {
+    let count = usize::from(cur.read_u16()?);
+    let mut effects = Vec::with_capacity(count);
+    for _ in 0..count {
+        let id = cur.read_u16()?;
+        let name_stridx = cur.read_u16()?;
+        let name = resolve_stridx(strings, name_stridx, "effect name")?;
+        let op_count = usize::from(cur.read_u16()?);
+        let mut ops = Vec::with_capacity(op_count);
+        for _ in 0..op_count {
+            let op_id = cur.read_u16()?;
+            let op_name_stridx = cur.read_u16()?;
+            let op_name = resolve_stridx(strings, op_name_stridx, "effect op name")?;
+            let param_count = usize::from(cur.read_u16()?);
+            let mut param_type_ids = Vec::with_capacity(param_count);
+            for _ in 0..param_count {
+                param_type_ids.push(cur.read_u32()?);
+            }
+            let ret_type_id = cur.read_u32()?;
+            let fatal_byte = cur.read_u8()?;
+            ops.push(LoadedEffectOp {
+                id: op_id,
+                name: op_name,
+                param_type_ids,
+                ret_type_id,
+                fatal: fatal_byte != 0,
+            });
+        }
+        effects.push(LoadedEffect { id, name, ops });
+    }
+    Ok(effects)
+}
+
+fn parse_frgn_section(
+    cur: &mut Cursor<'_>,
+    strings: &[Box<str>],
 ) -> Result<Vec<LoadedForeignFn>, VmError> {
-    let mut cur = Cursor::new(bytes, off);
-    let count = cur.read_usize("foreign fn count")?;
+    let count = usize::from(cur.read_u16()?);
     let mut fns = Vec::with_capacity(count);
     for _ in 0..count {
-        let ext_name_idx = cur.read_usize("ext_name const index")?;
-        let lib_name_idx = cur.read_usize("lib_name const index")?;
+        let ext_name_stridx = cur.read_u16()?;
+        let lib_stridx = cur.read_u16()?;
         let param_count = cur.read_u16()?;
         let pc = usize::from(param_count);
         let mut param_type_ids = Vec::with_capacity(pc);
@@ -412,14 +486,13 @@ fn parse_foreign_pool(
             param_type_ids.push(cur.read_u32()?);
         }
         let ret_type_id = cur.read_u32()?;
-        let flags = cur.read_u8()?;
-        let variadic = flags & 1 != 0;
+        let variadic_byte = cur.read_u8()?;
 
-        let ext_name = resolve_string_const(consts, ext_name_idx)?;
-        let lib_name = if lib_name_idx == usize::try_from(0xFFFF_FFFFu32).unwrap_or(usize::MAX) {
+        let ext_name = resolve_stridx(strings, ext_name_stridx, "foreign fn ext_name")?;
+        let lib_name = if lib_stridx == 0xFFFF {
             Box::from("")
         } else {
-            resolve_string_const(consts, lib_name_idx)?
+            resolve_stridx(strings, lib_stridx, "foreign fn lib_name")?
         };
 
         fns.push(LoadedForeignFn {
@@ -428,23 +501,10 @@ fn parse_foreign_pool(
             param_count,
             param_type_ids,
             ret_type_id,
-            variadic,
+            variadic: variadic_byte != 0,
         });
     }
     Ok(fns)
-}
-
-/// Look up a string constant by index.
-fn resolve_string_const(consts: &[LoadedConst], idx: usize) -> Result<Box<str>, VmError> {
-    let c = consts.get(idx).ok_or_else(|| VmError::Malformed {
-        desc: format!("foreign fn const index {idx} out of bounds").into_boxed_str(),
-    })?;
-    match c {
-        LoadedConst::Str(s) => Ok(s.clone()),
-        _ => Err(VmError::Malformed {
-            desc: format!("foreign fn const index {idx} is not a string").into_boxed_str(),
-        }),
-    }
 }
 
 struct Cursor<'a> {
@@ -462,10 +522,10 @@ impl<'a> Cursor<'a> {
             .bytes
             .get(self.pos..self.pos + N)
             .ok_or_else(|| VmError::Malformed {
-                desc: "unexpected end of file".into(),
+                desc: "unexpected end of section data".into(),
             })?;
         let arr = <[u8; N]>::try_from(slice).map_err(|_| VmError::Malformed {
-            desc: "unexpected end of file".into(),
+            desc: "unexpected end of section data".into(),
         })?;
         self.pos += N;
         Ok(arr)
@@ -476,29 +536,19 @@ impl<'a> Cursor<'a> {
     }
 
     fn read_u16(&mut self) -> Result<u16, VmError> {
-        Ok(u16::from_le_bytes(self.read_array()?))
+        Ok(u16::from_be_bytes(self.read_array()?))
     }
 
     fn read_u32(&mut self) -> Result<u32, VmError> {
-        Ok(u32::from_le_bytes(self.read_array()?))
-    }
-
-    fn read_usize(&mut self, ctx: &str) -> Result<usize, VmError> {
-        usize::try_from(self.read_u32()?).map_err(|_| VmError::Malformed {
-            desc: format!("{ctx} overflows usize").into_boxed_str(),
-        })
-    }
-
-    fn read_i32(&mut self) -> Result<i32, VmError> {
-        Ok(i32::from_le_bytes(self.read_array()?))
+        Ok(u32::from_be_bytes(self.read_array()?))
     }
 
     fn read_i64(&mut self) -> Result<i64, VmError> {
-        Ok(i64::from_le_bytes(self.read_array()?))
+        Ok(i64::from_be_bytes(self.read_array()?))
     }
 
     fn read_u64(&mut self) -> Result<u64, VmError> {
-        Ok(u64::from_le_bytes(self.read_array()?))
+        Ok(u64::from_be_bytes(self.read_array()?))
     }
 
     fn read_bytes(&mut self, len: usize) -> Result<&'a [u8], VmError> {
@@ -506,7 +556,7 @@ impl<'a> Cursor<'a> {
             .bytes
             .get(self.pos..self.pos + len)
             .ok_or_else(|| VmError::Malformed {
-                desc: "unexpected end of file".into(),
+                desc: "unexpected end of section data".into(),
             })?;
         self.pos += len;
         Ok(slice)

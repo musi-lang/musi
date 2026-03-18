@@ -1,6 +1,6 @@
 //! Frame types and stack helpers.
 
-use crate::error::{VmError, malformed};
+use crate::error::{malformed, VmError};
 use crate::value::Value;
 
 /// An activation record for a single function invocation.
@@ -18,6 +18,9 @@ pub struct Frame {
     pub marker_stack: Vec<ContMarker>,
     /// If this frame was entered via a closure call, the heap ref to the closure object.
     pub closure_ref: Option<Value>,
+    /// Heap indices of open upvalue cells whose `frame_depth` points to this frame.
+    /// Closed when this frame exits.
+    pub open_upvalues: Vec<usize>,
 }
 
 /// An active continuation marker binding a marker id to its handler function.

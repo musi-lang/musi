@@ -1,4 +1,4 @@
-//! Continuation mark/save/resume dispatch.
+//! Effect handler dispatch (EFF_HDL / EFF_NEED / EFF_RES / EFF_POP).
 
 use msc_bc::Opcode;
 
@@ -6,7 +6,7 @@ use crate::error::VmError;
 use crate::loader::{HandlerEntry, LoadedEffect};
 use crate::vm::{ContMarker, Frame};
 
-/// Dispatch continuation opcodes.
+/// Dispatch effect opcodes.
 pub fn exec(
     op: Opcode,
     operand: u32,
@@ -15,10 +15,11 @@ pub fn exec(
     handlers: &[HandlerEntry],
 ) -> Result<ContAction, VmError> {
     match op {
-        Opcode::CNT_MRK => exec_cont_mark(operand, frame, handlers),
-        Opcode::CNT_UMK => {
-            let effect_id = u8::try_from(operand).map_err(|_| VmError::Malformed {
-                desc: "cont.unmark effect_id overflow".into(),
+        Opcode::EFF_HDL => exec_eff_hdl(operand, frame, handlers),
+        Opcode::EFF_POP => {
+            // FI16 operand = effect_id.
+            let effect_id = u8::try_from(operand & 0xFF).map_err(|_| VmError::Malformed {
+                desc: "eff.pop effect_id overflow".into(),
             })?;
             if let Some(pos) = frame
                 .marker_stack
@@ -29,19 +30,25 @@ pub fn exec(
             }
             Ok(ContAction::Continue)
         }
-        Opcode::CNT_SAV => Ok(exec_cont_save(operand, frame, effects)),
-        Opcode::CNT_RSM => Ok(ContAction::Resume),
+        Opcode::EFF_NEED => {
+            // FI8x2: op_id in high byte, arity in low byte.
+            let op_id = u32::from((operand >> 8) & 0xFF);
+            let _arity = (operand & 0xFF) as u8;
+            Ok(exec_eff_need(op_id, frame, effects))
+        }
+        Opcode::EFF_RES => Ok(ContAction::Resume),
         _ => Ok(ContAction::NotHandled),
     }
 }
 
-fn exec_cont_mark(
+fn exec_eff_hdl(
     operand: u32,
     frame: &mut Frame,
     handlers: &[HandlerEntry],
 ) -> Result<ContAction, VmError> {
-    let effect_id = u8::try_from(operand).map_err(|_| VmError::Malformed {
-        desc: "cont.mark effect_id overflow".into(),
+    // FI16 operand = effect_id.
+    let effect_id = u8::try_from(operand & 0xFF).map_err(|_| VmError::Malformed {
+        desc: "eff.hdl effect_id overflow".into(),
     })?;
     let handler_fn_id = handlers
         .iter()
@@ -54,11 +61,10 @@ fn exec_cont_mark(
     Ok(ContAction::Continue)
 }
 
-fn exec_cont_save(op_id: u32, frame: &Frame, effects: &[LoadedEffect]) -> ContAction {
+fn exec_eff_need(op_id: u32, frame: &Frame, effects: &[LoadedEffect]) -> ContAction {
     let search_id = resolve_marker_id(op_id, effects);
     let search_id_u8 = u8::try_from(search_id & 0xFF).unwrap_or(u8::MAX);
 
-    // Search current frame first.
     if let Some(marker) = frame
         .marker_stack
         .iter()
@@ -70,33 +76,33 @@ fn exec_cont_save(op_id: u32, frame: &Frame, effects: &[LoadedEffect]) -> ContAc
         };
     }
 
-    // Not found in current frame - request cross-frame search.
     ContAction::CrossFrameSearch {
         effect_id: search_id_u8,
         op_id,
     }
 }
 
-/// Resolve an `op_id` to a marker id by searching the effects table.
-/// Falls back to treating `op_id` as marker id for simple single-op effects.
+/// Resolve an `op_id` to the containing effect's id via the effect table.
+///
+/// Falls back to treating `op_id` as the marker id for single-op effects.
 pub fn resolve_marker_id(op_id: u32, effects: &[LoadedEffect]) -> u32 {
     effects
         .iter()
-        .find(|eff| eff.ops.iter().any(|op| op.id == op_id))
-        .map_or(op_id, |eff| eff.id)
+        .find(|eff| eff.ops.iter().any(|op| u32::from(op.id) == op_id))
+        .map_or(op_id, |eff| u32::from(eff.id))
 }
 
-/// What the continuation dispatcher wants the main loop to do after handling an opcode.
+/// What the continuation dispatcher wants the main loop to do next.
 #[derive(Debug)]
 pub enum ContAction {
-    /// Opcode not in this group - try the next dispatcher.
+    /// Opcode not handled by this group — try the next dispatcher.
     NotHandled,
     /// Normal execution continues.
     Continue,
-    /// Call handler function with the operand stack arguments.
+    /// Call handler function with operand stack arguments.
     Dispatch { handler_fn_id: u32 },
-    /// Handler not found in current frame - search entire call stack.
+    /// Handler not found in current frame — search the entire call stack.
     CrossFrameSearch { effect_id: u8, op_id: u32 },
-    /// Resume a captured continuation (`CONT_RESUME`).
+    /// Resume a captured continuation (`EFF_RES`).
     Resume,
 }

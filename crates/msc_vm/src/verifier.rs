@@ -5,7 +5,7 @@
 
 use std::collections::HashSet;
 
-use msc_bc::{Opcode, instr_len, widened_operand_size};
+use msc_bc::{instr_len, Opcode};
 
 use crate::error::VmError;
 use crate::loader::{LoadedFn, LoadedModule};
@@ -31,27 +31,6 @@ fn collect_boundaries(code: &[u8]) -> Result<HashSet<usize>, VmError> {
     while ip < code.len() {
         let _ = boundaries.insert(ip);
         let raw = code[ip];
-
-        // Handle WID prefix
-        if raw == Opcode::WID {
-            if ip + 1 >= code.len() {
-                return Err(VmError::Verify {
-                    desc: "WID prefix at end of bytecode".into(),
-                });
-            }
-            let inner_op = code[ip + 1];
-            let zone = inner_op >> 6;
-            let wid_size = widened_operand_size(zone);
-            ip += 1 + 1 + wid_size; // WID + opcode + widened operand
-            continue;
-        }
-
-        // Handle EXT prefix
-        if raw == Opcode::EXT {
-            ip += 2; // EXT + extended opcode byte
-            continue;
-        }
-
         let len = instr_len(raw);
         ip += len;
     }
@@ -83,12 +62,16 @@ fn check_const(idx: usize, const_len: usize, name: &str) -> Result<(), VmError> 
     Ok(())
 }
 
-/// Check that a function id exists in the module (when the module has functions).
+/// Check that a function id (as index) is within the module's function table.
 fn check_fn_id(fn_id: u32, module: &LoadedModule, name: &str) -> Result<(), VmError> {
-    let found = module.functions.iter().any(|f| f.fn_id == fn_id);
-    if !found && !module.functions.is_empty() {
+    let idx = fn_id as usize;
+    if idx >= module.functions.len() && !module.functions.is_empty() {
         return Err(VmError::Verify {
-            desc: format!("{name} target fn_id {fn_id} not in module").into_boxed_str(),
+            desc: format!(
+                "{name} target fn_id {fn_id} out of bounds (len={})",
+                module.functions.len()
+            )
+            .into_boxed_str(),
         });
     }
     Ok(())
@@ -111,317 +94,273 @@ fn check_jump_target(
     Ok(())
 }
 
-/// Operand decoders.
-struct Operands<'a> {
-    code: &'a [u8],
-    ip: usize,
-    /// Whether this instruction was preceded by a WID prefix.
-    widened: bool,
-}
-
-impl Operands<'_> {
-    fn u8_op(&self) -> usize {
-        if self.widened {
-            // Widened from u8 → u16
-            let lo = self.code[self.ip + 2]; // WID + opcode + operand
-            let hi = self.code[self.ip + 3];
-            usize::from(u16::from_le_bytes([lo, hi]))
-        } else {
-            usize::from(self.code[self.ip + 1])
-        }
-    }
-
-    fn u16_op_full_u32(&self) -> u32 {
-        if self.widened {
-            let b = [
-                self.code[self.ip + 2],
-                self.code[self.ip + 3],
-                self.code[self.ip + 4],
-                self.code[self.ip + 5],
-            ];
-            u32::from_le_bytes(b)
-        } else {
-            let lo = self.code[self.ip + 1];
-            let hi = self.code[self.ip + 2];
-            u32::from(u16::from_le_bytes([lo, hi]))
-        }
-    }
-
-    fn u32_op(&self) -> u32 {
-        let start = self.ip + 1;
-        let b = [
-            self.code[start],
-            self.code[start + 1],
-            self.code[start + 2],
-            self.code[start + 3],
-        ];
-        u32::from_le_bytes(b)
-    }
-
-    fn i32_jump(&self) -> Result<isize, VmError> {
-        let start = self.ip + 1;
-        let b = [
-            self.code[start],
-            self.code[start + 1],
-            self.code[start + 2],
-            self.code[start + 3],
-        ];
-        let raw = i32::from_le_bytes(b);
-        isize::try_from(raw).map_err(|_| VmError::Verify {
-            desc: "jump offset overflows isize".into(),
-        })
-    }
-
-    fn i8_jump(&self) -> isize {
-        let byte = if self.widened {
-            self.code[self.ip + 2]
-        } else {
-            self.code[self.ip + 1]
-        };
-        isize::from(byte.cast_signed())
-    }
-}
-
-/// Stack depth delta for fixed-pattern opcodes (no operand validation needed).
+/// Stack depth delta for fixed-format opcodes that need no operand validation.
 ///
-/// Returns `Some(delta)` if the opcode is in a fixed group, `None` otherwise.
+/// Returns `Some(delta)` when the opcode is in a known fixed group.
 const fn fixed_stack_delta(op: Opcode) -> Option<i32> {
     match op {
-        // Net 0: no-ops, terminators, unary, struct ops, effects, concurrency
+        // Net 0: no-ops, terminators, unary, type, effect, gc hints, arena
         Opcode::NOP
-        | Opcode::BRK
-        | Opcode::HLT
+        | Opcode::PANIC
         | Opcode::RET
-        | Opcode::RET_UT
-        | Opcode::UNR
-        | Opcode::SWP
-        | Opcode::INT_NEG
-        | Opcode::FLT_NEG
-        | Opcode::BIT_NOT
-        | Opcode::CNV_ITF
-        | Opcode::CNV_FTI
-        | Opcode::LD_FLD
-        | Opcode::MK_ARR
-        | Opcode::LD_PAY
-        | Opcode::LD_TAG
-        | Opcode::CMP_TAG
-        | Opcode::LD_LEN
-        | Opcode::CNT_MRK
-        | Opcode::CNT_UMK
-        | Opcode::CNT_RSM
-        | Opcode::TSK_CHR
-        | Opcode::TSK_AWT
-        | Opcode::ALC_REF
-        | Opcode::TYP_CHK => Some(0),
+        | Opcode::RET_UNIT
+        | Opcode::SWAP
+        | Opcode::NEG
+        | Opcode::NOT
+        | Opcode::ARR_LEN
+        | Opcode::MAT_DATA
+        | Opcode::TY_TEST
+        | Opcode::TY_OF
+        | Opcode::TY_CAST
+        | Opcode::OPT_SOME
+        | Opcode::OPT_IS
+        | Opcode::OPT_GET
+        | Opcode::STR_LEN
+        | Opcode::EFF_HDL
+        | Opcode::EFF_POP
+        | Opcode::EFF_RES
+        | Opcode::GC_PIN
+        | Opcode::GC_UNPIN
+        | Opcode::AR_FREE => Some(0),
 
-        // Push 1: dup, load global, alloc, channel make, load upvalue, load unit
+        // Push 1: dup, load upvalue, load immediates, alloc arena
         Opcode::DUP
-        | Opcode::LD_GLB
-        | Opcode::ALC_ARN
-        | Opcode::TSK_CMK
         | Opcode::LD_UPV
-        | Opcode::LD_UT => Some(1),
+        | Opcode::LD_UNIT
+        | Opcode::LD_TRUE
+        | Opcode::LD_FALSE
+        | Opcode::LD_NONE
+        | Opcode::AR_NEW => Some(1),
 
-        // Net -1: pop, store global, index load, channel send, binary ops
+        // Net -1: pop, conditional branch (consumes cond), index get, binary ops
         Opcode::POP
-        | Opcode::ST_GLB
-        | Opcode::LD_IDX
-        | Opcode::TSK_CHS
-        | Opcode::INT_ADD
-        | Opcode::INT_SUB
-        | Opcode::INT_MUL
-        | Opcode::INT_DIV
-        | Opcode::INT_REM
-        | Opcode::NAT_ADD
-        | Opcode::NAT_SUB
-        | Opcode::NAT_MUL
-        | Opcode::NAT_DIV
-        | Opcode::NAT_REM
-        | Opcode::FLT_ADD
-        | Opcode::FLT_SUB
-        | Opcode::FLT_MUL
-        | Opcode::FLT_DIV
-        | Opcode::FLT_REM
-        | Opcode::BIT_AND
-        | Opcode::BIT_OR
-        | Opcode::BIT_XOR
-        | Opcode::BIT_SHL
-        | Opcode::BIT_SHR
-        | Opcode::BIT_SRU
+        | Opcode::BR_TRUE
+        | Opcode::BR_FALSE
+        | Opcode::ARR_GET
+        | Opcode::ADD
+        | Opcode::SUB
+        | Opcode::MUL
+        | Opcode::DIV
+        | Opcode::REM
+        | Opcode::AND
+        | Opcode::OR
+        | Opcode::XOR
+        | Opcode::SHL
+        | Opcode::SHR
         | Opcode::CMP_EQ
         | Opcode::CMP_NE
         | Opcode::CMP_LT
         | Opcode::CMP_LE
         | Opcode::CMP_GT
         | Opcode::CMP_GE
-        | Opcode::CMP_LTU
-        | Opcode::CMP_LEU
-        | Opcode::CMP_GTU
-        | Opcode::CMP_GEU
-        | Opcode::CMP_FLT
-        | Opcode::CMP_FLE
-        | Opcode::CMP_FGT
-        | Opcode::CMP_FGE => Some(-1),
+        | Opcode::TY_EQ
+        | Opcode::STR_CAT => Some(-1),
 
-        // Net -2: store field (pops obj+value)
-        Opcode::ST_FLD => Some(-2),
+        // Net -2: rec.set (pops obj + value), arr.set pops 3 but that's here encoded as -3 below
+        Opcode::REC_SET => Some(-2),
 
-        // Net -3: store index (pops value+base+index)
-        Opcode::ST_IDX => Some(-3),
+        // Net -3: arr.set (value + idx + arr)
+        Opcode::ARR_SET => Some(-3),
+
+        // Net -2: opt.none pushes 1, ar.alloc pops 2 and pushes 1
+        Opcode::AR_ALLOC => Some(-1),
 
         _ => None,
     }
 }
 
-/// Verify opcodes that need operand validation and return their stack delta.
-fn verify_operand_op(
-    op: Opcode,
-    ops: &Operands<'_>,
-    len: usize,
-    module: &LoadedModule,
-    local_count: usize,
-    const_len: usize,
-    boundaries: &HashSet<usize>,
-) -> Result<i32, VmError> {
-    match op {
-        Opcode::LD_LOC => {
-            check_local(ops.u8_op(), local_count, "ld.loc")?;
-            Ok(1)
-        }
-        Opcode::ST_LOC => {
-            check_local(ops.u8_op(), local_count, "st.loc")?;
-            Ok(-1)
-        }
-        Opcode::LD_CST => {
-            check_const(ops.u8_op(), const_len, "ld.cst")?;
-            Ok(1)
-        }
-        // Long jumps (i32 offset)
-        Opcode::JMP => {
-            check_jump_target(ops.ip, len, ops.i32_jump()?, boundaries)?;
-            Ok(0)
-        }
-        Opcode::JIF | Opcode::JNF => {
-            check_jump_target(ops.ip, len, ops.i32_jump()?, boundaries)?;
-            Ok(-1)
-        }
-        // Short jumps (i8 offset)
-        Opcode::JMP_SH => {
-            check_jump_target(ops.ip, len, ops.i8_jump(), boundaries)?;
-            Ok(0)
-        }
-        Opcode::JIF_SH | Opcode::JNF_SH => {
-            check_jump_target(ops.ip, len, ops.i8_jump(), boundaries)?;
-            Ok(-1)
-        }
-        // INV/INV_TAL use packed operand: (fn_id_u24 << 8) | arity_u8
-        Opcode::INV => {
-            let packed = ops.u32_op();
-            let (fn_id, _arity) = msc_bc::unpack_id_arity(packed);
-            check_fn_id(fn_id, module, "inv")?;
-            let param_count = module
-                .fn_by_id(fn_id)
-                .map_or(0, |(_, f)| i32::from(f.param_count));
-            Ok(1 - param_count)
-        }
-        Opcode::INV_TAL => {
-            let packed = ops.u32_op();
-            let (fn_id, _arity) = msc_bc::unpack_id_arity(packed);
-            check_fn_id(fn_id, module, "inv.tal")?;
-            let param_count = module
-                .fn_by_id(fn_id)
-                .map_or(0, |(_, f)| i32::from(f.param_count));
-            Ok(-param_count)
-        }
-        // MK_VAR uses packed u16 operand: (tag_u8 << 8) | arity_u8
-        Opcode::MK_VAR => {
-            let packed = ops.u16_op_full_u32();
-            let arity = (packed & 0xFF).cast_signed();
-            Ok(1 - arity)
-        }
-        Opcode::MK_PRD => {
-            let field_count = i32::try_from(ops.u8_op()).unwrap_or(i32::MAX);
-            Ok(1 - field_count)
-        }
-        Opcode::INV_DYN => {
-            let arg_count = i32::try_from(ops.u8_op()).unwrap_or(i32::MAX);
-            Ok(-arg_count)
-        }
-        Opcode::CNT_SAV => {
-            let op_id = ops.u32_op();
-            let param_count = lookup_effect_op_param_count(module, op_id);
-            Ok(1 - param_count)
-        }
-        Opcode::TSK_SPN => {
-            let fn_id = ops.u32_op();
-            check_fn_id(fn_id, module, "tsk.spn")?;
-            let param_count = module
-                .fn_by_id(fn_id)
-                .map_or(0, |(_, f)| i32::from(f.param_count));
-            Ok(1 - param_count)
-        }
-        // INV_FFI uses packed operand: (ffi_id_u24 << 8) | arity_u8
-        Opcode::INV_FFI => {
-            let packed = ops.u32_op();
-            let (ffi_id, _arity) = msc_bc::unpack_id_arity(packed);
-            let idx = usize::try_from(ffi_id).unwrap_or(usize::MAX);
-            if idx >= module.foreign_fns.len() {
-                return Err(VmError::Verify {
-                    desc: format!("inv.ffi index {idx} out of bounds").into_boxed_str(),
-                });
-            }
-            let param_count = i32::from(module.foreign_fns[idx].param_count);
-            Ok(1 - param_count)
-        }
-        // MK_CLO uses packed operand: (fn_id_u24 << 8) | upval_count_u8
-        Opcode::MK_CLO => {
-            let packed = ops.u32_op();
-            let (fn_id, upval_count) = msc_bc::unpack_id_arity(packed);
-            check_fn_id(fn_id, module, "mk.clo")?;
-            Ok(1 - i32::from(upval_count))
-        }
-        _ => Err(VmError::Verify {
-            desc: format!("unknown opcode {:#04x}", op.0).into_boxed_str(),
-        }),
-    }
+/// Read a big-endian i16 jump offset from the instruction at `ip`.
+fn read_be_i16_offset(code: &[u8], ip: usize) -> isize {
+    let hi = code[ip + 1];
+    let lo = code[ip + 2];
+    let raw = i16::from_be_bytes([hi, lo]);
+    isize::from(raw)
 }
 
-/// Look up the parameter count for an effect operation by its flat index.
-fn lookup_effect_op_param_count(module: &LoadedModule, op_id: u32) -> i32 {
-    let mut idx = 0u32;
-    for effect in &module.effects {
-        for op in &effect.ops {
-            if idx == op_id {
-                return i32::try_from(op.param_type_ids.len()).unwrap_or(0);
-            }
-            idx += 1;
-        }
-    }
-    0
+/// Read a big-endian signed i24 jump offset from the instruction at `ip`.
+fn read_be_i24_offset(code: &[u8], ip: usize) -> isize {
+    let b0 = code[ip + 1];
+    let b1 = code[ip + 2];
+    let b2 = code[ip + 3];
+    let raw = i32::from_be_bytes([b0, b1, b2, 0]) >> 8;
+    raw as isize
 }
 
-/// Compute the stack depth delta for an opcode and verify its operands.
-///
-/// Returns the net stack change.
+/// Read a big-endian u16 operand (FI16 or FI8x2) as a plain u32.
+fn read_be_u16(code: &[u8], ip: usize) -> u32 {
+    let hi = code[ip + 1];
+    let lo = code[ip + 2];
+    u32::from(u16::from_be_bytes([hi, lo]))
+}
+
+/// Compute the stack depth delta for an opcode and validate its operands.
 fn verify_op(
     op: Opcode,
-    ops: &Operands<'_>,
+    code: &[u8],
+    ip: usize,
     len: usize,
     module: &LoadedModule,
     local_count: usize,
+    upvalue_count: usize,
     const_len: usize,
     boundaries: &HashSet<usize>,
 ) -> Result<i32, VmError> {
     if let Some(delta) = fixed_stack_delta(op) {
         return Ok(delta);
     }
-    verify_operand_op(op, ops, len, module, local_count, const_len, boundaries)
+
+    match op {
+        // §4.1 Data movement
+        Opcode::LD_LOC => {
+            let slot = usize::from(code[ip + 1]);
+            check_local(slot, local_count, "ld.loc")?;
+            Ok(1)
+        }
+        Opcode::ST_LOC => {
+            let slot = usize::from(code[ip + 1]);
+            check_local(slot, local_count, "st.loc")?;
+            Ok(-1)
+        }
+        Opcode::LD_CONST => {
+            let idx = read_be_u16(code, ip) as usize;
+            check_const(idx, const_len, "ld.const")?;
+            Ok(1)
+        }
+        Opcode::LD_SMI => Ok(1),
+        Opcode::LD_ADDR => Ok(1),
+        Opcode::LD_IND => Ok(0),  // pops ref, pushes value
+        Opcode::ST_IND => Ok(-2), // pops ref + value
+        Opcode::ST_UPV => Ok(-1),
+
+        // §4.6 Branch
+        Opcode::BR => {
+            let offset = read_be_i16_offset(code, ip);
+            check_jump_target(ip, len, offset, boundaries)?;
+            Ok(0)
+        }
+        // BR_TRUE / BR_FALSE handled in fixed_stack_delta but need jump validation here.
+        // They are not in fixed_stack_delta so we reach this arm.
+        // (They ARE in fixed_stack_delta as -1 — not reached here.)
+        Opcode::BR_LONG => {
+            let offset = read_be_i24_offset(code, ip);
+            check_jump_target(ip, len, offset, boundaries)?;
+            Ok(0)
+        }
+
+        // §4.7 Call/Return
+        Opcode::CALL => {
+            let arity = i32::from(code[ip + 1]);
+            // Pops (arity args + 1 callee), pushes 1 result = net -(arity)
+            Ok(-arity)
+        }
+        Opcode::CALL_TAIL => {
+            let arity = i32::from(code[ip + 1]);
+            Ok(-(arity + 1))
+        }
+
+        // §4.8 Closure
+        Opcode::CLS_NEW => {
+            let fn_id = u32::from(read_be_u16(code, ip));
+            check_fn_id(fn_id, module, "cls.new")?;
+            Ok(1)
+        }
+        Opcode::CLS_UPV => {
+            // FI8x2: kind in hi byte (0=local, 1=parent), idx in lo byte.
+            let operand = read_be_u16(code, ip);
+            let kind = (operand >> 8) as u8;
+            let idx = (operand & 0xFF) as usize;
+            if kind > 1 {
+                return Err(VmError::Verify {
+                    desc: format!("cls.upv: invalid kind {kind}").into_boxed_str(),
+                });
+            }
+            if kind == 0 {
+                check_local(idx, local_count, "cls.upv local")?;
+            } else if upvalue_count > 0 && idx >= upvalue_count {
+                return Err(VmError::Verify {
+                    desc: format!("cls.upv parent: idx {idx} >= upvalue_count {upvalue_count}")
+                        .into_boxed_str(),
+                });
+            }
+            Ok(0)
+        }
+
+        // §4.9 Record
+        Opcode::REC_NEW => {
+            // FI8x2: tag in hi byte, arity in lo byte.
+            let operand = read_be_u16(code, ip);
+            let arity = i32::from((operand & 0xFF) as u8);
+            Ok(1 - arity)
+        }
+        Opcode::REC_GET => Ok(0), // pops rec, pushes field
+        Opcode::REC_ADDR => Ok(1),
+
+        // §4.10 Array
+        Opcode::ARR_NEW => Ok(0), // pops len, pushes ref
+
+        // §4.11 Tuple
+        Opcode::TUP_NEW => {
+            let arity = i32::from(code[ip + 1]);
+            Ok(1 - arity)
+        }
+        Opcode::TUP_GET => Ok(0), // pops tup, pushes field
+
+        // §4.12 Type
+        Opcode::TY_DESC => Ok(1),
+
+        // §4.13 Effect
+        Opcode::EFF_NEED => {
+            // FI8x2: op_id in hi byte, arity in lo byte. Use the effect table's param
+            // count when available; fall back to the inline arity byte.
+            let operand = read_be_u16(code, ip);
+            let op_id = u32::from((operand >> 8) as u8);
+            let inline_arity = i32::from((operand & 0xFF) as u8);
+            let param_count = {
+                let from_table = lookup_effect_op_param_count(module, op_id);
+                if from_table > 0 {
+                    from_table
+                } else {
+                    inline_arity
+                }
+            };
+            Ok(1 - param_count)
+        }
+
+        // §4.14 Match
+        Opcode::MAT_TAG => Ok(0), // pops ref, pushes bool
+
+        // §4.15 Optional
+        Opcode::OPT_NONE => Ok(1),
+
+        // §4.19 Foreign
+        Opcode::FFI_CALL => {
+            let operand = read_be_u16(code, ip);
+            let ffi_id = usize::from((operand >> 8) as u8);
+            if ffi_id >= module.foreign_fns.len() && !module.foreign_fns.is_empty() {
+                return Err(VmError::Verify {
+                    desc: format!("ffi.call sym_idx {ffi_id} out of bounds").into_boxed_str(),
+                });
+            }
+            let param_count = module
+                .foreign_fns
+                .get(ffi_id)
+                .map_or(0, |f| i32::from(f.param_count));
+            // Pops param_count + 1 callee… wait, FFI_CALL has no callee on stack in new ISA.
+            // sym_idx is baked into operand. So net = 1 - param_count.
+            Ok(1 - param_count)
+        }
+
+        _ => Err(VmError::Verify {
+            desc: format!("unknown opcode {:#04x}", op.0).into_boxed_str(),
+        }),
+    }
 }
 
 fn verify_fn(func: &LoadedFn, module: &LoadedModule) -> Result<(), VmError> {
     let code = &func.code;
     let const_len = module.consts.len();
-    let local_count = usize::from(func.local_count);
+    let local_count = usize::from(func.param_count) + usize::from(func.local_count);
+    let upvalue_count = usize::from(func.upvalue_count);
     let max_stack = usize::from(func.max_stack);
 
     let boundaries = collect_boundaries(code)?;
@@ -431,67 +370,34 @@ fn verify_fn(func: &LoadedFn, module: &LoadedModule) -> Result<(), VmError> {
 
     while ip < code.len() {
         let raw = code[ip];
+        let op = Opcode(raw);
+        let len = instr_len(raw);
 
-        // Handle WID prefix - decode inner opcode and verify with widened operand
-        if raw == Opcode::WID {
-            let inner_op_byte = code[ip + 1];
-            let inner_op = Opcode(inner_op_byte);
-            let zone = inner_op_byte >> 6;
-            let wid_size = widened_operand_size(zone);
-            let total_len = 1 + 1 + wid_size;
-            let ops = Operands {
+        // Validate that the instruction fits within the bytecode slice.
+        if ip + len > code.len() {
+            return Err(VmError::Verify {
+                desc: format!("instruction at {ip} extends past end of bytecode").into_boxed_str(),
+            });
+        }
+
+        // BR_TRUE / BR_FALSE: delta is -1 AND need jump check.
+        if matches!(op, Opcode::BR_TRUE | Opcode::BR_FALSE) {
+            let offset = read_be_i16_offset(code, ip);
+            check_jump_target(ip, len, offset, &boundaries)?;
+            depth -= 1;
+        } else {
+            depth += verify_op(
+                op,
                 code,
                 ip,
-                widened: true,
-            };
-            depth += verify_op(
-                inner_op,
-                &ops,
-                total_len,
+                len,
                 module,
                 local_count,
+                upvalue_count,
                 const_len,
                 &boundaries,
             )?;
-
-            if depth > 0 {
-                let d = usize::try_from(depth).unwrap_or(usize::MAX);
-                if d > max_stack && max_stack > 0 {
-                    return Err(VmError::Verify {
-                        desc: format!(
-                            "stack depth {d} exceeds max_stack {max_stack} at offset {ip}"
-                        )
-                        .into_boxed_str(),
-                    });
-                }
-            }
-
-            let is_terminator = matches!(
-                inner_op,
-                Opcode::RET | Opcode::RET_UT | Opcode::UNR | Opcode::HLT
-            );
-            if is_terminator {
-                depth = 0;
-            }
-            ip += total_len;
-            continue;
         }
-
-        // Handle EXT prefix
-        if raw == Opcode::EXT {
-            ip += 2;
-            continue;
-        }
-
-        let op = Opcode(raw);
-        let len = instr_len(raw);
-        let ops = Operands {
-            code,
-            ip,
-            widened: false,
-        };
-
-        depth += verify_op(op, &ops, len, module, local_count, const_len, &boundaries)?;
 
         if depth > 0 {
             let d = usize::try_from(depth).unwrap_or(usize::MAX);
@@ -503,9 +409,9 @@ fn verify_fn(func: &LoadedFn, module: &LoadedModule) -> Result<(), VmError> {
             }
         }
 
-        let is_terminator = matches!(op, Opcode::RET | Opcode::RET_UT | Opcode::UNR | Opcode::HLT);
-        let is_unconditional_jump = matches!(op, Opcode::JMP | Opcode::JMP_SH);
-        if is_terminator || is_unconditional_jump {
+        let is_terminator = matches!(op, Opcode::RET | Opcode::RET_UNIT | Opcode::PANIC);
+        let is_unconditional_branch = matches!(op, Opcode::BR | Opcode::BR_LONG);
+        if is_terminator || is_unconditional_branch {
             depth = 0;
         }
 
@@ -513,4 +419,16 @@ fn verify_fn(func: &LoadedFn, module: &LoadedModule) -> Result<(), VmError> {
     }
 
     Ok(())
+}
+
+/// Look up the parameter count for an effect operation by op_id.
+///
+/// Used for `EFF_NEED` stack delta: pops arity args, pushes 1 result.
+fn lookup_effect_op_param_count(module: &LoadedModule, op_id: u32) -> i32 {
+    module
+        .effects
+        .iter()
+        .flat_map(|eff| eff.ops.iter())
+        .find(|op| u32::from(op.id) == op_id)
+        .map_or(0, |op| i32::try_from(op.param_type_ids.len()).unwrap_or(0))
 }

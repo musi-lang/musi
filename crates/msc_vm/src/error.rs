@@ -3,7 +3,7 @@
 /// All errors that can occur during loading, verification, or execution.
 #[derive(Debug, thiserror::Error)]
 pub enum VmError {
-    #[error("bad magic bytes - not a .muse file")]
+    #[error("bad magic bytes - not a .seam file")]
     BadMagic,
     #[error("checksum mismatch - file may be corrupted")]
     BadChecksum,
