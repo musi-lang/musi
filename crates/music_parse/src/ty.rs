@@ -3,9 +3,9 @@
 #[cfg(test)]
 mod tests;
 
+use music_ast::ExprIdx;
 use music_ast::expr::{Arrow, EffectItem, EffectSet, Expr, FieldKey};
 use music_ast::ty_param::{Constraint, Rel};
-use music_ast::ExprIdx;
 use music_lex::token::TokenKind;
 use music_shared::Symbol;
 
