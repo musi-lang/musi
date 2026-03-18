@@ -755,8 +755,12 @@ name = "musi"
 version = "0.1.0-rc1"
 dependencies = [
  "clap",
+ "msc",
  "msc_builtins",
+ "msc_manifest",
+ "msc_resolve",
  "msc_vm",
+ "serde_json",
 ]
 
 [[package]]
