@@ -23,6 +23,12 @@ pub enum EmitError {
     FieldNotFound { desc: Box<str> },
     #[error("missing type info for {desc}")]
     NoTypeInfo { desc: Box<str> },
+    #[error("too many strings (max 65535)")]
+    TooManyStrings,
+    #[error("too many globals (max 65535)")]
+    TooManyGlobals,
+    #[error("section overflow")]
+    SectionOverflow,
 }
 
 impl EmitError {

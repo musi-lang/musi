@@ -1,8 +1,8 @@
 //! Control-flow instruction emission: piecewise and match expressions.
 
-use msc_ast::PatIdx;
 use msc_ast::expr::{MatchArm, PwArm, PwGuard};
 use msc_ast::lit::Lit;
+use msc_ast::PatIdx;
 use msc_ast::{AstArenas, Pat};
 
 use crate::const_pool::ConstValue;
@@ -10,8 +10,8 @@ use crate::error::EmitError;
 use msc_ast::ExprIdx;
 
 use super::super::emitter::Emitter;
-use super::FnCtx;
 use super::expr::{emit_expr, emit_expr_tail, resolve_variant_tag};
+use super::FnCtx;
 
 /// Emit a piecewise expression. Leaves result on stack.
 pub fn emit_piecewise(
@@ -158,9 +158,9 @@ fn emit_pat_test(
         Pat::Variant { name, .. } => {
             let name_str = em.interner.resolve(name);
             if name_str == "True" || name_str == "False" {
-                let expected = name_str == "True";
-                let cv = ConstValue::Bool(expected);
-                let ci = em.cp.intern(&cv, em.interner)?;
+                let expected = i64::from(name_str == "True");
+                let cv = ConstValue::Int(expected);
+                let ci = em.cp.intern(&cv)?;
                 fc.fe.emit_ld_loc(scrutinee_slot);
                 fc.fe.emit_ld_cst(ci);
                 fc.fe.emit_cmp_eq();
@@ -170,7 +170,7 @@ fn emit_pat_test(
             let tag = resolve_variant_tag(em, name)?;
             if let Some(ts) = tag_slot {
                 let tag_cv = ConstValue::Int(i64::from(tag));
-                let ci = em.cp.intern(&tag_cv, em.interner)?;
+                let ci = em.cp.intern(&tag_cv)?;
                 fc.fe.emit_ld_loc(ts);
                 fc.fe.emit_ld_cst(ci);
                 fc.fe.emit_cmp_eq();
@@ -197,7 +197,7 @@ fn emit_pat_test(
                     desc: "array pattern element count".into(),
                 })?;
             let len_const = ConstValue::Int(expected_len);
-            let len_cst_idx = em.cp.intern(&len_const, em.interner)?;
+            let len_cst_idx = em.cp.intern(&len_const)?;
             fc.fe.emit_ld_loc(scrutinee_slot);
             fc.fe.emit_ld_len();
             fc.fe.emit_ld_cst(len_cst_idx);
@@ -222,14 +222,17 @@ fn emit_lit_pat_test(
 ) -> Result<(), EmitError> {
     let cv = match lit {
         Lit::Int { value, .. } => ConstValue::Int(*value),
-        Lit::Rune { codepoint, .. } => ConstValue::Rune(*codepoint),
-        Lit::Str { value, .. } => ConstValue::Str(*value),
+        Lit::Rune { codepoint, .. } => ConstValue::Int(i64::from(*codepoint)),
+        Lit::Str { value, .. } => {
+            let stridx = em.string_table.intern(*value, em.interner)?;
+            ConstValue::Str(stridx)
+        }
         Lit::Float { value, .. } => ConstValue::Float(*value),
         Lit::Unit { .. } | Lit::FStr { .. } => return Ok(()),
     };
 
     fc.fe.emit_ld_loc(scrutinee_slot);
-    let ci = em.cp.intern(&cv, em.interner)?;
+    let ci = em.cp.intern(&cv)?;
     fc.fe.emit_ld_cst(ci);
     fc.fe.emit_cmp_eq();
     fc.fe.emit_jmp_f(fail_label);
@@ -321,7 +324,7 @@ fn emit_pat_bind(
                 let elem_idx = i64::try_from(i).map_err(|_| EmitError::OperandOverflow {
                     desc: "array pattern element index".into(),
                 })?;
-                let elem_cst_idx = em.cp.intern(&ConstValue::Int(elem_idx), em.interner)?;
+                let elem_cst_idx = em.cp.intern(&ConstValue::Int(elem_idx))?;
                 let elem_slot = fc.alloc_local();
                 fc.fe.emit_ld_loc(value_slot);
                 fc.fe.emit_ld_cst(elem_cst_idx);

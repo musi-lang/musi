@@ -1,31 +1,23 @@
 //! Constant pool builder.
 //!
-//! Interns constants by value so identical values share a single pool entry.
-//! Strings are deduplicated separately; other scalars are deduplicated by value.
+//! Interns constants by value. Str entries hold a u16 stridx into StringTable.
 
 use std::collections::HashMap;
 
-use msc_shared::{Interner, Symbol};
-
 use crate::error::EmitError;
 
-// Constant pool entry tags (§11.2)
-const TAG_I32: u8 = 0x01;
-const TAG_I64: u8 = 0x02;
-const TAG_F64: u8 = 0x04;
-const TAG_STR: u8 = 0x05;
-const TAG_RUNE: u8 = 0x06;
-const TAG_FN: u8 = 0x08;
+// Constant pool entry tags
+const TAG_INT: u8 = 0x01;
+const TAG_FLOAT: u8 = 0x02;
+const TAG_STR: u8 = 0x03;
 
 /// A compile-time constant value for the constant pool.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ConstValue {
     Int(i64),
     Float(f64),
-    Bool(bool),
-    Rune(u32),
-    Str(Symbol),
-    FnRef(u32),
+    /// String constant, stored as a stridx (u16) into StringTable.
+    Str(u16),
 }
 
 /// Key for deduplication in the constant pool.
@@ -33,10 +25,7 @@ pub enum ConstValue {
 enum ConstKey {
     Int(i64),
     Float(u64), // f64 bits
-    Bool(bool),
-    Rune(u32),
-    Str(Symbol),
-    Fn(u32),
+    Str(u16),
 }
 
 impl ConstKey {
@@ -44,10 +33,7 @@ impl ConstKey {
         match v {
             ConstValue::Int(n) => Self::Int(*n),
             ConstValue::Float(f) => Self::Float(f.to_bits()),
-            ConstValue::Bool(b) => Self::Bool(*b),
-            ConstValue::Rune(r) => Self::Rune(*r),
             ConstValue::Str(s) => Self::Str(*s),
-            ConstValue::FnRef(id) => Self::Fn(*id),
         }
     }
 }
@@ -73,22 +59,22 @@ impl ConstPool {
     }
 
     /// Intern `value`, returning its pool index.
-    pub fn intern(&mut self, value: &ConstValue, interner: &Interner) -> Result<u16, EmitError> {
+    pub fn intern(&mut self, value: &ConstValue) -> Result<u16, EmitError> {
         let key = ConstKey::from_value(value);
         if let Some(&idx) = self.index.get(&key) {
             return Ok(idx);
         }
         let idx = u16::try_from(self.entries.len()).map_err(|_| EmitError::TooManyConsts)?;
-        let entry = encode_const(value, interner);
+        let entry = encode_const(value);
         self.entries.push(entry);
         let _ = self.index.insert(key, idx);
         Ok(idx)
     }
 
-    /// Serialize the constant pool into `buf`.
+    /// Serialize the constant pool into `buf` (BE encoding).
     pub fn write_into(&self, buf: &mut Vec<u8>) -> Result<(), EmitError> {
-        let count = u32::try_from(self.entries.len()).map_err(|_| EmitError::TooManyConsts)?;
-        buf.extend_from_slice(&count.to_le_bytes());
+        let count = u16::try_from(self.entries.len()).map_err(|_| EmitError::TooManyConsts)?;
+        buf.extend_from_slice(&count.to_be_bytes());
         for entry in &self.entries {
             buf.push(entry.tag);
             buf.extend_from_slice(&entry.data);
@@ -97,53 +83,23 @@ impl ConstPool {
     }
 }
 
-fn encode_const(value: &ConstValue, interner: &Interner) -> ConstEntry {
+fn encode_const(value: &ConstValue) -> ConstEntry {
     match value {
         ConstValue::Int(n) => encode_int(*n),
         ConstValue::Float(f) => ConstEntry {
-            tag: TAG_F64,
-            data: f.to_bits().to_le_bytes().to_vec(),
+            tag: TAG_FLOAT,
+            data: f.to_bits().to_be_bytes().to_vec(),
         },
-        ConstValue::Bool(b) => {
-            let v = i32::from(*b);
-            ConstEntry {
-                tag: TAG_I32,
-                data: v.to_le_bytes().to_vec(),
-            }
-        }
-        ConstValue::Rune(r) => ConstEntry {
-            tag: TAG_RUNE,
-            data: r.to_le_bytes().to_vec(),
-        },
-        ConstValue::Str(sym) => encode_str(*sym, interner),
-        ConstValue::FnRef(id) => ConstEntry {
-            tag: TAG_FN,
-            data: id.to_le_bytes().to_vec(),
+        ConstValue::Str(stridx) => ConstEntry {
+            tag: TAG_STR,
+            data: stridx.to_be_bytes().to_vec(),
         },
     }
 }
 
 fn encode_int(n: i64) -> ConstEntry {
-    if i32::try_from(n).is_ok() {
-        let v = i32::try_from(n).expect("just checked above");
-        ConstEntry {
-            tag: TAG_I32,
-            data: v.to_le_bytes().to_vec(),
-        }
-    } else {
-        ConstEntry {
-            tag: TAG_I64,
-            data: n.to_le_bytes().to_vec(),
-        }
+    ConstEntry {
+        tag: TAG_INT,
+        data: n.to_be_bytes().to_vec(),
     }
-}
-
-fn encode_str(sym: Symbol, interner: &Interner) -> ConstEntry {
-    let s = interner.resolve(sym);
-    let bytes = s.as_bytes();
-    let len = u32::try_from(bytes.len()).expect("string too long for u32");
-    let mut data = Vec::with_capacity(4 + bytes.len());
-    data.extend_from_slice(&len.to_le_bytes());
-    data.extend_from_slice(bytes);
-    ConstEntry { tag: TAG_STR, data }
 }

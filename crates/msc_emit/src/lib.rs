@@ -1,20 +1,23 @@
-//! `msc_emit` - AST+sema -> `.muse` bytecode emitter.
+//! `msc_emit` - AST+sema -> `.seam` bytecode emitter.
 //!
 //! The entry point is [`emit`], which takes a parsed module, sema result,
-//! and interner, then returns the complete binary contents of a `.muse` file.
+//! and interner, then returns the complete binary contents of a `.seam` file.
 //!
 //! # Module layout
 //!
 //! - [`error`]      - [`EmitError`] enum
 //! - [`const_pool`] - constant pool builder
 //! - [`type_pool`]  - type pool builder (sema `TypeIdx` -> `type_id`)
-//! - [`module`]     - `.muse` binary assembler (header + 5 sections)
+//! - [`module`]     - `.seam` binary assembler (header + 5 sections)
 //! - [`emitter`]    - orchestrator; tree-walks AST+sema per function
 
 mod const_pool;
 mod emitter;
+mod global_table;
 mod module;
-mod type_pool;
+mod section;
+mod string_table;
+mod type_table;
 
 pub mod error;
 
@@ -40,7 +43,7 @@ pub struct DepEmitInput<'a> {
 /// Output of a successful [`emit`] call.
 #[derive(Debug)]
 pub struct EmitOutput {
-    /// Complete `.muse` file contents (little-endian binary).
+    /// Complete `.seam` file contents (little-endian binary).
     pub bytes: Vec<u8>,
 }
 
@@ -68,11 +71,15 @@ pub fn emit(
     let bytes = module::assemble(module::AssembleParams {
         cp: &mut emitter.cp,
         tp: &mut emitter.tp,
+        st: &mut emitter.string_table,
+        gt: &emitter.global_table,
         functions: &functions,
         effects: &emitter.effects,
         foreign_fns: &emitter.foreign_fns,
         interner: emitter.interner,
         entry_fn_id: emitter.entry_fn_id,
+        module_name: "",
+        source_path: "",
     })?;
     Ok(EmitOutput { bytes })
 }

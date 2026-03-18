@@ -187,9 +187,9 @@ pub fn emit_fstr(
     parts: &[FStrPart],
 ) -> Result<(), EmitError> {
     if parts.is_empty() {
-        let empty_sym = em.interner.intern("");
-        let cv = ConstValue::Str(empty_sym);
-        let i = em.cp.intern(&cv, em.interner)?;
+        let stridx = em.string_table.intern_str("")?;
+        let cv = ConstValue::Str(stridx);
+        let i = em.cp.intern(&cv)?;
         fc.fe.emit_ld_cst(i);
         return Ok(());
     }
@@ -216,8 +216,9 @@ pub fn emit_fstr(
                 } else {
                     *raw
                 };
-                let cv = ConstValue::Str(sym);
-                let i = em.cp.intern(&cv, em.interner)?;
+                let stridx = em.string_table.intern(sym, em.interner)?;
+                let cv = ConstValue::Str(stridx);
+                let i = em.cp.intern(&cv)?;
                 fc.fe.emit_ld_cst(i);
             }
             FStrPart::Interpolated { expr, .. } => {
@@ -227,9 +228,9 @@ pub fn emit_fstr(
                         fc.fe.emit_inv_ffi(show_idx, 1);
                     }
                 } else {
-                    let empty_sym = em.interner.intern("");
-                    let cv = ConstValue::Str(empty_sym);
-                    let i = em.cp.intern(&cv, em.interner)?;
+                    let stridx = em.string_table.intern_str("")?;
+                    let cv = ConstValue::Str(stridx);
+                    let i = em.cp.intern(&cv)?;
                     fc.fe.emit_ld_cst(i);
                 }
             }
@@ -380,7 +381,7 @@ pub fn emit_in_op(
 
     // i = 0
     let zero_cv = ConstValue::Int(0);
-    let zero_idx = em.cp.intern(&zero_cv, em.interner)?;
+    let zero_idx = em.cp.intern(&zero_cv)?;
     fc.fe.emit_ld_cst(zero_idx);
     let i_slot = fc.alloc_local();
     fc.fe.emit_st_loc(i_slot);
@@ -409,24 +410,24 @@ pub fn emit_in_op(
     // i += 1
     fc.fe.emit_ld_loc(i_slot);
     let one_cv = ConstValue::Int(1);
-    let one_idx = em.cp.intern(&one_cv, em.interner)?;
+    let one_idx = em.cp.intern(&one_cv)?;
     fc.fe.emit_ld_cst(one_idx);
-    fc.fe.emit_binop(Opcode::INT_ADD);
+    fc.fe.emit_binop(Opcode::ADD);
     fc.fe.emit_st_loc(i_slot);
 
     fc.fe.emit_jmp(loop_start);
 
     // found_true: push true and jump past the false path.
     fc.fe.emit_label(found_true);
-    let true_cv = ConstValue::Bool(true);
-    let true_idx = em.cp.intern(&true_cv, em.interner)?;
+    let true_cv = ConstValue::Int(1);
+    let true_idx = em.cp.intern(&true_cv)?;
     fc.fe.emit_ld_cst(true_idx);
     fc.fe.emit_jmp(end_label);
 
     // loop_exit: exhausted array without a match, push false.
     fc.fe.emit_label(loop_exit);
-    let false_cv = ConstValue::Bool(false);
-    let false_idx = em.cp.intern(&false_cv, em.interner)?;
+    let false_cv = ConstValue::Int(0);
+    let false_idx = em.cp.intern(&false_cv)?;
     fc.fe.emit_ld_cst(false_idx);
 
     fc.fe.emit_label(end_label);

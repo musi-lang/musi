@@ -3,7 +3,7 @@ name = "msc_emit"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-description = "Bytecode emitter: AST+sema -> .muse"
+description = "Bytecode emitter: AST+sema -> .seam"
 readme.workspace = true
 homepage.workspace = true
 repository.workspace = true
@@ -20,7 +20,6 @@ msc_shared  = { path = "../msc_shared" }
 thiserror     = { workspace = true }
 
 [dev-dependencies]
-msc_vm       = { path = "../msc_vm" }
 msc_lex     = { path = "../msc_lex" }
 msc_parse   = { path = "../msc_parse" }
 

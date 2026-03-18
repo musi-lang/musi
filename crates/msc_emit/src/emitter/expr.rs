@@ -156,7 +156,10 @@ fn cfv_walk(cx: &mut CfvCtx<'_, '_>, expr_idx: ExprIdx) {
         | Expr::Field { object: inner, .. }
         | Expr::UnaryOp { operand: inner, .. }
         | Expr::Fn { body: inner, .. }
-        | Expr::TypeCheck { operand: inner, .. } => cfv_walk(cx, *inner),
+        | Expr::TypeCheck { operand: inner, .. }
+        | Expr::Need { operand: inner, .. } => cfv_walk(cx, *inner),
+        Expr::Resume { value: Some(inner), .. } => cfv_walk(cx, *inner),
+        Expr::Resume { value: None, .. } => {}
         Expr::BinOp { left, right, .. }
         | Expr::Index {
             object: left,
@@ -330,11 +333,15 @@ pub fn emit_expr_tail(
         }
         Expr::UnaryOp { op, operand, span } => {
             let (op, operand, span) = (*op, *operand, *span);
-            if op == UnaryOp::Do {
-                emit_do(em, fc, operand, is_tail)
-            } else {
-                emit_unary(em, fc, op, operand, span)
-            }
+            emit_unary(em, fc, op, operand, span)
+        }
+        Expr::Need { operand, .. } => {
+            let operand = *operand;
+            emit_need(em, fc, operand, is_tail)
+        }
+        Expr::Resume { value, .. } => {
+            let value = *value;
+            emit_resume(em, fc, value)
         }
         Expr::Call { callee, args, .. } => {
             let (callee, args) = (*callee, args.clone());
@@ -358,14 +365,14 @@ pub fn emit_expr_tail(
             // direct name reference - no runtime field access needed.
             if let Some(&def_id) = em.expr_defs().get(&expr_idx) {
                 if let Some(&fn_id) = em.fn_map.get(&def_id) {
-                    let cv = ConstValue::FnRef(fn_id);
-                    let i = em.cp.intern(&cv, em.interner)?;
+                    let cv = ConstValue::Int(i64::from(fn_id));
+                    let i = em.cp.intern(&cv)?;
                     fc.fe.emit_ld_cst(i);
                     return Ok(true);
                 }
                 if let Some(&ffi_idx) = em.foreign_map.get(&def_id) {
-                    let cv = ConstValue::FnRef(ffi_idx);
-                    let i = em.cp.intern(&cv, em.interner)?;
+                    let cv = ConstValue::Int(i64::from(ffi_idx));
+                    let i = em.cp.intern(&cv)?;
                     fc.fe.emit_ld_cst(i);
                     return Ok(true);
                 }
@@ -438,14 +445,14 @@ fn emit_name(
         });
     };
     if let Some(&fn_id) = em.fn_map.get(&def_id) {
-        let cv = ConstValue::FnRef(fn_id);
-        let i = em.cp.intern(&cv, em.interner)?;
+        let cv = ConstValue::Int(i64::from(fn_id));
+        let i = em.cp.intern(&cv)?;
         fc.fe.emit_ld_cst(i);
         return Ok(true);
     }
     if let Some(&ffi_idx) = em.foreign_map.get(&def_id) {
-        let cv = ConstValue::FnRef(ffi_idx);
-        let i = em.cp.intern(&cv, em.interner)?;
+        let cv = ConstValue::Int(i64::from(ffi_idx));
+        let i = em.cp.intern(&cv)?;
         fc.fe.emit_ld_cst(i);
         return Ok(true);
     }
@@ -505,15 +512,15 @@ fn emit_module_record(
         for def in &em.sema.defs {
             if def.name == field_name && def.exported {
                 if let Some(&fn_id) = em.fn_map.get(&def.id) {
-                    let cv = ConstValue::FnRef(fn_id);
-                    let i = em.cp.intern(&cv, em.interner)?;
+                    let cv = ConstValue::Int(i64::from(fn_id));
+                    let i = em.cp.intern(&cv)?;
                     fc.fe.emit_ld_cst(i);
                     emitted = true;
                     break;
                 }
                 if let Some(&ffi_idx) = em.foreign_map.get(&def.id) {
-                    let cv = ConstValue::FnRef(ffi_idx);
-                    let i = em.cp.intern(&cv, em.interner)?;
+                    let cv = ConstValue::Int(i64::from(ffi_idx));
+                    let i = em.cp.intern(&cv)?;
                     fc.fe.emit_ld_cst(i);
                     emitted = true;
                     break;
@@ -690,16 +697,11 @@ fn emit_unary(
     emit_require(em, fc, operand, "unary operand")?;
     match op {
         UnaryOp::Neg => {
-            let family = classify_type_family(em, operand);
-            let opcode = match family {
-                Some(TypeFamily::Float) => Opcode::FLT_NEG,
-                _ => Opcode::INT_NEG,
-            };
-            fc.fe.emit_unop(opcode);
+            fc.fe.emit_unop(Opcode::NEG);
             Ok(true)
         }
         UnaryOp::Not => {
-            fc.fe.emit_unop(Opcode::BIT_NOT);
+            fc.fe.emit_unop(Opcode::NOT);
             Ok(true)
         }
         UnaryOp::ForceUnwrap => emit_force_unwrap(em, fc, operand),
@@ -712,13 +714,6 @@ fn emit_unary(
             Ok(true)
         }
         UnaryOp::Defer => Ok(emit_defer(fc, operand)),
-        UnaryOp::Do => {
-            // emit_expr_tail routes Do before calling emit_unary; reaching here is a bug.
-            Err(EmitError::UnsupportedFeature {
-                desc: "UnaryOp::Do reached emit_unary - caller must handle Do before dispatch"
-                    .into(),
-            })
-        }
     }
 }
 
@@ -873,8 +868,8 @@ fn emit_type_test(
 ) -> Result<bool, EmitError> {
     let produced = emit_expr(em, fc, operand)?;
     if !produced {
-        let cv = ConstValue::Bool(true);
-        let i = em.cp.intern(&cv, em.interner)?;
+        let cv = ConstValue::Int(1);
+        let i = em.cp.intern(&cv)?;
         fc.fe.emit_ld_cst(i);
         return Ok(true);
     }
@@ -883,8 +878,8 @@ fn emit_type_test(
     } else {
         // Type couldn't be resolved - fall back to always-true.
         fc.fe.emit_pop();
-        let cv = ConstValue::Bool(true);
-        let i = em.cp.intern(&cv, em.interner)?;
+        let cv = ConstValue::Int(1);
+        let i = em.cp.intern(&cv)?;
         fc.fe.emit_ld_cst(i);
     }
     Ok(true)
@@ -906,13 +901,11 @@ fn emit_type_cast(
         // Can't resolve type - leave value on stack, assume caller knows what they're doing.
         return Ok(true);
     };
-    // Duplicate so we still have the value after the check.
     fc.fe.emit_dup();
     fc.fe.emit_type_chk(type_id);
-    // Jump past UNR if check passed.
     let ok_label = fc.fresh_label();
     fc.fe.emit_jmp_t(ok_label);
-    fc.fe.emit_unop(msc_bc::Opcode::UNR);
+    fc.fe.emit_unop(msc_bc::Opcode::PANIC);
     fc.fe.emit_label(ok_label);
     Ok(true)
 }
@@ -969,7 +962,7 @@ fn emit_primitive_binop(
             } else {
                 emit_require(em, fc, left, "binop left operand")?;
                 emit_require(em, fc, right, "binop right operand")?;
-                fc.fe.emit_binop(Opcode::BIT_AND);
+                fc.fe.emit_binop(Opcode::AND);
             }
             Ok(true)
         }
@@ -980,7 +973,7 @@ fn emit_primitive_binop(
             } else {
                 emit_require(em, fc, left, "binop left operand")?;
                 emit_require(em, fc, right, "binop right operand")?;
-                fc.fe.emit_binop(Opcode::BIT_OR);
+                fc.fe.emit_binop(Opcode::OR);
             }
             Ok(true)
         }
@@ -1066,17 +1059,17 @@ fn emit_narrow_truncation(
     };
     if signed {
         let cv = ConstValue::Int(shift_amount);
-        let idx = em.cp.intern(&cv, em.interner)?;
+        let idx = em.cp.intern(&cv)?;
         fc.fe.emit_ld_cst(idx);
-        fc.fe.emit_binop(Opcode::BIT_SHL);
-        let idx2 = em.cp.intern(&cv, em.interner)?;
+        fc.fe.emit_binop(Opcode::SHL);
+        let idx2 = em.cp.intern(&cv)?;
         fc.fe.emit_ld_cst(idx2);
-        fc.fe.emit_binop(Opcode::BIT_SHR);
+        fc.fe.emit_binop(Opcode::SHR);
     } else {
         let cv = ConstValue::Int(mask.cast_signed());
-        let idx = em.cp.intern(&cv, em.interner)?;
+        let idx = em.cp.intern(&cv)?;
         fc.fe.emit_ld_cst(idx);
-        fc.fe.emit_binop(Opcode::BIT_AND);
+        fc.fe.emit_binop(Opcode::AND);
     }
     Ok(())
 }
@@ -1103,11 +1096,11 @@ fn emit_call(
             return Ok(true);
         }
         if let Some(&fn_id) = em.fn_map.get(&def_id) {
+            let ac = i32::try_from(total_count).map_err(|_| EmitError::overflow("arg count"))?;
             if is_tail {
-                fc.fe.emit_inv_tail(fn_id, false);
+                fc.fe.emit_inv_tail(fn_id, false, ac);
                 return Ok(false);
             }
-            let ac = i32::try_from(total_count).map_err(|_| EmitError::overflow("arg count"))?;
             fc.fe.emit_inv(fn_id, false, ac);
             return Ok(true);
         }
@@ -1314,14 +1307,14 @@ fn emit_variant(
     let name_str = em.interner.resolve(name);
     if args.is_empty() {
         if name_str == "True" {
-            let cv = ConstValue::Bool(true);
-            let i = em.cp.intern(&cv, em.interner)?;
+            let cv = ConstValue::Int(1);
+            let i = em.cp.intern(&cv)?;
             fc.fe.emit_ld_cst(i);
             return Ok(true);
         }
         if name_str == "False" {
-            let cv = ConstValue::Bool(false);
-            let i = em.cp.intern(&cv, em.interner)?;
+            let cv = ConstValue::Int(0);
+            let i = em.cp.intern(&cv)?;
             fc.fe.emit_ld_cst(i);
             return Ok(true);
         }
@@ -1353,7 +1346,6 @@ fn emit_fn(
         name: format!("<closure@{nested_fn_id}>"),
         params: params.to_vec(),
         body,
-        effect_mask: 0,
         dep_idx: em.active_dep,
     };
 
@@ -1420,11 +1412,11 @@ fn emit_fn(
     };
     let fn_bytecode = FnBytecode {
         fn_id: nested_fn_id,
+        name_stridx: 0,
         type_id,
         local_count: nested_fc.fe.local_count,
         param_count: nested_fc.fe.param_count,
         max_stack: nested_fc.fe.max_stack,
-        effect_mask: 0,
         upvalue_count,
         code: nested_fc.fe.code,
         handlers: nested_fc.fe.handlers,
@@ -1433,22 +1425,22 @@ fn emit_fn(
 
     if upvalue_count == 0 {
         // Non-capturing lambda: use existing LD_CST FnRef path.
-        let cv = ConstValue::FnRef(nested_fn_id);
-        let i = em.cp.intern(&cv, em.interner)?;
+        let cv = ConstValue::Int(i64::from(nested_fn_id));
+        let i = em.cp.intern(&cv)?;
         fc.fe.emit_ld_cst(i);
     } else {
-        // Capturing closure: push each captured value, then MK_CLO.
+        // Capturing closure: emit CLS_NEW then attach each upvalue cell.
+        fc.fe.emit_cls_new(nested_fn_id);
         for &(_, source) in &captures {
             match source {
-                CaptureSource::Local(slot) => fc.fe.emit_ld_loc(slot),
+                CaptureSource::Local(slot) => fc.fe.emit_cls_upv_local(slot),
                 CaptureSource::Upvalue(idx) => {
                     let u8_idx = u8::try_from(idx)
                         .map_err(|_| EmitError::overflow("upvalue index exceeds 255"))?;
-                    fc.fe.emit_ld_upv(u8_idx);
+                    fc.fe.emit_cls_upv_parent(u8_idx);
                 }
             }
         }
-        fc.fe.emit_mk_clo(nested_fn_id, upvalue_count);
     }
     Ok(true)
 }
@@ -1458,25 +1450,26 @@ fn emit_lit(em: &mut Emitter<'_>, fc: &mut FnCtx, lit: &Lit) -> Result<bool, Emi
         Lit::Unit { .. } => Ok(false),
         Lit::Int { value, .. } => {
             let cv = ConstValue::Int(*value);
-            let i = em.cp.intern(&cv, em.interner)?;
+            let i = em.cp.intern(&cv)?;
             fc.fe.emit_ld_cst(i);
             Ok(true)
         }
         Lit::Float { value, .. } => {
             let cv = ConstValue::Float(*value);
-            let i = em.cp.intern(&cv, em.interner)?;
+            let i = em.cp.intern(&cv)?;
             fc.fe.emit_ld_cst(i);
             Ok(true)
         }
         Lit::Rune { codepoint, .. } => {
-            let cv = ConstValue::Rune(*codepoint);
-            let i = em.cp.intern(&cv, em.interner)?;
+            let cv = ConstValue::Int(i64::from(*codepoint));
+            let i = em.cp.intern(&cv)?;
             fc.fe.emit_ld_cst(i);
             Ok(true)
         }
         Lit::Str { value, .. } => {
-            let cv = ConstValue::Str(*value);
-            let i = em.cp.intern(&cv, em.interner)?;
+            let stridx = em.string_table.intern(*value, em.interner)?;
+            let cv = ConstValue::Str(stridx);
+            let i = em.cp.intern(&cv)?;
             fc.fe.emit_ld_cst(i);
             Ok(true)
         }
@@ -1524,7 +1517,7 @@ pub fn bind_pat(em: &mut Emitter<'_>, fc: &mut FnCtx, pat_idx: PatIdx) -> Result
             for (i, elem) in elems.iter().enumerate() {
                 let elem_idx =
                     i64::try_from(i).map_err(|_| EmitError::overflow("array destructure index"))?;
-                let elem_cst_idx = em.cp.intern(&ConstValue::Int(elem_idx), em.interner)?;
+                let elem_cst_idx = em.cp.intern(&ConstValue::Int(elem_idx))?;
                 fc.fe.emit_ld_loc(tmp);
                 fc.fe.emit_ld_cst(elem_cst_idx);
                 fc.fe.emit_ld_idx();
@@ -1605,7 +1598,7 @@ fn emit_array_fixed(
     let count =
         u32::try_from(elems.len()).map_err(|_| EmitError::overflow("array element count"))?;
     let len_cv = ConstValue::Int(i64::from(count));
-    let li = em.cp.intern(&len_cv, em.interner)?;
+    let li = em.cp.intern(&len_cv)?;
     fc.fe.emit_ld_cst(li);
     fc.fe.emit_mk_arr(0);
 
@@ -1624,7 +1617,7 @@ fn emit_array_fixed(
         let idx_u32 = u32::try_from(i).map_err(|_| EmitError::overflow("array index"))?;
         fc.fe.emit_ld_loc(arr_slot);
         let idx_cv = ConstValue::Int(i64::from(idx_u32));
-        let ci = em.cp.intern(&idx_cv, em.interner)?;
+        let ci = em.cp.intern(&idx_cv)?;
         fc.fe.emit_ld_cst(ci);
         emit_require(em, fc, expr_idx, "array element")?;
         fc.fe.emit_st_idx();
@@ -1655,7 +1648,7 @@ fn emit_array_with_spread(
 
     // Compute total length: start with the fixed count constant, then add LD_LEN for each spread.
     let base_cv = ConstValue::Int(fixed_count_i64);
-    let bi = em.cp.intern(&base_cv, em.interner)?;
+    let bi = em.cp.intern(&base_cv)?;
     fc.fe.emit_ld_cst(bi);
 
     // Store spread arrays in locals so we can re-read them after computing the size.
@@ -1669,7 +1662,7 @@ fn emit_array_with_spread(
             // Add this spread's length to the running total.
             fc.fe.emit_ld_loc(slot);
             fc.fe.emit_ld_len();
-            fc.fe.emit_i_add();
+            fc.fe.emit_binop(Opcode::ADD);
         }
     }
 
@@ -1681,12 +1674,12 @@ fn emit_array_with_spread(
     // Write index local, starts at 0.
     let widx_slot = fc.alloc_local();
     let zero_cv = ConstValue::Int(0);
-    let zi = em.cp.intern(&zero_cv, em.interner)?;
+    let zi = em.cp.intern(&zero_cv)?;
     fc.fe.emit_ld_cst(zi);
     fc.fe.emit_st_loc(widx_slot);
 
     let one_cv = ConstValue::Int(1);
-    let one_i = em.cp.intern(&one_cv, em.interner)?;
+    let one_i = em.cp.intern(&one_cv)?;
 
     let mut spread_iter = spread_slots.iter().copied();
 
@@ -1700,7 +1693,7 @@ fn emit_array_with_spread(
                 // widx += 1
                 fc.fe.emit_ld_loc(widx_slot);
                 fc.fe.emit_ld_cst(one_i);
-                fc.fe.emit_i_add();
+                fc.fe.emit_binop(Opcode::ADD);
                 fc.fe.emit_st_loc(widx_slot);
             }
             ArrayElem::Spread { .. } => {
@@ -1740,13 +1733,13 @@ fn emit_array_with_spread(
                 // widx += 1
                 fc.fe.emit_ld_loc(widx_slot);
                 fc.fe.emit_ld_cst(one_i);
-                fc.fe.emit_i_add();
+                fc.fe.emit_binop(Opcode::ADD);
                 fc.fe.emit_st_loc(widx_slot);
 
                 // ridx += 1
                 fc.fe.emit_ld_loc(ridx_slot);
                 fc.fe.emit_ld_cst(one_i);
-                fc.fe.emit_i_add();
+                fc.fe.emit_binop(Opcode::ADD);
                 fc.fe.emit_st_loc(ridx_slot);
 
                 fc.fe.emit_jmp(loop_start);
@@ -2022,45 +2015,28 @@ pub fn classify_type_family(em: &Emitter<'_>, expr_idx: ExprIdx) -> Option<TypeF
     }
 }
 
-/// Map an AST `BinOp` + `TypeFamily` to the corresponding bytecode `Opcode`.
-pub fn map_binop(op: BinOp, family: Option<TypeFamily>) -> Result<Opcode, EmitError> {
-    let opcode = match (op, family) {
-        (BinOp::Add, Some(TypeFamily::Unsigned(_))) => Opcode::NAT_ADD,
-        (BinOp::Add, Some(TypeFamily::Float)) => Opcode::FLT_ADD,
-        (BinOp::Add, _) => Opcode::INT_ADD,
-        (BinOp::Sub, Some(TypeFamily::Unsigned(_))) => Opcode::NAT_SUB,
-        (BinOp::Sub, Some(TypeFamily::Float)) => Opcode::FLT_SUB,
-        (BinOp::Sub, _) => Opcode::INT_SUB,
-        (BinOp::Mul, Some(TypeFamily::Unsigned(_))) => Opcode::NAT_MUL,
-        (BinOp::Mul, Some(TypeFamily::Float)) => Opcode::FLT_MUL,
-        (BinOp::Mul, _) => Opcode::INT_MUL,
-        (BinOp::Div, Some(TypeFamily::Float)) => Opcode::FLT_DIV,
-        (BinOp::Div, Some(TypeFamily::Unsigned(_))) => Opcode::NAT_DIV,
-        (BinOp::Div, _) => Opcode::INT_DIV,
-        (BinOp::Rem, Some(TypeFamily::Float)) => Opcode::FLT_REM,
-        (BinOp::Rem, Some(TypeFamily::Unsigned(_))) => Opcode::NAT_REM,
-        (BinOp::Rem, _) => Opcode::INT_REM,
-        (BinOp::Eq, _) => Opcode::CMP_EQ,
-        (BinOp::Ne, _) => Opcode::CMP_NE,
-        (BinOp::Lt, Some(TypeFamily::Float)) => Opcode::CMP_FLT,
-        (BinOp::Lt, Some(TypeFamily::Unsigned(_))) => Opcode::CMP_LTU,
-        (BinOp::Lt, _) => Opcode::CMP_LT,
-        (BinOp::Le, Some(TypeFamily::Float)) => Opcode::CMP_FLE,
-        (BinOp::Le, Some(TypeFamily::Unsigned(_))) => Opcode::CMP_LEU,
-        (BinOp::Le, _) => Opcode::CMP_LE,
-        (BinOp::Gt, Some(TypeFamily::Float)) => Opcode::CMP_FGT,
-        (BinOp::Gt, Some(TypeFamily::Unsigned(_))) => Opcode::CMP_GTU,
-        (BinOp::Gt, _) => Opcode::CMP_GT,
-        (BinOp::Ge, Some(TypeFamily::Float)) => Opcode::CMP_FGE,
-        (BinOp::Ge, Some(TypeFamily::Unsigned(_))) => Opcode::CMP_GEU,
-        (BinOp::Ge, _) => Opcode::CMP_GE,
-        (BinOp::And, _) => Opcode::BIT_AND,
-        (BinOp::Or, _) => Opcode::BIT_OR,
-        (BinOp::Xor, _) => Opcode::BIT_XOR,
-        (BinOp::Shl, _) => Opcode::BIT_SHL,
-        (BinOp::Shr, Some(TypeFamily::Unsigned(_))) => Opcode::BIT_SRU,
-        (BinOp::Shr, _) => Opcode::BIT_SHR,
-        (op, _) => {
+/// Map an AST `BinOp` to the corresponding SEAM `Opcode`.
+///
+/// NaN-boxing handles runtime type dispatch; no type-specific variants exist.
+pub fn map_binop(op: BinOp, _family: Option<TypeFamily>) -> Result<Opcode, EmitError> {
+    let opcode = match op {
+        BinOp::Add => Opcode::ADD,
+        BinOp::Sub => Opcode::SUB,
+        BinOp::Mul => Opcode::MUL,
+        BinOp::Div => Opcode::DIV,
+        BinOp::Rem => Opcode::REM,
+        BinOp::Eq => Opcode::CMP_EQ,
+        BinOp::Ne => Opcode::CMP_NE,
+        BinOp::Lt => Opcode::CMP_LT,
+        BinOp::Le => Opcode::CMP_LE,
+        BinOp::Gt => Opcode::CMP_GT,
+        BinOp::Ge => Opcode::CMP_GE,
+        BinOp::And => Opcode::AND,
+        BinOp::Or => Opcode::OR,
+        BinOp::Xor => Opcode::XOR,
+        BinOp::Shl => Opcode::SHL,
+        BinOp::Shr => Opcode::SHR,
+        op => {
             return Err(EmitError::UnsupportedFeature {
                 desc: format!("binary operator `{op:?}`").into(),
             });
@@ -2069,8 +2045,6 @@ pub fn map_binop(op: BinOp, family: Option<TypeFamily>) -> Result<Opcode, EmitEr
     Ok(opcode)
 }
 
-/// Emit a force-unwrap: evaluate `operand`, check it is the `Some` variant
-/// (tag 0), emit `UNR` if None, then extract the payload with `ld.pay(0)`.
 fn emit_force_unwrap(
     em: &mut Emitter<'_>,
     fc: &mut FnCtx,
@@ -2080,15 +2054,15 @@ fn emit_force_unwrap(
     let tmp = fc.alloc_local();
     fc.fe.emit_st_loc(tmp);
 
-    let ok_label = fc.fresh_label();
     fc.fe.emit_ld_loc(tmp);
-    fc.fe.emit_cmp_tag(em.some_tag)?;
+    fc.fe.emit_unop(msc_bc::Opcode::OPT_IS);
+    let ok_label = fc.fresh_label();
     fc.fe.emit_jmp_t(ok_label);
-    fc.fe.emit_unop(msc_bc::Opcode::UNR);
+    fc.fe.emit_unop(msc_bc::Opcode::PANIC);
     fc.fe.emit_label(ok_label);
 
     fc.fe.emit_ld_loc(tmp);
-    fc.fe.emit_ld_pay(0);
+    fc.fe.emit_unop(msc_bc::Opcode::OPT_GET);
     Ok(true)
 }
 
@@ -2160,11 +2134,11 @@ fn emit_handle(
         };
         let fn_bytecode = FnBytecode {
             fn_id: handler_fn_id,
+            name_stridx: 0,
             type_id,
             local_count: handler_fc.fe.local_count,
             param_count: handler_fc.fe.param_count,
             max_stack: handler_fc.fe.max_stack,
-            effect_mask: 0,
             upvalue_count: 0,
             code: handler_fc.fe.code,
             handlers: handler_fc.fe.handlers,
@@ -2182,9 +2156,8 @@ fn emit_handle(
     Ok(produced)
 }
 
-/// Emit a `do expr` expression. When the body is a call to an effect operation,
-/// emit `CONT_SAVE` instead of a regular call.
-fn emit_do(
+/// Emit `need op(args)` — perform an effect operation via `eff.need`.
+fn emit_need(
     em: &mut Emitter<'_>,
     fc: &mut FnCtx,
     body: ExprIdx,
@@ -2200,17 +2173,6 @@ fn emit_do(
                 .iter()
                 .any(|d| d.id == def_id && d.kind == DefKind::EffectOp);
             if is_effect_op {
-                let op_def = em.sema.defs.iter().find(|d| d.id == def_id);
-                let is_async =
-                    op_def.and_then(|d| d.parent) == Some(em.sema.well_known.effects.async_eff);
-
-                if is_async {
-                    let op_name = op_def
-                        .map(|d| em.interner.resolve(d.name).to_owned())
-                        .unwrap_or_default();
-                    return emit_async_op(em, fc, &op_name, &args);
-                }
-
                 let op_index = resolve_effect_op_index(em, def_id);
                 let arg_count = emit_call_args(em, fc, &args)?;
                 let ac = i32::try_from(arg_count)
@@ -2223,7 +2185,21 @@ fn emit_do(
     emit_expr_tail(em, fc, body, is_tail)
 }
 
-/// Resolve the ordinal index of an effect operation among its sibling ops.
+/// Emit `resume value` — resume continuation via `eff.res`.
+fn emit_resume(
+    em: &mut Emitter<'_>,
+    fc: &mut FnCtx,
+    value: Option<ExprIdx>,
+) -> Result<bool, EmitError> {
+    if let Some(val_idx) = value {
+        emit_require(em, fc, val_idx, "resume value")?;
+    } else {
+        fc.fe.emit_ld_unit();
+    }
+    fc.fe.emit_cont_resume();
+    Ok(false)
+}
+
 fn resolve_effect_op_index(em: &Emitter<'_>, op_def_id: DefId) -> u32 {
     let def = em.sema.defs.iter().find(|d| d.id == op_def_id);
     let Some(def) = def else { return 0 };
@@ -2239,80 +2215,6 @@ fn resolve_effect_op_index(em: &Emitter<'_>, op_def_id: DefId) -> u32 {
         .collect();
     siblings.sort_unstable();
     u32::try_from(siblings.iter().position(|&x| x == op_def_id.0).unwrap_or(0)).unwrap_or(0)
-}
-
-/// Emit the TSK_* opcode for an `Async` effect operation.
-///
-/// Called from `emit_do` when the resolved op's parent effect is the well-known `Async` effect.
-/// Each arm handles argument layout for the corresponding VM instruction.
-fn emit_async_op(
-    em: &mut Emitter<'_>,
-    fc: &mut FnCtx,
-    op_name: &str,
-    args: &[Arg],
-) -> Result<bool, EmitError> {
-    match op_name {
-        "spawn" => {
-            // `spawn(f)` or `spawn(f, arg1, arg2, ...)`:
-            // The first argument is a static function reference whose fn_id becomes the TSK_SPN
-            // operand. Any remaining arguments are the spawned function's call arguments, which
-            // TSK_SPN pops from the caller's stack.
-            let fn_expr = match args.first() {
-                Some(Arg::Pos { expr, .. }) => *expr,
-                _ => {
-                    return Err(EmitError::UnsupportedFeature {
-                        desc: "spawn requires a function argument".into(),
-                    });
-                }
-            };
-            let fn_def_id = em
-                .sema
-                .resolution
-                .expr_defs
-                .get(&fn_expr)
-                .copied()
-                .ok_or_else(|| EmitError::UnsupportedFeature {
-                    desc: "spawn argument is not a resolved name".into(),
-                })?;
-            let fn_id = em.fn_map.get(&fn_def_id).copied().ok_or_else(|| {
-                EmitError::UnsupportedFeature {
-                    desc: "spawn argument must be a statically known function".into(),
-                }
-            })?;
-            let extra_args = args.get(1..).unwrap_or(&[]);
-            let extra_count = emit_call_args(em, fc, extra_args)?;
-            let ac = i32::try_from(extra_count)
-                .map_err(|_| EmitError::overflow("spawn extra arg count"))?;
-            fc.fe.emit_tsk_spn(fn_id, ac);
-            Ok(true)
-        }
-        "await" => {
-            // `await(task)`: push the task handle then await it.
-            let _arg_count = emit_call_args(em, fc, args)?;
-            fc.fe.emit_tsk_awt();
-            Ok(true)
-        }
-        "channel_make" | "make_channel" => {
-            // No arguments; TSK_CMK creates the channel and pushes its handle.
-            fc.fe.emit_tsk_cmk();
-            Ok(true)
-        }
-        "send" => {
-            // `send(chan, value)`: push chan then value, then TSK_CHS.
-            let _arg_count = emit_call_args(em, fc, args)?;
-            fc.fe.emit_tsk_chs();
-            Ok(true)
-        }
-        "recv" => {
-            // `recv(chan)`: push chan then TSK_CHR.
-            let _arg_count = emit_call_args(em, fc, args)?;
-            fc.fe.emit_tsk_chr();
-            Ok(true)
-        }
-        _ => Err(EmitError::UnsupportedFeature {
-            desc: format!("unknown Async effect op `{op_name}`").into(),
-        }),
-    }
 }
 
 /// Emit deferred expressions (in reverse order) for cleanup before function exit.
@@ -2470,7 +2372,7 @@ fn emit_dict_for_call(
                     let inst_method = inst.members.iter().find(|(s, _)| s == class_sym);
                     if let Some((_, method_def)) = inst_method {
                         if let Some(&fn_id) = em.fn_map.get(method_def) {
-                            let cst_idx = em.cp.intern(&ConstValue::FnRef(fn_id), em.interner)?;
+                            let cst_idx = em.cp.intern(&ConstValue::Int(i64::from(fn_id)))?;
                             fc.fe.emit_ld_cst(cst_idx);
                         } else {
                             return Err(EmitError::UnsupportedFeature {

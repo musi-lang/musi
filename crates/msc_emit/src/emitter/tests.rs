@@ -3,10 +3,10 @@
 use msc_bc::Opcode;
 use msc_lex::lex;
 use msc_parse::parse;
-use msc_sema::analyze;
+use msc_sema::{analyze, SemaOptions};
 use msc_shared::{DiagnosticBag, FileId, Interner};
 
-use crate::{EmitOutput, emit};
+use crate::{emit, EmitOutput};
 
 fn compile(source: &str) -> Result<EmitOutput, String> {
     let mut interner = Interner::new();
@@ -14,7 +14,13 @@ fn compile(source: &str) -> Result<EmitOutput, String> {
     let file_id = FileId(0);
     let lexed = lex(source, file_id, &mut interner, &mut diags);
     let parsed = parse(&lexed.tokens, file_id, &mut diags, &mut interner);
-    let sema = analyze(&parsed, &mut interner, file_id, &mut diags);
+    let sema = analyze(
+        &parsed,
+        &mut interner,
+        file_id,
+        &mut diags,
+        &SemaOptions::default(),
+    );
     if diags.has_errors() {
         let msgs: Vec<String> = diags
             .iter()
@@ -33,51 +39,96 @@ fn compile_lenient(source: &str) -> Result<EmitOutput, String> {
     let file_id = FileId(0);
     let lexed = lex(source, file_id, &mut interner, &mut diags);
     let parsed = parse(&lexed.tokens, file_id, &mut diags, &mut interner);
-    let sema = analyze(&parsed, &mut interner, file_id, &mut diags);
+    let sema = analyze(
+        &parsed,
+        &mut interner,
+        file_id,
+        &mut diags,
+        &SemaOptions::default(),
+    );
     emit(&parsed, &sema, &mut interner, file_id, false, &[]).map_err(|e| e.to_string())
 }
 
-/// Scan the function pool section (past the header) for the first occurrence of `op`.
+/// Find the start+length of a tagged section in the binary.
+/// Sections start at offset 16 (after the header) and are: 4-byte tag + 4-byte BE length + payload.
+fn find_section(bytes: &[u8], tag: &[u8; 4]) -> Option<(usize, usize)> {
+    let mut pos = 16; // skip header
+    while pos + 8 <= bytes.len() {
+        let section_tag = &bytes[pos..pos + 4];
+        let section_len = u32::from_be_bytes([
+            bytes[pos + 4],
+            bytes[pos + 5],
+            bytes[pos + 6],
+            bytes[pos + 7],
+        ]) as usize;
+        if section_tag == tag {
+            return Some((pos + 8, section_len));
+        }
+        pos += 8 + section_len;
+    }
+    None
+}
+
+/// Scan the METH section for the first occurrence of `op`.
 fn find_opcode(bytes: &[u8], op: Opcode) -> Option<usize> {
-    assert!(bytes.len() > 35, "bytes too short for header");
-    // fn_off is at header bytes 32..36
-    let fn_off = u32::from_le_bytes([bytes[32], bytes[33], bytes[34], bytes[35]]);
-    let start = usize::try_from(fn_off).expect("fn_off fits usize");
+    let (start, len) = find_section(bytes, b"METH")?;
+    let end = start + len;
     bytes
-        .get(start..)
+        .get(start..end)
         .and_then(|slice| slice.iter().position(|&b| b == op.0))
-        .map(|pos| pos + start)
+        .map(|p| p + start)
 }
 
 #[test]
 fn test_emit_header_valid() {
     let source = "#[entrypoint]\nlet main : () -> Int := () => 42;";
     let out = compile(source).expect("compile ok");
-    assert!(out.bytes.len() >= 40, "output must have at least a header");
-    assert_eq!(&out.bytes[..4], b"MUSI", "magic bytes");
+    assert!(
+        out.bytes.len() >= 16,
+        "output must have at least a 16-byte header"
+    );
+    assert_eq!(&out.bytes[..4], b"SEAM", "magic bytes");
+    assert_eq!(out.bytes[4], 1, "major version");
+    assert_eq!(out.bytes[5], 0, "minor version");
+    assert_eq!(out.bytes[6], 0, "patch version");
+}
+
+#[test]
+fn test_emit_sections_present() {
+    let source = "#[entrypoint]\nlet main : () -> Int := () => 42;";
+    let out = compile(source).expect("compile ok");
+    for tag in [
+        b"STRT", b"TYPE", b"CNST", b"DEPS", b"GLOB", b"METH", b"EFCT", b"CLSS", b"FRGN",
+    ] {
+        assert!(
+            find_section(&out.bytes, tag).is_some(),
+            "missing section {:?}",
+            std::str::from_utf8(tag).unwrap()
+        );
+    }
 }
 
 #[test]
 fn test_emit_simple_return_int() {
     let source = "#[entrypoint]\nlet main : () -> Int := () => 42;";
     let out = compile(source).expect("compile ok");
-    let found = find_opcode(&out.bytes, Opcode::LD_CST);
-    assert!(found.is_some(), "expected LD_CST for integer literal 42");
+    let found = find_opcode(&out.bytes, Opcode::LD_CONST);
+    assert!(found.is_some(), "expected LD_CONST for integer literal 42");
 }
 
 #[test]
 fn test_emit_binop_add() {
     let source = "#[entrypoint]\nlet add : (Int, Int) -> Int := (a, b) => a + b;";
     let out = compile(source).expect("compile ok");
-    let found = find_opcode(&out.bytes, Opcode::INT_ADD);
-    assert!(found.is_some(), "expected I_ADD for integer addition");
+    let found = find_opcode(&out.bytes, Opcode::ADD);
+    assert!(found.is_some(), "expected ADD for integer addition");
 }
 
 #[test]
 fn test_emit_piecewise() {
     let source = "#[entrypoint]\nlet f : (Int) -> Int := (x) => (42 if x > 0 | 0 if _);";
     let out = compile(source).expect("compile ok");
-    let found = find_opcode(&out.bytes, Opcode::JIF);
+    let found = find_opcode(&out.bytes, Opcode::BR_TRUE);
     assert!(found.is_some(), "expected conditional jump in piecewise");
 }
 
@@ -90,21 +141,19 @@ fn test_emit_let_binding() {
 }
 
 #[test]
-fn test_emit_entry_fn_id_set() {
+fn test_emit_entry_is_script() {
     let source = "#[entrypoint]\nlet go : () -> Int := () => 1;";
     let out = compile(source).expect("compile ok");
-    // Entry fn id at header offset 12..16; 0xFFFFFFFF means no entry.
-    let entry_id = u32::from_le_bytes([out.bytes[12], out.bytes[13], out.bytes[14], out.bytes[15]]);
-    assert_ne!(entry_id, 0xFFFF_FFFF, "entry fn id should be set");
+    // flags at byte 7; FLAG_SCRIPT = 1 << 2 = 4
+    assert_eq!(out.bytes[7] & 4, 4, "entrypoint => FLAG_SCRIPT");
 }
 
 #[test]
 fn test_emit_no_entrypoint_is_library() {
     let source = "let helper : (Int) -> Int := (x) => x + 1;";
     let out = compile(source).expect("compile ok");
-    // Flags at offset 8..12; FLAG_IS_LIB = 1 << 2 = 4.
-    let flags = u32::from_le_bytes([out.bytes[8], out.bytes[9], out.bytes[10], out.bytes[11]]);
-    assert_eq!(flags & 4, 4, "no entrypoint => FLAG_IS_LIB");
+    // flags at byte 7; FLAG_LIBRARY = 1 << 1 = 2
+    assert_eq!(out.bytes[7] & 2, 2, "no entrypoint => FLAG_LIBRARY");
 }
 
 #[test]
@@ -117,8 +166,8 @@ fn test_emit_range_inc() {
         out.unwrap_err()
     );
     let out = out.unwrap();
-    let found = find_opcode(&out.bytes, Opcode::MK_PRD);
-    assert!(found.is_some(), "expected MK_PRD for range construction");
+    let found = find_opcode(&out.bytes, Opcode::TUP_NEW);
+    assert!(found.is_some(), "expected TUP_NEW for range construction");
 }
 
 #[test]
@@ -131,8 +180,8 @@ fn test_emit_range_exc() {
         out.unwrap_err()
     );
     let out = out.unwrap();
-    let found = find_opcode(&out.bytes, Opcode::MK_PRD);
-    assert!(found.is_some(), "expected MK_PRD for range construction");
+    let found = find_opcode(&out.bytes, Opcode::TUP_NEW);
+    assert!(found.is_some(), "expected TUP_NEW for range construction");
 }
 
 #[test]
@@ -145,8 +194,8 @@ fn test_emit_nil_coal() {
         out.unwrap_err()
     );
     let out = out.unwrap();
-    let found = find_opcode(&out.bytes, Opcode::CMP_TAG);
-    assert!(found.is_some(), "expected CMP_TAG for nil-coalesce");
+    let found = find_opcode(&out.bytes, Opcode::MAT_TAG);
+    assert!(found.is_some(), "expected MAT_TAG for nil-coalesce");
 }
 
 #[test]
@@ -155,8 +204,8 @@ fn test_emit_cons() {
     let out = compile(source);
     assert!(out.is_ok(), "cons should compile: {}", out.unwrap_err());
     let out = out.unwrap();
-    let found = find_opcode(&out.bytes, Opcode::MK_PRD);
-    assert!(found.is_some(), "expected MK_PRD for cons cell");
+    let found = find_opcode(&out.bytes, Opcode::TUP_NEW);
+    assert!(found.is_some(), "expected TUP_NEW for cons cell");
 }
 
 #[test]
@@ -165,14 +214,16 @@ fn test_emit_try_expr() {
     let out = compile(source);
     assert!(out.is_ok(), "try should compile: {}", out.unwrap_err());
     let out = out.unwrap();
-    let found = find_opcode(&out.bytes, Opcode::MK_VAR);
-    assert!(found.is_some(), "expected MK_VAR for try wrapping in Some");
+    // After the rearchitecture, `try` wraps in a variant via REC_NEW (not OPT_SOME).
+    let found = find_opcode(&out.bytes, Opcode::REC_NEW);
+    assert!(
+        found.is_some(),
+        "expected REC_NEW for try wrapping in variant"
+    );
 }
 
 #[test]
 fn test_emit_err_coal() {
-    // !! requires Result-typed left operand (unavailable without stdlib),
-    // so use compile_lenient to skip type errors and verify emission.
     let source = "#[entrypoint]\nlet f : (Int, Int) -> Int := (a, b) => a !! b;";
     let out = compile_lenient(source);
     assert!(
@@ -181,8 +232,8 @@ fn test_emit_err_coal() {
         out.unwrap_err()
     );
     let out = out.unwrap();
-    let found = find_opcode(&out.bytes, Opcode::CMP_TAG);
-    assert!(found.is_some(), "expected CMP_TAG for err-coalesce");
+    let found = find_opcode(&out.bytes, Opcode::MAT_TAG);
+    assert!(found.is_some(), "expected MAT_TAG for err-coalesce");
 }
 
 #[test]
@@ -190,4 +241,34 @@ fn test_emit_defer() {
     let source = "#[entrypoint]\nlet f : () -> Int := () => (defer 1; 42);";
     let out = compile(source);
     assert!(out.is_ok(), "defer should compile: {}", out.unwrap_err());
+}
+
+#[test]
+fn test_emit_global_read_no_nop() {
+    // Global reads should emit LD_LOC 0 + REC_GET, not NOP.
+    let source = "#[entrypoint]\nlet main : () -> Int := () => 42;";
+    let out = compile(source).expect("compile ok");
+    let (meth_start, meth_len) = find_section(&out.bytes, b"METH").expect("METH section");
+    let meth = &out.bytes[meth_start..meth_start + meth_len];
+    // NOP should not appear in function code (it was the old global stub).
+    let nop_count = meth.iter().filter(|&&b| b == Opcode::NOP.0).count();
+    assert_eq!(nop_count, 0, "no NOP opcodes should appear in METH section");
+}
+
+#[test]
+fn test_emit_variant_uses_tag() {
+    // Variants should use REC_NEW with the correct tag, not OPT_SOME/OPT_NONE.
+    let source = "#[entrypoint]\nlet f : (Int) -> Int := (x) => try x;";
+    let out = compile(source).expect("compile ok");
+    let found_rec_new = find_opcode(&out.bytes, Opcode::REC_NEW);
+    assert!(
+        found_rec_new.is_some(),
+        "expected REC_NEW for variant construction"
+    );
+    // OPT_SOME should NOT appear (we use REC_NEW with tag now).
+    let found_opt_some = find_opcode(&out.bytes, Opcode::OPT_SOME);
+    assert!(
+        found_opt_some.is_none(),
+        "OPT_SOME should not appear; variants use REC_NEW"
+    );
 }

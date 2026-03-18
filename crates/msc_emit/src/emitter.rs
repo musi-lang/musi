@@ -24,19 +24,22 @@ use msc_shared::{FileId, Interner, Span, Symbol};
 
 use crate::const_pool::ConstPool;
 use crate::error::EmitError;
+use crate::global_table::GlobalTable;
+use crate::global_table;
 use crate::module::{EffectDef, EffectOpDef, ForeignFn};
-use crate::type_pool::TypePool;
+use crate::string_table::StringTable;
+use crate::type_table::TypeTable;
 
 pub use fn_emitter::{FnEmitter, HandlerEntry};
 
 /// Per-function bytecode output.
 pub struct FnBytecode {
     pub fn_id: u32,
+    pub name_stridx: u16,
     pub type_id: u32,
     pub local_count: u16,
     pub param_count: u16,
     pub max_stack: u16,
-    pub effect_mask: u16,
     pub upvalue_count: u16,
     pub code: Vec<u8>,
     pub handlers: Vec<HandlerEntry>,
@@ -60,7 +63,6 @@ pub struct FnEntry {
     pub name: String,
     pub params: Vec<Param>,
     pub body: ExprIdx,
-    pub effect_mask: u16,
     pub dep_idx: Option<usize>,
 }
 
@@ -71,7 +73,9 @@ pub struct Emitter<'a> {
     pub interner: &'a mut Interner,
     stmts: Vec<Stmt>,
     pub cp: ConstPool,
-    pub tp: TypePool,
+    pub tp: TypeTable,
+    pub string_table: StringTable,
+    pub global_table: GlobalTable,
     /// `DefId` -> bytecode `fn_id` for user-defined functions.
     pub(crate) fn_map: HashMap<DefId, u32>,
     /// `DefId` -> index into `foreign_fns` for FFI functions.
@@ -172,7 +176,9 @@ impl<'a> Emitter<'a> {
             interner,
             stmts: parsed.stmts.clone(),
             cp: ConstPool::new(),
-            tp: TypePool::new(),
+            tp: TypeTable::new(),
+            string_table: StringTable::new(),
+            global_table: GlobalTable::new(),
             fn_map: HashMap::new(),
             foreign_map: HashMap::new(),
             foreign_fns: vec![],
@@ -328,6 +334,8 @@ impl<'a> Emitter<'a> {
             | Expr::Class { .. }
             | Expr::TypeCheck { .. }
             | Expr::Handle { .. }
+            | Expr::Need { .. }
+            | Expr::Resume { .. }
             | Expr::Error { .. }
             | Expr::TypeApp { .. }
             | Expr::FnType { .. }
@@ -350,7 +358,7 @@ impl<'a> Emitter<'a> {
         let inner_expr = self.ast.exprs[inner].clone();
         match inner_expr {
             Expr::Binding { fields, .. } => match dep_idx {
-                Some(di) => self.scan_dep_binding(&fields, di),
+                Some(di) => self.scan_dep_binding(&fields, di)?,
                 None => self.scan_binding(&fields, is_entry),
             },
             Expr::Annotated {
@@ -596,7 +604,6 @@ impl<'a> Emitter<'a> {
             name: fn_name,
             params: fn_params,
             body: fn_body,
-            effect_mask: 0,
             dep_idx: None,
         });
     }
@@ -634,7 +641,6 @@ impl<'a> Emitter<'a> {
                 name: fn_name,
                 params: sig.params.clone(),
                 body: *body,
-                effect_mask: 0,
                 dep_idx,
             });
         }
@@ -664,7 +670,7 @@ impl<'a> Emitter<'a> {
                 self.scan_annotated(&attrs, inner, Some(dep_idx))?;
             }
             Expr::Binding { fields, .. } | Expr::Let { fields, .. } => {
-                self.scan_dep_binding(&fields, dep_idx);
+                self.scan_dep_binding(&fields, dep_idx)?;
             }
             Expr::Foreign { abi, decls, .. } => {
                 self.scan_foreign_with_attrs(abi, &decls, &[])?;
@@ -684,9 +690,9 @@ impl<'a> Emitter<'a> {
         Ok(())
     }
 
-    fn scan_dep_binding(&mut self, fields: &LetFields, dep_idx: usize) {
+    fn scan_dep_binding(&mut self, fields: &LetFields, dep_idx: usize) -> Result<(), EmitError> {
         let Some(value_idx) = fields.value else {
-            return;
+            return Ok(());
         };
 
         // Mutable bindings are always globals, even if the initial value is a
@@ -695,12 +701,10 @@ impl<'a> Emitter<'a> {
         if fields.kind == BindKind::Mut {
             let binding_span = pat_span(fields.pat, self.ast);
             if let Some(&did) = self.pat_defs().get(&binding_span) {
-                let slot = self.next_global;
-                self.next_global += 1;
-                let _ = self.global_map.insert(did, slot);
+                let slot = self.register_global(did, fields.pat, fields.kind)?;
                 self.dep_global_inits.push((value_idx, dep_idx, did, slot));
             }
-            return;
+            return Ok(());
         }
 
         let Some((fn_params, fn_body)) = extract_fn(value_idx, self.ast) else {
@@ -712,16 +716,14 @@ impl<'a> Emitter<'a> {
                 self.ast.exprs[value_idx],
                 Expr::Import { .. } | Expr::RecordDef { .. }
             ) {
-                return;
+                return Ok(());
             }
             let binding_span = pat_span(fields.pat, self.ast);
             if let Some(&did) = self.pat_defs().get(&binding_span) {
-                let slot = self.next_global;
-                self.next_global += 1;
-                let _ = self.global_map.insert(did, slot);
+                let slot = self.register_global(did, fields.pat, fields.kind)?;
                 self.dep_global_inits.push((value_idx, dep_idx, did, slot));
             }
-            return;
+            return Ok(());
         };
 
         let fn_id = self.alloc_fn_id();
@@ -741,9 +743,44 @@ impl<'a> Emitter<'a> {
             name: fn_name,
             params: fn_params,
             body: fn_body,
-            effect_mask: 0,
             dep_idx: Some(dep_idx),
         });
+        Ok(())
+    }
+
+    fn register_global(
+        &mut self,
+        did: DefId,
+        pat: PatIdx,
+        kind: BindKind,
+    ) -> Result<u32, EmitError> {
+        let slot = self.next_global;
+        self.next_global += 1;
+        let _ = self.global_map.insert(did, slot);
+
+        let binding_name = pat_name_str(pat, self.ast, self.interner);
+        let name_stridx = self.string_table.intern_str(&binding_name)?;
+        let is_exported = self
+            .sema
+            .defs
+            .iter()
+            .find(|d| d.id == did)
+            .map_or(false, |d| d.exported);
+        let mut flags = 0u8;
+        if is_exported {
+            flags |= global_table::FLAG_EXPORTED;
+        }
+        if kind == BindKind::Mut {
+            flags |= global_table::FLAG_MUTABLE;
+        }
+        flags |= global_table::FLAG_HAS_INIT;
+        let _ = self.global_table.add(global_table::GlobalEntry {
+            name_stridx,
+            type_ref: 0,
+            flags,
+            initializer: None,
+        })?;
+        Ok(slot)
     }
 
     fn emit_functions(&mut self) -> Result<Vec<FnBytecode>, EmitError> {
@@ -831,11 +868,11 @@ impl<'a> Emitter<'a> {
 
         Ok(FnBytecode {
             fn_id,
+            name_stridx: 0,
             type_id: unit_type_id,
             local_count: fc.fe.local_count,
             param_count: 0,
             max_stack: fc.fe.max_stack,
-            effect_mask: 0,
             upvalue_count: 0,
             code: fc.fe.code,
             handlers: fc.fe.handlers,
@@ -935,11 +972,11 @@ impl<'a> Emitter<'a> {
 
         Ok(FnBytecode {
             fn_id: entry.fn_id,
+            name_stridx: 0,
             type_id,
             local_count: fc.fe.local_count,
             param_count: fc.fe.param_count,
             max_stack: fc.fe.max_stack,
-            effect_mask: entry.effect_mask,
             upvalue_count: 0,
             code: fc.fe.code,
             handlers: fc.fe.handlers,
@@ -947,29 +984,36 @@ impl<'a> Emitter<'a> {
     }
 }
 
-/// Serialize the function pool section into `buf`.
+/// Serialize the function pool section into `buf` (BE encoding).
 pub fn write_function_pool(buf: &mut Vec<u8>, functions: &[FnBytecode]) -> Result<(), EmitError> {
     let count =
-        u32::try_from(functions.len()).map_err(|_| EmitError::overflow("too many functions"))?;
-    buf.extend_from_slice(&count.to_le_bytes());
+        u16::try_from(functions.len()).map_err(|_| EmitError::overflow("too many functions"))?;
+    buf.extend_from_slice(&count.to_be_bytes());
     for fn_bc in functions {
-        buf.extend_from_slice(&fn_bc.fn_id.to_le_bytes());
-        buf.extend_from_slice(&fn_bc.type_id.to_le_bytes());
-        buf.extend_from_slice(&fn_bc.local_count.to_le_bytes());
-        buf.extend_from_slice(&fn_bc.param_count.to_le_bytes());
-        buf.extend_from_slice(&fn_bc.max_stack.to_le_bytes());
-        buf.extend_from_slice(&fn_bc.effect_mask.to_le_bytes());
-        buf.extend_from_slice(&fn_bc.upvalue_count.to_le_bytes());
+        // name_stridx, sig_type, params, locals, max_stack, upvalues (all u16 BE)
+        buf.extend_from_slice(&fn_bc.name_stridx.to_be_bytes());
+        buf.extend_from_slice(
+            &u16::try_from(fn_bc.type_id)
+                .unwrap_or(u16::MAX)
+                .to_be_bytes(),
+        );
+        buf.extend_from_slice(&fn_bc.param_count.to_be_bytes());
+        buf.extend_from_slice(&fn_bc.local_count.to_be_bytes());
+        buf.extend_from_slice(&fn_bc.max_stack.to_be_bytes());
+        buf.extend_from_slice(&fn_bc.upvalue_count.to_be_bytes());
         let code_len = u32::try_from(fn_bc.code.len()).map_err(|_| EmitError::FunctionTooLarge)?;
-        buf.extend_from_slice(&code_len.to_le_bytes());
+        buf.extend_from_slice(&code_len.to_be_bytes());
         buf.extend_from_slice(&fn_bc.code);
         let handler_count = u16::try_from(fn_bc.handlers.len())
             .map_err(|_| EmitError::overflow("too many handler entries"))?;
-        buf.extend_from_slice(&handler_count.to_le_bytes());
+        buf.extend_from_slice(&handler_count.to_be_bytes());
         for h in &fn_bc.handlers {
             buf.push(h.effect_id);
-            buf.extend_from_slice(&h.handler_fn_id.to_le_bytes());
+            buf.extend_from_slice(&h.handler_fn_id.to_be_bytes());
         }
+        // safepoint_count = 0, effect_set_count = 0
+        buf.extend_from_slice(&0u16.to_be_bytes());
+        buf.extend_from_slice(&0u16.to_be_bytes());
     }
     Ok(())
 }
