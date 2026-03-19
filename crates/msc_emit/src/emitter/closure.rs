@@ -3,22 +3,26 @@
 use std::collections::HashSet;
 
 use msc_ast::ExprIdx;
+use msc_ast::PatIdx;
 use msc_ast::expr::Param;
+use msc_sema::DefId;
 use msc_sema::def::DefKind;
 
+use crate::const_pool::ConstValue;
 use crate::error::EmitError;
+use crate::error::EmitResult;
 
-use super::super::emitter::{Emitter, FnBytecode};
 use super::FnCtx;
 use super::capture::{CaptureSource, collect_free_vars};
 use super::expr::{emit_deferred_cleanup, emit_expr_tail};
+use super::{Emitter, FnBytecode};
 
 pub(super) fn emit_fn(
     em: &mut Emitter<'_>,
     fc: &mut FnCtx,
     params: &[Param],
     body: ExprIdx,
-) -> Result<bool, EmitError> {
+) -> EmitResult<bool> {
     let nested_fn_id = em.alloc_fn_id();
     let nested_param_count =
         u16::try_from(params.len()).map_err(|_| EmitError::overflow("nested fn param count"))?;
@@ -99,8 +103,12 @@ pub(super) fn emit_fn(
     em.nested_fns.push(fn_bytecode);
 
     if upvalue_count == 0 {
-        fc.fe.emit_cls_new(nested_fn_id);
+        // Non-capturing lambda: use LD_CST FnRef path (matches expr.rs:1445-1449).
+        let cv = ConstValue::Int(i64::from(nested_fn_id));
+        let i = em.cp.intern(&cv)?;
+        fc.fe.emit_ld_cst(i);
     } else {
+        // Capturing closure: emit CLS_NEW then attach each upvalue cell.
         fc.fe.emit_cls_new(nested_fn_id);
         for &(_, source) in &captures {
             match source {
@@ -114,4 +122,46 @@ pub(super) fn emit_fn(
         }
     }
     Ok(true)
+}
+
+/// Emit a recursive local closure via the ref-cell letrec pattern:
+/// 1. Pre-allocate a ref cell with a placeholder value
+/// 2. Emit the closure (which captures the ref cell as an upvalue)
+/// 3. Patch the ref cell with the actual closure value
+pub(super) fn emit_letrec_fn(
+    em: &mut Emitter<'_>,
+    fc: &mut FnCtx,
+    def_id: DefId,
+    _pat_idx: PatIdx,
+    _val_idx: ExprIdx,
+    params: &[Param],
+    fn_body: ExprIdx,
+) -> EmitResult {
+    // 1. Pre-allocate ref cell: LD_UNIT → ALC_REF → ST_LOC
+    let wk = &em.sema.well_known;
+    let type_id = em.tp.lower_well_known_def(wk.any, wk).unwrap_or(0);
+    fc.fe.emit_ld_unit();
+    fc.fe.emit_alc_ref(type_id);
+    let slot = fc.alloc_local();
+    fc.fe.emit_st_loc(slot);
+
+    // Register the binding before emitting the closure so collect_free_vars
+    // finds it in fc.local_map and captures the ref cell.
+    let prev = fc.local_map.insert(def_id, slot);
+    debug_assert!(prev.is_none(), "duplicate local slot for letrec def");
+    let _ = fc.ref_locals.insert(def_id);
+
+    // 2. Emit the closure (standard path - now finds self in parent_locals).
+    let produced = emit_fn(em, fc, params, fn_body)?;
+    if !produced {
+        return Ok(());
+    }
+
+    // 3. Patch: store closure into the ref cell's field 0.
+    let tmp = fc.alloc_local();
+    fc.fe.emit_st_loc(tmp);
+    fc.fe.emit_ld_loc(slot);
+    fc.fe.emit_ld_loc(tmp);
+    fc.fe.emit_st_fld(0)?;
+    Ok(())
 }

@@ -8,7 +8,7 @@ use msc_bc::crc32_slice;
 
 use crate::const_pool::ConstPool;
 use crate::emitter::{FnBytecode, write_function_pool};
-use crate::error::EmitError;
+use crate::error::{EmitError, EmitResult};
 use crate::global_table::GlobalTable;
 use crate::section::write_section;
 use crate::string_table::StringTable;
@@ -60,7 +60,7 @@ pub struct AssembleParams<'a> {
 }
 
 /// Assembles the complete `.seam` binary.
-pub fn assemble(params: AssembleParams<'_>) -> Result<Vec<u8>, EmitError> {
+pub fn assemble(params: AssembleParams<'_>) -> EmitResult<Vec<u8>> {
     let AssembleParams {
         cp,
         tp,
@@ -169,7 +169,7 @@ fn write_effect_pool(
     effects: &[EffectDef],
     st: &mut StringTable,
     interner: &Interner,
-) -> Result<(), EmitError> {
+) -> EmitResult {
     let count = u16::try_from(effects.len()).map_err(|_| EmitError::OperandOverflow {
         desc: "too many effects".into(),
     })?;
@@ -207,7 +207,7 @@ fn write_foreign_pool(
     foreign_fns: &[ForeignFn],
     st: &mut StringTable,
     interner: &Interner,
-) -> Result<(), EmitError> {
+) -> EmitResult {
     let count = u16::try_from(foreign_fns.len()).map_err(|_| EmitError::OperandOverflow {
         desc: "too many foreign functions".into(),
     })?;

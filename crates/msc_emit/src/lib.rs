@@ -30,6 +30,10 @@ use msc_sema::def::DefId;
 use msc_sema::{DictLookup, Obligation, ResolutionMap, SemaResult, TypeIdx};
 use msc_shared::{FileId, Interner};
 
+use crate::emitter::Emitter;
+use crate::error::EmitResult;
+use crate::module::AssembleParams;
+
 /// Dependency module data needed by the emitter.
 pub struct DepEmitInput<'a> {
     pub parsed: &'a ParsedModule,
@@ -64,11 +68,11 @@ pub fn emit(
     file_id: FileId,
     script: bool,
     deps: &[DepEmitInput<'_>],
-) -> Result<EmitOutput, EmitError> {
-    let mut emitter = emitter::Emitter::new(parsed, sema, interner, file_id, script, deps);
+) -> EmitResult<EmitOutput> {
+    let mut emitter = Emitter::new(parsed, sema, interner, file_id, script, deps);
     let functions = emitter.emit_all()?;
 
-    let bytes = module::assemble(module::AssembleParams {
+    let bytes = module::assemble(AssembleParams {
         cp: &mut emitter.cp,
         tp: &mut emitter.tp,
         st: &mut emitter.string_table,

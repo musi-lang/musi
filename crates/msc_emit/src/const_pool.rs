@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 
-use crate::error::EmitError;
+use crate::error::{EmitError, EmitResult};
 
 // Constant pool entry tags
 const TAG_INT: u8 = 0x01;
@@ -59,7 +59,7 @@ impl ConstPool {
     }
 
     /// Intern `value`, returning its pool index.
-    pub fn intern(&mut self, value: &ConstValue) -> Result<u16, EmitError> {
+    pub fn intern(&mut self, value: &ConstValue) -> EmitResult<u16> {
         let key = ConstKey::from_value(value);
         if let Some(&idx) = self.index.get(&key) {
             return Ok(idx);
@@ -72,7 +72,7 @@ impl ConstPool {
     }
 
     /// Serialize the constant pool into `buf` (BE encoding).
-    pub fn write_into(&self, buf: &mut Vec<u8>) -> Result<(), EmitError> {
+    pub fn write_into(&self, buf: &mut Vec<u8>) -> EmitResult {
         let count = u16::try_from(self.entries.len()).map_err(|_| EmitError::TooManyConsts)?;
         buf.extend_from_slice(&count.to_be_bytes());
         for entry in &self.entries {

@@ -7,8 +7,9 @@ use msc_shared::Symbol;
 
 use crate::const_pool::ConstValue;
 use crate::error::EmitError;
+use crate::error::EmitResult;
 
-use super::super::emitter::Emitter;
+use super::Emitter;
 use super::FnCtx;
 use super::expr::emit_require;
 use super::type_query::resolve_variant_tag;
@@ -17,14 +18,14 @@ pub(super) fn emit_record_lit(
     em: &mut Emitter<'_>,
     fc: &mut FnCtx,
     fields: &[RecField],
-    record_type_id: Option<u32>,
-) -> Result<bool, EmitError> {
+    _record_type_id: Option<u32>,
+) -> EmitResult<bool> {
     let has_spread = fields.iter().any(|f| matches!(f, RecField::Spread { .. }));
 
     if has_spread {
         emit_record_lit_with_spread(em, fc, fields)
     } else {
-        emit_record_lit_fixed(em, fc, fields, record_type_id)
+        emit_record_lit_fixed(em, fc, fields)
     }
 }
 
@@ -32,12 +33,11 @@ fn emit_record_lit_fixed(
     em: &mut Emitter<'_>,
     fc: &mut FnCtx,
     fields: &[RecField],
-    record_type_id: Option<u32>,
-) -> Result<bool, EmitError> {
+) -> EmitResult<bool> {
     // Collect (name, value) pairs and sort by name for canonical field ordering.
     // This ordering must match `resolve_field_in_type` and the type checker's
     // canonical sort so that field indices are consistent across modules.
-    let mut named_fields: Vec<(msc_shared::Symbol, Option<msc_ast::ExprIdx>)> = fields
+    let mut named_fields: Vec<(Symbol, Option<ExprIdx>)> = fields
         .iter()
         .filter_map(|f| match f {
             RecField::Named { name, value, .. } => Some((*name, *value)),
@@ -57,7 +57,7 @@ fn emit_record_lit_fixed(
     }
     let field_count = u32::try_from(n).map_err(|_| EmitError::overflow("record field count"))?;
     let stack_pop = i32::try_from(n).map_err(|_| EmitError::overflow("record field count"))?;
-    fc.fe.emit_mk_prd(field_count, stack_pop, record_type_id)?;
+    fc.fe.emit_mk_prd(field_count, stack_pop)?;
     Ok(true)
 }
 
@@ -73,7 +73,7 @@ fn emit_record_lit_with_spread(
     em: &mut Emitter<'_>,
     fc: &mut FnCtx,
     fields: &[RecField],
-) -> Result<bool, EmitError> {
+) -> EmitResult<bool> {
     let mut spread_expr: Option<ExprIdx> = None;
     for f in fields {
         if let RecField::Spread { expr, .. } = f {
@@ -115,7 +115,7 @@ fn resolve_field_name_by_symbol(
     em: &Emitter<'_>,
     object_expr: ExprIdx,
     name: Symbol,
-) -> Result<u32, EmitError> {
+) -> EmitResult<u32> {
     let Some(&ty_idx) = em.expr_types().get(&object_expr) else {
         return Err(EmitError::NoTypeInfo {
             desc: "record spread base".into(),
@@ -155,17 +155,17 @@ pub(super) fn emit_variant(
     fc: &mut FnCtx,
     name: Symbol,
     args: &[ExprIdx],
-) -> Result<bool, EmitError> {
+) -> EmitResult<bool> {
     let name_str = em.interner.resolve(name);
     if args.is_empty() {
         if name_str == "True" {
-            let cv = ConstValue::Bool(true);
+            let cv = ConstValue::Int(1);
             let i = em.cp.intern(&cv)?;
             fc.fe.emit_ld_cst(i);
             return Ok(true);
         }
         if name_str == "False" {
-            let cv = ConstValue::Bool(false);
+            let cv = ConstValue::Int(0);
             let i = em.cp.intern(&cv)?;
             fc.fe.emit_ld_cst(i);
             return Ok(true);
@@ -191,7 +191,7 @@ pub(super) fn emit_update(
     fc: &mut FnCtx,
     base: ExprIdx,
     fields: &[RecField],
-) -> Result<bool, EmitError> {
+) -> EmitResult<bool> {
     emit_require(em, fc, base, "update base")?;
     let base_slot = fc.alloc_local();
     fc.fe.emit_st_loc(base_slot);
@@ -203,6 +203,7 @@ pub(super) fn emit_update(
         });
     };
     let resolved = em.sema.unify.resolve(ty_idx, &em.sema.types);
+    // Clone needed: the borrow of em.sema.types must end before emit_expr borrows em mutably.
     let type_fields = match &em.sema.types[resolved] {
         Type::Record { fields, .. } => fields.clone(),
         _ => {
@@ -240,6 +241,6 @@ pub(super) fn emit_update(
 
     let field_count = u32::try_from(n).map_err(|_| EmitError::overflow("record field count"))?;
     let stack_pop = i32::try_from(n).map_err(|_| EmitError::overflow("record field count"))?;
-    fc.fe.emit_mk_prd(field_count, stack_pop, None)?;
+    fc.fe.emit_mk_prd(field_count, stack_pop)?;
     Ok(true)
 }

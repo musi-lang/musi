@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use msc_shared::{Interner, Symbol};
 
-use crate::error::EmitError;
+use crate::error::{EmitError, EmitResult};
 
 pub struct StringTable {
     entries: Vec<String>,
@@ -21,7 +21,7 @@ impl StringTable {
         }
     }
 
-    pub fn intern(&mut self, sym: Symbol, interner: &Interner) -> Result<u16, EmitError> {
+    pub fn intern(&mut self, sym: Symbol, interner: &Interner) -> EmitResult<u16> {
         if let Some(&idx) = self.index.get(&sym) {
             return Ok(idx);
         }
@@ -37,7 +37,7 @@ impl StringTable {
         Ok(idx)
     }
 
-    pub fn intern_str(&mut self, s: &str) -> Result<u16, EmitError> {
+    pub fn intern_str(&mut self, s: &str) -> EmitResult<u16> {
         if let Some(&idx) = self.str_index.get(s) {
             return Ok(idx);
         }

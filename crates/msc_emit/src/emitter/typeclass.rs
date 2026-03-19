@@ -7,9 +7,11 @@ use msc_sema::types::Type;
 use msc_sema::unify::types_match;
 use msc_shared::Symbol;
 
+use crate::const_pool::ConstValue;
 use crate::error::EmitError;
+use crate::error::EmitResult;
 
-use super::super::emitter::Emitter;
+use super::Emitter;
 use super::FnCtx;
 
 /// Returns the field index of a method within a class's member list (declaration order).
@@ -17,7 +19,7 @@ pub(super) fn class_method_index(
     em: &Emitter<'_>,
     class_def: DefId,
     method_sym: Symbol,
-) -> Result<u32, EmitError> {
+) -> EmitResult<u32> {
     let members: Vec<(Symbol, DefId)> = em
         .sema
         .defs
@@ -45,7 +47,7 @@ pub(super) fn emit_dict_for_call(
     fc: &mut FnCtx,
     callee_def: DefId,
     callee_expr: ExprIdx,
-) -> Result<usize, EmitError> {
+) -> EmitResult<u32> {
     let constraints = match em.active_fn_constraints().get(&callee_def) {
         Some(c) => c.clone(),
         None => return Ok(0),
@@ -81,7 +83,8 @@ pub(super) fn emit_dict_for_call(
                     let inst_method = inst.members.iter().find(|(s, _)| s == class_sym);
                     if let Some((_, method_def)) = inst_method {
                         if let Some(&fn_id) = em.fn_map.get(method_def) {
-                            fc.fe.emit_cls_new(fn_id);
+                            let cst_idx = em.cp.intern(&ConstValue::Int(i64::from(fn_id)))?;
+                            fc.fe.emit_ld_cst(cst_idx);
                         } else {
                             return Err(EmitError::UnsupportedFeature {
                                 desc: "instance method not compiled for dict construction".into(),
@@ -97,20 +100,18 @@ pub(super) fn emit_dict_for_call(
                     u32::try_from(method_count).map_err(|_| EmitError::overflow("method count"))?;
                 let sp =
                     i32::try_from(method_count).map_err(|_| EmitError::overflow("method count"))?;
-                fc.fe.emit_mk_prd(mc, sp, None)?;
+                fc.fe.emit_mk_prd(mc, sp)?;
             } else {
                 return Err(EmitError::UnsupportedFeature {
                     desc: "no instance found for call-site constraint".into(),
                 });
             }
+        } else if let Some(&dict_slot) = fc.dict_slots.get(&constraint.class) {
+            fc.fe.emit_ld_loc(dict_slot);
         } else {
-            if let Some(&dict_slot) = fc.dict_slots.get(&constraint.class) {
-                fc.fe.emit_ld_loc(dict_slot);
-            } else {
-                return Err(EmitError::UnsupportedFeature {
-                    desc: "no dictionary to forward for nested generic call".into(),
-                });
-            }
+            return Err(EmitError::UnsupportedFeature {
+                desc: "no dictionary to forward for nested generic call".into(),
+            });
         }
         let _ = callee_expr;
         dict_count += 1;

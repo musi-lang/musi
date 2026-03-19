@@ -1,14 +1,14 @@
 //! Type classification and field/variant resolution helpers.
 
 use msc_ast::ExprIdx;
-use msc_ast::expr::{BinOp, Expr, RecField};
+use msc_ast::expr::{BinOp, Expr};
 use msc_bc::Opcode;
 use msc_sema::TypeIdx;
 use msc_sema::def::DefKind;
 use msc_sema::types::{RecordField, Type};
 use msc_shared::Symbol;
 
-use crate::error::EmitError;
+use crate::error::{EmitError, EmitResult};
 
 use super::super::emitter::Emitter;
 
@@ -37,68 +37,6 @@ pub(super) fn object_type_is_tuple(em: &Emitter<'_>, object: ExprIdx) -> bool {
     };
     let resolved = em.sema.unify.resolve(ty_idx, &em.sema.types);
     matches!(&em.sema.types[resolved], Type::Tuple { .. })
-}
-
-/// Returns `true` when the object expression's sema type resolves to the well-known `Any` type.
-pub(super) fn object_type_is_any(em: &Emitter<'_>, object: ExprIdx) -> bool {
-    let Some(&ty_idx) = em.expr_types().get(&object) else {
-        return false;
-    };
-    let resolved = em.sema.unify.resolve(ty_idx, &em.sema.types);
-    matches!(&em.sema.types[resolved], Type::Named { def, .. } if *def == em.sema.well_known.any)
-}
-
-/// Look up the bytecode `type_id` for a record literal expression, interning field names.
-///
-/// Returns `None` if the expression has no type info or the type cannot be lowered.
-pub(super) fn lookup_record_type_id(em: &mut Emitter<'_>, expr_idx: ExprIdx) -> Option<u32> {
-    let &ty_idx = em.expr_types().get(&expr_idx)?;
-    let resolved = em.sema.unify.resolve(ty_idx, &em.sema.types);
-    // Only intern field names for record types; tuples use sentinel 0xFFFF.
-    if !matches!(&em.sema.types[resolved], Type::Record { .. }) {
-        return None;
-    }
-    // Split borrow across distinct Emitter fields: sema is &'a (shared), the rest are owned.
-    let types = &em.sema.types;
-    let unify = &em.sema.unify;
-    let wk = &em.sema.well_known;
-    em.tp
-        .lower_sema_type_named(
-            ty_idx,
-            types,
-            unify,
-            wk,
-            Some(&mut em.string_table),
-            Some(em.interner),
-        )
-        .ok()
-}
-
-/// Build a type descriptor from AST field names when sema type lowering fails.
-/// Field types are set to TAG_ANY since the exact types aren't available.
-pub(super) fn build_record_type_from_ast(
-    em: &mut Emitter<'_>,
-    fields: &[RecField],
-) -> Result<u32, EmitError> {
-    let mut named: Vec<Symbol> = fields
-        .iter()
-        .filter_map(|f| match f {
-            RecField::Named { name, .. } => Some(*name),
-            RecField::Spread { .. } => None,
-        })
-        .collect();
-    // Sort alphabetically to match canonical field ordering.
-    named.sort_by(|a, b| em.interner.resolve(*a).cmp(em.interner.resolve(*b)));
-
-    let name_stridxs: Vec<u16> = named
-        .iter()
-        .map(|sym| em.string_table.intern(*sym, em.interner))
-        .collect::<Result<_, _>>()?;
-
-    // Use TAG_ANY for all field types.
-    let field_ids: Vec<u32> = vec![em.tp.any_type_id(); named.len()];
-
-    em.tp.encode_named_product(&name_stridxs, &field_ids)
 }
 
 /// Resolve an AST type annotation (`ExprIdx`) to a bytecode `type_id`.
@@ -149,7 +87,7 @@ pub(super) fn lower_ast_ty_to_type_id(em: &mut Emitter<'_>, ty: ExprIdx) -> Opti
 }
 
 /// Resolve a variant's tag by scanning the def table for sibling variants.
-pub fn resolve_variant_tag(em: &Emitter<'_>, name: Symbol) -> Result<u32, EmitError> {
+pub fn resolve_variant_tag(em: &Emitter<'_>, name: Symbol) -> EmitResult<u32> {
     let name_str = em.interner.resolve(name);
     for def in &em.sema.defs {
         if def.kind == DefKind::Variant && em.interner.resolve(def.name) == name_str {
@@ -210,7 +148,7 @@ pub(super) fn resolve_field_name(
     em: &Emitter<'_>,
     object_expr: ExprIdx,
     name: Symbol,
-) -> Result<u32, EmitError> {
+) -> EmitResult<u32> {
     let Some(&ty_idx) = em.expr_types().get(&object_expr) else {
         return Err(EmitError::NoTypeInfo {
             desc: "field access object".into(),
@@ -302,11 +240,7 @@ fn find_complete_record_type(
     None
 }
 
-fn resolve_field_in_type(
-    em: &Emitter<'_>,
-    ty_idx: TypeIdx,
-    name: Symbol,
-) -> Result<u32, EmitError> {
+fn resolve_field_in_type(em: &Emitter<'_>, ty_idx: TypeIdx, name: Symbol) -> EmitResult<u32> {
     let resolved = em.sema.unify.resolve(ty_idx, &em.sema.types);
     match &em.sema.types[resolved] {
         Type::Record { .. } => {
@@ -420,7 +354,7 @@ pub fn classify_type_family(em: &Emitter<'_>, expr_idx: ExprIdx) -> Option<TypeF
 /// Map an AST `BinOp` to the corresponding SEAM `Opcode`.
 ///
 /// NaN-boxing handles runtime type dispatch; no type-specific variants exist.
-pub fn map_binop(op: BinOp, _family: Option<TypeFamily>) -> Result<Opcode, EmitError> {
+pub fn map_binop(op: BinOp, _family: Option<TypeFamily>) -> EmitResult<Opcode> {
     let opcode = match op {
         BinOp::Add => Opcode::ADD,
         BinOp::Sub => Opcode::SUB,

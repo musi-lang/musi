@@ -1,6 +1,6 @@
 //! Global variable table for the GLOB section.
 
-use crate::error::EmitError;
+use crate::error::{EmitError, EmitResult};
 
 pub struct GlobalEntry {
     pub name_stridx: u16,
@@ -22,7 +22,7 @@ impl GlobalTable {
         Self { entries: vec![] }
     }
 
-    pub fn add(&mut self, entry: GlobalEntry) -> Result<u16, EmitError> {
+    pub fn add(&mut self, entry: GlobalEntry) -> EmitResult<u16> {
         let idx = u16::try_from(self.entries.len()).map_err(|_| EmitError::TooManyGlobals)?;
         self.entries.push(entry);
         Ok(idx)

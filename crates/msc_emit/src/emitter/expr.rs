@@ -4,272 +4,35 @@ use msc_ast::ExprIdx;
 use msc_ast::Pat;
 use msc_ast::PatIdx;
 use msc_ast::expr::{
-    Arg, ArrayElem, BinOp, BindKind, Expr, FieldKey, HandlerOp, LetFields, MatchArm, Param, PwArm,
-    PwGuard, RecField, TypeCheckKind, UnaryOp,
+    Arg, ArrayElem, BinOp, BindKind, Expr, FieldKey, LetFields, TypeCheckKind, UnaryOp,
 };
 use msc_ast::lit::Lit;
 use msc_bc::Opcode;
-use msc_sema::DefId;
-use msc_sema::TypeIdx;
 use msc_sema::def::DefKind;
-use msc_sema::types::{RecordField, Type};
-use msc_sema::unify::types_match;
+use msc_sema::types::Type;
 use msc_shared::Span;
 use msc_shared::Symbol;
 
-use std::collections::{HashMap, HashSet};
-
 use crate::const_pool::ConstValue;
 use crate::error::EmitError;
+use crate::error::EmitResult;
 
-use super::super::emitter::{Emitter, FnBytecode, FnEntry};
+use super::Emitter;
 use super::FnCtx;
+use super::capture;
+use super::closure;
 use super::desugar;
-
-/// Where a captured variable lives in the parent scope.
-#[derive(Clone, Copy)]
-enum CaptureSource {
-    /// Parent has it as a local at the given slot.
-    Local(u32),
-    /// Parent captured it as an upvalue at the given index.
-    Upvalue(u16),
-}
-
-struct CfvCtx<'a, 'b> {
-    em: &'a Emitter<'b>,
-    local_defs: &'a HashSet<DefId>,
-    parent_locals: &'a HashMap<DefId, u32>,
-    parent_upvalues: &'a HashMap<DefId, u16>,
-    found: &'a mut Vec<(DefId, CaptureSource)>,
-    seen: &'a mut HashSet<DefId>,
-}
-
-/// Walk the AST body and collect free variables - names that reference
-/// definitions in an enclosing scope rather than local params/bindings.
-fn collect_free_vars(
-    em: &Emitter<'_>,
-    body: ExprIdx,
-    local_defs: &HashSet<DefId>,
-    parent_locals: &HashMap<DefId, u32>,
-    parent_upvalues: &HashMap<DefId, u16>,
-) -> Vec<(DefId, CaptureSource)> {
-    let mut found = vec![];
-    let mut seen = HashSet::new();
-    let mut cx = CfvCtx {
-        em,
-        local_defs,
-        parent_locals,
-        parent_upvalues,
-        found: &mut found,
-        seen: &mut seen,
-    };
-    cfv_walk(&mut cx, body);
-    found
-}
-
-/// Check whether `body` contains a free reference to `target` (i.e. the
-/// binding being defined references itself - a recursive closure).
-fn body_references_def(em: &Emitter<'_>, body: ExprIdx, target: DefId) -> bool {
-    let local_defs = HashSet::new();
-    let mut parent_locals = HashMap::new();
-    let _ = parent_locals.insert(target, 0);
-    let parent_upvalues = HashMap::new();
-    let captures = collect_free_vars(em, body, &local_defs, &parent_locals, &parent_upvalues);
-    captures.iter().any(|(did, _)| *did == target)
-}
-
-fn cfv_walk_rec_fields(cx: &mut CfvCtx<'_, '_>, fields: &[RecField]) {
-    for f in fields {
-        match f {
-            RecField::Named { value: Some(v), .. } => cfv_walk(cx, *v),
-            RecField::Spread { expr, .. } => cfv_walk(cx, *expr),
-            RecField::Named { value: None, .. } => {}
-        }
-    }
-}
-
-fn cfv_walk_piecewise(cx: &mut CfvCtx<'_, '_>, arms: &[PwArm]) {
-    for arm in arms {
-        if let PwGuard::When { expr, .. } = arm.guard {
-            cfv_walk(cx, expr);
-        }
-        cfv_walk(cx, arm.result);
-    }
-}
-
-fn cfv_walk_match(cx: &mut CfvCtx<'_, '_>, scrutinee: ExprIdx, arms: &[MatchArm]) {
-    cfv_walk(cx, scrutinee);
-    for arm in arms {
-        if let Some(g) = arm.guard {
-            cfv_walk(cx, g);
-        }
-        cfv_walk(cx, arm.result);
-    }
-}
-
-fn cfv_check_name(cx: &mut CfvCtx<'_, '_>, expr_idx: ExprIdx) {
-    let Some(&def_id) = cx.em.expr_defs().get(&expr_idx) else {
-        return;
-    };
-    if cx.local_defs.contains(&def_id)
-        || cx.em.fn_map.contains_key(&def_id)
-        || cx.em.foreign_map.contains_key(&def_id)
-        || cx.seen.contains(&def_id)
-    {
-        return;
-    }
-    if let Some(&slot) = cx.parent_locals.get(&def_id) {
-        let _ = cx.seen.insert(def_id);
-        cx.found.push((def_id, CaptureSource::Local(slot)));
-    } else if let Some(&idx) = cx.parent_upvalues.get(&def_id) {
-        let _ = cx.seen.insert(def_id);
-        cx.found.push((def_id, CaptureSource::Upvalue(idx)));
-    }
-}
-
-#[expect(
-    clippy::too_many_lines,
-    reason = "exhaustive match on all expression kinds"
-)]
-fn cfv_walk(cx: &mut CfvCtx<'_, '_>, expr_idx: ExprIdx) {
-    match &cx.em.ast.exprs[expr_idx] {
-        Expr::Name { .. } => cfv_check_name(cx, expr_idx),
-        Expr::Lit { .. }
-        | Expr::Error { .. }
-        | Expr::Import { .. }
-        | Expr::Export { .. }
-        | Expr::Choice { .. }
-        | Expr::RecordDef { .. }
-        | Expr::Class { .. }
-        | Expr::Effect { .. }
-        | Expr::Foreign { .. }
-        | Expr::Instance { .. }
-        | Expr::Return { value: None, .. }
-        | Expr::TypeApp { .. }
-        | Expr::FnType { .. }
-        | Expr::OptionType { .. }
-        | Expr::ProductType { .. }
-        | Expr::SumType { .. }
-        | Expr::ArrayType { .. }
-        | Expr::PiType { .. }
-        | Expr::Resume { value: None, .. } => {}
-        Expr::Paren { inner, .. }
-        | Expr::Annotated { inner, .. }
-        | Expr::Return {
-            value: Some(inner), ..
-        }
-        | Expr::Field { object: inner, .. }
-        | Expr::UnaryOp { operand: inner, .. }
-        | Expr::Fn { body: inner, .. }
-        | Expr::TypeCheck { operand: inner, .. }
-        | Expr::Need { operand: inner, .. }
-        | Expr::Resume {
-            value: Some(inner), ..
-        } => cfv_walk(cx, *inner),
-        Expr::BinOp { left, right, .. }
-        | Expr::Index {
-            object: left,
-            index: right,
-            ..
-        } => {
-            cfv_walk(cx, *left);
-            cfv_walk(cx, *right);
-        }
-        Expr::Block { stmts, tail, .. } => {
-            for &s in stmts {
-                cfv_walk(cx, s);
-            }
-            if let Some(t) = *tail {
-                cfv_walk(cx, t);
-            }
-        }
-        Expr::Let { fields, body, .. } => {
-            if let Some(v) = fields.value {
-                cfv_walk(cx, v);
-            }
-            if let Some(b) = *body {
-                cfv_walk(cx, b);
-            }
-        }
-        Expr::Binding { fields, .. } => {
-            if let Some(v) = fields.value {
-                cfv_walk(cx, v);
-            }
-        }
-        Expr::Call { callee, args, .. } => {
-            cfv_walk(cx, *callee);
-            for arg in args {
-                let e = match arg {
-                    Arg::Pos { expr, .. } | Arg::Spread { expr, .. } => *expr,
-                };
-                cfv_walk(cx, e);
-            }
-        }
-        Expr::Tuple { elems, .. } => {
-            for &e in elems {
-                cfv_walk(cx, e);
-            }
-        }
-        Expr::Variant { args, .. } => {
-            for &a in args {
-                cfv_walk(cx, a);
-            }
-        }
-        Expr::Array { elems, .. } => {
-            for e in elems {
-                let idx = match e {
-                    ArrayElem::Elem { expr, .. } | ArrayElem::Spread { expr, .. } => *expr,
-                };
-                cfv_walk(cx, idx);
-            }
-        }
-        Expr::Record { fields, .. } => cfv_walk_rec_fields(cx, fields),
-        Expr::Update { base, fields, .. } => {
-            cfv_walk(cx, *base);
-            cfv_walk_rec_fields(cx, fields);
-        }
-        Expr::Piecewise { arms, .. } => cfv_walk_piecewise(cx, arms),
-        Expr::Match {
-            scrutinee, arms, ..
-        } => cfv_walk_match(cx, *scrutinee, arms),
-        Expr::Handle { body, ops, .. } => cfv_walk_handle(cx, *body, ops),
-    }
-}
-
-fn cfv_walk_handle(cx: &mut CfvCtx<'_, '_>, body: ExprIdx, ops: &[HandlerOp]) {
-    cfv_walk(cx, body);
-    for op in ops {
-        cfv_walk(cx, op.body);
-    }
-}
-
-/// Bit-width of a numeric type, used for narrow-type truncation after arithmetic.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Width {
-    W8,
-    W16,
-    W32,
-    W64,
-}
-
-/// Type family used to select the right arithmetic/comparison opcodes.
-#[derive(Clone, Copy)]
-pub enum TypeFamily {
-    Signed(Width),
-    Unsigned(Width),
-    Float,
-    Bool,
-}
+use super::effects;
+use super::record;
+use super::type_query;
+use super::type_query::{TypeFamily, Width};
+use super::typeclass;
 
 /// Emit bytecode for `expr_idx`. Returns `true` if a value was pushed onto the stack.
 ///
 /// `is_tail` indicates whether this expression is in tail position of a function body.
 /// When true, direct calls can be emitted as tail calls.
-pub fn emit_expr(
-    em: &mut Emitter<'_>,
-    fc: &mut FnCtx,
-    expr_idx: ExprIdx,
-) -> Result<bool, EmitError> {
+pub fn emit_expr(em: &mut Emitter<'_>, fc: &mut FnCtx, expr_idx: ExprIdx) -> EmitResult<bool> {
     emit_expr_tail(em, fc, expr_idx, false)
 }
 
@@ -279,7 +42,7 @@ pub(super) fn emit_require(
     fc: &mut FnCtx,
     idx: ExprIdx,
     ctx: &str,
-) -> Result<(), EmitError> {
+) -> EmitResult {
     let produced = emit_expr(em, fc, idx)?;
     if !produced {
         return Err(EmitError::UnsupportedFeature {
@@ -296,7 +59,7 @@ fn emit_type_check(
     operand: ExprIdx,
     ty: ExprIdx,
     is_tail: bool,
-) -> Result<bool, EmitError> {
+) -> EmitResult<bool> {
     match kind {
         TypeCheckKind::Test => emit_type_test(em, fc, operand, ty),
         TypeCheckKind::Cast => emit_type_cast(em, fc, operand, ty, is_tail),
@@ -310,7 +73,7 @@ pub fn emit_expr_tail(
     fc: &mut FnCtx,
     expr_idx: ExprIdx,
     is_tail: bool,
-) -> Result<bool, EmitError> {
+) -> EmitResult<bool> {
     match &em.ast.exprs[expr_idx] {
         Expr::Lit { lit, .. } => emit_lit(em, fc, lit),
         Expr::Name { name_ref, span } => {
@@ -343,23 +106,23 @@ pub fn emit_expr_tail(
         }
         Expr::Need { operand, .. } => {
             let operand = *operand;
-            emit_need(em, fc, operand, is_tail)
+            effects::emit_need(em, fc, operand, is_tail)
         }
         Expr::Resume { value, .. } => {
             let value = *value;
-            emit_resume(em, fc, value)
+            effects::emit_resume(em, fc, value)
         }
         Expr::Call { callee, args, .. } => {
             let (callee, args) = (*callee, args.clone());
             emit_call(em, fc, callee, &args, is_tail)
         }
         Expr::Tuple { elems, .. } => emit_tuple(em, fc, &elems.clone()),
-        Expr::Record { fields, .. } => emit_record_lit(em, fc, &fields.clone()),
+        Expr::Record { fields, .. } => record::emit_record_lit(em, fc, &fields.clone(), None),
         Expr::Array { elems, .. } => {
             emit_array(em, fc, &elems.clone())?;
             Ok(true)
         }
-        Expr::Variant { name, args, .. } => emit_variant(em, fc, *name, &args.clone()),
+        Expr::Variant { name, args, .. } => record::emit_variant(em, fc, *name, &args.clone()),
         Expr::Field {
             object,
             field,
@@ -405,7 +168,7 @@ pub fn emit_expr_tail(
             super::control::emit_match(em, fc, scrutinee, &arms, is_tail)?;
             Ok(true)
         }
-        Expr::Fn { params, body, .. } => emit_fn(em, fc, &params.clone(), *body),
+        Expr::Fn { params, body, .. } => closure::emit_fn(em, fc, &params.clone(), *body),
         Expr::Import { .. }
         | Expr::Export { .. }
         | Expr::Choice { .. }
@@ -422,7 +185,7 @@ pub fn emit_expr_tail(
         | Expr::SumType { .. }
         | Expr::ArrayType { .. }
         | Expr::PiType { .. } => Ok(false),
-        Expr::Update { base, fields, .. } => emit_update(em, fc, *base, &fields.clone()),
+        Expr::Update { base, fields, .. } => record::emit_update(em, fc, *base, &fields.clone()),
         Expr::TypeCheck {
             kind, operand, ty, ..
         } => emit_type_check(em, fc, *kind, *operand, *ty, is_tail),
@@ -433,7 +196,7 @@ pub fn emit_expr_tail(
             ..
         } => {
             let (effect_ty, ops, body) = (*effect_ty, ops.clone(), *body);
-            emit_handle(em, fc, effect_ty, &ops, body)
+            effects::emit_handle(em, fc, effect_ty, &ops, body)
         }
     }
 }
@@ -444,7 +207,7 @@ fn emit_name(
     expr_idx: ExprIdx,
     name: Symbol,
     _span: Span,
-) -> Result<bool, EmitError> {
+) -> EmitResult<bool> {
     let Some(&def_id) = em.expr_defs().get(&expr_idx) else {
         return Err(EmitError::UnsupportedFeature {
             desc: format!("unresolved name `{}`", em.interner.resolve(name)).into(),
@@ -504,7 +267,7 @@ fn emit_module_record(
     em: &mut Emitter<'_>,
     fc: &mut FnCtx,
     ty_idx: msc_sema::TypeIdx,
-) -> Result<bool, EmitError> {
+) -> EmitResult<bool> {
     let resolved = em.sema.unify.resolve(ty_idx, &em.sema.types);
     let Type::Record { fields, .. } = &em.sema.types[resolved] else {
         return Ok(false);
@@ -566,7 +329,7 @@ fn emit_block(
     stmts: &[ExprIdx],
     tail: Option<ExprIdx>,
     is_tail: bool,
-) -> Result<bool, EmitError> {
+) -> EmitResult<bool> {
     for &stmt_idx in stmts {
         let produced = emit_expr(em, fc, stmt_idx)?;
         if produced {
@@ -584,7 +347,7 @@ fn emit_let(
     fields: &LetFields,
     body: Option<ExprIdx>,
     is_tail: bool,
-) -> Result<bool, EmitError> {
+) -> EmitResult<bool> {
     if let Some(val_idx) = fields.value {
         if fields.kind != BindKind::Mut
             && let Expr::Fn {
@@ -605,8 +368,10 @@ fn emit_let(
                         });
                     }
                     // Recursive lambda: use ref-cell letrec pattern.
-                    if body_references_def(em, fn_body, def_id) {
-                        emit_letrec_fn(em, fc, def_id, fields.pat, val_idx, &params, fn_body)?;
+                    if capture::body_references_def(em, fn_body, def_id) {
+                        closure::emit_letrec_fn(
+                            em, fc, def_id, fields.pat, val_idx, &params, fn_body,
+                        )?;
                         return body.map_or(Ok(false), |body_idx| {
                             emit_expr_tail(em, fc, body_idx, is_tail)
                         });
@@ -628,53 +393,7 @@ fn emit_let(
     })
 }
 
-/// Emit a recursive local closure via the ref-cell letrec pattern:
-/// 1. Pre-allocate a ref cell with a placeholder value
-/// 2. Emit the closure (which captures the ref cell as an upvalue)
-/// 3. Patch the ref cell with the actual closure value
-fn emit_letrec_fn(
-    em: &mut Emitter<'_>,
-    fc: &mut FnCtx,
-    def_id: DefId,
-    _pat_idx: PatIdx,
-    _val_idx: ExprIdx,
-    params: &[Param],
-    fn_body: ExprIdx,
-) -> Result<(), EmitError> {
-    // 1. Pre-allocate ref cell: LD_UNIT → ALC_REF → ST_LOC
-    let wk = &em.sema.well_known;
-    let type_id = em.tp.lower_well_known_def(wk.any, wk).unwrap_or(0);
-    fc.fe.emit_ld_unit();
-    fc.fe.emit_alc_ref(type_id);
-    let slot = fc.alloc_local();
-    fc.fe.emit_st_loc(slot);
-
-    // Register the binding before emitting the closure so collect_free_vars
-    // finds it in fc.local_map and captures the ref cell.
-    let prev = fc.local_map.insert(def_id, slot);
-    debug_assert!(prev.is_none(), "duplicate local slot for letrec def");
-    let _ = fc.ref_locals.insert(def_id);
-
-    // 2. Emit the closure (standard path - now finds self in parent_locals).
-    let produced = emit_fn(em, fc, params, fn_body)?;
-    if !produced {
-        return Ok(());
-    }
-
-    // 3. Patch: store closure into the ref cell's field 0.
-    let tmp = fc.alloc_local();
-    fc.fe.emit_st_loc(tmp);
-    fc.fe.emit_ld_loc(slot);
-    fc.fe.emit_ld_loc(tmp);
-    fc.fe.emit_st_fld(0)?;
-    Ok(())
-}
-
-fn emit_binding(
-    em: &mut Emitter<'_>,
-    fc: &mut FnCtx,
-    fields: &LetFields,
-) -> Result<bool, EmitError> {
+fn emit_binding(em: &mut Emitter<'_>, fc: &mut FnCtx, fields: &LetFields) -> EmitResult<bool> {
     let Some(val_idx) = fields.value else {
         return Ok(false);
     };
@@ -699,7 +418,7 @@ fn emit_unary(
     op: UnaryOp,
     operand: ExprIdx,
     _span: Span,
-) -> Result<bool, EmitError> {
+) -> EmitResult<bool> {
     emit_require(em, fc, operand, "unary operand")?;
     match op {
         UnaryOp::Neg => {
@@ -710,7 +429,7 @@ fn emit_unary(
             fc.fe.emit_unop(Opcode::NOT);
             Ok(true)
         }
-        UnaryOp::ForceUnwrap => emit_force_unwrap(em, fc, operand),
+        UnaryOp::ForceUnwrap => effects::emit_force_unwrap(em, fc, operand),
         UnaryOp::Propagate => {
             desugar::emit_propagate(em, fc, operand)?;
             Ok(true)
@@ -723,7 +442,7 @@ fn emit_unary(
     }
 }
 
-fn emit_tuple(em: &mut Emitter<'_>, fc: &mut FnCtx, elems: &[ExprIdx]) -> Result<bool, EmitError> {
+fn emit_tuple(em: &mut Emitter<'_>, fc: &mut FnCtx, elems: &[ExprIdx]) -> EmitResult<bool> {
     let n = elems.len();
     for &e in elems {
         emit_require(em, fc, e, "tuple element")?;
@@ -740,7 +459,7 @@ fn emit_field(
     object: ExprIdx,
     field: FieldKey,
     safe: bool,
-) -> Result<bool, EmitError> {
+) -> EmitResult<bool> {
     emit_require(em, fc, object, "field object")?;
 
     if safe {
@@ -759,7 +478,7 @@ fn emit_field(
         fc.fe.emit_ld_pay(0);
         let index = match field {
             FieldKey::Pos { index, .. } => index,
-            FieldKey::Name { name, .. } => resolve_field_name(em, object, name)?,
+            FieldKey::Name { name, .. } => type_query::resolve_field_name(em, object, name)?,
         };
         fc.fe.emit_ld_fld(index)?;
         fc.fe.emit_mk_var(em.some_tag, 1);
@@ -773,9 +492,9 @@ fn emit_field(
     } else {
         let index = match field {
             FieldKey::Pos { index, .. } => index,
-            FieldKey::Name { name, .. } => resolve_field_name(em, object, name)?,
+            FieldKey::Name { name, .. } => type_query::resolve_field_name(em, object, name)?,
         };
-        if object_type_is_tuple(em, object) {
+        if type_query::object_type_is_tuple(em, object) {
             fc.fe.emit_tup_get(index)?;
         } else {
             fc.fe.emit_ld_fld(index)?;
@@ -785,32 +504,19 @@ fn emit_field(
     Ok(true)
 }
 
-/// Returns `true` when the object expression's sema type resolves to `Type::Tuple`.
-fn object_type_is_tuple(em: &Emitter<'_>, object: ExprIdx) -> bool {
-    let Some(&ty_idx) = em.expr_types().get(&object) else {
-        return false;
-    };
-    let resolved = em.sema.unify.resolve(ty_idx, &em.sema.types);
-    matches!(&em.sema.types[resolved], Type::Tuple { .. })
-}
-
 fn emit_index(
     em: &mut Emitter<'_>,
     fc: &mut FnCtx,
     object: ExprIdx,
     index: ExprIdx,
-) -> Result<bool, EmitError> {
+) -> EmitResult<bool> {
     emit_require(em, fc, object, "index object")?;
     emit_require(em, fc, index, "index value")?;
     fc.fe.emit_ld_idx();
     Ok(true)
 }
 
-fn emit_return(
-    em: &mut Emitter<'_>,
-    fc: &mut FnCtx,
-    value: Option<ExprIdx>,
-) -> Result<bool, EmitError> {
+fn emit_return(em: &mut Emitter<'_>, fc: &mut FnCtx, value: Option<ExprIdx>) -> EmitResult<bool> {
     if let Some(val_idx) = value {
         let produced = emit_expr(em, fc, val_idx)?;
         if produced {
@@ -832,59 +538,12 @@ fn emit_return(
     Ok(false)
 }
 
-/// Resolve an AST type annotation (`ExprIdx`) to a bytecode `type_id`.
-///
-/// First checks well-known types by name. If not found, walks sema defs to
-/// find a matching named type and lowers its sema type. Returns `None` if
-/// the type cannot be resolved (e.g. type variable, unresolved name).
-fn lower_ast_ty_to_type_id(em: &mut Emitter<'_>, ty: ExprIdx) -> Option<u32> {
-    let name = match &em.ast.exprs[ty] {
-        Expr::Name { name_ref, .. } => em.ast.name_refs[*name_ref].name,
-        Expr::TypeApp { callee, .. } => match &em.ast.exprs[*callee] {
-            Expr::Name { name_ref, .. } => em.ast.name_refs[*name_ref].name,
-            _ => return None,
-        },
-        _ => return None,
-    };
-    let wk = &em.sema.well_known;
-    let name_str = em.interner.resolve(name);
-    // Well-known primitive types - match by name so they work even without sema ty_info.
-    match name_str {
-        "Bool" => return em.tp.lower_well_known_def(wk.bool, wk),
-        "Int" | "Int64" => return em.tp.lower_well_known_def(wk.ints.int, wk),
-        "Int8" => return em.tp.lower_well_known_def(wk.ints.int8, wk),
-        "Int16" => return em.tp.lower_well_known_def(wk.ints.int16, wk),
-        "Int32" => return em.tp.lower_well_known_def(wk.ints.int32, wk),
-        "Nat" | "Nat64" => return em.tp.lower_well_known_def(wk.nats.nat, wk),
-        "Nat8" => return em.tp.lower_well_known_def(wk.nats.nat8, wk),
-        "Nat16" => return em.tp.lower_well_known_def(wk.nats.nat16, wk),
-        "Nat32" => return em.tp.lower_well_known_def(wk.nats.nat32, wk),
-        "Float" => return em.tp.lower_well_known_def(wk.float, wk),
-        "Float32" => return em.tp.lower_well_known_def(wk.floats.float32, wk),
-        "Float64" => return em.tp.lower_well_known_def(wk.floats.float64, wk),
-        "Rune" => return em.tp.lower_well_known_def(wk.rune, wk),
-        "String" => return em.tp.lower_well_known_def(wk.string, wk),
-        "Unit" => return em.tp.lower_well_known_def(wk.unit, wk),
-        _ => {}
-    }
-    // User-defined named type: find by name in sema defs.
-    let def = em
-        .sema
-        .defs
-        .iter()
-        .find(|d| d.name == name && matches!(d.kind, DefKind::Type | DefKind::Effect))?;
-    let ty_idx = def.ty_info.ty?;
-    em.tp
-        .lower_sema_type(ty_idx, &em.sema.types, &em.sema.unify, &em.sema.well_known)
-        .ok()
-}
-
 fn emit_type_test(
     em: &mut Emitter<'_>,
     fc: &mut FnCtx,
     operand: ExprIdx,
     ty: ExprIdx,
-) -> Result<bool, EmitError> {
+) -> EmitResult<bool> {
     let produced = emit_expr(em, fc, operand)?;
     if !produced {
         let cv = ConstValue::Int(1);
@@ -892,7 +551,7 @@ fn emit_type_test(
         fc.fe.emit_ld_cst(i);
         return Ok(true);
     }
-    if let Some(type_id) = lower_ast_ty_to_type_id(em, ty) {
+    if let Some(type_id) = type_query::lower_ast_ty_to_type_id(em, ty) {
         fc.fe.emit_type_chk(type_id);
     } else {
         // Type couldn't be resolved - fall back to always-true.
@@ -911,12 +570,12 @@ fn emit_type_cast(
     operand: ExprIdx,
     ty: ExprIdx,
     is_tail: bool,
-) -> Result<bool, EmitError> {
+) -> EmitResult<bool> {
     let produced = emit_expr_tail(em, fc, operand, is_tail)?;
     if !produced {
         return Ok(false);
     }
-    let Some(type_id) = lower_ast_ty_to_type_id(em, ty) else {
+    let Some(type_id) = type_query::lower_ast_ty_to_type_id(em, ty) else {
         // Can't resolve type - leave value on stack, assume caller knows what they're doing.
         return Ok(true);
     };
@@ -936,7 +595,7 @@ fn emit_binop_expr(
     op: BinOp,
     left: ExprIdx,
     right: ExprIdx,
-) -> Result<bool, EmitError> {
+) -> EmitResult<bool> {
     if let Some(&def_id) = em.active_binop_dispatch().get(&expr_idx)
         && let Some(&fn_id) = em.fn_map.get(&def_id)
     {
@@ -954,7 +613,8 @@ fn emit_binop_expr(
             .ok_or_else(|| EmitError::UnsupportedFeature {
                 desc: "no dictionary slot for class constraint".into(),
             })?;
-        let method_idx = class_method_index(em, dict_lookup.class, dict_lookup.method_sym)?;
+        let method_idx =
+            typeclass::class_method_index(em, dict_lookup.class, dict_lookup.method_sym)?;
         fc.fe.emit_ld_loc(dict_slot); // load dictionary product
         fc.fe.emit_ld_fld(method_idx)?; // extract method fn value
         emit_require(em, fc, left, "dict-dispatched binop left operand")?;
@@ -972,11 +632,12 @@ fn emit_primitive_binop(
     op: BinOp,
     left: ExprIdx,
     right: ExprIdx,
-) -> Result<bool, EmitError> {
+) -> EmitResult<bool> {
     match op {
         BinOp::And => {
-            let family = classify_type_family(em, left).or_else(|| classify_type_family(em, right));
-            if is_logical_family(family) {
+            let family = type_query::classify_type_family(em, left)
+                .or_else(|| type_query::classify_type_family(em, right));
+            if type_query::is_logical_family(family) {
                 desugar::emit_and(em, fc, left, right)?;
             } else {
                 emit_require(em, fc, left, "binop left operand")?;
@@ -986,8 +647,9 @@ fn emit_primitive_binop(
             Ok(true)
         }
         BinOp::Or => {
-            let family = classify_type_family(em, left).or_else(|| classify_type_family(em, right));
-            if is_logical_family(family) {
+            let family = type_query::classify_type_family(em, left)
+                .or_else(|| type_query::classify_type_family(em, right));
+            if type_query::is_logical_family(family) {
                 desugar::emit_or(em, fc, left, right)?;
             } else {
                 emit_require(em, fc, left, "binop left operand")?;
@@ -1042,8 +704,8 @@ fn emit_primitive_binop(
             }
             emit_require(em, fc, left, "binop left operand")?;
             emit_require(em, fc, right, "binop right operand")?;
-            let family = classify_type_family(em, left);
-            let opcode = map_binop(op, family)?;
+            let family = type_query::classify_type_family(em, left);
+            let opcode = type_query::map_binop(op, family)?;
             fc.fe.emit_binop(opcode);
             // Comparison operators produce bool, not int - skip narrow truncation.
             if !matches!(
@@ -1066,7 +728,7 @@ fn emit_narrow_truncation(
     em: &mut Emitter<'_>,
     fc: &mut FnCtx,
     family: Option<TypeFamily>,
-) -> Result<(), EmitError> {
+) -> EmitResult {
     let (signed, shift_amount, mask) = match family {
         Some(TypeFamily::Signed(Width::W8)) => (true, 56i64, 0u64),
         Some(TypeFamily::Signed(Width::W16)) => (true, 48, 0),
@@ -1099,15 +761,17 @@ fn emit_call(
     callee: ExprIdx,
     args: &[Arg],
     is_tail: bool,
-) -> Result<bool, EmitError> {
+) -> EmitResult<bool> {
     // Direct dispatch: if the callee resolves to a known function, emit a
     // static call (INV / INV_FFI) instead of dynamic dispatch (INV_DYN).
     // This handles both simple names (`foo(...)`) and resolved import field
     // chains (`rt.writeln(...)`, `t.assertions.assert_eq(...)`).
     if let Some(&def_id) = em.expr_defs().get(&callee) {
-        let dict_count = emit_dict_for_call(em, fc, def_id, callee)?;
+        let dict_count = typeclass::emit_dict_for_call(em, fc, def_id, callee)?;
         let explicit_count = emit_call_args(em, fc, args)?;
-        let total_count = dict_count + explicit_count;
+        let explicit_count_u32 =
+            u32::try_from(explicit_count).map_err(|_| EmitError::overflow("arg count"))?;
+        let total_count = dict_count + explicit_count_u32;
 
         if let Some(&ffi_idx) = em.foreign_map.get(&def_id) {
             let ac = i32::try_from(total_count).map_err(|_| EmitError::overflow("arg count"))?;
@@ -1131,7 +795,11 @@ fn emit_call(
             || em.global_map.contains_key(&def_id)
         {
             // Spill args to temp slots.
-            let mut arg_temps = Vec::with_capacity(total_count);
+            let mut arg_temps = Vec::with_capacity(
+                total_count
+                    .try_into()
+                    .map_err(|_| EmitError::overflow("arg count"))?,
+            );
             for _ in 0..total_count {
                 let t = fc.alloc_local();
                 fc.fe.emit_st_loc(t);
@@ -1182,289 +850,7 @@ fn emit_call(
     }
 }
 
-fn emit_record_lit(
-    em: &mut Emitter<'_>,
-    fc: &mut FnCtx,
-    fields: &[RecField],
-) -> Result<bool, EmitError> {
-    let has_spread = fields.iter().any(|f| matches!(f, RecField::Spread { .. }));
-
-    if has_spread {
-        emit_record_lit_with_spread(em, fc, fields)
-    } else {
-        emit_record_lit_fixed(em, fc, fields)
-    }
-}
-
-fn emit_record_lit_fixed(
-    em: &mut Emitter<'_>,
-    fc: &mut FnCtx,
-    fields: &[RecField],
-) -> Result<bool, EmitError> {
-    // Collect (name, value) pairs and sort by name for canonical field ordering.
-    // This ordering must match `resolve_field_in_type` and the type checker's
-    // canonical sort so that field indices are consistent across modules.
-    let mut named_fields: Vec<(msc_shared::Symbol, Option<msc_ast::ExprIdx>)> = fields
-        .iter()
-        .filter_map(|f| match f {
-            RecField::Named { name, value, .. } => Some((*name, *value)),
-            RecField::Spread { .. } => None,
-        })
-        .collect();
-    named_fields.sort_by(|(a, _), (b, _)| em.interner.resolve(*a).cmp(em.interner.resolve(*b)));
-    let n = named_fields.len();
-    for (_, val_opt) in named_fields {
-        if let Some(val_idx) = val_opt {
-            emit_require(em, fc, val_idx, "record field")?;
-        } else {
-            return Err(EmitError::UnsupportedFeature {
-                desc: "record field with no value".into(),
-            });
-        }
-    }
-    let field_count = u32::try_from(n).map_err(|_| EmitError::overflow("record field count"))?;
-    let stack_pop = i32::try_from(n).map_err(|_| EmitError::overflow("record field count"))?;
-    fc.fe.emit_mk_prd(field_count, stack_pop)?;
-    Ok(true)
-}
-
-/// Emit a record literal that contains a spread (`{...base, name: val}`).
-///
-/// Records are heap-allocated products. The spread provides the base object;
-/// named fields override specific positions in that object via `ST_FLD`.
-/// Only a single leading spread followed by named overrides is supported
-/// (the common `{...base, key: val}` pattern). Multiple spreads or spreads
-/// mixed with overrides in arbitrary order would require full type-layout
-/// knowledge that isn't available here.
-fn emit_record_lit_with_spread(
-    em: &mut Emitter<'_>,
-    fc: &mut FnCtx,
-    fields: &[RecField],
-) -> Result<bool, EmitError> {
-    let mut spread_expr: Option<ExprIdx> = None;
-    for f in fields {
-        if let RecField::Spread { expr, .. } = f {
-            if spread_expr.is_some() {
-                return Err(EmitError::UnsupportedFeature {
-                    desc: "multiple spread elements in record literal".into(),
-                });
-            }
-            spread_expr = Some(*expr);
-        }
-    }
-    let base_expr = spread_expr.ok_or_else(|| EmitError::UnsupportedFeature {
-        desc: "record spread without base expression".into(),
-    })?;
-
-    emit_require(em, fc, base_expr, "record spread base")?;
-    let rec_slot = fc.alloc_local();
-    fc.fe.emit_st_loc(rec_slot);
-
-    for f in fields {
-        if let RecField::Named { name, value, .. } = f {
-            let val_idx = value.ok_or_else(|| EmitError::UnsupportedFeature {
-                desc: "record spread override field has no value".into(),
-            })?;
-
-            let field_idx = resolve_field_name_by_symbol(em, base_expr, *name)?;
-
-            fc.fe.emit_ld_loc(rec_slot);
-            emit_require(em, fc, val_idx, "record spread override field")?;
-            fc.fe.emit_st_fld(field_idx)?;
-        }
-    }
-
-    fc.fe.emit_ld_loc(rec_slot);
-    Ok(true)
-}
-
-fn resolve_field_name_by_symbol(
-    em: &Emitter<'_>,
-    object_expr: ExprIdx,
-    name: Symbol,
-) -> Result<u32, EmitError> {
-    let Some(&ty_idx) = em.expr_types().get(&object_expr) else {
-        return Err(EmitError::NoTypeInfo {
-            desc: "record spread base".into(),
-        });
-    };
-    let resolved = em.sema.unify.resolve(ty_idx, &em.sema.types);
-    match &em.sema.types[resolved] {
-        Type::Record { fields, .. } => {
-            let mut sorted: Vec<_> = fields.clone();
-            sorted.sort_by(|a, b| em.interner.resolve(a.name).cmp(em.interner.resolve(b.name)));
-            for (i, f) in sorted.iter().enumerate() {
-                if f.name == name {
-                    return u32::try_from(i).map_err(|_| {
-                        EmitError::overflow(format!(
-                            "record field index for `{}`",
-                            em.interner.resolve(name)
-                        ))
-                    });
-                }
-            }
-            Err(EmitError::FieldNotFound {
-                desc: format!("record field `{}`", em.interner.resolve(name)).into(),
-            })
-        }
-        _ => Err(EmitError::FieldNotFound {
-            desc: format!(
-                "spread base is not a record type (field `{}`)",
-                em.interner.resolve(name)
-            )
-            .into(),
-        }),
-    }
-}
-
-fn emit_variant(
-    em: &mut Emitter<'_>,
-    fc: &mut FnCtx,
-    name: Symbol,
-    args: &[ExprIdx],
-) -> Result<bool, EmitError> {
-    let name_str = em.interner.resolve(name);
-    if args.is_empty() {
-        if name_str == "True" {
-            let cv = ConstValue::Int(1);
-            let i = em.cp.intern(&cv)?;
-            fc.fe.emit_ld_cst(i);
-            return Ok(true);
-        }
-        if name_str == "False" {
-            let cv = ConstValue::Int(0);
-            let i = em.cp.intern(&cv)?;
-            fc.fe.emit_ld_cst(i);
-            return Ok(true);
-        }
-    }
-
-    for &arg_idx in args {
-        emit_require(em, fc, arg_idx, "variant arg")?;
-    }
-    let tag = resolve_variant_tag(em, name)?;
-    let arity = u8::try_from(args.len()).map_err(|_| EmitError::OperandOverflow {
-        desc: "variant arity exceeds 255".into(),
-    })?;
-    fc.fe.emit_mk_var(tag, arity);
-    Ok(true)
-}
-
-fn emit_fn(
-    em: &mut Emitter<'_>,
-    fc: &mut FnCtx,
-    params: &[Param],
-    body: ExprIdx,
-) -> Result<bool, EmitError> {
-    let nested_fn_id = em.alloc_fn_id();
-    let nested_param_count =
-        u16::try_from(params.len()).map_err(|_| EmitError::overflow("nested fn param count"))?;
-    let nested_entry = FnEntry {
-        fn_id: nested_fn_id,
-        def_id: None,
-        name: format!("<closure@{nested_fn_id}>"),
-        params: params.to_vec(),
-        body,
-        dep_idx: em.active_dep,
-    };
-
-    let mut nested_fc = FnCtx::new(nested_param_count);
-
-    // Build the set of locally-defined DefIds (params).
-    let mut local_defs = HashSet::new();
-    for (i, param) in params.iter().enumerate() {
-        let slot = u32::try_from(i).map_err(|_| EmitError::overflow("nested fn param index"))?;
-        if let Some(&did) = em.pat_defs().get(&param.span) {
-            let prev = nested_fc.local_map.insert(did, slot);
-            debug_assert!(prev.is_none(), "duplicate local slot for def");
-            let _ = local_defs.insert(did);
-        } else {
-            for def in &em.sema.defs {
-                if def.kind == DefKind::Param && def.name == param.name && def.span == param.span {
-                    let prev = nested_fc.local_map.insert(def.id, slot);
-                    debug_assert!(prev.is_none(), "duplicate local slot for def");
-                    let _ = local_defs.insert(def.id);
-                    break;
-                }
-            }
-        }
-    }
-
-    // Collect free variables from body that reference the parent scope.
-    let captures = collect_free_vars(em, body, &local_defs, &fc.local_map, &fc.upvalue_map);
-    let upvalue_count = u16::try_from(captures.len())
-        .map_err(|_| EmitError::overflow("too many captured variables"))?;
-
-    // Populate the nested function's upvalue_map and propagate ref info.
-    for (upv_idx, &(def_id, _)) in captures.iter().enumerate() {
-        let idx = u16::try_from(upv_idx)
-            .map_err(|_| EmitError::overflow("upvalue index in populate loop"))?;
-        let _ = nested_fc.upvalue_map.insert(def_id, idx);
-        if fc.ref_locals.contains(&def_id) || fc.ref_upvalues.contains(&def_id) {
-            let _ = nested_fc.ref_upvalues.insert(def_id);
-        }
-    }
-
-    let had_value = emit_expr_tail(em, &mut nested_fc, body, true)?;
-    if had_value {
-        if !nested_fc.deferred.is_empty() {
-            let tmp = nested_fc.alloc_local();
-            nested_fc.fe.emit_st_loc(tmp);
-            emit_deferred_cleanup(em, &mut nested_fc)?;
-            nested_fc.fe.emit_ld_loc(tmp);
-        }
-        nested_fc.fe.emit_ret();
-    } else {
-        emit_deferred_cleanup(em, &mut nested_fc)?;
-        nested_fc.fe.emit_ret_u();
-    }
-    nested_fc.fe.resolve_fixups(&nested_entry.name)?;
-    let _code_len = nested_fc.fe.validate_code_len()?;
-    let type_id = if let Some(&ty_idx) = em.expr_types().get(&body) {
-        em.tp
-            .lower_sema_type(ty_idx, &em.sema.types, &em.sema.unify, &em.sema.well_known)
-            .unwrap_or(0)
-    } else {
-        em.tp
-            .lower_well_known_def(em.sema.well_known.unit, &em.sema.well_known)
-            .ok_or_else(|| EmitError::unresolvable("Unit type"))?
-    };
-    let fn_bytecode = FnBytecode {
-        fn_id: nested_fn_id,
-        name_stridx: 0,
-        type_id,
-        local_count: nested_fc.fe.local_count,
-        param_count: nested_fc.fe.param_count,
-        max_stack: nested_fc.fe.max_stack,
-        upvalue_count,
-        code: nested_fc.fe.code,
-        handlers: nested_fc.fe.handlers,
-    };
-    em.nested_fns.push(fn_bytecode);
-
-    if upvalue_count == 0 {
-        // Non-capturing lambda: use existing LD_CST FnRef path.
-        let cv = ConstValue::Int(i64::from(nested_fn_id));
-        let i = em.cp.intern(&cv)?;
-        fc.fe.emit_ld_cst(i);
-    } else {
-        // Capturing closure: emit CLS_NEW then attach each upvalue cell.
-        fc.fe.emit_cls_new(nested_fn_id);
-        for &(_, source) in &captures {
-            match source {
-                CaptureSource::Local(slot) => fc.fe.emit_cls_upv_local(slot),
-                CaptureSource::Upvalue(idx) => {
-                    let u8_idx = u8::try_from(idx)
-                        .map_err(|_| EmitError::overflow("upvalue index exceeds 255"))?;
-                    fc.fe.emit_cls_upv_parent(u8_idx);
-                }
-            }
-        }
-    }
-    Ok(true)
-}
-
-fn emit_lit(em: &mut Emitter<'_>, fc: &mut FnCtx, lit: &Lit) -> Result<bool, EmitError> {
+fn emit_lit(em: &mut Emitter<'_>, fc: &mut FnCtx, lit: &Lit) -> EmitResult<bool> {
     match lit {
         Lit::Unit { .. } => Ok(false),
         Lit::Int { value, .. } => {
@@ -1504,7 +890,7 @@ fn emit_lit(em: &mut Emitter<'_>, fc: &mut FnCtx, lit: &Lit) -> Result<bool, Emi
 }
 
 /// Consume the top-of-stack value and bind it to `pat_idx`.
-pub fn bind_pat(em: &mut Emitter<'_>, fc: &mut FnCtx, pat_idx: PatIdx) -> Result<(), EmitError> {
+pub fn bind_pat(em: &mut Emitter<'_>, fc: &mut FnCtx, pat_idx: PatIdx) -> EmitResult {
     match &em.ast.pats[pat_idx] {
         Pat::Wild { .. } => {
             fc.fe.emit_pop();
@@ -1559,7 +945,7 @@ pub fn bind_pat(em: &mut Emitter<'_>, fc: &mut FnCtx, pat_idx: PatIdx) -> Result
 }
 
 /// Bind a pattern as a ref cell: wraps the top-of-stack value in `ALC_REF`.
-fn bind_pat_ref(em: &mut Emitter<'_>, fc: &mut FnCtx, pat_idx: PatIdx) -> Result<(), EmitError> {
+fn bind_pat_ref(em: &mut Emitter<'_>, fc: &mut FnCtx, pat_idx: PatIdx) -> EmitResult {
     match &em.ast.pats[pat_idx] {
         Pat::Bind { span, .. } => {
             let span = *span;
@@ -1580,7 +966,11 @@ fn bind_pat_ref(em: &mut Emitter<'_>, fc: &mut FnCtx, pat_idx: PatIdx) -> Result
     }
 }
 
-fn emit_call_args(em: &mut Emitter<'_>, fc: &mut FnCtx, args: &[Arg]) -> Result<usize, EmitError> {
+pub(super) fn emit_call_args(
+    em: &mut Emitter<'_>,
+    fc: &mut FnCtx,
+    args: &[Arg],
+) -> EmitResult<usize> {
     let mut count = 0usize;
     for &arg in args {
         match arg {
@@ -1603,7 +993,7 @@ fn emit_call_args(em: &mut Emitter<'_>, fc: &mut FnCtx, args: &[Arg]) -> Result<
     Ok(count)
 }
 
-fn emit_array(em: &mut Emitter<'_>, fc: &mut FnCtx, elems: &[ArrayElem]) -> Result<(), EmitError> {
+fn emit_array(em: &mut Emitter<'_>, fc: &mut FnCtx, elems: &[ArrayElem]) -> EmitResult {
     let has_spread = elems.iter().any(|e| matches!(e, ArrayElem::Spread { .. }));
 
     if has_spread {
@@ -1613,11 +1003,7 @@ fn emit_array(em: &mut Emitter<'_>, fc: &mut FnCtx, elems: &[ArrayElem]) -> Resu
     }
 }
 
-fn emit_array_fixed(
-    em: &mut Emitter<'_>,
-    fc: &mut FnCtx,
-    elems: &[ArrayElem],
-) -> Result<(), EmitError> {
+fn emit_array_fixed(em: &mut Emitter<'_>, fc: &mut FnCtx, elems: &[ArrayElem]) -> EmitResult {
     let count =
         u32::try_from(elems.len()).map_err(|_| EmitError::overflow("array element count"))?;
     let len_cv = ConstValue::Int(i64::from(count));
@@ -1656,11 +1042,7 @@ fn emit_array_fixed(
 /// 1. Compute total size: fixed element count + `LD_LEN` for each spread.
 /// 2. Push total size, `MK_ARR` to allocate.
 /// 3. Walk elements: for fixed, write at current index; for spread, loop over it.
-fn emit_array_with_spread(
-    em: &mut Emitter<'_>,
-    fc: &mut FnCtx,
-    elems: &[ArrayElem],
-) -> Result<(), EmitError> {
+fn emit_array_with_spread(em: &mut Emitter<'_>, fc: &mut FnCtx, elems: &[ArrayElem]) -> EmitResult {
     // Count the fixed elements (non-spread) to use as the base in the size sum.
     let fixed_count = elems
         .iter()
@@ -1775,473 +1157,8 @@ fn emit_array_with_spread(
     Ok(())
 }
 
-/// Resolve a variant's tag by scanning the def table for sibling variants.
-pub fn resolve_variant_tag(em: &Emitter<'_>, name: Symbol) -> Result<u32, EmitError> {
-    let name_str = em.interner.resolve(name);
-    for def in &em.sema.defs {
-        if def.kind == DefKind::Variant && em.interner.resolve(def.name) == name_str {
-            let Some(parent_id) = def.parent else {
-                return Err(EmitError::FieldNotFound {
-                    desc: format!("variant `{name_str}` has no parent choice type").into(),
-                });
-            };
-            let mut siblings: Vec<u32> = em
-                .sema
-                .defs
-                .iter()
-                .filter(|d| d.kind == DefKind::Variant && d.parent == Some(parent_id))
-                .map(|d| d.id.0)
-                .collect();
-            siblings.sort_unstable();
-            let pos = siblings
-                .iter()
-                .position(|&x| x == def.id.0)
-                .ok_or_else(|| EmitError::FieldNotFound {
-                    desc: format!("variant `{name_str}` not found among its siblings").into(),
-                })?;
-            return u32::try_from(pos)
-                .map_err(|_| EmitError::overflow(format!("variant tag index for `{name_str}`")));
-        }
-    }
-    // Fall back to well-known tags for open variants not in the def table.
-    let name_str_owned = em.interner.resolve(name).to_owned();
-    if name_str_owned == "Some" {
-        return Ok(em.some_tag);
-    }
-    if name_str_owned == "None" {
-        return Ok(u32::from(em.some_tag == 0));
-    }
-    if name_str_owned == "Ok" {
-        return Ok(em.ok_tag);
-    }
-    if name_str_owned == "Err" {
-        return Ok(u32::from(em.ok_tag == 0));
-    }
-    // Ordering variants: Less + Equal + Greater (defined in @std/cmp/ordering)
-    if name_str_owned == "Less" {
-        return Ok(0);
-    }
-    if name_str_owned == "Equal" {
-        return Ok(1);
-    }
-    if name_str_owned == "Greater" {
-        return Ok(2);
-    }
-    Err(EmitError::FieldNotFound {
-        desc: format!("variant `{name_str}` not found in any choice type").into(),
-    })
-}
-
-/// Resolve a named field to its positional index by inspecting the object's type.
-pub(super) fn resolve_field_name(
-    em: &Emitter<'_>,
-    object_expr: ExprIdx,
-    name: Symbol,
-) -> Result<u32, EmitError> {
-    let Some(&ty_idx) = em.expr_types().get(&object_expr) else {
-        return Err(EmitError::NoTypeInfo {
-            desc: "field access object".into(),
-        });
-    };
-    // Try the expression type first, then fall back to resolving through the
-    // object's definition type if the field isn't found (handles partially
-    // unified row types in cross-module emission).
-    if let Ok(idx) = resolve_field_in_type(em, ty_idx, name) {
-        return Ok(idx);
-    }
-    // Fallback: look up the object's definition type (the declared type of
-    // the variable, which may be fully concrete).
-    if let Some(&def_id) = em.expr_defs().get(&object_expr)
-        && let Some(def_info) = em.sema.defs.iter().find(|d| d.id == def_id)
-        && let Some(def_ty) = def_info.ty_info.ty
-        && let Ok(idx) = resolve_field_in_type(em, def_ty, name)
-    {
-        return Ok(idx);
-    }
-    Err(EmitError::FieldNotFound {
-        desc: format!("record field `{}`", em.interner.resolve(name)).into(),
-    })
-}
-
-fn collect_record_fields(em: &Emitter<'_>, ty_idx: TypeIdx, out: &mut Vec<RecordField>) -> bool {
-    let resolved = em.sema.unify.resolve(ty_idx, &em.sema.types);
-    if let Type::Record { fields, rest } = &em.sema.types[resolved] {
-        for f in fields {
-            if !out.iter().any(|ef| ef.name == f.name) {
-                out.push(f.clone());
-            }
-        }
-        rest.is_none_or(|rest_idx| collect_record_fields(em, rest_idx, out))
-    } else {
-        false // rest resolved to non-record (unbound var) - incomplete
-    }
-}
-
-/// Search for a closed record type definition whose fields are a superset
-/// of `partial_fields`. Returns the full field list if found.
-fn find_complete_record_type(
-    em: &Emitter<'_>,
-    partial_fields: &[RecordField],
-) -> Option<Vec<RecordField>> {
-    for def in &em.sema.defs {
-        // Look at type defs and let bindings that define record types.
-        if !matches!(def.kind, DefKind::Type | DefKind::Let) {
-            continue;
-        }
-        let Some(ty_idx) = def.ty_info.ty else {
-            continue;
-        };
-        let resolved = em.sema.unify.resolve(ty_idx, &em.sema.types);
-        let ty = &em.sema.types[resolved];
-
-        // Unwrap Type::Named to its underlying type (e.g., Deque['a] → Record).
-        let record_resolved = match ty {
-            Type::Record { .. } => resolved,
-            Type::Named { def: named_def, .. } => {
-                let inner_def = em.sema.defs.iter().find(|d| d.id == *named_def);
-                if let Some(d) = inner_def {
-                    if let Some(inner_ty) = d.ty_info.ty {
-                        em.sema.unify.resolve(inner_ty, &em.sema.types)
-                    } else {
-                        continue;
-                    }
-                } else {
-                    continue;
-                }
-            }
-            _ => continue,
-        };
-
-        if let Type::Record { rest, .. } = &em.sema.types[record_resolved] {
-            if rest.is_some() {
-                continue;
-            }
-            let mut full_fields = vec![];
-            let _ = collect_record_fields(em, record_resolved, &mut full_fields);
-            let is_superset = partial_fields
-                .iter()
-                .all(|pf| full_fields.iter().any(|ff| ff.name == pf.name));
-            if is_superset && full_fields.len() >= partial_fields.len() {
-                return Some(full_fields);
-            }
-        }
-    }
-    None
-}
-
-fn resolve_field_in_type(
-    em: &Emitter<'_>,
-    ty_idx: TypeIdx,
-    name: Symbol,
-) -> Result<u32, EmitError> {
-    let resolved = em.sema.unify.resolve(ty_idx, &em.sema.types);
-    match &em.sema.types[resolved] {
-        Type::Record { .. } => {
-            let mut all_fields: Vec<RecordField> = vec![];
-            let complete = collect_record_fields(em, resolved, &mut all_fields);
-            if !complete {
-                all_fields
-                    .sort_by(|a, b| em.interner.resolve(a.name).cmp(em.interner.resolve(b.name)));
-            }
-            // If the record is open (incomplete from dep module inference),
-            // find the canonical closed record type definition.
-            if !complete && let Some(full) = find_complete_record_type(em, &all_fields) {
-                all_fields = full;
-            }
-            // Sort by name string for canonical ordering - matches emit_record_lit_fixed.
-            all_fields.sort_by(|a, b| em.interner.resolve(a.name).cmp(em.interner.resolve(b.name)));
-            for (i, f) in all_fields.iter().enumerate() {
-                if f.name == name {
-                    return u32::try_from(i).map_err(|_| {
-                        EmitError::overflow(format!(
-                            "record field index for `{}`",
-                            em.interner.resolve(name)
-                        ))
-                    });
-                }
-            }
-            Err(EmitError::FieldNotFound {
-                desc: format!("record field `{}`", em.interner.resolve(name)).into(),
-            })
-        }
-        Type::Tuple { elems } => {
-            let name_str = em.interner.resolve(name);
-            let n = name_str
-                .parse::<usize>()
-                .map_err(|_| EmitError::FieldNotFound {
-                    desc: format!("tuple index `{name_str}`").into(),
-                })?;
-            let _ = elems;
-            u32::try_from(n)
-                .map_err(|_| EmitError::overflow(format!("tuple field index `{name_str}`")))
-        }
-        _ => Err(EmitError::FieldNotFound {
-            desc: format!("field `{}` on non-record type", em.interner.resolve(name)).into(),
-        }),
-    }
-}
-
-/// Returns true if the family indicates logical (short-circuit) semantics.
-/// Bool → logical; known numeric → bitwise; None → logical (safe default).
-const fn is_logical_family(family: Option<TypeFamily>) -> bool {
-    match family {
-        Some(TypeFamily::Bool) | None => true,
-        Some(_) => false,
-    }
-}
-
-/// Classify the type family of an expression for opcode selection.
-pub fn classify_type_family(em: &Emitter<'_>, expr_idx: ExprIdx) -> Option<TypeFamily> {
-    let ty_idx = em.expr_types().get(&expr_idx).copied()?;
-    let resolved = em.sema.unify.resolve(ty_idx, &em.sema.types);
-    let ty = &em.sema.types[resolved];
-    let wk = &em.sema.well_known;
-    match ty {
-        Type::Named { def, .. } => {
-            let d = *def;
-            if d == wk.ints.int || d == wk.ints.int64 {
-                return Some(TypeFamily::Signed(Width::W64));
-            }
-            if d == wk.ints.int32 {
-                return Some(TypeFamily::Signed(Width::W32));
-            }
-            if d == wk.ints.int16 {
-                return Some(TypeFamily::Signed(Width::W16));
-            }
-            if d == wk.ints.int8 {
-                return Some(TypeFamily::Signed(Width::W8));
-            }
-            if d == wk.nats.nat || d == wk.nats.nat64 {
-                return Some(TypeFamily::Unsigned(Width::W64));
-            }
-            if d == wk.nats.nat32 {
-                return Some(TypeFamily::Unsigned(Width::W32));
-            }
-            if d == wk.nats.nat16 {
-                return Some(TypeFamily::Unsigned(Width::W16));
-            }
-            if d == wk.nats.nat8 {
-                return Some(TypeFamily::Unsigned(Width::W8));
-            }
-            if d == wk.float || d == wk.floats.float64 {
-                return Some(TypeFamily::Float);
-            }
-            if d == wk.floats.float32 {
-                return Some(TypeFamily::Float);
-            }
-            if d == wk.bool {
-                return Some(TypeFamily::Bool);
-            }
-            None
-        }
-        _ => None,
-    }
-}
-
-/// Map an AST `BinOp` to the corresponding SEAM `Opcode`.
-///
-/// NaN-boxing handles runtime type dispatch; no type-specific variants exist.
-pub fn map_binop(op: BinOp, _family: Option<TypeFamily>) -> Result<Opcode, EmitError> {
-    let opcode = match op {
-        BinOp::Add => Opcode::ADD,
-        BinOp::Sub => Opcode::SUB,
-        BinOp::Mul => Opcode::MUL,
-        BinOp::Div => Opcode::DIV,
-        BinOp::Rem => Opcode::REM,
-        BinOp::Eq => Opcode::CMP_EQ,
-        BinOp::Ne => Opcode::CMP_NE,
-        BinOp::Lt => Opcode::CMP_LT,
-        BinOp::Le => Opcode::CMP_LE,
-        BinOp::Gt => Opcode::CMP_GT,
-        BinOp::Ge => Opcode::CMP_GE,
-        BinOp::And => Opcode::AND,
-        BinOp::Or => Opcode::OR,
-        BinOp::Xor => Opcode::XOR,
-        BinOp::Shl => Opcode::SHL,
-        BinOp::Shr => Opcode::SHR,
-        op => {
-            return Err(EmitError::UnsupportedFeature {
-                desc: format!("binary operator `{op:?}`").into(),
-            });
-        }
-    };
-    Ok(opcode)
-}
-
-fn emit_force_unwrap(
-    em: &mut Emitter<'_>,
-    fc: &mut FnCtx,
-    operand: ExprIdx,
-) -> Result<bool, EmitError> {
-    emit_require(em, fc, operand, "force-unwrap operand")?;
-    let tmp = fc.alloc_local();
-    fc.fe.emit_st_loc(tmp);
-
-    fc.fe.emit_ld_loc(tmp);
-    fc.fe.emit_unop(msc_bc::Opcode::OPT_IS);
-    let ok_label = fc.fresh_label();
-    fc.fe.emit_jmp_t(ok_label);
-    fc.fe.emit_unop(msc_bc::Opcode::PANIC);
-    fc.fe.emit_label(ok_label);
-
-    fc.fe.emit_ld_loc(tmp);
-    fc.fe.emit_unop(msc_bc::Opcode::OPT_GET);
-    Ok(true)
-}
-
-/// Emit a `handle` expression: compile each handler op as a nested function,
-/// push the effect handler, emit the body, then pop the handler.
-/// Resolve the numeric effect ID for a `handle` expression's effect type.
-///
-/// Walks the AST type expression to find the effect name, then looks up `effect_id_map`.
-/// Falls back to 0 for well-known effects not yet in the pool.
-fn resolve_handle_effect_id(em: &Emitter<'_>, effect_ty: ExprIdx) -> u8 {
-    let effect_name = match &em.ast.exprs[effect_ty] {
-        Expr::Name { name_ref, .. } => em.ast.name_refs[*name_ref].name,
-        Expr::TypeApp { callee, .. } => match &em.ast.exprs[*callee] {
-            Expr::Name { name_ref, .. } => em.ast.name_refs[*name_ref].name,
-            _ => return 0,
-        },
-        _ => return 0,
-    };
-    em.sema
-        .defs
-        .iter()
-        .find(|d| d.kind == DefKind::Effect && d.name == effect_name)
-        .and_then(|d| em.effect_id_map.get(&d.id).copied())
-        .unwrap_or(0)
-}
-
-/// Emit a `handle` expression: compile each handler op as a nested function,
-/// push the effect handler, emit the body, then pop the handler.
-fn emit_handle(
-    em: &mut Emitter<'_>,
-    fc: &mut FnCtx,
-    effect_ty: ExprIdx,
-    ops: &[HandlerOp],
-    body: ExprIdx,
-) -> Result<bool, EmitError> {
-    let effect_id = resolve_handle_effect_id(em, effect_ty);
-
-    // For each handler op, compile as a nested fn that takes op params and evaluates body.
-    for op in ops {
-        let handler_fn_id = em.alloc_fn_id();
-        let param_count = u16::try_from(op.params.len())
-            .map_err(|_| EmitError::overflow("handler op param count"))?;
-        let mut handler_fc = FnCtx::new(param_count);
-        for (i, param) in op.params.iter().enumerate() {
-            let slot = u32::try_from(i).map_err(|_| EmitError::overflow("handler param index"))?;
-            if let Some(&did) = em.pat_defs().get(&param.span) {
-                let prev = handler_fc.local_map.insert(did, slot);
-                debug_assert!(prev.is_none(), "duplicate local slot for def");
-            }
-        }
-        let had_value = emit_expr(em, &mut handler_fc, op.body)?;
-        if had_value {
-            handler_fc.fe.emit_cont_resume();
-        } else {
-            handler_fc.fe.emit_ret_u();
-        }
-        handler_fc
-            .fe
-            .resolve_fixups(&format!("<handler@{handler_fn_id}>"))?;
-        let _code_len = handler_fc.fe.validate_code_len()?;
-        let type_id = if let Some(&ty_idx) = em.expr_types().get(&op.body) {
-            em.tp
-                .lower_sema_type(ty_idx, &em.sema.types, &em.sema.unify, &em.sema.well_known)
-                .unwrap_or(0)
-        } else {
-            em.tp
-                .lower_well_known_def(em.sema.well_known.unit, &em.sema.well_known)
-                .ok_or_else(|| EmitError::unresolvable("Unit type"))?
-        };
-        let fn_bytecode = FnBytecode {
-            fn_id: handler_fn_id,
-            name_stridx: 0,
-            type_id,
-            local_count: handler_fc.fe.local_count,
-            param_count: handler_fc.fe.param_count,
-            max_stack: handler_fc.fe.max_stack,
-            upvalue_count: 0,
-            code: handler_fc.fe.code,
-            handlers: handler_fc.fe.handlers,
-        };
-        em.nested_fns.push(fn_bytecode);
-        fc.fe.emit_cont_mark(u32::from(effect_id), handler_fn_id)?;
-    }
-
-    let produced = emit_expr(em, fc, body)?;
-
-    for _ in ops {
-        fc.fe.emit_cont_unmark(u32::from(effect_id));
-    }
-
-    Ok(produced)
-}
-
-/// Emit `need op(args)` - perform an effect operation via `eff.need`.
-fn emit_need(
-    em: &mut Emitter<'_>,
-    fc: &mut FnCtx,
-    body: ExprIdx,
-    is_tail: bool,
-) -> Result<bool, EmitError> {
-    if let Expr::Call { callee, args, .. } = &em.ast.exprs[body] {
-        let callee = *callee;
-        let args: Vec<_> = args.clone();
-        if let Some(&def_id) = em.expr_defs().get(&callee) {
-            let is_effect_op = em
-                .sema
-                .defs
-                .iter()
-                .any(|d| d.id == def_id && d.kind == DefKind::EffectOp);
-            if is_effect_op {
-                let op_index = resolve_effect_op_index(em, def_id);
-                let arg_count = emit_call_args(em, fc, &args)?;
-                let ac = i32::try_from(arg_count)
-                    .map_err(|_| EmitError::overflow("effect op arg count"))?;
-                fc.fe.emit_cont_save(op_index, ac);
-                return Ok(true);
-            }
-        }
-    }
-    emit_expr_tail(em, fc, body, is_tail)
-}
-
-/// Emit `resume value` - resume continuation via `eff.res`.
-fn emit_resume(
-    em: &mut Emitter<'_>,
-    fc: &mut FnCtx,
-    value: Option<ExprIdx>,
-) -> Result<bool, EmitError> {
-    if let Some(val_idx) = value {
-        emit_require(em, fc, val_idx, "resume value")?;
-    } else {
-        fc.fe.emit_ld_unit();
-    }
-    fc.fe.emit_cont_resume();
-    Ok(false)
-}
-
-fn resolve_effect_op_index(em: &Emitter<'_>, op_def_id: DefId) -> u32 {
-    let def = em.sema.defs.iter().find(|d| d.id == op_def_id);
-    let Some(def) = def else { return 0 };
-    let Some(parent_id) = def.parent else {
-        return 0;
-    };
-    let mut siblings: Vec<u32> = em
-        .sema
-        .defs
-        .iter()
-        .filter(|d| d.kind == DefKind::EffectOp && d.parent == Some(parent_id))
-        .map(|d| d.id.0)
-        .collect();
-    siblings.sort_unstable();
-    u32::try_from(siblings.iter().position(|&x| x == op_def_id.0).unwrap_or(0)).unwrap_or(0)
-}
-
 /// Emit deferred expressions (in reverse order) for cleanup before function exit.
-pub fn emit_deferred_cleanup(em: &mut Emitter<'_>, fc: &mut FnCtx) -> Result<(), EmitError> {
+pub fn emit_deferred_cleanup(em: &mut Emitter<'_>, fc: &mut FnCtx) -> EmitResult {
     // Snapshot needed: emit_expr may push to fc.deferred (via nested defer), so we can't
     // iterate the vec while fc is mutably borrowed inside the loop.
     let deferred = fc.deferred.clone();
@@ -2259,178 +1176,4 @@ pub fn emit_deferred_cleanup(em: &mut Emitter<'_>, fc: &mut FnCtx) -> Result<(),
 fn emit_defer(fc: &mut FnCtx, operand: ExprIdx) -> bool {
     fc.deferred.push(operand);
     false
-}
-
-/// Emit `{ base | field = val, ... }` (functional record update).
-/// Copies unmodified fields from base, substitutes updated fields, then builds
-/// a new product.
-fn emit_update(
-    em: &mut Emitter<'_>,
-    fc: &mut FnCtx,
-    base: ExprIdx,
-    fields: &[RecField],
-) -> Result<bool, EmitError> {
-    emit_require(em, fc, base, "update base")?;
-    let base_slot = fc.alloc_local();
-    fc.fe.emit_st_loc(base_slot);
-
-    // Look up the record type to determine field layout.
-    let Some(&ty_idx) = em.expr_types().get(&base) else {
-        return Err(EmitError::NoTypeInfo {
-            desc: "update base".into(),
-        });
-    };
-    let resolved = em.sema.unify.resolve(ty_idx, &em.sema.types);
-    // Clone needed: the borrow of em.sema.types must end before emit_expr borrows em mutably.
-    let type_fields = match &em.sema.types[resolved] {
-        Type::Record { fields, .. } => fields.clone(),
-        _ => {
-            return Err(EmitError::UnsupportedFeature {
-                desc: "update on non-record type".into(),
-            });
-        }
-    };
-
-    let n = type_fields.len();
-
-    for (i, type_field) in type_fields.iter().enumerate() {
-        // Check if this field is being updated.
-        let update_val = fields.iter().find_map(|f| {
-            if let RecField::Named {
-                name,
-                value: Some(val_idx),
-                ..
-            } = f
-                && *name == type_field.name
-            {
-                return Some(*val_idx);
-            }
-            None
-        });
-
-        if let Some(val_idx) = update_val {
-            emit_require(em, fc, val_idx, "update field value")?;
-        } else {
-            let idx = u32::try_from(i).map_err(|_| EmitError::overflow("record field index"))?;
-            fc.fe.emit_ld_loc(base_slot);
-            fc.fe.emit_ld_fld(idx)?;
-        }
-    }
-
-    let field_count = u32::try_from(n).map_err(|_| EmitError::overflow("record field count"))?;
-    let stack_pop = i32::try_from(n).map_err(|_| EmitError::overflow("record field count"))?;
-    fc.fe.emit_mk_prd(field_count, stack_pop)?;
-    Ok(true)
-}
-
-/// Returns the field index of a method within a class's member list (declaration order).
-fn class_method_index(
-    em: &Emitter<'_>,
-    class_def: DefId,
-    method_sym: Symbol,
-) -> Result<u32, EmitError> {
-    let members: Vec<(Symbol, DefId)> = em
-        .sema
-        .defs
-        .iter()
-        .filter(|d| d.parent == Some(class_def) && d.kind == DefKind::Fn)
-        .map(|d| (d.name, d.id))
-        .collect();
-
-    for (i, &(sym, _)) in members.iter().enumerate() {
-        if sym == method_sym {
-            return u32::try_from(i).map_err(|_| EmitError::overflow("class method index"));
-        }
-    }
-
-    Err(EmitError::UnsupportedFeature {
-        desc: "class method not found for dictionary lookup".into(),
-    })
-}
-
-/// Emits dictionary construction at a call site for a constrained function.
-/// For each constraint, builds a product of method fn-id values from the
-/// concrete instance that satisfies the constraint at this call site.
-fn emit_dict_for_call(
-    em: &mut Emitter<'_>,
-    fc: &mut FnCtx,
-    callee_def: DefId,
-    callee_expr: ExprIdx,
-) -> Result<usize, EmitError> {
-    let constraints = match em.active_fn_constraints().get(&callee_def) {
-        Some(c) => c.clone(),
-        None => return Ok(0),
-    };
-
-    let mut dict_count = 0;
-    for constraint in &constraints {
-        // Resolve the concrete type at the call site.
-        let concrete_ty = constraint.args.first().and_then(|&arg| {
-            let resolved = em.sema.unify.resolve(arg, &em.sema.types);
-            match &em.sema.types[resolved] {
-                Type::Var(_) | Type::Rigid(_) => None,
-                _ => Some(resolved),
-            }
-        });
-
-        if let Some(concrete_ty) = concrete_ty {
-            // Find the instance that satisfies this constraint for the concrete type
-            let instance = em.sema.instances.iter().find(|inst| {
-                inst.class == constraint.class
-                    && types_match(&em.sema.types, &em.sema.unify, inst.target, concrete_ty)
-            });
-
-            if let Some(inst) = instance {
-                // Build ordered method list from the class
-                let class_members: Vec<(Symbol, DefId)> = em
-                    .sema
-                    .defs
-                    .iter()
-                    .filter(|d| d.parent == Some(constraint.class) && d.kind == DefKind::Fn)
-                    .map(|d| (d.name, d.id))
-                    .collect();
-
-                let method_count = class_members.len();
-                for (class_sym, _) in &class_members {
-                    let inst_method = inst.members.iter().find(|(s, _)| s == class_sym);
-                    if let Some((_, method_def)) = inst_method {
-                        if let Some(&fn_id) = em.fn_map.get(method_def) {
-                            let cst_idx = em.cp.intern(&ConstValue::Int(i64::from(fn_id)))?;
-                            fc.fe.emit_ld_cst(cst_idx);
-                        } else {
-                            return Err(EmitError::UnsupportedFeature {
-                                desc: "instance method not compiled for dict construction".into(),
-                            });
-                        }
-                    } else {
-                        return Err(EmitError::UnsupportedFeature {
-                            desc: "instance missing method required by class".into(),
-                        });
-                    }
-                }
-                let mc =
-                    u32::try_from(method_count).map_err(|_| EmitError::overflow("method count"))?;
-                let sp =
-                    i32::try_from(method_count).map_err(|_| EmitError::overflow("method count"))?;
-                fc.fe.emit_mk_prd(mc, sp)?;
-            } else {
-                return Err(EmitError::UnsupportedFeature {
-                    desc: "no instance found for call-site constraint".into(),
-                });
-            }
-        } else {
-            // Type is still a variable - forward our own dictionary
-            if let Some(&dict_slot) = fc.dict_slots.get(&constraint.class) {
-                fc.fe.emit_ld_loc(dict_slot);
-            } else {
-                return Err(EmitError::UnsupportedFeature {
-                    desc: "no dictionary to forward for nested generic call".into(),
-                });
-            }
-        }
-        let _ = callee_expr;
-        dict_count += 1;
-    }
-
-    Ok(dict_count)
 }

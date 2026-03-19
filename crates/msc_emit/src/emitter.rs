@@ -3,10 +3,16 @@
 #[cfg(test)]
 mod tests;
 
+mod capture;
+mod closure;
 mod control;
 mod desugar;
+mod effects;
 pub mod expr;
 mod fn_emitter;
+mod record;
+mod type_query;
+mod typeclass;
 
 use std::collections::{HashMap, HashSet};
 use std::mem;
@@ -23,9 +29,9 @@ use msc_sema::{DictLookup, Obligation, ResolutionMap, SemaResult, TypeIdx};
 use msc_shared::{FileId, Interner, Span, Symbol};
 
 use crate::const_pool::ConstPool;
-use crate::error::EmitError;
-use crate::global_table;
+use crate::error::{EmitError, EmitResult};
 use crate::global_table::GlobalTable;
+use crate::global_table::{self, GlobalEntry};
 use crate::module::{EffectDef, EffectOpDef, ForeignFn};
 use crate::string_table::StringTable;
 use crate::type_table::TypeTable;
@@ -239,7 +245,7 @@ impl<'a> Emitter<'a> {
             .map_or(&self.sema.expr_types, |i| self.dep_contexts[i].expr_types)
     }
 
-    pub fn emit_all(&mut self) -> Result<Vec<FnBytecode>, EmitError> {
+    pub fn emit_all(&mut self) -> EmitResult<Vec<FnBytecode>> {
         self.resolve_well_known_tags();
         self.mark_repr_c_types();
         self.scan_top_level()?;
@@ -281,11 +287,11 @@ impl<'a> Emitter<'a> {
     fn resolve_well_known_tags(&mut self) {
         let some_sym = self.interner.intern("Some");
         let ok_sym = self.interner.intern("Ok");
-        self.some_tag = expr::resolve_variant_tag(self, some_sym).unwrap_or(0);
-        self.ok_tag = expr::resolve_variant_tag(self, ok_sym).unwrap_or(0);
+        self.some_tag = type_query::resolve_variant_tag(self, some_sym).unwrap_or(0);
+        self.ok_tag = type_query::resolve_variant_tag(self, ok_sym).unwrap_or(0);
     }
 
-    fn scan_top_level(&mut self) -> Result<(), EmitError> {
+    fn scan_top_level(&mut self) -> EmitResult {
         let stmts = self.stmts.clone();
         for stmt in &stmts {
             self.scan_stmt(stmt.expr)?;
@@ -298,7 +304,7 @@ impl<'a> Emitter<'a> {
         Ok(())
     }
 
-    fn scan_stmt(&mut self, expr_idx: ExprIdx) -> Result<(), EmitError> {
+    fn scan_stmt(&mut self, expr_idx: ExprIdx) -> EmitResult {
         let expr = self.ast.exprs[expr_idx].clone();
         match expr {
             Expr::Annotated { attrs, inner, .. } => {
@@ -368,7 +374,7 @@ impl<'a> Emitter<'a> {
         attrs: &[Attr],
         inner: ExprIdx,
         dep_idx: Option<usize>,
-    ) -> Result<(), EmitError> {
+    ) -> EmitResult {
         let inner_expr = self.ast.exprs[inner].clone();
         match inner_expr {
             Expr::Binding { fields, .. } => match dep_idx {
@@ -406,7 +412,7 @@ impl<'a> Emitter<'a> {
         abi: Symbol,
         decls: &[ForeignDecl],
         attrs: &[Attr],
-    ) -> Result<(), EmitError> {
+    ) -> EmitResult {
         let abi_str = self.interner.resolve(abi).trim_matches('"').to_owned();
         let link_attrs = extract_link_attrs(attrs, self.interner);
         let any_type_id = self
@@ -539,7 +545,7 @@ impl<'a> Emitter<'a> {
         (param_type_ids, ret_type_id)
     }
 
-    fn scan_effect(&mut self, effect_name: Symbol, ops: &[EffectOp]) -> Result<(), EmitError> {
+    fn scan_effect(&mut self, effect_name: Symbol, ops: &[EffectOp]) -> EmitResult {
         let effect_def_id = self
             .sema
             .defs
@@ -676,7 +682,7 @@ impl<'a> Emitter<'a> {
         }
     }
 
-    fn scan_dep_modules(&mut self) -> Result<(), EmitError> {
+    fn scan_dep_modules(&mut self) -> EmitResult {
         for dep_idx in 0..self.dep_contexts.len() {
             let stmts = self.dep_contexts[dep_idx].stmts.clone();
             let saved_ast = self.ast;
@@ -693,7 +699,7 @@ impl<'a> Emitter<'a> {
         Ok(())
     }
 
-    fn scan_dep_stmt(&mut self, expr_idx: ExprIdx, dep_idx: usize) -> Result<(), EmitError> {
+    fn scan_dep_stmt(&mut self, expr_idx: ExprIdx, dep_idx: usize) -> EmitResult {
         let expr = self.ast.exprs[expr_idx].clone();
         match expr {
             Expr::Annotated { attrs, inner, .. } => {
@@ -723,7 +729,7 @@ impl<'a> Emitter<'a> {
         Ok(())
     }
 
-    fn scan_dep_binding(&mut self, fields: &LetFields, dep_idx: usize) -> Result<(), EmitError> {
+    fn scan_dep_binding(&mut self, fields: &LetFields, dep_idx: usize) -> EmitResult {
         let Some(value_idx) = fields.value else {
             return Ok(());
         };
@@ -781,12 +787,7 @@ impl<'a> Emitter<'a> {
         Ok(())
     }
 
-    fn register_global(
-        &mut self,
-        did: DefId,
-        pat: PatIdx,
-        kind: BindKind,
-    ) -> Result<u32, EmitError> {
+    fn register_global(&mut self, did: DefId, pat: PatIdx, kind: BindKind) -> EmitResult<u32> {
         let slot = self.next_global;
         self.next_global += 1;
         let _ = self.global_map.insert(did, slot);
@@ -807,7 +808,7 @@ impl<'a> Emitter<'a> {
             flags |= global_table::FLAG_MUTABLE;
         }
         flags |= global_table::FLAG_HAS_INIT;
-        let _ = self.global_table.add(global_table::GlobalEntry {
+        let _ = self.global_table.add(GlobalEntry {
             name_stridx,
             type_ref: 0,
             flags,
@@ -816,8 +817,8 @@ impl<'a> Emitter<'a> {
         Ok(slot)
     }
 
-    fn emit_functions(&mut self) -> Result<Vec<FnBytecode>, EmitError> {
-        let entries: Vec<FnEntry> = mem::take(&mut self.fn_entries);
+    fn emit_functions(&mut self) -> EmitResult<Vec<FnBytecode>> {
+        let entries = mem::take(&mut self.fn_entries);
         let mut results = Vec::with_capacity(entries.len());
         for entry in entries {
             let bc = self.emit_one_function(&entry)?;
@@ -838,7 +839,7 @@ impl<'a> Emitter<'a> {
 
     /// Emit a synthetic entry function that executes all top-level statements
     /// top-to-bottom. The last statement's value is the return value.
-    fn emit_script_entry(&mut self, fn_id: u32) -> Result<FnBytecode, EmitError> {
+    fn emit_script_entry(&mut self, fn_id: u32) -> EmitResult<FnBytecode> {
         let stmts: Vec<ExprIdx> = self.stmts.iter().map(|s| s.expr).collect();
         let mut fc = FnCtx::new(0);
 
@@ -912,7 +913,7 @@ impl<'a> Emitter<'a> {
         })
     }
 
-    fn resolve_fn_type_id(&mut self, def_id: Option<DefId>) -> Result<u32, EmitError> {
+    fn resolve_fn_type_id(&mut self, def_id: Option<DefId>) -> EmitResult<u32> {
         if let Some(did) = def_id
             && let Some(def_info) = self.sema.defs.iter().find(|d| d.id == did)
             && let Some(ty_idx) = def_info.ty_info.ty
@@ -932,7 +933,7 @@ impl<'a> Emitter<'a> {
             .ok_or_else(|| EmitError::unresolvable("Unit type"))
     }
 
-    fn emit_one_function(&mut self, entry: &FnEntry) -> Result<FnBytecode, EmitError> {
+    fn emit_one_function(&mut self, entry: &FnEntry) -> EmitResult<FnBytecode> {
         let saved = entry.dep_idx.map(|dep_idx| {
             let saved_ast = self.ast;
             self.ast = self.dep_contexts[dep_idx].ast;
@@ -1018,7 +1019,7 @@ impl<'a> Emitter<'a> {
 }
 
 /// Serialize the function pool section into `buf` (BE encoding).
-pub fn write_function_pool(buf: &mut Vec<u8>, functions: &[FnBytecode]) -> Result<(), EmitError> {
+pub fn write_function_pool(buf: &mut Vec<u8>, functions: &[FnBytecode]) -> EmitResult {
     let count =
         u16::try_from(functions.len()).map_err(|_| EmitError::overflow("too many functions"))?;
     buf.extend_from_slice(&count.to_be_bytes());

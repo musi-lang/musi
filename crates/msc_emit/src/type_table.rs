@@ -5,35 +5,13 @@
 
 use std::collections::{HashMap, HashSet};
 
+use msc_bc::type_tag::*;
 use msc_sema::types::{EffectRow, RecordField, SumVariant, Type};
 use msc_sema::well_known::WellKnown;
 use msc_sema::{DefId, TypeIdx, UnifyTable};
 use msc_shared::{Arena, Symbol};
 
 use crate::error::{EmitError, EmitResult};
-
-// §11.3 type tags
-const TAG_UNIT: u8 = 0x01;
-const TAG_BOOL: u8 = 0x02;
-const TAG_I8: u8 = 0x03;
-const TAG_I16: u8 = 0x04;
-const TAG_I32: u8 = 0x05;
-const TAG_I64: u8 = 0x06;
-const TAG_U8: u8 = 0x07;
-const TAG_U16: u8 = 0x08;
-const TAG_U32: u8 = 0x09;
-const TAG_U64: u8 = 0x0A;
-const TAG_F32: u8 = 0x0B;
-const TAG_F64: u8 = 0x0C;
-const TAG_RUNE: u8 = 0x0D;
-const TAG_PTR: u8 = 0x0E;
-const TAG_ARR: u8 = 0x0F;
-const TAG_PRODUCT: u8 = 0x10;
-const TAG_SUM: u8 = 0x11;
-const TAG_FN: u8 = 0x12;
-const TAG_REF: u8 = 0x13;
-const TAG_ANY: u8 = 0x14;
-const TAG_CSTRUCT: u8 = 0x15;
 
 /// A serialized type pool entry.
 struct TypeEntry {

@@ -6,12 +6,13 @@ use msc_ast::lit::Lit;
 use msc_ast::{AstArenas, Pat};
 
 use crate::const_pool::ConstValue;
-use crate::error::EmitError;
+use crate::error::{EmitError, EmitResult};
 use msc_ast::ExprIdx;
 
-use super::super::emitter::Emitter;
+use super::Emitter;
 use super::FnCtx;
-use super::expr::{emit_expr, emit_expr_tail, resolve_variant_tag};
+use super::expr::{emit_expr, emit_expr_tail};
+use super::type_query::resolve_variant_tag;
 
 /// Emit a piecewise expression. Leaves result on stack.
 pub fn emit_piecewise(
@@ -19,7 +20,7 @@ pub fn emit_piecewise(
     fc: &mut FnCtx,
     arms: &[PwArm],
     is_tail: bool,
-) -> Result<(), EmitError> {
+) -> EmitResult {
     if arms.is_empty() {
         return Err(EmitError::UnsupportedFeature {
             desc: "empty piecewise expression".into(),
@@ -73,7 +74,7 @@ pub fn emit_match(
     scrutinee: ExprIdx,
     arms: &[MatchArm],
     is_tail: bool,
-) -> Result<(), EmitError> {
+) -> EmitResult {
     let produced_scrutinee = emit_expr(em, fc, scrutinee)?;
     let scrutinee_slot = fc.alloc_local();
     if produced_scrutinee {
@@ -147,7 +148,7 @@ fn emit_pat_test(
     scrutinee_slot: u32,
     tag_slot: Option<u32>,
     fail_label: u32,
-) -> Result<(), EmitError> {
+) -> EmitResult {
     let pat = em.ast.pats[pat_idx].clone();
     match pat {
         Pat::Bind {
@@ -219,7 +220,7 @@ fn emit_lit_pat_test(
     scrutinee_slot: u32,
     lit: &Lit,
     fail_label: u32,
-) -> Result<(), EmitError> {
+) -> EmitResult {
     let cv = match lit {
         Lit::Int { value, .. } => ConstValue::Int(*value),
         Lit::Rune { codepoint, .. } => ConstValue::Int(i64::from(*codepoint)),
@@ -245,7 +246,7 @@ fn emit_pat_bind(
     fc: &mut FnCtx,
     pat_idx: PatIdx,
     value_slot: u32,
-) -> Result<(), EmitError> {
+) -> EmitResult {
     let pat = em.ast.pats[pat_idx].clone();
     match pat {
         Pat::Bind { span, inner, .. } => {

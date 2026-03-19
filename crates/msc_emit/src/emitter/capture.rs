@@ -6,7 +6,7 @@ use msc_ast::ExprIdx;
 use msc_ast::expr::{Arg, ArrayElem, Expr, HandlerOp, MatchArm, PwArm, PwGuard, RecField};
 use msc_sema::DefId;
 
-use super::super::emitter::Emitter;
+use super::Emitter;
 
 /// Where a captured variable lives in the parent scope.
 #[derive(Clone, Copy)]

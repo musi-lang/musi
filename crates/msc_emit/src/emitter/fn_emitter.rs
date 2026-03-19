@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-use crate::error::EmitError;
+use crate::error::{EmitError, EmitResult};
 use msc_bc::{Opcode, encode_f0, encode_fi8, encode_fi8x2, encode_fi16};
 
 /// Fixup record: a forward jump that needs patching once we know the label target.
@@ -100,7 +100,7 @@ impl FnEmitter {
     }
 
     /// Emit `tup.get idx` - pops tuple, pushes element at `idx`. Net 0.
-    pub fn emit_tup_get(&mut self, index: u32) -> Result<(), EmitError> {
+    pub fn emit_tup_get(&mut self, index: u32) -> EmitResult {
         let i = u8::try_from(index).map_err(|_| EmitError::OperandOverflow {
             desc: "tuple field index exceeds 255".into(),
         })?;
@@ -145,7 +145,7 @@ impl FnEmitter {
     }
 
     /// Emit `rec.get field` - pops record, pushes field value. Net 0.
-    pub fn emit_ld_fld(&mut self, index: u32) -> Result<(), EmitError> {
+    pub fn emit_ld_fld(&mut self, index: u32) -> EmitResult {
         let i = u8::try_from(index).map_err(|_| EmitError::OperandOverflow {
             desc: "field index exceeds 255".into(),
         })?;
@@ -154,7 +154,7 @@ impl FnEmitter {
     }
 
     /// Emit `tup.new count` - pops count items, pushes tuple. Net -(count-1).
-    pub fn emit_mk_prd(&mut self, field_count: u32, stack_pop: i32) -> Result<(), EmitError> {
+    pub fn emit_mk_prd(&mut self, field_count: u32, stack_pop: i32) -> EmitResult {
         let n = u8::try_from(field_count).map_err(|_| EmitError::OperandOverflow {
             desc: "product field count exceeds 255".into(),
         })?;
@@ -196,7 +196,7 @@ impl FnEmitter {
         self.stack_depth = 0;
     }
 
-    pub fn emit_inv_dyn(&mut self, arg_count: i32) -> Result<(), EmitError> {
+    pub fn emit_inv_dyn(&mut self, arg_count: i32) -> EmitResult {
         let n = u8::try_from(arg_count).map_err(|_| EmitError::OperandOverflow {
             desc: "dynamic call arg count exceeds 255".into(),
         })?;
@@ -254,7 +254,7 @@ impl FnEmitter {
     }
 
     /// Emit `rec.set field` - pops [record, value]. Net -2.
-    pub fn emit_st_fld(&mut self, index: u32) -> Result<(), EmitError> {
+    pub fn emit_st_fld(&mut self, index: u32) -> EmitResult {
         let i = u8::try_from(index).map_err(|_| EmitError::OperandOverflow {
             desc: "field index exceeds 255".into(),
         })?;
@@ -270,7 +270,7 @@ impl FnEmitter {
     }
 
     /// Emit `eff.hdl effect` - install an effect handler.
-    pub fn emit_cont_mark(&mut self, effect_id: u32, handler_fn_id: u32) -> Result<(), EmitError> {
+    pub fn emit_cont_mark(&mut self, effect_id: u32, handler_fn_id: u32) -> EmitResult {
         let id = u16::try_from(effect_id).map_err(|_| EmitError::OperandOverflow {
             desc: "effect id exceeds 65535".into(),
         })?;
@@ -303,7 +303,7 @@ impl FnEmitter {
         self.pop_n(1);
     }
 
-    pub fn emit_cmp_tag(&mut self, tag: u32) -> Result<(), EmitError> {
+    pub fn emit_cmp_tag(&mut self, tag: u32) -> EmitResult {
         let t = u16::try_from(tag).map_err(|_| EmitError::OperandOverflow {
             desc: "variant tag exceeds 65535".into(),
         })?;
@@ -407,7 +407,7 @@ impl FnEmitter {
         debug_assert!(prev.is_none(), "duplicate label target {label}");
     }
 
-    pub fn resolve_fixups(&mut self, fn_name: &str) -> Result<(), EmitError> {
+    pub fn resolve_fixups(&mut self, fn_name: &str) -> EmitResult {
         let mut i = 0;
         while i < self.fixups.len() {
             let fixup = &self.fixups[i];
@@ -464,7 +464,7 @@ impl FnEmitter {
     }
 
     /// Check that code length fits in u32.
-    pub fn validate_code_len(&self) -> Result<u32, EmitError> {
+    pub fn validate_code_len(&self) -> EmitResult<u32> {
         u32::try_from(self.code.len()).map_err(|_| EmitError::FunctionTooLarge)
     }
 

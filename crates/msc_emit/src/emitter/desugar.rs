@@ -5,23 +5,19 @@ use msc_ast::expr::{Expr, FieldKey};
 use msc_ast::lit::FStrPart;
 
 use crate::const_pool::ConstValue;
-use crate::error::EmitError;
+use crate::error::{EmitError, EmitResult};
 use msc_ast::ExprIdx;
 use msc_bc::Opcode;
 
-use super::super::emitter::Emitter;
+use super::Emitter;
 use super::FnCtx;
-use super::expr::{emit_expr, emit_require, resolve_field_name};
+use super::expr::{emit_expr, emit_require};
+use super::type_query::resolve_field_name;
 
 /// Emit `left and right` with short-circuit evaluation. Leaves bool on stack.
 ///
 /// If left is false, result is false without evaluating right.
-pub fn emit_and(
-    em: &mut Emitter<'_>,
-    fc: &mut FnCtx,
-    left: ExprIdx,
-    right: ExprIdx,
-) -> Result<(), EmitError> {
+pub fn emit_and(em: &mut Emitter<'_>, fc: &mut FnCtx, left: ExprIdx, right: ExprIdx) -> EmitResult {
     let false_label = fc.fresh_label();
     let end_label = fc.fresh_label();
 
@@ -42,12 +38,7 @@ pub fn emit_and(
 /// Emit `left or right` with short-circuit evaluation. Leaves bool on stack.
 ///
 /// If left is true, result is true without evaluating right.
-pub fn emit_or(
-    em: &mut Emitter<'_>,
-    fc: &mut FnCtx,
-    left: ExprIdx,
-    right: ExprIdx,
-) -> Result<(), EmitError> {
+pub fn emit_or(em: &mut Emitter<'_>, fc: &mut FnCtx, left: ExprIdx, right: ExprIdx) -> EmitResult {
     let end_label = fc.fresh_label();
 
     let produced = emit_expr(em, fc, left)?;
@@ -70,7 +61,7 @@ pub fn emit_assign(
     fc: &mut FnCtx,
     left: ExprIdx,
     right: ExprIdx,
-) -> Result<(), EmitError> {
+) -> EmitResult {
     let produced = emit_expr(em, fc, right)?;
     if !produced {
         return Ok(());
@@ -146,7 +137,7 @@ pub fn emit_pipe(
     _pipe_expr_idx: ExprIdx,
     left: ExprIdx,
     right: ExprIdx,
-) -> Result<(), EmitError> {
+) -> EmitResult {
     emit_require(em, fc, left, "pipe left operand")?;
 
     let right_expr = em.ast.exprs[right].clone();
@@ -181,11 +172,7 @@ pub fn emit_pipe(
 }
 
 /// Emit an f-string by concatenating each part. Leaves the result string on stack.
-pub fn emit_fstr(
-    em: &mut Emitter<'_>,
-    fc: &mut FnCtx,
-    parts: &[FStrPart],
-) -> Result<(), EmitError> {
+pub fn emit_fstr(em: &mut Emitter<'_>, fc: &mut FnCtx, parts: &[FStrPart]) -> EmitResult {
     if parts.is_empty() {
         let stridx = em.string_table.intern_str("")?;
         let cv = ConstValue::Str(stridx);
@@ -250,17 +237,13 @@ pub fn emit_nil_coal(
     fc: &mut FnCtx,
     left: ExprIdx,
     right: ExprIdx,
-) -> Result<(), EmitError> {
+) -> EmitResult {
     emit_coalesce(em, fc, left, right, em.some_tag, "nil-coalesce")
 }
 
 /// Emit `operand?` (propagate). If operand is Some, extract payload;
 /// if None, early-return None from the current function.
-pub fn emit_propagate(
-    em: &mut Emitter<'_>,
-    fc: &mut FnCtx,
-    operand: ExprIdx,
-) -> Result<(), EmitError> {
+pub fn emit_propagate(em: &mut Emitter<'_>, fc: &mut FnCtx, operand: ExprIdx) -> EmitResult {
     emit_require(em, fc, operand, "propagate operand")?;
     let tmp = fc.alloc_local();
     fc.fe.emit_st_loc(tmp);
@@ -290,7 +273,7 @@ pub fn emit_propagate(
 }
 
 /// Emit `try operand`. Evaluates operand and wraps result in Some(value).
-pub fn emit_try(em: &mut Emitter<'_>, fc: &mut FnCtx, operand: ExprIdx) -> Result<(), EmitError> {
+pub fn emit_try(em: &mut Emitter<'_>, fc: &mut FnCtx, operand: ExprIdx) -> EmitResult {
     emit_require(em, fc, operand, "try operand")?;
     fc.fe.emit_mk_var(em.some_tag, 1);
     Ok(())
@@ -302,7 +285,7 @@ pub fn emit_range(
     fc: &mut FnCtx,
     left: ExprIdx,
     right: ExprIdx,
-) -> Result<(), EmitError> {
+) -> EmitResult {
     emit_require(em, fc, left, "range start")?;
     emit_require(em, fc, right, "range end")?;
     fc.fe.emit_mk_prd(2, 1)?; // (start, end) product, pops 2 pushes 1 -> net pop 1
@@ -316,7 +299,7 @@ pub fn emit_err_coal(
     fc: &mut FnCtx,
     left: ExprIdx,
     right: ExprIdx,
-) -> Result<(), EmitError> {
+) -> EmitResult {
     emit_coalesce(em, fc, left, right, em.ok_tag, "err-coalesce")
 }
 
@@ -331,7 +314,7 @@ fn emit_coalesce(
     right: ExprIdx,
     success_tag: u32,
     op_name: &str,
-) -> Result<(), EmitError> {
+) -> EmitResult {
     emit_require(em, fc, left, &format!("{op_name} left operand"))?;
     let tmp = fc.alloc_local();
     fc.fe.emit_st_loc(tmp);
@@ -363,7 +346,7 @@ pub fn emit_in_op(
     fc: &mut FnCtx,
     left: ExprIdx,
     right: ExprIdx,
-) -> Result<(), EmitError> {
+) -> EmitResult {
     // Evaluate operands into temp slots so we can reload them inside the loop.
     emit_require(em, fc, right, "`in` right operand")?;
     let arr_slot = fc.alloc_local();
@@ -441,7 +424,7 @@ pub fn emit_cons(
     fc: &mut FnCtx,
     left: ExprIdx,
     right: ExprIdx,
-) -> Result<(), EmitError> {
+) -> EmitResult {
     emit_require(em, fc, left, "cons head")?;
     emit_require(em, fc, right, "cons tail")?;
     fc.fe.emit_mk_prd(2, 1)?; // (head, tail)

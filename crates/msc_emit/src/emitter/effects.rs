@@ -4,17 +4,17 @@ use msc_ast::ExprIdx;
 use msc_ast::expr::{Expr, HandlerOp};
 use msc_sema::def::DefKind;
 
-use crate::error::EmitError;
+use crate::error::{EmitError, EmitResult};
 
-use super::super::emitter::{Emitter, FnBytecode};
 use super::FnCtx;
 use super::expr::{emit_call_args, emit_expr, emit_expr_tail, emit_require};
+use super::{Emitter, FnBytecode};
 
 pub(super) fn emit_force_unwrap(
     em: &mut Emitter<'_>,
     fc: &mut FnCtx,
     operand: ExprIdx,
-) -> Result<bool, EmitError> {
+) -> EmitResult<bool> {
     emit_require(em, fc, operand, "force-unwrap operand")?;
     let tmp = fc.alloc_local();
     fc.fe.emit_st_loc(tmp);
@@ -58,7 +58,7 @@ pub(super) fn emit_handle(
     effect_ty: ExprIdx,
     ops: &[HandlerOp],
     body: ExprIdx,
-) -> Result<bool, EmitError> {
+) -> EmitResult<bool> {
     let effect_id = resolve_handle_effect_id(em, effect_ty);
 
     for op in ops {
@@ -121,7 +121,7 @@ pub(super) fn emit_need(
     fc: &mut FnCtx,
     body: ExprIdx,
     is_tail: bool,
-) -> Result<bool, EmitError> {
+) -> EmitResult<bool> {
     if let Expr::Call { callee, args, .. } = &em.ast.exprs[body] {
         let callee = *callee;
         let args: Vec<_> = args.clone();
@@ -148,7 +148,7 @@ pub(super) fn emit_resume(
     em: &mut Emitter<'_>,
     fc: &mut FnCtx,
     value: Option<ExprIdx>,
-) -> Result<bool, EmitError> {
+) -> EmitResult<bool> {
     if let Some(val_idx) = value {
         emit_require(em, fc, val_idx, "resume value")?;
     } else {
