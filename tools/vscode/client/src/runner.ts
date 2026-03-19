@@ -75,6 +75,7 @@ export function clearCompilerPathCache() {
 export async function executeInTerminal(
 	request: ExecutionRequest,
 	subcommand: "run" | "build" | "check" | "test",
+	nameFilter?: string,
 ): Promise<void> {
 	const config = getConfig();
 	const tc = config.terminal;
@@ -90,6 +91,9 @@ export async function executeInTerminal(
 		args.push(...request.compilerArgs);
 	}
 	args.push(JSON.stringify(request.file));
+	if (subcommand === "test" && nameFilter) {
+		args.push("--name", JSON.stringify(nameFilter));
+	}
 	if (subcommand === "run" && request.runtimeArgs.length > 0) {
 		args.push("--", ...request.runtimeArgs);
 	}

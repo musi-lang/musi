@@ -5,7 +5,7 @@ use std::{path::Path, process};
 use msc::pipeline;
 use msc_builtins::StdHost;
 use msc_manifest::MusiManifest;
-use msc_vm::{Vm, load, verify};
+use msc_vm::{load, verify, Vm};
 
 /// Compiles `path` and immediately runs it in the VM.
 pub fn run(path: &Path, manifest: &MusiManifest, project_root: &Path) -> ! {

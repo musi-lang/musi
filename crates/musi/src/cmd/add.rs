@@ -1,7 +1,7 @@
 use std::fs;
 use std::process;
 
-use msc_resolve::{ImportScheme, parse_specifier};
+use msc_resolve::{parse_specifier, ImportScheme};
 use serde_json::Value;
 
 pub fn run(specifier: &str, name_override: Option<&str>, dev: bool) -> ! {

@@ -204,7 +204,27 @@ function _createCommands(statusBar: StatusBar): Commands {
 		},
 
 		async runTest(...args: unknown[]) {
-			await _runCliOnFile("test", args);
+			const testName = typeof args[1] === "string" ? args[1] : undefined;
+			if (testName) {
+				let file: string | undefined;
+				if (typeof args[0] === "string") {
+					file = args[0].startsWith("file://")
+						? vscode.Uri.parse(args[0]).fsPath
+						: args[0];
+				}
+				if (!file) {
+					const editor = vscode.window.activeTextEditor;
+					if (!editor) {
+						vscode.window.showWarningMessage("No active editor.");
+						return;
+					}
+					file = editor.document.uri.fsPath;
+				}
+				const request = buildExecutionRequest(file);
+				await executeInTerminal(request, "test", testName);
+			} else {
+				await _runCliOnFile("test", args);
+			}
 		},
 
 		async debugTest(...args: unknown[]) {

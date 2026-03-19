@@ -38,8 +38,11 @@ enum Command {
     },
     /// Run tests
     Test {
-        /// Filter test names
+        /// Filter by file path substring
         filter: Option<String>,
+        /// Filter by test name substring (passed to runner)
+        #[arg(long)]
+        name: Option<String>,
     },
     /// Format source files
     Fmt {
@@ -119,8 +122,8 @@ fn main() {
             let path = resolve_entry(file.as_deref(), &manifest);
             build::run(&path, output.as_deref(), &manifest, &project_root);
         }
-        Command::Test { filter } => {
-            cmd::test::run(filter.as_deref(), &manifest, &project_root);
+        Command::Test { filter, name } => {
+            cmd::test::run(filter.as_deref(), name.as_deref(), &manifest, &project_root);
         }
         Command::Fmt { files, check } => {
             cmd::fmt::run(&files, check, &manifest);

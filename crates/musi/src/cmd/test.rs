@@ -8,7 +8,7 @@ use std::{fs, process};
 use msc::pipeline;
 use msc_builtins::StdHost;
 use msc_manifest::MusiManifest;
-use msc_vm::{Vm, load, verify};
+use msc_vm::{load, verify, Vm};
 
 enum TestOutcome {
     Passed,
@@ -16,7 +16,12 @@ enum TestOutcome {
     Error(String),
 }
 
-pub fn run(filter: Option<&str>, manifest: &MusiManifest, project_root: &Path) -> ! {
+pub fn run(
+    filter: Option<&str>,
+    name_filter: Option<&str>,
+    manifest: &MusiManifest,
+    project_root: &Path,
+) -> ! {
     let mut test_files = discover_test_files(project_root);
     test_files.sort();
 
@@ -34,6 +39,8 @@ pub fn run(filter: Option<&str>, manifest: &MusiManifest, project_root: &Path) -
         process::exit(0);
     }
 
+    msc_builtins::set_test_filter(name_filter.unwrap_or(""));
+
     let total = test_files.len();
     let mut passed = 0usize;
     let mut failed = 0usize;
@@ -43,25 +50,25 @@ pub fn run(filter: Option<&str>, manifest: &MusiManifest, project_root: &Path) -
 
     for path in &test_files {
         let display = path.strip_prefix(project_root).unwrap_or(path).display();
+        println!("\n {display}");
 
         match run_test_file(path, manifest, project_root) {
             TestOutcome::Passed => {
-                println!("[PASS] {display}");
                 passed += 1;
             }
             TestOutcome::Failed(n) => {
-                println!("[FAIL] {display} ({n} failed)");
+                println!(" [{n} failed]");
                 failed += 1;
             }
             TestOutcome::Error(msg) => {
-                println!("[ERR ] {display} - {msg}");
+                println!(" [error] {msg}");
                 errors += 1;
             }
         }
     }
 
     let elapsed = start.elapsed();
-    println!("─────────────────────────────");
+    println!("\n─────────────────────────────");
 
     let mut summary = format!("{passed}/{total} passed");
     if failed > 0 {
