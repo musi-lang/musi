@@ -11,8 +11,8 @@ use std::collections::HashMap;
 
 use msc_shared::{DiagnosticBag, FileId, Interner, Severity, Span, Symbol};
 
-use crate::analyze_setup;
 use crate::checker::{CheckContext, Checker};
+use crate::{SemaOptions, UnifyTable, pipeline};
 
 /// Helper to construct a Stmt.
 fn stmt(expr_idx: ExprIdx) -> Stmt {
@@ -68,7 +68,7 @@ fn bind_pat(sym: Symbol) -> Pat {
 fn check_module(interner: &mut Interner, module: &ParsedModule) -> DiagnosticBag {
     let mut diags_setup = DiagnosticBag::new();
     let (mut defs, well_known, mut scopes, module_scope, resolved, types) =
-        analyze_setup(module, interner, FileId(0), &mut diags_setup);
+        pipeline::analyze_setup(module, interner, FileId(0), &mut diags_setup);
 
     let empty_imports = HashMap::new();
     let ctx = CheckContext {
@@ -90,7 +90,7 @@ fn check_module(interner: &mut Interner, module: &ParsedModule) -> DiagnosticBag
         &mut scopes,
         module_scope,
         types,
-        crate::UnifyTable::new(),
+        UnifyTable::new(),
     );
 
     for st in &module.stmts {
@@ -98,12 +98,12 @@ fn check_module(interner: &mut Interner, module: &ParsedModule) -> DiagnosticBag
     }
 
     checker.resolve_obligations();
-    crate::analyze_emit_unused_warnings(
+    pipeline::analyze_emit_unused_warnings(
         &defs,
         interner,
         FileId(0),
         &mut diags,
-        &crate::SemaOptions::default(),
+        &SemaOptions::default(),
     );
 
     diags
@@ -273,7 +273,7 @@ fn test_insert_cast_records_any_boundary() {
 
     let mut diags_setup = DiagnosticBag::new();
     let (mut defs, well_known, mut scopes, module_scope, resolved, types) =
-        analyze_setup(&module, &mut interner, FileId(0), &mut diags_setup);
+        pipeline::analyze_setup(&module, &mut interner, FileId(0), &mut diags_setup);
 
     let empty_imports = HashMap::new();
     let ctx = CheckContext {

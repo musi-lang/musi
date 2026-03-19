@@ -49,7 +49,7 @@ pub fn check<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx, expecte
     );
 }
 
-#[allow(clippy::too_many_lines)]
+#[allow(clippy::too_many_lines)] // exhaustive match dispatching to named sub-functions
 fn synth_inner<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) -> TypeIdx {
     match &ck.ctx.ast.exprs[expr_idx] {
         Expr::Lit { lit, span } => {
