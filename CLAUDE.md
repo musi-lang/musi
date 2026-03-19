@@ -1,5 +1,58 @@
 # Project Instructions
 
+## Musi Language Reference
+
+Musi is NOT C, JavaScript, Rust, or Python. When writing or editing `.ms` files, use Musi syntax exclusively. Never substitute C/JS/Rust operators or keywords.
+
+### Forbidden C-isms
+
+| Wrong (C/JS/Rust)   | Correct (Musi)                       | Notes                                                 |
+| ------------------- | ------------------------------------ | ----------------------------------------------------- |
+| `&&`                | `and`                                | Type-directed: logical on Bool, bitwise on Int        |
+| `\|\|`              | `or`                                 | Type-directed: logical on Bool, bitwise on Int        |
+| `!x`                | `not x`                              | Type-directed: logical on Bool, bitwise on Int        |
+| `&`                 | `and`                                | No separate bitwise operators                         |
+| `\|` (bitwise)      | `or`                                 | No separate bitwise operators                         |
+| `^`                 | `xor`                                | No separate bitwise operators                         |
+| `~`                 | `not`                                | No separate bitwise operators                         |
+| `==`                | `=`                                  | Single equals is comparison                           |
+| `!=`                | `/=`                                 | Slash-equals                                          |
+| `x = 5` (assign)    | `x := 5` (bind) or `x <- 5` (mutate) | `:=` binds, `<-` mutates                              |
+| `if/else`           | `(x if cond \| y if _)`              | Piecewise expressions, no if/else                     |
+| `{ ... }` (blocks)  | `( ... )`                            | Parens for blocks/sequences                           |
+| `fn f()`            | `let f := () => ...`                 | No fn keyword                                         |
+| `null`/`nil`        | `.None`                              | Variant, dot-prefixed                                 |
+| `true`/`false`      | `.True`/`.False`                     | Variants, dot-prefixed, capitalized                   |
+| `enum`              | `choice { A + B of T }`              | Variants separated by `+`                             |
+| `struct`            | `record { x : T; y : U }`            | Fields separated by `;`                               |
+| `x.field` (obj lit) | `.{ field := value }`                | Record literals use `.{`                              |
+| `=>` (match arm)    | `=>`                                 | Same, but match uses `\|` separator and `( )` wrapper |
+| `->` (fn type)      | `->` (pure) / `~>` (effectful)       | Two arrow types                                       |
+
+### Key Syntax Rules
+
+- **Comments**: `//`, `///` (doc), `//!` (module doc), `/* */`
+- **Strings**: `"double quotes"` only. F-strings: `f"x is {x}"`
+- **Runes**: `'a'` (single character)
+- **Keywords** (29): `let`, `mut`, `return`, `match`, `if`, `and`, `or`, `xor`, `not`, `record`, `choice`, `of`, `as`, `where`, `class`, `instance`, `law`, `via`, `effect`, `need`, `handle`, `with`, `resume`, `fatal`, `export`, `import`, `foreign`, `in`, `defer`, `try`
+- **No** `fn`, `func`, `def`, `type`, `enum`, `struct`, `else`, `elif`, `switch`, `case`, `while`, `for`, `loop`
+- **Semicolons** separate statements in sequences; trailing `;` makes value `Unit`
+- **Variants** are dot-prefixed: `.Some(x)`, `.None`, `.Ok(v)`, `.Err(e)`
+- **Type params** use `['T]` brackets: `let id['T] := (x : 'T) : 'T => x`
+- **Attributes**: `#[key := value]`
+- **Pipeline**: `x |> f` equals `f(x)`
+- **Cons**: `x :: xs`
+- **Ranges**: `1..10` (inclusive), `1..<10` (exclusive)
+- **Spread**: `...arr`
+- **Optional chain**: `x?.field`, **Force**: `x!`, `x!.field`
+- **Type test**: `x :? Type`, **Type cast**: `x :?> Type`
+
+### Before Editing `.ms` Files
+
+1. Read `grammar.abnf` and `docs/` if unsure about syntax
+2. Check existing stdlib files for idiomatic patterns
+3. Never use C/JS/Rust operators — Musi has its own operator set
+
 ## Collaboration Protocol
 
 ### Adaptive Depth
