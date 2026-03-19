@@ -8,14 +8,19 @@
 
 import "@std/rt" as rt;
 
+/// Two-array double-ended queue.
 export let Deque ['a] := record { front : []'a; back : []'a };
 
+/// Create an empty deque.
 export let new ['a] := () => .{ front := [], back := [] };
 
+/// Push a value onto the front of the deque.
 export let push_front ['a] := (d, val) => rt.arr_push(d.front, val);
 
+/// Push a value onto the back of the deque.
 export let push_back ['a] := (d, val) => rt.arr_push(d.back, val);
 
+/// Remove and return the front value, or `.None` if empty.
 export let pop_front ['a] := (d) => (
   let flen := rt.arr_len(d.front);
   let blen := rt.arr_len(d.back);
@@ -31,6 +36,7 @@ export let pop_front ['a] := (d) => (
   )
 );
 
+/// Remove and return the back value, or `.None` if empty.
 export let pop_back ['a] := (d) => (
   let blen := rt.arr_len(d.back);
   let flen := rt.arr_len(d.front);
@@ -46,6 +52,7 @@ export let pop_back ['a] := (d) => (
   )
 );
 
+/// Return the front value without removing it, or `.None` if empty.
 export let peek_front ['a] := (d) => (
   let flen := rt.arr_len(d.front);
   let blen := rt.arr_len(d.back);
@@ -56,6 +63,7 @@ export let peek_front ['a] := (d) => (
   )
 );
 
+/// Return the back value without removing it, or `.None` if empty.
 export let peek_back ['a] := (d) => (
   let blen := rt.arr_len(d.back);
   let flen := rt.arr_len(d.front);
@@ -66,7 +74,9 @@ export let peek_back ['a] := (d) => (
   )
 );
 
+/// Return the total number of elements in the deque.
 export let len ['a] := (d) => rt.arr_len(d.front) + rt.arr_len(d.back);
 
+/// Return `.True` if the deque contains no elements.
 export let is_empty ['a] := (d) =>
   rt.arr_len(d.front) = 0 and rt.arr_len(d.back) = 0;

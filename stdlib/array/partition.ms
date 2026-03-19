@@ -2,6 +2,7 @@
 
 import "@std/rt" as rt;
 
+/// Split an array into two arrays: elements matching `pred` and those that do not.
 export let partition ['a] := (arr, pred) => (
   let mut matching := [];
   let mut rest := [];
@@ -17,6 +18,7 @@ export let partition ['a] := (arr, pred) => (
   step(0)
 );
 
+/// Split an array into consecutive sub-arrays of length `size`.
 export let chunk ['a] := (arr, size) => (
   let len := rt.arr_len(arr);
   let mut result := [];
@@ -31,6 +33,7 @@ export let chunk ['a] := (arr, size) => (
   step(0)
 );
 
+/// Return all contiguous sub-arrays of length `size`.
 export let windows ['a] := (arr, size) => (
   let len := rt.arr_len(arr);
   let mut result := [];
@@ -44,6 +47,7 @@ export let windows ['a] := (arr, size) => (
   step(0)
 );
 
+/// Split an array into two slices at `idx`.
 export let split_at ['a] := (arr, idx) => (
   let len := rt.arr_len(arr);
   let cut := (idx if idx < len | len if _);

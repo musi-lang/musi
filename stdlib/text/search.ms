@@ -2,8 +2,10 @@
 
 import "@std/rt" as rt;
 
+/// Return whether a string contains a given substring.
 export let contains := (s, sub) => rt.str_contains(s, sub);
 
+/// Count the number of non-overlapping occurrences of a substring.
 export let count_occurrences := (s, sub) => (
   let sub_len := rt.str_len(sub);
   0 if sub_len = 0
@@ -21,6 +23,7 @@ export let count_occurrences := (s, sub) => (
   ) if _
 );
 
+/// Return the character index of the last occurrence of sub, or -1 if not found.
 export let last_index_of := (s, sub) => (
   let sub_len := rt.str_len(sub);
   -1 if sub_len = 0

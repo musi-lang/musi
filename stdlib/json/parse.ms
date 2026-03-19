@@ -242,6 +242,7 @@ let parse_value := (chars, pos) => (
 
 parse_value_ref <- parse_value;
 
+/// Parses a JSON string into a JsonValue, returning .Err with a message on failure.
 export let parse := (s) => (
   let chars := rt.str_chars(s);
   match parse_value(chars, 0) (

@@ -4,6 +4,7 @@
 
 import "@std/rt" as rt;
 
+/// Return `.True` if `arr` is sorted according to `cmp`.
 export let is_sorted ['a] := (arr, cmp) => (
   let len := rt.arr_len(arr);
   let step := (i) => (
@@ -37,6 +38,7 @@ let merge := (left, right, cmp) => (
   step(0, 0)
 );
 
+/// Return a new array sorted by `cmp` using merge sort.
 export let merge_sort ['a] := (arr, cmp) => (
   let len := rt.arr_len(arr);
   arr if len <= 1
@@ -48,8 +50,10 @@ export let merge_sort ['a] := (arr, cmp) => (
   ) if _
 );
 
+/// Return a new array sorted by `cmp`.
 export let sort_by ['a] := (arr, cmp) => merge_sort(arr, cmp);
 
+/// Return a new array sorted by `cmp` using insertion sort (efficient for small or nearly-sorted arrays).
 export let insertion_sort ['a] := (arr, cmp) => (
   let len := rt.arr_len(arr);
   let sorted := rt.arr_slice(arr, 0, len);

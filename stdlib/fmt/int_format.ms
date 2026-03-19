@@ -7,6 +7,7 @@ let hex_char := (d) => (
   | rt.rune_from_int(d - 10 + rt.rune_to_int('a')) if _
 );
 
+/// Converts an integer to its lowercase hexadecimal string representation.
 export let int_to_hex := (n) => (
   let abs_n := (n if n >= 0 | 0 - n if _);
   (
@@ -23,6 +24,7 @@ export let int_to_hex := (n) => (
   | "0" if _
 );
 
+/// Converts an integer to its binary string representation.
 export let int_to_bin := (n) => (
   let abs_n := (n if n >= 0 | 0 - n if _);
   (

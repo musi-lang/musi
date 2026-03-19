@@ -2,6 +2,7 @@
 
 import "@std/rt" as rt;
 
+/// Remove consecutive duplicate elements from a sorted array.
 export let dedup ['a] := (arr) => (
   let len := rt.arr_len(arr);
   let mut result := [];
@@ -23,18 +24,21 @@ export let dedup ['a] := (arr) => (
   )
 );
 
+/// Return the first `n` elements of an array.
 export let take_arr ['a] := (arr, n) => (
   let len := rt.arr_len(arr);
   let end := (n if n < len | len if _);
   rt.arr_slice(arr, 0, end)
 );
 
+/// Return all elements after the first `n` elements of an array.
 export let drop_arr ['a] := (arr, n) => (
   let len := rt.arr_len(arr);
   let start := (n if n < len | len if _);
   rt.arr_slice(arr, start, len)
 );
 
+/// Map each element to an array and concatenate all results.
 export let flat_map_arr ['a, 'b] := (arr, f) => (
   let len := rt.arr_len(arr);
   let mut result := [];
@@ -54,6 +58,7 @@ export let flat_map_arr ['a, 'b] := (arr, f) => (
   step(0)
 );
 
+/// Apply `f` to each element and return a new array of results.
 export let map_arr ['a, 'b] := (arr, f) => (
   let len := rt.arr_len(arr);
   let mut result := [];
@@ -64,6 +69,7 @@ export let map_arr ['a, 'b] := (arr, f) => (
   step(0)
 );
 
+/// Return a new array containing only elements that satisfy `pred`.
 export let filter_arr ['a] := (arr, pred) => (
   let len := rt.arr_len(arr);
   let mut result := [];
@@ -77,6 +83,7 @@ export let filter_arr ['a] := (arr, pred) => (
   step(0)
 );
 
+/// Return a new array with elements in reverse order.
 export let reverse_copy ['a] := (arr) => (
   let len := rt.arr_len(arr);
   let mut result := [];
@@ -87,6 +94,7 @@ export let reverse_copy ['a] := (arr) => (
   (step(len - 1) if len > 0 | result if _)
 );
 
+/// Insert `sep` between every pair of adjacent elements.
 export let intersperse ['a] := (arr, sep) => (
   let len := rt.arr_len(arr);
   let mut result := [];
@@ -101,6 +109,7 @@ export let intersperse ['a] := (arr, sep) => (
   step(0)
 );
 
+/// Fold `f` left over the array, emitting each intermediate accumulator.
 export let scan ['a, 'b] := (arr, init, f) => (
   let len := rt.arr_len(arr);
   let mut acc := init;

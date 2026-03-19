@@ -2,6 +2,7 @@
 
 import "@std/rt" as rt;
 
+/// Truncates s to max_len characters, appending suffix if truncation occurs.
 export let truncate := (s, max_len, suffix) => (
   let len := rt.str_len(s);
   let suf_len := rt.str_len(suffix);

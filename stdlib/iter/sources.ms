@@ -2,8 +2,10 @@
 
 import "@std/rt" as rt;
 
+/// Lazy iterator that yields elements one at a time via `next`.
 export let Iter ['a] := record { next : () -> ?'a };
 
+/// Create an iterator that yields each element of `arr` in order.
 export let from_array ['a] := (arr) => (
   let mut i := 0;
   let len := rt.arr_len(arr);
@@ -13,6 +15,7 @@ export let from_array ['a] := (arr) => (
   ) }
 );
 
+/// Create an iterator that yields integers from `start` up to (exclusive) `end`.
 export let range := (start, end) => (
   let mut cur := start;
   .{ next := () => (
@@ -21,8 +24,10 @@ export let range := (start, end) => (
   ) }
 );
 
+/// Create an iterator that yields `value` indefinitely.
 export let repeat ['a] := (value) =>
   .{ next := () => .Some(value) };
 
+/// Create an iterator that immediately yields `.None`.
 export let empty ['a] := () =>
   .{ next := () => .None };

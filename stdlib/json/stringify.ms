@@ -29,6 +29,7 @@ let escape_str := (s) => (
   rt.str_from_chars(buf)
 );
 
+/// Serializes a JsonValue to a compact JSON string.
 export let stringify := (value) => (
   match value (
     .Null        => "null"
@@ -57,7 +58,7 @@ export let stringify := (value) => (
         ) if _
       );
       step(0);
-      // TODO: cannot use "{{ }}" in f-strings; need to support escaping braces in f-strings first
+      // String concatenation used here because f-strings cannot yet escape literal braces.
       "{" + rt.str_join(parts, ", ") + "}"
     )
   )

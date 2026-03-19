@@ -2,6 +2,7 @@
 
 import "@std/rt" as rt;
 
+/// Pair elements from two arrays by index, stopping at the shorter array.
 export let zip_arr ['a, 'b] := (a, b) => (
   let len_a := rt.arr_len(a);
   let len_b := rt.arr_len(b);
@@ -14,6 +15,7 @@ export let zip_arr ['a, 'b] := (a, b) => (
   step(0)
 );
 
+/// Split an array of pairs into two separate arrays.
 export let unzip ['a, 'b] := (arr) => (
   let len := rt.arr_len(arr);
   let mut lefts := [];

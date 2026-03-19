@@ -6,6 +6,7 @@ let mut suites := [];
 let mut current_tests := [];
 let mut current_failure := .None;
 
+/// Registers a named test suite; test cases inside suite_fn are collected via `it`.
 export let describe := (name, suite_fn) => (
   let tests := [];
   let prev := current_tests;
@@ -15,14 +16,17 @@ export let describe := (name, suite_fn) => (
   rt.arr_push(suites, .{ name := name, tests := tests })
 );
 
+/// Registers a single named test case to run within the current describe block.
 export let it := (name, test_fn) => (
   rt.arr_push(current_tests, .{ name := name, body := test_fn })
 );
 
+/// Records a test failure with the given message; only the first failure per test is kept.
 export let fail := (msg) => (
   (current_failure <- .Some(msg) if current_failure = .None | () if _)
 );
 
+/// Runs all registered suites, prints results, and returns the failure count.
 export let run := () => (
   let filter := rt.__test_filter();
   let has_filter := rt.str_len(filter) > 0;

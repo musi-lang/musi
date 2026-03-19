@@ -3,6 +3,7 @@
 import "@std/rt" as rt;
 import "./runner" as runner;
 
+/// Returns a matcher object with assertion methods for the given actual value.
 export let expect := (actual) => .{
   toBe := (expected) => (
     () if actual = expected

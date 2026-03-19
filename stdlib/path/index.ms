@@ -2,6 +2,7 @@
 
 import "@std/rt" as rt;
 
+/// Joins two path segments, handling trailing slashes and absolute second segments.
 export let join := (a, b) => (
   "" if rt.str_len(b) = 0
   | b if rt.str_len(a) = 0
@@ -12,6 +13,7 @@ export let join := (a, b) => (
   ) if _
 );
 
+/// Returns the directory component of a path.
 export let dirname := (p) => (
   let trimmed := (
     rt.str_slice(p, 0, rt.str_len(p) - 1) if rt.str_ends_with(p, "/") and rt.str_len(p) > 1
@@ -34,6 +36,7 @@ export let dirname := (p) => (
   )
 );
 
+/// Returns the final component of a path (the filename or last directory name).
 export let basename := (p) => (
   let trimmed := (
     rt.str_slice(p, 0, rt.str_len(p) - 1) if rt.str_ends_with(p, "/") and rt.str_len(p) > 1
@@ -56,6 +59,7 @@ export let basename := (p) => (
   )
 );
 
+/// Returns the file extension of a path as .Some(ext), or .None if absent.
 export let extension := (p) => (
   let base := basename(p);
   let len := rt.str_len(base);
@@ -75,6 +79,7 @@ export let extension := (p) => (
   )
 );
 
+/// Returns p with its file extension replaced by ext (pass "" to remove the extension).
 export let with_extension := (p, ext) => (
   let base := basename(p);
   let dir := dirname(p);
@@ -103,8 +108,10 @@ export let with_extension := (p, ext) => (
   )
 );
 
+/// Returns .True if p is an absolute path.
 export let is_absolute := (p) => rt.str_starts_with(p, "/");
 
+/// Resolves `.` and `..` components and removes redundant slashes from p.
 export let normalize := (p) => (
   let is_abs := is_absolute(p);
   let parts := rt.str_split(p, "/");

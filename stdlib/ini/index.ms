@@ -2,6 +2,7 @@
 
 import "@std/rt" as rt;
 
+/// A parsed INI section with its name and key-value entries.
 export let Section := record { name : String; entries : [](String, String) };
 
 let is_comment_line := (line) => (
@@ -29,6 +30,7 @@ let _split_entry := (line) => (
   (key, val)
 );
 
+/// Parses an INI-formatted string into a list of Section records.
 export let parse := (input) => (
   let raw_lines := rt.str_split(input, "\n");
   let n := rt.arr_len(raw_lines);
@@ -73,6 +75,7 @@ export let parse := (input) => (
   sections
 );
 
+/// Looks up a key in a named section, returning .Some(value) or .None.
 export let get := (sections, section_name, key) => (
   let sn := rt.arr_len(sections);
   let find_section := (si) => (

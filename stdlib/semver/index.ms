@@ -2,6 +2,7 @@
 
 import "@std/rt" as rt;
 
+/// A parsed semantic version with major, minor, patch, pre-release, and build metadata.
 export let Semver := record {
   major : Int;
   minor : Int;
@@ -10,8 +11,10 @@ export let Semver := record {
   build : String;
 };
 
+/// Error returned when a version string cannot be parsed.
 export let ParseError := choice { InvalidFormat of String };
 
+/// Parses a semver string (e.g. "1.2.3-alpha+build") into a Semver record.
 export let parse := (s) => (
   let plus_idx := rt.str_index_of(s, "+");
   let build := (
@@ -55,6 +58,7 @@ export let parse := (s) => (
   )
 );
 
+/// Formats a Semver record back to its canonical string representation.
 export let to_string := (v) => (
   let base := f"{v.major}.{v.minor}.{v.patch}";
   let with_pre := (
@@ -80,6 +84,7 @@ let compare_pre_result := (a, b) => (
   | (.Less if a < b | .Greater if _) if _
 );
 
+/// Compares two Semver values, returning .Less, .Equal, or .Greater.
 export let compare := (a, b) => (
   let maj := compare_int(a.major, b.major);
   match maj (
@@ -100,11 +105,13 @@ export let compare := (a, b) => (
   )
 );
 
+/// Returns .True if a and b are compatible under semver rules.
 export let is_compatible := (a, b) => (
   (a.major = b.major and a.minor = b.minor) if a.major = 0
   | a.major = b.major if _
 );
 
+/// Returns v with the major version incremented and minor/patch reset to zero.
 export let inc_major := (v) => .{
   major := v.major + 1,
   minor := 0,
@@ -113,6 +120,7 @@ export let inc_major := (v) => .{
   build := "",
 };
 
+/// Returns v with the minor version incremented and patch reset to zero.
 export let inc_minor := (v) => .{
   major := v.major,
   minor := v.minor + 1,
@@ -121,6 +129,7 @@ export let inc_minor := (v) => .{
   build := "",
 };
 
+/// Returns v with the patch version incremented.
 export let inc_patch := (v) => .{
   major := v.major,
   minor := v.minor,

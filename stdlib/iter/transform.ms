@@ -1,5 +1,6 @@
 //! Iterator transformation combinators.
 
+/// Apply `f` to each element, yielding transformed values.
 export let map ['a, 'b] := (iter, f) =>
   .{ next := () => (
     let v := iter.next();
@@ -9,6 +10,7 @@ export let map ['a, 'b] := (iter, f) =>
     )
   ) };
 
+/// Yield only elements for which `pred` returns `.True`.
 export let filter ['a] := (iter, pred) => (
   let step := () => (
     let v := iter.next();
@@ -20,6 +22,7 @@ export let filter ['a] := (iter, pred) => (
   .{ next := step }
 );
 
+/// Yield at most `n` elements from `iter`.
 export let take ['a] := (iter, n) => (
   let mut remaining := n;
   .{ next := () => (
@@ -28,6 +31,7 @@ export let take ['a] := (iter, n) => (
   ) }
 );
 
+/// Skip the first `n` elements, then yield the rest.
 export let skip ['a] := (iter, n) => (
   let mut skipped := 0;
   let step := () => (
@@ -37,6 +41,7 @@ export let skip ['a] := (iter, n) => (
   .{ next := step }
 );
 
+/// Yield pairs of corresponding elements, stopping when either iterator ends.
 export let zip ['a, 'b] := (a, b) =>
   .{ next := () => (
     let va := a.next();
@@ -52,6 +57,7 @@ export let zip ['a, 'b] := (a, b) =>
     )
   ) };
 
+/// Yield all elements of `a` followed by all elements of `b`.
 export let chain ['a] := (a, b) => (
   let mut exhausted_a := .False;
   .{ next := () => (
@@ -66,6 +72,7 @@ export let chain ['a] := (a, b) => (
   ) }
 );
 
+/// Pair each element with its zero-based index.
 export let enumerate ['a] := (iter) => (
   let mut i := 0;
   .{ next := () => (
@@ -77,6 +84,7 @@ export let enumerate ['a] := (iter) => (
   ) }
 );
 
+/// Map each element to an iterator and yield all elements of each sub-iterator in order.
 export let flat_map ['a, 'b] := (iter, f) => (
   let mut inner := .None;
   let step := () =>
@@ -99,6 +107,7 @@ export let flat_map ['a, 'b] := (iter, f) => (
   .{ next := step }
 );
 
+/// Yield elements while `pred` returns `.True`, then stop.
 export let take_while ['a] := (iter, pred) => (
   let mut done := .False;
   .{ next := () => (
@@ -113,6 +122,7 @@ export let take_while ['a] := (iter, pred) => (
   ) }
 );
 
+/// Skip leading elements while `pred` returns `.True`, then yield the rest.
 export let skip_while ['a] := (iter, pred) => (
   let mut skipping := .True;
   let step := () => (

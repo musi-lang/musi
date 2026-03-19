@@ -1,5 +1,6 @@
 //! Show type class and primitive instances.
 
+/// Human-readable string conversion: implement to support display formatting.
 #[lang := "Show"]
 export class Show ['a] {
   let show(a) : String;
