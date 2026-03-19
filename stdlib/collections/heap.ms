@@ -7,8 +7,10 @@
 import "@std/rt" as rt;
 import "@std/cmp/ordering";
 
+/// Array-backed binary heap with a caller-supplied comparator.
 export let Heap ['a] := record { data : []'a; cmp : ('a, 'a) -> Ordering };
 
+/// Create an empty heap using `cmp` to order elements.
 export let new ['a] := (cmp) => .{ data := [], cmp := cmp };
 
 let swap ['a] := (data, i, j) => (
@@ -46,11 +48,13 @@ let sift_down ['a] := (data, idx, len, cmp) => (
   | () if _
 );
 
+/// Insert a value into the heap.
 export let push ['a] := (h, val) => (
   rt.arr_push(h.data, val);
   sift_up(h.data, rt.arr_len(h.data) - 1, h.cmp)
 );
 
+/// Remove and return the highest-priority element, or `.None` if empty.
 export let pop ['a] := (h) => (
   let n := rt.arr_len(h.data);
   (
@@ -65,16 +69,20 @@ export let pop ['a] := (h) => (
   )
 );
 
+/// Return the highest-priority element without removing it, or `.None` if empty.
 export let peek ['a] := (h) => (
   let n := rt.arr_len(h.data);
   (.Some(h.data.[0]) if n > 0
   | .None if _)
 );
 
+/// Return the number of elements in the heap.
 export let len ['a] := (h) => rt.arr_len(h.data);
 
+/// Return `.True` if the heap contains no elements.
 export let is_empty ['a] := (h) => rt.arr_len(h.data) = 0;
 
+/// Build a heap from an existing array in O(n) time.
 export let from_array ['a] := (arr, cmp) => (
   let data := rt.arr_slice(arr, 0, rt.arr_len(arr));
   let h := .{ data := data, cmp := cmp };
@@ -87,11 +95,13 @@ export let from_array ['a] := (arr, cmp) => (
   h
 );
 
+/// Return a copy of the heap's backing array in unspecified order.
 export let to_array ['a] := (h) => rt.arr_slice(h.data, 0, rt.arr_len(h.data));
 
+/// Drain the heap and return its elements in priority order.
 export let to_sorted_array ['a] := (h) => (
   let copy := from_array(h.data, h.cmp);
-  let out := [];
+  let mut out := [];
   let step := () =>
     match pop(copy) (
       .Some(v) => (rt.arr_push(out, v); step())

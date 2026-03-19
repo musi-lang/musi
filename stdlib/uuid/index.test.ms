@@ -3,6 +3,7 @@
 import "@std/testing" as t;
 import "@std/uuid/index" as m;
 import "@std/random/rng" as rng;
+import "@std/rt/index" as rt;
 
 t.describe("UUID", () => (
   t.it("v4 - total length is 36", () => (
@@ -19,18 +20,18 @@ t.describe("UUID", () => (
     let r := rng.new(1);
     let uuid := m.v4(r);
     t.expect(
-      uuid.[8] = '-' and uuid.[13] = '-' and uuid.[18] = '-' and uuid.[23] = '-'
+      rt.str_at(uuid, 8) = '-' and rt.str_at(uuid, 13) = '-' and rt.str_at(uuid, 18) = '-' and rt.str_at(uuid, 23) = '-'
     ).toBe(.True)
   ));
   t.it("v4 - third segment starts with 4", () => (
     let r := rng.new(1);
     let uuid := m.v4(r);
-    t.expect(uuid.[14]).toBe('4')
+    t.expect(rt.str_at(uuid, 14)).toBe('4')
   ));
   t.it("v4 - variant nibble is 8, 9, a, or b", () => (
     let r := rng.new(1);
     let uuid := m.v4(r);
-    let variant := uuid.[19];
+    let variant := rt.str_at(uuid, 19);
     t.expect(
       variant = '8' or variant = '9' or variant = 'a' or variant = 'b'
     ).toBe(.True)
