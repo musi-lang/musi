@@ -35,6 +35,9 @@
 	"engines": {
 		"vscode": "^1.75.0"
 	},
+	"activationEvents": [
+		"workspaceContains:**/musi.json"
+	],
 	"contributes": {
 		"languages": [
 			{
@@ -254,6 +257,11 @@
 			{
 				"command": "musi.editRunConfigurations",
 				"title": "Edit Run Configurations",
+				"category": "Musi"
+			},
+			{
+				"command": "musi.runTaskCommand",
+				"title": "Run Task Command",
 				"category": "Musi"
 			}
 		],
