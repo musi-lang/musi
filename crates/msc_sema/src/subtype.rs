@@ -5,7 +5,7 @@ mod tests;
 
 use msc_shared::Arena;
 
-use crate::types::{Quantifier, RecordField, SumVariant, Type, TypeIdx};
+use crate::types::{EffectRow, Quantifier, RecordField, SumVariant, Type, TypeIdx};
 use crate::unify::UnifyTable;
 use crate::well_known::WellKnown;
 use crate::{DefId, TyVarId};
@@ -62,14 +62,14 @@ fn is_subtype_inner(sub: TypeIdx, sup: TypeIdx, ctx: &SubCtx) -> bool {
             Type::Fn {
                 params: p1,
                 ret: r1,
-                ..
+                effects: e1,
             },
             Type::Fn {
                 params: p2,
                 ret: r2,
-                ..
+                effects: e2,
             },
-        ) => is_subtype_fn(p1, *r1, p2, *r2, ctx),
+        ) => is_subtype_fn(p1, *r1, e1, p2, *r2, e2, ctx),
         (Type::Record { fields: f1, .. }, Type::Record { fields: f2, .. }) => {
             is_subtype_record(f1, f2, ctx)
         }
@@ -130,14 +130,42 @@ fn is_subtype_named(d1: DefId, a1: &[TypeIdx], d2: DefId, a2: &[TypeIdx], ctx: &
         .all(|(a, b)| is_subtype_inner(a, b, ctx))
 }
 
-fn is_subtype_fn(p1: &[TypeIdx], r1: TypeIdx, p2: &[TypeIdx], r2: TypeIdx, ctx: &SubCtx) -> bool {
+fn is_subtype_fn(
+    p1: &[TypeIdx],
+    r1: TypeIdx,
+    e1: &EffectRow,
+    p2: &[TypeIdx],
+    r2: TypeIdx,
+    e2: &EffectRow,
+    ctx: &SubCtx,
+) -> bool {
     if p1.len() != p2.len() {
         return false;
     }
-    p1.iter()
+    // Params: contravariant
+    let params_ok = p1
+        .iter()
         .zip(p2.iter())
-        .all(|(&param_sub, &param_sup)| is_subtype_inner(param_sup, param_sub, ctx))
-        && is_subtype_inner(r1, r2, ctx)
+        .all(|(&param_sub, &param_sup)| is_subtype_inner(param_sup, param_sub, ctx));
+    // Return: covariant
+    let ret_ok = is_subtype_inner(r1, r2, ctx);
+    // Effects: pure <: effectful (covariant)
+    let effects_ok = is_subtype_effects(e1, e2);
+    params_ok && ret_ok && effects_ok
+}
+
+/// A pure function (`->`) is a subtype of an effectful function (`~>`).
+/// If both are effectful, every effect in `sub` must appear in `sup`.
+fn is_subtype_effects(sub: &EffectRow, sup: &EffectRow) -> bool {
+    if sub.is_pure() {
+        return true;
+    }
+    if sup.row_var.is_some() {
+        return true;
+    }
+    sub.effects
+        .iter()
+        .all(|e| sup.effects.iter().any(|s| s.def == e.def))
 }
 
 fn is_subtype_record(f1: &[RecordField], f2: &[RecordField], ctx: &SubCtx) -> bool {
