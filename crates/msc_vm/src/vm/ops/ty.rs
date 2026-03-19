@@ -1,12 +1,12 @@
 //! Type operation opcode handlers (§4.12).
 
-use crate::error::VmError;
+use crate::VmResult;
 use crate::heap::{Heap, HeapObject};
 use crate::loader::LoadedType;
 use crate::value::Value;
 use crate::vm::Frame;
 
-pub fn exec_ty_of(frame: &mut Frame, heap: &Heap) -> Result<(), VmError> {
+pub fn exec_ty_of(frame: &mut Frame, heap: &Heap) -> VmResult {
     let val = frame.pop()?;
     let type_id: u32 = if val.is_float() {
         0x0C // TAG_TY_F64

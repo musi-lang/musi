@@ -1,11 +1,12 @@
 //! Array opcode handlers.
 
+use crate::VmResult;
 use crate::error::VmError;
 use crate::heap::Heap;
 use crate::value::Value;
 use crate::vm::Frame;
 
-pub fn exec_arr_len(frame: &mut Frame, heap: &Heap) -> Result<(), VmError> {
+pub fn exec_arr_len(frame: &mut Frame, heap: &Heap) -> VmResult {
     let arr_val = frame.pop()?;
     let ptr = arr_val.as_ref()?;
     let elems = heap.get_array(ptr)?;
@@ -14,7 +15,7 @@ pub fn exec_arr_len(frame: &mut Frame, heap: &Heap) -> Result<(), VmError> {
     Ok(())
 }
 
-pub fn exec_arr_get(frame: &mut Frame, heap: &Heap) -> Result<(), VmError> {
+pub fn exec_arr_get(frame: &mut Frame, heap: &Heap) -> VmResult {
     let idx_val = frame.pop()?;
     let arr_val = frame.pop()?;
     let idx = super::as_usize(idx_val)?;
@@ -37,7 +38,7 @@ pub fn exec_arr_get(frame: &mut Frame, heap: &Heap) -> Result<(), VmError> {
     Ok(())
 }
 
-pub fn exec_arr_set(frame: &mut Frame, heap: &mut Heap) -> Result<(), VmError> {
+pub fn exec_arr_set(frame: &mut Frame, heap: &mut Heap) -> VmResult {
     let val = frame.pop()?;
     let idx_val = frame.pop()?;
     let arr_val = frame.pop()?;
@@ -52,7 +53,7 @@ pub fn exec_arr_set(frame: &mut Frame, heap: &mut Heap) -> Result<(), VmError> {
     Ok(())
 }
 
-pub fn exec_arr_new(operand: u32, frame: &mut Frame, heap: &mut Heap) -> Result<(), VmError> {
+pub fn exec_arr_new(operand: u32, frame: &mut Frame, heap: &mut Heap) -> VmResult {
     let len_val = frame.pop()?;
     let len = super::as_usize(len_val)?;
     let elems = vec![Value::UNIT; len];

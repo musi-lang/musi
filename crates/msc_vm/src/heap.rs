@@ -6,6 +6,7 @@
 //! Mark-sweep GC: call `mark_reachable()` with root values, then `sweep()` to
 //! reclaim unreachable objects.
 
+use crate::VmResult;
 use crate::error::VmError;
 use crate::value::Value;
 
@@ -201,7 +202,7 @@ impl Heap {
     ///
     /// Returns `OutOfBounds` if `ptr` is not a valid heap index, or
     /// `FreedObject` if the slot has been swept.
-    pub fn get(&self, ptr: usize) -> Result<&HeapObject, VmError> {
+    pub fn get(&self, ptr: usize) -> VmResult<&HeapObject> {
         let slot = self.objects.get(ptr).ok_or(VmError::OutOfBounds {
             index: ptr,
             len: self.objects.len(),
@@ -215,7 +216,7 @@ impl Heap {
     ///
     /// Returns `OutOfBounds` if `ptr` is not a valid heap index, or
     /// `FreedObject` if the slot has been swept.
-    pub fn get_mut(&mut self, ptr: usize) -> Result<&mut HeapObject, VmError> {
+    pub fn get_mut(&mut self, ptr: usize) -> VmResult<&mut HeapObject> {
         let len = self.objects.len();
         let slot = self
             .objects
@@ -234,7 +235,7 @@ impl Heap {
     ///
     /// Returns `OutOfBounds` / `FreedObject` on bad pointer, or `TypeError` if
     /// the object is not a `HeapPayload::Str`.
-    pub fn get_string(&self, ptr: usize) -> Result<&str, VmError> {
+    pub fn get_string(&self, ptr: usize) -> VmResult<&str> {
         match &self.get(ptr)?.payload {
             HeapPayload::Str { data, .. } => Ok(data.as_ref()),
             _ => Err(VmError::TypeError {
@@ -249,7 +250,7 @@ impl Heap {
     /// # Errors
     ///
     /// Returns `TypeError` if the object is not a `HeapPayload::Array`.
-    pub fn get_array(&self, ptr: usize) -> Result<&[Value], VmError> {
+    pub fn get_array(&self, ptr: usize) -> VmResult<&[Value]> {
         match &self.get(ptr)?.payload {
             HeapPayload::Array { elems, .. } => Ok(elems.as_slice()),
             _ => Err(VmError::TypeError {
@@ -264,7 +265,7 @@ impl Heap {
     /// # Errors
     ///
     /// Returns `TypeError` if the object is not a `HeapPayload::Array`.
-    pub fn get_array_mut(&mut self, ptr: usize) -> Result<&mut Vec<Value>, VmError> {
+    pub fn get_array_mut(&mut self, ptr: usize) -> VmResult<&mut Vec<Value>> {
         match &mut self.get_mut(ptr)?.payload {
             HeapPayload::Array { elems, .. } => Ok(elems),
             _ => Err(VmError::TypeError {
@@ -279,7 +280,7 @@ impl Heap {
     /// # Errors
     ///
     /// Returns `TypeError` if the object is not a `HeapPayload::Record`.
-    pub fn get_record_fields(&self, ptr: usize) -> Result<&[Value], VmError> {
+    pub fn get_record_fields(&self, ptr: usize) -> VmResult<&[Value]> {
         match &self.get(ptr)?.payload {
             HeapPayload::Record { fields, .. } => Ok(fields.as_slice()),
             _ => Err(VmError::TypeError {
@@ -294,7 +295,7 @@ impl Heap {
     /// # Errors
     ///
     /// Returns `TypeError` if the object is not a `HeapPayload::Record`.
-    pub fn get_record_fields_mut(&mut self, ptr: usize) -> Result<&mut Vec<Value>, VmError> {
+    pub fn get_record_fields_mut(&mut self, ptr: usize) -> VmResult<&mut Vec<Value>> {
         match &mut self.get_mut(ptr)?.payload {
             HeapPayload::Record { fields, .. } => Ok(fields),
             _ => Err(VmError::TypeError {
@@ -309,7 +310,7 @@ impl Heap {
     /// # Errors
     ///
     /// Returns `TypeError` if the object is not a `HeapPayload::Record`.
-    pub fn get_record_tag(&self, ptr: usize) -> Result<Option<u32>, VmError> {
+    pub fn get_record_tag(&self, ptr: usize) -> VmResult<Option<u32>> {
         match &self.get(ptr)?.payload {
             HeapPayload::Record { tag, .. } => Ok(*tag),
             _ => Err(VmError::TypeError {
@@ -324,7 +325,7 @@ impl Heap {
     /// # Errors
     ///
     /// Returns `TypeError` if the object is not a `HeapPayload::Record`.
-    pub fn set_record_tag(&mut self, ptr: usize, new_tag: Option<u32>) -> Result<(), VmError> {
+    pub fn set_record_tag(&mut self, ptr: usize, new_tag: Option<u32>) -> VmResult<()> {
         match &mut self.get_mut(ptr)?.payload {
             HeapPayload::Record { tag, .. } => {
                 *tag = new_tag;
@@ -342,7 +343,7 @@ impl Heap {
     /// # Errors
     ///
     /// Returns `TypeError` if the object is not a `HeapPayload::Closure`.
-    pub fn get_closure(&self, ptr: usize) -> Result<(u32, &[Value]), VmError> {
+    pub fn get_closure(&self, ptr: usize) -> VmResult<(u32, &[Value])> {
         match &self.get(ptr)?.payload {
             HeapPayload::Closure { fn_id, upvalues } => Ok((*fn_id, upvalues.as_slice())),
             _ => Err(VmError::TypeError {
@@ -357,7 +358,7 @@ impl Heap {
     /// # Errors
     ///
     /// Returns `TypeError` if the object is not a `HeapPayload::Closure`.
-    pub fn get_closure_upvalues_mut(&mut self, ptr: usize) -> Result<&mut Vec<Value>, VmError> {
+    pub fn get_closure_upvalues_mut(&mut self, ptr: usize) -> VmResult<&mut Vec<Value>> {
         match &mut self.get_mut(ptr)?.payload {
             HeapPayload::Closure { upvalues, .. } => Ok(upvalues),
             _ => Err(VmError::TypeError {
@@ -386,7 +387,7 @@ impl Heap {
     ///
     /// Returns `OutOfBounds` / `FreedObject` on bad pointer, or `TypeError` if
     /// the object is not a `HeapPayload::Upvalue`.
-    pub fn get_upvalue(&self, ptr: usize) -> Result<&UpvalueCell, VmError> {
+    pub fn get_upvalue(&self, ptr: usize) -> VmResult<&UpvalueCell> {
         match &self.get(ptr)?.payload {
             HeapPayload::Upvalue(cell) => Ok(cell),
             _ => Err(VmError::TypeError {
@@ -402,7 +403,7 @@ impl Heap {
     ///
     /// Returns `OutOfBounds` / `FreedObject` on bad pointer, or `TypeError` if
     /// the object is not a `HeapPayload::Upvalue`.
-    pub fn get_upvalue_mut(&mut self, ptr: usize) -> Result<&mut UpvalueCell, VmError> {
+    pub fn get_upvalue_mut(&mut self, ptr: usize) -> VmResult<&mut UpvalueCell> {
         match &mut self.get_mut(ptr)?.payload {
             HeapPayload::Upvalue(cell) => Ok(cell),
             _ => Err(VmError::TypeError {
@@ -418,7 +419,7 @@ impl Heap {
     ///
     /// Returns `OutOfBounds` if `ptr` is not a valid heap index, or
     /// `FreedObject` if the slot has already been freed.
-    pub fn free(&mut self, ptr: usize) -> Result<(), VmError> {
+    pub fn free(&mut self, ptr: usize) -> VmResult {
         let len = self.objects.len();
         let slot = self
             .objects

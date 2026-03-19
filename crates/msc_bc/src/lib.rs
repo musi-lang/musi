@@ -8,6 +8,7 @@ mod crc32;
 mod disasm;
 mod encoding;
 mod opcode;
+pub mod type_tag;
 
 pub use crc32::crc32_slice;
 pub use disasm::disassemble;

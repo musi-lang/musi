@@ -1,5 +1,6 @@
 //! Frame types and stack helpers.
 
+use crate::VmResult;
 use crate::error::{VmError, malformed};
 use crate::value::Value;
 
@@ -43,7 +44,7 @@ impl Frame {
     /// # Errors
     ///
     /// Returns an error if the stack is empty.
-    pub fn pop(&mut self) -> Result<Value, VmError> {
+    pub fn pop(&mut self) -> VmResult<Value> {
         self.stack
             .pop()
             .ok_or_else(|| malformed!("operand stack underflow"))
@@ -54,7 +55,7 @@ impl Frame {
     /// # Errors
     ///
     /// Returns an error if the stack has fewer than two values.
-    pub fn pop2(&mut self) -> Result<(Value, Value), VmError> {
+    pub fn pop2(&mut self) -> VmResult<(Value, Value)> {
         let b = self.pop()?;
         let a = self.pop()?;
         Ok((b, a))
@@ -65,7 +66,7 @@ impl Frame {
     /// # Errors
     ///
     /// Returns an error if the stack is empty.
-    pub fn peek(&self) -> Result<Value, VmError> {
+    pub fn peek(&self) -> VmResult<Value> {
         self.stack
             .last()
             .copied()
@@ -77,7 +78,7 @@ impl Frame {
     /// # Errors
     ///
     /// Returns an error if the stack is empty.
-    pub fn dup(&mut self) -> Result<(), VmError> {
+    pub fn dup(&mut self) -> VmResult {
         let top = self.peek()?;
         self.stack.push(top);
         Ok(())
@@ -88,7 +89,7 @@ impl Frame {
     /// # Errors
     ///
     /// Returns an error if the stack has fewer than two values.
-    pub fn swp(&mut self) -> Result<(), VmError> {
+    pub fn swp(&mut self) -> VmResult {
         let len = self.stack.len();
         if len < 2 {
             return Err(malformed!("swp requires at least 2 stack values"));
@@ -102,7 +103,7 @@ impl Frame {
     /// # Errors
     ///
     /// Returns an error if `slot` is out of bounds for this frame's locals.
-    pub fn get_local(&self, slot: usize) -> Result<Value, VmError> {
+    pub fn get_local(&self, slot: usize) -> VmResult<Value> {
         self.locals.get(slot).copied().ok_or(VmError::OutOfBounds {
             index: slot,
             len: self.locals.len(),
@@ -114,7 +115,7 @@ impl Frame {
     /// # Errors
     ///
     /// Returns an error if `slot` is out of bounds for this frame's locals.
-    pub fn set_local(&mut self, slot: usize, v: Value) -> Result<(), VmError> {
+    pub fn set_local(&mut self, slot: usize, v: Value) -> VmResult {
         let len = self.locals.len();
         let dest = self
             .locals

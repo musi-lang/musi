@@ -16,6 +16,7 @@ publish.workspace = true
 libc = { workspace = true }
 libffi = { workspace = true }
 libloading = { workspace = true }
+msc_bc = { path = "../msc_bc" }
 msc_vm = { path = "../msc_vm" }
 
 [lints]

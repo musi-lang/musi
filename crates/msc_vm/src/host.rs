@@ -3,7 +3,7 @@
 //! The VM itself is pure - it delegates foreign calls to an external
 //! `HostFunctions` implementation provided by the embedder.
 
-use crate::error::VmError;
+use crate::VmResult;
 use crate::heap::Heap;
 use crate::value::Value;
 
@@ -14,6 +14,5 @@ pub trait HostFunctions {
     /// # Errors
     ///
     /// Returns `VmError` if the call fails.
-    fn call_foreign(&mut self, idx: u32, args: &[Value], heap: &mut Heap)
-    -> Result<Value, VmError>;
+    fn call_foreign(&mut self, idx: u32, args: &[Value], heap: &mut Heap) -> VmResult<Value>;
 }

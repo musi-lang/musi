@@ -6,8 +6,10 @@
 use core::str;
 
 use msc_bc::crc32_slice;
+use msc_bc::type_tag;
 
 use crate::error::VmError;
+use crate::error::VmResult;
 
 const MAGIC: &[u8; 4] = b"SEAM";
 const HEADER_SIZE: usize = 16;
@@ -162,7 +164,7 @@ const TAG_FRGN: &[u8; 4] = b"FRGN";
 ///
 /// Panics if the header length check passes but the bytes slice is shorter than
 /// 12 bytes (unreachable in practice due to the prior length guard).
-pub fn load(bytes: &[u8]) -> Result<LoadedModule, VmError> {
+pub fn load(bytes: &[u8]) -> VmResult<LoadedModule> {
     if bytes.len() < HEADER_SIZE {
         return Err(VmError::Malformed {
             desc: "file too short to contain header".into(),
@@ -259,7 +261,7 @@ pub fn load(bytes: &[u8]) -> Result<LoadedModule, VmError> {
     })
 }
 
-fn parse_string_table(cur: &mut Cursor<'_>) -> Result<Vec<Box<str>>, VmError> {
+fn parse_string_table(cur: &mut Cursor<'_>) -> VmResult<Vec<Box<str>>> {
     let count = usize::from(cur.read_u16()?);
     let mut strings = Vec::with_capacity(count);
     for _ in 0..count {
@@ -275,7 +277,7 @@ fn parse_string_table(cur: &mut Cursor<'_>) -> Result<Vec<Box<str>>, VmError> {
     Ok(strings)
 }
 
-fn resolve_stridx(strings: &[Box<str>], idx: u16, ctx: &str) -> Result<Box<str>, VmError> {
+fn resolve_stridx(strings: &[Box<str>], idx: u16, ctx: &str) -> VmResult<Box<str>> {
     let i = usize::from(idx);
     strings.get(i).cloned().ok_or_else(|| VmError::Malformed {
         desc: format!(
@@ -286,10 +288,7 @@ fn resolve_stridx(strings: &[Box<str>], idx: u16, ctx: &str) -> Result<Box<str>,
     })
 }
 
-fn parse_const_section(
-    cur: &mut Cursor<'_>,
-    strings: &[Box<str>],
-) -> Result<Vec<LoadedConst>, VmError> {
+fn parse_const_section(cur: &mut Cursor<'_>, strings: &[Box<str>]) -> VmResult<Vec<LoadedConst>> {
     let count = usize::from(cur.read_u16()?);
     let mut consts = Vec::with_capacity(count);
     for _ in 0..count {
@@ -319,132 +318,118 @@ fn parse_const_section(
     Ok(consts)
 }
 
-// Type tags from the emitter's type_table.rs
-const TAG_TY_UNIT: u8 = 0x01;
-const TAG_TY_BOOL: u8 = 0x02;
-const TAG_TY_I8: u8 = 0x03;
-const TAG_TY_I16: u8 = 0x04;
-const TAG_TY_I32: u8 = 0x05;
-const TAG_TY_I64: u8 = 0x06;
-const TAG_TY_U8: u8 = 0x07;
-const TAG_TY_U16: u8 = 0x08;
-const TAG_TY_U32: u8 = 0x09;
-const TAG_TY_U64: u8 = 0x0A;
-const TAG_TY_F32: u8 = 0x0B;
-const TAG_TY_F64: u8 = 0x0C;
-const TAG_TY_RUNE: u8 = 0x0D;
-const TAG_TY_PTR: u8 = 0x0E;
-const TAG_TY_ARR: u8 = 0x0F;
-const TAG_TY_PRODUCT: u8 = 0x10;
-const TAG_TY_SUM: u8 = 0x11;
-const TAG_TY_FN: u8 = 0x12;
-const TAG_TY_REF: u8 = 0x13;
-const TAG_TY_ANY: u8 = 0x14;
-const TAG_TY_CSTRUCT: u8 = 0x15;
-
-fn parse_type_section(cur: &mut Cursor<'_>) -> Result<Vec<LoadedType>, VmError> {
+fn parse_type_section(cur: &mut Cursor<'_>) -> VmResult<Vec<LoadedType>> {
     let count = usize::from(cur.read_u16()?);
     let mut types = Vec::with_capacity(count);
     for _ in 0..count {
         let tag = cur.read_u8()?;
-        let data = match tag {
-            // No-payload primitives
-            TAG_TY_UNIT | TAG_TY_BOOL | TAG_TY_I8 | TAG_TY_I16 | TAG_TY_I32 | TAG_TY_I64
-            | TAG_TY_U8 | TAG_TY_U16 | TAG_TY_U32 | TAG_TY_U64 | TAG_TY_F32 | TAG_TY_F64
-            | TAG_TY_RUNE | TAG_TY_ANY => vec![],
-            // 4-byte inner type_id
-            TAG_TY_PTR | TAG_TY_ARR | TAG_TY_REF => cur.read_bytes(4)?.to_vec(),
-            // Product: field_count:u32 BE + field_count * type_id:u32 BE
-            TAG_TY_PRODUCT => {
-                let field_count =
-                    usize::try_from(cur.read_u32()?).map_err(|_| VmError::Malformed {
-                        desc: "product field count overflow".into(),
-                    })?;
-                let byte_count = 4 + field_count * 4;
-                let mut data = Vec::with_capacity(byte_count);
-                data.extend_from_slice(
-                    &u32::try_from(field_count)
-                        .map_err(|_| VmError::Malformed {
-                            desc: "product field count overflow".into(),
-                        })?
-                        .to_be_bytes(),
-                );
-                let fields = cur.read_bytes(field_count * 4)?;
-                data.extend_from_slice(fields);
-                data
+        let payload = match tag {
+            type_tag::TAG_UNIT
+            | type_tag::TAG_BOOL
+            | type_tag::TAG_I8
+            | type_tag::TAG_I16
+            | type_tag::TAG_I32
+            | type_tag::TAG_I64
+            | type_tag::TAG_U8
+            | type_tag::TAG_U16
+            | type_tag::TAG_U32
+            | type_tag::TAG_U64
+            | type_tag::TAG_F32
+            | type_tag::TAG_F64
+            | type_tag::TAG_RUNE
+            | type_tag::TAG_ANY => vec![],
+            type_tag::TAG_PTR | type_tag::TAG_ARR | type_tag::TAG_REF => {
+                cur.read_bytes(4)?.to_vec()
             }
-            // Sum: variant_count:u32 BE + variant_count * (tag:u32 BE + payload_id:u32 BE)
-            TAG_TY_SUM => {
-                let variant_count =
-                    usize::try_from(cur.read_u32()?).map_err(|_| VmError::Malformed {
-                        desc: "sum variant count overflow".into(),
-                    })?;
-                let byte_count = 4 + variant_count * 8;
-                let mut data = Vec::with_capacity(byte_count);
-                data.extend_from_slice(
-                    &u32::try_from(variant_count)
-                        .map_err(|_| VmError::Malformed {
-                            desc: "sum variant count overflow".into(),
-                        })?
-                        .to_be_bytes(),
-                );
-                let variants = cur.read_bytes(variant_count * 8)?;
-                data.extend_from_slice(variants);
-                data
-            }
-            // CStruct: field_count:u16 BE + per-field(type_id:u32 + size:u16 + offset:u16) + total_size:u32 + alignment:u16
-            TAG_TY_CSTRUCT => {
-                let field_count = usize::from(cur.read_u16()?);
-                let per_field_bytes = field_count * 8; // 4 + 2 + 2 per field
-                let byte_count = 2 + per_field_bytes + 6; // header + fields + total_size(4) + alignment(2)
-                let mut data = Vec::with_capacity(byte_count);
-                data.extend_from_slice(
-                    &u16::try_from(field_count)
-                        .map_err(|_| VmError::Malformed {
-                            desc: "cstruct field count overflow".into(),
-                        })?
-                        .to_be_bytes(),
-                );
-                let fields = cur.read_bytes(per_field_bytes)?;
-                data.extend_from_slice(fields);
-                let trailer = cur.read_bytes(6)?; // total_size:u32 + alignment:u16
-                data.extend_from_slice(trailer);
-                data
-            }
-            // Fn: param_count:u32 BE + params:u32[] BE + ret_id:u32 BE + effect_mask:u16 BE
-            TAG_TY_FN => {
-                let param_count =
-                    usize::try_from(cur.read_u32()?).map_err(|_| VmError::Malformed {
-                        desc: "fn param count overflow".into(),
-                    })?;
-                let byte_count = 4 + param_count * 4 + 4 + 2;
-                let mut data = Vec::with_capacity(byte_count);
-                data.extend_from_slice(
-                    &u32::try_from(param_count)
-                        .map_err(|_| VmError::Malformed {
-                            desc: "fn param count overflow".into(),
-                        })?
-                        .to_be_bytes(),
-                );
-                let rest = cur.read_bytes(param_count * 4 + 4 + 2)?;
-                data.extend_from_slice(rest);
-                data
-            }
+            type_tag::TAG_PRODUCT => parse_product_type(cur)?,
+            type_tag::TAG_SUM => parse_sum_type(cur)?,
+            type_tag::TAG_CSTRUCT => parse_cstruct_type(cur)?,
+            type_tag::TAG_FN => parse_fn_type(cur)?,
             _ => {
                 return Err(VmError::Malformed {
                     desc: format!("unknown type tag {tag:#04x}").into_boxed_str(),
                 });
             }
         };
-        types.push(LoadedType { tag, data });
+        types.push(LoadedType { tag, data: payload });
     }
     Ok(types)
 }
 
-fn parse_glob_section(
-    cur: &mut Cursor<'_>,
-    strings: &[Box<str>],
-) -> Result<Vec<LoadedGlobal>, VmError> {
+fn parse_product_type(cur: &mut Cursor<'_>) -> VmResult<Vec<u8>> {
+    let field_count = usize::try_from(cur.read_u32()?).map_err(|_| VmError::Malformed {
+        desc: "product field count overflow".into(),
+    })?;
+    let byte_count = 4 + field_count * 4;
+    let mut payload = Vec::with_capacity(byte_count);
+    payload.extend_from_slice(
+        &u32::try_from(field_count)
+            .map_err(|_| VmError::Malformed {
+                desc: "product field count overflow".into(),
+            })?
+            .to_be_bytes(),
+    );
+    let fields = cur.read_bytes(field_count * 4)?;
+    payload.extend_from_slice(fields);
+    Ok(payload)
+}
+
+fn parse_sum_type(cur: &mut Cursor<'_>) -> VmResult<Vec<u8>> {
+    let variant_count = usize::try_from(cur.read_u32()?).map_err(|_| VmError::Malformed {
+        desc: "sum variant count overflow".into(),
+    })?;
+    let byte_count = 4 + variant_count * 8;
+    let mut payload = Vec::with_capacity(byte_count);
+    payload.extend_from_slice(
+        &u32::try_from(variant_count)
+            .map_err(|_| VmError::Malformed {
+                desc: "sum variant count overflow".into(),
+            })?
+            .to_be_bytes(),
+    );
+    let variants = cur.read_bytes(variant_count * 8)?;
+    payload.extend_from_slice(variants);
+    Ok(payload)
+}
+
+fn parse_cstruct_type(cur: &mut Cursor<'_>) -> VmResult<Vec<u8>> {
+    let field_count = usize::from(cur.read_u16()?);
+    let per_field_bytes = field_count * 8;
+    let byte_count = 2 + per_field_bytes + 6;
+    let mut payload = Vec::with_capacity(byte_count);
+    payload.extend_from_slice(
+        &u16::try_from(field_count)
+            .map_err(|_| VmError::Malformed {
+                desc: "cstruct field count overflow".into(),
+            })?
+            .to_be_bytes(),
+    );
+    let fields = cur.read_bytes(per_field_bytes)?;
+    payload.extend_from_slice(fields);
+    let trailer = cur.read_bytes(6)?;
+    payload.extend_from_slice(trailer);
+    Ok(payload)
+}
+
+fn parse_fn_type(cur: &mut Cursor<'_>) -> VmResult<Vec<u8>> {
+    let param_count = usize::try_from(cur.read_u32()?).map_err(|_| VmError::Malformed {
+        desc: "fn param count overflow".into(),
+    })?;
+    let byte_count = 4 + param_count * 4 + 4 + 2;
+    let mut payload = Vec::with_capacity(byte_count);
+    payload.extend_from_slice(
+        &u32::try_from(param_count)
+            .map_err(|_| VmError::Malformed {
+                desc: "fn param count overflow".into(),
+            })?
+            .to_be_bytes(),
+    );
+    let rest = cur.read_bytes(param_count * 4 + 4 + 2)?;
+    payload.extend_from_slice(rest);
+    Ok(payload)
+}
+
+fn parse_glob_section(cur: &mut Cursor<'_>, strings: &[Box<str>]) -> VmResult<Vec<LoadedGlobal>> {
     let count = usize::from(cur.read_u16()?);
     let mut globals = Vec::with_capacity(count);
     for _ in 0..count {
@@ -467,7 +452,7 @@ fn parse_glob_section(
     Ok(globals)
 }
 
-fn parse_meth_section(cur: &mut Cursor<'_>) -> Result<Vec<LoadedFn>, VmError> {
+fn parse_meth_section(cur: &mut Cursor<'_>) -> VmResult<Vec<LoadedFn>> {
     let count = usize::from(cur.read_u16()?);
     let mut functions = Vec::with_capacity(count);
     for _ in 0..count {
@@ -508,10 +493,7 @@ fn parse_meth_section(cur: &mut Cursor<'_>) -> Result<Vec<LoadedFn>, VmError> {
     Ok(functions)
 }
 
-fn parse_efct_section(
-    cur: &mut Cursor<'_>,
-    strings: &[Box<str>],
-) -> Result<Vec<LoadedEffect>, VmError> {
+fn parse_efct_section(cur: &mut Cursor<'_>, strings: &[Box<str>]) -> VmResult<Vec<LoadedEffect>> {
     let count = usize::from(cur.read_u16()?);
     let mut effects = Vec::with_capacity(count);
     for _ in 0..count {
@@ -544,7 +526,7 @@ fn parse_efct_section(
     Ok(effects)
 }
 
-fn parse_clss_section(cur: &mut Cursor<'_>) -> Result<ClassTable, VmError> {
+fn parse_clss_section(cur: &mut Cursor<'_>) -> VmResult<ClassTable> {
     let count = cur.read_u16()?;
     // No class entries are emitted yet; consume any unexpected extra bytes
     // by leaving the cursor at its current position (the caller uses a
@@ -555,7 +537,7 @@ fn parse_clss_section(cur: &mut Cursor<'_>) -> Result<ClassTable, VmError> {
 fn parse_frgn_section(
     cur: &mut Cursor<'_>,
     strings: &[Box<str>],
-) -> Result<Vec<LoadedForeignFn>, VmError> {
+) -> VmResult<Vec<LoadedForeignFn>> {
     let count = usize::from(cur.read_u16()?);
     let mut fns = Vec::with_capacity(count);
     for _ in 0..count {
@@ -606,7 +588,7 @@ impl<'a> Cursor<'a> {
         Self { bytes, pos }
     }
 
-    fn read_array<const N: usize>(&mut self) -> Result<[u8; N], VmError> {
+    fn read_array<const N: usize>(&mut self) -> VmResult<[u8; N]> {
         let slice = self
             .bytes
             .get(self.pos..self.pos + N)
@@ -620,27 +602,27 @@ impl<'a> Cursor<'a> {
         Ok(arr)
     }
 
-    fn read_u8(&mut self) -> Result<u8, VmError> {
+    fn read_u8(&mut self) -> VmResult<u8> {
         Ok(self.read_array::<1>()?[0])
     }
 
-    fn read_u16(&mut self) -> Result<u16, VmError> {
+    fn read_u16(&mut self) -> VmResult<u16> {
         Ok(u16::from_be_bytes(self.read_array()?))
     }
 
-    fn read_u32(&mut self) -> Result<u32, VmError> {
+    fn read_u32(&mut self) -> VmResult<u32> {
         Ok(u32::from_be_bytes(self.read_array()?))
     }
 
-    fn read_i64(&mut self) -> Result<i64, VmError> {
+    fn read_i64(&mut self) -> VmResult<i64> {
         Ok(i64::from_be_bytes(self.read_array()?))
     }
 
-    fn read_u64(&mut self) -> Result<u64, VmError> {
+    fn read_u64(&mut self) -> VmResult<u64> {
         Ok(u64::from_be_bytes(self.read_array()?))
     }
 
-    fn read_bytes(&mut self, len: usize) -> Result<&'a [u8], VmError> {
+    fn read_bytes(&mut self, len: usize) -> VmResult<&'a [u8]> {
         let slice = self
             .bytes
             .get(self.pos..self.pos + len)

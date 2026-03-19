@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 
+use crate::VmResult;
 use crate::error::{VmError, malformed};
 use crate::heap::{Heap, UpvalueCell};
 use crate::loader::LoadedFn;
@@ -14,7 +15,7 @@ pub fn exec_cls_new(
     frame: &mut Frame,
     functions: &[LoadedFn],
     heap: &mut Heap,
-) -> Result<(), VmError> {
+) -> VmResult {
     let fn_id = operand & 0xFFFF;
     let fn_idx = usize::try_from(fn_id).unwrap_or(usize::MAX);
     if fn_idx >= functions.len() {
@@ -37,7 +38,7 @@ pub fn exec_cls_upv(
     call_stack: &mut [Frame],
     heap: &mut Heap,
     open_upvalue_map: &mut HashMap<(usize, usize), usize>,
-) -> Result<(), VmError> {
+) -> VmResult {
     let kind = super::fi8x2_a(operand);
     let idx = super::fi8x2_b(operand);
 
@@ -95,7 +96,7 @@ pub fn exec_cls_upv(
 ///
 /// Dereferences the upvalue cell: open cells read from the live frame locals,
 /// closed cells return the captured value directly.
-pub fn exec_ld_upv(operand: u32, call_stack: &[Frame], heap: &Heap) -> Result<Value, VmError> {
+pub fn exec_ld_upv(operand: u32, call_stack: &[Frame], heap: &Heap) -> VmResult<Value> {
     let frame = call_stack
         .last()
         .ok_or_else(|| malformed!("ld.upv: empty call stack"))?;
@@ -125,7 +126,7 @@ pub fn exec_st_upv(
     new_val: Value,
     call_stack: &mut [Frame],
     heap: &mut Heap,
-) -> Result<(), VmError> {
+) -> VmResult {
     let frame_idx = call_stack.len() - 1;
     let idx = usize::try_from(operand).map_err(|_| malformed!("st.upv index overflow"))?;
     let closure_val = call_stack[frame_idx]

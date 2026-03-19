@@ -5,9 +5,9 @@ use std::f64::consts;
 use std::ffi::CStr;
 use std::ptr::with_exposed_provenance;
 
-use msc_vm::{Heap, Value, VmError};
+use msc_vm::{Heap, Value, VmError, VmResult};
 
-type BuiltinFn = fn(&[Value], &mut Heap) -> Result<Value, VmError>;
+type BuiltinFn = fn(&[Value], &mut Heap) -> VmResult<Value>;
 
 pub fn lookup(name: &str) -> Option<BuiltinFn> {
     match name {
@@ -85,42 +85,42 @@ pub fn lookup(name: &str) -> Option<BuiltinFn> {
     }
 }
 
-fn get_str(val: Value, heap: &Heap) -> Result<&str, VmError> {
+fn get_str(val: Value, heap: &Heap) -> VmResult<&str> {
     let ptr = val.as_ref()?;
     heap.get_string(ptr)
 }
 
-fn get_rune(val: Value) -> Result<char, VmError> {
+fn get_rune(val: Value) -> VmResult<char> {
     val.as_rune()
 }
 
-fn arg(args: &[Value], idx: usize) -> Result<Value, VmError> {
+fn arg(args: &[Value], idx: usize) -> VmResult<Value> {
     args.get(idx).copied().ok_or_else(|| VmError::Malformed {
         desc: format!("expected argument at index {idx}").into_boxed_str(),
     })
 }
 
-fn i64_to_usize(v: i64) -> Result<usize, VmError> {
+fn i64_to_usize(v: i64) -> VmResult<usize> {
     usize::try_from(v).map_err(|_| VmError::OutOfBounds { index: 0, len: 0 })
 }
 
-fn usize_to_i64(v: usize) -> Result<i64, VmError> {
+fn usize_to_i64(v: usize) -> VmResult<i64> {
     i64::try_from(v).map_err(|_| VmError::Malformed {
         desc: "integer overflow".into(),
     })
 }
 
-fn str_len(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+fn str_len(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     let s = get_str(arg(args, 0)?, heap)?;
     Ok(Value::from_int(usize_to_i64(s.chars().count())?))
 }
 
-fn str_byte_len(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+fn str_byte_len(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     let s = get_str(arg(args, 0)?, heap)?;
     Ok(Value::from_int(usize_to_i64(s.len())?))
 }
 
-fn str_at(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+fn str_at(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     let s = get_str(arg(args, 0)?, heap)?;
     let idx = i64_to_usize(arg(args, 1)?.as_int()?)?;
     let c = s.chars().nth(idx).ok_or_else(|| VmError::OutOfBounds {
@@ -130,7 +130,7 @@ fn str_at(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     Ok(Value::from_rune(c))
 }
 
-fn str_slice(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+fn str_slice(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     let s = get_str(arg(args, 0)?, heap)?;
     let start = i64_to_usize(arg(args, 1)?.as_int()?)?;
     let end = i64_to_usize(arg(args, 2)?.as_int()?)?;
@@ -143,25 +143,25 @@ fn str_slice(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     Ok(Value::from_ref(ptr))
 }
 
-fn str_contains(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+fn str_contains(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     let haystack = get_str(arg(args, 0)?, heap)?;
     let needle = get_str(arg(args, 1)?, heap)?;
     Ok(Value::from_bool(haystack.contains(needle)))
 }
 
-fn str_starts_with(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+fn str_starts_with(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     let s = get_str(arg(args, 0)?, heap)?;
     let prefix = get_str(arg(args, 1)?, heap)?;
     Ok(Value::from_bool(s.starts_with(prefix)))
 }
 
-fn str_ends_with(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+fn str_ends_with(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     let s = get_str(arg(args, 0)?, heap)?;
     let suffix = get_str(arg(args, 1)?, heap)?;
     Ok(Value::from_bool(s.ends_with(suffix)))
 }
 
-fn str_index_of(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+fn str_index_of(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     let haystack = get_str(arg(args, 0)?, heap)?;
     let needle = get_str(arg(args, 1)?, heap)?;
     let idx = haystack.find(needle).map_or(Ok(-1i64), |byte_idx| {
@@ -170,35 +170,35 @@ fn str_index_of(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     Ok(Value::from_int(idx))
 }
 
-fn str_to_upper(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+fn str_to_upper(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     let s = get_str(arg(args, 0)?, heap)?;
     let upper = s.to_uppercase();
     let ptr = heap.alloc_string(0, upper.into_boxed_str());
     Ok(Value::from_ref(ptr))
 }
 
-fn str_to_lower(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+fn str_to_lower(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     let s = get_str(arg(args, 0)?, heap)?;
     let lower = s.to_lowercase();
     let ptr = heap.alloc_string(0, lower.into_boxed_str());
     Ok(Value::from_ref(ptr))
 }
 
-fn str_trim(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+fn str_trim(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     let s = get_str(arg(args, 0)?, heap)?;
     let trimmed = s.trim();
     let ptr = heap.alloc_string(0, Box::from(trimmed));
     Ok(Value::from_ref(ptr))
 }
 
-fn str_trim_start(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+fn str_trim_start(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     let s = get_str(arg(args, 0)?, heap)?;
     let trimmed = s.trim_start();
     let ptr = heap.alloc_string(0, Box::from(trimmed));
     Ok(Value::from_ref(ptr))
 }
 
-fn str_trim_end(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+fn str_trim_end(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     let s = get_str(arg(args, 0)?, heap)?;
     let trimmed = s.trim_end();
     let ptr = heap.alloc_string(0, Box::from(trimmed));
@@ -207,7 +207,7 @@ fn str_trim_end(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
 
 // Need to collect into owned strings to release shared borrow on `heap`.
 #[allow(clippy::needless_collect)]
-fn str_split(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+fn str_split(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     let s = get_str(arg(args, 0)?, heap)?;
     let delim = get_str(arg(args, 1)?, heap)?;
     let owned: Vec<Box<str>> = s.split(delim).map(Box::from).collect();
@@ -219,7 +219,7 @@ fn str_split(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     Ok(Value::from_ref(arr_ptr))
 }
 
-fn str_replace(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+fn str_replace(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     let s = get_str(arg(args, 0)?, heap)?;
     let from = get_str(arg(args, 1)?, heap)?;
     let to = get_str(arg(args, 2)?, heap)?;
@@ -228,7 +228,7 @@ fn str_replace(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     Ok(Value::from_ref(ptr))
 }
 
-fn str_repeat(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+fn str_repeat(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     let s = get_str(arg(args, 0)?, heap)?;
     let n = i64_to_usize(arg(args, 1)?.as_int()?)?;
     let repeated = s.repeat(n);
@@ -236,14 +236,14 @@ fn str_repeat(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     Ok(Value::from_ref(ptr))
 }
 
-fn str_chars(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+fn str_chars(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     let s = get_str(arg(args, 0)?, heap)?;
     let runes: Vec<Value> = s.chars().map(Value::from_rune).collect();
     let arr_ptr = heap.alloc_array(0, runes);
     Ok(Value::from_ref(arr_ptr))
 }
 
-fn str_from_chars(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+fn str_from_chars(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     let arr_ref = arg(args, 0)?.as_ref()?;
     let elems = heap.get_array(arr_ref)?.to_vec();
     let mut s = String::with_capacity(elems.len());
@@ -254,18 +254,18 @@ fn str_from_chars(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     Ok(Value::from_ref(ptr))
 }
 
-fn str_parse_int(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+fn str_parse_int(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     let s = get_str(arg(args, 0)?, heap)?;
     let n = s.parse::<i64>().unwrap_or(0);
     Ok(Value::from_int(n))
 }
 
-fn str_parse_float(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+fn str_parse_float(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     let s = get_str(arg(args, 0)?, heap)?;
     Ok(s.parse::<f64>().map_or(Value::NAN, Value::from_float))
 }
 
-fn str_join(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+fn str_join(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     let arr_ptr = arg(args, 0)?.as_ref()?;
     let sep = get_str(arg(args, 1)?, heap)?.to_owned();
     // Clone element refs first to release the shared borrow on `heap` before
@@ -283,19 +283,19 @@ fn str_join(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     Ok(Value::from_ref(ptr))
 }
 
-fn arr_len(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+fn arr_len(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     let ptr = arg(args, 0)?.as_ref()?;
     Ok(Value::from_int(usize_to_i64(heap.get_array(ptr)?.len())?))
 }
 
-fn arr_push(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+fn arr_push(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     let ptr = arg(args, 0)?.as_ref()?;
     let val = arg(args, 1)?;
     heap.get_array_mut(ptr)?.push(val);
     Ok(Value::UNIT)
 }
 
-fn arr_pop(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+fn arr_pop(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     let ptr = arg(args, 0)?.as_ref()?;
     let val = heap
         .get_array_mut(ptr)?
@@ -304,7 +304,7 @@ fn arr_pop(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     Ok(val)
 }
 
-fn arr_slice(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+fn arr_slice(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     let ptr = arg(args, 0)?.as_ref()?;
     let start = i64_to_usize(arg(args, 1)?.as_int()?)?;
     let end = i64_to_usize(arg(args, 2)?.as_int()?)?;
@@ -317,7 +317,7 @@ fn arr_slice(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     Ok(Value::from_ref(new_ptr))
 }
 
-fn arr_concat(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+fn arr_concat(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     let ptr_a = arg(args, 0)?.as_ref()?;
     let ptr_b = arg(args, 1)?.as_ref()?;
     let a = heap.get_array(ptr_a)?.to_vec();
@@ -328,20 +328,20 @@ fn arr_concat(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     Ok(Value::from_ref(new_ptr))
 }
 
-fn arr_reverse(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+fn arr_reverse(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     let ptr = arg(args, 0)?.as_ref()?;
     heap.get_array_mut(ptr)?.reverse();
     Ok(Value::UNIT)
 }
 
-fn arr_contains(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+fn arr_contains(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     let ptr = arg(args, 0)?.as_ref()?;
     let needle = arg(args, 1)?;
     let found = heap.get_array(ptr)?.contains(&needle);
     Ok(Value::from_bool(found))
 }
 
-fn arr_index_of(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+fn arr_index_of(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     let ptr = arg(args, 0)?.as_ref()?;
     let needle = arg(args, 1)?;
     let idx = heap
@@ -352,7 +352,7 @@ fn arr_index_of(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     Ok(Value::from_int(idx))
 }
 
-fn arr_sort(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+fn arr_sort(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     let ptr = arg(args, 0)?.as_ref()?;
     heap.get_array_mut(ptr)?.sort_by(|a, b| {
         // Numeric comparison: try int first, then float.
@@ -367,31 +367,31 @@ fn arr_sort(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     Ok(Value::UNIT)
 }
 
-fn int_abs(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
+fn int_abs(args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
     let n = arg(args, 0)?.as_int()?;
     Ok(Value::from_int(n.wrapping_abs()))
 }
 
-fn int_min(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
+fn int_min(args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
     let a = arg(args, 0)?.as_int()?;
     let b = arg(args, 1)?.as_int()?;
     Ok(Value::from_int(a.min(b)))
 }
 
-fn int_max(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
+fn int_max(args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
     let a = arg(args, 0)?.as_int()?;
     let b = arg(args, 1)?.as_int()?;
     Ok(Value::from_int(a.max(b)))
 }
 
-fn int_clamp(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
+fn int_clamp(args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
     let val = arg(args, 0)?.as_int()?;
     let lo = arg(args, 1)?.as_int()?;
     let hi = arg(args, 2)?.as_int()?;
     Ok(Value::from_int(val.clamp(lo, hi)))
 }
 
-fn int_pow(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+fn int_pow(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     let base = arg(args, 0)?.as_int_wide(heap)?;
     let exp = arg(args, 1)?.as_int_wide(heap)?;
     let exp_u32 = u32::try_from(exp).map_err(|_| VmError::Malformed {
@@ -400,129 +400,130 @@ fn int_pow(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     Ok(Value::from_int_wide(base.wrapping_pow(exp_u32), heap))
 }
 
-fn float_abs(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
+fn float_abs(args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
     let f = arg(args, 0)?.as_float()?;
     Ok(Value::from_float(f.abs()))
 }
 
-fn float_floor(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
+fn float_floor(args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
     let f = arg(args, 0)?.as_float()?;
     Ok(Value::from_float(f.floor()))
 }
 
-fn float_ceil(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
+fn float_ceil(args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
     let f = arg(args, 0)?.as_float()?;
     Ok(Value::from_float(f.ceil()))
 }
 
-fn float_round(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
+fn float_round(args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
     let f = arg(args, 0)?.as_float()?;
     Ok(Value::from_float(f.round()))
 }
 
-fn float_sqrt(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
+fn float_sqrt(args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
     let f = arg(args, 0)?.as_float()?;
     Ok(Value::from_float(f.sqrt()))
 }
 
-fn float_sin(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
+fn float_sin(args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
     let f = arg(args, 0)?.as_float()?;
     Ok(Value::from_float(f.sin()))
 }
 
-fn float_cos(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
+fn float_cos(args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
     let f = arg(args, 0)?.as_float()?;
     Ok(Value::from_float(f.cos()))
 }
 
-fn float_tan(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
+fn float_tan(args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
     let f = arg(args, 0)?.as_float()?;
     Ok(Value::from_float(f.tan()))
 }
 
-fn float_log(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
+fn float_log(args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
     let f = arg(args, 0)?.as_float()?;
     Ok(Value::from_float(f.ln()))
 }
 
-fn float_exp(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
+fn float_exp(args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
     let f = arg(args, 0)?.as_float()?;
     Ok(Value::from_float(f.exp()))
 }
 
-fn float_is_nan(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
+fn float_is_nan(args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
     let f = arg(args, 0)?.as_float()?;
     Ok(Value::from_bool(f.is_nan()))
 }
 
-fn float_is_infinite(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
+fn float_is_infinite(args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
     let f = arg(args, 0)?.as_float()?;
     Ok(Value::from_bool(f.is_infinite()))
 }
 
+// Host function signature requires Result; these are infallible.
 #[allow(clippy::unnecessary_wraps)]
-const fn float_pi(_args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
+const fn float_pi(_args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
     Ok(Value::from_float(consts::PI))
 }
 
 #[allow(clippy::unnecessary_wraps)]
-const fn float_e(_args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
+const fn float_e(_args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
     Ok(Value::from_float(consts::E))
 }
 
 #[allow(clippy::unnecessary_wraps)]
-const fn float_infinity(_args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
+const fn float_infinity(_args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
     Ok(Value::from_float(f64::INFINITY))
 }
 
 #[allow(clippy::unnecessary_wraps)]
-const fn float_nan(_args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
+const fn float_nan(_args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
     Ok(Value::NAN)
 }
 
 #[allow(clippy::unnecessary_wraps)]
-fn int_min_val(_args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+fn int_min_val(_args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     Ok(Value::from_int_wide(i64::MIN, heap))
 }
 
 #[allow(clippy::unnecessary_wraps)]
-fn int_max_val(_args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+fn int_max_val(_args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     Ok(Value::from_int_wide(i64::MAX, heap))
 }
 
-fn rune_is_alpha(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
+fn rune_is_alpha(args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
     let c = get_rune(arg(args, 0)?)?;
     Ok(Value::from_bool(c.is_alphabetic()))
 }
 
-fn rune_is_digit(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
+fn rune_is_digit(args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
     let c = get_rune(arg(args, 0)?)?;
     Ok(Value::from_bool(c.is_ascii_digit()))
 }
 
-fn rune_is_whitespace(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
+fn rune_is_whitespace(args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
     let c = get_rune(arg(args, 0)?)?;
     Ok(Value::from_bool(c.is_whitespace()))
 }
 
-fn rune_to_upper(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
+fn rune_to_upper(args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
     let c = get_rune(arg(args, 0)?)?;
     let upper = c.to_uppercase().next().unwrap_or(c);
     Ok(Value::from_rune(upper))
 }
 
-fn rune_to_lower(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
+fn rune_to_lower(args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
     let c = get_rune(arg(args, 0)?)?;
     let lower = c.to_lowercase().next().unwrap_or(c);
     Ok(Value::from_rune(lower))
 }
 
-fn rune_to_int(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
+fn rune_to_int(args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
     let c = get_rune(arg(args, 0)?)?;
     Ok(Value::from_int(i64::from(u32::from(c))))
 }
 
-fn rune_from_int(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
+fn rune_from_int(args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
     let n = arg(args, 0)?.as_int()?;
     let scalar = u32::try_from(n)
         .ok()
@@ -540,7 +541,7 @@ fn int_to_ptr<T>(n: i64) -> *const T {
     with_exposed_provenance(addr)
 }
 
-fn ptr_deref_i32(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
+fn ptr_deref_i32(args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
     let n = arg(args, 0)?.as_int()?;
     let ptr: *const i32 = int_to_ptr(n);
     if ptr.is_null() {
@@ -553,7 +554,7 @@ fn ptr_deref_i32(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
     Ok(Value::from_int(i64::from(val)))
 }
 
-fn ptr_deref_i64(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
+fn ptr_deref_i64(args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
     let n = arg(args, 0)?.as_int()?;
     let ptr: *const i64 = int_to_ptr(n);
     if ptr.is_null() {
@@ -566,7 +567,7 @@ fn ptr_deref_i64(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
     Ok(Value::from_int(val))
 }
 
-fn ptr_to_string(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+fn ptr_to_string(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     let n = arg(args, 0)?.as_int()?;
     let ptr: *const i8 = int_to_ptr(n);
     if ptr.is_null() {

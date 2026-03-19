@@ -645,6 +645,7 @@ dependencies = [
  "libc",
  "libffi",
  "libloading",
+ "msc_bc",
  "msc_vm",
 ]
 

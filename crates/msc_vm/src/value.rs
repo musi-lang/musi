@@ -1,5 +1,6 @@
 use core::fmt;
 
+use crate::VmResult;
 use crate::error::VmError;
 use crate::heap::{Heap, HeapPayload};
 
@@ -213,7 +214,7 @@ impl Value {
     /// # Errors
     ///
     /// Returns [`VmError::TypeError`] if the value is not an int.
-    pub const fn as_int(self) -> Result<i64, VmError> {
+    pub const fn as_int(self) -> VmResult<i64> {
         if (self.0 & TAG_MASK) == TAG_INT {
             let raw = self.0 & PAYLOAD_MASK;
             Ok(Self::sign_extend_48(raw))
@@ -228,7 +229,7 @@ impl Value {
     /// # Errors
     ///
     /// Returns [`VmError::TypeError`] if the value is not a nat.
-    pub const fn as_nat(self) -> Result<u64, VmError> {
+    pub const fn as_nat(self) -> VmResult<u64> {
         if (self.0 & TAG_MASK) == TAG_NAT {
             Ok(self.0 & PAYLOAD_MASK)
         } else {
@@ -242,7 +243,7 @@ impl Value {
     /// # Errors
     ///
     /// Returns [`VmError::TypeError`] if the value is not a float.
-    pub const fn as_float(self) -> Result<f64, VmError> {
+    pub const fn as_float(self) -> VmResult<f64> {
         if self.is_float() {
             Ok(f64::from_bits(self.0))
         } else {
@@ -256,7 +257,7 @@ impl Value {
     /// # Errors
     ///
     /// Returns [`VmError::TypeError`] if the value is not a bool.
-    pub const fn as_bool(self) -> Result<bool, VmError> {
+    pub const fn as_bool(self) -> VmResult<bool> {
         if (self.0 & TAG_MASK) == TAG_BOOL {
             Ok((self.0 & 1) != 0)
         } else {
@@ -273,7 +274,7 @@ impl Value {
     /// # Errors
     ///
     /// Returns [`VmError::TypeError`] if the value is neither a bool nor an int.
-    pub fn as_truthy(self) -> Result<bool, VmError> {
+    pub fn as_truthy(self) -> VmResult<bool> {
         if (self.0 & TAG_MASK) == TAG_BOOL {
             Ok((self.0 & 1) != 0)
         } else if let Ok(n) = self.as_int() {
@@ -290,7 +291,7 @@ impl Value {
     ///
     /// Returns [`VmError::TypeError`] if the value is not a rune, or
     /// [`VmError::Malformed`] if the codepoint is invalid.
-    pub fn as_rune(self) -> Result<char, VmError> {
+    pub fn as_rune(self) -> VmResult<char> {
         if (self.0 & TAG_MASK) == TAG_RUNE {
             let code = self.payload_u32();
             char::from_u32(code).ok_or_else(|| VmError::Malformed {
@@ -308,7 +309,7 @@ impl Value {
     ///
     /// Returns [`VmError::TypeError`] if the value is not a ref, or
     /// [`VmError::Malformed`] if the heap index overflows usize.
-    pub fn as_ref(self) -> Result<usize, VmError> {
+    pub fn as_ref(self) -> VmResult<usize> {
         if (self.0 & TAG_MASK) == TAG_REF {
             let idx = self.payload_u32();
             usize::try_from(idx).map_err(|_| VmError::Malformed {
@@ -334,7 +335,7 @@ impl Value {
     /// # Errors
     ///
     /// Returns [`VmError::TypeError`] if the value is not a function.
-    pub const fn as_fn_id(self) -> Result<u32, VmError> {
+    pub const fn as_fn_id(self) -> VmResult<u32> {
         if (self.0 & TAG_MASK) == TAG_FN {
             Ok(self.payload_u32())
         } else {
@@ -348,7 +349,7 @@ impl Value {
     /// # Errors
     ///
     /// Returns [`VmError::TypeError`] if the value is not a task.
-    pub const fn as_task_id(self) -> Result<u32, VmError> {
+    pub const fn as_task_id(self) -> VmResult<u32> {
         if (self.0 & TAG_MASK) == TAG_TACH && (self.0 & CHAN_BIT) == 0 {
             Ok(self.payload_u32())
         } else {
@@ -362,7 +363,7 @@ impl Value {
     /// # Errors
     ///
     /// Returns [`VmError::TypeError`] if the value is not a channel.
-    pub const fn as_chan_id(self) -> Result<u32, VmError> {
+    pub const fn as_chan_id(self) -> VmResult<u32> {
         if (self.0 & TAG_MASK) == TAG_TACH && (self.0 & CHAN_BIT) != 0 {
             Ok(self.payload_u32_masked(PAYLOAD_MASK & !CHAN_BIT))
         } else {
@@ -378,7 +379,7 @@ impl Value {
     /// # Errors
     ///
     /// Returns [`VmError::TypeError`] if the value is not an int.
-    pub fn as_int_wide(self, heap: &Heap) -> Result<i64, VmError> {
+    pub fn as_int_wide(self, heap: &Heap) -> VmResult<i64> {
         if let Ok(n) = self.as_int() {
             return Ok(n);
         }
@@ -400,7 +401,7 @@ impl Value {
     /// # Errors
     ///
     /// Returns [`VmError::TypeError`] if the value is not a nat.
-    pub fn as_nat_wide(self, heap: &Heap) -> Result<u64, VmError> {
+    pub fn as_nat_wide(self, heap: &Heap) -> VmResult<u64> {
         if let Ok(n) = self.as_nat() {
             return Ok(n);
         }

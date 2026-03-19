@@ -16,6 +16,7 @@ use std::collections::HashMap;
 
 use msc_bc::Opcode;
 
+use crate::VmResult;
 use crate::error::{VmError, malformed};
 use crate::heap::Heap;
 use crate::host::HostFunctions;
@@ -117,7 +118,7 @@ impl Vm {
     /// # Errors
     ///
     /// Returns `VmError` if any initializer function fails.
-    pub fn init_globals(&mut self) -> Result<(), VmError> {
+    pub fn init_globals(&mut self) -> VmResult {
         for i in 0..self.module.globals.len() {
             let (flags, init_fn_id) = {
                 let g = &self.module.globals[i];
@@ -140,7 +141,7 @@ impl Vm {
     /// # Errors
     ///
     /// Returns `VmError` if `fn_idx` is out of bounds or the call stack overflows.
-    fn push_frame(&mut self, fn_idx: usize, args: &[Value]) -> Result<(), VmError> {
+    fn push_frame(&mut self, fn_idx: usize, args: &[Value]) -> VmResult {
         if self.call_stack.len() >= MAX_CALL_DEPTH {
             return Err(VmError::StackOverflow);
         }
@@ -173,7 +174,7 @@ impl Vm {
     ///
     /// Returns `VmError` on type errors, stack overflows, malformed bytecode,
     /// or unimplemented features.
-    pub fn run(&mut self) -> Result<Value, VmError> {
+    pub fn run(&mut self) -> VmResult<Value> {
         let entry = self
             .module
             .entry_point
@@ -187,7 +188,7 @@ impl Vm {
     ///
     /// Returns `VmError` on type errors, stack overflows, malformed bytecode,
     /// or unimplemented features.
-    pub fn call_fn(&mut self, fn_id: u32, args: &[Value]) -> Result<Value, VmError> {
+    pub fn call_fn(&mut self, fn_id: u32, args: &[Value]) -> VmResult<Value> {
         self.setup_call(fn_id, args)?;
         self.run_to_completion()
     }
@@ -197,7 +198,7 @@ impl Vm {
     /// # Errors
     ///
     /// Returns `VmError` if `fn_id` is not found or the call stack overflows.
-    pub fn setup_call(&mut self, fn_id: u32, args: &[Value]) -> Result<(), VmError> {
+    pub fn setup_call(&mut self, fn_id: u32, args: &[Value]) -> VmResult {
         self.push_frame(usize::try_from(fn_id).unwrap_or(usize::MAX), args)
     }
 
@@ -206,7 +207,7 @@ impl Vm {
     /// # Errors
     ///
     /// Returns `VmError` on any runtime error.
-    pub fn run_to_completion(&mut self) -> Result<Value, VmError> {
+    pub fn run_to_completion(&mut self) -> VmResult<Value> {
         loop {
             match self.step()? {
                 StepResult::Continue => {}
@@ -220,7 +221,7 @@ impl Vm {
     /// # Errors
     ///
     /// Returns `VmError` on any runtime error.
-    pub fn step(&mut self) -> Result<StepResult, VmError> {
+    pub fn step(&mut self) -> VmResult<StepResult> {
         if let Some(limit) = self.instruction_limit
             && self.instruction_count >= limit
         {
@@ -254,7 +255,7 @@ impl Vm {
         clippy::too_many_lines,
         reason = "flat opcode dispatch table - splitting would obscure control flow"
     )]
-    fn step_inner(&mut self) -> Result<StepResult, VmError> {
+    fn step_inner(&mut self) -> VmResult<StepResult> {
         self.maybe_gc();
 
         // Phase 1: decode instruction, advance IP.
@@ -714,7 +715,7 @@ impl Vm {
         op: Opcode,
         operand: u32,
         fn_idx: usize,
-    ) -> Result<StepResult, VmError> {
+    ) -> VmResult<StepResult> {
         let cont_action = {
             let frame = self
                 .call_stack
@@ -737,7 +738,7 @@ impl Vm {
         }
     }
 
-    fn exec_ffi_call(&mut self, ffi_id: u32) -> Result<StepResult, VmError> {
+    fn exec_ffi_call(&mut self, ffi_id: u32) -> VmResult<StepResult> {
         let foreign_idx =
             usize::try_from(ffi_id).map_err(|_| malformed!("foreign fn index overflows usize"))?;
         let foreign_fn = self
@@ -772,7 +773,7 @@ impl Vm {
         Ok(StepResult::Continue)
     }
 
-    fn current_frame(&mut self) -> Result<&mut Frame, VmError> {
+    fn current_frame(&mut self) -> VmResult<&mut Frame> {
         self.call_stack
             .last_mut()
             .ok_or_else(|| malformed!("empty call stack"))

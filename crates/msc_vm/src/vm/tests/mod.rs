@@ -40,6 +40,7 @@ use std::iter;
 
 use msc_bc::{self, Opcode, crc32_slice};
 
+use crate::VmResult;
 use crate::error::VmError;
 use crate::loader::load;
 use crate::value::Value;
@@ -146,8 +147,8 @@ fn make_seam_with_effects(
     effects: &[SeamEffectDef],
     fns: &[FnDef],
 ) -> Vec<u8> {
-    let mut string_entries: Vec<Vec<u8>> = vec![];
-    let mut str_lookup: HashMap<Vec<u8>, u16> = HashMap::new();
+    let mut string_entries = vec![];
+    let mut str_lookup = HashMap::new();
 
     let mut intern_str = |s: &[u8]| -> u16 {
         if let Some(&idx) = str_lookup.get(s) {
@@ -161,8 +162,8 @@ fn make_seam_with_effects(
 
     let _ = intern_str(b"");
 
-    let mut effect_name_idxs: Vec<u16> = vec![];
-    let mut op_name_idxs: Vec<Vec<u16>> = vec![];
+    let mut effect_name_idxs = vec![];
+    let mut op_name_idxs = vec![];
     for eff in effects {
         effect_name_idxs.push(intern_str(eff.name.as_bytes()));
         let mut op_idxs = vec![];
@@ -172,7 +173,7 @@ fn make_seam_with_effects(
         op_name_idxs.push(op_idxs);
     }
 
-    let mut const_str_idxs: Vec<u16> = vec![];
+    let mut const_str_idxs = vec![];
     for c in consts {
         if let ConstEntry::Str(bytes) = c {
             const_str_idxs.push(intern_str(bytes));
@@ -181,7 +182,7 @@ fn make_seam_with_effects(
         }
     }
 
-    let mut strt: Vec<u8> = vec![];
+    let mut strt = vec![];
     strt.extend_from_slice(
         &u16::try_from(string_entries.len())
             .unwrap_or(u16::MAX)
@@ -192,10 +193,10 @@ fn make_seam_with_effects(
         strt.extend_from_slice(entry);
     }
 
-    let mut type_payload: Vec<u8> = vec![];
+    let mut type_payload = vec![];
     type_payload.extend_from_slice(&0u16.to_be_bytes());
 
-    let mut cnst: Vec<u8> = vec![];
+    let mut cnst = vec![];
     cnst.extend_from_slice(
         &u16::try_from(consts.len())
             .unwrap_or(u16::MAX)
@@ -220,10 +221,10 @@ fn make_seam_with_effects(
         }
     }
 
-    let deps: Vec<u8> = 0u16.to_be_bytes().to_vec();
-    let glob: Vec<u8> = 0u16.to_be_bytes().to_vec();
+    let deps = 0u16.to_be_bytes().to_vec();
+    let glob = 0u16.to_be_bytes().to_vec();
 
-    let mut meth: Vec<u8> = vec![];
+    let mut meth = vec![];
     meth.extend_from_slice(&u16::try_from(fns.len()).unwrap_or(u16::MAX).to_be_bytes());
     for f in fns {
         meth.extend_from_slice(&0u16.to_be_bytes()); // name_stridx
@@ -252,7 +253,7 @@ fn make_seam_with_effects(
         meth.extend_from_slice(&0u16.to_be_bytes()); // effect_set_count
     }
 
-    let mut efct: Vec<u8> = vec![];
+    let mut efct = vec![];
     efct.extend_from_slice(
         &u16::try_from(effects.len())
             .unwrap_or(u16::MAX)
@@ -275,11 +276,11 @@ fn make_seam_with_effects(
         }
     }
 
-    let clss: Vec<u8> = 0u16.to_be_bytes().to_vec();
-    let frgn: Vec<u8> = 0u16.to_be_bytes().to_vec();
-    let dbug: Vec<u8> = vec![];
+    let clss = 0u16.to_be_bytes().to_vec();
+    let frgn = 0u16.to_be_bytes().to_vec();
+    let dbug = vec![];
 
-    let mut sections: Vec<u8> = vec![];
+    let mut sections = vec![];
     write_seam_section(&mut sections, *b"STRT", &strt);
     write_seam_section(&mut sections, *b"TYPE", &type_payload);
     write_seam_section(&mut sections, *b"CNST", &cnst);
@@ -293,8 +294,8 @@ fn make_seam_with_effects(
 
     let crc = crc32_slice(&sections);
 
-    let flags: u8 = if fns.is_empty() { 0x02 } else { 0x04 };
-    let mut header: Vec<u8> = Vec::with_capacity(16);
+    let flags = if fns.is_empty() { 0x02 } else { 0x04 };
+    let mut header = Vec::with_capacity(16);
     header.extend_from_slice(b"SEAM");
     header.push(1u8);
     header.push(0u8);
@@ -310,10 +311,6 @@ fn make_seam_with_effects(
     out.extend_from_slice(&sections);
     out
 }
-
-// ---------------------------------------------------------------------------
-// Instruction encoding helpers (SEAM ISA, BE operands)
-// ---------------------------------------------------------------------------
 
 fn ld_const(idx: u16) -> [u8; 3] {
     let [hi, lo] = idx.to_be_bytes();
@@ -379,11 +376,7 @@ fn code(parts: &[&[u8]]) -> Vec<u8> {
     out
 }
 
-// ---------------------------------------------------------------------------
-// Test helpers
-// ---------------------------------------------------------------------------
-
-fn run_vm(bytes: &[u8]) -> (Vm, Result<Value, VmError>) {
+fn run_vm(bytes: &[u8]) -> (Vm, VmResult<Value>) {
     let module = load(bytes).expect("loads");
     verify(&module).expect("verifies");
     let mut vm = Vm::new(module);
@@ -391,7 +384,7 @@ fn run_vm(bytes: &[u8]) -> (Vm, Result<Value, VmError>) {
     (vm, result)
 }
 
-fn run_vm_call(bytes: &[u8], fn_id: u32, args: &[Value]) -> (Vm, Result<Value, VmError>) {
+fn run_vm_call(bytes: &[u8], fn_id: u32, args: &[Value]) -> (Vm, VmResult<Value>) {
     let module = load(bytes).expect("loads");
     verify(&module).expect("verifies");
     let mut vm = Vm::new(module);

@@ -7,6 +7,7 @@ use std::collections::HashSet;
 
 use msc_bc::{Opcode, instr_len};
 
+use crate::VmResult;
 use crate::error::VmError;
 use crate::loader::{LoadedFn, LoadedModule};
 
@@ -17,7 +18,7 @@ use crate::loader::{LoadedFn, LoadedModule};
 /// Returns `VmError::Verify` if any function has invalid operands, jump
 /// targets that do not land on instruction boundaries, or a stack depth
 /// that exceeds the declared `max_stack`.
-pub fn verify(module: &LoadedModule) -> Result<(), VmError> {
+pub fn verify(module: &LoadedModule) -> VmResult {
     for func in &module.functions {
         verify_fn(func, module)?;
     }
@@ -25,7 +26,7 @@ pub fn verify(module: &LoadedModule) -> Result<(), VmError> {
 }
 
 /// Collect instruction boundary offsets for the given bytecode.
-fn collect_boundaries(code: &[u8]) -> Result<HashSet<usize>, VmError> {
+fn collect_boundaries(code: &[u8]) -> VmResult<HashSet<usize>> {
     let mut boundaries = HashSet::new();
     let mut ip = 0usize;
     while ip < code.len() {
@@ -43,7 +44,7 @@ fn collect_boundaries(code: &[u8]) -> Result<HashSet<usize>, VmError> {
 }
 
 /// Check that a local slot index is within bounds.
-fn check_local(slot: usize, local_count: usize, name: &str) -> Result<(), VmError> {
+fn check_local(slot: usize, local_count: usize, name: &str) -> VmResult {
     if slot >= local_count {
         return Err(VmError::Verify {
             desc: format!("{name} slot {slot} >= local_count {local_count}").into_boxed_str(),
@@ -53,7 +54,7 @@ fn check_local(slot: usize, local_count: usize, name: &str) -> Result<(), VmErro
 }
 
 /// Check that a constant pool index is within bounds.
-fn check_const(idx: usize, const_len: usize, name: &str) -> Result<(), VmError> {
+fn check_const(idx: usize, const_len: usize, name: &str) -> VmResult {
     if idx >= const_len {
         return Err(VmError::Verify {
             desc: format!("{name} index {idx} >= const pool size {const_len}").into_boxed_str(),
@@ -63,7 +64,7 @@ fn check_const(idx: usize, const_len: usize, name: &str) -> Result<(), VmError> 
 }
 
 /// Check that a function id (as index) is within the module's function table.
-fn check_fn_id(fn_id: u32, module: &LoadedModule, name: &str) -> Result<(), VmError> {
+fn check_fn_id(fn_id: u32, module: &LoadedModule, name: &str) -> VmResult {
     let idx = usize::try_from(fn_id).unwrap_or(usize::MAX);
     if idx >= module.functions.len() && !module.functions.is_empty() {
         return Err(VmError::Verify {
@@ -83,7 +84,7 @@ fn check_jump_target(
     len: usize,
     offset: isize,
     boundaries: &HashSet<usize>,
-) -> Result<(), VmError> {
+) -> VmResult {
     let after = ip + len;
     let target = after.wrapping_add_signed(offset);
     if !boundaries.contains(&target) {
@@ -202,7 +203,7 @@ struct VerifyCtx<'a> {
 }
 
 /// Compute the stack depth delta for an opcode and validate its operands.
-fn verify_op(op: Opcode, ip: usize, len: usize, cx: &VerifyCtx<'_>) -> Result<i32, VmError> {
+fn verify_op(op: Opcode, ip: usize, len: usize, cx: &VerifyCtx<'_>) -> VmResult<i32> {
     if let Some(delta) = fixed_stack_delta(op) {
         return Ok(delta);
     }
@@ -302,7 +303,7 @@ fn verify_op(op: Opcode, ip: usize, len: usize, cx: &VerifyCtx<'_>) -> Result<i3
     }
 }
 
-fn verify_cls_upv(ip: usize, cx: &VerifyCtx<'_>) -> Result<i32, VmError> {
+fn verify_cls_upv(ip: usize, cx: &VerifyCtx<'_>) -> VmResult<i32> {
     let operand = read_be_u16(cx.code, ip);
     let kind = u8::try_from(operand >> 8).unwrap_or(u8::MAX);
     let idx = usize::from(u8::try_from(operand & 0xFF).unwrap_or(u8::MAX));
@@ -325,7 +326,7 @@ fn verify_cls_upv(ip: usize, cx: &VerifyCtx<'_>) -> Result<i32, VmError> {
     Ok(0)
 }
 
-fn verify_ffi_call(ip: usize, cx: &VerifyCtx<'_>) -> Result<i32, VmError> {
+fn verify_ffi_call(ip: usize, cx: &VerifyCtx<'_>) -> VmResult<i32> {
     let operand = read_be_u16(cx.code, ip);
     let ffi_id = usize::from(u8::try_from(operand >> 8).unwrap_or(u8::MAX));
     if ffi_id >= cx.module.foreign_fns.len() && !cx.module.foreign_fns.is_empty() {
@@ -341,7 +342,7 @@ fn verify_ffi_call(ip: usize, cx: &VerifyCtx<'_>) -> Result<i32, VmError> {
     Ok(1 - param_count)
 }
 
-fn verify_fn(func: &LoadedFn, module: &LoadedModule) -> Result<(), VmError> {
+fn verify_fn(func: &LoadedFn, module: &LoadedModule) -> VmResult {
     let code = &func.code;
     let local_count = usize::from(func.param_count) + usize::from(func.local_count);
     let max_stack = usize::from(func.max_stack);

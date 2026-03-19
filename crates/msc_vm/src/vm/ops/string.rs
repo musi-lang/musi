@@ -1,11 +1,12 @@
 //! String opcode handlers.
 
-use crate::error::{VmError, malformed};
+use crate::VmResult;
+use crate::error::malformed;
 use crate::heap::Heap;
 use crate::value::Value;
 use crate::vm::Frame;
 
-pub fn exec_str_cat(frame: &mut Frame, heap: &mut Heap) -> Result<(), VmError> {
+pub fn exec_str_cat(frame: &mut Frame, heap: &mut Heap) -> VmResult {
     let (b, a) = frame.pop2()?;
     let ptr_a = a.as_ref()?;
     let ptr_b = b.as_ref()?;
@@ -21,7 +22,7 @@ pub fn exec_str_cat(frame: &mut Frame, heap: &mut Heap) -> Result<(), VmError> {
     Ok(())
 }
 
-pub fn exec_str_len(frame: &mut Frame, heap: &Heap) -> Result<(), VmError> {
+pub fn exec_str_len(frame: &mut Frame, heap: &Heap) -> VmResult {
     let val = frame.pop()?;
     let ptr = val.as_ref()?;
     let s = heap

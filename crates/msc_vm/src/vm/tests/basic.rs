@@ -1,9 +1,5 @@
 use super::*;
 
-// ---------------------------------------------------------------------------
-// Loader tests
-// ---------------------------------------------------------------------------
-
 #[test]
 fn test_load_valid_header_succeeds() {
     let bytes = make_msbc(&[], &[fn_def(0, 0, vec![Opcode::RET_UNIT.0])]);
@@ -32,10 +28,6 @@ fn test_load_bad_checksum_returns_error() {
         "expected BadChecksum, got {result:?}"
     );
 }
-
-// ---------------------------------------------------------------------------
-// Verifier tests
-// ---------------------------------------------------------------------------
 
 #[test]
 fn test_verifier_rejects_oob_const() {
@@ -134,10 +126,6 @@ fn test_verifier_depth_resets_to_zero_after_terminator() {
         "dead NOP after RET should not cause verifier failure"
     );
 }
-
-// ---------------------------------------------------------------------------
-// Basic execution tests
-// ---------------------------------------------------------------------------
 
 #[test]
 fn test_run_constant_return_i32() {

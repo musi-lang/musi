@@ -6,6 +6,7 @@
 
 use msc_bc::Opcode;
 
+use crate::VmResult;
 use crate::error::VmError;
 use crate::heap::Heap;
 use crate::value::{Value, wide_values_equal};
@@ -74,7 +75,7 @@ macro_rules! poly_cmp {
     clippy::too_many_lines,
     reason = "flat opcode dispatch; splitting adds no clarity"
 )]
-pub fn exec(op: Opcode, frame: &mut Frame, heap: &mut Heap) -> Result<bool, VmError> {
+pub fn exec(op: Opcode, frame: &mut Frame, heap: &mut Heap) -> VmResult<bool> {
     match op {
         // §4.3 Polymorphic arithmetic
         Opcode::ADD => {

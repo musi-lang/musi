@@ -14,7 +14,10 @@ use std::ffi::{CStr, CString, c_void};
 
 use libffi::middle::{Arg, Cif, CodePtr, Type, arg};
 use libloading::Library;
-use msc_vm::{Heap, HeapPayload, HostFunctions, LoadedForeignFn, LoadedType, Value, VmError};
+use msc_bc::type_tag::*;
+use msc_vm::{
+    Heap, HeapPayload, HostFunctions, LoadedForeignFn, LoadedType, Value, VmError, VmResult,
+};
 
 use std::cell::RefCell;
 
@@ -35,17 +38,6 @@ fn builtin_test_filter(_args: &[Value], heap: &mut Heap) -> Value {
     Value::from_ref(ptr)
 }
 
-// Type tags matching §11.3 of the Musi bytecode spec (mirrored from loader.rs).
-const TAG_TY_UNIT: u8 = 0x01;
-const TAG_TY_BOOL: u8 = 0x02;
-const TAG_TY_I8: u8 = 0x03;
-const TAG_TY_I16: u8 = 0x04;
-const TAG_TY_I32: u8 = 0x05;
-const TAG_TY_F32: u8 = 0x0B;
-const TAG_TY_F64: u8 = 0x0C;
-const TAG_TY_PTR: u8 = 0x0E;
-const TAG_TY_CSTRUCT: u8 = 0x15;
-
 struct ResolvedForeignFn {
     fn_ptr: CodePtr,
     cif: Cif,
@@ -64,7 +56,7 @@ enum FfiEntry {
     Builtin(BuiltinFn),
 }
 
-type BuiltinFn = fn(&[Value], &mut Heap) -> Result<Value, VmError>;
+type BuiltinFn = fn(&[Value], &mut Heap) -> VmResult<Value>;
 
 struct FfiTable {
     entries: Vec<FfiEntry>,
@@ -82,11 +74,11 @@ fn type_to_ffi(types: &[LoadedType], type_id: u32) -> Type {
     let idx = usize::try_from(type_id).unwrap_or(usize::MAX);
     let tag = types.get(idx).map_or(0, |t| t.tag);
     match tag {
-        TAG_TY_F32 | TAG_TY_F64 => Type::f64(),
-        TAG_TY_UNIT => Type::void(),
-        TAG_TY_BOOL | TAG_TY_I8 | TAG_TY_I16 | TAG_TY_I32 => Type::i32(),
-        TAG_TY_PTR => Type::pointer(),
-        TAG_TY_CSTRUCT => build_ffi_struct_type(types, idx),
+        TAG_F32 | TAG_F64 => Type::f64(),
+        TAG_UNIT => Type::void(),
+        TAG_BOOL | TAG_I8 | TAG_I16 | TAG_I32 => Type::i32(),
+        TAG_PTR => Type::pointer(),
+        TAG_CSTRUCT => build_ffi_struct_type(types, idx),
         // Int, Nat (i64/u64), Rune, Any, and composite types all use i64.
         _ => Type::i64(),
     }
@@ -96,7 +88,7 @@ fn type_to_ffi(types: &[LoadedType], type_id: u32) -> Type {
 fn ptr_inner_type_id(types: &[LoadedType], ptr_type_id: u32) -> Option<u32> {
     let idx = usize::try_from(ptr_type_id).ok()?;
     let entry = types.get(idx)?;
-    if entry.tag != TAG_TY_PTR || entry.data.len() < 4 {
+    if entry.tag != TAG_PTR || entry.data.len() < 4 {
         return None;
     }
     Some(u32::from_be_bytes([
@@ -109,29 +101,33 @@ fn ptr_inner_type_id(types: &[LoadedType], ptr_type_id: u32) -> Option<u32> {
 
 /// Build a libffi struct type from a CSTRUCT type entry.
 fn build_ffi_struct_type(types: &[LoadedType], idx: usize) -> Type {
-    let data = &types[idx].data;
-    if data.len() < 2 {
+    let type_data = &types[idx].data;
+    if type_data.len() < 2 {
         return Type::structure(vec![]);
     }
-    let field_count = usize::from(u16::from_be_bytes([data[0], data[1]]));
+    let field_count = usize::from(u16::from_be_bytes([type_data[0], type_data[1]]));
     let mut field_types = Vec::with_capacity(field_count);
     for i in 0..field_count {
         let off = 2 + i * 8;
-        if off + 4 > data.len() {
+        if off + 4 > type_data.len() {
             break;
         }
-        let field_type_id =
-            u32::from_be_bytes([data[off], data[off + 1], data[off + 2], data[off + 3]]);
+        let field_type_id = u32::from_be_bytes([
+            type_data[off],
+            type_data[off + 1],
+            type_data[off + 2],
+            type_data[off + 3],
+        ]);
         field_types.push(type_to_ffi(types, field_type_id));
     }
     Type::structure(field_types)
 }
 
 impl FfiTable {
-    fn resolve(entries: &[LoadedForeignFn], types: &[LoadedType]) -> Result<Self, VmError> {
+    fn resolve(entries: &[LoadedForeignFn], types: &[LoadedType]) -> VmResult<Self> {
         let mut lib_cache: HashMap<Box<str>, usize> = HashMap::new();
-        let mut libraries: Vec<Library> = vec![];
-        let mut resolved: Vec<FfiEntry> = Vec::with_capacity(entries.len());
+        let mut libraries = vec![];
+        let mut resolved = Vec::with_capacity(entries.len());
 
         for entry in entries {
             // Route msc_rt builtins via dedicated lookup.
@@ -201,7 +197,7 @@ impl FfiTable {
         })
     }
 
-    fn call(&self, idx: u32, args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+    fn call(&self, idx: u32, args: &[Value], heap: &mut Heap) -> VmResult<Value> {
         let i = usize::try_from(idx).map_err(|_| VmError::Malformed {
             desc: "foreign fn index overflows usize".into(),
         })?;
@@ -239,24 +235,24 @@ unsafe fn dispatch_native(
     args: &[Arg<'_>],
     types: &[LoadedType],
     heap: &mut Heap,
-) -> Result<Value, VmError> {
+) -> VmResult<Value> {
     match native.ret_tag {
-        TAG_TY_F32 | TAG_TY_F64 => {
+        TAG_F32 | TAG_F64 => {
             // SAFETY: CIF declares f64 return.
             let r: f64 = unsafe { native.cif.call(native.fn_ptr, args) };
             Ok(Value::from_float(r))
         }
-        TAG_TY_UNIT => {
+        TAG_UNIT => {
             // SAFETY: CIF declares void return.
             let (): () = unsafe { native.cif.call(native.fn_ptr, args) };
             Ok(Value::UNIT)
         }
-        TAG_TY_BOOL | TAG_TY_I8 | TAG_TY_I16 | TAG_TY_I32 => {
+        TAG_BOOL | TAG_I8 | TAG_I16 | TAG_I32 => {
             // SAFETY: CIF declares i32 return.
             let r: i32 = unsafe { native.cif.call(native.fn_ptr, args) };
             Ok(Value::from_int(i64::from(r)))
         }
-        TAG_TY_PTR => {
+        TAG_PTR => {
             // SAFETY: CIF declares pointer return.
             let ptr: *const i8 = unsafe { native.cif.call(native.fn_ptr, args) };
             if ptr.is_null() {
@@ -271,7 +267,7 @@ unsafe fn dispatch_native(
                 Ok(Value::from_ref(heap_ptr))
             }
         }
-        TAG_TY_CSTRUCT => {
+        TAG_CSTRUCT => {
             // SAFETY: CIF declares struct return - libffi returns bytes.
             let r: i64 = unsafe { native.cif.call(native.fn_ptr, args) };
             let buf = r.to_ne_bytes();
@@ -293,24 +289,19 @@ impl StdHost {
     /// # Errors
     ///
     /// Returns `VmError` if any library or symbol cannot be resolved.
-    pub fn new(foreign_fns: &[LoadedForeignFn], types: &[LoadedType]) -> Result<Self, VmError> {
+    pub fn new(foreign_fns: &[LoadedForeignFn], types: &[LoadedType]) -> VmResult<Self> {
         let ffi_table = FfiTable::resolve(foreign_fns, types)?;
         Ok(Self { ffi_table })
     }
 }
 
 impl HostFunctions for StdHost {
-    fn call_foreign(
-        &mut self,
-        idx: u32,
-        args: &[Value],
-        heap: &mut Heap,
-    ) -> Result<Value, VmError> {
+    fn call_foreign(&mut self, idx: u32, args: &[Value], heap: &mut Heap) -> VmResult<Value> {
         self.ffi_table.call(idx, args, heap)
     }
 }
 
-fn resolve_symbol(lib: &Library, name: &str) -> Result<CodePtr, VmError> {
+fn resolve_symbol(lib: &Library, name: &str) -> VmResult<CodePtr> {
     // SAFETY: bytecode-declared symbol name
     let sym: libloading::Symbol<'_, *mut c_void> =
         unsafe { lib.get(name.as_bytes()) }.map_err(|e| VmError::Malformed {
@@ -327,7 +318,7 @@ fn resolve_symbol(lib: &Library, name: &str) -> Result<CodePtr, VmError> {
 /// - `"framework"` (macOS only): open `/System/Library/Frameworks/{name}.framework/{name}`.
 /// - `"raw"`: open `name` as-is with no transformation.
 /// - empty name: open the default C library regardless of kind.
-fn load_library(name: &str, kind: &str) -> Result<Library, VmError> {
+fn load_library(name: &str, kind: &str) -> VmResult<Library> {
     if name.is_empty() {
         // SAFETY: bytecode-declared library
         return unsafe { Library::new(libloading::library_filename("c")) }.map_err(|e| {
@@ -386,24 +377,24 @@ fn marshal_args_typed(
     param_type_ids: &[u32],
     types: &[LoadedType],
     heap: &Heap,
-) -> Result<Vec<MarshaledArg>, VmError> {
+) -> VmResult<Vec<MarshaledArg>> {
     let mut storage = Vec::with_capacity(args.len());
     for (i, &val) in args.iter().enumerate() {
         let tag = param_tags.get(i).copied().unwrap_or(0);
-        if tag == TAG_TY_CSTRUCT {
+        if tag == TAG_CSTRUCT {
             let type_id = param_type_ids.get(i).copied().unwrap_or(0);
             storage.push(marshal_struct_arg(val, type_id, types, heap)?);
             continue;
         }
         // Ptr[CStruct]: marshal record to C buffer, pass pointer to it
-        if tag == TAG_TY_PTR {
+        if tag == TAG_PTR {
             let type_id = param_type_ids.get(i).copied().unwrap_or(0);
             let inner_type_id = ptr_inner_type_id(types, type_id);
             if let Some(inner_id) = inner_type_id {
                 let inner_tag = types
                     .get(usize::try_from(inner_id).unwrap_or(0))
                     .map_or(0, |t| t.tag);
-                if inner_tag == TAG_TY_CSTRUCT {
+                if inner_tag == TAG_CSTRUCT {
                     if val.is_unit() {
                         storage.push(MarshaledArg::Int(0)); // null pointer
                     } else {
@@ -420,7 +411,7 @@ fn marshal_args_typed(
     Ok(storage)
 }
 
-fn marshal_scalar_arg(val: Value, heap: &Heap) -> Result<MarshaledArg, VmError> {
+fn marshal_scalar_arg(val: Value, heap: &Heap) -> VmResult<MarshaledArg> {
     if val.is_float() {
         return Ok(MarshaledArg::Float(val.as_float()?));
     }
@@ -440,8 +431,8 @@ fn marshal_scalar_arg(val: Value, heap: &Heap) -> Result<MarshaledArg, VmError> 
         return Ok(MarshaledArg::Int(i64::from(u32::from(c))));
     }
     if let Ok(ptr) = val.as_ref() {
-        let obj = heap.get(ptr)?;
-        return match &obj.payload {
+        let heap_obj = heap.get(ptr)?;
+        return match &heap_obj.payload {
             HeapPayload::BoxedInt(n) | HeapPayload::BoxedNat(n) => Ok(MarshaledArg::Int(*n)),
             HeapPayload::Str { data, .. } => {
                 let cstr = CString::new(data.as_bytes()).map_err(|_| VmError::Malformed {
@@ -471,34 +462,33 @@ fn marshal_struct_arg(
     type_id: u32,
     types: &[LoadedType],
     heap: &Heap,
-) -> Result<MarshaledArg, VmError> {
+) -> VmResult<MarshaledArg> {
     let idx = usize::try_from(type_id).unwrap_or(0);
     let entry = types.get(idx).ok_or_else(|| VmError::Malformed {
         desc: "cstruct type_id out of bounds".into(),
     })?;
-    let data = &entry.data;
-    if data.len() < 8 {
+    let type_data = &entry.data;
+    if type_data.len() < 8 {
         return Ok(MarshaledArg::Int(0));
     }
-    let field_count = usize::from(u16::from_be_bytes([data[0], data[1]]));
+    let field_count = usize::from(u16::from_be_bytes([type_data[0], type_data[1]]));
     let total_size_off = 2 + field_count * 8;
-    if data.len() < total_size_off + 6 {
+    if type_data.len() < total_size_off + 6 {
         return Ok(MarshaledArg::Int(0));
     }
     let total_size = usize::try_from(u32::from_be_bytes([
-        data[total_size_off],
-        data[total_size_off + 1],
-        data[total_size_off + 2],
-        data[total_size_off + 3],
+        type_data[total_size_off],
+        type_data[total_size_off + 1],
+        type_data[total_size_off + 2],
+        type_data[total_size_off + 3],
     ]))
     .unwrap_or(0);
 
     let mut buf = vec![0u8; total_size];
 
-    // Get record fields from the heap
     let fields: &[Value] = if let Ok(ptr) = val.as_ref() {
-        let obj = heap.get(ptr)?;
-        match &obj.payload {
+        let heap_obj = heap.get(ptr)?;
+        match &heap_obj.payload {
             HeapPayload::Record { fields, .. } => fields,
             _ => return Ok(MarshaledArg::Int(0)),
         }
@@ -508,10 +498,15 @@ fn marshal_struct_arg(
 
     for i in 0..field_count {
         let off = 2 + i * 8;
-        let field_type_id =
-            u32::from_be_bytes([data[off], data[off + 1], data[off + 2], data[off + 3]]);
-        let field_size = usize::from(u16::from_be_bytes([data[off + 4], data[off + 5]]));
-        let field_offset = usize::from(u16::from_be_bytes([data[off + 6], data[off + 7]]));
+        let field_type_id = u32::from_be_bytes([
+            type_data[off],
+            type_data[off + 1],
+            type_data[off + 2],
+            type_data[off + 3],
+        ]);
+        let field_size = usize::from(u16::from_be_bytes([type_data[off + 4], type_data[off + 5]]));
+        let field_offset =
+            usize::from(u16::from_be_bytes([type_data[off + 6], type_data[off + 7]]));
 
         let field_tag = types
             .get(usize::try_from(field_type_id).unwrap_or(0))
@@ -533,19 +528,19 @@ fn write_scalar_to_buf(buf: &mut [u8], offset: usize, size: usize, tag: u8, val:
         return;
     }
     match tag {
-        TAG_TY_I8 => {
+        TAG_I8 => {
             if let Ok(n) = val.as_int() {
                 // Truncate to the low byte - C char/int8_t semantics.
                 buf[offset] = n.to_ne_bytes()[0];
             }
         }
-        TAG_TY_I16 => {
+        TAG_I16 => {
             if let Ok(n) = val.as_int() {
                 // Truncate to low 2 bytes - C int16_t semantics.
                 buf[offset..end].copy_from_slice(&n.to_ne_bytes()[..2]);
             }
         }
-        TAG_TY_I32 | TAG_TY_BOOL => {
+        TAG_I32 | TAG_BOOL => {
             if let Ok(n) = val.as_int() {
                 // Truncate to low 4 bytes - C int32_t semantics.
                 buf[offset..end].copy_from_slice(&n.to_ne_bytes()[..4]);
@@ -553,7 +548,7 @@ fn write_scalar_to_buf(buf: &mut [u8], offset: usize, size: usize, tag: u8, val:
                 buf[offset..end].copy_from_slice(&i32::from(b).to_ne_bytes());
             }
         }
-        TAG_TY_F32 => {
+        TAG_F32 => {
             if let Ok(f) = val.as_float() {
                 // f64 -> f32: intentional precision loss for C float ABI.
                 // No safe alternative exists for float narrowing.
@@ -565,7 +560,7 @@ fn write_scalar_to_buf(buf: &mut [u8], offset: usize, size: usize, tag: u8, val:
                 buf[offset..end].copy_from_slice(&(f as f32).to_ne_bytes());
             }
         }
-        TAG_TY_F64 => {
+        TAG_F64 => {
             if let Ok(f) = val.as_float() {
                 buf[offset..end].copy_from_slice(&f.to_ne_bytes());
             }
@@ -587,27 +582,32 @@ fn unmarshal_struct_return(
     type_id: u32,
     types: &[LoadedType],
     heap: &mut Heap,
-) -> Result<Value, VmError> {
+) -> VmResult<Value> {
     let idx = usize::try_from(type_id).unwrap_or(0);
     let entry = types.get(idx).ok_or_else(|| VmError::Malformed {
         desc: "cstruct ret type_id out of bounds".into(),
     })?;
-    let data = &entry.data;
-    if data.len() < 2 {
+    let type_data = &entry.data;
+    if type_data.len() < 2 {
         return Ok(Value::UNIT);
     }
-    let field_count = usize::from(u16::from_be_bytes([data[0], data[1]]));
+    let field_count = usize::from(u16::from_be_bytes([type_data[0], type_data[1]]));
     let mut fields = Vec::with_capacity(field_count);
 
     for i in 0..field_count {
         let off = 2 + i * 8;
-        if off + 8 > data.len() {
+        if off + 8 > type_data.len() {
             break;
         }
-        let field_type_id =
-            u32::from_be_bytes([data[off], data[off + 1], data[off + 2], data[off + 3]]);
-        let field_size = usize::from(u16::from_be_bytes([data[off + 4], data[off + 5]]));
-        let field_offset = usize::from(u16::from_be_bytes([data[off + 6], data[off + 7]]));
+        let field_type_id = u32::from_be_bytes([
+            type_data[off],
+            type_data[off + 1],
+            type_data[off + 2],
+            type_data[off + 3],
+        ]);
+        let field_size = usize::from(u16::from_be_bytes([type_data[off + 4], type_data[off + 5]]));
+        let field_offset =
+            usize::from(u16::from_be_bytes([type_data[off + 6], type_data[off + 7]]));
         let field_tag = types
             .get(usize::try_from(field_type_id).unwrap_or(0))
             .map_or(0, |t| t.tag);
@@ -631,23 +631,23 @@ fn read_scalar_from_buf(buf: &[u8], offset: usize, size: usize, tag: u8) -> Valu
     }
     let slice = &buf[offset..end];
     match tag {
-        TAG_TY_I8 => {
+        TAG_I8 => {
             let b = slice.first().copied().unwrap_or(0);
             Value::from_int(i64::from(b.cast_signed()))
         }
-        TAG_TY_I16 => {
+        TAG_I16 => {
             let bytes = <[u8; 2]>::try_from(slice).unwrap_or_default();
             Value::from_int(i64::from(i16::from_ne_bytes(bytes)))
         }
-        TAG_TY_I32 | TAG_TY_BOOL => {
+        TAG_I32 | TAG_BOOL => {
             let bytes = <[u8; 4]>::try_from(slice).unwrap_or_default();
             Value::from_int(i64::from(i32::from_ne_bytes(bytes)))
         }
-        TAG_TY_F32 => {
+        TAG_F32 => {
             let bytes = <[u8; 4]>::try_from(slice).unwrap_or_default();
             Value::from_float(f64::from(f32::from_ne_bytes(bytes)))
         }
-        TAG_TY_F64 => {
+        TAG_F64 => {
             let bytes = <[u8; 8]>::try_from(slice).unwrap_or_default();
             Value::from_float(f64::from_ne_bytes(bytes))
         }
@@ -676,7 +676,7 @@ fn lookup_msc_rt(ext_name: &str) -> Option<BuiltinFn> {
     }
 }
 
-fn int_to_float(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
+fn int_to_float(args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
     let n = args
         .first()
         .copied()
@@ -700,7 +700,7 @@ fn int_to_float(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
 const I64_MIN_F64: f64 = -9_223_372_036_854_775_808.0_f64;
 const I64_MAX_F64: f64 = 9_223_372_036_854_775_807.0_f64;
 
-fn float_to_int(args: &[Value], _heap: &mut Heap) -> Result<Value, VmError> {
+fn float_to_int(args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
     let f = args
         .first()
         .copied()
@@ -742,7 +742,7 @@ fn lookup_builtin(ext_name: &str) -> Option<BuiltinFn> {
     None
 }
 
-fn builtin_writeln(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+fn builtin_writeln(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     let val = args.first().copied().ok_or_else(|| VmError::Malformed {
         desc: "msc_writeln: expected 1 argument".into(),
     })?;
@@ -751,7 +751,7 @@ fn builtin_writeln(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     Ok(Value::UNIT)
 }
 
-fn builtin_write(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+fn builtin_write(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     let val = args.first().copied().ok_or_else(|| VmError::Malformed {
         desc: "msc_write: expected 1 argument".into(),
     })?;
@@ -760,7 +760,7 @@ fn builtin_write(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     Ok(Value::UNIT)
 }
 
-fn builtin_show(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+fn builtin_show(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     let val = args.first().copied().ok_or_else(|| VmError::Malformed {
         desc: "msc_show: expected 1 argument".into(),
     })?;
@@ -769,7 +769,7 @@ fn builtin_show(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     Ok(Value::from_ref(ptr))
 }
 
-fn builtin_str_cat(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+fn builtin_str_cat(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     let a = args.first().copied().ok_or_else(|| VmError::Malformed {
         desc: "msc_str_cat: expected 2 arguments".into(),
     })?;
@@ -778,8 +778,8 @@ fn builtin_str_cat(args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
     })?;
     let sa = value_to_string(a, heap);
     let sb = value_to_string(b, heap);
-    let result = format!("{sa}{sb}");
-    let ptr = heap.alloc_string(0, result.into_boxed_str());
+    let concatenated = format!("{sa}{sb}");
+    let ptr = heap.alloc_string(0, concatenated.into_boxed_str());
     Ok(Value::from_ref(ptr))
 }
 

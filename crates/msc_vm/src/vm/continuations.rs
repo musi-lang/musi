@@ -2,6 +2,7 @@
 
 use msc_bc::Opcode;
 
+use crate::VmResult;
 use crate::error::VmError;
 use crate::loader::{HandlerEntry, LoadedEffect};
 use crate::vm::{ContMarker, Frame};
@@ -13,7 +14,7 @@ pub fn exec(
     frame: &mut Frame,
     effects: &[LoadedEffect],
     handlers: &[HandlerEntry],
-) -> Result<ContAction, VmError> {
+) -> VmResult<ContAction> {
     match op {
         Opcode::EFF_HDL => exec_eff_hdl(operand, frame, handlers),
         Opcode::EFF_POP => {
@@ -44,7 +45,7 @@ fn exec_eff_hdl(
     operand: u32,
     frame: &mut Frame,
     handlers: &[HandlerEntry],
-) -> Result<ContAction, VmError> {
+) -> VmResult<ContAction> {
     // FI16 operand = effect_id.
     let effect_id = u8::try_from(operand & 0xFF).map_err(|_| VmError::Malformed {
         desc: "eff.hdl effect_id overflow".into(),

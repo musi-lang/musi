@@ -50,6 +50,8 @@ pub enum VmError {
     UnknownChannel { channel_id: u32 },
 }
 
+pub type VmResult<T = ()> = Result<T, VmError>;
+
 macro_rules! malformed {
     ($lit:literal) => {
         $crate::error::VmError::Malformed { desc: $lit.into() }

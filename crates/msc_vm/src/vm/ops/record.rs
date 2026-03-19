@@ -1,20 +1,17 @@
 //! Record, tuple, optional, and match opcode handlers.
 
+use crate::VmResult;
 use crate::error::{VmError, malformed};
 use crate::heap::Heap;
 use crate::value::Value;
 use crate::vm::Frame;
 
-// --------------------------------------------------------------------------
-// §4.9 Record
-// --------------------------------------------------------------------------
-
 /// `REC_NEW tag:u8, arity:u8` - allocate a record/variant and push a ref.
-pub fn exec_rec_new(operand: u32, frame: &mut Frame, heap: &mut Heap) -> Result<(), VmError> {
+pub fn exec_rec_new(operand: u32, frame: &mut Frame, heap: &mut Heap) -> VmResult {
     let tag = super::fi8x2_a(operand);
     let arity = super::fi8x2_b(operand);
     let n = usize::from(arity);
-    let mut fields: Vec<Value> = Vec::with_capacity(n);
+    let mut fields = Vec::with_capacity(n);
     for _ in 0..n {
         fields.push(frame.pop()?);
     }
@@ -25,7 +22,7 @@ pub fn exec_rec_new(operand: u32, frame: &mut Frame, heap: &mut Heap) -> Result<
     Ok(())
 }
 
-pub fn exec_rec_get(operand: u32, frame: &mut Frame, heap: &Heap) -> Result<(), VmError> {
+pub fn exec_rec_get(operand: u32, frame: &mut Frame, heap: &Heap) -> VmResult {
     let idx = usize::try_from(operand).map_err(|_| malformed!("rec.get index overflow"))?;
     let record_val = frame.pop()?;
     let ptr = record_val.as_ref()?;
@@ -38,7 +35,7 @@ pub fn exec_rec_get(operand: u32, frame: &mut Frame, heap: &Heap) -> Result<(), 
     Ok(())
 }
 
-pub fn exec_rec_set(operand: u32, frame: &mut Frame, heap: &mut Heap) -> Result<(), VmError> {
+pub fn exec_rec_set(operand: u32, frame: &mut Frame, heap: &mut Heap) -> VmResult {
     let field_idx = usize::try_from(operand).map_err(|_| malformed!("rec.set index overflow"))?;
     let val = frame.pop()?;
     let record_val = frame.pop()?;
@@ -53,11 +50,7 @@ pub fn exec_rec_set(operand: u32, frame: &mut Frame, heap: &mut Heap) -> Result<
     Ok(())
 }
 
-// --------------------------------------------------------------------------
-// §4.14 Match
-// --------------------------------------------------------------------------
-
-pub fn exec_mat_data(operand: u32, frame: &mut Frame, heap: &Heap) -> Result<(), VmError> {
+pub fn exec_mat_data(operand: u32, frame: &mut Frame, heap: &Heap) -> VmResult {
     let field_idx =
         usize::try_from(operand).map_err(|_| malformed!("mat.data field index overflow"))?;
     let variant_val = frame.pop()?;
@@ -69,7 +62,7 @@ pub fn exec_mat_data(operand: u32, frame: &mut Frame, heap: &Heap) -> Result<(),
 }
 
 /// `MAT_TAG tag:u16` - pop a ref, push bool(obj.tag == tag).
-pub fn exec_mat_tag(operand: u32, frame: &mut Frame, heap: &Heap) -> Result<(), VmError> {
+pub fn exec_mat_tag(operand: u32, frame: &mut Frame, heap: &Heap) -> VmResult {
     let expected_tag = operand & 0xFFFF;
     let variant_val = frame.pop()?;
     let ptr = variant_val.as_ref()?;
@@ -80,11 +73,7 @@ pub fn exec_mat_tag(operand: u32, frame: &mut Frame, heap: &Heap) -> Result<(), 
     Ok(())
 }
 
-// --------------------------------------------------------------------------
-// §4.11 Tuple
-// --------------------------------------------------------------------------
-
-pub fn exec_tup_new(operand: u32, frame: &mut Frame, heap: &mut Heap) -> Result<(), VmError> {
+pub fn exec_tup_new(operand: u32, frame: &mut Frame, heap: &mut Heap) -> VmResult {
     let n = usize::try_from(operand).map_err(|_| malformed!("tup.new arity overflow"))?;
     let mut fields: Vec<Value> = Vec::with_capacity(n);
     for _ in 0..n {
@@ -96,7 +85,7 @@ pub fn exec_tup_new(operand: u32, frame: &mut Frame, heap: &mut Heap) -> Result<
     Ok(())
 }
 
-pub fn exec_tup_get(operand: u32, frame: &mut Frame, heap: &Heap) -> Result<(), VmError> {
+pub fn exec_tup_get(operand: u32, frame: &mut Frame, heap: &Heap) -> VmResult {
     let idx = usize::try_from(operand).map_err(|_| malformed!("tup.get index overflow"))?;
     let tup_val = frame.pop()?;
     let ptr = tup_val.as_ref()?;
@@ -109,11 +98,7 @@ pub fn exec_tup_get(operand: u32, frame: &mut Frame, heap: &Heap) -> Result<(), 
     Ok(())
 }
 
-// --------------------------------------------------------------------------
-// §4.15 Optional
-// --------------------------------------------------------------------------
-
-pub fn exec_opt_some(frame: &mut Frame, heap: &mut Heap) -> Result<(), VmError> {
+pub fn exec_opt_some(frame: &mut Frame, heap: &mut Heap) -> VmResult {
     let val = frame.pop()?;
     // Represent Some(v) as a single-field record with tag=1.
     let ptr = heap.alloc_record(0, Some(1), vec![val]);
@@ -127,7 +112,7 @@ pub fn exec_opt_none(frame: &mut Frame, heap: &mut Heap) {
     frame.stack.push(Value::from_ref(ptr));
 }
 
-pub fn exec_opt_is(frame: &mut Frame, heap: &Heap) -> Result<(), VmError> {
+pub fn exec_opt_is(frame: &mut Frame, heap: &Heap) -> VmResult {
     let val = frame.pop()?;
     let is_some = val
         .as_ref()
@@ -136,7 +121,7 @@ pub fn exec_opt_is(frame: &mut Frame, heap: &Heap) -> Result<(), VmError> {
     Ok(())
 }
 
-pub fn exec_opt_get(frame: &mut Frame, heap: &Heap) -> Result<(), VmError> {
+pub fn exec_opt_get(frame: &mut Frame, heap: &Heap) -> VmResult {
     let val = frame.pop()?;
     let ptr = val.as_ref()?;
     if heap.get_record_tag(ptr)? != Some(1) {
@@ -148,11 +133,7 @@ pub fn exec_opt_get(frame: &mut Frame, heap: &Heap) -> Result<(), VmError> {
     Ok(())
 }
 
-// --------------------------------------------------------------------------
-// §4.1 Data movement - indirect memory
-// --------------------------------------------------------------------------
-
-pub fn exec_ld_ind(frame: &mut Frame, heap: &Heap) -> Result<(), VmError> {
+pub fn exec_ld_ind(frame: &mut Frame, heap: &Heap) -> VmResult {
     let addr_val = frame.pop()?;
     let ptr = addr_val.as_ref()?;
     let fields = heap.get_record_fields(ptr)?;
@@ -161,7 +142,7 @@ pub fn exec_ld_ind(frame: &mut Frame, heap: &Heap) -> Result<(), VmError> {
     Ok(())
 }
 
-pub fn exec_st_ind(frame: &mut Frame, heap: &mut Heap) -> Result<(), VmError> {
+pub fn exec_st_ind(frame: &mut Frame, heap: &mut Heap) -> VmResult {
     let val = frame.pop()?;
     let addr_val = frame.pop()?;
     let ptr = addr_val.as_ref()?;

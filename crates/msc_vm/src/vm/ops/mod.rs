@@ -19,30 +19,13 @@ pub use record::{
 pub use string::{exec_str_cat, exec_str_len};
 pub use ty::{exec_ty_desc, exec_ty_of};
 
-use msc_bc::{Opcode, instr_len};
+use msc_bc::{Opcode, instr_len, type_tag};
 
-use crate::error::{VmError, malformed};
+use crate::error::{VmError, VmResult, malformed};
 use crate::heap::{Heap, HeapPayload};
 use crate::loader::{LoadedConst, LoadedType};
 use crate::value::Value;
 use crate::vm::Frame;
-
-// Type pool tags (§11.3 of spec) - used for runtime type matching.
-const TYPE_TAG_UNIT: u8 = 0x01;
-const TYPE_TAG_BOOL: u8 = 0x02;
-const TYPE_TAG_I8: u8 = 0x03;
-const TYPE_TAG_I16: u8 = 0x04;
-const TYPE_TAG_I32: u8 = 0x05;
-const TYPE_TAG_I64: u8 = 0x06;
-const TYPE_TAG_U8: u8 = 0x07;
-const TYPE_TAG_U16: u8 = 0x08;
-const TYPE_TAG_U32: u8 = 0x09;
-const TYPE_TAG_U64: u8 = 0x0A;
-const TYPE_TAG_F32: u8 = 0x0B;
-const TYPE_TAG_F64: u8 = 0x0C;
-const TYPE_TAG_RUNE: u8 = 0x0D;
-const TYPE_TAG_FN: u8 = 0x12;
-const TYPE_TAG_ANY: u8 = 0x14;
 
 /// Decoded instruction: opcode + packed u32 carrying all operand bytes.
 ///
@@ -102,14 +85,14 @@ pub fn read_i16_operand(operand: u32) -> isize {
 }
 
 /// Extract the `FI24` operand as a signed isize jump offset.
-pub fn read_i24_operand(operand: u32) -> Result<isize, VmError> {
+pub fn read_i24_operand(operand: u32) -> VmResult<isize> {
     // decode_instruction stored it as i32 cast to u32.
     let signed = operand.cast_signed();
     isize::try_from(signed).map_err(|_| malformed!("br.long offset overflows isize"))
 }
 
 /// Compute absolute jump target: address after current instruction + signed offset.
-pub fn jump_target(after_instr: usize, offset: isize) -> Result<usize, VmError> {
+pub fn jump_target(after_instr: usize, offset: isize) -> VmResult<usize> {
     after_instr
         .checked_add_signed(offset)
         .ok_or_else(|| malformed!("jump target out of range"))
@@ -130,7 +113,7 @@ pub const fn fi8x2_b(operand: u32) -> u8 {
 }
 
 /// Convert a `usize`-range value from either int or nat.
-pub fn as_usize(v: Value) -> Result<usize, VmError> {
+pub fn as_usize(v: Value) -> VmResult<usize> {
     if let Ok(u) = v.as_nat() {
         usize::try_from(u).map_err(|_| VmError::OutOfBounds {
             index: usize::MAX,
@@ -156,16 +139,12 @@ pub fn const_to_value(c: &LoadedConst, heap: &mut Heap) -> Value {
     }
 }
 
-// --------------------------------------------------------------------------
-// §4.1 Data movement - LD_CONST
-// --------------------------------------------------------------------------
-
 pub fn exec_ld_const(
     operand: u32,
     frame: &mut Frame,
     consts: &[LoadedConst],
     heap: &mut Heap,
-) -> Result<(), VmError> {
+) -> VmResult {
     let idx = usize::try_from(operand).map_err(|_| malformed!("ld.const index overflow"))?;
     let c = consts.get(idx).ok_or(VmError::OutOfBounds {
         index: idx,
@@ -175,37 +154,33 @@ pub fn exec_ld_const(
     Ok(())
 }
 
-// --------------------------------------------------------------------------
-// §4.12 Type operations
-// --------------------------------------------------------------------------
-
 pub fn exec_ty_test(
     type_id: u32,
     frame: &mut Frame,
     types: &[LoadedType],
     heap: &Heap,
-) -> Result<(), VmError> {
+) -> VmResult {
     let val = frame.pop()?;
 
     let type_tag = types
         .get(usize::try_from(type_id).unwrap_or(usize::MAX))
-        .map_or(TYPE_TAG_ANY, |t| t.tag);
+        .map_or(type_tag::TAG_ANY, |t| t.tag);
 
     let matches = match () {
-        () if type_tag == TYPE_TAG_ANY => true,
-        () if val.is_float() => type_tag == TYPE_TAG_F32 || type_tag == TYPE_TAG_F64,
-        () if val.is_unit() => type_tag == TYPE_TAG_UNIT,
+        () if type_tag == type_tag::TAG_ANY => true,
+        () if val.is_float() => type_tag == type_tag::TAG_F32 || type_tag == type_tag::TAG_F64,
+        () if val.is_unit() => type_tag == type_tag::TAG_UNIT,
         () if val.is_int() => matches!(
             type_tag,
-            TYPE_TAG_I8 | TYPE_TAG_I16 | TYPE_TAG_I32 | TYPE_TAG_I64
+            type_tag::TAG_I8 | type_tag::TAG_I16 | type_tag::TAG_I32 | type_tag::TAG_I64
         ),
         () if val.is_nat() => matches!(
             type_tag,
-            TYPE_TAG_U8 | TYPE_TAG_U16 | TYPE_TAG_U32 | TYPE_TAG_U64
+            type_tag::TAG_U8 | type_tag::TAG_U16 | type_tag::TAG_U32 | type_tag::TAG_U64
         ),
-        () if val.is_bool() => type_tag == TYPE_TAG_BOOL,
-        () if val.is_rune() => type_tag == TYPE_TAG_RUNE,
-        () if val.is_fn() => type_tag == TYPE_TAG_FN,
+        () if val.is_bool() => type_tag == type_tag::TAG_BOOL,
+        () if val.is_rune() => type_tag == type_tag::TAG_RUNE,
+        () if val.is_fn() => type_tag == type_tag::TAG_FN,
         () => val
             .as_ref()
             .is_ok_and(|ptr| heap.get(ptr).is_ok_and(|obj| obj.type_id() == type_id)),
@@ -214,10 +189,6 @@ pub fn exec_ty_test(
     frame.stack.push(Value::from_bool(matches));
     Ok(())
 }
-
-// --------------------------------------------------------------------------
-// §4.7 Call - resolve callee from stack
-// --------------------------------------------------------------------------
 
 /// Resolve a `CALL arity:u8` callee: pop the callee value, classify it.
 pub enum CallTarget {
@@ -230,7 +201,7 @@ pub enum CallTarget {
 /// The operand stack at the point of CALL holds (bottom→top):
 ///   arg0 … arg_{arity-1}  callee
 /// We need to save the args, pop the callee, then push args back.
-pub fn resolve_callee(arity: u8, frame: &mut Frame, heap: &Heap) -> Result<CallTarget, VmError> {
+pub fn resolve_callee(arity: u8, frame: &mut Frame, heap: &Heap) -> VmResult<CallTarget> {
     let n = usize::from(arity);
     let stack_len = frame.stack.len();
     if stack_len < n + 1 {

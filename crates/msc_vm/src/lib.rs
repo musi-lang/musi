@@ -24,7 +24,7 @@ mod value;
 mod verifier;
 mod vm;
 
-pub use error::VmError;
+pub use error::{VmError, VmResult};
 pub use heap::{Heap, HeapPayload};
 pub use host::HostFunctions;
 pub use loader::{

@@ -1,5 +1,6 @@
 //! Call/return and upvalue-close helpers.
 
+use crate::VmResult;
 use crate::error::{VmError, malformed};
 use crate::heap::UpvalueCell;
 use crate::value::Value;
@@ -23,7 +24,7 @@ impl Vm {
 
     // Callers use `?` to propagate; keeping Result keeps the call sites uniform.
     #[expect(clippy::unnecessary_wraps)]
-    pub(super) fn do_return(&mut self, value: Value) -> Result<StepResult, VmError> {
+    pub(super) fn do_return(&mut self, value: Value) -> VmResult<StepResult> {
         self.close_frame_upvalues();
         let _ = self.call_stack.pop();
         if let Some(caller) = self.call_stack.last_mut() {
@@ -38,7 +39,7 @@ impl Vm {
         &mut self,
         fn_id: u32,
         closure_ref: Option<Value>,
-    ) -> Result<StepResult, VmError> {
+    ) -> VmResult<StepResult> {
         if self.call_stack.len() >= MAX_CALL_DEPTH {
             return Err(VmError::StackOverflow);
         }
@@ -91,7 +92,7 @@ impl Vm {
         &mut self,
         fn_id: u32,
         closure_ref: Option<Value>,
-    ) -> Result<StepResult, VmError> {
+    ) -> VmResult<StepResult> {
         let fn_idx = usize::try_from(fn_id).unwrap_or(usize::MAX);
         let func = self
             .module
@@ -140,7 +141,7 @@ impl Vm {
         &mut self,
         effect_id: u8,
         op_id: u32,
-    ) -> Result<StepResult, VmError> {
+    ) -> VmResult<StepResult> {
         let handler_idx =
             self.call_stack
                 .iter()
@@ -188,7 +189,7 @@ impl Vm {
         self.do_call_with_stack_args(handler_fn_id, None)
     }
 
-    pub(super) fn exec_cont_resume(&mut self) -> Result<StepResult, VmError> {
+    pub(super) fn exec_cont_resume(&mut self) -> VmResult<StepResult> {
         let resume_value = self
             .call_stack
             .last_mut()

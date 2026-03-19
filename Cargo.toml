@@ -101,6 +101,7 @@ unnecessary_safety_doc = "deny"
 unreachable = "deny"
 unwrap_in_result = "deny"
 # unwrap_used = "deny"  # use `.expect()` in prod, but allow `.unwrap()` in tests
+wildcard_imports = "allow"
 
 cargo = { level = "deny", priority = -1 }
 complexity = { level = "deny", priority = -1 }
