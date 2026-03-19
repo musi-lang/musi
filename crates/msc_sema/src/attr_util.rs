@@ -8,7 +8,6 @@ use crate::error::SemaError;
 
 /// Names that the compiler recognises as valid attributes.
 const KNOWN_ATTRS: &[&str] = &[
-    "entrypoint",
     "lang",
     "link",
     "test",

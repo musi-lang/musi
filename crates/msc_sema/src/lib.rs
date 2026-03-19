@@ -480,7 +480,6 @@ fn analyze_emit_unused_warnings(
         if def.use_count == 0
             && def.span != Span::DUMMY
             && !def.exported
-            && !def.is_entry_point
             && def.name != Symbol(u32::MAX)
             && !matches!(
                 def.kind,

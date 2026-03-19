@@ -32,7 +32,6 @@ impl Resolver<'_> {
                 if *exported {
                     self.mark_pat_exported(fields.pat);
                 }
-                self.maybe_mark_entrypoint(fields.pat, attrs);
                 self.maybe_mark_lang_item_pat(fields.pat, attrs);
                 self.apply_flags_to_pat(fields.pat, attrs);
             }
@@ -115,7 +114,6 @@ impl Resolver<'_> {
         };
         self.define_fn_name(fields.pat, kind);
         self.define_pat(fields.pat, kind);
-        self.maybe_mark_entrypoint(fields.pat, attrs);
         self.maybe_mark_lang_item_pat(fields.pat, attrs);
         self.apply_flags_to_pat(fields.pat, attrs);
         if is_type_def {
@@ -176,22 +174,6 @@ impl Resolver<'_> {
                     let _inserted = self.output.pat_defs.insert(*span, id);
                 }
             }
-        }
-    }
-
-    fn maybe_mark_entrypoint(&mut self, pat: PatIdx, attrs: &[Attr]) {
-        let has_ep = attrs
-            .iter()
-            .any(|a| self.interner.resolve(a.name) == "entrypoint");
-        if !has_ep {
-            return;
-        }
-        let span = match &self.ast.pats[pat] {
-            Pat::Variant { span, .. } | Pat::Bind { span, .. } => *span,
-            _ => return,
-        };
-        if let Some(&def_id) = self.output.pat_defs.get(&span) {
-            self.defs.get_mut(def_id).is_entry_point = true;
         }
     }
 

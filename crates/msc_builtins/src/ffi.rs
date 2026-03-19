@@ -10,13 +10,30 @@
 //! effect gates user-level access to FFI.
 
 use std::collections::HashMap;
-use std::ffi::{CStr, CString, c_void};
+use std::ffi::{c_void, CStr, CString};
 
-use libffi::middle::{Arg, Cif, CodePtr, Type, arg};
+use libffi::middle::{arg, Arg, Cif, CodePtr, Type};
 use libloading::Library;
 use msc_vm::{Heap, HeapPayload, HostFunctions, LoadedForeignFn, LoadedType, Value, VmError};
 
+use std::cell::RefCell;
+
 use crate::core;
+
+thread_local! {
+    static TEST_FILTER: RefCell<String> = const { RefCell::new(String::new()) };
+}
+
+/// Set the test name filter for the current thread. Called by `musi test --name`.
+pub fn set_test_filter(filter: &str) {
+    TEST_FILTER.with(|f| *f.borrow_mut() = filter.to_string());
+}
+
+fn builtin_test_filter(_args: &[Value], heap: &mut Heap) -> Result<Value, VmError> {
+    let filter = TEST_FILTER.with(|f| f.borrow().clone());
+    let ptr = heap.alloc_string(0, filter.into_boxed_str());
+    Ok(Value::from_ref(ptr))
+}
 
 // Type tags matching §11.3 of the Musi bytecode spec (mirrored from loader.rs).
 const TAG_TY_UNIT: u8 = 0x01;
@@ -654,6 +671,7 @@ fn lookup_msc_rt(ext_name: &str) -> Option<BuiltinFn> {
         "writeln" => Some(builtin_writeln),
         "int_to_float" => Some(int_to_float),
         "float_to_int" => Some(float_to_int),
+        "__test_filter" => Some(builtin_test_filter),
         _ => core::lookup(ext_name),
     }
 }

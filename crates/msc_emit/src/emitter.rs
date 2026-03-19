@@ -290,8 +290,7 @@ impl<'a> Emitter<'a> {
         for stmt in &stmts {
             self.scan_stmt(stmt.expr)?;
         }
-        // Script mode: synthesize an entry function from top-level statements
-        // when no explicit #[entrypoint] was declared.
+        // Script mode: synthesize an entry function from top-level statements.
         if self.script && self.entry_fn_id.is_none() {
             let fn_id = self.alloc_fn_id();
             self.entry_fn_id = Some(fn_id);
@@ -306,7 +305,7 @@ impl<'a> Emitter<'a> {
                 self.scan_annotated(&attrs, inner, None)?;
             }
             Expr::Binding { fields, .. } => {
-                self.scan_binding(&fields, false);
+                self.scan_binding(&fields);
             }
             Expr::Effect { name, ops, .. } => {
                 self.scan_effect(name, &ops)?;
@@ -320,7 +319,7 @@ impl<'a> Emitter<'a> {
                 }
             }
             Expr::Let { fields, body, .. } => {
-                self.scan_binding(&fields, false);
+                self.scan_binding(&fields);
                 if let Some(body_idx) = body {
                     self.scan_stmt(body_idx)?;
                 }
@@ -370,12 +369,11 @@ impl<'a> Emitter<'a> {
         inner: ExprIdx,
         dep_idx: Option<usize>,
     ) -> Result<(), EmitError> {
-        let is_entry = dep_idx.is_none() && has_entrypoint_attr(attrs, self.interner);
         let inner_expr = self.ast.exprs[inner].clone();
         match inner_expr {
             Expr::Binding { fields, .. } => match dep_idx {
                 Some(di) => self.scan_dep_binding(&fields, di)?,
-                None => self.scan_binding(&fields, is_entry),
+                None => self.scan_binding(&fields),
             },
             Expr::Annotated {
                 attrs: inner_attrs,
@@ -610,7 +608,7 @@ impl<'a> Emitter<'a> {
         Ok(())
     }
 
-    fn scan_binding(&mut self, fields: &LetFields, is_entry: bool) {
+    fn scan_binding(&mut self, fields: &LetFields) {
         let Some(value_idx) = fields.value else {
             return;
         };
@@ -622,14 +620,12 @@ impl<'a> Emitter<'a> {
         let fn_id = self.alloc_fn_id();
 
         let binding_span = pat_span(fields.pat, self.ast);
-        let mut binding_def_id = None;
-        if let Some(&did) = self.pat_defs().get(&binding_span) {
+        let binding_def_id = if let Some(&did) = self.pat_defs().get(&binding_span) {
             let _ = self.fn_map.insert(did, fn_id);
-            binding_def_id = Some(did);
-            if is_entry {
-                self.entry_fn_id = Some(fn_id);
-            }
-        }
+            Some(did)
+        } else {
+            None
+        };
 
         let fn_name = pat_name_str(fields.pat, self.ast, self.interner);
         self.fn_entries.push(FnEntry {
@@ -1062,12 +1058,6 @@ fn extract_fn(expr_idx: ExprIdx, ast: &AstArenas) -> Option<(Vec<Param>, ExprIdx
         Expr::Annotated { inner, .. } | Expr::Paren { inner, .. } => extract_fn(*inner, ast),
         _ => None,
     }
-}
-
-fn has_entrypoint_attr(attrs: &[Attr], interner: &Interner) -> bool {
-    attrs
-        .iter()
-        .any(|a| interner.resolve(a.name) == "entrypoint")
 }
 
 struct LinkAttrs {

@@ -10,7 +10,7 @@ use msc_shared::{DiagnosticBag, FileId, Interner};
 
 use crate::{EmitOutput, emit};
 
-fn compile(source: &str) -> Result<EmitOutput, String> {
+fn compile_with(source: &str, script: bool, strict: bool) -> Result<EmitOutput, String> {
     let mut interner = Interner::new();
     let mut diags = DiagnosticBag::new();
     let file_id = FileId(0);
@@ -23,32 +23,26 @@ fn compile(source: &str) -> Result<EmitOutput, String> {
         &mut diags,
         &SemaOptions::default(),
     );
-    if diags.has_errors() {
+    if strict && diags.has_errors() {
         let msgs: Vec<String> = diags
             .iter()
             .map(|d| format!("{:?}: {}", d.severity, d.message))
             .collect();
         return Err(format!("errors:\n{}", msgs.join("\n")));
     }
-    emit(&parsed, &sema, &mut interner, file_id, false, &[]).map_err(|e| e.to_string())
+    emit(&parsed, &sema, &mut interner, file_id, script, &[]).map_err(|e| e.to_string())
 }
 
-/// Like `compile` but ignores type errors so we can test emission of
-/// constructs whose types require stdlib definitions (e.g. Result).
+fn compile(source: &str) -> Result<EmitOutput, String> {
+    compile_with(source, false, true)
+}
+
+fn compile_script(source: &str) -> Result<EmitOutput, String> {
+    compile_with(source, true, true)
+}
+
 fn compile_lenient(source: &str) -> Result<EmitOutput, String> {
-    let mut interner = Interner::new();
-    let mut diags = DiagnosticBag::new();
-    let file_id = FileId(0);
-    let lexed = lex(source, file_id, &mut interner, &mut diags);
-    let parsed = parse(&lexed.tokens, file_id, &mut diags, &mut interner);
-    let sema = analyze(
-        &parsed,
-        &mut interner,
-        file_id,
-        &mut diags,
-        &SemaOptions::default(),
-    );
-    emit(&parsed, &sema, &mut interner, file_id, false, &[]).map_err(|e| e.to_string())
+    compile_with(source, true, false)
 }
 
 /// Find the start+length of a tagged section in the binary.
@@ -84,8 +78,8 @@ fn find_opcode(bytes: &[u8], op: Opcode) -> Option<usize> {
 
 #[test]
 fn test_emit_header_valid() {
-    let source = "#[entrypoint]\nlet main : () -> Int := () => 42;";
-    let out = compile(source).expect("compile ok");
+    let source = "let main : () -> Int := () => 42;";
+    let out = compile_script(source).expect("compile ok");
     assert!(
         out.bytes.len() >= 16,
         "output must have at least a 16-byte header"
@@ -98,8 +92,8 @@ fn test_emit_header_valid() {
 
 #[test]
 fn test_emit_sections_present() {
-    let source = "#[entrypoint]\nlet main : () -> Int := () => 42;";
-    let out = compile(source).expect("compile ok");
+    let source = "let main : () -> Int := () => 42;";
+    let out = compile_script(source).expect("compile ok");
     for tag in [
         *b"STRT", *b"TYPE", *b"CNST", *b"DEPS", *b"GLOB", *b"METH", *b"EFCT", *b"CLSS", *b"FRGN",
     ] {
@@ -116,8 +110,8 @@ fn test_emit_small_int_uses_ld_smi() {
     // 42 fits in i16 - the emitter should use LD_SMI for the literal.
     // Other LD_CONST emissions (e.g. function references) may still appear
     // in the same module, so we only assert LD_SMI is present.
-    let source = "#[entrypoint]\nlet main : () -> Int := () => 42;";
-    let out = compile(source).expect("compile ok");
+    let source = "let main : () -> Int := () => 42;";
+    let out = compile_script(source).expect("compile ok");
     assert!(
         find_opcode(&out.bytes, Opcode::LD_SMI).is_some(),
         "expected LD_SMI for small integer literal 42"
@@ -127,8 +121,8 @@ fn test_emit_small_int_uses_ld_smi() {
 #[test]
 fn test_emit_large_int_uses_ld_const() {
     // 100000 does not fit in i16 - the emitter must fall back to LD_CONST.
-    let source = "#[entrypoint]\nlet main : () -> Int := () => 100000;";
-    let out = compile(source).expect("compile ok");
+    let source = "let main : () -> Int := () => 100000;";
+    let out = compile_script(source).expect("compile ok");
     assert!(
         find_opcode(&out.bytes, Opcode::LD_CONST).is_some(),
         "expected LD_CONST for integer literal 100000 that exceeds i16 range"
@@ -137,48 +131,48 @@ fn test_emit_large_int_uses_ld_const() {
 
 #[test]
 fn test_emit_binop_add() {
-    let source = "#[entrypoint]\nlet add : (Int, Int) -> Int := (a, b) => a + b;";
-    let out = compile(source).expect("compile ok");
+    let source = "let add : (Int, Int) -> Int := (a, b) => a + b;";
+    let out = compile_script(source).expect("compile ok");
     let found = find_opcode(&out.bytes, Opcode::ADD);
     assert!(found.is_some(), "expected ADD for integer addition");
 }
 
 #[test]
 fn test_emit_piecewise() {
-    let source = "#[entrypoint]\nlet f : (Int) -> Int := (x) => (42 if x > 0 | 0 if _);";
-    let out = compile(source).expect("compile ok");
+    let source = "let f : (Int) -> Int := (x) => (42 if x > 0 | 0 if _);";
+    let out = compile_script(source).expect("compile ok");
     let found = find_opcode(&out.bytes, Opcode::BR_TRUE);
     assert!(found.is_some(), "expected conditional jump in piecewise");
 }
 
 #[test]
 fn test_emit_let_binding() {
-    let source = "#[entrypoint]\nlet main : () -> Int := () => (let x := 10; x);";
-    let out = compile(source).expect("compile ok");
+    let source = "let main : () -> Int := () => (let x := 10; x);";
+    let out = compile_script(source).expect("compile ok");
     let found = find_opcode(&out.bytes, Opcode::ST_LOC);
     assert!(found.is_some(), "expected ST_LOC for let binding");
 }
 
 #[test]
-fn test_emit_entry_is_script() {
-    let source = "#[entrypoint]\nlet go : () -> Int := () => 1;";
-    let out = compile(source).expect("compile ok");
+fn test_emit_script_mode() {
+    let source = "let go : () -> Int := () => 1;";
+    let out = compile_script(source).expect("compile ok");
     // flags at byte 7; FLAG_SCRIPT = 1 << 2 = 4
-    assert_eq!(out.bytes[7] & 4, 4, "entrypoint => FLAG_SCRIPT");
+    assert_eq!(out.bytes[7] & 4, 4, "script mode => FLAG_SCRIPT");
 }
 
 #[test]
-fn test_emit_no_entrypoint_is_library() {
+fn test_emit_library_mode() {
     let source = "let helper : (Int) -> Int := (x) => x + 1;";
     let out = compile(source).expect("compile ok");
     // flags at byte 7; FLAG_LIBRARY = 1 << 1 = 2
-    assert_eq!(out.bytes[7] & 2, 2, "no entrypoint => FLAG_LIBRARY");
+    assert_eq!(out.bytes[7] & 2, 2, "library mode => FLAG_LIBRARY");
 }
 
 #[test]
 fn test_emit_range_inc() {
-    let source = "#[entrypoint]\nlet f : (Int, Int) -> Int := (a, b) => a..b;";
-    let out = compile(source);
+    let source = "let f : (Int, Int) -> Int := (a, b) => a..b;";
+    let out = compile_script(source);
     assert!(
         out.is_ok(),
         "range-inc should compile: {}",
@@ -191,8 +185,8 @@ fn test_emit_range_inc() {
 
 #[test]
 fn test_emit_range_exc() {
-    let source = "#[entrypoint]\nlet f : (Int, Int) -> Int := (a, b) => a..<b;";
-    let out = compile(source);
+    let source = "let f : (Int, Int) -> Int := (a, b) => a..<b;";
+    let out = compile_script(source);
     assert!(
         out.is_ok(),
         "range-exc should compile: {}",
@@ -205,8 +199,8 @@ fn test_emit_range_exc() {
 
 #[test]
 fn test_emit_nil_coal() {
-    let source = "#[entrypoint]\nlet f : (Int, Int) -> Int := (a, b) => a ?? b;";
-    let out = compile(source);
+    let source = "let f : (Int, Int) -> Int := (a, b) => a ?? b;";
+    let out = compile_script(source);
     assert!(
         out.is_ok(),
         "nil-coalesce should compile: {}",
@@ -219,8 +213,8 @@ fn test_emit_nil_coal() {
 
 #[test]
 fn test_emit_cons() {
-    let source = "#[entrypoint]\nlet f : (Int, [] Int) -> [] Int := (x, xs) => x :: xs;";
-    let out = compile(source);
+    let source = "let f : (Int, []Int) -> []Int := (x, xs) => x :: xs;";
+    let out = compile_script(source);
     assert!(out.is_ok(), "cons should compile: {}", out.unwrap_err());
     let out = out.unwrap();
     let found = find_opcode(&out.bytes, Opcode::TUP_NEW);
@@ -229,8 +223,8 @@ fn test_emit_cons() {
 
 #[test]
 fn test_emit_try_expr() {
-    let source = "#[entrypoint]\nlet f : (Int) -> Int := (x) => try x;";
-    let out = compile(source);
+    let source = "let f : (Int) -> Int := (x) => try x;";
+    let out = compile_script(source);
     assert!(out.is_ok(), "try should compile: {}", out.unwrap_err());
     let out = out.unwrap();
     // After the rearchitecture, `try` wraps in a variant via REC_NEW (not OPT_SOME).
@@ -243,7 +237,7 @@ fn test_emit_try_expr() {
 
 #[test]
 fn test_emit_err_coal() {
-    let source = "#[entrypoint]\nlet f : (Int, Int) -> Int := (a, b) => a !! b;";
+    let source = "let f : (Int, Int) -> Int := (a, b) => a !! b;";
     let out = compile_lenient(source);
     assert!(
         out.is_ok(),
@@ -257,16 +251,16 @@ fn test_emit_err_coal() {
 
 #[test]
 fn test_emit_defer() {
-    let source = "#[entrypoint]\nlet f : () -> Int := () => (defer 1; 42);";
-    let out = compile(source);
+    let source = "let f : () -> Int := () => (defer 1; 42);";
+    let out = compile_script(source);
     assert!(out.is_ok(), "defer should compile: {}", out.unwrap_err());
 }
 
 #[test]
 fn test_emit_global_read_no_nop() {
     // Global reads should emit LD_LOC 0 + REC_GET, not NOP.
-    let source = "#[entrypoint]\nlet main : () -> Int := () => 42;";
-    let out = compile(source).expect("compile ok");
+    let source = "let main : () -> Int := () => 42;";
+    let out = compile_script(source).expect("compile ok");
     let (meth_start, meth_len) = find_section(&out.bytes, *b"METH").expect("METH section");
     let meth = &out.bytes[meth_start..meth_start + meth_len];
     // NOP should not appear in function code (it was the old global stub).
@@ -279,8 +273,8 @@ fn test_emit_global_read_no_nop() {
 #[test]
 fn test_emit_variant_uses_tag() {
     // Variants should use REC_NEW with the correct tag, not OPT_SOME/OPT_NONE.
-    let source = "#[entrypoint]\nlet f : (Int) -> Int := (x) => try x;";
-    let out = compile(source).expect("compile ok");
+    let source = "let f : (Int) -> Int := (x) => try x;";
+    let out = compile_script(source).expect("compile ok");
     let found_rec_new = find_opcode(&out.bytes, Opcode::REC_NEW);
     assert!(
         found_rec_new.is_some(),
