@@ -33,6 +33,7 @@ pub type NameRefIdx = Idx<NameRef>;
 pub struct NameRef {
     pub name: Symbol,
     pub span: Span,
+    pub is_ty_var: bool,
 }
 
 /// A list of expression indices.

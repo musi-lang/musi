@@ -73,11 +73,11 @@ fn test_cap_limits_diagnostic_count() {
     let mut bag = DiagnosticBag::new();
     let mut db = SourceDb::new();
     let fid = db.add("test.mu", "x\n");
-    for _ in 0..MAX_ERRORS + 10 {
+    for _ in 0..210 {
         let _d = bag.error("e", Span::new(0, 1), fid);
     }
     let count: usize = bag.iter().count();
-    assert_eq!(count, MAX_ERRORS);
+    assert_eq!(count, 200);
     let last = bag.iter().last().expect("non-empty");
     assert!(last.message.contains("too many errors"));
 }

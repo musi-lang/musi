@@ -5,10 +5,10 @@ use std::str::from_utf8;
 use msc_bc::Opcode;
 use msc_lex::lex;
 use msc_parse::parse;
-use msc_sema::{analyze, SemaOptions};
+use msc_sema::{SemaOptions, analyze};
 use msc_shared::{DiagnosticBag, FileId, Interner};
 
-use crate::{emit, EmitOutput};
+use crate::{EmitOutput, emit};
 
 fn compile_with(source: &str, script: bool, strict: bool) -> Result<EmitOutput, String> {
     let mut interner = Interner::new();

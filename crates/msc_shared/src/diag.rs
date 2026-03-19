@@ -187,17 +187,16 @@ pub trait IntoDiagnostic: fmt::Display {
     fn severity(&self) -> Severity;
 }
 
-const MAX_ERRORS: usize = 200;
-
 #[derive(Debug, Default)]
 pub struct DiagnosticBag {
     diagnostics: Vec<Diagnostic>,
     /// Number of `Severity::Error` diagnostics pushed so far.
     error_count: usize,
-    /// Throwaway sink for diagnostics pushed after `MAX_ERRORS`.
+    /// Throwaway sink for diagnostics pushed after `max_errors`.
     /// Callers that chain `.add_secondary()` on the returned `&mut Diagnostic`
     /// mutate this instead of corrupting the suppression sentinel.
     overflow: Option<Diagnostic>,
+    max_errors: usize,
 }
 
 macro_rules! severity_builder {
@@ -220,12 +219,17 @@ impl DiagnosticBag {
             diagnostics: vec![],
             error_count: 0,
             overflow: None,
+            max_errors: 200,
         }
+    }
+
+    pub fn set_max_errors(&mut self, max: usize) {
+        self.max_errors = max;
     }
 
     pub fn push(&mut self, diagnostic: Diagnostic) {
         if diagnostic.severity == Severity::Error {
-            if self.error_count >= MAX_ERRORS {
+            if self.error_count >= self.max_errors {
                 return;
             }
             self.error_count += 1;
@@ -266,7 +270,7 @@ impl DiagnosticBag {
     ) -> &mut Diagnostic {
         let is_error = severity == Severity::Error;
 
-        if is_error && self.error_count >= MAX_ERRORS {
+        if is_error && self.error_count >= self.max_errors {
             if self.overflow.is_none() {
                 self.overflow = Some(Diagnostic {
                     severity: Severity::Note,
@@ -277,7 +281,7 @@ impl DiagnosticBag {
             }
             return self.overflow.as_mut().expect("just assigned");
         }
-        let diagnostic = if is_error && self.error_count == MAX_ERRORS - 1 {
+        let diagnostic = if is_error && self.error_count == self.max_errors - 1 {
             let text: Box<str> = Box::from("too many errors; further diagnostics suppressed");
             Diagnostic {
                 severity: Severity::Error,

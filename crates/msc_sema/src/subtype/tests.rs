@@ -7,7 +7,7 @@ use crate::scope::ScopeTree;
 use crate::subtype::is_subtype;
 use crate::types::{EffectRow, RecordField, Type};
 use crate::unify::UnifyTable;
-use crate::well_known::{init_well_known, WellKnown};
+use crate::well_known::{WellKnown, init_well_known};
 
 fn setup() -> (Arena<Type>, UnifyTable, WellKnown) {
     let mut interner = Interner::new();

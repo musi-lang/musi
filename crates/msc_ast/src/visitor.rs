@@ -139,6 +139,7 @@ pub fn walk_expr<V: AstVisitor + ?Sized>(
             match body {
                 InstanceBody::Manual { members } => walk_class_members(v, members, ctx),
                 InstanceBody::Via { delegate, .. } => v.visit_expr(*delegate, ctx),
+                InstanceBody::Derives { .. } => ControlFlow::Continue(()),
             }
         }
         Expr::Effect { ops, .. } => walk_effect_ops(v, ops, ctx),

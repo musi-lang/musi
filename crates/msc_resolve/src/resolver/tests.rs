@@ -3,7 +3,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use crate::error::ResolveError;
-use crate::resolver::{ResolverConfig, resolve_import};
+use crate::resolver::{resolve_import, ResolverConfig};
 use crate::specifier::parse_specifier;
 
 fn temp_dir() -> tempfile::TempDir {
@@ -17,6 +17,8 @@ fn make_config(std_root: PathBuf, project_root: PathBuf) -> ResolverConfig {
         project_root,
         manifest_imports: HashMap::new(),
         manifest_deps: HashMap::new(),
+        base_url: None,
+        paths: None,
     }
 }
 

@@ -10,7 +10,7 @@ use msc_shared::Symbol;
 use crate::attr_util::validate_attrs;
 use crate::def::{DefFlags, DefId, DefKind};
 
-use super::{binding_def_kind, Resolver};
+use super::{Resolver, binding_def_kind};
 
 impl Resolver<'_> {
     pub(super) fn collect_top_level(&mut self, expr_idx: ExprIdx) {

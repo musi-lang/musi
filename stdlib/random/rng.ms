@@ -8,7 +8,7 @@ export let Rng := record { seed : Int };
 let MASK := 140737488355327;
 
 /// Advances the RNG state and returns the raw next value.
-export let next_raw := (rng) => (
+export let next_raw := (mut rng) => (
   let s0 := rng.seed;
   let s1 := s0 xor (s0 << 13);
   let s2 := s1 xor (s1 >> 7);
@@ -26,7 +26,7 @@ export let new := (seed) => (
 );
 
 /// Reseeds an existing RNG with a new seed value.
-export let seed_from := (rng, new_seed) =>
+export let seed_from := (mut rng, new_seed) =>
   rng.seed <- (new_seed if new_seed > 0 | 1 if _);
 
 /// Returns the next non-negative random integer.

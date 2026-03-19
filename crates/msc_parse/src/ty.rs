@@ -4,6 +4,7 @@
 mod tests;
 
 use msc_ast::ExprIdx;
+use msc_ast::NameRef;
 use msc_ast::expr::{Arrow, EffectItem, EffectSet, Expr, FieldKey};
 use msc_ast::ty_param::{Constraint, Rel};
 use msc_lex::token::TokenKind;
@@ -153,7 +154,11 @@ impl Parser<'_> {
         let start = self.start_span();
         let name = self.expect_symbol();
         let span = self.finish_span(start);
-        let name_ref = self.alloc_name_ref(name, span);
+        let name_ref = self.arenas.name_refs.alloc(NameRef {
+            name,
+            span,
+            is_ty_var: true,
+        });
         Expr::Name { name_ref, span }
     }
 

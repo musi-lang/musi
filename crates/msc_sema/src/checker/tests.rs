@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use msc_shared::{DiagnosticBag, FileId, Interner, Severity, Span, Symbol};
 
 use crate::checker::{CheckContext, Checker};
-use crate::{SemaOptions, UnifyTable, pipeline};
+use crate::{pipeline, SemaOptions, UnifyTable};
 
 /// Helper to construct a Stmt.
 fn stmt(expr_idx: ExprIdx) -> Stmt {
@@ -47,6 +47,7 @@ fn alloc_name_expr(arenas: &mut AstArenas, sym: Symbol) -> ExprIdx {
     let name_ref = arenas.name_refs.alloc(NameRef {
         name: sym,
         span: Span::DUMMY,
+        is_ty_var: false,
     });
     arenas.exprs.alloc(Expr::Name {
         name_ref,
@@ -71,6 +72,7 @@ fn check_module(interner: &mut Interner, module: &ParsedModule) -> DiagnosticBag
         pipeline::analyze_setup(module, interner, FileId(0), &mut diags_setup);
 
     let empty_imports = HashMap::new();
+    let options = SemaOptions::default();
     let ctx = CheckContext {
         ast: &module.arenas,
         interner,
@@ -81,6 +83,7 @@ fn check_module(interner: &mut Interner, module: &ParsedModule) -> DiagnosticBag
         import_types: &empty_imports,
         law_inferred_vars: &resolved.law_inferred_vars,
         class_op_members: &resolved.class_op_members,
+        options: &options,
     };
     let mut diags = DiagnosticBag::new();
     let mut checker = Checker::new_with_state(
@@ -276,6 +279,7 @@ fn test_insert_cast_records_any_boundary() {
         pipeline::analyze_setup(&module, &mut interner, FileId(0), &mut diags_setup);
 
     let empty_imports = HashMap::new();
+    let options = SemaOptions::default();
     let ctx = CheckContext {
         ast: &module.arenas,
         interner: &mut interner,
@@ -286,6 +290,7 @@ fn test_insert_cast_records_any_boundary() {
         import_types: &empty_imports,
         law_inferred_vars: &resolved.law_inferred_vars,
         class_op_members: &resolved.class_op_members,
+        options: &options,
     };
     let mut diags = DiagnosticBag::new();
     let mut checker = Checker::new_with_state(

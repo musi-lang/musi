@@ -108,11 +108,11 @@ impl Resolver<'_> {
                 use msc_ast::expr::InstanceBody;
                 let via_delegate = match &body {
                     InstanceBody::Via { delegate, .. } => Some(*delegate),
-                    InstanceBody::Manual { .. } => None,
+                    InstanceBody::Manual { .. } | InstanceBody::Derives { .. } => None,
                 };
                 let members = match &body {
                     InstanceBody::Manual { members } => members.clone(),
-                    InstanceBody::Via { .. } => vec![],
+                    InstanceBody::Via { .. } | InstanceBody::Derives { .. } => vec![],
                 };
                 self.resolve_expr_given(target, &params, &constraints, &members);
                 // Resolve the delegate type expression so name references inside it

@@ -46,6 +46,7 @@ fn alloc_name_expr(arenas: &mut AstArenas, sym: Symbol) -> ExprIdx {
     let name_ref = arenas.name_refs.alloc(NameRef {
         name: sym,
         span: Span::DUMMY,
+        is_ty_var: false,
     });
     arenas.exprs.alloc(Expr::Name {
         name_ref,

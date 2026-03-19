@@ -13,7 +13,7 @@ export let Heap ['a] := record { data : []'a; cmp : ('a, 'a) -> Ordering };
 /// Create an empty heap using `cmp` to order elements.
 export let new ['a] := (cmp) => .{ data := [], cmp := cmp };
 
-let swap ['a] := (data, i, j) => (
+let swap ['a] := (mut data, i, j) => (
   let tmp := data.[i];
   data.[i] <- data.[j];
   data.[j] <- tmp

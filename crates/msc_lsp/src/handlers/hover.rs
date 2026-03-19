@@ -6,7 +6,7 @@ use msc_ast::expr::{BindKind, InstanceBody, LetFields, Param, ParamMode};
 use msc_ast::pat::Pat;
 use msc_ast::{AstArenas, Expr, PatIdx};
 use msc_sema::def::DefInfo;
-use msc_sema::types::Type;
+use msc_sema::types::{Type, strip_ref};
 use msc_sema::{DefKind, SemaResult, TypeIdx};
 use msc_shared::Idx;
 
@@ -49,12 +49,12 @@ pub fn hover(doc: &AnalyzedDoc, position: Position) -> Option<Hover> {
         if let Some(ty) = ty {
             fmt_type_lsp(ty, doc, sema)
         } else if let Some(ty) = def.ty_info.ty {
-            fmt_type_lsp(ty, doc, sema)
+            fmt_type_lsp(strip_ref(ty, &sema.types), doc, sema)
         } else {
             "?".to_owned()
         }
     } else if let Some(ty) = def.ty_info.ty {
-        fmt_type_lsp(ty, doc, sema)
+        fmt_type_lsp(strip_ref(ty, &sema.types), doc, sema)
     } else {
         "?".to_owned()
     };
@@ -185,7 +185,7 @@ fn build_fn_signature(
     kind_kw: &str,
     display_name: &str,
 ) -> Option<String> {
-    let ty = def.ty_info.ty?;
+    let ty = strip_ref(def.ty_info.ty?, &sema.types);
     let (param_tys, ret_ty) = match &sema.types[ty] {
         Type::Fn { params, ret, .. } => (params.clone(), Some(*ret)),
         _ => return None,

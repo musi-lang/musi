@@ -310,7 +310,7 @@ impl<'a> Emitter<'a> {
             Expr::Annotated { attrs, inner, .. } => {
                 self.scan_annotated(&attrs, inner, None)?;
             }
-            Expr::Binding { fields, .. } => {
+            Expr::Binding { fields, .. } | Expr::Let { fields, .. } => {
                 self.scan_binding(&fields);
             }
             Expr::Effect { name, ops, .. } => {
@@ -323,9 +323,6 @@ impl<'a> Emitter<'a> {
                 if let InstanceBody::Manual { members } = body {
                     self.scan_instance_members(&members, None);
                 }
-            }
-            Expr::Let { fields, .. } => {
-                self.scan_binding(&fields);
             }
             Expr::Lit { .. }
             | Expr::Name { .. }

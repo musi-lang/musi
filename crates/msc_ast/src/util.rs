@@ -12,7 +12,7 @@ pub fn collect_ty_var_nodes(expr_idx: ExprIdx, arenas: &AstArenas, out: &mut Vec
     match &arenas.exprs[expr_idx] {
         Expr::Name { name_ref, .. } => {
             let nr = &arenas.name_refs[*name_ref];
-            if !out.iter().any(|p| p.name == nr.name) {
+            if nr.is_ty_var && !out.iter().any(|p| p.name == nr.name) {
                 out.push(TyParam {
                     name: nr.name,
                     span: nr.span,

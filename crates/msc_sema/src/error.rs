@@ -56,6 +56,16 @@ pub enum SemaError {
     ResumeOutsideHandler,
     #[error("no instance of `{delegate}` found to delegate `{class}` via")]
     NoDelegateInstance { class: Box<str>, delegate: Box<str> },
+    #[error("unsupported feature: {feature}")]
+    Unsupported { feature: Box<str> },
+    #[error("cannot assign to immutable binding")]
+    AssignToImmutable,
+    #[error("binding `{name}` has an implicit `Any` type")]
+    ImplicitAny { name: Box<str> },
+    #[error("not all code paths return a value")]
+    ImplicitReturn,
+    #[error("unreachable code")]
+    UnreachableCode,
 }
 
 impl IntoDiagnostic for SemaError {
@@ -71,7 +81,10 @@ impl IntoDiagnostic for SemaError {
             | Self::MissingHandlerOp { .. }
             | Self::UnsafeCast { .. }
             | Self::Deprecated { .. }
-            | Self::UnknownAttribute { .. } => Severity::Warning,
+            | Self::UnknownAttribute { .. }
+            | Self::Unsupported { .. }
+            | Self::ImplicitReturn
+            | Self::UnreachableCode => Severity::Warning,
             _ => Severity::Error,
         }
     }

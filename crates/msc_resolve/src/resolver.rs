@@ -26,6 +26,10 @@ pub struct ResolverConfig {
     pub manifest_imports: HashMap<String, String>,
     /// The `dependencies` map from `musi.json`.
     pub manifest_deps: HashMap<String, String>,
+    /// The `compilerOptions.baseUrl` from `musi.json`.
+    pub base_url: Option<PathBuf>,
+    /// The `compilerOptions.paths` from `musi.json`.
+    pub paths: Option<HashMap<String, Vec<String>>>,
 }
 
 impl ResolverConfig {
@@ -35,9 +39,19 @@ impl ResolverConfig {
         let std_root =
             discover_std_root(project_root).unwrap_or_else(|_| project_root.join("stdlib"));
         let cache_dir = cache_directory().join("musi/packages");
-        let (manifest_imports, manifest_deps) = manifest.map_or_else(
-            || (HashMap::new(), HashMap::new()),
-            |m| (m.imports.clone(), m.dependencies.clone()),
+        let (manifest_imports, manifest_deps, base_url, paths) = manifest.map_or_else(
+            || (HashMap::new(), HashMap::new(), None, None),
+            |m| {
+                let base = m.compiler_options.base_url.as_ref().map(PathBuf::from);
+                let paths = m.compiler_options.paths.as_ref().map(|p| {
+                    p.iter()
+                        .map(|(k, v)| {
+                            (k.clone(), v.iter().filter_map(|s| s.clone()).collect())
+                        })
+                        .collect()
+                });
+                (m.imports.clone(), m.dependencies.clone(), base, paths)
+            },
         );
         Self {
             std_root,
@@ -45,6 +59,8 @@ impl ResolverConfig {
             project_root: project_root.to_path_buf(),
             manifest_imports,
             manifest_deps,
+            base_url,
+            paths,
         }
     }
 }
@@ -181,11 +197,53 @@ pub fn resolve_relative(module_path: &str, importing_file: &Path) -> Result<Path
     })
 }
 
+fn match_path_pattern(pattern: &str, specifier: &str) -> Option<String> {
+    if let Some(prefix) = pattern.strip_suffix('*') {
+        specifier.strip_prefix(prefix).map(|rest| rest.to_string())
+    } else if pattern == specifier {
+        Some(String::new())
+    } else {
+        None
+    }
+}
+
 fn resolve_bare(
     name: &str,
     importing_file: &Path,
     config: &ResolverConfig,
 ) -> Result<PathBuf, ResolveError> {
+    // Try paths remapping first
+    if let Some(ref paths_map) = config.paths {
+        for (pattern, replacements) in paths_map {
+            if let Some(matched) = match_path_pattern(pattern, name) {
+                for replacement in replacements {
+                    let remapped = replacement.replace('*', &matched);
+                    let candidate = config.project_root.join(&remapped);
+                    if candidate.exists() {
+                        return Ok(candidate);
+                    }
+                    let with_ext = config.project_root.join(format!("{remapped}.ms"));
+                    if with_ext.exists() {
+                        return Ok(with_ext);
+                    }
+                }
+            }
+        }
+    }
+
+    // Try baseUrl
+    if let Some(ref base) = config.base_url {
+        let base_path = config.project_root.join(base).join(name);
+        let with_ext = base_path.with_extension("ms");
+        if with_ext.exists() {
+            return Ok(with_ext);
+        }
+        let index = base_path.join("index.ms");
+        if index.exists() {
+            return Ok(index);
+        }
+    }
+
     if let Some(target) = config.manifest_imports.get(name) {
         let inner = parse_specifier(target)?;
         return resolve_import(&inner, importing_file, config);

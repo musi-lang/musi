@@ -4,13 +4,13 @@
 use msc_ast::expr::{Expr, FieldKey};
 use msc_ast::lit::FStrPart;
 
-use crate::const_pool::ConstValue;
-use crate::error::{EmitError, EmitResult};
-use msc_ast::ExprIdx;
 use super::Emitter;
 use super::FnCtx;
 use super::expr::{emit_expr, emit_require};
 use super::type_query::resolve_field_name;
+use crate::const_pool::ConstValue;
+use crate::error::{EmitError, EmitResult};
+use msc_ast::ExprIdx;
 
 /// Emit `left and right` with short-circuit evaluation. Leaves bool on stack.
 ///

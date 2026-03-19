@@ -440,3 +440,12 @@ pub fn fmt_type(
     };
     Box::from(d.to_string())
 }
+
+/// Unwraps one layer of `Ref`, returning the inner type. Returns the input unchanged if not a `Ref`.
+#[must_use]
+pub fn strip_ref(ty: TypeIdx, types: &Arena<Type>) -> TypeIdx {
+    match &types[ty] {
+        Type::Ref { inner } => *inner,
+        _ => ty,
+    }
+}

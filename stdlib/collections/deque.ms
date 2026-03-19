@@ -21,7 +21,7 @@ export let push_front ['a] := (d, val) => rt.arr_push(d.front, val);
 export let push_back ['a] := (d, val) => rt.arr_push(d.back, val);
 
 /// Remove and return the front value, or `.None` if empty.
-export let pop_front ['a] := (d) => (
+export let pop_front ['a] := (mut d) => (
   let flen := rt.arr_len(d.front);
   let blen := rt.arr_len(d.back);
   (
@@ -37,7 +37,7 @@ export let pop_front ['a] := (d) => (
 );
 
 /// Remove and return the back value, or `.None` if empty.
-export let pop_back ['a] := (d) => (
+export let pop_back ['a] := (mut d) => (
   let blen := rt.arr_len(d.back);
   let flen := rt.arr_len(d.front);
   (

@@ -31,7 +31,7 @@ let binary_search ['a] := (arr, val) => (
 
 /// Insert `val` in sorted position.
 export let insert ['a] := (sa, val) => (
-  let arr := sa.data;
+  let mut arr := sa.data;
   let pos := binary_search(arr, val);
   let len := rt.arr_len(arr);
   rt.arr_push(arr, val);
@@ -53,7 +53,7 @@ export let contains ['a] := (sa, val) => (
 
 /// Remove the first occurrence of `val` and return `.True`, or `.False` if not found.
 export let remove ['a] := (sa, val) => (
-  let arr := sa.data;
+  let mut arr := sa.data;
   let len := rt.arr_len(arr);
   let pos := binary_search(arr, val);
   (

@@ -74,11 +74,11 @@ async function _showBinaryNotFoundUI(opts: {
 }
 
 /**
- * Locate `music_lsp` server binary.
+ * Locate `msc_lsp` server binary.
  *
  * Search order:
  * 1. User-configured `musi.lspPath` setting
- * 2. Workspace `target/debug/music_lsp` or `target/release/music_lsp`
+ * 2. Workspace `target/debug/msc_lsp` or `target/release/msc_lsp`
  * 3. Global paths: `~/.cargo/bin`, `/usr/local/bin`, `/usr/bin`
  *
  * @returns Absolute path to server binary, or `undefined` if not found.
@@ -99,8 +99,8 @@ export function findServerPath(): string | undefined {
 export function showServerNotFoundUI() {
 	return _showBinaryNotFoundUI({
 		message:
-			"Musi LSP server binary not found. Build with 'cargo build -p music_lsp'.",
-		cargoPackage: "music_lsp",
+			"Musi LSP server binary not found. Build with 'cargo build -p msc_lsp'.",
+		cargoPackage: "msc_lsp",
 		secondActionLabel: "Show Build Instructions",
 		secondActionHandler: () =>
 			vscode.env.openExternal(

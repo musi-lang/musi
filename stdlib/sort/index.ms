@@ -56,7 +56,7 @@ export let sort_by ['a] := (arr, cmp) => merge_sort(arr, cmp);
 /// Return a new array sorted by `cmp` using insertion sort (efficient for small or nearly-sorted arrays).
 export let insertion_sort ['a] := (arr, cmp) => (
   let len := rt.arr_len(arr);
-  let sorted := rt.arr_slice(arr, 0, len);
+  let mut sorted := rt.arr_slice(arr, 0, len);
   let outer := (i) => (
     (
       let key := sorted.[i];

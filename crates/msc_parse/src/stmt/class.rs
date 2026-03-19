@@ -46,6 +46,16 @@ impl Parser<'_> {
                 delegate,
                 span: self.finish_span(via_start),
             }
+        } else if self.eat(TokenKind::KwDerives) {
+            let derives_start = self.start_span();
+            let mut classes = vec![self.expect_symbol()];
+            while self.eat(TokenKind::Comma) {
+                classes.push(self.expect_symbol());
+            }
+            InstanceBody::Derives {
+                classes,
+                span: self.finish_span(derives_start),
+            }
         } else {
             let _lb = self.expect(TokenKind::LBrace);
             InstanceBody::Manual { members: vec![] }

@@ -15,7 +15,7 @@ export let new ['a] := () => .{ front := [], back := [] };
 export let enqueue ['a] := (q, val) => rt.arr_push(q.back, val);
 
 /// Remove and return the front value, or `.None` if empty.
-export let dequeue ['a] := (q) => (
+export let dequeue ['a] := (mut q) => (
   let flen := rt.arr_len(q.front);
   let blen := rt.arr_len(q.back);
   (

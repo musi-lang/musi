@@ -3,7 +3,7 @@ import * as os from "node:os";
 export const TERMINAL_NAME = "Musi";
 
 export function getServerBinaryName(): string {
-	return isWindows() ? "music_lsp.exe" : "music_lsp";
+	return isWindows() ? "msc_lsp.exe" : "msc_lsp";
 }
 
 export function getCliBinaryName(): string {

@@ -2,13 +2,13 @@
 
 use std::collections::HashSet;
 
+use msc_ast::ExprIdx;
 use msc_ast::decl::{ClassMember, EffectOp, ForeignDecl};
 use msc_ast::expr::{
     Arg, ArrayElem, Expr, InstanceBody, MatchArm, Param, PwArm, PwGuard, RecField,
 };
 use msc_ast::ty_param::{Constraint, TyParam};
 use msc_ast::util::collect_ty_var_nodes;
-use msc_ast::ExprIdx;
 use msc_shared::{Span, Symbol};
 
 use crate::def::{DefId, DefKind};
@@ -293,12 +293,7 @@ impl Resolver<'_> {
         seen: &mut HashSet<Symbol>,
     ) {
         match expr {
-            Expr::Let { fields, .. } => {
-                if let Some(v) = fields.value {
-                    self.collect_free_names_inner(v, free, seen);
-                }
-            }
-            Expr::Binding { fields, .. } => {
+            Expr::Let { fields, .. } | Expr::Binding { fields, .. } => {
                 if let Some(v) = fields.value {
                     self.collect_free_names_inner(v, free, seen);
                 }

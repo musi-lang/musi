@@ -292,16 +292,6 @@
                     "type": "boolean",
                     "default": false
                 },
-                "allowUnusedLabels": {
-                    "description": "Disable error reporting for unused labels.",
-                    "type": "boolean",
-                    "default": false
-                },
-                "exactOptionalPropertyTypes": {
-                    "description": "Interpret optional record field types as written, rather than implicitly adding Unit.",
-                    "type": "boolean",
-                    "default": false
-                },
                 "noErrorTruncation": {
                     "description": "Do not truncate error messages.",
                     "type": "boolean",

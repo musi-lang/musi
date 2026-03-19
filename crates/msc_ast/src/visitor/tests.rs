@@ -7,7 +7,7 @@ use msc_shared::{Span, Symbol};
 use crate::expr::{BinOp, BindKind, Expr, LetFields};
 use crate::pat::Pat;
 use crate::visitor::AstVisitor;
-use crate::{visitor, AstArenas, ExprIdx, NameRef, PatIdx};
+use crate::{AstArenas, ExprIdx, NameRef, PatIdx, visitor};
 
 /// A visitor that counts how many expr nodes it visits.
 struct CountingVisitor {
@@ -44,6 +44,7 @@ fn test_walk_expr_visits_binop_children_in_order() {
     let left_ref = arenas.name_refs.alloc(NameRef {
         name: Symbol(0),
         span: Span::new(0, 1),
+        is_ty_var: false,
     });
     let left = arenas.exprs.alloc(Expr::Name {
         name_ref: left_ref,
@@ -52,6 +53,7 @@ fn test_walk_expr_visits_binop_children_in_order() {
     let right_ref = arenas.name_refs.alloc(NameRef {
         name: Symbol(1),
         span: Span::new(4, 1),
+        is_ty_var: false,
     });
     let right = arenas.exprs.alloc(Expr::Name {
         name_ref: right_ref,
@@ -94,6 +96,7 @@ fn test_visitor_short_circuits_on_break() {
     let left_ref = arenas.name_refs.alloc(NameRef {
         name: Symbol(0),
         span: Span::new(0, 1),
+        is_ty_var: false,
     });
     let left = arenas.exprs.alloc(Expr::Name {
         name_ref: left_ref,
@@ -102,6 +105,7 @@ fn test_visitor_short_circuits_on_break() {
     let right_ref = arenas.name_refs.alloc(NameRef {
         name: Symbol(1),
         span: Span::new(4, 1),
+        is_ty_var: false,
     });
     let right = arenas.exprs.alloc(Expr::Name {
         name_ref: right_ref,
@@ -130,6 +134,7 @@ fn test_walk_expr_crosses_into_ty_annotation() {
     let ty_name_ref = arenas.name_refs.alloc(NameRef {
         name: Symbol(0),
         span: Span::new(6, 3),
+        is_ty_var: false,
     });
     // Type annotation is now an Expr::Name in the expr arena
     let ty_expr = arenas.exprs.alloc(Expr::Name {
@@ -139,6 +144,7 @@ fn test_walk_expr_crosses_into_ty_annotation() {
     let val_name_ref = arenas.name_refs.alloc(NameRef {
         name: Symbol(1),
         span: Span::new(12, 1),
+        is_ty_var: false,
     });
     let value = arenas.exprs.alloc(Expr::Name {
         name_ref: val_name_ref,
@@ -173,6 +179,7 @@ fn test_walk_expr_visits_record_def_fields() {
     let ty_name_ref = arenas.name_refs.alloc(NameRef {
         name: Symbol(0),
         span: Span::new(10, 3),
+        is_ty_var: false,
     });
     let ty_expr = arenas.exprs.alloc(Expr::Name {
         name_ref: ty_name_ref,

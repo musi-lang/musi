@@ -293,8 +293,8 @@
 			"properties": {
 				"musi.lspPath": {
 					"type": "string",
-					"default": "music_lsp",
-					"description": "Path to the music_lsp executable."
+					"default": "msc_lsp",
+					"description": "Path to the msc_lsp executable."
 				},
 				"musi.cliPath": {
 					"type": "string",

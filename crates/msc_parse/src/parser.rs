@@ -196,7 +196,11 @@ impl<'a> Parser<'a> {
     }
 
     pub(crate) fn alloc_name_ref(&mut self, name: Symbol, span: Span) -> NameRefIdx {
-        self.arenas.name_refs.alloc(NameRef { name, span })
+        self.arenas.name_refs.alloc(NameRef {
+            name,
+            span,
+            is_ty_var: false,
+        })
     }
 
     pub(crate) fn error_expr(&mut self, err: &ParseError) -> Expr {

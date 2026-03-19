@@ -278,6 +278,7 @@ pub struct HandlerOp {
 pub enum InstanceBody {
     Manual { members: Vec<ClassMember> },
     Via { delegate: ExprIdx, span: Span },
+    Derives { classes: Vec<Symbol>, span: Span },
 }
 
 /// Shared fields for let-bindings (`Let`, `Binding`).

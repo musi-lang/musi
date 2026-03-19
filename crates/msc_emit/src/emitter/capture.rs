@@ -2,8 +2,8 @@
 
 use std::collections::{HashMap, HashSet};
 
-use msc_ast::expr::{Arg, ArrayElem, Expr, HandlerOp, MatchArm, PwArm, PwGuard, RecField};
 use msc_ast::ExprIdx;
+use msc_ast::expr::{Arg, ArrayElem, Expr, HandlerOp, MatchArm, PwArm, PwGuard, RecField};
 use msc_sema::DefId;
 
 use super::Emitter;
@@ -109,10 +109,6 @@ fn cfv_check_name(cx: &mut CfvCtx<'_, '_>, expr_idx: ExprIdx) {
     }
 }
 
-#[expect(
-    clippy::too_many_lines,
-    reason = "exhaustive match on all expression kinds"
-)]
 fn cfv_walk(cx: &mut CfvCtx<'_, '_>, expr_idx: ExprIdx) {
     match &cx.em.ast.exprs[expr_idx] {
         Expr::Name { .. } => cfv_check_name(cx, expr_idx),
@@ -165,12 +161,7 @@ fn cfv_walk(cx: &mut CfvCtx<'_, '_>, expr_idx: ExprIdx) {
                 cfv_walk(cx, t);
             }
         }
-        Expr::Let { fields, .. } => {
-            if let Some(v) = fields.value {
-                cfv_walk(cx, v);
-            }
-        }
-        Expr::Binding { fields, .. } => {
+        Expr::Let { fields, .. } | Expr::Binding { fields, .. } => {
             if let Some(v) = fields.value {
                 cfv_walk(cx, v);
             }

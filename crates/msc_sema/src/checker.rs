@@ -23,6 +23,7 @@ use msc_shared::{Arena, DiagnosticBag, FileId, Interner, Span, Symbol};
 
 use crate::def::{DefId, DefKind, DefTable};
 use crate::error::SemaError;
+use crate::options::SemaOptions;
 use crate::scope::{ScopeId, ScopeTree};
 use crate::types::{
     CastInfo, DictLookup, EffectRow, InstanceInfo, Obligation, Type, TypeIdx, fmt_type,
@@ -45,6 +46,8 @@ pub struct CheckContext<'a, S: BuildHasher = RandomState> {
     pub(crate) law_inferred_vars: &'a HashMap<Span, Vec<(Symbol, DefId)>>,
     /// Maps (class `DefId`, operator `Symbol`) -> member `DefId` for operator dispatch.
     pub(crate) class_op_members: &'a HashMap<(DefId, Symbol), DefId>,
+    /// Compiler options controlling optional diagnostics.
+    pub(crate) options: &'a SemaOptions,
 }
 
 /// Mutable type-checking state built up during checking.
@@ -136,7 +139,13 @@ impl<'a, S: BuildHasher> Checker<'a, S> {
     }
 
     /// Unifies two types, reporting a diagnostic on failure.
-    pub(crate) fn unify_or_report(&mut self, expected: TypeIdx, found: TypeIdx, span: Span) {
+    pub(crate) fn unify_or_report(
+        &mut self,
+        expected: TypeIdx,
+        found: TypeIdx,
+        span: Span,
+        expr_idx: Option<ExprIdx>,
+    ) {
         if !self
             .store
             .unify
@@ -150,6 +159,9 @@ impl<'a, S: BuildHasher> Checker<'a, S> {
                 &self.store.unify,
                 self.ctx.well_known,
             ) {
+                if let Some(idx) = expr_idx {
+                    self.insert_cast(idx, found, expected, span);
+                }
                 return;
             }
             let defs_vec: Vec<_> = self.defs.iter().cloned().collect();
@@ -185,6 +197,7 @@ impl<'a, S: BuildHasher> Checker<'a, S> {
         expected: TypeIdx,
         found: TypeIdx,
         span: Span,
+        expr_idx: Option<ExprIdx>,
     ) {
         use crate::consistency::is_consistent;
         use crate::subtype::is_subtype;
@@ -211,8 +224,9 @@ impl<'a, S: BuildHasher> Checker<'a, S> {
             &self.store.unify,
             self.ctx.well_known,
         ) {
-            // Types are consistent but not subtypes - cast will be inserted at call sites
-            // via `insert_cast` when the expression index is available.
+            if let Some(idx) = expr_idx {
+                self.insert_cast(idx, found, expected, span);
+            }
             return;
         }
         let defs_vec: Vec<_> = self.defs.iter().cloned().collect();
@@ -244,7 +258,6 @@ impl<'a, S: BuildHasher> Checker<'a, S> {
     ///
     /// No-ops if the types are identical or not consistent (the latter should
     /// have been caught by `check_subtype_or_report`).
-    #[allow(dead_code)] // infrastructure for future cast insertion at expression sites
     pub fn insert_cast(&mut self, expr_idx: ExprIdx, from: TypeIdx, to: TypeIdx, span: Span) {
         use crate::consistency::is_consistent;
         use crate::types::{BlameLabel, Polarity};

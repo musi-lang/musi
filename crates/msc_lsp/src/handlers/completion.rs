@@ -3,6 +3,7 @@
 use std::collections::HashSet;
 
 use lsp_types::{CompletionItem, CompletionItemKind};
+use msc_sema::types::strip_ref;
 use msc_sema::{DefKind, Type};
 
 use crate::analysis::{AnalyzedDoc, expr_span};
@@ -120,7 +121,10 @@ fn global_completions(doc: &AnalyzedDoc) -> Vec<CompletionItem> {
                 DefKind::Import => unreachable!(),
             };
 
-            let detail = def.ty_info.ty.map(|ty| fmt_type_lsp(ty, doc, sema));
+            let detail = def
+                .ty_info
+                .ty
+                .map(|ty| fmt_type_lsp(strip_ref(ty, &sema.types), doc, sema));
 
             items.push(CompletionItem {
                 label: name.to_owned(),

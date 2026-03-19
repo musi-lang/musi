@@ -24,6 +24,8 @@ use crate::checker::exhaustive::check_match_exhaustiveness;
 use crate::checker::instantiate::{freshen_poly, substitute_ty};
 use crate::checker::pat::check_pat;
 use crate::checker::ty::lower_type_expr;
+use msc_ast::expr::ParamMode;
+
 use crate::def::{DefFlags, DefId, DefKind};
 use crate::error::SemaError;
 use crate::resolve;
@@ -46,6 +48,7 @@ pub fn check<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx, expecte
         expected,
         found,
         resolve::expr_span(&ck.ctx.ast.exprs[expr_idx]),
+        Some(expr_idx),
     );
 }
 
@@ -223,7 +226,7 @@ fn synth_index<S: BuildHasher>(
     let idx_ty = synth(ck, index);
     // Index must be an Int.
     let int_ty = ck.named_ty(ck.ctx.well_known.ints.int);
-    ck.unify_or_report(int_ty, idx_ty, span);
+    ck.unify_or_report(int_ty, idx_ty, span, None);
     let obj_ty = ck.resolve_ty(obj_ty);
     match &ck.store.types[obj_ty] {
         Type::Array { elem, .. } => *elem,
@@ -231,7 +234,7 @@ fn synth_index<S: BuildHasher>(
         Type::Var(_) => {
             let elem = ck.fresh_var(span);
             let arr_ty = ck.alloc_ty(Type::Array { elem, len: None });
-            ck.unify_or_report(obj_ty, arr_ty, span);
+            ck.unify_or_report(obj_ty, arr_ty, span, None);
             elem
         }
         _ => {
@@ -277,7 +280,7 @@ fn synth_update<S: BuildHasher>(
                 {
                     if let Some(rec_field) = rec_fields.iter().find(|f| f.name == name) {
                         let expected_ty = rec_field.ty;
-                        ck.unify_or_report(expected_ty, value_ty, span);
+                        ck.unify_or_report(expected_ty, value_ty, span, None);
                     } else {
                         let defs_vec: Vec<_> = ck.defs.iter().cloned().collect();
                         let field_str = ck.ctx.interner.resolve(name);
@@ -337,8 +340,27 @@ fn synth_block<S: BuildHasher>(
     stmts: &[ExprIdx],
     tail: Option<ExprIdx>,
 ) -> TypeIdx {
-    for &stmt in stmts {
-        let _ty = synth(ck, stmt);
+    for (i, &stmt) in stmts.iter().enumerate() {
+        let ty = synth(ck, stmt);
+        if !ck.ctx.options.allow_unreachable_code {
+            let resolved = ck.resolve_ty(ty);
+            if let Type::Named { def, .. } = &ck.store.types[resolved] {
+                if *def == ck.ctx.well_known.never
+                    && (i + 1 < stmts.len() || tail.is_some())
+                {
+                    let next_span = if i + 1 < stmts.len() {
+                        resolve::expr_span(&ck.ctx.ast.exprs[stmts[i + 1]])
+                    } else {
+                        resolve::expr_span(&ck.ctx.ast.exprs[tail.unwrap()])
+                    };
+                    let _d = ck.diags.report(
+                        &SemaError::UnreachableCode,
+                        next_span,
+                        ck.ctx.file_id,
+                    );
+                }
+            }
+        }
     }
     if let Some(tail) = tail {
         synth(ck, tail)
@@ -780,10 +802,10 @@ fn synth_piecewise<S: BuildHasher>(ck: &mut Checker<'_, S>, arms: &[PwArm], span
         if let PwGuard::When { expr, .. } = arm.guard {
             let guard_ty = synth(ck, expr);
             let bool_ty = ck.named_ty(ck.ctx.well_known.bool);
-            ck.unify_or_report(bool_ty, guard_ty, span);
+            ck.unify_or_report(bool_ty, guard_ty, span, None);
         }
         let arm_ty = synth(ck, arm.result);
-        ck.unify_or_report(result_ty, arm_ty, span);
+        ck.unify_or_report(result_ty, arm_ty, span, None);
     }
     result_ty
 }
@@ -803,7 +825,7 @@ fn synth_match<S: BuildHasher>(
             check(ck, guard, bool_ty);
         }
         let arm_ty = synth(ck, arm.result);
-        ck.unify_or_report(result_ty, arm_ty, span);
+        ck.unify_or_report(result_ty, arm_ty, span, None);
     }
     check_match_exhaustiveness(ck, scrut_ty, arms, span);
     result_ty
@@ -832,10 +854,16 @@ fn synth_name<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx, span: 
         let def = ck.defs.get(def_id);
         let ty_params = def.ty_info.ty_params.clone();
         let raw_ty = def.ty_info.ty.unwrap_or_else(|| ck.fresh_var(span));
-        if ty_params.is_empty() {
+        let result_ty = if ty_params.is_empty() {
             raw_ty
         } else {
             freshen_poly(ck, raw_ty, &ty_params, span)
+        };
+        // Auto-deref Ref for read access.
+        let resolved = ck.resolve_ty(result_ty);
+        match &ck.store.types[resolved] {
+            Type::Ref { inner } => *inner,
+            _ => result_ty,
         }
     } else {
         ck.error_ty()
@@ -934,7 +962,7 @@ fn synth_call<S: BuildHasher>(
                 ret,
                 effects: EffectRow::PURE,
             });
-            ck.unify_or_report(callee_ty, fn_ty, span);
+            ck.unify_or_report(callee_ty, fn_ty, span, None);
             ret
         }
         _ => {
@@ -976,11 +1004,11 @@ fn synth_binop<S: BuildHasher>(
 
     match op {
         BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge => {
-            ck.unify_or_report(left_ty, right_ty, span);
+            ck.unify_or_report(left_ty, right_ty, span, Some(expr_idx));
             ck.named_ty(ck.ctx.well_known.bool)
         }
         BinOp::And | BinOp::Or => {
-            ck.unify_or_report(left_ty, right_ty, span);
+            ck.unify_or_report(left_ty, right_ty, span, Some(expr_idx));
             let resolved = ck.store.unify.resolve(left_ty, &ck.store.types);
             match &ck.store.types[resolved] {
                 Type::Named { def, .. } => {
@@ -1001,7 +1029,7 @@ fn synth_binop<S: BuildHasher>(
                         left_ty
                     } else {
                         let bool_ty = ck.named_ty(wk.bool);
-                        ck.unify_or_report(bool_ty, left_ty, span);
+                        ck.unify_or_report(bool_ty, left_ty, span, Some(expr_idx));
                         bool_ty
                     }
                 }
@@ -1019,12 +1047,12 @@ fn synth_binop<S: BuildHasher>(
         | BinOp::RangeInc
         | BinOp::RangeExc
         | BinOp::NilCoal => {
-            ck.unify_or_report(left_ty, right_ty, span);
+            ck.unify_or_report(left_ty, right_ty, span, Some(expr_idx));
             left_ty
         }
         BinOp::ForceCoal => {
             let inner = unwrap_result_ty(ck, left_ty, span);
-            ck.unify_or_report(inner, right_ty, span);
+            ck.unify_or_report(inner, right_ty, span, Some(expr_idx));
             inner
         }
         BinOp::Pipe => {
@@ -1034,11 +1062,16 @@ fn synth_binop<S: BuildHasher>(
                 ret,
                 effects: EffectRow::PURE,
             });
-            ck.unify_or_report(fn_ty, right_ty, span);
+            ck.unify_or_report(fn_ty, right_ty, span, Some(expr_idx));
             ret
         }
         BinOp::Assign => {
-            ck.unify_or_report(left_ty, right_ty, span);
+            if !is_mutable_target(ck, left) {
+                let _d = ck
+                    .diags
+                    .report(&SemaError::AssignToImmutable, span, ck.ctx.file_id);
+            }
+            ck.unify_or_report(left_ty, right_ty, span, Some(expr_idx));
             ck.named_ty(ck.ctx.well_known.unit)
         }
         BinOp::Cons => {
@@ -1046,9 +1079,25 @@ fn synth_binop<S: BuildHasher>(
                 elem: left_ty,
                 len: None,
             });
-            ck.unify_or_report(arr_ty, right_ty, span);
+            ck.unify_or_report(arr_ty, right_ty, span, Some(expr_idx));
             right_ty
         }
+    }
+}
+
+fn is_mutable_target<S: BuildHasher>(ck: &Checker<'_, S>, expr_idx: ExprIdx) -> bool {
+    match &ck.ctx.ast.exprs[expr_idx] {
+        Expr::Name { .. } => {
+            if let Some(&def_id) = ck.ctx.expr_defs.get(&expr_idx) {
+                let def = ck.defs.get(def_id);
+                def.kind == DefKind::Var
+                    || (def.kind == DefKind::Param && def.param_mode == Some(ParamMode::Mut))
+            } else {
+                false
+            }
+        }
+        Expr::Index { object, .. } | Expr::Field { object, .. } => is_mutable_target(ck, *object),
+        _ => true,
     }
 }
 
@@ -1062,7 +1111,7 @@ fn synth_unaryop<S: BuildHasher>(
     match op {
         UnaryOp::Not => {
             let bool_ty = ck.named_ty(ck.ctx.well_known.bool);
-            ck.unify_or_report(bool_ty, operand_ty, span);
+            ck.unify_or_report(bool_ty, operand_ty, span, None);
             bool_ty
         }
         UnaryOp::Neg => operand_ty,
@@ -1244,7 +1293,7 @@ fn unwrap_option_ty<S: BuildHasher>(
             def,
             args: vec![inner],
         });
-        ck.unify_or_report(option_ty, operand_ty, span);
+        ck.unify_or_report(option_ty, operand_ty, span, None);
     }
     inner
 }
@@ -1268,7 +1317,7 @@ fn unwrap_result_ty<S: BuildHasher>(
             def,
             args: vec![ok_inner, err_inner],
         });
-        ck.unify_or_report(result_ty, operand_ty, span);
+        ck.unify_or_report(result_ty, operand_ty, span, None);
     }
     ok_inner
 }
@@ -1334,7 +1383,7 @@ fn check_variant_fn_args<S: BuildHasher>(
     {
         if arg_tys.len() == declared_params.len() {
             for (&arg_ty, &param_ty) in arg_tys.iter().zip(declared_params.iter()) {
-                ck.unify_or_report(param_ty, arg_ty, span);
+                ck.unify_or_report(param_ty, arg_ty, span, None);
             }
         } else {
             let _d = ck.diags.report(
@@ -1556,7 +1605,7 @@ fn synth_handler_params<S: BuildHasher>(
             ck.fresh_var(param.span)
         };
         if let Some(declared) = declared_params.as_ref().and_then(|v| v.get(i).copied()) {
-            ck.unify_or_report(declared, param_ty, param.span);
+            ck.unify_or_report(declared, param_ty, param.span, None);
         }
         let id = ck
             .defs

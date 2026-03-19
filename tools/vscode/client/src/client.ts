@@ -72,7 +72,7 @@ export function isClientRunning(): boolean {
 
 /**
  * Create and start new language client connected to given server.
- * @param serverPath Absolute path to music_lsp binary.
+ * @param serverPath Absolute path to msc_lsp binary.
  * @returns started LanguageClient instance.
  * @throws Error if server fails to start within timeout period.
  */
@@ -111,7 +111,7 @@ export async function stopClient() {
 
 /**
  * Restart language client with new server instance.
- * @param serverPath Absolute path to `music_lsp` binary.
+ * @param serverPath Absolute path to `msc_lsp` binary.
  */
 export async function restartClient(serverPath: string) {
 	await createAndStartClient(serverPath);

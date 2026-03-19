@@ -141,6 +141,9 @@ pub fn run_frontend_multi(
     };
 
     let sema_options = sema_options_from(&manifest.compiler_options);
+    if sema_options.no_error_truncation {
+        diags.set_max_errors(usize::MAX);
+    }
     let result = run_sema_in_order(
         &graph,
         &order,
@@ -370,9 +373,7 @@ const fn sema_options_from(opts: &CompilerOptions) -> SemaOptions {
         no_unused_parameters: opts.no_unused_parameters || opts.strict,
         no_implicit_returns: opts.no_implicit_returns || opts.strict,
         allow_unreachable_code: opts.allow_unreachable_code,
-        allow_unused_labels: opts.allow_unused_labels,
         no_implicit_any: opts.no_implicit_any || opts.strict,
-        exact_optional_property_types: opts.exact_optional_property_types || opts.strict,
         no_error_truncation: opts.no_error_truncation,
     }
 }

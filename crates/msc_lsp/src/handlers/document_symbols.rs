@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 
 use lsp_types::{DocumentSymbol, DocumentSymbolResponse, SymbolKind};
+use msc_sema::types::strip_ref;
 use msc_sema::{DefId, DefKind, Type};
 use msc_shared::Span;
 
@@ -50,7 +51,10 @@ pub fn document_symbols(doc: &AnalyzedDoc) -> DocumentSymbolResponse {
             };
 
             let name = doc.interner.try_resolve(def.name)?.to_owned();
-            let detail = def.ty_info.ty.map(|ty| fmt_type_lsp(ty, doc, sema));
+            let detail = def
+                .ty_info
+                .ty
+                .map(|ty| fmt_type_lsp(strip_ref(ty, &sema.types), doc, sema));
 
             let name_span = def_name_span(def, &doc.lexed.tokens);
             let range = span_to_range(doc.file_id, def.span, &doc.source_db);

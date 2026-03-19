@@ -82,6 +82,7 @@ fn test_lit_fstr_with_interpolation() {
     let name_ref = arenas.name_refs.alloc(NameRef {
         name: Symbol(1),
         span: Span::new(2, 3),
+        is_ty_var: false,
     });
     let expr_idx = arenas.exprs.alloc(Expr::Name {
         name_ref,

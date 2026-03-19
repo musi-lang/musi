@@ -2,7 +2,8 @@ use std::collections::{HashMap, HashSet};
 use std::hash::BuildHasher;
 use std::mem;
 
-use msc_ast::{ExprIdx, ParsedModule};
+use msc_ast::expr::{Expr, PwGuard};
+use msc_ast::{AstArenas, ExprIdx, ParsedModule};
 use msc_shared::{Arena, DiagnosticBag, FileId, Interner, Span, Symbol};
 
 use crate::checker::{CheckContext, Checker};
@@ -209,6 +210,7 @@ pub fn analyze_shared<S: BuildHasher>(
         import_types,
         law_inferred_vars: &resolved.law_inferred_vars,
         class_op_members: &resolved.class_op_members,
+        options,
     };
 
     let mut checker = Checker::new_with_state(
@@ -243,6 +245,17 @@ pub fn analyze_shared<S: BuildHasher>(
         .extend(result.instances[inherited_count..].iter().cloned());
 
     analyze_emit_unused_warnings(&state.defs, interner, file_id, diags, options);
+    analyze_implicit_any(
+        &state.defs,
+        &state.types,
+        &state.unify,
+        &state.well_known,
+        interner,
+        file_id,
+        diags,
+        options,
+    );
+    analyze_implicit_returns(module, diags, file_id, options);
 
     ModuleSemaOutput {
         module_scope,
@@ -299,6 +312,7 @@ pub fn analyze_with_imports<S: BuildHasher>(
         import_types,
         law_inferred_vars: &resolved.law_inferred_vars,
         class_op_members: &resolved.class_op_members,
+        options,
     };
     let mut checker = Checker::new_with_state(
         ctx,
@@ -318,6 +332,17 @@ pub fn analyze_with_imports<S: BuildHasher>(
     let result = checker.finish();
 
     analyze_emit_unused_warnings(&defs, interner, file_id, diags, options);
+    analyze_implicit_any(
+        &defs,
+        &result.types,
+        &result.unify,
+        &well_known,
+        interner,
+        file_id,
+        diags,
+        options,
+    );
+    analyze_implicit_returns(module, diags, file_id, options);
 
     let mut lang_items = LangItemRegistry::new();
     for def in defs.iter() {
@@ -383,6 +408,150 @@ pub(crate) fn analyze_setup<'a>(
     );
 
     (defs, well_known, scopes, module_scope, resolved, types)
+}
+
+pub(crate) fn analyze_implicit_any(
+    defs: &DefTable,
+    types: &Arena<Type>,
+    unify: &UnifyTable,
+    well_known: &WellKnown,
+    interner: &Interner,
+    file_id: FileId,
+    diags: &mut DiagnosticBag,
+    options: &SemaOptions,
+) {
+    if !options.no_implicit_any {
+        return;
+    }
+    for def in defs.iter() {
+        if matches!(
+            def.kind,
+            DefKind::Type
+                | DefKind::Instance
+                | DefKind::Variant
+                | DefKind::ForeignFn
+                | DefKind::Class
+                | DefKind::Effect
+                | DefKind::EffectOp
+                | DefKind::OpaqueType
+                | DefKind::Law
+                | DefKind::LawVar
+                | DefKind::Import
+        ) {
+            continue;
+        }
+        if def.span == Span::DUMMY || def.name == Symbol(u32::MAX) {
+            continue;
+        }
+        if !def.exported && def.file_id != file_id {
+            continue;
+        }
+        if let Some(ty) = def.ty_info.ty {
+            let resolved = unify.resolve(ty, types);
+            let is_implicit_any = match &types[resolved] {
+                Type::Var(_) => true,
+                Type::Named { def: d, args } if *d == well_known.any && args.is_empty() => true,
+                _ => false,
+            };
+            if is_implicit_any {
+                let name = Box::from(interner.resolve(def.name));
+                let _d = diags.error(
+                    SemaError::ImplicitAny { name }.to_string(),
+                    def.span,
+                    file_id,
+                );
+            }
+        }
+    }
+}
+
+pub(crate) fn analyze_implicit_returns(
+    module: &ParsedModule,
+    diags: &mut DiagnosticBag,
+    file_id: FileId,
+    options: &SemaOptions,
+) {
+    if !options.no_implicit_returns {
+        return;
+    }
+    for stmt in &module.stmts {
+        check_implicit_returns_in_expr(stmt.expr, &module.arenas, diags, file_id);
+    }
+}
+
+fn check_implicit_returns_in_expr(
+    expr_idx: ExprIdx,
+    arenas: &AstArenas,
+    diags: &mut DiagnosticBag,
+    file_id: FileId,
+) {
+    match &arenas.exprs[expr_idx] {
+        Expr::Fn {
+            ret_ty: Some(_),
+            body,
+            ..
+        } => {
+            let body = *body;
+            check_non_total_piecewise(body, arenas, diags, file_id);
+            check_implicit_returns_in_expr(body, arenas, diags, file_id);
+        }
+        Expr::Fn { body, .. } => {
+            let body = *body;
+            check_implicit_returns_in_expr(body, arenas, diags, file_id);
+        }
+        Expr::Block { stmts, tail, .. } => {
+            let (stmts, tail) = (stmts.clone(), *tail);
+            for s in stmts {
+                check_implicit_returns_in_expr(s, arenas, diags, file_id);
+            }
+            if let Some(t) = tail {
+                check_implicit_returns_in_expr(t, arenas, diags, file_id);
+            }
+        }
+        Expr::Let { fields, .. } | Expr::Binding { fields, .. } => {
+            if let Some(v) = fields.value {
+                let v = v;
+                check_implicit_returns_in_expr(v, arenas, diags, file_id);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn check_non_total_piecewise(
+    expr_idx: ExprIdx,
+    arenas: &AstArenas,
+    diags: &mut DiagnosticBag,
+    file_id: FileId,
+) {
+    match &arenas.exprs[expr_idx] {
+        Expr::Piecewise { arms, span } => {
+            let has_catch_all = arms
+                .iter()
+                .any(|arm| matches!(arm.guard, PwGuard::Any { .. }));
+            if !has_catch_all {
+                let _d = diags.report(&SemaError::ImplicitReturn, *span, file_id);
+            }
+            let arm_results: Vec<ExprIdx> = arms.iter().map(|a| a.result).collect();
+            for result in arm_results {
+                check_non_total_piecewise(result, arenas, diags, file_id);
+            }
+        }
+        Expr::Block { stmts, tail, .. } => {
+            let (stmts, tail) = (stmts.clone(), *tail);
+            if let Some(t) = tail {
+                check_non_total_piecewise(t, arenas, diags, file_id);
+            }
+            for s in stmts {
+                check_non_total_piecewise(s, arenas, diags, file_id);
+            }
+        }
+        Expr::Paren { inner, .. } => {
+            let inner = *inner;
+            check_non_total_piecewise(inner, arenas, diags, file_id);
+        }
+        _ => {}
+    }
 }
 
 pub(crate) fn analyze_emit_unused_warnings(

@@ -6,6 +6,7 @@ use std::collections::HashSet;
 use lsp_types::{InlayHint, InlayHintKind, InlayHintLabel};
 use msc_ast::Expr;
 use msc_lex::TokenKind;
+use msc_sema::types::strip_ref;
 use msc_sema::{DefKind, SemaResult, Type};
 use msc_shared::{Idx, Span};
 
@@ -67,7 +68,10 @@ pub fn inlay_hints(doc: &AnalyzedDoc, config: &InlayHintConfig) -> Vec<InlayHint
             _ => continue,
         }
 
-        let Some(ty) = def.ty_info.ty else { continue };
+        let Some(raw_ty) = def.ty_info.ty else {
+            continue;
+        };
+        let ty = strip_ref(raw_ty, &sema.types);
 
         if matches!(&sema.types[ty], Type::Var(_) | Type::Error) {
             continue;

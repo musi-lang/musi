@@ -1,4 +1,4 @@
-use super::{keyword_from_str, Token, TokenKind};
+use super::{Token, TokenKind, keyword_from_str};
 use msc_shared::{Span, Symbol};
 
 #[test]

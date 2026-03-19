@@ -8,11 +8,11 @@ import "@std/rt" as rt;
 /// Dense fixed-size bitset.
 export let Bitset := record { words : []Int; bit_count : Int };
 
-let word_size := 63;
+let WORD_SIZE := 63;
 
 /// Create a bitset of `size` bits, all cleared.
 export let new := (size) => (
-  let word_count := (size + word_size - 1) / word_size;
+  let word_count := (size + WORD_SIZE - 1) / WORD_SIZE;
   let mut arr := [];
   let fill := (i) => (
     () if i >= word_count
@@ -22,26 +22,26 @@ export let new := (size) => (
   .{ words := arr, bit_count := size }
 );
 
-let bit_mask := (bit_idx) => rt.int_pow(2, bit_idx % word_size);
+let bit_mask := (bit_idx) => rt.int_pow(2, bit_idx % WORD_SIZE);
 
 /// Set bit `idx` to 1.
-export let set := (bs, idx) => (
-  let w := idx / word_size;
+export let set := (mut bs, idx) => (
+  let w := idx / WORD_SIZE;
   let mask := bit_mask(idx);
   bs.words.[w] <- bs.words.[w] or mask
 );
 
 /// Clear bit `idx` to 0.
-export let clear := (bs, idx) => (
-  let w := idx / word_size;
+export let clear := (mut bs, idx) => (
+  let w := idx / WORD_SIZE;
   let mask := bit_mask(idx);
-  let all_ones := rt.int_pow(2, word_size) - 1;
+  let all_ones := rt.int_pow(2, WORD_SIZE) - 1;
   bs.words.[w] <- bs.words.[w] and (all_ones xor mask)
 );
 
 /// Return `.True` if bit `idx` is set.
 export let test := (bs, idx) => (
-  let w := idx / word_size;
+  let w := idx / WORD_SIZE;
   let mask := bit_mask(idx);
   (bs.words.[w] and mask) /= 0
 );
@@ -49,7 +49,7 @@ export let test := (bs, idx) => (
 /// Return a new bitset with all bits set in either `a` or `b`.
 export let union := (a, b) => (
   let n := rt.arr_len(a.words);
-  let result := new(a.bit_count);
+  let mut result := new(a.bit_count);
   let step := (i) => (
     () if i >= n
     | (
@@ -64,7 +64,7 @@ export let union := (a, b) => (
 /// Return a new bitset with only bits set in both `a` and `b`.
 export let intersect := (a, b) => (
   let n := rt.arr_len(a.words);
-  let result := new(a.bit_count);
+  let mut result := new(a.bit_count);
   let step := (i) => (
     () if i >= n
     | (
@@ -79,8 +79,8 @@ export let intersect := (a, b) => (
 /// Return a new bitset with bits set in `a` but not in `b`.
 export let difference := (a, b) => (
   let n := rt.arr_len(a.words);
-  let all_ones := rt.int_pow(2, word_size) - 1;
-  let result := new(a.bit_count);
+  let all_ones := rt.int_pow(2, WORD_SIZE) - 1;
+  let mut result := new(a.bit_count);
   let step := (i) => (
     () if i >= n
     | (

@@ -72,7 +72,7 @@ const TERMINAL_DEFAULTS: TerminalConfig = {
 };
 
 export const CONFIG_DEFAULTS: Config = {
-	lspPath: "music_lsp",
+	lspPath: "msc_lsp",
 	cliPath: "musi",
 	checkOnSave: true,
 	traceServer: "off",

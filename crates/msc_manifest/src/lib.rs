@@ -203,16 +203,21 @@ pub struct TaskDefObject {
     pub dependencies: Vec<String>,
 }
 
+const fn default_true() -> bool {
+    true
+}
+
 // CompilerOptions fields map 1:1 to the musi.json schema's `compilerOptions` object.
 // The schema mandates these as individual boolean properties; they cannot be grouped
 // without breaking JSON deserialization of the flat schema shape.
+// False positive: bools are schema-mandated, not a design choice — grouping would break serde.
 #[allow(clippy::struct_excessive_bools)]
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CompilerOptions {
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub strict: bool,
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub no_implicit_any: bool,
     #[serde(default)]
     pub no_unused_locals: bool,
@@ -223,15 +228,27 @@ pub struct CompilerOptions {
     #[serde(default)]
     pub allow_unreachable_code: bool,
     #[serde(default)]
-    pub allow_unused_labels: bool,
-    #[serde(default)]
-    pub exact_optional_property_types: bool,
-    #[serde(default)]
     pub no_error_truncation: bool,
     #[serde(default)]
     pub base_url: Option<String>,
     #[serde(default)]
     pub paths: Option<HashMap<String, Vec<Option<String>>>>,
+}
+
+impl Default for CompilerOptions {
+    fn default() -> Self {
+        Self {
+            strict: true,
+            no_implicit_any: true,
+            no_unused_locals: false,
+            no_unused_parameters: false,
+            no_implicit_returns: false,
+            allow_unreachable_code: false,
+            no_error_truncation: false,
+            base_url: None,
+            paths: None,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]

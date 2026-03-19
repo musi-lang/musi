@@ -315,6 +315,15 @@ pub fn check_decl<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) {
             InstanceBody::Via { delegate, .. } => {
                 check_instance_via(ck, target, params, delegate, span);
             }
+            InstanceBody::Derives { span, .. } => {
+                let _d = ck.diags.report(
+                    &SemaError::Unsupported {
+                        feature: "derives".into(),
+                    },
+                    span,
+                    ck.ctx.file_id,
+                );
+            }
         },
         Expr::Effect { ops, .. } => {
             for op in &ops {
@@ -326,8 +335,7 @@ pub fn check_decl<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) {
                 if let ForeignDecl::Fn { ty, span, .. } = decl {
                     let mut ty_params = vec![];
                     collect_ty_var_nodes(*ty, ck.ctx.ast, &mut ty_params);
-                    ty_params
-                        .retain(|p| ck.scopes.lookup(ck.current_scope, p.name).is_none());
+                    ty_params.retain(|p| ck.scopes.lookup(ck.current_scope, p.name).is_none());
                     let (parent, ty_param_defs) = if ty_params.is_empty() {
                         (None, vec![])
                     } else {

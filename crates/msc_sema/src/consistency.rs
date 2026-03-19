@@ -8,10 +8,10 @@ mod tests;
 
 use msc_shared::Arena;
 
+use crate::DefId;
 use crate::types::{SumVariant, Type, TypeIdx};
 use crate::unify::UnifyTable;
 use crate::well_known::WellKnown;
-use crate::DefId;
 
 fn is_named_consistent(
     d1: DefId,

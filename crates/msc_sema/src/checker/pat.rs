@@ -1,6 +1,7 @@
 //! Pattern type checking.
 
 use msc_ast::PatIdx;
+use msc_ast::expr::BindKind;
 use msc_ast::lit::Lit;
 use msc_ast::pat::Pat;
 use msc_shared::Span;
@@ -20,11 +21,18 @@ pub fn check_pat<S: BuildHasher>(ck: &mut Checker<'_, S>, pat_idx: PatIdx, expec
                 Lit::Rune { .. } => ck.named_ty(ck.ctx.well_known.rune),
                 Lit::Unit { .. } => ck.named_ty(ck.ctx.well_known.unit),
             };
-            ck.unify_or_report(expected, lit_ty, span);
+            ck.unify_or_report(expected, lit_ty, span, None);
         }
-        Pat::Bind { span, inner, .. } => {
+        Pat::Bind {
+            span, inner, kind, ..
+        } => {
             if let Some(&def_id) = ck.ctx.pat_defs.get(&span) {
-                ck.defs.get_mut(def_id).ty_info.ty = Some(expected);
+                let stored_ty = if kind == BindKind::Mut {
+                    ck.alloc_ty(Type::Ref { inner: expected })
+                } else {
+                    expected
+                };
+                ck.defs.get_mut(def_id).ty_info.ty = Some(stored_ty);
             }
             // If there's an inner pattern (`x @ pat`), check it too.
             if let Some(inner) = inner {
@@ -52,7 +60,7 @@ pub fn check_pat<S: BuildHasher>(ck: &mut Checker<'_, S>, pat_idx: PatIdx, expec
                 _ => {
                     let fresh_elems: Vec<_> = elems.iter().map(|_| ck.fresh_var(span)).collect();
                     let tup_ty = ck.alloc_ty(Type::Tuple { elems: fresh_elems });
-                    ck.unify_or_report(expected, tup_ty, span);
+                    ck.unify_or_report(expected, tup_ty, span, None);
                 }
             }
         }

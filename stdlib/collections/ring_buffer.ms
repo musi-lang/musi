@@ -19,7 +19,7 @@ export let new ['a] := (capacity, zero) => (
 let wrap := (idx, cap) => idx - (cap if idx >= cap | 0 if _);
 
 /// Push a value into the buffer, overwriting the oldest element if full.
-export let push ['a] := (rb, val) => (
+export let push ['a] := (mut rb, val) => (
   (
     let slot := wrap(rb.head + rb.count, rb.cap);
     rb.data.[slot] <- val;
@@ -32,7 +32,7 @@ export let push ['a] := (rb, val) => (
 );
 
 /// Remove and return the oldest value, or `.None` if empty.
-export let pop ['a] := (rb) => (
+export let pop ['a] := (mut rb) => (
   .None if rb.count = 0
   | (
     let val := rb.data.[rb.head];
