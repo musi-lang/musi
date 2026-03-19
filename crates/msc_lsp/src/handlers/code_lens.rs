@@ -5,7 +5,7 @@ use std::ops::ControlFlow;
 
 use lsp_types::{CodeLens, Command, Position, Range, Url};
 use msc_ast::expr::{Arg, FieldKey};
-use msc_ast::visitor::{walk_expr, AstVisitor};
+use msc_ast::visitor::{AstVisitor, walk_expr};
 use msc_ast::{AstArenas, Expr, ExprIdx, Lit};
 use msc_shared::{Interner, Span};
 

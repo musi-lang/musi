@@ -8,7 +8,7 @@ use std::{fs, process};
 use msc::pipeline;
 use msc_builtins::StdHost;
 use msc_manifest::MusiManifest;
-use msc_vm::{load, verify, Vm};
+use msc_vm::{Vm, load, verify};
 
 enum TestOutcome {
     Passed,

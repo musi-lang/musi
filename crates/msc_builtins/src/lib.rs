@@ -9,5 +9,5 @@
 mod core;
 mod ffi;
 
-pub use ffi::{set_test_filter, StdHost};
+pub use ffi::{StdHost, set_test_filter};
 pub use msc_vm::HostFunctions;
