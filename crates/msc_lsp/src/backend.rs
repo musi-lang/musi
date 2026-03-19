@@ -94,7 +94,7 @@ impl LanguageServer for MusiBackend {
                 parameter_types: bool_field("parameterTypes", true),
             };
         }
-        let result = InitializeResult {
+        let init_response = InitializeResult {
             server_info: Some(ServerInfo {
                 name: "msc_lsp".to_owned(),
                 version: Some(env!("CARGO_PKG_VERSION").to_owned()),
@@ -131,7 +131,7 @@ impl LanguageServer for MusiBackend {
                 ..ServerCapabilities::default()
             },
         };
-        Box::pin(async move { Ok(result) })
+        Box::pin(async move { Ok(init_response) })
     }
 
     fn shutdown(&mut self, _: ()) -> BoxFuture<'static, Result<(), Self::Error>> {
@@ -225,8 +225,8 @@ impl LanguageServer for MusiBackend {
         params: SemanticTokensParams,
     ) -> BoxFuture<'static, Result<Option<SemanticTokensResult>, Self::Error>> {
         let uri = params.text_document.uri;
-        let result = self.documents.get(&uri).map(semantic_tokens::compute);
-        Box::pin(async move { Ok(result) })
+        let tokens = self.documents.get(&uri).map(semantic_tokens::compute);
+        Box::pin(async move { Ok(tokens) })
     }
 
     fn hover(
@@ -235,11 +235,11 @@ impl LanguageServer for MusiBackend {
     ) -> BoxFuture<'static, Result<Option<Hover>, Self::Error>> {
         let uri = params.text_document_position_params.text_document.uri;
         let position = params.text_document_position_params.position;
-        let result = self
+        let hover_info = self
             .documents
             .get(&uri)
             .and_then(|doc| hover::hover(doc, position));
-        Box::pin(async move { Ok(result) })
+        Box::pin(async move { Ok(hover_info) })
     }
 
     fn signature_help(
@@ -252,11 +252,11 @@ impl LanguageServer for MusiBackend {
             .uri
             .clone();
         let position = params.text_document_position_params.position;
-        let result = self
+        let signature = self
             .documents
             .get(&uri)
             .and_then(|doc| signature_help::signature_help(doc, position));
-        Box::pin(async move { Ok(result) })
+        Box::pin(async move { Ok(signature) })
     }
 
     fn definition(
@@ -265,11 +265,11 @@ impl LanguageServer for MusiBackend {
     ) -> BoxFuture<'static, Result<Option<GotoDefinitionResponse>, Self::Error>> {
         let uri = params.text_document_position_params.text_document.uri;
         let position = params.text_document_position_params.position;
-        let result = self
+        let definition = self
             .documents
             .get(&uri)
             .and_then(|doc| goto_def::goto_definition(doc, position, &uri, self.root_uri.as_ref()));
-        Box::pin(async move { Ok(result) })
+        Box::pin(async move { Ok(definition) })
     }
 
     fn references(
@@ -279,11 +279,11 @@ impl LanguageServer for MusiBackend {
         let uri = params.text_document_position.text_document.uri;
         let position = params.text_document_position.position;
         let context = params.context;
-        let result = self
+        let references = self
             .documents
             .get(&uri)
             .and_then(|doc| references::find_references(doc, position, &context, &uri));
-        Box::pin(async move { Ok(result) })
+        Box::pin(async move { Ok(references) })
     }
 
     fn rename(
@@ -293,11 +293,11 @@ impl LanguageServer for MusiBackend {
         let uri = params.text_document_position.text_document.uri;
         let position = params.text_document_position.position;
         let new_name = params.new_name;
-        let result = self
+        let rename_edit = self
             .documents
             .get(&uri)
             .and_then(|doc| references::rename(doc, position, new_name, &uri));
-        Box::pin(async move { Ok(result) })
+        Box::pin(async move { Ok(rename_edit) })
     }
 
     fn prepare_rename(
@@ -306,11 +306,11 @@ impl LanguageServer for MusiBackend {
     ) -> BoxFuture<'static, Result<Option<PrepareRenameResponse>, Self::Error>> {
         let uri = params.text_document.uri;
         let position = params.position;
-        let result = self
+        let rename_prep = self
             .documents
             .get(&uri)
             .and_then(|doc| references::prepare_rename(doc, position, &uri));
-        Box::pin(async move { Ok(result) })
+        Box::pin(async move { Ok(rename_prep) })
     }
 
     fn folding_range(
@@ -332,11 +332,11 @@ impl LanguageServer for MusiBackend {
     ) -> BoxFuture<'static, Result<Option<GotoDefinitionResponse>, Self::Error>> {
         let uri = params.text_document_position_params.text_document.uri;
         let position = params.text_document_position_params.position;
-        let result = self
+        let type_definition = self
             .documents
             .get(&uri)
             .and_then(|doc| goto_type_def::goto_type_definition(doc, position, &uri));
-        Box::pin(async move { Ok(result) })
+        Box::pin(async move { Ok(type_definition) })
     }
 
     fn inlay_hint(
@@ -357,11 +357,11 @@ impl LanguageServer for MusiBackend {
         params: DocumentSymbolParams,
     ) -> BoxFuture<'static, Result<Option<DocumentSymbolResponse>, Self::Error>> {
         let uri = params.text_document.uri;
-        let result = self
+        let symbols = self
             .documents
             .get(&uri)
             .map(document_symbols::document_symbols);
-        Box::pin(async move { Ok(result) })
+        Box::pin(async move { Ok(symbols) })
     }
 
     fn code_action(
@@ -374,12 +374,12 @@ impl LanguageServer for MusiBackend {
             .get(&uri)
             .map(|doc| code_actions::code_actions(doc, &params, &uri))
             .unwrap_or_default();
-        let result = if actions.is_empty() {
+        let action_response = if actions.is_empty() {
             None
         } else {
             Some(actions)
         };
-        Box::pin(async move { Ok(result) })
+        Box::pin(async move { Ok(action_response) })
     }
 
     fn code_lens(

@@ -7,11 +7,11 @@
 //! - [`Symbol`] / [`Interner`] -- arena-backed string deduplication
 //! - [`Diagnostic`] / [`DiagnosticBag`] -- structured, accumulating error reporting
 
-pub mod arena;
-pub mod diag;
-pub mod intern;
-pub mod source;
-pub mod span;
+mod arena;
+mod diag;
+mod intern;
+mod source;
+mod span;
 
 pub use arena::{Arena, Idx, IdxRange};
 pub use diag::{Diagnostic, DiagnosticBag, IntoDiagnostic, Label, Severity};

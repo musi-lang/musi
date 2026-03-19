@@ -46,7 +46,7 @@ pub fn code_actions(
             continue;
         }
 
-        let pat_span = doc.module.arenas.pats[fields.pat].span();
+        let pat_span = pat_span(&doc.module.arenas.pats[fields.pat]);
         let def = sema.resolution.pat_defs.iter().find_map(|(s, &def_id)| {
             if s.start == pat_span.start {
                 sema.defs.get(def_id.0 as usize)
@@ -99,23 +99,16 @@ pub fn code_actions(
     actions
 }
 
-/// Extension trait to extract a span from a `Pat`.
-trait PatSpanExt {
-    fn span(&self) -> Span;
-}
-
-impl PatSpanExt for Pat {
-    fn span(&self) -> Span {
-        match self {
-            Pat::Wild { span, .. }
-            | Pat::Lit { span, .. }
-            | Pat::Bind { span, .. }
-            | Pat::Variant { span, .. }
-            | Pat::Record { span, .. }
-            | Pat::Tuple { span, .. }
-            | Pat::Array { span, .. }
-            | Pat::Or { span, .. }
-            | Pat::Error { span } => *span,
-        }
+fn pat_span(pat: &Pat) -> Span {
+    match pat {
+        Pat::Wild { span, .. }
+        | Pat::Lit { span, .. }
+        | Pat::Bind { span, .. }
+        | Pat::Variant { span, .. }
+        | Pat::Record { span, .. }
+        | Pat::Tuple { span, .. }
+        | Pat::Array { span, .. }
+        | Pat::Or { span, .. }
+        | Pat::Error { span } => *span,
     }
 }
