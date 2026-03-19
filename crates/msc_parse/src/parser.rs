@@ -134,6 +134,23 @@ impl<'a> Parser<'a> {
         Symbol(u32::MAX)
     }
 
+    /// Like [`expect_symbol`], but also accepts keywords as identifiers.
+    ///
+    /// Used for field names in record literals and field access, where the
+    /// language allows keywords (e.g. `.not`, `.or`) as field names.
+    pub(crate) fn expect_symbol_or_keyword(&mut self) -> Symbol {
+        if let Some(text) = self
+            .peek_kind()
+            .fixed_text()
+            .filter(|_| self.peek_kind().is_keyword())
+        {
+            let sym = self.interner.intern(text);
+            let _tok = self.bump();
+            return sym;
+        }
+        self.expect_symbol()
+    }
+
     pub(crate) fn start_span(&self) -> u32 {
         self.peek().span.start
     }

@@ -142,6 +142,16 @@ impl<'a, S: BuildHasher> Checker<'a, S> {
             .unify
             .unify(expected, found, &mut self.store.types, self.ctx.well_known)
         {
+            use crate::consistency::is_consistent;
+            if is_consistent(
+                found,
+                expected,
+                &self.store.types,
+                &self.store.unify,
+                self.ctx.well_known,
+            ) {
+                return;
+            }
             let defs_vec: Vec<_> = self.defs.iter().cloned().collect();
             let exp_str = fmt_type(
                 expected,

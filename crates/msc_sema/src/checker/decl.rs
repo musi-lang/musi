@@ -328,6 +328,7 @@ pub fn check_decl<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) {
                     collect_ty_var_nodes(*ty, ck.ctx.ast, &mut ty_params);
                 }
             }
+            ty_params.retain(|p| ck.scopes.lookup(ck.current_scope, p.name).is_none());
             let parent = if ty_params.is_empty() {
                 None
             } else {
@@ -412,6 +413,7 @@ fn check_instance_via<S: BuildHasher>(
     // things up (they also go through the same scope machinery).
     let mut all_params: Vec<TyParam> = params;
     collect_ty_var_nodes(target, ck.ctx.ast, &mut all_params);
+    all_params.retain(|p| ck.scopes.lookup(ck.current_scope, p.name).is_none());
 
     let parent = if all_params.is_empty() {
         None
@@ -481,6 +483,7 @@ fn check_instance<S: BuildHasher>(
 ) {
     let mut all_params: Vec<TyParam> = params;
     collect_ty_var_nodes(target, ck.ctx.ast, &mut all_params);
+    all_params.retain(|p| ck.scopes.lookup(ck.current_scope, p.name).is_none());
     let parent = if all_params.is_empty() {
         None
     } else {

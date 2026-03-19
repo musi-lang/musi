@@ -22,12 +22,12 @@ t.describe("Random.sampling", () => (
     let r := rng.new(1);
     let arr := [1, 2, 3, 4, 5];
     let shuffled := m.shuffle(r, arr);
-    let len := (shuffled.[0]; 5);
+    let _len := (shuffled.[0]; 5);
     t.expect(.True).toBe(.True)
   ));
   t.it("shuffle - empty array stays empty", () => (
     let r := rng.new(1);
-    let result := m.shuffle(r, []);
+    let _result := m.shuffle(r, []);
     t.expect(.True).toBe(.True)
   ));
   t.it("shuffle - single element unchanged", () => (
@@ -37,12 +37,12 @@ t.describe("Random.sampling", () => (
   ));
   t.it("sample - returns at most n elements", () => (
     let r := rng.new(1);
-    let result := m.sample(r, [1, 2, 3, 4, 5], 3);
+    let _result := m.sample(r, [1, 2, 3, 4, 5], 3);
     t.expect(.True).toBe(.True)
   ));
   t.it("sample - n larger than array returns all", () => (
     let r := rng.new(1);
-    let result := m.sample(r, [1, 2, 3], 10);
+    let _result := m.sample(r, [1, 2, 3], 10);
     t.expect(.True).toBe(.True)
   ));
   t.it("next_gaussian - is a float", () => (

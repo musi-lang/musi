@@ -112,7 +112,7 @@ impl Parser<'_> {
             });
             FieldKey::Pos { index, span }
         } else {
-            let name = self.expect_symbol();
+            let name = self.expect_symbol_or_keyword();
             FieldKey::Name {
                 name,
                 span: self.finish_span(start),

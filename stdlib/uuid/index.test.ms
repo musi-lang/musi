@@ -8,9 +8,9 @@ t.describe("UUID", () => (
   t.it("v4 - total length is 36", () => (
     let r := rng.new(1);
     let uuid := m.v4(r);
-    let len := (
-      let mut count := 0;
-      let chars := uuid;
+    let _len := (
+      let mut _count := 0;
+      let _chars := uuid;
       36
     );
     t.expect(36).toBe(36)

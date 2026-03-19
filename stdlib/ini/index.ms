@@ -21,7 +21,7 @@ let parse_section_name := (line) => (
   | "" if _
 );
 
-let split_entry := (line) => (
+let _split_entry := (line) => (
   let trimmed := rt.str_trim(line);
   let eq_idx := rt.str_index_of(trimmed, "=");
   let key := rt.str_trim(rt.str_slice(trimmed, 0, eq_idx));

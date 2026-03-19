@@ -2,13 +2,13 @@
 
 use std::collections::HashSet;
 
-use msc_ast::ExprIdx;
 use msc_ast::decl::{ClassMember, EffectOp, ForeignDecl};
 use msc_ast::expr::{
     Arg, ArrayElem, Expr, InstanceBody, MatchArm, Param, PwArm, PwGuard, RecField,
 };
 use msc_ast::ty_param::{Constraint, TyParam};
 use msc_ast::util::collect_ty_var_nodes;
+use msc_ast::ExprIdx;
 use msc_shared::{Span, Symbol};
 
 use crate::def::{DefId, DefKind};
@@ -64,6 +64,7 @@ impl Resolver<'_> {
     ) {
         let mut all_params: Vec<TyParam> = params.to_vec();
         collect_ty_var_nodes(target, self.ast, &mut all_params);
+        all_params.retain(|p| self.scopes.lookup(self.current_scope, p.name).is_none());
         let parent = self.enter_ty_param_scope(&all_params, constraints);
         self.resolve_type_expr(target);
         let _member_defs = self.resolve_class_members(members, None);
@@ -102,6 +103,7 @@ impl Resolver<'_> {
                 collect_ty_var_nodes(*ty, self.ast, &mut ty_params);
             }
         }
+        ty_params.retain(|p| self.scopes.lookup(self.current_scope, p.name).is_none());
         let parent = if ty_params.is_empty() {
             None
         } else {

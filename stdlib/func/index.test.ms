@@ -40,7 +40,7 @@ t.describe("Func", () => (
     t.expect(m.apply(double, 5)).toBe(10)
   ));
   t.it("on - applies g to both args then f", () => (
-    let strlen := (s) => 3;
+    let strlen := (_) => 3;
     let add := (a, b) => a + b;
     let add_lengths := m.on(add, strlen);
     t.expect(add_lengths("abc", "de")).toBe(6)
@@ -51,7 +51,7 @@ t.describe("Func", () => (
     t.expect(is_not_positive(-1)).toBe(.True)
   ));
   t.it("negate - true becomes false", () => (
-    let always_true := (x) => .True;
+    let always_true := (_) => .True;
     let always_false := m.negate(always_true);
     t.expect(always_false(0)).toBe(.False)
   ));

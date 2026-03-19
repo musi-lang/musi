@@ -101,7 +101,7 @@ impl Parser<'_> {
             };
         }
 
-        let name = self.expect_symbol();
+        let name = self.expect_symbol_or_keyword();
         let value = if self.eat(TokenKind::ColonEq) {
             Some(self.parse_alloc_expr())
         } else {

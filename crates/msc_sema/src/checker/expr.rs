@@ -228,6 +228,12 @@ fn synth_index<S: BuildHasher>(
     match &ck.store.types[obj_ty] {
         Type::Array { elem, .. } => *elem,
         Type::Error => ck.error_ty(),
+        Type::Var(_) => {
+            let elem = ck.fresh_var(span);
+            let arr_ty = ck.alloc_ty(Type::Array { elem, len: None });
+            ck.unify_or_report(obj_ty, arr_ty, span);
+            elem
+        }
         _ => {
             let defs_vec: Vec<_> = ck.defs.iter().cloned().collect();
             let ty_str = fmt_type(
@@ -745,10 +751,13 @@ fn synth_record<S: BuildHasher>(ck: &mut Checker<'_, S>, fields: &[RecField]) ->
     // Canonical field ordering: sort by name string so field indices are
     // consistent between construction and access across module boundaries.
     rec_fields.sort_by(|a, b| {
-        ck.ctx
-            .interner
-            .resolve(a.name)
-            .cmp(ck.ctx.interner.resolve(b.name))
+        match (
+            ck.ctx.interner.try_resolve(a.name),
+            ck.ctx.interner.try_resolve(b.name),
+        ) {
+            (Some(a_str), Some(b_str)) => a_str.cmp(b_str),
+            _ => a.name.0.cmp(&b.name.0),
+        }
     });
     ck.alloc_ty(Type::Record {
         fields: rec_fields,

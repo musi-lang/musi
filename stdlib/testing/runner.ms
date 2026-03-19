@@ -46,7 +46,7 @@ export let run := () => (
           (
             skipped <- skipped + 1;
             suite_skipped <- suite_skipped + 1
-          ) if has_filter & !rt.str_contains(entry.name, filter)
+          ) if has_filter and not rt.str_contains(entry.name, filter)
           | (
             total <- total + 1;
             current_failure <- .None;
