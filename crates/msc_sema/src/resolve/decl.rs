@@ -97,25 +97,21 @@ impl Resolver<'_> {
     }
 
     pub(super) fn resolve_expr_foreign(&mut self, decls: &[ForeignDecl]) {
-        let mut ty_params = vec![];
         for decl in decls {
             if let ForeignDecl::Fn { ty, .. } = decl {
+                let mut ty_params = vec![];
                 collect_ty_var_nodes(*ty, self.ast, &mut ty_params);
-            }
-        }
-        ty_params.retain(|p| self.scopes.lookup(self.current_scope, p.name).is_none());
-        let parent = if ty_params.is_empty() {
-            None
-        } else {
-            Some(self.enter_ty_param_scope(&ty_params, &[]))
-        };
-        for decl in decls {
-            if let ForeignDecl::Fn { ty, .. } = decl {
+                ty_params.retain(|p| self.scopes.lookup(self.current_scope, p.name).is_none());
+                let parent = if ty_params.is_empty() {
+                    None
+                } else {
+                    Some(self.enter_ty_param_scope(&ty_params, &[]))
+                };
                 self.resolve_type_expr(*ty);
+                if let Some(p) = parent {
+                    self.current_scope = p;
+                }
             }
-        }
-        if let Some(p) = parent {
-            self.current_scope = p;
         }
     }
 

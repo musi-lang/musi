@@ -322,29 +322,27 @@ pub fn check_decl<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) {
             }
         }
         Expr::Foreign { decls, .. } => {
-            let mut ty_params = vec![];
-            for decl in &decls {
-                if let ForeignDecl::Fn { ty, .. } = decl {
-                    collect_ty_var_nodes(*ty, ck.ctx.ast, &mut ty_params);
-                }
-            }
-            ty_params.retain(|p| ck.scopes.lookup(ck.current_scope, p.name).is_none());
-            let parent = if ty_params.is_empty() {
-                None
-            } else {
-                let (p, _ids) = ck.enter_ty_param_scope(&ty_params);
-                Some(p)
-            };
             for decl in &decls {
                 if let ForeignDecl::Fn { ty, span, .. } = decl {
+                    let mut ty_params = vec![];
+                    collect_ty_var_nodes(*ty, ck.ctx.ast, &mut ty_params);
+                    ty_params
+                        .retain(|p| ck.scopes.lookup(ck.current_scope, p.name).is_none());
+                    let (parent, ty_param_defs) = if ty_params.is_empty() {
+                        (None, vec![])
+                    } else {
+                        let (p, ids) = ck.enter_ty_param_scope(&ty_params);
+                        (Some(p), ids)
+                    };
                     let fn_ty = lower_type_expr(ck, *ty);
                     if let Some(&def_id) = ck.ctx.pat_defs.get(span) {
                         ck.defs.get_mut(def_id).ty_info.ty = Some(fn_ty);
+                        ck.defs.get_mut(def_id).ty_info.ty_params = ty_param_defs;
+                    }
+                    if let Some(p) = parent {
+                        ck.current_scope = p;
                     }
                 }
-            }
-            if let Some(p) = parent {
-                ck.current_scope = p;
             }
         }
         _ => {}
