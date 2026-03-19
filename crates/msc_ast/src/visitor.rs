@@ -72,7 +72,7 @@ pub fn walk_expr<V: AstVisitor + ?Sized>(
         }
         Expr::Block { stmts, tail, .. } => walk_expr_block(v, stmts, *tail, ctx),
 
-        Expr::Let { fields, body, .. } => walk_expr_let(v, fields, *body, ctx),
+        Expr::Let { fields, .. } => walk_expr_let(v, fields, ctx),
         Expr::Binding { fields, .. } => walk_let_fields(v, fields, ctx),
 
         Expr::Fn {
@@ -476,14 +476,9 @@ fn walk_attrs_values<V: AstVisitor + ?Sized>(
 fn walk_expr_let<V: AstVisitor + ?Sized>(
     v: &mut V,
     fields: &LetFields,
-    body: Option<ExprIdx>,
     ctx: &AstArenas,
 ) -> ControlFlow<V::Break> {
-    walk_let_fields(v, fields, ctx)?;
-    if let Some(b) = body {
-        v.visit_expr(b, ctx)?;
-    }
-    ControlFlow::Continue(())
+    walk_let_fields(v, fields, ctx)
 }
 
 fn walk_expr_fn<V: AstVisitor + ?Sized>(

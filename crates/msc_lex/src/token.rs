@@ -13,7 +13,7 @@ pub enum TokenKind {
     KwAs,
     KwChoice,
     KwClass,
-    KwDefer,
+    KwDerives,
     KwEffect,
     KwExport,
     KwFatal,
@@ -21,7 +21,6 @@ pub enum TokenKind {
     KwHandle,
     KwIf,
     KwImport,
-    KwIn,
     KwInstance,
     KwLaw,
     KwLet,
@@ -34,7 +33,6 @@ pub enum TokenKind {
     KwRecord,
     KwResume,
     KwReturn,
-    KwTry,
     KwVia,
     KwWhere,
     KwWith,
@@ -128,7 +126,7 @@ impl TokenKind {
                 | Self::KwAs
                 | Self::KwChoice
                 | Self::KwClass
-                | Self::KwDefer
+                | Self::KwDerives
                 | Self::KwEffect
                 | Self::KwExport
                 | Self::KwFatal
@@ -136,7 +134,6 @@ impl TokenKind {
                 | Self::KwHandle
                 | Self::KwIf
                 | Self::KwImport
-                | Self::KwIn
                 | Self::KwInstance
                 | Self::KwLaw
                 | Self::KwLet
@@ -149,7 +146,6 @@ impl TokenKind {
                 | Self::KwRecord
                 | Self::KwResume
                 | Self::KwReturn
-                | Self::KwTry
                 | Self::KwVia
                 | Self::KwWhere
                 | Self::KwWith
@@ -166,7 +162,7 @@ impl TokenKind {
             Self::KwAs => Some("as"),
             Self::KwChoice => Some("choice"),
             Self::KwClass => Some("class"),
-            Self::KwDefer => Some("defer"),
+            Self::KwDerives => Some("derives"),
             Self::KwEffect => Some("effect"),
             Self::KwExport => Some("export"),
             Self::KwFatal => Some("fatal"),
@@ -174,7 +170,6 @@ impl TokenKind {
             Self::KwHandle => Some("handle"),
             Self::KwIf => Some("if"),
             Self::KwImport => Some("import"),
-            Self::KwIn => Some("in"),
             Self::KwInstance => Some("instance"),
             Self::KwLaw => Some("law"),
             Self::KwLet => Some("let"),
@@ -187,7 +182,6 @@ impl TokenKind {
             Self::KwRecord => Some("record"),
             Self::KwResume => Some("resume"),
             Self::KwReturn => Some("return"),
-            Self::KwTry => Some("try"),
             Self::KwVia => Some("via"),
             Self::KwWhere => Some("where"),
             Self::KwWith => Some("with"),
@@ -289,7 +283,7 @@ pub fn keyword_from_str(s: &str) -> Option<TokenKind> {
         "as" => Some(TokenKind::KwAs),
         "choice" => Some(TokenKind::KwChoice),
         "class" => Some(TokenKind::KwClass),
-        "defer" => Some(TokenKind::KwDefer),
+        "derives" => Some(TokenKind::KwDerives),
         "effect" => Some(TokenKind::KwEffect),
         "export" => Some(TokenKind::KwExport),
         "fatal" => Some(TokenKind::KwFatal),
@@ -297,7 +291,6 @@ pub fn keyword_from_str(s: &str) -> Option<TokenKind> {
         "handle" => Some(TokenKind::KwHandle),
         "if" => Some(TokenKind::KwIf),
         "import" => Some(TokenKind::KwImport),
-        "in" => Some(TokenKind::KwIn),
         "instance" => Some(TokenKind::KwInstance),
         "law" => Some(TokenKind::KwLaw),
         "let" => Some(TokenKind::KwLet),
@@ -310,7 +303,6 @@ pub fn keyword_from_str(s: &str) -> Option<TokenKind> {
         "record" => Some(TokenKind::KwRecord),
         "resume" => Some(TokenKind::KwResume),
         "return" => Some(TokenKind::KwReturn),
-        "try" => Some(TokenKind::KwTry),
         "via" => Some(TokenKind::KwVia),
         "where" => Some(TokenKind::KwWhere),
         "with" => Some(TokenKind::KwWith),

@@ -15,8 +15,8 @@ use msc_shared::{DiagnosticBag, FileId, Interner, SourceDb, Span, Symbol};
 
 use crate::builtin::is_builtin_module;
 use crate::error::ResolveError;
-use crate::resolver::{ResolverConfig, resolve_import};
-use crate::specifier::{ImportScheme, parse_specifier};
+use crate::resolver::{resolve_import, ResolverConfig};
+use crate::specifier::{parse_specifier, ImportScheme};
 
 /// Opaque module identifier.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -291,12 +291,9 @@ fn collect_imports_from_expr(expr_idx: ExprIdx, arenas: &AstArenas, out: &mut Ve
         Expr::Import { path, span, .. } => {
             out.push((*path, *span));
         }
-        Expr::Let { fields, body, .. } => {
+        Expr::Let { fields, .. } => {
             if let Some(v) = fields.value {
                 collect_imports_from_expr(v, arenas, out);
-            }
-            if let Some(b) = body {
-                collect_imports_from_expr(*b, arenas, out);
             }
         }
         Expr::Binding { fields, .. } => {

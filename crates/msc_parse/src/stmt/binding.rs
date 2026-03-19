@@ -8,7 +8,7 @@ use crate::error::ParseError;
 use crate::parser::Parser;
 
 impl Parser<'_> {
-    /// Parses `'let' ['mut'] pat [ty_annot] ':=' expr ['in' '(' expr ')']`.
+    /// Parses `'let' ['mut'] pat [ty_annot] ':=' expr`.
     pub(crate) fn parse_expr_let(&mut self) -> Expr {
         let start = self.start_span();
         let _let = self.bump();
@@ -106,14 +106,7 @@ impl Parser<'_> {
         // `:= value` is required unless a type annotation is present (stub declaration)
         let value = if self.at(TokenKind::ColonEq) {
             let _ceq = self.bump();
-            // use no-in variant so `in` is not consumed as a binary operator
-            // when this is a let-in scoped binding
-            let v = if kind == BindKind::Immut {
-                self.parse_alloc_expr_no_in()
-            } else {
-                self.parse_alloc_expr()
-            };
-            Some(v)
+            Some(self.parse_alloc_expr())
         } else if ty.is_some() {
             None
         } else {
@@ -132,21 +125,8 @@ impl Parser<'_> {
             span: self.finish_span(start),
         };
 
-        // let ... in ( body ) form
-        if kind == BindKind::Immut && self.eat(TokenKind::KwIn) {
-            let _lp = self.expect(TokenKind::LParen);
-            let body_expr = self.parse_alloc_expr();
-            let _rp = self.expect(TokenKind::RParen);
-            return Expr::Let {
-                fields,
-                body: Some(body_expr),
-                span: self.finish_span(start),
-            };
-        }
-
         Expr::Let {
             fields,
-            body: None,
             span: self.finish_span(start),
         }
     }

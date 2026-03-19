@@ -7,8 +7,6 @@ use msc_ast::lit::FStrPart;
 use crate::const_pool::ConstValue;
 use crate::error::{EmitError, EmitResult};
 use msc_ast::ExprIdx;
-use msc_bc::Opcode;
-
 use super::Emitter;
 use super::FnCtx;
 use super::expr::{emit_expr, emit_require};
@@ -272,13 +270,6 @@ pub fn emit_propagate(em: &mut Emitter<'_>, fc: &mut FnCtx, operand: ExprIdx) ->
     Ok(())
 }
 
-/// Emit `try operand`. Evaluates operand and wraps result in Some(value).
-pub fn emit_try(em: &mut Emitter<'_>, fc: &mut FnCtx, operand: ExprIdx) -> EmitResult {
-    emit_require(em, fc, operand, "try operand")?;
-    fc.fe.emit_mk_var(em.some_tag, 1);
-    Ok(())
-}
-
 /// Emit `left..right` or `left..<right` (range construction as a 2-tuple).
 pub fn emit_range(
     em: &mut Emitter<'_>,
@@ -336,85 +327,6 @@ fn emit_coalesce(
     fc.fe.emit_ld_pay(0);
 
     fc.fe.emit_label(end_label);
-    Ok(())
-}
-
-/// Emit `left in right` (membership test). Linear scan over the array `right`,
-/// returning `true` if any element equals `left`, `false` otherwise.
-pub fn emit_in_op(
-    em: &mut Emitter<'_>,
-    fc: &mut FnCtx,
-    left: ExprIdx,
-    right: ExprIdx,
-) -> EmitResult {
-    // Evaluate operands into temp slots so we can reload them inside the loop.
-    emit_require(em, fc, right, "`in` right operand")?;
-    let arr_slot = fc.alloc_local();
-    fc.fe.emit_st_loc(arr_slot);
-
-    emit_require(em, fc, left, "`in` left operand")?;
-    let needle_slot = fc.alloc_local();
-    fc.fe.emit_st_loc(needle_slot);
-
-    // Get array length once.
-    fc.fe.emit_ld_loc(arr_slot);
-    fc.fe.emit_ld_len();
-    let len_slot = fc.alloc_local();
-    fc.fe.emit_st_loc(len_slot);
-
-    // i = 0
-    let zero_cv = ConstValue::Int(0);
-    let zero_idx = em.cp.intern(&zero_cv)?;
-    fc.fe.emit_ld_cst(zero_idx);
-    let i_slot = fc.alloc_local();
-    fc.fe.emit_st_loc(i_slot);
-
-    let loop_start = fc.fresh_label();
-    let found_true = fc.fresh_label();
-    let loop_exit = fc.fresh_label();
-    let end_label = fc.fresh_label();
-
-    fc.fe.emit_label(loop_start);
-
-    // Check i < len; if not, exit loop and push false.
-    fc.fe.emit_ld_loc(i_slot);
-    fc.fe.emit_ld_loc(len_slot);
-    fc.fe.emit_binop(Opcode::CMP_LT);
-    fc.fe.emit_jmp_f(loop_exit);
-
-    // Load arr[i] and compare with needle.
-    fc.fe.emit_ld_loc(arr_slot);
-    fc.fe.emit_ld_loc(i_slot);
-    fc.fe.emit_ld_idx();
-    fc.fe.emit_ld_loc(needle_slot);
-    fc.fe.emit_cmp_eq();
-    fc.fe.emit_jmp_t(found_true);
-
-    // i += 1
-    fc.fe.emit_ld_loc(i_slot);
-    let one_cv = ConstValue::Int(1);
-    let one_idx = em.cp.intern(&one_cv)?;
-    fc.fe.emit_ld_cst(one_idx);
-    fc.fe.emit_binop(Opcode::ADD);
-    fc.fe.emit_st_loc(i_slot);
-
-    fc.fe.emit_jmp(loop_start);
-
-    // found_true: push true and jump past the false path.
-    fc.fe.emit_label(found_true);
-    let true_cv = ConstValue::Int(1);
-    let true_idx = em.cp.intern(&true_cv)?;
-    fc.fe.emit_ld_cst(true_idx);
-    fc.fe.emit_jmp(end_label);
-
-    // loop_exit: exhausted array without a match, push false.
-    fc.fe.emit_label(loop_exit);
-    let false_cv = ConstValue::Int(0);
-    let false_idx = em.cp.intern(&false_cv)?;
-    fc.fe.emit_ld_cst(false_idx);
-
-    fc.fe.emit_label(end_label);
-
     Ok(())
 }
 

@@ -48,7 +48,6 @@ pub const fn can_start_expr(kind: TokenKind) -> bool {
             | TokenKind::DotLBrace
             | TokenKind::HashLBracket
             | TokenKind::KwClass
-            | TokenKind::KwDefer
             | TokenKind::KwEffect
             | TokenKind::KwExport
             | TokenKind::KwInstance
@@ -58,7 +57,6 @@ pub const fn can_start_expr(kind: TokenKind) -> bool {
             | TokenKind::KwNot
             | TokenKind::KwRecord
             | TokenKind::KwReturn
-            | TokenKind::KwTry
             | TokenKind::KwNeed
             | TokenKind::KwResume
             | TokenKind::KwForeign

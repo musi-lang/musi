@@ -78,7 +78,7 @@ impl Resolver<'_> {
                 }
             }
             Expr::Need { operand, .. } => self.resolve_expr(operand),
-            Expr::Let { fields, body, .. } => self.resolve_expr_let(&fields, body),
+            Expr::Let { fields, .. } => self.resolve_expr_let(&fields),
             Expr::Binding { fields, .. } => self.resolve_expr_binding(&fields),
             Expr::Fn {
                 params,
@@ -300,26 +300,12 @@ impl Resolver<'_> {
         }
     }
 
-    fn resolve_expr_let(&mut self, fields: &LetFields, body: Option<ExprIdx>) {
-        let is_fn_pat = matches!(&self.ast.pats[fields.pat], Pat::Variant { .. });
-        let is_lambda_bind = !is_fn_pat
-            && fields
-                .value
-                .is_some_and(|v| matches!(&self.ast.exprs[v], Expr::Fn { .. }));
-
+    fn resolve_expr_let(&mut self, fields: &LetFields) {
         let parent_ty_scope = if fields.params.is_empty() {
             None
         } else {
             Some(self.enter_ty_param_scope(&fields.params, &fields.constraints))
         };
-
-        // For let-in expressions, pre-define function names for recursion.
-        // Top-level `let` (body: None) is pre-defined in collect_top_level.
-        if is_fn_pat && body.is_some() {
-            self.define_fn_name(fields.pat, binding_def_kind(fields.kind));
-        } else if is_lambda_bind && body.is_some() {
-            self.define_pat(fields.pat, binding_def_kind(fields.kind));
-        }
 
         let fn_pat_parent = self.enter_fn_pat_scope(fields.pat);
 
@@ -334,16 +320,7 @@ impl Resolver<'_> {
             self.current_scope = p;
         }
 
-        if let Some(body) = body {
-            let parent = self.current_scope;
-            self.current_scope = self.scopes.push_child(parent);
-            if !is_fn_pat && !is_lambda_bind {
-                self.define_pat(fields.pat, binding_def_kind(fields.kind));
-            }
-            self.resolve_expr(body);
-            self.current_scope = parent;
-        }
-        // Top-level `let` (body: None) - names already defined in collect_top_level.
+        // Top-level `let` - names already defined in collect_top_level.
 
         if let Some(p) = parent_ty_scope {
             self.current_scope = p;

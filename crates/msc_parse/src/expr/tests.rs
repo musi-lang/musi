@@ -338,19 +338,6 @@ fn test_parse_import() {
 }
 
 #[test]
-fn test_parse_defer() {
-    let (expr, diags) = parse_single_expr("defer cleanup()");
-    assert!(!diags.has_errors());
-    assert!(matches!(
-        expr,
-        Expr::UnaryOp {
-            op: UnaryOp::Defer,
-            ..
-        }
-    ));
-}
-
-#[test]
 fn test_parse_await_is_identifier() {
     let (expr, diags) = parse_single_expr("await");
     assert!(!diags.has_errors());

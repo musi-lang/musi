@@ -89,9 +89,9 @@ pub fn emit_expr_tail(
             let (stmts, tail) = (stmts.clone(), *tail);
             emit_block(em, fc, &stmts, tail, is_tail)
         }
-        Expr::Let { fields, body, .. } => {
-            let (fields, body) = (fields.clone(), *body);
-            emit_let(em, fc, &fields, body, is_tail)
+        Expr::Let { fields, .. } => {
+            let fields = fields.clone();
+            emit_let(em, fc, &fields, is_tail)
         }
         Expr::Binding { fields, .. } => emit_binding(em, fc, &fields.clone()),
         Expr::BinOp {
@@ -345,8 +345,7 @@ fn emit_let(
     em: &mut Emitter<'_>,
     fc: &mut FnCtx,
     fields: &LetFields,
-    body: Option<ExprIdx>,
-    is_tail: bool,
+    _is_tail: bool,
 ) -> EmitResult<bool> {
     if let Some(val_idx) = fields.value {
         if fields.kind != BindKind::Mut
@@ -363,18 +362,14 @@ fn emit_let(
                 if let Some(&def_id) = em.pat_defs().get(&span) {
                     // Already registered by scan phase - compiled as top-level fn.
                     if em.fn_map.contains_key(&def_id) {
-                        return body.map_or(Ok(false), |body_idx| {
-                            emit_expr_tail(em, fc, body_idx, is_tail)
-                        });
+                        return Ok(false);
                     }
                     // Recursive lambda: use ref-cell letrec pattern.
                     if capture::body_references_def(em, fn_body, def_id) {
                         closure::emit_letrec_fn(
                             em, fc, def_id, fields.pat, val_idx, &params, fn_body,
                         )?;
-                        return body.map_or(Ok(false), |body_idx| {
-                            emit_expr_tail(em, fc, body_idx, is_tail)
-                        });
+                        return Ok(false);
                     }
                 }
             }
@@ -388,9 +383,7 @@ fn emit_let(
             }
         }
     }
-    body.map_or(Ok(false), |body_idx| {
-        emit_expr_tail(em, fc, body_idx, is_tail)
-    })
+    Ok(false)
 }
 
 fn emit_binding(em: &mut Emitter<'_>, fc: &mut FnCtx, fields: &LetFields) -> EmitResult<bool> {
@@ -434,11 +427,6 @@ fn emit_unary(
             desugar::emit_propagate(em, fc, operand)?;
             Ok(true)
         }
-        UnaryOp::Try => {
-            desugar::emit_try(em, fc, operand)?;
-            Ok(true)
-        }
-        UnaryOp::Defer => Ok(emit_defer(fc, operand)),
     }
 }
 
@@ -672,10 +660,6 @@ fn emit_primitive_binop(
         }
         BinOp::NilCoal => {
             desugar::emit_nil_coal(em, fc, left, right)?;
-            Ok(true)
-        }
-        BinOp::In => {
-            desugar::emit_in_op(em, fc, left, right)?;
             Ok(true)
         }
         BinOp::RangeInc | BinOp::RangeExc => {
@@ -1171,9 +1155,4 @@ pub fn emit_deferred_cleanup(em: &mut Emitter<'_>, fc: &mut FnCtx) -> EmitResult
     Ok(())
 }
 
-/// Emit `defer operand`: record the operand expression for deferred execution
-/// at function exit. Produces no stack value.
-fn emit_defer(fc: &mut FnCtx, operand: ExprIdx) -> bool {
-    fc.deferred.push(operand);
-    false
-}
+// deferred cleanup is invoked at function exit and early-return sites

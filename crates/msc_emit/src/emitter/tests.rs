@@ -5,10 +5,10 @@ use std::str::from_utf8;
 use msc_bc::Opcode;
 use msc_lex::lex;
 use msc_parse::parse;
-use msc_sema::{SemaOptions, analyze};
+use msc_sema::{analyze, SemaOptions};
 use msc_shared::{DiagnosticBag, FileId, Interner};
 
-use crate::{EmitOutput, emit};
+use crate::{emit, EmitOutput};
 
 fn compile_with(source: &str, script: bool, strict: bool) -> Result<EmitOutput, String> {
     let mut interner = Interner::new();
@@ -222,20 +222,6 @@ fn test_emit_cons() {
 }
 
 #[test]
-fn test_emit_try_expr() {
-    let source = "let f : (Int) -> Int := (x) => try x;";
-    let out = compile_script(source);
-    assert!(out.is_ok(), "try should compile: {}", out.unwrap_err());
-    let out = out.unwrap();
-    // After the rearchitecture, `try` wraps in a variant via REC_NEW (not OPT_SOME).
-    let found = find_opcode(&out.bytes, Opcode::REC_NEW);
-    assert!(
-        found.is_some(),
-        "expected REC_NEW for try wrapping in variant"
-    );
-}
-
-#[test]
 fn test_emit_err_coal() {
     let source = "let f : (Int, Int) -> Int := (a, b) => a !! b;";
     let out = compile_lenient(source);
@@ -247,13 +233,6 @@ fn test_emit_err_coal() {
     let out = out.unwrap();
     let found = find_opcode(&out.bytes, Opcode::MAT_TAG);
     assert!(found.is_some(), "expected MAT_TAG for err-coalesce");
-}
-
-#[test]
-fn test_emit_defer() {
-    let source = "let f : () -> Int := () => (defer 1; 42);";
-    let out = compile_script(source);
-    assert!(out.is_ok(), "defer should compile: {}", out.unwrap_err());
 }
 
 #[test]

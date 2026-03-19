@@ -324,11 +324,8 @@ impl<'a> Emitter<'a> {
                     self.scan_instance_members(&members, None);
                 }
             }
-            Expr::Let { fields, body, .. } => {
+            Expr::Let { fields, .. } => {
                 self.scan_binding(&fields);
-                if let Some(body_idx) = body {
-                    self.scan_stmt(body_idx)?;
-                }
             }
             Expr::Lit { .. }
             | Expr::Name { .. }

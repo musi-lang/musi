@@ -51,15 +51,6 @@ fn test_parse_let_with_type_annotation() {
 }
 
 #[test]
-fn test_parse_let_in_scoped() {
-    let (expr, diags) = parse_single("let x := 1 in (x);");
-    assert!(!diags.has_errors());
-    assert!(matches!(expr, Expr::Let { .. }), "expected Let");
-    let Expr::Let { body, .. } = expr else { return };
-    assert!(body.is_some());
-}
-
-#[test]
 fn test_parse_class_declaration() {
     let src = "class Eq ['T] { let (=)(a, b) : Bool; };";
     let (expr, diags) = parse_single(src);

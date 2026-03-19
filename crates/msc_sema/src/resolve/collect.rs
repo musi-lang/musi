@@ -10,7 +10,7 @@ use msc_shared::Symbol;
 use crate::attr_util::validate_attrs;
 use crate::def::{DefFlags, DefId, DefKind};
 
-use super::{Resolver, binding_def_kind};
+use super::{binding_def_kind, Resolver};
 
 impl Resolver<'_> {
     pub(super) fn collect_top_level(&mut self, expr_idx: ExprIdx) {
@@ -35,9 +35,7 @@ impl Resolver<'_> {
                 self.maybe_mark_lang_item_pat(fields.pat, attrs);
                 self.apply_flags_to_pat(fields.pat, attrs);
             }
-            Expr::Let {
-                fields, body: None, ..
-            } => {
+            Expr::Let { fields, .. } => {
                 self.collect_top_level_let(fields, attrs);
             }
             Expr::Class { name, exported, .. } => {

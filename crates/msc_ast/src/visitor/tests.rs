@@ -4,10 +4,10 @@ use std::ops::ControlFlow;
 
 use msc_shared::{Span, Symbol};
 
-use crate::expr::{BinOp, BindKind, Expr, LetFields, UnaryOp};
+use crate::expr::{BinOp, BindKind, Expr, LetFields};
 use crate::pat::Pat;
 use crate::visitor::AstVisitor;
-use crate::{AstArenas, ExprIdx, NameRef, PatIdx, visitor};
+use crate::{visitor, AstArenas, ExprIdx, NameRef, PatIdx};
 
 /// A visitor that counts how many expr nodes it visits.
 struct CountingVisitor {
@@ -155,7 +155,6 @@ fn test_walk_expr_crosses_into_ty_annotation() {
             with_effects: None,
             span: Span::new(0, 13),
         },
-        body: None,
         span: Span::new(0, 13),
     });
 
@@ -214,27 +213,4 @@ fn test_walk_pat_visits_or_branches() {
     let _ = visitor.visit_pat(root, &arenas);
     // root + left + right = 3
     assert_eq!(visitor.pat_count, 3);
-}
-
-#[test]
-fn test_walk_expr_visits_unary_op_defer_operand() {
-    let mut arenas = AstArenas::new();
-    let inner_ref = arenas.name_refs.alloc(NameRef {
-        name: Symbol(0),
-        span: Span::new(6, 3),
-    });
-    let inner = arenas.exprs.alloc(Expr::Name {
-        name_ref: inner_ref,
-        span: Span::new(6, 3),
-    });
-    let root = arenas.exprs.alloc(Expr::UnaryOp {
-        op: UnaryOp::Defer,
-        operand: inner,
-        span: Span::new(0, 9),
-    });
-
-    let mut visitor = CountingVisitor::new();
-    let _ = visitor.visit_expr(root, &arenas);
-    // root + operand = 2
-    assert_eq!(visitor.expr_count, 2);
 }

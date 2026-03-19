@@ -67,9 +67,9 @@ fn synth_inner<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) -> Ty
             let (stmts, tail) = (stmts.clone(), *tail);
             synth_block(ck, &stmts, tail)
         }
-        Expr::Let { fields, body, .. } => {
-            let (fields, body) = (fields.clone(), *body);
-            synth_let(ck, &fields, body)
+        Expr::Let { fields, .. } => {
+            let fields = fields.clone();
+            synth_let(ck, &fields)
         }
         Expr::Binding { fields, .. } => {
             let fields = fields.clone();
@@ -347,11 +347,7 @@ fn synth_block<S: BuildHasher>(
     }
 }
 
-fn synth_let<S: BuildHasher>(
-    ck: &mut Checker<'_, S>,
-    fields: &LetFields,
-    body: Option<ExprIdx>,
-) -> TypeIdx {
+fn synth_let<S: BuildHasher>(ck: &mut Checker<'_, S>, fields: &LetFields) -> TypeIdx {
     let (parent_scope, ty_var_ids) = if fields.params.is_empty() {
         (None, vec![])
     } else {
@@ -397,17 +393,11 @@ fn synth_let<S: BuildHasher>(
     record_fn_constraints(ck, fields);
     check_pat(ck, fields.pat, pat_ty);
 
-    let result = if let Some(body) = body {
-        synth(ck, body)
-    } else {
-        ck.named_ty(ck.ctx.well_known.unit)
-    };
-
     ck.store.active_obligations = prev_obligations;
     if let Some(p) = parent_scope {
         ck.current_scope = p;
     }
-    result
+    ck.named_ty(ck.ctx.well_known.unit)
 }
 
 fn synth_binding<S: BuildHasher>(ck: &mut Checker<'_, S>, fields: &LetFields) -> TypeIdx {
@@ -985,7 +975,7 @@ fn synth_binop<S: BuildHasher>(
     }
 
     match op {
-        BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge | BinOp::In => {
+        BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge => {
             ck.unify_or_report(left_ty, right_ty, span);
             ck.named_ty(ck.ctx.well_known.bool)
         }
@@ -1076,18 +1066,6 @@ fn synth_unaryop<S: BuildHasher>(
             bool_ty
         }
         UnaryOp::Neg => operand_ty,
-        UnaryOp::Defer => {
-            // `defer expr` produces a thunk: () -> T.
-            ck.alloc_ty(Type::Fn {
-                params: vec![],
-                ret: operand_ty,
-                effects: EffectRow::PURE,
-            })
-        }
-        UnaryOp::Try => {
-            // `try expr` unwraps a Result<T, E>, returning T.
-            unwrap_result_ty(ck, operand_ty, span)
-        }
         UnaryOp::ForceUnwrap | UnaryOp::Propagate => unwrap_option_ty(ck, operand_ty, span),
     }
 }

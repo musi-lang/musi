@@ -1,4 +1,4 @@
-use super::{Token, TokenKind, keyword_from_str};
+use super::{keyword_from_str, Token, TokenKind};
 use msc_shared::{Span, Symbol};
 
 #[test]
@@ -8,12 +8,11 @@ fn test_keyword_from_str_returns_some_for_every_keyword() {
         ("as", TokenKind::KwAs),
         ("choice", TokenKind::KwChoice),
         ("class", TokenKind::KwClass),
-        ("defer", TokenKind::KwDefer),
+        ("derives", TokenKind::KwDerives),
         ("effect", TokenKind::KwEffect),
         ("export", TokenKind::KwExport),
         ("if", TokenKind::KwIf),
         ("import", TokenKind::KwImport),
-        ("in", TokenKind::KwIn),
         ("instance", TokenKind::KwInstance),
         ("law", TokenKind::KwLaw),
         ("let", TokenKind::KwLet),
@@ -24,7 +23,6 @@ fn test_keyword_from_str_returns_some_for_every_keyword() {
         ("or", TokenKind::KwOr),
         ("record", TokenKind::KwRecord),
         ("return", TokenKind::KwReturn),
-        ("try", TokenKind::KwTry),
         ("where", TokenKind::KwWhere),
         ("xor", TokenKind::KwXor),
     ];

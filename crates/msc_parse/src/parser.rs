@@ -222,11 +222,6 @@ impl<'a> Parser<'a> {
         self.alloc_expr(e)
     }
 
-    pub(crate) fn parse_alloc_expr_no_in(&mut self) -> ExprIdx {
-        let e = self.parse_expr_no_in();
-        self.alloc_expr(e)
-    }
-
     pub(crate) fn parse_alloc_ty(&mut self) -> ExprIdx {
         let t = self.parse_ty();
         self.alloc_expr(t)

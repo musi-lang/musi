@@ -22,11 +22,6 @@ impl Parser<'_> {
         self.parse_pratt_until(min_bp, None)
     }
 
-    /// Like `parse_pratt(0)` but stops before `in` (for let-in disambiguation).
-    pub(crate) fn parse_expr_no_in(&mut self) -> Expr {
-        self.parse_pratt_until(0, Some(TokenKind::KwIn))
-    }
-
     /// Like `parse_pratt(0)` but stops before `|` (pipe-separated arms).
     pub(crate) fn parse_arm_body(&mut self) -> Expr {
         self.parse_pratt_until(0, Some(TokenKind::Pipe))
@@ -94,7 +89,6 @@ impl Parser<'_> {
             T::Gt => (50, 51, B::Gt),
             T::LtEq => (50, 51, B::Le),
             T::GtEq => (50, 51, B::Ge),
-            T::KwIn => (50, 51, B::In),
             // BP 60 - range (non-assoc)
             T::DotDot => (60, 61, B::RangeInc),
             T::DotDotLt => (60, 61, B::RangeExc),
@@ -120,10 +114,6 @@ impl Parser<'_> {
             // Prefix unary: - expr, not expr (BP 110 > multiplicative)
             TokenKind::Minus => self.parse_expr_unary_op(UnaryOp::Neg, 110),
             TokenKind::KwNot => self.parse_expr_unary_op(UnaryOp::Not, 110),
-
-            // Keyword prefix: defer/try expr (BP 0)
-            TokenKind::KwDefer => self.parse_expr_unary_op(UnaryOp::Defer, 0),
-            TokenKind::KwTry => self.parse_expr_unary_op(UnaryOp::Try, 0),
 
             // Literals
             TokenKind::IntLit | TokenKind::FloatLit | TokenKind::StringLit | TokenKind::RuneLit => {

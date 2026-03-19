@@ -42,7 +42,6 @@ pub enum Expr {
     // Bindings
     Let {
         fields: LetFields,
-        body: Option<ExprIdx>,
         span: Span,
     },
 
@@ -416,8 +415,6 @@ pub enum BinOp {
     Xor,
     Shl,
     Shr,
-    // membership
-    In,
     // special infix
     Pipe,
     Assign,
@@ -458,8 +455,6 @@ impl BinOp {
 pub enum UnaryOp {
     Neg,
     Not,
-    Defer,
-    Try,
     Propagate,
     ForceUnwrap,
 }
