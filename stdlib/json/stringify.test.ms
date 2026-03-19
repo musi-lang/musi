@@ -3,61 +3,63 @@
 import "@std/testing" as t;
 import "@std/json/stringify" as json;
 
-t.runner.report(t.runner.run_suite([
-  ("stringify - null", () => (
+t.describe("JSON.stringify", () => (
+  t.it("stringify - null", () => (
     let result := json.stringify(.Null);
-    t.assertions.assert_eq(result, "null")
-  )),
-  ("stringify - true", () => (
+    t.expect(result).toBe("null")
+  ));
+  t.it("stringify - true", () => (
     let result := json.stringify(.Bool(.True));
-    t.assertions.assert_eq(result, "true")
-  )),
-  ("stringify - false", () => (
+    t.expect(result).toBe("true")
+  ));
+  t.it("stringify - false", () => (
     let result := json.stringify(.Bool(.False));
-    t.assertions.assert_eq(result, "false")
-  )),
-  ("stringify - integer number", () => (
+    t.expect(result).toBe("false")
+  ));
+  t.it("stringify - integer number", () => (
     let result := json.stringify(.Number(42.0));
-    t.assertions.assert_eq(result, "42")
-  )),
-  ("stringify - simple string", () => (
+    t.expect(result).toBe("42")
+  ));
+  t.it("stringify - simple string", () => (
     let result := json.stringify(.Str("hello"));
-    t.assertions.assert_eq(result, "\"hello\"")
-  )),
-  ("stringify - empty string", () => (
+    t.expect(result).toBe("\"hello\"")
+  ));
+  t.it("stringify - empty string", () => (
     let result := json.stringify(.Str(""));
-    t.assertions.assert_eq(result, "\"\"")
-  )),
-  ("stringify - string with quote escaping", () => (
+    t.expect(result).toBe("\"\"")
+  ));
+  t.it("stringify - string with quote escaping", () => (
     let result := json.stringify(.Str("say \"hi\""));
-    t.assertions.assert_eq(result, "\"say \\\"hi\\\"\"")
-  )),
-  ("stringify - string with newline escaping", () => (
+    t.expect(result).toBe("\"say \\\"hi\\\"\"")
+  ));
+  t.it("stringify - string with newline escaping", () => (
     let result := json.stringify(.Str("line1\nline2"));
-    t.assertions.assert_eq(result, "\"line1\\nline2\"")
-  )),
-  ("stringify - string with backslash escaping", () => (
+    t.expect(result).toBe("\"line1\\nline2\"")
+  ));
+  t.it("stringify - string with backslash escaping", () => (
     let result := json.stringify(.Str("a\\b"));
-    t.assertions.assert_eq(result, "\"a\\\\b\"")
-  )),
-  ("stringify - empty array", () => (
+    t.expect(result).toBe("\"a\\\\b\"")
+  ));
+  t.it("stringify - empty array", () => (
     let result := json.stringify(.Array([]));
-    t.assertions.assert_eq(result, "[]")
-  )),
-  ("stringify - array of numbers", () => (
+    t.expect(result).toBe("[]")
+  ));
+  t.it("stringify - array of numbers", () => (
     let result := json.stringify(.Array([.Number(1.0), .Number(2.0), .Number(3.0)]));
-    t.assertions.assert_eq(result, "[1, 2, 3]")
-  )),
-  ("stringify - empty object", () => (
+    t.expect(result).toBe("[1, 2, 3]")
+  ));
+  t.it("stringify - empty object", () => (
     let result := json.stringify(.Object([]));
-    t.assertions.assert_eq(result, "{}")
-  )),
-  ("stringify - object with one key", () => (
+    t.expect(result).toBe("{}")
+  ));
+  t.it("stringify - object with one key", () => (
     let result := json.stringify(.Object([("x", .Number(1.0))]));
-    t.assertions.assert_eq(result, "{\"x\": 1}")
-  )),
-  ("stringify - nested structure", () => (
+    t.expect(result).toBe("{\"x\": 1}")
+  ));
+  t.it("stringify - nested structure", () => (
     let result := json.stringify(.Object([("a", .Array([.Bool(.True), .Null]))]));
-    t.assertions.assert_eq(result, "{\"a\": [true, null]}")
-  )),
-]));
+    t.expect(result).toBe("{\"a\": [true, null]}")
+  ))
+));
+
+t.run();

@@ -8,7 +8,7 @@
 
 import "@std/rt" as rt;
 
-export let Deque ['a] := record { front : [] 'a; back : [] 'a };
+export let Deque ['a] := record { front : []'a; back : []'a };
 
 export let new ['a] := () => .{ front := [], back := [] };
 

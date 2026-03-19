@@ -2,7 +2,7 @@
 
 import "@std/rt" as rt;
 
-export let Stack ['a] := record { data : [] 'a };
+export let Stack ['a] := record { data : []'a };
 
 export let new ['a] := () => .{ data := [] };
 

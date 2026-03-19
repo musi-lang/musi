@@ -5,62 +5,64 @@ import "@std/ini/index" as ini;
 
 let simple_ini := "[server]\nhost = localhost\nport = 8080\n\n[db]\nname = mydb\n";
 
-t.runner.report(t.runner.run_suite([
-  ("parse - empty string returns empty sections", () => (
+t.describe("INI", () => (
+  t.it("parse - empty string returns empty sections", () => (
     let sections := ini.parse("");
-    t.assertions.assert_eq(sections, [])
-  )),
-  ("parse - single section with entries", () => (
+    t.expect(sections).toBe([])
+  ));
+  t.it("parse - single section with entries", () => (
     let sections := ini.parse(simple_ini);
-    t.assertions.assert_eq(sections.[0].name, "server")
-  )),
-  ("parse - multiple sections", () => (
+    t.expect(sections.[0].name).toBe("server")
+  ));
+  t.it("parse - multiple sections", () => (
     let sections := ini.parse(simple_ini);
-    t.assertions.assert_eq(sections.[1].name, "db")
-  )),
-  ("get - finds value in section", () => (
+    t.expect(sections.[1].name).toBe("db")
+  ));
+  t.it("get - finds value in section", () => (
     let sections := ini.parse(simple_ini);
-    t.assertions.assert_eq(ini.get(sections, "server", "host"), .Some("localhost"))
-  )),
-  ("get - finds numeric value", () => (
+    t.expect(ini.get(sections, "server", "host")).toBe(.Some("localhost"))
+  ));
+  t.it("get - finds numeric value", () => (
     let sections := ini.parse(simple_ini);
-    t.assertions.assert_eq(ini.get(sections, "server", "port"), .Some("8080"))
-  )),
-  ("get - returns None for missing key", () => (
+    t.expect(ini.get(sections, "server", "port")).toBe(.Some("8080"))
+  ));
+  t.it("get - returns None for missing key", () => (
     let sections := ini.parse(simple_ini);
-    t.assertions.assert_eq(ini.get(sections, "server", "password"), .None)
-  )),
-  ("get - returns None for missing section", () => (
+    t.expect(ini.get(sections, "server", "password")).toBe(.None)
+  ));
+  t.it("get - returns None for missing section", () => (
     let sections := ini.parse(simple_ini);
-    t.assertions.assert_eq(ini.get(sections, "cache", "host"), .None)
-  )),
-  ("parse - semicolon comment lines ignored", () => (
+    t.expect(ini.get(sections, "cache", "host")).toBe(.None)
+  ));
+  t.it("parse - semicolon comment lines ignored", () => (
     let input := "; this is a comment\n[app]\nkey = value\n";
     let sections := ini.parse(input);
-    t.assertions.assert_eq(sections.[0].name, "app")
-  )),
-  ("parse - hash comment lines ignored", () => (
+    t.expect(sections.[0].name).toBe("app")
+  ));
+  t.it("parse - hash comment lines ignored", () => (
     let input := "# another comment\n[app]\nkey = value\n";
     let sections := ini.parse(input);
-    t.assertions.assert_eq(ini.get(sections, "app", "key"), .Some("value"))
-  )),
-  ("parse - keys with spaces around equals", () => (
+    t.expect(ini.get(sections, "app", "key")).toBe(.Some("value"))
+  ));
+  t.it("parse - keys with spaces around equals", () => (
     let input := "[s]\nfoo = bar\n";
     let sections := ini.parse(input);
-    t.assertions.assert_eq(ini.get(sections, "s", "foo"), .Some("bar"))
-  )),
-  ("parse - global entries before any section", () => (
+    t.expect(ini.get(sections, "s", "foo")).toBe(.Some("bar"))
+  ));
+  t.it("parse - global entries before any section", () => (
     let input := "key = value\n[s]\nother = x\n";
     let sections := ini.parse(input);
-    t.assertions.assert_eq(ini.get(sections, "", "key"), .Some("value"))
-  )),
-  ("parse - section with multiple entries", () => (
+    t.expect(ini.get(sections, "", "key")).toBe(.Some("value"))
+  ));
+  t.it("parse - section with multiple entries", () => (
     let input := "[s]\na = 1\nb = 2\nc = 3\n";
     let sections := ini.parse(input);
-    t.assertions.assert_true(
+    t.expect(
       ini.get(sections, "s", "a") = .Some("1") and
       ini.get(sections, "s", "b") = .Some("2") and
       ini.get(sections, "s", "c") = .Some("3")
-    )
-  )),
-]));
+    ).toBe(.True)
+  ))
+));
+
+t.run();

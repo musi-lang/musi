@@ -5,7 +5,7 @@
 
 import "@std/rt" as rt;
 
-export let SortedArray ['a] := record { data : [] 'a };
+export let SortedArray ['a] := record { data : []'a };
 
 export let new ['a] := () => .{ data := [] };
 

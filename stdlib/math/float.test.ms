@@ -3,95 +3,97 @@
 import "@std/testing" as t;
 import "@std/math/float" as m;
 
-t.runner.report(t.runner.run_suite([
-  ("floor - positive fractional", () => (
-    t.assertions.assert_eq(m.floor(3.7), 3.0)
-  )),
-  ("floor - negative fractional", () => (
-    t.assertions.assert_eq(m.floor(-2.3), -3.0)
-  )),
-  ("ceil - positive fractional", () => (
-    t.assertions.assert_eq(m.ceil(3.2), 4.0)
-  )),
-  ("ceil - negative fractional", () => (
-    t.assertions.assert_eq(m.ceil(-2.7), -2.0)
-  )),
-  ("round - rounds half up", () => (
-    t.assertions.assert_eq(m.round(2.5), 3.0)
-  )),
-  ("round - rounds down", () => (
-    t.assertions.assert_eq(m.round(2.3), 2.0)
-  )),
-  ("sqrt - perfect square", () => (
-    t.assertions.assert_eq(m.sqrt(4.0), 2.0)
-  )),
-  ("sqrt - zero", () => (
-    t.assertions.assert_eq(m.sqrt(0.0), 0.0)
-  )),
-  ("sqrt - one", () => (
-    t.assertions.assert_eq(m.sqrt(1.0), 1.0)
-  )),
-  ("sin - zero", () => (
-    t.assertions.assert_eq(m.sin(0.0), 0.0)
-  )),
-  ("cos - zero", () => (
-    t.assertions.assert_eq(m.cos(0.0), 1.0)
-  )),
-  ("log - one gives zero", () => (
-    t.assertions.assert_eq(m.log(1.0), 0.0)
-  )),
-  ("exp - zero gives one", () => (
-    t.assertions.assert_eq(m.exp(0.0), 1.0)
-  )),
-  ("is_nan - NaN value", () => (
-    t.assertions.assert_true(m.is_nan(m.sqrt(-1.0)))
-  )),
-  ("is_nan - normal value", () => (
-    t.assertions.assert_false(m.is_nan(1.0))
-  )),
-  ("is_infinite - normal value", () => (
-    t.assertions.assert_false(m.is_infinite(1.0))
-  )),
-  ("abs_float - negative", () => (
-    t.assertions.assert_eq(m.abs_float(-3.5), 3.5)
-  )),
-  ("abs_float - positive", () => (
-    t.assertions.assert_eq(m.abs_float(3.5), 3.5)
-  )),
-  ("abs_float - zero", () => (
-    t.assertions.assert_eq(m.abs_float(0.0), 0.0)
-  )),
-  ("clamp_float - below range", () => (
-    t.assertions.assert_eq(m.clamp_float(0.5, 1.0, 3.0), 1.0)
-  )),
-  ("clamp_float - above range", () => (
-    t.assertions.assert_eq(m.clamp_float(5.0, 1.0, 3.0), 3.0)
-  )),
-  ("clamp_float - within range", () => (
-    t.assertions.assert_eq(m.clamp_float(2.0, 1.0, 3.0), 2.0)
-  )),
-  ("min_float - returns smaller", () => (
-    t.assertions.assert_eq(m.min_float(1.5, 2.5), 1.5)
-  )),
-  ("max_float - returns larger", () => (
-    t.assertions.assert_eq(m.max_float(1.5, 2.5), 2.5)
-  )),
-  ("sign_float - negative", () => (
-    t.assertions.assert_eq(m.sign_float(-3.0), -1.0)
-  )),
-  ("sign_float - zero", () => (
-    t.assertions.assert_eq(m.sign_float(0.0), 0.0)
-  )),
-  ("sign_float - positive", () => (
-    t.assertions.assert_eq(m.sign_float(5.0), 1.0)
-  )),
-  ("lerp - at t=0 gives a", () => (
-    t.assertions.assert_eq(m.lerp(0.0, 10.0, 0.0), 0.0)
-  )),
-  ("lerp - at t=1 gives b", () => (
-    t.assertions.assert_eq(m.lerp(0.0, 10.0, 1.0), 10.0)
-  )),
-  ("lerp - at t=0.5 gives midpoint", () => (
-    t.assertions.assert_eq(m.lerp(0.0, 10.0, 0.5), 5.0)
-  )),
-]));
+t.describe("Math.float", () => (
+  t.it("floor - positive fractional", () => (
+    t.expect(m.floor(3.7)).toBe(3.0)
+  ));
+  t.it("floor - negative fractional", () => (
+    t.expect(m.floor(-2.3)).toBe(-3.0)
+  ));
+  t.it("ceil - positive fractional", () => (
+    t.expect(m.ceil(3.2)).toBe(4.0)
+  ));
+  t.it("ceil - negative fractional", () => (
+    t.expect(m.ceil(-2.7)).toBe(-2.0)
+  ));
+  t.it("round - rounds half up", () => (
+    t.expect(m.round(2.5)).toBe(3.0)
+  ));
+  t.it("round - rounds down", () => (
+    t.expect(m.round(2.3)).toBe(2.0)
+  ));
+  t.it("sqrt - perfect square", () => (
+    t.expect(m.sqrt(4.0)).toBe(2.0)
+  ));
+  t.it("sqrt - zero", () => (
+    t.expect(m.sqrt(0.0)).toBe(0.0)
+  ));
+  t.it("sqrt - one", () => (
+    t.expect(m.sqrt(1.0)).toBe(1.0)
+  ));
+  t.it("sin - zero", () => (
+    t.expect(m.sin(0.0)).toBe(0.0)
+  ));
+  t.it("cos - zero", () => (
+    t.expect(m.cos(0.0)).toBe(1.0)
+  ));
+  t.it("log - one gives zero", () => (
+    t.expect(m.log(1.0)).toBe(0.0)
+  ));
+  t.it("exp - zero gives one", () => (
+    t.expect(m.exp(0.0)).toBe(1.0)
+  ));
+  t.it("is_nan - NaN value", () => (
+    t.expect(m.is_nan(m.sqrt(-1.0))).toBe(.True)
+  ));
+  t.it("is_nan - normal value", () => (
+    t.expect(m.is_nan(1.0)).toBe(.False)
+  ));
+  t.it("is_infinite - normal value", () => (
+    t.expect(m.is_infinite(1.0)).toBe(.False)
+  ));
+  t.it("abs_float - negative", () => (
+    t.expect(m.abs_float(-3.5)).toBe(3.5)
+  ));
+  t.it("abs_float - positive", () => (
+    t.expect(m.abs_float(3.5)).toBe(3.5)
+  ));
+  t.it("abs_float - zero", () => (
+    t.expect(m.abs_float(0.0)).toBe(0.0)
+  ));
+  t.it("clamp_float - below range", () => (
+    t.expect(m.clamp_float(0.5, 1.0, 3.0)).toBe(1.0)
+  ));
+  t.it("clamp_float - above range", () => (
+    t.expect(m.clamp_float(5.0, 1.0, 3.0)).toBe(3.0)
+  ));
+  t.it("clamp_float - within range", () => (
+    t.expect(m.clamp_float(2.0, 1.0, 3.0)).toBe(2.0)
+  ));
+  t.it("min_float - returns smaller", () => (
+    t.expect(m.min_float(1.5, 2.5)).toBe(1.5)
+  ));
+  t.it("max_float - returns larger", () => (
+    t.expect(m.max_float(1.5, 2.5)).toBe(2.5)
+  ));
+  t.it("sign_float - negative", () => (
+    t.expect(m.sign_float(-3.0)).toBe(-1.0)
+  ));
+  t.it("sign_float - zero", () => (
+    t.expect(m.sign_float(0.0)).toBe(0.0)
+  ));
+  t.it("sign_float - positive", () => (
+    t.expect(m.sign_float(5.0)).toBe(1.0)
+  ));
+  t.it("lerp - at t=0 gives a", () => (
+    t.expect(m.lerp(0.0, 10.0, 0.0)).toBe(0.0)
+  ));
+  t.it("lerp - at t=1 gives b", () => (
+    t.expect(m.lerp(0.0, 10.0, 1.0)).toBe(10.0)
+  ));
+  t.it("lerp - at t=0.5 gives midpoint", () => (
+    t.expect(m.lerp(0.0, 10.0, 0.5)).toBe(5.0)
+  ))
+));
+
+t.run();

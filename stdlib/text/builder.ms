@@ -2,7 +2,7 @@
 
 import "@std/rt" as rt;
 
-export let Builder := record { parts : [] String };
+export let Builder := record { parts : []String };
 
 export let new := () => .{ parts := [] };
 

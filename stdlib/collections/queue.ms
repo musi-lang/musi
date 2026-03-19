@@ -5,7 +5,7 @@
 
 import "@std/rt" as rt;
 
-export let Queue ['a] := record { front : [] 'a; back : [] 'a };
+export let Queue ['a] := record { front : []'a; back : []'a };
 
 export let new ['a] := () => .{ front := [], back := [] };
 

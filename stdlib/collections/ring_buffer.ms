@@ -2,7 +2,7 @@
 
 import "@std/rt" as rt;
 
-export let RingBuffer ['a] := record { data : [] 'a; head : Int; count : Int; cap : Int };
+export let RingBuffer ['a] := record { data : []'a; head : Int; count : Int; cap : Int };
 
 export let new ['a] := (capacity) => (
   let mut arr := [];

@@ -3,33 +3,35 @@
 import "@std/testing" as t;
 import "@std/text/join" as tj;
 
-t.runner.report(t.runner.run_suite([
-  ("join - joins with separator", () => (
+t.describe("Text.join", () => (
+  t.it("join - joins with separator", () => (
     let result := tj.join(["a", "b", "c"], ", ");
-    t.assertions.assert_eq(result, "a, b, c")
-  )),
-  ("join - single element no separator", () => (
+    t.expect(result).toBe("a, b, c")
+  ));
+  t.it("join - single element no separator", () => (
     let result := tj.join(["hello"], ", ");
-    t.assertions.assert_eq(result, "hello")
-  )),
-  ("join - empty array returns empty string", () => (
+    t.expect(result).toBe("hello")
+  ));
+  t.it("join - empty array returns empty string", () => (
     let result := tj.join([], ", ");
-    t.assertions.assert_eq(result, "")
-  )),
-  ("join - empty separator concatenates", () => (
+    t.expect(result).toBe("")
+  ));
+  t.it("join - empty separator concatenates", () => (
     let result := tj.join(["a", "b", "c"], "");
-    t.assertions.assert_eq(result, "abc")
-  )),
-  ("join - newline separator", () => (
+    t.expect(result).toBe("abc")
+  ));
+  t.it("join - newline separator", () => (
     let result := tj.join(["line1", "line2", "line3"], "\n");
-    t.assertions.assert_eq(result, "line1\nline2\nline3")
-  )),
-  ("join - multi-char separator", () => (
+    t.expect(result).toBe("line1\nline2\nline3")
+  ));
+  t.it("join - multi-char separator", () => (
     let result := tj.join(["x", "y"], " | ");
-    t.assertions.assert_eq(result, "x | y")
-  )),
-  ("join - two elements", () => (
+    t.expect(result).toBe("x | y")
+  ));
+  t.it("join - two elements", () => (
     let result := tj.join(["foo", "bar"], "-");
-    t.assertions.assert_eq(result, "foo-bar")
-  )),
-]));
+    t.expect(result).toBe("foo-bar")
+  ))
+));
+
+t.run();

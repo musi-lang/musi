@@ -80,6 +80,9 @@ export foreign "C" (
   // Conversion
   let int_to_float : (Int) ~> Float64;
   let float_to_int : (Float64) ~> Int;
+
+  // Testing
+  let __test_filter : () ~> String;
 );
 
 #[lang := "write" ]

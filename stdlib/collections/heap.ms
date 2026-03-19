@@ -7,7 +7,7 @@
 import "@std/rt" as rt;
 import "@std/cmp/ordering";
 
-export let Heap ['a] := record { data : [] 'a; cmp : ('a, 'a) -> Ordering };
+export let Heap ['a] := record { data : []'a; cmp : ('a, 'a) -> Ordering };
 
 export let new ['a] := (cmp) => .{ data := [], cmp := cmp };
 
