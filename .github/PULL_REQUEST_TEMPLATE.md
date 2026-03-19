@@ -5,7 +5,7 @@
 <!-- How was this tested? Check all that apply -->
 - [ ] `cargo test --workspace`
 - [ ] `cargo clippy --workspace`
-- [ ] `music test` (stdlib tests pass)
+- [ ] `musi test` (stdlib tests pass)
 - [ ] Manual testing: _describe steps_
 
 ## Breaking changes

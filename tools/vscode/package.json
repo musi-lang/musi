@@ -343,7 +343,7 @@
 						"null"
 					],
 					"default": null,
-					"markdownDescription": "Path to `music` compiler binary. If not set, searches in `target/debug`, `target/release`, `~/.cargo/bin`, and system PATH."
+					"markdownDescription": "Path to `musi` compiler binary. If not set, searches in `target/debug`, `target/release`, `~/.cargo/bin`, and system PATH."
 				},
 				"musi.compiler.args": {
 					"type": "array",
@@ -351,7 +351,7 @@
 						"type": "string"
 					},
 					"default": [],
-					"description": "Extra arguments passed to the music compiler."
+					"description": "Extra arguments passed to the musi compiler."
 				},
 				"musi.compiler.target": {
 					"type": "string",

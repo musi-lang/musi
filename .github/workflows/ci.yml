@@ -80,7 +80,7 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-
 
       - name: Run stdlib tests
-        run: cargo run --bin music -- test
+        run: cargo run --bin musi -- test
 
   build-release:
     name: Build (release)

@@ -17,7 +17,7 @@ body:
       description: Minimal steps to reproduce the behavior.
       placeholder: |
         1. Create a file with ...
-        2. Run `music ...`
+        2. Run `musi ...`
         3. See error
     validations:
       required: true
@@ -38,8 +38,8 @@ body:
     id: version
     attributes:
       label: Musi version
-      description: Output of `music --version`.
-      placeholder: "music 0.1.0"
+      description: Output of `musi --version`.
+      placeholder: "musi 0.1.0"
 
   - type: dropdown
     id: os

@@ -54,11 +54,11 @@ export async function findCompilerPath(): Promise<string | undefined> {
 		}
 	}
 
-	const cliPath = await findCliPath();
+	const cliPath = findCliPath();
 	if (cliPath) {
-		// music compiler is co-located with the musi CLI - both built from the same cargo workspace
+		// musi compiler is co-located with the musi CLI - both built from the same cargo workspace
 		const dir = path.dirname(cliPath);
-		const musicPath = path.join(dir, "music");
+		const musicPath = path.join(dir, "musi");
 		if (fs.existsSync(musicPath)) {
 			_cachedCompilerPath = musicPath;
 			return _cachedCompilerPath;

@@ -108,7 +108,7 @@ cargo build
 cargo build --release
 
 # Run a Musi program
-./target/release/music run examples/hello.ms
+./target/release/musi run examples/hello.ms
 
 # Type-check a file
 ./target/release/musi check myfile.ms

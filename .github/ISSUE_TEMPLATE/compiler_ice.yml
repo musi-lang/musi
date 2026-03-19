@@ -30,8 +30,8 @@ body:
     id: version
     attributes:
       label: Musi version
-      description: Output of `music --version`.
-      placeholder: "music 0.1.0"
+      description: Output of `musi --version`.
+      placeholder: "musi 0.1.0"
     validations:
       required: true
 
