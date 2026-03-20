@@ -23,7 +23,7 @@ impl Resolver<'_> {
                 self.resolve_name(expr_idx, name_ref, nr.name, span);
             }
             Expr::Lit { ref lit, .. } => self.resolve_lit(lit),
-            Expr::Error { .. } | Expr::Import { .. } | Expr::Export { .. } => {}
+            Expr::Error { .. } | Expr::Import { .. } => {}
             Expr::Paren { inner, .. } | Expr::Annotated { inner, .. } => self.resolve_expr(inner),
             Expr::Choice { body, .. } => self.resolve_expr_choice(body, None),
             Expr::Tuple { elems, .. } | Expr::Variant { args: elems, .. } => {

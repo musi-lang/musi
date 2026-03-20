@@ -1,4 +1,4 @@
-use super::{Token, TokenKind, keyword_from_str};
+use super::{keyword_from_str, Token, TokenKind};
 use msc_shared::{Span, Symbol};
 
 #[test]
@@ -90,7 +90,6 @@ fn test_fixed_text_returns_correct_strings() {
     assert_eq!(TokenKind::HashLBracket.fixed_text(), Some("#["));
     assert_eq!(TokenKind::LtDash.fixed_text(), Some("<-"));
     assert_eq!(TokenKind::LtColon.fixed_text(), Some("<:"));
-    assert_eq!(TokenKind::ColonGt.fixed_text(), Some(":>"));
     assert_eq!(TokenKind::Bang.fixed_text(), Some("!"));
     assert_eq!(TokenKind::BangDot.fixed_text(), Some("!."));
     assert_eq!(TokenKind::ColonQuestion.fixed_text(), Some(":?"));

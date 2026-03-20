@@ -112,11 +112,6 @@ fn test_lt_colon() {
 }
 
 #[test]
-fn test_colon_gt() {
-    assert_eq!(lex_kinds(":>")[0], TokenKind::ColonGt);
-}
-
-#[test]
 fn test_colon_eq() {
     assert_eq!(lex_kinds(":=")[0], TokenKind::ColonEq);
 }

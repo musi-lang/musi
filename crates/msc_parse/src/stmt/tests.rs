@@ -90,7 +90,7 @@ fn test_parse_export_let() {
 
 #[test]
 fn test_parse_effect_no_params_single_op() {
-    let src = "effect Async { suspend : () -> (); };";
+    let src = "effect Async { let suspend() : (); };";
     let (expr, diags) = parse_single(src);
     assert!(!diags.has_errors(), "diags: {diags:?}");
     assert!(
@@ -106,7 +106,7 @@ fn test_parse_effect_no_params_single_op() {
 
 #[test]
 fn test_parse_effect_with_params_multiple_ops() {
-    let src = "effect State ['S] { get : () -> 'S; put : 'S -> (); };";
+    let src = "effect State ['S] { let get() : 'S; let put(x : 'S) : (); };";
     let (expr, diags) = parse_single(src);
     assert!(!diags.has_errors(), "diags: {diags:?}");
     assert!(
@@ -122,7 +122,7 @@ fn test_parse_effect_with_params_multiple_ops() {
 
 #[test]
 fn test_parse_effect_throw_parameterized() {
-    let src = "effect Throw ['E] { raise : 'E -> 'E; };";
+    let src = "effect Throw ['E] { let raise(e : 'E) : 'E; };";
     let (expr, diags) = parse_single(src);
     assert!(!diags.has_errors(), "diags: {diags:?}");
     let Expr::Effect { params, ops, .. } = expr else {

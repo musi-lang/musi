@@ -445,7 +445,6 @@ impl Lexer<'_> {
             (b':', Some(b'?'), _) => (TokenKind::ColonQuestion, 2),
             (b':', Some(b':'), _) => (TokenKind::ColonColon, 2),
             (b':', Some(b'='), _) => (TokenKind::ColonEq, 2),
-            (b':', Some(b'>'), _) => (TokenKind::ColonGt, 2),
             (b'<', Some(b'-'), _) => (TokenKind::LtDash, 2),
             (b'-', Some(b'>'), _) => (TokenKind::DashGt, 2),
             (b'~', Some(b'>'), _) => (TokenKind::TildeGt, 2),

@@ -70,12 +70,13 @@ impl Parser<'_> {
         }
     }
 
-    /// Parses `'effect' ident ['of' ty_param_list] '{' { effect_op ';' } '}'`.
+    /// Parses `'effect' ident ['of' ty_param_list] [where-clause] '{' { effect_op ';' } '}'`.
     pub(crate) fn parse_expr_effect(&mut self) -> Expr {
         let start = self.start_span();
         let _effect = self.expect(TokenKind::KwEffect);
         let name = self.expect_symbol();
         let params = self.parse_optional_bracket_params();
+        let constraints = self.parse_opt_where_clause();
         let _lb = self.expect(TokenKind::LBrace);
         let ops = self.parse_effect_ops();
         let _rb = self.expect(TokenKind::RBrace);
@@ -83,6 +84,7 @@ impl Parser<'_> {
             exported: false,
             name,
             params,
+            constraints,
             ops,
             span: self.finish_span(start),
         }
@@ -93,13 +95,13 @@ impl Parser<'_> {
         while !self.at(TokenKind::RBrace) && !self.at(TokenKind::Eof) {
             let op_start = self.start_span();
             let fatal = self.eat(TokenKind::KwFatal);
-            let name = self.expect_symbol();
-            let _colon = self.expect(TokenKind::Colon);
-            let ty = self.parse_alloc_ty();
+            let _let = self.expect(TokenKind::KwLet);
+            let sig = self.parse_fn_sig();
             ops.push(EffectOp {
                 fatal,
-                name,
-                ty,
+                name: sig.name,
+                params: sig.params,
+                ret: sig.ret,
                 span: self.finish_span(op_start),
             });
             if self.at(TokenKind::RBrace) {
@@ -170,9 +172,14 @@ impl Parser<'_> {
     fn parse_fn_sig(&mut self) -> FnSig {
         let start = self.start_span();
         let name = self.parse_op_or_ident();
-        let _lp = self.expect(TokenKind::LParen);
-        let params = self.comma_sep(TokenKind::RParen, Self::parse_param);
-        let _rp = self.expect(TokenKind::RParen);
+        let params = if self.at(TokenKind::LParen) {
+            let _lp = self.bump();
+            let params = self.comma_sep(TokenKind::RParen, Self::parse_param);
+            let _rp = self.expect(TokenKind::RParen);
+            params
+        } else {
+            vec![]
+        };
         let ret = self.parse_opt_ty_annot();
         FnSig {
             name,

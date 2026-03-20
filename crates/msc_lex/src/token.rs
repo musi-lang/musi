@@ -77,7 +77,6 @@ pub enum TokenKind {
     // 2-char
     ColonColon,       // ::   cons
     ColonEq,          // :=   binding
-    ColonGt,          // :>   supertype constraint
     DotDot,           // ..   inclusive range
     LtDash,           // <-   mutation
     DashGt,           // ->   pure function arrow
@@ -215,7 +214,6 @@ impl TokenKind {
             Self::DotDotLt => Some("..<"),
             Self::ColonColon => Some("::"),
             Self::ColonEq => Some(":="),
-            Self::ColonGt => Some(":>"),
             Self::DotDot => Some(".."),
             Self::LtDash => Some("<-"),
             Self::DashGt => Some("->"),

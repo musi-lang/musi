@@ -25,6 +25,5 @@ pub struct Constraint {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Rel {
     Sub,
-    Super,
     Member,
 }
