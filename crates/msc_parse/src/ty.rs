@@ -340,13 +340,18 @@ impl Parser<'_> {
     }
 
     fn parse_ty_arg_list(&mut self) -> Vec<ExprIdx> {
-        let first = self.parse_ty_base();
-        let mut args = vec![self.alloc_expr(first)];
-        while self.eat(TokenKind::Comma) {
-            let t = self.parse_ty_base();
-            args.push(self.alloc_expr(t));
+        let ty = self.parse_ty_base();
+        match ty {
+            Expr::TypeExpr {
+                kind:
+                    TypeForm::Product {
+                        ref fields,
+                        variadic: false,
+                    },
+                ..
+            } if fields.len() > 1 => fields.clone(),
+            _ => vec![self.alloc_expr(ty)],
         }
-        args
     }
 
     /// Parses a named type reference: `Name [ 'of' type_args ]`.

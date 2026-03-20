@@ -1,5 +1,7 @@
 //! Iterator transformation combinators.
 
+import "./sources" as src;
+
 /// Apply `f` to each element, yielding transformed values.
 export let map ['a, 'b] := (iter, f) =>
   .{ next := () => (
@@ -62,9 +64,9 @@ export let chain ['a] := (a, b) => (
   let mut exhausted_a := .False;
   .{ next := () => (
     (
-      let va := a.next();
+      let va : ?'a := a.next();
       match va (
-        .Some(x) => .Some(x)
+        .Some(x : 'a) => .Some(x)
         | .None => (exhausted_a <- .True; b.next())
       )
     ) if not exhausted_a
@@ -76,9 +78,9 @@ export let chain ['a] := (a, b) => (
 export let enumerate ['a] := (iter) => (
   let mut i := 0;
   .{ next := () => (
-    let v := iter.next();
+    let v : ?'a := iter.next();
     match v (
-      .Some(x) => (let idx := i; i <- i + 1; .Some((idx, x)))
+      .Some(x : 'a) => (let idx := i; i <- i + 1; .Some((idx, x)))
       | .None => .None
     )
   ) }
@@ -86,20 +88,20 @@ export let enumerate ['a] := (iter) => (
 
 /// Map each element to an iterator and yield all elements of each sub-iterator in order.
 export let flat_map ['a, 'b] := (iter, f) => (
-  let mut inner := .None;
+  let mut inner : ?(src.Iter of 'b) := .None;
   let step := () =>
     match inner (
       .Some(cur) => (
-        let v := cur.next();
+        let v : ?'b := cur.next();
         match v (
-          .Some(x) => .Some(x)
+          .Some(x : 'b) => .Some(x)
           | .None => (inner <- .None; step())
         )
       )
       | .None => (
-        let v := iter.next();
+        let v : ?'a := iter.next();
         match v (
-          .Some(x) => (inner <- .Some(f(x)); step())
+          .Some(x : 'a) => (inner <- .Some(f(x)); step())
           | .None => .None
         )
       )
@@ -112,9 +114,9 @@ export let take_while ['a] := (iter, pred) => (
   let mut done := .False;
   .{ next := () => (
     (
-      let v := iter.next();
+      let v : ?'a := iter.next();
       match v (
-        .Some(x) => (.Some(x) if pred(x) | (done <- .True; .None) if _)
+        .Some(x : 'a) => (.Some(x) if pred(x) | (done <- .True; .None) if _)
         | .None => .None
       )
     ) if not done
@@ -126,9 +128,9 @@ export let take_while ['a] := (iter, pred) => (
 export let skip_while ['a] := (iter, pred) => (
   let mut skipping := .True;
   let step := () => (
-    let v := iter.next();
+    let v : ?'a := iter.next();
     match v (
-      .Some(x) => (
+      .Some(x : 'a) => (
         (step() if pred(x) | (skipping <- .False; .Some(x)) if _) if skipping
         | .Some(x) if _
       )

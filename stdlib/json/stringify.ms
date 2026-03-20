@@ -1,7 +1,7 @@
 //! JSON serializer.
 
 import "@std/rt" as rt;
-import "./types" as _;
+import "./types" as types;
 
 let CH_QUOTE := 34;
 let CH_BACKSLASH := 92;
@@ -29,12 +29,12 @@ let escape_str := (s) => (
   rt.str_from_chars(buf)
 );
 
-/// Serializes a JsonValue to a compact JSON string.
-export let stringify := (value : JsonValue) => (
+/// Serializes a types.JsonValue to a compact JSON string.
+export let stringify := (value : types.JsonValue) => (
   match value (
     .Null        => "null"
     | .Bool(b)   => ("true" if b | "false" if _)
-    | .Number(n) => rt.show(n)
+    | .Number(n : Float64) => rt.show(n)
     | .Str(s)    => f"\"{escape_str(s)}\""
     | .Array(arr) => (
       let len := rt.arr_len(arr);
@@ -52,7 +52,7 @@ export let stringify := (value : JsonValue) => (
       let step := (i) => (
         () if i >= len
         | (
-          let pair : (String, JsonValue) := pairs.[i];
+          let pair : (String, types.JsonValue) := pairs.[i];
           rt.arr_push(parts, f"\"{escape_str(pair.0)}\": {stringify(pair.1)}");
           step(i + 1)
         ) if _

@@ -52,7 +52,7 @@ pub fn lower_type_expr<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprId
             field: FieldKey::Name { name, .. },
             span,
             ..
-        } => lower_type_qualified_expr(ck, object, name, &[], span),
+        } => lower_type_qualified_expr(ck, expr_idx, object, name, &[], span),
         Expr::FnType {
             params,
             ret,
@@ -141,18 +141,31 @@ fn lower_type_app<S: BuildHasher>(
             field: FieldKey::Name { name, .. },
             span: field_span,
             ..
-        } => lower_type_qualified_expr(ck, object, name, args, field_span),
+        } => lower_type_qualified_expr(ck, callee, object, name, args, field_span),
         _ => ck.error_ty(),
     }
 }
 
 fn lower_type_qualified_expr<S: BuildHasher>(
     ck: &mut Checker<'_, S>,
+    callee_expr: ExprIdx,
     object: ExprIdx,
     name: Symbol,
     args: &[ExprIdx],
     span: Span,
 ) -> TypeIdx {
+    // If the resolver resolved this qualified name to a type def, use it directly.
+    if let Some(&def_id) = ck.ctx.expr_defs.get(&callee_expr) {
+        let def = ck.defs.get(def_id);
+        if def.kind == DefKind::Type {
+            let lowered_args: Vec<_> = args.iter().map(|&a| lower_type_expr(ck, a)).collect();
+            return ck.alloc_ty(Type::Named {
+                def: def_id,
+                args: lowered_args,
+            });
+        }
+    }
+    // Fallback: resolve through module record type.
     let mod_name = match &ck.ctx.ast.exprs[object] {
         Expr::Name { name_ref, .. } => {
             let nr = ck.ctx.ast.name_refs[*name_ref];
@@ -191,8 +204,12 @@ fn lower_type_qualified_expr<S: BuildHasher>(
         if lowered_args.is_empty() {
             field.ty
         } else {
+            let type_def = match &ck.store.types[field.ty] {
+                Type::Named { def, .. } => *def,
+                _ => mod_def,
+            };
             ck.alloc_ty(Type::Named {
-                def: mod_def,
+                def: type_def,
                 args: lowered_args,
             })
         }

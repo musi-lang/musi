@@ -144,7 +144,11 @@ impl Opcode {
     // §4.20 Foreign (1)
     pub const FFI_CALL: Self = Self(0x4E);
 
-    // §4.21 Misc (2)
+    // §4.21 Record tag (1)
+    /// Pop a record ref, push its variant tag as int (or -1 if untagged).
+    pub const REC_TAG: Self = Self(0x51);
+
+    // §4.22 Misc (2)
     /// Reserved: no-op placeholder; intended for patch-site alignment and debug breakpoints.
     pub const NOP: Self = Self(0x4F);
     pub const PANIC: Self = Self(0x50);
@@ -232,7 +236,9 @@ pub const fn format(op: u8) -> Format {
         0x4C | 0x4D => Format::F0, // GC_PIN, GC_UNPIN
         // §4.20 Foreign
         0x4E => Format::FI8x2, // FFI_CALL
-        // §4.21 Misc (all F0)
+        // §4.21 Record tag (F0)
+        0x51 => Format::F0, // REC_TAG
+        // §4.22 Misc (all F0)
         0x4F | 0x50 => Format::F0, // NOP, PANIC
         // All unassigned opcodes - treat as 1-byte F0 so the disassembler
         // can always advance by at least one byte.
@@ -360,6 +366,9 @@ pub const OPCODE_NAMES: [Option<&str>; 256] = {
     // §4.17 String
     t[0x47] = Some("str.cat");
     t[0x48] = Some("str.len");
+
+    // §4.21 Record tag
+    t[0x51] = Some("rec.tag");
 
     // §4.18 Arena
     t[0x49] = Some("ar.new");

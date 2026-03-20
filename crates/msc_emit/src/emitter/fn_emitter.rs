@@ -217,7 +217,7 @@ impl FnEmitter {
     }
 
     pub fn emit_mk_var(&mut self, tag: u32, arity: u8) {
-        let tag_u8 = u8::try_from(tag).unwrap_or(u8::MAX);
+        let tag_u8 = u8::try_from(tag + 1).unwrap_or(u8::MAX);
         encode_fi8x2(&mut self.code, Opcode::REC_NEW, tag_u8, arity);
         if arity > 0 {
             self.pop_n(i32::from(arity));
@@ -226,9 +226,9 @@ impl FnEmitter {
         self.record_safepoint(); // rec.new
     }
 
-    /// Emit `ty.of` - leaves type tag on stack. Net 0.
+    /// Emit `rec.tag` — pops record ref, pushes variant tag as int. Net 0.
     pub fn emit_ld_tag(&mut self) {
-        encode_f0(&mut self.code, Opcode::TY_OF);
+        encode_f0(&mut self.code, Opcode::REC_TAG);
     }
 
     pub fn emit_inv_dyn(&mut self, arg_count: i32) -> EmitResult {
@@ -374,7 +374,7 @@ impl FnEmitter {
             desc: "variant tag exceeds 65535".into(),
         })?;
         encode_fi16(&mut self.code, Opcode::MAT_TAG, t);
-        self.push_n(1);
+        // MAT_TAG pops 1 (scrutinee) and pushes 1 (bool). Net 0.
         Ok(())
     }
 
@@ -516,8 +516,8 @@ impl FnEmitter {
                 self.code[instr_offset + 1] = hi;
                 self.code[instr_offset + 2] = lo;
             } else {
-                // Upgrade 3-byte BR placeholder to 4-byte BR_LONG.
-                // Conditional branches that need >i16 offsets are unsupported.
+                // Upgrade 3-byte BR to 4-byte BR_LONG.
+                // Conditional branches (BR_TRUE/BR_FALSE) have no long form.
                 if self.code[instr_offset] != Opcode::BR.0 {
                     return Err(EmitError::JumpTooFar);
                 }

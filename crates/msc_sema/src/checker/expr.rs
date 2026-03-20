@@ -1050,27 +1050,10 @@ fn synth_choice_sum<S: BuildHasher>(
     variants: &[ExprIdx],
     parent: ScopeId,
 ) -> TypeIdx {
-    for &variant_expr in variants {
-        let name_ref = match &ck.ctx.ast.exprs[variant_expr] {
-            AstExpr::Name { name_ref, .. } => Some(*name_ref),
-            AstExpr::TypeApp { callee, .. } => {
-                if let AstExpr::Name { name_ref, .. } = &ck.ctx.ast.exprs[*callee] {
-                    Some(*name_ref)
-                } else {
-                    None
-                }
-            }
-            _ => None,
-        };
-        if let Some(nr_idx) = name_ref {
-            let name = ck.ctx.ast.name_refs[nr_idx].name;
-            let id = ck
-                .defs
-                .alloc(name, DefKind::Type, Span::DUMMY, ck.ctx.file_id);
-            let _prev = ck.scopes.define(ck.current_scope, name, id);
-        }
-    }
-
+    // Lower payload types BEFORE registering variant names in scope.
+    // This prevents variant names from shadowing built-in type names
+    // (e.g. `Bool of Bool` — the payload `Bool` must resolve to the built-in,
+    // not the variant name being defined).
     let mut sum_variants = Vec::with_capacity(variants.len());
     for &variant_expr in variants {
         let (name_opt, args_opt) = match &ck.ctx.ast.exprs[variant_expr] {
@@ -1098,6 +1081,16 @@ fn synth_choice_sum<S: BuildHasher>(
                 name: Symbol(0),
                 fields: vec![ty],
             });
+        }
+    }
+
+    // Register variant names after payload types are lowered.
+    for v in &sum_variants {
+        if v.name != Symbol(0) {
+            let id = ck
+                .defs
+                .alloc(v.name, DefKind::Type, Span::DUMMY, ck.ctx.file_id);
+            let _prev = ck.scopes.define(ck.current_scope, v.name, id);
         }
     }
 

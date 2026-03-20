@@ -13,8 +13,8 @@ pub use array::{exec_arr_get, exec_arr_len, exec_arr_new, exec_arr_set};
 pub use closure::{exec_cls_new, exec_cls_upv, exec_ld_upv, exec_st_upv};
 pub use record::{
     exec_ld_ind, exec_mat_data, exec_mat_tag, exec_opt_get, exec_opt_is, exec_opt_none,
-    exec_opt_some, exec_rec_get, exec_rec_new, exec_rec_set, exec_st_ind, exec_tup_get,
-    exec_tup_new,
+    exec_opt_some, exec_rec_get, exec_rec_new, exec_rec_set, exec_rec_tag, exec_st_ind,
+    exec_tup_get, exec_tup_new,
 };
 pub use string::{exec_str_cat, exec_str_len};
 pub use ty::{exec_ty_cast, exec_ty_desc, exec_ty_of, value_type_id};

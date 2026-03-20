@@ -66,7 +66,18 @@ impl Resolver<'_> {
                 }
             }
             Expr::Import { path, alias, .. } => {
-                if let Some(alias_name) = alias {
+                let is_glob = alias
+                    .as_ref()
+                    .is_some_and(|n| self.interner.try_resolve(*n) == Some("_"));
+                if is_glob {
+                    // `import "path" as _` — glob-import all exports into scope.
+                    if let Some(names) = self.import_names.get(path) {
+                        for &(name, def_id) in names {
+                            let _prev = self.scopes.define(self.current_scope, name, def_id);
+                            self.defs.get_mut(def_id).use_count += 1;
+                        }
+                    }
+                } else if let Some(alias_name) = alias {
                     let id = self.defs.alloc(
                         *alias_name,
                         DefKind::Import,

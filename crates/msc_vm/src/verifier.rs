@@ -222,9 +222,19 @@ fn verify_op(op: Opcode, ip: usize, len: usize, cx: &VerifyCtx<'_>) -> VmResult<
             check_const(idx, cx.const_len, "ld.const")?;
             Ok(1)
         }
-        Opcode::LD_IND | Opcode::REC_GET | Opcode::ARR_NEW | Opcode::TUP_GET | Opcode::MAT_TAG => {
-            Ok(0)
-        }
+        Opcode::LD_IND
+        | Opcode::REC_GET
+        | Opcode::ARR_NEW
+        | Opcode::TUP_GET
+        | Opcode::MAT_TAG
+        | Opcode::REC_TAG |
+        // EFF_HDL operand is a runtime effect ID (matches handler chain),
+        // not a table index into the EFCT section. No bounds check needed.
+        //
+        // §4.5 Class Dispatch
+        // CLS_DICT: pops val, pushes dict record. Net 0.
+        // CLS_DISP: pops val, invokes method - result pushed by callee. Net 0 (conservative).
+        Opcode::EFF_HDL | Opcode::CLS_DICT | Opcode::CLS_DISP => Ok(0),
         Opcode::ST_IND => Ok(-2),
         Opcode::ST_UPV | Opcode::ST_GLB => Ok(-1),
 
@@ -291,13 +301,6 @@ fn verify_op(op: Opcode, ip: usize, len: usize, cx: &VerifyCtx<'_>) -> VmResult<
             };
             Ok(1 - param_count)
         }
-        // EFF_HDL operand is a runtime effect ID (matches handler chain),
-        // not a table index into the EFCT section. No bounds check needed.
-        //
-        // §4.5 Class Dispatch
-        // CLS_DICT: pops val, pushes dict record. Net 0.
-        // CLS_DISP: pops val, invokes method - result pushed by callee. Net 0 (conservative).
-        Opcode::EFF_HDL | Opcode::CLS_DICT | Opcode::CLS_DISP => Ok(0),
 
         // §4.19 Foreign
         Opcode::FFI_CALL => verify_ffi_call(ip, cx),

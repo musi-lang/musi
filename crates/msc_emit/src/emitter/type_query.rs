@@ -282,6 +282,18 @@ fn resolve_field_in_type(em: &Emitter<'_>, ty_idx: TypeIdx, name: Symbol) -> Emi
             u32::try_from(n)
                 .map_err(|_| EmitError::overflow(format!("tuple field index `{name_str}`")))
         }
+        Type::Named { def, .. } => {
+            if let Some(def_info) = em.sema.defs.iter().find(|d| d.id == *def)
+                && let Some(inner_ty) = def_info.ty_info.ty
+            {
+                resolve_field_in_type(em, inner_ty, name)
+            } else {
+                Err(EmitError::FieldNotFound {
+                    desc: format!("field `{}` on non-record type", em.interner.resolve(name))
+                        .into(),
+                })
+            }
+        }
         _ => Err(EmitError::FieldNotFound {
             desc: format!("field `{}` on non-record type", em.interner.resolve(name)).into(),
         }),

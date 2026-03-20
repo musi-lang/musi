@@ -101,7 +101,7 @@ export let to_array ['a] := (h) => rt.arr_slice(h.data, 0, rt.arr_len(h.data));
 /// Drain the heap and return its elements in priority order.
 export let to_sorted_array ['a] := (h) => (
   let copy := from_array(h.data, h.cmp);
-  let mut out := [];
+  let mut out : []'a := [];
   let step := () =>
     match pop(copy) (
       .Some(v) => (rt.arr_push(out, v); step())

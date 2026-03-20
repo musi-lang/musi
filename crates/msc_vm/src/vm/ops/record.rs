@@ -16,7 +16,11 @@ pub fn exec_rec_new(operand: u32, frame: &mut Frame, heap: &mut Heap) -> VmResul
         fields.push(frame.pop()?);
     }
     fields.reverse();
-    let variant_tag = if tag != 0 { Some(u32::from(tag)) } else { None };
+    let variant_tag = if tag != 0 {
+        Some(u32::from(tag) - 1)
+    } else {
+        None
+    };
     let ptr = heap.alloc_record(0, variant_tag, fields);
     frame.stack.push(Value::from_ref(ptr));
     Ok(())
@@ -59,6 +63,19 @@ pub fn exec_mat_data(operand: u32, frame: &mut Frame, heap: &Heap) -> VmResult {
     let fields = heap.get_record_fields(ptr)?;
     let payload = fields.get(field_idx).copied().unwrap_or(Value::UNIT);
     frame.stack.push(payload);
+    Ok(())
+}
+
+/// `REC_TAG` - pop a record ref, push its variant tag as int (or -1 if untagged).
+/// Non-ref values (e.g. inline bools) return -1 so they never match a variant tag.
+pub fn exec_rec_tag(frame: &mut Frame, heap: &Heap) -> VmResult {
+    let val = frame.pop()?;
+    let tag_int = val
+        .try_as_ref()
+        .and_then(|ptr| heap.get_record_tag(ptr).ok())
+        .flatten()
+        .map_or(-1i64, i64::from);
+    frame.stack.push(Value::from_int(tag_int));
     Ok(())
 }
 

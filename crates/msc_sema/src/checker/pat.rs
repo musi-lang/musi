@@ -149,6 +149,14 @@ fn extract_variant_payload_types<S: BuildHasher>(
                 .find(|v| v.name == variant_name)
                 .map(|v| v.fields.clone());
         }
+        Type::Named { def, args } if *def == ck.ctx.well_known.option => {
+            let variant_str = ck.ctx.interner.resolve(variant_name);
+            match variant_str {
+                "Some" => return args.first().map(|inner| vec![*inner]),
+                "None" => return Some(vec![]),
+                _ => return None,
+            }
+        }
         Type::Named { def, args } => {
             let (def, args) = (*def, args.clone());
             let underlying = ck.defs.get(def).ty_info.ty?;

@@ -67,9 +67,9 @@ export let decode := (s) => (
       .Ok(bytes) if i >= len
       | (
         match rune_to_nibble(rt.str_at(s, i), i) (
-          .Err(e) => .Err(e)
+          .Err(e : DecodeError) => .Err(e)
           | .Ok(hi) => match rune_to_nibble(rt.str_at(s, i + 1), i + 1) (
-            .Err(e) => .Err(e)
+            .Err(e : DecodeError) => .Err(e)
             | .Ok(lo) => (
               rt.arr_push(bytes, hi * 16 + lo);
               step(i + 2)

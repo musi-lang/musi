@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use super::{Format, Opcode, format, instr_len};
 
-// All 81 defined opcodes with their expected formats.
+// All 82 defined opcodes with their expected formats.
 const OPCODE_FORMAT_TABLE: &[(Opcode, Format)] = &[
     // §4.1 Data Movement
     (Opcode::LD_CONST, Format::FI16),
@@ -103,7 +103,9 @@ const OPCODE_FORMAT_TABLE: &[(Opcode, Format)] = &[
     (Opcode::GC_UNPIN, Format::F0),
     // §4.19 Foreign
     (Opcode::FFI_CALL, Format::FI8x2),
-    // §4.21 Misc
+    // §4.21 Record tag
+    (Opcode::REC_TAG, Format::F0),
+    // §4.22 Misc
     (Opcode::NOP, Format::F0),
     (Opcode::PANIC, Format::F0),
 ];
@@ -112,8 +114,8 @@ const OPCODE_FORMAT_TABLE: &[(Opcode, Format)] = &[
 fn test_opcode_count() {
     assert_eq!(
         OPCODE_FORMAT_TABLE.len(),
-        81,
-        "expected 81 opcodes, got {}",
+        82,
+        "expected 82 opcodes, got {}",
         OPCODE_FORMAT_TABLE.len()
     );
 }
@@ -196,7 +198,7 @@ fn test_display_known_opcodes() {
 
 #[test]
 fn test_display_unknown_opcode() {
-    assert_eq!(format!("{}", Opcode(0x51)), "0x51");
+    assert_eq!(format!("{}", Opcode(0x52)), "0x52");
     assert_eq!(format!("{}", Opcode(0xFF)), "0xFF");
 }
 

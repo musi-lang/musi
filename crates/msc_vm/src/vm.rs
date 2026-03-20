@@ -577,6 +577,15 @@ impl Vm {
                 Ok(StepResult::Continue)
             }
 
+            Opcode::REC_TAG => {
+                let frame = self
+                    .call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_rec_tag(frame, &self.heap)?;
+                Ok(StepResult::Continue)
+            }
+
             // §4.15 Optional
             Opcode::OPT_SOME => {
                 let frame = self

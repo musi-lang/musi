@@ -28,7 +28,7 @@ fn test_run_make_variant_and_check_tag() {
             0,
             0,
             0,
-            code(&[&ld_const(0), &rec_new(7, 1), &mat_tag(7), &[Opcode::RET.0]]),
+            code(&[&ld_const(0), &rec_new(8, 1), &mat_tag(7), &[Opcode::RET.0]]),
         )],
     );
     let (_, result) = run_vm(&bytes);

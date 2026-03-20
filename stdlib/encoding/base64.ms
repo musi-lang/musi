@@ -1,6 +1,7 @@
 //! Base64 encoding and decoding (RFC 4648).
 
 import "@std/rt" as rt;
+import "@std/result/result" as res;
 
 let STANDARD_ALPHABET := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 let URL_SAFE_ALPHABET  := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
@@ -88,7 +89,7 @@ let decode_with := (s, is_url_safe) => (
     let full_groups := total / 4;
     let mut out := [];
     let mut has_error := .False;
-    let mut error := .None;
+    let mut error : ?res.Result of ([]Int, DecodeError) := .None;
 
     let decode_group := (g) => (
       () if g >= full_groups or has_error

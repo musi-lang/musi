@@ -16,7 +16,7 @@ t.describe("Iter.transform", () => (
     t.expect(c.count(iter)).toBe(5)
   ));
   t.it("map - empty source", () => (
-    let iter := m.map(src.empty(), (x) => x);
+    let iter := m.map(src.empty(), (x : Int) => x);
     t.expect(c.count(iter)).toBe(0)
   ));
   t.it("filter - keeps matching elements", () => (
