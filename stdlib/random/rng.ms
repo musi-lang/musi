@@ -10,9 +10,9 @@ let MASK := 140737488355327;
 /// Advances the RNG state and returns the raw next value.
 export let next_raw := (mut rng) => (
   let s0 := rng.seed;
-  let s1 := s0 xor (s0 << 13);
-  let s2 := s1 xor (s1 >> 7);
-  let s3 := s2 xor (s2 << 17);
+  let s1 := s0 xor rt.int_shl(s0, 13);
+  let s2 := s1 xor rt.int_shr(s1, 7);
+  let s3 := s2 xor rt.int_shl(s2, 17);
   let masked := (s3 + MASK + 1) - (((s3 + MASK + 1) / (MASK + 1)) * (MASK + 1));
   let positive := (masked if masked > 0 | 1 if _);
   rng.seed <- positive;

@@ -79,7 +79,7 @@ comment = "//" *(<any except newline>)  ; line
           / "///" *(<any except newline>)  ; doc - documents next item
           / "//!" *(<any except newline>)  ; module doc - documents enclosing module
           / "/*" *(<any except "*/">) "*/"  ; block - does not nest
-; §1.5  Keywords (26)
+; §1.5  Keywords (28)
 keyword = "and"
           / "as"
           / "choice"
@@ -135,7 +135,7 @@ compound-token = ":="
 ast-root = *(ast-stmt)
 
 ast-stmt = ast-expr ";"
-; §3  Expressions — Pratt parser
+; §3  Expressions - Pratt parser
 ; §3.1  Binding power table
 ;
 ;   BP   Operator(s)                 Assoc    Category
@@ -148,10 +148,11 @@ ast-stmt = ast-expr ";"
 ;   12   and                        left     conjunction
 ;   14   = /= < > <= >=             none     comparison
 ;   16   .. ..<                     none     range
+;   17   ::                         right    cons
 ;   18   + -                        left     additive
 ;   20   * / %                      left     multiplicative
 ;   22   - not                      prefix   unary (nud)
-;   24   () .[] .{} . ?. !. ? ! ..  postfix  postfix (led)
+;   24   () .[] .{} . ?. !. ? ! ... postfix  postfix (led)
 ;
 ;   and/or/xor/not are type-directed: boolean on Bool (short-circuiting), bitwise on integers.
 ;   Even-numbered BPs leave gaps for future insertion.
@@ -185,10 +186,11 @@ infix-op  = "<-"  ; assignment
             / "*"
             / "/"
             / "%"  ; multiplicative
+            / "::"  ; cons (right-assoc)
 ; §3.4  Postfix operations
 postfix-op = "(" [arg-list] ")"  ; call
-             / "." "[" [expr-list] "]"  ; index
-             / "." "{" [rec-lit-fields] "}"  ; record update
+             / ".[" [expr-list] "]"  ; index
+             / ".{" [rec-lit-fields] "}"  ; record update
              / "." field-target  ; field access
              / "?." field-target  ; optional chain
              / "!." field-target  ; forced unwrap access
@@ -196,7 +198,7 @@ postfix-op = "(" [arg-list] ")"  ; call
              / "!"  ; force unwrap
              / ":?" ast-ty-named ["as" ident]  ; type test
              / ":?>" ast-ty-named  ; type cast
-; §4  Atom forms — nud dispatch
+; §4  Atom forms - nud dispatch
 ; §4.1  Atom dispatch table
 ;   Each alternative has a unique FIRST token.
 ;   The parser dispatches on token kind.
@@ -243,7 +245,7 @@ seq-tail   = <empty>  ; trailing ;, returns ()
 
 seq-cont   = <empty>  ; returns last expr
              / ";" [seq-tail]  ; continue sequence
-; §4.3  Piecewise — sole conditional form
+; §4.3  Piecewise - sole conditional form
 pw-arm   = ast-expr "if" pw-guard
 
 pw-guard = "_"
@@ -380,6 +382,7 @@ ast-decl       = "export" export-tail
 ; §7.3  Exports
 export-tail = ast-let
               / "{" export-list "}" [":=" ast-import]
+              / ast-foreign-decl
 
 export-list = export-item *("," export-item)
 

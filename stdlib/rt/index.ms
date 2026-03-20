@@ -78,6 +78,10 @@ export foreign "C" (
   let int_clamp : (Int, Int, Int) ~> Int;
   /// Return the base raised to the given integer exponent.
   let int_pow : (Int, Int) ~> Int;
+  /// Shift an integer left by n bits.
+  let int_shl : (Int, Int) ~> Int;
+  /// Shift an integer right by n bits (arithmetic).
+  let int_shr : (Int, Int) ~> Int;
 
   // Float
   /// Return the absolute value of a Float64.

@@ -1,4 +1,4 @@
-//! Test runner — vitest-style describe/it with structured output.
+//! Test runner - vitest-style describe/it with structured output.
 
 import "@std/rt" as rt;
 

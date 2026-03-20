@@ -44,25 +44,3 @@ export class MsPackageCodeLensProvider implements vscode.CodeLensProvider {
 		return lenses;
 	}
 }
-
-export class MsTestCodeLensProvider implements vscode.CodeLensProvider {
-	provideCodeLenses(document: vscode.TextDocument): vscode.CodeLens[] {
-		if (!document.uri.fsPath.endsWith(".test.ms")) {
-			return [];
-		}
-
-		const range = new vscode.Range(0, 0, 0, 0);
-		return [
-			new vscode.CodeLens(range, {
-				title: "$(play) Run Test",
-				command: "musi.runTest",
-				arguments: [document.uri.fsPath],
-			}),
-			new vscode.CodeLens(range, {
-				title: "$(bug) Debug",
-				command: "musi.debugTest",
-				arguments: [document.uri.fsPath],
-			}),
-		];
-	}
-}
