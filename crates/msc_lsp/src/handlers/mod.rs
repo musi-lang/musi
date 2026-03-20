@@ -1,5 +1,4 @@
 pub mod code_actions;
-pub mod code_lens;
 pub mod completion;
 pub mod document_symbols;
 pub mod folding_ranges;
@@ -10,3 +9,4 @@ pub mod inlay_hints;
 pub mod references;
 pub mod semantic_tokens;
 pub mod signature_help;
+pub mod test_discovery;

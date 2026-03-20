@@ -262,11 +262,11 @@ fn find_ast_params(
         }
     }
 
-    // Path 3: Expr::Let / Expr::Binding with fn-typed pat
+    // Path 3: Expr::Let with fn-typed pat
     for raw_idx in 0..arenas.exprs.len() {
         let idx = Idx::from_raw(u32::try_from(raw_idx).ok()?);
         let fields = match &arenas.exprs[idx] {
-            Expr::Let { fields, .. } | Expr::Binding { fields, .. } => fields,
+            Expr::Let { fields, .. } => fields,
             _ => continue,
         };
         if let Some(params_str) = check_let_fields(doc, sema, def, fields, arenas, param_tys) {

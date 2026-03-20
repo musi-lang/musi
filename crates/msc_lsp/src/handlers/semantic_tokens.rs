@@ -330,11 +330,8 @@ fn is_operator_token(kind: TokenKind) -> bool {
             | TokenKind::KwOr
             | TokenKind::KwXor
             | TokenKind::KwNot
-            | TokenKind::BangBang
             | TokenKind::BangDot
             | TokenKind::Bang
-            | TokenKind::LtLt
-            | TokenKind::GtGt
             | TokenKind::ColonQuestion
             | TokenKind::ColonQuestionGt
             | TokenKind::QuestionDot

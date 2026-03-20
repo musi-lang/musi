@@ -7,7 +7,7 @@ use msc_sema::types::strip_ref;
 use msc_sema::{DefId, DefKind, Type};
 use msc_shared::Span;
 
-use crate::analysis::{AnalyzedDoc, def_name_span};
+use crate::analysis::{def_name_span, AnalyzedDoc};
 use crate::to_proto::{fmt_type_lsp, span_to_range};
 
 /// Produce the outline symbols for a document.
@@ -67,8 +67,10 @@ pub fn document_symbols(doc: &AnalyzedDoc) -> DocumentSymbolResponse {
                 return None;
             }
 
-            #[allow(deprecated)]
-            // `deprecated` field is still supported by many editors, so we set it based on the presence of `@deprecated` in the doc comment.
+            #[expect(
+                deprecated,
+                reason = "tower-lsp API requires deprecated SymbolKind variants"
+            )]
             let sym = DocumentSymbol {
                 name,
                 detail,

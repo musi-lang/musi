@@ -11,9 +11,10 @@ use lsp_types::*;
 use std::path::PathBuf;
 
 use crate::analysis::{AnalyzedDoc, analyze_doc, analyze_doc_multi};
+use crate::handlers::test_discovery::{DiscoverTestsParams, DiscoverTestsResult};
 use crate::handlers::{
-    code_actions, code_lens, completion, document_symbols, folding_ranges, goto_def, goto_type_def,
-    hover, inlay_hints, references, semantic_tokens, signature_help,
+    code_actions, completion, document_symbols, folding_ranges, goto_def, goto_type_def, hover,
+    inlay_hints, references, semantic_tokens, signature_help, test_discovery,
 };
 use crate::to_proto::position_to_offset;
 
@@ -70,8 +71,7 @@ impl LanguageServer for MusiBackend {
         &mut self,
         params: InitializeParams,
     ) -> BoxFuture<'static, Result<InitializeResult, Self::Error>> {
-        #[allow(deprecated)]
-        // `root_uri` field is still supported by many editors, so we check it if `workspace_folders` is not provided.
+        #[expect(deprecated, reason = "tower-lsp API requires deprecated method")]
         let resolved_root = params
             .workspace_folders
             .as_ref()
@@ -122,9 +122,6 @@ impl LanguageServer for MusiBackend {
                     work_done_progress_options: WorkDoneProgressOptions::default(),
                 }),
                 inlay_hint_provider: Some(OneOf::Left(true)),
-                code_lens_provider: Some(CodeLensOptions {
-                    resolve_provider: Some(false),
-                }),
                 code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
                 folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
                 type_definition_provider: Some(TypeDefinitionProviderCapability::Simple(true)),
@@ -381,18 +378,21 @@ impl LanguageServer for MusiBackend {
         };
         Box::pin(async move { Ok(action_response) })
     }
+}
 
-    fn code_lens(
-        &mut self,
-        params: CodeLensParams,
-    ) -> BoxFuture<'static, Result<Option<Vec<CodeLens>>, Self::Error>> {
-        let uri = params.text_document.uri;
-        let lenses = self
-            .documents
-            .get(&uri)
-            .map(|doc| code_lens::code_lens(doc, &uri))
-            .unwrap_or_default();
-        Box::pin(async move { Ok(Some(lenses)) })
+impl MusiBackend {
+    /// Handle the custom `musi/discoverTests` request.
+    ///
+    /// Kept on `MusiBackend` rather than in `main.rs` because `documents` is private.
+    pub fn handle_discover_tests(&mut self, params: DiscoverTestsParams) -> DiscoverTestsResult {
+        Url::parse(&params.uri)
+            .ok()
+            .and_then(|uri| {
+                self.documents
+                    .get(&uri)
+                    .map(|doc| test_discovery::discover_tests(doc, &uri))
+            })
+            .unwrap_or(DiscoverTestsResult { tests: vec![] })
     }
 }
 

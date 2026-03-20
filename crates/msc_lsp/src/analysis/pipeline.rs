@@ -14,8 +14,8 @@ use msc_resolve::graph::ModuleId;
 use msc_resolve::{ModuleGraph, ModuleNode, ResolverConfig, build_module_graph};
 use msc_sema::types::RecordField;
 use msc_sema::{
-    DefInfo, ExportBinding, ImportNames, ModuleSemaOutput, SemaOptions, SharedAnalysisState,
-    SubModuleExports, Type, TypeIdx, analyze, analyze_shared, collect_exports,
+    DefInfo, ExportBinding, ImportNames, ModuleAnalysisCtx, ModuleSemaOutput, SemaOptions,
+    SharedAnalysisState, SubModuleExports, Type, TypeIdx, analyze, analyze_shared, collect_exports,
 };
 use msc_shared::{Arena, DiagnosticBag, FileId, Interner, SourceDb, Span, Symbol};
 
@@ -202,10 +202,12 @@ fn run_lsp_sema_in_order(
             interner,
             file_id,
             diags,
-            &import_names,
-            &import_types,
-            &sub_module_exports,
-            &SemaOptions::default(),
+            &ModuleAnalysisCtx {
+                import_names: &import_names,
+                import_types: &import_types,
+                sub_module_exports: &sub_module_exports,
+                options: &SemaOptions::default(),
+            },
         );
 
         if module_id == entry_id {

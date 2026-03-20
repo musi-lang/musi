@@ -34,7 +34,7 @@ pub fn code_actions(
 
     for idx in 0..doc.module.arenas.exprs.len() {
         let idx = Idx::from_raw(u32::try_from(idx).unwrap_or(0));
-        let Expr::Binding { fields, span, .. } = &doc.module.arenas.exprs[idx] else {
+        let Expr::Let { fields, span, .. } = &doc.module.arenas.exprs[idx] else {
             continue;
         };
 

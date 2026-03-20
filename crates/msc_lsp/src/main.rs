@@ -6,16 +6,22 @@ use async_lsp::server::LifecycleLayer;
 use tower::ServiceBuilder;
 
 use msc_lsp::backend::MusiBackend;
+use msc_lsp::handlers::test_discovery::DiscoverTests;
 
 #[tokio::main]
 async fn main() {
     let (mainloop, _) = MainLoop::new_server(|client| {
         let state = MusiBackend::new(client);
+        let mut router = Router::from_language_server(state);
+        router.request::<DiscoverTests, _>(|state, params| {
+            let result = state.handle_discover_tests(params);
+            async move { Ok(result) }
+        });
         ServiceBuilder::new()
             .layer(LifecycleLayer::default())
             .layer(CatchUnwindLayer::default())
             .layer(ConcurrencyLayer::default())
-            .service(Router::from_language_server(state))
+            .service(router)
     });
     let stdin = async_lsp::stdio::PipeStdin::lock_tokio().expect("failed to lock stdin");
     let stdout = async_lsp::stdio::PipeStdout::lock_tokio().expect("failed to lock stdout");

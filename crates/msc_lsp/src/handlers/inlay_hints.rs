@@ -117,19 +117,16 @@ fn collect_unannotated_param_spans(doc: &AnalyzedDoc) -> HashSet<Span> {
     spans
 }
 
-/// Walk all `Expr::Binding` and `Expr::Let` nodes and collect the `LetFields`
+/// Walk all `Expr::Let` nodes and collect the `LetFields`
 /// span for bindings that already carry an explicit type annotation.
 fn collect_annotated_binding_spans(doc: &AnalyzedDoc) -> Vec<Span> {
     let mut spans = vec![];
     for idx in 0..doc.module.arenas.exprs.len() {
         let idx = Idx::from_raw(u32::try_from(idx).unwrap_or(0));
-        match &doc.module.arenas.exprs[idx] {
-            Expr::Binding { fields, .. } | Expr::Let { fields, .. } => {
-                if fields.ty.is_some() {
-                    spans.push(fields.span);
-                }
+        if let Expr::Let { fields, .. } = &doc.module.arenas.exprs[idx] {
+            if fields.ty.is_some() {
+                spans.push(fields.span);
             }
-            _ => {}
         }
     }
     spans
