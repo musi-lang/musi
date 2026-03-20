@@ -684,6 +684,7 @@ dependencies = [
  "msc_resolve",
  "msc_sema",
  "msc_shared",
+ "serde",
  "serde_json",
  "tokio",
  "tower",

@@ -51,7 +51,7 @@ Musi is NOT C, JavaScript, Rust, or Python. When writing or editing `.ms` files,
 
 1. Read `grammar.abnf` and `docs/` if unsure about syntax
 2. Check existing stdlib files for idiomatic patterns
-3. Never use C/JS/Rust operators — Musi has its own operator set
+3. Never use C/JS/Rust operators - Musi has its own operator set
 
 ## Collaboration Protocol
 
