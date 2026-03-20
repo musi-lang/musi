@@ -79,10 +79,10 @@ fn test_parse_export_let() {
     let (expr, diags) = parse_single(src);
     assert!(!diags.has_errors());
     assert!(
-        matches!(expr, Expr::Binding { .. }),
-        "expected Binding, got {expr:?}"
+        matches!(expr, Expr::Let { .. }),
+        "expected Let, got {expr:?}"
     );
-    let Expr::Binding { exported, .. } = expr else {
+    let Expr::Let { exported, .. } = expr else {
         return;
     };
     assert!(exported);

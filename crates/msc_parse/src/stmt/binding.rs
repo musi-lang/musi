@@ -126,6 +126,7 @@ impl Parser<'_> {
         };
 
         Expr::Let {
+            exported: false,
             fields,
             span: self.finish_span(start),
         }

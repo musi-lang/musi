@@ -1,6 +1,6 @@
 //! Type parsing tests.
 
-use msc_ast::expr::{Arrow, Expr};
+use msc_ast::expr::{Arrow, Expr, TypeForm};
 use msc_lex::lex as lex_source;
 use msc_lex::token::Token;
 use msc_shared::{DiagnosticBag, FileId, Interner, SourceDb, Span};
@@ -60,7 +60,13 @@ fn test_parse_named_type_with_args() {
 fn test_parse_option_type() {
     let (ty, diags) = parse_ty_from_let("?Int");
     assert!(!diags.has_errors());
-    assert!(matches!(ty, Expr::OptionType { .. }));
+    assert!(matches!(
+        ty,
+        Expr::TypeExpr {
+            kind: TypeForm::Option { .. },
+            ..
+        }
+    ));
 }
 
 #[test]
@@ -74,8 +80,21 @@ fn test_parse_type_variable() {
 fn test_parse_sum_type() {
     let (ty, diags) = parse_ty_from_let("Int + String");
     assert!(!diags.has_errors());
-    assert!(matches!(ty, Expr::SumType { .. }), "expected SumType");
-    let Expr::SumType { variants, .. } = ty else {
+    assert!(
+        matches!(
+            ty,
+            Expr::TypeExpr {
+                kind: TypeForm::Sum { .. },
+                ..
+            }
+        ),
+        "expected Sum TypeExpr"
+    );
+    let Expr::TypeExpr {
+        kind: TypeForm::Sum { variants },
+        ..
+    } = ty
+    else {
         return;
     };
     assert_eq!(variants.len(), 2);
@@ -86,10 +105,20 @@ fn test_parse_product_type() {
     let (ty, diags) = parse_ty_from_let("Int * String");
     assert!(!diags.has_errors());
     assert!(
-        matches!(ty, Expr::ProductType { .. }),
-        "expected ProductType"
+        matches!(
+            ty,
+            Expr::TypeExpr {
+                kind: TypeForm::Product { .. },
+                ..
+            }
+        ),
+        "expected Product TypeExpr"
     );
-    let Expr::ProductType { fields, .. } = ty else {
+    let Expr::TypeExpr {
+        kind: TypeForm::Product { fields, .. },
+        ..
+    } = ty
+    else {
         return;
     };
     assert_eq!(fields.len(), 2);
@@ -99,8 +128,21 @@ fn test_parse_product_type() {
 fn test_parse_array_type() {
     let (ty, diags) = parse_ty_from_let("[10] Int");
     assert!(!diags.has_errors());
-    assert!(matches!(ty, Expr::ArrayType { .. }), "expected ArrayType");
-    let Expr::ArrayType { len, .. } = ty else {
+    assert!(
+        matches!(
+            ty,
+            Expr::TypeExpr {
+                kind: TypeForm::Array { .. },
+                ..
+            }
+        ),
+        "expected Array TypeExpr"
+    );
+    let Expr::TypeExpr {
+        kind: TypeForm::Array { len, .. },
+        ..
+    } = ty
+    else {
         return;
     };
     assert_eq!(len, Some(10));

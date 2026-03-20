@@ -73,7 +73,6 @@ impl Parser<'_> {
             T::LtDash => (10, 9, B::Assign),
             // BP 15 - nil coalescing (right-assoc)
             T::QuestionQuestion => (15, 14, B::NilCoal),
-            T::BangBang => (15, 14, B::ForceCoal),
             // BP 20 - pipe (left-assoc)
             T::PipeGt => (20, 21, B::Pipe),
             // BP 30 - or (left-assoc)
@@ -94,9 +93,6 @@ impl Parser<'_> {
             T::DotDotLt => (60, 61, B::RangeExc),
             // BP 70 - cons (right-assoc)
             T::ColonColon => (70, 69, B::Cons),
-            // BP 80 - shift (left-assoc)
-            T::LtLt => (80, 81, B::Shl),
-            T::GtGt => (80, 81, B::Shr),
             // BP 90 - additive (left-assoc)
             T::Plus => (90, 91, B::Add),
             T::Minus => (90, 91, B::Sub),
@@ -223,13 +219,13 @@ impl Parser<'_> {
         }
     }
 
-    /// Parses `with EffectType { op(params) => body ... } handle body`.
+    /// Parses `with EffectType { let op(params) := body; ... } handle body`.
     ///
-    /// Syntax:
+    /// Syntax matches `fn-decl` from grammar §4.9:
     /// ```text
     /// with EffectType {
-    ///     op_name(params) => body
-    ///     | op_name(params) => body
+    ///     let print(msg) := resume();
+    ///     let read() := resume("hello")
     /// } handle expr
     /// ```
     fn parse_expr_handle(&mut self) -> Expr {
@@ -238,12 +234,17 @@ impl Parser<'_> {
         let _kw = self.bump();
         let effect_ty = self.parse_alloc_ty();
         let _lb = self.expect(TokenKind::LBrace);
-        let ops = self.pipe_sep(TokenKind::RBrace, |p| {
+        let ops = self.sep_by(TokenKind::Semi, TokenKind::RBrace, |p| {
             let op_start = p.start_span();
+            let _let_kw = p.expect(TokenKind::KwLet);
             let name = p.expect_symbol();
-            let _colon = p.expect(TokenKind::Colon);
-            let params = p.delimited(TokenKind::LParen, TokenKind::RParen, Self::parse_param);
-            let _arrow = p.expect(TokenKind::EqGt);
+            let params = if p.at(TokenKind::LParen) {
+                p.delimited(TokenKind::LParen, TokenKind::RParen, Self::parse_param)
+            } else {
+                vec![]
+            };
+            let _ty_annot = p.parse_opt_ty_annot();
+            let _assign = p.expect(TokenKind::ColonEq);
             let body = p.parse_alloc_expr();
             HandlerOp {
                 name,

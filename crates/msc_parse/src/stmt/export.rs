@@ -37,7 +37,7 @@ impl Parser<'_> {
             TokenKind::KwLet => {
                 let inner = self.parse_expr_let();
                 if let Expr::Let { fields, .. } = inner {
-                    return Expr::Binding {
+                    return Expr::Let {
                         exported,
                         fields,
                         span: self.finish_span(start),
@@ -118,7 +118,7 @@ impl Parser<'_> {
     fn parse_expr_annotated_binding(&mut self, start: u32, attrs: Vec<Attr>) -> Expr {
         let inner = self.parse_expr_let();
         if let Expr::Let { fields, .. } = inner {
-            let binding = Expr::Binding {
+            let binding = Expr::Let {
                 exported: false,
                 fields,
                 span: self.finish_span(start),
@@ -261,7 +261,7 @@ impl Parser<'_> {
     fn parse_export_binding(&mut self, start: u32) -> Expr {
         let inner = self.parse_expr_let();
         if let Expr::Let { fields, .. } = inner {
-            Expr::Binding {
+            Expr::Let {
                 exported: true,
                 fields,
                 span: self.finish_span(start),

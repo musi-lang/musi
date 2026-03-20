@@ -5,7 +5,7 @@ mod tests;
 
 use msc_ast::ExprIdx;
 use msc_ast::NameRef;
-use msc_ast::expr::{Arrow, EffectItem, EffectSet, Expr, FieldKey};
+use msc_ast::expr::{Arrow, EffectItem, EffectSet, Expr, FieldKey, TypeForm};
 use msc_ast::ty_param::{Constraint, Rel};
 use msc_lex::token::TokenKind;
 use msc_shared::Symbol;
@@ -58,8 +58,9 @@ impl Parser<'_> {
         while let Some(arrow) = arrows.pop() {
             let (param, _param_eff) = parts.pop().expect("matching param");
             let (params, variadic) = match param {
-                Expr::ProductType {
-                    fields, variadic, ..
+                Expr::TypeExpr {
+                    kind: TypeForm::Product { fields, variadic },
+                    ..
                 } => (fields, variadic),
                 other => (vec![self.alloc_expr(other)], false),
             };
@@ -85,9 +86,11 @@ impl Parser<'_> {
             let start = self.start_span();
             let _with = self.bump();
             let effects = Some(self.parse_effect_set());
-            let unit = Expr::ProductType {
-                fields: vec![],
-                variadic: false,
+            let unit = Expr::TypeExpr {
+                kind: TypeForm::Product {
+                    fields: vec![],
+                    variadic: false,
+                },
                 span: self.finish_span(start),
             };
             return (unit, effects);
@@ -113,8 +116,8 @@ impl Parser<'_> {
             let t = self.parse_ty_prod();
             variants.push(self.alloc_expr(t));
         }
-        Expr::SumType {
-            variants,
+        Expr::TypeExpr {
+            kind: TypeForm::Sum { variants },
             span: self.finish_span(start),
         }
     }
@@ -131,9 +134,11 @@ impl Parser<'_> {
             let t = self.parse_ty_base();
             fields.push(self.alloc_expr(t));
         }
-        Expr::ProductType {
-            fields,
-            variadic: false,
+        Expr::TypeExpr {
+            kind: TypeForm::Product {
+                fields,
+                variadic: false,
+            },
             span: self.finish_span(start),
         }
     }
@@ -167,8 +172,8 @@ impl Parser<'_> {
         let _q = self.bump();
         let inner = self.parse_ty_base();
         let inner_idx = self.alloc_expr(inner);
-        Expr::OptionType {
-            inner: inner_idx,
+        Expr::TypeExpr {
+            kind: TypeForm::Option { inner: inner_idx },
             span: self.finish_span(start),
         }
     }
@@ -243,9 +248,11 @@ impl Parser<'_> {
 
         let _lp = self.bump();
         if self.eat(TokenKind::RParen) {
-            return Expr::ProductType {
-                fields: vec![],
-                variadic: false,
+            return Expr::TypeExpr {
+                kind: TypeForm::Product {
+                    fields: vec![],
+                    variadic: false,
+                },
                 span: self.finish_span(start),
             };
         }
@@ -262,9 +269,11 @@ impl Parser<'_> {
             if self.at(TokenKind::DotDotDot) {
                 let _dots = self.bump();
                 let _rp = self.expect(TokenKind::RParen);
-                return Expr::ProductType {
-                    fields,
-                    variadic: true,
+                return Expr::TypeExpr {
+                    kind: TypeForm::Product {
+                        fields,
+                        variadic: true,
+                    },
                     span: self.finish_span(start),
                 };
             }
@@ -272,9 +281,11 @@ impl Parser<'_> {
             fields.push(self.alloc_expr(t));
         }
         let _rp = self.expect(TokenKind::RParen);
-        Expr::ProductType {
-            fields,
-            variadic: false,
+        Expr::TypeExpr {
+            kind: TypeForm::Product {
+                fields,
+                variadic: false,
+            },
             span: self.finish_span(start),
         }
     }
@@ -291,10 +302,12 @@ impl Parser<'_> {
         let _rp = self.expect(TokenKind::RParen);
         let _arrow = self.expect(TokenKind::DashGt);
         let body = self.parse_alloc_ty();
-        Expr::PiType {
-            param,
-            param_ty,
-            body,
+        Expr::TypeExpr {
+            kind: TypeForm::Pi {
+                param,
+                param_ty,
+                body,
+            },
             span: self.finish_span(start),
         }
     }
@@ -317,9 +330,11 @@ impl Parser<'_> {
         // Complex element types need parentheses: `[](Int -> Bool)`.
         let elem = self.parse_ty_base();
         let elem_idx = self.alloc_expr(elem);
-        Expr::ArrayType {
-            len,
-            elem: elem_idx,
+        Expr::TypeExpr {
+            kind: TypeForm::Array {
+                len,
+                elem: elem_idx,
+            },
             span: self.finish_span(start),
         }
     }

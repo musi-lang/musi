@@ -74,13 +74,14 @@ impl Parser<'_> {
                 }
             }
 
-            // Record pattern: { fields }
-            TokenKind::LBrace => {
+            // Anonymous record pattern: .{ fields } or Record pattern: { fields }
+            TokenKind::DotLBrace | TokenKind::LBrace => {
                 let start = self.start_span();
-                let _lb = self.bump();
+                let _ = self.bump();
                 let fields = self.comma_sep(TokenKind::RBrace, Self::parse_pat_rec_field);
                 let _rb = self.expect(TokenKind::RBrace);
                 Pat::Record {
+                    ty_name: None,
                     fields,
                     span: self.finish_span(start),
                 }
@@ -135,6 +136,7 @@ impl Parser<'_> {
                 let fields = self.comma_sep(TokenKind::RBrace, Self::parse_pat_rec_field);
                 let _rb = self.expect(TokenKind::RBrace);
                 Pat::Record {
+                    ty_name: Some(name),
                     fields,
                     span: self.finish_span(start),
                 }
