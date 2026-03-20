@@ -208,7 +208,10 @@ fn find_class_required_methods<S: BuildHasher>(
 }
 
 /// Checks a declaration expression (class, given, effect, foreign).
-#[expect(clippy::too_many_lines, reason = "large match over declaration variants")]
+#[expect(
+    clippy::too_many_lines,
+    reason = "large match over declaration variants"
+)]
 pub fn check_decl<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) {
     match ck.ctx.ast.exprs[expr_idx].clone() {
         Expr::Class {

@@ -104,7 +104,10 @@ pub fn run_frontend(path: &Path) -> Result<FrontendOutput, ()> {
 /// # Errors
 ///
 /// Returns `Err(())` if any errors occurred during compilation.
-#[expect(clippy::result_unit_err, reason = "errors printed to stderr; unit signals failure")]
+#[expect(
+    clippy::result_unit_err,
+    reason = "errors printed to stderr; unit signals failure"
+)]
 pub fn run_frontend_multi(
     path: &Path,
     manifest: &MusiManifest,

@@ -68,7 +68,10 @@ fn check_with_polarity<S: BuildHasher>(
     );
 }
 
-#[expect(clippy::too_many_lines, reason = "exhaustive match dispatching to sub-functions")]
+#[expect(
+    clippy::too_many_lines,
+    reason = "exhaustive match dispatching to sub-functions"
+)]
 fn synth_inner<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) -> TypeIdx {
     match &ck.ctx.ast.exprs[expr_idx] {
         Expr::Lit { lit, span } => {

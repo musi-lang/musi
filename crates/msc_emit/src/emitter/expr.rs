@@ -67,7 +67,10 @@ fn emit_type_check(
 }
 
 /// Emit bytecode for `expr_idx` in explicit tail position.
-#[expect(clippy::too_many_lines, reason = "exhaustive match dispatching to named sub-functions")]
+#[expect(
+    clippy::too_many_lines,
+    reason = "exhaustive match dispatching to named sub-functions"
+)]
 pub fn emit_expr_tail(
     em: &mut Emitter<'_>,
     fc: &mut FnCtx,

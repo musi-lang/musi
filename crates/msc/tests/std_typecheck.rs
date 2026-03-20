@@ -9,14 +9,14 @@ use std::panic;
 use std::path::{Path, PathBuf};
 
 use msc_ast::ParsedModule;
-use msc_resolve::graph::{build_module_graph, ModuleId};
 use msc_resolve::ResolverConfig;
+use msc_resolve::graph::{ModuleId, build_module_graph};
 use msc_sema::types::RecordField;
-use msc_sema::{analyze_shared, SemaOptions};
 use msc_sema::{
-    collect_exports, ExportBinding, ImportNames, ModuleAnalysisCtx, SharedAnalysisState,
-    SubModuleExports,
+    ExportBinding, ImportNames, ModuleAnalysisCtx, SharedAnalysisState, SubModuleExports,
+    collect_exports,
 };
+use msc_sema::{SemaOptions, analyze_shared};
 use msc_shared::{Arena, DiagnosticBag, FileId, Interner, Severity, SourceDb, Symbol};
 
 fn collect_ms_files(dir: &Path) -> Vec<PathBuf> {

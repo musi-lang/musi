@@ -38,14 +38,14 @@ mod gc;
 use std::collections::HashMap;
 use std::iter;
 
-use msc_bc::{self, crc32_slice, Opcode};
+use msc_bc::{self, Opcode, crc32_slice};
 
+use crate::VmResult;
 use crate::error::VmError;
 use crate::loader::load;
 use crate::value::Value;
 use crate::verifier::verify;
 use crate::vm::{StepResult, Vm};
-use crate::VmResult;
 
 // ---------------------------------------------------------------------------
 // Test binary builder (SEAM format)

@@ -28,17 +28,26 @@ const INT_48_MIN: i64 = -(1i64 << 47);
 const INT_48_MAX: i64 = (1i64 << 47) - 1;
 
 // Lossless widening helpers for const context where `u64::from()` is unavailable.
-#[expect(clippy::as_conversions, reason = "NaN-boxing bit manipulation requires as casts on constants")]
+#[expect(
+    clippy::as_conversions,
+    reason = "NaN-boxing bit manipulation requires as casts on constants"
+)]
 const fn widen(n: u32) -> u64 {
     n as u64
 }
 
-#[expect(clippy::as_conversions, reason = "NaN-boxing bit manipulation requires as casts on constants")]
+#[expect(
+    clippy::as_conversions,
+    reason = "NaN-boxing bit manipulation requires as casts on constants"
+)]
 const fn bool_to_u64(b: bool) -> u64 {
     b as u64
 }
 
-#[expect(clippy::as_conversions, reason = "NaN-boxing bit manipulation requires as casts on constants")]
+#[expect(
+    clippy::as_conversions,
+    reason = "NaN-boxing bit manipulation requires as casts on constants"
+)]
 const fn char_to_u64(c: char) -> u64 {
     c as u64
 }
@@ -184,7 +193,11 @@ impl Value {
     /// # Panics
     ///
     /// Panics in debug mode if the payload exceeds `u32::MAX`.
-    #[expect(clippy::cast_possible_truncation, clippy::as_conversions, reason = "masking to 48 bits guarantees fit in usize")]
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::as_conversions,
+        reason = "masking to 48 bits guarantees fit in usize"
+    )]
     const fn payload_u32(self) -> u32 {
         let p = self.0 & PAYLOAD_MASK;
         debug_assert!(p <= 0xFFFF_FFFF, "payload exceeds u32");
@@ -196,7 +209,11 @@ impl Value {
     /// # Panics
     ///
     /// Panics in debug mode if the masked payload exceeds `u32::MAX`.
-    #[expect(clippy::cast_possible_truncation, clippy::as_conversions, reason = "48-bit payload extracted via mask")]
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::as_conversions,
+        reason = "48-bit payload extracted via mask"
+    )]
     const fn payload_u32_masked(self, mask: u64) -> u32 {
         let p = self.0 & mask;
         debug_assert!(p <= 0xFFFF_FFFF, "payload exceeds u32");
@@ -204,7 +221,11 @@ impl Value {
     }
 
     /// Sign-extends a 48-bit payload to i64 via arithmetic right-shift.
-    #[expect(clippy::cast_possible_wrap, clippy::as_conversions, reason = "sign-extending 48-bit SMI intentionally wraps")]
+    #[expect(
+        clippy::cast_possible_wrap,
+        clippy::as_conversions,
+        reason = "sign-extending 48-bit SMI intentionally wraps"
+    )]
     const fn sign_extend_48(raw: u64) -> i64 {
         ((raw << 16) as i64) >> 16
     }

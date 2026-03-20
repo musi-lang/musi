@@ -5,9 +5,9 @@ mod tests;
 
 use msc_shared::{Arena, Span};
 
+use crate::DefId;
 use crate::types::{RecordField, SumVariant, TyVarId, Type, TypeIdx};
 use crate::well_known::WellKnown;
-use crate::DefId;
 
 /// Whether a type variable is solvable (unification) or rigid (skolem).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
