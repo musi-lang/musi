@@ -29,14 +29,15 @@ const OPCODE_FORMAT_TABLE: &[(Opcode, Format)] = &[
     (Opcode::DIV, Format::F0),
     (Opcode::REM, Format::F0),
     (Opcode::NEG, Format::F0),
-    // §4.4 Logic/Bitwise
-    (Opcode::AND, Format::F0),
-    (Opcode::OR, Format::F0),
-    (Opcode::XOR, Format::F0),
-    (Opcode::NOT, Format::F0),
-    (Opcode::SHL, Format::F0),
-    (Opcode::SHR, Format::F0),
-    // §4.5 Comparison
+    // §4.4 Bitwise
+    (Opcode::BAND, Format::F0),
+    (Opcode::BOR, Format::F0),
+    (Opcode::BXOR, Format::F0),
+    (Opcode::BNOT, Format::F0),
+    // §4.5 Class Dispatch
+    (Opcode::CLS_DICT, Format::FI16),
+    (Opcode::CLS_DISP, Format::FI8x2),
+    // §4.6 Comparison
     (Opcode::CMP_EQ, Format::F0),
     (Opcode::CMP_NE, Format::F0),
     (Opcode::CMP_LT, Format::F0),

@@ -49,15 +49,17 @@ impl Opcode {
     pub const REM: Self = Self(0x14);
     pub const NEG: Self = Self(0x15);
 
-    // §4.4 Logic/Bitwise (6)
-    pub const AND: Self = Self(0x16);
-    pub const OR: Self = Self(0x17);
-    pub const XOR: Self = Self(0x18);
-    pub const NOT: Self = Self(0x19);
-    pub const SHL: Self = Self(0x1A);
-    pub const SHR: Self = Self(0x1B);
+    // §4.4 Bitwise (4) - Int only; Bool and/or/xor/not compile to branch sequences
+    pub const BAND: Self = Self(0x16);
+    pub const BOR: Self = Self(0x17);
+    pub const BXOR: Self = Self(0x18);
+    pub const BNOT: Self = Self(0x19);
 
-    // §4.5 Comparison (6)
+    // §4.5 Class Dispatch (2)
+    pub const CLS_DICT: Self = Self(0x1A);
+    pub const CLS_DISP: Self = Self(0x1B);
+
+    // §4.6 Comparison (6)
     pub const CMP_EQ: Self = Self(0x1C);
     pub const CMP_NE: Self = Self(0x1D);
     pub const CMP_LT: Self = Self(0x1E);
@@ -185,8 +187,13 @@ pub const fn format(op: u8) -> Format {
         0x09 => Format::F0,          // LD_IND
         0x0A | 0x0B => Format::FI8,  // ST_LOC, ST_UPV
         0x0C => Format::F0,          // ST_IND
-        // §4.2 Stack - §4.5 Comparison (all F0)
-        0x0D..=0x21 => Format::F0, // POP..CMP_GE
+        // §4.2 Stack – §4.4 Bitwise (all F0)
+        0x0D..=0x19 => Format::F0, // POP..BNOT
+        // §4.5 Class Dispatch
+        0x1A => Format::FI16,  // CLS_DICT
+        0x1B => Format::FI8x2, // CLS_DISP
+        // §4.6 Comparison (all F0)
+        0x1C..=0x21 => Format::F0, // CMP_EQ..CMP_GE
         // §4.6 Branch
         0x22..=0x24 => Format::FI16, // BR, BR_TRUE, BR_FALSE
         0x25 => Format::FI24,        // BR_LONG
@@ -273,15 +280,17 @@ pub const OPCODE_NAMES: [Option<&str>; 256] = {
     t[0x14] = Some("rem");
     t[0x15] = Some("neg");
 
-    // §4.4 Logic/Bitwise
-    t[0x16] = Some("and");
-    t[0x17] = Some("or");
-    t[0x18] = Some("xor");
-    t[0x19] = Some("not");
-    t[0x1A] = Some("shl");
-    t[0x1B] = Some("shr");
+    // §4.4 Bitwise
+    t[0x16] = Some("band");
+    t[0x17] = Some("bor");
+    t[0x18] = Some("bxor");
+    t[0x19] = Some("bnot");
 
-    // §4.5 Comparison
+    // §4.5 Class Dispatch
+    t[0x1A] = Some("cls.dict");
+    t[0x1B] = Some("cls.disp");
+
+    // §4.6 Comparison
     t[0x1C] = Some("cmp.eq");
     t[0x1D] = Some("cmp.ne");
     t[0x1E] = Some("cmp.lt");
