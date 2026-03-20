@@ -30,7 +30,7 @@ pub struct ModuleExports {
 
 /// Collects the exported bindings from a parsed and type-checked module.
 ///
-/// Walks top-level `Expr::Binding { exported: true, .. }` nodes and looks up
+/// Walks top-level `Expr::Let { exported: true, .. }` nodes and looks up
 /// their types from the definition table.
 #[must_use]
 pub fn collect_exports<S: BuildHasher>(
@@ -55,7 +55,7 @@ fn collect_exports_from_expr<S: BuildHasher>(
     out: &mut Vec<ExportBinding>,
 ) {
     match &arenas.exprs[expr_idx] {
-        Expr::Binding {
+        Expr::Let {
             exported: true,
             fields,
             ..

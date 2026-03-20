@@ -2,7 +2,7 @@
 
 use msc_ast::expr::{
     Arg, ArrayElem, Expr, FieldKey, HandlerOp, LetFields, MatchArm, Param, PwArm, PwGuard,
-    RecDefField, RecField,
+    RecDefField, RecField, TypeForm,
 };
 use msc_ast::lit::{FStrPart, Lit};
 use msc_ast::pat::Pat;
@@ -15,7 +15,7 @@ use crate::error::SemaError;
 
 impl Resolver<'_> {
     /// Pass 2: resolve all name references in an expression.
-    #[allow(clippy::too_many_lines)]
+    #[expect(clippy::too_many_lines, reason = "exhaustive match dispatching")]
     pub(super) fn resolve_expr(&mut self, expr_idx: ExprIdx) {
         match self.ast.exprs[expr_idx].clone() {
             Expr::Name { name_ref, span } => {
@@ -79,7 +79,6 @@ impl Resolver<'_> {
             }
             Expr::Need { operand, .. } => self.resolve_expr(operand),
             Expr::Let { fields, .. } => self.resolve_expr_let(&fields),
-            Expr::Binding { fields, .. } => self.resolve_expr_binding(&fields),
             Expr::Fn {
                 params,
                 ret_ty,
@@ -140,13 +139,9 @@ impl Resolver<'_> {
                 ..
             } => self.resolve_expr_handle(effect_ty, &ops, body),
             // Type-expression variants: resolve names within them as type references.
-            Expr::TypeApp { .. }
-            | Expr::FnType { .. }
-            | Expr::OptionType { .. }
-            | Expr::ProductType { .. }
-            | Expr::SumType { .. }
-            | Expr::ArrayType { .. }
-            | Expr::PiType { .. } => self.resolve_type_expr(expr_idx),
+            Expr::TypeApp { .. } | Expr::FnType { .. } | Expr::TypeExpr { .. } => {
+                self.resolve_type_expr(expr_idx);
+            }
         }
     }
 
@@ -236,7 +231,7 @@ impl Resolver<'_> {
         self.current_scope = self.scopes.push_child(parent);
         for &stmt in stmts {
             let fields = match &self.ast.exprs[stmt] {
-                Expr::Binding { fields, .. } | Expr::Let { fields, .. } => Some(fields.clone()),
+                Expr::Let { fields, .. } => Some(fields.clone()),
                 _ => None,
             };
             if let Some(fields) = fields {
@@ -301,33 +296,6 @@ impl Resolver<'_> {
     }
 
     fn resolve_expr_let(&mut self, fields: &LetFields) {
-        let parent_ty_scope = if fields.params.is_empty() {
-            None
-        } else {
-            Some(self.enter_ty_param_scope(&fields.params, &fields.constraints))
-        };
-
-        let fn_pat_parent = self.enter_fn_pat_scope(fields.pat);
-
-        if let Some(v) = fields.value {
-            self.resolve_expr(v);
-        }
-        if let Some(ty) = fields.ty {
-            self.resolve_type_expr(ty);
-        }
-
-        if let Some(p) = fn_pat_parent {
-            self.current_scope = p;
-        }
-
-        // Top-level `let` - names already defined in collect_top_level.
-
-        if let Some(p) = parent_ty_scope {
-            self.current_scope = p;
-        }
-    }
-
-    fn resolve_expr_binding(&mut self, fields: &LetFields) {
         let parent_ty_scope = if fields.params.is_empty() {
             None
         } else {
@@ -403,7 +371,10 @@ impl Resolver<'_> {
         self.current_scope = self.scopes.push_child(parent);
 
         match self.ast.exprs[body].clone() {
-            Expr::SumType { variants, .. } => {
+            Expr::TypeExpr {
+                kind: TypeForm::Sum { variants },
+                ..
+            } => {
                 for &variant_expr in &variants {
                     if let Expr::Name { name_ref, span } = &self.ast.exprs[variant_expr] {
                         let name = self.ast.name_refs[*name_ref].name;

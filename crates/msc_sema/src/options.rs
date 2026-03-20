@@ -1,6 +1,9 @@
 // Each field maps 1:1 to a compiler flag; bools are the correct representation.
 // Using an enum or bitfield would obscure the direct CLI flag correspondence.
-#[allow(clippy::struct_excessive_bools)] // false positive: each bool IS a distinct compiler flag
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each bool is a distinct compiler flag"
+)]
 #[derive(Debug, Default)]
 pub struct SemaOptions {
     /// Enable all strict-mode checks. Equivalent to enabling every other flag.

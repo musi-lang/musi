@@ -1,3 +1,4 @@
+use std::collections::hash_map::RandomState;
 use std::collections::{HashMap, HashSet};
 use std::hash::BuildHasher;
 use std::mem;
@@ -164,24 +165,22 @@ impl SharedAnalysisState {
     }
 }
 
+/// Per-module context for shared analysis.
+pub struct ModuleAnalysisCtx<'a, S: BuildHasher = RandomState> {
+    pub import_names: &'a ImportNames,
+    pub import_types: &'a HashMap<Symbol, TypeIdx, S>,
+    pub sub_module_exports: &'a SubModuleExports,
+    pub options: &'a SemaOptions,
+}
+
 /// Runs analysis for a single module using shared cross-module state.
-// Nine parameters are structurally necessary: shared state (1), module (1),
-// interner + file_id + diags (3 required by every analysis call), and four
-// cross-module context values (import_names, import_types, sub_module_exports,
-// options) that vary per call and cannot be folded into SharedAnalysisState
-// without breaking the shared/per-module ownership boundary. Introducing a
-// wrapper struct would be an API change outside the scope of this refactor.
-#[allow(clippy::too_many_arguments)]
 pub fn analyze_shared<S: BuildHasher>(
     module: &ParsedModule,
     state: &mut SharedAnalysisState,
     interner: &mut Interner,
     file_id: FileId,
     diags: &mut DiagnosticBag,
-    import_names: &ImportNames,
-    import_types: &HashMap<Symbol, TypeIdx, S>,
-    sub_module_exports: &SubModuleExports,
-    options: &SemaOptions,
+    ctx: &ModuleAnalysisCtx<'_, S>,
 ) -> ModuleSemaOutput {
     let module_scope = state.scopes.push_child(state.prelude_scope);
 
@@ -196,25 +195,25 @@ pub fn analyze_shared<S: BuildHasher>(
         file_id,
         diags,
         &mut resolve_state,
-        import_names,
-        sub_module_exports,
+        ctx.import_names,
+        ctx.sub_module_exports,
     );
 
-    let ctx = CheckContext {
+    let check_ctx = CheckContext {
         ast: &module.arenas,
         interner,
         file_id,
         well_known: &state.well_known,
         expr_defs: &resolved.expr_defs,
         pat_defs: &resolved.pat_defs,
-        import_types,
+        import_types: ctx.import_types,
         law_inferred_vars: &resolved.law_inferred_vars,
         class_op_members: &resolved.class_op_members,
-        options,
+        options: ctx.options,
     };
 
     let mut checker = Checker::new_with_state(
-        ctx,
+        check_ctx,
         diags,
         &mut state.defs,
         &mut state.scopes,
@@ -244,18 +243,20 @@ pub fn analyze_shared<S: BuildHasher>(
         .instances
         .extend(result.instances[inherited_count..].iter().cloned());
 
-    analyze_emit_unused_warnings(&state.defs, interner, file_id, diags, options);
+    analyze_emit_unused_warnings(&state.defs, interner, file_id, diags, ctx.options);
     analyze_implicit_any(
-        &state.defs,
-        &state.types,
-        &state.unify,
-        &state.well_known,
+        &ImplicitAnyCtx {
+            defs: &state.defs,
+            types: &state.types,
+            unify: &state.unify,
+            well_known: &state.well_known,
+        },
         interner,
         file_id,
         diags,
-        options,
+        ctx.options,
     );
-    analyze_implicit_returns(module, diags, file_id, options);
+    analyze_implicit_returns(module, diags, file_id, ctx.options);
 
     ModuleSemaOutput {
         module_scope,
@@ -333,10 +334,12 @@ pub fn analyze_with_imports<S: BuildHasher>(
 
     analyze_emit_unused_warnings(&defs, interner, file_id, diags, options);
     analyze_implicit_any(
-        &defs,
-        &result.types,
-        &result.unify,
-        &well_known,
+        &ImplicitAnyCtx {
+            defs: &defs,
+            types: &result.types,
+            unify: &result.unify,
+            well_known: &well_known,
+        },
         interner,
         file_id,
         diags,
@@ -410,11 +413,15 @@ pub(crate) fn analyze_setup<'a>(
     (defs, well_known, scopes, module_scope, resolved, types)
 }
 
+pub(crate) struct ImplicitAnyCtx<'a> {
+    pub defs: &'a DefTable,
+    pub types: &'a Arena<Type>,
+    pub unify: &'a UnifyTable,
+    pub well_known: &'a WellKnown,
+}
+
 pub(crate) fn analyze_implicit_any(
-    defs: &DefTable,
-    types: &Arena<Type>,
-    unify: &UnifyTable,
-    well_known: &WellKnown,
+    ctx: &ImplicitAnyCtx<'_>,
     interner: &Interner,
     file_id: FileId,
     diags: &mut DiagnosticBag,
@@ -423,7 +430,7 @@ pub(crate) fn analyze_implicit_any(
     if !options.no_implicit_any {
         return;
     }
-    for def in defs.iter() {
+    for def in ctx.defs.iter() {
         if matches!(
             def.kind,
             DefKind::Type
@@ -447,10 +454,10 @@ pub(crate) fn analyze_implicit_any(
             continue;
         }
         if let Some(ty) = def.ty_info.ty {
-            let resolved = unify.resolve(ty, types);
-            let is_implicit_any = match &types[resolved] {
+            let resolved = ctx.unify.resolve(ty, ctx.types);
+            let is_implicit_any = match &ctx.types[resolved] {
                 Type::Var(_) => true,
-                Type::Named { def: d, args } if *d == well_known.any && args.is_empty() => true,
+                Type::Named { def: d, args } if *d == ctx.well_known.any && args.is_empty() => true,
                 _ => false,
             };
             if is_implicit_any {
@@ -508,9 +515,8 @@ fn check_implicit_returns_in_expr(
                 check_implicit_returns_in_expr(t, arenas, diags, file_id);
             }
         }
-        Expr::Let { fields, .. } | Expr::Binding { fields, .. } => {
+        Expr::Let { fields, .. } => {
             if let Some(v) = fields.value {
-                let v = v;
                 check_implicit_returns_in_expr(v, arenas, diags, file_id);
             }
         }

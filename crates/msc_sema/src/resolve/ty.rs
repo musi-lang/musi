@@ -1,7 +1,7 @@
 //! Type expression resolution helpers.
 
 use msc_ast::ExprIdx;
-use msc_ast::expr::{EffectItem, Expr};
+use msc_ast::expr::{EffectItem, Expr, TypeForm};
 
 use super::Resolver;
 
@@ -29,9 +29,20 @@ impl Resolver<'_> {
                 // The field name itself is not resolved here (handled by checker).
                 self.resolve_type_expr(object);
             }
-            Expr::OptionType { inner, .. } => {
-                self.resolve_type_expr(inner);
-            }
+            Expr::TypeExpr { kind, .. } => match kind {
+                TypeForm::Option { inner } | TypeForm::Array { elem: inner, .. } => {
+                    self.resolve_type_expr(inner);
+                }
+                TypeForm::Product { fields, .. } | TypeForm::Sum { variants: fields } => {
+                    for f in fields {
+                        self.resolve_type_expr(f);
+                    }
+                }
+                TypeForm::Pi { param_ty, body, .. } => {
+                    self.resolve_type_expr(param_ty);
+                    self.resolve_type_expr(body);
+                }
+            },
             Expr::FnType {
                 params,
                 ret,
@@ -54,23 +65,6 @@ impl Resolver<'_> {
                         }
                     }
                 }
-            }
-            Expr::ProductType { fields, .. } => {
-                for &f in &fields {
-                    self.resolve_type_expr(f);
-                }
-            }
-            Expr::SumType { variants, .. } => {
-                for &v in &variants {
-                    self.resolve_type_expr(v);
-                }
-            }
-            Expr::ArrayType { elem, .. } => {
-                self.resolve_type_expr(elem);
-            }
-            Expr::PiType { param_ty, body, .. } => {
-                self.resolve_type_expr(param_ty);
-                self.resolve_type_expr(body);
             }
             _ => {}
         }

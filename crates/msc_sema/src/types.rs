@@ -305,7 +305,10 @@ impl TypeDisplay<'_> {
 }
 
 impl fmt::Display for TypeDisplay<'_> {
-    #[allow(clippy::too_many_lines)] // exhaustive match over all type variants; extraction adds indirection without clarity
+    #[expect(
+        clippy::too_many_lines,
+        reason = "exhaustive match over all type variants"
+    )]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.arena[self.ty] {
             Type::Named { def, args } => {

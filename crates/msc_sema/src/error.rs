@@ -54,6 +54,8 @@ pub enum SemaError {
     NotIndexable { ty: Box<str> },
     #[error("`resume` used outside of a handler body")]
     ResumeOutsideHandler,
+    #[error("`resume` in a `fatal` handler is not allowed; `fatal` operations never resume")]
+    ResumeInFatalHandler,
     #[error("no instance of `{delegate}` found to delegate `{class}` via")]
     NoDelegateInstance { class: Box<str>, delegate: Box<str> },
     #[error("unsupported feature: {feature}")]
@@ -66,6 +68,8 @@ pub enum SemaError {
     ImplicitReturn,
     #[error("unreachable code")]
     UnreachableCode,
+    #[error("overlapping instances of `{class}` for type `{ty}`")]
+    OverlappingInstance { class: Box<str>, ty: Box<str> },
 }
 
 impl IntoDiagnostic for SemaError {

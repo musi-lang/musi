@@ -238,7 +238,6 @@ pub(crate) const fn expr_span(expr: &Expr) -> Span {
         | Expr::Import { span, .. }
         | Expr::Export { span, .. }
         | Expr::Annotated { span, .. }
-        | Expr::Binding { span, .. }
         | Expr::Class { span, .. }
         | Expr::Instance { span, .. }
         | Expr::Effect { span, .. }
@@ -248,11 +247,7 @@ pub(crate) const fn expr_span(expr: &Expr) -> Span {
         | Expr::Error { span, .. }
         | Expr::TypeApp { span, .. }
         | Expr::FnType { span, .. }
-        | Expr::OptionType { span, .. }
-        | Expr::ProductType { span, .. }
-        | Expr::SumType { span, .. }
-        | Expr::ArrayType { span, .. }
-        | Expr::PiType { span, .. }
+        | Expr::TypeExpr { span, .. }
         | Expr::Need { span, .. }
         | Expr::Resume { span, .. } => *span,
     }

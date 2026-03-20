@@ -293,7 +293,7 @@ impl Resolver<'_> {
         seen: &mut HashSet<Symbol>,
     ) {
         match expr {
-            Expr::Let { fields, .. } | Expr::Binding { fields, .. } => {
+            Expr::Let { fields, .. } => {
                 if let Some(v) = fields.value {
                     self.collect_free_names_inner(v, free, seen);
                 }

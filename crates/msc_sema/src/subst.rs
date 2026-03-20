@@ -9,7 +9,10 @@ use crate::types::{RecordField, SumVariant, Type, TypeIdx};
 ///
 /// Used for Π-type application: `(Π(x : A). B)(v)` becomes `B[x := v]`.
 #[must_use]
-#[allow(clippy::too_many_lines)] // exhaustive match over all type variants; extraction adds indirection without clarity
+#[expect(
+    clippy::too_many_lines,
+    reason = "exhaustive match over all type variants"
+)]
 pub fn subst_type(
     ty: TypeIdx,
     param_def: DefId,

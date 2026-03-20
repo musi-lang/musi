@@ -10,12 +10,14 @@ use msc_ast::ty_param::TyParam;
 use msc_ast::util::collect_ty_var_nodes;
 use msc_shared::{Idx, Span, Symbol};
 
+use crate::TypeIdx;
 use crate::checker::Checker;
 use crate::checker::expr::{check, synth};
 use crate::checker::ty::lower_type_expr;
 use crate::def::{DefId, DefKind};
 use crate::error::SemaError;
-use crate::types::{EffectRow, InstanceInfo, LawObligation, RecordField, Type};
+use crate::types::{EffectRow, InstanceInfo, LawObligation, RecordField, Type, fmt_type};
+use crate::unify::types_match;
 
 /// Checks a class/given member's default body with sig params in scope.
 /// Also stores the method's function type so cross-module callers can resolve it.
@@ -206,7 +208,7 @@ fn find_class_required_methods<S: BuildHasher>(
 }
 
 /// Checks a declaration expression (class, given, effect, foreign).
-#[allow(clippy::too_many_lines)] // large match over declaration variants; extraction would add indirection without clarity
+#[expect(clippy::too_many_lines, reason = "large match over declaration variants")]
 pub fn check_decl<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) {
     match ck.ctx.ast.exprs[expr_idx].clone() {
         Expr::Class {
@@ -315,14 +317,11 @@ pub fn check_decl<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) {
             InstanceBody::Via { delegate, .. } => {
                 check_instance_via(ck, target, params, delegate, span);
             }
-            InstanceBody::Derives { span, .. } => {
-                let _d = ck.diags.report(
-                    &SemaError::Unsupported {
-                        feature: "derives".into(),
-                    },
-                    span,
-                    ck.ctx.file_id,
-                );
+            InstanceBody::Derives {
+                classes,
+                span: derives_span,
+            } => {
+                check_instance_derives(ck, target, params, &classes, derives_span, span);
             }
         },
         Expr::Effect { ops, .. } => {
@@ -480,6 +479,231 @@ fn check_instance_via<S: BuildHasher>(
     }
 }
 
+fn check_instance_derives<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
+    target: ExprIdx,
+    params: Vec<TyParam>,
+    classes: &[Symbol],
+    derives_span: Span,
+    instance_span: Span,
+) {
+    let mut all_params: Vec<TyParam> = params;
+    collect_ty_var_nodes(target, ck.ctx.ast, &mut all_params);
+    all_params.retain(|p| ck.scopes.lookup(ck.current_scope, p.name).is_none());
+    let parent = if all_params.is_empty() {
+        None
+    } else {
+        let (p, _ids) = ck.enter_ty_param_scope(&all_params);
+        Some(p)
+    };
+
+    let first_arg_opt = match &ck.ctx.ast.exprs[target] {
+        Expr::TypeApp { args, .. } => args.first().copied(),
+        _ => None,
+    };
+
+    let target_ty = if let Some(arg) = first_arg_opt {
+        lower_type_expr(ck, arg)
+    } else {
+        ck.fresh_var(derives_span)
+    };
+
+    for &class_sym in classes {
+        check_eq_instance(ck, class_sym, target_ty, derives_span, instance_span);
+    }
+
+    if let Some(p) = parent {
+        ck.current_scope = p;
+    }
+}
+
+fn check_eq_instance<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
+    class_sym: Symbol,
+    target_ty: TypeIdx,
+    derives_span: Span,
+    instance_span: Span,
+) {
+    let class_name_str = ck.ctx.interner.resolve(class_sym).to_owned();
+
+    if class_name_str != "Eq" {
+        let _d = ck.diags.report(
+            &SemaError::Unsupported {
+                feature: format!("derives {class_name_str}").into_boxed_str(),
+            },
+            derives_span,
+            ck.ctx.file_id,
+        );
+        return;
+    }
+
+    let Some(class_def) = ck.scopes.lookup(ck.current_scope, class_sym) else {
+        return;
+    };
+
+    let resolved_target = ck.store.unify.resolve(target_ty, &ck.store.types);
+    let (target_def_opt, underlying_opt) = match &ck.store.types[resolved_target] {
+        Type::Named { def, .. } => (Some(*def), ck.defs.get(*def).ty_info.ty),
+        _ => (None, None),
+    };
+
+    let Some(target_def) = target_def_opt else {
+        let _d = ck.diags.report(
+            &SemaError::Unsupported {
+                feature: "derives Eq for non-named types".into(),
+            },
+            derives_span,
+            ck.ctx.file_id,
+        );
+        return;
+    };
+
+    let is_record =
+        underlying_opt.is_some_and(|ty| matches!(ck.store.types[ty], Type::Record { .. }));
+    if !is_record {
+        let _d = ck.diags.report(
+            &SemaError::Unsupported {
+                feature: "derives Eq for non-record types (choice types not yet supported)".into(),
+            },
+            derives_span,
+            ck.ctx.file_id,
+        );
+        return;
+    }
+
+    // `"="` must already be interned - it was interned when the Eq class body
+    // parsed `(=)`. If it is absent the Eq class was never loaded; skip.
+    let Some(eq_op_sym) = ck.ctx.interner.get("=") else {
+        return;
+    };
+    let synthetic_def = ck
+        .defs
+        .alloc(eq_op_sym, DefKind::Fn, derives_span, ck.ctx.file_id);
+    ck.defs.get_mut(synthetic_def).parent = Some(target_def);
+
+    let bool_ty = ck.named_ty(ck.ctx.well_known.bool);
+    let fn_ty = ck.alloc_ty(Type::Fn {
+        params: vec![target_ty, target_ty],
+        ret: bool_ty,
+        effects: EffectRow::PURE,
+    });
+    ck.defs.get_mut(synthetic_def).ty_info.ty = Some(fn_ty);
+
+    let resolved_for_coherence = ck.store.unify.resolve(target_ty, &ck.store.types);
+    let target_is_concrete = matches!(&ck.store.types[resolved_for_coherence], Type::Named { .. });
+
+    if target_is_concrete {
+        if let Some(prev_span) = find_overlapping_instance(ck, class_sym, target_ty) {
+            report_overlapping_instance(ck, class_name_str, target_ty, instance_span, prev_span);
+            return;
+        }
+    }
+
+    ck.store.instances.push(InstanceInfo {
+        class: class_def,
+        target: target_ty,
+        params: vec![],
+        constraints: vec![],
+        members: vec![(eq_op_sym, synthetic_def)],
+        span: instance_span,
+    });
+}
+
+fn find_overlapping_instance<S: BuildHasher>(
+    ck: &Checker<'_, S>,
+    class_sym: Symbol,
+    target_ty: TypeIdx,
+) -> Option<Span> {
+    let instances = &ck.store.instances;
+    let types = &ck.store.types;
+    let unify = &ck.store.unify;
+    let defs = &*ck.defs;
+    instances.iter().find_map(|inst| {
+        if defs.get(inst.class).name == class_sym
+            && types_match(types, unify, inst.target, target_ty)
+        {
+            Some(inst.span)
+        } else {
+            None
+        }
+    })
+}
+
+fn report_overlapping_instance<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
+    class_name_str: String,
+    target_ty: TypeIdx,
+    instance_span: Span,
+    prev_span: Span,
+) {
+    let class_str = class_name_str.into_boxed_str();
+    let defs_vec: Vec<_> = ck.defs.iter().cloned().collect();
+    let ty_str = fmt_type(
+        target_ty,
+        &ck.store.types,
+        &defs_vec,
+        ck.ctx.interner,
+        Some(&ck.store.unify),
+    );
+    let _ = ck
+        .diags
+        .report(
+            &SemaError::OverlappingInstance {
+                class: class_str,
+                ty: ty_str,
+            },
+            instance_span,
+            ck.ctx.file_id,
+        )
+        .add_secondary(prev_span, ck.ctx.file_id, "previous instance defined here");
+}
+
+fn extract_target_info<S: BuildHasher>(
+    ck: &Checker<'_, S>,
+    target: ExprIdx,
+) -> (Option<Symbol>, Option<ExprIdx>) {
+    match &ck.ctx.ast.exprs[target] {
+        Expr::Name { name_ref, .. } => (Some(ck.ctx.ast.name_refs[*name_ref].name), None),
+        Expr::TypeApp { callee, args, .. } => {
+            let name = if let Expr::Name { name_ref, .. } = &ck.ctx.ast.exprs[*callee] {
+                Some(ck.ctx.ast.name_refs[*name_ref].name)
+            } else {
+                None
+            };
+            (name, args.first().copied())
+        }
+        _ => (None, None),
+    }
+}
+
+fn collect_member_defs<S: BuildHasher>(
+    ck: &Checker<'_, S>,
+    members: &[ClassMember],
+) -> Vec<(Symbol, DefId)> {
+    members
+        .iter()
+        .filter_map(|m| {
+            if let ClassMember::Fn { sig, .. } = m {
+                ck.ctx.pat_defs.get(&sig.span).map(|&id| (sig.name, id))
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+fn resolve_target_type<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
+    first_arg_opt: Option<ExprIdx>,
+    span: Span,
+) -> TypeIdx {
+    if let Some(first_arg) = first_arg_opt {
+        lower_type_expr(ck, first_arg)
+    } else {
+        ck.fresh_var(span)
+    }
+}
+
 fn check_instance<S: BuildHasher>(
     ck: &mut Checker<'_, S>,
     target: ExprIdx,
@@ -497,19 +721,8 @@ fn check_instance<S: BuildHasher>(
         Some(p)
     };
     check_class_members(ck, members, &all_params);
-    // Extract class name and first type arg from the target expression.
-    let (target_name_opt, first_arg_opt) = match &ck.ctx.ast.exprs[target] {
-        Expr::Name { name_ref, .. } => (Some(ck.ctx.ast.name_refs[*name_ref].name), None),
-        Expr::TypeApp { callee, args, .. } => {
-            let name = if let Expr::Name { name_ref, .. } = &ck.ctx.ast.exprs[*callee] {
-                Some(ck.ctx.ast.name_refs[*name_ref].name)
-            } else {
-                None
-            };
-            (name, args.first().copied())
-        }
-        _ => (None, None),
-    };
+
+    let (target_name_opt, first_arg_opt) = extract_target_info(ck, target);
     let Some(target_name) = target_name_opt else {
         if let Some(p) = parent {
             ck.current_scope = p;
@@ -519,32 +732,51 @@ fn check_instance<S: BuildHasher>(
     check_instance_method_coverage(ck, target_name, members, span);
 
     if let Some(class_def) = ck.scopes.lookup(ck.current_scope, target_name) {
-        let target_ty = if let Some(first_arg) = first_arg_opt {
-            lower_type_expr(ck, first_arg)
-        } else {
-            ck.fresh_var(span)
-        };
-        let member_defs: Vec<(Symbol, DefId)> = members
-            .iter()
-            .filter_map(|m| {
-                if let ClassMember::Fn { sig, .. } = m {
-                    ck.ctx.pat_defs.get(&sig.span).map(|&id| (sig.name, id))
-                } else {
-                    None
-                }
-            })
-            .collect();
-        ck.store.instances.push(InstanceInfo {
-            class: class_def,
-            target: target_ty,
-            params: vec![],
-            constraints: vec![],
-            members: member_defs,
-            span,
-        });
+        let target_ty = resolve_target_type(ck, first_arg_opt, span);
+        let member_defs = collect_member_defs(ck, members);
+
+        check_instance_coherence(ck, class_def, target_name, target_ty, member_defs, span);
     }
 
     if let Some(p) = parent {
         ck.current_scope = p;
     }
+}
+
+fn check_instance_coherence<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
+    class_def: DefId,
+    target_name: Symbol,
+    target_ty: TypeIdx,
+    member_defs: Vec<(Symbol, DefId)>,
+    span: Span,
+) {
+    let resolved_target = ck.store.unify.resolve(target_ty, &ck.store.types);
+    let target_is_concrete = matches!(&ck.store.types[resolved_target], Type::Named { .. });
+    if target_is_concrete {
+        if let Some(prev_span) = find_overlapping_instance(ck, target_name, target_ty) {
+            let name_str = ck.ctx.interner.resolve(target_name).to_owned();
+            report_overlapping_instance(ck, name_str, target_ty, span, prev_span);
+            return;
+        }
+    }
+
+    register_instance(ck, class_def, target_ty, member_defs, span);
+}
+
+fn register_instance<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
+    class_def: DefId,
+    target_ty: TypeIdx,
+    member_defs: Vec<(Symbol, DefId)>,
+    span: Span,
+) {
+    ck.store.instances.push(InstanceInfo {
+        class: class_def,
+        target: target_ty,
+        params: vec![],
+        constraints: vec![],
+        members: member_defs,
+        span,
+    });
 }

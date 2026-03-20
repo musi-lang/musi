@@ -46,7 +46,8 @@ pub use well_known::WellKnown;
 pub use exports::{ExportBinding, ModuleExports, collect_exports};
 pub use options::SemaOptions;
 pub use pipeline::{
-    ModuleSemaOutput, SharedAnalysisState, analyze, analyze_shared, analyze_with_imports,
+    ModuleAnalysisCtx, ModuleSemaOutput, SharedAnalysisState, analyze, analyze_shared,
+    analyze_with_imports,
 };
 pub use resolve::{ImportNames, SubModuleExports};
 

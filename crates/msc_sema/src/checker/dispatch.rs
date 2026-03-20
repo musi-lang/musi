@@ -6,7 +6,7 @@ use std::hash::BuildHasher;
 use msc_ast::ExprIdx;
 use msc_ast::expr::{Expr, Expr as AstExpr, HandlerOp, LetFields};
 use msc_ast::pat::Pat;
-use msc_ast::ty_param::{Constraint, Rel, TyParam};
+use msc_ast::ty_param::{Constraint, TyParam};
 use msc_shared::{Idx, Span, Symbol};
 
 use crate::checker::Checker;
@@ -87,9 +87,6 @@ pub(super) fn enter_constraint_scope<S: BuildHasher>(
     let mut new_obligations = prev.clone();
 
     for constraint in constraints {
-        if constraint.rel == Rel::Super {
-            continue;
-        }
         let bound_name = match &ck.ctx.ast.exprs[constraint.bound] {
             AstExpr::Name { name_ref, .. } => ck.ctx.ast.name_refs[*name_ref].name,
             AstExpr::TypeApp { callee, .. } => match &ck.ctx.ast.exprs[*callee] {

@@ -5,9 +5,9 @@ mod tests;
 
 use msc_shared::{Arena, Span};
 
-use crate::DefId;
 use crate::types::{RecordField, SumVariant, TyVarId, Type, TypeIdx};
 use crate::well_known::WellKnown;
+use crate::DefId;
 
 /// Whether a type variable is solvable (unification) or rigid (skolem).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -150,7 +150,10 @@ impl UnifyTable {
     /// Unifies two types, returning `true` on success.
     ///
     /// On failure, returns `false` and the caller should report a diagnostic.
-    #[allow(clippy::too_many_lines)] // exhaustive match over all type variants; extraction adds indirection without clarity
+    #[expect(
+        clippy::too_many_lines,
+        reason = "exhaustive match over all type variants"
+    )]
     pub fn unify(
         &mut self,
         a: TypeIdx,
@@ -182,7 +185,10 @@ impl UnifyTable {
             }
 
             // Rigid type variables are intentionally non-unifiable with anything.
-            #[allow(clippy::match_same_arms)]
+            #[expect(
+                clippy::match_same_arms,
+                reason = "intentional: documents each variant's behavior"
+            )]
             (Type::Rigid(_), _) | (_, Type::Rigid(_)) => false,
 
             (Type::Named { def: d1, args: a1 }, Type::Named { def: d2, args: a2 }) => {
@@ -438,7 +444,10 @@ impl UnifyTable {
     ///
     /// Unsolved `Var` defaults to `Unknown`. Used before exporting types.
     #[must_use]
-    #[allow(clippy::too_many_lines)] // exhaustive match over all type variants; extraction adds indirection without clarity
+    #[expect(
+        clippy::too_many_lines,
+        reason = "exhaustive match over all type variants"
+    )]
     pub fn freeze(&self, ty: TypeIdx, arena: &mut Arena<Type>, unknown_def: DefId) -> TypeIdx {
         match arena[ty].clone() {
             Type::Var(v) => {

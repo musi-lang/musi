@@ -24,19 +24,13 @@ impl Resolver<'_> {
                 .report(&warning.message, warning.span, self.file_id);
         }
         match &self.ast.exprs[expr_idx] {
-            Expr::Binding {
+            Expr::Let {
                 exported, fields, ..
             } => {
-                self.define_fn_name(fields.pat, binding_def_kind(fields.kind));
-                self.define_pat(fields.pat, binding_def_kind(fields.kind));
+                self.collect_top_level_let(fields, attrs);
                 if *exported {
                     self.mark_pat_exported(fields.pat);
                 }
-                self.maybe_mark_lang_item_pat(fields.pat, attrs);
-                self.apply_flags_to_pat(fields.pat, attrs);
-            }
-            Expr::Let { fields, .. } => {
-                self.collect_top_level_let(fields, attrs);
             }
             Expr::Class { name, exported, .. } => {
                 self.collect_named_def(*name, DefKind::Class, *exported, expr_idx, attrs);

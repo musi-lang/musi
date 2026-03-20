@@ -12,7 +12,8 @@ use std::collections::HashMap;
 use msc_shared::{DiagnosticBag, FileId, Interner, Severity, Span, Symbol};
 
 use crate::checker::{CheckContext, Checker};
-use crate::{pipeline, SemaOptions, UnifyTable};
+use crate::types::Polarity;
+use crate::{SemaOptions, UnifyTable, pipeline};
 
 /// Helper to construct a Stmt.
 fn stmt(expr_idx: ExprIdx) -> Stmt {
@@ -153,7 +154,7 @@ fn test_check_underscore_binding_suppresses_unused_warning() {
         with_effects: None,
         span: Span::DUMMY,
     };
-    let binding = arenas.exprs.alloc(Expr::Binding {
+    let binding = arenas.exprs.alloc(Expr::Let {
         exported: false,
         fields,
         span: Span::DUMMY,
@@ -204,7 +205,7 @@ fn test_check_fn_parameter_scope_in_body() {
         with_effects: None,
         span: Span::DUMMY,
     };
-    let binding = arenas.exprs.alloc(Expr::Binding {
+    let binding = arenas.exprs.alloc(Expr::Let {
         exported: false,
         fields,
         span: Span::DUMMY,
@@ -253,7 +254,7 @@ fn test_check_binding_then_reference() {
         with_effects: None,
         span: Span::DUMMY,
     };
-    let binding = arenas.exprs.alloc(Expr::Binding {
+    let binding = arenas.exprs.alloc(Expr::Let {
         exported: false,
         fields,
         span: Span::DUMMY,
@@ -308,11 +309,23 @@ fn test_insert_cast_records_any_boundary() {
     let dummy_expr_idx = msc_ast::ExprIdx::from_raw(0u32);
 
     // Any ~ Int: inserting a cast should record it.
-    checker.insert_cast(dummy_expr_idx, any_ty, int_ty, Span::DUMMY);
+    checker.insert_cast_with_polarity(
+        dummy_expr_idx,
+        any_ty,
+        int_ty,
+        Span::DUMMY,
+        Polarity::Positive,
+    );
     assert!(checker.store.casts.contains_key(&dummy_expr_idx));
 
     // Identical types: no cast recorded.
     let dummy_expr_idx2 = msc_ast::ExprIdx::from_raw(1u32);
-    checker.insert_cast(dummy_expr_idx2, int_ty, int_ty, Span::DUMMY);
+    checker.insert_cast_with_polarity(
+        dummy_expr_idx2,
+        int_ty,
+        int_ty,
+        Span::DUMMY,
+        Polarity::Positive,
+    );
     assert!(!checker.store.casts.contains_key(&dummy_expr_idx2));
 }

@@ -148,3 +148,83 @@ fn test_via_delegation_parametric_reversed() {
     let (_result, diags) = analyze_src(src);
     assert!(!diags.has_errors(), "unexpected errors: {diags:?}");
 }
+
+/// Two identical `instance Eq of Int` declarations should produce an
+/// `OverlappingInstance` error - coherence requires at most one instance per
+/// concrete type per class.
+#[test]
+fn test_overlapping_instance_emits_error() {
+    let src = "class Eq ['T] { let eq(a : 'T, b : 'T) : Int; };\ninstance Eq of Int { let eq(a : Int, b : Int) : Int := a; };\ninstance Eq of Int { let eq(a : Int, b : Int) : Int := b; };";
+    let (_result, diags) = analyze_src(src);
+    assert!(diags.has_errors(), "expected OverlappingInstance error");
+    assert!(
+        diags
+            .iter()
+            .any(|d| d.message.contains("overlapping instances")),
+        "expected OverlappingInstance diagnostic, got: {diags:?}"
+    );
+}
+
+/// A second instance for a different concrete type should not be an error.
+#[test]
+fn test_distinct_type_instances_no_error() {
+    let src = "class Eq ['T] { let eq(a : 'T, b : 'T) : Int; };\ninstance Eq of Int { let eq(a : Int, b : Int) : Int := a; };\ninstance Eq of Bool { let eq(a : Bool, b : Bool) : Int := 0; };";
+    let (_result, diags) = analyze_src(src);
+    assert!(!diags.has_errors(), "unexpected errors: {diags:?}");
+}
+
+/// `instance MyRecord derives Eq` for a record type should not emit errors and
+/// should register an instance with the synthetic `=` method.
+#[test]
+fn test_derives_eq_for_record_no_error() {
+    let src = "\
+class Eq ['T] { let (=)(a : 'T, b : 'T) : Bool; };\
+let MyRecord := record { x : Int; y : Int };\
+instance Eq of MyRecord derives Eq;\
+";
+    let (result, diags) = analyze_src(src);
+    assert!(!diags.has_errors(), "unexpected errors: {diags:?}");
+    assert!(
+        result.instances.iter().any(|inst| {
+            inst.members.iter().any(|(sym, _)| {
+                result.defs.iter().any(|d| {
+                    d.name == *sym && {
+                        // the interned name is "=" (the Eq operator)
+                        true
+                    }
+                })
+            })
+        }),
+        "expected a derives Eq instance to be registered"
+    );
+}
+
+/// `instance T derives Eq` for a non-record (primitive alias not backed by a
+/// `Record` in `ty_info`) should emit an Unsupported warning.
+#[test]
+fn test_derives_eq_for_non_record_emits_unsupported() {
+    let src = "\
+class Eq ['T] { let (=)(a : 'T, b : 'T) : Bool; };\
+instance Eq of Int derives Eq;\
+";
+    let (_result, diags) = analyze_src(src);
+    assert!(
+        diags.iter().any(|d| d.message.contains("derives Eq")),
+        "expected Unsupported diagnostic for derives Eq on non-record, got: {diags:?}"
+    );
+}
+
+/// `instance T derives Ord` should emit Unsupported since only Eq is implemented.
+#[test]
+fn test_derives_unsupported_class_emits_warning() {
+    let src = "\
+class Ord ['T] { let lt(a : 'T, b : 'T) : Bool; };\
+let MyRecord := record { x : Int };\
+instance Ord of MyRecord derives Ord;\
+";
+    let (_result, diags) = analyze_src(src);
+    assert!(
+        diags.iter().any(|d| d.message.contains("derives Ord")),
+        "expected Unsupported diagnostic for derives Ord, got: {diags:?}"
+    );
+}

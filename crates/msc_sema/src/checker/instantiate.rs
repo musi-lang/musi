@@ -157,7 +157,7 @@ fn freshen_list<S: BuildHasher>(
         .collect()
 }
 
-#[allow(clippy::too_many_lines)] // large match over all type variants; extraction would add indirection without clarity
+#[expect(clippy::too_many_lines, reason = "large match over all type variants")]
 fn freshen_walk<S: BuildHasher>(
     ck: &mut Checker<'_, S>,
     ty: TypeIdx,

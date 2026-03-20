@@ -1,12 +1,12 @@
 //! Per-expression synthesis and checking.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::hash::BuildHasher;
 
 use msc_ast::expr::Expr as AstExpr;
 use msc_ast::expr::{
     Arg, ArrayElem, BinOp, Expr, FieldKey, HandlerOp, LetFields, MatchArm, Param, PwArm, PwGuard,
-    RecDefField, RecField, TypeCheckKind, UnaryOp,
+    RecDefField, RecField, TypeCheckKind, TypeForm, UnaryOp,
 };
 use msc_ast::lit::{FStrPart, Lit};
 use msc_ast::pat::Pat;
@@ -31,7 +31,9 @@ use crate::error::SemaError;
 use crate::resolve;
 use crate::scope::ScopeId;
 use crate::subst::subst_type;
-use crate::types::{EffectRow, RecordField, SumVariant, Type, TypeIdx, fmt_type};
+use crate::types::{
+    EffectEntry, EffectRow, Polarity, RecordField, SumVariant, Type, TypeIdx, fmt_type,
+};
 
 /// Synthesises a type for `expr` (inference mode, direction ↑).
 pub fn synth<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) -> TypeIdx {
@@ -42,17 +44,31 @@ pub fn synth<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) -> Type
 
 /// Checks `expr` against `expected` (checking mode, direction ↓).
 pub fn check<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx, expected: TypeIdx) {
+    check_with_polarity(ck, expr_idx, expected, Polarity::Positive);
+}
+
+/// Checks `expr` against `expected` with an explicit polarity for blame tracking.
+///
+/// Use `Polarity::Negative` for contravariant positions such as function parameter types,
+/// and `Polarity::Positive` for covariant positions such as return types and let bindings.
+fn check_with_polarity<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
+    expr_idx: ExprIdx,
+    expected: TypeIdx,
+    polarity: Polarity,
+) {
     let found = synth_inner(ck, expr_idx);
     ck.record_type(expr_idx, expected);
-    ck.check_subtype_or_report(
+    ck.check_subtype_or_report_with_polarity(
         expected,
         found,
         resolve::expr_span(&ck.ctx.ast.exprs[expr_idx]),
         Some(expr_idx),
+        polarity,
     );
 }
 
-#[allow(clippy::too_many_lines)] // exhaustive match dispatching to named sub-functions
+#[expect(clippy::too_many_lines, reason = "exhaustive match dispatching to sub-functions")]
 fn synth_inner<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) -> TypeIdx {
     match &ck.ctx.ast.exprs[expr_idx] {
         Expr::Lit { lit, span } => {
@@ -73,10 +89,6 @@ fn synth_inner<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) -> Ty
         Expr::Let { fields, .. } => {
             let fields = fields.clone();
             synth_let(ck, &fields)
-        }
-        Expr::Binding { fields, .. } => {
-            let fields = fields.clone();
-            synth_binding(ck, &fields)
         }
         Expr::Fn {
             params,
@@ -206,13 +218,9 @@ fn synth_inner<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) -> Ty
         }
         // Type-expression variants: these appear in type annotations and are
         // lowered via lower_type_expr, not synthesised as value expressions.
-        Expr::TypeApp { .. }
-        | Expr::FnType { .. }
-        | Expr::OptionType { .. }
-        | Expr::ProductType { .. }
-        | Expr::SumType { .. }
-        | Expr::ArrayType { .. }
-        | Expr::PiType { .. } => lower_type_expr(ck, expr_idx),
+        Expr::TypeApp { .. } | Expr::FnType { .. } | Expr::TypeExpr { .. } => {
+            lower_type_expr(ck, expr_idx)
+        }
     }
 }
 
@@ -345,19 +353,15 @@ fn synth_block<S: BuildHasher>(
         if !ck.ctx.options.allow_unreachable_code {
             let resolved = ck.resolve_ty(ty);
             if let Type::Named { def, .. } = &ck.store.types[resolved] {
-                if *def == ck.ctx.well_known.never
-                    && (i + 1 < stmts.len() || tail.is_some())
-                {
+                if *def == ck.ctx.well_known.never && (i + 1 < stmts.len() || tail.is_some()) {
                     let next_span = if i + 1 < stmts.len() {
                         resolve::expr_span(&ck.ctx.ast.exprs[stmts[i + 1]])
                     } else {
                         resolve::expr_span(&ck.ctx.ast.exprs[tail.unwrap()])
                     };
-                    let _d = ck.diags.report(
-                        &SemaError::UnreachableCode,
-                        next_span,
-                        ck.ctx.file_id,
-                    );
+                    let _d =
+                        ck.diags
+                            .report(&SemaError::UnreachableCode, next_span, ck.ctx.file_id);
                 }
             }
         }
@@ -370,59 +374,6 @@ fn synth_block<S: BuildHasher>(
 }
 
 fn synth_let<S: BuildHasher>(ck: &mut Checker<'_, S>, fields: &LetFields) -> TypeIdx {
-    let (parent_scope, ty_var_ids) = if fields.params.is_empty() {
-        (None, vec![])
-    } else {
-        let (parent, ids) = ck.enter_ty_param_scope(&fields.params);
-        (Some(parent), ids)
-    };
-
-    let prev_obligations = enter_constraint_scope(ck, &fields.constraints, &fields.params);
-
-    let fn_pat_info = enter_fn_pat_scope(ck, fields.pat);
-
-    let prev_repr_c = ck.current_repr_c;
-    ck.current_repr_c = binding_has_repr_c(ck, fields.pat);
-
-    let value_ty = match (fields.ty, fields.value) {
-        (Some(ty_ann), Some(val)) => {
-            let ann = lower_type_expr(ck, ty_ann);
-            let val_span = resolve::expr_span(&ck.ctx.ast.exprs[val]);
-            reject_abstract_record_construction(ck, ann, val, val_span);
-            let prev_effects = ck.current_effects.clone();
-            if let Type::Fn { ref effects, .. } = ck.store.types[ann]
-                && !effects.is_pure()
-            {
-                ck.current_effects = effects.clone();
-            }
-            check(ck, val, ann);
-            ck.current_effects = prev_effects;
-            ann
-        }
-        (Some(ty_ann), None) => lower_type_expr(ck, ty_ann),
-        (None, Some(val)) => synth(ck, val),
-        (None, None) => ck.named_ty(ck.ctx.well_known.unit),
-    };
-
-    ck.current_repr_c = prev_repr_c;
-
-    if let Some((p, _)) = &fn_pat_info {
-        ck.current_scope = *p;
-    }
-
-    let pat_ty = wrap_fn_pat_ty(ck, value_ty, fn_pat_info.as_ref());
-    store_pat_ty_info(ck, fields, &ty_var_ids);
-    record_fn_constraints(ck, fields);
-    check_pat(ck, fields.pat, pat_ty);
-
-    ck.store.active_obligations = prev_obligations;
-    if let Some(p) = parent_scope {
-        ck.current_scope = p;
-    }
-    ck.named_ty(ck.ctx.well_known.unit)
-}
-
-fn synth_binding<S: BuildHasher>(ck: &mut Checker<'_, S>, fields: &LetFields) -> TypeIdx {
     let (parent_scope, ty_var_ids) = if fields.params.is_empty() {
         (None, vec![])
     } else {
@@ -637,12 +588,7 @@ fn lookup_field<S: BuildHasher>(
                         }],
                         rest: Some(new_rest),
                     });
-                    let _ok = ck.store.unify.unify(
-                        rest_idx,
-                        constraint,
-                        &mut ck.store.types,
-                        ck.ctx.well_known,
-                    );
+                    ck.unify_or_report(rest_idx, constraint, span, None);
                     field_ty
                 } else {
                     report_no_such_field(ck, name, ty, span)
@@ -700,10 +646,7 @@ fn lookup_field<S: BuildHasher>(
                     }],
                     rest: Some(row_var),
                 });
-                let _ok =
-                    ck.store
-                        .unify
-                        .unify(ty, open_rec, &mut ck.store.types, ck.ctx.well_known);
+                ck.unify_or_report(ty, open_rec, span, None);
                 field_ty
             } else {
                 ck.error_ty()
@@ -898,7 +841,9 @@ fn synth_call<S: BuildHasher>(
             return ck.error_ty();
         }
         if let Arg::Pos { expr, .. } = args[0] {
-            check(ck, expr, param_ty);
+            // Pi-type parameter: contravariant position → Negative polarity for blame.
+            use crate::types::Polarity;
+            check_with_polarity(ck, expr, param_ty, Polarity::Negative);
         }
         let arg_ty = match args[0] {
             Arg::Pos { expr, .. } | Arg::Spread { expr, .. } => synth(ck, expr),
@@ -935,7 +880,9 @@ fn synth_call<S: BuildHasher>(
 
             for (arg, &param_ty) in args.iter().zip(params.iter()) {
                 if let Arg::Pos { expr, .. } = arg {
-                    check(ck, *expr, param_ty);
+                    // Function parameter: contravariant position → Negative polarity for blame.
+                    use crate::types::Polarity;
+                    check_with_polarity(ck, *expr, param_ty, Polarity::Negative);
                 }
             }
 
@@ -1042,18 +989,11 @@ fn synth_binop<S: BuildHasher>(
         | BinOp::Div
         | BinOp::Rem
         | BinOp::Xor
-        | BinOp::Shl
-        | BinOp::Shr
         | BinOp::RangeInc
         | BinOp::RangeExc
         | BinOp::NilCoal => {
             ck.unify_or_report(left_ty, right_ty, span, Some(expr_idx));
             left_ty
-        }
-        BinOp::ForceCoal => {
-            let inner = unwrap_result_ty(ck, left_ty, span);
-            ck.unify_or_report(inner, right_ty, span, Some(expr_idx));
-            inner
         }
         BinOp::Pipe => {
             let ret = ck.fresh_var(span);
@@ -1186,7 +1126,10 @@ fn synth_choice<S: BuildHasher>(ck: &mut Checker<'_, S>, body: ExprIdx) -> TypeI
     ck.current_scope = ck.scopes.push_child(parent);
 
     match ck.ctx.ast.exprs[body].clone() {
-        AstExpr::SumType { variants, .. } => synth_choice_sum(ck, &variants, parent),
+        AstExpr::TypeExpr {
+            kind: TypeForm::Sum { variants },
+            ..
+        } => synth_choice_sum(ck, &variants, parent),
         AstExpr::Name { name_ref, .. } => {
             let name = ck.ctx.ast.name_refs[name_ref].name;
             let id = ck
@@ -1298,30 +1241,6 @@ fn unwrap_option_ty<S: BuildHasher>(
     inner
 }
 
-/// Expects `operand_ty` to be `Result<T, E>`, returning `T`.
-/// Introduces fresh `T` and `E`, unifies `operand_ty` with `Result<T, E>`, and returns `T`.
-fn unwrap_result_ty<S: BuildHasher>(
-    ck: &mut Checker<'_, S>,
-    operand_ty: TypeIdx,
-    span: Span,
-) -> TypeIdx {
-    let ok_inner = ck.fresh_var(span);
-    let err_inner = ck.fresh_var(span);
-    if let Some(def) = ck
-        .ctx
-        .interner
-        .get("Result")
-        .and_then(|sym| ck.scopes.lookup(ck.current_scope, sym))
-    {
-        let result_ty = ck.alloc_ty(Type::Named {
-            def,
-            args: vec![ok_inner, err_inner],
-        });
-        ck.unify_or_report(result_ty, operand_ty, span, None);
-    }
-    ok_inner
-}
-
 fn synth_variant<S: BuildHasher>(ck: &mut Checker<'_, S>, name: Symbol, span: Span) -> TypeIdx {
     if let Some(def_id) = ck.scopes.lookup(ck.current_scope, name)
         && ck.defs.get(def_id).kind == DefKind::Variant
@@ -1420,12 +1339,30 @@ fn get_variant_parent_type<S: BuildHasher>(
 /// up the callee name in the AST to find the matching effect op declaration and
 /// return its declared return type. If the effect op cannot be found, the
 /// operand type is returned as a fallback (suppresses cascading errors).
+///
+/// Also propagates the effect to `current_effects` so that `check_effects_subset`
+/// can catch uses in pure functions.
 fn synth_need<S: BuildHasher>(ck: &mut Checker<'_, S>, operand: ExprIdx, _span: Span) -> TypeIdx {
     let operand_ty = synth(ck, operand);
 
     let Some(op_name) = extract_need_op_name(ck, operand) else {
         return operand_ty;
     };
+
+    // Propagate the effect to the current function's effect row (2b).
+    if let Some(effect_def) = find_effect_def_for_op(ck, op_name) {
+        let already_present = ck
+            .current_effects
+            .effects
+            .iter()
+            .any(|e| e.def == effect_def);
+        if !already_present {
+            ck.current_effects.effects.push(EffectEntry {
+                def: effect_def,
+                args: vec![],
+            });
+        }
+    }
 
     find_effect_op_return_type(ck, op_name).unwrap_or(operand_ty)
 }
@@ -1456,6 +1393,22 @@ fn find_effect_op_return_type<S: BuildHasher>(
                     return Some(ret);
                 }
                 return Some(declared_ty);
+            }
+        }
+    }
+    None
+}
+
+/// Finds the `DefId` of the effect that declares `op_name`, by looking it up
+/// in the current scope. Used by `synth_need` to propagate the effect to the
+/// current function's effect row (sub-task 2b).
+fn find_effect_def_for_op<S: BuildHasher>(ck: &Checker<'_, S>, op_name: Symbol) -> Option<DefId> {
+    let n = ck.ctx.ast.exprs.len();
+    for i in 0..n {
+        let idx = Idx::from_raw(u32::try_from(i).expect("expr index in range"));
+        if let AstExpr::Effect { name, ops, .. } = &ck.ctx.ast.exprs[idx] {
+            if ops.iter().any(|op| op.name == op_name) {
+                return ck.scopes.lookup(ck.current_scope, *name);
             }
         }
     }
@@ -1566,22 +1519,47 @@ fn synth_handle<S: BuildHasher>(
     let _eff_ty = lower_type_expr(ck, effect_ty);
     let effect_op_types = collect_effect_op_types(ck, effect_ty);
 
+    // Collect which op names are declared `fatal` in the effect definition (2a).
+    let fatal_ops = collect_fatal_op_names(ck, effect_ty);
+
     let prev_in_handler = ck.in_handler;
     ck.in_handler = true;
 
     for op in ops {
-        synth_handler_op(ck, op, &effect_op_types);
+        let is_fatal = fatal_ops.contains(&op.name);
+        synth_handler_op(ck, op, &effect_op_types, is_fatal);
     }
 
     ck.in_handler = prev_in_handler;
     check_handler_op_coverage(ck, effect_ty, ops);
-    synth(ck, body)
+
+    // Temporarily make the handled effect available so that `check_effects_subset`
+    // inside the body does not flag it as undeclared (2c). After synthesising the body
+    // restore the previous row - the effect has been discharged by this handler.
+    let prev_effects = ck.current_effects.clone();
+    if let Some(effect_def) = resolve_effect_def(ck, effect_ty) {
+        let already_present = ck
+            .current_effects
+            .effects
+            .iter()
+            .any(|e| e.def == effect_def);
+        if !already_present {
+            ck.current_effects.effects.push(EffectEntry {
+                def: effect_def,
+                args: vec![],
+            });
+        }
+    }
+    let body_ty = synth(ck, body);
+    ck.current_effects = prev_effects;
+    body_ty
 }
 
 fn synth_handler_op<S: BuildHasher>(
     ck: &mut Checker<'_, S>,
     op: &HandlerOp,
     effect_op_types: &HashMap<Symbol, TypeIdx>,
+    is_fatal: bool,
 ) {
     let parent = ck.current_scope;
     ck.current_scope = ck.scopes.push_child(parent);
@@ -1589,7 +1567,19 @@ fn synth_handler_op<S: BuildHasher>(
     let declared_params = get_handler_declared_params(ck, op.name, effect_op_types);
     synth_handler_params(ck, op, declared_params.as_ref());
 
-    let _op_ty = synth(ck, op.body);
+    // 2a: `fatal` ops must not contain `resume`. Walk the body before synthesising
+    // to catch all `resume` sites, including those inside nested expressions.
+    if is_fatal {
+        check_no_resume_in_fatal_op(ck, op.body);
+    }
+
+    let op_ty = synth(ck, op.body);
+    if let Some(&decl_ty_idx) = effect_op_types.get(&op.name) {
+        let resolved = ck.resolve_ty(decl_ty_idx);
+        if let Type::Fn { ret, .. } = ck.store.types[resolved].clone() {
+            ck.unify_or_report(ret, op_ty, op.span, None);
+        }
+    }
     ck.current_scope = parent;
 }
 
@@ -1630,6 +1620,86 @@ fn get_handler_declared_params<S: BuildHasher>(
     })
 }
 
+/// Returns the set of op names that are declared `fatal` in the effect referenced by
+/// `effect_ty_expr`. Used by `synth_handle` to enforce the no-resume-in-fatal rule (2a).
+fn collect_fatal_op_names<S: BuildHasher>(
+    ck: &Checker<'_, S>,
+    effect_ty_expr: ExprIdx,
+) -> HashSet<Symbol> {
+    let effect_name = match &ck.ctx.ast.exprs[effect_ty_expr] {
+        AstExpr::Name { name_ref, .. } => ck.ctx.ast.name_refs[*name_ref].name,
+        AstExpr::TypeApp { callee, .. } => match &ck.ctx.ast.exprs[*callee] {
+            AstExpr::Name { name_ref, .. } => ck.ctx.ast.name_refs[*name_ref].name,
+            _ => return HashSet::new(),
+        },
+        _ => return HashSet::new(),
+    };
+
+    let n = ck.ctx.ast.exprs.len();
+    for i in 0..n {
+        let idx = Idx::from_raw(u32::try_from(i).expect("expr index in range"));
+        if let AstExpr::Effect { name, ops, .. } = &ck.ctx.ast.exprs[idx]
+            && *name == effect_name
+        {
+            return ops.iter().filter(|op| op.fatal).map(|op| op.name).collect();
+        }
+    }
+    HashSet::new()
+}
+
+/// Resolves the `DefId` of the effect referred to by `effect_ty_expr` (the `with Eff` clause).
+/// Used by `synth_handle` to discharge the effect from the body's required effects (2c).
+fn resolve_effect_def<S: BuildHasher>(
+    ck: &Checker<'_, S>,
+    effect_ty_expr: ExprIdx,
+) -> Option<DefId> {
+    let effect_name = match &ck.ctx.ast.exprs[effect_ty_expr] {
+        AstExpr::Name { name_ref, .. } => ck.ctx.ast.name_refs[*name_ref].name,
+        AstExpr::TypeApp { callee, .. } => match &ck.ctx.ast.exprs[*callee] {
+            AstExpr::Name { name_ref, .. } => ck.ctx.ast.name_refs[*name_ref].name,
+            _ => return None,
+        },
+        _ => return None,
+    };
+    ck.scopes.lookup(ck.current_scope, effect_name)
+}
+
+/// Walks `body_expr` recursively and reports a `ResumeInFatalHandler` error for every
+/// `Expr::Resume` found. Does not descend into nested `Handle` expressions (a `resume`
+/// inside an inner handler is that handler's concern, not this one).
+fn check_no_resume_in_fatal_op<S: BuildHasher>(ck: &mut Checker<'_, S>, body_expr: ExprIdx) {
+    use msc_ast::visitor::{AstVisitor, walk_expr};
+    use std::ops::ControlFlow;
+
+    struct ResumeCollector {
+        found: Vec<Span>,
+    }
+
+    impl AstVisitor for ResumeCollector {
+        type Break = ();
+
+        fn visit_expr(&mut self, idx: ExprIdx, ctx: &msc_ast::AstArenas) -> ControlFlow<()> {
+            match &ctx.exprs[idx] {
+                AstExpr::Resume { span, .. } => {
+                    self.found.push(*span);
+                    ControlFlow::Continue(())
+                }
+                // Don't descend into nested handlers - their resumes are their concern.
+                AstExpr::Handle { .. } => ControlFlow::Continue(()),
+                _ => walk_expr(self, idx, ctx),
+            }
+        }
+    }
+
+    let mut collector = ResumeCollector { found: vec![] };
+    _ = collector.visit_expr(body_expr, ck.ctx.ast);
+    for span in collector.found {
+        let _d = ck
+            .diags
+            .report(&SemaError::ResumeInFatalHandler, span, ck.ctx.file_id);
+    }
+}
+
 /// Returns a map from effect op name to the declared type index for each op in the effect
 /// referenced by `effect_ty_expr`. Used by `synth_handle` to unify handler param types.
 fn collect_effect_op_types<S: BuildHasher>(
@@ -1664,11 +1734,3 @@ fn collect_effect_op_types<S: BuildHasher>(
     }
     HashMap::new()
 }
-
-// check_handler_op_coverage moved to checker/dispatch.rs
-
-// enter_constraint_scope moved to checker/dispatch.rs
-
-// record_fn_constraints moved to checker/dispatch.rs
-
-// find_dict_method and find_effect_required_ops moved to checker/dispatch.rs

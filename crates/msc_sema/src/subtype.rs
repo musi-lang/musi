@@ -124,10 +124,17 @@ fn is_subtype_named(d1: DefId, a1: &[TypeIdx], d2: DefId, a2: &[TypeIdx], ctx: &
     if d1 != d2 || a1.len() != a2.len() {
         return false;
     }
-    a1.iter()
-        .copied()
-        .zip(a2.iter().copied())
-        .all(|(a, b)| is_subtype_inner(a, b, ctx))
+    a1.iter().copied().zip(a2.iter().copied()).all(|(a, b)| {
+        let ra = ctx.unify.resolve(a, ctx.types);
+        let rb = ctx.unify.resolve(b, ctx.types);
+        let ref_position =
+            matches!(ctx.types[ra], Type::Ref { .. }) || matches!(ctx.types[rb], Type::Ref { .. });
+        if ref_position {
+            is_subtype_inner(a, b, ctx) && is_subtype_inner(b, a, ctx)
+        } else {
+            is_subtype_inner(a, b, ctx)
+        }
+    })
 }
 
 fn is_subtype_fn(
@@ -150,22 +157,29 @@ fn is_subtype_fn(
     // Return: covariant
     let ret_ok = is_subtype_inner(r1, r2, ctx);
     // Effects: pure <: effectful (covariant)
-    let effects_ok = is_subtype_effects(e1, e2);
+    let effects_ok = is_subtype_effects(e1, e2, ctx);
     params_ok && ret_ok && effects_ok
 }
 
 /// A pure function (`->`) is a subtype of an effectful function (`~>`).
-/// If both are effectful, every effect in `sub` must appear in `sup`.
-fn is_subtype_effects(sub: &EffectRow, sup: &EffectRow) -> bool {
+/// If both are effectful, every effect in `sub` must appear in `sup` with matching type args.
+fn is_subtype_effects(sub: &EffectRow, sup: &EffectRow, ctx: &SubCtx) -> bool {
     if sub.is_pure() {
         return true;
     }
     if sup.row_var.is_some() {
         return true;
     }
-    sub.effects
-        .iter()
-        .all(|e| sup.effects.iter().any(|s| s.def == e.def))
+    sub.effects.iter().all(|e| {
+        sup.effects.iter().any(|s| {
+            s.def == e.def
+                && s.args.len() == e.args.len()
+                && s.args
+                    .iter()
+                    .zip(e.args.iter())
+                    .all(|(&sa, &ea)| is_subtype_inner(ea, sa, ctx))
+        })
+    })
 }
 
 fn is_subtype_record(f1: &[RecordField], f2: &[RecordField], ctx: &SubCtx) -> bool {

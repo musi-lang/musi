@@ -118,7 +118,7 @@ fn test_resolve_let_binding_registers_pat_def() {
         with_effects: None,
         span: Span::DUMMY,
     };
-    let binding = arenas.exprs.alloc(Expr::Binding {
+    let binding = arenas.exprs.alloc(Expr::Let {
         exported: false,
         fields,
         span: Span::DUMMY,
@@ -150,7 +150,7 @@ fn test_resolve_name_reference_creates_expr_def() {
         with_effects: None,
         span: Span::DUMMY,
     };
-    let binding = arenas.exprs.alloc(Expr::Binding {
+    let binding = arenas.exprs.alloc(Expr::Let {
         exported: false,
         fields,
         span: Span::DUMMY,
@@ -201,7 +201,7 @@ fn test_resolve_duplicate_top_level_binding_emits_error() {
         with_effects: None,
         span: Span::DUMMY,
     };
-    let binding1 = arenas.exprs.alloc(Expr::Binding {
+    let binding1 = arenas.exprs.alloc(Expr::Let {
         exported: false,
         fields: fields1,
         span: Span::DUMMY,
@@ -220,7 +220,7 @@ fn test_resolve_duplicate_top_level_binding_emits_error() {
         with_effects: None,
         span: Span::DUMMY,
     };
-    let binding2 = arenas.exprs.alloc(Expr::Binding {
+    let binding2 = arenas.exprs.alloc(Expr::Let {
         exported: false,
         fields: fields2,
         span: Span::DUMMY,
@@ -269,7 +269,7 @@ fn test_resolve_fn_param_creates_def_in_body() {
         with_effects: None,
         span: Span::DUMMY,
     };
-    let binding = arenas.exprs.alloc(Expr::Binding {
+    let binding = arenas.exprs.alloc(Expr::Let {
         exported: false,
         fields,
         span: Span::DUMMY,

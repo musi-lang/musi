@@ -1,7 +1,7 @@
 //! Lowering AST type expressions (`Expr` type variants) to semantic `Type`.
 
 use msc_ast::ExprIdx;
-use msc_ast::expr::{Arrow, EffectItem, EffectSet, Expr, FieldKey};
+use msc_ast::expr::{Arrow, EffectItem, EffectSet, Expr, FieldKey, TypeForm};
 use msc_shared::{Span, Symbol};
 use std::hash::BuildHasher;
 
@@ -46,14 +46,7 @@ pub fn lower_type_expr<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprId
             }
         }
         Expr::TypeApp { callee, args, span } => lower_type_app(ck, callee, &args, span),
-        Expr::OptionType { inner, .. } => {
-            let inner_ty = lower_type_expr(ck, inner);
-            let def = ck.ctx.well_known.option;
-            ck.alloc_ty(Type::Named {
-                def,
-                args: vec![inner_ty],
-            })
-        }
+        Expr::TypeExpr { kind, .. } => lower_type_form(ck, kind),
         Expr::Field {
             object,
             field: FieldKey::Name { name, .. },
@@ -67,33 +60,49 @@ pub fn lower_type_expr<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprId
             effects,
             ..
         } => lower_type_fn(ck, &params, ret, arrow, effects.as_ref()),
-        Expr::ProductType { fields, .. } => {
+        _ => ck.error_ty(),
+    }
+}
+
+fn lower_type_form<S: BuildHasher>(ck: &mut Checker<'_, S>, kind: TypeForm) -> TypeIdx {
+    match kind {
+        TypeForm::Option { inner } => {
+            let inner_ty = lower_type_expr(ck, inner);
+            let def = ck.ctx.well_known.option;
+            ck.alloc_ty(Type::Named {
+                def,
+                args: vec![inner_ty],
+            })
+        }
+        TypeForm::Product { fields, .. } => {
             if fields.is_empty() {
                 return ck.named_ty(ck.ctx.well_known.unit);
             }
             let elems: Vec<_> = fields.iter().map(|&f| lower_type_expr(ck, f)).collect();
             ck.alloc_ty(Type::Tuple { elems })
         }
-        Expr::SumType { variants, .. } => {
+        TypeForm::Sum { variants } => {
             let variant_tys: Vec<_> = variants.iter().map(|&v| lower_type_expr(ck, v)).collect();
             ck.alloc_ty(Type::AnonSum {
                 variants: variant_tys,
             })
         }
-        Expr::ArrayType { elem, len, .. } => {
+        TypeForm::Array { elem, len } => {
             let elem_ty = lower_type_expr(ck, elem);
             ck.alloc_ty(Type::Array { elem: elem_ty, len })
         }
-        Expr::PiType {
+        TypeForm::Pi {
             param,
             param_ty,
             body,
-            span,
         } => {
             let lowered_param_ty = lower_type_expr(ck, param_ty);
             let parent = ck.current_scope;
             ck.current_scope = ck.scopes.push_child(parent);
-            let param_def = ck.defs.alloc(param, DefKind::Param, span, ck.ctx.file_id);
+            // Pi-bound param needs a span; use dummy since TypeForm dropped the outer span.
+            let param_def = ck
+                .defs
+                .alloc(param, DefKind::Param, Span::DUMMY, ck.ctx.file_id);
             let _prev = ck.scopes.define(ck.current_scope, param, param_def);
             ck.defs.get_mut(param_def).ty_info.ty = Some(lowered_param_ty);
             let lowered_body = lower_type_expr(ck, body);
@@ -105,7 +114,6 @@ pub fn lower_type_expr<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprId
                 body: lowered_body,
             })
         }
-        _ => ck.error_ty(),
     }
 }
 

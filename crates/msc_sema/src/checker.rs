@@ -26,10 +26,12 @@ use crate::error::SemaError;
 use crate::options::SemaOptions;
 use crate::scope::{ScopeId, ScopeTree};
 use crate::types::{
-    CastInfo, DictLookup, EffectRow, InstanceInfo, Obligation, Type, TypeIdx, fmt_type,
+    BlameLabel, CastInfo, DictLookup, EffectRow, InstanceInfo, Obligation, Polarity, Type, TypeIdx,
+    fmt_type,
 };
 use crate::unify::UnifyTable;
 use crate::well_known::WellKnown;
+use crate::{consistency, subtype};
 
 /// Read-only environment for the type checker.
 pub struct CheckContext<'a, S: BuildHasher = RandomState> {
@@ -146,6 +148,17 @@ impl<'a, S: BuildHasher> Checker<'a, S> {
         span: Span,
         expr_idx: Option<ExprIdx>,
     ) {
+        self.unify_or_report_with_polarity(expected, found, span, expr_idx, Polarity::Positive);
+    }
+
+    pub(crate) fn unify_or_report_with_polarity(
+        &mut self,
+        expected: TypeIdx,
+        found: TypeIdx,
+        span: Span,
+        expr_idx: Option<ExprIdx>,
+        polarity: Polarity,
+    ) {
         if !self
             .store
             .unify
@@ -160,7 +173,7 @@ impl<'a, S: BuildHasher> Checker<'a, S> {
                 self.ctx.well_known,
             ) {
                 if let Some(idx) = expr_idx {
-                    self.insert_cast(idx, found, expected, span);
+                    self.insert_cast_with_polarity(idx, found, expected, span, polarity);
                 }
                 return;
             }
@@ -190,18 +203,15 @@ impl<'a, S: BuildHasher> Checker<'a, S> {
         }
     }
 
-    /// Checks that `found` is a subtype of `expected`, falling back to unification,
-    /// then consistency, and reporting a diagnostic on failure.
-    pub(crate) fn check_subtype_or_report(
+    pub(crate) fn check_subtype_or_report_with_polarity(
         &mut self,
         expected: TypeIdx,
         found: TypeIdx,
         span: Span,
         expr_idx: Option<ExprIdx>,
+        polarity: Polarity,
     ) {
-        use crate::consistency::is_consistent;
-        use crate::subtype::is_subtype;
-        if is_subtype(
+        if subtype::is_subtype(
             found,
             expected,
             &self.store.types,
@@ -217,7 +227,7 @@ impl<'a, S: BuildHasher> Checker<'a, S> {
         {
             return;
         }
-        if is_consistent(
+        if consistency::is_consistent(
             found,
             expected,
             &self.store.types,
@@ -225,7 +235,7 @@ impl<'a, S: BuildHasher> Checker<'a, S> {
             self.ctx.well_known,
         ) {
             if let Some(idx) = expr_idx {
-                self.insert_cast(idx, found, expected, span);
+                self.insert_cast_with_polarity(idx, found, expected, span, polarity);
             }
             return;
         }
@@ -254,18 +264,22 @@ impl<'a, S: BuildHasher> Checker<'a, S> {
         );
     }
 
-    /// Records a runtime cast from `from` to `to` at the given expression.
+    /// Records a runtime cast with an explicit polarity for blame tracking.
     ///
-    /// No-ops if the types are identical or not consistent (the latter should
-    /// have been caught by `check_subtype_or_report`).
-    pub fn insert_cast(&mut self, expr_idx: ExprIdx, from: TypeIdx, to: TypeIdx, span: Span) {
-        use crate::consistency::is_consistent;
-        use crate::types::{BlameLabel, Polarity};
-
+    /// Use `Polarity::Negative` for contravariant positions (function parameters).
+    /// Use `Polarity::Positive` for covariant positions (return types, let bindings, record fields).
+    pub fn insert_cast_with_polarity(
+        &mut self,
+        expr_idx: ExprIdx,
+        from: TypeIdx,
+        to: TypeIdx,
+        span: Span,
+        polarity: Polarity,
+    ) {
         if from == to {
             return;
         }
-        if !is_consistent(
+        if !consistency::is_consistent(
             from,
             to,
             &self.store.types,
@@ -279,10 +293,7 @@ impl<'a, S: BuildHasher> Checker<'a, S> {
             CastInfo {
                 from,
                 to,
-                blame: BlameLabel {
-                    span,
-                    polarity: Polarity::Positive,
-                },
+                blame: BlameLabel { span, polarity },
             },
         );
     }
