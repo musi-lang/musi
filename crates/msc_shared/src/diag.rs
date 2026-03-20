@@ -223,7 +223,7 @@ impl DiagnosticBag {
         }
     }
 
-    pub fn set_max_errors(&mut self, max: usize) {
+    pub const fn set_max_errors(&mut self, max: usize) {
         self.max_errors = max;
     }
 

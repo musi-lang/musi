@@ -14,9 +14,9 @@ use msc_resolve::graph::ModuleId;
 use msc_resolve::{ModuleGraph, ModuleNode, build_module_graph};
 use msc_sema::types::RecordField;
 use msc_sema::{
-    DefId, DictLookup, ExportBinding, ImportNames, ModuleSemaOutput, Obligation, ResolutionMap,
-    SemaOptions, SemaResult, SharedAnalysisState, SubModuleExports, Type, TypeIdx, analyze,
-    collect_exports,
+    DefId, DictLookup, ExportBinding, ImportNames, ModuleAnalysisCtx, ModuleSemaOutput, Obligation,
+    ResolutionMap, SemaOptions, SemaResult, SharedAnalysisState, SubModuleExports, Type, TypeIdx,
+    analyze, analyze_shared, collect_exports,
 };
 use msc_shared::{Arena, DiagnosticBag, FileId, Interner, SourceDb, Symbol};
 
@@ -49,7 +49,10 @@ pub struct FrontendOutput {
 /// # Errors
 ///
 /// Returns `Err(())` if any errors occurred during compilation.
-#[allow(clippy::result_unit_err)] // printed to stderr; unit error signals failure without duplicating them.
+#[expect(
+    clippy::result_unit_err,
+    reason = "printed to stderr; unit error signals failure without duplicating them"
+)]
 pub fn run_frontend(path: &Path) -> Result<FrontendOutput, ()> {
     let source = match fs::read_to_string(path) {
         Ok(s) => s,
@@ -101,7 +104,7 @@ pub fn run_frontend(path: &Path) -> Result<FrontendOutput, ()> {
 /// # Errors
 ///
 /// Returns `Err(())` if any errors occurred during compilation.
-#[allow(clippy::result_unit_err)] // printed to stderr; unit error signals failure without duplicating them.
+#[expect(clippy::result_unit_err, reason = "errors printed to stderr; unit signals failure")]
 pub fn run_frontend_multi(
     path: &Path,
     manifest: &MusiManifest,
@@ -205,16 +208,18 @@ fn run_sema_in_order(
             continue;
         };
 
-        let output = msc_sema::analyze_shared(
+        let output = analyze_shared(
             &parsed,
             &mut state,
             interner,
             file_id,
             diags,
-            &import_names,
-            &import_types,
-            &sub_module_exports,
-            options,
+            &ModuleAnalysisCtx {
+                import_names: &import_names,
+                import_types: &import_types,
+                sub_module_exports: &sub_module_exports,
+                options,
+            },
         );
 
         if module_id == entry_id {
@@ -303,7 +308,10 @@ fn build_import_types(
 /// # Errors
 ///
 /// Returns `Err(())` after printing the error to stderr.
-#[allow(clippy::result_unit_err)] // printed to stderr; unit error signals failure without duplicating them.
+#[expect(
+    clippy::result_unit_err,
+    reason = "printed to stderr; unit error signals failure without duplicating them"
+)]
 pub fn run_backend(out: &mut FrontendOutput, script: bool) -> Result<Vec<u8>, ()> {
     let dep_inputs: Vec<msc_emit::DepEmitInput> = out
         .dep_modules

@@ -9,13 +9,14 @@ use std::panic;
 use std::path::{Path, PathBuf};
 
 use msc_ast::ParsedModule;
+use msc_resolve::graph::{build_module_graph, ModuleId};
 use msc_resolve::ResolverConfig;
-use msc_resolve::graph::{ModuleId, build_module_graph};
 use msc_sema::types::RecordField;
+use msc_sema::{analyze_shared, SemaOptions};
 use msc_sema::{
-    ExportBinding, ImportNames, SharedAnalysisState, SubModuleExports, collect_exports,
+    collect_exports, ExportBinding, ImportNames, ModuleAnalysisCtx, SharedAnalysisState,
+    SubModuleExports,
 };
-use msc_sema::{SemaOptions, analyze_shared};
 use msc_shared::{Arena, DiagnosticBag, FileId, Interner, Severity, SourceDb, Symbol};
 
 fn collect_ms_files(dir: &Path) -> Vec<PathBuf> {
@@ -114,10 +115,12 @@ fn run_sema_pass(
             interner,
             file_id,
             diags,
-            &import_names,
-            &import_types,
-            &sub_module_exports,
-            &options,
+            &ModuleAnalysisCtx {
+                import_names: &import_names,
+                import_types: &import_types,
+                sub_module_exports: &sub_module_exports,
+                options: &options,
+            },
         );
 
         let defs_vec: Vec<_> = state.defs.iter().cloned().collect();
@@ -257,7 +260,7 @@ fn typecheck_all_std_files() {
     );
     eprintln!("========================================");
 
-    // Catalogue test — does NOT assert zero errors.
+    // Catalogue test - does NOT assert zero errors.
 }
 
 enum GraphOutcome {
@@ -275,7 +278,7 @@ fn build_graph(
 ) -> GraphOutcome {
     // `build_module_graph` takes mutable references that are not `UnwindSafe`
     // so we cannot use catch_unwind here directly. Panics from the graph
-    // builder are therefore not caught — they will surface as test failures
+    // builder are therefore not caught - they will surface as test failures
     // rather than being silently ignored.
     match build_module_graph(
         path,

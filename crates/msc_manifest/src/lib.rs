@@ -210,8 +210,10 @@ const fn default_true() -> bool {
 // CompilerOptions fields map 1:1 to the musi.json schema's `compilerOptions` object.
 // The schema mandates these as individual boolean properties; they cannot be grouped
 // without breaking JSON deserialization of the flat schema shape.
-// False positive: bools are schema-mandated, not a design choice — grouping would break serde.
-#[allow(clippy::struct_excessive_bools)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each bool is a distinct manifest flag"
+)]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CompilerOptions {

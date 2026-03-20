@@ -104,6 +104,7 @@ fn main() {
         Command::Check { file } | Command::Build { file, .. } | Command::Run { file } => {
             file.as_deref()
         }
+        Command::Test { filter, .. } => filter.as_deref().map(Path::new),
         _ => None,
     };
 

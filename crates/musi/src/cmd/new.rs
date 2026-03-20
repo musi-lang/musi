@@ -43,7 +43,10 @@ pub fn create_project(dir: &Path, name: &str, template: &str) -> Result<(), Stri
     fs::write(dir.join("musi.json"), format!("{manifest}\n"))
         .map_err(|e| format!("failed to write musi.json: {e}"))?;
 
-    #[allow(clippy::literal_string_with_formatting_args)]
+    #[expect(
+        clippy::literal_string_with_formatting_args,
+        reason = "template string contains literal {name} placeholder"
+    )]
     let source = if template == "lib" {
         r#"export let greet : (String) -> String := (name) => f"hello, {name}!";
 "#
