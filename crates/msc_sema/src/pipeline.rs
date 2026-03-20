@@ -249,7 +249,6 @@ pub fn analyze_shared<S: BuildHasher>(
             defs: &state.defs,
             types: &state.types,
             unify: &state.unify,
-            well_known: &state.well_known,
         },
         interner,
         file_id,
@@ -338,7 +337,6 @@ pub fn analyze_with_imports<S: BuildHasher>(
             defs: &defs,
             types: &result.types,
             unify: &result.unify,
-            well_known: &well_known,
         },
         interner,
         file_id,
@@ -417,7 +415,6 @@ pub(crate) struct ImplicitAnyCtx<'a> {
     pub defs: &'a DefTable,
     pub types: &'a Arena<Type>,
     pub unify: &'a UnifyTable,
-    pub well_known: &'a WellKnown,
 }
 
 pub(crate) fn analyze_implicit_any(
@@ -455,11 +452,7 @@ pub(crate) fn analyze_implicit_any(
         }
         if let Some(ty) = def.ty_info.ty {
             let resolved = ctx.unify.resolve(ty, ctx.types);
-            let is_implicit_any = match &ctx.types[resolved] {
-                Type::Var(_) => true,
-                Type::Named { def: d, args } if *d == ctx.well_known.any && args.is_empty() => true,
-                _ => false,
-            };
+            let is_implicit_any = matches!(&ctx.types[resolved], Type::Var(_));
             if is_implicit_any {
                 let name = Box::from(interner.resolve(def.name));
                 let _d = diags.error(
