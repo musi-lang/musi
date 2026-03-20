@@ -112,16 +112,6 @@ fn test_lt_colon() {
 }
 
 #[test]
-fn test_lt_lt() {
-    assert_eq!(lex_kinds("<<")[0], TokenKind::LtLt);
-}
-
-#[test]
-fn test_gt_gt() {
-    assert_eq!(lex_kinds(">>")[0], TokenKind::GtGt);
-}
-
-#[test]
 fn test_colon_gt() {
     assert_eq!(lex_kinds(":>")[0], TokenKind::ColonGt);
 }
@@ -574,11 +564,6 @@ fn test_bang_single_token() {
 }
 
 #[test]
-fn test_bang_bang_token() {
-    assert_eq!(lex_kinds("!!")[0], TokenKind::BangBang);
-}
-
-#[test]
 fn test_bang_dot_token() {
     assert_eq!(lex_kinds("!.")[0], TokenKind::BangDot);
 }
@@ -591,14 +576,6 @@ fn test_colon_question_token() {
 #[test]
 fn test_colon_question_gt_token() {
     assert_eq!(lex_kinds(":?>")[0], TokenKind::ColonQuestionGt);
-}
-
-#[test]
-fn test_bang_maximal_munch_bang_bang_over_two_bangs() {
-    assert_eq!(lex_kinds("!!")[0], TokenKind::BangBang);
-    let two_bangs = lex_kinds("! !");
-    assert_eq!(two_bangs[0], TokenKind::Bang);
-    assert_eq!(two_bangs[1], TokenKind::Bang);
 }
 
 #[test]
@@ -619,13 +596,18 @@ fn test_colon_question_maximal_munch_three_char_over_two() {
 
 #[test]
 fn test_bang_in_expression_context() {
-    let kinds = lex_kinds("x!! y!.field");
+    // !! now lexes as two separate Bang tokens (no BangBang)
+    let double_bang = lex_kinds("x!!");
+    assert_eq!(double_bang[0], TokenKind::Ident);
+    assert_eq!(double_bang[1], TokenKind::Bang);
+    assert_eq!(double_bang[2], TokenKind::Bang);
+
+    // !. still lexes as BangDot
+    let kinds = lex_kinds("y!.field");
     assert_eq!(kinds[0], TokenKind::Ident);
-    assert_eq!(kinds[1], TokenKind::BangBang);
+    assert_eq!(kinds[1], TokenKind::BangDot);
     assert_eq!(kinds[2], TokenKind::Ident);
-    assert_eq!(kinds[3], TokenKind::BangDot);
-    assert_eq!(kinds[4], TokenKind::Ident);
-    assert_eq!(kinds[5], TokenKind::Eof);
+    assert_eq!(kinds[3], TokenKind::Eof);
 }
 
 #[test]

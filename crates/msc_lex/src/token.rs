@@ -68,8 +68,7 @@ pub enum TokenKind {
     DotDotDot, // ...  spread/splat
     DotDotLt,  // ..<  exclusive range
     // 2-char (bang)
-    BangBang, // !!   force null coalesce
-    BangDot,  // !.   forced unwrap field access
+    BangDot, // !.   forced unwrap field access
     // 1-char (bang)
     Bang, // !    force unwrap postfix
     // 2-char (colon-question)
@@ -86,8 +85,6 @@ pub enum TokenKind {
     LtColon,          // <:   subtype constraint
     QuestionDot,      // ?.   optional chain
     QuestionQuestion, // ??   nil coalesce
-    LtLt,             // <<   left shift
-    GtGt,             // >>   right shift
     SlashEq,          // /=   inequality
     LtEq,             // <=   less-or-equal
     GtEq,             // >=   greater-or-equal
@@ -187,7 +184,6 @@ impl TokenKind {
             Self::KwWith => Some("with"),
             Self::KwXor => Some("xor"),
             Self::Bang => Some("!"),
-            Self::BangBang => Some("!!"),
             Self::BangDot => Some("!."),
             Self::ColonQuestion => Some(":?"),
             Self::ColonQuestionGt => Some(":?>"),
@@ -227,8 +223,6 @@ impl TokenKind {
             Self::LtColon => Some("<:"),
             Self::QuestionDot => Some("?."),
             Self::QuestionQuestion => Some("??"),
-            Self::LtLt => Some("<<"),
-            Self::GtGt => Some(">>"),
             Self::SlashEq => Some("/="),
             Self::LtEq => Some("<="),
             Self::GtEq => Some(">="),

@@ -91,10 +91,7 @@ fn test_fixed_text_returns_correct_strings() {
     assert_eq!(TokenKind::LtDash.fixed_text(), Some("<-"));
     assert_eq!(TokenKind::LtColon.fixed_text(), Some("<:"));
     assert_eq!(TokenKind::ColonGt.fixed_text(), Some(":>"));
-    assert_eq!(TokenKind::LtLt.fixed_text(), Some("<<"));
-    assert_eq!(TokenKind::GtGt.fixed_text(), Some(">>"));
     assert_eq!(TokenKind::Bang.fixed_text(), Some("!"));
-    assert_eq!(TokenKind::BangBang.fixed_text(), Some("!!"));
     assert_eq!(TokenKind::BangDot.fixed_text(), Some("!."));
     assert_eq!(TokenKind::ColonQuestion.fixed_text(), Some(":?"));
     assert_eq!(TokenKind::ColonQuestionGt.fixed_text(), Some(":?>"));
