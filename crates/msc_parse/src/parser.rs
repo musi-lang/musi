@@ -236,6 +236,24 @@ impl<'a> Parser<'a> {
         self.alloc_pat(p)
     }
 
+    /// Parses a pattern, then attaches an optional `: type` annotation to bind
+    /// patterns. Used inside variant destructor args where the type annotation
+    /// belongs to the pattern, not an outer `let` binding.
+    pub(crate) fn parse_alloc_pat_typed(&mut self) -> PatIdx {
+        let mut p = self.parse_pat();
+        if let Pat::Bind {
+            ref mut ty,
+            kind: _,
+            name: _,
+            inner: _,
+            span: _,
+        } = p
+        {
+            *ty = self.parse_opt_ty_annot();
+        }
+        self.alloc_pat(p)
+    }
+
     pub(crate) fn parse_opt_expr(&mut self) -> Option<ExprIdx> {
         if can_start_expr(self.peek_kind()) {
             Some(self.parse_alloc_expr())

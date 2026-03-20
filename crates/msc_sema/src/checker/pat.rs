@@ -3,10 +3,10 @@
 use std::collections::HashMap;
 use std::hash::BuildHasher;
 
-use msc_ast::PatIdx;
 use msc_ast::expr::BindKind;
 use msc_ast::lit::Lit;
 use msc_ast::pat::Pat;
+use msc_ast::{ExprIdx, PatIdx};
 use msc_shared::{Span, Symbol};
 
 use crate::checker::Checker;
@@ -27,21 +27,12 @@ pub fn check_pat<S: BuildHasher>(ck: &mut Checker<'_, S>, pat_idx: PatIdx, expec
             ck.unify_or_report(expected, lit_ty, span, None);
         }
         Pat::Bind {
-            span, inner, kind, ..
-        } => {
-            if let Some(&def_id) = ck.ctx.pat_defs.get(&span) {
-                let stored_ty = if kind == BindKind::Mut {
-                    ck.alloc_ty(Type::Ref { inner: expected })
-                } else {
-                    expected
-                };
-                ck.defs.get_mut(def_id).ty_info.ty = Some(stored_ty);
-            }
-            // If there's an inner pattern (`x @ pat`), check it too.
-            if let Some(inner) = inner {
-                check_pat(ck, inner, expected);
-            }
-        }
+            span,
+            inner,
+            kind,
+            ty,
+            ..
+        } => check_pat_bind(ck, expected, span, inner, kind, ty),
         Pat::Tuple { elems, span } => {
             let resolved = ck.resolve_ty(expected);
             match &ck.store.types[resolved] {
@@ -115,6 +106,32 @@ pub fn check_pat<S: BuildHasher>(ck: &mut Checker<'_, S>, pat_idx: PatIdx, expec
             check_pat(ck, right, expected);
         }
         Pat::Wild { .. } | Pat::Error { .. } => {}
+    }
+}
+
+fn check_pat_bind<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
+    expected: TypeIdx,
+    span: Span,
+    inner: Option<PatIdx>,
+    kind: BindKind,
+    ty: Option<ExprIdx>,
+) {
+    let bound_ty = ty.map_or(expected, |ty_expr| {
+        let ann = super::ty::lower_type_expr(ck, ty_expr);
+        ck.unify_or_report(expected, ann, span, None);
+        ann
+    });
+    if let Some(&def_id) = ck.ctx.pat_defs.get(&span) {
+        let stored_ty = if kind == BindKind::Mut {
+            ck.alloc_ty(Type::Ref { inner: bound_ty })
+        } else {
+            bound_ty
+        };
+        ck.defs.get_mut(def_id).ty_info.ty = Some(stored_ty);
+    }
+    if let Some(inner) = inner {
+        check_pat(ck, inner, bound_ty);
     }
 }
 

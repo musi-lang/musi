@@ -212,7 +212,10 @@ pub fn walk_pat<V: AstVisitor + ?Sized>(
     match &ctx.pats[idx] {
         Pat::Wild { .. } | Pat::Lit { .. } | Pat::Error { .. } => ControlFlow::Continue(()),
 
-        Pat::Bind { inner, .. } => {
+        Pat::Bind { inner, ty, .. } => {
+            if let Some(ty_idx) = *ty {
+                v.visit_expr(ty_idx, ctx)?;
+            }
             if let Some(i) = *inner {
                 v.visit_pat(i, ctx)?;
             }

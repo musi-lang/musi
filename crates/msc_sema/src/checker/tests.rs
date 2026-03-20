@@ -61,6 +61,7 @@ fn bind_pat(sym: Symbol) -> Pat {
     Pat::Bind {
         kind: BindKind::Immut,
         name: sym,
+        ty: None,
         inner: None,
         span: Span::DUMMY,
     }

@@ -63,7 +63,11 @@ impl Parser<'_> {
                 let _dot = self.bump();
                 let name = self.expect_symbol();
                 let args = if self.at(TokenKind::LParen) {
-                    self.delimited(TokenKind::LParen, TokenKind::RParen, Self::parse_alloc_pat)
+                    self.delimited(
+                        TokenKind::LParen,
+                        TokenKind::RParen,
+                        Self::parse_alloc_pat_typed,
+                    )
                 } else {
                     vec![]
                 };
@@ -123,8 +127,11 @@ impl Parser<'_> {
         // Check for destructor suffix: Name(pats) or Name{ fields }
         match self.peek_kind() {
             TokenKind::LParen => {
-                let args =
-                    self.delimited(TokenKind::LParen, TokenKind::RParen, Self::parse_alloc_pat);
+                let args = self.delimited(
+                    TokenKind::LParen,
+                    TokenKind::RParen,
+                    Self::parse_alloc_pat_typed,
+                );
                 Pat::Variant {
                     name,
                     args,
@@ -150,6 +157,7 @@ impl Parser<'_> {
                 Pat::Bind {
                     kind,
                     name,
+                    ty: None,
                     inner,
                     span: self.finish_span(start),
                 }

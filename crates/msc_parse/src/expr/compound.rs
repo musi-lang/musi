@@ -1,8 +1,8 @@
 //! Compound expression parsing: paren groups, tuples, blocks, piecewise, match, fn literals.
 
+use msc_ast::ExprIdx;
 use msc_ast::expr::{Expr, MatchArm, PwArm, PwGuard};
 use msc_ast::lit::Lit;
-use msc_ast::ExprIdx;
 use msc_lex::token::TokenKind;
 
 use crate::parser::Parser;

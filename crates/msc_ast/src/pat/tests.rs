@@ -39,6 +39,7 @@ fn test_bind_with_inner_pattern() {
     let idx = arenas.pats.alloc(Pat::Bind {
         kind: BindKind::Immut,
         name: Symbol(0),
+        ty: None,
         inner: Some(inner),
         span: Span::new(0, 5),
     });

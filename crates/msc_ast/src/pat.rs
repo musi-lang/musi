@@ -7,7 +7,7 @@ use msc_shared::{Span, Symbol};
 
 use crate::expr::BindKind;
 use crate::lit::Lit;
-use crate::{PatIdx, PatList};
+use crate::{ExprIdx, PatIdx, PatList};
 
 /// A pattern node. Recursive children use arena indices.
 #[derive(Debug, Clone, PartialEq)]
@@ -22,6 +22,7 @@ pub enum Pat {
     Bind {
         kind: BindKind,
         name: Symbol,
+        ty: Option<ExprIdx>,
         inner: Option<PatIdx>,
         span: Span,
     },
