@@ -45,9 +45,7 @@ impl ResolverConfig {
                 let base = m.compiler_options.base_url.as_ref().map(PathBuf::from);
                 let paths = m.compiler_options.paths.as_ref().map(|p| {
                     p.iter()
-                        .map(|(k, v)| {
-                            (k.clone(), v.iter().filter_map(|s| s.clone()).collect())
-                        })
+                        .map(|(k, v)| (k.clone(), v.iter().filter_map(Clone::clone).collect()))
                         .collect()
                 });
                 (m.imports.clone(), m.dependencies.clone(), base, paths)
@@ -198,13 +196,44 @@ pub fn resolve_relative(module_path: &str, importing_file: &Path) -> Result<Path
 }
 
 fn match_path_pattern(pattern: &str, specifier: &str) -> Option<String> {
-    if let Some(prefix) = pattern.strip_suffix('*') {
-        specifier.strip_prefix(prefix).map(|rest| rest.to_string())
-    } else if pattern == specifier {
-        Some(String::new())
-    } else {
-        None
+    pattern.strip_suffix('*').map_or_else(
+        || (pattern == specifier).then(String::new),
+        |prefix| specifier.strip_prefix(prefix).map(ToOwned::to_owned),
+    )
+}
+
+fn resolve_with_paths_map(name: &str, config: &ResolverConfig) -> Option<PathBuf> {
+    let paths_map = config.paths.as_ref()?;
+    for (pattern, replacements) in paths_map {
+        if let Some(matched) = match_path_pattern(pattern, name) {
+            for replacement in replacements {
+                let remapped = replacement.replace('*', &matched);
+                let candidate = config.project_root.join(&remapped);
+                if candidate.exists() {
+                    return Some(candidate);
+                }
+                let with_ext = config.project_root.join(format!("{remapped}.ms"));
+                if with_ext.exists() {
+                    return Some(with_ext);
+                }
+            }
+        }
     }
+    None
+}
+
+fn resolve_with_base_url(name: &str, config: &ResolverConfig) -> Option<PathBuf> {
+    let base = config.base_url.as_ref()?;
+    let base_path = config.project_root.join(base).join(name);
+    let with_ext = base_path.with_extension("ms");
+    if with_ext.exists() {
+        return Some(with_ext);
+    }
+    let index = base_path.join("index.ms");
+    if index.exists() {
+        return Some(index);
+    }
+    None
 }
 
 fn resolve_bare(
@@ -212,36 +241,11 @@ fn resolve_bare(
     importing_file: &Path,
     config: &ResolverConfig,
 ) -> Result<PathBuf, ResolveError> {
-    // Try paths remapping first
-    if let Some(ref paths_map) = config.paths {
-        for (pattern, replacements) in paths_map {
-            if let Some(matched) = match_path_pattern(pattern, name) {
-                for replacement in replacements {
-                    let remapped = replacement.replace('*', &matched);
-                    let candidate = config.project_root.join(&remapped);
-                    if candidate.exists() {
-                        return Ok(candidate);
-                    }
-                    let with_ext = config.project_root.join(format!("{remapped}.ms"));
-                    if with_ext.exists() {
-                        return Ok(with_ext);
-                    }
-                }
-            }
-        }
+    if let Some(result) = resolve_with_paths_map(name, config) {
+        return Ok(result);
     }
-
-    // Try baseUrl
-    if let Some(ref base) = config.base_url {
-        let base_path = config.project_root.join(base).join(name);
-        let with_ext = base_path.with_extension("ms");
-        if with_ext.exists() {
-            return Ok(with_ext);
-        }
-        let index = base_path.join("index.ms");
-        if index.exists() {
-            return Ok(index);
-        }
+    if let Some(result) = resolve_with_base_url(name, config) {
+        return Ok(result);
     }
 
     if let Some(target) = config.manifest_imports.get(name) {

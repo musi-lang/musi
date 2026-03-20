@@ -3,7 +3,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use crate::error::ResolveError;
-use crate::resolver::{resolve_import, ResolverConfig};
+use crate::resolver::{ResolverConfig, resolve_import};
 use crate::specifier::parse_specifier;
 
 fn temp_dir() -> tempfile::TempDir {

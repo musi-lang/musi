@@ -291,7 +291,7 @@ fn collect_imports_from_expr(expr_idx: ExprIdx, arenas: &AstArenas, out: &mut Ve
         Expr::Import { path, span, .. } => {
             out.push((*path, *span));
         }
-        Expr::Let { fields, .. } | Expr::Binding { fields, .. } => {
+        Expr::Let { fields, .. } => {
             if let Some(v) = fields.value {
                 collect_imports_from_expr(v, arenas, out);
             }
