@@ -1,0 +1,5 @@
+{
+  "name": "@std/log",
+  "version": "0.1.0",
+  "main": "./index.ms"
+}

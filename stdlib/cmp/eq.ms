@@ -1,5 +1,6 @@
 //! Eq type class and primitive instances.
 
+/// Structural equality: types that support the `=` operator.
 #[lang := "Eq"]
 export class Eq ['a] {
   let (=)(a, b) : Bool;

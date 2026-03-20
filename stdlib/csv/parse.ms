@@ -25,6 +25,7 @@ let parse_quoted_field := (s, start) => (
   step(start + 1)
 );
 
+/// Parses a single CSV line into a list of field strings.
 export let parse_row := (line) => (
   let len := rt.str_len(line);
   let mut fields := [];
@@ -56,6 +57,7 @@ export let parse_row := (line) => (
   fields
 );
 
+/// Parses multi-line CSV text into a list of rows, skipping blank lines.
 export let parse := (input) => (
   let raw_lines := rt.str_split(input, "\n");
   let n := rt.arr_len(raw_lines);

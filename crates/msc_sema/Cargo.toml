@@ -1,0 +1,25 @@
+[package]
+name = "msc_sema"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Semantic analysis for the Musi compiler"
+readme.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+keywords = ["compiler", "musi", "type-checker"]
+categories = ["development-tools"]
+publish.workspace = true
+
+[dependencies]
+msc_ast = { path = "../msc_ast" }
+msc_shared = { path = "../msc_shared" }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+msc_lex = { path = "../msc_lex" }
+msc_parse = { path = "../msc_parse" }
+
+[lints]
+workspace = true

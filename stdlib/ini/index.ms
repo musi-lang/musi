@@ -2,6 +2,7 @@
 
 import "@std/rt" as rt;
 
+/// A parsed INI section with its name and key-value entries.
 export let Section := record { name : String; entries : [](String, String) };
 
 let is_comment_line := (line) => (
@@ -21,7 +22,7 @@ let parse_section_name := (line) => (
   | "" if _
 );
 
-let split_entry := (line) => (
+let _split_entry := (line) => (
   let trimmed := rt.str_trim(line);
   let eq_idx := rt.str_index_of(trimmed, "=");
   let key := rt.str_trim(rt.str_slice(trimmed, 0, eq_idx));
@@ -29,6 +30,7 @@ let split_entry := (line) => (
   (key, val)
 );
 
+/// Parses an INI-formatted string into a list of Section records.
 export let parse := (input) => (
   let raw_lines := rt.str_split(input, "\n");
   let n := rt.arr_len(raw_lines);
@@ -73,7 +75,8 @@ export let parse := (input) => (
   sections
 );
 
-export let get := (sections, section_name, key) => (
+/// Looks up a key in a named section, returning .Some(value) or .None.
+export let get := (sections, section_name : String, key : String) => (
   let sn := rt.arr_len(sections);
   let find_section := (si) => (
     .None if si >= sn
@@ -85,7 +88,7 @@ export let get := (sections, section_name, key) => (
         let find_key := (ei) => (
           .None if ei >= en
           | (
-            let pair := entries.[ei];
+            let pair : (String, String) := entries.[ei];
             (.Some(pair.1) if pair.0 = key | find_key(ei + 1) if _)
           ) if _
         );

@@ -3,38 +3,40 @@
 import "@std/testing" as t;
 import "@std/array/combine" as comb;
 
-t.runner.report(t.runner.run_suite([
-  ("zip_arr - pairs elements at same index", () => (
+t.describe("Array.combine", () => (
+  t.it("zip_arr - pairs elements at same index", () => (
     let result := comb.zip_arr([1, 2, 3], ["a", "b", "c"]);
-    t.assertions.assert_eq(result, [(1, "a"), (2, "b"), (3, "c")])
-  )),
-  ("zip_arr - stops at shorter array", () => (
+    t.expect(result).toBe([(1, "a"), (2, "b"), (3, "c")])
+  ));
+  t.it("zip_arr - stops at shorter array", () => (
     let result := comb.zip_arr([1, 2, 3], ["a", "b"]);
-    t.assertions.assert_eq(result, [(1, "a"), (2, "b")])
-  )),
-  ("zip_arr - empty first array returns empty", () => (
+    t.expect(result).toBe([(1, "a"), (2, "b")])
+  ));
+  t.it("zip_arr - empty first array returns empty", () => (
     let result := comb.zip_arr([], [1, 2, 3]);
-    t.assertions.assert_eq(result, [])
-  )),
-  ("zip_arr - empty second array returns empty", () => (
+    t.expect(result).toBe([])
+  ));
+  t.it("zip_arr - empty second array returns empty", () => (
     let result := comb.zip_arr([1, 2, 3], []);
-    t.assertions.assert_eq(result, [])
-  )),
-  ("unzip - splits array of pairs into two arrays", () => (
+    t.expect(result).toBe([])
+  ));
+  t.it("unzip - splits array of pairs into two arrays", () => (
     let result := comb.unzip([(1, "a"), (2, "b"), (3, "c")]);
-    t.assertions.assert_eq(result, ([1, 2, 3], ["a", "b", "c"]))
-  )),
-  ("unzip - single pair", () => (
+    t.expect(result).toBe(([1, 2, 3], ["a", "b", "c"]))
+  ));
+  t.it("unzip - single pair", () => (
     let result := comb.unzip([(5, "x")]);
-    t.assertions.assert_eq(result, ([5], ["x"]))
-  )),
-  ("unzip - empty array produces two empty arrays", () => (
+    t.expect(result).toBe(([5], ["x"]))
+  ));
+  t.it("unzip - empty array produces two empty arrays", () => (
     let result := comb.unzip([]);
-    t.assertions.assert_eq(result, ([], []))
-  )),
-  ("zip_arr then unzip - roundtrip", () => (
+    t.expect(result).toBe(([], []))
+  ));
+  t.it("zip_arr then unzip - roundtrip", () => (
     let zipped := comb.zip_arr([1, 2, 3], [4, 5, 6]);
     let (lefts, _) := comb.unzip(zipped);
-    t.assertions.assert_eq(lefts, [1, 2, 3])
-  )),
-]));
+    t.expect(lefts).toBe([1, 2, 3])
+  ))
+));
+
+t.run();

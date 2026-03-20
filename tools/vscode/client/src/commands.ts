@@ -1,5 +1,4 @@
 import * as path from "node:path";
-import { parse as parseTOML } from "smol-toml";
 import * as vscode from "vscode";
 import {
 	findCliPath,
@@ -77,25 +76,25 @@ async function _loadPackageTasks(): Promise<
 	{ tasks: Record<string, string | MsPackageTask>; pkgDir: string } | undefined
 > {
 	const pkgFiles = await vscode.workspace.findFiles(
-		"mspackage.toml",
+		"musi.json",
 		"**/node_modules/**",
 		1,
 	);
 	const pkgFile = pkgFiles[0];
 	if (!pkgFile) {
-		vscode.window.showWarningMessage("No mspackage.toml found in workspace.");
+		vscode.window.showWarningMessage("No musi.json found in workspace.");
 		return undefined;
 	}
 	let pkg: MsPackage;
 	try {
 		const raw = await vscode.workspace.fs.readFile(pkgFile);
-		pkg = parseTOML(Buffer.from(raw).toString("utf8")) as MsPackage;
+		pkg = JSON.parse(Buffer.from(raw).toString("utf8")) as MsPackage;
 	} catch {
-		vscode.window.showErrorMessage("Failed to parse mspackage.toml.");
+		vscode.window.showErrorMessage("Failed to parse musi.json.");
 		return undefined;
 	}
 	if (!(pkg.tasks && Object.keys(pkg.tasks).length > 0)) {
-		vscode.window.showWarningMessage("No tasks defined in mspackage.toml.");
+		vscode.window.showWarningMessage("No tasks defined in musi.json.");
 		return undefined;
 	}
 	return { tasks: pkg.tasks, pkgDir: path.dirname(pkgFile.fsPath) };
@@ -205,7 +204,27 @@ function _createCommands(statusBar: StatusBar): Commands {
 		},
 
 		async runTest(...args: unknown[]) {
-			await _runCliOnFile("test", args);
+			const testName = typeof args[1] === "string" ? args[1] : undefined;
+			if (testName) {
+				let file: string | undefined;
+				if (typeof args[0] === "string") {
+					file = args[0].startsWith("file://")
+						? vscode.Uri.parse(args[0]).fsPath
+						: args[0];
+				}
+				if (!file) {
+					const editor = vscode.window.activeTextEditor;
+					if (!editor) {
+						vscode.window.showWarningMessage("No active editor.");
+						return;
+					}
+					file = editor.document.uri.fsPath;
+				}
+				const request = buildExecutionRequest(file);
+				await executeInTerminal(request, "test", testName);
+			} else {
+				await _runCliOnFile("test", args);
+			}
 		},
 
 		async debugTest(...args: unknown[]) {

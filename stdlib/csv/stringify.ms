@@ -29,6 +29,7 @@ let serialize_row := (fields) => (
   rt.str_join(cells, ",")
 );
 
+/// Serializes a list of rows (each a list of field strings) into CSV text.
 export let stringify := (rows) => (
   let n := rt.arr_len(rows);
   let mut lines := [];

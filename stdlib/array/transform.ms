@@ -2,13 +2,14 @@
 
 import "@std/rt" as rt;
 
+/// Remove consecutive duplicate elements from a sorted array.
 export let dedup ['a] := (arr) => (
   let len := rt.arr_len(arr);
   let mut result := [];
   let step := (i) => (
     (
-      let x := arr.[i];
-      let prev := arr.[i - 1];
+      let x : 'a := arr.[i];
+      let prev : 'a := arr.[i - 1];
       (rt.arr_push(result, x) if not (x = prev) | () if _);
       step(i + 1)
     ) if i < len
@@ -23,18 +24,21 @@ export let dedup ['a] := (arr) => (
   )
 );
 
+/// Return the first `n` elements of an array.
 export let take_arr ['a] := (arr, n) => (
   let len := rt.arr_len(arr);
   let end := (n if n < len | len if _);
   rt.arr_slice(arr, 0, end)
 );
 
+/// Return all elements after the first `n` elements of an array.
 export let drop_arr ['a] := (arr, n) => (
   let len := rt.arr_len(arr);
   let start := (n if n < len | len if _);
   rt.arr_slice(arr, start, len)
 );
 
+/// Map each element to an array and concatenate all results.
 export let flat_map_arr ['a, 'b] := (arr, f) => (
   let len := rt.arr_len(arr);
   let mut result := [];
@@ -54,6 +58,7 @@ export let flat_map_arr ['a, 'b] := (arr, f) => (
   step(0)
 );
 
+/// Apply `f` to each element and return a new array of results.
 export let map_arr ['a, 'b] := (arr, f) => (
   let len := rt.arr_len(arr);
   let mut result := [];
@@ -64,6 +69,7 @@ export let map_arr ['a, 'b] := (arr, f) => (
   step(0)
 );
 
+/// Return a new array containing only elements that satisfy `pred`.
 export let filter_arr ['a] := (arr, pred) => (
   let len := rt.arr_len(arr);
   let mut result := [];
@@ -77,6 +83,7 @@ export let filter_arr ['a] := (arr, pred) => (
   step(0)
 );
 
+/// Return a new array with elements in reverse order.
 export let reverse_copy ['a] := (arr) => (
   let len := rt.arr_len(arr);
   let mut result := [];
@@ -87,7 +94,8 @@ export let reverse_copy ['a] := (arr) => (
   (step(len - 1) if len > 0 | result if _)
 );
 
-export let intersperse ['a] := (arr, sep) => (
+/// Insert `sep` between every pair of adjacent elements.
+export let intersperse ['a] := (arr, sep : 'a) => (
   let len := rt.arr_len(arr);
   let mut result := [];
   let step := (i) => (
@@ -101,9 +109,10 @@ export let intersperse ['a] := (arr, sep) => (
   step(0)
 );
 
-export let scan ['a, 'b] := (arr, init, f) => (
+/// Fold `f` left over the array, emitting each intermediate accumulator.
+export let scan ['a, 'b] := (arr, init : 'b, f) => (
   let len := rt.arr_len(arr);
-  let mut acc := init;
+  let mut acc : 'b := init;
   let mut result := [];
   let step := (i) => (
     (

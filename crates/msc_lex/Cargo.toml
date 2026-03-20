@@ -1,0 +1,20 @@
+[package]
+name = "msc_lex"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Lexer (tokenizer) for the Musi compiler"
+readme.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+keywords = ["compiler", "musi", "lexer"]
+categories = ["development-tools"]
+publish.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+msc_shared = { path = "../msc_shared" }
+
+[lints]
+workspace = true

@@ -1,6 +1,7 @@
 //! Iterable type class.
 
+/// Iteration protocol: types that can produce a sequence of elements.
 #[lang := "Iterable"]
-class Iterable ['a, 'elem] {
+export class Iterable ['a, 'elem] {
   let next(iter) : ?'elem;
 };

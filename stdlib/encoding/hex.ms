@@ -2,6 +2,7 @@
 
 import "@std/rt" as rt;
 
+/// Error returned by `decode` when input is invalid hex.
 export let DecodeError := choice { InvalidChar of Int + OddLength };
 
 let nibble_to_rune_lower := (nibble) => (
@@ -14,7 +15,7 @@ let nibble_to_rune_upper := (nibble) => (
   | rt.rune_from_int(65 + nibble - 10) if _
 );
 
-let rune_to_nibble := (r, pos) => (
+let rune_to_nibble := (r : Rune, pos : Int) => (
   let cp := rt.rune_to_int(r);
   .Ok(cp - 48) if (cp >= 48 and cp <= 57)
   | .Ok(cp - 97 + 10) if (cp >= 97 and cp <= 102)
@@ -22,6 +23,7 @@ let rune_to_nibble := (r, pos) => (
   | .Err(.InvalidChar(pos)) if _
 );
 
+/// Encodes a byte array as a lowercase hexadecimal string.
 export let encode := (bytes) => (
   let len := rt.arr_len(bytes);
   let mut chars := [];
@@ -38,6 +40,7 @@ export let encode := (bytes) => (
   rt.str_from_chars(chars)
 );
 
+/// Encodes a byte array as an uppercase hexadecimal string.
 export let encode_upper := (bytes) => (
   let len := rt.arr_len(bytes);
   let mut chars := [];
@@ -54,6 +57,7 @@ export let encode_upper := (bytes) => (
   rt.str_from_chars(chars)
 );
 
+/// Decodes a hexadecimal string into a byte array, returning .Err on invalid input.
 export let decode := (s) => (
   let len := rt.str_len(s);
   .Err(.OddLength) if (len % 2 = 1)
@@ -63,9 +67,9 @@ export let decode := (s) => (
       .Ok(bytes) if i >= len
       | (
         match rune_to_nibble(rt.str_at(s, i), i) (
-          .Err(e) => .Err(e)
+          .Err(e : DecodeError) => .Err(e)
           | .Ok(hi) => match rune_to_nibble(rt.str_at(s, i + 1), i + 1) (
-            .Err(e) => .Err(e)
+            .Err(e : DecodeError) => .Err(e)
             | .Ok(lo) => (
               rt.arr_push(bytes, hi * 16 + lo);
               step(i + 2)

@@ -138,7 +138,7 @@ let parse_array := (chars, start) => (
               | .Err("unterminated array") if _
             )
           )
-          | .Err(e) => .Err(e)
+          | .Err(e : String) => .Err(e)
         )
       ) if _
     ) if p1 < len
@@ -180,14 +180,14 @@ let parse_object := (chars, start) => (
                         | .Err("unterminated object") if _
                       )
                     )
-                    | .Err(e) => .Err(e)
+                    | .Err(e : String) => .Err(e)
                   )
                 ) if rt.rune_to_int(chars.[p3]) = CH_COLON
                 | .Err("expected ':' after object key") if _
               ) if p3 < len
               | .Err("unterminated object after key") if _
             )
-            | .Err(e) => .Err(e)
+            | .Err(e : String) => .Err(e)
           )
         ) if ch = CH_QUOTE
         | .Err("expected '\"' for object key") if _
@@ -211,7 +211,7 @@ let parse_value := (chars, pos) => (
     let c  := rt.rune_to_int(ch);
     (match parse_string(chars, p) (
       .Ok((s, np)) => .Ok((.Str(s), np))
-      | .Err(e)    => .Err(e)
+      | .Err(e : String) => .Err(e)
     )) if c = CH_QUOTE
     | parse_array(chars, p)  if c = CH_LBRACKET
     | parse_object(chars, p) if c = CH_LBRACE
@@ -242,10 +242,11 @@ let parse_value := (chars, pos) => (
 
 parse_value_ref <- parse_value;
 
+/// Parses a JSON string into a JsonValue, returning .Err with a message on failure.
 export let parse := (s) => (
   let chars := rt.str_chars(s);
   match parse_value(chars, 0) (
     .Ok((v, _)) => .Ok(v)
-    | .Err(e)   => .Err(e)
+    | .Err(e : String)   => .Err(e)
   )
 );

@@ -1,16 +1,17 @@
 import * as vscode from "vscode";
 import { findServerPath, showServerNotFoundUI } from "./bootstrap.ts";
 import { createAndStartClient, getClient, stopClient } from "./client.ts";
-import {
-	MsPackageCodeLensProvider,
-	MsTestCodeLensProvider,
-} from "./codelens.ts";
+import { MsPackageCodeLensProvider } from "./codelens.ts";
 import { clearCliCache, registerCommands } from "./commands.ts";
 import { onConfigChange } from "./config.ts";
 import { MusiConfigurationProvider } from "./launch.ts";
-import { registerMspackageValidator } from "./mspackage-validator.ts";
 import { clearCompilerPathCache } from "./runner.ts";
 import { StatusBar } from "./status.ts";
+import {
+	discoverAllOpenTestFiles,
+	disposeTestController,
+	registerTestController,
+} from "./testing.ts";
 
 const NOTIFICATION_DELAY_MS = 500;
 
@@ -45,6 +46,7 @@ async function _startServer() {
 	}
 
 	await createAndStartClient(serverPath);
+	await discoverAllOpenTestFiles();
 	_statusBar.update("Ready", "ready");
 
 	// Delay avoids notification flicker on fast server starts
@@ -89,14 +91,12 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	context.subscriptions.push(
 		vscode.languages.registerCodeLensProvider(
-			{ scheme: "file", pattern: "**/mspackage.toml" },
+			{ scheme: "file", pattern: "**/musi.json" },
 			new MsPackageCodeLensProvider(),
 		),
-		vscode.languages.registerCodeLensProvider(
-			{ language: "musi", pattern: "**/*.test.ms" },
-			new MsTestCodeLensProvider(),
-		),
 	);
+
+	registerTestController(context);
 
 	context.subscriptions.push(
 		vscode.debug.registerDebugConfigurationProvider(
@@ -104,8 +104,6 @@ export async function activate(context: vscode.ExtensionContext) {
 			new MusiConfigurationProvider(),
 		),
 	);
-
-	registerMspackageValidator(context);
 
 	try {
 		await _startServer();
@@ -119,6 +117,7 @@ export async function activate(context: vscode.ExtensionContext) {
  * Stops language client and cleans up resources.
  */
 export async function deactivate() {
+	disposeTestController();
 	_statusBar?.dispose();
 	await stopClient();
 }

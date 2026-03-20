@@ -3,6 +3,7 @@
 import "./eq";
 import "./ordering";
 
+/// Total ordering: types that can be compared and ranked.
 #[lang := "Ord"]
 export class Ord ['a] where 'a <: Eq {
   let compare(a, b) : Ordering;
@@ -33,6 +34,22 @@ instance Ord of String {
 };
 
 instance Ord of Rune {
+  let compare(a, b) : Ordering := (
+    .Less if a < b
+    | .Greater if a > b
+    | .Equal if _
+  );
+};
+
+instance Ord of Float64 {
+  let compare(a, b) : Ordering := (
+    .Less if a < b
+    | .Greater if a > b
+    | .Equal if _
+  );
+};
+
+instance Ord of Float {
   let compare(a, b) : Ordering := (
     .Less if a < b
     | .Greater if a > b

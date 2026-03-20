@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
@@ -54,11 +55,11 @@ export async function findCompilerPath(): Promise<string | undefined> {
 		}
 	}
 
-	const cliPath = await findCliPath();
+	const cliPath = findCliPath();
 	if (cliPath) {
-		// music compiler is co-located with the musi CLI — both built from the same cargo workspace
+		// musi compiler is co-located with the musi CLI - both built from the same cargo workspace
 		const dir = path.dirname(cliPath);
-		const musicPath = path.join(dir, "music");
+		const musicPath = path.join(dir, "musi");
 		if (fs.existsSync(musicPath)) {
 			_cachedCompilerPath = musicPath;
 			return _cachedCompilerPath;
@@ -72,9 +73,62 @@ export function clearCompilerPathCache() {
 	_cachedCompilerPath = undefined;
 }
 
+export interface TestProcessResult {
+	readonly exitCode: number;
+	readonly stdout: string;
+	readonly stderr: string;
+}
+
+export async function spawnTestProcess(
+	request: ExecutionRequest,
+	nameFilter?: string,
+): Promise<TestProcessResult> {
+	const compilerPath = await findCompilerPath();
+	if (!compilerPath) {
+		return { exitCode: 1, stdout: "", stderr: "Compiler not found" };
+	}
+
+	const args: string[] = ["test", request.file];
+	if (nameFilter) {
+		args.push("--name", nameFilter);
+	}
+
+	const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+
+	return new Promise((resolve) => {
+		const proc = spawn(compilerPath, args, {
+			cwd: request.cwd || workspaceRoot || undefined,
+			env: { ...process.env, ...request.env },
+			stdio: ["ignore", "pipe", "pipe"],
+		});
+
+		const timeout = setTimeout(() => {
+			proc.kill();
+		}, 30_000);
+
+		let stdout = "";
+		let stderr = "";
+		proc.stdout.on("data", (d: Buffer) => {
+			stdout += d.toString();
+		});
+		proc.stderr.on("data", (d: Buffer) => {
+			stderr += d.toString();
+		});
+		proc.on("close", (code) => {
+			clearTimeout(timeout);
+			resolve({ exitCode: code ?? 1, stdout, stderr });
+		});
+		proc.on("error", (err) => {
+			clearTimeout(timeout);
+			resolve({ exitCode: 1, stdout: "", stderr: err.message });
+		});
+	});
+}
+
 export async function executeInTerminal(
 	request: ExecutionRequest,
 	subcommand: "run" | "build" | "check" | "test",
+	nameFilter?: string,
 ): Promise<void> {
 	const config = getConfig();
 	const tc = config.terminal;
@@ -90,6 +144,9 @@ export async function executeInTerminal(
 		args.push(...request.compilerArgs);
 	}
 	args.push(JSON.stringify(request.file));
+	if (subcommand === "test" && nameFilter) {
+		args.push("--name", JSON.stringify(nameFilter));
+	}
 	if (subcommand === "run" && request.runtimeArgs.length > 0) {
 		args.push("--", ...request.runtimeArgs);
 	}

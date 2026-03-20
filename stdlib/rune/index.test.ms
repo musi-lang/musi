@@ -3,89 +3,91 @@
 import "@std/testing" as t;
 import "@std/rune/index" as m;
 
-t.runner.report(t.runner.run_suite([
-  ("is_alpha - letter", () => (
-    t.assertions.assert_true(m.is_alpha('a'))
-  )),
-  ("is_alpha - digit", () => (
-    t.assertions.assert_false(m.is_alpha('5'))
-  )),
-  ("is_digit - digit", () => (
-    t.assertions.assert_true(m.is_digit('7'))
-  )),
-  ("is_digit - letter", () => (
-    t.assertions.assert_false(m.is_digit('z'))
-  )),
-  ("is_whitespace - space", () => (
-    t.assertions.assert_true(m.is_whitespace(' '))
-  )),
-  ("is_whitespace - letter", () => (
-    t.assertions.assert_false(m.is_whitespace('a'))
-  )),
-  ("is_alphanumeric - letter", () => (
-    t.assertions.assert_true(m.is_alphanumeric('b'))
-  )),
-  ("is_alphanumeric - digit", () => (
-    t.assertions.assert_true(m.is_alphanumeric('3'))
-  )),
-  ("is_alphanumeric - space", () => (
-    t.assertions.assert_false(m.is_alphanumeric(' '))
-  )),
-  ("is_upper - uppercase letter", () => (
-    t.assertions.assert_true(m.is_upper('A'))
-  )),
-  ("is_upper - lowercase letter", () => (
-    t.assertions.assert_false(m.is_upper('a'))
-  )),
-  ("is_lower - lowercase letter", () => (
-    t.assertions.assert_true(m.is_lower('z'))
-  )),
-  ("is_lower - uppercase letter", () => (
-    t.assertions.assert_false(m.is_lower('Z'))
-  )),
-  ("to_upper - lowercase to uppercase", () => (
-    t.assertions.assert_eq(m.to_upper('a'), 'A')
-  )),
-  ("to_upper - already uppercase", () => (
-    t.assertions.assert_eq(m.to_upper('A'), 'A')
-  )),
-  ("to_lower - uppercase to lowercase", () => (
-    t.assertions.assert_eq(m.to_lower('A'), 'a')
-  )),
-  ("to_lower - already lowercase", () => (
-    t.assertions.assert_eq(m.to_lower('a'), 'a')
-  )),
-  ("to_int and from_int - round trip", () => (
-    t.assertions.assert_eq(m.from_int(m.to_int('A')), 'A')
-  )),
-  ("is_ascii - ASCII char", () => (
-    t.assertions.assert_true(m.is_ascii('a'))
-  )),
-  ("is_hex_digit - hex letter", () => (
-    t.assertions.assert_true(m.is_hex_digit('f'))
-  )),
-  ("is_hex_digit - uppercase hex", () => (
-    t.assertions.assert_true(m.is_hex_digit('F'))
-  )),
-  ("is_hex_digit - digit", () => (
-    t.assertions.assert_true(m.is_hex_digit('9'))
-  )),
-  ("is_hex_digit - non-hex letter", () => (
-    t.assertions.assert_false(m.is_hex_digit('g'))
-  )),
-  ("is_bin_digit - zero", () => (
-    t.assertions.assert_true(m.is_bin_digit('0'))
-  )),
-  ("is_bin_digit - one", () => (
-    t.assertions.assert_true(m.is_bin_digit('1'))
-  )),
-  ("is_bin_digit - two", () => (
-    t.assertions.assert_false(m.is_bin_digit('2'))
-  )),
-  ("is_oct_digit - valid", () => (
-    t.assertions.assert_true(m.is_oct_digit('7'))
-  )),
-  ("is_oct_digit - eight", () => (
-    t.assertions.assert_false(m.is_oct_digit('8'))
-  )),
-]));
+t.describe("Rune", () => (
+  t.it("is_alpha - letter", () => (
+    t.expect(m.is_alpha('a')).toBe(.True)
+  ));
+  t.it("is_alpha - digit", () => (
+    t.expect(m.is_alpha('5')).toBe(.False)
+  ));
+  t.it("is_digit - digit", () => (
+    t.expect(m.is_digit('7')).toBe(.True)
+  ));
+  t.it("is_digit - letter", () => (
+    t.expect(m.is_digit('z')).toBe(.False)
+  ));
+  t.it("is_whitespace - space", () => (
+    t.expect(m.is_whitespace(' ')).toBe(.True)
+  ));
+  t.it("is_whitespace - letter", () => (
+    t.expect(m.is_whitespace('a')).toBe(.False)
+  ));
+  t.it("is_alphanumeric - letter", () => (
+    t.expect(m.is_alphanumeric('b')).toBe(.True)
+  ));
+  t.it("is_alphanumeric - digit", () => (
+    t.expect(m.is_alphanumeric('3')).toBe(.True)
+  ));
+  t.it("is_alphanumeric - space", () => (
+    t.expect(m.is_alphanumeric(' ')).toBe(.False)
+  ));
+  t.it("is_upper - uppercase letter", () => (
+    t.expect(m.is_upper('A')).toBe(.True)
+  ));
+  t.it("is_upper - lowercase letter", () => (
+    t.expect(m.is_upper('a')).toBe(.False)
+  ));
+  t.it("is_lower - lowercase letter", () => (
+    t.expect(m.is_lower('z')).toBe(.True)
+  ));
+  t.it("is_lower - uppercase letter", () => (
+    t.expect(m.is_lower('Z')).toBe(.False)
+  ));
+  t.it("to_upper - lowercase to uppercase", () => (
+    t.expect(m.to_upper('a')).toBe('A')
+  ));
+  t.it("to_upper - already uppercase", () => (
+    t.expect(m.to_upper('A')).toBe('A')
+  ));
+  t.it("to_lower - uppercase to lowercase", () => (
+    t.expect(m.to_lower('A')).toBe('a')
+  ));
+  t.it("to_lower - already lowercase", () => (
+    t.expect(m.to_lower('a')).toBe('a')
+  ));
+  t.it("to_int and from_int - round trip", () => (
+    t.expect(m.from_int(m.to_int('A'))).toBe('A')
+  ));
+  t.it("is_ascii - ASCII char", () => (
+    t.expect(m.is_ascii('a')).toBe(.True)
+  ));
+  t.it("is_hex_digit - hex letter", () => (
+    t.expect(m.is_hex_digit('f')).toBe(.True)
+  ));
+  t.it("is_hex_digit - uppercase hex", () => (
+    t.expect(m.is_hex_digit('F')).toBe(.True)
+  ));
+  t.it("is_hex_digit - digit", () => (
+    t.expect(m.is_hex_digit('9')).toBe(.True)
+  ));
+  t.it("is_hex_digit - non-hex letter", () => (
+    t.expect(m.is_hex_digit('g')).toBe(.False)
+  ));
+  t.it("is_bin_digit - zero", () => (
+    t.expect(m.is_bin_digit('0')).toBe(.True)
+  ));
+  t.it("is_bin_digit - one", () => (
+    t.expect(m.is_bin_digit('1')).toBe(.True)
+  ));
+  t.it("is_bin_digit - two", () => (
+    t.expect(m.is_bin_digit('2')).toBe(.False)
+  ));
+  t.it("is_oct_digit - valid", () => (
+    t.expect(m.is_oct_digit('7')).toBe(.True)
+  ));
+  t.it("is_oct_digit - eight", () => (
+    t.expect(m.is_oct_digit('8')).toBe(.False)
+  ))
+));
+
+t.run();

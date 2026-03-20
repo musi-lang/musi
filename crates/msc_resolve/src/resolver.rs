@@ -1,0 +1,268 @@
+//! Path resolution: maps [`ImportSpecifier`] values to filesystem paths.
+
+#[cfg(test)]
+mod tests;
+
+use std::collections::HashMap;
+use std::env;
+use std::path::{self, Path, PathBuf};
+
+use msc_manifest::MusiManifest;
+
+use crate::builtin::is_builtin_module;
+use crate::error::ResolveError;
+use crate::git::fetch_git_package;
+use crate::specifier::{ImportScheme, ImportSpecifier, parse_git_source, parse_specifier};
+
+/// Configuration for import resolution.
+pub struct ResolverConfig {
+    /// Path to the `stdlib/` directory (for `musi:` imports).
+    pub std_root: PathBuf,
+    /// Cache directory for fetched packages (`~/.cache/musi/packages/`).
+    pub cache_dir: PathBuf,
+    /// The project root directory (containing `musi.json`).
+    pub project_root: PathBuf,
+    /// The `imports` map from `musi.json`.
+    pub manifest_imports: HashMap<String, String>,
+    /// The `dependencies` map from `musi.json`.
+    pub manifest_deps: HashMap<String, String>,
+    /// The `compilerOptions.baseUrl` from `musi.json`.
+    pub base_url: Option<PathBuf>,
+    /// The `compilerOptions.paths` from `musi.json`.
+    pub paths: Option<HashMap<String, Vec<String>>>,
+}
+
+impl ResolverConfig {
+    /// Builds a resolver configuration from a project root and optional manifest.
+    #[must_use]
+    pub fn from_project(project_root: &Path, manifest: Option<&MusiManifest>) -> Self {
+        let std_root =
+            discover_std_root(project_root).unwrap_or_else(|_| project_root.join("stdlib"));
+        let cache_dir = cache_directory().join("musi/packages");
+        let (manifest_imports, manifest_deps, base_url, paths) = manifest.map_or_else(
+            || (HashMap::new(), HashMap::new(), None, None),
+            |m| {
+                let base = m.compiler_options.base_url.as_ref().map(PathBuf::from);
+                let paths = m.compiler_options.paths.as_ref().map(|p| {
+                    p.iter()
+                        .map(|(k, v)| (k.clone(), v.iter().filter_map(Clone::clone).collect()))
+                        .collect()
+                });
+                (m.imports.clone(), m.dependencies.clone(), base, paths)
+            },
+        );
+        Self {
+            std_root,
+            cache_dir,
+            project_root: project_root.to_path_buf(),
+            manifest_imports,
+            manifest_deps,
+            base_url,
+            paths,
+        }
+    }
+}
+
+fn cache_directory() -> PathBuf {
+    env::var("HOME").map_or_else(
+        |_| PathBuf::from("/tmp"),
+        |home| PathBuf::from(home).join(".cache"),
+    )
+}
+
+/// Discovers the standard library root.
+///
+/// Searches in order:
+/// 1. `msc_builtins_ROOT` environment variable
+/// 2. Relative to the current executable (`../stdlib/`)
+/// 3. Sibling of `project_root` (i.e. `project_root/stdlib/`)
+///
+/// # Errors
+///
+/// Returns [`ResolveError::ModuleNotFound`] if no valid std root is found.
+pub fn discover_std_root(project_root: &Path) -> Result<PathBuf, ResolveError> {
+    if let Ok(env_root) = env::var("msc_builtins_ROOT") {
+        let p = PathBuf::from(env_root);
+        if p.is_dir() {
+            return Ok(p);
+        }
+    }
+
+    if let Ok(exe) = env::current_exe()
+        && let Some(parent) = exe.parent()
+    {
+        let candidate = parent.join("../stdlib");
+        if candidate.is_dir() {
+            return Ok(candidate);
+        }
+    }
+
+    let sibling = project_root.join("stdlib");
+    if sibling.is_dir() {
+        return Ok(sibling);
+    }
+
+    Err(ResolveError::ModuleNotFound {
+        path: Box::from("stdlib/ (standard library root)"),
+    })
+}
+
+/// Resolves an import specifier to a filesystem path.
+///
+/// # Errors
+///
+/// Returns a [`ResolveError`] if the module cannot be found, the scheme is
+/// unsupported, or a bare import is not defined in the manifest.
+pub fn resolve_import(
+    specifier: &ImportSpecifier,
+    importing_file: &Path,
+    config: &ResolverConfig,
+) -> Result<PathBuf, ResolveError> {
+    match specifier.scheme {
+        ImportScheme::Musi => resolve_musi(&specifier.module_path, config),
+        ImportScheme::AtStd => resolve_at_std(&specifier.module_path, config),
+        ImportScheme::Relative => resolve_relative(&specifier.module_path, importing_file),
+        ImportScheme::Bare => resolve_bare(&specifier.module_path, importing_file, config),
+        ImportScheme::Git => resolve_git(&specifier.module_path, config),
+        ImportScheme::Msr => Err(ResolveError::RegistryNotSupported {
+            specifier: specifier.raw.clone(),
+        }),
+    }
+}
+
+fn resolve_musi(module_path: &str, _config: &ResolverConfig) -> Result<PathBuf, ResolveError> {
+    if is_builtin_module(module_path) {
+        Ok(PathBuf::from(format!("<musi:{module_path}>")))
+    } else {
+        Err(ResolveError::ModuleNotFound {
+            path: Box::from(format!(
+                "musi:{module_path} (use @std/{module_path} for standard library imports)"
+            )),
+        })
+    }
+}
+
+fn resolve_at_std(module_path: &str, config: &ResolverConfig) -> Result<PathBuf, ResolveError> {
+    let segments = module_path.replace('/', path::MAIN_SEPARATOR_STR);
+
+    let as_file = config.std_root.join(format!("{segments}.ms"));
+    if as_file.is_file() {
+        return Ok(as_file);
+    }
+
+    let as_dir_mod = config.std_root.join(&segments).join("index.ms");
+    if as_dir_mod.is_file() {
+        return Ok(as_dir_mod);
+    }
+
+    Err(ResolveError::ModuleNotFound {
+        path: Box::from(format!("@std/{module_path}")),
+    })
+}
+
+/// Resolves a relative import path (`./foo`, `../bar`) against the importing file.
+///
+/// # Errors
+///
+/// Returns [`ResolveError::ModuleNotFound`] if no matching `.ms` file or
+/// `index.ms` directory module exists.
+pub fn resolve_relative(module_path: &str, importing_file: &Path) -> Result<PathBuf, ResolveError> {
+    let base_dir = importing_file.parent().unwrap_or_else(|| Path::new("."));
+
+    let candidate = base_dir.join(module_path);
+
+    if candidate.extension().is_some() {
+        if candidate.is_file() {
+            return Ok(candidate);
+        }
+        return Err(ResolveError::ModuleNotFound {
+            path: Box::from(module_path),
+        });
+    }
+
+    let with_ext = candidate.with_extension("ms");
+    if with_ext.is_file() {
+        return Ok(with_ext);
+    }
+
+    let as_dir_mod = candidate.join("index.ms");
+    if as_dir_mod.is_file() {
+        return Ok(as_dir_mod);
+    }
+
+    Err(ResolveError::ModuleNotFound {
+        path: Box::from(module_path),
+    })
+}
+
+fn match_path_pattern(pattern: &str, specifier: &str) -> Option<String> {
+    pattern.strip_suffix('*').map_or_else(
+        || (pattern == specifier).then(String::new),
+        |prefix| specifier.strip_prefix(prefix).map(ToOwned::to_owned),
+    )
+}
+
+fn resolve_with_paths_map(name: &str, config: &ResolverConfig) -> Option<PathBuf> {
+    let paths_map = config.paths.as_ref()?;
+    for (pattern, replacements) in paths_map {
+        if let Some(matched) = match_path_pattern(pattern, name) {
+            for replacement in replacements {
+                let remapped = replacement.replace('*', &matched);
+                let candidate = config.project_root.join(&remapped);
+                if candidate.exists() {
+                    return Some(candidate);
+                }
+                let with_ext = config.project_root.join(format!("{remapped}.ms"));
+                if with_ext.exists() {
+                    return Some(with_ext);
+                }
+            }
+        }
+    }
+    None
+}
+
+fn resolve_with_base_url(name: &str, config: &ResolverConfig) -> Option<PathBuf> {
+    let base = config.base_url.as_ref()?;
+    let base_path = config.project_root.join(base).join(name);
+    let with_ext = base_path.with_extension("ms");
+    if with_ext.exists() {
+        return Some(with_ext);
+    }
+    let index = base_path.join("index.ms");
+    if index.exists() {
+        return Some(index);
+    }
+    None
+}
+
+fn resolve_bare(
+    name: &str,
+    importing_file: &Path,
+    config: &ResolverConfig,
+) -> Result<PathBuf, ResolveError> {
+    if let Some(result) = resolve_with_paths_map(name, config) {
+        return Ok(result);
+    }
+    if let Some(result) = resolve_with_base_url(name, config) {
+        return Ok(result);
+    }
+
+    if let Some(target) = config.manifest_imports.get(name) {
+        let inner = parse_specifier(target)?;
+        return resolve_import(&inner, importing_file, config);
+    }
+    if let Some(target) = config.manifest_deps.get(name) {
+        let inner = parse_specifier(target)?;
+        return resolve_import(&inner, importing_file, config);
+    }
+    Err(ResolveError::UnresolvedBareImport {
+        name: Box::from(name),
+    })
+}
+
+fn resolve_git(module_path: &str, config: &ResolverConfig) -> Result<PathBuf, ResolveError> {
+    let source = parse_git_source(module_path)?;
+    let result = fetch_git_package(&source, &config.cache_dir)?;
+    Ok(result.entry_point)
+}

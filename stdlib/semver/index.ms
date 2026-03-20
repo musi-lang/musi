@@ -1,7 +1,9 @@
 //! Semantic versioning - parse, format, compare, and bump version strings.
 
 import "@std/rt" as rt;
+import "@std/result/result" as res;
 
+/// A parsed semantic version with major, minor, patch, pre-release, and build metadata.
 export let Semver := record {
   major : Int;
   minor : Int;
@@ -10,9 +12,11 @@ export let Semver := record {
   build : String;
 };
 
+/// Error returned when a version string cannot be parsed.
 export let ParseError := choice { InvalidFormat of String };
 
-export let parse := (s) => (
+/// Parses a semver string (e.g. "1.2.3-alpha+build") into a Semver record.
+export let parse := (s : String) : res.Result of (Semver, ParseError) => (
   let plus_idx := rt.str_index_of(s, "+");
   let build := (
     "" if plus_idx = -1
@@ -55,7 +59,8 @@ export let parse := (s) => (
   )
 );
 
-export let to_string := (v) => (
+/// Formats a Semver record back to its canonical string representation.
+export let to_string := (v : Semver) : String => (
   let base := f"{v.major}.{v.minor}.{v.patch}";
   let with_pre := (
     base if rt.str_len(v.pre) = 0
@@ -67,7 +72,9 @@ export let to_string := (v) => (
   )
 );
 
-let compare_int := (a, b) => (
+let Ordering := choice { Less + Equal + Greater };
+
+let compare_int := (a : Int, b : Int) => (
   .Less    if a < b
   | .Greater if a > b
   | .Equal   if _
@@ -80,14 +87,15 @@ let compare_pre_result := (a, b) => (
   | (.Less if a < b | .Greater if _) if _
 );
 
-export let compare := (a, b) => (
-  let maj := compare_int(a.major, b.major);
+/// Compares two Semver values, returning .Less, .Equal, or .Greater.
+export let compare := (a : Semver, b : Semver) : Ordering => (
+  let maj : Ordering := compare_int(a.major, b.major);
   match maj (
     .Equal => (
-      let min := compare_int(a.minor, b.minor);
+      let min : Ordering := compare_int(a.minor, b.minor);
       match min (
         .Equal => (
-          let pat := compare_int(a.patch, b.patch);
+          let pat : Ordering := compare_int(a.patch, b.patch);
           match pat (
             .Equal => compare_pre_result(a.pre, b.pre)
             | _ => pat
@@ -100,12 +108,14 @@ export let compare := (a, b) => (
   )
 );
 
-export let is_compatible := (a, b) => (
+/// Returns .True if a and b are compatible under semver rules.
+export let is_compatible := (a : Semver, b : Semver) => (
   (a.major = b.major and a.minor = b.minor) if a.major = 0
   | a.major = b.major if _
 );
 
-export let inc_major := (v) => .{
+/// Returns v with the major version incremented and minor/patch reset to zero.
+export let inc_major := (v : Semver) => .{
   major := v.major + 1,
   minor := 0,
   patch := 0,
@@ -113,7 +123,8 @@ export let inc_major := (v) => .{
   build := "",
 };
 
-export let inc_minor := (v) => .{
+/// Returns v with the minor version incremented and patch reset to zero.
+export let inc_minor := (v : Semver) => .{
   major := v.major,
   minor := v.minor + 1,
   patch := 0,
@@ -121,7 +132,8 @@ export let inc_minor := (v) => .{
   build := "",
 };
 
-export let inc_patch := (v) => .{
+/// Returns v with the patch version incremented.
+export let inc_patch := (v : Semver) => .{
   major := v.major,
   minor := v.minor,
   patch := v.patch + 1,

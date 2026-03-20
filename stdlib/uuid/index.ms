@@ -24,12 +24,13 @@ let rand_hex_segment := (rng, count) => (
   step(0)
 );
 
+/// Generates a random UUID v4 string using the given RNG.
 export let v4 := (rng) => (
   let p1 := rand_hex_segment(rng, 8);
   let p2 := rand_hex_segment(rng, 4);
   // Version nibble is always '4'.
   let p3 := "4" + rand_hex_segment(rng, 3);
-  // Variant nibble: must be 8, 9, a, or b (top two bits = 10).
+  // Variant nibble must be 8, 9, a, or b (top two bits = 10).
   let variant_n := (rand_nibble(rng) and 3) + 8;
   let mut p4_chars := [nibble_char(variant_n)];
   let p4_step := (i) => (

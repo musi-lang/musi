@@ -2,15 +2,19 @@
 members = ["crates/*"]
 resolver = "2"
 
+# https://doc.rust-lang.org/cargo/reference/manifest.html
 [workspace.package]
-description = "A systems programming language designed for clarity, safety, and performance."
 version = "0.1.0-rc1"
 edition = "2024"
-repository = "https://github.com/musi-lang/musi"
+rust-version = "1.87.0"
+description = "An interpreted systems programming language."
 readme = "README.md"
+homepage = "https://musi-lang.com"
+repository = "https://github.com/musi-lang/musi"
 license = "MIT OR Apache-2.0"
 keywords = ["compiler", "interpreter", "language", "musi"]
 categories = ["compilers", "interpreters", "development-tools"]
+publish = false
 
 [workspace.dependencies]
 byteorder = "1.5.0"
@@ -18,7 +22,7 @@ clap = { version = "4.6.0", features = ["derive"] }
 proc-macro2 = "1.0.106"
 quote = "1.0.45"
 syn = { version = "2.0.117", features = ["full"] }
-intaglio = "1.13.1"
+intaglio = "1.13.2"
 memchr = "2.8.0"
 thiserror = "2.0.18"
 tracing = "0.1.44"
@@ -28,12 +32,12 @@ serde_json = "1.0.149"
 criterion = "0.8.2"
 ureq = "3.2.0"
 flate2 = "1.1.9"
-tar = "0.4.44"
+tar = "0.4.45"
 semver = { version = "1.0.27", features = ["serde"] }
 dirs = "6.0"
 sha2 = "0.10.9"
-toml = "1.0.6"
-toml_edit = "0.22"
+toml = "1.0.7+spec-1.1.0"
+toml_edit = "0.25.5+spec-1.1.0"
 hex = "0.4.3"
 libc = "0.2.183"
 libffi = { version = "5.1.0", features = ["system"] }
@@ -97,6 +101,7 @@ unnecessary_safety_doc = "deny"
 unreachable = "deny"
 unwrap_in_result = "deny"
 # unwrap_used = "deny"  # use `.expect()` in prod, but allow `.unwrap()` in tests
+wildcard_imports = "allow"
 
 cargo = { level = "deny", priority = -1 }
 complexity = { level = "deny", priority = -1 }

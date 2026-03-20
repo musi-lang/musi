@@ -2,6 +2,7 @@
 
 import "@std/rt" as rt;
 
+/// Return whether the string contains only whitespace characters (or is empty).
 export let is_blank := (s) => (
   let chars := rt.str_chars(s);
   let len := rt.arr_len(chars);
@@ -12,6 +13,7 @@ export let is_blank := (s) => (
   step(0)
 );
 
+/// Return whether the string is non-empty and every character is alphabetic.
 export let is_alpha := (s) => (
   let chars := rt.str_chars(s);
   let len := rt.arr_len(chars);
@@ -25,6 +27,7 @@ export let is_alpha := (s) => (
   ) if _
 );
 
+/// Return whether the string is non-empty and every character is a decimal digit.
 export let is_digit := (s) => (
   let chars := rt.str_chars(s);
   let len := rt.arr_len(chars);
@@ -38,6 +41,7 @@ export let is_digit := (s) => (
   ) if _
 );
 
+/// Return whether the string is non-empty and every character is alphabetic or a digit.
 export let is_alphanumeric := (s) => (
   let chars := rt.str_chars(s);
   let len := rt.arr_len(chars);

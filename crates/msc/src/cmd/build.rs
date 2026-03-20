@@ -1,0 +1,25 @@
+//! `msc build` - compile a `.ms` source file to `.seam` bytecode.
+
+use std::{fs, path::Path, process};
+
+use msc_manifest::MusiManifest;
+
+use crate::pipeline;
+
+/// Compiles `path` to bytecode and writes it to `output` (or `path.seam`).
+pub fn run(path: &Path, output: Option<&Path>, manifest: &MusiManifest, project_root: &Path) -> ! {
+    let Ok(mut out) = pipeline::run_frontend_multi(path, manifest, project_root) else {
+        process::exit(1)
+    };
+    let Ok(bytes) = pipeline::run_backend(&mut out, true) else {
+        process::exit(1)
+    };
+    let out_path = output.map_or_else(|| path.with_extension("msbc"), Path::to_path_buf);
+    match fs::write(&out_path, &bytes) {
+        Ok(()) => process::exit(0),
+        Err(e) => {
+            eprintln!("error: {}: {e}", out_path.display());
+            process::exit(1);
+        }
+    }
+}

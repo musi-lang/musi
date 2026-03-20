@@ -1,10 +1,12 @@
 //! Base64 encoding and decoding (RFC 4648).
 
 import "@std/rt" as rt;
+import "@std/result/result" as res;
 
 let STANDARD_ALPHABET := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 let URL_SAFE_ALPHABET  := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
+/// Error returned by `decode` and `decode_url_safe` when input is malformed.
 export let DecodeError := choice {
   InvalidChar of Int
   + InvalidLength
@@ -12,16 +14,11 @@ export let DecodeError := choice {
 };
 
 let char_to_value := (code, is_url_safe) => (
-  // 'A'-'Z' → 0-25
   (code - 65) if code >= 65 and code <= 90
-  // 'a'-'z' → 26-51
   | (code - 71) if code >= 97 and code <= 122
-  // '0'-'9' → 52-61
-  | (code + 4) if code >= 48 and code <= 57
-  // '+' → 62 (standard), '-' → 62 (url-safe)
+  | (code + 4)  if code >= 48 and code <= 57
   | 62 if code = 43
   | 62 if code = 45 and is_url_safe
-  // '/' → 63 (standard), '_' → 63 (url-safe)
   | 63 if code = 47
   | 63 if code = 95 and is_url_safe
   | -1 if _
@@ -56,7 +53,6 @@ let encode_with := (bytes, alphabet) => (
 
   let rem_base := full_groups * 3;
   (
-    // 1 remaining byte → 2 chars + "=="
     (
       let b0 := bytes.[rem_base];
       push_char(b0 / 4);
@@ -64,7 +60,6 @@ let encode_with := (bytes, alphabet) => (
       rt.arr_push(out, rt.rune_from_int(61));
       rt.arr_push(out, rt.rune_from_int(61))
     ) if remainder = 1
-    // 2 remaining bytes → 3 chars + "="
     | (
       let b0 := bytes.[rem_base];
       let b1 := bytes.[rem_base + 1];
@@ -79,21 +74,22 @@ let encode_with := (bytes, alphabet) => (
   rt.str_from_chars(out)
 );
 
+/// Encodes a byte array as standard Base64 (with `+` and `/`).
 export let encode := (bytes) => encode_with(bytes, STANDARD_ALPHABET);
 
+/// Encodes a byte array as URL-safe Base64 (with `-` and `_`).
 export let encode_url_safe := (bytes) => encode_with(bytes, URL_SAFE_ALPHABET);
 
 let decode_with := (s, is_url_safe) => (
   let chars := rt.str_chars(s);
   let total := rt.arr_len(chars);
 
-  // Base64 strings must be a multiple of 4 characters
   .Err(.InvalidLength) if total = 0 or (total - (total / 4) * 4) /= 0
   | (
     let full_groups := total / 4;
     let mut out := [];
     let mut has_error := .False;
-    let mut error := .None;
+    let mut error : ?res.Result of ([]Int, DecodeError) := .None;
 
     let decode_group := (g) => (
       () if g >= full_groups or has_error
@@ -104,7 +100,7 @@ let decode_with := (s, is_url_safe) => (
         let r2 := rt.rune_to_int(chars.[base + 2]);
         let r3 := rt.rune_to_int(chars.[base + 3]);
         let is_last := g = full_groups - 1;
-        // '=' is codepoint 61
+        // codepoint 61 is '='
         let pad2 := r2 = 61 and r3 = 61 and is_last;
         let pad1 := not (r2 = 61) and r3 = 61 and is_last;
 
@@ -112,15 +108,12 @@ let decode_with := (s, is_url_safe) => (
         let v1 := char_to_value(r1, is_url_safe);
 
         (
-          // Validate v0 and v1 - always required
           (has_error <- .True; error <- .Some(.Err(.InvalidChar(r0)))) if v0 = -1
           | (has_error <- .True; error <- .Some(.Err(.InvalidChar(r1)))) if v1 = -1
           | (
-            // "==" padding: 2 pad chars, produce 1 byte
             (
               rt.arr_push(out, v0 * 4 + v1 / 16)
             ) if pad2
-            // "=" padding: 1 pad char, produce 2 bytes
             | (
               let v2 := char_to_value(r2, is_url_safe);
               (has_error <- .True; error <- .Some(.Err(.InvalidChar(r2)))) if v2 = -1
@@ -129,7 +122,6 @@ let decode_with := (s, is_url_safe) => (
                 rt.arr_push(out, (v1 - (v1 / 16) * 16) * 16 + v2 / 4)
               ) if _
             ) if pad1
-            // Non-padding group: produce 3 bytes
             | (
               let v2 := char_to_value(r2, is_url_safe);
               let v3 := char_to_value(r3, is_url_safe);
@@ -157,6 +149,8 @@ let decode_with := (s, is_url_safe) => (
   ) if _
 );
 
+/// Decodes a standard Base64 string into a byte array, returning .Err on invalid input.
 export let decode := (s) => decode_with(s, .False);
 
+/// Decodes a URL-safe Base64 string into a byte array, returning .Err on invalid input.
 export let decode_url_safe := (s) => decode_with(s, .True);

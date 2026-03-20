@@ -1,5 +1,0 @@
-[package]
-name = "musi-stdlib"
-version = "0.1.0"
-description = "Musi standard library"
-main = "./stdlib/prelude.ms"

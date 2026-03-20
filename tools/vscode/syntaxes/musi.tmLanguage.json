@@ -111,13 +111,24 @@
         "choice-body": {
             "comment": "choice { Variant + Variant of 'T } -- inline choice type",
             "name": "meta.type.choice.musi",
-            "begin": "\\b(choice)\\b\\s*\\{",
+            "begin": "\\b(choice)\\b\\s*(\\{)",
             "end": "\\}",
-            "beginCaptures": { "1": { "name": "storage.type.musi" } },
+            "beginCaptures": {
+                "1": { "name": "storage.type.musi" },
+                "2": { "name": "punctuation.section.block.begin.musi" }
+            },
             "endCaptures": { "0": { "name": "punctuation.section.block.end.musi" } },
             "patterns": [
                 { "include": "#comments" },
                 { "include": "#attributes" },
+                {
+                    "comment": "variant payload type: Failed of String - must precede #keywords so 'of' isn't consumed alone",
+                    "match": "\\b(of)\\s+([A-Z][a-zA-Z0-9_]*)",
+                    "captures": {
+                        "1": { "name": "keyword.other.musi" },
+                        "2": { "name": "entity.name.type.musi" }
+                    }
+                },
                 { "include": "#keywords" },
                 {
                     "match": "\\+",
@@ -186,7 +197,7 @@
                 { "include": "#literals" },
                 {
                     "comment": "well-known attribute names",
-                    "match": "\\b(entrypoint|test|lang|inline)\\b",
+                    "match": "\\b(test|lang|inline|link)\\b",
                     "name": "support.function.attribute.musi"
                 },
                 {
@@ -208,7 +219,7 @@
             "patterns": [
                 {
                     "name": "keyword.control.musi",
-                    "match": "\\b(if|match|in|return|defer|where|try|do|handle|resume|fatal)\\b"
+                    "match": "\\b(if|match|in|return|defer|where|try|need|handle|resume|fatal)\\b"
                 },
                 {
                     "name": "keyword.control.import.musi",
@@ -224,7 +235,7 @@
                 },
                 {
                     "name": "keyword.other.musi",
-                    "match": "\\b(of|with)\\b"
+                    "match": "\\b(of|with|via)\\b"
                 },
                 {
                     "name": "storage.modifier.musi",
@@ -413,10 +424,6 @@
                 {
                     "name": "keyword.operator.cons.musi",
                     "match": "::"
-                },
-                {
-                    "name": "keyword.operator.logical.musi",
-                    "match": "\\b(and|or|xor|not)\\b"
                 },
                 {
                     "name": "keyword.operator.bitwise.musi",

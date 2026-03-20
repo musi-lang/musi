@@ -1,22 +1,29 @@
 [package]
 name = "musi"
-description.workspace = true
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
+description.workspace = true
+readme.workspace = true
+homepage.workspace = true
 repository.workspace = true
 license.workspace = true
-readme.workspace = true
 keywords.workspace = true
 categories.workspace = true
+publish.workspace = true
 
 [[bin]]
 name = "musi"
 path = "src/main.rs"
 
 [dependencies]
-musi_builtins = { path = "../musi_builtins" }
-musi_vm = { path = "../musi_vm" }
+msc = { path = "../msc" }
+msc_builtins = { path = "../msc_builtins" }
+msc_manifest = { path = "../msc_manifest" }
+msc_vm = { path = "../msc_vm" }
+msc_resolve = { path = "../msc_resolve" }
 clap = { workspace = true }
+serde_json = { workspace = true }
 
 [lints]
 workspace = true

@@ -5,13 +5,17 @@
 
 import "@std/rt" as rt;
 
-export let Queue ['a] := record { front : [] 'a; back : [] 'a };
+/// Two-array FIFO queue.
+export let Queue ['a] := record { front : []'a; back : []'a };
 
+/// Create an empty queue.
 export let new ['a] := () => .{ front := [], back := [] };
 
-export let enqueue ['a] := (q, val) => rt.arr_push(q.back, val);
+/// Add a value to the back of the queue.
+export let enqueue ['a] := (q, val : 'a) => rt.arr_push(q.back, val);
 
-export let dequeue ['a] := (q) => (
+/// Remove and return the front value, or `.None` if empty.
+export let dequeue ['a] := (mut q) => (
   let flen := rt.arr_len(q.front);
   let blen := rt.arr_len(q.back);
   (
@@ -26,7 +30,9 @@ export let dequeue ['a] := (q) => (
   )
 );
 
+/// Return the total number of elements in the queue.
 export let len ['a] := (q) => rt.arr_len(q.front) + rt.arr_len(q.back);
 
+/// Return `.True` if the queue contains no elements.
 export let is_empty ['a] := (q) =>
   rt.arr_len(q.front) = 0 and rt.arr_len(q.back) = 0;
