@@ -9,7 +9,7 @@ export let Builder := record { parts : []String };
 export let new := () => .{ parts := [] };
 
 /// Append a string to the builder.
-export let append := (b, s) => rt.arr_push(b.parts, s);
+export let append := (b, s : String) => rt.arr_push(b.parts, s);
 
 /// Append a string followed by a newline.
 export let append_line := (b, s) => rt.arr_push(b.parts, s + "\n");

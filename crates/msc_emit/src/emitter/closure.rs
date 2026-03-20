@@ -8,7 +8,6 @@ use msc_ast::expr::Param;
 use msc_sema::DefId;
 use msc_sema::def::DefKind;
 
-use crate::const_pool::ConstValue;
 use crate::error::EmitError;
 use crate::error::EmitResult;
 
@@ -109,14 +108,9 @@ pub(super) fn emit_fn(
     };
     em.nested_fns.push(fn_bytecode);
 
-    if upvalue_count == 0 {
-        // Non-capturing lambda: use LD_CST FnRef path (matches expr.rs:1445-1449).
-        let cv = ConstValue::Int(i64::from(nested_fn_id));
-        let i = em.cp.intern(&cv)?;
-        fc.fe.emit_ld_cst(i);
-    } else {
-        // Capturing closure: emit CLS_NEW then attach each upvalue cell.
-        fc.fe.emit_cls_new(nested_fn_id);
+    fc.fe.emit_cls_new(nested_fn_id);
+    if upvalue_count > 0 {
+        // Capturing closure: attach each upvalue cell.
         for &(_, source) in &captures {
             match source {
                 CaptureSource::Local(slot) => fc.fe.emit_cls_upv_local(slot),

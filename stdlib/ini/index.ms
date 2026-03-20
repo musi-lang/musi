@@ -76,7 +76,7 @@ export let parse := (input) => (
 );
 
 /// Looks up a key in a named section, returning .Some(value) or .None.
-export let get := (sections, section_name, key) => (
+export let get := (sections, section_name : String, key : String) => (
   let sn := rt.arr_len(sections);
   let find_section := (si) => (
     .None if si >= sn
@@ -88,7 +88,7 @@ export let get := (sections, section_name, key) => (
         let find_key := (ei) => (
           .None if ei >= en
           | (
-            let pair := entries.[ei];
+            let pair : (String, String) := entries.[ei];
             (.Some(pair.1) if pair.0 = key | find_key(ei + 1) if _)
           ) if _
         );

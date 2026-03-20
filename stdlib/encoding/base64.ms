@@ -88,7 +88,7 @@ let decode_with := (s, is_url_safe) => (
     let full_groups := total / 4;
     let mut out := [];
     let mut has_error := .False;
-    let mut error := .None;
+    let mut error : ?(Result of []Int, DecodeError) := .None;
 
     let decode_group := (g) => (
       () if g >= full_groups or has_error

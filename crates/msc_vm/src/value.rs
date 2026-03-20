@@ -439,6 +439,46 @@ impl Value {
         })
     }
 
+    /// Promote any integer-like value (`Int`, `Nat`, `BoxedInt`, `BoxedNat`)
+    /// to `i128` for polymorphic arithmetic and comparison dispatch.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VmError::TypeError`] if the value is not an int or nat.
+    pub fn as_numeric_wide(self, heap: &Heap) -> VmResult<i128> {
+        if let Ok(n) = self.as_int() {
+            return Ok(i128::from(n));
+        }
+        if let Ok(n) = self.as_nat() {
+            return Ok(i128::from(n));
+        }
+        if let Ok(ptr) = self.as_ref() {
+            if let Ok(obj) = heap.get(ptr) {
+                match obj.payload {
+                    HeapPayload::BoxedInt(n) => return Ok(i128::from(n)),
+                    HeapPayload::BoxedNat(n) => return Ok(i128::from(n.cast_unsigned())),
+                    _ => {}
+                }
+            }
+        }
+        Err(VmError::TypeError {
+            expected: "int or nat",
+            found: self.type_name(),
+        })
+    }
+
+    /// Narrow an i128 arithmetic result back to Nat (if both operands were Nat)
+    /// or Int (otherwise).
+    pub fn from_numeric_wide(val: i128, both_nat: bool, heap: &mut Heap) -> Self {
+        if both_nat {
+            let clamped = u64::try_from(val.max(0)).unwrap_or(u64::MAX);
+            Self::from_nat_wide(clamped, heap)
+        } else {
+            let clamped = i64::try_from(val).unwrap_or(if val < 0 { i64::MIN } else { i64::MAX });
+            Self::from_int_wide(clamped, heap)
+        }
+    }
+
     #[must_use]
     pub const fn type_name(self) -> &'static str {
         if self.is_float() {

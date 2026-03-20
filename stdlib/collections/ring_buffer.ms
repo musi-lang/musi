@@ -6,7 +6,7 @@ import "@std/rt" as rt;
 export let RingBuffer ['a] := record { data : []'a; head : Int; count : Int; cap : Int };
 
 /// Create an empty ring buffer with the given capacity, using `zero` as the initial fill value.
-export let new ['a] := (capacity, zero) => (
+export let new ['a] := (capacity, zero : 'a) => (
   let mut arr := [];
   let fill := (i) => (
     () if i >= capacity
@@ -19,7 +19,7 @@ export let new ['a] := (capacity, zero) => (
 let wrap := (idx, cap) => idx - (cap if idx >= cap | 0 if _);
 
 /// Push a value into the buffer, overwriting the oldest element if full.
-export let push ['a] := (mut rb, val) => (
+export let push ['a] := (mut rb, val : 'a) => (
   (
     let slot := wrap(rb.head + rb.count, rb.cap);
     rb.data.[slot] <- val;
@@ -35,7 +35,7 @@ export let push ['a] := (mut rb, val) => (
 export let pop ['a] := (mut rb) => (
   .None if rb.count = 0
   | (
-    let val := rb.data.[rb.head];
+    let val : 'a := rb.data.[rb.head];
     rb.head <- wrap(rb.head + 1, rb.cap);
     rb.count <- rb.count - 1;
     .Some(val)

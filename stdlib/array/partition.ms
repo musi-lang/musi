@@ -9,7 +9,7 @@ export let partition ['a] := (arr, pred) => (
   let len := rt.arr_len(arr);
   let step := (i) => (
     (
-      let x := arr.[i];
+      let x : 'a := arr.[i];
       (rt.arr_push(matching, x) if pred(x) | rt.arr_push(rest, x) if _);
       step(i + 1)
     ) if i < len

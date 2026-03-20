@@ -1,13 +1,16 @@
 //! Pattern type checking.
 
+use std::collections::HashMap;
+use std::hash::BuildHasher;
+
 use msc_ast::PatIdx;
 use msc_ast::expr::BindKind;
 use msc_ast::lit::Lit;
 use msc_ast::pat::Pat;
-use msc_shared::Span;
-use std::hash::BuildHasher;
+use msc_shared::{Span, Symbol};
 
 use crate::checker::Checker;
+use crate::checker::instantiate::substitute_ty;
 use crate::types::{Type, TypeIdx};
 
 /// Checks a pattern against an expected type.
@@ -90,7 +93,9 @@ pub fn check_pat<S: BuildHasher>(ck: &mut Checker<'_, S>, pat_idx: PatIdx, expec
                 }
             }
         }
-        Pat::Variant { span, args, .. } => {
+        Pat::Variant {
+            name, span, args, ..
+        } => {
             if let Some(&def_id) = ck.ctx.pat_defs.get(&span) {
                 ck.defs.get_mut(def_id).ty_info.ty = Some(expected);
             }
@@ -98,7 +103,8 @@ pub fn check_pat<S: BuildHasher>(ck: &mut Checker<'_, S>, pat_idx: PatIdx, expec
             let param_tys: Vec<_> = if let Type::Fn { params, .. } = &ck.store.types[resolved] {
                 params.clone()
             } else {
-                args.iter().map(|_| ck.fresh_var(Span::DUMMY)).collect()
+                extract_variant_payload_types(ck, resolved, name)
+                    .unwrap_or_else(|| args.iter().map(|_| ck.fresh_var(Span::DUMMY)).collect())
             };
             for (&arg, param_ty) in args.iter().zip(param_tys) {
                 check_pat(ck, arg, param_ty);
@@ -109,5 +115,46 @@ pub fn check_pat<S: BuildHasher>(ck: &mut Checker<'_, S>, pat_idx: PatIdx, expec
             check_pat(ck, right, expected);
         }
         Pat::Wild { .. } | Pat::Error { .. } => {}
+    }
+}
+
+/// Expand a `Named` type to its underlying `Sum` and extract the payload types
+/// for the given variant. Mirrors the expansion logic in `lookup_field`.
+fn extract_variant_payload_types<S: BuildHasher>(
+    ck: &mut Checker<'_, S>,
+    ty: TypeIdx,
+    variant_name: Symbol,
+) -> Option<Vec<TypeIdx>> {
+    let expanded = match &ck.store.types[ty] {
+        Type::Sum { variants } => {
+            return variants
+                .iter()
+                .find(|v| v.name == variant_name)
+                .map(|v| v.fields.clone());
+        }
+        Type::Named { def, args } => {
+            let (def, args) = (*def, args.clone());
+            let underlying = ck.defs.get(def).ty_info.ty?;
+            let ty_params = ck.defs.get(def).ty_info.ty_params.clone();
+            if !ty_params.is_empty() && ty_params.len() == args.len() {
+                let mut subst = HashMap::with_capacity(ty_params.len());
+                for (param_def, &arg_ty) in ty_params.iter().zip(&args) {
+                    let _ = subst.insert(*param_def, arg_ty);
+                }
+                substitute_ty(ck, underlying, &subst)
+            } else {
+                underlying
+            }
+        }
+        _ => return None,
+    };
+    let expanded = ck.resolve_ty(expanded);
+    if let Type::Sum { variants } = &ck.store.types[expanded] {
+        variants
+            .iter()
+            .find(|v| v.name == variant_name)
+            .map(|v| v.fields.clone())
+    } else {
+        None
     }
 }

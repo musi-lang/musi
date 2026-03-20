@@ -11,13 +11,13 @@ export let SortedArray ['a] := record { data : []'a };
 /// Create an empty sorted array.
 export let new ['a] := () => .{ data := [] };
 
-let binary_search ['a] := (arr, val) => (
+let binary_search ['a] := (arr, val : 'a) => (
   let mut lo := 0;
   let mut hi := rt.arr_len(arr);
   let step := () => (
     (
       let mid := lo + (hi - lo) / 2;
-      let elem := arr.[mid];
+      let elem : 'a := arr.[mid];
       (
         (lo <- mid + 1; step()) if elem < val
         | (hi <- mid; step()) if elem > val
@@ -30,7 +30,7 @@ let binary_search ['a] := (arr, val) => (
 );
 
 /// Insert `val` in sorted position.
-export let insert ['a] := (sa, val) => (
+export let insert ['a] := (sa, val : 'a) => (
   let mut arr := sa.data;
   let pos := binary_search(arr, val);
   let len := rt.arr_len(arr);
@@ -44,7 +44,7 @@ export let insert ['a] := (sa, val) => (
 );
 
 /// Return `.True` if `val` is present in the sorted array.
-export let contains ['a] := (sa, val) => (
+export let contains ['a] := (sa, val : 'a) => (
   let arr := sa.data;
   let len := rt.arr_len(arr);
   let pos := binary_search(arr, val);
@@ -52,7 +52,7 @@ export let contains ['a] := (sa, val) => (
 );
 
 /// Remove the first occurrence of `val` and return `.True`, or `.False` if not found.
-export let remove ['a] := (sa, val) => (
+export let remove ['a] := (sa, val : 'a) => (
   let mut arr := sa.data;
   let len := rt.arr_len(arr);
   let pos := binary_search(arr, val);

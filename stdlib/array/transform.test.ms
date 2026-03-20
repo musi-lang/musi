@@ -33,7 +33,7 @@ t.describe("Array.transform", () => (
     t.expect(result).toBe([])
   ));
   t.it("flat_map_arr - empty input returns empty", () => (
-    let result := tr.flat_map_arr([], (x) => [x]);
+    let result := tr.flat_map_arr([], (x : Int) => [x]);
     t.expect(result).toBe([])
   ));
   t.it("take_arr - takes first n elements", () => (

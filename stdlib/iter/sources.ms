@@ -25,7 +25,7 @@ export let range := (start, end) => (
 );
 
 /// Create an iterator that yields `value` indefinitely.
-export let repeat ['a] := (value) =>
+export let repeat ['a] := (value : 'a) =>
   .{ next := () => .Some(value) };
 
 /// Create an iterator that immediately yields `.None`.

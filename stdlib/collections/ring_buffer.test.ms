@@ -61,8 +61,8 @@ t.describe("RingBuffer", () => (
     rb.push(r, 10);
     rb.push(r, 20);
     rb.push(r, 30);
-    let a := rb.pop(r);
-    let b := rb.pop(r);
+    let a : ?Int := rb.pop(r);
+    let b : ?Int := rb.pop(r);
     t.expect(a = .Some(10) and b = .Some(20)).toBe(.True)
   ));
   t.it("pop - len decrements", () => (
@@ -79,9 +79,9 @@ t.describe("RingBuffer", () => (
     rb.push(r, 3);
     rb.pop(r);
     rb.push(r, 4);
-    let a := rb.pop(r);
-    let b := rb.pop(r);
-    let c := rb.pop(r);
+    let a : ?Int := rb.pop(r);
+    let b : ?Int := rb.pop(r);
+    let c : ?Int := rb.pop(r);
     t.expect(a = .Some(2) and b = .Some(3) and c = .Some(4)).toBe(.True)
   ));
   t.it("is_empty - false when non-empty", () => (

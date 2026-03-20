@@ -33,7 +33,7 @@ t.describe("Iter.consume", () => (
     t.expect(m.any(src.range(0, 5), (x) => x > 100)).toBe(.False)
   ));
   t.it("any - false on empty", () => (
-    t.expect(m.any(src.empty(), (_) => .True)).toBe(.False)
+    t.expect(m.any(src.empty(), (_ : Int) => .True)).toBe(.False)
   ));
   t.it("all - true when all match", () => (
     t.expect(m.all(src.range(0, 5), (x) => x < 10)).toBe(.True)
@@ -42,7 +42,7 @@ t.describe("Iter.consume", () => (
     t.expect(m.all(src.range(0, 5), (x) => x < 3)).toBe(.False)
   ));
   t.it("all - true on empty", () => (
-    t.expect(m.all(src.empty(), (_) => .False)).toBe(.True)
+    t.expect(m.all(src.empty(), (_ : Int) => .False)).toBe(.True)
   ));
   t.it("find - returns first match", () => (
     t.expect(m.find(src.range(0, 5), (x) => x > 2)).toBe(.Some(3))
@@ -58,7 +58,7 @@ t.describe("Iter.consume", () => (
   ));
   t.it("for_each - executes for every element", () => (
     let mut n := 0;
-    m.for_each(src.range(0, 5), (_) => (n <- n + 1));
+    m.for_each(src.range(0, 5), (_ : Int) => (n <- n + 1));
     t.expect(n).toBe(5)
   ))
 ));

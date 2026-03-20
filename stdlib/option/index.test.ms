@@ -54,11 +54,11 @@ t.describe("Option", () => (
     t.expect(result).toBe(.Some(5))
   ));
   t.it("and_then - Some with function returning None", () => (
-    let result := opt.and_then(.Some(4), (_) => .None);
+    let result := opt.and_then(.Some(4), (_ : Int) => .None);
     t.expect(result).toBe(.None)
   ));
   t.it("and_then - None stays None", () => (
-    let result := opt.and_then(.None, (x) => .Some(x));
+    let result := opt.and_then(.None, (x : Int) => .Some(x));
     t.expect(result).toBe(.None)
   ));
   t.it("filter - predicate passes", () => (
@@ -146,11 +146,11 @@ t.describe("Option", () => (
     t.expect(result).toBe(.None)
   ));
   t.it("zip_with - both Some applies function", () => (
-    let result := opt.zip_with(.Some(3), .Some(4), (a, b) => a + b);
+    let result := opt.zip_with(.Some(3), .Some(4), (a : Int, b : Int) => a + b);
     t.expect(result).toBe(.Some(7))
   ));
   t.it("zip_with - first None returns None", () => (
-    let result := opt.zip_with(.None, .Some(4), (a, b) => a + b);
+    let result := opt.zip_with(.None, .Some(4), (a : Int, b : Int) => a + b);
     t.expect(result).toBe(.None)
   ));
   t.it("to_result - Some becomes Ok", () => (

@@ -3,9 +3,9 @@
 /// Apply `f` to each element, yielding transformed values.
 export let map ['a, 'b] := (iter, f) =>
   .{ next := () => (
-    let v := iter.next();
+    let v : ?'a := iter.next();
     match v (
-      .Some(x) => .Some(f(x))
+      .Some(x : 'a) => .Some(f(x))
       | .None => .None
     )
   ) };
@@ -13,9 +13,9 @@ export let map ['a, 'b] := (iter, f) =>
 /// Yield only elements for which `pred` returns `.True`.
 export let filter ['a] := (iter, pred) => (
   let step := () => (
-    let v := iter.next();
+    let v : ?'a := iter.next();
     match v (
-      .Some(x) => (.Some(x) if pred(x) | step() if _)
+      .Some(x : 'a) => (.Some(x) if pred(x) | step() if _)
       | .None => .None
     )
   );
@@ -44,12 +44,12 @@ export let skip ['a] := (iter, n) => (
 /// Yield pairs of corresponding elements, stopping when either iterator ends.
 export let zip ['a, 'b] := (a, b) =>
   .{ next := () => (
-    let va := a.next();
+    let va : ?'a := a.next();
     match va (
-      .Some(x) => (
-        let vb := b.next();
+      .Some(x : 'a) => (
+        let vb : ?'b := b.next();
         match vb (
-          .Some(y) => .Some((x, y))
+          .Some(y : 'b) => .Some((x, y))
           | .None => .None
         )
       )

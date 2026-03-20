@@ -8,7 +8,7 @@ use msc_ast::expr::{
 };
 use msc_ast::lit::Lit;
 use msc_bc::Opcode;
-use msc_sema::def::{DefId, DefKind};
+use msc_sema::def::DefKind;
 use msc_sema::types::Type;
 use msc_shared::Span;
 use msc_shared::Symbol;
@@ -139,9 +139,7 @@ pub fn emit_expr_tail(
             // direct name reference - no runtime field access needed.
             if let Some(&def_id) = em.expr_defs().get(&expr_idx) {
                 if let Some(&fn_id) = em.fn_map.get(&def_id) {
-                    let cv = ConstValue::Int(i64::from(fn_id));
-                    let i = em.cp.intern(&cv)?;
-                    fc.fe.emit_ld_cst(i);
+                    fc.fe.emit_cls_new(fn_id);
                     return Ok(true);
                 }
                 if let Some(&ffi_idx) = em.foreign_map.get(&def_id) {
@@ -214,9 +212,7 @@ fn emit_name(
         });
     };
     if let Some(&fn_id) = em.fn_map.get(&def_id) {
-        let cv = ConstValue::Int(i64::from(fn_id));
-        let i = em.cp.intern(&cv)?;
-        fc.fe.emit_ld_cst(i);
+        fc.fe.emit_cls_new(fn_id);
         return Ok(true);
     }
     if let Some(&ffi_idx) = em.foreign_map.get(&def_id) {
@@ -241,23 +237,14 @@ fn emit_name(
         }
         return Ok(true);
     }
-    // Global bindings from dependency modules (non-function module-level lets).
-    if em.global_map.contains_key(&def_id) {
-        // If the global belongs to a dep whose record is already packed into a
-        // local slot, use `ld.loc M` + `rec.get N` per the spec (§ Globals).
-        if let Some((dep_idx, field_index)) = find_dep_field(em, def_id)
-            && let Some(&module_slot) = em.dep_module_slots.get(&dep_idx)
-        {
-            fc.fe.emit_ld_import(module_slot, field_index);
-        } else {
-            fc.fe.emit_ld_glb(em.global_map[&def_id]);
-        }
+    // Global bindings: direct LD_GLB access.
+    if let Some(&slot) = em.global_map.get(&def_id) {
+        fc.fe.emit_ld_glb(slot);
         return Ok(true);
     }
-    // Import aliases: construct a module record from the module's exports.
     let def_info = em.sema.defs.iter().find(|d| d.id == def_id);
     if let Some(info) = def_info
-        && info.kind == DefKind::Import
+        && (info.kind == DefKind::Import || em.let_import_defs.contains(&def_id))
         && let Some(ty_idx) = info.ty_info.ty
     {
         return emit_module_record(em, fc, ty_idx);
@@ -265,18 +252,6 @@ fn emit_name(
     Err(EmitError::UnsupportedFeature {
         desc: format!("unresolved local `{}`", em.interner.resolve(name)).into(),
     })
-}
-
-/// Returns the `(dep_idx, field_index)` for a `DefId` registered in `dep_global_fields`.
-fn find_dep_field(em: &Emitter<'_>, did: DefId) -> Option<(usize, u32)> {
-    for (&dep_idx, fields) in &em.dep_global_fields {
-        for &(field_did, field_index) in fields {
-            if field_did == did {
-                return Some((dep_idx, field_index));
-            }
-        }
-    }
-    None
 }
 
 /// Construct a module record at runtime from its type's fields.
@@ -301,9 +276,7 @@ fn emit_module_record(
         for def in &em.sema.defs {
             if def.name == field_name && def.exported {
                 if let Some(&fn_id) = em.fn_map.get(&def.id) {
-                    let cv = ConstValue::Int(i64::from(fn_id));
-                    let i = em.cp.intern(&cv)?;
-                    fc.fe.emit_ld_cst(i);
+                    fc.fe.emit_cls_new(fn_id);
                     emitted = true;
                     break;
                 }
@@ -316,15 +289,9 @@ fn emit_module_record(
                 }
                 // Value bindings from dep modules stored as globals.
                 if matches!(def.kind, DefKind::Let | DefKind::Var)
-                    && em.global_map.contains_key(&def.id)
+                    && let Some(&slot) = em.global_map.get(&def.id)
                 {
-                    if let Some((dep_idx, field_index)) = find_dep_field(em, def.id)
-                        && let Some(&module_slot) = em.dep_module_slots.get(&dep_idx)
-                    {
-                        fc.fe.emit_ld_import(module_slot, field_index);
-                    } else {
-                        fc.fe.emit_ld_glb(em.global_map[&def.id]);
-                    }
+                    fc.fe.emit_ld_glb(slot);
                     emitted = true;
                     break;
                 }

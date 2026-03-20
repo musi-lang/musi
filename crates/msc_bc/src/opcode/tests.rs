@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use super::{Format, Opcode, format, instr_len};
 
-// All 79 defined opcodes with their expected formats.
+// All 81 defined opcodes with their expected formats.
 const OPCODE_FORMAT_TABLE: &[(Opcode, Format)] = &[
     // §4.1 Data Movement
     (Opcode::LD_CONST, Format::FI16),
@@ -13,10 +13,12 @@ const OPCODE_FORMAT_TABLE: &[(Opcode, Format)] = &[
     (Opcode::LD_NONE, Format::F0),
     (Opcode::LD_LOC, Format::FI8),
     (Opcode::LD_UPV, Format::FI8),
+    (Opcode::LD_GLB, Format::FI8),
     (Opcode::LD_ADDR, Format::FI8),
     (Opcode::LD_IND, Format::F0),
     (Opcode::ST_LOC, Format::FI8),
     (Opcode::ST_UPV, Format::FI8),
+    (Opcode::ST_GLB, Format::FI8),
     (Opcode::ST_IND, Format::F0),
     // §4.2 Stack
     (Opcode::POP, Format::F0),
@@ -101,7 +103,7 @@ const OPCODE_FORMAT_TABLE: &[(Opcode, Format)] = &[
     (Opcode::GC_UNPIN, Format::F0),
     // §4.19 Foreign
     (Opcode::FFI_CALL, Format::FI8x2),
-    // §4.20 Misc
+    // §4.21 Misc
     (Opcode::NOP, Format::F0),
     (Opcode::PANIC, Format::F0),
 ];
@@ -110,8 +112,8 @@ const OPCODE_FORMAT_TABLE: &[(Opcode, Format)] = &[
 fn test_opcode_count() {
     assert_eq!(
         OPCODE_FORMAT_TABLE.len(),
-        79,
-        "expected 79 opcodes, got {}",
+        81,
+        "expected 81 opcodes, got {}",
         OPCODE_FORMAT_TABLE.len()
     );
 }
@@ -160,7 +162,7 @@ fn test_instr_len_matches_format() {
 #[test]
 fn test_unassigned_opcodes_are_f0() {
     let assigned: HashSet<u8> = OPCODE_FORMAT_TABLE.iter().map(|(op, _)| op.0).collect();
-    for byte in 0x4Fu8..=0xFFu8 {
+    for byte in 0x51u8..=0xFFu8 {
         if !assigned.contains(&byte) {
             assert_eq!(
                 format(byte),
@@ -194,7 +196,7 @@ fn test_display_known_opcodes() {
 
 #[test]
 fn test_display_unknown_opcode() {
-    assert_eq!(format!("{}", Opcode(0x50)), "0x50");
+    assert_eq!(format!("{}", Opcode(0x51)), "0x51");
     assert_eq!(format!("{}", Opcode(0xFF)), "0xFF");
 }
 

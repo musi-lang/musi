@@ -7,7 +7,6 @@ use msc_sema::types::Type;
 use msc_sema::unify::types_match;
 use msc_shared::Symbol;
 
-use crate::const_pool::ConstValue;
 use crate::error::EmitError;
 use crate::error::EmitResult;
 
@@ -43,7 +42,7 @@ pub(super) fn class_method_index(
 /// For each constraint, builds a product of method fn-id values from the
 /// concrete instance that satisfies the constraint at this call site.
 pub(super) fn emit_dict_for_call(
-    em: &mut Emitter<'_>,
+    em: &Emitter<'_>,
     fc: &mut FnCtx,
     callee_def: DefId,
     callee_expr: ExprIdx,
@@ -83,8 +82,7 @@ pub(super) fn emit_dict_for_call(
                     let inst_method = inst.members.iter().find(|(s, _)| s == class_sym);
                     if let Some((_, method_def)) = inst_method {
                         if let Some(&fn_id) = em.fn_map.get(method_def) {
-                            let cst_idx = em.cp.intern(&ConstValue::Int(i64::from(fn_id)))?;
-                            fc.fe.emit_ld_cst(cst_idx);
+                            fc.fe.emit_cls_new(fn_id);
                         } else {
                             return Err(EmitError::UnsupportedFeature {
                                 desc: "instance method not compiled for dict construction".into(),

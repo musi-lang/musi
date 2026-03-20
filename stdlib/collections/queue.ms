@@ -12,7 +12,7 @@ export let Queue ['a] := record { front : []'a; back : []'a };
 export let new ['a] := () => .{ front := [], back := [] };
 
 /// Add a value to the back of the queue.
-export let enqueue ['a] := (q, val) => rt.arr_push(q.back, val);
+export let enqueue ['a] := (q, val : 'a) => rt.arr_push(q.back, val);
 
 /// Remove and return the front value, or `.None` if empty.
 export let dequeue ['a] := (mut q) => (

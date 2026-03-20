@@ -109,8 +109,9 @@ fn run_test_file(path: &Path, manifest: &MusiManifest, project_root: &Path) -> T
         return TestOutcome::Error(format!("verify error: {e}"));
     }
 
-    let Ok(host) = StdHost::new(&module.foreign_fns, &module.types) else {
-        return TestOutcome::Error("host error".into());
+    let host = match StdHost::new(&module.foreign_fns, &module.types) {
+        Ok(h) => h,
+        Err(e) => return TestOutcome::Error(format!("host error: {e}")),
     };
 
     let mut vm = Vm::new(module);

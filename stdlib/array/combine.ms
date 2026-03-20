@@ -22,7 +22,7 @@ export let unzip ['a, 'b] := (arr) => (
   let mut rights := [];
   let step := (i) => (
     (
-      let pair := arr.[i];
+      let pair : ('a, 'b) := arr.[i];
       rt.arr_push(lefts, pair.0);
       rt.arr_push(rights, pair.1);
       step(i + 1)

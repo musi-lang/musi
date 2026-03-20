@@ -848,6 +848,33 @@ impl Vm {
                 self.do_call_with_stack_args(fn_id, None)
             }
 
+            // §4.21 Globals
+            Opcode::LD_GLB => {
+                let idx = usize::from(u8::try_from(operand & 0xFF).unwrap_or(u8::MAX));
+                let val = *self.globals.get(idx).ok_or_else(|| {
+                    malformed!(
+                        "ld.glb index {} out of bounds ({})",
+                        idx,
+                        self.globals.len()
+                    )
+                })?;
+                self.current_frame()?.stack.push(val);
+                Ok(StepResult::Continue)
+            }
+            Opcode::ST_GLB => {
+                let idx = usize::from(u8::try_from(operand & 0xFF).unwrap_or(u8::MAX));
+                let val = self.current_frame()?.pop()?;
+                if idx >= self.globals.len() {
+                    return Err(malformed!(
+                        "st.glb index {} out of bounds ({})",
+                        idx,
+                        self.globals.len()
+                    ));
+                }
+                self.globals[idx] = val;
+                Ok(StepResult::Continue)
+            }
+
             _ => Err(malformed!("unknown opcode {:#04x}", op.0)),
         }
     }

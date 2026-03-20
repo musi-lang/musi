@@ -32,9 +32,9 @@ t.describe("Queue", () => (
     queue.enqueue(q, 1);
     queue.enqueue(q, 2);
     queue.enqueue(q, 3);
-    let a := queue.dequeue(q);
-    let b := queue.dequeue(q);
-    let c := queue.dequeue(q);
+    let a : ?Int := queue.dequeue(q);
+    let b : ?Int := queue.dequeue(q);
+    let c : ?Int := queue.dequeue(q);
     t.expect(a = .Some(1) and b = .Some(2) and c = .Some(3)).toBe(.True)
   ));
   t.it("dequeue - len decrements", () => (
@@ -62,8 +62,8 @@ t.describe("Queue", () => (
     queue.enqueue(q, 2);
     queue.dequeue(q);
     queue.enqueue(q, 3);
-    let a := queue.dequeue(q);
-    let b := queue.dequeue(q);
+    let a : ?Int := queue.dequeue(q);
+    let b : ?Int := queue.dequeue(q);
     t.expect(a = .Some(2) and b = .Some(3)).toBe(.True)
   ));
   t.it("is_empty - false when non-empty", () => (

@@ -71,7 +71,7 @@ export let to_string := (v) => (
   )
 );
 
-let compare_int := (a, b) => (
+let compare_int := (a : Int, b : Int) => (
   .Less    if a < b
   | .Greater if a > b
   | .Equal   if _
@@ -86,13 +86,13 @@ let compare_pre_result := (a, b) => (
 
 /// Compares two Semver values, returning .Less, .Equal, or .Greater.
 export let compare := (a, b) => (
-  let maj := compare_int(a.major, b.major);
+  let maj : Ordering := compare_int(a.major, b.major);
   match maj (
     .Equal => (
-      let min := compare_int(a.minor, b.minor);
+      let min : Ordering := compare_int(a.minor, b.minor);
       match min (
         .Equal => (
-          let pat := compare_int(a.patch, b.patch);
+          let pat : Ordering := compare_int(a.patch, b.patch);
           match pat (
             .Equal => compare_pre_result(a.pre, b.pre)
             | _ => pat

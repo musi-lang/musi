@@ -30,7 +30,7 @@ let escape_str := (s) => (
 );
 
 /// Serializes a JsonValue to a compact JSON string.
-export let stringify := (value) => (
+export let stringify := (value : JsonValue) => (
   match value (
     .Null        => "null"
     | .Bool(b)   => ("true" if b | "false" if _)
@@ -52,7 +52,7 @@ export let stringify := (value) => (
       let step := (i) => (
         () if i >= len
         | (
-          let pair := pairs.[i];
+          let pair : (String, JsonValue) := pairs.[i];
           rt.arr_push(parts, f"\"{escape_str(pair.0)}\": {stringify(pair.1)}");
           step(i + 1)
         ) if _

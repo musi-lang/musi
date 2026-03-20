@@ -85,7 +85,7 @@ t.describe("Array.aggregate", () => (
     t.expect(result).toBe(.Some(5))
   ));
   t.it("reduce_arr - empty array returns None", () => (
-    let result := agg.reduce_arr([], (acc, x) => acc + x);
+    let result := agg.reduce_arr([], (acc : Int, x : Int) => acc + x);
     t.expect(result).toBe(.None)
   ));
   t.it("sum_arr - sums all elements", () => (

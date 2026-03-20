@@ -153,8 +153,8 @@ fn test_disassemble_truncated_fi24() {
 
 #[test]
 fn test_disassemble_unassigned_opcode_advances_one_byte() {
-    // 0x50 is unassigned; treated as F0 so the disassembler doesn't stall.
-    let code = vec![0x50u8, Opcode::NOP.0];
+    // 0x51 is unassigned; treated as F0 so the disassembler doesn't stall.
+    let code = vec![0x51u8, Opcode::NOP.0];
     let out = disassemble(&code);
     assert!(out.contains("0001: nop"), "got: {out}");
 }

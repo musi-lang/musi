@@ -11,7 +11,6 @@ pub struct GlobalEntry {
 
 pub const FLAG_EXPORTED: u8 = 1 << 0;
 pub const FLAG_MUTABLE: u8 = 1 << 1;
-pub const FLAG_HAS_INIT: u8 = 1 << 2;
 
 pub struct GlobalTable {
     entries: Vec<GlobalEntry>,

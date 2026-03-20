@@ -226,7 +226,7 @@ fn verify_op(op: Opcode, ip: usize, len: usize, cx: &VerifyCtx<'_>) -> VmResult<
             Ok(0)
         }
         Opcode::ST_IND => Ok(-2),
-        Opcode::ST_UPV => Ok(-1),
+        Opcode::ST_UPV | Opcode::ST_GLB => Ok(-1),
 
         // §4.6 Branch
         Opcode::BR => {
@@ -267,6 +267,7 @@ fn verify_op(op: Opcode, ip: usize, len: usize, cx: &VerifyCtx<'_>) -> VmResult<
         }
         Opcode::LD_SMI
         | Opcode::LD_ADDR
+        | Opcode::LD_GLB
         | Opcode::REC_ADDR
         | Opcode::TY_DESC
         | Opcode::OPT_NONE => Ok(1),

@@ -17,7 +17,7 @@ export let shuffle ['a] := (r, arr) => (
   let step := (i) => (
     (
       let j := rng.next_bounded(r, i, len - 1);
-      let tmp := result.[i];
+      let tmp : 'a := result.[i];
       result.[i] <- result.[j];
       result.[j] <- tmp;
       step(i + 1)

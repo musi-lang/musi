@@ -6,7 +6,7 @@ import "@std/rt" as rt;
 export let min_of ['a] := (arr) => (
   let len := rt.arr_len(arr);
   (
-    let step := (i, cur) => (
+    let step := (i, cur : 'a) => (
       (step(i + 1, arr.[i]) if arr.[i] < cur | step(i + 1, cur) if _) if i < len
       | .Some(cur) if _
     );
@@ -19,7 +19,7 @@ export let min_of ['a] := (arr) => (
 export let max_of ['a] := (arr) => (
   let len := rt.arr_len(arr);
   (
-    let step := (i, cur) => (
+    let step := (i, cur : 'a) => (
       (step(i + 1, arr.[i]) if arr.[i] > cur | step(i + 1, cur) if _) if i < len
       | .Some(cur) if _
     );
@@ -59,9 +59,9 @@ export let any_arr ['a] := (arr, pred) => (
 );
 
 /// Reduce the array left-to-right using `f`, starting from `init`.
-export let fold_arr ['a, 'b] := (arr, init, f) => (
+export let fold_arr ['a, 'b] := (arr, init : 'b, f) => (
   let len := rt.arr_len(arr);
-  let step := (i, acc) => (
+  let step := (i, acc : 'b) => (
     step(i + 1, f(acc, arr.[i])) if i < len
     | acc if _
   );
@@ -72,7 +72,7 @@ export let fold_arr ['a, 'b] := (arr, init, f) => (
 export let reduce_arr ['a] := (arr, f) => (
   let len := rt.arr_len(arr);
   (
-    let step := (i, acc) => (
+    let step := (i, acc : 'a) => (
       step(i + 1, f(acc, arr.[i])) if i < len
       | .Some(acc) if _
     );

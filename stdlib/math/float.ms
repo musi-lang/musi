@@ -39,20 +39,20 @@ export let is_infinite := (f) => rt.float_is_infinite(f);
 export let abs_float := (f) => rt.float_abs(f);
 
 /// Clamps f to the inclusive range [lo, hi].
-export let clamp_float := (val, lo, hi) => (
+export let clamp_float := (val : Float64, lo : Float64, hi : Float64) => (
   lo if val < lo
   | hi if val > hi
   | val if _
 );
 
 /// Returns the smaller of two floats.
-export let min_float := (a, b) => (
+export let min_float := (a : Float64, b : Float64) => (
   a if a < b
   | b if _
 );
 
 /// Returns the larger of two floats.
-export let max_float := (a, b) => (
+export let max_float := (a : Float64, b : Float64) => (
   a if a > b
   | b if _
 );
@@ -65,4 +65,4 @@ export let sign_float := (f) => (
 );
 
 /// Linearly interpolates between a and b by t.
-export let lerp := (a, b, t) => a + (b - a) * t;
+export let lerp := (a : Float64, b : Float64, t : Float64) => a + (b - a) * t;

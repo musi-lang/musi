@@ -41,11 +41,11 @@ t.describe("Result", () => (
     t.expect(result).toBe(0)
   ));
   t.it("unwrap_or_else - Ok returns inner value", () => (
-    let result := res.unwrap_or_else(.Ok(9), (_) => 0);
+    let result := res.unwrap_or_else(.Ok(9), (_ : String) => 0);
     t.expect(result).toBe(9)
   ));
   t.it("unwrap_or_else - Err calls function with error", () => (
-    let result := res.unwrap_or_else(.Err("x"), (_) => 99);
+    let result := res.unwrap_or_else(.Err("x"), (_ : String) => 99);
     t.expect(result).toBe(99)
   ));
   t.it("and_then - Ok applies function returning Ok", () => (
@@ -53,7 +53,7 @@ t.describe("Result", () => (
     t.expect(result).toBe(.Ok(5))
   ));
   t.it("and_then - Ok applies function returning Err", () => (
-    let result := res.and_then(.Ok(4), (_) => .Err("nope"));
+    let result := res.and_then(.Ok(4), (_ : Int) => .Err("nope"));
     t.expect(result).toBe(.Err("nope"))
   ));
   t.it("and_then - Err short-circuits", () => (
@@ -61,11 +61,11 @@ t.describe("Result", () => (
     t.expect(result).toBe(.Err("e"))
   ));
   t.it("or_else - Err calls function", () => (
-    let result := res.or_else(.Err("e"), (_) => .Ok(0));
+    let result := res.or_else(.Err("e"), (_ : String) => .Ok(0));
     t.expect(result).toBe(.Ok(0))
   ));
   t.it("or_else - Ok passes through", () => (
-    let result := res.or_else(.Ok(5), (_) => .Ok(0));
+    let result := res.or_else(.Ok(5), (_ : String) => .Ok(0));
     t.expect(result).toBe(.Ok(5))
   ));
   t.it("flat_map - Ok applies function", () => (
@@ -73,7 +73,7 @@ t.describe("Result", () => (
     t.expect(result).toBe(.Ok(9))
   ));
   t.it("flat_map - Err passes through", () => (
-    let result := res.flat_map(.Err("fail"), (x) => .Ok(x));
+    let result := res.flat_map(.Err("fail"), (x : String) => .Ok(x));
     t.expect(result).toBe(.Err("fail"))
   ));
   t.it("flatten - Ok(Ok(v)) unwraps to Ok(v)", () => (

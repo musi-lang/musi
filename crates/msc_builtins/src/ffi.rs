@@ -130,14 +130,14 @@ impl FfiTable {
         let mut resolved = Vec::with_capacity(entries.len());
 
         for entry in entries {
-            // Route msc_rt builtins via dedicated lookup.
-            if entry.lib_name.as_ref() == "msc_rt" {
-                if let Some(builtin) = lookup_msc_rt(&entry.ext_name) {
+            // Route musi_rt builtins via dedicated lookup.
+            if entry.lib_name.as_ref() == "musi_rt" {
+                if let Some(builtin) = lookup_musi_rt(&entry.ext_name) {
                     resolved.push(FfiEntry::Builtin(builtin));
                     continue;
                 }
                 return Err(VmError::Malformed {
-                    desc: format!("unknown msc_rt builtin: {}", entry.ext_name).into_boxed_str(),
+                    desc: format!("unknown musi_rt builtin: {}", entry.ext_name).into_boxed_str(),
                 });
             }
 
@@ -668,7 +668,7 @@ fn read_scalar_from_buf(buf: &[u8], offset: usize, size: usize, tag: u8) -> Valu
     }
 }
 
-fn lookup_msc_rt(ext_name: &str) -> Option<BuiltinFn> {
+fn lookup_musi_rt(ext_name: &str) -> Option<BuiltinFn> {
     match ext_name {
         "show" => Some(builtin_show),
         "str_cat" => Some(builtin_str_cat),

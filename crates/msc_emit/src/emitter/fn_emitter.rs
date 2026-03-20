@@ -568,40 +568,18 @@ impl FnEmitter {
         u32::try_from(self.code.len()).map_err(|_| EmitError::FunctionTooLarge)
     }
 
-    /// Load a field from an imported dep's module record: `ld.loc M` + `rec.get N`.
-    pub fn emit_ld_import(&mut self, module_slot: u32, field: u32) {
-        let ms = u8::try_from(module_slot).unwrap_or(u8::MAX);
-        let fi = u8::try_from(field).unwrap_or(u8::MAX);
-        encode_fi8(&mut self.code, Opcode::LD_LOC, ms);
-        self.push_n(1);
-        encode_fi8(&mut self.code, Opcode::REC_GET, fi);
-        // REC_GET: net 0 (pop record, push field value)
-    }
-
-    /// Load a global: `ld.loc 0` (module record) + `rec.get field`.
+    /// Load a global variable by slot index.
     pub fn emit_ld_glb(&mut self, slot: u32) {
-        let field = u8::try_from(slot).unwrap_or(u8::MAX);
-        encode_fi8(&mut self.code, Opcode::LD_LOC, 0);
+        let idx = u8::try_from(slot).unwrap_or(u8::MAX);
+        encode_fi8(&mut self.code, Opcode::LD_GLB, idx);
         self.push_n(1);
-        encode_fi8(&mut self.code, Opcode::REC_GET, field);
-        // REC_GET: net 0 (pop record, push field value)
     }
 
-    /// Store a global: save value to temp, load module record, reload value, rec.set.
+    /// Store a global variable by slot index.
     pub fn emit_st_glb(&mut self, slot: u32) {
-        // Stack: [value]. Need [record, value] for REC_SET.
-        let field = u8::try_from(slot).unwrap_or(u8::MAX);
-        let temp = u32::from(self.local_count);
-        self.local_count += 1;
-        let temp_u8 = u8::try_from(temp).unwrap_or(u8::MAX);
-        encode_fi8(&mut self.code, Opcode::ST_LOC, temp_u8);
+        let idx = u8::try_from(slot).unwrap_or(u8::MAX);
+        encode_fi8(&mut self.code, Opcode::ST_GLB, idx);
         self.pop_n(1);
-        encode_fi8(&mut self.code, Opcode::LD_LOC, 0);
-        self.push_n(1);
-        encode_fi8(&mut self.code, Opcode::LD_LOC, temp_u8);
-        self.push_n(1);
-        encode_fi8(&mut self.code, Opcode::REC_SET, field);
-        self.pop_n(2);
     }
 }
 

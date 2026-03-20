@@ -11,10 +11,10 @@ import "@std/cmp/ordering";
 export let Heap ['a] := record { data : []'a; cmp : ('a, 'a) -> Ordering };
 
 /// Create an empty heap using `cmp` to order elements.
-export let new ['a] := (cmp) => .{ data := [], cmp := cmp };
+export let new ['a] := (cmp : ('a, 'a) -> Ordering) => .{ data := [], cmp := cmp };
 
 let swap ['a] := (mut data, i, j) => (
-  let tmp := data.[i];
+  let tmp : 'a := data.[i];
   data.[i] <- data.[j];
   data.[j] <- tmp
 );
@@ -49,7 +49,7 @@ let sift_down ['a] := (data, idx, len, cmp) => (
 );
 
 /// Insert a value into the heap.
-export let push ['a] := (h, val) => (
+export let push ['a] := (h, val : 'a) => (
   rt.arr_push(h.data, val);
   sift_up(h.data, rt.arr_len(h.data) - 1, h.cmp)
 );
@@ -59,7 +59,7 @@ export let pop ['a] := (h) => (
   let n := rt.arr_len(h.data);
   (
     (
-      let top := h.data.[0];
+      let top : 'a := h.data.[0];
       swap(h.data, 0, n - 1);
       rt.arr_pop(h.data);
       sift_down(h.data, 0, n - 1, h.cmp);

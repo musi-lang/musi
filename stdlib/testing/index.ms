@@ -3,6 +3,7 @@
 /// Low-level test runner (describe, it, run, fail).
 export let runner := import "./runner";
 
+/// Assertion module.
 let expect_mod := import "./expect";
 
 /// Creates a fluent matcher for the given actual value.

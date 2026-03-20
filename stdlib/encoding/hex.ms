@@ -15,7 +15,7 @@ let nibble_to_rune_upper := (nibble) => (
   | rt.rune_from_int(65 + nibble - 10) if _
 );
 
-let rune_to_nibble := (r, pos) => (
+let rune_to_nibble := (r, pos) : Result of Int, DecodeError => (
   let cp := rt.rune_to_int(r);
   .Ok(cp - 48) if (cp >= 48 and cp <= 57)
   | .Ok(cp - 97 + 10) if (cp >= 97 and cp <= 102)

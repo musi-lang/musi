@@ -15,10 +15,10 @@ export let Deque ['a] := record { front : []'a; back : []'a };
 export let new ['a] := () => .{ front := [], back := [] };
 
 /// Push a value onto the front of the deque.
-export let push_front ['a] := (d, val) => rt.arr_push(d.front, val);
+export let push_front ['a] := (d, val : 'a) => rt.arr_push(d.front, val);
 
 /// Push a value onto the back of the deque.
-export let push_back ['a] := (d, val) => rt.arr_push(d.back, val);
+export let push_back ['a] := (d, val : 'a) => rt.arr_push(d.back, val);
 
 /// Remove and return the front value, or `.None` if empty.
 export let pop_front ['a] := (mut d) => (

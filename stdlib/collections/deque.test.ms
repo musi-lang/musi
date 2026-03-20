@@ -33,8 +33,8 @@ t.describe("Deque", () => (
     deque.push_back(d, 1);
     deque.push_back(d, 2);
     deque.push_back(d, 3);
-    let a := deque.pop_front(d);
-    let b := deque.pop_front(d);
+    let a : ?Int := deque.pop_front(d);
+    let b : ?Int := deque.pop_front(d);
     t.expect(a = .Some(1) and b = .Some(2)).toBe(.True)
   ));
   t.it("push_front/pop_front - stack order", () => (
@@ -42,8 +42,8 @@ t.describe("Deque", () => (
     deque.push_front(d, 1);
     deque.push_front(d, 2);
     deque.push_front(d, 3);
-    let a := deque.pop_front(d);
-    let b := deque.pop_front(d);
+    let a : ?Int := deque.pop_front(d);
+    let b : ?Int := deque.pop_front(d);
     t.expect(a = .Some(3) and b = .Some(2)).toBe(.True)
   ));
   t.it("push_back/pop_back - stack order", () => (

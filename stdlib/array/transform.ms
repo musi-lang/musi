@@ -8,8 +8,8 @@ export let dedup ['a] := (arr) => (
   let mut result := [];
   let step := (i) => (
     (
-      let x := arr.[i];
-      let prev := arr.[i - 1];
+      let x : 'a := arr.[i];
+      let prev : 'a := arr.[i - 1];
       (rt.arr_push(result, x) if not (x = prev) | () if _);
       step(i + 1)
     ) if i < len
@@ -95,7 +95,7 @@ export let reverse_copy ['a] := (arr) => (
 );
 
 /// Insert `sep` between every pair of adjacent elements.
-export let intersperse ['a] := (arr, sep) => (
+export let intersperse ['a] := (arr, sep : 'a) => (
   let len := rt.arr_len(arr);
   let mut result := [];
   let step := (i) => (
@@ -110,9 +110,9 @@ export let intersperse ['a] := (arr, sep) => (
 );
 
 /// Fold `f` left over the array, emitting each intermediate accumulator.
-export let scan ['a, 'b] := (arr, init, f) => (
+export let scan ['a, 'b] := (arr, init : 'b, f) => (
   let len := rt.arr_len(arr);
-  let mut acc := init;
+  let mut acc : 'b := init;
   let mut result := [];
   let step := (i) => (
     (

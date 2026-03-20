@@ -4,7 +4,7 @@ import "@std/rt" as rt;
 
 let mut suites := [];
 let mut current_tests := [];
-let mut current_failure := .None;
+let mut current_failure : ?String := .None;
 
 /// Registers a named test suite; test cases inside suite_fn are collected via `it`.
 export let describe := (name, suite_fn) => (
@@ -22,7 +22,7 @@ export let it := (name, test_fn) => (
 );
 
 /// Records a test failure with the given message; only the first failure per test is kept.
-export let fail := (msg) => (
+export let fail := (msg : String) => (
   (current_failure <- .Some(msg) if current_failure = .None | () if _)
 );
 

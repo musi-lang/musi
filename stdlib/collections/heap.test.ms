@@ -63,9 +63,9 @@ t.describe("Heap", () => (
     heap.push(h, 7);
     heap.push(h, 1);
     heap.push(h, 5);
-    let a := heap.pop(h);
-    let b := heap.pop(h);
-    let c := heap.pop(h);
+    let a : ?Int := heap.pop(h);
+    let b : ?Int := heap.pop(h);
+    let c : ?Int := heap.pop(h);
     t.expect(a = .Some(1) and b = .Some(2) and c = .Some(5)).toBe(.True)
   ));
   t.it("push/pop - duplicates handled correctly", () => (
@@ -73,9 +73,9 @@ t.describe("Heap", () => (
     heap.push(h, 3);
     heap.push(h, 3);
     heap.push(h, 1);
-    let a := heap.pop(h);
-    let b := heap.pop(h);
-    let c := heap.pop(h);
+    let a : ?Int := heap.pop(h);
+    let b : ?Int := heap.pop(h);
+    let c : ?Int := heap.pop(h);
     t.expect(a = .Some(1) and b = .Some(3) and c = .Some(3)).toBe(.True)
   ));
   t.it("max_cmp - max-heap pops largest first", () => (

@@ -134,17 +134,10 @@ pub struct Emitter<'a> {
     dep_global_inits: Vec<(ExprIdx, usize, DefId, u32)>,
     /// Top-level side-effect statements from dep modules (e.g., assignments).
     dep_side_effects: Vec<(ExprIdx, usize)>,
-    /// `dep_idx` → local slot in the entry function holding that dep's module record.
-    ///
-    /// Populated during `emit_script_entry` after all dep globals are initialised.
-    /// Used by expression emission to lower imported-global loads to
-    /// `ld.loc module_slot` + `rec.get field` instead of the flat `LD_GLB` path.
-    pub(crate) dep_module_slots: HashMap<usize, u32>,
-    /// `dep_idx` → ordered list of `(DefId, field_index_within_module_record)`.
-    ///
-    /// Built incrementally by `register_global` when `active_dep` is `Some`.
-    /// The field order matches the `TUP_NEW` constructed in `emit_script_entry`.
-    pub(crate) dep_global_fields: HashMap<usize, Vec<(DefId, u32)>>,
+    /// `DefId`s for `let x := import "..."` bindings. These have `DefKind::Let`
+    /// but should be treated like `DefKind::Import` during name resolution so
+    /// that `emit_name` constructs a module record from the dep's exports.
+    pub(crate) let_import_defs: HashSet<DefId>,
 }
 
 /// Per-function emission context.
@@ -240,8 +233,7 @@ impl<'a> Emitter<'a> {
             next_global: 0,
             dep_global_inits: vec![],
             dep_side_effects: vec![],
-            dep_module_slots: HashMap::new(),
-            dep_global_fields: HashMap::new(),
+            let_import_defs: HashSet::new(),
         }
     }
 
@@ -927,12 +919,17 @@ impl<'a> Emitter<'a> {
         let Some((fn_params, fn_body)) = extract_fn(value_idx, self.ast) else {
             // Non-function binding: register as a global so dep functions can
             // reference it at runtime via LD_GLB.
-            // Skip imports and record defs - they don't produce runtime values
-            // and are handled via sub-module record construction instead.
-            if matches!(
-                self.ast.exprs[value_idx],
-                Expr::Import { .. } | Expr::RecordDef { .. }
-            ) {
+            // Record defs don't produce runtime values.
+            if matches!(self.ast.exprs[value_idx], Expr::RecordDef { .. }) {
+                return Ok(());
+            }
+            // `let x := import "..."` bindings: record the DefId so emit_name
+            // treats them like DefKind::Import (constructs a module record).
+            if matches!(self.ast.exprs[value_idx], Expr::Import { .. }) {
+                let binding_span = pat_span(fields.pat, self.ast);
+                if let Some(&did) = self.pat_defs().get(&binding_span) {
+                    let _ = self.let_import_defs.insert(did);
+                }
                 return Ok(());
             }
             let binding_span = pat_span(fields.pat, self.ast);
@@ -970,14 +967,6 @@ impl<'a> Emitter<'a> {
         self.next_global += 1;
         let _ = self.global_map.insert(did, slot);
 
-        // Track per-dep-module field ownership so that expression emission can
-        // lower cross-module global loads to `ld.loc M` + `rec.get N`.
-        if let Some(dep_idx) = self.active_dep {
-            let fields = self.dep_global_fields.entry(dep_idx).or_default();
-            let field_index = u32::try_from(fields.len()).unwrap_or(u32::MAX);
-            fields.push((did, field_index));
-        }
-
         let binding_name = pat_name_str(pat, self.ast, self.interner);
         let name_stridx = self.string_table.intern_str(&binding_name)?;
         let is_exported = self
@@ -993,7 +982,6 @@ impl<'a> Emitter<'a> {
         if kind == BindKind::Mut {
             flags |= global_table::FLAG_MUTABLE;
         }
-        flags |= global_table::FLAG_HAS_INIT;
         let _ = self.global_table.add(GlobalEntry {
             name_stridx,
             type_ref: 0,
@@ -1042,32 +1030,6 @@ impl<'a> Emitter<'a> {
             if produced {
                 fc.fe.emit_st_glb(slot);
             }
-        }
-
-        // Per-dep module records: pack each dep's globals into a TUP_NEW and store
-        // in a local slot so imports lower to `ld.loc M` + `rec.get N`.
-        let dep_field_snapshot: Vec<(usize, Vec<(DefId, u32)>)> = self
-            .dep_global_fields
-            .iter()
-            .map(|(&dep_idx, fields)| (dep_idx, fields.clone()))
-            .collect();
-        for (dep_idx, fields) in dep_field_snapshot {
-            if fields.is_empty() {
-                continue;
-            }
-            let mut ordered = fields;
-            ordered.sort_by_key(|&(_, fi)| fi);
-            for (did, _) in &ordered {
-                fc.fe.emit_ld_glb(self.global_map[did]);
-            }
-            let field_count = u32::try_from(ordered.len())
-                .map_err(|_| EmitError::overflow("dep module record fields"))?;
-            let stack_pop = i32::try_from(ordered.len())
-                .map_err(|_| EmitError::overflow("dep module record fields"))?;
-            fc.fe.emit_mk_prd(field_count, stack_pop)?;
-            let module_slot = fc.fe.alloc_local();
-            fc.fe.emit_st_loc(module_slot);
-            let _ = self.dep_module_slots.insert(dep_idx, module_slot);
         }
 
         // Emit top-level side-effect statements from dep modules

@@ -9,7 +9,7 @@ export let Stack ['a] := record { data : []'a };
 export let new ['a] := () => .{ data := [] };
 
 /// Push a value onto the top of the stack.
-export let push ['a] := (s, val) => rt.arr_push(s.data, val);
+export let push ['a] := (s, val : 'a) => rt.arr_push(s.data, val);
 
 /// Remove and return the top value, or `.None` if empty.
 export let pop ['a] := (s) => rt.arr_pop(s.data);

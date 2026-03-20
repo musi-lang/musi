@@ -59,7 +59,7 @@ export let insertion_sort ['a] := (arr, cmp) => (
   let mut sorted := rt.arr_slice(arr, 0, len);
   let outer := (i) => (
     (
-      let key := sorted.[i];
+      let key : 'a := sorted.[i];
       let inner := (j) => (
         (
           sorted.[j + 1] <- sorted.[j];
