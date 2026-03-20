@@ -28,7 +28,8 @@ pub fn exec_str_len(frame: &mut Frame, heap: &Heap) -> VmResult {
     let s = heap
         .get_string(ptr)
         .map_err(|_| malformed!("str.len: value is not a string"))?;
-    let len = u64::try_from(s.chars().count()).unwrap_or(u64::MAX);
-    frame.stack.push(Value::from_nat(len));
+    let len = s.chars().count();
+    let n = i64::try_from(len).unwrap_or(i64::MAX);
+    frame.stack.push(Value::from_int(n));
     Ok(())
 }

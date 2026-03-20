@@ -11,11 +11,8 @@ use crate::vm::Frame;
 
 // Type ID constants
 const TAG_TY_UNIT: u16 = 0x01;
-const TAG_TY_BOOL: u16 = 0x02;
 const TAG_TY_I64: u16 = 0x06;
-const TAG_TY_U64: u16 = 0x0A;
 const TAG_TY_F64: u16 = 0x0C;
-const TAG_TY_RUNE: u16 = 0x0D;
 const TAG_TY_FN: u16 = 0x12;
 const TAG_TY_UNKNOWN: u16 = 0xFFFF;
 const TAG_TY_UNKNOWN_32: u32 = 0xFFFF_FFFF;
@@ -31,10 +28,7 @@ pub fn value_type_id(val: Value, heap: &Heap) -> u16 {
     match () {
         () if val.is_float() => TAG_TY_F64,
         () if val.is_int() => TAG_TY_I64,
-        () if val.is_nat() => TAG_TY_U64,
-        () if val.is_bool() => TAG_TY_BOOL,
         () if val.is_unit() => TAG_TY_UNIT,
-        () if val.is_rune() => TAG_TY_RUNE,
         () if val.is_fn() => TAG_TY_FN,
         () => val
             .as_ref()
@@ -51,10 +45,7 @@ pub fn exec_ty_of(frame: &mut Frame, heap: &Heap) -> VmResult {
     let type_id: u32 = match () {
         () if val.is_float() => u32::from(TAG_TY_F64),
         () if val.is_int() => u32::from(TAG_TY_I64),
-        () if val.is_nat() => u32::from(TAG_TY_U64),
-        () if val.is_bool() => u32::from(TAG_TY_BOOL),
         () if val.is_unit() => u32::from(TAG_TY_UNIT),
-        () if val.is_rune() => u32::from(TAG_TY_RUNE),
         () if val.is_fn() => u32::from(TAG_TY_FN),
         () => val
             .as_ref()
@@ -62,7 +53,7 @@ pub fn exec_ty_of(frame: &mut Frame, heap: &Heap) -> VmResult {
             .and_then(|ptr| heap.get(ptr).ok())
             .map_or(TAG_TY_UNKNOWN_32, HeapObject::type_id),
     };
-    frame.stack.push(Value::from_nat(u64::from(type_id)));
+    frame.stack.push(Value::from_int(i64::from(type_id)));
     Ok(())
 }
 
@@ -100,14 +91,17 @@ pub fn exec_ty_cast(frame: &mut Frame, types: &[LoadedType], heap: &Heap) -> VmR
         () if val.is_unit() => type_tag_val == type_tag::TAG_UNIT,
         () if val.is_int() => matches!(
             type_tag_val,
-            type_tag::TAG_I8 | type_tag::TAG_I16 | type_tag::TAG_I32 | type_tag::TAG_I64
+            type_tag::TAG_I8
+                | type_tag::TAG_I16
+                | type_tag::TAG_I32
+                | type_tag::TAG_I64
+                | type_tag::TAG_U8
+                | type_tag::TAG_U16
+                | type_tag::TAG_U32
+                | type_tag::TAG_U64
+                | type_tag::TAG_BOOL
+                | type_tag::TAG_RUNE
         ),
-        () if val.is_nat() => matches!(
-            type_tag_val,
-            type_tag::TAG_U8 | type_tag::TAG_U16 | type_tag::TAG_U32 | type_tag::TAG_U64
-        ),
-        () if val.is_bool() => type_tag_val == type_tag::TAG_BOOL,
-        () if val.is_rune() => type_tag_val == type_tag::TAG_RUNE,
         () if val.is_fn() => type_tag_val == type_tag::TAG_FN,
         () => val
             .as_ref()

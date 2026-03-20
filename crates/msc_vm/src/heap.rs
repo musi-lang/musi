@@ -76,8 +76,6 @@ pub enum HeapPayload {
     Str { type_id: u32, data: Box<str> },
     /// Wide signed integer that does not fit in the inline 48-bit payload.
     BoxedInt(i64),
-    /// Wide unsigned integer that does not fit in the inline 48-bit payload.
-    BoxedNat(i64),
     /// Arbitrary-precision integer stored as two's complement big-endian bytes.
     BigInt(Box<[u8]>),
     /// Arena region: a block of values that can be bulk-freed.
@@ -420,21 +418,6 @@ impl Heap {
         let obj = HeapObject {
             gc_flags: 0,
             payload: HeapPayload::BoxedInt(n),
-        };
-        u64::try_from(self.alloc_flat(obj)).expect("heap index fits u64")
-    }
-
-    /// Allocate a heap-boxed wide unsigned integer. Returns the flat pointer.
-    ///
-    /// The u64 value is stored as i64 via bit reinterpretation.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the heap pointer exceeds `u64::MAX`.
-    pub fn alloc_wide_nat(&mut self, n: u64) -> u64 {
-        let obj = HeapObject {
-            gc_flags: 0,
-            payload: HeapPayload::BoxedNat(n.cast_signed()),
         };
         u64::try_from(self.alloc_flat(obj)).expect("heap index fits u64")
     }
@@ -986,7 +969,6 @@ fn object_refs(payload: &HeapPayload) -> Vec<usize> {
         HeapPayload::Upvalue(UpvalueCell::Open { .. })
         | HeapPayload::Str { .. }
         | HeapPayload::BoxedInt(_)
-        | HeapPayload::BoxedNat(_)
         | HeapPayload::BigInt(_) => vec![],
         HeapPayload::Arena { slots } => slots.iter().filter_map(|v| v.try_as_ref()).collect(),
     }
@@ -1033,7 +1015,6 @@ fn patch_payload(payload: &mut HeapPayload, forwarding: &[Option<usize>], nurser
         HeapPayload::Upvalue(UpvalueCell::Open { .. })
         | HeapPayload::Str { .. }
         | HeapPayload::BoxedInt(_)
-        | HeapPayload::BoxedNat(_)
         | HeapPayload::BigInt(_) => {}
     }
 }

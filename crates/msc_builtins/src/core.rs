@@ -93,7 +93,13 @@ fn get_str(val: Value, heap: &Heap) -> VmResult<&str> {
 }
 
 fn get_rune(val: Value) -> VmResult<char> {
-    val.as_rune()
+    let n = val.as_int()?;
+    let code = u32::try_from(n).map_err(|_| VmError::Malformed {
+        desc: "rune codepoint out of u32 range".into(),
+    })?;
+    char::from_u32(code).ok_or_else(|| VmError::Malformed {
+        desc: "invalid rune codepoint".into(),
+    })
 }
 
 fn arg(args: &[Value], idx: usize) -> VmResult<Value> {
@@ -129,7 +135,7 @@ fn str_at(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
         index: idx,
         len: s.chars().count(),
     })?;
-    Ok(Value::from_rune(c))
+    Ok(Value::from_int(i64::from(u32::from(c))))
 }
 
 fn str_slice(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
@@ -243,7 +249,10 @@ fn str_repeat(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
 
 fn str_chars(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     let s = get_str(arg(args, 0)?, heap)?;
-    let runes: Vec<Value> = s.chars().map(Value::from_rune).collect();
+    let runes: Vec<Value> = s
+        .chars()
+        .map(|c| Value::from_int(i64::from(u32::from(c))))
+        .collect();
     let arr_ptr = heap.alloc_array(0, runes);
     Ok(Value::from_ref(arr_ptr))
 }
@@ -546,13 +555,13 @@ fn rune_is_whitespace(args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
 fn rune_to_upper(args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
     let c = get_rune(arg(args, 0)?)?;
     let upper = c.to_uppercase().next().unwrap_or(c);
-    Ok(Value::from_rune(upper))
+    Ok(Value::from_int(i64::from(u32::from(upper))))
 }
 
 fn rune_to_lower(args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
     let c = get_rune(arg(args, 0)?)?;
     let lower = c.to_lowercase().next().unwrap_or(c);
-    Ok(Value::from_rune(lower))
+    Ok(Value::from_int(i64::from(u32::from(lower))))
 }
 
 fn rune_to_int(args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
@@ -562,11 +571,15 @@ fn rune_to_int(args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
 
 fn rune_from_int(args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
     let n = arg(args, 0)?.as_int()?;
-    let scalar = u32::try_from(n)
-        .ok()
-        .and_then(char::from_u32)
-        .unwrap_or('\0');
-    Ok(Value::from_rune(scalar))
+    let code = u32::try_from(n).map_err(|_| VmError::Malformed {
+        desc: "rune_from_int: codepoint out of u32 range".into(),
+    })?;
+    if char::from_u32(code).is_none() {
+        return Err(VmError::Malformed {
+            desc: "rune_from_int: invalid Unicode scalar value".into(),
+        });
+    }
+    Ok(Value::from_int(i64::from(code)))
 }
 
 fn int_to_ptr<T>(n: i64) -> *const T {

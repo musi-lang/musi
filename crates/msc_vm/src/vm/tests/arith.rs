@@ -224,13 +224,14 @@ fn test_value_nan_boxing_roundtrip() {
     let cases: &[Case] = &[
         (Value::from_int(-1), |v| v.as_int().is_ok()),
         (Value::from_int(i64::MAX >> 16), |v| v.as_int().is_ok()),
-        (Value::from_nat(0xDEAD_BEEF), |v| v.as_nat().is_ok()),
+        // from_nat now uses TAG_INT; as_int succeeds
+        (Value::from_nat(0xDEAD_BEEF), |v| v.as_int().is_ok()),
         (Value::from_float(1.5), |v| v.as_float().is_ok()),
+        // from_bool now uses TAG_INT (0 or 1); as_bool and as_int both succeed
         (Value::from_bool(true), |v| v.as_bool().is_ok()),
         (Value::from_bool(false), |v| v.as_bool().is_ok()),
-        (Value::from_rune('A'), |v| {
-            v.as_int().is_err() && !v.is_float()
-        }),
+        // from_rune now uses TAG_INT; as_int succeeds
+        (Value::from_rune('A'), |v| v.as_int().is_ok()),
         (Value::from_fn_id(42), |v| v.as_fn_id().is_ok()),
         (Value::UNIT, |v| v.is_unit()),
     ];

@@ -509,6 +509,6 @@ fn test_rune_int_roundtrip() {
 #[test]
 fn test_rune_from_int_invalid() {
     let mut heap = Heap::new();
-    let c = rune_from_int(&[Value::from_int(0xD800)], &mut heap).unwrap(); // surrogate
-    assert_eq!(get_rune(c).unwrap(), '\0');
+    // 0xD800 is a surrogate - not a valid Unicode scalar, must error
+    assert!(rune_from_int(&[Value::from_int(0xD800)], &mut heap).is_err());
 }

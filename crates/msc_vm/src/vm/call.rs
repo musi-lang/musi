@@ -1,11 +1,11 @@
 //! Call/return and upvalue-close helpers.
 
-use crate::error::{malformed, VmError};
+use crate::VmResult;
+use crate::error::{VmError, malformed};
 use crate::heap::UpvalueCell;
 use crate::value::Value;
 use crate::vm::frame::{Continuation, Frame};
-use crate::vm::{StepResult, Vm, MAX_CALL_DEPTH};
-use crate::VmResult;
+use crate::vm::{MAX_CALL_DEPTH, StepResult, Vm};
 
 impl Vm {
     pub(super) fn close_frame_upvalues(&mut self) {

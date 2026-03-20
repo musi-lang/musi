@@ -112,20 +112,13 @@ pub const fn fi8x2_b(operand: u32) -> u8 {
     (operand & 0xFF) as u8
 }
 
-/// Convert a `usize`-range value from either int or nat.
+/// Convert a `usize`-range value from an int.
 pub fn as_usize(v: Value) -> VmResult<usize> {
-    if let Ok(u) = v.as_nat() {
-        usize::try_from(u).map_err(|_| VmError::OutOfBounds {
-            index: usize::MAX,
-            len: 0,
-        })
-    } else {
-        let n = v.as_int()?;
-        usize::try_from(n).map_err(|_| VmError::OutOfBounds {
-            index: usize::MAX,
-            len: 0,
-        })
-    }
+    let n = v.as_int()?;
+    usize::try_from(n).map_err(|_| VmError::OutOfBounds {
+        index: usize::MAX,
+        len: 0,
+    })
 }
 
 pub fn const_to_value(c: &LoadedConst, heap: &mut Heap) -> Value {
@@ -189,14 +182,17 @@ pub fn exec_ty_test(
         () if val.is_unit() => type_tag == type_tag::TAG_UNIT,
         () if val.is_int() => matches!(
             type_tag,
-            type_tag::TAG_I8 | type_tag::TAG_I16 | type_tag::TAG_I32 | type_tag::TAG_I64
+            type_tag::TAG_I8
+                | type_tag::TAG_I16
+                | type_tag::TAG_I32
+                | type_tag::TAG_I64
+                | type_tag::TAG_U8
+                | type_tag::TAG_U16
+                | type_tag::TAG_U32
+                | type_tag::TAG_U64
+                | type_tag::TAG_BOOL
+                | type_tag::TAG_RUNE
         ),
-        () if val.is_nat() => matches!(
-            type_tag,
-            type_tag::TAG_U8 | type_tag::TAG_U16 | type_tag::TAG_U32 | type_tag::TAG_U64
-        ),
-        () if val.is_bool() => type_tag == type_tag::TAG_BOOL,
-        () if val.is_rune() => type_tag == type_tag::TAG_RUNE,
         () if val.is_fn() => type_tag == type_tag::TAG_FN,
         () => val
             .as_ref()

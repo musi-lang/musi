@@ -10,8 +10,8 @@ pub fn exec_arr_len(frame: &mut Frame, heap: &Heap) -> VmResult {
     let arr_val = frame.pop()?;
     let ptr = arr_val.as_ref()?;
     let elems = heap.get_array(ptr)?;
-    let len = u64::try_from(elems.len()).unwrap_or(u64::MAX);
-    frame.stack.push(Value::from_nat(len));
+    let n = i64::try_from(elems.len()).unwrap_or(i64::MAX);
+    frame.stack.push(Value::from_int(n));
     Ok(())
 }
 
@@ -26,7 +26,7 @@ pub fn exec_arr_get(frame: &mut Frame, heap: &Heap) -> VmResult {
             index: idx,
             len: s.chars().count(),
         })?;
-        frame.stack.push(Value::from_rune(ch));
+        frame.stack.push(Value::from_int(i64::from(u32::from(ch))));
         return Ok(());
     }
     let elems = heap.get_array(ptr)?;

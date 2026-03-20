@@ -426,19 +426,10 @@ fn marshal_scalar_arg(val: Value, heap: &Heap) -> VmResult<MarshaledArg> {
     if let Ok(n) = val.as_int() {
         return Ok(MarshaledArg::Int(n));
     }
-    if let Ok(n) = val.as_nat() {
-        return Ok(MarshaledArg::Int(n.cast_signed()));
-    }
-    if let Ok(b) = val.as_bool() {
-        return Ok(MarshaledArg::Int(i64::from(i32::from(b))));
-    }
-    if let Ok(c) = val.as_rune() {
-        return Ok(MarshaledArg::Int(i64::from(u32::from(c))));
-    }
     if let Ok(ptr) = val.as_ref() {
         let heap_obj = heap.get(ptr)?;
         return match &heap_obj.payload {
-            HeapPayload::BoxedInt(n) | HeapPayload::BoxedNat(n) => Ok(MarshaledArg::Int(*n)),
+            HeapPayload::BoxedInt(n) => Ok(MarshaledArg::Int(*n)),
             HeapPayload::Str { data, .. } => {
                 let cstr = CString::new(data.as_bytes()).map_err(|_| VmError::Malformed {
                     desc: "string contains interior null byte for FFI".into(),
@@ -795,34 +786,29 @@ fn value_to_string(val: Value, heap: &Heap) -> String {
     if val.is_unit() {
         return "()".to_owned();
     }
-    match (
-        val.as_bool(),
-        val.as_int(),
-        val.as_nat(),
-        val.as_rune(),
-        val.as_ref(),
-        val.as_fn_id(),
-        val.as_task_id(),
-        val.as_chan_id(),
-    ) {
-        (Ok(b), _, _, _, _, _, _, _) => format!("{b}"),
-        (_, Ok(n), _, _, _, _, _, _) => format!("{n}"),
-        (_, _, Ok(n), _, _, _, _, _) => format!("{n}"),
-        (_, _, _, Ok(c), _, _, _, _) => format!("{c}"),
-        (_, _, _, _, Ok(ptr), _, _, _) => heap.get(ptr).map_or_else(
+    if let Ok(n) = val.as_int() {
+        return format!("{n}");
+    }
+    if let Ok(ptr) = val.as_ref() {
+        return heap.get(ptr).map_or_else(
             |_| format!("<ref:{ptr}>"),
             |obj| match &obj.payload {
                 HeapPayload::BoxedInt(n) => format!("{n}"),
-                HeapPayload::BoxedNat(n) => format!("{}", n.cast_unsigned()),
                 HeapPayload::Str { data, .. } => data.as_ref().to_owned(),
                 _ => format!("<ref:{ptr}>"),
             },
-        ),
-        (_, _, _, _, _, Ok(id), _, _) => format!("<fn:{id}>"),
-        (_, _, _, _, _, _, Ok(id), _) => format!("<task:{id}>"),
-        (_, _, _, _, _, _, _, Ok(id)) => format!("<chan:{id}>"),
-        _ => format!("<unknown:{:#018x}>", val.0),
+        );
     }
+    if let Ok(id) = val.as_fn_id() {
+        return format!("<fn:{id}>");
+    }
+    if let Ok(id) = val.as_task_id() {
+        return format!("<task:{id}>");
+    }
+    if let Ok(id) = val.as_chan_id() {
+        return format!("<chan:{id}>");
+    }
+    format!("<unknown:{:#018x}>", val.0)
 }
 
 fn build_args(storage: &[MarshaledArg]) -> Vec<Arg<'_>> {

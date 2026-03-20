@@ -14,12 +14,9 @@ const PAYLOAD_MASK: u64 = 0x0000_FFFF_FFFF_FFFF;
 const TAG_MASK: u64 = 0xFFFF_0000_0000_0000;
 
 const TAG_INT: u64 = 0x7FFC_0000_0000_0000;
-const TAG_NAT: u64 = 0x7FFD_0000_0000_0000;
-const TAG_BOOL: u64 = 0x7FFE_0000_0000_0000;
 const TAG_UNIT: u64 = 0x7FFF_0000_0000_0000;
 const TAG_REF: u64 = 0xFFFC_0000_0000_0000;
 const TAG_FN: u64 = 0xFFFD_0000_0000_0000;
-const TAG_RUNE: u64 = 0xFFFE_0000_0000_0000;
 const TAG_TACH: u64 = 0xFFFF_0000_0000_0000; // task / chan combined
 
 const CHAN_BIT: u64 = 1u64 << 47;
@@ -56,15 +53,16 @@ const fn char_to_u64(c: char) -> u64 {
 ///
 /// - Floats: stored as raw IEEE 754 bits (NaN canonicalized)
 /// - Tagged values: top 16 bits = type tag, bottom 48 bits = payload
-/// - Wide integers (>48-bit): heap-boxed behind a `Ref` with a `BoxedInt`/`BoxedNat` payload
+/// - Wide integers (>48-bit): heap-boxed behind a `Ref` with a `BoxedInt` payload
+/// - Bool, Rune, and Nat share `TAG_INT` at runtime; type distinctions are compile-time only
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
 pub struct Value(pub u64);
 
 impl Value {
     pub const UNIT: Self = Self(TAG_UNIT);
-    pub const TRUE: Self = Self(TAG_BOOL | 1);
-    pub const FALSE: Self = Self(TAG_BOOL);
+    pub const TRUE: Self = Self(TAG_INT | 1);
+    pub const FALSE: Self = Self(TAG_INT);
     pub const NAN: Self = Self(CANONICAL_NAN);
 
     /// Create an int. Truncates to 48 bits (wrapping).
@@ -74,11 +72,10 @@ impl Value {
         Self(TAG_INT | (n.cast_unsigned() & PAYLOAD_MASK))
     }
 
-    /// Create a nat. Truncates to 48 bits.
-    /// Use `from_nat_wide` for values > 2^48-1.
+    /// Create a nat. Truncates to 48 bits. Stored as `TAG_INT` at runtime.
     #[must_use]
     pub const fn from_nat(n: u64) -> Self {
-        Self(TAG_NAT | (n & PAYLOAD_MASK))
+        Self(TAG_INT | (n & PAYLOAD_MASK))
     }
 
     #[must_use]
@@ -93,12 +90,13 @@ impl Value {
 
     #[must_use]
     pub const fn from_bool(b: bool) -> Self {
-        Self(TAG_BOOL | bool_to_u64(b))
+        Self(TAG_INT | bool_to_u64(b))
     }
 
+    /// Create a rune. Stored as `TAG_INT` at runtime.
     #[must_use]
     pub const fn from_rune(c: char) -> Self {
-        Self(TAG_RUNE | char_to_u64(c))
+        Self(TAG_INT | char_to_u64(c))
     }
 
     #[must_use]
@@ -133,12 +131,7 @@ impl Value {
 
     #[must_use]
     pub fn from_nat_wide(n: u64, heap: &mut Heap) -> Self {
-        if n <= PAYLOAD_MASK {
-            Self::from_nat(n)
-        } else {
-            let ptr = heap.alloc_wide_nat(n);
-            Self::from_ref(ptr)
-        }
+        Self::from_int_wide(n.cast_signed(), heap)
     }
 
     #[must_use]
@@ -154,21 +147,6 @@ impl Value {
     #[must_use]
     pub const fn is_int(self) -> bool {
         (self.0 & TAG_MASK) == TAG_INT
-    }
-
-    #[must_use]
-    pub const fn is_nat(self) -> bool {
-        (self.0 & TAG_MASK) == TAG_NAT
-    }
-
-    #[must_use]
-    pub const fn is_bool(self) -> bool {
-        (self.0 & TAG_MASK) == TAG_BOOL
-    }
-
-    #[must_use]
-    pub const fn is_rune(self) -> bool {
-        (self.0 & TAG_MASK) == TAG_RUNE
     }
 
     #[must_use]
@@ -249,15 +227,15 @@ impl Value {
 
     /// # Errors
     ///
-    /// Returns [`VmError::TypeError`] if the value is not a nat.
-    pub const fn as_nat(self) -> VmResult<u64> {
-        if (self.0 & TAG_MASK) == TAG_NAT {
-            Ok(self.0 & PAYLOAD_MASK)
-        } else {
-            Err(VmError::TypeError {
+    /// Returns [`VmError::TypeError`] if the value is not a nat (non-negative int).
+    pub fn as_nat(self) -> VmResult<u64> {
+        match self.as_int() {
+            Ok(n) if n >= 0 => Ok(n.cast_unsigned()),
+            Ok(_) => Err(VmError::TypeError {
                 expected: "nat",
                 found: self.type_name(),
-            })
+            }),
+            Err(e) => Err(e),
         }
     }
 
@@ -277,53 +255,44 @@ impl Value {
 
     /// # Errors
     ///
-    /// Returns [`VmError::TypeError`] if the value is not a bool.
-    pub const fn as_bool(self) -> VmResult<bool> {
-        if (self.0 & TAG_MASK) == TAG_BOOL {
-            Ok((self.0 & 1) != 0)
-        } else {
-            Err(VmError::TypeError {
+    /// Returns [`VmError::TypeError`] if the value is not a bool (int 0 or 1).
+    pub fn as_bool(self) -> VmResult<bool> {
+        match self.as_int() {
+            Ok(0) => Ok(false),
+            Ok(1) => Ok(true),
+            Ok(_) => Err(VmError::TypeError {
                 expected: "bool",
                 found: self.type_name(),
-            })
+            }),
+            Err(e) => Err(e),
         }
     }
 
-    /// Interprets the value as a boolean condition, accepting both bools and
-    /// ints (non-zero = true). Used by conditional jumps.
+    /// Interprets the value as a boolean condition (non-zero int = true).
     ///
     /// # Errors
     ///
-    /// Returns [`VmError::TypeError`] if the value is neither a bool nor an int.
+    /// Returns [`VmError::TypeError`] if the value is not an int.
     pub fn as_truthy(self) -> VmResult<bool> {
-        if (self.0 & TAG_MASK) == TAG_BOOL {
-            Ok((self.0 & 1) != 0)
-        } else if let Ok(n) = self.as_int() {
-            Ok(n != 0)
-        } else {
-            Err(VmError::TypeError {
-                expected: "bool",
-                found: self.type_name(),
-            })
+        match self.as_int() {
+            Ok(n) => Ok(n != 0),
+            Err(e) => Err(e),
         }
     }
 
     /// # Errors
     ///
-    /// Returns [`VmError::TypeError`] if the value is not a rune, or
-    /// [`VmError::Malformed`] if the codepoint is invalid.
+    /// Returns [`VmError::TypeError`] if the value is not an int, or
+    /// [`VmError::Malformed`] if the codepoint is not a valid Unicode scalar.
     pub fn as_rune(self) -> VmResult<char> {
-        if (self.0 & TAG_MASK) == TAG_RUNE {
-            let code = self.payload_u32();
-            char::from_u32(code).ok_or_else(|| VmError::Malformed {
-                desc: "invalid rune codepoint".into(),
-            })
-        } else {
-            Err(VmError::TypeError {
-                expected: "rune",
-                found: self.type_name(),
-            })
-        }
+        let n = self.as_int()?;
+        let code = u32::try_from(n).map_err(|_| VmError::TypeError {
+            expected: "rune",
+            found: self.type_name(),
+        })?;
+        char::from_u32(code).ok_or_else(|| VmError::Malformed {
+            desc: "invalid rune codepoint".into(),
+        })
     }
 
     /// # Errors
@@ -417,68 +386,6 @@ impl Value {
         })
     }
 
-    /// Extract nat: inline 48-bit or heap-boxed wide nat.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`VmError::TypeError`] if the value is not a nat.
-    pub fn as_nat_wide(self, heap: &Heap) -> VmResult<u64> {
-        if let Ok(n) = self.as_nat() {
-            return Ok(n);
-        }
-        if let Ok(ptr) = self.as_ref() {
-            if let Ok(obj) = heap.get(ptr) {
-                if let HeapPayload::BoxedNat(n) = obj.payload {
-                    return Ok(n.cast_unsigned());
-                }
-            }
-        }
-        Err(VmError::TypeError {
-            expected: "nat",
-            found: self.type_name(),
-        })
-    }
-
-    /// Promote any integer-like value (`Int`, `Nat`, `BoxedInt`, `BoxedNat`)
-    /// to `i128` for polymorphic arithmetic and comparison dispatch.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`VmError::TypeError`] if the value is not an int or nat.
-    pub fn as_numeric_wide(self, heap: &Heap) -> VmResult<i128> {
-        if let Ok(n) = self.as_int() {
-            return Ok(i128::from(n));
-        }
-        if let Ok(n) = self.as_nat() {
-            return Ok(i128::from(n));
-        }
-        if let Ok(ptr) = self.as_ref() {
-            if let Ok(obj) = heap.get(ptr) {
-                match obj.payload {
-                    HeapPayload::BoxedInt(n) => return Ok(i128::from(n)),
-                    HeapPayload::BoxedNat(n) => return Ok(i128::from(n.cast_unsigned())),
-                    _ => {}
-                }
-            }
-        }
-        Err(VmError::TypeError {
-            expected: "int or nat",
-            found: self.type_name(),
-        })
-    }
-
-    /// Narrow an i128 arithmetic result back to Nat (if both operands were Nat)
-    /// or Int (otherwise).
-    pub fn from_numeric_wide(val: i128, both_nat: bool, heap: &mut Heap) -> Self {
-        if both_nat {
-            let clamped = u64::try_from(val.max(0)).unwrap_or(u64::MAX);
-            Self::from_nat_wide(clamped, heap)
-        } else {
-            let clamped = i64::try_from(val).unwrap_or(if val < 0 { i64::MIN } else { i64::MAX });
-            Self::from_int_wide(clamped, heap)
-        }
-    }
-
     #[must_use]
     pub const fn type_name(self) -> &'static str {
         if self.is_float() {
@@ -486,12 +393,9 @@ impl Value {
         }
         match self.0 & TAG_MASK {
             TAG_INT => "int",
-            TAG_NAT => "nat",
-            TAG_BOOL => "bool",
             TAG_UNIT => "unit",
             TAG_REF => "ref",
             TAG_FN => "fn",
-            TAG_RUNE => "rune",
             TAG_TACH => {
                 if (self.0 & CHAN_BIT) != 0 {
                     "chan"
@@ -515,18 +419,9 @@ impl fmt::Debug for Value {
                 let n = Self::sign_extend_48(raw);
                 write!(f, "int({n})")
             }
-            TAG_NAT => write!(f, "nat({})", self.0 & PAYLOAD_MASK),
-            TAG_BOOL => write!(f, "bool({})", (self.0 & 1) != 0),
             TAG_UNIT => write!(f, "unit"),
             TAG_REF => write!(f, "ref({})", self.payload_u32()),
             TAG_FN => write!(f, "fn({})", self.payload_u32()),
-            TAG_RUNE => {
-                let code = self.payload_u32();
-                match char::from_u32(code) {
-                    Some(c) => write!(f, "rune({c})"),
-                    None => write!(f, "rune(<invalid:{code}>)"),
-                }
-            }
             TAG_TACH => {
                 if (self.0 & CHAN_BIT) != 0 {
                     write!(
@@ -549,9 +444,6 @@ impl fmt::Debug for Value {
 pub fn wide_values_equal(a: Value, b: Value, heap: &Heap) -> bool {
     if let (Ok(ai), Ok(bi)) = (a.as_int_wide(heap), b.as_int_wide(heap)) {
         return ai == bi;
-    }
-    if let (Ok(an), Ok(bn)) = (a.as_nat_wide(heap), b.as_nat_wide(heap)) {
-        return an == bn;
     }
     if let (Ok(ai), Ok(bi)) = (a.as_ref(), b.as_ref())
         && let (Ok(oa), Ok(ob)) = (heap.get(ai), heap.get(bi))
