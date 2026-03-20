@@ -1,7 +1,6 @@
 //! Export and annotated declaration parsing.
 
 use msc_ast::attr::Attr;
-use msc_ast::decl::ExportItem;
 use msc_ast::expr::Expr;
 use msc_lex::token::TokenKind;
 
@@ -27,11 +26,6 @@ impl Parser<'_> {
     fn parse_expr_annotated_export(&mut self, start: u32, attrs: Vec<Attr>) -> Expr {
         let exported = true;
         let _export = self.bump();
-
-        // export { items } [:= import]
-        if self.at(TokenKind::LBrace) {
-            return self.parse_export_list(start, attrs);
-        }
 
         match self.peek_kind() {
             TokenKind::KwLet => {
@@ -174,48 +168,9 @@ impl Parser<'_> {
         }
     }
 
-    fn parse_export_list(&mut self, start: u32, _attrs: Vec<Attr>) -> Expr {
-        let _lb = self.bump();
-        let items = self.comma_sep(TokenKind::RBrace, Self::parse_export_item);
-        let _rb = self.expect(TokenKind::RBrace);
-        let source = if self.eat(TokenKind::ColonEq) {
-            // expect import "path"
-            let _import = self.expect(TokenKind::KwImport);
-            let tok = self.bump();
-            tok.symbol
-        } else {
-            None
-        };
-        Expr::Export {
-            items,
-            source,
-            span: self.finish_span(start),
-        }
-    }
-
-    fn parse_export_item(&mut self) -> ExportItem {
-        let start = self.start_span();
-        let name = self.expect_symbol();
-        let alias = if self.eat(TokenKind::KwAs) {
-            Some(self.expect_symbol())
-        } else {
-            None
-        };
-        ExportItem {
-            name,
-            alias,
-            span: self.finish_span(start),
-        }
-    }
-
     pub(crate) fn parse_expr_export(&mut self) -> Expr {
         let start = self.start_span();
         let _export = self.bump();
-
-        // export { items } [:= import]
-        if self.at(TokenKind::LBrace) {
-            return self.parse_export_list(start, vec![]);
-        }
 
         self.parse_expr_export_rest(start)
     }

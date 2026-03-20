@@ -236,7 +236,6 @@ pub(crate) const fn expr_span(expr: &Expr) -> Span {
         | Expr::Match { span, .. }
         | Expr::Return { span, .. }
         | Expr::Import { span, .. }
-        | Expr::Export { span, .. }
         | Expr::Annotated { span, .. }
         | Expr::Class { span, .. }
         | Expr::Instance { span, .. }

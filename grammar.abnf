@@ -381,12 +381,10 @@ ast-decl       = "export" export-tail
                  / ast-foreign-decl
 ; §7.3  Exports
 export-tail = ast-let
-              / "{" export-list "}" [":=" ast-import]
               / ast-foreign-decl
-
-export-list = export-item *("," export-item)
-
-export-item = ident ["as" ident]
+              / ast-class-decl
+              / ast-instance-decl
+              / ast-effect-decl
 ; §7.4  Classes and instances
 ast-class-decl    = "class" ident [bracket-params] [where-clause] "{" *(class-member) "}"
 
@@ -403,7 +401,7 @@ effect-member   = ["fatal"] fn-decl
 ; §7.6  Foreign
 ast-foreign-decl = "foreign" [lit-string] ("let" foreign-binding / "(" *(("let" foreign-binding) ";") ")" / "import" lit-string)
 
-foreign-binding  = [attrs] ident ["as" lit-string] [":" ast-ty]
+foreign-binding  = [attrs] ident [bracket-params] ["as" lit-string] [where-clause] [":" ast-ty]
 ; §7.7  Members
 class-member = (fn-decl / law-decl) [";"]
 

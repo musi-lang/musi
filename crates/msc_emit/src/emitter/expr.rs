@@ -175,7 +175,6 @@ pub fn emit_expr_tail(
         }
         Expr::Fn { params, body, .. } => closure::emit_fn(em, fc, &params.clone(), *body),
         Expr::Import { .. }
-        | Expr::Export { .. }
         | Expr::Choice { .. }
         | Expr::RecordDef { .. }
         | Expr::Class { .. }

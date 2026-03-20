@@ -31,7 +31,6 @@ pub fn expr_span(idx: ExprIdx, module: &ParsedModule) -> Option<Span> {
         | Expr::Match { span, .. }
         | Expr::Return { span, .. }
         | Expr::Import { span, .. }
-        | Expr::Export { span, .. }
         | Expr::Annotated { span, .. }
         | Expr::Class { span, .. }
         | Expr::Instance { span, .. }
