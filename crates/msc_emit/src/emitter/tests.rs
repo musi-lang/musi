@@ -41,10 +41,6 @@ fn compile_script(source: &str) -> Result<EmitOutput, String> {
     compile_with(source, true, true)
 }
 
-fn compile_lenient(source: &str) -> Result<EmitOutput, String> {
-    compile_with(source, true, false)
-}
-
 /// Find the start+length of a tagged section in the binary.
 /// Sections start at offset 16 (after the header) and are: 4-byte tag + 4-byte BE length + payload.
 fn find_section(bytes: &[u8], tag: [u8; 4]) -> Option<(usize, usize)> {
@@ -222,20 +218,6 @@ fn test_emit_cons() {
 }
 
 #[test]
-fn test_emit_err_coal() {
-    let source = "let f : (Int, Int) -> Int := (a, b) => a !! b;";
-    let out = compile_lenient(source);
-    assert!(
-        out.is_ok(),
-        "err-coalesce should compile: {}",
-        out.unwrap_err()
-    );
-    let out = out.unwrap();
-    let found = find_opcode(&out.bytes, Opcode::MAT_TAG);
-    assert!(found.is_some(), "expected MAT_TAG for err-coalesce");
-}
-
-#[test]
 fn test_emit_global_read_no_nop() {
     // Global reads should emit LD_LOC 0 + REC_GET, not NOP.
     let source = "let main : () -> Int := () => 42;";
@@ -252,7 +234,7 @@ fn test_emit_global_read_no_nop() {
 #[test]
 fn test_emit_variant_uses_tag() {
     // Variants should use REC_NEW with the correct tag, not OPT_SOME/OPT_NONE.
-    let source = "let f : (Int) -> Int := (x) => try x;";
+    let source = "let f : () -> Unit := () => .Some(42);";
     let out = compile_script(source).expect("compile ok");
     let found_rec_new = find_opcode(&out.bytes, Opcode::REC_NEW);
     assert!(

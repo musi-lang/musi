@@ -93,12 +93,19 @@ pub(super) fn emit_fn(
         fn_id: nested_fn_id,
         name_stridx: 0,
         type_id,
+        exported: false,
+        effectful: false,
+        dict_param_count: 0,
         local_count: nested_fc.fe.local_count,
         param_count: nested_fc.fe.param_count,
         max_stack: nested_fc.fe.max_stack,
         upvalue_count,
+        source_map: nested_fc.fe.source_map,
+        local_names: vec![],
         code: nested_fc.fe.code,
         handlers: nested_fc.fe.handlers,
+        safepoints: nested_fc.fe.safepoints,
+        effect_refs: vec![],
     };
     em.nested_fns.push(fn_bytecode);
 

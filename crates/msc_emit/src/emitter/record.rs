@@ -5,7 +5,6 @@ use msc_ast::expr::RecField;
 use msc_sema::types::Type;
 use msc_shared::Symbol;
 
-use crate::const_pool::ConstValue;
 use crate::error::EmitError;
 use crate::error::EmitResult;
 
@@ -159,15 +158,15 @@ pub(super) fn emit_variant(
     let name_str = em.interner.resolve(name);
     if args.is_empty() {
         if name_str == "True" {
-            let cv = ConstValue::Int(1);
-            let i = em.cp.intern(&cv)?;
-            fc.fe.emit_ld_cst(i);
+            fc.fe.emit_ld_true();
             return Ok(true);
         }
         if name_str == "False" {
-            let cv = ConstValue::Int(0);
-            let i = em.cp.intern(&cv)?;
-            fc.fe.emit_ld_cst(i);
+            fc.fe.emit_ld_false();
+            return Ok(true);
+        }
+        if name_str == "None" {
+            fc.fe.emit_ld_none();
             return Ok(true);
         }
     }

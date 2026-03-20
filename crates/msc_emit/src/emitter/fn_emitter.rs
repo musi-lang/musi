@@ -25,6 +25,13 @@ pub struct HandlerEntry {
     pub handler_fn_id: u32,
 }
 
+/// A GC safepoint: records the bytecode offset and operand stack depth at
+/// a call/allocation site so the garbage collector can find live references.
+pub struct SafepointEntry {
+    pub offset: u32,
+    pub stack_depth: u16,
+}
+
 pub struct FnEmitter {
     pub code: Vec<u8>,
     label_targets: HashMap<u32, usize>,
@@ -34,6 +41,11 @@ pub struct FnEmitter {
     pub local_count: u16,
     pub param_count: u16,
     pub handlers: Vec<HandlerEntry>,
+    pub safepoints: Vec<SafepointEntry>,
+    /// Source map entries: (`bytecode_offset`, `span_byte_offset`, `0_column`).
+    /// Recorded at function call and branch sites; `span_byte_offset` is used
+    /// in place of line since no line map is available at emit time.
+    pub source_map: Vec<(u32, u32, u16)>,
 }
 
 impl FnEmitter {
@@ -47,7 +59,32 @@ impl FnEmitter {
             local_count,
             param_count,
             handlers: vec![],
+            safepoints: vec![],
+            source_map: vec![],
         }
+    }
+
+    /// Record a GC safepoint at the current code position.
+    ///
+    /// Called immediately after encoding any opcode that may trigger a GC
+    /// (allocations, calls, effect operations). Uses a saturating cast for
+    /// the stack depth so that tracking stays correct even at extreme depths.
+    fn record_safepoint(&mut self) {
+        let offset = u32::try_from(self.code.len()).unwrap_or(u32::MAX);
+        let depth = u16::try_from(self.stack_depth.max(0)).unwrap_or(u16::MAX);
+        self.safepoints.push(SafepointEntry {
+            offset,
+            stack_depth: depth,
+        });
+    }
+
+    /// Record a source map entry at the current code position for the given span.
+    ///
+    /// `span_start` is the byte offset in the source file; used as the "line"
+    /// field until a line map is available at emit time.
+    pub fn record_source(&mut self, span_start: u32) {
+        let offset = u32::try_from(self.code.len()).unwrap_or(u32::MAX);
+        self.source_map.push((offset, span_start, 0));
     }
 
     pub fn push_n(&mut self, n: i32) {
@@ -133,6 +170,21 @@ impl FnEmitter {
         self.push_n(1);
     }
 
+    pub fn emit_ld_true(&mut self) {
+        encode_f0(&mut self.code, Opcode::LD_TRUE);
+        self.push_n(1);
+    }
+
+    pub fn emit_ld_false(&mut self) {
+        encode_f0(&mut self.code, Opcode::LD_FALSE);
+        self.push_n(1);
+    }
+
+    pub fn emit_ld_none(&mut self) {
+        encode_f0(&mut self.code, Opcode::LD_NONE);
+        self.push_n(1);
+    }
+
     /// Emit a binary op instruction (F0, pops 2, pushes 1 → net -1).
     pub fn emit_binop(&mut self, op: Opcode) {
         encode_f0(&mut self.code, op);
@@ -160,6 +212,7 @@ impl FnEmitter {
         })?;
         encode_fi8(&mut self.code, Opcode::TUP_NEW, n);
         self.pop_n(stack_pop - 1);
+        self.record_safepoint(); // tup.new
         Ok(())
     }
 
@@ -170,6 +223,7 @@ impl FnEmitter {
             self.pop_n(i32::from(arity));
         }
         self.push_n(1);
+        self.record_safepoint(); // rec.new
     }
 
     /// Emit `ty.of` - leaves type tag on stack. Net 0.
@@ -181,18 +235,22 @@ impl FnEmitter {
         let proto = u16::try_from(fn_id).unwrap_or(u16::MAX);
         encode_fi16(&mut self.code, Opcode::CLS_NEW, proto);
         self.push_n(1);
+        self.record_safepoint(); // cls.new
         let arity = u8::try_from(arg_count).unwrap_or(u8::MAX);
         encode_fi8(&mut self.code, Opcode::CALL, arity);
         self.pop_n(arg_count + 1);
         self.push_n(1);
+        self.record_safepoint(); // call
     }
 
     pub fn emit_inv_tail(&mut self, fn_id: u32, _effectful: bool, arg_count: i32) {
         let proto = u16::try_from(fn_id).unwrap_or(u16::MAX);
         encode_fi16(&mut self.code, Opcode::CLS_NEW, proto);
         self.push_n(1);
+        self.record_safepoint(); // cls.new
         let arity = u8::try_from(arg_count).unwrap_or(u8::MAX);
         encode_fi8(&mut self.code, Opcode::CALL_TAIL, arity);
+        self.record_safepoint(); // call.tail
         self.stack_depth = 0;
     }
 
@@ -203,6 +261,7 @@ impl FnEmitter {
         encode_fi8(&mut self.code, Opcode::CALL, n);
         self.pop_n(arg_count + 1);
         self.push_n(1);
+        self.record_safepoint(); // call (dynamic)
         Ok(())
     }
 
@@ -224,6 +283,7 @@ impl FnEmitter {
         encode_fi8x2(&mut self.code, Opcode::FFI_CALL, sym, arity);
         self.pop_n(arg_count);
         self.push_n(1);
+        self.record_safepoint(); // ffi.call
     }
 
     /// Emit `arr.len` - pops array ref, pushes length. Net 0.
@@ -245,6 +305,7 @@ impl FnEmitter {
 
     pub fn emit_mk_arr(&mut self, _type_id: u32) {
         encode_f0(&mut self.code, Opcode::ARR_NEW);
+        self.record_safepoint(); // arr.new
     }
 
     /// Allocate a ref cell: wraps value on stack into a 1-field record (tag 0).
@@ -269,13 +330,29 @@ impl FnEmitter {
         encode_f0(&mut self.code, Opcode::TY_TEST);
     }
 
+    pub fn emit_ty_cast(&mut self, type_id: u32) {
+        let tid = u16::try_from(type_id).unwrap_or(u16::MAX);
+        encode_fi16(&mut self.code, Opcode::TY_DESC, tid);
+        encode_f0(&mut self.code, Opcode::TY_CAST);
+        self.record_safepoint(); // ty.cast
+    }
+
     /// Emit `eff.hdl effect` - install an effect handler.
-    pub fn emit_cont_mark(&mut self, effect_id: u32, handler_fn_id: u32) -> EmitResult {
+    ///
+    /// `one_shot` sets bit 15 of the operand. The VM uses this hint to move
+    /// captured continuation frames on the first resume instead of cloning them.
+    pub fn emit_cont_mark(
+        &mut self,
+        effect_id: u32,
+        handler_fn_id: u32,
+        one_shot: bool,
+    ) -> EmitResult {
         let id = u16::try_from(effect_id).map_err(|_| EmitError::OperandOverflow {
             desc: "effect id exceeds 65535".into(),
         })?;
+        let operand = id | if one_shot { 0x8000 } else { 0 };
         let handler_u8 = u8::try_from(effect_id).unwrap_or(0);
-        encode_fi16(&mut self.code, Opcode::EFF_HDL, id);
+        encode_fi16(&mut self.code, Opcode::EFF_HDL, operand);
         self.handlers.push(HandlerEntry {
             effect_id: handler_u8,
             handler_fn_id,
@@ -295,12 +372,14 @@ impl FnEmitter {
         encode_fi8x2(&mut self.code, Opcode::EFF_NEED, op, arity);
         self.pop_n(arg_count);
         self.push_n(1);
+        self.record_safepoint(); // eff.need
     }
 
     /// Emit `eff.res` - resume from a handler.
     pub fn emit_cont_resume(&mut self) {
         encode_f0(&mut self.code, Opcode::EFF_RES);
         self.pop_n(1);
+        self.record_safepoint(); // eff.res
     }
 
     pub fn emit_cmp_tag(&mut self, tag: u32) -> EmitResult {
@@ -323,6 +402,7 @@ impl FnEmitter {
         let proto = u16::try_from(fn_id).unwrap_or(u16::MAX);
         encode_fi16(&mut self.code, Opcode::CLS_NEW, proto);
         self.push_n(1);
+        self.record_safepoint(); // cls.new
     }
 
     /// Emit `cls.upv 0, slot` - attach an open upvalue for local `slot`. Stack neutral.
@@ -334,6 +414,26 @@ impl FnEmitter {
     /// Emit `cls.upv 1, idx` - re-capture parent upvalue at `idx`. Stack neutral.
     pub fn emit_cls_upv_parent(&mut self, idx: u8) {
         encode_fi8x2(&mut self.code, Opcode::CLS_UPV, 1, idx);
+    }
+
+    /// Emit `cls.dict class_idx` - pops receiver, pushes a method dict record. Net 0.
+    ///
+    /// The VM resolves the instance at runtime by querying the class dispatch
+    /// table keyed on `(class_idx, value_type_id(receiver))`.
+    pub fn emit_cls_dict(&mut self, class_idx: u16) {
+        encode_fi16(&mut self.code, Opcode::CLS_DICT, class_idx);
+        // Net 0: pop receiver, push dict record.
+        self.record_safepoint(); // cls.dict
+    }
+
+    /// Emit `cls.disp class_idx, method_idx` - pops receiver, calls method. Net 0.
+    ///
+    /// Used when the receiver type is not statically known (Any/Unknown): the VM
+    /// looks up the method by `(class_idx, value_type_id(receiver))` and dispatches
+    /// directly without materialising a full dict record.
+    pub fn emit_cls_disp(&mut self, class_idx: u8, method_idx: u8) {
+        encode_fi8x2(&mut self.code, Opcode::CLS_DISP, class_idx, method_idx);
+        // Net 0: pop receiver, callee pushes result.
     }
 
     pub fn emit_jmp_f(&mut self, label: u32) {
@@ -466,6 +566,16 @@ impl FnEmitter {
     /// Check that code length fits in u32.
     pub fn validate_code_len(&self) -> EmitResult<u32> {
         u32::try_from(self.code.len()).map_err(|_| EmitError::FunctionTooLarge)
+    }
+
+    /// Load a field from an imported dep's module record: `ld.loc M` + `rec.get N`.
+    pub fn emit_ld_import(&mut self, module_slot: u32, field: u32) {
+        let ms = u8::try_from(module_slot).unwrap_or(u8::MAX);
+        let fi = u8::try_from(field).unwrap_or(u8::MAX);
+        encode_fi8(&mut self.code, Opcode::LD_LOC, ms);
+        self.push_n(1);
+        encode_fi8(&mut self.code, Opcode::REC_GET, fi);
+        // REC_GET: net 0 (pop record, push field value)
     }
 
     /// Load a global: `ld.loc 0` (module record) + `rec.get field`.

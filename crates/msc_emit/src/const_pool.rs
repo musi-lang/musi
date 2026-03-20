@@ -10,7 +10,6 @@ use crate::error::{EmitError, EmitResult};
 const TAG_INT: u8 = 0x01;
 const TAG_FLOAT: u8 = 0x02;
 const TAG_STR: u8 = 0x03;
-
 /// A compile-time constant value for the constant pool.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ConstValue {

@@ -125,11 +125,7 @@ fn cfv_walk(cx: &mut CfvCtx<'_, '_>, expr_idx: ExprIdx) {
         | Expr::Return { value: None, .. }
         | Expr::TypeApp { .. }
         | Expr::FnType { .. }
-        | Expr::OptionType { .. }
-        | Expr::ProductType { .. }
-        | Expr::SumType { .. }
-        | Expr::ArrayType { .. }
-        | Expr::PiType { .. }
+        | Expr::TypeExpr { .. }
         | Expr::Resume { value: None, .. } => {}
         Expr::Paren { inner, .. }
         | Expr::Annotated { inner, .. }
@@ -161,7 +157,7 @@ fn cfv_walk(cx: &mut CfvCtx<'_, '_>, expr_idx: ExprIdx) {
                 cfv_walk(cx, t);
             }
         }
-        Expr::Let { fields, .. } | Expr::Binding { fields, .. } => {
+        Expr::Let { fields, .. } => {
             if let Some(v) = fields.value {
                 cfv_walk(cx, v);
             }

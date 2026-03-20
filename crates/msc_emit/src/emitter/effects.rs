@@ -1,7 +1,8 @@
 //! Effect operation emission: handle, need, resume.
 
-use msc_ast::ExprIdx;
-use msc_ast::expr::{Expr, HandlerOp};
+use msc_ast::decl::ClassMember;
+use msc_ast::expr::{Arg, ArrayElem, Expr, HandlerOp, InstanceBody, MatchArm, PwGuard, RecField};
+use msc_ast::{AstArenas, ExprIdx};
 use msc_sema::def::DefKind;
 
 use crate::error::{EmitError, EmitResult};
@@ -29,6 +30,132 @@ pub(super) fn emit_force_unwrap(
     fc.fe.emit_ld_loc(tmp);
     fc.fe.emit_unop(msc_bc::Opcode::OPT_GET);
     Ok(true)
+}
+
+/// Counts the number of `Expr::Resume` nodes reachable from `expr`.
+///
+/// Used to determine whether a handler body has at most one resume site,
+/// enabling the one-shot continuation optimisation.
+fn count_resumes(ast: &AstArenas, expr: ExprIdx) -> usize {
+    match &ast.exprs[expr] {
+        Expr::Resume { .. } => 1,
+        Expr::Paren { inner, .. } | Expr::Annotated { inner, .. } => count_resumes(ast, *inner),
+        Expr::Tuple { elems, .. } => elems.iter().map(|&e| count_resumes(ast, e)).sum(),
+        Expr::Block { stmts, tail, .. } => {
+            let s: usize = stmts.iter().map(|&e| count_resumes(ast, e)).sum();
+            let t = tail.map_or(0, |e| count_resumes(ast, e));
+            s + t
+        }
+        Expr::Let { fields, .. } => fields.value.map_or(0, |e| count_resumes(ast, e)),
+        Expr::Fn { body, .. } | Expr::Choice { body, .. } => count_resumes(ast, *body),
+        Expr::Call { callee, args, .. } => {
+            let c = count_resumes(ast, *callee);
+            let a: usize = args
+                .iter()
+                .map(|arg| match arg {
+                    Arg::Pos { expr, .. } | Arg::Spread { expr, .. } => count_resumes(ast, *expr),
+                })
+                .sum();
+            c + a
+        }
+        Expr::Field { object, .. } => count_resumes(ast, *object),
+        Expr::Index { object, index, .. } => {
+            count_resumes(ast, *object) + count_resumes(ast, *index)
+        }
+        Expr::Update { base, fields, .. } => {
+            let b = count_resumes(ast, *base);
+            let f: usize = fields
+                .iter()
+                .map(|rf| match rf {
+                    RecField::Named { value, .. } => value.map_or(0, |e| count_resumes(ast, e)),
+                    RecField::Spread { expr, .. } => count_resumes(ast, *expr),
+                })
+                .sum();
+            b + f
+        }
+        Expr::Record { fields, .. } => fields
+            .iter()
+            .map(|rf| match rf {
+                RecField::Named { value, .. } => value.map_or(0, |e| count_resumes(ast, e)),
+                RecField::Spread { expr, .. } => count_resumes(ast, *expr),
+            })
+            .sum(),
+        Expr::Array { elems, .. } => elems
+            .iter()
+            .map(|ae| match ae {
+                ArrayElem::Elem { expr, .. } | ArrayElem::Spread { expr, .. } => {
+                    count_resumes(ast, *expr)
+                }
+            })
+            .sum(),
+        Expr::Variant { args, .. } => args.iter().map(|&e| count_resumes(ast, e)).sum(),
+        Expr::BinOp { left, right, .. } => count_resumes(ast, *left) + count_resumes(ast, *right),
+        Expr::UnaryOp { operand, .. } => count_resumes(ast, *operand),
+        Expr::Piecewise { arms, .. } => arms
+            .iter()
+            .map(|arm| {
+                let r = count_resumes(ast, arm.result);
+                let g = match arm.guard {
+                    PwGuard::When { expr, .. } => count_resumes(ast, expr),
+                    PwGuard::Any { .. } => 0,
+                };
+                r + g
+            })
+            .sum(),
+        Expr::Match {
+            scrutinee, arms, ..
+        } => count_resumes_match(ast, *scrutinee, arms),
+        Expr::Return { value, .. } => value.map_or(0, |e| count_resumes(ast, e)),
+        Expr::Need { operand, .. } | Expr::TypeCheck { operand, .. } => {
+            count_resumes(ast, *operand)
+        }
+        Expr::Handle { body, ops, .. } => {
+            let b = count_resumes(ast, *body);
+            let o: usize = ops.iter().map(|op| count_resumes(ast, op.body)).sum();
+            b + o
+        }
+        Expr::Instance { body, .. } => count_resumes_instance(ast, body),
+        // Leaf nodes and declaration nodes without resumable sub-expressions.
+        Expr::Lit { .. }
+        | Expr::Name { .. }
+        | Expr::RecordDef { .. }
+        | Expr::Import { .. }
+        | Expr::Export { .. }
+        | Expr::Class { .. }
+        | Expr::Effect { .. }
+        | Expr::Foreign { .. }
+        | Expr::TypeApp { .. }
+        | Expr::FnType { .. }
+        | Expr::TypeExpr { .. }
+        | Expr::Error { .. } => 0,
+    }
+}
+
+fn count_resumes_match(ast: &AstArenas, scrutinee: ExprIdx, arms: &[MatchArm]) -> usize {
+    let s = count_resumes(ast, scrutinee);
+    let a: usize = arms
+        .iter()
+        .map(|arm| {
+            let g = arm.guard.map_or(0, |e| count_resumes(ast, e));
+            g + count_resumes(ast, arm.result)
+        })
+        .sum();
+    s + a
+}
+
+fn count_resumes_instance(ast: &AstArenas, body: &InstanceBody) -> usize {
+    match body {
+        InstanceBody::Manual { members } => members
+            .iter()
+            .filter_map(|m| match m {
+                ClassMember::Fn { default, .. } => *default,
+                ClassMember::Law { body, .. } => Some(*body),
+            })
+            .map(|e| count_resumes(ast, e))
+            .sum(),
+        InstanceBody::Via { delegate, .. } => count_resumes(ast, *delegate),
+        InstanceBody::Derives { .. } => 0,
+    }
 }
 
 /// Walks the AST type expression to find the effect name, then looks up `effect_id_map`.
@@ -96,15 +223,25 @@ pub(super) fn emit_handle(
             fn_id: handler_fn_id,
             name_stridx: 0,
             type_id,
+            exported: false,
+            effectful: true,
+            dict_param_count: 0,
             local_count: handler_fc.fe.local_count,
             param_count: handler_fc.fe.param_count,
             max_stack: handler_fc.fe.max_stack,
             upvalue_count: 0,
+            source_map: handler_fc.fe.source_map,
+            local_names: vec![],
             code: handler_fc.fe.code,
             handlers: handler_fc.fe.handlers,
+            safepoints: handler_fc.fe.safepoints,
+            effect_refs: vec![],
         };
         em.nested_fns.push(fn_bytecode);
-        fc.fe.emit_cont_mark(u32::from(effect_id), handler_fn_id)?;
+        let resume_count = count_resumes(em.ast, op.body);
+        let is_one_shot = resume_count <= 1;
+        fc.fe
+            .emit_cont_mark(u32::from(effect_id), handler_fn_id, is_one_shot)?;
     }
 
     let produced = emit_expr(em, fc, body)?;

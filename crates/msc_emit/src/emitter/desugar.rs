@@ -3,6 +3,7 @@
 
 use msc_ast::expr::{Expr, FieldKey};
 use msc_ast::lit::FStrPart;
+use msc_bc::Opcode;
 
 use super::Emitter;
 use super::FnCtx;
@@ -179,11 +180,6 @@ pub fn emit_fstr(em: &mut Emitter<'_>, fc: &mut FnCtx, parts: &[FStrPart]) -> Em
         return Ok(());
     }
 
-    let str_cat_idx = em
-        .str_cat_ffi_idx
-        .ok_or_else(|| EmitError::UnsupportedFeature {
-            desc: "str_cat FFI not registered".into(),
-        })?;
     let show_ffi_idx = em
         .sema
         .lang_items
@@ -221,7 +217,7 @@ pub fn emit_fstr(em: &mut Emitter<'_>, fc: &mut FnCtx, parts: &[FStrPart]) -> Em
             }
         }
         if !first {
-            fc.fe.emit_inv_ffi(str_cat_idx, 2);
+            fc.fe.emit_binop(Opcode::STR_CAT);
         }
         first = false;
     }
@@ -283,18 +279,7 @@ pub fn emit_range(
     Ok(())
 }
 
-/// Emit `left !! right` (error coalescing). If left is Ok, extract payload;
-/// otherwise evaluate right as fallback.
-pub fn emit_err_coal(
-    em: &mut Emitter<'_>,
-    fc: &mut FnCtx,
-    left: ExprIdx,
-    right: ExprIdx,
-) -> EmitResult {
-    emit_coalesce(em, fc, left, right, em.ok_tag, "err-coalesce")
-}
-
-/// Shared implementation for nil-coalesce (`??`) and err-coalesce (`!!`).
+/// Shared implementation for nil-coalesce (`??`).
 ///
 /// Checks left against `success_tag` (Some for `??`, Ok for `!!`).
 /// If the tag matches, extracts payload; otherwise evaluates right as fallback.

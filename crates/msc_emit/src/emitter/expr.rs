@@ -8,7 +8,7 @@ use msc_ast::expr::{
 };
 use msc_ast::lit::Lit;
 use msc_bc::Opcode;
-use msc_sema::def::DefKind;
+use msc_sema::def::{DefId, DefKind};
 use msc_sema::types::Type;
 use msc_shared::Span;
 use msc_shared::Symbol;
@@ -67,7 +67,7 @@ fn emit_type_check(
 }
 
 /// Emit bytecode for `expr_idx` in explicit tail position.
-#[allow(clippy::too_many_lines)]
+#[expect(clippy::too_many_lines, reason = "exhaustive match dispatching to named sub-functions")]
 pub fn emit_expr_tail(
     em: &mut Emitter<'_>,
     fc: &mut FnCtx,
@@ -93,7 +93,6 @@ pub fn emit_expr_tail(
             let fields = fields.clone();
             emit_let(em, fc, &fields, is_tail)
         }
-        Expr::Binding { fields, .. } => emit_binding(em, fc, &fields.clone()),
         Expr::BinOp {
             op, left, right, ..
         } => {
@@ -104,16 +103,19 @@ pub fn emit_expr_tail(
             let (op, operand, span) = (*op, *operand, *span);
             emit_unary(em, fc, op, operand, span)
         }
-        Expr::Need { operand, .. } => {
-            let operand = *operand;
+        Expr::Need { operand, span } => {
+            let (operand, span) = (*operand, *span);
+            fc.fe.record_source(span.start);
             effects::emit_need(em, fc, operand, is_tail)
         }
-        Expr::Resume { value, .. } => {
-            let value = *value;
+        Expr::Resume { value, span } => {
+            let (value, span) = (*value, *span);
+            fc.fe.record_source(span.start);
             effects::emit_resume(em, fc, value)
         }
-        Expr::Call { callee, args, .. } => {
-            let (callee, args) = (*callee, args.clone());
+        Expr::Call { callee, args, span } => {
+            let (callee, args, span) = (*callee, args.clone(), *span);
+            fc.fe.record_source(span.start);
             emit_call(em, fc, callee, &args, is_tail)
         }
         Expr::Tuple { elems, .. } => emit_tuple(em, fc, &elems.clone()),
@@ -180,11 +182,7 @@ pub fn emit_expr_tail(
         | Expr::Error { .. }
         | Expr::TypeApp { .. }
         | Expr::FnType { .. }
-        | Expr::OptionType { .. }
-        | Expr::ProductType { .. }
-        | Expr::SumType { .. }
-        | Expr::ArrayType { .. }
-        | Expr::PiType { .. } => Ok(false),
+        | Expr::TypeExpr { .. } => Ok(false),
         Expr::Update { base, fields, .. } => record::emit_update(em, fc, *base, &fields.clone()),
         Expr::TypeCheck {
             kind, operand, ty, ..
@@ -242,8 +240,16 @@ fn emit_name(
         return Ok(true);
     }
     // Global bindings from dependency modules (non-function module-level lets).
-    if let Some(&slot) = em.global_map.get(&def_id) {
-        fc.fe.emit_ld_glb(slot);
+    if em.global_map.contains_key(&def_id) {
+        // If the global belongs to a dep whose record is already packed into a
+        // local slot, use `ld.loc M` + `rec.get N` per the spec (§ Globals).
+        if let Some((dep_idx, field_index)) = find_dep_field(em, def_id)
+            && let Some(&module_slot) = em.dep_module_slots.get(&dep_idx)
+        {
+            fc.fe.emit_ld_import(module_slot, field_index);
+        } else {
+            fc.fe.emit_ld_glb(em.global_map[&def_id]);
+        }
         return Ok(true);
     }
     // Import aliases: construct a module record from the module's exports.
@@ -257,6 +263,18 @@ fn emit_name(
     Err(EmitError::UnsupportedFeature {
         desc: format!("unresolved local `{}`", em.interner.resolve(name)).into(),
     })
+}
+
+/// Returns the `(dep_idx, field_index)` for a `DefId` registered in `dep_global_fields`.
+fn find_dep_field(em: &Emitter<'_>, did: DefId) -> Option<(usize, u32)> {
+    for (&dep_idx, fields) in &em.dep_global_fields {
+        for &(field_did, field_index) in fields {
+            if field_did == did {
+                return Some((dep_idx, field_index));
+            }
+        }
+    }
+    None
 }
 
 /// Construct a module record at runtime from its type's fields.
@@ -296,9 +314,15 @@ fn emit_module_record(
                 }
                 // Value bindings from dep modules stored as globals.
                 if matches!(def.kind, DefKind::Let | DefKind::Var)
-                    && let Some(&slot) = em.global_map.get(&def.id)
+                    && em.global_map.contains_key(&def.id)
                 {
-                    fc.fe.emit_ld_glb(slot);
+                    if let Some((dep_idx, field_index)) = find_dep_field(em, def.id)
+                        && let Some(&module_slot) = em.dep_module_slots.get(&dep_idx)
+                    {
+                        fc.fe.emit_ld_import(module_slot, field_index);
+                    } else {
+                        fc.fe.emit_ld_glb(em.global_map[&def.id]);
+                    }
                     emitted = true;
                     break;
                 }
@@ -386,25 +410,6 @@ fn emit_let(
     Ok(false)
 }
 
-fn emit_binding(em: &mut Emitter<'_>, fc: &mut FnCtx, fields: &LetFields) -> EmitResult<bool> {
-    let Some(val_idx) = fields.value else {
-        return Ok(false);
-    };
-    let is_fn = matches!(em.ast.exprs[val_idx], Expr::Fn { .. });
-    if is_fn {
-        return Ok(false);
-    }
-    let produced = emit_expr(em, fc, val_idx)?;
-    if produced {
-        if fields.kind == BindKind::Mut {
-            bind_pat_ref(em, fc, fields.pat)?;
-        } else {
-            bind_pat(em, fc, fields.pat)?;
-        }
-    }
-    Ok(false)
-}
-
 fn emit_unary(
     em: &mut Emitter<'_>,
     fc: &mut FnCtx,
@@ -419,7 +424,14 @@ fn emit_unary(
             Ok(true)
         }
         UnaryOp::Not => {
-            fc.fe.emit_unop(Opcode::NOT);
+            let family = type_query::classify_type_family(em, operand);
+            if type_query::is_logical_family(family) {
+                // Bool not: flip via `ld.false; cmp.eq` (true→false, false→true)
+                fc.fe.emit_ld_false();
+                fc.fe.emit_binop(Opcode::CMP_EQ);
+            } else {
+                fc.fe.emit_unop(Opcode::BNOT);
+            }
             Ok(true)
         }
         UnaryOp::ForceUnwrap => effects::emit_force_unwrap(em, fc, operand),
@@ -567,12 +579,7 @@ fn emit_type_cast(
         // Can't resolve type - leave value on stack, assume caller knows what they're doing.
         return Ok(true);
     };
-    fc.fe.emit_dup();
-    fc.fe.emit_type_chk(type_id);
-    let ok_label = fc.fresh_label();
-    fc.fe.emit_jmp_t(ok_label);
-    fc.fe.emit_unop(msc_bc::Opcode::PANIC);
-    fc.fe.emit_label(ok_label);
+    fc.fe.emit_ty_cast(type_id);
     Ok(true)
 }
 
@@ -593,21 +600,47 @@ fn emit_binop_expr(
         return Ok(true);
     }
     // Polymorphic dispatch: load method from dictionary, call via INV_DYN
-    if let Some(dict_lookup) = em.active_binop_dict_dispatch().get(&expr_idx) {
-        let dict_slot = fc
-            .dict_slots
-            .get(&dict_lookup.class)
-            .copied()
-            .ok_or_else(|| EmitError::UnsupportedFeature {
-                desc: "no dictionary slot for class constraint".into(),
-            })?;
+    if let Some(dict_lookup) = em.active_binop_dict_dispatch().get(&expr_idx).cloned() {
         let method_idx =
             typeclass::class_method_index(em, dict_lookup.class, dict_lookup.method_sym)?;
-        fc.fe.emit_ld_loc(dict_slot); // load dictionary product
-        fc.fe.emit_ld_fld(method_idx)?; // extract method fn value
-        emit_require(em, fc, left, "dict-dispatched binop left operand")?;
-        emit_require(em, fc, right, "dict-dispatched binop right operand")?;
-        fc.fe.emit_inv_dyn(2)?; // call through fn value with 2 args
+        if let Some(&dict_slot) = fc.dict_slots.get(&dict_lookup.class) {
+            fc.fe.emit_ld_loc(dict_slot); // load dictionary product
+            fc.fe.emit_ld_fld(method_idx)?; // extract method fn value
+            emit_require(em, fc, left, "dict-dispatched binop left operand")?;
+            emit_require(em, fc, right, "dict-dispatched binop right operand")?;
+            fc.fe.emit_inv_dyn(2)?; // call through fn value with 2 args
+        } else {
+            // No static dict slot: emit cls.disp for runtime dispatch via TypeDescriptor.
+            let class_name = em
+                .sema
+                .defs
+                .iter()
+                .find(|d| d.id == dict_lookup.class && d.kind == DefKind::Class)
+                .map(|d| d.name);
+            if let Some(class_name) = class_name {
+                if let Some(&class_ref) = em.class_id_map.get(&class_name) {
+                    let class_u8 =
+                        u8::try_from(class_ref).map_err(|_| EmitError::OperandOverflow {
+                            desc: "cls.disp class index exceeds 255".into(),
+                        })?;
+                    let method_u8 =
+                        u8::try_from(method_idx).map_err(|_| EmitError::OperandOverflow {
+                            desc: "cls.disp method index exceeds 255".into(),
+                        })?;
+                    emit_require(em, fc, left, "cls-disp binop receiver")?;
+                    emit_require(em, fc, right, "cls-disp binop right operand")?;
+                    fc.fe.emit_cls_disp(class_u8, method_u8);
+                } else {
+                    return Err(EmitError::UnsupportedFeature {
+                        desc: "class not in class_id_map for cls.disp binop".into(),
+                    });
+                }
+            } else {
+                return Err(EmitError::UnsupportedFeature {
+                    desc: "no dictionary slot or class def for polymorphic binop".into(),
+                });
+            }
+        }
         return Ok(true);
     }
     emit_primitive_binop(em, fc, expr_idx, op, left, right)
@@ -630,7 +663,7 @@ fn emit_primitive_binop(
             } else {
                 emit_require(em, fc, left, "binop left operand")?;
                 emit_require(em, fc, right, "binop right operand")?;
-                fc.fe.emit_binop(Opcode::AND);
+                fc.fe.emit_binop(Opcode::BAND);
             }
             Ok(true)
         }
@@ -642,7 +675,20 @@ fn emit_primitive_binop(
             } else {
                 emit_require(em, fc, left, "binop left operand")?;
                 emit_require(em, fc, right, "binop right operand")?;
-                fc.fe.emit_binop(Opcode::OR);
+                fc.fe.emit_binop(Opcode::BOR);
+            }
+            Ok(true)
+        }
+        BinOp::Xor => {
+            let family = type_query::classify_type_family(em, left)
+                .or_else(|| type_query::classify_type_family(em, right));
+            emit_require(em, fc, left, "binop left operand")?;
+            emit_require(em, fc, right, "binop right operand")?;
+            if type_query::is_logical_family(family) {
+                // Bool xor: a xor b ≡ a /= b
+                fc.fe.emit_binop(Opcode::CMP_NE);
+            } else {
+                fc.fe.emit_binop(Opcode::BXOR);
             }
             Ok(true)
         }
@@ -652,10 +698,6 @@ fn emit_primitive_binop(
         }
         BinOp::Pipe => {
             desugar::emit_pipe(em, fc, expr_idx, left, right)?;
-            Ok(true)
-        }
-        BinOp::ForceCoal => {
-            desugar::emit_err_coal(em, fc, left, right)?;
             Ok(true)
         }
         BinOp::NilCoal => {
@@ -671,18 +713,17 @@ fn emit_primitive_binop(
             Ok(true)
         }
         _ => {
-            // String `+` → call str_cat FFI instead of I_ADD.
+            // String `+` → STR_CAT opcode (dedicated, no FFI overhead).
             if op == BinOp::Add
                 && let Some(ty_idx) = em.expr_types().get(&left).copied()
             {
                 let resolved = em.sema.unify.resolve(ty_idx, &em.sema.types);
                 if let Type::Named { def, .. } = &em.sema.types[resolved]
                     && *def == em.sema.well_known.string
-                    && let Some(ffi_idx) = em.str_cat_ffi_idx
                 {
                     emit_require(em, fc, left, "binop left operand")?;
                     emit_require(em, fc, right, "binop right operand")?;
-                    fc.fe.emit_inv_ffi(ffi_idx, 2);
+                    fc.fe.emit_binop(Opcode::STR_CAT);
                     return Ok(true);
                 }
             }
@@ -723,18 +764,23 @@ fn emit_narrow_truncation(
         _ => return Ok(()),
     };
     if signed {
-        let cv = ConstValue::Int(shift_amount);
+        // Sign-extend via MUL/DIV by 2^N (equivalent to SHL/SHR which were removed).
+        let shift_u32 = u32::try_from(shift_amount).map_err(|_| EmitError::OperandOverflow {
+            desc: "narrow truncation shift amount out of range".into(),
+        })?;
+        let scale = 1i64.wrapping_shl(shift_u32);
+        let cv = ConstValue::Int(scale);
         let idx = em.cp.intern(&cv)?;
         fc.fe.emit_ld_cst(idx);
-        fc.fe.emit_binop(Opcode::SHL);
+        fc.fe.emit_binop(Opcode::MUL);
         let idx2 = em.cp.intern(&cv)?;
         fc.fe.emit_ld_cst(idx2);
-        fc.fe.emit_binop(Opcode::SHR);
+        fc.fe.emit_binop(Opcode::DIV);
     } else {
         let cv = ConstValue::Int(mask.cast_signed());
         let idx = em.cp.intern(&cv)?;
         fc.fe.emit_ld_cst(idx);
-        fc.fe.emit_binop(Opcode::AND);
+        fc.fe.emit_binop(Opcode::BAND);
     }
     Ok(())
 }
@@ -758,6 +804,17 @@ fn emit_call(
         let total_count = dict_count + explicit_count_u32;
 
         if let Some(&ffi_idx) = em.foreign_map.get(&def_id) {
+            // Replace known FFI builtins with dedicated opcodes.
+            let ffi_name = em
+                .sema
+                .defs
+                .iter()
+                .find(|d| d.id == def_id)
+                .map(|d| em.interner.resolve(d.name));
+            if ffi_name == Some("str_len") && total_count == 1 {
+                fc.fe.emit_unop(Opcode::STR_LEN);
+                return Ok(true);
+            }
             let ac = i32::try_from(total_count).map_err(|_| EmitError::overflow("arg count"))?;
             fc.fe.emit_inv_ffi(ffi_idx, ac);
             return Ok(true);

@@ -109,9 +109,26 @@ pub(super) fn emit_dict_for_call(
         } else if let Some(&dict_slot) = fc.dict_slots.get(&constraint.class) {
             fc.fe.emit_ld_loc(dict_slot);
         } else {
-            return Err(EmitError::UnsupportedFeature {
-                desc: "no dictionary to forward for nested generic call".into(),
-            });
+            // Runtime dispatch: build dictionary from receiver's TypeDescriptor at runtime.
+            let class_name = em
+                .sema
+                .defs
+                .iter()
+                .find(|d| d.id == constraint.class && d.kind == DefKind::Class)
+                .map(|d| d.name);
+            if let Some(class_name) = class_name {
+                if let Some(&class_ref) = em.class_id_map.get(&class_name) {
+                    fc.fe.emit_cls_dict(class_ref);
+                } else {
+                    return Err(EmitError::UnsupportedFeature {
+                        desc: "class not in class_id_map for runtime dispatch".into(),
+                    });
+                }
+            } else {
+                return Err(EmitError::UnsupportedFeature {
+                    desc: "class def not found for runtime dispatch".into(),
+                });
+            }
         }
         let _ = callee_expr;
         dict_count += 1;

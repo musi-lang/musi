@@ -79,11 +79,14 @@ pub fn emit(
         gt: &emitter.global_table,
         functions: &functions,
         effects: &emitter.effects,
+        classes: &emitter.classes,
+        class_instances: &emitter.class_instances,
         foreign_fns: &emitter.foreign_fns,
         interner: emitter.interner,
         entry_fn_id: emitter.entry_fn_id,
         module_name: "",
         source_path: "",
+        dep_names: &[],
     })?;
     Ok(EmitOutput { bytes })
 }

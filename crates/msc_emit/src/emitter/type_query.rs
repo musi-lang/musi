@@ -367,11 +367,9 @@ pub fn map_binop(op: BinOp, _family: Option<TypeFamily>) -> EmitResult<Opcode> {
         BinOp::Le => Opcode::CMP_LE,
         BinOp::Gt => Opcode::CMP_GT,
         BinOp::Ge => Opcode::CMP_GE,
-        BinOp::And => Opcode::AND,
-        BinOp::Or => Opcode::OR,
-        BinOp::Xor => Opcode::XOR,
-        BinOp::Shl => Opcode::SHL,
-        BinOp::Shr => Opcode::SHR,
+        BinOp::And => Opcode::BAND,
+        BinOp::Or => Opcode::BOR,
+        BinOp::Xor => Opcode::BXOR,
         op => {
             return Err(EmitError::UnsupportedFeature {
                 desc: format!("binary operator `{op:?}`").into(),

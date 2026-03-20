@@ -15,6 +15,7 @@ mod type_query;
 mod typeclass;
 
 use std::collections::{HashMap, HashSet};
+use std::iter::repeat_n;
 use std::mem;
 
 use msc_ast::Pat;
@@ -22,6 +23,7 @@ use msc_ast::attr::{Attr, AttrValue};
 use msc_ast::decl::{ClassMember, EffectOp, ForeignDecl};
 use msc_ast::expr::{BinOp, BindKind, Expr, InstanceBody, LetFields, Param};
 use msc_ast::lit::Lit;
+use msc_ast::ty_param::TyParam;
 use msc_ast::{AstArenas, ExprIdx, ParsedModule, PatIdx, Stmt};
 use msc_sema::Type;
 use msc_sema::def::{DefFlags, DefId, DefKind};
@@ -32,11 +34,13 @@ use crate::const_pool::ConstPool;
 use crate::error::{EmitError, EmitResult};
 use crate::global_table::GlobalTable;
 use crate::global_table::{self, GlobalEntry};
-use crate::module::{EffectDef, EffectOpDef, ForeignFn};
+use crate::module::{
+    ClassDef, ClassInstanceDef, ClassMethodDef, EffectDef, EffectOpDef, ForeignFn,
+};
 use crate::string_table::StringTable;
 use crate::type_table::TypeTable;
 
-pub use fn_emitter::{FnEmitter, HandlerEntry};
+pub use fn_emitter::{FnEmitter, HandlerEntry, SafepointEntry};
 
 /// Per-function bytecode output.
 pub struct FnBytecode {
@@ -47,8 +51,23 @@ pub struct FnBytecode {
     pub param_count: u16,
     pub max_stack: u16,
     pub upvalue_count: u16,
+    /// Number of implicit dictionary parameters prepended before explicit params.
+    pub dict_param_count: u8,
+    /// Whether this function is exported from the module (bit0 of flags).
+    pub exported: bool,
+    /// Whether this function has effectful arrow `~>` (bit2 of flags).
+    pub effectful: bool,
     pub code: Vec<u8>,
     pub handlers: Vec<HandlerEntry>,
+    /// GC safepoint map entries, one per allocation/call site.
+    pub safepoints: Vec<SafepointEntry>,
+    /// Effect set: indices into the module's effect table used by this function.
+    pub effect_refs: Vec<u16>,
+    /// Source map entries: (`bytecode_offset`, `span_byte_offset`, `column=0`).
+    pub source_map: Vec<(u32, u32, u16)>,
+    /// Local variable debug names: per slot index, (`name_stridx`, `scope_start`, `scope_end`).
+    /// Slot order matches the function's local slot layout.
+    pub local_names: Vec<(u16, u32, u32)>,
 }
 
 /// Per-dependency-module context for multi-module emission.
@@ -92,8 +111,10 @@ pub struct Emitter<'a> {
     pub(crate) effect_id_map: HashMap<DefId, u8>,
     /// `DefId` -> `op.id` for user-defined effect operations.
     pub(crate) op_id_map: HashMap<DefId, u32>,
-    /// Index into `foreign_fns` for the `str_cat` helper (used by f-string desugar).
-    pub(crate) str_cat_ffi_idx: Option<u32>,
+    pub classes: Vec<ClassDef>,
+    pub class_instances: Vec<ClassInstanceDef>,
+    /// Class name `Symbol` -> index into `classes` vec (stable across calls).
+    pub(crate) class_id_map: HashMap<Symbol, u16>,
     /// Variant tag for `Some` (resolved at init, fallback 0).
     pub(crate) some_tag: u32,
     /// Variant tag for `Ok` (resolved at init, fallback 0).
@@ -113,6 +134,17 @@ pub struct Emitter<'a> {
     dep_global_inits: Vec<(ExprIdx, usize, DefId, u32)>,
     /// Top-level side-effect statements from dep modules (e.g., assignments).
     dep_side_effects: Vec<(ExprIdx, usize)>,
+    /// `dep_idx` → local slot in the entry function holding that dep's module record.
+    ///
+    /// Populated during `emit_script_entry` after all dep globals are initialised.
+    /// Used by expression emission to lower imported-global loads to
+    /// `ld.loc module_slot` + `rec.get field` instead of the flat `LD_GLB` path.
+    pub(crate) dep_module_slots: HashMap<usize, u32>,
+    /// `dep_idx` → ordered list of `(DefId, field_index_within_module_record)`.
+    ///
+    /// Built incrementally by `register_global` when `active_dep` is `Some`.
+    /// The field order matches the `TUP_NEW` constructed in `emit_script_entry`.
+    pub(crate) dep_global_fields: HashMap<usize, Vec<(DefId, u32)>>,
 }
 
 /// Per-function emission context.
@@ -191,7 +223,9 @@ impl<'a> Emitter<'a> {
             effects: vec![],
             effect_id_map: HashMap::new(),
             op_id_map: HashMap::new(),
-            str_cat_ffi_idx: None,
+            classes: vec![],
+            class_instances: vec![],
+            class_id_map: HashMap::new(),
             some_tag: 0,
             ok_tag: 0,
             next_fn_id: 0,
@@ -206,6 +240,8 @@ impl<'a> Emitter<'a> {
             next_global: 0,
             dep_global_inits: vec![],
             dep_side_effects: vec![],
+            dep_module_slots: HashMap::new(),
+            dep_global_fields: HashMap::new(),
         }
     }
 
@@ -250,12 +286,7 @@ impl<'a> Emitter<'a> {
         self.mark_repr_c_types();
         self.scan_top_level()?;
         self.scan_dep_modules()?;
-        // Update str_cat index from lang items if rt.ms was imported
-        if let Some(str_cat_def) = self.sema.lang_items.get("str_cat")
-            && let Some(&idx) = self.foreign_map.get(&str_cat_def)
-        {
-            self.str_cat_ffi_idx = Some(idx);
-        }
+        self.collect_class_instances();
         let functions = self.emit_functions()?;
         if functions.is_empty() && self.entry_fn_id.is_some() {
             return Err(EmitError::UnsupportedFeature {
@@ -310,7 +341,7 @@ impl<'a> Emitter<'a> {
             Expr::Annotated { attrs, inner, .. } => {
                 self.scan_annotated(&attrs, inner, None)?;
             }
-            Expr::Binding { fields, .. } | Expr::Let { fields, .. } => {
+            Expr::Let { fields, .. } => {
                 self.scan_binding(&fields);
             }
             Expr::Effect { name, ops, .. } => {
@@ -323,6 +354,14 @@ impl<'a> Emitter<'a> {
                 if let InstanceBody::Manual { members } = body {
                     self.scan_instance_members(&members, None);
                 }
+            }
+            Expr::Class {
+                name,
+                params,
+                members,
+                ..
+            } => {
+                self.scan_class(name, &params, &members)?;
             }
             Expr::Lit { .. }
             | Expr::Name { .. }
@@ -346,7 +385,6 @@ impl<'a> Emitter<'a> {
             | Expr::Return { .. }
             | Expr::Import { .. }
             | Expr::Export { .. }
-            | Expr::Class { .. }
             | Expr::TypeCheck { .. }
             | Expr::Handle { .. }
             | Expr::Need { .. }
@@ -354,11 +392,7 @@ impl<'a> Emitter<'a> {
             | Expr::Error { .. }
             | Expr::TypeApp { .. }
             | Expr::FnType { .. }
-            | Expr::OptionType { .. }
-            | Expr::ProductType { .. }
-            | Expr::SumType { .. }
-            | Expr::ArrayType { .. }
-            | Expr::PiType { .. } => {}
+            | Expr::TypeExpr { .. } => {}
         }
         Ok(())
     }
@@ -371,7 +405,7 @@ impl<'a> Emitter<'a> {
     ) -> EmitResult {
         let inner_expr = self.ast.exprs[inner].clone();
         match inner_expr {
-            Expr::Binding { fields, .. } => match dep_idx {
+            Expr::Let { fields, .. } => match dep_idx {
                 Some(di) => self.scan_dep_binding(&fields, di)?,
                 None => self.scan_binding(&fields),
             },
@@ -395,6 +429,14 @@ impl<'a> Emitter<'a> {
                 ..
             } => {
                 self.scan_instance_members(&members, dep_idx);
+            }
+            Expr::Class {
+                name,
+                params,
+                members,
+                ..
+            } if dep_idx.is_none() => {
+                self.scan_class(name, &params, &members)?;
             }
             _ => {}
         }
@@ -465,10 +507,18 @@ impl<'a> Emitter<'a> {
                 let trimmed = self.interner.resolve(s).trim_matches('"').to_owned();
                 self.interner.intern(&trimmed)
             });
-            let link_kind = link_attrs.kind.map(|s| {
-                let trimmed = self.interner.resolve(s).trim_matches('"').to_owned();
-                self.interner.intern(&trimmed)
+            let link_kind_tag = link_attrs.kind.map_or(0x00u8, |s| {
+                match self.interner.resolve(s).trim_matches('"') {
+                    "static" => 0x01,
+                    "framework" => 0x02,
+                    _ => 0x00, // dynamic
+                }
             });
+            let abi_tag = match abi_str.as_str() {
+                "stdcall" => 0x01,
+                "system" => 0x02,
+                _ => 0x00, // "C" and unknown ABIs both map to 0x00 (default C ABI)
+            };
 
             let attr_variadic = binding_attrs
                 .iter()
@@ -482,9 +532,13 @@ impl<'a> Emitter<'a> {
             let idx = u32::try_from(self.foreign_fns.len())
                 .map_err(|_| EmitError::overflow("foreign fn index overflow"))?;
             self.foreign_fns.push(ForeignFn {
+                musi_name: *name,
                 ext_name: ext_sym,
                 library,
-                link_kind,
+                abi: abi_tag,
+                link_kind_tag,
+                signature_type_id: 0,
+                ffi_flags: 0,
                 param_type_ids,
                 ret_type_id,
                 variadic: is_variadic,
@@ -559,11 +613,6 @@ impl<'a> Emitter<'a> {
         let effect_id =
             u8::try_from(raw_effect_id).map_err(|_| EmitError::overflow("too many effects"))?;
 
-        let unit_type_id = self
-            .tp
-            .lower_well_known_def(self.sema.well_known.unit, &self.sema.well_known)
-            .ok_or_else(|| EmitError::unresolvable("Unit type"))?;
-
         let mut op_defs = Vec::with_capacity(ops.len());
         for (op_idx, op) in ops.iter().enumerate() {
             let op_def_id = self
@@ -580,32 +629,166 @@ impl<'a> Emitter<'a> {
             let op_id = u32::try_from(op_idx)
                 .map_err(|_| EmitError::overflow("effect op index overflow"))?;
 
-            let (param_type_ids, ret_type_id) = op_def_id.map_or_else(
-                || (vec![], unit_type_id),
-                |did| self.resolve_fn_type(did, unit_type_id, unit_type_id),
-            );
-
             if let Some(did) = op_def_id {
                 let _ = self.op_id_map.insert(did, op_id);
             }
 
             op_defs.push(EffectOpDef {
-                id: op_id,
+                signature: op_id,
                 name: op.name,
-                param_type_ids,
-                ret_type_id,
                 fatal: op.fatal,
             });
         }
 
-        let effect_id_u32 = u32::from(effect_id);
         self.effects.push(EffectDef {
-            id: effect_id_u32,
             name: effect_name,
+            type_param_names: vec![],
             ops: op_defs,
+            laws: vec![],
         });
         let _ = self.effect_id_map.insert(effect_def_id, effect_id);
         Ok(())
+    }
+
+    /// Register a class declaration from the AST into `self.classes`.
+    ///
+    /// Skips duplicate registrations (idempotent on class name).
+    fn scan_class(
+        &mut self,
+        class_name: Symbol,
+        type_params: &[TyParam],
+        members: &[ClassMember],
+    ) -> EmitResult {
+        // Idempotent: skip if already registered.
+        if self.class_id_map.contains_key(&class_name) {
+            return Ok(());
+        }
+
+        let class_idx = u16::try_from(self.classes.len())
+            .map_err(|_| EmitError::overflow("too many class declarations"))?;
+
+        let mut method_defs: Vec<ClassMethodDef> = vec![];
+        for member in members {
+            let ClassMember::Fn { sig, default, .. } = member else {
+                continue;
+            };
+            // Use 0 as signature_type_id; full type lowering requires the
+            // sema types arena which can't be borrowed mutably alongside tp.
+            // The type ref is informational metadata - the VM uses fn_map refs
+            // for actual dispatch.
+            let _ = self
+                .sema
+                .defs
+                .iter()
+                .find(|d| d.kind == DefKind::Fn && d.name == sig.name && d.span == sig.span)
+                .map(|d| d.id);
+            method_defs.push(ClassMethodDef {
+                name: sig.name,
+                signature_type_id: 0,
+                has_default: default.is_some(),
+            });
+        }
+
+        // Laws from ClassMember::Law entries.
+        let laws: Vec<(Symbol, u16)> = members
+            .iter()
+            .filter_map(|m| {
+                if let ClassMember::Law { name, .. } = m {
+                    Some((*name, 0u16))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        let type_param_syms: Vec<Symbol> = type_params.iter().map(|p| p.name).collect();
+
+        self.classes.push(ClassDef {
+            name: class_name,
+            type_params: type_param_syms,
+            methods: method_defs,
+            laws,
+            superclasses: vec![],
+        });
+        let _ = self.class_id_map.insert(class_name, class_idx);
+        Ok(())
+    }
+
+    /// Populate `self.class_instances` from `sema.instances`.
+    ///
+    /// Must be called after `scan_top_level` (and dep modules) so that all
+    /// class declarations have been registered in `class_id_map`.
+    fn collect_class_instances(&mut self) {
+        let instances = self.sema.instances.clone();
+        for inst in &instances {
+            // Resolve class_ref: find the class name from its DefId, then look up in class_id_map.
+            let class_name = self
+                .sema
+                .defs
+                .iter()
+                .find(|d| d.id == inst.class && d.kind == DefKind::Class)
+                .map(|d| d.name);
+            let Some(class_name) = class_name else {
+                // Class not declared in this module's CLSS table - skip.
+                continue;
+            };
+            let Some(&class_ref) = self.class_id_map.get(&class_name) else {
+                // Class declaration wasn't scanned (e.g., imported from another module).
+                continue;
+            };
+
+            // type_ref: lower the instance target type.
+            let type_ref = self
+                .tp
+                .lower_sema_type(
+                    inst.target,
+                    &self.sema.types,
+                    &self.sema.unify,
+                    &self.sema.well_known,
+                )
+                .ok()
+                .and_then(|id| u16::try_from(id).ok())
+                .unwrap_or(0xFFFF);
+
+            // Determine instance kind:
+            // Manual instances have all their member DefIds registered in fn_map
+            // by scan_instance_members. Via/derives instances have empty members
+            // or members not in fn_map.
+            let (kind, method_refs, delegate_type_ref) = if inst.members.is_empty() {
+                // No members: treat as derives (0x02).
+                (0x02u8, vec![], None)
+            } else {
+                let all_in_fn_map = inst
+                    .members
+                    .iter()
+                    .all(|(_, did)| self.fn_map.contains_key(did));
+                if all_in_fn_map {
+                    // Manual instance: emit one method_ref per member.
+                    let refs: Vec<u16> = inst
+                        .members
+                        .iter()
+                        .filter_map(|(_, did)| {
+                            self.fn_map
+                                .get(did)
+                                .and_then(|&fn_id| u16::try_from(fn_id).ok())
+                        })
+                        .collect();
+                    (0x00u8, refs, None)
+                } else {
+                    // Via delegation: members were copied from the delegate instance.
+                    // No separate delegate_type_ref is available from InstanceInfo.
+                    (0x01u8, vec![], None)
+                }
+            };
+
+            self.class_instances.push(ClassInstanceDef {
+                class_ref,
+                type_ref,
+                kind,
+                method_refs,
+                delegate_type_ref,
+            });
+        }
     }
 
     fn scan_binding(&mut self, fields: &LetFields) {
@@ -699,7 +882,7 @@ impl<'a> Emitter<'a> {
             Expr::Annotated { attrs, inner, .. } => {
                 self.scan_annotated(&attrs, inner, Some(dep_idx))?;
             }
-            Expr::Binding { fields, .. } | Expr::Let { fields, .. } => {
+            Expr::Let { fields, .. } => {
                 self.scan_dep_binding(&fields, dep_idx)?;
             }
             Expr::Foreign { abi, decls, .. } => {
@@ -786,6 +969,14 @@ impl<'a> Emitter<'a> {
         self.next_global += 1;
         let _ = self.global_map.insert(did, slot);
 
+        // Track per-dep-module field ownership so that expression emission can
+        // lower cross-module global loads to `ld.loc M` + `rec.get N`.
+        if let Some(dep_idx) = self.active_dep {
+            let fields = self.dep_global_fields.entry(dep_idx).or_default();
+            let field_index = u32::try_from(fields.len()).unwrap_or(u32::MAX);
+            fields.push((did, field_index));
+        }
+
         let binding_name = pat_name_str(pat, self.ast, self.interner);
         let name_stridx = self.string_table.intern_str(&binding_name)?;
         let is_exported = self
@@ -852,6 +1043,32 @@ impl<'a> Emitter<'a> {
             }
         }
 
+        // Per-dep module records: pack each dep's globals into a TUP_NEW and store
+        // in a local slot so imports lower to `ld.loc M` + `rec.get N`.
+        let dep_field_snapshot: Vec<(usize, Vec<(DefId, u32)>)> = self
+            .dep_global_fields
+            .iter()
+            .map(|(&dep_idx, fields)| (dep_idx, fields.clone()))
+            .collect();
+        for (dep_idx, fields) in dep_field_snapshot {
+            if fields.is_empty() {
+                continue;
+            }
+            let mut ordered = fields;
+            ordered.sort_by_key(|&(_, fi)| fi);
+            for (did, _) in &ordered {
+                fc.fe.emit_ld_glb(self.global_map[did]);
+            }
+            let field_count = u32::try_from(ordered.len())
+                .map_err(|_| EmitError::overflow("dep module record fields"))?;
+            let stack_pop = i32::try_from(ordered.len())
+                .map_err(|_| EmitError::overflow("dep module record fields"))?;
+            fc.fe.emit_mk_prd(field_count, stack_pop)?;
+            let module_slot = fc.fe.alloc_local();
+            fc.fe.emit_st_loc(module_slot);
+            let _ = self.dep_module_slots.insert(dep_idx, module_slot);
+        }
+
         // Emit top-level side-effect statements from dep modules
         // (e.g., mutable global reassignment like `parse_value_ref <- parse_value`).
         let side_effects = mem::take(&mut self.dep_side_effects);
@@ -902,8 +1119,15 @@ impl<'a> Emitter<'a> {
             param_count: 0,
             max_stack: fc.fe.max_stack,
             upvalue_count: 0,
+            dict_param_count: 0,
+            exported: false,
+            effectful: false,
+            source_map: fc.fe.source_map,
+            local_names: vec![],
             code: fc.fe.code,
             handlers: fc.fe.handlers,
+            safepoints: fc.fe.safepoints,
+            effect_refs: vec![],
         })
     }
 
@@ -935,44 +1159,8 @@ impl<'a> Emitter<'a> {
             saved_ast
         });
 
-        // Determine implicit dictionary parameter count from constraints
-        let constraints = entry
-            .def_id
-            .and_then(|did| self.active_fn_constraints().get(&did));
-        let dict_count = constraints.map_or(0, Vec::len);
-        let total_params = entry.params.len() + dict_count;
-        let param_count =
-            u16::try_from(total_params).map_err(|_| EmitError::overflow("too many params"))?;
-
-        let mut fc = FnCtx::new(param_count);
-
-        // Slots 0..dict_count are implicit dictionary parameters
-        if let Some(constraints) = constraints {
-            for (i, ob) in constraints.iter().enumerate() {
-                let slot =
-                    u32::try_from(i).map_err(|_| EmitError::overflow("dict slot overflow"))?;
-                let _ = fc.dict_slots.insert(ob.class, slot);
-            }
-        }
-
-        // Slots dict_count..total are explicit parameters (shifted by dict_count)
-        for (i, param) in entry.params.iter().enumerate() {
-            let slot = u32::try_from(i + dict_count)
-                .map_err(|_| EmitError::overflow("param index overflow"))?;
-            if let Some(&did) = self.pat_defs().get(&param.span) {
-                let _ = fc.local_map.insert(did, slot);
-            } else {
-                for def in &self.sema.defs {
-                    if def.kind == DefKind::Param
-                        && def.name == param.name
-                        && def.span == param.span
-                    {
-                        let _ = fc.local_map.insert(def.id, slot);
-                        break;
-                    }
-                }
-            }
-        }
+        let mut fc = self.build_fn_ctx(entry)?;
+        let dict_count = usize::from(fc.fe.param_count) - entry.params.len();
 
         let had_value = expr::emit_expr_tail(self, &mut fc, entry.body, true)?;
         if had_value {
@@ -992,6 +1180,10 @@ impl<'a> Emitter<'a> {
         let _code_len = fc.fe.validate_code_len()?;
 
         let type_id = self.resolve_fn_type_id(entry.def_id)?;
+        let (exported, effectful, effect_refs) = self.resolve_fn_def_flags(entry.def_id);
+        let dict_param_count = u8::try_from(dict_count)
+            .map_err(|_| EmitError::overflow("dict_param_count overflow"))?;
+        let local_names = self.build_local_names(&fc);
 
         if let Some(saved_ast) = saved {
             self.ast = saved_ast;
@@ -1006,9 +1198,123 @@ impl<'a> Emitter<'a> {
             param_count: fc.fe.param_count,
             max_stack: fc.fe.max_stack,
             upvalue_count: 0,
+            dict_param_count,
+            exported,
+            effectful,
+            source_map: fc.fe.source_map,
+            local_names,
             code: fc.fe.code,
             handlers: fc.fe.handlers,
+            safepoints: fc.fe.safepoints,
+            effect_refs,
         })
+    }
+
+    /// Build and populate a `FnCtx` for `entry`: allocates param/dict slots.
+    fn build_fn_ctx(&self, entry: &FnEntry) -> EmitResult<FnCtx> {
+        let constraints = entry
+            .def_id
+            .and_then(|did| self.active_fn_constraints().get(&did));
+        let dict_count = constraints.map_or(0, Vec::len);
+        let total_params = entry.params.len() + dict_count;
+        let param_count =
+            u16::try_from(total_params).map_err(|_| EmitError::overflow("too many params"))?;
+
+        let mut fc = FnCtx::new(param_count);
+
+        // Slots 0..dict_count are implicit dictionary parameters.
+        if let Some(constraints) = constraints {
+            for (i, ob) in constraints.iter().enumerate() {
+                let slot =
+                    u32::try_from(i).map_err(|_| EmitError::overflow("dict slot overflow"))?;
+                let _ = fc.dict_slots.insert(ob.class, slot);
+            }
+        }
+
+        // Slots dict_count..total are explicit parameters (shifted by dict_count).
+        for (i, param) in entry.params.iter().enumerate() {
+            let slot = u32::try_from(i + dict_count)
+                .map_err(|_| EmitError::overflow("param index overflow"))?;
+            if let Some(&did) = self.pat_defs().get(&param.span) {
+                let _ = fc.local_map.insert(did, slot);
+            } else {
+                for def in &self.sema.defs {
+                    if def.kind == DefKind::Param
+                        && def.name == param.name
+                        && def.span == param.span
+                    {
+                        let _ = fc.local_map.insert(def.id, slot);
+                        break;
+                    }
+                }
+            }
+        }
+
+        Ok(fc)
+    }
+
+    /// Resolve exported/effectful flags and effect refs for a definition.
+    fn resolve_fn_def_flags(&self, def_id: Option<DefId>) -> (bool, bool, Vec<u16>) {
+        let Some(did) = def_id else {
+            return (false, false, vec![]);
+        };
+        let def_info = self.sema.defs.iter().find(|d| d.id == did);
+        let is_exported = def_info.is_some_and(|d| d.exported);
+        let resolved_ty = def_info
+            .and_then(|d| d.ty_info.ty)
+            .map(|ty_idx| self.sema.unify.resolve(ty_idx, &self.sema.types));
+        let is_effectful = resolved_ty.is_some_and(|resolved| {
+            matches!(&self.sema.types[resolved], Type::Fn { effects, .. } if !effects.is_pure())
+        });
+        let refs: Vec<u16> = resolved_ty
+            .and_then(|resolved| {
+                if let Type::Fn { effects, .. } = &self.sema.types[resolved] {
+                    Some(
+                        effects
+                            .effects
+                            .iter()
+                            .filter_map(|entry| {
+                                self.effect_id_map
+                                    .get(&entry.def)
+                                    .map(|&idx| u16::from(idx))
+                            })
+                            .collect(),
+                    )
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_default();
+        (is_exported, is_effectful, refs)
+    }
+
+    /// Build the `local_names` debug table from the completed `FnCtx`.
+    ///
+    /// Uses conservative full-function scope (`scope_start=0`, `scope_end=code_len`)
+    /// since fine-grained scope tracking is not performed during emission.
+    fn build_local_names(&mut self, fc: &FnCtx) -> Vec<(u16, u32, u32)> {
+        let code_len = u32::try_from(fc.fe.code.len()).unwrap_or(u32::MAX);
+        let local_count_usize = usize::from(fc.fe.local_count);
+        let mut local_names: Vec<(u16, u32, u32)> = vec![(0u16, 0u32, 0u32); local_count_usize];
+        for (&def_id, &slot) in &fc.local_map {
+            let Some(slot_idx) = usize::try_from(slot)
+                .ok()
+                .filter(|&i| i < local_count_usize)
+            else {
+                continue;
+            };
+            let name_sym = self
+                .sema
+                .defs
+                .iter()
+                .find(|d| d.id == def_id)
+                .map(|d| d.name);
+            let name_stridx = name_sym
+                .and_then(|sym| self.string_table.intern(sym, self.interner).ok())
+                .unwrap_or(0);
+            local_names[slot_idx] = (name_stridx, 0, code_len);
+        }
+        local_names
     }
 }
 
@@ -1018,17 +1324,31 @@ pub fn write_function_pool(buf: &mut Vec<u8>, functions: &[FnBytecode]) -> EmitR
         u16::try_from(functions.len()).map_err(|_| EmitError::overflow("too many functions"))?;
     buf.extend_from_slice(&count.to_be_bytes());
     for fn_bc in functions {
-        // name_stridx, sig_type, params, locals, max_stack, upvalues (all u16 BE)
+        // u16 name_stridx
         buf.extend_from_slice(&fn_bc.name_stridx.to_be_bytes());
+        // u16 sig_type
         buf.extend_from_slice(
             &u16::try_from(fn_bc.type_id)
                 .unwrap_or(u16::MAX)
                 .to_be_bytes(),
         );
+        // u8 flags: bit0=exported, bit2=effectful
+        let mut flags: u8 = 0;
+        if fn_bc.exported {
+            flags |= 0x01;
+        }
+        if fn_bc.effectful {
+            flags |= 0x04;
+        }
+        buf.push(flags);
+        // u16 param_count, u16 local_count, u16 max_stack, u16 upvalue_count
         buf.extend_from_slice(&fn_bc.param_count.to_be_bytes());
         buf.extend_from_slice(&fn_bc.local_count.to_be_bytes());
         buf.extend_from_slice(&fn_bc.max_stack.to_be_bytes());
         buf.extend_from_slice(&fn_bc.upvalue_count.to_be_bytes());
+        // u8 dict_param_count
+        buf.push(fn_bc.dict_param_count);
+        // u32 bytecode length + bytes
         let code_len = u32::try_from(fn_bc.code.len()).map_err(|_| EmitError::FunctionTooLarge)?;
         buf.extend_from_slice(&code_len.to_be_bytes());
         buf.extend_from_slice(&fn_bc.code);
@@ -1039,9 +1359,26 @@ pub fn write_function_pool(buf: &mut Vec<u8>, functions: &[FnBytecode]) -> EmitR
             buf.push(h.effect_id);
             buf.extend_from_slice(&h.handler_fn_id.to_be_bytes());
         }
-        // safepoint_count = 0, effect_set_count = 0
-        buf.extend_from_slice(&0u16.to_be_bytes());
-        buf.extend_from_slice(&0u16.to_be_bytes());
+        // Safepoint map: u16 count, each: u32 offset + u16 stack_depth + bitmap(stack) + bitmap(locals).
+        // Bitmaps are conservative (all bits set - every slot potentially a ref).
+        let sp_count = u16::try_from(fn_bc.safepoints.len())
+            .map_err(|_| EmitError::overflow("safepoint count"))?;
+        buf.extend_from_slice(&sp_count.to_be_bytes());
+        for sp in &fn_bc.safepoints {
+            buf.extend_from_slice(&sp.offset.to_be_bytes());
+            buf.extend_from_slice(&sp.stack_depth.to_be_bytes());
+            let stack_bitmap_bytes = usize::from(sp.stack_depth).div_ceil(8);
+            buf.extend(repeat_n(0xFF_u8, stack_bitmap_bytes));
+            let local_bitmap_bytes = usize::from(fn_bc.local_count).div_ceil(8);
+            buf.extend(repeat_n(0xFF_u8, local_bitmap_bytes));
+        }
+        // Effect set: u16 count, each: u16 effect ref.
+        let esc = u16::try_from(fn_bc.effect_refs.len())
+            .map_err(|_| EmitError::overflow("effect set count"))?;
+        buf.extend_from_slice(&esc.to_be_bytes());
+        for &eref in &fn_bc.effect_refs {
+            buf.extend_from_slice(&eref.to_be_bytes());
+        }
     }
     Ok(())
 }
