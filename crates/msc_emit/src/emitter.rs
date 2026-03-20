@@ -315,14 +315,15 @@ impl<'a> Emitter<'a> {
     }
 
     fn scan_top_level(&mut self) -> EmitResult {
-        let stmts = self.stmts.clone();
-        for stmt in &stmts {
-            self.scan_stmt(stmt.expr)?;
-        }
-        // Script mode: synthesize an entry function from top-level statements.
+        // Reserve fn_id=0 for the entry function so the loader (which hardcodes
+        // entry_point=0) starts execution at the right function.
         if self.script && self.entry_fn_id.is_none() {
             let fn_id = self.alloc_fn_id();
             self.entry_fn_id = Some(fn_id);
+        }
+        let stmts = self.stmts.clone();
+        for stmt in &stmts {
+            self.scan_stmt(stmt.expr)?;
         }
         Ok(())
     }
@@ -1068,6 +1069,8 @@ impl<'a> Emitter<'a> {
         }
 
         fc.fe.resolve_fixups("__main__")?;
+
+        // Entry function bytecode is complete.
 
         let unit_type_id = self
             .tp

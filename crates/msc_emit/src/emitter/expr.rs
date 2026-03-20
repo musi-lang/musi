@@ -563,9 +563,10 @@ fn emit_binop_expr(
     if let Some(&def_id) = em.active_binop_dispatch().get(&expr_idx)
         && let Some(&fn_id) = em.fn_map.get(&def_id)
     {
+        fc.fe.emit_cls_new(fn_id);
         emit_require(em, fc, left, "dispatched binop left operand")?;
         emit_require(em, fc, right, "dispatched binop right operand")?;
-        fc.fe.emit_inv(fn_id, false, 2);
+        fc.fe.emit_inv_dyn(2)?;
         return Ok(true);
     }
     // Polymorphic dispatch: load method from dictionary, call via INV_DYN
@@ -766,6 +767,25 @@ fn emit_call(
     // This handles both simple names (`foo(...)`) and resolved import field
     // chains (`rt.writeln(...)`, `t.assertions.assert_eq(...)`).
     if let Some(&def_id) = em.expr_defs().get(&callee) {
+        // Direct fn call: push callee (CLS_NEW) BEFORE args so resolve_callee
+        // finds it below the arguments on the operand stack.
+        if let Some(&fn_id) = em.fn_map.get(&def_id) {
+            fc.fe.emit_cls_new(fn_id);
+            let dict_count = typeclass::emit_dict_for_call(em, fc, def_id, callee)?;
+            let explicit_count = emit_call_args(em, fc, args)?;
+            let explicit_count_u32 =
+                u32::try_from(explicit_count).map_err(|_| EmitError::overflow("arg count"))?;
+            let total_count = dict_count + explicit_count_u32;
+            let ac = i32::try_from(total_count).map_err(|_| EmitError::overflow("arg count"))?;
+            if is_tail {
+                fc.fe.emit_inv_dyn_tail(ac)?;
+                return Ok(false);
+            }
+            fc.fe.emit_inv_dyn(ac)?;
+            return Ok(true);
+        }
+
+        // FFI and dynamic paths: args first (FFI_CALL doesn't use resolve_callee).
         let dict_count = typeclass::emit_dict_for_call(em, fc, def_id, callee)?;
         let explicit_count = emit_call_args(em, fc, args)?;
         let explicit_count_u32 =
@@ -773,7 +793,6 @@ fn emit_call(
         let total_count = dict_count + explicit_count_u32;
 
         if let Some(&ffi_idx) = em.foreign_map.get(&def_id) {
-            // Replace known FFI builtins with dedicated opcodes.
             let ffi_name = em
                 .sema
                 .defs
@@ -786,15 +805,6 @@ fn emit_call(
             }
             let ac = i32::try_from(total_count).map_err(|_| EmitError::overflow("arg count"))?;
             fc.fe.emit_inv_ffi(ffi_idx, ac);
-            return Ok(true);
-        }
-        if let Some(&fn_id) = em.fn_map.get(&def_id) {
-            let ac = i32::try_from(total_count).map_err(|_| EmitError::overflow("arg count"))?;
-            if is_tail {
-                fc.fe.emit_inv_tail(fn_id, false, ac);
-                return Ok(false);
-            }
-            fc.fe.emit_inv(fn_id, false, ac);
             return Ok(true);
         }
         // Dynamic dispatch via local, upvalue, or global requires callee below args.

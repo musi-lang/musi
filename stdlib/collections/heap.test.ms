@@ -3,13 +3,13 @@
 import "@std/testing" as t;
 import "@std/collections/heap" as heap;
 
-let min_cmp := (a, b) => (
+let min_cmp := (a : Int, b : Int) => (
   .Less if a < b
   | .Greater if a > b
   | .Equal if _
 );
 
-let max_cmp := (a, b) => (
+let max_cmp := (a : Int, b : Int) => (
   .Less if a > b
   | .Greater if a < b
   | .Equal if _

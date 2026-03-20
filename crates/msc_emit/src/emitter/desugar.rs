@@ -147,11 +147,18 @@ pub fn emit_pipe(
                 return Ok(());
             }
             if let Some(&fn_id) = em.fn_map.get(&def_id) {
-                fc.fe.emit_inv(fn_id, false, 1);
+                let tmp = fc.alloc_local();
+                fc.fe.emit_st_loc(tmp);
+                fc.fe.emit_cls_new(fn_id);
+                fc.fe.emit_ld_loc(tmp);
+                fc.fe.emit_inv_dyn(1)?;
                 return Ok(());
             }
             if let Some(&slot) = fc.local_map.get(&def_id) {
+                let tmp = fc.alloc_local();
+                fc.fe.emit_st_loc(tmp);
                 fc.fe.emit_ld_loc(slot);
+                fc.fe.emit_ld_loc(tmp);
                 fc.fe.emit_inv_dyn(1)?;
                 return Ok(());
             }

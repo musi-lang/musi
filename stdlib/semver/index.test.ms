@@ -47,24 +47,24 @@ t.describe("Semver", () => (
     )
   ));
   t.it("compare - equal versions", () => (
-    let a : Result of semver.Semver, semver.ParseError := semver.parse("1.2.3");
-    let b : Result of semver.Semver, semver.ParseError := semver.parse("1.2.3");
+    let a := semver.parse("1.2.3");
+    let b := semver.parse("1.2.3");
     match (a, b) (
       (.Ok(av), .Ok(bv)) => t.expect(semver.compare(av, bv)).toBe(.Equal)
       | _ => t.expect(.True).toBe(.False)
     )
   ));
   t.it("compare - major version difference", () => (
-    let a : Result of semver.Semver, semver.ParseError := semver.parse("2.0.0");
-    let b : Result of semver.Semver, semver.ParseError := semver.parse("1.0.0");
+    let a := semver.parse("2.0.0");
+    let b := semver.parse("1.0.0");
     match (a, b) (
       (.Ok(av), .Ok(bv)) => t.expect(semver.compare(av, bv)).toBe(.Greater)
       | _ => t.expect(.True).toBe(.False)
     )
   ));
   t.it("compare - pre-release is lower precedence than release", () => (
-    let a : Result of semver.Semver, semver.ParseError := semver.parse("1.0.0");
-    let b : Result of semver.Semver, semver.ParseError := semver.parse("1.0.0-alpha");
+    let a := semver.parse("1.0.0");
+    let b := semver.parse("1.0.0-alpha");
     match (a, b) (
       (.Ok(av), .Ok(bv)) => t.expect(semver.compare(av, bv)).toBe(.Greater)
       | _ => t.expect(.True).toBe(.False)
@@ -98,16 +98,16 @@ t.describe("Semver", () => (
     )
   ));
   t.it("is_compatible - same major is compatible", () => (
-    let a : Result of semver.Semver, semver.ParseError := semver.parse("1.2.3");
-    let b : Result of semver.Semver, semver.ParseError := semver.parse("1.5.0");
+    let a := semver.parse("1.2.3");
+    let b := semver.parse("1.5.0");
     match (a, b) (
       (.Ok(av), .Ok(bv)) => t.expect(semver.is_compatible(av, bv)).toBe(.True)
       | _ => t.expect(.True).toBe(.False)
     )
   ));
   t.it("is_compatible - different major is not compatible", () => (
-    let a : Result of semver.Semver, semver.ParseError := semver.parse("1.0.0");
-    let b : Result of semver.Semver, semver.ParseError := semver.parse("2.0.0");
+    let a := semver.parse("1.0.0");
+    let b := semver.parse("2.0.0");
     match (a, b) (
       (.Ok(av), .Ok(bv)) => t.expect(semver.is_compatible(av, bv)).toBe(.False)
       | _ => t.expect(.True).toBe(.False)

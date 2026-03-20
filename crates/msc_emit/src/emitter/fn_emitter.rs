@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 
 use crate::error::{EmitError, EmitResult};
-use msc_bc::{Opcode, encode_f0, encode_fi8, encode_fi8x2, encode_fi16};
+use msc_bc::{encode_f0, encode_fi16, encode_fi8, encode_fi8x2, Opcode};
 
 /// Fixup record: a forward jump that needs patching once we know the label target.
 struct Fixup {
@@ -231,29 +231,6 @@ impl FnEmitter {
         encode_f0(&mut self.code, Opcode::TY_OF);
     }
 
-    pub fn emit_inv(&mut self, fn_id: u32, _effectful: bool, arg_count: i32) {
-        let proto = u16::try_from(fn_id).unwrap_or(u16::MAX);
-        encode_fi16(&mut self.code, Opcode::CLS_NEW, proto);
-        self.push_n(1);
-        self.record_safepoint(); // cls.new
-        let arity = u8::try_from(arg_count).unwrap_or(u8::MAX);
-        encode_fi8(&mut self.code, Opcode::CALL, arity);
-        self.pop_n(arg_count + 1);
-        self.push_n(1);
-        self.record_safepoint(); // call
-    }
-
-    pub fn emit_inv_tail(&mut self, fn_id: u32, _effectful: bool, arg_count: i32) {
-        let proto = u16::try_from(fn_id).unwrap_or(u16::MAX);
-        encode_fi16(&mut self.code, Opcode::CLS_NEW, proto);
-        self.push_n(1);
-        self.record_safepoint(); // cls.new
-        let arity = u8::try_from(arg_count).unwrap_or(u8::MAX);
-        encode_fi8(&mut self.code, Opcode::CALL_TAIL, arity);
-        self.record_safepoint(); // call.tail
-        self.stack_depth = 0;
-    }
-
     pub fn emit_inv_dyn(&mut self, arg_count: i32) -> EmitResult {
         let n = u8::try_from(arg_count).map_err(|_| EmitError::OperandOverflow {
             desc: "dynamic call arg count exceeds 255".into(),
@@ -261,7 +238,17 @@ impl FnEmitter {
         encode_fi8(&mut self.code, Opcode::CALL, n);
         self.pop_n(arg_count + 1);
         self.push_n(1);
-        self.record_safepoint(); // call (dynamic)
+        self.record_safepoint();
+        Ok(())
+    }
+
+    pub fn emit_inv_dyn_tail(&mut self, arg_count: i32) -> EmitResult {
+        let n = u8::try_from(arg_count).map_err(|_| EmitError::OperandOverflow {
+            desc: "dynamic tail call arg count exceeds 255".into(),
+        })?;
+        encode_fi8(&mut self.code, Opcode::CALL_TAIL, n);
+        self.record_safepoint();
+        self.stack_depth = 0;
         Ok(())
     }
 

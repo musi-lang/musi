@@ -1,8 +1,8 @@
 //! Compound expression parsing: paren groups, tuples, blocks, piecewise, match, fn literals.
 
-use msc_ast::ExprIdx;
 use msc_ast::expr::{Expr, MatchArm, PwArm, PwGuard};
 use msc_ast::lit::Lit;
+use msc_ast::ExprIdx;
 use msc_lex::token::TokenKind;
 
 use crate::parser::Parser;
@@ -41,6 +41,7 @@ impl Parser<'_> {
         // (mut ...) or (ident : ...) can only be a lambda — parse as param list directly
         if self.at(TokenKind::KwMut)
             || (self.at(TokenKind::Ident) && self.peek_at(1).kind == TokenKind::Colon)
+            || (self.at(TokenKind::Underscore) && self.peek_at(1).kind == TokenKind::Colon)
         {
             return self.parse_forced_fn_literal(start);
         }
