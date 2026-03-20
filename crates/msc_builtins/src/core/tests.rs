@@ -249,7 +249,10 @@ fn test_str_parse_int_invalid() {
 }
 
 #[test]
-#[allow(clippy::approx_constant)]
+#[expect(
+    clippy::approx_constant,
+    reason = "intentionally testing near-pi values"
+)]
 fn test_str_parse_float() {
     let mut heap = Heap::new();
     let s = make_string(&mut heap, "3.14");

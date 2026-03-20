@@ -49,6 +49,8 @@ pub fn lookup(name: &str) -> Option<BuiltinFn> {
         "int_max" => Some(int_max),
         "int_clamp" => Some(int_clamp),
         "int_pow" => Some(int_pow),
+        "int_shl" => Some(int_shl),
+        "int_shr" => Some(int_shr),
         // Numeric - float
         "float_abs" => Some(float_abs),
         "float_floor" => Some(float_floor),
@@ -206,7 +208,10 @@ fn str_trim_end(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
 }
 
 // Need to collect into owned strings to release shared borrow on `heap`.
-#[allow(clippy::needless_collect)]
+#[expect(
+    clippy::needless_collect,
+    reason = "collect needed to avoid borrow conflict"
+)]
 fn str_split(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     let s = get_str(arg(args, 0)?, heap)?;
     let delim = get_str(arg(args, 1)?, heap)?;
@@ -400,6 +405,20 @@ fn int_pow(args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     Ok(Value::from_int_wide(base.wrapping_pow(exp_u32), heap))
 }
 
+fn int_shl(args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
+    let val = arg(args, 0)?.as_int()?;
+    let shift = arg(args, 1)?.as_int()?;
+    let shift_u32 = u32::try_from(shift).unwrap_or(0);
+    Ok(Value::from_int(val.wrapping_shl(shift_u32)))
+}
+
+fn int_shr(args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
+    let val = arg(args, 0)?.as_int()?;
+    let shift = arg(args, 1)?.as_int()?;
+    let shift_u32 = u32::try_from(shift).unwrap_or(0);
+    Ok(Value::from_int(val.wrapping_shr(shift_u32)))
+}
+
 fn float_abs(args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
     let f = arg(args, 0)?.as_float()?;
     Ok(Value::from_float(f.abs()))
@@ -461,32 +480,50 @@ fn float_is_infinite(args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
 }
 
 // Host function signature requires Result; these are infallible.
-#[allow(clippy::unnecessary_wraps)]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "FFI callback signature requires Result return"
+)]
 const fn float_pi(_args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
     Ok(Value::from_float(consts::PI))
 }
 
-#[allow(clippy::unnecessary_wraps)]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "FFI callback signature requires Result return"
+)]
 const fn float_e(_args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
     Ok(Value::from_float(consts::E))
 }
 
-#[allow(clippy::unnecessary_wraps)]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "FFI callback signature requires Result return"
+)]
 const fn float_infinity(_args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
     Ok(Value::from_float(f64::INFINITY))
 }
 
-#[allow(clippy::unnecessary_wraps)]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "FFI callback signature requires Result return"
+)]
 const fn float_nan(_args: &[Value], _heap: &mut Heap) -> VmResult<Value> {
     Ok(Value::NAN)
 }
 
-#[allow(clippy::unnecessary_wraps)]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "FFI callback signature requires Result return"
+)]
 fn int_min_val(_args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     Ok(Value::from_int_wide(i64::MIN, heap))
 }
 
-#[allow(clippy::unnecessary_wraps)]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "FFI callback signature requires Result return"
+)]
 fn int_max_val(_args: &[Value], heap: &mut Heap) -> VmResult<Value> {
     Ok(Value::from_int_wide(i64::MAX, heap))
 }

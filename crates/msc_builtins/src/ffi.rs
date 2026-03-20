@@ -150,7 +150,12 @@ impl FfiTable {
             let lib_idx = if let Some(&idx) = lib_cache.get(&entry.lib_name) {
                 idx
             } else {
-                let lib = load_library(&entry.lib_name, &entry.link_kind)?;
+                let kind_str = match entry.link_kind_tag {
+                    0x01 => "static",
+                    0x02 => "framework",
+                    _ => "", // 0x00 = dynamic (default)
+                };
+                let lib = load_library(&entry.lib_name, kind_str)?;
                 let idx = libraries.len();
                 libraries.push(lib);
                 let _ = lib_cache.insert(entry.lib_name.clone(), idx);
