@@ -6,7 +6,7 @@ mod tests;
 use msc_shared::{Span, Symbol};
 
 use crate::attr::Attr;
-use crate::decl::{ClassMember, EffectOp, ExportItem, ForeignDecl};
+use crate::decl::{ClassMember, EffectOp, ForeignDecl};
 use crate::lit::Lit;
 use crate::ty_param::{Constraint, TyParam};
 use crate::{ExprIdx, ExprList, NameRefIdx, PatIdx};
@@ -147,11 +147,6 @@ pub enum Expr {
         alias: Option<Symbol>,
         span: Span,
     },
-    Export {
-        items: Vec<ExportItem>,
-        source: Option<Symbol>,
-        span: Span,
-    },
     Annotated {
         attrs: Vec<Attr>,
         inner: ExprIdx,
@@ -179,6 +174,7 @@ pub enum Expr {
         exported: bool,
         name: Symbol,
         params: Vec<TyParam>,
+        constraints: Vec<Constraint>,
         ops: Vec<EffectOp>,
         span: Span,
     },

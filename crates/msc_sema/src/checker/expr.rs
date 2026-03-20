@@ -185,23 +185,6 @@ fn synth_inner<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) -> Ty
             ck.named_ty(ck.ctx.well_known.unit)
         }
         Expr::Import { path, alias, .. } => synth_import(ck, *path, *alias),
-        Expr::Export { items, span, .. } => {
-            let (items, span) = (items.clone(), *span);
-            for item in &items {
-                if ck.scopes.lookup(ck.current_scope, item.name).is_none() {
-                    let name_str = ck.ctx.interner.resolve(item.name);
-                    let _d = ck.diags.report(
-                        &SemaError::UndefinedName {
-                            name: Box::from(name_str),
-                        },
-                        item.span,
-                        ck.ctx.file_id,
-                    );
-                }
-            }
-            let _ = span;
-            ck.named_ty(ck.ctx.well_known.unit)
-        }
         Expr::Error { .. } => ck.error_ty(),
         Expr::TypeCheck {
             kind,
@@ -384,7 +367,7 @@ fn synth_let<S: BuildHasher>(ck: &mut Checker<'_, S>, fields: &LetFields) -> Typ
         (Some(parent), ids)
     };
 
-    let prev_obligations = enter_constraint_scope(ck, &fields.constraints, &fields.params);
+    let prev_obligations = enter_constraint_scope(ck, &fields.constraints, &fields.params, true);
 
     let fn_pat_info = enter_fn_pat_scope(ck, fields.pat);
 
@@ -1390,12 +1373,12 @@ fn find_effect_op_return_type<S: BuildHasher>(
         let idx = Idx::from_raw(u32::try_from(i).expect("expr index in range"));
         if let AstExpr::Effect { ops, .. } = &ck.ctx.ast.exprs[idx] {
             if let Some(op) = ops.iter().find(|op| op.name == op_name) {
-                let declared_ty = lower_type_expr(ck, op.ty);
-                let resolved = ck.resolve_ty(declared_ty);
-                if let Type::Fn { ret, .. } = ck.store.types[resolved].clone() {
-                    return Some(ret);
-                }
-                return Some(declared_ty);
+                let ret = if let Some(ret_expr) = op.ret {
+                    lower_type_expr(ck, ret_expr)
+                } else {
+                    ck.named_ty(ck.ctx.well_known.unit)
+                };
+                return Some(ret);
             }
         }
     }
@@ -1728,8 +1711,28 @@ fn collect_effect_op_types<S: BuildHasher>(
                 .iter()
                 .map(|op| {
                     let op_name = op.name;
-                    let ty_idx = lower_type_expr(ck, op.ty);
-                    (op_name, ty_idx)
+                    let param_tys: Vec<TypeIdx> = op
+                        .params
+                        .iter()
+                        .map(|p| {
+                            if let Some(ty) = p.ty {
+                                lower_type_expr(ck, ty)
+                            } else {
+                                ck.fresh_var(p.span)
+                            }
+                        })
+                        .collect();
+                    let ret_ty = if let Some(ret_expr) = op.ret {
+                        lower_type_expr(ck, ret_expr)
+                    } else {
+                        ck.named_ty(ck.ctx.well_known.unit)
+                    };
+                    let fn_ty = ck.alloc_ty(Type::Fn {
+                        params: param_tys,
+                        ret: ret_ty,
+                        effects: EffectRow::PURE,
+                    });
+                    (op_name, fn_ty)
                 })
                 .collect();
             return op_types.into_iter().collect();

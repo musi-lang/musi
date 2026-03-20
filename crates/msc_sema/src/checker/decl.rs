@@ -6,12 +6,13 @@ use std::hash::BuildHasher;
 use msc_ast::ExprIdx;
 use msc_ast::decl::{ClassMember, ForeignDecl};
 use msc_ast::expr::{Expr, InstanceBody, Param};
-use msc_ast::ty_param::TyParam;
+use msc_ast::ty_param::{Constraint, TyParam};
 use msc_ast::util::collect_ty_var_nodes;
 use msc_shared::{Idx, Span, Symbol};
 
 use crate::TypeIdx;
 use crate::checker::Checker;
+use crate::checker::dispatch::enter_constraint_scope;
 use crate::checker::expr::{check, synth};
 use crate::checker::ty::lower_type_expr;
 use crate::def::{DefId, DefKind};
@@ -310,33 +311,61 @@ pub fn check_decl<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) {
         Expr::Instance {
             target,
             params,
+            constraints,
             body,
             span,
             ..
         } => match body {
             InstanceBody::Manual { members } => {
-                check_instance(ck, target, params, &members, span);
+                check_instance(ck, target, params, &constraints, &members, span);
             }
             InstanceBody::Via { delegate, .. } => {
-                check_instance_via(ck, target, params, delegate, span);
+                check_instance_via(ck, target, params, &constraints, delegate, span);
             }
             InstanceBody::Derives {
                 classes,
                 span: derives_span,
             } => {
-                check_instance_derives(ck, target, params, &classes, derives_span, span);
+                check_instance_derives(
+                    ck,
+                    target,
+                    params,
+                    &constraints,
+                    &classes,
+                    derives_span,
+                    span,
+                );
             }
         },
         Expr::Effect { ops, .. } => {
             for op in &ops {
-                let _op_ty = lower_type_expr(ck, op.ty);
+                for param in &op.params {
+                    if let Some(ty) = param.ty {
+                        let _ = lower_type_expr(ck, ty);
+                    }
+                }
+                if let Some(ret) = op.ret {
+                    let _ = lower_type_expr(ck, ret);
+                }
             }
         }
         Expr::Foreign { decls, .. } => {
             for decl in &decls {
-                if let ForeignDecl::Fn { ty, span, .. } = decl {
-                    let mut ty_params = vec![];
-                    collect_ty_var_nodes(*ty, ck.ctx.ast, &mut ty_params);
+                if let ForeignDecl::Fn {
+                    params: decl_params,
+                    constraints: decl_constraints,
+                    ty,
+                    span,
+                    ..
+                } = decl
+                {
+                    let mut ty_params = if decl_params.is_empty() {
+                        let mut collected = vec![];
+                        collect_ty_var_nodes(*ty, ck.ctx.ast, &mut collected);
+                        collected
+                    } else {
+                        decl_params.clone()
+                    };
                     ty_params.retain(|p| ck.scopes.lookup(ck.current_scope, p.name).is_none());
                     let (parent, ty_param_defs) = if ty_params.is_empty() {
                         (None, vec![])
@@ -344,6 +373,8 @@ pub fn check_decl<S: BuildHasher>(ck: &mut Checker<'_, S>, expr_idx: ExprIdx) {
                         let (p, ids) = ck.enter_ty_param_scope(&ty_params);
                         (Some(p), ids)
                     };
+                    let _prev_obligations =
+                        enter_constraint_scope(ck, decl_constraints, &ty_params, false);
                     let fn_ty = lower_type_expr(ck, *ty);
                     if let Some(&def_id) = ck.ctx.pat_defs.get(span) {
                         ck.defs.get_mut(def_id).ty_info.ty = Some(fn_ty);
@@ -380,6 +411,7 @@ fn check_instance_via<S: BuildHasher>(
     ck: &mut Checker<'_, S>,
     target: ExprIdx,
     params: Vec<TyParam>,
+    constraints: &[Constraint],
     delegate: ExprIdx,
     span: Span,
 ) {
@@ -429,6 +461,7 @@ fn check_instance_via<S: BuildHasher>(
         let (p, _ids) = ck.enter_ty_param_scope(&all_params);
         Some(p)
     };
+    let prev_obligations = enter_constraint_scope(ck, constraints, &all_params, false);
 
     let class_def_opt = ck.scopes.lookup(ck.current_scope, target_name);
     // delegate_class_def_opt is only used to confirm the class is in scope;
@@ -477,6 +510,7 @@ fn check_instance_via<S: BuildHasher>(
     // If one or both class names couldn't be resolved, the resolver will have
     // reported undefined-name errors; skip silently here.
 
+    ck.store.active_obligations = prev_obligations;
     if let Some(p) = parent {
         ck.current_scope = p;
     }
@@ -486,6 +520,7 @@ fn check_instance_derives<S: BuildHasher>(
     ck: &mut Checker<'_, S>,
     target: ExprIdx,
     params: Vec<TyParam>,
+    constraints: &[Constraint],
     classes: &[Symbol],
     derives_span: Span,
     instance_span: Span,
@@ -499,6 +534,7 @@ fn check_instance_derives<S: BuildHasher>(
         let (p, _ids) = ck.enter_ty_param_scope(&all_params);
         Some(p)
     };
+    let prev_obligations = enter_constraint_scope(ck, constraints, &all_params, false);
 
     let first_arg_opt = match &ck.ctx.ast.exprs[target] {
         Expr::TypeApp { args, .. } => args.first().copied(),
@@ -515,6 +551,7 @@ fn check_instance_derives<S: BuildHasher>(
         check_eq_instance(ck, class_sym, target_ty, derives_span, instance_span);
     }
 
+    ck.store.active_obligations = prev_obligations;
     if let Some(p) = parent {
         ck.current_scope = p;
     }
@@ -711,6 +748,7 @@ fn check_instance<S: BuildHasher>(
     ck: &mut Checker<'_, S>,
     target: ExprIdx,
     params: Vec<TyParam>,
+    constraints: &[Constraint],
     members: &[ClassMember],
     span: Span,
 ) {
@@ -723,10 +761,12 @@ fn check_instance<S: BuildHasher>(
         let (p, _ids) = ck.enter_ty_param_scope(&all_params);
         Some(p)
     };
+    let prev_obligations = enter_constraint_scope(ck, constraints, &all_params, false);
     check_class_members(ck, members, &all_params);
 
     let (target_name_opt, first_arg_opt) = extract_target_info(ck, target);
     let Some(target_name) = target_name_opt else {
+        ck.store.active_obligations = prev_obligations;
         if let Some(p) = parent {
             ck.current_scope = p;
         }
@@ -741,6 +781,7 @@ fn check_instance<S: BuildHasher>(
         check_instance_coherence(ck, class_def, target_name, target_ty, member_defs, span);
     }
 
+    ck.store.active_obligations = prev_obligations;
     if let Some(p) = parent {
         ck.current_scope = p;
     }

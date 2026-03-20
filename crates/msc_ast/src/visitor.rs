@@ -59,9 +59,7 @@ pub fn walk_expr<V: AstVisitor + ?Sized>(
 ) -> ControlFlow<V::Break> {
     match &ctx.exprs[idx] {
         Expr::Lit { lit, .. } => walk_expr_lit(v, lit, ctx),
-        Expr::Name { .. } | Expr::Error { .. } | Expr::Import { .. } | Expr::Export { .. } => {
-            ControlFlow::Continue(())
-        }
+        Expr::Name { .. } | Expr::Error { .. } | Expr::Import { .. } => ControlFlow::Continue(()),
 
         Expr::Paren { inner: e, .. } | Expr::Field { object: e, .. } => v.visit_expr(*e, ctx),
         Expr::Tuple { elems, .. } => {
@@ -362,7 +360,14 @@ fn walk_effect_ops<V: AstVisitor + ?Sized>(
     ctx: &AstArenas,
 ) -> ControlFlow<V::Break> {
     for op in ops {
-        v.visit_expr(op.ty, ctx)?;
+        for param in &op.params {
+            if let Some(ty) = param.ty {
+                v.visit_expr(ty, ctx)?;
+            }
+        }
+        if let Some(ret) = op.ret {
+            v.visit_expr(ret, ctx)?;
+        }
     }
     ControlFlow::Continue(())
 }

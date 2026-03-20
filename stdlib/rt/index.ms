@@ -49,23 +49,23 @@ export foreign "C" (
 
   // Array
   /// Return the number of elements in an array.
-  let arr_len : ([]'T) ~> Int;
+  let arr_len['T] : ([]'T) ~> Int;
   /// Append an element to the end of an array in place.
-  let arr_push : ([]'T, 'T) ~> Unit;
+  let arr_push['T] : ([]'T, 'T) ~> Unit;
   /// Remove and return the last element of an array.
-  let arr_pop : ([]'T) ~> 'T;
+  let arr_pop['T] : ([]'T) ~> 'T;
   /// Return a sub-array between two indices.
-  let arr_slice : ([]'T, Int, Int) ~> []'T;
+  let arr_slice['T] : ([]'T, Int, Int) ~> []'T;
   /// Return a new array with two arrays concatenated.
-  let arr_concat : ([]'T, []'T) ~> []'T;
+  let arr_concat['T] : ([]'T, []'T) ~> []'T;
   /// Reverse an array in place.
-  let arr_reverse : ([]'T) ~> Unit;
+  let arr_reverse['T] : ([]'T) ~> Unit;
   /// Return whether an array contains a given element.
-  let arr_contains : ([]'T, 'T) ~> Bool;
+  let arr_contains['T] : ([]'T, 'T) ~> Bool;
   /// Return the first index of an element in an array, or -1 if not found.
-  let arr_index_of : ([]'T, 'T) ~> Int;
+  let arr_index_of['T] : ([]'T, 'T) ~> Int;
   /// Sort an array in place using the natural ordering.
-  let arr_sort : ([]'T) ~> Unit;
+  let arr_sort['T] : ([]'T) ~> Unit;
 
   // Int
   /// Return the absolute value of an integer.
@@ -170,7 +170,7 @@ export foreign "C" (
 #[lang := "show" ]
 #[link(name := "musi_rt")]
 export foreign "C" (
-  let show : (Any) ~> String;
+  let show['T] : ('T) ~> String;
 );
 
 /// Concatenate two strings.

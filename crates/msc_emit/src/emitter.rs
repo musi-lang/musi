@@ -384,7 +384,6 @@ impl<'a> Emitter<'a> {
             | Expr::Match { .. }
             | Expr::Return { .. }
             | Expr::Import { .. }
-            | Expr::Export { .. }
             | Expr::TypeCheck { .. }
             | Expr::Handle { .. }
             | Expr::Need { .. }
@@ -464,6 +463,8 @@ impl<'a> Emitter<'a> {
             let ForeignDecl::Fn {
                 attrs: binding_attrs,
                 name,
+                params: _,
+                constraints: _,
                 ext_name,
                 ty: decl_ty,
                 span,

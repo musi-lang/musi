@@ -84,6 +84,7 @@ impl Parser<'_> {
     fn parse_foreign_binding(&mut self, attrs: Vec<Attr>) -> ForeignDecl {
         let start = self.start_span();
         let name = self.expect_symbol();
+        let params = self.parse_optional_bracket_params();
         let ext_name = if self.eat(TokenKind::KwAs) {
             if self.at(TokenKind::StringLit) {
                 let tok = self.bump();
@@ -95,6 +96,7 @@ impl Parser<'_> {
         } else {
             None
         };
+        let constraints = self.parse_opt_where_clause();
 
         if self.eat(TokenKind::Colon) {
             // Has type annotation -> foreign function
@@ -102,6 +104,8 @@ impl Parser<'_> {
             ForeignDecl::Fn {
                 attrs,
                 name,
+                params,
+                constraints,
                 ext_name,
                 ty,
                 span: self.finish_span(start),

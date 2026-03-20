@@ -74,10 +74,18 @@ pub(super) fn check_handler_op_coverage<S: BuildHasher>(
 
 /// Processes AST constraints into active obligations for the current scope.
 /// Returns the previous obligations so they can be restored.
+///
+/// When `discharge` is `true`, each obligation is also pushed to
+/// `store.obligations` so `resolve_obligations` will verify it (correct for
+/// call-site constraints on functions). When `false` the obligation is treated
+/// as an axiom — recorded only in `active_obligations` — which is correct for
+/// instance-header constraints (`where 'T : Eq` on an instance declaration),
+/// where `'T` is abstract and no concrete instance can discharge it.
 pub(super) fn enter_constraint_scope<S: BuildHasher>(
     ck: &mut Checker<'_, S>,
     constraints: &[Constraint],
     params: &[TyParam],
+    discharge: bool,
 ) -> Vec<Obligation> {
     if constraints.is_empty() {
         return ck.store.active_obligations.clone();
@@ -134,7 +142,9 @@ pub(super) fn enter_constraint_scope<S: BuildHasher>(
             span: constraint.span,
         };
         new_obligations.push(ob.clone());
-        ck.store.obligations.push(ob);
+        if discharge {
+            ck.store.obligations.push(ob);
+        }
     }
 
     ck.store.active_obligations = new_obligations;

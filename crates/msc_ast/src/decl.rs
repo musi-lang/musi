@@ -2,9 +2,10 @@
 
 use msc_shared::{Span, Symbol};
 
-use crate::ExprIdx;
 use crate::attr::Attr;
 use crate::expr::Param;
+use crate::ty_param::{Constraint, TyParam};
+use crate::ExprIdx;
 
 /// A member of a class or given declaration.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -31,30 +32,25 @@ pub struct FnSig {
     pub span: Span,
 }
 
-/// An item in an export list.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ExportItem {
-    pub name: Symbol,
-    pub alias: Option<Symbol>,
-    pub span: Span,
-}
-
 /// An operation in an effect definition.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EffectOp {
     pub fatal: bool,
     pub name: Symbol,
-    pub ty: ExprIdx,
+    pub params: Vec<Param>,
+    pub ret: Option<ExprIdx>,
     pub span: Span,
 }
 
 /// A declaration inside a `foreign "C" (...)` block.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ForeignDecl {
-    /// A foreign function binding: `let name [as "ext_name"] : ty`.
+    /// A foreign function binding: `let name ['T] [as "ext_name"] [where ...] : ty`.
     Fn {
         attrs: Vec<Attr>,
         name: Symbol,
+        params: Vec<TyParam>,
+        constraints: Vec<Constraint>,
         ext_name: Option<Symbol>,
         ty: ExprIdx,
         span: Span,

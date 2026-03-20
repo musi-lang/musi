@@ -100,7 +100,9 @@ fn test_check_underscore_suppresses_unused_warning() {
 /// scope processing.
 #[test]
 fn test_member_constraint_in_instance_no_error() {
-    let src = "class Eq ['T] { let eq(a : 'T, b : 'T) : Int; };\ninstance Eq of Int { let eq(a : Int, b : Int) : Int := a; };\ninstance ['T] where 'T : Eq Eq of List { let eq(a : List, b : List) : Int := 0; };";
+    let src = "class Eq ['T] { let eq(a : 'T, b : 'T) : Int; };\n\
+               instance Eq of Int { let eq(a : Int, b : Int) : Int := a; };\n\
+               instance ['U] where 'U : Eq Eq of []'U { let eq(a : []'U, b : []'U) : Int := 0; };";
     let (_result, diags) = analyze_src(src);
     assert!(!diags.has_errors(), "unexpected errors: {diags:?}");
 }
@@ -109,11 +111,12 @@ fn test_member_constraint_in_instance_no_error() {
 /// `<:` (`Rel::Sub`). Verify no parse or type errors from the constraint syntax alone.
 #[test]
 fn test_member_constraint_rel_accepted_same_as_sub() {
-    let src_member = "class Eq ['T] { let eq(a : 'T, b : 'T) : Int; };\ninstance ['T] where 'T : Eq Eq of List { let eq(a : List, b : List) : Int := 0; };";
-    let src_sub = "class Eq ['T] { let eq(a : 'T, b : 'T) : Int; };\ninstance ['T] where 'T <: Eq Eq of List { let eq(a : List, b : List) : Int := 0; };";
+    let src_member = "class Eq ['T] { let eq(a : 'T, b : 'T) : Int; };\n\
+                      instance ['U] where 'U : Eq Eq of []'U { let eq(a : []'U, b : []'U) : Int := 0; };";
+    let src_sub = "class Eq ['T] { let eq(a : 'T, b : 'T) : Int; };\n\
+                   instance ['U] where 'U <: Eq Eq of []'U { let eq(a : []'U, b : []'U) : Int := 0; };";
     let (_, diags_member) = analyze_src(src_member);
     let (_, diags_sub) = analyze_src(src_sub);
-    // Both should have the same error count (none, or both the same warnings).
     assert_eq!(
         diags_member.has_errors(),
         diags_sub.has_errors(),
