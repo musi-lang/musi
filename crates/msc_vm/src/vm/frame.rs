@@ -29,13 +29,27 @@ pub struct Frame {
 pub struct ContMarker {
     pub effect_id: u8,
     pub handler_fn_id: u32,
+    /// Whether the emitter determined this handler has at most one resume site.
+    /// The VM uses this to move continuation frames on the first resume instead of cloning.
+    pub one_shot: bool,
 }
 
-/// A captured one-shot continuation (frames between handler and `CONT_SAVE` site).
+/// A captured continuation (frames between handler and `CONT_SAVE` site).
+///
+/// Multi-shot by default: each resume clones the captured frames so the handler
+/// can invoke `resume` more than once. When `one_shot` is `true` and
+/// `resume_count == 0`, the first resume moves the frames instead of cloning
+/// them, avoiding the allocation for the common single-resume case.
+#[derive(Clone)]
 pub struct Continuation {
     pub frames: Vec<Frame>,
     /// The effect op id that triggered this continuation (for fatality checks on resume).
     pub op_id: u32,
+    /// How many times this continuation has been resumed so far.
+    pub resume_count: u32,
+    /// Optimization hint: set to `true` when the handler body has a single resume path.
+    /// The first resume then moves frames instead of cloning them.
+    pub one_shot: bool,
 }
 
 impl Frame {

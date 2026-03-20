@@ -18,6 +18,7 @@ const HEADER_SIZE: usize = 16;
 const TAG_CONST_INT: u8 = 0x01;
 const TAG_CONST_FLOAT: u8 = 0x02;
 const TAG_CONST_STR: u8 = 0x03;
+const TAG_CONST_BIGINT: u8 = 0x04;
 
 /// A decoded constant pool entry.
 #[derive(Debug, Clone)]
@@ -25,6 +26,8 @@ pub enum LoadedConst {
     Int(i64),
     Float(f64),
     Str(Box<str>),
+    /// Big integer stored as two's complement bytes (big-endian).
+    BigInt(Box<[u8]>),
 }
 
 /// A decoded type pool entry (stored as raw tag + opaque payload).
@@ -46,32 +49,56 @@ pub struct LoadedGlobal {
 /// A decoded effect definition.
 #[derive(Debug, Clone)]
 pub struct LoadedEffect {
+    /// Effect index within the module's effect table (assigned at load time).
     pub id: u16,
     /// Effect name resolved from the string table.
     pub name: Box<str>,
+    /// Type parameter names resolved from the string table.
+    pub type_params: Vec<Box<str>>,
     pub ops: Vec<LoadedEffectOp>,
+    /// Law entries: (law name, method ref index).
+    pub laws: Vec<(Box<str>, u16)>,
 }
 
 /// A decoded effect operation.
 #[derive(Debug, Clone)]
 pub struct LoadedEffectOp {
-    pub id: u16,
+    /// Op index within the parent effect's op array (assigned at load time).
+    /// Matches the `op_id` embedded in `EFF_NEED` bytecode instructions.
+    pub id: u32,
     /// Op name resolved from the string table.
     pub name: Box<str>,
-    pub param_type_ids: Vec<u32>,
-    pub ret_type_id: u32,
-    pub fatal: bool,
+    /// Type ref index into the TYPE table (op signature).
+    pub signature: u16,
+    /// Flags: bit0=fatal.
+    pub flags: u8,
+}
+
+impl LoadedEffectOp {
+    /// Returns `true` if this op is fatal (cannot be resumed).
+    #[must_use]
+    pub const fn fatal(&self) -> bool {
+        self.flags & 0x01 != 0
+    }
 }
 
 /// A decoded foreign (FFI) function entry.
 #[derive(Debug, Clone)]
 pub struct LoadedForeignFn {
+    /// Musi-side name.
+    pub musi_name: Box<str>,
     /// C-side symbol name.
     pub ext_name: Box<str>,
     /// Library name (empty = default C library).
     pub lib_name: Box<str>,
-    /// Library kind hint: "dylib", "framework", "raw", or empty for default.
-    pub link_kind: Box<str>,
+    /// ABI: 0x00=C, 0x01=stdcall, 0x02=system.
+    pub abi: u8,
+    /// Link kind: 0x00=dynamic, 0x01=static, 0x02=framework.
+    pub link_kind_tag: u8,
+    /// Type signature index into the TYPE table.
+    pub signature_type_id: u16,
+    /// Flags: bit0=exported.
+    pub ffi_flags: u8,
     /// Number of fixed parameters.
     pub param_count: u16,
     /// Type pool ids for each parameter.
@@ -82,14 +109,110 @@ pub struct LoadedForeignFn {
     pub variadic: bool,
 }
 
-/// Decoded class table from the CLSS section.
+/// A decoded method within a class declaration.
+#[derive(Debug, Clone)]
+pub struct LoadedClassMethod {
+    /// Method name resolved from the string table.
+    pub name: Box<str>,
+    /// Type ref index into the TYPE table (method signature).
+    pub signature: u16,
+    /// Flags: bit0=has default.
+    pub flags: u8,
+}
+
+impl LoadedClassMethod {
+    /// Returns `true` if this method has a default implementation.
+    #[must_use]
+    pub const fn has_default(&self) -> bool {
+        self.flags & 0x01 != 0
+    }
+}
+
+/// A decoded class (typeclass) declaration.
+#[derive(Debug, Clone)]
+pub struct LoadedClass {
+    /// Class name resolved from the string table.
+    pub name: Box<str>,
+    /// Type parameter count.
+    pub type_param_count: u8,
+    pub methods: Vec<LoadedClassMethod>,
+    /// Law entries: (law name, method ref index).
+    pub laws: Vec<(Box<str>, u16)>,
+    /// Superclass constraint refs (indices into the class table).
+    pub superclasses: Vec<u16>,
+}
+
+/// A decoded module dependency entry from the DEPS section.
+#[derive(Debug, Clone)]
+pub struct LoadedDep {
+    /// Dependency module name resolved from the string table.
+    pub name: Box<str>,
+    pub major: u8,
+    pub minor: u8,
+    pub patch: u8,
+}
+
+/// A decoded class instance record.
+#[derive(Debug, Clone)]
+pub struct LoadedClassInstance {
+    /// Index into the CLSS declarations array.
+    pub class_ref: u16,
+    /// Type ref index into the TYPE table (target type).
+    pub type_ref: u16,
+    /// Instance kind: 0x00=manual, 0x01=via delegation, 0x02=derives.
+    pub kind: u8,
+    /// Method function refs for manual instances (one per class method).
+    pub method_refs: Vec<u16>,
+    /// Delegate type ref for via-delegation instances.
+    pub delegate_type_ref: Option<u16>,
+}
+
+/// A single source map entry: maps a bytecode offset to a source location.
 ///
-/// Currently always empty - the emitter writes a zero-count stub. Stored so
-/// the data is not silently discarded when future class definitions are added.
+/// The `line` field contains the source byte offset (not a line number) because
+/// no line map is computed at emit time. A post-processor can convert byte offsets
+/// to line/column using the original source text.
+#[derive(Debug, Clone, Copy)]
+pub struct SourceMapEntry {
+    /// Byte offset within the function's bytecode (across all functions, in emission order).
+    pub bytecode_offset: u32,
+    /// Source byte offset used in place of a line number until a line map is available.
+    pub line: u32,
+    /// Column (currently always 0).
+    pub column: u16,
+}
+
+/// Debug local variable entry for one local slot in a function.
+#[derive(Debug, Clone)]
+pub struct LocalNameEntry {
+    /// String index into the module's string table for the variable name (0 = unnamed).
+    pub name_stridx: u16,
+    /// Bytecode offset where this local comes into scope.
+    pub scope_start: u32,
+    /// Bytecode offset where this local goes out of scope (exclusive).
+    pub scope_end: u32,
+}
+
+/// Debug information parsed from the DBUG section.
 #[derive(Debug, Default, Clone)]
-pub struct ClassTable {
-    /// Number of class entries present (zero until class emission is implemented).
-    pub count: u16,
+pub struct DebugInfo {
+    /// Source map entries across all functions, in emission order.
+    pub source_map: Vec<SourceMapEntry>,
+    /// Per-method local variable name tables. Parallel to the METH function array.
+    pub local_names: Vec<Vec<LocalNameEntry>>,
+}
+
+/// A GC safepoint entry parsed from the function's safepoint map.
+#[derive(Debug, Clone)]
+pub struct SafepointMap {
+    /// Bytecode offset of this safepoint.
+    pub offset: u32,
+    /// Operand stack depth at the safepoint.
+    pub stack_depth: u16,
+    /// Conservative bitmap of live stack slots (all bits set = every slot may be a ref).
+    pub stack_bitmap: Vec<u8>,
+    /// Conservative bitmap of live local slots (all bits set = every slot may be a ref).
+    pub local_bitmap: Vec<u8>,
 }
 
 /// A decoded function entry.
@@ -97,12 +220,20 @@ pub struct ClassTable {
 pub struct LoadedFn {
     pub name_stridx: u16,
     pub type_id: u16,
+    /// Raw flags byte: bit0=exported, bit1=foreign export, bit2=effectful, bit3=has dict params.
+    pub flags: u8,
     pub param_count: u16,
     pub local_count: u16,
     pub max_stack: u16,
     pub upvalue_count: u16,
+    /// Number of implicit dictionary parameters prepended before explicit params.
+    pub dict_param_count: u8,
     pub code: Box<[u8]>,
     pub handlers: Vec<HandlerEntry>,
+    /// GC safepoint map entries for this function.
+    pub safepoints: Vec<SafepointMap>,
+    /// Effect set: indices into the module's effect table used by this function.
+    pub effect_refs: Vec<u16>,
 }
 
 /// An effect handler registration entry from the function's handler table.
@@ -122,11 +253,17 @@ pub struct LoadedModule {
     pub consts: Vec<LoadedConst>,
     pub types: Vec<LoadedType>,
     pub globals: Vec<LoadedGlobal>,
+    /// Direct module dependencies declared in the DEPS section.
+    pub deps: Vec<LoadedDep>,
     pub effects: Vec<LoadedEffect>,
     pub foreign_fns: Vec<LoadedForeignFn>,
     pub functions: Vec<LoadedFn>,
-    /// Class table parsed from the CLSS section. Currently always empty.
-    pub classes: ClassTable,
+    /// Class declarations from the CLSS section.
+    pub classes: Vec<LoadedClass>,
+    /// Class instances from the CLSS section.
+    pub class_instances: Vec<LoadedClassInstance>,
+    /// Debug information from the DBUG section (empty if section was absent or stripped).
+    pub debug_info: DebugInfo,
 }
 
 impl LoadedModule {
@@ -148,6 +285,7 @@ const TAG_METH: &[u8; 4] = b"METH";
 const TAG_EFCT: &[u8; 4] = b"EFCT";
 const TAG_CLSS: &[u8; 4] = b"CLSS";
 const TAG_FRGN: &[u8; 4] = b"FRGN";
+const TAG_DBUG: &[u8; 4] = b"DBUG";
 
 /// Parse raw `.seam` bytes into a `LoadedModule`.
 ///
@@ -203,10 +341,13 @@ pub fn load(bytes: &[u8]) -> VmResult<LoadedModule> {
     let mut consts: Vec<LoadedConst> = vec![];
     let mut types: Vec<LoadedType> = vec![];
     let mut globals: Vec<LoadedGlobal> = vec![];
+    let mut deps: Vec<LoadedDep> = vec![];
     let mut effects: Vec<LoadedEffect> = vec![];
     let mut foreign_fns: Vec<LoadedForeignFn> = vec![];
     let mut functions: Vec<LoadedFn> = vec![];
-    let mut classes = ClassTable::default();
+    let mut classes: Vec<LoadedClass> = vec![];
+    let mut class_instances: Vec<LoadedClassInstance> = vec![];
+    let mut debug_info = DebugInfo::default();
 
     let mut cur = Cursor::new(bytes, HEADER_SIZE);
     while cur.pos < bytes.len() {
@@ -214,7 +355,6 @@ pub fn load(bytes: &[u8]) -> VmResult<LoadedModule> {
         let payload_len = usize::try_from(cur.read_u32()?).map_err(|_| VmError::Malformed {
             desc: "section payload length overflow".into(),
         })?;
-        let payload_start = cur.pos;
         let payload = cur.read_bytes(payload_len)?;
 
         let mut sc = Cursor::new(payload, 0);
@@ -225,7 +365,7 @@ pub fn load(bytes: &[u8]) -> VmResult<LoadedModule> {
         } else if tag == TAG_CNST {
             consts = parse_const_section(&mut sc, &strings)?;
         } else if tag == TAG_DEPS {
-            // Ignore: count is always 0 for now.
+            deps = parse_deps_section(&mut sc, &strings)?;
         } else if tag == TAG_GLOB {
             globals = parse_glob_section(&mut sc, &strings)?;
         } else if tag == TAG_METH {
@@ -233,12 +373,15 @@ pub fn load(bytes: &[u8]) -> VmResult<LoadedModule> {
         } else if tag == TAG_EFCT {
             effects = parse_efct_section(&mut sc, &strings)?;
         } else if tag == TAG_CLSS {
-            classes = parse_clss_section(&mut sc)?;
+            let (cls, inst) = parse_clss_section(&mut sc, &strings)?;
+            classes = cls;
+            class_instances = inst;
         } else if tag == TAG_FRGN {
             foreign_fns = parse_frgn_section(&mut sc, &strings)?;
+        } else if tag == TAG_DBUG {
+            debug_info = parse_dbug_section(&mut sc)?;
         }
-        // DBUG: silently skip.
-        let _ = payload_start;
+        // Unknown tags are silently skipped (forward compatibility).
     }
 
     let entry_point = if flags & FLAG_SCRIPT != 0 && !functions.is_empty() {
@@ -254,10 +397,13 @@ pub fn load(bytes: &[u8]) -> VmResult<LoadedModule> {
         consts,
         types,
         globals,
+        deps,
         effects,
         foreign_fns,
         functions,
         classes,
+        class_instances,
+        debug_info,
     })
 }
 
@@ -275,6 +421,25 @@ fn parse_string_table(cur: &mut Cursor<'_>) -> VmResult<Vec<Box<str>>> {
         strings.push(s);
     }
     Ok(strings)
+}
+
+fn parse_deps_section(cur: &mut Cursor<'_>, strings: &[Box<str>]) -> VmResult<Vec<LoadedDep>> {
+    let count = usize::from(cur.read_u16()?);
+    let mut deps = Vec::with_capacity(count);
+    for _ in 0..count {
+        let name_stridx = cur.read_u16()?;
+        let name = resolve_stridx(strings, name_stridx, "DEPS")?;
+        let major = cur.read_u8()?;
+        let minor = cur.read_u8()?;
+        let patch = cur.read_u8()?;
+        deps.push(LoadedDep {
+            name,
+            major,
+            minor,
+            patch,
+        });
+    }
+    Ok(deps)
 }
 
 fn resolve_stridx(strings: &[Box<str>], idx: u16, ctx: &str) -> VmResult<Box<str>> {
@@ -306,6 +471,11 @@ fn parse_const_section(cur: &mut Cursor<'_>, strings: &[Box<str>]) -> VmResult<V
                 let stridx = cur.read_u16()?;
                 let s = resolve_stridx(strings, stridx, "const pool STR")?;
                 LoadedConst::Str(s)
+            }
+            TAG_CONST_BIGINT => {
+                let byte_len = usize::from(cur.read_u16()?);
+                let bytes = cur.read_bytes(byte_len)?;
+                LoadedConst::BigInt(bytes.into())
             }
             _ => {
                 return Err(VmError::Malformed {
@@ -458,10 +628,14 @@ fn parse_meth_section(cur: &mut Cursor<'_>) -> VmResult<Vec<LoadedFn>> {
     for _ in 0..count {
         let name_stridx = cur.read_u16()?;
         let type_id = cur.read_u16()?;
+        // u8 flags: bit0=exported, bit1=foreign export, bit2=effectful, bit3=has dict params
+        let flags = cur.read_u8()?;
         let param_count = cur.read_u16()?;
         let local_count = cur.read_u16()?;
         let max_stack = cur.read_u16()?;
         let upvalue_count = cur.read_u16()?;
+        // u8 dict_param_count
+        let dict_param_count = cur.read_u8()?;
         let code_len = usize::try_from(cur.read_u32()?).map_err(|_| VmError::Malformed {
             desc: "function code length overflow".into(),
         })?;
@@ -476,18 +650,42 @@ fn parse_meth_section(cur: &mut Cursor<'_>) -> VmResult<Vec<LoadedFn>> {
                 handler_fn_id,
             });
         }
-        // safepoint_count and effect_set_count - always 0, consume them.
-        let _safepoint_count = cur.read_u16()?;
-        let _effect_set_count = cur.read_u16()?;
+        // Safepoint map: u16 count, each: u32 offset + u16 stack_depth + bitmap(stack) + bitmap(locals).
+        let safepoint_count = usize::from(cur.read_u16()?);
+        let mut safepoints = Vec::with_capacity(safepoint_count);
+        for _ in 0..safepoint_count {
+            let offset = cur.read_u32()?;
+            let stack_depth = cur.read_u16()?;
+            let stack_bm_len = usize::from(stack_depth).div_ceil(8);
+            let stack_bitmap = cur.read_bytes(stack_bm_len)?.to_vec();
+            let local_bm_len = usize::from(local_count).div_ceil(8);
+            let local_bitmap = cur.read_bytes(local_bm_len)?.to_vec();
+            safepoints.push(SafepointMap {
+                offset,
+                stack_depth,
+                stack_bitmap,
+                local_bitmap,
+            });
+        }
+        // Effect set: u16 count, each: u16 effect ref.
+        let effect_count = usize::from(cur.read_u16()?);
+        let mut effect_refs = Vec::with_capacity(effect_count);
+        for _ in 0..effect_count {
+            effect_refs.push(cur.read_u16()?);
+        }
         functions.push(LoadedFn {
             name_stridx,
             type_id,
+            flags,
             param_count,
             local_count,
             max_stack,
             upvalue_count,
+            dict_param_count,
             code,
             handlers,
+            safepoints,
+            effect_refs,
         });
     }
     Ok(functions)
@@ -496,42 +694,143 @@ fn parse_meth_section(cur: &mut Cursor<'_>) -> VmResult<Vec<LoadedFn>> {
 fn parse_efct_section(cur: &mut Cursor<'_>, strings: &[Box<str>]) -> VmResult<Vec<LoadedEffect>> {
     let count = usize::from(cur.read_u16()?);
     let mut effects = Vec::with_capacity(count);
-    for _ in 0..count {
-        let id = cur.read_u16()?;
+    for eff_idx in 0..count {
+        let eff_id = u16::try_from(eff_idx).unwrap_or(u16::MAX);
+        // u16 name (string index)
         let name_stridx = cur.read_u16()?;
         let name = resolve_stridx(strings, name_stridx, "effect name")?;
+        // u8 type_param_count + per-param u16 name
+        let type_param_count = usize::from(cur.read_u8()?);
+        let mut type_params = Vec::with_capacity(type_param_count);
+        for _ in 0..type_param_count {
+            let tp_stridx = cur.read_u16()?;
+            type_params.push(resolve_stridx(strings, tp_stridx, "effect type param")?);
+        }
+        // u16 op_count, per op: u16 name + u16 signature + u8 flags
         let op_count = usize::from(cur.read_u16()?);
         let mut ops = Vec::with_capacity(op_count);
-        for _ in 0..op_count {
-            let op_id = cur.read_u16()?;
+        for op_idx in 0..op_count {
             let op_name_stridx = cur.read_u16()?;
             let op_name = resolve_stridx(strings, op_name_stridx, "effect op name")?;
-            let param_count = usize::from(cur.read_u16()?);
-            let mut param_type_ids = Vec::with_capacity(param_count);
-            for _ in 0..param_count {
-                param_type_ids.push(cur.read_u32()?);
-            }
-            let ret_type_id = cur.read_u32()?;
-            let fatal_byte = cur.read_u8()?;
+            let signature = cur.read_u16()?;
+            let flags = cur.read_u8()?;
+            // op id = index within this effect's op array, matching EFF_NEED bytecode encoding
+            let op_id = u32::try_from(op_idx).unwrap_or(u32::MAX);
             ops.push(LoadedEffectOp {
                 id: op_id,
                 name: op_name,
-                param_type_ids,
-                ret_type_id,
-                fatal: fatal_byte != 0,
+                signature,
+                flags,
             });
         }
-        effects.push(LoadedEffect { id, name, ops });
+        // u16 law_count + per-law: u16 name + u16 method_ref
+        let law_count = usize::from(cur.read_u16()?);
+        let mut laws = Vec::with_capacity(law_count);
+        for _ in 0..law_count {
+            let law_name_stridx = cur.read_u16()?;
+            let law_name = resolve_stridx(strings, law_name_stridx, "effect law name")?;
+            let method_ref = cur.read_u16()?;
+            laws.push((law_name, method_ref));
+        }
+        effects.push(LoadedEffect {
+            id: eff_id,
+            name,
+            type_params,
+            ops,
+            laws,
+        });
     }
     Ok(effects)
 }
 
-fn parse_clss_section(cur: &mut Cursor<'_>) -> VmResult<ClassTable> {
-    let count = cur.read_u16()?;
-    // No class entries are emitted yet; consume any unexpected extra bytes
-    // by leaving the cursor at its current position (the caller uses a
-    // sub-cursor bounded to the payload length).
-    Ok(ClassTable { count })
+fn parse_clss_section(
+    cur: &mut Cursor<'_>,
+    strings: &[Box<str>],
+) -> VmResult<(Vec<LoadedClass>, Vec<LoadedClassInstance>)> {
+    // Class declarations.
+    let class_count = usize::from(cur.read_u16()?);
+    let mut classes = Vec::with_capacity(class_count);
+    for _ in 0..class_count {
+        let name_stridx = cur.read_u16()?;
+        let type_param_count = cur.read_u8()?;
+        let method_count = usize::from(cur.read_u16()?);
+        let mut methods = Vec::with_capacity(method_count);
+        for _ in 0..method_count {
+            let method_name_stridx = cur.read_u16()?;
+            let signature = cur.read_u16()?;
+            let flags = cur.read_u8()?;
+            let name = resolve_stridx(strings, method_name_stridx, "class method name")?;
+            methods.push(LoadedClassMethod {
+                name,
+                signature,
+                flags,
+            });
+        }
+        let law_count = usize::from(cur.read_u16()?);
+        let mut laws = Vec::with_capacity(law_count);
+        for _ in 0..law_count {
+            let law_name_stridx = cur.read_u16()?;
+            let method_ref = cur.read_u16()?;
+            let law_name = resolve_stridx(strings, law_name_stridx, "class law name")?;
+            laws.push((law_name, method_ref));
+        }
+        let superclass_count = usize::from(cur.read_u16()?);
+        let mut superclasses = Vec::with_capacity(superclass_count);
+        for _ in 0..superclass_count {
+            superclasses.push(cur.read_u16()?);
+        }
+        let name = resolve_stridx(strings, name_stridx, "class name")?;
+        classes.push(LoadedClass {
+            name,
+            type_param_count,
+            methods,
+            laws,
+            superclasses,
+        });
+    }
+    // Instance records.
+    let instance_count = usize::from(cur.read_u16()?);
+    let mut instances = Vec::with_capacity(instance_count);
+    for _ in 0..instance_count {
+        let class_ref = cur.read_u16()?;
+        let type_ref = cur.read_u16()?;
+        let kind = cur.read_u8()?;
+        let (method_refs, delegate_type_ref) = match kind {
+            0x00 => {
+                // Manual: one method_ref per method in the class.
+                let method_count = classes
+                    .get(usize::from(class_ref))
+                    .map_or(0, |c| c.methods.len());
+                let mut refs = Vec::with_capacity(method_count);
+                for _ in 0..method_count {
+                    refs.push(cur.read_u16()?);
+                }
+                (refs, None)
+            }
+            0x01 => {
+                // Via delegation: u16 delegate_type_ref.
+                let delegate = cur.read_u16()?;
+                (vec![], Some(delegate))
+            }
+            0x02 => {
+                // Derives: no additional data.
+                (vec![], None)
+            }
+            _ => {
+                return Err(VmError::Malformed {
+                    desc: format!("unknown class instance kind 0x{kind:02X}").into(),
+                });
+            }
+        };
+        instances.push(LoadedClassInstance {
+            class_ref,
+            type_ref,
+            kind,
+            method_refs,
+            delegate_type_ref,
+        });
+    }
+    Ok((classes, instances))
 }
 
 fn parse_frgn_section(
@@ -541,9 +840,13 @@ fn parse_frgn_section(
     let count = usize::from(cur.read_u16()?);
     let mut fns = Vec::with_capacity(count);
     for _ in 0..count {
+        let musi_name_stridx = cur.read_u16()?;
         let ext_name_stridx = cur.read_u16()?;
         let lib_stridx = cur.read_u16()?;
-        let kind_stridx = cur.read_u16()?;
+        let abi = cur.read_u8()?;
+        let link_kind_tag = cur.read_u8()?;
+        let signature_type_id = cur.read_u16()?;
+        let ffi_flags = cur.read_u8()?;
         let param_count = cur.read_u16()?;
         let pc = usize::from(param_count);
         let mut param_type_ids = Vec::with_capacity(pc);
@@ -553,22 +856,22 @@ fn parse_frgn_section(
         let ret_type_id = cur.read_u32()?;
         let variadic_byte = cur.read_u8()?;
 
+        let musi_name = resolve_stridx(strings, musi_name_stridx, "foreign fn musi_name")?;
         let ext_name = resolve_stridx(strings, ext_name_stridx, "foreign fn ext_name")?;
         let lib_name = if lib_stridx == 0xFFFF {
             Box::from("")
         } else {
             resolve_stridx(strings, lib_stridx, "foreign fn lib_name")?
         };
-        let link_kind = if kind_stridx == 0xFFFF {
-            Box::from("")
-        } else {
-            resolve_stridx(strings, kind_stridx, "foreign fn link_kind")?
-        };
 
         fns.push(LoadedForeignFn {
+            musi_name,
             ext_name,
             lib_name,
-            link_kind,
+            abi,
+            link_kind_tag,
+            signature_type_id,
+            ffi_flags,
             param_count,
             param_type_ids,
             ret_type_id,
@@ -576,6 +879,59 @@ fn parse_frgn_section(
         });
     }
     Ok(fns)
+}
+
+/// Parse the DBUG section.
+///
+/// Format (mirrors the emitter):
+///   Source map: u16 count, per entry: u32 `bytecode_offset` + u32 line + u16 column.
+///   Local names: u16 `method_count`, per method: u16 `local_count`,
+///                per local: u16 `name_stridx` + u32 `scope_start` + u32 `scope_end`.
+///
+/// An empty payload (0 bytes) is valid and returns default `DebugInfo`.
+fn parse_dbug_section(cur: &mut Cursor<'_>) -> VmResult<DebugInfo> {
+    // An empty DBUG section (legacy or stripped) is valid - return defaults.
+    if cur.bytes.len() == cur.pos {
+        return Ok(DebugInfo::default());
+    }
+
+    // Source map entries.
+    let entry_count = usize::from(cur.read_u16()?);
+    let mut source_map = Vec::with_capacity(entry_count);
+    for _ in 0..entry_count {
+        let bytecode_offset = cur.read_u32()?;
+        let line = cur.read_u32()?;
+        let column = cur.read_u16()?;
+        source_map.push(SourceMapEntry {
+            bytecode_offset,
+            line,
+            column,
+        });
+    }
+
+    // Local names table.
+    let method_count = usize::from(cur.read_u16()?);
+    let mut local_names = Vec::with_capacity(method_count);
+    for _ in 0..method_count {
+        let local_count = usize::from(cur.read_u16()?);
+        let mut locals = Vec::with_capacity(local_count);
+        for _ in 0..local_count {
+            let name_stridx = cur.read_u16()?;
+            let scope_start = cur.read_u32()?;
+            let scope_end = cur.read_u32()?;
+            locals.push(LocalNameEntry {
+                name_stridx,
+                scope_start,
+                scope_end,
+            });
+        }
+        local_names.push(locals);
+    }
+
+    Ok(DebugInfo {
+        source_map,
+        local_names,
+    })
 }
 
 struct Cursor<'a> {

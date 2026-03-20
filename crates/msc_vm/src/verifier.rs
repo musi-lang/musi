@@ -107,17 +107,15 @@ const fn fixed_stack_delta(op: Opcode) -> Option<i32> {
         | Opcode::RET_UNIT
         | Opcode::SWAP
         | Opcode::NEG
-        | Opcode::NOT
+        | Opcode::BNOT
         | Opcode::ARR_LEN
         | Opcode::MAT_DATA
         | Opcode::TY_TEST
         | Opcode::TY_OF
-        | Opcode::TY_CAST
         | Opcode::OPT_SOME
         | Opcode::OPT_IS
         | Opcode::OPT_GET
         | Opcode::STR_LEN
-        | Opcode::EFF_HDL
         | Opcode::EFF_POP
         | Opcode::EFF_RES
         | Opcode::GC_PIN
@@ -143,11 +141,9 @@ const fn fixed_stack_delta(op: Opcode) -> Option<i32> {
         | Opcode::MUL
         | Opcode::DIV
         | Opcode::REM
-        | Opcode::AND
-        | Opcode::OR
-        | Opcode::XOR
-        | Opcode::SHL
-        | Opcode::SHR
+        | Opcode::BAND
+        | Opcode::BOR
+        | Opcode::BXOR
         | Opcode::CMP_EQ
         | Opcode::CMP_NE
         | Opcode::CMP_LT
@@ -155,6 +151,7 @@ const fn fixed_stack_delta(op: Opcode) -> Option<i32> {
         | Opcode::CMP_GT
         | Opcode::CMP_GE
         | Opcode::TY_EQ
+        | Opcode::TY_CAST
         | Opcode::STR_CAT
         | Opcode::AR_ALLOC => Some(-1),
 
@@ -280,7 +277,7 @@ fn verify_op(op: Opcode, ip: usize, len: usize, cx: &VerifyCtx<'_>) -> VmResult<
             Ok(1 - arity)
         }
 
-        // §4.13 Effect
+        // §4.13 Effect - check 11: effect refs within effect table
         Opcode::EFF_NEED => {
             let operand = read_be_u16(cx.code, ip);
             let op_id = u32::from(u8::try_from(operand >> 8).unwrap_or(u8::MAX));
@@ -293,6 +290,13 @@ fn verify_op(op: Opcode, ip: usize, len: usize, cx: &VerifyCtx<'_>) -> VmResult<
             };
             Ok(1 - param_count)
         }
+        // EFF_HDL operand is a runtime effect ID (matches handler chain),
+        // not a table index into the EFCT section. No bounds check needed.
+        //
+        // §4.5 Class Dispatch
+        // CLS_DICT: pops val, pushes dict record. Net 0.
+        // CLS_DISP: pops val, invokes method - result pushed by callee. Net 0 (conservative).
+        Opcode::EFF_HDL | Opcode::CLS_DICT | Opcode::CLS_DISP => Ok(0),
 
         // §4.19 Foreign
         Opcode::FFI_CALL => verify_ffi_call(ip, cx),
@@ -405,11 +409,11 @@ fn verify_fn(func: &LoadedFn, module: &LoadedModule) -> VmResult {
 /// Look up the parameter count for an effect operation by `op_id`.
 ///
 /// Used for `EFF_NEED` stack delta: pops arity args, pushes 1 result.
-fn lookup_effect_op_param_count(module: &LoadedModule, op_id: u32) -> i32 {
-    module
-        .effects
-        .iter()
-        .flat_map(|eff| eff.ops.iter())
-        .find(|op| u32::from(op.id) == op_id)
-        .map_or(0, |op| i32::try_from(op.param_type_ids.len()).unwrap_or(0))
+/// Returns 0 if not found; the caller falls back to the inline arity operand.
+const fn lookup_effect_op_param_count(module: &LoadedModule, op_id: u32) -> i32 {
+    // op.id is the op's index within its parent effect's op array.
+    // Param count is not stored in the new binary format; return 0 to trigger
+    // the inline-arity fallback in the caller.
+    let _ = (module, op_id);
+    0
 }

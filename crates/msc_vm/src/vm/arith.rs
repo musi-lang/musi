@@ -71,10 +71,6 @@ macro_rules! poly_cmp {
 ///
 /// Returns `true` if the opcode was handled, `false` if the caller should try
 /// the next dispatch group.
-#[expect(
-    clippy::too_many_lines,
-    reason = "flat opcode dispatch; splitting adds no clarity"
-)]
 pub fn exec(op: Opcode, frame: &mut Frame, heap: &mut Heap) -> VmResult<bool> {
     match op {
         // §4.3 Polymorphic arithmetic
@@ -105,67 +101,32 @@ pub fn exec(op: Opcode, frame: &mut Frame, heap: &mut Heap) -> VmResult<bool> {
             }
         }
 
-        // §4.4 Bitwise / logic (integer-only)
-        Opcode::AND => {
+        // §4.4 Bitwise (Int only - Bool and/or/not compile to branch sequences)
+        Opcode::BAND => {
             let (b, a) = frame.pop2()?;
-            // Boolean AND: if both are bools, keep as bool.
-            if a.is_bool() && b.is_bool() {
-                frame
-                    .stack
-                    .push(Value::from_bool(a.as_bool()? && b.as_bool()?));
-            } else {
-                let ai = a.as_int_wide(heap)?;
-                let bi = b.as_int_wide(heap)?;
-                frame.stack.push(Value::from_int_wide(ai & bi, heap));
-            }
+            let ai = a.as_int_wide(heap)?;
+            let bi = b.as_int_wide(heap)?;
+            frame.stack.push(Value::from_int_wide(ai & bi, heap));
         }
-        Opcode::OR => {
+        Opcode::BOR => {
             let (b, a) = frame.pop2()?;
-            if a.is_bool() && b.is_bool() {
-                frame
-                    .stack
-                    .push(Value::from_bool(a.as_bool()? || b.as_bool()?));
-            } else {
-                let ai = a.as_int_wide(heap)?;
-                let bi = b.as_int_wide(heap)?;
-                frame.stack.push(Value::from_int_wide(ai | bi, heap));
-            }
+            let ai = a.as_int_wide(heap)?;
+            let bi = b.as_int_wide(heap)?;
+            frame.stack.push(Value::from_int_wide(ai | bi, heap));
         }
-        Opcode::XOR => {
+        Opcode::BXOR => {
             let (b, a) = frame.pop2()?;
-            if a.is_bool() && b.is_bool() {
-                frame
-                    .stack
-                    .push(Value::from_bool(a.as_bool()? ^ b.as_bool()?));
-            } else {
-                let ai = a.as_int_wide(heap)?;
-                let bi = b.as_int_wide(heap)?;
-                frame.stack.push(Value::from_int_wide(ai ^ bi, heap));
-            }
+            let ai = a.as_int_wide(heap)?;
+            let bi = b.as_int_wide(heap)?;
+            frame.stack.push(Value::from_int_wide(ai ^ bi, heap));
         }
-        Opcode::NOT => {
+        Opcode::BNOT => {
             let a = frame.pop()?;
-            if let Ok(b) = a.as_bool() {
-                frame.stack.push(Value::from_bool(!b));
-            } else {
-                let n = a.as_int_wide(heap)?;
-                frame.stack.push(Value::from_int_wide(!n, heap));
-            }
-        }
-        Opcode::SHL => {
-            let (b, a) = frame.pop2()?;
-            let shift = u32::try_from(b.as_int_wide(heap)? & 63).unwrap_or(63);
-            let result = a.as_int_wide(heap)?.wrapping_shl(shift);
-            frame.stack.push(Value::from_int_wide(result, heap));
-        }
-        Opcode::SHR => {
-            let (b, a) = frame.pop2()?;
-            let shift = u32::try_from(b.as_int_wide(heap)? & 63).unwrap_or(63);
-            let result = a.as_int_wide(heap)?.wrapping_shr(shift);
-            frame.stack.push(Value::from_int_wide(result, heap));
+            let n = a.as_int_wide(heap)?;
+            frame.stack.push(Value::from_int_wide(!n, heap));
         }
 
-        // §4.5 Comparison (polymorphic: float or int)
+        // §4.6 Comparison (polymorphic: float or int)
         Opcode::CMP_EQ => {
             let (b, a) = frame.pop2()?;
             let eq = a.0 == b.0 || wide_values_equal(a, b, heap);

@@ -15,11 +15,10 @@ fn test_eff_do_cross_frame_finds_handler() {
     let bytes = make_seam_with_effects(
         &[ConstEntry::Int(42)],
         &[SeamEffectDef {
-            id: 1,
             name: "test_eff",
             ops: vec![SeamEffectOpDef {
-                id: 1,
                 name: "test_op",
+                fatal: false,
             }],
         }],
         &[
@@ -55,11 +54,10 @@ fn test_eff_res_resumes_continuation() {
     let bytes = make_seam_with_effects(
         &[ConstEntry::Int(99)],
         &[SeamEffectDef {
-            id: 1,
             name: "test_eff",
             ops: vec![SeamEffectOpDef {
-                id: 1,
                 name: "test_op",
+                fatal: false,
             }],
         }],
         &[

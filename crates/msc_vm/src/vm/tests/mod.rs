@@ -38,14 +38,14 @@ mod gc;
 use std::collections::HashMap;
 use std::iter;
 
-use msc_bc::{self, Opcode, crc32_slice};
+use msc_bc::{self, crc32_slice, Opcode};
 
-use crate::VmResult;
 use crate::error::VmError;
 use crate::loader::load;
 use crate::value::Value;
 use crate::verifier::verify;
 use crate::vm::{StepResult, Vm};
+use crate::VmResult;
 
 // ---------------------------------------------------------------------------
 // Test binary builder (SEAM format)
@@ -128,14 +128,13 @@ fn make_msbc(consts: &[ConstEntry], fns: &[FnDef]) -> Vec<u8> {
 }
 
 struct SeamEffectDef {
-    id: u16,
     name: &'static str,
     ops: Vec<SeamEffectOpDef>,
 }
 
 struct SeamEffectOpDef {
-    id: u16,
     name: &'static str,
+    fatal: bool,
 }
 
 #[expect(
@@ -228,12 +227,14 @@ fn make_seam_with_effects(
     meth.extend_from_slice(&u16::try_from(fns.len()).unwrap_or(u16::MAX).to_be_bytes());
     for f in fns {
         meth.extend_from_slice(&0u16.to_be_bytes()); // name_stridx
-        meth.extend_from_slice(&0u16.to_be_bytes()); // type_id
+        meth.extend_from_slice(&0u16.to_be_bytes()); // sig_type
+        meth.push(0u8); // flags
         meth.extend_from_slice(&f.param_count.to_be_bytes());
         meth.extend_from_slice(&f.local_count.to_be_bytes());
         let max_stack: u16 = f.max_stack.unwrap_or(16);
         meth.extend_from_slice(&max_stack.to_be_bytes());
         meth.extend_from_slice(&f.upvalue_count.to_be_bytes());
+        meth.push(0u8); // dict_param_count
         meth.extend_from_slice(
             &u32::try_from(f.code.len())
                 .unwrap_or(u32::MAX)
@@ -260,23 +261,29 @@ fn make_seam_with_effects(
             .to_be_bytes(),
     );
     for (eff_i, eff) in effects.iter().enumerate() {
-        efct.extend_from_slice(&eff.id.to_be_bytes());
+        // u16 name (string index)
         efct.extend_from_slice(&effect_name_idxs[eff_i].to_be_bytes());
+        // u8 type_param_count (0 for tests)
+        efct.push(0u8);
+        // u16 op_count, per op: u16 name + u16 signature + u8 flags
         efct.extend_from_slice(
             &u16::try_from(eff.ops.len())
                 .unwrap_or(u16::MAX)
                 .to_be_bytes(),
         );
         for (op_i, op) in eff.ops.iter().enumerate() {
-            efct.extend_from_slice(&op.id.to_be_bytes());
             efct.extend_from_slice(&op_name_idxs[eff_i][op_i].to_be_bytes());
-            efct.extend_from_slice(&0u16.to_be_bytes()); // param_count
-            efct.extend_from_slice(&0u32.to_be_bytes()); // ret_type_id
-            efct.push(0u8); // fatal
+            efct.extend_from_slice(&0u16.to_be_bytes()); // signature (type ref)
+            efct.push(u8::from(op.fatal)); // flags: bit0=fatal
         }
+        // u16 law_count (0 for tests)
+        efct.extend_from_slice(&0u16.to_be_bytes());
     }
 
-    let clss = 0u16.to_be_bytes().to_vec();
+    // CLSS: u16 class_count=0, u16 instance_count=0
+    let mut clss = vec![];
+    clss.extend_from_slice(&0u16.to_be_bytes());
+    clss.extend_from_slice(&0u16.to_be_bytes());
     let frgn = 0u16.to_be_bytes().to_vec();
     let dbug = vec![];
 
@@ -325,12 +332,6 @@ fn br(offset: i16) -> [u8; 3] {
 fn br_false(offset: i16) -> [u8; 3] {
     let [hi, lo] = offset.to_be_bytes();
     [Opcode::BR_FALSE.0, hi, lo]
-}
-
-#[allow(dead_code)] // encoding helper kept for completeness alongside br_false
-fn br_true(offset: i16) -> [u8; 3] {
-    let [hi, lo] = offset.to_be_bytes();
-    [Opcode::BR_TRUE.0, hi, lo]
 }
 
 fn rec_new(tag: u8, arity: u8) -> [u8; 3] {

@@ -18,7 +18,7 @@ use msc_bc::Opcode;
 
 use crate::VmResult;
 use crate::error::{VmError, malformed};
-use crate::heap::Heap;
+use crate::heap::{Heap, HeapPayload};
 use crate::host::HostFunctions;
 use crate::loader::LoadedModule;
 use crate::value::Value;
@@ -45,6 +45,12 @@ pub struct Vm {
     host: Option<Box<dyn HostFunctions>>,
     /// Maps `(frame_depth, local_slot)` to the heap index of the open upvalue cell.
     open_upvalue_map: HashMap<(usize, usize), usize>,
+    /// Class dispatch table: `(class_ref, type_ref)` → method function id list.
+    ///
+    /// Populated at load time from `module.class_instances` for manual instances
+    /// (kind == 0x00). Enables `CLS_DICT` and `CLS_DISP` to resolve methods
+    /// without scanning the full instance list at every dispatch site.
+    class_dispatch: HashMap<(u16, u16), Vec<u16>>,
 }
 
 impl Vm {
@@ -55,6 +61,7 @@ impl Vm {
     #[must_use]
     pub fn new(module: LoadedModule) -> Self {
         let globals = vec![Value::UNIT; module.globals.len()];
+        let class_dispatch = Self::build_class_dispatch(&module);
         Self {
             module,
             heap: Heap::new(),
@@ -65,7 +72,23 @@ impl Vm {
             continuations: vec![],
             host: None,
             open_upvalue_map: HashMap::new(),
+            class_dispatch,
         }
+    }
+
+    /// Build the class dispatch table from all manual instances in the module.
+    ///
+    /// Only `kind == 0x00` (manual) instances contribute entries. Via-delegation
+    /// and derived instances are not wired here.
+    fn build_class_dispatch(module: &LoadedModule) -> HashMap<(u16, u16), Vec<u16>> {
+        let mut table: HashMap<(u16, u16), Vec<u16>> = HashMap::new();
+        for inst in &module.class_instances {
+            if inst.kind == 0x00 {
+                let key = (inst.class_ref, inst.type_ref);
+                let _ = table.insert(key, inst.method_refs.clone());
+            }
+        }
+        table
     }
 
     /// Set the maximum number of instructions the VM will execute before
@@ -256,8 +279,6 @@ impl Vm {
         reason = "flat opcode dispatch table - splitting would obscure control flow"
     )]
     fn step_inner(&mut self) -> VmResult<StepResult> {
-        self.maybe_gc();
-
         // Phase 1: decode instruction, advance IP.
         let (fn_idx, op, operand) = {
             let frame = self
@@ -380,6 +401,7 @@ impl Vm {
                 Ok(StepResult::Continue)
             }
             Opcode::ST_IND => {
+                self.safepoint_gc();
                 let frame = self
                     .call_stack
                     .last_mut()
@@ -390,6 +412,7 @@ impl Vm {
 
             // §4.9 Record
             Opcode::REC_NEW => {
+                self.safepoint_gc();
                 let frame = self
                     .call_stack
                     .last_mut()
@@ -415,6 +438,7 @@ impl Vm {
             }
             // §4.10 Array
             Opcode::ARR_NEW => {
+                self.safepoint_gc();
                 let frame = self
                     .call_stack
                     .last_mut()
@@ -449,6 +473,7 @@ impl Vm {
 
             // §4.11 Tuple
             Opcode::TUP_NEW => {
+                self.safepoint_gc();
                 let frame = self
                     .call_stack
                     .last_mut()
@@ -483,15 +508,46 @@ impl Vm {
                 Ok(StepResult::Continue)
             }
             Opcode::TY_EQ => {
-                // Pop two type ids (nats), push bool(a == b).
-                let frame = self.current_frame()?;
-                let (b, a) = frame.pop2()?;
-                let eq = a.0 == b.0;
-                frame.stack.push(Value::from_bool(eq));
+                // Stack: type_desc val → bool.
+                // type_desc is a heap Str pushed by ty.desc, encoding the type_id.
+                // val is the value whose runtime type is being checked.
+                // Pop both values before borrowing the heap so the frame borrow ends.
+                let (val, type_desc) = {
+                    let frame = self
+                        .call_stack
+                        .last_mut()
+                        .ok_or_else(|| malformed!("empty call stack"))?;
+                    let val = frame.pop()?;
+                    let type_desc = frame.pop()?;
+                    (val, type_desc)
+                };
+                let val_type = ops::value_type_id(val, &self.heap);
+                let expected = type_desc
+                    .as_ref()
+                    .ok()
+                    .and_then(|ptr| self.heap.get(ptr).ok())
+                    .and_then(|obj| {
+                        if let HeapPayload::Str { type_id, .. } = &obj.payload {
+                            u16::try_from(*type_id).ok()
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or(u16::MAX);
+                self.call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?
+                    .stack
+                    .push(Value::from_bool(val_type == expected));
                 Ok(StepResult::Continue)
             }
             Opcode::TY_CAST => {
-                // Identity cast at this level - the emitter already checked types.
+                self.safepoint_gc();
+                let frame = self
+                    .call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?;
+                ops::exec_ty_cast(frame, &self.module.types, &self.heap)?;
                 Ok(StepResult::Continue)
             }
             Opcode::TY_DESC => {
@@ -557,6 +613,7 @@ impl Vm {
 
             // §4.16 String
             Opcode::STR_CAT => {
+                self.safepoint_gc();
                 let frame = self
                     .call_stack
                     .last_mut()
@@ -575,6 +632,7 @@ impl Vm {
 
             // §4.8 Closure
             Opcode::CLS_NEW => {
+                self.safepoint_gc();
                 let frame = self
                     .call_stack
                     .last_mut()
@@ -655,6 +713,7 @@ impl Vm {
 
             // CALL arity:u8 - callee is on the stack below the args.
             Opcode::CALL => {
+                self.safepoint_gc();
                 let arity = u8::try_from(operand & 0xFF).unwrap_or(u8::MAX);
                 let call_target = {
                     let frame = self
@@ -671,6 +730,7 @@ impl Vm {
                 }
             }
             Opcode::CALL_TAIL => {
+                self.safepoint_gc();
                 let arity = u8::try_from(operand & 0xFF).unwrap_or(u8::MAX);
                 let call_target = {
                     let frame = self
@@ -688,23 +748,105 @@ impl Vm {
 
             // FFI_CALL sym_idx:u8, arity:u8
             Opcode::FFI_CALL => {
+                self.safepoint_gc();
                 let ffi_id = u32::from(ops::fi8x2_a(operand));
                 self.exec_ffi_call(ffi_id)
             }
 
             // §4.13 Effects
             Opcode::EFF_HDL | Opcode::EFF_POP | Opcode::EFF_NEED | Opcode::EFF_RES => {
+                self.safepoint_gc();
                 self.step_continuations(op, operand, fn_idx)
             }
 
-            // §4.17 Arena - not yet implemented; error explicitly rather than
-            // falling through to the generic "unknown opcode" branch.
-            Opcode::AR_NEW => Err(VmError::Unimplemented { desc: "ar.new" }),
-            Opcode::AR_ALLOC => Err(VmError::Unimplemented { desc: "ar.alloc" }),
-            Opcode::AR_FREE => Err(VmError::Unimplemented { desc: "ar.free" }),
+            // §4.17 Arena
+            Opcode::AR_NEW => {
+                let frame = self
+                    .call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?;
+                let size_val = frame.pop()?;
+                let capacity = usize::try_from(size_val.as_int()?).unwrap_or(64);
+                let ptr = self.heap.alloc_arena(capacity);
+                frame.stack.push(Value::from_ref(ptr));
+                Ok(StepResult::Continue)
+            }
+            Opcode::AR_ALLOC => {
+                let frame = self
+                    .call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?;
+                let (arena_val, size_val) = frame.pop2()?;
+                let arena_ptr = arena_val.as_ref()?;
+                let val = size_val;
+                let idx = self.heap.arena_alloc(arena_ptr, val)?;
+                frame.stack.push(Value::from_int(i64::from(idx)));
+                Ok(StepResult::Continue)
+            }
+            Opcode::AR_FREE => {
+                let frame = self
+                    .call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?;
+                let arena_val = frame.pop()?;
+                let arena_ptr = arena_val.as_ref()?;
+                self.heap.arena_free(arena_ptr)?;
+                Ok(StepResult::Continue)
+            }
 
             // §4.18 GC hints and NOP - no-ops
             Opcode::NOP | Opcode::GC_PIN | Opcode::GC_UNPIN => Ok(StepResult::Continue),
+
+            // §4.5 Class Dispatch
+            Opcode::CLS_DICT => {
+                // FI16: class_ref encoded in operand low 16 bits.
+                let class_ref = u16::try_from(operand & 0xFFFF).unwrap_or(u16::MAX);
+                let frame = self
+                    .call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?;
+                let val = frame.pop()?;
+                let type_id = ops::value_type_id(val, &self.heap);
+                let method_refs = self
+                    .class_dispatch
+                    .get(&(class_ref, type_id))
+                    .ok_or(VmError::Halted)?;
+                let fields: Vec<Value> = method_refs
+                    .iter()
+                    .map(|&fn_id| Value::from_int(i64::from(fn_id)))
+                    .collect();
+                let field_count = fields.len();
+                let ptr = self.heap.alloc_record(0, None, fields);
+                let frame = self
+                    .call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?;
+                frame.stack.push(Value::from_ref(ptr));
+                let _ = field_count;
+                Ok(StepResult::Continue)
+            }
+
+            Opcode::CLS_DISP => {
+                // FI8x2: class_ref in hi byte, method_idx in lo byte.
+                let class_ref = u16::from(ops::fi8x2_a(operand));
+                let method_idx = usize::from(ops::fi8x2_b(operand));
+                let frame = self
+                    .call_stack
+                    .last_mut()
+                    .ok_or_else(|| malformed!("empty call stack"))?;
+                let val = frame.pop()?;
+                let type_id = ops::value_type_id(val, &self.heap);
+                let method_refs = self
+                    .class_dispatch
+                    .get(&(class_ref, type_id))
+                    .ok_or(VmError::Halted)?;
+                let fn_id =
+                    u32::from(*method_refs.get(method_idx).ok_or(VmError::OutOfBounds {
+                        index: method_idx,
+                        len: method_refs.len(),
+                    })?);
+                self.do_call_with_stack_args(fn_id, None)
+            }
 
             _ => Err(malformed!("unknown opcode {:#04x}", op.0)),
         }
@@ -728,9 +870,11 @@ impl Vm {
             continuations::ContAction::NotHandled | continuations::ContAction::Continue => {
                 Ok(StepResult::Continue)
             }
-            continuations::ContAction::Dispatch { handler_fn_id } => {
-                self.do_call_with_stack_args(handler_fn_id, None)
-            }
+            continuations::ContAction::Dispatch {
+                handler_fn_id,
+                op_id,
+                one_shot,
+            } => self.exec_cont_save_same_frame(handler_fn_id, op_id, one_shot),
             continuations::ContAction::CrossFrameSearch { effect_id, op_id } => {
                 self.exec_cont_save_cross_frame(effect_id, op_id)
             }

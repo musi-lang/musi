@@ -47,6 +47,7 @@ pub fn exec_rec_set(operand: u32, frame: &mut Frame, heap: &mut Heap) -> VmResul
         len,
     })?;
     *field = val;
+    heap.write_barrier(ptr, val);
     Ok(())
 }
 
@@ -152,5 +153,6 @@ pub fn exec_st_ind(frame: &mut Frame, heap: &mut Heap) -> VmResult {
     } else {
         fields[0] = val;
     }
+    heap.write_barrier(ptr, val);
     Ok(())
 }

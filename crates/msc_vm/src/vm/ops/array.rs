@@ -50,6 +50,7 @@ pub fn exec_arr_set(frame: &mut Frame, heap: &mut Heap) -> VmResult {
         .get_mut(idx)
         .ok_or(VmError::OutOfBounds { index: idx, len })?;
     *elem = val;
+    heap.write_barrier(ptr, val);
     Ok(())
 }
 

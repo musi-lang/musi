@@ -46,8 +46,9 @@ fn exec_eff_hdl(
     frame: &mut Frame,
     handlers: &[HandlerEntry],
 ) -> VmResult<ContAction> {
-    // FI16 operand = effect_id.
-    let effect_id = u8::try_from(operand & 0xFF).map_err(|_| VmError::Malformed {
+    // FI16 operand: bit15 = one_shot hint, bits 14-0 = effect_id.
+    let one_shot = (operand & 0x8000) != 0;
+    let effect_id = u8::try_from(operand & 0x7F).map_err(|_| VmError::Malformed {
         desc: "eff.hdl effect_id overflow".into(),
     })?;
     let handler_fn_id = handlers
@@ -57,6 +58,7 @@ fn exec_eff_hdl(
     frame.marker_stack.push(ContMarker {
         effect_id,
         handler_fn_id,
+        one_shot,
     });
     Ok(ContAction::Continue)
 }
@@ -73,9 +75,16 @@ fn exec_eff_need(op_id: u32, frame: &Frame, effects: &[LoadedEffect]) -> ContAct
     {
         return ContAction::Dispatch {
             handler_fn_id: marker.handler_fn_id,
+            op_id,
+            one_shot: marker.one_shot,
         };
     }
 
+    // Handler is in a different frame; one_shot comes from EFF_HDL operand
+    // stored in the calling frame's marker. We don't have a marker in scope
+    // here (not found in current frame), so conservatively set one_shot=false.
+    // The cross-frame search in call.rs locates the correct marker and reads
+    // its one_shot field directly.
     ContAction::CrossFrameSearch {
         effect_id: search_id_u8,
         op_id,
@@ -88,7 +97,7 @@ fn exec_eff_need(op_id: u32, frame: &Frame, effects: &[LoadedEffect]) -> ContAct
 pub fn resolve_marker_id(op_id: u32, effects: &[LoadedEffect]) -> u32 {
     effects
         .iter()
-        .find(|eff| eff.ops.iter().any(|op| u32::from(op.id) == op_id))
+        .find(|eff| eff.ops.iter().any(|op| op.id == op_id))
         .map_or(op_id, |eff| u32::from(eff.id))
 }
 
@@ -100,7 +109,12 @@ pub enum ContAction {
     /// Normal execution continues.
     Continue,
     /// Call handler function with operand stack arguments.
-    Dispatch { handler_fn_id: u32 },
+    Dispatch {
+        handler_fn_id: u32,
+        op_id: u32,
+        /// One-shot hint from the emitter: the handler body has at most one resume site.
+        one_shot: bool,
+    },
     /// Handler not found in current frame - search the entire call stack.
     CrossFrameSearch { effect_id: u8, op_id: u32 },
     /// Resume a captured continuation (`EFF_RES`).

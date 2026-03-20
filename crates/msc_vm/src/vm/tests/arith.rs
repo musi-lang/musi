@@ -70,12 +70,13 @@ fn test_float_multiply() {
 }
 
 #[test]
-fn test_bitwise_and_and_shift() {
+fn test_bitwise_and_and_mul() {
+    // 0xFF BAND 0x0F = 0x0F, then 0x0F * 16 = 240
     let bytes = make_msbc(
         &[
             ConstEntry::Int(0xFF),
             ConstEntry::Int(0x0F),
-            ConstEntry::Int(4),
+            ConstEntry::Int(16),
         ],
         &[fn_def_with_max_stack(
             0,
@@ -84,9 +85,9 @@ fn test_bitwise_and_and_shift() {
             code(&[
                 &ld_const(0),
                 &ld_const(1),
-                &[Opcode::AND.0],
+                &[Opcode::BAND.0],
                 &ld_const(2),
-                &[Opcode::SHL.0, Opcode::RET.0],
+                &[Opcode::MUL.0, Opcode::RET.0],
             ]),
         )],
     );

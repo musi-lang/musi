@@ -159,13 +159,14 @@ impl Vm {
 
         let h_idx = handler_idx.ok_or(VmError::NoHandler { effect_id })?;
 
-        let handler_fn_id = self.call_stack[h_idx]
+        let marker = self.call_stack[h_idx]
             .marker_stack
             .iter()
             .rev()
             .find(|f| f.effect_id == effect_id)
-            .ok_or_else(|| malformed!("handler not found"))?
-            .handler_fn_id;
+            .ok_or_else(|| malformed!("handler not found"))?;
+        let handler_fn_id = marker.handler_fn_id;
+        let one_shot = marker.one_shot;
 
         for fi in (h_idx + 1)..self.call_stack.len() {
             let upvalue_ptrs: Vec<usize> = self.call_stack[fi].open_upvalues.clone();
@@ -184,8 +185,28 @@ impl Vm {
         self.continuations.push(Continuation {
             frames: captured,
             op_id,
+            resume_count: 0,
+            one_shot,
         });
 
+        self.do_call_with_stack_args(handler_fn_id, None)
+    }
+
+    /// Same-frame effect dispatch: handler and effect site are in the same activation
+    /// record, so no frames need to be captured. A zero-frame continuation is pushed so
+    /// the `one_shot` hint is preserved for any `EFF_RES` that follows.
+    pub(super) fn exec_cont_save_same_frame(
+        &mut self,
+        handler_fn_id: u32,
+        op_id: u32,
+        one_shot: bool,
+    ) -> VmResult<StepResult> {
+        self.continuations.push(Continuation {
+            frames: vec![],
+            op_id,
+            resume_count: 0,
+            one_shot,
+        });
         self.do_call_with_stack_args(handler_fn_id, None)
     }
 
@@ -198,9 +219,10 @@ impl Vm {
             .pop()
             .ok_or_else(|| malformed!("eff.res on empty operand stack"))?;
 
-        let cont = self
+        let cont_idx = self
             .continuations
-            .pop()
+            .len()
+            .checked_sub(1)
             .ok_or_else(|| malformed!("eff.res with no captured continuation"))?;
 
         let op_is_fatal = self
@@ -208,13 +230,27 @@ impl Vm {
             .effects
             .iter()
             .flat_map(|eff| eff.ops.iter())
-            .any(|op| u32::from(op.id) == cont.op_id && op.fatal);
+            .any(|op| op.id == self.continuations[cont_idx].op_id && op.fatal());
         if op_is_fatal {
-            return Err(VmError::FatalEffectResumed { op_id: cont.op_id });
+            return Err(VmError::FatalEffectResumed {
+                op_id: self.continuations[cont_idx].op_id,
+            });
         }
 
+        // One-shot optimization: move frames on the first resume of a one-shot
+        // continuation; clone for multi-shot or subsequent resumes.
+        let frames = if self.continuations[cont_idx].one_shot
+            && self.continuations[cont_idx].resume_count == 0
+        {
+            self.continuations[cont_idx].resume_count += 1;
+            self.continuations.pop().expect("checked above").frames
+        } else {
+            self.continuations[cont_idx].resume_count += 1;
+            self.continuations[cont_idx].frames.clone()
+        };
+
         let _ = self.call_stack.pop();
-        self.call_stack.extend(cont.frames);
+        self.call_stack.extend(frames);
 
         let top = self
             .call_stack

@@ -17,7 +17,7 @@ pub use record::{
     exec_tup_new,
 };
 pub use string::{exec_str_cat, exec_str_len};
-pub use ty::{exec_ty_desc, exec_ty_of};
+pub use ty::{exec_ty_cast, exec_ty_desc, exec_ty_of, value_type_id};
 
 use msc_bc::{Opcode, instr_len, type_tag};
 
@@ -135,6 +135,23 @@ pub fn const_to_value(c: &LoadedConst, heap: &mut Heap) -> Value {
         LoadedConst::Str(s) => {
             let ptr = heap.alloc_string(0, s.clone());
             Value::from_ref(ptr)
+        }
+        LoadedConst::BigInt(bytes) => {
+            if bytes.len() <= 8 {
+                // Fits in i64 - decode as inline or boxed int.
+                let mut val: i64 = if bytes.first().is_some_and(|&b| b & 0x80 != 0) {
+                    -1
+                } else {
+                    0
+                };
+                for &byte in bytes {
+                    val = val.wrapping_shl(8) | i64::from(byte);
+                }
+                Value::from_int_wide(val, heap)
+            } else {
+                let ptr = heap.alloc_bigint(bytes.clone());
+                Value::from_ref(ptr)
+            }
         }
     }
 }
