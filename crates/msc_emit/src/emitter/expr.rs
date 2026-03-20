@@ -846,6 +846,10 @@ fn emit_call(
                 fc.fe.emit_ld_loc(t);
             }
             let ac_i = i32::try_from(total_count).map_err(|_| EmitError::overflow("arg count"))?;
+            if is_tail {
+                fc.fe.emit_inv_dyn_tail(ac_i)?;
+                return Ok(false);
+            }
             fc.fe.emit_inv_dyn(ac_i)?;
             return Ok(true);
         }
@@ -865,6 +869,10 @@ fn emit_call(
         emit_require(em, fc, callee, "callee")?;
         let arg_count = emit_call_args(em, fc, args)?;
         let ac_i = i32::try_from(arg_count).map_err(|_| EmitError::overflow("arg count"))?;
+        if is_tail {
+            fc.fe.emit_inv_dyn_tail(ac_i)?;
+            return Ok(false);
+        }
         fc.fe.emit_inv_dyn(ac_i)?;
         Ok(true)
     }

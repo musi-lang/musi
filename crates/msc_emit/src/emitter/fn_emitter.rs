@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 
 use crate::error::{EmitError, EmitResult};
-use msc_bc::{encode_f0, encode_fi16, encode_fi8, encode_fi8x2, Opcode};
+use msc_bc::{Opcode, encode_f0, encode_fi8, encode_fi8x2, encode_fi16};
 
 /// Fixup record: a forward jump that needs patching once we know the label target.
 struct Fixup {

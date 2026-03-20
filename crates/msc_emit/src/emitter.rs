@@ -219,7 +219,7 @@ impl<'a> Emitter<'a> {
             classes: vec![],
             class_instances: vec![],
             class_id_map: HashMap::new(),
-            some_tag: 0,
+            some_tag: 1,
             ok_tag: 0,
             next_fn_id: 0,
             entry_fn_id: None,
