@@ -2,8 +2,8 @@
 
 use std::collections::{HashMap, HashSet};
 
-use msc_ast::expr::{Arg, ArrayElem, Expr, HandlerOp, MatchArm, PwArm, PwGuard, RecField};
 use msc_ast::ExprIdx;
+use msc_ast::expr::{Arg, ArrayElem, Expr, HandlerOp, MatchArm, PwArm, PwGuard, RecField};
 use msc_sema::DefId;
 
 use super::Emitter;

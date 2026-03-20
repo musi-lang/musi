@@ -2,10 +2,10 @@
 
 use msc_shared::{Span, Symbol};
 
+use crate::ExprIdx;
 use crate::attr::Attr;
 use crate::expr::Param;
 use crate::ty_param::{Constraint, TyParam};
-use crate::ExprIdx;
 
 /// A member of a class or given declaration.
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -7,8 +7,8 @@ use msc_sema::def::DefKind;
 
 use crate::error::{EmitError, EmitResult};
 
-use super::expr::{emit_call_args, emit_expr, emit_expr_tail, emit_require};
 use super::FnCtx;
+use super::expr::{emit_call_args, emit_expr, emit_expr_tail, emit_require};
 use super::{Emitter, FnBytecode};
 
 pub(super) fn emit_force_unwrap(

@@ -3,10 +3,10 @@
 #[cfg(test)]
 mod tests;
 
-use msc_ast::expr::{Arrow, EffectItem, EffectSet, Expr, FieldKey, TypeForm};
-use msc_ast::ty_param::{Constraint, Rel};
 use msc_ast::ExprIdx;
 use msc_ast::NameRef;
+use msc_ast::expr::{Arrow, EffectItem, EffectSet, Expr, FieldKey, TypeForm};
+use msc_ast::ty_param::{Constraint, Rel};
 use msc_lex::token::TokenKind;
 use msc_shared::Symbol;
 
