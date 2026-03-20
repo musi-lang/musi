@@ -38,8 +38,10 @@ impl Parser<'_> {
             };
         }
 
-        // (mut ...) can only be a lambda - parse as param list directly
-        if self.at(TokenKind::KwMut) {
+        // (mut ...) or (ident : ...) can only be a lambda — parse as param list directly
+        if self.at(TokenKind::KwMut)
+            || (self.at(TokenKind::Ident) && self.peek_at(1).kind == TokenKind::Colon)
+        {
             return self.parse_forced_fn_literal(start);
         }
 
@@ -74,7 +76,9 @@ impl Parser<'_> {
         let mut raw_elems = vec![first];
         if !self.at(TokenKind::RParen) {
             loop {
-                if self.at(TokenKind::KwMut) {
+                if self.at(TokenKind::KwMut)
+                    || (self.at(TokenKind::Ident) && self.peek_at(1).kind == TokenKind::Colon)
+                {
                     let mut params = self.reinterpret_as_params(&raw_elems);
                     params.push(self.parse_param());
                     while self.eat(TokenKind::Comma) {
