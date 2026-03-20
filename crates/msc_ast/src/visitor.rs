@@ -9,7 +9,7 @@ use crate::attr::{Attr, AttrValue};
 use crate::decl::{ClassMember, EffectOp, ForeignDecl};
 use crate::expr::{
     Arg, ArrayElem, EffectItem, Expr, HandlerOp, InstanceBody, LetFields, MatchArm, Param, PwArm,
-    PwGuard, RecDefField, RecField,
+    PwGuard, RecDefField, RecField, TypeForm,
 };
 use crate::lit::{FStrPart, Lit};
 use crate::pat::Pat;
@@ -73,7 +73,6 @@ pub fn walk_expr<V: AstVisitor + ?Sized>(
         Expr::Block { stmts, tail, .. } => walk_expr_block(v, stmts, *tail, ctx),
 
         Expr::Let { fields, .. } => walk_expr_let(v, fields, ctx),
-        Expr::Binding { fields, .. } => walk_let_fields(v, fields, ctx),
 
         Expr::Fn {
             params,
@@ -157,13 +156,9 @@ pub fn walk_expr<V: AstVisitor + ?Sized>(
             ..
         } => walk_expr_handle(v, *effect_ty, ops, *body, ctx),
 
-        Expr::TypeApp { .. }
-        | Expr::FnType { .. }
-        | Expr::OptionType { .. }
-        | Expr::ProductType { .. }
-        | Expr::SumType { .. }
-        | Expr::ArrayType { .. }
-        | Expr::PiType { .. } => walk_type_expr(v, idx, ctx),
+        Expr::TypeApp { .. } | Expr::FnType { .. } | Expr::TypeExpr { .. } => {
+            walk_type_expr(v, idx, ctx)
+        }
     }
 }
 
@@ -195,16 +190,17 @@ fn walk_type_expr<V: AstVisitor + ?Sized>(
             }
             ControlFlow::Continue(())
         }
-        Expr::OptionType { inner, .. } => v.visit_expr(*inner, ctx),
-        Expr::ProductType { fields, .. }
-        | Expr::SumType {
-            variants: fields, ..
-        } => v.visit_expr_list(fields, ctx),
-        Expr::ArrayType { elem, .. } => v.visit_expr(*elem, ctx),
-        Expr::PiType { param_ty, body, .. } => {
-            v.visit_expr(*param_ty, ctx)?;
-            v.visit_expr(*body, ctx)
-        }
+        Expr::TypeExpr { kind, .. } => match kind {
+            TypeForm::Option { inner } => v.visit_expr(*inner, ctx),
+            TypeForm::Product { fields, .. } | TypeForm::Sum { variants: fields } => {
+                v.visit_expr_list(fields, ctx)
+            }
+            TypeForm::Array { elem, .. } => v.visit_expr(*elem, ctx),
+            TypeForm::Pi { param_ty, body, .. } => {
+                v.visit_expr(*param_ty, ctx)?;
+                v.visit_expr(*body, ctx)
+            }
+        },
         _ => ControlFlow::Continue(()),
     }
 }

@@ -30,6 +30,7 @@ fn test_let_fields_round_trip_through_arena() {
         span: Span::new(0, 10),
     };
     let idx = arenas.exprs.alloc(Expr::Let {
+        exported: false,
         fields,
         span: Span::new(0, 10),
     });
@@ -97,7 +98,7 @@ fn test_block_with_no_tail() {
 }
 
 #[test]
-fn test_binding_embeds_let_fields() {
+fn test_let_exported_embeds_let_fields() {
     let mut arenas = AstArenas::new();
     let pat = arenas.pats.alloc(Pat::Wild {
         span: Span::new(4, 1),
@@ -119,16 +120,16 @@ fn test_binding_embeds_let_fields() {
         value: Some(value),
         span: Span::new(0, 10),
     };
-    let idx = arenas.exprs.alloc(Expr::Binding {
+    let idx = arenas.exprs.alloc(Expr::Let {
         exported: true,
         fields,
         span: Span::new(0, 10),
     });
-    let Expr::Binding {
+    let Expr::Let {
         exported, fields, ..
     } = &arenas.exprs[idx]
     else {
-        panic!("expected Binding");
+        panic!("expected Let");
     };
     assert!(*exported);
     assert_eq!(fields.kind, BindKind::Mut);

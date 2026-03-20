@@ -31,6 +31,7 @@ pub enum Pat {
         span: Span,
     },
     Record {
+        ty_name: Option<Symbol>,
         fields: Vec<PatRecField>,
         span: Span,
     },

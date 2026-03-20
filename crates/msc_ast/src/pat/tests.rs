@@ -67,6 +67,7 @@ fn test_record_pattern_fields_round_trip() {
         span: Span::new(0, 8),
     };
     let idx = arenas.pats.alloc(Pat::Record {
+        ty_name: None,
         fields: vec![field],
         span: Span::new(0, 10),
     });

@@ -41,6 +41,7 @@ pub enum Expr {
 
     // Bindings
     Let {
+        exported: bool,
         fields: LetFields,
         span: Span,
     },
@@ -158,11 +159,6 @@ pub enum Expr {
     },
 
     // Declarations
-    Binding {
-        exported: bool,
-        fields: LetFields,
-        span: Span,
-    },
     Class {
         exported: bool,
         name: Symbol,
@@ -227,34 +223,9 @@ pub enum Expr {
         variadic: bool,
         span: Span,
     },
-    /// Option type sugar: `?Int`.
-    OptionType {
-        inner: ExprIdx,
-        span: Span,
-    },
-    /// Product type: `Int * String`.
-    ProductType {
-        fields: ExprList,
-        /// Whether the last position is a variadic spread (`(T, ...)`).
-        variadic: bool,
-        span: Span,
-    },
-    /// Sum type: `Int + String`.
-    SumType {
-        variants: ExprList,
-        span: Span,
-    },
-    /// Array type: `[]Int` or `[3]Int`.
-    ArrayType {
-        len: Option<u32>,
-        elem: ExprIdx,
-        span: Span,
-    },
-    /// Dependent function type: `(x : A) -> B` where x may appear in B.
-    PiType {
-        param: Symbol,
-        param_ty: ExprIdx,
-        body: ExprIdx,
+    /// Structural type-level expression forms: option, array, product, sum, pi.
+    TypeExpr {
+        kind: TypeForm,
         span: Span,
     },
 
@@ -281,7 +252,7 @@ pub enum InstanceBody {
     Derives { classes: Vec<Symbol>, span: Span },
 }
 
-/// Shared fields for let-bindings (`Let`, `Binding`).
+/// Shared fields for let-bindings (`Let`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LetFields {
     pub kind: BindKind,
@@ -414,8 +385,6 @@ pub enum BinOp {
     And,
     Or,
     Xor,
-    Shl,
-    Shr,
     // special infix
     Pipe,
     Assign,
@@ -423,7 +392,6 @@ pub enum BinOp {
     RangeExc,
     Cons,
     NilCoal,
-    ForceCoal,
 }
 
 impl BinOp {
@@ -442,8 +410,6 @@ impl BinOp {
             Self::Gt => Some(">"),
             Self::Le => Some("<="),
             Self::Ge => Some(">="),
-            Self::Shl => Some("<<"),
-            Self::Shr => Some(">>"),
             Self::Cons => Some("::"),
             Self::Pipe => Some("|>"),
             _ => None,
@@ -465,6 +431,25 @@ pub enum UnaryOp {
 pub enum TypeCheckKind {
     Test,
     Cast,
+}
+
+/// Discriminator for structural type-level expression forms.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TypeForm {
+    /// `?T` - option sugar
+    Option { inner: ExprIdx },
+    /// `[N]T` - array type
+    Array { len: Option<u32>, elem: ExprIdx },
+    /// `A * B` - product type
+    Product { fields: ExprList, variadic: bool },
+    /// `A + B` - sum type
+    Sum { variants: ExprList },
+    /// `(x : A) -> B` - dependent function type
+    Pi {
+        param: Symbol,
+        param_ty: ExprIdx,
+        body: ExprIdx,
+    },
 }
 
 /// A set of effects on a function type.

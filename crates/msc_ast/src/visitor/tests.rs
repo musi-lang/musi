@@ -151,6 +151,7 @@ fn test_walk_expr_crosses_into_ty_annotation() {
         span: Span::new(12, 1),
     });
     let root = arenas.exprs.alloc(Expr::Let {
+        exported: false,
         fields: LetFields {
             kind: BindKind::Immut,
             pat,

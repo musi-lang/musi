@@ -1,6 +1,6 @@
 //! Utility functions for AST traversal.
 
-use crate::expr::Expr;
+use crate::expr::{Expr, TypeForm};
 use crate::ty_param::TyParam;
 use crate::{AstArenas, ExprIdx};
 
@@ -25,30 +25,29 @@ pub fn collect_ty_var_nodes(expr_idx: ExprIdx, arenas: &AstArenas, out: &mut Vec
                 collect_ty_var_nodes(arg, arenas, out);
             }
         }
-        Expr::OptionType { inner, .. } | Expr::ArrayType { elem: inner, .. } => {
-            collect_ty_var_nodes(*inner, arenas, out);
-        }
+        Expr::TypeExpr { kind, .. } => match kind {
+            TypeForm::Option { inner } | TypeForm::Array { elem: inner, .. } => {
+                collect_ty_var_nodes(*inner, arenas, out);
+            }
+            TypeForm::Product { fields, .. } | TypeForm::Sum { variants: fields } => {
+                for &f in fields {
+                    collect_ty_var_nodes(f, arenas, out);
+                }
+            }
+            TypeForm::Pi { param_ty, body, .. } => {
+                collect_ty_var_nodes(*param_ty, arenas, out);
+                collect_ty_var_nodes(*body, arenas, out);
+            }
+        },
         Expr::FnType { params, ret, .. } => {
             for &p in params {
                 collect_ty_var_nodes(p, arenas, out);
             }
             collect_ty_var_nodes(*ret, arenas, out);
         }
-        Expr::ProductType { fields, .. }
-        | Expr::SumType {
-            variants: fields, ..
-        } => {
-            for &f in fields {
-                collect_ty_var_nodes(f, arenas, out);
-            }
-        }
         // Field access for qualified types (M.Type)
         Expr::Field { object, .. } => {
             collect_ty_var_nodes(*object, arenas, out);
-        }
-        Expr::PiType { param_ty, body, .. } => {
-            collect_ty_var_nodes(*param_ty, arenas, out);
-            collect_ty_var_nodes(*body, arenas, out);
         }
         _ => {}
     }
