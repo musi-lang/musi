@@ -1,0 +1,60 @@
+use super::*;
+
+#[test]
+fn intern_resolve_round_trip() {
+    let mut interner = Interner::new();
+    let sym = interner.intern("hello");
+    assert_eq!(interner.resolve(sym), "hello");
+}
+
+#[test]
+fn same_string_same_symbol() {
+    let mut interner = Interner::new();
+    let a = interner.intern("foo");
+    let b = interner.intern("foo");
+    assert_eq!(a, b);
+}
+
+#[test]
+fn different_strings_different_symbols() {
+    let mut interner = Interner::new();
+    let a = interner.intern("foo");
+    let b = interner.intern("bar");
+    assert_ne!(a, b);
+}
+
+#[test]
+fn len_tracks_unique_strings() {
+    let mut interner = Interner::new();
+    assert_eq!(interner.len(), 0);
+    assert!(interner.is_empty());
+
+    let _s = interner.intern("a");
+    assert_eq!(interner.len(), 1);
+    assert!(!interner.is_empty());
+
+    let _s = interner.intern("a");
+    assert_eq!(interner.len(), 1);
+
+    let _s = interner.intern("b");
+    assert_eq!(interner.len(), 2);
+}
+
+#[test]
+fn display_shows_hash_format() {
+    let sym = Symbol(42);
+    assert_eq!(format!("{sym}"), "#42");
+}
+
+#[test]
+fn raw_returns_inner_value() {
+    let sym = Symbol(7);
+    assert_eq!(sym.raw(), 7);
+}
+
+#[test]
+fn default_interner_is_empty() {
+    let interner = Interner::default();
+    assert!(interner.is_empty());
+    assert_eq!(interner.len(), 0);
+}
