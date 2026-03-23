@@ -23,23 +23,35 @@ Musi is NOT C, JavaScript, Rust, or Python. When writing or editing `.ms` files,
 | `fn f()`            | `let f := () => ...`                 | No fn keyword                                         |
 | `null`/`nil`        | `.None`                              | Variant, dot-prefixed                                 |
 | `true`/`false`      | `.True`/`.False`                     | Variants, dot-prefixed, capitalized                   |
-| `enum`              | `choice { A + B of T }`              | Variants separated by `+`                             |
+| `enum`              | `choice { A \| B : T }`              | `\|` separates variants, `:` for payload              |
 | `struct`            | `record { x : T; y : U }`            | Fields separated by `;`                               |
 | `x.field` (obj lit) | `.{ field := value }`                | Record literals use `.{`                              |
 | `=>` (match arm)    | `=>`                                 | Same, but match uses `\|` separator and `( )` wrapper |
 | `->` (fn type)      | `->` (pure) / `~>` (effectful)       | Two arrow types                                       |
+| `#[attr]`           | `@attr`                              | Rust-style attributes replaced by `@` prefix          |
+| `'T`                | `T` (declared in `[T]`)              | No tick prefix for type variables                     |
+| `enum { A, B }`     | `choice { A \| B }`                  | `\|` separates variants, not `+`                      |
+| `A + B` (type sum)  | `A \| B`                             | `+` is arithmetic only                                |
 
 ### Key Syntax Rules
 
 - **Comments**: `//`, `///` (doc), `//!` (module doc), `/* */`
 - **Strings**: `"double quotes"` only. F-strings: `f"x is {x}"`
 - **Runes**: `'a'` (single character)
-- **Keywords** (29): `let`, `mut`, `return`, `match`, `if`, `and`, `or`, `xor`, `not`, `record`, `choice`, `of`, `as`, `where`, `class`, `instance`, `law`, `via`, `effect`, `need`, `handle`, `with`, `resume`, `fatal`, `export`, `import`, `foreign`, `in`, `defer`, `try`
-- **No** `fn`, `func`, `def`, `type`, `enum`, `struct`, `else`, `elif`, `switch`, `case`, `while`, `for`, `loop`
+- **Keywords** (29): `let`, `mut`, `return`, `match`, `if`, `in`, `and`, `or`, `xor`, `not`, `record`, `choice`, `of`, `as`, `where`, `class`, `instance`, `law`, `via`, `effect`, `need`, `handle`, `with`, `resume`, `export`, `import`, `foreign`, `opaque`, `quote`
+- **No** `fn`, `func`, `def`, `type`, `enum`, `struct`, `else`, `elif`, `switch`, `case`, `while`, `for`, `loop`, `fatal`, `defer`, `try`
 - **Semicolons** separate statements in sequences; trailing `;` makes value `Unit`
 - **Variants** are dot-prefixed: `.Some(x)`, `.None`, `.Ok(v)`, `.Err(e)`
-- **Type params** use `['T]` brackets: `let id['T] := (x : 'T) : 'T => x`
-- **Attributes**: `#[key := value]`
+- **Type params** use `[T]` brackets: `let id[T] := (x : T) : T => x`
+- **Attributes**: `@name` or `@name(args)` -- metadata annotations, runtime-inspectable
+- **Choice variants** use `|` separator and `:` for payload: `choice { Some : T | None }`
+- **Quote/splice**: `quote (expr)` captures syntax. `$name`, `$(expr)`, `$[exprs]` splice into quotes.
+- **Mut model**: `let`/`let mut` for binding mutability. `mut` on values for data writability.
+- **Anonymous sums**: `A | B` in type position. No `+` or `*` in types -- those are arithmetic only.
+- **Matrix syntax**: `[a, b; c, d]` -- semicolons separate rows
+- **Comprehensions**: `[x * 2 | x in xs]` -- `in` is a keyword
+- **Types as values**: Types bound via `let`. `let MyInt := Int;` is a type alias. `record`, `choice`, `effect`, `class` are anonymous expressions always bound via `let`.
+- **Opaque exports**: `export opaque let T := ...` -- hides internal representation
 - **Pipeline**: `x |> f` equals `f(x)`
 - **Cons**: `x :: xs`
 - **Ranges**: `1..10` (inclusive), `1..<10` (exclusive)
@@ -52,6 +64,34 @@ Musi is NOT C, JavaScript, Rust, or Python. When writing or editing `.ms` files,
 1. Read `grammar.abnf` and `docs/` if unsure about syntax
 2. Check existing stdlib files for idiomatic patterns
 3. Never use C/JS/Rust operators - Musi has its own operator set
+
+## Rust Test Convention (IMPORTANT)
+
+Unit tests are NEVER inside source files. No `#[cfg(test)] mod tests { }` blocks.
+
+Unit tests go in `module_name/tests.rs`. Integration and e2e tests go in `tests/` alongside `src/`. This applies to ALL Rust crates in this project.
+
+```mermaid
+graph TD
+    A["crates/music_found/"] --> B["src/"]
+    A --> C["tests/"]
+    B --> D["lib.rs"]
+    B --> E["span.rs"]
+    B --> F["span/"]
+    B --> G["ident.rs"]
+    B --> H["ident/"]
+    B --> I["diag.rs"]
+    B --> J["diag/"]
+    F --> K["tests.rs<br/>(unit tests for span.rs)"]
+    H --> L["tests.rs<br/>(unit tests for ident.rs)"]
+    J --> M["tests.rs<br/>(unit tests for diag.rs)"]
+    C --> N["integration_test.rs<br/>(integration/e2e tests)"]
+
+    style K fill:#e1f5ff
+    style L fill:#e1f5ff
+    style M fill:#e1f5ff
+    style N fill:#fff3e0
+```
 
 ## Collaboration Protocol
 
@@ -87,7 +127,7 @@ Musi is NOT C, JavaScript, Rust, or Python. When writing or editing `.ms` files,
 ## Behavioral Constraints
 
 - No filler words: "robust", "seamless", "comprehensive", "cutting-edge", "leverage", "utilize", "facilitate", "enhance", "ensure", "empower"
-- No placeholder code: no TODO, stub, "in a real implementation", or incomplete function bodies
+- No stub code, no unfinished markers, no "in a real implementation", no incomplete function bodies
 - No obvious comments: code that needs "what" comments needs renaming
 - Evidence-based claims only: "this breaks X because Y at file:line" not "this might cause issues"
 - Don't add features beyond what was asked - but do finish everything that WAS asked
