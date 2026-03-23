@@ -35,7 +35,7 @@ Musi is NOT C, JavaScript, Rust, or Python. When writing or editing `.ms` files,
 
 ### Key Syntax Rules
 
-- **Comments**: `//`, `///` (doc), `//!` (module doc), `/* */`
+- **Comments**: `//`, `///` (doc), `/** */` (doc), `/* */`
 - **Strings**: `"double quotes"` only. F-strings: `f"x is {x}"`
 - **Runes**: `'a'` (single character)
 - **Keywords** (29): `let`, `mut`, `return`, `match`, `if`, `in`, `and`, `or`, `xor`, `not`, `record`, `choice`, `of`, `as`, `where`, `class`, `instance`, `law`, `via`, `effect`, `need`, `handle`, `with`, `resume`, `export`, `import`, `foreign`, `opaque`, `quote`
