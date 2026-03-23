@@ -13,6 +13,14 @@ name = "music_arena"
 version = "0.1.0-rc1"
 
 [[package]]
+name = "music_ast"
+version = "0.1.0-rc1"
+dependencies = [
+ "music_arena",
+ "music_found",
+]
+
+[[package]]
 name = "music_found"
 version = "0.1.0-rc1"
 dependencies = [

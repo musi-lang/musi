@@ -7,10 +7,8 @@ fn keyword_from_str_all() {
         ("as", TokenKind::KwAs),
         ("choice", TokenKind::KwChoice),
         ("class", TokenKind::KwClass),
-        ("defer", TokenKind::KwDefer),
         ("effect", TokenKind::KwEffect),
         ("export", TokenKind::KwExport),
-        ("fatal", TokenKind::KwFatal),
         ("foreign", TokenKind::KwForeign),
         ("handle", TokenKind::KwHandle),
         ("if", TokenKind::KwIf),
@@ -30,13 +28,12 @@ fn keyword_from_str_all() {
         ("record", TokenKind::KwRecord),
         ("resume", TokenKind::KwResume),
         ("return", TokenKind::KwReturn),
-        ("try", TokenKind::KwTry),
         ("via", TokenKind::KwVia),
         ("where", TokenKind::KwWhere),
         ("with", TokenKind::KwWith),
         ("xor", TokenKind::KwXor),
     ];
-    assert_eq!(keywords.len(), 32);
+    assert_eq!(keywords.len(), 29);
     for (s, expected) in &keywords {
         assert_eq!(
             keyword_from_str(s),

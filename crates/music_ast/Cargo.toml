@@ -1,0 +1,15 @@
+[package]
+name = "music_ast"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "AST types for the Musi compiler"
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+music_found = { path = "../music_found" }
+music_arena = { path = "../music_arena" }
+
+[lints]
+workspace = true
